@@ -936,7 +936,7 @@ and context () =
           let s = "{" ^ self#pprint_poly (n, ts) ^ "}" in
           let tnode = self#get_node (new symbol Uninterp s) [] in
           let u = tnode#value#mk_unknown in
-          self#simplex_assert_eq n ((neg_unit_num, u)::List.map (fun (t, scale) -> (scale, t#value#mk_unknown)) ts);
+          ignore (self#simplex_assert_eq n ((neg_unit_num, u)::List.map (fun (t, scale) -> (scale, t#value#mk_unknown)) ts));
           assert (self#pump_simplex_eqs <> Unsat3);
           tnode
         end

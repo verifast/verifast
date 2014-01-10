@@ -44,7 +44,7 @@ else
   linux_or_macos: ocamlopt
 endif
 linux_or_macos: make
-	make -C $(SRCDIR)/linux OCAMLOPTOPT=$(OCAMLOPTOPT) BYTECODE=$(BYTECODE) DEBUG=$(DEBUG)
+	make -C $(SRCDIR)/linux/.. -f $(SRCDIR)/linux/GNUmakefile OCAMLOPT=$(OCAMLOPTOPT) BYTECODE=$(BYTECODE) DEBUG=$(DEBUG)
 
 vfversion: ocaml
 	cd $(SRCDIR) ; ${OCAML} generate_vfversion.ml

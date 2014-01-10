@@ -37,11 +37,11 @@ let scan_files_with_extension extension =
   let filenames = Sys.readdir "." in
   Array.iter scan filenames
 
-let print_banner () =
-  Printf.printf "Fearsome tab hunter at work...\n"
 
-let _ =
-  print_banner ();
+let () =
   scan_files_with_extension ".ml";
-  Printf.printf "Found %d tab(s)\n" !result;
-  exit (if !result = 0 then 0 else 1)
+  if !result <> 0 then begin
+    Printf.printf "Found %d tab(s)\n" !result;
+    exit 1
+  end
+    

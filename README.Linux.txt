@@ -16,6 +16,14 @@ OCaml and LABLGTK2. Thus, we provide a build script to automatically
 download and compile the OCaml 4.00.1, camlidl, lablgtk and the Z3 OCaml
 bindings.
 
+You do not have to use this script, you can also install the dependencies
+by hand.
+
+The script to install the dependencies is GNUmakefile outside the src
+directory. The script to build verifast itself is src/GNUmakefile.
+If the script to build the dependencies does not work on your system,
+you can install the dependencies by hand and just use src/GNUmakefile.
+
 Required Packages
 =================
 

@@ -1,10 +1,12 @@
 
 all: trivial_verifast_plugin.cmxs verify
 
-trivial_verifast_plugin.cmxs: DynType.mli plugins.mli plugins2.mli trivial_plugin.ml
-	${OCAMLOPTOPT} -o trivial_verifast_plugin.cmxs -shared DynType.mli plugins.mli plugins2.mli trivial_plugin.ml
+OCAMLOPT ?= ocamlopt.opt
 
-verify:
+trivial_verifast_plugin.cmxs: DynType.mli plugins.mli plugins2.mli trivial_plugin.ml
+	${OCAMLOPT} -o trivial_verifast_plugin.cmxs -shared DynType.mli plugins.mli plugins2.mli trivial_plugin.ml
+
+verify: trivial_verifast_plugin.cmxs
 	verifast -c -allow_should_fail plugin.c
 
 clean:

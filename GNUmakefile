@@ -1,3 +1,7 @@
+# This makefile builds the *dependencies* of VeriFast like ocaml, and calls
+# the makefile in src/ that builds verifast itself. If the makefile
+# you currently are looking at does not work, you can install the dependencies
+# by hand and use src/GNUmakefile to build VeriFast.
 
 # --- Config  ---------------------------------------------------------------
 

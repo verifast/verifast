@@ -44,7 +44,7 @@ clean_external:
 	rm -f $(wildcard $(addprefix $(SRCDIR)/, *.cm* *.o *.a))
 	rm -f $(wildcard $(addprefix $(SRCDIR)/java_frontend/, *.cm* *.o *.a))
 
-$(addprefix run_ocamlbuild_,$(OCAMLBUILD_SUPERTARGETS)): clean_external ocamlbuild
+$(addprefix run_ocamlbuild_,$(OCAMLBUILD_SUPERTARGETS)): clean_external ocamlbuild linux_or_macos
 	cat $(INCLUDECODE) $(SRCDIR)/$(SRCNAME) > $(SRCDIR)/buildcat_$(BINNAME).ml &&\
 	mkdir -p $(BUILDDIR) &&\
 	cd $(SRCDIR) &&\

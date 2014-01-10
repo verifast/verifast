@@ -1,416 +1,343 @@
+# Builds VeriFast itself. Does *not* build dependencies like lablgtk,ocaml,...
+
+all: build test
+
+#------------------------------- Help ---------------------------------------#
+help:
+	@echo "Builds verifast,vfide,mysh,... but not dependencies."
+	@echo "It does not build Z3 bindings, lablgtk bindings, ocaml, ..."
+	@echo "Usage: "
+	@echo "  make help : print this help"
+	@echo "  make env  : print environment variables, i.e. the configuration"
+	@echo "  make verifast: only compile verifast (also works without lablgtk)"
+	@echo "  make vfide: only compile vfide"
+	@echo "  make build: compile everything (do not run tests)"
+	@echo "  make      : compile all and run tests"
+	@echo "  make clean: remove output and temp files"
+	@echo "Tips:"
+	@echo "-You can add the option VERBOSE=1 to see more, e.g. 'make build VERBOSE=1'".
+	@echo "-You can add -j N to use N cores, e.g. 'make build -j 4'."
+
+#------------------------------- Settings -----------------------------------#
+
 include ../GNUmakefile.settings
 
-# OS detection
-ifeq ($(OS), Linux)
-  LINUX        = yes
-  OS_SUPPORTED = yes
-endif
-ifeq ($(OS), Darwin)
-  MAC          = yes
-  OS_SUPPORTED = yes
-endif
-# TODO: Add support for Cygwin
-
-# GSourceView2 for MAC
-ifdef MAC
-  GTKSOURCEVIEW      = -I macos GSourceView2.cmx
-  GTKSOURCEVIEW_DEPS = macos/GSourceView2.cmx
-  GTKSOURCEVIEW_LIBS =
-else ifdef WITHOUT_LABLGTK
-  GTKSOURCEVIEW      =
-  GTKSOURCEVIEW_DEPS =
-  GTKSOURCEVIEW_LIBS =
-else
-  ifdef LABLGTK2
-    GTKSOURCEVIEW      = -I ${LABLGTK2} lablgtksourceview2.cmxa
-    GTKSOURCEVIEW_DEPS =
+# Lablgtk configuration
+ifndef WITHOUT_LABLGTK
+  ifeq ($(OS), Darwin)
+    GTKSOURCEVIEW_LFLAGS += -I macos GSourceView2.cmx
+    GTKSOURCEVIEW_DEPS   += macos/GSourceView2.cmx
   else
-    GTKSOURCEVIEW      = lablgtksourceview2.cmxa
-    GTKSOURCEVIEW_DEPS =
-  endif
-  ifdef LABLLIBS
-    GTKSOURCEVIEW_LIBS = ${LABLLIBS}
-  else
-    GTKSOURCEVIEW_LIBS =
+    GTKSOURCEVIEW_LFLAGS += lablgtksourceview2.cmxa
+    ifdef LABLGTK2
+      GTKSOURCEVIEW_LFLAGS += -I ${LABLGTK2} 
+    endif
+    GTKSOURCEVIEW_LIBS   += ${LABLLIBS}
   endif
 endif
 
 
 # Z3 configuration
-ifdef Z3
-  Z3DEPS  = z3prover.cmx verifastPluginZ3.ml
-  Z3ARGS  = -I $(Z3)/ocaml z3.cmxa z3prover.cmx verifastPluginZ3.ml \
+ifndef NOZ3
+  ifdef Z3
+    Z3VERSION = 
+  else ifdef Z3V2
+    Z3VERSION = v2
+    Z3 = $(Z3V2)
+  else ifdef Z3V4
+    Z3VERSION = v4
+    Z3 = $(Z3V4)
+  else
+    $(error Neither Z3, Z3V2, Z3V4, nor NOZ3 is defined. Please check your \
+     ../GNUmakefile.settings)
+  endif
+  Z3DEPS  = z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml
+  Z3ARGS  = -I $(Z3)/ocaml z3.cmxa z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml \
             -ccopt "-I$(Z3)/ocaml -L$(Z3)/bin -L$(Z3)/lib" \
             -cclib -lz3-gmp -cclib -lz3stubs $(OCAMLLIB)/libcamlidl.a
   LDLPATH = $(Z3)/lib
-else ifdef Z3V2
-  Z3      = $(Z3V2)
-  Z3DEPS  = z3v2prover.cmx verifastPluginZ3v2.ml
-  Z3ARGS  = -I $(Z3)/ocaml z3.cmxa z3v2prover.cmx verifastPluginZ3v2.ml \
-            -ccopt "-I$(Z3)/ocaml -L$(Z3)/bin -L$(Z3)/lib" \
-            -cclib -lz3-gmp -cclib -lz3stubs $(OCAMLLIB)/libcamlidl.a
-  LDLPATH = $(Z3)/lib
-else ifdef Z3V4
-  Z3      = $(Z3V4)
-  Z3DEPS  = z3v4prover.cmx verifastPluginZ3v4.ml
-  Z3ARGS  = -I $(Z3)/ocaml z3.cmxa z3v4prover.cmx verifastPluginZ3v4.ml \
-            -ccopt "-I$(Z3)/ocaml -L$(Z3)/bin -L$(Z3)/lib" \
-            -cclib -lz3 -cclib -lz3stubs_dbg $(OCAMLLIB)/libcamlidl.a
-  LDLPATH = $(Z3)/lib
-else ifdef NOZ3
-  Z3DEPS  =
-  Z3ARGS  =
-  LDLPATH =
+endif
+
+# Should Make print each commandline? Then use "make VERBOSE=yes".
+ifndef VERBOSE
+  .SILENT:
+endif
+
+ifeq ($(OS), Cygwin)
+  DOTEXE=.exe
+endif
+
+# Paths
+OCAML        = ${OCAMLBIN}/ocaml
+OCAMLC       = ${OCAMLBIN}/ocamlc.opt
+OCAMLOPT     = ${OCAMLBIN}/ocamlopt.opt # The ".opt" version is ~3.5x faster!
+ifeq ($(OS), Cygwin)
+  CAMLP4O    = camlp4o.opt
 else
-  $(error Neither Z3, Z3V2, Z3V4, nor NOZ3 is defined. Please check your \
-   ../GNUmakefile.settings)
+  CAMLP4O      = ${OCAMLBIN}/camlp4o.opt
+endif
+OCAMLDEP     = ${OCAMLBIN}/ocamldep.opt
+
+# Do we build with "-I ./linux" or "-I ./win":
+ifeq ($(OS), Cygwin)
+  INCLUDE_OS_DIR = win
+else
+# Also for mac.
+  INCLUDE_OS_DIR = linux
 endif
 
 # Number of CPUs
-# TODO: Isn't there /sys on Darwin, Linux and Cygwin?
-ifdef MAC
+ifeq ($(OS), Darwin)
   NUMCPU := $(shell sysctl -n hw.ncpu)
 else
+# Works on Linux and Cygwin (Cygwin has no /sys).
   NUMCPU := $(shell cat /proc/cpuinfo | grep 'processor' | wc -l)
 endif
-
-
-# Shorthands to set up environments
-SET_LDD = export CAML_LD_LIBRARY_PATH=$$CAML_LD_LIBRARY_PATH:GTKSOURCEVIEW_LIBS
-SET_ENV = export PATH="$(CWD)/../bin/:$(OCAMLBIN):$$PATH"; \
-          export LD_LIBRARY_PATH="$(LDLPATH):$$LD_LIBRARY_PATH"
-
-
-all: build test
-
-build: env java_front \
-       ../bin/mysh ../bin/verifast ../bin/vfide ../bin/main_class ../bin/java_card_applet ../bin/dlsymtool \
-       ../bin/vfstrip ../bin/list.vfmanifest \
-       ../bin/raw_ghost_lists.vfmanifest ../bin/listex.vfmanifest \
-       ../bin/arrays.vfmanifest ../bin/quantifiers.vfmanifest \
-       ../bin/assoclist.vfmanifest ../bin/permutations.vfmanifest
-
-test_plugin: build
-	$(SET_ENV); \
-	  ${MAKE} -C ../examples/plugin clean OCAMLOPTOPT=${OCAMLOPTOPT}
-	$(SET_ENV); \
-	  ${MAKE} -C ../examples/plugin all OCAMLOPTOPT=${OCAMLOPTOPT}
-
-test: build test_plugin
-	$(SET_ENV); \
-        cd ..; bin/mysh -cpus $(NUMCPU) < testsuite.mysh
 
 env:
 	@echo "Configuration:"
 	@echo "---------------------"
-ifdef OS_SUPPORTED
-	@echo "OS                 $(OS)"
-else
-	$(error Unknown operating system: $(OS))
-endif
-	@echo "NUMCPU             $(NUMCPU)"
-	@echo "OCAMLBIN           $(OCAMLBIN)"
-	@echo "OCAMLLIB           $(OCAMLLIB)"
-	@echo "CWD                $(CWD)"
-	@echo "Z3                 $(Z3)"
-	@echo "Z3V2               $(Z3V2)"
-	@echo "Z3V4               $(Z3V4)"
-	@echo "Z3DEPS             $(Z3DEPS)"
-	@echo "LDLPATH            $(LDLPATH)"
-	@echo "GTKSOURCEVIEW      $(GTKSOURCEVIEW)"
-	@echo "GTKSOURCEVIEW_LIBS ${GTKSOURCEVIEW_LIBS}"
+	@echo "OS      : $(OS)"
+	@echo "NUMCPU  : $(NUMCPU)"
+	@echo "OCAMLBIN: $(OCAMLBIN)"
+	@echo "OCAMLLIB: $(OCAMLLIB)"
+	@echo "CWD     : $(CWD)"
+	@echo "Z3      : $(Z3)"
+	@echo "Z3V2    : $(Z3V2)"
+	@echo "Z3V4    : $(Z3V4)"
+	@echo "Z3DEPS  : $(Z3DEPS)"
+	@echo "LDLPATH : $(LDLPATH)"
+	@echo "GTKSOURCEVIEW_LFLAGS: $(GTKSOURCEVIEW_LFLAGS)"
+	@echo "GTKSOURCEVIEW_LIBS  : ${GTKSOURCEVIEW_LIBS}"
 
-# For building Java frontend prototype
-java_front: lexer.cmx parser.cmx
-	${MAKE} -C java_frontend OCAMLOPTOPT=${OCAMLOPTOPT} CAMLP4O=${CAMLP4O}
-#only 1 CPU allowed for this test because ASTServer currently can only hande one request at a time
-test_java_front: build test_plugin 
-	$(SET_ENV); \
-	cd ../examples/java/frontend; ../../../bin/mysh -cpus 1 < frontend.mysh
-
-JAVA_FE_INCLS = -thread threads.cmxa misc.cmx general_ast.cmx ast_reader.cmx  communication.cmx \
-                annotation_type_checker.cmx java_frontend.cmx ast_translator.cmx
-
-clean:
-	rm -f *.cm*
-	rm -f *.o *.a
-	cd ../bin; rm -f verifast vfide dlsymtool vfstrip mysh \
-         arrays.vfmanifest list.vfmanifest listex.vfmanifest \
-         raw_ghost_lists.vfmanifest quantifiers.vfmanifest \
-         permutations.vfmanifest
-	rm -f macos/*.cm* macos/*.o
-	rm -f a.out
-	${MAKE} -C linux -f GNUmakefile clean
-	${MAKE} -C java_frontend -f GNUmakefile clean
-
-distclean: clean
-
-../bin/list.vfmanifest: ../bin/list.c ../bin/list.gh
-	$(SET_ENV); cd ../bin; ./verifast -c -emit_vfmanifest list.c
-
-debug:
-	@echo "$(SET_ENV); cd ../bin; ./verifast -c -emit_vfmanifest list.c"
-
-../bin/listex.vfmanifest: ../bin/listex.c ../bin/listex.gh \
- ../bin/list.vfmanifest
-	$(SET_ENV); cd ../bin; ./verifast -c -emit_vfmanifest listex.c
-
-../bin/arrays.vfmanifest: ../bin/arrays.c ../bin/arrays.gh \
- ../bin/list.vfmanifest
-	$(SET_ENV); cd ../bin; ./verifast -c -emit_vfmanifest arrays.c
-
-../bin/raw_ghost_lists.vfmanifest: ../bin/raw_ghost_lists.c \
- ../bin/raw_ghost_lists.gh ../bin/list.vfmanifest
-	$(SET_ENV); cd ../bin; ./verifast -c -emit_vfmanifest raw_ghost_lists.c
-
-../bin/quantifiers.vfmanifest: ../bin/quantifiers.c ../bin/quantifiers.gh \
- ../bin/list.vfmanifest
-	$(SET_ENV); cd ../bin; ./verifast -c -emit_vfmanifest quantifiers.c
-
-../bin/permutations.vfmanifest: ../bin/permutations.c ../bin/permutations.gh \
- ../bin/list.vfmanifest
-	$(SET_ENV); cd ../bin; ./verifast -c -emit_vfmanifest permutations.c
-	
-../bin/assoclist.vfmanifest: ../bin/assoclist.c ../bin/assoclist.gh \
- ../bin/list.vfmanifest
-	$(SET_ENV); cd ../bin; ./verifast -c -emit_vfmanifest assoclist.c
-
-tabhunter: tabhunter.ml
-	${OCAMLOPTOPT} -o tabhunter tabhunter.ml
-
-tabhunt: tabhunter
-	./tabhunter
-
-../bin/vfstrip: vfstrip.ml
-	${OCAMLOPTOPT} -o ../bin/vfstrip vfstrip.ml
-
-../bin/main_class: main_class.ml
-	${OCAMLOPTOPT} -o ../bin/main_class main_class.ml
-
-../bin/java_card_applet: java_card_applet.ml
-	${OCAMLOPTOPT} -o ../bin/java_card_applet java_card_applet.ml
-
-../bin/dlsymtool: dlsymtool.ml
-	${OCAMLOPTOPT} -o ../bin/dlsymtool dlsymtool.ml
-
-reduxtest: verifastredux.opt
-	cd ../examples
-	../src/verifastredux.opt linkedlist.c
-	../src/verifastz3.opt linkedlist2.c
-#	../src/verifastredux.opt composite.c
-	../src/verifastredux.opt composite4.c
-#	../src/verifastredux.opt sorted_bintree.c
-	../src/verifastredux.opt -c iter.c
-	cd java
-#	../../src/verifastredux.opt -c Tree.java
-#	../../src/verifastredux.opt -c Tree2.java
-	cd ..
-	cd chat
-	../../src/verifastredux.opt -c stringBuffers.c
-#	../../src/verifastredux.opt stringBuffers.c sockets.o threading.o lists.o -allow_assume chat.c
-	cd ..
-	cd chatbot
-	../../src/verifastz3.opt -c bot.c
-	cd ..
-
-Printexc_proxy.cmx:
-	${OCAMLOPT} -c Printexc_proxy.ml
-
-ifdef MAC
-Fonts.cmx: Fonts_mac.ml
-	cp Fonts_mac.ml Fonts.ml
-	${OCAMLOPT} -c Fonts.ml
-else
-Fonts.cmx: Fonts_default.ml
-	cp Fonts_default.ml Fonts.ml
-	${OCAMLOPT} -c Fonts.ml
+#------------------------------- Includes   ---------------------------------#
+ifeq ($(OS), Linux)
+  include linux/GNUmakefile
 endif
 
-../bin/mysh: Fonts.cmx mysh.ml
-	${OCAMLOPTOPT} -thread -o ../bin/mysh unix.cmxa threads.cmxa Fonts.cmx mysh.ml
+include java_frontend/GNUmakefile
 
-vfversion.cmi: vfversion.mli
-	${OCAMLC} -c vfversion.mli
+#------------------------------- Shorthands ---------------------------------#
 
-vfversion_cmo: vfversion.cmi
-	${OCAML} generate_vfversion.ml
-	${OCAMLC} -c vfversion.ml
+SET_LDD = export CAML_LD_LIBRARY_PATH="$$CAML_LD_LIBRARY_PATH:$$GTKSOURCEVIEW_LIBS"
+SET_ENV = export PATH="$(CWD)/../bin/:$(OCAMLBIN):$$PATH"; \
+          export LD_LIBRARY_PATH="$(LDLPATH):$$LD_LIBRARY_PATH"
 
-vfversion_cmx: vfversion.cmi
-	${OCAML} generate_vfversion.ml
-	${OCAMLOPT} -c vfversion.ml
+STDLIB_FILES = ../bin/raw_ghost_lists.vfmanifest ../bin/listex.vfmanifest \
+       ../bin/arrays.vfmanifest ../bin/quantifiers.vfmanifest \
+       ../bin/assoclist.vfmanifest ../bin/permutations.vfmanifest \
+       ../bin/list.vfmanifest
 
-verifastRedux: vfversion_cmo proverapi.cmo simplex.cmo redux.cmo verifast.ml verifastPluginRedux.ml vfconsole.ml
-	${OCAMLC} -warn-error F -w p -g -pp ${CAMLP4O} -o verifastRedux -I java_frontend ${JAVA_FE_INCLS} unix.cma proverapi.cmo nums.cma simplex.cmo redux.cmo vfversion.cmo verifast.ml verifastPluginRedux.ml vfconsole.ml
+TOOLS = ../bin/mysh$(DOTEXE) ../bin/verifast$(DOTEXE) ../bin/vfide$(DOTEXE) \
+        ../bin/main_class$(DOTEXE) ../bin/java_card_applet$(DOTEXE) \
+        ../bin/dlsymtool$(DOTEXE) ../bin/vfstrip$(DOTEXE)
 
-verifastZ3: vfversion_cmo proverapi.cmo z3prover.cmo verifast.cmo verifastPluginZ3.ml vfconsole.ml
-ifdef Z3V2
-	$(error "Z3V2 is defined.")
-endif
-	${OCAMLC} -custom -warn-error F -g -pp ${CAMLP4O} -o verifastZ3 -I $(Z3)/ocaml unix.cma nums.cma $(Z3)/ocaml/z3.ml proverapi.cmo z3prover.cmo vfversion.cmo verifast.cmo verifastPluginZ3.ml vfconsole.ml $(Z3)/ocaml/z3_stubs.obj $(Z3)/bin/z3.lib $(OCAMLLIB)/libcamlidl.lib ole32.lib
+build: $(TOOLS) $(STDLIB_FILES) tabhunt vfversion_autogen
 
-verifastZ3v2: vfversion_cmo proverapi.cmo z3v2prover.cmo verifast.cmo verifastPluginZ3v2.ml vfconsole.ml
-ifndef Z3V2
-	$(error "Z3V2 is not defined.")
-endif
-	${OCAMLC} -custom -warn-error F -g -pp ${CAMLP4O} -o verifastZ3v2 -I ./linux -I $(Z3)/ocaml unix.cma nums.cma $(Z3)/ocaml/z3.ml proverapi.cmo z3v2prover.cmo vfversion.cmo verifast.cmo verifastPluginZ3v2.ml vfconsole.ml $(Z3)/ocaml/z3_stubs.obj $(Z3)/bin/z3.lib $(OCAMLLIB)/libcamlidl.lib ole32.lib
+distclean:: clean
 
-vfideZ3: vfversion_cmo proverapi.cmo z3prover.cmo verifast.cmo verifastPluginZ3.ml vfide.ml
-	$(SET_LDD); ${OCAMLC} -custom -warn-error F -g -pp ${CAMLP4O} -o vfideZ3 -I $(Z3)/ocaml -I +lablgtk2 lablgtk.cma gtkInit.cmo unix.cma nums.cma $(Z3)/ocaml/z3.ml proverapi.cmo z3prover.cmo vfversion.cmo verifast.cmo verifastPluginZ3.ml vfide.ml $(Z3)/ocaml/z3_stubs.obj $(Z3)/bin/z3.lib $(OCAMLLIB)/libcamlidl.lib ole32.lib -ccopt "/link /LIBPATH:"$(GTKLIB)
+#------------------------------- Build normal case --------------------------#
 
-mynum.cmx: mynum.ml
-	${OCAMLOPTOPT} -c nums.cmxa mynum.ml
+clean::
+	@echo "  CLEAN    "
 
-ifdef MAC
-macos/GSourceView2.cmx: macos/GSourceView2.ml
-	cd macos; ${OCAMLOPTOPT} -c -I +lablgtk2 GSourceView2.ml
-endif
+../bin/%: %.ml
+	@echo "  OCAMLOPT " $*.cmi
+	${OCAMLOPT} -o ../bin/$* $*.ml
+clean::
+	rm -f $(TOOLS)
 
-../bin/vfide: Printexc_proxy.cmx vfversion_cmx proverapi.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx verifast0.cmx verifast1.cmx assertions.cmx verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3DEPS) Fonts.cmx $(GTKSOURCEVIEW_DEPS) vfide.ml
-ifndef WITHOUT_LABLGTK
-	$(SET_LDD); ${OCAMLOPTOPT} -warn-error F -pp ${CAMLP4O} -o ../bin/vfide -I +lablgtk2 lablgtk.cmxa $(GTKSOURCEVIEW) gtkInit.cmx unix.cmxa nums.cmxa -I ./linux -I java_frontend Perf.cmxa proverapi.cmx Printexc_proxy.cmx vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx plugins2.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) Fonts.cmx vfide.ml 
-endif
+%.cmi: %.mli
+	@echo "  OCAMLOPT " $@
+	${OCAMLOPT} -I ./java_frontend -c $*.mli
+clean::
+	rm -f *.cmi
 
-vfideredux.opt: vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginRedux.ml vfide.ml
-	$(SET_LDD); ${OCAMLOPTOPT} -warn-error F -pp ${CAMLP4O} -o vfideredux.opt -I +lablgtk2 lablgtk.cmxa gtkInit.cmx unix.cmxa proverapi.cmx nums.cmxa simplex.cmx redux.cmx vfversion.cmx verifast.cmx verifastPluginRedux.ml vfide.ml
+%.cmx: %.ml
+	@echo "  OCAMLOPT " $@
+	${OCAMLOPT}  -thread -c -w p -warn-error FSU -c -I ./$(INCLUDE_OS_DIR) \
+	  -I ./java_frontend -pp ${CAMLP4O} nums.cmxa  $*.ml
+clean::
+	rm -f *.cmx
+	rm -f *.o
 
-linux/Perf.cmxa: linux/Perf.ml linux/Stopwatch.mli linux/caml_stopwatch.c
-	${MAKE} -C linux OCAMLOPTOPT=${OCAMLOPTOPT}
+../bin/%.vfmanifest: ../bin/%.c ../bin/%.gh ../bin/verifast$(DOTEXE)
+	$(SET_ENV); ../bin/verifast -c -emit_vfmanifest ../bin/$*.c
+clean::
+	rm -f $(STDLIB_FILES)
 
+#------------------------------- Auto code generation -----------------------#
 DynType.mli: ../examples/plugin/DynType.mli
-	cat generated_file_warning.txt ../examples/plugin/DynType.mli > DynType.mli
-
-DynType.cmi: DynType.mli
-	${OCAMLOPTOPT} -c DynType.mli
-
-DynType.cmx: DynType.cmi DynType.ml
-	${OCAMLOPTOPT} -c DynType.ml
+	@echo "  CAT      " $@
+	@cat generated_file_warning.txt ../examples/plugin/DynType.mli > DynType.mli
+clean::
+	rm -f DynType.mli
 
 plugins.mli: ../examples/plugin/plugins.mli
+	@echo "  CAT      " $@
 	cat generated_file_warning.txt ../examples/plugin/plugins.mli > plugins.mli
-
-plugins.cmi: DynType.cmi plugins.mli
-	${OCAMLOPTOPT} -c plugins.mli
-
-plugins.cmx: DynType.cmx plugins.cmi plugins.ml
-	${OCAMLOPTOPT} -c plugins.ml
-
-plugins_private.cmx: plugins.cmx plugins_private.ml
-	${OCAMLOPTOPT} -c plugins_private.ml
+clean::
+	rm -f plugins.mli
 
 plugins2.mli: ../examples/plugin/plugins2.mli
+	@echo "  CAT      " $@
 	cat generated_file_warning.txt ../examples/plugin/plugins2.mli > plugins2.mli
+clean::
+	rm -f plugins2.mli
 
+ifeq ($(OS), Darwin)
+Fonts.ml: Fonts_mac.ml
+	@echo "  CAT      " $@
+	cat generated_file_warning.txt Fonts_mac.ml > Fonts.ml
+else
+Fonts.ml: Fonts_default.ml
+	@echo "  CAT      " $@
+	cat generated_file_warning.txt Fonts_default.ml > Fonts.ml
+endif
+clean::
+	rm -f Fonts.ml
+
+vfversion_autogen:
+	@echo "  OCAML    " generate_vfversion.ml
+	${OCAML} generate_vfversion.ml
+.PHONY: vfversion_autogen
+clean::
+	rm -f vfversion.ml
+
+# We only want to rebuild vfversion.ml and everything that depends on it
+# when it actually changes. But make itself causes vfversion.ml to change,
+# so make must reload its dependency graph at runtime.
+# We can trick make into reloading its dependency graph by having a
+# dependency from an included makefile, here "../GNUmakefile.settings"
+../GNUmakefile.settings: vfversion_autogen
+
+#------------------------------- Build special cases ------------------------#
+
+tabhunt:
+	@echo "  OCAML    " tabhunter.ml
+	${OCAML} tabhunter.ml
+
+../bin/mysh$(DOTEXE): Fonts.cmx mysh.ml
+	@echo "  OCAMLOPT " $@
+	${OCAMLOPT} -thread -o ../bin/mysh$(DOTEXE) unix.cmxa threads.cmxa Fonts.cmx mysh.ml
+mysh: ../bin/mysh$(DOTEXE)
+.PHONY: mysh
+
+ifeq ($(OS), Darwin)
+macos/GSourceView2.cmx: macos/GSourceView2.ml
+	cd macos; ${OCAMLOPT} -c -I +lablgtk2 GSourceView2.ml
+endif
+clean::
+	rm -f macos/*.cm* macos/*.o
+
+../bin/vfide$(DOTEXE): Printexc_proxy.cmx vfversion.cmx proverapi.cmx util.cmx \
+  stats.cmx lexer.cmx ast.cmx parser.cmx verifast0.cmx verifast1.cmx \
+  assertions.cmx verify_expr.cmx verifast.cmx simplex.cmx redux.cmx \
+  verifastPluginRedux.ml $(Z3DEPS) Fonts.cmx $(GTKSOURCEVIEW_DEPS) \
+  $(INCLUDE_OS_DIR)/Perf.cmxa vfide.ml
+ifndef WITHOUT_LABLGTK
+	@echo "  OCAMLOPT " $@
+	$(SET_LDD); ${OCAMLOPT} -warn-error F -pp ${CAMLP4O} -o ../bin/vfide	\
+	  -I +lablgtk2 lablgtk.cmxa $(GTKSOURCEVIEW_LFLAGS) gtkInit.cmx unix.cmxa \
+	  nums.cmxa -I ./$(INCLUDE_OS_DIR) -I java_frontend Perf.cmxa proverapi.cmx \
+	  Printexc_proxy.cmx vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx \
+	  plugins_private.cmx plugins2.cmx util.cmx stats.cmx lexer.cmx ast.cmx \
+	  parser.cmx ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx \
+	  verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml \
+	  $(Z3ARGS) Fonts.cmx vfide.ml
+endif
+ifneq ($(OS), Cygwin)
+  ../bin/vfide$(DOTEXE): linux/libPerf_cobjs.a
+endif
+vfide: ../bin/vfide$(DOTEXE) $(STDLIB_FILES)
+.PHONY: vfide
+
+../bin/verifast$(DOTEXE): vfversion.cmx proverapi.cmx util.cmx stats.cmx lexer.cmx \
+  ast.cmx parser.cmx verifast0.cmx verifast1.cmx assertions.cmx \
+  verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml \
+  $(Z3DEPS) SExpressions.cmx SExpressionEmitter.cmx \
+  $(INCLUDE_OS_DIR)/Perf.cmxa vfconsole.ml
+	@echo "  OCAMLOPT " $@
+	${OCAMLOPT} -warn-error F -pp ${CAMLP4O} -o ../bin/verifast$(DOTEXE) unix.cmxa \
+	  nums.cmxa -I ./$(INCLUDE_OS_DIR) -I ./java_frontend Perf.cmxa proverapi.cmx \
+	  vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx \
+	  plugins2.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx \
+	  ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx \
+	  verify_expr.cmx verifast.cmx simplex.cmx redux.cmx \
+	  verifastPluginRedux.ml $(Z3ARGS) SExpressions.cmx \
+	  SExpressionEmitter.cmx vfconsole.ml
+ifneq ($(OS), Cygwin)
+  ../bin/verifast$(DOTEXE): linux/libPerf_cobjs.a
+endif
+verifast: ../bin/verifast$(DOTEXE) $(STDLIB_FILES)
+.PHONY: verifast
+
+z3prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmx proverapi.cmx z3prover.ml
+	@echo "  OCAMLOPT " $@
+	${OCAMLOPT} -warn-error F -c -I $(Z3)/ocaml z3.cmxa -I ./$(INCLUDE_OS_DIR) Perf.cmx proverapi.cmx z3prover.ml
+
+z3v2prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmx proverapi.cmx z3v2prover.ml
+	@echo "  OCAMLOPT " $@
+	${OCAMLOPT} -warn-error F -c -I $(Z3)/ocaml z3.cmxa -I ./$(INCLUDE_OS_DIR) Perf.cmx proverapi.cmx z3v2prover.ml
+
+z3v4prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmx proverapi.cmx z3v4prover.ml
+	@echo "  OCAMLOPT " $@
+	${OCAMLOPT} -warn-error F -c -I $(Z3)/ocaml z3.cmxa -I ./$(INCLUDE_OS_DIR) Perf.cmx proverapi.cmx z3v4prover.ml
+
+#------------------------------- Tests --------------------------------------#
+test_plugin: verifast
+	$(SET_ENV); \
+	  ${MAKE} -C ../examples/plugin clean OCAMLOPT=${OCAMLOPT}
+	$(SET_ENV); \
+	  ${MAKE} -C ../examples/plugin all OCAMLOPT=${OCAMLOPT}
+
+test: verifast test_plugin mysh
+	@echo "  MYSH     " testsuite
+	$(SET_ENV); \
+        cd ..; bin/mysh -cpus $(NUMCPU) < testsuite.mysh
+
+#------------------------------- Dependencies -------------------------------#
+vfversion.cmi: vfversion.mli
+vfversion.cmo: vfversion.cmi	
+vfversion.cmx: vfversion.cmi vfversion.ml
+mynum.cmx: mynum.ml
+DynType.cmx: DynType.cmi DynType.ml
+plugins.cmi: DynType.cmi plugins.mli
+plugins.cmx: DynType.cmx plugins.cmi plugins.ml
+plugins_private.cmx: plugins.cmx plugins_private.ml
 plugins2.cmi: plugins.cmi plugins2.mli
-	${OCAMLOPTOPT} -annot -c plugins2.mli
-
 plugins2.cmx: plugins_private.cmx plugins2.cmi plugins2.ml
-	${OCAMLOPTOPT} -annot -c plugins2.ml
-
-pa_verifast.cmo: pa_verifast.ml
-	${OCAMLC} -I +camlp4 dynlink.cma camlp4lib.cma -annot -pp "${CAMLP4O} pa_extend.cmo q_MLast.cmo" pa_verifast.ml
-
-util.cmx: linux/Perf.cmxa vfversion.cmi proverapi.cmx plugins2.cmx pa_verifast.cmo util.ml
-	${OCAMLOPTOPT} -annot -w p -warn-error FSU -c -I ./linux util.ml
-
+util.cmx: $(INCLUDE_OS_DIR)/Perf.cmxa vfversion.cmi proverapi.cmx plugins2.cmx util.ml
 stats.cmx: util.cmx stats.ml
-	${OCAMLOPTOPT} -annot -w p -warn-error FSU -c -I ./linux stats.ml
-
 lexer.cmx: stats.cmx lexer.ml
-	${OCAMLOPTOPT} -annot -w p -warn-error FSU -c -I ./linux lexer.ml
-
 ast.cmx: lexer.cmx ast.ml
-	${OCAMLOPTOPT} -annot -w p -warn-error FSU -c -I ./linux ast.ml
-
 parser.cmx: ast.cmx parser.ml
-	${OCAMLOPTOPT} -w p -warn-error FSU -pp ${CAMLP4O} -c -I ./linux parser.ml
-
 verifast0.cmx: parser.cmx verifast0.ml java_frontend
-	${OCAMLOPTOPT} -annot -w p -warn-error FSU -c -I ./linux -I ./java_frontend verifast0.ml
-
 verifast1.cmx: verifast0.cmx verifast1.ml
-	${OCAMLOPTOPT} -annot -w p -warn-error FSU -c -I ./linux -I ./java_frontend verifast1.ml
-
 assertions.cmx: verifast1.cmx assertions.ml
-	${OCAMLOPTOPT} -annot -w p -warn-error FSU -c -I ./linux assertions.ml
-
 verify_expr.cmx: assertions.cmx verify_expr.ml
-	${OCAMLOPTOPT} -annot -w p -warn-error FSU -c -I ./linux verify_expr.ml
-
 verifast.cmx: verify_expr.cmx verifast.ml
-	${OCAMLOPTOPT} -annot -w p -warn-error FSU -c -I ./linux -I ./java_frontend verifast.ml
-
 verifast.cmo: vfversion.cmi proverapi.cmo verifast.ml
-	${OCAMLCOPT} -annot -warn-error F -g -pp ${CAMLP4O} -I ./linux -c verifast.ml
-
 simplex.cmo: simplex.ml
-	${OCAMLC} -annot -warn-error F -g -c simplex.ml
-
 proverapi.cmo: proverapi.ml
-	${OCAMLC} -annot -warn-error F -g -c proverapi.ml
-
 redux.cmo: proverapi.cmo simplex.cmo redux.ml
-	${OCAMLC} -warn-error F -w p -g -c redux.ml
-
-z3prover.cmo: proverapi.cmo z3prover.ml linux/Perf.cmxa
-ifdef Z3V2
-	$(error "Z3V2 is defined.")
-endif
-	${OCAMLC} -warn-error F -g -c -I $(Z3)/ocaml -I ./linux z3prover.ml
-
-z3v2prover.cmo: proverapi.cmo z3v2prover.ml linux/Perf.cmxa
-ifndef Z3V2
-	$(error "Z3V2 is not defined.")
-endif
-	${OCAMLC} -warn-error F -g -c -I $(Z3)/ocaml -I ./linux z3v2prover.ml
-
-z3v4prover.cmo: proverapi.cmo z3v4prover.ml linux/Perf.cmxa
-ifndef Z3V4
-	$(error "Z3V4 is not defined.")
-endif
-	${OCAMLC} -warn-error F -g -c -I $(Z3)/ocaml -I ./linux z3v4prover.ml
-
-verifast.opt: vfversion_cmx proverapi.cmx redux.cmx z3prover.cmx verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
-	${OCAMLOPTOPT} -warn-error F -pp ${CAMLP4O} -o verifast.opt -I $(Z3)/ocaml ole32.lib $(OCAMLLIB)/libcamlidl.lib unix.cmxa z3.cmxa proverapi.cmx redux.cmx z3prover.cmx vfversion.cmx verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
-
 SExpressions.cmi: SExpressions.mli
-	${OCAMLOPTOPT} -c SExpressions.mli
-
 SExpressions.cmx: SExpressions.cmi SExpressions.ml
-	${OCAMLOPTOPT} -c nums.cmxa SExpressions.ml
-
 SExpressionEmitter.cmi: verifast.cmx SExpressionEmitter.mli
-	${OCAMLOPTOPT} -c SExpressionEmitter.mli
-
 SExpressionEmitter.cmx: verifast.cmx SExpressionEmitter.cmi SExpressions.cmx SExpressionEmitter.ml
-	${OCAMLOPTOPT} -c nums.cmxa SExpressionEmitter.ml
-
-../bin/verifast: tabhunt vfversion_cmx proverapi.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx verifast0.cmx verifast1.cmx assertions.cmx verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3DEPS) SExpressions.cmx SExpressionEmitter.cmx vfconsole.ml
-	${OCAMLOPTOPT} -warn-error F -pp ${CAMLP4O} -o ../bin/verifast unix.cmxa nums.cmxa -I ./linux -I ./java_frontend Perf.cmxa proverapi.cmx vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx plugins2.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) SExpressions.cmx SExpressionEmitter.cmx vfconsole.ml
-
 proverapi.cmx: proverapi.ml
-	${OCAMLOPTOPT} -warn-error F -c proverapi.ml
-
 simplex.cmi: simplex.mli
-	${OCAMLOPTOPT} -c simplex.mli
+simplex.cmx: $(INCLUDE_OS_DIR)/Perf.cmx simplex.cmi simplex.ml
+redux.cmx: $(INCLUDE_OS_DIR)/Perf.cmx proverapi.cmx simplex.cmx redux.ml
 
-simplex.cmx: linux/Perf.cmx simplex.cmi simplex.ml
-	${OCAMLOPTOPT} -warn-error F -c -I ./linux Perf.cmx simplex.ml
+# You can try building dependencies automatically, e.g. with
+# $(OCAMLDEP) -pp ${CAMLP4O} -native -I . -I linux/ -I java_frontend \
+#   $(filter-out pa_verifast.ml, $(wildcard *.ml)) *.mli linux/*.ml \
+#   linux/*.mli java_frontend/*.ml java_frontend/*.mli > .depend
+# but this does not seem to catch them all. Ocamlbuild manages to
+# do it automatically, so it must be possible somehow.
 
-redux.cmx: linux/Perf.cmx proverapi.cmx simplex.cmx redux.ml
-	${OCAMLOPTOPT} -warn-error F -c -I ./linux Perf.cmx redux.ml
-
-z3prover.cmx: linux/Perf.cmx proverapi.cmx z3prover.ml
-	${OCAMLOPTOPT} -warn-error F -c -I $(Z3)/ocaml z3.cmxa -I ./linux Perf.cmx proverapi.cmx z3prover.ml
-
-z3v2prover.cmx: linux/Perf.cmx proverapi.cmx z3v2prover.ml
-	${OCAMLOPTOPT} -warn-error F -c -I $(Z3)/ocaml z3.cmxa -I ./linux Perf.cmx proverapi.cmx z3v2prover.ml
-
-z3v4prover.cmx: linux/Perf.cmx proverapi.cmx z3v4prover.ml
-	${OCAMLOPTOPT} -warn-error F -c -I $(Z3)/ocaml z3.cmxa -I ./linux Perf.cmx proverapi.cmx z3v4prover.ml
-
-verifastRedux.opt: vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.ml verifastPluginRedux.ml vfconsole.ml
-	${OCAMLOPTOPT} -warn-error F -pp ${CAMLP4O} -o verifastRedux.opt unix.cmxa nums.cmxa proverapi.cmx simplex.cmx redux.cmx vfversion.cmx verifast.ml verifastPluginRedux.ml vfconsole.ml
+#------------------------------- Release Linux ------------------------------#
 
 release: test release_core
 
@@ -439,3 +366,4 @@ endif
 	cd verifast-$(VFVERSION)/tutorial_solutions; for f in *.c; do ../bin/vfstrip < $$f > ../tutorial/$$f; done; cd ../..
 	cp ../testsuite.mysh verifast-$(VFVERSION)
 	cp ../test.sh verifast-$(VFVERSION)
+

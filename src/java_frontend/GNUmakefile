@@ -1,44 +1,37 @@
-TARGETS = misc.cmx general_ast.cmx communication.cmx \
-          ast_writer.cmx ast_reader.cmx annotation_type_checker.cmx \
-          java_frontend.cmx ast_translator.cmx
+# You probably don't want to use this makefile, you probably want
+# /src/GNUmakefile.
 
-OCAML_INCL = str.cmxa nums.cmxa unix.cmxa
+# If you really want to use this makefile, just use /src/GNUmakefile and
+# provide a target of this makefile, e.g. "make java_frontend"
 
-VERIFAST = ..
+# Note: there are dependencies to the outer Makefile (/src/GNUMakefile).
 
-all: ${TARGETS}
+java_frontend: java_frontend/misc.cmx java_frontend/general_ast.cmx java_frontend/communication.cmx \
+          java_frontend/ast_writer.cmx java_frontend/ast_reader.cmx java_frontend/annotation_type_checker.cmx \
+          java_frontend/java_frontend.cmx java_frontend/ast_translator.cmx
 
-misc.cmx: misc.ml
-	${OCAMLOPTOPT} -c misc.ml
+java_frontend/misc.cmx: java_frontend/misc.ml
+java_frontend/general_ast.cmx: java_frontend/general_ast.ml java_frontend/misc.cmx
+java_frontend/ast_writer.cmx: java_frontend/ast_writer.ml java_frontend/general_ast.cmx
+java_frontend/ast_reader.cmx: java_frontend/ast_reader.ml java_frontend/general_ast.cmx
+java_frontend/communication.cmx: java_frontend/communication.ml java_frontend/ast_reader.cmx
+java_frontend/annotation_type_checker.cmi: java_frontend/annotation_type_checker.mli java_frontend/communication.cmx
+java_frontend/annotation_type_checker.cmx: java_frontend/annotation_type_checker.ml java_frontend/annotation_type_checker.cmi java_frontend/general_ast.cmx
+java_frontend/java_frontend.cmi: java_frontend/java_frontend.mli java_frontend/annotation_type_checker.cmx java_frontend/general_ast.cmx
+java_frontend/java_frontend.cmx: java_frontend/java_frontend.ml java_frontend/java_frontend.cmi java_frontend/ast_reader.cmx java_frontend/communication.cmx
+java_frontend/ast_translator.cmx: java_frontend/ast_translator.ml java_frontend/general_ast.cmx ast.cmx parser.cmx
 
-general_ast.cmx: general_ast.ml misc.cmx
-	${OCAMLOPTOPT} -c general_ast.ml
+# Note: only 1 CPU allowed for this test because ASTServer currently can only
+#       hande one request at a time
+test_java_front: build test_plugin
+	$(SET_ENV); \
+	cd ../examples/java/frontend; ../../../bin/mysh -cpus 1 < frontend.mysh
 
-ast_writer.cmx: ast_writer.ml general_ast.cmx
-	${OCAMLOPTOPT} -c ast_writer.ml
+JAVA_FE_INCLS = -thread threads.cmxa misc.cmx general_ast.cmx ast_reader.cmx \
+  communication.cmx annotation_type_checker.cmx java_frontend.cmx \
+  ast_translator.cmx
 
-ast_reader.cmx: ast_reader.ml general_ast.cmx
-	${OCAMLOPTOPT} -pp ${CAMLP4O} -c ast_reader.ml
+clean::
+	rm -f java_frontend/*.cm*
+	rm -f java_frontend/*.o java_frontend/*.a java_frontend/*.annot
 
-communication.cmx: communication.ml ast_reader.cmx
-	${OCAMLOPTOPT} -thread -c communication.ml
-
-annotation_type_checker.cmi: annotation_type_checker.mli communication.cmx
-	${OCAMLOPTOPT} -c annotation_type_checker.mli
-
-annotation_type_checker.cmx: annotation_type_checker.ml annotation_type_checker.cmi general_ast.cmx
-	${OCAMLOPTOPT} -c annotation_type_checker.ml
-
-java_frontend.cmi: java_frontend.mli annotation_type_checker.cmx general_ast.cmx
-	${OCAMLOPTOPT} -c java_frontend.mli
-
-java_frontend.cmx: java_frontend.ml java_frontend.cmi ast_reader.cmx communication.cmx
-	${OCAMLOPTOPT} -c java_frontend.ml
-
-ast_translator.cmx: ast_translator.ml general_ast.cmx
-	${OCAMLOPTOPT} -pp ${CAMLP4O} -annot -w p -c -I ./linux -I ${VERIFAST} ast_translator.ml
-
-clean:
-	rm -f *.cm*
-	rm -f *.o *.a *.annot
-	rm -f ${EXEC_NAME}
