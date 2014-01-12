@@ -1,6 +1,7 @@
 # Builds VeriFast itself. Does *not* build dependencies like lablgtk,ocaml,...
 
 all: build test
+.PHONY: all
 
 #------------------------------- Help ---------------------------------------#
 help:
@@ -17,6 +18,7 @@ help:
 	@echo "Tips:"
 	@echo "-You can add the option VERBOSE=1 to see more, e.g. 'make build VERBOSE=1'".
 	@echo "-You can add -j N to use N cores, e.g. 'make build -j 4'."
+.PHONY: help
 
 #------------------------------- Settings -----------------------------------#
 
@@ -88,10 +90,10 @@ endif
 
 # Number of CPUs
 ifeq ($(OS), Darwin)
-  NUMCPU := $(shell sysctl -n hw.ncpu)
+  NUMCPU ?= $(shell sysctl -n hw.ncpu)
 else
 # Works on Linux and Cygwin (Cygwin has no /sys).
-  NUMCPU := $(shell cat /proc/cpuinfo | grep 'processor' | wc -l)
+  NUMCPU ?= $(shell cat /proc/cpuinfo | grep 'processor' | wc -l)
 endif
 
 env:
@@ -128,11 +130,14 @@ STDLIB_FILES = ../bin/raw_ghost_lists.vfmanifest ../bin/listex.vfmanifest \
        ../bin/assoclist.vfmanifest ../bin/permutations.vfmanifest \
        ../bin/list.vfmanifest
 
-TOOLS = ../bin/mysh$(DOTEXE) ../bin/verifast$(DOTEXE) ../bin/vfide$(DOTEXE) \
+TOOLS_EXCEPT_VFIDE = ../bin/mysh$(DOTEXE) ../bin/verifast$(DOTEXE) \
         ../bin/main_class$(DOTEXE) ../bin/java_card_applet$(DOTEXE) \
         ../bin/dlsymtool$(DOTEXE) ../bin/vfstrip$(DOTEXE)
 
+TOOLS = $(TOOLS_EXCEPT_VFIDE) ../bin/vfide$(DOTEXE)
+
 build: $(TOOLS) $(STDLIB_FILES) tabhunt vfversion_autogen
+.PHONY: build
 
 distclean:: clean
 
@@ -216,6 +221,7 @@ clean::
 tabhunt:
 	@echo "  OCAML    " tabhunter.ml
 	${OCAML} tabhunter.ml
+.PHONY: tabhunt
 
 ../bin/mysh$(DOTEXE): Fonts.cmx mysh.ml
 	@echo "  OCAMLOPT " $@
@@ -290,11 +296,16 @@ test_plugin: verifast
 	  ${MAKE} -C ../examples/plugin clean OCAMLOPT=${OCAMLOPT}
 	$(SET_ENV); \
 	  ${MAKE} -C ../examples/plugin all OCAMLOPT=${OCAMLOPT}
+.PHONY: test_plugin
 
-test: verifast test_plugin mysh
+testsuite: $(STDLIB_FILES) $(TOOLS_EXCEPT_VFIDE)
 	@echo "  MYSH     " testsuite
 	$(SET_ENV); \
         cd ..; bin/mysh -cpus $(NUMCPU) < testsuite.mysh
+.PHONY: testsuite
+
+test: testsuite test_plugin 
+.PHONY: test
 
 #------------------------------- Dependencies -------------------------------#
 vfversion.cmi: vfversion.mli
@@ -337,11 +348,12 @@ redux.cmx: $(INCLUDE_OS_DIR)/Perf.cmx proverapi.cmx simplex.cmx redux.ml
 # but this does not seem to catch them all. Ocamlbuild manages to
 # do it automatically, so it must be possible somehow.
 
-#------------------------------- Release Linux ------------------------------#
-
-release: test release_core
-
-release_core:
+#------------------------------- Release ------------------------------------#
+release: release_core
+release_core: test build
+ifeq ($(OS), Cygwin)
+	$(error Cygwin currently not supported for release)
+endif
 	mkdir verifast-$(VFVERSION)
 	cp -R ../bin verifast-$(VFVERSION)
 ifdef Z3
