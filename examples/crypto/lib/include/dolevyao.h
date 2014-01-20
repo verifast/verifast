@@ -1,6 +1,8 @@
 #ifndef DOLEVYAO_H
 #define DOLEVYAO_H
 
+#include "bool.h"
+
 /*
 
 Dolev-Yao security verification of security protocols. Uses an invariant-based 
@@ -102,6 +104,14 @@ from it.
 //@ #include "switch_primitives.gh"
 
 ///////////////////////////////////////////////////////////////////////////////
+// Initialization /////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+
+void init_crypto_lib();
+  //@ requires exists<fixpoint(item, bool)>(?pub) &*& net_api_uninitialized();
+  //@ ensures world(pub);
+
+///////////////////////////////////////////////////////////////////////////////
 // General definitions ////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -145,7 +155,7 @@ inductive item =
   | nonce_item(int principal, int count, int info)
   | key_item(int principal, int count, key_kind kind, int info)
   | data_item(int data)
-  | hmac_item(int principal, int count, int info, item payload)
+  | hmac_item(int principal, int count, key_kind kind, int info, item payload)
   | encrypted_item(int principal, int count, key_kind kind, int info, item payload, int entropy)
   | pair_item(item first, item second);
   
@@ -156,6 +166,10 @@ predicate item(struct item *item, item i);
 bool item_equals(struct item *item1, struct item *item2);
   //@ requires item(item1, ?i1) &*& item(item2, ?i2);
   //@ ensures  item(item1, i1) &*& item(item2, i2) &*& result == (i1 == i2);
+
+struct item *item_clone(struct item *item);
+  //@ requires item(item, ?i);
+  //@ ensures  item(item, i) &*& item(result, i);
 
 void item_free(struct item *item);
   //@ requires item(item, _);
@@ -207,7 +221,7 @@ void check_is_nonce(struct item *item);
             return item(item, nonce_item(p0, c0, i0));
           case key_item(p0, c0, k0, i0): return false;
           case data_item(d0): return false;
-          case hmac_item(p0, c0, i0, payload0): return false;
+          case hmac_item(p0, c0, k0, i0, payload0): return false;
           case encrypted_item(p0, c0, k0, i0, payload0, entropy0): return false;
           case pair_item(f0, s0): return false;
         }; 
@@ -227,12 +241,22 @@ predicate key_item(struct item *item, int participant, int count, key_kind kind,
 //@ predicate key_request(int principal, int info) = emp;
 
 struct item *create_key();
-  /*@ requires generated_keys(?principal, ?count) &*& 
-               key_request(principal, ?info); 
+  /*@ requires key_request(?principal, ?info) &*&
+               generated_keys(principal, ?count); 
   @*/
   /*@ ensures  generated_keys(principal, count + 1) &*& 
                key_item(result, principal, count, symmetric_key, info); 
   @*/
+
+struct item *key_clone(struct item* key);
+  //@ requires key_item(key, ?principal, ?count, ?kind, ?info); 
+  /*@ ensures  key_item(key, principal, count, kind, info) &*&
+               key_item(result, principal, count, kind, info); 
+  @*/
+
+void key_free(struct item* key);
+  //@ requires key_item(key, _, _, _, _);
+  //@ ensures  true;
 
 //check_is_key aborts if the item is not a key.
 void check_is_key(struct item *item);
@@ -244,7 +268,7 @@ void check_is_key(struct item *item);
           case key_item(p0, c0, k0, i0):
             return key_item(item, p0, c0, k0, i0);
           case data_item(d0): return false;
-          case hmac_item(p0, c0, i0, payload0): return false;
+          case hmac_item(p0, c0, k0, i0, payload0): return false;
           case encrypted_item(p0, c0, k0, i0, payload0, entropy0): return false;
           case pair_item(f0, s0): return false;
        }; 
@@ -257,11 +281,19 @@ struct keypair;
 //@ predicate keypair_request(int info) = emp;
 //@ predicate public_key_request(int info) = emp;
 
-struct keypair *create_keypair();
-    //@ requires keypair_request(?info) &*& generated_keys(?principal, ?count);
+struct keypair *create_keypair(int principal);
+    //@ requires keypair_request(?info) &*& generated_keys(principal, ?count);
     /*@ ensures generated_keys(principal, count + 1) &*& 
                 keypair(result, principal, count, info);
     @*/
+
+struct item *get_public_key(int participant);
+  //@ requires public_key_request(?info);
+  //@ ensures key_item(result, participant, _, public_key, info);
+  
+void keypair_free(struct keypair *keypair);
+    //@ requires keypair(?result, ?principal, ?count, ?info);
+    //@ ensures true;
 
 struct item *keypair_get_private_key(struct keypair *keypair);
     //@ requires keypair(keypair, ?creator, ?id, ?info);
@@ -272,10 +304,6 @@ struct item *keypair_get_private_key(struct keypair *keypair);
 struct item *keypair_get_public_key(struct keypair *keypair);
     //@ requires keypair(keypair, ?creator, ?id, ?info);
     //@ ensures key_item(result, creator, id, public_key, info);
-
-struct item *get_client_public_key(int participant);
-  //@ requires public_key_request(?info);
-  //@ ensures key_item(result, participant, _, public_key, info);
 
 ///////////////////////////////////////////////////////////////////////////////
 // Data item //////////////////////////////////////////////////////////////////
@@ -295,7 +323,7 @@ int item_get_data(struct item *item);
           case key_item(p0, c0, k0, i0): return false;
           case data_item(d0):
             return item(item, i) &*& result == d0;
-          case hmac_item(p0, c0, i0, payload0): return false;
+          case hmac_item(p0, c0, k0, i0, payload0): return false;
           case encrypted_item(p0, c0, k0, i0, payload0, entropy0): return false;
           case pair_item(f0, s0): return false;
         };  
@@ -308,14 +336,14 @@ int item_get_data(struct item *item);
 struct item *hmac(struct item *key, struct item *payload);
   //@ requires key_item(key, ?creator, ?id, ?kind, ?info) &*& item(payload, ?p);
   /*@ ensures  key_item(key, creator, id, kind, info) &*& item(payload, p) &*& 
-               item(result, hmac_item(creator, id, info, p)); @*/
+               item(result, hmac_item(creator, id, kind, info, p)); @*/
 
 void hmacsha1_verify(struct item *hash, struct item *key, struct item *payload);
   /*@ requires item(hash, ?h) &*& key_item(key, ?creator, ?id, ?kind, ?info) &*& 
                item(payload, ?p); 
   @*/
   /*@ ensures  item(hash, h) &*& key_item(key, creator, id, kind, info) &*& 
-               item(payload, p) &*& h == hmac_item(creator, id, info, p); 
+               item(payload, p) &*& h == hmac_item(creator, id, kind, info, p); 
   @*/
 
 //check_is_hmac aborts if the item is not a hmac.
@@ -327,8 +355,8 @@ void check_is_hmac(struct item *item);
           case nonce_item(p0, c0, i0): return false;
           case key_item(p0, c0, k0, i0): return false;
           case data_item(d0): return false;
-          case hmac_item(p0, c0, i0, payload0):
-            return item(item, hmac_item(p0, c0, i0, payload0));
+          case hmac_item(p0, c0, k0, i0, payload0):
+            return item(item, hmac_item(p0, c0, k0, i0, payload0));
           case encrypted_item(p0, c0, k0, i0, payload0, entropy0): return false;
           case pair_item(f0, s0): return false;
        }; 
@@ -338,42 +366,46 @@ void check_is_hmac(struct item *item);
 // Encrypted item /////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-//@ predicate entropy(int value) = true;
+/*@ 
+predicate entropy(int value) = true;
 
-// This function aborts if the key is not a key item or if it is a private key.
+fixpoint key_kind inverse_key_kind(key_kind k)
+{
+  switch(k)
+  {
+    case symmetric_key: return symmetric_key;
+    case public_key: return private_key;
+    case private_key: return public_key;
+  }
+}
+
+@*/
+
+// This function aborts if the key is not a key item.
 struct item *encrypt(struct item *key, struct item *payload);
-  //@ requires key_item(key, ?s, ?count, ?kind, ?info) &*& item(payload, ?p);
+  /*@ requires key_item(key, ?s, ?count, ?kind, ?info) &*& item(payload, ?p); @*/
   /*@ ensures  key_item(key, s, count, kind, info) &*& 
+        (kind == symmetric_key || kind == public_key) &*&
         item(payload, p) &*& [_]entropy(?entropy) &*& 
         item(result, encrypted_item(s, count, kind, info, p, entropy));
   @*/
 
-// This function aborts if the key is not a key item or if it is a public key.
+// This function aborts if key is not a key item or if it is not a correct key.
 struct item *decrypt(struct item *key, struct item *item);
-  //@ requires key_item(key, ?participant, ?count, ?kind, ?info) &*& item(item, ?i);
+  /*@ requires key_item(key, ?participant, ?count, ?kind, ?info) &*& 
+               item(item, ?i); @*/
   /*@ ensures  key_item(key, participant, count, kind, info) &*& item(item, i) &*&
+        (kind == symmetric_key || kind == private_key) &*&
         switch (i) 
         {
           case nonce_item(p0, c0, i0): return false;
           case key_item(p0, c0, k0, i0): return false;
           case data_item(d0): return false;
-          case hmac_item(p0, c0, i0, payload0): return false;
+          case hmac_item(p0, c0, k0, i0, payload0): return false;
           case encrypted_item(p0, c0, k0, i0, payload0, entropy0): return
-            switch(k0)
-            {
-              case symmetric_key: return
-                kind == symmetric_key &*&
-                p0 == participant &*& c0 == count &*& 
-                i0 == info &*& item(result, payload0);
-              case public_key: return 
-                kind == private_key &*&
-                p0 == participant &*& c0 == count &*& 
-                i0 == info &*& item(result, payload0);
-              case private_key: return 
-                kind == public_key &*&
-                p0 == participant &*& c0 == count &*& 
-                i0 == info &*& item(result, payload0);
-            };
+            k0 == inverse_key_kind(kind) &*&
+            p0 == participant &*& c0 == count &*& 
+            i0 == info &*& item(result, payload0);
           case pair_item(f0, s0): return false;
         };
   @*/
@@ -395,7 +427,7 @@ struct item *pair_get_first(struct item *pair);
           case nonce_item(p0, c0, i0): return false;
           case key_item(p0, c0, k0, i0): return false;
           case data_item(d0): return false;
-          case hmac_item(p0, c0, i0, payload0): return false;
+          case hmac_item(p0, c0, k0, i0, payload0): return false;
           case encrypted_item(p0, c0, k0, i0, payload0, entropy0): return false;
           case pair_item(f0, s0):
             return item(result, f0);
@@ -411,23 +443,86 @@ struct item *pair_get_second(struct item *pair);
           case nonce_item(p0, c0, i0): return false;
           case key_item(p0, c0, k0, i0): return false;
           case data_item(d0): return false;
-          case hmac_item(p0, c0, i0, payload0): return false;
+          case hmac_item(p0, c0, i0, k0, payload0): return false;
           case encrypted_item(p0, c0, k0, i0, payload0, entropy0): return false;
           case pair_item(f0, s0):
             return item(result, s0);
         };
   @*/
 
+struct item *get_client_public_key(int participant);
+  //@ requires public_key_request(?info);
+  //@ ensures key_item(result, participant, _, public_key, info);
+
 ///////////////////////////////////////////////////////////////////////////////
 // Network ////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-void net_send(struct item *datagram);
-  //@ requires world(?pub) &*& item(datagram, ?d) &*& pub(d) == true;
-  //@ ensures world(pub) &*& item(datagram, d);
+struct network_status;
 
-struct item *net_receive();
-  //@ requires world(?pub);
-  //@ ensures world(pub) &*& item(result, ?d) &*& pub(d) == true;
+//@ predicate net_api_uninitialized();
+
+struct network_status *network_bind(int port);
+  //@ requires true;
+  //@ ensures true;
+
+struct network_status *network_connect(const char *name, int port);
+  //@ requires true;
+  //@ ensures true;
+
+void network_disconnect(struct network_status *stat);
+  //@ requires true;
+  //@ ensures true;
+
+void network_send(struct network_status *stat, struct item *datagram);
+  //@ requires [?f]world(?pub) &*& item(datagram, ?d) &*& pub(d) == true;
+  //@ ensures [f]world(pub) &*& item(datagram, d);
+
+struct item *network_receive(struct network_status *stat);
+  //@ requires [?f]world(?pub);
+  //@ ensures [f]world(pub) &*& item(result, ?d) &*& pub(d) == true;
+
+struct item *network_receive_attempt(struct network_status *stat);
+  //@ requires [?f]world(?pub);
+  /*@ ensures [f]world(pub) &*&
+              result == 0 ? true : item(result, ?d) &*& pub(d) == true;
+  @*/
+
+///////////////////////////////////////////////////////////////////////////////
+// Attacker capabilities //////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+
+//Participant 0 is a trusted server, which whom everyone shares a set of keys
+/*@ predicate initial_principals() = 
+      principals(?count) &*& count > 0 &*& bad(0) == false; @*/
+
+int create_principal(struct item **key_sym_pp, struct keypair **key_pair_pp);
+  /*@ requires *key_sym_pp |-> _ &*& *key_pair_pp |-> _ &*&
+               principals(?count);
+  @*/
+  /*@ ensures  principals(count + 1) &*& 
+               result == count &*&
+               generated_nonces(count, 0) &*&
+               generated_keys(count, 0) &*&
+               *key_sym_pp |-> ?key_sym &*& *key_pair_pp |-> ?key_pair &*&
+               key_item(key_sym, count, 0, symmetric_key, int_pair(0, 0)) &*&
+               keypair(key_pair, count, 0, int_pair(0, 0));
+  @*/
+  
+///////////////////////////////////////////////////////////////////////////////
+// Switch template ////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+
+// //@ assert item(item, ?i) &*&
+// /*@ switch (i) 
+//     {
+//       case nonce_item(p0, c0, ii0): i = i;
+//       case key_item(p0, c0, k0, ii0): i = i;
+//       case data_item(d0): i = i;
+//       case hmac_item(p0, c0, ii0, payload0): i = i;
+//       case encrypted_item(p0, c0, k0, ii0, payload0, entropy0): i = i;
+//       case pair_item(f0, s0): i = i;
+//     }
+// @*/
 
 #endif
