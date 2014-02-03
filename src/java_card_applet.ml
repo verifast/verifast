@@ -19,7 +19,12 @@ let rec mk_list_expr ss =
   | s::ss -> Printf.sprintf "cons<byte>(%s, %s)" s (mk_list_expr ss)
 
 let () =
-  let _::args = Array.to_list Sys.argv in
+  let args = 
+    match Array.to_list Sys.argv with 
+    | _::args -> args
+    (* This case can never happen, but otherwise compiler gives a warning *)
+    | _ -> exit 99
+  in
   let appletClass, args =
     match args with
       appletClass::args -> appletClass, args

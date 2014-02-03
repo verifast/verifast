@@ -30,7 +30,12 @@ let normalize_to_lf text =
   let rec iter lfCount crCount crlfCount k =
     if k = n then begin
       let counts = [lfCount, platform = Linux || platform = MacOS, "\n"; crlfCount, platform = Windows, "\r\n"; crCount, false, "\r"] in
-      let (_, _, eol)::_ = List.sort (fun x y -> - compare x y) counts in
+      let eol =
+        match List.sort (fun x y -> - compare x y) counts with
+        | (_, _, eol)::_ -> eol
+        (* This case can never happen, but otherwise compiler gives a warning *)
+        | _ -> ""
+      in
       (eol, Buffer.contents buffer)
     end else
       let c = text.[k] in
@@ -858,9 +863,17 @@ let show_ide initialPath prover codeFont traceFont runtime layout =
         let l = create_marks_of_loc l in
         (ass, h, env, l, msg, locstack)::iter (k + 1) itstack (Some it) ass locstack (Some l) (Some env) cs
       | PushSubcontext::cs ->
-        (match (last_it, last_loc, last_env) with (Some it, Some l, Some env) -> iter k (it::itstack) None ass ((l, env)::locstack) None None cs)
+        (match (last_it, last_loc, last_env) with 
+          | (Some it, Some l, Some env) -> iter k (it::itstack) None ass ((l, env)::locstack) None None cs
+          (* This case can never happen, but otherwise compiler gives a warning *)
+          | _ -> exit 99
+        )
       | PopSubcontext::cs ->
-        (match (itstack, locstack) with (_::itstack, _::locstack) -> iter k itstack None ass locstack None None cs)
+        (match (itstack, locstack) with 
+          |(_::itstack, _::locstack) -> iter k itstack None ass locstack None None cs
+          (* This case can never happen, but otherwise compiler gives a warning *)
+          | _ -> exit 99
+        )
     in
     stepItems := Some (iter 0 [] None [] [] None None ctxts_fifo)
   in
@@ -972,6 +985,8 @@ let show_ide initialPath prover codeFont traceFont runtime layout =
           | (x::xs, y::ys) ->
             let r = compare x y in
             if r <> 0 then r else compare_list xs ys
+          (* This case can never happen, but otherwise compiler gives a warning *)
+          | _ -> exit 99
         in
         let r = compare (string_of_targs targs) (string_of_targs targs') in
         if r <> 0 then r else
@@ -1540,5 +1555,10 @@ let () =
         "[-traceFont fontSpec] [-I IncludeDir] [-layout fourthree|widescreen]"
       end
   in
-  let _::args = Array.to_list (Sys.argv) in
+  let args = 
+    match Array.to_list (Sys.argv) with
+    | _::args -> args
+    (* This case can never happen, but otherwise compiler gives a warning *)
+    | _ -> exit 99
+  in
   iter args

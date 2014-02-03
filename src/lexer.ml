@@ -1225,8 +1225,8 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
                   begin
                     if p = x then
                       match a with
-                      | [(l1, Ident id1)] as t -> id1;
-                      | [(l1, Int i1)] as t -> string_of_big_int i1;
+                      | [(l1, Ident id1)] -> id1;
+                      | [(l1, Int i1)] -> string_of_big_int i1;
                       | _ -> error "Unsupported use of concatenation operator in macro";
                     else
                       find_arg params args

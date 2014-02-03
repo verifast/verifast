@@ -1301,11 +1301,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match tp with
       IntType -> assume (ctxt#mk_and (ctxt#mk_le min_int_term t) (ctxt#mk_le t max_int_term)) cont
     | PtrType _ -> assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) t) (ctxt#mk_le t max_ptr_term)) cont
-    | ShortType _ -> assume (ctxt#mk_and (ctxt#mk_le min_short_term t) (ctxt#mk_le t max_short_term)) cont
-    | UShortType _ -> assume (ctxt#mk_and (ctxt#mk_le min_ushort_term t) (ctxt#mk_le t max_ushort_term)) cont
-    | Char _ -> assume (ctxt#mk_and (ctxt#mk_le min_char_term t) (ctxt#mk_le t max_char_term)) cont
-    | UChar _ -> assume (ctxt#mk_and (ctxt#mk_le min_uchar_term t) (ctxt#mk_le t max_uchar_term)) cont
-    | UintPtrType _ -> assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) t) (ctxt#mk_le t max_ptr_term)) cont
+    | ShortType -> assume (ctxt#mk_and (ctxt#mk_le min_short_term t) (ctxt#mk_le t max_short_term)) cont
+    | UShortType -> assume (ctxt#mk_and (ctxt#mk_le min_ushort_term t) (ctxt#mk_le t max_ushort_term)) cont
+    | Char -> assume (ctxt#mk_and (ctxt#mk_le min_char_term t) (ctxt#mk_le t max_char_term)) cont
+    | UChar -> assume (ctxt#mk_and (ctxt#mk_le min_uchar_term t) (ctxt#mk_le t max_uchar_term)) cont
+    | UintPtrType -> assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) t) (ctxt#mk_le t max_ptr_term)) cont
     | ObjType _ -> cont ()
     | _ -> static_error l (Printf.sprintf "Producing the limits of a variable of type '%s' is not yet supported." (string_of_type tp)) None
   
@@ -1328,11 +1328,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         SrcPat (LitPat e) -> if not pure then check_ghost ghostenv l e; eval_h h env e cont
       | TermPat t -> cont h env t
     in
-    let rec evhs h env pats cont =
+    (*let rec evhs h env pats cont =
       match pats with
         [] -> cont h env []
       | pat::pats -> eval_h h env pat (fun h env v -> evhs h env pats (fun h env vs -> cont h env (v::vs)))
-    in 
+    in*) 
     let tpenv =
       match zip callee_tparams targs with
         None -> static_error l "Incorrect number of type arguments." None
