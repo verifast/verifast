@@ -1,9 +1,0 @@
-#
-# Example of settings. You can copy this to settings.make.
-#
-
-Z3       = $(HOME)/z3
-#Z3V2     = $(HOME)/z3
-#Z3V4     = $(HOME)/z3
-#NOZ3     = 1
-

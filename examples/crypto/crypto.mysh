@@ -15,7 +15,7 @@ verifast_both -c -I lib/include protocols/rpc/rpc.c
 verifast_both -c -I lib/include protocols/rpc/main.c
 
 #yahalom
-verifast      -c -I lib/include protocols/yahalom/yahalom.c
+ifnotmac verifast      -c -I lib/include protocols/yahalom/yahalom.c
 verifast_both -c -I lib/include protocols/yahalom/main.c
 
 #nss

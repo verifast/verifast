@@ -116,6 +116,9 @@ env:
 ifeq ($(OS), Linux)
   include linux/GNUmakefile
 endif
+ifeq ($(OS), Darwin)
+  include linux/GNUmakefile
+endif
 
 include java_frontend/GNUmakefile
 
@@ -231,6 +234,7 @@ mysh: ../bin/mysh$(DOTEXE)
 
 ifeq ($(OS), Darwin)
 macos/GSourceView2.cmx: macos/GSourceView2.ml
+	@echo "  OCAMLOPT " $@
 	cd macos; ${OCAMLOPT} -c -I +lablgtk2 GSourceView2.ml
 endif
 clean::
