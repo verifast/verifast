@@ -71,14 +71,15 @@ endif
 
 # Paths
 OCAML        = ${OCAMLBIN}/ocaml
-OCAMLC       = ${OCAMLBIN}/ocamlc.opt
-OCAMLOPT     = ${OCAMLBIN}/ocamlopt.opt # The ".opt" version is ~3.5x faster!
+# Note: the ".opt" version of the ocaml compiler is ~3.5x faster, but not
+# available everywhere, so we autodetect whether we have it.
+OCAMLC       = $(firstword $(wildcard ${OCAMLBIN}/ocamlc.opt ${OCAMLBIN}/ocamlc))
+OCAMLOPT     = $(firstword $(wildcard ${OCAMLBIN}/ocamlopt.opt ${OCAMLBIN}/ocamlopt))
 ifeq ($(OS), Cygwin)
   CAMLP4O    = camlp4o.opt
 else
-  CAMLP4O      = ${OCAMLBIN}/camlp4o.opt
+  CAMLP4O      = $(firstword $(wildcard ${OCAMLBIN}/camlp4o.opt ${OCAMLBIN}/camlp4o))
 endif
-OCAMLDEP     = ${OCAMLBIN}/ocamldep.opt
 
 # Do we build with "-I ./linux" or "-I ./win":
 ifeq ($(OS), Cygwin)
