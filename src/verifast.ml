@@ -104,11 +104,6 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let eval_h_pure h env e cont =
       eval_h_core true true h env e cont
     in
-    (*let rec evhs h env es cont =
-      match es with
-        [] -> cont h env []
-      | e::es -> eval_h h env e (fun h env v -> evhs h env es (fun h env vs -> cont h env (v::vs)))
-    in *)
     let ev e = eval env e in
     let cont = tcont sizemap tenv ghostenv in
     let verify_expr readonly h env xo e cont =

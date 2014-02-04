@@ -1328,11 +1328,6 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         SrcPat (LitPat e) -> if not pure then check_ghost ghostenv l e; eval_h h env e cont
       | TermPat t -> cont h env t
     in
-    (*let rec evhs h env pats cont =
-      match pats with
-        [] -> cont h env []
-      | pat::pats -> eval_h h env pat (fun h env v -> evhs h env pats (fun h env vs -> cont h env (v::vs)))
-    in*) 
     let tpenv =
       match zip callee_tparams targs with
         None -> static_error l "Incorrect number of type arguments." None

@@ -22,8 +22,7 @@ let () =
   let args = 
     match Array.to_list Sys.argv with 
     | _::args -> args
-    (* This case can never happen, but otherwise compiler gives a warning *)
-    | _ -> exit 99
+    | _ -> assert false
   in
   let appletClass, args =
     match args with

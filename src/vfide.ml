@@ -33,8 +33,7 @@ let normalize_to_lf text =
       let eol =
         match List.sort (fun x y -> - compare x y) counts with
         | (_, _, eol)::_ -> eol
-        (* This case can never happen, but otherwise compiler gives a warning *)
-        | _ -> ""
+        | _ -> assert false
       in
       (eol, Buffer.contents buffer)
     end else
@@ -865,14 +864,12 @@ let show_ide initialPath prover codeFont traceFont runtime layout =
       | PushSubcontext::cs ->
         (match (last_it, last_loc, last_env) with 
           | (Some it, Some l, Some env) -> iter k (it::itstack) None ass ((l, env)::locstack) None None cs
-          (* This case can never happen, but otherwise compiler gives a warning *)
-          | _ -> exit 99
+          | _ -> assert false
         )
       | PopSubcontext::cs ->
         (match (itstack, locstack) with 
           |(_::itstack, _::locstack) -> iter k itstack None ass locstack None None cs
-          (* This case can never happen, but otherwise compiler gives a warning *)
-          | _ -> exit 99
+          | _ -> assert false
         )
     in
     stepItems := Some (iter 0 [] None [] [] None None ctxts_fifo)
@@ -985,8 +982,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout =
           | (x::xs, y::ys) ->
             let r = compare x y in
             if r <> 0 then r else compare_list xs ys
-          (* This case can never happen, but otherwise compiler gives a warning *)
-          | _ -> exit 99
+          | _ -> assert false
         in
         let r = compare (string_of_targs targs) (string_of_targs targs') in
         if r <> 0 then r else
@@ -1558,7 +1554,6 @@ let () =
   let args = 
     match Array.to_list (Sys.argv) with
     | _::args -> args
-    (* This case can never happen, but otherwise compiler gives a warning *)
-    | _ -> exit 99
+    | _ -> assert false
   in
   iter args

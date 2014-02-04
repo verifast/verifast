@@ -109,7 +109,7 @@ let strip_annotations fin fout =
               | _ -> eat_annot (j + 1)
           in
           eat_annot (i + 3)
-        | _ -> let i = i + 1 in iter i0 i i
+        | _ -> assert false
         end
       | ' ' | '\t' -> iter i0 white (i + 1)
       | _ -> let i = i + 1 in iter i0 i i
