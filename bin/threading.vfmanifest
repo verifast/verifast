@@ -9,3 +9,14 @@
 .provides .\threading.h#thread_start
 .provides .\threading.h#thread_start_joinable
 .provides .\threading.h#thread_join
+.predicate .\threading.h@mutex
+.predicate .\threading.h@mutex_held
+.predicate .\threading.h@create_mutex_ghost_arg
+.predicate .\threading.h@lock
+.predicate .\threading.h@locked
+.predicate .\threading.h@create_lock_ghost_args
+.predicate .\threading.h@lockset
+.predicate .\threading.h@thread
+.structure .\threading.c@thread
+.structure .\threading.c@mutex
+.structure .\threading.c@lock

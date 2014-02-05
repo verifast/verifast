@@ -253,6 +253,13 @@ let split separator_predicate string =
   in
   iter [] 0 0
 
+let split_around_char string char =
+  try 
+    let index = String.rindex string char in
+    (String.sub string 0 index, String.sub string (index + 1) ((String.length string) - index - 1))
+  with 
+    _ -> (string, "")
+    
 (** Eliminates '.' and 'foo/..' components. *)
 let reduce_path path =
   let path = split (fun c -> c = '/' || c = '\\') path in

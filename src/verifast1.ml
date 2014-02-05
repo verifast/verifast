@@ -496,6 +496,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | [] -> (classes,lemmas)
     in
     iter' ([],[]) ps
+
+  let structures_defined     : (string * loc) list ref = ref []
+  let nonabstract_predicates : (string * loc) list ref = ref []
   
   (* Region: check_file *)
   
@@ -729,9 +732,17 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * string (* function type name *)
       * string list (* function type arguments; only module names are supported *)
       * bool (* function is declared in an unloadable module *)
+    type defined_structure_info =
+        string     (* structure name *)
+      * loc        (* structure body location *)
+    type nonabstract_predicate_info =
+        string     (* predicate name *)
+      * loc        (* predicate body location *)
     type check_file_output =
         implemented_prototype_info list
       * implemented_function_type_info list
+      * defined_structure_info list
+      * nonabstract_predicate_info list
       * module_info map
   end
   
@@ -1391,7 +1402,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
          in
          begin
            match fds_opt with
-             Some fds -> iter [] fds false
+             Some fds -> 
+               begin 
+                 structures_defined := (sn, l)::!structures_defined;
+                 iter [] fds false
+               end
            | None -> (sn, (l, None, None))
          end
       )
@@ -4292,11 +4307,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         None -> static_error l ("No such predicate family: "^p) None
       | Some (p, (lfam, predfam_tparams, arity, ps, psymb, inputParamCount)) ->
         if fns = [] && language = CLang then begin
-          let famPath = let (((basePath, relPath), _, _), _) = lfam in concat basePath relPath in
-          let instPath = let (((basePath, relPath), _, _), _) = l in concat basePath relPath in
-          let famPathNoExt = try Filename.chop_extension famPath with Invalid_argument _ -> famPath in
-          if instPath <> famPath && instPath <> famPathNoExt ^ ".c" then
-            static_error l "A predicate declared in a header file may be defined only in the corresponding .c file." None
+          nonabstract_predicates := (p, l)::!nonabstract_predicates
         end;
         (p, predfam_tparams, arity, ps, psymb, inputParamCount)
     in

@@ -129,10 +129,20 @@ SET_LDD = export CAML_LD_LIBRARY_PATH="$$CAML_LD_LIBRARY_PATH:$$GTKSOURCEVIEW_LI
 SET_ENV = export PATH="$(CWD)/../bin/:$(OCAMLBIN):$$PATH"; \
           export LD_LIBRARY_PATH="$(LDLPATH):$$LD_LIBRARY_PATH"
 
-STDLIB_FILES = ../bin/raw_ghost_lists.vfmanifest ../bin/listex.vfmanifest \
-       ../bin/arrays.vfmanifest ../bin/quantifiers.vfmanifest \
-       ../bin/assoclist.vfmanifest ../bin/permutations.vfmanifest \
-       ../bin/list.vfmanifest
+STDLIB = ../bin/crt.dll.vfmanifest
+#sequence is important, it presents dependencies in command line of VeriFast
+STDLIB_FILES_GEN = \
+       ../bin/list.vfmanifest \
+       ../bin/listex.vfmanifest \
+       ../bin/raw_ghost_lists.vfmanifest \
+       ../bin/arrays.vfmanifest \
+       ../bin/quantifiers.vfmanifest \
+       ../bin/assoclist.vfmanifest \
+       ../bin/permutations.vfmanifest
+STDLIB_FILES = \
+	../bin/crt.vfmanifest \
+	$(STDLIB_FILES_GEN) \
+	../bin/threading.vfmanifest
 
 TOOLS_EXCEPT_VFIDE = ../bin/mysh$(DOTEXE) ../bin/verifast$(DOTEXE) \
         ../bin/main_class$(DOTEXE) ../bin/java_card_applet$(DOTEXE) \
@@ -140,7 +150,7 @@ TOOLS_EXCEPT_VFIDE = ../bin/mysh$(DOTEXE) ../bin/verifast$(DOTEXE) \
 
 TOOLS = $(TOOLS_EXCEPT_VFIDE) ../bin/vfide$(DOTEXE)
 
-build: $(TOOLS) $(STDLIB_FILES) tabhunt vfversion_autogen
+build: $(TOOLS) $(STDLIB) tabhunt vfversion_autogen
 .PHONY: build
 
 distclean:: clean
@@ -170,10 +180,16 @@ clean::
 	rm -f *.cmx
 	rm -f *.o
 
+$(STDLIB): $(STDLIB_FILES)
+	> $(STDLIB)
+	verifast -shared $(STDLIB_FILES) -emit_dll_vfmanifest \
+	  -emit_dll_vfmanifest_as $@
+	
 ../bin/%.vfmanifest: ../bin/%.c ../bin/%.gh ../bin/verifast$(DOTEXE)
 	$(SET_ENV); ../bin/verifast -c -emit_vfmanifest ../bin/$*.c
 clean::
-	rm -f $(STDLIB_FILES)
+	rm -f $(STDLIB)
+	rm -f $(STDLIB_FILES_GEN)
 
 #------------------------------- Auto code generation -----------------------#
 DynType.mli: ../examples/plugin/DynType.mli
@@ -260,7 +276,7 @@ endif
 ifneq ($(OS), Cygwin)
   ../bin/vfide$(DOTEXE): linux/libPerf_cobjs.a
 endif
-vfide: ../bin/vfide$(DOTEXE) $(STDLIB_FILES)
+vfide: ../bin/vfide$(DOTEXE) $(STDLIB)
 .PHONY: vfide
 
 ../bin/verifast$(DOTEXE): vfversion.cmx proverapi.cmx util.cmx stats.cmx lexer.cmx \
@@ -280,7 +296,7 @@ vfide: ../bin/vfide$(DOTEXE) $(STDLIB_FILES)
 ifneq ($(OS), Cygwin)
   ../bin/verifast$(DOTEXE): linux/libPerf_cobjs.a
 endif
-verifast: ../bin/verifast$(DOTEXE) $(STDLIB_FILES)
+verifast: ../bin/verifast$(DOTEXE) $(STDLIB)
 .PHONY: verifast
 
 z3prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmx proverapi.cmx z3prover.ml
@@ -303,7 +319,7 @@ test_plugin: verifast
 	  ${MAKE} -C ../examples/plugin all OCAMLOPT=${OCAMLOPT}
 .PHONY: test_plugin
 
-testsuite: $(STDLIB_FILES) $(TOOLS_EXCEPT_VFIDE)
+testsuite: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
 	@echo "  MYSH     " testsuite
 	$(SET_ENV); \
         cd ..; bin/mysh -cpus $(NUMCPU) < testsuite.mysh

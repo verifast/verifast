@@ -8,12 +8,12 @@ verifast -prover redux -c Combinators.java
 cd ..
 cd ..
 cd problem3
-verifast -prover redux listex.o arrays.o problem3.c
-ifnotmac verifast listex.o arrays.o problem3_alt.c
+verifast -prover redux problem3.c
+ifnotmac verifast problem3_alt.c
 cd ..
 cd problem4
-verifast -prover redux listex.o treerec_list.c treerec_tree.c treerec.c
+verifast -prover redux treerec_list.c treerec_tree.c treerec.c
 cd ..
 cd problem5
-verifast -prover redux listex.o listex2.c lset.c problem5.c
+verifast -prover redux listex2.c lset.c problem5.c
 cd ..

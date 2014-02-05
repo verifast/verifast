@@ -152,7 +152,9 @@ let _ =
   let allowShouldFail = ref false in
   let emitManifest = ref false in
   let emitDllManifest = ref false in
-  let modules: string list ref = ref [] in
+  let allModules: string list ref = ref [] in
+  let dllModules: string list ref = ref [] in
+  let dllManifestName = ref None in
   let emitHighlightedSourceFiles = ref false in
   let exports: string list ref = ref [] in
   let outputSExpressions : string option ref = ref None in
@@ -181,6 +183,7 @@ let _ =
             ; "-allow_should_fail", Set allowShouldFail, "Allow '//~' annotations that specify the line should fail."
             ; "-emit_vfmanifest", Set emitManifest, " "
             ; "-emit_dll_vfmanifest", Set emitDllManifest, " "
+            ; "-emit_dll_vfmanifest_as", String (fun str -> dllManifestName := Some str), " "
             ; "-emit_highlighted_source_files", Set emitHighlightedSourceFiles, " "
             ; "-provides", String (fun path -> provides := !provides @ [path]), " "
             ; "-keep_provide_files", Set keepProvideFiles, " "
@@ -231,9 +234,28 @@ let _ =
               SExpressionEmitter.emit target_file packages          
             | None             -> ()
         in
-        verify ~emitter_callback:emitter_callback !stats options !prover filename !emitHighlightedSourceFiles
-      end;
-      modules := filename::!modules
+        verify ~emitter_callback:emitter_callback !stats options !prover filename !emitHighlightedSourceFiles;
+        allModules := ((Filename.chop_extension filename) ^ ".vfmanifest")::!allModules
+      end
+    else if Filename.check_suffix filename ".o" then
+      allModules := ((Filename.chop_extension filename) ^ ".vfmanifest")::!allModules
+    else if List.exists (Filename.check_suffix filename) [ ".so"; ".dll"; ".dll.vfmanifest" ] then
+      begin
+        let filename =
+          if Filename.check_suffix filename ".so" then (Filename.chop_extension filename) ^ ".dll.vfmanifest"
+          else if Filename.check_suffix filename ".dll" then (filename ^ ".vfmanifest") 
+          else filename
+        in
+        dllModules := filename::!dllModules;
+        allModules := filename::!allModules;
+      end
+    else if Filename.check_suffix filename ".vfmanifest" then
+      allModules := filename::!allModules
+    else
+      begin
+        print_endline ("Don't know what to do with file \'" ^ filename ^ "\'."); 
+        exit 1
+      end
   in
   let usage_string =
     Verifast.banner () ^ "\nUsage: verifast [options] {sourcefile|objectfile}\n"
@@ -247,12 +269,13 @@ let _ =
         try
           print_endline "Linking...";
           let mydir = Filename.dirname Sys.executable_name in
-          let libs = ["crt.a"; "list.o"; "raw_ghost_lists.o"] in
+          let libs = ["crt.dll.vfmanifest"] in
           let libs = List.map (Filename.concat mydir) libs in
-          let assume_lib = Filename.concat mydir "assume.a" in
-          let modules = libs @ List.rev !modules in
-          let modules = if !allowAssume then assume_lib::modules else modules in
-          link_program (!isLibrary) modules !emitDllManifest !exports; 
+          let assume_lib = Filename.concat mydir "assume.dll.vfmanifest" in
+          let libs = if !allowAssume then libs @ [assume_lib] else libs in
+          let dllModules = libs @ List.rev !dllModules in
+          let allModules = libs @ List.rev !allModules in
+          link_program (!isLibrary) allModules dllModules !emitDllManifest !dllManifestName !exports; 
           if (!linkShouldFail) then 
             (print_endline "Error: link phase succeeded, while expected to fail (option -link_should_fail)."; exit 1)
           else print_endline "Program linked successfully."

@@ -224,18 +224,6 @@ lemma void forall_drop<t>(list<t> xs, fixpoint(t, bool) p, int i)
     }
 }
 
-lemma void nth_update<t>(int i, int j, t y, list<t> xs)
-    requires 0 <= i &*& i < length(xs) &*& 0 <= j &*& j < length(xs);
-    ensures nth(i, update(j, y, xs)) == (i == j ? y : nth(i, xs));
-{
-    switch (xs) {
-        case nil:
-        case cons(x, xs0):
-            if (i != 0 && j != 0)
-                nth_update(i - 1, j - 1, y, xs0);
-    }
-}
-
 lemma void mem_max(int x, list<int> xs)
     requires true;
     ensures mem(max(x, xs), cons(x, xs)) == true;

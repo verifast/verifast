@@ -89,18 +89,6 @@ predicate object_inv(struct object *object) =
     [_]class->inv |-> ?inv &*& inv(object) &*&
     [_]is_dispose_func(dispose, inv);
 
-lemma void mem_remove_all<t>(t x, list<t> xs, list<t> ys)
-    requires mem(x, ys) == true &*& !mem(x, xs);
-    ensures mem(x, remove_all(xs, ys)) == true;
-{
-    switch (xs) {
-        case nil:
-        case cons(x0, xs0):
-            mem_remove_all(x, xs0, ys);
-            neq_mem_remove(x, x0, remove_all(xs0, ys));
-    }
-}
-
 fixpoint bool sublist<t>(list<t> xs, list<t> ys) {
     switch (xs) {
         case nil: return true;

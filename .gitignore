@@ -29,6 +29,7 @@
 /bin/main_class
 /bin/quantifiers.vfmanifest
 /bin/permutations.vfmanifest
+/bin/crt.dll.vfmanifest
 /src/a.out
 /src/pa_verifast.cmo
 
@@ -95,6 +96,8 @@ examples/*/*.cmxs
 examples/*/*.annot
 examples/*/*.cmo
 examples/*/*.cma
+
+*.kdev4
 
 /src/buildcat_*.ml
 

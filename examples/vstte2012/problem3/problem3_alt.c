@@ -128,24 +128,26 @@ lemma void update_drop_take<t>(int n, t elem, list<t> elems)
     } 
 }
 
-lemma void take_append<t>(int n, list<t> l1, list<t> l2)
+lemma void take_append_alt<t>(int n, list<t> l1, list<t> l2)
     requires n >= 0; 
     ensures take(n, append(l1, l2)) == (n <= length(l1) ? take(n, l1) : append(l1, take(n-length(l1), l2)));
 {
     switch(l1) {
         case nil:
-        case cons(h, t): if(n!=0) take_append(n-1, t, l2);
+        case cons(h, t): if(n!=0) take_append_alt(n-1, t, l2);
     }
 }
-lemma void drop_append<t>(int n, list<t> l1, list<t> l2)
+
+lemma void drop_append_alt<t>(int n, list<t> l1, list<t> l2)
     requires n >= 0; 
     ensures drop(n, append(l1, l2)) == (n <= length(l1) ? append(drop(n, l1), l2) : drop(n-length(l1), l2));
 {
     switch(l1) {
         case nil:
-        case cons(h, t): if(n!=0) drop_append(n-1, t, l2);
+        case cons(h, t): if(n!=0) drop_append_alt(n-1, t, l2);
     }
 }
+
 lemma void append_split<t>(list<t> l1, list<t> l2)
     requires true; 
     ensures take(length(l1), append(l1, l2)) == l1 &*& drop(length(l1),append(l1, l2)) == l2;
@@ -186,7 +188,7 @@ void ring_buffer_push(struct ring_buffer *ring_buffer, int element)
     //@ assert ints(fields, size, update(offset, element, elems));
     //@ assert items == take(length(items),append(drop(first, elems), take(first, elems)));
     //@ append_take_drop(first, elems);
-    //@ take_append(length(items), drop(first, elems), take(first, elems));
+    //@ take_append_alt(length(items), drop(first, elems), take(first, elems));
     //@ update_append(offset, element, take(first, elems), drop(first, elems));
     /*@
         if(first <= offset) {
@@ -199,11 +201,11 @@ void ring_buffer_push(struct ring_buffer *ring_buffer, int element)
             assert take(first, update(offset, element, elems)) == take(first, elems); 
             assert drop(first, update(offset, element, elems)) == update(offset-first, element, drop(first, elems));
             //update_drop_take(offset-first, element, drop(first, elems));
-            take_append(length(items)+1, update(offset-first, element, drop(first, elems)), take(first, elems));
+            take_append_alt(length(items)+1, update(offset-first, element, drop(first, elems)), take(first, elems));
             assert take(length(items)+1, append(update(offset-first, element, drop(first, elems)), take(first, elems))) ==
                    take(length(items)+1, update(offset-first, element, drop(first, elems)));
             update_append(offset-first, element, take(offset-first, drop(first, elems)), drop(offset-first, drop(first, elems)));
-            take_append(length(items)+1, take(offset-first, drop(first,elems)), update(0, element, drop(offset-first, drop(first,elems))));
+            take_append_alt(length(items)+1, take(offset-first, drop(first,elems)), update(0, element, drop(offset-first, drop(first,elems))));
             switch(drop(offset-first, drop(first, elems))) { case nil: case cons(h, t): }
             assert take(length(items)+1, update(offset-first, element, drop(first, elems))) == 
                    append(take(offset-first, drop(first,elems)), cons(element, nil));
@@ -224,8 +226,8 @@ void ring_buffer_push(struct ring_buffer *ring_buffer, int element)
             update_append(offset, element, take(offset, take(first, elems)), drop(offset, take(first, elems)));
             assert take(length(items)+1, append(drop(first, elems), update(offset, element, take(first, elems)))) ==
                    take(length(items)+1, append(drop(first, elems), append(take(offset, take(first, elems)), update(0, element, drop(offset, take(first, elems))))));
-            take_append(length(items)+1, drop(first, elems), update(offset, element, take(first, elems)));
-            take_append(length(items)+1-length(drop(first, elems)), take(offset, take(first, elems)), update(0, element, drop(offset, take(first, elems))));
+            take_append_alt(length(items)+1, drop(first, elems), update(offset, element, take(first, elems)));
+            take_append_alt(length(items)+1-length(drop(first, elems)), take(offset, take(first, elems)), update(0, element, drop(offset, take(first, elems))));
             assert take(length(items)+1, append(drop(first, elems), update(offset, element, take(first, elems)))) ==
                    append(drop(first, elems), append(take(offset, take(first, elems)), take(1, update(0, element, drop(offset, take(first, elems))))));
                    
@@ -267,18 +269,18 @@ int ring_buffer_pop(struct ring_buffer *ring_buffer)
                 switch(drop(first,elems)) { case nil: case cons(h,t): }
                 drop_n_plus_one(first, elems);
                 take_plus_one(first, elems);
-                take_append(length(items), drop(first, elems), take(first, elems));
+                take_append_alt(length(items), drop(first, elems), take(first, elems));
                 assert items == cons(nth(first, elems), take(length(items)-1,append(drop(first+1, elems), take(first, elems))));
                 assert drop(newfirst, elems) == tail(drop(first, elems));
                 assert take(newfirst, elems) == append(take(first, elems), cons(head(drop(first, elems)), nil)); 
                 assert take(length(items)-1,append(drop(newfirst, elems), take(newfirst, elems))) == 
                        take(length(items)-1, append(tail(drop(first, elems)), append(take(first, elems), cons(head(drop(first, elems)), nil))));
-                take_append(length(items)-1, tail(drop(first, elems)), append(take(first, elems), cons(head(drop(first, elems)), nil)));
+                take_append_alt(length(items)-1, tail(drop(first, elems)), append(take(first, elems), cons(head(drop(first, elems)), nil)));
                 assert length(drop(first, elems)) == length(elems) - first;
                 if(length(items) < length(drop(first, elems))) {
                     assert (tail(items) == take(length(items)-1,append(drop(newfirst, elems), take(newfirst, elems))));
                 } else {
-                    take_append(length(items)-length(drop(first, elems)), take(first, elems), cons(head(drop(first, elems)), nil));
+                    take_append_alt(length(items)-length(drop(first, elems)), take(first, elems), cons(head(drop(first, elems)), nil));
                     assert (tail(items) == take(length(items)-1,append(drop(newfirst, elems), take(newfirst, elems))));
                 }
         } else {
@@ -287,10 +289,10 @@ int ring_buffer_pop(struct ring_buffer *ring_buffer)
                 assert length(drop(first, elems)) == 1;                
                 switch(drop(first,elems)) { case nil: case cons(h,t): switch(t) {case nil: case cons(h2,t2): }}
                 assert head(items) == head(drop(first, elems));
-                take_append(length(items),drop(first, elems), take(first, elems));
+                take_append_alt(length(items),drop(first, elems), take(first, elems));
                 assert items == append(drop(first, elems), take(length(items)-1, take(first,elems)));
                 assert tail(items) == take(length(items)-1, take(first, elems));
-                take_append(length(items)-1,drop(newfirst, elems), take(newfirst, elems));
+                take_append_alt(length(items)-1,drop(newfirst, elems), take(newfirst, elems));
                 assert drop(0, elems) == elems &*& take(0, elems) == nil;
                 append_nil(drop(newfirst, elems));
                 assert take(length(items)-1, append(drop(newfirst, elems), take(newfirst, elems))) ==

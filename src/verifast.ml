@@ -2681,7 +2681,20 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let () = verify_funcs' [] lems0 ps
   
-  let result = ((prototypes_implemented, !functypes_implemented, importmodulemap1), (structmap1, enummap1, globalmap1, modulemap1, importmodulemap1, inductivemap1, purefuncmap1,predctormap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, typedefmap1, functypemap1, funcmap1, boxmap,classmap1,interfmap1,classterms1,interfaceterms1, pluginmap1))
+  let result = 
+    (
+      (
+        prototypes_implemented, !functypes_implemented, !structures_defined, 
+        !nonabstract_predicates, importmodulemap1
+      ), 
+      (
+        structmap1, enummap1, globalmap1, modulemap1, importmodulemap1, 
+        inductivemap1, purefuncmap1,predctormap1, malloc_block_pred_map1, 
+        field_pred_map1, predfammap1, predinstmap1, typedefmap1, functypemap1, 
+        funcmap1, boxmap,classmap1,interfmap1,classterms1,interfaceterms1, 
+        pluginmap1
+      )
+    )
   
   end (* CheckFile *)
   
@@ -2702,8 +2715,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let jardeps = ref []
   let provide_files = ref []
-  let (prototypes_implemented, functypes_implemented, modules_imported) =
-    let result = check_should_fail ([], [], []) $. fun () ->
+  let (prototypes_implemented, functypes_implemented, structures_defined, 
+       nonabstract_predicates, modules_imported) =
+    let result = check_should_fail ([], [], [], [], []) $. fun () ->
     let (headers, ds)=
       match file_type path with
         | Java ->
@@ -2749,7 +2763,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             parse_c_file path reportRange reportShouldFail options.option_include_paths
     in
     emitter_callback ds;
-    check_should_fail ([], [], []) $. fun () ->
+    check_should_fail ([], [], [], [], []) $. fun () ->
     let (linker_info, _) = check_file path false true programDir "" headers ds in
     linker_info
     in
@@ -2783,10 +2797,10 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let qualified_path (basedir, relpath) =
       if basedir = local_basedir then Filename.concat "." relpath else relpath
     in
-    let sorted_lines protos =
+    let sorted_lines symbol protos =
       let lines =
         protos |> List.map begin fun (g, ((path, _, _), _)) ->
-          qualified_path path ^ "#" ^ g
+          qualified_path path ^ (Char.escaped symbol) ^ g
         end
       in
       List.sort compare lines
@@ -2799,9 +2813,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       List.sort compare lines
     in
     let lines =
-      List.map (fun line -> ".requires " ^ line) (sorted_lines !prototypes_used)
+      List.map (fun line -> ".requires " ^ line) (sorted_lines '#' !prototypes_used)
       @
-      List.map (fun line -> ".provides " ^ line) (sorted_lines prototypes_implemented)
+      List.map (fun line -> ".provides " ^ line) (sorted_lines '#' prototypes_implemented)
+      @
+      List.map (fun line -> ".structure " ^ line) (sorted_lines '@' structures_defined)
+      @
+      List.map (fun line -> ".predicate " ^ line) (sorted_lines '@' nonabstract_predicates)
       @
       List.sort compare
         begin
@@ -2975,7 +2993,7 @@ let parse_line line =
   let symbol = if startswith symbol ".\\" then String.sub symbol 2 (String.length symbol - 2) else symbol in
   (command, symbol)
 
-let link_program isLibrary modulepaths emitDllManifest exports =
+let link_program isLibrary allModulepaths dllModulepaths emitDllManifest dllManifestName exports =
   let consume msg x xs =
     let rec iter xs' xs =
       match xs with
@@ -2984,9 +3002,25 @@ let link_program isLibrary modulepaths emitDllManifest exports =
     in
     iter [] xs
   in
-  let rec iter impls mods modulepaths =
+  let get_lines file =
+    try
+      read_file_lines file
+    with FileNotFound ->
+      try
+        read_file_lines (concat bindir file)
+      with FileNotFound ->
+        failwith ("VeriFast link phase error: could not find .vfmanifest file '" ^ file ^ 
+                  "'. Re-verify the module using the -emit_vfmanifest or -emit_dll_vfmanifest option.")
+  in
+  let split_manifest_entry symbol entry =
+    let (first, second) = split_around_char entry symbol in
+    if second = "" then
+      raise (LinkError "Invalid manifest entry");
+    (first, second)
+  in
+  let rec iter (impls, structs, preds) mods modulepaths =
     match modulepaths with
-      [] -> (impls, mods)
+      [] -> ((impls, structs, preds), mods)
     | modulepath::modulepaths ->
       let manifest_path = 
         try Filename.chop_extension modulepath ^ ".vfmanifest" with
@@ -2996,31 +3030,60 @@ let link_program isLibrary modulepaths emitDllManifest exports =
         if List.mem_assoc manifest_path !manifest_map then
           List.assoc manifest_path !manifest_map
         else
-          try
-            read_file_lines manifest_path
-          with FileNotFound ->
-            try
-              read_file_lines (concat bindir manifest_path)
-            with FileNotFound ->
-              failwith ("VeriFast link phase error: could not find .vfmanifest file '" ^ manifest_path ^ "' for module '" ^ modulepath ^ "'. Re-verify the module using the -emit_vfmanifest option.")
+          get_lines manifest_path
       in
-      let rec iter0 impls' mods' lines =
+      let rec iter0 (impls', structs', preds') mods' lines =
         match lines with
-          [] -> iter impls' mods' modulepaths
+          [] -> iter (impls', structs', preds') mods' modulepaths
         | line::lines ->
           let (command, symbol) = parse_line line in
           begin
             match command with
-              ".requires" -> if List.mem symbol impls then iter0 impls' mods' lines else raise (LinkError ("Module '" ^ modulepath ^ "': unsatisfied requirement '" ^ symbol ^ "'."))
-            | ".provides" -> iter0 (symbol::impls') mods' lines
-            | ".produces" -> iter0 (symbol::impls') (symbol::mods') lines
-            | ".imports" -> iter0 impls' (consume (fun x -> "Module '" ^ modulepath ^ "': unsatisfied import '" ^ x ^ "'.") symbol mods) lines
+            | ".structure"  ->
+              begin
+                let (file, name) = split_manifest_entry '@' symbol in
+                match try_assoc0 name structs with
+                | Some (name2, file2) ->
+                  if file <> file2 then 
+                    raise (LinkError ("Module '" ^ modulepath ^ "': Structure " ^ name ^ " is defined twice."))
+                  else 
+                    iter0 (impls', structs', preds') mods' lines
+                | None -> iter0 (impls', (name, file)::structs', preds') mods' lines
+              end
+            | ".predicate" -> 
+              begin
+                let (file, name) = split_manifest_entry '@' symbol in
+                match try_assoc0 name preds with
+                | Some (name2, file2) ->
+                  if file <> file2 then
+                    raise (LinkError ("Module '" ^ modulepath ^ "': Predicates " ^ name ^ " is given a body twice."))
+                  else
+                    iter0 (impls', structs', preds') mods' lines
+                | None -> iter0 (impls', structs', (name, file)::preds') mods' lines
+              end
+            | ".provides"   -> 
+              if List.mem symbol impls then 
+                raise (LinkError ("Module '" ^ modulepath ^ "': Function " ^ symbol ^ " is implemented twice."))
+              else 
+                  iter0 (symbol::impls', structs', preds') mods' lines
+            | ".requires"   -> 
+              if List.mem symbol impls then 
+                iter0 (impls', structs', preds') mods' lines 
+              else 
+                raise (LinkError ("Module '" ^ modulepath ^ "': unsatisfied requirement '" ^ symbol ^ "'."))
+            | ".produces" -> 
+              iter0 (symbol::impls', structs', preds') (symbol::mods') lines
+            | ".imports" -> 
+              let mods'' =
+                consume (fun x -> "Module '" ^ modulepath ^ "': unsatisfied import '" ^ x ^ "'.") symbol mods
+              in
+              iter0 (impls', structs', preds') mods'' lines
           end
       in
-      iter0 impls mods lines
+      iter0 (impls, structs, preds) mods lines
   in
-  let (impls, _) = iter [] [] modulepaths in
-  let mainModulePath = match List.rev modulepaths with [] -> raise (LinkError "DLL must contain at least one module.") | m::_ -> m in
+  let ((impls, structs, preds), _) = iter ([], [], []) [] allModulepaths in
+  let mainModulePath = match List.rev allModulepaths with [] -> raise (LinkError "DLL must contain at least one module.") | m::_ -> m in
   let mainModuleName = try Filename.chop_extension (Filename.basename mainModulePath) with Invalid_argument _ -> raise (CompilationError "file without extension") in
   let impls =
     if not isLibrary then
@@ -3062,13 +3125,32 @@ let link_program isLibrary modulepaths emitDllManifest exports =
   in
   if emitDllManifest then
   begin
-    let manifestPath = Filename.chop_extension mainModulePath ^ ".dll.vfmanifest" in
+    let manifestPath = 
+      match dllManifestName with
+      | Some n -> n
+      | None -> Filename.chop_extension mainModulePath ^ ".dll.vfmanifest"
+    in
+    let other_dll_lines = List.flatten (List.map get_lines dllModulepaths) in
+    List.iter print_endline other_dll_lines;
     begin
       try
-        let file = open_out manifestPath in
-        do_finally begin fun () ->
-          List.iter (fun line -> Printf.fprintf file ".provides %s\n" line) impls
-        end (fun () -> close_out file)
+        let manifestFile = open_out manifestPath in
+        let print_requires_or_provides impl =
+          let provides = Printf.sprintf ".provides %s" impl in
+          if List.mem provides other_dll_lines then
+            Printf.fprintf manifestFile ".requires %s\n" impl
+          else
+            Printf.fprintf manifestFile ".provides %s\n" impl
+        in
+        List.iter print_requires_or_provides impls;
+        let print_if_necesarry label file name =
+          let entry = Printf.sprintf "%s %s@%s" label file name in
+          if not (List.mem entry other_dll_lines) || not (Filename.check_suffix file ".c") then
+            Printf.fprintf manifestFile "%s\n" entry
+        in
+        List.iter (fun (name, file) -> print_if_necesarry ".structure" file name) structs;
+        List.iter (fun (name, file) -> print_if_necesarry ".predicate" file name) preds;
+        close_out manifestFile
       with
         Sys_error s -> raise (LinkError (Printf.sprintf "Could not create DLL manifest file '%s': %s" manifestPath s))
     end;
