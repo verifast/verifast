@@ -182,7 +182,7 @@ clean::
 
 $(STDLIB): $(STDLIB_FILES)
 	> $(STDLIB)
-	verifast -shared $(STDLIB_FILES) -emit_dll_vfmanifest \
+	../bin/verifast -shared $(STDLIB_FILES) -emit_dll_vfmanifest \
 	  -emit_dll_vfmanifest_as $@
 	
 ../bin/%.vfmanifest: ../bin/%.c ../bin/%.gh ../bin/verifast$(DOTEXE)
