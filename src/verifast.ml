@@ -3004,7 +3004,7 @@ let link_program isLibrary allModulepaths dllModulepaths emitDllManifest dllMani
   in
   let get_lines file =
     try
-      read_file_lines file
+      List.filter (fun str -> str.[0] <> '#') (read_file_lines file)
     with FileNotFound ->
       try
         read_file_lines (concat bindir file)
@@ -3012,10 +3012,10 @@ let link_program isLibrary allModulepaths dllModulepaths emitDllManifest dllMani
         failwith ("VeriFast link phase error: could not find .vfmanifest file '" ^ file ^ 
                   "'. Re-verify the module using the -emit_vfmanifest or -emit_dll_vfmanifest option.")
   in
-  let split_manifest_entry symbol entry =
+  let split_manifest_entry symbol entry modulepath =
     let (first, second) = split_around_char entry symbol in
     if second = "" then
-      raise (LinkError "Invalid manifest entry");
+      raise (LinkError ("Manifest file '" ^ modulepath ^ "': error parsing line: cannot find symbol '" ^ (Char.escaped symbol) ^ "'."));
     (first, second)
   in
   let rec iter (impls, structs, preds) mods modulepaths =
@@ -3041,7 +3041,7 @@ let link_program isLibrary allModulepaths dllModulepaths emitDllManifest dllMani
             match command with
             | ".structure"  ->
               begin
-                let (file, name) = split_manifest_entry '@' symbol in
+                let (file, name) = split_manifest_entry '@' symbol modulepath in
                 match try_assoc0 name structs with
                 | Some (name2, file2) ->
                   if file <> file2 then 
@@ -3052,7 +3052,7 @@ let link_program isLibrary allModulepaths dllModulepaths emitDllManifest dllMani
               end
             | ".predicate" -> 
               begin
-                let (file, name) = split_manifest_entry '@' symbol in
+                let (file, name) = split_manifest_entry '@' symbol modulepath in
                 match try_assoc0 name preds with
                 | Some (name2, file2) ->
                   if file <> file2 then
@@ -3078,6 +3078,7 @@ let link_program isLibrary allModulepaths dllModulepaths emitDllManifest dllMani
                 consume (fun x -> "Module '" ^ modulepath ^ "': unsatisfied import '" ^ x ^ "'.") symbol mods
               in
               iter0 (impls', structs', preds') mods'' lines
+            | _ -> raise (LinkError ("Manifest file '" ^ modulepath ^ "': cannot parse line."))
           end
       in
       iter0 (impls, structs, preds) mods lines

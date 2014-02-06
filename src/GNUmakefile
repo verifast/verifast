@@ -180,10 +180,17 @@ clean::
 	rm -f *.cmx
 	rm -f *.o
 
+# We have " || rm ..." such that in case verifast fails, we do not end
+# up with an empty (and thus incorrect) .dll.vfmanifest file.
+# We have "> $(STDLIB)" for bootstrapping the standard library: the
+# .dll.vfmanifest gets loaded when creating .dll.vfmanifest, so it must
+# be empty.
 $(STDLIB): $(STDLIB_FILES)
+	@echo "  >        " $@
 	> $(STDLIB)
+	@echo "  VERIFAST " $@
 	../bin/verifast -shared $(STDLIB_FILES) -emit_dll_vfmanifest \
-	  -emit_dll_vfmanifest_as $@
+	  -emit_dll_vfmanifest_as $@  || (rm -f $(STDLIB) ; false)
 	
 ../bin/%.vfmanifest: ../bin/%.c ../bin/%.gh ../bin/verifast$(DOTEXE)
 	$(SET_ENV); ../bin/verifast -c -emit_vfmanifest ../bin/$*.c
