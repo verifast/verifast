@@ -828,11 +828,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (structmap, enummap, globalmap, modulemap, importmodulemap, inductivemap, purefuncmap, predctormap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, pluginmap)
       (structmap0, enummap0, globalmap0, modulemap0, importmodulemap0, inductivemap0, purefuncmap0, predctormap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, pluginmap0)
       =
-      (append_nodups structmap structmap0 id l "struct",
+      (
+(*     append_nodups structmap structmap0 id l "struct", *)
        append_nodups enummap enummap0 id l "enum",
        append_nodups globalmap globalmap0 id l "global variable",
        modulemap @ modulemap0,
-(*       append_nodups modulemap modulemap0 id l "module", *)
+(*     append_nodups modulemap modulemap0 id l "module", *)
        importmodulemap @ importmodulemap0,
 (*     append_nodups importmodulemap importmodulemap0 id l "imported module", *)
        append_nodups inductivemap inductivemap0 id l "inductive datatype",
@@ -841,7 +842,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
        malloc_block_pred_map @ malloc_block_pred_map0,
        field_pred_map @ field_pred_map0,
        append_nodups predfammap predfammap0 id l "predicate",
-       append_nodups predinstmap predinstmap0 (fun (p, is) -> p ^ "(" ^ String.concat ", " is ^ ")") l "predicate instance",
+(*     append_nodups predinstmap predinstmap0 (fun (p, is) -> p ^ "(" ^ String.concat ", " is ^ ")") l "predicate instance", *)
+       predinstmap @ predinstmap0,
        append_nodups typedefmap typedefmap0 id l "typedef",
        append_nodups functypemap functypemap0 id l "function type",
        append_nodups funcmap funcmap0 id l "function",
