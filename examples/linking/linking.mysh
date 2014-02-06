@@ -21,9 +21,9 @@ cd simple_pred
 cd ..
 
 cd double_declares
-  verifast -allow_should_fail struct_redeclaration_invalid.c
-  verifast pred_redeclaration_valid.c
-  verifast -allow_should_fail pred_redeclaration_invalid.c
+  verifast -c -allow_should_fail struct_redeclaration_invalid.c
+  verifast -c pred_redeclaration_valid.c
+  verifast -c -allow_should_fail pred_redeclaration_invalid.c
 cd ..
 
 cd dll_uses_dll

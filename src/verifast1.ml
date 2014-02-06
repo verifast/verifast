@@ -830,6 +830,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       =
       (
 (*     append_nodups structmap structmap0 id l "struct", *)
+       structmap @ structmap0,
        append_nodups enummap enummap0 id l "enum",
        append_nodups globalmap globalmap0 id l "global variable",
        modulemap @ modulemap0,
