@@ -1324,7 +1324,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match dec with
           None -> cont None
         | Some dec ->
-          eval_h h' env' dec $. fun _ _ t_dec ->
+          eval_h_pure h' env' dec $. fun _ _ t_dec ->
           cont (Some t_dec)
       end $. fun t_dec ->
       let env' = old_xs_env @ env' in
@@ -1385,7 +1385,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       execute_branch begin fun () -> match (t_dec, dec) with
         (None, None) -> success()
       | (Some t_dec, Some dec) ->
-        eval_h h' env'' dec $. fun _ _ t_dec2 ->
+        eval_h_pure h' env'' dec $. fun _ _ t_dec2 ->
         let dec_check1 = ctxt#mk_lt t_dec2 t_dec in
         assert_term dec_check1 h' env'' (expr_loc dec) (sprintf "Cannot prove that loop measure decreases: %s" (ctxt#pprint dec_check1)) None;
         let dec_check2 = ctxt#mk_le (ctxt#mk_intlit 0) t_dec in
