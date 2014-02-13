@@ -357,34 +357,31 @@ void remover_thread(struct set *set)
                 bool success2;
                 {
                     /*@
-                    predicate_family_instance set_remove_pre(remove_op)(set_unsep *unsep, space_info info_, int e) =
+                    predicate_family_instance set_contains_pre(contains_op)(set_unsep *unsep, space_info info_, int e) =
                         unsep == space_unsep &*& info_ == space_info(set, adderCell, removerPhaseCell, removerCell) &*& e == x &*&
                         [1/2]ghost_cell<bool>(removerPhaseCell, true) &*& [1/2]ghost_cell<int>(removerCell, x);
-                    predicate_family_instance set_remove_post(remove_op)(bool result) =
+                    predicate_family_instance set_contains_post(contains_op)(bool result) =
                         [1/2]ghost_cell<bool>(removerPhaseCell, false) &*&
                         [1/2]ghost_cell<int>(removerCell, x) &*& !result;
-                    lemma void remove_op() : set_remove
-                        requires set_remove_pre(remove_op)(?unsep, ?info_, ?e) &*& set_unsep(unsep)(info_, ?set_, ?inv, ?sep, ?values);
-                        ensures set_remove_post(remove_op)(mem_sorted(e, values)) &*& set_unsep(unsep)(info_, set_, inv, sep, remove_sorted(e, values));
+                    lemma void contains_op() : set_contains
+                        requires set_contains_pre(contains_op)(?unsep, ?info_, ?e) &*& set_unsep(unsep)(info_, ?set_, ?inv, ?sep, ?values);
+                        ensures set_contains_post(contains_op)(mem_sorted(e, values)) &*& set_unsep(unsep)(info_, set_, inv, sep, values);
                     {
-                        open set_remove_pre(remove_op)(_, _, _);
+                        open set_contains_pre(contains_op)(_, _, _);
                         open set_unsep(space_unsep)(?info__, _, _, _, _);
                         ghost_cell_mutate(removerPhaseCell, false);
                         assert [1/2]ghost_cell<int>(adderCell, ?adderValue);
-                        forall_remove_sorted(values, x, (ge)(unit, adderValue));
-                        close set_remove_post(remove_op)(mem_sorted(e, values));
-                        is_sorted_remove_sorted(values, INT_MIN, e);
-                        //mem_sorted_remove_sorted(INT_MIN, x, x, values);
-                        close set_unsep(space_unsep)(info__, set, inv, sep, remove_sorted(e, values));
+                        close set_contains_post(contains_op)(mem_sorted(e, values));
+                        close set_unsep(space_unsep)(info__, set, inv, sep, values);
                     }
                     @*/
                     //@ close set_sep(space_sep)(space_info(set, adderCell, removerPhaseCell, removerCell), set, space_inv(set, adderCell, removerPhaseCell, removerCell), space_unsep);
-                    //@ produce_lemma_function_pointer_chunk(remove_op);
-                    //@ close set_remove_pre(remove_op)(space_unsep, space_info(set, adderCell, removerPhaseCell, removerCell), x);
-                    success2 = remove(set, x);
-                    //@ open set_remove_post(remove_op)(_);
+                    //@ produce_lemma_function_pointer_chunk(contains_op);
+                    //@ close set_contains_pre(contains_op)(space_unsep, space_info(set, adderCell, removerPhaseCell, removerCell), x);
+                    success2 = contains(set, x);
+                    //@ open set_contains_post(contains_op)(_);
                     //@ open set_sep(space_sep)(_, _, _, _);
-                    //@ leak is_set_remove(remove_op);
+                    //@ leak is_set_contains(contains_op);
                 }
                 assert(!success2);
             }

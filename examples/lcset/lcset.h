@@ -51,6 +51,34 @@ fixpoint list<int> add_sorted(int e, list<int> xs) {
 
 /*@
 
+predicate_family set_contains_pre(void *op)(set_unsep *unsep, any info, int e);
+predicate_family set_contains_post(void *op)(bool result);
+
+typedef lemma void set_contains();
+    requires set_contains_pre(this)(?unsep, ?info, ?e) &*& set_unsep(unsep)(info, ?set, ?inv, ?sep, ?values);
+    ensures set_contains_post(this)(mem_sorted(e, values)) &*& set_unsep(unsep)(info, set, inv, sep, values);
+
+@*/
+
+bool contains(struct set *set, int e);
+    /*@
+    requires
+        INT_MIN < e &*& e < INT_MAX &*&
+        [?f]atomic_space(?inv) &*&
+        [?fSet]set(set) &*&
+        is_set_sep(?sep) &*& is_set_unsep(?unsep) &*& set_sep(sep)(?info, set, inv, unsep) &*&
+        is_set_contains(?op) &*& set_contains_pre(op)(unsep, info, e);
+    @*/
+    /*@
+    ensures
+        [f]atomic_space(inv) &*&
+        [fSet]set(set) &*&
+        is_set_sep(sep) &*& is_set_unsep(unsep) &*& set_sep(sep)(info, set, inv, unsep) &*&
+        is_set_contains(op) &*& set_contains_post(op)(result);
+    @*/
+
+/*@
+
 predicate_family set_add_pre(void *op)(set_unsep *unsep, any info, int e);
 predicate_family set_add_post(void *op)(bool result);
 

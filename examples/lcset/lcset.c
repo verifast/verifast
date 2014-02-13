@@ -102,6 +102,26 @@ lemma void lseg_merge(struct node *node)
     }
 }
 
+lemma void lseg_merge1(struct node *node, int e)
+    requires
+        lseg(?nodesList, ?first, ?firstValue, node, ?nodeValue, ?nodes0, ?values0, ?lockCount0) &*&
+        lseg(nodesList, node, nodeValue, ?last, ?lastValue, ?nodes1, ?values1, ?lockCount1) &*&
+        nodeValue < e;
+    ensures
+        lseg(nodesList, first, firstValue, last, lastValue, append(nodes0, nodes1), append(values0, values1), lockCount0 + lockCount1) &*&
+        0 <= lockCount0 &*& 0 <= lockCount1 &*&
+        firstValue < e &*&
+        mem_sorted(e, append(values0, values1)) == mem_sorted(e, values1);
+{
+    open lseg(nodesList, first, firstValue, node, nodeValue, nodes0, values0, lockCount0);
+    if (values0 == nil) {
+        lseg_lockCount_nonnegative();
+    } else {
+        lseg_merge1(node, e);
+        close lseg(nodesList, first, firstValue, last, lastValue, append(nodes0, nodes1), append(values0, values1), lockCount0 + lockCount1);
+    }
+}
+
 lemma void lseg_merge2(struct node *node, int e, list<int> values10)
     requires
         lseg(?nodesList, ?first, ?firstValue, node, ?nodeValue, ?nodes0, ?values0, ?lockCount0) &*&
@@ -483,6 +503,97 @@ loop:
         goto loop;
     }
     return p;
+}
+
+bool contains(struct set *set, int e)
+    /*@
+    requires
+        INT_MIN < e &*& e < INT_MAX &*&
+        [?f]atomic_space(?inv) &*&
+        [?fSet]set(set) &*&
+        is_set_sep(?sep) &*& is_set_unsep(?unsep) &*& set_sep(sep)(?info, set, inv, unsep) &*&
+        is_set_contains(?op) &*& set_contains_pre(op)(unsep, info, e);
+    @*/
+    /*@
+    ensures
+        [f]atomic_space(inv) &*&
+        [fSet]set(set) &*&
+        is_set_sep(sep) &*& is_set_unsep(unsep) &*& set_sep(sep)(info, set, inv, unsep) &*&
+        is_set_contains(op) &*& set_contains_post(op)(result);
+    @*/
+{
+    //@ open set(set);
+    //@ assert [fSet/2]set->nodesList |-> ?nodesList;
+    //@ assert [fSet/2]set->lockCounter |-> ?lockCounter;
+    struct node *head = set->head;
+    struct node *x = locate(set, e);
+    struct node *z = x->next;
+    bool result = z->value == e;
+    //@ assert [1/4]x->value |-> ?xValue;
+    //@ assert [1/4]z->value |-> ?zValue;
+    {
+        /*@
+        predicate_family_instance atomic_store_pointer_context_pre(context)(predicate() inv_, void **pp, void *p_) =
+            inv_ == inv &*& pp == &x->lock &*& p_ == 0 &*&
+            [fSet/2]set->head |-> head &*&
+            [fSet/2]set->nodesList |-> nodesList &*&
+            [fSet/2]set->lockCounter |-> lockCounter &*&
+            ghost_counter_contrib(lockCounter, fSet, 1) &*&
+            is_set_sep(sep) &*& is_set_unsep(unsep) &*& set_sep(sep)(info, set, inv, unsep) &*&
+            is_set_contains(op) &*& set_contains_pre(op)(unsep, info, e) &*&
+            ghost_list_member_handle(nodesList, x) &*&
+            [1/2]x->lock |-> (void *)1 &*&
+            [1/2]x->oldNext |-> z &*&
+            [1/4]x->value |-> xValue &*&
+            [1/4]z->value |-> zValue &*&
+            x->next |-> z;
+        predicate_family_instance atomic_store_pointer_context_post(context)() =
+            [fSet/2]set->head |-> head &*&
+            [fSet/2]set->nodesList |-> nodesList &*&
+            [fSet/2]set->lockCounter |-> lockCounter &*&
+            [fSet]ghost_counter_zero_contrib(lockCounter) &*&
+            is_set_sep(sep) &*& is_set_unsep(unsep) &*& set_sep(sep)(info, set, inv, unsep) &*&
+            is_set_contains(op) &*& set_contains_post(op)(zValue == e);
+        lemma void context(atomic_store_pointer_operation *sop) : atomic_store_pointer_context
+            requires
+                atomic_store_pointer_context_pre(context)(?inv_, ?pp, ?p_) &*& inv_() &*&
+                is_atomic_store_pointer_operation(sop) &*& atomic_store_pointer_operation_pre(sop)(pp, p_);
+            ensures
+                atomic_store_pointer_context_post(context)() &*& inv_() &*&
+                is_atomic_store_pointer_operation(sop) &*& atomic_store_pointer_operation_post(sop)();
+        {
+            open atomic_store_pointer_context_pre(context)(_, _, _);
+            sep();
+            open set_atomic(set, ?values);
+            ghost_list_member_handle_lemma();
+            lseg_split(x);
+            assert lseg(nodesList, head, _, x, _, ?nodes0, ?values0, ?lockCount0);
+            open lseg(nodesList, x, _, ?last, INT_MAX, ?nodes1, ?values1, ?lockCount1);
+            open node_lock(x, _);
+            sop();
+            close node_lock(x, 0);
+            open lseg(nodesList, z, zValue, last, INT_MAX, ?nodes2, ?values2, ?lockCount2);
+            close lseg(nodesList, z, zValue, last, INT_MAX, nodes2, values2, lockCount2);
+            open node_frac(x, 1/2);
+            close node_frac(x, 1);
+            close lseg(nodesList, x, xValue, last, INT_MAX, nodes1, values1, lockCount2);
+            lseg_merge1(x, e);
+            ghost_counter_decrement();
+            ghost_counter_end_contrib();
+            close set_atomic(set, values);
+            op();
+            unsep();
+            close atomic_store_pointer_context_post(context)();
+        }
+        @*/
+        //@ close atomic_store_pointer_context_pre(context)(inv, &x->lock, 0);
+        //@ produce_lemma_function_pointer_chunk(context);
+        unlock(&x->lock);
+        //@ leak is_atomic_store_pointer_context(context);
+        //@ open atomic_store_pointer_context_post(context)();
+    }
+    //@ close [fSet]set(set);
+    return result;
 }
 
 bool add(struct set *set, int e)
