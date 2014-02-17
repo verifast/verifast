@@ -11,7 +11,7 @@ CFLAGS += -I polarssl/include
 #Output
 #------
 
-LIB = libdolevyao.a
+LIB = libdolevyao.so
 
 #Targets
 #-------
@@ -35,10 +35,13 @@ polar:
 	  include/polarssl/config.h; \
 	make -j4;
 
-lib: switch polar src/dolevyao.c
+# bin/dolevyao.dll.vfmanifest: bin/dolevyao.vfmanifest
+	../../../bin/verifast -shared bin/dolevyao.vfmanifest -emit_dll_vfmanifest
+
+lib: switch polar src/dolevyao.c bin/dolevyao.dll.vfmanifest
 	$(CC) $(DEBUG) $(CFLAGS) -c -o src/dolevyao.o src/dolevyao.c;
 	$(CC) $(DEBUG) $(CFLAGS) -c -o src/attacker.o src/attacker.c;
-	ar rcs $(LIB) src/attacker.o src/dolevyao.o
+	gcc -shared src/attacker.o src/dolevyao.o -o bin/$(LIB)
 
 tests: lib
 	make -C tests

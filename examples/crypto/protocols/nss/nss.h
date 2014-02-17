@@ -192,13 +192,11 @@ fixpoint bool nss_pub(item i)
 // Implementation prototypes for this protocol ////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-/*@ 
-predicate protocol_pub(; fixpoint(item, bool) pub);
+//@ predicate protocol_pub(; fixpoint(item, bool) pub);
 
-lemma void init_protocol();
-     requires true;
-     ensures protocol_pub(nss_pub);
-@*/
+void init_protocol();
+  //@ requires true;
+  //@ ensures protocol_pub(nss_pub) &*& generated_keys(0, ?count);
 
 ///////////////////////////////////////////////////////////////////////////////
 // Protocol implementation ////////////////////////////////////////////////////
@@ -206,13 +204,13 @@ lemma void init_protocol();
 
 struct item *sender(int sender, int receiver, struct item * KAS);
   /*@ requires 
+        [?f0]world(nss_pub) &*& [?f1]net_api_initialized() &*&
         !bad(sender) &*& !bad(receiver) &*& !bad(0) &*&
-        [?f]world(nss_pub) &*& 
         generated_nonces(sender, ?count) &*& 
         key_item(KAS, sender, 0, symmetric_key, int_pair(0, 0));
   @*/
   /*@ ensures 
-        [f]world(nss_pub) &*& 
+        [f0]world(nss_pub) &*& [f1]net_api_initialized() &*&
         generated_nonces(sender, count + 1) &*&
         key_item(KAS, sender, 0, symmetric_key, int_pair(0, 0)) &*&
         key_item(result, 0, ?cab, symmetric_key, 
@@ -226,13 +224,13 @@ struct item *sender(int sender, int receiver, struct item * KAS);
 
 void receiver(int receiver, struct item *KBS);
   /*@ requires 
+        [?f0]world(nss_pub) &*& [?f1]net_api_initialized() &*&
         !bad(receiver) &*& !bad(0) &*&
-        [?f]world(nss_pub) &*&
         generated_nonces(receiver, ?count) &*& 
         key_item(KBS, receiver, 0, symmetric_key, int_pair(0, 0));
   @*/
   /*@  ensures 
-        [f]world(nss_pub) &*& 
+        [f0]world(nss_pub) &*& [f1]net_api_initialized() &*&
         generated_nonces(receiver, count + 2) &*&
         key_item(KBS, receiver, 0, symmetric_key, int_pair(0, 0)); 
   @*/
@@ -240,13 +238,13 @@ void receiver(int receiver, struct item *KBS);
 struct item *core_receiver(struct network_status *net_stat, int sender, 
                            int receiver, struct item *KBS);
   /*@ requires 
+        [?f0]world(nss_pub) &*& [?f1]net_api_initialized() &*&
         !bad(receiver) &*& !bad(0) &*&
-        [?f]world(nss_pub) &*&
         generated_nonces(receiver, ?count) &*& 
         key_item(KBS, receiver, 0, symmetric_key, int_pair(0, 0));
   @*/
   /*@  ensures 
-        [f]world(nss_pub) &*& 
+        [f0]world(nss_pub) &*& [f1]net_api_initialized() &*&
         generated_nonces(receiver, count + 2) &*&
         key_item(KBS, receiver, 0, symmetric_key, int_pair(0, 0)) &*&
         key_item(result, 0, ?cab, symmetric_key, 
@@ -260,14 +258,14 @@ struct item *core_receiver(struct network_status *net_stat, int sender,
 
 void server(int sender, int receiver, struct item *KAS, 
                                             struct item *KBS, struct item *KAB);
-  /*@ requires [?f]world(nss_pub) &*& 
+  /*@ requires [?f0]world(nss_pub) &*& [?f1]net_api_initialized() &*&
                !bad(0) &*& !bad(sender) &*& !bad(receiver) &*&
                key_item(KAS, sender, 0, symmetric_key, int_pair(0,0)) &*&
                key_item(KBS, receiver, 0, symmetric_key, int_pair(0,0)) &*&
                item(KAB, key_item(0, ?count, symmetric_key, 
                                       int_pair(2,int_pair(sender, receiver))));
   @*/
-  /*@ ensures [f]world(nss_pub) &*&
+  /*@ ensures [f0]world(nss_pub) &*& [f1]net_api_initialized() &*&
               key_item(KAS, sender, 0, symmetric_key, int_pair(0,0)) &*&
               key_item(KBS, receiver, 0, symmetric_key, int_pair(0,0)) &*&
               item(KAB, key_item(0, count, symmetric_key, 

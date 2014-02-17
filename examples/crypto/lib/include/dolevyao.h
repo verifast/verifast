@@ -108,8 +108,8 @@ from it.
 ///////////////////////////////////////////////////////////////////////////////
 
 void init_crypto_lib();
-  //@ requires exists<fixpoint(item, bool)>(?pub) &*& net_api_uninitialized();
-  //@ ensures world(pub);
+  //@ requires exists<fixpoint(item, bool)>(?pub);
+  //@ ensures  world(pub) &*& net_api_initialized() &*& initial_principals();
 
 ///////////////////////////////////////////////////////////////////////////////
 // General definitions ////////////////////////////////////////////////////////
@@ -460,31 +460,37 @@ struct item *get_client_public_key(int participant);
 
 struct network_status;
 
-//@ predicate net_api_uninitialized();
+//@ predicate net_api_initialized();
 
 struct network_status *network_bind(int port);
-  //@ requires true;
-  //@ ensures true;
+  //@ requires [?f]net_api_initialized();
+  //@ ensures  [f]net_api_initialized();
 
 struct network_status *network_connect(const char *name, int port);
-  //@ requires true;
-  //@ ensures true;
+  //@ requires [?f]net_api_initialized();
+  //@ ensures  [f]net_api_initialized();
 
 void network_disconnect(struct network_status *stat);
-  //@ requires true;
-  //@ ensures true;
+  //@ requires [?f]net_api_initialized();
+  //@ ensures  [f]net_api_initialized();
 
 void network_send(struct network_status *stat, struct item *datagram);
-  //@ requires [?f]world(?pub) &*& item(datagram, ?d) &*& pub(d) == true;
-  //@ ensures [f]world(pub) &*& item(datagram, d);
+  /*@ requires [?f0]world(?pub) &*& [?f1]net_api_initialized() &*&
+               item(datagram, ?d) &*& pub(d) == true; 
+  @*/
+  /*@ ensures  [f0]world(pub) &*& [f1]net_api_initialized() &*&
+               item(datagram, d);
+  @*/
 
 struct item *network_receive(struct network_status *stat);
-  //@ requires [?f]world(?pub);
-  //@ ensures [f]world(pub) &*& item(result, ?d) &*& pub(d) == true;
+  //@ requires [?f0]world(?pub) &*& [?f1]net_api_initialized();
+  /*@ ensures  [f0]world(pub) &*& [f1]net_api_initialized() &*&
+               item(result, ?d) &*& pub(d) == true;
+  @*/         
 
 struct item *network_receive_attempt(struct network_status *stat);
-  //@ requires [?f]world(?pub);
-  /*@ ensures [f]world(pub) &*&
+  //@ requires [?f0]world(?pub) &*& [?f1]net_api_initialized();
+  /*@ ensures [f0]world(pub) &*& [f1]net_api_initialized() &*&
               result == 0 ? true : item(result, ?d) &*& pub(d) == true;
   @*/
 

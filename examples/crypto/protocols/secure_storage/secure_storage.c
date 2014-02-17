@@ -3,15 +3,26 @@
 
 #define APP_RECEIVE_PORT 121212
 
+/*@ 
+predicate protocol_pub(; fixpoint(item, bool) pub) = pub == ss_pub;
+
+lemma void init_protocol()
+     requires true;
+     ensures protocol_pub(ss_pub);
+{
+  close protocol_pub(ss_pub);
+}
+@*/
+
 void app_send(struct item *key, struct item *message)
-    /*@ requires [?f]world(ss_pub) &*& 
-                 key_item(key, ?creator, ?id, symmetric_key, int_pair(0, 0)) &*& 
-                 item(message, ?msg) &*& ss_pub(msg) == true &*& 
-                 app_send_event(creator, msg) == true; 
-    @*/
-    /*@ ensures  [f]world(ss_pub) &*& 
-                 key_item(key, creator, id, symmetric_key, int_pair(0, 0)) &*& 
-                 item(message, msg); 
+  /*@ requires [?f0]world(ss_pub) &*& [?f1]net_api_initialized() &*&
+                key_item(key, ?creator, ?id, symmetric_key, int_pair(0, 0)) &*& 
+                item(message, ?msg) &*& ss_pub(msg) == true &*& 
+                app_send_event(creator, msg) == true; 
+  @*/
+  /*@ ensures  [f0]world(ss_pub) &*& [f1]net_api_initialized() &*&
+                key_item(key, creator, id, symmetric_key, int_pair(0, 0)) &*& 
+                item(message, msg); 
     @*/
 {
     struct network_status *net_stat = 
@@ -27,14 +38,14 @@ void app_send(struct item *key, struct item *message)
 }
 
 struct item *app_receive(struct item *key)
-    /*@ requires [?f]world(ss_pub) &*& 
-                 key_item(key, ?creator, ?id, symmetric_key, int_pair(0, 0)); 
-    @*/
-    /*@ ensures [f]world(ss_pub) &*& 
-                key_item(key, creator, id, symmetric_key, int_pair(0, 0)) &*& 
-                item(result, ?msg) &*& bad(creator) || 
-                app_send_event(creator, msg); 
-    @*/
+  /*@ requires [?f0]world(ss_pub) &*& [?f1]net_api_initialized() &*&
+                key_item(key, ?creator, ?id, symmetric_key, int_pair(0, 0)); 
+  @*/
+  /*@ ensures [f0]world(ss_pub) &*& [f1]net_api_initialized() &*&
+              key_item(key, creator, id, symmetric_key, int_pair(0, 0)) &*& 
+              item(result, ?msg) &*& bad(creator) || 
+              app_send_event(creator, msg); 
+  @*/
 {
     struct network_status *net_stat = network_bind(APP_RECEIVE_PORT);
     

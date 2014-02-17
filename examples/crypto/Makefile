@@ -9,7 +9,7 @@ CFLAGS += -I lib/include
 CFLAGS += -I lib/polarssl/include 
 CFLAGS += -D EXECUTE
 
-LIBS += -L lib -ldolevyao 
+LIBS += -L lib/bin -ldolevyao 
 LIBS += -L lib/polarssl/library -lpolarssl 
 LIBS += -pthreads -lpthread 
 LIBS += -lm
@@ -42,7 +42,7 @@ protocols_verify: lib_
 protocols_compile: $(PROT_APPS)
 
 protocols_execute: protocols_compile
-	$(foreach exec,$(PROT_APPS), ./$(exec) ;)
+	$(foreach exec,$(PROT_APPS), LD_LIBRARY_PATH=./lib/bin/ ; ./$(exec) ;)
 
 .SECONDEXPANSION:
 

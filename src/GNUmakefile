@@ -142,7 +142,8 @@ STDLIB_FILES_GEN = \
 STDLIB_FILES = \
 	../bin/crt.vfmanifest \
 	$(STDLIB_FILES_GEN) \
-	../bin/threading.vfmanifest
+	../bin/threading.vfmanifest \
+	../bin/pthread.vfmanifest
 
 TOOLS_EXCEPT_VFIDE = ../bin/mysh$(DOTEXE) ../bin/verifast$(DOTEXE) \
         ../bin/main_class$(DOTEXE) ../bin/java_card_applet$(DOTEXE) \

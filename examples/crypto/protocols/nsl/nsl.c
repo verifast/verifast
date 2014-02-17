@@ -5,14 +5,25 @@
 
 #define RECEIVER_PORT 121212
 
+/*@ 
+predicate protocol_pub(; fixpoint(item, bool) pub) = pub == nsl_pub;
+
+lemma void init_protocol()
+     requires true;
+     ensures protocol_pub(nsl_pub);
+{
+  close protocol_pub(nsl_pub);
+}
+@*/
+
 void sender(int sender, int receiver, struct item *KA_PRIVATE, struct item *KB)
-  /*@ requires generated_nonces(sender, _) &*& 
-               [?f]world(nsl_pub) &*& !bad(sender) &*& !bad(receiver) &*&
+  /*@ requires generated_nonces(sender, _) &*& !bad(sender) &*& !bad(receiver) &*&
+               [?f0]world(nsl_pub) &*& [?f1]net_api_initialized() &*&
                key_item(KA_PRIVATE, sender, ?cskid, private_key, int_pair(0, 0)) &*&
                key_item(KB, receiver, ?spkid, public_key, int_pair(0, 0));
   @*/
   /*@ ensures  generated_nonces(sender, _) &*&
-               [f]world(nsl_pub) &*&
+               [f0]world(nsl_pub) &*& [f1]net_api_initialized() &*&
                key_item(KA_PRIVATE, sender, cskid, private_key, int_pair(0, 0)) &*&
                key_item(KB, receiver, spkid, public_key, int_pair(0, 0));
   @*/
@@ -83,12 +94,12 @@ void sender(int sender, int receiver, struct item *KA_PRIVATE, struct item *KB)
 }
 
 void receiver(int receiver, struct item *KB_PRIVATE)
-  /*@ requires generated_nonces(receiver, _) &*&
-               [?f]world(nsl_pub) &*& !bad(receiver) &*&
+  /*@ requires generated_nonces(receiver, _) &*& !bad(receiver) &*&
+               [?f0]world(nsl_pub) &*& [?f1]net_api_initialized() &*&
                key_item(KB_PRIVATE, receiver, ?sskid, private_key, int_pair(0, 0)); 
   @*/
-  /*@ ensures generated_nonces(receiver, _) &*&
-               [f]world(nsl_pub) &*& !bad(receiver) &*&
+  /*@ ensures generated_nonces(receiver, _) &*& !bad(receiver) &*&
+               [f0]world(nsl_pub) &*& [f1]net_api_initialized() &*& 
                key_item(KB_PRIVATE, receiver, sskid, private_key, int_pair(0, 0)); 
   @*/
 {

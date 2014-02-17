@@ -7,7 +7,8 @@
 
 /*@
 predicate_family_instance pthread_run_pre(attacker_t)(void *data, any info) = 
-    exists(yahalom_pub) &*& [_]world(yahalom_pub) &*& 
+    exists(yahalom_pub) &*& 
+    [_]world(yahalom_pub) &*& [_]net_api_initialized() &*&
     attacker_proof_obligations(yahalom_pub) &*&
     initial_principals() &*& !bad(0) &*&
     info == nil;
@@ -33,7 +34,7 @@ struct yahalom_args
 
 /*@
 predicate_family_instance pthread_run_pre(server_t)(void *data, any info) = 
-  [_]world(yahalom_pub) &*&
+  [_]world(yahalom_pub) &*& [_]net_api_initialized() &*&
   yahalom_args_sender(data, ?sender) &*&
   yahalom_args_receiver(data, ?receiver) &*&
   yahalom_args_key_AS(data, ?key_AS) &*&
@@ -45,7 +46,7 @@ predicate_family_instance pthread_run_pre(server_t)(void *data, any info) =
   key_item(key_AB, sender, ?id, symmetric_key, int_pair(2, receiver)) &*&
   info == nil;
 predicate_family_instance pthread_run_post(server_t)(void *data, any info) = 
-  [_]world(yahalom_pub) &*&
+  [_]world(yahalom_pub) &*& [_]net_api_initialized() &*&
   yahalom_args_sender(data, ?sender) &*&
   yahalom_args_receiver(data, ?receiver) &*&
   yahalom_args_key_AS(data, ?key_AS) &*&
@@ -71,7 +72,7 @@ void *server_t(void* data) //@ : pthread_run_joinable
 
 /*@
 predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) = 
-  [_]world(yahalom_pub) &*&
+  [_]world(yahalom_pub) &*& [_]net_api_initialized() &*&
   yahalom_args_receiver(data, ?receiver) &*&
   yahalom_args_key_BS(data, ?key_BS) &*&
   !bad(0) &*& !bad(receiver) &*&
@@ -79,7 +80,7 @@ predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) =
   key_item(key_BS, receiver, 0, symmetric_key, int_pair(0, 0)) &*&
   info == cons(receiver, nil);
 predicate_family_instance pthread_run_post(receiver_t)(void *data, any info) = 
-  [_]world(yahalom_pub) &*&
+  [_]world(yahalom_pub) &*& [_]net_api_initialized() &*&
   yahalom_args_receiver(data, ?receiver) &*&
   yahalom_args_key_BS(data, ?key_BS) &*&
   generated_nonces(receiver, _) &*&
@@ -100,7 +101,7 @@ void *receiver_t(void* data) //@ : pthread_run_joinable
 
 /*@
 predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) = 
-  [_]world(yahalom_pub) &*&
+  [_]world(yahalom_pub) &*& [_]net_api_initialized() &*&
   yahalom_args_sender(data, ?sender) &*&
   yahalom_args_receiver(data, ?receiver) &*&
   yahalom_args_key_AS(data, ?key_AS) &*&
@@ -109,7 +110,7 @@ predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
   key_item(key_AS, sender, 0, symmetric_key, int_pair(0, 0)) &*&
   info == cons(sender, nil);
 predicate_family_instance pthread_run_post(sender_t)(void *data, any info) = 
-  [_]world(yahalom_pub) &*&
+  [_]world(yahalom_pub) &*& [_]net_api_initialized() &*&
   yahalom_args_sender(data, ?sender) &*&
   yahalom_args_receiver(data, ?receiver) &*&
   yahalom_args_key_AS(data, ?key_AS) &*&
@@ -130,8 +131,8 @@ void *sender_t(void* data) //@ : pthread_run_joinable
   return 0;
 }
 
-int main()
-  //@ requires net_api_uninitialized() &*& initial_principals();
+int main() //@ : main
+  //@ requires true;
   //@ ensures true;
 {
   struct item *key_AS;
@@ -140,11 +141,9 @@ int main()
   struct keypair *keypair;
 
   printf("\n\tExecuting \"yahalom protocol\" ... ");
-  
-  //@ init_protocol();
-  //@ assert protocol_pub(?pub);
-  //@ close exists(pub);
+  //@ close exists(yahalom_pub);
   init_crypto_lib();
+  //@ init_protocol();
   
   //@ open initial_principals();
   int server = create_principal(&key_AS, &keypair);
@@ -158,14 +157,14 @@ int main()
   key_AB = create_key();
   //@ close initial_principals();
   
-  //@ assume (!bad(server) && !bad(sender) && !bad(receiver));
+  //@ assume (!bad(sender) && !bad(receiver));
   void *null = (void *) 0;
   
   {
     pthread_t a_thread;
     //@ PACK_ATTACKER_PROOF_OBLIGATIONS(yahalom)
     //@ close attacker_proof_obligations(yahalom_pub);
-    //@ leak  world(yahalom_pub);
+    //@ leak  world(yahalom_pub) &*& net_api_initialized();
     //@ close pthread_run_pre(attacker_t)(null, _);
     pthread_create(&a_thread, null, &attacker_t, null);  
   }
@@ -177,7 +176,7 @@ int main()
   while (true)
 #endif
     /*@ invariant 
-              [_]world(yahalom_pub) &*&
+              [_]world(yahalom_pub) &*& [_]net_api_initialized() &*&
               generated_nonces(sender, _) &*&
               key_AS |-> ?kkey_AS &*& key_item(kkey_AS, 
                           sender, 0, symmetric_key, int_pair(0, 0)) &*&

@@ -6,10 +6,9 @@
 
 /*@
 predicate_family_instance pthread_run_pre(attacker_t)(void *data, any info) = 
-    exists(ss_pub) &*& [_]world(ss_pub) &*& 
-    attacker_proof_obligations(ss_pub) &*&
-    initial_principals() &*& !bad(0) &*&
-    info == nil;
+    exists(ss_pub) &*& [_]world(ss_pub) &*& [_]net_api_initialized() &*&
+    attacker_proof_obligations(ss_pub) &*& initial_principals() &*& 
+    !bad(0) &*& info == nil;
 @*/
 
 void *attacker_t(void* _unused) //@ : pthread_run_joinable
@@ -23,7 +22,7 @@ void *attacker_t(void* _unused) //@ : pthread_run_joinable
 
 /*@
 predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) = 
-  [_]world(ss_pub) &*&
+  [_]world(ss_pub) &*& [_]net_api_initialized() &*&
   key_item(data, _, _, symmetric_key, int_pair(0, 0)) &*&
   info == nil;
 predicate_family_instance pthread_run_post(receiver_t)(void *data, any info) =
@@ -45,7 +44,7 @@ void *receiver_t(void* data) //@ : pthread_run_joinable
 
 /*@
 predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) = 
-  [_]world(ss_pub) &*&
+  [_]world(ss_pub) &*& [_]net_api_initialized() &*&
   key_item(data, ?sender, _, symmetric_key, int_pair(0, 0)) &*&
   info == cons(sender, nil);
 predicate_family_instance pthread_run_post(sender_t)(void *data, any info) =
@@ -69,22 +68,20 @@ void *sender_t(void* data) //@ : pthread_run_joinable
   return 0;
 }
 
-int main()
-  //@ requires net_api_uninitialized() &*& initial_principals();
+int main() //@ : main
+  //@ requires true;
   //@ ensures true;
-{
+{ 
   struct item *key; 
   struct item *s_key;
   struct item *r_key;
   struct keypair *keypair;
   
   printf("\n\tExecuting \"secure_storage protocol\" ... ");
-  
-  //@ init_protocol();
-  //@ assert protocol_pub(?pub);
-  //@ close exists(pub);
+  //@ close exists(ss_pub);
   init_crypto_lib();
-  
+  //@ init_protocol();
+
   //@ open initial_principals();
   int sender = create_principal(&key, &keypair);
   keypair_free(keypair);
@@ -93,14 +90,13 @@ int main()
   key_free(key);
   //@ close initial_principals();
   
-  //@ assume (!bad(0));
   void *null = (void *) 0;
   
   {
     pthread_t a_thread;
     //@ PACK_ATTACKER_PROOF_OBLIGATIONS(ss)
     //@ close attacker_proof_obligations(ss_pub);
-    //@ leak  world(ss_pub);
+    //@ leak  world(ss_pub) &*& net_api_initialized();
     //@ close pthread_run_pre(attacker_t)(null, _);
     pthread_create(&a_thread, null, &attacker_t, null);  
   }
@@ -111,7 +107,7 @@ int main()
 #else
   while (true)
 #endif
-    /*@ invariant [_]world(ss_pub) &*&
+    /*@ invariant [_]world(ss_pub) &*& [_]net_api_initialized() &*&
                   key_item(s_key, sender, _, symmetric_key, int_pair(0, 0)) &*&
                   key_item(r_key, _, _, symmetric_key, int_pair(0, 0));
     @*/

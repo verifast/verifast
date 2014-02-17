@@ -23,17 +23,17 @@ fixpoint bool app_send_event(int sender, item message);
 ///////////////////////////////////////////////////////////////////////////////
 
 fixpoint bool ss_pub(item i) {
-    switch (i) {
-        case key_item(p, c, k, info): 
-          return bad(p);
-        case data_item(d): return true;
-        case hmac_item(creator, id, kind, info, m): 
-          return bad(creator) || app_send_event(creator, m);
-        case pair_item(i1, i2): return ss_pub(i1) && ss_pub(i2);
-        case encrypted_item(s0, count0, kind0, info0, p0, entropy0):
-          return ss_pub(p0) && bad(s0);
-        default: return false;
-    }
+  switch (i) {
+    case key_item(p, c, k, info): 
+      return bad(p);
+    case data_item(d): return true;
+    case hmac_item(creator, id, kind, info, m): 
+      return bad(creator) || app_send_event(creator, m);
+    case pair_item(i1, i2): return ss_pub(i1) && ss_pub(i2);
+    case encrypted_item(s0, count0, kind0, info0, p0, entropy0):
+      return ss_pub(p0) && bad(s0);
+    default: return false;
+  }
 }
 @*/
 
@@ -50,25 +50,25 @@ lemma void init_protocol();
 @*/
 
 void app_send(struct item *key, struct item *message);
-    /*@ requires [?f]world(ss_pub) &*& 
-                 key_item(key, ?creator, ?id, symmetric_key, int_pair(0, 0)) &*& 
-                 item(message, ?msg) &*& ss_pub(msg) == true &*& 
-                 app_send_event(creator, msg) == true; 
-    @*/
-    /*@ ensures  [f]world(ss_pub) &*& 
-                 key_item(key, creator, id, symmetric_key, int_pair(0, 0)) &*& 
-                 item(message, msg); 
-    @*/
+  /*@ requires [?f0]world(ss_pub) &*& [?f1]net_api_initialized() &*&
+                key_item(key, ?creator, ?id, symmetric_key, int_pair(0, 0)) &*& 
+                item(message, ?msg) &*& ss_pub(msg) == true &*& 
+                app_send_event(creator, msg) == true; 
+  @*/
+  /*@ ensures  [f0]world(ss_pub) &*& [f1]net_api_initialized() &*&
+                key_item(key, creator, id, symmetric_key, int_pair(0, 0)) &*& 
+                item(message, msg); 
+  @*/
 
 struct item *app_receive(struct item *key);
-    /*@ requires [?f]world(ss_pub) &*& 
-                 key_item(key, ?creator, ?id, symmetric_key, int_pair(0, 0)); 
-    @*/
-    /*@ ensures [f]world(ss_pub) &*& 
-                key_item(key, creator, id, symmetric_key, int_pair(0, 0)) &*& 
-                item(result, ?msg) &*& bad(creator) || 
-                app_send_event(creator, msg); 
-    @*/
+  /*@ requires [?f0]world(ss_pub) &*& [?f1]net_api_initialized() &*&
+                key_item(key, ?creator, ?id, symmetric_key, int_pair(0, 0)); 
+  @*/
+  /*@ ensures [f0]world(ss_pub) &*& [f1]net_api_initialized() &*&
+              key_item(key, creator, id, symmetric_key, int_pair(0, 0)) &*& 
+              item(result, ?msg) &*& bad(creator) || 
+              app_send_event(creator, msg); 
+  @*/
 
 ///////////////////////////////////////////////////////////////////////////////
 // Attacker proof obligations for this protocol ///////////////////////////////

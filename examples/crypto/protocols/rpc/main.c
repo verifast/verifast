@@ -7,7 +7,7 @@
 
 /*@
 predicate_family_instance pthread_run_pre(attacker_t)(void *data, any info) = 
-    exists(rpc_pub) &*& [_]world(rpc_pub) &*& 
+    exists(rpc_pub) &*& [_]world(rpc_pub) &*& [_]net_api_initialized() &*&
     attacker_proof_obligations(rpc_pub) &*&
     initial_principals() &*& !bad(0) &*&
     info == nil;
@@ -32,7 +32,7 @@ struct rpc_args
 
 /*@
 predicate_family_instance pthread_run_pre(server_t)(void *data, any info) = 
-  [_]world(rpc_pub) &*&
+  [_]world(rpc_pub) &*& [_]net_api_initialized() &*&
   rpc_args_server(data, ?server) &*&
   rpc_args_client(data, ?client) &*&
   rpc_args_key(data, ?key) &*&
@@ -61,7 +61,7 @@ void *server_t(void* data) //@ : pthread_run_joinable
 
 /*@
 predicate_family_instance pthread_run_pre(client_t)(void *data, any info) = 
-  [_]world(rpc_pub) &*&
+  [_]world(rpc_pub) &*& [_] net_api_initialized() &*&
   rpc_args_server(data, ?server) &*&
   rpc_args_client(data, ?client) &*&
   rpc_args_key(data, ?key) &*&
@@ -93,19 +93,17 @@ void *client_t(void* data) //@ : pthread_run_joinable
   return 0;
 }
 
-int main()
-  //@ requires net_api_uninitialized() &*& initial_principals();
+int main() //@ : main
+  //@ requires true;
   //@ ensures true;
 {
   struct item *key;
   struct keypair *keypair;
 
   printf("\n\tExecuting \"rpc protocol\" ... ");
-  
-  //@ init_protocol();
-  //@ assert protocol_pub(?pub);
-  //@ close exists(pub);
+  //@ close exists(rpc_pub);
   init_crypto_lib();
+  //@ init_protocol();
   
   //@ open initial_principals();
   int server = choose();
@@ -116,14 +114,13 @@ int main()
   //@ assume (shared_with(client, id) == server);
   //@ close initial_principals();
   
-  //@ assume (!bad(0));
   void *null = (void *) 0;
   
   {
     pthread_t a_thread;
     //@ PACK_ATTACKER_PROOF_OBLIGATIONS(rpc)
     //@ close attacker_proof_obligations(rpc_pub);
-    //@ leak  world(rpc_pub);
+    //@ leak  world(rpc_pub) &*& net_api_initialized();
     //@ close pthread_run_pre(attacker_t)(null, _);
     pthread_create(&a_thread, null, &attacker_t, null);  
   }
@@ -134,7 +131,7 @@ int main()
 #else
   while (true)
 #endif
-    /*@ invariant [_]world(rpc_pub) &*&
+    /*@ invariant [_]world(rpc_pub) &*& [_]net_api_initialized() &*&
                   key |-> kkey &*& shared_with(client, id) == server &*&
                   key_item(kkey, client, id, symmetric_key, int_pair(0, 0));
     @*/

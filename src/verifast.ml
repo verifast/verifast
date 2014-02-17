@@ -3132,7 +3132,6 @@ let link_program isLibrary allModulepaths dllModulepaths emitDllManifest dllMani
       | None -> Filename.chop_extension mainModulePath ^ ".dll.vfmanifest"
     in
     let other_dll_lines = List.flatten (List.map get_lines dllModulepaths) in
-    List.iter print_endline other_dll_lines;
     begin
       try
         let manifestFile = open_out manifestPath in

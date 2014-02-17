@@ -2,7 +2,8 @@
 #include "attacker.h"
 
 void attacker()
-  /*@ requires exists<fixpoint(item, bool)>(?pub) &*& [?f]world(pub) &*&
+  /*@ requires exists<fixpoint(item, bool)>(?pub) &*& 
+               [?f0]world(pub) &*& [?f1]net_api_initialized() &*&
                attacker_proof_obligations(pub) &*&
                initial_principals();
   @*/
@@ -10,8 +11,8 @@ void attacker()
 {
   //@ open initial_principals();
   for (;;)
-    /*@ invariant [f]world(pub) &*& attacker_proof_obligations(pub) &*& 
-                  principals(_); 
+    /*@ invariant [f0]world(pub) &*& [f1]net_api_initialized() &*&
+                  attacker_proof_obligations(pub) &*& principals(_); 
     @*/
   {
     // Attackers are arbitrary principals.
@@ -31,8 +32,8 @@ void attacker()
     
     for (;;)
       /*@ 
-          invariant [f]world(pub) &*& attacker_proof_obligations(pub) &*&
-                    principals(_) &*&
+          invariant [f0]world(pub) &*& [f1]net_api_initialized() &*& 
+                    attacker_proof_obligations(pub) &*& principals(_) &*&
                     generated_nonces(bad_one, 0) &*&
                     a_key_sym |-> ?key_sym &*&
                     key_item(key_sym, bad_one, 0, symmetric_key, int_pair(0, 0)); 

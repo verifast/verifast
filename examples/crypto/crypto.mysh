@@ -3,26 +3,40 @@ verifast
 verifast -prover redux
 in
 
-#attacker
-verifast_both -c -I lib/include lib/src/attacker.c
+cd protocols
+  #secure_storage
+  cd secure_storage
+    verifast_both -c -I ../../lib/include secure_storage.c
+    verifast_both -c -I ../../lib/include main.c
+    verifast_both -allow_assume -I ../../lib/include ../../lib/bin/dolevyao.dll.vfmanifest secure_storage.c main.c
+  cd ..
+  #rpc
+  cd rpc
+    verifast_both -c -I ../../lib/include rpc.c
+    verifast_both -c -I ../../lib/include main.c
+    verifast_both -allow_assume -I ../../lib/include ../../lib/bin/dolevyao.dll.vfmanifest rpc.c main.c
+  cd ..
+  #yahalom
+  cd yahalom
+    ifnotmac verifast -c -I ../../lib/include yahalom.c
+    ifnotmac verifast -c -I ../../lib/include main.c
+    ifnotmac verifast -allow_assume -I ../../lib/include ../../lib/bin/dolevyao.dll.vfmanifest yahalom.c main.c
+  cd ..
+  ##nss
+  cd nss
+    verifast_both -c -I ../../lib/include nss.c
+    verifast_both -c -I ../../lib/include main.c
+    verifast_both -allow_assume -I ../../lib/include ../../lib/bin/dolevyao.dll.vfmanifest nss.c main.c
+  cd ..
+  ##nsl
+  cd nsl
+    verifast_both -c -I ../../lib/include nsl.c
+    verifast_both -c -I ../../lib/include main.c
+    verifast_both -allow_assume -I ../../lib/include ../../lib/bin/dolevyao.dll.vfmanifest nsl.c main.c
+  cd ..
+cd ..
 
-#secure_storage
-verifast_both -c -I lib/include protocols/secure_storage/secure_storage.c
-verifast_both -c -I lib/include protocols/secure_storage/main.c
-
-#rpc
-verifast_both -c -I lib/include protocols/rpc/rpc.c
-verifast_both -c -I lib/include protocols/rpc/main.c
-
-#yahalom
-ifnotmac verifast      -c -I lib/include protocols/yahalom/yahalom.c
-verifast_both -c -I lib/include protocols/yahalom/main.c
-
-#nss
-verifast_both -c -I lib/include protocols/nss/nss.c
-verifast_both -c -I lib/include protocols/nss/main.c
-
-#nsl
-verifast_both -c -I lib/include protocols/nsl/nsl.c
-verifast_both -c -I lib/include protocols/nsl/main.c
-
+cd lib/src
+  #attacker
+  verifast_both -c -I ../include attacker.c
+cd ../..

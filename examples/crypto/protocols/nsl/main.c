@@ -7,7 +7,7 @@
 
 /*@
 predicate_family_instance pthread_run_pre(attacker_t)(void *data, any info) = 
-    exists(nsl_pub) &*& [_]world(nsl_pub) &*& 
+    exists(nsl_pub) &*& [_]world(nsl_pub) &*& [_]net_api_initialized() &*&
     attacker_proof_obligations(nsl_pub) &*&
     initial_principals() &*& !bad(0) &*&
     info == nil;
@@ -32,7 +32,7 @@ struct nsl_args
 
 /*@
 predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) = 
-  [_]world(nsl_pub) &*&
+  [_]world(nsl_pub) &*& [_]net_api_initialized() &*&
   nsl_args_receiver(data, ?receiver) &*&
   nsl_args_key1(data, ?key_KB_PRIV) &*&
   !bad(receiver) &*&
@@ -61,7 +61,7 @@ void *receiver_t(void* data) //@ : pthread_run_joinable
 
 /*@
 predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) = 
-  [_]world(nsl_pub) &*&
+  [_]world(nsl_pub) &*& [_]net_api_initialized() &*&
   nsl_args_sender(data, ?sender) &*&
   nsl_args_receiver(data, ?receiver) &*&
   nsl_args_key1(data, ?key_KA_PRIV) &*&
@@ -94,19 +94,17 @@ void *sender_t(void* data) //@ : pthread_run_joinable
   return 0;
 }
 
-int main()
-  //@ requires net_api_uninitialized() &*& initial_principals();
+int main() //@ : main
+  //@ requires true;
   //@ ensures true;
 {
   struct item *key;
   struct keypair *keypair;
 
   printf("\n\tExecuting \"nsl protocol\" ... ");
-  
-  //@ init_protocol();
-  //@ assert protocol_pub(?pub);
-  //@ close exists(pub);
+  //@ close exists(nsl_pub);
   init_crypto_lib();
+  //@ init_protocol();
   
   //@ open initial_principals();
   int sendr = create_principal(&key, &keypair);
@@ -119,14 +117,14 @@ int main()
   key_free(key);
   //@ close initial_principals();
   
-  //@ assume (!bad(0) && !bad(sendr) && !bad(receiver));
+  //@ assume (!bad(sendr) && !bad(receiver));
   void *null = (void *) 0;
   
   {
     pthread_t a_thread;
     //@ PACK_ATTACKER_PROOF_OBLIGATIONS(nsl)
     //@ close attacker_proof_obligations(nsl_pub);
-    //@ leak  world(nsl_pub);
+    //@ leak  world(nsl_pub) &*& net_api_initialized();
     //@ close pthread_run_pre(attacker_t)(null, _);
     pthread_create(&a_thread, null, &attacker_t, null);  
   }
@@ -137,7 +135,7 @@ int main()
 #else
   while (true)
 #endif
-    /*@ invariant [_]world(nsl_pub) &*& 
+    /*@ invariant [_]world(nsl_pub) &*& [_]net_api_initialized() &*&
                   generated_nonces(sendr, _) &*&
                   generated_nonces(receiver, _) &*&
                   key_item(KA_PRIV, sendr, 0, private_key, int_pair(0, 0)) &*&
