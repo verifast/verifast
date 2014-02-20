@@ -1,0 +1,31 @@
+/**
+ * io/io.gh - input/output fundamental predicate and lemma declarations.
+ *
+ * This file is the simplified version; it is not suitable for memory-based
+ * input/output (i.e. input/output-style contracts for programs doing
+ * memory-based operations).
+ */
+
+#ifndef IO_IO_H
+#define IO_IO_H
+
+inductive iostate = iostate(int);
+inductive time = time(int);
+
+predicate time(time t);
+
+predicate split(time t1, time t2, time t3);
+
+predicate join(time t1, time t2, time t3);
+
+lemma void join();
+    requires join(?t1, ?t2, ?t3)
+        &*& time(t1) &*& time(t2);
+    ensures time(t3);
+   
+lemma void split();
+    requires split(?t1, ?t2, ?t3) &*& time(t1);
+    ensures time(t2) &*& time(t3);
+
+
+#endif

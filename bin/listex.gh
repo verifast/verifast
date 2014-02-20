@@ -5,7 +5,7 @@
 
 Contents:
 - lemmas about the definitions in list.h (in the same order)
-- fixpoints update, max
+- fixpoints max, fold_left, remove_all, ...
 
 */
 
@@ -80,6 +80,9 @@ lemma void forall_mem<t>(t x, list<t> xs, fixpoint(t, bool) p);
 lemma void forall_drop<t>(list<t> xs, fixpoint(t, bool) p, int i);
     requires forall(xs, p) == true;
     ensures forall(drop(i, xs), p) == true;
+
+
+// --- End of lemmas about definitions from list.gh --- //
 
 fixpoint int max(int x, list<int> xs) {
     switch (xs) {

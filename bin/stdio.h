@@ -1,3 +1,10 @@
+/**
+ * Contracts for C standard library's input/output functions.
+ *
+ * If you are looking for contract supporting specifying input/output behaviour,
+ * see io/stdio.h. These contracts are also closer to the actual API.
+ */
+
 #ifndef STDIO_H
 #define STDIO_H
 

@@ -5,14 +5,14 @@
 #include "assert.h"
 
 int main(int argc, char** argv) //@ : main
-  //@ requires 0 <= argc &*& [_]argv(argv, argc);
+  //@ requires 0 <= argc &*& [_]argv(argv, argc, _);
   //@ ensures true;
 {
   struct file* from = 0; struct file* to = 0; char* buffer = 0; int nb_read = 0;
   if(argc < 3) { puts("Not enough parameters."); return -1; }
-  //@ open [_]argv(argv, argc);
-  //@ open [_]argv(argv + 1, argc - 1);
-  //@ open [_]argv(argv + 2, argc - 2);
+  //@ open [_]argv(argv, argc, _);
+  //@ open [_]argv(argv + 1, argc - 1, _);
+  //@ open [_]argv(argv + 2, argc - 2, _);
   from = fopen(* (argv + 1), "r");
   to = fopen(* (argv + 2), "w");
   buffer = malloc(100);

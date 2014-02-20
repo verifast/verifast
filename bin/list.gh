@@ -9,7 +9,7 @@ Contents:
 - inductive list
 - fixpoints head, tail, length, append, reverse, mem, nth, distinct, take, drop, remove, index_of
 - predicate foreach
-- fixpoints map, forall, exists
+- fixpoints map, forall, exists, update
 and various lemmas.
 
 See listex.h for additional lemmas about these definitions, and for additional definitions.

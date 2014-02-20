@@ -3,6 +3,7 @@
 
 //@ #include "prelude_core.gh"
 //@ #include "list.gh"
+//@ #include "io/io.gh"
 
 /*@
 
@@ -290,19 +291,31 @@ inductive vararg = vararg_int(int) | vararg_uint(unsigned int) | vararg_pointer(
 predicate module(int moduleId, bool initialState);
 predicate module_code(int moduleId;);
 
-predicate argv(char **argv, int argc) =
-    argc <= 0 ? true : pointer(argv, ?arg) &*& string(arg, _) &*& argv(argv + 1, argc - 1);
-
+predicate argv(char **argv, int argc; list<list<char> > arguments) =
+    argc <= 0 ?
+        arguments == nil
+    :
+        pointer(argv, ?arg)
+        &*& string(arg, ?head_arguments)
+        &*& argv(argv + 1, argc - 1, ?tail_arguments)
+        &*& arguments == cons(head_arguments, tail_arguments); // fix output parameter.
 @*/
 
 typedef int main(int argc, char **argv);
-    //@ requires 0 <= argc &*& [_]argv(argv, argc);
+    //@ requires 0 <= argc &*& [_]argv(argv, argc, ?arguments);
     //@ ensures true;
 
 typedef int main_full/*@(int mainModule)@*/(int argc, char **argv);
-    //@ requires module(mainModule, true) &*& [_]argv(argv, argc);
+    //@ requires module(mainModule, true) &*& [_]argv(argv, argc, ?arguments);
     //@ ensures true;
-    
+
+// The author of the main function can provide a body of this predicate.
+//@ predicate main_io(time t1, list<list<char> > commandline_arguments, time t2);
+typedef int main_io/*@(int mainModule)@*/(int argc, char **argv);
+    //@ requires module(mainModule, true) &*& [_]argv(argv, argc, ?arguments) &*& main_io(?t1, arguments, ?t2) &*& time(t1);
+    //@ ensures time(t2);
+
+
 // action permissions
 
 /*@
