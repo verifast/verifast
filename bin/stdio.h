@@ -70,6 +70,13 @@ void putchar(char c);
 
 /*@
 
+fixpoint option<list<t> > option_cons<t>(t x, option<list<t> > xs) {
+    switch (xs) {
+        case none: return none;
+        case some(xs0): return some(cons(x, xs0));
+    }
+}
+
 fixpoint option<list<char *> > printf_parse_format(list<char> fcs, list<vararg> args) {
     switch (fcs) {
         case nil: return some(nil);
@@ -160,6 +167,35 @@ inductive formatted_part =
   formatted_part_int_specifier(int) |
   formatted_part_uint_specifier(unsigned int) |
   formatted_part_string_specifier(char*);
+
+fixpoint int option_length<t>(option<list<t> > xs) {
+    switch (xs) {
+        case none: return 0;
+        case some(xs0): return
+            switch (xs0) {
+                case nil: return 0;
+                case cons(x, xs1): return 1 + length(xs1);
+            };
+    }
+}
+
+fixpoint option<list<t> > option_append<t>(list<t> xs0, option<list<t> > xs1) {
+    switch (xs1) {
+        case none: return none;
+        case some(xs2): return some(append(xs0, xs2));
+    }
+}
+
+fixpoint option<list<t> > option_option_append<t>(option<list<t> > xs0, option<list<t> > xs1) {
+    switch (xs0) {
+        case none: return none;
+        case some(xs0'): return 
+            switch (xs1) {
+                case none: return none;
+                case some(xs1'): return some(append(xs0', xs1'));
+            };
+    }
+}
 
 fixpoint option<list<formatted_part> > sprintf_parse_format(list<char> fcs, list<vararg> args) {
     switch (fcs) {
