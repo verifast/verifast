@@ -123,6 +123,7 @@ cd examples
     mysh < preprocessor.mysh
   cd ..
   verifast_both printf.c
+  verifast -prover redux sprintf.c
   verifast_both -c pthreads.c
   verifast_both -c public_invariant.c
   verifast_both -c pure_map.c

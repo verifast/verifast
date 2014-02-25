@@ -8,6 +8,8 @@
 #ifndef STDIO_H
 #define STDIO_H
 
+#include "stddef.h"
+
 typedef struct file FILE;
 
 struct file;
@@ -67,13 +69,6 @@ void putchar(char c);
     //@ ensures true;
 
 /*@
-
-fixpoint option<list<t> > option_cons<t>(t x, option<list<t> > xs) {
-    switch (xs) {
-        case none: return none;
-        case some(xs0): return some(cons(x, xs0));
-    }
-}
 
 fixpoint option<list<char *> > printf_parse_format(list<char> fcs, list<vararg> args) {
     switch (fcs) {
@@ -155,6 +150,171 @@ int printf(char* format, ...);
                         };
                 };
         };
+    @*/
+    //@ ensures emp;
+
+/*@
+
+inductive formatted_part =
+  formatted_part_char(char) |
+  formatted_part_int_specifier(int) |
+  formatted_part_uint_specifier(unsigned int) |
+  formatted_part_string_specifier(char*);
+
+fixpoint option<list<formatted_part> > sprintf_parse_format(list<char> fcs, list<vararg> args) {
+    switch (fcs) {
+        case nil: return some(nil);
+        case cons(fc, fcs0): return
+            fc != '%' ?
+                option_cons(formatted_part_char(fc), sprintf_parse_format(fcs0, args))
+            :
+                switch (fcs0) {
+                    case nil: return none;
+                    case cons(fc1, fcs1): return
+                        fc1 == '%' ?
+                            option_cons(formatted_part_char('%'),
+                              option_cons(formatted_part_char('%'), 
+                                sprintf_parse_format(fcs1, args)))
+                        : fc1 == 'd' || fc1 == 'i' || fc1 == 'c' ?
+                            switch (args) {
+                                case nil: return none;
+                                case cons(arg, args1): return
+                                    switch (arg) {
+                                        case vararg_int(v): return
+                                           option_cons(formatted_part_int_specifier(v), sprintf_parse_format(fcs1, args1));
+                                        default: return none;
+                                    };
+                            }
+                        : fc1 == 'u' ?
+                            switch (args) {
+                                case nil: return none;
+                                case cons(arg, args1): return
+                                    switch (arg) {
+                                        case vararg_uint(v): return
+                                          option_cons(formatted_part_uint_specifier(v), sprintf_parse_format(fcs1, args1));
+                                        default: return none;
+                                    };
+                            }
+                        : fc1 == 's' ?
+                            switch (args) {
+                                case nil: return none;
+                                case cons(arg, args1): return
+                                    switch (arg) {
+                                        case vararg_pointer(v): return 
+                                          option_cons(formatted_part_string_specifier(v), sprintf_parse_format(fcs1, args1));
+                                        default: return none;
+                                    };
+                            }
+                        :
+                            none;
+                };
+    }
+}
+
+fixpoint option<list<char> > chars_for_uint(int i) {
+    return i > 9 || i < 0 ? none : some(cons(i + 48, nil));
+}
+
+fixpoint option<list<char> > chars_for_int(int i) {
+    return i > 9 || i < -9 ? none :
+               i < 0 ? option_cons('-', chars_for_uint(-i)) : chars_for_uint(i);
+}
+
+fixpoint option<list<char> > sprintf_filled_in_args(list<formatted_part> parts, list<list<char> > string_args) {
+    switch (parts) {
+        case nil: return some(cons(0, nil));
+        case cons(arg0, args0): return
+            switch (arg0) {
+                case formatted_part_char(c):
+                    return option_cons(c, sprintf_filled_in_args(args0, string_args));
+                case formatted_part_int_specifier(i): 
+                    return option_option_append(chars_for_int(i), sprintf_filled_in_args(args0, string_args));
+                case formatted_part_uint_specifier(i):
+                    return option_option_append(chars_for_uint(i), sprintf_filled_in_args(args0, string_args));
+                case formatted_part_string_specifier(s): return
+                    switch(string_args) {
+                        case cons(cs, string_args0):
+                            return option_append(cs, sprintf_filled_in_args(args0, string_args0));
+                        case nil: return none;
+                    };
+            };
+    }
+}
+
+@*/
+
+int sprintf(char* dest, char* format, ...);
+    /*@ 
+    requires [?f]string(format, ?f_cs) &*&
+             chars(dest, ?d_length, ?d_cs) &*&
+             sprintf_parse_format(f_cs, varargs) == some(?parsed_format) &*&
+             // string chunck requirements
+             printf_parse_format(f_cs, varargs) == some(?ps) &*&
+             switch (ps) {
+                case nil: 
+                    return 
+                        sprintf_filled_in_args(parsed_format, {}) == some(?r_cs) &*&
+                        d_length >= length(r_cs) &*& 
+                    ensures
+                        [f]string(format, f_cs) &*&
+                        chars(dest, length(r_cs), r_cs) &*&
+                        chars(dest + length(r_cs), d_length - length(r_cs), ?rest_cs);
+                case cons(p0, ps0): return [?f0]string(p0, ?cs0) &*&
+                    switch (ps0) {
+                        case nil: 
+                            return 
+                                sprintf_filled_in_args(parsed_format, {cs0}) == some(?r_cs) &*&
+                                d_length >= length(r_cs) &*& 
+                            ensures 
+                                [f0]string(p0, cs0) &*&
+                                [f]string(format, f_cs) &*&  
+                                chars(dest, length(r_cs), r_cs) &*&
+                                chars(dest + length(r_cs), d_length - length(r_cs), ?rest_cs);
+                        case cons(p1, ps1): return [?f1]string(p1, ?cs1) &*&
+                            switch (ps1) {
+                                case nil: 
+                                    return 
+                                        sprintf_filled_in_args(parsed_format, {cs0, cs1}) == some(?r_cs) &*&
+                                        d_length >= length(r_cs) &*& 
+                                    ensures
+                                        [f1]string(p1, cs1) &*&
+                                        [f0]string(p0, cs0) &*&
+                                        [f]string(format, f_cs) &*&  
+                                        chars(dest, length(r_cs), r_cs) &*&
+                                        chars(dest + length(r_cs), d_length - length(r_cs), ?rest_cs);
+                                case cons(p2, ps2): return [?f2]string(p2, ?cs2) &*&
+                                    switch (ps2) {
+                                        case nil: 
+                                            return 
+                                                sprintf_filled_in_args(parsed_format, {cs0, cs1, cs2}) == some(?r_cs) &*&
+                                                d_length >= length(r_cs) &*& 
+                                            ensures
+                                                [f2]string(p2, cs2) &*&
+                                                [f1]string(p1, cs1) &*&
+                                                [f0]string(p0, cs0) &*&
+                                                [f]string(format, f_cs) &*&  
+                                                chars(dest, length(r_cs), r_cs) &*&
+                                                chars(dest + length(r_cs), d_length - length(r_cs), ?rest_cs);
+                                        case cons(p3, ps3): return [?f3]string(p3, ?cs3) &*&
+                                            switch (ps3) {
+                                                case nil: 
+                                                    return 
+                                                        sprintf_filled_in_args(parsed_format, {cs0, cs1, cs2, cs3}) == some(?r_cs) &*&
+                                                        d_length >= length(r_cs) &*&       
+                                                    ensures
+                                                        [f3]string(p3, cs3) &*&
+                                                        [f2]string(p2, cs2) &*&
+                                                        [f1]string(p1, cs1) &*&
+                                                        [f0]string(p0, cs0) &*&
+                                                        [f]string(format, f_cs) &*&  
+                                                        chars(dest, length(r_cs), r_cs) &*&
+                                                        chars(dest + length(r_cs), d_length - length(r_cs), ?rest_cs);
+                                                case cons(p4, ps4): return false; // TODO: Support more string arguments...
+                                            };
+                                    };
+                            };
+                    };
+            };
     @*/
     //@ ensures emp;
 
