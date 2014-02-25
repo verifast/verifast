@@ -102,7 +102,7 @@
 .provides stdio.h#fread
 .provides stdio.h#fwrite
 .provides stdio.h#printf
-.provides stdio.h#snprintf
+.provides stdio.h#sprintf
 .provides stdio.h#feof
 .provides stdio.h#getchar
 .provides stdio.h#putchar
