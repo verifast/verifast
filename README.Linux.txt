@@ -27,12 +27,9 @@ you can install the dependencies by hand and just use src/GNUmakefile.
 Required Packages
 =================
 
-- svn
-- wget
-- make
-- gcc
-- gtk
-- standard system, X11 and GTK development files
+- svn, wget, make, gcc
+- standard system, X11, GTK and TCL/TK development files
+  (try "sudo apt-get build-dep ocaml" on Debian/Ubuntu)
 - libgtksourceview2.0 and libgtksourceview2.0-dev
 
 How to build
