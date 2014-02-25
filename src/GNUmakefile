@@ -58,6 +58,9 @@ ifndef NOZ3
             -ccopt "-I$(Z3)/ocaml -L$(Z3)/bin -L$(Z3)/lib" \
             -cclib -lz3-gmp -cclib -lz3stubs $(OCAMLLIB)/libcamlidl.a
   LDLPATH = $(Z3)/lib
+  VERIFAST := LD_LIBRARY_PATH=${LDLPATH}:$$LD_LIBRARY_PATH ../bin/verifast
+else
+  VERIFAST := ../bin/verifast
 endif
 
 # Should Make print each commandline? Then use "make VERBOSE=yes".
@@ -97,6 +100,7 @@ else
   NUMCPU ?= $(shell cat /proc/cpuinfo | grep 'processor' | wc -l)
 endif
 
+
 env:
 	@echo "Configuration:"
 	@echo "---------------------"
@@ -112,6 +116,8 @@ env:
 	@echo "LDLPATH : $(LDLPATH)"
 	@echo "GTKSOURCEVIEW_LFLAGS: $(GTKSOURCEVIEW_LFLAGS)"
 	@echo "GTKSOURCEVIEW_LIBS  : ${GTKSOURCEVIEW_LIBS}"
+	@echo "VERIFAST: ${VERIFAST}"
+
 
 #------------------------------- Includes   ---------------------------------#
 ifeq ($(OS), Linux)
@@ -190,7 +196,7 @@ $(STDLIB): $(STDLIB_FILES)
 	@echo "  >        " $@
 	> $(STDLIB)
 	@echo "  VERIFAST " $@
-	../bin/verifast -shared $(STDLIB_FILES) -emit_dll_vfmanifest \
+	${VERIFAST} -shared $(STDLIB_FILES) -emit_dll_vfmanifest \
 	  -emit_dll_vfmanifest_as $@  || (rm -f $(STDLIB) ; false)
 	
 ../bin/%.vfmanifest: ../bin/%.c ../bin/%.gh ../bin/verifast$(DOTEXE)
