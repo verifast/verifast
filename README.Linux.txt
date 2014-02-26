@@ -51,9 +51,10 @@ Remarks:
   with Z3 support requires you to have 32 bit versions of all development
   files and libraries installed
 - If your Linux distribution does not provide 32 bit versions of gtk and
-  libgtksourceview (e.g. the 64 bit version of Ubuntu 12.04), the build
-  system will automatically skip compiling vfide, the interactive IDE of
-  VeriFast. Only the command line version of the verifier will be available
+  libgtksourceview (e.g. the 64 bit version of Ubuntu 12.04), you can
+  skip compiling vfide. To do so, add WITHOUT_LABLGTK=true to the make
+  commandline, e.g. 'make -f GNUmakefile WITHOUT_LABLGTK=true'.
+  Only the command line version of the verifier will be available
   in this case.
 - You may also read the GNUmakefile in advance so that you
   know what to expect

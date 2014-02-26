@@ -1,5 +1,7 @@
+# This makefile does not work on Mac, see README.MacOS.txt for info.
+#
 # This makefile builds the *dependencies* of VeriFast like ocaml, and calls
-# the makefile in src/ that builds verifast itself. If the makefile
+# the makefile in src/ that builds VeriFast itself. If the makefile
 # you currently are looking at does not work, you can install the dependencies
 # by hand and use src/GNUmakefile to build VeriFast.
 
@@ -8,6 +10,8 @@
 #Z3v1     = true
 #Z3v4     = true
 #noZ3     = true
+#WITHOUT_LABLGTK=true
+
   
 # --- End of Config  --------------------------------------------------------
 
@@ -45,7 +49,10 @@ endif
 
 LASTZ3   = $(shell cat lastz3)
 
-all: ocaml cidl lgtk
+ifndef WITHOUT_LABLGTK
+  all: lgtk
+endif
+all: ocaml cidl
 	$(MAKE) GNUmakefile.settings
 ifdef Z3v1
   ifneq ($(LASTZ3),Z3v1)
@@ -93,33 +100,28 @@ cidl: GNUmakefile ocaml
 	gunzip -c ${CIDLPKG} | tar -xv
 	sed 's#/usr/local#${OCAMLDIR}#g'\
           ${CIDLSRC}/config/Makefile.unix >${CIDLSRC}/config/Makefile
-	cd ${CIDLSRC}; export PATH=${OCAMLDIR}/bin:$$PATH; ${MAKE} all
-	cd ${CIDLSRC}; export PATH=${OCAMLDIR}/bin:$$PATH; ${MAKE} install
-	cd ${CIDLSRC}; export PATH=${OCAMLDIR}/bin:$$PATH; ${MAKE} clean
+	cd ${CIDLSRC}; export PATH=${OCAMLDIR}/bin:"$$PATH"; ${MAKE} all
+	cd ${CIDLSRC}; export PATH=${OCAMLDIR}/bin:"$$PATH"; ${MAKE} install
+	cd ${CIDLSRC}; export PATH=${OCAMLDIR}/bin:"$$PATH"; ${MAKE} clean
 	touch cidl
 
 lgtk: GNUmakefile ocaml
 	rm -rf ${LGTKPKG} ${LGTKSRC}
 	wget ${LGTKURL}${LGTKPKG}
 	gunzip -c ${LGTKPKG} | tar -xv
-	cd ${LGTKSRC}; export PATH=${OCAMLDIR}/bin:$$PATH; \
-          ./configure --prefix=${OCAMLDIR} CC="gcc -m32"
-	grep "USE_GTKSOURCEVIEW2='1'" ${LGTKSRC}/config.log; \
-          echo "$$?" >lgtk.conf
-	if [ `cat lgtk.conf` -eq 0 ]; then \
-          cd ${LGTKSRC}; export PATH=${OCAMLDIR}/bin:$$PATH; \
+	cd ${LGTKSRC}; export PATH=${OCAMLDIR}/bin:"$$PATH"; \
+          ./configure --with-gtksourceview2 --prefix=${OCAMLDIR} CC="gcc -m32" || \
+           (echo "*** ERROR: Failed to configure lablgtk. Did you install gtksourceview2? (only the 32bit version works)" ; \
+            echo "*** Note: if you don't want or can't build with LablGTK, use 'make WITHOUT_LABLGTK=true'." ; \
+            false)
+	cd ${LGTKSRC}; export PATH=${OCAMLDIR}/bin:"$$PATH"; \
           ${MAKE} all install && \
           ${MAKE} -C src gtkInit.cmx gtkInit.o lablgtksourceview2.cmxa \
             lablgtksourceview2.a lablgtk.cmxa lablgtk.a && \
           cp src/gtkInit.cmx src/gtkInit.o \
             src/lablgtksourceview2.cmxa src/lablgtksourceview2.a \
-            src/lablgtk.cmxa src/lablgtk.a ${OCAMLDIR}/lib/ocaml/lablgtk2/ && \
-          cd ../ && \
-          echo "0" >lgtk; \
-         else \
-          echo "*** GTKSOURCEVIEW not installed. VFIDE will not be built."; \
-          echo "1" >lgtk; \
-         fi
+            src/lablgtk.cmxa src/lablgtk.a ${OCAMLDIR}/lib/ocaml/lablgtk2/
+	touch lgtk
 
 z3build: GNUmakefile ocaml cidl
 ifdef Z3v1
@@ -128,7 +130,7 @@ ifdef Z3v1
 	@echo to this directory and press return.
 	@bash -c read
 	gunzip -c ${Z3PKG} | tar -xv
-	cd ${Z3SRC}/ocaml; export PATH=${OCAMLDIR}/bin:$$PATH; \
+	cd ${Z3SRC}/ocaml; export PATH=${OCAMLDIR}/bin:"$$PATH"; \
           ./build-lib.sh `ocamlc -where`
 	echo $(shell pwd)/${Z3SRC} >z3build
 else ifdef Z3v4
@@ -137,17 +139,17 @@ else ifdef Z3v4
 	@echo to this directory and press return.
 	@bash -c read
 	gunzip -c ${Z3PKG} | tar -xv
-	cd ${Z3SRC}; export PATH=${OCAMLDIR}/bin:$$PATH; \
+	cd ${Z3SRC}; export PATH=${OCAMLDIR}/bin:"$$PATH"; \
           autoconf && ./configure --prefix=$(shell pwd)/${Z3SRC} && \
           python scripts/mk_make.py && cd build; make
-	cd ${Z3SRC}/build; export PATH=${OCAMLDIR}/bin:$$PATH; make install; \
+	cd ${Z3SRC}/build; export PATH=${OCAMLDIR}/bin:"$$PATH"; make install; \
           true  # "install" always fails -- TODO
 	cd ${Z3SRC}; cp -r src/api/ml/ ./ocaml
 	cp build_helpers/z3v4/Makefile.z3v4.ocaml ${Z3SRC}/ocaml/Makefile
 	cp build_helpers/z3v4/z3_stubs.c ${Z3SRC}/ocaml/
 	cd ${Z3SRC}/ocaml; chmod a+x build-lib.sh && \
-          export PATH=${OCAMLDIR}/bin:$$PATH; \
-          export LD_LIBRARY_PATH=${Z3SRC}/lib:$$LD_LIBRARY_PATH; \
+          export PATH=${OCAMLDIR}/bin:"$$PATH"; \
+          export LD_LIBRARY_PATH=${Z3SRC}/lib:"$$LD_LIBRARY_PATH"; \
           ${MAKE}
 	echo $(shell pwd)/${Z3SRC} >z3build
 else ifdef noZ3
@@ -157,7 +159,7 @@ else
           target z3build)
 endif
 
-GNUmakefile.settings: GNUmakefile.settings.local lgtk
+GNUmakefile.settings: GNUmakefile.settings.local
 ifdef Z3v1
 	cat GNUmakefile.settings.local | \
           sed 's/^#Z3 /Z3 /g;s/^NOZ3 /#NOZ3 /;' > GNUmakefile.settings
@@ -170,9 +172,9 @@ else
 	$(error Neither Z3v1, Z3v4, nor noZ3 is defined for \
           target GNUmakefile.settings)
 endif
-	if [ `cat lgtk` -eq 1 ]; then \
-          echo "WITHOUT_LABLGTK = yes" >>GNUmakefile.settings; \
-        fi
+ifdef WITHOUT_LABLGTK
+	echo "WITHOUT_LABLGTK = yes" >>GNUmakefile.settings
+endif
 
 touch:
 	touch ocaml cidl lgtk z3build
