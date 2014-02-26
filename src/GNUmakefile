@@ -114,6 +114,7 @@ env:
 	@echo "Z3V4    : $(Z3V4)"
 	@echo "Z3DEPS  : $(Z3DEPS)"
 	@echo "LDLPATH : $(LDLPATH)"
+	@echo "WITHOUT_LABLGTK     : $(WITHOUT_LABLGTK)"
 	@echo "GTKSOURCEVIEW_LFLAGS: $(GTKSOURCEVIEW_LFLAGS)"
 	@echo "GTKSOURCEVIEW_LIBS  : ${GTKSOURCEVIEW_LIBS}"
 	@echo "VERIFAST: ${VERIFAST}"
@@ -157,7 +158,12 @@ TOOLS_EXCEPT_VFIDE = ../bin/mysh$(DOTEXE) ../bin/verifast$(DOTEXE) \
 
 TOOLS = $(TOOLS_EXCEPT_VFIDE) ../bin/vfide$(DOTEXE)
 
+
+ifndef WITHOUT_LABLGTK
 build: $(TOOLS) $(STDLIB) tabhunt vfversion_autogen
+else
+build: $(TOOLS_EXCEPT_VFIDE) $(STDLIB) tabhunt vfversion_autogen
+endif
 .PHONY: build
 
 distclean:: clean

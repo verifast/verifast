@@ -69,7 +69,7 @@ endif
 	rm -f GNUmakefile.settings
 	$(MAKE) GNUmakefile.settings
 	$(MAKE) z3build
-	$(MAKE) -C src -f GNUmakefile all
+	$(MAKE) -C src -f GNUmakefile all VERBOSE=1
 
 rebuild:
 	$(MAKE) -C src -f GNUmakefile build
@@ -103,9 +103,10 @@ lgtk: GNUmakefile ocaml
 	wget ${LGTKURL}${LGTKPKG}
 	gunzip -c ${LGTKPKG} | tar -xv
 	cd ${LGTKSRC}; export PATH=${OCAMLDIR}/bin:$$PATH; \
-          ./configure --prefix=${OCAMLDIR} CC="gcc -m32"; \
+          ./configure --prefix=${OCAMLDIR} CC="gcc -m32"
+	grep "USE_GTKSOURCEVIEW2='1'" ${LGTKSRC}/config.log; \
           echo "$$?" >lgtk.conf
-	if [ `cat ${LGTKSRC}/lgtk.conf` -eq 0 ]; then \
+	if [ `cat lgtk.conf` -eq 0 ]; then \
           cd ${LGTKSRC}; export PATH=${OCAMLDIR}/bin:$$PATH; \
           ${MAKE} all install && \
           ${MAKE} -C src gtkInit.cmx gtkInit.o lablgtksourceview2.cmxa \
@@ -116,6 +117,7 @@ lgtk: GNUmakefile ocaml
           cd ../ && \
           echo "0" >lgtk; \
          else \
+          echo "*** GTKSOURCEVIEW not installed. VFIDE will not be built."; \
           echo "1" >lgtk; \
          fi
 
