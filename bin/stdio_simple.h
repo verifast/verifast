@@ -30,16 +30,30 @@ predicate read_char_io(time t1, FILE *file; unsigned char c, bool success, time 
 predicate write_char_io(time t1, FILE *file, unsigned char c; bool success, time t2);
 @*/
 
+/*@
+fixpoint FILE* get_stderr();
+fixpoint FILE* get_stdout();
+fixpoint FILE* get_stdin();
+@*/
+
+#define stderr (get_stderr())
+#define stdout (get_stdout())
+#define stdin (get_stdin())
+
+FILE *get_stderr();
+//@ requires true;
+//@ ensures result == stderr;
+
 int getc(FILE *stream);
-//@ requires read_char_io(?t1, stdin(), ?c, ?success, ?t2) &*& time(t1);
+//@ requires read_char_io(?t1, stream, ?c, ?success, ?t2) &*& time(t1);
 //@ ensures time(t2) &*& success ? result == c && c >= 0 && c <= 255 : result < 0;
 
 int getchar();
-//@ requires read_char_io(?t1, stdin(), ?c, ?success, ?t2) &*& time(t1);
+//@ requires read_char_io(?t1, stdin, ?c, ?success, ?t2) &*& time(t1);
 //@ ensures time(t2) &*& success ? result == c && c >= 0 && c <= 255: result < 0;
 
 int putchar(int c);
-//@ requires write_char_io(?t1, stdout(), c, ?success, ?t2) &*& c >= 0 && c <= 255 &*& time(t1);
+//@ requires write_char_io(?t1, stdout, c, ?success, ?t2) &*& c >= 0 && c <= 255 &*& time(t1);
 //@ ensures time(t2) &*& success ? result == c : result < 0;
 
 int putc(int c, FILE *stream);
@@ -48,15 +62,6 @@ int putc(int c, FILE *stream);
 
 
 
-/*@
-fixpoint FILE* stderr();
-fixpoint FILE* stdout();
-fixpoint FILE* stdin();
-@*/
-
-FILE *get_stderr();
-//@ requires true;
-//@ ensures result == stderr();
 
 
 // The author of the main function can provide a body of this predicate.

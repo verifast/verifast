@@ -2,38 +2,19 @@
  * tee.c - minimalistic example of compositional I/O.
  *
  * This program reads from stdin, and writes its input to both stdout and stderr.
+ *
+ * The specifications forbid buffering, see tee_buffered.c for a buffered example.
  */
 
 //@ #include <io.gh>
 #include <stdio_simple.h>
 // #include <stdio.h>
-// #define get_stderr() stderr
 
-/*@		
-predicate tee_out_io(time t1, unsigned char c; time t2) =
-  c >= 0 && c <= 255
-  &*& split(t1, ?t_stdout1, ?t_stderr1)
-    &*& write_char_io(t_stdout1, stdout(), c, ?success_stdout, ?t_stdout2)
-    //---
-    &*& write_char_io(t_stderr1, stderr(), c, ?success_stderr, ?t_stderr2)
-  &*& join(t_stdout2, t_stderr2, t2);
-@*/
-
-void tee_out(int c)
-//@ requires tee_out_io(?t1, c, ?t2) &*& time(t1);
-//@ ensures time(t2);
-{
-  //@ open tee_out_io(_, _, _);
-  //@ split();
-  putchar(c);
-  putc(c, get_stderr());
-  //@ join();
-}
-
+#include "tee_out.h"
 
 /*@
 predicate tee_io(time t1, list<char> contents; time t2) =
-  read_char_io(t1, stdin(), ?c, ?success, ?t_read)
+  read_char_io(t1, stdin, ?c, ?success, ?t_read)
   &*& success ?
     length(contents) > 0
     &*& head(contents) == c
@@ -49,8 +30,8 @@ predicate main_io(time t1, list<list<char> > arguments, time t2) =
 @*/
 
 
-int main(int argc, char **argv) //@ : main_io(tee)
-/*@ requires module(tee, true)
+int main(int argc, char **argv) //@ : main_io(tee_unbuffered)
+/*@ requires module(tee_unbuffered, true)
   &*& [_]argv(argv, argc, ?arguments)
   &*& main_io(?t1, arguments, ?t2)
   &*& time(t1);

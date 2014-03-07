@@ -162,7 +162,8 @@ cd examples
     mysh < runtests.mysh
   cd ..
   cd io
-    verifast_both -shared io.o stdio_simple.o tee.c
+    verifast_both -shared io.o stdio_simple.o tee_out.c tee_unbuffered.c
+    verifast_both -shared io.o stdio_simple.o tee_out.c tee_buffered.c
   cd ..
   cd java
     cd channels
