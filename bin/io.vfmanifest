@@ -1,0 +1,5 @@
+.predicate @time
+.predicate @split
+.provides io.gh#split
+.predicate @join
+.provides io.gh#join

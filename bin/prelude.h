@@ -3,7 +3,6 @@
 
 //@ #include "prelude_core.gh"
 //@ #include "list.gh"
-//@ #include "io/io.gh"
 
 /*@
 
@@ -308,13 +307,6 @@ typedef int main(int argc, char **argv);
 typedef int main_full/*@(int mainModule)@*/(int argc, char **argv);
     //@ requires module(mainModule, true) &*& [_]argv(argv, argc, ?arguments);
     //@ ensures true;
-
-// The author of the main function can provide a body of this predicate.
-//@ predicate main_io(time t1, list<list<char> > commandline_arguments, time t2);
-typedef int main_io/*@(int mainModule)@*/(int argc, char **argv);
-    //@ requires module(mainModule, true) &*& [_]argv(argv, argc, ?arguments) &*& main_io(?t1, arguments, ?t2) &*& time(t1);
-    //@ ensures time(t2);
-
 
 // action permissions
 

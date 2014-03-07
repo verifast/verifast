@@ -161,6 +161,9 @@ cd examples
   cd generic_functypedef
     mysh < runtests.mysh
   cd ..
+  cd io
+    verifast_both -shared io.o stdio_simple.o tee.c
+  cd ..
   cd java
     cd channels
       verifast -prover redux -disable_overflow_check -c channels.jarsrc client.jarsrc

@@ -1,0 +1,7 @@
+.provides stdio_simple.h#getc
+.provides stdio_simple.h#getchar
+.provides stdio_simple.h#putchar
+.provides stdio_simple.h#putc
+.provides stdio_simple.h#get_stderr
+.predicate @read_char_io
+.predicate @write_char_io
