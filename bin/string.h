@@ -41,6 +41,19 @@ char *memchr(char *array, char c, size_t count);
     //@ requires [?f]chars(array, count, ?cs);
     //@ ensures [f]chars(array, count, cs) &*& result == 0 ? mem(c, cs) == false : mem(c, cs) == true &*& result == array + index_of(c, cs);
 
+char* strchr(char *str, int c);
+    //@ requires [?f]string(str, ?cs);
+    /*@ ensures
+            [f]string(str, cs) &*&
+            c == 0 ? 
+                result == str + length(cs)
+            : 
+                result == 0 ?
+                    mem(c, cs) == false
+                :
+                    mem(c, cs) == true &*& result == str + index_of(c, cs);
+    @*/
+
 void memset(void *array, char value, size_t size);
     //@ requires chars(array, size, ?cs);
     //@ ensures chars(array, size, ?cs1) &*& all_eq(cs1, value) == true;
