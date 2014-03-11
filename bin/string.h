@@ -41,7 +41,7 @@ char *memchr(char *array, char c, size_t count);
     //@ requires [?f]chars(array, count, ?cs);
     //@ ensures [f]chars(array, count, cs) &*& result == 0 ? mem(c, cs) == false : mem(c, cs) == true &*& result == array + index_of(c, cs);
 
-char* strchr(char *str, int c);
+char* strchr(char *str, char c);
     //@ requires [?f]string(str, ?cs);
     /*@ ensures
             [f]string(str, cs) &*&
