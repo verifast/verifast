@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <caml/fail.h>
 #include <caml/mlvalues.h>
 #include <caml/alloc.h>
 

@@ -1,0 +1,7 @@
+#!/bin/bash
+if [ ! -e GNUmakefile.settings ]; then
+	echo Creating default settings file GNUmakefile.settings. Edit this file to enable Z3 integration or the VeriFast IDE.
+	cp GNUmakefile.settings.example GNUmakefile.settings
+else
+	echo "Found an existing settings file GNUmakefile.settings; doing nothing."
+fi

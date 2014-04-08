@@ -21,6 +21,7 @@ let max_processes =
   | _ -> 1
 
 let parse_cmdline line =
+  if line <> "" && line.[0] = '#' then [""] else
   try
     let space = String.index line ' ' in
     [String.sub line 0 space; String.sub line (space + 1) (String.length line - space - 1)]
@@ -85,12 +86,7 @@ let rec exec_lines filepath file lineno =
         ["cd"; dir] -> Sys.chdir dir
       | ["del"; file] -> while !active_processes_count > 0 do pump_events() done; Sys.remove file
       | ["ifnotmac"; line] -> if not Fonts.is_macos then exec_line line
-      (* Lines starting with "# " are comments, ignore them.
-       * Don't pass comments to the shell because it is not portable.
-       * (Unix uses "#", Windows uses "rem")
-       *)
-      | ["#"; line] -> () 
-      | ["#"] -> () (* Also when "#" is the only contents of the line. *)
+      | ["ifz3"; line] -> if Vfconfig.z3_present then exec_line line
       | [""] -> () (* Do not launch a process for empty lines. *)
       | ["let"; macroName] ->
         let lines =

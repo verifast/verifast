@@ -59,8 +59,10 @@ ifndef NOZ3
             -cclib -lz3-gmp -cclib -lz3stubs $(OCAMLLIB)/libcamlidl.a
   LDLPATH = $(Z3)/lib
   VERIFAST := LD_LIBRARY_PATH=${LDLPATH}:$$LD_LIBRARY_PATH ../bin/verifast
+  Z3PRESENT=true
 else
   VERIFAST := ../bin/verifast
+  Z3PRESENT=false
 endif
 
 # Should Make print each commandline? Then use "make VERBOSE=yes".
@@ -127,6 +129,9 @@ endif
 ifeq ($(OS), Darwin)
   include linux/GNUmakefile
 endif
+ifeq ($(OS), Cygwin)
+  include win/GNUmakefile
+endif
 
 include java_frontend/GNUmakefile
 
@@ -160,7 +165,7 @@ TOOLS = $(TOOLS_EXCEPT_VFIDE) ../bin/vfide$(DOTEXE)
 
 
 ifndef WITHOUT_LABLGTK
-build: $(TOOLS) $(STDLIB) tabhunt vfversion_autogen
+build: $(TOOLS) $(STDLIB) tabhunt vfversion_autogen vfconfig_autogen
 else
 build: $(TOOLS_EXCEPT_VFIDE) $(STDLIB) tabhunt vfversion_autogen
 endif
@@ -173,9 +178,9 @@ distclean:: clean
 clean::
 	@echo "  CLEAN    "
 
-../bin/%: %.ml
+../bin/%$(DOTEXE): %.ml
 	@echo "  OCAMLOPT " $*.cmi
-	${OCAMLOPT} -o ../bin/$* $*.ml
+	${OCAMLOPT} -o ../bin/$*$(DOTEXE) $*.ml
 clean::
 	rm -f $(TOOLS)
 
@@ -244,17 +249,21 @@ clean::
 
 vfversion_autogen:
 	@echo "  OCAML    " generate_vfversion.ml
-	${OCAML} generate_vfversion.ml
+	${OCAML} generate_vfversion.ml $(Z3PRESENT)
 .PHONY: vfversion_autogen
 clean::
 	rm -f vfversion.ml
 
+VFCONFIG_CONTENT=let z3_present = $(Z3PRESENT)
+vfconfig_autogen:
+	if [[ -e vfconfig.ml && "$(shell cat vfconfig.ml)" != "$(VFCONFIG_CONTENT)" ]]; then echo "$(VFCONFIG_CONTENT)" > vfconfig.ml; fi
+	
 # We only want to rebuild vfversion.ml and everything that depends on it
 # when it actually changes. But make itself causes vfversion.ml to change,
 # so make must reload its dependency graph at runtime.
 # We can trick make into reloading its dependency graph by having a
 # dependency from an included makefile, here "../GNUmakefile.settings"
-../GNUmakefile.settings: vfversion_autogen
+../GNUmakefile.settings: vfversion_autogen vfconfig_autogen
 
 #------------------------------- Build special cases ------------------------#
 
@@ -263,9 +272,9 @@ tabhunt:
 	${OCAML} tabhunter.ml
 .PHONY: tabhunt
 
-../bin/mysh$(DOTEXE): Fonts.cmx mysh.ml
+../bin/mysh$(DOTEXE): Fonts.cmx vfconfig.cmx mysh.ml
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} -thread -o ../bin/mysh$(DOTEXE) unix.cmxa threads.cmxa Fonts.cmx mysh.ml
+	${OCAMLOPT} -thread -o ../bin/mysh$(DOTEXE) unix.cmxa threads.cmxa Fonts.cmx vfconfig.cmx mysh.ml
 mysh: ../bin/mysh$(DOTEXE)
 .PHONY: mysh
 

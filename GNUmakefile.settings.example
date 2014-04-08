@@ -3,17 +3,24 @@
 # Path to Z3 or Z3v2
 # Notes: Use $$HOME instead of ~ here!
 #        If you don't have Z3, i.e. on a MAC, define NOZ3 = true instead.
-Z3       = $$HOME/z3
+#Z3       = $$HOME/z3
 #Z3V2     = $$HOME/z3
 #Z3V4     = $$HOME/z3
-#NOZ3     = true
+NOZ3     = true
 
 
 # ----------------------------------------------------------------------------
 # Autodetection of operating system.
-# If autodetection fails, set OS to either "Linux" or "Darwin", "Cygwin"
-OS       = $(shell uname -s)
-#OS       = Cygwin
+# If autodetection fails, set OS to "Linux", "Darwin", or "Cygwin"
+ifeq ($(shell uname -s), Linux)
+	OS = Linux
+else ifeq ($(shell uname -s), Darwin)
+	OS = Darwin
+else ifeq ($(shell uname -o), Cygwin)
+	OS = Cygwin
+else
+	$(error "Could not recognize your platform")
+endif
 
 
 # ----------------------------------------------------------------------------
@@ -25,9 +32,9 @@ OCAMLLIB = $(shell ${OCAMLBIN}/ocamlc -where)
 
 # ----------------------------------------------------------------------------
 # lablgtk2 installation directories
-LABLGTK2 = /usr/local/lib/ocaml/lablgtk2
-LABLLIBS = /usr/local/lib/ocaml/stublibs
-#WITHOUT_LABLGTK = yes
+#LABLGTK2 = /usr/local/lib/ocaml/lablgtk2
+#LABLLIBS = /usr/local/lib/ocaml/stublibs
+WITHOUT_LABLGTK = yes
 
 
 # ----------------------------------------------------------------------------

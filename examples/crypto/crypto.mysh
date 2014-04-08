@@ -1,5 +1,5 @@
 let verifast_both
-verifast
+ifz3 verifast
 verifast -prover redux
 in
 
@@ -18,9 +18,9 @@ cd protocols
   cd ..
   #yahalom
   cd yahalom
-    ifnotmac verifast -c -I ../../lib/include yahalom.c
-    ifnotmac verifast -c -I ../../lib/include main.c
-    ifnotmac verifast -allow_assume -I ../../lib/include ../../lib/bin/dolevyao.dll.vfmanifest yahalom.c main.c
+    ifz3 verifast -c -I ../../lib/include yahalom.c
+    ifz3 verifast -c -I ../../lib/include main.c
+    ifz3 verifast -allow_assume -I ../../lib/include ../../lib/bin/dolevyao.dll.vfmanifest yahalom.c main.c
   cd ..
   ##nss
   cd nss

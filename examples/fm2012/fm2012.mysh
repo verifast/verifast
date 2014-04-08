@@ -1,11 +1,11 @@
 let verifast_both
-ifnotmac verifast
+ifz3 verifast
 verifast -prover redux
 in
 verifast_both -shared problem1.c
 verifast_both -shared range.c problem1-alternative2.c
 verifast_both -shared problem1-alternative.c
 verifast_both -shared problem1-split.c
-ifnotmac verifast -c -disable_overflow_check problem2.java
-ifnotmac verifast -shared problem3.c
-ifnotmac verifast -shared problem3-alternative.c
+ifz3 verifast -c -disable_overflow_check problem2.java
+ifz3 verifast -shared problem3.c
+ifz3 verifast -shared problem3-alternative.c

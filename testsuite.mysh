@@ -1,5 +1,5 @@
 let verifast_both
-ifnotmac verifast
+ifz3 verifast
 verifast -prover redux
 in
 cd bin
@@ -17,34 +17,34 @@ cd examples
   verifast_both -disable_overflow_check barrier.c
   verifast_both -c static_array.c
   verifast_both -c automation.c
-  ifnotmac verifast -disable_overflow_check priorityqueue-forall_nth.c
+  ifz3 verifast -disable_overflow_check priorityqueue-forall_nth.c
   verifast_both set.c
   cd BeepDriver
     mysh < BeepKernel.mysh
   cd ..
   cd shared_boxes
-    ifnotmac verifast -c sblock.c
+    ifz3 verifast -c sblock.c
     verifast_both -c sglock.c
     verifast_both -c tblock.c
     verifast_both -c strong_ghost_lists.c
     verifast_both -c permutations.o ghost_lists.c
     verifast_both -c ticketlock_cap.c
-    ifnotmac verifast -c ticket_lock.c
+    ifz3 verifast -c ticket_lock.c
     verifast_both -c gotsmanlock.c
     verifast_both -c spinlock.c
-    ifnotmac verifast -c concurrentqueue.c
-    ifnotmac verifast -c concurrentstack.c
-    ifnotmac verifast -c concurrentstackclient.c
-    ifnotmac verifast -allow_assume atomics.o concurrentqueue.c concurrentqueue_client.c
+    ifz3 verifast -c concurrentqueue.c
+    ifz3 verifast -c concurrentstack.c
+    ifz3 verifast -c concurrentstackclient.c
+    ifz3 verifast -allow_assume atomics.o concurrentqueue.c concurrentqueue_client.c
     verifast_both -c atomic_integer.c
     verifast_both -c spinlock_with_atomic_integer.c
     verifast_both -c ticketlock_with_atomic_integer.c
     verifast -prover redux -c interval.c
     verifast_both -c lcl_set.c
     verifast_both -c cell_refcounted.c
-    ifnotmac verifast -c cowl.c
+    ifz3 verifast -c cowl.c
   cd ..
-  ifnotmac verifast stringBuffers.c sockets.o bot.c
+  ifz3 verifast stringBuffers.c sockets.o bot.c
   verifast_both -disable_overflow_check cat.c
   verifast_both char.c
   mysh < chat.mysh
@@ -61,7 +61,7 @@ cd examples
   verifast_both -shared counting_threads.c
   verifast_both -c default_clause_test.c
   verifast_both -disable_overflow_check cp.c
-  ifnotmac verifast -c decreases.c
+  ifz3 verifast -c decreases.c
   cd crypto
     mysh < crypto.mysh
   cd ..
@@ -93,7 +93,7 @@ cd examples
   verifast_both iter.c
   verifast_both iter_with_auto.c
   verifast_both -c iospec.c
-  ifnotmac verifast -prover redux -c iospec_theory.c
+  ifz3 verifast -prover redux -c iospec_theory.c
   cd lcset
     verifast_both atomics.o ghost_lists.c ghost_counters.c locks.c lcset.c lcset_client.c
   cd ..
@@ -207,8 +207,8 @@ cd examples
     verifast_both -c -disable_overflow_check ArraysAuto.java
     verifast_both -c -disable_overflow_check ArraysManual.java
     verifast_both -c -disable_overflow_check Automation.java
-    ifnotmac verifast -c Bag.java
-    ifnotmac verifast -c -disable_overflow_check Comprehensions.java
+    ifz3 verifast -c Bag.java
+    ifz3 verifast -c -disable_overflow_check Comprehensions.java
     verifast_both -c Constants.java
     verifast_both -c FieldInitializers.java
     verifast_both -c -allow_should_fail CompoundAssignments.java
@@ -242,17 +242,17 @@ cd examples
     verifast -c -allow_should_fail Exceptions.java
   cd ..
   cd vstte2010
-    ifnotmac verifast -c -disable_overflow_check problem1.c
-    ifnotmac verifast -c -disable_overflow_check problem2.c
+    ifz3 verifast -c -disable_overflow_check problem1.c
+    ifz3 verifast -c -disable_overflow_check problem2.c
     verifast_both -c -disable_overflow_check problem3.java
-    ifnotmac verifast -c -disable_overflow_check problem4.java
+    ifz3 verifast -c -disable_overflow_check problem4.java
     verifast_both -c -disable_overflow_check problem5.java
   cd ..
   cd vstte2012
     mysh < run.mysh
   cd ..
   cd vacid-0
-    ifnotmac verifast -c -disable_overflow_check Problem3.c
+    ifz3 verifast -c -disable_overflow_check Problem3.c
   cd ..
 cd ..
 cd tutorial_solutions
