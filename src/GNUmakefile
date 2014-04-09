@@ -38,6 +38,11 @@ ifndef WITHOUT_LABLGTK
   endif
 endif
 
+ifeq ($(OS), Cygwin)
+  LDLPATHVAR=PATH
+else
+  LDLPATHVAR=LD_LIBRARY_PATH
+endif
 
 # Z3 configuration
 ifndef NOZ3
@@ -54,11 +59,20 @@ ifndef NOZ3
      ../GNUmakefile.settings)
   endif
   Z3DEPS  = z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml
-  Z3ARGS  = -I $(Z3)/ocaml z3.cmxa z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml \
+  ifeq ($(OS), Cygwin)
+    Z3CCOPTS=
+    LDLPATH=$(Z3)/bin
+    Z3_OCAML=$(shell cygpath -m $(Z3)/ocaml)
+  else
+    # TODO: Specify these arguments when creating z3.cmxa; then you don't have to specify them here.
+    Z3CCOPTS= \
             -ccopt "-I$(Z3)/ocaml -L$(Z3)/bin -L$(Z3)/lib" \
             -cclib -lz3-gmp -cclib -lz3stubs $(OCAMLLIB)/libcamlidl.a
-  LDLPATH = $(Z3)/lib
-  VERIFAST := LD_LIBRARY_PATH=${LDLPATH}:$$LD_LIBRARY_PATH ../bin/verifast
+    LDLPATH = $(Z3)/lib
+    Z3_OCAML=$(Z3)/ocaml
+  endif
+  Z3ARGS  = -I $(Z3_OCAML) z3.cmxa z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml $(Z3CCOPTS)
+  VERIFAST := $(LDLPATHVAR)=${LDLPATH}:$$$(LDLPATHVAR) ../bin/verifast
   Z3PRESENT=true
 else
   VERIFAST := ../bin/verifast
@@ -139,7 +153,7 @@ include java_frontend/GNUmakefile
 
 SET_LDD = export CAML_LD_LIBRARY_PATH="$$CAML_LD_LIBRARY_PATH:$$GTKSOURCEVIEW_LIBS"
 SET_ENV = export PATH="$(CWD)/../bin/:$(OCAMLBIN):$$PATH"; \
-          export LD_LIBRARY_PATH="$(LDLPATH):$$LD_LIBRARY_PATH"
+          export $(LDLPATHVAR)="$(LDLPATH):$$$(LDLPATHVAR)"
 
 STDLIB = ../bin/crt.dll.vfmanifest
 #sequence is important, it presents dependencies in command line of VeriFast
@@ -339,15 +353,15 @@ verifast: ../bin/verifast$(DOTEXE) $(STDLIB)
 
 z3prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmx proverapi.cmx z3prover.ml
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} -warn-error F -c -I $(Z3)/ocaml z3.cmxa -I ./$(INCLUDE_OS_DIR) Perf.cmx proverapi.cmx z3prover.ml
+	${OCAMLOPT} -warn-error F -c -I $(Z3_OCAML) z3.cmxa -I ./$(INCLUDE_OS_DIR) Perf.cmx proverapi.cmx z3prover.ml
 
 z3v2prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmx proverapi.cmx z3v2prover.ml
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} -warn-error F -c -I $(Z3)/ocaml z3.cmxa -I ./$(INCLUDE_OS_DIR) Perf.cmx proverapi.cmx z3v2prover.ml
+	${OCAMLOPT} -warn-error F -c -I $(Z3_OCAML) z3.cmxa -I ./$(INCLUDE_OS_DIR) Perf.cmx proverapi.cmx z3v2prover.ml
 
 z3v4prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmx proverapi.cmx z3v4prover.ml
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} -warn-error F -c -I $(Z3)/ocaml z3.cmxa -I ./$(INCLUDE_OS_DIR) Perf.cmx proverapi.cmx z3v4prover.ml
+	${OCAMLOPT} -warn-error F -c -I $(Z3_OCAML) z3.cmxa -I ./$(INCLUDE_OS_DIR) Perf.cmx proverapi.cmx z3v4prover.ml
 
 #------------------------------- Tests --------------------------------------#
 test_plugin: verifast
