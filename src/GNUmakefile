@@ -316,7 +316,7 @@ clean::
   $(INCLUDE_OS_DIR)/Perf.cmxa vfide.ml
 ifndef WITHOUT_LABLGTK
 	@echo "  OCAMLOPT " $@
-	$(SET_LDD); ${OCAMLOPT} -warn-error F -pp ${CAMLP4O} -o ../bin/vfide	\
+	$(SET_LDD); ${OCAMLOPT} -warn-error F -pp ${CAMLP4O} -o ../bin/vfide$(DOTEXE)	\
 	  -I +lablgtk2 lablgtk.cmxa $(GTKSOURCEVIEW_LFLAGS) gtkInit.cmx unix.cmxa \
 	  nums.cmxa -I ./$(INCLUDE_OS_DIR) -I java_frontend Perf.cmxa proverapi.cmx \
 	  Printexc_proxy.cmx vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx \

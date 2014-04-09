@@ -48,4 +48,55 @@ To enable in the VeriFast build process: in <VeriFast checkout>/GNUmakefile.sett
     Z3=/cygdrive/c/Z3-1.3.6
 
 To build the IDE:
-TODO
+
+Inside Cygwin:
+
+wget ftp://ftp.gnome.org/pub/gnome/binaries/win32/gtk+/2.24/gtk+-bundle_2.24.10-20120208_win32.zip
+mkdir gtk
+cd gtk
+unzip ../gtk+-bundle_2.24.10-20120208_win32.zip
+cd ..
+wget https://forge.ocamlcore.org/frs/download.php/1261/lablgtk-2.18.0.tar.gz
+tar xzf lablgtk-2.18.0.tar.gz
+cd lablgtk-2.18.0
+
+Problem: the pkg-config program that ships with Gtk produces CRLF-terminated lines. The Cygwin tools choke on this.
+Solution: create a wrapper that transforms the DOS lines to Unix lines using the Cygwin d2u program:
+
+Create file pkg-config with the following contents:
+#!/bin/bash
+set -o pipefail # A pipe fails if any component fails
+/cygdrive/c/gtk/bin/pkg-config $* | d2u
+
+export PATH=$PWD:/usr/bin:/cygdrive/c/OCaml4010/bin:/cygdrive/c/gtk/bin
+./configure
+make
+make opt
+In src/Makefile, after the line
+  include $(CONFIG)
+insert the line
+  FLINSTALLDIR := $(subst \,/,$(FLINSTALLDIR))
+make install
+
+Note: the lablgtk2 wrapper for the ocaml toplevel is installed into /usr/local/bin, but is broken (because the backslashes in the OCaml directory name are expanded away).
+
+To test:
+cd examples
+ocaml -I +site-lib/lablgtk2 lablgtk.cma gtkInit.cmo hello.ml
+ocaml -I +site-lib/lablgtk2 lablgtk.cma gtkInit.cmo testgtk.ml
+
+Getting gtksourceview2 support:
+wget ftp://ftp.gnome.org/pub/gnome/binaries/win32/gtksourceview/2.10/gtksourceview-2.10.0.zip
+wget ftp://ftp.gnome.org/pub/gnome/binaries/win32/gtksourceview/2.10/gtksourceview-dev-2.10.0.zip
+wget ftp://ftp.gnome.org/pub/gnome/binaries/win32/dependencies/libxml2_2.9.0-1_win32.zip
+wget ftp://ftp.gnome.org/pub/gnome/binaries/win32/dependencies/libxml2-dev_2.9.0-1_win32.zip
+Extract into C:\gtk
+(To check that you have all dependencies, run pkg-config --cflags gtksourceview-2.0. This will tell you which packages are unresolved, if any.)
+./configure
+make
+make opt
+make install # (if this fails, do make uninstall first)
+
+To test:
+cd examples/sourceview
+ocaml -I +site-lib/lablgtk2 lablgtk.cma gtkInit.cmo lablgtksourceview2.cma test2.ml
