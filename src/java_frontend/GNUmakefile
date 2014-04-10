@@ -27,9 +27,11 @@ test_java_front: build test_plugin
 	$(SET_ENV); \
 	cd ../examples/java/frontend; ../../../bin/mysh -cpus 1 < frontend.mysh
 
-JAVA_FE_INCLS = -thread threads.cmxa misc.cmx general_ast.cmx ast_reader.cmx \
-  communication.cmx annotation_type_checker.cmx java_frontend.cmx \
-  ast_translator.cmx SExpressions.cmx SExpressionEmitter.cmx
+JAVA_FE_DEPS = java_frontend/misc.cmx java_frontend/general_ast.cmx \
+  java_frontend/ast_reader.cmx java_frontend/communication.cmx \
+  java_frontend/annotation_type_checker.cmx java_frontend/java_frontend.cmx \
+  java_frontend/ast_translator.cmx SExpressions.cmx SExpressionEmitter.cmx
+JAVA_FE_INCLS = -thread threads.cmxa $(JAVA_FE_DEPS)
 
 clean::
 	rm -f java_frontend/*.cm*

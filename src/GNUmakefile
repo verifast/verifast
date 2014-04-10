@@ -313,7 +313,7 @@ clean::
   stats.cmx lexer.cmx ast.cmx parser.cmx verifast0.cmx verifast1.cmx \
   assertions.cmx verify_expr.cmx verifast.cmx simplex.cmx redux.cmx \
   verifastPluginRedux.ml $(Z3DEPS) Fonts.cmx $(GTKSOURCEVIEW_DEPS) \
-  $(INCLUDE_OS_DIR)/Perf.cmxa vfide.ml
+  $(INCLUDE_OS_DIR)/Perf.cmxa $(JAVA_FE_DEPS) vfide.ml
 ifndef WITHOUT_LABLGTK
 	@echo "  OCAMLOPT " $@
 	$(SET_LDD); ${OCAMLOPT} -warn-error F -pp ${CAMLP4O} -o ../bin/vfide$(DOTEXE)	\
@@ -334,7 +334,7 @@ vfide: ../bin/vfide$(DOTEXE) $(STDLIB)
 ../bin/verifast$(DOTEXE): vfversion.cmx proverapi.cmx util.cmx stats.cmx lexer.cmx \
   ast.cmx parser.cmx verifast0.cmx verifast1.cmx assertions.cmx \
   verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml \
-  $(Z3DEPS) SExpressions.cmx SExpressionEmitter.cmx \
+  $(Z3DEPS) $(JAVA_FE_DEPS) \
   $(INCLUDE_OS_DIR)/Perf.cmxa vfconsole.ml
 	@echo "  OCAMLOPT " $@
 	${OCAMLOPT} -warn-error F -pp ${CAMLP4O} -o ../bin/verifast$(DOTEXE) unix.cmxa \
