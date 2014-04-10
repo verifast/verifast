@@ -36,7 +36,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    an AST. If a location makes sense for the error a location is also
    specified. All functions in this file may raise a JavaFrontendException
 *)
-exception JavaFrontendException of (General_ast.loc option * string)
+exception JavaFrontendException of (General_ast.source_location * string)
 
 (* Load the AstServer: 
     @param1        command string to launch the AstServer  
@@ -61,6 +61,17 @@ val detach : unit -> unit
      this includes extraction of inner classes and 
      instantiation of generics. *)
   val desugar : ast_option
+  
+  (* When performing desugaring, keep assertions *)
+  val keep_assertions : ast_option
+  
+  (* Allow assignments before super calls in constructors or not. If not 
+     allowed (i.e. super() must be the first statement in an constructor) be 
+     aware of bug JDK-4030374.
+     
+     see http://bugs.java.com/view_bug.do?bug_id=4030374
+   *)
+  val keep_super_call_first : ast_option
 
   (* Add the annotations following a interface method
      or an abstract method, to that method and not treat

@@ -1,0 +1,27 @@
+Use the Java frontend:
+======================
+
+To execute the tests in this folder,
+you need to retrieve the file ast_server.jar from:
+
+  https://bitbucket.org/gijsv/stance-java-frontend
+
+Then you must set the environment variable 
+VERIFAST_JAVA_AST_SERVER as follows:
+  
+  export VERIFAST_JAVA_AST_SERVER="java -jar path_to_ast_server_jar"
+  
+To finaly run the tests you'll need to run the following command from this directory:
+
+
+Known bugs:
+===========
+
+-Desugaring of static inner classes (and other desugaring) introduces null 
+ checks for its arguments, (see inner_class/MemberClass_desugard.java). 
+ Currently these chekcs are ignored (i.e. thrown away) by the AstServer. For 
+ member inner classes this seems not to be a problem (constructing the outer 
+ class can never result in null). However, this may cause problems that we are
+ currently not aware of. These null checks cannot simple be translated into an 
+ if-statement that throws a NullPointerException since null checks are 
+ expressions!

@@ -1,5 +1,67 @@
 let verifast_both
-ifnotmac verifast
+ifz3 verifast
 verifast -prover redux
 in
-verifast_both -c -javac -disable_overflow_check Java7Program.java
+
+cd varargs
+  verifast_both -c Varargs_desugared.java
+  verifast_both -c -javac Varargs_desugared.java
+  verifast_both -c -javac Varargs.java
+cd ..
+
+cd boxing
+  verifast_both -c Boxing_desugared.java
+  verifast_both -c -javac Boxing_desugared.java
+  verifast_both -c -javac Boxing.java
+cd ..
+
+cd foreach
+  verifast_both -c -disable_overflow_check Foreach_desugared.java
+  verifast_both -c -disable_overflow_check -javac Foreach_desugared.java
+  verifast_both -c -disable_overflow_check -javac Foreach.java
+cd ..
+
+cd switch
+  verifast_both -c -disable_overflow_check Switch.java
+  verifast_both -c -disable_overflow_check -javac Switch.java
+cd ..
+
+cd assert
+  verifast_both -c -disable_overflow_check Assert_desugared.java
+  verifast_both -c -disable_overflow_check -javac Assert_desugared.java
+  verifast_both -c -disable_overflow_check -javac Assert.java
+cd ..
+
+cd assign
+  verifast -c -disable_overflow_check Assign.java
+  verifast -c -disable_overflow_check -javac Assign.java
+cd ..
+
+cd exceptions
+  verifast -c -disable_overflow_check Exceptions.java
+  verifast -c -disable_overflow_check -javac Exceptions.java
+cd ..
+
+cd inner_class
+  verifast -c -disable_overflow_check StaticMemberClass_desugared.java
+  verifast -c -disable_overflow_check -javac StaticMemberClass_desugared.java
+  verifast -c -disable_overflow_check -javac StaticMemberClass.java
+  
+  verifast -c -disable_overflow_check MemberClass_desugared.java
+  verifast -c -disable_overflow_check -javac MemberClass_desugared.java
+  verifast -c -disable_overflow_check -javac MemberClass.java
+  
+  verifast -c -disable_overflow_check LocalClass_desugared.java
+  verifast -c -disable_overflow_check -javac LocalClass_desugared.java
+  verifast -c -disable_overflow_check -javac LocalClass.java
+  
+  verifast -c -disable_overflow_check AnonymousClass_desugared.java
+  verifast -c -disable_overflow_check -javac AnonymousClass_desugared.java
+  verifast -c -disable_overflow_check -javac AnonymousClass.java
+cd ..
+
+cd big_example
+  verifast_both -c -disable_overflow_check Java7Program_desugared.java
+  verifast_both -c -disable_overflow_check -javac Java7Program_desugared.java
+  verifast_both -c -disable_overflow_check -javac Java7Program.java
+cd ..

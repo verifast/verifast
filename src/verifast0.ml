@@ -144,24 +144,11 @@ type options = {
 (* result of symbolic execution; used instead of unit to detect branches not guarded by push and pop calls *)
 type symexec_result = SymExecSuccess
 
-
-
 (*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*)
 (*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*)
 (*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*)
 
 (* To be moved to other location *)
-
-(*let compare_packages p1 p2 =
-  let write_to_file p name =
-    let sexpr = SExpressions.string_of_sexpression ~margin:4 (SExpressionEmitter.sexpr_of_package p) in
-    let file = open_out name in
-    Printf.fprintf file "AST:\n%s" sexpr;
-    close_out file
-  in
-  write_to_file p1 "sexpr1.txt";
-  write_to_file p2 "sexpr2.txt";
-  Sys.command "diff sexpr1.txt sexpr2.txt"*)
 
 let parse_java_file (path: string) (reportRange: range_kind -> loc -> unit) reportShouldFail use_java_frontend: package =
   if (Filename.check_suffix path ".javaspec") || not (use_java_frontend) then
@@ -187,7 +174,12 @@ let parse_java_file (path: string) (reportRange: range_kind -> loc -> unit) repo
     let package = 
       try
         Java_frontend.attach(ast_server_launch);
-        let options = [Java_frontend.desugar; Java_frontend.bodyless_methods_own_trailing_annotations] in
+        let options = 
+          [Java_frontend.desugar; 
+           Java_frontend.keep_assertions;
+           Java_frontend.keep_super_call_first;
+           Java_frontend.bodyless_methods_own_trailing_annotations] 
+        in
         Java_frontend.ast_from_java_file path options ann_checker
       with
         Java_frontend.JavaFrontendException(l, m) -> 
@@ -195,11 +187,25 @@ let parse_java_file (path: string) (reportRange: range_kind -> loc -> unit) repo
             String.concat "  ||" (Misc.split_string '\n' m)
           in
           match l with
-            Some l -> raise (Lexer.ParseException(l, message))
-          | None -> raise (Parser.CompilationError message)
+          | General_ast.NoSource -> raise (Parser.CompilationError message)
+          | _ -> raise (Lexer.ParseException(Ast_translator.translate_location l, message))
     in
     let annotations = ann_checker#retrieve_annotations () in
     let result = Ast_translator.translate_ast package annotations in
-(* compare_packages original result; *)
+(*    let compare_packages p1 p2 =
+      let write_to_file p name =
+        let sexpr = SExpressions.string_of_sexpression ~margin:4 (SExpressionEmitter.sexpr_of_package p) in
+        let file = open_out name in
+        Printf.fprintf file "AST:\n%s" sexpr;
+        close_out file
+      in
+      write_to_file p1 "sexpr1.txt";
+      write_to_file p2 "sexpr2.txt";
+      let _ = Sys.command "diff sexpr1.txt sexpr2.txt" in
+      ()
+    in
+    compare_packages original result;*)
     result
   end
+
+  

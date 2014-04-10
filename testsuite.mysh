@@ -176,8 +176,11 @@ cd examples
       verifast_both -disable_overflow_check -c -provides "main_class chatbot.Bot" Bot.java
     cd ..
     cd frontend
-      cd desugared
-        verifast_both -disable_overflow_check -c Java7Program.java
+      #To test the new Java frontend, read and follow the instructions in the file
+      #example/java/frontend/README and decomment the following line
+      #mysh < frontend.mysh
+      cd big_example
+       verifast_both -disable_overflow_check -c Java7Program_desugared.java
       cd ..
     cd ..
     cd Iterator

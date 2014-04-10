@@ -343,8 +343,7 @@ vfide: ../bin/vfide$(DOTEXE) $(STDLIB)
 	  plugins2.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx \
 	  ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx \
 	  verify_expr.cmx verifast.cmx simplex.cmx redux.cmx \
-	  verifastPluginRedux.ml $(Z3ARGS) SExpressions.cmx \
-	  SExpressionEmitter.cmx vfconsole.ml
+	  verifastPluginRedux.ml $(Z3ARGS) vfconsole.ml
 ifneq ($(OS), Cygwin)
   ../bin/verifast$(DOTEXE): linux/libPerf_cobjs.a
 endif

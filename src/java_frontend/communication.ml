@@ -192,7 +192,7 @@ object (this)
       let parts = List.tl lines in
       if (List.length parts < 2) then
         this#error ("Received an incomprehensible error message from the ASTServer: \n" ^ message);
-      let l = Ast_reader.parse_with (Ast_reader.parse_opt Ast_reader.parse_loc) (List.hd parts) in
+      let l = Ast_reader.parse_with Ast_reader.parse_loc (List.hd parts) in
       let m = String.concat "\n" (List.tl parts) in
       raise (Ast_reader.AstReaderException(l, m))
     end;

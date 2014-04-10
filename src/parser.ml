@@ -258,12 +258,7 @@ and
   parse_ghost_java_members cn = parser
   [< '(_, Kwd "@*/") >] -> []
 | [< vis = parse_visibility; m = begin parser
-       [< '(l, Kwd "predicate"); '(_, Ident g); ps = parse_paramlist;
-          body = begin parser
-            [< '(_, Kwd "="); p = parse_pred >] -> Some p
-          | [< >] -> None
-          end;
-          '(_, Kwd ";") >] -> PredMember (InstancePredDecl (l, g, ps, body))
+       [< p = parse_java_instance_pred >] -> PredMember(p)
      | [< '(l, Kwd "lemma"); t = parse_return_type; '(l, Ident x); (ps, co, ss) = parse_method_rest >] ->
        let ps = (IdentTypeExpr (l, None, cn), "this")::ps in
        MethMember (Meth (l, Ghost, t, x, ps, co, ss, Instance, vis, false))
@@ -272,6 +267,14 @@ and
      end;
      mems = parse_ghost_java_members cn
   >] -> m::mems
+and
+  parse_java_instance_pred = parser
+    [< '(l, Kwd "predicate"); '(_, Ident g); ps = parse_paramlist;
+          body = begin parser
+            [< '(_, Kwd "="); p = parse_pred >] -> Some p
+          | [< >] -> None
+          end;
+     '(_, Kwd ";") >] -> InstancePredDecl (l, g, ps, body)
 and
   parse_thrown = parser
   [< tp = parse_type; '(_, Kwd "/*@"); '(_, Kwd "ensures"); epost = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> (tp, epost)

@@ -248,6 +248,23 @@ public class Integer {
         //@ ensures result == Integer_intValue(this);
 }
 
+//@ fixpoint boolean Boolean_booleanValue(Boolean b);
+
+public class Boolean {
+
+    public Boolean(boolean b);
+        //@ requires emp;
+        //@ ensures Boolean_booleanValue(this) == b;
+        
+    public static Boolean valueOf(boolean b);
+        //@ requires emp;
+        //@ ensures result != null &*& Boolean_booleanValue(result) == b;
+    
+    public boolean booleanValue();
+        //@ requires true;
+        //@ ensures result == Boolean_booleanValue(this);
+}
+
 /*@
 
 inductive array_slice_elems =

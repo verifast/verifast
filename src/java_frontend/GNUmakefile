@@ -29,7 +29,7 @@ test_java_front: build test_plugin
 
 JAVA_FE_INCLS = -thread threads.cmxa misc.cmx general_ast.cmx ast_reader.cmx \
   communication.cmx annotation_type_checker.cmx java_frontend.cmx \
-  ast_translator.cmx
+  ast_translator.cmx SExpressions.cmx SExpressionEmitter.cmx
 
 clean::
 	rm -f java_frontend/*.cm*

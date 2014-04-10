@@ -27,10 +27,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 *)
 
-open Communication
+open General_ast
 open Ast_reader
+open Ast_writer
+open Communication
 
-exception JavaFrontendException of (General_ast.loc option * string)
+exception JavaFrontendException of (General_ast.source_location * string)
 
 let frontend_error l m =
   raise (JavaFrontendException (l, m))
@@ -40,13 +42,15 @@ let catch_exceptions f =
     f ()
   with
   | Communication.CommunicationException (m) -> 
-      frontend_error None ("Communucation Failure: " ^ m)
+      frontend_error NoSource ("Communucation Failure: " ^ m)
   | Ast_reader.AstReaderException(l, m) -> 
       frontend_error l m
 
 type ast_option = string
 
 let desugar : ast_option = "DESUGAR"
+let keep_assertions : ast_option = "KEEP_ASSERTIONS"
+let keep_super_call_first : ast_option = "KEEP_SUPER_FIRST"
 let bodyless_methods_own_trailing_annotations : ast_option = "EMPTY_METHODS"
 
 let communication = 
@@ -74,16 +78,16 @@ let ast_from_java_file_core f opts achecker =
     recieve ();
     while(!kind <> SUCCESS) do
       if (!kind <> CALLBACK) then
-        frontend_error None 
+        frontend_error NoSource 
           ("Callback failure: expected " ^ (string_of_response_kind CALLBACK) ^ 
            " message, but got " ^ (string_of_response_kind !kind) ^ " message");
       achecker#check_annotation !response communication;
       communication#send_command(command_continue);
       recieve ();
     done;
-    Ast_reader.read_ast (!response)
+    !response
   )
 
 (* method to send a FILE request and parse the response message with the given options *)
 let ast_from_java_file f opts achecker =
-  catch_exceptions (fun _ -> ast_from_java_file_core f opts achecker)
+  catch_exceptions (fun _ -> Ast_reader.read_ast(ast_from_java_file_core f opts achecker))

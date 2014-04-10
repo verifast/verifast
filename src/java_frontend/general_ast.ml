@@ -29,7 +29,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 open Misc
 
-open Num
+(* open Num *)
 open Big_int
 
 (* 
@@ -44,68 +44,91 @@ open Big_int
 (* ------------------------ *)
 
 (* locations *)
-type srcpos = ((string * string) * int * int)
-type loc = (srcpos * srcpos)
+type 
+  source_location =
+  | NoSource
+  | SourceLine of string * int * int * int   
+   (* [SourceLine (filename, line, startColumn, endColumn)] *)
+  | SourceLines of string * int * int * int * int 
+   (* [SourceLines (filename, startLine, startColumn, endLine, endColumn)] *)
+and
+  gen_source =
+  | Original
+  | Generated
 
 
 (* verifier annotations *)
-type
+and
   annotation =
   | Annotation of
-      loc * 
-      string (* Annotation contents *)
+      source_location * 
+      string           (* Annotation contents *)
 
 
 (* names *)
 and
   identifier =
   | Identifier of
-      loc *
+      source_location *
       string (* Name of this identifier *)  
 and
   name =
   | Name of
-      loc *
+      source_location *
       identifier list (* Sequence of the dot-seperated identifiers of 
                          this fully qualified name *)
 
 
-(* accessibility modifiers *)
+(* accessibility *)
 and
   accessibility =
   | PublicAccess
   | PackageAccess
+  | ProtectedAccess
   | PrivateAccess
+and
+  static_binding =
+  | Static
+  | NonStatic
+and
+  abstractness =
+  | Abstract
+  | NonAbstract
+and
+  finality =
+  | Final
+  | NonFinal
 
 
 (* types *)
 and
   prim_type =
-  | VoidType of loc
-  | BoolType of loc
-  | CharType of loc
-  | ByteType of loc
-  | ShortType of loc
-  | IntType of loc
-  | LongType of loc
-  | FloatType of loc
-  | DoubleType of loc
+  | VoidType of source_location
+  | BoolType of source_location
+  | CharType of source_location
+  | ByteType of source_location
+  | ShortType of source_location
+  | IntType of source_location
+  | LongType of source_location
+  | FloatType of source_location
+  | DoubleType of source_location
 and
   ref_type =
   | SimpleRef of
       name                 (* Name of the referenced type *)
   | TypeApply of
-      loc *
+      source_location *
       name *               (* Name of the refererenced parameterized type *)
       ref_type list        (* Type arguments for this type instantiation *)
   | WildCard of
-      loc *
+      source_location *
       ref_type option *    (* Possible type bound of the wildcard *)
       wild_card_bound_kind (* Is the bound an upper or lower bound? *)
 and
   wild_card_bound_kind =
   | Upper
   | Lower
+  | Unbound
 and
   type_ =
   | PrimType of
@@ -117,7 +140,7 @@ and
 and
   type_param =
   | TypeParam of
-      loc *
+      source_location *
       identifier *  (* Identifier for this type parameter *)
       ref_type list (* List of bounds for this type parameter *)
 
@@ -126,14 +149,14 @@ and
 and 
   package =
   | Package of 
-      loc * 
+      source_location * 
       name *            (* Package name *)
       import list *     (* Import list *)
       package_decl list (* Package declaration list *)
 and
   import =
   | Import of
-      loc *
+      source_location *
       name *            (* Imported package name *)
       identifier option (* None means entire package, 
                            Some x means only x from specified package *)
@@ -150,20 +173,20 @@ and
 and
   interface_class_enum =
   | Class of
-      loc *
-      annotation list * (* annotation list (VeriFast style) *)
+      source_location *
+      annotation list * (* Annotation list (VeriFast style) *)
       identifier *      (* Identifier for this class *)
       type_param list * (* The type parameters of this class *)
       accessibility *   (* Is this class public, package or private? *)
-      bool *            (* Is this class abstract? *)
-      bool *            (* Is this class final? *)
-      bool *            (* Is this class static? *)
+      abstractness *    (* Is this class abstract? *)
+      finality *        (* Is this class final? *)
+      static_binding *  (* Is this class static? *)
       ref_type option * (* None means this class does not extend some other
                            Some x means this class extends x *)
       ref_type list *   (* List of interfaces that this class implements *)
       class_decl list   (* List of declarations from this class in order *)
   | Interface of
-      loc *
+      source_location *
       annotation list * (* Interface annotation list (VeriFast style) *)
       identifier *      (* Identifier for this interface *)
       type_param list * (* The type parameters of this interface *)
@@ -172,7 +195,7 @@ and
       class_decl list   (* List of declarations from this interface in 
                            order *)
   | Enum of
-      loc *
+      source_location *
       annotation list * (* Enum annotation list (VeriFast style) *)
       identifier *      (* Identifier for this enum *)
       accessibility *   (* Is this enum public, package or private? *)
@@ -189,58 +212,53 @@ and
                     *)
 and
   class_decl =
-  | C_Variable of
-      variable_decl        (* Variable declaration at class level 
-                              (i.e. instance variable) *)
-  | C_Method of
-      method_decl          (* Method (or constructor) declaration *)
   | C_Annotation of  
       annotation           (* Annotation at class level *)
   | C_Class of
       interface_class_enum (* Interface/class/enum declaration at class 
                               level (i.e. inner class) *)
-and
-  method_decl =
+  | Field of
+      source_location *
+      identifier *        (* Identifier of this field *)
+      accessibility *     (* Is this variable public, package, protected 
+                             or private? *)
+      finality *          (* Is this variable final? *)
+      static_binding *    (* Is this variable static? *)
+      type_ *             (* The type of this variable *)
+      expression option * (* Possible initializing expression *)
+      gen_source          (* Is this field auto generated? *)
   | Constructor of
-      loc *
+      source_location *
       annotation list * (* Consructor annotation list (VeriFast style) *)
-      identifier *      (* Identifier for this constructor *)
       type_param list * (* The type parameters of this constructor *)
-      accessibility *   (* Is this constructor public, package or 
-                           private? *)
-      bool *            (* Is this constructor protected?, 
-                           if so the accessibility is meaningless *)
+      accessibility *   (* Is this constructor public, package, protected 
+                           or private? *)
       variable_decl list *  (* The parameters for this constructor *)
       (ref_type * annotation) list * (* List of possible thrown exceptions 
                                         together with their annotations *)
       statement list *  (* Possible statements in body of constructor *)
-      bool              (* Is this constructor auto generated? *)
+      gen_source        (* Is this constructor auto generated? *)
   | Method of
-      loc *
+      source_location *
       annotation list * (* Method annotation list (VeriFast style) *)
       identifier *      (* Identifier for this method *)
       type_param list * (* The type parameters of this method *)
-      accessibility *   (* Is this method public, package or private? *)
-      bool *            (* Is this method protected?, 
-                           if so the accessibility is meaningless *)
-      bool *            (* Is this method abstract? *)
-      bool *            (* Is this method final? *)
-      bool *            (* Is this method static? *)
+      accessibility *   (* Is this method public, package, protected 
+                           or private? *)
+      abstractness *    (* Is this method abstract? *)
+      finality *        (* Is this method final? *)
+      static_binding *  (* Is this method static? *)
       type_ *           (* The return type of this method *)
       variable_decl list *           (* The parameters for this method *)
       (ref_type * annotation) list * (* List of possible thrown exceptions 
                                         together with their annotations *)
-      statement list option (* Possible statements in body of function *)
+      statement list option * (* List of statements in possible body of function *)
+      gen_source        (* Is this method auto generated? *)
 and
   variable_decl =
   | Variable of
-      loc *
-      identifier *      (* Name *)
-      accessibility *   (* Is this variable public, package or private? *)
-      bool *            (* Is this variable protected?, 
-                           if so the accessibility is meaningless *)
-      bool *            (* Is this variable final? *)
-      bool *            (* Is this variable static? *)
+      source_location *
+      identifier *      (* Identifier of this local variable *)
       type_ *           (* The type of this variable *)
       expression option (* Possible initializing expression *)
 
@@ -255,25 +273,25 @@ and
   | S_Expression of
       expression
   | Block of
-      loc *
+      source_location *
       statement list    (* List of statements in this block *)
   | Try of
-      loc *
+      source_location *
       statement list *  (* Body of this try block *)
       catch list        (* List of catch blocks associated with this 
                            try block *)
   | DoWhile of
-      loc *
+      source_location *
       annotation list * (* Loop annotation list (VeriFast style) *)
       expression *      (* Loop condition of this loop as an expression *)
       statement list    (* Body of this loop *)
   | While of
-      loc *
+      source_location *
       annotation list * (* Loop annotation list (VeriFast style) *)
       expression *      (* Loop condition of this loop as an expression *)
       statement list    (* Body of this loop *)
   | For of
-      loc *
+      source_location *
       annotation list * (* Loop annotation list (VeriFast style) *)
       statement list *  (* Initializing statements of this for loop 
                            (i.e. for( * ; ; )) *)
@@ -283,45 +301,46 @@ and
                            (i.e. for( ; ; * )) *)
       statement list    (* Body of this loop *)
   | Foreach of
-      loc *
+      source_location *
       annotation list * (* Loop annotation list (VeriFast style) *)
       variable_decl *   (* Variable declaration for the loop variable *)
       expression *      (* Container to loop over as an expression *)
       statement list    (* Body of this loop *)
   | Labeled of
-      loc *
-      identifier * (* The name of the label of this labeled statement *)  
-      statement    (* Body of this labeled statement *)
+      source_location *
+      identifier *      (* The name of the label of this labeled statement *)  
+      statement         (* Body of this labeled statement *)
   | Switch of
-      loc *
-      expression * (* Selector of this switch statement *)  
-      case list *  (* List of cases in this switch statement *)
-      case option  (* Possible default case of this switch statement *)
+      source_location *
+      expression *      (* Selector of this switch statement *)  
+      case list *       (* List of cases in this switch statement *)
+      case option       (* Possible default case of this switch statement *)
   | If of
-      loc *
-      expression * (* Branching condition for this if statment *)
-      statement *  (* If branch of this if statment *)
-      statement    (* Else branch of this if statment *)
+      source_location *
+      expression *      (* Branching condition for this if statment *)
+      statement list *  (* If branch of this if statment *)
+      statement list    (* Else branch of this if statment *)
   | Break of 
-      loc
+      source_location
   | Continue of 
-      loc
+      source_location
   | Return of
-      loc *
-      expression (* Expression that is returned by this return statement *)
+      source_location *
+      expression option (* Possible expression that is returned by this 
+                           return statement *)
   | Throw of
-      loc *
+      source_location *
       expression (* Expression (which should be Throwable) that is thrown 
                     by this throw statement *)
   | Assert of
-      loc *
-      expression * (* Failing condition for this assert *)
-      expression   (* Detailed information (implicit String conversion when 
-                      evaluated) associated with this assert *) 
+      source_location *
+      expression *       (* Failing condition for this assert *)
+      expression option  (* Detailed information (implicit String conversion  
+                            when evaluated) associated with this assert *) 
 and
   case =
   | Case of 
-      loc *
+      source_location *
       expression option * (* Pattern matched by this case from a switch 
                              statment *)
       statement list      (* List of statements in this case from a switch 
@@ -329,7 +348,7 @@ and
 and
   catch =
   | Catch of 
-      loc *
+      source_location *
       variable_decl * (* Declaration of Throwable object that is catched by 
                          this catch block *)
       statement list  (* Body of this catch block *)
@@ -341,65 +360,65 @@ and
   | E_Identifier of
       identifier
   | Access of
-      loc *
+      source_location *
       expression *      (* Object that is inspected *)
       identifier        (* Name of selected member *)
   | Apply of
-      loc *
+      source_location *
       type_param list * (* List of type parameters for this method 
                            invocation *)
       expression *      (* Method that is called *)
       expression list   (* List of arguments provided for this method 
                            invocation *)
   | NewClass of
-      loc *
+      source_location *
       type_param list * (* List of type parameters for this constructor 
                            invocation *)
       ref_type *        (* Type of the class that is instantiated *)
       expression list   (* List of arguments provided for this constructor 
                            invocation *)
   | NewArray of
-      loc *
+      source_location *
       type_ *         (* Type of elements in the newly created array *)
 (*       TODO: fix multidimentional arrays *)
 (*       expression * (* Number of elements in the allocated array *) *)
       expression list (* List of expressions to initialize the newly 
                          created array *)
   | Assign of
-      loc *                      
+      source_location *                      
       bin_operator option * (* Possible binary operator for this assigment: 
                                 e.g. 'None' means just '=' (no operator), 
                                      'some O_Plus' means '+=' *)
       expression *          (* Left hand side of this assignment *)
       expression            (* Right hand side of this assignment *)
   | Unary of
-      loc *                      
+      source_location *                      
       uni_operator * (* Operator in this unary expression *)
       expression     (* Only argument to this unary operator *)
   | Binary of
-      loc *                      
+      source_location *                      
       bin_operator * (* Operator in this binary expression  *)
       expression *   (* Left hand side argument to this binary operator *)
       expression     (* Right hand side argument to this binary operator *)
   | Ternary of
-      loc *
+      source_location *
       expression * (* Branching condition for this ternary operator *)
       expression * (* True branch of this ternary operator *)
       expression   (* False branch of this ternary operator *)
   | TypeCast of
-      loc *
+      source_location *
       type_ *    (* Type to cast the given expression to *)
       expression (* Expression which is cast do the speciefied type *) 
   | TypeTest of
-      loc *
+      source_location *
       type_ *    (* Type to check the given expression's type against *)
       expression (* Expression which is tested for its type *)
   | ArrayAccess of
-      loc *
+      source_location *
       expression * (* Array that is indexed *)
       expression   (* Index of array access *)
   | Literal of
-      loc *                            
+      source_location *                            
       type_ * (* Type of this literal:
                   -If type_ is a prim_type then the meaning is clear
                   -If type_ is a reftype ten it must be a String literal,
@@ -444,8 +463,7 @@ and
 (* -------------------------- *)
 
 (* dummies *)
-let dummy_srcpos = (("<nowhere>", "source"), 0, 0)
-let dummy_loc = (dummy_srcpos, dummy_srcpos)
+let dummy_loc = NoSource
 let dummy_ident = Identifier(dummy_loc, "")
 let dummy_name = Name(dummy_loc, [])
 let dummy_package = Package(dummy_loc, Name(dummy_loc, []), [], [])
@@ -515,20 +533,17 @@ let a_operator_of_string o =
 (* -------------------------- *)
 
 (* string_of_x *)
-let string_of_srcpos (p,l,c) = p ^ "(" ^ string_of_int l ^ "," ^ string_of_int c ^ ")"
+(* let string_of_srcpos (p,l,c) = p ^ "(" ^ string_of_int l ^ "," ^ string_of_int c ^ ")" *)
 let string_of_path (basedir, relpath) = concat basedir relpath
-let string_of_loc ((p1, l1, c1), (p2, l2, c2)) =
-  string_of_path p1 ^ "(" ^ string_of_int l1 ^ "," ^ string_of_int c1 ^
-  if p1 = p2 then
-    if l1 = l2 then
-      if c1 = c2 then
-        ")"
-      else
-        "-" ^ string_of_int c2 ^ ")"
-    else
-      "-" ^ string_of_int l2 ^ "," ^ string_of_int c2 ^ ")"
-  else
-    ")-" ^ string_of_path p2 ^ "(" ^ string_of_int l2 ^ "," ^ string_of_int c2 ^ ")" 
+let string_of_loc loc =
+  let (f, l1, c1, l2, c2) = 
+    match loc with 
+      NoSource -> ("<nowhere>", 0, 0, 0, 0)
+    | SourceLine(f, l, c1 ,c2) -> (f, l, c1, l,c2)
+    | SourceLines(f, l1, c1, l2 ,c2) -> (f, l1, c1, l2 ,c2)
+  in
+  "(" ^ f ^ ", " ^ (string_of_int l1) ^ ", " ^ (string_of_int c1) ^ ", " ^ 
+                   (string_of_int l2) ^ ", " ^ (string_of_int c2) ^ ")"
 let string_of_identifier id =
   match id with Identifier(_, name) -> name
 let string_of_name name =
@@ -567,8 +582,9 @@ and string_of_type t =
   | ArrayType t -> string_of_ref_type t
 let string_of_accessibility access =
   match access with
-    PublicAccess -> "public"
+  | PublicAccess -> "public"
   | PackageAccess -> "package"
+  | ProtectedAccess -> "protected"
   | PrivateAccess -> "private"
 
 (* string_equals_x *)
@@ -578,16 +594,33 @@ let string_equals_name s n =
   s = string_of_name n
 
 (* misc *)
+let extend_location loc1 loc2 =
+  let extend_location(f, l0, c0) =
+    match loc1 with 
+    | SourceLine(f, l, c1 ,c2) when l <= l0 ->
+        if (l == l0 && c2 <= c0) then
+          SourceLine(f, l, c1, c0)
+        else if (l < l0) then
+          SourceLines(f, l, l0, c1, c0)
+        else 
+          loc1
+    | SourceLines(f, l1, c1, l2 ,c2) when l2 <= l0 && (l2 = l0 || c2 <= c0)->
+        SourceLines(f, l1, c1, l0 ,c0)
+    | _ -> loc1
+  in
+  match loc2 with 
+    NoSource -> loc1
+  | SourceLine(f, l, c1 ,c2) -> extend_location(f, l, c1)
+  | SourceLines(f, l1, c1, l2 ,c2) -> extend_location(f, l1, c1)
+
 let remove_last_id name=
   match name with
-    Name((l1,l2), parts) ->
+    Name(loc, parts) ->
       if List.length parts > 0 then
         let id = get_last parts in
-        let l2' =
-          match id with 
-            Identifier((l, _), _) -> l
-        in
-        (Name((l1,l2'), remove_last parts), id)
+        let loc_id = match id with Identifier(l, _) -> l in
+        let loc' = extend_location loc loc_id in  
+        (Name(loc', remove_last parts), id)
       else
         (name, Identifier(dummy_loc, ""))
 
@@ -595,32 +628,4 @@ let remove_last_id name=
 (* -------------------------- *)
 (* End                        *)
 (* -------------------------- *)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
