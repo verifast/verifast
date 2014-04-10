@@ -32,7 +32,7 @@
 /bin/crt.dll.vfmanifest
 /src/a.out
 /src/pa_verifast.cmo
-
+/src/vfconfig.ml
 
 GNUmakefile.settings
 cidl
@@ -112,3 +112,6 @@ doc/*/*.pdf
 /buildsystems/ocamlbuild/_tempbuildfiles
 /buildsystems/ocamlbuild/settings.make
 
+# Java frontend stuff
+src/java_frontend/ast_server.jar
+examples/crypto/lib/polarssl
