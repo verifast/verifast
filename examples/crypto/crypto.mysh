@@ -22,13 +22,13 @@ cd protocols
     ifz3 verifast -c -I ../../lib/include main.c
     ifz3 verifast -allow_assume -I ../../lib/include ../../lib/bin/dolevyao.dll.vfmanifest yahalom.c main.c
   cd ..
-  ##nss
+  #nss
   cd nss
     verifast_both -c -I ../../lib/include nss.c
     verifast_both -c -I ../../lib/include main.c
     verifast_both -allow_assume -I ../../lib/include ../../lib/bin/dolevyao.dll.vfmanifest nss.c main.c
   cd ..
-  ##nsl
+  #nsl
   cd nsl
     verifast_both -c -I ../../lib/include nsl.c
     verifast_both -c -I ../../lib/include main.c

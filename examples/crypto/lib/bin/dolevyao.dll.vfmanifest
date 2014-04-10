@@ -1,4 +1,4 @@
-.provides attacker.h#attacker
+.provides dolevyao.h#attacker
 .provides dolevyao.h#create_principal
 .provides dolevyao.h#network_receive_attempt
 .provides dolevyao.h#network_receive
@@ -13,7 +13,7 @@
 .provides dolevyao.h#encrypt
 .provides dolevyao.h#inverse_key_kind
 .provides dolevyao.h#check_is_hmac
-.provides dolevyao.h#hmacsha1_verify
+.provides dolevyao.h#hmac_verify
 .provides dolevyao.h#hmac
 .provides dolevyao.h#item_get_data
 .provides dolevyao.h#create_data_item
@@ -49,6 +49,7 @@
 .requires string.h#memcmp
 .requires string.h#memcpy
 .requires string.h#memchr
+.requires string.h#strchr
 .requires string.h#strcmp
 .requires string.h#strlen
 .requires string.h#strdup
@@ -118,6 +119,7 @@
 .requires stdio.h#fread
 .requires stdio.h#fwrite
 .requires stdio.h#printf
+.requires stdio.h#sprintf
 .requires stdio.h#feof
 .requires stdio.h#getchar
 .requires stdio.h#putchar
@@ -292,9 +294,9 @@
 .structure @thread
 .structure @mutex
 .structure @lock
-.predicate attacker.h@attacker_proof_obligations
+.predicate dolevyao.h@attacker_proof_obligations
 .predicate dolevyao.h@initial_principals
-.predicate @net_api_uninitialized
+.predicate @net_api_initialized
 .predicate dolevyao.h@entropy
 .predicate dolevyao.h@public_key_request
 .predicate dolevyao.h@keypair_request

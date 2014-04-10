@@ -5,7 +5,7 @@ CC = clang
 
 CFLAGS += -I ../include
 
-LIBS += -L .. -ldolevyao
+LIBS += -L ../bin -ldolevyao
 LIBS += -L ../polarssl/library -lpolarssl
 LIBS += -pthreads -lpthread 
 LIBS += -lm
@@ -31,11 +31,11 @@ OBJECTS = \
 
 all: run
 
-$(EXEC_NAME): $(OBJECTS) ../lib$(LIB_NAME).a
+$(EXEC_NAME): $(OBJECTS) ../bin/lib$(LIB_NAME).so
 	$(CC) $(CFLAGS) tests.c $(OBJECTS) $(LIBS) -o $(EXEC_NAME)
 
 run: $(EXEC_NAME)
-	./$(EXEC_NAME)
+	LD_LIBRARY_PATH=../bin/; ./$(EXEC_NAME)
 
 clean:
 	rm -f *.o

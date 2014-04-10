@@ -1,8 +1,6 @@
 #ifndef DOLEVYAO_H
 #define DOLEVYAO_H
 
-#include "bool.h"
-
 /*
 
 Dolev-Yao security verification of security protocols. Uses an invariant-based 
@@ -101,7 +99,13 @@ from it.
 
 */
 
+///////////////////////////////////////////////////////////////////////////////
+// Includes ///////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+
+#include "bool.h"
 //@ #include "switch_primitives.gh"
+//@ #include "attacker_proof_obligations.gh"
 
 ///////////////////////////////////////////////////////////////////////////////
 // Initialization /////////////////////////////////////////////////////////////
@@ -109,7 +113,7 @@ from it.
 
 void init_crypto_lib();
   //@ requires exists<fixpoint(item, bool)>(?pub);
-  //@ ensures  world(pub) &*& net_api_initialized() &*& initial_principals();
+  //@ ensures  world(pub) &*& initial_principals();
 
 ///////////////////////////////////////////////////////////////////////////////
 // General definitions ////////////////////////////////////////////////////////
@@ -135,8 +139,8 @@ lemma_auto void int_right_int_pair(int f, int s);
 @*/
 
 int choose();
-    //@ requires true;
-    //@ ensures true;
+    //@ requires [?f]world(?pub);
+    //@ ensures  [f]world(pub);
 
 ///////////////////////////////////////////////////////////////////////////////
 // Item definitions ///////////////////////////////////////////////////////////
@@ -159,21 +163,24 @@ inductive item =
   | encrypted_item(int principal, int count, key_kind kind, int info, item payload, int entropy)
   | pair_item(item first, item second);
   
-predicate item(struct item *item, item i);
+predicate item(struct item *item; item i);
 
 @*/
 
 bool item_equals(struct item *item1, struct item *item2);
-  //@ requires item(item1, ?i1) &*& item(item2, ?i2);
-  //@ ensures  item(item1, i1) &*& item(item2, i2) &*& result == (i1 == i2);
+  /*@ requires [?f]world(?pub) &*& [?f1]item(item1, ?i1) &*& 
+               [?f2]item(item2, ?i2); @*/
+  /*@ ensures  [f]world(pub) &*& [f1]item(item1, i1) &*& 
+               [f2]item(item2, i2) &*& result == (i1 == i2);
+  @*/
 
 struct item *item_clone(struct item *item);
-  //@ requires item(item, ?i);
-  //@ ensures  item(item, i) &*& item(result, i);
+  //@ requires [?f]world(?pub) &*& item(item, ?i);
+  //@ ensures  [f]world(pub) &*& item(item, i) &*& item(result, i);
 
 void item_free(struct item *item);
-  //@ requires item(item, _);
-  //@ ensures  true;
+  //@ requires [?f]world(?pub) &*& item(item, _);
+  //@ ensures  [f]world(pub);
 
 ///////////////////////////////////////////////////////////////////////////////
 // Principals /////////////////////////////////////////////////////////////////
@@ -199,22 +206,26 @@ predicate generated_keys(int principal, int count);
 //@ predicate nonce_request(int principal, int info) = emp;
 
 struct item *create_nonce();
-  /*@ requires generated_nonces(?principal, ?count) &*& 
+  /*@ requires [?f]world(?pub) &*& generated_nonces(?principal, ?count) &*& 
                nonce_request(principal, ?info); 
   @*/
-  /*@ ensures  generated_nonces(principal, count + 1) &*&
+  /*@ ensures  [f]world(pub) &*& generated_nonces(principal, count + 1) &*&
                item(result, nonce_item(principal, count, info)); 
   @*/
 
 struct item *increment_nonce(struct item *item, int amount);
-  //@ requires item(item, nonce_item(?principal, ?count, ?info));
-  /*@ ensures  item(item, nonce_item(principal, count, info)) &*& 
-               item(result, nonce_item(principal, count, int_pair(amount, info))); @*/
+  /*@ requires [?f]world(?pub) &*& 
+               item(item, nonce_item(?principal, ?count, ?info));
+  @*/
+  /*@ ensures  [f]world(pub) &*& 
+               item(item, nonce_item(principal, count, info)) &*& 
+               item(result, nonce_item(principal, count, int_pair(amount, info))); 
+  @*/
 
 // check_is_nonce aborts if the item is not a nonce
 void check_is_nonce(struct item *item);
-  //@ requires item(item, ?i);
-  /*@ ensures
+  //@ requires [?f]world(?pub) &*& item(item, ?i);
+  /*@ ensures  [f]world(pub) &*& 
         switch (i) 
         {
           case nonce_item(p0, c0, i0): 
@@ -241,27 +252,27 @@ predicate key_item(struct item *item, int participant, int count, key_kind kind,
 //@ predicate key_request(int principal, int info) = emp;
 
 struct item *create_key();
-  /*@ requires key_request(?principal, ?info) &*&
+  /*@ requires [?f]world(?pub) &*& key_request(?principal, ?info) &*&
                generated_keys(principal, ?count); 
   @*/
-  /*@ ensures  generated_keys(principal, count + 1) &*& 
+  /*@ ensures  [f]world(pub) &*& generated_keys(principal, count + 1) &*& 
                key_item(result, principal, count, symmetric_key, info); 
   @*/
 
 struct item *key_clone(struct item* key);
-  //@ requires key_item(key, ?principal, ?count, ?kind, ?info); 
-  /*@ ensures  key_item(key, principal, count, kind, info) &*&
+  //@ requires [?f]world(?pub) &*& key_item(key, ?principal, ?count, ?kind, ?info); 
+  /*@ ensures  [f]world(pub) &*& key_item(key, principal, count, kind, info) &*&
                key_item(result, principal, count, kind, info); 
   @*/
 
 void key_free(struct item* key);
-  //@ requires key_item(key, _, _, _, _);
-  //@ ensures  true;
+  //@ requires [?f]world(?pub) &*& key_item(key, _, _, _, _);
+  //@ ensures  [f]world(pub);
 
 //check_is_key aborts if the item is not a key.
 void check_is_key(struct item *item);
-  //@ requires item(item, ?i);
-  /*@ ensures
+  //@ requires [?f]world(?pub) &*& item(item, ?i);
+  /*@ ensures  [f]world(pub) &*&
         switch (i) 
         {
           case nonce_item(p0, c0, i0): return false;
@@ -282,41 +293,49 @@ struct keypair;
 //@ predicate public_key_request(int info) = emp;
 
 struct keypair *create_keypair(int principal);
-    //@ requires keypair_request(?info) &*& generated_keys(principal, ?count);
-    /*@ ensures generated_keys(principal, count + 1) &*& 
+  /*@ requires [?f]world(?pub) &*& generated_keys(principal, ?count) &*&
+                keypair_request(?info); 
+  @*/
+  /*@ ensures  [f]world(pub) &*& generated_keys(principal, count + 1) &*& 
                 keypair(result, principal, count, info);
-    @*/
+  @*/
 
 struct item *get_public_key(int participant);
-  //@ requires public_key_request(?info);
-  //@ ensures key_item(result, participant, _, public_key, info);
+  //@ requires [?f]world(?pub) &*& public_key_request(?info);
+  /*@ ensures  [f]world(pub) &*& 
+               key_item(result, participant, _, public_key, info); 
+  @*/
   
 void keypair_free(struct keypair *keypair);
-    //@ requires keypair(?result, ?principal, ?count, ?info);
-    //@ ensures true;
+  /*@ requires [?f]world(?pub) &*& 
+                keypair(?result, ?principal, ?count, ?info); 
+  @*/
+  //@ ensures  [f]world(pub);
 
 struct item *keypair_get_private_key(struct keypair *keypair);
-    //@ requires keypair(keypair, ?creator, ?id, ?info);
-    /*@ ensures keypair(keypair, creator, id, info) &*& 
-        key_item(result, creator, id, private_key, info);
-    @*/
+  //@ requires [?f]world(?pub) &*& keypair(keypair, ?creator, ?id, ?info);
+  /*@ ensures  [f]world(pub) &*& keypair(keypair, creator, id, info) &*& 
+               key_item(result, creator, id, private_key, info);
+  @*/
 
 struct item *keypair_get_public_key(struct keypair *keypair);
-    //@ requires keypair(keypair, ?creator, ?id, ?info);
-    //@ ensures key_item(result, creator, id, public_key, info);
+  //@ requires [?f]world(?pub) &*& keypair(keypair, ?creator, ?id, ?info);
+  /*@ ensures  [f]world(pub) &*& 
+               key_item(result, creator, id, public_key, info);
+  @*/
 
 ///////////////////////////////////////////////////////////////////////////////
 // Data item //////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
 struct item *create_data_item(int data);
-  //@ requires true;
-  //@ ensures  item(result, data_item(data));
+  //@ requires [?f]world(?pub);
+  //@ ensures  [f]world(pub) &*& item(result, data_item(data));
 
 // item_get_data aborts if the item is not a data item.
 int item_get_data(struct item *item);
-  //@ requires item(item, ?i);
-  /*@ ensures
+  //@ requires [?f]world(?pub) &*& item(item, ?i);
+  /*@ ensures  [f]world(pub) &*& 
         switch (i) 
         {
           case nonce_item(p0, c0, i0): return false;
@@ -334,22 +353,28 @@ int item_get_data(struct item *item);
 ///////////////////////////////////////////////////////////////////////////////
 
 struct item *hmac(struct item *key, struct item *payload);
-  //@ requires key_item(key, ?creator, ?id, ?kind, ?info) &*& item(payload, ?p);
-  /*@ ensures  key_item(key, creator, id, kind, info) &*& item(payload, p) &*& 
-               item(result, hmac_item(creator, id, kind, info, p)); @*/
+  /*@ requires [?f]world(?pub) &*& 
+               key_item(key, ?creator, ?id, ?kind, ?info) &*& item(payload, ?p);
+  @*/
+  /*@ ensures  [f]world(pub) &*& 
+               key_item(key, creator, id, kind, info) &*& item(payload, p) &*& 
+               item(result, hmac_item(creator, id, kind, info, p)); 
+  @*/
 
-void hmacsha1_verify(struct item *hash, struct item *key, struct item *payload);
-  /*@ requires item(hash, ?h) &*& key_item(key, ?creator, ?id, ?kind, ?info) &*& 
+void hmac_verify(struct item *hash, struct item *key, struct item *payload);
+  /*@ requires [?f]world(?pub) &*& item(hash, ?h) &*& 
+               key_item(key, ?creator, ?id, ?kind, ?info) &*& 
                item(payload, ?p); 
   @*/
-  /*@ ensures  item(hash, h) &*& key_item(key, creator, id, kind, info) &*& 
+  /*@ ensures  [f]world(pub) &*& item(hash, h) &*& 
+               key_item(key, creator, id, kind, info) &*& 
                item(payload, p) &*& h == hmac_item(creator, id, kind, info, p); 
   @*/
 
 //check_is_hmac aborts if the item is not a hmac.
 void check_is_hmac(struct item *item);
-  //@ requires item(item, ?i);
-  /*@ ensures
+  //@ requires [?f]world(?pub) &*& item(item, ?i);
+  /*@ ensures  [f]world(pub) &*&
         switch (i) 
         {
           case nonce_item(p0, c0, i0): return false;
@@ -383,31 +408,38 @@ fixpoint key_kind inverse_key_kind(key_kind k)
 
 // This function aborts if the key is not a key item.
 struct item *encrypt(struct item *key, struct item *payload);
-  /*@ requires key_item(key, ?s, ?count, ?kind, ?info) &*& item(payload, ?p); @*/
-  /*@ ensures  key_item(key, s, count, kind, info) &*& 
-        (kind == symmetric_key || kind == public_key) &*&
-        item(payload, p) &*& [_]entropy(?entropy) &*& 
-        item(result, encrypted_item(s, count, kind, info, p, entropy));
+  /*@ requires [?f]world(?pub) &*&
+               key_item(key, ?s, ?count, ?kind, ?info) &*&
+               item(payload, ?p); 
+  @*/
+  /*@ ensures  [f]world(pub) &*&
+               key_item(key, s, count, kind, info) &*& 
+               item(payload, p) &*&
+               (kind == symmetric_key || kind == public_key) &*&
+               [_]entropy(?entropy) &*& 
+               item(result, encrypted_item(s, count, kind, info, p, entropy));
   @*/
 
 // This function aborts if key is not a key item or if it is not a correct key.
 struct item *decrypt(struct item *key, struct item *item);
-  /*@ requires key_item(key, ?participant, ?count, ?kind, ?info) &*& 
-               item(item, ?i); @*/
-  /*@ ensures  key_item(key, participant, count, kind, info) &*& item(item, i) &*&
-        (kind == symmetric_key || kind == private_key) &*&
-        switch (i) 
-        {
-          case nonce_item(p0, c0, i0): return false;
-          case key_item(p0, c0, k0, i0): return false;
-          case data_item(d0): return false;
-          case hmac_item(p0, c0, k0, i0, payload0): return false;
-          case encrypted_item(p0, c0, k0, i0, payload0, entropy0): return
-            k0 == inverse_key_kind(kind) &*&
-            p0 == participant &*& c0 == count &*& 
-            i0 == info &*& item(result, payload0);
-          case pair_item(f0, s0): return false;
-        };
+  /*@ requires [?f]world(?pub) &*& item(item, ?i) &*&
+               key_item(key, ?participant, ?count, ?kind, ?info); 
+  @*/
+  /*@ ensures  [f]world(pub) &*& item(item, i) &*&
+               key_item(key, participant, count, kind, info) &*&
+               (kind == symmetric_key || kind == private_key) &*&
+               switch (i) 
+               {
+                 case nonce_item(p0, c0, i0): return false;
+                 case key_item(p0, c0, k0, i0): return false;
+                 case data_item(d0): return false;
+                 case hmac_item(p0, c0, k0, i0, payload0): return false;
+                 case encrypted_item(p0, c0, k0, i0, payload0, entropy0): return
+                   k0 == inverse_key_kind(kind) &*&
+                   p0 == participant &*& c0 == count &*& 
+                   i0 == info &*& item(result, payload0);
+                 case pair_item(f0, s0): return false;
+               };
   @*/
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -415,13 +447,15 @@ struct item *decrypt(struct item *key, struct item *item);
 ///////////////////////////////////////////////////////////////////////////////
 
 struct item *create_pair(struct item *first, struct item *second);
-  //@ requires item(first, ?f) &*& item(second, ?s);
-  //@ ensures item(first, f) &*& item(second, s) &*& item(result, pair_item(f, s));
+  //@ requires [?f]world(?pub) &*& item(first, ?fi) &*& item(second, ?s);
+  /*@ ensures  [f]world(pub) &*& item(first, fi) &*& item(second, s) &*&  
+               item(result, pair_item(fi, s));
+  @*/
 
 // This function aborts if the pair is not a pair item.
 struct item *pair_get_first(struct item *pair);
-  //@ requires item(pair, ?p);
-  /*@ ensures  item(pair, p) &*&
+  //@ requires [?f]world(?pub) &*& item(pair, ?p);
+  /*@ ensures  [f]world(pub) &*& item(pair, p) &*&
         switch (p) 
         {
           case nonce_item(p0, c0, i0): return false;
@@ -436,8 +470,8 @@ struct item *pair_get_first(struct item *pair);
 
 // This function aborts if the pair is not a pair item.
 struct item *pair_get_second(struct item *pair);
-  //@ requires item(pair, ?p);
-  /*@ ensures  item(pair, p) &*&
+  //@ requires [?f]world(?pub) &*& item(pair, ?p);
+  /*@ ensures  [f]world(pub) &*& item(pair, p) &*&
         switch (p) 
         {
           case nonce_item(p0, c0, i0): return false;
@@ -451,8 +485,10 @@ struct item *pair_get_second(struct item *pair);
   @*/
 
 struct item *get_client_public_key(int participant);
-  //@ requires public_key_request(?info);
-  //@ ensures key_item(result, participant, _, public_key, info);
+  //@ requires [?f]world(?pub) &*& public_key_request(?info);
+  /*@ ensures  [f]world(pub) &*& 
+               key_item(result, participant, _, public_key, info);
+  @*/
 
 ///////////////////////////////////////////////////////////////////////////////
 // Network ////////////////////////////////////////////////////////////////////
@@ -460,37 +496,37 @@ struct item *get_client_public_key(int participant);
 
 struct network_status;
 
-//@ predicate net_api_initialized();
+//@ predicate network_status(struct network_status *stat);
 
 struct network_status *network_bind(int port);
-  //@ requires [?f]net_api_initialized();
-  //@ ensures  [f]net_api_initialized();
+  //@ requires true;
+  //@ ensures  network_status(result);
 
 struct network_status *network_connect(const char *name, int port);
-  //@ requires [?f]net_api_initialized();
-  //@ ensures  [f]net_api_initialized();
+  //@ requires true;
+  //@ ensures  network_status(result);
 
 void network_disconnect(struct network_status *stat);
-  //@ requires [?f]net_api_initialized();
-  //@ ensures  [f]net_api_initialized();
+  //@ requires network_status(stat);
+  //@ ensures  true;
 
 void network_send(struct network_status *stat, struct item *datagram);
-  /*@ requires [?f0]world(?pub) &*& [?f1]net_api_initialized() &*&
+  /*@ requires [?f0]world(?pub) &*& network_status(stat) &*&
                item(datagram, ?d) &*& pub(d) == true; 
   @*/
-  /*@ ensures  [f0]world(pub) &*& [f1]net_api_initialized() &*&
+  /*@ ensures  [f0]world(pub) &*& network_status(stat) &*&
                item(datagram, d);
   @*/
 
 struct item *network_receive(struct network_status *stat);
-  //@ requires [?f0]world(?pub) &*& [?f1]net_api_initialized();
-  /*@ ensures  [f0]world(pub) &*& [f1]net_api_initialized() &*&
+  //@ requires [?f0]world(?pub) &*& network_status(stat);
+  /*@ ensures  [f0]world(pub) &*& network_status(stat) &*&
                item(result, ?d) &*& pub(d) == true;
   @*/         
 
 struct item *network_receive_attempt(struct network_status *stat);
-  //@ requires [?f0]world(?pub) &*& [?f1]net_api_initialized();
-  /*@ ensures [f0]world(pub) &*& [f1]net_api_initialized() &*&
+  //@ requires [?f0]world(?pub) &*& network_status(stat);
+  /*@ ensures [f0]world(pub) &*& network_status(stat) &*&
               result == 0 ? true : item(result, ?d) &*& pub(d) == true;
   @*/
 
@@ -503,10 +539,11 @@ struct item *network_receive_attempt(struct network_status *stat);
       principals(?count) &*& count > 0 &*& bad(0) == false; @*/
 
 int create_principal(struct item **key_sym_pp, struct keypair **key_pair_pp);
-  /*@ requires *key_sym_pp |-> _ &*& *key_pair_pp |-> _ &*&
-               principals(?count);
+  /*@ requires [?f]world(?pub) &*& principals(?count) &*&
+               *key_sym_pp |-> _ &*& *key_pair_pp |-> _;
   @*/
-  /*@ ensures  principals(count + 1) &*& 
+  /*@ ensures  [f]world(pub) &*& 
+               principals(count + 1) &*& 
                result == count &*&
                generated_nonces(count, 0) &*&
                generated_keys(count, 0) &*&
@@ -514,7 +551,100 @@ int create_principal(struct item **key_sym_pp, struct keypair **key_pair_pp);
                key_item(key_sym, count, 0, symmetric_key, int_pair(0, 0)) &*&
                keypair(key_pair, count, 0, int_pair(0, 0));
   @*/
-  
+
+///////////////////////////////////////////////////////////////////////////////
+// Attacker ///////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+
+/*@
+predicate attacker_proof_obligations(fixpoint(item, bool) pub) =
+ is_can_send_bad_principal_keys(_, pub) &*&
+ is_can_send_data(_, pub) &*&
+ is_can_send_public_pair(_, pub) &*&
+ is_can_send_decomposed_public_pair(_, pub) &*&
+ is_can_send_public_encrypted(_, pub) &*&
+ is_can_send_public_decrypted(_, pub) &*&
+ is_can_send_public_hmac(_, pub);
+                                                                 
+typedef lemma void can_send_bad_principal_keys(fixpoint(item, bool) pub)(int p);
+  requires  [?f0]world(pub) &*&
+            item(?item, key_item(p, ?c, ?k, ?i)) &*& 
+            bad(p) == true;
+  ensures   [f0]world(pub) &*&
+            item(item, key_item(p, c, k, i)) &*& 
+            pub(key_item(p, c, k, i)) == true;
+
+typedef lemma void can_send_data(fixpoint(item, bool) pub)(int data);
+  requires  [?f0]world(pub);
+  ensures   [f0]world(pub) &*&
+            pub(data_item(data)) == true;
+
+typedef lemma void can_send_public_pair(fixpoint(item, bool) pub)();
+  requires  [?f0]world(pub) &*&
+            item(?i1, ?ii1) &*& pub(ii1) == true &*& 
+            item(?i2, ?ii2) &*& pub(ii2) == true;
+  ensures   [f0]world(pub) &*&
+            item(i1, ii1) &*&
+            item(i2, ii2) &*&
+            pub(pair_item(ii1, ii2)) == true;
+
+typedef lemma void can_send_decomposed_public_pair(fixpoint(item, bool) pub)(struct item* pair);
+  requires  [?f0]world(pub) &*&
+            item(pair, pair_item(?i1, ?i2)) &*& 
+            pub(pair_item(i1, i2)) == true;
+  ensures   [f0]world(pub) &*&
+            item(pair, pair_item(i1, i2)) &*& 
+            pub(i1) == true &*& pub(i2) == true;
+
+typedef lemma void can_send_public_encrypted(fixpoint(item, bool) pub)(struct item* k_item);
+  requires  [?f0]world(pub) &*&
+            item(k_item, key_item(?p, ?c, ?k, ?i)) &*& 
+            pub(key_item(p, c, k, i)) == true &*&
+            item(?p_item, ?payload) &*&
+            pub(
+            payload) == true &*&
+            item(?e_item, encrypted_item(p, c, k, i, payload, ?e));
+  ensures   [f0]world(pub) &*&
+            item(k_item, key_item(p, c, k, i)) &*&
+            item(p_item, payload) &*&
+            item(e_item, encrypted_item(p, c, k, i, payload, e)) &*&
+            pub(encrypted_item(p, c, k, i, payload, e)) == true;
+
+typedef lemma void can_send_public_decrypted(fixpoint(item, bool) pub)(struct item* key, struct item* encrypted);
+  requires  [?f0]world(pub) &*&
+            item(key, key_item(?p, ?c, ?k, ?i)) &*& 
+            pub(key_item(p, c, k, i)) == true &*&
+            item(encrypted, encrypted_item(p, c, inverse_key_kind(k), i, ?payload, ?e)) &*&
+            pub(encrypted_item(p, c, inverse_key_kind(k), i, payload, e)) == true &*&
+            item(?p_item, payload);
+  ensures   [f0]world(pub) &*&
+            item(key, key_item(p, c, k, i)) &*&
+            item(p_item, payload) &*&
+            item(encrypted, encrypted_item(p, c, inverse_key_kind(k), i, payload, e)) &*&
+            pub(payload) == true;
+
+typedef lemma void can_send_public_hmac(fixpoint(item, bool) pub)(struct item* key);
+  requires  [?f0]world(pub) &*&
+            item(key, key_item(?p, ?c, ?k, ?i)) &*& 
+            pub(key_item(p, c, k, i)) == true &*&
+            item(?p_item, ?payload) &*&
+            pub(payload) == true &*&
+            item(?h_item, hmac_item(p, c, k, i, payload));
+  ensures   [f0]world(pub) &*&
+            item(key, key_item(p, c, k, i)) &*&
+            item(p_item, payload) &*&
+            item(h_item, hmac_item(p, c, k, i, payload)) &*&
+            pub(hmac_item(p, c, k, i, payload)) == true;
+@*/
+
+void attacker();
+  /*@ requires exists<fixpoint(item, bool)>(?pub) &*&
+               [?f0]world(pub) &*&
+               attacker_proof_obligations(pub) &*&
+               initial_principals() &*& !bad(0);
+  @*/
+  //@ ensures false;
+
 ///////////////////////////////////////////////////////////////////////////////
 // Switch template ////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
@@ -525,7 +655,7 @@ int create_principal(struct item **key_sym_pp, struct keypair **key_pair_pp);
 //       case nonce_item(p0, c0, ii0): i = i;
 //       case key_item(p0, c0, k0, ii0): i = i;
 //       case data_item(d0): i = i;
-//       case hmac_item(p0, c0, ii0, payload0): i = i;
+//       case hmac_item(p0, c0, k0, ii0, payload0): i = i;
 //       case encrypted_item(p0, c0, k0, ii0, payload0, entropy0): i = i;
 //       case pair_item(f0, s0): i = i;
 //     }

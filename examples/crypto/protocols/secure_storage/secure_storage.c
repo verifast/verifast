@@ -15,12 +15,12 @@ lemma void init_protocol()
 @*/
 
 void app_send(struct item *key, struct item *message)
-  /*@ requires [?f0]world(ss_pub) &*& [?f1]net_api_initialized() &*&
+  /*@ requires [?f0]world(ss_pub) &*&
                 key_item(key, ?creator, ?id, symmetric_key, int_pair(0, 0)) &*& 
                 item(message, ?msg) &*& ss_pub(msg) == true &*& 
                 app_send_event(creator, msg) == true; 
   @*/
-  /*@ ensures  [f0]world(ss_pub) &*& [f1]net_api_initialized() &*&
+  /*@ ensures  [f0]world(ss_pub) &*&
                 key_item(key, creator, id, symmetric_key, int_pair(0, 0)) &*& 
                 item(message, msg); 
     @*/
@@ -38,10 +38,10 @@ void app_send(struct item *key, struct item *message)
 }
 
 struct item *app_receive(struct item *key)
-  /*@ requires [?f0]world(ss_pub) &*& [?f1]net_api_initialized() &*&
+  /*@ requires [?f0]world(ss_pub) &*&
                 key_item(key, ?creator, ?id, symmetric_key, int_pair(0, 0)); 
   @*/
-  /*@ ensures [f0]world(ss_pub) &*& [f1]net_api_initialized() &*&
+  /*@ ensures [f0]world(ss_pub) &*&
               key_item(key, creator, id, symmetric_key, int_pair(0, 0)) &*& 
               item(result, ?msg) &*& bad(creator) || 
               app_send_event(creator, msg); 
@@ -53,7 +53,7 @@ struct item *app_receive(struct item *key)
     struct item *hash = pair_get_first(m);
     struct item *message = pair_get_second(m);
     item_free(m);
-    hmacsha1_verify(hash, key, message);
+    hmac_verify(hash, key, message);
     item_free(hash);
     
     network_disconnect(net_stat);

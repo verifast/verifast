@@ -1,9 +1,8 @@
 #include "dolevyao.h"
-#include "attacker.h"
 
 void attacker()
   /*@ requires exists<fixpoint(item, bool)>(?pub) &*& 
-               [?f0]world(pub) &*& [?f1]net_api_initialized() &*&
+               [?f0]world(pub) &*&
                attacker_proof_obligations(pub) &*&
                initial_principals();
   @*/
@@ -11,7 +10,7 @@ void attacker()
 {
   //@ open initial_principals();
   for (;;)
-    /*@ invariant [f0]world(pub) &*& [f1]net_api_initialized() &*&
+    /*@ invariant [f0]world(pub) &*&
                   attacker_proof_obligations(pub) &*& principals(_); 
     @*/
   {
@@ -32,7 +31,7 @@ void attacker()
     
     for (;;)
       /*@ 
-          invariant [f0]world(pub) &*& [f1]net_api_initialized() &*& 
+          invariant [f0]world(pub) &*& network_status(net_stat) &*&
                     attacker_proof_obligations(pub) &*& principals(_) &*&
                     generated_nonces(bad_one, 0) &*&
                     a_key_sym |-> ?key_sym &*&
@@ -95,7 +94,7 @@ void attacker()
             second = pair_get_second(pair);
             /*@ assert is_can_send_decomposed_public_pair(
                                       ?can_send_decomposed_public_pair, pub); @*/
-            //@ can_send_decomposed_public_pair();
+            //@ can_send_decomposed_public_pair(pair);
             network_send(net_stat, first);
             network_send(net_stat, second);
             item_free(first);
@@ -116,7 +115,9 @@ void attacker()
               //@ open key_item(key, _, _, _, _);
               /*@ assert is_can_send_public_encrypted(
                                               ?can_send_public_encrypted, pub); @*/
-              //@ can_send_public_encrypted();
+              //@ assert item(first, ?fff);
+              //@ assert pub(fff) == true;
+              //@ can_send_public_encrypted(key);
               network_send(net_stat, second);
               item_free(first);
               item_free(second);
@@ -137,7 +138,7 @@ void attacker()
               //@ open key_item(key, ?foo, ?bar, ?baz, ?baq);
               /*@ assert is_can_send_public_decrypted(
                                               ?can_send_public_decrypted, pub); @*/
-              //@ can_send_public_decrypted();
+              //@ can_send_public_decrypted(key, first);
               network_send(net_stat, second);
               item_free(first);
               item_free(second);
@@ -157,7 +158,7 @@ void attacker()
               //@ open key_item(key, _, _, _, _);
               /*@ assert is_can_send_public_hmac(
                                               ?can_send_public_hmac, pub); @*/
-              //@ can_send_public_hmac();
+              //@ can_send_public_hmac(key);
               network_send(net_stat, hash);
               item_free(item);
               item_free(hash);

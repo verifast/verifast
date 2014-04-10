@@ -17,13 +17,13 @@ lemma void init_protocol()
 @*/
 
 void sender(int sender, int receiver, struct item *KA_PRIVATE, struct item *KB)
-  /*@ requires generated_nonces(sender, _) &*& !bad(sender) &*& !bad(receiver) &*&
-               [?f0]world(nsl_pub) &*& [?f1]net_api_initialized() &*&
+  /*@ requires [?f0]world(nsl_pub) &*&
+               generated_nonces(sender, _) &*& !bad(sender) &*& !bad(receiver) &*&
                key_item(KA_PRIVATE, sender, ?cskid, private_key, int_pair(0, 0)) &*&
                key_item(KB, receiver, ?spkid, public_key, int_pair(0, 0));
   @*/
-  /*@ ensures  generated_nonces(sender, _) &*&
-               [f0]world(nsl_pub) &*& [f1]net_api_initialized() &*&
+  /*@ ensures  [f0]world(nsl_pub) &*&
+               generated_nonces(sender, _) &*&
                key_item(KA_PRIVATE, sender, cskid, private_key, int_pair(0, 0)) &*&
                key_item(KB, receiver, spkid, public_key, int_pair(0, 0));
   @*/
@@ -94,12 +94,12 @@ void sender(int sender, int receiver, struct item *KA_PRIVATE, struct item *KB)
 }
 
 void receiver(int receiver, struct item *KB_PRIVATE)
-  /*@ requires generated_nonces(receiver, _) &*& !bad(receiver) &*&
-               [?f0]world(nsl_pub) &*& [?f1]net_api_initialized() &*&
+  /*@ requires [?f0]world(nsl_pub) &*&
+               generated_nonces(receiver, _) &*& !bad(receiver) &*&
                key_item(KB_PRIVATE, receiver, ?sskid, private_key, int_pair(0, 0)); 
   @*/
-  /*@ ensures generated_nonces(receiver, _) &*& !bad(receiver) &*&
-               [f0]world(nsl_pub) &*& [f1]net_api_initialized() &*& 
+  /*@ ensures  [f0]world(nsl_pub) &*&
+               generated_nonces(receiver, _) &*& !bad(receiver) &*&
                key_item(KB_PRIVATE, receiver, sskid, private_key, int_pair(0, 0)); 
   @*/
 {

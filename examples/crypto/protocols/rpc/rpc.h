@@ -3,7 +3,6 @@
 
 // See explanations in ../../lib/dolevyao.h
 #include "dolevyao.h"
-#include "attacker.h"
 
 /*
 Dolev-Yao security verification of a simple request-response protocol.
@@ -84,13 +83,13 @@ lemma void init_protocol();
 @*/
 
 struct item *client(int server, struct item *key, struct item *request);
-  /*@ requires [?f0]world(rpc_pub) &*& [?f1]net_api_initialized() &*&
+  /*@ requires [?f0]world(rpc_pub) &*&
                key_item(key, ?creator, ?id, symmetric_key, int_pair(0, 0)) &*& 
                item(request, ?req) &*&
                rpc_pub(req) == true &*& request(creator, server, req) == true &*& 
                shared_with(creator, id) == server; 
   @*/
-  /*@ ensures  [f0]world(rpc_pub) &*& [f1]net_api_initialized() &*&
+  /*@ ensures  [f0]world(rpc_pub) &*&
                key_item(key, creator, id, symmetric_key, int_pair(0, 0)) &*& 
                item(request, req) &*& 
                item(result, ?resp) &*& bad(creator) || bad(server) || 
@@ -98,11 +97,11 @@ struct item *client(int server, struct item *key, struct item *request);
   @*/
 
 void server(int serverId, struct item *key);
-  /*@ requires [?f0]world(rpc_pub) &*& [?f1]net_api_initialized() &*&
+  /*@ requires [?f0]world(rpc_pub) &*&
                key_item(key, ?creator, ?id, symmetric_key, ?info) &*& 
                shared_with(creator, id) == serverId; 
   @*/
-  /*@ ensures  [f0]world(rpc_pub) &*& [f1]net_api_initialized() &*&
+  /*@ ensures  [f0]world(rpc_pub) &*&
                key_item(key, creator, id, symmetric_key, info);
   @*/
 

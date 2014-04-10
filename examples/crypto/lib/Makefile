@@ -3,11 +3,18 @@
 
 CC = clang
 AR = ar
-# DEBUG += -g -D DEBUG
 
 CFLAGS += -I include 
 CFLAGS += -I polarssl/include
+# CFLAGS += -g -D DEBUG
 
+#Input
+#-----
+
+OBJECTS = \
+  src/attacker.o \
+  src/dolevyao.o 
+  
 #Output
 #------
 
@@ -18,9 +25,10 @@ LIB = libdolevyao.so
 
 all: lib
 
-switch:
-	cd include; \
-	./switch_primitives.py;
+switch_primitives:
+	cd tools; \
+	./switch_primitives.py; \
+	mv switch_primitives.gh ../include
 
 polar:
 	test -d polarssl || git clone https://github.com/polarssl/polarssl.git polarssl
@@ -35,19 +43,24 @@ polar:
 	  include/polarssl/config.h; \
 	make -j4;
 
-# bin/dolevyao.dll.vfmanifest: bin/dolevyao.vfmanifest
+polar_sizes: tools/switch_primitives.py
+	cd tools; \
+	gcc -I ../polarssl/include/polarssl/ polarssl_sizes.c -lpthread -L ../polarssl/library -lpolarssl ; \
+	./a.out; \
+	rm a.out; \
+	mv polarssl_sizes.h ../include;
+
+dolevyao_dll: bin/dolevyao.vfmanifest
 	../../../bin/verifast -shared bin/dolevyao.vfmanifest -emit_dll_vfmanifest
 
-lib: switch polar src/dolevyao.c bin/dolevyao.dll.vfmanifest
-	$(CC) $(DEBUG) $(CFLAGS) -c -o src/dolevyao.o src/dolevyao.c;
-	$(CC) $(DEBUG) $(CFLAGS) -c -o src/attacker.o src/attacker.c;
-	gcc -shared src/attacker.o src/dolevyao.o -o bin/$(LIB)
+lib: switch_primitives polar polar_sizes dolevyao_dll $(OBJECTS)
+	gcc -shared $(OBJECTS) -o bin/$(LIB)
 
 tests: lib
 	make -C tests
 
 clean:
 	make -C tests clean
-	rm -f dolevyao.a
+	rm -f $(LIB)
 	rm -f src/*.o
 	rm -f include/switch_primitives.gh

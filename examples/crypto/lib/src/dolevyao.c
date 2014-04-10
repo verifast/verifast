@@ -710,7 +710,7 @@ struct item *hmac(struct item *key, struct item *payload)
   return result;
 }
 
-bool hmacsha1_is_correct(struct item *hash, struct item *key, 
+bool hmac_is_correct(struct item *hash, struct item *key, 
                                             struct item *payload)
 {
   check_is_hmac(hash);
@@ -722,9 +722,9 @@ bool hmacsha1_is_correct(struct item *hash, struct item *key,
   return result;
 }
 
-void hmacsha1_verify(struct item *hash, struct item *key, struct item *payload)
+void hmac_verify(struct item *hash, struct item *key, struct item *payload)
 {   
-  if(!hmacsha1_is_correct(hash, key, payload))
+  if(!hmac_is_correct(hash, key, payload))
   {
     abort_crypto_lib("Calculated hash is different from expected one");
   }

@@ -1,5 +1,4 @@
 #include "nsl.h"
-#include "attacker.h"
 
 #include <pthread.h>
 #include <stdio.h>
@@ -7,7 +6,7 @@
 
 /*@
 predicate_family_instance pthread_run_pre(attacker_t)(void *data, any info) = 
-    exists(nsl_pub) &*& [_]world(nsl_pub) &*& [_]net_api_initialized() &*&
+    exists(nsl_pub) &*& [_]world(nsl_pub) &*&
     attacker_proof_obligations(nsl_pub) &*&
     initial_principals() &*& !bad(0) &*&
     info == nil;
@@ -32,7 +31,7 @@ struct nsl_args
 
 /*@
 predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) = 
-  [_]world(nsl_pub) &*& [_]net_api_initialized() &*&
+  [_]world(nsl_pub) &*&
   nsl_args_receiver(data, ?receiver) &*&
   nsl_args_key1(data, ?key_KB_PRIV) &*&
   !bad(receiver) &*&
@@ -61,7 +60,7 @@ void *receiver_t(void* data) //@ : pthread_run_joinable
 
 /*@
 predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) = 
-  [_]world(nsl_pub) &*& [_]net_api_initialized() &*&
+  [_]world(nsl_pub) &*&
   nsl_args_sender(data, ?sender) &*&
   nsl_args_receiver(data, ?receiver) &*&
   nsl_args_key1(data, ?key_KA_PRIV) &*&
@@ -124,7 +123,7 @@ int main() //@ : main
     pthread_t a_thread;
     //@ PACK_ATTACKER_PROOF_OBLIGATIONS(nsl)
     //@ close attacker_proof_obligations(nsl_pub);
-    //@ leak  world(nsl_pub) &*& net_api_initialized();
+    //@ leak  world(nsl_pub);
     //@ close pthread_run_pre(attacker_t)(null, _);
     pthread_create(&a_thread, null, &attacker_t, null);  
   }
@@ -135,7 +134,7 @@ int main() //@ : main
 #else
   while (true)
 #endif
-    /*@ invariant [_]world(nsl_pub) &*& [_]net_api_initialized() &*&
+    /*@ invariant [_]world(nsl_pub) &*&
                   generated_nonces(sendr, _) &*&
                   generated_nonces(receiver, _) &*&
                   key_item(KA_PRIV, sendr, 0, private_key, int_pair(0, 0)) &*&

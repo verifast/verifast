@@ -1,12 +1,11 @@
 #include "secure_storage.h"
-#include "attacker.h"
 
 #include <pthread.h>
 #include <stdio.h>
 
 /*@
 predicate_family_instance pthread_run_pre(attacker_t)(void *data, any info) = 
-    exists(ss_pub) &*& [_]world(ss_pub) &*& [_]net_api_initialized() &*&
+    exists(ss_pub) &*& [_]world(ss_pub) &*&
     attacker_proof_obligations(ss_pub) &*& initial_principals() &*& 
     !bad(0) &*& info == nil;
 @*/
@@ -22,7 +21,7 @@ void *attacker_t(void* _unused) //@ : pthread_run_joinable
 
 /*@
 predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) = 
-  [_]world(ss_pub) &*& [_]net_api_initialized() &*&
+  [_]world(ss_pub) &*&
   key_item(data, _, _, symmetric_key, int_pair(0, 0)) &*&
   info == nil;
 predicate_family_instance pthread_run_post(receiver_t)(void *data, any info) =
@@ -44,7 +43,7 @@ void *receiver_t(void* data) //@ : pthread_run_joinable
 
 /*@
 predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) = 
-  [_]world(ss_pub) &*& [_]net_api_initialized() &*&
+  [_]world(ss_pub) &*&
   key_item(data, ?sender, _, symmetric_key, int_pair(0, 0)) &*&
   info == cons(sender, nil);
 predicate_family_instance pthread_run_post(sender_t)(void *data, any info) =
@@ -94,9 +93,9 @@ int main() //@ : main
   
   {
     pthread_t a_thread;
+    //@ leak  world(ss_pub);
     //@ PACK_ATTACKER_PROOF_OBLIGATIONS(ss)
     //@ close attacker_proof_obligations(ss_pub);
-    //@ leak  world(ss_pub) &*& net_api_initialized();
     //@ close pthread_run_pre(attacker_t)(null, _);
     pthread_create(&a_thread, null, &attacker_t, null);  
   }
@@ -107,7 +106,7 @@ int main() //@ : main
 #else
   while (true)
 #endif
-    /*@ invariant [_]world(ss_pub) &*& [_]net_api_initialized() &*&
+    /*@ invariant [_]world(ss_pub) &*&
                   key_item(s_key, sender, _, symmetric_key, int_pair(0, 0)) &*&
                   key_item(r_key, _, _, symmetric_key, int_pair(0, 0));
     @*/

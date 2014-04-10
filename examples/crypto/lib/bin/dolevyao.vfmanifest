@@ -24,7 +24,7 @@
 .provides .\dolevyao.h#create_data_item
 .provides .\dolevyao.h#item_get_data
 .provides .\dolevyao.h#hmac
-.provides .\dolevyao.h#hmacsha1_verify
+.provides .\dolevyao.h#hmac_verify
 .provides .\dolevyao.h#check_is_hmac
 .provides .\dolevyao.h#inverse_key_kind
 .provides .\dolevyao.h#encrypt
@@ -39,7 +39,7 @@
 .provides .\dolevyao.h#network_receive
 .provides .\dolevyao.h#network_receive_attempt
 .provides .\dolevyao.h#create_principal
-.provides .\attacker.h#attacker
+.provides .\dolevyao.h#attacker
 # The empty filename is used for struct and predicates that never
 # can be given a body.
 .predicate @world
@@ -54,9 +54,9 @@
 .predicate .\dolevyao.h@keypair_request
 .predicate .\dolevyao.h@public_key_request
 .predicate .\dolevyao.h@entropy
-.predicate @net_api_uninitialized
+.predicate @net_api_initialized
 .predicate .\dolevyao.h@initial_principals
-.predicate .\attacker.h@attacker_proof_obligations
+.predicate .\dolevyao.h@attacker_proof_obligations
 .structure @item
 .structure @keypair
 .structure @network_status

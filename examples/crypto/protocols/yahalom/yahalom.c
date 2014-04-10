@@ -17,12 +17,12 @@ lemma void init_protocol()
 @*/
 
 struct item *sender(int sender, int receiver, struct item *KAS)
-  /*@ requires !bad(sender) &*& !bad(receiver) &*& !bad(0) &*&
-               [?f0]world(yahalom_pub) &*& [?f1]net_api_initialized() &*&
+  /*@ requires [?f0]world(yahalom_pub) &*&
+               !bad(sender) &*& !bad(receiver) &*& !bad(0) &*&
                generated_nonces(sender, ?count) &*& 
                key_item(KAS, sender, 0, symmetric_key, int_pair(0,0)); 
   @*/
-  /*@ ensures  [f0]world(yahalom_pub) &*& [f1]net_api_initialized() &*&
+  /*@ ensures  [f0]world(yahalom_pub) &*&
                generated_nonces(sender, count + 1) &*& 
                key_item(KAS, sender, 0, symmetric_key, int_pair(0,0)) &*& 
                // Secrecy of KAS
@@ -123,12 +123,12 @@ struct item *sender(int sender, int receiver, struct item *KAS)
 }
 
 void receiver(int receiver, struct item * KBS)
-  /*@ requires !bad(receiver) &*& !bad(0) &*&
-               [?f0]world(yahalom_pub) &*& [?f1]net_api_initialized() &*&
+  /*@ requires [?f0]world(yahalom_pub) &*&
+               !bad(receiver) &*& !bad(0) &*&
                generated_nonces(receiver, ?count) &*&
                key_item(KBS, receiver, 0, symmetric_key, int_pair(0,0)); 
   @*/
-  /*@ ensures  [f0]world(yahalom_pub) &*& [f1]net_api_initialized() &*&
+  /*@ ensures  [f0]world(yahalom_pub) &*&
                generated_nonces(receiver, count + 1) &*& 
                key_item(KBS, receiver, 0, symmetric_key, int_pair(0,0)); 
   @*/
@@ -161,14 +161,16 @@ void receiver(int receiver, struct item * KBS)
 struct item *core_receiver(struct network_status *net_stat_in, 
                            struct network_status *net_stat_out, int sender, 
                            struct item* NA, int receiver, struct item * KBS)
-  /*@ requires !bad(receiver) &*& !bad(0) &*&
-               [?f0]world(yahalom_pub) &*& [?f1]net_api_initialized() &*&
+  /*@ requires [?f0]world(yahalom_pub) &*&
+               network_status(net_stat_in) &*& network_status(net_stat_out) &*& 
+               !bad(receiver) &*& !bad(0) &*&
                generated_nonces(receiver, ?count) &*&
                key_item(KBS, receiver, 0, symmetric_key, int_pair(0,0)) &*&
                item(NA, nonce_item(?p, ?c, ?i)) &*& 
                yahalom_pub(nonce_item(p, c, i)) == true; 
   @*/
-  /*@ ensures  [f0]world(yahalom_pub) &*& [f1]net_api_initialized() &*&
+  /*@ ensures  [f0]world(yahalom_pub) &*&
+               network_status(net_stat_in) &*& network_status(net_stat_out) &*& 
                generated_nonces(receiver, count + 1) &*& 
                key_item(KBS, receiver, 0, symmetric_key, int_pair(0,0)) &*&
                // Secrecy of KBS
@@ -257,14 +259,14 @@ struct item *core_receiver(struct network_status *net_stat_in,
 }
 
 void server(int sender, int receiver, struct item *KAS, struct item *KBS, struct item *KAB)
-  /*@ requires [?f0]world(yahalom_pub) &*& [?f1]net_api_initialized() &*&
+  /*@ requires [?f0]world(yahalom_pub) &*&
                !bad(0) &*& !bad(sender) &*& !bad(receiver) &*&
                key_item(KAS, sender, 0, symmetric_key, int_pair(0,0)) &*&
                key_item(KBS, receiver, 0, symmetric_key, int_pair(0,0)) &*&
                item(KAB, key_item(sender, ?count, symmetric_key, 
                                                          int_pair(2,receiver)));
   @*/
-  /*@ ensures [f0]world(yahalom_pub) &*& [f1]net_api_initialized() &*&
+  /*@ ensures [f0]world(yahalom_pub) &*&
               key_item(KAS, sender, 0, symmetric_key, int_pair(0,0)) &*&
               key_item(KBS, receiver, 0, symmetric_key, int_pair(0,0)) &*&
               item(KAB, key_item(sender, count, symmetric_key, 

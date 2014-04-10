@@ -15,13 +15,13 @@ lemma void init_protocol()
 @*/
 
 struct item *client(int server, struct item *key, struct item *request)
-  /*@ requires [?f0]world(rpc_pub) &*& [?f1]net_api_initialized() &*&
+  /*@ requires [?f0]world(rpc_pub) &*&
                key_item(key, ?creator, ?id, symmetric_key, int_pair(0, 0)) &*& 
                item(request, ?req) &*&
                rpc_pub(req) == true &*& request(creator, server, req) == true &*& 
                shared_with(creator, id) == server; 
   @*/
-  /*@ ensures  [f0]world(rpc_pub) &*& [f1]net_api_initialized() &*&
+  /*@ ensures  [f0]world(rpc_pub) &*&
                key_item(key, creator, id, symmetric_key, int_pair(0, 0)) &*& 
                item(request, req) &*& 
                item(result, ?resp) &*& bad(creator) || bad(server) || 
@@ -42,12 +42,13 @@ struct item *client(int server, struct item *key, struct item *request)
         item_free(m);
     }
     
+    struct item *response;
     {
         struct item *r = network_receive(net_stat);
         struct item *hash = pair_get_first(r);
         struct item *payload = pair_get_second(r);
         item_free(r);
-        hmacsha1_verify(hash, key, payload);
+        hmac_verify(hash, key, payload);
         item_free(hash);
         struct item *tag = pair_get_first(payload);
         int tagValue = item_get_data(tag);
@@ -56,26 +57,28 @@ struct item *client(int server, struct item *key, struct item *request)
         struct item *reqresp = pair_get_second(payload);
         item_free(payload);
         struct item *request1 = pair_get_first(reqresp);
-        struct item *response = pair_get_second(reqresp);
+        response = pair_get_second(reqresp);
         item_free(reqresp);
         bool eq = item_equals(request, request1);
         if (!eq) abort();
         item_free(request1);
-        return response;
     }
     
     network_disconnect(net_stat);
+    return response;
 }
 
 // This function represents the server application.
 // We pass in the key predicate just to get hold of the creator principal id.
 struct item *compute_response(struct item *request)
-  /*@ requires key_item(?key, ?creator, ?id, symmetric_key, ?info) &*& 
+  /*@ requires [?f]world(rpc_pub) &*& 
+               key_item(?key, ?creator, ?id, symmetric_key, ?info) &*& 
                item(request, ?req) &*& 
                bad(creator) || bad(shared_with(creator, id)) || 
                request(creator, shared_with(creator, id), req) == true; 
   @*/
-  /*@ ensures  key_item(key, creator, id, symmetric_key, info) &*& 
+  /*@ ensures  [f]world(rpc_pub) &*& 
+               key_item(key, creator, id, symmetric_key, info) &*& 
                item(request, req) &*& 
                item(result, ?resp) &*& rpc_pub(resp) == true &*& 
                response(creator, shared_with(creator, id), req, resp) == true;
@@ -89,11 +92,11 @@ struct item *compute_response(struct item *request)
 }
 
 void server(int serverId, struct item *key)
-  /*@ requires [?f0]world(rpc_pub) &*& [?f1]net_api_initialized() &*&
+  /*@ requires [?f0]world(rpc_pub) &*&
                key_item(key, ?creator, ?id, symmetric_key, ?info) &*& 
                shared_with(creator, id) == serverId; 
   @*/
-  /*@ ensures  [f0]world(rpc_pub) &*& [f1]net_api_initialized() &*&
+  /*@ ensures  [f0]world(rpc_pub) &*&
                key_item(key, creator, id, symmetric_key, info);
   @*/
 {
@@ -105,7 +108,7 @@ void server(int serverId, struct item *key)
         struct item *hash = pair_get_first(r);
         struct item *payload = pair_get_second(r);
         item_free(r);
-        hmacsha1_verify(hash, key, payload);
+        hmac_verify(hash, key, payload);
         item_free(hash);
         struct item *tag = pair_get_first(payload);
         int tagValue = item_get_data(tag);

@@ -1,5 +1,4 @@
 #include "rpc.h"
-#include "attacker.h"
 
 #include <pthread.h>
 #include <stdio.h>
@@ -7,7 +6,7 @@
 
 /*@
 predicate_family_instance pthread_run_pre(attacker_t)(void *data, any info) = 
-    exists(rpc_pub) &*& [_]world(rpc_pub) &*& [_]net_api_initialized() &*&
+    exists(rpc_pub) &*& [_]world(rpc_pub) &*&
     attacker_proof_obligations(rpc_pub) &*&
     initial_principals() &*& !bad(0) &*&
     info == nil;
@@ -32,7 +31,7 @@ struct rpc_args
 
 /*@
 predicate_family_instance pthread_run_pre(server_t)(void *data, any info) = 
-  [_]world(rpc_pub) &*& [_]net_api_initialized() &*&
+  [_]world(rpc_pub) &*&
   rpc_args_server(data, ?server) &*&
   rpc_args_client(data, ?client) &*&
   rpc_args_key(data, ?key) &*&
@@ -61,7 +60,7 @@ void *server_t(void* data) //@ : pthread_run_joinable
 
 /*@
 predicate_family_instance pthread_run_pre(client_t)(void *data, any info) = 
-  [_]world(rpc_pub) &*& [_] net_api_initialized() &*&
+  [_]world(rpc_pub) &*&
   rpc_args_server(data, ?server) &*&
   rpc_args_client(data, ?client) &*&
   rpc_args_key(data, ?key) &*&
@@ -120,7 +119,7 @@ int main() //@ : main
     pthread_t a_thread;
     //@ PACK_ATTACKER_PROOF_OBLIGATIONS(rpc)
     //@ close attacker_proof_obligations(rpc_pub);
-    //@ leak  world(rpc_pub) &*& net_api_initialized();
+    //@ leak  world(rpc_pub);
     //@ close pthread_run_pre(attacker_t)(null, _);
     pthread_create(&a_thread, null, &attacker_t, null);  
   }
@@ -131,7 +130,7 @@ int main() //@ : main
 #else
   while (true)
 #endif
-    /*@ invariant [_]world(rpc_pub) &*& [_]net_api_initialized() &*&
+    /*@ invariant [_]world(rpc_pub) &*&
                   key |-> kkey &*& shared_with(client, id) == server &*&
                   key_item(kkey, client, id, symmetric_key, int_pair(0, 0));
     @*/

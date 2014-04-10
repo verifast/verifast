@@ -1,5 +1,4 @@
 #include "nss.h"
-#include "attacker.h"
 
 #include <pthread.h>
 #include <stdio.h>
@@ -7,7 +6,7 @@
 
 /*@
 predicate_family_instance pthread_run_pre(attacker_t)(void *data, any info) = 
-    exists(nss_pub) &*& [_]world(nss_pub) &*& [_]net_api_initialized() &*&
+    exists(nss_pub) &*& [_]world(nss_pub) &*&
     attacker_proof_obligations(nss_pub) &*&
     initial_principals() &*& !bad(0) &*&
     info == nil;
@@ -33,7 +32,7 @@ struct nss_args
 
 /*@
 predicate_family_instance pthread_run_pre(server_t)(void *data, any info) = 
-  [_]world(nss_pub) &*& [_]net_api_initialized() &*&
+  [_]world(nss_pub) &*&
   nss_args_sender(data, ?sender) &*&
   nss_args_receiver(data, ?receiver) &*&
   nss_args_key_AS(data, ?key_AS) &*&
@@ -71,7 +70,7 @@ void *server_t(void* data) //@ : pthread_run_joinable
 
 /*@
 predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) = 
-  [_]world(nss_pub) &*& [_]net_api_initialized() &*&
+  [_]world(nss_pub) &*&
   nss_args_receiver(data, ?receiver) &*&
   nss_args_key_BS(data, ?key_BS) &*&
   !bad(0) &*& !bad(receiver) &*&
@@ -100,7 +99,7 @@ void *receiver_t(void* data) //@ : pthread_run_joinable
 
 /*@
 predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) = 
-  [_]world(nss_pub) &*& [_]net_api_initialized() &*&
+  [_]world(nss_pub) &*&
   nss_args_sender(data, ?sender) &*&
   nss_args_receiver(data, ?receiver) &*&
   nss_args_key_AS(data, ?key_AS) &*&
@@ -109,7 +108,7 @@ predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
   key_item(key_AS, sender, 0, symmetric_key, int_pair(0, 0)) &*&
   info == cons(sender, nil);
 predicate_family_instance pthread_run_post(sender_t)(void *data, any info) = 
-  [_]world(nss_pub) &*& [_]net_api_initialized() &*&
+  [_]world(nss_pub) &*&
   nss_args_sender(data, ?sender) &*&
   nss_args_receiver(data, ?receiver) &*&
   nss_args_key_AS(data, ?key_AS) &*&
@@ -160,7 +159,7 @@ int main() //@ : main
     pthread_t a_thread;
     //@ PACK_ATTACKER_PROOF_OBLIGATIONS(nss)
     //@ close attacker_proof_obligations(nss_pub);
-    //@ leak  world(nss_pub) &*& net_api_initialized();
+    //@ leak  world(nss_pub);
     //@ close pthread_run_pre(attacker_t)(null, _);
     pthread_create(&a_thread, null, &attacker_t, null);  
   }
@@ -172,7 +171,7 @@ int main() //@ : main
   while (true)
 #endif
     /*@ invariant 
-              [_]world(nss_pub) &*& [_]net_api_initialized() &*&
+              [_]world(nss_pub) &*&
               generated_nonces(sender, _) &*&
               key_AS |-> ?kkey_AS &*& key_item(kkey_AS, 
                           sender, 0, symmetric_key, int_pair(0, 0)) &*&

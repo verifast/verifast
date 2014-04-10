@@ -3,7 +3,6 @@
 
 // See explanations in ../../lib/include/dolevyao.h
 #include "dolevyao.h"
-#include "attacker.h"
 
 /*
 
@@ -50,21 +49,21 @@ lemma void init_protocol();
 @*/
 
 void app_send(struct item *key, struct item *message);
-  /*@ requires [?f0]world(ss_pub) &*& [?f1]net_api_initialized() &*&
+  /*@ requires [?f0]world(ss_pub) &*&
                 key_item(key, ?creator, ?id, symmetric_key, int_pair(0, 0)) &*& 
                 item(message, ?msg) &*& ss_pub(msg) == true &*& 
                 app_send_event(creator, msg) == true; 
   @*/
-  /*@ ensures  [f0]world(ss_pub) &*& [f1]net_api_initialized() &*&
+  /*@ ensures  [f0]world(ss_pub) &*&
                 key_item(key, creator, id, symmetric_key, int_pair(0, 0)) &*& 
                 item(message, msg); 
   @*/
 
 struct item *app_receive(struct item *key);
-  /*@ requires [?f0]world(ss_pub) &*& [?f1]net_api_initialized() &*&
+  /*@ requires [?f0]world(ss_pub) &*&
                 key_item(key, ?creator, ?id, symmetric_key, int_pair(0, 0)); 
   @*/
-  /*@ ensures [f0]world(ss_pub) &*& [f1]net_api_initialized() &*&
+  /*@ ensures [f0]world(ss_pub) &*&
               key_item(key, creator, id, symmetric_key, int_pair(0, 0)) &*& 
               item(result, ?msg) &*& bad(creator) || 
               app_send_event(creator, msg); 
