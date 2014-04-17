@@ -108,11 +108,7 @@ cd examples
     mysh < MockKernel.mysh
   cd ..
   cd module_imports
-    verifast_both mysubmodule.c mymodule.c client.c
-    verifast_both -link_should_fail mysubmodule.c mymodule.c fail_client.c
-    cd circular_deps
-      verifast_both -link_should_fail b.c a.c
-    cd ..
+    mysh -cpus 1 < module_imports.mysh
   cd ..
   cd linking
     mysh < linking.mysh
@@ -149,7 +145,7 @@ cd examples
   verifast_both -c -allow_should_fail carrays.c
   cd helloproc
     # Helloproc.mysh is not parallelizable.  mysh does not guarantee that 1 will be
-    # the default number of cpus forever, so we explicitly specify it to be 1.  
+    # the default number of cpus forever, so we explicitly specify it to be 1.
     mysh -cpus 1 < helloproc.mysh
   cd ..
   cd usbkbd

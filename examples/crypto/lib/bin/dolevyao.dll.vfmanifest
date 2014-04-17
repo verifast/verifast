@@ -176,7 +176,6 @@
 .requires list.gh#reverse_reverse
 .requires list.gh#take_0
 .requires list.gh#take_length
-.requires module list
 .requires listex.gh#append_drop_take
 .requires listex.gh#distinct_mem_nth_take
 .requires listex.gh#distinct_mem_remove
@@ -220,24 +219,20 @@
 .requires listex.gh#subset_trans
 .requires listex.gh#take_append
 .requires listex.gh#take_plus_one
-.requires module listex
 .requires raw_ghost_lists.gh#create_raw_ghost_list
 .requires raw_ghost_lists.gh#raw_ghost_list_add
 .requires raw_ghost_lists.gh#raw_ghost_list_match
 .requires raw_ghost_lists.gh#raw_ghost_list_remove
-.requires module raw_ghost_lists
 .requires arrays.gh#ints_join
 .requires arrays.gh#ints_limits
 .requires arrays.gh#ints_split
 .requires arrays.gh#ints_unseparate
 .requires arrays.gh#ints_unseparate_same
-.requires module arrays
 .requires quantifiers.gh#apply_forall_proof
 .requires quantifiers.gh#forall_elim
 .requires quantifiers.gh#forall_nth_elim
 .requires quantifiers.gh#not_forall
 .requires quantifiers.gh#not_forall_nth
-.requires module quantifiers
 .requires assoclist.gh#append_update_entry
 .requires assoclist.gh#append_values
 .requires assoclist.gh#assoc_append
@@ -257,7 +252,6 @@
 .requires assoclist.gh#take_values
 .requires assoclist.gh#update_entry_preserves_keys
 .requires assoclist.gh#update_entry_preserves_other_values
-.requires module assoclist
 .requires permutations.gh#all_count_eq_iff_is_permutation
 .requires permutations.gh#count_eq_bounds
 .requires permutations.gh#count_eq_nonzero_implies_mem
@@ -268,7 +262,6 @@
 .requires permutations.gh#is_perm_symmetric
 .requires permutations.gh#is_perm_transitive
 .requires permutations.gh#is_permutation_reflexive
-.requires module permutations
 .requires threading.h#create_mutex
 .requires threading.h#mutex_acquire
 .requires threading.h#mutex_release

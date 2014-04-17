@@ -1,0 +1,22 @@
+let verifast_both
+ifz3 verifast
+verifast -prover redux
+in
+
+verifast_both mysubmodule.c mymodule.c client.c
+verifast_both -c -emit_vfmanifest mymodule.c
+verifast_both -c -emit_vfmanifest mysubmodule.c
+verifast_both -shared mysubmodule.vfmanifest mymodule.vfmanifest -emit_dll_vfmanifest -emit_dll_vfmanifest_as modules.dll.vfmanifest
+verifast_both modules.dll.vfmanifest client.c
+del mymodule.vfmanifest
+del mysubmodule.vfmanifest
+del modules.dll.vfmanifest
+verifast_both -shared -emit_dll_vfmanifest mysubmodule.c
+verifast_both -shared -emit_dll_vfmanifest mysubmodule.dll.vfmanifest mymodule.c
+verifast_both mysubmodule.dll.vfmanifest mymodule.dll.vfmanifest client.c
+del mymodule.dll.vfmanifest
+del mysubmodule.dll.vfmanifest
+verifast_both -link_should_fail mysubmodule.c mymodule.c fail_client.c
+cd circular_deps
+  verifast_both -link_should_fail b.c a.c
+cd ..

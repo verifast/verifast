@@ -3072,7 +3072,7 @@ let link_program isLibrary allModulepaths dllModulepaths emitDllManifest dllMani
               else 
                 raise (LinkError ("Module '" ^ modulepath ^ "': unsatisfied requirement '" ^ symbol ^ "'."))
             | ".produces" -> 
-              iter0 (symbol::impls', structs', preds') (symbol::mods') lines
+              iter0 (impls', structs', preds') (symbol::mods') lines
             | ".imports" -> 
               let mods'' =
                 consume (fun x -> "Module '" ^ modulepath ^ "': unsatisfied import '" ^ x ^ "'.") symbol mods
@@ -3083,46 +3083,46 @@ let link_program isLibrary allModulepaths dllModulepaths emitDllManifest dllMani
       in
       iter0 (impls, structs, preds) mods lines
   in
-  let ((impls, structs, preds), _) = iter ([], [], []) [] allModulepaths in
+  let ((impls, structs, preds), mods) = iter ([], [], []) [] allModulepaths in
   let mainModulePath = match List.rev allModulepaths with [] -> raise (LinkError "DLL must contain at least one module.") | m::_ -> m in
   let mainModuleName = try Filename.chop_extension (Filename.basename mainModulePath) with Invalid_argument _ -> raise (CompilationError "file without extension") in
-  let impls =
+  let mods =
     if not isLibrary then
       if not (List.mem "main : prelude.h#main()" impls) then
         if not (List.mem (Printf.sprintf "main : prelude.h#main_full(%s)" mainModuleName) impls) then
           raise (LinkError ("Program does not implement a function 'main' that implements function type 'main' or 'main_full' declared in prelude.h. Use the '-shared' option to suppress this error."))
         else
-          consume (fun _ -> "Could not consume the main module") ("module " ^ mainModuleName) impls
+          consume (fun _ -> "Could not consume the main module") ("module " ^ mainModuleName) mods
       else
-        impls
+        mods
     else
-      impls
+      mods
   in
-  let impls =
-    let rec iter impls exports =
+  let (impls, mods) =
+    let rec iter (impls, mods) exports =
       match exports with
-        [] -> impls
+        [] -> (impls, mods)
       | exportPath::exports ->
         let lines = try read_file_lines exportPath with FileNotFound -> failwith ("Could not find export manifest file '" ^ exportPath ^ "'") in
-        let rec iter' impls lines =
+        let rec iter' (impls, mods) lines =
           match lines with
-            [] -> impls
+            [] -> (impls, mods)
           | line::lines ->
             let (command, symbol) = parse_line line in
             match command with
               ".provides" ->
               if List.mem symbol impls then
-                iter' impls lines
+                iter' (impls, mods) lines
               else
                 raise (LinkError (Printf.sprintf "Unsatisfied requirement '%s' in export manifest '%s'" symbol exportPath))
             | ".produces" ->
-              let impls = consume (fun s -> Printf.sprintf "Unsatisfied requirement '%s' in export manifest '%s'" s exportPath) symbol impls in
-              iter' impls lines
+              let mods = consume (fun s -> Printf.sprintf "Unsatisfied requirement '%s' in export manifest '%s'" s exportPath) symbol mods in
+              iter' (impls, mods) lines
         in
-        let impls = iter' impls lines in
-        iter impls exports
+        let (impls, mods) = iter' (impls, mods) lines in
+        iter (impls, mods) exports
     in
-    iter impls exports
+    iter (impls, mods) exports
   in
   if emitDllManifest then
   begin
@@ -3150,6 +3150,12 @@ let link_program isLibrary allModulepaths dllModulepaths emitDllManifest dllMani
         in
         List.iter (fun (name, file) -> print_if_necesarry ".structure" file name) structs;
         List.iter (fun (name, file) -> print_if_necesarry ".predicate" file name) preds;
+        let print_module m =
+          let produces = Printf.sprintf ".produces %s" m in
+          if not (List.mem produces other_dll_lines) then
+            Printf.fprintf manifestFile "%s\n" produces
+        in
+        List.iter print_module mods;
         close_out manifestFile
       with
         Sys_error s -> raise (LinkError (Printf.sprintf "Could not create DLL manifest file '%s': %s" manifestPath s))
