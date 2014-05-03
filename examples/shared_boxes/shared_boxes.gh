@@ -1,0 +1,29 @@
+#include <ghost_cells.gh>
+
+typedef lemma void preds_preserved<S,A,P>(fixpoint(S,S,A,list<int>,bool) action_sat, fixpoint(S,int,P,bool) pred_sat)(S s0, S s1, list<int> actionHandles, A a, int predicateHandle, P p);
+    requires pred_sat(s0, predicateHandle, p) && action_sat(s0, s1, a, actionHandles) && !mem(predicateHandle, actionHandles);
+    ensures pred_sat(s1, predicateHandle, p) == true;
+
+predicate shared_box<S,A,P>(int id, fixpoint(S,S,A,list<int>,bool) action_sat, fixpoint(S,int,P,bool) pred_sat, S s);
+
+lemma int create_shared_box<S,A,P>(S s);
+    requires is_preds_preserved<S,A,P>(?lem, ?action_sat, ?pred_sat);
+    ensures shared_box<S,A,P>(result, action_sat, pred_sat, s);
+
+lemma void shared_box_perform_action0<S,A,P>(int id, S s1, A a);
+    requires shared_box<S,A,P>(id, ?action_sat, ?pred_sat, ?s0) &*& action_sat(s0, s1, a, nil) == true;
+    ensures shared_box(id, action_sat, pred_sat, s1);
+
+lemma void shared_box_perform_action1<S,A,P>(int id, S s1, A a, int actionHandle);
+    requires shared_box<S,A,P>(id, ?action_sat, ?pred_sat, ?s0) &*& action_sat(s0, s1, a, {actionHandle}) == true &*& ghost_cell(actionHandle, ?v);
+    ensures shared_box(id, action_sat, pred_sat, s1) &*& ghost_cell(actionHandle, v);
+
+predicate shared_box_pred<P>(int id, int handleId, P p);
+
+lemma void shared_box_add_pred<S,A,P>(int id, int handleId, P p);
+    requires shared_box(id, ?action_sat, ?pred_sat, ?s) &*& pred_sat(s, handleId, p) == true &*& [2/3]ghost_cell(handleId, _);
+    ensures shared_box(id, action_sat, pred_sat, s) &*& shared_box_pred(id, handleId, p);
+
+lemma void shared_box_remove_pred<S,A,P>(int id, int handleId);
+    requires shared_box(id, ?action_sat, ?pred_sat, ?s) &*& shared_box_pred(id, handleId, ?p);
+    ensures shared_box(id, action_sat, pred_sat, s) &*& pred_sat(s, handleId, p) == true &*& [2/3]ghost_cell(handleId, _);

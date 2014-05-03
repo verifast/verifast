@@ -43,6 +43,7 @@ cd examples
     verifast_both -c lcl_set.c
     verifast_both -c cell_refcounted.c
     ifz3 verifast -c cowl.c
+    verifast_both -c shared_boxes.c
   cd ..
   ifz3 verifast stringBuffers.c sockets.o bot.c
   verifast_both -disable_overflow_check cat.c
