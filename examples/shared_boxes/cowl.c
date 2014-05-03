@@ -103,6 +103,8 @@ predicate_ctor I(struct node* n, box id)() =
   malloc_block_node(n) &*& foreach(keys(owners), is_handle) &*&
   (next == 0 ? values == cons(value, nil) : is_client_wrapper(next, ?nha, ?nid, ?nf) &*& [nf]next->values |-> ?tail &*& values == cons(value, tail));
 
+predicate is_client_wrapper(struct node* n, handle ha, box id, real f) = is_client(ha, id, f) &*& [f]lock(&n->lock, I(n, id));
+
 predicate list(struct list* l, list<int> values) = 
   l->head |-> ?head &*& malloc_block_list(l) &*&
   head == 0 ? values == nil : is_client_wrapper(head, ?ha, ?id, ?f) &*& [f]head->values |-> values;
@@ -161,8 +163,6 @@ struct list* copy_cow_list(struct list* src)
   return l;
 }
 
-//@ predicate is_client_wrapper(struct node* n, handle ha, box id, real f) = is_client(ha, id, f) &*& [f]lock(&n->lock, I(n, id));
-
 void cow_list_insert(struct list* l, int x)
   //@ requires list(l, ?values);
   //@ ensures list(l, cons(x, values));
@@ -176,7 +176,6 @@ void cow_list_insert(struct list* l, int x)
   if(l->head != 0) {
     //@ open is_client_wrapper(old_head, ?ha, ?id, ?f);
     //@ the_handle = ha;
-    acquire(&l->head->lock);
   }
   new_node->next = l->head;
   l->head = new_node;
@@ -186,7 +185,6 @@ void cow_list_insert(struct list* l, int x)
   //@ close exists(I(new_node, new_id));
   init(&new_node->lock);
   if(new_node->next != 0) {
-    release(&new_node->next->lock);
     //@ close is_client_wrapper(old_head, the_handle, _, _);
   }
   //@ close foreach(nil, is_handle);

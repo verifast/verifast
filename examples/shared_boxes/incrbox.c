@@ -1,85 +1,81 @@
-#include "threading.h"
+#include <threading.h>
 #include "atomics.h"
 
 /*@
-box_class incr_box(int* x) {
-  invariant integer(x, ?value);
-  
-  action increase(int amount);
-    requires 0 <= amount;
-    ensures value == old_value + amount;
+
+box_class incr_box(int *x) {
+    invariant *x |-> ?value;
     
-  handle_predicate observed(int myvalue) {
-    invariant myvalue <= value;
+    action increase();
+        requires true;
+        ensures old_value <= value;
     
-    preserved_by increase(amount) { }
-  }
+    handle_predicate observed(int v) {
+        invariant v <= value;
+    
+        preserved_by increase() {}
+    }
 }
+
 @*/
 
-//@ predicate_family_instance thread_run_data(inc)(int* x) = [1/2]incr_box(?id, x);
+//@ predicate_family_instance thread_run_data(inc)(int* x) = [_]incr_box(_, x);
 
-void inc(int* x) //@ : thread_run
-  //@ requires thread_run_data(inc)(x);
-  //@ ensures true;
+void inc(int *x) //@ : thread_run
+    //@ requires thread_run_data(inc)(x);
+    //@ ensures true;
 {
-  //@ open thread_run_data(inc)(x);
-  //@ assert [?f]incr_box(?id, x);
-  //@ handle ha = create_handle incr_box_handle(id);
-  while(true)
-    //@ invariant [f]incr_box(id, x) &*& incr_box_handle(ha, id);
-  {;
-    /*@
-    consuming_box_predicate incr_box(id, x)
-    consuming_handle_predicate incr_box_handle(ha)
-    perform_action increase(1) atomic
+    //@ open thread_run_data(inc)(x);
+    while(true)
+        //@ invariant [_]incr_box(_, x);
     {
-      @*/ atomic_increment(x); /*@
+        ;
+        /*@
+        consuming_box_predicate incr_box(_, x)
+        perform_action increase()
+        {
+            @*/ atomic_increment(x); /*@
+        };
+        @*/
     }
-    producing_handle_predicate incr_box_handle();
-    @*/
-  }
 }
 
-void reader(int* x)
-  //@ requires [1/2]incr_box(?id, x);
-  //@ ensures false;
-{;
-  //@ handle ha = create_handle incr_box_handle(id);
-  /*@
-  consuming_box_predicate incr_box(id, x)
-  consuming_handle_predicate incr_box_handle(ha)
-  perform_action increase(0) atomic
-  {
-    @*/ int value = atomic_load_int(x); /*@
-  }
-  producing_handle_predicate observed(value);
-  @*/
-  while(true)
-    //@ invariant [1/2]incr_box(id, x) &*& observed(ha, id, value);
-  {;
-    /*@
-    consuming_box_predicate incr_box(id, x)
-    consuming_handle_predicate observed(ha, value)
-    perform_action increase(0) atomic
+void reader(int *x)
+    //@ requires [_]incr_box(_, x);
+    //@ ensures false;
+{
+    for (;;)
+        //@ invariant [_]incr_box(_, x);
     {
-      @*/ int tmp = atomic_load_int(x); /*@
+        ;
+        /*@
+        consuming_box_predicate incr_box(_, x)
+        perform_action increase()
+        {
+            @*/ int m0 = atomic_load_int(x); /*@
+        }
+        producing_fresh_handle_predicate observed(m0);
+        @*/
+        /*@
+        consuming_box_predicate incr_box(_, x)
+        consuming_handle_predicate observed(_, m0)
+        perform_action increase()
+        {
+            @*/ int m1 = atomic_load_int(x); /*@
+        };
+        @*/
+        assert(m0 <= m1);
     }
-    producing_handle_predicate observed(tmp);
-    @*/
-    assert value <= tmp;
-    value = tmp;
-  }
 }
 
 int main()
-  //@ requires true;
-  //@ ensures true;
+    //@ requires true;
+    //@ ensures true;
 {
-  int x;
-  //@ create_box id = incr_box(&x);
-  //@ close thread_run_data(inc)(&x);
-  thread_start(inc, &x);
-  reader(&x);
-  return 0;
+    int x;
+    //@ create_box id = incr_box(&x);
+    //@ leak incr_box(id, &x);
+    //@ close thread_run_data(inc)(&x);
+    thread_start(inc, &x);
+    reader(&x);
 }
