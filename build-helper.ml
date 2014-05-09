@@ -4,6 +4,7 @@ open Unix;;
 open Printf;;
 
 let releases = [ (* Add new releases to the front *)
+  "14.5"; 1544;
   "13.11.14", 1467;
   "13.11", 1463;
   "12.12", 1307;
@@ -60,8 +61,6 @@ let sh cmd =
 let rm_Rf_cmd = match Sys.os_type with "Win32" -> "rmdir /s /q " | _ -> "rm -Rf "
 let rm_Rf dir = sh (rm_Rf_cmd ^ dir)
 
-let make_cmd = match Sys.os_type with "Win32" -> "nmake" | _ -> "make"
-
 let (create_zip_cmd, zipext) =
   match Sys.os_type with
     "Win32" -> ("7z a", ".zip")
@@ -108,7 +107,7 @@ let () =
   Sys.chdir exportdir;
   Sys.chdir "src";
   let mac_flag = if is_macos then "MAC=yes" else "" in
-  sh (sprintf "%s %s VFVERSION=%s release" make_cmd mac_flag release);
+  sh (sprintf "make %s VFVERSION=%s release" mac_flag release);
   let releasename = Printf.sprintf "verifast-%s" release in
   let zipname = releasename ^ os_suffix ^ zipext in
   let zippath = ".." // ".." // zipname in

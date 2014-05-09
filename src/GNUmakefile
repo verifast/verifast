@@ -429,20 +429,62 @@ redux.cmx: $(INCLUDE_OS_DIR)/Perf.cmx proverapi.cmx simplex.cmx redux.ml
 #------------------------------- Release ------------------------------------#
 release: release_core
 release_core: test build
-ifeq ($(OS), Cygwin)
-	$(error Cygwin currently not supported for release)
-endif
-	mkdir verifast-$(VFVERSION)
+	rm -Rf verifast-$(VFVERSION); mkdir verifast-$(VFVERSION)
 	cp -R ../bin verifast-$(VFVERSION)
 ifdef Z3
+ifeq ($(OS), Cygwin)
+	cd $(GTK)/bin && cp -v \
+    FREETYPE6.DLL \
+    INTL.DLL \
+    LIBATK-1.0-0.DLL \
+    LIBCAIRO-2.DLL \
+    LIBEXPAT-1.DLL \
+    LIBFONTCONFIG-1.DLL \
+    LIBGDK-WIN32-2.0-0.DLL \
+    LIBGDK_PIXBUF-2.0-0.DLL \
+    LIBGIO-2.0-0.DLL \
+    LIBGLIB-2.0-0.DLL \
+    LIBGMODULE-2.0-0.DLL \
+    LIBGOBJECT-2.0-0.DLL \
+    LIBGTHREAD-2.0-0.DLL \
+    LIBGTK-WIN32-2.0-0.DLL \
+    LIBGTKSOURCEVIEW-2.0-0.DLL \
+    LIBPANGO-1.0-0.DLL \
+    LIBPANGOCAIRO-1.0-0.DLL \
+    LIBPANGOFT2-1.0-0.DLL \
+    LIBPANGOWIN32-1.0-0.DLL \
+    LIBPNG14-14.DLL \
+    LIBXML2-2.DLL \
+    ZLIB1.DLL \
+    $(CWD)/verifast-$(VFVERSION)/bin
+	cp $(Z3)/bin/z3.dll verifast-$(VFVERSION)/bin
+	cp -R $(Z3)/bin/Microsoft.VC90.CRT verifast-$(VFVERSION)/bin
+	cd verifast-$(VFVERSION) && \
+	mkdir etc && \
+	cd etc && \
+	mkdir gtk-2.0 && \
+	cd gtk-2.0 && \
+	echo "" > gdk-pixbuf.loaders && \
+	echo 'gtk-theme-name = "MS-Windows"' > gtkrc && \
+	cd .. && \
+	cd .. && \
+	mkdir -p share/themes/MS-Windows/gtk-2.0 && \
+	cd share/themes/MS-Windows/gtk-2.0 && \
+	cp $(GTK)/share/themes/MS-Windows/gtk-2.0/gtkrc . && \
+	cd ../../../.. && \
+	mkdir -p lib/gtk-2.0/2.10.0/engines && \
+	cp $(GTK)/lib/gtk-2.0/2.10.0/engines/libwimp.dll lib/gtk-2.0/2.10.0/engines
+else
 	cd verifast-$(VFVERSION)/bin; mv verifast verifast-core
 	cd verifast-$(VFVERSION)/bin; mv vfide vfide-core
 	cp verifast.sh verifast-$(VFVERSION)/bin/verifast
 	cp vfide.sh verifast-$(VFVERSION)/bin/vfide
 	cp $(Z3)/lib/libz3-gmp.so verifast-$(VFVERSION)/bin
 	cp /usr/lib/libgtksourceview-2.0.so.0.0.0 verifast-$(VFVERSION)/bin/libgtksourceview-2.0.so.0
+endif
 	cp ../Z3.LICENSE.txt verifast-$(VFVERSION)
-else
+endif
+ifeq ($(OS), Darwin)
 	cd verifast-$(VFVERSION)/bin; mv vfide vfide-core
 	cp vfide-mac.sh verifast-$(VFVERSION)/bin/vfide
 	cp -R ~/Desktop/GtkDemo.app/Contents/Resources/* verifast-$(VFVERSION)
@@ -455,5 +497,8 @@ endif
 	mkdir verifast-$(VFVERSION)/tutorial
 	cd verifast-$(VFVERSION)/tutorial_solutions; for f in *.c; do ../bin/vfstrip < $$f > ../tutorial/$$f; done; cd ../..
 	cp ../testsuite.mysh verifast-$(VFVERSION)
+ifeq ($(OS), Cygwin)
+	cp ../test.bat verifast-$(VFVERSION)
+else
 	cp ../test.sh verifast-$(VFVERSION)
-
+endif
