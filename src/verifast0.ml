@@ -158,7 +158,7 @@ let parse_java_file (path: string) (reportRange: range_kind -> loc -> unit) repo
     let ast_server_launch =
       try Sys.getenv "VERIFAST_JAVA_AST_SERVER"  
       with Not_found ->
-        let ast_server_filename = "ast_server-fe655c5.jar" in
+        let ast_server_filename = "ast_server-5b3d969.jar" in
         let open Printf in
         let error_message =
           "\nYou specified the option -javac to use the STANCE Java frontend. " ^
