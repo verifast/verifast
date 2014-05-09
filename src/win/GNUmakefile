@@ -2,4 +2,4 @@ win/Perf.cmxa: win/caml_perf.c win/Perf.mli win/Perf.ml win/Stopwatch.mli win/ca
 	cd win; ocamlopt.opt -a -o Perf.cmxa caml_perf.c Perf.mli Perf.ml Stopwatch.mli caml_stopwatch.c
 
 clean::
-	rm win/*.o win/*.a win/*.cm*
+	rm -f win/*.o win/*.a win/*.cm*

@@ -26,6 +26,11 @@ include ../GNUmakefile.settings
 
 # Lablgtk configuration
 ifndef WITHOUT_LABLGTK
+  ifeq ($(OS), Cygwin)
+    LABLGTK_FLAGS += -I +site-lib/lablgtk2 lablgtk.cmxa
+  else
+    LABLGTK_FLAGS += -I +lablgtk2 lablgtk.cmxa
+  endif
   ifeq ($(OS), Darwin)
     GTKSOURCEVIEW_LFLAGS += -I macos GSourceView2.cmx
     GTKSOURCEVIEW_DEPS   += macos/GSourceView2.cmx
@@ -317,7 +322,7 @@ clean::
 ifndef WITHOUT_LABLGTK
 	@echo "  OCAMLOPT " $@
 	$(SET_LDD); ${OCAMLOPT} -warn-error F -pp ${CAMLP4O} -o ../bin/vfide$(DOTEXE)	\
-	  -I +lablgtk2 lablgtk.cmxa $(GTKSOURCEVIEW_LFLAGS) gtkInit.cmx unix.cmxa \
+	  $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) gtkInit.cmx unix.cmxa \
 	  nums.cmxa -I ./$(INCLUDE_OS_DIR) -I java_frontend Perf.cmxa proverapi.cmx \
 	  Printexc_proxy.cmx vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx \
 	  plugins_private.cmx plugins2.cmx util.cmx stats.cmx lexer.cmx ast.cmx \

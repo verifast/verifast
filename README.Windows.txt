@@ -19,7 +19,7 @@ tar xzf camlidl-1.05.tar.gz
 cd camlidl-1.05
 cp config/Makefile.unix config/Makefile
 
-Now, edit config/Makefile.unix and update the lines that set OCAMLLIB and BINDIR as follows (assuming C:\OCaml4010 is the location of your OCaml installation):
+Now, edit config/Makefile and update the lines that set OCAMLLIB and BINDIR as follows (assuming C:\OCaml4010 is the location of your OCaml installation):
 OCAMLLIB=C:/OCaml4010/lib
 BINDIR=/cygdrive/c/OCaml4010/bin
 
@@ -29,7 +29,9 @@ make install
 - Build the Z3 OCaml bindings.
 Download https://dnetcode.cs.kuleuven.be/attachments/download/1030/Z3-1.3.6-win.tgz (you'll have to log in)
 tar xzf Z3-1.3.6-win.tgz
-cd Z3-1.3.6/ocaml
+cd Z3-1.3.6
+cp -R ocaml ocaml-clean
+cd ocaml
 ocamlopt.opt -a -o z3.cmxa -ccopt "-I ../include" -ccopt "$PWD/../bin/z3.lib" z3_stubs.c z3.mli z3.ml -cclib -lole32 -cclib -lcamlidl
 
 To test:
