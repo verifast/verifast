@@ -86,6 +86,7 @@ cd examples
   verifast_both -disable_overflow_check global_points_to_syntax.c
   verifast_both -shared goto.c
   verifast_both -disable_overflow_check -c gui-app.c
+  verifast_both -c icap_mt_event_loop.c
   verifast_both -c ifs.c
   verifast_both incr.c
   cd incr_box
