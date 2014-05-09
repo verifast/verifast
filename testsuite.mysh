@@ -46,6 +46,11 @@ cd examples
     verifast_both -c shared_boxes.c
     verifast_both -c incrbox.c
   cd ..
+  cd tso
+    verifast_both -c cvm0.c
+    verifast_both -c lock.c
+    verifast_both -c -disable_overflow_check prodcons.c
+  cd ..
   ifz3 verifast stringBuffers.c sockets.o bot.c
   verifast_both -disable_overflow_check cat.c
   verifast_both char.c
