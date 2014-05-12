@@ -1,3 +1,12 @@
+Building VeriFast on Ubuntu 12.04 LTS 64-bit
+============================================
+
+Note: this build does not include Z3.
+
+sudo apt-get install subversion ocaml liblablgtk2-ocaml-dev liblablgtksourceview2-ocaml-dev
+Replace /usr/local/lib/ocaml by /usr/lib/ocaml in GNUmakefile.settings
+cd src; make
+
 Building VeriFast on Linux
 ==========================
 

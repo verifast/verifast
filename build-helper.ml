@@ -4,7 +4,7 @@ open Unix;;
 open Printf;;
 
 let releases = [ (* Add new releases to the front *)
-  "14.5", 1547;
+  "14.5", 1548;
   "13.11.14", 1467;
   "13.11", 1463;
   "12.12", 1307;
@@ -52,6 +52,7 @@ let sys cmd =
   line
 
 let is_macos = Sys.os_type = "Unix" && sys "uname" = "Darwin"
+let is_64bit = Sys.word_size = 64
 
 let sh cmd =
   print_endline cmd;
@@ -68,7 +69,7 @@ let (create_zip_cmd, zipext) =
 
 let create_zip zippath dirname = sh (Printf.sprintf "%s %s %s" create_zip_cmd zippath dirname)
 
-let os_suffix = if is_macos then "-macos" else ""
+let os_suffix = if is_macos then "-macos" else if is_64bit then "-x64" else ""
 
 let (//) x y = Filename.concat x y
 

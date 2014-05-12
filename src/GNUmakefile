@@ -431,7 +431,6 @@ release: release_core
 release_core: test build
 	rm -Rf verifast-$(VFVERSION); mkdir verifast-$(VFVERSION)
 	cp -R ../bin verifast-$(VFVERSION)
-ifdef Z3
 ifeq ($(OS), Cygwin)
 	cd $(GTK)/bin && cp -v \
     FREETYPE6.DLL \
@@ -457,8 +456,6 @@ ifeq ($(OS), Cygwin)
     LIBXML2-2.DLL \
     ZLIB1.DLL \
     $(CWD)/verifast-$(VFVERSION)/bin
-	cp $(Z3)/bin/z3.dll verifast-$(VFVERSION)/bin
-	cp -R $(Z3)/bin/Microsoft.VC90.CRT verifast-$(VFVERSION)/bin
 	cd verifast-$(VFVERSION) && \
 	mkdir etc && \
 	cd etc && \
@@ -474,14 +471,22 @@ ifeq ($(OS), Cygwin)
 	cd ../../../.. && \
 	mkdir -p lib/gtk-2.0/2.10.0/engines && \
 	cp $(GTK)/lib/gtk-2.0/2.10.0/engines/libwimp.dll lib/gtk-2.0/2.10.0/engines
-else
+ifdef Z3
+	cp $(Z3)/bin/z3.dll verifast-$(VFVERSION)/bin
+	cp -R $(Z3)/bin/Microsoft.VC90.CRT verifast-$(VFVERSION)/bin
+endif
+endif
+ifeq ($(OS), Linux)
 	cd verifast-$(VFVERSION)/bin; mv verifast verifast-core
 	cd verifast-$(VFVERSION)/bin; mv vfide vfide-core
 	cp verifast.sh verifast-$(VFVERSION)/bin/verifast
 	cp vfide.sh verifast-$(VFVERSION)/bin/vfide
+ifdef Z3
 	cp $(Z3)/lib/libz3-gmp.so verifast-$(VFVERSION)/bin
 	cp /usr/lib/libgtksourceview-2.0.so.0.0.0 verifast-$(VFVERSION)/bin/libgtksourceview-2.0.so.0
 endif
+endif
+ifdef Z3
 	cp ../Z3.LICENSE.txt verifast-$(VFVERSION)
 endif
 ifeq ($(OS), Darwin)
