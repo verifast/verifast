@@ -12,7 +12,7 @@
 // #include <stdio.h>
 
 
-/*@		
+/*@
 predicate tee_out_io(time t1, unsigned char c; time t2) =
   c >= 0 && c <= 255
   &*& split(t1, ?t_stdout1, ?t_stderr1)
