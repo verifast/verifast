@@ -34,6 +34,10 @@ OCAMLLIB = $(shell ${OCAMLBIN}/ocamlc -where)
 # lablgtk2 installation directories
 #LABLGTK2 = /usr/local/lib/ocaml/lablgtk2
 #LABLLIBS = /usr/local/lib/ocaml/stublibs
+
+#LABLGTK2 = /usr/local/lib/ocaml/site-lib/lablgtk2/
+#LABLLIBS = /usr/local/lib/ocaml/site-lib/lablgtk2/
+
 WITHOUT_LABLGTK = yes
 
 

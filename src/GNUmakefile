@@ -402,7 +402,7 @@ plugins.cmx: DynType.cmx plugins.cmi plugins.ml
 plugins_private.cmx: plugins.cmx plugins_private.ml
 plugins2.cmi: plugins.cmi plugins2.mli
 plugins2.cmx: plugins_private.cmx plugins2.cmi plugins2.ml
-util.cmx: $(INCLUDE_OS_DIR)/Perf.cmxa vfversion.cmi proverapi.cmx plugins2.cmx util.ml
+util.cmx: $(INCLUDE_OS_DIR)/Perf.cmxa $(INCLUDE_OS_DIR)/Perf.cmi vfversion.cmi proverapi.cmx plugins2.cmx util.ml
 stats.cmx: util.cmx stats.ml
 lexer.cmx: stats.cmx lexer.ml
 ast.cmx: lexer.cmx ast.ml
