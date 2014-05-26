@@ -33,6 +33,9 @@ open General_ast
 
 exception AnnotationTypeCheckerException of string
 
+let debug_print m = Printf.printf "<annotation_type_checker> %s\n" m
+let debug_print m = ()
+
 class type ann_type_checker =
 object
   method check_annotation : string -> t_frontend_communication -> unit
@@ -46,6 +49,7 @@ object (this)
     let lines = Misc.split_string '\n' a in
     let loc = General_ast.string_of_loc (Ast_reader.parse_loc (Ast_reader.make_lexer Ast_reader.keywords (List.hd lines))) in
     let ann = String.concat "\n" (List.tl lines) in
+    debug_print ("Adding annotation (@" ^ loc ^ "\n" ^ ann);
     Hashtbl.add annotations loc ann
   method retrieve_annotations _ = annotations
 end

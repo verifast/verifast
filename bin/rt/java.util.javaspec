@@ -113,7 +113,7 @@ lemma_auto void seq_of_list_nth<t>(list<t> xs, int i);
 
 @*/
 
-interface Iterator{
+interface Iterator<E>{
     
     //@ predicate Iterator(fixpoint(int, option<Object>) elements, option<int> currentIndex, int nextIndex);
     //@ predicate Iterator_removals(list<int> indices);
@@ -122,7 +122,7 @@ interface Iterator{
         //@ requires Iterator(?es, ?c, ?n);
         //@ ensures Iterator(es, c, n) &*& result ? es(n) != none : es(n) == none; // Force case split.
     
-    Object next();
+    E next();
         //@ requires Iterator(?es, ?c, ?n) &*& es(n) != none;
         //@ ensures Iterator(es, some(n), n + 1) &*& result == the(es(n));
     
@@ -145,7 +145,7 @@ fixpoint list<t> remove_nths<t>(list<int> ns, list<t> xs) {
 
 @*/
 
-interface List {
+interface List<E> {
     
     //@ predicate List(list<Object> elements);
     
@@ -153,7 +153,7 @@ interface List {
         //@ requires [?f]List(?es);
         //@ ensures [f]List(es) &*& result == length(es);
     
-    Object get(int index);
+    E get(int index);
         //@ requires [?f]List(?es) &*& 0 <= index &*& index < length(es); 
         //@ ensures [f]List(es) &*& result == nth(index, es);
     
@@ -178,7 +178,7 @@ interface List {
     
     @*/
     
-    boolean add(Object e);
+    boolean add(E e);
         //@ requires List(?es);
         //@ ensures List(append(es, cons(e, nil))) &*& result;
 
@@ -186,13 +186,13 @@ interface List {
         //@ requires List(?es) &*& other.List(?other_es);
         //@ ensures List(append(es, other_es)) &*& other.List(other_es);
     
-    Object remove(int index);
+    E remove(int index);
         //@ requires List(?es) &*& 0 <= index &*& index < length(es);
         //@ ensures List(remove_nth(index, es)) &*& result == nth(index, es);
     
 }
 
-public class ArrayList implements List {
+public class ArrayList<E> implements List<E> {
     
     ArrayList();
         //@ requires emp;
@@ -202,7 +202,7 @@ public class ArrayList implements List {
 
 public class Arrays {
     
-    static List asList(Object[] a);
+    public static <E> List<E> asList(E[] a)
         //@ requires [?f]a[..] |-> ?es;
         //@ ensures [f]a[..] |-> es &*& result.List(es);
     
@@ -214,7 +214,7 @@ predicate_family Set_iterating(Class c)(Set s, list<Object> elements, real frac,
 
 @*/
 
-interface Set {
+interface Set<E> {
     
     //@ predicate Set(list<Object> elements);
     
@@ -236,7 +236,7 @@ interface Set {
     
 }
 
-public class HashSet implements Set {
+public class HashSet<E> implements Set<E> {
     
     HashSet();
         //@ requires emp;
@@ -244,19 +244,19 @@ public class HashSet implements Set {
     
 }
 
-public interface Map {
+public interface Map<K,V> {
     
     //@ predicate Map(list<pair<Object, Object> > elements);
     
 }
 
-public class IdentityHashMap implements Map {
+public class IdentityHashMap<K, V> implements Map<K, V> {
     
     IdentityHashMap();
         //@ requires emp;
         //@ ensures Map(nil);
     
-    public Object put(Object key, Object value);
+    public V put(K key, V value);
         //@ requires Map(?es);
         /*@
         ensures
@@ -264,11 +264,11 @@ public class IdentityHashMap implements Map {
             &*& contains_key(key, es) == true ? Map(update_value(key, value, es)) : Map(append(es, cons(pair(key, value), nil)));
         @*/
     
-    public Object get(Object key);
+    public V get(K key);
         //@ requires Map(?es) &*& contains_key(key, es) == true;
         //@ ensures result == in_map(key, es) &*& Map(es) &*& mem(key, fst_list(es)) == true &*& mem(result, snd_list(es)) == true;
     
-    public boolean containsKey(Object key);
+    public boolean containsKey(K key);
         //@ requires Map(?es);
         /*@
         ensures
@@ -276,7 +276,7 @@ public class IdentityHashMap implements Map {
             contains_key(key, es) == mem(key, fst_list(es));
         @*/
     
-    public Object remove(Object key);
+    public V remove(K key);
         //@ requires Map(?es);
         //@ ensures result == in_map(key, es) &*& contains_key(key, es) ? Map(remove_pair(key, es)) : Map(es);
     
