@@ -7,6 +7,7 @@ open Verifast0
 open Verifast
 open GMain
 open Pervasives
+open Shape_analysis_frontend
 
 type platform = Windows | Linux | MacOS
 
@@ -205,6 +206,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout =
       a "Find file (bottom window)" ~label:"Find _file (bottom window)..." ~stock:`FIND ~accel:"F7";
       a "VerifyProgram" ~label:"Verify program" ~stock:`MEDIA_PLAY ~accel:"F5" ~tooltip:"Verify";
       a "RunToCursor" ~label:"_Run to cursor" ~stock:`JUMP_TO ~accel:"<Ctrl>F5" ~tooltip:"Run to cursor";
+      a "RunShapeAnalysis" ~label:"Run shape analysis on function" ~stock:`MEDIA_FORWARD ~accel:"F9" ~tooltip:"Run shape analysis on the function where the cursor is in";
       a "TopWindow" ~label:"Window(_Top)";
       a "BottomWindow" ~label:"Window(_Bottom)";
       a "Stub";
@@ -249,6 +251,8 @@ let show_ide initialPath prover codeFont traceFont runtime layout =
         <menu action='Verify'>
           <menuitem action='VerifyProgram' />
           <menuitem action='RunToCursor' />
+          <separator />
+          <menuitem action='RunShapeAnalysis' />
           <separator />
           <menuitem action='CheckOverflow' />
           <menuitem action='UseJavaFrontend' />
@@ -1212,6 +1216,19 @@ let show_ide initialPath prover codeFont traceFont runtime layout =
       tab#useSiteTags := []
     end
   in
+  let getCursor () =
+    begin match !current_tab with
+      None -> None
+    | Some tab ->
+      match !(tab#path) with
+        None -> None
+      | Some (path, mtime) ->
+        let buffer = tab#buffer in
+        let insert_iter = buffer#get_iter_at_mark `INSERT in
+        let insert_line = insert_iter#line in
+        Some (path, insert_line + 1)
+    end
+  in
   let verifyProgram runToCursor targetPath () =
     msg := Some("Verifying...");
     updateMessageEntry();
@@ -1228,17 +1245,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout =
           begin
             let breakpoint =
               if runToCursor then
-              begin match !current_tab with
-                None -> None
-              | Some tab ->
-                match !(tab#path) with
-                  None -> None
-                | Some (path, mtime) ->
-                  let buffer = tab#buffer in
-                  let insert_iter = buffer#get_iter_at_mark `INSERT in
-                  let insert_line = insert_iter#line in
-                  Some (path, insert_line + 1)
-              end
+                getCursor ()
               else
                 None
             in
@@ -1307,6 +1314,46 @@ let show_ide initialPath prover codeFont traceFont runtime layout =
             !postProcess ()
           end
       end
+  in
+  let runShapeAnalyser () =
+    (* TODO: after running the shape analyser, the undo history
+     * has the step "clear buffer" and "put contents", but that should
+     * be only one undo step. This requires adding a new undo type, 'Replace'.
+     * This would theoretically also solve the program that pasting over a
+     * selection ends up incorrectly as two undo steps.*)
+    match (get_current_tab(), getCursor()) with
+      (None, _) -> () (* get_current_tab already shows messagebox on error *)
+      | (_, None) ->
+        GToolbox.message_box "VeriFast IDE" ("First place the cursor" ^
+          " inside the function you want to perform shape analysis on.")
+      | (Some tab, cursor) ->
+        match !(tab#path) with
+          None -> GToolbox.message_box "VeriFast IDE" ("Error: current tab" ^
+            " has no path.")
+        | Some (path, mtime) ->
+          if file_type path <> CLang then
+            (* It should be possible to support anything since we work on
+             * the AST, so this is just because there is no (known) code yet to
+             * call the correct parser. *)
+            GToolbox.message_box "VeriFast IDE" ("The shape analyser currently" ^
+            " only supports C programs")
+          else begin
+            (* Save all tabs to disk firsts. Only continue on success. *)
+            if not (List.exists sync_with_disk !buffers) then begin
+              try begin
+                let new_contents = shape_analyse_frontend path !include_paths (getCursor ()) in
+                let buffer = tab#buffer in
+                buffer#set_text new_contents;
+                (* syntax highlighting gets updated automatically *)
+                clearTrace();
+                ()
+              end with
+              | ParseException (l, emsg) ->
+                handleStaticError l ("Parse error" ^
+                  (if emsg = "" then "." else ": " ^ emsg)) None;
+                ()
+            end
+          end
   in
   begin
     let open TreeMetrics in
@@ -1503,6 +1550,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout =
   ignore $. (actionGroup#get_action "Preferences")#connect#activate showPreferencesDialog;
   ignore $. (actionGroup#get_action "VerifyProgram")#connect#activate (verifyProgram false None);
   ignore $. (actionGroup#get_action "RunToCursor")#connect#activate (verifyProgram true None);
+  ignore $. (actionGroup#get_action "RunShapeAnalysis")#connect#activate runShapeAnalyser;
   ignore $. (actionGroup#get_action "Include paths")#connect#activate showIncludesDialog;
   ignore $. (actionGroup#get_action "Find file (top window)")#connect#activate (showFindFileDialog subNotebook);
   ignore $. (actionGroup#get_action "Find file (bottom window)")#connect#activate (showFindFileDialog textNotebook);

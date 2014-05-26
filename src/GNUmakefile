@@ -212,7 +212,7 @@ clean::
 %.cmx: %.ml
 	@echo "  OCAMLOPT " $@
 	${OCAMLOPT}  -thread -c -w p -warn-error FSU -c -I ./$(INCLUDE_OS_DIR) \
-	  -I ./java_frontend -pp ${CAMLP4O} nums.cmxa  $*.ml
+	  -I ./java_frontend -I shape_analysis -pp ${CAMLP4O} nums.cmxa  $*.ml
 clean::
 	rm -f *.cmx
 	rm -f *.o
@@ -318,7 +318,8 @@ clean::
   stats.cmx lexer.cmx ast.cmx parser.cmx verifast0.cmx verifast1.cmx \
   assertions.cmx verify_expr.cmx verifast.cmx simplex.cmx redux.cmx \
   verifastPluginRedux.ml $(Z3DEPS) Fonts.cmx $(GTKSOURCEVIEW_DEPS) \
-  $(INCLUDE_OS_DIR)/Perf.cmxa $(JAVA_FE_DEPS) vfide.ml
+  shape_analysis/shape_analysis_frontend.cmx shape_analysis/shape_analysis_backend.cmx \
+  shape_analysis/changelog.cmx $(INCLUDE_OS_DIR)/Perf.cmxa $(JAVA_FE_DEPS) vfide.ml
 ifndef WITHOUT_LABLGTK
 	@echo "  OCAMLOPT " $@
 	$(SET_LDD); ${OCAMLOPT} -warn-error F -pp ${CAMLP4O} -o ../bin/vfide$(DOTEXE)	\
@@ -328,6 +329,8 @@ ifndef WITHOUT_LABLGTK
 	  plugins_private.cmx plugins2.cmx util.cmx stats.cmx lexer.cmx ast.cmx \
 	  parser.cmx ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx \
 	  verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml \
+	  -I shape_analysis shape_analysis/shape_analysis_backend.cmx \
+	  shape_analysis/changelog.cmx shape_analysis/shape_analysis_frontend.cmx \
 	  $(Z3ARGS) Fonts.cmx vfide.ml
 endif
 ifneq ($(OS), Cygwin)
@@ -366,6 +369,9 @@ z3v2prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmx proverapi.cmx z3v2prover.ml
 z3v4prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmx proverapi.cmx z3v4prover.ml
 	@echo "  OCAMLOPT " $@
 	${OCAMLOPT} -warn-error F -c -I $(Z3_OCAML) z3.cmxa -I ./$(INCLUDE_OS_DIR) Perf.cmx proverapi.cmx z3v4prover.ml
+
+clean::
+	rm -f shape_analysis/*.cm[ix] shape_analysis/*.cmo
 
 #------------------------------- Tests --------------------------------------#
 test_plugin: verifast
@@ -418,6 +424,9 @@ proverapi.cmx: proverapi.ml
 simplex.cmi: simplex.mli
 simplex.cmx: $(INCLUDE_OS_DIR)/Perf.cmx simplex.cmi simplex.ml
 redux.cmx: $(INCLUDE_OS_DIR)/Perf.cmx proverapi.cmx simplex.cmx redux.ml
+shape_analysis/shape_analysis_frontend.cmx: shape_analysis/shape_analysis_backend.cmx shape_analysis/changelog.cmx parser.cmx ast.cmx
+shape_analysis/shape_analysis_backend.cmx: shape_analysis/changelog.cmx
+shape_analysis/changelog.cmx: lexer.cmx util.cmx
 
 # You can try building dependencies automatically, e.g. with
 # $(OCAMLDEP) -pp ${CAMLP4O} -native -I . -I linux/ -I java_frontend \
