@@ -174,6 +174,9 @@ cd examples
       verifast_both -shared -I . -allow_assume syscall_memory.c
       verifast_both -shared -I . io/io_lemma_impl.c
     cd ..
+    cd matching-brackets
+      verifast_both stdio_simple.o -shared -disable_overflow_check matching-brackets-input.c
+    cd ..
   cd ..
   cd java
     cd channels
