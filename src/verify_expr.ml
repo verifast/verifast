@@ -851,6 +851,29 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
       classmap1
   
+  let rec interface_methods itf =
+    let InterfaceInfo (l, fds, meths, preds, supers) = List.assoc itf interfmap in
+    List.map (fun (sign, _) -> (sign, ("interface", itf))) meths @ flatmap interface_methods supers
+  
+  let rec unimplemented_class_methods cn trust_cabstract =
+    if cn = "" then [] else
+    let {cmeths; csuper; cinterfs; cabstract} = List.assoc cn classmap in
+    if trust_cabstract && not cabstract then [] else
+    let inherited_unimplemented_methods = unimplemented_class_methods csuper true @ flatmap interface_methods cinterfs in
+    let abstract_methods = flatmap (function (sign, (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, ss, Instance, v, is_override, true)) -> [sign, ("class", cn)] | _ -> []) cmeths in
+    let implemented_methods = flatmap (function (sign, (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, ss, Instance, v, is_override, false)) -> [sign] | _ -> []) cmeths in
+    List.filter (fun (sign, _) -> not (List.mem sign implemented_methods)) inherited_unimplemented_methods @ abstract_methods
+  
+  let () =
+    if not is_jarspec then
+    classmap1 |> List.iter begin function (cn, {cl; cabstract}) ->
+      if not cabstract then begin
+        match unimplemented_class_methods cn false with
+          [] -> ()
+        | (sign, (k, tn))::_ -> static_error cl (Printf.sprintf "This class must implement method %s declared in %s %s or must be declared abstract." (string_of_sign sign) k tn) None
+      end
+    end
+  
   let () =
     if file_type path=Java && filepath = path then begin
     let rec check_spec_lemmas lemmas impl=

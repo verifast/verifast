@@ -357,6 +357,27 @@ final class ArrayList implements List {
         return true;
     }
     
+    boolean addAll(List other)
+        //@ requires List(?es) &*& other.List(?other_es);
+        //@ ensures List(append(es, other_es)) &*& other.List(other_es);
+    {
+        int n = other.size();
+        //@ list<Object> ys = nil;
+        //@ list<Object> zs = other_es;
+        for (int i = 0; i < n; i++)
+            //@ requires List(?xs) &*& other.List(append(ys, zs)) &*& length(ys) == i &*& length(ys) + length(zs) == n &*& switch (zs) { case nil: return true; case cons(h, t): return true; };
+            //@ ensures List(append(xs, old_zs)) &*& other.List(append(old_ys, old_zs));
+        {
+            add(other.get(i));
+            //@ assert zs == cons(?h, ?t);
+            //@ append_assoc(ys, {h}, t);
+            //@ ys = append(ys, {h});
+            //@ zs = t;
+            //@ append_assoc(xs, {h}, t);
+        }
+        return true;
+    }
+    
     Object remove(int index)
         //@ requires List(?es) &*& 0 <= index &*& index < length(es);
         //@ ensures List(remove_nth(index, es)) &*& result == nth(index, es);

@@ -109,11 +109,12 @@ let rec exec_lines filepath file lineno =
         Printf.printf "Starting process %d\n" pid;
         incr active_processes_count;
         let time0 = Unix.gettimeofday () in
+        let cwd = Sys.getcwd () in
         let cin = Unix.open_process_in line in
         let t = Thread.create
           begin fun () ->
             let output = ref [] in
-            push output line;
+            push output (cwd ^ "$ " ^ line);
             try
               while true do
                 let line = input_line cin in
