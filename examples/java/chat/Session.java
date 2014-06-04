@@ -163,13 +163,14 @@ public final class Session implements Runnable {
         {
             List membersList = room.members;
             //@ assert foreach<Member>(?members, @member);
+            //@ membersList.list_to_iterable();
             Iterator iter = membersList.iterator();
             boolean hasNext = iter.hasNext();
             while (hasNext)
                 /*@
                 invariant
                     writer.Writer() &*&
-                    iter.Iterator((seq_of_list)(members), _, ?i) &*& List_iterating(membersList.getClass())(membersList, members, 1, iter)
+                    iter.Iterator((seq_of_list)(members), _, ?i) &*& Iterable_iterating(membersList.getClass())(membersList, members, 1, iter)
                     &*& foreach(members, @member) &*& hasNext == (i < length(members)) &*& 0 <= i &*& i <= length(members);
                 @*/
             {
@@ -186,6 +187,7 @@ public final class Session implements Runnable {
             writer.write("\r\n");
             writer.flush();
             //@ membersList.destroyIterator();
+            //@ membersList.iterable_to_list();
         }
         
         //@ close room(room);

@@ -30,13 +30,14 @@ public class Room {
         //@ open room(this);
         //@ assert foreach(?members, _);
         List membersList = this.members;
+        //@ membersList.list_to_iterable();
         Iterator iter = membersList.iterator();
         boolean hasMember = false;
         boolean hasNext = iter.hasNext();
         while (hasNext && !hasMember)
             /*@
             invariant
-                iter.Iterator((seq_of_list)(members), _, ?i) &*& List_iterating(membersList.getClass())(membersList, members, 1, iter) &*& foreach(members, @member)
+                iter.Iterator((seq_of_list)(members), _, ?i) &*& Iterable_iterating(membersList.getClass())(membersList, members, 1, iter) &*& foreach(members, @member)
                 &*& hasNext == (i < length(members)) &*& 0 <= i &*& i <= length(members);
             @*/
         {
@@ -50,6 +51,7 @@ public class Room {
             hasNext = iter.hasNext();
         }
         //@ membersList.destroyIterator();
+        //@ membersList.iterable_to_list();
         //@ close room(this);
         return hasMember;
     }
@@ -61,13 +63,14 @@ public class Room {
         //@ open room(this);
         //@ assert foreach(?members0, _);
         List membersList = this.members;
+        //@ membersList.list_to_iterable();
         Iterator iter = membersList.iterator();
         boolean hasNext = iter.hasNext();
         //@ length_nonnegative(members0);
         while (hasNext)
             /*@
             invariant
-                foreach<Member>(?members, @member) &*& iter.Iterator((seq_of_list)(members), _, ?i) &*& List_iterating(membersList.getClass())(membersList, members, 1, iter)
+                foreach<Member>(?members, @member) &*& iter.Iterator((seq_of_list)(members), _, ?i) &*& Iterable_iterating(membersList.getClass())(membersList, members, 1, iter)
                 &*& hasNext == (i < length(members)) &*& 0 <= i &*& i <= length(members);
             @*/
         {
@@ -85,6 +88,7 @@ public class Room {
             hasNext = iter.hasNext();
         }
         //@ membersList.destroyIterator();
+        //@ membersList.iterable_to_list();
         //@ close room(this);
     }
 }

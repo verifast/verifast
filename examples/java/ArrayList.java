@@ -129,7 +129,7 @@ lemma void remove_nth_remove_nths(int i, list<int> rs, list<Object> es)
 }
 
 @*/
-
+    
 final class ArrayListIterator implements Iterator {
     
     ArrayList list;
@@ -163,13 +163,17 @@ final class ArrayListIterator implements Iterator {
     
     ArrayListIterator(ArrayList list)
         //@ requires [?f]list.List(?es);
-        //@ ensures Iterator((seq_of_list)(es), none, 0) &*& (f == 1 ? Iterator_removals(nil) : true) &*& [_]this.list |-> list &*& [_]oldElements |-> es &*& [_]frac |-> f;
+        /*@ ensures Iterator((seq_of_list)(es), none, 0) &*& (f == 1 ? Iterator_removals(nil) : true) &*& 
+                    [_]this.list |-> list &*& [_]oldElements |-> es &*& [_]frac |-> f &*&
+                    Iterable_iterating(ArrayList.class)(list, es, f, this);
+        @*/
     {
         this.list = list;
         //@ frac = f;
         //@ oldElements = es;
         //@ removals = nil;
         //@ leak this.list |-> _ &*& frac |-> _ &*& oldElements |-> _;
+        //@ close Iterable_iterating(ArrayList.class) (list, es, f, this);
     }
     
     boolean hasNext()
@@ -238,7 +242,7 @@ lemma int list_neq_nth<t>(list<t> xs, list<t> ys)
 
 /*@
 
-predicate_family_instance List_iterating(ArrayList.class)(ArrayList list, list<Object> elements, real frac, ArrayListIterator it) =
+predicate_family_instance Iterable_iterating(ArrayList.class)(ArrayList list, list<Object> elements, real frac, ArrayListIterator it) =
     [_]it.list |-> list &*& [_]it.oldElements |-> elements &*& [_]it.frac |-> frac &*& it.getClass() == ArrayListIterator.class;
 
 @*/
@@ -279,37 +283,19 @@ final class ArrayList implements List {
     }
     
     public Iterator iterator()
-        //@ requires [?f]List(?es);
+        //@ requires [?f]Iterable(?es);
         /*@
         ensures
             result.Iterator((seq_of_list)(es), none, 0) &*&
             (f == 1 ? result.Iterator_removals(nil) : true) &*&
-            List_iterating(this.getClass())(this, es, f, result);
+            Iterable_iterating(this.getClass())(this, es, f, result);
         @*/
     {
-        return new ArrayListIterator(this);
+        //@ this.iterable_to_list();
+        ArrayListIterator i = new ArrayListIterator(this);
+        //@ close Iterable_iterating(ArrayList.class)(this, es, f, i);
+        return i;
     }
-    
-    /*@
-    
-    lemma void destroyIterator()
-        requires List_iterating(this.getClass())(this, ?es, 1, ?it) &*& it.Iterator(_, _, _) &*& it.Iterator_removals(?rs);
-        ensures List(remove_nths(rs, es));
-    {
-        open List_iterating(ArrayList.class)(_, _, _, ?iter);
-        open iter.Iterator(_, _, _);
-        open iter.Iterator_removals(_);
-    }
-    
-    lemma void destroyIteratorFrac()
-        requires List_iterating(this.getClass())(this, ?es, ?f, ?it) &*& it.Iterator(_, _, _) &*& f < 1;
-        ensures [f]List(es);
-    {
-        open List_iterating(ArrayList.class)(_, _, _, ?iter);
-        open iter.Iterator(_, _, _);
-    }
-    
-    @*/
     
     boolean add(Object e)
         //@ requires List(?es);

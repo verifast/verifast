@@ -132,9 +132,10 @@ interface Iterator<E>{
     
 }
 
-/*@
+public interface Collection<E> extends Iterable<E> {
+}
 
-predicate_family List_iterating(Class c)(List list, list<Object> elements, real frac, Iterator iterator;);
+/*@
 
 fixpoint list<t> remove_nths<t>(list<int> ns, list<t> xs) {
     switch (ns) {
@@ -145,9 +146,21 @@ fixpoint list<t> remove_nths<t>(list<int> ns, list<t> xs) {
 
 @*/
 
-interface List<E> {
+interface List<E> extends Collection<E> {
     
     //@ predicate List(list<Object> elements);
+    
+    /*@
+    
+    lemma void list_to_iterable();
+        requires [?f]List(?es);
+        ensures  [f]Iterable(es);
+    
+    lemma void iterable_to_list();
+       requires [?f]Iterable(?es);
+       ensures  [f]List(es);
+        
+    @*/
     
     int size();
         //@ requires [?f]List(?es);
@@ -158,23 +171,19 @@ interface List<E> {
         //@ ensures [f]List(es) &*& result == nth(index, es);
     
     Iterator iterator();
-        //@ requires [?f]List(?es);
+        //@ requires [?f]Iterable(?es);
         /*@
         ensures
             result.Iterator((seq_of_list)(es), none, 0) &*&
             (f == 1 ? result.Iterator_removals(nil) : true) &*&
-            List_iterating(this.getClass())(this, es, f, result);
+            Iterable_iterating(this.getClass())(this, es, f, result);
         @*/
     
     /*@
     
     lemma void destroyIterator();
-        requires List_iterating(this.getClass())(this, ?es, 1, ?it) &*& it.Iterator(_, _, _) &*& it.Iterator_removals(?rs);
-        ensures List(remove_nths(rs, es));
-    
-    lemma void destroyIteratorFrac();
-        requires List_iterating(this.getClass())(this, ?es, ?f, ?it) &*& it.Iterator(_, _, _) &*& f < 1;
-        ensures [f]List(es);
+        requires Iterable_iterating(this.getClass())(this, ?es, 1, ?it) &*& it.Iterator(_, _, _) &*& it.Iterator_removals(?rs);
+        ensures Iterable(remove_nths(rs, es));
     
     @*/
     
@@ -208,31 +217,29 @@ public class Arrays {
     
 }
 
-/*@
-
-predicate_family Set_iterating(Class c)(Set s, list<Object> elements, real frac, Iterator i;);
-
-@*/
-
-interface Set<E> {
+interface Set<E> extends Collection<E> {
     
     //@ predicate Set(list<Object> elements);
     
-    Iterator iterator();
-        //@ requires [?f]Set(?es);
-        /*@
-        ensures
-            exists<list<Object> >(?es1) &*& result.Iterator((seq_of_list)(es1), none, 0) &*& Set_iterating(this.getClass())(this, es, f, result)
-            &*& subset(es1, es) == true &*& subset(es, es1) == true &*& distinct(es1) == true;
-        @*/
-    
     /*@
     
-    lemma void destroyIterator();
-        requires Set_iterating(this.getClass())(this, ?es, ?f, ?i) &*& i.Iterator(_, _, _);
-        ensures [f]Set(es);
+    lemma void set_to_iterable();
+        requires [?f]Set(?es);
+        ensures  [f]Iterable(es);
     
+    lemma void iterable_to_set();
+       requires [?f]Iterable(?es);
+       ensures  [f]Set(es);
+        
     @*/
+    
+    Iterator iterator();
+        //@ requires [?f]Iterable(?es);
+        /*@
+        ensures
+            exists<list<Object> >(?es1) &*& result.Iterator((seq_of_list)(es1), none, 0) &*& Iterable_iterating(this.getClass())(this, es, f, result)
+            &*& subset(es1, es) == true &*& subset(es, es1) == true &*& distinct(es1) == true;
+        @*/
     
 }
 

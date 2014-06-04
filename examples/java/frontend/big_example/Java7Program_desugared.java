@@ -64,6 +64,7 @@ public class Java7Program_desugared
   {
     Object acc = acc0;
     
+    //@ xs.list_to_iterable();
     {
       Iterator iSSS = xs.iterator();
       while (iSSS.hasNext())
@@ -77,8 +78,8 @@ public class Java7Program_desugared
         }
       }
     }
-    
     //@ xs.destroyIterator();
+    //@ xs.iterable_to_list();
     
     return acc;
   } 

@@ -1,5 +1,7 @@
 package java.lang;
 
+import java.util.Iterator;
+
 /*@
 
 inductive unit = unit;
@@ -431,4 +433,35 @@ public class StringBuffer{
         //@ requires [?f]StringBuffer();
         //@ ensures [f]StringBuffer() &*& result != null;
     
+}
+
+/*@
+
+predicate_family Iterable_iterating(Class c)(Iterable i, list<Object> elements, real frac, Iterator it;);
+
+@*/
+
+public interface Iterable<T> {
+    
+    //@ predicate Iterable(list<Object> elements);
+    
+    Iterator<T> iterator();
+        //@ requires [?f]Iterable(?es1);
+        /*@ ensures  result.Iterator(?es2, none, 0) &*&
+                     (f == 1 ? result.Iterator_removals(nil) : true) &*&
+                     Iterable_iterating(this.getClass())(this, es1, f, result);
+        @*/
+
+    /*@
+    
+    lemma void destroyIterator();
+        requires Iterable_iterating(this.getClass())(this, ?es, ?f, ?it) &*& f == 1 &*&
+                 it.Iterator(_, _, _) &*& it.Iterator_removals(?rs);
+        ensures  Iterable(?es1);
+    
+     lemma void destroyIteratorFrac();
+        requires Iterable_iterating(this.getClass())(this, ?es, ?f, ?it) &*& f < 1 &*& it.Iterator(_, _, _);
+        ensures  [f]Iterable(es);
+    
+    @*/
 }
