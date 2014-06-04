@@ -30,7 +30,7 @@ public class Room {
         //@ open room(this);
         //@ assert foreach(?members, _);
         List membersList = this.members;
-        //@ membersList.list_to_iterable();
+        //@ membersList.listToIterable();
         Iterator iter = membersList.iterator();
         boolean hasMember = false;
         boolean hasNext = iter.hasNext();
@@ -51,7 +51,7 @@ public class Room {
             hasNext = iter.hasNext();
         }
         //@ membersList.destroyIterator();
-        //@ membersList.iterable_to_list();
+        //@ membersList.iterableToList();
         //@ close room(this);
         return hasMember;
     }
@@ -63,7 +63,7 @@ public class Room {
         //@ open room(this);
         //@ assert foreach(?members0, _);
         List membersList = this.members;
-        //@ membersList.list_to_iterable();
+        //@ membersList.listToIterable();
         Iterator iter = membersList.iterator();
         boolean hasNext = iter.hasNext();
         //@ length_nonnegative(members0);
@@ -88,7 +88,7 @@ public class Room {
             hasNext = iter.hasNext();
         }
         //@ membersList.destroyIterator();
-        //@ membersList.iterable_to_list();
+        //@ membersList.iterableToList();
         //@ close room(this);
     }
 }

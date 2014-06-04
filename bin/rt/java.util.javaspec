@@ -152,11 +152,11 @@ interface List<E> extends Collection<E> {
     
     /*@
     
-    lemma void list_to_iterable();
+    lemma void listToIterable();
         requires [?f]List(?es);
         ensures  [f]Iterable(es);
     
-    lemma void iterable_to_list();
+    lemma void iterableToList();
        requires [?f]Iterable(?es);
        ensures  [f]List(es);
         
@@ -223,11 +223,11 @@ interface Set<E> extends Collection<E> {
     
     /*@
     
-    lemma void set_to_iterable();
+    lemma void setToIterable();
         requires [?f]Set(?es);
         ensures  [f]Iterable(es);
     
-    lemma void iterable_to_set();
+    lemma void iterableToSet();
        requires [?f]Iterable(?es);
        ensures  [f]Set(es);
         

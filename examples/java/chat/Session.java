@@ -163,7 +163,7 @@ public final class Session implements Runnable {
         {
             List membersList = room.members;
             //@ assert foreach<Member>(?members, @member);
-            //@ membersList.list_to_iterable();
+            //@ membersList.listToIterable();
             Iterator iter = membersList.iterator();
             boolean hasNext = iter.hasNext();
             while (hasNext)
@@ -187,7 +187,7 @@ public final class Session implements Runnable {
             writer.write("\r\n");
             writer.flush();
             //@ membersList.destroyIterator();
-            //@ membersList.iterable_to_list();
+            //@ membersList.iterableToList();
         }
         
         //@ close room(room);

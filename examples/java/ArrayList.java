@@ -253,11 +253,27 @@ final class ArrayList implements List {
     int size;
     
     /*@
-    
+    predicate Iterable(list<Object> elements) =
+        List(elements);
+
     predicate List(list<Object> elements) =
         this.elements |-> ?e &*& this.size |-> ?s &*&
         array_slice(e, 0, s, elements) &*&
         array_slice(e, s, e.length, _);
+    
+    lemma void listToIterable()
+        requires [?f]List(?es);
+        ensures  [f]Iterable(es);
+    {
+        close [f]Iterable(es);
+    }
+    
+    lemma void iterableToList()
+        requires [?f]Iterable(?es);
+        ensures  [f]List(es);
+    {
+        open [f]Iterable(es);
+    }
     
     @*/
 
@@ -266,13 +282,17 @@ final class ArrayList implements List {
         //@ ensures List(nil);
     {
         elements = new Object[10];
+        //@ close Iterable(nil);
+        //@ iterableToList();
     }
     
     public int size()
         //@ requires [?f]List(?es);
         //@ ensures [f]List(es) &*& result == length(es);
     {
+        //@ listToIterable();
         return size;
+        //@ iterableToList();
     }
     
     public Object get(int index)
@@ -291,12 +311,34 @@ final class ArrayList implements List {
             Iterable_iterating(this.getClass())(this, es, f, result);
         @*/
     {
-        //@ this.iterable_to_list();
+        //@ this.iterableToList();
         ArrayListIterator i = new ArrayListIterator(this);
         //@ close Iterable_iterating(ArrayList.class)(this, es, f, i);
         return i;
     }
     
+    /*@
+    
+    lemma void destroyIterator()
+        requires Iterable_iterating(this.getClass())(this, ?es, 1, ?it) &*& it.Iterator(_, _, _) &*& it.Iterator_removals(?rs);
+        ensures Iterable(remove_nths(rs, es));
+    {
+        open Iterable_iterating(ArrayList.class)(_, _, _, ?iter);
+        open iter.Iterator(_, _, _);
+        open iter.Iterator_removals(_);
+        close List(remove_nths(rs, es));
+    }
+    
+    lemma void destroyIteratorFrac()
+        requires Iterable_iterating(this.getClass())(this, ?es, ?f, ?it) &*& it.Iterator(_, _, _) &*& f < 1;
+        ensures [f]Iterable(es);
+    {
+        open Iterable_iterating(ArrayList.class)(_, _, _, ?iter);
+        open iter.Iterator(_, _, _);
+    }
+    
+    @*/
+
     boolean add(Object e)
         //@ requires List(?es);
         //@ ensures List(append(es, cons(e, nil))) &*& result;
