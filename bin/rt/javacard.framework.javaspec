@@ -56,7 +56,7 @@ lemma_auto void APDU_inv();
 
 @*/
 
-class APDU {
+public class APDU {
     
     public static final byte PROTOCOL_MEDIA_CONTACTLESS_TYPE_A = -128;
     public static final byte PROTOCOL_MEDIA_CONTACTLESS_TYPE_B = -112;
@@ -344,7 +344,7 @@ class Util {
         //@ requires true;
         //@ ensures true;
     
-    public static short setShort(byte[] dest, short offset, short value)
+    public static short setShort(byte[] dest, short offset, short value);
         //@ requires array_slice(dest, offset, offset + 2, _);
         //@ ensures array_slice(dest, offset, offset + 2, _);
     

@@ -36,7 +36,7 @@ public class ByteBuffer {
         //@ requires ByteBuffer(?cap, ?lim, ?pos);
         //@ ensures ByteBuffer(cap, lim, 0);
     
-    public ByteBuffer get(byte[] dst)
+    public ByteBuffer get(byte[] dst);
         //@ requires ByteBuffer(?cap, ?lim, ?pos) &*& array_slice(dst, 0, dst.length, _) &*& dst.length <= lim - pos;
         //@ ensures ByteBuffer(cap, lim, pos+dst.length) &*& array_slice(dst, 0, dst.length, _);
     

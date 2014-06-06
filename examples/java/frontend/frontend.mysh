@@ -38,26 +38,43 @@ cd assign
 cd ..
 
 cd exceptions
-  verifast -c -disable_overflow_check Exceptions.java
-  verifast -c -disable_overflow_check -javac Exceptions.java
+  verifast_both -c -disable_overflow_check Exceptions.java
+  verifast_both -c -disable_overflow_check -javac Exceptions.java
 cd ..
 
 cd inner_class
-  verifast -c -disable_overflow_check StaticMemberClass_desugared.java
-  verifast -c -disable_overflow_check -javac StaticMemberClass_desugared.java
-  verifast -c -disable_overflow_check -javac StaticMemberClass.java
+  verifast_both -c -disable_overflow_check StaticMemberClass_desugared.java
+  verifast_both -c -disable_overflow_check -javac StaticMemberClass_desugared.java
+  verifast_both -c -disable_overflow_check -javac StaticMemberClass.java
   
-  verifast -c -disable_overflow_check MemberClass_desugared.java
-  verifast -c -disable_overflow_check -javac MemberClass_desugared.java
-  verifast -c -disable_overflow_check -javac MemberClass.java
+  verifast_both -c -disable_overflow_check MemberClass_desugared.java
+  verifast_both -c -disable_overflow_check -javac MemberClass_desugared.java
+  verifast_both -c -disable_overflow_check -javac MemberClass.java
   
-  verifast -c -disable_overflow_check LocalClass_desugared.java
-  verifast -c -disable_overflow_check -javac LocalClass_desugared.java
-  verifast -c -disable_overflow_check -javac LocalClass.java
+  verifast_both -c -disable_overflow_check LocalClass_desugared.java
+  verifast_both -c -disable_overflow_check -javac LocalClass_desugared.java
+  verifast_both -c -disable_overflow_check -javac LocalClass.java
   
-  verifast -c -disable_overflow_check AnonymousClass_desugared.java
-  verifast -c -disable_overflow_check -javac AnonymousClass_desugared.java
-  verifast -c -disable_overflow_check -javac AnonymousClass.java
+  verifast_both -c -disable_overflow_check AnonymousClass_desugared.java
+  verifast_both -c -disable_overflow_check -javac AnonymousClass_desugared.java
+  verifast_both -c -disable_overflow_check -javac AnonymousClass.java
+cd ..
+
+cd multiple_files
+  verifast_both -c -javac subpackage/Subpackage.jarsrc
+  verifast_both -c -javac Main.jarsrc
+cd ..
+
+cd many_files
+  verifast_both -c -javac subpackage1/subsub1/Subpackage1_1.jarsrc
+  verifast_both -c -javac subpackage1/Subpackage1.jarsrc
+  verifast_both -c -javac subpackage2/subsub1/Subpackage2_1.jarsrc
+  verifast_both -c -javac subpackage2/subsub2/Subpackage2_2.jarsrc
+  verifast_both -c -javac subpackage2/Subpackage2.jarsrc
+  verifast_both -c -javac subpackage3/subsub1/Subpackage3_1.jarsrc
+  verifast_both -c -javac subpackage3/subsub2/Subpackage3_2.jarsrc
+  verifast_both -c -javac subpackage3/subsub3/Subpackage3_3.jarsrc
+  verifast_both -c -javac subpackage3/Subpackage3.jarsrc
 cd ..
 
 cd big_example

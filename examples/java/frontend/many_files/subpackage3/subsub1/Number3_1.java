@@ -1,0 +1,11 @@
+package subpackage3.subsub1;
+
+public class Number3_1
+{
+  public static int getNumber()
+    //@ requires true;
+    //@ ensures result == 31;
+  {
+    return 31;
+  }
+}

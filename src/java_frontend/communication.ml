@@ -43,7 +43,8 @@ let debug_print x = ()
 (* commands *)
 let command_separator                  = " "
 let command_stop                       = "STOP"
-let command_handle_file                = "FILE"
+let command_handle_files               = "FILES"
+let file_separator                     = "//\\\\"
 let command_continue                   = "CONTINUE"
 
 (* responses *)
@@ -177,8 +178,8 @@ object (this)
 
   method receive_response =
     let lines = this#receive_message in
-    debug_print "receive_response got message";
     let message = String.concat "\n" (List.tl lines) in
+    debug_print ("receive_response got message: \n" ^ message);
     if (List.length lines < 1) then
       this#error ("Received a empty message from the ASTServer");
     let kind = List.hd lines in

@@ -1,0 +1,10 @@
+package subpackage1;
+
+import  subpackage1.subsub1.Number1_1;
+
+public class Add1
+{
+  public static int add();
+    //@ requires true;
+    //@ ensures result == 11;
+}

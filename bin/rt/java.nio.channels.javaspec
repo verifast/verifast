@@ -3,6 +3,7 @@ package java.nio.channels;
 import java.util.*;
 import java.nio.*;
 import java.net.*;
+import java.io.IOException;
 
 public class Selector {
     

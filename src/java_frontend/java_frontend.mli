@@ -45,13 +45,15 @@ exception JavaFrontendException of (General_ast.source_location * string)
 *)
 val attach : string -> unit
 
+(* Check if the AstServer is loaded *)
+val is_attached : unit -> bool
+
 (*  Notify and unload the AstServer 
     @param1        ()
     @return        ()
     @raise         JavaFrontendException If the AstServer could not be stopped
 *)
 val detach : unit -> unit
-
 
 (* possible options for generating an AST *)
 
@@ -77,12 +79,40 @@ val detach : unit -> unit
      or an abstract method, to that method and not treat
      them as class level declarations. *)
   val bodyless_methods_own_trailing_annotations : ast_option
+  
+  (* Allow files with the extension 'javaspec' to be parsed. In these files 
+     classes can be declared as in normal Java, however methods can only have 
+     annotations, but no bodies. This is convenient for modular verification. *)
+  val accept_spec_files : ast_option
 
-(* Create a desugared AST from the specified file
-     @param1        path of the file to create a desugared AST from
+(* Create an AST from the specified file
+     @param1        path of the file to create an AST from
      @param2        options options for creating the AST 
-     @param3        annotation checker to parse and type check the encountered annotations while creating the AST
-     @return        the AST generated from the specified file
-     @raise         JavaFrontendException If the AstServer could not generated an AST from the speci
+     @param3        annotation checker to parse and type check the encountered 
+                    annotations while creating the AST
+     @return        the single AST generated from the specified file
+     @raise         JavaFrontendException If the AstServer could not generated 
+                    an AST
 *)
-val ast_from_java_file : string -> ast_option list -> Annotation_type_checker.ann_type_checker -> General_ast.package
+val ast_from_java_file : string -> 
+                         ast_option list -> 
+                         Annotation_type_checker.ann_type_checker -> 
+                           General_ast.package
+
+(* Create an AST for each of the specified files,
+   these files may have circular dependencies
+     @param1        paths of the files to create an AST from
+     @param2        paths of the files that can be used for type checking the
+                    files to create an AST from
+     @param3        options options for creating the ASTs
+     @param4        annotation checker to parse and type check the encountered
+                    annotations while creating the ASTs
+     @return        the multiple ASTs generated from the specified files
+     @raise         JavaFrontendException If the AstServer could not generated 
+                    valid ASTs
+*)
+val asts_from_java_files : string list -> 
+                           context: string list ->
+                           ast_option list -> 
+                           Annotation_type_checker.ann_type_checker -> 
+                             General_ast.package list

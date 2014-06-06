@@ -407,11 +407,11 @@ stats.cmx: util.cmx stats.ml
 lexer.cmx: stats.cmx lexer.ml
 ast.cmx: lexer.cmx ast.ml
 parser.cmx: ast.cmx parser.ml
-verifast0.cmx: parser.cmx verifast0.ml java_frontend
-verifast1.cmx: verifast0.cmx verifast1.ml
+verifast0.cmx: parser.cmx verifast0.ml
+verifast1.cmx: verifast0.cmx java_frontend/java_frontend_bridge.cmx verifast1.ml
 assertions.cmx: verifast1.cmx assertions.ml
 verify_expr.cmx: assertions.cmx verify_expr.ml
-verifast.cmx: verify_expr.cmx verifast.ml
+verifast.cmx: verify_expr.cmx java_frontend/java_frontend_bridge.cmx verifast.ml
 verifast.cmo: vfversion.cmi proverapi.cmo verifast.ml
 simplex.cmo: simplex.ml
 proverapi.cmo: proverapi.ml

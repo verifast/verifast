@@ -199,7 +199,14 @@ let show_ide initialPath prover codeFont traceFont runtime layout =
       (fun group -> group#add_action showWhitespaceAction);
       a "Verify" ~label:"_Verify";
       GAction.add_toggle_action "CheckOverflow" ~label:"Check arithmetic overflow" ~active:true ~callback:(fun toggleAction -> disableOverflowCheck := not toggleAction#get_active);
-      GAction.add_toggle_action "UseJavaFrontend" ~label:"Use the Java frontend" ~active:false ~callback:(fun toggleAction -> useJavaFrontend := toggleAction#get_active);
+      GAction.add_toggle_action "UseJavaFrontend" ~label:"Use the Java frontend" ~active:false ~callback:(
+        fun toggleAction -> 
+          (useJavaFrontend := toggleAction#get_active;
+          if !useJavaFrontend then
+            Java_frontend_bridge.load()
+          else
+            Java_frontend_bridge.unload())
+      );
       GAction.add_toggle_action "SimplifyTerms" ~label:"Simplify Terms" ~active:true ~callback:(fun toggleAction -> simplifyTerms := toggleAction#get_active);
       a "Include paths" ~label:"_Include paths...";
       a "Find file (top window)" ~label:"Find file (_top window)..." ~stock:`FIND ~accel:"<Shift>F7";
@@ -1283,7 +1290,13 @@ let show_ide initialPath prover codeFont traceFont runtime layout =
               PreprocessorDivergence (l, emsg) ->
               handleStaticError l ("Preprocessing error" ^ (if emsg = "" then "." else ": " ^ emsg)) None
             | ParseException (l, emsg) ->
-              handleStaticError l ("Parse error" ^ (if emsg = "" then "." else ": " ^ emsg)) None
+              let message = "Parse error" ^ (if emsg = "" then "." else ": " ^ emsg) in
+              if (l = Lexer.dummy_loc) then begin
+                msg := Some(message);
+                updateMessageEntry()
+              end
+              else
+                handleStaticError l message None
             | CompilationError(emsg) ->
               clearTrace();
               msg := Some(emsg);

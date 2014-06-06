@@ -1,6 +1,16 @@
 package java.io;
 
-public class IOException {}
+import java.lang.Exception;
+
+public class IOException extends Exception {
+    
+    public IOException();
+       //@ requires emp;
+       //@ ensures emp;
+    
+}
+
+public class ClosedChannelException extends IOException {}
 
 public interface InputStream {
     

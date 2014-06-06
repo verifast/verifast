@@ -16,6 +16,7 @@ public class Foreach_desugared
     //@ assert ints.List(?es);
     int result = 0;
     {
+      //@ ints.listToIterable();
       Iterator iSSS = ints.iterator();
       while (iSSS.hasNext())
         //@ requires iSSS.Iterator((seq_of_list)(es), _, ?n) &*& n >= 0 &*& n <= length(es);
@@ -26,6 +27,8 @@ public class Foreach_desugared
           result += x.intValue();
         }
       }
+      //@ ints.destroyIterator();
+      //@ ints.iterableToList();
     }
   }
 }

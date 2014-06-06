@@ -339,6 +339,7 @@ let parse_opt : (token Stream.t -> 'a) -> (token Stream.t) -> 'a option =
 (* ------------------------ *)
 
 let parse_with p s =
+  debug_print ("parse_with: \n" ^ s);
   try
     p (make_lexer keywords s)
   with
@@ -349,9 +350,9 @@ let parse_with p s =
       in
       error NoSource m
 
-let rec read_ast s =
+let rec read_asts s =
   debug_print ("\n" ^ s ^ "\n");
-  parse_with parse_package s
+  parse_with (parse_list parse_package) s
 
 (* ------------------------ *)
 (* AST Parse functions      *)
@@ -498,7 +499,7 @@ and
       debug_print ("parse_type: RefType");
       RefType(t)
   | [< '(Kwd "ArrayType");    '(Kwd "(");
-          t = parse_ref_type; '(Kwd ")");
+          t = parse_type;     '(Kwd ")");
     >] -> 
       debug_print ("parse_type: ArrayType");
       ArrayType(t)
@@ -622,7 +623,8 @@ and
           params = parse_list parse_var_decl;    '(Kwd ",");
           thrown = parse_list (parse_pair 
              parse_ref_type parse_annotation);   '(Kwd ",");
-          stmts = parse_list parse_statement;    '(Kwd ",");
+          stmts = parse_opt (parse_list
+             parse_statement);                   '(Kwd ",");
           auto_gen = parse_gen_source;           '(Kwd ")");
     >] -> 
       debug_print ("parse_meth_decl: Constructor");

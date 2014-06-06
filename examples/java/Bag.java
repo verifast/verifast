@@ -139,6 +139,8 @@ class Bag {
     return m;
     //@ assert a |-> ?array &*& n |-> ?number &*& array_slice(array, 0, number, ?xs1);
     //@ close permut(xs, cons(pair(mindex, number), nil), append(xs1, cons(m, nil)));
+    
+    //@ assert m == min(xs);
   }
   
 } 

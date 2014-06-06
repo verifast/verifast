@@ -1419,11 +1419,11 @@ let parse_scala_file (path: string) (reportRange: range_kind -> loc -> unit): pa
     Stream.Error msg -> raise (ParseException (loc(), msg))
   | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
 
-(* 
-  renamed from parse_java_spec_file to still support spec files, 
-  normal java files are now handled by frontend
+(*
+  old way to parse java files, these files (including non-run-time javaspec files)
+  can now be handled by the Java frontend
 *)
-let parse_java_spec_file (path: string) (reportRange: range_kind -> loc -> unit) reportShouldFail: package =
+let parse_java_file_old (path: string) (reportRange: range_kind -> loc -> unit) reportShouldFail: package =
   Stopwatch.start parsing_stopwatch;
   let result =
   if Filename.check_suffix (Filename.basename path) ".scala" then

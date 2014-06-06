@@ -82,6 +82,7 @@ public class Java7Program
   {
     T acc = acc0;
     
+    //@ xs.listToIterable();
     for (A x : xs) 
       //@ requires i$.Iterator((seq_of_list)(es), _, ?n) &*& FoldFunc(f.getClass())(f, drop(n, es), acc, info) &*& f != null &*& n >= 0 &*& n <= length(es);
       //@ ensures FoldFunc(f.getClass())(f, nil, acc, info) &*& i$.Iterator((seq_of_list)(es), _, length(es));
@@ -89,8 +90,8 @@ public class Java7Program
       //@ drop_n_plus_one(n, es);
       acc = f.fold(acc, x);
     }
-    
     //@ xs.destroyIterator();
+    //@ xs.iterableToList();
     
     return acc;
   }

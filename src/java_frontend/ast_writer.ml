@@ -202,7 +202,7 @@ and string_for_type t () =
       string_for_constructor "RefType" args;
   | ArrayType(t) ->
       let args = 
-        [string_for_ref_type t]
+        [string_for_type t]
       in
       string_for_constructor "ArrayType" args;
 and string_for_prim_type t () =
@@ -354,7 +354,7 @@ and string_for_class_decl decl () =
          string_for_accessibility access;
          string_for_list (List.map string_for_var_decl params);
          string_for_list (List.map string_for_exception exceps);
-         string_for_list (List.map string_for_statement stmts);
+         string_for_option (fun x -> string_for_list (List.map string_for_statement x)) stmts;
          string_for_gen_source auto]
       in
       string_for_constructor "Constructor" args;

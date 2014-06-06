@@ -13,7 +13,7 @@ abstract class RandomData {
     public static final byte ALG_SECURE_RANDOM = 2;
 }
 
-interface Key {
+public interface Key {
     public void clearKey();
     //@ requires true;
     //@ ensures true;

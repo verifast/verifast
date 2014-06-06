@@ -15,6 +15,7 @@ public class Foreach
 
     //@ assert ints.List(?es);
     int result = 0;
+    //@ ints.listToIterable();
     for (Integer x : ints)
       //@ requires i$.Iterator((seq_of_list)(es), _, ?n) &*& n >= 0 &*& n <= length(es);
       //@ ensures  i$.Iterator((seq_of_list)(es), _, length(es));

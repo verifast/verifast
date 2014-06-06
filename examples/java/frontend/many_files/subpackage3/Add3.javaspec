@@ -1,0 +1,12 @@
+package subpackage3;
+
+import  subpackage3.subsub1.Number3_1;
+import  subpackage3.subsub2.Number3_2;
+import  subpackage3.subsub3.Number3_3;
+
+public class Add3
+{
+  public static int add();
+    //@ requires true;
+    //@ ensures result == 31 + 32 + 33;
+}

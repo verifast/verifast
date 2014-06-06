@@ -1,0 +1,11 @@
+package subpackage2.subsub2;
+
+public class Number2_2
+{
+  public static int getNumber()
+    //@ requires true;
+    //@ ensures result == 22;
+  {
+    return 22;
+  }
+}

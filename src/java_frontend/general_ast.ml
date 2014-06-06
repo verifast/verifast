@@ -136,7 +136,7 @@ and
   | RefType of                           
       ref_type  (* The referenced type *)
   | ArrayType of
-      ref_type  (* Type of the elements in an array of this array type *)
+      type_     (* Type of the elements in an array of this array type *)
 and
   type_param =
   | TypeParam of
@@ -236,7 +236,7 @@ and
       variable_decl list *  (* The parameters for this constructor *)
       (ref_type * annotation) list * (* List of possible thrown exceptions 
                                         together with their annotations *)
-      statement list *  (* Possible statements in body of constructor *)
+      statement list option * (* Possible statements in body of constructor *)
       gen_source        (* Is this constructor auto generated? *)
   | Method of
       source_location *
@@ -579,7 +579,7 @@ and string_of_type t =
   match t with
   | PrimType t -> string_of_prim_type t
   | RefType t -> string_of_ref_type t
-  | ArrayType t -> string_of_ref_type t
+  | ArrayType t -> string_of_type t
 let string_of_accessibility access =
   match access with
   | PublicAccess -> "public"

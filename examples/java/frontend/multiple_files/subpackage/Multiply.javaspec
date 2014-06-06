@@ -1,0 +1,12 @@
+package subpackage;
+
+public class Multiply
+{
+  public Multiply();
+    //@ requires true;
+    //@ ensures  true;
+  
+  public int multiply();
+    //@ requires true;
+    //@ ensures result == 30;
+}

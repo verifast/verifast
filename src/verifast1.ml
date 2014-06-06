@@ -907,7 +907,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   | Java ->
                     let (jars, javaspecs) = parse_jarspec_file_core path in
                     let pathDir = Filename.dirname path in
-                    let ds = List.map (fun javaspec -> parse_java_file (concat pathDir javaspec) reportRange reportShouldFail option_use_java_frontend) javaspecs in
+                    let ds = Java_frontend_bridge.parse_java_files (List.map (fun javaspec -> concat pathDir javaspec) javaspecs) [] reportRange reportShouldFail option_use_java_frontend in
                     if not header_is_import_spec then begin
                       let (classes, lemmas) = extract_specs ds in
                       spec_classes := classes;
@@ -942,7 +942,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let javaspecs =
                   if options.option_allow_assume then "_assume.javaspec"::javaspecs else javaspecs
                 in
-                let ds = List.map (fun x -> parse_java_file (concat rtdir x) reportRange reportShouldFail option_use_java_frontend) javaspecs in
+                let ds = Java_frontend_bridge.parse_java_files (List.map (fun x -> concat rtdir x) javaspecs) [] reportRange reportShouldFail option_use_java_frontend in
                 let (_, maps0) = check_file rtpath true false bindir "" [] ds in
                 headermap := (rtpath, ([], maps0))::!headermap;
                 (maps0, [])
@@ -1228,6 +1228,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           let super =
             if i = "java.lang.Object" then "" else
+            if super = "java.lang.Object" then super else
             match search2' super (pn,il) classlist classmap0 with
               None-> static_error l ("Superclass wasn't found: "^super) None
             | Some super -> super

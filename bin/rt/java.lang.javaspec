@@ -181,16 +181,6 @@ public class InterruptedException {
     
 }
 
-public class IOException extends Exception {
-    
-    public IOException();
-        //@ requires emp;
-        //@ ensures emp;
-    
-}
-
-public class ClosedChannelException extends IOException {}
-
 public class RuntimeException extends Exception {
     
     public RuntimeException();
@@ -326,8 +316,18 @@ predicate arraycopy_post(array_slice_elemtype type, boolean overlap, real frac, 
 
 @*/
 
+public class PrintStream {
+
+    void println(String s);
+        //@ requires true;
+        //@ ensures true;
+
+}
+
 public class System {
     
+    static final PrintStream out;
+
     public static void arraycopy(Object src, int srcPos, Object dest, int destPos, int length); // TODO: - Support more element types.
         //@ requires arraycopy_pre(?type, ?overlap, ?frac, src, srcPos, length, ?elems, dest, destPos);
         //@ ensures arraycopy_post(type, overlap, frac, src, srcPos, length, elems, dest, destPos);
@@ -429,7 +429,7 @@ public class StringBuffer{
         //@ requires StringBuffer();
         //@ ensures StringBuffer() &*& result == this;
     
-    String toString();
+    public String toString();
         //@ requires [?f]StringBuffer();
         //@ ensures [f]StringBuffer() &*& result != null;
     

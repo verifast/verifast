@@ -82,7 +82,7 @@ let annotations : (string, string) Hashtbl.t ref = ref (Hashtbl.create 1)
 let parse_pure_decls_core used_parser anns autogen =
   Parser.set_language Java;
   if (List.length anns < 1) then
-    raise (Lexer.ParseException (dummy_loc, "Composing of lexers for parsing annotations failed (empty list of annotations)"));
+    raise (Lexer.ParseException (dummy_loc, "Parsing failed due to missing annotations"));
   let (loc, token_stream) =
     let make_ann_lexer ann =
       match ann with
@@ -91,7 +91,11 @@ let parse_pure_decls_core used_parser anns autogen =
           if autogen then
             a
           else
-            Hashtbl.find !annotations (General_ast.string_of_loc l)
+            try
+              Hashtbl.find !annotations (General_ast.string_of_loc l)
+            with Not_found ->
+              let message = "Annotation @ " ^ (General_ast.string_of_loc l) ^ "not found: \n" ^ a in
+              raise (Lexer.ParseException (dummy_loc, message));
         in
         begin
           let (srcpos1, _) = translate_location l in
@@ -188,7 +192,10 @@ let parse_loop_invar anns autogen =
 (* Translation of Ast's                             *)
 (* ------------------------------------------------ *)
 
-let rec translate_ast package anns =
+let rec translate_asts packages anns =
+  List.map (fun x -> translate_ast x anns) packages
+
+and translate_ast package anns =
   annotations := anns;
   translate_package package
 
@@ -323,16 +330,15 @@ and translate_block l stmts =
     Some stmts -> Some (List.map translate_statement stmts, l)
   | None -> None
 
-and translate_class_decls_helper : 'a . (GEN.class_decl -> 'a list option) -> 
-                                         GEN.class_decl list -> (GEN.class_decl list * 'a list) = 
-  debug_print "translate_class_decls";
+and translate_class_decls_helper : 'a . (GEN.class_decl -> 'a list option) ->
+                                         GEN.class_decl list -> (GEN.class_decl list * 'a list) =
   fun translator decls ->
   begin
     match decls with
     | d::decls ->
       begin
         let (unmatched, matched) = translate_class_decls_helper translator decls in
-        debug_print_begin "translate_class_decl";
+        debug_print_begin "translate_class_decl some";
         let res =
           match translator d with
           | Some d -> (unmatched, d @ matched)
@@ -341,7 +347,7 @@ and translate_class_decls_helper : 'a . (GEN.class_decl -> 'a list option) ->
         debug_print_end "translate_class_decl";
         res
       end
-    | [] -> ([],[])
+    | [] -> debug_print "translate_class_decl some"; ([],[])
   end
 
 and translate_methods cn decls = 
@@ -409,7 +415,7 @@ and translate_constructors decls =
             let throws' = List.map translate_throws_clause throws in
             Some(pre, post, throws')
           in
-          let stmts' = translate_block l' (Some(stmts)) in
+          let stmts' = translate_block l' stmts in
           let access' = translate_accessibility access in
           Some([VF.Cons(l', params', contr', stmts', access')])
       | _ -> None
@@ -468,7 +474,7 @@ and translate_type (typ : GEN.type_) : VF.type_expr =
   match typ with
     GEN.PrimType t -> translate_prim_type t
   | GEN.RefType t -> translate_ref_type t
-  | GEN.ArrayType t -> VF.ArrayTypeExpr(Lexer.dummy_loc, translate_ref_type t)
+  | GEN.ArrayType t -> VF.ArrayTypeExpr(dummy_loc, translate_type t)
 
 and translate_prim_type typ =
   debug_print "translate_prim_type";
@@ -477,7 +483,7 @@ and translate_prim_type typ =
   | GEN.BoolType l -> VF.ManifestTypeExpr(translate_location l, VF.Bool)
   | GEN.CharType l -> VF.ManifestTypeExpr(translate_location l, VF.Char)
   (* TODO fix type here *)
-  | GEN.ByteType l -> VF.ManifestTypeExpr(translate_location l, VF.ShortType)
+  | GEN.ByteType l -> VF.ManifestTypeExpr(translate_location l, VF.Char)
   | GEN.ShortType l -> VF.ManifestTypeExpr(translate_location l, VF.ShortType)
   | GEN.IntType l -> VF.ManifestTypeExpr(translate_location l, VF.IntType)
   (* TODO fix type here *)

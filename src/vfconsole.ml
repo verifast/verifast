@@ -12,14 +12,13 @@ let _ =
   let verify ?(emitter_callback = fun _ -> ()) (stats : bool) (options : options) (prover : string option) (path : string) (emitHighlightedSourceFiles : bool) =
     let verify range_callback =
     let exit l =
-      Java_frontend.detach();
+      Java_frontend_bridge.unload();
       exit l
     in
     try
       let use_site_callback declKind declLoc useSiteLoc = () in
       verify_program ~emitter_callback:emitter_callback prover stats options path range_callback use_site_callback (fun _ -> ()) None None;
       print_endline "0 errors found";
-      Java_frontend.detach()
     with
       PreprocessorDivergence (l, msg) -> print_msg l msg; exit 1
     | ParseException (l, msg) -> print_msg l ("Parse error" ^ (if msg = "" then "." else ": " ^ msg)); exit 1
@@ -166,7 +165,7 @@ let _ =
   let header_whitelist: string list ref = ref [] in
   let linkShouldFail = ref false in
   let useJavaFrontend = ref false in
-  
+
   (* Explanations that are an empty string ("") become hidden in the
    * "--help" output. When adding options, you can consider writing an
    * explanation or just " " to prevent this, or document why the
@@ -204,7 +203,7 @@ let _ =
             ; "-safe_mode", Set safe_mode, "Safe mode (for use in CGI scripts)."
             ; "-allow_header", String (fun str -> header_whitelist := str::!header_whitelist), "Add the specified header to the whitelist."
             ; "-link_should_fail", Set linkShouldFail, "Specify that the linking phase is expected to fail."
-            ; "-javac", Set useJavaFrontend, " "
+            ; "-javac", Unit (fun _ -> (useJavaFrontend := true; Java_frontend_bridge.load ())), " "
             ]
   in
   let process_file filename =
@@ -264,6 +263,7 @@ let _ =
   then usage cla usage_string
   else begin
     parse cla process_file usage_string;
+    Java_frontend_bridge.unload();
     if not !compileOnly then
       begin
         try

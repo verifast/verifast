@@ -52,22 +52,34 @@ let desugar : ast_option = "DESUGAR"
 let keep_assertions : ast_option = "KEEP_ASSERTIONS"
 let keep_super_call_first : ast_option = "KEEP_SUPER_FIRST"
 let bodyless_methods_own_trailing_annotations : ast_option = "EMPTY_METHODS"
+let accept_spec_files : ast_option = "ACCEPT_SPEC_FILES"
 
 let communication = 
   catch_exceptions get_communication_channel
 
+let attached_status = ref false
+
 (** @param ast_server_launch   command to launch the ast_server *)
 let attach ast_server_launch = 
-  catch_exceptions (fun _ -> communication#load(ast_server_launch))
+  catch_exceptions (fun _ -> communication#load(ast_server_launch));
+  attached_status := true
 
+let is_attached () = 
+  !attached_status
+  
 let detach () =
-  catch_exceptions (fun _ -> communication#unload)
-
-(* method to send a FILE request with corresponding options and parse the response message *)
-let ast_from_java_file_core f opts achecker =
+  catch_exceptions (fun _ -> communication#unload);
+  attached_status := false
+  
+(* method to send a FILES request with corresponding options and parse the response message *)
+let asts_from_java_files_core files cfiles opts achecker =
   catch_exceptions (fun _ ->
-    communication#send_command(command_handle_file ^ command_separator ^
-                               f ^ command_separator ^ (String.concat command_separator opts));
+    let files' = file_separator ^ (String.concat file_separator files) ^ file_separator in
+    let cfiles' = file_separator ^ (String.concat file_separator cfiles) ^ file_separator in
+    communication#send_command(command_handle_files ^ command_separator ^
+                               files' ^ command_separator ^
+                               cfiles' ^ command_separator ^
+                               (String.concat command_separator opts));
     let kind = ref CALLBACK in
     let response = ref "" in
     let recieve _ =
@@ -88,6 +100,11 @@ let ast_from_java_file_core f opts achecker =
     !response
   )
 
-(* method to send a FILE request and parse the response message with the given options *)
-let ast_from_java_file f opts achecker =
-  catch_exceptions (fun _ -> Ast_reader.read_ast(ast_from_java_file_core f opts achecker))
+(* method to send a FILES request and parse the response message with the given options *)
+let asts_from_java_files files ~context:cfiles opts achecker =
+  catch_exceptions (fun _ -> Ast_reader.read_asts (asts_from_java_files_core files cfiles opts achecker))
+
+let ast_from_java_file file opts achecker =
+  let result = asts_from_java_files [file] [] opts achecker in
+  if (List.length result != 1) then frontend_error dummy_loc "Single file did not result in single AST";
+  List.hd result

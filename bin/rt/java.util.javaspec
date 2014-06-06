@@ -113,7 +113,7 @@ lemma_auto void seq_of_list_nth<t>(list<t> xs, int i);
 
 @*/
 
-interface Iterator<E>{
+public interface Iterator<E>{
     
     //@ predicate Iterator(fixpoint(int, option<Object>) elements, option<int> currentIndex, int nextIndex);
     //@ predicate Iterator_removals(list<int> indices);
