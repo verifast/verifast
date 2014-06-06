@@ -122,7 +122,7 @@ module TreeMetrics = struct
   let cw = dotWidth + 2 * padding
 end
 
-let show_ide initialPath prover codeFont traceFont runtime layout =
+let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend =
   let ctxts_lifo = ref None in
   let msg = ref None in
   let url = ref None in
@@ -149,6 +149,13 @@ let show_ide initialPath prover codeFont traceFont runtime layout =
   let actionGroup = GAction.action_group ~name:"Actions" () in
   let disableOverflowCheck = ref false in
   let useJavaFrontend = ref false in
+  let toggle_java_frontend active =
+    (useJavaFrontend := active;
+    if !useJavaFrontend then
+      Java_frontend_bridge.load()
+    else
+      Java_frontend_bridge.unload())
+  in
   let simplifyTerms = ref false in
   let current_tab = ref None in
   let showLineNumbers enable =
@@ -199,14 +206,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout =
       (fun group -> group#add_action showWhitespaceAction);
       a "Verify" ~label:"_Verify";
       GAction.add_toggle_action "CheckOverflow" ~label:"Check arithmetic overflow" ~active:true ~callback:(fun toggleAction -> disableOverflowCheck := not toggleAction#get_active);
-      GAction.add_toggle_action "UseJavaFrontend" ~label:"Use the Java frontend" ~active:false ~callback:(
-        fun toggleAction -> 
-          (useJavaFrontend := toggleAction#get_active;
-          if !useJavaFrontend then
-            Java_frontend_bridge.load()
-          else
-            Java_frontend_bridge.unload())
-      );
+      GAction.add_toggle_action "UseJavaFrontend" ~label:"Use the Java frontend" ~active:(toggle_java_frontend javaFrontend; javaFrontend) ~callback:(fun toggleAction -> toggle_java_frontend toggleAction#get_active);
       GAction.add_toggle_action "SimplifyTerms" ~label:"Simplify Terms" ~active:true ~callback:(fun toggleAction -> simplifyTerms := toggleAction#get_active);
       a "Include paths" ~label:"_Include paths...";
       a "Find file (top window)" ~label:"Find file (_top window)..." ~stock:`FIND ~accel:"<Shift>F7";
@@ -1592,6 +1592,7 @@ let () =
   let traceFont = ref Fonts.trace_font in
   let runtime = ref None in
   let layout = ref FourThree in
+  let javaFrontend = ref false in
   let rec iter args =
     match args with
       "-prover"::arg::args -> prover := Some arg; iter args
@@ -1603,13 +1604,15 @@ let () =
        iter args
     | "-layout"::"fourthree"::args -> layout := FourThree; iter args
     | "-layout"::"widescreen"::args -> layout := Widescreen; iter args
+    | "-javac"::args -> javaFrontend := true; iter args
     | arg::args when not (startswith arg "-") -> path := Some arg; iter args
-    | [] -> show_ide !path !prover !codeFont !traceFont !runtime !layout
+    | [] -> show_ide !path !prover !codeFont !traceFont !runtime !layout !javaFrontend
     | _ ->
       GToolbox.message_box "VeriFast IDE" begin
         "Invalid command line.\n\n" ^ 
         "Usage: vfide [filepath] [-prover z3|redux] [-codeFont fontSpec] " ^
-        "[-traceFont fontSpec] [-I IncludeDir] [-layout fourthree|widescreen]"
+        "[-traceFont fontSpec] [-I IncludeDir] [-layout fourthree|widescreen] " ^
+        "[-javac] "
       end
   in
   let args = 
