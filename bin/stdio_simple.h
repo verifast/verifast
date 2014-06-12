@@ -52,12 +52,16 @@ int getchar();
 //@ requires read_char_io(?t1, stdin, ?c, ?success, ?t2) &*& time(t1);
 //@ ensures time(t2) &*& success ? result == c && c >= 0 && c <= 255: result < 0;
 
+/**
+ * The character c "cast to an unsigned char" (source: man putchar(3)) is written.
+ * This conversion to an unsigned char is always defined (see C99 sec. 6.3.1.3).
+ */
 int putchar(int c);
-//@ requires write_char_io(?t1, stdout, c, ?success, ?t2) &*& c >= 0 && c <= 255 &*& time(t1);
+//@ requires write_char_io(?t1, stdout, c, ?success, ?t2) &*& time(t1);
 //@ ensures time(t2) &*& success ? result == c : result < 0;
 
 int putc(int c, FILE *stream);
-//@ requires write_char_io(?t1, stream, c, ?success, ?t2) &*& c >= 0 && c <= 255 &*& time(t1);
+//@ requires write_char_io(?t1, stream, c, ?success, ?t2) &*& time(t1);
 //@ ensures time(t2) &*& success ? result == c : result < 0;
 
 
