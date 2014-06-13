@@ -5,7 +5,8 @@
 # provide a target of this makefile, e.g. "make java_frontend"
 
 # Note: there are dependencies to the outer Makefile (/src/GNUMakefile).
-
+# Note: these dependencies will overlap with the auto generated dependencies
+#       of the outer Makefile (which does no harm)
 java_frontend/misc.cmx: java_frontend/misc.ml
 java_frontend/general_ast.cmx: java_frontend/general_ast.ml java_frontend/misc.cmx
 java_frontend/ast_writer.cmx: java_frontend/ast_writer.ml java_frontend/general_ast.cmx
