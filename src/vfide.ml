@@ -1103,11 +1103,13 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend =
     ()
   in
   let handleStaticError l emsg eurl =
-    apply_tag_by_loc "error" l;
+    if l <> dummy_loc then
+      apply_tag_by_loc "error" l;
     msg := Some emsg;
     url := eurl;
     updateMessageEntry();
-    go_to_loc l
+    if l <> dummy_loc then
+      go_to_loc l
   in
   let reportRange kind l =
     apply_tag_by_loc (tag_name_of_range_kind kind) l
@@ -1364,6 +1366,9 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend =
               | ParseException (l, emsg) ->
                 handleStaticError l ("Parse error" ^
                   (if emsg = "" then "." else ": " ^ emsg)) None;
+                ()
+              | ShapeAnalysisException (l, message) ->
+                handleStaticError l ("Shape analysis error: " ^ message) None;
                 ()
             end
           end

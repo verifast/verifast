@@ -229,7 +229,7 @@ type srcpos = ((string * string) * int * int) (* ?srcpos *)
 (** A range of source code: start position, end position *)
 type loc = (srcpos * srcpos) (* ?loc *)
 
-let dummy_srcpos = (("<nowhere>", "prelude"), 0, 0)
+let dummy_srcpos = (("<nowhere>", "<nofile>"), 0, 0)
 let dummy_loc = (dummy_srcpos, dummy_srcpos)
 
 (*
