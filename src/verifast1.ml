@@ -942,6 +942,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let javaspecs =
                   if options.option_allow_assume then "_assume.javaspec"::javaspecs else javaspecs
                 in
+                let rtdir = Filename.dirname rtpath in
                 let ds = Java_frontend_bridge.parse_java_files (List.map (fun x -> concat rtdir x) javaspecs) [] reportRange reportShouldFail option_use_java_frontend in
                 let (_, maps0) = check_file rtpath true false bindir "" [] ds in
                 headermap := (rtpath, ([], maps0))::!headermap;
