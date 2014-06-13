@@ -35,9 +35,6 @@ open GEN
 
 open Lexer
 
-exception AstTranslatorException of loc * string
-
-
 let indent = ref ""
 let indent_string = "___"
 
@@ -55,7 +52,7 @@ let debug_print_end m =
 let debug_print_end m = ()
   
 let error l m =
-  raise (AstTranslatorException(l, m))
+  raise (ParseException(l, m))
 let warning l m =
   let delim = "????????????????????????????????????????????????"in
   Printf.printf "%s\n%s\n%s\n" delim (m ^ " - " ^ (Lexer.string_of_loc l)) delim
@@ -97,6 +94,7 @@ let parse_pure_decls_core used_parser anns autogen =
               let message = "Annotation @ " ^ (General_ast.string_of_loc l) ^ "not found: \n" ^ a in
               raise (Lexer.ParseException (dummy_loc, message));
         in
+        debug_print (Printf.sprintf "Handling annotation \n%s\n" a);
         begin
           let (srcpos1, _) = translate_location l in
           let reportRange kind ((_, line1, col1), (_, line2, col2)) =
@@ -159,13 +157,17 @@ let parse_postcondition anns autogen =
   parse_pure_decls_core parser_postcondition_eof anns autogen
 
 let parse_contract anns autogen =
-  parse_pure_decls_core Parser.parse_spec anns autogen
-  
-let parse_instance_preds classname ann =
-  let pred_members =
-    parse_pure_decls_core (Parser.rep Parser.parse_java_instance_pred) [ann] false
+  let parse_contract_eof = parser 
+    [< s = Parser.parse_spec; _ = Lexer.Stream.empty >] -> s
   in
-  pred_members
+  parse_pure_decls_core parse_contract_eof anns autogen
+  
+let parse_ghost_members classname ann =
+  let rec parse_ghost_members_eof = parser
+  | [< _ = Lexer.Stream.empty >] -> []
+  | [< m = Parser.parse_ghost_java_member classname; mems = parse_ghost_members_eof >] -> m::mems
+  in
+  parse_pure_decls_core parse_ghost_members_eof [ann] false
 
 let parse_pure_statement l ann autogen =
   let parse_pure_statement_eof = parser
@@ -264,6 +266,7 @@ and translate_class_decl decl =
   let (res, name') = 
     match decl with
       GEN.Class(l, anns, id, tparams, access, abs, fin, stat, extnds, impls, decls) ->
+        let l'= translate_location l in
         let abs' = translate_abstractness abs in
         let fin' = translate_class_finality fin in
         let id' = GEN.string_of_identifier id in
@@ -277,21 +280,35 @@ and translate_class_decl decl =
           | None -> "java.lang.Object"
         in
         let impls' = List.map GEN.string_of_ref_type impls in
-        let (decls', preds') = translate_class_preds id' decls' in
-        assert (decls' = []);
-        (VF.Class(translate_location l, abs', fin', id', meths', fields', cons', extnds', impls', preds'), id')
+        let (decls', ghost_members') = translate_ghost_members id' decls' in
+        let (ghost_fields', ghost_meths', ghost_preds') = split_ghost_members l ghost_members' in
+        if (decls' <> []) then error l' "Not all declarations in class could be processed";
+        (VF.Class(l', abs', fin', id', meths' @ ghost_meths', fields' @ ghost_fields', cons', extnds', impls', ghost_preds'), id')
     | GEN.Interface(l, anns, id, tparams, access, impls, decls) ->
+        let l'= translate_location l in
         let id' = GEN.string_of_identifier id in
         debug_print ("interface declaration " ^ id');
         let impls' = List.map GEN.string_of_ref_type impls in
         let (decls', fields') = translate_fields decls in
         let (decls', meths') = translate_methods id' decls' in
-        let (decls', preds') = translate_class_preds id' decls' in
-        assert (decls' = []);
-        (VF.Interface((translate_location l), id', impls', fields', meths', preds'), id')
+        let (decls', ghost_members') = translate_ghost_members id' decls' in
+        let (ghost_fields', ghost_meths', ghost_preds') = split_ghost_members l ghost_members' in
+        if (decls' <> []) then error l' "Not all declarations in class could be processed";
+        (VF.Interface(l', id', impls', fields' @ ghost_fields', meths' @ ghost_meths', ghost_preds'), id')
   in 
   debug_print_end ("translate_class_decl " ^ name');
   res
+
+and split_ghost_members l ghost_members =
+  let rec split_ghost_members_core all fields meths preds =
+     match all with
+     | FieldMember f::rest -> split_ghost_members_core rest (f @ fields) meths preds
+     | MethMember m::rest -> split_ghost_members_core rest fields (m::meths) preds
+     | PredMember p::rest -> split_ghost_members_core rest fields meths (p::preds)
+     | [] -> (fields, meths, preds)
+     | _ -> assert false
+  in
+  split_ghost_members_core ghost_members [] [] []
 
 and translate_abstractness abs =
   debug_print "translate_abstractness";
@@ -380,7 +397,7 @@ and translate_methods cn decls =
         let contr' = 
           let (pre,post) =
             if List.length anns = 0 then begin
-              let ann_pre = Annotation(l, "requires false; ") in
+              let ann_pre = Annotation(l, "requires true; ") in
               let ann_post = Annotation(l, "ensures true; ") in
               parse_contract [ann_pre; ann_post] true
             end else
@@ -459,16 +476,16 @@ and translate_fields decls =
   in 
   translate_class_decls_helper translator decls
 
-and translate_class_preds classname decls = 
-  debug_print "translate_preds";
+and translate_ghost_members classname decls = 
+  debug_print "translate_ghost_members";
   let translator decl =
     match decl with
     | GEN.C_Annotation a ->
-        Some(parse_instance_preds classname a)
+        Some(parse_ghost_members classname a)
     | _ -> None
   in 
   translate_class_decls_helper translator decls
-  
+
 and translate_type (typ : GEN.type_) : VF.type_expr = 
   debug_print "translate_type";
   match typ with
