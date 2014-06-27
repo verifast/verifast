@@ -394,7 +394,13 @@ testsuite: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
         cd ..; bin/mysh -cpus $(NUMCPU) < testsuite.mysh
 .PHONY: testsuite
 
-test: testsuite test_plugin 
+# Verify model solution of student assignments to prevent regression.
+assignment_tests: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
+	@echo "  MYSH     " assignments/run_model_solutions
+	$(SET_ENV); \
+        cd ../assignments; ../bin/mysh -cpus $(NUMCPU) < run_model_solutions.mysh
+
+test: testsuite assignment_tests test_plugin 
 .PHONY: test
 
 
