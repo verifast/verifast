@@ -10,7 +10,7 @@
 
 
 /*@
-// Expresses the following grammar:   brackets = '(' brackets ')' | epsilon
+// Expresses the following grammar:   brackets = '(' brackets ')' brackets | epsilon
 predicate matching_brackets_helper(time t1, time t2) =
   t1 == t2 ?
     emp
