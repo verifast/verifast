@@ -1,0 +1,18 @@
+let verifast_basic
+  verifast -shared -allow_should_fail
+in
+let run
+  ifz3 verifast_basic
+  verifast_basic -prover redux
+in
+  run -disable_overflow_check copredicate_auto_open.c
+  run copredicate_fractions.c
+  run copredicate_invalid_redeclaration.c
+  run copredicate_invalid_redeclaration2.c
+  run invalid_coinduction1.c
+  run invalid_coinduction2.c
+  run invalid_coinduction3.c
+  run -c InvalidCoinduction4.java
+  run -c invalid_coinduction_predicate_value.c
+  run valid_recursion.c
+  

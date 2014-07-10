@@ -181,6 +181,9 @@ cd examples
       verifast_both stdio_simple.o bigstar.o -shared output-any-char.c
       verifast_both stdio_simple.o bigstar.o -shared output-any-string.c
     cd ..
+    cd never-ending-program
+      verifast_both stdio_simple.o -shared yes.c
+    cd ..
   cd ..
   cd java
     cd channels
@@ -325,6 +328,9 @@ cd tests
   verifast_both -c test-pattern-match-constructor-subtyping.c
   verifast_both -c test-octal-number.c
   verifast_both -c integral-ghost-types.c
+  cd copredicates
+    mysh < run.mysh
+  cd ..
   cd bugs
   cd ..
   cd errors

@@ -269,7 +269,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               (ftn, ft_predfammaps, fttargs, List.map snd ftargenv)
             end
         in
-        let [(_, (_, _, _, _, symb, _))] = ft_predfammaps in
+        let [(_, (_, _, _, _, symb, _, _))] = ft_predfammaps in
         let coef = match stmt_ghostness with Real -> get_dummy_frac_term () | Ghost -> real_unit in
         let h = Chunk ((symb, true), fttargs, coef, fterm::ftargs, None)::h in
         match scope_opt with
@@ -324,7 +324,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let sn = match tp with PtrType (StructType sn) -> sn | _ -> static_error l "The argument of close_struct must be of type pointer-to-struct." None in
       eval_h h env w $. fun h env pointerTerm ->
       with_context (Executing (h, env, l, "Consuming character array")) $. fun () ->
-      let (_, _, _, _, chars_symb, _) = List.assoc ("chars") predfammap in
+      let (_, _, _, _, chars_symb, _, _) = List.assoc ("chars") predfammap in
       consume_chunk rules h ghostenv [] [] l (chars_symb, true) [] real_unit dummypat None [TermPat pointerTerm; TermPat (List.assoc sn struct_sizes); SrcPat DummyPat] $. fun _ h coef _ _ _ _ _ ->
       if not (definitely_equal coef real_unit) then assert_false h env l "Closing a struct requires full permission to the character array." None;
       produce_c_object l real_unit pointerTerm (StructType sn) None false true h $. fun h ->
@@ -335,7 +335,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let sn = match tp with PtrType (StructType sn) -> sn | _ -> static_error l "The argument of open_struct must be of type pointer-to-struct." None in
       eval_h h env w $. fun h env pointerTerm ->
       consume_c_object l pointerTerm (StructType sn) h true $. fun h ->
-      let (_, _, _, _, chars_symb, _) = List.assoc "chars" predfammap in
+      let (_, _, _, _, chars_symb, _, _) = List.assoc "chars" predfammap in
       let cs = get_unique_var_symb "cs" (InductiveType ("list", [Char])) in
       let Some (_, _, _, _, length_symb) = try_assoc' (pn,ilist) "length" purefuncmap in
       let size = List.assoc sn struct_sizes in
@@ -357,7 +357,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           consume_c_object l arg t h false $. fun h ->
           begin match t with
             StructType sn ->
-            let (_, (_, _, _, _, malloc_block_symb, _)) = List.assoc sn malloc_block_pred_map in
+            let (_, (_, _, _, _, malloc_block_symb, _, _)) = List.assoc sn malloc_block_pred_map in
             consume_chunk rules h [] [] [] l (malloc_block_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat arg] $. fun _ h _ _ _ _ _ _ ->
             cont h env
           | _ ->
@@ -386,7 +386,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           cn
         | _ -> static_error l "Syntax error. Syntax: 'init_class(MyClass.class);'." None
       in
-      let (_, _, _, _, token_psymb, _) = List.assoc "java.lang.class_init_token" predfammap in
+      let (_, _, _, _, token_psymb, _, _) = List.assoc "java.lang.class_init_token" predfammap in
       let classterm = List.assoc cn classterms in
       consume_chunk rules h [] [] [] l (token_psymb, true) [] real_unit real_unit_pat (Some 1) [TermPat classterm] $. fun _ h _ _ _ _ _ _ ->
       let {cfds} = List.assoc cn classmap in
@@ -399,7 +399,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               None -> cont h1 [] (default_value ft)
             | Some e -> eval_h h1 [] e cont
           end $. fun h1 [] v ->
-          let (_, (_, _, _, _, symb, _)) = List.assoc (cn, fn) field_pred_map in
+          let (_, (_, _, _, _, symb, _, _)) = List.assoc (cn, fn) field_pred_map in
           produce_chunk h1 (symb, true) [] real_unit (Some 0) [v] None $. fun h1 ->
           iter h1 fds
         | _::fds ->
@@ -408,8 +408,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       iter [] cfds
     | ExprStmt (CallExpr (l, "open_module", [], [], args, Static)) ->
       if args <> [] then static_error l "open_module requires no arguments." None;
-      let (_, _, _, _, module_symb, _) = List.assoc "module" predfammap in
-      let (_, _, _, _, module_code_symb, _) = List.assoc "module_code" predfammap in
+      let (_, _, _, _, module_symb, _, _) = List.assoc "module" predfammap in
+      let (_, _, _, _, module_code_symb, _, _) = List.assoc "module_code" predfammap in
       consume_chunk rules h [] [] [] l (module_symb, true) [] real_unit (SrcPat DummyPat) (Some 2) [TermPat current_module_term; TermPat ctxt#mk_true] $. fun _ h coef _ _ _ _ _ ->
       begin fun cont ->
         let rec iter h globals =
@@ -436,8 +436,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       cont (codeChunks @ h) env
     | ExprStmt (CallExpr (l, "close_module", [], [], args, Static)) ->
       if args <> [] then static_error l "close_module requires no arguments." None;
-      let (_, _, _, _, module_symb, _) = List.assoc "module" predfammap in
-      let (_, _, _, _, module_code_symb, _) = List.assoc "module_code" predfammap in
+      let (_, _, _, _, module_symb, _, _) = List.assoc "module" predfammap in
+      let (_, _, _, _, module_code_symb, _, _) = List.assoc "module_code" predfammap in
       begin fun cont ->
         let rec iter h importmodules =
           match importmodules with
@@ -776,7 +776,45 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             (let Some bs = zip ps ts in bs)
         in
         let env' = env0 @ env' in
-        let body_size = match chunk_size with Some (PredicateChunkSize k) -> Some (PredicateChunkSize (k - 1)) | _ -> None in
+        let body_size =
+          begin match chunk_size with
+          | Some (PredicateChunkSize k) ->
+            let inductiveness: inductiveness =
+              begin match try_assoc g predfammap with
+              | Some (_, _, _, _, _, _, inductiveness) -> inductiveness
+              | None ->
+                begin match try_assoc g tenv with
+                | Some (PredType (_, _, _, inductiveness)) ->  inductiveness
+                | _ ->
+                  begin match try_assoc' (pn,ilist) g predctormap with
+                  | None ->
+                    begin match resolve (pn,ilist) l g predfammap with
+                    | Some (g, (_, _, _, _, _, _, inductiveness)) -> inductiveness
+                    | None -> 
+                      (* trying to find out whether the predicate is
+                       * inductive or coinductive failed. *)
+                      assert false
+                    end
+                  | Some (PredCtorInfo (_, ps1, ps2, inputParamCount, body, funcsym)) ->
+                    (* predicate ctors do not support coinductive predicates yet, so they are inductive. *)
+                    Inductiveness_Inductive
+                  end
+                end
+              end
+            in
+            begin match inductiveness with
+            | Inductiveness_Inductive -> Some (PredicateChunkSize (k - 1))
+            | Inductiveness_CoInductive ->
+              if pure then
+                static_error l "Coinductive proof by coinduction on first consumed coinductive heap chunk is currently not supported." None
+                (* Note that the size can be decreased again by opening chunks in case
+                 * copredicates and predicates are nested. *)
+              else
+                Some (PredicateChunkSize (k + 1))
+            end
+          | _ -> None
+          end
+        in
         with_context PushSubcontext (fun () ->
           produce_asn tpenv h ghostenv env' p coef body_size body_size (fun h _ _ ->
             with_context PopSubcontext (fun () -> tcont sizemap tenv' ghostenv h env)
@@ -788,7 +826,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (targs, g_symb, pts, inputParamCount) =
         match try_assoc' (pn,ilist) p predfammap with
           None -> static_error l "No such predicate." None
-        | Some (_, predfam_tparams, arity, pts, g_symb, inputParamCount) ->
+        | Some (_, predfam_tparams, arity, pts, g_symb, inputParamCount, _) ->
           let targs = if targs = [] then List.map (fun _ -> InferredType (ref None)) predfam_tparams else targs in
           let tpenv =
             match zip predfam_tparams targs with
@@ -825,7 +863,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let g_symb =
             match try_assoc p#name predfammap with
               None -> static_error l "No such predicate." None
-            | Some (_, predfam_tparams, arity, pts, g_symb, inputParamCount) -> g_symb
+            | Some (_, predfam_tparams, arity, pts, g_symb, inputParamCount, _) -> g_symb
           in
           let inputParamCount =
             match p#inputParamCount with
@@ -834,7 +872,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           ((g_symb, true), inputParamCount, targs, pats, false)
         | WPointsTo (_, WRead (_, e, fparent, fname, frange, fstatic, fvalue, fghost), _, rhs) ->
-          let (p, (_, _, _, _, symb, _)) = List.assoc (fparent, fname) field_pred_map in
+          let (p, (_, _, _, _, symb, _, _)) = List.assoc (fparent, fname) field_pred_map in
           let pats, inputParamCount =
             if fstatic then
               [rhs], 0
@@ -903,7 +941,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           None -> static_error l "No such box class." None
         | Some boxinfo -> boxinfo
       in
-      let Some (_, _, _, pts, g_symb, _) = try_assoc' (pn,ilist) bcn predfammap in
+      let Some (_, _, _, pts, g_symb, _, _) = try_assoc' (pn,ilist) bcn predfammap in
       let (pats, tenv) = check_pats (pn,ilist) l tparams tenv pts pats in
       consume_chunk rules h ghostenv env [] l (g_symb, true) [] real_unit dummypat None (srcpats pats) $. fun boxChunk h coef ts _ ghostenv env [] ->
       (*if not (definitely_equal coef real_unit) then static_error l "Disposing a box requires full permission." None;*)
@@ -924,7 +962,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let hpParamTypes = List.map (fun (x, t) -> t) hpParamMap in
                   let (wpats, tenv) = check_pats (pn,ilist) l tparams tenv (HandleIdType::hpParamTypes) pats in
                   let wpats = srcpats wpats in
-                  let Some (_, _, _, _, hpn_symb, _) = try_assoc' (pn,ilist) hpn predfammap in
+                  let Some (_, _, _, _, hpn_symb, _, _) = try_assoc' (pn,ilist) hpn predfammap in
                   let handlePat::argPats = wpats in
                   let pats = handlePat::TermPat boxId::argPats in
                   consume_chunk rules h ghostenv env [] l (hpn_symb, true) [] real_unit dummypat None pats $. fun _ h coef ts _ ghostenv env [] ->
@@ -1186,7 +1224,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               let hpInvEnv = [("predicateHandle", handleIdTerm)] @ hpArgMap @ boxVarMap in
               with_context (Executing (h, hpInvEnv, asn_loc hpInv, "Checking handle predicate invariant")) $. fun () ->
               assert_handle_invs bcn hpmap hpn hpInvEnv h $. fun h ->
-              let (_, _, _, _, hpn_symb, _) = match try_assoc' (pn,ilist) hpn predfammap with 
+              let (_, _, _, _, hpn_symb, _, _) = match try_assoc' (pn,ilist) hpn predfammap with 
                 None-> static_error l ("No such predicate family: "^hpn) None
               | Some x -> x
               in
@@ -1197,7 +1235,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         iter [] handleClauses h
       end $. fun (handleChunks, h) ->
-      let (_, _, _, _, bcn_symb, _) = match try_assoc' (pn,ilist) bcn predfammap with
+      let (_, _, _, _, bcn_symb, _, _) = match try_assoc' (pn,ilist) bcn predfammap with
         None -> static_error l ("No such predicate family: "^bcn) None
       | Some x-> x
       in
@@ -1215,7 +1253,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let w = check_expr_t (pn,ilist) tparams tenv arg BoxIdType in
       let boxIdTerm = ev w in
       let handleTerm = get_unique_var_symb x HandleIdType in
-      let (_, _, _, _, hpn_symb, _) = match try_assoc' (pn,ilist) hpn predfammap with
+      let (_, _, _, _, hpn_symb, _, _) = match try_assoc' (pn,ilist) hpn predfammap with
         None -> static_error l ("No such predicate family: "^hpn) None
       | Some x-> x
       in
@@ -1529,7 +1567,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if not (List.mem pre_bcn boxes) then static_error lcb "You cannot perform an action on a box class that has not yet been declared." None;
       let (pre_bcp_pats, tenv) = check_pats (pn,ilist) lcb tparams tenv (BoxIdType::List.map (fun (x, t) -> t) boxpmap) pre_bcp_pats in
       let pre_bcp_pats = srcpats pre_bcp_pats in
-      let (_, _, _, _, boxpred_symb, _) = match try_assoc' (pn,ilist) pre_bcn predfammap with 
+      let (_, _, _, _, boxpred_symb, _, _) = match try_assoc' (pn,ilist) pre_bcn predfammap with 
         Some x->x
       | None -> static_error lcb ("Box predicate not found: "^pre_bcn) None
       in
@@ -1572,7 +1610,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | Some (l, hppmap, extended, inv, _) ->
                   (hppmap, extended, inv)
             in
-            let (_, _, _, _, pre_handlepred_symb, _) = match try_assoc' (pn,ilist) pre_hpn predfammap with 
+            let (_, _, _, _, pre_handlepred_symb, _, _) = match try_assoc' (pn,ilist) pre_hpn predfammap with 
               Some x->x
             | None -> static_error lcb ("Box predicate not found: "^pre_bcn) None
             in
@@ -1684,7 +1722,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                          | Some (_, hppmap, extended, inv, _) ->
                            (hppmap, extended, inv)
                      in
-                     let (_, _, _, _, post_handlePred_symb, _) = match try_assoc' (pn,ilist) post_hpn predfammap with 
+                     let (_, _, _, _, post_handlePred_symb, _, _) = match try_assoc' (pn,ilist) post_hpn predfammap with 
                        None-> static_error lph ("No such predicate family: "^post_hpn) None
                      | Some x-> x
                      in
@@ -1734,13 +1772,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         List.fold_left
           begin fun (lems, predinsts, localpreds, localpredinsts) decl ->
             match decl with
-            | PredFamilyDecl (l, p, tparams, arity, tes, inputParamCount) ->
+            | PredFamilyDecl (l, p, tparams, arity, tes, inputParamCount, inductiveness) ->
               if tparams <> [] then static_error l "Local predicates with type parameters are not yet supported." None;
               if arity <> 0 then static_error l "Local predicate families are not yet supported." None;
               if List.mem_assoc p predfammap then static_error l "Duplicate predicate family name." None;
               if List.mem_assoc p tenv then static_error l "Predicate name conflicts with local variable name." None;
               let ts = List.map (check_pure_type (pn,ilist) tparams) tes in
-              let ptype = PredType ([], ts, inputParamCount) in
+              let ptype = PredType ([], ts, inputParamCount, inductiveness) in
               let psymb = get_unique_var_symb p ptype in
               (lems, predinsts, (p, (l, ts, inputParamCount, ptype, psymb))::localpreds, localpredinsts)
             | PredFamilyInstanceDecl (l, p, predinst_tparams, is, xs, body) ->
@@ -1905,7 +1943,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     begin fun cont ->
       if not pure && unloadable then
         let codeCoef = List.assoc "currentCodeFraction" env in
-        let (_, _, _, _, module_code_symb, _) = List.assoc "module_code" predfammap in
+        let (_, _, _, _, module_code_symb, _, _) = List.assoc "module_code" predfammap in
         produce_chunk h (module_code_symb, true) [] codeCoef (Some 1) [current_module_term] None cont
       else
         cont h
@@ -2056,7 +2094,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   (* Region: verification of function bodies *)
   and add_rule_for_lemma lemma_name l pre post ps frac q_ref q_input_args unbound =
-    let (_, _, _, _, q_symb, Some q_inputParamCount) = List.assoc q_ref#name predfammap in
+    let (_, _, _, _, q_symb, Some q_inputParamCount, _) = List.assoc q_ref#name predfammap in
     let rule l h targs terms_are_well_typed coef coefpat ts cont =
       let rec f input_args ts unbound env =
         if unbound = [] then
@@ -2070,7 +2108,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       let param_env0 = f q_input_args ts unbound [] in (* env0 maps all parameters not bound by precondition to term *)
       let try_consume_pred h consumed param_env env asn frac p_ref p_args success_cont fail =
-        let (_, _, _, _, p_symb, Some p_inputParamCount) = List.assoc p_ref#name predfammap in
+        let (_, _, _, _, p_symb, Some p_inputParamCount, _) = List.assoc p_ref#name predfammap in
         let rec find_chunk hdone htodo =
           match htodo with
             [] -> fail ()
@@ -2302,7 +2340,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end $. fun sizemap tenv ghostenv h env ->
         begin fun cont ->
           if unloadable && not in_pure_context then
-            let (_, _, _, _, module_code_symb, _) = List.assoc "module_code" predfammap in
+            let (_, _, _, _, module_code_symb, _, _) = List.assoc "module_code" predfammap in
             with_context (Executing (h, env, l, "Consuming code fraction")) $. fun () ->
             consume_chunk rules h [] [] [] l (module_code_symb, true) [] real_unit (SrcPat DummyPat) (Some 1) [TermPat current_module_term] $. fun _ h coef _ _ _ _ _ ->
             let half = real_mul l real_half coef in

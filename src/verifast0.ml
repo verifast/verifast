@@ -71,7 +71,7 @@ let rec string_of_type t =
   | StructType sn -> "struct " ^ sn
   | PtrType t -> string_of_type t ^ " *"
   | FuncType ft -> ft
-  | PredType (tparams, ts, inputParamCount) ->
+  | PredType (tparams, ts, inputParamCount, inductiveness) ->
     let tparamsText = if tparams = [] then "" else "<" ^ String.concat ", " tparams ^ ">" in
     let paramTypesText =
       let typesText ts = String.concat ", " (List.map string_of_type ts) in
@@ -81,7 +81,8 @@ let rec string_of_type t =
         let (ts1, ts2) = take_drop n ts in
         typesText ts1 ^ ";" ^ if ts2 = [] then "" else " " ^ typesText ts2
     in
-    Printf.sprintf "predicate%s(%s)" tparamsText paramTypesText
+    let inductivenessText = match inductiveness with Inductiveness_Inductive -> "" | Inductiveness_CoInductive -> "co" in
+    Printf.sprintf "%spredicate%s(%s)" inductivenessText tparamsText paramTypesText
   | PureFuncType (t1, t2) ->
     let (pts, rt) =  (* uncurry *)
       let rec iter pts rt =

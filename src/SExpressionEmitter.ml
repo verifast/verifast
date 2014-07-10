@@ -74,10 +74,13 @@ let rec sexpr_of_type_ (t : type_) : sexpression =
     | InductiveType (s, ts)   -> List ( Symbol "type-inductive" ::
                                         Symbol s ::
                                         List.map sexpr_of_type_ ts )
-    | PredType (is, args, p)  -> List ( [Symbol "type-pred-type"] @ 
+    | PredType (is, args, p, inductiveness)
+                              -> List ( [Symbol "type-pred-type"] @ 
                                         (List.map aux1 is) @
                                         (List.map sexpr_of_type_ args) @
-                                        [sexpr_of_option sexpr_of_int p] )
+                                        [ sexpr_of_option sexpr_of_int p
+                                          ; Symbol "coinductive"
+                                          ; sexpr_of_bool (inductiveness = Inductiveness_CoInductive) ] )
     | PureFuncType (t1, t2)   -> List [ Symbol "type-pred-func-type";
                                         sexpr_of_type_ t1; 
                                         sexpr_of_type_ t2]
@@ -614,12 +617,14 @@ and sexpr_of_decl (decl : decl) : sexpression =
                       tparams,
                       index_count,
                       params,
-                      precise) ->
+                      precise,
+                      inductiveness) ->
       build_list [ Symbol "declare-predicate-family"
                  ; Symbol name ]
                  [ "type-parameters", List (List.map symbol tparams)
                  ; "parameters", List (List.map sexpr_of_type_expr params)
-                 ; "index-count", sexpr_of_int index_count ]
+                 ; "index-count", sexpr_of_int index_count
+                 ; "coinductive", sexpr_of_bool (inductiveness = Inductiveness_CoInductive)]
     | PredFamilyInstanceDecl (loc,
                               name,
                               tparams,

@@ -298,7 +298,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | StaticArrayType (t, s) -> ProverInt
     | PtrType t -> ProverInt
     | FuncType _ -> ProverInt
-    | PredType (tparams, ts, inputParamCount) -> ProverInductive
+    | PredType (tparams, ts, inputParamCount, _) -> ProverInductive
     | PureFuncType _ -> ProverInductive
     | BoxIdType -> ProverInt
     | HandleIdType -> ProverInt
@@ -553,6 +553,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * type_ list (* parameter types *)
       * termnode
       * int option (* number of input parameters; None if not precise *)
+      * inductiveness
     type malloc_block_pred_info =
         string (* predicate name *)
       * pred_fam_info
@@ -974,7 +975,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           begin try
             let p = Plugins_private.load_plugin (concat basedir (x ^ "_verifast_plugin")) in
             let x = full_name pn x in
-            (x, ((p, p#create_instance plugin_context), get_unique_var_symb x (PredType ([], [], None))))::pluginmap1
+            (x, ((p, p#create_instance plugin_context), get_unique_var_symb x (PredType ([], [], None, Inductiveness_Inductive))))::pluginmap1
           with
             Plugins_private.LoadPluginError msg -> static_error l ("Could not load plugin: " ^ msg) None
           end
@@ -1308,7 +1309,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       else
         StructType sn
     | PtrTypeExpr (l, te) -> PtrType (check te)
-    | PredTypeExpr (l, tes, inputParamCount) -> PredType ([], List.map check tes, inputParamCount)
+    | PredTypeExpr (l, tes, inputParamCount) ->
+      PredType ([], List.map check tes, inputParamCount, Inductiveness_Inductive)
     | PureFuncTypeExpr (l, tes) ->
       let ts = List.map check tes in
       let rec iter ts =
@@ -1355,7 +1357,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       TypeParam x -> List.assoc x tpenv
     | PtrType t -> PtrType (instantiate_type tpenv t)
     | InductiveType (i, targs) -> InductiveType (i, List.map (instantiate_type tpenv) targs)
-    | PredType ([], pts, inputParamCount) -> PredType ([], List.map (instantiate_type tpenv) pts, inputParamCount)
+    | PredType ([], pts, inputParamCount, inductiveness) -> PredType ([], List.map (instantiate_type tpenv) pts, inputParamCount, inductiveness)
     | PureFuncType (t1, t2) -> PureFuncType (instantiate_type tpenv t1, instantiate_type tpenv t2)
     | InferredType t ->
       begin match !t with
@@ -1396,7 +1398,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                if has_ghost_fields then
                  None
                else
-                 Some (get_unique_var_symb ("struct_" ^ sn ^ "_padding") (PredType ([], [PtrType (StructType sn)], Some 1)))
+                 Some (get_unique_var_symb ("struct_" ^ sn ^ "_padding") (PredType ([], [PtrType (StructType sn)], Some 1, Inductiveness_Inductive)))
               )
              )
            | Field (lf, gh, t, f, Instance, Public, final, init)::fds ->
@@ -1589,7 +1591,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (ShortType, IntType) -> ()
     | ((Char|UChar|ShortType|UShortType|IntType|UintPtrType), (Char|UChar|ShortType|UShortType|IntType|UintPtrType)) when inAnnotation = Some true -> ()
     | (ObjType x, ObjType y) when is_subtype_of x y -> ()
-    | (PredType ([], ts, inputParamCount), PredType ([], ts0, inputParamCount0)) ->
+    | (PredType ([], ts, inputParamCount, inductiveness), PredType ([], ts0, inputParamCount0, inductiveness0))when inductiveness = inductiveness0 ->
       begin
         match zip ts ts0 with
           Some tpairs when List.for_all (fun (t, t0) -> unify t t0) tpairs && (inputParamCount0 = None || inputParamCount = inputParamCount0) -> ()
@@ -1767,7 +1769,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 end else
                   check_welldefined (rank + 1) negative_rank pred_ptrs (i0, (info0, ptr0))
               end
-            | PredType (tps, pts, _) ->
+            | PredType (tps, pts, _, _) ->
               assert (tps = []);
               List.iter (fun t -> check_type true t) pts
             | PureFuncType (t1, t2) ->
@@ -1805,7 +1807,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               match tp with
                 Bool | IntType | ShortType | UintPtrType | RealType | Char | PtrType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> true
               | TypeParam _ -> true  (* Should be checked at instantiation site. *)
-              | PredType (tps, pts, _) -> true
+              | PredType (tps, pts, _, _) -> true
               | PureFuncType (t1, t2) -> type_is_inhabited t2
               | InductiveType (i0, tps) ->
                 List.for_all type_is_inhabited tps &&
@@ -1846,7 +1848,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             match tp with
               Bool -> Some []
             | TypeParam x -> Some [x]
-            | IntType | ShortType | UintPtrType | RealType | Char | PtrType _ | PredType (_, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> None
+            | IntType | ShortType | UintPtrType | RealType | Char | PtrType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> None
             | PureFuncType (_, _) -> None (* CAVEAT: This assumes we do *not* have extensionality *)
             | InductiveType (i0, targs) ->
               begin match try_assoc i0 infinite_map with
@@ -1895,7 +1897,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match tp with
       Bool -> false
     | TypeParam x -> true
-    | IntType | ShortType | UintPtrType | RealType | Char | PtrType _ | PredType (_, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> true
+    | IntType | ShortType | UintPtrType | RealType | Char | PtrType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> true
     | PureFuncType (t1, t2) -> is_universal_type t1 && is_universal_type t2
     | InductiveType (i0, targs) ->
       let (_, _, _, cond) = List.assoc i0 inductivemap in
@@ -1953,12 +1955,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   (* Region: predicate families *)
   
-  let mk_predfam p l tparams arity ts inputParamCount = (p, (l, tparams, arity, ts, get_unique_var_symb p (PredType (tparams, ts, inputParamCount)), inputParamCount))
+  let mk_predfam p l tparams arity ts inputParamCount inductiveness =
+    (p, (l, tparams, arity, ts, get_unique_var_symb p (PredType (tparams, ts, inputParamCount, inductiveness)), inputParamCount, inductiveness))
 
   let struct_padding_predfams1 =
     flatmap
       (function
-         (sn, (l, fds, Some padding_predsymb)) -> [("struct_" ^ sn ^ "_padding", (l, [], 0, [PtrType (StructType sn)], padding_predsymb, Some 1))]
+         (sn, (l, fds, Some padding_predsymb)) -> [("struct_" ^ sn ^ "_padding", (l, [], 0, [PtrType (StructType sn)], padding_predsymb, Some 1, Inductiveness_Inductive))]
        | _ -> [])
       structmap1
   
@@ -1968,7 +1971,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let predfammaps =
           if gh = Ghost || ftxmap <> [] || tparams <> [] then
             let paramtypes = [PtrType (FuncType g)] @ List.map snd ftxmap in
-            [mk_predfam (full_name pn ("is_" ^ g0)) l tparams 0 paramtypes (Some (List.length paramtypes))]
+            [mk_predfam (full_name pn ("is_" ^ g0)) l tparams 0 paramtypes (Some (List.length paramtypes)) Inductiveness_Inductive]
           else
             []
         in
@@ -1978,13 +1981,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let isparamizedfunctypepreds1 = flatmap (fun (g, (l, gh, tparams, rt, ftxmap, xmap, pn, ilist, pre, post, predfammaps)) -> predfammaps) functypedeclmap1
   
-  let malloc_block_pred_map1 = 
+  let malloc_block_pred_map1: malloc_block_pred_info map = 
     structmap1 |> flatmap begin function
-      (sn, (l, Some _, _)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) l [] 0 [PtrType (StructType sn)] (Some 1))]
+      (sn, (l, Some _, _)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) l [] 0 [PtrType (StructType sn)] (Some 1) Inductiveness_Inductive)]
     | _ -> []
     end
   
-  let malloc_block_pred_map = malloc_block_pred_map1 @ malloc_block_pred_map0
+  let malloc_block_pred_map: malloc_block_pred_info map = malloc_block_pred_map1 @ malloc_block_pred_map0
 
   let field_pred_map1 = (* dient om dingen te controleren bij read/write controle v velden*)
     match file_type path with
@@ -1993,8 +1996,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         fds |> List.map begin fun (fn, {fl; ft; fbinding}) ->
           let predfam =
             match fbinding with
-              Static -> mk_predfam (cn ^ "_" ^ fn) fl [] 0 [ft] (Some 0)
-            | Instance -> mk_predfam (cn ^ "_" ^ fn) fl [] 0 [ObjType cn; ft] (Some 1)
+              Static -> mk_predfam (cn ^ "_" ^ fn) fl [] 0 [ft] (Some 0) Inductiveness_Inductive
+            | Instance -> mk_predfam (cn ^ "_" ^ fn) fl [] 0 [ObjType cn; ft] (Some 1) Inductiveness_Inductive
           in
           ((cn, fn), predfam)
         end
@@ -2007,7 +2010,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
          | Some fds ->
            List.map
              (fun (fn, (l, gh, t)) ->
-              ((sn, fn), mk_predfam (sn ^ "_" ^ fn) l [] 0 [PtrType (StructType sn); t] (Some 1))
+              ((sn, fn), mk_predfam (sn ^ "_" ^ fn) l [] 0 [PtrType (StructType sn); t] (Some 1) Inductiveness_Inductive)
              )
              fds
       )
@@ -2015,27 +2018,27 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let field_pred_map = field_pred_map1 @ field_pred_map0
   
-  let structpreds1 = List.map (fun (_, p) -> p) malloc_block_pred_map1 @ List.map (fun (_, p) -> p) field_pred_map1 @ struct_padding_predfams1
+  let structpreds1: pred_fam_info map = List.map (fun (_, p) -> p) malloc_block_pred_map1 @ List.map (fun (_, p) -> p) field_pred_map1 @ struct_padding_predfams1
   
   let predfammap1 =
     let rec iter (pn,ilist) pm ds =
       match ds with
-        PredFamilyDecl (l, p, tparams, arity, tes, inputParamCount)::ds -> let p=full_name pn p in
+        PredFamilyDecl (l, p, tparams, arity, tes, inputParamCount, inductiveness)::ds -> let p=full_name pn p in
         let ts = List.map (check_pure_type (pn,ilist) tparams) tes in
         begin
           match try_assoc2' (pn,ilist) p pm predfammap0 with
-            Some (l0, tparams0, arity0, ts0, symb0, inputParamCount0) ->
+            Some (l0, tparams0, arity0, ts0, symb0, inputParamCount0, inductiveness0) ->
             let tpenv =
               match zip tparams0 (List.map (fun x -> TypeParam x) tparams) with
                 None -> static_error l "Predicate family redeclarations declares a different number of type parameters." None
               | Some bs -> bs
             in
             let ts0' = List.map (instantiate_type tpenv) ts0 in
-            if arity <> arity0 || ts <> ts0' || inputParamCount <> inputParamCount0 then
+            if arity <> arity0 || ts <> ts0' || inputParamCount <> inputParamCount0 || inductiveness <> inductiveness0 then
               static_error l ("Predicate family redeclaration does not match original declaration at '" ^ string_of_loc l0 ^ "'.") None;
             iter (pn,ilist) pm ds
           | None ->
-            iter (pn,ilist) (mk_predfam p l tparams arity ts inputParamCount::pm) ds
+            iter (pn,ilist) (mk_predfam p l tparams arity ts inputParamCount inductiveness::pm) ds
         end
       | _::ds -> iter (pn,ilist) pm ds
       | [] -> List.rev pm
@@ -2067,8 +2070,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           iter [] ps
         in
-        let pfm = mk_predfam bcn l [] 0 (BoxIdType::List.map (fun (x, t) -> t) boxpmap) (Some 1)::pfm in
-        let pfm = mk_predfam default_hpn l [] 0 (HandleIdType::BoxIdType::[]) (Some 1)::pfm in
+        let pfm = mk_predfam bcn l [] 0 (BoxIdType::List.map (fun (x, t) -> t) boxpmap) (Some 1) Inductiveness_Inductive::pfm  in
+        let pfm = mk_predfam default_hpn l [] 0 (HandleIdType::BoxIdType::[]) (Some 1) Inductiveness_Inductive::pfm in
         let (pfm, amap) =
           let rec iter pfm amap ads =
             match ads with
@@ -2098,8 +2101,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   if List.mem_assoc action_permission_pred_name pfm || List.mem_assoc action_permission_pred_name purefuncmap0 then static_error l "Action permission name clashes with existing predicate name." None;
                   let action_permission_pred_param_types = BoxIdType :: (List.map (fun (x, t) -> t) pmap) in
                   let action_permission_pred_inputParamCount = Some (1 + nb_action_parameters) in
-                  let action_permission_pred = (mk_predfam action_permission_pred_name l [] 0 action_permission_pred_param_types action_permission_pred_inputParamCount) in
-                  let  (_, (_, _, _, _, action_permission_pred_symb, _)) = action_permission_pred in
+                  let action_permission_pred = (mk_predfam action_permission_pred_name l [] 0 action_permission_pred_param_types action_permission_pred_inputParamCount) Inductiveness_Inductive in
+                  let  (_, (_, _, _, _, action_permission_pred_symb, _, Inductiveness_Inductive)) = action_permission_pred in
                   let (_, _, _, _, is_action_permissionx_symb) = List.assoc ("is_action_permission" ^ (string_of_int nb_action_parameters)) purefuncmap0 in
                   ignore (ctxt#assume (mk_app is_action_permissionx_symb [action_permission_pred_symb]));
                   if ps = [] then
@@ -2111,8 +2114,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     let [(_, action_param_type)] = pmap in 
                     let action_permission_dispenser_pred_param_types = [BoxIdType; InductiveType("list", [action_param_type])] in
                     let action_permission_dispenser_pred_inputParamCount = Some 2 in
-                    let action_permission_dispenser_pred = (mk_predfam action_permission_dispenser_pred_name l [] 0 action_permission_dispenser_pred_param_types action_permission_dispenser_pred_inputParamCount) in
-                    let  (_, (_, _, _, _, action_permission_dispenser_pred_symb, _)) = action_permission_dispenser_pred in
+                    let action_permission_dispenser_pred = (mk_predfam action_permission_dispenser_pred_name l [] 0  action_permission_dispenser_pred_param_types action_permission_dispenser_pred_inputParamCount Inductiveness_Inductive) in
+                    let  (_, (_, _, _, _, action_permission_dispenser_pred_symb, _, _)) = action_permission_dispenser_pred in
                     (* assuming is_action_permission1_dispenser(action_permission_dispenser_pred_symb) *)
                     let (_, _, _, _, is_action_permission1_dispenser_symb) = List.assoc "is_action_permission1_dispenser" purefuncmap0 in
                     ignore (ctxt#assume (mk_app is_action_permission1_dispenser_symb [action_permission_dispenser_pred_symb]));
@@ -2160,7 +2163,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   (take (List.length epmap) pmap) epmap) 
                 then static_error l "Extended handle's parameter list must be prefix of extending handle's parameter list." None;
               );
-              iter (mk_predfam hpn l [] 0 (HandleIdType::BoxIdType::List.map (fun (x, t) -> t) pmap) (Some 1)::pfm) ((hpn, (l, pmap, extends, inv, pbcs))::hpm) hpds
+              iter (mk_predfam hpn l [] 0 (HandleIdType::BoxIdType::List.map (fun (x, t) -> t) pmap) (Some 1) Inductiveness_Inductive::pfm) ((hpn, (l, pmap, extends, inv, pbcs))::hpm) hpds
           in
           iter pfm [] hpds
         in
@@ -2215,7 +2218,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 []
               in
               match flatmap preds_in_itf interfs with
-                [] -> (tn, get_unique_var_symb (tn ^ "#" ^ g) (PredType ([], [], None)))
+                [] -> (tn, get_unique_var_symb (tn ^ "#" ^ g) (PredType ([], [], None, Inductiveness_Inductive)))
               | [(family, pmap0, symb)] ->
                 if not (for_all2 (fun (x, t) (x0, t0) -> expect_type_core l "Predicate parameter covariance check" (Some true) t t0; true) pmap pmap0) then
                   static_error l "Predicate override check: parameter count mismatch" None;
@@ -2289,7 +2292,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 []
               in
               match preds_in_class super @ flatmap preds_in_itf interfs with
-                [] -> (cn, get_unique_var_symb (cn ^ "#" ^ g) (PredType ([], [], None)))
+                (* InstancePredDecl currently does not support coinductive declarations. *)
+                [] -> (cn, get_unique_var_symb (cn ^ "#" ^ g) (PredType ([], [], None, Inductiveness_Inductive)))
               | [(family, pmap0, symb)] ->
                 if not (for_all2 (fun (x, t) (x0, t0) -> expect_type_core l "Predicate parameter covariance check" (Some true) t t0; true) pmap pmap0) then
                   static_error l "Predicate override check: parameter count mismatch" None;
@@ -2347,7 +2351,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           iter ps1 [] ps2
         in
         let funcsym = mk_func_symbol p (List.map (fun (x, t) -> provertype_of_type t) ps1) ProverInductive Proverapi.Uninterp in
-        let pf = (p, (l, [], PredType ([], List.map (fun (x, t) -> t) ps2, inputParamCount), List.map (fun (x, t) -> (x, t)) ps1, funcsym)) in
+        (* predicate constructors do not support coinductive predicates yet. *)
+        let pf = (p, (l, [], PredType ([], List.map (fun (x, t) -> t) ps2, inputParamCount, Inductiveness_Inductive), List.map (fun (x, t) -> (x, t)) ps1, funcsym)) in
         iter (pn,ilist) ((p, (l, ps1, ps2, inputParamCount, body, funcsym, pn, ilist))::pcm) (pf::pfm) ds
       | [] -> (pcm, pfm)
       | _::ds -> iter (pn,ilist) pcm pfm ds
@@ -2643,11 +2648,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | _ -> scope := Some FuncName; (e, PtrType Void, None)
       else
       match resolve (pn,ilist) l x predfammap with
-      | Some (x, (_, tparams, arity, ts, _, inputParamCount)) ->
+      | Some (x, (_, tparams, arity, ts, _, inputParamCount, inductiveness)) ->
         if arity <> 0 then static_error l "Using a predicate family as a value is not supported." None;
         if tparams <> [] then static_error l "Using a predicate with type parameters as a value is not supported." None;
         scope := Some PredFamName;
-        (Var (l, x, scope), PredType (tparams, ts, inputParamCount), None)
+        (Var (l, x, scope), PredType (tparams, ts, inputParamCount, inductiveness), None)
       | None ->
       match try_assoc x enummap with
       | Some i ->
@@ -2680,10 +2685,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | PredNameExpr (l, g) ->
       begin
         match resolve (pn,ilist) l g predfammap with
-          Some (g, (_, tparams, arity, ts, _, inputParamCount)) ->
+          Some (g, (_, tparams, arity, ts, _, inputParamCount, inductiveness)) ->
           if arity <> 0 then static_error l "Using a predicate family as a value is not supported." None;
           if tparams <> [] then static_error l "Using a predicate with type parameters as a value is not supported." None;
-          (PredNameExpr (l, g), PredType (tparams, ts, inputParamCount), None)
+          (PredNameExpr (l, g), PredType (tparams, ts, inputParamCount, inductiveness), None)
         | None -> static_error l "No such predicate." None
       end
     | Operation (l, (Eq | Neq as operator), [e1; e2], ts) -> 
@@ -3743,7 +3748,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
     | _ -> static_error l (Printf.sprintf "Ambiguous instance predicate assertion: multiple predicates named '%s' in scope" g) None
     end
   
-  let get_pred_symb p = let (_, _, _, _, symb, _) = List.assoc p predfammap in symb
+  let get_pred_symb p = let (_, _, _, _, symb, _, _) = List.assoc p predfammap in symb
   let get_pure_func_symb g = let (_, _, _, _, symb) = List.assoc g purefuncmap in symb
   
   let lazy_value f =
@@ -3865,10 +3870,10 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
       begin fun cont ->
          match try_assoc p#name tenv with
-           Some (PredType (callee_tparams, ts, inputParamCount)) -> cont (new predref (p#name), false, callee_tparams, [], ts, inputParamCount)
+           Some (PredType (callee_tparams, ts, inputParamCount, inductiveness)) -> cont (new predref (p#name), false, callee_tparams, [], ts, inputParamCount)
          | None | Some _ ->
           begin match resolve (pn,ilist) l p#name predfammap with
-            Some (pname, (_, callee_tparams, arity, xs, _, inputParamCount)) ->
+            Some (pname, (_, callee_tparams, arity, xs, _, inputParamCount, inductiveness)) ->
             let ts0 = match file_type path with
               Java-> list_make arity (ObjType "java.lang.Class")
             | _   -> list_make arity (PtrType Void)
@@ -4227,7 +4232,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
               function
                 (f, (l, Real, t)) ->
                 begin
-                let (g, (_, _, _, _, symb, _)) = List.assoc (sn, f) field_pred_map in
+                let (g, (_, _, _, _, symb, _, inductiveness)) = List.assoc (sn, f) field_pred_map in (* TODO WILLEM: we moeten die inductiveness ergens gebruiken *)
                 let predinst p =
                   p#set_inputParamCount (Some 1);
                   ((g, []),
@@ -4310,7 +4315,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
     let (p, predfam_tparams, arity, ps, psymb, inputParamCount) =
       match resolve (pn,ilist) l p predfammap with
         None -> static_error l ("No such predicate family: "^p) None
-      | Some (p, (lfam, predfam_tparams, arity, ps, psymb, inputParamCount)) ->
+      | Some (p, (lfam, predfam_tparams, arity, ps, psymb, inputParamCount, inductiveness)) ->
         if fns = [] && language = CLang then begin
           nonabstract_predicates := (p, l)::!nonabstract_predicates
         end;
@@ -4730,7 +4735,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
           LocalVar -> (try List.assoc x env with Not_found -> assert_false [] env l (Printf.sprintf "Unbound variable '%s'" x) None)
         | PureCtor -> let Some (lg, tparams, t, [], s) = try_assoc x purefuncmap in mk_app s []
         | FuncName -> List.assoc x funcnameterms
-        | PredFamName -> let Some (_, _, _, _, symb, _) = try_assoc x predfammap in symb
+        | PredFamName -> let Some (_, _, _, _, symb, _, _) = try_assoc x predfammap in symb
         | EnumElemName n -> ctxt#mk_intlit_of_string (string_of_big_int n)
         | GlobalName ->
           let Some((_, tp, symbol, init)) = try_assoc x globalmap in 
@@ -4747,7 +4752,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         | ModuleName -> List.assoc x modulemap
         | PureFuncName -> let (lg, tparams, t, tps, (fsymb, vsymb)) = List.assoc x purefuncmap in vsymb
       end
-    | PredNameExpr (l, g) -> let Some (_, _, _, _, symb, _) = try_assoc g predfammap in cont state symb
+    | PredNameExpr (l, g) -> let Some (_, _, _, _, symb, _, _) = try_assoc g predfammap in cont state symb
     | CastExpr (l, truncating, ManifestTypeExpr (_, t), e) ->
       begin
         match (e, t, truncating) with

@@ -108,7 +108,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       ((g1, literal1), (g2, literal2)) -> if literal1 && literal2 then g1 == g2 else definitely_equal g1 g2
   
   let assume_field h0 fparent fname frange fghost tp tv tcoef cont =
-    let (_, (_, _, _, _, symb, _)) = List.assoc (fparent, fname) field_pred_map in
+    let (_, (_, _, _, _, symb, _, _)) = List.assoc (fparent, fname) field_pred_map in
     if fghost = Real then begin
       match frange with
          Char -> ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_char_term tv) (ctxt#mk_le tv max_char_term)))
@@ -208,7 +208,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match p with
     | WPointsTo (l, WRead (lr, e, fparent, fname, frange, fstatic, fvalue, fghost), tp, rhs) ->
       if fstatic then
-        let (_, (_, _, _, _, symb, _)) = List.assoc (fparent, fname) field_pred_map in
+        let (_, (_, _, _, _, symb, _, _)) = List.assoc (fparent, fname) field_pred_map in
         evalpat (fghost = Ghost) ghostenv env rhs tp tp $. fun ghostenv env t ->
         produce_chunk h (symb, true) [] coef (Some 0) [t] None $. fun h ->
         cont h ghostenv env
@@ -249,7 +249,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let Some term = try_assoc g#name env in ((term, false), pats0, pats, g#domain, None)
        else
           begin match try_assoc g#name predfammap with
-            Some (_, _, _, declared_paramtypes, symb, _) -> ((symb, true), pats0, pats, g#domain, Some (g#name, declared_paramtypes))
+            Some (_, _, _, declared_paramtypes, symb, _, _) -> ((symb, true), pats0, pats, g#domain, Some (g#name, declared_paramtypes))
           | None ->
             let PredCtorInfo (_, ps1, ps2, inputParamCount, body, funcsym) = List.assoc g#name predctormap in
             let ctorargs = List.map (function LitPat e -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
@@ -573,11 +573,11 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Some v -> v
 
   let read_field h env l t fparent fname =
-    let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
+    let (_, (_, _, _, _, f_symb, _, _)) = List.assoc (fparent, fname) field_pred_map in
     lookup_points_to_chunk h env l f_symb t
   
   let read_static_field h env l fparent fname =
-    let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
+    let (_, (_, _, _, _, f_symb, _, _)) = List.assoc (fparent, fname) field_pred_map in
     match extract (function Chunk (g, targs, coef, arg0::args, size) when predname_eq (f_symb, true) g -> Some arg0 | _ -> None) h with
       None -> assert_false h env l ("No matching heap chunk: " ^ ctxt#pprint f_symb) None
     | Some (v, _) -> v
@@ -727,8 +727,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let (g, inputParamCount) = match inputParamCount with 
             Some (n) -> (g, inputParamCount)
           | None when not (snd g) ->
-            begin match try_find (fun (_, (_, _, _, _, symb, _)) -> symb == fst(g)) predfammap with
-              Some (_, (_, _, _, _, symb, inputParamCount)) -> ((symb, true), inputParamCount)
+            begin match try_find (fun (_, (_, _, _, _, symb, _, _)) -> symb == fst(g)) predfammap with
+              Some (_, (_, _, _, _, symb, inputParamCount, _)) -> ((symb, true), inputParamCount)
             | None -> begin match try_assq (fst g) !pred_ctor_applications with
                 None -> (g, None)
               | Some (funsym, funterm, args, inputParamCount) -> (g, inputParamCount)
@@ -844,7 +844,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let points_to l coefpat e tp rhs =
       match e with
         WRead (lr, e, fparent, fname, frange, fstatic, fvalue, fghost) ->
-        let (_, (_, _, _, _, symb, _)) = List.assoc (fparent, fname) field_pred_map in
+        let (_, (_, _, _, _, symb, _, _)) = List.assoc (fparent, fname) field_pred_map in
         let (inputParamCount, pats) =
           if fstatic then
             (Some 0, [rhs])
@@ -883,7 +883,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (g_symb, pats0, pats, types) =
         if is_global_predref then
            match try_assoc g#name predfammap with
-            Some (_, _, _, _, symb, _) -> ((symb, true), pats0, pats, g#domain)
+            Some (_, _, _, _, symb, _, _) -> ((symb, true), pats0, pats, g#domain)
           | None -> 
             let PredCtorInfo (_, ps1, ps2, inputParamCount, body, funcsym) = List.assoc g#name predctormap in
             let ctorargs = List.map (function SrcPat (LitPat e) -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
@@ -1128,7 +1128,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match wbody with
         WPointsTo(_, WRead(lr, e, fparent, fname, frange, fstatic, fvalue, fghost), tp, v) ->
         if expr_is_fixed inputParameters e || fstatic then
-          let (_, (_, _, _, _, qsymb, _)) = List.assoc (fparent, fname) field_pred_map in
+          let (_, (_, _, _, _, qsymb, _, _)) = List.assoc (fparent, fname) field_pred_map in
           construct_edge qsymb coef None [] [] (if fstatic then [] else [e]) conds
         else
           []
@@ -1137,7 +1137,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           Some _ -> []
         | None ->
           begin match try_assoc q#name predfammap with
-            Some (_, qtparams, _, qtps, qsymb, _) ->
+            Some (_, qtparams, _, qtps, qsymb, _, _) ->
             begin match q#inputParamCount with
               None -> assert false;
             | Some qInputParamCount ->

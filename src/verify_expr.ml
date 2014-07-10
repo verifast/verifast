@@ -103,7 +103,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       cont h coef t)
     
   let get_field h t fparent fname l cont =
-    let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
+    let (_, (_, _, _, _, f_symb, _, _)) = List.assoc (fparent, fname) field_pred_map in
     get_points_to h t f_symb l cont
   
   let current_thread_name = "currentThread"
@@ -1127,7 +1127,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | LabelStmt _ | GotoStmt _ | NoopStmt _ | Break _ | Throw _ | TryFinally _ | TryCatch _ -> []
     | _ -> []
   
-  let nonempty_pred_symbs = List.map (fun (_, (_, (_, _, _, _, symb, _))) -> symb) field_pred_map
+  let nonempty_pred_symbs = List.map (fun (_, (_, (_, _, _, _, symb, _, _))) -> symb) field_pred_map
   
   let eval_non_pure_cps ev is_ghost_expr ((h, env) as state) env e cont =
     let assert_term = if is_ghost_expr then None else Some (fun l t msg url -> assert_term t h env l msg url) in
@@ -1311,7 +1311,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             consume_c_object l (field_address l addr sn f) t h true $. fun h ->
             iter h fields
           | _ ->
-             let (_, (_, _, _, _, f_symb, _)) = List.assoc (sn, f) field_pred_map in
+             let (_, (_, _, _, _, f_symb, _, _)) = List.assoc (sn, f) field_pred_map in
              consume_chunk rules h [] [] [] l (f_symb, true) [] real_unit (TermPat(real_unit)) (Some 1) [TermPat addr; dummypat] $.
              (fun chunk h coef [_; t] size ghostenv env env' -> iter h fields)
       in
@@ -1427,10 +1427,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                           begin
                             match chunk_size with
                               Some (PredicateChunkSize k) when k < 0 -> ()
+                            | Some (PredicateChunkSize k) when k > 0 ->
+                              with_context_force (Executing (h, env', l, "Checking recursion termination")) (fun _ ->
+                                assert_false h env l "Coinductive proof not supported yet." (Some "recursivelemmacall")
+                              )
                             | _ ->
                               with_context_force (Executing (h, env', l, "Checking recursion termination")) (fun _ ->
                               assert_false h env l "Recursive lemma call does not decrease the heap (no full field chunks left) or the derivation depth of the first chunk and there is no inductive parameter." (Some "recursivelemmacall")
-                            )
+                              )
                           end
                       | Some x -> (
                           match try_assq (List.assoc x env') sizemap with
@@ -1569,7 +1573,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let new_array h env l elem_tp length elems =
       let at = get_unique_var_symb (match xo with None -> "array" | Some x -> x) (ArrayType elem_tp) in
-      let (_, _, _, _, array_slice_symb, _) = List.assoc "java.lang.array_slice" predfammap in
+      let (_, _, _, _, array_slice_symb, _, _) = List.assoc "java.lang.array_slice" predfammap in
       assume (ctxt#mk_not (ctxt#mk_eq at (ctxt#mk_intlit 0))) $. fun () ->
       assume (ctxt#mk_eq (ctxt#mk_app arraylength_symbol [at]) length) $. fun () ->
       cont (Chunk ((array_slice_symb, true), [elem_tp], real_unit, [at; ctxt#mk_intlit 0; length; elems], None)::h) env at
@@ -1578,7 +1582,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match lhs with
         Var (l, x, scope) -> cont h env (LValues.Var (l, x, scope))
       | WRead (l, w, fparent, fname, tp, fstatic, fvalue, fghost) ->
-        let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
+        let (_, (_, _, _, _, f_symb, _, _)) = List.assoc (fparent, fname) field_pred_map in
         begin fun cont ->
           if fstatic then
             cont h env None
@@ -1737,7 +1741,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           produce_c_object l real_unit result t None true false h $. fun h ->
           match t with
             StructType sn ->
-            let (_, (_, _, _, _, malloc_block_symb, _)) = List.assoc sn malloc_block_pred_map in
+            let (_, (_, _, _, _, malloc_block_symb, _, _)) = List.assoc sn malloc_block_pred_map in
             cont (Chunk ((malloc_block_symb, true), [], real_unit, [result], None)::h)
           | _ ->
             match try_pointee_pred_symb0 t with
@@ -1763,14 +1767,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           assert_term phi h env l ("Could not prove is_" ^ ftn ^ "(" ^ g ^ ")") None;
           check_call [] h [] cont
         | Real ->
-          let [(_, (_, _, _, _, predsymb, inputParamCount))] = ft_predfammaps in
+          let [(_, (_, _, _, _, predsymb, inputParamCount, _))] = ft_predfammaps in
           let pats = TermPat fterm::List.map (fun _ -> SrcPat DummyPat) ftxmap in
           let targs = List.map (fun _ -> InferredType (ref None)) fttparams in
           consume_chunk rules h [] [] [] l (predsymb, true) targs real_unit dummypat inputParamCount pats $. fun _ h coef (_::args) _ _ _ _ ->
           check_call targs h args $. fun h env retval ->
           cont (Chunk ((predsymb, true), [], coef, fterm::args, None)::h) env retval
         | Ghost ->
-          let [(_, (_, _, _, _, predsymb, inputParamCount))] = ft_predfammaps in
+          let [(_, (_, _, _, _, predsymb, inputParamCount, _))] = ft_predfammaps in
           let targs = List.map (fun _ -> InferredType (ref None)) fttparams in
           let pats = TermPat fterm::List.map (fun _ -> SrcPat DummyPat) ftxmap in
           consume_chunk rules h [] [] [] l (predsymb, true) targs real_unit dummypat inputParamCount pats $. fun chunk h coef (_::args) _ _ _ _ ->
@@ -1853,7 +1857,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         )
       | _ ->
         if unloadable then static_error l "The use of string literals as expressions in unloadable modules is not supported. Put the string literal in a named global array variable instead." None;
-        let (_, _, _, _, string_symb, _) = List.assoc "string" predfammap in
+        let (_, _, _, _, string_symb, _, _) = List.assoc "string" predfammap in
         let cs = get_unique_var_symb "stringLiteralChars" (InductiveType ("list", [Char])) in
         let value = get_unique_var_symb "stringLiteral" (PtrType Char) in
         let coef = get_dummy_frac_term () in
@@ -1873,7 +1877,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         StaticArrayType (elemTp, elemCount) ->
         cont h env (field_address l t fparent fname)
       | _ ->
-      let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
+      let (_, (_, _, _, _, f_symb, _, _)) = List.assoc (fparent, fname) field_pred_map in
       begin match lookup_points_to_chunk_core h f_symb t with
         None -> (* Try the heavyweight approach; this might trigger a rule (i.e. an auto-open or auto-close) and rewrite the heap. *)
         get_points_to h t f_symb l $. fun h coef v ->
@@ -1882,7 +1886,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
       end
     | WRead (l, _, fparent, fname, frange, true (* is static? *), fvalue, fghost) when ! fvalue = None || ! fvalue = Some None->
-      let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
+      let (_, (_, _, _, _, f_symb, _, _)) = List.assoc (fparent, fname) field_pred_map in
       consume_chunk rules h [] [] [] l (f_symb, true) [] real_unit dummypat (Some 0) [dummypat] (fun chunk h coef [field_value] size ghostenv _ _ ->
         cont (chunk :: h) env field_value)
     | WReadArray (l, arr, elem_tp, i) when language = Java ->

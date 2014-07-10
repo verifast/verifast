@@ -15,6 +15,17 @@ exception NotAConstant
 
 (* Region: ASTs *)
 
+(* Because using "True" and "False" for everything results in unreadable sourcecode *)
+type inductiveness = (* ? inductiveness *)
+  | Inductiveness_Inductive (* prefixing to avoid nameclash with "Inductive" *)
+  | Inductiveness_CoInductive
+
+let string_of_inductiveness inductiveness =
+  match inductiveness with
+  | Inductiveness_Inductive -> "inductive"
+  | Inductiveness_CoInductive -> "coinductive"
+  
+
 type type_ = (* ?type_ *)
     Bool
   | Void
@@ -29,7 +40,7 @@ type type_ = (* ?type_ *)
   | PtrType of type_
   | FuncType of string   (* The name of a typedef whose body is a C function type. *)
   | InductiveType of string * type_ list
-  | PredType of string list * type_ list * int option (* if None, not necessarily precise; if Some n, precise with n input parameters *)
+  | PredType of string list * type_ list * int option * inductiveness (* if None, not necessarily precise; if Some n, precise with n input parameters *)
   | PureFuncType of type_ * type_  (* Curried *)
   | ObjType of string
   | ArrayType of type_
@@ -504,7 +515,8 @@ and
       string list (* type parameters *) *
       int (* number of indices *) *
       type_expr list *
-      int option (* (Some n) means the predicate is precise and the first n parameters are input parameters *)
+      int option (* (Some n) means the predicate is precise and the first n parameters are input parameters *) *
+      inductiveness
   | PredFamilyInstanceDecl of
       loc *
       string *

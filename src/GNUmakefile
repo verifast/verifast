@@ -13,11 +13,16 @@ help:
 	@echo "  make verifast: only compile verifast (also works without lablgtk)"
 	@echo "  make vfide: only compile vfide"
 	@echo "  make build: compile everything (do not run tests)"
+	@echo "  make test : run tests and examples"
 	@echo "  make      : compile all and run tests"
 	@echo "  make clean: remove output and temp files"
+	@echo ""
 	@echo "Tips:"
-	@echo "-You can add the option VERBOSE=1 to see more, e.g. 'make build VERBOSE=1'".
-	@echo "-You can add -j N to use N CPU cores, e.g. 'make build -j 4'."
+	@echo "- Use e.g. 'make build VERBOSE=yes' to see more."
+	@echo "- Use e.g. 'make build -j 4' to use 4 cores."
+	@echo "- Use e.g. 'make DEBUG=yes' to include debug symbols and output"
+	@echo "  .annot files containing type information. To see stack"
+	@echo "  trace, launch with 'OCAMLRUNPARAM=b verifast <args>'.
 .PHONY: help
 
 #------------------------------- Settings -----------------------------------#
@@ -123,6 +128,10 @@ else
 endif
 
 
+ifdef DEBUG
+  OCAMLCFLAGS += -g -annot
+endif
+
 env:
 	@echo "Configuration:"
 	@echo "---------------------"
@@ -202,22 +211,25 @@ clean::
 
 ../bin/%$(DOTEXE): %.ml
 	@echo "  OCAMLOPT " $*.cmi
-	${OCAMLOPT} -o ../bin/$*$(DOTEXE) $*.ml
+	${OCAMLOPT} $(OCAMLCFLAGS) -o ../bin/$*$(DOTEXE) $*.ml
 clean::
 	rm -f $(TOOLS)
 
 %.cmi: %.mli
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} $(INCLUDES) -c $*.mli
+	${OCAMLOPT} $(OCAMLCFLAGS) $(INCLUDES) -c $*.mli
 clean::
 	rm -f *.cmi
 
 %.cmx: %.ml
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} -thread -c -w p -warn-error FSU -c $(INCLUDES) -pp ${CAMLP4O} nums.cmxa  $*.ml
+	${OCAMLOPT} $(OCAMLCFLAGS) -thread -c -w p -warn-error FSU -c $(INCLUDES) -pp ${CAMLP4O} nums.cmxa  $*.ml
 clean::
 	rm -f *.cmx
 	rm -f *.o
+
+clean::
+	rm -f *.annot
 
 # We have " || rm ..." such that in case verifast fails, we do not end
 # up with an empty (and thus incorrect) .dll.vfmanifest file.
@@ -304,27 +316,27 @@ tabhunt:
 
 ../bin/mysh$(DOTEXE): Fonts.cmx vfconfig.cmx mysh.ml
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} -thread -o ../bin/mysh$(DOTEXE) unix.cmxa threads.cmxa Fonts.cmx vfconfig.cmx mysh.ml
+	${OCAMLOPT} $(OCAMLCFLAGS) -thread -o ../bin/mysh$(DOTEXE) unix.cmxa threads.cmxa Fonts.cmx vfconfig.cmx mysh.ml
 mysh: ../bin/mysh$(DOTEXE)
 .PHONY: mysh
 
 ifeq ($(OS), Darwin)
 macos/GSourceView2.cmx: macos/GSourceView2.ml
 	@echo "  OCAMLOPT " $@
-	cd macos; ${OCAMLOPT} -c -I +lablgtk2 GSourceView2.ml
+	cd macos; ${OCAMLOPT} $(OCAMLCFLAGS) -c -I +lablgtk2 GSourceView2.ml
 endif
 clean::
 	rm -f macos/*.cm* macos/*.o
 
 vfide.cmx: Fonts.cmx
 	@echo "  OCAMLOPT " $@
-	$(SET_LDD); $(OCAMLOPT) -thread -c -w p -warn-error FSU -c $(INCLUDES) \
+	$(SET_LDD); $(OCAMLOPT) $(OCAMLCFLAGS) -thread -c -w p -warn-error FSU -c $(INCLUDES) \
 	-pp ${CAMLP4O} nums.cmxa $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) vfide.ml
 
 ../bin/vfide$(DOTEXE): vfide.cmx redux.cmx $(Z3DEPS) plugins2.cmx $(GTKSOURCEVIEW_DEPS)
 ifndef WITHOUT_LABLGTK
 	@echo "  OCAMLOPT " $@
-	$(SET_LDD); ${OCAMLOPT} -warn-error F -pp ${CAMLP4O} -o ../bin/vfide$(DOTEXE)	\
+	$(SET_LDD); ${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/vfide$(DOTEXE)	\
 	  $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) gtkInit.cmx unix.cmxa \
 	  nums.cmxa $(INCLUDES) Perf.cmxa proverapi.cmx \
 	  Printexc_proxy.cmx vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx \
@@ -343,7 +355,7 @@ vfide: ../bin/vfide$(DOTEXE) $(STDLIB)
 
 ../bin/verifast$(DOTEXE): vfconsole.cmx redux.cmx $(Z3DEPS) plugins2.cmx
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} -warn-error F -pp ${CAMLP4O} -o ../bin/verifast$(DOTEXE) unix.cmxa \
+	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/verifast$(DOTEXE) unix.cmxa \
 	  nums.cmxa $(INCLUDES) Perf.cmxa proverapi.cmx \
 	  vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx \
 	  plugins2.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx \
@@ -360,15 +372,15 @@ verifast: ../bin/verifast$(DOTEXE) $(STDLIB)
 
 z3prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmx proverapi.cmx z3prover.ml
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} -warn-error F -c -I $(Z3_OCAML) z3.cmxa -I ./$(INCLUDE_OS_DIR) Perf.cmx proverapi.cmx z3prover.ml
+	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -c -I $(Z3_OCAML) z3.cmxa -I ./$(INCLUDE_OS_DIR) Perf.cmx proverapi.cmx z3prover.ml
 
 z3v2prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmx proverapi.cmx z3v2prover.ml
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} -warn-error F -c -I $(Z3_OCAML) z3.cmxa -I ./$(INCLUDE_OS_DIR) Perf.cmx proverapi.cmx z3v2prover.ml
+	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -c -I $(Z3_OCAML) z3.cmxa -I ./$(INCLUDE_OS_DIR) Perf.cmx proverapi.cmx z3v2prover.ml
 
 z3v4prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmx proverapi.cmx z3v4prover.ml
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} -warn-error F -c -I $(Z3_OCAML) z3.cmxa -I ./$(INCLUDE_OS_DIR) Perf.cmx proverapi.cmx z3v4prover.ml
+	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -c -I $(Z3_OCAML) z3.cmxa -I ./$(INCLUDE_OS_DIR) Perf.cmx proverapi.cmx z3v4prover.ml
 
 clean::
 	rm -f shape_analysis/*.cm[ix] shape_analysis/*.cmo
