@@ -81,9 +81,6 @@ cd examples
     mysh < fm2012.mysh
   cd ..
   verifast_both -disable_overflow_check -c fractions-counting.c
-  verifast_both -disable_overflow_check -c full_func_io.c
-  verifast_both -disable_overflow_check -c full_func_io_mod.c
-  verifast_both -disable_overflow_check -c full_func_io_sim.c
   verifast_both -disable_overflow_check -c gcl0.c
   verifast_both -disable_overflow_check -c gcl.c
   verifast_both ghost_field.c
@@ -100,8 +97,13 @@ cd examples
   verifast_both -shared -disable_overflow_check inverse.c
   verifast_both iter.c
   verifast_both iter_with_auto.c
-  verifast_both -c iospec.c
-  ifz3 verifast -prover redux -c iospec_theory.c
+  cd old_io
+    verifast_both -c iospec.c
+    verifast -prover redux -c iospec_theory.c
+    verifast_both -disable_overflow_check -c full_func_io.c
+    verifast_both -disable_overflow_check -c full_func_io_mod.c
+    verifast_both -disable_overflow_check -c full_func_io_sim.c
+  cd ..
   cd lcset
     verifast_both atomics.o ghost_lists.c ghost_counters.c locks.c lcset.c lcset_client.c
   cd ..
