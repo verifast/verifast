@@ -5,7 +5,7 @@
  * so we need to represent an infinite amount of permissions in the contract.
  */
 
-//@ #include <stdio_simple.h>
+#include <stdio_simple.h>
 //#include <stdio.h>
 //@ #include <bigstar.gh>
 

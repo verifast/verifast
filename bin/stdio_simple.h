@@ -5,7 +5,7 @@
  * If you do not want to specify that, you can use the stdio.h.
  *
  * The specifications are for a simplified view on the stdio API:
- * - files cannot be opened/closed, only stdin/stdout/stderr is available
+ * - limited mode for fopen/fclose
  * - reading and writing is not buffered and not read-ahead
  * - only putchar/getchar, no fread/fwrite
  * - functions are thread-safe (this is also the case in glibc).
@@ -44,9 +44,22 @@ FILE *get_stderr();
 //@ requires true;
 //@ ensures result == stderr;
 
-int getc(FILE *stream);
-//@ requires read_char_io(?t1, stream, ?c, ?success, ?t2) &*& time(t1);
-//@ ensures time(t2) &*& success ? result == c && c >= 0 && c <= 255 : result < 0;
+int fgetc(FILE *stream);
+/*@ requires read_char_io(?t1, stream, ?c, ?success, ?t2) &*& time(t1)
+  &*& stream != stdin ?
+    [?f]stream(stream, ?mode) &*& true==does_fopen_mode_allow_reading(mode)
+    &*& ensures
+      [f]stream(stream, mode)
+      &*& time(t2) &*& (success ? result == c && c >= 0 && c <= 255 : result < 0)
+  : 
+    // no stream required for stdin for convenience.
+    ensures
+      time(t2) &*& (success ? result == c && c >= 0 && c <= 255 : result < 0);
+@*/
+/*@ ensures emp; // ensures clauses embedded in requires clause.
+@*/
+
+#define getc(stream) fgetc(stream)
 
 int getchar();
 //@ requires read_char_io(?t1, stdin, ?c, ?success, ?t2) &*& time(t1);
@@ -60,12 +73,58 @@ int putchar(int c);
 //@ requires write_char_io(?t1, stdout, c, ?success, ?t2) &*& time(t1);
 //@ ensures time(t2) &*& success ? result == c : result < 0;
 
-int putc(int c, FILE *stream);
-//@ requires write_char_io(?t1, stream, c, ?success, ?t2) &*& time(t1);
-//@ ensures time(t2) &*& success ? result == c : result < 0;
+int fputc(int c, FILE *stream);
+/*@ requires write_char_io(?t1, stream, c, ?success, ?t2) &*& time(t1)
+  &*& true==(stream != stdout && stream != stderr) ?
+    [?f]stream(stream, ?mode) &*& true==does_fopen_mode_allow_writing(mode)
+    &*& ensures
+      [f]stream(stream, mode)
+      &*& time(t2) &*& (success ? result == c : result < 0)
+    :
+      ensures
+      time(t2) &*& (success ? result == c : result < 0);
+@*/
+//@ ensures emp; // ensures clauses embedded in requires clause.
 
+#define putc(c, stream) fputc(c, stream)
 
+/*@
+fixpoint bool is_valid_fopen_mode(list<char> mode_str){
+  return mode_str == {'r','b'} || mode_str == {'w','b'}; // currently not supporting much.
+}
 
+fixpoint bool does_fopen_mode_allow_writing(list<char> mode_str){
+  return mode_str == {'w','b'}; 
+}
+
+fixpoint bool does_fopen_mode_allow_reading(list<char> mode_str){
+  return mode_str == {'r','b'}; 
+}
+@*/
+
+//@ predicate stream(FILE *stream, list<char> mode);
+
+//@ predicate fopen_io(time t1, list<char> filename, list<char> mode; FILE *stream, time t2);
+FILE *fopen(char *filename, char *mode);
+/*@ requires [?ff]string(filename, ?filename_str) &*& [?fm]string(mode, ?mode_str)
+  &*& true==is_valid_fopen_mode(mode_str)
+  &*& fopen_io(?t1, filename_str, mode_str, ?stream, ?t2) &*& time(t1);
+@*/
+/*@ ensures
+  [ff]string(filename, filename_str)
+  &*& [fm]string(mode, mode_str)
+  &*& result == stream
+  &*& time(t2)
+  &*& stream != 0 ?
+    stream(result, mode_str)
+  :
+    emp;
+@*/
+
+//@ predicate fclose_io(time t1, FILE *stream; time t2);
+void fclose(FILE *stream);
+/*@ requires stream(stream, _) &*& fclose_io(?t1, stream, ?t2) &*& time(t1); @*/
+/*@ ensures time(t2); @*/
 
 
 // The author of the main function can provide a body of this predicate.

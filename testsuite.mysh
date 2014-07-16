@@ -184,6 +184,12 @@ cd examples
     cd never-ending-program
       verifast_both stdio_simple.o -shared yes.c
     cd ..
+    cd hello-world
+      verifast_both stdio_simple.o -shared hello-world.c
+    cd ..
+    cd read-files-of-file
+      verifast_both io.o stdio_simple.o -shared read-files-of-file.c
+    cd ..
   cd ..
   cd java
     cd channels
