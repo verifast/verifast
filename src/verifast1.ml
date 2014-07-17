@@ -1591,7 +1591,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (ShortType, IntType) -> ()
     | ((Char|UChar|ShortType|UShortType|IntType|UintPtrType), (Char|UChar|ShortType|UShortType|IntType|UintPtrType)) when inAnnotation = Some true -> ()
     | (ObjType x, ObjType y) when is_subtype_of x y -> ()
-    | (PredType ([], ts, inputParamCount, inductiveness), PredType ([], ts0, inputParamCount0, inductiveness0))when inductiveness = inductiveness0 ->
+    | (PredType ([], ts, inputParamCount, inductiveness), PredType ([], ts0, inputParamCount0, inductiveness0)) ->
       begin
         match zip ts ts0 with
           Some tpairs when List.for_all (fun (t, t0) -> unify t t0) tpairs && (inputParamCount0 = None || inputParamCount = inputParamCount0) -> ()
