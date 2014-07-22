@@ -178,6 +178,7 @@ cd examples
     cd ..
     cd matching-brackets
       verifast_both stdio_simple.o -shared -disable_overflow_check matching-brackets-input.c
+      verifast_both stdio_simple.o -shared matching_brackets_checker.c
     cd ..
     cd output-anything
       verifast_both stdio_simple.o bigstar.o -shared output-any-char.c

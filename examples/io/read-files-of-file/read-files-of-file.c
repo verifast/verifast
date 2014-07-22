@@ -21,73 +21,84 @@
 
 /*@
 
-predicate read_opened_file(time t1, FILE *handle_in; list<char> contents, time t_end) =
-  read_char_io(t1, handle_in, ?c, ?success, ?t2)
+predicate read_opened_file(time t1, FILE *f; list<char> text, time t_end) =
+  read_char_io(t1, f, ?c, ?success, ?t2)
   &*& success ?
-    read_opened_file(t2, handle_in, ?sub_contents, t_end)
-    &*& contents == cons(c, sub_contents)
+    read_opened_file(t2, f, ?sub_text, t_end)
+    &*& text == cons(c, sub_text)
   :
     t_end == t2
-    &*& contents == nil;
+    &*& text == nil;
 
-predicate read_file(time t1, list<char> filename; list<unsigned char> contents, time t_end) =
+predicate read_file(time t1, list<char> filename;
+  list<unsigned char> text, time t_end) =
+  
   fopen_io(t1, filename, {'r','b'}, ?file_handle, ?t2)
   &*& file_handle == 0 ?
     t_end == t2
-    &*& contents == nil
+    &*& text == nil
   :
-    read_opened_file(t2, file_handle, contents, ?t3)
+    read_opened_file(t2, file_handle, text, ?t3)
     &*& fclose_io(t3, file_handle, t_end);
 
-predicate write_opened_file(time t1, FILE *file_handle, list<unsigned char> contents; time t_end) =
-  contents == nil ?
+predicate write_opened_file(time t1, FILE *file_handle,
+  list<unsigned char> text; time t_end) =
+  
+  text == nil ?
     t_end == t1
   :
-    write_char_io(t1, file_handle, head(contents), _, ?t2)
-    &*& write_opened_file(t2, file_handle, tail(contents), t_end);
+    write_char_io(t1, file_handle, head(text), _, ?t2)
+    &*& write_opened_file(t2, file_handle, tail(text), t_end);
 
-predicate read_files_io(time t1, list<list<char> > filenames; list<char> contents, time t_end) =
+predicate read_files_io(time t1, list<list<char> > filenames;
+  list<char> text, time t_end) =
+  
   filenames == nil ?
     t_end == t1
-    &*& contents == nil
+    &*& text == nil
   :
-    read_file(t1, head(filenames), ?contents1, ?t2)
-    &*& read_files_io(t2, tail(filenames), ?contents2, t_end)
-    &*& contents == append(contents1, contents2);
+    read_file(t1, head(filenames), ?text1, ?t2)
+    &*& read_files_io(t2, tail(filenames), ?text2, t_end)
+    &*& text == append(text1, text2);
 
 
-predicate read_filename_list_io(time t1, FILE *stream; list<list<char> > filenames, time t_end) =
+predicate read_filename_list_io(time t1, FILE *stream; list<list<char> >
+  filenames, time t_end) =
+  
   read_char_io(t1, stream, ?c, ?success, ?t2)
   &*& success ?
     read_filename_list_io(t2, stream, ?sub_filenames, t_end)
     &*& c > 0 && c <= 127 ? // TODO
       filenames == cons({c}, sub_filenames)
     :
-      // null is not a valid filename, thus ignored. Also ignore non 7bit ascii filenames.
+      // null is not a valid filename, thus ignored.
+      // Also ignore non 7bit ascii filenames.
       filenames == sub_filenames
   :
     t_end == t2
     &*& filenames == nil;
 
-predicate read_file_of_files_io(time t1, list<char> filename, FILE *stream_out, time t_end) =
+predicate read_file_of_files_io(time t1, list<char> filename,
+  FILE *stream_out, time t_end) =
+  
   fopen_io(t1, filename, {'r','b'}, ?meta_file, ?t2)
   &*& meta_file != 0 ?
-    split(t2, ?t_read_list, ?t_readwrite)
-      &*& read_filename_list_io(t_read_list, meta_file, ?filenames, ?t_read_list2)
-      &*& fclose_io(t_read_list2, meta_file, ?t_read_list3)
+    split(t2, ?t_meta, ?t_readwrite)
+      &*& read_filename_list_io(t_meta, meta_file, ?filenames, ?t_meta2)
+      &*& fclose_io(t_meta2, meta_file, ?t_meta3)
       // --
       &*& split(t_readwrite, ?t_read, ?t_write)
-        &*& read_files_io(t_read, filenames, ?contents, ?t_read2)
+        &*& read_files_io(t_read, filenames, ?text, ?t_read2)
         //--
-        &*& write_opened_file(t_write, stdout, contents, ?t_write2)
+        &*& write_opened_file(t_write, stdout, text, ?t_write2)
       &*& join(t_read2, t_write2, ?t_readwrite2)
-    &*& join(t_read_list3, t_readwrite2, t_end)
+    &*& join(t_meta3, t_readwrite2, t_end)
   :
     t_end == t2;
 @*/
 
 
-// We choose the simplest implementation (alternatives would be buffering, threading, ...)
+// We choose the simplest implementation (alternatives would bebuffering, threading, ...)
 
 void main()
 //@ requires read_file_of_files_io(?t1, {'f'}, stdout, ?t_end) &*& time(t1);
@@ -113,8 +124,8 @@ void main()
       stream(meta, {'r','b'})
       &*& c >= 0 ?
         read_filename_list_io(?t_cur, meta, ?filenames, t_read_list2) &*& time(t_cur)
-        &*& read_files_io(?t_read, filenames, ?contents, t_read2) &*& time(t_read)
-        &*& write_opened_file(?t_write, stdout, contents, t_write2) &*& time(t_write)
+        &*& read_files_io(?t_read, filenames, ?text, t_read2) &*& time(t_read)
+        &*& write_opened_file(?t_write, stdout, text, t_write2) &*& time(t_write)
       :
         time(t_read_list2)
         &*& time(t_read2)
@@ -129,7 +140,7 @@ void main()
       filename[0] = (char)c;
       
       //@ open read_files_io(_, _, _, _);
-      //@ assert read_files_io(_, _, ?contents_nextfiles, _);
+      //@ assert read_files_io(_, _, ?text_nextfiles, _);
       //@ open read_file(_, _, _, _);
       
       FILE *f = fopen(filename, "rb");
@@ -140,12 +151,12 @@ void main()
         /*@ invariant
           stream(f, {'r','b'})
           &*& c2 >= 0 ?
-            read_opened_file(?t_read_cur, f, ?contents_onefile, t_read_cur_end) &*& time(t_read_cur)
-            &*& write_opened_file(?t_write_cur, stdout, ?contents_allfiles, t_write2) &*& time(t_write_cur)
-            &*& append(contents_onefile, contents_nextfiles) == contents_allfiles
+            read_opened_file(?t_read_cur, f, ?text_onefile, t_read_cur_end) &*& time(t_read_cur)
+            &*& write_opened_file(?t_write_cur, stdout, ?text_allfiles, t_write2) &*& time(t_write_cur)
+            &*& append(text_onefile, text_nextfiles) == text_allfiles
           :
             time(t_read_cur_end)
-            &*& write_opened_file(?t_write_cur, stdout, contents_nextfiles, t_write2) &*& time(t_write_cur);
+            &*& write_opened_file(?t_write_cur, stdout, text_nextfiles, t_write2) &*& time(t_write_cur);
         @*/
         {
           //@ open read_opened_file(_, _, _, _);

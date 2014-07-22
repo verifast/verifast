@@ -1,5 +1,6 @@
 /**
- * Consider the following grammar:     brackets = '(' brackets ')' | epsilon
+ * Consider the following grammar: 
+ *   brackets = '(' brackets ')' brackets | epsilon
  * Here, epsilon denotes the empty string.
  *
  * This program is a program that crashes if the input is not consistent with the grammar.

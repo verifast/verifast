@@ -26,7 +26,7 @@ typedef struct file FILE;
 struct file;
 
 /*@
-predicate read_char_io(time t1, FILE *file; unsigned char c, bool success, time t2);
+predicate read_char_io(time t1, FILE *file; int c, bool success, time t2);
 predicate write_char_io(time t1, FILE *file, unsigned char c; bool success, time t2);
 @*/
 
@@ -63,7 +63,7 @@ int fgetc(FILE *stream);
 
 int getchar();
 //@ requires read_char_io(?t1, stdin, ?c, ?success, ?t2) &*& time(t1);
-//@ ensures time(t2) &*& success ? result == c && c >= 0 && c <= 255: result < 0;
+//@ ensures time(t2) &*& result == c &*& success ? c >= 0 && c <= 255: result < 0;
 
 /**
  * The character c "cast to an unsigned char" (source: man putchar(3)) is written.
