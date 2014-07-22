@@ -19,9 +19,7 @@ predicate matching_brackets_helper(time t1, time t2) =
     read_char_io(t1, stdin, '(', true, ?t_open)
     &*& matching_brackets_helper(t_open, ?t_center)
     &*& read_char_io(t_center, stdin, ')', true, ?t_close)
-    &*& matching_brackets_helper(t_close, t2)
-    &*& t2 == t_close
-;
+    &*& matching_brackets_helper(t_close, t2);
 @*/
 
 

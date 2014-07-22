@@ -1,3 +1,11 @@
+/**
+ * Reads a string.
+ * Consider the grammar of matching brackets: B ::= `(' B `)' B | emptystring
+ * If this string is of the language defined by the grammer then print `1'.
+ * If it is not, print `0'.
+ *
+ */
+
 //#include <stdbool.h>
 //#include <stdio.h>
 #include <stdio_simple.h>
@@ -94,10 +102,6 @@ bool brackets()
     }
   }
 }
-
-/*@ predicate read_char_io_wrap(time t1, FILE *file) =
-  read_char_io(t1, file, _, _, _);
-@*/
 
 void main()
 /*@ requires time(?t1)
