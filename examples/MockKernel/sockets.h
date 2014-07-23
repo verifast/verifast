@@ -1,7 +1,7 @@
 #ifndef SOCKETS_H
 #define SOCKETS_H
 
-#include "bool.h"
+#include <stdbool.h>
 #include "malloc.h"
 #include "stringBuffers.h"
 

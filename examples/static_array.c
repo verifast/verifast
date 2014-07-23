@@ -3,7 +3,7 @@
 #include <assert.h>
 #include <string.h>
 
-#include "bool.h"
+#include <stdbool.h>
 
 //@ #include "arrays.gh"
 

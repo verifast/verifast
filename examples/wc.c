@@ -1,7 +1,7 @@
 #include "stdlib.h"
 #include "stdio.h"
 #include "malloc.h"
-#include "bool.h"
+#include <stdbool.h>
 #include "assert.h"
 
 // Counts the number of words in the given file.

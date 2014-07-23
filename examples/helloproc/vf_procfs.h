@@ -2,7 +2,7 @@
 #define VF_PROCFS_H
 
 #include "vf_mem.h"
-#include "bool.h"
+#include "include_ignored_by_verifast.h" // workaround, see inside file to read why.
 
 
 #include "vf_cleanup_debt.h"

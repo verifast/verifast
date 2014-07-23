@@ -1,6 +1,6 @@
 // verifast_annotation_char:#
 
-#include "bool.h"
+#include <stdbool.h>
 #include "assert.h"
 #include "malloc.h"
 #include "stdlib.h"

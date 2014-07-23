@@ -24,7 +24,7 @@ Files: Use but do not edit
     The wrapper API specifications and documentation.
     You can #include them in your kernel module.
 
--   bool.h and limits.h
+-   include_ignored_by_verifast.h and limits.h
     Special cases.  You can #include these files in your kernel module
     too.
 

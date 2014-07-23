@@ -23,7 +23,7 @@ typedef int ssize_t;
 
 #endif
 
-#include "bool.h"
+#include "stdbool.h"
 #include "stringBuffers.h"
 #include "sockets.h"
 

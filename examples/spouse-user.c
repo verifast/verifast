@@ -3,7 +3,7 @@
 #include "arraylist.h"
 //@ #include "ghostlist.gh"
 #include "io_helper.h"
-#include "bool.h"
+#include <stdbool.h>
 
 /*@
 predicate_ctor person_ctor(int gid)(struct person* p) =

@@ -1,4 +1,4 @@
-#include "bool.h"
+#include <stdbool.h>
 #include "stdlib.h"
 #include "rdcss.h"
 //@ #include "ghost_cells_ex.gh"

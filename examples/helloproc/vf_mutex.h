@@ -1,7 +1,7 @@
 #ifndef VF_MUTEX_H
 #define VF_MUTEX_H
 
-#include "bool.h"
+#include "include_ignored_by_verifast.h"
 #include "vf_cleanup_debt.h"
 
 /*

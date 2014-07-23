@@ -1,7 +1,7 @@
 #ifndef STDLIB_H
 #define STDLIB_H
 
-#include "bool.h"
+#include <stdbool.h>
 #include <malloc.h>
 
 void abort();

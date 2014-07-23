@@ -1,6 +1,6 @@
 #include "stdlib.h"
 #include "assert.h"
-#include "bool.h"
+#include <stdbool.h>
 #include "malloc.h"
 
 //@ #include "quantifiers.gh"

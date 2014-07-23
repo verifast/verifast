@@ -1090,7 +1090,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
         begin match peek () with
         | Some (l, (String s | AngleBracketString s as ss)) ->
           junk ();
-          if List.mem s ["bool.h"; "assert.h"; "limits.h"] then 
+          if List.mem s ["include_ignored_by_verifast.h"; "assert.h"; "limits.h"] then 
             next_token () 
           else begin
             if !tlexer#isGhostHeader() then

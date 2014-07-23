@@ -1,7 +1,7 @@
 #ifndef STRINGBUFFERS_H
 #define STRINGBUFFERS_H
 
-#include "bool.h"
+#include <stdbool.h>
 
 struct string_buffer;
 

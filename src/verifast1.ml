@@ -863,7 +863,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match headers with
         [] -> (maps0, headers_included)
       | (l, (include_kind, header_path, total_path), hs, header_decls)::headers ->
-        if List.mem header_path ["bool.h"; "assert.h"; "limits.h"] then
+        if List.mem header_path ["include_ignored_by_verifast.h"; "assert.h"; "limits.h"] then
           merge_header_maps include_prelude maps0 headers_included basedir reldir headers global_headers
         else begin
           if (options.option_safe_mode || options.option_header_whitelist <> []) && not (List.mem header_path options.option_header_whitelist) then

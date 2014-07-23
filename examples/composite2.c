@@ -1,5 +1,5 @@
 #include "malloc.h"
-#include "bool.h"
+#include <stdbool.h>
 
 struct node {
     struct node *left;

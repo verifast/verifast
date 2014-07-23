@@ -1,7 +1,7 @@
 #ifndef SOCKETS_H
 #define SOCKETS_H
 
-#include "bool.h"
+#include <stdbool.h>
 #include "stringBuffers.h"
 
 struct server_socket;

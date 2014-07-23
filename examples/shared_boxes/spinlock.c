@@ -1,6 +1,6 @@
 #include "atomics.h"
 #include "spinlock.h"
-#include "bool.h"
+#include <stdbool.h>
 #include "malloc.h"
 
 struct spinlock {

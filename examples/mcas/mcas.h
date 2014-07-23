@@ -1,7 +1,7 @@
 #ifndef MCAS_H
 #define MCAS_H
 
-#include "bool.h"
+#include <stdbool.h>
 #include "stdlib.h"
 //@ #include "assoc_list.gh"
 #include "atomics.h"
