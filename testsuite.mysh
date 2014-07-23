@@ -187,6 +187,7 @@ cd examples
     cd ..
     cd never-ending-program
       verifast_both stdio_simple.o -shared yes.c
+      verifast_both stdio_simple.o -shared infinite-counter.c
     cd ..
     cd hello-world
       verifast_both stdio_simple.o -shared hello-world.c

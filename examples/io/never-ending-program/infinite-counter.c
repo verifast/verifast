@@ -1,0 +1,64 @@
+/**
+ * Program that prints 1,2,3,4,... in unary notation
+ * and never stops.
+ * (because a computer has finite memory it is impossible to implement
+ * this, but the contract is written as such. The current implementation
+ * counts until UINT_MAX and then aborts).
+ *
+ * This is an example of I/O verification of nonterminating
+ * programs. It uses a coinductive predicate.
+ */
+
+#include <stdio_simple.h>
+//#include <stdio.h>
+#include <stdbool.h>
+#include <limits.h>
+
+#include <stdlib.h>
+
+/*@
+
+predicate print_unary_io(time t1, int number; time t_end) =
+  number >= 1 ?
+    write_char_io(t1, stdout, '1', _, ?t2)
+    &*& print_unary_io(t2, number - 1, t_end)
+  :
+    t_end == t1;
+
+copredicate infinite_counter_io(time t1, int number, time t_end) =
+  print_unary_io(t1, number, ?t2)
+  &*& write_char_io(t2, stdout, '\n', _, ?t3)
+  &*& infinite_counter_io(t3, number + 1, t_end);
+@*/
+
+void main()
+//@ requires time(?t1) &*& infinite_counter_io(t1, 0, ?t_end);
+//@ ensures false; // program must not terminate.
+{
+  unsigned int count = 0;
+  while(true)
+    //@ invariant time(?t_cur) &*& infinite_counter_io(t_cur, count, t_end);
+  {
+    unsigned int unary_count = 0;
+    //@ open infinite_counter_io(_, _, _);
+    //@ assert print_unary_io(_, _, ?t_unary_end);
+    while (unary_count < count)
+      /*@ invariant
+        time(?t1_unary) &*& print_unary_io(t1_unary, count - unary_count, t_unary_end);
+      @*/
+    {
+      //@ open print_unary_io(_, _, _);
+      putchar('1');
+      unsigned char u = 0;
+      
+      // VeriFast does not support "unary_count++;" for unsigned int.
+      unary_count = unary_count + ((unsigned int) 1);
+    }
+    //@ open print_unary_io(_, _, _);
+    putchar('\n');
+    if (count == UINT_MAX){
+      abort(); // use bigint if you want more.
+    }
+    count = count + ((unsigned int) 1);
+  }
+}
