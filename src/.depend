@@ -1,15 +1,15 @@
 # These dependencies are automatically generated.
 # Do not edit by hand. To generate, run 'make depend'.
 assertions.cmo : verifast1.cmx verifast0.cmx util.cmx stats.cmx \
-    proverapi.cmx plugins.cmx linux/Perf.cmx parser.cmx lexer.cmx ast.cmx
+    proverapi.cmx plugins.cmi linux/Perf.cmx parser.cmx lexer.cmx ast.cmx
 assertions.cmx : verifast1.cmx verifast0.cmx util.cmx stats.cmx \
     proverapi.cmx plugins.cmx linux/Perf.cmx parser.cmx lexer.cmx ast.cmx
-ast.cmo : util.cmx plugins.cmx lexer.cmx DynType.cmx
+ast.cmo : util.cmx plugins.cmi lexer.cmx DynType.cmi
 ast.cmx : util.cmx plugins.cmx lexer.cmx DynType.cmx
 dlsymtool.cmo :
 dlsymtool.cmx :
-DynType.cmo :
-DynType.cmx :
+DynType.cmo : DynType.cmi
+DynType.cmx : DynType.cmi
 Fonts_default.cmo :
 Fonts_default.cmx :
 Fonts_mac.cmo :
@@ -24,15 +24,15 @@ mynum.cmo :
 mynum.cmx :
 Mynum_slow.cmo :
 Mynum_slow.cmx :
-mysh.cmo : vfconfig.cmx
-mysh.cmx : vfconfig.cmx
+mysh.cmo : vfconfig.cmx Fonts.cmx
+mysh.cmx : vfconfig.cmx Fonts.cmx
 parser.cmo : util.cmx linux/Stopwatch.cmi stats.cmx lexer.cmx ast.cmx
 parser.cmx : util.cmx linux/Stopwatch.cmi stats.cmx lexer.cmx ast.cmx
-plugins2.cmo : plugins_private.cmx
-plugins2.cmx : plugins_private.cmx
-plugins.cmo : DynType.cmx
-plugins.cmx : DynType.cmx
-plugins_private.cmo : plugins.cmx
+plugins2.cmo : plugins_private.cmx plugins.cmi plugins2.cmi
+plugins2.cmx : plugins_private.cmx plugins.cmx plugins2.cmi
+plugins.cmo : DynType.cmi plugins.cmi
+plugins.cmx : DynType.cmx plugins.cmi
+plugins_private.cmo : plugins.cmi
 plugins_private.cmx : plugins.cmx
 Printexc_proxy.cmo :
 Printexc_proxy.cmx :
@@ -58,10 +58,10 @@ tabhunter.cmo :
 tabhunter.cmx :
 util.cmo : proverapi.cmx
 util.cmx : proverapi.cmx
-verifast0.cmo : util.cmx plugins.cmx lexer.cmx ast.cmx
+verifast0.cmo : util.cmx plugins.cmi lexer.cmx ast.cmx
 verifast0.cmx : util.cmx plugins.cmx lexer.cmx ast.cmx
 verifast1.cmo : verifast0.cmx util.cmx stats.cmx proverapi.cmx \
-    plugins_private.cmx plugins.cmx parser.cmx lexer.cmx \
+    plugins_private.cmx plugins.cmi parser.cmx lexer.cmx \
     java_frontend/java_frontend_bridge.cmx ast.cmx
 verifast1.cmx : verifast0.cmx util.cmx stats.cmx proverapi.cmx \
     plugins_private.cmx plugins.cmx parser.cmx lexer.cmx \
@@ -92,10 +92,10 @@ vfconsole.cmx : verifast0.cmx verifast.cmx SExpressionEmitter.cmx parser.cmx \
     lexer.cmx java_frontend/java_frontend_bridge.cmx ast.cmx
 vfide.cmo : vfversion.cmi verifast0.cmx verifast.cmx util.cmx \
     shape_analysis/shape_analysis_frontend.cmx Printexc_proxy.cmx parser.cmx \
-    lexer.cmx java_frontend/java_frontend_bridge.cmx ast.cmx
+    lexer.cmx java_frontend/java_frontend_bridge.cmx Fonts.cmx ast.cmx
 vfide.cmx : vfversion.cmx verifast0.cmx verifast.cmx util.cmx \
     shape_analysis/shape_analysis_frontend.cmx Printexc_proxy.cmx parser.cmx \
-    lexer.cmx java_frontend/java_frontend_bridge.cmx ast.cmx
+    lexer.cmx java_frontend/java_frontend_bridge.cmx Fonts.cmx ast.cmx
 vfstrip.cmo :
 vfstrip.cmx :
 z3prover.cmo : proverapi.cmx linux/Perf.cmx
