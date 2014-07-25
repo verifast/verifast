@@ -195,6 +195,9 @@ cd examples
     cd read-files-of-file
       verifast_both io.o stdio_simple.o -shared read-files-of-file.c
     cd ..
+    cd buffering-in-library
+      verifast_both stdio_simple.o -shared -c putchar-with-buffer.c
+    cd ..
   cd ..
   cd java
     cd channels
