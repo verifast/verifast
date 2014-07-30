@@ -1,0 +1,13 @@
+# Boilerplate:
+let verifast_both
+verifast
+verifast -prover redux
+in
+
+
+# Verify that an untrusted programmer who wrote unstrusted_implementation.c
+# actually made a valid program that conforms to the contract
+# written in specification.h
+
+verifast -shared stdio_simple.o -export specification.vfmanifest untrusted_implementation.c
+

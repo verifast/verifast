@@ -399,6 +399,8 @@ vfversion.cmi: vfversion.mli
 vfversion.cmo: vfversion.cmi	
 vfversion.cmx: vfversion.cmi vfversion.ml
 vfconfig.cmx: vfconfig.ml
+plugins2.cmi : plugins.cmi
+plugins.cmi : DynType.cmi
 
 #------------------------------- Tests --------------------------------------#
 test_plugin: verifast
