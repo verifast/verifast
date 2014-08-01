@@ -832,10 +832,11 @@ and
   | [< '(Kwd "NewArray");                     '(Kwd "(");
           l = parse_loc;                      '(Kwd ",");
           typ = parse_type;                   '(Kwd ",");
+          dims = parse_list parse_expression; '(Kwd ",");
           elem = parse_list parse_expression; '(Kwd ")");
     >] -> 
       debug_print "parse_expression: NewArray"; 
-      NewArray(l, typ, elem)
+      NewArray(l, typ, dims, elem)
   | [< '(Kwd "Assign");                         '(Kwd "(");
           l = parse_loc;                        '(Kwd ",");
           op = parse_opt parse_bin_operator;    '(Kwd ",");
@@ -888,6 +889,13 @@ and
     >] -> 
       debug_print "parse_expression: TypeCast"; 
       TypeCast(l, typ, e)
+  | [< '(Kwd "TypeTest");       '(Kwd "(");
+          l = parse_loc;        '(Kwd ",");
+          typ = parse_type;     '(Kwd ",");
+          e = parse_expression; '(Kwd ")");
+    >] -> 
+      debug_print "parse_expression: TypeTest"; 
+      TypeTest(l, typ, e)
 and
   parse_bin_operator = parser
   | [< '(Kwd "O_Plus") >]    -> debug_print ("parse_bin_operator: O_Plus");    O_Plus

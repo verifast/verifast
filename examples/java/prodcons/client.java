@@ -129,7 +129,7 @@ predicate producerWorkerIndex(int i, ProducerThread t) =
 
 @*/
 
-public class ProducerThread implements Runnable {
+class ProducerThread implements Runnable {
     
     //@ int producerSendCount;
     //@ int myIndex;
@@ -353,7 +353,7 @@ class ConsumerThread implements Runnable {
     }
 }
 
-public class Program {
+class Program {
     
     //@ static int sendCount;
     //@ static int receiveCount;

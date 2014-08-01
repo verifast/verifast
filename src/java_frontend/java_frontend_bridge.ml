@@ -7,7 +7,7 @@ let load _ =
   let launch = 
     try Sys.getenv "VERIFAST_JAVA_AST_SERVER"  
     with Not_found ->
-      let ast_server_filename = "ast_server-1d80e62.jar" in
+      let ast_server_filename = "ast_server-5e8f909.jar" in
       let error_message =
         "\nYou specified the option -javac to use the STANCE Java frontend. " ^
         Printf.sprintf "However, to use the STANCE Java frontend, you need to retrieve the file %s from: \n" ast_server_filename ^
@@ -71,9 +71,9 @@ let parse_java_files (paths: string list) (jars: string list) (reportRange: rang
       let rec recurse_specs javas jars =
         match jars with
         | j::rest ->
-            let jar = j ^ "src" in
+            let jar = j ^ "spec" in
 (*             Printf.printf "Looking at jarspec file %s\n" jar; *)
-            let (jars, specs, _) = Parser.parse_jarsrc_file_core jar in
+            let (jars, specs) = Parser.parse_jarspec_file_core jar in
 (*             List.iter (fun p -> Printf.printf "Found jarsrc --------> %s\n" p) jars; *)
 (*             List.iter (fun p -> Printf.printf "Found spec   --------> %s\n" p) specs; *)
             let path_dir = Filename.dirname jar in

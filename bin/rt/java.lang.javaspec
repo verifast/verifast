@@ -196,6 +196,9 @@ public class RuntimeException extends Exception {
 public class ArrayIndexOutOfBoundsException extends RuntimeException {
 }
 
+public class IllegalArgumentException extends RuntimeException {
+}
+
 public class NullPointerException extends RuntimeException {
 }
 

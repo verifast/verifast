@@ -149,3 +149,7 @@ public class PrintWriter implements Writer {
     @*/
     
 }
+
+public interface Serializable {
+     
+}

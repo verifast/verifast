@@ -15,7 +15,7 @@ fixpoint Object objects_last(list<Object> a) {
 
 public class IteratorUtil {
 
-    public static Object getLast(Iterator iterator)
+    public static Object getLast(Iterator iterator);
         //@ requires iterator != null &*& iterator.valid(?xs);
         //@ ensures iterator.valid(nil) &*& result == objects_last(xs);
 

@@ -149,6 +149,11 @@ let parse_pure_decls anns autogen =
   in
   parse_pure_decls_core parser_pure_decls_eof anns autogen
 
+let parse_pure_decls_try anns autogen =
+  try 
+    parse_pure_decls anns autogen
+  with parse_error -> []
+
 let parse_postcondition anns autogen =
   let parser_postcondition_eof = parser 
     [< '(_, Lexer.Kwd "ensures"); post = Parser.parse_pred; '(_, Lexer.Kwd ";"); 
@@ -343,8 +348,9 @@ and translate_staticness stat =
   | GEN.NonStatic -> VF.Instance
 
 and translate_block l stmts =
+  let l'= translate_location l in
   match stmts with
-    Some stmts -> Some (List.map translate_statement stmts, l)
+    Some stmts -> Some ([translate_statements_as_block l' stmts], l')
   | None -> None
 
 and translate_class_decls_helper : 'a . (GEN.class_decl -> 'a list option) ->
@@ -406,7 +412,7 @@ and translate_methods cn decls =
           let throws' = List.map translate_throws_clause throws in
           Some(pre, post, throws')
         in
-        let stmts' = translate_block l' stmts in
+        let stmts' = translate_block l stmts in
         Some([VF.Meth(l', ghost', ret', id', params', contr', stmts', stat', access', abs')])
     | _ -> None
   in 
@@ -414,6 +420,11 @@ and translate_methods cn decls =
 
 and translate_constructors decls = 
   debug_print "translate_constructors";
+  (* Default constructors are handle by VeriFast *)
+  let filter x =
+    match x with GEN.Constructor(_, _, _, _, _, _, _, Generated) -> false | _ -> true
+  in
+  let decls = List.filter filter decls in
   let translator decl =
     match decl with
       | GEN.Constructor(l, anns, tparams, access, params, throws, stmts, autogen) ->
@@ -432,7 +443,7 @@ and translate_constructors decls =
             let throws' = List.map translate_throws_clause throws in
             Some(pre, post, throws')
           in
-          let stmts' = translate_block l' stmts in
+          let stmts' = translate_block l stmts in
           let access' = translate_accessibility access in
           Some([VF.Cons(l', params', contr', stmts', access')])
       | _ -> None
@@ -552,19 +563,17 @@ and translate_statement stmt =
             VF.ExprStmt (translate_expression e)
       end
   | GEN.Block(l, stmts) ->
-      let l' = translate_location l in
-      let stmts' = List.map translate_statement stmts in
-      (* TODO: findout meaning of all arguments to this constructor*)
-      VF.BlockStmt(l', [], stmts', dummy_loc, ref [])
+      let l' = translate_location l in 
+      translate_statements_as_block l' stmts
   | GEN.Try(l, stmts, catchs) ->
       let l' = translate_location l in
-      let stmts' = List.map translate_statement stmts in
+      let stmt' = translate_statements_as_block l' stmts in
       let catchs' = List.map translate_catch catchs in
-      VF.TryCatch(l', stmts', catchs')
-  | GEN.While(l, anns, expr, stmt) ->
+      VF.TryCatch(l', [stmt'], catchs')
+  | GEN.While(l, anns, expr, stmts) ->
       let l' = translate_location l in
       let expr' = translate_expression expr in
-      let stmts' = List.map translate_statement stmt in
+      let stmt' = translate_statements_as_block l' stmts in
       let (inv, dec) = 
         if List.length anns = 0 then begin
           warning l' ("While loop does not have a valid invariant");
@@ -572,11 +581,10 @@ and translate_statement stmt =
         end else
           parse_loop_invar anns false
       in
-      VF.WhileStmt(l', expr', inv, dec, stmts')
-  | GEN.DoWhile(l, anns, expr, stmt) ->
+      VF.WhileStmt(l', expr', inv, dec, [stmt'])
+  | GEN.DoWhile(l, anns, expr, stmts) ->
       let l' = translate_location l in
       let expr' = translate_expression expr in
-      let stmts' = List.map translate_statement stmt in
       let (inv, dec) = 
         if List.length anns = 0 then begin
           warning l' ("While loop does not have a valid invariant");
@@ -584,10 +592,10 @@ and translate_statement stmt =
         end else
           parse_loop_invar anns false
       in
-      let body = VF.BlockStmt(l', [], stmts', dummy_loc, ref []) in
-      let while_ = VF.WhileStmt(l', expr', inv, dec, stmts') in
+      let body = translate_statements_as_block l' stmts in
+      let while_ = VF.WhileStmt(l', expr', inv, dec, [body]) in
       VF.BlockStmt(l', [], [body; while_], dummy_loc, ref [])
-  | GEN.For(l, anns, init, expr, update, stmt) ->
+  | GEN.For(l, anns, init, expr, update, stmts) ->
       let l' = translate_location l in
       let (inv, dec) = 
         if List.length anns = 0 then begin
@@ -599,14 +607,14 @@ and translate_statement stmt =
       let init' = List.map translate_statement init in
       let expr' = translate_expression expr in
       let update' = List.map translate_statement update in
-      let stmts' = List.map translate_statement stmt in
-      VF.BlockStmt (l', [], init' @ [WhileStmt (l', expr', inv, dec, stmts' @ update')], l', ref [])
-  | GEN.If(l, expr, stmt_true, stmt_false) ->
+      let stmt' = translate_statements_as_block l' stmts in
+      VF.BlockStmt (l', [], init' @ [WhileStmt (l', expr', inv, dec, [stmt'] @ update')], l', ref [])
+  | GEN.If(l, expr, stmts_true, stmts_false) ->
       let l' = translate_location l in
       let expr' = translate_expression expr in
-      let stmt_true' =  List.map translate_statement stmt_true in
-      let stmt_false' = List.map translate_statement stmt_false in
-      VF.IfStmt(l', expr', stmt_true', stmt_false')
+      let stmt_true' = translate_statements_as_block l' stmts_true in
+      let stmt_false' = translate_statements_as_block l' stmts_false in
+      VF.IfStmt(l', expr', [stmt_true'], [stmt_false'])
   | GEN.Return(l, expr) ->
       let l' = translate_location l in
       let expr' = Misc.apply_option translate_expression expr in
@@ -639,6 +647,21 @@ and translate_statement stmt =
   | GEN.Foreach(l, _, _, _, _) -> 
       let l' = translate_location l in
       error l' "Foreach statements are not supported yet by the VeriFast ast"
+
+and translate_statements_as_block l stmts =
+  let rec iter deps stmts =
+    match (stmts) with
+    | GEN.S_Annotation(a)::rest ->
+      let ds = parse_pure_decls_try [a] false in
+      if (ds <> []) then
+        iter (ds @ deps) rest
+      else
+        (deps, stmts)
+    | _ -> (deps, stmts)
+  in
+  let (deps, stmts) = iter [] stmts in
+  let stmts' = List.map translate_statement stmts in
+  VF.BlockStmt(l, deps, stmts', l, ref [])
 
 and translate_catch catch =
   match catch with
@@ -686,7 +709,12 @@ and translate_expression expr =
         | GEN.Access(l_a, expr, Identifier(l_id, id)) ->
             let l' = translate_location l in
             let expr' = translate_expression expr in
-            VF.CallExpr(l', id, [], [], (VF.LitPat expr')::pats', VF.Instance)
+            begin
+              match expr' with
+              | VF.Var(_, "super", _) ->    
+                  SuperMethodCall (l', id, exprs')     
+              | _ -> VF.CallExpr(l', id, [], [], (VF.LitPat expr')::pats', VF.Instance)
+            end
         | _ -> error l' "Internal error of ast_translator";
       end
   | GEN.NewClass(l, tparams, typ, exprs) ->
@@ -696,11 +724,17 @@ and translate_expression expr =
       let typ' = GEN.string_of_ref_type typ in
       let exprs' = List.map translate_expression exprs in
       VF.NewObject(l', typ', exprs')
-  | GEN.NewArray(l, typ, exprs) ->
+  | GEN.NewArray(l, typ, dims, exprs) ->
       let l' = translate_location l in
       let typ' = translate_type typ in
+      let dims' = List.map translate_expression dims in
       let exprs' = List.map translate_expression exprs in
-      VF.NewArrayWithInitializer(l', typ', exprs')
+      if (List.length dims > 1) then
+        error l' "Multiple dimensions for arrays creation not supported yet";
+      if (List.length dims == 1) then
+        VF.NewArray(l', typ', List.hd dims') 
+      else
+        VF.NewArrayWithInitializer(l', typ', exprs')
   | GEN.Assign(l, op, expr_l, expr_r) ->
       let l' = translate_location l in
       let expr_l' = translate_expression expr_l in
@@ -712,6 +746,10 @@ and translate_expression expr =
             AssignOpExpr(l', expr_l', op', expr_r', false, ref None, ref None)
         | _ -> AssignExpr(l', expr_l', expr_r')
       end
+  | GEN.Unary(l, op, expr) -> 
+      let l' = translate_location l in
+      let expr' = translate_expression expr in
+      translate_uni_operator op l' expr'
   | GEN.Binary(l, op, expr_l, expr_r) ->
       let l' = translate_location l in
       let left = translate_expression expr_l in
@@ -720,12 +758,18 @@ and translate_expression expr =
       let (expr_l', expr_r') =
         if rev then (right, left) else (left, right)
       in
-      Operation(l', op', [expr_l'; expr_r'], ref None)
-  | GEN.Unary(l, op, expr) -> 
+      VF.Operation(l', op', [expr_l'; expr_r'], ref None)
+  | GEN.Ternary(l, expr1, expr2, expr3) ->
       let l' = translate_location l in
-      let expr = translate_expression expr in
-      let (op', exprs') = translate_uni_operator l' op expr in
-      Operation(l', op', exprs', ref None)
+      let expr1' = translate_expression expr1 in
+      let expr2' = translate_expression expr2 in
+      let expr3' = translate_expression expr3 in
+      VF.IfExpr(l', expr1', expr2', expr3')
+  | GEN.TypeTest(l, type_expr, expr) ->
+      let l' = translate_location l in
+      let expr' = translate_expression expr in
+      let type_expr' = translate_type type_expr in
+      VF.InstanceOfExpr(l', expr', type_expr')
   | GEN.TypeCast(l, typ, expr) ->
       let l' = translate_location l in
       let typ' = translate_type typ in
@@ -733,7 +777,11 @@ and translate_expression expr =
       VF.CastExpr(l', false, typ', expr')
   | GEN.Literal(l, typ, value) ->
       translate_literal l typ value 
-  (* TODO: finish implementation *)
+  | GEN.ArrayAccess(l, expr1, expr2) ->
+      let l' = translate_location l in
+      let expr1' = translate_expression expr1 in
+      let expr2' = translate_expression expr2 in
+      VF.ReadArray(l', expr1', expr2')
 
 and translate_bin_operator op =
   debug_print "bin_operator";
@@ -755,15 +803,18 @@ and translate_bin_operator op =
   | GEN.O_BitXor -> (false, VF.BitXor)
   | GEN.O_BitAnd -> (false, VF.BitAnd)
 
-and translate_uni_operator l op expr =
+and translate_uni_operator op l expr =
   debug_print "uni_operator";
+  let unit_big_int = VF.IntLit(l, Big_int.big_int_of_int (1), ref None) in
   match op with
-  | O_Not -> (VF.Eq, [VF.False(l); expr])
-  | O_Pos -> (VF.Add, [VF.IntLit(l, Big_int.big_int_of_int 0, ref None); expr])
-  | O_Neg -> (VF.Mul, [VF.IntLit(l, Big_int.big_int_of_int (-1), ref None); expr])
-  | O_PreInc -> (VF.Add, [VF.IntLit(l, Big_int.big_int_of_int 1, ref None); expr])
-  | O_PreDec -> (VF.Sub, [VF.IntLit(l, Big_int.big_int_of_int 1, ref None); expr])
-  | _ -> error l "Unary operator not supported yet";
+  | GEN.O_Not     -> VF.Operation(l, VF.Eq, [VF.False(l); expr], ref None)
+  | GEN.O_Pos     -> expr
+  | GEN.O_Neg     -> VF.Operation(l, VF.Mul, [VF.IntLit(l, Big_int.big_int_of_int (-1), ref None); expr], ref None)
+  | GEN.O_PreInc  -> VF.AssignOpExpr(l, expr, Add, unit_big_int, false, ref None, ref None)
+  | GEN.O_PreDec  -> VF.AssignOpExpr(l, expr, Sub, unit_big_int, false, ref None, ref None)
+  | GEN.O_PostInc -> VF.AssignOpExpr(l, expr, Add, unit_big_int, true, ref None, ref None)
+  | GEN.O_PostDec -> VF.AssignOpExpr(l, expr, Sub, unit_big_int, true, ref None, ref None)
+  | GEN.O_Compl   -> error l "Unary operator ~ not supported yet";
 
 and translate_literal l typ value =
   debug_print "translate_literal";

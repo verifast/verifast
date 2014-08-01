@@ -559,10 +559,11 @@ and string_for_expression e () =
          string_for_list (List.map string_for_expression args);]
       in
       string_for_constructor "NewClass" args;
-  | NewArray(l, typ, inits) ->
+  | NewArray(l, typ, dims, inits) ->
       let args = 
         [string_for_location l;
          string_for_type typ;
+         string_for_list (List.map string_for_expression dims);
          string_for_list (List.map string_for_expression inits)]
       in
       string_for_constructor "NewArray" args;

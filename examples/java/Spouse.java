@@ -1,4 +1,4 @@
-public class Person {
+class Person {
 
     protected Person spouse;
 

@@ -9,11 +9,11 @@ interface Counter {
 
     @*/
 
-    int get();
+    public int get();
         //@ requires [?f]Counter(?value);
         //@ ensures [f]Counter(value) &*& result == value;
 
-    void set(int value);
+    public void set(int value);
         //@ requires Counter(_) &*& 0 <= value;
         //@ ensures Counter(value);
 }
@@ -42,7 +42,7 @@ class MyCounter implements Counter {
         //@ close Counter(0);
     }
 
-    int get()
+    public int get()
         //@ requires [?f]Counter(?value);
         //@ ensures [f]Counter(value) &*& result == value;
     {
@@ -51,7 +51,7 @@ class MyCounter implements Counter {
         //@ close [f]Counter(value);
     }
 
-    void set(int value)
+    public void set(int value)
         //@ requires Counter(_) &*& 0 <= value;
         //@ ensures Counter(value);
     {

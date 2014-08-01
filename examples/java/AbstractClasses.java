@@ -1,4 +1,4 @@
-public abstract class A {
+abstract class A {
   //@ predicate valid() = true;
 
   public abstract void m();

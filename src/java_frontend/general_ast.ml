@@ -379,11 +379,10 @@ and
                            invocation *)
   | NewArray of
       source_location *
-      type_ *         (* Type of elements in the newly created array *)
-(*       TODO: fix multidimentional arrays *)
-(*       expression * (* Number of elements in the allocated array *) *)
-      expression list (* List of expressions to initialize the newly 
-                         created array *)
+      type_ *           (* Type of elements in the newly created array *)
+      expression list * (* List of dimentions as expressions *)
+      expression list   (* List of expressions to initialize the newly 
+                           created array *)
   | Assign of
       source_location *                      
       bin_operator option * (* Possible binary operator for this assigment: 

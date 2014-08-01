@@ -176,7 +176,7 @@ final class ArrayListIterator implements Iterator {
         //@ close Iterable_iterating(ArrayList.class) (list, es, f, this);
     }
     
-    boolean hasNext()
+    public boolean hasNext()
         //@ requires Iterator(?es, ?c, ?n);
         //@ ensures Iterator(es, c, n) &*& result ? es(n) != none : es(n) == none; // Force case split.
     {
@@ -186,7 +186,7 @@ final class ArrayListIterator implements Iterator {
         
     }
     
-    Object next()
+    public Object next()
         //@ requires Iterator(?es, ?c, ?n) &*& es(n) != none;
         //@ ensures Iterator(es, some(n), n + 1) &*& result == the(es(n));
     {
@@ -201,7 +201,7 @@ final class ArrayListIterator implements Iterator {
         //@ nth_remove_nths(n, removals, oldElements);
     }
     
-    void remove()
+    public void remove()
         //@ requires Iterator(?es, ?c, ?n) &*& Iterator_removals(?rs) &*& c != none;
         //@ ensures Iterator(es, none, n) &*& Iterator_removals(cons(the(c), rs));
     {

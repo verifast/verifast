@@ -2,7 +2,7 @@
 // Two layers of specification seem to be required: an inner layer that deals with storage of the spouse field, and
 // an outer layer that encapsulates the bidirectionality of the association.
 
-public class Person {
+class Person {
 
     private Person spouse;
 

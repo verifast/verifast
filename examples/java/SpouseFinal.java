@@ -1,4 +1,4 @@
-public final class Person {
+final class Person {
 
     private Person spouse;
 

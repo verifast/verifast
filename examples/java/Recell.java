@@ -33,7 +33,7 @@ class Recell extends Cell {
         //@ ensures valid(x + 1);
     {
         //@ open valid(x);
-        x--;
+        value--;
     }
 
 }

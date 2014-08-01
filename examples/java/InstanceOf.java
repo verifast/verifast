@@ -15,7 +15,7 @@ class Program {
     if(! (a instanceof B[])) {
     }
     
-    if(a instanceof I) {
+    if(a instanceof I[]) {
     }
   }
 }

@@ -4,7 +4,7 @@ import iterator.it.*;
 import iterator.itutil.*;
 import iterator.singleton.*;
 
-class Program {
+public class Program {
 
     public static void main(String[] args)
         //@ requires true;

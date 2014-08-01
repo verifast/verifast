@@ -209,12 +209,21 @@ public class ArrayList<E> implements List<E> {
     
 }
 
+//@ fixpoint int list_of_byte_hashcode(list<byte> bs);
+
 public class Arrays {
     
     public static <E> List<E> asList(E[] a)
         //@ requires [?f]a[..] |-> ?es;
         //@ ensures [f]a[..] |-> es &*& result.List(es);
+   
+    static boolean equals(byte[] a1, byte[] a2);
+        //@ requires [?f1]a1[..] |-> ?es1 &*& [?f2]a2[..] |-> ?es2;
+        //@ ensures [f1]a1[..] |-> es1 &*& [f2]a2[..] |-> es2 &*& result == (es1 == es2);
     
+    static int hashCode(byte[] a);
+        //@ requires [?f]a[..] |-> ?es;
+        //@ ensures [f]a[..] |-> es &*& result == list_of_byte_hashcode(es);   
 }
 
 interface Set<E> extends Collection<E> {

@@ -1,9 +1,9 @@
 package foo;
 
 class Bar {
+    public static final short BAR = (byte)0x103;
     public static final short QUUX = (short) (Foo.FOO + BAR);
     public static final short BLA = (short)QUUX;
-    public static final short BAR = (byte)0x103;
 
     private Bar() 
       //@ requires true;
