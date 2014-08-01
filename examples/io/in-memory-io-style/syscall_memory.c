@@ -53,93 +53,48 @@
 //@ #include <listex.gh>
 //@ #include <arrays.gh>
 //@ #include "io/io_pred_bodies.gh"
+#include "buffer.h"
 #include <stdlib.h> // abort
 #include <stddef.h>
-
-/*@
-fixpoint list<ioaction> iostate_to_list(iostate iostate){
-    switch(iostate){
-        case iostate(ioactions): return ioactions;
-    }
-}
-
-fixpoint bool iostate_add(iostate sigma1, iostate sigma2, ioaction act){
-    switch(sigma1){
-        case iostate(actions): return sigma2 == iostate(cons(act, actions));
-    }
-}
-
-fixpoint bool syscall_guarantee(int c, fixpoint(iostate, bool) invar, fixpoint(iostate, iostate, bool) guarantee, pair<iostate, iostate > pair){
-    return
-        snd(pair) == fst(pair) // we're reflexive.
-        // it's allowed to add "c":
-        || !invar( fst(pair) )
-        || ! iostate_add(fst(pair),snd(pair), ioaction({c}))
-        || guarantee(fst(pair), snd(pair))
-    ;
-}
-
-predicate syscall_io(time t1, int c, time t2) =
-    t1 == time(?invar1, ?guarantee, ?rely)
-    &*& t2 == time(?invar2, guarantee, rely)
-    
-    &*& [_]is_forall_t<pair<iostate, iostate > >(?forall_sigmapair)
-    
-    // guarantee is reflexive.
-    // guarantee adds a c.
-    &*& true == forall_sigmapair((syscall_guarantee)(c, invar1, guarantee))
-    
-    // invar2 = R({o^v|o \in invar1})
-    &*& true == forall_sigmapair((invar2_includes_guarantee)(invar1,invar2,guarantee))
-    &*& true == forall_sigmapair((invar_closed_under_rely)(t2))
-;
-
-@*/
 
 
 int *memory;
 
 /*@
-fixpoint iostate buffer_to_iostate(int buffer){
-    return buffer == 0 ? iostate({}) : iostate({ioaction({buffer})});
-}
-
 
 predicate iostate(int id, iostate state) =
     syscall_iostate(state)
     &*& iothreads(id, state);
 
-predicate syscall_iostate(iostate state) =
-    pointer(&memory, ?memory_)
-    &*& integer(memory_, ?b)
-    &*& state == buffer_to_iostate(b)
-;
 @*/
 
+/*@
+lemma void cons_makes_neq<t>(t elem, list<t> lst)
+requires true;
+ensures cons(elem, lst) != lst;
+{
+  switch(lst){
+    case nil:
+    case cons(hd, tl):
+      cons_makes_neq(elem, tl);
+  }
+}
+@*/
 
-
-void syscall_output(int c)
+void syscall_output(char c)
 /*@ requires
     syscall_io(?t1, c, ?t2)
     &*& time(?ghost_list_id, t1)
     &*& iostate(ghost_list_id, ?state1)
     
     &*& state1 == iostate(?state1_list)
-    
-    // For now, the buffer is encoded as one int, and 0 denotes
-    // empty buffer. Currently we disallow writing '0'.
-    &*& c != 0;
+    ;
 @*/
 /*@ ensures
     time(ghost_list_id, t2)
-    &*& iostate(ghost_list_id, iostate(append(state1_list, {ioaction({c})})));
+    &*& iostate(ghost_list_id, iostate(cons(ioaction_write(c), state1_list)));
 @*/
 {
-    // For now, we assume that the buffer is not full yet
-    // (currently the buffer is one element big)
-    //@ assume(length(state1_list) < 1);
-    
-    
     //@ assert (t1 == time(?invar1, ?guarantee, ?rely));
     
 
@@ -148,22 +103,22 @@ void syscall_output(int c)
     //@ open time(ghost_list_id, t1);
     //@ open iostate(_, _);
     //@ open iothreads(ghost_list_id, state1);
-    //@ open syscall_iostate(state1);
-    //@ assert pointer(&memory, ?memory_) &*& integer(memory_, 0);
+    //@ open iothreads_pure(_, _);
     //@ assert cooked_ghost_list(ghost_list_id, _, ?k_time_pairs_old);
     //@ assert cooked_ghost_list_member_handle(ghost_list_id, ?k_t1, t1);
     //@ cooked_ghost_list_match(ghost_list_id, k_t1);
     
-    *memory = c;
+    write(c);
+    
     //@ cooked_ghost_list_remove(ghost_list_id, k_t1);
     //@ cooked_ghost_list_add(ghost_list_id, t2);
     
     // Initialize handy variables:
     //@ assert cooked_ghost_list(ghost_list_id, ?k_t2_plus_1, ?k_time_pairs_new);
+    //@ assert true==distinct(k_time_pairs_new);
     //@ int k_t2 = k_t2_plus_1 - 1;
     //@ assert [_]is_forall_t<pair<iostate, iostate > >(?forall_sigmapair);
-    //@ iostate state2 = buffer_to_iostate(c);
-    //@ iostate sigma = iostate({});
+    //@ iostate state2 = iostate(cons(ioaction_write(c), state1_list));
     //@ assert t2 == time(?invar2, guarantee, rely);
     //@ assert [_]is_forall_t<iostate >(?forall_sigma);
     //@ assert [_]is_forall_t< quadruple< pair<int,time>, pair<int, time>, iostate, iostate > >(?forall_guar_rely);
@@ -179,6 +134,17 @@ void syscall_output(int c)
             
             // PROOF
                 //@ forall_t_elim(forall_sigmapair, ((syscall_guarantee)(c, invar1, guarantee)), pair(state1, state2));
+                
+                //@ assert true == syscall_guarantee(c, invar1, guarantee, pair(state1, state2));
+                
+                // PROOF: state1 != state2
+                  //@ assert state2 == iostate(cons(ioaction_write(c), state1_list));
+                  //@ assert state1 == iostate(state1_list);
+                  //@ cons_makes_neq(ioaction_write(c), state1_list);
+                //@ assert state1 != state2; // End proof. 
+                // We need state1 != state2 to prove guarantee(state1, state2), because
+                // the guarantee fixpoint embeds reflexivity as well.
+               
             //@ assert true == guarantee(state1, state2); // End proof.
             
             // PROOF
@@ -257,10 +223,10 @@ void syscall_output(int c)
             
             forall_t_elim(forall_sigmapair, (syscall_guarantee)(c, invar1, guarantee), pair(state1, state2));
             assert true == syscall_guarantee(c, invar1, guarantee, pair(state1, state2)); // result of forall_t_elim.
-            assert !invar1(state1) || ! ((state2 == iostate(cons(ioaction({c}), iostate_to_list(state1)))) || state2 == state1 ) || guarantee(state1,state2); // body of previous line.
+            assert !invar1(state1) || ! ((state2 == iostate(cons(ioaction_write(c), iostate_to_list(state1)))) || state2 == state1 ) || guarantee(state1,state2); // body of previous line.
             assert true == invar1(state1); // one case eliminated.
-            assert true == (state2 == iostate(cons(ioaction({c}), iostate_to_list(state1)))); // second case eliminated.
-            assert true == ((state2 == iostate(cons(ioaction({c}), iostate_to_list(state1)))) || state2 == state1 ); // third case eliminated.
+            assert true == (state2 == iostate(cons(ioaction_write(c), iostate_to_list(state1)))); // second case eliminated.
+            assert true == ((state2 == iostate(cons(ioaction_write(c), iostate_to_list(state1)))) || state2 == state1 ); // third case eliminated.
             assert true == guarantee(state1, state2); // conclusion.
             
             remove_implies_subset(k_time_pairs_old, pair(k_t1, t1));
@@ -288,6 +254,8 @@ void syscall_output(int c)
         predicate helperpred() =
             [_]is_forall_t<quadruple<pair<int, time>, pair<int, time>, iostate, iostate > >(?forall_guar_rely2)
             &*& true == forall_guar_rely2((guarantee_preserve_rely)(k_time_pairs_old));
+        
+        
         
         // guarantee_preserve_rely is true for k_time_pairs old, prove that it is also for k_time_pairs_new.
         lemma void guaranteerelylemma(quadruple<pair<int, time>, pair<int, time>, iostate, iostate > quadruple)
@@ -524,9 +492,10 @@ void syscall_output(int c)
         
     //@ assert true == forall_ktimesigmasigma((rely_preserve_invar)(k_time_pairs_new)); // End proof.
     
-    //@ close iothreads(ghost_list_id, iostate({ioaction({c})}));
+    //@ close iothreads_pure(k_time_pairs_new, state2);
+    //@ leak iothreads_pure(k_time_pairs_new, state2);
+    //@ close iothreads(ghost_list_id, state2);
     //@ close time(ghost_list_id, t2);
-    //@ close syscall_iostate(iostate({ioaction({c})}));
-    //@ close iostate(ghost_list_id, iostate({ioaction({c})}));
+    //@ close iostate(ghost_list_id, state2);
 }
 

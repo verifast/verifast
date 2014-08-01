@@ -23,7 +23,7 @@
  * would cause problems (as visible by the error "A type parameter may
  * not appear in a negative position in an inductive datatype definition.")
  */
-inductive ioaction = ioaction(list<int> encoding);
+inductive ioaction = ioaction_write(int encoding);
 inductive iostate = iostate(list<ioaction> actions);
 inductive time = time(
     fixpoint(iostate, bool) invar,

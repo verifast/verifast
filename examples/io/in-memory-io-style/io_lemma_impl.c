@@ -3,9 +3,9 @@
  * If you are looking for examples of I/O, you are at the wrong file.
  * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
  *
- * See ../syscall_memory.c to read what this is about.
+ * See syscall_memory.c to read what this is about.
  *
- * Launch with: cd .. ; vfide -I . io/io_lemma_impl.c
+ * Launch with: vfide -I . io_lemma_impl.c
  */
  
 /*
@@ -57,6 +57,7 @@ ensures time(ghost_list_id, t2) &*& time(ghost_list_id, t3) &*& iothreads(ghost_
     open split(t1, t2, t3);
     open time(?t1_id, t1);
     open iothreads(ghost_list_id, state);
+    open iothreads_pure(_, _);
     assert cooked_ghost_list(ghost_list_id, ?n_old, ?k_time_pairs_old);
     assert cooked_ghost_list_member_handle(ghost_list_id, ?k_t1, t1);
     cooked_ghost_list_match(ghost_list_id, k_t1);
@@ -205,6 +206,8 @@ ensures time(ghost_list_id, t2) &*& time(ghost_list_id, t3) &*& iothreads(ghost_
         assert false;
     }
     
+    close iothreads_pure(k_time_pairs_new, state);
+    leak iothreads_pure(k_time_pairs_new, state);
     close iothreads(ghost_list_id, state);
 }
 
@@ -216,6 +219,7 @@ ensures time(ghost_list_id, t3) &*& iothreads(ghost_list_id, state);
     open time(ghost_list_id, t1);
     open time(ghost_list_id, t2);
     open iothreads(ghost_list_id,state);
+    open iothreads_pure(_, _);
     
     assert cooked_ghost_list_member_handle(_, ?k_t1, t1) &*& cooked_ghost_list_member_handle(_, ?k_t2, t2);
     assert cooked_ghost_list(_, ?n, ?k_time_pairs_old);
@@ -365,6 +369,8 @@ ensures time(ghost_list_id, t3) &*& iothreads(ghost_list_id, state);
         }
     }
     
+    close iothreads_pure(k_time_pairs_new, state);
+    leak iothreads_pure(k_time_pairs_new, state);
     close iothreads(ghost_list_id, state);
 }
 @*/
