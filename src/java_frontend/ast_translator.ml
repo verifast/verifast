@@ -350,7 +350,15 @@ and translate_staticness stat =
 and translate_block l stmts =
   let l'= translate_location l in
   match stmts with
-    Some stmts -> Some ([translate_statements_as_block l' stmts], l')
+    Some stmts -> 
+      begin
+        let stmt' = translate_statements_as_block l' stmts in
+        match stmt' with
+        | VF.BlockStmt(l1, ds, VF.SuperConstructorCall(l2, exprs)::stms'', l3, _) -> 
+          Some ([VF.SuperConstructorCall(l2, exprs); 
+               VF.BlockStmt(l1, ds, stms'', l3, ref [])], l')
+        | _ -> Some ([stmt'], l')
+      end
   | None -> None
 
 and translate_class_decls_helper : 'a . (GEN.class_decl -> 'a list option) ->
@@ -430,7 +438,7 @@ and translate_constructors decls =
       | GEN.Constructor(l, anns, tparams, access, params, throws, stmts, autogen) ->
           let l' = translate_location l in
           let params' = List.map translate_param params in
-          let contr' = 
+          let contr' =
             let (pre, post) =
               match autogen with
               | Generated ->

@@ -7,7 +7,7 @@ let load _ =
   let launch = 
     try Sys.getenv "VERIFAST_JAVA_AST_SERVER"  
     with Not_found ->
-      let ast_server_filename = "ast_server-5e8f909.jar" in
+      let ast_server_filename = "ast_server-5473edd.jar" in
       let error_message =
         "\nYou specified the option -javac to use the STANCE Java frontend. " ^
         Printf.sprintf "However, to use the STANCE Java frontend, you need to retrieve the file %s from: \n" ast_server_filename ^
@@ -23,16 +23,47 @@ let load _ =
 let unload _ =
   Java_frontend.detach()
 
-let parse_java_files_with_frontend (paths: string list) (context: string list) (reportRange: range_kind -> loc -> unit) reportShouldFail: package list =
-(*   Printf.printf "\n\n%s\n%s\n%s\n" "----------------------------" "parse_java_files_with_frontend" "----------------------------"; *)
+let found_java_spec_files = ref []
+
+let build_context paths jars = 
+  let rec recurse_specs javaspecs jars =
+    match jars with
+    | j::rest ->
+(*         Printf.printf "\nLooking at jar file %s\n" j; *)
+        let jar = (Filename.chop_extension j) ^ ".jarspec" in
+        let (jars, specs) = Parser.parse_jarspec_file_core jar in
+(*        List.iter (fun p -> Printf.printf "Found jars --------> %s\n" p) jars;
+        List.iter (fun p -> Printf.printf "Found javas   --------> %s\n" p) specs;*)
+        let path_dir = Filename.dirname jar in
+        let jars = (List.map (Util.concat path_dir) jars) in
+        let specs = (List.map (Util.concat path_dir) specs) in
+(*        List.iter (fun p -> Printf.printf "Selected jarsrc --------> %s\n" p) jars;
+        List.iter (fun p -> Printf.printf "Selected spec   --------> %s\n" p) specs;*)
+        let check_dup l =
+          match l with 
+          | [] -> false
+          | x::rest -> List.mem x rest
+        in
+        if check_dup jars then
+          raise (ParseException (dummy_loc, "Include cycle in jarspec files"));
+        recurse_specs (specs @ javaspecs) (jars @ rest)
+    | [] -> javaspecs
+  in
+  recurse_specs [] jars
+
+let parse_java_files_with_frontend (paths: string list) (jars: string list) (reportRange: range_kind -> loc -> unit) reportShouldFail: package list =
   let (rt_paths, paths) =
     List.partition (fun p -> Filename.dirname p = Util.rtdir) paths
   in
-  let context = List.filter (fun x -> not (List.mem ((Filename.chop_extension x) ^ ".javaspec") paths)) context in
-  let context = List.filter (fun x -> not (List.mem ((Filename.chop_extension x) ^ ".java") paths)) context in
-(*   List.iter (fun x -> Printf.printf "rt_paths %s\n" x) rt_paths; *)
-(*   List.iter (fun x -> Printf.printf "paths    %s\n" x) paths; *)
-(*   List.iter (fun x -> Printf.printf "context  %s\n" x) context;   *)
+  let context_new = build_context paths jars in
+  found_java_spec_files := Util.list_remove_dups (!found_java_spec_files @ context_new);
+  let context_for_paths = List.filter (fun x -> not (List.mem ((Filename.chop_extension x) ^ ".javaspec") paths)) !found_java_spec_files in
+  let context_for_paths = List.filter (fun x -> not (List.mem ((Filename.chop_extension x) ^ ".java") paths)) context_for_paths in
+(*  Printf.printf "\n----------------------------------\n%s\n" "-Buildup context:";
+  List.iter (fun p -> Printf.printf "- -> %s\n" p) !found_java_spec_files;
+  Printf.printf "Using context: %s\n" "";
+  List.iter (fun p -> Printf.printf "- -> %s\n" p) context_for_paths;
+  Printf.printf "----------------------------------\n\n%s" "";*)
   let result =
     match paths with
     | [] -> []
@@ -48,7 +79,7 @@ let parse_java_files_with_frontend (paths: string list) (context: string list) (
               Java_frontend.bodyless_methods_own_trailing_annotations;
               Java_frontend.accept_spec_files]
             in
-            Java_frontend.asts_from_java_files paths ~context:context options ann_checker
+            Java_frontend.asts_from_java_files paths ~context:context_for_paths options ann_checker
           with
             Java_frontend.JavaFrontendException(l, m) -> 
               let message = 
@@ -63,43 +94,14 @@ let parse_java_files_with_frontend (paths: string list) (context: string list) (
    in
    (List.map (fun x -> Parser.parse_java_file_old x reportRange reportShouldFail) rt_paths) @ result 
 
-let previous_context = ref []
-
 let parse_java_files (paths: string list) (jars: string list) (reportRange: range_kind -> loc -> unit) reportShouldFail use_java_frontend: package list =
-  if use_java_frontend then begin
-    let context =
-      let rec recurse_specs javas jars =
-        match jars with
-        | j::rest ->
-            let jar = j ^ "spec" in
-(*             Printf.printf "Looking at jarspec file %s\n" jar; *)
-            let (jars, specs) = Parser.parse_jarspec_file_core jar in
-(*             List.iter (fun p -> Printf.printf "Found jarsrc --------> %s\n" p) jars; *)
-(*             List.iter (fun p -> Printf.printf "Found spec   --------> %s\n" p) specs; *)
-            let path_dir = Filename.dirname jar in
-            let jars = (List.map (Util.concat path_dir) jars) in
-            let specs = (List.map (Util.concat path_dir) specs) in
-(*             List.iter (fun p -> Printf.printf "Selected jarsrc --------> %s\n" p) jars; *)
-(*             List.iter (fun p -> Printf.printf "Selected spec   --------> %s\n" p) specs; *)
-            let check_dup l =
-              match l with 
-              | [] -> false
-              | x::rest -> List.mem x rest
-            in
-            if check_dup jars then
-              raise (ParseException (dummy_loc, "Include cycle in jarspec files"));
-            recurse_specs (specs @ javas) (jars @ rest)
-        | [] -> List.map (fun x -> x) javas
-      in
-      let recursive_context = recurse_specs [] jars in
-      let recursive_context = List.filter (fun p -> not (List.mem ((Filename.chop_extension p) ^ ".java") paths)) recursive_context in
-      let recursive_context = List.filter (fun p -> not (List.mem p paths)) recursive_context in
-      if !previous_context = [] then previous_context := recursive_context;
-      recursive_context
-    in
-    let context = if context = [] then !previous_context else context in
-    parse_java_files_with_frontend paths context reportRange reportShouldFail
-  end
+(*  Printf.printf "\n++++++++++++++++++++++++++++++++++\n%s\n" "+Parsing files:";
+  List.iter (fun p -> Printf.printf "+ -> %s\n" p) paths;
+  Printf.printf "+\n%s\n" "+With jars:";
+  List.iter (fun p -> Printf.printf "+ -> %s\n" p) jars;
+  Printf.printf "++++++++++++++++++++++++++++++++++\n\n%s" "";*)
+  if use_java_frontend then
+    parse_java_files_with_frontend paths jars reportRange reportShouldFail
   else
     List.map (fun x -> Parser.parse_java_file_old x reportRange reportShouldFail) paths
 

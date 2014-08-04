@@ -915,7 +915,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                       spec_lemmas := lemmas
                     end;
                     let l = file_loc path in
-                    let jarspecs = List.map (fun path -> (l, (DoubleQuoteInclude, path ^ "spec", concat bindir (path ^ "spec")), [], [])) jars in
+                    let spec_include_for_jar jar =
+                      let jarspec = (Filename.chop_extension jar) ^ ".jarspec" in
+                      (l, (DoubleQuoteInclude, jarspec, concat bindir jarspec), [], [])
+                    in
+                    let jarspecs = List.map spec_include_for_jar jars in 
                     (jarspecs, ds)
                 in
                 let (_, maps) = check_file header_path header_is_import_spec include_prelude basedir1 reldir1 headers' ds in
