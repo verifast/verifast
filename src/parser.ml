@@ -1582,6 +1582,8 @@ let concat_if_relative path1 path2 =
 (* Returned paths are relative to the directory of [path] *)
 let parse_jarspec_file_core path =
   let lines = read_file_lines path in
+  (* Filter comments *)
+  let lines = List.filter (fun x -> if (String.contains x '#') then not (String.index x '#' == 0) else true) lines in
   let (jarspecs, lines) =
     let rec iter jarspecs lines =
       match lines with
@@ -1610,6 +1612,8 @@ let parse_jarspec_file_core path =
 (* Returned paths are relative to the directory of [path] *)
 let parse_jarsrc_file_core path =
   let lines = read_file_lines path in
+  (* Filter comments *)
+  let lines = List.filter (fun x -> if (String.contains x '#') then not (String.index x '#' == 0) else true) lines in
   let (jars, lines) =
     let rec iter jars lines =
       match lines with

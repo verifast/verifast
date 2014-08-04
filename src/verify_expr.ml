@@ -750,7 +750,18 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               | Some {fl=lf1; ft=t1; fvis=vis1; fbinding=binding1; ffinal=final1; finit=init1; fvalue=value1} ->
                 let v1 = ! value0 in
                 let v2 = ! value1 in
-                if t0 <> t1 || vis0 <> vis1 || binding0 <> binding1 || final0 <> final1 || v1 <> v2 then static_error lf1 "Duplicate field" None;
+                begin
+                  try
+                    if t0 <> t1 || vis0 <> vis1 || binding0 <> binding1 || final0 <> final1 || v1 <> v2 then 
+                      static_error lf1 "Duplicate field" None
+                  with Invalid_argument _ ->
+                  begin
+                    match (v1, v2) with 
+                    | (Some(Some(IntConst b1)), Some(Some(IntConst b2))) -> 
+                        if compare_big_int b1 b2 <> 0 then static_error lf1 "Duplicate field" None
+                    | _ -> static_error lf1 "Incomparable fields" None
+                  end
+                end;
                 if !value0 = None && init0 <> None then static_error lf1 "Cannot refine a non-constant field with an initializer." None;
                 iter rest fds1
             in

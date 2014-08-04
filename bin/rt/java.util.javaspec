@@ -213,7 +213,7 @@ public class ArrayList<E> implements List<E> {
 
 public class Arrays {
     
-    public static <E> List<E> asList(E[] a)
+    public static <E> List<E> asList(E[] a);
         //@ requires [?f]a[..] |-> ?es;
         //@ ensures [f]a[..] |-> es &*& result.List(es);
    
@@ -226,7 +226,7 @@ public class Arrays {
         //@ ensures [f]a[..] |-> es &*& result == list_of_byte_hashcode(es);   
 }
 
-interface Set<E> extends Collection<E> {
+public interface Set<E> extends Collection<E> {
     
     //@ predicate Set(list<Object> elements);
     

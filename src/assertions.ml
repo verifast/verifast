@@ -286,30 +286,34 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             produce_asn_core_with_post (zip2 tparams targs) h [] ((f, coef) :: (zip2 (xs1@xs2) ts)) post real_unit size_first size_all true (fun h_ _ _ _ -> cont h_ ghostenv env)
       )
     | WInstPredAsn (l, e_opt, st, cfin, tn, g, index, pats) ->
-      let (pmap, pred_symb) =
-        match try_assoc tn classmap1 with
-          Some (lcn, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
-          let (_, pmap, _, symb, _) = List.assoc g preds in (pmap, symb)
-        | None ->
-          match try_assoc tn classmap0 with
-            Some {cpreds} ->
-            let (_, pmap, _, symb, _) = List.assoc g cpreds in (pmap, symb)
+      begin
+      try
+        let (pmap, pred_symb) =
+          match try_assoc tn classmap1 with
+            Some (lcn, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+            let (_, pmap, _, symb, _) = List.assoc g preds in (pmap, symb)
           | None ->
-            match try_assoc tn interfmap1 with
-              Some (li, fields, methods, preds, interfs, pn, ilist) -> let (_, pmap, family, symb) = List.assoc g preds in (pmap, symb)
+            match try_assoc tn classmap0 with
+              Some {cpreds} ->
+              let (_, pmap, _, symb, _) = List.assoc g cpreds in (pmap, symb)
             | None ->
-              let InterfaceInfo (li, fields, methods, preds, interfs) = List.assoc tn interfmap0 in
-              let (_, pmap, family, symb) = List.assoc g preds in
-              (pmap, symb)
-      in
-      let target = match e_opt with None -> List.assoc "this" env | Some e -> ev e in
-      let index = ev index in
-      assume (ctxt#mk_not (ctxt#mk_eq target (ctxt#mk_intlit 0))) $. fun () ->
-      begin fun cont -> if cfin = FinalClass then assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [target]) (List.assoc st classterms)) cont else cont () end $. fun () ->
-      let types = List.map snd pmap in
-      evalpats ghostenv env pats types types $. fun ghostenv env args ->
-      produce_chunk h (pred_symb, true) [] coef (Some 2) (target::index::args) size_first $. fun h ->
-      cont h ghostenv env
+              match try_assoc tn interfmap1 with
+                Some (li, fields, methods, preds, interfs, pn, ilist) -> let (_, pmap, family, symb) = List.assoc g preds in (pmap, symb)
+              | None ->
+                let InterfaceInfo (li, fields, methods, preds, interfs) = List.assoc tn interfmap0 in
+                let (_, pmap, family, symb) = List.assoc g preds in
+                (pmap, symb)
+        in
+        let target = match e_opt with None -> List.assoc "this" env | Some e -> ev e in
+        let index = ev index in
+        assume (ctxt#mk_not (ctxt#mk_eq target (ctxt#mk_intlit 0))) $. fun () ->
+        begin fun cont -> if cfin = FinalClass then assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [target]) (List.assoc st classterms)) cont else cont () end $. fun () ->
+        let types = List.map snd pmap in
+        evalpats ghostenv env pats types types $. fun ghostenv env args ->
+        produce_chunk h (pred_symb, true) [] coef (Some 2) (target::index::args) size_first $. fun h ->
+        cont h ghostenv env
+      with Not_found -> assert_false h env l ("Definition of predicate " ^ g ^  " is missing from implementing class") None
+      end
     | ExprAsn (l, e) -> assume (ev e) (fun _ -> cont h ghostenv env)
     | WMatchAsn (l, e, pat, tp) ->
       let v = ev e in

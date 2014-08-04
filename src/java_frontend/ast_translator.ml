@@ -76,10 +76,10 @@ let annotations : (string, string) Hashtbl.t ref = ref (Hashtbl.create 1)
 (* this function creates a lexer for each of 
    the annotations and composes them before
    passing the resulting stream to the parser *)
-let parse_pure_decls_core used_parser anns autogen =
+let parse_pure_decls_core loc used_parser anns autogen =
   Parser.set_language Java;
   if (List.length anns < 1) then
-    raise (Lexer.ParseException (dummy_loc, "Parsing failed due to missing annotations"));
+    raise (Lexer.ParseException (loc, "Parsing failed due to missing annotations"));
   let (loc, token_stream) =
     let make_ann_lexer ann =
       match ann with
@@ -142,45 +142,45 @@ let parse_pure_decls_core used_parser anns autogen =
     Lexer.Stream.Error msg -> raise (Lexer.ParseException (loc(), msg))
   | Lexer.Stream.Failure -> raise (Lexer.ParseException (loc(), "Parse error"))
 
-let parse_pure_decls anns autogen =
+let parse_pure_decls loc anns autogen =
   let parser_pure_decls_eof = parser 
     [< ds = Parser.parse_decls VF.Java ~inGhostHeader:true;
       _ = Lexer.Stream.empty >] -> ds
   in
-  parse_pure_decls_core parser_pure_decls_eof anns autogen
+  parse_pure_decls_core loc parser_pure_decls_eof anns autogen
 
 let parse_pure_decls_try anns autogen =
   try 
-    parse_pure_decls anns autogen
+    parse_pure_decls dummy_loc anns autogen
   with parse_error -> []
 
-let parse_postcondition anns autogen =
+let parse_postcondition loc anns autogen =
   let parser_postcondition_eof = parser 
     [< '(_, Lexer.Kwd "ensures"); post = Parser.parse_pred; '(_, Lexer.Kwd ";"); 
        _ = Lexer.Stream.empty >] -> post
   in
-  parse_pure_decls_core parser_postcondition_eof anns autogen
+  parse_pure_decls_core loc parser_postcondition_eof anns autogen
 
-let parse_contract anns autogen =
+let parse_contract loc anns autogen =
   let parse_contract_eof = parser 
     [< s = Parser.parse_spec; _ = Lexer.Stream.empty >] -> s
   in
-  parse_pure_decls_core parse_contract_eof anns autogen
+  parse_pure_decls_core loc parse_contract_eof anns autogen
   
-let parse_ghost_members classname ann =
+let parse_ghost_members loc classname ann =
   let rec parse_ghost_members_eof = parser
   | [< _ = Lexer.Stream.empty >] -> []
   | [< m = Parser.parse_ghost_java_member classname; mems = parse_ghost_members_eof >] -> m::mems
   in
-  parse_pure_decls_core parse_ghost_members_eof [ann] false
+  parse_pure_decls_core loc parse_ghost_members_eof [ann] false
 
-let parse_pure_statement l ann autogen =
+let parse_pure_statement loc ann autogen =
   let parse_pure_statement_eof = parser
-    [< s = Parser.parse_stmt0; _ = Lexer.Stream.empty >] -> PureStmt (l, s)
+    [< s = Parser.parse_stmt0; _ = Lexer.Stream.empty >] -> PureStmt (loc, s)
   in
-  parse_pure_decls_core parse_pure_statement_eof [ann] autogen
+  parse_pure_decls_core loc parse_pure_statement_eof [ann] autogen
 
-let parse_loop_invar anns autogen =
+let parse_loop_invar loc anns autogen =
   let parse_loop_invar_eof = parser 
     [<
       inv =
@@ -193,7 +193,7 @@ let parse_loop_invar anns autogen =
       dec = Parser.opt (parser [< '(_, Lexer.Kwd "decreases"); decr = Parser.parse_expr; '(_, Lexer.Kwd ";"); >] -> decr)
     >] -> (inv, dec)
   in
-  parse_pure_decls_core parse_loop_invar_eof anns autogen
+  parse_pure_decls_core loc parse_loop_invar_eof anns autogen
 
 (* ------------------------------------------------ *)
 (* Translation of Ast's                             *)
@@ -209,13 +209,14 @@ and translate_ast package anns =
 and translate_package package =
   match package with
     GEN.Package(l, name, imprts, decls) ->
+      let l' = translate_location l in
       let name'   = translate_name name in
       debug_print_begin ("translate_package " ^ name');
       (* necessary to also import java.lang.* to find required definitions *)
       let imprts' = VF.Import(dummy_loc,"java.lang",None)::(List.map translate_import imprts) in
-      let decls'  = List.flatten (List.map translate_package_decl decls) in
+      let decls'  = List.flatten (List.map (translate_package_decl l') decls) in
       debug_print_end ("translate_package: " ^ name');
-      VF.PackageDecl(translate_location l, name', imprts', decls')
+      VF.PackageDecl(l', name', imprts', decls')
 
 and translate_identifier id =
   debug_print_begin "translate_identifier";
@@ -254,12 +255,12 @@ and translate_import imprt =
       VF.Import(translate_location l, name', id')
 
 (* one 'decl' can result in multiple translated ones due to uninterpreted annotations *)
-and translate_package_decl decl =
+and translate_package_decl loc decl =
   debug_print_begin "translate_package_decl";
   let res =
     match decl with
       GEN.P_Annotation a -> 
-        parse_pure_decls [a] false
+        parse_pure_decls loc [a] false
     | GEN.P_Class c -> 
         [translate_class_decl c]
   in
@@ -285,7 +286,7 @@ and translate_class_decl decl =
           | None -> "java.lang.Object"
         in
         let impls' = List.map GEN.string_of_ref_type impls in
-        let (decls', ghost_members') = translate_ghost_members id' decls' in
+        let (decls', ghost_members') = translate_ghost_members l' id' decls' in
         let (ghost_fields', ghost_meths', ghost_preds') = split_ghost_members l ghost_members' in
         if (decls' <> []) then error l' "Not all declarations in class could be processed";
         (VF.Class(l', abs', fin', id', meths' @ ghost_meths', fields' @ ghost_fields', cons', extnds', impls', ghost_preds'), id')
@@ -296,7 +297,7 @@ and translate_class_decl decl =
         let impls' = List.map GEN.string_of_ref_type impls in
         let (decls', fields') = translate_fields decls in
         let (decls', meths') = translate_methods id' decls' in
-        let (decls', ghost_members') = translate_ghost_members id' decls' in
+        let (decls', ghost_members') = translate_ghost_members l' id' decls' in
         let (ghost_fields', ghost_meths', ghost_preds') = split_ghost_members l ghost_members' in
         if (decls' <> []) then error l' "Not all declarations in class could be processed";
         (VF.Interface(l', id', impls', fields' @ ghost_fields', meths' @ ghost_meths', ghost_preds'), id')
@@ -413,11 +414,11 @@ and translate_methods cn decls =
             if List.length anns = 0 then begin
               let ann_pre = Annotation(l, "requires true; ") in
               let ann_post = Annotation(l, "ensures true; ") in
-              parse_contract [ann_pre; ann_post] true
+              parse_contract l' [ann_pre; ann_post] true
             end else
-              parse_contract anns false
+              parse_contract l' anns false
           in
-          let throws' = List.map translate_throws_clause throws in
+          let throws' = List.map (translate_throws_clause l') throws in
           Some(pre, post, throws')
         in
         let stmts' = translate_block l stmts in
@@ -444,11 +445,11 @@ and translate_constructors decls =
               | Generated ->
                   let ann_pre = Annotation(l, "requires true; ") in
                   let ann_post = Annotation(l, "ensures true; ") in
-                  parse_contract [ann_pre; ann_post] true
+                  parse_contract l' [ann_pre; ann_post] true
               | Original ->
-                  parse_contract anns false
+                  parse_contract l' anns false
             in
-            let throws' = List.map translate_throws_clause throws in
+            let throws' = List.map (translate_throws_clause l') throws in
             Some(pre, post, throws')
           in
           let stmts' = translate_block l stmts in
@@ -470,10 +471,10 @@ and translate_param param =
   debug_print_end ("translate_param " ^ id');
   res
 
-and translate_throws_clause (rtype, ann) =
+and translate_throws_clause loc (rtype, ann) =
   debug_print "translate_throws";
   let rtype' = translate_ref_type rtype in
-  let post = parse_postcondition [ann] false in
+  let post = parse_postcondition loc [ann] false in
   (rtype', post)
 
 and translate_fields decls = 
@@ -495,12 +496,12 @@ and translate_fields decls =
   in 
   translate_class_decls_helper translator decls
 
-and translate_ghost_members classname decls = 
+and translate_ghost_members loc classname decls = 
   debug_print "translate_ghost_members";
   let translator decl =
     match decl with
     | GEN.C_Annotation a ->
-        Some(parse_ghost_members classname a)
+        Some(parse_ghost_members loc classname a)
     | _ -> None
   in 
   translate_class_decls_helper translator decls
@@ -587,7 +588,7 @@ and translate_statement stmt =
           warning l' ("While loop does not have a valid invariant");
           (None, None)
         end else
-          parse_loop_invar anns false
+          parse_loop_invar l' anns false
       in
       VF.WhileStmt(l', expr', inv, dec, [stmt'])
   | GEN.DoWhile(l, anns, expr, stmts) ->
@@ -598,7 +599,7 @@ and translate_statement stmt =
           warning l' ("While loop does not have a valid invariant");
           (None, None)
         end else
-          parse_loop_invar anns false
+          parse_loop_invar l' anns false
       in
       let body = translate_statements_as_block l' stmts in
       let while_ = VF.WhileStmt(l', expr', inv, dec, [body]) in
@@ -610,7 +611,7 @@ and translate_statement stmt =
           warning l' ("For loop does not have a valid invariant");
           (None, None)
         end else
-          parse_loop_invar anns false
+          parse_loop_invar l' anns false
       in
       let init' = List.map translate_statement init in
       let expr' = translate_expression expr in
