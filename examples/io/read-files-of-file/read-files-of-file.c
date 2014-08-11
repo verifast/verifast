@@ -23,6 +23,8 @@
 
 predicate read_opened_file(time t1, FILE *f; list<char> text, time t_end) =
   read_char_io(t1, f, ?c, ?success, ?t2)
+  // On paper, we write "c >= 0 ?" instead of "success ?" as a simplification.
+  // They are equivalent because of the contract of fgetc and friends.
   &*& success ?
     read_opened_file(t2, f, ?sub_text, t_end)
     &*& text == cons(c, sub_text)
@@ -50,26 +52,30 @@ predicate write_opened_file(time t1, FILE *file_handle,
     write_char_io(t1, file_handle, head(text), _, ?t2)
     &*& write_opened_file(t2, file_handle, tail(text), t_end);
 
-predicate read_files_io(time t1, list<list<char> > filenames;
+// Normally this would be "list<list<char > > filenames",
+// and that works, but for similarity with the example on
+// paper, we write "list<char> filenames" (one char per
+// filename).
+predicate read_files_io(time t1, list<char> filenames;
   list<char> text, time t_end) =
   
   filenames == nil ?
     t_end == t1
     &*& text == nil
   :
-    read_file(t1, head(filenames), ?text1, ?t2)
+    read_file(t1, {head(filenames)}, ?text1, ?t2)
     &*& read_files_io(t2, tail(filenames), ?text2, t_end)
     &*& text == append(text1, text2);
 
 
-predicate read_filename_list_io(time t1, FILE *stream; list<list<char> >
+predicate read_filename_list_io(time t1, FILE *stream; list<char>
   filenames, time t_end) =
   
   read_char_io(t1, stream, ?c, ?success, ?t2)
-  &*& success ?
+  &*& success ? // equivalent with "c >= 0"
     read_filename_list_io(t2, stream, ?sub_filenames, t_end)
-    &*& c > 0 && c <= 127 ? // TODO
-      filenames == cons({c}, sub_filenames)
+    &*& c > 0 && c <= 127 ?
+      filenames == cons(c, sub_filenames)
     :
       // null is not a valid filename, thus ignored.
       // Also ignore non 7bit ascii filenames.

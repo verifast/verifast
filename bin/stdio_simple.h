@@ -50,11 +50,11 @@ int fgetc(FILE *stream);
     [?f]stream(stream, ?mode) &*& true==does_fopen_mode_allow_reading(mode)
     &*& ensures
       [f]stream(stream, mode)
-      &*& time(t2) &*& (success ? result == c && c >= 0 && c <= 255 : result < 0)
+      &*& time(t2) &*& result == c &*& (success ? c >= 0 && c <= 255 : c < 0)
   : 
     // no stream required for stdin for convenience.
     ensures
-      time(t2) &*& (success ? result == c && c >= 0 && c <= 255 : result < 0);
+      time(t2) &*& result == c &*& (success ? c >= 0 && c <= 255 : c < 0);
 @*/
 /*@ ensures emp; // ensures clauses embedded in requires clause.
 @*/

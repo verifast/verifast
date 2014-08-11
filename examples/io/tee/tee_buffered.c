@@ -14,12 +14,11 @@
 
 
 /*@
-predicate read_till_eof_io(time t1, list<char> contents; time t2) =
+predicate read_till_eof_io(time t1; list<char> contents, time t2) =
   read_char_io(t1, stdin, ?c, ?success, ?t_read)
   &*& success ?
-    length(contents) > 0
-    &*& c == head(contents)
-    &*& read_till_eof_io(t_read, tail(contents), t2)
+    read_till_eof_io(t_read, ?sub, t2)
+    &*& contents == cons(c, sub)
   :
     t2 == t_read
     &*& contents == nil;
