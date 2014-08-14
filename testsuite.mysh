@@ -202,6 +202,9 @@ cd examples
     cd user-sets-contract
       mysh < verify.mysh
     cd ..
+    cd turing-complete
+      verifast_both stdio_simple.o -shared turing-complete.c
+    cd ..
   cd ..
   cd java
     cd channels
