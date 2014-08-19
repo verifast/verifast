@@ -3,6 +3,9 @@
  * complete, i.e. any input/output behavior of a turing machine can be
  * expressed in a contract.
  *
+ * We do not suggest to write contracts like this. This example is just
+ * to illustrate that the approach is more powerful than one might expect.
+ *
  * In this file, we first model the concept of a turing machine. Next,
  * we define a predicate "tm_io" that, given a turing machine as an
  * argument, expresses the permission to do the input/output the turing
@@ -23,6 +26,9 @@
  * simple C program that just writes what it reads, only performs the
  * I/O allowed by a turing machine that only writes (to the world) what
  * it reads (from the world).
+ *
+ * For a version that uses less annotation features,
+ * see turing-complete-lowtech.c.
  *
  */
 
@@ -157,7 +163,7 @@ fixpoint t option_unpack<t>(option<t> option){
  * starting from configuration config.
  * For the initial config, use "tm_get_initial_config(tm)".
  */
-predicate tm_io(time t1, tm tm, tm_config config, time t2) =
+copredicate tm_io(time t1, tm tm, tm_config config, time t2) =
   tm_step(tm, config) == none ?
     t2 == t1
   :
