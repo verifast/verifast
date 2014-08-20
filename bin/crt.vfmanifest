@@ -24,9 +24,16 @@
 .provides prelude.h#chars_zero
 .provides prelude.h#char_limits
 .provides prelude.h#integer_limits
+.provides prelude.h#u_integer_limits
 .provides prelude.h#chars_limits
 .provides prelude.h#chars_split
 .provides prelude.h#chars_join
+.provides prelude.h#chars_of_int_of_chars
+.provides prelude.h#int_of_chars_of_int
+.provides prelude.h#chars_of_int_injective
+.provides prelude.h#int_of_chars_injective
+.provides prelude.h#chars_of_int_size
+.provides prelude.h#int_of_chars_size
 .provides prelude.h#chars_to_integer
 .provides prelude.h#chars_to_u_integer
 .provides prelude.h#chars_to_pointer

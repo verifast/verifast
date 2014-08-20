@@ -3,40 +3,24 @@ ifz3 verifast
 verifast -prover redux
 in
 
-cd protocols
-  #secure_storage
-  cd secure_storage
-    verifast_both -c -I ../../lib/include secure_storage.c
-    verifast_both -c -I ../../lib/include main.c
-    verifast_both -allow_assume -I ../../lib/include ../../lib/bin/dolevyao.dll.vfmanifest secure_storage.c main.c
-  cd ..
-  #rpc
-  cd rpc
-    verifast_both -c -I ../../lib/include rpc.c
-    verifast_both -c -I ../../lib/include main.c
-    verifast_both -allow_assume -I ../../lib/include ../../lib/bin/dolevyao.dll.vfmanifest rpc.c main.c
-  cd ..
-  #yahalom
-  cd yahalom
-    ifz3 verifast -c -I ../../lib/include yahalom.c
-    ifz3 verifast -c -I ../../lib/include main.c
-    ifz3 verifast -allow_assume -I ../../lib/include ../../lib/bin/dolevyao.dll.vfmanifest yahalom.c main.c
-  cd ..
-  #nss
-  cd nss
-    verifast_both -c -I ../../lib/include nss.c
-    verifast_both -c -I ../../lib/include main.c
-    verifast_both -allow_assume -I ../../lib/include ../../lib/bin/dolevyao.dll.vfmanifest nss.c main.c
-  cd ..
-  #nsl
-  cd nsl
-    verifast_both -c -I ../../lib/include nsl.c
-    verifast_both -c -I ../../lib/include main.c
-    verifast_both -allow_assume -I ../../lib/include ../../lib/bin/dolevyao.dll.vfmanifest nsl.c main.c
-  cd ..
+cd src
+  verifast_both -shared -allow_assume -emit_dll_vfmanifest -emit_dll_vfmanifest_as ../bin/cryptolib.dll.vfmanifest ../bin/libpolarssl.so general.c debug.c principals.c item.c serialization.c data_item.c pair_item.c nonce_item.c key_item.c hmac_item.c encrypted_item.c symmetric_encryption.c asymmetric_encryption.c encryption.c network.c cryptolib.c attacker.c
 cd ..
 
-cd lib/src
-  #attacker
-  verifast_both -c -I ../include attacker.c
-cd ../..
+cd protocols
+  cd rpc
+    verifast_both -allow_assume ../../bin/libpolarssl.dll.vfmanifest ../../bin/cryptolib.dll.vfmanifest rpc.c main_app.c
+  cd ..
+  cd secure_storage
+    verifast_both -allow_assume ../../bin/libpolarssl.dll.vfmanifest ../../bin/cryptolib.dll.vfmanifest secure_storage.c main_app.c
+  cd ..
+  cd yahalom
+    verifast_both -allow_assume ../../bin/libpolarssl.dll.vfmanifest ../../bin/cryptolib.dll.vfmanifest yahalom.c main_app.c
+  cd ..
+  cd nsl
+    verifast_both -allow_assume ../../bin/libpolarssl.dll.vfmanifest ../../bin/cryptolib.dll.vfmanifest nsl.c main_app.c
+  cd ..
+  cd nss
+    verifast_both -allow_assume ../../bin/libpolarssl.dll.vfmanifest ../../bin/cryptolib.dll.vfmanifest nss.c main_app.c
+  cd ..
+cd ..

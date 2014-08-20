@@ -3,29 +3,19 @@
 
 #include <stdio.h>
 
-#define RECEIVER_PORT 121212
-
-/*@ 
-predicate protocol_pub(; fixpoint(item, bool) pub) = pub == nsl_pub;
-
-lemma void init_protocol()
-     requires true;
-     ensures protocol_pub(nsl_pub);
-{
-  close protocol_pub(nsl_pub);
-}
-@*/
+#define RECEIVER_PORT 191919
 
 void sender(int sender, int receiver, struct item *KA_PRIVATE, struct item *KB)
   /*@ requires [?f0]world(nsl_pub) &*&
-               generated_nonces(sender, _) &*& !bad(sender) &*& !bad(receiver) &*&
-               key_item(KA_PRIVATE, sender, ?cskid, private_key, int_pair(0, 0)) &*&
-               key_item(KB, receiver, ?spkid, public_key, int_pair(0, 0));
+               generated_values(sender, _) &*&
+               !bad(sender) &*& !bad(receiver) &*&
+               item(KA_PRIVATE, ?kap) &*& item(KB, ?kb) &*&
+               kap == key_item(sender, ?count_kap, private_key, int_pair(0, 0)) &*&
+               kb == key_item(receiver, ?count_kb, public_key, int_pair(0, 0));
   @*/
   /*@ ensures  [f0]world(nsl_pub) &*&
-               generated_nonces(sender, _) &*&
-               key_item(KA_PRIVATE, sender, cskid, private_key, int_pair(0, 0)) &*&
-               key_item(KB, receiver, spkid, public_key, int_pair(0, 0));
+               generated_values(sender, _) &*&
+               item(KA_PRIVATE, kap) &*& item(KB, kb);
   @*/
 {
   struct network_status *net_stat = network_connect("localhost", RECEIVER_PORT);
@@ -76,15 +66,15 @@ void sender(int sender, int receiver, struct item *KA_PRIVATE, struct item *KB)
   //Protocol End Goals
   ///////////////////////////////////////////////////////////////////////////
   //1) Secrecy of NA
-  //@ assert item(NA, ?cn);
-  //@ assert !nsl_pub(cn);
+  //@ assert item(NA, ?na);
+  //@ assert !nsl_pub(na);
   //
   //2) Secrecy of NB
-  //@ assert item(NB, ?sn);
-  //@ assert !nsl_pub(sn);
+  //@ assert item(NB, ?nb);
+  //@ assert true == if_no_collision(!nsl_pub(nb));
   //
   //3) Secrecy of KA_PRIVATE
-  //@ assert !nsl_pub(key_item(sender, cskid, private_key, int_pair(0, 0)));
+  //@ assert !nsl_pub(kap);
   ///////////////////////////////////////////////////////////////////////////
     
   item_free(NA);
@@ -95,15 +85,16 @@ void sender(int sender, int receiver, struct item *KA_PRIVATE, struct item *KB)
 
 void receiver(int receiver, struct item *KB_PRIVATE)
   /*@ requires [?f0]world(nsl_pub) &*&
-               generated_nonces(receiver, _) &*& !bad(receiver) &*&
-               key_item(KB_PRIVATE, receiver, ?sskid, private_key, int_pair(0, 0)); 
+               generated_values(receiver, _) &*& !bad(receiver) &*&
+               item(KB_PRIVATE, ?kbp) &*&
+               kbp == key_item(receiver, ?sskid, private_key, int_pair(0, 0));
   @*/
   /*@ ensures  [f0]world(nsl_pub) &*&
-               generated_nonces(receiver, _) &*& !bad(receiver) &*&
-               key_item(KB_PRIVATE, receiver, sskid, private_key, int_pair(0, 0)); 
+               generated_values(receiver, _) &*& !bad(receiver) &*&
+               item(KB_PRIVATE, kbp);
   @*/
 {
-  struct network_status *net_stat = network_bind(RECEIVER_PORT);
+  struct network_status *net_stat = network_bind_and_accept(RECEIVER_PORT);
   
   // 1. A -> B. {A,NA}_K(B)
   int sender = 0;
@@ -123,25 +114,14 @@ void receiver(int receiver, struct item *KB_PRIVATE)
   // 2. B -> A. {B,NA,NB}_K(A)
   struct item *NB = 0;
   {
-    //@ assert item(NA, ?cn);
-    //@ close public_key_request(int_pair(0, 0));
-    struct item *KA = get_public_key(sender);
-      /*@ close nonce_request(receiver, 
-                                int_pair(2, int_pair(sender, receiver))); @*/
-      
-    //@ assert key_item(KA, sender, _, public_key, int_pair(0, 0));
-    NB = create_nonce();
     struct item *i0 = create_data_item(receiver);
-    //@ assert item(i0, data_item(receiver));
-    //@ assert item(NA, nonce_item(?sss, _, ?iii));
-    /*@ assert item(NB, nonce_item(
-                  receiver, _, int_pair(2 , int_pair(sender, receiver)))); @*/
-    /*@ assert
-          bad(sss) || 
-        (int_left(iii) == 1 && bad(int_right(iii))) ||
-        (int_left(iii) == 2 && bad(int_left(int_right(iii)))) ||
-        (sss == sender && iii == int_pair(1, receiver));
-    @*/
+    /*@ close nonce_request(receiver, 
+                                int_pair(2, int_pair(sender, receiver))); @*/
+    NB = create_nonce();
+    //@ assert item(NA, ?na);
+    struct item *KA = get_public_key(sender);
+    //@ assert item(KA, key_item(sender, _, public_key, _));
+      
     struct item *i1 = create_pair(NA, NB);
     struct item *i2 = create_pair(i0, i1);
     struct item *i3 = encrypt(KA, i2);
@@ -150,7 +130,7 @@ void receiver(int receiver, struct item *KB_PRIVATE)
     item_free(i1);
     item_free(i2);
     item_free(i3);
-    key_free(KA);
+    item_free(KA);
   }
     
   // 3. A -> B. {NB}_K(B)
@@ -166,18 +146,15 @@ void receiver(int receiver, struct item *KB_PRIVATE)
   //Protocol End Goals
   ///////////////////////////////////////////////////////////////////////////
   //1) Secrecy of NA
-  //@ assert item(NA, nonce_item(?na_p, ?na_c, ?na_i));
-  /*@ assert bad(na_p) || 
-              (int_left(na_i) == 1 && bad(int_right(na_i))) ||
-              (int_left(na_i) == 2 && bad(int_left(int_right(na_i)))) ||
-              !nsl_pub(nonce_item(na_p, na_c, na_i));
-  @*/
+  //@ assert item(NA, ?na) &*& na == nonce_item(?na_p, ?na_c, ?na_inc, ?na_i);
+  //@ assert bad(sender) || if_no_collision(!nsl_pub(na));
+  //
   //2) Secrecy of NB
-  //@ assert item(NB, ?ns);
-  //@ assert bad(sender) || !nsl_pub(ns);
+  //@ assert item(NB, ?nb);
+  //@ assert bad(sender) || !nsl_pub(nb);
   //
   //3) Secrecy of KB_PRIVATE
-  //@ assert !nsl_pub(key_item(receiver, sskid, private_key, int_pair(0, 0)));
+  //@ assert !nsl_pub(kbp);
   ///////////////////////////////////////////////////////////////////////////
 
   item_free(NA);

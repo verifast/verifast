@@ -70,7 +70,7 @@ cd examples
   verifast_both -disable_overflow_check cp.c
   ifz3 verifast -c decreases.c
   cd crypto
-    mysh < crypto.mysh
+    mysh -cpus 1 < crypto.mysh
   cd ..
   verifast_both -shared doubly_linked_list.c
   verifast_both -allow_assume -disable_overflow_check dyncode.c

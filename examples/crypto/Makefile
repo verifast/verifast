@@ -2,54 +2,105 @@
 #--------------
 
 CC = clang
+AR = ar
 
-# DEBUG += -g -D DEBUG
+CFLAGS += -I include
+CFLAGS += -I polarssl/include
+# CFLAGS += -D DEBUG
 
-CFLAGS += -I lib/include
-CFLAGS += -I lib/polarssl/include 
-CFLAGS += -D EXECUTE
+#Input
+#-----
 
-LIBS += -L lib/bin -ldolevyao 
-LIBS += -L lib/polarssl/library -lpolarssl 
-LIBS += -pthreads -lpthread 
-LIBS += -lm
+MODULES = \
+  general \
+  debug \
+  principals \
+  item \
+  serialization \
+  data_item \
+  pair_item \
+  nonce_item \
+  key_item \
+  hmac_item \
+  encrypted_item \
+  symmetric_encryption \
+  asymmetric_encryption \
+  encryption \
+  network \
+  cryptolib \
+  attacker \
 
-#Implemented Protocols
-#---------------------
+SOURCES = $(foreach module,$(MODULES),src/$(module).c)
+OBJECTS = $(foreach module,$(MODULES),src/$(module).o)
 
-PROTOCOLS = \
-	nsl \
-	nss \
-	yahalom \
-	rpc \
-	secure_storage \
+#Output
+#------
 
-PROT_APPS = $(foreach prot,$(PROTOCOLS),protocols/$(prot)/$(prot))
+LIB = libcryptolib.so
 
 #Targets
 #-------
 
-all: protocols_execute
+all : lib bin/cryptolib.dll.vfmanifest tests example_protocols
 
-lib_:
-	make -C lib
-test_lib:
-	make -C lib tests
+verify :
+	verifast -shared -allow_assume bin/libpolarssl.so $(SOURCES)
 
-protocols_verify: lib_
-	../../bin/mysh -cpus $(NUMCPU) < crypto.mysh
+bin/cryptolib.dll.vfmanifest : $(SOURCES)
+	verifast -shared -allow_assume -emit_dll_vfmanifest \
+	         -emit_dll_vfmanifest_as bin/cryptolib.dll.vfmanifest \
+	         bin/libpolarssl.so $(SOURCES)
+	
 
-protocols_compile: $(PROT_APPS)
+include/aux/switch_primitives.gh : tools/switch_primitives.py
+	cd tools; \
+	./switch_primitives.py; \
+	mv switch_primitives.gh ../include/aux
 
-protocols_execute: protocols_compile
-	$(foreach exec,$(PROT_APPS), LD_LIBRARY_PATH=./lib/bin/ ; ./$(exec) ;)
+switch_primitives : include/aux/switch_primitives.gh
 
-.SECONDEXPANSION:
+polar :
+	test -d polarssl || git clone https://github.com/polarssl/polarssl.git polarssl
+	cd polarssl; \
+	git checkout .; \
+	git pull; \
+	sed -i 's/\/\/#define POLARSSL_HAVEGE_C/#define POLARSSL_HAVEGE_C/g' \
+	  include/polarssl/config.h; \
+	sed -i 's/\/\/#define POLARSSL_RSA_C/#define POLARSSL_RSA_C/g' \
+	  include/polarssl/config.h; \
+	sed -i 's/\/\/#define POLARSSL_PK_PARSE_C/#define POLARSSL_PK_PARSE_C/g' \
+	  include/polarssl/config.h; \
+	sed -i 's/\/\/#define POLARSSL_PK_WRITE_C/#define POLARSSL_PK_WRITE_C/g' \
+	  include/polarssl/config.h; \
+	sed -i 's/\/\/#define POLARSSL_PEM_WRITE_C/#define POLARSSL_PEM_WRITE_C/g' \
+	  include/polarssl/config.h; \
+	sed -i 's/\/\/#define POLARSSL_THREADING_C/#define POLARSSL_THREADING_C/g' \
+	  include/polarssl/config.h; \
+	sed -i 's/\/\/#define POLARSSL_THREADING_PTHREAD/#define POLARSSL_THREADING_PTHREAD/g' \
+	  include/polarssl/config.h; \
+	make -j4;
 
-$(PROT_APPS): $$(addsuffix main.c, $$(dir $$@)) $$(addsuffix .c, $$@) lib_
-	$(CC) $(DEBUG) $(CFLAGS) $< $(addsuffix .c, $@) -o $@ $(LIBS)
-		
+include/aux/polarssl_sizes.h : tools/polarssl_sizes.c
+	cd tools; \
+	gcc -I ../polarssl/include/polarssl/ polarssl_sizes.c -lpthread -L ../polarssl/library -lpolarssl ; \
+	./a.out; \
+	rm a.out; \
+	mv polarssl_sizes.h ../include/aux;
 
-clean:
-	make -C lib clean
-	rm -f $(PROT_APPS)
+polar_sizes : polar include/aux/polarssl_sizes.h
+
+lib : switch_primitives polar polar_sizes $(OBJECTS)
+	gcc -shared $(OBJECTS) -o bin/$(LIB)
+
+tests : lib
+	make -C tests
+
+example_protocols : bin/cryptolib.dll.vfmanifest lib
+	make -C protocols
+
+clean :
+	rm -f bin/$(LIB)
+	rm -f src/*.o
+	rm -f bin/cryptolib.dll.vfmanifest
+	make -C tests clean
+	make -C protocols clean

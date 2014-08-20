@@ -5,38 +5,30 @@
 #define RECVER_PORT 232323
 #define SENDER_PORT 121212
 
-/*@ 
-predicate protocol_pub(; fixpoint(item, bool) pub) = pub == yahalom_pub;
-
-lemma void init_protocol()
-  requires true;
-  ensures protocol_pub(yahalom_pub);
-{
-  close protocol_pub(yahalom_pub);
-}
-@*/
-
 struct item *sender(int sender, int receiver, struct item *KAS)
   /*@ requires [?f0]world(yahalom_pub) &*&
-               !bad(sender) &*& !bad(receiver) &*& !bad(0) &*&
-               generated_nonces(sender, ?count) &*& 
-               key_item(KAS, sender, 0, symmetric_key, int_pair(0,0)); 
+               !bad(server_id()) &*& !bad(sender) &*& !bad(receiver) &*&
+               generated_values(sender, ?count) &*& item(KAS, ?kas) &*&
+               kas == key_item(sender, 1, symmetric_key, int_pair(0,0));
   @*/
   /*@ ensures  [f0]world(yahalom_pub) &*&
-               generated_nonces(sender, count + 1) &*& 
-               key_item(KAS, sender, 0, symmetric_key, int_pair(0,0)) &*& 
+               generated_values(sender, ?count2) &*& count2 >= count &*&
                // Secrecy of KAS
-               yahalom_pub(key_item(sender, 0, symmetric_key, 
-                             int_pair(0, 0))) == false &*&
-               key_item(result, sender, ?cab, symmetric_key, 
-                             int_pair(2, receiver)) &*&
+               item(KAS, kas) &*& yahalom_pub(kas) == false &*&
                // Secrecy of KAB
-               yahalom_pub(key_item(sender, cab, symmetric_key, 
-                             int_pair(2, receiver))) == false; 
+               item(result, ?kab) &*& 
+               kab == key_item(?p_ab, ?c_ab, ?k_ab, ?i_ab) &*&
+               true == if_no_collision
+               (
+                 p_ab == server_id() &&
+                 k_ab == symmetric_key &&
+                 i_ab == int_pair(2, int_pair(sender, receiver)) &&
+                 yahalom_pub(kab) == false
+               );
   @*/
 {
-  struct network_status *net_stat_in  = network_bind(SENDER_PORT);
   struct network_status *net_stat_out = network_connect("localhost", RECVER_PORT);
+  struct network_status *net_stat_in  = network_bind_and_accept(SENDER_PORT);
   
   struct item *i1;
   struct item *i2;
@@ -67,13 +59,15 @@ struct item *sender(int sender, int receiver, struct item *KAS)
     if (!item_equals(i4, B)){abort();}
   i5 = pair_get_second(i3);
   struct item *KAB = pair_get_first(i5); // K(AB)
+    // check KAB
+    check_is_key(KAB);
   i6 = pair_get_second(i5);
   i7 = pair_get_first(i6); // NA
     // check NA
     if (!item_equals(i7, NA)){abort();}
   struct item *NB = pair_get_second(i6); // NB
-    // check KAB
-    check_is_key(KAB);
+    // check NB
+    check_is_nonce(NB);
   item_free(i1);
   item_free(i2);
   item_free(i3);
@@ -86,7 +80,7 @@ struct item *sender(int sender, int receiver, struct item *KAS)
   i1 = encrypt(KAB, NB);
   i2 = create_pair(B_S, i1);
   //@ SWITCH_CRYPTO_PRIMITIVES(i1, 1, 2);
-
+ 
   network_send(net_stat_out, i2);
   item_free(i1);
   item_free(i2);
@@ -95,19 +89,15 @@ struct item *sender(int sender, int receiver, struct item *KAS)
     ///////////////////////////////////////////////////////////////////////////
     //1) Secrecy of NB
     //@  assert item(NB, ?nb);
-    //@  assert (yahalom_pub(nb) == false);
+    //@  assert true == if_no_collision(!yahalom_pub(nb));
     //
     //2) Secrecy of KAS
-    //@ open key_item(KAS, ?sas, ?cas, ?kindas, ?ias);
-    //@ assert item(KAS, ?kas);
-    //@ assert (yahalom_pub(kas) == false);
-    //@ close key_item(KAS, sas, cas, kindas, ias);
+    //@ assert item(KAS, kas);
+    //@ assert true == if_no_collision(!yahalom_pub(kas));
     //
     //3) Secrecy of KAB
-    //@ open key_item(KAB, ?sab, ?cab, ?kindab, ?iab);
     //@ assert item(KAB, ?kab);
-    //@ assert (yahalom_pub(kab) == false);
-    //@ close key_item(KAB, sab, cab, kindab, iab);
+    //@ assert true == if_no_collision(!yahalom_pub(kab));
     ///////////////////////////////////////////////////////////////////////////
 
   item_free(A);
@@ -124,16 +114,16 @@ struct item *sender(int sender, int receiver, struct item *KAS)
 
 void receiver(int receiver, struct item * KBS)
   /*@ requires [?f0]world(yahalom_pub) &*&
-               !bad(receiver) &*& !bad(0) &*&
-               generated_nonces(receiver, ?count) &*&
-               key_item(KBS, receiver, 0, symmetric_key, int_pair(0,0)); 
+               !bad(server_id()) &*& !bad(receiver) &*&
+               generated_values(receiver, ?count) &*& item(KBS, ?kbs) &*& 
+               kbs == key_item(receiver, 1, symmetric_key, int_pair(0,0));
   @*/
   /*@ ensures  [f0]world(yahalom_pub) &*&
-               generated_nonces(receiver, count + 1) &*& 
-               key_item(KBS, receiver, 0, symmetric_key, int_pair(0,0)); 
+               generated_values(receiver, ?count2) &*& count2 >= count &*&
+               item(KBS, kbs);
   @*/
 {
-  struct network_status *net_stat_in  = network_bind(RECVER_PORT);
+  struct network_status *net_stat_in  = network_bind_and_accept(RECVER_PORT);
   struct network_status *net_stat_out = network_connect("localhost", SERVER_PORT);
   
   struct item *i1;
@@ -151,7 +141,6 @@ void receiver(int receiver, struct item * KBS)
             core_receiver(net_stat_in, net_stat_out, sender, NA, receiver, KBS);
   
   item_free(A);
-  //@ open key_item(KAB, _, _, _, _);
   item_free(KAB);
   
   network_disconnect(net_stat_in);
@@ -162,25 +151,24 @@ struct item *core_receiver(struct network_status *net_stat_in,
                            struct network_status *net_stat_out, int sender, 
                            struct item* NA, int receiver, struct item * KBS)
   /*@ requires [?f0]world(yahalom_pub) &*&
-               network_status(net_stat_in) &*& network_status(net_stat_out) &*& 
-               !bad(receiver) &*& !bad(0) &*&
-               generated_nonces(receiver, ?count) &*&
-               key_item(KBS, receiver, 0, symmetric_key, int_pair(0,0)) &*&
-               item(NA, nonce_item(?p, ?c, ?i)) &*& 
-               yahalom_pub(nonce_item(p, c, i)) == true; 
+               network_status(net_stat_in) &*& network_status(net_stat_out) &*&
+               !bad(server_id()) &*& !bad(receiver) &*&
+               generated_values(receiver, ?count) &*& item(KBS, ?kbs) &*&
+               kbs == key_item(receiver, 1, symmetric_key, int_pair(0,0)) &*&
+               item(NA, ?na) &*& true == if_no_collision(yahalom_pub(na));
   @*/
   /*@ ensures  [f0]world(yahalom_pub) &*&
-               network_status(net_stat_in) &*& network_status(net_stat_out) &*& 
-               generated_nonces(receiver, count + 1) &*& 
-               key_item(KBS, receiver, 0, symmetric_key, int_pair(0,0)) &*&
-               // Secrecy of KBS
-               yahalom_pub(key_item(receiver, 0, symmetric_key, 
-                             int_pair(0, 0))) == false &*&
-               key_item(result, sender, ?cab, symmetric_key, 
-                             int_pair(2, receiver)) &*&
-               // Secrecy of KAB
-               bad(sender) || yahalom_pub(key_item(sender, cab, symmetric_key, 
-                             int_pair(2, receiver))) == false; 
+               network_status(net_stat_in) &*& network_status(net_stat_out) &*&
+               generated_values(receiver, ?count2) &*& count2 >= count &*& 
+               item(KBS, kbs) &*& yahalom_pub(kbs) == false &*&
+               item(result, ?kab) &*& 
+               kab == key_item(?p_ab, ?c_ab, ?k_ab, ?i_ab) &*&
+               true == if_no_collision(
+                 p_ab == server_id() &&
+                 k_ab == symmetric_key &&
+                 i_ab == int_pair(2, int_pair(sender, receiver)) &&
+                 bad(sender) || !yahalom_pub(kab)
+               );
   @*/
 {
   struct item *i1;
@@ -194,7 +182,7 @@ struct item *core_receiver(struct network_status *net_stat_in,
   struct item *B = create_data_item(receiver);
   
   // 2. B -> S. B, {A, NA, NB}_K(BS)
-  //@ close nonce_request(receiver, int_pair(4, int_pair(sender, receiver)));
+  //@ close nonce_request(receiver, int_pair(4, sender));
   struct item *NB = create_nonce();
   i1 = create_pair(NA, NB);
   i2 = create_pair(A, i1);
@@ -220,7 +208,6 @@ struct item *core_receiver(struct network_status *net_stat_in,
   i6 = decrypt(KAB, i3); // NB
     // check NB
     if (!item_equals(i6, NB)){abort();}
-  
   item_free(i1);
   item_free(i2);
   item_free(i3);
@@ -235,19 +222,15 @@ struct item *core_receiver(struct network_status *net_stat_in,
     //
     //1) Secrecy of NB
     //@  assert item(NB, ?nb);
-    //@  assert bad(sender) || (yahalom_pub(nb) == false);
+    //@  assert bad(sender) || !yahalom_pub(nb);
     //
     //2) Secrecy of KBS
-    //@ open key_item(KBS, ?sbs, ?cbs, ?kindbs, ?ibs);
-    //@ assert item(KBS, ?kbs);
-    //@ assert (yahalom_pub(kbs) == false);
-    //@ close key_item(KBS, sbs, cbs, kindbs, ibs);
+    //@ assert item(KBS, kbs);
+    //@ assert !yahalom_pub(kbs);
     //
     //3) Secrecy of KAB
-    //@ open key_item(KAB, ?sab, ?cab, ?kindab, ?iab);
     //@ assert item(KAB, ?kab);
-    //@ assert bad(sender) || (yahalom_pub(kab) == false);
-    //@ close key_item(KAB, sab, cab, kindab, iab);
+    //@ assert true == if_no_collision(bad(sender) || !yahalom_pub(kab));
     ///////////////////////////////////////////////////////////////////////////
     
   item_free(A);
@@ -259,21 +242,29 @@ struct item *core_receiver(struct network_status *net_stat_in,
 }
 
 void server(int sender, int receiver, struct item *KAS, struct item *KBS, struct item *KAB)
-  /*@ requires [?f0]world(yahalom_pub) &*&
-               !bad(0) &*& !bad(sender) &*& !bad(receiver) &*&
-               key_item(KAS, sender, 0, symmetric_key, int_pair(0,0)) &*&
-               key_item(KBS, receiver, 0, symmetric_key, int_pair(0,0)) &*&
-               item(KAB, key_item(sender, ?count, symmetric_key, 
-                                                         int_pair(2,receiver)));
+  /*@ requires [?f]world(yahalom_pub) &*&
+               !bad(server_id()) &*& !bad(sender) &*& !bad(receiver) &*&
+               generated_values(server_id(), ?count) &*&
+               item(KAS, ?kas) &*& 
+                 kas == key_item(sender, 1, symmetric_key, int_pair(0,0)) &*&
+               item(KBS, ?kbs) &*& 
+                 kbs == key_item(receiver, 1, symmetric_key, int_pair(0,0)) &*&
+               item(KAB, ?kab) &*& 
+                 kab == key_item(server_id(), 1, symmetric_key, 
+                                 int_pair(2, int_pair(sender, receiver)));
   @*/
-  /*@ ensures [f0]world(yahalom_pub) &*&
-              key_item(KAS, sender, 0, symmetric_key, int_pair(0,0)) &*&
-              key_item(KBS, receiver, 0, symmetric_key, int_pair(0,0)) &*&
-              item(KAB, key_item(sender, count, symmetric_key, 
-                                                         int_pair(2,receiver)));
+  /*@ ensures [f]world(yahalom_pub) &*&
+              generated_values(server_id(), ?count2) &*& count2 >= count &*&
+              item(KAS, kas) &*& item(KBS, kbs) &*& item(KAB, kab) &*&
+              true == if_no_collision
+              (
+                yahalom_pub(kas) == false &&
+                yahalom_pub(kbs) == false &&
+                yahalom_pub(kab) == false
+              );
   @*/
 {
-  struct network_status *net_stat_in  = network_bind(SERVER_PORT);
+  struct network_status *net_stat_in  = network_bind_and_accept(SERVER_PORT);
   struct network_status *net_stat_out = network_connect("localhost", SENDER_PORT);
   
   struct item *i1;
@@ -319,6 +310,7 @@ void server(int sender, int receiver, struct item *KAS, struct item *KBS, struct
   i5 = create_pair(B, i4);
   i6 = encrypt(KAS, i5);
   i7 = create_pair(i6, i2);
+  
   network_send(net_stat_out, i7);
   item_free(i1);
   item_free(i2);

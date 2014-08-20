@@ -44,6 +44,10 @@ lemma void integer_limits(int *p);
     requires [?f]integer(p, ?v);
     ensures [f]integer(p, v) &*& p > (int *)0 &*& p + 1 <= (int *)UINTPTR_MAX &*& INT_MIN <= v &*& v <= INT_MAX;
 
+lemma void u_integer_limits(unsigned int *p);
+    requires [?f]u_integer(p, ?v);
+    ensures [f]u_integer(p, v) &*& p > (unsigned int *)0 &*& p + 1 <= (unsigned int *)UINTPTR_MAX &*& 0 <= v &*& v <= UINT_MAX;
+
 lemma void pointer_distinct(void *pp1, void *pp2);
     requires pointer(pp1, ?p1) &*& pointer(pp2, ?p2);
     ensures pointer(pp1, p1) &*& pointer(pp2, p2) &*& pp1 != pp2;
@@ -102,11 +106,37 @@ lemma_auto void chars_join(char *array);
     requires [?f]chars(array, ?n, ?cs) &*& [f]chars(array + n, ?n0, ?cs0);
     ensures [f]chars(array, n + n0, append(cs, cs0));
 
+fixpoint int int_of_chars(list<char> cs);
+fixpoint list<char> chars_of_int(int i);
+
+lemma_auto(int_of_chars(chars_of_int(i))) void int_of_chars_of_int(int i);
+    requires INT_MIN <= i && i <= INT_MAX;
+    ensures i == (int_of_chars(chars_of_int(i)));
+
+lemma_auto(chars_of_int(int_of_chars(cs))) void chars_of_int_of_chars(list<char> cs);
+    requires true;
+    ensures cs == (chars_of_int(int_of_chars(cs)));
+
+lemma void int_of_chars_injective(list<char> cs1, list<char> cs2);
+    requires true;
+    ensures true == ((cs1 == cs2) == (int_of_chars(cs1) == int_of_chars(cs2)));
+
+lemma void chars_of_int_injective(int i1, int i2);
+    requires true;
+    ensures true == ((i1 == i2) == (chars_of_int(i1) == chars_of_int(i2)));
+
+lemma_auto void chars_of_int_size(int i);
+    requires INT_MIN <= i && i <= INT_MAX;
+    ensures length(chars_of_int(i)) == sizeof(int);
+
+lemma_auto void int_of_chars_size(list<char> cs);
+    requires length(cs) == sizeof(int);
+    ensures INT_MIN <= int_of_chars(cs) && int_of_chars(cs) <= INT_MAX;
 
 // chars to ...
 lemma_auto void chars_to_integer(void *p);
     requires [?f]chars(p, sizeof(int), ?cs);
-    ensures [f]integer(p, _);
+    ensures [f]integer(p, int_of_chars(cs));
 
 lemma_auto void chars_to_u_integer(void *p);
     requires [?f]chars(p, sizeof(unsigned int), ?cs);
@@ -118,8 +148,8 @@ lemma_auto void chars_to_pointer(void *p);
 
 // ... to chars
 lemma_auto void integer_to_chars(void *p);
-    requires [?f]integer(p, _);
-    ensures [f]chars(p, sizeof(int), ?cs);
+    requires [?f]integer(p, ?i);
+    ensures [f]chars(p, sizeof(int), chars_of_int(i));
 
 lemma_auto void u_integer_to_chars(void *p);
     requires [?f]u_integer(p, _);

@@ -4,15 +4,6 @@
 #define SERVER_PORT 121212
 #define RECVER_PORT 232323
 
-//@ predicate protocol_pub(; fixpoint(item, bool) pub) = pub == nss_pub;
-
-void init_protocol()
-  //@ requires true;
-  //@ ensures protocol_pub(nss_pub) &*& generated_keys(0, ?count);
-{
-  //@ assume (false);
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 // Protocol implementation ////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
@@ -20,26 +11,30 @@ void init_protocol()
 struct item *sender(int sender, int receiver, struct item * KAS)
   /*@ requires 
         [?f0]world(nss_pub) &*&
-        !bad(sender) &*& !bad(receiver) &*& !bad(0) &*&
-        generated_nonces(sender, ?count) &*& 
-        key_item(KAS, sender, 0, symmetric_key, int_pair(0, 0));
+        !bad(server_id()) &*& !bad(sender) &*& !bad(receiver) &*&
+        generated_values(sender, ?count) &*& 
+        item(KAS, ?kas) &*& 
+        kas == key_item(sender, 1, symmetric_key, int_pair(0, 0));
   @*/
   /*@ ensures 
         [f0]world(nss_pub) &*&
-        generated_nonces(sender, count + 1) &*&
-        key_item(KAS, sender, 0, symmetric_key, int_pair(0, 0)) &*&
-        key_item(result, 0, ?cab, symmetric_key, 
-                                  int_pair(2, int_pair(sender, receiver))) &*&
-        // Secrecy of KAS
-        nss_pub(key_item(sender, 0, symmetric_key, int_pair(0, 0))) == false &*&
-        // Secrecy of KAB
-        nss_pub(key_item(0, cab, symmetric_key, 
-                            int_pair(2, int_pair(sender, receiver)))) == false; 
+        generated_values(sender, ?count2) &*& count2 >= count &*&
+        item(KAS, kas) &*& nss_pub(kas) == false &*&
+        item(result, ?kab) &*& kab == key_item(?p0, ?c0, ?k0, ?i0) &*&
+        collision_in_run() ? 
+          true 
+        : 
+          (
+            p0 == server_id() &&
+            k0 == symmetric_key &&
+            i0 == int_pair(2, int_pair(sender, receiver))&&
+            nss_pub(kab) == false
+          );
   @*/
 { 
   struct network_status *net_stat = network_connect("localhost", RECVER_PORT);
-  struct network_status *net_stat_serv  = network_connect("localhost", SERVER_PORT);
-  
+  struct network_status *net_stat_serv = 
+                                    network_connect("localhost", SERVER_PORT);
   // 1. A -> B. A
   struct item *A = 0;
   {
@@ -95,7 +90,10 @@ struct item *sender(int sender, int receiver, struct item * KAS)
     item_free(i6);
   }
   
-  //@ assert key_item(KAB, 0, _, symmetric_key, int_pair(2, int_pair(sender, receiver)));
+  //@ assert item(KAB, key_item(?p0, ?c0, ?k0, ?i0));
+  //@ collision_in_run() ? true : p0 == 0;
+  //@ collision_in_run() ? true : k0 == symmetric_key;
+  //@ collision_in_run() ? true : i0 == int_pair(2, int_pair(sender, receiver));
   
   // 5. A -> B. {K(AB), A, NB1}_K(BS)
   {
@@ -118,11 +116,17 @@ struct item *sender(int sender, int receiver, struct item * KAS)
     item_free(i2);
     item_free(i3);
   }
-
+  
+  //@ assert item(NB2, nonce_item(?pp1, ?cc1, ?inc1, ?ii1));
+  //@ collision_in_run() ? true : pp1  == receiver;
+  //@ collision_in_run() ? true : inc1 == 0;
+  //@ collision_in_run() ? true : ii1  == int_pair(5, sender);
+  
   // 7. A -> B. {NB2 + 1, 1}_K(AB)
   struct item *NB22 = 0;
   {
-    NB22 = increment_nonce(NB2, 6);          //   NB2 + 1
+    NB22 = item_clone(NB2);
+    increment_nonce(NB22);                   //   NB2 + 1
     struct item *i1 = create_data_item(1);   //            1
     struct item *i2 = create_pair(NB22, i1); //  (NB2 + 1, 1)
     struct item *i3 = encrypt(KAB, i2);      // {(NB2 + 1, 1)}_K(AB)
@@ -131,28 +135,24 @@ struct item *sender(int sender, int receiver, struct item * KAS)
     item_free(i2);
     item_free(i3);
   }
-
+  
     //Protocol End Goals
     ///////////////////////////////////////////////////////////////////////////
     //1) Secrecy of NB2
     //@  assert item(NB2, ?nb2);
-    //@  assert (nss_pub(nb2) == false);
+    //@  assert collision_in_run() ? true : (nss_pub(nb2) == false);
     //
     //2) Secrecy of NB2 + 1
     //@  assert item(NB22, ?nb22);
-    //@  assert (nss_pub(nb22) == false);
+    //@  assert collision_in_run() ? true : (nss_pub(nb22) == false);
     //
     //3) Secrecy of KAS
-    //@ open key_item(KAS, ?sas, ?cas, ?kindas, ?ias);
-    //@ assert item(KAS, ?kas);
-    //@ assert (nss_pub(kas) == false);
-    //@ close key_item(KAS, sas, cas, kindas, ias);
+    //@ assert item(KAS, kas);
+    //@ assert nss_pub(kas) == false;
     //
     //4) Secrecy of KAB
-    //@ open key_item(KAB, ?sab, ?cab, ?kindab, ?iab);
     //@ assert item(KAB, ?kab);
-    //@ assert (nss_pub(kab) == false);
-    //@ close key_item(KAB, sab, cab, kindab, iab);
+    //@ assert collision_in_run() ? true : (nss_pub(kab) == false);
     ///////////////////////////////////////////////////////////////////////////
   
   item_free(A);
@@ -170,19 +170,20 @@ struct item *sender(int sender, int receiver, struct item * KAS)
 }
 
 void receiver(int receiver, struct item *KBS)
-  /*@ requires 
+  /*@ requires
         [?f0]world(nss_pub) &*&
-        !bad(receiver) &*& !bad(0) &*&
-        generated_nonces(receiver, ?count) &*& 
-        key_item(KBS, receiver, 0, symmetric_key, int_pair(0, 0));
+        !bad(server_id()) &*& !bad(receiver) &*&
+        generated_values(receiver, ?count) &*&
+        item(KBS, ?kbs) &*& 
+        kbs == key_item(receiver, 1, symmetric_key, int_pair(0, 0));
   @*/
-  /*@  ensures 
+  /*@  ensures
         [f0]world(nss_pub) &*&
-        generated_nonces(receiver, count + 2) &*&
-        key_item(KBS, receiver, 0, symmetric_key, int_pair(0, 0)); 
+        generated_values(receiver, ?count2) &*& count2 >= count &*&
+        item(KBS, kbs);
   @*/
 {
-  struct network_status *net_stat = network_bind(RECVER_PORT);
+  struct network_status *net_stat = network_bind_and_accept(RECVER_PORT);
   
   // 1. A -> B. A
   int sender = 0;
@@ -195,7 +196,6 @@ void receiver(int receiver, struct item *KBS)
   struct item* KAB = core_receiver(net_stat, sender, receiver, KBS);
   
   item_free(A);
-  //@ open key_item(KAB, _, _, _, _);
   item_free(KAB);
   
   network_disconnect(net_stat);
@@ -203,23 +203,27 @@ void receiver(int receiver, struct item *KBS)
 
 struct item *core_receiver(struct network_status *net_stat, int sender, 
                            int receiver, struct item *KBS)
-  /*@ requires 
+  /*@ requires
         [?f0]world(nss_pub) &*& network_status(net_stat) &*&
-        !bad(receiver) &*& !bad(0) &*&
-        generated_nonces(receiver, ?count) &*& 
-        key_item(KBS, receiver, 0, symmetric_key, int_pair(0, 0));
+        !bad(server_id()) &*& !bad(receiver) &*&
+        generated_values(receiver, ?count) &*&
+        item(KBS, ?kbs) &*& 
+        kbs == key_item(receiver, 1, symmetric_key, int_pair(0, 0));
   @*/
-  /*@  ensures 
+  /*@  ensures
         [f0]world(nss_pub) &*& network_status(net_stat) &*&
-        generated_nonces(receiver, count + 2) &*&
-        key_item(KBS, receiver, 0, symmetric_key, int_pair(0, 0)) &*&
-        key_item(result, 0, ?cab, symmetric_key, 
-                                  int_pair(2, int_pair(sender, receiver))) &*&
-        // Secrecy of KBS
-        nss_pub(key_item(receiver, 0, symmetric_key, int_pair(0, 0))) == false &*&
-        // Secrecy (conditionally on sender being bad) of KAB
-        (bad(sender) || nss_pub(key_item(0, cab, symmetric_key, 
-                            int_pair(2, int_pair(sender, receiver)))) == false); 
+        generated_values(receiver, ?count2) &*& count2 >= count &*&
+        item(KBS, kbs) &*& nss_pub(kbs) == false &*&
+        item(result, ?kab) &*& kab == key_item(?p0, ?c0, ?k0, ?i0) &*&
+        collision_in_run() ? 
+          true 
+        : 
+          (
+            p0 == server_id() &&
+            k0 == symmetric_key &&
+            i0 == int_pair(2, int_pair(sender, receiver))&&
+            (bad(sender) || nss_pub(kab) == false)
+          );
   @*/
 {
   struct item *A = create_data_item(sender);
@@ -259,6 +263,11 @@ struct item *core_receiver(struct network_status *net_stat, int sender,
     item_free(i5);
   }
   
+  //@ assert item(KAB, key_item(?p0, ?c0, ?k0, ?i0));
+  //@ collision_in_run() ? true : p0 == 0;
+  //@ collision_in_run() ? true : k0 == symmetric_key;
+  //@ collision_in_run() ? true : i0 == int_pair(2, int_pair(sender, receiver));
+  
   // 6. B -> A. {NB2, 0}_K(AB)
   struct item *NB2 = 0;
   {
@@ -276,7 +285,8 @@ struct item *core_receiver(struct network_status *net_stat, int sender,
   // 7. A -> B. {NB2 + 1, 1}_K(AB)
   struct item *NB22 = 0;
   {
-    NB22 = increment_nonce(NB2, 6); 
+    NB22 = item_clone(NB2);
+    increment_nonce(NB22); 
     struct item *i1 = network_receive(net_stat);
     struct item *i2 = decrypt(KAB, i1);        // (NB2 + 1, 1)
     struct item *i3 = pair_get_first(i2);      //  NB2 + 1
@@ -306,16 +316,12 @@ struct item *core_receiver(struct network_status *net_stat, int sender,
     //@  assert bad(sender) || (nss_pub(nb22) == false);
     //
     //3) Secrecy of KBS
-    //@ open key_item(KBS, ?sbs, ?cbs, ?kindbs, ?ibs);
-    //@ assert item(KBS, ?kbs);
-    //@ assert (nss_pub(kbs) == false);
-    //@ close key_item(KBS, sbs, cbs, kindbs, ibs);
+    //@  assert item(KBS, kbs);
+    //@  assert (nss_pub(kbs) == false);
     //
     //4) Secrecy of KAB
-    //@ open key_item(KAB, ?sab, ?cab, ?kindab, ?iab);
-    //@ assert item(KAB, ?kab);
-    //@ assert bad(sender) || (nss_pub(kab) == false);
-    //@ close key_item(KAB, sab, cab, kindab, iab);
+    //@  assert item(KAB, ?kab);
+    //@  assert  collision_in_run() ? true : (bad(sender) || (nss_pub(kab) == false));
     ///////////////////////////////////////////////////////////////////////////
 
   item_free(A);
@@ -327,22 +333,23 @@ struct item *core_receiver(struct network_status *net_stat, int sender,
   return KAB;
 }
 
-void server(int sender, int receiver, struct item *KAS, struct item *KBS, struct item *KAB)
+void server(int sender, int receiver, 
+            struct item *KAS, struct item *KBS, struct item *KAB)
   /*@ requires [?f0]world(nss_pub) &*&
-               !bad(0) &*& !bad(sender) &*& !bad(receiver) &*&
-               key_item(KAS, sender, 0, symmetric_key, int_pair(0,0)) &*&
-               key_item(KBS, receiver, 0, symmetric_key, int_pair(0,0)) &*&
-               item(KAB, key_item(0, ?count, symmetric_key, 
-                                      int_pair(2,int_pair(sender, receiver))));
+               !bad(server_id()) &*& !bad(sender) &*& !bad(receiver) &*&
+               generated_values(server_id(), ?count1) &*&
+               item(KAS, ?kas) &*& item(KBS, ?kbs) &*& item(KAB, ?kab) &*&
+               kas == key_item(sender, 1, symmetric_key, int_pair(0,0)) &*&
+               kbs == key_item(receiver, 1, symmetric_key, int_pair(0,0)) &*&
+               kab == key_item(server_id(), ?count2, symmetric_key,
+                                      int_pair(2,int_pair(sender, receiver)));
   @*/
-  /*@ ensures [f0]world(nss_pub) &*&
-              key_item(KAS, sender, 0, symmetric_key, int_pair(0,0)) &*&
-              key_item(KBS, receiver, 0, symmetric_key, int_pair(0,0)) &*&
-              item(KAB, key_item(0, count, symmetric_key, 
-                                      int_pair(2,int_pair(sender, receiver))));
+  /*@ ensures  [f0]world(nss_pub) &*&
+               generated_values(server_id(), ?count3) &*& count3 >= count1 &*&
+               item(KAS, kas) &*& item(KBS, kbs) &*& item(KAB, kab);
   @*/
-{
-  struct network_status *net_stat  = network_bind(SERVER_PORT);
+{ 
+  struct network_status *net_stat  = network_bind_and_accept(SERVER_PORT);
 
   struct item *A = create_data_item(sender);
   struct item *B = create_data_item(receiver);

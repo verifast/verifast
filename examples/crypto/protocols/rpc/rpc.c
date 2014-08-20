@@ -3,29 +3,24 @@
 
 #define SERVER_PORT 121212
 
-/*@ 
-predicate protocol_pub(; fixpoint(item, bool) pub) = pub == rpc_pub;
-
-lemma void init_protocol()
-     requires true;
-     ensures protocol_pub(rpc_pub);
-{
-  close protocol_pub(rpc_pub);
-}
-@*/
-
 struct item *client(int server, struct item *key, struct item *request)
   /*@ requires [?f0]world(rpc_pub) &*&
-               key_item(key, ?creator, ?id, symmetric_key, int_pair(0, 0)) &*& 
-               item(request, ?req) &*&
-               rpc_pub(req) == true &*& request(creator, server, req) == true &*& 
-               shared_with(creator, id) == server; 
+               item(key, 
+                    key_item(?creator, ?id, symmetric_key, int_pair(0, 0))) &*&
+               item(request, ?req) &*& rpc_pub(req) == true &*& 
+               request(creator, server, req) == true &*&
+               shared_with(creator, id) == server;
   @*/
   /*@ ensures  [f0]world(rpc_pub) &*&
-               key_item(key, creator, id, symmetric_key, int_pair(0, 0)) &*& 
-               item(request, req) &*& 
-               item(result, ?resp) &*& bad(creator) || bad(server) || 
-               response(creator, server, req, resp) == true;  
+               item(key, 
+                    key_item(creator, id, symmetric_key, int_pair(0, 0))) &*&
+               item(request, req) &*& item(result, ?resp) &*& 
+               (
+                 bad(creator) || 
+                 bad(server) ||
+                 collision_in_run() ||
+                 response(creator, server, req, resp) == true
+               );
   @*/
 {
     struct network_status *net_stat = network_connect("localhost", SERVER_PORT);
@@ -70,37 +65,45 @@ struct item *client(int server, struct item *key, struct item *request)
 
 // This function represents the server application.
 // We pass in the key predicate just to get hold of the creator principal id.
-struct item *compute_response(struct item *request)
-  /*@ requires [?f]world(rpc_pub) &*& 
-               key_item(?key, ?creator, ?id, symmetric_key, ?info) &*& 
-               item(request, ?req) &*& 
-               bad(creator) || bad(shared_with(creator, id)) || 
-               request(creator, shared_with(creator, id), req) == true; 
+struct item *compute_response(int server, struct item *request)
+  /*@ requires [?f]world(rpc_pub) &*&
+               generated_values(server, ?count) &*&
+               item(?key, key_item(?creator, ?id, symmetric_key, ?info)) &*&
+               item(request, ?req) &*&
+               (
+                 bad(creator) || 
+                 bad(shared_with(creator, id)) || 
+                 collision_in_run() ||
+                 request(creator, shared_with(creator, id), req)
+               );
   @*/
   /*@ ensures  [f]world(rpc_pub) &*& 
-               key_item(key, creator, id, symmetric_key, info) &*& 
+               generated_values(server, count + 1) &*&
+               item(key, key_item(creator, id, symmetric_key, info)) &*& 
                item(request, req) &*& 
                item(result, ?resp) &*& rpc_pub(resp) == true &*& 
                response(creator, shared_with(creator, id), req, resp) == true;
   @*/
 {
-  int random = choose();
+  int random = random_int();
   struct item *response = create_data_item(random);
   //@ assert item(response, ?resp);
   //@ assume (response(creator, shared_with(creator, id), req, resp) == true);
   return response;
 }
 
-void server(int serverId, struct item *key)
+void server(int server, struct item *key)
   /*@ requires [?f0]world(rpc_pub) &*&
-               key_item(key, ?creator, ?id, symmetric_key, ?info) &*& 
-               shared_with(creator, id) == serverId; 
+               generated_values(server, ?count) &*&
+               item(key, key_item(?creator, ?id, symmetric_key, ?info)) &*&  
+               shared_with(creator, id) == server;
   @*/
   /*@ ensures  [f0]world(rpc_pub) &*&
-               key_item(key, creator, id, symmetric_key, info);
+               generated_values(server, count + 1) &*&
+               item(key, key_item(creator, id, symmetric_key, info));
   @*/
 {
-    struct network_status *net_stat = network_bind(SERVER_PORT);
+    struct network_status *net_stat = network_bind_and_accept(SERVER_PORT);
     
     struct item *request = 0;
     {
@@ -119,7 +122,7 @@ void server(int serverId, struct item *key)
     }
     
     {
-        struct item *response = compute_response(request);
+        struct item *response = compute_response(server, request);
         struct item *reqresp = create_pair(request, response);
         item_free(response);
         item_free(request);
