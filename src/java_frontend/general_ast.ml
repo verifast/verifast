@@ -217,6 +217,9 @@ and
   | C_Class of
       interface_class_enum (* Interface/class/enum declaration at class 
                               level (i.e. inner class) *)
+  | StaticBlock of
+      source_location *
+      statement list      (* Statements in this static block *)
   | Field of
       source_location *
       identifier *        (* Identifier of this field *)
@@ -234,8 +237,9 @@ and
       accessibility *   (* Is this constructor public, package, protected 
                            or private? *)
       variable_decl list *  (* The parameters for this constructor *)
-      (ref_type * annotation) list * (* List of possible thrown exceptions 
-                                        together with their annotations *)
+      (ref_type * annotation option) list * 
+                        (* List of possible thrown exceptions 
+                           together with their annotations *)
       statement list option * (* Possible statements in body of constructor *)
       gen_source        (* Is this constructor auto generated? *)
   | Method of
@@ -250,8 +254,9 @@ and
       static_binding *  (* Is this method static? *)
       type_ *           (* The return type of this method *)
       variable_decl list *           (* The parameters for this method *)
-      (ref_type * annotation) list * (* List of possible thrown exceptions 
-                                        together with their annotations *)
+      (ref_type * annotation option) list * 
+                        (* List of possible thrown exceptions 
+                           together with their annotations *)
       statement list option * (* List of statements in possible body of function *)
       gen_source        (* Is this method auto generated? *)
 and

@@ -68,7 +68,7 @@ let is_attached () =
   !attached_status
   
 let detach () =
-  catch_exceptions (fun _ -> communication#unload);
+  try communication#unload with _ -> ();
   attached_status := false
   
 (* method to send a FILES request with corresponding options and parse the response message *)
@@ -81,7 +81,7 @@ let asts_from_java_files_core files cfiles opts achecker =
                                cfiles' ^ command_separator ^
                                (String.concat command_separator opts));
     let kind = ref CALLBACK in
-    let response = ref "" in
+    let response = ref [] in
     let recieve _ =
       let (k, r) = communication#receive_response in
       kind := k;
@@ -92,8 +92,8 @@ let asts_from_java_files_core files cfiles opts achecker =
       if (!kind <> CALLBACK) then
         frontend_error NoSource 
           ("Callback failure: expected " ^ (string_of_response_kind CALLBACK) ^ 
-           " message, but got " ^ (string_of_response_kind !kind) ^ " message");
-      achecker#check_annotation !response communication;
+           " message, but got a " ^ (string_of_response_kind !kind) ^ " message");
+      achecker#check_annotation (Misc.join_lines_never_fail !response) communication;
       communication#send_command(command_continue);
       recieve ();
     done;

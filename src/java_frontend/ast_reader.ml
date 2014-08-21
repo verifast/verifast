@@ -127,6 +127,7 @@ let keywords = [
   "C_Class";
   "Constructor";
   "Method";
+  "StaticBlock";
   "Variable";
   
   (* statements *)
@@ -199,11 +200,23 @@ let keywords = [
   ","; ";"; "("; ")"; "["; "]";
 ]
 
-let make_lexer keywords text =
+let make_lexer keywords lines =
   let buffer = ref "" in
   let append c = buffer := !buffer ^ (String.make 1 c) in
   let reset_buffer () = let b = !buffer in buffer := ""; b in
-  let stream = Stream.of_string(text) in
+  let str = 
+    try
+      join_lines_fail lines
+    with Invalid_argument(_) ->
+    begin
+      let lines' = List.map Misc.trim lines in
+      try
+        String.concat "" lines'
+      with Invalid_argument(_) ->
+        error NoSource ("Input was to big")
+    end
+  in
+  let stream = Stream.of_string str in
   let next () = Stream.next stream in
   let peek () = 
     match Stream.peek stream with
@@ -213,7 +226,6 @@ let make_lexer keywords text =
   let junk () = Stream.junk stream in
   let kwd_table = Hashtbl.create 17 in
   List.iter (fun s -> Hashtbl.add kwd_table s (Kwd s)) keywords;
-  
   let ident_or_key () =
     let s = reset_buffer () in
     if Hashtbl.mem kwd_table s then
@@ -230,11 +242,11 @@ let make_lexer keywords text =
               (junk(); Some (Kwd (String.make 1 c)))
     | ('A'..'Z' | 'a'..'z' | '\128'..'\255' | '0'..'9' | '_' | '\'') as c -> 
             junk (); append c; make_ident_or_key ()
-    | (' ' | '\009' | '\010'| '\012'| '\013' | '\026') -> 
+    | (' ' | '\000' | '\009' | '\010'| '\012'| '\013' | '\026') -> 
             ident_or_key ()
     | _ as c -> error NoSource ("Internal Error!\n" ^
-                "AST Lexer encountered unexpected character while scanning identifier/keyword: " ^ 
-                (String.make 1 c))
+                "AST Lexer encountered unexpected character while scanning identifier/keyword " ^
+                !buffer ^ " : " ^ (Printf.sprintf "%i" (int_of_char c)))
   in
   
   let rec make_num () =
@@ -339,7 +351,6 @@ let parse_opt : (token Stream.t -> 'a) -> (token Stream.t) -> 'a option =
 (* ------------------------ *)
 
 let parse_with p s =
-  debug_print ("parse_with: \n" ^ s);
   try
     p (make_lexer keywords s)
   with
@@ -350,8 +361,9 @@ let parse_with p s =
       in
       error NoSource m
 
+let parse_line_with p s = parse_with p [s]
+
 let rec read_asts s =
-  debug_print ("\n" ^ s ^ "\n");
   parse_with (parse_list parse_package) s
 
 (* ------------------------ *)
@@ -602,6 +614,12 @@ and
     >] -> 
       debug_print "parse_class_decl: C_Class"; 
       C_Class(c)
+  | [< '(Kwd "StaticBlock");                  '(Kwd "(");
+          l = parse_loc;                      '(Kwd ",");
+          stmts = parse_list parse_statement; '(Kwd ")");
+    >] -> 
+      debug_print "parse_class_decl: StaticBlock"; 
+      StaticBlock(l, stmts)
   | [< '(Kwd "Field");                    '(Kwd "(");
           l = parse_loc;                  '(Kwd ",");
           id = parse_identifier;          '(Kwd ",");
@@ -622,7 +640,8 @@ and
           access = parse_accessibility;          '(Kwd ",");
           params = parse_list parse_var_decl;    '(Kwd ",");
           thrown = parse_list (parse_pair 
-             parse_ref_type parse_annotation);   '(Kwd ",");
+             parse_ref_type 
+             (parse_opt parse_annotation));      '(Kwd ",");
           stmts = parse_opt (parse_list
              parse_statement);                   '(Kwd ",");
           auto_gen = parse_gen_source;           '(Kwd ")");
@@ -642,7 +661,8 @@ and
           rett = parse_type;                     '(Kwd ",");
           params = parse_list parse_var_decl;    '(Kwd ",");
           thrown = parse_list (parse_pair 
-             parse_ref_type parse_annotation);   '(Kwd ",");
+             parse_ref_type 
+             (parse_opt parse_annotation));      '(Kwd ",");
           stmts = parse_opt (parse_list 
              parse_statement);                   '(Kwd ",");
           auto_gen = parse_gen_source;           '(Kwd ")");

@@ -43,6 +43,24 @@ let rec split_string c s =
   with Not_found ->
     [s]
 
+let rec join_lines_fail lines = String.concat "\n" lines
+
+let rec join_lines_never_fail lines =
+  try
+    join_lines_fail lines
+  with
+    Invalid_argument(_) -> String.concat "\n" ((List.hd lines)::["(to big) ..."])
+
+let rec trim s =
+  let l = String.length s in 
+  if l=0 then s
+  else if s.[0]=' ' || s.[0]='\t' || s.[0]='\n' || s.[0]='\r' then
+    trim (String.sub s 1 (l-1))
+  else if s.[l-1]=' ' || s.[l-1]='\t' || s.[l-1]='\n' || s.[l-1]='\r' then
+    trim (String.sub s 0 (l-1))
+  else
+    s
+
 (* Paths *)
 let concat path1 path2 =
   if path1 = "" || path1 = "." then path2 else path1 ^ Filename.dir_sep ^ path2

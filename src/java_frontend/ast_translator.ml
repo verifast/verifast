@@ -53,9 +53,6 @@ let debug_print_end m = ()
   
 let error l m =
   raise (ParseException(l, m))
-let warning l m =
-  let delim = "????????????????????????????????????????????????"in
-  Printf.printf "%s\n%s\n%s\n" delim (m ^ " - " ^ (Lexer.string_of_loc l)) delim
   
 (* ------------------------------------------------ *)
 (* Translation of location                          *)
@@ -71,7 +68,7 @@ let translate_location l =
 (* Parsing of annotations using the VeriFast parser *)
 (* ------------------------------------------------ *)
 
-let annotations : (string, string) Hashtbl.t ref = ref (Hashtbl.create 1)
+let annotations : (string, string list) Hashtbl.t ref = ref (Hashtbl.create 1)
 
 (* this function creates a lexer for each of 
    the annotations and composes them before
@@ -79,7 +76,7 @@ let annotations : (string, string) Hashtbl.t ref = ref (Hashtbl.create 1)
 let parse_pure_decls_core loc used_parser anns autogen =
   Parser.set_language Java;
   if (List.length anns < 1) then
-    raise (Lexer.ParseException (loc, "Parsing failed due to missing annotations"));
+    error loc "Parsing failed due to missing annotations";
   let (loc, token_stream) =
     let make_ann_lexer ann =
       match ann with
@@ -89,10 +86,13 @@ let parse_pure_decls_core loc used_parser anns autogen =
             a
           else
             try
-              Hashtbl.find !annotations (General_ast.string_of_loc l)
-            with Not_found ->
-              let message = "Annotation @ " ^ (General_ast.string_of_loc l) ^ "not found: \n" ^ a in
-              raise (Lexer.ParseException (dummy_loc, message));
+              Misc.join_lines_fail (Hashtbl.find !annotations (General_ast.string_of_loc l))
+            with 
+              Not_found ->
+                let message = "Annotation @ " ^ (General_ast.string_of_loc l) ^ "not found: \n" ^ a in
+                error dummy_loc message;
+            | Invalid_argument(_) -> 
+                error loc "Parsing failed due to too big annotation";
         in
         debug_print (Printf.sprintf "Handling annotation \n%s\n" a);
         begin
@@ -118,7 +118,7 @@ let parse_pure_decls_core loc used_parser anns autogen =
     let index = ref 0 in
     let current_loc () =
       if (!index >= List.length lexers) then
-        raise (Lexer.ParseException (dummy_loc, "Composing of lexers for parsing annotations failed (index past end of list)"))
+        error dummy_loc "Composing of lexers for parsing annotations failed (index past end of list)"
       else
         match List.nth lexers !index with (loc, _) -> loc ()
     in
@@ -136,11 +136,10 @@ let parse_pure_decls_core loc used_parser anns autogen =
     (current_loc, stream)
   in
   try
-    let foo = used_parser token_stream in
-    foo
+    used_parser token_stream
   with
-    Lexer.Stream.Error msg -> raise (Lexer.ParseException (loc(), msg))
-  | Lexer.Stream.Failure -> raise (Lexer.ParseException (loc(), "Parse error"))
+    Lexer.Stream.Error msg -> error (loc()) msg
+  | Lexer.Stream.Failure -> error (loc()) "Parse error"
 
 let parse_pure_decls loc anns autogen =
   let parser_pure_decls_eof = parser 
@@ -278,6 +277,7 @@ and translate_class_decl decl =
         let id' = GEN.string_of_identifier id in
         debug_print ("class declaration " ^ id');
         let (decls', meths') = translate_methods id' decls in
+        let (decls', static_blocks') = translate_static_blocks id' decls' in
         let (decls', fields') = translate_fields decls' in
         let (decls', cons') = translate_constructors decls' in
         let extnds' =
@@ -289,7 +289,7 @@ and translate_class_decl decl =
         let (decls', ghost_members') = translate_ghost_members l' id' decls' in
         let (ghost_fields', ghost_meths', ghost_preds') = split_ghost_members l ghost_members' in
         if (decls' <> []) then error l' "Not all declarations in class could be processed";
-        (VF.Class(l', abs', fin', id', meths' @ ghost_meths', fields' @ ghost_fields', cons', extnds', impls', ghost_preds'), id')
+        (VF.Class(l', abs', fin', id', static_blocks' @ meths' @ ghost_meths', fields' @ ghost_fields', cons', extnds', impls', ghost_preds'), id')
     | GEN.Interface(l, anns, id, tparams, access, impls, decls) ->
         let l'= translate_location l in
         let id' = GEN.string_of_identifier id in
@@ -381,6 +381,29 @@ and translate_class_decls_helper : 'a . (GEN.class_decl -> 'a list option) ->
       end
     | [] -> debug_print "translate_class_decl some"; ([],[])
   end
+
+and translate_static_blocks cn decls =
+  let counter = ref 0 in
+  debug_print "translate_static_blocks";
+  let translator decl =
+    match decl with
+    | GEN.StaticBlock(l, stmts) ->
+      begin
+        let l' = translate_location l in
+        let id' = cn ^ "_static_block_" ^ (string_of_int !counter) in
+        counter := !counter + 1;
+        let contr' = 
+          let ann_pre = Annotation(l, "requires true; ") in
+          let ann_post = Annotation(l, "ensures true; ") in
+          let (pre, post) = parse_contract l' [ann_pre; ann_post] true in
+          Some(pre, post, [])
+        in
+        let stmts' = translate_block l (Some stmts) in
+        Some([VF.Meth(l', VF.Real, None, id', [], contr', stmts', VF.Static, VF.Private, false)])
+      end
+    | _ -> None
+  in 
+  translate_class_decls_helper translator decls
 
 and translate_methods cn decls = 
   debug_print "translate_methods";
@@ -474,7 +497,11 @@ and translate_param param =
 and translate_throws_clause loc (rtype, ann) =
   debug_print "translate_throws";
   let rtype' = translate_ref_type rtype in
-  let post = parse_postcondition loc [ann] false in
+  let post = 
+    match ann with
+      Some a -> parse_postcondition loc [a] false
+    | None -> error loc "Throws clause must have a contract"
+  in
   (rtype', post)
 
 and translate_fields decls = 
@@ -585,8 +612,7 @@ and translate_statement stmt =
       let stmt' = translate_statements_as_block l' stmts in
       let (inv, dec) = 
         if List.length anns = 0 then begin
-          warning l' ("While loop does not have a valid invariant");
-          (None, None)
+          error l' ("While loop does not have a valid invariant");
         end else
           parse_loop_invar l' anns false
       in
@@ -596,8 +622,7 @@ and translate_statement stmt =
       let expr' = translate_expression expr in
       let (inv, dec) = 
         if List.length anns = 0 then begin
-          warning l' ("While loop does not have a valid invariant");
-          (None, None)
+          error l' ("While loop does not have a valid invariant");
         end else
           parse_loop_invar l' anns false
       in
@@ -608,8 +633,7 @@ and translate_statement stmt =
       let l' = translate_location l in
       let (inv, dec) = 
         if List.length anns = 0 then begin
-          warning l' ("For loop does not have a valid invariant");
-          (None, None)
+          error l' ("For loop does not have a valid invariant");
         end else
           parse_loop_invar l' anns false
       in
@@ -751,7 +775,7 @@ and translate_expression expr =
       begin
         match op with 
           Some op -> 
-            let (_, op') = translate_bin_operator op in
+            let (_, op') = translate_bin_operator op l' in
             AssignOpExpr(l', expr_l', op', expr_r', false, ref None, ref None)
         | _ -> AssignExpr(l', expr_l', expr_r')
       end
@@ -763,7 +787,7 @@ and translate_expression expr =
       let l' = translate_location l in
       let left = translate_expression expr_l in
       let right = translate_expression expr_r in
-      let (rev, op') = translate_bin_operator op in
+      let (rev, op') = translate_bin_operator op l' in
       let (expr_l', expr_r') =
         if rev then (right, left) else (left, right)
       in
@@ -792,7 +816,7 @@ and translate_expression expr =
       let expr2' = translate_expression expr2 in
       VF.ReadArray(l', expr1', expr2')
 
-and translate_bin_operator op =
+and translate_bin_operator op l =
   debug_print "bin_operator";
   match op with
   | GEN.O_Plus   -> (false, VF.Add)
@@ -811,6 +835,9 @@ and translate_bin_operator op =
   | GEN.O_BitOr  -> (false, VF.BitOr)
   | GEN.O_BitXor -> (false, VF.BitXor)
   | GEN.O_BitAnd -> (false, VF.BitAnd)
+  | GEN.O_ShiftL -> error l "Binary operator << not supported yet";
+  | GEN.O_ShiftR -> error l "Binary operator >> not supported yet";
+  | GEN.O_UShiftR-> error l "Binary operator >>> not supported yet";
 
 and translate_uni_operator op l expr =
   debug_print "uni_operator";

@@ -7,7 +7,7 @@ let load _ =
   let launch = 
     try Sys.getenv "VERIFAST_JAVA_AST_SERVER"  
     with Not_found ->
-      let ast_server_filename = "ast_server-415b386.jar" in
+      let ast_server_filename = "ast_server-4fc2203.jar" in
       let error_message =
         "\nYou specified the option -javac to use the STANCE Java frontend. " ^
         Printf.sprintf "However, to use the STANCE Java frontend, you need to retrieve the file %s from: \n" ast_server_filename ^
@@ -70,7 +70,6 @@ let parse_java_files_with_frontend (paths: string list) (jars: string list) (rep
     | _ ->
       if not (Java_frontend.is_attached ()) then load();
         let ann_checker = new Annotation_type_checker.dummy_ann_type_checker () in
-        let packages = 
           try
             let options = 
               [Java_frontend.desugar; 
@@ -79,7 +78,11 @@ let parse_java_files_with_frontend (paths: string list) (jars: string list) (rep
               Java_frontend.bodyless_methods_own_trailing_annotations;
               Java_frontend.accept_spec_files]
             in
-            Java_frontend.asts_from_java_files paths ~context:context_for_paths options ann_checker
+            let packages = 
+              Java_frontend.asts_from_java_files paths ~context:context_for_paths options ann_checker
+            in
+            let annotations = ann_checker#retrieve_annotations () in
+            Ast_translator.translate_asts packages annotations
           with
             Java_frontend.JavaFrontendException(l, m) -> 
               let message = 
@@ -88,9 +91,6 @@ let parse_java_files_with_frontend (paths: string list) (jars: string list) (rep
               match l with
               | General_ast.NoSource -> raise (Parser.CompilationError message)
               | _ -> raise (Lexer.ParseException(Ast_translator.translate_location l, message))
-        in
-        let annotations = ann_checker#retrieve_annotations () in
-        Ast_translator.translate_asts packages annotations
    in
    (List.map (fun x -> Parser.parse_java_file_old x reportRange reportShouldFail) rt_paths) @ result 
 

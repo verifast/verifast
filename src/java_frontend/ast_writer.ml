@@ -334,6 +334,12 @@ and string_for_class_decl decl () =
         [string_for_class c]
       in
       string_for_constructor "C_Class" args;
+  | StaticBlock(l, stmts) -> 
+      let args = 
+        [string_for_location l;
+         string_for_list (List.map string_for_statement stmts)]
+      in
+      string_for_constructor "StaticBlock" args;
   | Field(l, id, access, final, stat, typ, e, auto) ->
       let args = 
         [string_for_location l;
@@ -387,7 +393,7 @@ and string_for_var_decl var () =
 and string_for_exception (typ, ann) () =
   let middle () =
     (string_for_ref_type typ ()) ^ (",\n") ^
-    (string_for_annotation ann ())
+    (string_for_option (fun x -> string_for_annotation x) ann) ()
   in
   string_wrapped "(" middle ")"
 

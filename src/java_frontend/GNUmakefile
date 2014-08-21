@@ -17,7 +17,7 @@ java_frontend/annotation_type_checker.cmx: java_frontend/annotation_type_checker
 java_frontend/java_frontend.cmi: java_frontend/java_frontend.mli java_frontend/annotation_type_checker.cmx java_frontend/general_ast.cmx
 java_frontend/java_frontend.cmx: java_frontend/java_frontend.ml java_frontend/java_frontend.cmi java_frontend/ast_reader.cmx java_frontend/ast_writer.cmx java_frontend/communication.cmx
 
-java_frontend/ast_translator.cmx: java_frontend/ast_translator.ml java_frontend/general_ast.cmx parser.cmx
+java_frontend/ast_translator.cmx: java_frontend/ast_translator.ml java_frontend/java_frontend.cmx java_frontend/general_ast.cmx parser.cmx
 java_frontend/java_frontend_bridge.cmx: java_frontend/java_frontend_bridge.ml java_frontend/ast_translator.cmx java_frontend/java_frontend.cmx parser.cmx
 
 # Note: only 1 CPU allowed for this test because ASTServer currently can only

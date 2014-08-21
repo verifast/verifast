@@ -83,7 +83,7 @@ object
   (* accepts a single line string command to send *)
   method send_command     : string -> unit
   (* returns a message possibly spanning multiple lines *)
-  method receive_response : (response_kind * string)
+  method receive_response : (response_kind * string list)
 end
 
 (* ----------------------------- *)
@@ -127,8 +127,13 @@ object (this)
         let (kind, result) = this#receive_response in
         match kind with 
           SUCCESS ->
-            if (result <> "") then
-              this#error ("Got a non-empty reply from ASTServer while expecting one \ncontents of the message : " ^ result);
+            if (result <> []) then
+              let message =
+                "Got a non-empty reply from ASTServer while expecting" ^
+                " one \ncontents of the message : " ^
+                (Misc.join_lines_never_fail result)
+              in
+              this#error message;
             let _ = Unix.close_process (ast_server_stdin, ast_server_stdout) in ()
         | CALLBACK -> this#error ("Got a callback from ASTServer while unloading");
       with
@@ -168,7 +173,6 @@ object (this)
       with
         End_of_file -> ()
     done;
-    debug_print ("receive_message: \n" ^ (String.concat "\n" (List.rev !message)));
     List.rev !message
   
   method send_command(command) =
@@ -178,7 +182,7 @@ object (this)
 
   method receive_response =
     let lines = this#receive_message in
-    let message = String.concat "\n" (List.tl lines) in
+    let message = Misc.join_lines_never_fail lines in
     debug_print ("receive_response got message: \n" ^ message);
     if (List.length lines < 1) then
       this#error ("Received a empty message from the ASTServer");
@@ -189,20 +193,19 @@ object (this)
       this#unload;
       this#error ("ASTServer aborted while exetuting command: \n" ^ message)
     end;
+    let parts = List.tl lines in
     if kind = response_failure then begin
-      let parts = List.tl lines in
       if (List.length parts < 2) then
         this#error ("Received an incomprehensible error message from the ASTServer: \n" ^ message);
-      let l = Ast_reader.parse_with Ast_reader.parse_loc (List.hd parts) in
-      let m = String.concat "\n" (List.tl parts) in
-      raise (Ast_reader.AstReaderException(l, m))
+      let l = Ast_reader.parse_line_with Ast_reader.parse_loc (List.hd parts) in
+      raise (Ast_reader.AstReaderException(l, message))
     end;
     let kind =
       if kind = response_success then SUCCESS
       else if kind = response_callback then CALLBACK
       else (this#error ("ASTServer internal inconsistency"); CALLBACK)
     in
-    (kind, message)
+    (kind, parts)
 end
 
 (* ------------------------ *)

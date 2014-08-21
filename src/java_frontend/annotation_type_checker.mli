@@ -27,11 +27,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 *)
 
-(** The methods in ann_type_checker
-   arg1: error message
-*)
-exception AnnotationTypeCheckerException of string
-
 (** Class template for annotation type checker. Implement this class to be 
    able to type check your annotations.
 *)
@@ -40,7 +35,7 @@ object
   (** Called when the frontend encounteres an annotation *)
   method check_annotation : string -> Communication.t_frontend_communication -> unit
   (** To retrieve the type checked annotations *)
-  method retrieve_annotations : unit -> (string, string) Hashtbl.t
+  method retrieve_annotations : unit -> (string, string list) Hashtbl.t
 end
 
 class dummy_ann_type_checker : unit -> ann_type_checker

@@ -23,12 +23,12 @@ ocaml_files = [
          "ast_writer.ml",
          "communication.ml",
          "general_ast.ml",
-         "internal_java_frontend.ml",
          "java_frontend.ml",
          "java_frontend.mli",
          "misc.ml",
          
          #Unsed OCaml source files
+         #"internal_java_frontend.ml",
          #"ast_value.ml",
          #"main.ml",
          #"test.ml"
