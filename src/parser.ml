@@ -258,7 +258,13 @@ and
   parse_java_members cn= parser
   [<'(_, Kwd "}")>] -> []
 | [< '(_, Kwd "/*@"); mems1 = parse_ghost_java_members cn; mems2 = parse_java_members cn >] -> mems1 @ mems2
-| [< m=parse_java_member cn;mr=parse_java_members cn>] -> m::mr
+| [< m=parse_java_member cn;mr=parse_java_members cn>] -> 
+  match m with
+   MethMember (Meth (l, Real, t', x, ps, co, ss, binding, vis, abstract)) ->
+     (match co with None -> mr | Some _ -> m::mr)
+ | ConsMember (Cons (l, ps, co, ss, vis)) ->
+     (match co with None -> mr | Some _ -> m::mr)
+ | FieldMember fds -> m::mr
 and
   parse_ghost_java_members cn = parser
   [< '(_, Kwd "@*/") >] -> []
@@ -387,7 +393,7 @@ and
     [< '(_, Kwd "{"); fs = parse_fields; '(_, Kwd ";") >] -> Struct (l, s, Some fs)
   | [< '(_, Kwd ";") >] -> Struct (l, s, None)
   | [< t = parse_type_suffix (StructTypeExpr (l, s)); d = parse_func_rest Regular (Some t) Public >] -> d
-  >] -> [d]
+  >] -> drop_if_no_contract d
 | [< '(l, Kwd "typedef");
      rt = parse_return_type; '(_, Ident g);
      ds = begin parser
@@ -395,12 +401,7 @@ and
          (tparams, ftps, ps) = parse_functypedecl_paramlist_in_real_context;
          '(_, Kwd ";");
          spec = opt parse_spec
-       >] ->
-         let spec = match spec with
-           Some spec -> spec
-           | None -> raise (ParseException (l, "Function type declaration should have contract."))
-         in
-         [FuncTypeDecl (l, Real, rt, g, tparams, ftps, ps, spec)]
+       >] -> (match spec with None -> [] | Some spec -> [FuncTypeDecl (l, Real, rt, g, tparams, ftps, ps, spec)])
        | [< '(_, Kwd ";") >] ->
          begin
            match rt with
@@ -413,8 +414,13 @@ and
      elems = rep_comma (parser [< '(_, Ident e); init = opt (parser [< '(_, Kwd "="); e = parse_expr >] -> e) >] -> (e, init));
      '(_, Kwd "}"); '(_, Kwd ";"); >] ->
   [EnumDecl(l, n, elems)]
-| [< '(_, Kwd "static"); t = parse_return_type; d = parse_func_rest Regular t Private >] -> [d]
-| [< t = parse_return_type; d = parse_func_rest Regular t Public >] -> [d]
+| [< '(_, Kwd "static"); t = parse_return_type; d = parse_func_rest Regular t Private >] -> drop_if_no_contract d
+| [< t = parse_return_type; d = parse_func_rest Regular t Public >] -> drop_if_no_contract d
+and drop_if_no_contract d =
+  match d with
+  | Func(_, _, _, _, _, _, _, _, contract, _, _, _) -> 
+      (match contract with None -> [] | Some _ -> [d])
+  | _ -> [d]
 and
   parse_pure_decls = parser
   [< ds0 = parse_pure_decl; ds = parse_pure_decls >] -> ds0 @ ds

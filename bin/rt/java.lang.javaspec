@@ -325,6 +325,13 @@ public class PrintStream {
         //@ requires true;
         //@ ensures true;
 
+    void print(String s);
+        //@ requires true;
+        //@ ensures true;
+
+    void print(int i);
+        //@ requires true;
+        //@ ensures true;
 }
 
 public class System {

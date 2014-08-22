@@ -141,6 +141,9 @@ cd examples
   verifast_both -disable_overflow_check stringBuffers.c tokenizer.c ghostlist.o rcl.c
   verifast_both reallittest.c
   verifast_both -disable_overflow_check ref_points_to_syntax.c
+  cd reduced_annotations
+    mysh < reduced_annotations.mysh
+  cd ..
   verifast_both -c short.c
   verifast_both sorted_bintree.c
   verifast_both spouse.c

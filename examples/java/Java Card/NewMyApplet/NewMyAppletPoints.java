@@ -5,7 +5,10 @@ package newmypackage;
 		//@ javacard.framework.Applet applet;
 		//@ predicate Shareable(javacard.framework.Applet a) = [_]applet |-> a;
 		
-		public byte sharePoints(byte points) {
+		public byte sharePoints(byte points) 
+		  //@ requires true;
+                  //@ ensures true;
+		{
 	        return points <= 124 ? (byte) (points + 3) : points;
 		}
 		

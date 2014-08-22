@@ -1,0 +1,10 @@
+let verifast_both
+ifz3 verifast
+verifast -prover redux
+in
+cd c_language
+  mysh < verify.mysh
+cd ..
+cd java_language
+  mysh < verify.mysh
+cd ..

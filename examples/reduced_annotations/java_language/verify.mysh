@@ -1,0 +1,6 @@
+let verifast_both
+ifz3 verifast
+verifast -prover redux
+in
+verifast_both -c submodule2.jarsrc
+verifast_both -c main.jarsrc
