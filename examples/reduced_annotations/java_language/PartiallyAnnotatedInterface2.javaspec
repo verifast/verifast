@@ -2,9 +2,9 @@ class NotAnnotatedInterface2_1
 {
   private int x; 
 
-  NotAnnotatedInterface2_1(int i) {/*@ assert false; @*/x = i;}
+  NotAnnotatedInterface2_1(int i);
 
-  int NotAnnotatedInterface2_1_1(int i) {/*@ assert false; @*/return i;}
+  int NotAnnotatedInterface2_1_1(int i);
 }
 
 public interface PartiallyAnnotatedInterface2
@@ -24,7 +24,7 @@ class NotAnnotatedInterface2_3
 {
   private int x; 
 
-  NotAnnotatedInterface2_3(int i) {/*@ assert false; @*/x = i;}
+  NotAnnotatedInterface2_3(int i);
 
-  int NotAnnotatedInterface2_3_1(int i) {/*@ assert false; @*/return i;}
+  int NotAnnotatedInterface2_3_1(int i);
 }

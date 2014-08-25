@@ -198,7 +198,7 @@ object (this)
       if (List.length parts < 2) then
         this#error ("Received an incomprehensible error message from the ASTServer: \n" ^ message);
       let l = Ast_reader.parse_line_with Ast_reader.parse_loc (List.hd parts) in
-      raise (Ast_reader.AstReaderException(l, message))
+      raise (Ast_reader.AstReaderException(l, Misc.join_lines_never_fail (List.tl parts)))
     end;
     let kind =
       if kind = response_success then SUCCESS

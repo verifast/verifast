@@ -7,7 +7,7 @@ let load _ =
   let launch = 
     try Sys.getenv "VERIFAST_JAVA_AST_SERVER"  
     with Not_found ->
-      let ast_server_filename = "ast_server-4fc2203.jar" in
+      let ast_server_filename = "ast_server-23ae79c.jar" in
       let error_message =
         "\nYou specified the option -javac to use the STANCE Java frontend. " ^
         Printf.sprintf "However, to use the STANCE Java frontend, you need to retrieve the file %s from: \n" ast_server_filename ^
@@ -51,7 +51,7 @@ let build_context paths jars =
   in
   recurse_specs [] jars
 
-let parse_java_files_with_frontend (paths: string list) (jars: string list) (reportRange: range_kind -> loc -> unit) reportShouldFail: package list =
+let parse_java_files_with_frontend (paths: string list) (jars: string list) (reportRange: range_kind -> loc -> unit) reportShouldFail enforceAnnotations: package list =
   let (rt_paths, paths) =
     List.partition (fun p -> Filename.dirname p = Util.rtdir) paths
   in
@@ -71,7 +71,7 @@ let parse_java_files_with_frontend (paths: string list) (jars: string list) (rep
       if not (Java_frontend.is_attached ()) then load();
         let ann_checker = new Annotation_type_checker.dummy_ann_type_checker () in
           try
-            let options = 
+            let options =
               [Java_frontend.desugar; 
               Java_frontend.keep_assertions;
               Java_frontend.keep_super_call_first;
@@ -82,7 +82,7 @@ let parse_java_files_with_frontend (paths: string list) (jars: string list) (rep
               Java_frontend.asts_from_java_files paths ~context:context_for_paths options ann_checker
             in
             let annotations = ann_checker#retrieve_annotations () in
-            Ast_translator.translate_asts packages annotations
+            Ast_translator.translate_asts packages annotations enforceAnnotations
           with
             Java_frontend.JavaFrontendException(l, m) -> 
               let message = 
@@ -90,18 +90,18 @@ let parse_java_files_with_frontend (paths: string list) (jars: string list) (rep
               in
               match l with
               | General_ast.NoSource -> raise (Parser.CompilationError message)
-              | _ -> raise (Lexer.ParseException(Ast_translator.translate_location l, message))
+              | _ -> raise (Parser.StaticError(Ast_translator.translate_location l, message, None))
    in
-   (List.map (fun x -> Parser.parse_java_file_old x reportRange reportShouldFail) rt_paths) @ result 
+   (List.map (fun x -> Parser.parse_java_file_old x reportRange reportShouldFail enforceAnnotations) rt_paths) @ result 
 
-let parse_java_files (paths: string list) (jars: string list) (reportRange: range_kind -> loc -> unit) reportShouldFail use_java_frontend: package list =
+let parse_java_files (paths: string list) (jars: string list) (reportRange: range_kind -> loc -> unit) reportShouldFail enforceAnnotations useJavaFrontend: package list =
 (*  Printf.printf "\n++++++++++++++++++++++++++++++++++\n%s\n" "+Parsing files:";
   List.iter (fun p -> Printf.printf "+ -> %s\n" p) paths;
   Printf.printf "+\n%s\n" "+With jars:";
   List.iter (fun p -> Printf.printf "+ -> %s\n" p) jars;
   Printf.printf "++++++++++++++++++++++++++++++++++\n\n%s" "";*)
-  if use_java_frontend then
-    parse_java_files_with_frontend paths jars reportRange reportShouldFail
+  if useJavaFrontend then
+    parse_java_files_with_frontend paths jars reportRange reportShouldFail enforceAnnotations
   else
-    List.map (fun x -> Parser.parse_java_file_old x reportRange reportShouldFail) paths
+    List.map (fun x -> Parser.parse_java_file_old x reportRange reportShouldFail enforceAnnotations) paths 
 

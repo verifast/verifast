@@ -39,6 +39,11 @@ void not_annotated_main2(){/*@ assert false; @*/}
 int not_annotated_inc_main(int i)
 {
   return not_annotated_inc_h_1(i);
+  
+  while(true)
+  {
+  }
+  
   /*@ assert false; @*/
 }
 

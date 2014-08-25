@@ -38,7 +38,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     option_allow_should_fail=allow_should_fail;
     option_emit_manifest=emit_manifest;
     option_include_paths=include_paths;
-    option_use_java_frontend=option_use_java_frontend
+    option_use_java_frontend=use_java_frontend;
+    option_enforce_annotations=enforce_annotations
   } = options
   
   let verbosity = ref 0
@@ -908,7 +909,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   | Java ->
                     let (jars, javaspecs) = parse_jarspec_file_core path in
                     let pathDir = Filename.dirname path in
-                    let ds = Java_frontend_bridge.parse_java_files (List.map (fun javaspec -> concat pathDir javaspec) javaspecs) [] reportRange reportShouldFail option_use_java_frontend in
+                    let ds = Java_frontend_bridge.parse_java_files (List.map (fun javaspec -> concat pathDir javaspec) javaspecs) [] 
+                                                                    reportRange reportShouldFail enforce_annotations use_java_frontend
+                    in
                     if not header_is_import_spec then begin
                       let (classes, lemmas) = extract_specs ds in
                       spec_classes := classes;
@@ -948,7 +951,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   if options.option_allow_assume then "_assume.javaspec"::javaspecs else javaspecs
                 in
                 let rtdir = Filename.dirname rtpath in
-                let ds = Java_frontend_bridge.parse_java_files (List.map (fun x -> concat rtdir x) javaspecs) [] reportRange reportShouldFail option_use_java_frontend in
+                let ds = Java_frontend_bridge.parse_java_files (List.map (fun x -> concat rtdir x) javaspecs) [] reportRange
+                                                               reportShouldFail enforce_annotations use_java_frontend in
                 let (_, maps0) = check_file rtpath true false bindir "" [] ds in
                 headermap := (rtpath, ([], maps0))::!headermap;
                 (maps0, [])
@@ -956,7 +960,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 (maps0, [])
           end
           | CLang ->
-            let (headers, prelude_decls) = parse_header_file bindir "prelude.h" reportRange reportShouldFail [] in
+            let (headers, prelude_decls) = parse_header_file bindir "prelude.h" reportRange reportShouldFail [] enforce_annotations in
             let header_names = List.map (fun (_, (_, _, h), _, _) -> h) headers in
             let headers = (dummy_loc, (AngleBracketInclude, "prelude.h", concat bindir "prelude.h"), header_names, prelude_decls)::headers in
             merge_header_maps false maps0 [] bindir "" headers headers

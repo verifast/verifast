@@ -165,6 +165,7 @@ let _ =
   let header_whitelist: string list ref = ref [] in
   let linkShouldFail = ref false in
   let useJavaFrontend = ref false in
+  let enforceAnnotations = ref false in
 
   (* Explanations that are an empty string ("") become hidden in the
    * "--help" output. When adding options, you can consider writing an
@@ -204,6 +205,7 @@ let _ =
             ; "-allow_header", String (fun str -> header_whitelist := str::!header_whitelist), "Add the specified header to the whitelist."
             ; "-link_should_fail", Set linkShouldFail, "Specify that the linking phase is expected to fail."
             ; "-javac", Unit (fun _ -> (useJavaFrontend := true; Java_frontend_bridge.load ())), " "
+            ; "-enforce_annotations", Unit (fun _ -> (enforceAnnotations := true)), " "
             ]
   in
   let process_file filename =
@@ -223,7 +225,8 @@ let _ =
           option_include_paths = !include_paths;
           option_safe_mode = !safe_mode;
           option_header_whitelist = !header_whitelist;
-          option_use_java_frontend = !useJavaFrontend
+          option_use_java_frontend = !useJavaFrontend;
+          option_enforce_annotations = !enforceAnnotations
         } in
         print_endline filename;
         let emitter_callback (packages : package list) =

@@ -76,6 +76,22 @@ public final class NewJTicketApplet extends Applet {
      */
     
     public void process(APDU apdu)
+    /*@
+    requires
+      current_applet(this) &*&
+      [1/2]valid() &*&
+      apdu != null &*&
+      APDU(apdu, ?buffer) &*&
+      array_slice(buffer, 0, buffer.length, _);
+    @*/
+    /*@
+    ensures
+      current_applet(this) &*&
+      [1/2]valid() &*&
+      apdu != null &*&
+      APDU(apdu, buffer) &*&
+      array_slice(buffer, 0, buffer.length, _);
+    @*/
     {
         byte[] apduBuffer = apdu.getBuffer();
         // APDU header processing

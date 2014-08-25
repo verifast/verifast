@@ -64,6 +64,12 @@ public class Main
   {
     //@ assert false;
     PartiallyAnnotatedInterface1 o = new PartiallyAnnotated1();
+
+    for (int j = 0; j < 4; j++)
+    {
+      System.out.println("Foobar");
+    }
+
     return o.NotAnnotatedIncInterface1(i);
   }
   

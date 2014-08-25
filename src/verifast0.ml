@@ -137,7 +137,8 @@ type options = {
   option_include_paths: string list;
   option_safe_mode: bool; (* for invocation through web interface *)
   option_header_whitelist: string list;
-  option_use_java_frontend : bool
+  option_use_java_frontend : bool;
+  option_enforce_annotations : bool
 } (* ?options *)
 
 (* Region: verify_program_core: the toplevel function *)

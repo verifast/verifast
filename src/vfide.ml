@@ -122,7 +122,7 @@ module TreeMetrics = struct
   let cw = dotWidth + 2 * padding
 end
 
-let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend =
+let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend enforceAnnotations =
   let ctxts_lifo = ref None in
   let msg = ref None in
   let url = ref None in
@@ -1264,6 +1264,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend =
                 option_verbose = 0;
                 option_disable_overflow_check = !disableOverflowCheck;
                 option_use_java_frontend = !useJavaFrontend;
+                option_enforce_annotations = enforceAnnotations;
                 option_allow_should_fail = true;
                 option_emit_manifest = false;
                 option_allow_assume = true;
@@ -1598,6 +1599,7 @@ let () =
   let runtime = ref None in
   let layout = ref FourThree in
   let javaFrontend = ref false in
+  let enforceAnnotations = ref false in
   let rec iter args =
     match args with
       "-prover"::arg::args -> prover := Some arg; iter args
@@ -1610,8 +1612,9 @@ let () =
     | "-layout"::"fourthree"::args -> layout := FourThree; iter args
     | "-layout"::"widescreen"::args -> layout := Widescreen; iter args
     | "-javac"::args -> javaFrontend := true; iter args
+    | "-enforce_annotations"::args -> enforceAnnotations := true; iter args
     | arg::args when not (startswith arg "-") -> path := Some arg; iter args
-    | [] -> show_ide !path !prover !codeFont !traceFont !runtime !layout !javaFrontend
+    | [] -> show_ide !path !prover !codeFont !traceFont !runtime !layout !javaFrontend !enforceAnnotations
     | _ ->
       GToolbox.message_box "VeriFast IDE" begin
         "Invalid command line.\n\n" ^ 

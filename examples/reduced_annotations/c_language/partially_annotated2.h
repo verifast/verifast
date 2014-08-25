@@ -15,6 +15,6 @@ int annotated_inc_2_2(int i);
   //@ requires i < 100;
   //@ ensures result == i + 1;
 
-void not_annotated_h_2_2();
+void not_annotated_h_2_3();
 
 #endif

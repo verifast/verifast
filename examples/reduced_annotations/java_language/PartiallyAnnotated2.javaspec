@@ -2,9 +2,9 @@ class NotAnnotatedClass2_1
 {
   private int x; 
 
-  NotAnnotatedClass2_1(int i) {/*@ assert false; @*/x = i;}
+  NotAnnotatedClass2_1(int i);
 
-  int NotAnnotatedClass2_1_1(int i) {/*@ assert false; @*/return i;}
+  int NotAnnotatedClass2_1_1(int i);
 }
 
 public class PartiallyAnnotated2 implements PartiallyAnnotatedInterface2
@@ -47,7 +47,7 @@ class NotAnnotatedClass2_3
 {
   private int x; 
 
-  NotAnnotatedClass2_3(int i) {/*@ assert false; @*/x = i;}
+  NotAnnotatedClass2_3(int i);
 
-  int NotAnnotatedClass2_3_1(int i) {/*@ assert false; @*/return i;}
+  int NotAnnotatedClass2_3_1(int i);
 }

@@ -90,7 +90,24 @@ public final class EWallet extends Applet implements EWalletInterface {
         //@ close [1/2]valid();
     }
 
-    public void process(APDU apdu) {
+    public void process(APDU apdu)
+    /*@
+    requires
+      current_applet(this) &*&
+      [1/2]valid() &*&
+      apdu != null &*&
+      APDU(apdu, ?buffer) &*&
+      array_slice(buffer, 0, buffer.length, _);
+    @*/
+    /*@
+    ensures
+      current_applet(this) &*&
+      [1/2]valid() &*&
+      apdu != null &*&
+      APDU(apdu, buffer) &*&
+      array_slice(buffer, 0, buffer.length, _);
+    @*/
+    {
         byte[] abuffer = apdu.getBuffer();
 
         if(selectingApplet())

@@ -42,7 +42,24 @@ public final class EPhone extends Applet {
         //@ close valid();
     }
 
-    public void process(APDU apdu) {
+    public void process(APDU apdu)
+    /*@
+    requires
+      current_applet(this) &*&
+      [1/2]valid() &*&
+      apdu != null &*&
+      APDU(apdu, ?buffer) &*&
+      array_slice(buffer, 0, buffer.length, _);
+    @*/
+    /*@
+    ensures
+      current_applet(this) &*&
+      [1/2]valid() &*&
+      apdu != null &*&
+      APDU(apdu, buffer) &*&
+      array_slice(buffer, 0, buffer.length, _);
+    @*/
+    {
         byte[] abuffer = apdu.getBuffer();
 
         if(selectingApplet())

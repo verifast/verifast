@@ -178,11 +178,14 @@ type modifier = StaticModifier | FinalModifier | AbstractModifier | VisibilityMo
    TODO: find a better solution
 *)
 let language = ref CLang
-let set_language lang =
-  language := lang
+let set_language lang = language := lang
+(* TODO: find a better solution *)
+let enforce_annotations = ref false
+let set_enforce_annotations v = enforce_annotations := v
 
-let rec parse_decls lang ?inGhostHeader =
+let rec parse_decls lang enforceAnnotations ?inGhostHeader =
   set_language lang;
+  set_enforce_annotations enforceAnnotations;
   if match inGhostHeader with None -> false | Some b -> b then
     parse_pure_decls
   else
@@ -258,13 +261,7 @@ and
   parse_java_members cn= parser
   [<'(_, Kwd "}")>] -> []
 | [< '(_, Kwd "/*@"); mems1 = parse_ghost_java_members cn; mems2 = parse_java_members cn >] -> mems1 @ mems2
-| [< m=parse_java_member cn;mr=parse_java_members cn>] -> 
-  match m with
-   MethMember (Meth (l, Real, t', x, ps, co, ss, binding, vis, abstract)) ->
-     (match co with None -> mr | Some _ -> m::mr)
- | ConsMember (Cons (l, ps, co, ss, vis)) ->
-     (match co with None -> mr | Some _ -> m::mr)
- | FieldMember fds -> m::mr
+| [< m=parse_java_member cn;mr=parse_java_members cn>] -> m::mr
 and
   parse_ghost_java_members cn = parser
   [< '(_, Kwd "@*/") >] -> []
@@ -279,7 +276,7 @@ and
           end;
          '(_, Kwd ";") >] -> PredMember(InstancePredDecl (l, g, ps, body))
      | [< '(l, Kwd "lemma"); t = parse_return_type; 
-          '(l, Ident x); (ps, co, ss) = parse_method_rest >] -> 
+          '(l, Ident x); (ps, co, ss) = parse_method_rest l >] -> 
         let ps = (IdentTypeExpr (l, None, cn), "this")::ps in
         MethMember(Meth (l, Ghost, t, x, ps, co, ss, Instance, vis, false))
      | [< binding = (parser [< '(_, Kwd "static") >] -> Static | [< >] -> Instance); t = parse_type; '(l, Ident x); '(_, Kwd ";") >] ->
@@ -287,11 +284,17 @@ and
     end
   >] -> m
 and
-  parse_thrown = parser
-  [< tp = parse_type; '(_, Kwd "/*@"); '(_, Kwd "ensures"); epost = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> (tp, epost)
+  parse_thrown l = parser 
+  [< tp = parse_type; epost =
+    begin
+      parser
+        [< '(_, Kwd "/*@"); '(_, Kwd "ensures"); epost = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> Some epost
+      | [< >] -> None
+    end
+   >] -> (tp, epost)
 and
   parse_throws_clause = parser
-  [< '(l, Kwd "throws"); epost = rep_comma parse_thrown >] -> epost
+  [< '(l, Kwd "throws"); epost = rep_comma (parse_thrown l) >] -> epost
 and
   parse_array_dims t = parser
   [< '(l, Kwd "["); '(_, Kwd "]"); t = parse_array_dims (ArrayTypeExpr (l, t)) >] -> t
@@ -312,7 +315,7 @@ and
      member = parser
        [< '(l, Ident x);
           member = parser
-            [< (ps, co, ss) = parse_method_rest >] ->
+            [< (ps, co, ss) = parse_method_rest l >] ->
             let t' = option_map type_param_erasure_in_scope t in
             let ps = List.map (fun (texpr, s) -> (type_param_erasure_in_scope texpr, s))
                 (if binding = Instance then (IdentTypeExpr (l, None, cn), "this")::ps else ps) in
@@ -329,7 +332,7 @@ and
             in
             FieldMember fds
        >] -> member
-     | [< (ps, co, ss) = parse_method_rest >] ->
+     | [< (ps, co, ss) = parse_method_rest (match t with Some t -> type_expr_loc t | None -> dummy_loc) >] ->
        let l =
          match t with
            None -> raise (Stream.Error "Keyword 'void' cannot be followed by a parameter list.")
@@ -358,13 +361,33 @@ and
      init = opt (parser [< '(_, Kwd "="); e = parse_declaration_rhs tx >] -> e);
   >] -> (l, tx, x, init, ref false)
 and
-  parse_method_rest = parser
+  parse_method_rest l = parser
   [< ps = parse_paramlist;
     epost = opt parse_throws_clause;
     (ss, co) = parser
       [< '(_, Kwd ";"); spec = opt parse_spec >] -> (None, spec)
     | [< spec = opt parse_spec; ss = parse_some_block >] -> (ss, spec)
-    >] -> (ps, (match co with None -> None | Some(pre, post) -> Some (pre, post, (match epost with None -> [] | Some(epost) -> epost))), ss)
+    >] ->
+    let contract =
+      let epost = match epost with None -> [] | Some(epost) -> epost in
+      match co with
+      | Some(pre, post) -> 
+        let epost = List.map (fun (tp, e) -> 
+          (tp, match e with 
+            None -> raise (ParseException (l, "If you give a method a contract, you must also give ensures clauses for the thrown expceptions.")) | 
+            Some(e) -> e)) epost 
+        in
+        Some(pre, post, epost)
+      | None -> 
+        if !enforce_annotations then None else
+        begin
+         let pre = ExprAsn(l, False(l)) in
+         let post = ExprAsn(l, True(l)) in
+         let epost = List.map (fun (tp, e) -> (tp, match e with None -> ExprAsn(l, True(l)) | Some(e) -> e)) epost in
+         Some (pre, post, epost)
+        end
+    in
+    (ps, contract, ss)
 and
   parse_functype_paramlists = parser
   [< ps1 = parse_paramlist; ps2 = opt parse_paramlist >] -> (match ps2 with None -> ([], ps1) | Some ps2 -> (ps1, ps2))
@@ -393,7 +416,7 @@ and
     [< '(_, Kwd "{"); fs = parse_fields; '(_, Kwd ";") >] -> Struct (l, s, Some fs)
   | [< '(_, Kwd ";") >] -> Struct (l, s, None)
   | [< t = parse_type_suffix (StructTypeExpr (l, s)); d = parse_func_rest Regular (Some t) Public >] -> d
-  >] -> drop_if_no_contract d
+  >] -> check_function_for_contract d
 | [< '(l, Kwd "typedef");
      rt = parse_return_type; '(_, Ident g);
      ds = begin parser
@@ -401,7 +424,9 @@ and
          (tparams, ftps, ps) = parse_functypedecl_paramlist_in_real_context;
          '(_, Kwd ";");
          spec = opt parse_spec
-       >] -> (match spec with None -> [] | Some spec -> [FuncTypeDecl (l, Real, rt, g, tparams, ftps, ps, spec)])
+       >] ->
+         let contract = check_for_contract spec l "Function type declaration should have contract." in
+         [FuncTypeDecl (l, Real, rt, g, tparams, ftps, ps, contract)]
        | [< '(_, Kwd ";") >] ->
          begin
            match rt with
@@ -414,12 +439,22 @@ and
      elems = rep_comma (parser [< '(_, Ident e); init = opt (parser [< '(_, Kwd "="); e = parse_expr >] -> e) >] -> (e, init));
      '(_, Kwd "}"); '(_, Kwd ";"); >] ->
   [EnumDecl(l, n, elems)]
-| [< '(_, Kwd "static"); t = parse_return_type; d = parse_func_rest Regular t Private >] -> drop_if_no_contract d
-| [< t = parse_return_type; d = parse_func_rest Regular t Public >] -> drop_if_no_contract d
-and drop_if_no_contract d =
+| [< '(_, Kwd "static"); t = parse_return_type; d = parse_func_rest Regular t Private >] -> check_function_for_contract d
+| [< t = parse_return_type; d = parse_func_rest Regular t Public >] -> check_function_for_contract d
+and check_for_contract contract l m =
+  match contract with
+    | Some spec -> spec 
+    | None -> 
+      if !enforce_annotations then 
+        raise (ParseException (l, m)) 
+      else
+        (ExprAsn(l, False(l)), ExprAsn(l, True(l)))
+
+and check_function_for_contract d =
   match d with
-  | Func(_, _, _, _, _, _, _, _, contract, _, _, _) -> 
-      (match contract with None -> [] | Some _ -> [d])
+  | Func(l, k, tparams, t, g, ps, gc, ft, contract, ss, static, v) ->
+    let contract = check_for_contract contract l "Function declaration should have a contract." in
+    [Func(l, k, tparams, t, g, ps, gc, ft, Some contract, ss, static, v)]
   | _ -> [d]
 and
   parse_pure_decls = parser
@@ -884,9 +919,9 @@ and
 | [< '(l, Kwd "invariant"); inv = parse_pred; '(_, Kwd ";") >] -> InvariantStmt (l, inv)
 | [< '(l, Kwd "return"); eo = parser [< '(_, Kwd ";") >] -> None | [< e = parse_expr; '(_, Kwd ";") >] -> Some e >] -> ReturnStmt (l, eo)
 | [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")");
-     (inv, dec, body) = parse_loop_core
+     (inv, dec, body) = parse_loop_core l
   >] -> WhileStmt (l, e, inv, dec, body)
-| [< '(l, Kwd "do"); (inv, dec, body) = parse_loop_core; '(lwhile, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd ";") >] ->
+| [< '(l, Kwd "do"); (inv, dec, body) = parse_loop_core l; '(lwhile, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd ";") >] ->
   (* "do S while (E);" is translated to "while (true) { S if (E) {} else break; }" *)
   (* CAVEAT: If we ever add support for 'continue' statements, then this translation is not sound. *)
   WhileStmt (l, True l, inv, dec, body @ [IfStmt (lwhile, e, [], [Break lwhile])])
@@ -905,7 +940,7 @@ and
      '(_, Kwd ";");
      update_exprs = rep_comma parse_expr;
      '(_, Kwd ")");
-     (inv, dec, b) = parse_loop_core
+     (inv, dec, b) = parse_loop_core l
   >] ->
   let cond = match cond with None -> True l | Some e -> e in
   BlockStmt (l, [], init_stmts @ [WhileStmt (l, cond, inv, dec, b @ List.map (fun e -> ExprStmt e) update_exprs)], l, ref [])
@@ -963,12 +998,12 @@ and
     with
      Match_failure _ -> s2 )
 and
-  parse_loop_core = parser [<
-    (inv, dec) = parse_loop_core0;
+  parse_loop_core l = parser [<
+    (inv, dec) = parse_loop_core0 l;
     body = parse_stmt
   >] -> (inv, dec, [body])
 and
-  parse_loop_core0 = parser [<
+  parse_loop_core0 l = parser [<
     inv =
       opt
         begin parser
@@ -982,7 +1017,14 @@ and
         | [< '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); >] -> LoopInv p
         end;
     dec = opt (parser [< '(_, Kwd "/*@"); '(_, Kwd "decreases"); decr = parse_expr; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> decr | [< '(_, Kwd "decreases"); decr = parse_expr; '(_, Kwd ";"); >] -> decr );(* only allows decreases if invariant provided *)
-  >] -> (inv, dec)
+  >] -> 
+  match (inv, dec) with
+  | (None, None) -> 
+      if !enforce_annotations then 
+        raise (ParseException (l, "A loop must have an invariant")) 
+      else
+        (Some(LoopInv(ExprAsn(l, False(l)))), None)
+  | _ -> (inv, dec)
 and
   packagename_of_read l e =
   match e with
@@ -1416,8 +1458,8 @@ let parse_import = parser
   [< i = parse_import0 >] -> i
 | [< i = peek_in_ghost_range (parser [< i = parse_import0; '(_, Kwd "@*/") >] -> i) >] -> i
 
-let parse_package_decl= parser
-  [< (l,p) = parse_package; is=rep parse_import; ds=parse_decls Java;>] -> PackageDecl(l,p,Import(dummy_loc,"java.lang",None)::is, ds)
+let parse_package_decl enforceAnnotations = parser
+  [< (l,p) = parse_package; is=rep parse_import; ds=parse_decls Java enforceAnnotations;>] -> PackageDecl(l,p,Import(dummy_loc,"java.lang",None)::is, ds)
 
 let parse_scala_file (path: string) (reportRange: range_kind -> loc -> unit): package =
   let lexer = make_lexer Scala.keywords ghost_keywords in
@@ -1433,7 +1475,7 @@ let parse_scala_file (path: string) (reportRange: range_kind -> loc -> unit): pa
   old way to parse java files, these files (including non-run-time javaspec files)
   can now be handled by the Java frontend
 *)
-let parse_java_file_old (path: string) (reportRange: range_kind -> loc -> unit) reportShouldFail: package =
+let parse_java_file_old (path: string) (reportRange: range_kind -> loc -> unit) reportShouldFail enforceAnnotations: package =
   Stopwatch.start parsing_stopwatch;
   let result =
   if Filename.check_suffix (Filename.basename path) ".scala" then
@@ -1441,7 +1483,7 @@ let parse_java_file_old (path: string) (reportRange: range_kind -> loc -> unit) 
   else
   let lexer = make_lexer (common_keywords @ java_keywords) ghost_keywords in
   let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (readFile path) reportRange reportShouldFail in
-  let parse_decls_eof = parser [< p = parse_package_decl; _ = Stream.empty >] -> p in
+  let parse_decls_eof = parser [< p = parse_package_decl enforceAnnotations; _ = Stream.empty >] -> p in
   try
     parse_decls_eof token_stream
   with
@@ -1453,7 +1495,8 @@ let parse_java_file_old (path: string) (reportRange: range_kind -> loc -> unit) 
 
 type 'result parser_ = (loc * token) Stream.t -> 'result
 
-let rec parse_include_directives (ignore_eol: bool ref) : ((loc * (include_kind * string * string) * string list * package list) list * string list) parser_ =
+let rec parse_include_directives (ignore_eol: bool ref) (enforceAnnotations: bool) : 
+    ((loc * (include_kind * string * string) * string list * package list) list * string list) parser_ =
   let active_headers = ref [] in
   let test_include_cycle l totalPath =
     if List.mem totalPath !active_headers then raise (ParseException (l, "Include cycles (even with header guards) are not supported"));
@@ -1468,20 +1511,20 @@ let rec parse_include_directives (ignore_eol: bool ref) : ((loc * (include_kind 
       [< '(l, SecondaryInclude(h, totalPath)) >] -> test_include_cycle l totalPath; ([], totalPath)
     | [< (l,h,totalPath) = peek_in_ghost_range begin parser [< '(l, SecondaryInclude(h, p)) >] -> (l,h,p) end; '(_, Kwd "@*/") >] -> test_include_cycle l totalPath; ([], totalPath)
     | [< '(l, BeginInclude(kind, h, totalPath)); (headers, header_names) = (active_headers := totalPath::!active_headers; parse_include_directives_core []); 
-                                           ds = parse_decls CLang ~inGhostHeader:(isGhostHeader h); '(_, EndInclude) >] -> 
+                                           ds = parse_decls CLang enforceAnnotations ~inGhostHeader:(isGhostHeader h); '(_, EndInclude) >] -> 
                                                         active_headers := List.filter (fun h -> h <> totalPath) !active_headers;
                                                         let ps = [PackageDecl(dummy_loc,"",[],ds)] in
                                                         (List.append headers [(l, (kind, h, totalPath), header_names, ps)], totalPath)
     | [< (l,kind,h,totalPath) = peek_in_ghost_range begin parser [< '(l, BeginInclude(kind, h, p)) >] -> (l,kind,h,p) end; 
                                                 (headers, header_names) = (active_headers := totalPath::!active_headers; parse_include_directives_core []); 
-                                                ds = parse_decls CLang ~inGhostHeader:(isGhostHeader h); '(_, EndInclude); '(_, Kwd "@*/") >] -> 
+                                                ds = parse_decls CLang enforceAnnotations ~inGhostHeader:(isGhostHeader h); '(_, EndInclude); '(_, Kwd "@*/") >] -> 
                                                         active_headers := List.filter (fun h -> h <> totalPath) !active_headers;
                                                         let ps = [PackageDecl(dummy_loc,"",[],ds)] in
                                                         (List.append headers [(l, (kind, h, totalPath), header_names, ps)], totalPath)
   in
   parse_include_directives_core []
 
-  let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit) (include_paths: string list): 
+let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit) (include_paths: string list) (enforceAnnotations: bool): 
                                               ((loc * (include_kind * string * string) * string list * package list) list * package list) = (* ?parse_c_file *)
   Stopwatch.start parsing_stopwatch;
   let result =
@@ -1492,8 +1535,8 @@ let rec parse_include_directives (ignore_eol: bool ref) : ((loc * (include_kind 
     let (loc, ignore_eol, token_stream) = make_preprocessor make_lexer (Filename.dirname path) (Filename.basename path) include_paths in
     let parse_c_file =
       parser
-        [< (headers, _) = parse_include_directives ignore_eol; 
-                            ds = parse_decls CLang ~inGhostHeader:false; _ = Stream.empty >] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])
+        [< (headers, _) = parse_include_directives ignore_eol enforceAnnotations; 
+                            ds = parse_decls CLang enforceAnnotations ~inGhostHeader:false; _ = Stream.empty >] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])
     in
     try
       parse_c_file token_stream
@@ -1505,7 +1548,7 @@ let rec parse_include_directives (ignore_eol: bool ref) : ((loc * (include_kind 
   result
 
 let parse_header_file (basePath: string) (relPath: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit) 
-         (include_paths: string list): ((loc * (include_kind * string * string) * string list * package list) list * package list) =
+         (include_paths: string list) (enforceAnnotations: bool): ((loc * (include_kind * string * string) * string list * package list) list * package list) =
   Stopwatch.start parsing_stopwatch;
   let isGhostHeader = Filename.check_suffix relPath ".gh" in
   let result =
@@ -1515,8 +1558,10 @@ let parse_header_file (basePath: string) (relPath: string) (reportRange: range_k
     in
     let (loc, ignore_eol, token_stream) = make_preprocessor make_lexer basePath relPath include_paths in
     let p = parser
-      [< (headers, _) = parse_include_directives ignore_eol; ds = parse_decls CLang ~inGhostHeader:isGhostHeader; 
-                                                  _ = (fun _ -> ignore_eol := true);_ = Stream.empty >] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])
+      [< (headers, _) = parse_include_directives ignore_eol enforceAnnotations; 
+         ds = parse_decls CLang enforceAnnotations ~inGhostHeader:isGhostHeader; 
+         _ = (fun _ -> ignore_eol := true);_ = Stream.empty 
+      >] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])
     in
     try
       p token_stream

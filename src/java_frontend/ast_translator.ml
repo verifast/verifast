@@ -69,11 +69,12 @@ let translate_location l =
 (* ------------------------------------------------ *)
 
 let annotations : (string, string list) Hashtbl.t ref = ref (Hashtbl.create 1)
+let enforce_annotations : bool ref = ref false
 
 (* this function creates a lexer for each of 
    the annotations and composes them before
    passing the resulting stream to the parser *)
-let parse_pure_decls_core loc used_parser anns autogen =
+let parse_pure_decls_core loc used_parser anns lookup =
   Parser.set_language Java;
   if (List.length anns < 1) then
     error loc "Parsing failed due to missing annotations";
@@ -82,7 +83,7 @@ let parse_pure_decls_core loc used_parser anns autogen =
       match ann with
         GEN.Annotation(l, a) -> 
         let a = 
-          if autogen then
+          if lookup = false then
             a
           else
             try
@@ -141,30 +142,30 @@ let parse_pure_decls_core loc used_parser anns autogen =
     Lexer.Stream.Error msg -> error (loc()) msg
   | Lexer.Stream.Failure -> error (loc()) "Parse error"
 
-let parse_pure_decls loc anns autogen =
+let parse_pure_decls loc anns lookup =
   let parser_pure_decls_eof = parser 
-    [< ds = Parser.parse_decls VF.Java ~inGhostHeader:true;
+    [< ds = Parser.parse_decls VF.Java ~inGhostHeader:true true;
       _ = Lexer.Stream.empty >] -> ds
   in
-  parse_pure_decls_core loc parser_pure_decls_eof anns autogen
+  parse_pure_decls_core loc parser_pure_decls_eof anns lookup
 
-let parse_pure_decls_try anns autogen =
+let parse_pure_decls_try anns lookup =
   try 
-    parse_pure_decls dummy_loc anns autogen
+    parse_pure_decls dummy_loc anns lookup
   with parse_error -> []
 
-let parse_postcondition loc anns autogen =
+let parse_postcondition loc anns lookup =
   let parser_postcondition_eof = parser 
     [< '(_, Lexer.Kwd "ensures"); post = Parser.parse_pred; '(_, Lexer.Kwd ";"); 
        _ = Lexer.Stream.empty >] -> post
   in
-  parse_pure_decls_core loc parser_postcondition_eof anns autogen
+  parse_pure_decls_core loc parser_postcondition_eof anns lookup
 
-let parse_contract loc anns autogen =
+let parse_contract loc anns lookup =
   let parse_contract_eof = parser 
     [< s = Parser.parse_spec; _ = Lexer.Stream.empty >] -> s
   in
-  parse_pure_decls_core loc parse_contract_eof anns autogen
+  parse_pure_decls_core loc parse_contract_eof anns lookup
   
 let parse_ghost_members loc classname ann =
   let rec parse_ghost_members_eof = parser
@@ -173,13 +174,13 @@ let parse_ghost_members loc classname ann =
   in
   parse_pure_decls_core loc parse_ghost_members_eof [ann] false
 
-let parse_pure_statement loc ann autogen =
+let parse_pure_statement loc ann lookup =
   let parse_pure_statement_eof = parser
     [< s = Parser.parse_stmt0; _ = Lexer.Stream.empty >] -> PureStmt (loc, s)
   in
-  parse_pure_decls_core loc parse_pure_statement_eof [ann] autogen
+  parse_pure_decls_core loc parse_pure_statement_eof [ann] lookup
 
-let parse_loop_invar loc anns autogen =
+let parse_loop_invar loc anns lookup =
   let parse_loop_invar_eof = parser 
     [<
       inv =
@@ -192,18 +193,19 @@ let parse_loop_invar loc anns autogen =
       dec = Parser.opt (parser [< '(_, Lexer.Kwd "decreases"); decr = Parser.parse_expr; '(_, Lexer.Kwd ";"); >] -> decr)
     >] -> (inv, dec)
   in
-  parse_pure_decls_core loc parse_loop_invar_eof anns autogen
+  parse_pure_decls_core loc parse_loop_invar_eof anns lookup
 
 (* ------------------------------------------------ *)
 (* Translation of Ast's                             *)
 (* ------------------------------------------------ *)
 
-let rec translate_asts packages anns =
-  List.map (fun x -> translate_ast x anns) packages
+let rec translate_asts packages anns enforce_annotations =
+  List.map (fun x -> translate_ast x anns enforce_annotations) packages
 
-and translate_ast package anns =
+and translate_ast package anns enforce_anns =
   annotations := anns;
-  translate_package package
+  enforce_annotations := enforce_anns;
+  translate_package package 
 
 and translate_package package =
   match package with
@@ -392,12 +394,7 @@ and translate_static_blocks cn decls =
         let l' = translate_location l in
         let id' = cn ^ "_static_block_" ^ (string_of_int !counter) in
         counter := !counter + 1;
-        let contr' = 
-          let ann_pre = Annotation(l, "requires true; ") in
-          let ann_post = Annotation(l, "ensures true; ") in
-          let (pre, post) = parse_contract l' [ann_pre; ann_post] true in
-          Some(pre, post, [])
-        in
+        let contr' = check_contract l [] [] Generated in
         let stmts' = translate_block l (Some stmts) in
         Some([VF.Meth(l', VF.Real, None, id', [], contr', stmts', VF.Static, VF.Private, false)])
       end
@@ -405,11 +402,42 @@ and translate_static_blocks cn decls =
   in 
   translate_class_decls_helper translator decls
 
+and check_contract l anns throws generate =
+  let l' = translate_location l in
+  let anns' =
+    if (List.length anns = 0) then
+    (
+      if ((!enforce_annotations) && generate == Generated) then
+        error l' "Method must have a contract"
+      else
+        [Annotation(l, "requires false;"); Annotation(l, "ensures true;")]
+    )
+    else
+      anns
+  in
+  let (pre', post') = parse_contract l' anns' false in
+  let throws' = 
+    List.map 
+      (fun c -> 
+        match translate_throws_clause l' c with 
+          | (t, None) -> 
+              if (!enforce_annotations) then
+                error l' "Throw clauses must have an ensures clause."
+              else if (List.length anns > 0) then
+                error l' "If you give a method a contract, you must also give ensures clauses for the thrown expceptions."
+              else
+                (t, ExprAsn(l', True(l')))
+          | (t, Some(a)) -> (t, a)
+      )      
+    throws
+  in
+  Some(pre', post', throws')
+
 and translate_methods cn decls = 
   debug_print "translate_methods";
   let translator decl =
     match decl with
-    | GEN.Method(l, anns, id, tparams, access, abs, fin, stat, ret, params, throws, stmts, gen) ->
+    | GEN.Method(l, anns, id, tparams, access, abs, fin, stat, ret, params, throws, stmts, autogen) ->
         let l' = translate_location l in
         let ghost' = VF.Real in
         let ret' = 
@@ -432,18 +460,7 @@ and translate_methods cn decls =
             (* Adding the implicit this parameter as an explicit one *)
             (IdentTypeExpr (translate_location l, None, cn), "this")::params'
         in
-        let contr' = 
-          let (pre,post) =
-            if List.length anns = 0 then begin
-              let ann_pre = Annotation(l, "requires true; ") in
-              let ann_post = Annotation(l, "ensures true; ") in
-              parse_contract l' [ann_pre; ann_post] true
-            end else
-              parse_contract l' anns false
-          in
-          let throws' = List.map (translate_throws_clause l') throws in
-          Some(pre, post, throws')
-        in
+        let contr' = check_contract l anns throws autogen in
         let stmts' = translate_block l stmts in
         Some([VF.Meth(l', ghost', ret', id', params', contr', stmts', stat', access', abs')])
     | _ -> None
@@ -462,19 +479,7 @@ and translate_constructors decls =
       | GEN.Constructor(l, anns, tparams, access, params, throws, stmts, autogen) ->
           let l' = translate_location l in
           let params' = List.map translate_param params in
-          let contr' =
-            let (pre, post) =
-              match autogen with
-              | Generated ->
-                  let ann_pre = Annotation(l, "requires true; ") in
-                  let ann_post = Annotation(l, "ensures true; ") in
-                  parse_contract l' [ann_pre; ann_post] true
-              | Original ->
-                  parse_contract l' anns false
-            in
-            let throws' = List.map (translate_throws_clause l') throws in
-            Some(pre, post, throws')
-          in
+          let contr' = check_contract l anns throws autogen in
           let stmts' = translate_block l stmts in
           let access' = translate_accessibility access in
           Some([VF.Cons(l', params', contr', stmts', access')])
@@ -499,8 +504,8 @@ and translate_throws_clause loc (rtype, ann) =
   let rtype' = translate_ref_type rtype in
   let post = 
     match ann with
-      Some a -> parse_postcondition loc [a] false
-    | None -> error loc "Throws clause must have a contract"
+      Some a -> Some(parse_postcondition loc [a] false)
+    | None -> None
   in
   (rtype', post)
 
@@ -576,6 +581,15 @@ and translate_ref_type typ =
       let l' = translate_location l in
       error l' "Wildcards not supported yet"
 
+and check_loop_invariant l' anns =
+  if List.length anns = 0 then begin
+    if !enforce_annotations then
+      error l' ("While loop does not have a valid invariant")
+    else
+      (Some(LoopInv(ExprAsn(l', False(l')))), None)
+  end else
+    parse_loop_invar l' anns false
+
 and translate_statement stmt =
   debug_print "translate_statement";
   match stmt with
@@ -610,33 +624,18 @@ and translate_statement stmt =
       let l' = translate_location l in
       let expr' = translate_expression expr in
       let stmt' = translate_statements_as_block l' stmts in
-      let (inv, dec) = 
-        if List.length anns = 0 then begin
-          error l' ("While loop does not have a valid invariant");
-        end else
-          parse_loop_invar l' anns false
-      in
+      let (inv, dec) = check_loop_invariant l' anns in
       VF.WhileStmt(l', expr', inv, dec, [stmt'])
   | GEN.DoWhile(l, anns, expr, stmts) ->
       let l' = translate_location l in
       let expr' = translate_expression expr in
-      let (inv, dec) = 
-        if List.length anns = 0 then begin
-          error l' ("While loop does not have a valid invariant");
-        end else
-          parse_loop_invar l' anns false
-      in
+      let (inv, dec) = check_loop_invariant l' anns in
       let body = translate_statements_as_block l' stmts in
       let while_ = VF.WhileStmt(l', expr', inv, dec, [body]) in
       VF.BlockStmt(l', [], [body; while_], dummy_loc, ref [])
   | GEN.For(l, anns, init, expr, update, stmts) ->
       let l' = translate_location l in
-      let (inv, dec) = 
-        if List.length anns = 0 then begin
-          error l' ("For loop does not have a valid invariant");
-        end else
-          parse_loop_invar l' anns false
-      in
+      let (inv, dec) = check_loop_invariant l' anns in
       let init' = List.map translate_statement init in
       let expr' = translate_expression expr in
       let update' = List.map translate_statement update in
