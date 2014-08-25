@@ -336,7 +336,8 @@ endif
 clean::
 	rm -f macos/*.cm* macos/*.o
 
-vfide.cmx: Fonts.cmx
+# Also depend on "vfide.ml": Make ignores our dependency "%.cmx: %.ml".
+vfide.cmx: Fonts.cmx vfide.ml
 	@echo "  OCAMLOPT " $@
 	$(SET_LDD); $(OCAMLOPT) $(OCAMLCFLAGS) -thread -c -w p -warn-error FSU -c $(INCLUDES) \
 	-pp ${CAMLP4O} nums.cmxa $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) vfide.ml
