@@ -156,7 +156,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let pop_contextStack () = pop_undoStack(); let h::t = !contextStackStack in contextStack := h; contextStackStack := t
   
   let with_context_force msg cont =
-    stats#execStep;
+    !stats#execStep;
     push_contextStack ();
     push_context msg;
     let result = cont() in
@@ -164,7 +164,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     result
   
   let with_context msg cont =
-    stats#execStep;
+    !stats#execStep;
     push_contextStack ();
     push_context msg;
     let result =
@@ -4537,7 +4537,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
   (* TODO: To improve performance, push only when branching, i.e. not at every assume. *)
   
   let assume t cont =
-    stats#proverAssume;
+    !stats#proverAssume;
     push_context (Assuming t);
     ctxt#push;
     let result =
@@ -4558,11 +4558,11 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
   let assume_neq t1 t2 cont = assume (ctxt#mk_not (ctxt#mk_eq t1 t2)) cont
   
   let query_term t = 
-    stats#proverOtherQuery;
+    !stats#proverOtherQuery;
     (ctxt#query t)
   
   let assert_term t h env l msg url = 
-    stats#proverOtherQuery;
+    !stats#proverOtherQuery;
     if not (ctxt#query t) then
       raise (SymbolicExecutionError (pprint_context_stack !contextStack, ctxt#pprint t, l, msg, url))
 

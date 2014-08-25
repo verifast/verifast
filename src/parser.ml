@@ -836,7 +836,7 @@ and
   [< s = parse_stmt; ss = parse_stmts >] -> s::ss
 | [< >] -> []
 and
-  parse_stmt = parser [< s = parse_stmt0 >] -> stats#stmtParsed; s
+  parse_stmt = parser [< s = parse_stmt0 >] -> !stats#stmtParsed; s
 and
   parse_coef = parser
   [< '(l, Kwd "["); pat = parse_pattern; '(_, Kwd "]") >] -> pat
@@ -861,19 +861,19 @@ and
 | [< '(l, Kwd "open"); coef = opt parse_coef; e = parse_expr; '(_, Kwd ";") >] ->
   (match e with
      CallExpr (_, g, targs, es1, es2, Static) ->
-       stats#openParsed;
+       !stats#openParsed;
        Open (l, None, g, targs, es1, es2, coef)
    | CallExpr (_, g, targs, es1, LitPat target::es2, Instance) ->
-       stats#openParsed;
+       !stats#openParsed;
        Open (l, Some target, g, targs, es1, es2, coef)
    | _ -> raise (ParseException (l, "Body of open statement must be call expression.")))
 | [< '(l, Kwd "close"); coef = opt parse_coef; e = parse_expr; '(_, Kwd ";") >] ->
   (match e with
      CallExpr (_, g, targs, es1, es2, Static) ->
-       stats#closeParsed;
+       !stats#closeParsed;
        Close (l, None, g, targs, es1, es2, coef)
    | CallExpr (_, g, targs, es1, LitPat target::es2, Instance) ->
-       stats#closeParsed;
+       !stats#closeParsed;
        Close (l, Some target, g, targs, es1, es2, coef)
    | _ -> raise (ParseException (l, "Body of close statement must be call expression.")))
 | [< '(l, Kwd "split_fraction"); '(li, Ident p); targs = parse_type_args li; pats = parse_patlist;

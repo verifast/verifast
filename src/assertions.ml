@@ -56,7 +56,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     end
   
   and branch cont1 cont2 =
-    stats#branch;
+    !stats#branch;
     execute_branch cont1;
     execute_branch cont2;
     SymExecSuccess
@@ -99,7 +99,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     if t2 == real_unit then t1 else static_error l "Real division not yet supported." None
   
   let definitely_equal t1 t2 =
-    let result = if t1 == t2 then (stats#definitelyEqualSameTerm; true) else (stats#definitelyEqualQuery; ctxt#query (ctxt#mk_eq t1 t2)) in
+    let result = if t1 == t2 then (!stats#definitelyEqualSameTerm; true) else (!stats#definitelyEqualQuery; ctxt#query (ctxt#mk_eq t1 t2)) in
     (* print_endline ("Checking definite equality of " ^ ctxt#pprint t1 ^ " and " ^ ctxt#pprint t2 ^ ": " ^ (if result then "true" else "false")); *)
     result
   

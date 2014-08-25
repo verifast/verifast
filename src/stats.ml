@@ -28,6 +28,7 @@ class stats =
     method openParsed = openParsedCount <- openParsedCount + 1
     method closeParsed = closeParsedCount <- closeParsedCount + 1
     method stmtExec = stmtExecCount <- stmtExecCount + 1
+    method getStmtExec = stmtExecCount
     method execStep = execStepCount <- execStepCount + 1
     method branch = branchCount <- branchCount + 1
     method proverAssume = proverAssumeCount <- proverAssumeCount + 1
@@ -76,4 +77,8 @@ class stats =
       print_endline (Printf.sprintf "Total time: %.2f seconds" (Perf.time() -. startTime))
   end
 
-let stats = new stats
+let stats = ref (new stats)
+
+let clear_stats _ = 
+  stats := (new stats)
+  

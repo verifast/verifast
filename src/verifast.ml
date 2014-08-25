@@ -44,7 +44,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | Some(ehname) -> assert_handle_invs bcn hpmap ehname hpInvEnv h (fun h ->  consume_asn rules [] h [] hpInvEnv inv true real_unit (fun _ h _ _ _ -> cont h))
   
   let rec verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont econt =
-    stats#stmtExec;
+    !stats#stmtExec;
     let l = stmt_loc s in
     let free_locals closeBraceLoc h tenv env locals cont =
       let rec free_locals_core h locals =
@@ -2397,7 +2397,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let record_fun_timing l funName body =
     let time0 = Perf.time() in
     let result = body () in
-    stats#recordFunctionTiming (string_of_loc l ^ ": " ^ funName) (Perf.time() -. time0);
+    !stats#recordFunctionTiming (string_of_loc l ^ ": " ^ funName) (Perf.time() -. time0);
     result
   
   let rec verify_exceptional_return (pn,ilist) l h ghostenv env exceptp excep handlers =
@@ -2818,7 +2818,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       !provide_files |> List.iter Sys.remove
     end
   
-  let () = stats#appendProverStats ctxt#stats
+  let () = !stats#appendProverStats ctxt#stats
 
   let create_jardeps_file() =
     let jardeps_filename = Filename.chop_extension path ^ ".jardeps" in
@@ -2927,27 +2927,12 @@ let verify_program_core (* ?verify_program_core *)
 
 (* Region: prover selection *)
 
-let verify_program_with_stats (* ?verify_program_with_stats *)
-    ?(emitter_callback : package list -> unit = fun _ -> ())
-    ctxt
-    (print_stats : bool)
-    (verbose : options)
-    (path : string)
-    (reportRange : range_kind -> loc -> unit)
-    (reportUseSite : decl_kind -> loc -> loc -> unit)
-    (reportExecutionForest : node list ref -> unit)
-    (breakpoint : (string * int) option)
-    (targetPath : int list option) : unit =
-  do_finally
-    (fun () -> verify_program_core ~emitter_callback:emitter_callback ctxt verbose path reportRange reportUseSite reportExecutionForest breakpoint targetPath)
-    (fun () -> if print_stats then stats#printStats)
-
 class virtual prover_client =
   object
-    method virtual run: 'typenode 'symbol 'termnode. ('typenode, 'symbol, 'termnode) Proverapi.context -> unit
+    method virtual run: 'typenode 'symbol 'termnode. ('typenode, 'symbol, 'termnode) Proverapi.context -> Stats.stats
   end
 
-let prover_table: (string * (string * (prover_client -> unit))) list ref = ref []
+let prover_table: (string * (string * (prover_client -> Stats.stats))) list ref = ref []
 
 let register_prover name banner f =
   prover_table := (name, (banner, f))::!prover_table
@@ -2977,18 +2962,19 @@ let lookup_prover prover =
 let verify_program (* ?verify_program *)
     ?(emitter_callback : package list -> unit = fun _ -> ())
     (prover : string option)
-    (print_stats : bool)
     (options : options)
     (path : string)
     (reportRange : range_kind -> loc -> unit)
     (reportUseSite : decl_kind -> loc -> loc -> unit)
     (reportExecutionForest : node list ref -> unit)
     (breakpoint : (string * int) option)
-    (targetPath : int list option) : unit =
+    (targetPath : int list option) : Stats.stats =
   lookup_prover prover
     (object
-       method run: 'typenode 'symbol 'termnode. ('typenode, 'symbol, 'termnode) Proverapi.context -> unit =
-         fun ctxt -> verify_program_with_stats ~emitter_callback:emitter_callback ctxt print_stats options path reportRange reportUseSite reportExecutionForest breakpoint targetPath
+       method run: 'typenode 'symbol 'termnode. ('typenode, 'symbol, 'termnode) Proverapi.context -> Stats.stats =
+         fun ctxt -> clear_stats ();
+                     verify_program_core ~emitter_callback:emitter_callback ctxt options path reportRange reportUseSite reportExecutionForest breakpoint targetPath;
+                     !stats
      end)
 
 (* Region: linker *)

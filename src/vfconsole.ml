@@ -9,7 +9,7 @@ let _ =
   let print_msg l msg =
     print_endline (string_of_loc l ^ ": " ^ msg)
   in
-  let verify ?(emitter_callback = fun _ -> ()) (stats : bool) (options : options) (prover : string option) (path : string) (emitHighlightedSourceFiles : bool) =
+  let verify ?(emitter_callback = fun _ -> ()) (print_stats : bool) (options : options) (prover : string option) (path : string) (emitHighlightedSourceFiles : bool) =
     let verify range_callback =
     let exit l =
       Java_frontend_bridge.unload();
@@ -17,8 +17,9 @@ let _ =
     in
     try
       let use_site_callback declKind declLoc useSiteLoc = () in
-      verify_program ~emitter_callback:emitter_callback prover stats options path range_callback use_site_callback (fun _ -> ()) None None;
-      print_endline "0 errors found";
+      let stats = verify_program ~emitter_callback:emitter_callback prover options path range_callback use_site_callback (fun _ -> ()) None None in
+      if print_stats then stats#printStats;
+      print_endline ("0 errors found (" ^ (string_of_int (stats#getStmtExec)) ^ " statements verified)");
     with
       PreprocessorDivergence (l, msg) -> print_msg l msg; exit 1
     | ParseException (l, msg) -> print_msg l ("Parse error" ^ (if msg = "" then "." else ": " ^ msg)); exit 1

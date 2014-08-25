@@ -648,11 +648,11 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       end
       !buffers
   in
-  let updateMessageEntry() =
+  let updateMessageEntry (success: bool) =
     (match !msg with
       None -> messageEntry#coerce#misc#hide(); helpButton#coerce#misc#hide()
     | Some msg ->
-      let (backColor, textColor) = if msg = "0 errors found" then ("green", "black") else ("red", "white") in
+      let (backColor, textColor) = if success then ("green", "black") else ("red", "white") in
       messageEntry#coerce#misc#show();
       messageEntry#set_text msg;
       messageEntry#coerce#misc#modify_base [`NORMAL, `NAME backColor];
@@ -1033,7 +1033,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       msg := None;
       url := None;
       clearStepItems();
-      updateMessageEntry();
+      updateMessageEntry(false);
       clearStepInfo();
       stepStore#clear();
       List.iter (fun tab ->
@@ -1107,7 +1107,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       apply_tag_by_loc "error" l;
     msg := Some emsg;
     url := eurl;
-    updateMessageEntry();
+    updateMessageEntry(false);
     if l <> dummy_loc then
       go_to_loc l
   in
@@ -1240,7 +1240,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   in
   let verifyProgram runToCursor targetPath () =
     msg := Some("Verifying...");
-    updateMessageEntry();
+    updateMessageEntry(false);
     clearTrace();
     match !buffers with
       [] -> ()
@@ -1286,9 +1286,16 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
               if options.option_use_java_frontend then begin
                 perform_syntax_highlighting tab tab#buffer#start_iter tab#buffer#end_iter
               end;
-              verify_program prover false options path reportRange reportUseSite reportExecutionForest breakpoint targetPath;
-              msg := Some (if targetPath <> None then "0 errors found (target path not reached)" else if runToCursor then "0 errors found (cursor is unreachable)" else "0 errors found");
-              updateMessageEntry()
+              let stats = verify_program prover options path reportRange reportUseSite reportExecutionForest breakpoint targetPath in
+              let success =
+                if targetPath <> None then
+                  (msg := Some("0 errors found (target path not reached)"); false)
+                else if runToCursor then
+                  (msg := Some("0 errors found (cursor is unreachable)"); false)
+                else
+                  (msg := Some("0 errors found (" ^ (string_of_int (stats#getStmtExec)) ^ " statements verified)"); true)
+              in
+              updateMessageEntry(success)
             with
               PreprocessorDivergence (l, emsg) ->
               handleStaticError l ("Preprocessing error" ^ (if emsg = "" then "." else ": " ^ emsg)) None
@@ -1296,14 +1303,14 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
               let message = "Parse error" ^ (if emsg = "" then "." else ": " ^ emsg) in
               if (l = Lexer.dummy_loc) then begin
                 msg := Some(message);
-                updateMessageEntry()
+                updateMessageEntry(false)
               end
               else
                 handleStaticError l message None
             | CompilationError(emsg) ->
               clearTrace();
               msg := Some(emsg);
-              updateMessageEntry()
+              updateMessageEntry(false)
             | StaticError (l, emsg, eurl) ->
               handleStaticError l emsg eurl 
             | SymbolicExecutionError (ctxts, phi, l, emsg, eurl) ->
@@ -1317,7 +1324,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
                 apply_tag_by_loc "error" l;
                 msg := Some emsg;
                 url := eurl;
-                updateMessageEntry()
+                updateMessageEntry(false)
               | _ ->
                 handleStaticError l emsg eurl
               end

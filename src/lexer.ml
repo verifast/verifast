@@ -595,7 +595,7 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
     | '\000' ->
       in_ghost_range := !ghost_range_start <> None;
       ghost_range_end();
-      stats#overhead ~path:path ~nonGhostLineCount:!non_ghost_line_count ~ghostLineCount:!ghost_line_count ~mixedLineCount:!mixed_line_count;
+      !stats#overhead ~path:path ~nonGhostLineCount:!non_ghost_line_count ~ghostLineCount:!ghost_line_count ~mixedLineCount:!mixed_line_count;
       None
     | '*' -> start_token(); text_junk(); begin match text_peek() with '=' -> text_junk(); Some (keyword_or_error "*=") | _ -> Some (keyword_or_error "*") end
     | c -> start_token(); text_junk (); Some (keyword_or_error (String.make 1 c))
