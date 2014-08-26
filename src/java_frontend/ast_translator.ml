@@ -407,7 +407,9 @@ and check_contract l anns throws generate =
   let anns' =
     if (List.length anns = 0) then
     (
-      if ((!enforce_annotations) && generate == Generated) then
+      if (generate = Generated) then
+        [Annotation(l, "requires true;"); Annotation(l, "ensures true;")]
+      else if ((!enforce_annotations)) then
         error l' "Method must have a contract"
       else
         [Annotation(l, "requires false;"); Annotation(l, "ensures true;")]

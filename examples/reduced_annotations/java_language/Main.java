@@ -60,7 +60,7 @@ public class Main
     return ++i;
   }
   
-  static int notAnnotatedIncMain(int i)
+  static int notAnnotatedIncMain(int i) throws Exception
   {
     //@ assert false;
     PartiallyAnnotatedInterface1 o = new PartiallyAnnotated1();
@@ -73,10 +73,10 @@ public class Main
     return o.NotAnnotatedIncInterface1(i);
   }
   
-  int NotAnnotatedMethodMain_2(int i) {return i;}
+  int NotAnnotatedMethodMain_2(int i) throws Exception, RuntimeException {return i;}
 }
 
-class NotAnnotatedClassMain_3
+class NotAnnotatedClassMain_3 
 {
   private int x; 
 
