@@ -765,7 +765,7 @@ and translate_expression expr =
       let exprs' = List.map translate_expression exprs in
       if (List.length dims > 1) then
         error l' "Multiple dimensions for arrays creation not supported yet";
-      if (List.length dims == 1) then
+      if (List.length dims = 1) then
         VF.NewArray(l', typ', List.hd dims') 
       else
         VF.NewArrayWithInitializer(l', typ', exprs')
@@ -836,8 +836,8 @@ and translate_bin_operator op l =
   | GEN.O_BitOr  -> (false, VF.BitOr)
   | GEN.O_BitXor -> (false, VF.BitXor)
   | GEN.O_BitAnd -> (false, VF.BitAnd)
-  | GEN.O_ShiftL -> error l "Binary operator << not supported yet";
-  | GEN.O_ShiftR -> error l "Binary operator >> not supported yet";
+  | GEN.O_ShiftL -> (false, VF.ShiftLeft);
+  | GEN.O_ShiftR -> (false, VF.ShiftRight);
   | GEN.O_UShiftR-> error l "Binary operator >>> not supported yet";
 
 and translate_uni_operator op l expr =

@@ -602,7 +602,7 @@ let extend_location loc1 loc2 =
   let extend_location(f, l0, c0) =
     match loc1 with 
     | SourceLine(f, l, c1 ,c2) when l <= l0 ->
-        if (l == l0 && c2 <= c0) then
+        if (l = l0 && c2 <= c0) then
           SourceLine(f, l, c1, c0)
         else if (l < l0) then
           SourceLines(f, l, l0, c1, c0)
