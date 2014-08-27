@@ -1196,29 +1196,35 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   (* Region: interfdeclmap, classmap1 *)
   
-  let (interfmap1,classmap1)=
-    let rec iter (pn,il) ifdm classlist ds =
-      match ds with
-        [] -> (ifdm, classlist)
-      | (Interface (l, i, interfs, fields, meths, pred_specs))::ds -> let i= full_name pn i in 
+  let (interfmap1,classmap1) =
+   let rec iter (ifdm, classlist) ds todo =
+     match ds with 
+      | [] -> (ifdm, classlist, todo)
+      | (pn, ilist, Interface (l, i, interfs, fields, meths, pred_specs))::rest ->
+        let i= full_name pn i in 
         if List.mem_assoc i ifdm then
           static_error l ("There exists already an interface with this name: "^i) None
         else
         if List.mem_assoc i classlist then
           static_error l ("There exists already a class with this name: "^i) None
         else
-          let interfs =
-            let rec check_interfs ls=
-                match ls with
-                  [] -> []
-                | i::ls -> match search2' i (pn,il) ifdm interfmap0 with 
-                            Some i -> i::check_interfs ls
-                          | None -> static_error l ("Interface wasn't found: " ^ i) None
-            in
-            check_interfs interfs
-          in
-          iter (pn, il) ((i, (l, fields, meths, pred_specs, interfs, pn, il))::ifdm) classlist ds
-      | (Class (l, abstract, fin, i, meths,fields,constr,super,interfs,preds))::ds -> 
+          begin
+            try
+              let interfs =
+                let rec check_interfs ls=
+                  match ls with
+                    [] -> []
+                  | i::ls -> match search2' i (pn,ilist) ifdm interfmap0 with 
+                              Some i -> i::check_interfs ls
+                            | None -> raise Not_found
+                in
+                check_interfs interfs
+              in
+              iter (((i, (l, fields, meths, pred_specs, interfs, pn, ilist))::ifdm), classlist) rest todo
+            with Not_found ->
+              iter (ifdm, classlist) rest ((List.hd ds)::todo)
+          end
+      | (pn, ilist, Class (l, abstract, fin, i, meths,fields,constr,super,interfs,preds))::rest ->
         let i= full_name pn i in
         if List.mem_assoc i ifdm then
           static_error l ("There exists already an interface with this name: "^i) None
@@ -1226,33 +1232,56 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if List.mem_assoc i classlist then
           static_error l ("There exists already a class with this name: "^i) None
         else
-          let interfs =
-            let rec check_interfs ls=
-                match ls with
-                  [] -> []
-                | i::ls -> match search2' i (pn,il) ifdm interfmap0 with 
-                            Some i -> i::check_interfs ls
-                          | None -> static_error l ("Interface wasn't found: "^i) None
+          begin
+            try
+              let interfs =
+                let rec check_interfs ls=
+                    match ls with
+                      [] -> []
+                    | i::ls -> match search2' i (pn,ilist) ifdm interfmap0 with 
+                                Some i -> i::check_interfs ls
+                              | None -> raise Not_found
+                in
+                check_interfs interfs
+              in
+              let super =
+                if i = "java.lang.Object" then "" else
+                if super = "java.lang.Object" then super else
+                match search2' super (pn,ilist) classlist classmap0 with
+                  None-> raise Not_found
+                | Some super -> super
+              in
+              iter (ifdm, (i, (l,abstract,fin,meths,fields,constr,super,interfs,preds,pn,ilist))::classlist) rest todo
+            with Not_found ->
+              iter (ifdm, classlist) rest ((List.hd ds)::todo)
+          end
+      | (pn, ilist, _)::rest -> iter (ifdm, classlist) rest todo
+    in
+    let rec iter' (ifdm, classlist) ds =
+      let (ifdm', classlist', ds_rest)  = iter (ifdm, classlist) ds [] in
+      if (List.length ds_rest > 0) then
+        begin
+          if (List.length ds_rest = List.length ds) then
+            let (l, message) =
+              match ds_rest with
+              | (_, _, (Interface (l, i, interfs, fields, meths, pred_specs)))::_ ->
+                  (l, "Interface " ^ i ^ " is part of an inheritance cycle")
+              | (_, _, (Class (l, abstract, fin, i, meths,fields,constr,super,interfs,preds)))::_ ->
+                  (l, "Class " ^ i ^ " is part of an inheritance cycle")
             in
-            check_interfs interfs
-          in
-          let super =
-            if i = "java.lang.Object" then "" else
-            if super = "java.lang.Object" then super else
-            match search2' super (pn,il) classlist classmap0 with
-              None-> static_error l ("Superclass wasn't found: "^super) None
-            | Some super -> super
-          in
-          iter (pn,il) ifdm ((i, (l,abstract,fin,meths,fields,constr,super,interfs,preds,pn,il))::classlist) ds
-      | _::ds -> iter (pn,il) ifdm classlist ds
+            static_error l message None
+          else
+            iter' (ifdm', classlist') ds_rest
+        end
+      else
+        (List.rev ifdm', List.rev classlist')
     in
-    let rec iter' (ifdm,classlist) ps =
+    let rec get_declarations ps =
       match ps with
-
-      PackageDecl(l,pn,ilist,ds)::rest -> iter' (iter (pn,ilist) ifdm classlist ds) rest
-      | [] -> (List.rev ifdm, List.rev classlist)
+      | PackageDecl(l,pn,ilist,ds)::rest -> (List.map (fun d -> (pn, ilist, d)) ds) @ (get_declarations rest)
+      | [] -> []
     in
-    iter' ([],[]) ps
+    iter' ([],[]) (get_declarations ps)
   
   let inductive_arities =
     List.map (fun (i, (l, tparams, _)) -> (i, (l, List.length tparams))) inductivedeclmap

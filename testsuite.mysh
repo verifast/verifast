@@ -289,6 +289,17 @@ cd examples
     verifast_both -c Tree.java
     verifast_both -c SuperConstructorCall.java
     verifast -c -allow_should_fail Exceptions.java
+    cd out_of_order_jarsrc
+      cd in_order
+        verifast_both -c main.jarsrc
+      cd ..
+      cd out_of_order
+        verifast_both -c main.jarsrc
+      cd ..
+      cd inheritance_cycle
+        verifast_both -c -allow_should_fail main.jarsrc
+      cd ..
+    cd ..
   cd ..
   cd vstte2010
     ifz3 verifast -c -disable_overflow_check problem1.c
