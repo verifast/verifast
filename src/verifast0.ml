@@ -1,6 +1,5 @@
 open Printf
 open Util
-open Lexer
 open Ast
 
 (** Keeps manifests produced by the compilation phase, for use during the linking phase. Avoids writing manifest files to disk. *)

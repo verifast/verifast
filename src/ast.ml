@@ -1,7 +1,51 @@
 open Big_int
 open Num
 open Util
-open Lexer
+
+(* Region: Locations *)
+
+(** Base path, relative path, line (1-based), column (1-based) *)
+type srcpos = ((string * string) * int * int) (* ?srcpos *)
+
+(** A range of source code: start position, end position *)
+type loc = (srcpos * srcpos) (* ?loc *)
+
+let dummy_srcpos = (("<nowhere>", "<nofile>"), 0, 0)
+let dummy_loc = (dummy_srcpos, dummy_srcpos)
+
+(*
+Visual Studio format:
+C:\ddd\sss.xyz(123): error VF0001: blah
+C:\ddd\sss.xyz(123,456): error VF0001: blah
+C:\ddd\sss.xyz(123,456-789): error VF0001: blah
+C:\ddd\sss.xyz(123,456-789,123): error VF0001: blah
+GNU format:
+C:\ddd\sss.xyz:123: error VF0001: blah
+C:\ddd\sss.xyz:123.456: error VF0001: blah
+C:\ddd\sss.xyz:123.456-789: error VF0001: blah
+C:\ddd\sss.xyz:123.456-789.123: error VF0001: blah
+See
+http://blogs.msdn.com/msbuild/archive/2006/11/03/msbuild-visual-studio-aware-error-messages-and-message-formats.aspx
+and
+http://www.gnu.org/prep/standards/standards.html#Errors
+*)
+
+let string_of_srcpos (p,l,c) = p ^ "(" ^ string_of_int l ^ "," ^ string_of_int c ^ ")"
+
+let string_of_path (basedir, relpath) = concat basedir relpath
+
+let string_of_loc ((p1, l1, c1), (p2, l2, c2)) =
+  string_of_path p1 ^ "(" ^ string_of_int l1 ^ "," ^ string_of_int c1 ^
+  if p1 = p2 then
+    if l1 = l2 then
+      if c1 = c2 then
+        ")"
+      else
+        "-" ^ string_of_int c2 ^ ")"
+    else
+      "-" ^ string_of_int l2 ^ "," ^ string_of_int c2 ^ ")"
+  else
+    ")-" ^ string_of_path p2 ^ "(" ^ string_of_int l2 ^ "," ^ string_of_int c2 ^ ")"
 
 (* Some types for dealing with constants *)
 

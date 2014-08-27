@@ -1,5 +1,5 @@
-open Lexer
 open Ast
+open Lexer
 open Parser
 open Verifast0
 open Verifast

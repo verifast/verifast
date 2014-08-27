@@ -33,6 +33,7 @@ module GEN = General_ast
 open VF
 open GEN
 
+open Ast
 open Lexer
 
 let indent = ref ""

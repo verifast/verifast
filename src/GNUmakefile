@@ -349,7 +349,7 @@ ifndef WITHOUT_LABLGTK
 	  $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) gtkInit.cmx unix.cmxa \
 	  nums.cmxa $(INCLUDES) Perf.cmxa proverapi.cmx \
 	  Printexc_proxy.cmx vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx \
-	  plugins_private.cmx plugins2.cmx util.cmx stats.cmx lexer.cmx ast.cmx \
+	  plugins_private.cmx plugins2.cmx util.cmx ast.cmx stats.cmx lexer.cmx \
 	  parser.cmx ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx \
 	  verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml \
 	  shape_analysis/shape_analysis_backend.cmx \
@@ -367,7 +367,7 @@ vfide: ../bin/vfide$(DOTEXE) $(STDLIB)
 	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/verifast$(DOTEXE) unix.cmxa \
 	  nums.cmxa $(INCLUDES) Perf.cmxa proverapi.cmx \
 	  vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx \
-	  plugins2.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx \
+	  plugins2.cmx util.cmx ast.cmx stats.cmx lexer.cmx parser.cmx \
 	  ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx \
 	  verify_expr.cmx verifast.cmx simplex.cmx redux.cmx \
 	  verifastPluginRedux.ml $(Z3ARGS) vfconsole.cmx

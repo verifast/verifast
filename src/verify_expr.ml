@@ -4,7 +4,6 @@ open Printf
 open Num (* rational numbers *)
 open Util
 open Stats
-open Lexer
 open Ast
 open Parser
 open Verifast0

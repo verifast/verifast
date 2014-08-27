@@ -1,5 +1,5 @@
-open Lexer
 open Ast
+open Lexer
 
 open Ast_writer
 

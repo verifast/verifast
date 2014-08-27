@@ -16,7 +16,6 @@ open Shape_analysis_backend
 open Parser (* for file_type *)
 open Changelog
 open Ast
-open Lexer
 
 exception ShapeAnalysisException of (loc * string);;
 

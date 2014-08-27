@@ -1,11 +1,11 @@
 # These dependencies are automatically generated.
 # Do not edit by hand. To generate, run 'make depend'.
 assertions.cmo : verifast1.cmx verifast0.cmx util.cmx stats.cmx \
-    proverapi.cmx plugins.cmi linux/Perf.cmx parser.cmx lexer.cmx ast.cmx
+    proverapi.cmx plugins.cmi linux/Perf.cmx parser.cmx ast.cmx
 assertions.cmx : verifast1.cmx verifast0.cmx util.cmx stats.cmx \
-    proverapi.cmx plugins.cmx linux/Perf.cmx parser.cmx lexer.cmx ast.cmx
-ast.cmo : util.cmx plugins.cmi lexer.cmx DynType.cmi
-ast.cmx : util.cmx plugins.cmx lexer.cmx DynType.cmx
+    proverapi.cmx plugins.cmx linux/Perf.cmx parser.cmx ast.cmx
+ast.cmo : util.cmx plugins.cmi DynType.cmi
+ast.cmx : util.cmx plugins.cmx DynType.cmx
 dlsymtool.cmo :
 dlsymtool.cmx :
 DynType.cmo : DynType.cmi
@@ -16,8 +16,8 @@ Fonts_mac.cmo :
 Fonts_mac.cmx :
 java_card_applet.cmo :
 java_card_applet.cmx :
-lexer.cmo : util.cmx stats.cmx
-lexer.cmx : util.cmx stats.cmx
+lexer.cmo : util.cmx stats.cmx ast.cmx
+lexer.cmx : util.cmx stats.cmx ast.cmx
 main_class.cmo :
 main_class.cmx :
 mynum.cmo :
@@ -28,8 +28,8 @@ mysh.cmo : vfconfig.cmx Fonts.cmx
 mysh.cmx : vfconfig.cmx Fonts.cmx
 parser.cmo : util.cmx linux/Stopwatch.cmi stats.cmx lexer.cmx ast.cmx
 parser.cmx : util.cmx linux/Stopwatch.cmi stats.cmx lexer.cmx ast.cmx
-plugins2.cmo : plugins_private.cmx plugins.cmi plugins2.cmi
-plugins2.cmx : plugins_private.cmx plugins.cmx plugins2.cmi
+plugins2.cmo : plugins_private.cmx plugins2.cmi
+plugins2.cmx : plugins_private.cmx plugins2.cmi
 plugins.cmo : DynType.cmi plugins.cmi
 plugins.cmx : DynType.cmx plugins.cmi
 plugins_private.cmo : plugins.cmi
@@ -58,8 +58,8 @@ tabhunter.cmo :
 tabhunter.cmx :
 util.cmo : proverapi.cmx
 util.cmx : proverapi.cmx
-verifast0.cmo : util.cmx plugins.cmi lexer.cmx ast.cmx
-verifast0.cmx : util.cmx plugins.cmx lexer.cmx ast.cmx
+verifast0.cmo : util.cmx plugins.cmi ast.cmx
+verifast0.cmx : util.cmx plugins.cmx ast.cmx
 verifast1.cmo : verifast0.cmx util.cmx stats.cmx proverapi.cmx \
     plugins_private.cmx plugins.cmi parser.cmx lexer.cmx \
     java_frontend/java_frontend_bridge.cmx ast.cmx
@@ -83,9 +83,9 @@ verifastPluginZ3v2.cmx : z3v2prover.cmx verifast.cmx proverapi.cmx
 verifastPluginZ3v4.cmo : z3v4prover.cmx verifast.cmx proverapi.cmx
 verifastPluginZ3v4.cmx : z3v4prover.cmx verifast.cmx proverapi.cmx
 verify_expr.cmo : verifast1.cmx verifast0.cmx util.cmx stats.cmx \
-    proverapi.cmx parser.cmx lexer.cmx ast.cmx assertions.cmx
+    proverapi.cmx parser.cmx ast.cmx assertions.cmx
 verify_expr.cmx : verifast1.cmx verifast0.cmx util.cmx stats.cmx \
-    proverapi.cmx parser.cmx lexer.cmx ast.cmx assertions.cmx
+    proverapi.cmx parser.cmx ast.cmx assertions.cmx
 vfconsole.cmo : verifast0.cmx verifast.cmx SExpressionEmitter.cmi parser.cmx \
     lexer.cmx java_frontend/java_frontend_bridge.cmx ast.cmx
 vfconsole.cmx : verifast0.cmx verifast.cmx SExpressionEmitter.cmx parser.cmx \
@@ -127,8 +127,10 @@ java_frontend/ast_translator.cmx : parser.cmx java_frontend/misc.cmx \
     lexer.cmx java_frontend/general_ast.cmx ast.cmx
 java_frontend/ast_writer.cmo : java_frontend/general_ast.cmx
 java_frontend/ast_writer.cmx : java_frontend/general_ast.cmx
-java_frontend/communication.cmo : java_frontend/ast_reader.cmx
-java_frontend/communication.cmx : java_frontend/ast_reader.cmx
+java_frontend/communication.cmo : java_frontend/misc.cmx \
+    java_frontend/ast_reader.cmx
+java_frontend/communication.cmx : java_frontend/misc.cmx \
+    java_frontend/ast_reader.cmx
 java_frontend/general_ast.cmo : java_frontend/misc.cmx
 java_frontend/general_ast.cmx : java_frontend/misc.cmx
 java_frontend/java_frontend_bridge.cmo : util.cmx parser.cmx \
@@ -141,24 +143,26 @@ java_frontend/java_frontend_bridge.cmx : util.cmx parser.cmx \
     java_frontend/general_ast.cmx java_frontend/ast_writer.cmx \
     java_frontend/ast_translator.cmx ast.cmx \
     java_frontend/annotation_type_checker.cmx
-java_frontend/java_frontend.cmo : java_frontend/general_ast.cmx \
-    java_frontend/communication.cmx java_frontend/ast_writer.cmx \
-    java_frontend/ast_reader.cmx java_frontend/java_frontend.cmi
-java_frontend/java_frontend.cmx : java_frontend/general_ast.cmx \
-    java_frontend/communication.cmx java_frontend/ast_writer.cmx \
-    java_frontend/ast_reader.cmx java_frontend/java_frontend.cmi
+java_frontend/java_frontend.cmo : java_frontend/misc.cmx \
+    java_frontend/general_ast.cmx java_frontend/communication.cmx \
+    java_frontend/ast_writer.cmx java_frontend/ast_reader.cmx \
+    java_frontend/java_frontend.cmi
+java_frontend/java_frontend.cmx : java_frontend/misc.cmx \
+    java_frontend/general_ast.cmx java_frontend/communication.cmx \
+    java_frontend/ast_writer.cmx java_frontend/ast_reader.cmx \
+    java_frontend/java_frontend.cmi
 java_frontend/misc.cmo :
 java_frontend/misc.cmx :
 java_frontend/annotation_type_checker.cmi : java_frontend/communication.cmx
 java_frontend/java_frontend.cmi : java_frontend/general_ast.cmx \
     java_frontend/annotation_type_checker.cmi
-shape_analysis/changelog.cmo : util.cmx lexer.cmx
-shape_analysis/changelog.cmx : util.cmx lexer.cmx
+shape_analysis/changelog.cmo : util.cmx ast.cmx
+shape_analysis/changelog.cmx : util.cmx ast.cmx
 shape_analysis/shape_analysis_backend.cmo : shape_analysis/changelog.cmx
 shape_analysis/shape_analysis_backend.cmx : shape_analysis/changelog.cmx
 shape_analysis/shape_analysis_frontend.cmo : \
-    shape_analysis/shape_analysis_backend.cmx parser.cmx lexer.cmx \
+    shape_analysis/shape_analysis_backend.cmx parser.cmx \
     shape_analysis/changelog.cmx ast.cmx
 shape_analysis/shape_analysis_frontend.cmx : \
-    shape_analysis/shape_analysis_backend.cmx parser.cmx lexer.cmx \
+    shape_analysis/shape_analysis_backend.cmx parser.cmx \
     shape_analysis/changelog.cmx ast.cmx

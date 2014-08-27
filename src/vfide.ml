@@ -1,7 +1,7 @@
 open Unix
 open Util
-open Lexer
 open Ast
+open Lexer
 open Parser
 open Verifast0
 open Verifast
@@ -1301,7 +1301,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
               handleStaticError l ("Preprocessing error" ^ (if emsg = "" then "." else ": " ^ emsg)) None
             | ParseException (l, emsg) ->
               let message = "Parse error" ^ (if emsg = "" then "." else ": " ^ emsg) in
-              if (l = Lexer.dummy_loc) then begin
+              if (l = Ast.dummy_loc) then begin
                 msg := Some(message);
                 updateMessageEntry(false)
               end
