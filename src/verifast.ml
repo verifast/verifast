@@ -44,8 +44,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | Some(ehname) -> assert_handle_invs bcn hpmap ehname hpInvEnv h (fun h ->  consume_asn rules [] h [] hpInvEnv inv true real_unit (fun _ h _ _ _ -> cont h))
   
   let rec verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont econt =
-    !stats#stmtExec;
     let l = stmt_loc s in
+    let _ =
+      match s with
+      (* Make sure that nested statements are not counted *)
+      | PureStmt _ | NonpureStmt _ | IfStmt _  | SwitchStmt _ | WhileStmt _ | BlockStmt _ -> ()
+      | _ -> !stats#stmtExec l;
+    in
     let free_locals closeBraceLoc h tenv env locals cont =
       let rec free_locals_core h locals =
         match locals with

@@ -14,6 +14,8 @@ Fonts_default.cmo :
 Fonts_default.cmx :
 Fonts_mac.cmo :
 Fonts_mac.cmx :
+Fonts.cmo :
+Fonts.cmx :
 java_card_applet.cmo :
 java_card_applet.cmx :
 lexer.cmo : util.cmx stats.cmx ast.cmx
@@ -50,8 +52,8 @@ SExpressions.cmo : SExpressions.cmi
 SExpressions.cmx : SExpressions.cmi
 simplex.cmo : linux/Stopwatch.cmi simplex.cmi
 simplex.cmx : linux/Stopwatch.cmi simplex.cmi
-stats.cmo : util.cmx linux/Stopwatch.cmi linux/Perf.cmx
-stats.cmx : util.cmx linux/Stopwatch.cmi linux/Perf.cmx
+stats.cmo : util.cmx linux/Stopwatch.cmi linux/Perf.cmx ast.cmx
+stats.cmx : util.cmx linux/Stopwatch.cmi linux/Perf.cmx ast.cmx
 stopwatch_test.cmo : linux/Stopwatch.cmi
 stopwatch_test.cmx : linux/Stopwatch.cmi
 tabhunter.cmo :
@@ -86,6 +88,8 @@ verify_expr.cmo : verifast1.cmx verifast0.cmx util.cmx stats.cmx \
     proverapi.cmx parser.cmx ast.cmx assertions.cmx
 verify_expr.cmx : verifast1.cmx verifast0.cmx util.cmx stats.cmx \
     proverapi.cmx parser.cmx ast.cmx assertions.cmx
+vfconfig.cmo :
+vfconfig.cmx :
 vfconsole.cmo : verifast0.cmx verifast.cmx SExpressionEmitter.cmi parser.cmx \
     lexer.cmx java_frontend/java_frontend_bridge.cmx ast.cmx
 vfconsole.cmx : verifast0.cmx verifast.cmx SExpressionEmitter.cmx parser.cmx \
@@ -98,12 +102,17 @@ vfide.cmx : vfversion.cmx verifast0.cmx verifast.cmx util.cmx \
     lexer.cmx java_frontend/java_frontend_bridge.cmx Fonts.cmx ast.cmx
 vfstrip.cmo :
 vfstrip.cmx :
+vfversion.cmo : vfversion.cmi
+vfversion.cmx : vfversion.cmi
 z3prover.cmo : proverapi.cmx linux/Perf.cmx
 z3prover.cmx : proverapi.cmx linux/Perf.cmx
 z3v2prover.cmo : proverapi.cmx linux/Perf.cmx
 z3v2prover.cmx : proverapi.cmx linux/Perf.cmx
 z3v4prover.cmo : proverapi.cmx linux/Perf.cmx
 z3v4prover.cmx : proverapi.cmx linux/Perf.cmx
+DynType.cmi :
+plugins2.cmi : plugins.cmi
+plugins.cmi : DynType.cmi
 SExpressionEmitter.cmi : SExpressions.cmi ast.cmx
 SExpressions.cmi :
 simplex.cmi :

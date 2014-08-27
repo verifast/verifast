@@ -1,4 +1,5 @@
 open Util
+open Ast
 
 (* Region: Statistics *)
 
@@ -11,7 +12,8 @@ class stats =
     val mutable stmtsParsedCount = 0
     val mutable openParsedCount = 0
     val mutable closeParsedCount = 0
-    val mutable stmtExecCount = 0
+    val mutable stmtExecOnAllPathsCount = 0
+    val mutable stmtExecLocs = Hashtbl.create 1000;
     val mutable execStepCount = 0
     val mutable branchCount = 0
     val mutable proverAssumeCount = 0
@@ -23,12 +25,16 @@ class stats =
     val mutable functionTimings: (string * float) list = []
     
     method tickLength = let t1 = Perf.time() in let ticks1 = Stopwatch.processor_ticks() in (t1 -. startTime) /. Int64.to_float (Int64.sub ticks1 startTicks)
-    
+
     method stmtParsed = stmtsParsedCount <- stmtsParsedCount + 1
     method openParsed = openParsedCount <- openParsedCount + 1
     method closeParsed = closeParsedCount <- closeParsedCount + 1
-    method stmtExec = stmtExecCount <- stmtExecCount + 1
-    method getStmtExec = stmtExecCount
+    method stmtExec (l: loc) =
+      stmtExecOnAllPathsCount <- stmtExecOnAllPathsCount + 1;
+      Hashtbl.replace stmtExecLocs l l
+    method getStmtExec = Hashtbl.length stmtExecLocs
+    method getStmtExecLocs = Hashtbl.fold (fun _ loc locs -> loc::locs) stmtExecLocs []
+    method getStmtExecOnAllPaths = stmtExecOnAllPathsCount
     method execStep = execStepCount <- execStepCount + 1
     method branch = branchCount <- branchCount + 1
     method proverAssume = proverAssumeCount <- proverAssumeCount + 1
@@ -63,7 +69,7 @@ class stats =
       print_endline ("Statements parsed: " ^ string_of_int stmtsParsedCount);
       print_endline ("Open statements parsed: " ^ string_of_int openParsedCount);
       print_endline ("Close statements parsed: " ^ string_of_int closeParsedCount);
-      print_endline ("Statement executions: " ^ string_of_int stmtExecCount);
+      print_endline ("Statement executions: " ^ string_of_int (self#getStmtExec));
       print_endline ("Execution steps (including assertion production/consumption steps): " ^ string_of_int execStepCount);
       print_endline ("Symbolic execution forks: " ^ string_of_int branchCount);
       print_endline ("Prover assumes: " ^ string_of_int proverAssumeCount);
