@@ -82,3 +82,8 @@ cd big_example
   verifast_both -c -disable_overflow_check -javac Java7Program_desugared.java
   verifast_both -c -disable_overflow_check -javac Java7Program.java
 cd ..
+
+cd binary_operators
+  verifast_both -c -javac BinaryOps.java
+cd ..
+

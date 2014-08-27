@@ -851,7 +851,7 @@ and translate_uni_operator op l expr =
   | GEN.O_PreDec  -> VF.AssignOpExpr(l, expr, Sub, unit_big_int, false, ref None, ref None)
   | GEN.O_PostInc -> VF.AssignOpExpr(l, expr, Add, unit_big_int, true, ref None, ref None)
   | GEN.O_PostDec -> VF.AssignOpExpr(l, expr, Sub, unit_big_int, true, ref None, ref None)
-  | GEN.O_Compl   -> error l "Unary operator ~ not supported yet";
+  | GEN.O_Compl   -> VF.Operation(l, VF.BitNot, [expr], ref None)
 
 and translate_literal l typ value =
   debug_print "translate_literal";
