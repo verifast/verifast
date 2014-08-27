@@ -549,11 +549,12 @@ and string_for_expression e () =
          string_for_id id;]
       in
       string_for_constructor "Access" args;
-  | Apply(l, tparams, e, args) ->
+  | Apply(l, tparams, e, arg_types, args) ->
       let args = 
         [string_for_location l;
          string_for_list (List.map string_for_type_param tparams);
          string_for_expression e;
+         string_for_list (List.map string_for_type arg_types);
          string_for_list (List.map string_for_expression args);]
       in
       string_for_constructor "Apply" args;

@@ -131,9 +131,11 @@ java_frontend/ast_reader.cmo : java_frontend/misc.cmx \
 java_frontend/ast_reader.cmx : java_frontend/misc.cmx \
     java_frontend/general_ast.cmx
 java_frontend/ast_translator.cmo : parser.cmx java_frontend/misc.cmx \
-    lexer.cmx java_frontend/general_ast.cmx ast.cmx
+    lexer.cmx java_frontend/general_ast.cmx java_frontend/ast_writer.cmx \
+    ast.cmx
 java_frontend/ast_translator.cmx : parser.cmx java_frontend/misc.cmx \
-    lexer.cmx java_frontend/general_ast.cmx ast.cmx
+    lexer.cmx java_frontend/general_ast.cmx java_frontend/ast_writer.cmx \
+    ast.cmx
 java_frontend/ast_writer.cmo : java_frontend/general_ast.cmx
 java_frontend/ast_writer.cmx : java_frontend/general_ast.cmx
 java_frontend/communication.cmo : java_frontend/misc.cmx \

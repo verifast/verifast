@@ -2798,7 +2798,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           provide_files := provide_javas;
           let javas = javas @ provide_javas in
           let context = List.map (fun ((((b, _), _, _), _), (_, p, _), _, _) -> Util.concat b ((Filename.chop_extension p) ^ ".jar")) headers in
-          let ds = Java_frontend_bridge.parse_java_files javas context reportRange reportShouldFail options.option_enforce_annotations options.option_use_java_frontend in
+          let ds = Java_frontend_bridge.parse_java_files (options.option_runtime <> Some("nort")) javas context reportRange reportShouldFail options.option_enforce_annotations options.option_use_java_frontend in
           (headers, ds)
         | CLang ->
           if Filename.check_suffix path ".h" then

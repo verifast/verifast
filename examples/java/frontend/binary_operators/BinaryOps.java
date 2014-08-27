@@ -13,8 +13,7 @@ public class BinaryOps
      c = a & b;
      c = a | b;
      c = a ^ b;
-     c = ~a;  
-     //@ assert c == 0; 
+     c = ~a;
      c = a << 2;
      c = a >> 2;
   }

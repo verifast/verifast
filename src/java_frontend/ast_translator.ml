@@ -35,6 +35,7 @@ open GEN
 
 open Ast
 open Lexer
+open Ast_writer
 
 let indent = ref ""
 let indent_string = "___"
@@ -593,6 +594,22 @@ and check_loop_invariant l' anns =
   end else
     parse_loop_invar l' anns false
 
+and add_casts_in_method_call arg_types exprs l =
+  let rec iter (exprs, arg_types) =
+    match (exprs, arg_types) with
+    | (e::exprs, t::arg_types) ->
+      let e = translate_expression e in
+      let t = translate_type t in
+      let e' =
+        let l_e = expr_loc e in
+        CastExpr(l_e, false, t, e)
+      in
+      e'::(iter(exprs, arg_types))
+    | ([], []) -> []
+    | _ ->  error l "Internal error while translating method application"
+  in
+  iter (exprs, arg_types) 
+
 and translate_statement stmt =
   debug_print "translate_statement";
   match stmt with
@@ -608,9 +625,9 @@ and translate_statement stmt =
   | GEN.S_Expression(e) ->
       begin
         match e with
-        | GEN.Apply(l, tparams, GEN.E_Identifier(GEN.Identifier(l_id, "super")), exprs) ->
+        | GEN.Apply(l, tparams, GEN.E_Identifier(GEN.Identifier(l_id, "super")), arg_types, exprs) ->
             let l' = translate_location l in
-            let exprs' = List.map translate_expression exprs in
+            let exprs' = add_casts_in_method_call arg_types exprs l' in
             VF.SuperConstructorCall(l', exprs')
         | _ -> 
             VF.ExprStmt (translate_expression e)
@@ -730,11 +747,11 @@ and translate_expression expr =
       let expr' = translate_expression expr in
       let id' = translate_identifier id in
       VF.Read(l', expr', id')
-  | GEN.Apply(l, tparams, expr, exprs) ->
+  | GEN.Apply(l, tparams, expr, arg_types, exprs) ->
       let l' = translate_location l in
       if (List.length tparams <> 0) then
         error l' "Generics should be erased before using this translator";
-      let exprs' = List.map translate_expression exprs in
+      let exprs' = add_casts_in_method_call arg_types exprs l' in
       let pats' = List.map (fun e -> VF.LitPat e) exprs' in
       begin
         match expr with

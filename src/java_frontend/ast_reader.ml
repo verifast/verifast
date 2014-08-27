@@ -837,10 +837,11 @@ and
           l = parse_loc;                         '(Kwd ",");
           tparams = parse_list parse_type_param; '(Kwd ",");
           e = parse_expression;                  '(Kwd ",");
+          arg_types = parse_list parse_type;     '(Kwd ",");
           args = parse_list parse_expression;    '(Kwd ")");
     >] -> 
       debug_print "parse_expression: Apply"; 
-      Apply(l, tparams, e, args)
+      Apply(l, tparams, e, arg_types, args)
   | [< '(Kwd "NewClass");                        '(Kwd "(");
           l = parse_loc;                         '(Kwd ",");
           tparams = parse_list parse_type_param; '(Kwd ",");

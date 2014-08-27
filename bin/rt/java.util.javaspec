@@ -133,6 +133,7 @@ public interface Iterator<E>{
 }
 
 public interface Collection<E> extends Iterable<E> {
+
 }
 
 /*@
@@ -146,7 +147,7 @@ fixpoint list<t> remove_nths<t>(list<int> ns, list<t> xs) {
 
 @*/
 
-interface List<E> extends Collection<E> {
+public interface List<E> extends Collection<E> {
     
     //@ predicate List(list<Object> elements);
     
@@ -159,7 +160,7 @@ interface List<E> extends Collection<E> {
     lemma void iterableToList();
        requires [?f]Iterable(?es);
        ensures  [f]List(es);
-        
+
     @*/
     
     int size();
@@ -203,7 +204,7 @@ interface List<E> extends Collection<E> {
 
 public class ArrayList<E> implements List<E> {
     
-    ArrayList();
+    public ArrayList();
         //@ requires emp;
         //@ ensures List(nil);
     

@@ -87,3 +87,7 @@ cd binary_operators
   verifast_both -c -javac BinaryOps.java
 cd ..
 
+cd overloaded_methods
+  verifast_both -c -javac main.jarsrc
+cd ..
+

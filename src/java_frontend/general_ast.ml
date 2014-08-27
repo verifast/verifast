@@ -373,6 +373,7 @@ and
       type_param list * (* List of type parameters for this method 
                            invocation *)
       expression *      (* Method that is called *)
+      type_ list *      (* List of types of the arguments of the invoced method *)
       expression list   (* List of arguments provided for this method 
                            invocation *)
   | NewClass of
