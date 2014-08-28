@@ -208,6 +208,7 @@ cd examples
     cd turing-complete
       verifast_both stdio_simple.o -shared turing-complete.c
       verifast_both stdio_simple.o -shared turing-complete-lowtech.c
+      verifast_both stdio_simple.o -shared turing-complete-underspec-lowtech.c
     cd ..
   cd ..
   cd java
