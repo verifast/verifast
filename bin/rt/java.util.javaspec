@@ -147,6 +147,8 @@ fixpoint list<t> remove_nths<t>(list<int> ns, list<t> xs) {
 
 @*/
 
+//@ predicate listIsCollection(List first, Collection second) = second == first;
+
 public interface List<E> extends Collection<E> {
     
     //@ predicate List(list<Object> elements);
@@ -192,9 +194,9 @@ public interface List<E> extends Collection<E> {
         //@ requires List(?es);
         //@ ensures List(append(es, cons(e, nil))) &*& result;
 
-    boolean addAll(List other);
-        //@ requires List(?es) &*& other.List(?other_es);
-        //@ ensures List(append(es, other_es)) &*& other.List(other_es);
+    boolean addAll(Collection other);
+        //@ requires List(?es) &*& listIsCollection(?other', other) &*& other'.List(?other_es);
+        //@ ensures List(append(es, other_es)) &*& other'.List(other_es);
     
     E remove(int index);
         //@ requires List(?es) &*& 0 <= index &*& index < length(es);

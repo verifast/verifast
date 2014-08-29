@@ -1861,10 +1861,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | StringLit (l, s)->
       begin match file_type path with
         Java ->
+        (* TODO: support UTF-8 *)
         let value = get_unique_var_symb "stringLiteral" (ObjType "java.lang.String") in
-        assume_neq value (ctxt#mk_intlit 0) (fun () ->
-          cont h env value
-        )
+        let (_, _, _, _, chars_of_string_symb) = List.assoc "java.lang.charsOfString" purefuncmap in
+        assume_neq value (ctxt#mk_intlit 0) $. fun () ->
+        assume_eq (mk_app chars_of_string_symb [value]) (mk_char_list_of_c_string (String.length s) s) $. fun () ->
+        cont h env value
       | _ ->
         if unloadable then static_error l "The use of string literals as expressions in unloadable modules is not supported. Put the string literal in a named global array variable instead." None;
         let (_, _, _, _, string_symb, _, _) = List.assoc "string" predfammap in

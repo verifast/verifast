@@ -97,6 +97,7 @@ let parse_pure_decls_core loc used_parser anns lookup =
             | Invalid_argument(_) -> 
                 error loc "Parsing failed due to too big annotation";
         in
+        let a = Str.global_replace (Str.regexp "\\\\\"") "\"" a in
         debug_print (Printf.sprintf "Handling annotation \n%s\n" a);
         begin
           let (srcpos1, _) = translate_location l in
@@ -909,7 +910,10 @@ and translate_literal l typ value =
     end
   | GEN.RefType t ->
       let l' = translate_location l in
-      VF.Null(l')
+      match t with
+      | SimpleRef(Name(_, [Identifier(_, "java"); Identifier(_, "lang"); Identifier(_, "String")])) -> VF.StringLit(l', value)
+      | _ -> VF.Null(l')
+      
   
 
 

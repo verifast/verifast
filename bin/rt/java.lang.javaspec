@@ -344,6 +344,8 @@ public class System {
     
 }
 
+//@ fixpoint list<char> charsOfString(String s);
+
 public class String{
 
     public String();
@@ -356,7 +358,7 @@ public class String{
     
     public boolean equals(String other);
         //@ requires true;
-        //@ ensures true;
+        //@ ensures result == (charsOfString(this) == charsOfString(other));
     
     public int indexOf(String other);
         //@ requires true;

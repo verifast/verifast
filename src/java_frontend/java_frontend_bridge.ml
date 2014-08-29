@@ -51,11 +51,10 @@ let build_context paths jars =
   in
   recurse_specs [] jars
 
-let parse_java_files_with_frontend (runtime: bool) (paths: string list) (jars: string list) (reportRange: range_kind -> loc -> unit) reportShouldFail enforceAnnotations: package list =
+let parse_java_files_with_frontend (paths: string list) (jars: string list) (reportRange: range_kind -> loc -> unit) reportShouldFail enforceAnnotations: package list =
   let (rt_paths, paths) =
     List.partition (fun p -> Filename.dirname p = Util.rtdir) paths
   in
-  let jars = if runtime then (Util.concat Util.rtdir "/rt.jarsrc")::jars else jars in
   let context_new = build_context paths jars in
   found_java_spec_files := Util.list_remove_dups (!found_java_spec_files @ context_new);
   let context_for_paths = List.filter (fun x -> not (List.mem ((Filename.chop_extension x) ^ ".javaspec") paths)) !found_java_spec_files in
@@ -95,14 +94,14 @@ let parse_java_files_with_frontend (runtime: bool) (paths: string list) (jars: s
    in
    (List.map (fun x -> Parser.parse_java_file_old x reportRange reportShouldFail enforceAnnotations) rt_paths) @ result 
 
-let parse_java_files (runtime: bool) (paths: string list) (jars: string list) (reportRange: range_kind -> loc -> unit) reportShouldFail enforceAnnotations useJavaFrontend: package list =
+let parse_java_files (paths: string list) (jars: string list) (reportRange: range_kind -> loc -> unit) reportShouldFail enforceAnnotations useJavaFrontend: package list =
 (*  Printf.printf "\n++++++++++++++++++++++++++++++++++\n%s\n" "+Parsing files:";
   List.iter (fun p -> Printf.printf "+ -> %s\n" p) paths;
   Printf.printf "+\n%s\n" "+With jars:";
   List.iter (fun p -> Printf.printf "+ -> %s\n" p) jars;
   Printf.printf "++++++++++++++++++++++++++++++++++\n\n%s" "";*)
   if useJavaFrontend then
-    parse_java_files_with_frontend runtime paths jars reportRange reportShouldFail enforceAnnotations
+    parse_java_files_with_frontend paths jars reportRange reportShouldFail enforceAnnotations
   else
     List.map (fun x -> Parser.parse_java_file_old x reportRange reportShouldFail enforceAnnotations) paths 
 

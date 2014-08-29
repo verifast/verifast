@@ -260,6 +260,11 @@ let split_around_char string char =
   with 
     _ -> (string, "")
     
+let rec chars_of_string s = 
+  match s with 
+  | "" -> [] 
+  | s -> (String.get s 0 )::(chars_of_string (String.sub s 1 ((String.length s) - 1)))
+
 (** Eliminates '.' and 'foo/..' components. *)
 let reduce_path path =
   let path = split (fun c -> c = '/' || c = '\\') path in

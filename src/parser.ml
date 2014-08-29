@@ -1244,7 +1244,14 @@ and
 | [< '(l, Kwd "UCHAR_MAX") >] -> IntLit (l, big_int_of_string "255", ref None)
 | [< '(l, Kwd "USHRT_MAX") >] -> IntLit (l, big_int_of_string "65535", ref None)
 | [< '(l, Kwd "UINT_MAX") >] -> IntLit (l, big_int_of_string "4294967295", ref None)
-| [< '(l, String s); ss = rep (parser [< '(_, String s) >] -> s) >] -> StringLit (l, String.concat "" (s::ss))
+| [< '(l, String s); ss = rep (parser [< '(_, String s) >] -> s) >] -> 
+     (* TODO: support UTF-8 *)
+     if !language = Java && !lexer_in_ghost_range then
+       let chars = chars_of_string s in
+       let es = List.map (fun c -> IntLit(l, big_int_of_int (Char.code c), ref (Some Char))) chars in
+       InitializerList(l, es)
+     else
+       StringLit (l, String.concat "" (s::ss))
 | [< '(l, Kwd "truncating"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")"); e = parse_expr_suffix >] -> CastExpr (l, true, t, e)
 | [< e = peek_in_ghost_range (parser [< '(l, Kwd "truncating"); '(_, Kwd "@*/"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")"); e = parse_expr_suffix >] -> CastExpr (l, true, t, e)) >] -> e
 | [< '(l, Kwd "(");

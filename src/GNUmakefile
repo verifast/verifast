@@ -347,7 +347,7 @@ ifndef WITHOUT_LABLGTK
 	@echo "  OCAMLOPT " $@
 	$(SET_LDD); ${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/vfide$(DOTEXE)	\
 	  $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) gtkInit.cmx unix.cmxa \
-	  nums.cmxa $(INCLUDES) Perf.cmxa proverapi.cmx \
+	  nums.cmxa str.cmxa $(INCLUDES) Perf.cmxa proverapi.cmx \
 	  Printexc_proxy.cmx vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx \
 	  plugins_private.cmx plugins2.cmx util.cmx ast.cmx stats.cmx lexer.cmx \
 	  parser.cmx ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx \
@@ -365,7 +365,7 @@ vfide: ../bin/vfide$(DOTEXE) $(STDLIB)
 ../bin/verifast$(DOTEXE): vfconsole.cmx redux.cmx $(Z3DEPS) plugins2.cmx
 	@echo "  OCAMLOPT " $@
 	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/verifast$(DOTEXE) unix.cmxa \
-	  nums.cmxa $(INCLUDES) Perf.cmxa proverapi.cmx \
+	  nums.cmxa str.cmxa $(INCLUDES) Perf.cmxa proverapi.cmx \
 	  vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx \
 	  plugins2.cmx util.cmx ast.cmx stats.cmx lexer.cmx parser.cmx \
 	  ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx \

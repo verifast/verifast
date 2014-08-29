@@ -68,6 +68,7 @@ public class Java7Program
     if (xs.length > 0)
     {
       List<T> temp = Arrays.asList(xs);
+      //@ close listIsCollection(temp, temp);
       l.addAll(temp);
     }
     else

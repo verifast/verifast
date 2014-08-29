@@ -357,18 +357,20 @@ final class ArrayList implements List {
         return true;
     }
     
-    boolean addAll(List other)
-        //@ requires List(?es) &*& other.List(?other_es);
-        //@ ensures List(append(es, other_es)) &*& other.List(other_es);
+    boolean addAll(Collection other)
+        //@ requires List(?es) &*& listIsCollection(?other', other) &*& other'.List(?other_es);
+        //@ ensures List(append(es, other_es)) &*& other'.List(other_es);
     {
-        int n = other.size();
+        //@ open listIsCollection(other', other);
+        List l = (List) other;
+        int n = l.size();
         //@ list<Object> ys = nil;
         //@ list<Object> zs = other_es;
         for (int i = 0; i < n; i++)
-            //@ requires List(?xs) &*& other.List(append(ys, zs)) &*& length(ys) == i &*& length(ys) + length(zs) == n &*& switch (zs) { case nil: return true; case cons(h, t): return true; };
-            //@ ensures List(append(xs, old_zs)) &*& other.List(append(old_ys, old_zs));
+            //@ requires List(?xs) &*& l.List(append(ys, zs)) &*& length(ys) == i &*& length(ys) + length(zs) == n &*& switch (zs) { case nil: return true; case cons(h, t): return true; };
+            //@ ensures List(append(xs, old_zs)) &*& l.List(append(old_ys, old_zs));
         {
-            add(other.get(i));
+            add(l.get(i));
             //@ assert zs == cons(?h, ?t);
             //@ append_assoc(ys, {h}, t);
             //@ ys = append(ys, {h});

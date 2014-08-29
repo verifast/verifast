@@ -50,6 +50,7 @@ public class Java7Program_desugared
     if (xs.length > 0)
     {
       List temp = Arrays.asList(xs);
+      //@ close listIsCollection(temp, temp);
       l.addAll(temp);
     }
     else

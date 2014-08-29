@@ -909,9 +909,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   | Java ->
                     let (jars, javaspecs) = parse_jarspec_file_core path in
                     let pathDir = Filename.dirname path in
-                    let ds = Java_frontend_bridge.parse_java_files (options.option_runtime <> Some("nort"))
-                                                                   (List.map (fun javaspec -> concat pathDir javaspec) javaspecs) [] 
-                                                                    reportRange reportShouldFail enforce_annotations use_java_frontend
+                    let ds = Java_frontend_bridge.parse_java_files (List.map (fun javaspec -> concat pathDir javaspec) javaspecs) [] 
+                                                                   reportRange reportShouldFail enforce_annotations use_java_frontend
                     in
                     if not header_is_import_spec then begin
                       let (classes, lemmas) = extract_specs ds in
@@ -952,8 +951,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   if options.option_allow_assume then "_assume.javaspec"::javaspecs else javaspecs
                 in
                 let rtdir = Filename.dirname rtpath in
-                let ds = Java_frontend_bridge.parse_java_files (options.option_runtime <> Some("nort")) 
-                                                               (List.map (fun x -> concat rtdir x) javaspecs) [] reportRange
+                let ds = Java_frontend_bridge.parse_java_files (List.map (fun x -> concat rtdir x) javaspecs) [] reportRange
                                                                reportShouldFail enforce_annotations use_java_frontend in
                 let (_, maps0) = check_file rtpath true false bindir "" [] ds in
                 headermap := (rtpath, ([], maps0))::!headermap;

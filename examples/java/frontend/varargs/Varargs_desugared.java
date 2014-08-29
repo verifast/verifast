@@ -7,6 +7,7 @@ public class Varargs_desugared
     //@ ensures l.List(append(l_es, l_xs)) &*& [f]xs[..] |-> l_xs; 
   {
     List temp = Arrays.asList(xs);
+    //@ close listIsCollection(temp, temp);
     l.addAll(temp);
   }
 
