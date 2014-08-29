@@ -358,10 +358,10 @@ final class ArrayList implements List {
     }
     
     boolean addAll(Collection other)
-        //@ requires List(?es) &*& listIsCollection(?other', other) &*& other'.List(?other_es);
-        //@ ensures List(append(es, other_es)) &*& other'.List(other_es);
+        //@ requires List(?es) &*& listIsCollection(?li, other) &*& li.List(?other_es);
+        //@ ensures List(append(es, other_es)) &*& li.List(other_es);
     {
-        //@ open listIsCollection(other', other);
+        //@ open listIsCollection(li, other);
         List l = (List) other;
         int n = l.size();
         //@ list<Object> ys = nil;

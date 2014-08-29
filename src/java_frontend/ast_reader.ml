@@ -364,7 +364,7 @@ let parse_with p s =
 let parse_line_with p s = parse_with p [s]
 
 let rec read_asts s =
-  Printf.printf ("AST: \n %s \n") (String.concat "\n" s);
+(*   Printf.printf ("AST: \n %s \n") (String.concat "\n" s); *)
   parse_with (parse_list parse_package) s
 
 (* ------------------------ *)
