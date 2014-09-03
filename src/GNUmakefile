@@ -435,6 +435,17 @@ test: test_plugin testsuite assignment_tests
 test_plugin: testsuite      # dependency to enforce serialization
 testsuite: assignment_tests # dependency to enforce serialization
 
+ifdef VERIFAST_JAVA_AST_SERVER
+java_frontend_test: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
+	@echo "  MYSH     " examples/java/frontend/frontend
+	$(SET_ENV); \
+	cd ../examples/java/frontend; ../../../bin/mysh -cpus $(NUMCPU) < frontend.mysh
+
+test: java_frontend_test
+
+assignment_test: java_frontend_tests # dependency to enforce serialization
+endif
+
 #----------------------------- Auto Dependencies -----------------------------#
 
 # Builds dependency graph automatically.
