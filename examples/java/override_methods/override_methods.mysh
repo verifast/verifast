@@ -1,0 +1,10 @@
+let verifast_both
+ifz3 verifast
+verifast -prover redux
+in
+
+verifast_both -c NoOverrideNoUsage.java
+verifast_both -c NoOverrideSpecfileNoExport.jarsrc
+verifast_both -c -allow_should_fail NoOverrideObjectCreation.java
+verifast_both -c -allow_should_fail NoOverrideSuperCall.java
+verifast_both -c -allow_should_fail NoOverrideSpecfileExport.jarsrc

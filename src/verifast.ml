@@ -2472,6 +2472,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let (argtypes, args) = match explicitsupercall with
                   None -> ([], [])
                 | Some(SuperConstructorCall(l, es)) -> 
+                  inheritance_check cn l;
                   ((List.map (fun e -> let (w, tp) = check_expr (pn,ilist) [] tenv (Some true) e in tp) es), es)
                 in
                 match try_assoc argtypes superctors with

@@ -1,0 +1,19 @@
+abstract class A 
+{
+  //@ predicate pred();
+
+  public A();
+    //@ requires true;
+    //@ ensures pred();
+
+  public void m();
+    //@ requires pred();
+    //@ ensures pred();
+}
+
+class B extends A
+{
+  public void m5();
+    //@ requires pred();
+    //@ ensures pred();
+}

@@ -833,8 +833,13 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
       classmap
   
-  let () =
-    (* Inheritance check *)
+  (* Inheritance check *)
+  let inheritance_check cn l =
+    let {cl; cabstract; cmeths} =
+      match try_assoc cn classmap with
+      | Some c -> c
+      | None -> static_error l "Class not found" None
+    in  
     let rec get_overrides cn =
       if cn = "java.lang.Object" then [] else
       let {cmeths; csuper} = List.assoc cn classmap in
@@ -847,19 +852,15 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       overrides @ get_overrides csuper
     in
-    List.iter
-      begin fun (cn, {cl; cabstract; cmeths}) ->
-        if not cabstract then begin
-          let overrides = get_overrides cn in
-          List.iter
-            begin fun (cn, sign) ->
-              if not (List.mem_assoc sign cmeths) then
-                static_error cl (Printf.sprintf "This class must override method %s declared in class %s or must be declared abstract." (string_of_sign sign) cn) None
-            end
-            overrides
-         end
-      end
-      classmap1
+    if not cabstract then begin
+      let overrides = get_overrides cn in
+      List.iter
+        begin fun (cn, sign) ->
+          if not (List.mem_assoc sign cmeths) then
+            static_error cl (Printf.sprintf "This class must override method %s declared in class %s or must be declared abstract." (string_of_sign sign) cn) None
+        end
+        overrides
+    end
   
   let rec interface_methods itf =
     let InterfaceInfo (l, fds, meths, preds, supers) = List.assoc itf interfmap in
@@ -908,6 +909,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | (n,lm0)::_ -> static_error lm0 ("Method not in specs: "^n) None
           )
       | Class(l,abstract,fin,cn,meths,fds,cons,super,inames,preds)::rest ->
+          inheritance_check cn l;
           let check_meths meths meths_impl=
             let rec iter mlist meths_impl=
               match mlist with
@@ -1794,6 +1796,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           cont (chunk::h) env retval
       end
     | NewObject (l, cn, args) ->
+      inheritance_check cn l;
       if pure then static_error l "Object creation is not allowed in a pure context" None;
       let {cctors} = List.assoc cn classmap in
       let args' = List.map (fun e -> check_expr (pn,ilist) tparams tenv e) args in

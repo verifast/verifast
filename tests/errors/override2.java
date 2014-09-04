@@ -3,7 +3,7 @@ class C {
         //@ requires true;
         //@ ensures false;
     {
-        throw null;
+        //@ assume (false);
     }
 }
 
@@ -12,7 +12,11 @@ class D extends C {
         //@ requires this.getClass() == D.class;
         //@ ensures false;
     {
-        if (this.getClass() == D.class) throw null;
+        if (this.getClass() == D.class)
+        {
+          //@ assume (false);
+          throw null;
+        }
     }
 }
 
