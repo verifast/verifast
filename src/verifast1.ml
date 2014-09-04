@@ -1262,12 +1262,25 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if (List.length ds_rest > 0) then
         begin
           if (List.length ds_rest = List.length ds) then
+            let rec check_interfs kind i ls (pn,ilist) =
+              match ls with
+                [] -> kind ^ " " ^ i ^ " is part of an inheritance cycle"
+              | i::ls -> match search2' i (pn,ilist) ifdm interfmap0 with 
+                          Some i -> check_interfs kind i ls (pn,ilist)
+                        | None -> "Interface " ^ i ^ " not found"
+            in
             let (l, message) =
               match ds_rest with
-              | (_, _, (Interface (l, i, interfs, fields, meths, pred_specs)))::_ ->
-                  (l, "Interface " ^ i ^ " is part of an inheritance cycle")
-              | (_, _, (Class (l, abstract, fin, i, meths,fields,constr,super,interfs,preds)))::_ ->
-                  (l, "Class " ^ i ^ " is part of an inheritance cycle")
+              | (pn, ilist, (Interface (l, i, interfs, fields, meths, pred_specs)))::_ ->
+                  (l, check_interfs "Interface" i interfs (pn,ilist))
+              | (pn, ilist, (Class (l, abstract, fin, i, meths,fields,constr,super,interfs,preds)))::_ ->
+                  match search2' super (pn,ilist) classlist classmap0 with
+                    None-> 
+                      if i = "java.lang.Object" || super = "java.lang.Object" then 
+                        (l, check_interfs "Class" i interfs (pn,ilist))
+                      else
+                        (l, "Class " ^ super ^ " not found")
+                  | Some super -> (l, check_interfs "Class" i interfs (pn,ilist));
             in
             static_error l message None
           else
