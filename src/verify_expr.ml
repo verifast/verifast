@@ -834,7 +834,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       classmap
   
   (* Inheritance check *)
+  let inheritance_check_processed = ref []
   let inheritance_check cn l =
+    if not (List.mem cn !inheritance_check_processed) then
+    inheritance_check_processed := cn::!inheritance_check_processed;
     let {cl; cabstract; cmeths} =
       match try_assoc cn classmap with
       | Some c -> c
