@@ -44,6 +44,7 @@ let debug_print x = ()
 let command_separator                  = " "
 let command_stop                       = "STOP"
 let command_handle_files               = "FILES"
+let command_type                       = "TYPE"
 let file_separator                     = "//\\\\"
 let command_continue                   = "CONTINUE"
 
@@ -177,7 +178,7 @@ object (this)
   
   method send_command(command) =
     if (String.contains command '\n') then
-      this#error ("Presented command to send was not single line");
+      this#error ("Presented command to send was not single line: " ^ command);
     this#send_message(command)
 
   method receive_response =

@@ -39,3 +39,8 @@ object
 end
 
 class dummy_ann_type_checker : unit -> ann_type_checker
+
+(** Function that allows you to request the type for a specific variable
+*)
+val type_check : string -> Communication.t_frontend_communication -> General_ast.type_
+
