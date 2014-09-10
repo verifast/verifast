@@ -695,10 +695,10 @@ and translate_statement stmt =
       VF.Assert(l', VF.ExprAsn(l', expr'))
   | GEN.Continue(l) -> 
       let l' = translate_location l in
-      error l' "Continue statements are not supported yet by the VeriFast"
-  | GEN.Labeled(l, _, _, _, _) -> 
+      error l' "Continue statements are not supported yet by VeriFast"
+  | GEN.Labeled(l, _, _) -> 
       let l' = translate_location l in
-      error l' "Labeled statements are not supported yet by the VeriFast"
+      error l' "Labeled statements are not supported yet by VeriFast"
   | GEN.Foreach(l, _, _, _, _) -> 
       let l' = translate_location l in
       error l' "Internal error: Foreach statements are not supported by the VeriFast ast"
