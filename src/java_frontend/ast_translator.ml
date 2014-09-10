@@ -693,13 +693,15 @@ and translate_statement stmt =
       let l' = translate_location l in
       let expr' = translate_expression expr in
       VF.Assert(l', VF.ExprAsn(l', expr'))
-  (* TODO: finish implementation *)
   | GEN.Continue(l) -> 
       let l' = translate_location l in
-      error l' "Continue statements are not supported yet by the VeriFast ast"
+      error l' "Continue statements are not supported yet by the VeriFast"
+  | GEN.Labeled(l, _, _, _, _) -> 
+      let l' = translate_location l in
+      error l' "Labeled statements are not supported yet by the VeriFast"
   | GEN.Foreach(l, _, _, _, _) -> 
       let l' = translate_location l in
-      error l' "Foreach statements are not supported yet by the VeriFast ast"
+      error l' "Internal error: Foreach statements are not supported by the VeriFast ast"
 
 and translate_statements_as_block l stmts =
   let rec iter deps stmts =
