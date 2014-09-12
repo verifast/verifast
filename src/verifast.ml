@@ -122,7 +122,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           Var (lfn, x, _) -> (lfn, x)
         | _ -> static_error (expr_loc fpe) "Function name expected" None
       in
-      match resolve (pn,ilist) l fn funcmap with
+      match resolve Real (pn,ilist) l fn funcmap with
         None -> static_error l "No such function." None
       | Some (fn, FuncInfo (funenv, Some fterm, lf, k, f_tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, functype_opt, body',fb,v)) ->
         if stmt_ghostness = Ghost && not (is_lemma k) then static_error l "Not a lemma function." None;
@@ -147,7 +147,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             end
           | Some (ftn, fttargs, args, params, openBraceLoc, ss, closeBraceLoc) ->
             let (rt1, xmap1, pre1, post1) = (rt, ps, pre, post) in
-            begin match resolve (pn,ilist) l ftn functypemap with
+            begin match resolve Real (pn,ilist) l ftn functypemap with
               None -> static_error l "No such function type" None
             | Some (ftn, (lft, gh, fttparams, rt, ftxmap, xmap, pre, post, ft_predfammaps)) ->
               begin match stmt_ghostness with
@@ -342,7 +342,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       consume_c_object l pointerTerm (StructType sn) h true $. fun h ->
       let (_, _, _, _, chars_symb, _, _) = List.assoc "chars" predfammap in
       let cs = get_unique_var_symb "cs" (InductiveType ("list", [Char])) in
-      let Some (_, _, _, _, length_symb) = try_assoc' (pn,ilist) "length" purefuncmap in
+      let Some (_, _, _, _, length_symb) = try_assoc' Ghost (pn,ilist) "length" purefuncmap in
       let size = List.assoc sn struct_sizes in
       assume (ctxt#mk_eq (mk_app length_symb [cs]) size) $. fun () ->
       cont (Chunk ((chars_symb, true), [], real_unit, [pointerTerm; size; cs], None)::h) env
@@ -534,7 +534,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       begin match tp with
         InductiveType (i, targs) ->
-        let (tn, targs, Some (_, tparams, ctormap, _)) = (i, targs, try_assoc' (pn,ilist) i inductivemap) in
+        let (tn, targs, Some (_, tparams, ctormap, _)) = (i, targs, try_assoc' Ghost (pn,ilist) i inductivemap) in
         let (Some tpenv) = zip tparams targs in
         let rec iter ctors cs =
           match cs with
@@ -555,7 +555,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               | _ -> static_error l "Case expression must be constructor pattern" None
             in
             let pts =
-              match try_assoc' (pn,ilist) cn ctormap with
+              match try_assoc' Real (pn,ilist) cn ctormap with
                 None -> static_error lc ("Not a constructor of type " ^ tn) None
               | Some (_, (l, _, _, pts, _)) -> pts
             in
@@ -580,7 +580,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               in
               iter [] [] [] pats pts
             in
-            let Some (_, _, _, _, ctorsym) = try_assoc' (pn,ilist) cn purefuncmap in
+            let Some (_, _, _, _, ctorsym) = try_assoc' Ghost (pn,ilist) cn purefuncmap in
             let sizemap =
               match try_assq v sizemap with
                 None -> sizemap
@@ -666,7 +666,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match pats0 with
             [] -> target_cn
           | [LitPat (ClassLit (l, x))] ->
-            begin match resolve (pn,ilist) l x classmap with
+            begin match resolve Real (pn,ilist) l x classmap with
               None -> static_error l "Index: No such class" None
             | Some (cn, _) ->
               if is_subtype_of target_cn cn then
@@ -731,7 +731,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           end
         in
         let open_pred_inst g = 
-          match resolve (pn,ilist) l g predfammap with
+          match resolve Ghost (pn,ilist) l g predfammap with
             Some (g, _) -> open_pred_inst0 g
           | None ->
           match try_assoc g tenv with
@@ -742,7 +742,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           Some result -> result
         | None ->
           begin
-          match try_assoc' (pn,ilist) g predctormap with
+          match try_assoc' Ghost (pn,ilist) g predctormap with
             None ->
             begin match try_assoc "this" tenv with
               None -> static_error l "No such predicate instance." None
@@ -791,9 +791,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 begin match try_assoc g tenv with
                 | Some (PredType (_, _, _, inductiveness)) ->  inductiveness
                 | _ ->
-                  begin match try_assoc' (pn,ilist) g predctormap with
+                  begin match try_assoc' Ghost (pn,ilist) g predctormap with
                   | None ->
-                    begin match resolve (pn,ilist) l g predfammap with
+                    begin match resolve Ghost (pn,ilist) l g predfammap with
                     | Some (g, (_, _, _, _, _, _, inductiveness)) -> inductiveness
                     | None -> 
                       (* trying to find out whether the predicate is
@@ -829,7 +829,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | SplitFractionStmt (l, p, targs, pats, coefopt) ->
       let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
       let (targs, g_symb, pts, inputParamCount) =
-        match try_assoc' (pn,ilist) p predfammap with
+        match try_assoc' Ghost (pn,ilist) p predfammap with
           None -> static_error l "No such predicate." None
         | Some (_, predfam_tparams, arity, pts, g_symb, inputParamCount, _) ->
           let targs = if targs = [] then List.map (fun _ -> InferredType (ref None)) predfam_tparams else targs in
@@ -942,11 +942,11 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       iter None [] h None
     | DisposeBoxStmt (l, bcn, pats, handleClauses) ->
       let (_, boxpmap, inv, boxvarmap, amap, hpmap) =
-        match try_assoc' (pn,ilist) bcn boxmap with
+        match try_assoc' Ghost (pn,ilist) bcn boxmap with
           None -> static_error l "No such box class." None
         | Some boxinfo -> boxinfo
       in
-      let Some (_, _, _, pts, g_symb, _, _) = try_assoc' (pn,ilist) bcn predfammap in
+      let Some (_, _, _, pts, g_symb, _, _) = try_assoc' Ghost (pn,ilist) bcn predfammap in
       let (pats, tenv) = check_pats (pn,ilist) l tparams tenv pts pats in
       consume_chunk rules h ghostenv env [] l (g_symb, true) [] real_unit dummypat None (srcpats pats) $. fun boxChunk h coef ts _ ghostenv env [] ->
       (*if not (definitely_equal coef real_unit) then static_error l "Disposing a box requires full permission." None;*)
@@ -967,7 +967,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let hpParamTypes = List.map (fun (x, t) -> t) hpParamMap in
                   let (wpats, tenv) = check_pats (pn,ilist) l tparams tenv (HandleIdType::hpParamTypes) pats in
                   let wpats = srcpats wpats in
-                  let Some (_, _, _, _, hpn_symb, _, _) = try_assoc' (pn,ilist) hpn predfammap in
+                  let Some (_, _, _, _, hpn_symb, _, _) = try_assoc' Ghost (pn,ilist) hpn predfammap in
                   let handlePat::argPats = wpats in
                   let pats = handlePat::TermPat boxId::argPats in
                   consume_chunk rules h ghostenv env [] l (hpn_symb, true) [] real_unit dummypat None pats $. fun _ h coef ts _ ghostenv env [] ->
@@ -992,7 +992,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match pats0 with
             [] -> target_cn
           | [LitPat (ClassLit (l, x))] ->
-            begin match resolve (pn,ilist) l x classmap with
+            begin match resolve Real (pn,ilist) l x classmap with
               None -> static_error l "Index: No such class" None
             | Some (cn, _) ->
               if is_subtype_of target_cn cn then
@@ -1052,7 +1052,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           end
         in
         let close_pred_inst g =
-          match resolve (pn,ilist) l g predfammap with
+          match resolve Ghost (pn,ilist) l g predfammap with
             Some (g, _) -> close_pred_inst0 g
           | None ->
           match try_assoc g tenv with
@@ -1063,7 +1063,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           Some result -> result
         | None ->
           begin
-            match try_assoc' (pn,ilist) g predctormap with
+            match try_assoc' Ghost (pn,ilist) g predctormap with
               None ->
               begin match try_assoc "this" tenv with
                 Some (ObjType cn) ->
@@ -1143,7 +1143,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | CreateBoxStmt (l, x, bcn, args, lower_bounds, upper_bounds, handleClauses) ->
       if not pure then static_error l "Box creation statements are allowed only in a pure context." None;
       let (_, boxpmap, inv, boxvarmap, amap, hpmap) =
-        match try_assoc' (pn,ilist) bcn boxmap with
+        match try_assoc' Ghost (pn,ilist) bcn boxmap with
           None -> static_error l "No such box class." None
         | Some boxinfo -> boxinfo
       in
@@ -1229,7 +1229,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               let hpInvEnv = [("predicateHandle", handleIdTerm)] @ hpArgMap @ boxVarMap in
               with_context (Executing (h, hpInvEnv, asn_loc hpInv, "Checking handle predicate invariant")) $. fun () ->
               assert_handle_invs bcn hpmap hpn hpInvEnv h $. fun h ->
-              let (_, _, _, _, hpn_symb, _, _) = match try_assoc' (pn,ilist) hpn predfammap with 
+              let (_, _, _, _, hpn_symb, _, _) = match try_assoc' Ghost (pn,ilist) hpn predfammap with 
                 None-> static_error l ("No such predicate family: "^hpn) None
               | Some x -> x
               in
@@ -1240,7 +1240,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         iter [] handleClauses h
       end $. fun (handleChunks, h) ->
-      let (_, _, _, _, bcn_symb, _, _) = match try_assoc' (pn,ilist) bcn predfammap with
+      let (_, _, _, _, bcn_symb, _, _) = match try_assoc' Ghost (pn,ilist) bcn predfammap with
         None -> static_error l ("No such predicate family: "^bcn) None
       | Some x-> x
       in
@@ -1251,14 +1251,14 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if List.mem_assoc x tenv then static_error l "Declaration hides existing variable." None;
       begin match chop_suffix hpn "_handle" with
           None -> static_error l "Handle creation statement must mention predicate name that ends in '_handle'." None
-        | Some bcn -> match try_assoc' (pn,ilist) bcn boxmap with
+        | Some bcn -> match try_assoc' Ghost (pn,ilist) bcn boxmap with
             None-> static_error l "No such box class." None
           | Some bcn -> ()
       end;
       let w = check_expr_t (pn,ilist) tparams tenv arg BoxIdType in
       let boxIdTerm = ev w in
       let handleTerm = get_unique_var_symb x HandleIdType in
-      let (_, _, _, _, hpn_symb, _, _) = match try_assoc' (pn,ilist) hpn predfammap with
+      let (_, _, _, _, hpn_symb, _, _) = match try_assoc' Ghost (pn,ilist) hpn predfammap with
         None -> static_error l ("No such predicate family: "^hpn) None
       | Some x-> x
       in
@@ -1559,20 +1559,20 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
     | PerformActionStmt (lcb, nonpure_ctxt, pre_bcn, pre_bcp_pats, consumed_handle_predicates, lpa, an, aargs, ss, closeBraceLoc, post_bcp_args_opt, produced_handle_predicates) ->
       let (_, boxpmap, inv, boxvarmap, amap, hpmap) =
-        match try_assoc' (pn,ilist) pre_bcn boxmap with
+        match try_assoc' Ghost (pn,ilist) pre_bcn boxmap with
           None -> static_error lcb "No such box class." None
         | Some boxinfo -> boxinfo
       in
       let inv_variables = List.filter (fun (x, t) -> not (List.mem_assoc x boxpmap)) boxvarmap in 
       let pre_bcn=
-        match search' pre_bcn (pn,ilist) boxmap with
+        match search' Ghost pre_bcn (pn,ilist) boxmap with
           None-> static_error lcb "You cannot perform an action on a box class that has not yet been declared." None
         | Some pre_bcn -> pre_bcn
       in
       if not (List.mem pre_bcn boxes) then static_error lcb "You cannot perform an action on a box class that has not yet been declared." None;
       let (pre_bcp_pats, tenv) = check_pats (pn,ilist) lcb tparams tenv (BoxIdType::List.map (fun (x, t) -> t) boxpmap) pre_bcp_pats in
       let pre_bcp_pats = srcpats pre_bcp_pats in
-      let (_, _, _, _, boxpred_symb, _, _) = match try_assoc' (pn,ilist) pre_bcn predfammap with 
+      let (_, _, _, _, boxpred_symb, _, _) = match try_assoc' Ghost (pn,ilist) pre_bcn predfammap with 
         Some x->x
       | None -> static_error lcb ("Box predicate not found: "^pre_bcn) None
       in
@@ -1610,12 +1610,12 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               if pre_hpn = pre_bcn ^ "_handle" then
                 ([], None, EmpAsn lch)
               else
-                match try_assoc' (pn,ilist) pre_hpn hpmap with
+                match try_assoc' Ghost (pn,ilist) pre_hpn hpmap with
                   None -> static_error lch "No such handle predicate in box class." None
                 | Some (l, hppmap, extended, inv, _) ->
                   (hppmap, extended, inv)
             in
-            let (_, _, _, _, pre_handlepred_symb, _, _) = match try_assoc' (pn,ilist) pre_hpn predfammap with 
+            let (_, _, _, _, pre_handlepred_symb, _, _) = match try_assoc' Ghost (pn,ilist) pre_hpn predfammap with 
               Some x->x
             | None -> static_error lcb ("Box predicate not found: "^pre_bcn) None
             in
@@ -1727,7 +1727,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                          | Some (_, hppmap, extended, inv, _) ->
                            (hppmap, extended, inv)
                      in
-                     let (_, _, _, _, post_handlePred_symb, _, _) = match try_assoc' (pn,ilist) post_hpn predfammap with 
+                     let (_, _, _, _, post_handlePred_symb, _, _) = match try_assoc' Ghost (pn,ilist) post_hpn predfammap with 
                        None-> static_error lph ("No such predicate family: "^post_hpn) None
                      | Some x-> x
                      in
@@ -2395,7 +2395,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | _ -> ([], None)
   
   let get_fields (pn,ilist) cn lm=
-    match try_assoc' (pn,ilist) cn classmap with
+    match try_assoc' Real (pn,ilist) cn classmap with
       Some {cfds} -> cfds
     | None -> static_error lm ("No class was found: "^cn) None
   
@@ -2616,7 +2616,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end in
       verify_funcs (pn, ilist) boxes lems' ds
     | BoxClassDecl (l, bcn, _, _, _, _)::ds -> let bcn=full_name pn bcn in
-      let (Some (l, boxpmap, boxinv, boxvarmap, amap, hpmap)) = try_assoc' (pn,ilist) bcn boxmap in
+      let (Some (l, boxpmap, boxinv, boxvarmap, amap, hpmap)) = try_assoc' Ghost (pn,ilist) bcn boxmap in
       let old_boxvarmap = List.map (fun (x, t) -> ("old_" ^ x, t)) boxvarmap in
       let leminfo = Some (lems, "", None) in
       List.iter

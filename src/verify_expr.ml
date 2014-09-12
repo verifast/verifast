@@ -299,7 +299,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | Some (ftn, fttargs, ftargs) ->
         if body = None then static_error l "A function prototype cannot implement a function type." None;
         begin
-          match resolve (pn,ilist) l ftn functypemap with
+          match resolve Real (pn,ilist) l ftn functypemap with
             None -> static_error l "No such function type." None
           | Some (ftn, (lft, gh, fttparams, rt0, ftxmap0, xmap0, pre0, post0, ft_predfammaps)) ->
             let fttargs = List.map (check_pure_type (pn,ilist) []) fttargs in
@@ -1564,7 +1564,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match try_assoc x tenv with
           None -> 
         begin
-          match try_assoc' (pn, ilist) x globalmap with
+          match try_assoc' Real (pn, ilist) x globalmap with
             None -> static_error l ("No such variable: "^x) None
           | Some((l, tp, symbol, init)) -> (tp, Some(symbol))
         end 

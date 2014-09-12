@@ -49,24 +49,28 @@ let file_separator                     = "//\\\\"
 let command_continue                   = "CONTINUE"
 
 (* responses *)
-let response_success  = "SUCCESS"
-let response_callback = "CALLBACK"
-let response_failure  = "FAILURE"
-let response_abort    = "ABORT"
-let begin_of_message  = "++++++++++"
-let end_of_message    = "----------"
+let response_success            = "SUCCESS"
+let response_found_annotation   = "ANNOTATION"
+let response_report_should_fail = "SHOULD_FAIL"
+let response_failure            = "FAILURE"
+let response_abort              = "ABORT"
+let begin_of_message            = "++++++++++"
+let end_of_message              = "----------"
 
 type response_kind =
   | SUCCESS
-  | CALLBACK
+  | ANNOTATION
+  | SHOULD_FAIL
   
 let string_of_response_kind k =
   match k with 
-  | SUCCESS -> response_success
-  | CALLBACK -> response_callback
+  | SUCCESS     -> response_success
+  | ANNOTATION  -> response_found_annotation
+  | SHOULD_FAIL -> response_report_should_fail
 
 let responses = [response_success;
-                 response_callback;
+                 response_found_annotation;
+                 response_report_should_fail;
                  response_failure;
                  response_abort]
 
@@ -136,7 +140,7 @@ object (this)
               in
               this#error message;
             let _ = Unix.close_process (ast_server_stdin, ast_server_stdout) in ()
-        | CALLBACK -> this#error ("Got a callback from ASTServer while unloading");
+        | _ -> this#error ("Got a callback from ASTServer while unloading");
       with
         _ -> this#error ("Unloading of ASTServer failed"));
       attached <- false
@@ -203,8 +207,9 @@ object (this)
     end;
     let kind =
       if kind = response_success then SUCCESS
-      else if kind = response_callback then CALLBACK
-      else (this#error ("ASTServer internal inconsistency"); CALLBACK)
+      else if kind = response_found_annotation then ANNOTATION
+      else if kind = response_report_should_fail then SHOULD_FAIL
+      else (this#error ("ASTServer internal inconsistency"); SHOULD_FAIL)
     in
     (kind, parts)
 end

@@ -1,0 +1,10 @@
+let verifast_both
+ifz3 verifast
+verifast -prover redux
+in
+
+verifast_both -c Main_package_include.jarsrc
+verifast_both -c Main_separate_include.jarsrc
+verifast_both -c -allow_should_fail Main_missing_fixpoint_include.jarsrc
+verifast_both -c -allow_should_fail Main_missing_predicate_include.jarsrc
+verifast_both -c -allow_should_fail Main_missing_lemma_include.jarsrc

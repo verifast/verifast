@@ -88,14 +88,16 @@ val detach : unit -> unit
 (* Create an AST from the specified file
      @param1        path of the file to create an AST from
      @param2        options options for creating the AST 
-     @param3        annotation checker to parse and type check the encountered 
+     @param3        function that is called if a fail indicator (/*~*/ or //~) is encoutered
+     @param4        annotation checker to parse and type check the encountered 
                     annotations while creating the AST
      @return        the single AST generated from the specified file
      @raise         JavaFrontendException If the AstServer could not generated 
                     an AST
 *)
 val ast_from_java_file : string -> 
-                         ast_option list -> 
+                         ast_option list ->
+                         (General_ast.source_location -> unit) ->
                          Annotation_type_checker.ann_type_checker -> 
                            General_ast.package
 
@@ -105,7 +107,8 @@ val ast_from_java_file : string ->
      @param2        paths of the files that can be used for type checking the
                     files to create an AST from
      @param3        options options for creating the ASTs
-     @param4        annotation checker to parse and type check the encountered
+     @param4        function that is called if a fail indicator (/*~*/ or //~) is encoutered
+     @param5        annotation checker to parse and type check the encountered
                     annotations while creating the ASTs
      @return        the multiple ASTs generated from the specified files
      @raise         JavaFrontendException If the AstServer could not generated 
@@ -114,5 +117,6 @@ val ast_from_java_file : string ->
 val asts_from_java_files : string list -> 
                            context: string list ->
                            ast_option list -> 
+                           (General_ast.source_location -> unit) ->
                            Annotation_type_checker.ann_type_checker -> 
                              General_ast.package list

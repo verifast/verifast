@@ -7,7 +7,7 @@ let load _ =
   let launch = 
     try Sys.getenv "VERIFAST_JAVA_AST_SERVER"  
     with Not_found ->
-      let ast_server_filename = "ast_server-0a42627.jar" in
+      let ast_server_filename = "ast_server-b896ede.jar" in
       let error_message =
         "\nYou specified the option -javac to use the STANCE Java frontend. " ^
         Printf.sprintf "However, to use the STANCE Java frontend, you need to retrieve the file %s from: \n" ast_server_filename ^
@@ -29,16 +29,11 @@ let build_context paths jars =
   let rec recurse_specs javaspecs jars =
     match jars with
     | j::rest ->
-(*         Printf.printf "\nLooking at jar file %s\n" j; *)
         let jar = (Filename.chop_extension j) ^ ".jarspec" in
         let (jars, specs) = Parser.parse_jarspec_file_core jar in
-(*        List.iter (fun p -> Printf.printf "Found jars --------> %s\n" p) jars;
-        List.iter (fun p -> Printf.printf "Found javas   --------> %s\n" p) specs;*)
         let path_dir = Filename.dirname jar in
         let jars = (List.map (Util.concat path_dir) jars) in
         let specs = (List.map (Util.concat path_dir) specs) in
-(*        List.iter (fun p -> Printf.printf "Selected jarsrc --------> %s\n" p) jars;
-        List.iter (fun p -> Printf.printf "Selected spec   --------> %s\n" p) specs;*)
         let check_dup l =
           match l with 
           | [] -> false
@@ -59,47 +54,45 @@ let parse_java_files_with_frontend (paths: string list) (jars: string list) (rep
   found_java_spec_files := Util.list_remove_dups (!found_java_spec_files @ context_new);
   let context_for_paths = List.filter (fun x -> not (List.mem ((Filename.chop_extension x) ^ ".javaspec") paths)) !found_java_spec_files in
   let context_for_paths = List.filter (fun x -> not (List.mem ((Filename.chop_extension x) ^ ".java") paths)) context_for_paths in
-(*  Printf.printf "\n----------------------------------\n%s\n" "-Buildup context:";
-  List.iter (fun p -> Printf.printf "- -> %s\n" p) !found_java_spec_files;
-  Printf.printf "Using context: %s\n" "";
-  List.iter (fun p -> Printf.printf "- -> %s\n" p) context_for_paths;
-  Printf.printf "----------------------------------\n\n%s" "";*)
+  let parse paths =
+    try
+      if not (Java_frontend.is_attached ()) then load();
+      let ann_checker = new Annotation_type_checker.dummy_ann_type_checker () in
+      let fe_options =
+        [Java_frontend.desugar; 
+        Java_frontend.keep_assertions;
+        Java_frontend.keep_super_call_first;
+        Java_frontend.bodyless_methods_own_trailing_annotations;
+        Java_frontend.accept_spec_files]
+      in
+      let reportShouldFail l =
+        let l = Ast_translator.translate_location l in
+        reportShouldFail l
+      in
+      let packages = 
+        Java_frontend.asts_from_java_files paths ~context:context_for_paths fe_options reportShouldFail ann_checker
+      in
+      let annotations = ann_checker#retrieve_annotations () in
+      Ast_translator.translate_asts packages annotations enforceAnnotations
+    with
+      Java_frontend.JavaFrontendException(l, m) -> 
+        let message = 
+          String.concat " |" (Misc.split_string '\n' m)
+        in
+        match l with
+        | General_ast.NoSource -> raise (Parser.CompilationError message)
+        | _ -> raise (Parser.StaticError(Ast_translator.translate_location l, message, None))
+  in
   let result =
     match paths with
     | [] -> []
-    | _ ->
-      if not (Java_frontend.is_attached ()) then load();
-        let ann_checker = new Annotation_type_checker.dummy_ann_type_checker () in
-          try
-            let fe_options =
-              [Java_frontend.desugar; 
-              Java_frontend.keep_assertions;
-              Java_frontend.keep_super_call_first;
-              Java_frontend.bodyless_methods_own_trailing_annotations;
-              Java_frontend.accept_spec_files]
-            in
-            let packages = 
-              Java_frontend.asts_from_java_files paths ~context:context_for_paths fe_options ann_checker
-            in
-            let annotations = ann_checker#retrieve_annotations () in
-            Ast_translator.translate_asts packages annotations enforceAnnotations
-          with
-            Java_frontend.JavaFrontendException(l, m) -> 
-              let message = 
-                String.concat " |" (Misc.split_string '\n' m)
-              in
-              match l with
-              | General_ast.NoSource -> raise (Parser.CompilationError message)
-              | _ -> raise (Parser.StaticError(Ast_translator.translate_location l, message, None))
-   in
-   (List.map (fun x -> Parser.parse_java_file_old x reportRange reportShouldFail enforceAnnotations) rt_paths) @ result 
+    | _ -> parse paths
+  in
+  (List.map (fun x -> Parser.parse_java_file_old x reportRange reportShouldFail enforceAnnotations) rt_paths) @ result
+(*   TODO: replace with this statement and check why this does not work yet *) 
+(*   (parse rt_paths) @ result  *)
 
 let parse_java_files (paths: string list) (jars: string list) (reportRange: range_kind -> loc -> unit) reportShouldFail enforceAnnotations useJavaFrontend: package list =
-(*  Printf.printf "\n++++++++++++++++++++++++++++++++++\n%s\n" "+Parsing files:";
-  List.iter (fun p -> Printf.printf "+ -> %s\n" p) paths;
-  Printf.printf "+\n%s\n" "+With jars:";
-  List.iter (fun p -> Printf.printf "+ -> %s\n" p) jars;
-  Printf.printf "++++++++++++++++++++++++++++++++++\n\n%s" "";*)
   if useJavaFrontend then
     parse_java_files_with_frontend paths jars reportRange reportShouldFail enforceAnnotations
   else

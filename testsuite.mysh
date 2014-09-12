@@ -265,6 +265,9 @@ cd examples
     verifast_both -c DoWhile.java
     verifast_both -c Downcast.java
     verifast_both -c DowncastInfo.java
+    cd ghost_imports
+      mysh < ghost_imports.mysh
+    cd ..
     verifast_both -c hello.scala
     verifast_both -c HelloWorld.java
     verifast_both -c -disable_overflow_check InstanceOf.java

@@ -72,7 +72,7 @@ let detach () =
   attached_status := false
   
 (* method to send a FILES request with corresponding options and parse the response message *)
-let asts_from_java_files_core files cfiles opts achecker =
+let asts_from_java_files_core files cfiles opts report_should_fail achecker =
   catch_exceptions (fun _ ->
     let files' = file_separator ^ (String.concat file_separator files) ^ file_separator in
     let cfiles' = file_separator ^ (String.concat file_separator cfiles) ^ file_separator in
@@ -80,7 +80,7 @@ let asts_from_java_files_core files cfiles opts achecker =
                                files' ^ command_separator ^
                                cfiles' ^ command_separator ^
                                (String.concat command_separator opts));
-    let kind = ref CALLBACK in
+    let kind = ref ANNOTATION in
     let response = ref [] in
     let recieve _ =
       let (k, r) = communication#receive_response in
@@ -89,22 +89,34 @@ let asts_from_java_files_core files cfiles opts achecker =
     in
     recieve ();
     while(!kind <> SUCCESS) do
-      if (!kind <> CALLBACK) then
-        frontend_error NoSource 
-          ("Callback failure: expected " ^ (string_of_response_kind CALLBACK) ^ 
-           " message, but got a " ^ (string_of_response_kind !kind) ^ " message");
-      achecker#check_annotation (Misc.join_lines_never_fail !response) communication;
-      communication#send_command(command_continue);
-      recieve ();
+      if (!kind = ANNOTATION) then
+        begin
+          achecker#check_annotation (Misc.join_lines_never_fail !response) communication;
+          communication#send_command(command_continue) 
+        end
+      else if (!kind = SHOULD_FAIL) then
+        begin
+          if (List.length !response <> 1) then
+            frontend_error NoSource  
+              ("Received an incomprehensible error message from the ASTServer: \n" ^ (String.concat "\n" !response));
+          let l = Ast_reader.parse_line_with Ast_reader.parse_loc (List.hd !response) in
+          report_should_fail l
+        end
+      else
+        begin
+          frontend_error NoSource 
+            ("Callback failure: got a " ^ (string_of_response_kind !kind) ^ " message");
+        end;
+      recieve ()
     done;
     !response
   )
 
 (* method to send a FILES request and parse the response message with the given options *)
-let asts_from_java_files files ~context:cfiles opts achecker =
-  catch_exceptions (fun _ -> Ast_reader.read_asts (asts_from_java_files_core files cfiles opts achecker))
+let asts_from_java_files files ~context:cfiles opts report_should_fail achecker =
+  catch_exceptions (fun _ -> Ast_reader.read_asts (asts_from_java_files_core files cfiles opts report_should_fail achecker))
 
-let ast_from_java_file file opts achecker =
-  let result = asts_from_java_files [file] [] opts achecker in
+let ast_from_java_file file opts report_should_fail achecker =
+  let result = asts_from_java_files [file] [] opts report_should_fail achecker in
   if (List.length result != 1) then frontend_error dummy_loc "Single file did not result in single AST";
   List.hd result

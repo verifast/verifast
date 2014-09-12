@@ -1459,19 +1459,20 @@ let parse_import_name= parser
   [<'(_, Ident n);(n',el)=parse_import_names>] -> (n^n',el)
   
 let parse_import0= parser
-  [<'(l, Kwd "import");n= parse_import_name>] -> let (pn,el)=n in Import(l,pn,el)
+  [<'(l, Kwd "import");n= parse_import_name>] -> let (pn,el)=n in Import(l,Real,pn,el)
 
 let parse_import = parser
   [< i = parse_import0 >] -> i
-| [< i = peek_in_ghost_range (parser [< i = parse_import0; '(_, Kwd "@*/") >] -> i) >] -> i
+| [< i = peek_in_ghost_range (parser [< i = parse_import0; '(_, Kwd "@*/") >] -> i) >] ->
+      (match i with Import(l, Real, pn,el) -> Import(l, Ghost, pn,el))
 
 let parse_package_decl enforceAnnotations = parser
-  [< (l,p) = parse_package; is=rep parse_import; ds=parse_decls Java enforceAnnotations;>] -> PackageDecl(l,p,Import(dummy_loc,"java.lang",None)::is, ds)
+  [< (l,p) = parse_package; is=rep parse_import; ds=parse_decls Java enforceAnnotations;>] -> PackageDecl(l,p,Import(dummy_loc,Real,"java.lang",None)::is, ds)
 
 let parse_scala_file (path: string) (reportRange: range_kind -> loc -> unit): package =
   let lexer = make_lexer Scala.keywords ghost_keywords in
   let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (readFile path) reportRange (fun x->()) in
-  let parse_decls_eof = parser [< ds = rep Scala.parse_decl; _ = Stream.empty >] -> PackageDecl(dummy_loc,"",[Import(dummy_loc,"java.lang",None)],ds) in
+  let parse_decls_eof = parser [< ds = rep Scala.parse_decl; _ = Stream.empty >] -> PackageDecl(dummy_loc,"",[Import(dummy_loc,Real,"java.lang",None)],ds) in
   try
     parse_decls_eof token_stream
   with

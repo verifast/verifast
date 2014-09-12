@@ -145,6 +145,13 @@ let parse_pure_decls_core loc used_parser anns lookup =
     Lexer.Stream.Error msg -> error (loc()) msg
   | Lexer.Stream.Failure -> error (loc()) "Parse error"
 
+let parse_ghost_import loc anns lookup =
+  let parse_ghost_import_eof = parser 
+    [< i = Parser.parse_import0; _ = Lexer.Stream.empty >] -> 
+        match i with Import(l, Real, pn,el) -> Import(l, Ghost, pn,el)
+  in
+  parse_pure_decls_core loc parse_ghost_import_eof anns lookup
+
 let parse_pure_decls loc anns lookup =
   let parser_pure_decls_eof = parser 
     [< ds = Parser.parse_decls VF.Java ~inGhostHeader:true true;
@@ -217,10 +224,11 @@ and translate_package package =
       let name'   = translate_name name in
       debug_print_begin ("translate_package " ^ name');
       (* necessary to also import java.lang.* to find required definitions *)
-      let imprts' = VF.Import(dummy_loc,"java.lang",None)::(List.map translate_import imprts) in
-      let decls'  = List.flatten (List.map (translate_package_decl l') decls) in
+      let imprts' = VF.Import(dummy_loc,Real,"java.lang",None)::(List.map translate_import imprts) in
+      let (decls', ghost_imports')  = translate_ghost_imports l' (decls, []) in
+      let decls'  = List.flatten (List.map (translate_package_decl l') decls') in
       debug_print_end ("translate_package: " ^ name');
-      VF.PackageDecl(l', name', imprts', decls')
+      VF.PackageDecl(l', name', imprts' @ ghost_imports', decls')
 
 and translate_identifier id =
   debug_print_begin "translate_identifier";
@@ -249,6 +257,23 @@ and retrieve_package_name name =
         Some res
     end
 
+and translate_ghost_imports loc (decls, imprts) =
+  debug_print_begin "translate_ghost_import";
+  match decls with
+    (GEN.P_Annotation a)::decls' ->
+    begin
+      try
+        let import =
+          parse_ghost_import loc [a] true
+        in
+        debug_print_end "translate_ghost_import: Some";
+        translate_ghost_imports loc (decls', import::imprts)
+      with
+        parse_error -> (debug_print_end "translate_ghost_import: None"; (decls, imprts))
+    end
+  | _ -> 
+      (decls, imprts)
+
 and translate_import imprt =
   debug_print_begin "translate_import";
   match imprt with
@@ -256,7 +281,7 @@ and translate_import imprt =
       let name' = translate_name name in
       let id' = Misc.apply_option translate_identifier id in
       debug_print_end ("translate_import: " ^ name');
-      VF.Import(translate_location l, name', id')
+      VF.Import(translate_location l, Real, name', id')
 
 (* one 'decl' can result in multiple translated ones due to uninterpreted annotations *)
 and translate_package_decl loc decl =

@@ -774,8 +774,9 @@ and sexpr_of_stmt_clause (clause : switch_stmt_clause) : sexpression =
     build_list [ Symbol "clause-default" ]
                [ "statements", sexpr_of_list sexpr_of_stmt stmts ]
 
-let sexpr_of_import (Import (loc, name, entry)) : sexpression =
+let sexpr_of_import (Import (loc, ghost, name, entry)) : sexpression =
   List [ Symbol "import"
+       ; sexpr_of_ghostness ghost
        ; Symbol name
        ; match entry with
          | None   -> Symbol "*"

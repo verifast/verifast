@@ -263,6 +263,7 @@ and
   import = (* ?import *)
     Import of
         loc *
+        ghostness *
         string *
         string option (* None betekent heel package, Some string betekent 1 ding eruit *)
 and 
