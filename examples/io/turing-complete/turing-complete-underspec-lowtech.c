@@ -68,6 +68,9 @@ copredicate tm_lookup_io(time t1, list<int> tm, list<int> tm_unwinding, bool lin
       tm_lookup_io(t1, tm, tm_smaller, false, state, tape_left, tape_right, t2)
 ;
 
+/**
+ * Represents the permission to do the input output actions which the given tm does.
+ */
 // It is easier in proofs to separate tm_lookup_io from tm_io. Technically it's the same but conceptually it's a bit different
 copredicate tm_io(time t1, list<int> tm, int state, list<int> tape_left, list<int> tape_right, time t2) =
   tm_lookup_io(t1, tm, tm, false, state, tape_left, tape_right, t2);

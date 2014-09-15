@@ -422,6 +422,7 @@ assignment_tests: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
 	@echo "  MYSH     " assignments/run_model_solutions
 	$(SET_ENV); \
         cd ../assignments; ../bin/mysh -cpus $(NUMCPU) < run_model_solutions.mysh
+.PHONY: assignment_tests
 
 # Do not run the test targets in parallel because of GNU Make bug:
 # If one of the parallel targets fails, make prints an error
@@ -440,11 +441,26 @@ java_frontend_test: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
 	@echo "  MYSH     " examples/java/frontend/frontend
 	$(SET_ENV); \
 	cd ../examples/java/frontend; ../../../bin/mysh -cpus $(NUMCPU) < frontend.mysh
-
+.PHONY: java_frontend_test
 test: java_frontend_test
 
 assignment_test: java_frontend_tests # dependency to enforce serialization
 endif
+
+# Not all tests manage to always clean up (usually when interrupted),
+# and not all tests provide a "make clean" themselves. So we clean here.
+clean::
+	rm -f ../examples/crypto/bin/cryptolib.dll.vfmanifest
+	rm -f ../examples/java/chat/Member_.java
+	rm -f ../examples/java/chat/chat_provide0.java
+	rm -f ../examples/java/chat/chat_provide0_*.java
+	rm -f ../examples/reduced_annotations/c_language/partially_annotated2.dll.vfmanifest
+	rm -f ../examples/true
+	rm -f ../examples/tso/cvm0_.c
+	rm -f ../examples/tso/cvm0__.c
+	rm -f ../examples/BeepDriver/BeepDriver_proxy.c
+	rm -f ../examples/BeepDriver/BeepDriver_proxy.h
+	rm -f ../examples/BeepDriver/BeepDriver_proxy.vfmanifest
 
 #----------------------------- Auto Dependencies -----------------------------#
 
