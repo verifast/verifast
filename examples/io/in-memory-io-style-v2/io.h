@@ -25,8 +25,13 @@
  * - list<fixpoint(list<int>, list<int>, bool)> rely_stack1
  *   Rely-relation before the last split.
  *   Because join-split can be nested, this is a list.
+ *
+ * TODO: this formalisation currently does not support nondeterminism of the form
+ *   time(t1) &*& io1(t1, t2) &*& io2(t1, t2)
+ *
  */
 
+//@ #include "foralls.gh"
 //@ #include <quantifiers.gh>
 //@ #include "../in-memory-io-style/helpers/cooked_ghost_lists.gh"
 #include <threading.h>
@@ -35,21 +40,10 @@
 
 //-------------// buffer //-------------//
 
-/**
- *
- * todo -> +--------+
- *         |        |
- *         |        |
- *         +--------+
- * done -> | done3  |
- *         | done2  |
- *         | ...    |
- *         +--------+
- */
+// We need a ring buffer here, TODO.
+
 struct buffer{
-  char *todo;
-  char *done;
-  int size;
+  char *buffer;
 };
 
 // Does not have to be global, but if it is then you can support C APIs that
@@ -58,24 +52,15 @@ static struct buffer *global_buffer;
 
 /*@
 
-predicate buffer(list<int> actions) =
-  global_buffer |-> ?buffer_ptr
-  &*& buffer_ptr->todo |-> ?todo
-  &*& buffer_ptr->done |-> ?done
-  &*& buffer_ptr->size |-> ?size
-  &*& chars(todo, ?nb_todo, _)
-  &*& chars(done, ?nb_done, ?done_chars)
-  &*& nb_todo + nb_done == size
-  &*& todo + nb_todo == done
-  &*& done_chars == actions
-;
+predicate buffer(list<int> actions);
+// = TODO
 @*/
 
 //-------------// write //-------------//
 /*@
 fixpoint bool invar_fp_helper(
   fixpoint(list<int>, bool) invar1,
-  fixpoint(list<int>, list<int>, bool) guarantee_acum2,
+  fixpoint(list<int>, list<int>, bool) guarantee_plus2,
   fixpoint(list<int>, list<int>, bool) rely1,
   list<int> actions,
   //---curry away above
@@ -84,7 +69,7 @@ fixpoint bool invar_fp_helper(
   return
     ! (
       invar1(fst(sigmapair))
-      && guarantee_acum2(fst(sigmapair), snd(sigmapair))
+      && guarantee_plus2(fst(sigmapair), snd(sigmapair))
       && rely1(snd(sigmapair), actions)
     )
   ;
@@ -92,15 +77,24 @@ fixpoint bool invar_fp_helper(
 
 // invar2(sigma) == ∃ sigma1, sigma 2 . invar1(sigma1) && guarantee2(sigma1, sigma2) && rely(sigma2, sigma)
 fixpoint bool invar_fp(
-  fixpoint(fixpoint(pair<list<int>, list<int> >, bool), bool) forall_fp,
   fixpoint(list<int>, bool) invar1,
-  fixpoint(list<int>, list<int>, bool) guarantee2,
+  fixpoint(list<int>, list<int>, bool) guarantee_plus2,
   fixpoint(list<int>, list<int>, bool) rely1,
   //---curry away above
   list<int> actions
 ){
   return
-    false == forall_fp((invar_fp_helper)(invar1, guarantee2, rely1, actions));
+    false == forall_pair_list_int((invar_fp_helper)(invar1, guarantee_plus2, rely1, actions));
+}
+
+fixpoint bool write_guarantee_plus_fp(
+  fixpoint(list<int>, bool) invar1,
+  int c,
+  //---curry away above
+  list<int> actions1,
+  list<int> actions2
+){
+  return invar1(actions1) && actions2 == cons(c, actions1);
 }
 
 fixpoint bool write_guarantee_acum_fp(
@@ -111,32 +105,30 @@ fixpoint bool write_guarantee_acum_fp(
   list<int> actions1,
   list<int> actions2
 ){
-  return
-    guarantee_acum1(actions1, actions2)
-    || (
-      invar1(actions1) && actions2 == cons(c, actions1)
-    )
-  ;
+  return guarantee_acum1(actions1, actions2) || write_guarantee_plus_fp(invar1, c, actions1, actions2);
 }
 
 
 predicate write_io(
   time t1,
-  int c,
+  int c;
   time t2
 ) =
+  
   t1 == time(?invar1, ?guarantee_acum1, ?guarantee_thread1, ?guarantee_stack1, ?rely1, ?rely_stack1)
-  &*& t2 == time(?invar2, ?guarantee_acum2, ?guarantee_thread2, ?guarantee_stack2, ?rely2, ?rely_stack2)
-  
-  &*& guarantee_thread2 == guarantee_thread1
-  &*& rely2 == rely1
-  &*& rely_stack2 == rely_stack1
-  
-  &*& guarantee_acum2 == (write_guarantee_acum_fp)(guarantee_acum1, invar1, c)
-  
-  &*& [_]is_forall_t<pair<list<int>, list<int> > >(?forall_sigmapair)
-  &*& invar2 == (invar_fp)(forall_sigmapair, invar1, guarantee_acum2, rely1);
-
+  &*& [_]is_forall_t<pair<list<int>, list<int> > >(forall_pair_list_int)
+  &*& t2 == time(
+    (invar_fp)(invar1,
+      (write_guarantee_plus_fp)(invar1, c) // guarantee_plus2
+      , rely1
+    ), // invar2
+    (write_guarantee_acum_fp)(guarantee_acum1, invar1, c), //guarantee_acum2,
+    guarantee_thread1, //guarantee_thread2,
+    guarantee_stack1, //guarantee_stack2,
+    rely1, //rely2,
+    rely_stack1 //rely_stack2
+  )
+;
 @*/
 
 //-------------// read //-------------//
@@ -147,7 +139,7 @@ fixpoint list<t> remove_last<t>(list<t> xs){
   switch(xs){
     case nil: return nil; // should not happen in recursive call.
     case cons(xs_head, xs_tail):
-      return xs_tail == nil ? nil : remove_last(xs_tail);
+      return xs_tail == nil ? nil : cons(xs_head, remove_last(xs_tail));
   }
 }
 
@@ -157,6 +149,16 @@ fixpoint t last<t>(list<t> xs){
     case cons(xs_head, xs_tail):
       return xs_tail == nil ? xs_head : last(xs_tail);
   }
+}
+
+fixpoint bool read_guarantee_plus_fp(
+  fixpoint(list<int>, bool) invar1,
+  int c,
+  //---curry away above
+  list<int> actions1,
+  list<int> actions2
+){
+  return invar1(actions1) && actions1 != nil && actions2 == remove_last(actions1) && c == last(actions1);
 }
 
 fixpoint bool read_guarantee_acum_fp(
@@ -171,12 +173,7 @@ fixpoint bool read_guarantee_acum_fp(
   // "c == head(actions(1)" expresses you can only read if c is the thing that will be read.
   // The implementation thus has to block until c is the next thing to read, or it has to not perform any
   // read if something else is going to be read.
-  return
-    guarantee_acum1(actions1, actions2)
-    || (
-      invar1(actions1) && actions1 != nil && actions2 == remove_last(actions1) && c == last(actions1)
-    )
-  ;
+  return guarantee_acum1(actions1, actions2) || read_guarantee_plus_fp(invar1, c, actions1, actions2);
 }
 
 fixpoint bool read_prophecy_helper(
@@ -190,41 +187,60 @@ fixpoint bool read_prophecy_helper(
 
 fixpoint bool read_prophecy(
   fixpoint(list<int>, bool) invar1,
-  fixpoint(fixpoint(list<int>, bool), bool) forall_fp,
   //---curry away above
   int c
 ){
-  return ! forall_fp((read_prophecy_helper)(c, invar1));
+  return ! forall_list_int((read_prophecy_helper)(c, invar1));
 }
 
 fixpoint bool not<t>(fixpoint(t, bool) fp, t t){
   return ! fp(t);
 }
 
+fixpoint time read_io_t2(time t1, int c){
+  switch(t1){
+    case time(invar1, guarantee_acum1, guarantee_thread1, guarantee_stack1, rely1, rely_stack1):
+    return time(
+      (invar_fp)(invar1,
+        (read_guarantee_plus_fp)(invar1, c),
+        rely1
+      ), //invar2,
+      (read_guarantee_acum_fp)(guarantee_acum1, invar1, c), //guarantee_acum2
+      guarantee_thread1, //guarantee_thread2,
+      guarantee_stack1, //guarantee_stack2,
+      rely1, //rely2,
+      rely_stack1 //rely_stack2
+    );
+  }
+}
+
+/**
+ *
+ * We cannot put c in the output arguments (i.e. after the ";").
+ * If we would do that, we could prove false out of 
+ * time(?ta1) &*& nondeterministic(ta1, ?ta2) &*& read(ta2, ca, _) &*& time(?tb1) &*& nondeterministic(t1b, tb2) &*& read(tb2, cb, _)
+ * nondeterministic does fix ta2, the invariant of ta2 just allows multiple states.
+ * It is possible to obtain ca != cb, while ta2 == tb2. If ca and cb were output arguments,
+ * this would imply ca == cb, which combined with ca != cb implies false.
+ * An example of the nondeterministic predicate is 
+ *   nondeterministic(t1, t4) = split(t1, ?t2, ?t3) &*& write(t2, 'x', ?t22) &*& write(t3, 'y', ?t33) * join(t22, t33, t4);
+ */
 predicate read_io(
   time t1,
-  int c,
+  int c;
   time t2
 ) =
   t1 == time(?invar1, ?guarantee_acum1, ?guarantee_thread1, ?guarantee_stack1, ?rely1, ?rely_stack1)
-  &*& t2 == time(?invar2, ?guarantee_acum2, ?guarantee_thread2, ?guarantee_stack2, ?rely2, ?rely_stack2)
-  
-  &*& guarantee_thread2 == guarantee_thread1
-  &*& rely_stack2 == rely_stack1
-  &*& rely2 == rely1
-  
-  &*& guarantee_acum2 == (read_guarantee_acum_fp)(guarantee_acum1, invar1, c)
-  
-  &*& [_]is_forall_t<  pair< list<int>, list<int> >  >(?forall_sigmapair)
-  &*& invar2 == (invar_fp)(forall_sigmapair, invar1, guarantee_acum2, rely1)
+  &*& [_]is_forall_t<  pair< list<int>, list<int> >  >(forall_pair_list_int)
+  &*& t2 == read_io_t2(t1, c)
   
   // Normally, you need something like: 
   //    read_prophecy(c) || ∀c'. !read_prophecy(c')
   // but prophecy.h already does that for us: if 
   // there is no c' for which the prophecy-invariant holds,
   // then you cannot use the prophecy.
-  &*& [_]is_forall_t< list<int> >(?forall_sigma)
-  &*& prophecy_int((read_prophecy)(invar1, forall_sigma), c)
+  &*& [_]is_forall_t< list<int> >(forall_list_int)
+  &*& prophecy_int((read_prophecy)(invar1), c)
 ;
 
 @*/
@@ -330,14 +346,13 @@ fixpoint bool split_invar_fp_helper(
 
 // invar2(sigma) == ∃ sigma_A . invar1(sigma_A) && rely2(sigma_A, sigma)
 fixpoint bool split_invar(
-  fixpoint(fixpoint(list<int>, bool), bool) forall_sigma,
   fixpoint(list<int>, bool) invar1,
   fixpoint(list<int>, list<int>, bool) rely2,
   //---curry away above
   list<int> actions
 ){
   return
-    false == forall_sigma((split_invar_fp_helper)(invar1, rely2, actions));
+    false == forall_list_int((split_invar_fp_helper)(invar1, rely2, actions));
 }
 
 fixpoint bool sigma_id(
@@ -419,10 +434,10 @@ predicate split(
   &*& guarantee_stack2 == cons(guarantee_acum1, guarantee_stack1)
   &*& guarantee_stack3 == cons(guarantee_acum1, guarantee_stack1)
   
-  &*& [_]is_forall_t<list<int> >(?forall_sigma)
+  &*& [_]is_forall_t<list<int> >(forall_list_int)
   
-  &*& invar2 == (split_invar)(forall_sigma, invar1, rely2)
-  &*& invar3 == (split_invar)(forall_sigma, invar1, rely3)
+  &*& invar2 == (split_invar)(invar1, rely2)
+  &*& invar3 == (split_invar)(invar1, rely3)
 ;
 
     
@@ -444,13 +459,20 @@ fixpoint bool invar_init(list<int> ioactions){
 }
 
 /** Time after program startup, i.e. no I/O happened */
-predicate is_initial_time(time t) =
-  t == time(invar_init, sigma_id /*guarantee_acum_init*/, sigma_id /*guarantee_thread_init*/, nil /*guarantee_stack_init*/, sigma_id /*rely_init*/, nil /*rely_stack_init */);
+fixpoint time init_time(){
+  return time(
+    invar_init,
+    sigma_id /*guarantee_acum_init*/,
+    sigma_id /*guarantee_thread_init*/,
+    nil /*guarantee_stack_init*/,
+    sigma_id /*rely_init*/,
+    nil /*rely_stack_init */
+  );
+}
 
-predicate time(
-  time t
-);
-// = emp; // TODO
+predicate time(time t) =
+  iostate_shared(?ghost_list_id)
+  &*& cooked_ghost_list_member_handle(ghost_list_id, ?k, t);
 
 inductive time = time(
   fixpoint(list<int>, bool) invar1,
@@ -485,9 +507,9 @@ predicate iostate(int ghost_list_id, list<int> actionlist) =
   // ∀ t ∈ active_times . ∀ sigma1, sigma2 . t.invar(sigma1) => t.rely(sigma1, sigma2) => t.invar(sigma2)
 ;
 
-predicate iostate_shared() = 
+predicate iostate_shared(int ghost_list_id) = 
   // TODO put it in a mutex.
-  iostate(_, _);
+  iostate(ghost_list_id, _);
   
 @*/
 

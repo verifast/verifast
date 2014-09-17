@@ -2,7 +2,7 @@
 #define __PROPHECY_H
 
 
-//@ predicate prophecy_int(fixpoint(int, bool) invar, int val);
+//@ predicate prophecy_int(fixpoint(int, bool) invar, int val;);
 
 int prophecy_int_assign(int val);
 //@ requires prophecy_int(?fp, _) &*& fp(val) == true;
@@ -18,12 +18,24 @@ int prophecy_int_assign(int val);
 /*@
 lemma void prophecy_invar(int val_prophecy, int val_instance);
 requires
-  [_]prophecy_int(?invar, val_prophecy)
+  prophecy_int(?invar, val_prophecy)
   // Invar must be true for some value:
   &*& true == invar(val_instance);
 ensures
-  [_]prophecy_int(invar, val_prophecy)
+  prophecy_int(invar, val_prophecy)
   &*& true == invar(val_prophecy);
+@*/
+
+/**
+ * Creates a prophecy.
+ *
+ * Note that we do not require that the invariant is true for some value,
+ * if it is not, you simply cannot use it.
+ */
+/*@
+lemma int prophecy_create(fixpoint(int, bool) invar);
+requires true;
+ensures prophecy_int(invar, result);
 @*/
 
 #endif
