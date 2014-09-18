@@ -1,6 +1,7 @@
 #include "malloc.h"
 //@ #include "arrays.gh"
 //@ #include "listex.gh"
+#include "problem3.h"
 
 /*
 Terminology: if the array is STUFF1_empty_STUFF2, then bighead refers to stuff2, bigtail refers to stuff1.
@@ -34,17 +35,16 @@ fixpoint int bigtail_size(int size, int first, int len){
 }
 
 
-predicate ring_buffer(struct ring_buffer *buffer, int size, int first, int len, list<int> items) =
-	size >= 0 && size * 4 < INT_MAX
+predicate ring_buffer(struct ring_buffer *buffer, int size, list<int> items) =
+	buffer->fields |-> ?fields
+	&*& buffer->size |-> size
+	&*& buffer->first |-> ?first
+	&*& buffer->len |-> ?len
+	
+	&*& size >= 0 && size * 4 < INT_MAX
 	&*& len <= size
 	&*& first >= 0 && first < size
-	
 	&*& length(items) == len
-	
-	&*& buffer->fields |-> ?fields
-	&*& buffer->size |-> size
-	&*& buffer->first |-> first
-	&*& buffer->len |-> len
 	
 	&*& malloc_block_ints(fields, size)
 	&*& malloc_block_ring_buffer(buffer)
@@ -85,7 +85,7 @@ struct ring_buffer *ring_buffer_create(int size)
 //@ requires size >= 1 &*& size * sizeof(int) < INT_MAX;
 /*@ ensures
 	result == 0 ? true
-	: ring_buffer(result, size, 0, 0, nil)
+	: ring_buffer(result, size, nil)
 ;
 @*/
 {	
@@ -101,22 +101,24 @@ struct ring_buffer *ring_buffer_create(int size)
 	ring_buffer->first = 0;
 	ring_buffer->len = 0;
 	
-	//@ close ring_buffer(ring_buffer, size, 0, 0, nil);
+	//@ close ring_buffer(ring_buffer, size, nil);
 	return ring_buffer;
 }
 
 // i.e. add to end of queue.
 void ring_buffer_push(struct ring_buffer *ring_buffer, int element)
 /*@ requires
-	ring_buffer(ring_buffer, ?size, ?first, ?len, ?items)
-	&*& len < size // you can't push more elements if it's already full.
+	ring_buffer(ring_buffer, ?size, ?items)
+	&*& length(items) < size // you can't push more elements if it's already full.
 	;
 @*/
-//@ ensures ring_buffer(ring_buffer, size, first, len+1, ?items2) &*& append(items, cons(element, nil)) == items2;
+//@ ensures ring_buffer(ring_buffer, size, ?items2) &*& append(items, cons(element, nil)) == items2;
 {
 
-	//@ open ring_buffer(ring_buffer, size, first, len, items);
+	//@ open ring_buffer(ring_buffer, size, items);
 	//@ assert ring_buffer->fields |-> ?fields;
+	//@ assert ring_buffer->first |-> ?first;
+	//@ assert ring_buffer->len |-> ?len;
 	
 	int put_at;
 	if (is_split_up(ring_buffer->size, ring_buffer->first, ring_buffer->len+1)){
@@ -147,7 +149,7 @@ void ring_buffer_push(struct ring_buffer *ring_buffer, int element)
 		//@ ints_join(ring_buffer->fields+first);
 	}
 	ring_buffer->len++;
-	//@ close ring_buffer(ring_buffer, size, first, len+1, append(items, cons(element, nil)));
+	//@ close ring_buffer(ring_buffer, size, append(items, cons(element, nil)));
 }
 
 /*@
@@ -167,39 +169,41 @@ lemma void tail_of_singleton_is_nil<t>(list<t> l)
 @*/
 
 void ring_buffer_clear(struct ring_buffer *ring_buffer)
-//@ requires ring_buffer(ring_buffer, ?size, ?first, ?len, ?elems);
-//@ ensures ring_buffer(ring_buffer, size, first, 0, nil);
+//@ requires ring_buffer(ring_buffer, ?size, ?elems);
+//@ ensures ring_buffer(ring_buffer, size, nil);
 {
-	//@ open ring_buffer(ring_buffer, size, first, len, elems);
+	//@ open ring_buffer(ring_buffer, size, elems);
 	//@ ints_join(ring_buffer->fields);
 	//@ ints_join(ring_buffer->fields);
 	ring_buffer->len = 0;
-	//@ ints_split(ring_buffer->fields,first);
-	//@ close ring_buffer(ring_buffer, size, first, 0, nil);
+	//@ ints_split(ring_buffer->fields,ring_buffer->first);
+	//@ close ring_buffer(ring_buffer, size, nil);
 }
 
 
 int ring_buffer_head(struct ring_buffer *ring_buffer)
-//@ requires ring_buffer(ring_buffer, ?size, ?first, ?len, ?elems) &*& len > 0;
-//@ ensures ring_buffer(ring_buffer, size, first, len, elems) &*& result == head(elems);
+//@ requires ring_buffer(ring_buffer, ?size, ?elems) &*& length(elems) > 0;
+//@ ensures ring_buffer(ring_buffer, size, elems) &*& result == head(elems);
 {
-	//@ open ring_buffer(ring_buffer, size, first, len, elems);
+	//@ open ring_buffer(ring_buffer, size, elems);
 	//@ open ints(ring_buffer->fields + ring_buffer->first, _, _);
 	return *(ring_buffer->fields + ring_buffer->first);
-	//@ close ring_buffer(ring_buffer, size, first, len, elems);
+	//@ close ring_buffer(ring_buffer, size, elems);
 	
 }
 
 // i.e. remove from beginning of queue
 int ring_buffer_pop(struct ring_buffer *ring_buffer)
 /*@ requires
-	ring_buffer(ring_buffer, ?size, ?first, ?len, ?elems)
-	&*& len > 0 // you can't pop nonexisting elements
+	ring_buffer(ring_buffer, ?size, ?elems)
+	&*& length(elems) > 0 // you can't pop nonexisting elements
 	;
 @*/
-//@ ensures ring_buffer(ring_buffer, size, first == size - 1 ? 0 : first + 1, len-1, tail(elems)) &*& result == head(elems);
+//@ ensures ring_buffer(ring_buffer, size, tail(elems)) &*& result == head(elems);
 {
-	//@ open ring_buffer(ring_buffer, _, _, _, _);
+	//@ open ring_buffer(ring_buffer, _, _);
+	//@ assert ring_buffer->first |-> ?first;
+	//@ assert ring_buffer->len |-> ?len;
 	int take_at = ring_buffer->first;
 	int elem;
 	//@ int  newfirst = first + 1 == size ? 0 : first + 1;
@@ -241,22 +245,32 @@ int ring_buffer_pop(struct ring_buffer *ring_buffer)
 		}
 	}
 	@*/
-	//@close ring_buffer(ring_buffer, size, newfirst, len-1,  tail(elems));
+	//@close ring_buffer(ring_buffer, size, tail(elems));
 	
 	return elem;
 		
 }
 
 void ring_buffer_dispose(struct ring_buffer *ring_buffer)
-//@ requires ring_buffer(ring_buffer, _, _, _, _);
+//@ requires ring_buffer(ring_buffer, _, _);
 //@ ensures true;
 {
-	//@ open ring_buffer(ring_buffer, _, _, _, _);
+	//@ open ring_buffer(ring_buffer, _, _);
 	//@ ints_join(ring_buffer->fields);
 	//@ ints_join(ring_buffer->fields);
 	free(ring_buffer->fields);
 	free(ring_buffer);
 }
+
+bool ring_buffer_is_full(struct ring_buffer *ring_buffer)
+//@ requires ring_buffer(ring_buffer, ?size, ?items);
+//@ ensures ring_buffer(ring_buffer, size, items) &*& result == (length(items) == size) &*& length(items) <= size;
+{
+	//@ open ring_buffer(_, _, _);
+	return ring_buffer->len == ring_buffer->size;
+	//@ close ring_buffer(ring_buffer, size, items);
+}
+
 
 void harness(int x, int y, int z)
 //@ requires true;

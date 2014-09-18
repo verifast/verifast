@@ -15,9 +15,89 @@
 #include "io.h"
 #include <malloc.h>
 
-void write(int c);
-//@ requires time(?t1) &*& write_io(t1, c, ?t2) &*& c >= 0 && c < 127;
+/*@
+lemma void t2_inv_holds_generic(int c, list<int> sigma_A)
+requires write_io(?t1, c, ?t2) &*& t1 == time(?invar1, _, _, _, ?rely1, _) &*& rely1 == sigma_id &*& t2 == time(?invar2, _, _, _, _, _) &*& true == invar1(sigma_A);
+ensures write_io(t1, c, t2) &*& true==invar2(cons(c, sigma_A));
+{
+  /*
+  Prove: ∃ sigma_AA, sigma_B . Invar1(sigma_AA) && Guarantee_+2(sigma_AA, sigma_B) && Rely2(sigma_B, {c} ++ sigma_A).
+  It suffices to prove that         ¬∀sigma_AA, sigma_B . ¬(Invar1(sigma_AA) && Guarantee_+2(sigma_AA, sigma_B) && Rely2(sigma_B, {c} ++ sigma_A)).
+  Proof by contradiction: assume     ∀sigma_AA, sigma_B . ¬(Invar1(sigma_AA) && Guarantee_+2(sigma_AA, sigma_B) && Rely2(sigma_B, {c} ++ sigma_A)).
+  Therefore, for sigma_AA=sigma_A,sigma_B={c}, it holds that ¬(Invar1(sigma_A) && Guarantee_+2(sigma_A, sigma_B) && Rely2(sigma_B, {c} ++ sigma_A)).
+  However, the negation also holds.
+  */
+  open write_io(t1, c, t2);
+  assert t1 == time(invar1, ?guarantee_acum1, ?guarantee_thread1, ?guarantee_stack1, rely1, ?rely_stack1);
+  get_forall_pair_list_int();
+  fixpoint(list<int>, list<int>, bool) guarantee_acum2 = (write_guarantee_acum_fp)(guarantee_acum1, invar1, c);
+  assert invar2 == (invar_fp)(invar1,
+      (write_guarantee_plus_fp)(invar1, c)
+      , rely1
+  );
+  
+  if (! invar2(cons(c, sigma_A))) {
+    forall_t_elim(forall_pair_list_int, (invar_fp_helper)(invar1, (write_guarantee_plus_fp)(invar1, c), rely1, cons(c, sigma_A)), pair(sigma_A, cons(c, sigma_A)));
+  }
+}
+@*/
+
+void write(char c)
+//@ requires time(?t1) &*& t1==time(_, _, _, _, ?rely1, _) &*& rely1 == sigma_id &*& write_io(t1, c, ?t2) &*& c >= 0 && c < 127;
 //@ ensures time(t2);
+{
+  //@ open time(t1);
+  //@ open iostate_shared(?ghost_list_id);
+  //@ open iostate(_, _);
+  //@ open buffer(?contents);
+  //@ assert global_buffer |-> ?global_buffer_ptr;
+  //@ assert global_buffer_ptr->ring_buffer |-> ?ring_buffer;
+  
+  if (ring_buffer_is_full(global_buffer->ring_buffer)){
+    // TODO: what to do? Currently single-threaded, so we cannot wait. Require non-empty buffer in precondition?
+    while (true) /*@ invariant true; @*/ {}
+  }
+  ring_buffer_push(global_buffer->ring_buffer, c);
+    
+  // Prove invar1(contents)
+  //@ assert cooked_ghost_list_member_handle(ghost_list_id, ?k, t1);
+  //@ cooked_ghost_list_match(ghost_list_id, k);
+  //@ assert cooked_ghost_list(_, _, ?k_time_pairs);
+  //@ forall_elim(k_time_pairs, (invar_holds)(contents), pair(k, t1));
+  
+  // Prove invar2(contents). Uses invar1(contents).
+  //@ t2_inv_holds_generic(c, contents);
+  
+  //@ assert length(k_time_pairs) == 1;
+  
+  // Prove the ghost list is empty.
+  //@ cooked_ghost_list_remove(ghost_list_id, k);
+  //@ assert cooked_ghost_list(_, _, ?should_be_empty);
+  //@ assert should_be_empty == remove(pair(k,t1), k_time_pairs);
+  //@ length_remove(pair(k,t1), k_time_pairs);
+  //@ assert length(should_be_empty) == 0;
+  //@ switch(should_be_empty){case nil: assert true; case cons(x,xs0): assert false;}
+  //@ assert should_be_empty == {};
+  
+  // Get k_time_pairs_new
+  //@ int k_t2 = cooked_ghost_list_add(ghost_list_id, t2);
+  //@ assert cooked_ghost_list(_, _, ?k_time_pairs_new);
+  //@ assert k_time_pairs_new == append(nil, {(pair(k_t2, t2))});
+  
+  /*@
+  if ( ! forall(k_time_pairs_new, (invar_holds)(cons(c, contents)))){
+    pair<int, time> ktime = not_forall(k_time_pairs_new, (invar_holds)(cons(c, contents)));
+    assert snd(ktime) != t2;
+    assert(false);
+  }
+  @*/
+  
+  //@ close buffer(cons(c, contents));
+  //@ close iostate(ghost_list_id, cons(c, contents));
+  //@ close iostate_shared(ghost_list_id);
+  //@ close time(t2);
+  //@ open write_io(t1, c, t2);
+}
 
 int read();
 //@ requires time(?t1) &*& read_io(t1, ?c, ?t2);
@@ -33,9 +113,10 @@ bool buffer_dispose();
 
 
 void write_hi()
-//@ requires time(?t1) &*& write_io(t1, 'h', ?t2) &*& write_io(t2, 'i', ?t3);
+//@ requires time(?t1) &*& t1==time(_, _, _, _, ?rely1, _) &*& rely1 == sigma_id &*& write_io(t1, 'h', ?t2) &*& write_io(t2, 'i', ?t3);
 //@ ensures time(t3);
 {
+  //@ open write_io(t1, _, _); // to get rely2 == sigma_id
   write('h');
   write('i');
 }
@@ -122,47 +203,16 @@ lemma void t2_inv_holds()
 requires time(?t1) &*& t1 == init_time() &*& write_io(t1, 'h', ?t2) &*& t2 == time(?invar2, _, _, _, _, _);
 ensures time(t1) &*& write_io(t1, 'h', t2) &*& true==invar2({'h'});
 {
-  /*
-  Prove: ∃ sigma_A, sigma_B . Invar1(sigma_A) && Guarantee_+2(sigma_A, sigma_B) && Rely2(sigma_B, {'h'}).
-  It suffices to prove that         ¬∀sigma_A, sigma_B . ¬(Invar1(sigma_A) && Guarantee_+2(sigma_A, sigma_B) && Rely2(sigma_B, {'h'})).
-  Proof by contradiction: assume     ∀sigma_A, sigma_B . ¬(Invar1(sigma_A) && Guarantee_+2(sigma_A, sigma_B) && Rely2(sigma_B, {'h'})).
-  Therefore, for sigma_A={},sigma_B={'h'}, it holds that ¬(Invar1(sigma_A) && Guarantee_+2(sigma_A, sigma_B) && Rely2(sigma_B, {'h'})).
-  However, the negation also holds.
-  */
-  open write_io(t1, 'h', t2);
-  assert t1 == time(?invar1, ?guarantee_acum1, ?guarantee_thread1, ?guarantee_stack1, ?rely1, ?rely_stack1);
-  get_forall_pair_list_int();
-  fixpoint(list<int>, list<int>, bool) guarantee_acum2 = (write_guarantee_acum_fp)(guarantee_acum1, invar1, 'h');
-  assert invar2 == (invar_fp)(invar1,
-      (write_guarantee_plus_fp)(invar1, 'h')
-      , rely1
-  );
-  
-  if (! invar2({'h'})) {
-    forall_t_elim(forall_pair_list_int, (invar_fp_helper)(invar1, (write_guarantee_plus_fp)(invar1, 'h'), rely1, {'h'}), pair({}, {'h'}));
-  }
+  t2_inv_holds_generic('h', {});
 }
 
 lemma void t3_inv_holds()
 requires time(?t1) &*& t1 == init_time() &*& write_io(t1, 'h', ?t2) &*& write_io(t2, 'i', ?t3) &*& t3 == time(?invar3, _, _, _, _, _);
 ensures time(t1) &*& write_io(t1, 'h', t2) &*& write_io(t2, 'i', t3) &*& true==invar3({'i', 'h'});
 {
-  
   t2_inv_holds();
-  open write_io(t2, 'i', t3);
-  assert t2 == time(?invar2, ?guarantee_acum2, ?guarantee_thread2, ?guarantee_stack2, ?rely2, ?rely_stack2);
-  get_forall_pair_list_int();
-  fixpoint(list<int>, list<int>, bool) guarantee_acum3 = (write_guarantee_acum_fp)(guarantee_acum2, invar2, 'i');
-  assert invar3 == (invar_fp)(invar2,
-      (write_guarantee_plus_fp)(invar2, 'i')
-      , rely2
-  );
-  
-  if (! invar3({'i', 'h'})) {
-    forall_t_elim(forall_pair_list_int, (invar_fp_helper)(invar2, (write_guarantee_plus_fp)(invar2, 'i'), rely2, {'i', 'h'}), pair({'h'}, {'i', 'h'}));
-    open write_io(t1, 'h', t2); // to get rely2 equals the identify function.
-    assert false;
-  }
+  open write_io(t1, 'h', t2);
+  t2_inv_holds_generic('i', {'h'});
 }
 
 

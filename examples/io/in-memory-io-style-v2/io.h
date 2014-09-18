@@ -27,7 +27,7 @@
  *   Because join-split can be nested, this is a list.
  *
  * TODO: this formalisation currently does not support nondeterminism of the form
- *   time(t1) &*& io1(t1, t2) &*& io2(t1, t2)
+ *   time(t1) &*& io1(t1, t2) &*& io2(t1, t2).
  *
  */
 
@@ -36,24 +36,33 @@
 //@ #include "../in-memory-io-style/helpers/cooked_ghost_lists.gh"
 #include <threading.h>
 #include "prophecy.h"
+#include "../../vstte2012/problem3/problem3.h" // Ring buffer has been verified before, just reuse it.
 
 
 //-------------// buffer //-------------//
 
-// We need a ring buffer here, TODO.
-
 struct buffer{
-  char *buffer;
+  struct ring_buffer *ring_buffer;
 };
 
-// Does not have to be global, but if it is then you can support C APIs that
-// require this (like putchar).
+/**
+ *
+ * Does not have to be global, but if it is then you can support C APIs that
+ * require this (like putchar).
+ */
 static struct buffer *global_buffer;
 
-/*@
 
-predicate buffer(list<int> actions);
-// = TODO
+/**
+ *
+ * "actions" is the reverse of the writes that has happened,
+ * i.e. if we first write A and then B, actions = {'B','A'}.
+ */
+/*@
+predicate buffer(list<int> actions) =
+  global_buffer |-> ?bufferptr
+  &*& bufferptr->ring_buffer |-> ?ring_buffer
+  &*& ring_buffer(ring_buffer, 4096, reverse(actions));
 @*/
 
 //-------------// write //-------------//
@@ -470,6 +479,7 @@ fixpoint time init_time(){
   );
 }
 
+
 predicate time(time t) =
   iostate_shared(?ghost_list_id)
   &*& cooked_ghost_list_member_handle(ghost_list_id, ?k, t);
@@ -492,6 +502,8 @@ predicate iostate(int ghost_list_id, list<int> actionlist) =
   buffer(actionlist)
   
   &*& cooked_ghost_list<time>(ghost_list_id, _, ?k_time_pairs)
+  
+  &*& length(k_time_pairs) == 1 // TODO: drop this to support split/join (makes proofs harder).
   
   &*& true==distinct(k_time_pairs)
     

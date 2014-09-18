@@ -1,4 +1,5 @@
 #include "malloc.h"
+#include "problem3.h"
 //@ #include "arrays.gh"
 //@ #include "listex.gh"
 
@@ -306,6 +307,16 @@ int ring_buffer_pop(struct ring_buffer *ring_buffer)
     //@ close ring_buffer(ring_buffer, size, tail(items));
     return result;   
 }
+
+bool ring_buffer_is_full(struct ring_buffer *ring_buffer)
+//@ requires ring_buffer(ring_buffer, ?size, ?items);
+//@ ensures ring_buffer(ring_buffer, size, items) &*& result == (length(items) == size) &*& length(items) <= size;
+{
+    //@ open ring_buffer(_, _, _);
+    return ring_buffer->len == ring_buffer->size;
+    //@ close ring_buffer(ring_buffer, size, items);
+}
+
 
 void test (int x, int y, int z) 
     //@ requires true;
