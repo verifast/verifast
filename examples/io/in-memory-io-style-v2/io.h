@@ -26,9 +26,10 @@
  *   Rely-relation before the last split.
  *   Because join-split can be nested, this is a list.
  *
- * TODO: this formalisation currently does not support nondeterminism of the form
- *   time(t1) &*& io1(t1, t2) &*& io2(t1, t2).
- *
+ * Note: instead of writing
+ *   time(t1) &*& io1(t1, t2) &*& io2(t1, t2) &*& io3(t2, t3)
+ * in this formalisation you write
+ *   time(t1) &*& io1(t1, t11) &*& io2(t1, t12) &*& choice(t12, t22, t2) &*& &*& io3(t2, t3)
  */
 
 //@ #include "foralls.gh"
@@ -38,34 +39,49 @@
 #include "prophecy.h"
 #include "../../vstte2012/problem3/problem3.h" // Ring buffer has been verified before, just reuse it.
 
-
-//-------------// buffer //-------------//
-
-struct buffer{
-  struct ring_buffer *ring_buffer;
-};
+//-------------// Common //-------------//
 
 /**
- *
- * Does not have to be global, but if it is then you can support C APIs that
- * require this (like putchar).
- */
-static struct buffer *global_buffer;
-
-
-/**
- *
- * "actions" is the reverse of the writes that has happened,
- * i.e. if we first write A and then B, actions = {'B','A'}.
+ * Decomposes time and gets basic properties that always hold for a time.
  */
 /*@
-predicate buffer(list<int> actions) =
-  global_buffer |-> ?bufferptr
-  &*& bufferptr->ring_buffer |-> ?ring_buffer
-  &*& ring_buffer(ring_buffer, 4096, reverse(actions));
+lemma void time_properties()
+requires time(?t1) &*& t1==time(?invar1, _, _, _, ?rely1, _) &*& rely1 == sigma_id;
+ensures
+  global_buffer |-> ?global_buffer_ptr
+  &*& cooked_ghost_list<time>(?ghost_list_id, _, nil)
+  &*& global_buffer_ptr->ring_buffer |-> ?ring_buffer
+  &*& ring_buffer(ring_buffer, 4096, ?contents)
+  &*& malloc_block_buffer(global_buffer_ptr)
+  &*& true == invar1(contents);
+{
+  open time(t1);
+  open iostate_shared(?ghost_list_id);
+  open iostate(_, _);
+  open buffer(?contents);
+  assert global_buffer |-> ?global_buffer_ptr;
+  assert global_buffer_ptr->ring_buffer |-> ?ring_buffer;
+  
+  // Prove invar1(contents)
+  assert cooked_ghost_list_member_handle(ghost_list_id, ?k, t1);
+  cooked_ghost_list_match(ghost_list_id, k);
+  assert cooked_ghost_list(_, _, ?k_time_pairs);
+  forall_elim(k_time_pairs, (invar_holds)(contents), pair(k, t1));
+  assert true==invar1(contents);
+  
+  assert length(k_time_pairs) == 1;
+  
+  // Make the ghost list empty.
+  cooked_ghost_list_remove(ghost_list_id, k);
+  assert cooked_ghost_list(_, _, ?should_be_empty);
+  assert should_be_empty == remove(pair(k,t1), k_time_pairs);
+  length_remove(pair(k,t1), k_time_pairs);
+  assert length(should_be_empty) == 0;
+  switch(should_be_empty){case nil: assert true; case cons(x,xs0): assert false;}
+  assert should_be_empty == {};
+}
 @*/
 
-//-------------// write //-------------//
 /*@
 fixpoint bool invar_fp_helper(
   fixpoint(list<int>, bool) invar1,
@@ -95,7 +111,33 @@ fixpoint bool invar_fp(
   return
     false == forall_pair_list_int((invar_fp_helper)(invar1, guarantee_plus2, rely1, actions));
 }
+@*/
 
+//-------------// buffer //-------------//
+
+struct buffer{
+  struct ring_buffer *ring_buffer;
+};
+
+/**
+ *
+ * Does not have to be global, but if it is then you can support C APIs that
+ * require this (like putchar).
+ */
+static struct buffer *global_buffer;
+
+
+/*@
+predicate buffer(list<int> actions) =
+  global_buffer |-> ?bufferptr
+  &*& bufferptr->ring_buffer |-> ?ring_buffer
+  &*& ring_buffer(ring_buffer, 4096, actions)
+  &*& malloc_block_buffer(bufferptr);
+@*/
+
+//-------------// write //-------------//
+
+/*@
 fixpoint bool write_guarantee_plus_fp(
   fixpoint(list<int>, bool) invar1,
   int c,
@@ -103,7 +145,7 @@ fixpoint bool write_guarantee_plus_fp(
   list<int> actions1,
   list<int> actions2
 ){
-  return invar1(actions1) && actions2 == cons(c, actions1);
+  return invar1(actions1) && actions2 == append(actions1, {c}); // alternative: cons(c, actions1);
 }
 
 fixpoint bool write_guarantee_acum_fp(
@@ -143,7 +185,9 @@ predicate write_io(
 //-------------// read //-------------//
 /*@
 
-
+// remove_last and last are useful if the contents is recorded in the other order,
+// which can be useful to avoid the use of append which can make proofs more difficult.
+/*
 fixpoint list<t> remove_last<t>(list<t> xs){
   switch(xs){
     case nil: return nil; // should not happen in recursive call.
@@ -159,6 +203,7 @@ fixpoint t last<t>(list<t> xs){
       return xs_tail == nil ? xs_head : last(xs_tail);
   }
 }
+*/
 
 fixpoint bool read_guarantee_plus_fp(
   fixpoint(list<int>, bool) invar1,
@@ -167,7 +212,7 @@ fixpoint bool read_guarantee_plus_fp(
   list<int> actions1,
   list<int> actions2
 ){
-  return invar1(actions1) && actions1 != nil && actions2 == remove_last(actions1) && c == last(actions1);
+  return invar1(actions1) && actions1 != nil && actions2 == tail(actions1) && c == head(actions1); // alternative: actions2 == remove_last(actions1) && c == last(actions1);
 }
 
 fixpoint bool read_guarantee_acum_fp(
@@ -191,7 +236,7 @@ fixpoint bool read_prophecy_helper(
   //---curry away above
   list<int> sigma
 ){
-  return ! (invar1(sigma) && sigma != nil && last(sigma) == c);
+  return ! (invar1(sigma) && sigma != nil && head(sigma) == c); // alternative: && last(sigma) == c);
 }
 
 fixpoint bool read_prophecy(
@@ -249,7 +294,7 @@ predicate read_io(
   // there is no c' for which the prophecy-invariant holds,
   // then you cannot use the prophecy.
   &*& [_]is_forall_t< list<int> >(forall_list_int)
-  &*& prophecy_int((read_prophecy)(invar1), c)
+  &*& prophecy<int>((read_prophecy)(invar1), c)
 ;
 
 @*/
@@ -460,9 +505,88 @@ ensures time(t2) &*& time(t3);
 @*/
 
 
+//-------------// choice //-------------//
+
+
+/*@
+fixpoint bool guarantee_acum_choice(
+  fixpoint(list<int>, list<int>, bool) guarantee_acum1,
+  fixpoint(list<int>, list<int>, bool) guarantee_acum2,
+  //---curry away above
+  list<int> actions1,
+  list<int> actions2
+){
+  return guarantee_acum1(actions1, actions2) || guarantee_acum2(actions1, actions2);
+}
+
+fixpoint bool invar_choice(
+  fixpoint(list<int>, bool) invar1,
+  fixpoint(list<int>, bool) invar2,
+  //---curry away above
+  list<int> actions
+){
+  return invar1(actions) || invar2(actions);
+}
+@*/
+
+/**
+ * Support nondeterministic: one of two (composite) actions can be executed, but not both.
+ *
+ * Example: requires time(?t1) &*& write(t1, 'x', ?tx) &*& write(t1, 'y', ?ty) &*& choice(tx, ty, ?t2) &*& write(t2, 'z', ?t3);
+ *          ensures time(t3).
+ * On termination, the program has either printed "xz" or "yz".
+ */
+
+/*@
+predicate choice(time t1, time t2; time t3) =
+  t1 == time(?invar1, ?guarantee_acum1, ?guarantee_thread1, ?guarantee_stack1, ?rely1, ?rely_stack1)
+  &*& t2 == time(?invar2, ?guarantee_acum2, ?guarantee_thread2, ?guarantee_stack2, ?rely2, ?rely_stack2)
+  &*& t3 == time(
+    (invar_choice)(invar1, invar2), //invar3,
+    (guarantee_acum_choice)(guarantee_acum1, guarantee_acum2), //guarantee_acum3,
+    guarantee_thread1, //guarantee_thread3,
+    guarantee_stack1, //guarantee_stack3,
+    rely1, //rely3,
+    rely_stack1 //rely_stack3
+  )
+  
+  // assert guarantee_stack1 == guarantee_stack
+  // assert rely1 == rely2
+  // assert rely_stack2 == rely_stack1
+;
+
+
+lemma void choice()
+requires choice(?t1, ?t2, ?t3) &*& time(?t) &*& t==time(?invar1, _, _, _, ?rely, _) &*& rely == sigma_id &*& t == t1 || t == t2;
+ensures time(t3);
+{
+  open choice(t1, t2, t3);
+  time_properties();
+  
+  assert cooked_ghost_list(?ghost_list_id, _, {});
+  
+  int k_t3 = cooked_ghost_list_add(ghost_list_id, t3);
+  assert cooked_ghost_list(_, _, ?k_time_pairs_new);
+  assert k_time_pairs_new == append(nil, {(pair(k_t3, t3))});
+  
+  assert ring_buffer(_, _, ?contents);
+  
+  if ( ! forall(k_time_pairs_new, (invar_holds)(contents))){
+    pair<int, time> ktime = not_forall(k_time_pairs_new, (invar_holds)(contents));
+    assert(false);
+  }
+  
+  close buffer(contents);
+  close iostate(ghost_list_id, _);
+  close iostate_shared(ghost_list_id);
+  close time(t3);
+}
+
+@*/
+
+
 //-------------// core //-------------//
 /*@
-
 fixpoint bool invar_init(list<int> ioactions){
   return ioactions == {};
 }
@@ -503,10 +627,10 @@ predicate iostate(int ghost_list_id, list<int> actionlist) =
   
   &*& cooked_ghost_list<time>(ghost_list_id, _, ?k_time_pairs)
   
-  &*& length(k_time_pairs) == 1 // TODO: drop this to support split/join (makes proofs harder).
+  &*& length(k_time_pairs) == 1 // TODO: drop this when adding support for split/join (makes proofs harder).
   
   &*& true==distinct(k_time_pairs)
-    
+  
   // For all times, invar holds for the current actionlist:
   &*& true == forall(k_time_pairs, (invar_holds)(actionlist))
     

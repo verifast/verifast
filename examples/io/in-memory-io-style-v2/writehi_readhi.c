@@ -16,9 +16,9 @@
 #include <malloc.h>
 
 /*@
-lemma void t2_inv_holds_generic(int c, list<int> sigma_A)
+lemma void write_inv_holds(int c, list<int> sigma_A)
 requires write_io(?t1, c, ?t2) &*& t1 == time(?invar1, _, _, _, ?rely1, _) &*& rely1 == sigma_id &*& t2 == time(?invar2, _, _, _, _, _) &*& true == invar1(sigma_A);
-ensures write_io(t1, c, t2) &*& true==invar2(cons(c, sigma_A));
+ensures write_io(t1, c, t2) &*& true==invar2(append(sigma_A, {c}));
 {
   /*
   Prove: ∃ sigma_AA, sigma_B . Invar1(sigma_AA) && Guarantee_+2(sigma_AA, sigma_B) && Rely2(sigma_B, {c} ++ sigma_A).
@@ -36,48 +36,30 @@ ensures write_io(t1, c, t2) &*& true==invar2(cons(c, sigma_A));
       , rely1
   );
   
-  if (! invar2(cons(c, sigma_A))) {
-    forall_t_elim(forall_pair_list_int, (invar_fp_helper)(invar1, (write_guarantee_plus_fp)(invar1, c), rely1, cons(c, sigma_A)), pair(sigma_A, cons(c, sigma_A)));
+  if (! invar2(append(sigma_A, {c}))) {
+    forall_t_elim(forall_pair_list_int, (invar_fp_helper)(invar1, (write_guarantee_plus_fp)(invar1, c), rely1, append(sigma_A, {c})), pair(sigma_A, append(sigma_A, {c})));
   }
 }
+
 @*/
 
 void write(char c)
-//@ requires time(?t1) &*& t1==time(_, _, _, _, ?rely1, _) &*& rely1 == sigma_id &*& write_io(t1, c, ?t2) &*& c >= 0 && c < 127;
+//@ requires time(?t1) &*& t1==time(?invar1, _, _, _, ?rely1, _) &*& rely1 == sigma_id &*& write_io(t1, c, ?t2) &*& c >= 0 && c < 127;
 //@ ensures time(t2);
 {
-  //@ open time(t1);
-  //@ open iostate_shared(?ghost_list_id);
-  //@ open iostate(_, _);
-  //@ open buffer(?contents);
-  //@ assert global_buffer |-> ?global_buffer_ptr;
-  //@ assert global_buffer_ptr->ring_buffer |-> ?ring_buffer;
+  //@ time_properties();
+  //@ assert cooked_ghost_list<time>(?ghost_list_id, _, nil);
+  //@ assert ring_buffer(_, _, ?contents);
   
   if (ring_buffer_is_full(global_buffer->ring_buffer)){
     // TODO: what to do? Currently single-threaded, so we cannot wait. Require non-empty buffer in precondition?
     while (true) /*@ invariant true; @*/ {}
   }
   ring_buffer_push(global_buffer->ring_buffer, c);
-    
-  // Prove invar1(contents)
-  //@ assert cooked_ghost_list_member_handle(ghost_list_id, ?k, t1);
-  //@ cooked_ghost_list_match(ghost_list_id, k);
-  //@ assert cooked_ghost_list(_, _, ?k_time_pairs);
-  //@ forall_elim(k_time_pairs, (invar_holds)(contents), pair(k, t1));
   
-  // Prove invar2(contents). Uses invar1(contents).
-  //@ t2_inv_holds_generic(c, contents);
+  // Prove invar2(append(contents, {c})). Uses invar1(contents).
+  //@ write_inv_holds(c, contents);  
   
-  //@ assert length(k_time_pairs) == 1;
-  
-  // Prove the ghost list is empty.
-  //@ cooked_ghost_list_remove(ghost_list_id, k);
-  //@ assert cooked_ghost_list(_, _, ?should_be_empty);
-  //@ assert should_be_empty == remove(pair(k,t1), k_time_pairs);
-  //@ length_remove(pair(k,t1), k_time_pairs);
-  //@ assert length(should_be_empty) == 0;
-  //@ switch(should_be_empty){case nil: assert true; case cons(x,xs0): assert false;}
-  //@ assert should_be_empty == {};
   
   // Get k_time_pairs_new
   //@ int k_t2 = cooked_ghost_list_add(ghost_list_id, t2);
@@ -85,31 +67,159 @@ void write(char c)
   //@ assert k_time_pairs_new == append(nil, {(pair(k_t2, t2))});
   
   /*@
-  if ( ! forall(k_time_pairs_new, (invar_holds)(cons(c, contents)))){
-    pair<int, time> ktime = not_forall(k_time_pairs_new, (invar_holds)(cons(c, contents)));
+  if ( ! forall(k_time_pairs_new, (invar_holds)(append(contents, {c})))){
+    pair<int, time> ktime = not_forall(k_time_pairs_new, (invar_holds)(append(contents, {c})));
     assert snd(ktime) != t2;
     assert(false);
   }
   @*/
   
-  //@ close buffer(cons(c, contents));
-  //@ close iostate(ghost_list_id, cons(c, contents));
+  //@ close buffer(append(contents, {c}));
+  //@ close iostate(ghost_list_id, append(contents, {c}));
   //@ close iostate_shared(ghost_list_id);
   //@ close time(t2);
   //@ open write_io(t1, c, t2);
 }
 
-int read();
-//@ requires time(?t1) &*& read_io(t1, ?c, ?t2);
+/*@
+lemma void read_inv_holds(list<int> contents)
+requires [?f]read_io(?t3, ?c, ?t4) &*& t3==time(?invar3, _, _, _, ?rely3, _) &*& rely3 == sigma_id &*& t4 == time(?invar4, _, _, _, _, _) &*& true==invar3(contents) &*& contents != nil &*& c == head(contents);
+ensures [f]read_io(t3, c, t4) &*& true==invar4(tail(contents));
+{
+  open [f]read_io(t3, c, t4);
+  close [f]read_io(t3, c, t4);
+  assert t3 == time(invar3, ?guarantee_acum3, ?guarantee_thread3, ?guarantee_stack3, rely3, ?rely_stack3);
+  get_forall_pair_list_int();
+  fixpoint(list<int>, list<int>, bool) guarantee_acum4 = (read_guarantee_acum_fp)(guarantee_acum3, invar3, head(contents));
+  assert invar4 == (invar_fp)(invar3,
+      (read_guarantee_plus_fp)(invar3, c)
+      , rely3
+  );
+  
+  if (! invar4(tail(contents))) {
+    
+    forall_t_elim(forall_pair_list_int, (invar_fp_helper)(invar3, (read_guarantee_plus_fp)(invar3, head(contents)), rely3, tail(contents)), pair(contents, tail(contents)));
+    
+    assert true == invar_fp_helper(invar3, (read_guarantee_plus_fp)(invar3, head(contents)), rely3, tail(contents), pair(contents, tail(contents)));
+    // Rewrite:
+    assert true == ! (
+      invar3(contents)
+      && read_guarantee_plus_fp(invar3, head(contents), contents, tail(contents))
+      && rely3(tail(contents), tail(contents))
+    );
+    
+    // Therefore, because these two are true...
+    assert true==invar3(contents);
+    assert true==rely3(tail(contents), tail(contents));
+    // This one must be false:
+    assert false == read_guarantee_plus_fp(invar3, c, contents, tail(contents));
+    // Rewrite:
+    assert false == (invar3(contents) && contents != nil && tail(contents) == tail(contents) && head(contents) == head(contents));
+    // To obtain a contradiction, one is false. VeriFast can see these are true:
+    assert true == invar3(contents);
+    assert tail(contents) == tail(contents);
+    // Therefore:
+    assert head(contents) != head(contents);
+    // While the negation is also true.
+    assert false;
+  }
+}
+@*/
+
+
+int read()
+//@ requires time(?t1) &*& t1==time(?invar1, _, _, _, ?rely1, _) &*& rely1 == sigma_id &*& read_io(t1, ?c, ?t2);
 //@ ensures time(t2) &*& result == c;
+{ 
+  //@ time_properties();
+  //@ assert cooked_ghost_list<time>(?ghost_list_id, _, nil);
+  //@ assert ring_buffer(_, _, ?contents);
+  
+  if (ring_buffer_is_empty(global_buffer->ring_buffer)) {
+    // TODO: what to do? Currently single-threaded, so we cannot wait. Require non-empty buffer in precondition?
+    while (true) /*@ invariant true; @*/ {}
+  }  
+  int c_real = ring_buffer_pop(global_buffer->ring_buffer);
+  
+  // Prove read_prophecy(invar1, c_real)
+  /*@
+  if ( ! read_prophecy(invar1, c_real)){
+    // rewrite
+    assert true==forall_list_int((read_prophecy_helper)(c_real, invar1));
+    // So it also holds for contents:
+    forall_t_elim(forall_list_int, (read_prophecy_helper)(c_real, invar1), contents);
+    assert true == read_prophecy_helper(c_real, invar1, contents);
+    // Rewrite.
+    assert ! (invar1(contents) && contents != nil && head(contents) == c_real);
+    assert false;
+  }
+  @*/
+  
+  //@ open read_io(t1, c, t2);
+  
+  // Prove c == c_real
+  //@ assert prophecy<int>((read_prophecy)(invar1), c);
+  prophecy_int_assign(c_real);
+    
+  // Prove invar2(tail(contents))). Needs c == head(contents).
+  //@ assert [?f]prophecy<int>(_, _);
+  //@ close [f]read_io(t1, c, t2);
+  //@ assert c == head(contents);
+  //@ read_inv_holds(contents);
+  
+  // Get k_time_pairs_new: {k_t2, t2}.
+  //@ int k_t2 = cooked_ghost_list_add(ghost_list_id, t2);
+  //@ assert cooked_ghost_list(_, _, ?k_time_pairs_new);
+  //@ assert k_time_pairs_new == append(nil, {(pair(k_t2, t2))});
+  
+  // Prove ∀ i ∈ {invar2} . i(tail(contents)).
+  /*@
+  if ( ! forall(k_time_pairs_new, (invar_holds)(tail(contents)))){
+    pair<int, time> ktime = not_forall(k_time_pairs_new, (invar_holds)(append(contents, {c})));
+    assert snd(ktime) != t2;
+    assert(false);
+  }
+  @*/
+  
+  //@ assert c == c_real;
+  
+  //@ close buffer(tail(contents));
+  //@ close iostate(ghost_list_id, tail(contents));
+  //@ close iostate_shared(ghost_list_id);
+  //@ close time(t2);
+  
+  return c_real;
+}
 
-bool buffer_create();
+bool buffer_create()
 //@ requires pointer(&global_buffer, _);
-//@ ensures result == true ? buffer({}) : pointer(&global_buffer, ?buffer) ; // buffer contains global pointer.
+//@ ensures result == true ? buffer({}) : pointer(&global_buffer, _) ; // buffer contains global pointer.
+{
+  global_buffer = malloc(sizeof(struct buffer));
+  if (global_buffer == 0){
+    return false;
+  }
+  struct ring_buffer *ring_buffer = ring_buffer_create(4096); // avoid unsupported potentially side-effecting expression
+  if (ring_buffer == 0){
+    free(global_buffer);
+    return false;
+  }else{
+    global_buffer->ring_buffer = ring_buffer;
+    //@ close buffer({});
+    return true;
+  }
+  
+  
+}
 
-bool buffer_dispose();
+void buffer_dispose()
 //@ requires buffer(_);
 //@ ensures pointer(&global_buffer, _);
+{
+  //@ open buffer(_);
+  ring_buffer_dispose(global_buffer->ring_buffer);
+  free(global_buffer);
+}
 
 
 void write_hi()
@@ -122,7 +232,7 @@ void write_hi()
 }
 
 void read_must_be(int c_must_be)
-//@ requires time(?t1) &*& read_io(t1, c_must_be, ?t2);
+//@ requires time(?t1) &*& t1==time(_, _, _, _, ?rely1, _) &*& rely1 == sigma_id  &*& read_io(t1, c_must_be, ?t2);
 //@ ensures time(t2);
 {
   int c_actual = read();
@@ -135,9 +245,10 @@ void read_must_be(int c_must_be)
 
 
 void read_hi()
-//@ requires time(?t1) &*& read_io(t1, 'h', ?t2) &*& read_io(t2, 'i', ?t3);
+//@ requires time(?t1) &*& t1==time(_, _, _, _, ?rely1, _) &*& rely1 == sigma_id &*& read_io(t1, 'h', ?t2) &*& read_io(t2, 'i', ?t3);
 //@ ensures time(t3);
 {
+  //@ open read_io(t1, 'h', t2); // to obtain rely2 == sigma_id
   read_must_be('h');
   read_must_be('i');
 }
@@ -163,7 +274,7 @@ ensures time(t1) &*& write_io(t1, 'h', t2) &*& sigma == {'h'};
 lemma void t3_inv(list<int> sigma)
 requires time(?t1) &*& t1 == init_time() &*& write_io(t1, 'h', ?t2) &*& write_io(t2, 'i', ?t3) &*& t3 == time(?invar3, _, _, _, _, _)
   &*& true==invar3(sigma);
-ensures time(t1) &*& write_io(t1, 'h', t2) &*& write_io(t2, 'i', t3) &*& sigma == {'i', 'h'};
+ensures time(t1) &*& write_io(t1, 'h', t2) &*& write_io(t2, 'i', t3) &*& sigma == {'h', 'i'};
 {
   open write_io(t1, 'h', t2);
   open write_io(t2, 'i', t3);
@@ -195,7 +306,7 @@ ensures time(t1) &*& write_io(t1, 'h', t2) &*& write_io(t2, 'i', t3) &*& read_io
       , rely3);
   pair<list<int>, list<int> > sigmapair = not_forall_t(forall_pair_list_int, (invar_fp_helper)(invar3, (read_guarantee_plus_fp)(invar3, 'h'), rely3, sigma));
   t3_inv(fst(sigmapair));
-  assert fst(sigmapair) == {'i', 'h'};
+  assert fst(sigmapair) == {'h', 'i'};
 }
 
 
@@ -203,16 +314,16 @@ lemma void t2_inv_holds()
 requires time(?t1) &*& t1 == init_time() &*& write_io(t1, 'h', ?t2) &*& t2 == time(?invar2, _, _, _, _, _);
 ensures time(t1) &*& write_io(t1, 'h', t2) &*& true==invar2({'h'});
 {
-  t2_inv_holds_generic('h', {});
+  write_inv_holds('h', {});
 }
 
 lemma void t3_inv_holds()
 requires time(?t1) &*& t1 == init_time() &*& write_io(t1, 'h', ?t2) &*& write_io(t2, 'i', ?t3) &*& t3 == time(?invar3, _, _, _, _, _);
-ensures time(t1) &*& write_io(t1, 'h', t2) &*& write_io(t2, 'i', t3) &*& true==invar3({'i', 'h'});
+ensures time(t1) &*& write_io(t1, 'h', t2) &*& write_io(t2, 'i', t3) &*& true==invar3({'h', 'i'});
 {
   t2_inv_holds();
   open write_io(t1, 'h', t2);
-  t2_inv_holds_generic('i', {'h'});
+  write_inv_holds('i', {'h'});
 }
 
 
@@ -221,42 +332,9 @@ requires time(?t1) &*& t1 == init_time() &*& write_io(t1, 'h', ?t2) &*& write_io
 ensures time(t1) &*& write_io(t1, 'h', t2) &*& write_io(t2, 'i', t3) &*& read_io(t3, 'h', t4) &*& true==invar4({'i'});
 {
   t3_inv_holds();
-  open read_io(t3, 'h', t4);
-  assert t3 == time(?invar3, ?guarantee_acum3, ?guarantee_thread3, ?guarantee_stack3, ?rely3, ?rely_stack3);
-  get_forall_pair_list_int();
-  fixpoint(list<int>, list<int>, bool) guarantee_acum4 = (read_guarantee_acum_fp)(guarantee_acum3, invar3, 'h');
-  assert invar4 == (invar_fp)(invar3,
-      (read_guarantee_plus_fp)(invar3, 'h')
-      , rely3
-  );
-  
-  if (! invar4({'i'})) {
-    forall_t_elim(forall_pair_list_int, (invar_fp_helper)(invar3, (read_guarantee_plus_fp)(invar3, 'h'), rely3, {'i'}), pair({'i', 'h'}, {'i'}));
-    
-    open write_io(t1, 'h', t2); open write_io(t2, 'i', t3); /* to get */ assert rely3 == sigma_id;
-    
-    assert true == invar_fp_helper(invar3, (read_guarantee_plus_fp)(invar3, 'h'), rely3, {'i'}, pair({'i', 'h'}, {'i'}));
-    // Rewrite:
-    assert true == ! (
-      invar3({'i','h'})
-      && read_guarantee_plus_fp(invar3, 'h', {'i','h'}, {'i'})
-      && rely3({'i'}, {'i'})
-    );
-    // Therefore, because these two are true...
-    assert true==invar3({'i','h'});
-    assert true==rely3({'i'}, {'i'});
-    // This one must be false:
-    assert false == read_guarantee_plus_fp(invar3, 'h', {'i','h'}, {'i'});
-    // Rewrite:
-    assert false == (invar3({'i','h'}) && {'i','h'} != nil && {'i'} == remove_last({'i','h'}) && 'h' == last({'i','h'}));
-    // To obtain a contradiction, one is false. VeriFast can see these are true:
-    assert true == invar3({'i','h'});
-    assert 'h' == last({'i','h'});
-    // Therefore:
-    assert {'i'} != remove_last({'i','h'});
-    // While the negation is also true.
-    assert false;
-  }
+  open write_io(t1, 'h', t2);
+  open write_io(t2, 'i', t3); // to obtain t3.rely == sigma_id
+  read_inv_holds({'h', 'i'});
 }
 
 lemma void invar_of_prophecy_is_true()
@@ -265,7 +343,7 @@ ensures time(t1) &*& write_io(t1, 'h', t2) &*& write_io(t2, 'i', t3) &*& true ==
 {
    if ( forall_list_int((read_prophecy_helper)('h', invar3))){
      get_forall_list_int();
-     list<int> sigma = {'i','h'};
+     list<int> sigma = {'h', 'i'};
      forall_t_elim(forall_list_int, (read_prophecy_helper)('h', invar3), sigma);
      assert true!=invar3(sigma);
      t3_inv_holds();
@@ -295,23 +373,23 @@ ensures time(t1) &*& write_io(t1, 'h', t2) &*& write_io(t2, 'i', t3) &*& read_io
   We want to prove: c == 'h'.
   invar_of_prohecy_is_true proves that there is an x such that the prophecy invariant holds for x,
   therefore the prophecy invariant holds for c.
-  The prophecy invariant is: invar(c) <=> ¬∀sigma.¬(I3(sigma) && sigma != nil && last(sigma) == c).
-  Because                                 ¬∀sigma.¬(I3(sigma) && sigma != nil && last(sigma) == c),
-  there must be a sigma such that                  (I3(sigma) && sigma != nil && last(sigma) == c).
+  The prophecy invariant is: invar(c) <=> ¬∀sigma.¬(I3(sigma) && sigma != nil && head(sigma) == c).
+  Because                                 ¬∀sigma.¬(I3(sigma) && sigma != nil && head(sigma) == c),
+  there must be a sigma such that                  (I3(sigma) && sigma != nil && head(sigma) == c).
   Take such a sigma. Because I3(sigma), sigma == {'i','h'} (use t3_inv to prove that).
-  Therefore, last(sigma) == c and last(sigma) == 'h'.
+  Therefore, head(sigma) == c and head(sigma) == 'h'.
   Thus, c == 'h'.
   */
 
   invar_of_prophecy_is_true(); /* shows that: */ assert true==read_prophecy(invar3, 'h');
 
   open read_io(t3, c, t4);
-  assert prophecy_int((read_prophecy)(invar3), c);
+  assert prophecy<int>((read_prophecy)(invar3), c);
   prophecy_invar(c, 'h');
   assert true == read_prophecy(invar3, c);
   assert ! forall_list_int((read_prophecy_helper)(c, invar3));
   list<int> sigma = not_forall_t(forall_list_int, (read_prophecy_helper)(c, invar3));
-  assert (invar3(sigma) && sigma != nil && last(sigma) == c);
+  assert (invar3(sigma) && sigma != nil && head(sigma) == c);
   t3_inv(sigma);
 }
 
@@ -323,12 +401,12 @@ ensures time(t1) &*& write_io(t1, 'h', t2) &*& write_io(t2, 'i', t3) &*& read_io
   invar_of_prophecy2_is_true(); /* shows that: */ assert true==read_prophecy(invar4, 'i');
   open read_io(t4, ci, t5);
   get_forall_list_int();
-  assert prophecy_int((read_prophecy)(invar4), ci);
+  assert prophecy<int>((read_prophecy)(invar4), ci);
   prophecy_invar(ci, 'i');
   assert true == read_prophecy(invar4, ci);
   assert ! forall_list_int((read_prophecy_helper)(ci, invar4));
   list<int> sigma = not_forall_t(forall_list_int, (read_prophecy_helper)(ci, invar4));
-  assert (invar4(sigma) && sigma != nil && last(sigma) == ci);
+  assert (invar4(sigma) && sigma != nil && head(sigma) == ci);
   t4_inv(sigma);
 }
 

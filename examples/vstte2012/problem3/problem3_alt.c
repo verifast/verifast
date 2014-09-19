@@ -317,6 +317,15 @@ bool ring_buffer_is_full(struct ring_buffer *ring_buffer)
     //@ close ring_buffer(ring_buffer, size, items);
 }
 
+bool ring_buffer_is_empty(struct ring_buffer *ring_buffer)
+//@ requires ring_buffer(ring_buffer, ?size, ?items);
+//@ ensures ring_buffer(ring_buffer, size, items) &*& result == (length(items) == 0) &*& length(items) >= 0;
+{
+    //@ open ring_buffer(_, _, _);
+    return ring_buffer->len == 0;
+    //@ close ring_buffer(ring_buffer, size, items);
+}
+
 
 void test (int x, int y, int z) 
     //@ requires true;

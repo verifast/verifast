@@ -41,4 +41,8 @@ bool ring_buffer_is_full(struct ring_buffer *ring_buffer);
 //@ requires ring_buffer(ring_buffer, ?size, ?items);
 //@ ensures ring_buffer(ring_buffer, size, items) &*& result == (length(items) == size) &*& length(items) <= size;
 
+bool ring_buffer_is_empty(struct ring_buffer *ring_buffer);
+//@ requires ring_buffer(ring_buffer, ?size, ?items);
+//@ ensures ring_buffer(ring_buffer, size, items) &*& result == (length(items) == 0) &*& length(items) >= 0;
+
 #endif

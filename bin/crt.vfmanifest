@@ -96,6 +96,7 @@
 .predicate prelude.h@argv
 .predicate @is_handle
 .predicate @current_box_level
+.predicate @is_forall_t
 .provides prelude_core.gh#default_value_eq_zero
 .provides quantifiers.gh#get_forall_t
 .provides quantifiers.gh#not_forall_t

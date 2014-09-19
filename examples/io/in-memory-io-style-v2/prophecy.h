@@ -2,11 +2,11 @@
 #define __PROPHECY_H
 
 
-//@ predicate prophecy_int(fixpoint(int, bool) invar, int val;);
+//@ predicate prophecy<t>(fixpoint(t, bool) invar, t val;);
 
-int prophecy_int_assign(int val);
-//@ requires prophecy_int(?fp, _) &*& fp(val) == true;
-//@ ensures [_]prophecy_int(fp, val) &*& result == val;
+void prophecy_int_assign(int val);
+//@ requires prophecy<int>(?fp, ?prophetic_value) &*& fp(val) == true;
+//@ ensures [_]prophecy<int>(fp, prophetic_value) &*& val == prophetic_value;
 
 /**
  * Shows the prophecy invariant is true for the prophecy value
@@ -16,13 +16,13 @@ int prophecy_int_assign(int val);
  * cannot be instantiated.
  */
 /*@
-lemma void prophecy_invar(int val_prophecy, int val_instance);
+lemma void prophecy_invar<t>(t val_prophecy, t val_instance);
 requires
-  prophecy_int(?invar, val_prophecy)
+  prophecy<t>(?invar, val_prophecy)
   // Invar must be true for some value:
   &*& true == invar(val_instance);
 ensures
-  prophecy_int(invar, val_prophecy)
+  prophecy<t>(invar, val_prophecy)
   &*& true == invar(val_prophecy);
 @*/
 
@@ -33,9 +33,9 @@ ensures
  * if it is not, you simply cannot use it.
  */
 /*@
-lemma int prophecy_create(fixpoint(int, bool) invar);
+lemma t prophecy_create<t>(fixpoint(t, bool) invar);
 requires true;
-ensures prophecy_int(invar, result);
+ensures prophecy<t>(invar, result);
 @*/
 
 #endif
