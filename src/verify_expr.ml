@@ -837,34 +837,36 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let inheritance_check_processed = ref []
   let inheritance_check cn l =
     if not (List.mem cn !inheritance_check_processed) then
-    inheritance_check_processed := cn::!inheritance_check_processed;
-    let {cl; cabstract; cmeths} =
-      match try_assoc cn classmap with
-      | Some c -> c
-      | None -> static_error l "Class not found" None
-    in  
-    let rec get_overrides cn =
-      if cn = "java.lang.Object" then [] else
-      let {cmeths; csuper} = List.assoc cn classmap in
-      let overrides =
-        flatmap
-          begin fun (sign, (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, ss, fb, v, is_override, abstract)) ->
-            if is_override || pre != pre_dyn || post != post_dyn then [(cn, sign)] else []
-          end
-          cmeths
+    begin
+      inheritance_check_processed := cn::!inheritance_check_processed;
+      let {cl; cabstract; cmeths} =
+        match try_assoc cn classmap with
+        | Some c -> c
+        | None -> static_error l "Class not found" None
+      in  
+      let rec get_overrides cn =
+        if cn = "java.lang.Object" then [] else
+        let {cmeths; csuper} = List.assoc cn classmap in
+        let overrides =
+          flatmap
+            begin fun (sign, (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, ss, fb, v, is_override, abstract)) ->
+              if is_override || pre != pre_dyn || post != post_dyn then [(cn, sign)] else []
+            end
+            cmeths
+        in
+        overrides @ get_overrides csuper
       in
-      overrides @ get_overrides csuper
-    in
-    if not cabstract then begin
-      let overrides = get_overrides cn in
-      List.iter
-        begin fun (cn, sign) ->
-          if not (List.mem_assoc sign cmeths) then
-            static_error cl (Printf.sprintf "This class must override method %s declared in class %s or must be declared abstract." (string_of_sign sign) cn) None
-        end
-        overrides
+      if not cabstract then begin
+        let overrides = get_overrides cn in
+        List.iter
+          begin fun (cn, sign) ->
+            if not (List.mem_assoc sign cmeths) then
+              static_error cl (Printf.sprintf "This class must override method %s declared in class %s or must be declared abstract." (string_of_sign sign) cn) None
+          end
+          overrides
+      end
     end
-  
+
   let rec interface_methods itf =
     let InterfaceInfo (l, fds, meths, preds, supers) = List.assoc itf interfmap in
     List.map (fun (sign, _) -> (sign, ("interface", itf))) meths @ flatmap interface_methods supers
