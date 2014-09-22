@@ -461,6 +461,18 @@ clean::
 	rm -f ../examples/BeepDriver/BeepDriver_proxy.c
 	rm -f ../examples/BeepDriver/BeepDriver_proxy.h
 	rm -f ../examples/BeepDriver/BeepDriver_proxy.vfmanifest
+	rm -f ../examples/a.out
+	rm -f ../examples/java/Iterator/prog_provide0_*.java
+	rm -f ../examples/java/"Java Card"/Addressbook_provide0_*.java
+	rm -f ../examples/java/"Java Card"/Echo_provide0_*.java
+	rm -f ../examples/java/"Java Card"/JavaCard_provide0_*.java
+	rm -f ../examples/java/"Java Card"/NewEPurse/NewEPurseApplet_provide0_*.java
+	rm -f ../examples/java/"Java Card"/NewJTicket/NewJTicketApplet_provide0_*.java
+	rm -f ../examples/java/"Java Card"/Store_provide0_*.java
+	rm -f ../examples/java/"Java Card"/shareable-applets/wallet_provide0_*.java
+	rm -f ../examples/java/chatbot/Bot_provide0_*.java
+
+
 
 #----------------------------- Auto Dependencies -----------------------------#
 
