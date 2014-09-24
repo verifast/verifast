@@ -213,6 +213,9 @@ cd examples
       verifast_both stdio_simple.o -shared turing-complete-lowtech.c
       verifast_both stdio_simple.o -shared turing-complete-underspec-lowtech.c
     cd ..
+    cd template-method
+      verifast_both -c TemplateMethod.java
+    cd ..
   cd ..
   cd java
     cd channels
