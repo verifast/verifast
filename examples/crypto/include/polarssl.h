@@ -2,7 +2,7 @@
 #define POLARSSL_H
 
 #include "shared_definitions.h"
-#include "aux/polarssl_sizes.h"
+#include "aux_include/polarssl_sizes.h"
 
 #define AES_ENCRYPT   1
 #define AES_DECRYPT   0

@@ -52,12 +52,12 @@ bin/cryptolib.dll.vfmanifest : $(SOURCES)
 	         bin/libpolarssl.so $(SOURCES)
 	
 
-include/aux/switch_primitives.gh : tools/switch_primitives.py
+include/aux_include/switch_primitives.gh : tools/switch_primitives.py
 	cd tools; \
 	./switch_primitives.py; \
-	mv switch_primitives.gh ../include/aux
+	mv switch_primitives.gh ../include/aux_include
 
-switch_primitives : include/aux/switch_primitives.gh
+switch_primitives : include/aux_include/switch_primitives.gh
 
 polar :
 	test -d polarssl || git clone https://github.com/polarssl/polarssl.git polarssl
@@ -80,14 +80,14 @@ polar :
 	  include/polarssl/config.h; \
 	make -j4;
 
-include/aux/polarssl_sizes.h : tools/polarssl_sizes.c
+include/aux_include/polarssl_sizes.h : tools/polarssl_sizes.c
 	cd tools; \
 	gcc -I ../polarssl/include/polarssl/ polarssl_sizes.c -lpthread -L ../polarssl/library -lpolarssl ; \
 	./a.out; \
 	rm a.out; \
-	mv polarssl_sizes.h ../include/aux;
+	mv polarssl_sizes.h ../include/aux_include;
 
-polar_sizes : polar include/aux/polarssl_sizes.h
+polar_sizes : polar include/aux_include/polarssl_sizes.h
 
 lib : switch_primitives polar polar_sizes $(OBJECTS)
 	gcc -shared $(OBJECTS) -o bin/$(LIB)

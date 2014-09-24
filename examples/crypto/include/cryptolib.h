@@ -2,8 +2,8 @@
 #define CRYPTOLIB_H
 
 #include "shared_definitions.h"
-#include "aux/attacker_proof_obligations.gh"
-#include "aux/switch_primitives.gh"
+#include "aux_include/attacker_proof_obligations.gh"
+#include "aux_include/switch_primitives.gh"
 
 #include <pthread.h>
 
