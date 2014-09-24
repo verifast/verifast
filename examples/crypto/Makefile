@@ -44,10 +44,10 @@ LIB = libcryptolib.so
 all : lib bin/cryptolib.dll.vfmanifest tests example_protocols
 
 verify :
-	verifast -shared -allow_assume bin/libpolarssl.so $(SOURCES)
+	../../bin/verifast -shared -allow_assume bin/libpolarssl.so $(SOURCES)
 
 bin/cryptolib.dll.vfmanifest : $(SOURCES)
-	verifast -shared -allow_assume -emit_dll_vfmanifest \
+	../../bin/verifast -shared -allow_assume -emit_dll_vfmanifest \
 	         -emit_dll_vfmanifest_as bin/cryptolib.dll.vfmanifest \
 	         bin/libpolarssl.so $(SOURCES)
 	

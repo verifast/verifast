@@ -34,7 +34,7 @@ protocols_execute : protocols_compile
 
 protocols_verify : 
 	$(foreach prot,$(PROTOCOLS), cd $(prot); \
-	      verifast -allow_assume ../../bin/libpolarssl.dll.vfmanifest \
+	      ../../../../bin/verifast -allow_assume ../../bin/libpolarssl.dll.vfmanifest \
 	      ../../bin/cryptolib.dll.vfmanifest $(prot).c main_app.c; cd ..;) \
 
 .SECONDEXPANSION:
