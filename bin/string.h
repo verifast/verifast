@@ -3,6 +3,10 @@
 
 #include <stddef.h>
 
+char *strcpy(char *d, char *s);
+    //@ requires [?f]string(s, ?cs) &*& chars(d, length(cs) + 1, _);
+    //@ ensures [f]string(s, cs) &*& chars(d, length(cs) + 1, append(cs, {0})) &*& result == d;
+
 void memcpy(void *array, void *array0, size_t count);
     //@ requires chars(array, count, ?cs) &*& [?f]chars(array0, count, ?cs0);
     //@ ensures chars(array, count, cs0) &*& [f]chars(array0, count, cs0);
