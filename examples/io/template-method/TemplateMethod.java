@@ -18,27 +18,35 @@
  * that an I/O operation will be executed. The I/O operation is specific
  * to the subclass. This way, the template method's contract is an 
  * easy I/O style contract.
+ *
+ * In this example, the I/O stye contract of the template method (which 
+ * is only written once: in the superclassis) is:
+ *  requires this.time(?t1)
+ *     &*& m1_io(this.getClass())(t1, ?t2) // This is the calculation that the subclass will perform.
+ *     &*& m1_io(this.getClass())(t2, ?t3)
+ *     &*& m2_io(this.getClass())(t3, ?t4);
+ *  ensures this.time(t4);
+ *
+ * This expresses: first the behaviour of the method m1 will
+ * be performed, then the behaviour of m1 again, and then the behaviour of m2.
+ * Multiple subclasses can define different behaviour of their implementation of m1 and m2.
+ *
+ * Subclasses can choose their own internal data representation.
  */
 
 /*@
 // t1 should not be precise, hence we cannot just use a predicate inside a class.
-predicate_family io(Class c)(int t1; int t2);
+predicate_family m1_io(Class c)(int t1; int t2);
+predicate_family m2_io(Class c)(int t1; int t2);
 @*/
 
 /**
  * Class that does a "complex" (here simplified since it's an example) calculation,
  * but delegates some steps to the subclass.
  */
-public abstract class A {
-  int x;
-  //@ predicate time(int x) = this.x |-> x &*& x > 10;
-
-  public A()
-  //@ requires true;
-  //@ ensures time(20);
-  {
-    x = 20;
-  }
+public abstract class ComplexCalculation {
+  // predicate body is unused - subclasses can choose whatever representation they want.
+  //@ predicate time(int x) = x == 0 &*& false;
 
   /**
    * The template method from the Template Method Design Pattern.
@@ -47,21 +55,71 @@ public abstract class A {
    */
   public void template()
     /*@ requires this.time(?t1)
-      &*& io(this.getClass())(t1, ?t2); // This is the calculation that the subclass will perform.
+      &*& m1_io(this.getClass())(t1, ?t2) // This is the calculation that the subclass will perform.
+      &*& m1_io(this.getClass())(t2, ?t3)
+      &*& m2_io(this.getClass())(t3, ?t4);
     @*/
-    //@ ensures this.time(t2);
+    //@ ensures this.time(t4);
   {
-    // generic stuff here
-    m(); // specific stuff, delegated to subclass
-    // more generic stuff here
+    // We delegate some steps to subclasses:
+    m1();
+    m1();
+    m2();
   }
 
   /**
-   * Method implemented by subclasses. They do a part of the "complex" calculation.
+   * Method implemented by subclasses. It does a part of the "complex" calculation.
    */
-  public abstract void m();
-    //@ requires time(?t1) &*& io(this.getClass())(t1, ?t2);
+  public abstract void m1();
+    //@ requires time(?t1) &*& m1_io(this.getClass())(t1, ?t2);
     //@ ensures time(t2);
+  
+  public abstract void m2();
+    //@ requires time(?t1) &*& m2_io(this.getClass())(t1, ?t2);
+    //@ ensures time(t2);
+  
+  public abstract int getX();
+    //@ requires time(?v);
+    //@ ensures time(v) &*& result == v;
+}
+
+
+/*@
+predicate_family_instance m1_io(Adder)(int t1, int t2) = t2 == (t1 == Integer.MAX_VALUE ? Integer.MAX_VALUE : t1+1);
+predicate_family_instance m2_io(Adder)(int t1, int t2) = t2 == (t1 > Integer.MAX_VALUE - 20 ? Integer.MAX_VALUE : t1+20);
+@*/
+/**
+ * Class that does a calculation, by adding a number.
+ */
+public class Adder extends ComplexCalculation {
+  int x = 0;
+  //@ predicate time(int t1) = this.getClass() == Adder.class &*& this->x |-> t1;
+
+  public void m1()
+    //@ requires time(?t1) &*& m1_io(this.getClass())(t1, ?t2);
+    //@ ensures time(t2);
+  {
+    //@ open time(t1);
+    //@ open m1_io(Adder.class)(_, _);
+    if (x != Integer.MAX_VALUE){
+      x = x + 1;
+    }
+    //@ close time(t2);
+  }
+  
+  public void m2()
+    //@ requires time(?t1) &*& m2_io(this.getClass())(t1, ?t2);
+    //@ ensures time(t2);
+  {
+    //@ open time(t1);
+    //@ open m2_io(Adder.class)(_, _);
+    if (x < Integer.MAX_VALUE - 20){
+      x = x + 20;
+    }else{
+      x = Integer.MAX_VALUE;
+    }
+    //@ close time(t2);
+  }
   
   public int getX()
     //@ requires time(?v);
@@ -71,67 +129,56 @@ public abstract class A {
   }
 }
 
-
 /*@
-predicate_family_instance io(AddOne)(int t1, int t2) = t2 == (t1 == Integer.MAX_VALUE ? Integer.MAX_VALUE : t1+1);
+predicate_family_instance m1_io(Multiplier)(int t1, int t2) = t2 == (t1 <= (Integer.MAX_VALUE - 1)/ 2 ? t1 * 2 : Integer.MAX_VALUE);
+predicate_family_instance m2_io(Multiplier)(int t1, int t2) = t2 == (t1 <= (Integer.MAX_VALUE - 1)/ 3 ? t1 * 3 : Integer.MAX_VALUE);
 @*/
 /**
- * Class that does a calculation, by adding one number.
+ * Class that does a calculation, by multiplying a number.
  */
-public class AddOne extends A {
-  //@ predicate time(int x) = this.getClass() == AddOne.class &*& this.time(A.class)(x);
-
-  public void m()
-    //@ requires time(?t1) &*& io(this.getClass())(t1, ?t2);
-    //@ ensures time(t2);
-  {
-    //@ open time(t1);
-    //@ assert this.getClass() == AddOne.class;
-    //@ open io(AddOne.class)(_, _);
-    if (x != Integer.MAX_VALUE){
-      x = x + 1;
-    }
-    //@ close time(t2);
-  }
+public class Multiplier extends ComplexCalculation {
+  int myValue = 1;
+  //@ predicate time(int x) = this.myValue |-> x &*& x >= 0; // We can also use a totally other representation here.
   
-  // VeriFast enforces that all methods must be overridden for soundness reasons.
-  public int getX()
-    //@ requires time(?v);
-    //@ ensures time(v) &*& result == v;
+  public Multiplier()
+  //@ requires true;
+  //@ ensures time(1);
   {
-    return super.getX();
   }
-}
 
-/*@
-predicate_family_instance io(TimesTwo)(int t1, int t2) = t2 == (t1 <= (Integer.MAX_VALUE - 1)/ 2 ? t1 * 2 : Integer.MAX_VALUE);
-@*/
-/**
- * Class that does a calculation, by multiplying the value with two.
- */
-public class TimesTwo extends A {
-  //@ predicate time(int x) = this.getClass() == TimesTwo.class &*& this.time(A.class)(x);
-
-  public void m()
-    //@ requires time(?t1) &*& io(this.getClass())(t1, ?t2);
+  public void m1()
+    //@ requires time(?t1) &*& this.getClass() == Multiplier.class &*& m1_io(this.getClass())(t1, ?t2);
     //@ ensures time(t2);
   {
     //@ open time(t1);
-    //@ open io(TimesTwo.class)(_, _);
-    if (x <= Integer.MAX_VALUE / 2){
-      x = x * 2;
+    //@ open m1_io(Multiplier.class)(_, _);
+    if (myValue <= Integer.MAX_VALUE / 2){
+      myValue = myValue * 2;
     }else{
-      x = Integer.MAX_VALUE;
+      myValue = Integer.MAX_VALUE;
     }
     //@ close time(t2);
   } 
   
-  // VeriFast enforces that all methods must be overridden for soundness reasons.
+  public void m2()
+    //@ requires time(?t1) &*& this.getClass() == Multiplier.class &*& m2_io(this.getClass())(t1, ?t2);
+    //@ ensures time(t2);
+  {
+    //@ open time(t1);
+    //@ open m2_io(Multiplier.class)(_, _);
+    if (myValue <= Integer.MAX_VALUE / 3){
+      myValue = myValue * 3;
+    }else{
+      myValue = Integer.MAX_VALUE;
+    }
+    //@ close time(t2);
+  } 
+  
   public int getX()
     //@ requires time(?v);
     //@ ensures time(v) &*& result == v;
   {
-    return super.getX();
+    return myValue;
   }
 }
 
@@ -140,21 +187,25 @@ public class Test {
   //@ requires true;
   //@ ensures true;
   {
-    A a = new AddOne();
-    //@ assert a.time(?x);
-    //@ close io(AddOne.class)(x, _);
-    a.template();
-    int should_be_21 = a.getX();
-    assert should_be_21 == 21;
+    ComplexCalculation calc1 = new Adder();
+    //@ assert calc1.time(?t1);
+    //@ close m1_io(Adder.class)(t1, ?t2);
+    //@ close m1_io(Adder.class)(t2, ?t3);
+    //@ close m2_io(Adder.class)(t3, ?t4);
+    calc1.template();
+    int should_be_22 = calc1.getX();
+     assert should_be_22 == 22;
     // Or a ghost assert: (both are statically checked by VeriFast)
-    //@ assert should_be_21 == 21;
+    //@ assert should_be_22 == 22;
     
-    A a2 = new TimesTwo();
-    //@ assert a2.time(?x_a2);
-    //@ close io(TimesTwo.class)(x_a2, _);
-    a2.template();
-    int should_be_40 = a2.getX();
-    assert should_be_40 == 40;
+    ComplexCalculation calc2 = new Multiplier();
+    //@ assert calc2.time(?calc2_t1);
+    //@ close m1_io(Multiplier.class)(calc2_t1, ?calc2_t2);
+    //@ close m1_io(Multiplier.class)(calc2_t2, ?calc2_t3);
+    //@ close m2_io(Multiplier.class)(calc2_t3, ?calc2_t4);
+    calc2.template();
+    int should_be_12 = calc2.getX();
+    assert should_be_12 == 12;
   }
 }
 
