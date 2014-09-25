@@ -87,6 +87,12 @@ let rec exec_lines filepath file lineno =
       | ["del"; file] -> while !active_processes_count > 0 do pump_events() done; Sys.remove file
       | ["ifnotmac"; line] -> if not Fonts.is_macos then exec_line line
       | ["ifz3"; line] -> if Vfconfig.z3_present then exec_line line
+      | ["ifdef"; line] ->
+        let space = try String.index line ' ' with Not_found -> error "Syntax error: 'ifdef ENVVAR CMD' expected" in
+        let var = String.sub line 0 space in
+        let cmd = String.sub line (space + 1) (String.length line - space - 1) in
+        if try ignore (Sys.getenv var); true with Not_found -> false then
+          exec_line cmd
       | [""] -> () (* Do not launch a process for empty lines. *)
       | ["let"; macroName] ->
         let lines =
