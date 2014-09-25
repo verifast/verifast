@@ -104,7 +104,7 @@ public class AddOne extends A {
 }
 
 /*@
-predicate_family_instance io(TimesTwo)(int t1, int t2) = t2 == (t1 <= Integer.MAX_VALUE / 2 ? t1 * 2 : Integer.MAX_VALUE);
+predicate_family_instance io(TimesTwo)(int t1, int t2) = t2 == (t1 <= (Integer.MAX_VALUE - 1)/ 2 ? t1 * 2 : Integer.MAX_VALUE);
 @*/
 /**
  * Class that does a calculation, by multiplying the value with two.
@@ -118,8 +118,6 @@ public class TimesTwo extends A {
   {
     //@ open time(t1);
     //@ open io(TimesTwo.class)(_, _);
-    // XXX TODO XXX z3 accepts an "//@ assert false;" here (redux does not). I do not know why.
-    ///@ assert false;
     if (x <= Integer.MAX_VALUE / 2){
       x = x * 2;
     }else{
