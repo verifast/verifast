@@ -36,8 +36,8 @@
 
 /*@
 // t1 should not be precise, hence we cannot just use a predicate inside a class.
-predicate_family m1_io(Class c)(int t1; int t2);
-predicate_family m2_io(Class c)(int t1; int t2);
+predicate_family m1_io(Class c)(any t1; any t2);
+predicate_family m2_io(Class c)(any t1; any t2);
 @*/
 
 /**
@@ -46,7 +46,7 @@ predicate_family m2_io(Class c)(int t1; int t2);
  */
 public abstract class ComplexCalculation {
   // predicate body is unused - subclasses can choose whatever representation they want.
-  //@ predicate time(int x) = x == 0 &*& false;
+  //@ predicate time(any x) = x == default_value<any> &*& false;
 
   /**
    * The template method from the Template Method Design Pattern.
@@ -77,72 +77,106 @@ public abstract class ComplexCalculation {
   public abstract void m2();
     //@ requires time(?t1) &*& m2_io(this.getClass())(t1, ?t2);
     //@ ensures time(t2);
-  
-  public abstract int getX();
-    //@ requires time(?v);
-    //@ ensures time(v) &*& result == v;
 }
 
 
 /*@
-predicate_family_instance m1_io(Adder)(int t1, int t2) = t2 == (t1 == Integer.MAX_VALUE ? Integer.MAX_VALUE : t1+1);
-predicate_family_instance m2_io(Adder)(int t1, int t2) = t2 == (t1 > Integer.MAX_VALUE - 20 ? Integer.MAX_VALUE : t1+20);
+predicate_family_instance m1_io(Adder)(adder_time t1, adder_time t2) =
+  t1 == adder_time(?value)
+  &*& value == Short.MAX_VALUE ?
+    t2 == t1
+  :
+    t2 == adder_time(value + 1)
+;
+predicate_family_instance m2_io(Adder)(adder_time t1, adder_time t2) =
+  t1 == adder_time(?value)
+  &*& value > Short.MAX_VALUE - 20 ?
+    t2 == t1
+  :
+    t2 == adder_time(value + 20)
+;
+inductive adder_time = adder_time(int value);
 @*/
 /**
  * Class that does a calculation, by adding a number.
  */
 public class Adder extends ComplexCalculation {
-  int x = 0;
-  //@ predicate time(int t1) = this.getClass() == Adder.class &*& this->x |-> t1;
+  short x = 0;
+  //@ predicate time(any t1) = this->x |-> ?x &*& t1 == adder_time(x);
+
+  public Adder()
+    //@ requires true;
+    //@ ensures time(adder_time(0));
+  {
+  }
 
   public void m1()
-    //@ requires time(?t1) &*& m1_io(this.getClass())(t1, ?t2);
+    //@ requires time(?t1) &*& this.getClass() == Adder.class &*& m1_io(this.getClass())(t1, ?t2);
     //@ ensures time(t2);
   {
     //@ open time(t1);
     //@ open m1_io(Adder.class)(_, _);
-    if (x != Integer.MAX_VALUE){
-      x = x + 1;
+    if (x != Short.MAX_VALUE){
+      x = (short)(x + 1);
     }
     //@ close time(t2);
   }
   
   public void m2()
-    //@ requires time(?t1) &*& m2_io(this.getClass())(t1, ?t2);
+    //@ requires time(?t1) &*& this.getClass() == Adder.class &*& m2_io(this.getClass())(t1, ?t2);
     //@ ensures time(t2);
   {
     //@ open time(t1);
     //@ open m2_io(Adder.class)(_, _);
-    if (x < Integer.MAX_VALUE - 20){
-      x = x + 20;
-    }else{
-      x = Integer.MAX_VALUE;
+    if (x <= Short.MAX_VALUE - 20){
+      x = (short)(x + 20);
     }
     //@ close time(t2);
   }
   
-  public int getX()
-    //@ requires time(?v);
-    //@ ensures time(v) &*& result == v;
+  public int getValue()
+    //@ requires time(?t) &*& t == adder_time(?v);
+    //@ ensures time(t) &*& result == v;
   {
     return x;
   }
 }
 
 /*@
-predicate_family_instance m1_io(Multiplier)(int t1, int t2) = t2 == (t1 <= (Integer.MAX_VALUE - 1)/ 2 ? t1 * 2 : Integer.MAX_VALUE);
-predicate_family_instance m2_io(Multiplier)(int t1, int t2) = t2 == (t1 <= (Integer.MAX_VALUE - 1)/ 3 ? t1 * 3 : Integer.MAX_VALUE);
+predicate_family_instance m1_io(Multiplier)(multiplier_time t1, multiplier_time t2) =
+  t1 == multiplier_time(?x)
+  &*& x * 2 > Integer.MAX_VALUE ? // Would cause integer overflow
+    t2 == t1
+  :
+    t2 == multiplier_time(x * 2)
+;
+predicate_family_instance m2_io(Multiplier)(multiplier_time t1, multiplier_time t2) = 
+  t1 == multiplier_time(?x)
+  &*& x * 3 > Integer.MAX_VALUE ? // Would cause integer overflow
+    t2 == t1
+  :
+    t2 == multiplier_time(x * 3)
+;
+
+inductive multiplier_time = multiplier_time(int x);
 @*/
+
+
 /**
  * Class that does a calculation, by multiplying a number.
  */
 public class Multiplier extends ComplexCalculation {
-  int myValue = 1;
-  //@ predicate time(int x) = this.myValue |-> x &*& x >= 0; // We can also use a totally other representation here.
+  int value = 1; // It is possible to have a different representation.
+  /*@
+  predicate time(any t) =
+    this.value |-> ?value
+    &*& value >= 0
+    &*& t == multiplier_time(value);
+  @*/
   
   public Multiplier()
   //@ requires true;
-  //@ ensures time(1);
+  //@ ensures time(multiplier_time(1));
   {
   }
 
@@ -152,10 +186,8 @@ public class Multiplier extends ComplexCalculation {
   {
     //@ open time(t1);
     //@ open m1_io(Multiplier.class)(_, _);
-    if (myValue <= Integer.MAX_VALUE / 2){
-      myValue = myValue * 2;
-    }else{
-      myValue = Integer.MAX_VALUE;
+    if (value <= Integer.MAX_VALUE / 2){
+      value = value * 2;
     }
     //@ close time(t2);
   } 
@@ -166,19 +198,17 @@ public class Multiplier extends ComplexCalculation {
   {
     //@ open time(t1);
     //@ open m2_io(Multiplier.class)(_, _);
-    if (myValue <= Integer.MAX_VALUE / 3){
-      myValue = myValue * 3;
-    }else{
-      myValue = Integer.MAX_VALUE;
+    if (value <= Integer.MAX_VALUE / 3){
+      value = value * 3;
     }
     //@ close time(t2);
   } 
   
-  public int getX()
-    //@ requires time(?v);
-    //@ ensures time(v) &*& result == v;
+  public int getValue()
+    //@ requires time(?t);
+    //@ ensures time(t) &*& t == multiplier_time(?x) &*& result == x;
   {
-    return myValue;
+    return value;
   }
 }
 
@@ -187,25 +217,25 @@ public class Test {
   //@ requires true;
   //@ ensures true;
   {
-    ComplexCalculation calc1 = new Adder();
-    //@ assert calc1.time(?t1);
-    //@ close m1_io(Adder.class)(t1, ?t2);
+    Adder calc1 = new Adder();
+    //@ close m1_io(Adder.class)(adder_time(0), ?t2);
     //@ close m1_io(Adder.class)(t2, ?t3);
     //@ close m2_io(Adder.class)(t3, ?t4);
     calc1.template();
-    int should_be_22 = calc1.getX();
+    int should_be_22 = calc1.getValue();
      assert should_be_22 == 22;
     // Or a ghost assert: (both are statically checked by VeriFast)
     //@ assert should_be_22 == 22;
     
-    ComplexCalculation calc2 = new Multiplier();
+    Multiplier calc2 = new Multiplier();
     //@ assert calc2.time(?calc2_t1);
-    //@ close m1_io(Multiplier.class)(calc2_t1, ?calc2_t2);
+    //@ close m1_io(Multiplier.class)(multiplier_time(1), ?calc2_t2);
     //@ close m1_io(Multiplier.class)(calc2_t2, ?calc2_t3);
     //@ close m2_io(Multiplier.class)(calc2_t3, ?calc2_t4);
     calc2.template();
-    int should_be_12 = calc2.getX();
+    int should_be_12 = calc2.getValue();
     assert should_be_12 == 12;
+    
   }
 }
 

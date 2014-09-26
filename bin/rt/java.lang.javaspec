@@ -135,7 +135,7 @@ lemma void array_slice_deep_empty_close<T, A, V>(T[] array, int start, predicate
     requires array != null &*& 0 <= start &*& start <= array.length;
     ensures array_slice_deep<T, A, V>(array, start, start, p, a, nil, nil);
 
-predicate exists<t>(t x) = true;
+predicate exists<t>(t x;) = true;
 
 @*/
 

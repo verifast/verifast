@@ -8,7 +8,7 @@
  * The API provides a flush function that forces that
  * all pending writes also happen.
  * This is what C standard libraries like glibc do:
- * write() and putchar() do not always do a system call,
+ * fwrite() and putchar() do not always do a system call,
  * they might postpone it to a future write() call.
  *
  * How to write the specifications of this buffered_write function

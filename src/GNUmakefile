@@ -22,7 +22,7 @@ help:
 	@echo "- Use e.g. 'make build -j 4' to use 4 cores."
 	@echo "- Use e.g. 'make DEBUG=yes' to include debug symbols and output"
 	@echo "  .annot files containing type information. To see stack"
-	@echo "  trace, launch with 'OCAMLRUNPARAM=b verifast <args>'.
+	@echo "  trace, launch with 'OCAMLRUNPARAM=b verifast <args>'."
 .PHONY: help
 
 #------------------------------- Settings -----------------------------------#
