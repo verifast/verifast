@@ -37,7 +37,7 @@
 //@ #include "../in-memory-io-style/helpers/cooked_ghost_lists.gh"
 #include <threading.h>
 #include "prophecy.h"
-#include "../../vstte2012/problem3/problem3.h" // Ring buffer has been verified before, just reuse it.
+#include "../../../vstte2012/problem3/problem3.h" // Ring buffer has been verified before, just reuse it.
 
 //-------------// Common //-------------//
 
