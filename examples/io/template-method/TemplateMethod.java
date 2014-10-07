@@ -111,7 +111,7 @@ public class Adder extends ComplexCalculation {
   }
 
   public void m1()
-    //@ requires time(?t1) &*& this.getClass() == Adder.class &*& m1_io(this.getClass())(t1, ?t2);
+    //@ requires time(?t1) &*& m1_io(Adder.class)(t1, ?t2);
     //@ ensures time(t2);
   {
     //@ open time(t1);
@@ -123,7 +123,7 @@ public class Adder extends ComplexCalculation {
   }
   
   public void m2()
-    //@ requires time(?t1) &*& this.getClass() == Adder.class &*& m2_io(this.getClass())(t1, ?t2);
+    //@ requires time(?t1) &*& m2_io(Adder.class )(t1, ?t2);
     //@ ensures time(t2);
   {
     //@ open time(t1);
@@ -181,7 +181,7 @@ public class Multiplier extends ComplexCalculation {
   }
 
   public void m1()
-    //@ requires time(?t1) &*& this.getClass() == Multiplier.class &*& m1_io(this.getClass())(t1, ?t2);
+    //@ requires time(?t1) &*& m1_io(Multiplier.class)(t1, ?t2);
     //@ ensures time(t2);
   {
     //@ open time(t1);
@@ -193,7 +193,7 @@ public class Multiplier extends ComplexCalculation {
   } 
   
   public void m2()
-    //@ requires time(?t1) &*& this.getClass() == Multiplier.class &*& m2_io(this.getClass())(t1, ?t2);
+    //@ requires time(?t1) &*& m2_io(Multiplier.class)(t1, ?t2);
     //@ ensures time(t2);
   {
     //@ open time(t1);
@@ -238,4 +238,6 @@ public class Test {
     
   }
 }
+
+
 
