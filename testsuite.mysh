@@ -379,6 +379,9 @@ cd tests
     mysh < run.mysh
   cd ..
   cd bugs
+    cd z3-proves-false
+      ifz3 verifast -c -runtime rt/rt.jarspec z3-proves-false.java
+    cd ..
   cd ..
   cd errors
     verifast_both -c -allow_should_fail basics.c

@@ -5,9 +5,6 @@ Target soundness statement:
 If "verifast A.c B.c C.c" succeeds, then "gcc -o ./program.exe A.c B.c C.c && ./program.exe" does not throw any assertion failures.
 
 Known VeriFast unsoundnesses:
-- sizeof(...) is of type "unsigned int" but VeriFast treats it as an expression of type "int", which may cause unsoundness due to integer promotion.
-- linking correctness: ensure header files have the same meaning in all modules
-- linking correctness: prevent duplicate struct definitions
 - predicate preciseness analysis: does not deal correctly with the local variable scopes induced by conditional assertions and switch assertions
 - disallow the use of regular function pointers as predicate family indices in unloadable modules. (Note: using lemma function pointers as predicate family indices is fine.)
 - VeriFast assumes that the C compiler does not assume that the C program obeys strict aliasing rules.
@@ -26,15 +23,26 @@ void foo()
   //@ requires true;
   //@ ensures true;
 {
+  void *p0 = 0;
+  void *q0 = &((struct bar *)p0)->y;
+  //@ produce_limits(q0);
+  //@ assert p0 <= q0;
+  //@ assert q0 - p0 >= 0;
   void *p = (void *)UINTPTR_MAX;
   void *q = &((struct bar *)p)->y;
   //@ produce_limits(q);
-  if (q > p)
-    assert(false);
+  //@ assert q <= p;
+  //@ assert q - p <= 0;
+  //@ assert q - p == 0;
+  struct bar b;
+  //@ open bar_x(&b, _);
+  //@ open bar_y(&b, _);
+  //@ integer_distinct(&b.x, &b.x);
+  assert(false);
 }
 
 - When including files using double quotes (e.g. 'include "xyz.h"', in contrast to 'include <xyz.h>'), VeriFast assumes the compiler searches first in the directory of the file in which the include statement is written. This is the behaviour of GCC. This is not enforced by the C standard.
-- When using a different include path to verify a 'static' library, then when using that library, the user can overwrite definitions from headers of that library and symbolic linking cannot detect this (see tests/bugs/include_paths).
+- When using a different include path to verify a 'static' library, than when using that library, the user can overwrite definitions from headers of that library and symbolic linking cannot detect this (see tests/bugs/include_paths).
 
 Java Programs
 =============
@@ -55,3 +63,4 @@ Known VeriFast unsoundnesses:
 - Spec of Selector.selectedKeys: states that the selected-keys set does not contain any cancelled keys. This is not true.
 - API specs: Not all specs of methods that throw checked exceptions (such as IOException) declare them
 - Linking soundness (i.e. soundness for multi-jar programs) has not yet been thoroughly dealt with
+- See tests/bugs/z3-proves-false.java. Reduced test case at tests/bugs/z3-proves-false/z3-proves-false.java. This seems to be an unsoundness in Z3 1.3.6, but further research is necessary.

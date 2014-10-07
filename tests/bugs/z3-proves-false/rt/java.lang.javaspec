@@ -1,0 +1,27 @@
+package java.lang;
+
+/*@
+
+fixpoint int mydiv2(int x);
+fixpoint int mymod(int x, int y);
+fixpoint int bar(int x);
+
+lemma_auto(mymod(1, y)) void modulo_nonnegative(int y);
+    requires 1 < y;
+    ensures mymod(1, y) < y;
+  
+lemma_auto void bitand_modulo(int x);
+    requires x == 1;
+    ensures mymod(x, 2) == bar(x) && 0 <= bar(1) && bar(1) <= 1;
+
+lemma_auto void modulo_div(int x);
+    requires x == 1;
+    ensures 2 * mydiv2(x) + mymod(1, 2) == 1;
+
+predicate array_element();
+predicate array_slice();
+predicate array_slice_deep();
+
+@*/
+
+public class Object {}
