@@ -1795,7 +1795,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let targs = List.map (fun _ -> InferredType (ref None)) fttparams in
           let pats = TermPat fterm::List.map (fun _ -> SrcPat DummyPat) ftxmap in
           consume_chunk rules h [] [] [] l (predsymb, true) targs real_unit dummypat inputParamCount pats $. fun chunk h coef (_::args) _ _ _ _ ->
-          if not (definitely_equal coef real_unit) then assert_false h env l "Full lemma function pointer chunk required." None;
+          if leminfo <> None && not (definitely_equal coef real_unit) then assert_false h env l "Full lemma function pointer chunk required." None;
           let targs = List.map unfold_inferred_type targs in
           check_call targs h args $. fun h env retval ->
           cont (chunk::h) env retval
