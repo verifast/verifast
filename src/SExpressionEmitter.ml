@@ -538,18 +538,19 @@ let rec sexpr_of_stmt (stmt : stmt) : sexpression =
     | Leak (loc, asn) ->
       List [ Symbol "stmt-leak"
            ; sexpr_of_pred asn ]
-    | PerformActionStmt _                    -> unsupported "stmt-PerformActionStmt"
-    | SplitFractionStmt _                    -> unsupported "stmt-SplitFractionStmt"
-    | MergeFractionsStmt _                   -> unsupported "stmt-MergeFractionsStmt"
-    | CreateBoxStmt _                        -> unsupported "stmt-CreateBoxStmt"
-    | CreateHandleStmt _                     -> unsupported "stmt-CreateHandleStmt"
-    | DisposeBoxStmt _                       -> unsupported "stmt-DisposeBoxStmt"
-    | LabelStmt _                            -> unsupported "stmt-LabelStmt"
-    | GotoStmt _                             -> unsupported "stmt-GotoStmt"
-    | NoopStmt _                             -> unsupported "stmt-NoopStmt"
-    | InvariantStmt _                        -> unsupported "stmt-InvariantStmt"
-    | ProduceLemmaFunctionPointerChunkStmt _ -> unsupported "stmt-ProduceLemmaFunctionPointerChunkStmt"
-    | ProduceFunctionPointerChunkStmt _      -> unsupported "stmt-ProduceFunctionPointerChunkStmt"
+    | PerformActionStmt _                      -> unsupported "stmt-PerformActionStmt"
+    | SplitFractionStmt _                      -> unsupported "stmt-SplitFractionStmt"
+    | MergeFractionsStmt _                     -> unsupported "stmt-MergeFractionsStmt"
+    | CreateBoxStmt _                          -> unsupported "stmt-CreateBoxStmt"
+    | CreateHandleStmt _                       -> unsupported "stmt-CreateHandleStmt"
+    | DisposeBoxStmt _                         -> unsupported "stmt-DisposeBoxStmt"
+    | LabelStmt _                              -> unsupported "stmt-LabelStmt"
+    | GotoStmt _                               -> unsupported "stmt-GotoStmt"
+    | NoopStmt _                               -> unsupported "stmt-NoopStmt"
+    | InvariantStmt _                          -> unsupported "stmt-InvariantStmt"
+    | ProduceLemmaFunctionPointerChunkStmt _   -> unsupported "stmt-ProduceLemmaFunctionPointerChunkStmt"
+    | DuplicateLemmaFunctionPointerChunkStmt _ -> unsupported "stmt-DuplicateLemmaFunctionPointerChunkStmt"
+    | ProduceFunctionPointerChunkStmt _        -> unsupported "stmt-ProduceFunctionPointerChunkStmt"
     | TryCatch (loc, stmts, catchs) ->
       build_list [ Symbol "stmt-try-catch" ]
                  [ "stmts", sexpr_of_list sexpr_of_stmt stmts ]

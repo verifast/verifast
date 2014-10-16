@@ -23,7 +23,8 @@ let ghost_keywords = [
   "ensures"; "close"; "lemma"; "open"; "emp"; "invariant"; "lemma_auto";
   "_"; "@*/"; "predicate_family"; "predicate_family_instance"; "predicate_ctor"; "leak"; "@";
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action"; "nonghost_callers_only";
-  "create_box"; "above"; "below"; "and_handle"; "and_fresh_handle"; "create_handle"; "create_fresh_handle"; "dispose_box"; "produce_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
+  "create_box"; "above"; "below"; "and_handle"; "and_fresh_handle"; "create_handle"; "create_fresh_handle"; "dispose_box"; 
+  "produce_lemma_function_pointer_chunk"; "duplicate_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
   "producing_box_predicate"; "producing_handle_predicate"; "producing_fresh_handle_predicate"; "box"; "handle"; "any"; "real"; "split_fraction"; "by"; "merge_fractions";
   "unloadable_module"; "decreases"; "load_plugin"; "forall_"; "import_module"; "require_module"; ".."; "extends"; "permbased"
 ]
@@ -908,6 +909,8 @@ and
        [< '(_, Kwd ";") >] -> None
      | [< s = parse_stmt >] -> Some s
   >] -> ProduceLemmaFunctionPointerChunkStmt (l, e, ftclause, body)
+| [< '(l, Kwd "duplicate_lemma_function_pointer_chunk"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd ";")
+  >] -> DuplicateLemmaFunctionPointerChunkStmt (l, e)
 | [< '(l, Kwd "produce_function_pointer_chunk"); '(li, Ident ftn);
      targs = parse_type_args li;
      '(_, Kwd "("); fpe = parse_expr; '(_, Kwd ")");

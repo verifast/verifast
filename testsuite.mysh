@@ -112,6 +112,8 @@ cd examples
     verifast_both -c lemmafuncptr.c
     verifast_both -c lemmafuncptr_fraction_valid.c
     verifast_both -c -allow_should_fail lemmafuncptr_fraction_invalid.c
+    verifast_both -c lemmafuncptr_duplication_valid.c
+    verifast_both -c -allow_should_fail lemmafuncptr_duplication_invalid.c
     verifast_both -c linkedlist_with_lemmaptr.c
     verifast_both -c odd_even_lemmas.c
   cd ..

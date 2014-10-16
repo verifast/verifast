@@ -381,6 +381,9 @@ and
       expr *
       (string * type_expr list * expr list * (loc * string) list * loc * stmt list * loc) option *
       stmt option
+  | DuplicateLemmaFunctionPointerChunkStmt of
+      loc *
+      expr
   | ProduceFunctionPointerChunkStmt of
       loc *
       string * (* name of function typedef *)
@@ -772,6 +775,7 @@ let stmt_loc s =
   | NoopStmt l -> l
   | InvariantStmt (l, _) -> l
   | ProduceLemmaFunctionPointerChunkStmt (l, _, _, _) -> l
+  | DuplicateLemmaFunctionPointerChunkStmt (l, _) -> l
   | ProduceFunctionPointerChunkStmt (l, ftn, fpe, targs, args, params, openBraceLoc, ss, closeBraceLoc) -> l
   | Break (l) -> l
   | SuperConstructorCall(l, _) -> l

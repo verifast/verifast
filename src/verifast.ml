@@ -323,6 +323,27 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       verify_produce_function_pointer_chunk_stmt Ghost l e ftclause_opt body
     | ProduceFunctionPointerChunkStmt (l, ftn, fpe, targs, args, params, openBraceLoc, ss, closeBraceLoc) ->
       verify_produce_function_pointer_chunk_stmt Real l fpe (Some (ftn, targs, args, params, openBraceLoc, ss, closeBraceLoc)) None
+    | DuplicateLemmaFunctionPointerChunkStmt (l, e) ->
+      if not pure then static_error l "This construct is not allowed in a non-pure context." None;
+      if leminfo <> None then static_error l "This construct is not allowed in a lemma." None;
+      let (lftn, ftn) =
+        match e with
+          Var (lftn, x, _) -> (lftn, x)
+        | _ -> static_error (expr_loc e) "Function type expected" None
+      in
+      begin
+        match resolve Real (pn,ilist) l ftn functypemap with
+          None -> static_error lftn "No such function type." None
+        | Some (ftn, (lft, gh, fttparams, rt, ftxmap, xmap, pre, post, ft_predfammaps)) ->
+          let p_symb = 
+            if gh <> Ghost then static_error lftn "Only lemma function types allowed here." None;
+            let [(_, (_, _, _, _, p_tn, _, _))] = ft_predfammaps in p_tn
+          in
+          consume_chunk rules h ghostenv [] [] l (p_symb, true) [] real_unit dummypat None [SrcPat DummyPat] $. fun _ h coef ts size _ _ _ ->
+          produce_chunk h (p_symb, true) [] coef (Some 0) ts size $. fun h ->
+          produce_chunk h (p_symb, true) [] real_unit (Some 0) ts size $. fun h ->
+          cont h env
+      end
     | ExprStmt (CallExpr (l, "close_struct", targs, [], args, Static)) when language = CLang ->
       let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "close_struct expects no type arguments and one argument." None in
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
