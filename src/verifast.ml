@@ -339,7 +339,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             if gh <> Ghost then static_error lftn "Only lemma function types allowed here." None;
             let [(_, (_, _, _, _, p_tn, _, _))] = ft_predfammaps in p_tn
           in
-          consume_chunk rules h ghostenv [] [] l (p_symb, true) [] real_unit dummypat None [SrcPat DummyPat] $. fun _ h coef ts size _ _ _ ->
+          let targs = List.map (fun _ -> SrcPat DummyPat) ftxmap in
+          consume_chunk rules h ghostenv [] [] l (p_symb, true) [] real_unit dummypat (Some 1) ((SrcPat DummyPat)::targs) $. fun _ h coef ts size _ _ _ ->
           produce_chunk h (p_symb, true) [] coef (Some 0) ts size $. fun h ->
           produce_chunk h (p_symb, true) [] real_unit (Some 0) ts size $. fun h ->
           cont h env
