@@ -221,7 +221,7 @@ clean::
 clean::
 	rm -f *.cmi
 
-%.cmx: %.ml
+%.cmx: %.ml $(INCLUDE_OS_DIR)/Perf.cmxa
 	@echo "  OCAMLOPT " $@
 	${OCAMLOPT} $(OCAMLCFLAGS) -thread -c -w p -warn-error FSU -c $(INCLUDES) -pp ${CAMLP4O} nums.cmxa  $*.ml
 clean::
@@ -375,6 +375,8 @@ vfide: ../bin/vfide$(DOTEXE) $(STDLIB)
 
 ifneq ($(OS), Cygwin)
   ../bin/verifast$(DOTEXE): linux/libPerf_cobjs.a
+else
+  ../bin/verifast$(DOTEXE): win/Perf.cmxa
 endif
 verifast: ../bin/verifast$(DOTEXE) $(STDLIB)
 .PHONY: verifast
