@@ -2402,7 +2402,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let _ = pop() in
     let _ = 
       (match k with
-        Lemma(true, trigger) -> create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams'
+        Lemma(true, trigger) -> 
+          if (try_assoc g !prototypes_used = None) then
+            create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams'
       | _ -> ()
     ) in
     lems'
