@@ -2402,9 +2402,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let _ = pop() in
     let _ = 
       (match k with
-        Lemma(true, trigger) -> 
-          if (try_assoc g !prototypes_used = None) then
-            create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams'
+        Lemma(true, trigger) -> create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams'
       | _ -> ()
     ) in
     lems'
@@ -2617,7 +2615,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if language = Java && not (Filename.check_suffix g_file_name ".javaspec") then
         static_error l "A lemma function outside a .javaspec file must have a body. To assume a lemma, use the body '{ assume(false); }'." None;
       let FuncInfo ([], fterm, _, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, functype_opt, body, fb,v) = (List.assoc g funcmap) in
-      if auto && (Filename.check_suffix g_file_name ".c" or is_import_spec or language = CLang) then begin
+      if auto && (Filename.check_suffix g_file_name ".c" or is_import_spec or language = CLang && Filename.chop_extension (Filename.basename g_file_name) <> Filename.chop_extension (Filename.basename program_path)) then begin
         register_prototype_used l g;
         create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams'
       end;
@@ -2882,8 +2880,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       List.sort compare lines
     in
     let lines =
-      let used = List.filter (fun x -> not (List.mem x prototypes_implemented)) !prototypes_used in
-      List.map (fun line -> ".requires " ^ line) (sorted_lines '#' used)
+      List.map (fun line -> ".requires " ^ line) (sorted_lines '#' !prototypes_used)
       @
       List.map (fun line -> ".provides " ^ line) (sorted_lines '#' prototypes_implemented)
       @

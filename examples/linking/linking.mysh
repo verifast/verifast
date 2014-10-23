@@ -45,7 +45,3 @@ cd double_dll_defines
   del dll2.dll.vfmanifest
   del dll1.dll.vfmanifest
 cd ..
-
-cd auto_lemma
-  verifast auto_lemma_impl.c main.c
-cd ..
