@@ -204,6 +204,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     produce_asn tpenv0 [] [] env0 pre0 real_unit None None (fun h _ env0 ->
       let bs = zip2 xmap env0_0 in
       let env = currentThreadEnv @ List.map (fun ((p, _), (p0, v)) -> (p, v)) bs @ env00 in
+      begin match pre with
+        ExprAsn (la, False lf) when la == l ->
+        assert_false h env l "Contract required" None
+      | _ -> ()
+      end;
       consume_asn rules tpenv h [] env pre true real_unit (fun _ h _ env _ ->
         let (env, env0) =
           match rt with
@@ -1415,8 +1420,16 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         assert_false h env l "Target of method call might be null." None
     in
     let cenv = [(current_thread_name, List.assoc current_thread_name env)] @ env' @ funenv in
-    (fun cont -> with_context (Executing (h, env, l, "Verifying call")) cont) $. fun () ->
+    with_context (Executing (h, env, l, "Verifying call")) $. fun () ->
     with_context PushSubcontext (fun () ->
+      begin match pre with
+        ExprAsn (lg, False ld) when ld == dummy_loc ->
+        ignore begin
+          with_context (Executing (h, env, lg, "Consuming precondition")) $. fun () ->
+          assert_false h env lg "Callee must have contract" None
+        end
+      | _ -> ()
+      end;
       consume_asn_with_post rules tpenv h ghostenv cenv pre true real_unit (fun _ h ghostenv' env' chunk_size post' ->
         let post =
           match post' with
@@ -1587,6 +1600,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (* check_expr is needed here because args are not typechecked yet. Why does check_expr_t not check the arguments of a WFunCall? *)
       let at_most_one_unsafe args = (List.length (List.filter (fun a -> let (w, t) = check_expr (pn,ilist) tparams tenv a in not (is_safe_expr w)) args)) <= 1 in
       let eval_h = if language == CLang && not heapReadonly &&  (List.length args = 1 || at_most_one_unsafe args) then (fun h env e cont -> eval_h_core (true, false) h env e cont) else eval_h in
+      let pre = match pre with ExprAsn (la, False _) when la == lg -> ExprAsn (lg, False dummy_loc) | _ -> pre in
       verify_call funcmap eval_h l (pn, ilist) xo g targs (List.map (fun e -> SrcPat (LitPat e)) args) (callee_tparams, tr, ps, funenv, pre, post, epost, v) pure leminfo sizemap h tparams tenv ghostenv env cont econt
     in
     let new_array h env l elem_tp length elems =

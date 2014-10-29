@@ -1020,14 +1020,7 @@ and
         | [< '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); >] -> LoopInv p
         end;
     dec = opt (parser [< '(_, Kwd "/*@"); '(_, Kwd "decreases"); decr = parse_expr; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> decr | [< '(_, Kwd "decreases"); decr = parse_expr; '(_, Kwd ";"); >] -> decr );(* only allows decreases if invariant provided *)
-  >] -> 
-  match (inv, dec) with
-  | (None, None) -> 
-      if !enforce_annotations then 
-        raise (ParseException (l, "A loop must have an invariant")) 
-      else
-        (Some(LoopInv(ExprAsn(l, False(l)))), None)
-  | _ -> (inv, dec)
+  >] -> (inv, dec)
 and
   packagename_of_read l e =
   match e with
