@@ -25,7 +25,7 @@ FILE* fopen(char* filename, char* mode); // todo: check that mode is a valid mod
     //@ ensures [f]string(filename, fcs) &*& [g]string(mode, mcs) &*& result == 0 ? true : file(result);
 
 int fread(void* buffer, int size, int n, FILE* fp);
-    //@ requires chars(buffer, ?m, ?cs) &*& 0<=size &*& 0<=n &*& size * n <= m &*& file(fp); // TODO!
+    //@ requires chars(buffer, ?m, ?cs) &*& 0<=size &*& 0<=n &*& size * n <= m &*& file(fp);
     //@ ensures chars(buffer, m, ?cs2) &*& file(fp) &*& result <= n;
   
 int fwrite(void* buffer, int size, int n, FILE* fp);
@@ -48,9 +48,9 @@ void rewind(FILE* fp);
     //@ requires file(fp);
     //@ ensures file(fp);
 
-int puts(char* format);
-    //@ requires [?f]string(format, ?cs);
-    //@ ensures [f]string(format, cs);
+int puts(char* text);
+    //@ requires [?f]string(text, ?cs);
+    //@ ensures [f]string(text, cs);
   
 int feof(FILE* fp);
     //@ requires file(fp);

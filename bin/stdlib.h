@@ -9,9 +9,7 @@ void abort();
     //@ ensures false;
 
 void exit(int status);
-/*@ requires true;
-  @*/
-/*@ ensures false;
-  @*/
+    //@ requires true;
+    //@ ensures false;
 
 #endif
