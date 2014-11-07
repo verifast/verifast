@@ -100,7 +100,7 @@ lemma void forall_t_elim<t>(fixpoint(fixpoint(t, bool), bool) f, fixpoint(t, boo
     ensures p(x) == true;
 
 /**
- * An implementation of this typedef proofs that p(x) is true. Note that x is not constrained.
+ * An implementation of this typedef proves that p(x) is true for all x. Note that x is not constrained.
  *
  * In case the proof requires [_]is_forall_t<t3>(?p3) &*& p3(f3)==true for some t3,p3,f3,
  * you can pass this in the predicate pred.
@@ -111,9 +111,9 @@ typedef lemma void forall_proof_t<t>(fixpoint(t, bool) p, predicate() pred)(t x)
 
 /**
  * Ensures p(x) is true for all x,
- * given a lemma forall_proof that proofs p(x) is true for an unconstrained x.
+ * given a lemma forall_proof that proves p(x) is true for an unconstrained x.
  *
- * Note: it might be easyer to use not_forall_t instead because it does not require
+ * Note: it might be easier to use not_forall_t instead because it does not require
  * creating a lemma function pointer chunk. See the implementation of apply_forall_proof
  * in quantifiers.c to see how not_forall_t can be used instead.
  */
