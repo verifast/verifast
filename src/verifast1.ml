@@ -4127,7 +4127,11 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
   let rec fix_inferred_type r =
     match !r with
       None -> r := Some Bool (* any type will do *)
-    | Some (InferredType r) -> fix_inferred_type r
+    | Some t -> fix_inferred_types_in_type t
+  and fix_inferred_types_in_type t =
+    match t with
+      InferredType r -> fix_inferred_type r
+    | InductiveType (i, targs) -> List.iter fix_inferred_types_in_type targs
     | _ -> ()
   
   let fix_inferred_types rs = List.iter fix_inferred_type rs
