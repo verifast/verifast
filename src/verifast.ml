@@ -554,7 +554,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let verify_expr ro h env opt e cont = verify_expr ro h env opt e cont econt in 
       verify_expr false h env None w $. fun h env v ->
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
-      begin match tp with
+      begin match unfold_inferred_type tp with
         InductiveType (i, targs) ->
         let (tn, targs, Some (_, itparams, ctormap, _)) = (i, targs, try_assoc' Ghost (pn,ilist) i inductivemap) in
         let (Some tpenv) = zip itparams targs in
