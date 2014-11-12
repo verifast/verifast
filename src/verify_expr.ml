@@ -63,7 +63,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | DeclStmt (l, xs) -> flatmap (fun (_, _, x, e, _) -> (match e with None -> [] | Some e -> expr_assigned_variables e)) xs
     | IfStmt (l, e, ss1, ss2) -> expr_assigned_variables e @ block_assigned_variables ss1 @ block_assigned_variables ss2
     | ProduceLemmaFunctionPointerChunkStmt (l, e, ftclause, body) ->
-      expr_assigned_variables e @
+      (match e with None -> [] | Some e -> expr_assigned_variables e) @
       begin
         match body with
           None -> []
@@ -1439,7 +1439,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let _ =
           match leminfo with
             None -> ()
-          | Some (lems, g0, indinfo) ->
+          | Some (lems, g0, indinfo, nonghost_callers_only) ->
               if match g with Some g -> List.mem g lems | None -> true then
                 ()
               else 
@@ -1861,7 +1861,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if body = None then register_prototype_used lg g;
       if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." None;
       if not pure && is_lemma k then static_error l "Cannot call lemma functions in a non-pure context." None;
-      if nonghost_callers_only && leminfo <> None then static_error l "A lemma function marked nonghost_callers_only cannot be called from a lemma function." None;
+      if nonghost_callers_only then begin
+        match leminfo with
+          None | Some (_, _, _, true) -> ()
+        | _ -> static_error l "A lemma function marked nonghost_callers_only cannot be called from a non-nonghost_callers_only lemma function." None
+      end;
       check_correct xo (Some g) targs es (lg, tparams, tr, ps, funenv, pre, post, None, v) cont
     | NewArray(l, tp, e) ->
       let elem_tp = check_pure_type (pn,ilist) tparams tp in

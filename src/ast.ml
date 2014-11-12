@@ -378,7 +378,7 @@ and
       asn (* join point *)
   | ProduceLemmaFunctionPointerChunkStmt of
       loc *
-      expr *
+      expr option *
       (string * type_expr list * expr list * (loc * string) list * loc * stmt list * loc) option *
       stmt option
   | DuplicateLemmaFunctionPointerChunkStmt of

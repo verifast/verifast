@@ -848,6 +848,14 @@ and
   [< '(l, Kwd "if"); '(_, Kwd "("); condition = parse_expr; '(_, Kwd ")"); (lph, post_hpn, post_hp_args) = parse_producing_handle_predicate; '(_, Kwd "else"); rest = parse_producing_handle_predicate_list >] -> ConditionalProducingHandlePredicate(lph, condition, post_hpn, post_hp_args, rest); 
 | [< (lph, post_hpn, post_hp_args) = parse_producing_handle_predicate >] -> BasicProducingHandlePredicate(lph, post_hpn, post_hp_args)
 and
+  parse_produce_lemma_function_pointer_chunk_stmt_function_type_clause = parser
+  [< '(li, Ident ftn);
+     targs = parse_type_args li;
+     args = parse_arglist;
+     '(_, Kwd "("); params = rep_comma (parser [< '(l, Ident x) >] -> (l, x)); '(_, Kwd ")");
+     '(openBraceLoc, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}") >] ->
+     (ftn, targs, args, params, openBraceLoc, ss, closeBraceLoc)
+and
   parse_stmt0 = parser
   [< '((sp1, _), Kwd "/*@"); s = parse_stmt0; '((_, sp2), Kwd "@*/") >] -> PureStmt ((sp1, sp2), s)
 | [< '((sp1, _), Kwd "@*/"); s = parse_stmt; '((_, sp2), Kwd "/*@") >] -> NonpureStmt ((sp1, sp2), false, s)
@@ -894,16 +902,12 @@ and
      );
      '(_, Kwd ";")
      >] -> CreateBoxStmt (l, x, bcn, args, (match lower_bounds with None -> [] | Some lbs -> lbs), (match upper_bounds with None -> [] | Some ubs -> ubs), handleClauses)
-| [< '(l, Kwd "produce_lemma_function_pointer_chunk"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")");
-     ftclause = begin parser
-       [< '(_, Kwd ":");
-          '(li, Ident ftn);
-          targs = parse_type_args li;
-          args = parse_arglist;
-          '(_, Kwd "("); params = rep_comma (parser [< '(l, Ident x) >] -> (l, x)); '(_, Kwd ")");
-          '(openBraceLoc, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}") >] ->
-       Some (ftn, targs, args, params, openBraceLoc, ss, closeBraceLoc)
-     | [< >] -> None
+| [< '(l, Kwd "produce_lemma_function_pointer_chunk");
+     (e, ftclause) = begin parser
+       [< '(_, Kwd "("); e = parse_expr; '(_, Kwd ")");
+          ftclause = opt (parser [< '(_, Kwd ":"); ftclause = parse_produce_lemma_function_pointer_chunk_stmt_function_type_clause >] -> ftclause)
+          >] -> (Some e, ftclause)
+     | [< ftclause = parse_produce_lemma_function_pointer_chunk_stmt_function_type_clause >] -> (None, Some ftclause)
      end;
      body = parser
        [< '(_, Kwd ";") >] -> None
