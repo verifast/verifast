@@ -325,7 +325,12 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       verify_produce_function_pointer_chunk_stmt Real l (Some fpe) (Some (ftn, targs, args, params, openBraceLoc, ss, closeBraceLoc)) None
     | DuplicateLemmaFunctionPointerChunkStmt (l, e) ->
       if not pure then static_error l "This construct is not allowed in a non-pure context." None;
-      if leminfo <> None then static_error l "This construct is not allowed in a lemma." None;
+      begin
+        match leminfo with
+          | Some (lems, g0, indinfo, nonghost_callers_only) ->
+              if not(nonghost_callers_only) then static_error l "This construct is not allowed in a lemma that is not nonghost_callers_only." None
+          | None -> ()
+      end;
       let (lftn, ftn) =
         match e with
           Var (lftn, x, _) -> (lftn, x)

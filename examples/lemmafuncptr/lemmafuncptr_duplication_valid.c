@@ -12,9 +12,17 @@ typedef lemma void lemma_type4(fixpoint(bool, int) targ1, fixpoint(bool, int) ta
                               (bool arg1, int arg2);
   requires true;
   ensures  true;
+  
+lemma void test1() nonghost_callers_only
+  requires [?f]is_lemma_type1(?lem);
+  ensures [f]is_lemma_type1(lem) &*& is_lemma_type1(lem);
+{
+  duplicate_lemma_function_pointer_chunk(lemma_type1);
+}
+
 @*/
 
-void test()
+void test2()
   /*@ requires [?f1]is_lemma_type1(?lem1) &*& 
                [?f2]is_lemma_type2(?lem2) &*& 
                [?f3]is_lemma_type3(?lem3) &*& 
