@@ -131,6 +131,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if f_tparams <> [] then static_error l "Taking the address of a function with type parameters is not yet supported." None;
         if body' = None then register_prototype_used lf fn;
         if stmt_ghostness = Ghost then begin
+          if nonghost_callers_only then static_error l "Function pointer chunks cannot be produced for nonghost_callers_only lemmas." None;
           match leminfo with
             None -> ()
           | Some (lems, g0, indinfo, nonghost_callers_only) ->
