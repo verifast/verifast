@@ -117,6 +117,7 @@ cd examples
     verifast_both -c -allow_should_fail lemmafuncptr_produce_invalid.c
     verifast_both -c linkedlist_with_lemmaptr.c
     verifast_both -c odd_even_lemmas.c
+    verifast_both -c split_inductive_proof.c
   cd ..
   verifast_both -c limits.c
   verifast_both map.c
