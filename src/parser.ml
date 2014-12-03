@@ -1246,7 +1246,7 @@ and
 | [< '(l, Kwd "UINT_MAX") >] -> IntLit (l, big_int_of_string "4294967295", ref None)
 | [< '(l, String s); ss = rep (parser [< '(_, String s) >] -> s) >] -> 
      (* TODO: support UTF-8 *)
-     if !language = Java && !lexer_in_ghost_range then
+     if !lexer_in_ghost_range then
        let chars = chars_of_string s in
        let es = List.map (fun c -> IntLit(l, big_int_of_int (Char.code c), ref (Some Char))) chars in
        InitializerList(l, es)
