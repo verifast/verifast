@@ -3924,7 +3924,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
     | PredAsn (l, p, targs, ps0, ps) ->
       let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
       begin fun cont ->
-         match try_assoc p#name tenv with
+         match try_assoc p#name tenv |> option_map unfold_inferred_type with
            Some (PredType (callee_tparams, ts, inputParamCount, inductiveness)) -> cont (new predref (p#name), false, callee_tparams, [], ts, inputParamCount)
          | None | Some _ ->
           begin match resolve Ghost (pn,ilist) l p#name predfammap with
