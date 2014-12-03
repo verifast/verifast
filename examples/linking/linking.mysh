@@ -14,10 +14,11 @@ cd ..
 cd simple_pred
   verifast -c give_pred_body.c
   verifast -shared use_pred_abstract.c
-  verifast give_pred_body_main.c
+  verifast private_pred.c give_pred_body2.c give_pred_body_main.c
   verifast use_pred_body.c use_pred_body_main.c
   verifast -link_should_fail give_pred_body.c give_pred_body_main.c
   verifast -c -allow_should_fail give_pred_double_body.c
+  verifast -shared -link_should_fail prelude_redef.c
 cd ..
 
 cd double_declares

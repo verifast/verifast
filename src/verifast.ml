@@ -2886,6 +2886,14 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       List.sort compare lines
     in
+    let sorted_predicate_lines preds =
+      let lines =
+        preds |> List.map begin fun (p, ((fampath, _, _), _), ((instpath, _, _), _)) ->
+          Printf.sprintf "%s@%s#%s" (qualified_path instpath) (qualified_path fampath) p
+        end
+      in
+      List.sort compare lines
+    in
     let lines =
       List.map (fun line -> ".requires " ^ line) (sorted_lines '#' !prototypes_used)
       @
@@ -2893,7 +2901,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       @
       List.map (fun line -> ".structure " ^ line) (sorted_lines '@' structures_defined)
       @
-      List.map (fun line -> ".predicate " ^ line) (sorted_lines '@' nonabstract_predicates)
+      List.map (fun line -> ".predicate " ^ line) (sorted_predicate_lines nonabstract_predicates)
       @
       List.sort compare
         begin

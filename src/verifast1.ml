@@ -499,7 +499,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     iter' ([],[]) ps
 
   let structures_defined     : (string * loc) list ref = ref []
-  let nonabstract_predicates : (string * loc) list ref = ref []
+  let nonabstract_predicates : (string * loc * loc) list ref = ref [] (* (name, familyLoc, instanceLoc) *)
   
   (* Region: check_file *)
   
@@ -739,7 +739,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * loc        (* structure body location *)
     type nonabstract_predicate_info =
         string     (* predicate name *)
-      * loc        (* predicate body location *)
+      * loc        (* predicate declaration (= family) location *)
+      * loc        (* predicate body (= instance) location *)
     type check_file_output =
         implemented_prototype_info list
       * implemented_function_type_info list
@@ -4375,8 +4376,8 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       match resolve Ghost (pn,ilist) l p predfammap with
         None -> static_error l ("No such predicate family: "^p) None
       | Some (p, (lfam, predfam_tparams, arity, ps, psymb, inputParamCount, inductiveness)) ->
-        if fns = [] && language = CLang then begin
-          nonabstract_predicates := (p, l)::!nonabstract_predicates
+        if fns = [] && language = CLang && l != lfam then begin
+          nonabstract_predicates := (p, lfam, l)::!nonabstract_predicates
         end;
         (p, predfam_tparams, arity, ps, psymb, inputParamCount)
     in
