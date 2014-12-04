@@ -226,6 +226,7 @@ cd examples
     cd ..
     cd template-method
       verifast_both -c TemplateMethod.java
+      verifast_both -c TemplateMethodWhile.java
     cd ..
   cd ..
   cd java
