@@ -1,0 +1,5 @@
+verifast -c -I sub1/sub2 -emit_vfmanifest main.c
+verifast -c -I sub1/ -emit_vfmanifest lib.c	
+verifast lib.o main.o
+del main.vfmanifest
+del lib.vfmanifest

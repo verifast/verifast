@@ -1,0 +1,8 @@
+#ifndef RAW_GHOST_LISTS_GH
+#define RAW_GHOST_LISTS_GH
+
+lemma int create_raw_ghost_list<t>();
+    requires emp;
+    ensures false;
+
+#endif

@@ -393,6 +393,14 @@ cd tests
     cd z3-proves-false
       ifz3 verifast -c -runtime rt/rt.jarspec z3-proves-false.java
     cd ..
+    cd filename_confusion
+      cd include_paths
+        mysh < include_paths.mysh
+      cd ..
+      cd clash_with_vfbin
+        verifast lemma_redef.c
+      cd ..
+    cd ..
   cd ..
   cd errors
     verifast_both -c -allow_should_fail basics.c
