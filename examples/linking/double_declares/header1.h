@@ -5,8 +5,4 @@ struct structure;
 
 //@ predicate pred();
 
-struct structure;
-
-//@ predicate pred();
-
 #endif

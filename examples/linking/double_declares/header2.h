@@ -3,9 +3,6 @@
 
 #include "header1.h"
 
-struct structure;
-//@ predicate pred();
-
 struct structure
 {
   int value;

@@ -2886,10 +2886,10 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       List.sort compare lines
     in
-    let sorted_predicate_lines preds =
+    let sorted_delayed_definition_lines defs =
       let lines =
-        preds |> List.map begin fun (p, ((fampath, _, _), _), ((instpath, _, _), _)) ->
-          Printf.sprintf "%s@%s#%s" (qualified_path instpath) (qualified_path fampath) p
+        defs |> List.map begin fun (x, ((declpath, _, _), _), ((defpath, _, _), _)) ->
+          Printf.sprintf "%s@%s#%s" (qualified_path defpath) (qualified_path declpath) x
         end
       in
       List.sort compare lines
@@ -2899,9 +2899,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       @
       List.map (fun line -> ".provides " ^ line) (sorted_lines '#' prototypes_implemented)
       @
-      List.map (fun line -> ".structure " ^ line) (sorted_lines '@' structures_defined)
+      List.map (fun line -> ".structure " ^ line) (sorted_delayed_definition_lines structures_defined)
       @
-      List.map (fun line -> ".predicate " ^ line) (sorted_predicate_lines nonabstract_predicates)
+      List.map (fun line -> ".predicate " ^ line) (sorted_delayed_definition_lines nonabstract_predicates)
       @
       List.sort compare
         begin

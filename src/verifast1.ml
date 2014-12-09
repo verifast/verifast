@@ -498,7 +498,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     iter' ([],[]) ps
 
-  let structures_defined     : (string * loc) list ref = ref []
+  let structures_defined     : (string * loc * loc) list ref = ref [] (* (name, declLoc, bodyLoc) *)
   let nonabstract_predicates : (string * loc * loc) list ref = ref [] (* (name, familyLoc, instanceLoc) *)
   
   (* Region: check_file *)
@@ -736,10 +736,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * bool (* function is declared in an unloadable module *)
     type defined_structure_info =
         string     (* structure name *)
+      * loc        (* structure forward declaration location *)
       * loc        (* structure body location *)
     type nonabstract_predicate_info =
         string     (* predicate name *)
-      * loc        (* predicate declaration (= family) location *)
+      * loc        (* predicate forward declaration (= family) location *)
       * loc        (* predicate body (= instance) location *)
     type check_file_output =
         implemented_prototype_info list
@@ -1016,6 +1017,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     if language = Java then [] else
     let [PackageDecl(_,"",[],ds)] = ps in iter [] ds
   
+  let delayed_struct_def sn ldecl ldef =
+    structures_defined := (sn, ldecl, ldef)::!structures_defined
+  
   let structdeclmap =
     let rec iter sdm ds =
       match ds with
@@ -1024,13 +1028,16 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         begin
           match try_assoc sn structmap0 with
             Some (_, Some _, _) -> static_error l "Duplicate struct name." None
-          | Some (_, None, _) | None -> ()
+          | Some (ldecl, None, _) -> if fds_opt = None then static_error l "Duplicate struct declaration." None else delayed_struct_def sn ldecl l
+          | None -> ()
         end;
         begin
           match try_assoc sn sdm with
             Some (_, Some _) -> static_error l "Duplicate struct name." None
-          | Some (_, None) | None -> iter ((sn, (l, fds_opt))::sdm) ds
-        end
+          | Some (ldecl, None) -> if fds_opt = None then static_error l "Duplicate struct declaration." None else delayed_struct_def sn ldecl l
+          | None -> ()
+        end;
+        iter ((sn, (l, fds_opt))::sdm) ds
       | _::ds -> iter sdm ds
     in
     match ps with
@@ -1465,11 +1472,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
          in
          begin
            match fds_opt with
-             Some fds -> 
-               begin 
-                 structures_defined := (sn, l)::!structures_defined;
-                 iter [] fds false
-               end
+             Some fds -> iter [] fds false
            | None -> (sn, (l, None, None))
          end
       )
