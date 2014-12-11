@@ -115,14 +115,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter functypemap ds =
       match ds with
         [] -> List.rev functypemap
-      | (ftn, (l, gh, tparams, rt, ftxmap, xmap, pn, ilist, pre, post, predfammaps))::ds ->
+      | (ftn, (l, gh, tparams, rt, ftxmap, xmap, pn, ilist, pre, post, terminates, predfammaps))::ds ->
         let (pre, post) =
           let (wpre, tenv) = check_asn (pn,ilist) tparams (ftxmap @ xmap @ [("this", PtrType Void); (current_thread_name, current_thread_type)]) pre in
           let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
           let (wpost, tenv) = check_asn (pn,ilist) tparams postmap post in
           (wpre, wpost)
         in
-        iter ((ftn, (l, gh, tparams, rt, ftxmap, xmap, pre, post, predfammaps))::functypemap) ds
+        iter ((ftn, (l, gh, tparams, rt, ftxmap, xmap, pre, post, terminates, predfammaps))::functypemap) ds
     in
     iter [] functypedeclmap1
   
@@ -309,7 +309,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         begin
           match resolve Real (pn,ilist) l ftn functypemap with
             None -> static_error l "No such function type." None
-          | Some (ftn, (lft, gh, fttparams, rt0, ftxmap0, xmap0, pre0, post0, ft_predfammaps)) ->
+          | Some (ftn, (lft, gh, fttparams, rt0, ftxmap0, xmap0, pre0, post0, terminates0, ft_predfammaps)) ->
             let fttargs = List.map (check_pure_type (pn,ilist) []) fttargs in
             let fttpenv =
               match zip fttparams fttargs with
@@ -346,7 +346,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let xmap0 = List.map (fun (x, t) -> (x, instantiate_type fttpenv t)) xmap0 in
             check_func_header_compat l "Function type implementation check: " env0
               (k, tparams, rt, xmap, nonghost_callers_only, pre, post, [], terminates)
-              (k', [], rt0, xmap0, false, fttpenv, cenv0, pre0, post0, [], false);
+              (k', [], rt0, xmap0, false, fttpenv, cenv0, pre0, post0, [], terminates0);
             if gh = Real then
             begin
               if ftargs = [] && fttargs = [] then
@@ -1461,13 +1461,15 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         let _ =
           match leminfo with
-            RealFuncInfo (gs, g0, terminates) ->
-            if terminates then
+            RealFuncInfo (gs, g0, caller_terminates) ->
+            if caller_terminates && not pure then begin
+              if not terminates then static_error l "Callee should be declared as 'terminates'." None;
               begin match g with
-                None -> static_error l "Function pointer calls by functions declared as 'terminates' are not yet supported." None
+                None -> ()
               | Some g ->
                 if not (List.mem g gs) then static_error l "A function declared as 'terminates' can call only preceding functions." None
               end
+            end
           | LemInfo (lems, g0, indinfo, nonghost_callers_only) ->
               if match g with Some g -> List.mem g lems | None -> true then
                 ()
@@ -1815,10 +1817,18 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (PtrType (FuncType ftn)) = List.assoc g tenv in
       has_heap_effects ();
       let fterm = List.assoc g env in
-      let (_, gh, fttparams, rt, ftxmap, xmap, pre, post, ft_predfammaps) = List.assoc ftn functypemap in
+      let (_, gh, fttparams, rt, ftxmap, xmap, pre, post, terminates, ft_predfammaps) = List.assoc ftn functypemap in
       if pure && gh = Real then static_error l "Cannot call regular function pointer in a pure context." None;
       let check_call targs h args0 cont =
-        verify_call funcmap eval_h l (pn, ilist) xo None targs (TermPat fterm::List.map (fun arg -> TermPat arg) args0 @ List.map (fun e -> SrcPat (LitPat e)) args) (fttparams, rt, (("this", PtrType Void)::ftxmap @ xmap), [], pre, post, None, false, Public) pure leminfo sizemap h tparams tenv ghostenv env cont (fun _ _ _ _ -> assert false)
+        verify_call funcmap eval_h l (pn, ilist) xo None targs (TermPat fterm::List.map (fun arg -> TermPat arg) args0 @ List.map (fun e -> SrcPat (LitPat e)) args) (fttparams, rt, (("this", PtrType Void)::ftxmap @ xmap), [], pre, post, None, terminates, Public) pure leminfo sizemap h tparams tenv ghostenv env cont (fun _ _ _ _ -> assert false)
+      in
+      let consume_call_perm h cont =
+        if should_terminate leminfo then begin
+          let (_, _, _, _, call_perm__symb, _, _) = List.assoc "call_perm_" predfammap in
+          consume_chunk rules h [] [] [] l (call_perm__symb, true) [] real_unit dummypat (Some 1) [TermPat fterm] $. fun _ h _ _ _ _ _ _ ->
+          cont h
+        end else
+          cont h
       in
       begin
         match gh with
@@ -1826,12 +1836,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let (lg, _, _, _, isfuncsymb) = List.assoc ("is_" ^ ftn) purefuncmap in
           let phi = mk_app isfuncsymb [fterm] in
           assert_term phi h env l ("Could not prove is_" ^ ftn ^ "(" ^ g ^ ")") None;
+          consume_call_perm h $. fun h ->
           check_call [] h [] cont
         | Real ->
           let [(_, (_, _, _, _, predsymb, inputParamCount, _))] = ft_predfammaps in
           let pats = TermPat fterm::List.map (fun _ -> SrcPat DummyPat) ftxmap in
           let targs = List.map (fun _ -> InferredType (ref None)) fttparams in
           consume_chunk rules h [] [] [] l (predsymb, true) targs real_unit dummypat inputParamCount pats $. fun _ h coef (_::args) _ _ _ _ ->
+          consume_call_perm h $. fun h ->
           check_call targs h args $. fun h env retval ->
           cont (Chunk ((predsymb, true), [], coef, fterm::args, None)::h) env retval
         | Ghost ->

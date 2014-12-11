@@ -148,10 +148,10 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               (ftn, ft_predfammaps, fttargs, [])
             end
           | Some (ftn, fttargs, args, params, openBraceLoc, ss, closeBraceLoc) ->
-            let (rt1, xmap1, pre1, post1) = (rt, ps, pre, post) in
+            let (rt1, xmap1, pre1, post1, terminates1) = (rt, ps, pre, post, terminates) in
             begin match resolve Real (pn,ilist) l ftn functypemap with
               None -> static_error l "No such function type" None
-            | Some (ftn, (lft, gh, fttparams, rt, ftxmap, xmap, pre, post, ft_predfammaps)) ->
+            | Some (ftn, (lft, gh, fttparams, rt, ftxmap, xmap, pre, post, terminates, ft_predfammaps)) ->
               begin match stmt_ghostness with
                 Real -> if gh <> Real || (ftxmap = [] && fttparams = []) then static_error l "A produce_function_pointer_chunk statement may be used only for parameterized and type-parameterized function types." None
               | Ghost -> if gh <> Ghost then static_error l "Lemma function pointer type expected." None
@@ -161,6 +161,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               | (Some t, Some t1) -> expect_type_core l "Function return type: " (Some (stmt_ghostness = Ghost)) t1 t
               | _ -> static_error l "Return type mismatch: Function does not return a value" None
               end;
+              if terminates && not terminates1 then static_error l "Target function should be declared 'terminates'." None;
               let fttargs = List.map (check_pure_type (pn,ilist) tparams) fttargs in
               let tpenv =
                 match zip fttparams fttargs with
@@ -340,7 +341,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin
         match resolve Real (pn,ilist) l ftn functypemap with
           None -> static_error lftn "No such function type." None
-        | Some (ftn, (lft, gh, fttparams, rt, ftxmap, xmap, pre, post, ft_predfammaps)) ->
+        | Some (ftn, (lft, gh, fttparams, rt, ftxmap, xmap, pre, post, terminates, ft_predfammaps)) ->
           let p_symb = 
             if gh <> Ghost then static_error lftn "Only lemma function types allowed here." None;
             let [(_, (_, _, _, _, p_tn, _, _))] = ft_predfammaps in p_tn
@@ -440,7 +441,18 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           iter h1 fds
       in
       iter [] cfds
-    | ExprStmt (CallExpr (l, "open_module", [], [], args, Static)) ->
+    | ExprStmt (CallExpr (l, "produce_call_below_perm_", [], [], args, Static)) when pure ->
+      if args <> [] then static_error l "produce_call_below_perm_ requires no arguments." None;
+      let (_, _, _, _, call_below_perm__symb, _, _) = List.assoc "call_below_perm_" predfammap in
+      let g =
+        match leminfo with
+          RealFuncInfo (gs, g, terminates) -> g
+        | LemInfo (lems, g, indinfo, nonghost_callers_only) -> g
+      in
+      let gterm = List.assoc g funcnameterms in
+      let callPermChunk = Chunk ((call_below_perm__symb, true), [], real_unit, [gterm], None) in
+      cont (callPermChunk::h) env
+    | ExprStmt (CallExpr (l, "open_module", [], [], args, Static)) when pure ->
       if args <> [] then static_error l "open_module requires no arguments." None;
       let (_, _, _, _, module_symb, _, _) = List.assoc "module" predfammap in
       let (_, _, _, _, module_code_symb, _, _) = List.assoc "module_code" predfammap in
@@ -468,7 +480,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if unloadable then [Chunk ((module_code_symb, true), [], coef, [current_module_term], None)] else []
       in
       cont (codeChunks @ h) env
-    | ExprStmt (CallExpr (l, "close_module", [], [], args, Static)) ->
+    | ExprStmt (CallExpr (l, "close_module", [], [], args, Static)) when pure ->
       if args <> [] then static_error l "close_module requires no arguments." None;
       let (_, _, _, _, module_symb, _, _) = List.assoc "module" predfammap in
       let (_, _, _, _, module_code_symb, _, _) = List.assoc "module_code" predfammap in

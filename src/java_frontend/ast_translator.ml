@@ -445,7 +445,8 @@ and check_contract l anns throws generate =
     else
       anns
   in
-  let (pre', post') = parse_contract l' anns' false in
+  let (pre', post', terminates') = parse_contract l' anns' false in
+  if terminates' then error l' "'terminates' clauses are not yet supported.";
   let throws' = 
     List.map 
       (fun c -> 

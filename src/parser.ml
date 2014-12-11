@@ -374,7 +374,8 @@ and
     let contract =
       let epost = match epost with None -> [] | Some(epost) -> epost in
       match co with
-      | Some(pre, post) -> 
+      | Some(pre, post, terminates) -> 
+        if terminates then raise (ParseException (l, "'terminates' clauses on methods are not yet supported."));
         let epost = List.map (fun (tp, e) -> 
           (tp, match e with 
             None -> raise (ParseException (l, "If you give a method a contract, you must also give ensures clauses for the thrown expceptions.")) | 
@@ -428,7 +429,7 @@ and
          '(_, Kwd ";");
          spec = opt parse_spec
        >] ->
-         let contract = check_for_contract spec l "Function type declaration should have contract." in
+         let contract = check_for_contract spec l "Function type declaration should have contract." (fun (pre, post) -> (pre, post, false)) in
          [FuncTypeDecl (l, Real, rt, g, tparams, ftps, ps, contract)]
        | [< '(_, Kwd ";") >] ->
          begin
@@ -444,19 +445,19 @@ and
   [EnumDecl(l, n, elems)]
 | [< '(_, Kwd "static"); t = parse_return_type; d = parse_func_rest Regular t Private >] -> check_function_for_contract d
 | [< t = parse_return_type; d = parse_func_rest Regular t Public >] -> check_function_for_contract d
-and check_for_contract contract l m =
+and check_for_contract: 'a. 'a option -> loc -> string -> (asn * asn -> 'a) -> 'a = fun contract l m f ->
   match contract with
     | Some spec -> spec 
     | None -> 
       if !enforce_annotations then 
         raise (ParseException (l, m)) 
       else
-        (ExprAsn(l, False(l)), ExprAsn(l, True(l)))
+        f (ExprAsn(l, False(l)), ExprAsn(l, True(l)))
 
 and check_function_for_contract d =
   match d with
   | Func(l, k, tparams, t, g, ps, gc, ft, contract, terminates, ss, static, v) ->
-    let contract = check_for_contract contract l "Function declaration should have a contract." in
+    let contract = check_for_contract contract l "Function declaration should have a contract." (fun co -> co) in
     [Func(l, k, tparams, t, g, ps, gc, ft, Some contract, terminates, ss, static, v)]
   | _ -> [d]
 and
@@ -510,8 +511,8 @@ and
        '(_, Kwd "{"); '(_, Kwd "invariant"); inv = parse_pred; '(_, Kwd ";");
        ads = parse_action_decls; hpds = parse_handle_pred_decls; '(_, Kwd "}") >] -> [BoxClassDecl (l, bcn, ps, inv, ads, hpds)]
   | [< '(l, Kwd "typedef"); '(_, Kwd "lemma"); rt = parse_return_type; '(li, Ident g); tps = parse_type_params li;
-       (ftps, ps) = parse_functype_paramlists; '(_, Kwd ";"); (pre, post) = parse_spec >] ->
-    [FuncTypeDecl (l, Ghost, rt, g, tps, ftps, ps, (pre, post))]
+       (ftps, ps) = parse_functype_paramlists; '(_, Kwd ";"); (pre, post, terminates) = parse_spec >] ->
+    [FuncTypeDecl (l, Ghost, rt, g, tps, ftps, ps, (pre, post, terminates))]
   | [< '(l, Kwd "unloadable_module"); '(_, Kwd ";") >] -> [UnloadableModuleDecl l]
   | [< '(l, Kwd "load_plugin"); '(lx, Ident x); '(_, Kwd ";") >] -> [LoadPluginDecl (l, lx, x)]
   | [< '(l, Kwd "import_module"); '(_, Ident g); '(lx, Kwd ";") >] -> [ImportModuleDecl (l, g)]
@@ -813,10 +814,10 @@ and
 and
   parse_spec = parser
     [< (nonghost_callers_only, ft, pre_post, terminates) = parse_spec_clauses >] ->
-    match (nonghost_callers_only, ft, pre_post, terminates) with
-      (false, None, None, false) -> raise Stream.Failure
-    | (false, None, (Some (pre, post)), false) -> (pre, post)
-    | _ -> raise (Stream.Error "Incorrect kind, number, or order of specification clauses. Expected: requires clause, ensures clause.")
+    match (nonghost_callers_only, ft, pre_post) with
+      (false, None, None) -> raise Stream.Failure
+    | (false, None, (Some (pre, post))) -> (pre, post, terminates)
+    | _ -> raise (Stream.Error "Incorrect kind, number, or order of specification clauses. Expected: requires clause, ensures clause, terminates clause (optional).")
 and
   parse_block = parser
   [< '(l, Kwd "{"); ss = parse_stmts; '(_, Kwd "}") >] -> ss

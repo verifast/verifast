@@ -310,8 +310,18 @@ lemma void string_limits(char *s);
     requires [?f]string(s, ?cs);
     ensures [f]string(s, cs) &*& true == ((char *)0 < s) &*& s + length(cs) < (char *)UINTPTR_MAX;
 
-
 inductive vararg = vararg_int(int) | vararg_uint(unsigned int) | vararg_pointer(void *);
+
+@*/
+
+/*@
+
+// Termination of function pointer calls
+
+fixpoint bool func_lt(void *f, void *g);
+
+predicate call_perm_(void *f;);
+predicate call_below_perm_(void *f;);
 
 @*/
 

@@ -597,6 +597,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * type_ map (* parameters of the function *)
       * asn (* precondition *)
       * asn (* postcondition *)
+      * bool (* terminates *)
       * pred_fam_info map (* the is_xyz predicate, if any *)
     type signature = string * type_ list
     type method_info =
@@ -1968,7 +1969,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter (pn,ilist) functypedeclmap1 ds =
       match ds with
         [] -> functypedeclmap1
-      | FuncTypeDecl (l, gh, rt, ftn, tparams, ftxs, xs, (pre, post))::ds ->
+      | FuncTypeDecl (l, gh, rt, ftn, tparams, ftxs, xs, (pre, post, terminates))::ds ->
+        if gh = Ghost && terminates then static_error l "A 'terminates' clause on a lemma function type is superfluous." None;
         let ftn0 = ftn in
         let ftn = full_name pn ftn in
         let _ = if List.mem_assoc ftn functypedeclmap1 || List.mem_assoc ftn functypemap0 then static_error l "Duplicate function type name." None in
@@ -2004,7 +2006,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           iter [] xs
         in
-        iter (pn,ilist) ((ftn, (l, gh, tparams, rt, ftxmap, xmap, ftn0, pn, ilist, pre, post))::functypedeclmap1) ds
+        iter (pn,ilist) ((ftn, (l, gh, tparams, rt, ftxmap, xmap, ftn0, pn, ilist, pre, post, terminates))::functypedeclmap1) ds
       | _::ds -> iter (pn,ilist) functypedeclmap1 ds
     in
     let rec iter' functypedeclmap1 ps =
@@ -2028,7 +2030,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let functypedeclmap1 =
     List.map
-      begin fun (g, (l, gh, tparams, rt, ftxmap, xmap, g0, pn, ilist, pre, post)) ->
+      begin fun (g, (l, gh, tparams, rt, ftxmap, xmap, g0, pn, ilist, pre, post, terminates)) ->
         let predfammaps =
           if gh = Ghost || ftxmap <> [] || tparams <> [] then
             let paramtypes = [PtrType (FuncType g)] @ List.map snd ftxmap in
@@ -2036,11 +2038,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           else
             []
         in
-        (g, (l, gh, tparams, rt, ftxmap, xmap, pn, ilist, pre, post, predfammaps))
+        (g, (l, gh, tparams, rt, ftxmap, xmap, pn, ilist, pre, post, terminates, predfammaps))
       end
       functypedeclmap1
   
-  let isparamizedfunctypepreds1 = flatmap (fun (g, (l, gh, tparams, rt, ftxmap, xmap, pn, ilist, pre, post, predfammaps)) -> predfammaps) functypedeclmap1
+  let isparamizedfunctypepreds1 = flatmap (fun (g, (l, gh, tparams, rt, ftxmap, xmap, pn, ilist, pre, post, terminates, predfammaps)) -> predfammaps) functypedeclmap1
   
   let malloc_block_pred_map1: malloc_block_pred_info map = 
     structmap1 |> flatmap begin function
@@ -2897,9 +2899,9 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       let func_call () =
         match try_assoc g tenv with
           Some (PtrType (FuncType ftn)) ->
-          let (_, gh, tparams, rt, ftxmap, xmap, pre, post, ft_predfammap) =
+          let (_, gh, tparams, rt, ftxmap, xmap, pre, post, terminates, ft_predfammap) =
             match try_assoc ftn functypemap with
-              None -> static_error l "Function pointer calls are now allowed here." None
+              None -> static_error l "Function pointer calls are not allowed here." None
             | Some info -> info
           in
           let rt = match rt with None -> Void | Some rt -> rt in (* This depends on the fact that the return type does not mention type parameters. *)

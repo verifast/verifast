@@ -611,7 +611,7 @@ and
       string list * (* type parameters *)
       (type_expr * string) list *
       (type_expr * string) list *
-      (asn * asn) (* precondition, postcondition *)
+      (asn * asn * bool) (* precondition, postcondition, terminates *)
   | BoxClassDecl of
       loc *
       string *
