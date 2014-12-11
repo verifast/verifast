@@ -26,7 +26,8 @@ let ghost_keywords = [
   "create_box"; "above"; "below"; "and_handle"; "and_fresh_handle"; "create_handle"; "create_fresh_handle"; "dispose_box"; 
   "produce_lemma_function_pointer_chunk"; "duplicate_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
   "producing_box_predicate"; "producing_handle_predicate"; "producing_fresh_handle_predicate"; "box"; "handle"; "any"; "real"; "split_fraction"; "by"; "merge_fractions";
-  "unloadable_module"; "decreases"; "load_plugin"; "forall_"; "import_module"; "require_module"; ".."; "extends"; "permbased"
+  "unloadable_module"; "decreases"; "load_plugin"; "forall_"; "import_module"; "require_module"; ".."; "extends"; "permbased";
+  "terminates";
 ]
 
 let c_keywords = [
@@ -87,6 +88,7 @@ type spec_clause = (* ?spec_clause *)
 | FuncTypeClause of string * type_expr list * (loc * string) list
 | RequiresClause of asn
 | EnsuresClause of asn
+| TerminatesClause of loc
 
 (* A toy Scala parser. *)
 module Scala = struct
@@ -453,9 +455,9 @@ and check_for_contract contract l m =
 
 and check_function_for_contract d =
   match d with
-  | Func(l, k, tparams, t, g, ps, gc, ft, contract, ss, static, v) ->
+  | Func(l, k, tparams, t, g, ps, gc, ft, contract, terminates, ss, static, v) ->
     let contract = check_for_contract contract l "Function declaration should have a contract." in
-    [Func(l, k, tparams, t, g, ps, gc, ft, Some contract, ss, static, v)]
+    [Func(l, k, tparams, t, g, ps, gc, ft, Some contract, terminates, ss, static, v)]
   | _ -> [d]
 and
   parse_pure_decls = parser
@@ -620,10 +622,10 @@ and
       [<
         ps = parse_paramlist;
         f = parser
-          [< '(_, Kwd ";"); (nonghost_callers_only, ft, co) = parse_spec_clauses >] ->
-          Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, None, Static, v)
-        | [< (nonghost_callers_only, ft, co) = parse_spec_clauses; '(_, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}") >] ->
-          Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, Some (ss, closeBraceLoc), Static, v)
+          [< '(_, Kwd ";"); (nonghost_callers_only, ft, co, terminates) = parse_spec_clauses >] ->
+          Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, terminates, None, Static, v)
+        | [< (nonghost_callers_only, ft, co, terminates) = parse_spec_clauses; '(_, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}") >] ->
+          Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, terminates, Some (ss, closeBraceLoc), Static, v)
       >] -> f
     | [<
         () = (fun s -> if k = Regular && tparams = [] && t <> None then () else raise Stream.Failure);
@@ -789,12 +791,13 @@ and
 and
   parse_pure_spec_clause = parser
   [< '(_, Kwd "nonghost_callers_only") >] -> NonghostCallersOnlyClause
+| [< '(l, Kwd "terminates"); '(_, Kwd ";") >] -> TerminatesClause l
 | [< '(_, Kwd ":"); '(li, Ident ft); targs = parse_type_args li; ftargs = parse_functypeclause_args >] -> FuncTypeClause (ft, targs, ftargs)
 | [< '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";") >] -> RequiresClause p
 | [< '(_, Kwd "ensures"); p = parse_pred; '(_, Kwd ";") >] -> EnsuresClause p
 and
   parse_spec_clause = parser
-  [< '((sp1, _), Kwd "/*@"); c = parse_pure_spec_clause; '((_, sp2), Kwd "@*/") >] -> c
+  [< c = peek_in_ghost_range (parser [< c = parse_pure_spec_clause; '(_, Kwd "@*/") >] -> c) >] -> c
 | [< c = parse_pure_spec_clause >] -> c
 and
   parse_spec_clauses = fun token_stream ->
@@ -804,14 +807,15 @@ and
     let nonghost_callers_only = (parser [< 'NonghostCallersOnlyClause >] -> out_count := !out_count + 1; true | [< >] -> false) clause_stream in
     let ft = (parser [< 'FuncTypeClause (ft, fttargs, ftargs) >] -> out_count := !out_count + 1; Some (ft, fttargs, ftargs) | [< >] -> None) clause_stream in
     let pre_post = (parser [< 'RequiresClause pre; 'EnsuresClause post; >] -> out_count := !out_count + 2; Some (pre, post) | [< >] -> None) clause_stream in
-    if !in_count > !out_count then raise (Stream.Error "The number, kind, or order of specification clauses is incorrect. Expected: nonghost_callers_only clause (optional), function type clause (optional), contract (optional).");
-    (nonghost_callers_only, ft, pre_post)
+    let terminates = (parser [< '(TerminatesClause l) >] -> out_count := !out_count + 1; true | [< >] -> false) clause_stream in
+    if !in_count > !out_count then raise (Stream.Error "The number, kind, or order of specification clauses is incorrect. Expected: nonghost_callers_only clause (optional), function type clause (optional), contract (optional), terminates clause (optional).");
+    (nonghost_callers_only, ft, pre_post, terminates)
 and
   parse_spec = parser
-    [< (nonghost_callers_only, ft, pre_post) = parse_spec_clauses >] ->
-    match (nonghost_callers_only, ft, pre_post) with
-      (false, None, None) -> raise Stream.Failure
-    | (false, None, (Some (pre, post))) -> (pre, post)
+    [< (nonghost_callers_only, ft, pre_post, terminates) = parse_spec_clauses >] ->
+    match (nonghost_callers_only, ft, pre_post, terminates) with
+      (false, None, None, false) -> raise Stream.Failure
+    | (false, None, (Some (pre, post)), false) -> (pre, post)
     | _ -> raise (Stream.Error "Incorrect kind, number, or order of specification clauses. Expected: requires clause, ensures clause.")
 and
   parse_block = parser

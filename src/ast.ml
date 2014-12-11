@@ -589,6 +589,7 @@ and
       bool (* nonghost_callers_only *) *
       (string * type_expr list * (loc * string) list) option (* implemented function type, with function type type arguments and function type arguments *) *
       (asn * asn) option *  (* contract *)
+      bool *  (* terminates *)
       (stmt list * loc (* Close brace *)) option *  (* body *)
       method_binding *  (* static or instance *)
       visibility

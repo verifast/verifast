@@ -125,7 +125,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       match resolve Real (pn,ilist) l fn funcmap with
         None -> static_error l "No such function." None
-      | Some (fn, FuncInfo (funenv, Some fterm, lf, k, f_tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, functype_opt, body',fb,v)) ->
+      | Some (fn, FuncInfo (funenv, Some fterm, lf, k, f_tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body',fb,v)) ->
         if stmt_ghostness = Ghost && not (is_lemma k) then static_error l "Not a lemma function." None;
         if stmt_ghostness = Real && k <> Regular then static_error l "Regular function expected." None;
         if f_tparams <> [] then static_error l "Taking the address of a function with type parameters is not yet supported." None;
@@ -133,8 +133,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if stmt_ghostness = Ghost then begin
           if nonghost_callers_only then static_error l "Function pointer chunks cannot be produced for nonghost_callers_only lemmas." None;
           match leminfo with
-            None -> ()
-          | Some (lems, g0, indinfo, nonghost_callers_only) ->
+            RealFuncInfo (_, _, _) -> ()
+          | LemInfo (lems, g0, indinfo, nonghost_callers_only) ->
             if not (List.mem fn lems) then static_error l "Function pointer chunks can only be produced for preceding lemmas." None;
             if scope_opt = None then static_error l "produce_lemma_function_pointer_chunk statement must have a body." None
         end;
@@ -328,9 +328,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if not pure then static_error l "This construct is not allowed in a non-pure context." None;
       begin
         match leminfo with
-          | Some (lems, g0, indinfo, nonghost_callers_only) ->
+          | LemInfo (lems, g0, indinfo, nonghost_callers_only) ->
               if not(nonghost_callers_only) then static_error l "This construct is not allowed in a lemma that is not nonghost_callers_only." None
-          | None -> ()
+          | RealFuncInfo (_, _, _) -> ()
       end;
       let (lftn, ftn) =
         match e with
@@ -1301,7 +1301,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if not pure then begin
         match ss with PureStmt (lp, _)::_ -> static_error lp "Pure statement not allowed here." None | _ -> ()
       end;
-      if pure && (match dec with None -> true | _ -> false) then static_error l "Loops without a measure are not supported in a pure context." None;
+      if pure && dec = None then static_error l "Loops without a measure are not supported in a pure context." None;
+      if dec = None && should_terminate leminfo then static_error l "'decreases' clause required." None;
       let endBodyLoc = match ss with BlockStmt(_, _, _, closeBraceLoc, _) :: _ -> closeBraceLoc | _-> l in
       let break h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       let lblenv = ("#break", fun blocks_done sizemap tenv ghostenv h env -> break h env)::lblenv in
@@ -1368,6 +1369,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match ss with PureStmt (lp, _)::_ -> static_error lp "Pure statement not allowed here." None | _ -> ()
       end;
       if pure && (match dec with None -> true | _ -> false) then static_error l "Loops without a measure are not supported in a pure context." None;
+      if dec = None && should_terminate leminfo then static_error l "'decreases' clause required." None;
       let endBodyLoc = match ss with BlockStmt(_, _, _, closeBraceLoc, _) :: _ -> closeBraceLoc | _-> l in
       let break h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       let lblenv = ("#break", fun blocks_done sizemap tenv ghostenv h env -> break h env)::lblenv in
@@ -1827,11 +1829,11 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 if List.mem_assoc (p, i) predinsts then static_error l "Duplicate predicate family instance." None;
                 (lems, ((p, i), (l, predinst_tparams, xs, body))::predinsts, localpreds, localpredinsts)
               end
-            | Func (l, Lemma(auto, trigger), tparams, rt, fn, xs, nonghost_callers_only, functype_opt, contract_opt, Some body, Static, Public) ->
+            | Func (l, Lemma(auto, trigger), tparams, rt, fn, xs, nonghost_callers_only, functype_opt, contract_opt, terminates, Some body, Static, Public) ->
               if List.mem_assoc fn funcmap || List.mem_assoc fn lems then static_error l "Duplicate function name." None;
               if List.mem_assoc fn tenv then static_error l "Local lemma name hides existing local variable name." None;
               let fterm = get_unique_var_symb fn (PtrType Void) in
-              ((fn, (auto, trigger, fterm, l, tparams, rt, xs, nonghost_callers_only, functype_opt, contract_opt, body))::lems, predinsts, localpreds, localpredinsts)
+              ((fn, (auto, trigger, fterm, l, tparams, rt, xs, nonghost_callers_only, functype_opt, contract_opt, terminates, body))::lems, predinsts, localpreds, localpredinsts)
             | _ -> static_error l "Local declarations must be lemmas or predicate family instances." None
           end
           ([], [], [], [])
@@ -1840,7 +1842,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (lems, predinsts, localpreds, localpredinsts) = (List.rev lems, List.rev predinsts, List.rev localpreds, List.rev localpredinsts) in
       let funcnameterms' =
         List.map
-          (fun (fn, (autom, trigger, fterm, l, tparams, rt, xs, nonghost_callers_only, functype_opt, contract_opt, body)) -> (fn, fterm))
+          (fun (fn, (autom, trigger, fterm, l, tparams, rt, xs, nonghost_callers_only, functype_opt, contract_opt, terminates, body)) -> (fn, fterm))
         lems
       in
       let env = funcnameterms' @ env in
@@ -1865,11 +1867,11 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       let funcmap' =
         List.map
-          begin fun (fn, (auto, trigger, fterm, l, tparams', rt, xs, nonghost_callers_only, functype_opt, contract_opt, body)) ->
+          begin fun (fn, (auto, trigger, fterm, l, tparams', rt, xs, nonghost_callers_only, functype_opt, contract_opt, terminates, body)) ->
             let (rt, xmap, functype_opt, pre, pre_tenv, post) =
-              check_func_header pn ilist tparams tenv env l (Lemma(auto, trigger)) tparams' rt fn (Some fterm) xs nonghost_callers_only functype_opt contract_opt (Some body)
+              check_func_header pn ilist tparams tenv env l (Lemma(auto, trigger)) tparams' rt fn (Some fterm) xs nonghost_callers_only functype_opt contract_opt terminates (Some body)
             in
-            (fn, FuncInfo (env, Some fterm, l, Lemma(auto, trigger), tparams', rt, xmap, nonghost_callers_only, pre, pre_tenv, post, functype_opt, Some (Some body), Static, Public))
+            (fn, FuncInfo (env, Some fterm, l, Lemma(auto, trigger), tparams', rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, Some (Some body), Static, Public))
           end
           lems
       in
@@ -1877,24 +1879,25 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let funcmap = funcmap' @ funcmap in
       let verify_lems lems0 =
         List.fold_left
-          begin fun lems0 (fn, FuncInfo (funenv, fterm, l, k, tparams', rt, xmap, nonghost_callers_only, pre, pre_tenv, post, functype_opt, Some (Some (ss, closeBraceLoc)), _, _)) ->
-            verify_func pn ilist lems0 boxes predinstmap funcmap tparams funenv l k tparams' rt fn xmap nonghost_callers_only pre pre_tenv post ss closeBraceLoc
+          begin fun lems0 (fn, FuncInfo (funenv, fterm, l, k, tparams', rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, Some (Some (ss, closeBraceLoc)), _, _)) ->
+            let gs', lems' = verify_func pn ilist [] lems0 boxes predinstmap funcmap tparams funenv l k tparams' rt fn xmap nonghost_callers_only pre pre_tenv post terminates ss closeBraceLoc in
+            lems'
           end
           lems0
           funcmap'
       in
       let leminfo =
         match leminfo with
-          None ->
+          RealFuncInfo (_, _, _) ->
           let lems0 =
             flatmap
-              (function (fn, FuncInfo (funenv, fterm, l, Lemma(_), tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, functype_opt, body, _, _)) -> [fn] | _ -> [])
+              (function (fn, FuncInfo (funenv, fterm, l, Lemma(_), tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, _, _)) -> [fn] | _ -> [])
               funcmap
           in
           ignore $. verify_lems lems0;
-          None
-        | Some (lems, g, indinfo, nonghost_callers_only) ->
-          Some (verify_lems lems, g, indinfo, nonghost_callers_only)
+          leminfo
+        | LemInfo (lems, g, indinfo, nonghost_callers_only) ->
+          LemInfo (verify_lems lems, g, indinfo, nonghost_callers_only)
       in
       check_block_declarations ss;
       let cont h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in      
@@ -2313,7 +2316,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match ps with
       [] -> cont h
     | _ -> with_context (Executing (h, env, l, "Freeing parameters.")) (fun _ -> cleanup_heapy_locals_core (pn, ilist) l h env ps cont)
-  and verify_func pn ilist lems boxes predinstmap funcmap tparams env l k tparams' rt g ps nonghost_callers_only pre pre_tenv post ss closeBraceLoc =
+  and verify_func pn ilist gs lems boxes predinstmap funcmap tparams env l k tparams' rt g ps nonghost_callers_only pre pre_tenv post terminates ss closeBraceLoc =
     let tparams = tparams' @ tparams in
     let _ = push() in
     let penv = get_unique_var_symbs_ ps (match k with Regular -> false | _ -> true) in (* actual params invullen *)
@@ -2340,11 +2343,11 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         None -> pre_tenv
       | Some rt -> ("#result", rt)::pre_tenv
     in
-    let (in_pure_context, leminfo, lems', ghostenv) =
+    let (in_pure_context, leminfo, gs', lems', ghostenv) =
       if is_lemma k then 
-        (true, Some (lems, g, indinfo, nonghost_callers_only), g::lems, List.map (function (p, t) -> p) ps @ ["#result"])
+        (true, LemInfo (lems, g, indinfo, nonghost_callers_only), gs, g::lems, List.map (function (p, t) -> p) ps @ ["#result"])
       else
-        (false, None, lems, [])
+        (false, RealFuncInfo (gs, g, terminates), g::gs, lems, [])
     in
     let env = [(current_thread_name, get_unique_var_symb current_thread_name current_thread_type)] @ penv @ env in
     let _ =
@@ -2412,7 +2415,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         Lemma(true, trigger) -> create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams'
       | _ -> ()
     ) in
-    lems'
+    gs', lems'
   
   let switch_stmt ss env=
     match ss with
@@ -2474,7 +2477,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let env = get_unique_var_symbs_non_ghost ([(current_thread_name, current_thread_type)] @ xmap) in
         let (sizemap, indinfo) = switch_stmt ss env in
         let (ss, explicitsupercall) = match ss with SuperConstructorCall(l, es) :: body -> (body, Some(SuperConstructorCall(l, es))) | _ -> (ss, None) in
-        let (in_pure_context, leminfo, ghostenv) = (false, None, []) in
+        let (in_pure_context, leminfo, ghostenv) = (false, RealFuncInfo ([], "", false), []) in
         begin
           produce_asn [] [] ghostenv env pre real_unit None None $. fun h ghostenv env ->
           let this = get_unique_var_symb "this" (ObjType cn) in
@@ -2511,7 +2514,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   with_context (Executing (h, env, lm, "Implicit superclass constructor call")) $. fun () ->
                   let eval_h h env e cont = verify_expr false (pn,ilist) [] false leminfo funcmap sizemap tenv ghostenv h env None e cont econt in
                   let pats = (List.map (fun e -> SrcPat (LitPat e)) args) in
-                  verify_call funcmap eval_h lm (pn, ilist) None None [] pats ([], None, xmap0, ["this", this], pre0, post0, Some(epost0), v0) false leminfo sizemap h [] tenv ghostenv env (fun h env _ ->
+                  verify_call funcmap eval_h lm (pn, ilist) None None [] pats ([], None, xmap0, ["this", this], pre0, post0, Some(epost0), false, v0) false leminfo sizemap h [] tenv ghostenv env (fun h env _ ->
                   cont h) econt
             end $. fun h ->
             let fds = get_fields (pn,ilist) cn lm in
@@ -2558,8 +2561,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         execute_branch $. fun () ->
         let (in_pure_context, leminfo, ghostenv) =
           match gh with
-            Ghost -> (true, Some (lems, "<method>", None, false), List.map (function (p, t) -> p) ps @ ["#result"])
-          | Real -> (false, None, [])
+            Ghost -> (true, LemInfo (lems, "<method>", None, false), List.map (function (p, t) -> p) ps @ ["#result"])
+          | Real -> (false, RealFuncInfo ([], "<method>", false), [])
         in
         begin
           let env = get_unique_var_symbs_non_ghost (ps @ [(current_thread_name, current_thread_type)]) in (* actual params invullen *)
@@ -2613,15 +2616,15 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       verify_meths (cpn, cilist) cfinal cabstract boxes lems cmeths;
       verify_classes boxes lems classm
   
-  let rec verify_funcs (pn,ilist)  boxes lems ds =
+  let rec verify_funcs (pn,ilist)  boxes gs lems ds =
     match ds with
-     [] -> (boxes, lems)
-    | Func (l, Lemma(auto, trigger), _, rt, g, ps, _, _, _, None, _, _)::ds -> 
+     [] -> (boxes, gs, lems)
+    | Func (l, Lemma(auto, trigger), _, rt, g, ps, _, _, _, _, None, _, _)::ds -> 
       let g = full_name pn g in
       let (((_, g_file_name), _, _), _) = l in
       if language = Java && not (Filename.check_suffix g_file_name ".javaspec") then
         static_error l "A lemma function outside a .javaspec file must have a body. To assume a lemma, use the body '{ assume(false); }'." None;
-      let FuncInfo ([], fterm, _, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, functype_opt, body, fb,v) = (List.assoc g funcmap) in
+      let FuncInfo ([], fterm, _, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, fb,v) = List.assoc g funcmap in
       if auto && (Filename.check_suffix g_file_name ".c" or is_import_spec or language = CLang && Filename.chop_extension (Filename.basename g_file_name) <> Filename.chop_extension (Filename.basename program_path)) then begin
         register_prototype_used l g;
         create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams'
@@ -2632,22 +2635,32 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         else
           lems    (* Prototype for lemma implemented in current file; will not generate .requires directive; calls must be subjected to termination check. *)
       in
-      verify_funcs (pn,ilist) boxes lems ds
-    | Func (l, k, _, _, g, _, _, functype_opt, _, Some _, _, _)::ds when k <> Fixpoint ->
+      verify_funcs (pn,ilist) boxes gs lems ds
+    | Func (l, Regular, _, rt, g, ps, _, _, _, _, None, _, _)::ds ->
       let g = full_name pn g in
-      let lems' =
+      let FuncInfo ([], fterm, _, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, fb,v) = List.assoc g funcmap in
+      let gs =
+        if body = None then
+          g::gs
+        else
+          gs
+      in
+      verify_funcs (pn,ilist) boxes gs lems ds
+    | Func (l, k, _, _, g, _, _, functype_opt, _, _, Some _, _, _)::ds when k <> Fixpoint ->
+      let g = full_name pn g in
+      let gs', lems' =
       record_fun_timing l g begin fun () ->
       if !verbosity >= 1 then Printf.printf "%10.6fs: %s: Verifying function %s\n" (Perf.time()) (string_of_loc l) g;
-      let FuncInfo ([], fterm, l, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, _, Some (Some (ss, closeBraceLoc)),fb,v) = (List.assoc g funcmap)in
+      let FuncInfo ([], fterm, l, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, _, Some (Some (ss, closeBraceLoc)),fb,v) = (List.assoc g funcmap)in
       let tparams = [] in
       let env = [] in
-      verify_func pn ilist lems boxes predinstmap funcmap tparams env l k tparams' rt g ps nonghost_callers_only pre pre_tenv post ss closeBraceLoc
+      verify_func pn ilist gs lems boxes predinstmap funcmap tparams env l k tparams' rt g ps nonghost_callers_only pre pre_tenv post terminates ss closeBraceLoc
       end in
-      verify_funcs (pn, ilist) boxes lems' ds
+      verify_funcs (pn, ilist) boxes gs' lems' ds
     | BoxClassDecl (l, bcn, _, _, _, _)::ds -> let bcn=full_name pn bcn in
       let (Some (l, boxpmap, boxinv, boxvarmap, amap, hpmap)) = try_assoc' Ghost (pn,ilist) bcn boxmap in
       let old_boxvarmap = List.map (fun (x, t) -> ("old_" ^ x, t)) boxvarmap in
-      let leminfo = Some (lems, "", None, false) in
+      let leminfo = LemInfo (lems, "", None, false) in
       List.iter
         (fun (hpn, (l, pmap, extended, inv, pbcs)) ->
            let pbcans =
@@ -2734,25 +2747,35 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
            in
            List.iter (fun (an, _) -> if not (List.mem an pbcans) then static_error l ("No preserved_by clause for action '" ^ an ^ "'.") None) amap)
         hpmap;
-      verify_funcs (pn,ilist)  (bcn::boxes) lems ds
-    | _::ds -> verify_funcs (pn,ilist)  boxes lems ds
+      verify_funcs (pn,ilist) (bcn::boxes) gs lems ds
+    | _::ds -> verify_funcs (pn,ilist)  boxes gs lems ds
   
   let lems1 =
     flatmap
-      (function (g, FuncInfo (funenv, fterm, l, Lemma(_), tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, functype_opt, body, fb, v)) -> [g] | _ -> [])
+      (function (g, FuncInfo (funenv, fterm, l, Lemma(_), tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, fb, v)) -> [g] | _ -> [])
       funcmap1
   
   let lems0 =
     flatmap
-      (function (g, FuncInfo (funenv, fterm, l, Lemma(_), tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, functype_opt, body, fb, v)) when not (List.mem g lems1) -> [g] | _ -> [])
+      (function (g, FuncInfo (funenv, fterm, l, Lemma(_), tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, fb, v)) when not (List.mem g lems1) -> [g] | _ -> [])
       funcmap0
   
-  let rec verify_funcs' boxes lems ps=
+  let gs1 =
+    flatmap
+      (function (g, FuncInfo (funenv, fterm, l, Regular, tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, fb, v)) -> [g] | _ -> [])
+      funcmap1
+  
+  let gs0 =
+    flatmap
+      (function (g, FuncInfo (funenv, fterm, l, Regular, tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, fb, v)) when not (List.mem g gs1) -> [g] | _ -> [])
+      funcmap0
+  
+  let rec verify_funcs' boxes gs lems ps=
     match ps with
-      PackageDecl(l,pn,il,ds)::rest-> let (boxes, lems) = verify_funcs (pn,il) boxes lems ds in verify_funcs' boxes lems rest
+      PackageDecl(l,pn,il,ds)::rest-> let (boxes, gs, lems) = verify_funcs (pn,il) boxes gs lems ds in verify_funcs' boxes gs lems rest
     | [] -> verify_classes boxes lems classmap
   
-  let () = verify_funcs' [] lems0 ps
+  let () = verify_funcs' [] gs0 lems0 ps
   
   let result = 
     (

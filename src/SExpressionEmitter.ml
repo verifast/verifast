@@ -588,6 +588,7 @@ and sexpr_of_decl (decl : decl) : sexpression =
             atom,
             impl,
             contract,
+            terminates,
             body,
             binding,
             visibility) ->

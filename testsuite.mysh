@@ -46,6 +46,9 @@ cd examples
     verifast_both -c shared_boxes.c
     verifast_both -c incrbox.c
   cd ..
+  cd termination
+    mysh < termination.mysh
+  cd ..
   cd tso
     verifast_both -c cvm0.c
     verifast_both -c lock.c
