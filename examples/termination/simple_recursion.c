@@ -54,7 +54,6 @@ int main() //@ : main
     //@ terminates;
 {
     //@ produce_call_below_perm_();
-    //@ assume(func_lt(is_even, main));
     ///@ call_perm_weaken(5, is_even);
     //@ div_rem(10, 2);
     is_even(10);

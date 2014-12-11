@@ -125,11 +125,11 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       match resolve Real (pn,ilist) l fn funcmap with
         None -> static_error l "No such function." None
-      | Some (fn, FuncInfo (funenv, Some fterm, lf, k, f_tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body',fb,v)) ->
+      | Some (fn, FuncInfo (funenv, fterm, lf, k, f_tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body',fb,v)) ->
         if stmt_ghostness = Ghost && not (is_lemma k) then static_error l "Not a lemma function." None;
         if stmt_ghostness = Real && k <> Regular then static_error l "Regular function expected." None;
         if f_tparams <> [] then static_error l "Taking the address of a function with type parameters is not yet supported." None;
-        if body' = None then register_prototype_used lf fn;
+        if body' = None then register_prototype_used lf fn fterm;
         if stmt_ghostness = Ghost then begin
           if nonghost_callers_only then static_error l "Function pointer chunks cannot be produced for nonghost_callers_only lemmas." None;
           match leminfo with
@@ -1883,7 +1883,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let (rt, xmap, functype_opt, pre, pre_tenv, post) =
               check_func_header pn ilist tparams tenv env l (Lemma(auto, trigger)) tparams' rt fn (Some fterm) xs nonghost_callers_only functype_opt contract_opt terminates (Some body)
             in
-            (fn, FuncInfo (env, Some fterm, l, Lemma(auto, trigger), tparams', rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, Some (Some body), Static, Public))
+            (fn, FuncInfo (env, fterm, l, Lemma(auto, trigger), tparams', rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, Some (Some body), Static, Public))
           end
           lems
       in
@@ -2638,7 +2638,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         static_error l "A lemma function outside a .javaspec file must have a body. To assume a lemma, use the body '{ assume(false); }'." None;
       let FuncInfo ([], fterm, _, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, fb,v) = List.assoc g funcmap in
       if auto && (Filename.check_suffix g_file_name ".c" or is_import_spec or language = CLang && Filename.chop_extension (Filename.basename g_file_name) <> Filename.chop_extension (Filename.basename program_path)) then begin
-        register_prototype_used l g;
+        register_prototype_used l g fterm;
         create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams'
       end;
       let lems =

@@ -263,7 +263,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     ignore (ctxt#assume (ctxt#mk_eq (mk_app symb [List.assoc fn funcnameterms]) ctxt#mk_true))
    
   let funcnameterm_of funcmap fn =
-    let FuncInfo (env, Some fterm, l, k, tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, _, _) = List.assoc fn funcmap in fterm
+    let FuncInfo (env, fterm, l, k, tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, _, _) = List.assoc fn funcmap in fterm
  
   let functypes_implemented = ref []
   
@@ -365,9 +365,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         [] -> (funcmap, List.rev prototypes_implemented)
       | Func (l, k, tparams, rt, fn, xs, nonghost_callers_only, functype_opt, contract_opt, terminates, body,Static,_)::ds when k <> Fixpoint ->
         let fn = full_name pn fn in
-        let fterm = Some (List.assoc fn funcnameterms) in
+        let fterm = List.assoc fn funcnameterms in
+        if body <> None then
+          ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_app func_rank [fterm]) (ctxt#mk_intlit !func_counter)));
+        incr func_counter;
         let (rt, xmap, functype_opt, pre, pre_tenv, post) =
-          check_func_header pn ilist [] [] [] l k tparams rt fn fterm xs nonghost_callers_only functype_opt contract_opt terminates body
+          check_func_header pn ilist [] [] [] l k tparams rt fn (Some fterm) xs nonghost_callers_only functype_opt contract_opt terminates body
         in
         begin
           let body' = match body with None -> None | Some body -> Some (Some body) in
@@ -393,6 +396,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     iter' ([],[]) ps
   
   let funcmap = funcmap1 @ funcmap0
+  
+  let register_prototype_used l g gterm =
+    if not (List.mem (g, l) !prototypes_used) then begin
+      prototypes_used := (g, l)::!prototypes_used;
+      ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_app func_rank [gterm]) int_zero_term))
+    end
   
   let interfmap1 =
     List.map
@@ -1369,6 +1378,21 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let mk_vararg_uint t = mk_app (Lazy.force vararg_uint_symb) [t]
   let mk_vararg_pointer t = mk_app (Lazy.force vararg_pointer_symb) [t]
   
+  let () =
+    if language = CLang then begin
+      match try_assoc "func_lt" purefuncmap with
+        None -> ()
+      | Some (_, _, _, _, (func_lt, _)) ->
+        (* forall f, g. func_lt(f, g) = (func_rank(f) < func_rank(g)) *)
+        ctxt#begin_formal;
+        let f = ctxt#mk_bound 0 ctxt#type_int in
+        let g = ctxt#mk_bound 1 ctxt#type_int in
+        let app = ctxt#mk_app func_lt [f; g] in
+        let body = ctxt#mk_eq app (ctxt#mk_lt (ctxt#mk_app func_rank [f]) (ctxt#mk_app func_rank [g])) in
+        ctxt#end_formal;
+        ctxt#assume_forall "func_lt" [app] [ctxt#type_int; ctxt#type_int] body
+    end
+  
   type leminfo =
     RealFuncInfo of
       string list  (* Preceding functions *)
@@ -1899,7 +1923,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | WFunCall (l, g, targs, es) ->
       let FuncInfo (funenv, fterm, lg, k, tparams, tr, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, fbf, v) = List.assoc g funcmap in
       has_heap_effects ();
-      if body = None then register_prototype_used lg g;
+      if body = None then register_prototype_used lg g fterm;
       if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." None;
       if not pure && is_lemma k then static_error l "Cannot call lemma functions in a non-pure context." None;
       if nonghost_callers_only then begin

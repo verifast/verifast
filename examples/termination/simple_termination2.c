@@ -11,5 +11,7 @@ void baz(int n)
     {
         foo();
         bar();
+        //@ assert func_lt(foo, baz) == true;
+        //@ assert func_lt(bar, baz) == true;
     }
 }

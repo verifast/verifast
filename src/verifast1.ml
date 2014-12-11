@@ -51,6 +51,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let () = set_verbosity initial_verbosity
   
   let class_counter = ref 0
+  let func_counter = ref 1  (* 0 is reserved for functions declared in preceding modules used by the current module *)
 
   (** Maps an identifier to a ref cell containing approximately the number of distinct symbols that have been generated for this identifier.
     * It is an approximation because of clashes such as the clash between the second symbol ('foo0') generated for 'foo'
@@ -314,6 +315,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let get_class_symbol = mk_symbol "getClass" [ctxt#type_int] ctxt#type_int Uninterp
   let class_serial_number = mk_symbol "class_serial_number" [ctxt#type_int] ctxt#type_int Uninterp
+  let func_rank = mk_symbol "func_rank" [ctxt#type_int] ctxt#type_int Uninterp
   let bitwise_or_symbol = mk_symbol "bitor" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp
   let bitwise_xor_symbol = mk_symbol "bitxor" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp
   let bitwise_and_symbol = mk_symbol "bitand" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp
@@ -459,10 +461,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
  
   let prototypes_used : (string * loc) list ref = ref []
   
-  let register_prototype_used l g =
-    if not (List.mem (g, l) !prototypes_used) then
-      prototypes_used := (g, l)::!prototypes_used
-  
   let extract_specs ps=
     let rec iter (pn,ilist) classes lemmas ds=
       match ds with
@@ -573,7 +571,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     type func_info =
       FuncInfo of
         (string * termnode) list (* environment at definition site (for local lemma functions) *)
-      * termnode option (* function pointer; None if ? *)
+      * termnode (* function pointer *)
       * loc
       * func_kind
       * string list (* type parameters *)
@@ -2445,6 +2443,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         ps
       end
   
+  let funcnameterms = List.map (fun fn -> (fn, get_unique_var_symb fn (PtrType Void))) funcnames
+  let funcnameterms0 = List.map (fun (g, FuncInfo (_, fterm, _, _, _, _, _, _, _, _, _, _, _, _,_,_)) -> (g, fterm)) funcmap0
+  let all_funcnameterms = funcnameterms @ funcnameterms0
+  
   let check_classname (pn, ilist) (l, c) =
     match resolve Real (pn, ilist) l c classmap1 with 
       None -> static_error l "No such class name." None
@@ -2705,11 +2707,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           scope := Some PureCtor; (Var (l, x, scope), t, None)
         end
       | _ ->
-      if List.mem x funcnames then
-        match file_type path with
-          Java -> static_error l "In java methods can't be used as pointers" None
-        | _ -> scope := Some FuncName; (e, PtrType Void, None)
-      else
+      match try_assoc x all_funcnameterms with
+        Some fterm when language = CLang ->
+        scope := Some FuncName; (e, PtrType Void, None)
+      | None ->
       match resolve Ghost (pn,ilist) l x predfammap with
       | Some (x, (_, tparams, arity, ts, _, inputParamCount, inductiveness)) ->
         if arity <> 0 then static_error l "Using a predicate family as a value is not supported." None;
@@ -4469,8 +4470,6 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       end
       e
 
-  let funcnameterms = List.map (fun fn -> (fn, get_unique_var_symb fn (PtrType Void))) funcnames
-  
   let struct_sizes =
     List.map
       begin fun (sn, _) ->
@@ -4801,7 +4800,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         match scope with
           LocalVar -> (try List.assoc x env with Not_found -> assert_false [] env l (Printf.sprintf "Unbound variable '%s'" x) None)
         | PureCtor -> let Some (lg, tparams, t, [], s) = try_assoc x purefuncmap in mk_app s []
-        | FuncName -> List.assoc x funcnameterms
+        | FuncName -> List.assoc x all_funcnameterms
         | PredFamName -> let Some (_, _, _, _, symb, _, _) = try_assoc x predfammap in symb
         | EnumElemName n -> ctxt#mk_intlit_of_string (string_of_big_int n)
         | GlobalName ->
@@ -5046,7 +5045,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
            assignment of function pointers. We tread (&function) in the
            same way as (function), which is what most compilers do: *)
         | Var (l, x, scope) when !scope = Some FuncName ->
-            cont state (List.assoc x funcnameterms)
+            cont state (List.assoc x all_funcnameterms)
         | _ -> static_error l "Taking the address of this expression is not supported." None
       end
     | SwitchExpr (l, e, cs, cdef_opt, tref) ->
