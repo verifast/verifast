@@ -398,10 +398,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let funcmap = funcmap1 @ funcmap0
   
   let register_prototype_used l g gterm =
-    if not (List.mem (g, l) !prototypes_used) then begin
+    if not (List.mem (g, l) !prototypes_used) then
       prototypes_used := (g, l)::!prototypes_used;
-      ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_app func_rank [gterm]) int_zero_term))
-    end
+    ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_app func_rank [gterm]) int_zero_term))
   
   let interfmap1 =
     List.map
