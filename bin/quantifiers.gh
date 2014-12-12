@@ -99,6 +99,14 @@ lemma void forall_t_elim<t>(fixpoint(fixpoint(t, bool), bool) f, fixpoint(t, boo
     requires [_]is_forall_t<t>(f) &*& f(p) == true;
     ensures p(x) == true;
 
+fixpoint bool notf<t>(fixpoint(t, bool) p, t x) {
+    return !p(x);
+}
+
+fixpoint bool exists_t<t>(fixpoint(fixpoint(t, bool), bool) forall_t, fixpoint(t, bool) p) {
+    return !forall_t((notf)(p));
+}
+
 /**
  * An implementation of this typedef proves that p(x) is true for all x. Note that x is not constrained.
  *

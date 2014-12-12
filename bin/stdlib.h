@@ -7,9 +7,11 @@
 void abort();
     //@ requires true;
     //@ ensures false;
+    //@ terminates;
 
 void exit(int status);
     //@ requires true;
     //@ ensures false;
+    //@ terminates;
 
 #endif

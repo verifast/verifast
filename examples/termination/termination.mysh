@@ -4,3 +4,7 @@ verifast -c -allow_should_fail termination_errors2.c
 verifast -c -allow_should_fail proto_impl_error.c
 verifast -shared -link_should_fail inter_module_loop1.c inter_module_loop2.c
 verifast -allow_assume simple_recursion.c
+
+verifast -disable_overflow_check -c ackermann.c
+verifast -disable_overflow_check -c funcptr.c
+verifast call_perms.o termination.c cons.c

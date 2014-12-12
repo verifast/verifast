@@ -1,0 +1,166 @@
+#ifndef TERMINATION_GH
+#define TERMINATION_GH
+
+// A library of useful definitions and lemmas for dealing with call permissions.
+
+#include "call_perms.gh"
+#include <listex.gh>
+
+// The natural well-founded order on (nonnegative) integers
+
+fixpoint bool lt(int x, int y) { return 0 <= x && x < y; }
+
+lemma void is_wf_lt();
+    requires true;
+    ensures [_]is_wf(lt);
+
+// Lexicographic ordering
+
+fixpoint bool pair_lt<a, b>(fixpoint(a, a, bool) a_lt, fixpoint(b, b, bool) b_lt, pair<a, b> x, pair<a, b> y) {
+    return a_lt(fst(x), fst(y)) || fst(x) == fst(y) && b_lt(snd(x), snd(y));
+}
+
+lemma void is_wf_pair_lt<a, b>(fixpoint(a, a, bool) a_lt, fixpoint(b, b, bool) b_lt);
+    requires [_]is_wf(a_lt) &*& [_]is_wf(b_lt);
+    ensures [_]is_wf((pair_lt)(a_lt, b_lt));
+
+// Well-founded induction 
+
+fixpoint c flip<a, b, c>(fixpoint(a, b, c) f, b y, a x) { return f(x, y); }
+
+fixpoint bool implies<t>(fixpoint(t, bool) p1, fixpoint(t, bool) p2, t x) { return !p1(x) || p2(x); }
+
+fixpoint bool is_wf_inductive_at<t>(fixpoint(fixpoint(t, bool), bool) forall_t, fixpoint(t, t, bool) lt, fixpoint(t, bool) p, t x) {
+    return !forall_t((implies)((flip)(lt)(x), p)) || p(x);
+}
+
+predicate is_wf_inductive<t>(fixpoint(t, t, bool) lt, fixpoint(t, bool) p) =
+    [_]is_forall_t<t>(?forall_t) &*& forall_t((is_wf_inductive_at)(forall_t, lt, p)) == true;
+
+lemma void wf_induct<t>(fixpoint(t, t, bool) lt, fixpoint(t, bool) p);
+    requires [_]is_wf<t>(lt) &*& is_wf_inductive(lt, p);
+    ensures [_]is_forall_t<t>(?forall_t) &*& forall_t(p) == true;
+
+// Strict partial orders
+
+fixpoint bool is_lt_trans_at<t>(fixpoint(t, t, bool) lt, pair<t, pair<t, t> > xs) {
+    return !lt(fst(xs), fst(snd(xs))) || !lt(fst(snd(xs)), snd(snd(xs))) || lt(fst(xs), snd(snd(xs)));
+}
+
+fixpoint bool is_lt_antirefl_at<t>(fixpoint(t, t, bool) lt, t x) { return !lt(x, x); }
+
+predicate is_order<t>(fixpoint(t, t, bool) lt) =
+    [_]is_forall_t<pair<t, pair<t, t> > >(?forall_t_triples) &*& forall_t_triples((is_lt_trans_at)(lt)) == true &*&
+    [_]is_forall_t<t>(?forall_t) &*& forall_t((is_lt_antirefl_at)(lt)) == true;
+
+// func_lt is a strict partial order
+
+lemma void is_order_func_lt();
+    requires true;
+    ensures [_]is_order(func_lt);
+
+// Properties of bag_le
+
+lemma void remove_all_xs_xs<t>(list<t> xs);
+    requires true;
+    ensures remove_all(xs, xs) == nil;
+
+lemma void remove_all_cons_xs_xs<t>(t x, list<t> xs);
+    requires true;
+    ensures remove_all(cons(x, xs), xs) == nil;
+
+lemma void remove_all_xs_cons_xs<t>(t x, list<t> xs);
+    requires true;
+    ensures remove_all(xs, cons(x, xs)) == {x};
+
+lemma void bag_lt_cons_lt<t>(fixpoint(t, t, bool) lt, t x, t y, list<t> xs);
+    requires [_]is_order(lt) &*& lt(x, y) == true;
+    ensures bag_lt(lt, cons(x, xs), cons(y, xs)) == true;
+
+lemma void bag_lt_xs_cons_xs<t>(fixpoint(t, t, bool) lt, t x, list<t> xs);
+    requires true;
+    ensures bag_lt(lt, xs, cons(x, xs)) == true;
+
+lemma void bag_le_bag_le_append_l<t>(fixpoint(t, t, bool) lt, list<t> xs1, list<t> xs2, list<t> ys);
+    requires bag_le(lt, xs1, xs2) == true;
+    ensures bag_le(lt, append(xs1, ys), append(xs2, ys)) == true;
+
+lemma void bag_le_append_r<t>(fixpoint(t, t, bool) lt, list<t> xs, list<t> ys);
+    requires true;
+    ensures bag_le(lt, ys, append(xs, ys)) == true;
+
+lemma void bag_le_cons_xs_cons_ys<t>(fixpoint(t, t, bool) lt, t x, list<t> xs, list<t> ys);
+    requires bag_le(lt, xs, ys) == true;
+    ensures bag_le(lt, cons(x, xs), cons(x, ys)) == true;
+
+lemma void not_mem_remove<t>(t x, list<t> xs);
+    requires !mem(x, xs);
+    ensures remove(x, xs) == xs;
+
+fixpoint bool eq<t>(t x, t y) { return x == y; }
+
+fixpoint int count_eq<t>(t x, list<t> xs) { return count(xs, (eq)(x)); }
+
+fixpoint int max_(int x, int y) { return x < y ? y : x; }
+
+lemma void count_eq_remove_all<t>(t z, list<t> xs, list<t> ys);
+    requires true;
+    ensures count_eq(z, remove_all(xs, ys)) == max_(0, count_eq(z, ys) - count_eq(z, xs));
+
+lemma void mem_count_eq<t>(t x, list<t> xs);
+    requires true;
+    ensures mem(x, xs) == (count_eq(x, xs) > 0);
+
+lemma void mem_remove_all_count_eq<t>(t z, list<t> xs, list<t> ys);
+    requires true;
+    ensures mem(z, remove_all(xs, ys)) == (count_eq(z, ys) > count_eq(z, xs));
+
+lemma t exists_get_witness<t>(list<t> xs, fixpoint(t, bool) p);
+    requires exists(xs, p) == true; 
+    ensures mem(result, xs) && p(result); 
+
+lemma void exists_not_forall_not<t>(list<t> xs, fixpoint(t, bool) p);
+    requires true;
+    ensures exists(xs, p) == !forall(xs, (notf)(p));
+
+lemma void not_exists<t>(list<t> xs, fixpoint(t, bool) p, t x);
+    requires mem(x, xs) && !exists(xs, p);
+    ensures !p(x);
+
+fixpoint bool le<t>(fixpoint(t, t, bool) lt, t x, t y) { return x == y || lt(x, y); }
+
+lemma void le_lt_trans<t>(fixpoint(t, t, bool) lt, t x, t y, t z);
+    requires [_]is_order(lt) &*& le(lt, x, y) && lt(y, z);
+    ensures lt(x, z) == true;
+
+fixpoint bool implies_at<t>(fixpoint(t, bool) p1, fixpoint(t, bool) p2, t x) { return !p1(x) || p2(x); }
+
+lemma void implies_count_le<t>(list<t> xs, fixpoint(t, bool) p1, fixpoint(t, bool) p2);
+    requires [_]is_forall_t<t>(?forall_t) &*& forall_t((implies_at)(p2, p1)) == true;
+    ensures count(xs, p2) <= count(xs, p1);
+
+lemma void mem_count_decreases<t>(t x, list<t> xs, fixpoint(t, bool) p1, fixpoint(t, bool) p2);
+    requires [_]is_forall_t<t>(?forall_t) &*& mem(x, xs) && p1(x) && !p2(x) && forall_t((implies_at)(p2, p1));
+    ensures count(xs, p2) < count(xs, p1);
+
+lemma void lt_forall_t_implies_at<t>(fixpoint(t, t, bool) lt, t x, t y);
+    requires [_]is_order(lt) &*& lt(x, y) == true;
+    ensures [_]is_forall_t<t>(?forall_t) &*& forall_t((implies_at)((lt)(y), (lt)(x))) == true;
+
+lemma void is_order_antirefl<t>(t x);
+    requires [_]is_order<t>(?lt);
+    ensures !lt(x, x);
+
+lemma void mem_remove_all_trans<t>(t x, list<t> xs, list<t> ys, list<t> zs);
+    requires mem(x, remove_all(ys, xs)) && !mem(x, remove_all(zs, xs));
+    ensures mem(x, remove_all(ys, zs)) == true;
+
+lemma void bag_le_trans<t>(fixpoint(t, t, bool) lt, list<t> xs, list<t> ys, list<t> zs);
+    requires [_]is_order(lt) &*& bag_le(lt, xs, ys) && bag_le(lt, ys, zs);
+    ensures bag_le(lt, xs, zs) == true;
+
+lemma void bag_le_bag_lt<t>(fixpoint(t, t, bool) lt, list<t> xs, list<t> ys, list<t> zs);
+    requires [_]is_order(lt) &*& bag_le(lt, xs, ys) && bag_lt(lt, ys, zs);
+    ensures bag_lt(lt, xs, zs) == true;
+
+#endif
