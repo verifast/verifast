@@ -285,6 +285,23 @@ and termnode (ctxt: context) s initial_children =
           else
             ctxt#add_redex (fun () -> ctxt#assert_le v2#initial_child zero_num v1#initial_child)
         end
+      | ("<=/", [v1; v2]) ->
+        begin
+          if value = ctxt#true_node#value then
+            ctxt#add_redex (fun () -> ctxt#assert_le v1#initial_child zero_num v2#initial_child)
+          else begin
+            ctxt#add_redex (fun () -> ctxt#assert_le v2#initial_child zero_num v1#initial_child);
+            ctxt#add_redex (fun () -> ctxt#assert_neq v1#initial_child#value v2#initial_child#value)
+          end
+        end
+      | ("</", [v1; v2]) ->
+        begin
+          if value = ctxt#true_node#value then begin
+            ctxt#add_redex (fun () -> ctxt#assert_le v1#initial_child zero_num v2#initial_child);
+            ctxt#add_redex (fun () -> ctxt#assert_neq v1#initial_child#value v2#initial_child#value)
+          end else
+            ctxt#add_redex (fun () -> ctxt#assert_le v2#initial_child zero_num v1#initial_child)
+        end
       | ("&&", [v1; v2]) ->
         if value = ctxt#true_node#value then
         begin
