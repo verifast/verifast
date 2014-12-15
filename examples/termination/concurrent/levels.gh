@@ -1,0 +1,39 @@
+#ifndef LEVELS_GH
+#define LEVELS_GH
+
+inductive level = level(real);
+
+fixpoint bool level_below(level level1, level level2) {
+    switch (level1) {
+        case level(r1): return
+            switch (level2) {
+                case level(r2): return r1 < r2;
+            };
+    }
+}
+
+fixpoint bool level_below_or_eq(level level1, level level2) { return level_below(level1, level2) || level1 == level2; }
+
+fixpoint bool level_above(level level1, level level2) { return level_below(level2, level1); }
+
+fixpoint bool level_all_below(list<level> levels, level level) { return forall(levels, (level_above)(level)); }
+
+fixpoint bool level_all_above(list<level> levels, level level) { return forall(levels, (level_below)(level)); }
+
+fixpoint bool level_all_above_or_eq(list<level> levels, level level) { return forall(levels, (level_below_or_eq)(level)); }
+
+fixpoint bool level_all_below_all(list<level> levels1, list<level> levels2) { return forall(levels1, (level_all_above)(levels2)); }
+
+lemma level create_level(list<level> lowerBounds, list<level> upperBounds);
+    requires level_all_below_all(lowerBounds, upperBounds) == true;
+    ensures level_all_below(lowerBounds, result) && level_all_above(upperBounds, result);
+
+lemma void level_below_transitive(level level1, level level2, level level3);
+    requires level_below(level1, level2) == true &*& level_below(level2, level3) == true;
+    ensures level_below(level1, level3) == true;
+
+lemma void level_below_antireflexive(level level);
+    requires true;
+    ensures !level_below(level, level);
+
+#endif

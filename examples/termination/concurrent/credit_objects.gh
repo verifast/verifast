@@ -1,0 +1,41 @@
+#ifndef CREDIT_OBJECTS_GH
+#define CREDIT_OBJECTS_GH
+
+#include "ghost_cells.gh"
+#include "ghost_counters.gh"
+#include "obligations.gh"
+
+predicate credit_object(int id, int scope, level level);
+predicate credit_object_handle(int id, int items, int blockees);
+predicate credit(int creditObject;);
+predicate debit(int creditObject;);
+
+lemma int create_credit_object(int scope, level level);
+    requires true;
+    ensures credit_object(result, scope, level) &*& credit_object_handle(result, 0, 0);
+
+lemma void create_debit();
+    requires credit_object(?creditObject, ?scope, ?level) &*& obligation(scope, level);
+    ensures credit_object(creditObject, scope, level) &*& credit(creditObject) &*& debit(creditObject);
+
+lemma void debit_dispose();
+    requires credit_object(?creditObject, ?scope, ?level) &*& credit(creditObject) &*& debit(creditObject);
+    ensures credit_object(creditObject, scope, level) &*& obligation(scope, level);
+
+lemma void credit_object_block();
+    requires credit_object(?creditObject, ?scope, ?level) &*& credit_object_handle(creditObject, 0, ?blockees) &*& credit(creditObject);
+    ensures credit_object(creditObject, scope, level) &*& credit_object_handle(creditObject, 0, blockees + 1) &*& obligation(scope, level);
+
+lemma void credit_object_unblock();
+    requires credit_object(?creditObject, ?scope, ?level) &*& credit_object_handle(creditObject, 0, ?blockees) &*& 0 < blockees &*& obligation(scope, level);
+    ensures credit_object(creditObject, scope, level) &*& credit_object_handle(creditObject, 0, blockees - 1) &*& credit(creditObject);
+
+lemma void credit_object_acquire();
+    requires credit_object(?creditObject, ?scope, ?level) &*& credit_object_handle(creditObject, ?items, 0) &*& 0 < items &*& credit(creditObject);
+    ensures credit_object(creditObject, scope, level) &*& credit_object_handle(creditObject, items - 1, 0);
+
+lemma void credit_object_release();
+    requires credit_object(?creditObject, ?scope, ?level) &*& credit_object_handle(creditObject, ?items, 0);
+    ensures credit_object(creditObject, scope, level) &*& credit_object_handle(creditObject, items + 1, 0) &*& credit(creditObject);
+
+#endif

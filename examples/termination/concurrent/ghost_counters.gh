@@ -1,0 +1,23 @@
+#ifndef GHOST_COUNTERS_GH
+#define GHOST_COUNTERS_GH
+
+predicate ghost_counter(int id; int count);
+predicate ghost_counter_ticket(int id;);
+
+lemma int create_ghost_counter();
+    requires true;
+    ensures ghost_counter(result, 0);
+
+lemma void create_ghost_counter_ticket(int id);
+    requires ghost_counter(id, ?n);
+    ensures ghost_counter(id, n + 1) &*& ghost_counter_ticket(id);
+
+lemma void ghost_counter_match_ticket(int id);
+    requires ghost_counter(id, ?n) &*& [?f]ghost_counter_ticket(id);
+    ensures ghost_counter(id, n) &*& [f]ghost_counter_ticket(id) &*& 0 < n;
+
+lemma void ghost_counter_destroy_ticket(int id);
+    requires ghost_counter(id, ?n) &*& ghost_counter_ticket(id);
+    ensures ghost_counter(id, n - 1) &*& 0 < n;
+
+#endif

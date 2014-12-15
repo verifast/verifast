@@ -1,0 +1,26 @@
+#ifndef PRECISION_AXIOM_GH
+#define PRECISION_AXIOM_GH
+
+// Lemmas that allow predicates that are splittable and mergeable,
+// but not accepted as precise by VeriFast's precision analysis,
+// to be treated as precise predicates nonetheless.
+
+predicate precise<a, b>(predicate(real, a, b) p, a x; b y);
+
+typedef lemma void split<a, b>(predicate(real, a, b) p)(real f1, real f2);
+    requires 0 < f1 &*& 0 < f2 &*& p(f1 + f2, ?x, ?y);
+    ensures p(f1, x, y) &*& p(f2, x, y);
+
+typedef lemma void merge<a, b>(predicate(real, a, b) p)();
+    requires p(?f1, ?x, ?y1) &*& p(?f2, x, ?y2);
+    ensures p(f1 + f2, x, y1) &*& y2 == y1;
+
+lemma void close_precise<a, b>(real frac, predicate(real, a, b) p, a x, b y);
+    requires p(frac, x, y) &*& is_split(?split, p) &*& is_merge(?merge, p);
+    ensures [frac]precise(p, x, y) &*& is_split(split, p) &*& is_merge(merge, p);
+
+lemma void open_precise<a, b>(real frac, predicate(real, a, b) p, a x);
+    requires [frac]precise(p, x, ?y);
+    ensures p(frac, x, y);
+
+#endif

@@ -1,0 +1,40 @@
+#ifndef OBLIGATIONS_GH
+#define OBLIGATIONS_GH
+
+#include "levels.gh"
+
+predicate obligation_scope(int id, predicate() p);
+predicate obligation_scope_joinee(int scope);
+predicate obligation(int scope, level level;);
+predicate obligation_set(int scope, list<level> levels);
+predicate obligation_set_calling(int scope, list<level> levels, real frac, level level);
+
+lemma int create_obligation_scope(predicate() p);
+    requires true;
+    ensures obligation_scope(result, p) &*& obligation_set(result, nil);
+
+lemma void join_obligation_scope(int scope);
+    requires obligation_scope(scope, ?p) &*& p();
+    ensures obligation_scope(scope, p) &*& obligation_set(scope, nil) &*& obligation_scope_joinee(scope);
+
+lemma void leave_obligation_scope(int scope);
+    requires obligation_scope(scope, ?p) &*& obligation_set(scope, nil) &*& obligation_scope_joinee(scope);
+    ensures obligation_scope(scope, p) &*& p();
+
+lemma void create_obligation(level level);
+    requires obligation_scope(?scope, ?p) &*& obligation_set(scope, ?obligations);
+    ensures obligation_scope(scope, p) &*& obligation_set(scope, cons(level, obligations)) &*& obligation(scope, level);
+
+lemma void call_obligation();
+    requires obligation_scope(?scope, ?p) &*& obligation_set(scope, ?obligations) &*& [?f]obligation(scope, ?level) &*& level_all_above(obligations, level) == true;
+    ensures obligation_scope(scope, p) &*& obligation_set_calling(scope, obligations, f, level) &*& p();
+
+lemma void return_obligation();
+    requires obligation_scope(?scope, ?p) &*& obligation_set_calling(scope, ?obligations, ?f, ?level) &*& p();
+    ensures obligation_scope(scope, p) &*& obligation_set(scope, obligations) &*& [f]obligation(scope, level);
+
+lemma void destroy_obligation();
+    requires obligation_scope(?scope, ?p) &*& obligation_set(scope, ?obligations) &*& obligation(scope, ?level) &*& mem(level, obligations) == true;
+    ensures obligation_scope(scope, p) &*& obligation_set(scope, remove(level, obligations));
+
+#endif

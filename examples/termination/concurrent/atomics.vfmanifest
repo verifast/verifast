@@ -1,0 +1,5 @@
+.predicate @atomics.gh#atomic_space
+.provides atomics.gh#create_atomic_space
+.provides atomics.gh#atomic_space_destroy
+.provides atomics.gh#atomic_noop
+.provides atomics.gh#atomic_noop_nested

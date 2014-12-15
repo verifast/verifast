@@ -1,0 +1,52 @@
+#ifndef OBSPACE_CREDIT_OBJECTS_GH
+#define OBSPACE_CREDIT_OBJECTS_GH
+
+#include "ghost_cells.gh"
+#include "credit_objects.gh"
+#include "obligation_spaces.gh"
+#include "levels.gh"
+#include "stop_perms.gh"
+
+predicate_ctor credit_object_(int id, int scope, level level)() = credit_object(id, scope, level);
+
+predicate obspace_credit_object(int creditObject, int space, level level, int items, int blockees) =
+    [_]ghost_cell<pair<int, real> >(space, pair(?scopeId, ?olevel)) &*&
+    [_]atomic_space(olevel + 1, credit_object_(creditObject, scopeId, level)) &*&
+    credit_object_handle(creditObject, items, blockees);
+
+predicate obspace_credit_object_info(int creditObject, int space, level level;) =
+    [_]ghost_cell<pair<int, real> >(space, pair(?scopeId, ?olevel)) &*&
+    [_]atomic_space(olevel + 1, credit_object_(creditObject, scopeId, level));
+
+lemma int create_obspace_credit_object(int space, level level);
+    nonghost_callers_only
+    requires [?fs]obligation_space(space, ?termScope);
+    ensures [fs]obligation_space(space, termScope) &*& obspace_credit_object(result, space, level, 0, 0);
+
+lemma void obspace_credit_object_get_info();
+    requires obspace_credit_object(?creditObject, ?space, ?level, ?items, ?blockees);
+    ensures obspace_credit_object(creditObject, space, level, items, blockees) &*& [_]obspace_credit_object_info(creditObject, space, level);
+
+lemma void create_obspace_debit();
+    nonghost_callers_only
+    requires
+        [_]obspace_credit_object_info(?creditObject, ?space, ?level) &*&
+        [?fs]obligation_space(space, ?termScope) &*&
+        obspace_obligation_set(space, ?obs);
+    ensures
+        [fs]obligation_space(space, termScope) &*&
+        obspace_obligation_set(space, cons(level, obs)) &*&
+        credit(creditObject) &*& debit(creditObject);
+
+lemma void obspace_debit_dispose();
+    nonghost_callers_only
+    requires
+        [_]obspace_credit_object_info(?creditObject, ?space, ?level) &*&
+        [?fs]obligation_space(space, ?termScope) &*&
+        obspace_obligation_set(space, ?obs) &*& mem(level, obs) == true &*&
+        credit(creditObject) &*& debit(creditObject);
+    ensures
+        [fs]obligation_space(space, termScope) &*&
+        obspace_obligation_set(space, remove(level, obs));
+
+#endif

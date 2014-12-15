@@ -48,6 +48,9 @@ cd examples
   cd ..
   cd termination
     mysh < termination.mysh
+    cd concurrent
+      mysh < prodcons.mysh
+    cd ..
   cd ..
   cd tso
     verifast_both -c cvm0.c

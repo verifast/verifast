@@ -1,0 +1,27 @@
+#ifndef GHOST_MAPS_H
+#define GHOST_MAPS_H
+
+predicate ghost_map<a, b>(int id; list<pair<a, b> > entries);
+predicate ghost_map_entry_handle<a, b>(int id, a key; b value);
+
+lemma int create_ghost_map<a, b>();
+    requires emp;
+    ensures ghost_map<a, b>(result, nil);
+
+lemma void ghost_map_add<a, b>(int id, a key, b value);
+    requires ghost_map<a, b>(id, ?es) &*& !mem(key, map(fst, es));
+    ensures ghost_map<a, b>(id, append(es, {pair(key, value)})) &*& [_]ghost_map_entry_handle<a, b>(id, key, value);
+
+lemma b ghost_map_get_entry_handle<a, b>(int id, a key);
+    requires ghost_map<a, b>(id, ?es) &*& mem(key, map(fst, es)) == true;
+    ensures ghost_map<a, b>(id, es) &*& [_]ghost_map_entry_handle<a, b>(id, key, result) &*& mem(pair(key, result), es) == true;
+
+lemma void ghost_map_match<a, b>(int id, a key);
+    requires ghost_map<a, b>(id, ?es) &*& [_]ghost_map_entry_handle<a, b>(id, key, ?value);
+    ensures ghost_map<a, b>(id, es) &*& mem(pair(key, value), es) == true;
+
+lemma void ghost_map_keys_distinct<a, b>(int id);
+    requires ghost_map<a, b>(id, ?es);
+    ensures ghost_map<a, b>(id, es) &*& distinct(map(fst, es)) == true;
+
+#endif

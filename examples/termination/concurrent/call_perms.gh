@@ -1,0 +1,103 @@
+#ifndef CALL_PERMS_GH
+#define CALL_PERMS_GH
+
+// Axioms about func_lt, call_perm_, and call_below_perm_ (defined in prelude.h), and their relationships.
+
+#include <listex.gh>
+#include <quantifiers.gh>
+
+// Properties of func_lt
+
+lemma_auto void func_lt_irrefl(void *f, void *g);
+    requires func_lt(f, g) == true;
+    ensures f != g;
+
+lemma void func_lt_trans(void *f, void *g, void *h);
+    requires func_lt(f, g) && func_lt(g, h);
+    ensures func_lt(f, h) == true;
+
+// Call permissions qualified by a bag of function pointers
+
+predicate call_perm_below(list<void *> fs;);
+predicate call_perm(list<void *> fs;);
+
+fixpoint bool lt_some<t>(fixpoint(t, t, bool) lt, list<t> ys, t x) {
+    return exists(ys, (lt)(x));
+}
+
+fixpoint bool all_lt_some<t>(fixpoint(t, t, bool) lt, list<t> xs, list<t> ys) {
+    return forall(xs, (lt_some)(lt, ys));
+}
+
+fixpoint bool bag_le<t>(fixpoint(t, t, bool) lt, list<t> xs, list<t> ys) {
+    return all_lt_some(lt, remove_all(ys, xs), remove_all(xs, ys)) == true;
+}
+
+fixpoint bool func_bag_le(list<void *> fs1, list<void *> fs2) { return bag_le(func_lt, fs1, fs2); }
+
+fixpoint bool bag_lt<t>(fixpoint(t, t, bool) lt, list<t> xs, list<t> ys) {
+    return bag_le(lt, xs, ys) && remove_all(xs, ys) != nil;
+}
+
+fixpoint bool func_bag_lt(list<void *> fs1, list<void *> fs2) { return bag_lt(func_lt, fs1, fs2); }
+
+lemma void consume_call_perm_for(void *f);
+    requires call_perm_below(?fs) &*& func_bag_lt({f}, fs) == true;
+    ensures call_perm_(f);
+
+lemma void call_perm(list<void *> fs);
+    requires call_perm_below(?fs0) &*& func_bag_lt(fs, fs0) == true;
+    ensures call_perm(fs);
+
+lemma void call_perm_weaken(list<void *> fs);
+    requires call_perm(?fs0) &*& func_bag_le(fs, fs0) == true;
+    ensures call_perm(fs);
+
+lemma void call_below_perm__elim(void *f);
+    requires call_below_perm_(f);
+    ensures call_perm_below({f});
+
+lemma void call_perm_below(real frac);
+    requires call_perm(?fs) &*& 1 <= frac;
+    ensures [frac]call_perm_below(fs);
+
+// Call permissions qualified by an element of an arbitrary well-founded order
+
+predicate call_perm_level<t>(pair<fixpoint(t, t, bool), t> level, list<void *> fs;);
+
+fixpoint bool is_lesser_element<t>(fixpoint(t, bool) set, fixpoint(t, t, bool) lt, t x, t y) {
+    return set(y) && lt(y, x);
+}
+
+fixpoint bool is_minimal<t>(fixpoint(fixpoint(t, bool), bool) forall_t, fixpoint(t, t, bool) lt, fixpoint(t, bool) set, t x) {
+    return set(x) && !exists_t(forall_t, (is_lesser_element)(set, lt, x));
+}
+
+fixpoint bool has_minimal<t>(fixpoint(fixpoint(t, bool), bool) forall_t, fixpoint(t, t, bool) lt, fixpoint(t, bool) set) {
+    return forall_t((notf)(set)) || exists_t(forall_t, (is_minimal)(forall_t, lt, set));
+}
+
+predicate is_wf<t>(fixpoint(t, t, bool) lt) =
+    [_]is_forall_t<fixpoint(t, bool)>(?forall_sets) &*&
+    [_]is_forall_t<t>(?forall_t) &*&
+    forall_sets((has_minimal)(forall_t, lt)) == true;
+
+lemma void call_perm_level_weaken<t>(
+    real frac0,
+    fixpoint(t, t, bool) lt,
+    t level0,
+    list<void *> fs0,
+    real frac1,
+    t level1);
+    requires 1 <= frac0 &*& [frac0]call_perm_level<t>(pair(lt, level0), fs0) &*& 1 <= frac1 &*& [_]is_wf(lt) &*& lt(level1, level0) == true;
+    ensures [frac1]call_perm_level<t>(pair(lt, level1), fs0);
+
+lemma void consume_call_perm_level_for<t>(void *f);
+    requires call_perm_level<t>(?level, ?fs) &*& mem(f, fs) == true;
+    ensures call_perm_(f);
+
+lemma void call_perm_level<t>(real frac, fixpoint(t, t, bool) lt, t level, list<void *> fs);
+    requires call_perm_below(?fs0) &*& func_bag_lt(fs, fs0) == true &*& 0 < frac;
+    ensures [frac]call_perm_level(pair(lt, level), fs);
+
+#endif

@@ -1,0 +1,9 @@
+.provides threading_terminates.h#call_term_scope
+.provides threading_terminates.h#thread_start
+.structure @threading_terminates.h#semaphore
+.predicate @threading_terminates.h#semaphore
+.provides threading_terminates.h#create_semaphore
+.provides threading_terminates.h#semaphore_acquire
+.provides threading_terminates.h#semaphore_release
+.provides threading_terminates.h#semaphore_dispose
+.provides threading_terminates.h#atomic_store

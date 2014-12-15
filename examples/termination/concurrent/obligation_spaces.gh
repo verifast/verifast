@@ -1,0 +1,29 @@
+#ifndef OBLIGATION_SPACES_GH
+#define OBLIGATION_SPACES_GH
+
+#include "atomics.gh"
+#include "ghost_cells.gh"
+#include "obligations.gh"
+#include "stop_perms.gh"
+
+predicate_ctor obligation_space_inv(int scopeId, int termScope)() =
+    obligation_scope(scopeId, stop_perm_(termScope));
+
+predicate obligation_space(int id, int termScope;) =
+    [_]ghost_cell<pair<int, real> >(id, pair(?scopeId, ?level)) &*&
+    atomic_space(level, obligation_space_inv(scopeId, termScope)) &*&
+    term_perm(termScope, false);
+
+predicate obligation_space0(int id, int termScope;) =
+    [_]ghost_cell<pair<int, real> >(id, pair(?scopeId, ?level)) &*&
+    atomic_space(level, obligation_space_inv(scopeId, termScope));
+
+predicate obspace_joinee(int id) =
+    [_]ghost_cell<pair<int, real> >(id, pair(?scopeId, ?level)) &*&
+    obligation_scope_joinee(scopeId);
+
+predicate obspace_obligation_set(int id, list<level> obs) =
+    [_]ghost_cell<pair<int, real> >(id, pair(?scopeId, ?level)) &*&
+    obligation_set(scopeId, obs);
+
+#endif

@@ -1,0 +1,28 @@
+#ifndef ATOMICS_GH
+#define ATOMICS_GH
+
+predicate atomic_space(real level, predicate() inv;);
+predicate atomic_space_level(; real level);
+
+lemma void create_atomic_space(real level, predicate() inv);
+    requires inv();
+    ensures atomic_space(level, inv);
+
+lemma void atomic_space_destroy(real level, predicate() inv);
+    nonghost_callers_only
+    requires atomic_space(level, inv);
+    ensures inv();
+
+typedef lemma void atomic_noop_body(real level, predicate() inv, predicate() P, predicate() Q)();
+    requires atomic_space_level(level) &*& inv() &*& P();
+    ensures atomic_space_level(level) &*& inv() &*& Q();
+
+lemma void atomic_noop(); nonghost_callers_only
+    requires [?f]atomic_space(?level, ?inv) &*& is_atomic_noop_body(?body, level, inv, ?P, ?Q) &*& P();
+    ensures [f]atomic_space(level, inv) &*& is_atomic_noop_body(body, level, inv, P, Q) &*& Q();
+
+lemma void atomic_noop_nested();
+    requires atomic_space_level(?level0) &*& is_atomic_noop_body(?body, ?level, ?inv, ?P, ?Q) &*& [?f]atomic_space(level, inv) &*& P() &*& level < level0;
+    ensures atomic_space_level(level0) &*& [f]atomic_space(level, inv) &*& is_atomic_noop_body(body, level, inv, P, Q) &*& Q();
+
+#endif

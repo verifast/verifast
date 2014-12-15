@@ -1,0 +1,41 @@
+#ifndef SPLITTABLE_COUNTING_GH
+#define SPLITTABLE_COUNTING_GH
+
+predicate counting_handle_id_reservation(int id);
+predicate counting_handle(int id, predicate(;) p, real frac, int tickets);
+predicate counting_ticket(int id, real frac);
+
+lemma int create_counting_handle_id_reservation();
+    requires true;
+    ensures counting_handle_id_reservation(result);
+
+lemma void create_counting_handle(predicate(;) p);
+    requires counting_handle_id_reservation(?id) &*& p();
+    ensures counting_handle(id, p, 1, 0);
+
+lemma void split_counting_handle(int id, real frac1, int tickets1);
+    nonghost_callers_only
+    requires counting_handle(id, ?p, ?f, ?tickets) &*& 0 < frac1 &*& frac1 < f;
+    ensures counting_handle(id, p, frac1, tickets1) &*& counting_handle(id, p, f - frac1, tickets - tickets1);
+
+lemma void merge_counting_handle(int id);
+    nonghost_callers_only
+    requires counting_handle(id, ?p, ?f1, ?tickets1) &*& counting_handle(id, p, ?f2, ?tickets2);
+    ensures counting_handle(id, p, f1 + f2, tickets1 + tickets2);
+
+lemma void create_counting_ticket(int id);
+    nonghost_callers_only
+    requires counting_handle(id, ?p, ?f, ?tickets);
+    ensures counting_handle(id, p, f, tickets + 1) &*& counting_ticket(id, ?frac) &*& [frac]p() &*& 0 < frac;
+
+lemma void destroy_counting_ticket(int id);
+    nonghost_callers_only
+    requires counting_handle(id, ?p, ?f, ?tickets) &*& counting_ticket(id, ?frac) &*& [frac]p();
+    ensures counting_handle(id, p, f, tickets - 1);
+
+lemma void destroy_counting_handle(int id);
+    nonghost_callers_only
+    requires counting_handle(id, ?p, 1, 0);
+    ensures p();
+
+#endif

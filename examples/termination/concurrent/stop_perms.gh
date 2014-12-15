@@ -1,0 +1,8 @@
+#ifndef STOP_PERMS_GH
+#define STOP_PERMS_GH
+
+predicate term_perm(int termScope; bool terminated);
+predicate stop_perm(int termScope;);
+predicate_ctor stop_perm_(int termScope)(;) = stop_perm(termScope);
+
+#endif
