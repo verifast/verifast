@@ -43,7 +43,7 @@ copredicate tm_lowtech_lookup(list<int> tm, int state, int on_tape, int _action,
    :
      tm_lowtech_lookup(tail(tail(tail(tail(tail(tm))))), state, on_tape, _action, write_value, new_state)
 ;
-copredicate tm_lowtech_io(time t1, list<int> tm, int cur_state, list<int> tape_left, list<int> tape_cur_and_right, time t2) =
+copredicate tm_lowtech_io(place t1, list<int> tm, int cur_state, list<int> tape_left, list<int> tape_cur_and_right, place t2) =
   tm_lowtech_lookup(tm, cur_state, head(tape_cur_and_right), ?_action, ?write_value, ?new_state)
   &*& _action == 0 ? // do not move
     tm_lowtech_io(t1, tm, new_state, tape_left, tape_cur_and_right, t2)
@@ -77,7 +77,7 @@ copredicate tm_lowtech_io(time t1, list<int> tm, int cur_state, list<int> tape_l
  * easy to add more characters.
  */
 void cat()
-/*@ requires time(?t1)
+/*@ requires token(?t1)
   &*& tm_lowtech_io(t1, ?tm, 0, {}, {}, ?t2)
   &*& tm == {
       // state, on_tape, action, write, new_state
@@ -88,11 +88,11 @@ void cat()
          1    , 'b'    , 3     , 'b'  , 0
     };
 @*/
-//@ ensures time(t2);
+//@ ensures token(t2);
 {
   int c = 'a';
   while(c == 'a' || c == 'b')
-    /*@ invariant time(?t1_loop) &*&
+    /*@ invariant token(?t1_loop) &*&
       c == 'a' || c == 'b' ?
         tm_lowtech_io(t1_loop, tm, 0, {}, ?tape_right, t2)
         &*& tape_right == nil || tape_right == {97} || tape_right == {98}

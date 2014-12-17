@@ -12,7 +12,7 @@
 
 /*@
 // Expresses the following grammar:   brackets = '(' brackets ')' brackets | epsilon
-predicate matching_brackets_helper(time t1, list<bool> choices, time t2) =
+predicate matching_brackets_helper(place t1, list<bool> choices, place t2) =
   t1 == t2 ?
     choices == {false}
   :
@@ -24,14 +24,14 @@ predicate matching_brackets_helper(time t1, list<bool> choices, time t2) =
 ;
 
 // Make it a predicate with one argument because bigstar expects the predicate to have one argument.
-predicate_ctor matching_brackets_ctor(time t1, time t2)(list<bool> choices) =
+predicate_ctor matching_brackets_ctor(place t1, place t2)(list<bool> choices) =
   matching_brackets_helper(t1, choices, t2);
 @*/
 
 
 void main()
-//@ requires time(?t1) &*& exists<time>(?t2) &*& bigstar<list<bool> >(matching_brackets_ctor(t1, t2), nil);
-//@ ensures time(t2);
+//@ requires token(?t1) &*& exists<place>(?t2) &*& bigstar<list<bool> >(matching_brackets_ctor(t1, t2), nil);
+//@ ensures token(t2);
 {
   //@ bigstar_extract(matching_brackets_ctor(t1, t2), {true, false, false});
   //@ open matching_brackets_ctor(t1,t2)(_);

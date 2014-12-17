@@ -13,10 +13,10 @@
 //@ #include <bigstar.gh>
 
 /*@
-predicate_ctor output_helper(time t1, time t2)(char value) =
+predicate_ctor output_helper(place t1, place t2)(char value) =
   write_char_io(t1, stdout, value, _, t2);
 
-predicate output_anything(time t1, time t2) =
+predicate output_anything(place t1, place t2) =
   bigstar(output_helper(t1, t2), nil);
 @*/
 
@@ -35,8 +35,8 @@ int get_any_unsigned_char()
 }
 
 void main()
-//@ requires time(?t1) &*& output_anything(t1, ?t2);
-//@ ensures time(t2);
+//@ requires token(?t1) &*& output_anything(t1, ?t2);
+//@ ensures token(t2);
 {
   
   int i;

@@ -22,7 +22,7 @@
 #include <stdio_simple.h>
 
 /*@
-copredicate tm_transition_io(time t1, list<int> tm, int _action, int write_value, int new_state, list<int> tape_left, list<int> tape_right, time t2) =
+copredicate tm_transition_io(place t1, list<int> tm, int _action, int write_value, int new_state, list<int> tape_left, list<int> tape_right, place t2) =
   _action == 0 ? // do not move
     tm_io(t1, tm, new_state, tape_left, tape_right, t2)
   : _action == -1 ?  // move left
@@ -39,7 +39,7 @@ copredicate tm_transition_io(time t1, list<int> tm, int _action, int write_value
     exists<list<int> >({'B','A','D','_','T', 'M'})
 ;
 
-copredicate tm_lookup_io(time t1, list<int> tm, list<int> tm_unwinding, bool line_found, int state, list<int> tape_left, list<int> tape_right, time t2) =
+copredicate tm_lookup_io(place t1, list<int> tm, list<int> tm_unwinding, bool line_found, int state, list<int> tape_left, list<int> tape_right, place t2) =
   tm_unwinding == nil? // All possible transitions are already considered
     line_found ? // There was at least one transition, i.e. the TM did not halt
       emp
@@ -72,7 +72,7 @@ copredicate tm_lookup_io(time t1, list<int> tm, list<int> tm_unwinding, bool lin
  * Represents the permission to do the input output actions which the given tm does.
  */
 // It is easier in proofs to separate tm_lookup_io from tm_io. Technically it's the same but conceptually it's a bit different
-copredicate tm_io(time t1, list<int> tm, int state, list<int> tape_left, list<int> tape_right, time t2) =
+copredicate tm_io(place t1, list<int> tm, int state, list<int> tape_left, list<int> tape_right, place t2) =
   tm_lookup_io(t1, tm, tm, false, state, tape_left, tape_right, t2);
 
 
@@ -91,7 +91,7 @@ copredicate tm_io(time t1, list<int> tm, int state, list<int> tape_left, list<in
  * easy to add more characters.
  */
 void cat()
-/*@ requires time(?t1)
+/*@ requires token(?t1)
   &*& tm_io(t1, ?tm, 0, {}, {}, ?t2)
   &*& tm == {
       // state, on_tape, action, write, new_state
@@ -102,11 +102,11 @@ void cat()
          1    , 'b'    , 3     , 'b'  , 0
     };
 @*/
-//@ ensures time(t2);
+//@ ensures token(t2);
 {
   int c = 'a';
   while(c == 'a' || c == 'b')
-    /*@ invariant time(?t1_loop) &*&
+    /*@ invariant token(?t1_loop) &*&
       c == 'a' || c == 'b' ?
         tm_io(t1_loop, tm, 0, {}, ?tape_right, t2)
         &*& tape_right == nil || tape_right == {c}

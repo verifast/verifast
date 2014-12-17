@@ -21,7 +21,7 @@
 
 /*@
 
-predicate read_opened_file(time t1, FILE *f; list<char> text, time t_end) =
+predicate read_opened_file(place t1, FILE *f; list<char> text, place t_end) =
   read_char_io(t1, f, ?c, ?success, ?t2)
   // On paper, we write "c >= 0 ?" instead of "success ?" as a simplification.
   // They are equivalent because of the contract of fgetc and friends.
@@ -32,8 +32,8 @@ predicate read_opened_file(time t1, FILE *f; list<char> text, time t_end) =
     t_end == t2
     &*& text == nil;
 
-predicate read_file(time t1, list<char> filename;
-  list<unsigned char> text, time t_end) =
+predicate read_file(place t1, list<char> filename;
+  list<unsigned char> text, place t_end) =
   
   fopen_io(t1, filename, {'r','b'}, ?file_handle, ?t2)
   &*& file_handle == 0 ?
@@ -43,8 +43,8 @@ predicate read_file(time t1, list<char> filename;
     read_opened_file(t2, file_handle, text, ?t3)
     &*& fclose_io(t3, file_handle, t_end);
 
-predicate write_opened_file(time t1, FILE *file_handle,
-  list<unsigned char> text; time t_end) =
+predicate write_opened_file(place t1, FILE *file_handle,
+  list<unsigned char> text; place t_end) =
   
   text == nil ?
     t_end == t1
@@ -56,8 +56,8 @@ predicate write_opened_file(time t1, FILE *file_handle,
 // and that works, but for similarity with the example on
 // paper, we write "list<char> filenames" (one char per
 // filename).
-predicate read_files_io(time t1, list<char> filenames;
-  list<char> text, time t_end) =
+predicate read_files_io(place t1, list<char> filenames;
+  list<char> text, place t_end) =
   
   filenames == nil ?
     t_end == t1
@@ -68,8 +68,8 @@ predicate read_files_io(time t1, list<char> filenames;
     &*& text == append(text1, text2);
 
 
-predicate read_filename_list_io(time t1, FILE *stream; list<char>
-  filenames, time t_end) =
+predicate read_filename_list_io(place t1, FILE *stream; list<char>
+  filenames, place t_end) =
   
   read_char_io(t1, stream, ?c, ?success, ?t2)
   &*& success ? // equivalent with "c >= 0"
@@ -84,8 +84,8 @@ predicate read_filename_list_io(time t1, FILE *stream; list<char>
     t_end == t2
     &*& filenames == nil;
 
-predicate read_file_of_files_io(time t1, list<char> filename,
-  FILE *stream_out, time t_end) =
+predicate read_file_of_files_io(place t1, list<char> filename,
+  FILE *stream_out, place t_end) =
   
   fopen_io(t1, filename, {'r','b'}, ?meta_file, ?t2)
   &*& meta_file != 0 ?
@@ -107,8 +107,8 @@ predicate read_file_of_files_io(time t1, list<char> filename,
 // We choose the simplest implementation (alternatives would bebuffering, threading, ...)
 
 void main()
-//@ requires read_file_of_files_io(?t1, {'f'}, stdout, ?t_end) &*& time(t1);
-//@ ensures time(t_end);
+//@ requires read_file_of_files_io(?t1, {'f'}, stdout, ?t_end) &*& token(t1);
+//@ ensures token(t_end);
 {
   
   //@ open read_file_of_files_io(_, _, _, _);
@@ -129,13 +129,13 @@ void main()
     /*@ invariant
       stream(meta, {'r','b'})
       &*& c >= 0 ?
-        read_filename_list_io(?t_cur, meta, ?filenames, t_read_list2) &*& time(t_cur)
-        &*& read_files_io(?t_read, filenames, ?text, t_read2) &*& time(t_read)
-        &*& write_opened_file(?t_write, stdout, text, t_write2) &*& time(t_write)
+        read_filename_list_io(?t_cur, meta, ?filenames, t_read_list2) &*& token(t_cur)
+        &*& read_files_io(?t_read, filenames, ?text, t_read2) &*& token(t_read)
+        &*& write_opened_file(?t_write, stdout, text, t_write2) &*& token(t_write)
       :
-        time(t_read_list2)
-        &*& time(t_read2)
-        &*& time(t_write2);
+        token(t_read_list2)
+        &*& token(t_read2)
+        &*& token(t_write2);
     @*/
   {
     //@ open read_filename_list_io(_, _, _, _);
@@ -157,12 +157,12 @@ void main()
         /*@ invariant
           stream(f, {'r','b'})
           &*& c2 >= 0 ?
-            read_opened_file(?t_read_cur, f, ?text_onefile, t_read_cur_end) &*& time(t_read_cur)
-            &*& write_opened_file(?t_write_cur, stdout, ?text_allfiles, t_write2) &*& time(t_write_cur)
+            read_opened_file(?t_read_cur, f, ?text_onefile, t_read_cur_end) &*& token(t_read_cur)
+            &*& write_opened_file(?t_write_cur, stdout, ?text_allfiles, t_write2) &*& token(t_write_cur)
             &*& append(text_onefile, text_nextfiles) == text_allfiles
           :
-            time(t_read_cur_end)
-            &*& write_opened_file(?t_write_cur, stdout, text_nextfiles, t_write2) &*& time(t_write_cur);
+            token(t_read_cur_end)
+            &*& write_opened_file(?t_write_cur, stdout, text_nextfiles, t_write2) &*& token(t_write_cur);
         @*/
         {
           //@ open read_opened_file(_, _, _, _);

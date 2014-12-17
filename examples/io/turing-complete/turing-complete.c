@@ -163,7 +163,7 @@ fixpoint t option_unpack<t>(option<t> option){
  * starting from configuration config.
  * For the initial config, use "tm_get_initial_config(tm)".
  */
-copredicate tm_io(time t1, tm tm, tm_config config, time t2) =
+copredicate tm_io(place t1, tm tm, tm_config config, place t2) =
   tm_step(tm, config) == none ?
     t2 == t1
   :
@@ -234,11 +234,11 @@ fixpoint tm cat_tm(){
  * verification will pass.
  */
 void cat()
-//@ requires time(?t1) &*& tm_io(t1, cat_tm(), tm_get_initial_config(cat_tm()), ?t2);
-//@ ensures time(t2);
+//@ requires token(?t1) &*& tm_io(t1, cat_tm(), tm_get_initial_config(cat_tm()), ?t2);
+//@ ensures token(t2);
 {
   while(true)
-    //@ invariant time(?t1_loop) &*& tm_io(t1_loop, cat_tm(), ?config, t2) &*& tm_config_get_state(config) == tm_state(0);
+    //@ invariant token(?t1_loop) &*& tm_io(t1_loop, cat_tm(), ?config, t2) &*& tm_config_get_state(config) == tm_state(0);
   {
     //@ open tm_io(_, _, _, _);
     int c = getchar();

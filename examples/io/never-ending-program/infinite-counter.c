@@ -18,33 +18,33 @@
 
 /*@
 
-predicate print_unary_io(time t1, int number; time t_end) =
+predicate print_unary_io(place t1, int number; place t_end) =
   number >= 1 ?
     write_char_io(t1, stdout, '1', _, ?t2)
     &*& print_unary_io(t2, number - 1, t_end)
   :
     t_end == t1;
 
-copredicate infinite_counter_io(time t1, int number, time t_end) =
+copredicate infinite_counter_io(place t1, int number, place t_end) =
   print_unary_io(t1, number, ?t2)
   &*& write_char_io(t2, stdout, '\n', _, ?t3)
   &*& infinite_counter_io(t3, number + 1, t_end);
 @*/
 
 void main()
-//@ requires time(?t1) &*& infinite_counter_io(t1, 0, ?t_end);
+//@ requires token(?t1) &*& infinite_counter_io(t1, 0, ?t_end);
 //@ ensures false; // program must not terminate.
 {
   unsigned int count = 0;
   while(true)
-    //@ invariant time(?t_cur) &*& infinite_counter_io(t_cur, count, t_end);
+    //@ invariant token(?t_cur) &*& infinite_counter_io(t_cur, count, t_end);
   {
     unsigned int unary_count = 0;
     //@ open infinite_counter_io(_, _, _);
     //@ assert print_unary_io(_, _, ?t_unary_end);
     while (unary_count < count)
       /*@ invariant
-        time(?t1_unary) &*& print_unary_io(t1_unary, count - unary_count, t_unary_end);
+        token(?t1_unary) &*& print_unary_io(t1_unary, count - unary_count, t_unary_end);
       @*/
     {
       //@ open print_unary_io(_, _, _);

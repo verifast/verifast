@@ -14,7 +14,7 @@
 
 
 /*@
-predicate read_till_eof_io(time t1; list<char> contents, time t2) =
+predicate read_till_eof_io(place t1; list<char> contents, place t2) =
   read_char_io(t1, stdin, ?c, ?success, ?t_read)
   &*& success ?
     read_till_eof_io(t_read, ?sub, t2)
@@ -25,7 +25,7 @@ predicate read_till_eof_io(time t1; list<char> contents, time t2) =
 @*/
 
 /*@
-predicate tee_out_string_io(time t1, list<char> contents; time t2) =
+predicate tee_out_string_io(place t1, list<char> contents; place t2) =
   contents == nil ?
     t2 == t1
   :
@@ -34,14 +34,14 @@ predicate tee_out_string_io(time t1, list<char> contents; time t2) =
 @*/
 
 /*@
-predicate tee_buffered_io(time t1, list<char> contents; time t2) =
+predicate tee_buffered_io(place t1, list<char> contents; place t2) =
   split(t1, ?t_read1, ?t_write1)
     &*& read_till_eof_io(t_read1, contents, ?t_read2)
     // --
     &*& tee_out_string_io(t_write1, contents, ?t_write2)
   &*& join(t_read2, t_write2, t2);
   
-predicate main_io(time t1, list<list<char> > arguments, time t2) =
+predicate main_io(place t1, list<list<char> > arguments, place t2) =
   tee_buffered_io(t1, _, t2);
 @*/
 
@@ -50,9 +50,9 @@ int main(int argc, char **argv) //@ : main_io(tee_buffered)
 /*@ requires module(tee_buffered, true)
   &*& [_]argv(argv, argc, ?arguments)
   &*& main_io(?t1, arguments, ?t2)
-  &*& time(t1);
+  &*& token(t1);
 @*/
-/*@ ensures time(t2);
+/*@ ensures token(t2);
 @*/
 {
   //@ open main_io(_, _, _);
@@ -63,11 +63,11 @@ int main(int argc, char **argv) //@ : main_io(tee_buffered)
   while (c2 >= 0)
     /*@ invariant
       c2 >= 0 ?
-        read_till_eof_io(?t_read1, ?contents, ?t_read2) &*& time(t_read1)
-        &*& tee_out_string_io(?t_write1, contents, ?t_write2) &*& time(t_write1)
+        read_till_eof_io(?t_read1, ?contents, ?t_read2) &*& token(t_read1)
+        &*& tee_out_string_io(?t_write1, contents, ?t_write2) &*& token(t_write1)
         &*& join(t_read2, t_write2, t2)
       :
-        time(t2)
+        token(t2)
       ;
     @*/
   {

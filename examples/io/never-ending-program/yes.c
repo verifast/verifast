@@ -11,19 +11,19 @@
 
 /*@
 // This expresses an action that never terminates.
-copredicate yes_io(time t1) =
+copredicate yes_io(place t1) =
   write_char_io(t1, stdout, 'y', _, ?t2)
   &*& write_char_io(t2, stdout, '\n', _, ?t3)
   &*& yes_io(t3);
 @*/
 
 void main()
-//@ requires time(?t1) &*& yes_io(t1);
+//@ requires token(?t1) &*& yes_io(t1);
 //@ ensures false; // does not terminate.
 {
   int counter = 0;
   while (1)
-    //@ invariant time(?t) &*& yes_io(t);
+    //@ invariant token(?t) &*& yes_io(t);
   {
     //@ open yes_io(t);
     putchar('y');

@@ -12,7 +12,7 @@
 
 /*@
 // Expresses the following grammar:   brackets = '(' brackets ')' brackets | epsilon
-predicate matching_brackets_helper(time t1, time t2) =
+predicate matching_brackets_helper(place t1, place t2) =
   t1 == t2 ?
     emp
   :
@@ -24,10 +24,10 @@ predicate matching_brackets_helper(time t1, time t2) =
 
 
 void main()
-/*@ requires time(?t1) &*& matching_brackets_helper(t1, ?t_help)
+/*@ requires token(?t1) &*& matching_brackets_helper(t1, ?t_help)
   &*& read_char_io(t_help, stdin, _, false, ?t2); // end of file
 @*/
-//@ ensures time(t2);
+//@ ensures token(t2);
 {
   
   int counter = 0;
@@ -35,7 +35,7 @@ void main()
   //@ brackets_to_iterative(t1);
   do
     /*@ invariant
-      time(?t1_)
+      token(?t1_)
       &*& matching_brackets_iterative(t1_, counter, ?depth, t_help)
       &*& counter >= 0
       &*& read_char_io(t_help, stdin, _, false, t2);
@@ -72,7 +72,7 @@ void main()
  */
 
 /*@
-predicate matching_brackets_iterative(time t1, int depth, int length, time t2) =
+predicate matching_brackets_iterative(place t1, int depth, int length, place t2) =
   depth >= 0
   &*& length >= 0
   &*& length == 0 ?
@@ -88,7 +88,7 @@ predicate matching_brackets_iterative(time t1, int depth, int length, time t2) =
       &*& sub_depth == depth - 1
 ;
 
-lemma void brackets_iterative_add_close(time t_open)
+lemma void brackets_iterative_add_close(place t_open)
 requires matching_brackets_iterative(t_open, ?depth, ?length, ?t_center)
     &*& read_char_io(t_center, stdin, ')', true, ?t_close);
 ensures matching_brackets_iterative(t_open, depth + 1, length + 1, t_close);
@@ -105,7 +105,7 @@ ensures matching_brackets_iterative(t_open, depth + 1, length + 1, t_close);
   }
 }
 
-lemma void brackets_iterative_deepen(time t1)
+lemma void brackets_iterative_deepen(place t1)
 requires read_char_io(t1, stdin, '(', true, ?t_open)
     &*& matching_brackets_iterative(t_open, 0, ?length, ?t_center)
     &*& read_char_io(t_center, stdin, ')', true, ?t_close);
@@ -119,7 +119,7 @@ ensures matching_brackets_iterative(t1, 0, length + 2, t_close);
   close matching_brackets_iterative(t1, 0, length + 2, t_close);
 }
 
-lemma void brackets_iterative_concat(time t1)
+lemma void brackets_iterative_concat(place t1)
 requires matching_brackets_iterative(t1, ?depth, ?length1, ?t2)
   &*& matching_brackets_iterative(t2, 0, ?length2, ?t3);
 ensures matching_brackets_iterative(t1, depth, length1 + length2, t3);
@@ -139,7 +139,7 @@ ensures matching_brackets_iterative(t1, depth, length1 + length2, t3);
   }
 }
 
-lemma void brackets_to_iterative(time t1)
+lemma void brackets_to_iterative(place t1)
     requires matching_brackets_helper(t1, ?t2);
     ensures matching_brackets_iterative(t1, 0, _, t2);
 {

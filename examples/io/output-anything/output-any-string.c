@@ -10,7 +10,7 @@
 //@ #include <bigstar.gh>
 
 /*@
-predicate write_string_io(time t1, list<char> string, time t2) =
+predicate write_string_io(place t1, list<char> string, place t2) =
   string == nil ?
     t1 == t2
   :
@@ -20,8 +20,8 @@ predicate write_string_io(time t1, list<char> string, time t2) =
 @*/
 
 void write_string(char *string_arg)
-//@ requires [?f]string(string_arg, ?str) &*& write_string_io(?t1, str, ?t2) &*& time(t1);
-//@ ensures [f]string(string_arg, str) &*& time(t2);
+//@ requires [?f]string(string_arg, ?str) &*& write_string_io(?t1, str, ?t2) &*& token(t1);
+//@ ensures [f]string(string_arg, str) &*& token(t2);
 {
   char *string_temp = string_arg;
   //@ close exists(tail(str));
@@ -40,7 +40,7 @@ void write_string(char *string_arg)
   /*@ requires
     [f]character(string_temp, ?c)
     &*& exists<list<char> >(?str_loop)
-    &*& time(?t_loop)
+    &*& token(?t_loop)
     &*& write_string_io(t_loop, ?str_write, t2)
     &*& c != 0 ?
       [f]string(string_temp+1, str_loop)
@@ -52,7 +52,7 @@ void write_string(char *string_arg)
   /*@ ensures
     [f]character(old_string_temp, c)
     &*& write_string_io(t2, nil, t2)
-    &*& time(t2)
+    &*& token(t2)
     &*& c != 0 ?
       [f]string(old_string_temp+1, str_loop)
     :
@@ -76,10 +76,10 @@ void write_string(char *string_arg)
 }
 
 /*@
-predicate_ctor output_helper(time t1, time t2)(list<char> value) =
+predicate_ctor output_helper(place t1, place t2)(list<char> value) =
   write_string_io(t1, value, t2);
 
-predicate output_anything(time t1, time t2) =
+predicate output_anything(place t1, place t2) =
   bigstar(output_helper(t1, t2), nil);
 @*/
 
@@ -91,8 +91,8 @@ char* get_any_string()
 }
 
 void main()
-//@ requires time(?t1) &*& output_anything(t1, ?t2);
-//@ ensures time(t2);
+//@ requires token(?t1) &*& output_anything(t1, ?t2);
+//@ ensures token(t2);
 {
   char *string;
   string = get_any_string();

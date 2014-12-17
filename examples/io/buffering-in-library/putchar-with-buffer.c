@@ -26,14 +26,14 @@
 
 /*--------------------- SYSCALL ---------------------*/
 /*@
-predicate syscall_putchar_io(time t1, int c, time t2);
+predicate syscall_putchar_io(place t1, int c, place t2);
 @*/
 void syscall_putchar(int c);
-//@ requires time(?t1) &*& syscall_putchar_io(t1, c, ?t2);
-//@ ensures time(t2);
+//@ requires token(?t1) &*& syscall_putchar_io(t1, c, ?t2);
+//@ ensures token(t2);
 
 /*@
-predicate syscall_write_io(time t1, list<int> string, time t2) =
+predicate syscall_write_io(place t1, list<int> string, place t2) =
   string == nil ?
     t1 == t2
   :
@@ -49,8 +49,8 @@ struct stdlib{
   int buffer_used;
 };
 /*@
-inductive stdlib_state = stdlib_state(list<int> to_write, time t1, time t2);
-predicate stdlib(struct stdlib *stdlib, time t1, time t2) =
+inductive stdlib_state = stdlib_state(list<int> to_write, place t1, place t2);
+predicate stdlib(struct stdlib *stdlib, place t1, place t2) =
   stdlib->buffer |-> ?buffer
   &*& stdlib->buffer_size |-> ?buffer_size
   &*& stdlib->buffer_used |-> ?buffer_used
@@ -64,7 +64,7 @@ predicate stdlib(struct stdlib *stdlib, time t1, time t2) =
     &*& t1 == t2
 ;
 
-predicate stdlib_putchars_io(time t1, list<int> string, time t2) =
+predicate stdlib_putchars_io(place t1, list<int> string, place t2) =
   string == nil ?
     t1 == t2
   :
@@ -73,17 +73,17 @@ predicate stdlib_putchars_io(time t1, list<int> string, time t2) =
 ;
 
 
-predicate stdlib_putchar_io(time t1, int c, time t2) =
+predicate stdlib_putchar_io(place t1, int c, place t2) =
   syscall_putchar_io(t1, c, t2);
 @*/
 
 
 void stdlib_putchar(struct stdlib *stdlib, int c)
-/*@ requires time(?t1) &*& stdlib(stdlib, t1, ?t_postponed)
+/*@ requires token(?t1) &*& stdlib(stdlib, t1, ?t_postponed)
   &*& stdlib_putchar_io(t_postponed, c, ?t2);
 @*/
 /*@ ensures stdlib(stdlib, ?t1_new, t2)
-  &*& time(t1_new);
+  &*& token(t1_new);
 @*/
 {
   //@ open stdlib(stdlib, _, _);
@@ -102,10 +102,10 @@ void stdlib_putchar(struct stdlib *stdlib, int c)
 }
 
 void stdlib_flush_stdout(struct stdlib *stdlib)
-/*@ requires time(?t1) &*& stdlib(stdlib, t1, ?t_postponed);
+/*@ requires token(?t1) &*& stdlib(stdlib, t1, ?t_postponed);
 @*/
 /*@ ensures stdlib(stdlib, t_postponed, t_postponed)
-  &*& time(t_postponed);
+  &*& token(t_postponed);
 @*/
 {
   //@ open stdlib(stdlib, _, _);
@@ -119,13 +119,13 @@ void stdlib_flush_stdout(struct stdlib *stdlib)
 /*--------------------- USER -----------------------*/
 
 void main(struct stdlib *stdlib)
-/*@ requires time(?t1)
+/*@ requires token(?t1)
   &*& stdlib(stdlib, t1, t1)
   &*& stdlib_putchar_io(t1, 'h', ?t2)
   &*& stdlib_putchar_io(t2, 'i', ?t3);
 @*/
 /*@
-  ensures time(t3) &*& stdlib(stdlib, t3, t3);
+  ensures token(t3) &*& stdlib(stdlib, t3, t3);
 @*/
 {
   stdlib_putchar(stdlib, 'h');

@@ -21,18 +21,18 @@ predicate template_io(any t1, Class c, any t2) =
 @*/
 
 public abstract class ComplexCalculation {
-  //@ predicate time(any x) = x == default_value<any> &*& false;
+  //@ predicate token(any x) = x == default_value<any> &*& false;
 
   public void template()
-    /*@ requires this.time(?t1)
+    /*@ requires this.token(?t1)
       &*& template_io(t1, this.getClass(), ?t2);
     @*/
-    //@ ensures this.time(t2);
+    //@ ensures this.token(t2);
   {
     //@ open template_io(_, _, _);
     while (m1())
         /*@ invariant
-            this.time(?t_cur)
+            this.token(?t_cur)
             &*& m1_io(this.getClass())(t_cur, ?return_val, ?t_m1)
             &*& return_val ?
               m2_io(this.getClass())(t_m1, ?t_m2)
@@ -49,16 +49,16 @@ public abstract class ComplexCalculation {
   // The paper formalization does only allow expressions as guard for while loops.
   // This version of the template method is written as such.
   public void template_guard_is_expression()
-    /*@ requires this.time(?t1)
+    /*@ requires this.token(?t1)
       &*& template_io(t1, this.getClass(), ?t2);
     @*/
-    //@ ensures this.time(t2);
+    //@ ensures this.token(t2);
   {
     //@ open template_io(_, _, ?t_open1);
     boolean return_val = m1();
     while (return_val)
         /*@ invariant
-          this.time(?t_cur)
+          this.token(?t_cur)
           &*& return_val ?
             m2_io(this.getClass())(t_cur, ?t_m2)
             &*& template_io(t_m2, this.getClass(), t2)
@@ -72,12 +72,12 @@ public abstract class ComplexCalculation {
   }
 
   public abstract boolean m1();
-    //@ requires time(?t1) &*& m1_io(this.getClass())(t1, ?result_value, ?t2);
-    //@ ensures time(t2) &*& result == result_value;
+    //@ requires token(?t1) &*& m1_io(this.getClass())(t1, ?result_value, ?t2);
+    //@ ensures token(t2) &*& result == result_value;
   
   public abstract void m2();
-    //@ requires time(?t1) &*& m2_io(this.getClass())(t1, ?t2);
-    //@ ensures time(t2);
+    //@ requires token(?t1) &*& m2_io(this.getClass())(t1, ?t2);
+    //@ ensures token(t2);
 }
 
 
@@ -85,40 +85,40 @@ public abstract class ComplexCalculation {
 // return a boolean such that it can be used as the while guard.
 
 /*@
-predicate_family_instance m1_io(Adder)(adder_time t1, boolean result, adder_time t2) =
-  t1 == adder_time(?value)
+predicate_family_instance m1_io(Adder)(adder_place t1, boolean result, adder_place t2) =
+  t1 == adder_place(?value)
   &*& value == Short.MAX_VALUE ?
     t2 == t1 &*& result == false
   :
-    t2 == adder_time(value + 1) &*& result == true
+    t2 == adder_place(value + 1) &*& result == true
 ;
-predicate_family_instance m2_io(Adder)(adder_time t1, adder_time t2) =
-  t1 == adder_time(?value)
+predicate_family_instance m2_io(Adder)(adder_place t1, adder_place t2) =
+  t1 == adder_place(?value)
   &*& value > Short.MAX_VALUE - 20 ?
     t2 == t1
   :
-    t2 == adder_time(value + 20)
+    t2 == adder_place(value + 20)
 ;
-inductive adder_time = adder_time(int value);
+inductive adder_place = adder_place(int value);
 @*/
 /**
  * Class that does a calculation, by adding a number.
  */
 public class Adder extends ComplexCalculation {
   short x = 0;
-  //@ predicate time(any t1) = this->x |-> ?x &*& t1 == adder_time(x);
+  //@ predicate token(any t1) = this->x |-> ?x &*& t1 == adder_place(x);
 
   public Adder()
     //@ requires true;
-    //@ ensures time(adder_time(0));
+    //@ ensures token(adder_place(0));
   {
   }
 
   public boolean m1()
-    //@ requires time(?t1) &*& m1_io(Adder.class)(t1, ?return_value, ?t2);
-    //@ ensures time(t2) &*& result == return_value;
+    //@ requires token(?t1) &*& m1_io(Adder.class)(t1, ?return_value, ?t2);
+    //@ ensures token(t2) &*& result == return_value;
   {
-    //@ open time(t1);
+    //@ open token(t1);
     //@ open m1_io(Adder.class)(_, _, _);
     if (x != Short.MAX_VALUE){
       x = (short)(x + 1);
@@ -126,48 +126,48 @@ public class Adder extends ComplexCalculation {
     }else{
       return false;
     }
-    //@ close time(t2);
+    //@ close token(t2);
   }
   
   public void m2()
-    //@ requires time(?t1) &*& m2_io(Adder.class )(t1, ?t2);
-    //@ ensures time(t2);
+    //@ requires token(?t1) &*& m2_io(Adder.class )(t1, ?t2);
+    //@ ensures token(t2);
   {
-    //@ open time(t1);
+    //@ open token(t1);
     //@ open m2_io(Adder.class)(_, _);
     if (x <= Short.MAX_VALUE - 20){
       x = (short)(x + 20);
     }
-    //@ close time(t2);
+    //@ close token(t2);
   }
   
   public int getValue()
-    //@ requires time(?t) &*& t == adder_time(?v);
-    //@ ensures time(t) &*& result == v;
+    //@ requires token(?t) &*& t == adder_place(?v);
+    //@ ensures token(t) &*& result == v;
   {
     return x;
   }
 }
 
 /*@
-predicate_family_instance m1_io(Multiplier)(multiplier_time t1, boolean result, multiplier_time t2) =
-  t1 == multiplier_time(?x)
+predicate_family_instance m1_io(Multiplier)(multiplier_place t1, boolean result, multiplier_place t2) =
+  t1 == multiplier_place(?x)
   &*& x * 2 > Integer.MAX_VALUE ? // Would cause integer overflow
     t2 == t1
     &*& result == false
   :
-    t2 == multiplier_time(x * 2)
+    t2 == multiplier_place(x * 2)
     &*& result == true
 ;
-predicate_family_instance m2_io(Multiplier)(multiplier_time t1, multiplier_time t2) = 
-  t1 == multiplier_time(?x)
+predicate_family_instance m2_io(Multiplier)(multiplier_place t1, multiplier_place t2) = 
+  t1 == multiplier_place(?x)
   &*& x * 3 > Integer.MAX_VALUE ? // Would cause integer overflow
     t2 == t1
   :
-    t2 == multiplier_time(x * 3)
+    t2 == multiplier_place(x * 3)
 ;
 
-inductive multiplier_time = multiplier_time(int x);
+inductive multiplier_place = multiplier_place(int x);
 @*/
 
 
@@ -177,23 +177,23 @@ inductive multiplier_time = multiplier_time(int x);
 public class Multiplier extends ComplexCalculation {
   int value = 1; // It is possible to have a different representation.
   /*@
-  predicate time(any t) =
+  predicate token(any t) =
     this.value |-> ?value
     &*& value >= 0
-    &*& t == multiplier_time(value);
+    &*& t == multiplier_place(value);
   @*/
   
   public Multiplier()
   //@ requires true;
-  //@ ensures time(multiplier_time(1));
+  //@ ensures token(multiplier_place(1));
   {
   }
 
   public boolean m1()
-    //@ requires time(?t1) &*& m1_io(Multiplier.class)(t1, ?return_value, ?t2);
-    //@ ensures time(t2) &*& result == return_value;
+    //@ requires token(?t1) &*& m1_io(Multiplier.class)(t1, ?return_value, ?t2);
+    //@ ensures token(t2) &*& result == return_value;
   {
-    //@ open time(t1);
+    //@ open token(t1);
     //@ open m1_io(Multiplier.class)(_, _, _);
     if (value <= Integer.MAX_VALUE / 2){
       value = value * 2;
@@ -201,24 +201,24 @@ public class Multiplier extends ComplexCalculation {
     }else{
       return false;
     }
-    //@ close time(t2);
+    //@ close token(t2);
   } 
   
   public void m2()
-    //@ requires time(?t1) &*& m2_io(Multiplier.class)(t1, ?t2);
-    //@ ensures time(t2);
+    //@ requires token(?t1) &*& m2_io(Multiplier.class)(t1, ?t2);
+    //@ ensures token(t2);
   {
-    //@ open time(t1);
+    //@ open token(t1);
     //@ open m2_io(Multiplier.class)(_, _);
     if (value <= Integer.MAX_VALUE / 3){
       value = value * 3;
     }
-    //@ close time(t2);
+    //@ close token(t2);
   } 
   
   public int getValue()
-    //@ requires time(?t);
-    //@ ensures time(t) &*& t == multiplier_time(?x) &*& result == x;
+    //@ requires token(?t);
+    //@ ensures token(t) &*& t == multiplier_place(?x) &*& result == x;
   {
     return value;
   }

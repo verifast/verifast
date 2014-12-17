@@ -18,8 +18,8 @@ int *c;
 //@ predicate buffer(int *cc, int ccc) = pointer(&c, cc) &*& integer(cc, ccc);
 
 int pop_read_ahead()
-//@ requires buffer(?cc, ?c_old) &*& time(?t1) &*& read_char_io(t1, stdin, ?new_char, ?success, ?t2);
-//@ ensures buffer(cc, new_char) &*& time(t2) &*& result == c_old;
+//@ requires buffer(?cc, ?c_old) &*& token(?t1) &*& read_char_io(t1, stdin, ?new_char, ?success, ?t2);
+//@ ensures buffer(cc, new_char) &*& token(t2) &*& result == c_old;
 {
   //@ open buffer(_, _);
   int c_copy = *c;
@@ -43,7 +43,7 @@ int peek_read_ahead()
 /*
  * Note that this predicate would be incorrect:
  *
- * predicate matching_brackets_helper(time t1, bool valid, time t2) =
+ * predicate matching_brackets_helper(place t1, bool valid, place t2) =
  *   t1 != t2 ?
  *     read_char_io(t1, stdin, ?should_be_open, _, ?t_open)
  *     &*& matching_brackets_helper(t_open, ?sub_valid1, ?t_center)
@@ -59,7 +59,7 @@ int peek_read_ahead()
  * is possible the string is actually one of the language.
  */
 /*@
-predicate brackets_io(time t_read1, int read1; int read5, bool valid, time t_read5) =
+predicate brackets_io(place t_read1, int read1; int read5, bool valid, place t_read5) =
 
   //        (   brackets   )   brackets
   // read:  1   2          3   4          5
@@ -80,9 +80,9 @@ bool brackets()
 /*@ requires
   buffer(?cc, ?read1) // contains the read ahead
   &*& brackets_io(?t_read1, read1, ?read5, ?valid, ?t_read5)
-  &*& time(t_read1);
+  &*& token(t_read1);
 @*/
-//@ ensures buffer(cc, read5) &*& time(t_read5) &*& result == valid;
+//@ ensures buffer(cc, read5) &*& token(t_read5) &*& result == valid;
 {
   //@ open brackets_io(_, _, _, _, _);
   if (peek_read_ahead() == '('){
@@ -104,14 +104,14 @@ bool brackets()
 }
 
 void main()
-/*@ requires time(?t1)
+/*@ requires token(?t1)
   &*& read_char_io(t1, stdin, ?read_ahead, _, ?t_read_ahead)
   &*& brackets_io(t_read_ahead, read_ahead, ?read_last, ?valid, ?t_brackets_end)
   &*& read_last < 0 // must read till EOF
   &*& write_char_io(t_brackets_end, stdout, (valid ? '1' : '0'), _, ?t_end)
   &*& module(matching_brackets_checker, true);
 @*/
-//@ ensures time(t_end) &*& module(matching_brackets_checker, _);
+//@ ensures token(t_end) &*& module(matching_brackets_checker, _);
 {
   //@ open_module();
   c = malloc(sizeof(int));

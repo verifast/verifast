@@ -16,8 +16,8 @@
 //#include <stdio.h>
 
 void main()
-//@ requires time(?t1) &*& example_io(t1, ?t2);
-//@ ensures time(t2);
+//@ requires token(?t1) &*& example_io(t1, ?t2);
+//@ ensures token(t2);
 {
   //@ open example_io(_, _);
   putchar('h');

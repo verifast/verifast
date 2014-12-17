@@ -13,7 +13,7 @@
 
 
 /*@
-predicate tee_out_io(time t1, unsigned char c; time t2) =
+predicate tee_out_io(place t1, unsigned char c; place t2) =
   c >= 0 && c <= 255
   &*& split(t1, ?t_stdout1, ?t_stderr1)
     &*& write_char_io(t_stdout1, get_stdout(), c, ?success_stdout, ?t_stdout2)
@@ -23,8 +23,8 @@ predicate tee_out_io(time t1, unsigned char c; time t2) =
 @*/
 
 void tee_out(int c);
-//@ requires tee_out_io(?t1, c, ?t2) &*& time(t1);
-//@ ensures time(t2);
+//@ requires tee_out_io(?t1, c, ?t2) &*& token(t1);
+//@ ensures token(t2);
 
 
 

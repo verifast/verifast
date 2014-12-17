@@ -1,4 +1,4 @@
-.predicate @time
+.predicate @token
 .predicate @split
 .provides io.gh#split
 .provides io.gh#split_specific

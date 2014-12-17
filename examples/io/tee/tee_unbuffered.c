@@ -13,7 +13,7 @@
 #include "tee_out.h"
 
 /*@
-predicate tee_io(time t1, list<char> contents; time t2) =
+predicate tee_io(place t1, list<char> contents; place t2) =
   read_char_io(t1, stdin, ?c, ?success, ?t_read)
   &*& success ?
     length(contents) > 0
@@ -25,7 +25,7 @@ predicate tee_io(time t1, list<char> contents; time t2) =
     contents == nil
     &*& t2 == t_read;
   
-predicate main_io(time t1, list<list<char> > arguments, time t2) =
+predicate main_io(place t1, list<list<char> > arguments, place t2) =
   tee_io(t1, _, t2);
 @*/
 
@@ -34,9 +34,9 @@ int main(int argc, char **argv) //@ : main_io(tee_unbuffered)
 /*@ requires module(tee_unbuffered, true)
   &*& [_]argv(argv, argc, ?arguments)
   &*& main_io(?t1, arguments, ?t2)
-  &*& time(t1);
+  &*& token(t1);
 @*/
-/*@ ensures time(t2);
+/*@ ensures token(t2);
 @*/
 {
   //@ open main_io(_, _, _);
@@ -44,9 +44,9 @@ int main(int argc, char **argv) //@ : main_io(tee_unbuffered)
   while (c >= 0)
     /*@ invariant
       c >= 0 ?
-        tee_io(?t_tee1, ?contents, t2) &*& time(t_tee1)
+        tee_io(?t_tee1, ?contents, t2) &*& token(t_tee1)
       :
-        time(t2)
+        token(t2)
       ;
     @*/
   {
