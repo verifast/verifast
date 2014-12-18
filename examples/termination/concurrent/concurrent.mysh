@@ -1,0 +1,21 @@
+let verifast_both
+ifz3 verifast
+verifast -prover redux
+in
+verifast_both -shared -emit_vfmanifest ../call_perms.o precision_axiom.o atomics.o threading_terminates.o levels.c raw_ghost_lists_.c ghost_counters.c ghost_maps.c ghost_lists.c obligations.c mutexes.c credit_objects.c obspace_credit_objects.c splittable_counting.c semas.c queues.c channels.c threading_with_obspaces.c
+verifast_both -shared ../call_perms.o precision_axiom.o atomics.o threading_terminates.o levels.o raw_ghost_lists_.o ghost_counters.o ghost_maps.o ghost_lists.o obligations.o mutexes.o credit_objects.o obspace_credit_objects.o splittable_counting.o semas.o queues.o channels.o threading_with_obspaces.o prodcons.c
+verifast_both -shared ../call_perms.o atomics.o threading_terminates.o precision_axiom.o raw_ghost_lists_.o ghost_counters.o ghost_maps.o ghost_lists.o ../termination.c stack.c
+del levels.vfmanifest
+del raw_ghost_lists_.vfmanifest
+del ghost_counters.vfmanifest
+del ghost_maps.vfmanifest
+del ghost_lists.vfmanifest
+del obligations.vfmanifest
+del mutexes.vfmanifest
+del credit_objects.vfmanifest
+del obspace_credit_objects.vfmanifest
+del splittable_counting.vfmanifest
+del semas.vfmanifest
+del queues.vfmanifest
+del channels.vfmanifest
+del threading_with_obspaces.vfmanifest

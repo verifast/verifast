@@ -1,3 +1,14 @@
+void fob()
+    //@ requires true;
+    //@ ensures true;
+    //@ terminates;
+{
+    for (;;) //~ should_fail
+        //@ invariant true;
+    {
+    }
+}
+
 void foo()
     //@ requires true;
     //@ ensures true;
@@ -22,13 +33,3 @@ void baz()
     bar();
 }
 
-void fob()
-    //@ requires true;
-    //@ ensures true;
-    //@ terminates;
-{
-    for (;;) //~ should_fail
-        //@ invariant true;
-    {
-    }
-}

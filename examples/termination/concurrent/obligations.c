@@ -558,22 +558,6 @@ lemma pair<list<THREAD>, list<THREAD> > destroy_obligation_helper(list<THREAD> t
     return pair(ts1, ts2);
 }
 
-lemma pair<list<t>, list<t> > mem_remove_eq_append<t>(t x, list<t> xs)
-    requires mem(x, xs) == true;
-    ensures result == pair(?xs1, ?xs2) &*& xs == append(xs1, cons(x, xs2)) &*& remove(x, xs) == append(xs1, xs2);
-{
-    switch (xs) {
-        case nil:
-        case cons(x0, xs0):
-            if (x0 == x) {
-                return pair(nil, xs0);
-            } else {
-                pair<list<t>, list<t> > p = mem_remove_eq_append(x, xs0);
-                return pair(cons(x0, fst(p)), snd(p));
-            }
-    }
-}
-
 lemma void destroy_obligation()
     requires obligation_scope(?scope, ?p) &*& obligation_set(scope, ?obligations) &*& obligation(scope, ?level) &*& mem(level, obligations) == true;
     ensures obligation_scope(scope, p) &*& obligation_set(scope, remove(level, obligations));
@@ -590,8 +574,8 @@ lemma void destroy_obligation()
     ghost_list_insert(threadsId, ts1, ts2, pair(remove(level, obligations), none));
     map_append(fst, ts1, cons(pair(obligations, none), ts2));
     flatten_append(map(fst, ts1), map(fst, cons(pair(obligations, none), ts2)));
-    pair<list<level>, list<level> > obs1_obs2 = mem_remove_eq_append(level, obligations);
-    assert obs1_obs2 == pair(?obs1, ?obs2);
+    mem_remove_eq_append(level, obligations);
+    open exists(pair(?obs1, ?obs2));
     append_assoc(obs1, cons(level, obs2), flatten(map(fst, ts2)));
     append_assoc(flatten(map(fst, ts1)), obs1, append(cons(level, obs2), flatten(map(fst, ts2))));
     ghost_list_remove(obligationsId, append(flatten(map(fst, ts1)), obs1), append(obs2, flatten(map(fst, ts2))), level);

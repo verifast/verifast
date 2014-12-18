@@ -67,6 +67,6 @@ int ackermann(int m, int n)
 {
     //@ produce_call_below_perm_();
     //@ call_below_perm__elim(ackermann);
-    //@ call_perm_level(2, (pair_lt)(lt, lt),  pair(m, n), {ackermann_iter});
+    //@ call_perm_level(2, pair((pair_lt)(lt, lt), pair(m, n)), {ackermann_iter});
     return ackermann_iter(m, n);
 }

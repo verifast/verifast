@@ -49,7 +49,7 @@ cd examples
   cd termination
     mysh < termination.mysh
     cd concurrent
-      mysh < prodcons.mysh
+      mysh < concurrent.mysh
     cd ..
   cd ..
   cd tso

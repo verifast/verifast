@@ -1,5 +1,0 @@
-let verifast_both
-ifz3 verifast
-verifast -prover redux
-in
-verifast_both -shared call_perms.o precision_axiom.o atomics.o threading_terminates.o levels.c raw_ghost_lists_.c ghost_counters.c ghost_maps.c ghost_lists.c obligations.c mutexes.c credit_objects.c obspace_credit_objects.c splittable_counting.c semas.c queues.c channels.c threading_with_obspaces.c prodcons.c

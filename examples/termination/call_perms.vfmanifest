@@ -11,3 +11,4 @@
 .provides call_perms.gh#call_perm_level_weaken
 .provides call_perms.gh#consume_call_perm_level_for
 .provides call_perms.gh#call_perm_level
+.provides call_perms.gh#call_perm_level_below

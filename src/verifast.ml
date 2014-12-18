@@ -1314,7 +1314,6 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match ss with PureStmt (lp, _)::_ -> static_error lp "Pure statement not allowed here." None | _ -> ()
       end;
       if pure && dec = None then static_error l "Loops without a measure are not supported in a pure context." None;
-      if dec = None && should_terminate leminfo then static_error l "'decreases' clause required." None;
       let endBodyLoc = match ss with BlockStmt(_, _, _, closeBraceLoc, _) :: _ -> closeBraceLoc | _-> l in
       let break h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       let lblenv = ("#break", fun blocks_done sizemap tenv ghostenv h env -> break h env)::lblenv in
@@ -1351,7 +1350,6 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           end
           begin fun () ->
             assume (ctxt#mk_not v) $. fun () ->
-
             tcont sizemap tenv' ghostenv' (h' @ h) env'
           end
       end $. fun () ->
@@ -1363,19 +1361,29 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end $. fun h' env ->
       let env = List.filter (fun (x, _) -> List.mem_assoc x tenv) env in
       consume_asn rules [] h' ghostenv env p true real_unit $. fun _ h''' _ env''' _ ->
-      execute_branch (fun () -> check_leaks h''' env endBodyLoc "Loop leaks heap chunks.");
-      execute_branch begin fun () ->
+      begin fun cont ->
       match (t_dec, dec) with
-        (None, None) -> success()
+        (None, None) ->
+        let consume_call_perm g =
+          let gterm = List.assoc g funcnameterms in
+          let (_, _, _, _, call_perm__symb, _, _) = List.assoc "call_perm_" predfammap in
+          consume_chunk rules h''' [] [] [] l (call_perm__symb, true) [] real_unit dummypat (Some 1) [TermPat gterm] $. fun _ h _ _ _ _ _ _ ->
+          cont h
+        in
+        begin match leminfo with
+          RealFuncInfo (gs, g, terminates) when terminates -> consume_call_perm g
+        | LemInfo (gs, g, indinfo, nonghost_callers_only) -> consume_call_perm g
+        | _ -> cont h'''
+        end
       | (Some t_dec, Some dec) ->
         eval_h_pure h' env''' dec $. fun _ _ t_dec2 ->
         let dec_check1 = ctxt#mk_lt t_dec2 t_dec in
         assert_term dec_check1 h' env''' (expr_loc dec) (sprintf "Cannot prove that loop measure decreases: %s" (ctxt#pprint dec_check1)) None;
         let dec_check2 = ctxt#mk_le (ctxt#mk_intlit 0) t_dec in
         assert_term dec_check2 h' env''' (expr_loc dec) (sprintf "Cannot prove that the loop measure remains non-negative: %s" (ctxt#pprint dec_check2)) None;
-        success()
-      end;
-      success()
+        cont h'''
+      end $. fun h''' ->
+      check_leaks h''' env endBodyLoc "Loop leaks heap chunks."
     | WhileStmt (l, e, Some (LoopSpec (pre, post)), dec, ss) ->
       if not pure then begin
         match ss with PureStmt (lp, _)::_ -> static_error lp "Pure statement not allowed here." None | _ -> ()

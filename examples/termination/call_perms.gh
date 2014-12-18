@@ -92,12 +92,20 @@ lemma void call_perm_level_weaken<t>(
     requires 1 <= frac0 &*& [frac0]call_perm_level<t>(pair(lt, level0), fs0) &*& 1 <= frac1 &*& [_]is_wf(lt) &*& lt(level1, level0) == true;
     ensures [frac1]call_perm_level<t>(pair(lt, level1), fs0);
 
+lemma void call_perm_level_below<t>(
+    real frac0,
+    pair<fixpoint(t, t, bool), t> level,
+    list<void *> fs,
+    real frac1);
+    requires 1 <= frac0 &*& [frac0]call_perm_level<t>(level, fs) &*& 1 <= frac1;
+    ensures [frac1]call_perm_below(fs);
+
 lemma void consume_call_perm_level_for<t>(void *f);
     requires call_perm_level<t>(?level, ?fs) &*& mem(f, fs) == true;
     ensures call_perm_(f);
 
-lemma void call_perm_level<t>(real frac, fixpoint(t, t, bool) lt, t level, list<void *> fs);
+lemma void call_perm_level<t>(real frac, pair<fixpoint(t, t, bool), t> level, list<void *> fs);
     requires call_perm_below(?fs0) &*& func_bag_lt(fs, fs0) == true &*& 0 < frac;
-    ensures [frac]call_perm_level(pair(lt, level), fs);
+    ensures [frac]call_perm_level(level, fs);
 
 #endif

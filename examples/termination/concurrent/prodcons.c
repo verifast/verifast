@@ -2,7 +2,7 @@
 #include "threading_with_obspaces.h"
 #include "channels.h"
 #include <stdlib.h>
-//@ #include "call_perms.gh"
+//@ #include "../call_perms.gh"
 
 struct info {
     channel channel;

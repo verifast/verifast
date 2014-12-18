@@ -1,5 +1,5 @@
-#ifndef THREADING_TERMINATES_H
-#define THREADING_TERMINATES_H
+#ifndef THREADING_LIVE_H
+#define THREADING_LIVE_H
 
 //@ #include "atomics.gh"
 //@ #include "stop_perms.gh"
@@ -112,6 +112,40 @@ void semaphore_release(semaphore s);
 void semaphore_dispose(semaphore s);
     //@ requires semaphore(s, ?items, ?blockees);
     //@ ensures blockees == 0;
+    //@ terminates;
+
+/*@
+
+typedef lemma void *atomic_load_op(void **pp, predicate() pre, predicate(void *) post)();
+    requires pre() &*& [?f]pointer(pp, ?p);
+    ensures post(p) &*& [f]pointer(pp, p) &*& result == p;
+
+typedef lemma void atomic_load_ctxt(real level, predicate() inv, void **pp, predicate() P, predicate(void *) Q)();
+    requires atomic_space_level(level) &*& inv() &*& P() &*& is_atomic_load_op(?op, pp, ?pre, ?post) &*& pre();
+    ensures atomic_space_level(level) &*& inv() &*& post(?p) &*& Q(p) &*& is_atomic_load_op(op, pp, pre, post);
+
+@*/
+
+void *atomic_load(void **pp);
+    //@ requires [?f]atomic_space(?level, ?inv) &*& is_atomic_load_ctxt(?ctxt, level, inv, pp, ?P, ?Q) &*& P();
+    //@ ensures [f]atomic_space(level, inv) &*& Q(result);
+    //@ terminates;
+
+/*@
+
+typedef lemma void *atomic_compare_and_swap_op(void **pp, void *old, void *new, predicate() pre, predicate(void *) post)();
+    requires pre() &*& [?f]pointer(pp, ?p) &*& p == old ? f == 1 : true;
+    ensures post(p) &*& [f]pointer(pp, p == old ? new : p);
+
+typedef lemma void atomic_compare_and_swap_ctxt(real level, predicate() inv, void **pp, void *old, void *new, predicate() P, predicate(void *) Q)();
+    requires atomic_space_level(level) &*& inv() &*& P() &*& is_atomic_compare_and_swap_op(?op, pp, old, new, ?pre, ?post) &*& pre();
+    ensures atomic_space_level(level) &*& inv() &*& post(?p) &*& Q(p) &*& is_atomic_compare_and_swap_op(op, pp, old, new, pre, post);
+
+@*/
+
+void *atomic_compare_and_swap(void **pp, void *old, void *new);
+    //@ requires [?f]atomic_space(?level, ?inv) &*& is_atomic_compare_and_swap_ctxt(?ctxt, level, inv, pp, old, new, ?P, ?Q) &*& P();
+    //@ ensures [f]atomic_space(level, inv) &*& Q(result);
     //@ terminates;
 
 /*@

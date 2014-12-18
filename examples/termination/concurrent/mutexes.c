@@ -105,23 +105,6 @@ lemma void call_obligation_helper(real f)
     call_obligation();
 }
 
-lemma void mem_remove_eq_append<t>(t x, list<t> xs)
-    requires mem(x, xs) == true;
-    ensures exists(pair(?xs1, ?xs2)) &*& xs == append(xs1, cons(x, xs2)) &*& remove(x, xs) == append(xs1, xs2);
-{
-    switch (xs) {
-        case nil:
-        case cons(x0, xs0):
-            if (x0 == x) {
-                close exists(pair(nil, xs0));
-            } else {
-                mem_remove_eq_append(x, xs0);
-                open exists(pair(?xs1, ?xs2));
-                close exists(pair(cons(x0, xs1), xs2));
-            }
-    }
-}
-
 lemma void real_sum_append(list<real> xs, list<real> ys)
     requires true;
     ensures real_sum(append(xs, ys)) == real_sum(xs) + real_sum(ys);
