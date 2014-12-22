@@ -23,7 +23,7 @@ let include_paths: string list ref = ref []
  * Sources: https://forge.ocamlcore.org/tracker/?func=detail&atid=1032&aid=1059&group_id=220
  *          http://permalink.gmane.org/gmane.comp.lang.ocaml.lib.gtk/1464
  *)
-let _ = GtkMain.Main.init ()
+let _ = GtkMain.Main.init ~setlocale:false ()
 
 let normalize_to_lf text =
   let n = String.length text in
