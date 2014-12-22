@@ -2,11 +2,11 @@ let verifast_both
 ifnotmac verifast
 verifast -prover redux
 in
-ifnotmac verifast stringBuffers.c sockets.o lists.c ghostlist.o chat.c
+ifnotmac verifast CRT/threading.o stringBuffers.c sockets.o lists.c ghostlist.o chat.c
 ifnotmac verifast -c -emit_vfmanifest stringBuffers.c
 verifast_both -c -emit_vfmanifest lists.c
 verifast_both -c -emit_vfmanifest chat.c
-ifnotmac verifast_both stringBuffers.o sockets.o lists.o ghostlist.o chat.o
+ifnotmac verifast_both CRT/threading.o stringBuffers.o sockets.o lists.o ghostlist.o chat.o
 ifnotmac del stringBuffers.vfmanifest
 del chat.vfmanifest
 del lists.vfmanifest

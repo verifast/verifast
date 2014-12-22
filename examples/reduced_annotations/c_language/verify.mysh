@@ -4,3 +4,4 @@ verifast -prover redux
 in
 verifast_both -shared -emit_dll_vfmanifest -emit_dll_vfmanifest_as partially_annotated2.dll.vfmanifest partially_annotated2.c
 verifast_both partially_annotated2.so partially_annotated1.c main.c
+del partially_annotated2.dll.vfmanifest

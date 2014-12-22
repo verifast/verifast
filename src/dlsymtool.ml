@@ -89,7 +89,7 @@ let () =
       try
         let manifest = open_out manifestpath in
         Printf.fprintf manifest ".produces module %s\n" modulename;
-        Printf.fprintf manifest ".provides %s : .\\%s#%s(%s)%s\n" symbol header funtype modulename (if unloadable then " unloadable" else "");
+        Printf.fprintf manifest ".provides .\\%s#%s : %s(%s)%s\n" header symbol funtype modulename (if unloadable then " unloadable" else "");
         close_out manifest;
         Printf.fprintf stderr "Written %s\n" manifestpath
       with

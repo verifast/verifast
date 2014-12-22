@@ -2907,12 +2907,58 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       ) (fun () -> close_out file)
     else
       jardeps_map := (jardeps_filename, !jardeps)::!jardeps_map
-  
+
+(*
+There are 7 kinds of entries possible in a vfmanifest/dll_vfmanifest file
+
+.provides FILE#NAME:
+  The c-files that correspond with this vfmanifest file,
+  implement the function NAME that was forward declared in the header FILE.
+
+.provides FILE#F_NAME : FTYPE_NAME(TYPE_ARGS) UNLOADABLE
+  The c-files that correspond with this vfmanifest file,
+  implement the function F_NAME which is of the function type FTYPE_NAME. The 
+  function type FTYPE_NAME was forward declared in the header FILE.
+  The type arguments of F_NAME are given by TYPE_ARGS and UNLOADABLE indicates
+  if the function F_NAME is an unloadable module.
+
+.requires FILE#NAME:
+  The c-files that correspond with this vfmanifest file,
+  use the function NAME that was forward declared in the header FILE without
+  providing an implementation.
+
+.structure: FILE1@FILE2#NAME:
+  The c-files that correspond with this vfmanifest file,
+  give the structure NAME a body in the file FILE1 and that structure was 
+  forward declared in the header FILE2.
+  An empty FILE1 means that the struct can never be given a body, this is used
+  to create a vfmanifest or dll_Vfmanifest for a library that was not verified.
+
+.predicate FILE1@FILE2#NAME:
+  The c-files that correspond with this vfmanifest file,
+  give the predicate NAME a body in the file FILE1 and the predicate family of
+  the predicate NAME was declared in the file FILE2.
+  A predicate that has no distinct declared predicate family is considered to
+  have an implicit predicate family declaration in the same file where de
+  predicate is defined (so FILE1 == FILE2 or FILE1 == "").
+  When manually creating a vfmanifest or dll_vfmanifest for a library and we 
+  have an abstract predicate in the API, we pretend to give that predicate a
+  body to prevent the user of that API to give the predicate a body.
+
+.produces name:
+  The c-file that corresponds with this vfmanifest file,
+  provides the module NAME during linking
+
+.imports NAME:
+  The c-file that corresponds with this vfmanifest file,
+  requires the module NAME during linking
+
+*)
+
   let create_manifest_file() =
     let manifest_filename = Filename.chop_extension path ^ ".vfmanifest" in
-    let local_basedir = Filename.dirname path in
     let qualified_path (basedir, relpath) =
-      if basedir = local_basedir then Filename.concat "." relpath else relpath
+      qualified_path path (basedir, relpath)
     in
     let sorted_lines symbol protos =
       let lines =
@@ -2951,7 +2997,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           List.map
             begin fun (fn, ((header, _, _), _), ftn, ftargs, unloadable) ->
               Printf.sprintf
-                ".provides %s : %s#%s(%s)%s" fn (qualified_path header) ftn (String.concat "," ftargs) (if unloadable then " unloadable" else "")
+                ".provides %s#%s : %s(%s)%s" (qualified_path header) fn ftn (String.concat "," ftargs) (if unloadable then " unloadable" else "")
             end
             functypes_implemented
         end
@@ -3100,34 +3146,52 @@ let parse_line line =
   let command = String.sub line 0 space in
   let symbol = String.sub line (space + 1) (String.length line - space - 1) in
   let n = String.length symbol in
-  for i = 0 to n - 1 do if symbol.[i] = '/' then symbol.[i] <- '\\' done;
-  let symbol = if startswith symbol ".\\" then String.sub symbol 2 (String.length symbol - 2) else symbol in
+  for i = 0 to n - 1 do if symbol.[i] = '\\' then symbol.[i] <- '/' done;
   (command, symbol)
 
-let link_program isLibrary allModulepaths dllModulepaths emitDllManifest dllManifestName exports =
+let link_program isLibrary allModulepaths dllManifest exports =
   let consume msg x xs =
     let rec iter xs' xs =
       match xs with
         [] -> raise (LinkError (msg x))
-      | x'::xs -> if x = x' then xs' @ xs else iter (x'::xs') xs
+      | (x', modp')::xs -> if x = x' then xs' @ xs else iter ((x', modp')::xs') xs
     in
     iter [] xs
   in
-  let get_lines file =
+  let get_lines_from_file file =
     try
-      List.filter (fun str -> str.[0] <> '#') (read_file_lines file)
+      (file, List.filter (fun str -> str.[0] <> '#') (read_file_lines file))
     with FileNotFound ->
-      try
-        read_file_lines (concat bindir file)
+      try 
+        let file = replace_vroot file in
+        (file, read_file_lines file)
       with FileNotFound ->
-        failwith ("VeriFast link phase error: could not find .vfmanifest file '" ^ file ^ 
-                  "'. Re-verify the module using the -emit_vfmanifest or -emit_dll_vfmanifest option.")
+        try
+          let file = concat bindir file in
+          (file, read_file_lines file)
+        with FileNotFound ->
+          failwith ("VeriFast link phase error: could not find .vfmanifest file '" ^ file ^ 
+                    "'. Re-verify the module using the -emit_vfmanifest or -emit_dll_vfmanifest option.")
   in
   let split_manifest_entry symbol entry modulepath =
     let (first, second) = split_around_char entry symbol in
     if second = "" then
       raise (LinkError ("Manifest file '" ^ modulepath ^ "': error parsing line: cannot find symbol '" ^ (Char.escaped symbol) ^ "'."));
     (first, second)
+  in
+  let absolute_path manifest_dir path =
+    let result =
+      let path = (replace_vroot (reduce_path path)) in
+      let manifest_dir = (replace_vroot (reduce_path manifest_dir)) in
+      if not (Filename.is_relative path) then path else 
+      begin
+        let path = reduce_path (manifest_dir ^ "/" ^ path) in
+        if not (Filename.is_relative path) then path
+        else reduce_path (cwd ^ "/" ^ path)
+      end
+    in
+    if (Filename.is_relative result) then raise (CompilationError "Inconsistency during linking");
+    result
   in
   let rec iter (impls, structs, preds) mods modulepaths =
     match modulepaths with
@@ -3137,12 +3201,14 @@ let link_program isLibrary allModulepaths dllModulepaths emitDllManifest dllMani
         try Filename.chop_extension modulepath ^ ".vfmanifest" with
           Invalid_argument  _ -> raise (CompilationError "file without extension")
       in
-      let lines =
+      let (manifest_path, lines) =
         if List.mem_assoc manifest_path !manifest_map then
-          List.assoc manifest_path !manifest_map
+          (manifest_path, List.assoc manifest_path !manifest_map)
         else
-          get_lines manifest_path
+          get_lines_from_file manifest_path
       in
+      let manifest_dir = Filename.dirname manifest_path in
+      let absolute_path path = absolute_path manifest_dir path in
       let rec iter0 (impls', structs', preds') mods' lines =
         match lines with
           [] -> iter (impls', structs', preds') mods' modulepaths
@@ -3152,41 +3218,52 @@ let link_program isLibrary allModulepaths dllModulepaths emitDllManifest dllMani
             match command with
             | ".structure"  ->
               begin
-                let (file, name) = split_manifest_entry '@' symbol modulepath in
-                match try_assoc0 name structs with
-                | Some (name2, file2) ->
-                  if file <> file2 then 
-                    raise (LinkError ("Module '" ^ modulepath ^ "': Structure " ^ name ^ " is defined twice."))
+                let (def_file, dcl_file) = split_manifest_entry '@' symbol manifest_path in
+                let abs_dcl_file = absolute_path dcl_file in
+                let abs_def_file = if def_file = "" then "" else absolute_path def_file in
+                let entry = (abs_dcl_file, (abs_def_file, (manifest_path, dcl_file, def_file))) in
+                match try_assoc0 abs_dcl_file structs with
+                | Some (_, (abs_def_file2, _)) ->
+                  if abs_def_file <> abs_def_file2 then 
+                    raise (LinkError ("Module '" ^ modulepath ^ "': Structure " ^ abs_dcl_file ^ " is defined twice."))
                   else 
                     iter0 (impls', structs', preds') mods' lines
-                | None -> iter0 (impls', (name, file)::structs', preds') mods' lines
+                | None -> iter0 (impls', entry::structs', preds') mods' lines
               end
             | ".predicate" -> 
               begin
-                let (file, name) = split_manifest_entry '@' symbol modulepath in
-                match try_assoc0 name preds with
-                | Some (name2, file2) ->
-                  if file <> file2 then
-                    raise (LinkError ("Module '" ^ modulepath ^ "': Predicates " ^ name ^ " is given a body twice."))
+                let (def_file, dcl_file) = split_manifest_entry '@' symbol manifest_path in
+                let abs_dcl_file = absolute_path dcl_file in
+                let abs_def_file = if def_file = "" then "" else absolute_path def_file in
+                let entry = (abs_dcl_file, (abs_def_file, (manifest_path, dcl_file, def_file))) in
+                match try_assoc0 abs_dcl_file preds with
+                | Some (_, (abs_def_file2, _)) ->
+                  if abs_def_file <> abs_def_file2 then
+                    raise (LinkError ("Module '" ^ modulepath ^ "': Predicates " ^ abs_dcl_file ^ " is given a body twice."))
                   else
                     iter0 (impls', structs', preds') mods' lines
-                | None -> iter0 (impls', structs', (name, file)::preds') mods' lines
+                | None -> iter0 (impls', structs', entry::preds') mods' lines
               end
-            | ".provides"   -> 
-              if List.mem symbol impls then 
-                raise (LinkError ("Module '" ^ modulepath ^ "': Function " ^ symbol ^ " is implemented twice."))
-              else 
-                  iter0 (symbol::impls', structs', preds') mods' lines
-            | ".requires"   -> 
-              if List.mem symbol impls then 
-                iter0 (impls', structs', preds') mods' lines 
-              else 
-                raise (LinkError ("Module '" ^ modulepath ^ "': unsatisfied requirement '" ^ symbol ^ "'."))
-            | ".produces" -> 
-              iter0 (impls', structs', preds') (symbol::mods') lines
-            | ".imports" -> 
+            | ".provides"   ->
+              begin
+                let abs_symbol = absolute_path symbol in
+                let entry = (abs_symbol, (manifest_path, symbol)) in
+                match try_assoc0 abs_symbol impls' with
+                | Some _ -> raise (LinkError ("Module '" ^ modulepath ^ "': Function " ^ abs_symbol ^ " is implemented twice."))
+                | None -> iter0 (entry::impls', structs', preds') mods' lines  
+              end
+            | ".requires"   ->
+              begin
+                let abs_symbol = absolute_path symbol in
+                match try_assoc0 abs_symbol impls' with
+                | Some _ -> iter0 (impls', structs', preds') mods' lines 
+                | None -> raise (LinkError ("Module '" ^ modulepath ^ "': unsatisfied requirement '" ^ abs_symbol ^ "'."))
+              end
+            | ".produces" ->
+              iter0 (impls', structs', preds') ((symbol, manifest_path)::mods') lines
+            | ".imports" ->
               let mods'' =
-                consume (fun x -> "Module '" ^ modulepath ^ "': unsatisfied import '" ^ x ^ "'.") symbol mods
+                consume (fun x -> "Module '" ^ modulepath ^ "': unsatisfied import '" ^ x ^ "'.") symbol mods'
               in
               iter0 (impls', structs', preds') mods'' lines
             | _ -> raise (LinkError ("Manifest file '" ^ modulepath ^ "': cannot parse line."))
@@ -3199,13 +3276,15 @@ let link_program isLibrary allModulepaths dllModulepaths emitDllManifest dllMani
   let mainModuleName = try Filename.chop_extension (Filename.basename mainModulePath) with Invalid_argument _ -> raise (CompilationError "file without extension") in
   let mods =
     if not isLibrary then
-      if not (List.mem "main : prelude.h#main()" impls) then
-        if not (List.mem (Printf.sprintf "main : prelude.h#main_full(%s)" mainModuleName) impls) then
+    begin
+      let abs_bindir = absolute_path bindir "." in
+      let main = abs_bindir ^ "/prelude.h#main : main()" in 
+      let main_full = abs_bindir ^ (Printf.sprintf "/prelude.h#main : main_full(%s)" mainModuleName) in
+      match (try_assoc main impls, try_assoc main_full impls) with
+      | (None, None) ->
           raise (LinkError ("Program does not implement a function 'main' that implements function type 'main' or 'main_full' declared in prelude.h. Use the '-shared' option to suppress this error."))
-        else
-          consume (fun _ -> "Could not consume the main module") ("module " ^ mainModuleName) mods
-      else
-        mods
+      | _ -> consume (fun _ -> "Could not consume the main module") ("module " ^ mainModuleName) mods
+    end
     else
       mods
   in
@@ -3221,52 +3300,62 @@ let link_program isLibrary allModulepaths dllModulepaths emitDllManifest dllMani
           | line::lines ->
             let (command, symbol) = parse_line line in
             match command with
-              ".provides" ->
-              if List.mem symbol impls then
-                iter' (impls, mods) lines
-              else
-                raise (LinkError (Printf.sprintf "Unsatisfied requirement '%s' in export manifest '%s'" symbol exportPath))
+            | ".provides" ->
+              begin
+                let export_dir = Filename.dirname exportPath in
+                let abs_symbol = absolute_path export_dir symbol in
+                match try_assoc0 abs_symbol impls with
+                | Some _ -> iter' (impls, mods) lines
+                | None ->  raise (LinkError (Printf.sprintf "Unsatisfied requirement '%s' in export manifest '%s'" abs_symbol exportPath))
+              end
             | ".produces" ->
               let mods = consume (fun s -> Printf.sprintf "Unsatisfied requirement '%s' in export manifest '%s'" s exportPath) symbol mods in
               iter' (impls, mods) lines
+            | _ -> raise (LinkError ("Incorrect export manifest " ^ exportPath))
         in
         let (impls, mods) = iter' (impls, mods) lines in
         iter (impls, mods) exports
     in
     iter (impls, mods) exports
   in
-  if emitDllManifest then
+  match dllManifest with None -> () | Some(dllManifestName) ->
   begin
     let manifestPath = 
       match dllManifestName with
       | Some n -> n
       | None -> Filename.chop_extension mainModulePath ^ ".dll.vfmanifest"
     in
-    let other_dll_lines = List.flatten (List.map get_lines dllModulepaths) in
     begin
       try
         let manifestFile = open_out manifestPath in
-        let print_requires_or_provides impl =
-          let provides = Printf.sprintf ".provides %s" impl in
-          if List.mem provides other_dll_lines then
-            Printf.fprintf manifestFile ".requires %s\n" impl
-          else
-            Printf.fprintf manifestFile ".provides %s\n" impl
+        let rebase_path modp path =
+          if path = "" then "" else qualified_path manifestPath (Filename.dirname modp, path)
         in
-        List.iter print_requires_or_provides impls;
-        let print_if_necesarry label file name =
-          let entry = Printf.sprintf "%s %s@%s" label file name in
-          if not (List.mem entry other_dll_lines) || not (Filename.check_suffix file ".c") then
+        let is_dll def =
+          Filename.check_suffix def ".dll.vfmanifest"
+        in
+        let print_requires_or_provides (abs_sym, (modp, sym)) =
+          if is_dll modp then
+            Printf.fprintf manifestFile ".requires %s\n" (rebase_path modp sym)
+          else
+            Printf.fprintf manifestFile ".provides %s\n" (rebase_path modp sym)
+        in
+        let print_if_necesarry label (abs_dcl_file, (abs_def_file, (modp, dcl_file, def_file))) =
+          let entry = Printf.sprintf "%s %s@%s" label (rebase_path modp def_file) (rebase_path modp dcl_file) in
+          let (dcl_file, _) = split_around_char dcl_file '#' in
+          if not (is_dll modp) || not (Filename.check_suffix dcl_file ".c") then
             Printf.fprintf manifestFile "%s\n" entry
         in
-        List.iter (fun (name, file) -> print_if_necesarry ".structure" file name) structs;
-        List.iter (fun (name, file) -> print_if_necesarry ".predicate" file name) preds;
-        let print_module m =
-          let produces = Printf.sprintf ".produces %s" m in
-          if not (List.mem produces other_dll_lines) then
-            Printf.fprintf manifestFile "%s\n" produces
+        let print_module (m, mdop) =
+          if is_dll mdop then
+            Printf.fprintf manifestFile ".imports %s\n" m
+          else
+            Printf.fprintf manifestFile ".produces %s\n" m
         in
-        List.iter print_module mods;
+        impls   |> List.iter print_requires_or_provides;
+        structs |> List.iter (print_if_necesarry ".structure");
+        preds   |> List.iter (print_if_necesarry ".predicate");
+        mods    |> List.iter print_module;
         close_out manifestFile
       with
         Sys_error s -> raise (LinkError (Printf.sprintf "Could not create DLL manifest file '%s': %s" manifestPath s))

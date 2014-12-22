@@ -4,45 +4,58 @@ verifast -prover redux
 in
 
 cd simple_struct
-  verifast -c give_struct_body.c
-  verifast give_struct_body_main.c
-  verifast use_struct_body.c use_struct_body_main.c
-  verifast -link_should_fail give_struct_body.c give_struct_body_main.c
-  verifast -c -allow_should_fail give_struct_double_body.c
+  verifast_both -c give_struct_body.c
+  verifast_both give_struct_body_main.c
+  verifast_both use_struct_body.c use_struct_body_main.c
+  verifast_both -link_should_fail give_struct_body.c give_struct_body_main.c
+  verifast_both -c -allow_should_fail give_struct_double_body.c
 cd ..
 
 cd simple_pred
-  verifast -c give_pred_body.c
-  verifast -shared use_pred_abstract.c
-  verifast private_pred.c give_pred_body2.c give_pred_body_main.c
-  verifast use_pred_body.c use_pred_body_main.c
-  verifast -link_should_fail give_pred_body.c give_pred_body_main.c
-  verifast -c -allow_should_fail give_pred_double_body.c
-  verifast -shared -link_should_fail prelude_redef.c
+  verifast_both -c give_pred_body.c
+  verifast_both -shared use_pred_abstract.c
+  verifast_both private_pred.c give_pred_body2.c give_pred_body_main.c
+  verifast_both use_pred_body.c use_pred_body_main.c
+  verifast_both -link_should_fail give_pred_body.c give_pred_body_main.c
+  verifast_both -c -allow_should_fail give_pred_double_body.c
+  verifast_both -shared -link_should_fail prelude_redef.c
 cd ..
 
 cd double_declares
-  verifast -c -allow_should_fail struct_redeclaration_invalid.c
-  verifast -c pred_redeclaration_valid.c
-  verifast -c -allow_should_fail pred_redeclaration_invalid.c
+  verifast_both -c -allow_should_fail struct_redeclaration_invalid.c
+  verifast_both -c pred_redeclaration_valid.c
+  verifast_both -c -allow_should_fail pred_redeclaration_invalid.c
 cd ..
 
 cd dll_uses_dll
-  verifast -shared -emit_dll_vfmanifest -emit_dll_vfmanifest_as dll2.dll.vfmanifest dll2_source.c
-  verifast -shared -emit_dll_vfmanifest -emit_dll_vfmanifest_as dll1.dll.vfmanifest dll2.dll.vfmanifest dll1_source1.c dll1_source2.c
-  verifast dll2.dll.vfmanifest dll1.dll.vfmanifest main.c
+  verifast_both -shared -emit_dll_vfmanifest -emit_dll_vfmanifest_as dll2.dll.vfmanifest -export dll2.vfmanifest dll2_source.c
+  verifast_both -shared -emit_dll_vfmanifest -emit_dll_vfmanifest_as dll1.dll.vfmanifest dll2.dll.vfmanifest dll1_source1.c dll1_source2.c
+  verifast_both dll2.dll.vfmanifest dll1.dll.vfmanifest main.c
   del dll2.dll.vfmanifest
   del dll1.dll.vfmanifest
 cd ..
 
 cd double_dll_defines
-  verifast -shared -emit_dll_vfmanifest -emit_dll_vfmanifest_as dll1.dll.vfmanifest dll_source1.c
-  verifast -shared -emit_dll_vfmanifest -emit_dll_vfmanifest_as dll2.dll.vfmanifest dll_source2.c
-  verifast -link_should_fail dll1.dll.vfmanifest dll2.dll.vfmanifest main.c
-  verifast dll1.dll.vfmanifest main.c
-  verifast dll2.dll.vfmanifest main.c
-  verifast -link_should_fail dll1.dll.vfmanifest main2.c
-  verifast -link_should_fail dll1.dll.vfmanifest main3.c
+  verifast_both -shared -emit_dll_vfmanifest -emit_dll_vfmanifest_as dll1.dll.vfmanifest dll_source1.c
+  verifast_both -shared -emit_dll_vfmanifest -emit_dll_vfmanifest_as dll2.dll.vfmanifest dll_source2.c
+  verifast_both -link_should_fail dll1.dll.vfmanifest dll2.dll.vfmanifest main.c
+  verifast_both dll1.dll.vfmanifest main.c
+  verifast_both dll2.dll.vfmanifest main.c
+  verifast_both -link_should_fail dll1.dll.vfmanifest main2.c
+  verifast_both -link_should_fail dll1.dll.vfmanifest main3.c
   del dll2.dll.vfmanifest
   del dll1.dll.vfmanifest
+cd ..
+
+cd clash_with_vfbin
+  verifast_both -c lemma_redef.c
+  verifast_both -link_should_fail lemma_redef.c
+cd ..
+
+cd include_paths
+  verifast -c -I sub1/sub2 -emit_vfmanifest main.c
+  verifast -c -I sub1/ -emit_vfmanifest lib.c 
+  verifast -link_should_fail lib.o main.o
+  del main.vfmanifest
+  del lib.vfmanifest
 cd ..

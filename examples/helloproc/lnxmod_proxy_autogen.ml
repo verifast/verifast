@@ -197,7 +197,7 @@ let autogenerate_vfmanifest inputfile =
   try
     let channel = open_out (autogen_full_filename_vfmanifest inputfile) in
   
-    Printf.fprintf channel ".requires %s : ./vf_initexit.h#module_setup_t(%s,%s)\n"
+    Printf.fprintf channel ".requires ./vf_initexit.h#%s : module_setup_t(%s,%s)\n"
       (init_procedure_name inputfile) (module_name inputfile) (exit_procedure_name inputfile);
     Printf.fprintf channel ".produces module %s\n" (autogen_modulename inputfile);
   

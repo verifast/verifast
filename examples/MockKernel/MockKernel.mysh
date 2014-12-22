@@ -3,9 +3,11 @@ verifast
 verifast -prover redux
 in
 dlsymtool MockKernelModule.dlsymspec
-verifast_both -emit_dll_vfmanifest MockKernelModule_proxy.o contrib.o ghost_sets.o libraries.o lists.o sockets.o MockKernel.c
+verifast_both -c -emit_vfmanifest MockKernel.c
+verifast_both -emit_dll_vfmanifest MockKernelModule_proxy.o threading.o contrib.o ghost_sets.o libraries.o lists.o sockets.o MockKernel.o
 dlsymtool MockKernelModule.dlsymspec AdderModule
 verifast_both -shared MockKernel.dll.vfmanifest AdderModule.c -export MockKernelModule_AdderModule.vfmanifest
+del MockKernel.vfmanifest
 del MockKernelModule_proxy.h
 del MockKernelModule_proxy.c
 del MockKernelModule_proxy.vfmanifest

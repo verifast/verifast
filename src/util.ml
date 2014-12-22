@@ -193,6 +193,22 @@ let try_assoc_i x xys =
   in
   iter 0 xys
 
+(** Same as [try_assoc x (xys1 @ xys2)] but without performing the append operation. *)
+let try_assoc2 x xys1 xys2 =
+  match try_assoc x xys1 with
+    None -> try_assoc x xys2
+  | result -> result
+
+let assoc2 x xys1 xys2 =
+  let (Some y) = try_assoc2 x xys1 xys2 in y
+
+exception IsNone
+
+let get x = 
+  match x with
+    None -> raise IsNone
+  | Some x -> x
+
 (** Like [List.map], except also passes the index of each element to f. *)
 let imap (f: int -> 'a -> 'b) (xs: 'a list): 'b list =
   let rec imapi i xs =
@@ -265,36 +281,81 @@ let rec chars_of_string s =
   | "" -> [] 
   | s -> (String.get s 0 )::(chars_of_string (String.sub s 1 ((String.length s) - 1)))
 
+let concat path1 path2 =
+  if path1 = "" || path1 = "." then path2 else path1 ^ Filename.dir_sep ^ path2
+
+let bindir = Filename.dirname Sys.executable_name
+let rtdir = concat bindir "rt"
+let cwd = Sys.getcwd()
+
+let compose base path = if Filename.is_relative path then base ^ "/" ^ path else path
+
 (** Eliminates '.' and 'foo/..' components. *)
 let reduce_path path =
   let path = split (fun c -> c = '/' || c = '\\') path in
   let rec iter reduced todo =
     match reduced, todo with
-      _, [] -> String.concat "/" (List.rev reduced)
+      _, [] -> if reduced = [] then "." else String.concat "/" (List.rev reduced)
     | head::reduced, ".."::todo when head <> ".." -> iter reduced todo
     | _, "."::todo -> iter reduced todo
     | _, part::todo -> iter (part::reduced) todo
   in
   iter [] path
 
-let concat path1 path2 =
-  if path1 = "" || path1 = "." then path2 else path1 ^ Filename.dir_sep ^ path2
+(* Like reduce_path, except does not remove the first component *)
+let reduce_rooted_path path =
+  let root::path = split (fun c -> c = '/' || c = '\\') path in
+  let rec iter reduced todo =
+    match reduced, todo with
+      _, [] -> String.concat "/" (root::List.rev reduced)
+    | head::reduced, ".."::todo when head <> ".." -> iter reduced todo
+    | _, "."::todo -> iter reduced todo
+    | _, part::todo -> iter (part::reduced) todo
+  in
+  iter [] path
 
-(** Same as [try_assoc x (xys1 @ xys2)] but without performing the append operation. *)
-let try_assoc2 x xys1 xys2 =
-  match try_assoc x xys1 with
-    None -> try_assoc x xys2
-  | result -> result
+let remove_prefix p s =
+  let np = String.length p in
+  let ns = String.length s in
+  if np <= ns && String.sub s 0 np = p then
+    Some (String.sub s np (ns - np))
+  else
+    None
 
-let assoc2 x xys1 xys2 =
-  let (Some y) = try_assoc2 x xys1 xys2 in y
+let crt_vroot = ("CRT", reduce_path bindir)
+let vroots = [crt_vroot]
 
-exception IsNone
+let replace_vroot path =
+  let root::rest = split (fun c -> c = '/' || c = '\\') path in
+  match try_assoc root vroots with
+  | Some p -> reduce_path (p ^ "/" ^ String.concat "/" rest)
+  | None -> path
 
-let get x = 
-  match x with
-    None -> raise IsNone
-  | Some x -> x
-
-let bindir = Filename.dirname Sys.executable_name
-let rtdir = concat bindir "rt"
+let qualified_path modpath (basedir, relpath) =
+  let module_basedir = reduce_path (compose cwd (Filename.dirname modpath)) in
+  let module_basedir_prefix = module_basedir ^ "/" in
+  let path = reduce_path (compose cwd (basedir ^ "/" ^ relpath)) in
+  match remove_prefix module_basedir_prefix path with
+    Some relpath -> "./" ^ relpath
+  | None ->
+  let vrooted_paths = vroots |> flatmap begin fun (name, expansion) ->
+      match remove_prefix (expansion ^ "/") path with
+        Some relpath -> [name ^ "/" ^ relpath]
+      | None -> []
+    end
+  in
+  match vrooted_paths with
+    h::t -> h
+  | [] ->
+  let mcs = split (fun c -> c = '/') module_basedir in
+  let pcs = split (fun c -> c = '/') path in
+  if List.hd mcs <> List.hd pcs then
+    (* We're running on Windows and the path is on a different drive than the module. Use an absolute path. *)
+    path
+  else
+  let rec iter mcs pcs =
+    match mcs, pcs with
+      mc::mcs1, pc::pcs1 when mc = pc -> iter mcs1 pcs1
+    | _ -> "./" ^ String.concat "/" (list_make (List.length mcs) ".." @ pcs)
+  in
+  iter mcs pcs

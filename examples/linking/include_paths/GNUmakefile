@@ -3,7 +3,7 @@ all: verif exec
 verif:
 	verifast -c -I sub1/sub2 -emit_vfmanifest main.c
 	verifast -c -I sub1/ -emit_vfmanifest lib.c	
-	verifast lib.o main.o
+# 	verifast lib.o main.o LINKING CORRECTLY FAILS NOW
 
 exec:
 	gcc -c -I sub1/sub2 -emit_vfmanifest main.c

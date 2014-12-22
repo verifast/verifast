@@ -1,0 +1,3 @@
+.produces module dll2_source
+.provides ./dll2.h#get_struct_dll2
+.provides ./dll2.h#free_struct_dll2

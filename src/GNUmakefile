@@ -182,9 +182,7 @@ STDLIB_FILES_GEN = \
        ../bin/permutations.vfmanifest
 STDLIB_FILES = \
 	../bin/crt.vfmanifest \
-	$(STDLIB_FILES_GEN) \
-	../bin/threading.vfmanifest \
-	../bin/pthread.vfmanifest
+	$(STDLIB_FILES_GEN)
 
 TOOLS_EXCEPT_VFIDE = ../bin/mysh$(DOTEXE) ../bin/verifast$(DOTEXE) \
         ../bin/main_class$(DOTEXE) ../bin/java_card_applet$(DOTEXE) \

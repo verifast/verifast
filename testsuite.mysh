@@ -14,7 +14,7 @@ cd examples
   verifast_both -c args.c
   verifast_both -disable_overflow_check array_of_struct.c
   verifast_both -disable_overflow_check -c arraylist.c
-  verifast_both -disable_overflow_check barrier.c
+  verifast_both -disable_overflow_check threading.o barrier.c
   verifast_both -c static_array.c
   verifast_both -c automation.c
   ifz3 verifast -disable_overflow_check priorityqueue-forall_nth.c
@@ -35,7 +35,7 @@ cd examples
     ifz3 verifast -c concurrentqueue.c
     ifz3 verifast -c concurrentstack.c
     ifz3 verifast -c concurrentstackclient.c
-    ifz3 verifast -allow_assume atomics.o concurrentqueue.c concurrentqueue_client.c
+    ifz3 verifast -allow_assume threading.o atomics.o concurrentqueue.c concurrentqueue_client.c
     verifast_both -c atomic_integer.c
     verifast_both -c spinlock_with_atomic_integer.c
     verifast_both -c ticketlock_with_atomic_integer.c
@@ -71,7 +71,7 @@ cd examples
   verifast_both -disable_overflow_check counter.c
   verifast_both -disable_overflow_check counter_with_pred.c
   verifast_both -disable_overflow_check counter_with_pred_auto.c
-  verifast_both -shared counting_threads.c
+  verifast_both -shared threading.o counting_threads.c
   verifast_both -c default_clause_test.c
   verifast_both -disable_overflow_check cp.c
   ifz3 verifast -c decreases.c
@@ -96,7 +96,7 @@ cd examples
   verifast_both -disable_overflow_check -c gui-app.c
   verifast_both -c icap_mt_event_loop.c
   verifast_both -c ifs.c
-  verifast_both incr.c
+  verifast_both threading.o incr.c
   cd incr_box
     verifast_both -c incr_box.c
   cd ..
@@ -112,7 +112,7 @@ cd examples
     verifast_both -disable_overflow_check -c full_func_io_sim.c
   cd ..
   cd lcset
-    verifast_both atomics.o ghost_lists.c ghost_counters.c locks.c lcset.c lcset_client.c
+    verifast_both threading.o atomics.o ghost_lists.c ghost_counters.c locks.c lcset.c lcset_client.c
   cd ..
   cd lemmafuncptr
     verifast_both -c lemmafuncptr.c
@@ -140,7 +140,7 @@ cd examples
   cd linking
     mysh < linking.mysh
   cd ..
-  verifast_both philosophers.c
+  verifast_both threading.o philosophers.c
   cd preprocessor
     mysh < preprocessor.mysh
   cd ..
@@ -150,7 +150,7 @@ cd examples
   verifast_both -c public_invariant.c
   verifast_both -c pure_map.c
   cd queue
-    verifast_both atomics.o queue.c queue_client.c
+    verifast_both threading.o atomics.o queue.c queue_client.c
   cd ..
   verifast_both -c tokenizer_test.c
   verifast_both -disable_overflow_check stringBuffers.c tokenizer.c ghostlist.o rcl.c
@@ -187,53 +187,7 @@ cd examples
     mysh < runtests.mysh
   cd ..
   cd io
-    cd tee
-      verifast_both -shared io.o stdio_simple.o tee_out.c tee_unbuffered.c
-      verifast_both -shared io.o stdio_simple.o tee_out.c tee_buffered.c
-    cd ..
-    cd work-in-progress
-      cd in-memory-io-style
-        verifast_both -shared -I . buffer.c syscall_memory.c
-        verifast_both -shared -I . io_lemma_impl.c
-      cd ..
-      cd in-memory-io-style-v2
-        verifast -allow_assume foralls.o prophecy.o ../../../vstte2012/problem3/problem3.c writehi_readhi.c
-      cd ..
-    cd ..
-    cd matching-brackets
-      verifast_both stdio_simple.o -shared -disable_overflow_check matching-brackets-input.c
-      verifast_both stdio_simple.o -shared matching_brackets_checker.c
-      verifast_both stdio_simple.o bigstar.o -shared matching_brackets_output.c
-    cd ..
-    cd output-anything
-      verifast_both stdio_simple.o bigstar.o -shared output-any-char.c
-      verifast_both stdio_simple.o bigstar.o -shared output-any-string.c
-    cd ..
-    cd never-ending-program
-      verifast_both stdio_simple.o -shared yes.c
-      verifast_both stdio_simple.o -shared infinite-counter.c
-    cd ..
-    cd hello-world
-      verifast_both stdio_simple.o -shared hello-world.c
-    cd ..
-    cd read-files-of-file
-      verifast_both io.o stdio_simple.o -shared read-files-of-file.c
-    cd ..
-    cd buffering-in-library
-      verifast_both stdio_simple.o -shared -c putchar-with-buffer.c
-    cd ..
-    cd user-sets-contract
-      mysh < verify.mysh
-    cd ..
-    cd turing-complete
-      verifast_both stdio_simple.o -shared turing-complete.c
-      verifast_both stdio_simple.o -shared turing-complete-lowtech.c
-      verifast_both stdio_simple.o -shared turing-complete-underspec-lowtech.c
-    cd ..
-    cd template-method
-      verifast_both -c TemplateMethod.java
-      verifast_both -c TemplateMethodWhile.java
-    cd ..
+    mysh < io.mysh
   cd ..
   cd java
     cd channels
@@ -399,14 +353,6 @@ cd tests
   cd bugs
     cd z3-proves-false
       ifz3 verifast -c -runtime rt/rt.jarspec z3-proves-false.java
-    cd ..
-    cd filename_confusion
-      cd include_paths
-        mysh < include_paths.mysh
-      cd ..
-      cd clash_with_vfbin
-        verifast lemma_redef.c
-      cd ..
     cd ..
   cd ..
   cd errors

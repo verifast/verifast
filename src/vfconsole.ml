@@ -153,7 +153,6 @@ let _ =
   let emitManifest = ref false in
   let emitDllManifest = ref false in
   let allModules: string list ref = ref [] in
-  let dllModules: string list ref = ref [] in
   let dllManifestName = ref None in
   let emitHighlightedSourceFiles = ref false in
   let exports: string list ref = ref [] in
@@ -249,7 +248,6 @@ let _ =
           else if Filename.check_suffix filename ".dll" then (filename ^ ".vfmanifest") 
           else filename
         in
-        dllModules := filename::!dllModules;
         allModules := filename::!allModules;
       end
     else if Filename.check_suffix filename ".vfmanifest" then
@@ -277,9 +275,11 @@ let _ =
           let libs = List.map (Filename.concat mydir) libs in
           let assume_lib = Filename.concat mydir "assume.dll.vfmanifest" in
           let libs = if !allowAssume then libs @ [assume_lib] else libs in
-          let dllModules = libs @ List.rev !dllModules in
           let allModules = libs @ List.rev !allModules in
-          link_program (!isLibrary) allModules dllModules !emitDllManifest !dllManifestName !exports; 
+          let dllManifest =
+            if !emitDllManifest then Some (!dllManifestName) else None
+          in
+          link_program (!isLibrary) allModules dllManifest !exports;
           if (!linkShouldFail) then 
             (print_endline "Error: link phase succeeded, while expected to fail (option -link_should_fail)."; exit 1)
           else print_endline "Program linked successfully."

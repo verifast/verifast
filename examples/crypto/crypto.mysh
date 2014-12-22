@@ -9,18 +9,20 @@ cd ..
 
 cd protocols
   cd rpc
-    verifast_both -allow_assume ../../bin/libpolarssl.dll.vfmanifest ../../bin/cryptolib.dll.vfmanifest rpc.c main_app.c
+    verifast_both -allow_assume CRT/pthread.o ../../bin/libpolarssl.dll.vfmanifest ../../bin/cryptolib.dll.vfmanifest rpc.c main_app.c
   cd ..
   cd secure_storage
-    verifast_both -allow_assume ../../bin/libpolarssl.dll.vfmanifest ../../bin/cryptolib.dll.vfmanifest secure_storage.c main_app.c
+    verifast_both -allow_assume CRT/pthread.o ../../bin/libpolarssl.dll.vfmanifest ../../bin/cryptolib.dll.vfmanifest secure_storage.c main_app.c
   cd ..
   cd yahalom
-    verifast_both -allow_assume ../../bin/libpolarssl.dll.vfmanifest ../../bin/cryptolib.dll.vfmanifest yahalom.c main_app.c
+    verifast_both -allow_assume CRT/pthread.o ../../bin/libpolarssl.dll.vfmanifest ../../bin/cryptolib.dll.vfmanifest yahalom.c main_app.c
   cd ..
   cd nsl
-    verifast_both -allow_assume ../../bin/libpolarssl.dll.vfmanifest ../../bin/cryptolib.dll.vfmanifest nsl.c main_app.c
+    verifast_both -allow_assume CRT/pthread.o ../../bin/libpolarssl.dll.vfmanifest ../../bin/cryptolib.dll.vfmanifest nsl.c main_app.c
   cd ..
   cd nss
-    verifast_both -allow_assume ../../bin/libpolarssl.dll.vfmanifest ../../bin/cryptolib.dll.vfmanifest nss.c main_app.c
+    verifast_both -allow_assume CRT/pthread.o ../../bin/libpolarssl.dll.vfmanifest ../../bin/cryptolib.dll.vfmanifest nss.c main_app.c
   cd ..
 cd ..
+
+del bin/cryptolib.dll.vfmanifest
