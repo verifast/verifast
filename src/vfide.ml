@@ -128,9 +128,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   let url = ref None in
   let appTitle = "VeriFast " ^ Vfversion.version ^ " IDE" in
   let root = GWindow.window
-    ~width:(match layout with FourThree -> 800 | Widescreen -> 1024)
-    ~height:(match layout with FourThree -> 600 | Widescreen -> 640)
-    ~title:appTitle ~allow_shrink:true ()
+    ~title:appTitle ()
   in
   let fontScalePower = ref 0 in
   let getScaledFont fontName =
@@ -294,6 +292,9 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   let windowMenuItemBottom = new GMenu.menu_item (GtkMenu.MenuItem.cast (ui#get_widget "/MenuBar/BottomWindow")#as_widget) in
   let ignore_text_changes = ref false in
   let rootVbox = GPack.vbox ~packing:root#add () in
+  root#resize
+    ~width:(match layout with FourThree -> 800 | Widescreen -> 1024)
+    ~height:(match layout with FourThree -> 600 | Widescreen -> 640);
   rootVbox#pack (ui#get_widget "/MenuBar");
   let toolbar = new GButton.toolbar (GtkButton.Toolbar.cast (ui#get_widget "/ToolBar")#as_widget) in
   toolbar#set_icon_size `SMALL_TOOLBAR;
