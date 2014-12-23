@@ -332,6 +332,7 @@ let replace_vroot path =
   | None -> path
 
 let qualified_path modpath (basedir, relpath) =
+  if (replace_vroot relpath) <> relpath then relpath else
   let module_basedir = reduce_path (compose cwd (Filename.dirname modpath)) in
   let module_basedir_prefix = module_basedir ^ "/" in
   let path = reduce_path (compose cwd (basedir ^ "/" ^ relpath)) in
