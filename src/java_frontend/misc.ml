@@ -77,3 +77,6 @@ let apply_option f a =
   match a with
     Some a' -> Some (f a')
   | None -> None
+
+(* Version *)
+let release_version = "23"

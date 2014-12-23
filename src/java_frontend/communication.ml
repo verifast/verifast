@@ -112,7 +112,10 @@ object (this)
   
   method error m =
     raise (CommunicationException m)
-  
+
+  method inconsistent_version () = 
+    this#error ("Unexpected behavior from Java AST server. Are you running version " ^ Misc.release_version ^ "?")
+
   method load ast_server_launch =
     if (not attached) then begin
       let (i, o) = 
@@ -122,7 +125,19 @@ object (this)
       ast_server_stdin <- i;
       ast_server_stdout <- o;
       this#init_channels;
-      attached <- true
+      attached <- true;
+      try
+        this#send_command("VERSION");
+        let (kind, result) = this#receive_response in
+        begin
+          match kind with 
+          | SUCCESS -> 
+            if (result <> [Misc.release_version]) then this#inconsistent_version ()
+          | _ -> this#error ("Loading of ASTServer failed")
+        end
+      with
+      | CommunicationException m -> raise (CommunicationException m)
+      | _ -> this#error ("Loading of ASTServer failed")
     end
 
   method unload =
@@ -165,7 +180,7 @@ object (this)
         if (line = begin_of_message) then
           finished := true;
       with
-        End_of_file -> ()
+        End_of_file -> this#inconsistent_version ()
     done;
     finished := false;
     while (not !finished) do
@@ -176,7 +191,7 @@ object (this)
         else
           message := line::!message
       with
-        End_of_file -> ()
+        End_of_file -> this#inconsistent_version ()
     done;
     List.rev !message
   

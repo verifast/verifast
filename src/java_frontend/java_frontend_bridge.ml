@@ -4,21 +4,24 @@ open Lexer
 open Ast_writer
 
 let load _ =
-  let launch = 
-    try Sys.getenv "VERIFAST_JAVA_AST_SERVER"  
-    with Not_found ->
-      let ast_server_filename = "ast_server-b896ede.jar" in
-      let error_message =
-        "\nYou specified the option -javac to use the STANCE Java frontend. " ^
-        Printf.sprintf "However, to use the STANCE Java frontend, you need to retrieve the file %s from: \n" ast_server_filename ^
-            "\t https://bitbucket.org/gijsv/stance-java-frontend \n" ^
-        "Then you must set the environment variable VERIFAST_JAVA_AST_SERVER as follows: \n" ^
-            Printf.sprintf "\t export VERIFAST_JAVA_AST_SERVER=\"java -jar path/to/%s\" \n" ast_server_filename
-      in
-      Printf.printf "%s" error_message;
-      failwith error_message
-  in
-  Java_frontend.attach(launch)
+  try
+    let launch = 
+      try Sys.getenv "VERIFAST_JAVA_AST_SERVER"  
+      with Not_found ->
+        let ast_server_filename = "ast_server_" ^ Misc.release_version ^ ".jar" in
+        let error_message =
+          "\nYou specified the option -javac to use the STANCE Java frontend. " ^
+          Printf.sprintf "However, to use the STANCE Java frontend, you need to retrieve the file %s from: \n" ast_server_filename ^
+              "\t https://bitbucket.org/gijsv/stance-java-frontend \n" ^
+          "Then you must set the environment variable VERIFAST_JAVA_AST_SERVER as follows: \n" ^
+              Printf.sprintf "\t export VERIFAST_JAVA_AST_SERVER=\"java -jar path/to/%s\" \n" ast_server_filename
+        in
+        Printf.printf "%s" error_message;
+        failwith error_message
+    in
+    Java_frontend.attach(launch)
+  with
+    Java_frontend.JavaFrontendException(_, msg) -> raise (Parser.CompilationError msg)
 
 let unload _ =
   Java_frontend.detach()
