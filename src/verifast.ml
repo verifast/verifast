@@ -3189,6 +3189,9 @@ let link_program isLibrary allModulepaths dllManifest exports =
           failwith ("VeriFast link phase error: could not find .vfmanifest file '" ^ file ^ 
                     "'. Re-verify the module using the -emit_vfmanifest or -emit_dll_vfmanifest option.")
   in
+  let manifest_corruption modulepath msg =
+    raise (LinkError ("Manifest file for '" ^ modulepath ^ "' is corrupted: " ^ msg))
+  in
   let rec iter (impls, structs, preds) mods modulepaths =
     match modulepaths with
       [] -> ((impls, structs, preds), mods)
@@ -3197,13 +3200,35 @@ let link_program isLibrary allModulepaths dllManifest exports =
         try Filename.chop_extension modulepath ^ ".vfmanifest" with
           Invalid_argument  _ -> raise (CompilationError "file without extension")
       in
+      let is_generated_manifest = List.mem_assoc manifest_path !manifest_map in 
       let (manifest_path, lines) =
-        if List.mem_assoc manifest_path !manifest_map then
+        if is_generated_manifest then
           (manifest_path, List.assoc manifest_path !manifest_map)
         else
           get_lines_from_file manifest_path
       in
       let rebase_path path = rebase_path manifest_path path in
+      let check_file_name path =
+        if path <> "" && (String.get path 0) <> '.' && (String.get path 0) <> '/' && (String.get path 0) <> '\\' then
+        begin
+          let root::_ = split (fun c -> c = '/' || c = '\\') path in
+          match try_assoc0 root vroots with
+          | Some _ -> ()
+          | None -> manifest_corruption modulepath ("relative path should start with ./ or ../")
+        end;
+        let absolute_path =
+          let path = (replace_vroot (reduce_path path)) in
+          let manifest_dir = (replace_vroot (reduce_path (Filename.dirname manifest_path))) in
+          if not (Filename.is_relative path) then path else 
+          begin
+            let path = reduce_path (manifest_dir ^ "/" ^ path) in
+            if not (Filename.is_relative path) then path
+            else reduce_path (cwd ^ "/" ^ path)
+          end
+        in
+        if (not (Sys.file_exists absolute_path)) then 
+          manifest_corruption modulepath ("file does not exist " ^ path ^ " (absolute: " ^ absolute_path ^ ")")
+      in
       let rec iter0 (impls', structs', preds') mods' lines =
         match lines with
           [] -> iter (impls', structs', preds') mods' modulepaths
@@ -3213,34 +3238,54 @@ let link_program isLibrary allModulepaths dllManifest exports =
             match command with
             | ".structure"  ->
               begin
-                let (def_file, dcl_file) = split_manifest_entry '@' symbol manifest_path in
-                let dcl_file = rebase_path dcl_file in
+                let (def_file, dcl_part) = split_manifest_entry '@' symbol manifest_path in
+                if not is_generated_manifest then
+                begin
+                  let (dcl_file, name) = split_around_char dcl_part '#' in
+                  if name = "" then manifest_corruption modulepath ("empty structure entry");
+                  check_file_name def_file;
+                  check_file_name dcl_file;
+                end;
+                let dcl_part = rebase_path dcl_part in
                 let def_file = rebase_path def_file in
-                let entry = (dcl_file, (def_file, manifest_path)) in
-                match try_assoc dcl_file structs with
+                let entry = (dcl_part, (def_file, manifest_path)) in
+                match try_assoc dcl_part structs with
                 | Some (def_file2, _) ->
                   if def_file <> def_file2 then 
-                    raise (LinkError ("Module '" ^ modulepath ^ "': Structure " ^ dcl_file ^ " is defined twice."))
+                    raise (LinkError ("Module '" ^ modulepath ^ "': Structure " ^ dcl_part ^ " is defined twice."))
                   else 
                     iter0 (impls', structs', preds') mods' lines
                 | None -> iter0 (impls', entry::structs', preds') mods' lines
               end
             | ".predicate" -> 
               begin
-                let (def_file, dcl_file) = split_manifest_entry '@' symbol manifest_path in
-                let dcl_file = rebase_path dcl_file in
+                let (def_file, dcl_part) = split_manifest_entry '@' symbol manifest_path in
+                if not is_generated_manifest then
+                begin
+                  let (dcl_file, name) = split_around_char dcl_part '#' in
+                  if name = "" then manifest_corruption modulepath ("empty predicate entry");
+                  check_file_name def_file;
+                  check_file_name dcl_file;
+                end;
+                let dcl_part = rebase_path dcl_part in
                 let def_file = rebase_path def_file in
-                let entry = (dcl_file, (def_file, manifest_path)) in
-                match try_assoc dcl_file preds with
+                let entry = (dcl_part, (def_file, manifest_path)) in
+                match try_assoc dcl_part preds with
                 | Some (def_file2, _) ->
                   if def_file <> def_file2 then
-                    raise (LinkError ("Module '" ^ modulepath ^ "': Predicates " ^ dcl_file ^ " is given a body twice."))
+                    raise (LinkError ("Module '" ^ modulepath ^ "': Predicates " ^ dcl_part ^ " is given a body twice."))
                   else
                     iter0 (impls', structs', preds') mods' lines
                 | None -> iter0 (impls', structs', entry::preds') mods' lines
               end
             | ".provides"   ->
               begin
+                if not is_generated_manifest then
+                begin
+                  let (path, name) = split_around_char symbol '#' in
+                  if name = "" then manifest_corruption modulepath ("empty provides entry");
+                  check_file_name path;
+                end;
                 let symbol = rebase_path symbol in
                 let entry = (symbol, manifest_path) in
                 match try_assoc0 symbol impls' with
@@ -3249,6 +3294,12 @@ let link_program isLibrary allModulepaths dllManifest exports =
               end
             | ".requires"   ->
               begin
+                if not is_generated_manifest then
+                begin
+                  let (path, name) = split_around_char symbol '#' in
+                  if name = "" then manifest_corruption modulepath ("empty requires entry");
+                  check_file_name path;
+                end;
                 let symbol = rebase_path symbol in
                 match try_assoc0 symbol impls' with
                 | Some _ -> iter0 (impls', structs', preds') mods' lines 
@@ -3261,7 +3312,7 @@ let link_program isLibrary allModulepaths dllManifest exports =
                 consume (fun x -> "Module '" ^ modulepath ^ "': unsatisfied import '" ^ x ^ "'.") symbol mods'
               in
               iter0 (impls', structs', preds') mods'' lines
-            | _ -> raise (LinkError ("Manifest file '" ^ modulepath ^ "': cannot parse line."))
+            | _ -> manifest_corruption modulepath ("cannot parse line " ^ line)
           end
       in
       iter0 (impls, structs, preds) mods lines

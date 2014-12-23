@@ -1,3 +1,3 @@
-.predicate @precision_axiom.gh#precise
-.provides precision_axiom.gh#close_precise
-.provides precision_axiom.gh#open_precise
+.predicate @./precision_axiom.gh#precise
+.provides ./precision_axiom.gh#close_precise
+.provides ./precision_axiom.gh#open_precise
