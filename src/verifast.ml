@@ -2485,7 +2485,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (sign, (lm, xmap, pre, pre_tenv, post, epost, ss, v))::rest ->
       match ss with
         None ->
-        let (((_, p), _, _), ((_, _), _, _)) = lm in 
+        let ((p, _, _), (_, _, _)) = lm in 
         if Filename.check_suffix p ".javaspec" then
           verify_cons (pn,ilist) cfin cn superctors boxes lems rest
         else
@@ -2571,7 +2571,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ((g,sign), (l,gh, rt, ps,pre,pre_tenv,post,epost,pre_dyn,post_dyn,epost_dyn,sts,fb,v, _,abstract))::meths ->
       if abstract && not cabstract then static_error l "Abstract method can only appear in abstract class." None;
       match sts with
-        None -> let (((_,p),_,_),((_,_),_,_))=l in 
+        None -> let ((p,_,_),(_,_,_))=l in 
           if (Filename.check_suffix p ".javaspec") || abstract then verify_meths (pn,ilist) cfin cabstract boxes lems meths
           else static_error l "Method specification is only allowed in javaspec files!" None
       | Some (Some (ss, closeBraceLoc)) ->
@@ -2641,7 +2641,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
      [] -> (boxes, gs, lems)
     | Func (l, Lemma(auto, trigger), _, rt, g, ps, _, _, _, _, None, _, _)::ds -> 
       let g = full_name pn g in
-      let (((_, g_file_name), _, _), _) = l in
+      let ((g_file_name, _, _), _) = l in
       if language = Java && not (Filename.check_suffix g_file_name ".javaspec") then
         static_error l "A lemma function outside a .javaspec file must have a body. To assume a lemma, use the body '{ assume(false); }'." None;
       let FuncInfo ([], fterm, _, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, fb,v) = List.assoc g funcmap in
@@ -2814,13 +2814,12 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   end (* CheckFile *)
   
-  let rec check_file filepath is_import_spec include_prelude basedir reldir headers ps =
+  let rec check_file filepath is_import_spec include_prelude dir headers ps =
     let module CF = CheckFile(struct
       let filepath = filepath
       let is_import_spec = is_import_spec
       let include_prelude = include_prelude
-      let basedir = basedir
-      let reldir = reldir
+      let dir = dir
       let headers = headers
       let ps = ps
       let check_file = check_file
@@ -2870,18 +2869,18 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           provide_files := provide_javas;
           let javas = javas @ provide_javas in
-          let context = List.map (fun ((((b, _), _, _), _), (_, p, _), _, _) -> Util.concat b ((Filename.chop_extension p) ^ ".jar")) headers in
+          let context = List.map (fun (((b, _, _), _), (_, p, _), _, _) -> Util.concat (Filename.dirname b) ((Filename.chop_extension p) ^ ".jar")) headers in
           let ds = Java_frontend_bridge.parse_java_files javas context reportRange reportShouldFail options.option_enforce_annotations options.option_use_java_frontend in
           (headers, ds)
         | CLang ->
           if Filename.check_suffix path ".h" then
-            parse_header_file "" path reportRange reportShouldFail [] options.option_enforce_annotations
+            parse_header_file path reportRange reportShouldFail [] options.option_enforce_annotations
           else
             parse_c_file path reportRange reportShouldFail options.option_include_paths options.option_enforce_annotations
     in
     emitter_callback ds;
     check_should_fail ([], [], [], [], []) $. fun () ->
-    let (linker_info, _) = check_file path false true programDir "" headers ds in
+    let (linker_info, _) = check_file path false true programDir headers ds in
     linker_info
     in
     begin
@@ -2957,8 +2956,8 @@ There are 7 kinds of entries possible in a vfmanifest/dll_vfmanifest file
 
   let create_manifest_file() =
     let manifest_filename = Filename.chop_extension path ^ ".vfmanifest" in
-    let qualified_path (basedir, relpath) =
-      qualified_path options.option_vroots path (basedir, relpath)
+    let qualified_path path' =
+      qualified_path options.option_vroots path (Filename.dirname path', Filename.basename path')
     in
     let sorted_lines symbol protos =
       let lines =

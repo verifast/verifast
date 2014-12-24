@@ -854,7 +854,7 @@ class tentative_lexer (lloc:unit -> loc) (lignore_eol:bool ref) (lstream:(loc * 
     method isGhostHeader() =
       begin match this#peek() with 
         None -> false
-      | Some ((((_,f), _, _),_), _) -> Filename.check_suffix f ".gh"
+      | Some (((f, _, _),_), _) -> Filename.check_suffix f ".gh"
       end
       
     method private fetch () =
@@ -1292,11 +1292,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
   in
   (next_token, fun _ -> !last_macro_used)
 
-(**
- *
- * basePath, relPath: see make_preprocessor
- *)
-let make_sound_preprocessor make_lexer basePath relPath include_paths =
+let make_sound_preprocessor make_lexer path include_paths =
   let tlexers = ref [] in
   let curr_tlexer = ref (new tentative_lexer (fun () -> dummy_loc) (ref false) (Stream.of_list [])) in
   let is_ghost_header h = Filename.check_suffix h ".gh" in
@@ -1304,14 +1300,14 @@ let make_sound_preprocessor make_lexer basePath relPath include_paths =
   let cfp_in_ghost_range = ref [] in
   let included_files = ref [] in
   let paths = ref [] in  
-  let push_tlexer basePath relPath =
-    p_in_ghost_range := (ref (is_ghost_header relPath))::!p_in_ghost_range;
-    cfp_in_ghost_range := (ref (is_ghost_header relPath))::!cfp_in_ghost_range;
-    let (loc, lexer_ignore_eol, stream) = make_lexer basePath relPath include_paths ~inGhostRange:!(List.hd !p_in_ghost_range) in
+  let push_tlexer path =
+    p_in_ghost_range := (ref (is_ghost_header path))::!p_in_ghost_range;
+    cfp_in_ghost_range := (ref (is_ghost_header path))::!cfp_in_ghost_range;
+    let (loc, lexer_ignore_eol, stream) = make_lexer path include_paths ~inGhostRange:!(List.hd !p_in_ghost_range) in
     lexer_ignore_eol := false;
     curr_tlexer := new tentative_lexer loc lexer_ignore_eol stream;
     tlexers := !curr_tlexer::!tlexers;
-    paths := (basePath, relPath)::!paths
+    paths := path::!paths
   in
   let pop_tlexer () =
     p_in_ghost_range := List.tl !p_in_ghost_range;
@@ -1320,7 +1316,7 @@ let make_sound_preprocessor make_lexer basePath relPath include_paths =
     curr_tlexer := List.hd !tlexers;
     paths := List.tl !paths
   in
-  push_tlexer basePath relPath;
+  push_tlexer path;
   let p_begin_include macros =
     macros
   in
@@ -1349,14 +1345,11 @@ let make_sound_preprocessor make_lexer basePath relPath include_paths =
     if (compare_tokens p_t cfp_t) && (!(List.hd !p_in_ghost_range) = !(List.hd !cfp_in_ghost_range)) then begin
       begin match p_t with
         Some (l,BeginInclude(kind, i, _)) ->    
-          let basePath0, relPath0 = List.hd !paths in
-          let rellocalpath = concat (Filename.dirname relPath0) i in
-          let includepaths = (match kind with DoubleQuoteInclude -> [basePath0] | AngleBracketInclude -> []) @ include_paths @ [bindir] in
+          let path0 = List.hd !paths in
+          let includepaths = (match kind with DoubleQuoteInclude -> [Filename.dirname path0] | AngleBracketInclude -> []) @ include_paths @ [bindir] in
           
-          (** Searches the directory in includepaths that contains the
-           * file rellocalpath. rellocalpath can contain
-           * directory names. Returns the (dirname, basename) pair
-           * in canonical form of filename, e.g. ("some/dir", "somefile.h").
+          (** Searches the directory in includepaths that contains the file i (can contain directory names).
+           *  Returns the path of the found file.
            * 
            * What to do in case of multiple matches?
            *
@@ -1392,7 +1385,7 @@ let make_sound_preprocessor make_lexer basePath relPath include_paths =
            *)
           let find_include_file includepaths =
             (* build all possible filenames for the file we want to #include: *)
-            let possiblepaths = List.map (fun d -> concat d rellocalpath) includepaths in
+            let possiblepaths = (List.map (fun d -> concat d i) includepaths) in
             (* Rewrite all filenames in canonical form: *)
             let possiblepaths = List.map reduce_path possiblepaths in
             (* Remove duplicates: *)
@@ -1400,16 +1393,15 @@ let make_sound_preprocessor make_lexer basePath relPath include_paths =
             (* Remove filenames that don't exist: *)
             let possiblepaths = List.filter Sys.file_exists possiblepaths in
             match possiblepaths with
-              [] -> error (current_loc()) (Printf.sprintf "No such file '%s'." rellocalpath)
-            | [p] -> ((Filename.dirname p),(Filename.basename p))
+              [] -> error (current_loc()) (Printf.sprintf "No such file '%s'." i)
+            | [p] -> p
             | h::t ->
               (* The aggressive version that does not break examples: *)
-              ((Filename.dirname h),(Filename.basename h))
+              h
               (* The safest version: *)
-              (* error (current_loc()) (Printf.sprintf "Cannot include file '%s' because multiple possible include paths are found." rellocalpath) *)
+              (* error (current_loc()) (Printf.sprintf "Cannot include file '%s' because multiple possible include paths are found." i) *)
           in
-          let (basePath, relPath) = find_include_file includepaths in push_tlexer basePath relPath;
-          let path = reduce_path (concat basePath relPath) in
+          let path = find_include_file includepaths in push_tlexer path;
           if List.mem path !included_files then begin
             match p_next() with
               Some _ -> divergence l ("Preprocessor does not skip secondary inclusion of file \n" ^ path)
@@ -1441,11 +1433,5 @@ let make_sound_preprocessor make_lexer basePath relPath include_paths =
   in
   ((fun () -> current_loc()), ref true, Stream.from (fun _ -> next_token ()))
 
-(**
- * 
- * basePath: path of the current .h or .c file. e.g. if "/dir1/a.c" includes
- *   "/dir2/b.h", then, when including "c.h", basePath will be "/dir2/".
- * relPath: the filename we want to include, e.g. "stdio.h".
- *)
-let make_preprocessor make_lexer basePath relPath include_paths =
-  make_sound_preprocessor make_lexer basePath relPath include_paths
+let make_preprocessor make_lexer path include_paths =
+  make_sound_preprocessor make_lexer path include_paths

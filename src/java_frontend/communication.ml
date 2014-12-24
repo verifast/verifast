@@ -131,8 +131,7 @@ object (this)
         let (kind, result) = this#receive_response in
         begin
           match kind with 
-          | SUCCESS -> 
-            if (result <> [Misc.release_version]) then this#inconsistent_version ()
+          | SUCCESS -> if (result <> [Misc.release_version]) then this#inconsistent_version ()
           | _ -> this#error ("Loading of ASTServer failed")
         end
       with

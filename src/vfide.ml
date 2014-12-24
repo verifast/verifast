@@ -490,7 +490,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     let text = start#get_text ~stop:stop in
     let highlight keywords =
       let (loc, ignore_eol, tokenStream, in_comment, in_ghost_range) =
-        make_lexer_helper keywords ghost_keywords ("<bufferBase>", "<buffer>") text reportRange startIsInComment startIsInGhostRange false (fun _ -> ()) annotChar in
+        make_lexer_helper keywords ghost_keywords "<buffer>" text reportRange startIsInComment startIsInGhostRange false (fun _ -> ()) annotChar in
       Stream.iter (fun _ -> ()) tokenStream;
       (* Printf.printf "!in_comment: %B; !in_ghost_range: %B\n" !in_comment !in_ghost_range; flush stdout; *)
       if not (stop#is_end) && (!in_comment, !in_ghost_range) <> (stopIsInComment, stopIsInGhostRange) then
@@ -837,10 +837,10 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     iter 0 !buffers
   in
   let create_marks_of_loc ((p1, p2): loc) =
-    let ((path1_base, path1_relpath) as path1, line1, col1) = p1 in
+    let (path1, line1, col1) = p1 in
     let (path2, line2, col2) = p2 in
     assert (path1 = path2);
-    let (_, tab) = get_tab_for_path (concat path1_base path1_relpath) in
+    let (_, tab) = get_tab_for_path path1 in
     let buffer = tab#buffer in
     let mark1 = buffer#create_mark (srcpos_iter buffer (line1, col1)) in
     let mark2 = buffer#create_mark (srcpos_iter buffer (line2, col2)) in
@@ -927,10 +927,10 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     apply_tag_by_name tab name ~start:(buffer#get_iter_at_mark (`MARK mark1)) ~stop:(buffer#get_iter_at_mark (`MARK mark2))
   in
   let apply_tag_by_loc name ((p1, p2): loc) =
-    let ((path1_base, path1_relpath) as path1, line1, col1) = p1 in
+    let (path1, line1, col1) = p1 in
     let (path2, line2, col2) = p2 in
     assert (path1 = path2);
-    let (_, tab) = get_tab_for_path (concat path1_base path1_relpath) in
+    let (_, tab) = get_tab_for_path path1 in
     let buffer = tab#buffer in
     apply_tag_by_name tab name ~start:(srcpos_iter buffer (line1, col1)) ~stop:(srcpos_iter buffer (line2, col2))
   in
@@ -1095,7 +1095,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   let go_to_loc l =
     let (start, stop) = l in
     let (path, line, col) = start in
-    let (k, tab) = get_tab_for_path (string_of_path path) in
+    let (k, tab) = get_tab_for_path path in
     textNotebook#goto_page k;
     let buffer = tab#buffer in
     let it = srcpos_iter buffer (line, col) in
@@ -1119,7 +1119,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     let (useSiteStart, useSiteStop) = useSiteLoc in
     let (useSitePath, useSiteLine, useSiteCol) = useSiteStart in
     let (_, useSiteStopLine, useSiteStopCol) = useSiteStop in
-    let (useSiteK, useSiteTab) = get_tab_for_path (string_of_path useSitePath) in
+    let (useSiteK, useSiteTab) = get_tab_for_path useSitePath in
     let useSiteBuffer = useSiteTab#buffer in
     let useSiteTag = useSiteBuffer#create_tag [] in
     useSiteTab#useSiteTags := useSiteTag::!(useSiteTab#useSiteTags);

@@ -1476,7 +1476,7 @@ let parse_package_decl enforceAnnotations = parser
 
 let parse_scala_file (path: string) (reportRange: range_kind -> loc -> unit): package =
   let lexer = make_lexer Scala.keywords ghost_keywords in
-  let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (readFile path) reportRange (fun x->()) in
+  let (loc, ignore_eol, token_stream) = lexer path (readFile path) reportRange (fun x->()) in
   let parse_decls_eof = parser [< ds = rep Scala.parse_decl; _ = Stream.empty >] -> PackageDecl(dummy_loc,"",[Import(dummy_loc,Real,"java.lang",None)],ds) in
   try
     parse_decls_eof token_stream
@@ -1495,7 +1495,7 @@ let parse_java_file_old (path: string) (reportRange: range_kind -> loc -> unit) 
     parse_scala_file path reportRange
   else
   let lexer = make_lexer (common_keywords @ java_keywords) ghost_keywords in
-  let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (readFile path) reportRange reportShouldFail in
+  let (loc, ignore_eol, token_stream) = lexer path (readFile path) reportRange reportShouldFail in
   let parse_decls_eof = parser [< p = parse_package_decl enforceAnnotations; _ = Stream.empty >] -> p in
   try
     parse_decls_eof token_stream
@@ -1541,11 +1541,11 @@ let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (report
                                               ((loc * (include_kind * string * string) * string list * package list) list * package list) = (* ?parse_c_file *)
   Stopwatch.start parsing_stopwatch;
   let result =
-    let make_lexer basePath relPath include_paths ~inGhostRange =
-      let text = readFile (concat basePath relPath) in
-      make_lexer (common_keywords @ c_keywords) ghost_keywords (basePath, relPath) text reportRange ~inGhostRange reportShouldFail
+    let make_lexer path include_paths ~inGhostRange =
+      let text = readFile path in
+      make_lexer (common_keywords @ c_keywords) ghost_keywords path text reportRange ~inGhostRange reportShouldFail
     in
-    let (loc, ignore_eol, token_stream) = make_preprocessor make_lexer (Filename.dirname path) (Filename.basename path) include_paths in
+    let (loc, ignore_eol, token_stream) = make_preprocessor make_lexer path include_paths in
     let parse_c_file =
       parser
         [< (headers, _) = parse_include_directives ignore_eol enforceAnnotations; 
@@ -1560,16 +1560,16 @@ let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (report
   Stopwatch.stop parsing_stopwatch;  
   result
 
-let parse_header_file (basePath: string) (relPath: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit) 
+let parse_header_file (path: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit) 
          (include_paths: string list) (enforceAnnotations: bool): ((loc * (include_kind * string * string) * string list * package list) list * package list) =
   Stopwatch.start parsing_stopwatch;
-  let isGhostHeader = Filename.check_suffix relPath ".gh" in
+  let isGhostHeader = Filename.check_suffix path ".gh" in
   let result =
-    let make_lexer basePath relPath include_paths ~inGhostRange =
-      let text = readFile (concat basePath relPath) in
-      make_lexer (common_keywords @ c_keywords) ghost_keywords (basePath, relPath) text reportRange ~inGhostRange:inGhostRange reportShouldFail
+    let make_lexer path include_paths ~inGhostRange =
+      let text = readFile path in
+      make_lexer (common_keywords @ c_keywords) ghost_keywords path text reportRange ~inGhostRange:inGhostRange reportShouldFail
     in
-    let (loc, ignore_eol, token_stream) = make_preprocessor make_lexer basePath relPath include_paths in
+    let (loc, ignore_eol, token_stream) = make_preprocessor make_lexer path include_paths in
     let p = parser
       [< (headers, _) = parse_include_directives ignore_eol enforceAnnotations; 
          ds = parse_decls CLang enforceAnnotations ~inGhostHeader:isGhostHeader; 
@@ -1603,7 +1603,7 @@ let read_file_lines path =
   lines
 
 let file_loc path =
-  let pos = ((Filename.dirname path, Filename.basename path), 1, 1) in
+  let pos = (path, 1, 1) in
   (pos, pos)
 
 let expand_macros macros text =

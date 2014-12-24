@@ -776,13 +776,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     val filepath: string
     val is_import_spec: bool
     val include_prelude: bool
-    val basedir: string
-    val reldir: string
+    val dir: string
     val headers: (loc * (include_kind * string * string) * string list * package list) list
     val ps: package list
     
     (** For recursive calls. *)
-    val check_file: string -> bool -> bool -> string -> string -> (loc * (include_kind * string * string) * string list * package list) list -> package list -> check_file_output * maps
+    val check_file: string -> bool -> bool -> string -> (loc * (include_kind * string * string) * string list * package list) list -> package list -> check_file_output * maps
   end
   
   module CheckFile1(CheckFileArgs: CHECK_FILE_ARGS) = struct
@@ -862,38 +861,34 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
 
     (** [merge_header_maps maps0 headers] returns [maps0] plus all elements transitively declared in [headers]. *)
-    let rec merge_header_maps include_prelude maps0 headers_included basedir reldir headers global_headers =
+    let rec merge_header_maps include_prelude maps0 headers_included dir headers global_headers =
       match headers with
         [] -> (maps0, headers_included)
       | (l, (include_kind, header_path, total_path), hs, header_decls)::headers ->
         if List.mem header_path ["include_ignored_by_verifast.h"; "assert.h"; "limits.h"] then
-          merge_header_maps include_prelude maps0 headers_included basedir reldir headers global_headers
+          merge_header_maps include_prelude maps0 headers_included dir headers global_headers
         else begin
           if (options.option_safe_mode || options.option_header_whitelist <> []) && not (List.mem header_path options.option_header_whitelist) then
             static_error l "This header file is not on the header whitelist." None;
-          let rellocalpath = concat reldir header_path in
-          let includepaths = (match include_kind with DoubleQuoteInclude -> [basedir] | AngleBracketInclude -> []) @ include_paths @ [bindir] in
+          let includepaths = (match include_kind with DoubleQuoteInclude -> [dir] | AngleBracketInclude -> []) @ include_paths @ [bindir] in
           let rec find_include_file includepaths =
             match language with
               CLang ->
-                (".", total_path)
+                total_path
             | Java ->
                 match includepaths with
-                  [] -> static_error l (Printf.sprintf "No such file: '%s'" rellocalpath) None
+                  [] -> static_error l (Printf.sprintf "No such file: '%s'" header_path) None
                 | head::body ->
-                  let headerpath = concat head rellocalpath in
+                  let headerpath = concat head header_path in
                   if Sys.file_exists headerpath then
-                    (head, rellocalpath)
+                    headerpath
                   else
                     (find_include_file body)
           in
-          let (basedir1, relpath) = find_include_file includepaths in
-          let relpath = reduce_path relpath in
-          let path = reduce_path (concat basedir1 relpath) in
+          let path = find_include_file includepaths in
           if List.mem path headers_included then
-            merge_header_maps include_prelude maps0 headers_included basedir reldir headers global_headers
+            merge_header_maps include_prelude maps0 headers_included dir headers global_headers
           else begin
-            let reldir1 = Filename.dirname relpath in
             let (headers', maps) =
               match try_assoc path !headermap with
                 None ->
@@ -905,7 +900,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                         try 
                           List.find (fun (l', (_,h',tp'), hs', ps') -> h = tp') global_headers
                         with
-                          Not_found -> static_error l (Printf.sprintf "Necessary header %s is not parsed" rellocalpath) None
+                          Not_found -> static_error l (Printf.sprintf "Necessary header %s is not parsed" header_path) None
                       in
                       (List.map (fun h -> look_up h) hs, header_decls)
                   | Java ->
@@ -927,14 +922,15 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     let jarspecs = List.map spec_include_for_jar jars in 
                     (jarspecs, ds)
                 in
-                let (_, maps) = check_file header_path header_is_import_spec include_prelude basedir1 reldir1 headers' ds in
+                let (_, maps) = check_file header_path header_is_import_spec include_prelude (Filename.dirname path) headers' ds in
                 headermap := (path, (headers', maps))::!headermap;
                 (headers', maps)
               | Some (headers', maps) ->
                 (headers', maps)
             in
-            let (maps0, headers_included) = merge_header_maps include_prelude maps0 headers_included basedir1 reldir1 headers' global_headers in
-            merge_header_maps include_prelude (merge_maps l maps maps0) (path::headers_included) basedir reldir headers global_headers
+            let path_dir = Filename.dirname path in
+            let (maps0, headers_included) = merge_header_maps include_prelude maps0 headers_included path_dir headers' global_headers in
+            merge_header_maps include_prelude (merge_maps l maps maps0) (path::headers_included) dir headers global_headers
           end
         end
     in
@@ -955,22 +951,22 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let rtdir = Filename.dirname rtpath in
                 let ds = Java_frontend_bridge.parse_java_files (List.map (fun x -> concat rtdir x) javaspecs) [] reportRange
                                                                reportShouldFail enforce_annotations use_java_frontend in
-                let (_, maps0) = check_file rtpath true false bindir "" [] ds in
+                let (_, maps0) = check_file rtpath true false bindir [] ds in
                 headermap := (rtpath, ([], maps0))::!headermap;
                 (maps0, [])
               | Some ([], maps0) ->
                 (maps0, [])
           end
           | CLang ->
-            let (headers, prelude_decls) = parse_header_file bindir "prelude.h" reportRange reportShouldFail [] enforce_annotations in
+            let (headers, prelude_decls) = parse_header_file (concat bindir "prelude.h") reportRange reportShouldFail [] enforce_annotations in
             let header_names = List.map (fun (_, (_, _, h), _, _) -> h) headers in
             let headers = (dummy_loc, (AngleBracketInclude, "prelude.h", concat bindir "prelude.h"), header_names, prelude_decls)::headers in
-            merge_header_maps false maps0 [] bindir "" headers headers
+            merge_header_maps false maps0 [] bindir headers headers
       else
         (maps0, [])
     in
 
-    let (maps, _) = merge_header_maps include_prelude maps0 headers_included basedir reldir headers headers in
+    let (maps, _) = merge_header_maps include_prelude maps0 headers_included dir headers headers in
     maps
 
   (* Region: structdeclmap, enumdeclmap, inductivedeclmap, modulemap *)
@@ -983,7 +979,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           if pluginmap0 <> [] || pluginmap1 <> [] then static_error l "VeriFast does not yet support loading multiple plugins" None;
           if options.option_safe_mode then static_error l "Loading plugins is not allowed in safe mode" None;
           begin try
-            let p = Plugins_private.load_plugin (concat basedir (x ^ "_verifast_plugin")) in
+            let p = Plugins_private.load_plugin (concat dir (x ^ "_verifast_plugin")) in
             let x = full_name pn x in
             (x, ((p, p#create_instance plugin_context), get_unique_var_symb x (PredType ([], [], None, Inductiveness_Inductive))))::pluginmap1
           with

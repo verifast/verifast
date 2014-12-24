@@ -42,7 +42,7 @@ let _ =
       let sourceFiles : (string * (((int * int) * (int * int)) * range_kind) list ref) list ref = ref [] in
       let range_callback kind ((path1, line1, col1), (path2, line2, col2)) =    
         assert (path1 = path2);
-        let path = string_of_path path1 in
+        let path = path1 in
         let ranges =
           if List.mem_assoc path !sourceFiles then
             List.assoc path !sourceFiles

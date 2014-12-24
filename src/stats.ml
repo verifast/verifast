@@ -45,8 +45,6 @@ class stats =
       let tickLength = self#tickLength in
       proverStats <- proverStats ^ text ^ String.concat "" (List.map (fun (lbl, ticks) -> Printf.sprintf "%s: %.6fs\n" lbl (Int64.to_float ticks *. tickLength)) tickCounts)
     method overhead ~path ~nonGhostLineCount ~ghostLineCount ~mixedLineCount =
-      let (basepath, relpath) = path in
-      let path = concat basepath relpath in
       let o = object method path = path method nonghost_lines = nonGhostLineCount method ghost_lines = ghostLineCount method mixed_lines = mixedLineCount end in
       overhead <- o::overhead
     method recordFunctionTiming funName seconds = if seconds > 0.1 then functionTimings <- (funName, seconds)::functionTimings

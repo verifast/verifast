@@ -128,11 +128,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let functypemap = functypemap1 @ functypemap0
   
-  let check_breakpoint h env ((((basepath, relpath), line, col), _) as l) =
+  let check_breakpoint h env (((path, line, col), _) as l) =
     match breakpoint with
       None -> ()
     | Some (path0, line0) ->
-      if line = line0 && concat basepath relpath = path0 then
+      if line = line0 && path = path0 then
         assert_false h env l "Breakpoint reached." None
 
   let is_empty_chunk name targs frac args =

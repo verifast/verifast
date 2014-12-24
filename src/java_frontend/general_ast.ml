@@ -538,8 +538,6 @@ let a_operator_of_string o =
 (* -------------------------- *)
 
 (* string_of_x *)
-(* let string_of_srcpos (p,l,c) = p ^ "(" ^ string_of_int l ^ "," ^ string_of_int c ^ ")" *)
-let string_of_path (basedir, relpath) = concat basedir relpath
 let string_of_loc loc =
   let (f, l1, c1, l2, c2) = 
     match loc with 

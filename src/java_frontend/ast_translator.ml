@@ -63,8 +63,8 @@ let error l m =
 let translate_location l =
   match l with 
   | GEN.NoSource -> dummy_loc
-  | GEN.SourceLine(f, l, c1 ,c2) -> ((Misc.split_path(f), l, c1), (Misc.split_path(f), l, c2))
-  | GEN.SourceLines(f, l1, c1, l2 ,c2) -> ((Misc.split_path(f), l1, c1), (Misc.split_path(f), l2, c2))
+  | GEN.SourceLine(f, l, c1 ,c2) -> ((f, l, c1), (f, l, c2))
+  | GEN.SourceLines(f, l1, c1, l2 ,c2) -> ((f, l1, c1), (f, l2, c2))
 
 (* ------------------------------------------------ *)
 (* Parsing of annotations using the VeriFast parser *)
