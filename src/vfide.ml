@@ -1268,6 +1268,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
                 option_enforce_annotations = enforceAnnotations;
                 option_allow_should_fail = true;
                 option_emit_manifest = false;
+                option_vroots = [crt_vroot];
                 option_allow_assume = true;
                 option_simplify_terms = !simplifyTerms;
                 option_runtime = runtime;

@@ -2958,7 +2958,7 @@ There are 7 kinds of entries possible in a vfmanifest/dll_vfmanifest file
   let create_manifest_file() =
     let manifest_filename = Filename.chop_extension path ^ ".vfmanifest" in
     let qualified_path (basedir, relpath) =
-      qualified_path path (basedir, relpath)
+      qualified_path options.option_vroots path (basedir, relpath)
     in
     let sorted_lines symbol protos =
       let lines =
@@ -3149,7 +3149,7 @@ let parse_line line =
   for i = 0 to n - 1 do if symbol.[i] = '\\' then symbol.[i] <- '/' done;
   (command, symbol)
 
-let link_program isLibrary allModulepaths dllManifest exports =
+let link_program vroots isLibrary allModulepaths dllManifest exports =
   let mainModulePath = match List.rev allModulepaths with [] -> raise (LinkError "DLL must contain at least one module.") | m::_ -> m in
   let mainModuleName = try Filename.chop_extension (Filename.basename mainModulePath) with Invalid_argument _ -> raise (CompilationError "file without extension") in
   let mainModuleManifest =
@@ -3158,7 +3158,7 @@ let link_program isLibrary allModulepaths dllManifest exports =
     | _ -> Filename.chop_extension mainModulePath ^ ".dll.vfmanifest"
   in
   let rebase_path manifest_path path =
-    if path = "" then "" else qualified_path mainModuleManifest (Filename.dirname manifest_path, path)
+    if path = "" then "" else qualified_path vroots mainModuleManifest (Filename.dirname manifest_path, path)
   in
   let split_manifest_entry symbol entry modulepath =
     let (first, second) = split_around_char entry symbol in
@@ -3179,7 +3179,7 @@ let link_program isLibrary allModulepaths dllManifest exports =
       (file, List.filter (fun str -> str.[0] <> '#') (read_file_lines file))
     with FileNotFound ->
       try 
-        let file = replace_vroot file in
+        let file = replace_vroot vroots file in
         (file, read_file_lines file)
       with FileNotFound ->
         try
@@ -3217,8 +3217,8 @@ let link_program isLibrary allModulepaths dllManifest exports =
           | None -> manifest_corruption modulepath ("relative path should start with ./ or ../")
         end;
         let absolute_path =
-          let path = (replace_vroot (reduce_path path)) in
-          let manifest_dir = (replace_vroot (reduce_path (Filename.dirname manifest_path))) in
+          let path = (replace_vroot vroots (reduce_path path)) in
+          let manifest_dir = (replace_vroot vroots (reduce_path (Filename.dirname manifest_path))) in
           if not (Filename.is_relative path) then path else 
           begin
             let path = reduce_path (manifest_dir ^ "/" ^ path) in
@@ -3243,6 +3243,7 @@ let link_program isLibrary allModulepaths dllManifest exports =
                 begin
                   let (dcl_file, name) = split_around_char dcl_part '#' in
                   if name = "" then manifest_corruption modulepath ("empty structure entry");
+                  if dcl_file = "" then manifest_corruption modulepath ("empty structure declaration file entry");
                   check_file_name def_file;
                   check_file_name dcl_file;
                 end;
@@ -3264,6 +3265,7 @@ let link_program isLibrary allModulepaths dllManifest exports =
                 begin
                   let (dcl_file, name) = split_around_char dcl_part '#' in
                   if name = "" then manifest_corruption modulepath ("empty predicate entry");
+                  if dcl_file = "" then manifest_corruption modulepath ("empty predicate declaration file entry");
                   check_file_name def_file;
                   check_file_name dcl_file;
                 end;
@@ -3284,6 +3286,7 @@ let link_program isLibrary allModulepaths dllManifest exports =
                 begin
                   let (path, name) = split_around_char symbol '#' in
                   if name = "" then manifest_corruption modulepath ("empty provides entry");
+                  if path = "" then manifest_corruption modulepath ("empty provides file entry");
                   check_file_name path;
                 end;
                 let symbol = rebase_path symbol in
@@ -3298,6 +3301,7 @@ let link_program isLibrary allModulepaths dllManifest exports =
                 begin
                   let (path, name) = split_around_char symbol '#' in
                   if name = "" then manifest_corruption modulepath ("empty requires entry");
+                  if path = "" then manifest_corruption modulepath ("empty requires file entry");
                   check_file_name path;
                 end;
                 let symbol = rebase_path symbol in

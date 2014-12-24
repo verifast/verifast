@@ -167,6 +167,24 @@ let _ =
   let linkShouldFail = ref false in
   let useJavaFrontend = ref false in
   let enforceAnnotations = ref false in
+  let vroots = ref [Util.crt_vroot] in
+  let add_vroot vroot =
+    let (root, expansion) = Util.split_around_char vroot '=' in
+    let check_root root =
+      if String.length root = 0 then false else
+      if String.uppercase root <> root then false else
+      let first = Char.code (String.get root 0) in
+      65 <= first && first <= 90
+    in
+    let expansion = 
+      if Filename.is_relative expansion then 
+        Util.reduce_path (Util.compose Util.cwd expansion) 
+      else 
+        expansion 
+    in
+    if Sys.file_exists expansion && check_root root then
+      vroots := List.append !vroots [(root, expansion)]
+  in
 
   (* Explanations that are an empty string ("") become hidden in the
    * "--help" output. When adding options, you can consider writing an
@@ -185,6 +203,7 @@ let _ =
             ; "-emit_vfmanifest", Set emitManifest, " "
             ; "-emit_dll_vfmanifest", Set emitDllManifest, " "
             ; "-emit_dll_vfmanifest_as", String (fun str -> dllManifestName := Some str), " "
+            ; "-vroot", String (fun str -> add_vroot str), "Add a virtual root for include paths and, creating or linking vfmanifest files (e.g. MYLIB=../../lib). Ill-formed roots are ignored."
             ; "-emit_highlighted_source_files", Set emitHighlightedSourceFiles, " "
             ; "-provides", String (fun path -> provides := !provides @ [path]), " "
             ; "-keep_provide_files", Set keepProvideFiles, " "
@@ -218,12 +237,13 @@ let _ =
           option_disable_overflow_check = !disable_overflow_check;
           option_allow_should_fail = !allowShouldFail;
           option_emit_manifest = !emitManifest;
+          option_vroots = !vroots;
           option_allow_assume = !allowAssume;
           option_simplify_terms = !simplifyTerms;
           option_runtime = !runtime;
           option_provides = !provides;
           option_keep_provide_files = !keepProvideFiles;
-          option_include_paths = !include_paths;
+          option_include_paths = List.map (Util.replace_vroot !vroots) !include_paths;
           option_safe_mode = !safe_mode;
           option_header_whitelist = !header_whitelist;
           option_use_java_frontend = !useJavaFrontend;
@@ -279,7 +299,7 @@ let _ =
           let dllManifest =
             if !emitDllManifest then Some (!dllManifestName) else None
           in
-          link_program (!isLibrary) allModules dllManifest !exports;
+          link_program !vroots (!isLibrary) allModules dllManifest !exports;
           if (!linkShouldFail) then 
             (print_endline "Error: link phase succeeded, while expected to fail (option -link_should_fail)."; exit 1)
           else print_endline "Program linked successfully."

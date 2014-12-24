@@ -323,16 +323,15 @@ let remove_prefix p s =
     None
 
 let crt_vroot = ("CRT", reduce_path bindir)
-let vroots = [crt_vroot]
 
-let replace_vroot path =
+let replace_vroot vroots path =
   let root::rest = split (fun c -> c = '/' || c = '\\') path in
   match try_assoc root vroots with
   | Some p -> reduce_path (p ^ "/" ^ String.concat "/" rest)
   | None -> path
 
-let qualified_path modpath (basedir, relpath) =
-  if (replace_vroot relpath) <> relpath then relpath else
+let qualified_path vroots modpath (basedir, relpath) =
+  if (replace_vroot vroots relpath) <> relpath then relpath else
   let module_basedir = reduce_path (compose cwd (Filename.dirname modpath)) in
   let module_basedir_prefix = module_basedir ^ "/" in
   let path = reduce_path (compose cwd (basedir ^ "/" ^ relpath)) in

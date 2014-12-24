@@ -128,6 +128,7 @@ type options = {
   option_disable_overflow_check: bool;
   option_allow_should_fail: bool;
   option_emit_manifest: bool;
+  option_vroots: (string * string) list;
   option_allow_assume: bool;
   option_simplify_terms: bool;
   option_runtime: string option;
