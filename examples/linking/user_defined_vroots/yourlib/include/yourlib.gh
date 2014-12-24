@@ -1,0 +1,8 @@
+#ifndef YOURLIB_GH
+#define YOURLIB_GH
+
+lemma void length_not_zero_not_nil<t>(list<t> xs);
+     requires length(xs) != 0;
+     ensures xs != nil;
+
+#endif

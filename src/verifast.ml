@@ -3149,7 +3149,7 @@ let parse_line line =
   for i = 0 to n - 1 do if symbol.[i] = '\\' then symbol.[i] <- '/' done;
   (command, symbol)
 
-let link_program vroots isLibrary allModulepaths dllManifest exports =
+let link_program vroots library_paths isLibrary allModulepaths dllManifest exports =
   let mainModulePath = match List.rev allModulepaths with [] -> raise (LinkError "DLL must contain at least one module.") | m::_ -> m in
   let mainModuleName = try Filename.chop_extension (Filename.basename mainModulePath) with Invalid_argument _ -> raise (CompilationError "file without extension") in
   let mainModuleManifest =
@@ -3183,8 +3183,17 @@ let link_program vroots isLibrary allModulepaths dllManifest exports =
         (file, read_file_lines file)
       with FileNotFound ->
         try
-          let file = concat bindir file in
-          (file, read_file_lines file)
+          let rec search_library_paths library_paths file =
+            match library_paths with 
+            | path::rest ->
+              let search_path = concat path file in
+              if Sys.file_exists search_path then
+                (search_path, read_file_lines search_path)
+              else
+               search_library_paths rest file
+            | [] -> raise FileNotFound
+          in
+          search_library_paths library_paths file
         with FileNotFound ->
           failwith ("VeriFast link phase error: could not find .vfmanifest file '" ^ file ^ 
                     "'. Re-verify the module using the -emit_vfmanifest or -emit_dll_vfmanifest option.")

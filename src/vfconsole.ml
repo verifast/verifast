@@ -162,6 +162,7 @@ let _ =
   let provides = ref [] in
   let keepProvideFiles = ref false in
   let include_paths: string list ref = ref [] in
+  let library_paths: string list ref = ref [Util.bindir] in
   let safe_mode = ref false in
   let header_whitelist: string list ref = ref [] in
   let linkShouldFail = ref false in
@@ -221,6 +222,7 @@ let _ =
               "Emits the AST as an s-expression to the specified file; raises exception on unsupported constructs."
             ; "-export", String (fun str -> exports := str :: !exports), " "
             ; "-I", String (fun str -> include_paths := str :: !include_paths), "Add a directory to the list of directories to be searched for header files."
+            ; "-L", String (fun str -> library_paths := str :: !library_paths), "Add a directory to the list of directories to be searched for manifest files during linking."
             ; "-safe_mode", Set safe_mode, "Safe mode (for use in CGI scripts)."
             ; "-allow_header", String (fun str -> header_whitelist := str::!header_whitelist), "Add the specified header to the whitelist."
             ; "-link_should_fail", Set linkShouldFail, "Specify that the linking phase is expected to fail."
@@ -290,6 +292,7 @@ let _ =
       begin
         try
           print_endline "Linking...";
+          let library_paths = List.map (Util.replace_vroot !vroots) !library_paths in
           let mydir = Filename.dirname Sys.executable_name in
           let libs = ["crt.dll.vfmanifest"] in
           let libs = List.map (Filename.concat mydir) libs in
@@ -299,7 +302,7 @@ let _ =
           let dllManifest =
             if !emitDllManifest then Some (!dllManifestName) else None
           in
-          link_program !vroots (!isLibrary) allModules dllManifest !exports;
+          link_program !vroots library_paths (!isLibrary) allModules dllManifest !exports;
           if (!linkShouldFail) then 
             (print_endline "Error: link phase succeeded, while expected to fail (option -link_should_fail)."; exit 1)
           else print_endline "Program linked successfully."

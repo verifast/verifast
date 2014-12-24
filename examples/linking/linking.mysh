@@ -60,14 +60,21 @@ cd include_paths
   del lib.vfmanifest
 cd ..
 
-cd user_defined_vroot
+cd user_defined_vroots
+  cd yourlib
+    verifast_both -c -emit_vfmanifest -I include lib/yourlib.c
+  cd ..
   cd mylib
     verifast_both -c -emit_vfmanifest -I include lib/mylib.c
   cd ..
   cd myprogram
-    verifast_both -c -emit_vfmanifest -vroot MYLIB=../mylib -I MYLIB/include myprogram.c
-    verifast_both -vroot MYLIB=../mylib MYLIB/lib/mylib.o myprogram.o
+    verifast_both -c -emit_vfmanifest -vroot YOURLIB=../yourlib -vroot MYLIB=../mylib -I YOURLIB/include -I MYLIB/include myprogram.c
+    verifast_both -vroot YOURLIB=../yourlib -vroot MYLIB=../mylib YOURLIB/lib/yourlib.o MYLIB/lib/mylib.o myprogram.o
+    del myprogram.vfmanifest
+    verifast_both -c -emit_vfmanifest -vroot YOURLIB=../yourlib/lib -vroot MYLIB=../mylib/lib -I YOURLIB/../include -I MYLIB/../include myprogram.c
+    verifast_both -vroot YOURLIB=../yourlib/lib -vroot MYLIB=../mylib/lib -L YOURLIB -L MYLIB yourlib.o mylib.o myprogram.o
+    del myprogram.vfmanifest
   cd ..
+  del yourlib/lib/yourlib.vfmanifest
   del mylib/lib/mylib.vfmanifest
-  del myprogram/myprogram.vfmanifest
 cd ..
