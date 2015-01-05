@@ -568,6 +568,14 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           (fun _ -> assume (ctxt#mk_not w) (fun _ -> verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss2 tcont return_cont econt))
       ))
     | SwitchStmt (l, e, cs) ->
+      let sizemap = match e with 
+        | Var (_, x, _) ->
+          begin match try_assoc x env with 
+            | None -> sizemap 
+            | Some t -> (match try_assq t sizemap with None -> (t, 0)::sizemap | Some _ -> sizemap)
+          end
+        | _ -> sizemap
+      in
       let lblenv = ("#break", fun blocks_done sizemap tenv ghostenv h env -> cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env))::lblenv in
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       let verify_expr ro h env opt e cont = verify_expr ro h env opt e cont econt in 

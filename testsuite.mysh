@@ -72,12 +72,13 @@ cd examples
   verifast_both -disable_overflow_check counter_with_pred.c
   verifast_both -disable_overflow_check counter_with_pred_auto.c
   verifast_both -shared threading.o counting_threads.c
-  verifast_both -c default_clause_test.c
   verifast_both -disable_overflow_check cp.c
-  ifz3 verifast -c decreases.c
   cd crypto
     mysh -cpus 1 < crypto.mysh
   cd ..
+  ifz3 verifast -c decreases.c
+  verifast_both -c default_clause_test.c
+  verifast_both -shared double_induction.c
   verifast_both -shared doubly_linked_list.c
   verifast_both -allow_assume -disable_overflow_check dyncode.c
   verifast_both enums.c

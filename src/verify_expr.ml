@@ -1504,6 +1504,15 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                       | Chunk ((p, true), _, coef, ts, _)::_ when List.memq p nonempty_pred_symbs && coef == real_unit -> true
                       | _::h -> nonempty h
                     in
+                    let check_nested_induction args =
+                      let rec iter args =
+                        match args with
+                        | Some k::args when k < 0 -> true
+                        | _::args -> iter args
+                        | _ -> false
+                      in 
+                      iter (List.map (fun x -> try_assq (List.assoc x env') sizemap) args)
+                    in
                     if nonempty h then
                       ()
                     else (
@@ -1521,14 +1530,16 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                               assert_false h env l "Recursive lemma call does not decrease the heap (no full field chunks left) or the derivation depth of the first chunk and there is no inductive parameter." (Some "recursivelemmacall")
                               )
                           end
-                      | Some x -> (
-                          match try_assq (List.assoc x env') sizemap with
-                            Some k when k < 0 -> ()
-                          | _ ->
+                      | Some x ->
+                          let fail _ =
                             with_context_force (Executing (h, env', l, "Checking recursion termination")) (fun _ ->
-                            assert_false h env l "Recursive lemma call does not decrease the heap (no full field chunks left) or the inductive parameter." None
-                          )
-                        )
+                              assert_false h env l "Recursive lemma call does not decrease the heap (no full field chunks left) or the inductive parameter(s)." None)
+                          in 
+                          if check_nested_induction [x] then () else
+                          match ys with
+                          (* if switch expression as body fails to do correct induction, try lexicographic order of arguments*)
+                          | y::_ when y = x -> if check_nested_induction ys then () else fail ()
+                          | _ -> fail ()
                     )
                   else
                     static_error l "A lemma can call only preceding lemmas or itself." None
