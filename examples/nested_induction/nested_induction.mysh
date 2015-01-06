@@ -1,0 +1,16 @@
+let verifast_both
+ifz3 verifast
+verifast -prover redux
+in
+
+verifast_both -c double_induction.c
+verifast_both -c nested_induction_correct.c
+verifast_both -c -allow_should_fail nested_induction_incorrect1.c
+verifast_both -c -allow_should_fail nested_induction_incorrect2.c
+verifast_both -c -allow_should_fail nested_induction_incorrect3.c
+verifast_both -c -allow_should_fail nested_induction_incorrect4.c
+verifast_both -c -allow_should_fail nested_induction_incorrect5.c
+verifast_both -c -allow_should_fail nested_induction_incorrect6.c
+verifast_both -c -allow_should_fail nested_induction_incorrect7.c
+verifast_both -c -allow_should_fail nested_induction_incorrect8.c
+verifast_both -c -allow_should_fail nested_induction_incorrect9.c

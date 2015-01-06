@@ -572,7 +572,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | Var (_, x, _) ->
           begin match try_assoc x env with 
             | None -> sizemap 
-            | Some t -> (match try_assq t sizemap with None -> (t, 0)::sizemap | Some _ -> sizemap)
+            | Some t -> (match try_assq t sizemap with None -> (t, (t, 0))::sizemap | Some _ -> sizemap)
           end
         | _ -> sizemap
       in
@@ -633,7 +633,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let sizemap =
               match try_assq v sizemap with
                 None -> sizemap
-              | Some k -> List.map (fun (x, t) -> (t, k - 1)) xenv @ sizemap
+              | Some(t, k) -> List.map (fun (x, tx) -> (tx, (t, k - 1))) xenv @ sizemap
             in
             branch
               (fun _ -> assume_eq v (mk_app ctorsym xterms) (fun _ -> verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap (ptenv @ tenv) (pats @ ghostenv) h (xenv @ env) ss tcont return_cont econt))
@@ -2360,9 +2360,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let (sizemap, indinfo) =
       match ss with
         [SwitchStmt (_, Var (_, x, _), _)] -> (
-        match try_assoc x penv with
+        match try_assoc_i x penv with
           None -> ([], None)
-        | Some t -> ([(t, 0)], Some x)
+        | Some(i, t) -> ([(t, (t, 0))], Some (x, i, List.map (fun (_, t) -> t) penv))
         )
       | _ -> ([], None)
     in
@@ -2450,7 +2450,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       [SwitchStmt (_, Var (_, x, _), _)] ->
         (match try_assoc x env with
            None -> ([], None)
-         | Some t -> ([(t, 0)], Some x)
+         | Some t -> ([(t, (t, 0))], Some x)
         )
     | _ -> ([], None)
   

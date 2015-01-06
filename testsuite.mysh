@@ -78,7 +78,9 @@ cd examples
   cd ..
   ifz3 verifast -c decreases.c
   verifast_both -c default_clause_test.c
-  verifast_both -shared double_induction.c
+  cd nested_induction
+    mysh < nested_induction.mysh
+  cd ..
   verifast_both -shared doubly_linked_list.c
   verifast_both -allow_assume -disable_overflow_check dyncode.c
   verifast_both enums.c

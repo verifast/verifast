@@ -1400,7 +1400,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   | LemInfo of
       string list  (* Preceding lemmas *)
       * string  (* Current lemma *)
-      * string option  (* Inductive parameter *)
+      * (string * int * (termnode) list) option  (* Inductive parameter name, its index and paramter list*)
       * bool  (* nonghost_callers_only *)
   
   let leminfo_is_lemma leminfo =
@@ -1504,42 +1504,48 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                       | Chunk ((p, true), _, coef, ts, _)::_ when List.memq p nonempty_pred_symbs && coef == real_unit -> true
                       | _::h -> nonempty h
                     in
-                    let check_nested_induction args =
-                      let rec iter args =
-                        match args with
-                        | Some k::args when k < 0 -> true
-                        | _::args -> iter args
-                        | _ -> false
-                      in 
-                      iter (List.map (fun x -> try_assq (List.assoc x env') sizemap) args)
-                    in
                     if nonempty h then
                       ()
                     else (
+                      let recursive_check_fail msg =
+                        with_context_force (Executing (h, env', l, "Checking recursion termination")) 
+                          (fun _ -> assert_false h env l msg (Some "recursivelemmacall"))
+                      in
                       match indinfo with
                         None ->
                           begin
                             match chunk_size with
                               Some (PredicateChunkSize k) when k < 0 -> ()
-                            | Some (PredicateChunkSize k) when k > 0 ->
-                              with_context_force (Executing (h, env', l, "Checking recursion termination")) (fun _ ->
-                                assert_false h env l "Coinductive proof not supported yet." (Some "recursivelemmacall")
-                              )
+                            | Some (PredicateChunkSize k) when k > 0 -> 
+                                recursive_check_fail "Coinductive proof not supported yet."
                             | _ ->
-                              with_context_force (Executing (h, env', l, "Checking recursion termination")) (fun _ ->
-                              assert_false h env l "Recursive lemma call does not decrease the heap (no full field chunks left) or the derivation depth of the first chunk and there is no inductive parameter." (Some "recursivelemmacall")
-                              )
+                                recursive_check_fail "Recursive lemma call does not decrease the heap (no full field chunks left) or the derivation depth of the first chunk and there is no inductive parameter."
                           end
-                      | Some x ->
-                          let fail _ =
-                            with_context_force (Executing (h, env', l, "Checking recursion termination")) (fun _ ->
-                              assert_false h env l "Recursive lemma call does not decrease the heap (no full field chunks left) or the inductive parameter(s)." None)
-                          in 
-                          if check_nested_induction [x] then () else
-                          match ys with
-                          (* if switch expression as body fails to do correct induction, try lexicographic order of arguments*)
-                          | y::_ when y = x -> if check_nested_induction ys then () else fail ()
-                          | _ -> fail ()
+                      | Some (x, i, params) ->
+                          let fail () = recursive_check_fail "Recursive lemma call does not decrease the heap (no full field chunks left) or the inductive parameter(s)." in
+                          if i != 0 then
+                            (* induction on one parameter that is not the first *)
+                            begin
+                              match try_assq (List.assoc x env') sizemap with
+                              | Some(t, k) when k < 0 && t == (List.nth params i) -> ()
+                              | _ -> fail ()
+                            end
+                          else
+                            (* lexicographic induction on all parameters *)
+                            begin
+                              let rec check_nested_induction (params, rec_args) =
+                                match (params, rec_args) with
+                                | (t1::params, t2::rec_args) ->
+                                    begin
+                                      match try_assq t2 sizemap with
+                                      | Some (t, k) when k < 0 && t1 == t -> true 
+                                      | Some (t, k) when k = 0 && t1 == t -> check_nested_induction (params, rec_args)
+                                      | _ -> false
+                                    end
+                                | ([], []) -> false
+                              in
+                              if not (check_nested_induction (params, ts)) then fail ()
+                            end
                     )
                   else
                     static_error l "A lemma can call only preceding lemmas or itself." None
