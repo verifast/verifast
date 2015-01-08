@@ -9,6 +9,10 @@
  * We thus prove that this program does not crash.
  * The main function closes the necessary I/O predicates required by read_hi and write_hi.
  *
+ * The enqueue and dequeue function of the (ring)buffer only have one contract
+ * and implementation that is not specific for this use of the buffer.
+ * It is implemented once and verified once.
+ *
  * It is probably possible to make this file more compact by making some lemmas more generic.
  */
 

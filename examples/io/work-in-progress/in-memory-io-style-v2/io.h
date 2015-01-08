@@ -19,12 +19,12 @@
  *   This is up to the join of this thread.
  * - list<fixpoint(list<int>, list<int>, bool)> guarantee_stack,
  *   The acumulated guarantee relation before the last split.
- *   Because join-split can be nested, this is a list.
+ *   Because join-split can be nested, this is a list of fixpoints.
  * - fixpoint(list<int>, list<int>, bool) rely,
  *   Transitions all other threads can perform in the past and in the future.
  * - list<fixpoint(list<int>, list<int>, bool)> rely_stack1
  *   Rely-relation before the last split.
- *   Because join-split can be nested, this is a list.
+ *   Because join-split can be nested, this is a list of fixpoints.
  *
  * Note: instead of writing
  *   time(t1) &*& io1(t1, t2) &*& io2(t1, t2) &*& io3(t2, t3)
