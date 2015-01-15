@@ -62,5 +62,21 @@ lemma void split_specific(place t1);
     requires split(t1, ?t2, ?t3) &*& token(t1);
     ensures token(t2) &*& token(t3);
 
+/**
+ * Permission to do nothing.
+ * This is useful to make I/O optional:
+ * In the following precondition, some_io is optional, i.e. the
+ * program is allowed to not perform I/O:
+ *   token(?t1) &*& no_op(t1, ?t2) &*& some_io(t1, t2)
+ */
+predicate no_op(place t1, place t2);
+
+/**
+ * Performs the no_op I/O action,
+ * i.e. moves from place t1 to t2 if given permission.
+ */
+lemma void no_op();
+requires token(?t1) &*& no_op(t1, ?t2);
+ensures token(t2);
 
 #endif

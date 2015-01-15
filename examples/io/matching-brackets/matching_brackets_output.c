@@ -8,38 +8,39 @@
  */
 #include <stdio_simple.h>
 
-//@ #include <bigstar.gh>
-
 /*@
-// Expresses the following grammar:   brackets = '(' brackets ')' brackets | epsilon
-predicate matching_brackets_helper(place t1, list<bool> choices, place t2) =
-  t1 == t2 ?
-    choices == {false}
-  :
-    write_char_io(t1, stdout, '(', _, ?t_open)
-    &*& matching_brackets_helper(t_open, ?subchoices1, ?t_center)
-    &*& write_char_io(t_center, stdout, ')', _, ?t_close)
-    &*& matching_brackets_helper(t_close, ?subchoices2, t2)
-    &*& choices == cons(true, append(subchoices1, subchoices2))
-;
+/* We have two copredicates (matching_brackets and matching_brackets_helper)
+ * because it makes it easier to deal with leaking unused permissions.
+ * If you prefere to only use one copredicate, this is possible as well.
+ * It is also possible to use one copredicate for the contract,
+ * and convert it to two copredicates (using a lemma) for verification.
+ */
+copredicate matching_brackets_helper(place t1, place t2) =
+  write_char_io(t1, stdout, '(', _, ?t_open)
+  &*& matching_brackets(t_open, ?t_center)
+  &*& write_char_io(t_center, stdout, ')', _, ?t_close)
+  &*& matching_brackets(t_close, t2);
 
-// Make it a predicate with one argument because bigstar expects the predicate to have one argument.
-predicate_ctor matching_brackets_ctor(place t1, place t2)(list<bool> choices) =
-  matching_brackets_helper(t1, choices, t2);
+// Expresses the following grammar:   brackets = '(' brackets ')' brackets | epsilon
+copredicate matching_brackets(place t1, place t2) =
+  no_op(t1, t2) // epsilon
+  &*& matching_brackets_helper(t1, t2);
 @*/
 
-
 void main()
-//@ requires token(?t1) &*& exists<place>(?t2) &*& bigstar<list<bool> >(matching_brackets_ctor(t1, t2), nil);
+//@ requires token(?t1) &*& matching_brackets(t1, ?t2);
 //@ ensures token(t2);
 {
-  //@ bigstar_extract(matching_brackets_ctor(t1, t2), {true, false, false});
-  //@ open matching_brackets_ctor(t1,t2)(_);
-  //@ open matching_brackets_helper(_, _, _);
+  //@ open matching_brackets(t1, t2);
+  //@ leak no_op(_, _);
+  //@ open matching_brackets_helper(t1, t2);
   //@ assert write_char_io(t1, _, '(', _, ?t_open); // bind t_open
-  //@ open matching_brackets_helper(t_open, _, _); // open this one first.
-  //@ open matching_brackets_helper(_, _, _);
   putchar('(');
+  //@ open matching_brackets(t_open, ?t_center);
+  //@ leak matching_brackets_helper(t_open, t_center);
+  //@ no_op();
   putchar(')');
-  //@ leak bigstar(_, _);
+  //@ open matching_brackets(?t_close, t2);
+  //@ no_op();
+  //@ leak matching_brackets_helper(t_close, t2);
 }
