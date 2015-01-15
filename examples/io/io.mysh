@@ -21,11 +21,10 @@ cd ..
 cd matching-brackets
   verifast_both stdio_simple.o -shared -disable_overflow_check matching-brackets-input.c
   verifast_both stdio_simple.o -shared matching_brackets_checker.c
-  verifast_both CRT/io.o stdio_simple.o bigstar.o -shared matching_brackets_output.c
+  verifast_both CRT/io.o stdio_simple.o -shared matching_brackets_output.c
 cd ..
 cd output-anything
   verifast_both stdio_simple.o bigstar.o -shared output-any-char.c
-  verifast_both stdio_simple.o bigstar.o -shared output-any-string.c
 cd ..
 cd never-ending-program
   verifast_both stdio_simple.o -shared yes.c
