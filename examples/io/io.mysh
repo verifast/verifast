@@ -25,6 +25,7 @@ cd matching-brackets
 cd ..
 cd output-anything
   verifast_both stdio_simple.o bigstar.o -shared output-any-char.c
+  verifast_both stdio_simple.o CRT/io.o bigstar.o -shared output-any-string.c
 cd ..
 cd never-ending-program
   verifast_both stdio_simple.o -shared yes.c
