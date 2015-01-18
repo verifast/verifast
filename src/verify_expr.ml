@@ -721,13 +721,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 if fbinding = Static then
                   post
                 else
-                  let default_value =
+                  let value =
                     match ft with
-                      Bool -> False fl
-                    | IntType | ShortType | Char -> IntLit (fl, zero_big_int, ref (Some ft))
-                    | ObjType _ | ArrayType _ -> Null fl
+                      Bool -> LitPat (False fl)
+                    | IntType | ShortType | Char -> LitPat (IntLit (fl, zero_big_int, ref (Some ft)))
+                    | ObjType _ | ArrayType _ -> LitPat (Null fl)
+                    | _ -> DummyPat
                   in
-                  Sep (l, post, WPointsTo (fl, WRead (fl, Var (fl, "this", ref (Some LocalVar)), cn, f, ft, false, ref (Some None), Real), ft, LitPat default_value))
+                  Sep (l, post, WPointsTo (fl, WRead (fl, Var (fl, "this", ref (Some LocalVar)), cn, f, ft, false, ref (Some None), Real), ft, value))
               end
               super_post
               fds
