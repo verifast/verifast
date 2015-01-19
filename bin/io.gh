@@ -73,7 +73,19 @@ predicate no_op(place t1, place t2);
 
 /**
  * Performs the no_op I/O action,
- * i.e. moves from place t1 to t2 if given permission.
+ * i.e. "moves" from place t1 to t2 if given permission.
+ *
+ * Note that this is not the same as asserting t1==t2.
+ * Example:
+ *   some_io(t1, t2) &*& other_io(t1, t2) &*& no_op(t1, t2)
+ *   This expresses that the program must do either
+ *   some_io, other_io, or nothing.
+ *
+ *   some_io(t1, t2) &*& other_io(t1, t2) &*& t1==t2
+ *   This expresses that the program must do either
+ *   some_io, other_io, nothing, or
+ *   some_io followed by other_io, or other_io followed by some_io.
+ * 
  */
 lemma void no_op();
 requires token(?t1) &*& no_op(t1, ?t2);

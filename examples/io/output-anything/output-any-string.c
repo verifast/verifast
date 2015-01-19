@@ -25,11 +25,7 @@ void write_string(char *string_arg)
 {
   char *string_iterator = string_arg;
   //@ close exists(tail(str));
-  //@ open [f]string(string_arg, str);
-
-
-  // TODO: rename string_temp -> string_iterator
-  
+  //@ open [f]string(string_arg, str);  
   //@ open write_string_io(t1, str, t2);
   /*@
   if (str == nil){
