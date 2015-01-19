@@ -1714,7 +1714,7 @@ let parse_jarsrc_file_core path =
       [] -> provides
     | [line] when startswith line "main-class " ->
       let mainClass = String.sub line (String.length "main-class ") (String.length line - String.length "main-class ") in
-      provides @ ["main_class " ^ mainClass]
+      provides @ [(Util.concat Util.bindir "main_class ") ^ mainClass]
     | _ ->
       raise (ParseException (file_loc path, "A .jarsrc file must consists of a list of .jar file paths followed by a list of .java file paths, optionally followed by a line of the form \"main-class mymainpackage.MyMainClass\""))
   in
