@@ -33,8 +33,8 @@ cd assert
 cd ..
 
 cd assign
-  verifast -c -disable_overflow_check Assign.java
-  verifast -c -disable_overflow_check -javac Assign.java
+  ifz3 verifast -c -disable_overflow_check Assign.java
+  ifz3 verifast -c -disable_overflow_check -javac Assign.java
 cd ..
 
 cd exceptions
