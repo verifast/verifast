@@ -1,4 +1,4 @@
-# Script to verify all IO related examples.
+# Script to verify all input/output related examples.
 #
 let verifast_both
 ifz3 verifast
@@ -45,8 +45,8 @@ cd user_sets_contract
 cd ..
 cd turing_complete
   verifast_both stdio_simple.o -shared turing_complete.c
-  verifast_both stdio_simple.o -shared turing_complete_lowtech.c
-  verifast_both stdio_simple.o -shared turing_complete_underspec_lowtech.c
+  verifast_both CRT/io.o stdio_simple.o -shared turing_complete_lowtech.c
+  verifast_both CRT/io.o stdio_simple.o -shared turing_complete_underspec_lowtech.c
 cd ..
 cd template_method
   verifast_both -c TemplateMethod.java

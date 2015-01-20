@@ -58,7 +58,7 @@ copredicate tm_lowtech_io(place t1, list<int> tm, int cur_state, list<int> tape_
     write_char_io(t1, stdout, write_value, ?success, ?t_before)
     &*& tm_lowtech_io(t_before, tm, new_state, tape_left, tape_cur_and_right, t2)
   : _action == 4 ?   // halt (encoded in TM as no transition)
-    t2 == t1
+    no_op(t1, t2)
   : // does not happen for proper encoded turing machines
     emp
 ;
@@ -79,14 +79,13 @@ copredicate tm_lowtech_io(place t1, list<int> tm, int cur_state, list<int> tape_
 void cat()
 /*@ requires token(?t1)
   &*& tm_lowtech_io(t1, ?tm, 0, {}, {}, ?t2)
-  &*& tm == {
-      // state, on_tape, action, write, new_state
-         0    , 0      , 2     , -1   , 1, // because tape is initially empty.
-         0    , 'a'    , 2     , -1   , 1,
-         0    , 'b'    , 2     , -1   , 1,
-         1    , 'a'    , 3     , 'a'  , 0,
-         1    , 'b'    , 3     , 'b'  , 0
-    };
+  // columns: state, on_tape, action, write, new_state
+  &*& tm == { 0    , 0      , 2     , -1   , 1, // because tape is initially empty.
+              0    , 'a'    , 2     , -1   , 1,
+              0    , 'b'    , 2     , -1   , 1,
+              1    , 'a'    , 3     , 'a'  , 0,
+              1    , 'b'    , 3     , 'b'  , 0
+  };
 @*/
 //@ ensures token(t2);
 {
@@ -97,7 +96,7 @@ void cat()
         tm_lowtech_io(t1_loop, tm, 0, {}, ?tape_right, t2)
         &*& tape_right == nil || tape_right == {97} || tape_right == {98}
       :
-        t2 == t1_loop;
+        no_op(t1_loop, t2);
     @*/
   {
     //@ open tm_lowtech_io(_, _, _, _, ?tape_right, _);
@@ -116,6 +115,7 @@ void cat()
       putchar(c);
     }
   }
+  //@ no_op();
 }
 
 

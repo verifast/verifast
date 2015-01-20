@@ -165,7 +165,7 @@ fixpoint t option_unpack<t>(option<t> option){
  */
 copredicate tm_io(place t1, tm tm, tm_config config, place t2) =
   tm_step(tm, config) == none ?
-    t2 == t1
+    no_op(t1, t2)
   :
     [_]exists(?t_before)
     &*& [_]exists(?new_config)

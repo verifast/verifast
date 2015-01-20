@@ -44,7 +44,7 @@ copredicate tm_lookup_io(place t1, list<int> tm, list<int> tm_unwinding, bool li
     line_found ? // There was at least one transition, i.e. the TM did not halt
       emp
     :
-      t2 == t1 // No transition in TM. Halt.
+      no_op(t1, t2) // No transition in TM. Halt.
   :
     // Take the table of the transitions with the first row removed
     [_]exists<list<int> >(?tm_smaller) &*& tm_smaller == tail(tail(tail(tail(tail(tm_unwinding)))))
@@ -65,7 +65,7 @@ copredicate tm_lookup_io(place t1, list<int> tm, list<int> tm_unwinding, bool li
       &*& tm_transition_io(t1, tm, _action, write_value, new_state, tape_left, tape_right, t2)
       
     : // The transition was for wrong state/symbol, let's continiue searching transitions
-      tm_lookup_io(t1, tm, tm_smaller, false, state, tape_left, tape_right, t2)
+      tm_lookup_io(t1, tm, tm_smaller, line_found, state, tape_left, tape_right, t2)
 ;
 
 /**
@@ -93,14 +93,13 @@ copredicate tm_io(place t1, list<int> tm, int state, list<int> tape_left, list<i
 void cat()
 /*@ requires token(?t1)
   &*& tm_io(t1, ?tm, 0, {}, {}, ?t2)
-  &*& tm == {
-      // state, on_tape, action, write, new_state
-         0    , 0      , 2     , -1   , 1, // because tape is initially empty.
-         0    , 'a'    , 2     , -1   , 1,
-         0    , 'b'    , 2     , -1   , 1,
-         1    , 'a'    , 3     , 'a'  , 0,
-         1    , 'b'    , 3     , 'b'  , 0
-    };
+  // columns: state, on_tape, action, write, new_state
+  &*& tm == { 0    , 0      , 2     , -1   , 1, // because tape is initially empty.
+              0    , 'a'    , 2     , -1   , 1,
+              0    , 'b'    , 2     , -1   , 1,
+              1    , 'a'    , 3     , 'a'  , 0,
+              1    , 'b'    , 3     , 'b'  , 0
+  };
 @*/
 //@ ensures token(t2);
 {
@@ -111,7 +110,7 @@ void cat()
         tm_io(t1_loop, tm, 0, {}, ?tape_right, t2)
         &*& tape_right == nil || tape_right == {c}
       :
-        t2 == t1_loop;
+        no_op(t1_loop, t2);
     @*/
   {
     //@ open tm_io(_, _, _, _, ?tape_right, _);
@@ -137,6 +136,7 @@ void cat()
       putchar(c);
     }
   }
+  //@ no_op();
 }
 
 
