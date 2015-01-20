@@ -35,7 +35,7 @@ void syscall_putchar(int c);
 /*@
 predicate syscall_write_io(place t1, list<int> string, place t2) =
   string == nil ?
-    t1 == t2
+    no_op(t1, t2)
   :
     syscall_putchar_io(t1, head(string), ?t_between)
     &*& syscall_write_io(t1, tail(string), t2);
@@ -61,12 +61,16 @@ predicate stdlib(struct stdlib *stdlib, place t1, place t2) =
     syscall_putchar_io(t1, i, t2)
   :
     buffer_size == 0
+    // this is not a no_op; stdlib does not represent
+    // a regular i/o action. Instead it contains the
+    // set of postponed I/O actions (because of buffering),
+    // which can be the empty set. In that case, t1==t2.
     &*& t1 == t2
 ;
 
 predicate stdlib_putchars_io(place t1, list<int> string, place t2) =
   string == nil ?
-    t1 == t2
+    no_op(t1, t2)
   :
     syscall_putchar_io(t1, head(string), ?t_between)
     &*& stdlib_putchars_io(t_between, tail(string), t2)

@@ -18,12 +18,12 @@
 
 /*@
 
-predicate print_unary_io(place t1, int number; place t_end) =
+predicate print_unary_io(place t1, int number, place t_end) =
   number >= 1 ?
     write_char_io(t1, stdout, '1', _, ?t2)
     &*& print_unary_io(t2, number - 1, t_end)
   :
-    t_end == t1;
+    no_op(t1, t_end);
 
 copredicate infinite_counter_io(place t1, int number, place t_end) =
   print_unary_io(t1, number, ?t2)
@@ -55,6 +55,7 @@ void main()
       unary_count = unary_count + ((unsigned int) 1);
     }
     //@ open print_unary_io(_, _, _);
+    //@ no_op();
     putchar('\n');
     if (count == UINT_MAX){
       abort(); // use bigint if you want more.

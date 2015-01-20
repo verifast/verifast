@@ -20,21 +20,23 @@ predicate read_till_eof_io(place t1; list<char> contents, place t2) =
     read_till_eof_io(t_read, ?sub, t2)
     &*& contents == cons(c, sub)
   :
-    t2 == t_read
-    &*& contents == nil;
+    t2 == t_read &*& contents == nil;
 @*/
 
 /*@
-predicate tee_out_string_io(place t1, list<char> contents; place t2) =
+predicate tee_out_string_io(place t1, list<char> contents, place t2) =
   contents == nil ?
-    t2 == t1
+    // It's also possible to write "t2==t1" here,
+    // but it is better to write "no_op(t1, t2)".
+    // See the documentation of no_op in io.gh for more info.
+    no_op(t1, t2)
   :
     tee_out_io(t1, head(contents), ?t_read)
     &*& tee_out_string_io(t_read, tail(contents), t2);
 @*/
 
 /*@
-predicate tee_buffered_io(place t1, list<char> contents; place t2) =
+predicate tee_buffered_io(place t1, list<char> contents, place t2) =
   split(t1, ?t_read1, ?t_write1)
     &*& read_till_eof_io(t_read1, contents, ?t_read2)
     // --
@@ -89,6 +91,7 @@ int main(int argc, char **argv) //@ : main_io(tee_buffered)
     }
     /*@
     if (c2 < 0){
+      no_op();
       join();
     }
     @*/

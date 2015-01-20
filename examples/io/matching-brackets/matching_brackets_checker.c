@@ -1,17 +1,17 @@
 /**
- * Reads a string.
+ * Reads a string and outputs whether it is a string of the mathing brackets grammar.
+ *
  * Consider the grammar of matching brackets: B ::= `(' B `)' B | emptystring
- * If this string is of the language defined by the grammer then print `1'.
+ * If the string that is read is of the language defined by the grammer, then print `1'.
  * If it is not, print `0'.
  *
  */
 
-//#include <stdbool.h>
 //#include <stdio.h>
 #include <stdio_simple.h>
 //@ #include <io.gh>
 #include <malloc.h>
-#include <stdlib.h> // abort()
+#include <stdlib.h> // abort() (used when malloc fails)
 
 
 int *c;
@@ -39,27 +39,8 @@ int peek_read_ahead()
   //@ close [f]buffer(cc, ccc);
 }
 
-
-/*
- * Note that this predicate would be incorrect:
- *
- * predicate matching_brackets_helper(place t1, bool valid, place t2) =
- *   t1 != t2 ?
- *     read_char_io(t1, stdin, ?should_be_open, _, ?t_open)
- *     &*& matching_brackets_helper(t_open, ?sub_valid1, ?t_center)
- *     &*& read_char_io(t_center, stdin, ?should_be_close, _, ?t_close)
- *     &*& matching_brackets_helper(t_close, ?sub_valid2, t2)
- *     &*& t2 == t_close
- *     &*& valid == (should_be_open == '(' && should_be_close == ')' && sub_valid1 && sub_valid2)
- *   :
- *      valid == true;
- *
- * In case valid==true the string read will indeed be one of the strings of
- * the language described by the grammer. However, if valid==false, it
- * is possible the string is actually one of the language.
- */
 /*@
-predicate brackets_io(place t_read1, int read1; int read5, bool valid, place t_read5) =
+predicate brackets_io(place t_read1, int read1, int read5, bool valid, place t_read5) =
 
   //        (   brackets   )   brackets
   // read:  1   2          3   4          5
@@ -71,7 +52,7 @@ predicate brackets_io(place t_read1, int read1; int read5, bool valid, place t_r
     &*& brackets_io(t_read4, read4, read5, ?subvalid2, t_read5)
     &*& valid == (subvalid1 && read3 == ')' && subvalid2)
   :
-   t_read5 == t_read1 &*& read5 == read1
+   no_op(t_read1, t_read5) &*& read5 == read1
    &*& valid == (read1 < 0 || read1 == ')');
 @*/
 
@@ -93,6 +74,7 @@ bool brackets()
     return brackets1 && should_be_close && brackets2;
   } else{
      int i = peek_read_ahead();
+     //@ no_op();
      if (i < 0){
       return true;  // empty string because read eof
     } else if (peek_read_ahead() == ')'){
@@ -118,8 +100,13 @@ void main()
   if (c == 0){
     abort();
   }
-  int c_local = getchar(); // Split because of "This potentially side-effecting expression"
+  
+  // Split in two lines because otherwise we have the erro
+  // "This potentially side-effecting expression is not supported in this position,
+  //  because of C's unspecified evaluation order".
+  int c_local = getchar();
   *c = c_local;
+  
   //@ close buffer(c, c_local);
   bool match = brackets();
   if (match == true){

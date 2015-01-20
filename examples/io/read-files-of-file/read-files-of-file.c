@@ -20,7 +20,6 @@
 #include <stdio_simple.h>
 
 /*@
-
 predicate read_opened_file(place t1, FILE *f; list<char> text, place t_end) =
   read_char_io(t1, f, ?c, ?success, ?t2)
   // On paper, we write "c >= 0 ?" instead of "success ?" as a simplification.
@@ -56,12 +55,14 @@ predicate write_opened_file(place t1, FILE *file_handle,
 // and that works, but for similarity with the example on
 // paper, we write "list<char> filenames" (one char per
 // filename).
-predicate read_files_io(place t1, list<char> filenames;
+predicate read_files_io(place t1, list<char> filenames,
   list<char> text, place t_end) =
   
   filenames == nil ?
-    t_end == t1
-    &*& text == nil
+    // It's also possible to write "t_end==t1" here,
+    // but it is better to write "no_op(t1, t_end)".
+    // See the documentation of no_op in io.gh for more info.
+    no_op(t1, t_end) &*& text == nil
   :
     read_file(t1, {head(filenames)}, ?text1, ?t2)
     &*& read_files_io(t2, tail(filenames), ?text2, t_end)
@@ -70,7 +71,7 @@ predicate read_files_io(place t1, list<char> filenames;
 
 predicate read_filename_list_io(place t1, FILE *stream; list<char>
   filenames, place t_end) =
-  
+
   read_char_io(t1, stream, ?c, ?success, ?t2)
   &*& success ? // equivalent with "c >= 0"
     read_filename_list_io(t2, stream, ?sub_filenames, t_end)
@@ -181,6 +182,7 @@ void main()
     if (c < 0){
       open read_files_io(_, _, _, _);
       open write_opened_file(_, _, _, _);
+      no_op();
     }
     @*/
   }
