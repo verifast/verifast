@@ -18,37 +18,37 @@ cd work-in-progress
     verifast -allow_assume foralls.o prophecy.o ../../../vstte2012/problem3/problem3.c writehi_readhi.c
   cd ..
 cd ..
-cd matching-brackets
-  verifast_both stdio_simple.o -shared -disable_overflow_check matching-brackets-input.c
+cd matching_brackets
+  verifast_both stdio_simple.o -shared -disable_overflow_check matching_brackets_input.c
   verifast_both CRT/io.o stdio_simple.o -shared matching_brackets_checker.c
   verifast_both CRT/io.o stdio_simple.o -shared matching_brackets_output.c
 cd ..
-cd output-anything
-  verifast_both stdio_simple.o bigstar.o -shared output-any-char.c
-  verifast_both stdio_simple.o CRT/io.o bigstar.o -shared output-any-string.c
+cd output_anything
+  verifast_both stdio_simple.o bigstar.o -shared output_any_char.c
+  verifast_both stdio_simple.o CRT/io.o bigstar.o -shared output_any_string.c
 cd ..
-cd never-ending-program
+cd never_ending_program
   verifast_both stdio_simple.o -shared yes.c
-  verifast_both CRT/io.o stdio_simple.o -shared infinite-counter.c
+  verifast_both CRT/io.o stdio_simple.o -shared infinite_counter.c
 cd ..
-cd hello-world
-  verifast_both stdio_simple.o -shared hello-world.c
+cd hello_world
+  verifast_both stdio_simple.o -shared hello_world.c
 cd ..
-cd read-files-of-file
-  verifast_both io.o stdio_simple.o -shared read-files-of-file.c
+cd read_files_of_file
+  verifast_both io.o stdio_simple.o -shared read_files_of_file.c
 cd ..
-cd buffering-in-library
-  verifast_both stdio_simple.o -shared -c putchar-with-buffer.c
+cd buffering_in_library
+  verifast_both stdio_simple.o -shared -c putchar_with_buffer.c
 cd ..
-cd user-sets-contract
+cd user_sets_contract
   mysh < verify.mysh
 cd ..
-cd turing-complete
-  verifast_both stdio_simple.o -shared turing-complete.c
-  verifast_both stdio_simple.o -shared turing-complete-lowtech.c
-  verifast_both stdio_simple.o -shared turing-complete-underspec-lowtech.c
+cd turing_complete
+  verifast_both stdio_simple.o -shared turing_complete.c
+  verifast_both stdio_simple.o -shared turing_complete_lowtech.c
+  verifast_both stdio_simple.o -shared turing_complete_underspec_lowtech.c
 cd ..
-cd template-method
+cd template_method
   verifast_both -c TemplateMethod.java
   verifast_both -c TemplateMethodWhile.java
 cd ..
