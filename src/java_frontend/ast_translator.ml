@@ -449,16 +449,18 @@ and check_contract l anns throws generate =
   if terminates' then error l' "'terminates' clauses are not yet supported.";
   let throws' = 
     List.map 
-      (fun c -> 
-        match translate_throws_clause l' c with 
-          | (t, None) -> 
-              if (!enforce_annotations) then
-                error l' "Throw clauses must have an ensures clause."
-              else if (List.length anns > 0) then
-                error l' "If you give a method a contract, you must also give ensures clauses for the thrown expceptions."
-              else
-                (t, ExprAsn(l', True(l')))
-          | (t, Some(a)) -> (t, a)
+      (fun (t, c) -> 
+        if (List.length anns = 0) then
+        (
+          let t' = translate_ref_type t in
+          (t', ExprAsn(l', True(l')))
+        )
+        else
+        (
+          match translate_throws_clause l' (t, c) with 
+            | (t', None) -> error l' "Throw clauses must have an ensures clause."
+            | (t', Some(a)) -> (t', a)
+        )
       )      
     throws
   in
