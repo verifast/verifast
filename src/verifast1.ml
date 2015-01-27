@@ -2673,20 +2673,20 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         Some result -> result
       | None ->
       match resolve Real (pn,ilist) l x classmap1 with
-        Some (cn, _) -> (e, ClassOrInterfaceName cn, None)
+        Some (cn, _) -> scope := Some ClassOrInterfaceNameScope; (e, ClassOrInterfaceName cn, None)
       | None ->
       match resolve Real (pn,ilist) l x interfmap1 with
-        Some (cn, _) -> (e, ClassOrInterfaceName cn, None)
+        Some (cn, _) -> scope := Some ClassOrInterfaceNameScope; (e, ClassOrInterfaceName cn, None)
       | None ->
       match resolve Real (pn,ilist) l x classmap0 with
-        Some (cn, _) -> (e, ClassOrInterfaceName cn, None)
+        Some (cn, _) -> scope := Some ClassOrInterfaceNameScope; (e, ClassOrInterfaceName cn, None)
       | None ->
       match resolve Real (pn,ilist) l x interfmap0 with
-        Some (cn, _) -> (e, ClassOrInterfaceName cn, None)
+        Some (cn, _) -> scope := Some ClassOrInterfaceNameScope; (e, ClassOrInterfaceName cn, None)
       | None ->
-      if is_package x then
-        (e, PackageName x, None)
-      else
+      if is_package x then begin
+        scope := Some PackageNameScope; (e, PackageName x, None)
+      end else
         cont ()
       end $. fun () ->
       match resolve Ghost (pn,ilist) l x purefuncmap with

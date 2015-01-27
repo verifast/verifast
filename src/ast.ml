@@ -136,6 +136,8 @@ type
   | GlobalName
   | ModuleName
   | PureFuncName
+  | ClassOrInterfaceNameScope
+  | PackageNameScope
 
 type
   operator =  (* ?operator *)

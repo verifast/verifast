@@ -28,4 +28,6 @@ class Program {
     {
         assert(expected == actual);
     }
+    
+    //@ predicate foo(int v) = Program.x |-> v &*& x |-> v;
 }
