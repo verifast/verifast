@@ -171,6 +171,13 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       tab#mainView#view#set_draw_spaces flags;
       tab#subView#view#set_draw_spaces flags
   in
+  let showRightMargin enable =
+    match !current_tab with
+      None -> ()
+    | Some tab ->
+      tab#mainView#view#set_show_right_margin enable;
+      tab#subView#view#set_show_right_margin enable
+  in
   let showLineNumbersAction =
     let a = GAction.toggle_action ~name:"ShowLineNumbers" () in
     a#set_label "Show _line numbers"; ignore $. a#connect#toggled (fun () -> showLineNumbers a#get_active);
@@ -179,6 +186,11 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   let showWhitespaceAction =
     let a = GAction.toggle_action ~name:"ShowWhitespace" () in
     a#set_label "Show _whitespace"; ignore $. a#connect#toggled (fun () -> showWhitespace a#get_active);
+    a
+  in
+  let showRightMarginAction =
+    let a = GAction.toggle_action ~name:"ShowRightMargin" () in
+    a#set_label "Show _right margin ruler"; ignore $. a#connect#toggled (fun () -> showRightMargin a#get_active);
     a
   in
   let _ =
@@ -202,6 +214,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       a "TextSizeDefault" ~label:"_Default";
       (fun group -> group#add_action showLineNumbersAction);
       (fun group -> group#add_action showWhitespaceAction);
+      (fun group -> group#add_action showRightMarginAction);
       a "Verify" ~label:"_Verify";
       GAction.add_toggle_action "CheckOverflow" ~label:"Check arithmetic overflow" ~active:true ~callback:(fun toggleAction -> disableOverflowCheck := not toggleAction#get_active);
       GAction.add_toggle_action "UseJavaFrontend" ~label:"Use the Java frontend" ~active:(toggle_java_frontend javaFrontend; javaFrontend) ~callback:(fun toggleAction -> toggle_java_frontend toggleAction#get_active);
@@ -250,6 +263,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
           <separator />
           <menuitem action='ShowLineNumbers' />
           <menuitem action='ShowWhitespace' />
+          <menuitem action='ShowRightMargin' />
           <menuitem action='Find file (top window)' />
           <menuitem action='Find file (bottom window)' />
         </menu>
@@ -424,14 +438,17 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       undoAction#set_sensitive false;
       redoAction#set_sensitive false;
       showLineNumbersAction#set_sensitive false;
-      showWhitespaceAction#set_sensitive false
+      showWhitespaceAction#set_sensitive false;
+      showRightMarginAction#set_sensitive false
     | Some tab ->
       undoAction#set_sensitive (!(tab#undoList) <> []);
       redoAction#set_sensitive (!(tab#redoList) <> []);
       showLineNumbersAction#set_sensitive true;
       showLineNumbersAction#set_active (tab#mainView#view#show_line_numbers);
       showWhitespaceAction#set_sensitive true;
-      showWhitespaceAction#set_active (tab#subView#view#draw_spaces <> [])
+      showWhitespaceAction#set_active (tab#subView#view#draw_spaces <> []);
+      showRightMarginAction#set_sensitive true;
+      showRightMarginAction#set_active (tab#mainView#view#show_right_margin)
   in
   let tag_name_of_range_kind kind =
     match kind with
