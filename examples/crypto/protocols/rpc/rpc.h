@@ -22,9 +22,10 @@ shared. We assume the client generated the key and shared it with the server.
 /*@
 fixpoint int shared_with(int cl, int id);
 
-// The example protocol uses two event predicates: "request(C, S, R)" states that
-// client C sent a request item R to server S; "response(C, S, R, R1)" states that
-// server S responded to request item R from client C with response item R1.
+// The example protocol uses two event predicates: "request(C, S, R)" states 
+// that client C sent a request item R to server S; "response(C, S, R, R1)" 
+// states that server S responded to request item R from client C with response 
+// item R1.
 
 fixpoint bool request(int cl, int sv, item req);
 fixpoint bool response(int cl, int sv, item req, item resp);
@@ -33,54 +34,90 @@ fixpoint bool response(int cl, int sv, item req, item resp);
 // Definition of pub for this protocol ////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-fixpoint bool rpc_pub(item i)
-{
-  switch (i)
+predicate rpc_pub(item i) =
+  collision_in_run() ? true :
+  [_]info_for_item(i, ?info0) &*&
+  switch (i) 
   {
-    case key_item(p0, c0, k0, i0):
-      return bad(p0) || bad(shared_with(p0, c0));
-    case data_item(d0): return true;
-    case hmac_item(k0, m0): return
-      switch (k0) 
+    case data_item(d0):
+      return true;
+    case pair_item(f0, s0):
+      return [_]rpc_pub(f0) &*& 
+             [_]rpc_pub(s0);
+    case nonce_item(p0, c0, inc0): 
+      return true == bad(p0);
+    case hash_item(pay0): return
+      switch (pay0)
       {
-        case key_item(creator0, count0, kind0, info0) : return
-          bad(creator0) || 
-          bad(shared_with(creator0, count0)) ||
-          collision_in_run() ||
-          switch (m0) {
-            case pair_item(first1, second1): return
-              switch (first1) {
-                case data_item(tag2): return
-                  tag2 == 0 ?
-                    request(creator0, shared_with(creator0, count0), second1)
-                  : tag2 == 1 ?
-                    switch (second1) {
-                      case pair_item(req3, resp3): return
-                        response(creator0, 
-                                 shared_with(creator0, count0), req3, resp3);
+        case some(pay1):
+          return [_]rpc_pub(pay1);
+        case none:
+          return true;
+      };
+    case symmetric_key_item(p0, c0):
+      return true == bad(p0) || bad(shared_with(p0, c0));
+    case public_key_item(p0, c0):
+      return true;
+    case private_key_item(p0, c0):
+      return true == bad(p0);
+    case hmac_item(p0, c0, pay0): return
+      switch(pay0)
+      {
+        case some(pay1): return
+          bad(p0) || 
+          bad(shared_with(p0, c0)) ||
+          switch (pay1) {
+            case pair_item(first2, second2): return
+              switch (first2) {
+                case data_item(tag3): return
+                  tag3 == cons(0, nil) ?
+                    request(p0, shared_with(p0, c0), second2)
+                : tag3 == cons(1, nil) ?
+                    switch (second2) 
+                    {
+                      case pair_item(req4, resp4): return
+                        response(p0, shared_with(p0, c0), req4, resp4);
                       default: return false;
                     }
-                  : false
-                    ;
+                : false;
                 default: return false;
               };
             default: return false;
-          };  
-        default: return false;
+          };
+        case none:
+          return true;
       };
-    case pair_item(first0, second0):
-      return rpc_pub(first0) && rpc_pub(second0);
-    case nonce_item(p0, c0, inc0, info0): 
-      return bad(p0);
-    case encrypted_item(k0, p0, e0): return
-      switch (k0) 
+    case symmetric_encrypted_item(p0, c0, pay0, ent0): return
+      switch(pay0)
       {
-        case key_item(creator1, count1, kind1, info1) : return
-          (rpc_pub(k0) && rpc_pub(p0)) || collision_in_run();
-        default: return true;
+        case some(pay1):
+          return [_]rpc_pub(pay1);
+        case none:
+          return true;
+      };
+    case asymmetric_encrypted_item(p0, c0, pay0, ent0): return
+      switch (pay0)
+      {
+        case some(pay1): return
+          [_]message_tag(i)(?tag) &*& 
+          tag == 10 ?
+          (
+            [_]rpc_pub(pay1)
+          ) :
+          false;
+        case none:
+          return true;
+      };
+    case asymmetric_signature_item(p0, c0, pay0, ent0): return
+      switch (pay0)
+      {
+        case some(pay1):
+          return [_]rpc_pub(pay1);
+        case none:
+          return true;
       };
   }
-}
+;
 
 @*/
 
@@ -88,41 +125,40 @@ fixpoint bool rpc_pub(item i)
 // Implementation prototypes for this protocol ////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-struct item *client(int server, struct item *key, struct item *request);
+struct item *client(char server, struct item *key, struct item *request);
   /*@ requires [?f0]world(rpc_pub) &*&
-               item(key, 
-                    key_item(?creator, ?id, symmetric_key, int_pair(0, 0))) &*&
-               item(request, ?req) &*& rpc_pub(req) == true &*& 
-               request(creator, server, req) == true &*&
+               item(key, symmetric_key_item(?creator, ?id), rpc_pub) &*&
+               item(request, ?req, rpc_pub) &*& [_]rpc_pub(req) &*&
+               true == well_formed_item(req) &*&
+               true == request(creator, server, req) &*&
                shared_with(creator, id) == server;
   @*/
   /*@ ensures  [f0]world(rpc_pub) &*&
-               item(key, 
-                    key_item(creator, id, symmetric_key, int_pair(0, 0))) &*&
-               item(request, req) &*& item(result, ?resp) &*& 
+               item(key, symmetric_key_item(creator, id), rpc_pub) &*&
+               item(request, req, rpc_pub) &*& item(result, ?resp, rpc_pub) &*& 
                (
                  bad(creator) || 
                  bad(server) ||
                  collision_in_run() ||
-                 response(creator, server, req, resp) == true
+                 true == response(creator, server, req, resp) == true
                );
   @*/
 
-void server(int server, struct item *key);
+void server(char server, struct item *key);
   /*@ requires [?f0]world(rpc_pub) &*&
                generated_values(server, ?count) &*&
-               item(key, key_item(?creator, ?id, symmetric_key, ?info)) &*&  
+               item(key, symmetric_key_item(?creator, ?id), rpc_pub) &*&  
                shared_with(creator, id) == server;
   @*/
   /*@ ensures  [f0]world(rpc_pub) &*&
                generated_values(server, count + 1) &*&
-               item(key, key_item(creator, id, symmetric_key, info));
+               item(key, symmetric_key_item(creator, id), rpc_pub);
   @*/
 
 ///////////////////////////////////////////////////////////////////////////////
 // Attacker proof obligations for this protocol ///////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-//@ ATTACKER_PROOFS_DEFAULT(rpc)
+//@ PROOFS_DEFAULT(rpc)
 
 #endif

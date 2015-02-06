@@ -1,28 +1,22 @@
-let verifast_both
-ifz3 verifast
-verifast -prover redux
-in
-
-cd src
-  verifast_both -shared -allow_assume -emit_dll_vfmanifest -emit_dll_vfmanifest_as ../bin/cryptolib.dll.vfmanifest ../bin/libpolarssl.so general.c debug.c principals.c item.c serialization.c data_item.c pair_item.c nonce_item.c key_item.c hmac_item.c encrypted_item.c symmetric_encryption.c asymmetric_encryption.c encryption.c network.c cryptolib.c attacker.c
+cd polarssl
+  verifast -allow_assume -shared -emit_dll_vfmanifest -emit_dll_vfmanifest_as bin/libann_polarssl.dll.vfmanifest bin/libann_polarssl.vfmanifest src/auxiliary_definitions.c src/polarssl.c src/random.c src/polarssl_attacker.c
+  cd protocols
+    verifast -allow_assume pthread.o ../bin/libann_polarssl.dll.vfmanifest rpc/rpc.c rpc/main_app.c
+    verifast -allow_assume pthread.o ../bin/libann_polarssl.dll.vfmanifest secure_communication_authenticated_encryption/secure_communication_authenticated_encryption.c secure_communication_authenticated_encryption/main_app.c
+    verifast -allow_assume pthread.o ../bin/libann_polarssl.dll.vfmanifest secure_communication_encryption/secure_communication_encryption.c secure_communication_encryption/main_app.c
+    verifast -allow_assume pthread.o ../bin/libann_polarssl.dll.vfmanifest secure_storage/secure_storage.c secure_storage/main_app.c
+  cd ..
 cd ..
 
+verifast -shared -allow_assume -emit_dll_vfmanifest -emit_dll_vfmanifest_as bin/cryptolib.dll.vfmanifest polarssl/bin/libann_polarssl.so src/general.c src/debug.c src/item.c src/key_register.c src/item_constraints.c src/serialization.c src/invariants.c src/deserialization.c src/data_item.c src/pair_item.c src/nonce_item.c src/hash_item.c src/key_item.c src/hmac_item.c src/symmetric_encrypted_item.c src/asymmetric_encrypted_item.c src/asymmetric_signature_item.c src/asymmetric_authenticated_encryption.c src/network.c src/principals.c src/cryptolib.c src/attacker.c
 cd protocols
-  cd rpc
-    verifast_both -allow_assume CRT/pthread.o ../../bin/libpolarssl.dll.vfmanifest ../../bin/cryptolib.dll.vfmanifest rpc.c main_app.c
-  cd ..
-  cd secure_storage
-    verifast_both -allow_assume CRT/pthread.o ../../bin/libpolarssl.dll.vfmanifest ../../bin/cryptolib.dll.vfmanifest secure_storage.c main_app.c
-  cd ..
-  cd yahalom
-    verifast_both -allow_assume CRT/pthread.o ../../bin/libpolarssl.dll.vfmanifest ../../bin/cryptolib.dll.vfmanifest yahalom.c main_app.c
-  cd ..
-  cd nsl
-    verifast_both -allow_assume CRT/pthread.o ../../bin/libpolarssl.dll.vfmanifest ../../bin/cryptolib.dll.vfmanifest nsl.c main_app.c
-  cd ..
-  cd nss
-    verifast_both -allow_assume CRT/pthread.o ../../bin/libpolarssl.dll.vfmanifest ../../bin/cryptolib.dll.vfmanifest nss.c main_app.c
-  cd ..
+  verifast -allow_assume pthread.o ../polarssl/bin/libann_polarssl.dll.vfmanifest ../bin/cryptolib.dll.vfmanifest dummy_protocol/dummy_protocol.c dummy_protocol/main_app.c
+  verifast -allow_assume pthread.o ../polarssl/bin/libann_polarssl.dll.vfmanifest ../bin/cryptolib.dll.vfmanifest secure_storage/secure_storage.c secure_storage/main_app.c
+  verifast -allow_assume pthread.o ../polarssl/bin/libann_polarssl.dll.vfmanifest ../bin/cryptolib.dll.vfmanifest rpc/rpc.c rpc/main_app.c
+  verifast -allow_assume pthread.o ../polarssl/bin/libann_polarssl.dll.vfmanifest ../bin/cryptolib.dll.vfmanifest yahalom/yahalom.c yahalom/main_app.c
+  verifast -allow_assume pthread.o ../polarssl/bin/libann_polarssl.dll.vfmanifest ../bin/cryptolib.dll.vfmanifest secure_storage_asym/secure_storage_asym.c secure_storage_asym/main_app.c
+  verifast -allow_assume pthread.o ../polarssl/bin/libann_polarssl.dll.vfmanifest ../bin/cryptolib.dll.vfmanifest nsl/nsl.c nsl/main_app.c
 cd ..
 
+del polarssl/bin/libann_polarssl.dll.vfmanifest
 del bin/cryptolib.dll.vfmanifest

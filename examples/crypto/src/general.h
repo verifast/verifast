@@ -18,19 +18,23 @@
 //@ #include <listex.gh>
 
 ///////////////////////////////////////////////////////////////////////////////
-// PolarSLL config ////////////////////////////////////////////////////////////
+// PolarSLL includes + config /////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "../include/polarssl.h"
+#include "../polarssl/annotated_api/polarssl.h"
+#include "../polarssl/src/random.h"
 
 #define MAX_PACKAGE_SIZE 8192
-
-#define NONCE_SIZE   64
-#define HMAC_SIZE    64
-#define AES_IV_SIZE  16
-#define AES_KEY_SIZE 256
-
-#define RSA_KEY_SIZE 2048
+#define NONCE_SIZE 16
+#define HASH_SIZE 64
+#define HMAC_SIZE 64
+#define GCM_IV_SIZE 16
+#define GCM_TAG_SIZE 16
+#define GCM_ENT_SIZE 32 /* should be (GCM_IV_SIZE + GCM_TAG_SIZE), 
+                           but VeriFast parser complains */
+#define GCM_KEY_SIZE 32
+#define RSA_KEY_SIZE 256
+#define RSA_BIT_KEY_SIZE (8 * RSA_KEY_SIZE)
 #define RSA_SERIALIZED_KEY_SIZE 2048
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -54,18 +58,6 @@ void write_buffer(char **target, const char *source, int length);
   /*@ ensures  pointer(target, t + length) &*& chars(t, length, cs0) &*&
                [f]chars(source, length, cs0);
   @*/
-
-///////////////////////////////////////////////////////////////////////////////
-// Auxiliary predicates ///////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////
-
-/*@
-
-predicate hide_chars(char *buffer, int length, list<char> cs) =
-  chars(buffer, length, cs)
-;
-
-@*/
 
 ///////////////////////////////////////////////////////////////////////////////
 // Auxiliary lemmas ///////////////////////////////////////////////////////////
@@ -113,6 +105,54 @@ fixpoint nat nat_length<T>(list<T> cs)
     case cons(c, cs0) : return succ(nat_length(cs0));
   }
 }
+
+lemma void length_equals_nat_length(list<char> cs);
+  requires true;
+  ensures  length(cs) == int_of_nat(nat_length(cs));
+
+lemma void int_of_nat_injective(nat n1, nat n2);
+  requires int_of_nat(n1) == int_of_nat(n2);
+  ensures  n1 == n2;
+
+fixpoint int unbounded_int_of_chars(list<char> cs)
+{
+  return 
+    length(cs) == sizeof(int) ?
+      int_of_chars(cs)
+    :
+      head(cs)
+  ;
+}
+
+fixpoint list<char> chars_of_unbounded_int(int i)
+{
+  return 
+    INT_MIN <= i && i <= INT_MAX ?
+      chars_of_int(i)
+    :
+      cons(i, nil)
+  ;
+}
+
+lemma void head_append<t>(list<t> xs, list<t> ys);
+  requires length(xs) > 0;
+  ensures head(xs) == head(append(xs, ys));
+
+lemma void head_mem<t>(list<t> l);
+  requires length(l) > 0;
+  ensures  true == mem(head(l), l);
+
+lemma void chars_of_unbounded_int_bounds(int i);
+  requires true;
+  ensures  INT_MIN <= i && i <= INT_MAX ?
+             INT_MIN <= head(chars_of_unbounded_int(i)) &*& 
+             head(chars_of_unbounded_int(i)) <= INT_MAX
+           :
+             head(chars_of_unbounded_int(i)) == i;
+
+lemma void forall_subset<t>(list<t> sub_cs, list<t> cs, fixpoint(t, bool) p);
+  requires true == forall(cs, p) &*& true == subset(sub_cs, cs);
+  ensures  true == forall(sub_cs, p);
 
 @*/
 

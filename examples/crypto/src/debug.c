@@ -3,40 +3,6 @@
 #include "general.h"
 #include "item.h"
 
-#ifdef DEBUG
-int indent;
-#endif
-
-/*@
-
-predicate debug_initialized() =
-#ifdef DEBUG
-  integer(&indent, ?i) &*&
-#endif
-  true
-;
-
-@*/
-
-void debug_init()
-  //@ requires module(debug, true);
-  //@ ensures  debug_initialized();
-{
-  //@ open_module();
-#ifdef DEBUG
-  indent = 0;
-#endif
-  //@ close debug_initialized();
-}
-
-void debug_exit()
-  //@ requires debug_initialized();
-  //@ ensures  module(debug, false);
-{
-  //@ open debug_initialized();
-  //@ close_module();
-}
-
 void debug_print(const char *message)
   //@ requires [?f]string(message, ?cs);
   //@ ensures  [f]string(message, cs);
@@ -47,7 +13,7 @@ void debug_print(const char *message)
 }
 
 void print_buffer(const char *buffer, int size)
-  //@ requires [?f]chars(buffer, size, ?cs) &*& size < INT_MAX;
+  //@ requires [?f]chars(buffer, size, ?cs);
   //@ ensures  [f]chars(buffer, size, cs);
 {
 #ifdef DEBUG
@@ -70,22 +36,19 @@ void print_buffer(const char *buffer, int size)
 }
 
 void print_item(const struct item* item)
-  //@ requires [?f]item(item, ?i);
-  //@ ensures  [f]item(item, i);
+  //@ requires [?f]item(item, ?i, ?pub);
+  //@ ensures  [f]item(item, i, pub);
 {
 #ifdef DEBUG
-  //@ open [f]item(item, i);
+  //@ open [f]item(item, i, pub);
   printf("---------------------\n");
   printf("Item: %p\n", item);
-  printf("\ttag %i\n", item->tag);
   printf("\tsize %i\n", item->size);
+  printf("\ttag: %c\n", *(item->content));
   printf("\tcontent:");
-  if (item->content == 0)
-    printf("\t[empty]");
-  else
-    print_buffer(item->content, item->size);
+  print_buffer(item->content + 1, item->size - 1);
   printf("---------------------\n");
-  //@ close  [f]item(item, i);
+  //@ close  [f]item(item, i, pub);
 #else
 #endif
 }

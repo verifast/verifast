@@ -126,5 +126,94 @@ lemma void equal_double_triple_append(
   append_assoc(cs2, cs3, append(cs4, append(cs5, cs6)));
 }
 
+lemma void head_append<t>(list<t> xs, list<t> ys)
+  requires length(xs) > 0;
+  ensures head(xs) == head(append(xs, ys));
+{
+  switch(xs)
+  {
+    case cons(c, cs):
+    case nil:
+  }
+}
+
+lemma void head_mem<t>(list<t> l)
+  requires length(l) > 0;
+  ensures  true == mem(head(l), l);
+{
+  switch(l)
+  {
+    case cons(c, cs):
+    case nil:
+  }
+}
+
+lemma void chars_of_unbounded_int_bounds(int i)
+  requires true;
+  ensures  INT_MIN <= i && i <= INT_MAX ?
+             INT_MIN <= head(chars_of_unbounded_int(i)) &*& 
+             head(chars_of_unbounded_int(i)) <= INT_MAX
+           :
+             head(chars_of_unbounded_int(i)) == i;
+{
+  if (INT_MIN <= i && i <= INT_MAX)
+  {
+    assert length(chars_of_int(i)) == sizeof(int);
+    head_mem(chars_of_int(i));
+    chars_of_int_char_in_bounds(head(chars_of_int(i)), i);
+  }
+  else
+  {
+    assert head(chars_of_unbounded_int(i)) == i;
+  }
+}
+
+lemma void int_of_nat_injective(nat n1, nat n2)
+  requires int_of_nat(n1) == int_of_nat(n2);
+  ensures  n1 == n2;
+{
+  switch(n1)
+  {
+    case succ(s1):
+      switch(n2)
+      {
+        case succ(s2):
+          int_of_nat_injective(s1, s2);
+        case zero:
+          assert false;
+      }
+    case zero:
+      assert n1 == n2;
+  }
+}
+
+lemma void length_equals_nat_length(list<char> cs)
+  requires true;
+  ensures  length(cs) == int_of_nat(nat_length(cs));
+{
+  switch(cs)
+  {
+    case cons(c0, cs0):
+      length_equals_nat_length(cs0);
+    case nil:
+  }
+}
+
+lemma void forall_subset<t>(list<t> sub_cs, list<t> cs, fixpoint(t, bool) p)
+  requires true == forall(cs, p) &*& true == subset(sub_cs, cs);
+  ensures  true == forall(sub_cs, p);
+{
+  switch(sub_cs)
+  {
+    case cons(c0, cs0):
+      forall_subset(cs0, cs, p);
+      assert true == forall(cs0, p);
+      forall_mem(c0, cs, p);
+      assert p(c0) == true;
+    case nil:
+      assert true == forall(sub_cs, p);
+  }
+}
+
 @*/
 

@@ -2,6 +2,7 @@
 
 #include "item.h"
 #include "serialization.h"
+#include "deserialization.h"
 #include "general.h"
 #include "principals.h"
 
@@ -46,12 +47,10 @@ struct network_status
 };
 
 void network_sleep(unsigned int microseconds)
-  //@ requires [?f0]world(?pub);
-  //@ ensures  [f0]world(pub);
+  //@ requires true;
+  //@ ensures  true;
 {
-  //@ open [f0]world(pub);
   net_usleep(microseconds);
-  //@ close [f0]world(pub);
 }
 
 struct network_status *network_status_uninitialized()
@@ -71,21 +70,18 @@ struct network_status *network_status_uninitialized()
 }
 
 struct network_status *network_connect(const char *name, int port)
-  /*@ requires [?f0]world(?pub) &*&
-               [?f1]string(name, ?cs); @*/
-  /*@ ensures  [f0]world(pub) &*&
-               [f1]string(name, cs) &*& network_status(result); @*/
+  //@ requires [?f1]option_string(name, ?ip);
+  //@ ensures  [f1]option_string(name, ip) &*& network_status(result);
 {
   struct network_status *stat = network_status_uninitialized();
   
   int time = 10;
-  for (int i = 0; i < 50; i++)
-    /*@ invariant [f0]world(pub) &*& network_status_core(stat, false) &*&
+  int i;
+  for (i = 0; i < 50; i++)
+    /*@ invariant network_status_core(stat, false) &*&
                   time > 0 &*& time < TIME_BOUND &*&
-                  [f1]string(name, cs); @*/
+                  [f1]option_string(name, ip); @*/
   {
-    //@ open [f0]world(pub);
-    
     //@ open network_status_core(stat, false);
     if (net_connect(&stat->server_socket, name, port) == 0)
     {
@@ -97,8 +93,6 @@ struct network_status *network_connect(const char *name, int port)
         stat->initialized = 1;
         //@ close network_status_core(stat, true);
         //@ close network_status(stat);
-
-        //@ close [f0]world(pub);
         return stat;
       }
       else
@@ -111,8 +105,7 @@ struct network_status *network_connect(const char *name, int port)
       time = time * 2;
     else
       break;
-
-    //@ close [f0]world(pub);
+      
     network_sleep((unsigned int) time);
   }
   
@@ -121,8 +114,8 @@ struct network_status *network_connect(const char *name, int port)
 }
 
 struct network_status *network_bind_and_accept(int port)
-  //@ requires [?f0]world(?pub);
-  //@ ensures  [f0]world(pub) &*& network_status(result);
+  //@ requires true;
+  //@ ensures  network_status(result);
 {
   struct network_status *stat = network_bind(port);
   network_accept(stat);
@@ -131,15 +124,14 @@ struct network_status *network_bind_and_accept(int port)
 }
 
 struct network_status *network_bind(int port)
-  //@ requires [?f0]world(?pub);
-  //@ ensures  [f0]world(pub) &*& network_status_core(result, true);
+  //@ requires true;
+  //@ ensures  network_status_core(result, true);
 { 
   int time = 10;
-  for (int i = 0; i < 50; i++)
-    /*@ invariant [f0]world(pub) &*&
-                  time > 0 &*& time < TIME_BOUND; @*/
+  int i;
+  for (i = 0; i < 50; i++)
+    //@ invariant time > 0 &*& time < TIME_BOUND;
   {
-    //@ open [f0]world(pub);
     struct network_status *stat = network_status_uninitialized();
     //@ open network_status_core(stat, false);
     
@@ -150,7 +142,6 @@ struct network_status *network_bind(int port)
       {
         stat->initialized = 1;
         //@ close network_status_core(stat, true);
-        //@ close [f0]world(pub);
         return stat;
       }
       
@@ -163,7 +154,6 @@ struct network_status *network_bind(int port)
     else
       break;
     
-    //@ close [f0]world(pub);
     network_sleep((unsigned int) time);
   }
   
@@ -172,13 +162,12 @@ struct network_status *network_bind(int port)
 }
 
 void network_accept(struct network_status *stat)
-  //@ requires [?f0]world(?pub) &*& network_status_core(stat, true);
-  //@ ensures  [f0]world(pub) &*& network_status_core(stat, true);
+  //@ requires network_status_core(stat, true);
+  //@ ensures  network_status_core(stat, true);
 {
   //@ open network_status_core(stat, true);
   if (stat->listen_socket > 0 && stat->client_socket == -1)
   {
-    //@ open [f0]world(pub);
     //@ close chars(NULL, 0, nil);
     if(net_accept(stat->listen_socket, &stat->client_socket, NULL) != 0)
       abort_crypto_lib("Failed to accept client");
@@ -188,7 +177,6 @@ void network_accept(struct network_status *stat)
     if (net_set_block(stat->client_socket) == 0)
     {
       stat->initialized = 1;
-      //@ close [f0]world(pub);
     }
     else
       abort_crypto_lib("Failed to open client connection");
@@ -197,10 +185,9 @@ void network_accept(struct network_status *stat)
 }
 
 void network_disconnect(struct network_status *stat)
-  //@ requires [?f0]world(?pub) &*& network_status(stat);
-  //@ ensures  [f0]world(pub);
+  //@ requires network_status(stat);
+  //@ ensures  true;
 {
-  //@ open [f0]world(pub);
   //@ open network_status(stat);
   //@ open network_status_core(stat, true);    
 
@@ -214,14 +201,14 @@ void network_disconnect(struct network_status *stat)
     net_close(stat->server_socket);
 
   free(stat);
-  //@ close [f0]world(pub);
 }
 
 void network_send(struct network_status *stat, struct item* datagram)
-  /*@ requires [?f0]world(?pub) &*& network_status(stat) &*&
-               item(datagram, ?d) &*& (collision_in_run() || pub(d)); @*/
-  /*@ ensures  [f0]world(pub) &*& network_status(stat) &*&
-               item(datagram, d); @*/
+  /*@ requires [?f]world(?pub) &*&
+               network_status(stat) &*&
+               item(datagram, ?d, pub) &*& [_]pub(d); @*/
+  /*@ ensures  [f]world(pub) &*& network_status(stat) &*&
+               item(datagram, d, pub); @*/
 {
   int socket = -1;
   
@@ -237,18 +224,15 @@ void network_send(struct network_status *stat, struct item* datagram)
   
   if (socket > 0)
   {
-    char* message = 0;
-    int message_size = 0;
-    
-    int temp = item_serialize(&message, datagram);
-    message_size = temp;
-    if (message_size > MAX_PACKAGE_SIZE)
-      abort_crypto_lib("Message to send is to big");
+    char* message;
+    int size = serialize_to_public_message(&message, datagram);
+    if (size > MAX_PACKAGE_SIZE)
+       abort_crypto_lib("Message to send is to big");
 
-    //@ open [f0]world(pub);
-    //@ close polarssl_witness<item>(d);
-    net_send(&socket, message, (unsigned int) message_size);
-    //@ close [f0]world(pub);
+    //@ open [f]world(pub);
+    net_send(&socket, message, (unsigned int) size);
+    //@ close [f]world(pub);
+    //@ open polarssl_public_message(polarssl_pub(pub))(message, _, _);
     free(message);
   }
   //@ close network_status_core(stat, true);
@@ -256,14 +240,17 @@ void network_send(struct network_status *stat, struct item* datagram)
 }
 
 struct item *network_receive_attempt(struct network_status *stat)
-  //@ requires [?f0]world(?pub) &*& network_status(stat);
+  /*@ requires [?f0]world(?pub) &*& network_status(stat) &*&
+               proof_obligations(pub); @*/
   /*@ ensures  [f0]world(pub) &*& network_status(stat) &*&
-               result == 0 ? true : item(result, ?d) &*& 
-               (collision_in_run() || pub(d)); @*/
+               proof_obligations(pub) &*&
+               result == 0 ? 
+                 true 
+               : 
+                 item(result, ?d, pub) &*& [_]pub(d); @*/
 {
   int socket = -1;
   struct item *result = 0;
-  debug_print("network_receive");
   
   //@ open network_status(stat);
   //@ open network_status_core(stat, true);
@@ -280,21 +267,17 @@ struct item *network_receive_attempt(struct network_status *stat)
     //@ close [f0]world(pub);
     
     //receiving failed?
-    if (received >= 0)
-    {      
-      //@ assert chars(receive_buffer, received, ?cs);
-      //@ open polarssl_witness<item>(?witness);
-      //@ close deserialization_attempt(witness, cs);
-      result = item_deserialize(receive_buffer, received);
-      /*@ if (collision_in_run())
-          {
-            assert item(result, _);
-          }
-          else
-          {
-            assert item(result, witness);
-          }
-      @*/
+    if (received > 0)
+    {
+      /*@ open polarssl_public_message(polarssl_pub(pub))
+                                        (receive_buffer, received, ?cs); @*/
+      debug_print("network_receive");
+      print_buffer(receive_buffer, received);
+      /*@ close polarssl_public_message(polarssl_pub(pub))
+                                      (receive_buffer, received, cs); @*/
+      result = deserialize_from_public_message(receive_buffer, received);
+      /*@ open polarssl_public_message(polarssl_pub(pub))
+                                      (receive_buffer, received, cs); @*/
     }
   }
   
@@ -304,15 +287,17 @@ struct item *network_receive_attempt(struct network_status *stat)
 }
 
 struct item *network_receive(struct network_status *stat)
-  //@ requires [?f0]world(?pub) &*& network_status(stat);
-  /*@ ensures  [f0]world(pub) &*& network_status(stat) &*&
-               item(result, ?d) &*& (collision_in_run() || pub(d)); @*/
+  /*@ requires [?f]world(?pub) &*&
+               network_status(stat); @*/
+  /*@ ensures  [f]world(pub) &*&
+               network_status(stat) &*&
+               item(result, ?d, pub) &*& [_]pub(d); @*/
 {
+  //@ retreive_proof_obligations();
   struct item *i = network_receive_attempt(stat);
   if (i == 0)
     abort_crypto_lib("Receiving message failed");
 
   return i;
+  //@ leak proof_obligations(pub);
 }
-
-

@@ -1,104 +1,154 @@
 #include "hmac_item.h"
 
-#include "item.h"
-#include "serialization.h"
+#include "key_item.h"
 #include "principals.h"
-
-struct item *hmac(struct item *key, struct item *payload)
-  /*@ requires [?f]world(?pub) &*& item(payload, ?p) &*&
-               item(key, ?k) &*& k == key_item(?creator, ?id, ?kind, ?info);
-  @*/
-  /*@ ensures  [f]world(pub) &*& item(payload, p) &*&
-               item(key, k) &*& item(result, hmac_item(k, p));
-  @*/
-{
-  char *cs_key;
-  char *cs_pay;
-  int cs_key_length = item_serialize(&cs_key, key);
-  int cs_pay_length = item_serialize(&cs_pay, payload);
-  
-  //@ open [f]world(pub);
-  struct item* hmac = malloc(sizeof(struct item));
-  if (hmac == 0){abort_crypto_lib("malloc of item failed");}
-  hmac->tag = 4;
-  hmac->size = HMAC_SIZE;
-  hmac->content = malloc_wrapper(HMAC_SIZE);
-  sha512_hmac(cs_key, (unsigned int) cs_key_length, 
-              cs_pay, (unsigned int) cs_pay_length, 
-              hmac->content, 0);
-  free(cs_key);
-  free(cs_pay);
-  //@ sha512_polarssl_item_to_chars(hmac->content);
-  //@ open item(payload, p);
-  //@ open item(key, k);
-  //@ close item(hmac, hmac_item(k, p));
-  return hmac;  
-  //@ close item(key, k);
-  //@ close item(payload, p);
-  //@ close [f]world(pub);
-}
-
-void hmac_verify(struct item *hash, struct item *key, struct item *payload)
-  /*@ requires [?f]world(?pub) &*& item(hash, ?h) &*& item(payload, ?p) &*&
-               item(key, key_item(?creator, ?id, ?kind, ?info)); @*/
-  /*@ ensures  [f]world(pub) &*& item(hash, h) &*& item(payload, p) &*&
-               item(key, key_item(creator, id, kind, info)) &*&
-               collision_in_run() ? 
-                   true 
-                 : 
-                   h == hmac_item(key_item(creator, id, kind, info), p); @*/
-{
-  struct item *calucated_hash = hmac(key, payload);
-  if (!item_equals(hash, calucated_hash))
-    abort_crypto_lib("Hash to verify was not correct");
-  item_free(calucated_hash);
-}
+#include "item_constraints.h"
+#include "serialization.h"
 
 bool is_hmac(struct item *item)
-  //@ requires item(item, ?i);
-  /*@ ensures  item(item, i) &*&
-        switch (i)
-        {
-          case data_item(d0):
-            return result == false;
-          case pair_item(f0, s0):
-            return result == false;
-          case nonce_item(p0, c0, inc0, i0):
-            return result == false;
-          case key_item(p0, c0, k0, i0):
-            return result == false;
-          case hmac_item(k0, pay0):
-            return result == true;
-          case encrypted_item(k0, pay0, ent0):
-            return result == false;
-        };
-  @*/
+  //@ requires item(item, ?i, ?pub);
+  /*@ ensures  item(item, i, pub) &*&
+               result ? i == hmac_item(_, _, _) : true; @*/
 {
-  //@ open item(item, i);
-  return (item->tag == 4);
-  //@ close item(item, i);
+  //@ open item(item, i, pub);
+  //@ open chars(item->content, ?size, ?cs);
+  //@ open [_]item_constraints(?b, i, cs, pub);
+  //@ if (!b) open [_]item_constraints_no_collision(i, cs, pub);
+  return *(item->content) == 'h';
+  //@ close item(item, i, pub);
 }
 
 void check_is_hmac(struct item *item)
-  //@ requires item(item, ?i);
-  /*@ ensures
-        switch (i)
-        {
-          case data_item(d0):
-            return false;
-          case pair_item(f0, s0):
-            return false;
-          case nonce_item(p0, c0, inc0, i0):
-            return false;
-          case key_item(p0, c0, k0, i0):
-            return false;
-          case hmac_item(k0, pay0):
-            return item(item, hmac_item(k0, pay0));
-          case encrypted_item(k0, pay0, ent0):
-            return false;
-        };
-  @*/
+  //@ requires item(item, ?i, ?pub);
+  //@ ensures  item(item, i, pub) &*& i == hmac_item(_, _, _);
 {
   if (!is_hmac(item))
     abort_crypto_lib("Presented item is not an hmac");
+}
+
+struct item *create_hmac(struct item *key, struct item *payload)
+  /*@ requires [?f]world(?pub) &*&
+               item(payload, ?pay, pub) &*& item(key, ?k, pub) &*& 
+               k == symmetric_key_item(?creator, ?id); @*/
+  /*@ ensures  [f]world(pub) &*&
+               item(payload, pay, pub) &*& item(key, k, pub) &*& 
+               item(result, ?hmac, pub) &*& 
+               collision_in_run() ? 
+                 true
+               :
+                 hmac == hmac_item(creator, id, some(pay)); @*/
+{
+  //@ open item(payload, pay, pub);
+  //@ open [_]item_constraints(_, pay, ?pay_cs, pub);
+  //@ open item(key, k, pub);
+  check_valid_symmetric_key_item_size(key->size);
+  //@ assert key->content |-> ?k_cont;
+  //@ assert chars(k_cont + 1, GCM_KEY_SIZE, ?k_cs);
+  //@ open [_]item_constraints(?b, k, ?key_cs, pub);
+  //@ if (!b) open [_]item_constraints_no_collision(k, key_cs, pub);
+  
+  struct item* hmac = malloc(sizeof(struct item));
+  if (hmac == 0){abort_crypto_lib("malloc of item failed");}
+  
+  hmac->size = 1 + HMAC_SIZE;
+  hmac->content = malloc_wrapper(hmac->size);
+  *(hmac->content) = 'h';
+  
+  check_valid_symmetric_key_item_size(key->size);
+  //@ chars_limits(key->content);
+  //@ polarssl_cryptogram k_cg = polarssl_symmetric_key(creator, id);
+  //@ close exists<polarssl_cryptogram>(k_cg);
+  if (payload->size < POLARSSL_MIN_HMAC_INPUT_BYTE_SIZE)
+    {abort_crypto_lib("Payload of hmac was to small");}
+  sha512_hmac(key->content + 1, (unsigned int) GCM_KEY_SIZE, 
+              payload->content, (unsigned int) payload->size, 
+              hmac->content + 1, 0);
+   
+  //@ assert hmac->content |-> ?cont &*& hmac->size |-> ?size;
+  /*@ if (collision_in_run())
+      {
+        if (k_cs == polarssl_chars_for_cryptogram(k_cg))
+          open polarssl_cryptogram(cont + 1, 64, _, _);
+          
+        item h = dummy_item_for_tag('h');
+        assert chars(cont, size, ?cs);
+        collision_public(pub, cs);
+        polarssl_cryptograms_in_chars_upper_bound_from(cs, 
+                      polarssl_generated_public_cryptograms(polarssl_pub(pub)));
+        close item_constraints(true, h, cs, pub);
+        leak item_constraints(true, h, cs, pub);
+        close item(hmac, h, pub);
+      }
+      else
+      {
+        assert k_cs == polarssl_chars_for_cryptogram(k_cg);
+        
+        item h = hmac_item(creator, id, some(pay));
+        assert key_cs == cons('e', k_cs);
+        assert k_cs == polarssl_chars_for_cryptogram(k_cg);
+        open polarssl_cryptogram(cont + 1, 64, ?h_cs, ?h_cg);
+        list<char> cs = cons('h', h_cs);
+        assert chars(cont, size, cs);
+        assert h_cg == polarssl_hmac(creator, id, pay_cs);
+        item_constraints_well_formed(pay, h);
+        close item_constraints_no_collision(h, cs, pub);
+        leak item_constraints_no_collision(h, cs, pub);
+        close item_constraints(false, h, cs, pub);
+        leak item_constraints(false, h, cs, pub);
+        close item(hmac, h, pub);
+      }
+  @*/
+  
+  return hmac;
+  
+  //@ close item(key, k, pub);
+  //@ close item(payload, pay, pub);
+}
+
+void hmac_verify(struct item *hmac, struct item *key, struct item *payload)
+  /*@ requires [?f]world(?pub) &*&
+               item(hmac, ?h, pub) &*&
+               item(payload, ?pay, pub) &*& item(key, ?k, pub) &*& 
+               k == symmetric_key_item(?principal, ?count); @*/
+  /*@ ensures  [f]world(pub) &*&
+               item(hmac, h, pub) &*& 
+               item(payload, pay, pub) &*& item(key, k, pub) &*&
+                 collision_in_run() ? 
+                   true 
+                 :
+                   h == hmac_item(principal, count, some(pay)); @*/
+{
+  check_is_symmetric_key(key);
+  check_is_hmac(hmac);
+  
+  struct item *calc_hmac = create_hmac(key, payload);
+  //@ open item(calc_hmac, ?calc_h, pub);
+  //@ open item(hmac, h, pub);
+  //@ open item(payload, pay, pub);
+  if (hmac->size == calc_hmac->size)
+  {
+    if (0 == memcmp((void*) (hmac->content), (void*) (calc_hmac->content),
+                    (unsigned int) hmac->size))
+    {
+      /*@ if (!collision_in_run())
+          {
+            assert calc_h == hmac_item(principal, count, some(pay));
+            open [_]item_constraints(_, calc_h, ?calc_h_cs, pub);
+            open [_]item_constraints_no_collision(calc_h, calc_h_cs, pub);
+            open [_]item_constraints(_, h, ?h_cs, pub);
+            open [_]item_constraints_no_collision(h, h_cs, pub);
+            assert calc_h_cs == h_cs;
+            item_constraints_injective(h_cs, h, calc_h);
+            assert h == calc_h;
+          }
+      @*/
+      //@ close item(payload, pay, pub);
+      //@ close item(calc_hmac, calc_h, pub);
+      //@ close item(hmac, h, pub);
+      item_free(calc_hmac);
+      return;
+    }
+  }
+  
+  abort_crypto_lib("Hmac to verify was not correct");
 }

@@ -1,9 +1,0 @@
-#ifndef POLARSSL_SIZES
-#define POLARSSL_SIZES
-
-#define CHAR_SIZE_OF_HAVEGE_STATE 36880
-#define CHAR_SIZE_OF_AES_CONTEXT 280
-#define PK_RSA_TYPE 1
-
-#endif
-

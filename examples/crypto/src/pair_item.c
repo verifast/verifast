@@ -1,129 +1,94 @@
 #include "pair_item.h"
 
+#include "item_constraints.h"
+#include "serialization.h"
+
 struct item *create_pair(struct item *first, struct item *second)
-  //@ requires item(first, ?fi) &*& item(second, ?si);
-  /*@ ensures  item(first, fi) &*& item(second, si) &*&
-               item(result, pair_item(fi, si));
-  @*/
+  //@ requires item(first, ?f, ?pub) &*& item(second, ?s, pub);
+  /*@ ensures  item(first, f, pub) &*& item(second, s, pub) &*&
+               item(result, pair_item(f, s), pub); @*/
 {
-  int* temp1;
-  char* temp2;
-
-  //@ open item(first, fi);
-  //@ open item(second, si);
-
   struct item* pair = malloc(sizeof(struct item));
   if (pair == 0){abort_crypto_lib("malloc of item failed");}
-  pair->tag = 1;
-  if (first->size > INT_MAX - 6 * (int) sizeof(int) - second->size)
-    abort_crypto_lib("Pair item to construct is to big");
-  pair->size = 4 * (int) sizeof(int) + first->size + second->size;
+  
+  //@ open item(first, f, pub);
+  //@ assert first->content |-> ?cont_f &*& first->size |-> ?size_f;
+  //@ assert chars(cont_f, size_f, ?cs_f);
+  //@ open [_]item_constraints(?b1, f, cs_f, pub);
+  //@ open item(second, s, pub);
+  //@ assert second->content |-> ?cont_s &*& second->size |-> ?size_s;
+  //@ assert chars(cont_s, size_s, ?cs_s);
+  //@ open [_]item_constraints(?b2, s, cs_s, pub);
+  
+  if (INT_MAX - 1 - (int) sizeof(int) - first->size < second->size) 
+    abort_crypto_lib("Requested pair item was to big");
+  pair->size = 1 + (int) sizeof(int) + first->size + second->size;
   pair->content = malloc_wrapper(pair->size);
-
-  //@ assert pair->content |-> ?c_p &*& chars(c_p, ?size_p, ?cs_p);
+  //@ assert pair->content |-> ?cont &*& pair->size |-> ?size;
+  *(pair->content) = 'b';
+  {
+    //@ assert chars(cont, 1, cons('b', nil));
+    char* temp = pair->content + 1;
+    //@ chars_split(cont + 1, sizeof(int));
+    //@ assert integer(&first->size, ?flen);
+    //@ integer_to_chars(&first->size);
+    write_buffer(&temp, (void*) &(first->size), (int) sizeof(int));
+    //@ chars_to_integer(&first->size);
+    //@ assert chars(cont + 1, sizeof(int), chars_of_int(flen));
+    //@ chars_split(cont + 1 + sizeof(int), first->size);
+    write_buffer(&temp, first->content, first->size);
+    //@ assert chars(cont + 1 + sizeof(int), size_f, cs_f);
+    write_buffer(&temp, second->content, second->size);
+    //@ chars_join(cont + 1 + sizeof(int));
+    //@ chars_join(cont + 1);
+  }
+  //@ list<char> size_f_cs = chars_of_int(size_f);
+  //@ list<char> cs = cons('b', append(size_f_cs, append(cs_f, cs_s)));
+  //@ append_assoc(size_f_cs, cs_f, cs_s);
+  //@ assert chars(cont, size, cs);
   
-  // First item
-  temp1 = (void*) pair->content;
-  //@ chars_to_integer(temp1);
-  *(temp1) = first->tag;
-  //@ integer_to_chars(temp1);
-  temp1++;
-  //@ chars_to_integer(temp1);
-  *(temp1) = first->size;
-  //@ integer_to_chars(temp1);
-  temp1++;
-  temp2 = (void*) temp1;
-  write_buffer(&temp2, first->content, first->size);
-  
-  // Second item
-  temp1 = (void*) temp2;
-  //@ chars_to_integer(temp1);
-  *(temp1) = second->tag;
-  //@ integer_to_chars(temp1);
-  temp1++;
-  //@ chars_to_integer(temp1);
-  *(temp1) = second->size;
-  //@ integer_to_chars(temp1);
-  temp1++;
-  temp2 = (void*) temp1;
-  write_buffer(&temp2, second->content, second->size);
-
-  //@ chars_join(c_p);
-  //@ chars_join(c_p);
-  //@ chars_join(c_p);
-  //@ chars_join(c_p);
-  //@ chars_join(c_p);
-
-  //@ list<char> l1 = chars_of_int(tag_for_item(fi));
-  //@ list<char> l2 = chars_of_int(length(chars_for_item(fi)));
-  //@ list<char> l3 = chars_for_item(fi);
-  //@ list<char> l4 = chars_of_int(tag_for_item(si));
-  //@ list<char> l5 = chars_of_int(length(chars_for_item(si)));
-  //@ list<char> l6 = chars_for_item(si);
-
-  //@ assert chars(c_p, ?l, ?cs);
-  /*@
-      if (!collision_in_run)
+  //@ item p = pair_item(f, s);
+  //@ bool col = collision_in_run();
+  /*@ if (col)
       {
-        assert cs == append(append(append(
-                     append(append(l1, l2), l3), l4), l5), l6);
-        append_assoc(append(append(append(l1, l2), l3), l4), l5, l6);
-        append_assoc(append(append(l1, l2), l3), l4, append(l5, l6));
-        append_assoc(append(l1, l2), l3, append(l4, append(l5, l6)));
-        append_assoc(l1, l2, append(l3, append(l4, append(l5, l6))));   
+        well_formed_pair_item(cs, cs_f, cs_s);
+        close well_formed_item_chars(p)(cs);
+        leak well_formed_item_chars(p)(cs);
+        collision_public(pub,cs);
+      }
+      else
+      {
+        close item_constraints_no_collision(p, cs, pub);
+        leak item_constraints_no_collision(p, cs, pub);
+        item_constraints_no_collision_well_formed(p, p);
+        open [_]well_formed_item_chars(p)(cs);
       }
   @*/
-
-  //@ close item(first, fi);
-  //@ close item(second, si);
-  //@ close item(pair, pair_item(fi, si));
+  //@ close item_constraints(col, p, cs, pub);
+  //@ leak item_constraints(col, p, cs, pub);
+  //@ close item(pair, p, pub);
+  
+  //@ close item(first, f, pub);
+  //@ close item(second, s, pub);
   return pair;
 }
 
 bool is_pair(struct item *item)
-  //@ requires item(item, ?i);
-  /*@ ensures  item(item, i) &*&
-        switch (i)
-        {
-          case data_item(d0):     
-            return result == false;
-          case pair_item(f0, s0):     
-            return result == true;
-          case nonce_item(p0, c0, inc0, i0):
-            return result == false;
-          case key_item(p0, c0, k0, i0):
-            return result == false;
-          case hmac_item(k0, pay0):
-            return result == false;
-          case encrypted_item(k0, pay0, ent0):
-            return result == false;
-        };
-  @*/
+  //@ requires item(item, ?i, ?pub);
+  /*@ ensures  item(item, i, pub) &*&
+               result ? i == pair_item(_, _) : true; @*/
 {
-  //@ open item(item, i);
-  return item->tag == 1;
-  //@ close item(item, i);
+  //@ open item(item, i, pub);
+  //@ open chars(item->content, ?size, ?cs);
+  //@ open [_]item_constraints(?b, i, cs, pub);
+  //@ if (!b) open [_]item_constraints_no_collision(i, cs, pub);
+  return *(item->content) == 'b';
+  //@ close item(item, i, pub);
 }
 
 void check_is_pair(struct item *item)
-  //@ requires item(item, ?i);
-  /*@ ensures  
-        switch (i)
-        {
-          case data_item(d0):
-            return false;
-          case pair_item(f0, s0):
-            return item(item, i);
-          case nonce_item(p0, c0, inc0, i0):
-            return false;
-          case key_item(p0, c0, k0, i0):
-            return false;
-          case hmac_item(k0, pay0):
-            return false;
-          case encrypted_item(k0, pay0, ent0):
-            return false;
-        };
-  @*/
+  //@ requires item(item, ?p, ?pub);
+  //@ ensures  item(item, p, pub) &*& p == pair_item(_, _);
 {
   if (!is_pair(item))
     abort_crypto_lib("Presented item is not a pair item");
@@ -131,222 +96,173 @@ void check_is_pair(struct item *item)
 
 void pair_get_components(struct item* pair, 
                          struct item** firstp, struct item** secondp)
-  /*@ requires item(pair, ?p) &*&
+  /*@ requires item(pair, ?p, ?pub) &*&
+               p == pair_item(?f0, ?s0) &*&
                pointer(firstp, _) &*& pointer(secondp, _); @*/
-  /*@ ensures  item(pair, p) &*&
+  /*@ ensures  item(pair, p, pub) &*&
                pointer(firstp, ?fp) &*& pointer(secondp, ?sp) &*&
-        switch (p)
-        {
-          case data_item(d0):
-            return false;
-          case pair_item(f0, s0):
-            return item(fp, ?f1) &*& item(sp, ?s1) &*& 
-                   true == if_no_collision(f0 == f1 && s0 == s1);
-          case nonce_item(p0, c0, inc0, i0): 
-            return false;
-          case key_item(p0, c0, k0, i0):
-            return false;
-          case hmac_item(k0, pay0):
-            return false;
-          case encrypted_item(k0, pay0, ent0):
-            return false;
-        };
-  @*/
+                item(fp, ?f1, pub) &*& item(sp, ?s1, pub) &*&
+               collision_in_run() ? true : f0 == f1 && s0 == s1; @*/
 {
-  int* temp;
-
+  char* temp;
+  
   check_is_pair(pair);
-  //@ open item(pair, pair_item(?f0, ?s0));
-
+  //@ open item(pair, p, pub);
+  //@ assert pair->content |-> ?cont &*& pair->size |-> ?size;
+  //@ assert chars(cont, size, ?cs);
+  //@ chars_limits(cont);
+  //@ open [_]item_constraints(?b, p, cs, pub);
+  //@ if (!b) open item_constraints_no_collision(p, cs, pub);
+  
   struct item *first  = malloc(sizeof(struct item));
   struct item *second = malloc(sizeof(struct item));
   if (first == 0 || second == 0){abort_crypto_lib("malloc of item failed");}
 
-  //@ assert pair->content |-> ?p_content &*& chars(p_content, ?p_size, ?p_cs);
-  //@ close [1/2]hide_chars(p_content, p_size, p_cs);
-  //@ list<char> l1 = chars_of_int(tag_for_item(f0));
-  //@ list<char> l2 = chars_of_int(length(chars_for_item(f0)));
-  //@ list<char> l3 = chars_for_item(f0);
-  //@ list<char> l4 = chars_of_int(tag_for_item(s0));
-  //@ list<char> l5 = chars_of_int(length(chars_for_item(s0)));
-  //@ list<char> l6 = chars_for_item(s0);
-  /*@ assert true == if_no_collision(
-                    p_cs == append(l1, append(l2, append(l3, 
-                            append(l4, append(l5, l6)))))); @*/
-
-  //@ chars_limits(p_content);
-  if (pair->size < 2 * (int) sizeof(int))
-    abort_crypto_lib("Inconsistent pair item 1");
-  temp = (void*) pair->content;
-
-  //First item: tag
-  //@ chars_split((void*) temp, sizeof(int));
+  temp = pair->content;
+  //@ chars_split(cont, 1);
+  //@ assert chars(temp, 1, ?cs1);
+  //@ assert chars(temp + 1, size - 1, ?cs2);
+  //@ assert cs == append(cs1, cs2);
+  //@ switch(cs1) {case cons(c0, cs0): case nil:}
+  //@ assert cs1 == cons('b', nil);
+  //@ assert cs2 == tail(cs);
+  
+  temp = temp + 1;
+  if (pair->size <= 1 + (int) sizeof(int))
+    abort_crypto_lib("Found corrupted pair item 1");
+  
+  //@ chars_split(temp, sizeof(int));
   //@ chars_to_integer(temp);
-  first->tag = *(temp);
-  check_valid_item_tag(first->tag);
+  first->size = *((int*) (void*) temp);
+  if (first->size <= 1 ||
+      pair->size - 1 - (int) sizeof(int) <= first->size)
+    abort_crypto_lib("Found corrupted pair item 2");
   //@ integer_to_chars(temp);
-  /*@ take_append(sizeof(int), l1, append(l2, append(l3, 
-                                   append(l4, append(l5, l6))))); @*/
-  //@ assert first->tag |-> ?tag1;
-  //@ assert true == if_no_collision(tag1 == tag_for_item(f0));
-
-  //First item: size
-  temp++; //@ chars_split((void*) temp, sizeof(int));
-  //@ chars_to_integer(temp);
-  first->size = *(temp);
-  check_valid_item_chars_size(first->size);
-  //@ integer_to_chars(temp);
-  //@ assert first->size |-> ?size1;
-  /*@ if (!collision_in_run())
-      {
-       drop_append(sizeof(int), l1, append(l2, append(l3, 
-                                   append(l4, append(l5, l6)))));
-       take_append(sizeof(int), l2, append(l3, append(l4, append(l5, l6))));
-       assert size1 == length(chars_for_item(f0));
-      }
-  @*/
-  if (first->size < 0 || first->size > pair->size - 2 * (int) sizeof(int))
-    abort_crypto_lib("Inconsistent pair item 2");
-
-  //First item: content
-  temp++; //@ chars_split((void*) temp, size1);
+  //@ assert chars(temp, sizeof(int), ?size_f_cs);
+  temp = temp + (int) sizeof(int);
+  //@ assert chars(temp, size - 1 - sizeof(int), ?cs3);
+  //@ assert cs2 == append(size_f_cs, cs3);
+  
+  //@ chars_split(temp, first->size);
   first->content = malloc_wrapper(first->size);
-  memcpy(first->content, (void*) temp, (unsigned int) first->size);
-
-  //Second item: tag
-  temp = (void*) temp + first->size; 
-  if (pair->size - first->size - 2 * (int) sizeof(int) < 2 * (int) sizeof(int))
-    abort_crypto_lib("Inconsistent pair item 3");
-  //@ chars_to_integer(temp);
-  second->tag = *(temp);
-  check_valid_item_tag(second->tag);
-  //@ integer_to_chars(temp);
-  //@ assert second->tag |-> ?tag2;
-  /*@ if (!collision_in_run())
-      {
-        drop_append(sizeof(int), l2, append(l3, append(l4, append(l5, l6))));
-        drop_append(size1, l3, append(l4, append(l5, l6)));
-        take_append(sizeof(int), l4, append(l5, l6));
-        assert tag2 == tag_for_item(s0);
-      }
-  @*/
-
-  temp++; //@ chars_split((void*) temp, sizeof(int));
-  //@ chars_to_integer(temp);
-  second->size = *(temp);
-  check_valid_item_chars_size(second->size);
-  //@ integer_to_chars(temp);
-  //@ assert second->size |-> ?size2;
-  /*@ if (!collision_in_run())
-      {
-        drop_append(sizeof(int), l4, append(l5, l6));
-        take_append(sizeof(int), l5, l6);
-        assert size2 == length(chars_for_item(s0));
-      }
-  @*/
-  if (second->size < 0 || 
-      second->size != pair->size - first->size - 4 * (int) sizeof(int))
-    abort_crypto_lib("Inconsistent pair item 4");
-
-  temp++;
+  memcpy(first->content, temp, (unsigned int) first->size);
+  
+  temp = temp + first->size;
+  second->size = pair->size - 1 - (int) sizeof(int) - first->size;
+  if (second->size <= 1)
+    abort_crypto_lib("Found corrupted pair item 3");
   second->content = malloc_wrapper(second->size);
-  memcpy(second->content, (void*) temp, (unsigned int) second->size);
+  memcpy(second->content, temp, (unsigned int) second->size);
+ 
+  //@ chars_join(cont + 1 + sizeof(int));
+  //@ chars_join(cont + 1);
+  //@ assert first->content |-> ?cont_f &*& first->size |-> ?size_f;
+  //@ assert second->content |-> ?cont_s &*& second->size |-> ?size_s;
+  //@ assert chars(cont_f, size_f, ?cs_f);
+  //@ assert chars(cont_s, size_s, ?cs_s);
+  
+  //@ assert size_f == int_of_chars(size_f_cs);
+  //@ assert length(cs_f) == size_f;
+  //@ assert chars_of_unbounded_int(size_f) == size_f_cs;
+  //@ assert cs3 == append(cs_f, cs_s);
+  
+  /*@ if (!b) 
+      {
+        assert [_]item_constraints_no_collision(f0, ?cs_f0, pub);
+        item_constraints_no_collision_well_formed(f0, f0);
+        open [_]well_formed_item_chars(f0)(cs_f0);
+        close item_constraints(false, f0, cs_f0, pub);
+        leak item_constraints(false, f0, cs_f0, pub);
+        
+        assert [_]item_constraints_no_collision(s0, ?cs_s0, pub);
+        item_constraints_no_collision_well_formed(s0, s0);
+        open [_]well_formed_item_chars(s0)(cs_s0);
+        close item_constraints(false, s0, cs_s0, pub);
+        leak item_constraints(false, s0, cs_s0, pub);
+        
+        drop_append(sizeof(int), chars_of_int(length(cs_f0)), 
+                    append(cs_f0, cs_s0));
+        take_append(sizeof(int), chars_of_int(length(cs_f0)), 
+                    append(cs_f0, cs_s0));
+        drop_append(length(cs_f0), cs_f0, cs_s0);
+        take_append(length(cs_f0), cs_f0, cs_s0);
+        close item(first, f0, pub);
+        close item(second, s0, pub);
+      }
+      else
+      {
+        head_append(size_f_cs, cs3);
+        head_mem(size_f_cs);
+        assert true == mem(head(cs2), size_f_cs);
+        chars_of_int_char_in_bounds(head(tail(cs)), size_f);
+        assert INT_MIN <= head(tail(cs)) && head(tail(cs)) <= INT_MAX;
+        nat n;
+        switch(nat_length(cs)) {case succ(n0): n = n0; case zero: assert false;}
+        length_equals_nat_length(cs_f);
+        well_formed_upper_bound(cs_f, n, nat_length(cs_f));
+        assert true == well_formed(cs_f, nat_length(cs_f));
+        switch(nat_length(cs_f)) {case succ(n0): case zero: assert false;}
+        assert true == valid_tag(head(cs_f));
+        length_equals_nat_length(cs_s);
+        well_formed_upper_bound(cs_s, n, nat_length(cs_s));
+        assert true == well_formed(cs_s, nat_length(cs_s));
+        switch(nat_length(cs_s)) {case succ(n0): case zero: assert false;}
+        assert true == valid_tag(head(cs_s));
+        
+        polarssl_generated_public_cryptograms_subset(polarssl_pub(pub), cs);
+        polarssl_cryptograms_in_chars_public_upper_bound_split(
+                                                      polarssl_pub(pub), cs, 1);
+        polarssl_cryptograms_in_chars_public_upper_bound_split(
+                                           polarssl_pub(pub), cs2, sizeof(int));
+        polarssl_cryptograms_in_chars_public_upper_bound_split(
+                                                polarssl_pub(pub), cs3, size_f);
+        polarssl_cryptograms_in_chars_upper_bound_from(cs_f, 
+                      polarssl_generated_public_cryptograms(polarssl_pub(pub)));
+        polarssl_cryptograms_in_chars_upper_bound_from(cs_s, 
+                      polarssl_generated_public_cryptograms(polarssl_pub(pub)));
+        
+        item f = dummy_item_for_tag(head(cs_f));
+        tag_for_dummy_item(f, head(cs_f));
+        item s = dummy_item_for_tag(head(cs_s));
+        tag_for_dummy_item(s, head(cs_s));
+        close item_constraints(true, f, cs_f, pub);
+        leak item_constraints(true, f, cs_f, pub);
+        close item(first, f, pub);
+        close item_constraints(true, s, cs_s, pub);
+        leak item_constraints(true, s, cs_s, pub);
+        close item(second, s, pub);
+      }
+  @*/
 
-  //First item: constraints
-  //@ assert first->content |-> ?content1 &*& chars(content1, size1, ?f_cs);
-  /*@ if (!collision_in_run())
-      {
-        drop_append(sizeof(int), l1, append(l2, append(l3, 
-                                   append(l4, append(l5, l6)))));
-        drop_append(sizeof(int), l2, append(l3, append(l4, append(l5, l6))));
-        take_append(length(chars_for_item(f0)), l3, append(l4, append(l5, l6)));
-        assert l3 == f_cs;
-        close item(first, f0);
-      }
-      else
-      {
-        dummy_item_for_tag_has_valid_tag(tag1);
-        close item(first, dummy_item_for_tag(tag1));
-      }
-  @*/
-  *firstp =  first;
-  //Second item: constraints
-  //@ assert second->content |-> ?content2 &*& chars(content2, size2, ?s_cs);
-  /*@ if (!collision_in_run())
-      {
-        drop_append(sizeof(int), l4, append(l5, l6));
-        drop_append(sizeof(int), l5, l6);
-        assert l6 == s_cs;
-        close item(second, s0);
-      }
-      else
-      {
-        dummy_item_for_tag_has_valid_tag(tag2);
-        item dummy = dummy_item_for_tag(tag2);
-        close item(second, dummy);
-      }
-  @*/
+  //@ close item(pair, pair_item(f0, s0), pub);
+  
+  *firstp = first;
   *secondp = second;
-
-  //@ chars_join(p_content);
-  //@ chars_join(p_content);
-  //@ chars_join(p_content);
-  //@ chars_join(p_content);
-  //@ open [1/2]hide_chars(p_content, p_size, p_cs);
-  //@ close item(pair, pair_item(f0, s0));
 }
 
 struct item *pair_get_first(struct item *pair)
-  //@ requires item(pair, ?p);
-  /*@ ensures  item(pair, p) &*&
-        switch (p)
-        {
-          case data_item(d0):
-            return false;
-          case pair_item(f0, s0):
-            return item(result, ?f1) &*& 
-                   true == if_no_collision(f0 == f1);
-          case nonce_item(p0, c0, inc0, i0): 
-            return false;
-          case key_item(p0, c0, k0, i0):
-            return false;
-          case hmac_item(k0, pay0):
-            return false;
-          case encrypted_item(k0, pay0, ent0):
-            return false;
-        };
-  @*/
+  //@ requires item(pair, ?p, ?pub);
+  /*@ ensures  item(pair, p, pub) &*& p == pair_item(?f, ?s) &*& 
+               item(result, ?f0, pub) &*&
+               collision_in_run() ? true : f == f0; @*/
 {
   struct item *first;
   struct item *second;
+  check_is_pair(pair);
   pair_get_components(pair, &first, &second);
   item_free(second);
   return first;
 }
 
 struct item *pair_get_second(struct item *pair)
-  //@ requires item(pair, ?p);
-  /*@ ensures  item(pair, p) &*&
-        switch (p)
-        {
-          case data_item(d0):
-            return false;
-          case pair_item(f0, s0):
-            return item(result, ?s1) &*& 
-                   true == if_no_collision(s0 == s1);
-          case nonce_item(p0, c0, inc0, i0):
-            return false;
-          case key_item(p0, c0, k0, i0):
-            return false;
-          case hmac_item(k0, pay0):
-            return false;
-          case encrypted_item(k0, pay0, ent0):
-            return false;
-        };
-  @*/
+  //@ requires item(pair, ?p, ?pub);
+  /*@ ensures  item(pair, p, pub) &*& p == pair_item(?f, ?s) &*& 
+               item(result, ?s0, pub) &*&
+               collision_in_run() ? true : s == s0; @*/
 {
   struct item *first;
   struct item *second;
+  check_is_pair(pair);
   pair_get_components(pair, &first, &second);
   item_free(first);
   return second;

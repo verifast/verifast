@@ -19,7 +19,6 @@
 .provides ./prelude.h#pointer_nonzero
 .provides ./prelude.h#pointer_limits
 .provides ./prelude.h#pointer_of_chars_of_pointer
-.provides ./prelude.h#chars_inv
 .provides ./prelude.h#chars_of_pointer_of_chars
 .provides ./prelude.h#chars_zero
 .provides ./prelude.h#char_limits
@@ -34,6 +33,7 @@
 .provides ./prelude.h#int_of_chars_injective
 .provides ./prelude.h#chars_of_int_size
 .provides ./prelude.h#int_of_chars_size
+.provides ./prelude.h#chars_of_int_char_in_bounds
 .provides ./prelude.h#chars_to_integer
 .provides ./prelude.h#chars_to_u_integer
 .provides ./prelude.h#chars_to_pointer
@@ -51,6 +51,7 @@
 .provides ./prelude.h#chars_separate_string
 .provides ./prelude.h#chars_unseparate_string
 .provides ./prelude.h#string_limits
+.provides ./prelude.h#chars_inv
 .provides ./prelude.h#uchars_inv
 .provides ./prelude.h#ints_inv
 .provides ./prelude.h#uints_inv

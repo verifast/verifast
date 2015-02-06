@@ -1,101 +1,102 @@
 #include "data_item.h"
 
-struct item *create_data_item(int data)
-  //@ requires emp;
-  //@ ensures  item(result, data_item(data));
-{
-  struct item* item = malloc(sizeof(struct item));
-  if (item == 0){abort_crypto_lib("malloc of item failed");}
-  item->tag = 0;
-  item->size = (int) sizeof(int);
-  item->content = malloc_wrapper(item->size);
-  memcpy(item->content, &data, sizeof(int));
-  
-  //@ chars_to_integer(&data);
-  //@ close item(item, data_item(data));
-  return item;
-}
+#include "item_constraints.h"
 
 bool is_data(struct item *item)
-  //@ requires item(item, ?i);
-  /*@ ensures  item(item, i) &*&
-        switch (i)
-        {
-          case data_item(d0):
-            return result == true;
-          case pair_item(f0, s0):
-            return result == false;
-          case nonce_item(p0, c0, inc0, i0):
-            return result == false;
-          case key_item(p0, c0, k0, i0):
-            return result == false;
-          case hmac_item(k0, pay0):
-            return result == false;
-          case encrypted_item(k0, pay0, ent0):
-            return result == false;
-        };
-  @*/
+  //@ requires item(item, ?i, ?pub);
+  /*@ ensures  item(item, i, pub) &*&
+               result ? i == data_item(_) : true; @*/
 {
-  //@ open item(item, i);
-  return item->tag == 0;
-  //@ close item(item, i);
+  //@ open item(item, i, pub);
+  //@ open chars(item->content, ?size, ?cs);
+  //@ open [_]item_constraints(?b, i, cs, pub);
+  //@ if (!b) open [_]item_constraints_no_collision(i, cs, pub);
+  return *(item->content) == 'a';
+  //@ close item(item, i, pub);
 }
 
 void check_is_data(struct item *item)
-  //@ requires item(item, ?i);
-  /*@ ensures 
-        switch (i)
-        {
-          case data_item(d0):
-            return item(item, i);
-          case pair_item(f0, s0):
-            return false;
-          case nonce_item(p0, c0, inc0, i0):
-            return false;
-          case key_item(p0, c0, k0, i0):
-            return false;
-          case hmac_item(k0, pay0):
-            return false;
-          case encrypted_item(k0, pay0, ent0):
-            return false;
-        };
-  @*/
+  //@ requires item(item, ?i, ?pub);
+  //@ ensures  item(item, i, pub) &*& i == data_item(_);
 {
   if (!is_data(item))
     abort_crypto_lib("Presented item is not a data item");
 }
 
-int item_get_data(struct item *item)
-  //@ requires item(item, ?i);
-  /*@ ensures  
-        switch (i)
-        {
-          case data_item(d0):
-            return item(item, i) &*& 
-                   collision_in_run() ? true : result == d0;
-          case pair_item(f0, s0):
-            return false;
-          case nonce_item(p0, c0, inc0, i0):
-            return false;
-          case key_item(p0, c0, k0, i0):
-            return false;
-          case hmac_item(k0, pay0):
-            return false;
-          case encrypted_item(k0, pay0, ent0):
-            return false;
-        };
-  @*/
+struct item *create_data_item(char* data, int length)
+  /*@ requires [?f]world(?pub) &*&
+               chars(data, length, ?cs) &*& length > 0; @*/
+  /*@ ensures  [f]world(pub) &*&
+               chars(data, length, cs) &*& 
+               item(result, data_item(cs), pub); @*/
 {
-  check_is_data(item);
-  //@ assert item(item, data_item(?d0));
-  //@ open item(item, i);
-  
-  int* temp = (void*) item->content;
-  if (item->size != (int) sizeof(int))
-    abort_crypto_lib("Illegal size for data item");
-  //@ chars_to_integer(item->content);
-  return *temp;
-
-  //@ close item(item, i);
+  struct item* item = malloc(sizeof(struct item));
+  if (item == 0){abort_crypto_lib("malloc of item failed");}
+  if (length >= INT_MAX - 1) abort_crypto_lib("Requested data item was to big");
+  item->size = 1 + length;
+  item->content = malloc_wrapper(item->size);
+  *(item->content) = 'a';
+  memcpy(item->content + 1, data, (unsigned int) length);
+  //@ assert item->content |-> ?cont &*& item->size |-> ?size;
+  //@ assert chars(cont, size, ?cs1);
+  //@ item d = data_item(cs);
+  //@ close item_constraints_no_collision(d, cs1, pub);
+  //@ leak item_constraints_no_collision(d, cs1, pub);
+  //@ close item_constraints(false, d, cs1, pub);
+  //@ leak item_constraints(false, d, cs1, pub);
+  //@ close item(item, d, pub);
+  return item;
 }
 
+struct item *create_data_item_from_char(char i)
+  //@ requires [?f]world(?pub);
+  /*@ ensures  [f]world(pub) &*&
+               item(result, data_item(cons(i, nil)), pub); @*/
+{
+  return create_data_item(&i, (int) sizeof(char));
+}
+
+int item_get_data(struct item *item, char** data)
+  //@ requires item(item, ?i, ?pub) &*& i == data_item(?cs0) &*& pointer(data, _);
+  /*@ ensures  item(item, i, pub) &*& pointer(data, ?p) &*&
+               chars(p, result, ?cs1) &*& malloc_block(p, result) &*&
+               collision_in_run() ? true : cs0 == cs1; @*/
+{
+  //@ open item(item, data_item(cs0), pub);
+  //@ assert item->content |-> ?cont;
+  //@ assert chars(cont, _, ?cs);
+  //@ chars_limits(cont);
+  //@ open [_]item_constraints(?b, i, cs, pub);
+  //@ if (!b) open [_]item_constraints_no_collision(i, cs, pub);
+
+  int size = item->size - 1;
+  char* temp = malloc_wrapper(size);
+  memcpy(temp, (void*) item->content + 1, (unsigned int) size);
+  
+  //@ close item(item, data_item(cs0), pub);
+  *data = temp;
+  return size;
+}
+
+char item_get_data_as_char(struct item *item)
+  //@ requires item(item, ?i, ?pub) &*& i == data_item(?cs0);
+  /*@ ensures  item(item, i, pub) &*& 
+               collision_in_run() ? true : cs0 == cons(result, nil); @*/
+{
+  //@ open item(item, data_item(cs0), pub);
+  //@ assert item->content |-> ?cont;
+  //@ assert chars(cont, _, ?cs);
+  //@ chars_limits(cont);
+  //@ open [_]item_constraints(?b, i, cs, pub);
+  //@ if (!b) open [_]item_constraints_no_collision(i, cs, pub);
+  
+  char* temp = item->content + 1;
+  if (item->size != (int) sizeof(char) + 1)
+    abort_crypto_lib("Illegal size for char data item");
+  
+  //@ open chars(cont, 2, cs);
+  //@ open chars(temp, 1, _);
+  return *temp;
+  //@ close chars(temp, 1, _);
+  //@ close item(item, i, pub);
+}

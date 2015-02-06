@@ -10,9 +10,7 @@ lemma void assume(bool b);
     requires true;
     ensures b;
 
-
 predicate exists<t>(t x;) = true;
-
 
 fixpoint int abs(int x) { return x < 0 ? -x : x; }
 
@@ -132,6 +130,11 @@ lemma_auto void chars_of_int_size(int i);
 lemma_auto void int_of_chars_size(list<char> cs);
     requires length(cs) == sizeof(int);
     ensures INT_MIN <= int_of_chars(cs) && int_of_chars(cs) <= INT_MAX;
+
+lemma void chars_of_int_char_in_bounds(char c, int i);
+    requires INT_MIN <= i && i <= INT_MAX &*&
+             true == mem(c, chars_of_int(i));
+    ensures  INT_MIN <= c && c <= INT_MAX;
 
 // chars to ...
 lemma_auto void chars_to_integer(void *p);

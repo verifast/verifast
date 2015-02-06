@@ -4,22 +4,11 @@
 #include "general.h"
 #include "debug.h"
 #include "item.h"
-#include "nonce_item.h"
-#include "key_item.h"
-#include "polarssl_invariants.h"
-
-// see ../include/cryptolib.h
+#include "invariants.h"
 
 //@ require_module principals;
 
 /*@ 
-
-predicate world(fixpoint(item, bool) pub) =
-  debug_initialized() &*&
-  nonces_initialized() &*&
-  key_registry_initialized() &*&
-  polarssl_world<item>(polarssl_pub(pub))
-;
 
 predicate principal(int p) =
   polarssl_principal(p)
@@ -29,6 +18,8 @@ predicate generated_values(int principal, int count) =
   polarssl_generated_values(principal, count)
 ;
 
+predicate principals_created_temp(int* counter);
+
 @*/
 
 void principals_init();
@@ -36,7 +27,7 @@ void principals_init();
                polarssl_principals(0) &*&
                module(principals, true); @*/
   /*@ ensures  [f]world(pub) &*& 
-               initial_principals(); @*/
+               principals_created(0); @*/
 
 /*@
 lemma void principals_exit();
@@ -46,4 +37,17 @@ lemma void principals_exit();
            polarssl_principals(_) &*&
            module(principals, false);
 @*/
+
+int* get_polarssl_principals();
+  //@ requires principals_created(?count);
+  /*@ ensures  principals_created_temp(result) &*& integer(result, count) &*&
+               polarssl_principals(count) &*& count >= 0; @*/
+
+/*@
+lemma void return_polarssl_principals();
+  requires principals_created_temp(?counter) &*& integer(counter, ?count) &*&
+           count >= 0 &*& polarssl_principals(count);
+  ensures  principals_created(count);
+@*/
+
 #endif

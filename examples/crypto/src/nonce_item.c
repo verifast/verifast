@@ -1,21 +1,20 @@
 #include "nonce_item.h"
+
 #include "principals.h"
+#include "item_constraints.h"
+#include "serialization.h"
 
 struct havege_state random_state;
 
 /*@
-
 predicate nonces_initialized() =
   havege_state_initialized(&random_state)
 ;
-
 @*/
 
 void nonces_init()
-  /*@ requires [?f]polarssl_world<item>(?pub) &*&
-               module(nonce_item, true); @*/
-  /*@ ensures  [f]polarssl_world<item>(pub) &*& 
-               nonces_initialized(); @*/
+  //@ requires module(nonce_item, true);
+  //@ ensures  nonces_initialized();
 {
   //@ open_module();
   //@ close havege_state(&random_state);
@@ -24,153 +23,188 @@ void nonces_init()
 }
 
 void *nonces_expose_state()
-  /*@ requires [?f1]polarssl_world<item>(?pub) &*&
-               [?f2]nonces_initialized(); @*/
-  /*@ ensures  [f1]polarssl_world<item>(pub) &*& 
-               [f2]havege_state_initialized(result); @*/
+  //@ requires [?f]nonces_initialized();
+  //@ ensures  [f]havege_state_initialized(result);
 {
-  //@ open [f2]nonces_initialized();
+  //@ open [f]nonces_initialized();
   return &random_state;
 }
 
 void nonces_hide_state(void* state)
-  /*@ requires [?f1]polarssl_world<item>(?pub) &*&
-               [?f2]havege_state_initialized(state); @*/
-  /*@ ensures  [f1]polarssl_world<item>(pub) &*& 
-               [f2]nonces_initialized(); @*/
+  //@ requires [?f]havege_state_initialized(state);
+  //@ ensures  [f]nonces_initialized();
 {
   void *temp = &random_state;
   if (state != temp)
     abort_crypto_lib("Illegal state for nonces");
   
-  //@ close [f2]nonces_initialized();
+  //@ close [f]nonces_initialized();
 }
 
 void nonces_exit()
-  /*@ requires [?f]polarssl_world<item>(?pub) &*&
-               nonces_initialized(); @*/
-  /*@ ensures  [f]polarssl_world<item>(pub) &*&
-               module(nonce_item, false); @*/
+  //@ requires nonces_initialized();
+  //@ ensures  module(nonce_item, false);
 {
   //@ open nonces_initialized();
-  //@ havege_exit(&random_state);
+  havege_free(&random_state);
   //@ open havege_state(&random_state);
   //@ close_module();
+}
+
+bool is_nonce(struct item *item)
+  //@ requires item(item, ?i, ?pub);
+  /*@ ensures  item(item, i, pub) &*&
+               result ? i == nonce_item(_, _, _) : true; @*/
+{
+  //@ open item(item, i, pub);
+  //@ assert item->content |-> ?cont;
+  //@ open chars(cont, ?size, ?cs);
+  //@ open [_]item_constraints(?b, i, cs, pub);
+  //@ if (!b) open [_]item_constraints_no_collision(i, cs, pub);
+  return *(item->content) == 'c';
+  //@ close chars(cont, size, cs);
+  //@ close item(item, i, pub);
+}
+
+void check_is_nonce(struct item *item)
+  //@ requires item(item, ?i, ?pub);
+  //@ ensures  item(item, i, pub) &*& i == nonce_item(_, _, _);
+{
+  if (!is_nonce(item))
+    abort_crypto_lib("Presented item is not a nonce");
 }
 
 struct item *create_nonce()
   /*@ requires [?f]world(?pub) &*&
                generated_values(?principal, ?count) &*&
                nonce_request(principal, ?info); @*/
-  /*@ ensures  [f]world(pub) &*& 
+  /*@ ensures  [f]world(pub) &*&
                generated_values(principal, count + 1) &*&
-               item(result, ?i) &*&
-               i == nonce_item(principal, count + 1, 0, info); 
-  @*/
+               item(result, ?i, pub) &*& [_]info_for_item(i, info) &*&
+               i == nonce_item(principal, count + 1, 0); @*/
 {
-  int increment = 0;
-  char* temp;
+  struct item* item = malloc(sizeof(struct item));
+  if (item == 0){abort_crypto_lib("malloc of item failed");}
+  item->size = 2 + NONCE_SIZE;
+  item->content = malloc_wrapper(item->size);
+  *(item->content) = 'c';
+  *(item->content + 1) = 0;
+  create_havege_random(item->content + 2, NONCE_SIZE);
   
-  struct item* nonce = malloc(sizeof(struct item));
-  if (nonce == 0){abort_crypto_lib("malloc of item failed");}
-  nonce->tag = 2;
-  nonce->size = NONCE_SIZE + (int) sizeof(int);
-  nonce->content = malloc_wrapper(nonce->size);
-  temp = nonce->content;
-  
-  write_buffer(&temp, (void*) &increment, (int) sizeof(int));
-  create_havege_random(temp, NONCE_SIZE);
-  
-  //@ open [f]world(pub);
-  //@ havege_polarssl_item_to_chars(temp);
-  //@ close item(nonce, nonce_item(principal, count + 1, 0, info));
-  return nonce;
-  //@ close [f]world(pub);
-}
-
-bool is_nonce(struct item *item)
-  //@ requires item(item, ?i);
-  /*@ ensures  item(item, i) &*&
-        switch (i)
-        {
-          case data_item(d0):
-            return result == false;
-          case pair_item(f0, s0):
-            return result == false;
-          case nonce_item(p0, c0, inc0, i0):
-            return result == true;
-          case key_item(p0, c0, k0, i0):
-            return result == false;
-          case hmac_item(k0, pay0):
-            return result == false;
-          case encrypted_item(k0, pay0, ent0):
-            return result == false;
-        };
-  @*/
-{
-  //@ open item(item, i);
-  return (item->tag == 2);
-  //@ close item(item, i);
-}
-
-void check_is_nonce(struct item *item)
-  //@ requires item(item, ?i);
-  /*@ ensures
-        switch (i)
-        {
-          case data_item(d0):
-            return false;
-          case pair_item(f0, s0):
-            return false;
-          case nonce_item(p0, c0, inc0, i0):
-            return item(item, nonce_item(p0, c0, inc0, i0));
-          case key_item(p0, c0, k0, i0):
-            return false;
-          case hmac_item(k0, pay0):
-            return false;
-          case encrypted_item(k0, pay0, ent0):
-            return false;
-        };
-  @*/
-{
-  if (!is_nonce(item))
-    abort_crypto_lib("Presented item is not a nonce");
+  //@ item nonce = nonce_item(principal, count + 1, 0);
+  //@ assert item->content |-> ?cont;
+  //@ open polarssl_cryptogram(cont + 2, NONCE_SIZE, ?n_cs, ?n_cg);
+  //@ close exists(pair(principal, count + 1));
+  //@ list<char> cs = cons('c', cons(0, n_cs));
+  //@ close item_constraints_no_collision(nonce, cs, pub);
+  //@ leak item_constraints_no_collision(nonce, cs, pub);
+  //@ close item_constraints(false, nonce, cs, pub);
+  //@ leak item_constraints(false, nonce, cs, pub);
+  //@ close item(item, nonce, pub);
+  //@ close info_for_item(nonce, info);
+  //@ leak info_for_item(nonce, info);
+  return item;
 }
 
 void increment_nonce(struct item *item)
-  /*@ requires [?f]world(?pub) &*&
-               item(item, ?ni) &*& 
-               ni == nonce_item(?principal, ?count, ?inc0, ?info);
-  @*/
-  /*@ ensures  [f]world(pub) &*&
-               item(item, ?i) &*& 
-               i == nonce_item(principal, count, inc0 + 1, info);
-  @*/
+  /*@ requires item(item, ?i, ?pub) &*& 
+               i == nonce_item(?principal, ?count, ?inc0); @*/
+  /*@ ensures  item(item, ?i_inc, pub) &*& 
+               [_]info_for_item(i, ?info1) &*&
+               [_]info_for_item(i_inc, ?info2) &*&
+               collision_in_run() ? 
+                 true 
+               : 
+                 i_inc == nonce_item(principal, count, inc0 + 1) &&
+                 info1 == info2; @*/
 {
-  //@ open  item(item, nonce_item(principal, count, inc0, info));
-  //@ assert item->size |-> ?size;
-  //@ assert item->content |-> ?content &*& chars(content, size, ?cs);
-  int *increment = (void*) item->content;
-  if (item->size < (int) sizeof(int))
-     abort_crypto_lib("Nonce to increment was corrupted");
-  //@ chars_split((void*) increment, sizeof(int));
-  /*@
-      if (!collision_in_run())
+  //@ open  item(item, i, pub);
+  //@ assert item->size |-> ?size &*& item->content |-> ?cont;
+  //@ chars_limits(cont);
+  //@ open chars(cont, size, ?cs);
+  //@ open [_]item_constraints(?b, i, cs, pub);
+  //@ if (!b) open [_]item_constraints_no_collision(i, cs, pub);
+  
+  char *increment = item->content + 1;
+  //@ open chars(cont + 1, size - 1, _);
+  //@ assert chars(cont + 2, size - 2, ?n_cs);
+  if (*increment < 0 || *increment >= 126)
+    abort_crypto_lib("Incremented nonce to many times");
+  (*increment)++;
+  //@ assert character(increment, ?val);
+  //@ close chars(cont + 1, size - 1, cons(val, n_cs));
+  //@ close chars(cont, size, cons('c', cons(val, n_cs)));
+  
+  //@ item nonce;
+  //@ list<char> nonce_prefix = cons('c', cons(val, nil)); 
+  //@ list<char> nonce_cs = append(nonce_prefix, n_cs);
+  /*@ if (!b) 
       {
-        take_append(sizeof(int), chars_of_int(inc0),  
-                          havege_chars_for_polarssl_item(
-                          polarssl_havege_item(principal, count)));
-        drop_append(sizeof(int), chars_of_int(inc0),  
-                          havege_chars_for_polarssl_item(
-                          polarssl_havege_item(principal, count)));
+        nonce = nonce_item(principal, count, inc0 + 1);
+        open [_]item_constraints_no_collision(i, cs, pub);
+        assert val == inc0 + 1;
+        close item_constraints_no_collision(nonce, nonce_cs, pub);
+        leak item_constraints_no_collision(nonce, nonce_cs, pub);
+        item_constraints_no_collision_well_formed(nonce, nonce);
+      }
+      else
+      {
+        nonce = dummy_item_for_tag('c');
+        polarssl_generated_public_cryptograms_subset(polarssl_pub(pub), cs);
+        polarssl_cryptograms_in_chars_public_upper_bound_split(
+                                                      polarssl_pub(pub), cs, 2);
+        collision_public(pub, nonce_cs);
+        polarssl_cryptograms_in_chars_public_upper_bound_join(polarssl_pub(pub), 
+                                                              nonce_cs, n_cs);
+        polarssl_cryptograms_in_chars_upper_bound_from(nonce_cs, 
+                      polarssl_generated_public_cryptograms(polarssl_pub(pub)));
       }
   @*/
-  //@ chars_to_integer(increment);
-  if (*increment == INT_MAX)
-     abort_crypto_lib("Incremented nonce to many times");
-  (*increment)++;
-  //@ integer_to_chars(increment);
-  //@ close item(item, nonce_item(principal, count, inc0 + 1, info));
+  //@ close item_constraints(b, nonce, nonce_cs, pub);
+  //@ leak item_constraints(b, nonce, nonce_cs, pub);
+  //@ close item(item, nonce, pub);
+  //@ close info_for_item(i, polarssl_info_for_item(i));
+  //@ leak info_for_item(i, polarssl_info_for_item(i));
+  //@ close info_for_item(nonce, polarssl_info_for_item(nonce));
+  //@ leak info_for_item(nonce, polarssl_info_for_item(nonce));
+}
+
+/*@
+lemma void info_for_incremented_nonce(item i, int inc1, int inc2)
+  requires [_]info_for_item(i, ?info) &*&
+           i == nonce_item(?p, ?c, inc1);
+  ensures  [_]info_for_item(nonce_item(p, c, inc2), info);
+{
+  open [_]info_for_item(i, info);
+  item i2 = nonce_item(p, c, inc2);
+  close info_for_item(i2, info);
+  leak info_for_item(i2, info);
+}
+@*/
+
+void create_havege_random(char *output, int len)
+  /*@ requires [?f]world(?pub) &*& 
+               nonce_request(?principal, ?info) &*&
+               generated_values(principal, ?count) &*&
+               chars(output, len, _);  @*/
+  /*@ ensures  [f]world(pub) &*& 
+               generated_values(principal, count + 1) &*&
+               polarssl_cryptogram(output, len, ?cs, ?cg) &*& 
+               cg == polarssl_random(principal, count + 1) &*&
+               info == polarssl_cryptogram_info(cg); @*/
+{
+  //@ open [f]world(pub);
+  //@ open nonce_request(principal, info);
+  //@ open generated_values(principal, count);
+  //@ open [f]nonces_initialized();
+  //@ close random_request(principal, info, false);
+  if (len < POLARSSL_MIN_RANDOM_BYTE_SIZE)
+    abort_crypto_lib("Trying to generate a random value that is to small");
+  if (havege_random((void*) &random_state, output, (unsigned int) len) != 0)
+    abort_crypto_lib("Generation of random value failed");
+  //@ close [f]nonces_initialized();
+  //@ close generated_values(principal, count + 1);
+  //@ close [f]world(pub);
 }
 
 void random_buffer(char* buffer, int size)
@@ -181,17 +215,9 @@ void random_buffer(char* buffer, int size)
                chars(buffer, size, _) &*&
                generated_values(principal, count + 1); @*/
 {
-  //@ open [f]world(pub);
-  //@ open generated_values(principal, count);
-
-  //@ open [f]nonces_initialized();
-  //@ close havege_request(principal, 0);
-  havege_random((void*) &random_state, buffer, (unsigned int) size);
-  //@ havege_polarssl_item_to_chars(buffer);
-  //@ close [f]nonces_initialized();
-  
-  //@ close generated_values(principal, count + 1);
-  //@ close [f]world(pub);
+  //@ close nonce_request(principal, 0);
+  create_havege_random(buffer, size);
+  //@ open polarssl_cryptogram(buffer, size, _, _);
 }
 
 int random_int()
@@ -206,31 +232,14 @@ int random_int()
   return i;
 }
 
-void create_havege_random/*@ <T> @*/(char *output, int len)
-  /*@ requires
-        [?f0]world(?pub) &*& 
-        nonce_request(?principal, ?info) &*&
-        generated_values(principal, ?count) &*&
-        chars(output, len, _);
-  @*/
-  /*@ ensures
-        [f0]world(pub) &*& 
-        generated_values(principal, count + 1) &*&
-        polarssl_item(output, ?i) &*& 
-        i == polarssl_havege_item(principal, count + 1) &*&
-        len == length(havege_chars_for_polarssl_item(i)) &*&
-        info == info_for_polarssl_item(i);
-  @*/
+unsigned int random_u_int()
+  /*@ requires [?f]world(?pub) &*&
+               generated_values(?principal, ?count); @*/
+  /*@ ensures  [f]world(pub) &*&
+               generated_values(principal, count + 1); @*/
 {
-  //@ open [f0]world(pub);
-  //@ open nonce_request(principal, info);
-  //@ open generated_values(principal, count);
-  //@ open [f0]nonces_initialized();
-  //@ close havege_request(principal, info);
-  havege_random((void*) &random_state, output, (unsigned int) len);
-  //@ close [f0]nonces_initialized();
-  //@ close generated_values(principal, count + 1);
-  //@ close [f0]world(pub);
+  unsigned int i;
+  random_buffer((void*) &i, (int) sizeof(unsigned int));
+  //@ chars_to_u_integer(&i);
+  return i;
 }
-  
-

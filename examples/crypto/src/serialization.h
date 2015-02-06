@@ -1,42 +1,33 @@
 #ifndef SERIALIZATION_H
 #define SERIALIZATION_H
 
-#include "item.h"
+#include "invariants.h"
+#include "general.h"
+#include "item_constraints.h"
 
-/*@ 
+/*@
 
-fixpoint bool serialization_constraints(item i, list<char> serialized_item)
-{
-  return if_no_collision(
-      // serialized_item is correct serialization
-      serialized_item == extended_chars_for_item(i) &&
-      item_constraints(i, tag_for_item(i), 
-                  length(chars_for_item(i)), chars_for_item(i)) &&
-      // lengths of parts of serialized_item are correct
-      length(chars_of_int(tag_for_item(i))) == sizeof(int) &&
-      0 < length(chars_for_item(i)) && length(chars_for_item(i)) < INT_MAX &&
-      length(chars_of_int(length(chars_for_item(i)))) == sizeof(int) &&
-      length(chars_for_item(i)) > 0
-    );
-}
+lemma void collision_public(predicate(item) pub, list<char> cs);
+  requires true == collision_in_run();
+  ensures  true == public_chars(pub, cs);
 
-predicate deserialization_attempt(item i, list<char> serialized_item) = true;
+lemma void serialize_item(item i);
+  requires proof_obligations(?pub) &*&
+           [_]item_constraints_no_collision(i, ?cs, pub) &*&
+           [_]pub(i);
+  ensures  proof_obligations(pub) &*& true == public_chars(pub, cs);
 
 @*/
 
-int item_serialize(char** dest, struct item* item);
-  //@ requires [?f0]world(?pub) &*& item(item, ?i) &*& pointer(dest, ?d0);
-  /*@ ensures  [f0]world(pub) &*& item(item, i) &*& pointer(dest, ?d) &*&
-               malloc_block(d, result) &*& chars(d, result, ?cs) &*&
-               result > 0 &*& serialization_constraints(i, cs) == true;
-  @*/
-
-struct item* item_deserialize(char* buffer, int size);
-  /*@ requires [?f0]world(?pub) &*& [?f1]chars(buffer, size, ?cs) &*&
-               deserialization_attempt(?i1, cs) &*&
-               serialization_constraints(i1, cs) == true; @*/
-  /*@ ensures  [f0]world(pub) &*& [f1]chars(buffer, size, cs) &*&
-               item(result, ?i2) &*& result != 0 &&
-               if_no_collision(i1 == i2); @*/
+int serialize_to_public_message(char** dest, struct item* item);
+  /*@ requires [?f0]world(?pub) &*& 
+               [?f1]item(item, ?i, pub) &*& pointer(dest, _) &*& 
+               [_]pub(i); @*/
+  /*@ ensures  [f0]world(pub) &*& 
+               [f1]item(item, i, pub) &*& pointer(dest, ?d) &*& 
+               malloc_block(d, result) &*& result > 1 &*&
+               polarssl_public_message(polarssl_pub(pub))
+                                      (d, result, ?cs) &*&
+               [_]item_constraints(_, i, cs, pub); @*/
 
 #endif

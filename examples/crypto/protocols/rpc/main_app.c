@@ -6,29 +6,37 @@
 
 //@ import_module cryptolib;
 
+struct rpc_args
+{
+  int attacker;
+  char server;
+  char client;
+  struct item *key;
+  struct item *request;
+  struct item *response;
+  struct keypair *keypair;
+};
+
 /*@
 predicate_family_instance pthread_run_pre(attacker_t)(void *data, any info) =
     exists(rpc_pub) &*& [_]world(rpc_pub) &*&
-    attacker_proof_obligations(rpc_pub) &*& 
+    rpc_args_attacker(data, ?attacker) &*&
+    true == bad(attacker) &*&
+    generated_values(attacker, _) &*&
+    rpc_args_keypair(data, ?keypair) &*&    
+    keypair(keypair, attacker, _, ?i, rpc_pub) &*&
     principals_created(_) &*& info == nil;
 @*/
 
-void *attacker_t(void* _unused) //@ : pthread_run_joinable
-  //@ requires pthread_run_pre(attacker_t)(_unused, _);
+void *attacker_t(void* data) //@ : pthread_run_joinable
+  //@ requires pthread_run_pre(attacker_t)(data, ?info);
   //@ ensures false;
 {
-  //@ open pthread_run_pre(attacker_t)(_unused, _);
-  attacker();
+  //@ open pthread_run_pre(attacker_t)(data, info);
+  struct rpc_args *args = (void*) data;
+  attacker(args->attacker, args->keypair);
   return 0;
 }
-
-struct rpc_args
-{
-  int server;
-  int client;
-  struct item *key;
-  struct item *request;
-};
 
 /*@
 predicate_family_instance pthread_run_pre(server_t)(void *data, any info) =
@@ -37,7 +45,7 @@ predicate_family_instance pthread_run_pre(server_t)(void *data, any info) =
   rpc_args_client(data, ?client) &*&
   rpc_args_key(data, ?key) &*&
   generated_values(server, _) &*&
-  item(key, key_item(client, ?id, symmetric_key, ?i)) &*&
+  item(key, symmetric_key_item(client, ?id), rpc_pub) &*&
   shared_with(client, id) == server &*&
   info == cons(server, nil);
 predicate_family_instance pthread_run_post(server_t)(void *data, any info) =
@@ -68,8 +76,9 @@ predicate_family_instance pthread_run_pre(client_t)(void *data, any info) =
   rpc_args_client(data, ?client) &*&
   rpc_args_key(data, ?key) &*&
   rpc_args_request(data, ?req) &*&
-  item(key, key_item(client, ?id, symmetric_key, int_pair(0, 0))) &*&
-  item(req, ?item) &*& rpc_pub(item) == true &*&
+  item(key, symmetric_key_item(client, ?id), rpc_pub) &*&
+  item(req, ?item, rpc_pub) &*& [_]rpc_pub(item) &*&
+  true == well_formed_item(item) &*&
   request(client, server, item) == true &*&
   shared_with(client, id) == server &*&
   info == nil;
@@ -99,28 +108,37 @@ int main() //@ : main_full(main_app)
   //@ requires module(main_app, true);
   //@ ensures  true;
 {
+  struct keypair* apair;
+  struct keypair* cpair;
+  struct keypair* spair;
+    
   printf("\n\tExecuting \"rpc protocol\" ... \n\n");
   //@ open_module();
-  //@ close exists(rpc_pub);
+  //@ PACK_PROOF_OBLIGATIONS(rpc)
   init_crypto_lib();
-
-  //@ open initial_principals();
-  int client = create_principal();
+  
+  int attacker = create_principal(&apair);
+  //@ assume (bad(attacker));
+  int client_ = create_principal(&cpair);
+  keypair_free(cpair);
+  char client = (char) client_;
   //@ close key_request(client, int_pair(0, 0));
   struct item* key = create_symmetric_key();
-  int server = create_principal();
-  //@ assert item(key, key_item(_, ?id, _, _));
+  int server_ = create_principal(&spair);
+  keypair_free(spair);
+  char server = (char) server_;
+  //@ assert item(key, symmetric_key_item(_, ?id), rpc_pub);
   //@ assume (shared_with(client, id) == server);
-
-  void *null = (void *) 0;
-
-  {
+  //@ leak  world(rpc_pub);
+  
+  { 
     pthread_t a_thread;
-    //@ PACK_ATTACKER_PROOF_OBLIGATIONS(rpc)
-    //@ close attacker_proof_obligations(rpc_pub);
-    //@ leak  world(rpc_pub);
-    //@ close pthread_run_pre(attacker_t)(null, _);
-    pthread_create(&a_thread, null, &attacker_t, null);
+    struct rpc_args *args = malloc(sizeof(struct rpc_args));
+    if (args == 0) abort();
+    args->attacker = attacker;
+    args->keypair = apair;  
+    //@ close pthread_run_pre(attacker_t)(args, _);
+    pthread_create(&a_thread, NULL, &attacker_t, args);
   }
 
   int i = 0;
@@ -132,37 +150,41 @@ int main() //@ : main_full(main_app)
     /*@ invariant [_]world(rpc_pub) &*&
                   shared_with(client, id) == server &*&
                   generated_values(server, ?count) &*&
-                  item(key, key_item(client, id, symmetric_key, int_pair(0, 0)));
+                  item(key, symmetric_key_item(client, id), rpc_pub);
     @*/
   {
     pthread_t s_thread, c_thread;
     struct rpc_args s_args, c_args;
     struct item *temp_key;
     {
+      int random = random_int();
       c_args.client = client;
       c_args.server = server;
       temp_key = item_clone(key);
       c_args.key = temp_key;
-      int random = random_int();
-      struct item *req = create_data_item(random);
-      //@ assert item(req, ?request);
+      
+      struct item *req = create_data_item((void*) &random, (int) sizeof(int));
+      //@ assert item(req, ?request, rpc_pub);
+      //@ get_info_for_item(request);
+      //@ close rpc_pub(request);
+      //@ leak rpc_pub(request);
       c_args.request = req;
       //@ assume (request(client, server, request) == true);
       //@ close pthread_run_pre(client_t)(&c_args, _);
-      pthread_create(&c_thread, null, &client_t, &c_args);
+      pthread_create(&c_thread, NULL, &client_t, &c_args);
 
       s_args.client = client;
       s_args.server = server;
       temp_key = item_clone(key);
       s_args.key = temp_key;
       //@ close pthread_run_pre(server_t)(&s_args, cons(server, nil));
-      pthread_create(&s_thread, null, &server_t, &s_args);
+      pthread_create(&s_thread, NULL, &server_t, &s_args);
     }
 
     {
-      pthread_join(c_thread, null);
+      pthread_join(c_thread, NULL);
       //@ open pthread_run_post(client_t)(&c_args, _);
-      pthread_join(s_thread, null);
+      pthread_join(s_thread, NULL);
       //@ open pthread_run_post(server_t)(&s_args, cons(server, nil));
     }
   }

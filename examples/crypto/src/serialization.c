@@ -1,108 +1,448 @@
 #include "serialization.h"
 
-#include "item.h"
 #include "principals.h"
+#include "item_constraints.h"
 
-int item_serialize(char** dest, struct item* item)
-  //@ requires [?f0]world(?pub) &*& item(item, ?i) &*& pointer(dest, ?d0);
-  /*@ ensures  [f0]world(pub) &*& item(item, i) &*& pointer(dest, ?d) &*&
-               malloc_block(d, result) &*& chars(d, result, ?cs) &*&
-               result > 0 &*& serialization_constraints(i, cs) == true;
-  @*/
+/*@ 
+
+lemma void collision_public(predicate(item) pub, list<char> cs)
+  requires true == collision_in_run();
+  ensures  true == public_chars(pub, cs);
 {
-  //@ open item(item, i);
-  int size = (int) sizeof(int) + (int) sizeof(int) + item->size;
-  char *buffer = malloc_wrapper(size);
-  *dest = buffer;
-
-  //@ integer_to_chars(&(item->tag));
-  write_buffer(&buffer, (void *) &(item->tag), (int) sizeof(int));
-  //@ chars_to_integer(&(item->tag));
-  //@ integer_to_chars(&(item->size));
-  write_buffer(&buffer, (void *) &(item->size), (int) sizeof(int));
-  //@ chars_to_integer(&(item->size));
-  write_buffer(&buffer, (void *) item->content, (int) item->size);
-
-  return size;
-  //@ chars_join(*dest);
-  //@ chars_join(*dest);
-  //@ close item(item, i);
-
-  /*@ 
-    append_assoc(chars_of_int(tag_for_item(i)),
-                    chars_of_int(length(chars_for_item(i))), 
-                      chars_for_item(i));
-  @*/
+  polarssl_generated_public_cryptograms_assume(polarssl_pub(pub), cs);
+  polarssl_cryptograms_in_chars_upper_bound_from(
+                  cs, polarssl_generated_public_cryptograms(polarssl_pub(pub)));
 }
 
-struct item* item_deserialize(char* buffer, int size)
-  /*@ requires [?f0]world(?pub) &*& [?f1]chars(buffer, size, ?cs) &*&
-               deserialization_attempt(?i1, cs) &*&
-               serialization_constraints(i1, cs) == true; @*/
-  /*@ ensures  [f0]world(pub) &*& [f1]chars(buffer, size, cs) &*&
-               item(result, ?i2) &*& result != 0 &&
-               if_no_collision(i1 == i2); @*/
+lemma void serialize_pair(list<char> cs, list<char> f_cs, list<char> s_cs)
+  requires proof_obligations(?pub) &*& 
+           public_chars(pub, f_cs) && public_chars(pub, s_cs) &*&
+           cs == cons('b', append(chars_of_unbounded_int(length(f_cs)), 
+                                  append(f_cs, s_cs)));
+  ensures  proof_obligations(pub) &*& true == public_chars(pub, cs);
 {
-  //@ open deserialization_attempt(i1, cs);
-  
-  struct item* result = malloc(sizeof(struct item));
-  if (result == 0){abort_crypto_lib("malloc of item failed");}
-  
-  //@ close [f1/2]hide_chars(buffer, size, cs);
-  check_valid_item_size(size);
-  
-  //@ chars_limits(buffer);
-  int* temp = (void*) buffer;
-  //@ chars_split(buffer, sizeof(int));
-  //@ chars_to_integer(temp);
-  int tag = *(temp);
-  if (tag < 0 || tag > 5)
-    abort_crypto_lib("Illegal tag");
-  result->tag = tag;
-  //@ integer_to_chars(temp);
-  check_valid_item_tag(tag);
-  
-  temp++;
-  //@ chars_to_integer(temp);
-  result->size = *(temp);
-  //@ integer_to_chars(temp);
-  check_valid_item_sizes(size, result->size);
-    
-  temp++;
-  result->content = malloc_wrapper(result->size);
-  char* item_chars = (void*) temp;
-  
-  //@ int tag_r = tag_for_item(i1);
-  //@ int size_r = length(chars_for_item(i1));
-  //@ list<char> cs_1 = chars_of_int(tag_r);
-  //@ list<char> cs_2 = chars_of_int(size_r);
-  //@ list<char> cs_r = chars_for_item(i1);
-  //@ take_append(sizeof(int), cs_1, append(cs_2, cs_r));
-  //@ drop_append(sizeof(int), cs_1, append(cs_2, cs_r));
-  /*@ 
-    if (collision_in_run() == false) 
-    {
-      take_append(sizeof(int), cs_2, cs_r);
-      drop_append(sizeof(int), cs_2, cs_r);
-    }
-  @*/
-  memcpy(result->content, item_chars, (unsigned int) result->size);
+  int length_f = length(f_cs);
+  list<char> length_f_cs = chars_of_unbounded_int(length(f_cs));
+  polarssl_generated_public_cryptograms_assume(polarssl_pub(pub), 
+                                               cons('b', length_f_cs));
+  polarssl_cryptograms_in_chars_public_upper_bound_join(
+                               polarssl_pub(pub), cons('b', length_f_cs), f_cs);
+  polarssl_cryptograms_in_chars_public_upper_bound_join(
+                 polarssl_pub(pub), append(cons('b', length_f_cs), f_cs), s_cs);
+  append_assoc(length_f_cs, f_cs, s_cs);
+  polarssl_cryptograms_in_chars_upper_bound_from(
+                  cs, polarssl_generated_public_cryptograms(polarssl_pub(pub)));
+}
 
-  if (result == 0)
-    abort_crypto_lib("Deserializing failed: null is not a valid item");
-  /*@
-    if (collision_in_run() == false) 
-    {
-      close item(result, i1);
-    }
-    else
-    {
-      dummy_item_for_tag_has_valid_tag(tag);
-      close item(result, dummy_item_for_tag(tag));
-    }
-  @*/ 
-  //@ chars_join(buffer + sizeof(int));
-  //@ chars_join(buffer);
-  //@ open [f1/2]hide_chars(buffer, size, cs);
-  return result;
+lemma void serialize_nonce(int p0, int c0, char inc0)
+  requires proof_obligations(?pub) &*&
+           [_]item_constraints_no_collision(?nonce, ?cs, pub) &*&
+           nonce == nonce_item(p0, c0, inc0) &*& [_]pub(nonce);
+  ensures  proof_obligations(pub) &*& true == public_chars(pub, cs);
+{
+  item nonce0 = nonce_item(p0, c0, 0);
+  open proof_obligations(pub);
+  assert is_public_incremented_nonce(?proof, pub);
+  proof(nonce, nonce0);
+  close proof_obligations(pub);
+  
+  assert [_]pub(nonce);
+  assert [_]pub(nonce0);
+  
+  open [_]item_constraints_no_collision(nonce, cs, pub);
+  assert cs == cons('c', cons(inc0, ?cs_cg));
+  polarssl_cryptogram pnonce = polarssl_random(p0, c0);
+  polarssl_cryptogram_constraints(cs_cg, pnonce);
+  close polarssl_pub(pub)(pnonce);
+  leak polarssl_pub(pub)(pnonce);
+  polarssl_generated_public_cryptograms_upper_bound(polarssl_pub(pub), pnonce);
+  
+  polarssl_generated_public_cryptograms_assume(
+                                 polarssl_pub(pub), cons('c', cons(inc0, nil)));
+  polarssl_cryptograms_in_chars_public_upper_bound_join(
+                          polarssl_pub(pub), cons('c', cons(inc0, nil)), cs_cg);
+  polarssl_cryptograms_in_chars_upper_bound_from(
+                  cs, polarssl_generated_public_cryptograms(polarssl_pub(pub)));
+}
+
+lemma void serialize_hash(option<item> pay0)
+  requires proof_obligations(?pub) &*&
+           [_]item_constraints_no_collision(?hash, ?cs, pub) &*&
+           hash == hash_item(pay0) &*& [_]pub(hash);
+  ensures  proof_obligations(pub) &*& true == public_chars(pub, cs);
+{
+  open [_]item_constraints_no_collision(hash, cs, pub);
+  assert cs == cons('d', ?cs_cg);
+  
+  polarssl_cryptogram phash;
+  switch(pay0)
+  {
+    case some(pay1):
+      assert [_]item_constraints_no_collision(pay1, ?cs_pay0, pub);
+      phash = polarssl_hash(cs_pay0);
+      close exists(false);
+      leak exists(false);
+    case none:
+      assert [_]ill_formed_item_chars(hash)(?cs_pay0);
+      phash = polarssl_hash(cs_pay0);
+      polarssl_cryptogram_constraints(cs_cg, phash);
+      close exists(true);
+      leak exists(true);
+  }
+  close polarssl_pub(pub)(phash);
+  leak polarssl_pub(pub)(phash);
+  polarssl_generated_public_cryptograms_upper_bound(polarssl_pub(pub), phash);
+  
+  polarssl_generated_public_cryptograms_assume(
+                                             polarssl_pub(pub), cons('d', nil));
+  polarssl_cryptograms_in_chars_public_upper_bound_join(
+                                      polarssl_pub(pub), cons('d', nil), cs_cg);
+  polarssl_cryptograms_in_chars_upper_bound_from(
+                  cs, polarssl_generated_public_cryptograms(polarssl_pub(pub)));                                      
+}
+
+
+lemma void serialize_symmetric_key(int p0, int c0)
+  requires proof_obligations(?pub) &*&
+           [_]item_constraints_no_collision(?key, ?cs, pub) &*&
+           key == symmetric_key_item(p0, c0) &*& [_]pub(key);
+  ensures  proof_obligations(pub) &*& true == public_chars(pub, cs);
+{
+  open [_]item_constraints_no_collision(key, cs, pub);
+  assert cs == cons('e', ?cs_cg);
+  polarssl_cryptogram pkey = polarssl_symmetric_key(p0, c0);
+  polarssl_cryptogram_constraints(cs_cg, pkey);
+  close polarssl_pub(pub)(pkey);
+  leak polarssl_pub(pub)(pkey);
+  polarssl_generated_public_cryptograms_upper_bound(polarssl_pub(pub), pkey);
+  
+  polarssl_generated_public_cryptograms_assume(
+                                             polarssl_pub(pub), cons('e', nil));
+  polarssl_cryptograms_in_chars_public_upper_bound_join(
+                                      polarssl_pub(pub), cons('e', nil), cs_cg);
+  polarssl_cryptograms_in_chars_upper_bound_from(
+                  cs, polarssl_generated_public_cryptograms(polarssl_pub(pub)));
+}
+
+lemma void serialize_public_key(int p0, int c0)
+  requires proof_obligations(?pub) &*&
+           [_]item_constraints_no_collision(?key, ?cs, pub) &*&
+           key == public_key_item(p0, c0) &*& [_]pub(key);
+  ensures  proof_obligations(pub) &*& true == public_chars(pub, cs);
+{
+  open [_]item_constraints_no_collision(key, cs, pub);
+  assert cs == cons('f', ?cs_cg);
+  polarssl_cryptogram pkey = polarssl_public_key(p0, c0);
+  polarssl_cryptogram_constraints(cs_cg, pkey);
+  close polarssl_pub(pub)(pkey);
+  leak polarssl_pub(pub)(pkey);
+  polarssl_generated_public_cryptograms_upper_bound(polarssl_pub(pub), pkey);
+  
+  polarssl_generated_public_cryptograms_assume(
+                                             polarssl_pub(pub), cons('f', nil));
+  polarssl_cryptograms_in_chars_public_upper_bound_join(
+                                      polarssl_pub(pub), cons('f', nil), cs_cg);
+  polarssl_cryptograms_in_chars_upper_bound_from(
+                  cs, polarssl_generated_public_cryptograms(polarssl_pub(pub)));
+}
+
+lemma void serialize_private_key(int p0, int c0)
+  requires proof_obligations(?pub) &*&
+           [_]item_constraints_no_collision(?key, ?cs, pub) &*&
+           key == private_key_item(p0, c0) &*& [_]pub(key);
+  ensures  proof_obligations(pub) &*& true == public_chars(pub, cs);
+{
+  open [_]item_constraints_no_collision(key, cs, pub);
+  assert cs == cons('g', ?cs_cg);
+  polarssl_cryptogram pkey = polarssl_private_key(p0, c0);
+  polarssl_cryptogram_constraints(cs_cg, pkey);
+  close polarssl_pub(pub)(pkey);
+  leak polarssl_pub(pub)(pkey);
+  polarssl_generated_public_cryptograms_upper_bound(polarssl_pub(pub), pkey);
+  
+  polarssl_generated_public_cryptograms_assume(
+                                             polarssl_pub(pub), cons('g', nil));
+  polarssl_cryptograms_in_chars_public_upper_bound_join(
+                                      polarssl_pub(pub), cons('g', nil), cs_cg);
+  polarssl_cryptograms_in_chars_upper_bound_from(
+                  cs, polarssl_generated_public_cryptograms(polarssl_pub(pub)));
+}
+
+lemma void serialize_hmac(int p0, int c0, option<item> pay0)
+  requires proof_obligations(?pub) &*&
+           [_]item_constraints_no_collision(?hmac, ?cs, pub) &*&
+           hmac == hmac_item(p0, c0, pay0) &*& [_]pub(hmac);
+  ensures  proof_obligations(pub) &*& true == public_chars(pub, cs);
+{
+  open [_]item_constraints_no_collision(hmac, cs, pub);
+  assert cs == cons('h', ?cs_cg);
+  
+  polarssl_cryptogram phmac;
+  switch(pay0)
+  {
+    case some(pay1):
+      assert [_]item_constraints_no_collision(pay1, ?cs_pay0, pub);
+      phmac = polarssl_hmac(p0, c0, cs_pay0);
+      close exists(false);
+      leak exists(false);
+    case none:
+      assert [_]ill_formed_item_chars(hmac)(?cs_pay0);
+      phmac = polarssl_hmac(p0, c0, cs_pay0);
+      polarssl_cryptogram_constraints(cs_cg, phmac);
+      close exists(true);
+      leak exists(true);
+  }
+  close polarssl_pub(pub)(phmac);
+  leak polarssl_pub(pub)(phmac);
+  polarssl_generated_public_cryptograms_upper_bound(polarssl_pub(pub), phmac);
+  
+  polarssl_generated_public_cryptograms_assume(
+                                             polarssl_pub(pub), cons('h', nil));
+  polarssl_cryptograms_in_chars_public_upper_bound_join(
+                                      polarssl_pub(pub), cons('h', nil), cs_cg);
+  polarssl_cryptograms_in_chars_upper_bound_from(
+                  cs, polarssl_generated_public_cryptograms(polarssl_pub(pub)));                                      
+}
+
+lemma void serialize_symmetric_encrypted(int p0, int c0, 
+                                         option<item> pay0, list<char> ent0)
+  requires proof_obligations(?pub) &*&
+           [_]item_constraints_no_collision(?enc, ?cs, pub) &*&
+           enc == symmetric_encrypted_item(p0, c0, pay0, ent0) &*& [_]pub(enc);
+  ensures  proof_obligations(pub) &*& true == public_chars(pub, cs);
+{
+  open [_]item_constraints_no_collision(enc, cs, pub);
+  list<char> ent0_1 = take(GCM_ENT_SIZE, ent0);
+  list<char> ent0_2 = drop(GCM_ENT_SIZE, ent0);
+  assert ent0 == append(ent0_1, ent0_2);
+  assert cs == cons('i', ?cs0);
+  list<char> cs_cg = drop(GCM_ENT_SIZE, cs0);
+  assert cs0 == append(ent0_1, cs_cg);
+  assert [_]symmetric_encryption_entropy(enc)(?mac0, ?iv0);
+  assert ent0_2 == cons(length(mac0), append(mac0, iv0));
+  
+  polarssl_cryptogram penc;
+  switch(pay0)
+  {
+    case some(pay1):
+      assert [_]well_formed_item_chars(enc)(?cs_pay0);
+      assert [_]item_constraints_no_collision(pay1, cs_pay0, pub);
+      penc = polarssl_auth_encrypted(p0, c0, mac0, cs_pay0, iv0);
+      close exists(ent0);
+      leak exists(ent0);
+      close exists(false);
+      leak exists(false);
+    case none:
+      assert [_]ill_formed_item_chars(enc)(?cs_pay0);
+      penc = polarssl_auth_encrypted(p0, c0, mac0, cs_pay0, iv0);
+      polarssl_cryptogram_constraints(cs_cg, penc);
+      close exists(true);
+      leak exists(true);
+  }
+  close polarssl_pub(pub)(penc);
+  leak polarssl_pub(pub)(penc);
+  polarssl_generated_public_cryptograms_upper_bound(polarssl_pub(pub), penc);
+  
+  polarssl_generated_public_cryptograms_assume(
+                                          polarssl_pub(pub), cons('i', ent0_1));
+  polarssl_cryptograms_in_chars_public_upper_bound_join(
+                                   polarssl_pub(pub), cons('i', ent0_1), cs_cg);
+  polarssl_cryptograms_in_chars_upper_bound_from(
+                  cs, polarssl_generated_public_cryptograms(polarssl_pub(pub)));
+}
+
+lemma void serialize_asymmetric_encrypted(int p0, int c0, 
+                                          option<item> pay0, list<char> ent0)
+  requires proof_obligations(?pub) &*&
+           [_]item_constraints_no_collision(?enc, ?cs, pub) &*&
+           enc == asymmetric_encrypted_item(p0, c0, pay0, ent0) &*& [_]pub(enc);
+  ensures  proof_obligations(pub) &*& true == public_chars(pub, cs);
+{
+  open [_]item_constraints_no_collision(enc, cs, pub);
+  assert cs == cons('j', ?cs_cg);
+  
+  polarssl_cryptogram penc;
+  switch(pay0)
+  {
+    case some(pay1):
+      assert [_]well_formed_item_chars(enc)(?cs_pay0);
+      assert [_]item_constraints_no_collision(pay1, cs_pay0, pub);
+      penc = polarssl_asym_encrypted(p0, c0, cs_pay0, ent0);
+      close exists(ent0);
+      leak exists(ent0);
+      close exists(false);
+      leak exists(false);
+    case none:
+      assert [_]ill_formed_item_chars(enc)(?cs_pay0);
+      penc = polarssl_asym_encrypted(p0, c0, cs_pay0, ent0);
+      polarssl_cryptogram_constraints(cs_cg, penc);
+      close exists(true);
+      leak exists(true);
+  }
+  close polarssl_pub(pub)(penc);
+  leak polarssl_pub(pub)(penc);
+  polarssl_generated_public_cryptograms_upper_bound(polarssl_pub(pub), penc);
+  
+  polarssl_generated_public_cryptograms_assume(
+                                          polarssl_pub(pub), cons('j', nil));
+  polarssl_cryptograms_in_chars_public_upper_bound_join(
+                                   polarssl_pub(pub), cons('j', nil), cs_cg);
+  polarssl_cryptograms_in_chars_upper_bound_from(
+                  cs, polarssl_generated_public_cryptograms(polarssl_pub(pub)));
+}
+
+lemma void serialize_asymmetric_signature(int p0, int c0, 
+                                          option<item> pay0, list<char> ent0)
+  requires proof_obligations(?pub) &*&
+           [_]item_constraints_no_collision(?sig, ?cs, pub) &*&
+           sig == asymmetric_signature_item(p0, c0, pay0, ent0) &*& [_]pub(sig);
+  ensures  proof_obligations(pub) &*& true == public_chars(pub, cs);
+{
+  open [_]item_constraints_no_collision(sig, cs, pub);
+  assert cs == cons('k', ?cs_cg);
+  
+  polarssl_cryptogram psig;
+  switch(pay0)
+  {
+    case some(pay1):
+      assert [_]well_formed_item_chars(sig)(?cs_pay0);
+      assert [_]item_constraints_no_collision(pay1, cs_pay0, pub);
+      psig = polarssl_asym_signature(p0, c0, cs_pay0, ent0);
+      close exists(ent0);
+      leak exists(ent0);
+      close exists(false);
+      leak exists(false);
+    case none:
+      assert [_]ill_formed_item_chars(sig)(?cs_pay0);
+      psig = polarssl_asym_signature(p0, c0, cs_pay0, ent0);
+      polarssl_cryptogram_constraints(cs_cg, psig);
+      close exists(true);
+      leak exists(true);
+  }
+  close polarssl_pub(pub)(psig);
+  leak polarssl_pub(pub)(psig);
+  polarssl_generated_public_cryptograms_upper_bound(polarssl_pub(pub), psig);
+  
+  polarssl_generated_public_cryptograms_assume(
+                                          polarssl_pub(pub), cons('k', nil));
+  polarssl_cryptograms_in_chars_public_upper_bound_join(
+                                   polarssl_pub(pub), cons('k', nil), cs_cg);
+  polarssl_cryptograms_in_chars_upper_bound_from(
+                  cs, polarssl_generated_public_cryptograms(polarssl_pub(pub)));
+}
+
+lemma void serialize_item(item i)
+  requires proof_obligations(?pub) &*&
+           [_]item_constraints_no_collision(i, ?cs, pub) &*&
+           [_]pub(i);
+  ensures  proof_obligations(pub) &*& true == public_chars(pub, cs);
+{
+  switch (i)
+  {
+    case data_item(d0):
+      polarssl_generated_public_cryptograms_assume(polarssl_pub(pub), cs);
+      polarssl_cryptograms_in_chars_upper_bound_from(
+                  cs, polarssl_generated_public_cryptograms(polarssl_pub(pub)));
+    case pair_item(first0, second0):
+      open [_]item_constraints_no_collision(i, cs, pub);
+      assert [_]item_constraints_no_collision(first0, ?f_cs, pub);
+      assert [_]item_constraints_no_collision(second0, ?s_cs, pub);
+      open proof_obligations(pub);
+      assert is_public_pair_decompose(?proof, pub);
+      proof(i);
+      close proof_obligations(pub);
+      assert [_]pub(first0);
+      assert [_]pub(second0);
+      serialize_item(first0);
+      serialize_item(second0);
+      serialize_pair(cs, f_cs, s_cs);
+    case nonce_item(p0, c0, inc0):
+      serialize_nonce(p0, c0, inc0);
+    case hash_item(pay0):
+      serialize_hash(pay0);
+    case symmetric_key_item(p0, c0):
+      serialize_symmetric_key(p0, c0);
+    case public_key_item(p0, c0):
+      serialize_public_key(p0, c0);
+    case private_key_item(p0, c0):
+      serialize_private_key(p0, c0);
+    case hmac_item(p0, c0, pay0):
+      serialize_hmac(p0, c0, pay0);
+    case symmetric_encrypted_item(p0, c0, pay0, ent0):
+      serialize_symmetric_encrypted(p0, c0, pay0, ent0);
+    case asymmetric_encrypted_item(p0, c0, pay0, ent0):
+      serialize_asymmetric_encrypted(p0, c0, pay0, ent0);
+    case asymmetric_signature_item(p0, c0, pay0, ent0):
+      serialize_asymmetric_signature(p0, c0, pay0, ent0);
+  }
+}
+
+lemma void retreive_proof_obligations()
+  nonghost_callers_only
+  requires [?f]world(?pub);
+  ensures  [f]world(pub) &*& proof_obligations(pub); 
+{
+  open  [f]world(pub);
+  open  [f]proof_obligations(pub);
+  
+  duplicate_lemma_function_pointer_chunk(public_collision);
+  duplicate_lemma_function_pointer_chunk(public_data);
+  duplicate_lemma_function_pointer_chunk(public_pair_compose);
+  duplicate_lemma_function_pointer_chunk(public_pair_decompose);
+  duplicate_lemma_function_pointer_chunk(public_nonce);
+  duplicate_lemma_function_pointer_chunk(public_incremented_nonce);
+  duplicate_lemma_function_pointer_chunk(public_hash);
+  duplicate_lemma_function_pointer_chunk(public_symmetric_key);
+  duplicate_lemma_function_pointer_chunk(public_public_key);
+  duplicate_lemma_function_pointer_chunk(public_private_key);
+  duplicate_lemma_function_pointer_chunk(public_hmac);
+  duplicate_lemma_function_pointer_chunk(public_symmetric_encrypted);
+  duplicate_lemma_function_pointer_chunk(public_symmetric_encrypted_entropy);
+  duplicate_lemma_function_pointer_chunk(public_symmetric_decrypted);
+  duplicate_lemma_function_pointer_chunk(public_asymmetric_encrypted);
+  duplicate_lemma_function_pointer_chunk(public_asymmetric_encrypted_entropy);
+  duplicate_lemma_function_pointer_chunk(public_asymmetric_decrypted);
+  duplicate_lemma_function_pointer_chunk(public_asymmetric_signature);
+  close proof_obligations(pub);
+
+  close [f]proof_obligations(pub);
+  close [f]world(pub);
+}
+
+@*/
+
+int serialize_to_public_message(char** dest, struct item* item)
+  /*@ requires [?f0]world(?pub) &*& 
+               [?f1]item(item, ?i, pub) &*& pointer(dest, _) &*& 
+               [_]pub(i); @*/
+  /*@ ensures  [f0]world(pub) &*& 
+               [f1]item(item, i, pub) &*& pointer(dest, ?d) &*& 
+               malloc_block(d, result) &*& result > 1 &*&
+               polarssl_public_message(polarssl_pub(pub))
+                                      (d, result, ?cs) &*&
+               [_]item_constraints(_, i, cs, pub); @*/
+{
+  int size;
+  char* temp;
+  
+  //@ open [f1]item(item, i, pub);
+  //@ assert [f1]item->content |-> ?cont;
+  //@ assert [f1]chars(cont, _, ?cs);
+  size = item->size;
+  
+  temp = malloc_wrapper(size);
+  memcpy(temp, item->content, (unsigned int) size);
+  *dest = temp;
+
+  //@ open [f0]world(pub);
+  //@ close [f0]world(pub);
+  //@ retreive_proof_obligations();
+  //@ open [_]item_constraints(?b, i, cs, pub);
+  //@ if (!b) serialize_item(i);
+  //@ leak proof_obligations(pub);
+  /*@ close polarssl_public_message(polarssl_pub(pub))
+                                   (temp, size, cs); @*/
+  //@ close [f1]item(item, i, pub);
+  
+  return size;
 }

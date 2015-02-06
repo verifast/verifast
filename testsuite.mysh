@@ -8,6 +8,9 @@ cd bin
   cd ..
 cd ..
 cd examples
+  cd crypto
+    mysh -cpus 1 < crypto.mysh
+  cd ..
   verifast_both -c -disable_overflow_check -allow_should_fail forall.c
   verifast_both -c -disable_overflow_check -allow_should_fail address_of_local.c
   verifast_both -c -disable_overflow_check alt_threading.c
@@ -73,9 +76,6 @@ cd examples
   verifast_both -disable_overflow_check counter_with_pred_auto.c
   verifast_both -shared threading.o counting_threads.c
   verifast_both -disable_overflow_check cp.c
-  cd crypto
-    mysh -cpus 1 < crypto.mysh
-  cd ..
   ifz3 verifast -c decreases.c
   verifast_both -c default_clause_test.c
   cd nested_induction
