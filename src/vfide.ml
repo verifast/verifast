@@ -411,10 +411,23 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   let goto_tab tab notebook =
     notebook#goto_page (index_of_byref tab !buffers)
   in
+  let getTitleOfTab tab =
+    match !(tab#path) with
+      None -> "(Untitled)"
+    | Some (path, mtime) -> path
+  in
+  let updateWindowTitle (): unit =
+    let filename = 
+      match !buffers with
+        [] -> "(no file)"
+      | tab::tabs -> getTitleOfTab tab
+    in
+    root#set_title (filename ^ " - " ^ appTitle)
+  in
   let updateBufferMenu () =
     let menu notebook = 
       let gtk_menu = GMenu.menu () in
-      let items = !buffers |> List.map (fun tab -> (match !(tab#path) with None -> "(Untitled)" | Some (path, mtime) -> path), tab) in
+      let items = !buffers |> List.map (fun tab -> getTitleOfTab tab, tab) in
       let items = List.sort (fun (name1, _) (name2, _) -> compare name1 name2) items in
       items |> List.iter begin fun (name, tab) ->
          let item = GMenu.menu_item ~label:name ~packing:gtk_menu#add () in
@@ -424,6 +437,10 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     in
       windowMenuItemTop#set_submenu (menu subNotebook);
       windowMenuItemBottom#set_submenu (menu textNotebook)
+  in
+  let updateWhenTabListChanges () =
+    updateBufferMenu ();
+    updateWindowTitle ()
   in
   let updateBufferTitle tab =
     let text = (match !(tab#path) with None -> "(New buffer)" | Some (path, mtime) -> Filename.basename path) ^ (if tab#buffer#modified then "*" else "") in
@@ -716,12 +733,12 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   let open_path path =
     let tab = add_buffer () in
     ignore $. load tab path;
-    updateBufferMenu ();
+    updateWhenTabListChanges ();
     tab
   in
   let new_buffer () =
     let tab = add_buffer () in
-    updateBufferMenu ();
+    updateWhenTabListChanges ();
     tab
   in
   begin
@@ -738,6 +755,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     tab#path := Some (thePath, mtime);
     tab#buffer#set_modified false;
     updateBufferTitle tab;
+    updateWhenTabListChanges ();
     Some thePath
   in
   let rec saveAs tab =
@@ -1085,7 +1103,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       subNotebook#remove tab#subView#page#coerce;
       buffers := List.filter (fun tab0 -> not (tab0 == tab)) !buffers;
       begin match !current_tab with None -> () | Some tab0 -> if tab == tab0 then set_current_tab None end;
-      updateBufferMenu ();
+      updateWhenTabListChanges ();
       false
     end
   in
@@ -1553,7 +1571,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     
     (* Gets the list of names of tabs and tabs. *)
     let search_tabs () =
-      let items = !buffers |> List.map (fun tab -> (match !(tab#path) with None -> "(Untitled)" | Some (path, mtime) -> path), tab) in
+      let items = !buffers |> List.map (fun tab -> (getTitleOfTab tab), tab) in
       let items = List.sort (fun (name1, _) (name2, _) -> compare name1 name2) items in
       let (item_strings, _) = List.split items in
       (item_strings, items)
