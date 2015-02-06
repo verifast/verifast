@@ -350,6 +350,7 @@ cd tests
   verifast_both -c test-pattern-match-constructor-subtyping.c
   verifast_both -c test-octal-number.c
   verifast_both -c integral-ghost-types.c
+  verifast_both -c test-precise-predicate-pointsto.c
   cd copredicates
     mysh < run.mysh
   cd ..
@@ -385,5 +386,6 @@ cd tests
     verifast -c -allow_should_fail java_typing_array_assignment/Test2.java
     verifast -c -allow_should_fail java_typing_array_assignment/Test2.java
     verifast_both -c -allow_should_fail fraction-of-fraction.c
+    verifast_both -c -allow_should_fail test-precise-predicate-pointsto-errorcase.c
   cd ..
 cd ..

@@ -4228,6 +4228,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       begin match lhs with
         WRead (lr, et, _, _, _, _, _, _) -> assert_expr_fixed fixed et
       | WReadArray (la, ea, tp, ei) -> assert_expr_fixed fixed ea; assert_expr_fixed fixed ei
+      | Var (_, _, scope) when !scope = Some GlobalName -> ()
       end;
       assume_pat_fixed fixed pv
     | WPredAsn (l, g, is_global_predref, targs, pats0, pats) ->
