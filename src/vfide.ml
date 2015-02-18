@@ -17,6 +17,8 @@ let platform = if Sys.os_type = "Win32" then Windows else if Fonts.is_macos then
 
 let include_paths: string list ref = ref []
 
+let () = Unix.putenv "LANG" "en_US" (* This works around a problem that causes vfide to become unusable in the Chinese locale. *)
+
 (* The lablgtk.init has a problem that automatically finding
  * this package does not always work. To avoid that problem,
  * we just do what this package do: calling GTKMain.Main.init().
