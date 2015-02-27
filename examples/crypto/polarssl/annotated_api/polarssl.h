@@ -513,42 +513,23 @@ void sha512_hmac(const char *key, size_t keylen, const char *input, size_t ilen,
                  char *output, int is384);
   /*@ requires [?f1]chars(key, keylen, ?cs_key) &*& 
                  exists<polarssl_cryptogram>(?cg_key) &*&
+                 cg_key == polarssl_symmetric_key(?p, ?c) &*&
                [?f2]chars(input, ilen, ?cs_pay) &*&
                  ilen >= POLARSSL_MIN_HMAC_INPUT_BYTE_SIZE &*&
                chars(output, 64, _) &*& (is384 == 0 || is384 == 1); @*/
   /*@ ensures  [f1]chars(key, keylen, cs_key) &*& 
                [f2]chars(input, ilen, cs_pay) &*&
-               switch(cg_key)
-               {
-                 case polarssl_random(p0, c0):
-                   return chars(output, 64, _);
-                 case polarssl_symmetric_key(p0, c0):
-                   return cs_key == polarssl_chars_for_cryptogram(cg_key) ?
-                     polarssl_cryptogram(output, ?length, ?cs, ?cg) &*&
-                     cg == polarssl_hmac(p0, c0, cs_pay) &*&
-                     is384 == 0 ?
-                       length == 64
-                     :
-                       length == 48 &*& chars(output + 48, 16, _)
+               cs_key == polarssl_chars_for_cryptogram(cg_key) ?
+                 (
+                   polarssl_cryptogram(output, ?length, ?cs, ?cg) &*&
+                   cg == polarssl_hmac(p, c, cs_pay) &*&
+                   is384 == 0 ?
+                     length == 64
                    :
-                     chars(output, 64, _);
-                 case polarssl_public_key(p0, c0):
-                   return chars(output, 64, _);
-                 case polarssl_private_key(p0, c0):
-                   return chars(output, 64, _);
-                 case polarssl_hash(cs0):
-                   return chars(output, 64, _);
-                 case polarssl_hmac(p0, c0, cs0):
-                   return chars(output, 64, _);
-                 case polarssl_encrypted(p0, c0, cs0, ent0):
-                   return chars(output, 64, _);
-                 case polarssl_auth_encrypted(p0, c0, mac0, cs0, ent0):
-                   return chars(output, 64, _);
-                 case polarssl_asym_encrypted(p0, c0, cs0, ent0):
-                   return chars(output, 64, _);
-                 case polarssl_asym_signature(p0, c0, cs0, ent0):
-                   return chars(output, 64, _);
-               }; @*/
+                     length == 48 &*& chars(output + 48, 16, _)
+                 )
+               :
+                 chars(output, 64, _); @*/
 
 ///////////////////////////////////////////////////////////////////////////////
 // Polarssl symmetric encrypted cryptogram - see "aes.h" //////////////////////

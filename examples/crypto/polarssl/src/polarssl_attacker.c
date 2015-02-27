@@ -351,7 +351,9 @@ void polarssl_attacker_send_hmac/*@ <T> @*/(havege_state *havege_state,
   {
     //@ open polarssl_public_message(pub)(buffer1, size1, ?cs1);
     //@ chars_split(buffer3, 64);
-    //@ polarssl_cryptogram cg;
+    //@ int p;
+    //@ int c;
+    //@ polarssl_cryptogram cg = polarssl_symmetric_key(p, c);
     //@ close exists<polarssl_cryptogram>(cg);
     //@ open polarssl_public_message(pub)(buffer2, size2, ?cs2);
     sha512_hmac(buffer1, (unsigned int) size1, buffer2, 
