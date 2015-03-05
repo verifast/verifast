@@ -13,7 +13,7 @@
 predicate world(predicate(item) pub) =
   nonces_initialized() &*&
   key_registry_initialized(pub) &*&
-  polarssl_world(polarssl_pub(pub), proof_obligations, pub) &*&
+  polarssl_world(polarssl_pub(pub)) &*&
   proof_obligations(pub)
 ;
 
@@ -105,6 +105,10 @@ predicate_ctor polarssl_pub(predicate(item) pub)
   }
 ;
 
+predicate_ctor polarssl_proof_pred(predicate(item) pub)() =
+  proof_obligations(pub)
+;
+                           
 fixpoint int polarssl_info_for_item(item i)
 {
   switch(i)
@@ -146,7 +150,7 @@ lemma void retreive_polarssl_proof_obligations();
   requires proof_obligations(?pub);
   ensures  proof_obligations(pub) &*&
            polarssl_proof_obligations(polarssl_pub(pub), 
-                                      proof_obligations, pub);
+                                      polarssl_proof_pred(pub));
 
 @*/ 
 

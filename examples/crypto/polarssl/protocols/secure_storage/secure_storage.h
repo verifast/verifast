@@ -23,8 +23,6 @@ fixpoint bool app_send_event(int sender, list<char> message);
 // Definition of pub for this protocol ////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-predicate ss_polarssl_proof_pred(unit u) = true;
-
 predicate ss_polarssl_pub(polarssl_cryptogram cg) =
   switch(cg)
   {
@@ -64,9 +62,7 @@ predicate ss_polarssl_pub(polarssl_cryptogram cg) =
 ///////////////////////////////////////////////////////////////////////////////
 
 void app_send(char *key, int key_len, char *message, int message_len);
-  /*@ requires [?f0]polarssl_world<unit>(ss_polarssl_pub,
-                                         ss_polarssl_proof_pred, 
-                                         unit) &*&
+  /*@ requires [?f0]polarssl_world(ss_polarssl_pub) &*&
                [?f1]polarssl_cryptogram(key, key_len, ?key_cs, ?key_cg) &*&
                  key_cg == polarssl_symmetric_key(?creator, ?id) &*&
                [?f2]polarssl_public_message(ss_polarssl_pub)
@@ -75,25 +71,19 @@ void app_send(char *key, int key_len, char *message, int message_len);
                  message_len < POLARSSL_MAX_MESSAGE_BYTE_SIZE - 64 &*&
                app_send_event(creator, msg_cs) == true;
   @*/
-  /*@ ensures  [f0]polarssl_world<unit>(ss_polarssl_pub,
-                                        ss_polarssl_proof_pred, 
-                                        unit) &*&
+  /*@ ensures  [f0]polarssl_world(ss_polarssl_pub) &*&
                [f1]polarssl_cryptogram(key, key_len, key_cs, key_cg) &*&
                [f2]polarssl_public_message(ss_polarssl_pub)
                                           (message, message_len, msg_cs);
   @*/
 
 int app_receive(char *key, int key_len, char **message);
-  /*@ requires [?f0]polarssl_world<unit>(ss_polarssl_pub,
-                                         ss_polarssl_proof_pred, 
-                                         unit) &*&
+  /*@ requires [?f0]polarssl_world(ss_polarssl_pub) &*&
                [?f1]polarssl_cryptogram(key, key_len, ?key_cs, ?key_cg) &*&
                  key_cg == polarssl_symmetric_key(?creator, ?id) &*&
                pointer(message, _);
   @*/
-  /*@ ensures  [f0]polarssl_world<unit>(ss_polarssl_pub,
-                                        ss_polarssl_proof_pred, 
-                                        unit) &*&
+  /*@ ensures  [f0]polarssl_world(ss_polarssl_pub) &*&
                [f1]polarssl_cryptogram(key, key_len, key_cs, key_cg) &*&
                pointer(message, ?message_p) &*&
                  malloc_block(message_p, result) &*&

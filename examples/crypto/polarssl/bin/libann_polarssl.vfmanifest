@@ -10,7 +10,6 @@
 #Initialization/finalization
 .predicate @../annotated_api/polarssl.h#polarssl_world
 .provides ../annotated_api/polarssl.h#polarssl_init
-.provides ../annotated_api/polarssl.h#polarssl_get_proof_obligations
 .provides ../annotated_api/polarssl.h#polarssl_exit
 #PolarSSL cryptogram char representation
 .provides ../annotated_api/polarssl.h#polarssl_chars_for_cryptogram_injective

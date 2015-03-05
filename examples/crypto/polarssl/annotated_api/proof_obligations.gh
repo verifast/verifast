@@ -5,71 +5,71 @@
 { \
 produce_lemma_function_pointer_chunk \
     (PREFIX##_polarssl_bad_random_is_public) : \
-    polarssl_bad_random_is_public<unit> \
-    (PREFIX##_polarssl_pub, PREFIX##_polarssl_proof_pred, unit) \
+    polarssl_bad_random_is_public \
+    (PREFIX##_polarssl_pub, PREFIX##_proof_pred) \
     (PREFIX##_random){ call(); }; \
 produce_lemma_function_pointer_chunk \
     (PREFIX##_polarssl_bad_key_is_public) : \
-    polarssl_bad_key_is_public<unit> \
-    (PREFIX##_polarssl_pub, PREFIX##_polarssl_proof_pred, unit) \
+    polarssl_bad_key_is_public \
+    (PREFIX##_polarssl_pub, PREFIX##_proof_pred) \
     (PREFIX##_key){ call(); }; \
 produce_lemma_function_pointer_chunk \
     (PREFIX##_polarssl_public_key_is_public) : \
-    polarssl_public_key_is_public<unit> \
-    (PREFIX##_polarssl_pub, PREFIX##_polarssl_proof_pred, unit) \
+    polarssl_public_key_is_public \
+    (PREFIX##_polarssl_pub, PREFIX##_proof_pred) \
     (PREFIX##_random){ call(); }; \
 produce_lemma_function_pointer_chunk \
     (PREFIX##_polarssl_bad_private_key_is_public) : \
-    polarssl_bad_private_key_is_public<unit> \
-    (PREFIX##_polarssl_pub, PREFIX##_polarssl_proof_pred, unit) \
+    polarssl_bad_private_key_is_public \
+    (PREFIX##_polarssl_pub, PREFIX##_proof_pred) \
     (PREFIX##_random){ call(); }; \
 produce_lemma_function_pointer_chunk \
     (PREFIX##_polarssl_hash_is_public) : \
-    polarssl_hash_is_public<unit> \
-    (PREFIX##_polarssl_pub, PREFIX##_polarssl_proof_pred, unit) \
+    polarssl_hash_is_public \
+    (PREFIX##_polarssl_pub, PREFIX##_proof_pred) \
     (PREFIX##_hash, PREFIX##_cgs_pay){ call(); }; \
 produce_lemma_function_pointer_chunk \
     (PREFIX##_polarssl_public_hmac_is_public) : \
-    polarssl_public_hmac_is_public<unit> \
-    (PREFIX##_polarssl_pub, PREFIX##_polarssl_proof_pred, unit) \
+    polarssl_public_hmac_is_public \
+    (PREFIX##_polarssl_pub, PREFIX##_proof_pred) \
     (PREFIX##_hmac, PREFIX##_cgs_pay){ call(); }; \
 produce_lemma_function_pointer_chunk \
     (PREFIX##_polarssl_public_encryption_is_public) : \
-    polarssl_public_encryption_is_public<unit> \
-    (PREFIX##_polarssl_pub, PREFIX##_polarssl_proof_pred, unit) \
+    polarssl_public_encryption_is_public \
+    (PREFIX##_polarssl_pub, PREFIX##_proof_pred) \
     (PREFIX##_encrypted, PREFIX##_cgs){ call(); }; \
 produce_lemma_function_pointer_chunk \
     (PREFIX##_polarssl_public_decryption_is_public) : \
-    polarssl_public_decryption_is_public<unit> \
-    (PREFIX##_polarssl_pub, PREFIX##_polarssl_proof_pred, unit) \
+    polarssl_public_decryption_is_public \
+    (PREFIX##_polarssl_pub, PREFIX##_proof_pred) \
     (PREFIX##_key, PREFIX##_encrypted){ call(); }; \
 produce_lemma_function_pointer_chunk \
     (PREFIX##_polarssl_public_auth_encryption_is_public) : \
-    polarssl_public_auth_encryption_is_public<unit> \
-    (PREFIX##_polarssl_pub, PREFIX##_polarssl_proof_pred, unit) \
+    polarssl_public_auth_encryption_is_public \
+    (PREFIX##_polarssl_pub, PREFIX##_proof_pred) \
     (PREFIX##_encrypted, PREFIX##_cgs){ call(); }; \
 produce_lemma_function_pointer_chunk \
     (PREFIX##_polarssl_public_auth_decryption_is_public) : \
-    polarssl_public_auth_decryption_is_public<unit> \
-    (PREFIX##_polarssl_pub, PREFIX##_polarssl_proof_pred, unit) \
+    polarssl_public_auth_decryption_is_public \
+    (PREFIX##_polarssl_pub, PREFIX##_proof_pred) \
     (PREFIX##_key, PREFIX##_encrypted){ call(); }; \
 produce_lemma_function_pointer_chunk \
     (PREFIX##_polarssl_public_asym_encryption_is_public) : \
-    polarssl_public_asym_encryption_is_public<unit> \
-    (PREFIX##_polarssl_pub, PREFIX##_polarssl_proof_pred, unit) \
+    polarssl_public_asym_encryption_is_public \
+    (PREFIX##_polarssl_pub, PREFIX##_proof_pred) \
     (PREFIX##_encrypted, PREFIX##_cgs){ call(); }; \
 produce_lemma_function_pointer_chunk \
     (PREFIX##_polarssl_public_asym_decryption_is_public) : \
-    polarssl_public_asym_decryption_is_public<unit> \
-    (PREFIX##_polarssl_pub, PREFIX##_polarssl_proof_pred, unit) \
+    polarssl_public_asym_decryption_is_public \
+    (PREFIX##_polarssl_pub, PREFIX##_proof_pred) \
     (PREFIX##_key, PREFIX##_encrypted){ call(); }; \
 produce_lemma_function_pointer_chunk \
     (PREFIX##_polarssl_public_asym_signature_is_public) : \
-    polarssl_public_asym_signature_is_public<unit> \
-    (PREFIX##_polarssl_pub, PREFIX##_polarssl_proof_pred, unit) \
+    polarssl_public_asym_signature_is_public \
+    (PREFIX##_polarssl_pub, PREFIX##_proof_pred) \
     (PREFIX##_sig, PREFIX##_cgs){ call(); }; \
 close polarssl_proof_obligations \
-    (PREFIX##_polarssl_pub, PREFIX##_polarssl_proof_pred, unit); \
+    (PREFIX##_polarssl_pub, PREFIX##_proof_pred); \
 }
 
 #define POLARSSL_PROOFS_DEFAULT(PREFIX, LEVEL) \

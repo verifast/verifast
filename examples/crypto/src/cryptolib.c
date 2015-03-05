@@ -20,8 +20,9 @@ void init_crypto_lib()
 {
   //@ open_module();
 
-  //@ retreive_polarssl_proof_obligations();
+  //@ close exists(polarssl_pub(pub));
   //@ polarssl_init();
+  
   //@ assert polarssl_principals(?count);
   nonces_init();
   //@ close exists(pub);

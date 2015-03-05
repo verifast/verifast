@@ -64,33 +64,15 @@ lemma void polarssl_destroy_principal(int count);
 
 /*@
 
-predicate polarssl_world<T>(
-                       predicate(polarssl_cryptogram) polarssl_pub,
-                       predicate(T) polarssl_proof_pred,
-                       T polarssl_proof_arg;);
+predicate polarssl_world(predicate(polarssl_cryptogram) polarssl_pub;);
 
-lemma void polarssl_init<T>();
-  requires polarssl_proof_obligations<T>(?polarssl_pub,
-                                         ?polarssl_proof_pred,
-                                         ?polarssl_proof_arg); 
-  ensures  polarssl_world<T>(polarssl_pub,
-                             polarssl_proof_pred, 
-                             polarssl_proof_arg) &*& 
+lemma void polarssl_init();
+  requires exists<predicate(polarssl_cryptogram)>(?polarssl_pub);
+  ensures  polarssl_world(polarssl_pub) &*& 
            polarssl_principals(0);
 
-lemma void polarssl_get_proof_obligations<T>();
-  requires [?f]polarssl_world<T>(?polarssl_pub,
-                                 ?polarssl_proof_pred,
-                                 ?polarssl_proof_arg);
-  ensures  [f]polarssl_world<T>(polarssl_pub,
-                                polarssl_proof_pred, 
-                                polarssl_proof_arg) &*&
-           polarssl_proof_obligations<T>(polarssl_pub,
-                                         polarssl_proof_pred, 
-                                         polarssl_proof_arg);
-
-lemma void polarssl_exit<T>();
-  requires polarssl_world<T>(_, _, _) &*& polarssl_principals(_);
+lemma void polarssl_exit();
+  requires polarssl_world(_) &*& polarssl_principals(_);
   ensures  true;
 
 @*/
@@ -1258,32 +1240,24 @@ lemma void polarssl_public_message_from_chars(
 
 @*/
 
-int net_send/*@ <T> @*/(void *ctx, const char *buf, size_t len);
-  /*@ requires [?f]polarssl_world<T>(?polarssl_pub,
-                                     ?polarssl_proof_pred,
-                                     ?polarssl_proof_arg) &*&
+int net_send(void *ctx, const char *buf, size_t len);
+  /*@ requires [?f]polarssl_world(?polarssl_pub) &*&
                integer(ctx, ?fd) &*&
                polarssl_net_status(fd, ?ip, ?port, connected) &*&
                len <= POLARSSL_MAX_MESSAGE_BYTE_SIZE &*&
                polarssl_public_message(polarssl_pub)(buf, len, ?cs); @*/
-  /*@ ensures  [f]polarssl_world<T>(polarssl_pub, 
-                                    polarssl_proof_pred, 
-                                    polarssl_proof_arg) &*&
+  /*@ ensures  [f]polarssl_world(polarssl_pub) &*&
                integer(ctx, fd)  &*&
                polarssl_net_status(fd, ip, port, connected) &*&
                polarssl_public_message(polarssl_pub)(buf, len, cs); @*/
   
-int net_recv/*@ <T> @*/(void *ctx, char *buf, size_t len);
-  /*@ requires [?f]polarssl_world<T>(?polarssl_pub,
-                                     ?polarssl_proof_pred, 
-                                     ?polarssl_proof_arg) &*&
+int net_recv(void *ctx, char *buf, size_t len);
+  /*@ requires [?f]polarssl_world(?polarssl_pub) &*&
                integer(ctx, ?fd)  &*&
                polarssl_net_status(fd, ?ip, ?port, connected) &*&
                chars(buf, len, _) &*& 
                  len <= POLARSSL_MAX_MESSAGE_BYTE_SIZE; @*/
-  /*@ ensures  [f]polarssl_world<T>(polarssl_pub,
-                                    polarssl_proof_pred, 
-                                    polarssl_proof_arg) &*&
+  /*@ ensures  [f]polarssl_world(polarssl_pub) &*&
                integer(ctx, fd)  &*&
                polarssl_net_status(fd, ip, port, connected) &*&
                result <= 0 ?
@@ -1305,200 +1279,187 @@ void net_close(int fd);
 
 /*@
 
-typedef lemma void polarssl_bad_random_is_public<T>(
+typedef lemma void polarssl_bad_random_is_public(
                       predicate(polarssl_cryptogram) polarssl_pub,
-                      predicate(T) polarssl_proof_pred,
-                      T polarssl_proof_arg)
+                      predicate() polarssl_proof_pred)
                          (polarssl_cryptogram random);
-  requires  polarssl_proof_pred(polarssl_proof_arg) &*&
+  requires  polarssl_proof_pred() &*&
             random == polarssl_random(?p, _) &*&
             true == bad(p);
-  ensures   polarssl_proof_pred(polarssl_proof_arg) &*&
+  ensures   polarssl_proof_pred() &*&
             [_]polarssl_pub(random);
 
-typedef lemma void polarssl_bad_key_is_public<T>(
+typedef lemma void polarssl_bad_key_is_public(
                       predicate(polarssl_cryptogram) polarssl_pub,
-                      predicate(T) polarssl_proof_pred,
-                      T polarssl_proof_arg)
+                      predicate() polarssl_proof_pred)
                          (polarssl_cryptogram key);
-  requires  polarssl_proof_pred(polarssl_proof_arg) &*&
+  requires  polarssl_proof_pred() &*&
             key == polarssl_symmetric_key(?p, _) &*&
             true == bad(p);
-  ensures   polarssl_proof_pred(polarssl_proof_arg) &*&
+  ensures   polarssl_proof_pred() &*&
             [_]polarssl_pub(key);
 
-typedef lemma void polarssl_public_key_is_public<T>(
+typedef lemma void polarssl_public_key_is_public(
                       predicate(polarssl_cryptogram) polarssl_pub,
-                      predicate(T) polarssl_proof_pred,
-                      T polarssl_proof_arg)
+                      predicate() polarssl_proof_pred)
                          (polarssl_cryptogram key);
-  requires  polarssl_proof_pred(polarssl_proof_arg) &*&
+  requires  polarssl_proof_pred() &*&
             key == polarssl_public_key(_, _);
-  ensures   polarssl_proof_pred(polarssl_proof_arg) &*&
+  ensures   polarssl_proof_pred() &*&
             [_]polarssl_pub(key);
      
-typedef lemma void polarssl_bad_private_key_is_public<T>(
+typedef lemma void polarssl_bad_private_key_is_public(
                       predicate(polarssl_cryptogram) polarssl_pub,
-                      predicate(T) polarssl_proof_pred,
-                      T polarssl_proof_arg)
+                      predicate() polarssl_proof_pred)
                          (polarssl_cryptogram key);
-  requires  polarssl_proof_pred(polarssl_proof_arg) &*&
+  requires  polarssl_proof_pred() &*&
             key == polarssl_private_key(?p, _) &*&
             true == bad(p);
-  ensures   polarssl_proof_pred(polarssl_proof_arg) &*&
+  ensures   polarssl_proof_pred() &*&
             [_]polarssl_pub(key);
 
-typedef lemma void polarssl_hash_is_public<T>(
+typedef lemma void polarssl_hash_is_public(
                       predicate(polarssl_cryptogram) polarssl_pub,
-                      predicate(T) polarssl_proof_pred,
-                      T polarssl_proof_arg)
+                      predicate() polarssl_proof_pred)
                          (polarssl_cryptogram hash,
                           list<polarssl_cryptogram> cgs_pay);
-  requires  polarssl_proof_pred(polarssl_proof_arg) &*&
+  requires  polarssl_proof_pred() &*&
             hash == polarssl_hash(?pay) &*&
             length(pay) <= INT_MAX &*&
             polarssl_cryptograms_in_chars_upper_bound(pay, cgs_pay) &&
             subset(cgs_pay, polarssl_generated_public_cryptograms(polarssl_pub));
-  ensures   polarssl_proof_pred(polarssl_proof_arg) &*&
+  ensures   polarssl_proof_pred() &*&
             [_]polarssl_pub(hash);
 
-typedef lemma void polarssl_public_hmac_is_public<T>(
+typedef lemma void polarssl_public_hmac_is_public(
                       predicate(polarssl_cryptogram) polarssl_pub,
-                      predicate(T) polarssl_proof_pred,
-                      T polarssl_proof_arg)
+                      predicate() polarssl_proof_pred)
                          (polarssl_cryptogram hmac,
                           list<polarssl_cryptogram> cgs_pay);
-  requires  polarssl_proof_pred(polarssl_proof_arg) &*&
+  requires  polarssl_proof_pred() &*&
             hmac == polarssl_hmac(?p, ?c, ?pay) &*&
             length(pay) <= INT_MAX &*&
             [_]polarssl_pub(polarssl_symmetric_key(p, c)) &*&
             polarssl_cryptograms_in_chars_upper_bound(pay, cgs_pay) &&
             subset(cgs_pay, polarssl_generated_public_cryptograms(polarssl_pub));
-  ensures   polarssl_proof_pred(polarssl_proof_arg) &*&
+  ensures   polarssl_proof_pred() &*&
             [_]polarssl_pub(hmac);
 
-typedef lemma void polarssl_public_encryption_is_public<T>(
+typedef lemma void polarssl_public_encryption_is_public(
                       predicate(polarssl_cryptogram) polarssl_pub,
-                      predicate(T) polarssl_proof_pred,
-                      T polarssl_proof_arg)
+                      predicate() polarssl_proof_pred)
                          (polarssl_cryptogram encrypted, 
                           list<polarssl_cryptogram> cgs_pay);
-  requires  polarssl_proof_pred(polarssl_proof_arg) &*&
+  requires  polarssl_proof_pred() &*&
             encrypted == polarssl_encrypted(?p, ?c, ?pay, ?ent) &*&
             length(pay) <= INT_MAX &*&
             [_]polarssl_pub(polarssl_symmetric_key(p, c)) &*&
             polarssl_cryptograms_in_chars_upper_bound(pay, cgs_pay) &&
             subset(cgs_pay, polarssl_generated_public_cryptograms(polarssl_pub));
-  ensures   polarssl_proof_pred(polarssl_proof_arg) &*&
+  ensures   polarssl_proof_pred() &*&
             [_]polarssl_pub(encrypted);
  
-typedef lemma void polarssl_public_decryption_is_public<T>(
+typedef lemma void polarssl_public_decryption_is_public(
                       predicate(polarssl_cryptogram) polarssl_pub,
-                      predicate(T) polarssl_proof_pred,
-                      T polarssl_proof_arg)
+                      predicate() polarssl_proof_pred)
                          (polarssl_cryptogram key, 
                           polarssl_cryptogram encrypted);
-  requires  polarssl_proof_pred(polarssl_proof_arg) &*&
+  requires  polarssl_proof_pred() &*&
             key == polarssl_symmetric_key(?p, ?c) &*&
             encrypted == polarssl_encrypted(p, c, ?pay, ?ent) &*&
             [_]polarssl_pub(key) &*&
             [_]polarssl_pub(encrypted);
-  ensures   polarssl_proof_pred(polarssl_proof_arg) &*&
+  ensures   polarssl_proof_pred() &*&
             true == subset(polarssl_cryptograms_in_chars(pay), 
                            polarssl_generated_public_cryptograms(polarssl_pub));
 
-typedef lemma void polarssl_public_auth_encryption_is_public<T>(
+typedef lemma void polarssl_public_auth_encryption_is_public(
                       predicate(polarssl_cryptogram) polarssl_pub,
-                      predicate(T) polarssl_proof_pred,
-                      T polarssl_proof_arg)
+                      predicate() polarssl_proof_pred)
                          (polarssl_cryptogram encrypted, 
                           list<polarssl_cryptogram> cgs_pay);
-  requires  polarssl_proof_pred(polarssl_proof_arg) &*&
+  requires  polarssl_proof_pred() &*&
             encrypted == polarssl_auth_encrypted(?p, ?c, ?mac, ?pay, ?ent) &*&
             length(pay) <= INT_MAX &*&
             [_]polarssl_pub(polarssl_symmetric_key(p, c)) &*&
             polarssl_cryptograms_in_chars_upper_bound(pay, cgs_pay) &&
             subset(cgs_pay, polarssl_generated_public_cryptograms(polarssl_pub));
-  ensures   polarssl_proof_pred(polarssl_proof_arg) &*&
+  ensures   polarssl_proof_pred() &*&
             [_]polarssl_pub(encrypted);
 
-typedef lemma void polarssl_public_auth_decryption_is_public<T>(
+typedef lemma void polarssl_public_auth_decryption_is_public(
                       predicate(polarssl_cryptogram) polarssl_pub,
-                      predicate(T) polarssl_proof_pred,
-                      T polarssl_proof_arg)
+                      predicate() polarssl_proof_pred)
                          (polarssl_cryptogram key, 
                           polarssl_cryptogram encrypted);
-  requires  polarssl_proof_pred(polarssl_proof_arg) &*&
+  requires  polarssl_proof_pred() &*&
             key == polarssl_symmetric_key(?p, ?c) &*&
             encrypted == polarssl_auth_encrypted(p, c, ?mac, ?pay, ?ent) &*&
             [_]polarssl_pub(key) &*&
             [_]polarssl_pub(encrypted);
-  ensures   polarssl_proof_pred(polarssl_proof_arg) &*&
+  ensures   polarssl_proof_pred() &*&
             true == subset(polarssl_cryptograms_in_chars(pay), 
                            polarssl_generated_public_cryptograms(polarssl_pub));
 
-typedef lemma void polarssl_public_asym_encryption_is_public<T>(
+typedef lemma void polarssl_public_asym_encryption_is_public(
                       predicate(polarssl_cryptogram) polarssl_pub,
-                      predicate(T) polarssl_proof_pred,
-                      T polarssl_proof_arg)
+                      predicate() polarssl_proof_pred)
                          (polarssl_cryptogram encrypted, 
                           list<polarssl_cryptogram> cgs_pay);
-  requires  polarssl_proof_pred(polarssl_proof_arg) &*&
+  requires  polarssl_proof_pred() &*&
             encrypted == polarssl_asym_encrypted(?p, ?c, ?pay, ?ent) &*&
             length(pay) <= INT_MAX &*&
             [_]polarssl_pub(polarssl_public_key(p, c)) &*&
             polarssl_cryptograms_in_chars_upper_bound(pay, cgs_pay) &&
             subset(cgs_pay, polarssl_generated_public_cryptograms(polarssl_pub));
-  ensures   polarssl_proof_pred(polarssl_proof_arg) &*&
+  ensures   polarssl_proof_pred() &*&
             [_]polarssl_pub(encrypted);
 
-typedef lemma void polarssl_public_asym_decryption_is_public<T>(
+typedef lemma void polarssl_public_asym_decryption_is_public(
                       predicate(polarssl_cryptogram) polarssl_pub,
-                      predicate(T) polarssl_proof_pred,
-                      T polarssl_proof_arg)
+                      predicate() polarssl_proof_pred)
                          (polarssl_cryptogram key, 
                           polarssl_cryptogram encrypted);
-  requires  polarssl_proof_pred(polarssl_proof_arg) &*&
+  requires  polarssl_proof_pred() &*&
             key == polarssl_private_key(?p, ?c) &*&
             encrypted == polarssl_asym_encrypted(p, c, ?pay, ?ent) &*&
             [_]polarssl_pub(key) &*& 
             [_]polarssl_pub(encrypted);
-  ensures   polarssl_proof_pred(polarssl_proof_arg) &*&
+  ensures   polarssl_proof_pred() &*&
             true == subset(polarssl_cryptograms_in_chars(pay), 
                            polarssl_generated_public_cryptograms(polarssl_pub));
 
-typedef lemma void polarssl_public_asym_signature_is_public<T>(
+typedef lemma void polarssl_public_asym_signature_is_public(
                       predicate(polarssl_cryptogram) polarssl_pub,
-                      predicate(T) polarssl_proof_pred,
-                      T polarssl_proof_arg)
+                      predicate() polarssl_proof_pred)
                          (polarssl_cryptogram sig,
                           list<polarssl_cryptogram> cgs_pay);
-  requires  polarssl_proof_pred(polarssl_proof_arg) &*&
+  requires  polarssl_proof_pred() &*&
             sig == 
               polarssl_asym_signature(?p, ?c, ?pay, ?ent) &*&
             length(pay) <= INT_MAX &*&
             [_]polarssl_pub(polarssl_private_key(p, c)) &*&
             polarssl_cryptograms_in_chars_upper_bound(pay, cgs_pay) &&
             subset(cgs_pay, polarssl_generated_public_cryptograms(polarssl_pub));
-  ensures   polarssl_proof_pred(polarssl_proof_arg) &*&
+  ensures   polarssl_proof_pred() &*&
             [_]polarssl_pub(sig);
 
-predicate polarssl_proof_obligations<T>(
+predicate polarssl_proof_obligations(
                      predicate(polarssl_cryptogram) pub,
-                     predicate(T) pred, T arg) =
-  is_polarssl_bad_random_is_public(_, pub, pred, arg) &*&
-  is_polarssl_bad_key_is_public(_, pub, pred, arg) &*&
-  is_polarssl_public_key_is_public(_, pub, pred, arg) &*&
-  is_polarssl_bad_private_key_is_public(_, pub, pred, arg) &*&
-  is_polarssl_hash_is_public(_, pub, pred, arg) &*&
-  is_polarssl_public_hmac_is_public(_, pub, pred, arg) &*&
-  is_polarssl_public_encryption_is_public(_, pub, pred, arg) &*&
-  is_polarssl_public_decryption_is_public(_, pub, pred, arg) &*&
-  is_polarssl_public_auth_encryption_is_public(_, pub, pred, arg) &*&
-  is_polarssl_public_auth_decryption_is_public(_, pub, pred, arg) &*&
-  is_polarssl_public_asym_encryption_is_public(_, pub, pred, arg) &*&
-  is_polarssl_public_asym_decryption_is_public(_, pub, pred, arg) &*&
-  is_polarssl_public_asym_signature_is_public(_, pub, pred, arg)
+                     predicate() pred) =
+  is_polarssl_bad_random_is_public(_, pub, pred) &*&
+  is_polarssl_bad_key_is_public(_, pub, pred) &*&
+  is_polarssl_public_key_is_public(_, pub, pred) &*&
+  is_polarssl_bad_private_key_is_public(_, pub, pred) &*&
+  is_polarssl_hash_is_public(_, pub, pred) &*&
+  is_polarssl_public_hmac_is_public(_, pub, pred) &*&
+  is_polarssl_public_encryption_is_public(_, pub, pred) &*&
+  is_polarssl_public_decryption_is_public(_, pub, pred) &*&
+  is_polarssl_public_auth_encryption_is_public(_, pub, pred) &*&
+  is_polarssl_public_auth_decryption_is_public(_, pub, pred) &*&
+  is_polarssl_public_asym_encryption_is_public(_, pub, pred) &*&
+  is_polarssl_public_asym_decryption_is_public(_, pub, pred) &*&
+  is_polarssl_public_asym_signature_is_public(_, pub, pred)
 ;
 @*/
 
@@ -1506,17 +1467,15 @@ predicate polarssl_proof_obligations<T>(
 // PolarSSL attacker model ////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-void polarssl_attacker/*@ <T> @*/(int *i);
-  /*@ requires [?f]polarssl_world<T>(?polarssl_pub,
-                                     ?polarssl_proof_pred, 
-                                     ?polarssl_proof_arg) &*&
-               polarssl_proof_pred(polarssl_proof_arg) &*&
+void polarssl_attacker(int *i);
+  /*@ requires [?f]polarssl_world(?polarssl_pub) &*&
+               polarssl_proof_obligations(polarssl_pub, ?proof_pred) &*&
+               proof_pred() &*&
                integer(i, ?count1) &*& count1 >= 0 &*&
                polarssl_principals(count1); @*/
-  /*@ ensures  [f]polarssl_world<T>(polarssl_pub, 
-                                    polarssl_proof_pred, 
-                                    polarssl_proof_arg) &*&
-               polarssl_proof_pred(polarssl_proof_arg) &*&
+  /*@ ensures  [f]polarssl_world(polarssl_pub) &*&
+               polarssl_proof_obligations(polarssl_pub, proof_pred) &*&
+               proof_pred() &*&
                integer(i, ?count2) &*& polarssl_principals(count2) &*&
                count2 > count1; @*/
 

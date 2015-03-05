@@ -20,8 +20,6 @@ fixpoint bool response(int cl, int sv, list<char> req, list<char> resp);
 // Definition of pub for this protocol ////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-predicate rpc_polarssl_proof_pred(unit u) = true;
-
 predicate rpc_polarssl_pub(polarssl_cryptogram cg) =
   switch (cg)
   {
@@ -74,9 +72,7 @@ predicate rpc_polarssl_pub(polarssl_cryptogram cg) =
 ///////////////////////////////////////////////////////////////////////////////
 
 void client(char *key, int key_len, char *request, char *response);
-  /*@ requires [?f0]polarssl_world<unit>(rpc_polarssl_pub,
-                                         rpc_polarssl_proof_pred, 
-                                         unit) &*&
+  /*@ requires [?f0]polarssl_world(rpc_polarssl_pub) &*&
                [?f1]polarssl_cryptogram(key, key_len, ?key_cs, ?key_cg) &*&
                  key_cg == polarssl_symmetric_key(?creator, ?id) &*&
                [?f2]polarssl_public_message(rpc_polarssl_pub)
@@ -84,9 +80,7 @@ void client(char *key, int key_len, char *request, char *response);
                request(creator, shared_with(creator, id), req_cs) == true &*&
                chars(response, PACKAGE_BYTE_SIZE, _);
   @*/
-  /*@ ensures  [f0]polarssl_world<unit>(rpc_polarssl_pub,
-                                        rpc_polarssl_proof_pred, 
-                                        unit) &*&
+  /*@ ensures  [f0]polarssl_world(rpc_polarssl_pub) &*&
                [f1]polarssl_cryptogram(key, key_len, key_cs, key_cg) &*&
                [f2]polarssl_public_message(rpc_polarssl_pub)
                                           (request, PACKAGE_BYTE_SIZE, req_cs) &*&
@@ -99,16 +93,12 @@ void client(char *key, int key_len, char *request, char *response);
   @*/
 
 void server(char *key, int key_len);
-  /*@ requires [?f0]polarssl_world<unit>(rpc_polarssl_pub,
-                                         rpc_polarssl_proof_pred, 
-                                         unit) &*&
+  /*@ requires [?f0]polarssl_world(rpc_polarssl_pub) &*&
                [?f1]polarssl_cryptogram(key, key_len, ?key_cs, ?key_cg) &*&
                  key_cg == polarssl_symmetric_key(?creator, ?id) &*&
                polarssl_generated_values(shared_with(creator, id), ?count);
   @*/
-  /*@ ensures  [f0]polarssl_world<unit>(rpc_polarssl_pub,
-                                        rpc_polarssl_proof_pred, 
-                                        unit) &*&
+  /*@ ensures  [f0]polarssl_world(rpc_polarssl_pub) &*&
                [f1]polarssl_cryptogram(key, key_len, key_cs, key_cg) &*&
                polarssl_generated_values(shared_with(creator, id), count + 1);
   @*/

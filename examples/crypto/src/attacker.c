@@ -512,9 +512,13 @@ void attacker(int attacker_id, struct keypair* keypair)
         case 0:
           c = get_polarssl_principals();
           //@ open [f]world(pub);
+          //@ retreive_polarssl_proof_obligations();
+          //@ close polarssl_proof_pred(pub)();
           polarssl_attacker(c);
+          //@ open polarssl_proof_pred(pub)();
           //@ close [f]world(pub);
           //@ return_polarssl_principals();
+          //@ leak polarssl_proof_obligations(_, _);
           break;
         case 1:
           // Anyone can publish arbitrary data items...

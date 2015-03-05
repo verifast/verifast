@@ -7,8 +7,11 @@
 #define KEY_BYTE_SIZE 16
 
 /*@
+predicate rpc_proof_pred() = true;
+
 predicate_family_instance pthread_run_pre(attacker_t)(void *data, any info) =
-    [1/3]polarssl_world(rpc_polarssl_pub, rpc_polarssl_proof_pred, unit) &*&
+    [1/3]polarssl_world(rpc_polarssl_pub) &*&
+    polarssl_proof_obligations(rpc_polarssl_pub, rpc_proof_pred) &*&
     integer(data, ?val) &*& val >= 0 &*&
     polarssl_principals(val) &*& info == nil;
 @*/
@@ -21,9 +24,9 @@ void *attacker_t(void* data) //@ : pthread_run_joinable
     //@ invariant pthread_run_pre(attacker_t)(data, info);
   {
     //@ open pthread_run_pre(attacker_t)(data, info);
-    //@ close rpc_polarssl_proof_pred(unit);
+    //@ close rpc_proof_pred();
     polarssl_attacker(data);
-    //@ open rpc_polarssl_proof_pred(unit);
+    //@ open rpc_proof_pred();
     //@ close pthread_run_pre(attacker_t)(data, info);
   }
    
@@ -47,7 +50,7 @@ inductive info =
 ;
 
 predicate_family_instance pthread_run_pre(server_t)(void *data, any info) =
-  [1/3]polarssl_world(rpc_polarssl_pub, rpc_polarssl_proof_pred, unit) &*&
+  [1/3]polarssl_world(rpc_polarssl_pub) &*&
   rpc_args_server(data, ?server) &*&
   rpc_args_client(data, ?client) &*&
   rpc_args_key(data, ?key) &*&
@@ -61,7 +64,7 @@ predicate_family_instance pthread_run_pre(server_t)(void *data, any info) =
                 cons(int_value(id),
                   nil))));
 predicate_family_instance pthread_run_post(server_t)(void *data, any info) =
-  [1/3]polarssl_world(rpc_polarssl_pub, rpc_polarssl_proof_pred, unit) &*&
+  [1/3]polarssl_world(rpc_polarssl_pub) &*&
   rpc_args_server(data, ?server) &*&
   rpc_args_client(data, ?client) &*&
   rpc_args_key(data, ?key) &*&
@@ -88,7 +91,7 @@ void *server_t(void* data) //@ : pthread_run_joinable
 
 /*@
 predicate_family_instance pthread_run_pre(client_t)(void *data, any info) =
-  [1/3]polarssl_world(rpc_polarssl_pub, rpc_polarssl_proof_pred, unit) &*&
+  [1/3]polarssl_world(rpc_polarssl_pub) &*&
   rpc_args_server(data, ?server) &*&
   rpc_args_client(data, ?client) &*&
   rpc_args_key(data, ?key) &*&
@@ -109,7 +112,7 @@ predicate_family_instance pthread_run_pre(client_t)(void *data, any info) =
                     cons(int_value(id),
                       nil))))));
 predicate_family_instance pthread_run_post(client_t)(void *data, any info) =
-  [1/3]polarssl_world(rpc_polarssl_pub, rpc_polarssl_proof_pred, unit) &*&
+  [1/3]polarssl_world(rpc_polarssl_pub) &*&
   rpc_args_server(data, ?server) &*&
   rpc_args_client(data, ?client) &*&
   rpc_args_key(data, ?key) &*&
@@ -161,6 +164,7 @@ int main() //@ : main
   printf("\n\tExecuting \"rpc protocol\" ... \n\n");
   
   //@ PACK_PROOF_OBLIGATIONS(rpc)
+  //@ close exists(rpc_polarssl_pub);
   //@ polarssl_init();
   
   //@ int client = polarssl_create_principal();
@@ -180,8 +184,7 @@ int main() //@ : main
 #else
   while (true)
 #endif
-    /*@ invariant [2/3]polarssl_world(rpc_polarssl_pub, 
-                                      rpc_polarssl_proof_pred, unit) &*& 
+    /*@ invariant [2/3]polarssl_world(rpc_polarssl_pub) &*& 
                   havege_state_initialized(&havege_state) &*&
                   polarssl_generated_values(client, ?count_c) &*&
                   polarssl_generated_values(server, ?count_s);

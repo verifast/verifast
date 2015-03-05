@@ -12,25 +12,24 @@
 
 /*@
 
-predicate attacker_invariant<T>(real f,
-                       predicate(polarssl_cryptogram) pub,
-                       predicate(T) pred, T arg,
+predicate attacker_invariant(real f,
+                       predicate(polarssl_cryptogram) pub, predicate() pred,
                        struct havege_state* state, void* socket, int attacker) =
-  [f]polarssl_world(pub, pred, arg) &*&
-    pred(arg) &*&
-    is_polarssl_bad_random_is_public(_, pub, pred, arg) &*&
-    is_polarssl_bad_key_is_public(_, pub, pred, arg) &*&
-    is_polarssl_public_key_is_public(_, pub, pred, arg) &*&
-    is_polarssl_bad_private_key_is_public(_, pub, pred, arg) &*&
-    is_polarssl_hash_is_public(_, pub, pred, arg) &*&
-    is_polarssl_public_hmac_is_public(_, pub, pred, arg) &*&
-    is_polarssl_public_encryption_is_public(_, pub, pred, arg) &*&
-    is_polarssl_public_decryption_is_public(_, pub, pred, arg) &*&
-    is_polarssl_public_auth_encryption_is_public(_, pub, pred, arg) &*&
-    is_polarssl_public_auth_decryption_is_public(_, pub, pred, arg) &*&
-    is_polarssl_public_asym_encryption_is_public(_, pub, pred, arg) &*&
-    is_polarssl_public_asym_decryption_is_public(_, pub, pred, arg) &*&
-    is_polarssl_public_asym_signature_is_public(_, pub, pred, arg) &*&
+  [f]polarssl_world(pub) &*&
+    pred() &*&
+    is_polarssl_bad_random_is_public(_, pub, pred) &*&
+    is_polarssl_bad_key_is_public(_, pub, pred) &*&
+    is_polarssl_public_key_is_public(_, pub, pred) &*&
+    is_polarssl_bad_private_key_is_public(_, pub, pred) &*&
+    is_polarssl_hash_is_public(_, pub, pred) &*&
+    is_polarssl_public_hmac_is_public(_, pub, pred) &*&
+    is_polarssl_public_encryption_is_public(_, pub, pred) &*&
+    is_polarssl_public_decryption_is_public(_, pub, pred) &*&
+    is_polarssl_public_auth_encryption_is_public(_, pub, pred) &*&
+    is_polarssl_public_auth_decryption_is_public(_, pub, pred) &*&
+    is_polarssl_public_asym_encryption_is_public(_, pub, pred) &*&
+    is_polarssl_public_asym_decryption_is_public(_, pub, pred) &*&
+    is_polarssl_public_asym_signature_is_public(_, pub, pred) &*&
   true == bad(attacker) &*&
   polarssl_principal(attacker) &*&
   polarssl_generated_values(attacker, ?count) &*&
@@ -39,11 +38,11 @@ predicate attacker_invariant<T>(real f,
   polarssl_net_status(fd, ?ip, ?port, connected)
 ;
 
-lemma void assume_chars_contain_public_cryptograms<T>(char* buffer, int size)
+lemma void assume_chars_contain_public_cryptograms(char* buffer, int size)
   nonghost_callers_only
-  requires [?f]polarssl_world<T>(?pub, ?pred, ?arg) &*&
+  requires [?f]polarssl_world(?pub) &*&
            chars(buffer, size, ?cs);
-  ensures  [f]polarssl_world<T>(pub, pred, arg) &*&
+  ensures  [f]polarssl_world(pub) &*&
            polarssl_public_message(pub)(buffer, size, cs);
 {
   polarssl_generated_public_cryptograms_assume(pub, cs);
@@ -52,19 +51,19 @@ lemma void assume_chars_contain_public_cryptograms<T>(char* buffer, int size)
 
 @*/
 
-void polarssl_attacker_send_data/*@ <T> @*/(havege_state *havege_state, 
+void polarssl_attacker_send_data(havege_state *havege_state, 
                                             void* socket)
-  /*@ requires attacker_invariant<T>(?f, ?pub, ?pred, ?arg,
+  /*@ requires attacker_invariant(?f, ?pub, ?pred,
                                      havege_state, socket, ?attacker); @*/
-  /*@ ensures  attacker_invariant<T>(f, pub, pred, arg, 
+  /*@ ensures  attacker_invariant(f, pub, pred, 
                                      havege_state, socket, attacker); @*/
 {
   int temp;
   int size;
   char buffer[POLARSSL_MAX_MESSAGE_BYTE_SIZE];
   
-  //@ open attacker_invariant(f, pub, pred, arg, havege_state, socket, attacker);
-  //@ assert pred(arg);
+  //@ open attacker_invariant(f, pub, pred, havege_state, socket, attacker);
+  //@ assert pred();
   r_int_with_bounds(havege_state, &temp, 1, POLARSSL_MAX_MESSAGE_BYTE_SIZE);
   size = temp;
   //@ chars_split(buffer, size);
@@ -72,14 +71,14 @@ void polarssl_attacker_send_data/*@ <T> @*/(havege_state *havege_state,
   //@ assume_chars_contain_public_cryptograms(buffer, size);
   net_send(socket, buffer, (unsigned int) size);
   //@ open polarssl_public_message(pub)(buffer, _, _);
-  //@ close attacker_invariant(f, pub, pred, arg, havege_state, socket, attacker);
+  //@ close attacker_invariant(f, pub, pred, havege_state, socket, attacker);
 }
 
-void polarssl_attacker_send_concatenation/*@ <T> @*/(havege_state *havege_state, 
+void polarssl_attacker_send_concatenation(havege_state *havege_state, 
                                                      void* socket)
-  /*@ requires attacker_invariant<T>(?f, ?pub, ?pred, ?arg,
+  /*@ requires attacker_invariant(?f, ?pub, ?pred,
                                      havege_state, socket, ?attacker); @*/
-  /*@ ensures  attacker_invariant<T>(f, pub, pred, arg, 
+  /*@ ensures  attacker_invariant(f, pub, pred, 
                                      havege_state, socket, attacker); @*/
 {
   int size1;
@@ -88,7 +87,7 @@ void polarssl_attacker_send_concatenation/*@ <T> @*/(havege_state *havege_state,
   char buffer2[POLARSSL_MAX_MESSAGE_BYTE_SIZE];
   char buffer3[POLARSSL_MAX_MESSAGE_BYTE_SIZE];
 
-  //@ open attacker_invariant(f, pub, pred, arg, havege_state, socket, attacker);
+  //@ open attacker_invariant(f, pub, pred, havege_state, socket, attacker);
   size1 = net_recv(socket, buffer1, POLARSSL_MAX_MESSAGE_BYTE_SIZE);
   size2 = net_recv(socket, buffer2, POLARSSL_MAX_MESSAGE_BYTE_SIZE);
   if (size1 > 0 && size2 > 0)
@@ -113,14 +112,14 @@ void polarssl_attacker_send_concatenation/*@ <T> @*/(havege_state *havege_state,
         open polarssl_public_message(pub)(buffer1, _, _); @*/
   /*@ if (size2 > 0 && size1 <= 0) 
         open polarssl_public_message(pub)(buffer2, _, _); @*/
-  //@ close attacker_invariant(f, pub, pred, arg, havege_state, socket, attacker);
+  //@ close attacker_invariant(f, pub, pred, havege_state, socket, attacker);
 }
 
-void polarssl_attacker_send_split/*@ <T> @*/(havege_state *havege_state, 
+void polarssl_attacker_send_split(havege_state *havege_state, 
                                              void* socket)
-  /*@ requires attacker_invariant<T>(?f, ?pub, ?pred, ?arg,
+  /*@ requires attacker_invariant(?f, ?pub, ?pred,
                                      havege_state, socket, ?attacker); @*/
-  /*@ ensures  attacker_invariant<T>(f, pub, pred, arg, 
+  /*@ ensures  attacker_invariant(f, pub, pred, 
                                      havege_state, socket, attacker); @*/
 {
   int temp;
@@ -128,7 +127,7 @@ void polarssl_attacker_send_split/*@ <T> @*/(havege_state *havege_state,
   int size2;
   char buffer[POLARSSL_MAX_MESSAGE_BYTE_SIZE];
 
-  //@ open attacker_invariant(f, pub, pred, arg, havege_state, socket, attacker);
+  //@ open attacker_invariant(f, pub, pred, havege_state, socket, attacker);
   size1 = net_recv(socket, buffer, POLARSSL_MAX_MESSAGE_BYTE_SIZE);
   if (size1 > 0)
   {
@@ -148,21 +147,21 @@ void polarssl_attacker_send_split/*@ <T> @*/(havege_state *havege_state,
     //@ open polarssl_public_message(pub)((void*) buffer + size2, _, _);
     //@ chars_join(buffer);
   }
-  //@ close attacker_invariant(f, pub, pred, arg, havege_state, socket, attacker);
+  //@ close attacker_invariant(f, pub, pred, havege_state, socket, attacker);
 }
 
-void polarssl_attacker_send_random/*@ <T> @*/(havege_state *havege_state, 
+void polarssl_attacker_send_random(havege_state *havege_state, 
                                               void* socket)
-  /*@ requires attacker_invariant<T>(?f, ?pub, ?pred, ?arg,
+  /*@ requires attacker_invariant(?f, ?pub, ?pred,
                                      havege_state, socket, ?attacker); @*/
-  /*@ ensures  attacker_invariant<T>(f, pub, pred, arg, 
+  /*@ ensures  attacker_invariant(f, pub, pred, 
                                      havege_state, socket, attacker); @*/
 {
   int temp;
   int size;
   char buffer[POLARSSL_MAX_MESSAGE_BYTE_SIZE];
 
-  //@ open attacker_invariant(f, pub, pred, arg, havege_state, socket, attacker);
+  //@ open attacker_invariant(f, pub, pred, havege_state, socket, attacker);
   r_int_with_bounds(havege_state, &temp, POLARSSL_MIN_RANDOM_BYTE_SIZE, 
                                          POLARSSL_MAX_MESSAGE_BYTE_SIZE);
   size = temp;
@@ -171,14 +170,14 @@ void polarssl_attacker_send_random/*@ <T> @*/(havege_state *havege_state,
   if (havege_random(havege_state, buffer, (unsigned int) size) == 0)
   {
     //@ assert polarssl_cryptogram(buffer, size, ?cs, ?cg);
-    //@ assert is_polarssl_bad_random_is_public(?proof, pub, pred, arg);
+    //@ assert is_polarssl_bad_random_is_public(?proof, pub, pred);
     //@ proof(cg);
     //@ polarssl_public_message_from_cryptogram(pub, buffer, size, cs, cg);
     net_send(socket, buffer, (unsigned int) size);
     //@ open polarssl_public_message(pub)(buffer, _, _);
     //@ chars_join(buffer);
   }
-  //@ close attacker_invariant(f, pub, pred, arg, havege_state, socket, attacker);
+  //@ close attacker_invariant(f, pub, pred, havege_state, socket, attacker);
 }
 
 int attacker_key_item_havege_random_stub(void *havege_state, 
@@ -204,11 +203,11 @@ int attacker_key_item_havege_random_stub(void *havege_state,
   return havege_random(havege_state, output, len);
 }
 
-void polarssl_attacker_send_keys/*@ <T> @*/(havege_state *havege_state, 
+void polarssl_attacker_send_keys(havege_state *havege_state, 
                                             void* socket)
-  /*@ requires attacker_invariant<T>(?f, ?pub, ?pred, ?arg,
+  /*@ requires attacker_invariant(?f, ?pub, ?pred,
                                      havege_state, socket, ?attacker); @*/
-  /*@ ensures  attacker_invariant<T>(f, pub, pred, arg, 
+  /*@ ensures  attacker_invariant(f, pub, pred, 
                                      havege_state, socket, attacker); @*/
 {
   pk_context context;
@@ -216,7 +215,7 @@ void polarssl_attacker_send_keys/*@ <T> @*/(havege_state *havege_state,
   pk_context context_priv;
   unsigned int key_size;
   
-  //@ open attacker_invariant(f, pub, pred, arg, havege_state, socket, attacker);
+  //@ open attacker_invariant(f, pub, pred, havege_state, socket, attacker);
   
   unsigned int temp;
   r_u_int_with_bounds(havege_state, &temp, 1024, 8192);
@@ -258,14 +257,14 @@ void polarssl_attacker_send_keys/*@ <T> @*/(havege_state *havege_state,
   if (pk_parse_public_key(&context_pub, pub_key, key_size) != 0) abort();
   if (pk_parse_key(&context_priv, priv_key, key_size, NULL, 0) != 0) abort();
   
-  //@ assert is_polarssl_bad_key_is_public(?proof1, pub, pred, arg);
+  //@ assert is_polarssl_bad_key_is_public(?proof1, pub, pred);
   //@ assert polarssl_cryptogram(key, key_size, ?key_cs, ?key_cg);
   //@ proof1(key_cg);
   //@ polarssl_public_message_from_cryptogram(pub, key, key_size, key_cs, key_cg);
   net_send(socket, key, key_size);
   //@ open polarssl_public_message(pub)(key, _, _);
     
-  //@ assert is_polarssl_public_key_is_public(?proof2, pub, pred, arg);
+  //@ assert is_polarssl_public_key_is_public(?proof2, pub, pred);
   //@ proof2(pub_key_cg);
   //@ close polarssl_cryptogram(pub_key, key_size, pub_key_cs, pub_key_cg);
   /*@ polarssl_public_message_from_cryptogram(pub, pub_key, key_size, 
@@ -273,7 +272,7 @@ void polarssl_attacker_send_keys/*@ <T> @*/(havege_state *havege_state,
   net_send(socket, pub_key, key_size);
   //@ open polarssl_public_message(pub)(pub_key, _, _);
   
-  //@ assert is_polarssl_bad_private_key_is_public(?proof3, pub, pred, arg);
+  //@ assert is_polarssl_bad_private_key_is_public(?proof3, pub, pred);
   //@ proof3(priv_key_cg);
   //@ close polarssl_cryptogram(priv_key, key_size, priv_key_cs, priv_key_cg);
   /*@ polarssl_public_message_from_cryptogram(pub, priv_key, key_size, 
@@ -294,21 +293,21 @@ void polarssl_attacker_send_keys/*@ <T> @*/(havege_state *havege_state,
   free(pub_key);
   free(priv_key);
   
-  //@ close attacker_invariant(f, pub, pred, arg, havege_state, socket, attacker);
+  //@ close attacker_invariant(f, pub, pred, havege_state, socket, attacker);
 }
 
-void polarssl_attacker_send_hash/*@ <T> @*/(havege_state *havege_state, 
+void polarssl_attacker_send_hash(havege_state *havege_state, 
                                             void* socket)
-  /*@ requires attacker_invariant<T>(?f, ?pub, ?pred, ?arg,
+  /*@ requires attacker_invariant(?f, ?pub, ?pred,
                                      havege_state, socket, ?attacker); @*/
-  /*@ ensures  attacker_invariant<T>(f, pub, pred, arg, 
+  /*@ ensures  attacker_invariant(f, pub, pred, 
                                      havege_state, socket, attacker); @*/
 {
   int temp;
   int size;
   char buffer[POLARSSL_MAX_MESSAGE_BYTE_SIZE];
 
-  //@ open attacker_invariant(f, pub, pred, arg, havege_state, socket, attacker);
+  //@ open attacker_invariant(f, pub, pred, havege_state, socket, attacker);
 
   size = net_recv(socket, buffer, POLARSSL_MAX_MESSAGE_BYTE_SIZE);
   if (size >= POLARSSL_MIN_HMAC_INPUT_BYTE_SIZE)
@@ -318,7 +317,7 @@ void polarssl_attacker_send_hash/*@ <T> @*/(havege_state *havege_state,
     sha512(buffer, (unsigned int) size, hash, 0);
     //@ assert polarssl_cryptogram(hash, 64, ?h_cs, ?h_cg);
     //@ assert h_cg == polarssl_hash(pay);
-    //@ assert is_polarssl_hash_is_public(?proof, pub, pred, arg);
+    //@ assert is_polarssl_hash_is_public(?proof, pub, pred);
     //@ proof(h_cg, polarssl_generated_public_cryptograms(pub));
     //@ close polarssl_public_message(pub)(buffer, size, pay);
     //@ polarssl_public_message_from_cryptogram(pub, hash, 64, h_cs, h_cg);
@@ -326,14 +325,14 @@ void polarssl_attacker_send_hash/*@ <T> @*/(havege_state *havege_state,
     //@ open polarssl_public_message(pub)(hash, 64, _);
   }
   //@ if (size > 0) open polarssl_public_message(pub)(buffer, _, _);
-  //@ close attacker_invariant(f, pub, pred, arg, havege_state, socket, attacker);
+  //@ close attacker_invariant(f, pub, pred, havege_state, socket, attacker);
 }
 
-void polarssl_attacker_send_hmac/*@ <T> @*/(havege_state *havege_state, 
+void polarssl_attacker_send_hmac(havege_state *havege_state, 
                                             void* socket)
-  /*@ requires attacker_invariant<T>(?f, ?pub, ?pred, ?arg,
+  /*@ requires attacker_invariant(?f, ?pub, ?pred,
                                      havege_state, socket, ?attacker); @*/
-  /*@ ensures  attacker_invariant<T>(f, pub, pred, arg, 
+  /*@ ensures  attacker_invariant(f, pub, pred, 
                                      havege_state, socket, attacker); @*/
 {
   int temp;
@@ -343,7 +342,7 @@ void polarssl_attacker_send_hmac/*@ <T> @*/(havege_state *havege_state,
   char buffer2[POLARSSL_MAX_MESSAGE_BYTE_SIZE];
   char buffer3[POLARSSL_MAX_MESSAGE_BYTE_SIZE];
 
-  //@ open attacker_invariant(f, pub, pred, arg, havege_state, socket, attacker);
+  //@ open attacker_invariant(f, pub, pred, havege_state, socket, attacker);
 
   size1 = net_recv(socket, buffer1, POLARSSL_MAX_MESSAGE_BYTE_SIZE);
   size2 = net_recv(socket, buffer2, POLARSSL_MAX_MESSAGE_BYTE_SIZE);
@@ -370,7 +369,7 @@ void polarssl_attacker_send_hmac/*@ <T> @*/(havege_state *havege_state,
                               cs1, cg, polarssl_generated_public_cryptograms(pub));
               polarssl_generated_public_cryptograms_from(pub, cg);
               assert [_]pub(cg);
-              assert is_polarssl_public_hmac_is_public(?proof2, pub, pred, arg);
+              assert is_polarssl_public_hmac_is_public(?proof2, pub, pred);
               proof2(hmac, polarssl_generated_public_cryptograms(pub));
               polarssl_public_message_from_cryptogram(pub, buffer3, 64, cs_hmac, hmac);
             }
@@ -403,14 +402,14 @@ void polarssl_attacker_send_hmac/*@ <T> @*/(havege_state *havege_state,
     open polarssl_public_message(pub)(buffer1, _, _); @*/
   /*@ if (size2 > 0 && (size1 <= 0 || size2 < POLARSSL_MIN_HMAC_INPUT_BYTE_SIZE)) 
     open polarssl_public_message(pub)(buffer2, _, _); @*/
-  //@ close attacker_invariant(f, pub, pred, arg, havege_state, socket, attacker);
+  //@ close attacker_invariant(f, pub, pred, havege_state, socket, attacker);
 }
 
-void polarssl_attacker_send_encrypted/*@ <T> @*/(havege_state *havege_state, 
+void polarssl_attacker_send_encrypted(havege_state *havege_state, 
                                                  void* socket)
-  /*@ requires attacker_invariant<T>(?f, ?pub, ?pred, ?arg,
+  /*@ requires attacker_invariant(?f, ?pub, ?pred,
                                      havege_state, socket, ?attacker); @*/
-  /*@ ensures  attacker_invariant<T>(f, pub, pred, arg, 
+  /*@ ensures  attacker_invariant(f, pub, pred, 
                                      havege_state, socket, attacker); @*/
 {
   int temp;
@@ -420,7 +419,7 @@ void polarssl_attacker_send_encrypted/*@ <T> @*/(havege_state *havege_state,
   char buffer2[POLARSSL_MAX_MESSAGE_BYTE_SIZE];
   char buffer3[POLARSSL_MAX_MESSAGE_BYTE_SIZE];
 
-  //@ open attacker_invariant(f, pub, pred, arg, havege_state, socket, attacker);
+  //@ open attacker_invariant(f, pub, pred, havege_state, socket, attacker);
 
   size1 = net_recv(socket, buffer1, POLARSSL_MAX_MESSAGE_BYTE_SIZE);
   size2 = net_recv(socket, buffer2, POLARSSL_MAX_MESSAGE_BYTE_SIZE);
@@ -468,7 +467,7 @@ void polarssl_attacker_send_encrypted/*@ <T> @*/(havege_state *havege_state,
                         polarssl_generated_public_cryptograms_from(pub, cg_key);
                         assert [_]pub(cg_key);
                         assert is_polarssl_public_encryption_is_public(
-                                                       ?proof2, pub, pred, arg);
+                                                       ?proof2, pub, pred);
                         proof2(cg_enc, polarssl_generated_public_cryptograms(pub));
                         polarssl_public_message_from_cryptogram(pub, buffer3, size2, cs_enc, cg_enc);
                     }
@@ -489,14 +488,14 @@ void polarssl_attacker_send_encrypted/*@ <T> @*/(havege_state *havege_state,
     open polarssl_public_message(pub)(buffer1, _, _); @*/
   /*@ if (size2 > 0 && (size1 <= 0 || size2 < POLARSSL_MIN_ENCRYPTED_BYTE_SIZE)) 
     open polarssl_public_message(pub)(buffer2, _, _); @*/
-  //@ close attacker_invariant(f, pub, pred, arg, havege_state, socket, attacker);
+  //@ close attacker_invariant(f, pub, pred, havege_state, socket, attacker);
 }
 
-void polarssl_attacker_send_decrypted/*@ <T> @*/(havege_state *havege_state, 
+void polarssl_attacker_send_decrypted(havege_state *havege_state, 
                                                  void* socket)
-  /*@ requires attacker_invariant<T>(?f, ?pub, ?pred, ?arg,
+  /*@ requires attacker_invariant(?f, ?pub, ?pred,
                                      havege_state, socket, ?attacker); @*/
-  /*@ ensures  attacker_invariant<T>(f, pub, pred, arg, 
+  /*@ ensures  attacker_invariant(f, pub, pred, 
                                      havege_state, socket, attacker); @*/
 {
   int temp;
@@ -506,7 +505,7 @@ void polarssl_attacker_send_decrypted/*@ <T> @*/(havege_state *havege_state,
   char buffer2[POLARSSL_MAX_MESSAGE_BYTE_SIZE];
   char buffer3[POLARSSL_MAX_MESSAGE_BYTE_SIZE];
 
-  //@ open attacker_invariant(f, pub, pred, arg, havege_state, socket, attacker);
+  //@ open attacker_invariant(f, pub, pred, havege_state, socket, attacker);
 
   size1 = net_recv(socket, buffer1, POLARSSL_MAX_MESSAGE_BYTE_SIZE);
   size2 = net_recv(socket, buffer2, POLARSSL_MAX_MESSAGE_BYTE_SIZE);
@@ -561,7 +560,7 @@ void polarssl_attacker_send_decrypted/*@ <T> @*/(havege_state *havege_state,
                         assert [_]pub(cg_enc);
                         
                         assert is_polarssl_public_decryption_is_public(
-                                                       ?proof3, pub, pred, arg);
+                                                       ?proof3, pub, pred);
                         proof3(cg_key, cg_enc);
                         polarssl_public_message_from_chars(pub, buffer3, 
                                                            size2, cs_output);
@@ -583,14 +582,14 @@ void polarssl_attacker_send_decrypted/*@ <T> @*/(havege_state *havege_state,
     open polarssl_public_message(pub)(buffer1, _, _); @*/
   /*@ if (size2 > 0 && (size1 <= 0 || size2 < POLARSSL_MIN_ENCRYPTED_BYTE_SIZE)) 
     open polarssl_public_message(pub)(buffer2, _, _); @*/
-  //@ close attacker_invariant(f, pub, pred, arg, havege_state, socket, attacker);
+  //@ close attacker_invariant(f, pub, pred, havege_state, socket, attacker);
 }
 
-void polarssl_attacker_send_auth_encrypted/*@ <T> @*/(havege_state *havege_state, 
+void polarssl_attacker_send_auth_encrypted(havege_state *havege_state, 
                                                       void* socket)
-  /*@ requires attacker_invariant<T>(?f, ?pub, ?pred, ?arg,
+  /*@ requires attacker_invariant(?f, ?pub, ?pred,
                                      havege_state, socket, ?attacker); @*/
-  /*@ ensures  attacker_invariant<T>(f, pub, pred, arg, 
+  /*@ ensures  attacker_invariant(f, pub, pred, 
                                      havege_state, socket, attacker); @*/
 {
   int temp;
@@ -600,7 +599,7 @@ void polarssl_attacker_send_auth_encrypted/*@ <T> @*/(havege_state *havege_state
   char buffer2[POLARSSL_MAX_MESSAGE_BYTE_SIZE];
   char buffer3[POLARSSL_MAX_MESSAGE_BYTE_SIZE];
 
-  //@ open attacker_invariant(f, pub, pred, arg, havege_state, socket, attacker);
+  //@ open attacker_invariant(f, pub, pred, havege_state, socket, attacker);
 
   size1 = net_recv(socket, buffer1, POLARSSL_MAX_MESSAGE_BYTE_SIZE);
   size2 = net_recv(socket, buffer2, POLARSSL_MAX_MESSAGE_BYTE_SIZE);
@@ -649,7 +648,7 @@ void polarssl_attacker_send_auth_encrypted/*@ <T> @*/(havege_state *havege_state
                         assert cg_enc == polarssl_auth_encrypted(
                                                    p1, id1, mac_cs, cs2, cs_iv);
                         assert is_polarssl_public_auth_encryption_is_public(
-                                                       ?proof1, pub, pred, arg);
+                                                       ?proof1, pub, pred);
                         proof1(cg_enc, polarssl_generated_public_cryptograms(pub));
                         polarssl_public_message_from_cryptogram(pub, buffer3, size2, 
                                                                 cs_enc, cg_enc);
@@ -671,14 +670,14 @@ void polarssl_attacker_send_auth_encrypted/*@ <T> @*/(havege_state *havege_state
     open polarssl_public_message(pub)(buffer1, _, _); @*/
   /*@ if (size2 > 0 && (size1 <= 0 || size2 < POLARSSL_MIN_ENCRYPTED_BYTE_SIZE)) 
     open polarssl_public_message(pub)(buffer2, _, _); @*/
-  //@ close attacker_invariant(f, pub, pred, arg, havege_state, socket, attacker);
+  //@ close attacker_invariant(f, pub, pred, havege_state, socket, attacker);
 }
 
-void polarssl_attacker_send_auth_decrypted/*@ <T> @*/(havege_state *havege_state, 
+void polarssl_attacker_send_auth_decrypted(havege_state *havege_state, 
                                                       void* socket)
-  /*@ requires attacker_invariant<T>(?f, ?pub, ?pred, ?arg,
+  /*@ requires attacker_invariant(?f, ?pub, ?pred,
                                      havege_state, socket, ?attacker); @*/
-  /*@ ensures  attacker_invariant<T>(f, pub, pred, arg, 
+  /*@ ensures  attacker_invariant(f, pub, pred, 
                                      havege_state, socket, attacker); @*/
 {
   int temp;
@@ -688,7 +687,7 @@ void polarssl_attacker_send_auth_decrypted/*@ <T> @*/(havege_state *havege_state
   char buffer2[POLARSSL_MAX_MESSAGE_BYTE_SIZE];
   char buffer3[POLARSSL_MAX_MESSAGE_BYTE_SIZE];
 
-  //@ open attacker_invariant(f, pub, pred, arg, havege_state, socket, attacker);
+  //@ open attacker_invariant(f, pub, pred, havege_state, socket, attacker);
 
   size1 = net_recv(socket, buffer1, POLARSSL_MAX_MESSAGE_BYTE_SIZE);
   size2 = net_recv(socket, buffer2, POLARSSL_MAX_MESSAGE_BYTE_SIZE);
@@ -750,7 +749,7 @@ void polarssl_attacker_send_auth_decrypted/*@ <T> @*/(havege_state *havege_state
                           assert [_]pub(cg_enc);
 
                           assert is_polarssl_public_auth_decryption_is_public(
-                                                        ?proof, pub, pred, arg);
+                                                        ?proof, pub, pred);
                           proof(cg_key, cg_enc);
                           polarssl_public_message_from_chars(pub, buffer3, size2, 
                                                              cs_output);
@@ -773,14 +772,14 @@ void polarssl_attacker_send_auth_decrypted/*@ <T> @*/(havege_state *havege_state
     open polarssl_public_message(pub)(buffer1, _, _); @*/
   /*@ if (size2 > 0 && (size1 <= 0 || size2 < POLARSSL_MIN_ENCRYPTED_BYTE_SIZE)) 
     open polarssl_public_message(pub)(buffer2, _, _); @*/
-  //@ close attacker_invariant(f, pub, pred, arg, havege_state, socket, attacker);
+  //@ close attacker_invariant(f, pub, pred, havege_state, socket, attacker);
 }
 
-void polarssl_attacker_send_asym_encrypted/*@ <T> @*/(
+void polarssl_attacker_send_asym_encrypted(
                                        havege_state *havege_state, void* socket)
-  /*@ requires attacker_invariant<T>(?f, ?pub, ?pred, ?arg,
+  /*@ requires attacker_invariant(?f, ?pub, ?pred,
                                      havege_state, socket, ?attacker); @*/
-  /*@ ensures  attacker_invariant<T>(f, pub, pred, arg, 
+  /*@ ensures  attacker_invariant(f, pub, pred, 
                                      havege_state, socket, attacker); @*/
 {
   int temp;
@@ -791,7 +790,7 @@ void polarssl_attacker_send_asym_encrypted/*@ <T> @*/(
   char buffer2[POLARSSL_MAX_MESSAGE_BYTE_SIZE];
   char buffer3[POLARSSL_MAX_MESSAGE_BYTE_SIZE];
 
-  //@ open attacker_invariant(f, pub, pred, arg, havege_state, socket, attacker);
+  //@ open attacker_invariant(f, pub, pred, havege_state, socket, attacker);
 
   size1 = net_recv(socket, buffer1, POLARSSL_MAX_MESSAGE_BYTE_SIZE);
   size2 = net_recv(socket, buffer2, POLARSSL_MAX_MESSAGE_BYTE_SIZE);
@@ -839,7 +838,7 @@ void polarssl_attacker_send_asym_encrypted/*@ <T> @*/(
                       assert cg_enc == polarssl_asym_encrypted(
                                                  p1, id1, cs2, _);
                       assert is_polarssl_public_asym_encryption_is_public(
-                                                 ?proof, pub, pred, arg);
+                                                 ?proof, pub, pred);
                       proof(cg_enc, polarssl_generated_public_cryptograms(pub));
                       assert [_]pub(cg_enc);
                       polarssl_public_message_from_cryptogram(
@@ -862,14 +861,14 @@ void polarssl_attacker_send_asym_encrypted/*@ <T> @*/(
     open polarssl_public_message(pub)(buffer1, _, _); @*/
   /*@ if (size2 > 0 && (size1 <= 0 || size2 < POLARSSL_MIN_ENCRYPTED_BYTE_SIZE)) 
     open polarssl_public_message(pub)(buffer2, _, _); @*/
-  //@ close attacker_invariant(f, pub, pred, arg, havege_state, socket, attacker);
+  //@ close attacker_invariant(f, pub, pred, havege_state, socket, attacker);
 }
 
-void polarssl_attacker_send_asym_decrypted/*@ <T> @*/(
+void polarssl_attacker_send_asym_decrypted(
                                        havege_state *havege_state, void* socket)
-  /*@ requires attacker_invariant<T>(?f, ?pub, ?pred, ?arg,
+  /*@ requires attacker_invariant(?f, ?pub, ?pred,
                                      havege_state, socket, ?attacker); @*/
-  /*@ ensures  attacker_invariant<T>(f, pub, pred, arg, 
+  /*@ ensures  attacker_invariant(f, pub, pred, 
                                      havege_state, socket, attacker); @*/
 {
   int temp;
@@ -880,7 +879,7 @@ void polarssl_attacker_send_asym_decrypted/*@ <T> @*/(
   char buffer2[POLARSSL_MAX_MESSAGE_BYTE_SIZE];
   char buffer3[POLARSSL_MAX_MESSAGE_BYTE_SIZE];
 
-  //@ open attacker_invariant(f, pub, pred, arg, havege_state, socket, attacker);
+  //@ open attacker_invariant(f, pub, pred, havege_state, socket, attacker);
 
   size1 = net_recv(socket, buffer1, POLARSSL_MAX_MESSAGE_BYTE_SIZE);
   size2 = net_recv(socket, buffer2, POLARSSL_MAX_MESSAGE_BYTE_SIZE);
@@ -937,7 +936,7 @@ void polarssl_attacker_send_asym_decrypted/*@ <T> @*/(
                         assert [_]pub(cg_enc);
                         
                         assert is_polarssl_public_asym_decryption_is_public(
-                                                       ?proof3, pub, pred, arg);
+                                                       ?proof3, pub, pred);
                         proof3(cg_key, cg_enc);
                         polarssl_public_message_from_chars(pub, buffer3, 
                                                           osize_val, cs_output);
@@ -966,14 +965,14 @@ void polarssl_attacker_send_asym_decrypted/*@ <T> @*/(
     open polarssl_public_message(pub)(buffer1, _, _); @*/
   /*@ if (size2 > 0 && (size1 <= 0 || size2 < POLARSSL_MIN_ENCRYPTED_BYTE_SIZE)) 
     open polarssl_public_message(pub)(buffer2, _, _); @*/
-  //@ close attacker_invariant(f, pub, pred, arg, havege_state, socket, attacker);
+  //@ close attacker_invariant(f, pub, pred, havege_state, socket, attacker);
 }
 
-void polarssl_attacker_send_asym_signature/*@ <T> @*/(
+void polarssl_attacker_send_asym_signature(
                                        havege_state *havege_state, void* socket)
-  /*@ requires attacker_invariant<T>(?f, ?pub, ?pred, ?arg,
+  /*@ requires attacker_invariant(?f, ?pub, ?pred,
                                      havege_state, socket, ?attacker); @*/
-  /*@ ensures  attacker_invariant<T>(f, pub, pred, arg, 
+  /*@ ensures  attacker_invariant(f, pub, pred, 
                                      havege_state, socket, attacker); @*/
 {
   int temp;
@@ -984,7 +983,7 @@ void polarssl_attacker_send_asym_signature/*@ <T> @*/(
   char buffer2[POLARSSL_MAX_MESSAGE_BYTE_SIZE];
   char buffer3[POLARSSL_MAX_MESSAGE_BYTE_SIZE];
 
-  //@ open attacker_invariant(f, pub, pred, arg, havege_state, socket, attacker);
+  //@ open attacker_invariant(f, pub, pred, havege_state, socket, attacker);
 
   size1 = net_recv(socket, buffer1, POLARSSL_MAX_MESSAGE_BYTE_SIZE);
   size2 = net_recv(socket, buffer2, POLARSSL_MAX_MESSAGE_BYTE_SIZE);
@@ -1030,7 +1029,7 @@ void polarssl_attacker_send_asym_signature/*@ <T> @*/(
                                                  ?cs_enc, ?cg_enc);
                       assert cg_enc == polarssl_asym_signature(p1, id1, cs2, _);
                       assert is_polarssl_public_asym_signature_is_public(
-                                                        ?proof, pub, pred, arg);
+                                                        ?proof, pub, pred);
                       proof(cg_enc, polarssl_generated_public_cryptograms(pub));
                       polarssl_public_message_from_cryptogram(pub, buffer3, 
                                                      osize_val, cs_enc, cg_enc);
@@ -1053,19 +1052,19 @@ void polarssl_attacker_send_asym_signature/*@ <T> @*/(
     open polarssl_public_message(pub)(buffer1, _, _); @*/
   /*@ if (size2 > 0 && (size1 <= 0 || size2 < POLARSSL_MIN_ENCRYPTED_BYTE_SIZE)) 
     open polarssl_public_message(pub)(buffer2, _, _); @*/
-  //@ close attacker_invariant(f, pub, pred, arg, havege_state, socket, attacker);
+  //@ close attacker_invariant(f, pub, pred, havege_state, socket, attacker);
 }
 
-void polarssl_attacker_core/*@ <T> @*/(havege_state *havege_state, void* socket)
-  /*@ requires attacker_invariant<T>(?f, ?pub, ?pred, ?arg,
+void polarssl_attacker_core(havege_state *havege_state, void* socket)
+  /*@ requires attacker_invariant(?f, ?pub, ?pred,
                                      havege_state, socket, ?attacker); @*/
-  /*@ ensures  attacker_invariant<T>(f, pub, pred, arg, 
+  /*@ ensures  attacker_invariant(f, pub, pred, 
                                      havege_state, socket, attacker); @*/
 {
   int action;
-  //@ open attacker_invariant<T>(f, pub, pred, arg, havege_state, socket, attacker);
+  //@ open attacker_invariant(f, pub, pred, havege_state, socket, attacker);
   r_int(havege_state, &action);
-  //@ close attacker_invariant<T>(f, pub, pred, arg, havege_state, socket, attacker);
+  //@ close attacker_invariant(f, pub, pred, havege_state, socket, attacker);
 
   switch (action % 14)
   {
@@ -1114,19 +1113,18 @@ void polarssl_attacker_core/*@ <T> @*/(havege_state *havege_state, void* socket)
   }
 }
 
-void polarssl_attacker/*@ <T> @*/(int* i)
-  /*@ requires [?f]polarssl_world<T>(?polarssl_pub,
-                                     ?polarssl_proof_pred, 
-                                     ?polarssl_proof_arg) &*&
-               polarssl_proof_pred(polarssl_proof_arg) &*&
+void polarssl_attacker(int* i)
+  /*@ requires [?f]polarssl_world(?polarssl_pub) &*&
+               polarssl_proof_obligations(polarssl_pub, ?proof_pred) &*&
+               proof_pred() &*&
                integer(i, ?count1) &*& count1 >= 0 &*&
                polarssl_principals(count1); @*/
-  /*@ ensures  [f]polarssl_world<T>(polarssl_pub, 
-                                    polarssl_proof_pred, 
-                                    polarssl_proof_arg) &*&
-               polarssl_proof_pred(polarssl_proof_arg) &*&
+  /*@ ensures  [f]polarssl_world(polarssl_pub) &*&
+               polarssl_proof_obligations(polarssl_pub, proof_pred) &*&
+               proof_pred() &*&
                integer(i, ?count2) &*& polarssl_principals(count2) &*&
                count2 > count1; @*/
+
 {
   havege_state havege_state;
   //@ close havege_state(&havege_state);
@@ -1167,28 +1165,20 @@ void polarssl_attacker/*@ <T> @*/(int* i)
 
     if (!network_failure)
     {
-      //@ polarssl_get_proof_obligations();
-      /*@ open polarssl_proof_obligations<T>(polarssl_pub, 
-                                             polarssl_proof_pred, 
-                                             polarssl_proof_arg); @*/
-      /*@ close attacker_invariant<T>(f, polarssl_pub, polarssl_proof_pred, 
-                       polarssl_proof_arg, &havege_state, socket, bad_one); @*/
+      //@ open polarssl_proof_obligations(polarssl_pub, proof_pred);
+      /*@ close attacker_invariant(f, polarssl_pub, proof_pred, 
+                                   &havege_state, socket, bad_one); @*/
       int j = 0;     
       while(j < POLARSSL_ATTACKER_ITERATIONS)
-        /*@ invariant attacker_invariant<T>(f, polarssl_pub, polarssl_proof_pred, 
-                       polarssl_proof_arg, &havege_state, socket, bad_one); @*/
+        /*@ invariant attacker_invariant(f, polarssl_pub, proof_pred, 
+                                         &havege_state, socket, bad_one); @*/
       {
         polarssl_attacker_core(&havege_state, socket);
         j++;
       }
-      /*@ open attacker_invariant<T>(f, polarssl_pub, polarssl_proof_pred, 
-                       polarssl_proof_arg, &havege_state, socket, bad_one); @*/
-      /*@ close polarssl_proof_obligations<T>(polarssl_pub, 
-                                              polarssl_proof_pred, 
-                                              polarssl_proof_arg); @*/
-      /*@ leak polarssl_proof_obligations<T>(polarssl_pub, 
-                                             polarssl_proof_pred, 
-                                             polarssl_proof_arg); @*/
+      /*@ open attacker_invariant(f, polarssl_pub, proof_pred,
+                                  &havege_state, socket, bad_one); @*/
+      //@ close polarssl_proof_obligations(polarssl_pub, proof_pred);
     }
 
     if (!network_failure)

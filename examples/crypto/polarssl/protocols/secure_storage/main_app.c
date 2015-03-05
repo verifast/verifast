@@ -9,8 +9,11 @@
 #define KEY_BYTE_SIZE 128
 
 /*@
+predicate ss_proof_pred() = true;
+
 predicate_family_instance pthread_run_pre(attacker_t)(void *data, any info) =
-    [1/3]polarssl_world(ss_polarssl_pub, ss_polarssl_proof_pred, unit) &*&
+    [1/3]polarssl_world(ss_polarssl_pub) &*&
+    polarssl_proof_obligations(ss_polarssl_pub, ss_proof_pred) &*&
     integer(data, ?val) &*& val >= 0 &*&
     polarssl_principals(val) &*& info == nil;
 @*/
@@ -23,9 +26,9 @@ void *attacker_t(void* data) //@ : pthread_run_joinable
     //@ invariant pthread_run_pre(attacker_t)(data, info);
   {
     //@ open pthread_run_pre(attacker_t)(data, info);
-    //@ close ss_polarssl_proof_pred(unit);
+    //@ close ss_proof_pred();
     polarssl_attacker(data);
-    //@ open ss_polarssl_proof_pred(unit);
+    //@ open ss_proof_pred();
     //@ close pthread_run_pre(attacker_t)(data, info);
   }
    
@@ -48,7 +51,7 @@ inductive info =
 ;
 
 predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
-  [1/3]polarssl_world(ss_polarssl_pub, ss_polarssl_proof_pred, unit) &*&
+  [1/3]polarssl_world(ss_polarssl_pub) &*&
     ss_args_key(data, ?key) &*&
     ss_args_key_len(data, KEY_BYTE_SIZE) &*&
     ss_args_message(data, ?message) &*&
@@ -67,7 +70,7 @@ predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
                 cons(char_list(msg_cs),
                   nil))));
 predicate_family_instance pthread_run_post(sender_t)(void *data, any info) =
-  [1/3]polarssl_world(ss_polarssl_pub, ss_polarssl_proof_pred, unit) &*&
+  [1/3]polarssl_world(ss_polarssl_pub) &*&
     ss_args_key(data, ?key) &*&
     ss_args_key_len(data, KEY_BYTE_SIZE) &*&
     ss_args_message(data, ?message) &*&
@@ -97,7 +100,7 @@ void *sender_t(void* data) //@ : pthread_run_joinable
 
 /*@
 predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) =
-  [1/3]polarssl_world(ss_polarssl_pub, ss_polarssl_proof_pred, unit) &*&
+  [1/3]polarssl_world(ss_polarssl_pub) &*&
     ss_args_key(data, ?key) &*&
     ss_args_key_len(data, ?key_len) &*&
     ss_args_message(data, ?message) &*&
@@ -109,7 +112,7 @@ predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) =
               cons(pointer_value(key), 
                 nil)));
 predicate_family_instance pthread_run_post(receiver_t)(void *data, any info) =
-  [1/3]polarssl_world(ss_polarssl_pub, ss_polarssl_proof_pred, unit) &*&
+  [1/3]polarssl_world(ss_polarssl_pub) &*&
     ss_args_key(data, ?key) &*&
     ss_args_key_len(data, ?key_len) &*&
     ss_args_message(data, ?message) &*&
@@ -152,6 +155,7 @@ int main() //@ : main
   printf("\n\tExecuting \"secure_storage protocol\" ... \n\n");
   
   //@ PACK_PROOF_OBLIGATIONS(ss)
+  //@ close exists(ss_polarssl_pub);
   //@ polarssl_init();
   
   //@ int sender = polarssl_create_principal();
@@ -171,7 +175,7 @@ int main() //@ : main
 #else
   while (true)
 #endif
-    /*@ invariant [2/3]polarssl_world(ss_polarssl_pub, ss_polarssl_proof_pred, unit) &*& 
+    /*@ invariant [2/3]polarssl_world(ss_polarssl_pub) &*& 
                   havege_state_initialized(&havege_state) &*&
                   polarssl_generated_values(sender, ?count_s);
     @*/
