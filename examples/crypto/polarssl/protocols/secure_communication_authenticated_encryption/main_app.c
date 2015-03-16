@@ -196,7 +196,7 @@ int main() //@ : main
     //@ open polarssl_cryptogram(message, message_len, ?msg_cs, ?msg_cg);
     //@ assume (!bad(sender));
     //@ assume (app_send_event(sender, msg_cs));
-    //@ polarssl_generated_public_cryptograms_assume(sc_auth_polarssl_pub, msg_cs);
+    //@ polarssl_public_generated_chars_assume(sc_auth_polarssl_pub, msg_cs);
     /*@ close polarssl_public_message(sc_auth_polarssl_pub)
                                      (message, message_len, msg_cs); @*/
     {

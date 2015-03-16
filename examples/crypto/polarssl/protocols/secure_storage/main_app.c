@@ -197,7 +197,7 @@ int main() //@ : main
     message = malloc(message_len);
     if (message == 0) abort();
     //@ assert chars(message, message_len, ?msg_cs);
-    //@ polarssl_generated_public_cryptograms_assume(ss_polarssl_pub, msg_cs);
+    //@ polarssl_public_generated_chars_assume(ss_polarssl_pub, msg_cs);
     {
       pthread_t s_thread, r_thread;
       

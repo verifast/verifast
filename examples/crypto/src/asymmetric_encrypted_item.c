@@ -138,6 +138,7 @@ struct item *asymmetric_encryption(struct item *key, struct item *payload)
             };
           case none:
             assert true == collision_in_run();
+            open polarssl_public_message(polarssl_pub(pub))(output, _, _);
         }
     @*/
     //@ assert chars(output, ?enc_length, ?enc_cs);
@@ -162,8 +163,6 @@ struct item *asymmetric_encryption(struct item *key, struct item *payload)
         {
           item e = dummy_item_for_tag('j');
           collision_public(pub, cs);
-          polarssl_cryptograms_in_chars_upper_bound_from(cs, 
-                      polarssl_generated_public_cryptograms(polarssl_pub(pub)));
           close item_constraints(true, e, cs, pub);
           leak item_constraints(true, e, cs, pub);
           close item(result, e, pub);
@@ -253,8 +252,24 @@ struct item *asymmetric_decryption(struct item *key, struct item *item)
                   output, &olen, MAX_PACKAGE_SIZE,
                   asym_enc_havege_random_stub, random_state) != 0)
       abort_crypto_lib("Decryption failed");
+    //@ assert exists<polarssl_cryptogram>(?cg_enc);
+    /*@ assert cg_enc == polarssl_asym_encrypted(?principal4, ?count4, 
+                                                 ?cs_out4, ?ent4); @*/
     //@ close generated_values(principal1, count1 + 1);
     //@ assert u_integer(&olen, ?size_out);
+    /*@ switch(id_key)
+        {
+          case some(pair):
+            switch (pair)
+            { 
+              case pair(principal, count):
+                if (count4 != count || principal4 != principal)
+                  open polarssl_public_message(polarssl_pub(pub))(output, _, _);
+            }
+          case none:
+            open polarssl_public_message(polarssl_pub(pub))(output, _, _);
+        }
+    @*/
     //@ assert chars(output, size_out, ?cs_out);
     parse_item(output, (int) olen);
     nonces_hide_state(random_state);
@@ -262,9 +277,6 @@ struct item *asymmetric_decryption(struct item *key, struct item *item)
     pk_free(&context);
     //@ open pk_context(&context);
     //@ close [f]world(pub);
-    //@ assert exists<polarssl_cryptogram>(?cg_enc);
-    /*@ assert cg_enc == polarssl_asym_encrypted(?principal4, ?count4, 
-                                                 ?cs_out4, ?ent4); @*/
     
     result->size = (int) olen;
     result->content = malloc(result->size);
@@ -279,8 +291,6 @@ struct item *asymmetric_decryption(struct item *key, struct item *item)
           well_formed_valid_tag(cs_out, nat_length(cs_out));
           tag_for_dummy_item(e, head(cs_out));
           collision_public(pub, cs_out);
-          polarssl_cryptograms_in_chars_upper_bound_from(cs_out, 
-                      polarssl_generated_public_cryptograms(polarssl_pub(pub)));
           close item_constraints(true, e, cs_out, pub);
           leak item_constraints(true, e, cs_out, pub);
           close item(result, e, pub);
@@ -330,10 +340,7 @@ struct item *asymmetric_decryption(struct item *key, struct item *item)
           }
           else
           {
-            assert nil == polarssl_cryptograms_in_chars(cs_out);
             retreive_proof_obligations();
-            polarssl_generated_public_cryptograms_subset(
-                                              polarssl_pub(pub), cs_out);
             deserialize_item(cs_out, pub);
             leak proof_obligations(pub);
             assert [_]item_constraints_no_collision(?i, cs_out, pub);

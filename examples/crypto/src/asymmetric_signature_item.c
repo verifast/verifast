@@ -147,6 +147,7 @@ struct item *asymmetric_signature(struct item *key, struct item *payload)
                   assert true == collision_in_run();
             };
           case none:
+            open polarssl_public_message(polarssl_pub(pub))(output, _, _);
             assert true == collision_in_run();
         }
     @*/
@@ -174,8 +175,6 @@ struct item *asymmetric_signature(struct item *key, struct item *payload)
         {
           item e = dummy_item_for_tag('k');
           collision_public(pub, cs);
-          polarssl_cryptograms_in_chars_upper_bound_from(cs, 
-                      polarssl_generated_public_cryptograms(polarssl_pub(pub)));
           close item_constraints(true, e, cs, pub);
           leak item_constraints(true, e, cs, pub);
           close item(result, e, pub);

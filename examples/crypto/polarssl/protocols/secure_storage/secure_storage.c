@@ -33,23 +33,23 @@ void app_send(char *key, int key_len, char *message, int message_len)
     abort();
 
   //@ open [f1]polarssl_cryptogram(key, key_len, key_cs, key_cg);
-  //@ close exists<polarssl_cryptogram>(key_cg);
+  //@ close polarssl_key_id(creator, id);
   /*@ open [f2]polarssl_public_message(ss_polarssl_pub)
                                       (message, message_len, msg_cs); @*/
   sha512_hmac(key, (unsigned int) key_len, message, 
               (unsigned int) message_len, hmac, 0);
-  //@ open polarssl_cryptogram(hmac, 64, ?hmac_cs, ?hmac_cg);
-  
+  //@ assert polarssl_cryptogram(hmac, 64, ?hmac_cs, ?hmac_cg);
+  //@ close ss_polarssl_pub(hmac_cg);
+  //@ leak ss_polarssl_pub(hmac_cg);
+  /*@ polarssl_public_message_from_cryptogram(
+                               ss_polarssl_pub, hmac, 64, hmac_cs, hmac_cg); @*/
+  //@ open polarssl_public_message(ss_polarssl_pub)(hmac, 64, hmac_cs);
   char* m = malloc(message_len + 64);
   if (m == 0) abort();
   memcpy(m, message, (unsigned int) message_len);
   memcpy(m + message_len, hmac, 64);
-  //@ close ss_polarssl_pub(hmac_cg);
-  //@ leak ss_polarssl_pub(hmac_cg);
-  /*@ polarssl_generated_public_cryptograms_upper_bound(ss_polarssl_pub, 
-                                                        hmac_cg); @*/
-  /*@ polarssl_cryptograms_in_chars_public_upper_bound_join(
-                                          ss_polarssl_pub, msg_cs, hmac_cs); @*/
+  /*@ polarssl_public_generated_chars_join(ss_polarssl_pub, 
+                                           msg_cs, hmac_cs); @*/
   //@ chars_join(m);
   /*@ close polarssl_public_message(ss_polarssl_pub)(
                               m, message_len + 64, append(msg_cs, hmac_cs)); @*/
@@ -104,8 +104,7 @@ int app_receive(char *key, int key_len, char **message)
     if (result == 0) abort();
     
     //@ chars_split(buffer, size);
-    /*@ polarssl_cryptograms_in_chars_public_upper_bound_split(
-                                                 ss_polarssl_pub, cs, size); @*/
+    //@ polarssl_public_generated_chars_split(ss_polarssl_pub, cs, size);
     memcpy(result, buffer, (unsigned int) size);
     *message = result;
     //@ assert chars(result, size, ?msg_cs);
@@ -114,16 +113,14 @@ int app_receive(char *key, int key_len, char **message)
     //@ chars_join(buffer);
     
     //@ open [f1]polarssl_cryptogram(key, key_len, key_cs, key_cg);
-    //@ close exists<polarssl_cryptogram>(key_cg);
+    //@ close polarssl_key_id(creator, id);
     sha512_hmac(key, (unsigned int) key_len, result, 
                 (unsigned int) size, hmac2, 0);
     //@ open polarssl_cryptogram(hmac2, 64, ?hmac_cs2, ?hmac_cg);
-    
     if (memcmp(hmac1, hmac2, 64) != 0) abort();
     /*@ {
-          polarssl_cryptogram_in_upper_bound(hmac_cs1, hmac_cg,
-                        polarssl_generated_public_cryptograms(ss_polarssl_pub));
-          polarssl_generated_public_cryptograms_from(ss_polarssl_pub, hmac_cg);
+          open [_]polarssl_public_generated_chars(ss_polarssl_pub)(hmac_cs2);
+          polarssl_public_generated_chars_extract(ss_polarssl_pub, hmac_cs2, hmac_cg);
           open [_]ss_polarssl_pub(hmac_cg);
           assert bad(creator) ? true : true == app_send_event(creator, msg_cs);
           close polarssl_public_message(ss_polarssl_pub)

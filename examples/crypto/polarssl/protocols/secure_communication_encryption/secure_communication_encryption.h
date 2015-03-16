@@ -45,23 +45,19 @@ predicate sc_enc_polarssl_pub(polarssl_cryptogram cg) =
       :
         [_]exists<polarssl_cryptogram>(?cg2) &*&
         cg2 == polarssl_encrypted(?p3, ?c3, ?cs3, ?ent3) &*&
-        true == subset(cons(cg2, nil),
-          polarssl_generated_public_cryptograms(sc_enc_polarssl_pub)) &*&
+        [_]polarssl_public_generated_chars(sc_enc_polarssl_pub)(cs1) &*&
         cs1 == append(ent3, polarssl_chars_for_cryptogram(cg2)) &*&
         p1 == p3 &&
         true == app_send_event(p1, cs3);
     case polarssl_encrypted(p1, c1, cs1, ent1): 
       return bad(p1) ?
-               true == subset(polarssl_cryptograms_in_chars(cs1),
-                 polarssl_generated_public_cryptograms(sc_enc_polarssl_pub))
+               [_]polarssl_public_generated_chars(sc_enc_polarssl_pub)(cs1)
              :
                true == app_send_event(p1, cs1);
     case polarssl_auth_encrypted(p1, c1, mac1, cs1, ent1): 
-      return true == subset(polarssl_cryptograms_in_chars(cs1),
-               polarssl_generated_public_cryptograms(sc_enc_polarssl_pub));
+      return [_]polarssl_public_generated_chars(sc_enc_polarssl_pub)(cs1);
     case polarssl_asym_encrypted(p1, c1, cs1, ent1):
-      return true == subset(polarssl_cryptograms_in_chars(cs1),
-               polarssl_generated_public_cryptograms(sc_enc_polarssl_pub));
+      return [_]polarssl_public_generated_chars(sc_enc_polarssl_pub)(cs1);
     case polarssl_asym_signature(p1, c1, cs1, ent1): 
       return true == bad(p1);
   }
@@ -104,8 +100,7 @@ int app_receive(char *key, char **message);
                malloc_block(message_p, result) &*&
                chars(message_p, result, ?m_cs) &*&
                bad(creator) ?
-                 true == subset(polarssl_cryptograms_in_chars(m_cs),
-                   polarssl_generated_public_cryptograms(sc_enc_polarssl_pub))
+                 [_]polarssl_public_generated_chars(sc_enc_polarssl_pub)(m_cs)
                : 
                  true == app_send_event(creator, m_cs);
   @*/

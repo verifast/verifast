@@ -155,29 +155,22 @@ lemma void retreive_polarssl_hash_is_public()
                                          polarssl_proof_pred(pub));
 { 
   {
-    lemma void crypto_polarssl_hash_is_public(polarssl_cryptogram hash,
-                                              list<polarssl_cryptogram> cgs_pay)
+    lemma void crypto_polarssl_hash_is_public(polarssl_cryptogram hash)
       requires  polarssl_proof_pred(pub)() &*&
                 hash == polarssl_hash(?pay) &*&
                 length(pay) <= INT_MAX &*&
-                polarssl_cryptograms_in_chars_upper_bound(pay, cgs_pay) &&
-                subset(cgs_pay, polarssl_generated_public_cryptograms(
-                                                            polarssl_pub(pub)));
+                [_]polarssl_public_generated_chars(polarssl_pub(pub))(pay);
       ensures   polarssl_proof_pred(pub)() &*&
                 [_]polarssl_pub(pub)(hash);
     {
       close exists<bool>(true);
       leak exists<bool>(true);
-      polarssl_cryptograms_in_chars_upper_bound_subset(pay, cgs_pay,
-                      polarssl_generated_public_cryptograms(polarssl_pub(pub)));
-      polarssl_cryptograms_in_chars_upper_bound_from(pay, 
-                      polarssl_generated_public_cryptograms(polarssl_pub(pub)));
       close polarssl_pub(pub)(hash);
       leak polarssl_pub(pub)(hash);
     }
     produce_lemma_function_pointer_chunk(crypto_polarssl_hash_is_public) :
       polarssl_hash_is_public
-        (polarssl_pub(pub), polarssl_proof_pred(pub))(hash, cgs_pay) { call(); }
+        (polarssl_pub(pub), polarssl_proof_pred(pub))(hash) { call(); }
     {duplicate_lemma_function_pointer_chunk(polarssl_hash_is_public);};
   }
 }
@@ -191,32 +184,25 @@ lemma void retreive_polarssl_public_hmac_is_public()
 {
   {
     lemma void crypto_polarssl_public_hmac_is_public(
-                                              polarssl_cryptogram hmac,
-                                              list<polarssl_cryptogram> cgs_pay)
+                                              polarssl_cryptogram hmac)
       requires  polarssl_proof_pred(pub)() &*&
                 hmac == polarssl_hmac(?p, ?c, ?pay) &*&
                 length(pay) <= INT_MAX &*&
                 [_]polarssl_pub(pub)(polarssl_symmetric_key(p, c)) &*&
-                polarssl_cryptograms_in_chars_upper_bound(pay, cgs_pay) &&
-                subset(cgs_pay, polarssl_generated_public_cryptograms(
-                                                            polarssl_pub(pub)));
+                [_]polarssl_public_generated_chars(polarssl_pub(pub))(pay);
       ensures   polarssl_proof_pred(pub)() &*&
                 [_]polarssl_pub(pub)(hmac);
     {
       close exists<bool>(true);
       leak exists<bool>(true);
       open [_]polarssl_pub(pub)(polarssl_symmetric_key(p, c));
-      polarssl_cryptograms_in_chars_upper_bound_subset(pay, cgs_pay,
-                      polarssl_generated_public_cryptograms(polarssl_pub(pub)));
-      polarssl_cryptograms_in_chars_upper_bound_from(pay, 
-                      polarssl_generated_public_cryptograms(polarssl_pub(pub)));
       close polarssl_pub(pub)(hmac);
       leak polarssl_pub(pub)(hmac);
     }
     produce_lemma_function_pointer_chunk
       (crypto_polarssl_public_hmac_is_public) :
         polarssl_public_hmac_is_public
-          (polarssl_pub(pub), polarssl_proof_pred(pub))(hmac, cgs_pay) { call(); }
+          (polarssl_pub(pub), polarssl_proof_pred(pub))(hmac) { call(); }
     {duplicate_lemma_function_pointer_chunk(polarssl_public_hmac_is_public);};
   }
 }
@@ -230,29 +216,22 @@ lemma void retreive_polarssl_public_encryption_is_public()
 {
   {
     lemma void crypto_polarssl_public_encryption_is_public(
-                                              polarssl_cryptogram encrypted, 
-                                              list<polarssl_cryptogram> cgs_pay)
+                                              polarssl_cryptogram encrypted)
       requires  polarssl_proof_pred(pub)() &*&
                 encrypted == polarssl_encrypted(?p, ?c, ?pay, ?ent) &*&
                 [_]polarssl_pub(pub)(polarssl_symmetric_key(p, c)) &*&
-                polarssl_cryptograms_in_chars_upper_bound(pay, cgs_pay) &&
-                subset(cgs_pay, polarssl_generated_public_cryptograms(
-                                                            polarssl_pub(pub)));
+                [_]polarssl_public_generated_chars(polarssl_pub(pub))(pay);
       ensures   polarssl_proof_pred(pub)() &*&
                 [_]polarssl_pub(pub)(encrypted);                
     {
       open [_]polarssl_pub(pub)(polarssl_symmetric_key(p, c));
-      polarssl_cryptograms_in_chars_upper_bound_subset(pay, cgs_pay,
-                      polarssl_generated_public_cryptograms(polarssl_pub(pub)));
-      polarssl_cryptograms_in_chars_upper_bound_from(pay, 
-                      polarssl_generated_public_cryptograms(polarssl_pub(pub)));
       close polarssl_pub(pub)(encrypted);
       leak polarssl_pub(pub)(encrypted);
     }
     produce_lemma_function_pointer_chunk
       (crypto_polarssl_public_encryption_is_public) :
         polarssl_public_encryption_is_public
-          (polarssl_pub(pub), polarssl_proof_pred(pub))(encrypted__, cgs_pay__) 
+          (polarssl_pub(pub), polarssl_proof_pred(pub))(encrypted__) 
     { call(); }
     {duplicate_lemma_function_pointer_chunk(
                                         polarssl_public_encryption_is_public);};
@@ -276,13 +255,10 @@ lemma void retreive_polarssl_public_decryption_is_public()
                 [_]polarssl_pub(pub)(key) &*&
                 [_]polarssl_pub(pub)(encrypted);
       ensures   polarssl_proof_pred(pub)() &*&
-                true == subset(polarssl_cryptograms_in_chars(pay), 
-                      polarssl_generated_public_cryptograms(polarssl_pub(pub)));
+                [_]polarssl_public_generated_chars(polarssl_pub(pub))(pay);
     {
       open [_]polarssl_pub(pub)(key);
       open [_]polarssl_pub(pub)(encrypted);
-      assert true == subset(polarssl_cryptograms_in_chars(pay),
-                      polarssl_generated_public_cryptograms(polarssl_pub(pub)));
     }
     produce_lemma_function_pointer_chunk
       (crypto_polarssl_public_decryption_is_public) :
@@ -303,24 +279,17 @@ lemma void retreive_polarssl_public_auth_encryption_is_public()
 {
   {
     lemma void crypto_polarssl_public_auth_encryption_is_public(
-                                              polarssl_cryptogram encrypted, 
-                                              list<polarssl_cryptogram> cgs_pay)
+                                              polarssl_cryptogram encrypted)
       requires  polarssl_proof_pred(pub)() &*&
                 encrypted == 
                            polarssl_auth_encrypted(?p, ?c, ?mac, ?pay, ?ent) &*&
                 length(pay) <= INT_MAX &*&
                 [_]polarssl_pub(pub)(polarssl_symmetric_key(p, c)) &*&
-                polarssl_cryptograms_in_chars_upper_bound(pay, cgs_pay) &&
-                subset(cgs_pay, polarssl_generated_public_cryptograms(
-                                                            polarssl_pub(pub)));
+                [_]polarssl_public_generated_chars(polarssl_pub(pub))(pay);
       ensures   polarssl_proof_pred(pub)() &*&
                 [_]polarssl_pub(pub)(encrypted);                
     {
       open [_]polarssl_pub(pub)(polarssl_symmetric_key(p, c));
-      polarssl_cryptograms_in_chars_upper_bound_subset(pay, cgs_pay,
-                      polarssl_generated_public_cryptograms(polarssl_pub(pub)));
-      polarssl_cryptograms_in_chars_upper_bound_from(pay, 
-                      polarssl_generated_public_cryptograms(polarssl_pub(pub)));
       close exists<bool>(true);
       leak exists<bool>(true);
       close polarssl_pub(pub)(encrypted);
@@ -329,7 +298,7 @@ lemma void retreive_polarssl_public_auth_encryption_is_public()
     produce_lemma_function_pointer_chunk
       (crypto_polarssl_public_auth_encryption_is_public) :
         polarssl_public_auth_encryption_is_public
-          (polarssl_pub(pub), polarssl_proof_pred(pub))(encrypted__, cgs_pay__) 
+          (polarssl_pub(pub), polarssl_proof_pred(pub))(encrypted__) 
     { call(); }
     {duplicate_lemma_function_pointer_chunk(
                                    polarssl_public_auth_encryption_is_public);};
@@ -353,16 +322,14 @@ lemma void retreive_polarssl_public_auth_decryption_is_public()
                 [_]polarssl_pub(pub)(key) &*&
                 [_]polarssl_pub(pub)(encrypted);
       ensures   polarssl_proof_pred(pub)() &*&
-                true == subset(polarssl_cryptograms_in_chars(pay), 
-                      polarssl_generated_public_cryptograms(polarssl_pub(pub)));
+                [_]polarssl_public_generated_chars(polarssl_pub(pub))(pay);
     {
       open [_]polarssl_pub(pub)(key);
       open [_]polarssl_pub(pub)(encrypted);
       assert [_]exists<bool>(?b);
       if (b)
       {
-        assert true == subset(polarssl_cryptograms_in_chars(pay),
-                 polarssl_generated_public_cryptograms(polarssl_pub(pub)));
+        assert [_]polarssl_public_generated_chars(polarssl_pub(pub))(pay);
       }
       else
       {
@@ -380,9 +347,7 @@ lemma void retreive_polarssl_public_auth_decryption_is_public()
         close proof_obligations(pub);
         assert [_]pub(pay0);
         serialize_item(pay0);
-        close polarssl_proof_pred(pub)();
-        polarssl_cryptograms_in_chars_upper_bound_from(pay, 
-                       polarssl_generated_public_cryptograms(polarssl_pub(pub)));        
+        close polarssl_proof_pred(pub)();      
       }
     }
     produce_lemma_function_pointer_chunk
@@ -404,23 +369,16 @@ lemma void retreive_polarssl_public_asym_encryption_is_public()
 {
   {
     lemma void crypto_polarssl_public_asym_encryption_is_public(
-                                              polarssl_cryptogram encrypted, 
-                                              list<polarssl_cryptogram> cgs_pay)
+                                              polarssl_cryptogram encrypted)
       requires  polarssl_proof_pred(pub)() &*&
                 encrypted == polarssl_asym_encrypted(?p, ?c, ?pay, ?ent) &*&
                 length(pay) <= INT_MAX &*&
                 [_]polarssl_pub(pub)(polarssl_public_key(p, c)) &*&
-                polarssl_cryptograms_in_chars_upper_bound(pay, cgs_pay) &&
-                subset(cgs_pay, polarssl_generated_public_cryptograms(
-                                                            polarssl_pub(pub)));
+                [_]polarssl_public_generated_chars(polarssl_pub(pub))(pay);
       ensures   polarssl_proof_pred(pub)() &*&
                 [_]polarssl_pub(pub)(encrypted);                
     {
       open [_]polarssl_pub(pub)(polarssl_public_key(p, c));
-      polarssl_cryptograms_in_chars_upper_bound_subset(pay, cgs_pay,
-                      polarssl_generated_public_cryptograms(polarssl_pub(pub)));
-      polarssl_cryptograms_in_chars_upper_bound_from(pay, 
-                      polarssl_generated_public_cryptograms(polarssl_pub(pub)));
       close exists<bool>(true);
       leak exists<bool>(true);
       close polarssl_pub(pub)(encrypted);
@@ -429,7 +387,7 @@ lemma void retreive_polarssl_public_asym_encryption_is_public()
     produce_lemma_function_pointer_chunk
       (crypto_polarssl_public_asym_encryption_is_public) :
         polarssl_public_asym_encryption_is_public
-          (polarssl_pub(pub), polarssl_proof_pred(pub))(encrypted__, cgs_pay__) 
+          (polarssl_pub(pub), polarssl_proof_pred(pub))(encrypted__) 
     { call(); }
     {duplicate_lemma_function_pointer_chunk(
                                    polarssl_public_asym_encryption_is_public);};
@@ -453,16 +411,14 @@ lemma void retreive_polarssl_public_asym_decryption_is_public()
                 [_]polarssl_pub(pub)(key) &*&
                 [_]polarssl_pub(pub)(encrypted);
       ensures   polarssl_proof_pred(pub)() &*&
-                true == subset(polarssl_cryptograms_in_chars(pay),
-                      polarssl_generated_public_cryptograms(polarssl_pub(pub)));          
+                [_]polarssl_public_generated_chars(polarssl_pub(pub))(pay);
     {
       open [_]polarssl_pub(pub)(key);
       open [_]polarssl_pub(pub)(encrypted);
       assert [_]exists<bool>(?b);
       if (b)
       {
-        assert true == subset(polarssl_cryptograms_in_chars(pay),
-                 polarssl_generated_public_cryptograms(polarssl_pub(pub)));
+        assert [_]polarssl_public_generated_chars(polarssl_pub(pub))(pay);
       }
       else
       {
@@ -479,8 +435,6 @@ lemma void retreive_polarssl_public_asym_decryption_is_public()
         assert [_]pub(pay0);
         serialize_item(pay0);
         close polarssl_proof_pred(pub)();
-        polarssl_cryptograms_in_chars_upper_bound_from(pay, 
-                       polarssl_generated_public_cryptograms(polarssl_pub(pub)));
       }
     }
     produce_lemma_function_pointer_chunk
@@ -502,23 +456,16 @@ lemma void retreive_polarssl_public_asym_signature_is_public()
 {
   {
     lemma void crypto_polarssl_public_asym_signature_is_public(
-                                         polarssl_cryptogram sig,
-                                         list<polarssl_cryptogram> cgs_pay)
+                                         polarssl_cryptogram sig)
       requires  polarssl_proof_pred(pub)() &*&
                 sig == polarssl_asym_signature(?p, ?c, ?pay, ?ent) &*&
                 length(pay) <= INT_MAX &*&
                 [_]polarssl_pub(pub)(polarssl_private_key(p, c)) &*&
-                polarssl_cryptograms_in_chars_upper_bound(pay, cgs_pay) &&
-                subset(cgs_pay, polarssl_generated_public_cryptograms(
-                                                            polarssl_pub(pub)));
+                [_]polarssl_public_generated_chars(polarssl_pub(pub))(pay);
       ensures   polarssl_proof_pred(pub)() &*&
                 [_]polarssl_pub(pub)(sig);
     {
       open [_]polarssl_pub(pub)(polarssl_private_key(p, c));
-      polarssl_cryptograms_in_chars_upper_bound_subset(pay, cgs_pay,
-                      polarssl_generated_public_cryptograms(polarssl_pub(pub)));
-      polarssl_cryptograms_in_chars_upper_bound_from(pay, 
-                      polarssl_generated_public_cryptograms(polarssl_pub(pub)));
       close exists<bool>(true);
       leak exists<bool>(true);
       close polarssl_pub(pub)(sig);
@@ -527,7 +474,7 @@ lemma void retreive_polarssl_public_asym_signature_is_public()
     produce_lemma_function_pointer_chunk
       (crypto_polarssl_public_asym_signature_is_public) :
         polarssl_public_asym_signature_is_public
-          (polarssl_pub(pub), polarssl_proof_pred(pub))(sig__, cgs_pay__) 
+          (polarssl_pub(pub), polarssl_proof_pred(pub))(sig__) 
     { call(); }
     {duplicate_lemma_function_pointer_chunk(
                                     polarssl_public_asym_signature_is_public);};

@@ -209,17 +209,10 @@ void pair_get_components(struct item* pair,
         switch(nat_length(cs_s)) {case succ(n0): case zero: assert false;}
         assert true == valid_tag(head(cs_s));
         
-        polarssl_generated_public_cryptograms_subset(polarssl_pub(pub), cs);
-        polarssl_cryptograms_in_chars_public_upper_bound_split(
-                                                      polarssl_pub(pub), cs, 1);
-        polarssl_cryptograms_in_chars_public_upper_bound_split(
+        polarssl_public_generated_chars_split(polarssl_pub(pub), cs, 1);
+        polarssl_public_generated_chars_split(
                                            polarssl_pub(pub), cs2, sizeof(int));
-        polarssl_cryptograms_in_chars_public_upper_bound_split(
-                                                polarssl_pub(pub), cs3, size_f);
-        polarssl_cryptograms_in_chars_upper_bound_from(cs_f, 
-                      polarssl_generated_public_cryptograms(polarssl_pub(pub)));
-        polarssl_cryptograms_in_chars_upper_bound_from(cs_s, 
-                      polarssl_generated_public_cryptograms(polarssl_pub(pub)));
+        polarssl_public_generated_chars_split(polarssl_pub(pub), cs3, size_f);
         
         item f = dummy_item_for_tag(head(cs_f));
         tag_for_dummy_item(f, head(cs_f));

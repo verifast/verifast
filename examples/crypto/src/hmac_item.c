@@ -57,24 +57,25 @@ struct item *create_hmac(struct item *key, struct item *payload)
   check_valid_symmetric_key_item_size(key->size);
   //@ chars_limits(key->content);
   //@ polarssl_cryptogram k_cg = polarssl_symmetric_key(creator, id);
-  //@ close exists<polarssl_cryptogram>(k_cg);
+  //@ close polarssl_key_id(creator, id);
+  //@ open [f]world(pub);
   if (payload->size < POLARSSL_MIN_HMAC_INPUT_BYTE_SIZE)
     {abort_crypto_lib("Payload of hmac was to small");}
   sha512_hmac(key->content + 1, (unsigned int) GCM_KEY_SIZE, 
               payload->content, (unsigned int) payload->size, 
               hmac->content + 1, 0);
-   
+  //@ close [f]world(pub);
   //@ assert hmac->content |-> ?cont &*& hmac->size |-> ?size;
   /*@ if (collision_in_run())
       {
         if (k_cs == polarssl_chars_for_cryptogram(k_cg))
           open polarssl_cryptogram(cont + 1, 64, _, _);
+        else
+          open polarssl_public_message(polarssl_pub(pub))(cont + 1, 64, _);
           
         item h = dummy_item_for_tag('h');
         assert chars(cont, size, ?cs);
         collision_public(pub, cs);
-        polarssl_cryptograms_in_chars_upper_bound_from(cs, 
-                      polarssl_generated_public_cryptograms(polarssl_pub(pub)));
         close item_constraints(true, h, cs, pub);
         leak item_constraints(true, h, cs, pub);
         close item(hmac, h, pub);

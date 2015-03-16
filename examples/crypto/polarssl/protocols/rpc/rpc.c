@@ -46,23 +46,23 @@ void client(char *key, int key_len, char *request, char *response)
     
     *message = '0';
     memcpy(message + 1, request, PACKAGE_BYTE_SIZE);
-    /*@ polarssl_generated_public_cryptograms_assume(rpc_polarssl_pub, 
-                                                     cons('0', nil)); @*/
-    /*@ polarssl_cryptograms_in_chars_public_upper_bound_join(
+    /*@ polarssl_public_generated_chars_assume(rpc_polarssl_pub, 
+                                               cons('0', nil)); @*/
+    /*@ polarssl_public_generated_chars_join(
                                   rpc_polarssl_pub, cons('0', nil), req_cs); @*/
     //@ assert chars(message, PACKAGE_BYTE_SIZE + 1, cons('0', req_cs));
     //@ open [f1]polarssl_cryptogram(key, key_len, key_cs, key_cg);
-    //@ close exists<polarssl_cryptogram>(key_cg);
+    //@ close polarssl_key_id(creator, id);
     sha512_hmac(key, (unsigned int) key_len, message, 
                 (unsigned int) PACKAGE_BYTE_SIZE + 1, hmac, 0);
     //@ close [f1]polarssl_cryptogram(key, key_len, key_cs, key_cg);
-    //@ open polarssl_cryptogram(hmac, 64, ?hmac_cs, ?hmac_cg);
-    memcpy(message + PACKAGE_BYTE_SIZE + 1, hmac, 64);
-
+    //@ assert polarssl_cryptogram(hmac, 64, ?hmac_cs, ?hmac_cg);
     //@ close rpc_polarssl_pub(hmac_cg);
     //@ leak rpc_polarssl_pub(hmac_cg);
-    //@ polarssl_generated_public_cryptograms_upper_bound(rpc_polarssl_pub, hmac_cg);
-    /*@ polarssl_cryptograms_in_chars_public_upper_bound_join(
+    //@ polarssl_public_message_from_cryptogram(rpc_polarssl_pub, hmac, 64, hmac_cs, hmac_cg);
+    //@ open polarssl_public_message(rpc_polarssl_pub)(hmac, 64, hmac_cs);
+    memcpy(message + PACKAGE_BYTE_SIZE + 1, hmac, 64);
+    /*@ polarssl_public_generated_chars_join(
                  rpc_polarssl_pub, append(cons('0', nil), req_cs), hmac_cs); @*/
     //@ chars_join(message);
     /*@ close polarssl_public_message(rpc_polarssl_pub)
@@ -83,12 +83,12 @@ void client(char *key, int key_len, char *request, char *response)
     //@ open polarssl_public_message(rpc_polarssl_pub)(buffer, size, ?cs);
 
     //Verify the hmac
-    /*@ polarssl_cryptograms_in_chars_public_upper_bound_split(
+    /*@ polarssl_public_generated_chars_split(
                            rpc_polarssl_pub, cs, 1 + 2 * PACKAGE_BYTE_SIZE); @*/
     /*@ assert chars(buffer, (1 + 2 * PACKAGE_BYTE_SIZE), 
                      take((1 + 2 * PACKAGE_BYTE_SIZE), cs)); @*/
     //@ open [f1]polarssl_cryptogram(key, key_len, key_cs, key_cg);
-    //@ close exists<polarssl_cryptogram>(key_cg);
+    //@ close polarssl_key_id(creator, id);
     sha512_hmac(key, (unsigned int) key_len, buffer, 
                 (unsigned int) (1 + 2 * PACKAGE_BYTE_SIZE), hmac, 0);
     //@ close [f1]polarssl_cryptogram(key, key_len, key_cs, key_cg);
@@ -127,13 +127,10 @@ void client(char *key, int key_len, char *request, char *response)
             case cons(c1, cs1):
               if (c1 == '1')
               {
-                polarssl_cryptograms_in_chars_public_upper_bound_split(
+                polarssl_public_generated_chars_split(
                            rpc_polarssl_pub, msg_cs, 1 + 2 * PACKAGE_BYTE_SIZE);
-                polarssl_cryptogram_constraints(hmac_cs, hmac_cg);
-                polarssl_cryptogram_in_upper_bound(hmac_cs, hmac_cg,
-                       polarssl_generated_public_cryptograms(rpc_polarssl_pub));
-                polarssl_generated_public_cryptograms_from(rpc_polarssl_pub, 
-                                                           hmac_cg);
+                polarssl_public_generated_chars_extract(
+                                            rpc_polarssl_pub, hmac_cs, hmac_cg);
                 open [_]rpc_polarssl_pub(hmac_cg);
               }
               else
@@ -148,9 +145,9 @@ void client(char *key, int key_len, char *request, char *response)
                    response(creator, shared_with(creator, id), req_cs, resp_cs);
         }
     @*/
-    /*@ polarssl_cryptograms_in_chars_public_upper_bound_split(
+    /*@ polarssl_public_generated_chars_split(
                            rpc_polarssl_pub, cs, 1 + 2 * PACKAGE_BYTE_SIZE); @*/
-    /*@ polarssl_cryptograms_in_chars_public_upper_bound_split(
+    /*@ polarssl_public_generated_chars_split(
                            rpc_polarssl_pub, cont_cs,1 + PACKAGE_BYTE_SIZE); @*/
     /*@ close polarssl_public_message(rpc_polarssl_pub)
                                      (response, PACKAGE_BYTE_SIZE, resp_cs); @*/
@@ -193,7 +190,7 @@ void compute_response(char* request, char* response)
   if (havege_random(&havege_state, response, PACKAGE_BYTE_SIZE) != 0) abort();
   //@ open polarssl_cryptogram(response, PACKAGE_BYTE_SIZE, ?resp_cs, ?resp_cg);
   
-  //@ polarssl_generated_public_cryptograms_assume(rpc_polarssl_pub, resp_cs);
+  //@ polarssl_public_generated_chars_assume(rpc_polarssl_pub, resp_cs);
   /*@ close polarssl_public_message(rpc_polarssl_pub)
                                    (response, PACKAGE_BYTE_SIZE, resp_cs); @*/
   //@ assume (response(creator, shared_with(creator, id), req_cs, resp_cs) == true);
@@ -237,12 +234,12 @@ void server(char *key, int key_len)
                                     (buffer, size, ?cs); @*/
 
     //Verify the hmac
-    /*@ polarssl_cryptograms_in_chars_public_upper_bound_split(
+    /*@ polarssl_public_generated_chars_split(
                                rpc_polarssl_pub, cs, 1 + PACKAGE_BYTE_SIZE); @*/
     /*@ assert chars(buffer, (1 + PACKAGE_BYTE_SIZE),
                      take((1 + PACKAGE_BYTE_SIZE), cs)); @*/
     //@ open [f1]polarssl_cryptogram(key, key_len, key_cs, key_cg);
-    //@ close exists<polarssl_cryptogram>(key_cg);
+    //@ close polarssl_key_id(creator, id);
     sha512_hmac(key, (unsigned int) key_len, buffer, 
                 (unsigned int) (1 + PACKAGE_BYTE_SIZE), hmac, 0);
     //@ close [f1]polarssl_cryptogram(key, key_len, key_cs, key_cg);
@@ -267,16 +264,13 @@ void server(char *key, int key_len)
           case cons(c1, cs1):
             assert chars(request, PACKAGE_BYTE_SIZE, ?req_cs);
             assert cont_cs == cons('0', req_cs);
-            polarssl_cryptograms_in_chars_public_upper_bound_split(
-                                                  rpc_polarssl_pub, cont_cs, 1);
+            polarssl_public_generated_chars_split(rpc_polarssl_pub, cont_cs, 1);
             if (c1 == '0' && !bad(creator) && !bad(shared_with(creator, id)))
             {
-              polarssl_cryptograms_in_chars_public_upper_bound_split(
+              polarssl_public_generated_chars_split(
                                rpc_polarssl_pub, msg_cs, 1 + PACKAGE_BYTE_SIZE);
-              polarssl_cryptogram_in_upper_bound(hmac_cs, hmac_cg,
-                       polarssl_generated_public_cryptograms(rpc_polarssl_pub));
-              polarssl_generated_public_cryptograms_from(rpc_polarssl_pub, 
-                                                         hmac_cg);
+              polarssl_public_generated_chars_extract(
+                                            rpc_polarssl_pub, hmac_cs, hmac_cg);
               open [_]rpc_polarssl_pub(hmac_cg);
               assert (request(creator, shared_with(creator, id), req_cs) == true);
            }
@@ -299,38 +293,31 @@ void server(char *key, int key_len)
     *message = '1';
     memcpy(message + 1, request, PACKAGE_BYTE_SIZE);
     memcpy(message + 1 + PACKAGE_BYTE_SIZE, response, PACKAGE_BYTE_SIZE);
-    /*@ polarssl_generated_public_cryptograms_assume(rpc_polarssl_pub,
-                                                     cons('1', nil)); @*/
-    /*@ polarssl_cryptograms_in_chars_public_upper_bound_join(
+    /*@ polarssl_public_generated_chars_assume(rpc_polarssl_pub,
+                                               cons('1', nil)); @*/
+    /*@ polarssl_public_generated_chars_join(
                                   rpc_polarssl_pub, cons('1', nil), req_cs); @*/
-    /*@ polarssl_cryptograms_in_chars_public_upper_bound_join(
+    /*@ polarssl_public_generated_chars_join(
                  rpc_polarssl_pub, append(cons('1', nil), req_cs), resp_cs); @*/
-    /*@ assert true == polarssl_cryptograms_in_chars_upper_bound(
-                   cons('1', append(req_cs, resp_cs)), 
-                   polarssl_generated_public_cryptograms(rpc_polarssl_pub)); @*/
-    /*@ assert chars(message, 1 + 2 * PACKAGE_BYTE_SIZE, 
-                               cons('1', append(req_cs, resp_cs))); @*/
     //@ open [f1]polarssl_cryptogram(key, key_len, key_cs, key_cg);
-    //@ close exists<polarssl_cryptogram>(key_cg);
+    //@ close polarssl_key_id(creator, id);
     sha512_hmac(key, (unsigned int) key_len, message, 
                 (unsigned int) 2 * PACKAGE_BYTE_SIZE + 1, hmac, 0);
     //@ close [f1]polarssl_cryptogram(key, key_len, key_cs, key_cg);
     //@ assert chars(message, 1 + 2 * PACKAGE_BYTE_SIZE, ?cont_cs);
-    //@ open polarssl_cryptogram(hmac, 64, ?hmac_cs, ?hmac_cg);
-    memcpy(message + 2 * PACKAGE_BYTE_SIZE + 1, hmac, 64);
-    //@ assert chars(message, message_len, ?msg_cs);
-    //@ assert hmac_cg == polarssl_hmac(creator, id, cont_cs);
-
+    //@ assert polarssl_cryptogram(hmac, 64, ?hmac_cs, ?hmac_cg);
     //@ assert cont_cs == cons('1', append(req_cs, resp_cs));
     //@ drop_append(PACKAGE_BYTE_SIZE, req_cs, resp_cs);
     //@ take_append(PACKAGE_BYTE_SIZE, req_cs, resp_cs);
-
     //@ close rpc_polarssl_pub(hmac_cg);    
     //@ leak rpc_polarssl_pub(hmac_cg);
-    //@ polarssl_generated_public_cryptograms_to(rpc_polarssl_pub, hmac_cg);
-    /*@ polarssl_generated_public_cryptograms_upper_bound(rpc_polarssl_pub, 
-                                                          hmac_cg); @*/
-    /*@ polarssl_cryptograms_in_chars_public_upper_bound_join(rpc_polarssl_pub,
+    /*@ polarssl_public_message_from_cryptogram(
+                              rpc_polarssl_pub, hmac, 64, hmac_cs, hmac_cg); @*/
+    //@ open polarssl_public_message(rpc_polarssl_pub)(hmac, 64, hmac_cs);
+    memcpy(message + 2 * PACKAGE_BYTE_SIZE + 1, hmac, 64);
+    //@ assert chars(message, message_len, ?msg_cs);
+    //@ assert hmac_cg == polarssl_hmac(creator, id, cont_cs);
+    /*@ polarssl_public_generated_chars_join(rpc_polarssl_pub,
                   append(append(cons('1', nil), req_cs), resp_cs), hmac_cs); @*/
     /*@ close polarssl_public_message(rpc_polarssl_pub)(message, message_len,
                        append(append(cons('1', req_cs), resp_cs), hmac_cs)); @*/

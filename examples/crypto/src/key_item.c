@@ -238,7 +238,7 @@ void set_public_key(pk_context *ctx, struct item *pub_key)
   //@ assert pub_key->content |-> ?cont;
   //@ chars_limits(pub_key->content);
   //@ chars_split(pub_key->content, 1);
-  //@ close exists(polarssl_public_key(principal, count));
+  //@ close polarssl_key_id(principal, count);
   if (pk_parse_public_key(ctx, (void*) pub_key->content + 1, 
       (unsigned int) (RSA_SERIALIZED_KEY_SIZE)) != 0)
   {
@@ -266,7 +266,7 @@ void set_private_key(pk_context *ctx, struct item *priv_key)
   //@ assert priv_key->content |-> ?cont;
   //@ chars_limits(priv_key->content);
   //@ chars_split(priv_key->content, 1);
-  //@ close exists(polarssl_private_key(principal, count));
+  //@ close polarssl_key_id(principal, count);
   if (pk_parse_key(ctx, (void*) priv_key->content + 1,
       (unsigned int) (RSA_SERIALIZED_KEY_SIZE), NULL, 0) != 0)
   {

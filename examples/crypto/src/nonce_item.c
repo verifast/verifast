@@ -150,14 +150,9 @@ void increment_nonce(struct item *item)
       else
       {
         nonce = dummy_item_for_tag('c');
-        polarssl_generated_public_cryptograms_subset(polarssl_pub(pub), cs);
-        polarssl_cryptograms_in_chars_public_upper_bound_split(
-                                                      polarssl_pub(pub), cs, 2);
+        polarssl_public_generated_chars_split(polarssl_pub(pub), cs, 2);
         collision_public(pub, nonce_cs);
-        polarssl_cryptograms_in_chars_public_upper_bound_join(polarssl_pub(pub), 
-                                                              nonce_cs, n_cs);
-        polarssl_cryptograms_in_chars_upper_bound_from(nonce_cs, 
-                      polarssl_generated_public_cryptograms(polarssl_pub(pub)));
+        polarssl_public_generated_chars_join(polarssl_pub(pub), nonce_cs, n_cs);
       }
   @*/
   //@ close item_constraints(b, nonce, nonce_cs, pub);

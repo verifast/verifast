@@ -9,13 +9,14 @@
 
 lemma void collision_public(predicate(item) pub, list<char> cs);
   requires true == collision_in_run();
-  ensures  true == public_chars(pub, cs);
+  ensures  [_]polarssl_public_generated_chars(polarssl_pub(pub))(cs);
 
 lemma void serialize_item(item i);
   requires proof_obligations(?pub) &*&
            [_]item_constraints_no_collision(i, ?cs, pub) &*&
            [_]pub(i);
-  ensures  proof_obligations(pub) &*& true == public_chars(pub, cs);
+  ensures  proof_obligations(pub) &*& 
+           [_]polarssl_public_generated_chars(polarssl_pub(pub))(cs);
 
 @*/
 

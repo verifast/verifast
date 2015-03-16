@@ -150,10 +150,6 @@ lemma void chars_of_unbounded_int_bounds(int i);
            :
              head(chars_of_unbounded_int(i)) == i;
 
-lemma void forall_subset<t>(list<t> sub_cs, list<t> cs, fixpoint(t, bool) p);
-  requires true == forall(cs, p) &*& true == subset(sub_cs, cs);
-  ensures  true == forall(sub_cs, p);
-
 @*/
 
 #endif

@@ -55,8 +55,6 @@ struct item *create_hash(struct item *payload)
         item h = dummy_item_for_tag('d');
         assert chars(cont, size, ?cs);
         collision_public(pub, cs);
-        polarssl_cryptograms_in_chars_upper_bound_from(cs, 
-                      polarssl_generated_public_cryptograms(polarssl_pub(pub)));
         close item_constraints(true, h, cs, pub);
         leak item_constraints(true, h, cs, pub);
         close item(hash, h, pub);

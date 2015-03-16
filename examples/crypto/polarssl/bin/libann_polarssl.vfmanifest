@@ -12,31 +12,29 @@
 .provides ../annotated_api/polarssl.h#polarssl_init
 .provides ../annotated_api/polarssl.h#polarssl_exit
 #PolarSSL cryptogram char representation
+.predicate @../annotated_api/polarssl.h#polarssl_key_id
 .provides ../annotated_api/polarssl.h#polarssl_chars_for_cryptogram_injective
 .provides ../annotated_api/polarssl.h#polarssl_chars_for_cryptogram_surjective
 #PolarSSL cryptograms in list of characters
-.provides ../annotated_api/polarssl.h#polarssl_cryptograms_in_chars_upper_bound_from
-.provides ../annotated_api/polarssl.h#polarssl_cryptograms_in_chars_upper_bound_to
-.provides ../annotated_api/polarssl.h#polarssl_cryptograms_in_chars_upper_bound_join
-.provides ../annotated_api/polarssl.h#polarssl_cryptograms_in_chars_upper_bound_split
-.provides ../annotated_api/polarssl.h#polarssl_cryptograms_in_chars_upper_bound_intersection
-.provides ../annotated_api/polarssl.h#polarssl_cryptograms_in_chars_upper_bound_subset
+.provides ../annotated_api/polarssl.h#polarssl_cryptograms_in_chars_bound_from
+.provides ../annotated_api/polarssl.h#polarssl_cryptograms_in_chars_bound_to
+.provides ../annotated_api/polarssl.h#polarssl_cryptograms_in_chars_bound_join
+.provides ../annotated_api/polarssl.h#polarssl_cryptograms_in_chars_bound_split
+.provides ../annotated_api/polarssl.h#polarssl_cryptograms_in_chars_bound_subset
 #PolarSSL generated cryptograms
 .provides ../annotated_api/polarssl.h#polarssl_cryptogram_constraints
 .predicate @../annotated_api/polarssl.h#polarssl_cryptogram
 #PolarSSL generated public cryptograms
-.provides ../annotated_api/polarssl.h#polarssl_generated_public_cryptograms_assume
-.provides ../annotated_api/polarssl.h#polarssl_generated_public_cryptograms_from
-.provides ../annotated_api/polarssl.h#polarssl_generated_public_cryptograms_to
+.provides ../annotated_api/polarssl.h#polarssl_public_generated_chars_assume
 #PolarSSL nested level
-.provides ../annotated_api/polarssl.h#polarssl_cryprogram_level_upper_bound_apply
+.provides ../annotated_api/polarssl.h#polarssl_cryprogram_level_bound_apply
 .provides ../annotated_api/polarssl.h#polarssl_cryptogram_level_flat_constraints
 .provides ../annotated_api/polarssl.h#polarssl_cryptogram_level_nested_constraints
 #Havege
 .structure @../annotated_api/polarssl.h#havege_state
 .predicate @../annotated_api/polarssl.h#havege_state
 .predicate @../annotated_api/polarssl.h#havege_state_initialized
-.predicate @../annotated_api/polarssl.h#havege_request
+.predicate @../annotated_api/polarssl.h#random_request
 .provides ../annotated_api/polarssl.h#havege_init
 .provides ../annotated_api/polarssl.h#havege_free
 .provides ../annotated_api/polarssl.h#havege_random
@@ -89,7 +87,6 @@
 .provides ../annotated_api/polarssl.h#pk_verify
 #Network
 .predicate @../annotated_api/polarssl.h#polarssl_net_status
-.predicate @../annotated_api/polarssl.h#polarssl_message
 .provides ../annotated_api/polarssl.h#net_connect
 .provides ../annotated_api/polarssl.h#net_set_block
 .provides ../annotated_api/polarssl.h#net_bind

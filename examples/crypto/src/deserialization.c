@@ -6,6 +6,91 @@
 
 /*@
 
+#define DESERIALIZE_ITEM_PROOF_1(CS, SIZE) \
+  open [_]polarssl_public_generated_chars(polarssl_pub(pub))(CS); \
+  polarssl_public_generated_chars_split(polarssl_pub(pub), CS, SIZE); \
+  polarssl_cryptograms_in_chars_bound_to(CS); \
+  polarssl_cryptograms_in_chars_bound_split( \
+                                   CS, polarssl_cryptograms_in_chars(CS), SIZE);
+
+#define DESERIALIZE_ITEM_PROOF_2(TAG, CG) \
+  polarssl_cryptogram cg = \
+                         polarssl_chars_for_cryptogram_surjective(cs_cg, TAG); \
+  list<polarssl_cryptogram> cgs = polarssl_cryptograms_in_chars(cs_cg); \
+  assert cg == CG; \
+  polarssl_public_generated_chars_extract(polarssl_pub(pub), cs_cg, cg); \
+  polarssl_cryptograms_in_chars_bound_to(cs_cg); \
+  polarssl_cryptogram_in_bound(cs_cg, cg, cgs); \
+  polarssl_cryptograms_in_chars_bound_from(cs_cg, \
+                                           polarssl_cryptograms_in_chars(cs)); \
+  mem_subset(cg, cgs, polarssl_cryptograms_in_chars(cs)); \
+  
+#define DESERIALIZE_ITEM_PROOF_3(I1, I2, PROOF) \
+  open [_]polarssl_pub(pub)(cg); \
+  assert [_]exists(?col); \
+  item i; \
+  if (col) \
+  { \
+    if (well_formed(cs_pay0, nat_length(cs_pay0))) \
+    { \
+      switch(level_bound) \
+      { \
+        case succ(level_bound0): \
+          close proof_obligations(pub); \
+          DESERIALIZE_ITEM_PROOF_3_1(I1) \
+          open proof_obligations(pub); \
+          PROOF \
+        case zero: \
+          DESERIALIZE_ITEM_PROOF_3_2 \
+      } \
+    } \
+    else \
+    { \
+      DESERIALIZE_ITEM_PROOF_3_3(I2, PROOF) \
+    } \
+  } \
+  else \
+  { \
+    DESERIALIZE_ITEM_PROOF_3_4(I1) \
+  } \
+  close item_constraints_no_collision(i, cs, pub); \
+  leak item_constraints_no_collision(i, cs, pub); \
+  assert [_]pub(i); \
+  assert [_]item_constraints_no_collision(i, cs, pub); \
+
+#define DESERIALIZE_ITEM_PROOF_3_1(I) \
+  well_formed_upper_bound(cs_pay0, nat_length(cs_pay0), nat_of_int(INT_MAX)); \
+  forall_mem(cg, polarssl_cryptograms_in_chars(cs), \
+                    (polarssl_cryprogram_has_lower_level)(succ(level_bound))); \
+  polarssl_cryptogram_level_nested_constraints_bound(cg, level_bound); \
+  deserialize_item_(level_bound0, nat_of_int(INT_MAX), cs_pay0, pub); \
+  open [_]item_constraints_no_collision(?pay0, cs_pay0, pub); \
+  assert [_]pub(pay0); \
+  i = I; \
+  close well_formed_item_chars(I)(cs_pay0); \
+  leak well_formed_item_chars(I)(cs_pay0); \
+  
+#define DESERIALIZE_ITEM_PROOF_3_2 \
+  polarssl_cryptogram_level_flat_constraints(cg); \
+  assert polarssl_cryptogram_level(cg) != zero; \
+  polarssl_cryptogram_constraints(cs_cg, cg); \
+  forall_mem(cg, polarssl_cryptograms_in_chars(cs), \
+                    (polarssl_cryprogram_has_lower_level)(succ(level_bound))); \
+  assert polarssl_cryptogram_level(cg) == zero; \
+  assert false;
+
+#define DESERIALIZE_ITEM_PROOF_3_3(I, PROOF) \
+  i = I; \
+  PROOF \
+  close ill_formed_item_chars(I)(cs_pay0); \
+  leak ill_formed_item_chars(I)(cs_pay0); \
+
+#define DESERIALIZE_ITEM_PROOF_3_4(I) \
+  assert [_]item_constraints_no_collision(?pay0, cs_pay0, pub); \
+  i = I; \
+  item_constraints_no_collision_well_formed(pay0, i); \
+  assert [_]pub(i); \
+
 #define DESERIALIZE_ITEM_PROOF \
 switch(length_bound) \
 { \
@@ -24,9 +109,8 @@ switch(length_bound) \
     else if (head(cs) == 'b') \
     { \
       assert cs == cons('b', ?cs0); \
-      polarssl_cryptograms_in_chars_public_upper_bound_split( \
-                                                    polarssl_pub(pub), cs, 1); \
-      polarssl_cryptograms_in_chars_split(cs, 1); \
+      DESERIALIZE_ITEM_PROOF_1(cs, 1); \
+      \
       int length_f_cs; \
       list<char> p_cs, f_cs, s_cs; \
       \
@@ -41,52 +125,33 @@ switch(length_bound) \
         f_cs = take(length_f_cs, p_cs); \
         s_cs = drop(length_f_cs, p_cs); \
         \
+        list<polarssl_cryptogram> cgs = polarssl_cryptograms_in_chars(cs); \
+        list<polarssl_cryptogram> f_cgs = polarssl_cryptograms_in_chars(f_cs); \
+        list<polarssl_cryptogram> s_cgs = polarssl_cryptograms_in_chars(s_cs); \
+        \
         length_drop(1 + sizeof(int), cs); \
         length_take(length_f_cs, p_cs); \
         length_drop(length_f_cs, p_cs); \
         \
-        polarssl_cryptograms_in_chars_public_upper_bound_split( \
-                                        polarssl_pub(pub), cs0, sizeof(int)); \
-        polarssl_cryptograms_in_chars_split(cs0, sizeof(int)); \
-        polarssl_cryptograms_in_chars_public_upper_bound_split( \
+        polarssl_public_generated_chars_split( \
+                                         polarssl_pub(pub), cs0, sizeof(int)); \
+        polarssl_cryptograms_in_chars_bound_split(cs0, cgs, sizeof(int)); \
+        polarssl_public_generated_chars_split( \
                                         polarssl_pub(pub), p_cs, length_f_cs); \
-        polarssl_cryptograms_in_chars_split(p_cs, length_f_cs); \
+        polarssl_cryptograms_in_chars_bound_split(p_cs, cgs, length_f_cs); \
         \
-        assert cs0 == append(chars_of_int(length_f_cs), append(f_cs, s_cs)); \
-        assert true == forall(polarssl_cryptograms_in_chars(cs), \
-                    (polarssl_cryprogram_has_lower_level)(succ(level_bound))); \
+        open [_]polarssl_public_generated_chars(polarssl_pub(pub))(f_cs); \
+        open [_]polarssl_public_generated_chars(polarssl_pub(pub))(s_cs); \
         \
-        subset_trans(polarssl_cryptograms_in_chars(f_cs), \
-                      polarssl_cryptograms_in_chars(p_cs), \
-                      polarssl_cryptograms_in_chars(cs0)); \
-        subset_trans(polarssl_cryptograms_in_chars(f_cs), \
-                      polarssl_cryptograms_in_chars(cs0), \
-                      polarssl_cryptograms_in_chars(cs)); \
-        subset_trans(polarssl_cryptograms_in_chars(s_cs), \
-                      polarssl_cryptograms_in_chars(p_cs), \
-                      polarssl_cryptograms_in_chars(cs0)); \
-        subset_trans(polarssl_cryptograms_in_chars(s_cs), \
-                      polarssl_cryptograms_in_chars(cs0), \
-                      polarssl_cryptograms_in_chars(cs)); \
+        polarssl_cryptograms_in_chars_bound_from(f_cs, cgs); \
+        forall_subset(f_cgs, cgs, polarssl_cryptogram_is_generated); \
+        polarssl_cryptograms_in_chars_bound_from(s_cs, cgs); \
+        forall_subset(s_cgs, cgs, polarssl_cryptogram_is_generated); \
         \
-        assert true == subset(polarssl_cryptograms_in_chars(f_cs), \
-                              polarssl_cryptograms_in_chars(cs)); \
-        assert true == subset(polarssl_cryptograms_in_chars(s_cs), \
-                              polarssl_cryptograms_in_chars(cs)); \
-        \
-        forall_subset(polarssl_cryptograms_in_chars(f_cs), \
-                      polarssl_cryptograms_in_chars(cs), \
-                      (polarssl_cryprogram_has_lower_level) \
-                      (succ(level_bound))); \
-        forall_subset(polarssl_cryptograms_in_chars(s_cs), \
-                      polarssl_cryptograms_in_chars(cs), \
-                      (polarssl_cryprogram_has_lower_level) \
-                      (succ(level_bound))); \
-        \
-        assert true == forall(polarssl_cryptograms_in_chars(f_cs), \
-                    (polarssl_cryprogram_has_lower_level)(succ(level_bound))); \
-        assert true == forall(polarssl_cryptograms_in_chars(s_cs), \
-                    (polarssl_cryprogram_has_lower_level)(succ(level_bound))); \
+        forall_subset(f_cgs, cgs, (polarssl_cryprogram_has_lower_level) \
+                                  (succ(level_bound))); \
+        forall_subset(s_cgs, cgs, (polarssl_cryprogram_has_lower_level) \
+                                  (succ(level_bound))); \
       } \
       else \
       { \
@@ -119,14 +184,8 @@ switch(length_bound) \
       else \
       { \
         assert cs == cons('c', cons(?inc, ?cs_cg)); \
-        polarssl_cryptogram cg = \
-                          polarssl_chars_for_cryptogram_surjective(cs_cg, 1); \
-        assert cg == polarssl_random(?p0, ?c0); \
-        polarssl_cryptograms_in_chars_public_upper_bound_split( \
-                                                    polarssl_pub(pub), cs, 2); \
-        polarssl_cryptogram_in_upper_bound(cs_cg, cg, \
-                    polarssl_generated_public_cryptograms(polarssl_pub(pub))); \
-        polarssl_generated_public_cryptograms_from(polarssl_pub(pub), cg); \
+        DESERIALIZE_ITEM_PROOF_1(cs, 2) \
+        DESERIALIZE_ITEM_PROOF_2(1, polarssl_random(?p0, ?c0)) \
         \
         item i = nonce_item(p0, c0, inc); \
         item i0 = nonce_item(p0, c0, 0); \
@@ -143,107 +202,18 @@ switch(length_bound) \
     else if (head(cs) == 'd') \
     { \
       assert cs == cons('d', ?cs_cg); \
-      polarssl_cryptogram cg = \
-                           polarssl_chars_for_cryptogram_surjective(cs_cg, 5); \
-      assert cg == polarssl_hash(?cs_pay0); \
-      polarssl_cryptograms_in_chars_public_upper_bound_split( \
-                                                    polarssl_pub(pub), cs, 1); \
-      polarssl_cryptogram_in_upper_bound(cs_cg, cg, \
-                    polarssl_generated_public_cryptograms(polarssl_pub(pub))); \
-      polarssl_generated_public_cryptograms_from(polarssl_pub(pub), cg); \
-      \
-      open [_]polarssl_pub(pub)(cg); \
-      assert [_]exists(?col); \
-      item i; \
-      if (col) \
-      { \
-        assert true == subset(polarssl_cryptograms_in_chars(cs_pay0), \
-                  polarssl_generated_public_cryptograms(polarssl_pub(pub))); \
-        polarssl_cryptograms_in_chars_split(cs, 1); \
-        if (well_formed(cs_pay0, nat_length(cs_pay0))) \
-        { \
-          switch(level_bound) \
-          { \
-            case succ(level_bound0): \
-              close proof_obligations(pub); \
-              well_formed_upper_bound(cs_pay0, nat_length(cs_pay0), \
-                                               nat_of_int(INT_MAX)); \
-              polarssl_cryptograms_in_chars_upper_bound_to(cs_pay0, \
-                                      polarssl_cryptograms_in_chars(cs_pay0)); \
-              polarssl_cryptograms_in_chars_upper_bound_subset( \
-                    cs_pay0, polarssl_cryptograms_in_chars(cs_pay0), \
-                    polarssl_generated_public_cryptograms(polarssl_pub(pub))); \
-              polarssl_cryptogram_constraints(cs_cg, cg); \
-              forall_mem(cg, polarssl_cryptograms_in_chars(cs), \
-                         (polarssl_cryprogram_has_lower_level) \
-                         (succ(level_bound))); \
-              polarssl_cryptogram_level_nested_constraints_upper_bound( \
-                                                             cg, level_bound); \
-              \
-              assert true == well_formed(cs_pay0, nat_of_int(INT_MAX)); \
-              assert true == forall( \
-                   polarssl_cryptograms_in_chars(cs_pay0), \
-                   (polarssl_cryprogram_has_lower_level)(succ(level_bound0))); \
-              assert length(cs_pay0) <= INT_MAX; \
-              assert true == polarssl_cryptograms_in_chars_upper_bound( \
-                               cs_pay0, polarssl_generated_public_cryptograms( \
-                                                          polarssl_pub(pub))); \
-              deserialize_item_(level_bound0, nat_of_int(INT_MAX), \
-                                cs_pay0, pub); \
-              open [_]item_constraints_no_collision(?pay0, cs_pay0, pub); \
-              open proof_obligations(pub); \
-              assert [_]pub(pay0); \
-              i = hash_item(some(pay0)); \
-              close well_formed_item_chars(i)(cs_pay0); \
-              leak well_formed_item_chars(i)(cs_pay0); \
-              assert is_public_hash(?proof, pub); \
-              proof(i); \
-              close item_constraints_no_collision(i, cs, pub); \
-              leak item_constraints_no_collision(i, cs, pub); \
-            case zero: \
-              polarssl_cryptogram_level_flat_constraints(cg); \
-              assert polarssl_cryptogram_level(cg) != zero; \
-              polarssl_cryptogram_constraints(cs_cg, cg); \
-              forall_mem(cg, polarssl_cryptograms_in_chars(cs), \
-                    (polarssl_cryprogram_has_lower_level)(succ(level_bound))); \
-              assert polarssl_cryptogram_level(cg) == zero; \
-              assert false; \
-          } \
-        } \
-        else \
-        { \
-          i = hash_item(none); \
-          assert is_public_hash(?proof, pub); \
-          proof(i); \
-          close ill_formed_item_chars(i)(cs_pay0); \
-          leak ill_formed_item_chars(i)(cs_pay0); \
-          close item_constraints_no_collision(i, cs, pub); \
-          leak item_constraints_no_collision(i, cs, pub); \
-        } \
-      } \
-      else \
-      { \
-        assert [_]item_constraints_no_collision(?pay0, cs_pay0, pub); \
-        i = hash_item(some(pay0)); \
-        item_constraints_no_collision_well_formed(pay0, i); \
-        assert [_]pub(i); \
-        close item_constraints_no_collision(i, cs, pub); \
-        leak item_constraints_no_collision(i, cs, pub); \
-      } \
-      assert [_]pub(i); \
-      assert [_]item_constraints_no_collision(i, cs, pub); \
+      DESERIALIZE_ITEM_PROOF_1(cs, 1) \
+      DESERIALIZE_ITEM_PROOF_2(5, polarssl_hash(?cs_pay0)) \
+      DESERIALIZE_ITEM_PROOF_3(hash_item(some(pay0)), \
+                               hash_item(none), \
+                               assert is_public_hash(?proof, pub); \
+                               proof(i);) \
     } \
     else if (head(cs) == 'e') \
     { \
       assert cs == cons('e', ?cs_cg); \
-      polarssl_cryptogram cg = \
-                          polarssl_chars_for_cryptogram_surjective(cs_cg, 2); \
-      assert cg == polarssl_symmetric_key(?p0, ?c0); \
-      polarssl_cryptograms_in_chars_public_upper_bound_split( \
-                                                    polarssl_pub(pub), cs, 1); \
-      polarssl_cryptogram_in_upper_bound(cs_cg, cg, \
-                    polarssl_generated_public_cryptograms(polarssl_pub(pub))); \
-      polarssl_generated_public_cryptograms_from(polarssl_pub(pub), cg); \
+      DESERIALIZE_ITEM_PROOF_1(cs, 1) \
+      DESERIALIZE_ITEM_PROOF_2(2, polarssl_symmetric_key(?p0, ?c0)) \
       \
       open [_]polarssl_pub(pub)(cg); \
       item i = symmetric_key_item(p0, c0); \
@@ -253,14 +223,8 @@ switch(length_bound) \
     else if (head(cs) == 'f') \
     { \
       assert cs == cons('f', ?cs_cg); \
-      polarssl_cryptogram cg = \
-                          polarssl_chars_for_cryptogram_surjective(cs_cg, 3); \
-      assert cg == polarssl_public_key(?p0, ?c0); \
-      polarssl_cryptograms_in_chars_public_upper_bound_split( \
-                                                    polarssl_pub(pub), cs, 1); \
-      polarssl_cryptogram_in_upper_bound(cs_cg, cg, \
-                    polarssl_generated_public_cryptograms(polarssl_pub(pub))); \
-      polarssl_generated_public_cryptograms_from(polarssl_pub(pub), cg); \
+      DESERIALIZE_ITEM_PROOF_1(cs, 1) \
+      DESERIALIZE_ITEM_PROOF_2(3, polarssl_public_key(?p0, ?c0)) \
       \
       open [_]polarssl_pub(pub)(cg); \
       item i = public_key_item(p0, c0); \
@@ -270,15 +234,8 @@ switch(length_bound) \
     else if (head(cs) == 'g') \
     { \
       assert cs == cons('g', ?cs_cg); \
-      polarssl_cryptogram cg = \
-                          polarssl_chars_for_cryptogram_surjective(cs_cg, 4); \
-      assert cg == polarssl_private_key(?p0, ?c0); \
-      polarssl_cryptograms_in_chars_public_upper_bound_split( \
-                                                    polarssl_pub(pub), cs, 1); \
-      polarssl_cryptograms_in_chars_split(cs, 1); \
-      polarssl_cryptogram_in_upper_bound(cs_cg, cg, \
-                    polarssl_generated_public_cryptograms(polarssl_pub(pub))); \
-      polarssl_generated_public_cryptograms_from(polarssl_pub(pub), cg); \
+      DESERIALIZE_ITEM_PROOF_1(cs, 1) \
+      DESERIALIZE_ITEM_PROOF_2(4, polarssl_private_key(?p0, ?c0)) \
       \
       open [_]polarssl_pub(pub)(cg); \
       item i = private_key_item(p0, c0); \
@@ -288,96 +245,12 @@ switch(length_bound) \
     else if (head(cs) == 'h') \
     { \
       assert cs == cons('h', ?cs_cg); \
-      polarssl_cryptogram cg = \
-                           polarssl_chars_for_cryptogram_surjective(cs_cg, 6); \
-      assert cg == polarssl_hmac(?p0, ?c0, ?cs_pay0); \
-      polarssl_cryptograms_in_chars_public_upper_bound_split( \
-                                                    polarssl_pub(pub), cs, 1); \
-      polarssl_cryptogram_in_upper_bound(cs_cg, cg, \
-                    polarssl_generated_public_cryptograms(polarssl_pub(pub))); \
-      polarssl_generated_public_cryptograms_from(polarssl_pub(pub), cg); \
-      \
-      open [_]polarssl_pub(pub)(cg); \
-      assert [_]exists(?col); \
-      item i; \
-      if (col) \
-      { \
-        assert [_]pub(symmetric_key_item(p0, c0)); \
-        assert true == subset(polarssl_cryptograms_in_chars(cs_pay0), \
-                  polarssl_generated_public_cryptograms(polarssl_pub(pub))); \
-        polarssl_cryptograms_in_chars_split(cs, 1); \
-        if (well_formed(cs_pay0, nat_length(cs_pay0))) \
-        { \
-          switch(level_bound) \
-          { \
-            case succ(level_bound0): \
-              close proof_obligations(pub); \
-              well_formed_upper_bound(cs_pay0, nat_length(cs_pay0), \
-                                               nat_of_int(INT_MAX)); \
-              polarssl_cryptograms_in_chars_upper_bound_to(cs_pay0, \
-                                      polarssl_cryptograms_in_chars(cs_pay0)); \
-              polarssl_cryptograms_in_chars_upper_bound_subset( \
-                    cs_pay0, polarssl_cryptograms_in_chars(cs_pay0), \
-                    polarssl_generated_public_cryptograms(polarssl_pub(pub))); \
-              polarssl_cryptogram_constraints(cs_cg, cg); \
-              forall_mem(cg, polarssl_cryptograms_in_chars(cs), \
-                         (polarssl_cryprogram_has_lower_level) \
-                         (succ(level_bound))); \
-              polarssl_cryptogram_level_nested_constraints_upper_bound( \
-                                                             cg, level_bound); \
-              \
-              assert true == well_formed(cs_pay0, nat_of_int(INT_MAX)); \
-              assert true == forall( \
-                   polarssl_cryptograms_in_chars(cs_pay0), \
-                   (polarssl_cryprogram_has_lower_level)(succ(level_bound0))); \
-              assert length(cs_pay0) <= INT_MAX; \
-              assert true == polarssl_cryptograms_in_chars_upper_bound( \
-                               cs_pay0, polarssl_generated_public_cryptograms( \
-                                                          polarssl_pub(pub))); \
-              deserialize_item_(level_bound0, nat_of_int(INT_MAX), \
-                                cs_pay0, pub); \
-              open [_]item_constraints_no_collision(?pay0, cs_pay0, pub); \
-              open proof_obligations(pub); \
-              assert [_]pub(pay0); \
-              i = hmac_item(p0, c0, some(pay0)); \
-              close well_formed_item_chars(i)(cs_pay0); \
-              leak well_formed_item_chars(i)(cs_pay0); \
-              assert is_public_hmac(?proof, pub); \
-              proof(i); \
-              close item_constraints_no_collision(i, cs, pub); \
-              leak item_constraints_no_collision(i, cs, pub); \
-            case zero: \
-              polarssl_cryptogram_level_flat_constraints(cg); \
-              assert polarssl_cryptogram_level(cg) != zero; \
-              polarssl_cryptogram_constraints(cs_cg, cg); \
-              forall_mem(cg, polarssl_cryptograms_in_chars(cs), \
-                    (polarssl_cryprogram_has_lower_level)(succ(level_bound))); \
-              assert polarssl_cryptogram_level(cg) == zero; \
-              assert false; \
-          } \
-        } \
-        else \
-        { \
-          i = hmac_item(p0, c0, none); \
-          assert is_public_hmac(?proof, pub); \
-          proof(i); \
-          close ill_formed_item_chars(i)(cs_pay0); \
-          leak ill_formed_item_chars(i)(cs_pay0); \
-          close item_constraints_no_collision(i, cs, pub); \
-          leak item_constraints_no_collision(i, cs, pub); \
-        } \
-      } \
-      else \
-      { \
-        assert [_]item_constraints_no_collision(?pay0, cs_pay0, pub); \
-        i = hmac_item(p0, c0, some(pay0)); \
-        item_constraints_no_collision_well_formed(pay0, i); \
-        assert [_]pub(i); \
-        close item_constraints_no_collision(i, cs, pub); \
-        leak item_constraints_no_collision(i, cs, pub); \
-      } \
-      assert [_]pub(i); \
-      assert [_]item_constraints_no_collision(i, cs, pub); \
+      DESERIALIZE_ITEM_PROOF_1(cs, 1) \
+      DESERIALIZE_ITEM_PROOF_2(6, polarssl_hmac(?p0, ?c0, ?cs_pay0)) \
+      DESERIALIZE_ITEM_PROOF_3(hmac_item(p0, c0, some(pay0)), \
+                               hmac_item(p0, c0, none), \
+                               assert is_public_hmac(?proof, pub); \
+                               proof(i);) \
     } \
     else if (head(cs) == 'i') \
     { \
@@ -385,16 +258,24 @@ switch(length_bound) \
       assert length(cs) <= INT_MAX; \
       list<char> ent1 = take(GCM_ENT_SIZE, cs0); \
       list<char> cs_cg = drop(GCM_ENT_SIZE, cs0); \
-      polarssl_cryptograms_in_chars_split(cs, 1); \
-      polarssl_cryptograms_in_chars_split(cs0, GCM_ENT_SIZE); \
-      subset_trans(polarssl_cryptograms_in_chars(cs_cg), \
-                   polarssl_cryptograms_in_chars(cs0), \
-                   polarssl_cryptograms_in_chars(cs)); \
-      assert true == subset(polarssl_cryptograms_in_chars(cs_cg), \
-                            polarssl_cryptograms_in_chars(cs0)); \
-      assert cs0 == append(ent1, cs_cg); \
+      take_append(GCM_ENT_SIZE, ent1, cs_cg); \
+      drop_append(GCM_ENT_SIZE, ent1, cs_cg); \
+      \
+      open [_]polarssl_public_generated_chars(polarssl_pub(pub))(cs); \
+      polarssl_public_generated_chars_split(polarssl_pub(pub), cs, 1); \
+      polarssl_cryptograms_in_chars_bound_to(cs); \
+      polarssl_cryptograms_in_chars_bound_split( \
+                                    cs, polarssl_cryptograms_in_chars(cs), 1); \
+      \
+      open [_]polarssl_public_generated_chars(polarssl_pub(pub))(cs0); \
+      polarssl_public_generated_chars_split(polarssl_pub(pub), \
+                                            cs0, GCM_ENT_SIZE); \
+      polarssl_cryptograms_in_chars_bound_to(cs0); \
+      polarssl_cryptograms_in_chars_bound_split( \
+                        cs0, polarssl_cryptograms_in_chars(cs), GCM_ENT_SIZE); \
+      \
       polarssl_cryptogram cg = \
-                           polarssl_chars_for_cryptogram_surjective(cs_cg, 8); \
+                         polarssl_chars_for_cryptogram_surjective(cs_cg, 8); \
       assert cg == polarssl_auth_encrypted(?p0, ?c0, ?mac0, ?cs_pay0, ?iv0); \
       list<char> ent2 = cons(length(mac0), append(mac0, iv0)); \
       take_append(length(mac0), mac0, iv0); \
@@ -402,24 +283,18 @@ switch(length_bound) \
       list<char> ent3 = append(ent1, ent2); \
       take_append(GCM_ENT_SIZE, ent1, ent2); \
       drop_append(GCM_ENT_SIZE, ent1, ent2); \
-      polarssl_cryptograms_in_chars_public_upper_bound_split( \
-                                                    polarssl_pub(pub), cs, 1); \
-      polarssl_cryptograms_in_chars_public_upper_bound_split( \
-                                        polarssl_pub(pub), cs0, length(ent1)); \
-      polarssl_cryptogram_in_upper_bound(cs_cg, cg, \
-                    polarssl_generated_public_cryptograms(polarssl_pub(pub))); \
-      polarssl_generated_public_cryptograms_from(polarssl_pub(pub), cg); \
-      polarssl_cryptogram_constraints(cs_cg, cg); \
-      forall_subset(polarssl_cryptograms_in_chars(cs_cg), \
-                    polarssl_cryptograms_in_chars(cs), \
-                    (polarssl_cryprogram_has_lower_level) \
-                    (succ(level_bound))); \
-      forall_mem(cg, polarssl_cryptograms_in_chars(cs_cg), \
-            (polarssl_cryprogram_has_lower_level)(succ(level_bound))); \
       \
-      item i; \
+      list<polarssl_cryptogram> cgs = polarssl_cryptograms_in_chars(cs_cg); \
+      polarssl_public_generated_chars_extract(polarssl_pub(pub), cs_cg, cg); \
+      polarssl_cryptograms_in_chars_bound_to(cs_cg); \
+      polarssl_cryptogram_in_bound(cs_cg, cg, cgs); \
+      polarssl_cryptograms_in_chars_bound_from(cs_cg, \
+                                           polarssl_cryptograms_in_chars(cs)); \
+      mem_subset(cg, cgs, polarssl_cryptograms_in_chars(cs)); \
+      \
       open [_]polarssl_pub(pub)(cg); \
       assert [_]exists<bool>(?col); \
+      item i; \
       if (col) \
       { \
         if (well_formed(cs_pay0, nat_length(cs_pay0))) \
@@ -430,22 +305,12 @@ switch(length_bound) \
               close proof_obligations(pub); \
               well_formed_upper_bound(cs_pay0, nat_length(cs_pay0), \
                                                nat_of_int(INT_MAX)); \
-              polarssl_cryptograms_in_chars_upper_bound_to(cs_pay0, \
-                                      polarssl_cryptograms_in_chars(cs_pay0)); \
-              polarssl_cryptograms_in_chars_upper_bound_subset( \
-                    cs_pay0, polarssl_cryptograms_in_chars(cs_pay0), \
-                    polarssl_generated_public_cryptograms(polarssl_pub(pub))); \
-              polarssl_cryptogram_level_nested_constraints_upper_bound( \
-                                                             cg, level_bound); \
               \
-              assert true == well_formed(cs_pay0, nat_of_int(INT_MAX)); \
-              assert true == forall( \
-                   polarssl_cryptograms_in_chars(cs_pay0), \
-                   (polarssl_cryprogram_has_lower_level)(succ(level_bound0))); \
-              assert length(cs_pay0) <= INT_MAX; \
-              assert true == polarssl_cryptograms_in_chars_upper_bound( \
-                               cs_pay0, polarssl_generated_public_cryptograms( \
-                                                          polarssl_pub(pub))); \
+              forall_mem(cg, polarssl_cryptograms_in_chars(cs), \
+                         (polarssl_cryprogram_has_lower_level)(succ(level_bound))); \
+              assert true == (polarssl_cryprogram_has_lower_level(succ(level_bound), cg)); \
+              polarssl_cryptogram_level_nested_constraints_bound(cg, level_bound); \
+              \
               deserialize_item_(level_bound0, nat_of_int(INT_MAX), \
                                 cs_pay0, pub); \
               assert [_]item_constraints_no_collision(?pay0, cs_pay0, pub); \
@@ -457,19 +322,14 @@ switch(length_bound) \
               assert is_public_symmetric_encrypted(?proof, pub); \
               proof(i); \
             case zero: \
-              polarssl_cryptogram_level_flat_constraints(cg); \
-              assert polarssl_cryptogram_level(cg) != zero; \
-              assert polarssl_cryptogram_level(cg) == zero; \
-              assert false; \
+              DESERIALIZE_ITEM_PROOF_3_2 \
           } \
         } \
         else \
         { \
-          i = symmetric_encrypted_item(p0, c0, none, ent3); \
-          assert is_public_symmetric_encrypted(?proof, pub); \
-          proof(i); \
-          close ill_formed_item_chars(i)(cs_pay0); \
-          leak ill_formed_item_chars(i)(cs_pay0); \
+          DESERIALIZE_ITEM_PROOF_3_3(symmetric_encrypted_item(p0, c0, none, ent3), \
+                                     assert is_public_symmetric_encrypted(?proof, pub); \
+                                     proof(i);) \
         } \
       } \
       else \
@@ -483,7 +343,7 @@ switch(length_bound) \
         proof(i_orig, ent3); \
         assert [_]pub(i); \
         item_constraints_no_collision_well_formed(pay0, i); \
-      }\
+      } \
       assert [_]pub(i); \
       close symmetric_encryption_entropy(i)(mac0, iv0); \
       leak symmetric_encryption_entropy(i)(mac0, iv0); \
@@ -493,176 +353,22 @@ switch(length_bound) \
     else if (head(cs) == 'j') \
     { \
       assert cs == cons('j', ?cs_cg); \
-      polarssl_cryptogram cg = \
-                           polarssl_chars_for_cryptogram_surjective(cs_cg, 9); \
-      assert cg == polarssl_asym_encrypted(?p0, ?c0, ?cs_pay0, ?ent0); \
-      polarssl_cryptograms_in_chars_split(cs, 1); \
-      polarssl_cryptograms_in_chars_public_upper_bound_split( \
-                                                    polarssl_pub(pub), cs, 1); \
-      polarssl_cryptogram_in_upper_bound(cs_cg, cg, \
-                    polarssl_generated_public_cryptograms(polarssl_pub(pub))); \
-      polarssl_generated_public_cryptograms_from(polarssl_pub(pub), cg); \
-      \
-      polarssl_cryptogram_constraints(cs_cg, cg); \
-      forall_subset(polarssl_cryptograms_in_chars(cs_cg), \
-                    polarssl_cryptograms_in_chars(cs), \
-                    (polarssl_cryprogram_has_lower_level) \
-                    (succ(level_bound))); \
-      forall_mem(cg, polarssl_cryptograms_in_chars(cs_cg), \
-            (polarssl_cryprogram_has_lower_level)(succ(level_bound))); \
-      \
-      open [_]polarssl_pub(pub)(cg); \
-      assert [_]exists(?col); \
-      item i; \
-      if (col) \
-      { \
-        if (well_formed(cs_pay0, nat_length(cs_pay0))) \
-        { \
-          switch(level_bound) \
-          { \
-            case succ(level_bound0): \
-              close proof_obligations(pub); \
-              well_formed_upper_bound(cs_pay0, nat_length(cs_pay0), \
-                                               nat_of_int(INT_MAX)); \
-              polarssl_cryptograms_in_chars_upper_bound_to(cs_pay0, \
-                                      polarssl_cryptograms_in_chars(cs_pay0)); \
-              polarssl_cryptograms_in_chars_upper_bound_subset( \
-                    cs_pay0, polarssl_cryptograms_in_chars(cs_pay0), \
-                    polarssl_generated_public_cryptograms(polarssl_pub(pub))); \
-              polarssl_cryptogram_level_nested_constraints_upper_bound( \
-                                                             cg, level_bound); \
-              \
-              assert true == well_formed(cs_pay0, nat_of_int(INT_MAX)); \
-              assert true == forall( \
-                   polarssl_cryptograms_in_chars(cs_pay0), \
-                   (polarssl_cryprogram_has_lower_level)(succ(level_bound0))); \
-              assert length(cs_pay0) <= INT_MAX; \
-              assert true == polarssl_cryptograms_in_chars_upper_bound( \
-                               cs_pay0, polarssl_generated_public_cryptograms( \
-                                                          polarssl_pub(pub))); \
-              deserialize_item_(level_bound0, nat_of_int(INT_MAX), \
-                                cs_pay0, pub); \
-              assert [_]item_constraints_no_collision(?pay0, cs_pay0, pub); \
-              open proof_obligations(pub); \
-              assert [_]pub(pay0); \
-              i = asymmetric_encrypted_item(p0, c0, some(pay0), ent0); \
-              close well_formed_item_chars(i)(cs_pay0); \
-              leak well_formed_item_chars(i)(cs_pay0); \
-              assert is_public_asymmetric_encrypted(?proof, pub); \
-              proof(i); \
-            case zero: \
-              polarssl_cryptogram_level_flat_constraints(cg); \
-              assert polarssl_cryptogram_level(cg) != zero; \
-              assert polarssl_cryptogram_level(cg) == zero; \
-              assert false; \
-          } \
-        } \
-        else \
-        { \
-          i = asymmetric_encrypted_item(p0, c0, none, ent0); \
-          assert is_public_asymmetric_encrypted(?proof, pub); \
-          proof(i); \
-          close ill_formed_item_chars(i)(cs_pay0); \
-          leak ill_formed_item_chars(i)(cs_pay0); \
-        } \
-      } \
-      else \
-      { \
-        assert [_]item_constraints_no_collision(?pay0, cs_pay0, pub); \
-        i = asymmetric_encrypted_item(p0, c0, some(pay0), ent0); \
-        assert [_]pub(i); \
-        item_constraints_no_collision_well_formed(pay0, i); \
-      } \
-      assert [_]pub(i); \
-      close item_constraints_no_collision(i, cs, pub); \
-      leak item_constraints_no_collision(i, cs, pub); \
+      DESERIALIZE_ITEM_PROOF_1(cs, 1) \
+      DESERIALIZE_ITEM_PROOF_2(9, polarssl_asym_encrypted(?p0, ?c0, ?cs_pay0, ?ent0)) \
+      DESERIALIZE_ITEM_PROOF_3(asymmetric_encrypted_item(p0, c0, some(pay0), ent0), \
+                               asymmetric_encrypted_item(p0, c0, none, ent0), \
+                               assert is_public_asymmetric_encrypted(?proof, pub); \
+                               proof(i);) \
     } \
     else if (head(cs) == 'k') \
     { \
       assert cs == cons('k', ?cs_cg); \
-      polarssl_cryptogram cg = \
-                          polarssl_chars_for_cryptogram_surjective(cs_cg, 10); \
-      assert cg == polarssl_asym_signature(?p0, ?c0, ?cs_pay0, ?ent0); \
-      polarssl_cryptograms_in_chars_split(cs, 1); \
-      polarssl_cryptograms_in_chars_public_upper_bound_split( \
-                                                    polarssl_pub(pub), cs, 1); \
-      polarssl_cryptogram_in_upper_bound(cs_cg, cg, \
-                    polarssl_generated_public_cryptograms(polarssl_pub(pub))); \
-      polarssl_generated_public_cryptograms_from(polarssl_pub(pub), cg); \
-      \
-      polarssl_cryptogram_constraints(cs_cg, cg); \
-      forall_subset(polarssl_cryptograms_in_chars(cs_cg), \
-                    polarssl_cryptograms_in_chars(cs), \
-                    (polarssl_cryprogram_has_lower_level) \
-                    (succ(level_bound))); \
-      forall_mem(cg, polarssl_cryptograms_in_chars(cs_cg), \
-            (polarssl_cryprogram_has_lower_level)(succ(level_bound))); \
-      \
-      open [_]polarssl_pub(pub)(cg); \
-      assert [_]exists(?col); \
-      item i; \
-      if (col) \
-      { \
-        if (well_formed(cs_pay0, nat_length(cs_pay0))) \
-        { \
-          switch(level_bound) \
-          { \
-            case succ(level_bound0): \
-              close proof_obligations(pub); \
-              well_formed_upper_bound(cs_pay0, nat_length(cs_pay0), \
-                                               nat_of_int(INT_MAX)); \
-              polarssl_cryptograms_in_chars_upper_bound_to(cs_pay0, \
-                                      polarssl_cryptograms_in_chars(cs_pay0)); \
-              polarssl_cryptograms_in_chars_upper_bound_subset( \
-                    cs_pay0, polarssl_cryptograms_in_chars(cs_pay0), \
-                    polarssl_generated_public_cryptograms(polarssl_pub(pub))); \
-              polarssl_cryptogram_level_nested_constraints_upper_bound( \
-                                                             cg, level_bound); \
-              \
-              assert true == well_formed(cs_pay0, nat_of_int(INT_MAX)); \
-              assert true == forall( \
-                   polarssl_cryptograms_in_chars(cs_pay0), \
-                   (polarssl_cryprogram_has_lower_level)(succ(level_bound0))); \
-              assert length(cs_pay0) <= INT_MAX; \
-              assert true == polarssl_cryptograms_in_chars_upper_bound( \
-                               cs_pay0, polarssl_generated_public_cryptograms( \
-                                                          polarssl_pub(pub))); \
-              deserialize_item_(level_bound0, nat_of_int(INT_MAX), \
-                                cs_pay0, pub); \
-              assert [_]item_constraints_no_collision(?pay0, cs_pay0, pub); \
-              open proof_obligations(pub); \
-              assert [_]pub(pay0); \
-              i = asymmetric_signature_item(p0, c0, some(pay0), ent0); \
-              close well_formed_item_chars(i)(cs_pay0); \
-              leak well_formed_item_chars(i)(cs_pay0); \
-              assert is_public_asymmetric_signature(?proof, pub); \
-              proof(i); \
-            case zero: \
-              polarssl_cryptogram_level_flat_constraints(cg); \
-              assert polarssl_cryptogram_level(cg) != zero; \
-              assert polarssl_cryptogram_level(cg) == zero; \
-              assert false; \
-          } \
-        } \
-        else \
-        { \
-          i = asymmetric_signature_item(p0, c0, none, ent0); \
-          assert is_public_asymmetric_signature(?proof, pub); \
-          proof(i); \
-          close ill_formed_item_chars(i)(cs_pay0); \
-          leak ill_formed_item_chars(i)(cs_pay0); \
-        } \
-      } \
-      else \
-      { \
-        assert [_]item_constraints_no_collision(?pay0, cs_pay0, pub); \
-        i = asymmetric_signature_item(p0, c0, some(pay0), ent0); \
-        assert [_]pub(i); \
-        item_constraints_no_collision_well_formed(pay0, i); \
-      } \
-      assert [_]pub(i); \
-      close item_constraints_no_collision(i, cs, pub); \
-      leak item_constraints_no_collision(i, cs, pub); \
+      DESERIALIZE_ITEM_PROOF_1(cs, 1) \
+      DESERIALIZE_ITEM_PROOF_2(10, polarssl_asym_signature(?p0, ?c0, ?cs_pay0, ?ent0)) \
+      DESERIALIZE_ITEM_PROOF_3(asymmetric_signature_item(p0, c0, some(pay0), ent0), \
+                               asymmetric_signature_item(p0, c0, none, ent0), \
+                               assert is_public_asymmetric_signature(?proof, pub); \
+                               proof(i);) \
     } \
     else \
     { \
@@ -679,16 +385,16 @@ lemma void deserialize_item_(nat level_bound, nat length_bound,
            proof_obligations(pub) &*&
            //knowledge about first inductive paramter
            true == forall(polarssl_cryptograms_in_chars(cs), 
-                   (polarssl_cryprogram_has_lower_level)(succ(level_bound))) &*&
+                                           (polarssl_cryprogram_has_lower_level)
+                                           (succ(level_bound))) &*&
            //knowledge about second inductive paramter
            length(cs) <= int_of_nat(length_bound) &*&
            true == well_formed(cs, length_bound) &*&
-           true == polarssl_cryptograms_in_chars_upper_bound(
-               cs, polarssl_generated_public_cryptograms(polarssl_pub(pub)));
+           [_]polarssl_public_generated_chars(polarssl_pub(pub))(cs);
   ensures  proof_obligations(pub) &*&
            [_]item_constraints_no_collision(?i, cs, pub) &*& [_]pub(i);
 {
-  //Dummy switch to enforce lexicographic induction
+  // Dummy switch to enforce lexicographic induction
   switch(level_bound)
   {
     case succ(l0):
@@ -703,19 +409,15 @@ lemma void deserialize_item(list<char> cs, predicate(item) pub)
            proof_obligations(pub) &*&
            length(cs) <= INT_MAX &*&
            true == well_formed(cs, nat_length(cs)) &*&
-           true == polarssl_cryptograms_in_chars_upper_bound(
-               cs, polarssl_generated_public_cryptograms(polarssl_pub(pub)));
+           [_]polarssl_public_generated_chars(polarssl_pub(pub))(cs);
   ensures  proof_obligations(pub) &*&
            [_]item_constraints_no_collision(?i, cs, pub) &*& [_]pub(i);
 {
   well_formed_upper_bound(cs, nat_length(cs), nat_of_int(INT_MAX));
-  polarssl_cryptograms_in_chars_upper_bound_from(cs, 
-                  polarssl_generated_public_cryptograms(polarssl_pub(pub)));
-  polarssl_cryptograms_in_chars_generated(polarssl_pub(pub), cs);
-  polarssl_cryptograms_generated_level_upper_bound(
-                                         polarssl_cryptograms_in_chars(cs));
-  deserialize_item_(polarssl_cryprogram_level_upper_bound(), 
-                   nat_of_int(INT_MAX), cs, pub);
+  open [_]polarssl_public_generated_chars(polarssl_pub(pub))(cs);
+  polarssl_cryptograms_generated_level_bound(polarssl_cryptograms_in_chars(cs));
+  deserialize_item_(polarssl_cryprogram_level_bound(), 
+                    nat_of_int(INT_MAX), cs, pub);
 }
 
 @*/
@@ -752,7 +454,8 @@ void parse_pair_item(char* message, int size)
   memcpy(buffer_f, message + 1 + (int) sizeof(int), (unsigned int) size_f);
   //@ assert chars(buffer_f, size_f, ?cs_f);
   char *buffer_s = malloc_wrapper(size_s);
-  memcpy(buffer_s, message + 1 + (int) sizeof(int) + size_f, (unsigned int) size_s);
+  memcpy(buffer_s, message + 1 + (int) sizeof(int) + size_f, 
+         (unsigned int) size_s);
   //@ assert chars(buffer_s, size_s, ?cs_s);
   if (size_f <= 1 || size_s <= 1)
     abort_crypto_lib("Incorrect size for pair item");
@@ -847,7 +550,8 @@ struct item* deserialize_from_public_message(char* buffer, int size)
                                           (buffer, size, cs) &*&
                item(result, ?i, pub) &*& [_]pub(i); @*/
 {
-  if (size <= 1){abort_crypto_lib("Found corrupted item during deserialization");}
+  if (size <= 1)
+    abort_crypto_lib("Found corrupted item during deserialization");
   struct item* item = malloc(sizeof(struct item));
   if (item == 0){abort_crypto_lib("malloc of item failed");}
 

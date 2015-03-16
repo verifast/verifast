@@ -36,10 +36,7 @@ predicate_ctor polarssl_pub(predicate(item) pub)
     case polarssl_hash(cs0):
       return length(cs0) <= INT_MAX &*&
              [_]exists<bool>(?collision) &*& collision ?
-             (
-               true == subset(polarssl_cryptograms_in_chars(cs0),
-                 polarssl_generated_public_cryptograms(polarssl_pub(pub)))
-             )
+               [_]polarssl_public_generated_chars(polarssl_pub(pub))(cs0)
              :
              (
                [_]item_constraints_no_collision(?pay0, cs0, pub) &*&
@@ -50,8 +47,7 @@ predicate_ctor polarssl_pub(predicate(item) pub)
              [_]exists<bool>(?collision) &*& collision ?
              (
                [_]pub(symmetric_key_item(p0, c0)) &*&
-               true == subset(polarssl_cryptograms_in_chars(cs0),
-                 polarssl_generated_public_cryptograms(polarssl_pub(pub)))
+               [_]polarssl_public_generated_chars(polarssl_pub(pub))(cs0)
              )
              :
              (
@@ -59,15 +55,13 @@ predicate_ctor polarssl_pub(predicate(item) pub)
                [_]pub(hmac_item(p0, c0, some(pay0)))
              );
     case polarssl_encrypted(p0, c0, cs0, iv0):
-      return true == subset(polarssl_cryptograms_in_chars(cs0),
-               polarssl_generated_public_cryptograms(polarssl_pub(pub)));
+      return [_]polarssl_public_generated_chars(polarssl_pub(pub))(cs0);
     case polarssl_auth_encrypted(p0, c0, mac0, cs0, iv0):
       return length(cs0) <= INT_MAX &*&
              [_]exists<bool>(?collision) &*& collision ?
              (
                [_]pub(symmetric_key_item(p0, c0)) &*&
-               true == subset(polarssl_cryptograms_in_chars(cs0),
-                 polarssl_generated_public_cryptograms(polarssl_pub(pub)))
+               [_]polarssl_public_generated_chars(polarssl_pub(pub))(cs0)
              )
              :
              (
@@ -81,8 +75,7 @@ predicate_ctor polarssl_pub(predicate(item) pub)
              [_]exists<bool>(?collision) &*& collision ?
              (
                [_]pub(public_key_item(p0, c0)) &*&
-               true == subset(polarssl_cryptograms_in_chars(cs0),
-                 polarssl_generated_public_cryptograms(polarssl_pub(pub)))
+               [_]polarssl_public_generated_chars(polarssl_pub(pub))(cs0)
              )
              :
              (
@@ -94,8 +87,7 @@ predicate_ctor polarssl_pub(predicate(item) pub)
              [_]exists<bool>(?collision) &*& collision ?
              (
                [_]pub(private_key_item(p0, c0)) &*&
-               true == subset(polarssl_cryptograms_in_chars(cs0),
-                 polarssl_generated_public_cryptograms(polarssl_pub(pub)))
+               [_]polarssl_public_generated_chars(polarssl_pub(pub))(cs0)
              )
              :
              (

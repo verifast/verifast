@@ -199,21 +199,5 @@ lemma void length_equals_nat_length(list<char> cs)
   }
 }
 
-lemma void forall_subset<t>(list<t> sub_cs, list<t> cs, fixpoint(t, bool) p)
-  requires true == forall(cs, p) &*& true == subset(sub_cs, cs);
-  ensures  true == forall(sub_cs, p);
-{
-  switch(sub_cs)
-  {
-    case cons(c0, cs0):
-      forall_subset(cs0, cs, p);
-      assert true == forall(cs0, p);
-      forall_mem(c0, cs, p);
-      assert p(c0) == true;
-    case nil:
-      assert true == forall(sub_cs, p);
-  }
-}
-
 @*/
 

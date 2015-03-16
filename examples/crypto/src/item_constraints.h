@@ -211,8 +211,8 @@ predicate item_constraints_no_collision(item i, list<char> cs,
         case none:
           return [_]ill_formed_item_chars(i)(?cs_pay0) &*& 
                  length(cs_pay0) <= INT_MAX &*&
-                 true == subset(polarssl_cryptograms_in_chars(cs_pay0),
-                   polarssl_generated_public_cryptograms(polarssl_pub(pub))) &*&
+                 [_]polarssl_public_generated_chars(polarssl_pub(pub))
+                                                   (cs_pay0) &*&
                  cs_cg == polarssl_chars_for_cryptogram(
                                                      polarssl_hash(cs_pay0)) &*&
                  true == polarssl_cryptogram_is_generated(
@@ -256,8 +256,8 @@ predicate item_constraints_no_collision(item i, list<char> cs,
           return [_]ill_formed_item_chars(i)(?cs_pay0) &*& 
                  length(cs_pay0) <= INT_MAX &*&
                  [_]pub(symmetric_key_item(p0, c0)) &*&
-                 true == subset(polarssl_cryptograms_in_chars(cs_pay0),
-                   polarssl_generated_public_cryptograms(polarssl_pub(pub))) &*&
+                 [_]polarssl_public_generated_chars(polarssl_pub(pub))
+                                                   (cs_pay0) &*&
                  cs_cg == polarssl_chars_for_cryptogram(
                                              polarssl_hmac(p0, c0, cs_pay0)) &*&
                  true == polarssl_cryptogram_is_generated(
@@ -288,8 +288,8 @@ predicate item_constraints_no_collision(item i, list<char> cs,
           return [_]ill_formed_item_chars(i)(?cs_pay0) &*& 
                  length(cs_pay0) <= INT_MAX &*&
                  [_]pub(symmetric_key_item(p0, c0)) &*&
-                 true == subset(polarssl_cryptograms_in_chars(cs_pay0),
-                   polarssl_generated_public_cryptograms(polarssl_pub(pub))) &*&
+                 [_]polarssl_public_generated_chars(polarssl_pub(pub))
+                                                   (cs_pay0) &*&
                  drop(GCM_ENT_SIZE, cs0) == polarssl_chars_for_cryptogram(
                    polarssl_auth_encrypted(p0, c0, mac0, cs_pay0, iv0)) &*&
                  true == polarssl_cryptogram_is_generated(
@@ -315,8 +315,8 @@ predicate item_constraints_no_collision(item i, list<char> cs,
           return [_]ill_formed_item_chars(i)(?cs_pay0) &*& 
                  length(cs_pay0) <= INT_MAX &*&
                  [_]pub(public_key_item(p0, c0)) &*&
-                 true == subset(polarssl_cryptograms_in_chars(cs_pay0),
-                   polarssl_generated_public_cryptograms(polarssl_pub(pub))) &*&
+                 [_]polarssl_public_generated_chars(polarssl_pub(pub))
+                                                   (cs_pay0) &*&
                  cs_cg == polarssl_chars_for_cryptogram(
                               polarssl_asym_encrypted(p0, c0, cs_pay0, ent0)) &*&
                  true == polarssl_cryptogram_is_generated(
@@ -342,8 +342,8 @@ predicate item_constraints_no_collision(item i, list<char> cs,
           return [_]ill_formed_item_chars(i)(?cs_pay0) &*& 
                  length(cs_pay0) <= INT_MAX &*&
                  [_]pub(private_key_item(p0, c0)) &*&
-                 true == subset(polarssl_cryptograms_in_chars(cs_pay0),
-                   polarssl_generated_public_cryptograms(polarssl_pub(pub))) &*&
+                 [_]polarssl_public_generated_chars(polarssl_pub(pub))
+                                                   (cs_pay0) &*&
                  cs_cg == polarssl_chars_for_cryptogram(
                               polarssl_asym_signature(p0, c0, cs_pay0, ent0)) &*&
                  true == polarssl_cryptogram_is_generated(
@@ -377,21 +377,13 @@ lemma void item_constraints_no_collision_bijective(
            [_]item_constraints_no_collision(i2, cs2, pub);
   ensures  collision_in_run() ? true : true == ((cs1 == cs2) == (i1 == i2));
 
-fixpoint bool public_chars(predicate(item) pub, list<char> cs)
-{
-  return polarssl_cryptograms_in_chars_upper_bound(
-                cs, polarssl_generated_public_cryptograms(polarssl_pub(pub))) &&
-         subset(polarssl_cryptograms_in_chars(cs),
-                polarssl_generated_public_cryptograms(polarssl_pub(pub)));
-}
-
 predicate item_constraints(bool collision, item i, list<char> cs, 
                            predicate(item) pub) =
   true == well_formed(cs, nat_length(cs)) &*&
   collision ?
   (
+    [_]polarssl_public_generated_chars(polarssl_pub(pub))(cs) &*&
     collision_in_run() == true &&
-    public_chars(pub, cs) &&
     tag_for_item(i) == head(cs)
   )
   :

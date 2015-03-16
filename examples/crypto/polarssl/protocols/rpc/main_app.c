@@ -203,8 +203,7 @@ int main() //@ : main
     //@ assume (shared_with(client, count_c + 1) == server);
     
     //@ assert chars(request, PACKAGE_BYTE_SIZE, ?msg_cs);
-    /*@ polarssl_generated_public_cryptograms_assume(
-                                                rpc_polarssl_pub, msg_cs); @*/
+    //@ polarssl_public_generated_chars_assume(rpc_polarssl_pub, msg_cs);
     /*@ close polarssl_public_message(rpc_polarssl_pub)
                                      (request, PACKAGE_BYTE_SIZE, msg_cs); @*/
     {

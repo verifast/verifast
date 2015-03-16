@@ -100,6 +100,8 @@ inductive polarssl_cryptogram =
                             list<char> payload, list<char> entropy)  
 ;
 
+predicate polarssl_key_id(int principal, int count) = true;
+
 fixpoint int  polarssl_cryptogram_tag(polarssl_cryptogram cg)
 {
   switch(cg)
@@ -115,12 +117,6 @@ fixpoint int  polarssl_cryptogram_tag(polarssl_cryptogram cg)
     case polarssl_asym_encrypted(p1, c1, cs1, ent1):       return 9;
     case polarssl_asym_signature(p1, c1, cs1, ent1):       return 10;
   }
-}
-
-fixpoint bool polarssl_cryptogram_same_kind(polarssl_cryptogram cg1, 
-                                            polarssl_cryptogram cg2)
-{
-  return polarssl_cryptogram_tag(cg1) == polarssl_cryptogram_tag(cg2);
 }
 
 fixpoint bool polarssl_cryptogram_is_nested(polarssl_cryptogram cg)
@@ -168,21 +164,17 @@ fixpoint list<polarssl_cryptogram> polarssl_cryptograms_in_chars(list<char> cs);
 
 //Is this set (as a list) of cryptograms an upper bound on the cryptograms 
 //exposed by a list of characters
-fixpoint bool polarssl_cryptograms_in_chars_upper_bound(
+fixpoint bool polarssl_cryptograms_in_chars_bound(
                                   list<char> cs, list<polarssl_cryptogram> cgs);
 
 //Is the cryptogram generated in this run?
 fixpoint bool polarssl_cryptogram_is_generated(polarssl_cryptogram cg);
 
-//The set (as a list) of all public cryptograms that are generated in this run.
-fixpoint list<polarssl_cryptogram> polarssl_generated_public_cryptograms(
-                                   predicate(polarssl_cryptogram) polarssl_pub);
-
 //How deep are cryptograms nested through their payload?
 fixpoint nat polarssl_cryptogram_level(polarssl_cryptogram cg);
 
 //Upper bound on the nesting of cryptograms.
-fixpoint nat polarssl_cryprogram_level_upper_bound();
+fixpoint nat polarssl_cryprogram_level_bound();
 
 @*/
 
@@ -212,57 +204,39 @@ lemma polarssl_cryptogram
 
 /*@
 
-lemma void polarssl_cryptograms_in_chars_upper_bound_from(
+lemma void polarssl_cryptograms_in_chars_bound_from(
                                                  list<char> cs, 
                                                  list<polarssl_cryptogram> cgs);
-  requires true == polarssl_cryptograms_in_chars_upper_bound(cs, cgs);
+  requires true == polarssl_cryptograms_in_chars_bound(cs, cgs);
   ensures  true == subset(polarssl_cryptograms_in_chars(cs), cgs);
 
-lemma void polarssl_cryptograms_in_chars_upper_bound_to(
-                                                 list<char> cs, 
-                                                 list<polarssl_cryptogram> cgs);
-  requires cgs == polarssl_cryptograms_in_chars(cs);
-  ensures  true == polarssl_cryptograms_in_chars_upper_bound(cs, cgs);
+lemma void polarssl_cryptograms_in_chars_bound_to(list<char> cs);
+  requires true;
+  ensures  true == polarssl_cryptograms_in_chars_bound(
+                                         cs, polarssl_cryptograms_in_chars(cs));
 
-lemma void polarssl_cryptograms_in_chars_upper_bound_join(
+lemma void polarssl_cryptograms_in_chars_bound_join(
                                 list<char> cs1, list<polarssl_cryptogram> cgs1,
                                 list<char> cs2, list<polarssl_cryptogram> cgs2);
-  requires polarssl_cryptograms_in_chars_upper_bound(cs1, cgs1) &&
-           polarssl_cryptograms_in_chars_upper_bound(cs2, cgs2);
-  ensures  true == polarssl_cryptograms_in_chars_upper_bound(
+  requires polarssl_cryptograms_in_chars_bound(cs1, cgs1) &&
+           polarssl_cryptograms_in_chars_bound(cs2, cgs2);
+  ensures  true == polarssl_cryptograms_in_chars_bound(
                                            append(cs1, cs2), union(cgs1, cgs2));
 
-lemma void polarssl_cryptograms_in_chars_upper_bound_split(
+lemma void polarssl_cryptograms_in_chars_bound_split(
                            list<char> cs, list<polarssl_cryptogram> cgs, int i);
   requires 0 <= i && i <= length(cs) &&
-           polarssl_cryptograms_in_chars_upper_bound(cs, cgs);
-  ensures  polarssl_cryptograms_in_chars_upper_bound(take(i, cs), cgs) &&
-           polarssl_cryptograms_in_chars_upper_bound(drop(i, cs), cgs);
+           polarssl_cryptograms_in_chars_bound(cs, cgs);
+  ensures  polarssl_cryptograms_in_chars_bound(take(i, cs), cgs) &&
+           polarssl_cryptograms_in_chars_bound(drop(i, cs), cgs);
 
-lemma void polarssl_cryptograms_in_chars_upper_bound_intersection(
-                                                list<char> cs, 
-                                                list<polarssl_cryptogram> cgs1,
-                                                list<polarssl_cryptogram> cgs2);
-  requires polarssl_cryptograms_in_chars_upper_bound(cs, cgs1) &&
-           polarssl_cryptograms_in_chars_upper_bound(cs, cgs2);
-  ensures  true == polarssl_cryptograms_in_chars_upper_bound(
-                                                  cs, intersection(cgs1, cgs2));
-
-lemma void polarssl_cryptograms_in_chars_upper_bound_subset(
+lemma void polarssl_cryptograms_in_chars_bound_subset(
                                                 list<char> cs, 
                                                 list<polarssl_cryptogram> cgs1,
                                                 list<polarssl_cryptogram> cgs2);
   requires subset(cgs1, cgs2) && 
-           polarssl_cryptograms_in_chars_upper_bound(cs, cgs1);
-  ensures  true == polarssl_cryptograms_in_chars_upper_bound(cs, cgs2);
-
-//Derived
-lemma void polarssl_cryptograms_in_chars_split(list<char> cs, int i);
-  requires 0 <= i && i <= length(cs);
-  ensures  subset(polarssl_cryptograms_in_chars(take(i, cs)), 
-                  polarssl_cryptograms_in_chars(cs)) &&
-           subset(polarssl_cryptograms_in_chars(drop(i, cs)), 
-                  polarssl_cryptograms_in_chars(cs));
+           polarssl_cryptograms_in_chars_bound(cs, cgs1);
+  ensures  true == polarssl_cryptograms_in_chars_bound(cs, cgs2);
 
 @*/
 
@@ -284,93 +258,90 @@ predicate polarssl_cryptogram(char* chars, int len, list<char> cs,
   true == polarssl_cryptogram_is_generated(cg) &&
   //Not necessary but for convenience
   cons(cg, nil) == polarssl_cryptograms_in_chars(cs) &&
-  true == polarssl_cryptograms_in_chars_upper_bound(cs, cons(cg, nil))
+  true == polarssl_cryptograms_in_chars_bound(cs, cons(cg, nil))
 ;
 
 //Derived
-lemma void polarssl_cryptogram_in_upper_bound(
-                                          list<char> cs, polarssl_cryptogram cg,
-                                          list<polarssl_cryptogram> cgs);
+lemma void polarssl_cryptogram_in_bound(list<char> cs, polarssl_cryptogram cg,
+                                        list<polarssl_cryptogram> cgs);
   requires cs == polarssl_chars_for_cryptogram(cg) &&
-           true == polarssl_cryptograms_in_chars_upper_bound(cs, cgs);
+           true == polarssl_cryptograms_in_chars_bound(cs, cgs);
   ensures  true == mem(cg, cgs);
 
 @*/
 
 ///////////////////////////////////////////////////////////////////////////////
-// PolarSSL generated public cryptograms //////////////////////////////////////
+// PolarSSL public characters /////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
 /*@
 
-lemma void polarssl_generated_public_cryptograms_assume(
+predicate_ctor polarssl_public_generated_chars
+                               (predicate(polarssl_cryptogram) polarssl_pub)
+                               (list<char> cs) =
+  [_]dummy_foreach(polarssl_cryptograms_in_chars(cs), polarssl_pub) &*&
+  true == forall(polarssl_cryptograms_in_chars(cs),
+                 polarssl_cryptogram_is_generated)
+;
+
+lemma void polarssl_public_generated_chars_assume(
                                     predicate(polarssl_cryptogram) polarssl_pub,
                                     list<char> cs);
   requires true;
-  ensures  true == polarssl_cryptograms_in_chars_upper_bound(
-                       cs, polarssl_generated_public_cryptograms(polarssl_pub));
+  ensures  [_]polarssl_public_generated_chars(polarssl_pub)(cs);
 
-lemma void polarssl_generated_public_cryptograms_from(
+//Derived
+lemma void polarssl_public_generated_cryptogram_chars(
                                     predicate(polarssl_cryptogram) polarssl_pub,
                                     polarssl_cryptogram cg);
-  requires true == mem(cg, polarssl_generated_public_cryptograms(polarssl_pub));
+  requires true == polarssl_cryptogram_is_generated(cg) &*& [_]polarssl_pub(cg);
+  ensures  [_]polarssl_public_generated_chars(polarssl_pub)(
+                                             polarssl_chars_for_cryptogram(cg));
+
+//Derived
+lemma void polarssl_public_generated_chars_extract(
+                                    predicate(polarssl_cryptogram) polarssl_pub,
+                                    list<char> cs, polarssl_cryptogram cg);
+  requires [_]polarssl_public_generated_chars(polarssl_pub)(cs) &*&
+           true == mem(cg, polarssl_cryptograms_in_chars(cs)) ||
+           cs == polarssl_chars_for_cryptogram(cg);
   ensures  true == polarssl_cryptogram_is_generated(cg) &*& [_]polarssl_pub(cg);
 
-lemma void polarssl_generated_public_cryptograms_to(
-                                    predicate(polarssl_cryptogram) polarssl_pub,
-                                    polarssl_cryptogram cg);
-  requires true == polarssl_cryptogram_is_generated(cg) &*& [_]polarssl_pub(cg);
-  ensures  true == mem(cg, polarssl_generated_public_cryptograms(polarssl_pub));
-
 //Derived
-lemma void polarssl_cryptograms_in_chars_public_upper_bound_join(
+lemma void polarssl_public_generated_chars_join(
                                    predicate(polarssl_cryptogram) polarssl_pub,
                                    list<char> cs1, list<char> cs2);
-  requires polarssl_cryptograms_in_chars_upper_bound(cs1, 
-                        polarssl_generated_public_cryptograms(polarssl_pub)) &&
-           polarssl_cryptograms_in_chars_upper_bound(cs2, 
-                        polarssl_generated_public_cryptograms(polarssl_pub));
-  ensures  true == polarssl_cryptograms_in_chars_upper_bound(append(cs1, cs2),
-                        polarssl_generated_public_cryptograms(polarssl_pub));
+  requires [_]polarssl_public_generated_chars(polarssl_pub)(cs1) &*&
+           [_]polarssl_public_generated_chars(polarssl_pub)(cs2);
+  ensures  [_]polarssl_public_generated_chars(polarssl_pub)(append(cs1, cs2));
 
 //Derived
-lemma void polarssl_cryptograms_in_chars_public_upper_bound_split(
+lemma void polarssl_public_generated_chars_split(
                                    predicate(polarssl_cryptogram) polarssl_pub,
                                    list<char> cs, int i);
-     requires 0 <= i && i <= length(cs) &&
-              polarssl_cryptograms_in_chars_upper_bound(cs,
-                         polarssl_generated_public_cryptograms(polarssl_pub));
-     ensures  polarssl_cryptograms_in_chars_upper_bound(take(i, cs), 
-                         polarssl_generated_public_cryptograms(polarssl_pub)) &&
-              polarssl_cryptograms_in_chars_upper_bound(drop(i, cs), 
-                         polarssl_generated_public_cryptograms(polarssl_pub));
+     requires 0 <= i && i <= length(cs) &*&
+              [_]polarssl_public_generated_chars(polarssl_pub)(cs);
+     ensures  [_]polarssl_public_generated_chars(polarssl_pub)(take(i, cs)) &*&
+              [_]polarssl_public_generated_chars(polarssl_pub)(drop(i, cs));
+
+///////////////////////////////////////////////////////////////////////////////
+// PolarSSL public messages ///////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+
+predicate_ctor polarssl_public_message
+         (predicate(polarssl_cryptogram) polarssl_pub)
+         (char* chars, int len, list<char> cs) =
+  chars(chars, len, cs) &*&
+  [_]polarssl_public_generated_chars(polarssl_pub)(cs)
+;
 
 //Derived
-lemma void polarssl_generated_public_cryptograms_upper_bound(
-                                    predicate(polarssl_cryptogram) polarssl_pub,
-                                    polarssl_cryptogram cg);
-  requires true == polarssl_cryptogram_is_generated(cg) &*& [_]polarssl_pub(cg);
-  ensures  true == polarssl_cryptograms_in_chars_upper_bound(
-                           polarssl_chars_for_cryptogram(cg), 
-                           polarssl_generated_public_cryptograms(polarssl_pub));
-
-//Derived
-lemma void polarssl_generated_public_cryptograms_subset(
-                                    predicate(polarssl_cryptogram) polarssl_pub,
-                                    list<char> cs);
-  requires true == subset(polarssl_cryptograms_in_chars(cs),
-                          polarssl_generated_public_cryptograms(polarssl_pub));
-  ensures  true == polarssl_cryptograms_in_chars_upper_bound(
-                       cs, polarssl_generated_public_cryptograms(polarssl_pub));
-
-//Derived
-lemma void polarssl_cryptograms_in_chars_generated(
-                                    predicate(polarssl_cryptogram) polarssl_pub,
-                                    list<char> cs);
-  requires true == subset(polarssl_cryptograms_in_chars(cs),
-                          polarssl_generated_public_cryptograms(polarssl_pub));
-  ensures  true == forall(polarssl_cryptograms_in_chars(cs), 
-                          polarssl_cryptogram_is_generated);
+lemma void polarssl_public_message_from_cryptogram(
+                   predicate(polarssl_cryptogram) polarssl_pub,
+                   char* chars, int len, list<char> cs, polarssl_cryptogram cg);
+  requires polarssl_cryptogram(chars, len, cs, cg) &*&
+           [_]polarssl_pub(cg);
+  ensures  polarssl_public_message(polarssl_pub)(chars, len, cs);
 
 @*/
 
@@ -386,10 +357,10 @@ fixpoint bool polarssl_cryprogram_has_lower_level(nat bound,
   return int_of_nat(polarssl_cryptogram_level(cg)) < int_of_nat(bound);
 }
 
-lemma void polarssl_cryprogram_level_upper_bound_apply(polarssl_cryptogram cg);
+lemma void polarssl_cryprogram_level_bound_apply(polarssl_cryptogram cg);
   requires true == polarssl_cryptogram_is_generated(cg);
   ensures  true == polarssl_cryprogram_has_lower_level(
-                            succ(polarssl_cryprogram_level_upper_bound()), cg);
+                            succ(polarssl_cryprogram_level_bound()), cg);
 
 lemma void polarssl_cryptogram_level_flat_constraints(polarssl_cryptogram cg);
   requires true == polarssl_cryptogram_is_generated(cg);
@@ -408,21 +379,21 @@ lemma void polarssl_cryptogram_level_nested_constraints(
                                            polarssl_cryptogram_level(cg1), cg2);
 
 //Derived
-lemma void polarssl_cryptogram_level_nested_constraints_upper_bound(
-                                       polarssl_cryptogram cg, nat upper_bound);
+lemma void polarssl_cryptogram_level_nested_constraints_bound(
+                                       polarssl_cryptogram cg, nat bound);
   requires polarssl_cryptogram_is_generated(cg) &&
            polarssl_cryptogram_is_nested(cg) &&
-           polarssl_cryprogram_has_lower_level(succ(upper_bound), cg);
+           polarssl_cryprogram_has_lower_level(succ(bound), cg);
   ensures  true == forall(
                  polarssl_cryptograms_in_chars(polarssl_cryptogram_payload(cg)),
-                            (polarssl_cryprogram_has_lower_level)(upper_bound));
+                            (polarssl_cryprogram_has_lower_level)(bound));
 
 //Derived
-lemma void polarssl_cryptograms_generated_level_upper_bound(
+lemma void polarssl_cryptograms_generated_level_bound(
                                                  list<polarssl_cryptogram> cgs);
   requires true == forall(cgs, polarssl_cryptogram_is_generated);
   ensures  true == forall(cgs, (polarssl_cryprogram_has_lower_level)
-                               (succ(polarssl_cryprogram_level_upper_bound())));
+                               (succ(polarssl_cryprogram_level_bound())));
 @*/
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -493,9 +464,9 @@ void sha512(const char *input, size_t ilen, char* output, int is384);
 
 void sha512_hmac(const char *key, size_t keylen, const char *input, size_t ilen,
                  char *output, int is384);
-  /*@ requires [?f1]chars(key, keylen, ?cs_key) &*& 
-                 exists<polarssl_cryptogram>(?cg_key) &*&
-                 cg_key == polarssl_symmetric_key(?p, ?c) &*&
+  /*@ requires [?f0]polarssl_world(?polarssl_pub) &*&
+               [?f1]chars(key, keylen, ?cs_key) &*&
+                 polarssl_key_id(?p, ?c) &*&
                [?f2]chars(input, ilen, ?cs_pay) &*&
                  ilen >= POLARSSL_MIN_HMAC_INPUT_BYTE_SIZE &*&
                chars(output, ?length, _) &*&
@@ -503,13 +474,15 @@ void sha512_hmac(const char *key, size_t keylen, const char *input, size_t ilen,
                    length == 64
                  :
                    length == 48 && is384 == 1; @*/
-  /*@ ensures  [f1]chars(key, keylen, cs_key) &*& 
+  /*@ ensures  [f0]polarssl_world(polarssl_pub) &*&
+               [f1]chars(key, keylen, cs_key) &*& 
                [f2]chars(input, ilen, cs_pay) &*&
-               cs_key != polarssl_chars_for_cryptogram(cg_key) ?
-                 chars(output, length, _)
-               :
+               cs_key == polarssl_chars_for_cryptogram(
+                           polarssl_symmetric_key(p, c)) ?
                  polarssl_cryptogram(output, length, ?cs, ?cg) &*&
-                 cg == polarssl_hmac(p, c, cs_pay); @*/
+                 cg == polarssl_hmac(p, c, cs_pay)
+               :
+                 polarssl_public_message(polarssl_pub)(output, length, _); @*/
                  
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -536,38 +509,19 @@ predicate aes_context_initialized(aes_context *context,
 int aes_setkey_enc(aes_context *ctx, const char *key, unsigned int keysize);
   /*@ requires [?f]chars(key, ?size_key, ?cs_key) &*& 
                  keysize == size_key * 8 &*&
-                 exists<polarssl_cryptogram>(?cg_key) &*&
+                 polarssl_key_id(?p, ?c) &*&
                aes_context(ctx) &*&
                (keysize == 128 || keysize == 192 || keysize == 256); @*/
   /*@ ensures  [f]chars(key, size_key, cs_key) &*&
                result == 0 ?
                  aes_context_initialized(ctx, ?key_id) &*&
-                 switch(cg_key)
-                 {
-                   case polarssl_random(p0, c0):
-                     return key_id == none;
-                   case polarssl_symmetric_key(p0, c0):
-                     return cs_key == polarssl_chars_for_cryptogram(cg_key) ?
-                               key_id == some(pair(p0, c0))
-                             :
-                               key_id == none;
-                   case polarssl_hash(cs0):
-                     return key_id == none;
-                   case polarssl_hmac(p0, c0, cs0):
-                     return key_id == none;
-                   case polarssl_encrypted(p0, c0, cs0, ent0):
-                     return key_id == none;
-                   case polarssl_auth_encrypted(p0, c0, mac0, cs0, ent0):
-                     return key_id == none;
-                   case polarssl_public_key(p0, c0):
-                     return key_id == none;
-                   case polarssl_private_key(p0, c0):
-                     return key_id == none;
-                   case polarssl_asym_encrypted(p0, c0, cs0, ent0):
-                     return key_id == none;
-                   case polarssl_asym_signature(p0, c0, cs0, ent0):
-                     return key_id == none;
-                 }
+                 (
+                   cs_key == polarssl_chars_for_cryptogram(
+                               polarssl_symmetric_key(p, c)) ?
+                     key_id == some(pair(p, c))
+                   :
+                     key_id == none
+                 )
                :
                  aes_context(ctx); @*/
 
@@ -579,17 +533,19 @@ int aes_crypt_cfb128(aes_context *ctx, int mode, size_t length,
                                 size_t *iv_off, char *iv, 
                                 const char *input, char *output);
   /*@ requires
+        [?f0]polarssl_world(?polarssl_pub) &*&
         aes_context_initialized(ctx, ?key_id) &*&
         (mode == POLARSSL_AES_ENCRYPT || mode == POLARSSL_AES_DECRYPT) &*&
         chars(iv, 16, ?cs_iv) &*& u_integer(iv_off, ?iv_off_val) &*&
         iv_off_val >= 0 &*& iv_off_val < 16 &*&
-        [?f]chars(input, length, ?cs_input) &*&
+        [?f1]chars(input, length, ?cs_input) &*&
           length >= POLARSSL_MIN_ENCRYPTED_BYTE_SIZE &*&
         chars(output, length, _); @*/
   /*@ ensures
+        [f0]polarssl_world(polarssl_pub) &*&
         aes_context_initialized(ctx, key_id) &*&
         chars(iv, 16, _) &*& u_integer(iv_off, _) &*&
-        [f]chars(input, length, cs_input) &*&
+        [f1]chars(input, length, cs_input) &*&
         result == 0 ?
           mode == POLARSSL_AES_ENCRYPT ?
           (
@@ -606,7 +562,7 @@ int aes_crypt_cfb128(aes_context *ctx, int mode, size_t length,
                                       append(chars_of_int(iv_off_val), cs_iv));
                 };
               case none: return
-                chars(output, length, _);
+                polarssl_public_message(polarssl_pub)(output, length, _);
             }
           ) :
           mode == POLARSSL_AES_DECRYPT ?
@@ -619,12 +575,12 @@ int aes_crypt_cfb128(aes_context *ctx, int mode, size_t length,
                   case pair(principal, id): return
                     chars(output, length, ?cs_output) &*&
                     cs_input == polarssl_chars_for_cryptogram(
-                      polarssl_encrypted(
+                                  polarssl_encrypted(
                                       principal, id, cs_output,
                                       append(chars_of_int(iv_off_val), cs_iv)));
                 };
               case none: return
-                chars(output, length, ?cs_output);
+                polarssl_public_message(polarssl_pub)(output, length, _);
             }
           ) :
           false
@@ -656,7 +612,7 @@ int gcm_init(gcm_context *ctx, int cipher,
              const char *key, unsigned int keysize);
   /*@ requires [?f]chars(key, ?size_key, ?cs_key) &*&
                  keysize == size_key * 8 &*&
-                 exists<polarssl_cryptogram>(?cg_key) &*&
+                 polarssl_key_id(?p, ?c) &*&
                gcm_context(ctx) &*& 
                (keysize == 128 || keysize == 192 || keysize == 256) &*&
                // only AES supported for now
@@ -664,32 +620,13 @@ int gcm_init(gcm_context *ctx, int cipher,
   /*@ ensures  [f]chars(key, size_key / 8, cs_key) &*&
                result == 0 ?
                  gcm_context_initialized(ctx, ?key_id) &*&
-                 switch(cg_key)
-                 {
-                   case polarssl_random(p0, c0):
-                     return key_id == none;
-                   case polarssl_symmetric_key(p0, c0):
-                     return cs_key == polarssl_chars_for_cryptogram(cg_key) ?
-                               key_id == some(pair(p0, c0))
-                             :
-                               key_id == none;
-                   case polarssl_public_key(p0, c0):
-                     return key_id == none;
-                   case polarssl_private_key(p0, c0):
-                     return key_id == none;
-                   case polarssl_hash(cs0):
-                     return key_id == none;
-                   case polarssl_hmac(p0, c0, cs0):
-                     return key_id == none;
-                   case polarssl_encrypted(p0, c0, cs0, ent0):
-                     return key_id == none;
-                   case polarssl_auth_encrypted(p0, c0, mac0, cs0, ent0):
-                     return key_id == none;
-                   case polarssl_asym_encrypted(p0, c0, cs0, ent0):
-                     return key_id == none;
-                   case polarssl_asym_signature(p0, c0, cs0, ent0):
-                     return key_id == none;
-                 }
+                 (
+                   cs_key == polarssl_chars_for_cryptogram(
+                               polarssl_symmetric_key(p, c)) ?
+                     key_id == some(pair(p, c))
+                   :
+                     key_id == none
+                 )
                :
                  gcm_context(ctx); @*/
 
@@ -703,6 +640,7 @@ int gcm_crypt_and_tag(gcm_context *ctx, int mode, size_t length,
                       const char *input, char *output, 
                       size_t tag_len, char *tag);
   /*@ requires
+        [?f0]polarssl_world(?polarssl_pub) &*&
         gcm_context_initialized(ctx, ?key_id) &*&
         // this function is only spec'ed for encryption, use the function 
         // gcm_auth_decrypt to decrypt
@@ -711,29 +649,29 @@ int gcm_crypt_and_tag(gcm_context *ctx, int mode, size_t length,
           chars(iv, iv_len, ?cs_iv) &*& iv_len == 16 &*&
         // no additional data supported yet
           add == NULL &*& add_len == 0 &*&
-        [?f]chars(input, length, ?cs_in) &*&
+        [?f1]chars(input, length, ?cs_in) &*&
           length >= POLARSSL_MIN_ENCRYPTED_BYTE_SIZE &*&
         chars(tag, 16, ?tag_cs_in) &*& 
         chars(output, length, _); @*/
   /*@ ensures
+        [f0]polarssl_world(polarssl_pub) &*&
         gcm_context_initialized(ctx, key_id) &*&
         chars(iv, 16, _) &*&
-        [f]chars(input, length, cs_in) &*&
+        [f1]chars(input, length, cs_in) &*&
         result == 0 ?
+          chars(tag, tag_len, ?tag_cs_out) &*&
           switch(key_id)
           {
             case some(pair) : return
               switch (pair)
               { 
                 case pair(principal, id): return
-                  chars(tag, tag_len, ?tag_cs_out) &*&
                   polarssl_cryptogram(output, length, ?cs_out, ?cg_out) &*&
                   cg_out == polarssl_auth_encrypted(
                               principal, id, tag_cs_out, cs_in, cs_iv);
               };
             case none: return
-              chars(tag, tag_len, _) &*&
-              chars(output, length, _);
+              polarssl_public_message(polarssl_pub)(output, length, _);
           }
         :
           chars(tag, tag_len, _) &*&
@@ -929,37 +867,18 @@ lemma void polarssl_info_for_keypair(int principal, int count);
 
 int pk_parse_public_key(pk_context *ctx, const char *key, size_t keylen);
   /*@ requires pk_context_initialized(ctx) &*&
-               [?f]chars(key, keylen, ?cs_key) &*& 
-                 exists<polarssl_cryptogram>(?cg_key); @*/
+               [?f]chars(key, keylen, ?cs_key) &*&
+                 polarssl_key_id(?p, ?c); @*/
   /*@ ensures  [f]chars(key, keylen, cs_key) &*& 
                result == 0 ?
                  pk_context_with_key(ctx, pk_public, keylen, ?key_id) &*&
-                 switch(cg_key)
-                 {
-                   case polarssl_random(p0, c0):
-                     return key_id == none;
-                   case polarssl_symmetric_key(p0, c0):
-                     return key_id == none;
-                   case polarssl_public_key(p0, c0):
-                     return cs_key == polarssl_chars_for_cryptogram(cg_key) ?
-                             key_id == some(pair(p0, c0))
-                           :
-                             key_id == none;
-                   case polarssl_private_key(p0, c0):
-                     return key_id == none;
-                   case polarssl_hash(cs0):
-                     return key_id == none;
-                   case polarssl_hmac(p0, c0, cs0):
-                     return key_id == none;
-                   case polarssl_encrypted(p0, c0, cs0, ent0):
-                     return key_id == none;
-                   case polarssl_auth_encrypted(p0, c0, mac0, cs0, ent0):
-                     return key_id == none;
-                   case polarssl_asym_encrypted(p0, c0, cs0, ent0):
-                     return key_id == none;
-                   case polarssl_asym_signature(p0, c0, cs0, ent0):
-                     return key_id == none;
-                 }
+                 (
+                   cs_key == polarssl_chars_for_cryptogram(
+                               polarssl_public_key(p, c)) ?
+                     key_id == some(pair(p, c))
+                   :
+                     key_id == none
+                 )
                :
                  pk_context_garbage(ctx); @*/
 
@@ -968,57 +887,39 @@ int pk_parse_key(pk_context *ctx, const char *key, size_t keylen,
   /*@ requires pk_context_initialized(ctx) &*&
                pwd == NULL &*& pwdlen == 0 &*&
                [?f]chars(key, keylen, ?cs_key) &*& 
-                 exists<polarssl_cryptogram>(?cg_key);
-  @*/
+                 polarssl_key_id(?p, ?c); @*/
   /*@ ensures  [f]chars(key, keylen, cs_key) &*& 
                result == 0 ?
                  pk_context_with_key(ctx, pk_private, keylen, ?key_id) &*&
-                 switch(cg_key)
-                 {
-                  case polarssl_random(p0, c0):
-                    return key_id == none;
-                  case polarssl_symmetric_key(p0, c0):
-                    return key_id == none;
-                  case polarssl_public_key(p0, c0):
-                    return key_id == none;
-                  case polarssl_private_key(p0, c0):
-                    return cs_key == polarssl_chars_for_cryptogram(cg_key) ?
-                              key_id == some(pair(p0, c0))
-                            :
-                              key_id == none;
-                  case polarssl_hash(cs0):
-                    return key_id == none;
-                  case polarssl_hmac(p0, c0, cs0):
-                    return key_id == none;
-                  case polarssl_encrypted(p0, c0, cs0, ent0):
-                    return key_id == none;
-                  case polarssl_auth_encrypted(p0, c0, mac0, cs0, ent0):
-                    return key_id == none;
-                  case polarssl_asym_encrypted(p0, c0, cs0, ent0):
-                    return key_id == none;
-                  case polarssl_asym_signature(p0, c0, cs0, ent0):
-                    return key_id == none;
-                }
+                 (
+                   cs_key == polarssl_chars_for_cryptogram(
+                               polarssl_private_key(p, c)) ?
+                     key_id == some(pair(p, c))
+                   :
+                     key_id == none
+                 )
                :
                  pk_context_garbage(ctx); @*/
   
 int pk_encrypt(pk_context *ctx, const char *input, size_t ilen, char *output, 
                size_t *olen, size_t osize, void *f_rng, void *p_rng);
-  /*@ requires  random_function_predicate(?state_pred) &*&
+  /*@ requires  [?f0]polarssl_world(?polarssl_pub) &*&
+                random_function_predicate(?state_pred) &*&
                 pk_context_with_key(ctx, pk_public, ?nbits, ?key_id) &*&
-                [?f0]chars(input, ilen, ?cs_in) &*&
+                [?f1]chars(input, ilen, ?cs_in) &*&
                   ilen >= POLARSSL_MIN_ENCRYPTED_BYTE_SIZE &*&
                   // encrypted message can not be bigger than key
                   ilen * 8 <= nbits &*&
                 u_integer(olen, _) &*&
                 chars(output, osize, _) &*&
                 [_]is_random_function(f_rng, state_pred) &*&
-                [?f1]state_pred(p_rng) &*&
+                [?f2]state_pred(p_rng) &*&
                 polarssl_generated_values(?principal, ?count); @*/
-  /*@ ensures   pk_context_with_key(ctx, pk_public, nbits, key_id) &*&
-                [f0]chars(input, ilen, cs_in) &*&
+  /*@ ensures   [f0]polarssl_world(polarssl_pub) &*&
+                pk_context_with_key(ctx, pk_public, nbits, key_id) &*&
+                [f1]chars(input, ilen, cs_in) &*&
                 u_integer(olen, ?olen_val) &*&
-                [f1]state_pred(p_rng) &*&
+                [f2]state_pred(p_rng) &*&
                 polarssl_generated_values(principal, count + 1) &*&
                 result == 0 ?
                   olen_val > 0 &*& olen_val < osize &*& 
@@ -1036,7 +937,8 @@ int pk_encrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                                                   principal1, id1, cs_in, ?ent);
                       };
                     case none: return
-                      chars(output, olen_val, _);
+                      polarssl_public_message(polarssl_pub)
+                                             (output, olen_val, _);
                   }
                 :
                   chars(output, osize, _)
@@ -1044,25 +946,26 @@ int pk_encrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
 
 int pk_decrypt(pk_context *ctx, const char *input, size_t ilen, char *output, 
                size_t *olen, size_t osize, void *f_rng, void *p_rng);
-  /*@ requires  random_function_predicate(?state_pred) &*&
+  /*@ requires  [?f0]polarssl_world(?polarssl_pub) &*&
+                random_function_predicate(?state_pred) &*&
                 pk_context_with_key(ctx, pk_private, ?nbits, ?key_id) &*&
-                [?f0]chars(input, ilen, ?cs_in) &*&
+                [?f1]chars(input, ilen, ?cs_in) &*&
                   ilen >= POLARSSL_MIN_ENCRYPTED_BYTE_SIZE &*&
                   // message to decrypt can not be bigger than key
                   ilen * 8 <= nbits &*&
                 u_integer(olen, _) &*&
                 chars(output, osize, _) &*&
                 [_]is_random_function(f_rng, state_pred) &*&
-                [?f1]state_pred(p_rng) &*&
+                [?f2]state_pred(p_rng) &*&
                 polarssl_generated_values(?principal1, ?count1); @*/
-  /*@ ensures   pk_context_with_key(ctx, pk_private, nbits, key_id) &*&
-                [f0]chars(input, ilen, cs_in) &*&
+  /*@ ensures   [f0]polarssl_world(polarssl_pub) &*&
+                pk_context_with_key(ctx, pk_private, nbits, key_id) &*&
+                [f1]chars(input, ilen, cs_in) &*&
                 u_integer(olen, ?olen_val) &*&
-                [f1]state_pred(p_rng) &*&
+                [f2]state_pred(p_rng) &*&
                 polarssl_generated_values(principal1, count1 + 1) &*&
                 result == 0 ?
                   olen_val * 2 > ilen &*&
-                  chars(output, olen_val, ?cs_out) &*&
                   chars(output + olen_val, osize - olen_val, _) &*&
                   exists<polarssl_cryptogram>(?cg_in) &*&
                   cs_in == polarssl_chars_for_cryptogram(cg_in) &*&
@@ -1075,12 +978,14 @@ int pk_decrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                       { 
                         case pair(principal3, id3): return
                           principal2 == principal3 && id2 == id3 ?
-                            cs_out == cs_out2
+                            chars(output, olen_val, cs_out2)
                           :
-                            nil == polarssl_cryptograms_in_chars(cs_out);
+                            polarssl_public_message(polarssl_pub)
+                                                   (output, olen_val, _);
                       };
-                    case none: 
-                      return true;
+                    case none: return
+                      polarssl_public_message(polarssl_pub)
+                                             (output, olen_val, _);
                   }
                 :
                   chars(output, osize, _)
@@ -1088,23 +993,25 @@ int pk_decrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
 
 int pk_sign(pk_context *ctx, int md_alg, const char *hash, size_t hash_len,
             char *sig, size_t *sig_len, void *f_rng, void *p_rng);
-  /*@ requires  random_function_predicate(?state_pred) &*&
+  /*@ requires  [?f0]polarssl_world(?polarssl_pub) &*&
+                random_function_predicate(?state_pred) &*&
                 pk_context_with_key(ctx, pk_private, ?nbits, ?key_id) &*&
                 // only signing of a general buffer for now
                 md_alg == POLARSSL_MD_NONE &*&
-                [?f0]chars(hash, hash_len, ?cs_in) &*&
+                [?f1]chars(hash, hash_len, ?cs_in) &*&
                   hash_len >= POLARSSL_MIN_HMAC_INPUT_BYTE_SIZE &*&
                   // hash to sign can not be bigger than key
                   hash_len * 8 <= nbits &*&
                 u_integer(sig_len, _) &*&
                 chars(sig, ?out_len, _) &*& 8 * out_len >= nbits &*&
                 [_]is_random_function(f_rng, state_pred) &*&
-                [?f1]state_pred(p_rng) &*&
+                [?f2]state_pred(p_rng) &*&
                 polarssl_generated_values(?principal1, ?count1); @*/
-  /*@ ensures   pk_context_with_key(ctx, pk_private, nbits, key_id) &*&
-                [f0]chars(hash, hash_len, cs_in) &*&
+  /*@ ensures   [f0]polarssl_world(polarssl_pub) &*&
+                pk_context_with_key(ctx, pk_private, nbits, key_id) &*&
+                [f1]chars(hash, hash_len, cs_in) &*&
                 u_integer(sig_len, ?sig_len_val) &*&
-                [f1]state_pred(p_rng) &*&
+                [f2]state_pred(p_rng) &*&
                 polarssl_generated_values(principal1, count1 + 1) &*&
                 result == 0 ?
                   sig_len_val > 0 &*& sig_len_val <= out_len &*& 
@@ -1121,7 +1028,7 @@ int pk_sign(pk_context *ctx, int md_alg, const char *hash, size_t hash_len,
                                                principal2, count2, cs_in, ?ent);
                       };
                     case none: return
-                      chars(sig, sig_len_val, _);
+                      polarssl_public_message(polarssl_pub)(sig, sig_len_val, _);
                   }
                 :
                   chars(sig, out_len, _); @*/
@@ -1211,45 +1118,16 @@ void net_usleep(unsigned long usec);
   //@ requires true;
   //@ ensures  true;
 
-/*@
-
-predicate_ctor polarssl_public_message
-         (predicate(polarssl_cryptogram) polarssl_pub)
-         (char* chars, int len, list<char> cs) =
-  chars(chars, len, cs) &*&
-  true == polarssl_cryptograms_in_chars_upper_bound(cs,
-                            polarssl_generated_public_cryptograms(polarssl_pub))
-;
-
-//Derived
-lemma void polarssl_public_message_from_cryptogram(
-                   predicate(polarssl_cryptogram) polarssl_pub,
-                   char* chars, int len, list<char> cs, polarssl_cryptogram cg);
-  requires polarssl_cryptogram(chars, len, cs, cg) &*&
-           [_]polarssl_pub(cg);
-  ensures  polarssl_public_message(polarssl_pub)(chars, len, cs);
-
-//Derived
-lemma void polarssl_public_message_from_chars(
-                   predicate(polarssl_cryptogram) polarssl_pub,
-                   char* chars, int len, list<char> cs);
-  requires chars(chars, len, cs) &*&
-           true == subset(polarssl_cryptograms_in_chars(cs),
-                          polarssl_generated_public_cryptograms(polarssl_pub));
-  ensures  polarssl_public_message(polarssl_pub)(chars, len, cs);
-
-@*/
-
 int net_send(void *ctx, const char *buf, size_t len);
-  /*@ requires [?f]polarssl_world(?polarssl_pub) &*&
+  /*@ requires [?f0]polarssl_world(?polarssl_pub) &*&
                integer(ctx, ?fd) &*&
                polarssl_net_status(fd, ?ip, ?port, connected) &*&
                len <= POLARSSL_MAX_MESSAGE_BYTE_SIZE &*&
-               polarssl_public_message(polarssl_pub)(buf, len, ?cs); @*/
-  /*@ ensures  [f]polarssl_world(polarssl_pub) &*&
+               [?f1]polarssl_public_message(polarssl_pub)(buf, len, ?cs); @*/
+  /*@ ensures  [f0]polarssl_world(polarssl_pub) &*&
                integer(ctx, fd)  &*&
                polarssl_net_status(fd, ip, port, connected) &*&
-               polarssl_public_message(polarssl_pub)(buf, len, cs); @*/
+               [f1]polarssl_public_message(polarssl_pub)(buf, len, cs); @*/
   
 int net_recv(void *ctx, char *buf, size_t len);
   /*@ requires [?f]polarssl_world(?polarssl_pub) &*&
@@ -1317,45 +1195,39 @@ typedef lemma void polarssl_bad_private_key_is_public(
             true == bad(p);
   ensures   polarssl_proof_pred() &*&
             [_]polarssl_pub(key);
-
+  
 typedef lemma void polarssl_hash_is_public(
                       predicate(polarssl_cryptogram) polarssl_pub,
                       predicate() polarssl_proof_pred)
-                         (polarssl_cryptogram hash,
-                          list<polarssl_cryptogram> cgs_pay);
+                         (polarssl_cryptogram hash);
   requires  polarssl_proof_pred() &*&
             hash == polarssl_hash(?pay) &*&
             length(pay) <= INT_MAX &*&
-            polarssl_cryptograms_in_chars_upper_bound(pay, cgs_pay) &&
-            subset(cgs_pay, polarssl_generated_public_cryptograms(polarssl_pub));
+            [_]polarssl_public_generated_chars(polarssl_pub)(pay);
   ensures   polarssl_proof_pred() &*&
             [_]polarssl_pub(hash);
 
 typedef lemma void polarssl_public_hmac_is_public(
                       predicate(polarssl_cryptogram) polarssl_pub,
                       predicate() polarssl_proof_pred)
-                         (polarssl_cryptogram hmac,
-                          list<polarssl_cryptogram> cgs_pay);
+                         (polarssl_cryptogram hmac);
   requires  polarssl_proof_pred() &*&
             hmac == polarssl_hmac(?p, ?c, ?pay) &*&
             length(pay) <= INT_MAX &*&
             [_]polarssl_pub(polarssl_symmetric_key(p, c)) &*&
-            polarssl_cryptograms_in_chars_upper_bound(pay, cgs_pay) &&
-            subset(cgs_pay, polarssl_generated_public_cryptograms(polarssl_pub));
+            [_]polarssl_public_generated_chars(polarssl_pub)(pay);
   ensures   polarssl_proof_pred() &*&
             [_]polarssl_pub(hmac);
 
 typedef lemma void polarssl_public_encryption_is_public(
                       predicate(polarssl_cryptogram) polarssl_pub,
                       predicate() polarssl_proof_pred)
-                         (polarssl_cryptogram encrypted, 
-                          list<polarssl_cryptogram> cgs_pay);
+                         (polarssl_cryptogram encrypted);
   requires  polarssl_proof_pred() &*&
             encrypted == polarssl_encrypted(?p, ?c, ?pay, ?ent) &*&
             length(pay) <= INT_MAX &*&
             [_]polarssl_pub(polarssl_symmetric_key(p, c)) &*&
-            polarssl_cryptograms_in_chars_upper_bound(pay, cgs_pay) &&
-            subset(cgs_pay, polarssl_generated_public_cryptograms(polarssl_pub));
+            [_]polarssl_public_generated_chars(polarssl_pub)(pay);
   ensures   polarssl_proof_pred() &*&
             [_]polarssl_pub(encrypted);
  
@@ -1370,20 +1242,17 @@ typedef lemma void polarssl_public_decryption_is_public(
             [_]polarssl_pub(key) &*&
             [_]polarssl_pub(encrypted);
   ensures   polarssl_proof_pred() &*&
-            true == subset(polarssl_cryptograms_in_chars(pay), 
-                           polarssl_generated_public_cryptograms(polarssl_pub));
+            [_]polarssl_public_generated_chars(polarssl_pub)(pay);
 
 typedef lemma void polarssl_public_auth_encryption_is_public(
                       predicate(polarssl_cryptogram) polarssl_pub,
                       predicate() polarssl_proof_pred)
-                         (polarssl_cryptogram encrypted, 
-                          list<polarssl_cryptogram> cgs_pay);
+                         (polarssl_cryptogram encrypted);
   requires  polarssl_proof_pred() &*&
             encrypted == polarssl_auth_encrypted(?p, ?c, ?mac, ?pay, ?ent) &*&
             length(pay) <= INT_MAX &*&
             [_]polarssl_pub(polarssl_symmetric_key(p, c)) &*&
-            polarssl_cryptograms_in_chars_upper_bound(pay, cgs_pay) &&
-            subset(cgs_pay, polarssl_generated_public_cryptograms(polarssl_pub));
+            [_]polarssl_public_generated_chars(polarssl_pub)(pay);
   ensures   polarssl_proof_pred() &*&
             [_]polarssl_pub(encrypted);
 
@@ -1398,20 +1267,17 @@ typedef lemma void polarssl_public_auth_decryption_is_public(
             [_]polarssl_pub(key) &*&
             [_]polarssl_pub(encrypted);
   ensures   polarssl_proof_pred() &*&
-            true == subset(polarssl_cryptograms_in_chars(pay), 
-                           polarssl_generated_public_cryptograms(polarssl_pub));
+            [_]polarssl_public_generated_chars(polarssl_pub)(pay);
 
 typedef lemma void polarssl_public_asym_encryption_is_public(
                       predicate(polarssl_cryptogram) polarssl_pub,
                       predicate() polarssl_proof_pred)
-                         (polarssl_cryptogram encrypted, 
-                          list<polarssl_cryptogram> cgs_pay);
+                         (polarssl_cryptogram encrypted);
   requires  polarssl_proof_pred() &*&
             encrypted == polarssl_asym_encrypted(?p, ?c, ?pay, ?ent) &*&
             length(pay) <= INT_MAX &*&
             [_]polarssl_pub(polarssl_public_key(p, c)) &*&
-            polarssl_cryptograms_in_chars_upper_bound(pay, cgs_pay) &&
-            subset(cgs_pay, polarssl_generated_public_cryptograms(polarssl_pub));
+            [_]polarssl_public_generated_chars(polarssl_pub)(pay);
   ensures   polarssl_proof_pred() &*&
             [_]polarssl_pub(encrypted);
 
@@ -1426,21 +1292,18 @@ typedef lemma void polarssl_public_asym_decryption_is_public(
             [_]polarssl_pub(key) &*& 
             [_]polarssl_pub(encrypted);
   ensures   polarssl_proof_pred() &*&
-            true == subset(polarssl_cryptograms_in_chars(pay), 
-                           polarssl_generated_public_cryptograms(polarssl_pub));
+            [_]polarssl_public_generated_chars(polarssl_pub)(pay);
 
 typedef lemma void polarssl_public_asym_signature_is_public(
                       predicate(polarssl_cryptogram) polarssl_pub,
                       predicate() polarssl_proof_pred)
-                         (polarssl_cryptogram sig,
-                          list<polarssl_cryptogram> cgs_pay);
+                         (polarssl_cryptogram sig);
   requires  polarssl_proof_pred() &*&
             sig == 
               polarssl_asym_signature(?p, ?c, ?pay, ?ent) &*&
             length(pay) <= INT_MAX &*&
             [_]polarssl_pub(polarssl_private_key(p, c)) &*&
-            polarssl_cryptograms_in_chars_upper_bound(pay, cgs_pay) &&
-            subset(cgs_pay, polarssl_generated_public_cryptograms(polarssl_pub));
+            [_]polarssl_public_generated_chars(polarssl_pub)(pay);
   ensures   polarssl_proof_pred() &*&
             [_]polarssl_pub(sig);
 

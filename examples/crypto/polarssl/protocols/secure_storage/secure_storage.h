@@ -39,16 +39,13 @@ predicate ss_polarssl_pub(polarssl_cryptogram cg) =
     case polarssl_hmac(p0, c0, cs0):
       return bad(p0) || app_send_event(p0, cs0);
     case polarssl_encrypted(p0, c0, cs0, ent0):
-      return subset(polarssl_cryptograms_in_chars(cs0),
-                    polarssl_generated_public_cryptograms(ss_polarssl_pub)) &&
-             bad(p0);
+      return [_]polarssl_public_generated_chars(ss_polarssl_pub)(cs0) &*&
+             true == bad(p0);
     case polarssl_auth_encrypted(p0, c0, mac0, cs0, ent0):
-      return subset(polarssl_cryptograms_in_chars(cs0),
-                    polarssl_generated_public_cryptograms(ss_polarssl_pub)) &&
-             bad(p0);
+      return [_]polarssl_public_generated_chars(ss_polarssl_pub)(cs0) &*&
+             true == bad(p0);
     case polarssl_asym_encrypted(p0, c0, cs0, ent0):
-      return true == subset(polarssl_cryptograms_in_chars(cs0),
-                       polarssl_generated_public_cryptograms(ss_polarssl_pub));
+      return [_]polarssl_public_generated_chars(ss_polarssl_pub)(cs0);
     case polarssl_asym_signature(p0, c0, cs0, ent0):
         return true == bad(p0);
   }

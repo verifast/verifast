@@ -45,7 +45,7 @@ lemma void assume_chars_contain_public_cryptograms(char* buffer, int size)
   ensures  [f]polarssl_world(pub) &*&
            polarssl_public_message(pub)(buffer, size, cs);
 {
-  polarssl_generated_public_cryptograms_assume(pub, cs);
+  polarssl_public_generated_chars_assume(pub, cs);
   close polarssl_public_message(pub)(buffer, size, cs);
 }
 
@@ -98,10 +98,7 @@ void polarssl_attacker_send_concatenation(havege_state *havege_state,
     {
       memcpy(buffer3, buffer1, (unsigned int) size1);
       memcpy((char*) buffer3 + size1, buffer2, (unsigned int) size2);
-      /*@ polarssl_cryptograms_in_chars_upper_bound_join(
-                           cs1, polarssl_generated_public_cryptograms(pub),
-                           cs2, polarssl_generated_public_cryptograms(pub)); @*/
-      //@ union_refl(polarssl_generated_public_cryptograms(pub));
+      //@ polarssl_public_generated_chars_join(pub, cs1, cs2);
       /*@ close polarssl_public_message(pub)(buffer3, size1 + size2, 
                                              append(cs1, cs2)); @*/
       net_send(socket, buffer3, (unsigned int) (size1 + size2));
@@ -135,8 +132,7 @@ void polarssl_attacker_send_split(havege_state *havege_state,
     r_int_with_bounds(havege_state, &temp, 0, size1);
     size2 = temp;
     //@ chars_split(buffer, size2);
-    /*@ polarssl_cryptograms_in_chars_upper_bound_split(
-                        cs, polarssl_generated_public_cryptograms(pub), size2); @*/
+    //@ polarssl_public_generated_chars_split(pub, cs, size2);
     //@ close polarssl_public_message(pub)(buffer, size2, take(size2, cs));
     net_send(socket, buffer, (unsigned int) (size2));
     /*@ close polarssl_public_message(pub)((void*)buffer + size2, size1 - size2, 
@@ -253,8 +249,9 @@ void polarssl_attacker_send_keys(havege_state *havege_state,
   //@ close exists(pub_key_cg);
   if (pk_write_key_pem(&context, priv_key, key_size) != 0) abort();
   //@ open polarssl_cryptogram(priv_key, key_size, ?priv_key_cs, ?priv_key_cg);
-  //@ close exists(priv_key_cg);
+  //@ close polarssl_key_id(0, 0);
   if (pk_parse_public_key(&context_pub, pub_key, key_size) != 0) abort();
+  //@ close polarssl_key_id(0, 0);
   if (pk_parse_key(&context_priv, priv_key, key_size, NULL, 0) != 0) abort();
   
   //@ assert is_polarssl_bad_key_is_public(?proof1, pub, pred);
@@ -318,7 +315,7 @@ void polarssl_attacker_send_hash(havege_state *havege_state,
     //@ assert polarssl_cryptogram(hash, 64, ?h_cs, ?h_cg);
     //@ assert h_cg == polarssl_hash(pay);
     //@ assert is_polarssl_hash_is_public(?proof, pub, pred);
-    //@ proof(h_cg, polarssl_generated_public_cryptograms(pub));
+    //@ proof(h_cg);
     //@ close polarssl_public_message(pub)(buffer, size, pay);
     //@ polarssl_public_message_from_cryptogram(pub, hash, 64, h_cs, h_cg);
     net_send(socket, hash, 64);
@@ -353,46 +350,17 @@ void polarssl_attacker_send_hmac(havege_state *havege_state,
     //@ int p;
     //@ int c;
     //@ polarssl_cryptogram cg = polarssl_symmetric_key(p, c);
-    //@ close exists<polarssl_cryptogram>(cg);
     //@ open polarssl_public_message(pub)(buffer2, size2, ?cs2);
+    //@ close polarssl_key_id(p, c);
     sha512_hmac(buffer1, (unsigned int) size1, buffer2, 
                 (unsigned int) size2, buffer3, 0);
-    /*@ switch(cg)
+    /*@ if (cs1 == polarssl_chars_for_cryptogram(cg))
         {
-          case polarssl_random(p0, c0):
-            assume_chars_contain_public_cryptograms(buffer3, 64);
-          case polarssl_symmetric_key(p0, c0):
-            if (cs1 == polarssl_chars_for_cryptogram(cg))
-            {
-              assert polarssl_cryptogram(buffer3, 64, ?cs_hmac, ?hmac);
-              polarssl_cryptogram_in_upper_bound(
-                              cs1, cg, polarssl_generated_public_cryptograms(pub));
-              polarssl_generated_public_cryptograms_from(pub, cg);
-              assert [_]pub(cg);
-              assert is_polarssl_public_hmac_is_public(?proof2, pub, pred);
-              proof2(hmac, polarssl_generated_public_cryptograms(pub));
-              polarssl_public_message_from_cryptogram(pub, buffer3, 64, cs_hmac, hmac);
-            }
-            else
-            {
-              assume_chars_contain_public_cryptograms(buffer3, 64);
-            }
-          case polarssl_public_key(p0, c0):
-            assume_chars_contain_public_cryptograms(buffer3, 64);
-          case polarssl_private_key(p0, c0):
-            assume_chars_contain_public_cryptograms(buffer3, 64);
-          case polarssl_hash(cs0):
-            assume_chars_contain_public_cryptograms(buffer3, 64);
-          case polarssl_hmac(p0, c0, cs0):
-            assume_chars_contain_public_cryptograms(buffer3, 64);
-          case polarssl_encrypted(p0, c0, cs0, ent0):
-            assume_chars_contain_public_cryptograms(buffer3, 64);
-          case polarssl_auth_encrypted(p0, c0, mac0, cs0, ent0):
-            assume_chars_contain_public_cryptograms(buffer3, 64);
-          case polarssl_asym_encrypted(p0, c0, cs0, ent0):
-            assume_chars_contain_public_cryptograms(buffer3, 64);
-          case polarssl_asym_signature(p0, c0, cs0, ent0):
-            assume_chars_contain_public_cryptograms(buffer3, 64);
+          assert polarssl_cryptogram(buffer3, 64, ?cs_hmac, ?hmac);
+          polarssl_public_generated_chars_extract(pub, cs1, cg);
+          assert is_polarssl_public_hmac_is_public(?proof2, pub, pred);
+          proof2(hmac);
+          polarssl_public_message_from_cryptogram(pub, buffer3, 64, cs_hmac, hmac);
         }
     @*/
     net_send(socket, buffer3, 64);
@@ -434,7 +402,7 @@ void polarssl_attacker_send_encrypted(havege_state *havege_state,
       //@ int p0;
       //@ int id0;
       //@ polarssl_cryptogram cg_key = polarssl_symmetric_key(p0, id0);
-      //@ close exists<polarssl_cryptogram>(cg_key);
+      //@ close polarssl_key_id(p0, id0);
       if (aes_setkey_enc(&aes_context, buffer1, (unsigned int) size1 * 8) == 0)
       {
         //@ assert aes_context_initialized(&aes_context, ?key_id);
@@ -457,26 +425,24 @@ void polarssl_attacker_send_encrypted(havege_state *havege_state,
                     switch (pair)
                     {
                       case pair(p1, id1):
+                        assert p0 == p1 && id0 == id1;
                         assert cs1 == polarssl_chars_for_cryptogram(cg_key);
                         assert polarssl_cryptogram(buffer3, size2, 
-                                                   ?cs_enc, ?cg_enc);
+                                                    ?cs_enc, ?cg_enc);
                         assert cg_enc == polarssl_encrypted(p1, id1, cs2,
-                                       append(chars_of_int(iv_off_val), cs_iv));
-                        polarssl_cryptogram_in_upper_bound(
-                          cs1, cg_key, polarssl_generated_public_cryptograms(pub));
-                        polarssl_generated_public_cryptograms_from(pub, cg_key);
+                                        append(chars_of_int(iv_off_val), cs_iv));
+                        polarssl_public_generated_chars_extract(pub, cs1, cg_key);
                         assert [_]pub(cg_key);
                         assert is_polarssl_public_encryption_is_public(
-                                                       ?proof2, pub, pred);
-                        proof2(cg_enc, polarssl_generated_public_cryptograms(pub));
+                                                        ?proof2, pub, pred);
+                        proof2(cg_enc);
                         polarssl_public_message_from_cryptogram(pub, buffer3, size2, cs_enc, cg_enc);
                     }
                   case none:
-                    assume_chars_contain_public_cryptograms(buffer3, size2);
                 }
             @*/
             net_send(socket, buffer3, (unsigned int) size2);
-            //@ open polarssl_public_message(pub)(buffer3, _, _);
+            //@ open polarssl_public_message(pub)(buffer3, size2, _);
           }
         }
         aes_free(&aes_context);
@@ -520,7 +486,7 @@ void polarssl_attacker_send_decrypted(havege_state *havege_state,
       //@ int p0;
       //@ int id0;
       //@ polarssl_cryptogram cg_key = polarssl_symmetric_key(p0, id0);
-      //@ close exists<polarssl_cryptogram>(cg_key);
+      //@ close polarssl_key_id(p0, id0);
       if (aes_setkey_enc(&aes_context, buffer1, (unsigned int) size1 * 8) == 0)
       {
         //@ assert aes_context_initialized(&aes_context, ?key_id);
@@ -545,28 +511,22 @@ void polarssl_attacker_send_decrypted(havege_state *havege_state,
                       case pair(p1, id1):
                         assert chars(buffer3, size2, ?cs_output);
                         assert cs1 == polarssl_chars_for_cryptogram(cg_key);
-                        polarssl_cryptogram_in_upper_bound(cs1, cg_key,
-                                    polarssl_generated_public_cryptograms(pub));
-                        polarssl_generated_public_cryptograms_from(pub, cg_key);
+                        polarssl_public_generated_chars_extract(pub, cs1, cg_key);
                         assert [_]pub(cg_key);
 
                         polarssl_cryptogram cg_enc =
                                      polarssl_encrypted(p1, id1, cs_output,
                                        append(chars_of_int(iv_off_val), cs_iv));
                         assert cs2 == polarssl_chars_for_cryptogram(cg_enc);
-                        polarssl_cryptogram_in_upper_bound(cs2, cg_enc,
-                                    polarssl_generated_public_cryptograms(pub));
-                        polarssl_generated_public_cryptograms_from(pub, cg_enc);
+                        polarssl_public_generated_chars_extract(pub, cs2, cg_enc);
                         assert [_]pub(cg_enc);
                         
                         assert is_polarssl_public_decryption_is_public(
                                                        ?proof3, pub, pred);
                         proof3(cg_key, cg_enc);
-                        polarssl_public_message_from_chars(pub, buffer3, 
-                                                           size2, cs_output);
+                        close polarssl_public_message(pub)(buffer3, size2, cs_output);
                     }
                   case none:
-                    assume_chars_contain_public_cryptograms(buffer3, size2);
                 }
             @*/
             net_send(socket, buffer3, (unsigned int) size2);
@@ -614,7 +574,7 @@ void polarssl_attacker_send_auth_encrypted(havege_state *havege_state,
       //@ int p0;
       //@ int id0;
       //@ polarssl_cryptogram cg_key = polarssl_symmetric_key(p0, id0);
-      //@ close exists<polarssl_cryptogram>(cg_key);
+      //@ close polarssl_key_id(p0, id0);
       if (gcm_init(&gcm_context, POLARSSL_AES_CIPHER_ID, 
           buffer1, (unsigned int) size1 * 8) == 0)
       {
@@ -637,9 +597,7 @@ void polarssl_attacker_send_auth_encrypted(havege_state *havege_state,
                     {
                       case pair(p1, id1):
                         assert cs1 == polarssl_chars_for_cryptogram(cg_key);
-                        polarssl_cryptogram_in_upper_bound(
-                          cs1, cg_key, polarssl_generated_public_cryptograms(pub));
-                        polarssl_generated_public_cryptograms_from(pub, cg_key);
+                        polarssl_public_generated_chars_extract(pub, cs1, cg_key);
                         assert [_]pub(cg_key);
                         
                         assert polarssl_cryptogram(
@@ -649,12 +607,11 @@ void polarssl_attacker_send_auth_encrypted(havege_state *havege_state,
                                                    p1, id1, mac_cs, cs2, cs_iv);
                         assert is_polarssl_public_auth_encryption_is_public(
                                                        ?proof1, pub, pred);
-                        proof1(cg_enc, polarssl_generated_public_cryptograms(pub));
+                        proof1(cg_enc);
                         polarssl_public_message_from_cryptogram(pub, buffer3, size2, 
                                                                 cs_enc, cg_enc);
                     }
                   case none:
-                    assume_chars_contain_public_cryptograms(buffer3, size2);
                 }
             @*/
             net_send(socket, buffer3, (unsigned int) size2);
@@ -702,7 +659,7 @@ void polarssl_attacker_send_auth_decrypted(havege_state *havege_state,
       //@ int p0;
       //@ int id0;
       //@ polarssl_cryptogram cg_key = polarssl_symmetric_key(p0, id0);
-      //@ close exists<polarssl_cryptogram>(cg_key);
+      //@ close polarssl_key_id(p0, id0);
       if (gcm_init(&gcm_context, POLARSSL_AES_CIPHER_ID, 
           buffer1, (unsigned int) size1 * 8) == 0)
       {
@@ -731,28 +688,20 @@ void polarssl_attacker_send_auth_decrypted(havege_state *havege_state,
                         case pair(p1, id1):
                           assert chars(buffer3, size2, ?cs_output);
                           assert cs1 == polarssl_chars_for_cryptogram(cg_key);
-                          polarssl_cryptogram_in_upper_bound(
-                                       cs1, cg_key, 
-                                       polarssl_generated_public_cryptograms(pub));
-                          polarssl_generated_public_cryptograms_from(pub, cg_key);
+                          polarssl_public_generated_chars_extract(pub, cs1, cg_key);
                           assert [_]pub(cg_key);
 
                           polarssl_cryptogram cg_enc =
                                   polarssl_auth_encrypted(
                                     p1, id1, cs_mac, cs_output, cs_iv);
                           assert cs2 == polarssl_chars_for_cryptogram(cg_enc);
-                          polarssl_cryptogram_constraints(cs2, cg_enc);
-                          polarssl_cryptogram_in_upper_bound(
-                                       cs2, cg_enc, 
-                                       polarssl_generated_public_cryptograms(pub));
-                          polarssl_generated_public_cryptograms_from(pub, cg_enc);
+                          polarssl_public_generated_chars_extract(pub, cs2, cg_enc);
                           assert [_]pub(cg_enc);
 
                           assert is_polarssl_public_auth_decryption_is_public(
                                                         ?proof, pub, pred);
                           proof(cg_key, cg_enc);
-                          polarssl_public_message_from_chars(pub, buffer3, size2, 
-                                                             cs_output);
+                          close polarssl_public_message(pub)(buffer3, size2, cs_output);
                       }
                     case none:
                       assert false;
@@ -805,7 +754,7 @@ void polarssl_attacker_send_asym_encrypted(
     //@ int p0;
     //@ int id0;
     //@ polarssl_cryptogram cg_key = polarssl_public_key(p0, id0);
-    //@ close exists<polarssl_cryptogram>(cg_key);
+    //@ close polarssl_key_id(p0, id0);
     if (pk_parse_public_key(&context, buffer1, (unsigned int) size1) == 0)
     {
       if (size2 * 8 <= size1)
@@ -828,24 +777,21 @@ void polarssl_attacker_send_asym_encrypted(
                     case pair(p1, id1):
                       assert size1 == key_len;
                       assert cs1 == polarssl_chars_for_cryptogram(cg_key);
-                      polarssl_cryptogram_in_upper_bound(
-                          cs1, cg_key, polarssl_generated_public_cryptograms(pub));
-                      polarssl_generated_public_cryptograms_from(pub, cg_key);
+                      polarssl_public_generated_chars_extract(pub, cs1, cg_key);
                       assert [_]pub(cg_key);
                       
                       assert polarssl_cryptogram(buffer3, osize_val, 
-                                                 ?cs_enc, ?cg_enc);
+                                               ?cs_enc, ?cg_enc);
                       assert cg_enc == polarssl_asym_encrypted(
                                                  p1, id1, cs2, _);
                       assert is_polarssl_public_asym_encryption_is_public(
                                                  ?proof, pub, pred);
-                      proof(cg_enc, polarssl_generated_public_cryptograms(pub));
+                      proof(cg_enc);
                       assert [_]pub(cg_enc);
                       polarssl_public_message_from_cryptogram(
-                                          pub, buffer3, osize_val, cs_enc, cg_enc);
+                                     pub, buffer3, osize_val, cs_enc, cg_enc);
                   }
                 case none:
-                  assume_chars_contain_public_cryptograms(buffer3, osize_val);
               }
           @*/
           net_send(socket, buffer3, osize);
@@ -894,7 +840,7 @@ void polarssl_attacker_send_asym_decrypted(
     //@ int p0;
     //@ int id0;
     //@ polarssl_cryptogram cg_key = polarssl_private_key(p0, id0);
-    //@ close exists<polarssl_cryptogram>(cg_key);
+    //@ close polarssl_key_id(p0, id0);
     if (pk_parse_key(&context, buffer1, (unsigned int) size1, NULL, 0) == 0)
     {
       if (size2 * 8 <= size1)
@@ -915,41 +861,28 @@ void polarssl_attacker_send_asym_decrypted(
                   assert exists<polarssl_cryptogram>(?cg);
                   assert cg == polarssl_asym_encrypted(
                                             ?principal2, ?id2, ?cs_out2, ?ent2);
-                  assert chars(buffer3, osize_val, ?cs_output);
                   switch (pair)
                   {
                     case pair(p1, id1):
                       if (p1 == principal2 && id1 == id2)
                       {
+                        assert chars(buffer3, osize_val, ?cs_output);
                         assert cs1 == polarssl_chars_for_cryptogram(cg_key);
-                        polarssl_cryptogram_in_upper_bound(cs1, cg_key, 
-                                    polarssl_generated_public_cryptograms(pub));
-                        polarssl_generated_public_cryptograms_from(pub, cg_key);
+                        polarssl_public_generated_chars_extract(pub, cs1, cg_key);
                         assert [_]pub(cg_key);
                         polarssl_cryptogram cg_enc =
                              polarssl_asym_encrypted(p1, id1, cs_output, ent2);
                         assert cs2 == polarssl_chars_for_cryptogram(cg_enc);
-                        polarssl_cryptogram_constraints(cs2, cg_enc);
-                        polarssl_cryptogram_in_upper_bound(cs2, cg_enc, 
-                                    polarssl_generated_public_cryptograms(pub));
-                        polarssl_generated_public_cryptograms_from(pub, cg_enc);
+                        polarssl_public_generated_chars_extract(pub, cs2, cg_enc);
                         assert [_]pub(cg_enc);
                         
                         assert is_polarssl_public_asym_decryption_is_public(
                                                        ?proof3, pub, pred);
                         proof3(cg_key, cg_enc);
-                        polarssl_public_message_from_chars(pub, buffer3, 
-                                                          osize_val, cs_output);
-                      }
-                      else
-                      {
-                        nil == polarssl_cryptograms_in_chars(cs_output);
-                        polarssl_public_message_from_chars(pub, buffer3, 
-                                                          osize_val, cs_output);
+                        close polarssl_public_message(pub)(buffer3, osize_val, cs_output);
                       }
                   }
                 case none:
-                  assume_chars_contain_public_cryptograms(buffer3, osize_val);
               }
           @*/
           net_send(socket, buffer3, osize);
@@ -998,7 +931,7 @@ void polarssl_attacker_send_asym_signature(
     //@ int p0;
     //@ int id0;
     //@ polarssl_cryptogram cg_key = polarssl_private_key(p0, id0);
-    //@ close exists<polarssl_cryptogram>(cg_key);
+    //@ close polarssl_key_id(p0, id0);
     if (pk_parse_key(&context, buffer1, (unsigned int) size1, NULL, 0) == 0)
     {
       if (size2 * 8 < size1)
@@ -1020,22 +953,19 @@ void polarssl_attacker_send_asym_signature(
                   {
                     case pair(p1, id1):
                       assert cs1 == polarssl_chars_for_cryptogram(cg_key);
-                      polarssl_cryptogram_in_upper_bound(cs1, cg_key,
-                                    polarssl_generated_public_cryptograms(pub));
-                      polarssl_generated_public_cryptograms_from(pub, cg_key);
+                      polarssl_public_generated_chars_extract(pub, cs1, cg_key);
                       assert [_]pub(cg_key);
                       
                       assert polarssl_cryptogram(buffer3, osize_val, 
-                                                 ?cs_enc, ?cg_enc);
-                      assert cg_enc == polarssl_asym_signature(p1, id1, cs2, _);
+                                                 ?cs_enc, ?cg_sig);
+                      assert cg_sig == polarssl_asym_signature(p1, id1, cs2, _);
                       assert is_polarssl_public_asym_signature_is_public(
                                                         ?proof, pub, pred);
-                      proof(cg_enc, polarssl_generated_public_cryptograms(pub));
-                      polarssl_public_message_from_cryptogram(pub, buffer3, 
-                                                     osize_val, cs_enc, cg_enc);
+                      proof(cg_sig);
+                      polarssl_public_message_from_cryptogram(
+                                     pub, buffer3, osize_val, cs_enc, cg_sig);
                   }
                 case none:
-                  assume_chars_contain_public_cryptograms(buffer3, osize_val);
               }
           @*/
           net_send(socket, buffer3, osize);

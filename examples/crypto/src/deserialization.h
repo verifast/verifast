@@ -12,8 +12,7 @@ lemma void deserialize_item(list<char> cs, predicate(item) pub);
            proof_obligations(pub) &*&
            length(cs) <= INT_MAX &*&
            true == well_formed(cs, nat_length(cs)) &*&
-           true == polarssl_cryptograms_in_chars_upper_bound(
-               cs, polarssl_generated_public_cryptograms(polarssl_pub(pub)));
+           [_]polarssl_public_generated_chars(polarssl_pub(pub))(cs);
   ensures  proof_obligations(pub) &*&
            [_]item_constraints_no_collision(?i, cs, pub) &*& [_]pub(i);
 

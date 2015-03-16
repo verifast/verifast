@@ -86,7 +86,7 @@ struct item *symmetric_encryption(struct item *key, struct item *payload)
     //@ chars_split(key_cont, 1);
     //@ assert chars(key_cont + 1, GCM_KEY_SIZE, ?key_cs0);
     //@ polarssl_cryptogram key_cg = polarssl_symmetric_key(principal2, count2);
-    //@ close exists(key_cg);
+    //@ close polarssl_key_id(principal2, count2);
     if (gcm_init(&gcm_context, POLARSSL_AES_CIPHER_ID, (key->content + 1), 
                 (unsigned int) GCM_KEY_SIZE * 8) != 0) 
       abort_crypto_lib("Init gcm failed");
@@ -123,19 +123,23 @@ struct item *symmetric_encryption(struct item *key, struct item *payload)
     //@ assert chars(iv, GCM_IV_SIZE, ?iv_cs);
     encrypted = iv + GCM_IV_SIZE;
     //@ assert chars(encrypted, pay_size, _);
-    
+    //@ open [f]world(pub);
     if (gcm_crypt_and_tag(&gcm_context, POLARSSL_GCM_ENCRYPT, 
                           (unsigned int) payload->size,
                           iv_buffer, GCM_IV_SIZE, NULL, 0,
                           payload->content, encrypted,
                           GCM_TAG_SIZE, tag) != 0)
       abort_crypto_lib("Gcm encryption failed");
+    //@ close [f]world(pub);
     
     //@ polarssl_cryptogram k_cg = polarssl_symmetric_key(principal2, count2);
     /*@ if (collision_in_run())
         {
           if (key_cs0 == polarssl_chars_for_cryptogram(k_cg))
             open polarssl_cryptogram(encrypted, pay_size, _, _);
+          else
+            open polarssl_public_message(polarssl_pub(pub))
+                                        (encrypted, pay_size, _);
           
           item r = dummy_item_for_tag('i');
           assert chars(iv, GCM_IV_SIZE, iv_cs);
@@ -245,7 +249,7 @@ struct item *symmetric_decryption(struct item *key, struct item *item)
     //@ chars_split(key_cont, 1);
     //@ assert chars(key_cont + 1, GCM_KEY_SIZE, ?key_cs0);
     //@ polarssl_cryptogram key_cg = polarssl_symmetric_key(principal2, count2);
-    //@ close exists(key_cg);
+    //@ close polarssl_key_id(principal2, count2);
     if (gcm_init(&gcm_context, POLARSSL_AES_CIPHER_ID, (key->content + 1), 
                 (unsigned int) GCM_KEY_SIZE * 8) != 0) 
       abort_crypto_lib("Init gcm failed");
