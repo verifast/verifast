@@ -186,7 +186,8 @@ fixpoint nat polarssl_cryprogram_level_bound();
 
 lemma void polarssl_chars_for_cryptogram_injective(polarssl_cryptogram cg1,
                                                    polarssl_cryptogram cg2);
-  requires polarssl_chars_for_cryptogram(cg1) == 
+  requires polarssl_cryptogram_tag(cg1) == polarssl_cryptogram_tag(cg2) &*&
+           polarssl_chars_for_cryptogram(cg1) ==
            polarssl_chars_for_cryptogram(cg2);
   ensures  collision_in_run() ? true : (cg1 == cg2);
 
