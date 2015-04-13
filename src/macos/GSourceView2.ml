@@ -15,6 +15,8 @@ class source_view (source_buffer: source_buffer) view () =
     method draw_spaces = draw_spaces
     method set_draw_spaces flags = draw_spaces <- flags
     method set_tab_width (size: int) = ()
+    method show_right_margin = false
+    method set_show_right_margin (value: bool) = ()
   end
 
 let source_buffer () = new source_buffer (GText.buffer ())
