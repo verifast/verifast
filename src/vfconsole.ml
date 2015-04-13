@@ -171,20 +171,20 @@ let _ =
   let vroots = ref [Util.crt_vroot] in
   let add_vroot vroot =
     let (root, expansion) = Util.split_around_char vroot '=' in
-    let check_root root =
-      if String.length root = 0 then false else
-      if String.uppercase root <> root then false else
-      let first = Char.code (String.get root 0) in
-      65 <= first && first <= 90
-    in
     let expansion = 
       if Filename.is_relative expansion then 
         Util.reduce_path (Util.compose Util.cwd expansion) 
       else 
         expansion 
     in
-    if Sys.file_exists expansion && check_root root then
-      vroots := List.append !vroots [(root, expansion)]
+    if not (Sys.file_exists expansion) then
+      failwith (Printf.sprintf "In definition of vroot '%s': bad expansion '%s': no such file" root expansion);
+    if String.length root = 0 then
+      failwith (Printf.sprintf "Bad root name '%s': should be nonempty" root);
+    String.iter (function 'A'..'Z'|'_'|'0'..'9' -> () | _ -> failwith (Printf.sprintf "Bad root name '%s': should contain only uppercase letters, underscores, and digits" root)) root;
+    begin match root.[0] with 'A'..'Z' -> () | _ -> failwith (Printf.sprintf "Bad root name '%s': should start with an uppercase letter" root) end;
+    printff "Adding vroot '%s' with expansion '%s'\n" root expansion;
+    vroots := List.append !vroots [(root, expansion)]
   in
 
   (* Explanations that are an empty string ("") become hidden in the

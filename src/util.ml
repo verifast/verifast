@@ -290,14 +290,15 @@ let cwd = Sys.getcwd()
 
 let compose base path = if Filename.is_relative path then base ^ "/" ^ path else path
 
-(** Eliminates '.' and 'foo/..' components. *)
+(** Reduces './foo' to 'foo', 'foo/.' to 'foo', 'foo//' to 'foo/', and 'foo/../bar' to 'bar'. *)
 let reduce_path path =
   let path = split (fun c -> c = '/' || c = '\\') path in
   let rec iter reduced todo =
     match reduced, todo with
       _, [] -> if reduced = [] then "." else String.concat "/" (List.rev reduced)
-    | head::reduced, ".."::todo when head <> ".." -> iter reduced todo
+    | head::reduced, ".."::todo when head <> ".." && head <> "" -> iter reduced todo
     | _, "."::todo -> iter reduced todo
+    | _::_, ""::todo -> iter reduced todo
     | _, part::todo -> iter (part::reduced) todo
   in
   iter [] path
@@ -308,8 +309,9 @@ let reduce_rooted_path path =
   let rec iter reduced todo =
     match reduced, todo with
       _, [] -> String.concat "/" (root::List.rev reduced)
-    | head::reduced, ".."::todo when head <> ".." -> iter reduced todo
+    | head::reduced, ".."::todo when head <> ".." && head <> "" -> iter reduced todo
     | _, "."::todo -> iter reduced todo
+    | _::_, ""::todo -> iter reduced todo
     | _, part::todo -> iter (part::reduced) todo
   in
   iter [] path
@@ -327,7 +329,7 @@ let crt_vroot = ("CRT", reduce_path bindir)
 let replace_vroot vroots path =
   let root::rest = split (fun c -> c = '/' || c = '\\') path in
   match try_assoc root vroots with
-  | Some p -> reduce_path (p ^ "/" ^ String.concat "/" rest)
+  | Some p -> (String.concat "/" (p::rest))
   | None -> path
 
 let qualified_path vroots modpath (basedir, relpath) =
