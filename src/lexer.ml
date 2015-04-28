@@ -810,57 +810,69 @@ class type t_lexer =
 
 class tentative_lexer (lloc:unit -> loc) (lignore_eol:bool ref) (lstream:(loc * token) Stream.t) : t_lexer =
   object (this)
+    val mutable base = 0
+    val mutable fetched = 0
     val mutable counter = 0
     val mutable counter_old = 0
-    val mutable buffer = []
-    val mutable locs = [lloc()]
+
+    val mutable buffer = Array.make 1024 None;
+    val mutable locs = Array.make (1024 + 1) (lloc());
 
     method peek() =
-      if counter < List.length buffer then
-        List.nth buffer counter
+      if (base + counter) < fetched then
+        Array.get buffer (base + counter)
       else begin
         this#fetch();
         this#peek()
       end
     method peekn(n) =
-      if counter + n < List.length buffer then
-        Array.to_list (Array.sub (Array.of_list buffer) counter n)
+      if base + counter + n < fetched then
+        Array.to_list (Array.sub buffer counter n)
       else begin
         this#fetch();
         this#peekn(n)
       end
     method junk() =
-      counter <- counter + 1; 
+      counter <- counter + 1;
     method push(tok) =
       counter <- counter - 1;
-      if (tok <> List.nth buffer counter) then
+      if (tok <> Array.get buffer (base + counter)) then
         raise (Stream.Error "Pushing incorrect token back into tentative lexer");
     method loc() =
-      List.nth locs counter
+      Array.get locs (base + counter)
     method ignore_eol() =
       !lignore_eol
-    method reset() = 
+    method reset() =
       counter_old <- counter;
-      counter <- 0
+      counter <- 0;
     method commit() =
       if counter <> counter_old then raise (PreprocessorDivergence (this#loc(), 
            "Different amount of tokens were consumed by normal and context-free preprocessors"));
+      base <- base + counter;
+      counter <- 0;
       counter_old <- 0;
-      while counter <> 0 do
-        buffer <- List.tl buffer;
-        locs <- List.tl locs;
-        counter <- counter - 1
-      done
     method isGhostHeader() =
       begin match this#peek() with 
         None -> false
       | Some (((f, _, _),_), _) -> Filename.check_suffix f ".gh"
       end
-      
+    
     method private fetch () =
-      buffer <- List.append buffer [Stream.peek (lstream)];
-      Stream.junk lstream;
-      locs <- List.append locs [lloc()]
+      if fetched < (Array.length buffer) then begin
+        Array.set buffer fetched (Stream.peek (lstream));
+        Stream.junk lstream;
+        Array.set locs (fetched + 1) (lloc());
+        fetched <- fetched + 1;
+      end else begin
+        let length = 2 * (Array.length buffer) in
+        let b = Array.make length None in
+        let l = Array.make (length + 1) dummy_loc in
+        Array.blit buffer 0 b 0 (Array.length buffer);
+        Array.blit locs 0 l 0 (Array.length locs);
+        buffer <- b;
+        locs <- l;
+        this#fetch();
+      end
   end
 
 let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_ghost_range =
