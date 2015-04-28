@@ -1488,8 +1488,9 @@ let parse_scala_file (path: string) (reportRange: range_kind -> loc -> unit): pa
   old way to parse java files, these files (including non-run-time javaspec files)
   can now be handled by the Java frontend
 *)
-let parse_java_file_old (path: string) (reportRange: range_kind -> loc -> unit) reportShouldFail enforceAnnotations: package =
+let parse_java_file_old (path: string) (reportRange: range_kind -> loc -> unit) reportShouldFail verbose enforceAnnotations: package =
   Stopwatch.start parsing_stopwatch;
+  if verbose = -1 then Printf.printf "%10.6fs: >> parsing Java file: %s \n" (Perf.time()) path;
   let result =
   if Filename.check_suffix (Filename.basename path) ".scala" then
     parse_scala_file path reportRange
@@ -1508,7 +1509,7 @@ let parse_java_file_old (path: string) (reportRange: range_kind -> loc -> unit) 
 
 type 'result parser_ = (loc * token) Stream.t -> 'result
 
-let rec parse_include_directives (ignore_eol: bool ref) (enforceAnnotations: bool) : 
+let rec parse_include_directives (ignore_eol: bool ref) (verbose: int) (enforceAnnotations: bool) : 
     ((loc * (include_kind * string * string) * string list * package list) list * string list) parser_ =
   let active_headers = ref [] in
   let test_include_cycle l totalPath =
@@ -1521,34 +1522,41 @@ let rec parse_include_directives (ignore_eol: bool ref) (enforceAnnotations: boo
   and parse_include_directive = 
     let isGhostHeader header = Filename.check_suffix header ".gh" in
     parser
-      [< '(l, SecondaryInclude(h, totalPath)) >] -> test_include_cycle l totalPath; ([], totalPath)
-    | [< (l,h,totalPath) = peek_in_ghost_range begin parser [< '(l, SecondaryInclude(h, p)) >] -> (l,h,p) end; '(_, Kwd "@*/") >] -> test_include_cycle l totalPath; ([], totalPath)
+      [< '(l, SecondaryInclude(h, totalPath)) >] -> 
+        if verbose = -1 then Printf.printf "%10.6fs: >>>> ignored secondary include: %s \n" (Perf.time()) totalPath;
+        test_include_cycle l totalPath; ([], totalPath)
+    | [< (l,h,totalPath) = peek_in_ghost_range begin parser [< '(l, SecondaryInclude(h, p)) >] -> (l,h,p) end; '(_, Kwd "@*/") >] -> 
+        if verbose = -1 then Printf.printf "%10.6fs: >>>> ignored secondary include: %s \n" (Perf.time()) totalPath;
+        test_include_cycle l totalPath; ([], totalPath)
     | [< '(l, BeginInclude(kind, h, totalPath)); (headers, header_names) = (active_headers := totalPath::!active_headers; parse_include_directives_core []); 
-                                           ds = parse_decls CLang enforceAnnotations ~inGhostHeader:(isGhostHeader h); '(_, EndInclude) >] -> 
+                                           ds = parse_decls CLang enforceAnnotations ~inGhostHeader:(isGhostHeader h); '(_, EndInclude) >] ->
+                                                        if verbose = -1 then Printf.printf "%10.6fs: >>>> parsed include: %s \n" (Perf.time()) totalPath;
                                                         active_headers := List.filter (fun h -> h <> totalPath) !active_headers;
                                                         let ps = [PackageDecl(dummy_loc,"",[],ds)] in
                                                         (List.append headers [(l, (kind, h, totalPath), header_names, ps)], totalPath)
     | [< (l,kind,h,totalPath) = peek_in_ghost_range begin parser [< '(l, BeginInclude(kind, h, p)) >] -> (l,kind,h,p) end; 
                                                 (headers, header_names) = (active_headers := totalPath::!active_headers; parse_include_directives_core []); 
-                                                ds = parse_decls CLang enforceAnnotations ~inGhostHeader:(isGhostHeader h); '(_, EndInclude); '(_, Kwd "@*/") >] -> 
+                                                ds = parse_decls CLang enforceAnnotations ~inGhostHeader:(isGhostHeader h); '(_, EndInclude); '(_, Kwd "@*/") >] ->
+                                                        if verbose = -1 then Printf.printf "%10.6fs: >>>> parsed include: %s \n" (Perf.time()) totalPath;
                                                         active_headers := List.filter (fun h -> h <> totalPath) !active_headers;
                                                         let ps = [PackageDecl(dummy_loc,"",[],ds)] in
                                                         (List.append headers [(l, (kind, h, totalPath), header_names, ps)], totalPath)
   in
   parse_include_directives_core []
 
-let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit) (include_paths: string list) (enforceAnnotations: bool): 
-                                              ((loc * (include_kind * string * string) * string list * package list) list * package list) = (* ?parse_c_file *)
+let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit) (verbose: int) 
+            (include_paths: string list) (enforceAnnotations: bool): ((loc * (include_kind * string * string) * string list * package list) list * package list) = (* ?parse_c_file *)
   Stopwatch.start parsing_stopwatch;
+  if verbose = -1 then Printf.printf "%10.6fs: >> parsing C file: %s \n" (Perf.time()) path;
   let result =
     let make_lexer path include_paths ~inGhostRange =
       let text = readFile path in
       make_lexer (common_keywords @ c_keywords) ghost_keywords path text reportRange ~inGhostRange reportShouldFail
     in
-    let (loc, ignore_eol, token_stream) = make_preprocessor make_lexer path include_paths in
+    let (loc, ignore_eol, token_stream) = make_preprocessor make_lexer path verbose include_paths in
     let parse_c_file =
       parser
-        [< (headers, _) = parse_include_directives ignore_eol enforceAnnotations; 
+        [< (headers, _) = parse_include_directives ignore_eol verbose enforceAnnotations; 
                             ds = parse_decls CLang enforceAnnotations ~inGhostHeader:false; _ = Stream.empty >] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])
     in
     try
@@ -1557,21 +1565,22 @@ let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (report
       Stream.Error msg -> raise (ParseException (loc(), msg))
     | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
   in
-  Stopwatch.stop parsing_stopwatch;  
+  Stopwatch.stop parsing_stopwatch;
   result
 
-let parse_header_file (path: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit) 
+let parse_header_file (path: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit) (verbose: int) 
          (include_paths: string list) (enforceAnnotations: bool): ((loc * (include_kind * string * string) * string list * package list) list * package list) =
   Stopwatch.start parsing_stopwatch;
+  if verbose = -1 then Printf.printf "%10.6fs: >> parsing Header file: %s \n" (Perf.time()) path;
   let isGhostHeader = Filename.check_suffix path ".gh" in
   let result =
     let make_lexer path include_paths ~inGhostRange =
       let text = readFile path in
       make_lexer (common_keywords @ c_keywords) ghost_keywords path text reportRange ~inGhostRange:inGhostRange reportShouldFail
     in
-    let (loc, ignore_eol, token_stream) = make_preprocessor make_lexer path include_paths in
+    let (loc, ignore_eol, token_stream) = make_preprocessor make_lexer path verbose include_paths in
     let p = parser
-      [< (headers, _) = parse_include_directives ignore_eol enforceAnnotations; 
+      [< (headers, _) = parse_include_directives ignore_eol verbose enforceAnnotations; 
          ds = parse_decls CLang enforceAnnotations ~inGhostHeader:isGhostHeader; 
          _ = (fun _ -> ignore_eol := true);_ = Stream.empty 
       >] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])

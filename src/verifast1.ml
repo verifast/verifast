@@ -446,6 +446,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     else
       static_error l "Should fail directives are not allowed; use the -allow_should_fail command-line option to allow them." None
   
+  let (prelude_headers, prelude_decls) = parse_header_file (concat bindir "prelude.h") reportRange reportShouldFail initial_verbosity [] enforce_annotations
+  let prelude_header_names = List.map (fun (_, (_, _, h), _, _) -> h) prelude_headers
+  let prelude_headers = (dummy_loc, (AngleBracketInclude, "prelude.h", concat bindir "prelude.h"), prelude_header_names, prelude_decls)::prelude_headers
+  
   let check_should_fail default body =
     let locs_match ((path0, line0, _), _) ((path1, line1, _), _) = path0 = path1 && line0 = line1 in
     let should_fail l = List.exists (locs_match l) !shouldFailLocs in
@@ -789,7 +793,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   include CheckFileArgs
   
   let is_jarspec = Filename.check_suffix filepath ".jarspec"
-  
+
+  let _ = if options.option_verbose = -1 then Printf.printf "%10.6fs: >> type checking of %s \n" (Perf.time()) filepath
+
   let
     (
       (structmap0: struct_info map),
@@ -815,7 +821,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (pluginmap0: plugin_info map)
       : maps
     ) =
-  
+
     let append_nodups xys xys0 string_of_key l elementKind =
       let rec iter xys =
         match xys with
@@ -907,7 +913,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     let (jars, javaspecs) = parse_jarspec_file_core path in
                     let pathDir = Filename.dirname path in
                     let ds = Java_frontend_bridge.parse_java_files (List.map (fun javaspec -> concat pathDir javaspec) javaspecs) [] 
-                                                                   reportRange reportShouldFail enforce_annotations use_java_frontend
+                                                                   reportRange reportShouldFail initial_verbosity enforce_annotations use_java_frontend
                     in
                     if not header_is_import_spec then begin
                       let (classes, lemmas) = extract_specs ds in
@@ -950,7 +956,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 in
                 let rtdir = Filename.dirname rtpath in
                 let ds = Java_frontend_bridge.parse_java_files (List.map (fun x -> concat rtdir x) javaspecs) [] reportRange
-                                                               reportShouldFail enforce_annotations use_java_frontend in
+                                                               reportShouldFail initial_verbosity enforce_annotations use_java_frontend in
                 let (_, maps0) = check_file rtpath true false bindir [] ds in
                 headermap := (rtpath, ([], maps0))::!headermap;
                 (maps0, [])
@@ -958,9 +964,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 (maps0, [])
           end
           | CLang ->
-            let (headers, prelude_decls) = parse_header_file (concat bindir "prelude.h") reportRange reportShouldFail [] enforce_annotations in
-            let header_names = List.map (fun (_, (_, _, h), _, _) -> h) headers in
-            let headers = (dummy_loc, (AngleBracketInclude, "prelude.h", concat bindir "prelude.h"), header_names, prelude_decls)::headers in
+            let headers = (dummy_loc, (AngleBracketInclude, "prelude.h", concat bindir "prelude.h"), prelude_header_names, prelude_decls)::prelude_headers in
             merge_header_maps false maps0 [] bindir headers headers
       else
         (maps0, [])
@@ -5172,5 +5176,5 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     fixpointmap1
   
   end
-  
+
 end

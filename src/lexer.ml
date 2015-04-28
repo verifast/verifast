@@ -1292,7 +1292,8 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
   in
   (next_token, fun _ -> !last_macro_used)
 
-let make_sound_preprocessor make_lexer path include_paths =
+let make_sound_preprocessor make_lexer path verbose include_paths =
+  if verbose = -1 then Printf.printf "%10.6fs: >> start preprocessing file: %s\n" (Perf.time()) path;
   let tlexers = ref [] in
   let curr_tlexer = ref (new tentative_lexer (fun () -> dummy_loc) (ref false) (Stream.of_list [])) in
   let is_ghost_header h = Filename.check_suffix h ".gh" in
@@ -1406,6 +1407,7 @@ let make_sound_preprocessor make_lexer path include_paths =
             match p_next() with
               Some _ -> divergence l ("Preprocessor does not skip secondary inclusion of file \n" ^ path)
             | None -> 
+                if verbose = -1 then Printf.printf "%10.6fs: >>>> secondary include: %s\n" (Perf.time()) path;
                 (* possible TODO: needs caching for more efficiency, but overhead is negligible *)
                 let rec import_macros () =
                   match cfp_next() with 
@@ -1416,13 +1418,19 @@ let make_sound_preprocessor make_lexer path include_paths =
                 (* end *)
                 (pop_tlexer(); Some(l, SecondaryInclude(i, path)))
           end else begin
+            if verbose = -1 then Printf.printf "%10.6fs: >>>> including file: %s\n" (Perf.time()) path;
             included_files := path::!included_files;
             Some (l,BeginInclude(kind, i, path))
           end;  
       | None -> if List.length !tlexers > 1 then begin 
-                  let l = current_loc () in pop_tlexer(); Some (l, EndInclude) 
+                  if verbose = -1 then begin let path = List.hd !paths in Printf.printf "%10.6fs: >>>> end including file: %s\n" (Perf.time()) path end;
+                  let l = current_loc () in pop_tlexer();
+                  Some (l, EndInclude)
                 end 
-                else None
+                else begin 
+                  if verbose = -1 then Printf.printf "%10.6fs: >> finished preprocessing file: %s\n" (Perf.time()) path; 
+                  None
+                end
       | _ -> p_t
       end
     end
@@ -1433,5 +1441,5 @@ let make_sound_preprocessor make_lexer path include_paths =
   in
   ((fun () -> current_loc()), ref true, Stream.from (fun _ -> next_token ()))
 
-let make_preprocessor make_lexer path include_paths =
-  make_sound_preprocessor make_lexer path include_paths
+let make_preprocessor make_lexer path verbose include_paths =
+  make_sound_preprocessor make_lexer path verbose include_paths

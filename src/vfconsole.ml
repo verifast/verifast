@@ -193,7 +193,7 @@ let _ =
    * new option should be hidden.
    *)
   let cla = [ "-stats", Set stats, " "
-            ; "-verbose", Set_int verbose, "1 = statement executions; 2 = produce/consume steps; 4 = prover queries."
+            ; "-verbose", Set_int verbose, "-1 = file processing; 1 = statement executions; 2 = produce/consume steps; 4 = prover queries."
             ; "-disable_overflow_check", Set disable_overflow_check, " "
             ; "-prover", String (fun str -> prover := Some str), "Set SMT prover (e.g. redux, z3)."
             ; "-c", Set compileOnly, "Compile only, do not perform link checking."
@@ -287,6 +287,12 @@ let _ =
   if Array.length Sys.argv = 1
   then usage cla usage_string
   else begin
+    let process_file filename =
+      if !verbose = -1 then Printf.printf "\n%10.6fs: processing file %s\n" (Perf.time()) filename;
+      let result = process_file filename in
+      if !verbose = -1 then Printf.printf "%10.6fs: done with file %s\n\n" (Perf.time()) filename;
+      result
+    in
     parse cla process_file usage_string;
     if not !compileOnly then
       begin
@@ -299,6 +305,7 @@ let _ =
           let assume_lib = Filename.concat mydir "assume.dll.vfmanifest" in
           let libs = if !allowAssume then libs @ [assume_lib] else libs in
           let allModules = libs @ List.rev !allModules in
+          if !verbose = -1 then Printf.printf "\n%10.6fs: linking files: %s\n\n" (Perf.time()) (String.concat " " allModules);
           let dllManifest =
             if !emitDllManifest then Some (!dllManifestName) else None
           in

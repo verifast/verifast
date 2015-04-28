@@ -1,4 +1,5 @@
-VF = ../../../../bin/verifast
+VERBOSE = -verbose -1
+VF = ../../../../bin/verifast $(VERBOSE)
 
 include ../../Makefile.include
 

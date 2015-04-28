@@ -49,7 +49,7 @@ let build_context paths jars =
   in
   recurse_specs [] jars
 
-let parse_java_files_with_frontend (paths: string list) (jars: string list) (reportRange: range_kind -> loc -> unit) reportShouldFail enforceAnnotations: package list =
+let parse_java_files_with_frontend (paths: string list) (jars: string list) (reportRange: range_kind -> loc -> unit) reportShouldFail verbose enforceAnnotations: package list =
   let (rt_paths, paths) =
     List.partition (fun p -> Filename.dirname p = Util.rtdir) paths
   in
@@ -91,13 +91,13 @@ let parse_java_files_with_frontend (paths: string list) (jars: string list) (rep
     | [] -> []
     | _ -> parse paths
   in
-  (List.map (fun x -> Parser.parse_java_file_old x reportRange reportShouldFail enforceAnnotations) rt_paths) @ result
+  (List.map (fun x -> Parser.parse_java_file_old x reportRange reportShouldFail verbose enforceAnnotations) rt_paths) @ result
 (*   TODO: replace with this statement and check why this does not work yet *) 
 (*   (parse rt_paths) @ result  *)
 
-let parse_java_files (paths: string list) (jars: string list) (reportRange: range_kind -> loc -> unit) reportShouldFail enforceAnnotations useJavaFrontend: package list =
+let parse_java_files (paths: string list) (jars: string list) (reportRange: range_kind -> loc -> unit) reportShouldFail verbose enforceAnnotations useJavaFrontend: package list =
   if useJavaFrontend then
-    parse_java_files_with_frontend paths jars reportRange reportShouldFail enforceAnnotations
+    parse_java_files_with_frontend paths jars reportRange reportShouldFail verbose enforceAnnotations
   else
-    List.map (fun x -> Parser.parse_java_file_old x reportRange reportShouldFail enforceAnnotations) paths 
+    List.map (fun x -> Parser.parse_java_file_old x reportRange reportShouldFail verbose enforceAnnotations) paths 
 
