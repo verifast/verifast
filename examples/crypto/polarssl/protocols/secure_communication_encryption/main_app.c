@@ -148,7 +148,12 @@ int main() //@ : main
   if (principals == 0) abort();
   *principals = 0;
   
-  printf("\n\tExecuting \"secure_communication_encryption protocol\" ... \n\n");
+  printf("\n\tExecuting \""); 
+  printf("secure_communication");
+  printf("_encryption");
+  printf(" protocol");
+  printf("\" ... \n\n");
+  
   
   //@ PACK_PROOF_OBLIGATIONS(sc_enc)
   //@ close exists(sc_enc_polarssl_pub);

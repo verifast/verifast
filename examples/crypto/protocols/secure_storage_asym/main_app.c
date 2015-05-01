@@ -119,7 +119,11 @@ int main() //@ : main_full(main_app)
   struct item *pub_key;
   struct item *priv_key;
 
-  printf("\n\tExecuting \"auth secure_storage protocol\" ... \n\n");
+  printf("\n\tExecuting \""); 
+  printf("auth secure_storage");
+  printf("protocol");
+  printf("\" ... \n\n");
+  
   //@ open_module();
   //@ PACK_PROOF_OBLIGATIONS(ss_auth)
   init_crypto_lib();

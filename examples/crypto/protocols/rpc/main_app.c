@@ -112,7 +112,10 @@ int main() //@ : main_full(main_app)
   struct keypair* cpair;
   struct keypair* spair;
     
-  printf("\n\tExecuting \"rpc protocol\" ... \n\n");
+  printf("\n\tExecuting \"");
+  printf("rpc protocol");
+  printf("\" ... \n\n");
+  
   //@ open_module();
   //@ PACK_PROOF_OBLIGATIONS(rpc)
   init_crypto_lib();

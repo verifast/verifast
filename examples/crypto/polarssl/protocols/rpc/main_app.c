@@ -161,7 +161,9 @@ int main() //@ : main
   if (principals == 0) abort();
   *principals = 0;
   
-  printf("\n\tExecuting \"rpc protocol\" ... \n\n");
+  printf("\n\tExecuting \"");
+  printf("rpc protocol");
+  printf("\" ... \n\n");
   
   //@ PACK_PROOF_OBLIGATIONS(rpc)
   //@ close exists(rpc_polarssl_pub);

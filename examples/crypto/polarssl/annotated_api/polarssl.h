@@ -219,24 +219,24 @@ lemma void polarssl_cryptograms_in_chars_bound_to(list<char> cs);
 lemma void polarssl_cryptograms_in_chars_bound_join(
                                 list<char> cs1, list<polarssl_cryptogram> cgs1,
                                 list<char> cs2, list<polarssl_cryptogram> cgs2);
-  requires polarssl_cryptograms_in_chars_bound(cs1, cgs1) &&
-           polarssl_cryptograms_in_chars_bound(cs2, cgs2);
+  requires true == polarssl_cryptograms_in_chars_bound(cs1, cgs1) &*&
+           true == polarssl_cryptograms_in_chars_bound(cs2, cgs2);
   ensures  true == polarssl_cryptograms_in_chars_bound(
                                            append(cs1, cs2), union(cgs1, cgs2));
 
 lemma void polarssl_cryptograms_in_chars_bound_split(
                            list<char> cs, list<polarssl_cryptogram> cgs, int i);
-  requires 0 <= i && i <= length(cs) &&
-           polarssl_cryptograms_in_chars_bound(cs, cgs);
-  ensures  polarssl_cryptograms_in_chars_bound(take(i, cs), cgs) &&
-           polarssl_cryptograms_in_chars_bound(drop(i, cs), cgs);
+  requires 0 <= i &*& i <= length(cs) &*&
+           true == polarssl_cryptograms_in_chars_bound(cs, cgs);
+  ensures  true == polarssl_cryptograms_in_chars_bound(take(i, cs), cgs) &*&
+           true == polarssl_cryptograms_in_chars_bound(drop(i, cs), cgs);
 
 lemma void polarssl_cryptograms_in_chars_bound_subset(
                                                 list<char> cs, 
                                                 list<polarssl_cryptogram> cgs1,
                                                 list<polarssl_cryptogram> cgs2);
-  requires subset(cgs1, cgs2) && 
-           polarssl_cryptograms_in_chars_bound(cs, cgs1);
+  requires true == subset(cgs1, cgs2) &*& 
+           true == polarssl_cryptograms_in_chars_bound(cs, cgs1);
   ensures  true == polarssl_cryptograms_in_chars_bound(cs, cgs2);
 
 @*/
@@ -255,17 +255,17 @@ lemma void polarssl_cryptogram_constraints(list<char> cs,
 predicate polarssl_cryptogram(char* chars, int len, list<char> cs,
                               polarssl_cryptogram cg) =
   chars(chars, len, cs) &*&
-  cs == polarssl_chars_for_cryptogram(cg) &&
-  true == polarssl_cryptogram_is_generated(cg) &&
+  cs == polarssl_chars_for_cryptogram(cg) &*&
+  true == polarssl_cryptogram_is_generated(cg) &*&
   //Not necessary but for convenience
-  cons(cg, nil) == polarssl_cryptograms_in_chars(cs) &&
+  cons(cg, nil) == polarssl_cryptograms_in_chars(cs) &*&
   true == polarssl_cryptograms_in_chars_bound(cs, cons(cg, nil))
 ;
 
 //Derived
 lemma void polarssl_cryptogram_in_bound(list<char> cs, polarssl_cryptogram cg,
                                         list<polarssl_cryptogram> cgs);
-  requires cs == polarssl_chars_for_cryptogram(cg) &&
+  requires cs == polarssl_chars_for_cryptogram(cg) &*&
            true == polarssl_cryptograms_in_chars_bound(cs, cgs);
   ensures  true == mem(cg, cgs);
 
@@ -320,7 +320,7 @@ lemma void polarssl_public_generated_chars_join(
 lemma void polarssl_public_generated_chars_split(
                                    predicate(polarssl_cryptogram) polarssl_pub,
                                    list<char> cs, int i);
-     requires 0 <= i && i <= length(cs) &*&
+     requires 0 <= i &*& i <= length(cs) &*&
               [_]polarssl_public_generated_chars(polarssl_pub)(cs);
      ensures  [_]polarssl_public_generated_chars(polarssl_pub)(take(i, cs)) &*&
               [_]polarssl_public_generated_chars(polarssl_pub)(drop(i, cs));
@@ -372,9 +372,9 @@ lemma void polarssl_cryptogram_level_flat_constraints(polarssl_cryptogram cg);
 
 lemma void polarssl_cryptogram_level_nested_constraints(
                            polarssl_cryptogram cg1, polarssl_cryptogram cg2);
-  requires polarssl_cryptogram_is_generated(cg1) &&
-           polarssl_cryptogram_is_nested(cg1) &&
-           mem(cg2, polarssl_cryptograms_in_chars(
+  requires true == polarssl_cryptogram_is_generated(cg1) &*&
+           true == polarssl_cryptogram_is_nested(cg1) &*&
+           true == mem(cg2, polarssl_cryptograms_in_chars(
                                              polarssl_cryptogram_payload(cg1)));
   ensures  true == polarssl_cryprogram_has_lower_level(
                                            polarssl_cryptogram_level(cg1), cg2);
@@ -382,9 +382,9 @@ lemma void polarssl_cryptogram_level_nested_constraints(
 //Derived
 lemma void polarssl_cryptogram_level_nested_constraints_bound(
                                        polarssl_cryptogram cg, nat bound);
-  requires polarssl_cryptogram_is_generated(cg) &&
-           polarssl_cryptogram_is_nested(cg) &&
-           polarssl_cryprogram_has_lower_level(succ(bound), cg);
+  requires true == polarssl_cryptogram_is_generated(cg) &*&
+           true == polarssl_cryptogram_is_nested(cg) &*&
+           true == polarssl_cryprogram_has_lower_level(succ(bound), cg);
   ensures  true == forall(
                  polarssl_cryptograms_in_chars(polarssl_cryptogram_payload(cg)),
                             (polarssl_cryprogram_has_lower_level)(bound));
@@ -474,7 +474,7 @@ void sha512_hmac(const char *key, size_t keylen, const char *input, size_t ilen,
                is384 == 0 ? 
                    length == 64
                  :
-                   length == 48 && is384 == 1; @*/
+                   length == 48 &*& is384 == 1; @*/
   /*@ ensures  [f0]polarssl_world(polarssl_pub) &*&
                [f1]chars(key, keylen, cs_key) &*& 
                [f2]chars(input, ilen, cs_pay) &*&
@@ -826,7 +826,7 @@ int rsa_gen_key(void *ctx, void *f_rng, void *p_rng,
                rsa_key_request(?principal, ?info) &*&
                [_]is_random_function(f_rng, state_pred) &*&
                [?f]state_pred(p_rng) &*&
-               nbits >= 1024 && nbits <= 8192 &*& exponent == 65537 &*&
+               nbits >= 1024 &*& nbits <= 8192 &*& exponent == 65537 &*&
                polarssl_generated_values(principal, ?count); @*/
   /*@ ensures  [f]state_pred(p_rng) &*&
                polarssl_generated_values(principal, count + 1) &*&
@@ -978,7 +978,7 @@ int pk_decrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                       switch (pair)
                       { 
                         case pair(principal3, id3): return
-                          principal2 == principal3 && id2 == id3 ?
+                          principal2 == principal3 &*& id2 == id3 ?
                             chars(output, olen_val, cs_out2)
                           :
                             polarssl_public_message(polarssl_pub)

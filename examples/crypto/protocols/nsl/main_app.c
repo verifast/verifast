@@ -194,7 +194,10 @@ int main() //@ : main_full(main_app)
   struct item *key_A_priv;
   struct item *key_B_priv;
 
-  printf("\n\tExecuting \"nsl protocol\" ... \n\n");
+  printf("\n\tExecuting \"");
+  printf("nsl protocol");
+  printf("\" ... \n\n");
+  
   //@ open_module();
   //@ PACK_PROOF_OBLIGATIONS(nsl)
   init_crypto_lib();

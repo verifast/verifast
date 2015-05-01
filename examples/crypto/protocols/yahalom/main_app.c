@@ -180,7 +180,10 @@ int main() //@ : main_full(main_app)
   struct item *key_BS;
   struct item *key_AB;
 
-  printf("\n\tExecuting \"yahalom protocol\" ... \n\n");
+  printf("\n\tExecuting \""); 
+  printf("yahalom protocol");
+  printf("\" ... \n\n");
+  
   //@ open_module();
   //@ PACK_PROOF_OBLIGATIONS(yahalom)
   init_crypto_lib();

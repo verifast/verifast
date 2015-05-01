@@ -6,8 +6,12 @@ void abort_crypto_lib(const char* message)
   //@ requires [?f]string(message, ?cs);
   //@ ensures  false;
 {
-  printf("An error has occurred while using the crypto library:\n"
-         "\n\t%s\n\nAborting...\n", message);
+  printf("An error has"); 
+  printf("occurred while"); 
+  printf("using the crypto"); 
+  printf("library:\n\n\t"); 
+  printf("%s\n\nAborting...\n", message);
+
   abort();
 }
 

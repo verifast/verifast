@@ -459,6 +459,8 @@ void parse_pair_item(char* message, int size)
   //@ assert chars(buffer_s, size_s, ?cs_s);
   if (size_f <= 1 || size_s <= 1)
     abort_crypto_lib("Incorrect size for pair item");
+  /*@ assert cs0 == append(chars_of_unbounded_int(length(cs_f)), 
+                           append(cs_f, cs_s)); @*/
   parse_item(buffer_f, size_f);
   parse_item(buffer_s, size_s);
   //@ chars_join(message + 1 + sizeof(int));
@@ -471,6 +473,13 @@ void parse_pair_item(char* message, int size)
           length_equals_nat_length(cs0);
           well_formed_upper_bound(cs_f, nat_length(cs_f), nat_length(cs0));
           well_formed_upper_bound(cs_s, nat_length(cs_s), nat_length(cs0));
+          assert length(cs) > 0;
+          assert length(cs) <= INT_MAX;
+          assert cs == cons('b', cs0);
+          assert true == well_formed(cs_f, nat_length(cs_f));
+          assert true == well_formed(cs_s, nat_length(cs_s));
+          assert cs0 == append(chars_of_unbounded_int(length(cs_f)), 
+                        append(cs_f, cs_s));
           well_formed_pair_item(cs, cs_f, cs_s);
         case zero:
           assert false;

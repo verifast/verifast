@@ -119,7 +119,11 @@ int main() //@ : main_full(main_app)
   struct item *s_key;
   struct item *r_key;
   
-  printf("\n\tExecuting \"secure_storage protocol\" ... \n\n");
+  printf("\n\tExecuting \""); 
+  printf("secure_storage");
+  printf("protocol");
+  printf("\" ... \n\n");
+  
   //@ open_module();
   //@ PACK_PROOF_OBLIGATIONS(ss)
   init_crypto_lib();

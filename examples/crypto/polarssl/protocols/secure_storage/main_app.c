@@ -152,7 +152,10 @@ int main() //@ : main
   if (principals == 0) abort();
   *principals = 0;
   
-  printf("\n\tExecuting \"secure_storage protocol\" ... \n\n");
+  printf("\n\tExecuting \""); 
+  printf("secure_storage");
+  printf(" protocol");
+  printf("\" ... \n\n");
   
   //@ PACK_PROOF_OBLIGATIONS(ss)
   //@ close exists(ss_polarssl_pub);

@@ -72,7 +72,10 @@ int main() //@ : main_full(main_app)
   //@ requires module(main_app, true);
   //@ ensures  true;
 {
-  printf("\n\tExecuting \"dummy protocol\" ... \n\n");
+  printf("\n\tExecuting \"");
+  printf("dummy protocol");
+  printf("\" ... \n\n");
+  
   //@ open_module();
   //@ PACK_PROOF_OBLIGATIONS(dummy)
   init_crypto_lib();

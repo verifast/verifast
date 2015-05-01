@@ -131,7 +131,7 @@ lemma void well_formed_pair_item_2(list<char> cs,
 
 lemma void well_formed_pair_item(list<char> cs, 
                                  list<char> cs_f, list<char> cs_s)
-  requires length(cs) > 0 && length(cs) <= INT_MAX &*&
+  requires length(cs) > 0 &*& length(cs) <= INT_MAX &*&
            cs == cons('b', ?cs0) &*&
            cs0 == append(chars_of_unbounded_int(length(cs_f)), 
                         append(cs_f, cs_s)) &*&
