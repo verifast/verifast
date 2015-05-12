@@ -15,4 +15,6 @@ in
   run -c InvalidCoinduction4.java
   run -c invalid_coinduction_predicate_value.c
   run valid_recursion.c
+  run -c NormalPredicateTest.java
+  run -c InstancePredicateUseInLemma.java
   

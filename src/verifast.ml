@@ -844,10 +844,12 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   | None ->
                     begin match resolve Ghost (pn,ilist) l g predfammap with
                     | Some (g, (_, _, _, _, _, _, inductiveness)) -> inductiveness
-                    | None -> 
-                      (* trying to find out whether the predicate is
-                       * inductive or coinductive failed. *)
-                      assert false
+                    | None ->
+                      (* The predicate is not in one of the maps supporting
+                       * coinductive predicate. It might be an instance
+                       * predicate (or another type of predicate where
+                       * coinduction is not supported). *)
+                      Inductiveness_Inductive
                     end
                   | Some (PredCtorInfo (_, ps1, ps2, inputParamCount, body, funcsym)) ->
                     (* predicate ctors do not support coinductive predicates yet, so they are inductive. *)
