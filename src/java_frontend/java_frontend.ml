@@ -72,11 +72,12 @@ let detach () =
   attached_status := false
   
 (* method to send a FILES request with corresponding options and parse the response message *)
-let asts_from_java_files_core files cfiles opts report_should_fail achecker =
+let asts_from_java_files_core files cfiles opts report_should_fail annotaton_char_tag achecker =
   catch_exceptions (fun _ ->
     let files' = file_separator ^ (String.concat file_separator files) ^ file_separator in
     let cfiles' = file_separator ^ (String.concat file_separator cfiles) ^ file_separator in
     communication#send_command(command_handle_files ^ command_separator ^
+                               annotaton_char_tag ^ command_separator ^
                                files' ^ command_separator ^
                                cfiles' ^ command_separator ^
                                (String.concat command_separator opts));
@@ -113,10 +114,10 @@ let asts_from_java_files_core files cfiles opts report_should_fail achecker =
   )
 
 (* method to send a FILES request and parse the response message with the given options *)
-let asts_from_java_files files ~context:cfiles opts report_should_fail achecker =
-  catch_exceptions (fun _ -> Ast_reader.read_asts (asts_from_java_files_core files cfiles opts report_should_fail achecker))
+let asts_from_java_files files ~context:cfiles opts report_should_fail annotaton_char_tag achecker =
+  catch_exceptions (fun _ -> Ast_reader.read_asts (asts_from_java_files_core files cfiles opts report_should_fail annotaton_char_tag achecker))
 
-let ast_from_java_file file opts report_should_fail achecker =
-  let result = asts_from_java_files [file] [] opts report_should_fail achecker in
+let ast_from_java_file file opts report_should_fail annotaton_char_tag achecker =
+  let result = asts_from_java_files [file] ~context:[] opts report_should_fail annotaton_char_tag achecker in
   if (List.length result != 1) then frontend_error dummy_loc "Single file did not result in single AST";
   List.hd result

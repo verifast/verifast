@@ -3,6 +3,14 @@ ifz3 verifast
 verifast -prover redux
 in
 
+verifast_both -c -javac Empty.java
+verifast_both -c -javac AnnotationChar.java
+
+cd should_fail
+  verifast_both -c -javac -allow_should_fail ShouldFail1.java
+  verifast_both -c -javac -allow_should_fail ShouldFail2.java
+cd ..
+
 cd varargs
   verifast_both -c Varargs_desugared.java
   verifast_both -c -javac Varargs_desugared.java

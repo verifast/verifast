@@ -79,4 +79,4 @@ let apply_option f a =
   | None -> None
 
 (* Version *)
-let release_version = "23"
+let release_version = "25"

@@ -49,10 +49,7 @@ let build_context paths jars =
   in
   recurse_specs [] jars
 
-let parse_java_files_with_frontend (paths: string list) (jars: string list) (reportRange: range_kind -> loc -> unit) reportShouldFail verbose enforceAnnotations: package list =
-  let (rt_paths, paths) =
-    List.partition (fun p -> Filename.dirname p = Util.rtdir()) paths
-  in
+let rec parse_java_files_with_frontend (paths: string list) (jars: string list) (reportRange: range_kind -> loc -> unit) reportShouldFail verbose enforceAnnotations: package list =
   let context_new = build_context paths jars in
   found_java_spec_files := Util.list_remove_dups (!found_java_spec_files @ context_new);
   let context_for_paths = List.filter (fun x -> not (List.mem ((Filename.chop_extension x) ^ ".javaspec") paths)) !found_java_spec_files in
@@ -68,15 +65,15 @@ let parse_java_files_with_frontend (paths: string list) (jars: string list) (rep
         Java_frontend.bodyless_methods_own_trailing_annotations;
         Java_frontend.accept_spec_files]
       in
-      let reportShouldFail l =
+      let reportShouldFail' l =
         let l = Ast_translator.translate_location l in
         reportShouldFail l
       in
       let packages = 
-        Java_frontend.asts_from_java_files paths ~context:context_for_paths fe_options reportShouldFail ann_checker
+        Java_frontend.asts_from_java_files paths ~context:context_for_paths fe_options reportShouldFail' "verifast_annotation_char" ann_checker
       in
       let annotations = ann_checker#retrieve_annotations () in
-      Ast_translator.translate_asts packages annotations enforceAnnotations
+      Ast_translator.translate_asts packages annotations reportRange reportShouldFail enforceAnnotations
     with
       Java_frontend.JavaFrontendException(l, m) -> 
         let message = 
@@ -86,14 +83,9 @@ let parse_java_files_with_frontend (paths: string list) (jars: string list) (rep
         | General_ast.NoSource -> raise (Parser.CompilationError message)
         | _ -> raise (Parser.StaticError(Ast_translator.translate_location l, message, None))
   in
-  let result =
-    match paths with
+  match paths with
     | [] -> []
-    | _ -> parse paths
-  in
-  (List.map (fun x -> Parser.parse_java_file_old x reportRange reportShouldFail verbose enforceAnnotations) rt_paths) @ result
-(*   TODO: replace with this statement and check why this does not work yet *) 
-(*   (parse rt_paths) @ result  *)
+    | _ -> (parse paths)
 
 let parse_java_files (paths: string list) (jars: string list) (reportRange: range_kind -> loc -> unit) reportShouldFail verbose enforceAnnotations useJavaFrontend: package list =
   if useJavaFrontend then

@@ -204,13 +204,13 @@ object (this)
     let message = Misc.join_lines_never_fail lines in
     debug_print ("receive_response got message: \n" ^ message);
     if (List.length lines < 1) then
-      this#error ("Received a empty message from the ASTServer");
+      this#error ("Received an empty message from the ASTServer");
     let kind = List.hd lines in
     if not (List.mem kind responses) then
         this#error ("Received an incomprehensible message from the ASTServer: \n" ^ message);
     if kind = response_abort then begin
       this#unload;
-      this#error ("ASTServer aborted while exetuting command: \n" ^ message)
+      this#error ("ASTServer aborted\n")
     end;
     let parts = List.tl lines in
     if kind = response_failure then begin

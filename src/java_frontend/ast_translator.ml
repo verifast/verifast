@@ -71,6 +71,8 @@ let translate_location l =
 (* ------------------------------------------------ *)
 
 let annotations : (string, string list) Hashtbl.t ref = ref (Hashtbl.create 1)
+let report_range : (Lexer.range_kind -> Ast.loc -> unit) ref = ref (fun _ _ -> ())
+let report_should_fail : (Ast.loc -> unit) ref = ref (fun _ -> ())
 let enforce_annotations : bool ref = ref false
 
 (* this function creates a lexer for each of 
@@ -101,19 +103,11 @@ let parse_pure_decls_core loc used_parser anns lookup =
         debug_print (Printf.sprintf "Handling annotation \n%s\n" a);
         begin
           let (srcpos1, _) = translate_location l in
-          let reportRange kind ((_, line1, col1), (_, line2, col2)) =
-            ()  (* TODO implement *)
-          in
-          let reportShouldFail =
-            fun _ -> () (* TODO implement *)
-          in
-          let annotChar =
-            '@' (* TODO get correct value *)
-          in
+          let annotChar = '*' in (*No nested annotations allowed, so no problem. JDK takes care of annotation char*)
           let (loc, _, token_stream, _, _) =
             Lexer.make_lexer_core (Parser.common_keywords @ Parser.java_keywords) 
-                                  Parser.ghost_keywords srcpos1 a reportRange
-                                  false true true reportShouldFail annotChar
+                                  Parser.ghost_keywords srcpos1 a !report_range
+                                  false true true !report_should_fail annotChar
           in
           (loc, token_stream)
         end
@@ -209,11 +203,13 @@ let parse_loop_invar loc anns lookup =
 (* Translation of Ast's                             *)
 (* ------------------------------------------------ *)
 
-let rec translate_asts packages anns enforce_annotations =
-  List.map (fun x -> translate_ast x anns enforce_annotations) packages
+let rec translate_asts packages anns reportRange reportShouldFail enforce_annotations =
+  List.map (fun x -> translate_ast x anns reportRange reportShouldFail enforce_annotations) packages
 
-and translate_ast package anns enforce_anns =
+and translate_ast package anns report_range_ report_should_fail_ enforce_anns =
   annotations := anns;
+  report_range := report_range_;
+  report_should_fail := report_should_fail_;
   enforce_annotations := enforce_anns;
   translate_package package 
 
