@@ -75,6 +75,9 @@ cd examples
   verifast_both -disable_overflow_check counter_with_pred.c
   verifast_both -disable_overflow_check counter_with_pred_auto.c
   verifast_both -shared threading.o counting_threads.c
+  cd custom_bindir
+    mysh < custom_bindir.mysh
+  cd ..
   verifast_both -disable_overflow_check cp.c
   ifz3 verifast -c decreases.c
   verifast_both -c default_clause_test.c

@@ -1359,7 +1359,7 @@ let make_sound_preprocessor make_lexer path verbose include_paths =
       begin match p_t with
         Some (l,BeginInclude(kind, i, _)) ->    
           let path0 = List.hd !paths in
-          let includepaths = (match kind with DoubleQuoteInclude -> [Filename.dirname path0] | AngleBracketInclude -> []) @ include_paths @ [bindir] in
+          let includepaths = (match kind with DoubleQuoteInclude -> [Filename.dirname path0] | AngleBracketInclude -> []) @ include_paths @ [!bindir] in
           
           (** Searches the directory in includepaths that contains the file i (can contain directory names).
            *  Returns the path of the found file.

@@ -1641,7 +1641,7 @@ let expand_macros macros text =
   iter 0;
   Buffer.contents buffer
 
-let path_macros = [("VERIFAST", rtdir)]
+let path_macros = [("VERIFAST", rtdir())]
 
 let expand_path path =
   expand_macros path_macros path
@@ -1723,7 +1723,7 @@ let parse_jarsrc_file_core path =
       [] -> provides
     | [line] when startswith line "main-class " ->
       let mainClass = String.sub line (String.length "main-class ") (String.length line - String.length "main-class ") in
-      provides @ [(Util.concat Util.bindir "main_class ") ^ mainClass]
+      provides @ [(Util.concat !Util.bindir "main_class ") ^ mainClass]
     | _ ->
       raise (ParseException (file_loc path, "A .jarsrc file must consists of a list of .jar file paths followed by a list of .java file paths, optionally followed by a line of the form \"main-class mymainpackage.MyMainClass\""))
   in

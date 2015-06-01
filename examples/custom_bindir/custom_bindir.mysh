@@ -1,0 +1,11 @@
+let verifast_both
+verifast
+verifast -prover redux
+in
+
+verifast -bindir bin/stdlib -c -emit_vfmanifest test.c
+verifast -bindir bin/stdlib -c -emit_vfmanifest main.c
+verifast -bindir bin/stdlib test.o main.o
+
+rm test.vfmanifest
+rm main.vfmanifest

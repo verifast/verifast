@@ -435,7 +435,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let current_module_term = get_unique_var_symb current_module_name IntType
   
   let programDir = Filename.dirname path
-  let rtpath = match options.option_runtime with None -> concat rtdir "rt.jarspec" | Some path -> path
+  let rtpath = match options.option_runtime with None -> concat (rtdir()) "rt.jarspec" | Some path -> path
   (** Records the source lines containing //~, indicating that VeriFast is supposed to detect an error on that line. *)
   let shouldFailLocs = ref []
   
@@ -445,10 +445,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       shouldFailLocs := l::!shouldFailLocs
     else
       static_error l "Should fail directives are not allowed; use the -allow_should_fail command-line option to allow them." None
-  
-  let (prelude_headers, prelude_decls) = parse_header_file (concat bindir "prelude.h") reportRange reportShouldFail initial_verbosity [] enforce_annotations
-  let prelude_header_names = List.map (fun (_, (_, _, h), _, _) -> h) prelude_headers
-  let prelude_headers = (dummy_loc, (AngleBracketInclude, "prelude.h", concat bindir "prelude.h"), prelude_header_names, prelude_decls)::prelude_headers
   
   let check_should_fail default body =
     let locs_match ((path0, line0, _), _) ((path1, line1, _), _) = path0 = path1 && line0 = line1 in
@@ -876,7 +872,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         else begin
           if (options.option_safe_mode || options.option_header_whitelist <> []) && not (List.mem header_path options.option_header_whitelist) then
             static_error l "This header file is not on the header whitelist." None;
-          let includepaths = (match include_kind with DoubleQuoteInclude -> [dir] | AngleBracketInclude -> []) @ include_paths @ [bindir] in
+          let includepaths = (match include_kind with DoubleQuoteInclude -> [dir] | AngleBracketInclude -> []) @ include_paths @ [!bindir] in
           let rec find_include_file includepaths =
             match language with
               CLang ->
@@ -923,7 +919,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     let l = file_loc path in
                     let spec_include_for_jar jar =
                       let jarspec = (Filename.chop_extension jar) ^ ".jarspec" in
-                      (l, (DoubleQuoteInclude, jarspec, concat bindir jarspec), [], [])
+                      (l, (DoubleQuoteInclude, jarspec, concat !bindir jarspec), [], [])
                     in
                     let jarspecs = List.map spec_include_for_jar jars in 
                     (jarspecs, ds)
@@ -957,15 +953,18 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let rtdir = Filename.dirname rtpath in
                 let ds = Java_frontend_bridge.parse_java_files (List.map (fun x -> concat rtdir x) javaspecs) [] reportRange
                                                                reportShouldFail initial_verbosity enforce_annotations use_java_frontend in
-                let (_, maps0) = check_file rtpath true false bindir [] ds in
+                let (_, maps0) = check_file rtpath true false !bindir [] ds in
                 headermap := (rtpath, ([], maps0))::!headermap;
                 (maps0, [])
               | Some ([], maps0) ->
                 (maps0, [])
           end
           | CLang ->
-            let headers = (dummy_loc, (AngleBracketInclude, "prelude.h", concat bindir "prelude.h"), prelude_header_names, prelude_decls)::prelude_headers in
-            merge_header_maps false maps0 [] bindir headers headers
+            let (prelude_headers, prelude_decls) = parse_header_file (concat !bindir "prelude.h") reportRange reportShouldFail initial_verbosity [] enforce_annotations in
+            let prelude_header_names = List.map (fun (_, (_, _, h), _, _) -> h) prelude_headers in
+            let prelude_headers = (dummy_loc, (AngleBracketInclude, "prelude.h", concat !bindir "prelude.h"), prelude_header_names, prelude_decls)::prelude_headers in
+            let headers = (dummy_loc, (AngleBracketInclude, "prelude.h", concat !bindir "prelude.h"), prelude_header_names, prelude_decls)::prelude_headers in
+            merge_header_maps false maps0 [] !bindir headers headers
       else
         (maps0, [])
     in

@@ -51,7 +51,7 @@ let build_context paths jars =
 
 let parse_java_files_with_frontend (paths: string list) (jars: string list) (reportRange: range_kind -> loc -> unit) reportShouldFail verbose enforceAnnotations: package list =
   let (rt_paths, paths) =
-    List.partition (fun p -> Filename.dirname p = Util.rtdir) paths
+    List.partition (fun p -> Filename.dirname p = Util.rtdir()) paths
   in
   let context_new = build_context paths jars in
   found_java_spec_files := Util.list_remove_dups (!found_java_spec_files @ context_new);

@@ -162,29 +162,23 @@ let _ =
   let provides = ref [] in
   let keepProvideFiles = ref false in
   let include_paths: string list ref = ref [] in
-  let library_paths: string list ref = ref [Util.bindir] in
+  let library_paths: string list ref = ref ["CRT"] in
   let safe_mode = ref false in
   let header_whitelist: string list ref = ref [] in
   let linkShouldFail = ref false in
   let useJavaFrontend = ref false in
   let enforceAnnotations = ref false in
-  let vroots = ref [Util.crt_vroot] in
+  let vroots = ref [Util.crt_vroot Util.default_bindir] in
   let add_vroot vroot =
     let (root, expansion) = Util.split_around_char vroot '=' in
-    let expansion = 
-      if Filename.is_relative expansion then 
-        Util.reduce_path (Util.compose Util.cwd expansion) 
-      else 
-        expansion 
-    in
+    let expansion = Util.abs_path expansion in
     if not (Sys.file_exists expansion) then
       failwith (Printf.sprintf "In definition of vroot '%s': bad expansion '%s': no such file" root expansion);
     if String.length root = 0 then
       failwith (Printf.sprintf "Bad root name '%s': should be nonempty" root);
     String.iter (function 'A'..'Z'|'_'|'0'..'9' -> () | _ -> failwith (Printf.sprintf "Bad root name '%s': should contain only uppercase letters, underscores, and digits" root)) root;
     begin match root.[0] with 'A'..'Z' -> () | _ -> failwith (Printf.sprintf "Bad root name '%s': should start with an uppercase letter" root) end;
-    printff "Adding vroot '%s' with expansion '%s'\n" root expansion;
-    vroots := List.append !vroots [(root, expansion)]
+    vroots := List.append (List.filter (fun (x, y) -> x <> root) !vroots) [(root, expansion)]
   in
 
   (* Explanations that are an empty string ("") become hidden in the
@@ -204,6 +198,7 @@ let _ =
             ; "-emit_vfmanifest", Set emitManifest, " "
             ; "-emit_dll_vfmanifest", Set emitDllManifest, " "
             ; "-emit_dll_vfmanifest_as", String (fun str -> dllManifestName := Some str), " "
+            ; "-bindir", String (fun str -> let p = Util.abs_path str in Util.set_bindir p; add_vroot ("CRT=" ^ p)), "Set custom bindir with standard library"
             ; "-vroot", String (fun str -> add_vroot str), "Add a virtual root for include paths and, creating or linking vfmanifest files (e.g. MYLIB=../../lib). Ill-formed roots are ignored."
             ; "-emit_highlighted_source_files", Set emitHighlightedSourceFiles, " "
             ; "-provides", String (fun path -> provides := !provides @ [path]), " "
@@ -299,10 +294,8 @@ let _ =
         try
           print_endline "Linking...";
           let library_paths = List.map (Util.replace_vroot !vroots) !library_paths in
-          let mydir = Filename.dirname Sys.executable_name in
-          let libs = ["crt.dll.vfmanifest"] in
-          let libs = List.map (Filename.concat mydir) libs in
-          let assume_lib = Filename.concat mydir "assume.dll.vfmanifest" in
+          let libs = [Filename.concat !Util.bindir "crt.dll.vfmanifest"] in
+          let assume_lib = Filename.concat !Util.bindir "assume.dll.vfmanifest" in
           let libs = if !allowAssume then libs @ [assume_lib] else libs in
           let allModules = libs @ List.rev !allModules in
           if !verbose = -1 then Printf.printf "\n%10.6fs: linking files: %s\n\n" (Perf.time()) (String.concat " " allModules);

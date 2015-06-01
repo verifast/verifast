@@ -284,8 +284,12 @@ let rec chars_of_string s =
 let concat path1 path2 =
   if path1 = "" || path1 = "." then path2 else path1 ^ Filename.dir_sep ^ path2
 
-let bindir = Filename.dirname Sys.executable_name
-let rtdir = concat bindir "rt"
+let default_bindir = Filename.dirname Sys.executable_name
+let bindir = ref default_bindir
+let set_bindir dir =
+  bindir := dir
+
+let rtdir _ = concat !bindir "rt"
 let cwd = Sys.getcwd()
 
 let compose base path = if Filename.is_relative path then base ^ "/" ^ path else path
@@ -302,6 +306,12 @@ let reduce_path path =
     | _, part::todo -> iter (part::reduced) todo
   in
   iter [] path
+
+let abs_path path = 
+  if Filename.is_relative path then 
+    reduce_path (compose cwd path) 
+  else 
+    path
 
 (* Like reduce_path, except does not remove the first component *)
 let reduce_rooted_path path =
@@ -324,7 +334,7 @@ let remove_prefix p s =
   else
     None
 
-let crt_vroot = ("CRT", reduce_path bindir)
+let crt_vroot path = ("CRT", reduce_path path)
 
 let replace_vroot vroots path =
   let root::rest = split (fun c -> c = '/' || c = '\\') path in
@@ -337,9 +347,6 @@ let qualified_path vroots modpath (basedir, relpath) =
   let module_basedir = reduce_path (compose cwd (Filename.dirname modpath)) in
   let module_basedir_prefix = module_basedir ^ "/" in
   let path = reduce_path (compose cwd (basedir ^ "/" ^ relpath)) in
-  match remove_prefix module_basedir_prefix path with
-    Some relpath -> "./" ^ relpath
-  | None ->
   let vrooted_paths = vroots |> flatmap begin fun (name, expansion) ->
       match remove_prefix (expansion ^ "/") path with
         Some relpath -> [name ^ "/" ^ relpath]
@@ -349,6 +356,9 @@ let qualified_path vroots modpath (basedir, relpath) =
   match vrooted_paths with
     h::t -> h
   | [] ->
+  match remove_prefix module_basedir_prefix path with
+    Some relpath -> "./" ^ relpath
+  | None ->
   let mcs = split (fun c -> c = '/') module_basedir in
   let pcs = split (fun c -> c = '/') path in
   if List.hd mcs <> List.hd pcs then

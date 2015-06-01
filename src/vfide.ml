@@ -326,9 +326,9 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   let show_help url =
     if Sys.os_type = "Unix" then
      if sys "uname" = "Darwin" then
-        ignore (Sys.command ("open " ^ "'" ^ bindir ^ "/../help/" ^ url ^ ".html" ^ "'"))
+        ignore (Sys.command ("open " ^ "'" ^ !bindir ^ "/../help/" ^ url ^ ".html" ^ "'"))
       else
-        ignore (Sys.command ("xdg-open " ^ "'" ^ bindir ^ "/../help/" ^ url ^ ".html" ^ "'"))
+        ignore (Sys.command ("xdg-open " ^ "'" ^ !bindir ^ "/../help/" ^ url ^ ".html" ^ "'"))
     else
       (* The below command asynchronously launches a "cmd" process that launches the help topic.
          Launching the help topic synchronously seems to cause vfide to hang for between 6 and 30 seconds.
@@ -338,7 +338,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
          responsive until the Help topic is launched. Ergo the deadlock.
          This seems to be confirmed here <http://wiki.tcl.tk/996> and here <http://blogs.msdn.com/b/oldnewthing/archive/2007/02/26/1763683.aspx>.
       *)
-      ignore (Unix.create_process "cmd" [| "/C"; "start"; "Dummy Title"; bindir ^ "\\..\\help\\" ^ url ^ ".html" |] Unix.stdin Unix.stdout Unix.stderr)
+      ignore (Unix.create_process "cmd" [| "/C"; "start"; "Dummy Title"; !bindir ^ "\\..\\help\\" ^ url ^ ".html" |] Unix.stdin Unix.stdout Unix.stderr)
   in
   ignore (helpButton#connect#clicked (fun () -> (match(!url) with None -> () | Some(url) -> show_help url);));
   toolbar#insert messageToolItem;
@@ -1305,7 +1305,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
                 option_enforce_annotations = enforceAnnotations;
                 option_allow_should_fail = true;
                 option_emit_manifest = false;
-                option_vroots = [crt_vroot];
+                option_vroots = [crt_vroot default_bindir];
                 option_allow_assume = true;
                 option_simplify_terms = !simplifyTerms;
                 option_runtime = runtime;
@@ -1652,6 +1652,7 @@ let () =
     | "-codeFont"::arg::args -> codeFont := arg; iter args
     | "-traceFont"::arg::args -> traceFont := arg; iter args
     | "-runtime"::arg::args -> runtime := Some arg; iter args
+    | "-bindir"::arg::args -> Util.set_bindir arg; iter args
     | "-I"::arg::args -> ( match (Some arg) with
        None -> ( ) | Some arg -> include_paths := arg :: !include_paths);
        iter args
