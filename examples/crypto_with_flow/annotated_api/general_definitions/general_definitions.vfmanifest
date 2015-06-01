@@ -1,0 +1,52 @@
+# auxiliary_definitions.gh
+.provides ./auxiliary_definitions.gh#int_left_int_pair
+.provides ./auxiliary_definitions.gh#int_right_int_pair
+#
+#
+# principals.gh
+.predicate @./principals.gh#principals
+.provides ./principals.gh#principals_init
+.provides ./principals.gh#principals_exit
+.predicate @./principals.gh#principal
+.predicate @./principals.gh#generated_values
+.provides ./principals.gh#principal_create
+.provides ./principals.gh#principal_destroy
+#
+#
+# cryptogram.gh
+.provides ./cryptogram.gh#chars_for_cg_inj
+.provides ./cryptogram.gh#chars_for_cg_sur
+.provides ./cryptogram.gh#cg_constraints
+#
+#
+# cryptogram_bounds.gh
+.provides ./cryptogram_bounds.gh#cgs_in_chars_upper_bound
+.provides ./cryptogram_bounds.gh#cgs_in_chars_upper_bound_subset
+.provides ./cryptogram_bounds.gh#cgs_in_chars_upper_bound_superset
+.provides ./cryptogram_bounds.gh#cgs_in_chars_upper_bound_split
+.provides ./cryptogram_bounds.gh#cgs_in_chars_upper_bound_join
+#
+#
+# cryptogram_levels.gh
+.provides ./cryptogram_levels.gh#cg_level
+.provides ./cryptogram_levels.gh#cg_level_ind
+#
+#
+# crypto_chars_util.gh
+.provides ./crypto_chars.gh#crypto_chars
+.provides ./crypto_chars.gh#crypto_chars_inv
+.provides ./crypto_chars.gh#crypto_chars_split
+.provides ./crypto_chars.gh#crypto_chars_join
+#
+#
+# public_invariant.gh
+.predicate @./public_invariant.gh#public_invar
+.provides ./public_invariant.gh#public_invariant_init
+.predicate @./public_chars.gh#public_generated
+.predicate @./public_invariant.gh#public_invar_constraints
+.produces module public_invariant
+#
+#
+# public_chars.gh
+.provides ./public_chars.gh#public_chars
+.provides ./public_chars.gh#public_crypto_chars

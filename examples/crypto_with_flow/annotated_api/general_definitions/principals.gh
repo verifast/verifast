@@ -1,0 +1,30 @@
+#ifndef PRINCIPALS_GH
+#define PRINCIPALS_GH
+
+predicate principals(int count);
+
+lemma void principals_init();
+  requires true;
+  ensures  principals(_);
+
+lemma void principals_exit();
+  requires principals(_);
+  ensures  true;
+
+predicate principal(int principal);
+
+predicate generated_values(int principal, int count);
+
+fixpoint bool bad(int principal);
+
+lemma int principal_create();
+  requires principals(?count);
+  ensures  principals(count + 1) &*& result == count + 1 &*&
+           principal(count + 1) &*& generated_values(count + 1, 0);
+
+lemma void principal_destroy(int count);
+  requires principal(count) &*&
+           generated_values(count, _);
+  ensures  true;
+
+#endif

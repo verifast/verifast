@@ -11,6 +11,9 @@ cd examples
   cd crypto
     mysh -cpus 1 < crypto.mysh
   cd ..
+  cd crypto_with_flow
+    mysh -cpus 1 < crypto_with_flow.mysh
+  cd ..
   verifast_both -c -disable_overflow_check -allow_should_fail forall.c
   verifast_both -c -disable_overflow_check -allow_should_fail address_of_local.c
   verifast_both -c -disable_overflow_check alt_threading.c

@@ -1,0 +1,26 @@
+#ifndef KEY_UTIL_GH
+#define KEY_UTIL_GH
+
+#include "cryptogram.gh"
+#include "crypto_chars.gh"
+#include "public_chars.gh"
+
+lemma void interpret_symmetric_key(char *buffer, int size, list<char> cs);
+  requires [_]public_invar(?pub) &*&
+           [?f]chars(buffer, size, cs);
+  ensures  [f]cryptogram(buffer, size, cs, ?cg) &*& [_]pub(cg) &*&
+           cg == cg_symmetric_key(?p, ?c);
+
+lemma void interpret_public_key(char *buffer, int size, list<char> cs);
+  requires [_]public_invar(?pub) &*&
+           [?f]chars(buffer, size, cs);
+  ensures  [f]cryptogram(buffer, size, cs, ?cg) &*& [_]pub(cg) &*&
+           cg == cg_public_key(?p, ?c);
+
+lemma void interpret_private_key(char *buffer, int size, list<char> cs);
+  requires [_]public_invar(?pub) &*&
+           [?f]chars(buffer, size, cs);
+  ensures  [f]cryptogram(buffer, size, cs, ?cg) &*& [_]pub(cg) &*&
+           cg == cg_private_key(?p, ?c);
+
+#endif

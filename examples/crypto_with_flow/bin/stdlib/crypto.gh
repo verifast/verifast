@@ -1,0 +1,33 @@
+#ifndef CRYPTO_GH
+#define CRYPTO_GH
+
+inductive cryptogram =
+  | cg_random        (int principal, int count)
+  | cg_symmetric_key (int principal, int count)
+  | cg_public_key    (int principal, int count)
+  | cg_private_key   (int principal, int count)
+  | cg_hash          (list<char> payload)
+  | cg_hmac          (int principal, int count, list<char> payload)
+  | cg_encrypted     (int principal, int count, list<char> payload,
+                      list<char> entropy)
+  | cg_auth_encrypted(int principal, int count, list<char> mac,
+                      list<char> payload, list<char> entropy)
+  | cg_asym_encrypted(int principal, int count,
+                      list<char> payload, list<char> entropy)
+  | cg_asym_signature(int principal, int count,
+                      list<char> payload, list<char> entropy)
+;
+
+fixpoint list<char> chars_for_cg(cryptogram cg);
+
+predicate crypto_chars(char *array, int n; list<char> cs);
+
+predicate optional_crypto_chars(bool is_crypto_chars,
+                                char* array, int len; list<char> cs) =
+  is_crypto_chars ?
+    crypto_chars(array, len, cs)
+  :
+    chars(array, len, cs)
+;
+    
+#endif

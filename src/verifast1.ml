@@ -445,7 +445,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       shouldFailLocs := l::!shouldFailLocs
     else
       static_error l "Should fail directives are not allowed; use the -allow_should_fail command-line option to allow them." None
-  
+
   let check_should_fail default body =
     let locs_match ((path0, line0, _), _) ((path1, line1, _), _) = path0 = path1 && line0 = line1 in
     let should_fail l = List.exists (locs_match l) !shouldFailLocs in

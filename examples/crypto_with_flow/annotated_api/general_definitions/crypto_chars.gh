@@ -1,0 +1,53 @@
+#ifndef CRYPTO_CHARS_UTIL_H
+#define CRYPTO_CHARS_UTIL_H
+
+#include <crypto.gh>
+#include "cryptogram.gh"
+#include "cryptogram_levels.gh"
+
+lemma void crypto_chars(char *array, int n, list<char> cs);
+  requires [?f]chars(array, n, cs);
+  ensures  [f]crypto_chars(array, n, cs);
+
+lemma_auto void crypto_chars_inv();
+    requires [?f]crypto_chars(?array, ?count, ?cs);
+    ensures [f]crypto_chars(array, count, cs) &*& length(cs) == count;
+  
+lemma void crypto_chars_split(char *array, int offset);
+  requires [?f]crypto_chars(array, ?n, ?cs) &*& 0 <= offset &*& offset <= n;
+  ensures  [f]crypto_chars(array, offset, take(offset, cs)) &*& 
+           [f]crypto_chars(array + offset, n - offset, drop(offset, cs)) &*& 
+           append(take(offset, cs), drop(offset, cs)) == cs;
+
+lemma_auto void crypto_chars_join(char *array);
+  requires [?f]crypto_chars(array, ?n, ?cs) &*& 
+           [f]crypto_chars(array + n, ?n0, ?cs0);
+  ensures  [f]crypto_chars(array, n + n0, append(cs, cs0));
+
+predicate cryptogram(char* array, int len, list<char> cs,
+                     cryptogram cg;) =
+  crypto_chars(array, len, cs) &*& 
+  cs == chars_for_cg(cg) &*&
+  true == cg_is_generated(cg)
+;
+
+//Derived
+
+lemma_auto void optional_crypto_chars_inv(bool cc, char *array, int n, list<char> cs);
+  requires [?f]optional_crypto_chars(cc, array, n, cs);
+  ensures  [f]optional_crypto_chars(cc, array, n, cs) &*& length(cs) == n;
+
+lemma_auto void cryptogram_inv();
+  requires [?f]cryptogram(?array, ?n, ?cs, ?cg);
+  ensures  [f]cryptogram(array, n, cs, cg) &*& length(cs) == n;
+
+lemma void optional_crypto_chars_split(char *array, int offset);
+  requires [?f]optional_crypto_chars(?cc, array, ?n, ?cs) &*& 0 <= offset &*& offset <= n;
+  ensures  [f]optional_crypto_chars(cc, array, offset, take(offset, cs)) &*& 
+           [f]optional_crypto_chars(cc, array + offset, n - offset, drop(offset, cs)) &*& 
+           append(take(offset, cs), drop(offset, cs)) == cs;
+
+lemma_auto void optional_crypto_chars_join(char *array);
+  requires [?f]optional_crypto_chars(?cc, array, ?n, ?cs) &*& 
+           [f]optional_crypto_chars(cc, array + n, ?n0, ?cs0);
+  ensures  [f]optional_crypto_chars(cc, array, n + n0, append(cs, cs0));

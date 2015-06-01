@@ -1,0 +1,6 @@
+#ifndef COLLISION_GH
+#define COLLISION_GH
+
+fixpoint bool collision_in_run();
+
+#endif

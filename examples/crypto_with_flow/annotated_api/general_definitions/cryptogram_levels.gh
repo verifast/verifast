@@ -1,0 +1,41 @@
+#ifndef CRYPTOGRAM_LEVELS_GH
+#define CRYPTOGRAM_LEVELS_GH
+
+#include "auxiliary_definitions.gh"
+#include "cryptogram.gh"
+
+//Is the cryptogram generated in this run?
+fixpoint bool cg_is_generated(cryptogram cg);
+
+//How deep are cryptograms nested through their payload?
+fixpoint nat cg_level(cryptogram cg);
+
+//Upper bound on the nesting of cryptograms.
+fixpoint bool cg_level_upper_bound(cryptogram cg, nat bound)
+{
+  return int_of_nat(cg_level(cg)) < int_of_nat(bound);
+}
+
+//Maximum upper bound on the nesting of cryptograms.
+fixpoint nat cg_level_max();
+
+//Level lemma's are only valid for generated cryptograms to prevent crypto 
+//cycles during induction, e.g. E(...E(E(E(m)))) == m:
+//  If only cryptograms generated in some run are considered, then no cycle
+//  can occur unless there is a collusion. So only non-cyclic cryptograms are
+//  recorded by the public_crypto_chars predicate
+lemma_auto void cg_level(cryptogram cg);
+  requires true;
+  ensures  cg_is_generated(cg) ||
+           (
+             true == cg_level_upper_bound(cg, cg_level_max()) &&
+             cg_is_nested(cg) == (cg_level(cg) != zero)
+           );
+ 
+lemma void cg_level_ind(cryptogram cg1, cryptogram cg2);
+  requires true == cg_is_generated(cg1) &*& true == cg_is_nested(cg1) &*&
+           true == mem(cg2, cgs_in_chars(cg_payload(cg1)));
+  ensures  true == cg_level_upper_bound(cg2, cg_level(cg1));
+
+
+#endif
