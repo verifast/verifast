@@ -312,7 +312,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let typenode_of_type t = typenode_of_provertype (provertype_of_type t)
    
   (* Generate some global symbols. *)
-  
+
+  let ancestry_symbol = mk_symbol "ancestry" [ctxt#type_int] ctxt#type_inductive Uninterp
+  let ancester_at_symbol = mk_symbol "ancester_at" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp
   let get_class_symbol = mk_symbol "getClass" [ctxt#type_int] ctxt#type_int Uninterp
   let class_serial_number = mk_symbol "class_serial_number" [ctxt#type_int] ctxt#type_int Uninterp
   let func_rank = mk_symbol "func_rank" [ctxt#type_int] ctxt#type_int Uninterp
@@ -4591,6 +4593,227 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
     iter 0
   
   
+  (* data type to represent ancestries *)
+  type ancestry_dt =
+    | Class_anc of
+        bool * (* is_final *)
+        (string list) * (* ancesters *)
+        (string list) (* class hierarchy *)
+
+    | Intrf_anc of
+        string list (* ancesters *)
+
+  (* useful for printing ancestries for debugging purposes *)
+(*
+  let ancestry_to_string anc =
+    match anc with
+      | Class_anc (isfin, anc, hier) ->
+          "class_ancestry(" ^ (if isfin then "final" else "non-final") ^ ", " ^ (list_to_string anc (fun n -> n)) ^ ", " ^ (list_to_string hier (fun n -> n)) ^ ")"
+      | Intrf_anc anc -> "interface_ancestry(" ^ (list_to_string anc (fun n -> n)) ^ ")"
+  *)
+
+  (*calculating class/interface ancestries*)
+  (*we assume that there are no cycles in the class/interface diagram.
+    note that if it is not the case, program will enter an infinite loop (we won't get stack overflow as the function is tail-recursive)
+   *)
+  (* clmap0 and intfmap0 are respectively the class map and interface map for the library *)
+  let calculate_ancestries () =
+    let calculate_ancestry clinfname clmap0 clmap intfmap0 intfmap =
+      let class_encountered : bool ref =
+        ref false
+      in
+      let final_class_encountered : bool ref =
+        ref false
+      in
+      let rec calculate_ancestry_helper clintfnames calculated_ancestry calculated_hierarchy =
+        let find_super_clintf nm = (* note that in java there shouldn't be any collision between class and interface names! *)
+          try
+          match List.assoc nm clmap with
+            (_, _, fin, _, _, _, spr, intfs, _, _, _) ->
+              class_encountered := true; (if fin = FinalClass then final_class_encountered := true else ());
+              if spr = "" then (intfs, true) else ((spr :: intfs), true) (* super class of Java.lang.Object is registered as "" *)
+          with
+            Not_found ->
+              try
+                let cl = List.assoc nm clmap0
+                in
+                class_encountered := true; (if cl.cfinal = FinalClass then final_class_encountered := true else ());
+                if cl.csuper = "" then (cl.cinterfs, true) else ((cl.csuper :: cl.cinterfs), true) (* super class of Java.lang.Object is registered as "" *)
+              with
+                Not_found ->
+                  try
+                    match List.assoc nm intfmap with
+                      (_, _, _, _, intfs, _, _) ->
+                        (intfs, false)
+                    with
+                      Not_found ->
+                        try
+                          match List.assoc nm intfmap0 with
+                            InterfaceInfo (_, _, _, _, intfs) ->
+                              (intfs, false)
+                        with
+                          Not_found ->
+                            assert false (*there is a class/interface name in the lists or as an ancester of a class/interface in the list that is not represented in the list!*)
+        in
+        match clintfnames with
+          | [] -> (calculated_ancestry, calculated_hierarchy)
+          | nm :: l ->
+            let (cont_list, add_to_hierarchy) =
+              find_super_clintf nm
+            in
+            calculate_ancestry_helper (cont_list @ l) (nm :: calculated_ancestry) (if add_to_hierarchy then (nm :: calculated_hierarchy) else calculated_hierarchy)
+      in
+      (* Semantics of java implies that if a class (resp. final class) is visited while calculating ancesstry, then the item being processed is a class (respectively, final class) *)
+      (!class_encountered, !final_class_encountered, calculate_ancestry_helper [clinfname] [] [])
+    in
+    let calculate_all_ancestries l =
+      List.map (
+        fun (cn, _) ->
+          begin
+            match calculate_ancestry cn classmap0 classmap1 interfmap0 interfmap1 with
+              | (true, isfin, (ancestry, hierarchy)) ->
+                  (cn, Class_anc (isfin, ancestry, hierarchy))
+              | (false, _, (ancestry, _)) ->
+                  (cn, Intrf_anc ancestry)
+          end) l
+    in
+    let ancestries = 
+      (calculate_all_ancestries classmap0) @ (calculate_all_ancestries interfmap0) @ (calculate_all_ancestries classmap1) @ (calculate_all_ancestries interfmap1)
+    in
+    (* printing ancestries: *)
+(*    let () = ()
+      (* List.iter (fun (cn, anc) -> print_string ("\n(" ^ cn ^ ", " ^ (ancestry_to_string anc) ^ ")\n")) ancestries; flush stdout *)
+    in *)
+    ancestries
+
+(* adding asserions for ancestries to the prover theory *)
+let add_ancestries_to_prover ancestries =
+  let make_prover_ancesstry anc =
+    let resolve_class_interface nm =
+      try
+        List.assoc nm classterms
+      with
+        Not_found ->
+          try
+            List.assoc nm interfaceterms
+          with
+            Not_found ->
+              assert false (* should be impossible as each class/interface must have an representative term for prover *)
+    in
+    let add_ancestry cintf lst = 
+      let prover_ancesstry_list =
+        mk_list IntType (List.map resolve_class_interface lst)
+      in
+      let eq_assertion =
+        ctxt#mk_eq (ctxt#mk_app ancestry_symbol [cintf]) prover_ancesstry_list
+      in
+      ignore (ctxt#assume eq_assertion)
+    in
+    let add_hierarchy_and_instance_of_ancestry cintf ancestry hierarchy =
+      let ancester_at_of var offset i a =
+        ctxt#mk_eq (ctxt#mk_app ancester_at_symbol [var; (ctxt#mk_intlit (offset + i))]) (resolve_class_interface a)
+      in
+      ctxt#begin_formal;
+      let x =
+        ctxt#mk_bound 0 ctxt#type_int
+      in
+      let mk_x_instanceof y =
+        ctxt#mk_app instanceof_symbol [x; (resolve_class_interface y)]
+      in
+      let x_instanceof_cintf =
+        ctxt#mk_app instanceof_symbol [x; cintf]
+      in
+      let encoded_hierarchy =
+        match hierarchy with
+          | [] -> None (* it must be an interface with no class hierarchy *)
+          | [a] -> Some (ancester_at_of x 0 0 a)
+          | h :: tl -> Some (List.fold_left (fun x y -> ctxt#mk_and x y) (ancester_at_of x 0 0 h) (imap (ancester_at_of x 1) tl))
+      in
+      let instanceof_ancestry =
+        match ancestry with
+          | [] -> assert false (* the class ancestry can never be empty as it shoul always contain the class itself *)
+          | [a] -> mk_x_instanceof a
+          | h :: tl -> List.fold_left (fun x y -> ctxt#mk_and x y) (mk_x_instanceof h) (List.map mk_x_instanceof tl)
+      in
+      let x_instanceof_cintf_implies_encoded_hierarchy_and_instance_of_ancestry =
+        match encoded_hierarchy with
+          | None ->
+            ctxt#mk_implies x_instanceof_cintf instanceof_ancestry
+          | Some eh ->
+              ctxt#mk_implies x_instanceof_cintf (ctxt#mk_and eh instanceof_ancestry)
+      in
+      ctxt#end_formal;
+      ctxt#assume_forall ("x_instanceof_cintf_implies_encoded_hierarchy_and_instance_of_ancestry_for" ^ (ctxt#pprint cintf)) [x_instanceof_cintf] [ctxt#type_int] x_instanceof_cintf_implies_encoded_hierarchy_and_instance_of_ancestry
+    in
+    let add_finality cintf =
+      ctxt#begin_formal;
+      let a =
+        ctxt#mk_bound 0 ctxt#type_int
+      in
+      let a_instanceof_cintf =
+        ctxt#mk_app instanceof_symbol [a; cintf]
+      in
+      let a_getClass_eq_cintf =
+        ctxt#mk_eq (ctxt#mk_app get_class_symbol [a]) cintf
+      in
+      let a_instanceof_cintf_iff_a_getClass_eq_cintf =
+        ctxt#mk_iff a_instanceof_cintf a_getClass_eq_cintf
+      in
+      ctxt#end_formal;
+      ctxt#assume_forall ("a_instanceof_cintf_iff_a_getClass_eq_cintf_for" ^ (ctxt#pprint cintf)) [a_instanceof_cintf] [ctxt#type_int] a_instanceof_cintf_iff_a_getClass_eq_cintf
+    in
+    match anc with
+      | (nm, Class_anc (isfin, ancestry, hierarchy)) ->
+          let cintf =
+            resolve_class_interface nm
+          in
+          add_ancestry cintf ancestry;
+          add_hierarchy_and_instance_of_ancestry cintf ancestry hierarchy;
+          if isfin then add_finality cintf else ()
+      | (nm, Intrf_anc ancestry) ->
+          let cintf =
+            resolve_class_interface nm
+          in
+          add_ancestry cintf ancestry;
+          add_hierarchy_and_instance_of_ancestry cintf ancestry []
+  in
+  List.iter make_prover_ancesstry ancestries
+
+(* adding to the SMT solver that: forall a c, (a instance of c) <=> (mem(c, ancestry(a.getClass()))) *)
+let add__forall_a_c__a_instanceof_c__iff__mem_c__ancestry_getClass_a () =
+  ctxt#begin_formal;
+  let a =
+    ctxt#mk_bound 0 ctxt#type_int
+  in
+  let c =
+    ctxt#mk_bound 1 ctxt#type_int
+  in
+  let a_instanceof_c =
+    ctxt#mk_app instanceof_symbol [a; c]
+  in
+  let ancestry_getClass_a =
+    ctxt#mk_app ancestry_symbol [(ctxt#mk_app get_class_symbol [a])]
+  in
+  let mem_c__ancestry_getClass_a =
+    mk_mem IntType c ancestry_getClass_a
+  in
+  let a_instanceof_c__iff__mem_c__ancestry_getClass_a =
+    ctxt#mk_iff a_instanceof_c mem_c__ancestry_getClass_a
+  in
+  ctxt#end_formal;
+  ctxt#assume_forall "a_instanceof_c__iff__mem_c__ancestry_getClass_a" [a_instanceof_c] [ctxt#type_int; ctxt#type_int] a_instanceof_c__iff__mem_c__ancestry_getClass_a
+
+(* if the language is java, enable reasoning about instanceof *)
+  let () =
+    match language with
+      | Java ->
+          let ancestries =
+             calculate_ancestries ()
+          in
+          add_ancestries_to_prover ancestries;
+          add__forall_a_c__a_instanceof_c__iff__mem_c__ancestry_getClass_a ()
+      | CLang -> ()
+
   
   (* TODO: To improve performance, push only when branching, i.e. not at every assume. *)
   
@@ -5106,11 +5329,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     | SizeofExpr (l, ManifestTypeExpr (_, t)) ->
       cont state (sizeof l t)
     | InstanceOfExpr(l, e, ManifestTypeExpr (l2, tp)) ->
-      ev state e $. fun state v ->
-        begin match tp with (* hack: if tp is a final class, then instanceof is translated as getClass *)
-          ObjType(c) when get_class_finality c = FinalClass -> cont state (ctxt#mk_eq (prover_type_term l2 tp) (ctxt#mk_app get_class_symbol [v]))
-        | _ -> cont state (ctxt#mk_app instanceof_symbol [v; prover_type_term l2 tp])
-        end
+      ev state e $. fun state v -> cont state (ctxt#mk_app instanceof_symbol [v; prover_type_term l2 tp])
     | _ -> static_error (expr_loc e) "Construct not supported in this position." None
   
   let rec eval_core ass_term read_field env e =

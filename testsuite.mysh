@@ -293,6 +293,12 @@ cd examples
     cd override_methods
       mysh < override_methods.mysh
     cd ..
+    cd instanceof
+      verifast_both -c instanceof_1.java
+      verifast_both -c -allow_should_fail instanceof_2.java
+      verifast_both -c -allow_should_fail instanceof_3.java
+      verifast_both -c -allow_should_fail instanceof_4.java
+    cd ..
   cd ..
   cd vstte2010
     ifz3 verifast -c -disable_overflow_check problem1.c

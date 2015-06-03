@@ -321,6 +321,11 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if List.mem x ghostenv then static_error l "The argument for this call must be a non-ghost variable." None;
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       assume_is_of_type l (ev w) tp (fun () -> cont h env)
+    | ExprStmt (CallExpr (l, "produce_instanceof", [], [], [LitPat (Var (lv, x, _) as e)], Static)) when language = Java ->
+      if not pure then static_error l "This function may be called only from a pure context." None;
+      if List.mem x ghostenv then static_error l "The argument for this call must be a non-ghost variable." None;
+      let (w, tp) = check_expr (pn,ilist) tparams tenv e in
+      assume_instanceof l (ev w) tp (fun () -> cont h env)
     | ProduceLemmaFunctionPointerChunkStmt (l, e, ftclause_opt, body) ->
       verify_produce_function_pointer_chunk_stmt Ghost l e ftclause_opt body
     | ProduceFunctionPointerChunkStmt (l, ftn, fpe, targs, args, params, openBraceLoc, ss, closeBraceLoc) ->

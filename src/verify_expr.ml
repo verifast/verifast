@@ -1366,6 +1366,15 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ObjType _ -> cont ()
     | _ -> static_error l (Printf.sprintf "Producing the limits of a variable of type '%s' is not yet supported." (string_of_type tp)) None
   
+  let assume_instanceof l t tp cont =
+    match tp with
+    | ObjType obj ->
+        if not (ctxt#query (ctxt#mk_not (ctxt#mk_eq t (ctxt#mk_intlit 0)))) then
+        assert_false [] [] l "Can't produce instanceof for a object that might be null." None;
+        assume (ctxt#mk_app instanceof_symbol [t; (prover_type_term l tp)]) cont
+    | _ ->
+      static_error l (Printf.sprintf "Producing instanceof for a variable of type '%s' is not supported." (string_of_type tp)) None
+
   (* Region: verification of calls *)
   
   let get_purefuncsymb g = let (_, _, _, _, symb) = List.assoc g purefuncmap in symb
