@@ -23,8 +23,8 @@ class E extends C {}
 final class F extends A {}
 
 class main{
-  public static void test(A x)
-    //@ requires x != null;
+  public static void test(A x, A y)
+    //@ requires x != null &*& y != null;
     //@ ensures true;
   {
     A tst = null;
@@ -54,6 +54,13 @@ class main{
       //@ assert false;
       x.intRep();
     }
+    //@ A w = y;
+    //@produce_instanceof(w);
+    /*@
+    if(!(w instanceof iA)){
+      assert false;
+      y.intRep();
+    } @*/
   }
 }
 

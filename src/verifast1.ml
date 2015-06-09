@@ -4603,14 +4603,24 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
     | Intrf_anc of
         string list (* ancesters *)
 
-  (* useful for printing ancestries for debugging purposes *)
 (*
+  (* useful for printing ancestries for debugging purposes *)
+
+  let list_to_string lst f =
+    let rec list_to_string_helper tmp l =
+      match l with
+        | [] -> tmp
+        | [a] -> tmp ^ (f a)
+        | h :: t -> list_to_string_helper (tmp ^ (f h) ^ "; ") t
+    in
+    "[" ^ (list_to_string_helper "" lst) ^ "]"
+
   let ancestry_to_string anc =
     match anc with
       | Class_anc (isfin, anc, hier) ->
           "class_ancestry(" ^ (if isfin then "final" else "non-final") ^ ", " ^ (list_to_string anc (fun n -> n)) ^ ", " ^ (list_to_string hier (fun n -> n)) ^ ")"
       | Intrf_anc anc -> "interface_ancestry(" ^ (list_to_string anc (fun n -> n)) ^ ")"
-  *)
+*)
 
   (*calculating class/interface ancestries*)
   (*we assume that there are no cycles in the class/interface diagram.
@@ -4618,77 +4628,135 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
    *)
   (* clmap0 and intfmap0 are respectively the class map and interface map for the library *)
   let calculate_ancestries () =
-    let calculate_ancestry clinfname clmap0 clmap intfmap0 intfmap =
-      let class_encountered : bool ref =
-        ref false
+    let merge_ancesters_of_direct_ancesters already_calculated_ancestries direct_ancesters =
+      let rec merge_ancesters_of_direct_ancesters_helper (tmp_anc, tmp_hier) l =
+        match l with
+          | [] ->
+              Some (tmp_anc, tmp_hier)
+          | h :: t ->
+            try
+              let new_tmp_anc_tmp_hier = 
+                match List.assoc h already_calculated_ancestries with
+                  | Class_anc (isfin, anc, hier) -> (tmp_anc @ anc, tmp_hier @ hier)
+                  | Intrf_anc anc -> (tmp_anc @ anc, tmp_hier)
+              in
+              merge_ancesters_of_direct_ancesters_helper new_tmp_anc_tmp_hier t
+            with
+              Not_found -> None (* assert false (* As class and interface maps are sorted by inheritance order. *) *)
       in
-      let final_class_encountered : bool ref =
-        ref false
-      in
-      let rec calculate_ancestry_helper clintfnames calculated_ancestry calculated_hierarchy =
-        let find_super_clintf nm = (* note that in java there shouldn't be any collision between class and interface names! *)
-          try
-          match List.assoc nm clmap with
-            (_, _, fin, _, _, _, spr, intfs, _, _, _) ->
-              class_encountered := true; (if fin = FinalClass then final_class_encountered := true else ());
-              if spr = "" then (intfs, true) else ((spr :: intfs), true) (* super class of Java.lang.Object is registered as "" *)
-          with
-            Not_found ->
-              try
-                let cl = List.assoc nm clmap0
-                in
-                class_encountered := true; (if cl.cfinal = FinalClass then final_class_encountered := true else ());
-                if cl.csuper = "" then (cl.cinterfs, true) else ((cl.csuper :: cl.cinterfs), true) (* super class of Java.lang.Object is registered as "" *)
-              with
-                Not_found ->
-                  try
-                    match List.assoc nm intfmap with
-                      (_, _, _, _, intfs, _, _) ->
-                        (intfs, false)
-                    with
-                      Not_found ->
-                        try
-                          match List.assoc nm intfmap0 with
-                            InterfaceInfo (_, _, _, _, intfs) ->
-                              (intfs, false)
-                        with
-                          Not_found ->
-                            assert false (*there is a class/interface name in the lists or as an ancester of a class/interface in the list that is not represented in the list!*)
-        in
-        match clintfnames with
-          | [] -> (calculated_ancestry, calculated_hierarchy)
-          | nm :: l ->
-            let (cont_list, add_to_hierarchy) =
-              find_super_clintf nm
-            in
-            calculate_ancestry_helper (cont_list @ l) (nm :: calculated_ancestry) (if add_to_hierarchy then (nm :: calculated_hierarchy) else calculated_hierarchy)
-      in
-      (* Semantics of java implies that if a class (resp. final class) is visited while calculating ancesstry, then the item being processed is a class (respectively, final class) *)
-      (!class_encountered, !final_class_encountered, calculate_ancestry_helper [clinfname] [] [])
+      merge_ancesters_of_direct_ancesters_helper ([], []) direct_ancesters
     in
-    let calculate_all_ancestries l =
-      List.map (
-        fun (cn, _) ->
+    let calculate_ancestry_from_direct_ancesters_info already_calculated_ancestries clinfname direct_anc_info =
+      let (direct_ancesters, is_a_class, is_a_final_class) =
+        direct_anc_info
+      in
+      match merge_ancesters_of_direct_ancesters already_calculated_ancestries direct_ancesters with
+        | Some (direct_ancesters_ancestry, direct_ancesters_hierarchy) ->
           begin
-            match calculate_ancestry cn classmap0 classmap1 interfmap0 interfmap1 with
-              | (true, isfin, (ancestry, hierarchy)) ->
-                  (cn, Class_anc (isfin, ancestry, hierarchy))
-              | (false, _, (ancestry, _)) ->
-                  (cn, Intrf_anc ancestry)
-          end) l
+            let (anc, hier) =
+              ((clinfname :: direct_ancesters_ancestry), (if is_a_class then (clinfname :: direct_ancesters_hierarchy) else direct_ancesters_hierarchy))
+            in
+            if(is_a_class) then
+              Some (clinfname, Class_anc (is_a_final_class, anc, hier))
+            else
+              Some (clinfname, Intrf_anc anc)
+          end
+        | None -> None
     in
-    let ancestries = 
-      (calculate_all_ancestries classmap0) @ (calculate_all_ancestries interfmap0) @ (calculate_all_ancestries classmap1) @ (calculate_all_ancestries interfmap1)
+    let calculate_ancestry_intfmap0 already_calculated_ancestries (clinfname, info) =
+      let super_clintf =
+        match info with
+          InterfaceInfo (_, _, _, _, intfs) ->
+            (intfs, false, false)
+      in
+      calculate_ancestry_from_direct_ancesters_info already_calculated_ancestries clinfname super_clintf
     in
-    (* printing ancestries: *)
-(*    let () = ()
-      (* List.iter (fun (cn, anc) -> print_string ("\n(" ^ cn ^ ", " ^ (ancestry_to_string anc) ^ ")\n")) ancestries; flush stdout *)
+    let calculate_ancestry_intfmap1 already_calculated_ancestries (clinfname, info) =
+      let super_clintf =
+        match info with
+          (_, _, _, _, intfs, _, _) ->
+            (intfs, false, false)
+      in
+      calculate_ancestry_from_direct_ancesters_info already_calculated_ancestries clinfname super_clintf
+    in
+    let calculate_ancestry_classmap0 already_calculated_ancestries (clinfname, info) =
+      let super_clintf =
+        let iafc =
+          if info.cfinal = FinalClass then true else false
+        in
+        if info.csuper = "" then (info.cinterfs, true, iafc) else ((info.csuper :: info.cinterfs), true, iafc) (* super class of Java.lang.Object is registered as "" *)
+      in
+      calculate_ancestry_from_direct_ancesters_info already_calculated_ancestries clinfname super_clintf
+    in
+    let calculate_ancestry_classmap1 already_calculated_ancestries (clinfname, info) =
+      let super_clintf =
+        match info with
+          (_, _, fin, _, _, _, spr, intfs, _, _, _) ->
+            let iafc =
+              if fin = FinalClass then true else false
+            in
+            if spr = "" then (intfs, true, iafc) else ((spr :: intfs), true, iafc) (* super class of Java.lang.Object is registered as "" *)
+      in
+      calculate_ancestry_from_direct_ancesters_info already_calculated_ancestries clinfname super_clintf
+    in
+    let calculate_all_ancestries already_calculated_anc lst calculator =
+      let rec calculate_all_ancestries_helper num_started_with tmp postponed l =
+        match l with
+          | [] ->
+              begin
+              if postponed = [] then
+                tmp
+              else
+                if (List.length postponed) >= num_started_with then (* This check is to prevent infinite loops in case any of the situations below takes place due to a bug. *)
+                  assert false (* This can only happen if there are classes/interfaces with ancesters that are not in the maps or
+                                   if there is a cycle in the inheritence graph! which is impossible according to java's semantics. *)
+                else
+                  calculate_all_ancestries_helper (List.length postponed) tmp [] (List.rev postponed)
+              end
+          | h :: t ->
+              begin
+                match calculator tmp h with
+                  | Some new_anc -> calculate_all_ancestries_helper num_started_with (new_anc :: tmp) postponed t
+                  | None ->
+                      if (t = [] && postponed = []) then
+                        assert false (* h has ancesters that are neither processed yet nor are postponed! This should be impossible *)
+                      else
+                        (* Class/interface h appears in the class/interface map in an incorrect order! This should technically not happen.
+                           Yet, it occurs when we have a program that uses a java library (other than the standard library), e.g.,
+                           examples/reduced_annotations/java_language/main.jarsrc *)
+                        (* In this case, we simply postpone processing of h! *)
+                        (* In case no postponing happens, this function is linear in the length of the input list, i.e., lst.
+                           In the worst case, i.e., when the given list is sorted in the inverse order of inheritance,
+                           this function is quadratic in the length of the input list, i.e., lst *)
+                        calculate_all_ancestries_helper num_started_with tmp (h :: postponed) t
+              end
+      in
+      calculate_all_ancestries_helper (List.length lst) already_calculated_anc [] lst
+    in
+    let ancestries =
+      let anc_intfmap0 =
+        calculate_all_ancestries [] interfmap0 calculate_ancestry_intfmap0
+      in
+      let anc_intfmap0_intfmap1 =
+        calculate_all_ancestries anc_intfmap0 interfmap1 calculate_ancestry_intfmap1
+      in
+      let anc_intfmap0_intfmap1_classmap0 =
+        calculate_all_ancestries anc_intfmap0_intfmap1 classmap0 calculate_ancestry_classmap0
+      in
+      let anc_intfmap0_intfmap1_classmap0_classmap1 =
+        calculate_all_ancestries anc_intfmap0_intfmap1_classmap0 classmap1 calculate_ancestry_classmap1
+      in
+      anc_intfmap0_intfmap1_classmap0_classmap1
+    in
+(*    (* printing ancestries: *)
+    let () =
+       List.iter (fun (cn, anc) -> print_string ("\n(" ^ cn ^ ", " ^ (ancestry_to_string anc) ^ ")\n")) ancestries; flush stdout
     in *)
     ancestries
 
 (* adding asserions for ancestries to the prover theory *)
 let add_ancestries_to_prover ancestries =
-  let make_prover_ancesstry anc =
+  let make_prover_ancestry anc =
     let resolve_class_interface nm =
       try
         List.assoc nm classterms
@@ -4701,17 +4769,19 @@ let add_ancestries_to_prover ancestries =
               assert false (* should be impossible as each class/interface must have an representative term for prover *)
     in
     let add_ancestry cintf lst = 
-      let prover_ancesstry_list =
+      let prover_ancestry_list =
         mk_list IntType (List.map resolve_class_interface lst)
       in
       let eq_assertion =
-        ctxt#mk_eq (ctxt#mk_app ancestry_symbol [cintf]) prover_ancesstry_list
+        ctxt#mk_eq (ctxt#mk_app ancestry_symbol [cintf]) prover_ancestry_list
       in
       ignore (ctxt#assume eq_assertion)
     in
     let add_hierarchy_and_instance_of_ancestry cintf ancestry hierarchy =
-      let ancester_at_of var offset i a =
-        ctxt#mk_eq (ctxt#mk_app ancester_at_symbol [var; (ctxt#mk_intlit (offset + i))]) (resolve_class_interface a)
+      let ancester_at_of length var offset i a =
+        (* hierarchy is claculated in reverse order of inheritance (i.e., java.lang.Object is at the end). Therefore, we encode i^{th} element of the hierarchy as ancester_at(_, (length - i -1)).
+           Where length is the length of the hierarchy *)
+        ctxt#mk_eq (ctxt#mk_app ancester_at_symbol [var; (ctxt#mk_intlit (length - offset - i - 1))]) (resolve_class_interface a)
       in
       ctxt#begin_formal;
       let x =
@@ -4726,24 +4796,38 @@ let add_ancestries_to_prover ancestries =
       let encoded_hierarchy =
         match hierarchy with
           | [] -> None (* it must be an interface with no class hierarchy *)
-          | [a] -> Some (ancester_at_of x 0 0 a)
-          | h :: tl -> Some (List.fold_left (fun x y -> ctxt#mk_and x y) (ancester_at_of x 0 0 h) (imap (ancester_at_of x 1) tl))
+          | [a] -> Some (ancester_at_of 1 x 0 0 a)
+          | h :: tl -> let len = List.length hierarchy in Some (List.fold_left (fun x y -> ctxt#mk_and x y) (ancester_at_of len x 0 0 h) (imap (ancester_at_of len x 1) tl))
       in
       let instanceof_ancestry =
         match ancestry with
           | [] -> assert false (* the class ancestry can never be empty as it shoul always contain the class itself *)
-          | [a] -> mk_x_instanceof a
-          | h :: tl -> List.fold_left (fun x y -> ctxt#mk_and x y) (mk_x_instanceof h) (List.map mk_x_instanceof tl)
+          | [a] -> None (* it must be the class/interface itself *)
+          | h :: tl -> Some (List.fold_left (fun x y -> ctxt#mk_and x y) (mk_x_instanceof h) (List.map mk_x_instanceof tl))
       in
       let x_instanceof_cintf_implies_encoded_hierarchy_and_instance_of_ancestry =
-        match encoded_hierarchy with
-          | None ->
-            ctxt#mk_implies x_instanceof_cintf instanceof_ancestry
-          | Some eh ->
-              ctxt#mk_implies x_instanceof_cintf (ctxt#mk_and eh instanceof_ancestry)
+        match (encoded_hierarchy, instanceof_ancestry) with
+          | (None, None) ->
+              None
+          | (None, Some ianc) ->
+              Some (ctxt#mk_implies x_instanceof_cintf ianc)
+          | (Some eh, None) ->
+              Some (ctxt#mk_implies x_instanceof_cintf eh)
+          | (Some eh, Some ianc) ->
+              Some (ctxt#mk_implies x_instanceof_cintf (ctxt#mk_and eh ianc))
       in
       ctxt#end_formal;
-      ctxt#assume_forall ("x_instanceof_cintf_implies_encoded_hierarchy_and_instance_of_ancestry_for" ^ (ctxt#pprint cintf)) [x_instanceof_cintf] [ctxt#type_int] x_instanceof_cintf_implies_encoded_hierarchy_and_instance_of_ancestry
+      match x_instanceof_cintf_implies_encoded_hierarchy_and_instance_of_ancestry with
+        | None -> ()
+        | Some body ->
+            begin
+              (*
+              (* Printing the body of lemmas being emmited. Used for debugging purposes. *)
+              let () =
+                print_string ("\n" ^ (ctxt#pprint body) ^ "\n"); flush stdout;
+              in *)
+              ctxt#assume_forall ("x_instanceof_cintf_implies_encoded_hierarchy_and_instance_of_ancestry_for" ^ (ctxt#pprint cintf)) [x_instanceof_cintf] [ctxt#type_int] body
+            end
     in
     let add_finality cintf =
       ctxt#begin_formal;
@@ -4777,7 +4861,7 @@ let add_ancestries_to_prover ancestries =
           add_ancestry cintf ancestry;
           add_hierarchy_and_instance_of_ancestry cintf ancestry []
   in
-  List.iter make_prover_ancesstry ancestries
+  List.iter make_prover_ancestry ancestries
 
 (* adding to the SMT solver that: forall a c, (a instance of c) <=> (mem(c, ancestry(a.getClass()))) *)
 let add__forall_a_c__a_instanceof_c__iff__mem_c__ancestry_getClass_a () =

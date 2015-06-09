@@ -1370,7 +1370,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match tp with
     | ObjType obj ->
         if not (ctxt#query (ctxt#mk_not (ctxt#mk_eq t (ctxt#mk_intlit 0)))) then
-        assert_false [] [] l "Can't produce instanceof for a object that might be null." None;
+        assert_false [] [] l "Can't produce instanceof for a value that might be null." None;
         assume (ctxt#mk_app instanceof_symbol [t; (prover_type_term l tp)]) cont
     | _ ->
       static_error l (Printf.sprintf "Producing instanceof for a variable of type '%s' is not supported." (string_of_type tp)) None
