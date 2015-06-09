@@ -4887,17 +4887,37 @@ let add__forall_a_c__a_instanceof_c__iff__mem_c__ancestry_getClass_a () =
   ctxt#end_formal;
   ctxt#assume_forall "a_instanceof_c__iff__mem_c__ancestry_getClass_a" [a_instanceof_c] [ctxt#type_int; ctxt#type_int] a_instanceof_c__iff__mem_c__ancestry_getClass_a
 
+
+let check_if_list_is_defined () =
+  try 
+    let () =
+      ignore (!!nil_symb)
+    in
+    let () =
+      ignore (!!cons_symb)
+    in
+    let () =
+      ignore (!!mem_symb)
+    in
+    true
+  with
+    Not_found -> false
+
 (* if the language is java, enable reasoning about instanceof *)
   let () =
     match language with
       | Java ->
-          let ancestries =
-             calculate_ancestries ()
-          in
-          add_ancestries_to_prover ancestries;
-          add__forall_a_c__a_instanceof_c__iff__mem_c__ancestry_getClass_a ()
+          if check_if_list_is_defined () then
+            begin
+              let ancestries =
+                 calculate_ancestries ()
+              in
+              add_ancestries_to_prover ancestries;
+              add__forall_a_c__a_instanceof_c__iff__mem_c__ancestry_getClass_a ()
+            end
+          else
+            output_string stderr "Definition of the inductive data type list was not found. Support for instanceof is not enabled!\n"
       | CLang -> ()
-
   
   (* TODO: To improve performance, push only when branching, i.e. not at every assume. *)
   
