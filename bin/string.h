@@ -58,9 +58,9 @@ char* strchr(char *str, char c);
                     mem(c, cs) == true &*& result == str + index_of(c, cs);
     @*/
 
-void memset(void *array, char value, size_t size);
+void* memset(void *array, char value, size_t size);
     //@ requires chars(array, size, ?cs);
-    //@ ensures chars(array, size, ?cs1) &*& all_eq(cs1, value) == true;
+    //@ ensures chars(array, size, ?cs1) &*& all_eq(cs1, value) == true &*& result == array;
 
 char *strdup(char *string);
     //@ requires [?f]string(string, ?cs);
