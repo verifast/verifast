@@ -3188,12 +3188,15 @@ let link_program vroots library_paths isLibrary allModulepaths dllManifest expor
     iter [] xs
   in
   let get_lines_from_file file =
-    try
+    let get_lines file =
       (file, List.filter (fun str -> str.[0] <> '#') (read_file_lines file))
+    in
+    try
+      get_lines file
     with FileNotFound ->
       try 
         let file = replace_vroot vroots file in
-        (file, read_file_lines file)
+        get_lines file
       with FileNotFound ->
         try
           let rec search_library_paths library_paths file =
@@ -3201,7 +3204,7 @@ let link_program vroots library_paths isLibrary allModulepaths dllManifest expor
             | path::rest ->
               let search_path = concat path file in
               if Sys.file_exists search_path then
-                (search_path, read_file_lines search_path)
+                get_lines search_path
               else
                search_library_paths rest file
             | [] -> raise FileNotFound
