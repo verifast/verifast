@@ -27,7 +27,7 @@ help:
 
 #------------------------------- Settings -----------------------------------#
 
-include ../GNUmakefile.settings
+-include ../GNUmakefile.settings
 
 # Lablgtk configuration
 ifndef WITHOUT_LABLGTK
@@ -55,6 +55,7 @@ else
 endif
 
 # Z3 configuration
+# TODO: refactor variable names: "Z3" could be anything (path? version? boolean?)
 ifndef NOZ3
   ifdef Z3
     Z3VERSION = 
@@ -65,9 +66,10 @@ ifndef NOZ3
     Z3VERSION = v4
     Z3 = $(Z3V4)
   else
-    $(error Neither Z3, Z3V2, Z3V4, nor NOZ3 is defined. Please check your \
-     ../GNUmakefile.settings)
+    NOZ3=1
   endif
+endif
+ifndef NOZ3
   Z3DEPS  = z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml
   ifeq ($(OS), Cygwin)
     Z3CCOPTS=
@@ -99,6 +101,8 @@ ifeq ($(OS), Cygwin)
 endif
 
 # Paths
+OCAMLBIN    ?= $(shell dirname `which ocamlc`)
+OCAMLLIB    ?= $(shell ${OCAMLBIN}/ocamlc -where)
 OCAML        = ${OCAMLBIN}/ocaml
 # Note: the ".opt" version of the ocaml compiler is ~3.5x faster, but not
 # available everywhere, so we autodetect whether we have it.
@@ -109,6 +113,18 @@ ifeq ($(OS), Cygwin)
   CAMLP4O    = camlp4o.opt
 else
   CAMLP4O      = $(firstword $(wildcard ${OCAMLBIN}/camlp4o.opt ${OCAMLBIN}/camlp4o))
+endif
+
+ifndef OS
+  ifeq ($(shell uname -s), Linux)
+          OS = Linux
+  else ifeq ($(shell uname -s), Darwin)
+          OS = Darwin
+  else ifeq ($(shell uname -o), Cygwin)
+          OS = Cygwin
+  else
+          $(error "Could not recognize your platform")
+  endif
 endif
 
 # Do we build with "-I ./linux" or "-I ./win":
@@ -127,10 +143,11 @@ else
   NUMCPU ?= $(shell cat /proc/cpuinfo | grep 'processor' | wc -l)
 endif
 
-
 ifdef DEBUG
   OCAMLCFLAGS += -g -annot
 endif
+
+CWD ?= $(CURDIR)
 
 env:
 	@echo "Configuration:"
@@ -149,6 +166,7 @@ env:
 	@echo "GTKSOURCEVIEW_LFLAGS: $(GTKSOURCEVIEW_LFLAGS)"
 	@echo "GTKSOURCEVIEW_LIBS  : ${GTKSOURCEVIEW_LIBS}"
 	@echo "VERIFAST: ${VERIFAST}"
+	@echo "SET_ENV : ${SET_ENV}"
 
 
 #------------------------------- Includes   ---------------------------------#

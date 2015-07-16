@@ -12,9 +12,3 @@ Instructions:
 - To isolate the Gtk files that need to be shipped with VeriFast, use the bundling tool (ige-mac-bundler) from http://gtk-osx.sourceforge.net/ to create the example gtk-demo bundle. This will generate an application at ~/Desktop/GtkDemo.app. The VeriFast release build script will get the Gtk libraries and auxiliary files from ~/Desktop/GtkDemo.app/Contents/Resources.
 - Build the VeriFast release
 
-Note: the GNUmakefile *outside* the src directory (i.e. in src/../) does not
-      work on mac. This script only install dependencies (like lablgtk), do
-      not confuse with the GNUmakefile *inside* the src directory.
-
-
-

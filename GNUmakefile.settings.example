@@ -1,34 +1,19 @@
 
 # ----------------------------------------------------------------------------
-# Path to Z3 or Z3v2
+# Path to Z3 (optional)
 # Notes: Use $$HOME instead of ~ here!
-#        If you don't have Z3, i.e. on a MAC, define NOZ3 = true instead.
 #Z3       = $$HOME/z3
-#Z3V2     = $$HOME/z3
-#Z3V4     = $$HOME/z3
-NOZ3     = true
 
 
 # ----------------------------------------------------------------------------
-# Autodetection of operating system.
-# If autodetection fails, set OS to "Linux", "Darwin", or "Cygwin"
-ifeq ($(shell uname -s), Linux)
-	OS = Linux
-else ifeq ($(shell uname -s), Darwin)
-	OS = Darwin
-else ifeq ($(shell uname -o), Cygwin)
-	OS = Cygwin
-else
-	$(error "Could not recognize your platform")
-endif
-
+# OS is autodeteted. If that fails, set OS to "Linux", "Darwin", or "Cygwin"
+# OS = Linux
 
 # ----------------------------------------------------------------------------
-# Autodetection of OCAML Lib.
-# If autodetection fails, set OCAMLBIN to point to the location of the
-# OCAML binaries, i.e., "/usr/local/ocaml/bin".
-OCAMLBIN = $(shell dirname `which ocamlc`)
-OCAMLLIB = $(shell ${OCAMLBIN}/ocamlc -where)
+# OCAML Lib is usually autodetected.
+#OCAMLBIN = /usr/bin
+#OCAMLBIN = /usr/local/ocaml/bin
+#OCAMLLIB = /usr/lib/ocaml
 
 # ----------------------------------------------------------------------------
 # lablgtk2 installation directories
@@ -42,6 +27,6 @@ WITHOUT_LABLGTK = yes
 
 
 # ----------------------------------------------------------------------------
-# Autodetect current working directory
-CWD      = $(CURDIR)
+# current working directory is usually autodetected
+# CWD      = $(CURDIR)
 
