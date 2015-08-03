@@ -9,7 +9,7 @@ static struct mutex *requestsMutex;
 /*@
 
 predicate lock_invariant() =
-    pointer(&requests, ?requests_) &*& string_buffer(requests_);
+    pointer(&requests, ?requests_) &*& string_buffer(requests_, _);
 
 predicate_family_instance
         thread_run_data(handle_connection)(struct socket *socket) =
