@@ -7,7 +7,8 @@ in
 
 cd tee
   verifast_both -shared CRT/io.o CRT/stdio_simple.o tee_out.c tee_unbuffered.c
-  verifast_both -shared io.o stdio_simple.o tee_out.c tee_buffered.c
+  verifast_both -shared io.o stdio_simple.o tee_out.c tee_buffered_while.c
+  verifast_both -shared io.o stdio_simple.o tee_out.c tee_buffered_recursive.c
 cd ..
 cd work-in-progress
   cd in-memory-io-style

@@ -43,7 +43,7 @@ let main () =
    *)
   let should_write =
     not (Sys.file_exists filename)
-    or (file_get_contents filename) <> contents_shouldbe
+    || (file_get_contents filename) <> contents_shouldbe
   in
 
   if should_write then begin
