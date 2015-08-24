@@ -7,6 +7,8 @@
 .provides ./string.h#memcmp
 .provides ./string.h#memcpy
 .provides ./string.h#memchr
+.provides ./string.h#memmove
+.provides ./string.h#memset
 .provides ./string.h#strchr
 .provides ./string.h#strcmp
 .provides ./string.h#strlen

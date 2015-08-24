@@ -19,7 +19,7 @@ all: \
 	example_protocols
 
 library :
-	$(call pprint_big_begin, Updating PolarSSL repository)
+	$(call pprint_big_begin, Downloading and compiling PolarSSL library)
 	@test -d polarssl_library || \
 	  wget https://tls.mbed.org/download/polarssl-1.3.9-gpl.tgz; \
 	  tar xvf polarssl-1.3.9-gpl.tgz; \

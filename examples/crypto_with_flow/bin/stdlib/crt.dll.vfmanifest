@@ -220,6 +220,8 @@
 .provides CRT/string.h#strlen
 .provides CRT/string.h#strcmp
 .provides CRT/string.h#strchr
+.provides CRT/string.h#memset
+.provides CRT/string.h#memmove
 .provides CRT/string.h#memchr
 .provides CRT/string.h#memcpy
 .provides CRT/string.h#memcmp
