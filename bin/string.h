@@ -34,7 +34,7 @@ int strlen(char *string);
     //@ ensures [f]string(string, cs) &*& result == length(cs);
 
 int memcmp(char *array, char *array0, size_t count);
-    //@ requires [?f]chars(array, ?n, ?cs) &*& [?f0]chars(array0, ?n0, ?cs0) &*& n <= length(cs) &*& n0 <= length(cs0);
+    //@ requires [?f]chars(array, ?n, ?cs) &*& [?f0]chars(array0, ?n0, ?cs0) &*& count <= n &*& count <= n0;
     //@ ensures [f]chars(array, n, cs) &*& [f0]chars(array0, n0, cs0) &*& true == ((result == 0) == (take(count, cs) == take(count, cs0)));
 
 int strcmp(char *s1, char *s2);
