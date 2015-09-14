@@ -5,11 +5,15 @@
 
 #define PACKAGE_SIZE 40
 
+/*@
+
+// 1. client -> server : {request, HMAC(K, request)}
+// 2. server -> client : {request, respons, HMAC(K, {request, response})}
+
 ///////////////////////////////////////////////////////////////////////////////
 // Encodings for this protocol ////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-/*@
 fixpoint int shared_with(int cl, int id);
 
 fixpoint bool request(int cl, int sv, list<char> req);
@@ -34,13 +38,14 @@ predicate rpc_pub(cryptogram cg) =
       return true;
     case cg_hmac(p0, c0, cs0):
       return
-        true == bad(p0) || bad(shared_with(p0, c0)) ||
+        true == bad(p0) ||
         switch (cs0) 
         {
           case cons(c1, cs1): return
             c1 == '0' ?
               request(p0, shared_with(p0, c0), cs1)
           : c1 == '1' ?
+              bad(shared_with(p0, c0)) ||
               response(p0, shared_with(p0, c0), take(PACKAGE_SIZE, cs1),
                                                 drop(PACKAGE_SIZE, cs1))
           :
@@ -69,24 +74,37 @@ predicate rpc_pub(cryptogram cg) =
 
 void client(char *key, int key_len, char *request, char *response);
   /*@ requires [_]public_invar(rpc_pub) &*&
+               principal(?client, _) &*&
                [?f1]cryptogram(key, key_len, ?key_cs, ?key_cg) &*&
-                 key_cg == cg_symmetric_key(?creator, ?id) &*&
+                 key_cg == cg_symmetric_key(client, ?id) &*&
                [?f2]chars(request, PACKAGE_SIZE, ?req_cs) &*&
-               request(creator, shared_with(creator, id), req_cs) == true &*&
+                 bad(client) || 
+                 request(client, shared_with(client, id), req_cs) == true &*&
                chars(response, PACKAGE_SIZE, _); @*/
-  /*@ ensures  [f1]cryptogram(key, key_len, key_cs, key_cg) &*&
+  /*@ ensures  principal(client, _) &*&
+               [f1]cryptogram(key, key_len, key_cs, key_cg) &*&
                [f2]chars(request, PACKAGE_SIZE, req_cs) &*&
                chars(response, PACKAGE_SIZE, ?resp_cs) &*&
-               bad(creator) || bad(shared_with(creator, id)) ||
-               response(creator, shared_with(creator, id), req_cs, resp_cs); @*/
+                 bad(client) || bad(shared_with(client, id)) ||
+                 response(client, shared_with(client, id), 
+                          req_cs, resp_cs); @*/
 
-void server(char *key, int key_len);
+void server(char *key, int key_len, char *request, char *response);
   /*@ requires [_]public_invar(rpc_pub) &*&
+               principal(?server, _) &*&
                [?f1]cryptogram(key, key_len, ?key_cs, ?key_cg) &*&
-                 key_cg == cg_symmetric_key(?creator, ?id) &*&
-               generated_values(shared_with(creator, id), ?count); @*/
-  /*@ ensures  [f1]cryptogram(key, key_len, key_cs, key_cg) &*&
-               generated_values(shared_with(creator, id), count + 1); @*/
+                 key_cg == cg_symmetric_key(?client, ?id) &*&
+                 server == shared_with(client, id) &*&
+               chars(request, PACKAGE_SIZE, _) &*&
+               chars(response, PACKAGE_SIZE, _); @*/
+  /*@ ensures  principal(server, _) &*&
+               [f1]cryptogram(key, key_len, key_cs, key_cg) &*&
+               chars(request, PACKAGE_SIZE, ?req_cs) &*&
+                 bad(client) || 
+                 request(client, server, req_cs) &*&
+               chars(response, PACKAGE_SIZE, ?resp_cs) &*&
+                 bad(client) || bad(server) ||
+                 response(client, server, req_cs, resp_cs); @*/
 
 ///////////////////////////////////////////////////////////////////////////////
 // Attacker proof obligations for this protocol ///////////////////////////////

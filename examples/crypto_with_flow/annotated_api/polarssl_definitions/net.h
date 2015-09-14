@@ -54,19 +54,23 @@ void net_usleep(unsigned long usec);
   //@ ensures  true;
 
 int net_send(void *ctx, const char *buf, size_t len);
-  /*@ requires integer(ctx, ?fd) &*&
+  /*@ requires principal(?id, ?v) &*&
+               integer(ctx, ?fd) &*&
                net_status(fd, ?ip, ?port, connected) &*&
                len <= MAX_MESSAGE_SIZE &*&
                [?f1]chars(buf, len, ?cs); @*/
-  /*@ ensures  integer(ctx, fd)  &*&
+  /*@ ensures  principal(id, v) &*&
+               integer(ctx, fd)  &*&
                net_status(fd, ip, port, connected) &*&
                [f1]chars(buf, len, cs); @*/
 
 int net_recv(void *ctx, char *buf, size_t len);
-  /*@ requires integer(ctx, ?fd)  &*&
+  /*@ requires principal(?id, ?v) &*&
+               integer(ctx, ?fd)  &*&
                net_status(fd, ?ip, ?port, connected) &*&
                chars(buf, len, _) &*& len <= MAX_MESSAGE_SIZE; @*/
-  /*@ ensures  integer(ctx, fd)  &*&
+  /*@ ensures  principal(id, v) &*&
+               integer(ctx, fd)  &*&
                net_status(fd, ip, port, connected) &*&
                chars(buf, len, _) &*& result <= len; @*/
 

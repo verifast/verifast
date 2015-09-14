@@ -5,11 +5,11 @@
 void r_int(struct havege_state* state, int* i)
   /*@ requires [_]public_invar(?pub) &*&
                [?f]havege_state_initialized(state) &*&
-               generated_values(?principal, ?count) &*&
+               principal(?principal, ?count) &*&
                havege_util(pub, ?proof_pred, principal) &*&
                integer(i, _); @*/
   /*@ ensures  [f]havege_state_initialized(state) &*&
-               generated_values(principal, count + 1) &*&
+               principal(principal, count + 1) &*&
                havege_util(pub, proof_pred, principal) &*&
                integer(i, _); @*/
 {
@@ -31,12 +31,12 @@ void r_int_with_bounds(struct havege_state* state, int* i,
                        int l_bound, int u_bound)
   /*@ requires [_]public_invar(?pub) &*&
                [?f]havege_state_initialized(state) &*&
-               generated_values(?principal, ?count1) &*&
+               principal(?principal, ?count1) &*&
                havege_util(pub, ?proof_pred, principal) &*&
                0 <= l_bound &*& l_bound < u_bound &*& 
                integer(i, _); @*/
   /*@ ensures  [f]havege_state_initialized(state) &*&
-               generated_values(principal, ?count2) &*&
+               principal(principal, ?count2) &*&
                havege_util(pub, proof_pred, principal) &*&
                count2 > count1 &*& integer(i, ?val) &*& 
                l_bound <= val &*& val <= u_bound; @*/
@@ -63,11 +63,11 @@ void r_int_with_bounds(struct havege_state* state, int* i,
 void r_u_int(struct havege_state* state, unsigned int* i)
   /*@ requires [_]public_invar(?pub) &*&
                [?f]havege_state_initialized(state) &*&
-               generated_values(?principal, ?count) &*&
+               principal(?principal, ?count) &*&
                havege_util(pub, ?proof_pred, principal) &*&
                u_integer(i, _); @*/
   /*@ ensures  [f]havege_state_initialized(state) &*&
-               generated_values(principal, count + 1) &*&
+               principal(principal, count + 1) &*&
                havege_util(pub, proof_pred, principal) &*&
                u_integer(i, _); @*/
 {
@@ -82,12 +82,12 @@ void r_u_int_with_bounds(struct havege_state* state, unsigned int* i,
                          unsigned int l_bound, unsigned int u_bound)
   /*@ requires [_]public_invar(?pub) &*&
                [?f]havege_state_initialized(state) &*&
-               generated_values(?principal, ?count1) &*&
+               principal(?principal, ?count1) &*&
                havege_util(pub, ?proof_pred, principal) &*&
                l_bound < u_bound &*& u_bound <= INT_MAX &*& 
                u_integer(i, _); @*/
   /*@ ensures  [f]havege_state_initialized(state) &*&
-               generated_values(principal, ?count2) &*&
+               principal(principal, ?count2) &*&
                havege_util(pub, proof_pred, principal) &*&
                count1 < count2 &*& u_integer(i, ?val) &*& 
                l_bound <= val &*& val <= u_bound; @*/

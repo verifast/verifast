@@ -5,6 +5,8 @@
 
 #define PACKAGE_SIZE 40
 
+// 1. sender -> receiver : M
+
 /*@ 
 
 predicate dummy_pub(cryptogram cg) =
@@ -29,13 +31,17 @@ predicate dummy_pub(cryptogram cg) =
 
 @*/
 
-void sender();
-  //@ requires true;
-  //@ ensures  true;
+void sender(char* msg);
+  /*@ requires principal(?sender, _) &*&
+               [?f]chars(msg, PACKAGE_SIZE, ?cs); @*/
+  /*@ ensures  principal(sender, _) &*&
+               [f]chars(msg, PACKAGE_SIZE, cs); @*/
 
-void receiver();
-  //@ requires true;
-  //@ ensures  true;
+void receiver(char* msg);
+  /*@ requires principal(?receiver, _) &*&
+               chars(msg, PACKAGE_SIZE, _); @*/
+  /*@ ensures  principal(receiver, _) &*&
+               chars(msg, PACKAGE_SIZE, ?cs); @*/
 
 //@ PUBLIC_INVARIANT_PROOFS(dummy)
 

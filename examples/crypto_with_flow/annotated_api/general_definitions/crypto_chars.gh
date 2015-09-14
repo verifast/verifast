@@ -39,7 +39,8 @@ lemma_auto void optional_crypto_chars_inv(bool cc, char *array, int n, list<char
 
 lemma_auto void cryptogram_inv();
   requires [?f]cryptogram(?array, ?n, ?cs, ?cg);
-  ensures  [f]cryptogram(array, n, cs, cg) &*& length(cs) == n;
+  ensures  [f]cryptogram(array, n, cs, cg) &*& length(cs) == n &*&
+           cs == chars_for_cg(cg);
 
 lemma void optional_crypto_chars_split(char *array, int offset);
   requires [?f]optional_crypto_chars(?cc, array, ?n, ?cs) &*& 0 <= offset &*& offset <= n;

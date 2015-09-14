@@ -1,8 +1,6 @@
 #ifndef MALLOC_H
 #define MALLOC_H
 
-//@ #include <crypto.gh>
-
 /*@
 
 // In Standard C, freeing a null pointer is allowed and is a no-op.
@@ -28,8 +26,7 @@ void *malloc(int size);
     @*/
 
 void free(void *array);
-    /*@ requires malloc_block(array, ?size) &*&
-                 optional_crypto_chars(_, array, size, ?cs); @*/
-    //@ ensures  emp;
+    //@ requires malloc_block(array, ?size) &*& chars(array, size, ?cs);
+    //@ ensures emp;
 
 #endif

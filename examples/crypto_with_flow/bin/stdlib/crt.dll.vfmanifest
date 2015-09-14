@@ -1,5 +1,6 @@
 .predicate @./crypto.gh#crypto_chars
 .predicate @./crypto.gh#optional_crypto_chars
+.predicate @./crypto.gh#principal
 .provides CRT/permutations.gh#is_permutation_reflexive
 .provides CRT/permutations.gh#is_perm_transitive
 .provides CRT/permutations.gh#is_perm_symmetric

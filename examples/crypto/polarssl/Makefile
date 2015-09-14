@@ -1,4 +1,4 @@
-VERBOSE = -verbose -1
+# VERBOSE = -verbose -1
 VF = ../../../bin/verifast $(VERBOSE)
 
 include ../Makefile.include
@@ -21,8 +21,8 @@ all: \
 library :
 	$(call pprint_big_begin, Downloading and compiling PolarSSL library)
 	@test -d polarssl_library || \
-	  wget https://tls.mbed.org/download/polarssl-1.3.9-gpl.tgz; \
-	  tar xvf polarssl-1.3.9-gpl.tgz; \
+	  wget https://tls.mbed.org/download/polarssl-1.3.9-gpl.tgz || \
+	  tar xvf polarssl-1.3.9-gpl.tgz || \
 	  mv polarssl-1.3.9 polarssl_library; \
 	  cd polarssl_library; \
 	  sed -i 's/\/\/#define POLARSSL_HAVEGE_C/#define POLARSSL_HAVEGE_C/g' \

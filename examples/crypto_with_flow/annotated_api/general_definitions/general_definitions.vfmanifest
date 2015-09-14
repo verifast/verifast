@@ -7,7 +7,6 @@
 .predicate @./principals.gh#principals
 .provides ./principals.gh#principals_init
 .provides ./principals.gh#principals_exit
-.predicate @./principals.gh#principal
 .predicate @./principals.gh#generated_values
 .provides ./principals.gh#principal_create
 .provides ./principals.gh#principal_destroy
@@ -20,7 +19,7 @@
 #
 #
 # cryptogram_bounds.gh
-.provides ./cryptogram_bounds.gh#cgs_in_chars_upper_bound
+.provides ./cryptogram_bounds.gh#cgs_in_chars_upper_bound_
 .provides ./cryptogram_bounds.gh#cgs_in_chars_upper_bound_subset
 .provides ./cryptogram_bounds.gh#cgs_in_chars_upper_bound_superset
 .provides ./cryptogram_bounds.gh#cgs_in_chars_upper_bound_split
@@ -50,3 +49,7 @@
 # public_chars.gh
 .provides ./public_chars.gh#public_chars
 .provides ./public_chars.gh#public_crypto_chars
+#
+#
+# zeroize.h
+.provides ./zeroize.h#zeroize

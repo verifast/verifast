@@ -9,7 +9,9 @@ MODULES = \
   key_util \
   havege_util \
   attacker
-OBJECTS   = $(foreach src,$(MODULES),src/$(addsuffix .o, $(src)))
+
+OBJECTS   = $(foreach src,$(MODULES),src/$(addsuffix .o, $(src))) \
+	    src/zeroize.o
 MANIFESTS = $(foreach src,$(MODULES),src/$(addsuffix .vfmanifest, $(src)))
 
 all: \
@@ -20,13 +22,12 @@ all: \
 	bin/libann_polarssl.so \
 	protocols
 
-.PHONY: polarssl_library
 polarssl_library :
 	$(call pprint_big_begin, Downloading and compiling PolarSSL library)
 	@test -d polarssl_library || \
-	  wget https://tls.mbed.org/download/polarssl-1.3.9-gpl.tgz; \
-	  tar xvf polarssl-1.3.9-gpl.tgz; \
-	  mv polarssl-1.3.9 polarssl_library; \
+	  wget https://tls.mbed.org/download/mbedtls-1.3.11-gpl.tgz; \
+	  tar xvf mbedtls-1.3.11-gpl.tgz; \
+	  mv mbedtls-1.3.11 polarssl_library; \
 	  cd polarssl_library; \
 	  sed -i 's/\/\/#define POLARSSL_HAVEGE_C/#define POLARSSL_HAVEGE_C/g' \
 	    include/polarssl/config.h; \

@@ -16,7 +16,7 @@ int main()
   fprintf(f, "#ifndef POLARSSL_MACRO_DEFINES\n");
   fprintf(f, "#define POLARSSL_MACRO_DEFINES\n");
   fprintf(f, "\n");
-  fprintf(f, "//@ #include \"../general_definitions/general_definitions.gh\"\n");
+  fprintf(f, "#include \"../general_definitions/general_definitions.h\"\n");
   fprintf(f, "\n");
   fprintf(f, "#include <stddef.h>\n");
   fprintf(f, "#include <limits.h>\n");

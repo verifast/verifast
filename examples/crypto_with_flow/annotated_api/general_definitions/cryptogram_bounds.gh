@@ -8,7 +8,7 @@
 //characters
 fixpoint bool cgs_in_chars_upper_bound(list<char> cs, list<cryptogram> cgs);
 
-lemma_auto void cgs_in_chars_upper_bound(list<char> cs);
+lemma_auto void cgs_in_chars_upper_bound_(list<char> cs);
   requires true;
   ensures  true == cgs_in_chars_upper_bound(cs, cgs_in_chars(cs));
 

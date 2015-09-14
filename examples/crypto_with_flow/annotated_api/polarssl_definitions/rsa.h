@@ -14,10 +14,10 @@ int rsa_gen_key(void *ctx, void *f_rng, void *p_rng,
                [_]is_random_function(f_rng, ?state_pred) &*&
                [?f]state_pred(p_rng) &*&
                nbits >= 1024 &*& nbits <= 8192 &*& exponent == 65537 &*&
-               generated_values(principal, ?count); @*/
+               principal(principal, ?count); @*/
   /*@ ensures  pk_context_with_keys(pk_context, principal,
                                     count + 1, nbits, info) &*&
                [f]state_pred(p_rng) &*&
-               generated_values(principal, count + 1); @*/
+               principal(principal, count + 1); @*/
 
 #endif

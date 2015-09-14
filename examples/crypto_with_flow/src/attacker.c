@@ -46,8 +46,7 @@ predicate attacker_invariant(predicate(cryptogram) pub,
   [_]public_invar(pub) &*& pred() &*&
   havege_state_initialized(state) &*&
   integer(socket, ?fd) &*& net_status(fd, ?ip, ?port, connected) &*&
-  true == bad(attacker) &*& principal(attacker) &*& 
-  generated_values(attacker, ?count) &*&
+  true == bad(attacker) &*& principal(attacker, _) &*&
   is_principal_with_public_random(_, pub, 
                                   attacker_random_pred(pub, pred), 
                                   attacker) &*&

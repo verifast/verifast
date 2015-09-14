@@ -36,24 +36,26 @@ int strlen(char *string);
     //@ requires [?f]string(string, ?cs);
     //@ ensures [f]string(string, cs) &*& result == length(cs);
 
-//@ predicate memcpm_hmac(cryptogram cg) = true;
-
+#define MIN_MEMCMP_SIZE 4
 
 int memcmp(char *array, char *array0, size_t count);
-    /*@ requires [?f1]chars(array, ?n, ?cs) &*&
-                 [?f2]optional_crypto_chars(?cc, array0, ?n0, ?cs0) &*&
-                 n <= length(cs) &*& n0 <= length(cs0) &*&
-                 //only allowed for checking sha512 hmac
-                 cc ?
-                   memcpm_hmac(?hmac_cg) &*&
-                   n0 == n &*& (n0 == 48 || n0 == 64) &*&
-                   cs0 == chars_for_cg(hmac_cg) &*&
-                   hmac_cg == cg_hmac(?p, ?c, ?pay)
+    /*@ requires principal(?principal, ?values_count) &*&
+                 [?f1]optional_crypto_chars(?cc, array, ?n, ?cs) &*&
+                 [?f2]optional_crypto_chars(?cc0, array0, ?n0, ?cs0) &*& 
+                 count <= n &*& count <= n0 &*&
+                 cc || cc0 ? count >= MIN_MEMCMP_SIZE : true; @*/
+    /*@ ensures  [f1]optional_crypto_chars(cc, array, n, cs) &*&
+                 [f2]optional_crypto_chars(cc0, array0, n0, cs0) &*&
+                 cc || cc0 ?
+                   (result == 0 ?
+                      principal(principal, values_count) &*&
+                      (take(count, cs) == take(count, cs0))
+                    : 
+                      true
+                   )
                  :
-                   true; @*/
-    /*@ ensures  [f1]chars(array, n, cs) &*&
-                 [f2]optional_crypto_chars(cc, array0, n0, cs0) &*&
-                 true == ((result == 0) == (take(count, cs) == take(count, cs0))); @*/
+                   principal(principal, count) &*&
+                   true == ((result == 0) == (take(count, cs) == take(count, cs0))); @*/
 
 int strcmp(char *s1, char *s2);
     //@ requires [?f1]string(s1, ?cs1) &*& [?f2]string(s2, ?cs2);

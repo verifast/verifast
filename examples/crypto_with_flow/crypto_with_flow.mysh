@@ -6,7 +6,14 @@ verify_crypto -bindir bin/stdlib -allow_assume -shared -emit_dll_vfmanifest -emi
 
 cd protocols
   verify_crypto -bindir ../bin/stdlib -allow_assume pthread.o ../bin/libann_polarssl.dll.vfmanifest dummy/dummy.c dummy/main_app.c
+  verify_crypto -bindir ../bin/stdlib -allow_assume pthread.o ../bin/libann_polarssl.dll.vfmanifest hmac/hmac.c hmac/main_app.c
   verify_crypto -bindir ../bin/stdlib -allow_assume pthread.o ../bin/libann_polarssl.dll.vfmanifest rpc/rpc.c rpc/main_app.c
+  verify_crypto -bindir ../bin/stdlib -allow_assume pthread.o ../bin/libann_polarssl.dll.vfmanifest enc_then_hmac/enc_then_hmac.c enc_then_hmac/main_app.c
+  verify_crypto -bindir ../bin/stdlib -allow_assume pthread.o ../bin/libann_polarssl.dll.vfmanifest hmac_then_enc/hmac_then_enc.c hmac_then_enc/main_app.c
+  verify_crypto -bindir ../bin/stdlib -allow_assume pthread.o ../bin/libann_polarssl.dll.vfmanifest enc_and_hmac/enc_and_hmac.c enc_and_hmac/main_app.c
+  verify_crypto -bindir ../bin/stdlib -allow_assume pthread.o ../bin/libann_polarssl.dll.vfmanifest auth_enc/auth_enc.c auth_enc/main_app.c
+  verify_crypto -bindir ../bin/stdlib -allow_assume pthread.o ../bin/libann_polarssl.dll.vfmanifest sign/sign.c sign/main_app.c
+  verify_crypto -bindir ../bin/stdlib -allow_assume pthread.o ../bin/libann_polarssl.dll.vfmanifest nsl/nsl.c nsl/main_app.c
 cd ..
 
 del bin/libann_polarssl.dll.vfmanifest

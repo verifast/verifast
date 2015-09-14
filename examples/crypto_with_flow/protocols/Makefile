@@ -1,5 +1,5 @@
 # VERBOSE = -verbose -1
-VF = ../../../bin/verifast $(VERBOSE) -bindir ../bin/stdlib -vroot CRT=../bin/stdlib/
+VF = ../../../bin/verifast -bindir ../bin/stdlib -vroot CRT=../bin/stdlib/
 
 include ../Makefile.include
 
@@ -10,11 +10,18 @@ LIBS += -lm
 
 PROTOCOLS = \
 	dummy \
-	rpc
+	hmac \
+	rpc \
+	enc_then_hmac \
+	hmac_then_enc \
+	enc_and_hmac \
+	auth_enc \
+	sign \
+	nsl \
 
 PROT_APPS = $(foreach prot,$(PROTOCOLS),$(prot)/$(prot))
 
-all : $(PROT_APPS)
+all : $(PROT_APPS) z3_is_unsound
 
 .SECONDEXPANSION:
 
@@ -23,11 +30,14 @@ MSG = Verified, compiled and executed protocol:
 $(PROT_APPS) : ../annotated_api/polarssl_definitions/polarssl_definitions.h \
 	       $$(addsuffix .vfmanifest, $$@) $$(addsuffix .o, $$@) \
 	       $$(dir $$@)main_app.vfmanifest $$(dir $$@)main_app.o
-	$(VF) -allow_assume pthread.o ../bin/libann_polarssl.dll.vfmanifest \
+	$(VF) $(VFFLAGS) -allow_assume pthread.o ../bin/libann_polarssl.dll.vfmanifest \
 	                $(addsuffix .vfmanifest, $@) $(dir $@)main_app.vfmanifest
 	$(CC) $(CFLAGS) $(addsuffix .o, $@) $(dir $@)main_app.o -o $@ $(LIBS)
 	@LD_LIBRARY_PATH=:../bin ; ./$@
 	$(call pprint_big, $(MSG), \t\t$(patsubst %/,%,$(dir $@)) )
+
+z3_is_unsound:
+	$(VF) -allow_assume ../bin/libann_polarssl.dll.vfmanifest z3_is_unsound.c
 
 clean :
 	@rm -f $(PROT_APPS)

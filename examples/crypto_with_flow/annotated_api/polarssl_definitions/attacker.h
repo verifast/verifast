@@ -1,7 +1,7 @@
 #ifndef ATTACKER_H
 #define ATTACKER_H
 
-//@ #include "../general_definitions/general_definitions.gh"
+#include "../general_definitions/general_definitions.h"
 
 void attacker();
   /*@ requires [_]public_invar(?pub) &*&

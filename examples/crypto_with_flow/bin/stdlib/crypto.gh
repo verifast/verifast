@@ -29,5 +29,7 @@ predicate optional_crypto_chars(bool is_crypto_chars,
   :
     chars(array, len, cs)
 ;
+
+predicate principal(int principal, int generated_values);
     
 #endif

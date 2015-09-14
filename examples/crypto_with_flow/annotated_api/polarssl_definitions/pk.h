@@ -151,12 +151,12 @@ int pk_encrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                 random_state_predicate(?state_pred) &*&
                 [_]is_random_function(f_rng, state_pred) &*&
                 [?f2]state_pred(p_rng) &*&
-                generated_values(?p2, ?c2); @*/
+                principal(?p2, ?c2); @*/
   /*@ ensures   pk_context_with_key(ctx, pk_public, p1, c1, nbits) &*&
                 [f1]optional_crypto_chars(cc, input, ilen, cs_input) &*&
                 u_integer(olen, ?olen_val) &*&
                 [f2]state_pred(p_rng) &*&
-                generated_values(p2, c2 + 1) &*&
+                principal(p2, c2 + 1) &*&
                 result == 0 ?
                   olen_val > 0 &*& olen_val < osize &*&
                   8 * olen_val <= nbits &*&
@@ -178,14 +178,13 @@ int pk_decrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                 random_state_predicate(?state_pred) &*&
                 [_]is_random_function(f_rng, state_pred) &*&
                 [?f2]state_pred(p_rng) &*&
-                generated_values(?p2, ?c2); @*/
+                principal(?p2, ?c2); @*/
   /*@ ensures   pk_context_with_key(ctx, pk_private, p1, c1, nbits) &*&
                 [f1]optional_crypto_chars(cc, input, ilen, cs_input) &*&
                 u_integer(olen, ?olen_val) &*&
                 [f2]state_pred(p_rng) &*&
-                generated_values(p2, c2 + 1) &*&
+                principal(p2, c2 + 1) &*&
                 result == 0 ?
-                  olen_val * 2 > ilen &*&
                   crypto_chars(output, olen_val, ?cs_output) &*&
                   chars(output + olen_val, osize - olen_val, _) &*&
                   [_]exists(?ent) &*&
@@ -208,12 +207,12 @@ int pk_sign(pk_context *ctx, int md_alg, const char *hash, size_t hash_len,
                 random_state_predicate(?state_pred) &*&
                 [_]is_random_function(f_rng, state_pred) &*&
                 [?f2]state_pred(p_rng) &*&
-                generated_values(?p2, ?c2); @*/
+                principal(?p2, ?c2); @*/
   /*@ ensures   pk_context_with_key(ctx, pk_private, p1, c1, nbits) &*&
                 [f1]optional_crypto_chars(cc, hash, hash_len, cs_input) &*&
                 u_integer(sig_len, ?sig_len_val) &*&
                 [f2]state_pred(p_rng) &*&
-                generated_values(p2, c2 + 1) &*&
+                principal(p2, c2 + 1) &*&
                 result == 0 ?
                   sig_len_val > 0 &*& sig_len_val <= out_len &*& 
                   cryptogram(sig, sig_len_val, ?cs_out, ?cg_output) &*&
@@ -236,8 +235,8 @@ int pk_verify(pk_context *ctx, int md_alg, const char *hash,
                 [f1]optional_crypto_chars(cc1, hash, hash_len, cs_input) &*&
                 [f2]optional_crypto_chars(cc2, sig, sig_len, cs_sig) &*&
                 result == 0 ?
-                  exists(?cs) &*&
-                  cs_sig == chars_for_cg(cg_asym_signature(p, c, cs_input, cs))
+                  exists(?ent) &*&
+                  cs_sig == chars_for_cg(cg_asym_signature(p, c, cs_input, ent))
                 :
                   true; @*/
 
