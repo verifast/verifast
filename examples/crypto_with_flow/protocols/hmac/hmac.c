@@ -63,7 +63,7 @@ void receiver(char *key, int key_len, char *message)
   /*@ ensures  principal(receiver, _) &*&
                [f1]cryptogram(key, key_len, key_cs, key_cg) &*&
                chars(message, MESSAGE_SIZE, ?msg_cs) &*&
-               bad(sender) || bad(receiver) ||
+               collision_in_run || bad(sender) || bad(receiver) ||
                send(sender, receiver, msg_cs); @*/
 {
   int socket1;
@@ -96,16 +96,16 @@ void receiver(char *key, int key_len, char *message)
     //@ open optional_crypto_chars(false, buffer, MESSAGE_SIZE, msg_cs);
     //@ open cryptogram(hmac, 64, ?hmac_cs, ?hmac_cg);
     //@ assert hmac_cg == cg_hmac(sender, id, msg_cs);
-    //@ close optional_crypto_chars(true, hmac, 64, hmac_cs);
+    //@ close optional_crypto_chars(!collision_in_run, hmac, 64, hmac_cs);
     //@ close optional_crypto_chars(false, (void*) buffer + MESSAGE_SIZE, 64, _);
     if (memcmp((void*) buffer + MESSAGE_SIZE, hmac, 64) != 0) abort();
-    //@ open optional_crypto_chars(true, hmac, 64, hmac_cs);
+    //@ open optional_crypto_chars(!collision_in_run, hmac, 64, hmac_cs);
     //@ open optional_crypto_chars(false, (void*) buffer + MESSAGE_SIZE, 64, hmac_cs);
     //@ assert chars((void*) buffer + MESSAGE_SIZE, 64, hmac_cs);
     //@ assert chars(buffer, expected_size, append(msg_cs, hmac_cs));
     //@ public_chars((void*) buffer + MESSAGE_SIZE, 64, hmac_cs);
     
-    /*@ if (!bad(sender) && !bad(receiver))
+    /*@ if (!collision_in_run && !bad(sender) && !bad(receiver))
         {
           public_chars((void*) buffer + MESSAGE_SIZE, 64, hmac_cs);
           close cryptogram(hmac, 64, hmac_cs, hmac_cg);
@@ -117,7 +117,7 @@ void receiver(char *key, int key_len, char *message)
     //@ chars_join(buffer);
     /*@ open hide_chars((void*) buffer + expected_size, 
                         MAX_MESSAGE_SIZE - expected_size, _); @*/
-    //@ public_crypto_chars(hmac, 64, hmac_cs);
+    //@ if (!collision_in_run) public_crypto_chars(hmac, 64, hmac_cs);
   }
   net_close(socket2);
   net_close(socket1);

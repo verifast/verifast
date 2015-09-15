@@ -85,7 +85,8 @@ void client(char *key, int key_len, char *request, char *response);
                [f1]cryptogram(key, key_len, key_cs, key_cg) &*&
                [f2]chars(request, PACKAGE_SIZE, req_cs) &*&
                chars(response, PACKAGE_SIZE, ?resp_cs) &*&
-                 bad(client) || bad(shared_with(client, id)) ||
+                 collision_in_run || bad(client) || 
+                 bad(shared_with(client, id)) ||
                  response(client, shared_with(client, id), 
                           req_cs, resp_cs); @*/
 
@@ -100,9 +101,10 @@ void server(char *key, int key_len, char *request, char *response);
   /*@ ensures  principal(server, _) &*&
                [f1]cryptogram(key, key_len, key_cs, key_cg) &*&
                chars(request, PACKAGE_SIZE, ?req_cs) &*&
-                 bad(client) || 
+                 collision_in_run || bad(client) || 
                  request(client, server, req_cs) &*&
                chars(response, PACKAGE_SIZE, ?resp_cs) &*&
+                 collision_in_run || 
                  bad(client) || bad(server) ||
                  response(client, server, req_cs, resp_cs); @*/
 

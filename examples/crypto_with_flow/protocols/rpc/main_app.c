@@ -87,13 +87,8 @@ predicate_family_instance pthread_run_post(client_t)(void *data, any info) =
     [1/2]chars(req, PACKAGE_SIZE, ?req_cs) &*&
   rpc_args_response(data, ?resp) &*&
     chars(resp, PACKAGE_SIZE, ?resp_cs) &*&
-    (
-      bad(client) || bad(server) ?
-        true
-      :
-        true == response(client, server, req_cs, resp_cs)
-    )
-    &*&
+    collision_in_run || bad(client) || bad(server) ||
+    response(client, server, req_cs, resp_cs) &*&
   info == cons(int_value(client), 
             cons(int_value(server), 
               cons(pointer_value(key),
@@ -148,10 +143,12 @@ predicate_family_instance pthread_run_post(server_t)(void *data, any info) =
     key_cg == cg_symmetric_key(client, ?id) &*&
   rpc_args_request(data, ?req) &*&
     chars(req, PACKAGE_SIZE, ?req_cs) &*&
-    bad(client) || request(client, server, req_cs) == true &*&
+    collision_in_run ||
+    bad(client) || request(client, server, req_cs) &*&
   rpc_args_response(data, ?resp) &*&
     chars(resp, PACKAGE_SIZE, ?resp_cs) &*&
-    bad(client) || bad(server) || response(client, server, req_cs, resp_cs) == true &*&
+    collision_in_run || bad(client) || bad(server) || 
+    response(client, server, req_cs, resp_cs) == true &*&
   info == cons(int_value(client), 
             cons(int_value(server), 
               cons(pointer_value(key), 
@@ -272,7 +269,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
       if (memcmp(c_response, s_response, PACKAGE_SIZE) != 0)
         abort();
     }
-    //@ close optional_crypto_chars(true, key, KEY_SIZE, cs_key);
+    //@ close optional_crypto_chars(!collision_in_run, key, KEY_SIZE, cs_key);
     zeroize(key, KEY_SIZE);
     
     printf(" |%i| ", i);

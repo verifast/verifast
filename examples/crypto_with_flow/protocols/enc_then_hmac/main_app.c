@@ -298,11 +298,11 @@ int main(int argc, char **argv) //@ : main_full(main_app)
       zeroize(r_message, r_args.length);
     }
     //@ assert malloc_block(enc_key, KEY_SIZE);
-    //@ close optional_crypto_chars(true, enc_key, KEY_SIZE, enc_cs_key);
+    //@ close optional_crypto_chars(!collision_in_run, enc_key, KEY_SIZE, enc_cs_key);
     zeroize(enc_key, KEY_SIZE);
     free((void*) enc_key);
     //@ assert malloc_block(hmac_key, KEY_SIZE);
-    //@ close optional_crypto_chars(true, hmac_key, KEY_SIZE, hmac_cs_key);
+    //@ close optional_crypto_chars(!collision_in_run, hmac_key, KEY_SIZE, hmac_cs_key);
     zeroize(hmac_key, KEY_SIZE);
     free((void*) hmac_key);
     

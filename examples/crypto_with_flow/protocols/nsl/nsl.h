@@ -37,6 +37,7 @@
 fixpoint bool nsl_public_nonce(int principal, int info)
 {
   return
+    collision_in_run ||
     bad(principal) ||
     (int_left(info) == 1 && bad(int_right(info))) ||
     (int_left(info) == 2 && bad(int_left(int_right(info))));
@@ -75,7 +76,8 @@ predicate nsl_pub(cryptogram cg) =
     case cg_auth_encrypted(p0, c0, mac0, cs0, ent0):
       return true == bad(p0) &*& [_]public_generated(nsl_pub)(cs0);
     case cg_asym_encrypted(p0, c0, cs0, ent0):
-      return [_]nsl_pub_msg_sender(?p1) &*& bad(p0) || bad(p1) ?
+      return [_]nsl_pub_msg_sender(?p1) &*& 
+      collision_in_run || bad(p0) || bad(p1) ?
         [_]public_generated(nsl_pub)(cs0)
       : 
       (
@@ -153,13 +155,12 @@ void sender(int sender, int receiver,
              cryptogram(s_nonce, NONCE_SIZE, ?s_nonce_cs, ?s_nonce_cg) &*&
                s_nonce_cg == cg_random(sender, _) &*&
                cg_info(s_nonce_cg) == int_pair(1, receiver) &*&
-             crypto_chars(r_nonce, NONCE_SIZE, ?r_nonce_cs) &*&
-             bad(sender) || bad(receiver) ?
-               [_]public_generated(nsl_pub)(r_nonce_cs)
+             collision_in_run || bad(sender) || bad(receiver) ?
+               chars(r_nonce, NONCE_SIZE, _)
              :
-               [_]exists(?r_nonce_cg) &*&
+               cryptogram(r_nonce, NONCE_SIZE, _, ?r_nonce_cg) &*&
                r_nonce_cg == cg_random(receiver, _) &*&
-               cg_info(r_nonce_cg) == int_pair(2, int_pair(sender, sender));@*/
+               cg_info(r_nonce_cg) == int_pair(2, int_pair(sender, sender)); @*/
 
 void receiver(int sender, int receiver, 
               char *s_pub_key, char *r_priv_key,
@@ -179,19 +180,17 @@ void receiver(int sender, int receiver,
                             s_pub_key_cs, s_pub_key_cg) &*&
              [f2]cryptogram(r_priv_key, 8 * KEY_SIZE,
                             r_priv_key_cs, r_priv_key_cg) &*&
-             crypto_chars(s_nonce, NONCE_SIZE, ?s_nonce_cs) &*&
              cryptogram(r_nonce, NONCE_SIZE, ?r_nonce_cs, ?r_nonce_cg) &*&
                r_nonce_cg == cg_random(receiver, _) &*&
              (
                collision_in_run || bad(sender) || bad(receiver) ?
-                 true
+                 chars(s_nonce, NONCE_SIZE, _)
                :
-                 [_]exists(?s_nonce_cg) &*&
-                 s_nonce_cs == chars_for_cg(s_nonce_cg) &*&
+                 cryptogram(s_nonce, NONCE_SIZE, ?s_nonce_cs, ?s_nonce_cg) &*&
                  s_nonce_cg == cg_random(sender, _) &*&
                  cg_info(s_nonce_cg) == int_pair(1, receiver) &*&
-                 cg_info(r_nonce_cg) == int_pair(2, int_pair(sender, sender))
-             );@*/
+                 cg_info(r_nonce_cg) == int_pair(2, int_pair(sender, sender))   
+             ); @*/
 
 ///////////////////////////////////////////////////////////////////////////////
 // Attacker proof obligations for this protocol ///////////////////////////////

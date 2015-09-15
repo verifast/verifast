@@ -51,6 +51,6 @@ lemma void public_cryptogram_extract(char *array);
            [?f]cryptogram(array, ?n, ?cs, ?cg) &*&
            [_]public_generated(pub)(cs);
   ensures  [f]cryptogram(array, n, cs, cg) &*&
-           [_]pub(cg);
+           collision_in_run ? true : [_]pub(cg);
 
 #endif

@@ -143,19 +143,24 @@ void crashing_function(pk_context* pub_context, pk_context* priv_context,
   if (size != NONCE_SIZE)
     abort();
   //@ open optional_crypto_chars(false, encrypted, KEY_SIZE, enc_cs);
-  //@ assert u_integer(&size, NONCE_SIZE);  
-  //@ assert crypto_chars(message, NONCE_SIZE, ?dec_cs);
-  //@ assert [_]exists(?ent);
-  //@ cryptogram enc_cg = cg_asym_encrypted(principal, count, dec_cs, ent);
-  //@ assert enc_cs == chars_for_cg(enc_cg);
-  //@ public_chars_extract(encrypted, enc_cg);
+  //@ assert u_integer(&size, NONCE_SIZE);
+  //@ assert optional_crypto_chars(!collision_in_run, message, NONCE_SIZE, ?dec_cs);
+  //@ cryptogram enc_cg;
+  /*@ if (!collision_in_run)
+      {
+        assert [_]exists(?ent);
+        enc_cg = cg_asym_encrypted(principal, count, dec_cs, ent);
+        assert enc_cs == chars_for_cg(enc_cg);
+        public_chars_extract(encrypted, enc_cg);
+      }
+  @*/
   
   // Interpret the message
-  //@ close optional_crypto_chars(true, (void*) message, NONCE_SIZE, _);
-  //@ close optional_crypto_chars(true, nonce, NONCE_SIZE, nonce_cs);
+  //@ close optional_crypto_chars(!collision_in_run, (void*) message, NONCE_SIZE, _);
+  //@ close optional_crypto_chars(!collision_in_run, nonce, NONCE_SIZE, nonce_cs);
   if (memcmp((void*) message, nonce, NONCE_SIZE) != 0) abort();
   
-  /*@ if (!bad(principal))
+  /*@ if (!collision_in_run && !bad(principal))
       {
         open [_]z3_pub(enc_cg);
         assert [_]z3_pub_(?sender, ?nonce_cg2);
@@ -167,10 +172,15 @@ void crashing_function(pk_context* pub_context, pk_context* priv_context,
           assert false;
         }
         
-        //UNSOUND!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        //This should not be true in case of a collision
-        //How does z3 prover this?
-        //I see no way how to make this verified program crash though
+        //UNSOUND!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        //
+        //*This should not be true in case of a collision, otherwise false can
+        // be proven.
+        //
+        //*Cannot trigger this unsoundness because contracts were developped in
+        // sush a way that a collision can only be proven in exhaustive search.
+        //
+        //*How does z3 prover this?
         assert nonce_cg == nonce_cg2;
       }
   @*/
@@ -234,7 +244,7 @@ int main(int argc, char **argv) //@ : main_full(z3_is_unsound)
                    (unsigned int) 8 * KEY_SIZE, NULL, 0) != 0)
     abort();
   //@ open cryptogram(priv_key, 8 * KEY_SIZE, cs_priv_key, cg_priv_key);
-  //@ close optional_crypto_chars(true, priv_key, 8 * KEY_SIZE, cs_priv_key);
+  //@ close optional_crypto_chars(!collision_in_run, priv_key, 8 * KEY_SIZE, cs_priv_key);
   zeroize(priv_key, 8 * KEY_SIZE);
   //@ close z3_pub(cg_pub_key);
   //@ leak z3_pub(cg_pub_key);
@@ -251,7 +261,7 @@ int main(int argc, char **argv) //@ : main_full(z3_is_unsound)
     crashing_function(&pub_context, &priv_context, &havege_state, nonce);
     
     //@ open cryptogram(nonce, NONCE_SIZE, ?cs_nonce, _);
-    //@ close optional_crypto_chars(true, nonce, NONCE_SIZE, cs_nonce);
+    //@ close optional_crypto_chars(!collision_in_run, nonce, NONCE_SIZE, cs_nonce);
     zeroize(nonce, NONCE_SIZE);
   }
   

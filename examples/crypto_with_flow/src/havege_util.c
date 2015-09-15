@@ -19,10 +19,14 @@ void r_int(struct havege_state* state, int* i)
   //@ close random_request(principal, 0, false);
   if (havege_random(state, temp, sizeof(int)) != 0) abort();
   //@ open cryptogram(temp, ?l, ?cs, ?random);
-  //@ proof(random);
-  //@ dummy_foreach_singleton(pub, random);
-  //@ close_public_generated(cs);
-  //@ public_crypto_chars(temp, l, cs);
+  /*@ if (!collision_in_run)
+      {
+        proof(random);
+        dummy_foreach_singleton(pub, random);
+        close_public_generated(cs);
+        public_crypto_chars(temp, l, cs);
+      }
+  @*/
   //@ chars_to_integer(temp);
   //@ close havege_util(pub, proof_pred, principal);
 }

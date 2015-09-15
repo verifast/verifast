@@ -119,9 +119,9 @@ lemma void pk_info_for_keypair(int principal, int count);
 
 int pk_parse_public_key(pk_context *ctx, const char *key, size_t keylen);
   /*@ requires pk_context_initialized(ctx) &*&
-               [?f]cryptogram(key, keylen, _, ?cg_key) &*&
+               [?f]cryptogram(key, keylen, ?cs_key, ?cg_key) &*&
                cg_key == cg_public_key(?p, ?c); @*/
-  /*@ ensures  [f]cryptogram(key, keylen, _, cg_key) &*&
+  /*@ ensures  [f]cryptogram(key, keylen, cs_key, cg_key) &*&
                result == 0 ?
                  pk_context_with_key(ctx, pk_public, p, c, keylen)
                :
@@ -131,9 +131,9 @@ int pk_parse_key(pk_context *ctx, const char *key, size_t keylen,
                                   const char *pwd, size_t pwdlen);
   /*@ requires pk_context_initialized(ctx) &*&
                pwd == NULL &*& pwdlen == 0 &*&
-               [?f]cryptogram(key, keylen, _, ?cg_key) &*&
+               [?f]cryptogram(key, keylen, ?cs_key, ?cg_key) &*&
                cg_key == cg_private_key(?p, ?c); @*/
-  /*@ ensures  [f]cryptogram(key, keylen, _, cg_key) &*&
+  /*@ ensures  [f]cryptogram(key, keylen, cs_key, cg_key) &*&
                result == 0 ?
                  pk_context_with_key(ctx, pk_private, p, c, keylen)
                :
@@ -158,7 +158,7 @@ int pk_encrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                 [f2]state_pred(p_rng) &*&
                 principal(p2, c2 + 1) &*&
                 result == 0 ?
-                  olen_val > 0 &*& olen_val < osize &*&
+                  olen_val > 0 &*& olen_val <= osize &*&
                   8 * olen_val <= nbits &*&
                   cryptogram(output, olen_val, ?cs_out, ?cg_out) &*&
                   cg_out == cg_asym_encrypted(p1, c1, cs_input, _) &*&
@@ -185,11 +185,16 @@ int pk_decrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                 [f2]state_pred(p_rng) &*&
                 principal(p2, c2 + 1) &*&
                 result == 0 ?
-                  crypto_chars(output, olen_val, ?cs_output) &*&
-                  chars(output + olen_val, osize - olen_val, _) &*&
-                  [_]exists(?ent) &*&
-                  cs_input == chars_for_cg(
-                                cg_asym_encrypted(p1, c1, cs_output, ent))
+                  olen_val > 0 &*& olen_val <= osize &*&
+                  collision_in_run ?
+                    chars(output, osize, _)
+                  :
+                    crypto_chars(output, olen_val, ?cs_output) &*&
+                    chars(output + olen_val, osize - olen_val, _) &*&
+                    [_]exists(?ent) &*&
+                    collision_in_run ||
+                    cs_input == chars_for_cg(
+                                  cg_asym_encrypted(p1, c1, cs_output, ent))
                 :
                   chars(output, osize, _); @*/
 
@@ -236,6 +241,7 @@ int pk_verify(pk_context *ctx, int md_alg, const char *hash,
                 [f2]optional_crypto_chars(cc2, sig, sig_len, cs_sig) &*&
                 result == 0 ?
                   exists(?ent) &*&
+                  collision_in_run ||
                   cs_sig == chars_for_cg(cg_asym_signature(p, c, cs_input, ent))
                 :
                   true; @*/

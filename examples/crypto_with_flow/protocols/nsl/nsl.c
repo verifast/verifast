@@ -35,18 +35,17 @@ int random_stub_nsl(void *havege_state, char *output, size_t len)
     net_status(s, nil, port, connected) &*& \
   havege_state_initialized(havege_state) \
 
+predicate sender_inter(list<char> r_nonce_cs, cryptogram r_nonce_cg) = true;
+
 #define SENDER_INTER \
-  crypto_chars(r_nonce, NONCE_SIZE, ?r_nonce_cs) &*& \
+  sender_inter(?r_nonce_cs, ?r_nonce_cg) &*& \
   ( \
-    bad(sender) || bad(receiver) ? \
-      [_]public_generated(nsl_pub)(r_nonce_cs) \
+    collision_in_run || bad(sender) || bad(receiver) ? \
+      chars(r_nonce, NONCE_SIZE, r_nonce_cs) \
     : \
-      [_]exists(?r_nonce_cg) &*& \
+      cryptogram(r_nonce, NONCE_SIZE, r_nonce_cs, r_nonce_cg) &*& \
       r_nonce_cg == cg_random(receiver, _) &*& \
-      r_nonce_cs == chars_for_cg(r_nonce_cg) &*& \
-      cg_is_generated(r_nonce_cg) && \
-      cg_info(r_nonce_cg) == int_pair(2, int_pair(sender, \
-                                                  sender)) \
+      cg_info(r_nonce_cg) == int_pair(2, int_pair(sender, sender)) \
   )
   
 @*/
@@ -80,11 +79,19 @@ void sender_msg1(int* socket, havege_state* havege_state, pk_context* r_context,
   //@ chars_to_integer(&sender);
   //@ public_chars(message, 4, chars_of_int(sendr));
   //@ crypto_chars(message, 4, chars_of_int(sendr));
-  //@ close optional_crypto_chars(true, s_nonce, NONCE_SIZE, s_nonce_cs);
+  /*@ close optional_crypto_chars(!collision_in_run, 
+                                  s_nonce, NONCE_SIZE, s_nonce_cs); @*/
   memcpy((void*) message + 4, s_nonce, NONCE_SIZE);
-  //@ open optional_crypto_chars(true, s_nonce, NONCE_SIZE, s_nonce_cs);
-  /*@ open optional_crypto_chars(true, (void*) message + 4, 
-                                  NONCE_SIZE, s_nonce_cs); @*/
+  /*@ open optional_crypto_chars(!collision_in_run,
+                                 s_nonce, NONCE_SIZE, s_nonce_cs); @*/
+  /*@ open optional_crypto_chars(!collision_in_run, (void*) message + 4, 
+                                 NONCE_SIZE, s_nonce_cs); @*/
+  /*@ if (collision_in_run)
+      {
+        public_chars((void*) message + 4, NONCE_SIZE, s_nonce_cs);
+        crypto_chars((void*) message + 4, NONCE_SIZE, s_nonce_cs);
+      }
+  @*/
   //@ list<char> msg1 = append(chars_of_int(sendr), s_nonce_cs);
   //@ assert crypto_chars(message, MSG1_SIZE, msg1);  
   
@@ -105,12 +112,15 @@ void sender_msg1(int* socket, havege_state* havege_state, pk_context* r_context,
   //@ drop_append(4, chars_of_int(sendr), s_nonce_cs);
   //@ close nsl_pub_msg_sender(sendr);
   //@ leak nsl_pub_msg_sender(sendr);
-  /*@ if (bad(sender) || bad(receiver))
+  /*@ if (collision_in_run || bad(sender) || bad(receiver))
       {
         assert crypto_chars(message, MSG1_SIZE, msg1);
         crypto_chars_split(message, 4);
         
         public_crypto_chars(message, 4, chars_of_int(sendr));
+        if (collision_in_run)
+          public_crypto_chars((void*) message + 4, NONCE_SIZE, s_nonce_cs);
+          
         assert chars(message, 4, chars_of_int(sendr));
         close nsl_pub(s_nonce_cg);
         leak nsl_pub(s_nonce_cg);
@@ -172,36 +182,54 @@ void sender_msg2(int* socket, havege_state* havege_state, pk_context* s_context,
     abort();
   //@ open optional_crypto_chars(false, encrypted, KEY_SIZE, enc_cs);
   //@ assert u_integer(&size, MSG2_SIZE);  
-  //@ assert crypto_chars(message, MSG2_SIZE, ?dec_cs);
-  //@ assert [_]exists(?ent);
-  //@ cryptogram enc_cg = cg_asym_encrypted(sender, s_id, dec_cs, ent);
-  //@ assert enc_cs == chars_for_cg(enc_cg);
-  //@ public_chars_extract(encrypted, enc_cg);
-  //@ open [_]nsl_pub(enc_cg);
+  /*@ assert optional_crypto_chars(!collision_in_run, 
+                                   message, MSG2_SIZE, ?dec_cs); @*/
   
   // Interpret the message
-  //@ crypto_chars_split(message, 4);
-  //@ crypto_chars_split((void*) message + 4, NONCE_SIZE);
+  //@ cryptogram enc_cg;
+  /*@ if (!collision_in_run)
+      {
+        assert [_]exists(?ent);
+        enc_cg = cg_asym_encrypted(sender, s_id, dec_cs, ent);
+        assert enc_cs == chars_for_cg(enc_cg);
+        public_chars_extract(encrypted, enc_cg);
+        open [_]nsl_pub(enc_cg);
+        crypto_chars_split(message, 4);
+        crypto_chars_split((void*) message + 4, NONCE_SIZE);
+      }
+      else
+      {
+        chars_split(message, 4);
+        chars_split((void*) message + 4, NONCE_SIZE);
+      }
+  @*/
   //@ assert integer(&receiver, ?receivr);
   //@ integer_to_chars(&receiver);
   //@ public_chars((void*) &receiver, 4, chars_of_int(receivr));
   /*@ close optional_crypto_chars(false, (void*) &receiver, 
                                   4, chars_of_int(receivr)); @*/
-  //@ close optional_crypto_chars(true, message, 4, _);
+  //@ close optional_crypto_chars(!collision_in_run, message, 4, _);
   if (memcmp(message, (void*) &receiver, 4) != 0) abort();
   //@ chars_to_integer(&receiver);
-  //@ open optional_crypto_chars(true, message, 4, chars_of_int(receivr));
+  /*@ open optional_crypto_chars(!collision_in_run,
+                                 message, 4, chars_of_int(receivr)); @*/
   
-  //@ close optional_crypto_chars(true, (void*) message + 4, NONCE_SIZE, _);
-  //@ close optional_crypto_chars(true, s_nonce, NONCE_SIZE, s_nonce_cs);
+  /*@ close optional_crypto_chars(!collision_in_run, 
+                                  (void*) message + 4, NONCE_SIZE, _); @*/
+  /*@ close optional_crypto_chars(!collision_in_run,
+                                  s_nonce, NONCE_SIZE, s_nonce_cs); @*/
   if (memcmp((void*) message + 4, s_nonce, NONCE_SIZE) != 0) abort();
   //@ chars_to_integer(&receiver);
-  //@ open optional_crypto_chars(true, (void*) message + 4, NONCE_SIZE, _);
-  /*@ close optional_crypto_chars(true, (void*) message + 4 + NONCE_SIZE, 
+  /*@ open optional_crypto_chars(!collision_in_run, 
+                                 (void*) message + 4, NONCE_SIZE, _); @*/
+  /*@ close optional_crypto_chars(!collision_in_run,
+                                  (void*) message + 4 + NONCE_SIZE, 
                                   NONCE_SIZE, ?r_nonce_cs); @*/
   memcpy(r_nonce, (void*) message + 4 + NONCE_SIZE, NONCE_SIZE);
-  //@ assert crypto_chars(r_nonce, NONCE_SIZE, r_nonce_cs);
-  /*@ open optional_crypto_chars(true, (void*) message + 4 + NONCE_SIZE, 
+  /*@ assert optional_crypto_chars(!collision_in_run,
+                                   r_nonce, NONCE_SIZE, r_nonce_cs); @*/
+  /*@ open optional_crypto_chars(!collision_in_run,
+                                 (void*) message + 4 + NONCE_SIZE, 
                                  NONCE_SIZE, r_nonce_cs); @*/
   
   //@ append_assoc(chars_of_int(receivr), s_nonce_cs, r_nonce_cs);
@@ -209,57 +237,70 @@ void sender_msg2(int* socket, havege_state* havege_state, pk_context* s_context,
   //@ drop_append(4, chars_of_int(receivr), append(s_nonce_cs, r_nonce_cs));
   //@ take_append(NONCE_SIZE, s_nonce_cs, r_nonce_cs);
   //@ drop_append(NONCE_SIZE, s_nonce_cs, r_nonce_cs);
-        
-  //@ assert [_]nsl_pub_msg_sender(?receiver2);
-  /*@ if (bad(sender) || bad(receiver2))
+
+  //@ cryptogram r_nonce_cg;
+  /*@ if (collision_in_run)
       {
-        crypto_chars_join(message);
-        public_crypto_chars(message, MSG2_SIZE, dec_cs);
-        chars_split(message, 4);
-        chars_split((void*) message + 4, NONCE_SIZE);
-        public_chars((void*) message + 4, NONCE_SIZE, s_nonce_cs);
-        public_chars_extract((void*) message + 4, s_nonce_cg);
-        open [_]nsl_pub(s_nonce_cg);
-        assert bad(sender) || bad(receivr);
         public_chars((void*) message + 4 + NONCE_SIZE, NONCE_SIZE, r_nonce_cs);
         chars_join((void*) message + 4);
-        crypto_chars((void*) message + 4, 2 * NONCE_SIZE, 
-                     append(s_nonce_cs, r_nonce_cs));
       }
       else
       {
-        public_crypto_chars(message, 4, chars_of_int(receivr));
-        assert [_]nsl_pub_msg2(?p_instigator, sender, receiver2, 
-                               ?s_nonce_cs2, ?r_nonce_cg);
-        assert r_nonce_cg == cg_random(receiver2, _) ;
-        list<char> r_nonce_cs2 = chars_for_cg(r_nonce_cg);
-        take_append(4, chars_of_int(receiver2), 
-                    append(s_nonce_cs2, r_nonce_cs2));
-        drop_append(4, chars_of_int(receiver2),
-                    append(s_nonce_cs2, r_nonce_cs2));
-        take_append(NONCE_SIZE, s_nonce_cs2, r_nonce_cs2);
-        drop_append(NONCE_SIZE, s_nonce_cs2, r_nonce_cs2);
-        chars_of_int_injective(receiver2, receivr);
-        assert receiver2 == receivr;
-        assert s_nonce_cs2 == s_nonce_cs;
-        assert r_nonce_cs2 == r_nonce_cs;
-        assert cg_info(r_nonce_cg) == int_pair(2, int_pair(sender,
-                                                           p_instigator));
-        if (bad(p_instigator))
+        assert [_]nsl_pub_msg_sender(?receiver2);
+        if (bad(sender) || bad(receiver2))
         {
-          public_crypto_chars(s_nonce, NONCE_SIZE, s_nonce_cs);
-          public_chars_extract(s_nonce, s_nonce_cg);
+          crypto_chars_join(message);
+          public_crypto_chars(message, MSG2_SIZE, dec_cs);
+          chars_split(message, 4);
+          chars_split((void*) message + 4, NONCE_SIZE);
+          public_chars((void*) message + 4, NONCE_SIZE, s_nonce_cs);
+          public_chars_extract((void*) message + 4, s_nonce_cg);
           open [_]nsl_pub(s_nonce_cg);
-          assert false;
+          assert bad(sender) || bad(receivr);
+          public_chars((void*) message + 4 + NONCE_SIZE, 
+                       NONCE_SIZE, r_nonce_cs);
+          public_crypto_chars(r_nonce, NONCE_SIZE, r_nonce_cs);
+          chars_join((void*) message + 4);
+          crypto_chars((void*) message + 4, 2 * NONCE_SIZE, 
+                      append(s_nonce_cs, r_nonce_cs));
         }
-        
-        assert cg_info(r_nonce_cg) == int_pair(2, int_pair(sender, sender));
-        close exists(r_nonce_cg);
-        leak exists(r_nonce_cg);
+        else
+        {
+          public_crypto_chars(message, 4, chars_of_int(receivr));
+          assert [_]nsl_pub_msg2(?p_instigator, sender, receiver2, 
+                                ?s_nonce_cs2, ?r_nonce_cg2);
+          r_nonce_cg = r_nonce_cg2;
+          assert r_nonce_cg == cg_random(receiver2, _) ;
+          list<char> r_nonce_cs2 = chars_for_cg(r_nonce_cg);
+          take_append(4, chars_of_int(receiver2), 
+                      append(s_nonce_cs2, r_nonce_cs2));
+          drop_append(4, chars_of_int(receiver2),
+                      append(s_nonce_cs2, r_nonce_cs2));
+          take_append(NONCE_SIZE, s_nonce_cs2, r_nonce_cs2);
+          drop_append(NONCE_SIZE, s_nonce_cs2, r_nonce_cs2);
+          chars_of_int_injective(receiver2, receivr);
+          assert receiver2 == receivr;
+          assert s_nonce_cs2 == s_nonce_cs;
+          assert r_nonce_cs2 == r_nonce_cs;
+          assert cg_info(r_nonce_cg) == int_pair(2, int_pair(sender,
+                                                            p_instigator));
+          if (bad(p_instigator))
+          {
+            public_crypto_chars(s_nonce, NONCE_SIZE, s_nonce_cs);
+            public_chars_extract(s_nonce, s_nonce_cg);
+            open [_]nsl_pub(s_nonce_cg);
+            assert false;
+          }
+          
+          close cryptogram(r_nonce, NONCE_SIZE, r_nonce_cs, r_nonce_cg);
+          assert cg_info(r_nonce_cg) == int_pair(2, int_pair(sender, sender));    
+        }
       }
   @*/
+  //@ close sender_inter(r_nonce_cs, r_nonce_cg);
   //@ close cryptogram(s_nonce, NONCE_SIZE, s_nonce_cs, s_nonce_cg);
-  /*@ close optional_crypto_chars(true, (void*) message + 4, 2 * NONCE_SIZE, 
+  /*@ close optional_crypto_chars(!collision_in_run,
+                                  (void*) message + 4, 2 * NONCE_SIZE, 
                                   append(s_nonce_cs, r_nonce_cs)); @*/
   zeroize((void*) message + 4, 2 * NONCE_SIZE);
   //@ chars_join(message);
@@ -274,16 +315,23 @@ void sender_msg3(int* socket, havege_state* havege_state, pk_context* r_context,
   /*@ ensures  GENERAL_POST(sender) &*&
                pk_context_with_key(r_context, pk_public,
                                    receiver, r_id, 8 * KEY_SIZE) &*&
-               crypto_chars(r_nonce, NONCE_SIZE, r_nonce_cs); @*/
+               collision_in_run || bad(sender) || bad(receiver) ?
+                 chars(r_nonce, NONCE_SIZE, r_nonce_cs)
+               :
+                 cryptogram(r_nonce, NONCE_SIZE, r_nonce_cs, r_nonce_cg); @*/
 {
   unsigned int size;
   char message[MSG3_SIZE];
   char encrypted[KEY_SIZE];
   
   // Construct the message
-  //@ close optional_crypto_chars(true, r_nonce, NONCE_SIZE, r_nonce_cs);
+  //@ open sender_inter(r_nonce_cs, r_nonce_cg);
+  //@ bool condition = collision_in_run || bad(sender) || bad(receiver);
+  /*@ close optional_crypto_chars(!condition, 
+                                  r_nonce, NONCE_SIZE, r_nonce_cs); @*/
   memcpy((void*) message, r_nonce, NONCE_SIZE);
-  //@ open optional_crypto_chars(true, r_nonce, NONCE_SIZE, r_nonce_cs);
+  /*@ open optional_crypto_chars(!condition, 
+                                 r_nonce, NONCE_SIZE, r_nonce_cs); @*/
   
   // Encrypt the message
   /*@ produce_function_pointer_chunk random_function(random_stub_nsl)
@@ -292,18 +340,18 @@ void sender_msg3(int* socket, havege_state* havege_state, pk_context* r_context,
   if (pk_encrypt(r_context, message, MSG3_SIZE, encrypted, &size, 
                  KEY_SIZE, random_stub_nsl, havege_state) != 0)
     abort();
-  //@ open optional_crypto_chars(true, message, MSG3_SIZE, r_nonce_cs);
+  /*@ open optional_crypto_chars(!condition, 
+                                 message, MSG3_SIZE, r_nonce_cs); @*/
   //@ assert u_integer(&size, ?size_val);
   //@ assert cryptogram(encrypted, size_val, ?cs_enc, ?cg_enc);
   
   // Proof the message is public
   //@ close nsl_pub_msg_sender(sender);
   //@ leak nsl_pub_msg_sender(sender);
-  /*@ if (!bad(sender) && !bad(receiver))
-      {
-        assert [_]exists(?r_nonce_cg);
+  /*@ if (condition)
+        public_chars(r_nonce, NONCE_SIZE, r_nonce_cs);
+      else
         close nsl_pub_msg3(sender, receiver, r_nonce_cg);
-      }
   @*/
   //@ close nsl_pub(cg_enc);
   //@ leak nsl_pub(cg_enc);
@@ -311,7 +359,8 @@ void sender_msg3(int* socket, havege_state* havege_state, pk_context* r_context,
 
   // Send the message
   net_send(socket, encrypted, size);
-  //@ close optional_crypto_chars(true, message, MSG3_SIZE, r_nonce_cs);
+  /*@ close optional_crypto_chars(!condition,
+                                  message, MSG3_SIZE, r_nonce_cs); @*/
   zeroize(message, MSG3_SIZE);
 }
 
@@ -336,13 +385,12 @@ void sender(int sender, int receiver,
              cryptogram(s_nonce, NONCE_SIZE, ?s_nonce_cs, ?s_nonce_cg) &*&
                s_nonce_cg == cg_random(sender, _) &*&
                cg_info(s_nonce_cg) == int_pair(1, receiver) &*&
-             crypto_chars(r_nonce, NONCE_SIZE, ?r_nonce_cs) &*&
-             bad(sender) || bad(receiver) ?
-               [_]public_generated(nsl_pub)(r_nonce_cs)
+             collision_in_run || bad(sender) || bad(receiver) ?
+               chars(r_nonce, NONCE_SIZE, _)
              :
-               [_]exists(?r_nonce_cg) &*&
+               cryptogram(r_nonce, NONCE_SIZE, _, ?r_nonce_cg) &*&
                r_nonce_cg == cg_random(receiver, _) &*&
-               cg_info(r_nonce_cg) == int_pair(2, int_pair(sender, sender));@*/
+               cg_info(r_nonce_cg) == int_pair(2, int_pair(sender, sender)); @*/
 {
   int socket;
   pk_context s_context;
@@ -394,17 +442,18 @@ void sender(int sender, int receiver,
 
 /*@
 
+predicate receiver_inter(int p_instigator, list<char> s_nonce_cs, 
+                         cryptogram s_nonce_cg) = true;
+
 #define RECEIVER_INTER \
   ( \
-    [_]nsl_pub_msg_sender(?p_instigator) &*& \
-    bad(p_instigator) || bad(receiver) ? \
-      [_]public_generated(nsl_pub)(s_nonce_cs) \
+    receiver_inter(?p_instigator, ?s_nonce_cs, ?s_nonce_cg) &*& \
+    collision_in_run || bad(p_instigator) || bad(receiver) ? \
+      chars(s_nonce, NONCE_SIZE, s_nonce_cs) \
     : \
-      [_]exists(?s_nonce_cg) &*& \
+      cryptogram(s_nonce, NONCE_SIZE, s_nonce_cs, s_nonce_cg) &*& \
       sender == p_instigator &*& \
       s_nonce_cg == cg_random(sender, _) &*& \
-      s_nonce_cs == chars_for_cg(s_nonce_cg) &*& \
-      cg_is_generated(s_nonce_cg) && \
       cg_info(s_nonce_cg) == int_pair(1, receiver) \
   )
 
@@ -420,7 +469,7 @@ void receiver_msg1(int* socket, havege_state* havege_state,
   /*@ ensures  GENERAL_POST(receiver) &*&
                pk_context_with_key(r_context, pk_private,
                                    receiver, r_id, 8 * KEY_SIZE) &*&
-               crypto_chars(s_nonce, NONCE_SIZE, ?s_nonce_cs) &*&
+               
                RECEIVER_INTER; @*/
 {
   unsigned int size;
@@ -442,25 +491,32 @@ void receiver_msg1(int* socket, havege_state* havege_state,
   if (size != MSG1_SIZE)
     abort();
   //@ open optional_crypto_chars(false, encrypted, KEY_SIZE, enc_cs);
-  //@ assert u_integer(&size, MSG1_SIZE);  
-  //@ assert crypto_chars(message, MSG1_SIZE, ?dec_cs);
-  //@ assert [_]exists(?ent);
-  //@ cryptogram enc_cg = cg_asym_encrypted(receiver, r_id, dec_cs, ent);
-  //@ assert enc_cs == chars_for_cg(enc_cg);
-  //@ public_chars_extract(encrypted, enc_cg);
-  //@ open [_]nsl_pub(enc_cg);
+  //@ assert u_integer(&size, MSG1_SIZE);
   
   // Interpret the message
-  //@ assert [_]nsl_pub_msg_sender(?p_instigator);
-  /*@ if (bad(p_instigator) || bad(receiver))
+  //@ int p_instigator;
+  //@ list<char> dec_cs;
+  /*@ if (!collision_in_run)
       {
-        public_crypto_chars(message, MSG1_SIZE, dec_cs);
-      }
-      else
-      {
-        crypto_chars_split(message, 4);
-        assert crypto_chars(message, 4, ?rcvr_cs);
-        public_crypto_chars(message, 4, rcvr_cs);
+        assert crypto_chars(message, MSG1_SIZE, ?dec_cs2);
+        dec_cs = dec_cs2;
+        assert [_]exists(?ent);
+        cryptogram enc_cg = cg_asym_encrypted(receiver, r_id, dec_cs, ent);
+        assert enc_cs == chars_for_cg(enc_cg);
+        public_chars_extract(encrypted, enc_cg);
+        open [_]nsl_pub(enc_cg);
+        assert [_]nsl_pub_msg_sender(?p_instigator2);
+        p_instigator = p_instigator2;
+        if (bad(p_instigator) || bad(receiver))
+        {
+          public_crypto_chars(message, MSG1_SIZE, dec_cs);
+        }
+        else
+        {
+          crypto_chars_split(message, 4);
+          assert crypto_chars(message, 4, ?rcvr_cs);
+          public_crypto_chars(message, 4, rcvr_cs);
+        }
       }
   @*/
   //@ assert chars(message, 4, _);
@@ -473,17 +529,24 @@ void receiver_msg1(int* socket, havege_state* havege_state,
   //@ open optional_crypto_chars(false, message, 4, _);
   //@ chars_to_integer(&sender);
   //@ assert chars(message, 4, _);
-  /*@ if (bad(p_instigator) || bad(receiver))
+  
+  //@ bool condition = collision_in_run || bad(p_instigator) || bad(receiver);
+  //@ close optional_crypto_chars(!condition, (void*) message + 4, NONCE_SIZE, _);
+  memcpy(s_nonce, (void*) message + 4, NONCE_SIZE);
+  
+  //@ list<char> s_nonce_cs;
+  //@ cryptogram s_nonce_cg;
+  /*@ if (condition)
       {
-        assert chars((void*) message + 4, NONCE_SIZE, ?s_nonce_cs);
-        public_chars((void*) message + 4, NONCE_SIZE, s_nonce_cs);
-        crypto_chars((void*) message + 4, NONCE_SIZE, s_nonce_cs);
+        assert chars((void*) message + 4, NONCE_SIZE, ?s_nonce_cs2);
+        s_nonce_cs = s_nonce_cs2;
       }
       else
       {
-        assert [_]nsl_pub_msg1(p_instigator, receiver, ?s_nonce_cg);
+        assert [_]nsl_pub_msg1(p_instigator, receiver, ?s_nonce_cg2);
+        s_nonce_cg = s_nonce_cg2;
         assert s_nonce_cg == cg_random(p_instigator, _);
-        list<char> s_nonce_cs = chars_for_cg(s_nonce_cg);
+        s_nonce_cs = chars_for_cg(s_nonce_cg);
         assert dec_cs == append(chars_of_int(p_instigator), s_nonce_cs);
         take_append(4, chars_of_int(p_instigator), s_nonce_cs);
         drop_append(4, chars_of_int(p_instigator), s_nonce_cs);
@@ -491,14 +554,11 @@ void receiver_msg1(int* socket, havege_state* havege_state,
         chars_of_int_injective(p_instigator, sendr);
         assert p_instigator == sendr;
         assert cg_info(s_nonce_cg) == int_pair(1, receiver);
-        assert crypto_chars((void*) message + 4, NONCE_SIZE, _);
-        close exists(s_nonce_cg);
-        leak exists(s_nonce_cg);
+        assert crypto_chars((void*) message + 4, NONCE_SIZE, s_nonce_cs);
+        close cryptogram(s_nonce, NONCE_SIZE, s_nonce_cs, s_nonce_cg);
       }
   @*/
-  //@ close optional_crypto_chars(true, (void*) message + 4, NONCE_SIZE, _);
-  memcpy(s_nonce, (void*) message + 4, NONCE_SIZE);
-  //@ assert crypto_chars(s_nonce, NONCE_SIZE, ?s_nonce_cs);
+  //@ close receiver_inter(p_instigator, s_nonce_cs, s_nonce_cg);
   zeroize((void*) message + 4, NONCE_SIZE);
 }
 
@@ -508,7 +568,6 @@ void receiver_msg2(int* socket, havege_state* havege_state,
   /*@ requires GENERAL_PRE(receiver) &*&
                pk_context_with_key(s_context, pk_public,
                                    ?sender, ?s_id, 8 * KEY_SIZE) &*&
-               crypto_chars(s_nonce, NONCE_SIZE, ?s_nonce_cs) &*&
                RECEIVER_INTER &*&
                cryptogram(r_nonce, NONCE_SIZE, ?r_nonce_cs, ?r_nonce_cg) &*&
                  r_nonce_cg == cg_random(receiver, _) &*&
@@ -517,12 +576,18 @@ void receiver_msg2(int* socket, havege_state* havege_state,
   /*@ ensures  GENERAL_POST(receiver) &*&
                pk_context_with_key(s_context, pk_public,
                                    sender, s_id, 8 * KEY_SIZE) &*&
-               crypto_chars(s_nonce, NONCE_SIZE, s_nonce_cs) &*&
+               (
+                 collision_in_run || bad(p_instigator) || bad(receiver) ?
+                   chars(s_nonce, NONCE_SIZE, s_nonce_cs)
+                 :
+                   cryptogram(s_nonce, NONCE_SIZE, s_nonce_cs, s_nonce_cg)
+               ) &*&
                cryptogram(r_nonce, NONCE_SIZE, r_nonce_cs, r_nonce_cg); @*/
 {
   unsigned int size;
   char message[MSG2_SIZE];
   char encrypted[KEY_SIZE];
+  //@ open receiver_inter(p_instigator, s_nonce_cs, s_nonce_cg);
   
   // Construct the message
   //@ assert integer(&receiver, ?receivr);
@@ -536,16 +601,33 @@ void receiver_msg2(int* socket, havege_state* havege_state,
   //@ chars_to_integer(&receiver);
   //@ public_chars(message, 4, chars_of_int(receivr));
   //@ crypto_chars(message, 4, chars_of_int(receivr));
-  //@ close optional_crypto_chars(true, s_nonce, NONCE_SIZE, _);
+  //@ bool condition = collision_in_run || bad(p_instigator) || bad(receiver);
+  /*@ if (!condition) 
+        open cryptogram(s_nonce, NONCE_SIZE, s_nonce_cs, s_nonce_cg); @*/
+  //@ close optional_crypto_chars(!condition, s_nonce, NONCE_SIZE, _);
   memcpy((void*) message + 4, s_nonce, NONCE_SIZE);
-  //@ open optional_crypto_chars(true, s_nonce, NONCE_SIZE, _);
-  /*@ open optional_crypto_chars(true, (void*) message + 4, 
-                                  NONCE_SIZE, s_nonce_cs); @*/
-  //@ close optional_crypto_chars(true, r_nonce, NONCE_SIZE, _);
+  //@ open optional_crypto_chars(!condition, s_nonce, NONCE_SIZE, _);
+  /*@ open optional_crypto_chars(!condition, (void*) message + 4, 
+                                 NONCE_SIZE, s_nonce_cs); @*/
+  //@ close optional_crypto_chars(!collision_in_run, r_nonce, NONCE_SIZE, _);
   memcpy((void*) message + 4 + NONCE_SIZE, r_nonce, NONCE_SIZE);
-  //@ open optional_crypto_chars(true, r_nonce, NONCE_SIZE, _);
-  /*@ open optional_crypto_chars(true, (void*) message + 4 + NONCE_SIZE, 
-                                  NONCE_SIZE, r_nonce_cs); @*/
+  //@ open optional_crypto_chars(!collision_in_run, r_nonce, NONCE_SIZE, _);
+  /*@ open optional_crypto_chars(!collision_in_run, 
+                                 (void*) message + 4 + NONCE_SIZE, 
+                                 NONCE_SIZE, r_nonce_cs); @*/
+  /*@ if (condition)
+      {
+        public_chars((void*) message + 4, NONCE_SIZE, s_nonce_cs);
+        crypto_chars((void*) message + 4, NONCE_SIZE, s_nonce_cs);
+      }
+  @*/
+  /*@ if (collision_in_run)
+      {
+        public_chars((void*) message + 4 + NONCE_SIZE, NONCE_SIZE, r_nonce_cs);
+        crypto_chars((void*) message + 4 + NONCE_SIZE, NONCE_SIZE, r_nonce_cs);
+      }
+  @*/
+  //@ crypto_chars_join(message);
   //@ crypto_chars_join(message);
   /*@ list<char> msg2 = append(chars_of_int(receivr), 
                                append(s_nonce_cs, r_nonce_cs)); @*/
@@ -569,13 +651,20 @@ void receiver_msg2(int* socket, havege_state* havege_state,
   //@ drop_append(4, chars_of_int(receivr), append(s_nonce_cs, r_nonce_cs));
   //@ take_append(NONCE_SIZE, s_nonce_cs, r_nonce_cs);
   //@ drop_append(NONCE_SIZE, s_nonce_cs, r_nonce_cs);
-  /*@ if (bad(sender) || bad(receiver))
+  /*@ if (collision_in_run || bad(sender) || bad(receiver))
       {
         assert crypto_chars(message, MSG2_SIZE, msg2);
         crypto_chars_split(message, 4);
         crypto_chars_split((void*) message + 4, NONCE_SIZE);
         public_crypto_chars((void*) message, 4, chars_of_int(receivr));
         public_crypto_chars((void*) message + 4, NONCE_SIZE, s_nonce_cs);
+        
+        if (collision_in_run)
+        {
+          public_crypto_chars((void*) message + 4 + NONCE_SIZE, 
+                              NONCE_SIZE, r_nonce_cs);
+        }
+        
         close nsl_pub(r_nonce_cg);
         leak nsl_pub(r_nonce_cg);
         close cryptogram((void*) message + 4 + NONCE_SIZE, NONCE_SIZE, 
@@ -591,6 +680,10 @@ void receiver_msg2(int* socket, havege_state* havege_state,
       {
         close nsl_pub_msg2(p_instigator, sender, receiver, 
                            s_nonce_cs, r_nonce_cg);
+        if (!bad(p_instigator))
+        {
+          close cryptogram(s_nonce, NONCE_SIZE, s_nonce_cs, s_nonce_cg);
+        }
       }
   @*/
   //@ close nsl_pub_msg_sender(receivr);
@@ -611,8 +704,7 @@ void receiver_msg3(int* socket, havege_state* havege_state,
   /*@ requires GENERAL_PRE(receiver) &*&
                pk_context_with_key(r_context, pk_private,
                                    receiver, ?r_id, 8 * KEY_SIZE)  &*&
-               crypto_chars(s_nonce, NONCE_SIZE, ?s_nonce_cs) &*&
-                 RECEIVER_INTER &*&  
+               RECEIVER_INTER &*&  
                cryptogram(r_nonce, NONCE_SIZE, ?r_nonce_cs, ?r_nonce_cg) &*&
                  r_nonce_cg == cg_random(receiver, _) &*&
                  cg_info(r_nonce_cg) == 
@@ -620,7 +712,12 @@ void receiver_msg3(int* socket, havege_state* havege_state,
   /*@ ensures  GENERAL_POST(receiver) &*&
                pk_context_with_key(r_context, pk_private,
                                    receiver, r_id, 8 * KEY_SIZE) &*&
-               crypto_chars(s_nonce, NONCE_SIZE, s_nonce_cs) &*&
+               (
+                 collision_in_run || bad(p_instigator) || bad(receiver) ?
+                   chars(s_nonce, NONCE_SIZE, s_nonce_cs)
+                 :
+                   cryptogram(s_nonce, NONCE_SIZE, s_nonce_cs, s_nonce_cg)
+               ) &*&
                cryptogram(r_nonce, NONCE_SIZE, r_nonce_cs, r_nonce_cg) &*&
                collision_in_run || bad(sender) || bad(receiver) || 
                  sender == p_instigator; @*/
@@ -628,7 +725,8 @@ void receiver_msg3(int* socket, havege_state* havege_state,
   unsigned int size;
   char message[MSG3_SIZE];
   char encrypted[KEY_SIZE];
-  
+  //@ open receiver_inter(p_instigator, s_nonce_cs, s_nonce_cg);
+   
   // Receive the message
   net_recv(socket, encrypted, KEY_SIZE);
   //@ assert chars(encrypted, KEY_SIZE, ?enc_cs);
@@ -644,19 +742,25 @@ void receiver_msg3(int* socket, havege_state* havege_state,
   if (size != MSG3_SIZE)
     abort();
   //@ open optional_crypto_chars(false, encrypted, KEY_SIZE, enc_cs);
-  //@ assert u_integer(&size, MSG3_SIZE);  
-  //@ assert crypto_chars(message, MSG3_SIZE, ?dec_cs);
-  //@ assert [_]exists(?ent);
-  //@ cryptogram enc_cg = cg_asym_encrypted(receiver, r_id, dec_cs, ent);
-  //@ assert enc_cs == chars_for_cg(enc_cg);
-  //@ public_chars_extract(encrypted, enc_cg);
+  //@ assert u_integer(&size, MSG3_SIZE);
+  /*@ assert optional_crypto_chars(!collision_in_run,
+                                   message, MSG3_SIZE, ?dec_cs); @*/
+  //@ cryptogram enc_cg;
+  /*@ if (!collision_in_run)
+      {
+        assert [_]exists(?ent);
+        enc_cg = cg_asym_encrypted(receiver, r_id, dec_cs, ent);
+        assert enc_cs == chars_for_cg(enc_cg);
+        public_chars_extract(encrypted, enc_cg);
+      }
+  @*/
   
   // Interpret the message
-  //@ close optional_crypto_chars(true, (void*) message, NONCE_SIZE, _);
-  //@ close optional_crypto_chars(true, r_nonce, NONCE_SIZE, r_nonce_cs);
+  //@ close optional_crypto_chars(!collision_in_run, (void*) message, NONCE_SIZE, _);
+  //@ close optional_crypto_chars(!collision_in_run, r_nonce, NONCE_SIZE, r_nonce_cs);
   if (memcmp((void*) message, r_nonce, NONCE_SIZE) != 0) abort();
   
-  /*@ if (!bad(sender) && !bad(receiver))
+  /*@ if (!collision_in_run && !bad(sender) && !bad(receiver))
       {
         open [_]nsl_pub(enc_cg);
         assert [_]nsl_pub_msg_sender(?sender2);
@@ -713,15 +817,13 @@ void receiver(int sender, int receiver,
                             s_pub_key_cs, s_pub_key_cg) &*&
              [f2]cryptogram(r_priv_key, 8 * KEY_SIZE,
                             r_priv_key_cs, r_priv_key_cg) &*&
-             crypto_chars(s_nonce, NONCE_SIZE, ?s_nonce_cs) &*&
              cryptogram(r_nonce, NONCE_SIZE, ?r_nonce_cs, ?r_nonce_cg) &*&
                r_nonce_cg == cg_random(receiver, _) &*&
              (
                collision_in_run || bad(sender) || bad(receiver) ?
-                 true
+                 chars(s_nonce, NONCE_SIZE, _)
                :
-                 [_]exists(?s_nonce_cg) &*&
-                 s_nonce_cs == chars_for_cg(s_nonce_cg) &*&
+                 cryptogram(s_nonce, NONCE_SIZE, ?s_nonce_cs, ?s_nonce_cg) &*&
                  s_nonce_cg == cg_random(sender, _) &*&
                  cg_info(s_nonce_cg) == int_pair(1, receiver) &*&
                  cg_info(r_nonce_cg) == int_pair(2, int_pair(sender, sender))   
@@ -757,13 +859,14 @@ void receiver(int sender, int receiver,
   
   receiver_msg1(&socket2, &havege_state, &r_context, sender, receiver, s_nonce);
   
-  //@ assert [_]nsl_pub_msg_sender(?p_instigator);
+  //@ assert receiver_inter(?p_instigator, ?s_nonce_cs, ?s_nonce_cg);
   /*@ close random_request(receiver, int_pair(2, int_pair(sender,
                                                    p_instigator)), false); @*/
   if (havege_random(&havege_state, r_nonce, NONCE_SIZE) != 0) abort();
   
   receiver_msg2(&socket2, &havege_state, &s_context, receiver, 
                 s_nonce, r_nonce);
+  //@ close receiver_inter(p_instigator, s_nonce_cs, s_nonce_cg);
   receiver_msg3(&socket2, &havege_state, &r_context, sender, receiver, 
                 s_nonce, r_nonce);
   

@@ -478,19 +478,19 @@ void attacker_send_decrypted(havege_state *havege_state, void* socket)
                             (unsigned int) size2, &iv_off, iv, buffer2, 
                             buffer3) == 0)
       {
-        /*@ 
-          {
-            assert crypto_chars(buffer3, size2, ?cs_output);
-            cryptogram cg_enc = cg_encrypted(p, c, cs_output,
+        /*@ if (!collision_in_run) 
+            {
+              assert crypto_chars(buffer3, size2, ?cs_output);
+              cryptogram cg_enc = cg_encrypted(p, c, cs_output,
                                   append(chars_of_int(iv_off_val), cs_iv));
-            assert cs2 == chars_for_cg(cg_enc);
-            open optional_crypto_chars(false, buffer2, size2, cs2);
-            public_chars_extract(buffer2, cg_enc);
-            assert [_]pub(cg_enc);
-            assert is_public_decryption_is_public(?proof2, pub, pred);
-            proof2(cg_key, cg_enc);
-            public_crypto_chars(buffer3, size2, cs_output);
-          }
+              assert cs2 == chars_for_cg(cg_enc);
+              open optional_crypto_chars(false, buffer2, size2, cs2);
+              public_chars_extract(buffer2, cg_enc);
+              assert [_]pub(cg_enc);
+              assert is_public_decryption_is_public(?proof2, pub, pred);
+              proof2(cg_key, cg_enc);
+              public_crypto_chars(buffer3, size2, cs_output);
+            }
         @*/
         net_send(socket, buffer3, (unsigned int) size2);
       }
@@ -638,19 +638,19 @@ void attacker_send_auth_decrypted(havege_state *havege_state, void* socket)
                               iv, 16, NULL, 0, tag, 16,
                               buffer2, buffer3) == 0)
         {
-          /*@
-            {
-              assert crypto_chars(buffer3, size2, ?cs_output);
-              cryptogram cg_enc =
+          /*@ if (!collision_in_run)
+              {
+                assert crypto_chars(buffer3, size2, ?cs_output);
+                cryptogram cg_enc =
                            cg_auth_encrypted(p, c, cs_mac, cs_output, cs_iv);
-              assert cs2 == chars_for_cg(cg_enc);
-              public_chars(buffer2, size2, cs2);
-              public_chars_extract(buffer2, cg_enc);
-              assert [_]pub(cg_enc);
-              assert is_public_auth_decryption_is_public(?proof3, pub, pred);
-              proof3(cg_key, cg_enc);
-              public_crypto_chars(buffer3, size2, cs_output);
-            }
+                assert cs2 == chars_for_cg(cg_enc);
+                public_chars(buffer2, size2, cs2);
+                public_chars_extract(buffer2, cg_enc);
+                assert [_]pub(cg_enc);
+                assert is_public_auth_decryption_is_public(?proof3, pub, pred);
+                proof3(cg_key, cg_enc);
+                public_crypto_chars(buffer3, size2, cs_output);
+              }
           @*/
           net_send(socket, buffer3, (unsigned int) size2);
         }
@@ -775,18 +775,18 @@ void attacker_send_asym_decrypted(havege_state *havege_state, void* socket)
                     attacker_key_item_havege_random_stub, havege_state) == 0)
       {
         //@ assert u_integer(&osize, ?osize_val);
-        /*@
-          {
-            assert crypto_chars(buffer3, osize_val, ?cs_output);
-            assert [_]exists(?ent);
-            cryptogram cg_enc = cg_asym_encrypted(p, c, cs_output, ent);
-            public_chars(buffer2, size2, cs2);
-            public_chars_extract(buffer2, cg_enc);
-            assert [_]pub(cg_enc);
-            assert is_public_asym_decryption_is_public(?proof, pub, pred);
-            proof(cg_key, cg_enc);
-            public_crypto_chars(buffer3, osize_val, cs_output);
-          }
+        /*@ if (!collision_in_run)
+            {
+              assert crypto_chars(buffer3, osize_val, ?cs_output);
+              assert [_]exists(?ent);
+              cryptogram cg_enc = cg_asym_encrypted(p, c, cs_output, ent);
+              public_chars(buffer2, size2, cs2);
+              public_chars_extract(buffer2, cg_enc);
+              assert [_]pub(cg_enc);
+              assert is_public_asym_decryption_is_public(?proof, pub, pred);
+              proof(cg_key, cg_enc);
+              public_crypto_chars(buffer3, osize_val, cs_output);
+            }
         @*/
         net_send(socket, buffer3, osize);
       }

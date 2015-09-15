@@ -41,7 +41,7 @@ predicate hmac_then_enc_pub(cryptogram cg) =
     case cg_hmac(p0, c0, cs0):
       return true;
     case cg_encrypted(p0, c0, cs0, ent0):
-      return bad(p0) || bad(shared_with(p0, c0)) ? 
+      return collision_in_run || bad(p0) || bad(shared_with(p0, c0)) ? 
         [_]public_generated(hmac_then_enc_pub)(cs0) 
       :
         hmac_then_enc_pub_1(?msg_cs, ?hmac_cg) &*&
@@ -76,7 +76,8 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len);
                shared_with(sender, enc_id) == shared_with(sender, hmac_id) &*&
              [?f3]crypto_chars(msg, msg_len, ?msg_cs) &*&
                MAX_SIZE >= msg_len &*& msg_len >= MIN_ENC_SIZE &*&
-               bad(sender) || bad(shared_with(sender, enc_id)) ?
+               collision_in_run || bad(sender) || 
+               bad(shared_with(sender, enc_id)) ?
                  [_]public_generated(hmac_then_enc_pub)(msg_cs)
                :
                  // Not saying anything about publicness of msg_cs established 
@@ -101,8 +102,8 @@ int receiver(char *enc_key, char *hmac_key, char *msg);
              [f1]cryptogram(enc_key, KEY_SIZE, enc_key_cs, enc_key_cg) &*&
              [f2]cryptogram(hmac_key, KEY_SIZE, hmac_key_cs, hmac_key_cg) &*&
              chars(msg + result, MAX_SIZE - result, _) &*&
-             crypto_chars(msg, result, ?msg_cs) &*&
-             bad(sender) || bad(receiver) || collision_in_run() || 
+             optional_crypto_chars(!collision_in_run, msg, result, ?msg_cs) &*&
+             collision_in_run || bad(sender) || bad(receiver) ||  
              true == send(sender, receiver, msg_cs); @*/
 
 ///////////////////////////////////////////////////////////////////////////////

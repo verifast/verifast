@@ -20,9 +20,12 @@ lemma void public_cryptogram(char *array, cryptogram cg)
   ensures  [f]chars(array, n, cs);
 {
   open [f]cryptogram(array, n, cs, cg);
-  dummy_foreach_singleton(pub, cg);
-  close_public_generated(cs);
-  public_crypto_chars(array, n, cs);
+  if (!collision_in_run)
+  {
+    dummy_foreach_singleton(pub, cg);
+    close_public_generated(cs);
+    public_crypto_chars(array, n, cs);
+  }
 }
 
 lemma void public_chars_extract(char *array, cryptogram cg)
@@ -54,10 +57,13 @@ lemma void public_cryptogram_extract(char *array)
            [?f]cryptogram(array, ?n, ?cs, ?cg) &*&
            [_]public_generated(pub)(cs);
   ensures  [f]cryptogram(array, n, cs, cg) &*&
-           [_]pub(cg);
+           collision_in_run ? true : [_]pub(cg);
 {
   open [f]cryptogram(array, n, cs, cg);
-  public_crypto_chars_extract(array, cg);
+  if (!collision_in_run) 
+  {
+    public_crypto_chars_extract(array, cg);
+  }
   close [f]cryptogram(array, n, cs, cg);
 }
 

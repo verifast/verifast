@@ -153,7 +153,8 @@ void *receiver_t(void* data) //@ : pthread_run_joinable
   //@ assert hmac_args_receiver(data, ?receiver);
   //@ assert hmac_args_message(data, ?msg);
   //@ assert chars(msg, MESSAGE_SIZE, ?msg_cs);
-  //@ assert bad(sender) || bad(receiver) || send(sender, receiver, msg_cs);
+  /*@ assert collision_in_run || bad(sender) || bad(receiver) || 
+             send(sender, receiver, msg_cs); @*/
   //@ close pthread_run_post(receiver_t)(data, _);
   return 0;
 }
@@ -252,7 +253,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
       printf(" |%i| ", i);
     }
     //@ assert malloc_block(key, KEY_SIZE);
-    //@ close optional_crypto_chars(true, key, KEY_SIZE, cs_key);
+    //@ close optional_crypto_chars(!collision_in_run, key, KEY_SIZE, cs_key);
     zeroize(key, KEY_SIZE);
     free((void*) key);
   }

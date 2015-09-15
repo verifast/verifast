@@ -100,8 +100,8 @@ int receiver(char *key, char *msg)
 /*@ ensures  principal(receiver, _) &*&
              [f1]cryptogram(key, KEY_SIZE, key_cs, key_cg) &*&
              chars(msg + result, MAX_SIZE - result, _) &*&
-             crypto_chars(msg, result, ?msg_cs) &*&
-             bad(sender) || bad(receiver) || collision_in_run() ||
+             optional_crypto_chars(!collision_in_run, msg, result, ?msg_cs) &*&
+             collision_in_run || bad(sender) || bad(receiver) ||
              send(sender, receiver, msg_cs); @*/
 {
   int socket1;
@@ -146,12 +146,15 @@ int receiver(char *key, char *msg)
     gcm_free(&gcm_context);
     //@ open gcm_context(&gcm_context);
     
-    //@ assert crypto_chars(msg, enc_size, ?dec_cs);
+    //@ assert optional_crypto_chars(!collision_in_run, msg, enc_size, ?dec_cs);
     //@ cryptogram enc_cg = cg_auth_encrypted(sender, id, tag_cs, dec_cs, iv_cs);
-    //@ assert chars_for_cg(enc_cg) == enc_cs;
-    //@ public_chars_extract(buffer + 16, enc_cg);
-    //@ open [_]auth_enc_pub(enc_cg);
-    
+    /*@ if (!collision_in_run)
+        {
+          assert collision_in_run || chars_for_cg(enc_cg) == enc_cs;
+          public_chars_extract(buffer + 16, enc_cg);
+          open [_]auth_enc_pub(enc_cg);
+        }
+    @*/
     //@ open hide_chars((void*) buffer + size, max_size - size, _);
     //@ chars_join(buffer + 16);
     //@ chars_join(buffer);

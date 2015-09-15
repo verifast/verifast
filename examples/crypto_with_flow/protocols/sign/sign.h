@@ -47,7 +47,7 @@ predicate sign_pub(cryptogram cg) =
     case cg_asym_encrypted(p0, c0, cs0, ent0):
       return [_]public_generated(sign_pub)(cs0);
     case cg_asym_signature(p0, c0, cs0, ent0):
-      return bad(p0) ?
+      return collision_in_run || bad(p0) ?
                true
              :
                sign_pub_1(?cs1, ?receiver) &*&

@@ -39,7 +39,7 @@ predicate enc_then_hmac_pub(cryptogram cg) =
     case cg_hash(cs0):
       return true;
     case cg_hmac(p0, c0, cs0):
-      return bad(p0) || bad(shared_with(p0, c0)) ? 
+      return collision_in_run || bad(p0) || bad(shared_with(p0, c0)) ? 
         true 
       :
         enc_then_hmac_pub_1(?c1, ?cs1, ?ent1) &*&
@@ -104,7 +104,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg);
              [f2]cryptogram(hmac_key, KEY_SIZE, hmac_key_cs, hmac_key_cg) &*&
              chars(msg + result, MAX_SIZE - result, _) &*&
              crypto_chars(msg, result, ?msg_cs) &*&
-             bad(sender) || bad(receiver) || collision_in_run() ||
+             collision_in_run || bad(sender) || bad(receiver) ||
              send(sender, receiver, msg_cs); @*/
 
 ///////////////////////////////////////////////////////////////////////////////

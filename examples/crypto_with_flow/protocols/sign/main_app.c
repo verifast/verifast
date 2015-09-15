@@ -279,7 +279,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
       printf(" |%i| ", i);
     }
     //@ open cryptogram(priv_key, 8 * KEY_SIZE, cs_priv_key, _);
-    //@ close optional_crypto_chars(true, priv_key, 8 * KEY_SIZE, cs_priv_key);
+    //@ close optional_crypto_chars(!collision_in_run, priv_key, 8 * KEY_SIZE, cs_priv_key);
     zeroize(priv_key, 8 * KEY_SIZE);
     free((void*) priv_key);
     //@ close sign_pub(cg_pub_key);

@@ -20,7 +20,8 @@ void client(char *key, int key_len, char *request, char *response)
                [f1]cryptogram(key, key_len, key_cs, key_cg) &*&
                [f2]chars(request, PACKAGE_SIZE, req_cs) &*&
                chars(response, PACKAGE_SIZE, ?resp_cs) &*&
-                 bad(creator) || bad(shared_with(creator, id)) ||
+                 collision_in_run || bad(creator) || 
+                 bad(shared_with(creator, id)) ||
                  response(creator, shared_with(creator, id), 
                           req_cs, resp_cs); @*/
 {
@@ -81,11 +82,11 @@ void client(char *key, int key_len, char *request, char *response)
                                    1 + 2 * PACKAGE_SIZE, cont_cs); @*/
     //@ open cryptogram(hmac, 64, ?hmac_cs, ?hmac_cg);
     //@ assert hmac_cg == cg_hmac(creator, id, cont_cs);
-    //@ close optional_crypto_chars(true, hmac, 64, hmac_cs);
+    //@ close optional_crypto_chars(!collision_in_run, hmac, 64, hmac_cs);
     /*@ close optional_crypto_chars(false, 
                               (void*) buffer + 1 + 2 * PACKAGE_SIZE, 64, _); @*/
     if (memcmp((void*) buffer + 1 + 2 * PACKAGE_SIZE, hmac, 64) != 0) abort();
-    //@ open optional_crypto_chars(true, hmac, 64, hmac_cs);
+    //@ open optional_crypto_chars(!collision_in_run, hmac, 64, hmac_cs);
     //@ assert chars((void*) buffer + 1 + 2 * PACKAGE_SIZE, 64, hmac_cs);
     //@ public_chars((void*) buffer + 1 + 2 * PACKAGE_SIZE, 64, hmac_cs);
     //@ assert chars(buffer, expected_size, append(cont_cs, hmac_cs));
@@ -111,7 +112,7 @@ void client(char *key, int key_len, char *request, char *response)
                                    PACKAGE_SIZE, resp_cs); @*/
     //@ assert chars(response, PACKAGE_SIZE, resp_cs);
     
-    /*@ if (!bad(creator) && 
+    /*@ if (!collision_in_run && !bad(creator) && 
             !bad(shared_with(creator, id)))
         {
           switch (cont_cs) 
@@ -145,7 +146,7 @@ void client(char *key, int key_len, char *request, char *response)
     //@ chars_join(buffer);
     //@ chars_join(buffer);
     //@ assert chars(buffer, MAX_MESSAGE_SIZE, _);
-    //@ public_crypto_chars(hmac, 64, hmac_cs);
+    //@ if (!collision_in_run) public_crypto_chars(hmac, 64, hmac_cs);
   }
   net_close(socket);
 }
@@ -160,7 +161,7 @@ void compute_response(char* request, char* response)
                [?f2]chars(request, PACKAGE_SIZE, ?req_cs) &*&
                chars(response, PACKAGE_SIZE, _) &*&
                (
-                 bad(client) || bad(server) ||
+                 collision_in_run || bad(client) || bad(server) ||
                  request(client, server, req_cs)
                ); @*/
   /*@ ensures  principal(server, count + 1) &*&
@@ -197,9 +198,10 @@ void server(char *key, int key_len, char *request, char *response)
   /*@ ensures  principal(server, _) &*&
                [f1]cryptogram(key, key_len, key_cs, key_cg) &*&
                chars(request, PACKAGE_SIZE, ?req_cs) &*&
-                 bad(client) || 
+                 collision_in_run || bad(client) || 
                  request(client, server, req_cs) &*&
                chars(response, PACKAGE_SIZE, ?resp_cs) &*&
+                 collision_in_run ||
                  bad(client) || bad(server) ||
                  response(client, server, req_cs, resp_cs); @*/
 {
@@ -232,11 +234,11 @@ void server(char *key, int key_len, char *request, char *response)
     //@ open optional_crypto_chars(false, buffer, 1 + PACKAGE_SIZE, cont_cs);
     //@ open cryptogram(hmac, 64, ?hmac_cs, ?hmac_cg);
     //@ assert hmac_cg == cg_hmac(client, id, cont_cs);
-    //@ close optional_crypto_chars(true, hmac, 64, hmac_cs);
+    //@ close optional_crypto_chars(!collision_in_run, hmac, 64, hmac_cs);
     /*@ close optional_crypto_chars(false, (void*) buffer + 1 + PACKAGE_SIZE,
                                     64, _); @*/
     if (memcmp((void*) buffer + 1 + PACKAGE_SIZE, hmac, 64) != 0) abort();
-    //@ open optional_crypto_chars(true, hmac, 64, hmac_cs);
+    //@ open optional_crypto_chars(!collision_in_run, hmac, 64, hmac_cs);
     /*@ open optional_crypto_chars(false, (void*) buffer + 1 + PACKAGE_SIZE, 
                                    64, hmac_cs); @*/
     //@ assert chars((void*) buffer + 1 + PACKAGE_SIZE, 64, hmac_cs);
@@ -258,7 +260,7 @@ void server(char *key, int key_len, char *request, char *response)
         {
           case cons(c1, cs1):
             assert cont_cs == cons('0', req_cs);
-            if (c1 == '0' && !bad(client))
+            if (!collision_in_run && c1 == '0' && !bad(client))
             {
               public_chars((void*) buffer + 1 + PACKAGE_SIZE, 64, hmac_cs);
               close cryptogram(hmac, 64, hmac_cs, hmac_cg);
@@ -275,7 +277,7 @@ void server(char *key, int key_len, char *request, char *response)
     //@ chars_join(buffer);
     /*@ open hide_chars((void*) buffer + expected_size, 
                         MAX_MESSAGE_SIZE - expected_size, _); @*/
-    //@ public_crypto_chars(hmac, 64, hmac_cs);
+    //@ if (!collision_in_run) public_crypto_chars(hmac, 64, hmac_cs);
   }
   
   //@ assert chars(request, PACKAGE_SIZE, ?req_cs);
@@ -313,11 +315,11 @@ void server(char *key, int key_len, char *request, char *response)
     //@ open optional_crypto_chars(false, message, 1 + 2 * PACKAGE_SIZE, pay);
     //@ open cryptogram(hmac, 64, ?hmac_cs, ?hmac_cg);
     //@ assert hmac_cg == cg_hmac(client, id, pay);
-    //@ close optional_crypto_chars(true, hmac, 64, hmac_cs);
+    //@ close optional_crypto_chars(!collision_in_run, hmac, 64, hmac_cs);
     memcpy(message + 1 + 2 * PACKAGE_SIZE, hmac, 64);
-    //@ open optional_crypto_chars(true, hmac, 64, hmac_cs);
-    /*@ open optional_crypto_chars(true, message + 1 + 2 * PACKAGE_SIZE, 
-                                   64, hmac_cs); @*/
+    //@ open optional_crypto_chars(!collision_in_run, hmac, 64, hmac_cs);
+    /*@ open optional_crypto_chars(!collision_in_run, 
+                               message + 1 + 2 * PACKAGE_SIZE, 64, hmac_cs); @*/
     //@ close cryptogram(message + 1 + 2 * PACKAGE_SIZE, 64, hmac_cs, hmac_cg);
     //@ drop_append(PACKAGE_SIZE, req_cs, resp_cs);
     //@ take_append(PACKAGE_SIZE, req_cs, resp_cs);

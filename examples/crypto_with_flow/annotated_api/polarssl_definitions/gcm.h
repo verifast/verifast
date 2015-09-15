@@ -89,9 +89,13 @@ int gcm_auth_decrypt(gcm_context *ctx, size_t length,
               [f]optional_crypto_chars(cc, input, length, cs_in) &*&
               chars(tag, tag_len, _) &*&
               result == 0 ?
-                crypto_chars(output, length, ?cs_out) &*&
-                cs_in == chars_for_cg(cg_auth_encrypted(p, c, tag_cs_in, 
-                                                        cs_out, cs_iv))
+                collision_in_run ?
+                  chars(output, length, _)
+                :
+                  crypto_chars(output, length, ?cs_out) &*&
+                  collision_in_run ||
+                  cs_in == chars_for_cg(cg_auth_encrypted(p, c, tag_cs_in, 
+                                                          cs_out, cs_iv))
               :
                 chars(output, length, _); @*/
 

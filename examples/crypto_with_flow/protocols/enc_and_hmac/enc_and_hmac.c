@@ -137,8 +137,8 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
              [f1]cryptogram(enc_key, KEY_SIZE, enc_key_cs, enc_key_cg) &*&
              [f2]cryptogram(hmac_key, KEY_SIZE, hmac_key_cs, hmac_key_cg) &*&
              chars(msg + result, MAX_SIZE - result, _) &*&
-             crypto_chars(msg, result, ?msg_cs) &*&
-             bad(sender) || bad(receiver) || collision_in_run() ||
+             optional_crypto_chars(!collision_in_run, msg, result, ?msg_cs) &*&
+             collision_in_run || bad(sender) || bad(receiver) ||
              send(sender, receiver , msg_cs); @*/
 {
   int socket1;
@@ -199,31 +199,35 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ open optional_crypto_chars(false, buffer + 20, enc_size, enc_cs);
     aes_free(&aes_context);
     //@ open aes_context(&aes_context);
-    //@ assert crypto_chars(msg, enc_size, ?dec_cs);
+    //@ assert optional_crypto_chars(!collision_in_run, msg, enc_size, ?dec_cs);
     //@ cryptogram enc_cg = cg_encrypted(sender, enc_id, dec_cs, prefix);
     //@ public_chars(buffer + 20, enc_size, enc_cs);
-    //@ public_chars_extract(buffer + 20, enc_cg);
+    //@ if (!collision_in_run) public_chars_extract(buffer + 20, enc_cg);
     //@ assert chars(buffer, 20 + enc_size, append(prefix, enc_cs));
     
     //Verify the hmac
     //@ assert chars(buffer + size - 64, 64, ?hmac_cs);
-    //@ close optional_crypto_chars(true, msg, size - 84, ?pay_cs);
+    //@ close optional_crypto_chars(!collision_in_run, msg, size - 84, ?pay_cs);
     sha512_hmac(hmac_key, KEY_SIZE, msg,
                 (unsigned int) enc_size, hmac, 0);
-    //@ open optional_crypto_chars(true, msg, size - 84, pay_cs);
+    //@ open optional_crypto_chars(!collision_in_run, msg, size - 84, pay_cs);
     //@ open cryptogram(hmac, 64, ?hmac_cs2, ?hmac_cg);
-    //@ close optional_crypto_chars(true, hmac, 64, hmac_cs2);
+    //@ close optional_crypto_chars(!collision_in_run, hmac, 64, hmac_cs2);
     //@ close optional_crypto_chars(false, (void*) buffer + size - 64, 64, _);
     if (memcmp((void*) buffer + size - 64, hmac, 64) != 0) abort();
-    //@ open optional_crypto_chars(true, hmac, 64, hmac_cs2);
+    //@ open optional_crypto_chars(!collision_in_run, hmac, 64, hmac_cs2);
     //@ assert hmac_cg == cg_hmac(sender, hmac_id, dec_cs);
     //@ hmac_cs == hmac_cs2;
     //@ public_chars(buffer + size - 64, 64, hmac_cs);
-    //@ public_crypto_chars_extract(hmac, hmac_cg);
-    //@ public_crypto_chars(hmac, 64, hmac_cs2);
+    /*@ if (!collision_in_run) 
+        {
+          public_crypto_chars_extract(hmac, hmac_cg);
+          public_crypto_chars(hmac, 64, hmac_cs2);
+          open [_]enc_and_hmac_pub(enc_cg);
+          open [_]enc_and_hmac_pub(hmac_cg);
+        }
+    @*/
     //@ assert all_cs == append(prefix, append(enc_cs, hmac_cs));
-    //@ open [_]enc_and_hmac_pub(enc_cg);
-    //@ open [_]enc_and_hmac_pub(hmac_cg);
     //@ open hide_chars((void*) buffer + size, max_size - size, _);    
     //@ chars_join(buffer);
     //@ chars_join(buffer);

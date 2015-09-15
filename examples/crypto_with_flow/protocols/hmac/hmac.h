@@ -77,7 +77,7 @@ void receiver(char *key, int key_len, char *message);
   /*@ ensures  principal(receiver, _) &*&
                [f1]cryptogram(key, key_len, key_cs, key_cg) &*&
                chars(message, MESSAGE_SIZE, ?msg_cs) &*&
-               bad(sender) || bad(receiver) ||
+               collision_in_run || bad(sender) || bad(receiver) ||
                send(sender, receiver, msg_cs); @*/
 
 ///////////////////////////////////////////////////////////////////////////////

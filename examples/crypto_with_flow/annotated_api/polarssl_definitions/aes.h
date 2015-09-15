@@ -62,8 +62,11 @@ int aes_crypt_cfb128(aes_context *ctx, int mode, size_t length,
                                      append(chars_of_int(iv_off_val), cs_iv))
                 ) :
                 (
-                  crypto_chars(output, length, ?cs_output) &*&
-                  cs_input == chars_for_cg(cg_encrypted(p, c, cs_output, 
+                  collision_in_run ?
+                    chars(output, length, ?cs_output)
+                  :
+                    crypto_chars(output, length, ?cs_output) &*&
+                    cs_input == chars_for_cg(cg_encrypted(p, c, cs_output, 
                                       append(chars_of_int(iv_off_val), cs_iv)))
                 )
               :

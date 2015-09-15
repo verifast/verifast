@@ -93,15 +93,14 @@ predicate_family_instance pthread_run_post(sender_t)(void *data, any info) =
     r_key_cg == cg_public_key(receiver, ?r_id) &*&
   cryptogram(s_nonce, NONCE_SIZE, _, ?s_nonce_cg) &*&
     cg_info(s_nonce_cg) == int_pair(1, receiver) &*&
-  crypto_chars(r_nonce, NONCE_SIZE, ?r_nonce_cs) &*&
-    (
-      bad(sender) || bad(receiver) ?
-        [_]public_generated(nsl_pub)(r_nonce_cs)
-      :
-        [_]exists(?r_nonce_cg) &*&
-        r_nonce_cg == cg_random(receiver, _) &*&
-        cg_info(r_nonce_cg) == int_pair(2, int_pair(sender, sender))
-    ) &*&
+  (
+    collision_in_run || bad(sender) || bad(receiver) ?
+      chars(r_nonce, NONCE_SIZE, _)
+    :
+      cryptogram(r_nonce, NONCE_SIZE, _, ?r_nonce_cg) &*&
+      r_nonce_cg == cg_random(receiver, _) &*&
+      cg_info(r_nonce_cg) == int_pair(2, int_pair(sender, sender))
+  ) &*&
   info == cons(int_value(sender), 
             cons(int_value(receiver), 
               cons(pointer_value(s_key),
@@ -169,15 +168,13 @@ predicate_family_instance pthread_run_post(receiver_t)(void *data, any info) =
     s_key_cg == cg_public_key(sender, ?s_id) &*&
   [1/2]cryptogram(r_key, 8 * KEY_SIZE, ?r_key_cs, ?r_key_cg) &*&
     r_key_cg == cg_private_key(receiver, ?r_id) &*&
-  crypto_chars(s_nonce, NONCE_SIZE, ?s_nonce_cs) &*&
   cryptogram(r_nonce, NONCE_SIZE, _, ?r_nonce_cg) &*&
     r_nonce_cg == cg_random(receiver, _) &*&
   (
     collision_in_run || bad(sender) || bad(receiver) ?
-      true
+      chars(s_nonce, NONCE_SIZE, _)
     :
-      [_]exists(?s_nonce_cg) &*&
-      s_nonce_cs == chars_for_cg(s_nonce_cg) &*&
+      cryptogram(s_nonce, NONCE_SIZE, ?s_nonce_cs, ?s_nonce_cg) &*&
       s_nonce_cg == cg_random(sender, _) &*&
       cg_info(s_nonce_cg) == int_pair(1, receiver) &*&
       cg_info(r_nonce_cg) == int_pair(2, int_pair(sender, sender))
@@ -353,19 +350,20 @@ int main(int argc, char **argv) //@ : main_full(main_app)
 #endif
         
       //@ open cryptogram(s_s_nonce, NONCE_SIZE, ?cs_s_s_nonce, _);
-      //@ close optional_crypto_chars(true, s_s_nonce, NONCE_SIZE, cs_s_s_nonce);
+      //@ close optional_crypto_chars(!collision_in_run, s_s_nonce, NONCE_SIZE, cs_s_s_nonce);
       zeroize(s_s_nonce, NONCE_SIZE);
-      //@ close optional_crypto_chars(true, s_r_nonce, NONCE_SIZE, ?cs_s_r_nonce);
+      //@ bool condition = collision_in_run || bad(sender) || bad(receiver);
+      //@ close optional_crypto_chars(!condition, s_r_nonce, NONCE_SIZE, ?cs_s_r_nonce);
       zeroize(s_r_nonce, NONCE_SIZE);
-      //@ close optional_crypto_chars(true, r_s_nonce, NONCE_SIZE, ?cs_r_s_nonce);
+      //@ close optional_crypto_chars(!condition, r_s_nonce, NONCE_SIZE, ?cs_r_s_nonce);
       zeroize(r_s_nonce, NONCE_SIZE);
       //@ open cryptogram(r_r_nonce, NONCE_SIZE, ?cs_r_r_nonce, _);
-      //@ close optional_crypto_chars(true, r_r_nonce, NONCE_SIZE, cs_r_r_nonce);
+      //@ close optional_crypto_chars(!collision_in_run, r_r_nonce, NONCE_SIZE, cs_r_r_nonce);
       zeroize(r_r_nonce, NONCE_SIZE);                
       printf(" |%i| ", i);
     }
     //@ open cryptogram(s_priv_key, 8 * KEY_SIZE, cs_s_priv_key, _);
-    //@ close optional_crypto_chars(true, s_priv_key, 8 * KEY_SIZE, cs_s_priv_key);
+    //@ close optional_crypto_chars(!collision_in_run, s_priv_key, 8 * KEY_SIZE, cs_s_priv_key);
     zeroize(s_priv_key, 8 * KEY_SIZE);
     //@ close nsl_pub(cg_s_pub_key);
     //@ leak nsl_pub(cg_s_pub_key);
@@ -375,7 +373,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
     //@ assert chars(s_pub_key, 8 * KEY_SIZE, cs_s_pub_key);
     
     //@ open cryptogram(r_priv_key, 8 * KEY_SIZE, cs_r_priv_key, _);
-    //@ close optional_crypto_chars(true, r_priv_key, 8 * KEY_SIZE, cs_r_priv_key);
+    //@ close optional_crypto_chars(!collision_in_run, r_priv_key, 8 * KEY_SIZE, cs_r_priv_key);
     zeroize(r_priv_key, 8 * KEY_SIZE);
     //@ close nsl_pub(cg_r_pub_key);
     //@ leak nsl_pub(cg_r_pub_key);

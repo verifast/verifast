@@ -140,7 +140,7 @@ predicate_family_instance pthread_run_post(receiver_t)(void *data, any info) =
   [1/2]cryptogram(key, KEY_SIZE, ?key_cs, ?key_cg) &*&
     key_cg == cg_symmetric_key(sender, ?id) &*&
     receiver == shared_with(sender, id) &*&
-  crypto_chars(msg, length, ?msg_cs) &*&
+  optional_crypto_chars(!collision_in_run, msg, length, ?msg_cs) &*&
   chars(msg + length, MAX_SIZE - length, _) &*&
   collision_in_run() || send(sender, receiver, msg_cs) &*&
   info == cons(int_value(sender), 
@@ -251,13 +251,13 @@ int main(int argc, char **argv) //@ : main_full(main_app)
         abort();
       //@ public_crypto_chars(s_message, MSG_LEN, msg_cs);
       //@ close optional_crypto_chars(false, s_message, MSG_LEN, msg_cs);
-      //@ close optional_crypto_chars(true, r_message, r_args.length, _);
+      //@ close optional_crypto_chars(!collision_in_run, r_message, r_args.length, _);
       if (memcmp(s_message, r_message, MSG_LEN) != 0)
         abort();
       zeroize(r_message, r_args.length);
     }
     //@ assert malloc_block(key, KEY_SIZE);
-    //@ close optional_crypto_chars(true, key, KEY_SIZE, cs_key);
+    //@ close optional_crypto_chars(!collision_in_run, key, KEY_SIZE, cs_key);
     zeroize(key, KEY_SIZE);
     free((void*) key);
     

@@ -94,7 +94,7 @@ void sender(int recvr, char *key, int key_len, char *msg)
     //@ assert cryptogram(M + 4 + MSG_SIZE, sign_len_val, ?cs_sign, ?cg_sign);
     //@ assert chars(M + 4 + MSG_SIZE + sign_len_val, key_len - sign_len_val, _);
     //@ assert cg_sign == cg_asym_signature(sender, id, hash_cs, _);
-    //@ if (!bad(sender)) close sign_pub_1(msg_cs, recvr);    
+    //@ if (!collision_in_run && !bad(sender)) close sign_pub_1(msg_cs, recvr);    
     //@ close sign_pub(cg_sign);
     //@ leak sign_pub(cg_sign);
     //@ public_cryptogram(M + 4 + MSG_SIZE, cg_sign);
@@ -188,9 +188,13 @@ void receiver(int recvr, char *key, int key_len, char *msg)
     
     //@ assert exists(?ent);
     //@ cryptogram sign_cg1 = cg_asym_signature(sender, id, hash_cs, ent);
-    //@ assert sign_cs == chars_for_cg(sign_cg1);
-    //@ public_chars_extract(buffer + 4 + MSG_SIZE, sign_cg1);
-    //@ open [_]sign_pub(sign_cg1);
+    /*@ if (!collision_in_run)
+        {
+          assert collision_in_run || sign_cs == chars_for_cg(sign_cg1);
+          public_chars_extract(buffer + 4 + MSG_SIZE, sign_cg1);
+          open [_]sign_pub(sign_cg1);
+        }
+    @*/
     /*@ if (!bad(sender) && !collision_in_run())
         {
           assert [_]sign_pub_1(?msg_cs2, ?receiver2);

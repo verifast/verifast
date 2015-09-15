@@ -15,8 +15,11 @@ lemma void interpret_##SC_KIND##_key(char *buffer, int size, list<char> cs) \
   assert key == cg_##SC_KIND##_key(?p, ?c); \
   public_chars(buffer, size, cs); \
   open [_]public_generated(pub)(cs); \
-  crypto_chars(buffer, size, cs); \
-  forall_mem(key, cgs_in_chars(cs), cg_is_generated); \
+  if (!collision_in_run) \
+  { \
+    crypto_chars(buffer, size, cs); \
+    forall_mem(key, cgs_in_chars(cs), cg_is_generated); \
+  } \
   close [f]cryptogram(buffer, size, cs, key); \
 }
 

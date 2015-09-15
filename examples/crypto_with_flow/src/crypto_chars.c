@@ -17,10 +17,10 @@ lemma void optional_crypto_chars_inv(bool cc, char *array, int n, list<char> cs)
 lemma void cryptogram_inv()
   requires [?f]cryptogram(?array, ?n, ?cs, ?cg);
   ensures  [f]cryptogram(array, n, cs, cg) &*& length(cs) == n &*&
-           cs == chars_for_cg(cg);
+           collision_in_run || cs == chars_for_cg(cg);
 {
   open [f]cryptogram(array, n, cs, cg);
-  crypto_chars_inv();
+  if (!collision_in_run) crypto_chars_inv();
   close [f]cryptogram(array, n, cs, cg);
 }
 

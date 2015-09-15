@@ -17,7 +17,8 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
                shared_with(sender, enc_id) == shared_with(sender, hmac_id) &*&
              [?f3]crypto_chars(msg, msg_len, ?msg_cs) &*&
                MAX_SIZE >= msg_len &*& msg_len >= MIN_ENC_SIZE &*&
-               bad(sender) || bad(shared_with(sender, enc_id)) ?
+               collision_in_run || bad(sender) || 
+               bad(shared_with(sender, enc_id)) ?
                  [_]public_generated(hmac_then_enc_pub)(msg_cs)
                :
                  true == send(sender, shared_with(sender, enc_id), msg_cs); @*/
@@ -57,7 +58,12 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
                 enc_msg + (int) msg_len, 0);
     //@ open [f3]optional_crypto_chars(true, msg, msg_len, msg_cs);       
     //@ open cryptogram(enc_msg + msg_len, 64, ?hmac_cs, ?hmac_cg);
-    
+    /*@ if (collision_in_run) 
+        {
+          public_chars(enc_msg + msg_len, 64, hmac_cs);
+          crypto_chars(enc_msg + msg_len, 64, hmac_cs);
+        }
+    @*/
     //@ open optional_crypto_chars(true, enc_msg, msg_len, msg_cs);
     //@ crypto_chars_join(enc_msg);
     //@ list<char> enc_msg_cs = append(msg_cs, hmac_cs);
@@ -118,14 +124,15 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
     
     //@ close hmac_then_enc_pub(hmac_cg);
     //@ leak hmac_then_enc_pub(hmac_cg);
-    //@ crypto_chars_split(enc_msg, msg_len);
     //@ take_append(msg_len, msg_cs, hmac_cs);    
     //@ drop_append(msg_len, msg_cs, hmac_cs);
+    //@ crypto_chars_split(enc_msg, msg_len);
+    /*@ if (collision_in_run) 
+          public_crypto_chars(enc_msg + msg_len, 64, hmac_cs); @*/
     //@ close cryptogram(enc_msg + msg_len, 64, hmac_cs, hmac_cg);
     //@ public_cryptogram(enc_msg + msg_len, hmac_cg);
     //@ public_chars(enc_msg + msg_len, 64, hmac_cs);
-    /*@
-        if (bad(sender) || bad(shared_with(sender, enc_id)))
+    /*@ if (collision_in_run || bad(sender) || bad(shared_with(sender, enc_id)))
         {
           assert [_]public_generated(hmac_then_enc_pub)(msg_cs);
           assert [_]public_generated(hmac_then_enc_pub)(hmac_cs);
@@ -170,8 +177,8 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
              [f1]cryptogram(enc_key, KEY_SIZE, enc_key_cs, enc_key_cg) &*&
              [f2]cryptogram(hmac_key, KEY_SIZE, hmac_key_cs, hmac_key_cg) &*&
              chars(msg + result, MAX_SIZE - result, _) &*&
-             crypto_chars(msg, result, ?msg_cs) &*&
-             bad(sender) || bad(receiver) || collision_in_run() ||
+             optional_crypto_chars(!collision_in_run, msg, result, ?msg_cs) &*&
+             collision_in_run || bad(sender) || bad(receiver) ||
              send(sender, receiver, msg_cs); @*/
 {
   int socket1;
@@ -231,29 +238,35 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ open optional_crypto_chars(false, buffer + 20, enc_size, enc_cs);
     aes_free(&aes_context);
     //@ open aes_context(&aes_context);
-    //@ assert crypto_chars(buffer_dec, enc_size, ?dec_cs);
+    /*@ open optional_crypto_chars(!collision_in_run,
+                                   buffer_dec, enc_size, ?dec_cs); @*/
     //@ cryptogram enc_cg = cg_encrypted(sender, enc_id, dec_cs, prefix);
-    //@ public_chars_extract(buffer + 20, enc_cg);
+    //@ if (!collision_in_run) public_chars_extract(buffer + 20, enc_cg);
     
     //Verify the hmac
-    //@ crypto_chars_split(buffer_dec, enc_size - 64);
-    //@ close optional_crypto_chars(true, buffer_dec, enc_size - 64, ?pay_cs);
-    sha512_hmac(hmac_key, KEY_SIZE, buffer_dec, (unsigned int) (enc_size - 64), hmac, 0);
+    //@ if (!collision_in_run) crypto_chars_split(buffer_dec, enc_size - 64);
+    /*@ close optional_crypto_chars(!collision_in_run,
+                                    buffer_dec, enc_size - 64, ?pay_cs); @*/
+    sha512_hmac(hmac_key, KEY_SIZE, buffer_dec, 
+                (unsigned int) (enc_size - 64), hmac, 0);
     //@ assert cryptogram(hmac, 64, ?hmac_cs, ?hmac_cg);
     //@ close hmac_then_enc_pub(hmac_cg);
     //@ leak hmac_then_enc_pub(hmac_cg);
     //@ public_cryptogram(hmac, hmac_cg);
-    //@ close optional_crypto_chars(true, buffer_dec + enc_size - 64, 64, ?hmac_cs2);
+    /*@ close optional_crypto_chars(!collision_in_run, 
+                                 buffer_dec + enc_size - 64, 64, ?hmac_cs2); @*/
     //@ close optional_crypto_chars(false, hmac, 64, _);
     if (memcmp(hmac, (void*) buffer_dec + enc_size - 64, 64) != 0) abort();
-    //@ open optional_crypto_chars(true, buffer_dec + enc_size - 64, 64, hmac_cs2);
+    /*@ open optional_crypto_chars(!collision_in_run, 
+                                  buffer_dec + enc_size - 64, 64, hmac_cs2); @*/
     //@ open optional_crypto_chars(false, hmac, 64, hmac_cs2);
     //@ cryptogram hmac_cg2 = chars_for_cg_sur(hmac_cs2, CG_HMAC_TAG);
     //@ chars_split(msg, enc_size);
     memcpy(msg, buffer_dec, (unsigned int) enc_size - 64);
-    //@ open optional_crypto_chars(true, buffer_dec, enc_size - 64, pay_cs);
-    /*@ if (!bad(sender) && !bad(shared_with(sender, enc_id)) && 
-            !collision_in_run())
+    /*@ open optional_crypto_chars(!collision_in_run, 
+                                   buffer_dec, enc_size - 64, pay_cs); @*/
+    /*@ if (!collision_in_run && !bad(sender) && 
+            !bad(shared_with(sender, enc_id)))
         {
           open [_]hmac_then_enc_pub(enc_cg);
           assert [_]hmac_then_enc_pub_1(?msg_cs, ?hmac_cg3);
@@ -267,8 +280,8 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     @*/
     //@ chars_join(buffer);
     free(buffer);
-    //@ crypto_chars_join(buffer_dec);
-    //@ close optional_crypto_chars(true, buffer_dec, enc_size, _);
+    //@ if (!collision_in_run) crypto_chars_join(buffer_dec);
+    //@ close optional_crypto_chars(!collision_in_run, buffer_dec, enc_size, _);
     zeroize(buffer_dec, enc_size);
     free(buffer_dec);
   }

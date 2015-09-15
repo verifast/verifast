@@ -99,8 +99,8 @@ int receiver(char *enc_key, char *hmac_key, char *msg);
              [f1]cryptogram(enc_key, KEY_SIZE, enc_key_cs, enc_key_cg) &*&
              [f2]cryptogram(hmac_key, KEY_SIZE, hmac_key_cs, hmac_key_cg) &*&
              chars(msg + result, MAX_SIZE - result, _) &*&
-             crypto_chars(msg, result, ?msg_cs) &*&
-             bad(sender) || bad(receiver) || collision_in_run() ||
+             optional_crypto_chars(!collision_in_run, msg, result, ?msg_cs) &*&
+             collision_in_run || bad(sender) || bad(receiver) ||
              send(sender, receiver, msg_cs); @*/
 
 ///////////////////////////////////////////////////////////////////////////////

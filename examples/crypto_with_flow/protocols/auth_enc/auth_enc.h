@@ -88,8 +88,8 @@ int receiver(char *key, char *msg);
 /*@ ensures  principal(receiver, _) &*&
              [f1]cryptogram(key, KEY_SIZE, key_cs, key_cg) &*&
              chars(msg + result, MAX_SIZE - result, _) &*&
-             crypto_chars(msg, result, ?msg_cs) &*&
-             bad(sender) || bad(receiver) || collision_in_run() ||
+             optional_crypto_chars(!collision_in_run, msg, result, ?msg_cs) &*&
+             collision_in_run || bad(sender) || bad(receiver) ||
              send(sender, receiver, msg_cs); @*/
 
 ///////////////////////////////////////////////////////////////////////////////
