@@ -29,6 +29,22 @@ help:
 
 -include ../GNUmakefile.settings
 
+# Note: OS is defined by the operating system as Windows_NT on Windows.
+ifeq ($(OS), Linux)
+else ifeq ($(OS), Darwin)
+else ifeq ($(OS), Cygwin)
+else
+  ifeq ($(shell uname -s), Linux)
+          OS = Linux
+  else ifeq ($(shell uname -s), Darwin)
+          OS = Darwin
+  else ifeq ($(shell uname -o), Cygwin)
+          OS = Cygwin
+  else
+          $(error "Could not recognize your platform")
+  endif
+endif
+
 # Lablgtk configuration
 ifndef WITHOUT_LABLGTK
   ifeq ($(OS), Cygwin)
@@ -113,18 +129,6 @@ ifeq ($(OS), Cygwin)
   CAMLP4O    = camlp4o.opt
 else
   CAMLP4O      = $(firstword $(wildcard ${OCAMLBIN}/camlp4o.opt ${OCAMLBIN}/camlp4o))
-endif
-
-ifndef OS
-  ifeq ($(shell uname -s), Linux)
-          OS = Linux
-  else ifeq ($(shell uname -s), Darwin)
-          OS = Darwin
-  else ifeq ($(shell uname -o), Cygwin)
-          OS = Cygwin
-  else
-          $(error "Could not recognize your platform")
-  endif
 endif
 
 # Do we build with "-I ./linux" or "-I ./win":
@@ -352,6 +356,7 @@ endif
 clean::
 	rm -f macos/*.cm* macos/*.o
 
+ifndef WITHOUT_LABLGTK
 # Also depend on "vfide.ml": Make ignores our dependency "%.cmx: %.ml".
 vfide.cmx: Fonts.cmx vfide.ml $(GTKSOURCEVIEW_DEPS)
 	@echo "  OCAMLOPT " $@
@@ -359,7 +364,6 @@ vfide.cmx: Fonts.cmx vfide.ml $(GTKSOURCEVIEW_DEPS)
 	-pp ${CAMLP4O} nums.cmxa $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) vfide.ml
 
 ../bin/vfide$(DOTEXE): vfide.cmx redux.cmx $(Z3DEPS) plugins2.cmx $(GTKSOURCEVIEW_DEPS)
-ifndef WITHOUT_LABLGTK
 	@echo "  OCAMLOPT " $@
 	$(SET_LDD); ${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/vfide$(DOTEXE)	\
 	  $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) unix.cmxa \
