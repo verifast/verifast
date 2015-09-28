@@ -6,7 +6,9 @@
 #include <string.h>
 
 #define KEY_SIZE 128
-//@ import_module public_invariant;
+
+//@ import_module public_invariant_mod;
+//@ import_module principals_mod;
 
 /*@
 predicate sign_proof_pred() = true;
@@ -170,7 +172,6 @@ int main(int argc, char **argv) //@ : main_full(main_app)
     //@ ensures true;
 {
   //@ open_module();
-  //@ assert module(public_invariant, true);
 
   pthread_t a_thread;
   havege_state havege_state;

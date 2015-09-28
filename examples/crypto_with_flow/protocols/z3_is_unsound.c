@@ -10,7 +10,8 @@
 
 #define SERVER_PORT 50000
 
-//@ import_module public_invariant;
+//@ import_module public_invariant_mod;
+//@ import_module principals_mod;
 
 /*@
 
@@ -193,7 +194,6 @@ int main(int argc, char **argv) //@ : main_full(z3_is_unsound)
     //@ ensures true;
 {
   //@ open_module();
-  //@ assert module(public_invariant, true);
   //@ PUBLIC_INVARIANT_CONSTRAINTS(z3)
   //@ public_invariant_init(z3_pub);
   //@ principals_init();
@@ -280,6 +280,6 @@ int main(int argc, char **argv) //@ : main_full(z3_is_unsound)
   //@ principals_exit();
   //@ leak random_state_predicate(havege_state_initialized);
   //@ leak public_invariant_constraints(z3_pub, z3_proof_pred);
-  //@ leak module(public_invariant, false);
+  //@ leak module(public_invariant_mod, false);
   return 0;
 }

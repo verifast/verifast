@@ -3,14 +3,17 @@
 
 #include <crypto.gh>
 
+require_module principals_mod;
+
 predicate principals(int id);
 
 lemma void principals_init();
-  requires true;
-  ensures  principals(0);
+  requires module(principals_mod, true);
+  ensures  module(principals_mod, false) &*&
+           principals(0);
 
 lemma void principals_exit();
-  requires principals(_);
+  requires module(principals_mod, false) &*& principals(_);
   ensures  true;
 
 fixpoint bool bad(int principal);

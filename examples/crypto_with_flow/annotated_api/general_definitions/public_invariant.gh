@@ -4,13 +4,13 @@
 #include "principals.gh"
 #include "crypto_chars.gh"
 
-require_module public_invariant;
+require_module public_invariant_mod;
 
 predicate public_invar(predicate(cryptogram) pub);
 
 lemma void public_invariant_init(predicate(cryptogram) pub);
-  requires module(public_invariant, true);
-  ensures  module(public_invariant, false) &*&
+  requires module(public_invariant_mod, true);
+  ensures  module(public_invariant_mod, false) &*&
            [_]public_invar(pub);
 
 predicate_ctor public_generated(predicate(cryptogram) pub)(list<char> cs) =

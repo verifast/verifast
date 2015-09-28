@@ -10,6 +10,7 @@
 .predicate @./principals.gh#generated_values
 .provides ./principals.gh#principal_create
 .provides ./principals.gh#principal_destroy
+.produces module principals_mod
 #
 #
 # cryptogram.gh
@@ -43,7 +44,7 @@
 .provides ./public_invariant.gh#public_invariant_init
 .predicate @./public_chars.gh#public_generated
 .predicate @./public_invariant.gh#public_invar_constraints
-.produces module public_invariant
+.produces module public_invariant_mod
 #
 #
 # public_chars.gh
