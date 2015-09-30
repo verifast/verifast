@@ -41,6 +41,27 @@ void mutex_dispose(struct mutex *mutex);
     //@ requires mutex(mutex, ?p);
     //@ ensures p();
 
+// Condition variable, see e.g. pthread_cond_wait(3).
+struct mutex_cond;
+//@ predicate mutex_cond(struct mutex_cond *cond);
+
+struct mutex_cond *create_mutex_cond();
+    //@ requires emp;
+    //@ ensures result != 0 &*& mutex_cond(result);
+
+void mutex_cond_destroy(struct mutex_cond *cond);
+    //@ requires mutex_cond(cond);
+    //@ ensures true;
+
+void mutex_cond_wait(struct mutex_cond *cond, struct mutex *mutex);
+    //@ requires mutex_cond(cond) &*& mutex_held(mutex, ?p, currentThread, ?f);
+    //@ ensures mutex_cond(cond) &*& mutex_held(mutex, p, currentThread, f);
+
+void mutex_cond_signal(struct mutex_cond *cond);
+    //@ requires mutex_cond(cond);
+    //@ ensures mutex_cond(cond);
+
+
 // **** Lock ordering for re-entry and deadlock prevention ****
 
 // Note: we use lock IDs instead of struct lock pointers because

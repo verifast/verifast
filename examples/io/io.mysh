@@ -18,6 +18,9 @@ cd work-in-progress
   cd in-memory-io-style-v2
     verifast -allow_assume foralls.o prophecy.o ../../../vstte2012/problem3/problem3.c writehi_readhi.c
   cd ..
+  cd in-memory-io-style-v3
+    verifast -c ../../../vstte2012/problem3/problem3.c producer-consumer.c
+  cd ..
 cd ..
 cd matching_brackets
   verifast_both stdio_simple.o -shared -disable_overflow_check matching_brackets_input.c
