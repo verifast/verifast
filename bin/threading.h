@@ -43,23 +43,24 @@ void mutex_dispose(struct mutex *mutex);
 
 // Condition variable, see e.g. pthread_cond_wait(3).
 struct mutex_cond;
-//@ predicate mutex_cond(struct mutex_cond *cond);
+//@ predicate mutex_cond(struct mutex_cond *cond, struct mutex *mutex);
 
+//@ predicate create_mutex_cond_ghost_args(struct mutex *mutex) = emp;
 struct mutex_cond *create_mutex_cond();
-    //@ requires emp;
-    //@ ensures result != 0 &*& mutex_cond(result);
+    //@ requires create_mutex_cond_ghost_args(?mutex);
+    //@ ensures result != 0 &*& mutex_cond(result, mutex);
 
 void mutex_cond_destroy(struct mutex_cond *cond);
-    //@ requires mutex_cond(cond);
+    //@ requires mutex_cond(cond, _);
     //@ ensures true;
 
 void mutex_cond_wait(struct mutex_cond *cond, struct mutex *mutex);
-    //@ requires mutex_cond(cond) &*& mutex_held(mutex, ?p, currentThread, ?f);
-    //@ ensures mutex_cond(cond) &*& mutex_held(mutex, p, currentThread, f);
+    //@ requires [?fc]mutex_cond(cond, mutex) &*& mutex_held(mutex, ?p, currentThread, ?f) &*& p();
+    //@ ensures [fc]mutex_cond(cond, mutex) &*& mutex_held(mutex, p, currentThread, f) &*& p();
 
 void mutex_cond_signal(struct mutex_cond *cond);
-    //@ requires mutex_cond(cond);
-    //@ ensures mutex_cond(cond);
+    //@ requires [?fc]mutex_cond(cond, ?mutex) &*& mutex_held(mutex, ?p, currentThread, ?f);
+    //@ ensures [fc]mutex_cond(cond, mutex) &*& mutex_held(mutex, p, currentThread, f);
 
 
 // **** Lock ordering for re-entry and deadlock prevention ****

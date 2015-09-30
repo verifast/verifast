@@ -21,17 +21,17 @@ struct buffer {
 
 predicate_ctor buffer_protected(struct buffer *buffer)() =
   buffer->ring_buffer |-> ?ring_buffer
-  &*& ring_buffer(ring_buffer, ?size, ?contents)
-  
-  &*& buffer->cond_can_push |-> ?cond_can_push
-  &*& mutex_cond(cond_can_push)
-  &*& buffer->cond_can_pop |-> ?cond_can_pop
-  &*& mutex_cond(cond_can_pop)
+  &*& ring_buffer(ring_buffer, ?size, ?contents)  
 ;
 
 predicate buffer(struct buffer *buffer) =
   buffer-> mutex|-> ?mutex
   &*& mutex(mutex, ((buffer_protected)(buffer)))
+  &*& buffer->cond_can_push |-> ?cond_can_push
+  &*& mutex_cond(cond_can_push, mutex)
+  &*& buffer->cond_can_pop |-> ?cond_can_pop
+  &*& mutex_cond(cond_can_pop, mutex)
+
   &*& malloc_block_buffer(buffer);
   
   
@@ -51,12 +51,16 @@ struct buffer *setup(int size)
     return 0;
   }
   buffer->ring_buffer = ring_buffer;
-  buffer->cond_can_push = create_mutex_cond();
-  buffer->cond_can_pop = create_mutex_cond();
   
   //@ close create_mutex_ghost_arg(buffer_protected(buffer));
   //@ close buffer_protected(buffer)();
   buffer->mutex = create_mutex();
+  //@ close create_mutex_cond_ghost_args(buffer->mutex);
+  buffer->cond_can_push = create_mutex_cond();
+  //@ close create_mutex_cond_ghost_args(buffer->mutex);
+  buffer->cond_can_pop = create_mutex_cond();
+  
+
   return buffer;
   //@ close buffer(buffer);
 }
@@ -68,20 +72,23 @@ void push(struct buffer *buffer, int x)
 //@ ensures [f]buffer(buffer);
 {
   //@ open buffer(buffer);
+  //@ assert [f]buffer->mutex |-> ?mutex;
   mutex_acquire(buffer->mutex);
   //@ open buffer_protected(buffer)();
   while (ring_buffer_is_full(buffer->ring_buffer))
   /*@ invariant
       buffer->ring_buffer |-> ?ring_buffer
-      &*& [f]buffer->mutex |-> ?mutex
+      &*& [f]buffer->mutex |-> mutex
       &*& ring_buffer(ring_buffer, ?size, ?contents)
-      &*& buffer->cond_can_push |-> ?cond_can_push
-      &*& mutex_cond(cond_can_push)
+      &*& [f]buffer->cond_can_push |-> ?cond_can_push
+      &*& [f]mutex_cond(cond_can_push, mutex)
       &*& mutex_held(mutex, (buffer_protected)(buffer), currentThread, f);
       
   @*/
   {
+    //@ close buffer_protected(buffer)();
     mutex_cond_wait(buffer->cond_can_push, buffer->mutex);
+    //@ open buffer_protected(buffer)();
   }
   
   bool was_empty = ring_buffer_is_empty(buffer->ring_buffer);
@@ -103,20 +110,23 @@ int pop(struct buffer *buffer)
 //@ ensures [f]buffer(buffer);
 {
   //@ open buffer(buffer);
+  //@ assert [f]buffer->mutex |-> ?mutex;
   mutex_acquire(buffer->mutex);
   //@ open buffer_protected(buffer)();
   while (ring_buffer_is_empty(buffer->ring_buffer))
   /*@ invariant
       buffer->ring_buffer |-> ?ring_buffer
-      &*& [f]buffer->mutex |-> ?mutex
+      &*& [f]buffer->mutex |-> mutex
       &*& ring_buffer(ring_buffer, ?size, ?contents)
-      &*& buffer->cond_can_pop |-> ?cond_can_pop
-      &*& mutex_cond(cond_can_pop)
+      &*& [f]buffer->cond_can_pop |-> ?cond_can_pop
+      &*& [f]mutex_cond(cond_can_pop, mutex)
       &*& mutex_held(mutex, (buffer_protected)(buffer), currentThread, f);
       
   @*/
   {
+    //@ close buffer_protected(buffer)();
     mutex_cond_wait(buffer->cond_can_pop, buffer->mutex);
+    //@ open buffer_protected(buffer)();
   }
   
   bool was_full = ring_buffer_is_full(buffer->ring_buffer);
