@@ -43,14 +43,14 @@ void mutex_dispose(struct mutex *mutex);
 
 // Condition variable, see e.g. pthread_cond_wait(3).
 struct mutex_cond;
-//@ predicate mutex_cond(struct mutex_cond *cond, struct mutex *mutex);
+//@ predicate mutex_cond(struct mutex_cond *cond; struct mutex *mutex);
 
 //@ predicate create_mutex_cond_ghost_args(struct mutex *mutex) = emp;
 struct mutex_cond *create_mutex_cond();
     //@ requires create_mutex_cond_ghost_args(?mutex);
     //@ ensures result != 0 &*& mutex_cond(result, mutex);
 
-void mutex_cond_destroy(struct mutex_cond *cond);
+void mutex_cond_dispose(struct mutex_cond *cond);
     //@ requires mutex_cond(cond, _);
     //@ ensures true;
 

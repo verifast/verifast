@@ -1,10 +1,11 @@
 #include <malloc.h>
 #include <stdlib.h> // abort()
+//@ #include <ghost_cells.gh>
 
 /**
  * Motivating example for in-memory i/o.
  *
- * (Currently only memory-safety is verified to test condition variables)
+ * (Currently no i/o style here)
  */
 
 #include "../../../vstte2012/problem3/problem3.h" // Ring buffer
@@ -17,29 +18,35 @@ struct buffer {
   struct mutex_cond *cond_can_pop;
 };
 
-/*@
 
-predicate_ctor buffer_protected(struct buffer *buffer)() =
+/*@
+predicate_ctor buffer_protected(struct buffer *buffer, int id_to_read, int id_to_write)() =
   buffer->ring_buffer |-> ?ring_buffer
-  &*& ring_buffer(ring_buffer, ?size, ?contents)  
+  &*& ring_buffer(ring_buffer, ?size, ?contents)
+  
+  &*& [1/2]ghost_cell<list<int> >(id_to_read, ?to_read)
+  &*& [1/2]ghost_cell<list<int> >(id_to_write, ?to_write)
+  &*& exists<list<int> >(?read)
+  &*& {1,2,3,4,5,6,7,8,9,10} == append(read, append(contents, to_write))
+  &*& to_read == append(contents, to_write)
 ;
 
-predicate buffer(struct buffer *buffer) =
+predicate buffer(struct buffer *buffer, int id_to_read, int id_to_write;) =
   buffer-> mutex|-> ?mutex
-  &*& mutex(mutex, ((buffer_protected)(buffer)))
+  &*& mutex(mutex, ((buffer_protected)(buffer, id_to_read, id_to_write)))
   &*& buffer->cond_can_push |-> ?cond_can_push
   &*& mutex_cond(cond_can_push, mutex)
   &*& buffer->cond_can_pop |-> ?cond_can_pop
   &*& mutex_cond(cond_can_pop, mutex)
-
+  
   &*& malloc_block_buffer(buffer);
   
   
 @*/
 
-struct buffer *setup(int size)
-//@ requires true &*& size > 0 &*& size * sizeof(int) < INT_MAX;
-//@ ensures result == 0 ? emp : buffer(result);
+struct buffer *create_buffer(int size)
+//@ requires true &*& size > 0 &*& size * sizeof(int) < INT_MAX &*& ghost_cell<list<int> >(?id_to_write, {1,2,3,4,5,6,7,8,9,10});
+//@ ensures result == 0 ? ghost_cell(id_to_write, {1,2,3,4,5,6,7,8,9,10}) : buffer(result, ?id_to_read, id_to_write) &*& [1/2]ghost_cell(id_to_write, {1,2,3,4,5,6,7,8,9,10}) &*& [1/2]ghost_cell(id_to_read, {1,2,3,4,5,6,7,8,9,10});
 {
   struct buffer *buffer = malloc(sizeof(struct buffer));
   if (buffer == 0){
@@ -51,9 +58,10 @@ struct buffer *setup(int size)
     return 0;
   }
   buffer->ring_buffer = ring_buffer;
-  
-  //@ close create_mutex_ghost_arg(buffer_protected(buffer));
-  //@ close buffer_protected(buffer)();
+  //@ int id_to_read = create_ghost_cell({1,2,3,4,5,6,7,8,9,10});
+  //@ close create_mutex_ghost_arg(buffer_protected(buffer, id_to_read, id_to_write));
+  //@ close exists<list<int> >(nil);
+  //@ close buffer_protected(buffer, id_to_read, id_to_write)();
   buffer->mutex = create_mutex();
   //@ close create_mutex_cond_ghost_args(buffer->mutex);
   buffer->cond_can_push = create_mutex_cond();
@@ -62,19 +70,32 @@ struct buffer *setup(int size)
   
 
   return buffer;
-  //@ close buffer(buffer);
+  //@ close buffer(buffer, id_to_read, id_to_write);
+}
+
+void buffer_dispose(struct buffer *buffer)
+//@ requires buffer(buffer, ?id_to_read, ?id_to_write);
+//@ ensures [1/2]ghost_cell<list<int> >(id_to_write, _) &*& [1/2]ghost_cell<list<int> >(id_to_read, _);
+{
+  //@ open buffer(_, _, _);
+  mutex_cond_dispose(buffer->cond_can_push);
+  mutex_cond_dispose(buffer->cond_can_pop);
+  mutex_dispose(buffer->mutex);
+  //@ open buffer_protected(buffer, id_to_read, id_to_write)();
+  ring_buffer_dispose(buffer->ring_buffer);
+  free(buffer);
 }
 
 
 /** add to end of queue */
 void push(struct buffer *buffer, int x)
-//@ requires [?f]buffer(buffer);
-//@ ensures [f]buffer(buffer);
+//@ requires [?f]buffer(buffer, ?id_to_read, ?id_to_write) &*& [1/2]ghost_cell<list<int> >(id_to_write, ?to_write) &*& head(to_write) == x &*& to_write != nil;
+//@ ensures [f]buffer(buffer, id_to_read, id_to_write) &*& [1/2]ghost_cell(id_to_write, tail(to_write));
 {
-  //@ open buffer(buffer);
+  //@ open buffer(buffer, _, _);
   //@ assert [f]buffer->mutex |-> ?mutex;
   mutex_acquire(buffer->mutex);
-  //@ open buffer_protected(buffer)();
+  //@ open buffer_protected(buffer, id_to_read, id_to_write)();
   while (ring_buffer_is_full(buffer->ring_buffer))
   /*@ invariant
       buffer->ring_buffer |-> ?ring_buffer
@@ -82,37 +103,49 @@ void push(struct buffer *buffer, int x)
       &*& ring_buffer(ring_buffer, ?size, ?contents)
       &*& [f]buffer->cond_can_push |-> ?cond_can_push
       &*& [f]mutex_cond(cond_can_push, mutex)
-      &*& mutex_held(mutex, (buffer_protected)(buffer), currentThread, f);
+      &*& mutex_held(mutex, (buffer_protected)(buffer, id_to_read, id_to_write), currentThread, f)
+      &*& [1/2]ghost_cell(id_to_read, ?to_read)
+      &*& [1/2]ghost_cell(id_to_write, to_write)
+      &*& [1/2]ghost_cell(id_to_write, to_write)
+      &*& exists<list<int> >(?read)
+      &*& {1,2,3,4,5,6,7,8,9,10} == append(read, append(contents, to_write))
+      &*& to_read == append(contents, to_write)
+      ;
       
   @*/
   {
-    //@ close buffer_protected(buffer)();
+    //@ close buffer_protected(buffer, id_to_read, id_to_write)();
     mutex_cond_wait(buffer->cond_can_push, buffer->mutex);
-    //@ open buffer_protected(buffer)();
+    //@ open buffer_protected(buffer, id_to_read, id_to_write)();
   }
   
   bool was_empty = ring_buffer_is_empty(buffer->ring_buffer);
-  
+
   ring_buffer_push(buffer->ring_buffer, x);
-  
+
   if (was_empty){
     mutex_cond_signal(buffer->cond_can_pop);
   }
   
-  //@ close buffer_protected(buffer)();
+  //@ assert to_write != nil;
+  //@ assume (append(contents, to_write) == append(append(contents, cons(head(to_write),nil)), tail(to_write)));
+  
+  //@ ghost_cell_mutate(id_to_write, tail(to_write));
+
+  //@ close buffer_protected(buffer, id_to_read, id_to_write)();
   mutex_release(buffer->mutex);
-  //@ close [f]buffer(buffer);
+  //@ close [f]buffer(buffer, id_to_read, id_to_write);
 }
 
 /** read from beginning of queue (and remove that element) */
 int pop(struct buffer *buffer)
-//@ requires [?f]buffer(buffer);
-//@ ensures [f]buffer(buffer);
+//@ requires [?f]buffer(buffer, ?id_to_read, ?id_to_write) &*& [1/2]ghost_cell<list<int> >(id_to_read, ?to_read) &*& to_read != nil;
+//@ ensures [f]buffer(buffer, id_to_read, id_to_write) &*&  [1/2]ghost_cell(id_to_read, tail(to_read)) &*& result == head(to_read);
 {
-  //@ open buffer(buffer);
+  //@ open buffer(buffer, _, _);
   //@ assert [f]buffer->mutex |-> ?mutex;
   mutex_acquire(buffer->mutex);
-  //@ open buffer_protected(buffer)();
+  //@ open buffer_protected(buffer, id_to_read, id_to_write)();
   while (ring_buffer_is_empty(buffer->ring_buffer))
   /*@ invariant
       buffer->ring_buffer |-> ?ring_buffer
@@ -120,75 +153,145 @@ int pop(struct buffer *buffer)
       &*& ring_buffer(ring_buffer, ?size, ?contents)
       &*& [f]buffer->cond_can_pop |-> ?cond_can_pop
       &*& [f]mutex_cond(cond_can_pop, mutex)
-      &*& mutex_held(mutex, (buffer_protected)(buffer), currentThread, f);
+      &*& [1/2]ghost_cell(id_to_read, to_read)
+      &*& [1/2]ghost_cell(id_to_read, to_read)
+      &*& [1/2]ghost_cell(id_to_write, ?to_write)
+      &*& exists<list<int> >(?read)
+      &*& {1,2,3,4,5,6,7,8,9,10} == append(read, append(contents, to_write))
+      &*& to_read == append(contents, to_write)
+      &*& mutex_held(mutex, (buffer_protected)(buffer, id_to_read, id_to_write), currentThread, f);
       
   @*/
   {
-    //@ close buffer_protected(buffer)();
+    //@ close buffer_protected(buffer, id_to_read, id_to_write)();
     mutex_cond_wait(buffer->cond_can_pop, buffer->mutex);
-    //@ open buffer_protected(buffer)();
+    //@ open buffer_protected(buffer, id_to_read, id_to_write)();
   }
   
   bool was_full = ring_buffer_is_full(buffer->ring_buffer);
   
   int x = ring_buffer_pop(buffer->ring_buffer);
   
+  //@ assert contents != nil;
+  //@ assert x == head(contents);
+  //@ assume (x == head (append(contents, to_write)));
+  
   if (was_full){
     mutex_cond_signal(buffer->cond_can_push);
   }
   
-  //@ close buffer_protected(buffer)();
+  //@ open exists(read);
+  //@ close exists<list<int> >(append(read, cons(x, nil)));
+  
+  //@ assert contents != nil;
+  //@ assume(append(read, append(contents, to_write)) == append(append(read, cons(head(contents), nil)), append(tail(contents), to_write)));
+  
+  //@ assume(tail(append(contents, to_write)) == append(tail(contents), to_write));
+  
+  //@ ghost_cell_mutate(id_to_read, tail(to_read));
+  
+  //@ close buffer_protected(buffer, id_to_read, id_to_write)();
   mutex_release(buffer->mutex);
-  //@ close [f]buffer(buffer);
+  //@ close [f]buffer(buffer, id_to_read, id_to_write);
   return x;
 }
 
-//@ predicate_family_instance thread_run_data(producer)(struct buffer *buffer) = [?f]buffer(buffer);
+/*@ predicate_family_instance thread_run_pre(producer)(struct buffer *buffer, any p) =
+  [1/2]buffer(buffer, ?id_to_read, ?id_to_write) &*& [1/2]ghost_cell(id_to_write, {1,2,3,4,5,6,7,8,9,10})
+  &*& p == pair(id_to_read, id_to_write);
+@*/
+/*@ predicate_family_instance thread_run_post(producer)(struct buffer *buffer, any p) =
+  [1/2]buffer(buffer, ?id_to_read, ?id_to_write) &*& [1/2]ghost_cell<list<int> >(id_to_write, {})
+  &*& p == pair(id_to_read, id_to_write);
+@*/
 
-void producer(struct buffer *buffer) //@ : thread_run
-//@ requires thread_run_data(producer)(buffer);
-//@ ensures false;
+void producer(struct buffer *buffer) //@ : thread_run_joinable
+//@ requires thread_run_pre(producer)(buffer, ?info) &*& lockset(currentThread, nil);
+//@ ensures thread_run_post(producer)(buffer, info) &*& lockset(currentThread, nil);
 {
-  int x = 0;
-  //@ open thread_run_data(producer)(buffer);
-  while(true)
-  //@ invariant [?f]buffer(buffer);
-  {
-    push(buffer, x);
-    if (x == INT_MAX){
-      x = 0;
-    }else{
-      x++;
-    }
-  }
+  int x = 1;
+  //@ open thread_run_pre(producer)(buffer, info);
+  
+  // let's save on proving list properties by unrolling the loop. 
+  push(buffer, x);
+  x++;
+  
+  push(buffer, x);
+  x++;
+  
+  push(buffer, x);
+  x++;
+  
+  push(buffer, x);
+  x++;
+  
+  push(buffer, x);
+  x++;
+  
+  push(buffer, x);
+  x++;
+  
+  push(buffer, x);
+  x++;
+  
+  push(buffer, x);
+  x++;
+  
+  push(buffer, x);
+  x++;
+
+  push(buffer, x);
+  x++;
+  
+  //@ close thread_run_post(producer)(buffer, info);
 }
 
 int consumer(struct buffer *buffer, int count)
-//@ requires [?f]buffer(buffer);
-//@ ensures [f]buffer(buffer);
+//@ requires [?f]buffer(buffer, ?id_to_read, ?id_to_write) &*& [1/2]ghost_cell(id_to_read, {1,2,3,4,5,6,7,8,9,10});
+//@ ensures [f]buffer(buffer, id_to_read, id_to_write) &*& [1/2]ghost_cell<list<int> >(id_to_read, {}) &*& result == 55;
 {
   int i;
   int sum = 0;
-  for (i = 0; i < count ; i++)
-  //@ invariant [f]buffer(buffer);
-  {
-    int pop_result = pop(buffer);
-    bool has_overflow = (pop_result > 0 && sum > INT_MAX - pop_result)
-                     || (pop_result < 0 && sum < INT_MIN - pop_result);
-    if (has_overflow){
-      abort();
-    }
-    sum = sum + pop_result;
-  }
+  
+  int pop_result = pop(buffer);
+  sum = sum + pop_result;
+  
+  pop_result = pop(buffer);
+  sum = sum + pop_result;
+  
+  pop_result = pop(buffer);
+  sum = sum + pop_result;
+  
+  pop_result = pop(buffer);
+  sum = sum + pop_result;
+  
+  pop_result = pop(buffer);
+  sum = sum + pop_result;
+  
+  pop_result = pop(buffer);
+  sum = sum + pop_result;
+  
+  pop_result = pop(buffer);
+  sum = sum + pop_result;
+  
+  pop_result = pop(buffer);
+  sum = sum + pop_result;
+  
+  pop_result = pop(buffer);
+  sum = sum + pop_result;
+  
+  pop_result = pop(buffer);
+  sum = sum + pop_result;
+  
   return sum;
 }
-
+/*
 struct cat_data{
   struct buffer *buffer1;
   struct buffer *buffer2;
 };
-
-/*@
+*/
+/* @
 predicate cat_data(struct cat_data *cat_data) =
   cat_data->buffer1 |-> ?buffer1 
   &*& cat_data->buffer2 |-> ?buffer2
@@ -197,8 +300,9 @@ predicate cat_data(struct cat_data *cat_data) =
   &*& malloc_block_cat_data(cat_data);
 @*/
 
-//@ predicate_family_instance thread_run_data(cat)(struct cat_data *cat_data) = cat_data(cat_data);
+// @ predicate_family_instance thread_run_data(cat)(struct cat_data *cat_data) = cat_data(cat_data);
 
+/*
 void cat(struct cat_data *cat_data) //@ : thread_run
 //@ requires thread_run_data(cat)(cat_data);
 //@ ensures false; // non-terminating
@@ -213,48 +317,28 @@ void cat(struct cat_data *cat_data) //@ : thread_run
     //@ close cat_data(cat_data);
   }
 }
+*/
 
 int main()
 //@ requires true;
-//@ ensures true;
+//@ ensures result == 55;
 {
-  struct buffer *buffer = setup(64);
+  //@ int id_to_write = create_ghost_cell({1,2,3,4,5,6,7,8,9,10});
+  struct buffer *buffer = create_buffer(64);
+  //@ assert [1/2]ghost_cell(id_to_write, _) &*& [1/2]ghost_cell(?id_to_read, _);
   if (buffer == 0){
-    return -1;
-  }
-  //@ split_fraction buffer(buffer) by 1/2;
-  //@ close thread_run_data(producer)(buffer);
-  thread_start(producer, buffer);
-  int result = consumer(buffer, 100);
-  // this is a bit dirty...
-  //@ leak [1/2]buffer(buffer);
-  return result;
-}
-
-int main_with_cat()
-//@ requires true;
-//@ ensures true;
-{
-  struct buffer *buffer1 = setup(16);
-  struct buffer *buffer2 = setup(48);
-  struct cat_data *cat_data = malloc(sizeof(struct cat_data));
-  if (buffer1 == 0 || buffer2 == 0 || cat_data == 0){
     abort();
   }
-  
-  //@ split_fraction buffer(buffer1) by 1/2;
-  //@ close thread_run_data(producer)(buffer1);
-  thread_start(producer, buffer1);
-  
-  cat_data->buffer1 = buffer1;
-  cat_data->buffer2 = buffer2;
-  //@ split_fraction buffer(buffer2) by 1/2;
-  //@ close cat_data(cat_data);
-  //@ close thread_run_data(cat)(cat_data);
-  thread_start(cat, cat_data);
-  
-  int result = consumer(buffer2, 100);
-  // this is a bit dirty...
-  //@ leak [1/2]buffer(buffer2);
+  //@ split_fraction buffer(buffer, _, _) by 1/2;
+  //@ close thread_run_pre(producer)(buffer, pair(id_to_read, id_to_write));
+  struct thread *thread = thread_start_joinable(producer, buffer);
+  int result = consumer(buffer, 100);
+  thread_join(thread);
+  //@ open thread_run_post(producer)(buffer, pair(id_to_read, id_to_write));
+  //@ assert [1/2]buffer(buffer, id_to_read, id_to_write) &*& [1/2]buffer(buffer, id_to_read, id_to_write);
+  //@ merge_fractions buffer(buffer, id_to_read, id_to_write);
+  buffer_dispose(buffer);
   return result;
+  //@ ghost_cell_leak(id_to_read);
+  //@ ghost_cell_leak(id_to_write);
 }
