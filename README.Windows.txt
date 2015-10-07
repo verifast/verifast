@@ -5,11 +5,15 @@ This builds native Win32 VeriFast executables that do not depend on Cygwin, but 
 process requires Cygwin.
 
 - Install the "Cygwin-based native Win32 port" of OCaml by running the installer linked from the OCaml "Latest release" web page at http://caml.inria.fr/.
+  URL: http://gallium.inria.fr/~protzenk/caml-installer/ocaml-4.02.3-i686-mingw64-installer4.exe
   Install all optional components, including Cygwin itself. (If Cygwin is already installed, this will just install any missing Cygwin packages, including
   the gcc-mingw Cygwin-to-MinGW cross-compiler.
-  To keep Cygwin from messing with Windows file permissions, edit /etc/fstab and add ",noacl" to the mount options of each NTFS mount.
+  To keep Cygwin from messing with Windows file permissions, edit /etc/fstab and add ",noacl" to the mount options of each NTFS mount (including in particular the /cygdrive mount).
   At this point, you should be able to successfully build VeriFast in its default configuration (no Z3, no IDE)
   and successfully run the test suite. (Test cases that require Z3 will be skipped).
+  To do so, run
+
+    cd src; make WITHOUT_LABLGTK=yes
 
 To enable Z3 support:
 - Build and install camlidl.
@@ -32,7 +36,8 @@ tar xzf Z3-1.3.6-win.tgz
 cd Z3-1.3.6
 cp -R ocaml ocaml-clean
 cd ocaml
-ocamlopt.opt -a -o z3.cmxa -ccopt "-I ../include" -ccopt "$PWD/../bin/z3.lib" z3_stubs.c z3.mli z3.ml -cclib -lole32 -cclib -lcamlidl
+ocamlopt.opt -ccopt "-I ../include" -c z3_stubs.c
+ocamlopt.opt -a -o z3.cmxa -ccopt `cygpath -m "$PWD/../bin/z3.lib"` z3_stubs.o z3.mli z3.ml -cclib -lole32 -cclib -lcamlidl
 
 To test:
 cd ../examples/ocaml
@@ -58,20 +63,22 @@ mkdir gtk
 cd gtk
 unzip ../gtk+-bundle_2.24.10-20120208_win32.zip
 cd ..
-wget https://forge.ocamlcore.org/frs/download.php/1261/lablgtk-2.18.0.tar.gz
-tar xzf lablgtk-2.18.0.tar.gz
-cd lablgtk-2.18.0
+wget https://forge.ocamlcore.org/frs/download.php/1261/lablgtk-2.18.3.tar.gz
+tar xzf lablgtk-2.18.3.tar.gz
+mv lablgtk-2.18.0 lablgtk-2.18.3 # Bug in lablgtk-2.18.3.tar.gz: the directory is still called lablgtk-2.18.0
+cd lablgtk-2.18.3
 
 Problem: the pkg-config program that ships with Gtk produces CRLF-terminated lines. The Cygwin tools choke on this.
-Solution: create a wrapper that transforms the DOS lines to Unix lines using the Cygwin d2u program:
+Solution: create a wrapper that transforms the DOS lines to Unix lines using the Cygwin conv program:
 
 Create file pkg-config with the following contents:
 #!/bin/bash
 set -o pipefail # A pipe fails if any component fails
-/cygdrive/c/gtk/bin/pkg-config $* | d2u
+/cygdrive/c/gtk/bin/pkg-config $* | conv --dos2unix
 
 export PATH=$PWD:/usr/bin:/cygdrive/c/OCaml4010/bin:/cygdrive/c/gtk/bin
 ./configure
+export CAMLP4LIB=C:/OCaml4023/lib/camlp4
 make
 make opt
 In src/Makefile, after the line
@@ -86,6 +93,12 @@ To test:
 cd examples
 ocaml -I +site-lib/lablgtk2 lablgtk.cma gtkInit.cmo hello.ml
 ocaml -I +site-lib/lablgtk2 lablgtk.cma gtkInit.cmo testgtk.ml
+
+Note: to run vfide, you first need to add the GTK bin directory to your PATH. If you try to run vfide from the Cygwin terminal without having GTK in your PATH, it will give you the error message
+
+    C:/VeriFast/workdir/bin/vfide.exe: error while loading shared libraries: Z3.dll: cannot open shared object file: No such file or directory
+
+even if Z3.dll is in your PATH and the problem is really that the GTK DLLs are not in your PATH!
 
 Getting gtksourceview2 support:
 wget ftp://ftp.gnome.org/pub/gnome/binaries/win32/gtksourceview/2.10/gtksourceview-2.10.0.zip
