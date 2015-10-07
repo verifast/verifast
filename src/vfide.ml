@@ -625,7 +625,11 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       method useSiteTags = useSiteTags
     end in
     ignore $. buffer#connect#modified_changed (fun () ->
-      updateBufferTitle tab
+      updateBufferTitle tab;
+      (* should be "no color" (i.e. theme's default), but the API does
+         not seem to provide it. *)
+      messageEntry#coerce#misc#modify_base [`NORMAL, `NAME "gray"];
+      messageEntry#coerce#misc#modify_text [`NORMAL, `NAME "black"]
     );
     ignore $. buffer#connect#insert_text (fun iter text ->
       if not !ignore_text_changes then
