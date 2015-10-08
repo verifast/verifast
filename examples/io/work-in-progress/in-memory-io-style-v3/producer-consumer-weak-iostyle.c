@@ -381,39 +381,51 @@ int consumer(struct buffer *buffer, int count)
   //@ open ops(_, _, _, _, _);
   return sum;
 }
-/*
-struct cat_data{
-  struct buffer *buffer1;
-  struct buffer *buffer2;
-};
-*/
-/* @
-predicate cat_data(struct cat_data *cat_data) =
-  cat_data->buffer1 |-> ?buffer1 
-  &*& cat_data->buffer2 |-> ?buffer2
-  &*& [?f1]buffer(buffer1)
-  &*& [?f2]buffer(buffer2)
-  &*& malloc_block_cat_data(cat_data);
+
+/*@
+lemma void create_ops(int id_text, int id_op)
+requires [_]ghost_cell<list<int> >(id_text, {1,2,3,4,5,6,7,8,9,10});
+ensures ops(id_text, id_op, 0, {1,2,3,4,5,6,7,8,9,10}, 10);
+{
+  // let's save on writing loop invariants once more.
+  int i = 0;
+  
+  close op(id_text, id_op, i, i+1, i+1);
+  i=i+1;
+  close op(id_text, id_op, i, i+1, i+1);
+  i=i+1;
+  close op(id_text, id_op, i, i+1, i+1);
+  i=i+1;
+  close op(id_text, id_op, i, i+1, i+1);
+  i=i+1;
+  close op(id_text, id_op, i, i+1, i+1);
+  i=i+1;
+  close op(id_text, id_op, i, i+1, i+1);
+  i=i+1;
+  close op(id_text, id_op, i, i+1, i+1);
+  i=i+1;
+  close op(id_text, id_op, i, i+1, i+1);
+  i=i+1;
+  close op(id_text, id_op, i, i+1, i+1);
+  i=i+1;
+  close op(id_text, id_op, i, i+1, i+1);
+  i=i+1;
+  assert i == 10;
+  
+  close ops(id_text, id_op, 10, {}, 10);
+  close ops(id_text, id_op, 9, {10}, 10);  
+  close ops(id_text, id_op, 8, {9,10}, 10);
+  close ops(id_text, id_op, 7, {8,9,10}, 10);
+  close ops(id_text, id_op, 6, {7,8,9,10}, 10);
+  close ops(id_text, id_op, 5, {6,7,8,9,10}, 10);
+  close ops(id_text, id_op, 4, {5,6,7,8,9,10}, 10);
+  close ops(id_text, id_op, 3, {4,5,6,7,8,9,10}, 10);
+  close ops(id_text, id_op, 2, {3,4,5,6,7,8,9,10}, 10);
+  close ops(id_text, id_op, 1, {2,3,4,5,6,7,8,9,10}, 10);
+  close ops(id_text, id_op, 0, {1,2,3,4,5,6,7,8,9,10}, 10);
+}
 @*/
 
-// @ predicate_family_instance thread_run_data(cat)(struct cat_data *cat_data) = cat_data(cat_data);
-
-/*
-void cat(struct cat_data *cat_data) //@ : thread_run
-//@ requires thread_run_data(cat)(cat_data);
-//@ ensures false; // non-terminating
-{
-  //@ open thread_run_data(cat)(cat_data);
-  while(true)
-  //@ invariant cat_data(cat_data);
-  {
-    //@ open cat_data(cat_data);
-    int pop_result = pop(cat_data->buffer1);
-    push(cat_data->buffer2, pop_result);
-    //@ close cat_data(cat_data);
-  }
-}
-*/
 
 int main()
 //@ requires true;
@@ -427,63 +439,8 @@ int main()
   }
   
   //@ assert buffer(_, _, ?id_read, ?id_write);
-
-  // let's save on writing loop invariants once more.
-  //@ int i = 0;
-  //@ close op(id_text, id_write, i, i+1, i+1);
-  //@ close op(id_text, id_read, i, i+1, i+1);
-  //@ i=i+1;
-  //@ close op(id_text, id_write, i, i+1, i+1);
-  //@ close op(id_text, id_read, i, i+1, i+1);
-  //@ i=i+1;
-  //@ close op(id_text, id_write, i, i+1, i+1);
-  //@ close op(id_text, id_read, i, i+1, i+1);
-  //@ i=i+1;
-  //@ close op(id_text, id_write, i, i+1, i+1);
-  //@ close op(id_text, id_read, i, i+1, i+1);
-  //@ i=i+1;
-  //@ close op(id_text, id_write, i, i+1, i+1);
-  //@ close op(id_text, id_read, i, i+1, i+1);
-  //@ i=i+1;
-  //@ close op(id_text, id_write, i, i+1, i+1);
-  //@ close op(id_text, id_read, i, i+1, i+1);
-  //@ i=i+1;
-  //@ close op(id_text, id_write, i, i+1, i+1);
-  //@ close op(id_text, id_read, i, i+1, i+1);
-  //@ i=i+1;
-  //@ close op(id_text, id_write, i, i+1, i+1);
-  //@ close op(id_text, id_read, i, i+1, i+1);
-  //@ i=i+1;
-  //@ close op(id_text, id_write, i, i+1, i+1);
-  //@ close op(id_text, id_read, i, i+1, i+1);
-  //@ i=i+1;
-  //@ close op(id_text, id_write, i, i+1, i+1);
-  //@ close op(id_text, id_read, i, i+1, i+1);
-  //@ i=i+1;
-  //@ assert i == 10;
-  
-  //@ close ops(id_text, id_write, 10, {}, 10);
-  //@ close ops(id_text, id_write, 9, {10}, 10);
-  //@ close ops(id_text, id_write, 8, {9,10}, 10);
-  //@ close ops(id_text, id_write, 7, {8,9,10}, 10);
-  //@ close ops(id_text, id_write, 6, {7,8,9,10}, 10);
-  //@ close ops(id_text, id_write, 5, {6,7,8,9,10}, 10);
-  //@ close ops(id_text, id_write, 4, {5,6,7,8,9,10}, 10);
-  //@ close ops(id_text, id_write, 3, {4,5,6,7,8,9,10}, 10);
-  //@ close ops(id_text, id_write, 2, {3,4,5,6,7,8,9,10}, 10);
-  //@ close ops(id_text, id_write, 1, {2,3,4,5,6,7,8,9,10}, 10);
-  //@ close ops(id_text, id_write, 0, {1,2,3,4,5,6,7,8,9,10}, 10);
-  //@ close ops(id_text, id_read, 10, {}, 10);
-  //@ close ops(id_text, id_read, 9, {10}, 10);
-  //@ close ops(id_text, id_read, 8, {9,10}, 10);
-  //@ close ops(id_text, id_read, 7, {8,9,10}, 10);
-  //@ close ops(id_text, id_read, 6, {7,8,9,10}, 10);
-  //@ close ops(id_text, id_read, 5, {6,7,8,9,10}, 10);
-  //@ close ops(id_text, id_read, 4, {5,6,7,8,9,10}, 10);
-  //@ close ops(id_text, id_read, 3, {4,5,6,7,8,9,10}, 10);
-  //@ close ops(id_text, id_read, 2, {3,4,5,6,7,8,9,10}, 10);
-  //@ close ops(id_text, id_read, 1, {2,3,4,5,6,7,8,9,10}, 10);
-  //@ close ops(id_text, id_read, 0, {1,2,3,4,5,6,7,8,9,10}, 10);
+  //@ create_ops(id_text, id_write);
+  //@ create_ops(id_text, id_read);
   
   //@ close thread_run_pre(producer)(buffer, thread_data(id_text, id_read, id_write, 0, 10));
   struct thread *thread = thread_start_joinable(producer, buffer);
@@ -496,4 +453,167 @@ int main()
   //@ leak token(_, _);
   //@ leak [1/2]buffer(_, _, _, _);
   //@ leak [1/2]buffer(_, _, _, _);
+}
+
+
+
+struct cat_data{
+  struct buffer *bufferA;
+  struct buffer *bufferB;
+};
+
+/*@
+inductive cat_data = cat_data(int, int, int, int);
+
+predicate cat_io(int id_textA, int id_readA, int t_readA_1, int id_textB, int id_writeB, int t_writeB_1, list<int> contents, int t_readA_2, int t_writeB_2) =
+  ops(id_textA, id_readA, t_readA_1, contents, t_readA_2)
+  &*& ops(id_textB, id_writeB, t_writeB_1, contents, t_writeB_2)
+;
+
+@*/
+
+/*@ predicate_family_instance thread_run_pre(cat)(struct cat_data *cat_data, any p) =
+  cat_data->bufferA |-> ?bufferA 
+  &*& cat_data->bufferB |-> ?bufferB
+  &*& cat_io(?id_textA, ?id_readA, ?t_readA_1, ?id_textB, ?id_writeB, ?t_writeB_1, {1,2,3,4,5,6,7,8,9,10}, ?t_readA_2, ?t_writeB_2)
+  &*& token(id_readA, t_readA_1)
+  &*& token(id_writeB, t_writeB_1)
+  &*& [1/2]buffer(bufferA, id_textA, id_readA, ?id_writeA)
+  &*& [1/2]buffer(bufferB, id_textB, ?id_readB, id_writeB)
+  &*& malloc_block_cat_data(cat_data)
+  &*& p == cat_data(id_readA, t_readA_2, id_writeB, t_writeB_2)
+;
+@*/
+/*@ predicate_family_instance thread_run_post(cat)(struct cat_data *cat_data, any p) =
+  cat_data->bufferA |-> ?bufferA
+  &*& cat_data->bufferB |-> ?bufferB
+  &*& [1/2]buffer(bufferA, ?id_textA, ?id_readA, ?id_writeA)
+  &*& [1/2]buffer(bufferB, ?id_textB, ?id_readB, ?id_writeB)
+  &*& token(id_readA, ?t_readA_2)
+  &*& token(id_writeB, ?t_writeB_2)
+  &*& malloc_block_cat_data(cat_data)
+  &*& p == cat_data(id_readA, t_readA_2, id_writeB, t_writeB_2)
+;
+@*/
+
+void cat(struct cat_data *cat_data) //@ : thread_run_joinable
+//@ requires thread_run_pre(cat)(cat_data, ?info);
+//@ ensures thread_run_post(cat)(cat_data, info);
+{
+  //@ open thread_run_pre(cat)(cat_data, info);
+ 
+  //@ open cat_io(?id_textA, _, _, ?id_textB, _, _, _, _, _);
+  
+  // Implementation chooses a buffer size of two integers.
+  
+  //@ open ops(id_textA, _, _, _, _);
+  int pop_result1 = pop(cat_data->bufferA);
+  //@ open ops(id_textA, _, _, _, _);
+  int pop_result2 = pop(cat_data->bufferA);
+  
+  //@ open ops(id_textB, _, _, _, _);
+  push(cat_data->bufferB, pop_result1);
+  //@ open ops(id_textB, _, _, _, _);
+  push(cat_data->bufferB, pop_result2);
+  
+  //@ open ops(id_textA, _, _, _, _);
+  pop_result1 = pop(cat_data->bufferA);
+  //@ open ops(id_textA, _, _, _, _);
+  pop_result2 = pop(cat_data->bufferA);
+  
+  //@ open ops(id_textB, _, _, _, _);
+  push(cat_data->bufferB, pop_result1);
+  //@ open ops(id_textB, _, _, _, _);
+  push(cat_data->bufferB, pop_result2);
+  
+  //@ open ops(id_textA, _, _, _, _);
+  pop_result1 = pop(cat_data->bufferA);
+  //@ open ops(id_textA, _, _, _, _);
+  pop_result2 = pop(cat_data->bufferA);
+  
+  //@ open ops(id_textB, _, _, _, _);
+  push(cat_data->bufferB, pop_result1);
+  //@ open ops(id_textB, _, _, _, _);
+  push(cat_data->bufferB, pop_result2);
+  
+  //@ open ops(id_textA, _, _, _, _);
+  pop_result1 = pop(cat_data->bufferA);
+  //@ open ops(id_textA, _, _, _, _);
+  pop_result2 = pop(cat_data->bufferA);
+  
+  //@ open ops(id_textB, _, _, _, _);
+  push(cat_data->bufferB, pop_result1);
+  //@ open ops(id_textB, _, _, _, _);
+  push(cat_data->bufferB, pop_result2);
+  
+  //@ open ops(id_textA, _, _, _, _);
+  pop_result1 = pop(cat_data->bufferA);
+  //@ open ops(id_textA, _, _, _, _);
+  pop_result2 = pop(cat_data->bufferA);
+  
+  //@ open ops(id_textB, _, _, _, _);
+  push(cat_data->bufferB, pop_result1);
+  //@ open ops(id_textB, _, _, _, _);
+  push(cat_data->bufferB, pop_result2);
+  
+  //@ open ops(id_textA, _, _, _, _);
+  //@ open ops(id_textB, _, _, _, _);
+  
+  //@ close thread_run_post(cat)(cat_data, info);
+}
+
+/*
+ * producer writes {1,2,3,4,5,6,7,8,9,10} to buffer A
+ * cat reads from buffer A and writes to buffer B. Cat can do buffering.
+ * Consumer reads from buffer B and sums up the numbers it reads.
+ */
+int main_with_cat()
+//@ requires true;
+//@ ensures result == 55;
+{
+  //@ int id_text = create_ghost_cell({1,2,3,4,5,6,7,8,9,10});
+  //@ leak ghost_cell(id_text, _);
+  struct buffer *bufferA = create_buffer(2);
+  struct buffer *bufferB = create_buffer(2);
+  if (bufferA == 0 || bufferB == 0){
+    abort();
+  }
+  
+  //@ assert buffer(bufferA, _, ?id_readA, ?id_writeA);
+  //@ assert buffer(bufferB, _, ?id_readB, ?id_writeB);
+  
+  // producer:
+  //@ create_ops(id_text, id_writeA);
+  //@ close thread_run_pre(producer)(bufferA, thread_data(id_text, id_readA, id_writeA, 0, 10));
+  
+  // cat:
+  //@ create_ops(id_text, id_readA);
+  //@ create_ops(id_text, id_writeB);
+  //@ close cat_io(id_text, id_readA, 0, id_text, id_writeB, 0, {1,2,3,4,5,6,7,8,9,10}, ?t_readA_2, ?t_writeB_2);
+  struct cat_data *cat_data = malloc(sizeof(struct cat_data));
+  if (cat_data == 0){
+    abort();
+  }
+  cat_data -> bufferA = bufferA;
+  cat_data -> bufferB = bufferB;
+  //@ close thread_run_pre(cat)(cat_data, cat_data(id_readA, t_readA_2, id_writeB, t_writeB_2));
+  
+  // consumer:
+  //@ create_ops(id_text, id_readB);
+  
+  // start executing
+  struct thread *thread_producer = thread_start_joinable(producer, bufferA);
+  struct thread *thread_cat = thread_start_joinable(cat, cat_data);
+  int result = consumer(bufferB, 100);
+  
+  thread_join(thread_producer);
+  thread_join(thread_cat);
+  //@ open thread_run_post(producer)(bufferA, _);
+  return result;
+  //@ leak exists(_);
+  //@ leak token(_, _);
+  //@ leak token(_, _);
+  //@ leak [1/2]buffer(_, _, _, _);
+  //@ leak [1/2]buffer(_, _, _, _);
+  //@ leak thread_run_post(cat)(_, _);
 }
