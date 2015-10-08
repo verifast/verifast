@@ -76,15 +76,16 @@ fixpoint option<place> get_parent_of_parent(place t){
 }
 predicate join(place t1, place t2; place t3) =
   t3 == place_join(get_parent_of_parent(t1), t1, t2)
+  &*& get_parent(t1) == get_parent(t2) // if you want postcondition-style i/o, you'll need to add this to precondition of join lemma.
 ;
 
 lemma void split(place t1);
-  requires token(?py, t1);
-  ensures token(py, place_split_left(t1)) &*& token(py, place_split_right(t1));
+  requires token(?py, t1) &*& split(t1, ?t2, ?t3);
+  ensures token(py, t2) &*& token(py, t3);
 
 lemma void join(place t1, place t2);
-  requires token(?py, t1) &*& token(py, t2) &*& get_parent(t1) == get_parent(t2);
-  ensures token(py, place_join(get_parent_of_parent(t1), t1, t2));
+  requires token(?py, t1) &*& token(py, t2) &*& join(t1, t2, ?t3);
+  ensures token(py, t3);
 
 
 // -- IO operations
@@ -93,8 +94,8 @@ predicate io(place t1, fixpoint(int,int,bool) op; place t2) =
 ;
 
 lemma void do_io(fixpoint(int state1, int state2, bool) op, int state2);
-  requires token(?py, ?t1) &*& invar_low(py, ?state) &*& op(state, state2) == true;
-  ensures token(py, place_io(t1, op)) &*& invar_low(py, state2);
+  requires token(?py, ?t1) &*& invar_low(py, ?state) &*& io(t1, op, ?t2) &*& op(state, state2) == true;
+  ensures token(py, t2) &*& invar_low(py, state2);
 @*/
 
 
@@ -104,36 +105,44 @@ int buffer;
 //@ predicate my_invar_phys(int x) = buffer |-> x;
 
 /*@
-fixpoint bool add_something_io(int add_this, int state1, int state2){
+fixpoint bool add_something_fp(int add_this, int state1, int state2){
   return state2 == state1 + add_this;
 }
+
+predicate add_something_io(place t1, int add_this, place t2) =
+  io(t1, (add_something_fp)(add_this), t2);
 @*/
 
 void add_something(int add_this)
-//@ requires invar_high(my_invar_phys, ?state) &*& token(my_invar_phys, ?t1);
-//@ ensures invar_high(my_invar_phys, ?state2) &*& token(my_invar_phys, place_io(t1, (add_something_io)(add_this) ) );
+//@ requires invar_high(my_invar_phys, ?state) &*& token(my_invar_phys, ?t1) &*& add_something_io(t1, add_this, ?t2);
+//@ ensures invar_high(my_invar_phys, ?state2) &*& token(my_invar_phys, t2);
 {
   //@ open invar_high(_, _);
   //@ open my_invar_phys(_);
   buffer = buffer + add_this;
   //@ close my_invar_phys(_);
-  //@ do_io((add_something_io)(add_this), state + add_this);
+  //@ open add_something_io(_, _, _);
+  //@ do_io((add_something_fp)(add_this), state + add_this);
   //@ close invar_high(_, _);
 }
 
 
 /*@
-fixpoint bool make_minimum_io(int min, int state1, int state2){
+fixpoint bool make_minimum_fp(int min, int state1, int state2){
   return
     state2 == state1 && state1 >= min
     || state2 == min && state1 < min
   ;
 }
+
+predicate make_minimum_io(place t1, int min, place t2) =
+  io(t1, (make_minimum_fp)(min), t2);
+
 @*/
 
 void make_minimum(int min)
-//@ requires invar_high(my_invar_phys, ?state) &*& token(my_invar_phys, ?t1);
-//@ ensures invar_high(my_invar_phys, ?state2) &*& token(my_invar_phys, place_io(t1, (make_minimum_io)(min) ) );
+//@ requires invar_high(my_invar_phys, ?state) &*& token(my_invar_phys, ?t1) &*& make_minimum_io(t1, min, ?t2);
+//@ ensures invar_high(my_invar_phys, ?state2) &*& token(my_invar_phys, t2);
 {
   //@ open invar_high(_, _);
   //@ open my_invar_phys(_);
@@ -142,7 +151,8 @@ void make_minimum(int min)
   }
   //@ int buffer_contents = buffer;
   //@ close my_invar_phys(_);
-  //@ do_io((make_minimum_io)(min), buffer_contents);
+  //@ open make_minimum_io(_, _, _);
+  //@ do_io((make_minimum_fp)(min), buffer_contents);
   //@ close invar_high(_, _);
 }
 
@@ -150,18 +160,14 @@ void make_minimum(int min)
 
 void splitjoin_example(int add_this, int min)
 /*@ requires invar_high(my_invar_phys, ?state) &*& token(my_invar_phys, ?t1)
-  &*& split(t1, ?t_add_1, ?t_min_1) // for memory-based i/o you can also put it in the postcondition if you like.
-    &*& io(t_add_1, (add_something_io)(add_this), ?t_add_2)
-    &*& io(t_min_1, (make_minimum_io)(min), ?t_min_2)
+  &*& split(t1, ?t_add_1, ?t_min_1)
+    &*& add_something_io(t_add_1, add_this, ?t_add_2)
+    &*& make_minimum_io(t_min_1, min, ?t_min_2)
   &*& join(t_add_2, t_min_2, ?t2);
 @*/
 //@ ensures invar_high(my_invar_phys, ?state2) &*& token(my_invar_phys, t2);
 {
   //@ assert token(my_invar_phys, t1);
-  //@ open io(_, _, _);
-  //@ open io(_, _, _);
-  //@ open split(_, _, _);
-  //@ open join(_, _, _);
   //@ split(t1);
 
   //@ close tokenwrap(my_invar_phys, t_min_1);
@@ -184,6 +190,7 @@ void add_something_no_io(int add_this)
   //@ close my_invar_phys(startvalue);
   //@ create_session(startvalue, my_invar_phys);
   //@ assert token(_, ?t1);
+  //@ close add_something_io(t1, add_this, _);
   add_something(add_this);
   //@ assert token(_, ?t2);
   //@ assert invar_high(_, ?state2);
@@ -205,8 +212,8 @@ void splitjoin_example_no_io()
   
   //@ assert token(my_invar_phys, ?t1);
   //@ close split(t1, ?t_add_1, ?t_min_1);
-  //@ close io(t_add_1, (add_something_io)(5), ?t_add_2);
-  //@ close io(t_min_1, (make_minimum_io)(20), ?t_min_2);
+  //@ close add_something_io(t_add_1, 5, ?t_add_2);
+  //@ close make_minimum_io(t_min_1, 20, ?t_min_2);
   //@ close join(t_add_2, t_min_2, ?t2);
   splitjoin_example(5, 20);
   
