@@ -82,7 +82,7 @@ int gcm_auth_decrypt(gcm_context *ctx, size_t length,
                add == NULL &*& add_len == 0 &*&
                [?f]optional_crypto_chars(?cc, input, length, ?cs_in) &*&
                  length >= MIN_ENC_SIZE &*&
-               chars(tag, 16, ?tag_cs_in) &*& 
+               chars(tag, tag_len, ?tag_cs_in) &*& 
                chars(output, length, _); @*/
   /*@ ensures gcm_context_initialized(ctx, p, c) &*&
               chars(iv, 16, _) &*&

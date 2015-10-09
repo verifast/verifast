@@ -301,7 +301,6 @@ lemma void public_hmac_is_public(cryptogram hmac) \
 { \
   open [_]PREFIX##_pub(cg_symmetric_key(p, c)); \
   POLARSSL_SWITCH_1(PREFIX, cg_symmetric_key(p, c)); \
-  assert bad(p) == true; \
   close PREFIX##_pub(hmac); \
   leak PREFIX##_pub(hmac); \
 }
@@ -333,7 +332,6 @@ lemma void public_decryption_is_public(cryptogram key, \
   open  [_]PREFIX##_pub(encrypted); \
   \
   POLARSSL_SWITCH_1(PREFIX, cg_symmetric_key(p, c)); \
-  assert true == bad(p); \
 }
 
 #define DEFAULT_IS_PUBLIC_AUTH_ENCRYPTED(PREFIX) \
@@ -362,7 +360,6 @@ lemma void public_auth_decryption_is_public(cryptogram key, \
   open  [_]PREFIX##_pub(encrypted); \
   \
   POLARSSL_SWITCH_1(PREFIX, cg_symmetric_key(p, c)); \
-  assert true == bad(p); \
 }
 
 #define DEFAULT_IS_PUBLIC_ASYMMETRIC_ENCRYPTED(PREFIX) \

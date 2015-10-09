@@ -23,8 +23,6 @@ fixpoint bool send(int sender, int receiver, list<char> message);
 
 predicate enc_and_hmac_proof_pred() = true;
 
-predicate enc_and_hmac_pub_1(list<char> cs, cryptogram cg) = true;
-
 predicate enc_and_hmac_pub(cryptogram cg) =
   switch (cg)
   {

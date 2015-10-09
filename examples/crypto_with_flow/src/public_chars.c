@@ -33,7 +33,7 @@ lemma void public_chars_extract(char *array, cryptogram cg)
            [?f]chars(array, ?n, ?cs) &*&
            cs == chars_for_cg(cg);
   ensures  [f]chars(array, n, cs) &*&
-           [_]pub(cg);
+           true == cg_is_generated(cg) &*& [_]pub(cg);
 {
   public_chars(array, n, cs);
   open [_]public_generated(pub)(cs);
@@ -46,7 +46,7 @@ lemma void public_crypto_chars_extract(char *array, cryptogram cg)
            cs == chars_for_cg(cg) &*&
            [_]public_generated(pub)(cs);
   ensures  [f]crypto_chars(array, n, cs) &*&
-           [_]pub(cg);
+           true == cg_is_generated(cg) &*& [_]pub(cg);
 {
   open [_]public_generated(pub)(cs);
   dummy_foreach_extract(cg, cgs_in_chars(cs));

@@ -47,7 +47,7 @@ update_part(
   "                      true\r\n"
   "                   )\r\n"
   "                 :\r\n"
-  "                   principal(principal, count) &*&\r\n"
+  "                   principal(principal, values_count) &*&\r\n"
   "                   true == ((result == 0) == (take(count, cs) == take(count, cs0))); @*/\r\n"
 )
 

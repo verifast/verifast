@@ -54,7 +54,7 @@ int memcmp(char *array, char *array0, size_t count);
                       true
                    )
                  :
-                   principal(principal, count) &*&
+                   principal(principal, values_count) &*&
                    true == ((result == 0) == (take(count, cs) == take(count, cs0))); @*/
 
 int strcmp(char *s1, char *s2);

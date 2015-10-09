@@ -17,6 +17,7 @@ PROTOCOLS = \
 	enc_and_hmac \
 	auth_enc \
 	sign \
+	yahalom \
 	nsl \
 
 PROT_APPS = $(foreach prot,$(PROTOCOLS),$(prot)/$(prot))
@@ -38,6 +39,17 @@ $(PROT_APPS) : ../annotated_api/polarssl_definitions/polarssl_definitions.h \
 
 z3_is_unsound:
 	$(VF) -allow_assume ../bin/libann_polarssl.dll.vfmanifest z3_is_unsound.c
+
+stats :
+	$(foreach prot, $(PROTOCOLS), \
+	  echo "\n\n$(prot)\n\n"; \
+	  cd $(prot); \
+	  cloc .; \
+	  time -v ../../../../bin/verifast -bindir ../../bin/stdlib -vroot CRT=../../bin/stdlib/ \
+	                -allow_assume pthread.o  ../../bin/libann_polarssl.dll.vfmanifest \
+	                $(addsuffix .c, $(prot)) main_app.vfmanifest; \
+	  cd ..; \
+	)
 
 clean :
 	@rm -f $(PROT_APPS)
