@@ -798,7 +798,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   let () = (match layout with FourThree -> rootTable#pack2 | Widescreen -> rootTable#pack1) ~resize:true ~shrink:true (bottomTable#coerce) in
   let create_steplistbox =
     let collist = new GTree.column_list in
-    let col_k = collist#add Gobject.Data.int in
+    let col_data = collist#add Gobject.Data.caml in
     let col_text = collist#add Gobject.Data.string in
     let store = GTree.tree_store collist in
     let scrollWin = GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN () in
@@ -806,7 +806,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     lb#coerce#misc#modify_font_by_name !scaledTraceFont;
     let col = GTree.view_column ~title:"Steps" ~renderer:(GTree.cell_renderer_text [], ["text", col_text]) () in
     let _ = lb#append_column col in
-    (scrollWin, lb, col_k, col_text, col, store)
+    (scrollWin, lb, col_data, col_text, col, store)
   in
   let create_listbox title =
     let collist = new GTree.column_list in
@@ -836,7 +836,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     ignore (lb#append_column col2);
     (scrollWin, lb, col_k, col_text1, col_text2, col1, col2, store)
   in
-  let (steplistFrame, stepList, stepKCol, stepCol, stepViewCol, stepStore) = create_steplistbox in
+  let (steplistFrame, stepList, stepDataCol, stepCol, stepViewCol, stepStore) = create_steplistbox in
   let _ = bottomTable#pack1 ~resize:true ~shrink:true (steplistFrame#coerce) in
   let (assumptionsFrame, assumptionsList, assumptionsKCol, assumptionsCol, _, assumptionsStore) = create_listbox "Assumptions" in
   let _ = bottomTable2#pack1 ~resize:true ~shrink:true (assumptionsFrame#coerce) in
@@ -904,28 +904,35 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   let updateStepItems() =
     clearStepItems();
     let ctxts_fifo = List.rev (get !ctxts_lifo) in
-    let rec iter k itstack last_it ass locstack last_loc last_env ctxts =
+    let rec iter lastItem itstack last_it ass locstack last_loc last_env ctxts =
       match ctxts with
         [] -> []
-      | Assuming t::cs -> iter k itstack last_it (t::ass) locstack last_loc last_env cs
+      | Assuming t::cs -> iter lastItem itstack last_it (t::ass) locstack last_loc last_env cs
       | Executing (h, env, l, msg)::cs ->
         let it = stepStore#append ?parent:(match itstack with [] -> None | it::_ -> Some it) () in
-        stepStore#set ~row:it ~column:stepKCol k;
-        stepStore#set ~row:it ~column:stepCol msg;
         let l = create_marks_of_loc l in
-        (ass, h, env, l, msg, locstack)::iter (k + 1) itstack (Some it) ass locstack (Some l) (Some env) cs
+        let stepItem = (ass, h, env, l, msg, locstack) in
+        stepStore#set ~row:it ~column:stepDataCol stepItem;
+        stepStore#set ~row:it ~column:stepCol msg;
+        stepItem::iter (Some stepItem) itstack (Some it) ass locstack (Some l) (Some env) cs
       | PushSubcontext::cs ->
         (match (last_it, last_loc, last_env) with 
-          | (Some it, Some l, Some env) -> iter k (it::itstack) None ass ((l, env)::locstack) None None cs
+          | (Some it, Some l, Some env) -> iter lastItem (it::itstack) None ass ((l, env)::locstack) None None cs
           | _ -> assert false
         )
       | PopSubcontext::cs ->
         (match (itstack, locstack) with 
-          |(_::itstack, _::locstack) -> iter k itstack None ass locstack None None cs
+          |(_::itstack, _::locstack) -> iter lastItem itstack None ass locstack None None cs
           | _ -> assert false
         )
+      | Branching branch::cs ->
+        let it = stepStore#append ?parent:(match itstack with [] -> None | it::_ -> Some it) () in
+        let Some stepItem = lastItem in (* We assume this is not the first item in the trace. *)
+        stepStore#set ~row:it ~column:stepDataCol stepItem;
+        stepStore#set ~row:it ~column:stepCol (match branch with LeftBranch -> "Executing first branch" | RightBranch -> "Executing second branch");
+        iter lastItem itstack (Some it) ass locstack last_loc last_env cs
     in
-    stepItems := Some (iter 0 [] None [] [] None None ctxts_fifo)
+    stepItems := Some (iter None [] None [] [] None None ctxts_fifo)
   in
   let append_items (store:GTree.list_store) kcol col items =
     let rec iter k items =
@@ -977,8 +984,8 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   in
   let get_step_of_path selpath =
     let stepItems = match !stepItems with Some stepItems -> stepItems | None -> assert false in
-    let k = let gIter = stepStore#get_iter selpath in stepStore#get ~row:gIter ~column:stepKCol in
-    List.nth stepItems k
+    let gIter = stepStore#get_iter selpath in
+    stepStore#get ~row:gIter ~column:stepDataCol
   in
   let strings_of_env env =
     let env = remove_dups env in

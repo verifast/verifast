@@ -58,8 +58,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   and branch cont1 cont2 =
     !stats#branch;
+    push_context (Branching LeftBranch);
     execute_branch cont1;
+    pop_context ();
+    push_context (Branching RightBranch);
     execute_branch cont2;
+    pop_context ();
     SymExecSuccess
   
   and assert_expr_split e h env l msg url = 

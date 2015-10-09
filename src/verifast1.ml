@@ -110,7 +110,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
          let env' = List.map (fun (x, t) -> (x, pprint_context_term t)) env in
          Executing (h', env', l, msg)
        | PushSubcontext -> PushSubcontext
-       | PopSubcontext -> PopSubcontext)
+       | PopSubcontext -> PopSubcontext
+       | Branching branch -> Branching branch)
       cs
 
   let register_pred_ctor_application t symbol symbol_term ts inputParamCount =

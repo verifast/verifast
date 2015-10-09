@@ -32,11 +32,13 @@ type 'termnode chunk =
 type 'termnode heap = 'termnode chunk list
 type 'termnode env = (string * 'termnode) list
 (** Execution trace. For error reporting. *)
+type branch = LeftBranch | RightBranch
 type 'termnode context =
   Assuming of 'termnode
 | Executing of 'termnode heap * 'termnode env * loc * string
 | PushSubcontext
 | PopSubcontext
+| Branching of branch
 type node = Node of string * int list * node list ref
 
 (* Returns the locations of the "call stack" of the current execution step. *)
