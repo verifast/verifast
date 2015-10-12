@@ -10,6 +10,10 @@
 
 #include "stddef.h"
 
+#ifndef EOF
+# define EOF (-1)
+#endif
+
 typedef struct file FILE;
 
 struct file;
@@ -64,9 +68,9 @@ int getchar();
     //@ requires true;
     //@ ensures true;
 
-void putchar(char c);
+int putchar(char c);
     //@ requires true;
-    //@ ensures true;
+    //@ ensures c == result || EOF == result;
 
 /*@
 
