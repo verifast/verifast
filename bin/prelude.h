@@ -128,7 +128,7 @@ lemma_auto void chars_of_int_size(int i);
     ensures length(chars_of_int(i)) == sizeof(int);
 
 lemma_auto void int_of_chars_size(list<char> cs);
-    requires length(cs) == sizeof(int);
+    requires length(cs) == sizeof(int) && chars_within_limits(cs);
     ensures INT_MIN <= int_of_chars(cs) && int_of_chars(cs) <= INT_MAX;
 
 lemma void chars_of_int_char_in_bounds(char c, int i);
