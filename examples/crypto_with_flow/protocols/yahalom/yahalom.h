@@ -106,6 +106,7 @@ predicate yahalom_pub(cryptogram cg) =
       return yahalom_public_key(p0, c0) ?
         [_]public_generated(yahalom_pub)(cs0)
       :
+        cs0 == chars_for_cg(cg_symmetric_key(p0, c0)) ? true :
         length(cs0) == 4 + NONCE_SIZE + NONCE_SIZE ?
         (
           // ENC(KB, {A, NA, NB})

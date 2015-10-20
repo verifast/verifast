@@ -3,16 +3,16 @@
 
 /*@
 
-#define GENERAL_INTERPRET_METHOD(SC_KIND, BC_KIND) \
-lemma void interpret_##SC_KIND##_key(char *buffer, int size, list<char> cs) \
+#define GENERAL_INTERPRET_METHOD(KIND) \
+lemma void interpret_##KIND##_key(char *buffer, int size, list<char> cs) \
   requires [_]public_invar(?pub) &*& \
            [?f]chars(buffer, size, cs); \
   ensures  [f]cryptogram(buffer, size, cs, ?cg) &*& [_]pub(cg) &*& \
-           cg == cg_##SC_KIND##_key(?p, ?c); \
+           cg == cg_##KIND##_key(?p, ?c); \
 { \
-  cryptogram key = chars_for_cg_sur(cs, CG_##BC_KIND##_KEY_TAG); \
+  cryptogram key = chars_for_cg_sur_##KIND##_key(cs); \
   public_chars_extract(buffer, key); \
-  assert key == cg_##SC_KIND##_key(?p, ?c); \
+  assert key == cg_##KIND##_key(?p, ?c); \
   public_chars(buffer, size, cs); \
   open [_]public_generated(pub)(cs); \
   if (!collision_in_run) \
@@ -23,10 +23,10 @@ lemma void interpret_##SC_KIND##_key(char *buffer, int size, list<char> cs) \
   close [f]cryptogram(buffer, size, cs, key); \
 }
 
-GENERAL_INTERPRET_METHOD(symmetric, SYMMETRIC)
+GENERAL_INTERPRET_METHOD(symmetric)
 
-GENERAL_INTERPRET_METHOD(public, PUBLIC)
+GENERAL_INTERPRET_METHOD(public)
 
-GENERAL_INTERPRET_METHOD(private, PRIVATE)
+GENERAL_INTERPRET_METHOD(private)
 
 @*/

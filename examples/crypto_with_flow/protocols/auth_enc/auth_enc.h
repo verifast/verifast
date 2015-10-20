@@ -25,13 +25,18 @@ predicate auth_enc_proof_pred() = true;
 
 predicate auth_enc_pub_1(int p, list<char> cs1, list<char> cs2) = true;
 
+fixpoint bool auth_enc_public_key(int p, int c)
+{
+  return bad(p) || bad(shared_with(p, c));
+}
+
 predicate auth_enc_pub(cryptogram cg) =
   switch (cg)
   {
     case cg_random(p0, c0):
       return true;
     case cg_symmetric_key(p0, c0):
-      return true == bad(p0);
+      return true == auth_enc_public_key(p0, c0);
     case cg_public_key(p0, c0):
       return true;
     case cg_private_key(p0, c0):
@@ -41,13 +46,15 @@ predicate auth_enc_pub(cryptogram cg) =
     case cg_hmac(p0, c0, cs0):
       return true;
     case cg_encrypted(p0, c0, cs0, ent0):
-      return [_]public_generated(auth_enc_pub)(cs0) &*&
-             (bad(p0) || bad(shared_with(p0, c0)));
+      return auth_enc_public_key(p0, c0) ? 
+               [_]public_generated(auth_enc_pub)(cs0)
+             :
+               cs0 == chars_for_cg(cg_symmetric_key(p0, c0));
     case cg_auth_encrypted(p0, c0, mac0, cs0, ent0):
-      return bad(p0) || bad(shared_with(p0, c0)) ?
-        [_]public_generated(auth_enc_pub)(cs0)
-      : 
-        true == send(p0, shared_with(p0, c0), cs0);
+      return auth_enc_public_key(p0, c0) ?
+               [_]public_generated(auth_enc_pub)(cs0)
+             : 
+               true == send(p0, shared_with(p0, c0), cs0);
     case cg_asym_encrypted(p0, c0, cs0, ent0):
       return [_]public_generated(auth_enc_pub)(cs0);
     case cg_asym_signature(p0, c0, cs0, ent0):

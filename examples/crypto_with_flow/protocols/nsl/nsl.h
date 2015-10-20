@@ -34,15 +34,6 @@
 // Definition of pub for this protocol ////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-fixpoint bool nsl_public_nonce(int principal, int info)
-{
-  return
-    collision_in_run ||
-    bad(principal) ||
-    (int_left(info) == 1 && bad(int_right(info))) ||
-    (int_left(info) == 2 && bad(int_left(int_right(info))));
-}
-
 predicate nsl_pub_msg_sender(int receiver) = true;
 
 predicate nsl_pub_msg1(int sender, int receiver, cryptogram s_nonce) = true;
@@ -56,13 +47,27 @@ predicate nsl_proof_pred() =
   exists(?attacker) &*& true == bad(attacker)
 ;
 
+fixpoint bool nsl_public_nonce(int principal, int info)
+{
+  return
+    collision_in_run ||
+    bad(principal) ||
+    (int_left(info) == 1 && bad(int_right(info))) ||
+    (int_left(info) == 2 && bad(int_left(int_right(info))));
+}
+
+fixpoint bool nsl_public_key(int p, int c)
+{
+  return bad(p);
+}
+
 predicate nsl_pub(cryptogram cg) =
   switch (cg)
   {
     case cg_random(p0, c0):
       return true == nsl_public_nonce(p0, cg_info(cg));
     case cg_symmetric_key(p0, c0):
-      return true == bad(p0);
+      return true == nsl_public_key(p0, c0);
     case cg_public_key(p0, c0):
       return true;
     case cg_private_key(p0, c0):
@@ -72,9 +77,13 @@ predicate nsl_pub(cryptogram cg) =
     case cg_hmac(p0, c0, cs0):
       return true;
     case cg_encrypted(p0, c0, cs0, ent0):
-      return true == bad(p0) &*& [_]public_generated(nsl_pub)(cs0);
+      return nsl_public_key(p0, c0) ? 
+               [_]public_generated(nsl_pub)(cs0)
+             :
+               cs0 == chars_for_cg(cg_symmetric_key(p0, c0));
     case cg_auth_encrypted(p0, c0, mac0, cs0, ent0):
-      return true == bad(p0) &*& [_]public_generated(nsl_pub)(cs0);
+      return true == nsl_public_key(p0, c0) &*& 
+             [_]public_generated(nsl_pub)(cs0);
     case cg_asym_encrypted(p0, c0, cs0, ent0):
       return [_]nsl_pub_msg_sender(?p1) &*& 
       collision_in_run || bad(p0) || bad(p1) ?
@@ -205,6 +214,7 @@ DEFAULT_IS_PUBLIC_HASH(nsl)
 DEFAULT_IS_PUBLIC_HMAC(nsl)
 DEFAULT_IS_PUBLIC_ENCRYPTED(nsl)
 DEFAULT_IS_PUBLIC_DECRYPTED(nsl)
+DEFAULT_IS_DECRYPTION_ALLOWED(nsl)
 DEFAULT_IS_PUBLIC_AUTH_ENCRYPTED(nsl)
 DEFAULT_IS_PUBLIC_AUTH_DECRYPTED(nsl)
 // DEFAULT_IS_PUBLIC_ASYMMETRIC_ENCRYPTED(nsl)

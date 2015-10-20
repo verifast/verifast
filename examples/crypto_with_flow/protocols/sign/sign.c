@@ -199,7 +199,7 @@ void receiver(int recvr, char *key, int key_len, char *msg)
         {
           assert [_]sign_pub_1(?msg_cs2, ?receiver2);
           cryptogram hash_cg2 = cg_hash(append(chars_of_int(receiver2), msg_cs2));
-          chars_for_cg_inj(hash_cg, hash_cg2);
+          chars_for_cg_inj_hash(hash_cg, hash_cg2);
           assert true == send(sender, receiver2, msg_cs2);
           drop_append(4, chars_of_int(receiver), msg_cs);
           drop_append(4, chars_of_int(receiver2), msg_cs2);

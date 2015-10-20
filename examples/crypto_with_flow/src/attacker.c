@@ -58,6 +58,7 @@ predicate attacker_invariant(predicate(cryptogram) pub,
     is_public_hmac_is_public(_, pub, pred) &*&
     is_public_encryption_is_public(_, pub, pred) &*&
     is_public_decryption_is_public(_, pub, pred) &*&
+    is_decryption_allowed(_, pub, pred) &*&
     is_public_auth_encryption_is_public(_, pub, pred) &*&
     is_public_auth_decryption_is_public(_, pub, pred) &*&
     is_public_asym_encryption_is_public(_, pub, pred) &*&
@@ -352,7 +353,7 @@ void attacker_send_encrypted(havege_state *havege_state, void* socket)
   char buffer2[MAX_MESSAGE_SIZE];
   char buffer3[MAX_MESSAGE_SIZE];
   aes_context aes_context;
-  size_t iv_off;
+  size_t iv_off = 0;
   char iv[16];
   
   //@ open attacker_invariant(pub, pred, havege_state, socket, attacker);
@@ -367,11 +368,6 @@ void attacker_send_encrypted(havege_state *havege_state, void* socket)
   }
   //@ assert chars(buffer1, size1, ?cs1);
   //@ assert chars(buffer2, size2, ?cs2);
-  
-  //@ close_havege_util(pub, pred, attacker);
-  r_u_int_with_bounds(havege_state, &iv_off, 0, 15);
-  //@ open_havege_util(pub, pred, attacker);
-  //@ assert u_integer(&iv_off, ?iv_off_val);
   
   //@ close aes_context(&aes_context);
   //@ interpret_symmetric_key(buffer1, size1, cs1);
@@ -389,7 +385,6 @@ void attacker_send_encrypted(havege_state *havege_state, void* socket)
       //@ close attacker_random_pred(pub, pred)();
       //@ proof1(cg_iv);
       //@ open attacker_random_pred(pub, pred)();
-      //@ public_cryptogram(iv, cg_iv);
       //@ close optional_crypto_chars(false, buffer2, size2, cs2); 
       if (aes_crypt_cfb128(&aes_context, AES_ENCRYPT, 
                             (unsigned int) size2, &iv_off, iv, buffer2, 
@@ -398,8 +393,7 @@ void attacker_send_encrypted(havege_state *havege_state, void* socket)
         /*@ 
           {
             assert cryptogram(buffer3, size2, ?cs_enc, ?cg_enc);
-            assert cg_enc == cg_encrypted(p, c, cs2,
-                               append(chars_of_int(iv_off_val), cs_iv));
+            assert cg_enc == cg_encrypted(p, c, cs2, cs_iv);
             assert [_]pub(cg_key);
             assert is_public_encryption_is_public(?proof2, pub, pred);
             public_chars(buffer2, size2, cs2);
@@ -409,6 +403,7 @@ void attacker_send_encrypted(havege_state *havege_state, void* socket)
         @*/
         net_send(socket, buffer3, (unsigned int) size2);
       }
+      //@ public_cryptogram(iv, cg_iv);
       //@ open optional_crypto_chars(false, buffer2, size2, cs2); 
     }
     aes_free(&aes_context);
@@ -436,7 +431,7 @@ void attacker_send_decrypted(havege_state *havege_state, void* socket)
   char buffer3[MAX_MESSAGE_SIZE];
   aes_context aes_context;
   char iv[16];
-  size_t iv_off;
+  size_t iv_off = 0;
   
   //@ open attacker_invariant(pub, pred, havege_state, socket, attacker);
   
@@ -457,11 +452,6 @@ void attacker_send_decrypted(havege_state *havege_state, void* socket)
   //@ assert cg_key == cg_symmetric_key(?p, ?c);
   if (aes_setkey_enc(&aes_context, buffer1, (unsigned int) size1 * 8) == 0)
   {
-    
-    //@ close_havege_util(pub, pred, attacker);
-    r_u_int_with_bounds(havege_state, &iv_off, 0, 15);
-    //@ open_havege_util(pub, pred, attacker);
-    //@ assert u_integer(&iv_off, ?iv_off_val);
     //@ close random_request(attacker, 0, false);
     if (havege_random(havege_state, iv, 16) == 0)
     {
@@ -472,7 +462,6 @@ void attacker_send_decrypted(havege_state *havege_state, void* socket)
       //@ close attacker_random_pred(pub, pred)();
       //@ proof1(cg_iv);
       //@ open attacker_random_pred(pub, pred)();
-      //@ public_cryptogram(iv, cg_iv);
       //@ close optional_crypto_chars(false, buffer2, size2, cs2);
       if (aes_crypt_cfb128(&aes_context, AES_DECRYPT, 
                             (unsigned int) size2, &iv_off, iv, buffer2, 
@@ -481,8 +470,7 @@ void attacker_send_decrypted(havege_state *havege_state, void* socket)
         /*@ if (!collision_in_run) 
             {
               assert crypto_chars(buffer3, size2, ?cs_output);
-              cryptogram cg_enc = cg_encrypted(p, c, cs_output,
-                                  append(chars_of_int(iv_off_val), cs_iv));
+              cryptogram cg_enc = cg_encrypted(p, c, cs_output, cs_iv);
               assert cs2 == chars_for_cg(cg_enc);
               open optional_crypto_chars(false, buffer2, size2, cs2);
               public_chars_extract(buffer2, cg_enc);
@@ -494,6 +482,7 @@ void attacker_send_decrypted(havege_state *havege_state, void* socket)
         @*/
         net_send(socket, buffer3, (unsigned int) size2);
       }
+      //@ public_cryptogram(iv, cg_iv);
       //@ open optional_crypto_chars(false, buffer2, size2, cs2);
     }
     aes_free(&aes_context);

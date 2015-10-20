@@ -30,10 +30,10 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
   int socket;
   havege_state havege_state;
   
-  unsigned int temp;
-  int iv_off;
+  unsigned int iv_off = 0;
   char iv[16];
   char hmac[64];
+  aes_context aes_context;
   
   net_usleep(20000);
   if(net_connect(&socket, NULL, SERVER_PORT) != 0)
@@ -42,43 +42,25 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
     abort();
   
   {
-    aes_context aes_context;
-    int message_len = 4 + 16 + (int) msg_len + 64;
+    int message_len = 16 + (int) msg_len + 64;
     char* message = malloc(message_len);
     if (message == 0) abort();
   
     // IV stuff
     //@ close havege_state(&havege_state);
     havege_init(&havege_state);
-    /*@ DEFAULT_HAVEGE_UTIL_INIT(enc_and_hmac_pub, 
-                                 enc_and_hmac_proof_pred, sender) @*/
-    r_int_with_bounds(&havege_state, &iv_off, 0, 15);
     //@ close random_request(sender, 0, false);
-    if (havege_random(&havege_state, iv, 16) != 0) abort();  
-    //@ assert integer(&iv_off, ?iv_val) &*& iv_val >=0 &*& iv_val <= 15;
-    //@ assert cryptogram(iv, 16, ?iv_cs, ?iv_cg);
+    if (havege_random(&havege_state, iv, 16) != 0) abort();
+    //@ open cryptogram(iv, 16, ?iv_cs, ?iv_cg);
     //@ close enc_and_hmac_pub(iv_cg);
-    //@ leak enc_and_hmac_pub(iv_cg);
-    //@ public_cryptogram(iv, iv_cg);
-    //@ integer_to_chars(&iv_off);
-    /*@ close optional_crypto_chars(false, (void*) &iv_off, 
-                                    4, chars_of_int(iv_val)); @*/
-    memcpy(message, &iv_off, 4);
-    /*@ open optional_crypto_chars(false, (void*) &iv_off, 
-                                   4, chars_of_int(iv_val)); @*/
-    //@ open optional_crypto_chars(false, message, 4, chars_of_int(iv_val));
-    //@ chars_to_integer(&iv_off);
-    //@ close optional_crypto_chars(false, iv, 16, iv_cs);
-    memcpy(message + 4, iv, 16);
-    //@ open optional_crypto_chars(false, iv, 16, iv_cs);
-    //@ open optional_crypto_chars(false, message + 4, 16, iv_cs);
-    //@ chars_join(message);
-    //@ list<char> ent = append(chars_of_int(iv_val), iv_cs);
-    //@ assert chars(message, 20, ent);
-    //@ assert chars(message + 20, msg_len + 64, _);
+    //@ leak enc_and_hmac_pub(iv_cg);    
+    //@ close optional_crypto_chars(!collision_in_run, iv, 16, iv_cs);
+    memcpy(message, iv, 16);
+    //@ open optional_crypto_chars(!collision_in_run, iv, 16, iv_cs);
+    //@ close cryptogram(iv, 16, iv_cs, iv_cg);
+    //@ close cryptogram(message, 16, iv_cs, iv_cg);
+    //@ public_cryptogram(message, iv_cg);
     havege_free(&havege_state);
-    /*@ DEFAULT_HAVEGE_UTIL_EXIT(enc_and_hmac_pub, 
-                                 enc_and_hmac_proof_pred, sender) @*/
     //@ open havege_state(&havege_state);
     
     // encrypt
@@ -87,35 +69,40 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
                         (unsigned int) (KEY_SIZE * 8)) != 0)
       abort();
     //@ close [f3]optional_crypto_chars(true, msg, msg_len, msg_cs);
-    temp = (unsigned int) iv_off;
-    if (aes_crypt_cfb128(&aes_context, AES_ENCRYPT, msg_len, 
-                         &temp, iv, msg, message + 20) != 0)
-      abort();
+    {
+      //@ close enc_and_hmac_proof_pred();
+      //@ PRODUCE_IS_DECRYPTION_ALLOWED(enc_and_hmac)
+      if (aes_crypt_cfb128(&aes_context, AES_ENCRYPT, msg_len, 
+                           &iv_off, iv, msg, message + 16) != 0)
+        abort();
+      //@ open enc_and_hmac_proof_pred();
+      //@ leak is_decryption_allowed(_, _, _);
+    }
     //@ open [f3]optional_crypto_chars(true, msg, msg_len, msg_cs);
-    //@ assert cryptogram(message + 20, msg_len, ?enc_cs, ?enc_cg);
+    //@ public_cryptogram(iv, iv_cg);
+    //@ assert cryptogram(message + 16, msg_len, ?enc_cs, ?enc_cg);
     //@ close enc_and_hmac_pub(enc_cg);
     //@ leak enc_and_hmac_pub(enc_cg);
-    //@ public_cryptogram(message + 20, enc_cg);
-    //@ append_assoc(chars_of_int(iv_val), iv_cs, enc_cs);
-    //@ assert chars(message, 20 + msg_len, append(ent, enc_cs));
-    //@ assert enc_cg == cg_encrypted(sender, enc_id, msg_cs, ent);
+    //@ public_cryptogram(message + 16, enc_cg);
+    //@ assert chars(message, 16 + msg_len, append(iv_cs, enc_cs));
+    //@ assert enc_cg == cg_encrypted(sender, enc_id, msg_cs, iv_cs);
     aes_free(&aes_context);
     //@ open aes_context(&aes_context);
     
     // hmac
     //@ close [f3]optional_crypto_chars(true, msg, msg_len, msg_cs);
     sha512_hmac(hmac_key, KEY_SIZE, msg, (unsigned int) (msg_len),
-                message + 20 + (int) msg_len, 0);
+                message + 16 + (int) msg_len, 0);
     //@ open [f3]optional_crypto_chars(true, msg, msg_len, msg_cs);
-    //@ assert cryptogram(message + 20 + msg_len, 64, ?hmac_cs, ?hmac_cg);
+    //@ assert cryptogram(message + 16 + msg_len, 64, ?hmac_cs, ?hmac_cg);
     //@ assert hmac_cg == cg_hmac(sender, hmac_id, msg_cs);
     //@ close enc_and_hmac_pub(hmac_cg);
     //@ leak enc_and_hmac_pub(hmac_cg);
-    //@ public_cryptogram(message + 20 + msg_len, hmac_cg);
-    //@ append_assoc(ent, enc_cs, hmac_cs);
+    //@ public_cryptogram(message + 16 + msg_len, hmac_cg);
+    //@ append_assoc(iv_cs, enc_cs, hmac_cs);
     //@ chars_join(message);
     /*@ assert chars(message, message_len, 
-                     append(ent, append(enc_cs, hmac_cs))); @*/
+                     append(iv_cs, append(enc_cs, hmac_cs))); @*/
     net_send(&socket, message, (unsigned int) message_len);
     
     free(message);
@@ -144,6 +131,14 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
   int socket1;
   int socket2;
   
+  int size;
+  int enc_size;
+  char hmac[64];
+  unsigned int temp;
+  unsigned int iv_off = 0;
+  char iv[16];
+  aes_context aes_context;
+    
   if(net_bind(&socket1, NULL, SERVER_PORT) != 0)
     abort();
   if(net_accept(socket1, &socket2, NULL) != 0)
@@ -151,66 +146,60 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
   if(net_set_block(socket2) != 0)
     abort();
   
-  int size;
-  int enc_size;
   {
-    int max_size = 20 + MAX_SIZE + 64;
-    char hmac[64];
-    unsigned int temp;
-    int iv_off;
-    char iv[16];
-    aes_context aes_context;
+    int max_size = 16 + MAX_SIZE + 64;
     char *buffer = malloc (max_size); if (buffer == 0) abort();
     size = net_recv(&socket2, buffer, (unsigned int) max_size);
-    if (size <= 20 + 64) abort();
-    enc_size = size - 20 - 64;
+    if (size <= 16 + 64) abort();
+    enc_size = size - 16 - 64;
     if (enc_size < MIN_ENC_SIZE) abort();
     //@ chars_split(buffer, size);
     //@ assert chars(buffer, size, ?all_cs);
     //@ close hide_chars((void*) buffer + size, max_size - size, _);
     
     // IV stuff
-    //@ chars_split(buffer, 20);
-    //@ assert chars(buffer, 20, ?prefix);
-    //@ chars_split(buffer, 4);
-    //@ assert chars(buffer, 4, ?iv_off_cs);
-    //@ assert chars(buffer + 4, 16, ?iv_cs);
-    //@ chars_to_integer(buffer);
-    iv_off = *((int*) (void*) buffer);
-    if (iv_off < 0 || iv_off >= 16) abort();
-    //@ integer_to_chars(buffer);
-    //@ close optional_crypto_chars(false, buffer + 4, 16, iv_cs);
-    memcpy(iv, buffer + 4, 16);
-    //@ open optional_crypto_chars(false, buffer + 4, 16, iv_cs);
-    //@ assert iv_off_cs == chars_of_int(iv_off);
-    //@ assert prefix == append(iv_off_cs, iv_cs);
-    //@ chars_join(buffer);
+    //@ chars_split(buffer, 16);
+    //@ assert chars(buffer, 16, ?iv_cs);
+    //@ close optional_crypto_chars(false, buffer, 16, iv_cs);
+    memcpy(iv, buffer, 16);
+    //@ open optional_crypto_chars(false, buffer, 16, iv_cs);
+    //@ open optional_crypto_chars(false, iv, 16, iv_cs);
+    //@ cryptogram iv_cg = chars_for_cg_sur_random(iv_cs);
+    //@ public_chars_extract(iv, iv_cg); 
+    //@ if (!collision_in_run) crypto_chars(iv, 16, iv_cs);
+    //@ close cryptogram(iv, 16, iv_cs, iv_cg); 
     
     //Decrypt
     //@ close aes_context(&aes_context);
     if (aes_setkey_enc(&aes_context, enc_key, 
                         (unsigned int) (KEY_SIZE * 8)) != 0)
       abort();
-    //@ close optional_crypto_chars(false, buffer + 20, enc_size, ?enc_cs);
-    temp = (unsigned int) iv_off;
-    if (aes_crypt_cfb128(&aes_context, AES_DECRYPT, (unsigned int) enc_size,
-                         &temp, iv, buffer + 20, msg) != 0)
-      abort();
-    //@ open optional_crypto_chars(false, buffer + 20, enc_size, enc_cs);
+    //@ close optional_crypto_chars(false, buffer + 16, enc_size, ?enc_cs);
+    {
+      //@ close enc_and_hmac_proof_pred();
+      //@ PRODUCE_IS_DECRYPTION_ALLOWED(enc_and_hmac)
+      if (aes_crypt_cfb128(&aes_context, AES_DECRYPT, (unsigned int) enc_size,
+                           &iv_off, iv, buffer + 16, msg) != 0)
+        abort();
+      //@ open enc_and_hmac_proof_pred();
+      //@ leak is_decryption_allowed(_, _, _);
+    }
+    //@ open optional_crypto_chars(false, buffer + 16, enc_size, enc_cs);
+    //@ public_cryptogram(iv, iv_cg);
     aes_free(&aes_context);
     //@ open aes_context(&aes_context);
     //@ assert optional_crypto_chars(!collision_in_run, msg, enc_size, ?dec_cs);
-    //@ cryptogram enc_cg = cg_encrypted(sender, enc_id, dec_cs, prefix);
-    //@ public_chars(buffer + 20, enc_size, enc_cs);
-    //@ if (!collision_in_run) public_chars_extract(buffer + 20, enc_cg);
-    //@ assert chars(buffer, 20 + enc_size, append(prefix, enc_cs));
+    //@ cryptogram enc_cg = cg_encrypted(sender, enc_id, dec_cs, iv_cs);
+    //@ public_chars(buffer + 16, enc_size, enc_cs);
+    //@ if (!collision_in_run) public_chars_extract(buffer + 16, enc_cg);
+    //@ assert chars(buffer, 16 + enc_size, append(iv_cs, enc_cs));
     
     //Verify the hmac
     //@ assert chars(buffer + size - 64, 64, ?hmac_cs);
-    //@ close optional_crypto_chars(!collision_in_run, msg, size - 84, ?pay_cs);
+    //@ close optional_crypto_chars(!collision_in_run, msg, size - 80, ?pay_cs);
     sha512_hmac(hmac_key, KEY_SIZE, msg,
                 (unsigned int) enc_size, hmac, 0);
-    //@ open optional_crypto_chars(!collision_in_run, msg, size - 84, pay_cs);
+    //@ open optional_crypto_chars(!collision_in_run, msg, size - 80, pay_cs);
     //@ open cryptogram(hmac, 64, ?hmac_cs2, ?hmac_cg);
     //@ close optional_crypto_chars(!collision_in_run, hmac, 64, hmac_cs2);
     //@ close optional_crypto_chars(false, (void*) buffer + size - 64, 64, _);
@@ -227,7 +216,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
           open [_]enc_and_hmac_pub(hmac_cg);
         }
     @*/
-    //@ assert all_cs == append(prefix, append(enc_cs, hmac_cs));
+    //@ assert all_cs == append(iv_cs, append(enc_cs, hmac_cs));
     //@ open hide_chars((void*) buffer + size, max_size - size, _);    
     //@ chars_join(buffer);
     //@ chars_join(buffer);

@@ -22,7 +22,7 @@ PROTOCOLS = \
 
 PROT_APPS = $(foreach prot,$(PROTOCOLS),$(prot)/$(prot))
 
-all : $(PROT_APPS) z3_is_unsound
+all : $(PROT_APPS)
 
 .SECONDEXPANSION:
 
@@ -36,9 +36,6 @@ $(PROT_APPS) : ../annotated_api/polarssl_definitions/polarssl_definitions.h \
 	$(CC) $(CFLAGS) $(addsuffix .o, $@) $(dir $@)main_app.o -o $@ $(LIBS)
 	@LD_LIBRARY_PATH=:../bin ; ./$@
 	$(call pprint_big, $(MSG), \t\t$(patsubst %/,%,$(dir $@)) )
-
-z3_is_unsound:
-	$(VF) -allow_assume ../bin/libann_polarssl.dll.vfmanifest z3_is_unsound.c
 
 stats :
 	$(foreach prot, $(PROTOCOLS), \

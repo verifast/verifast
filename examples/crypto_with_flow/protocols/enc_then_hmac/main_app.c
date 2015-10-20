@@ -69,6 +69,7 @@ predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
   [1/2]cryptogram(hmac_key, KEY_SIZE, ?hmac_key_cs, ?hmac_key_cg) &*&
     hmac_key_cg == cg_symmetric_key(sender, ?hmac_id) &*&
     receiver == shared_with(sender, hmac_id) &*&
+    cg_info(hmac_key_cg) == enc_id &*&
   crypto_chars(msg, MSG_LEN, ?msg_cs) &*&
     true == send(sender, receiver, msg_cs) &*&
   info == cons(int_value(sender), 
@@ -140,6 +141,7 @@ predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) =
   [1/2]cryptogram(hmac_key, KEY_SIZE, ?hmac_key_cs, ?hmac_key_cg) &*&
     hmac_key_cg == cg_symmetric_key(sender, ?hmac_id) &*&
     receiver == shared_with(sender, hmac_id) &*&
+    cg_info(hmac_key_cg) == enc_id &*&
   chars(msg, MAX_SIZE, _) &*&
   info == cons(int_value(sender), 
             cons(int_value(receiver), 
@@ -243,9 +245,10 @@ int main(int argc, char **argv) //@ : main_full(main_app)
     //@ close random_request(sender, 0, true);
     if (havege_random(&havege_state, enc_key, KEY_SIZE) != 0) abort();
     //@ assume (shared_with(sender, count + 1) == receiver);
-    //@ close random_request(sender, 0, true);
     //@ assert cryptogram(enc_key, KEY_SIZE, ?enc_cs_key, ?enc_cg_key);
     //@ assert enc_cg_key == cg_symmetric_key(sender, count + 1);
+    
+    //@ close random_request(sender, count + 1, true);
     if (havege_random(&havege_state, hmac_key, KEY_SIZE) != 0) abort();
     //@ assume (shared_with(sender, count + 2) == receiver);
     //@ assert cryptogram(hmac_key, KEY_SIZE, ?hmac_cs_key, ?hmac_cg_key);

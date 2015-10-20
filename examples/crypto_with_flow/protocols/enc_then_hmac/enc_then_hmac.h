@@ -25,13 +25,18 @@ predicate enc_then_hmac_proof_pred() = true;
 
 predicate enc_then_hmac_pub_1(int p, list<char> cs1, list<char> cs2) = true;
 
+fixpoint bool enc_then_hmac_public_key(int p, int c)
+{
+  return bad(p) || bad(shared_with(p, c));
+}
+
 predicate enc_then_hmac_pub(cryptogram cg) =
   switch (cg)
   {
     case cg_random(p0, c0):
       return true;
     case cg_symmetric_key(p0, c0):
-      return true == bad(p0);
+      return true == enc_then_hmac_public_key(p0, c0);
     case cg_public_key(p0, c0):
       return true;
     case cg_private_key(p0, c0):
@@ -39,22 +44,23 @@ predicate enc_then_hmac_pub(cryptogram cg) =
     case cg_hash(cs0):
       return true;
     case cg_hmac(p0, c0, cs0):
-      return collision_in_run || bad(p0) || bad(shared_with(p0, c0)) ? 
-        true 
+      return collision_in_run || enc_then_hmac_public_key(p0, c0) ?
+        true
       :
         enc_then_hmac_pub_1(?c1, ?cs1, ?ent1) &*&
-        length(ent1) == 20 &&
+        cg_info(cg_symmetric_key(p0, c0)) == c1 &*&
+        length(ent1) == 16 &&
         cs0 == append(ent1, chars_for_cg(cg_encrypted(p0, c1, cs1, ent1))) &&
         shared_with(p0, c0) == shared_with(p0, c1) &&
         send(p0, shared_with(p0, c0), cs1);
     case cg_encrypted(p0, c0, cs0, ent0):
-      return bad(p0) || bad(shared_with(p0, c0)) ?
+      return enc_then_hmac_public_key(p0, c0) ?
         [_]public_generated(enc_then_hmac_pub)(cs0)
-      : 
-        true == send(p0, shared_with(p0, c0), cs0);
+      :
+        true;
     case cg_auth_encrypted(p0, c0, mac0, cs0, ent0):
-      return [_]public_generated(enc_then_hmac_pub)(cs0) &*&
-             (bad(p0) || bad(shared_with(p0, c0)));
+      return true == enc_then_hmac_public_key(p0, c0) &*&
+             [_]public_generated(enc_then_hmac_pub)(cs0);
     case cg_asym_encrypted(p0, c0, cs0, ent0):
       return [_]public_generated(enc_then_hmac_pub)(cs0);
     case cg_asym_signature(p0, c0, cs0, ent0):
@@ -75,13 +81,14 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len);
              [?f2]cryptogram(hmac_key, KEY_SIZE, ?hmac_key_cs, ?hmac_key_cg) &*&
                enc_key_cg == cg_symmetric_key(sender, ?enc_id) &*&
                hmac_key_cg == cg_symmetric_key(sender, ?hmac_id) &*&
+                 cg_info(hmac_key_cg) == enc_id &*&
                shared_with(sender, enc_id) == shared_with(sender, hmac_id) &*&
              [?f3]crypto_chars(msg, msg_len, ?msg_cs) &*&
                MAX_SIZE >= msg_len &*& msg_len >= MIN_ENC_SIZE &*&
                bad(sender) || bad(shared_with(sender, enc_id)) ?
                  [_]public_generated(enc_then_hmac_pub)(msg_cs)
                :
-                 // Not saying anything about publicness of msg_cs established 
+                 // Not saying anything about publicness of msg_cs established
                  // confidentiality
                  true == send(sender, shared_with(sender, enc_id), msg_cs); @*/
 /*@ ensures  principal(sender, _) &*&
@@ -96,6 +103,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg);
              [?f2]cryptogram(hmac_key, KEY_SIZE, ?hmac_key_cs, ?hmac_key_cg) &*&
                enc_key_cg == cg_symmetric_key(?sender, ?enc_id) &*&
                hmac_key_cg == cg_symmetric_key(sender, ?hmac_id) &*&
+                 cg_info(hmac_key_cg) == enc_id &*&
                receiver == shared_with(sender, enc_id) &*&
                receiver == shared_with(sender, hmac_id) &*&
              chars(msg, MAX_SIZE, _); @*/

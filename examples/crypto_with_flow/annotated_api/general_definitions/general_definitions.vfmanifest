@@ -14,9 +14,15 @@
 #
 #
 # cryptogram.gh
-.provides ./cryptogram.gh#chars_for_cg_inj
-.provides ./cryptogram.gh#chars_for_cg_sur
 .provides ./cryptogram.gh#cg_constraints
+.provides ./cryptogram.gh#chars_for_cg_inj_random
+.provides ./cryptogram.gh#chars_for_cg_inj_hash
+.provides ./cryptogram.gh#chars_for_cg_inj_hmac
+.provides ./cryptogram.gh#chars_for_cg_inj_encrypted
+.provides ./cryptogram.gh#chars_for_cg_sur_random
+.provides ./cryptogram.gh#chars_for_cg_sur_symmetric_key
+.provides ./cryptogram.gh#chars_for_cg_sur_public_key
+.provides ./cryptogram.gh#chars_for_cg_sur_private_key
 #
 #
 # cryptogram_bounds.gh

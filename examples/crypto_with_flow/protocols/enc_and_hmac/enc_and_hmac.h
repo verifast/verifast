@@ -23,13 +23,18 @@ fixpoint bool send(int sender, int receiver, list<char> message);
 
 predicate enc_and_hmac_proof_pred() = true;
 
+fixpoint bool enc_and_hmac_public_key(int p, int c)
+{
+  return bad(p) || bad(shared_with(p, c));
+}
+
 predicate enc_and_hmac_pub(cryptogram cg) =
   switch (cg)
   {
     case cg_random(p0, c0):
       return true;
     case cg_symmetric_key(p0, c0):
-      return true == bad(p0);
+      return true == enc_and_hmac_public_key(p0, c0);
     case cg_public_key(p0, c0):
       return true;
     case cg_private_key(p0, c0):
@@ -37,18 +42,21 @@ predicate enc_and_hmac_pub(cryptogram cg) =
     case cg_hash(cs0):
       return true;
     case cg_hmac(p0, c0, cs0):
-      return bad(p0) || bad(shared_with(p0, c0)) ? 
+      return enc_and_hmac_public_key(p0, c0) ? 
         [_]public_generated(enc_and_hmac_pub)(cs0) 
       :
         true == send(p0, shared_with(p0, c0), cs0);
     case cg_encrypted(p0, c0, cs0, ent0):
-      return bad(p0) || bad(shared_with(p0, c0)) ? 
+      return enc_and_hmac_public_key(p0, c0) ? 
         [_]public_generated(enc_and_hmac_pub)(cs0)
       :
-        true == send(p0, shared_with(p0, c0), cs0);
+        cs0 == chars_for_cg(cg_symmetric_key(p0, c0)) ?
+          true
+        :
+          true == send(p0, shared_with(p0, c0), cs0);
     case cg_auth_encrypted(p0, c0, mac0, cs0, ent0):
-      return [_]public_generated(enc_and_hmac_pub)(cs0) &*&
-             (bad(p0) || bad(shared_with(p0, c0)));
+      return true == enc_and_hmac_public_key(p0, c0) &*&
+             [_]public_generated(enc_and_hmac_pub)(cs0);
     case cg_asym_encrypted(p0, c0, cs0, ent0):
       return [_]public_generated(enc_and_hmac_pub)(cs0);
     case cg_asym_signature(p0, c0, cs0, ent0):

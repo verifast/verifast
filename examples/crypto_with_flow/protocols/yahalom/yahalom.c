@@ -11,7 +11,7 @@
 #define SERVER_PORT 343434
 
 void auth_enc(havege_state *state, char *key, char *msg,
-               unsigned int msg_len, char* output)
+              unsigned int msg_len, char* output)
 /*@ requires [_]public_invar(yahalom_pub) &*&
              havege_state_initialized(state) &*&
              principal(?principal1, _) &*&
@@ -26,8 +26,7 @@ void auth_enc(havege_state *state, char *key, char *msg,
              [f2]crypto_chars(msg, msg_len, msg_cs) &*&
              chars(output, 16, ?iv_cs) &*&
              cryptogram(output + 16, msg_len, _, ?enc_cg) &*&
-             enc_cg == cg_encrypted(principal2, id, msg_cs,
-                                    append(chars_of_int(0), iv_cs)); @*/
+             enc_cg == cg_encrypted(principal2, id, msg_cs, iv_cs); @*/
 {
   char iv[16];
   aes_context aes_context;
@@ -36,30 +35,37 @@ void auth_enc(havege_state *state, char *key, char *msg,
 
   //@ close random_request(principal1, IP(0, 0), false);
   if (havege_random(state, iv, 16) != 0) abort();
-  //@ assert cryptogram(iv, 16, ?iv_cs, ?iv_cg);
+  //@ open cryptogram(iv, 16, ?iv_cs, ?iv_cg);
   //@ close yahalom_pub(iv_cg);
   //@ leak yahalom_pub(iv_cg);
-  //@ public_cryptogram(iv, iv_cg);
-  //@ close optional_crypto_chars(false, iv, 16, iv_cs);
+  //@ close optional_crypto_chars(!collision_in_run, iv, 16, iv_cs);
   memcpy(output, iv, 16);
-  //@ open optional_crypto_chars(false, iv, 16, iv_cs);
-  //@ assert chars(output, 16, iv_cs);
+  //@ open optional_crypto_chars(!collision_in_run, iv, 16, iv_cs);
+  //@ close cryptogram(output, 16, iv_cs, iv_cg);
+  //@ public_cryptogram(output, iv_cg);
 
   //@ close aes_context(&aes_context);
   if (aes_setkey_enc(&aes_context, key, (unsigned int) KEY_SIZE * 8) != 0)
     abort();
   //@ close [f2]optional_crypto_chars(true, msg, msg_len, msg_cs);
-  if (aes_crypt_cfb128(&aes_context, AES_ENCRYPT,
-                        (unsigned int) msg_len,
-                        &iv_off, iv, msg, output + 16) != 0)
-    abort();
+  //@ close cryptogram(iv, 16, iv_cs, iv_cg);
+  {
+    //@ close yahalom_proof_pred();
+    //@ PRODUCE_IS_DECRYPTION_ALLOWED(yahalom)
+    if (aes_crypt_cfb128(&aes_context, AES_ENCRYPT,
+                         (unsigned int) msg_len,
+                         &iv_off, iv, msg, output + 16) != 0)
+      abort();
+    //@ open yahalom_proof_pred();
+    //@ leak is_decryption_allowed(_, _, _);
+  }
   aes_free(&aes_context);
   //@ open aes_context(&aes_context);
-
+  //@ public_cryptogram(iv, iv_cg);
+  
   //@ open [f2]optional_crypto_chars(true, msg, msg_len, msg_cs);
   //@ assert cryptogram(output + 16, msg_len, ?enc_cs, ?enc_cg);
-  /*@ assert enc_cg == cg_encrypted(principal2, id, msg_cs,
-                                    append(chars_of_int(0), iv_cs)); @*/
+  //@ assert enc_cg == cg_encrypted(principal2, id, msg_cs, iv_cs);
 }
 
 void auth_dec(char *key, char *msg, unsigned int msg_len, char* output)
@@ -81,8 +87,7 @@ void auth_dec(char *key, char *msg, unsigned int msg_len, char* output)
              :
                exists(?enc_cg) &*& [_]yahalom_pub(enc_cg) &*&
                msg_cs == chars_for_cg(enc_cg) &*&
-               enc_cg == cg_encrypted(principal2, id, dec_cs,
-                                      append(chars_of_int(0), iv_cs)); @*/
+               enc_cg == cg_encrypted(principal2, id, dec_cs, iv_cs); @*/
 {
   char iv[16];
   aes_context aes_context;
@@ -92,22 +97,32 @@ void auth_dec(char *key, char *msg, unsigned int msg_len, char* output)
   //@ close [f2]optional_crypto_chars(false, msg, 16, iv_cs);
   memcpy(iv, msg, 16);
   //@ open [f2]optional_crypto_chars(false, msg, 16, iv_cs);
-
+  //@ cryptogram iv_cg = chars_for_cg_sur_random(iv_cs);
+  //@ public_chars_extract(msg, iv_cg); 
+  //@ if (!collision_in_run) crypto_chars(iv, 16, iv_cs);
+  //@ close cryptogram(iv, 16, iv_cs, iv_cg);
+    
   //@ close aes_context(&aes_context);
   if (aes_setkey_enc(&aes_context, key, (unsigned int) KEY_SIZE * 8) != 0)
     abort();
   //@ close [f2]optional_crypto_chars(false, msg + 16, msg_len, msg_cs);
-  if (aes_crypt_cfb128(&aes_context, AES_DECRYPT,
-                        (unsigned int) msg_len,
-                        &iv_off, iv, msg + 16, output) != 0)
-    abort();
+  {
+    //@ close yahalom_proof_pred();
+    //@ PRODUCE_IS_DECRYPTION_ALLOWED(yahalom)
+    if (aes_crypt_cfb128(&aes_context, AES_DECRYPT,
+                          (unsigned int) msg_len,
+                          &iv_off, iv, msg + 16, output) != 0)
+      abort();
+    //@ open yahalom_proof_pred();
+    //@ leak is_decryption_allowed(_, _, _);
+  }
   //@ open [f2]optional_crypto_chars(false, msg + 16, msg_len, msg_cs);
+  //@ public_cryptogram(iv, iv_cg);
   aes_free(&aes_context);
   //@ open aes_context(&aes_context);
 
   //@ assert optional_crypto_chars(!collision_in_run, output, msg_len, ?dec_cs);
-  /*@ cryptogram enc_cg = cg_encrypted(principal2, id, dec_cs,
-                                       append(chars_of_int(0), iv_cs)); @*/
+  //@ cryptogram enc_cg = cg_encrypted(principal2, id, dec_cs, iv_cs);
   //@ close exists(enc_cg);
   //@ assert collision_in_run || msg_cs == chars_for_cg(enc_cg);
   /*@ if (!collision_in_run)
@@ -221,8 +236,8 @@ void server(int server, int sender, int receiver,
                                    (void*) decrypted + 4 + NONCE_SIZE,
                                    NONCE_SIZE, NB_cs); @*/
     //@ open optional_crypto_chars(!collision_in_run, NB, NONCE_SIZE, NB_cs);
-    //@ NA_cg = chars_for_cg_sur(NA_cs, CG_RANDOM_TAG);
-    //@ NB_cg = chars_for_cg_sur(NB_cs, CG_RANDOM_TAG);
+    //@ NA_cg = chars_for_cg_sur_random(NA_cs);
+    //@ NB_cg = chars_for_cg_sur_random(NB_cs);
     /*@ if (!collision_in_run)
         {
           crypto_chars_join((void*) decrypted + 4);
@@ -645,7 +660,7 @@ void sender(int server, int sender, int receiver,
     /*@ open optional_crypto_chars(!collision_in_run,
                                    (void*) dec + 4 + KEY_SIZE + NONCE_SIZE,
                                    NONCE_SIZE, cs_NB); @*/
-    //@ cg_NB = chars_for_cg_sur(cs_NB, CG_RANDOM_TAG);
+    //@ cg_NB = chars_for_cg_sur_random(cs_NB);
     /*@ assert dec_cs == append(chars_of_int(recvr_val),
                            append(cs_KAB, append(cs_NA, cs_NB))); @*/
     free(msg);
@@ -662,7 +677,7 @@ void sender(int server, int sender, int receiver,
           crypto_chars_join(dec);
         }
     @*/
-    //@ cg_KAB = chars_for_cg_sur(cs_KAB, CG_SYMMETRIC_KEY_TAG);
+    //@ cg_KAB = chars_for_cg_sur_symmetric_key(cs_KAB);
     /*@ if (collision_in_run || yahalom_public_key(sender, s_id2))
         {
           assert [_]public_generated(yahalom_pub)(dec_cs);
@@ -706,11 +721,11 @@ void sender(int server, int sender, int receiver,
           assert receiver2 == recvr_val;
           cg_KAB = KAB2;
           assert cg_KAB == cg_symmetric_key(server, _);
-          chars_for_cg_inj(cg_NA, NA2);
+          chars_for_cg_inj_random(cg_NA, NA2);
           assert cg_NA == cg_random(?s, ?a_id);
           assert NB2 == cg_random(?r, ?b_id);
           cg_NB = NB2;
-          chars_for_cg_inj(cg_NB, NB2);
+          chars_for_cg_inj_random(cg_NB, NB2);
           assert chars_for_cg(cg_NB) == cs_NB;
           assert server2 == server;
           assert cg_info(cg_KAB) == IP(4, IP(sender, IP(receiver,
@@ -875,7 +890,7 @@ void receiver(int server, int sender, int receiver,
   }
 
   //@ open optional_crypto_chars(false, NA, NONCE_SIZE, ?cs_NA);
-  //@ cryptogram cg_NA = chars_for_cg_sur(cs_NA, CG_RANDOM_TAG);
+  //@ cryptogram cg_NA = chars_for_cg_sur_random(cs_NA);
   //@ assert cg_NA == cg_random(?s, ?s_id);
   //@ public_chars_extract(NA, cg_NA);
   //@ close havege_state(&havege_state);
@@ -1021,7 +1036,7 @@ void receiver(int server, int sender, int receiver,
       memcpy(generated_key, dec1 + 4, KEY_SIZE);
       /*@ open optional_crypto_chars(!collision_in_run,
                                      dec1 + 4, KEY_SIZE, cs_KAB); @*/
-      //@ cg_KAB = chars_for_cg_sur(cs_KAB, CG_SYMMETRIC_KEY_TAG);
+      //@ cg_KAB = chars_for_cg_sur_symmetric_key(cs_KAB);
       /*@ if(collision_in_run || yahalom_public_key(recvr_val, r_id2))
           {
             if (collision_in_run)
@@ -1074,7 +1089,7 @@ void receiver(int server, int sender, int receiver,
             assert [_]yahalom_pub_msg4(?server2, ?sender2,
                                        ?receiver2, ?a_id2, ?NB2);
             assert NB2 == cg_random(?b2, ?b_id2);
-            chars_for_cg_inj(cg_NB, NB2);
+            chars_for_cg_inj_random(cg_NB, NB2);
             if (bad(server2) || bad(sender2) || bad(receiver2))
             {
               open [_]yahalom_pub(cg_NB);

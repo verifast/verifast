@@ -15,17 +15,18 @@ def update_part(path, old, new):
   f2.close()
 
 insert_part("string.h", 5, "//@ #include <crypto.gh>\r\n")
+insert_part("string.h", 7, "#define MINIMAL_STRING_SIZE 4\r\n\n")
 update_part(
   "string.h",
   "    //@ requires chars(array, count, ?cs) &*& [?f]chars(array0, count, ?cs0);\r\n"
   "    //@ ensures chars(array, count, cs0) &*& [f]chars(array0, count, cs0);\r\n",
   "    /*@ requires chars(array, count, ?cs) &*&\r\n"
-  "                 [?f]optional_crypto_chars(?cc, array0, count, ?cs0); @*/\r\n"
+  "                 [?f]optional_crypto_chars(?cc, array0, count, ?cs0) &*&\r\n"
+  "                 cc ? count >= MINIMAL_STRING_SIZE : true; @*/\r\n"
   "    /*@ ensures  optional_crypto_chars(cc, array, count, cs0) &*&\r\n"
   "                 [f]optional_crypto_chars(cc, array0, count, cs0); @*/\r\n"
 )
 
-insert_part("string.h", 39, "#define MIN_MEMCMP_SIZE 4\r\n\r\n")
 update_part(
   "string.h",
   "    //@ requires [?f]chars(array, ?n, ?cs) &*& [?f0]chars(array0, ?n0, ?cs0) &*& "
@@ -36,7 +37,7 @@ update_part(
   "                 [?f1]optional_crypto_chars(?cc, array, ?n, ?cs) &*&\r\n"
   "                 [?f2]optional_crypto_chars(?cc0, array0, ?n0, ?cs0) &*& \r\n"
   "                 count <= n &*& count <= n0 &*&\r\n"
-  "                 cc || cc0 ? count >= MIN_MEMCMP_SIZE : true; @*/\r\n"
+  "                 cc || cc0 ? count >= MINIMAL_STRING_SIZE : true; @*/\r\n"
   "    /*@ ensures  [f1]optional_crypto_chars(cc, array, n, cs) &*&\r\n"
   "                 [f2]optional_crypto_chars(cc0, array0, n0, cs0) &*&\r\n"
   "                 cc || cc0 ?\r\n"

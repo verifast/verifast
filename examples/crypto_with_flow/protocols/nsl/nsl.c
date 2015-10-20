@@ -780,7 +780,7 @@ void receiver_msg3(int* socket, havege_state* havege_state,
             int p2 = int_pair(sender2, sender2);
             assert cg_info(r_nonce_cg) == int_pair(2, p1);
             assert cg_info(r_nonce_cg2) == int_pair(2, p2);
-            chars_for_cg_inj(r_nonce_cg, r_nonce_cg2);
+            chars_for_cg_inj_random(r_nonce_cg, r_nonce_cg2);
             assert r_nonce_cg == r_nonce_cg2;
             assert int_pair(2, p1) == int_pair(2, p2);
             int_right_int_pair(2, p1);

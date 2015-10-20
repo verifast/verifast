@@ -4,13 +4,16 @@
 #include <stddef.h>
 //@ #include <crypto.gh>
 
+#define MINIMAL_STRING_SIZE 4
+
 char *strcpy(char *d, char *s);
     //@ requires [?f]string(s, ?cs) &*& chars(d, length(cs) + 1, _);
     //@ ensures [f]string(s, cs) &*& chars(d, length(cs) + 1, append(cs, {0})) &*& result == d;
 
 void memcpy(void *array, void *array0, size_t count);
     /*@ requires chars(array, count, ?cs) &*&
-                 [?f]optional_crypto_chars(?cc, array0, count, ?cs0); @*/
+                 [?f]optional_crypto_chars(?cc, array0, count, ?cs0) &*&
+                 cc ? count >= MINIMAL_STRING_SIZE : true; @*/
     /*@ ensures  optional_crypto_chars(cc, array, count, cs0) &*&
                  [f]optional_crypto_chars(cc, array0, count, cs0); @*/
 
@@ -36,14 +39,12 @@ int strlen(char *string);
     //@ requires [?f]string(string, ?cs);
     //@ ensures [f]string(string, cs) &*& result == length(cs);
 
-#define MIN_MEMCMP_SIZE 4
-
 int memcmp(char *array, char *array0, size_t count);
     /*@ requires principal(?principal, ?values_count) &*&
                  [?f1]optional_crypto_chars(?cc, array, ?n, ?cs) &*&
                  [?f2]optional_crypto_chars(?cc0, array0, ?n0, ?cs0) &*& 
                  count <= n &*& count <= n0 &*&
-                 cc || cc0 ? count >= MIN_MEMCMP_SIZE : true; @*/
+                 cc || cc0 ? count >= MINIMAL_STRING_SIZE : true; @*/
     /*@ ensures  [f1]optional_crypto_chars(cc, array, n, cs) &*&
                  [f2]optional_crypto_chars(cc0, array0, n0, cs0) &*&
                  cc || cc0 ?

@@ -11,44 +11,6 @@ fixpoint list<cryptogram> cgs_in_chars(list<char> cs);
 //Associated information of a cryptogram
 fixpoint int cg_info(cryptogram cg);
 
-#define CG_RANDOM_TAG           1
-#define CG_SYMMETRIC_KEY_TAG    2
-#define CG_PUBLIC_KEY_TAG       3
-#define CG_PRIVATE_KEY_TAG      4
-#define CG_HASH_TAG             5
-#define CG_HMAC_TAG             6
-#define CG_ENCRYPTED_TAG        7
-#define CG_AUTH_ENCRYPTED_TAG   8
-#define CG_ASYM_ENCRTYPTED_TAG  9
-#define CG_ASYM_SIGNATURE_TAG   10
-
-fixpoint int  cryptogram_tag(cryptogram cg)
-{
-  switch(cg)
-  {
-    case cg_random(p1, c1):
-      return CG_RANDOM_TAG;
-    case cg_symmetric_key(p1, c1):
-      return CG_SYMMETRIC_KEY_TAG;
-    case cg_public_key(p1, c1):
-      return CG_PUBLIC_KEY_TAG;
-    case cg_private_key(p1, c1):
-      return CG_PRIVATE_KEY_TAG;
-    case cg_hash(cs1):
-      return CG_HASH_TAG;
-    case cg_hmac(p1, c1, cs1):
-      return CG_HMAC_TAG;
-    case cg_encrypted(p1, c1, cs1, ent1):
-      return CG_ENCRYPTED_TAG;
-    case cg_auth_encrypted(p1, c1, mac1, cs1, ent1):
-      return CG_AUTH_ENCRYPTED_TAG;
-    case cg_asym_encrypted(p1, c1, cs1, ent1):
-      return CG_ASYM_ENCRTYPTED_TAG;
-    case cg_asym_signature(p1, c1, cs1, ent1):
-      return CG_ASYM_SIGNATURE_TAG;
-  }
-}
-
 fixpoint bool cg_is_nested(cryptogram cg)
 {
   switch(cg)
@@ -75,17 +37,49 @@ fixpoint list<char> cg_payload(cryptogram cg)
   }
 }
 
-lemma void chars_for_cg_inj(cryptogram cg1, cryptogram cg2);
-  requires cryptogram_tag(cg1) == cryptogram_tag(cg2) &*&
-           chars_for_cg(cg1) == chars_for_cg(cg2);
-  ensures  collision_in_run() || cg1 == cg2;
-
-lemma cryptogram chars_for_cg_sur(list<char> cs, int tag);
-  requires 1 <= tag &*& tag <= 10;
-  ensures  cryptogram_tag(result) == tag &*& cs == chars_for_cg(result);
-
 lemma_auto void cg_constraints(cryptogram cg);
      requires true;
      ensures  cons(cg, nil) == cgs_in_chars(chars_for_cg(cg));
+
+lemma void chars_for_cg_inj_random(cryptogram cg1, cryptogram cg2);
+  requires cg1 == cg_random(_, _) &*& cg2 == cg_random(_, _) &*&
+           chars_for_cg(cg1) == chars_for_cg(cg2);
+  ensures  collision_in_run() || cg1 == cg2;
+
+lemma void chars_for_cg_inj_hash(cryptogram cg1, cryptogram cg2);
+  requires cg1 == cg_hash(_) &*& cg2 == cg_hash(_) &*&
+           chars_for_cg(cg1) == chars_for_cg(cg2);
+  ensures  collision_in_run() || cg1 == cg2;
+
+lemma void chars_for_cg_inj_hmac(cryptogram cg1, cryptogram cg2);
+  requires cg1 == cg_hmac(?p, ?c, _) &*& cg2 == cg_hmac(p, c, _) &*&
+           chars_for_cg(cg1) == chars_for_cg(cg2);
+  ensures  collision_in_run() || cg1 == cg2;
+
+lemma void chars_for_cg_inj_encrypted(cryptogram cg1, cryptogram cg2);
+  requires cg1 == cg_encrypted(?p, ?c, _, ?ent) &*&
+           cg2 == cg_encrypted(p, c, _, ent) &*&
+           chars_for_cg(cg1) == chars_for_cg(cg2);
+  ensures  collision_in_run() || cg1 == cg2;
+
+lemma cryptogram chars_for_cg_sur_random(list<char> cs);
+  requires true;
+  ensures  result == cg_random(_, _) &*&
+           cs == chars_for_cg(result);
+
+lemma cryptogram chars_for_cg_sur_symmetric_key(list<char> cs);
+  requires true;
+  ensures  result == cg_symmetric_key(_, _) &*&
+           cs == chars_for_cg(result);
+
+lemma cryptogram chars_for_cg_sur_public_key(list<char> cs);
+  requires true;
+  ensures  result == cg_public_key(_, _) &*&
+           cs == chars_for_cg(result);
+
+lemma cryptogram chars_for_cg_sur_private_key(list<char> cs);
+  requires true;
+  ensures  result == cg_private_key(_, _) &*&
+           cs == chars_for_cg(result);
 
 #endif
