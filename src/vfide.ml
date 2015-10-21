@@ -125,6 +125,8 @@ module TreeMetrics = struct
 end
 
 let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend enforceAnnotations =
+  let leftBranchPixbuf = GdkPixbuf.from_file (default_bindir ^ "/branch-left.png") in
+  let rightBranchPixbuf = GdkPixbuf.from_file (default_bindir ^ "/branch-right.png") in
   let ctxts_lifo = ref None in
   let msg = ref None in
   let url = ref None in
@@ -539,7 +541,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       else if Filename.check_suffix path ".java" || Filename.check_suffix path ".javaspec" then highlight (common_keywords @ java_keywords)
       else ()
   in
-  let create_editor (textNotebook: GPack.notebook) buffer =
+  let create_editor (textNotebook: GPack.notebook) buffer lineMarksTable =
     let textLabel = GMisc.label ~text:"(untitled)" () in
     let textVbox = GPack.vbox ~spacing:2 ~packing:(fun widget -> ignore (textNotebook#append_page ~tab_label:textLabel#coerce widget)) () in
     let textFindBox = GPack.hbox ~show:false ~border_width:2 ~spacing:2 ~packing:(textVbox#pack ~expand:false) () in
@@ -549,6 +551,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN
         ~packing:textVbox#add () in
     let srcText = (*GText.view*) GSourceView2.source_view ~source_buffer:buffer ~packing:textScroll#add () in
+    lineMarksTable#show_in_source_view srcText;
     srcText#misc#modify_font_by_name !scaledCodeFont;
     ignore $. textFindEntry#event#connect#key_press (fun key ->
       if GdkEvent.Key.keyval key = GdkKeysyms._Escape then begin
@@ -592,6 +595,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   let add_buffer() =
     let path = ref None in
     let buffer = GSourceView2.source_buffer () in
+    let lineMarksTable = GLineMarks.table () in
     buffer#begin_not_undoable_action (); (* Disable the source view's undo manager since we handle undos ourselves. *)
     let apply_tag_enabled = ref false in (* To prevent tag copying when pasting from clipboard *)
     ignore $. buffer#connect#apply_tag (fun tag ~start ~stop -> if not !apply_tag_enabled then GtkSignal.emit_stop_by_name buffer#as_buffer "apply-tag");
@@ -605,8 +609,8 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     let _ = buffer#create_tag ~name:"currentCaller" [`BACKGROUND "Green"] in
     let currentStepMark = buffer#create_mark (buffer#start_iter) in
     let currentCallerMark = buffer#create_mark (buffer#start_iter) in
-    let mainView = create_editor textNotebook buffer in
-    let subView = create_editor subNotebook buffer in
+    let mainView = create_editor textNotebook buffer lineMarksTable in
+    let subView = create_editor subNotebook buffer lineMarksTable in
     let undoList: undo_action list ref = ref [] in
     let redoList: undo_action list ref = ref [] in
     let eol = ref (if platform = Windows then "\r\n" else "\n") in
@@ -623,6 +627,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       method currentStepMark = currentStepMark
       method currentCallerMark = currentCallerMark
       method useSiteTags = useSiteTags
+      method lineMarksTable = lineMarksTable
     end in
     ignore $. buffer#connect#modified_changed (fun () ->
       updateBufferTitle tab;
@@ -894,6 +899,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     | Some items ->
       List.iter
         begin fun (ass, h, env, (tab, mark1, mark2), msg, locstack) ->
+          tab#lineMarksTable#clear;
           let buffer = tab#buffer in
           buffer#delete_mark (`MARK mark1);
           buffer#delete_mark (`MARK mark2)
@@ -927,8 +933,12 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
         )
       | Branching branch::cs ->
         let it = stepStore#append ?parent:(match itstack with [] -> None | it::_ -> Some it) () in
-        let Some stepItem = lastItem in (* We assume this is not the first item in the trace. *)
-        stepStore#set ~row:it ~column:stepDataCol stepItem;
+        let Some lastItem_ = lastItem in (* We assume this is not the first item in the trace. *)
+        let (_, _, _, l, _, lastItemLocstack) = lastItem_ in
+        let (rootCaller, _) = let rec last xs = match xs with [x] -> x | _::xs -> last xs in last ((l, [])::lastItemLocstack) in
+        let (tab, startMark, endMark) = rootCaller in
+        tab#lineMarksTable#add startMark (match branch with LeftBranch -> leftBranchPixbuf | RightBranch -> rightBranchPixbuf);
+        stepStore#set ~row:it ~column:stepDataCol lastItem_;
         stepStore#set ~row:it ~column:stepCol (match branch with LeftBranch -> "Executing first branch" | RightBranch -> "Executing second branch");
         iter lastItem itstack (Some it) ass locstack last_loc last_env cs
     in
@@ -983,7 +993,6 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     apply_tag_by_name tab name ~start:(srcpos_iter buffer (line1, col1)) ~stop:(srcpos_iter buffer (line2, col2))
   in
   let get_step_of_path selpath =
-    let stepItems = match !stepItems with Some stepItems -> stepItems | None -> assert false in
     let gIter = stepStore#get_iter selpath in
     stepStore#get ~row:gIter ~column:stepDataCol
   in
