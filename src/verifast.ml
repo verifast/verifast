@@ -1356,6 +1356,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           eval_h_pure h' env' dec $. fun _ _ t_dec ->
           cont (Some t_dec)
       end $. fun t_dec ->
+      with_context (Executing (h', env', l, "Evaluating loop condition")) $. fun () ->
       eval_h_nonpure h' env' e $. fun h' env' v ->
       begin fun cont ->
         branch
@@ -1472,6 +1473,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       let lblenv = List.map (fun (lbl, cont) -> (lbl, fun blocks_done sizemap ttenv _ h' env' -> free_locals endBodyLoc h' ttenv env' !locals_to_free (fun h' _ -> exit_loop h' env' (cont blocks_done sizemap)))) lblenv in
       let return_cont h' tenv env retval = assert_false h' [] l "Returning out of a requires-ensures loop is not yet supported." None in
+      with_context (Executing (h', env', l, "Evaluating loop condition")) $. fun () ->
       eval_h_nonpure h' env' e $. fun h' env' v ->
       begin fun cont ->
         branch
