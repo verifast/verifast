@@ -6,7 +6,6 @@
 struct string_buffer;
 
 /*@
-
 predicate string_buffer(struct string_buffer *buffer; list<char> cs);
 predicate string_buffer_minus_chars(struct string_buffer *buffer; char *pcs, int length);
 
@@ -14,6 +13,9 @@ lemma void string_buffer_merge_chars(struct string_buffer *buffer);
     requires [?f]string_buffer_minus_chars(buffer, ?pcs, ?n) &*& [f]chars(pcs, n, ?cs);
     ensures [f]string_buffer(buffer, cs);
 
+lemma_auto void string_buffer_not_null();
+    requires string_buffer(?buffer, ?cs);
+    ensures string_buffer(buffer, cs) &*& buffer != 0;
 @*/
 
 struct string_buffer *create_string_buffer();

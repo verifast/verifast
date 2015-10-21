@@ -15,6 +15,7 @@ struct string_buffer {
 
 /*@
 predicate string_buffer(struct string_buffer *buffer; list<char> cs) =
+    buffer != 0 &*&
     buffer->length |-> ?length &*&
     buffer->capacity |-> ?capacity &*&
     buffer->chars |-> ?charsArray &*&
@@ -24,6 +25,7 @@ predicate string_buffer(struct string_buffer *buffer; list<char> cs) =
     malloc_block(charsArray, capacity);
 
 predicate string_buffer_minus_chars(struct string_buffer *buffer; char *charsArray, int length) =
+    buffer != 0 &*&
     buffer->length |-> length &*&
     buffer->capacity |-> ?capacity &*&
     buffer->chars |-> charsArray &*&
@@ -37,6 +39,14 @@ lemma void string_buffer_merge_chars(struct string_buffer *buffer)
     ensures [f]string_buffer(buffer, cs);
 {
   open string_buffer_minus_chars(buffer, pcs, n);
+}
+
+lemma_auto void string_buffer_not_null()
+    requires [?f]string_buffer(?buffer, ?cs);
+    ensures [f]string_buffer(buffer, cs) &*& buffer != 0;
+{
+    open [f]string_buffer(buffer, cs);
+    close [f]string_buffer(buffer, cs);
 }
 @*/
 
