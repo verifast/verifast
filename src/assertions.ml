@@ -281,14 +281,22 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           None -> do_assume_chunk ()
         | Some ((frac, tparams, xs1, xs2, pre, post), declared_paramtypes) ->
           let ts = List.map (fun (t, (tp0, tp)) -> prover_convert_term t tp0 tp) (zip2 ts (zip2 domain declared_paramtypes)) in
+          let produce_post env' =
+            let env'' = env' @ zip2 (xs1@xs2) ts in
+            with_context PushSubcontext $. fun () ->
+            with_context (Executing (h, env'', l, "Applying autolemma")) $. fun () ->
+            produce_asn_core_with_post (zip2 tparams targs) h [] env'' post real_unit size_first size_all true $. fun h_ _ _ _ ->
+            with_context PopSubcontext $. fun () ->
+            cont h_ ghostenv env
+          in
           match frac with
             None -> 
             if coef == real_unit then 
-              produce_asn_core_with_post (zip2 tparams targs) h [] (zip2 (xs1@xs2) ts) post coef size_first size_all true (fun h_ _ _ _ -> cont h_ ghostenv env)
+              produce_post []
             else
               do_assume_chunk ()
           | Some(f) ->
-            produce_asn_core_with_post (zip2 tparams targs) h [] ((f, coef) :: (zip2 (xs1@xs2) ts)) post real_unit size_first size_all true (fun h_ _ _ _ -> cont h_ ghostenv env)
+            produce_post [(f, coef)]
       )
     | WInstPredAsn (l, e_opt, st, cfin, tn, g, index, pats) ->
       begin
@@ -1427,6 +1435,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                         None -> env
                       | Some t -> ("this", t) :: env
                       in
+                      with_context PushSubcontext $. fun () ->
                       with_context (Executing (h, env, outer_l, "Auto-closing predicate")) $. fun () ->
                         let new_coef = 
                           match inner_frac_expr_opt with
@@ -1455,6 +1464,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                               (input_param_count - outer_nb_curried, (ctxt#mk_app funsym ctor_args, false), chunk_args)
                             end in
                             produce_chunk h symb current_targs new_coef (Some input_param_count) args None (fun h -> 
+                            with_context PopSubcontext $. fun () ->
                             cont h new_coef) (* todo: properly set the size *)
                     )
                   )
@@ -1564,8 +1574,10 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                         let full_env = match actual_this_opt with None -> full_env | Some t -> ("this", t) :: full_env in
                         let ghostenv = [] in
                         let produce_coef = if is_dummy_frac_term found_coef then get_dummy_frac_term () else found_coef in
+                        with_context PushSubcontext $. fun () ->
                         with_context (Executing (h, full_env, outer_l, "Auto-opening predicate")) $. fun () ->
                           produce_asn tpenv h ghostenv full_env outer_wbody produce_coef None None $. fun h ghostenv env ->
+                            with_context PopSubcontext $. fun () ->
                             (* perform remaining opens *)
                             if is_dummy_frac_term found_coef then
                               exec_rule (Some (Chunk(consumed_symb, consumed_targs, get_dummy_frac_term () , consumed_ts, consumed_size) :: h)) cont
@@ -1650,10 +1662,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let ghostenv = [] in
             let checkDummyFracs = true in
             let coef = match coefpat with TermPat f -> (real_mul dummy_loc coef f) | SrcPat (DummyPat) -> get_dummy_frac_term () | SrcPat (LitPat _) -> assert false; | SrcPat (VarPat(_, x)) -> real_unit  in
+            with_context PushSubcontext $. fun () ->
             with_context (Executing (h, env, l, "Auto-closing predicate")) $. fun () ->
             consume_asn rules tpenv h ghostenv env wbody checkDummyFracs coef $. fun _ h ghostenv env size_first ->
             let outputArgs = List.map (fun (x, tp0) -> let tp = instantiate_type tpenv tp0 in (prover_convert_term (List.assoc x env) tp0 tp)) outputParams in
             with_context (Executing (h, [], l, "Producing auto-closed chunk")) $. fun () ->
+            with_context PopSubcontext $. fun () ->
             cont (Chunk (g, targs, coef, inputArgs @ outputArgs, None)::h)
           in
           let rule l h targs terms_are_well_typed coef coefpat ts cont =
@@ -1861,8 +1875,10 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let [xinfo, _; xelem, _; xvalue, _] = xs in
                   let env = [xinfo, info; xelem, elem] in
                   let rules = rules_cell in
+                  with_context PushSubcontext $. fun () ->
                   with_context (Executing (h, env, asn_loc wbody, "Auto-closing array slice")) $. fun () ->
                   consume_asn rules tpenv h ghostenv env wbody true coef' $. fun _ h ghostenv env size_first ->
+                  with_context PopSubcontext $. fun () ->
                   match try_assoc xvalue env with
                     None -> cont None
                   | Some v -> cont'' v h
