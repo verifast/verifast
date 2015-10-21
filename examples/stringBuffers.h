@@ -18,7 +18,7 @@ lemma void string_buffer_merge_chars(struct string_buffer *buffer);
 
 struct string_buffer *create_string_buffer();
     //@ requires emp;
-    //@ ensures string_buffer(result, nil);
+    //@ ensures string_buffer(result, nil) &*& result != 0;
 int string_buffer_get_length(struct string_buffer *buffer);
     //@ requires [?f]string_buffer(buffer, ?cs);
     //@ ensures [f]string_buffer(buffer, cs) &*& result == length(cs);
@@ -49,8 +49,11 @@ struct string_buffer *string_buffer_copy(struct string_buffer *buffer);
 bool string_buffer_split(struct string_buffer *buffer, char *separator, struct string_buffer *before, struct string_buffer *after);
     //@ requires [?f1]string_buffer(buffer, ?bcs) &*& [?f2]string(separator, ?cs) &*& string_buffer(before, _) &*& string_buffer(after, _);
     //@ ensures [f1]string_buffer(buffer, bcs) &*& [f2]string(separator, cs) &*& string_buffer(before, _) &*& string_buffer(after, _);
+void string_buffer_drop_front(struct string_buffer *buffer, int length);
+    //@ requires string_buffer(buffer, ?bcs) &*& length >= 0;
+    //@ ensures string_buffer(buffer, _);
 void string_buffer_dispose(struct string_buffer *buffer);
-    //@ requires string_buffer(buffer, _);
+    //@ requires buffer == 0 ? emp : string_buffer(buffer, _);
     //@ ensures emp;
 
 #endif

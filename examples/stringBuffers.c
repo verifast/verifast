@@ -42,7 +42,7 @@ lemma void string_buffer_merge_chars(struct string_buffer *buffer)
 
 struct string_buffer *create_string_buffer()
     //@ requires emp;
-    //@ ensures string_buffer(result, nil);
+    //@ ensures string_buffer(result, nil) &*& result != 0;
 {
     struct string_buffer *buffer = malloc(sizeof(struct string_buffer));
     if (buffer == 0) {
@@ -111,7 +111,6 @@ void string_buffer_append_chars(struct string_buffer *buffer, char *chars, int c
     //@ ensures string_buffer(buffer, append(bcs, cs)) &*& [f]chars(chars, count, cs);
 {
     int newLength = 0;
-    int length = buffer->length;
     if (INT_MAX - buffer->length < count) abort();
     newLength = buffer->length + count;
     string_buffer_ensure_capacity(buffer, newLength);
@@ -176,11 +175,13 @@ bool string_buffer_equals_string(struct string_buffer *buffer, char *string)
 }
 
 void string_buffer_dispose(struct string_buffer *buffer)
-    //@ requires string_buffer(buffer, _);
+    //@ requires buffer == 0 ? emp : string_buffer(buffer, _);
     //@ ensures emp;
 {
-    free((void*) buffer->chars);
-    free(buffer);
+    if (buffer != 0){
+        free((void*) buffer->chars);
+        free(buffer);
+    }
 }
 
 int chars_index_of_string(char *chars, int length, char *string)
@@ -236,3 +237,24 @@ bool string_buffer_split(struct string_buffer *buffer, char *separator, struct s
     string_buffer_append_chars(after, chars + index + n, length - index - n);
     return true;
 }
+
+void string_buffer_drop_front(struct string_buffer *buffer, int length)
+    //@ requires string_buffer(buffer, ?bcs) &*& length >= 0;
+    //@ ensures string_buffer(buffer, _);
+{
+    int length_buffer = string_buffer_get_length(buffer);
+    if (length >= length_buffer){
+        string_buffer_clear(buffer);
+    }else{
+        char *chars = string_buffer_get_chars(buffer);
+        struct string_buffer *temp = create_string_buffer();
+        //@ chars_split(chars, length);
+        //@ chars_limits(chars);
+        string_buffer_append_chars(temp, chars+length, length_buffer - length);
+        //@ string_buffer_merge_chars(buffer);
+        string_buffer_clear(buffer);
+        string_buffer_append_string_buffer(buffer, temp);
+        string_buffer_dispose(temp);
+    }
+}
+
