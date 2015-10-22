@@ -57,10 +57,7 @@ ifndef WITHOUT_LABLGTK
     GTKSOURCEVIEW_LFLAGS += -I macos GSourceView2.cmx
     GTKSOURCEVIEW_DEPS   += macos/GSourceView2.cmx
   else
-    GTKSOURCEVIEW_LFLAGS += lablgtksourceview2.cmxa linemarks.cmxa
-    ifdef LABLGTK2
-      GTKSOURCEVIEW_LFLAGS += -I ${LABLGTK2} -I linemarks
-    endif
+    GTKSOURCEVIEW_LFLAGS += -I linemarks lablgtksourceview2.cmxa linemarks.cmxa
     GTKSOURCEVIEW_LIBS   += ${LABLLIBS}
   endif
 endif
@@ -361,6 +358,9 @@ ifndef WITHOUT_LABLGTK
 # Also depend on "vfide.ml": Make ignores our dependency "%.cmx: %.ml".
 vfide.cmx: Fonts.cmx vfide.ml $(GTKSOURCEVIEW_DEPS)
 	@echo "  OCAMLOPT " $@
+ifneq ($(OS), Darwin)
+	cd linemarks; make linemarks.cmxa
+endif
 	$(SET_LDD); $(OCAMLOPT) $(OCAMLCFLAGS) -thread -c -w p -warn-error FSU -c $(INCLUDES) \
 	-pp ${CAMLP4O} nums.cmxa $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) vfide.ml
 
