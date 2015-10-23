@@ -355,6 +355,10 @@ clean::
 	rm -f macos/*.cm* macos/*.o
 
 ifndef WITHOUT_LABLGTK
+
+clean::
+	cd linemarks; make clean
+
 # Also depend on "vfide.ml": Make ignores our dependency "%.cmx: %.ml".
 vfide.cmx: Fonts.cmx vfide.ml $(GTKSOURCEVIEW_DEPS)
 	@echo "  OCAMLOPT " $@

@@ -145,23 +145,23 @@ let readFile path =
   in
   let count = ref 0 in
   let rec iter () =
-    let buf = String.create 60000 in
+    let buf = Bytes.create 60000 in
     let result = input chan buf 0 60000 in
     count := !count + result;
     if result = 0 then [] else (buf, result)::iter()
   in
   let chunks = iter() in
   close_chan chan;
-  let s = String.create !count in
+  let s = Bytes.create !count in
   let rec iter2 chunks offset =
     match chunks with
       [] -> ()
     | (buf, size)::chunks ->
-      String.blit buf 0 s offset size;
+      Bytes.blit buf 0 s offset size;
       iter2 chunks (offset + size)
   in
   iter2 chunks 0;
-  file_to_utf8 s
+  file_to_utf8 (Bytes.unsafe_to_string s)
 
 type include_kind =
   DoubleQuoteInclude
@@ -375,7 +375,7 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
   let in_comment = ref inComment in
   let in_ghost_range = ref inGhostRange in
   
-  let initial_buffer = String.create 32
+  let initial_buffer = Bytes.create 32
   in
 
   let buffer = ref initial_buffer
@@ -387,17 +387,17 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
   in
 
   let store c =
-    if !bufpos >= String.length !buffer then
+    if !bufpos >= Bytes.length !buffer then
       begin
-        let newbuffer = String.create (2 * !bufpos) in
-        String.blit !buffer 0 newbuffer 0 !bufpos; buffer := newbuffer
+        let newbuffer = Bytes.create (2 * !bufpos) in
+        Bytes.blit !buffer 0 newbuffer 0 !bufpos; buffer := newbuffer
       end;
-    String.set !buffer !bufpos c;
+    Bytes.set !buffer !bufpos c;
     incr bufpos
   in
 
   let get_string () =
-    let s = String.sub !buffer 0 !bufpos in buffer := initial_buffer; s
+    let s = Bytes.sub_string !buffer 0 !bufpos in buffer := initial_buffer; s
   in
 
   let tokenpos = ref 0 in

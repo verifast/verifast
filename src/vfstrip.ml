@@ -37,22 +37,22 @@ let get_file_options text =
 let readFile chan =
   let count = ref 0 in
   let rec iter () =
-    let buf = String.create 60000 in
+    let buf = Bytes.create 60000 in
     let result = input chan buf 0 60000 in
     count := !count + result;
     if result = 0 then [] else (buf, result)::iter()
   in
   let chunks = iter() in
-  let s = String.create !count in
+  let s = Bytes.create !count in
   let rec iter2 chunks offset =
     match chunks with
       [] -> ()
     | (buf, size)::chunks ->
-      String.blit buf 0 s offset size;
+      Bytes.blit buf 0 s offset size;
       iter2 chunks (offset + size)
   in
   iter2 chunks 0;
-  s
+  Bytes.unsafe_to_string s
 
 let strip_annotations fin fout =
   let text = readFile fin in

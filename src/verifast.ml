@@ -3160,8 +3160,7 @@ let parse_line line =
   let space = String.index line ' ' in
   let command = String.sub line 0 space in
   let symbol = String.sub line (space + 1) (String.length line - space - 1) in
-  let n = String.length symbol in
-  for i = 0 to n - 1 do if symbol.[i] = '\\' then symbol.[i] <- '/' done;
+  let symbol = String.map (function '\\' -> '/' | c -> c) symbol in
   (command, symbol)
 
 let link_program vroots library_paths isLibrary allModulepaths dllManifest exports =

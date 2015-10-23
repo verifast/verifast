@@ -18,7 +18,7 @@ liblinemarks.a: linemarks.o
 linemarks.o: linemarks.c
 	ocamlopt.opt -c -ccopt "`pkg-config --cflags gtksourceview-2.0`" linemarks.c ml_GtkLineMarks.c
 
-ifeq ($(shell valac --version > /dev/null ; echo $$?), 0)
+ifeq ($(shell valac --version &>/dev/null ; echo $$?), 0)
 
 linemarks.c: linemarks.vala
 	valac --vapidir . -C -H linemarks.h --pkg gtksourceview-2.0 --pkg mystuff linemarks.vala
@@ -27,7 +27,10 @@ clean::
 	rm linemarks.c
 
 else
-$(warning No Vala compiler present; not rebuilding linemarks.c)
+
+linemarks.c: linemarks.vala
+	@echo linemarks.vala is newer than linemarks.c, but no Vala compiler present. Touch linemarks.c to eliminate this message.
+
 endif
 
 clean::
