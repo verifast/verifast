@@ -469,13 +469,11 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
       multiline_comment ()
     end
     else
-    let new_line () =
-      let old_linepos = !linepos in
+    let new_line old_line old_column =
       new_loc_line ();
       if !in_single_line_annotation then (
         in_single_line_annotation := false;
-        let end_of_line = if 0 <= !textpos - 2 && text.[!textpos - 2] = '\r' && text.[!textpos - 1] = '\n' then !textpos - 2 else !textpos - 1 in
-        ghost_range_end_at (path, !line - 1, end_of_line - old_linepos + 1); (* Do not include the newline in the ghost range; needed to make local syntax highlighting refresh hack work in vfide. *)
+        ghost_range_end_at (path, old_line, old_column); (* Do not include the newline in the ghost range; needed to make local syntax highlighting refresh hack work in vfide. *)
         Some (Kwd "@*/")
       ) else if !ignore_eol then
         next_token ()
@@ -485,12 +483,12 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
     match text_peek () with
       (' ' | '\009' | '\026' | '\012') ->
         text_junk (); next_token ()
-    | '\010' ->
-        text_junk (); new_line ()
-    | '\013' ->
+    | ('\010'|'\013') as c ->
+        let old_line = !line in
+        let old_column = !textpos - !linepos + 1 in
+        if c = '\013' && !textpos + 1 < textlength && text.[!textpos + 1] = '\010' then incr textpos;
         text_junk ();
-        if text_peek () = '\010' then text_junk ();
-        new_line ()
+        new_line old_line old_column
     | ('A'..'Z' | 'a'..'z' | '_' | '\128'..'\255') as c ->
         start_token();
         text_junk ();
