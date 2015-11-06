@@ -4,13 +4,19 @@ Compiling VeriFast on Debian and Ubuntu (also works on 64bit)
     
 1.  Run this (replace USERNAME with your departemental username)
     
-    $ sudo apt-get install --no-install-recommends subversion make ocaml-native-compilers gcc camlp4 liblablgtk2-ocaml-dev liblablgtksourceview2-ocaml-dev
+    $ sudo apt-get install --no-install-recommends \
+       subversion make ocaml-native-compilers gcc camlp4 \
+       liblablgtk2-ocaml-dev liblablgtksourceview2-ocaml-dev valac
     $ VERIFASTDIR=$PWD
     $ svn co --username USERNAME https://dnetcode.cs.kuleuven.be/svn/verifast/verifast/trunk verifast
     $ cd verifast/src/
     $ make -j 8
     $ ../bin/vfide
-    
+
+Make sure to install Ocaml 4.02.0 or later. If you are using opam, do
+    $ opam switch 4.02.0
+    $ opam install core lablgtk camlidl
+
 2.  Enjoy!
     
     

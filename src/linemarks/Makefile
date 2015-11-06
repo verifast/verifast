@@ -10,7 +10,11 @@ hello$(DOTEXE): hello.ml linemarks.cmxa
 	ocamlopt.opt -o hello$(DOTEXE) -I +$(LABLGTK2) lablgtk.cmxa lablgtksourceview2.cmxa linemarks.cmxa gtkInit.cmx hello.ml
 
 linemarks.cmxa: liblinemarks.a
+ifeq ($(shell uname -o), Cygwin)
 	ocamlopt.opt -a -o linemarks.cmxa -I +$(LABLGTK2) GtkLineMarks.mli GLineMarks.ml -cclib -L$(shell pwd) -cclib -llinemarks -cclib "`pkg-config --libs gtksourceview-2.0`"
+else
+	${OCAMLOPT} -a -o linemarks.cmxa $(LABLGTK_FLAGS) GtkLineMarks.mli GLineMarks.ml -cclib -L$(shell pwd) -cclib -llinemarks -cclib "`pkg-config --libs gtksourceview-2.0`"
+endif
 
 liblinemarks.a: linemarks.o
 	ar r liblinemarks.a linemarks.o ml_GtkLineMarks.o
@@ -24,7 +28,7 @@ linemarks.c: linemarks.vala
 	valac --vapidir . -C -H linemarks.h --pkg gtksourceview-2.0 --pkg mystuff linemarks.vala
 
 clean::
-	rm linemarks.c
+	rm -f linemarks.c
 
 else
 
@@ -34,4 +38,4 @@ linemarks.c: linemarks.vala
 endif
 
 clean::
-	rm *.o *.a *.cm* hello$(DOTEXE)
+	rm -f *.o *.a *.cm* hello$(DOTEXE)

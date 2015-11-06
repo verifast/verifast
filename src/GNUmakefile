@@ -51,7 +51,8 @@ ifndef WITHOUT_LABLGTK
   ifeq ($(OS), Cygwin)
     LABLGTK_FLAGS += -I +site-lib/lablgtk2 lablgtk.cmxa
   else
-    LABLGTK_FLAGS += -I +lablgtk2 lablgtk.cmxa
+    LABLGTK_FLAGS_ += -I +../lablgtk2
+    LABLGTK_FLAGS  += ${LABLGTK_FLAGS_} lablgtk.cmxa
   endif
   ifeq ($(OS), Darwin)
     GTKSOURCEVIEW_LFLAGS += -I macos GSourceView2.cmx
@@ -363,7 +364,7 @@ clean::
 vfide.cmx: Fonts.cmx vfide.ml $(GTKSOURCEVIEW_DEPS)
 	@echo "  OCAMLOPT " $@
 ifneq ($(OS), Darwin)
-	cd linemarks; make linemarks.cmxa
+	make -C linemarks OCAMLOPT=${OCAMLOPT} LABLGTK_FLAGS="$(LABLGTK_FLAGS_)" linemarks.cmxa
 endif
 	$(SET_LDD); $(OCAMLOPT) $(OCAMLCFLAGS) -thread -c -w p -warn-error FSU -c $(INCLUDES) \
 	-pp ${CAMLP4O} nums.cmxa $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) vfide.ml
