@@ -13,15 +13,16 @@ Compiling VeriFast on Debian and Ubuntu (also works on 64bit)
     $ make -j 8
     $ ../bin/vfide
 
-Make sure to install Ocaml 4.02.0 or later. If you are using opam, do
-    $ opam switch 4.02.0
-    $ opam install core lablgtk camlidl
-
 2.  Enjoy!
     
     
-    
-    
+
+Multiple Ocaml versions (optional)
+=======================
+If using Opam and if Opam works, you can test on multiple ocaml versions:
+    $ opam switch 4.02.0
+    $ opam install core lablgtk camlidl
+     
     
     
 Getting Z3 working on 32bit (optional)
