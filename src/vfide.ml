@@ -713,8 +713,10 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       let chan = open_in_bin newPath in
       let buf = String.create 60000 in
       let rec iter () =
-        let result = input chan buf 0 60000 in
-        if result = 0 then [] else String.sub buf 0 result::iter ()
+        let count = input chan buf 0 60000 in
+        if count = 0 then [] else
+          let chunk = String.sub buf 0 count in
+          chunk::iter ()
       in
       let chunks = iter() in
       let text = String.concat "" chunks in
