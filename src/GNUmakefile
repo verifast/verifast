@@ -74,10 +74,10 @@ endif
 ifndef NOZ3
   ifdef Z3
     Z3VERSION = 
-  else ifdef Z3V2
+  else ifdef Z3V2 # Note that using Z3 v2 is experimental and not supported
     Z3VERSION = v2
     Z3 = $(Z3V2)
-  else ifdef Z3V4
+  else ifdef Z3V4 # Note that using Z3 v4 is experimental and not supported
     Z3VERSION = v4
     Z3 = $(Z3V4)
   else
