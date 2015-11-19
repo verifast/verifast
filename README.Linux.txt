@@ -28,24 +28,26 @@ If using Opam and if Opam works, you can test on multiple ocaml versions:
 Getting Z3 working on 32bit (optional)
 ===========================
 
-3.  Download (requires login)
+3.  sudo apt-get install camlidl
+
+4.  Download (requires login)
     https://dnetcode.cs.kuleuven.be/attachments/download/736/z3.tar.gz
 
-4.  Run this (replace DOWNLOADPATH with the directory you put z3.tar.gz in (in step 3))
+5.  Run this (replace DOWNLOADPATH with the directory you put z3.tar.gz in (in step 3))
     $ cd
     $ Z3DIR=$PWD
     $ tar -xzf DOWNLOADPATH/z3.tar.gz
     $ cd z3/ocaml
 
-5.  Ignore the warnings on this one:
+6.  Ignore the warnings on this one:
     $ ./build-lib.sh $(ocamlc -where)
     $ echo "Z3=$PWD/../" >> $VERIFASTDIR/verifast/src/../GNUmakefile.settings
     
-5.  Recompile VeriFast:
+7.  Recompile VeriFast:
     $ cd $VERIFASTDIR/verifast/src/
     $ make -j 8
 
-6.  Run
+8.  Run
     $ export LD_LIBRARY_PATH="$Z3DIR/z3/lib:$LD_LIBRARY_PATH"
     $ $VERIFASTDIR/verifast/bin/vfide
 
