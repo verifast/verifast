@@ -51,7 +51,7 @@ ifndef WITHOUT_LABLGTK
   ifeq ($(OS), Cygwin)
     LABLGTK_FLAGS += -I +site-lib/lablgtk2 lablgtk.cmxa
   else
-    LABLGTK_FLAGS_ += -I +../lablgtk2
+    LABLGTK_FLAGS_ += -I +../lablgtk2 -I +lablgtk2
     LABLGTK_FLAGS  += ${LABLGTK_FLAGS_} lablgtk.cmxa
   endif
   ifeq ($(OS), Darwin)
