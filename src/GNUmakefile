@@ -433,6 +433,7 @@ vfversion.cmx: vfversion.cmi vfversion.ml
 vfconfig.cmx: vfconfig.ml
 plugins2.cmi : plugins.cmi
 plugins.cmi : DynType.cmi
+vfide.cmx: SExpressionEmitter.cmx
 
 #------------------------------- Tests --------------------------------------#
 test_plugin: verifast
