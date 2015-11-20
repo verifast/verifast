@@ -9,6 +9,9 @@
  * - knowledge about I/O happening in another thread can be used
  *   (here: the reader knows what the writer will write)
  *   (ESOP paper did not show a way to do that)
+ * - this knowledge about relationship between threads is rather
+ *   user-defined in a style chosen by a user, in contrast to
+ *   only definable in one fixed style (e.g. IGR).
  *
  * Issues:
  * - No proper support for split/join (e.g. the writer can write "1,2,3,4" and "5,6,7,8,9,10"
@@ -18,6 +21,8 @@
  *    the solutions will be more complicated)
  * - might be an issue: nondeterminism (not looked into yet)
  * - Closing the I/O style predicates is cumbersome.
+ * - No compositionality: the push and pop functions know how they are used and cannot be reused
+ *   for something else.
  */
 
 #include "../../../vstte2012/problem3/problem3.h" // Ring buffer

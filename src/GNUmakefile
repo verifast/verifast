@@ -271,7 +271,7 @@ clean::
 #------------------------------- Auto code generation -----------------------#
 DynType.mli: ../examples/plugin/DynType.mli
 	@echo "  CAT      " $@
-	@cat generated_file_warning.txt ../examples/plugin/DynType.mli > DynType.mli
+	cat generated_file_warning.txt ../examples/plugin/DynType.mli > DynType.mli
 clean::
 	rm -f DynType.mli
 AUTOGENERATE_TARGETS += DynType.mli
