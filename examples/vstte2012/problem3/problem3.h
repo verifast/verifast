@@ -3,7 +3,7 @@
 
 struct ring_buffer;
 /*@
-predicate ring_buffer(struct ring_buffer *buffer, int size, list<int> items);
+predicate ring_buffer(struct ring_buffer *buffer, int size; list<int> items);
 @*/
 
 struct ring_buffer *ring_buffer_create(int size);

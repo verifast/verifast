@@ -35,7 +35,7 @@ fixpoint int bigtail_size(int size, int first, int len){
 }
 
 
-predicate ring_buffer(struct ring_buffer *buffer, int size, list<int> items) =
+predicate ring_buffer(struct ring_buffer *buffer, int size; list<int> items) =
 	buffer->fields |-> ?fields
 	&*& buffer->size |-> size
 	&*& buffer->first |-> ?first
@@ -65,7 +65,7 @@ predicate ring_buffer(struct ring_buffer *buffer, int size, list<int> items) =
 		// make sure verification knows all arrays are next to each other.
 		&*& first == bigtail_size(size, first, len) + (size - len)
 		
-		&*& append(bighead_elems, bigtail_elems) == items
+		&*& items == append(bighead_elems, bigtail_elems)
 		
 	:
 		// leading emptyness

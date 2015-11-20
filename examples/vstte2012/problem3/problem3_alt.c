@@ -12,7 +12,7 @@ struct ring_buffer{
 
 /*@
 
-predicate ring_buffer(struct ring_buffer *buffer, int size, list<int> items) =
+predicate ring_buffer(struct ring_buffer *buffer, int size; list<int> items) =
 	size >= 0 && size * 4 < INT_MAX
 	
 	&*& buffer->fields |-> ?fields

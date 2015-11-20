@@ -15,6 +15,9 @@ cd work-in-progress
     verifast_both -shared -I . buffer.c syscall_memory.c
     verifast_both -shared -I . io_lemma_impl.c
   cd ..
+  cd in-memory-io-style-v1.1
+    mysh < run.mysh
+  cd ..
   cd in-memory-io-style-v2
     verifast -allow_assume foralls.o prophecy.o ../../../vstte2012/problem3/problem3.c writehi_readhi.c
   cd ..

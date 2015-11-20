@@ -1,5 +1,5 @@
 /**
- * cooked_ghost_lists.gh -  easier to digest than raw_ghost_list.
+ * cooked_ghost_lists.gh - easier to digest than raw_ghost_lists.gh.
  *
  * It guarantees that all pairs of (unique id, member) are
  * distinct, which makes some proofs easier.

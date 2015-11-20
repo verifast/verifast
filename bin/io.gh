@@ -1,3 +1,5 @@
+#ifndef IO_IO_H
+#define IO_IO_H
 /**
  * io.gh - input/output fundamental predicate and lemma declarations.
  *
@@ -6,8 +8,7 @@
  * memory-based operations).
  */
 
-#ifndef IO_IO_H
-#define IO_IO_H
+
 
 inductive place = place(int);
 
