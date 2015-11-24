@@ -288,6 +288,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match t with
       Bool -> ProverBool
     | IntType -> ProverInt
+    | Float -> ProverInductive
+    | Double -> ProverInductive
+    | LongDouble -> ProverInductive
     | UShortType -> ProverInt
     | ShortType -> ProverInt
     | UintPtrType -> ProverInt
@@ -2521,6 +2524,35 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let current_class = "#currentClass"
   
+  let string_of_operator op =
+    match op with
+      Eq -> "eq"
+    | Neq -> "neq"
+    | Lt -> "lt"
+    | Le -> "le"
+    | Gt -> "gt"
+    | Ge -> "ge"
+    | Add -> "add"
+    | Sub -> "sub"
+    | Mul -> "mul"
+    | Div -> "div"
+  
+  let floating_point_fun_call_expr funcmap l t fun_name args =
+    let prefix =
+      match t with
+        Float -> "float"
+      | Double -> "double"
+      | LongDouble -> "long_double"
+    in
+    let g = "vf__" ^ prefix ^ "_" ^ fun_name in
+    if not (List.mem_assoc g funcmap) then static_error l "Must include header <math.h> when using floating-point operations." None;
+    WFunCall (l, g, [], args)
+  
+  let operation_expr funcmap l t operator arg1 arg2 ts =
+    match t with
+      Float|Double|LongDouble -> floating_point_fun_call_expr funcmap l t (string_of_operator operator) [arg1; arg2]
+    | _ -> Operation (l, operator, [arg1; arg2], ts)
+    
   let rec check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e: (expr (* typechecked expression *) * type_ (* expression type *) * big_int option (* constant integer expression => value*)) =
     let check e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
     let checkcon e = check_condition_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
@@ -2583,6 +2615,20 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | ((Char|ShortType|IntType|UChar|UShortType), (Char|ShortType|IntType|UChar|UShortType)) ->
         ts := Some [IntType; IntType];
         (w1, w2, IntType)
+      | ((LongDouble, _)|(_, LongDouble)) ->
+        let w1 = if t1 = LongDouble then w1 else checkt e1 LongDouble in
+        let w2 = if t2 = LongDouble then w2 else checkt e2 LongDouble in
+        ts := Some [LongDouble; LongDouble];
+        (w1, w2, LongDouble)
+      | ((Double, _)|(_, Double)) ->
+        let w1 = if t1 = Double then w1 else checkt e1 Double in
+        let w2 = if t2 = Double then w2 else checkt e2 Double in
+        ts := Some [Double; Double];
+        (w1, w2, Double)
+      | ((Float, _)|(_, Float)) ->
+        let w1 = if t1 = Float then w1 else checkt e1 Float in
+        let w2 = if t2 = Float then w2 else checkt e2 Float in
+        (w1, w2, Float)
       | (t1, t2) ->
         let w2 = checkt e2 t1 in
         ts := Some [t1; t1];
@@ -2600,8 +2646,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
      *)
     let promote_checkdone l e1 e2 ts check_e1 check_e2 =
       match promote_numeric_checkdone e1 e2 ts check_e1 check_e2 with
-        (w1, w2, (Char | ShortType | IntType | RealType | UintPtrType | PtrType _ | UShortType | UChar)) as result -> result
-      | _ -> static_error l "Expression of type char, short, int, real, or pointer type expected." None
+        (w1, w2, (Char | ShortType | IntType | RealType | UintPtrType | PtrType _ | UShortType | UChar | Float | Double | LongDouble)) as result -> result
+      | _ -> static_error l "Expression of arithmetic or pointer type expected." None
     in
     let promote_numeric e1 e2 ts =
       promote_numeric_checkdone e1 e2 ts (check e1) (check e2)
@@ -2759,7 +2805,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | Operation (l, (Eq | Neq as operator), [e1; e2], ts) -> 
       let (w1, w2, t) = promote_numeric e1 e2 ts in
-      (Operation (l, operator, [w1; w2], ts), boolt, None)
+      (operation_expr funcmap l t operator w1 w2 ts, boolt, None)
     | Operation (l, (Or | And as operator), [e1; e2], ts) -> 
       let w1 = checkcon e1 in
       let w2 = checkcon e2 in
@@ -2804,9 +2850,9 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       | UintPtrType -> ts := Some [UintPtrType]; (Operation (l, BitNot, [w], ts), UintPtrType, None)
       | _ -> static_error l "argument to ~ must be char, short, int or uintptr" None
       end
-    | Operation (l, (Le | Lt as operator), [e1; e2], ts) -> 
+    | Operation (l, (Le | Lt | Ge | Gt as operator), [e1; e2], ts) -> 
       let (w1, w2, t) = promote l e1 e2 ts in
-      (Operation (l, operator, [w1; w2], ts), boolt, None)
+      (operation_expr funcmap l t operator w1 w2 ts, boolt, None)
     | Operation (l, (Add | Sub as operator), [e1; e2], ts) ->
       let (w1, t1, value1) = check e1 in
       let (w2, t2, value2) = check e2 in
@@ -3263,6 +3309,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         | (IntType, ShortType) when isCast -> w
         | (IntType, UShortType) when isCast -> w
         | (IntType, UintPtrType) when isCast -> w
+        | (IntType, (Float|Double|LongDouble)) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 "of_int" [w]
         | (UintPtrType, Char) when isCast -> w
         | (UintPtrType, UChar) when isCast -> w
         | (UintPtrType, ShortType) when isCast -> w
@@ -5051,21 +5098,25 @@ let check_if_list_is_defined () =
       | (UChar, UChar) ->
         check_overflow l min_uchar_term (ctxt#mk_mul v1 v2) max_uchar_term
       end
-    | Le ->
+    | Le|Lt|Ge|Gt ->
       let Some [tp1; tp2] = ts in
       begin match (tp1, tp2) with
         ((IntType, IntType) | (PtrType _, PtrType _) |
          (UintPtrType, UintPtrType)) | (UShortType, UShortType) |
-         (UChar, UChar)-> ctxt#mk_le v1 v2
-      | (RealType, RealType) -> ctxt#mk_real_le v1 v2
-      end
-    | Lt ->
-      let Some [tp1; tp2] = ts in
-      begin match (tp1, tp2) with
-        ((IntType, IntType) | (PtrType _, PtrType _) |
-         (UintPtrType, UintPtrType)) | (UShortType, UShortType) |
-         (UChar, UChar) -> ctxt#mk_lt v1 v2
-      | (RealType, RealType) -> ctxt#mk_real_lt v1 v2
+         (UChar, UChar)->
+        begin match op with
+          Le -> ctxt#mk_le v1 v2
+        | Lt -> ctxt#mk_lt v1 v2
+        | Ge -> ctxt#mk_le v2 v1
+        | Gt -> ctxt#mk_lt v2 v1
+        end
+      | (RealType, RealType) ->
+        begin match op with
+          Le -> ctxt#mk_real_le v1 v2
+        | Lt -> ctxt#mk_real_lt v1 v2
+        | Ge -> ctxt#mk_real_le v2 v1
+        | Gt -> ctxt#mk_real_lt v2 v1
+        end
       end
     | Div ->
       begin match ts with

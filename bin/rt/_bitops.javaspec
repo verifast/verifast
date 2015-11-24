@@ -29,18 +29,18 @@ lemma void masking_and(byte x, short y);
 
 inductive pos = p1_ | p0(pos) | p1(pos);
 
-fixpoint nat double(nat n) {
+fixpoint nat nat_double(nat n) {
     switch (n) {
         case zero: return zero;
-        case succ(n0): return succ(succ(double(n0)));
+        case succ(n0): return succ(succ(nat_double(n0)));
     }
 }
 
 fixpoint nat nat_of_pos(pos p) {
     switch (p) {
         case p1_: return succ(zero);
-        case p0(p0): return double(nat_of_pos(p0));
-        case p1(p0): return succ(double(nat_of_pos(p0)));
+        case p0(p0): return nat_double(nat_of_pos(p0));
+        case p1(p0): return succ(nat_double(nat_of_pos(p0)));
     }
 }
 

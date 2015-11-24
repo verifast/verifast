@@ -75,7 +75,10 @@ type type_ = (* ?type_ *)
   | UShortType
   | ShortType
   | UintPtrType  (* The uintptr_t type from the C99 standard. It's an integer type big enough to hold a pointer value. *)
-  | RealType
+  | RealType  (* Mathematical real numbers. Used for fractional permission coefficients. Also used for reasoning about floating-point code. *)
+  | Float
+  | Double
+  | LongDouble
   | UChar
   | Char
   | StructType of string
@@ -141,7 +144,7 @@ type
 
 type
   operator =  (* ?operator *)
-  | Add | Sub | Le | Lt | Eq | Neq | And | Or | Xor | Not | Mul | Div | Mod | BitNot | BitAnd | BitXor | BitOr | ShiftLeft | ShiftRight
+  | Add | Sub | Le | Ge | Lt | Gt | Eq | Neq | And | Or | Xor | Not | Mul | Div | Mod | BitNot | BitAnd | BitXor | BitOr | ShiftLeft | ShiftRight
 and
   expr = (* ?expr *)
     True of loc

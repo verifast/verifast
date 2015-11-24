@@ -15,6 +15,7 @@ let common_keywords = [
 (* Note: it's important for soundness that currentCodeFractions, currentThread, and varargs be considered keywords both inside and outside of annotations. *)
   "*"; "/"; "&"; "^"; "~"; "assert"; "currentCodeFraction"; "currentThread"; "varargs"; "short"; ">>"; "<<";
   "truncating"; "typedef"; "do"; "...";
+  "float"; "double";
   "->" (* Used for inductive value field access (e.g. "my_ind_value->my_param_name") in ghostcode, and struct field access in C and C-ghostcode. *)
 ]
 
@@ -697,8 +698,17 @@ and
 | [< '(l, Kwd "struct"); '(_, Ident s) >] -> StructTypeExpr (l, s)
 | [< '(l, Kwd "enum"); '(_, Ident _) >] -> ManifestTypeExpr (l, IntType)
 | [< '(l, Kwd "int") >] -> ManifestTypeExpr (l, IntType)
+| [< '(l, Kwd "float") >] -> ManifestTypeExpr (l, Float)
+| [< '(l, Kwd "double") >] -> ManifestTypeExpr (l, Double)
 | [< '(l, Kwd "short") >] -> ManifestTypeExpr(l, ShortType)
-| [< '(l, Kwd "long") >] -> ManifestTypeExpr (l, IntType)
+| [< '(l, Kwd "long");
+     t = begin parser
+       [< '(_, Kwd "int") >] -> ManifestTypeExpr (l, IntType);
+     | [< '(_, Kwd "double") >] -> ManifestTypeExpr (l, LongDouble);
+     | [< '(_, Kwd "long") >] -> raise (ParseException (l, "long long types are not yet supported."));
+     | [< >] -> ManifestTypeExpr (l, IntType)
+     end
+   >] -> t
 | [< '(l, Kwd "signed"); t0 = parse_primary_type >] ->
   (match t0 with
      (ManifestTypeExpr (_, IntType) | ManifestTypeExpr (_, ShortType) |
@@ -1243,6 +1253,7 @@ and
   >] -> ex
 | [< '(l, Int i) >] -> IntLit (l, i, ref None)
 | [< '(l, RealToken i) >] -> RealLit (l, num_of_big_int i)
+| [< '(l, RationalToken n) >] -> RealLit (l, n)
 | [< '(l, Kwd "INT_MIN") >] -> IntLit (l, big_int_of_string "-2147483648", ref None)
 | [< '(l, Kwd "INT_MAX") >] -> IntLit (l, big_int_of_string "2147483647", ref None)
 | [< '(l, Kwd "UINTPTR_MAX") >] -> IntLit (l, big_int_of_string "4294967295", ref None)
@@ -1349,13 +1360,12 @@ and
 | [< '(l, Kwd ">>"); e1 = parse_expr_arith; e = parse_shift_rest (Operation (l, ShiftRight, [e0; e1], ref None)) >] -> e
 | [< >] -> e0
 and
-
   parse_expr_rel_rest e0 = parser
   [< '(l, Kwd "=="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Eq, [e0; e1], ref None)) >] -> e
 | [< '(l, Kwd "!="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Neq, [e0; e1], ref None)) >] -> e
 | [< '(l, Kwd "<="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Le, [e0; e1], ref None)) >] -> e
-| [< '(l, Kwd ">"); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Lt, [e1; e0], ref None)) >] -> e
-| [< '(l, Kwd ">="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Le, [e1; e0], ref None)) >] -> e
+| [< '(l, Kwd ">"); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Gt, [e0; e1], ref None)) >] -> e
+| [< '(l, Kwd ">="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Ge, [e0; e1], ref None)) >] -> e
 | [< '(l, Kwd "instanceof"); tp = parse_expr; e = parse_expr_rel_rest (InstanceOfExpr (l, e0, type_expr_of_expr tp)) >] -> e
 | [< e = parse_expr_lt_rest e0 parse_expr_rel_rest >] -> e
 and

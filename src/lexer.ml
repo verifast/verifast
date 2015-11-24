@@ -1,4 +1,5 @@
 open Big_int
+open Num
 open Util
 open Ast
 open Stats
@@ -171,8 +172,8 @@ type token = (* ?token *)
   | Kwd of string
   | Ident of string
   | Int of big_int
-  | RealToken of big_int
-  | Float of float
+  | RealToken of big_int  (* Tokens of the form 123r. Used to distinguish 1r/2, denoting one half, from 1/2, which evaluates to zero, in a context that does not require an expression of type 'real'. *)
+  | RationalToken of num       (* Rational number literals. E.g. 0.5, 3.14, 3e8, 6.62607004E-34. Used for floating-point literals in real code, and for real number literals in annotations. Using the arbitrary-precision 'num' type instead of the OCaml 'float' type to avoid rounding errors. *)
   | String of string
   | AngleBracketString of string
   | CharToken of char
@@ -202,7 +203,7 @@ let string_of_token t =
   | Ident(s) -> "Identifier:" ^ s
   | Int(bi) -> "Int:" ^ (Big_int.string_of_big_int bi)
   | RealToken(bi) -> "RealToken:" ^ (Big_int.string_of_big_int bi)
-  | Float(fl) -> "Float:" ^ (Pervasives.string_of_float fl)
+  | RationalToken(n) -> "RationalToken:" ^ (Num.string_of_num n)
   | String(s) -> "String: " ^ s
   | CharToken(ch) -> "Char: " ^ (Char.escaped ch)
   | PreprocessorSymbol(s) -> "PPSymbol: " ^ s
@@ -219,7 +220,7 @@ let compare_tokens t1 t2 =
     (None,None) -> true
   | (Some(_,Int(bi1)),Some(_,Int(bi2))) -> compare_big_int bi1 bi2 = 0
   | (Some(_,RealToken(bi1)),Some(_,RealToken(bi2))) -> compare_big_int bi1 bi2 = 0
-  | (Some(_,Float(fl1)),Some(_,Float(fl2))) -> (Pervasives.string_of_float fl1) = (Pervasives.string_of_float fl2)
+  | (Some(_,RationalToken(n1)),Some(_,RationalToken(n2))) -> Num.eq_num n1 n2
   | (Some(_,t1),Some(_,t2)) -> t1 = t2
   | _ -> false
 end
@@ -606,7 +607,7 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
         text_junk (); store c; decimal_part ()
     | ('e' | 'E') ->
         text_junk (); store 'E'; exponent_part ()
-    | _ -> Some (Float (float_of_string (get_string ())))
+    | _ -> Some (RationalToken (num_of_decimal_fraction (get_string ())))
   and exponent_part () =
     match text_peek () with
       ('+' | '-' as c) ->
@@ -616,7 +617,7 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
     match text_peek () with
       ('0'..'9' as c) ->
         text_junk (); store c; end_exponent_part ()
-    | _ -> Some (Float (float_of_string (get_string ())))
+    | _ -> Some (RationalToken (num_of_decimal_fraction (get_string ())))
   and string () =
     match text_peek () with
       '"' -> text_junk (); get_string ()
