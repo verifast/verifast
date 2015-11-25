@@ -93,7 +93,7 @@ let rec sexpr_of_type_ (t : type_) : sexpression =
     | AnyType                 -> aux2 "AnyType"
     | TypeParam (s)           -> List [ Symbol "type-param";
                                         Symbol s ]
-    | InferredType (i)        -> List [ Symbol "type-inferred";
+    | InferredType (_, i)     -> List [ Symbol "type-inferred";
                                         sexpr_of_option sexpr_of_type_ !i]
     | ClassOrInterfaceName (s)-> List [ Symbol "type-class-or-interface-name";
                                         Symbol s ]

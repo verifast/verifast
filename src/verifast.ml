@@ -350,7 +350,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             if gh <> Ghost then static_error lftn "Only lemma function types allowed here." None;
             let [(_, (_, _, _, _, p_tn, _, _))] = ft_predfammaps in p_tn
           in
-          let targs = List.map (fun _ -> InferredType (ref None)) fttparams in
+          let targs = List.map (fun _ -> InferredType (object end, ref None)) fttparams in
           let args = List.map (fun _ -> SrcPat DummyPat) ftxmap in
           consume_chunk rules h ghostenv [] [] l (p_symb, true) targs real_unit dummypat (Some (List.length ftxmap + 1)) ((SrcPat DummyPat)::args) $. fun _ h coef ts size _ _ _ ->
           produce_chunk h (p_symb, true) targs coef (Some (List.length ftxmap + 1)) ts size $. fun h ->
@@ -771,7 +771,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             match try_assoc (g, fns) predinstmap with
               Some (predenv, _, predinst_tparams, ps, g_symb, inputParamCount, p) ->
               let (targs, tpenv) =
-                let targs = if targs = [] then List.map (fun _ -> InferredType (ref None)) predinst_tparams else targs in
+                let targs = if targs = [] then List.map (fun _ -> InferredType (object end, ref None)) predinst_tparams else targs in
                 match zip predinst_tparams targs with
                   None -> static_error l (Printf.sprintf "Predicate expects %d type arguments." (List.length predinst_tparams)) None
                 | Some bs -> (targs, bs)
@@ -887,7 +887,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match try_assoc' Ghost (pn,ilist) p predfammap with
           None -> static_error l "No such predicate." None
         | Some (_, predfam_tparams, arity, pts, g_symb, inputParamCount, _) ->
-          let targs = if targs = [] then List.map (fun _ -> InferredType (ref None)) predfam_tparams else targs in
+          let targs = if targs = [] then List.map (fun _ -> InferredType (object end, ref None)) predfam_tparams else targs in
           let tpenv =
             match zip predfam_tparams targs with
               None -> static_error l "Incorrect number of type arguments." None
@@ -1092,7 +1092,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           begin
           match try_assoc (g, fns) predinstmap with
             Some (predenv, lpred, predinst_tparams, ps, g_symb, inputParamCount, body) ->
-            let targs = if targs = [] then List.map (fun _ -> InferredType (ref None)) predinst_tparams else targs in
+            let targs = if targs = [] then List.map (fun _ -> InferredType (object end, ref None)) predinst_tparams else targs in
             let tpenv =
               match zip predinst_tparams targs with
                 None -> static_error l "Incorrect number of type arguments." None

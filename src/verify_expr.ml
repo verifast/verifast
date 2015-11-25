@@ -44,6 +44,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       expr_assigned_variables e @ flatmap (fun (SwitchExprClause (l, ctor, xs, e)) -> expr_assigned_variables e) cs @ (match cdef_opt with None -> [] | Some (l, e) -> expr_assigned_variables e)
     | CastExpr (l, trunc, te, e) -> expr_assigned_variables e
     | Upcast (e, fromType, toType) -> expr_assigned_variables e
+    | TypedExpr (e, t) -> expr_assigned_variables e
     | WidenedParameterArgument e -> expr_assigned_variables e
     | AddressOf (l, e) -> expr_assigned_variables e
     | AssignExpr (l, Var (_, x, _), e) -> [x] @ expr_assigned_variables e
@@ -996,6 +997,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | PredNameExpr _ -> ()
     | CastExpr(_, _, _, e) ->  expr_mark_addr_taken e locals
     | Upcast (e, _, _) -> expr_mark_addr_taken e locals
+    | TypedExpr (e, t) -> expr_mark_addr_taken e locals
     | WidenedParameterArgument e -> expr_mark_addr_taken e locals
     | InstanceOfExpr(_, e, _) ->  expr_mark_addr_taken e locals
     | SliceExpr (_, p1, p2) -> List.iter (function Some p -> pat_expr_mark_addr_taken p locals | _ -> ()) [p1; p2]
@@ -1130,6 +1132,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | PredNameExpr _ -> []
     | CastExpr(_, _, _, e) -> expr_address_taken e
     | Upcast (e, fromType, toType) -> expr_address_taken e
+    | TypedExpr (e, t) -> expr_address_taken e
     | WidenedParameterArgument e -> expr_address_taken e
     | InstanceOfExpr(_, e, _) -> expr_address_taken e
     | SliceExpr (_, p1, p2) -> flatmap (function Some p -> pat_address_taken p | _ -> []) [p1; p2]
@@ -1891,14 +1894,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | Real ->
           let [(_, (_, _, _, _, predsymb, inputParamCount, _))] = ft_predfammaps in
           let pats = TermPat fterm::List.map (fun _ -> SrcPat DummyPat) ftxmap in
-          let targs = List.map (fun _ -> InferredType (ref None)) fttparams in
+          let targs = List.map (fun _ -> InferredType (object end, ref None)) fttparams in
           consume_chunk rules h [] [] [] l (predsymb, true) targs real_unit dummypat inputParamCount pats $. fun _ h coef (_::args) _ _ _ _ ->
           consume_call_perm h $. fun h ->
           check_call targs h args $. fun h env retval ->
           cont (Chunk ((predsymb, true), [], coef, fterm::args, None)::h) env retval
         | Ghost ->
           let [(_, (_, _, _, _, predsymb, inputParamCount, _))] = ft_predfammaps in
-          let targs = List.map (fun _ -> InferredType (ref None)) fttparams in
+          let targs = List.map (fun _ -> InferredType (object end, ref None)) fttparams in
           let pats = TermPat fterm::List.map (fun _ -> SrcPat DummyPat) ftxmap in
           consume_chunk rules h [] [] [] l (predsymb, true) targs real_unit dummypat inputParamCount pats $. fun chunk h coef (_::args) _ _ _ _ ->
           if leminfo_is_lemma leminfo && not (definitely_equal coef real_unit) then assert_false h env l "Full lemma function pointer chunk required." None;
@@ -1948,7 +1951,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       check_correct None None [] args (lm, [], rt, xmap, [], pre, post, Some epost, false, v) cont
     | WFunCall (l, g, targs, es) ->
       let FuncInfo (funenv, fterm, lg, k, tparams, tr, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, fbf, v) = List.assoc g funcmap in
-      has_heap_effects ();
+      if not (startswith g "vf__") then has_heap_effects ();
       if body = None then register_prototype_used lg g fterm;
       if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." None;
       if not pure && is_lemma k then static_error l "Cannot call lemma functions in a non-pure context." None;

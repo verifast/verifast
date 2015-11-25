@@ -311,7 +311,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | AnyType -> ProverInductive
     | TypeParam _ -> ProverInductive
     | Void -> ProverInductive
-    | InferredType t -> begin match !t with None -> t := Some (InductiveType ("unit", [])); ProverInductive | Some t -> provertype_of_type t end
+    | InferredType (_, t) -> begin match !t with None -> t := Some (InductiveType ("unit", [])); ProverInductive | Some t -> provertype_of_type t end
   
   let typenode_of_type t = typenode_of_provertype (provertype_of_type t)
    
@@ -1427,7 +1427,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | InductiveType (i, targs) -> InductiveType (i, List.map (instantiate_type tpenv) targs)
     | PredType ([], pts, inputParamCount, inductiveness) -> PredType ([], List.map (instantiate_type tpenv) pts, inputParamCount, inductiveness)
     | PureFuncType (t1, t2) -> PureFuncType (instantiate_type tpenv t1, instantiate_type tpenv t2)
-    | InferredType t ->
+    | InferredType (_, t) ->
       begin match !t with
         None -> assert false
       | Some t -> instantiate_type tpenv t
@@ -1615,7 +1615,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let rec unfold_inferred_type t =
     match t with
-      InferredType t' ->
+      InferredType (_, t') ->
       begin
         match !t' with
           None -> t
@@ -1626,9 +1626,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let rec unify t1 t2 =
     t1 == t2 ||
     match (unfold_inferred_type t1, unfold_inferred_type t2) with
-      (InferredType t', InferredType t0') -> if t' == t0' then true else begin t0' := Some t1; true end
-    | (t, InferredType t0) -> t0 := Some t; true
-    | (InferredType t, t0) -> t := Some t0; true
+      (InferredType (_, t'), InferredType (_, t0')) -> if t' == t0' then true else begin t0' := Some t1; true end
+    | (t, InferredType (_, t0)) -> t0 := Some t; true
+    | (InferredType (_, t), t0) -> t := Some t0; true
     | (InductiveType (i1, args1), InductiveType (i2, args2)) ->
       i1=i2 && List.for_all2 unify args1 args2
     | (ArrayType t1, ArrayType t2) -> unify t1 t2
@@ -2537,22 +2537,28 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Mul -> "mul"
     | Div -> "div"
   
+  let identifier_string_of_type t =
+    match t with
+      Float -> "float"
+    | Double -> "double"
+    | LongDouble -> "long_double"
+    | IntType -> "int"
+    | UintPtrType -> "unsigned_int"
+    | RealType -> "real"
+  
   let floating_point_fun_call_expr funcmap l t fun_name args =
-    let prefix =
-      match t with
-        Float -> "float"
-      | Double -> "double"
-      | LongDouble -> "long_double"
-    in
+    let prefix = identifier_string_of_type t in
     let g = "vf__" ^ prefix ^ "_" ^ fun_name in
     if not (List.mem_assoc g funcmap) then static_error l "Must include header <math.h> when using floating-point operations." None;
     WFunCall (l, g, [], args)
   
   let operation_expr funcmap l t operator arg1 arg2 ts =
     match t with
-      Float|Double|LongDouble -> floating_point_fun_call_expr funcmap l t (string_of_operator operator) [arg1; arg2]
+      Float|Double|LongDouble ->
+      let Some [t1; t2] = !ts in
+      floating_point_fun_call_expr funcmap l t (string_of_operator operator) [TypedExpr (arg1, t1); TypedExpr (arg2, t2)]
     | _ -> Operation (l, operator, [arg1; arg2], ts)
-    
+  
   let rec check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e: (expr (* typechecked expression *) * type_ (* expression type *) * big_int option (* constant integer expression => value*)) =
     let check e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
     let checkcon e = check_condition_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
@@ -2745,7 +2751,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | Some (x, (_, tparams, t, [], _)) ->
         if tparams <> [] then
         begin
-          let targs = List.map (fun _ -> InferredType (ref None)) tparams in
+          let targs = List.map (fun _ -> InferredType (object end, ref None)) tparams in
           let Some tpenv = zip tparams targs in
           scope := Some PureCtor;
           (Var (l, x, scope), instantiate_type tpenv t, None)
@@ -2784,7 +2790,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           if tparams = [] then
             (pts, t)
           else
-            let tpenv = List.map (fun x -> (x, InferredType (ref None))) tparams in
+            let tpenv = List.map (fun x -> (x, InferredType (object end, ref None))) tparams in
             (List.map (instantiate_type tpenv) pts, instantiate_type tpenv t)
         in
         scope := Some PureFuncName; (Var (l, x, scope), List.fold_right (fun t1 t2 -> PureFuncType (t1, t2)) pts t, None)
@@ -2859,43 +2865,49 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       let t1 = unfold_inferred_type t1 in
       let t2 = unfold_inferred_type t2 in
       begin
-        match t1 with
-          PtrType pt1 ->
-          begin match t2 with
-            PtrType pt2 when operator = Sub ->
+        match t1, t2 with
+          PtrType pt1, PtrType pt2 when operator = Sub ->
             if pt1 <> pt2 then static_error l "Pointers must be of same type" None;
             if pt1 <> Char && pt1 <> Void then static_error l "Subtracting non-char pointers is not yet supported" None;
             ts:=Some [t1; t2];
             (Operation (l, operator, [w1; w2], ts), IntType, None)
-          | _ ->
+        | PtrType pt1, _ ->
             let w2 = checkt e2 intt in
             ts:=Some [t1; IntType];
             (Operation (l, operator, [w1; w2], ts), t1, None)
-          end
-        | IntType | RealType | ShortType | Char | UintPtrType ->
+        | t1, t2 when is_arithmetic_type t1 && is_arithmetic_type t2 ->
           let (w1, w2, t) = promote_checkdone l e1 e2 ts (w1, t1, value1) (w2, t2, value2) in
-          (Operation (l, operator, [w1; w2], ts), t, if t = IntType then (match (value1, value2) with ((Some value1), (Some value2)) -> begin match operator with Add -> Some(add_big_int value1 value2) | Sub -> Some(sub_big_int value1 value2) end | _-> None) else None)
-        | ObjType "java.lang.String" as t when operator = Add ->
+          let value =
+            if t = IntType then
+              match (value1, value2, operator) with
+                (Some value1, Some value2, Add) -> Some (add_big_int value1 value2)
+              | (Some value1, Some value2, Sub) -> Some (sub_big_int value1 value2)
+              | _ -> None
+            else
+              None
+          in
+          (operation_expr funcmap l t operator w1 w2 ts, t, value)
+        | (ObjType "java.lang.String" as t, _) when operator = Add ->
           let w2 = checkt e2 t in
           ts:=Some [t1; ObjType "java.lang.String"];
           (Operation (l, operator, [w1; w2], ts), t1, None)
         | _ -> static_error l ("Operand of addition or subtraction must be pointer, integer, char, short, or real number: t1 "^(string_of_type t1)^" t2 "^(string_of_type t2)) None
       end
-    | Operation (l, Mul, [e1; e2], ts) ->
+    | Operation (l, (Mul|Div as operator), [e1; e2], ts) ->
       let (w1, w2, t) = promote l e1 e2 ts in
-      begin match t with PtrType _ -> static_error l "Cannot multiply pointers." None | _ -> () end;
-      (Operation (l, Mul, [w1; w2], ts), t, None)
-    | Operation (l, Div, [e1; e2], ts) ->
-      let (w1, w2, t) = promote l e1 e2 ts in
-      begin match t with PtrType _ -> static_error l "Cannot divide pointers." None | _ -> () end;
-      (Operation (l, Div, [w1; w2], ts), t, None)
+      begin match t with PtrType _ -> static_error l "Operands should be arithmetic expressions, not pointer expressions" None | _ -> () end;
+      (operation_expr funcmap l t operator w1 w2 ts, t, None)
     | Operation (l, (ShiftLeft | ShiftRight as op), [e1; e2], ts) ->
       let w1 = checkt e1 IntType in
       let w2 = checkt e2 IntType in
       ts := Some [IntType; IntType];
       (Operation (l, op, [w1; w2], ts), IntType, None)
     | IntLit (l, n, t) -> (e, (match !t with None -> t := Some intt; intt | Some t -> t), Some n)
-    | RealLit(l, n) -> (e, RealType, None)
+    | RealLit(l, n) ->
+      if inAnnotation = Some true then
+        (e, RealType, None)
+      else
+        (floating_point_fun_call_expr funcmap l Double "of_real" [TypedExpr (e, RealType)], Double, None)
     | ClassLit (l, s) ->
       let s = check_classname (pn, ilist) (l, s) in
       (ClassLit (l, s), ObjType "java.lang.Class", None)
@@ -2906,6 +2918,8 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       let t = check_pure_type (pn,ilist) tparams te in
       let w = checkt_cast e t in
       (CastExpr (l, truncating, ManifestTypeExpr (type_expr_loc te, t), w), t, None)
+    | TypedExpr (w, t) ->
+      (w, t, None)
     | Read (l, e, f) ->
       check_deref_core functypemap funcmap classmap interfmap (pn,ilist) l tparams tenv e f
     | Deref (l, e, tr) ->
@@ -2933,7 +2947,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       let es = List.map (function LitPat e -> e | _ -> static_error l "Patterns are not allowed in this position" None) pats in
       let process_targes callee_tparams =
         if callee_tparams <> [] && targes = [] then
-          let targs = List.map (fun _ -> InferredType (ref None)) callee_tparams in
+          let targs = List.map (fun _ -> InferredType (object end, ref None)) callee_tparams in
           let Some tpenv = zip callee_tparams targs in
           (targs, tpenv)
         else
@@ -3301,28 +3315,13 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
        *)
       let (w, t, value) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
       let check () = begin match (t, t0) with
-          (ObjType _, ObjType _) when isCast -> w
+        | _ when t = t0 -> w
+        | (ObjType _, ObjType _) when isCast -> w
         | (PtrType _, UintPtrType) when isCast -> w
         | (UintPtrType, PtrType _) when isCast -> w
-        | (IntType, Char) when isCast -> w
-        | (IntType, UChar) when isCast -> w
-        | (IntType, ShortType) when isCast -> w
-        | (IntType, UShortType) when isCast -> w
-        | (IntType, UintPtrType) when isCast -> w
-        | (IntType, (Float|Double|LongDouble)) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 "of_int" [w]
-        | (UintPtrType, Char) when isCast -> w
-        | (UintPtrType, UChar) when isCast -> w
-        | (UintPtrType, ShortType) when isCast -> w
-        | (UintPtrType, UShortType) when isCast -> w
-        | (UintPtrType, IntType) when isCast -> w
-        | (ShortType, UChar) when isCast -> w
-        | (ShortType, Char) when isCast -> w
-        | (ShortType, UShortType) when isCast -> w
-        | (UShortType, UChar) when isCast -> w
-        | (UShortType, Char) when isCast -> w
-        | (UShortType, ShortType) when isCast -> w
-        | (Char, UChar) when isCast -> w
-        | (UChar, Char) when isCast -> w
+        | ((IntType|UintPtrType|ShortType|UShortType|Char|UChar), (IntType|UintPtrType|ShortType|UShortType|Char|UChar)) when isCast -> w
+        | ((IntType|UintPtrType|Float|Double|LongDouble), (Float|Double|LongDouble)) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
+        | ((Float|Double|LongDouble), (IntType|UintPtrType)) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
         | (ObjType ("java.lang.Object"), ArrayType _) when isCast -> w
         | _ ->
           expect_type (expr_loc e) inAnnotation t t0;
@@ -3573,6 +3572,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       | NewArrayWithInitializer (l, t, es) -> List.iter iter es
       | CastExpr (l, _, _, e) -> iter e
       | Upcast (e, _, _) -> iter e
+      | TypedExpr (e, _) -> iter e
       | WRead (_, e, _, _, _, _, _, _) -> iter e
       | _ -> static_error (expr_loc e) "This expression form is not supported in a static field initializer." None
     in
@@ -3701,6 +3701,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         | _ -> raise NotAConstant
         end
       | Upcast (e, fromType, toType) -> ev e
+      | TypedExpr (e, t) -> ev e
       | WidenedParameterArgument e -> ev e
       | _ -> raise NotAConstant
     and eval_field callers ((cn, fn) as f) =
@@ -3771,7 +3772,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
           begin match try_assoc g ctormap with
             Some (_, (_, _, _, param_names_types, symb)) ->
             let (_, ts0) = List.split param_names_types in
-            let targs = List.map (fun _ -> InferredType (ref None)) inductive_tparams in
+            let targs = List.map (fun _ -> InferredType (object end, ref None)) inductive_tparams in
             let Some tpenv = zip inductive_tparams targs in
             let ts = List.map (instantiate_type tpenv) ts0 in
             let t0 = InductiveType (i, targs) in
@@ -4034,10 +4035,10 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       begin
         let (targs, tpenv, inferredTypes) =
           if targs = [] then
-            let tpenv = List.map (fun x -> (x, ref None)) callee_tparams in
-            (List.map (fun (x, r) -> InferredType r) tpenv,
-             List.map (fun (x, r) -> (x, InferredType r)) tpenv,
-             List.map (fun (x, r) -> r) tpenv)
+            let tpenv = List.map (fun x -> (x, (object end), ref None)) callee_tparams in
+            (List.map (fun (x, o, r) -> InferredType (o, r)) tpenv,
+             List.map (fun (x, o, r) -> (x, InferredType (o, r))) tpenv,
+             List.map (fun (x, o, r) -> r) tpenv)
           else
             match zip callee_tparams targs with
               None -> static_error l (Printf.sprintf "Predicate requires %d type arguments." (List.length callee_tparams)) None
@@ -4188,7 +4189,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
     | Some t -> fix_inferred_types_in_type t
   and fix_inferred_types_in_type t =
     match t with
-      InferredType r -> fix_inferred_type r
+      InferredType (_, r) -> fix_inferred_type r
     | InductiveType (i, targs) -> List.iter fix_inferred_types_in_type targs
     | _ -> ()
   
@@ -5245,6 +5246,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         | _ -> ev state e cont (* No other cast allowed by the type checker changes the value *)
       end
     | Upcast (e, fromType, toType) -> ev state e cont
+    | TypedExpr (e, t) -> ev state e cont
     | WidenedParameterArgument e -> ev state e cont
     | RealLit(l, n) ->
       cont state begin 
