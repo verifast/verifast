@@ -55,8 +55,8 @@ ifndef WITHOUT_LABLGTK
     LABLGTK_FLAGS  += ${LABLGTK_FLAGS_} lablgtk.cmxa
   endif
   ifeq ($(OS), Darwin)
-    GTKSOURCEVIEW_LFLAGS += -I macos GSourceView2.cmx
-    GTKSOURCEVIEW_DEPS   += macos/GSourceView2.cmx
+    GTKSOURCEVIEW_LFLAGS += -I macos GSourceView2.cmx GLineMarks.cmx
+    GTKSOURCEVIEW_DEPS   += macos/GSourceView2.cmx macos/GLineMarks.cmx
   else
     GTKSOURCEVIEW_LFLAGS += -I linemarks lablgtksourceview2.cmxa linemarks.cmxa
     GTKSOURCEVIEW_LIBS   += ${LABLLIBS}
@@ -351,6 +351,10 @@ ifeq ($(OS), Darwin)
 macos/GSourceView2.cmx: macos/GSourceView2.ml
 	@echo "  OCAMLOPT " $@
 	cd macos; ${OCAMLOPT} $(OCAMLCFLAGS) -c -I +lablgtk2 GSourceView2.ml
+
+macos/GLineMarks.cmx: macos/GLineMarks.ml
+	@echo "  OCAMLOPT " $@
+	cd macos; ${OCAMLOPT} $(OCAMLCFLAGS) -c -I +lablgtk2 GLineMarks.ml
 endif
 clean::
 	rm -f macos/*.cm* macos/*.o

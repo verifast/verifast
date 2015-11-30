@@ -17,7 +17,10 @@ let () =
   table#show_in_source_view view;
   let scrolledWindow = GBin.scrolled_window () in
   scrolledWindow#add view#coerce;
-  app#add scrolledWindow#coerce;
+  let rootVbox = GPack.vbox ~packing:app#add () in
+  let openButton = GButton.button ~label:"Open" ~packing:(rootVbox#pack) () in
+  openButton#connect#clicked (fun () -> ignore @@ GToolbox.select_file ~title:"Open" ());
+  rootVbox#pack scrolledWindow#coerce;
   
   app#connect#destroy (fun () -> GMain.Main.quit ());
   app#show ();
