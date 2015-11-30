@@ -930,7 +930,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
         )
       | PopSubcontext::cs ->
         (match (itstack, locstack) with 
-          |(_::itstack, _::locstack) -> iter lastItem itstack None ass locstack None None cs
+          |(it::itstack, (l, env)::locstack) -> iter lastItem itstack (Some it) ass locstack (Some l) (Some env) cs
           | _ -> assert false
         )
       | Branching branch::cs ->
