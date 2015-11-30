@@ -7,11 +7,11 @@ LABLGTK2=lablgtk2
 endif
 
 hello$(DOTEXE): hello.ml linemarks.cmxa
-	ocamlopt.opt -o hello$(DOTEXE) -I +$(LABLGTK2) lablgtk.cmxa lablgtksourceview2.cmxa linemarks.cmxa gtkInit.cmx hello.ml
+	${OCAMLOPT} -o hello$(DOTEXE) -I +$(LABLGTK2) lablgtk.cmxa lablgtksourceview2.cmxa linemarks.cmxa gtkInit.cmx hello.ml
 
 linemarks.cmxa: liblinemarks.a
 ifeq ($(shell uname -o), Cygwin)
-	ocamlopt.opt -a -o linemarks.cmxa -I +$(LABLGTK2) GtkLineMarks.mli GLineMarks.ml -cclib -L$(shell pwd) -cclib -llinemarks -cclib "`pkg-config --libs gtksourceview-2.0`"
+	${OCAMLOPT} -a -o linemarks.cmxa -I +$(LABLGTK2) GtkLineMarks.mli GLineMarks.ml -cclib -L$(shell pwd) -cclib -llinemarks -cclib "`pkg-config --libs gtksourceview-2.0`"
 else
 	${OCAMLOPT} -a -o linemarks.cmxa $(LABLGTK_FLAGS) GtkLineMarks.mli GLineMarks.ml -cclib -L$(shell pwd) -cclib -llinemarks -cclib "`pkg-config --libs gtksourceview-2.0`"
 endif
@@ -20,7 +20,7 @@ liblinemarks.a: linemarks.o
 	ar r liblinemarks.a linemarks.o ml_GtkLineMarks.o
 
 linemarks.o: linemarks.c
-	ocamlopt.opt -c -ccopt "`pkg-config --cflags gtksourceview-2.0`" linemarks.c ml_GtkLineMarks.c
+	${OCAMLOPT} -c -ccopt "`pkg-config --cflags gtksourceview-2.0`" linemarks.c ml_GtkLineMarks.c
 
 ifeq ($(shell valac --version &>/dev/null ; echo $$?), 0)
 
