@@ -54,7 +54,7 @@ ifndef WITHOUT_LABLGTK
     LABLGTK_FLAGS_ += -I +../lablgtk2 -I +lablgtk2
     LABLGTK_FLAGS  += ${LABLGTK_FLAGS_} lablgtk.cmxa
   endif
-  ifeq ($(OS), Darwin)
+  ifdef WITHOUT_GTKSOURCEVIEW
     GTKSOURCEVIEW_LFLAGS += -I macos GSourceView2.cmx GLineMarks.cmx
     GTKSOURCEVIEW_DEPS   += macos/GSourceView2.cmx macos/GLineMarks.cmx
   else
@@ -350,7 +350,7 @@ tabhunt:
 mysh: ../bin/mysh$(DOTEXE)
 .PHONY: mysh
 
-ifeq ($(OS), Darwin)
+ifdef WITHOUT_GTKSOURCEVIEW
 macos/GSourceView2.cmx: macos/GSourceView2.ml
 	@echo "  OCAMLOPT " $@
 	cd macos; ${OCAMLOPT} $(OCAMLCFLAGS) -c -I +lablgtk2 GSourceView2.ml
@@ -370,7 +370,7 @@ clean::
 # Also depend on "vfide.ml": Make ignores our dependency "%.cmx: %.ml".
 vfide.cmx: Fonts.cmx vfide.ml $(GTKSOURCEVIEW_DEPS)
 	@echo "  OCAMLOPT " $@
-ifneq ($(OS), Darwin)
+ifndef WITHOUT_GTKSOURCEVIEW
 	make -C linemarks OCAMLOPT=${OCAMLOPT} LABLGTK_FLAGS="$(LABLGTK_FLAGS_)" linemarks.cmxa
 endif
 	$(SET_LDD); $(OCAMLOPT) $(OCAMLCFLAGS) -thread -c -w p -warn-error FSU -c $(INCLUDES) \
@@ -378,7 +378,7 @@ endif
 
 ../bin/vfide$(DOTEXE): vfide.cmx redux.cmx $(Z3DEPS) plugins2.cmx $(GTKSOURCEVIEW_DEPS)
 	@echo "  OCAMLOPT " $@
-ifneq ($(OS), Darwin)
+ifndef WITHOUT_GTKSOURCEVIEW
 	cd linemarks; make linemarks.cmxa
 endif
 	$(SET_LDD); ${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/vfide$(DOTEXE)	\
