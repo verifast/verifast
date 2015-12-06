@@ -146,8 +146,11 @@ else
   NUMCPU ?= $(shell cat /proc/cpuinfo | grep 'processor' | wc -l)
 endif
 
+# Always include debug information. This seems necessary to prevent vfide crashes on OS X (see https://dnetcode.cs.kuleuven.be/issues/1975).
+# Also, this is necessary to get stack traces.
+OCAMLCFLAGS += -g
 ifdef DEBUG
-  OCAMLCFLAGS += -g -annot
+  OCAMLCFLAGS += -annot
 endif
 
 CWD ?= $(CURDIR)
