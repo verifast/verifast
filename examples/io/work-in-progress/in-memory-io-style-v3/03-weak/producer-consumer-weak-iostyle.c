@@ -25,7 +25,7 @@
  *   for something else.
  */
 
-#include "../../../vstte2012/problem3/problem3.h" // Ring buffer
+#include "../../../../vstte2012/problem3/problem3.h" // Ring buffer
 #include <threading.h>
 
 struct buffer {

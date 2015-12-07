@@ -19,12 +19,21 @@ cd work-in-progress
     mysh < run.mysh
   cd ..
   cd in-memory-io-style-v2
-    verifast -allow_assume foralls.o prophecy.o ../../../vstte2012/problem3/problem3.c writehi_readhi.c
+    verifast_both -allow_assume foralls.o prophecy.o ../../../vstte2012/problem3/problem3.c writehi_readhi.c
   cd ..
   cd in-memory-io-style-v3
-    verifast -c -disable_overflow_check in-memory-splitjoin-framepresupd.c
-    verifast -c -allow_assume ../../../vstte2012/problem3/problem3.c producer-consumer.c
-    verifast -c -allow_assume ../../../vstte2012/problem3/problem3.c producer-consumer-weak-iostyle.c
+    cd 01-producer-consumer-no-iostyle
+      verifast_both -c -allow_assume producer-consumer.c
+    cd ..
+    cd 02-framepresupd
+      verifast_both -c -disable_overflow_check in-memory-splitjoin-framepresupd.c
+    cd ..
+    cd 03-weak
+      verifast_both -c -allow_assume producer-consumer-weak-iostyle.c
+    cd ..
+    cd 04-split-invar
+      verifast_both -c buffer.c
+    cd ..
   cd ..
 cd ..
 cd matching_brackets
