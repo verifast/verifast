@@ -21,9 +21,9 @@ help:
 	@echo "Tips:"
 	@echo "- Use e.g. 'make build VERBOSE=yes' to see more."
 	@echo "- Use e.g. 'make build -j 4' to use 4 cores."
-	@echo "- Use e.g. 'make DEBUG=yes' to include debug symbols and output"
-	@echo "  .annot files containing type information. To see stack"
-	@echo "  trace, launch with 'OCAMLRUNPARAM=b verifast <args>'."
+	@echo "- Use e.g. 'make ANNOT=yes' to output .annot files containing"
+	@echo "  type information."
+	@echo "- To see stack trace, launch with 'OCAMLRUNPARAM=b verifast <args>'."
 .PHONY: help
 
 #------------------------------- Settings -----------------------------------#
@@ -149,7 +149,7 @@ endif
 # Always include debug information. This seems necessary to prevent vfide crashes on OS X (see https://dnetcode.cs.kuleuven.be/issues/1975).
 # Also, this is necessary to get stack traces.
 OCAMLCFLAGS += -g
-ifdef DEBUG
+ifdef ANNOT
   OCAMLCFLAGS += -annot
 endif
 
