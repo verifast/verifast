@@ -62,6 +62,25 @@ void mutex_cond_signal(struct mutex_cond *cond);
     //@ requires [?fc]mutex_cond(cond, ?mutex) &*& mutex_held(mutex, ?p, currentThread, ?f);
     //@ ensures [fc]mutex_cond(cond, mutex) &*& mutex_held(mutex, p, currentThread, f);
 
+// ghost critical sections
+/*@
+typedef lemma void mutex_ghost_critical_section_t
+  (predicate() p, predicate() pre, predicate() post)
+  ();
+requires p() &*& pre();
+ensures p() &*& post();
+
+lemma void mutex_ghost_use(struct mutex *mutex, predicate() pre, predicate() post);
+nonghost_callers_only
+requires
+  [?f]mutex(mutex, ?p)
+  &*& pre()
+  &*& is_mutex_ghost_critical_section_t(?critical_section, p, pre, post);
+ensures
+  [f]mutex(mutex, p)
+  &*& post()
+  &*& is_mutex_ghost_critical_section_t(critical_section, p, pre, post);
+@*/
 
 // **** Lock ordering for re-entry and deadlock prevention ****
 
