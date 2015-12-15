@@ -30,7 +30,6 @@ requires
   &*& is_critical_section_t(critical_section, invar, pre, post);
 ensures
   [f]ghost_mutex(id, invar)
-  &*& invar()
   &*& post()
   &*& is_critical_section_t(critical_section, invar, pre, post);
 
