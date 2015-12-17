@@ -7,7 +7,7 @@
 
 // 1. sender -> receiver : M
 
-/*@ 
+/*@
 
 fixpoint bool dummy_public_key(int p, int c)
 {
@@ -17,19 +17,17 @@ fixpoint bool dummy_public_key(int p, int c)
 predicate dummy_pub(cryptogram cg) =
   switch (cg)
   {
-    case cg_random(p0, c0):        return true;
+    case cg_nonce(p0, c0):        return true;
     case cg_symmetric_key(p0, c0): return true == dummy_public_key(p0, c0);
     case cg_public_key(p0, c0):    return true;
     case cg_private_key(p0, c0):   return true == bad(p0);
     case cg_hash(cs0):             return true;
     case cg_hmac(p0, c0, cs0):     return true == dummy_public_key(p0, c0);
-    case cg_encrypted(p0, c0, cs0, ent0): 
-      return dummy_public_key(p0, c0) ? 
-               [_]public_generated(dummy_pub)(cs0)
-             :
-               cs0 == chars_for_cg(cg_symmetric_key(p0, c0));
+    case cg_encrypted(p0, c0, cs0, ent0):
+      return true == dummy_public_key(p0, c0) &*&
+             [_]public_generated(dummy_pub)(cs0);
     case cg_auth_encrypted(p0, c0, mac0, cs0, ent0):
-      return true == dummy_public_key(p0, c0) &*& 
+      return true == dummy_public_key(p0, c0) &*&
              [_]public_generated(dummy_pub)(cs0);
     case cg_asym_encrypted(p0, c0, cs0, ent0):
       return [_]public_generated(dummy_pub)(cs0);

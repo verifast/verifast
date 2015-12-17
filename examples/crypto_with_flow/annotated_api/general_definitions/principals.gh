@@ -13,7 +13,7 @@ lemma void principals_init();
            principals(0);
 
 lemma void principals_exit();
-  requires module(principals_mod, false) &*& principals(_);
+  requires principals(_);
   ensures  true;
 
 fixpoint bool bad(int principal);

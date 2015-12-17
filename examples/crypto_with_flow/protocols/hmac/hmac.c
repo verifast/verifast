@@ -32,20 +32,19 @@ void sender(char *key, int key_len, char *message)
     char* M = malloc(message_len);
     if (M == 0) abort();
     
-    //@ close [f2]optional_crypto_chars(false, message, MESSAGE_SIZE, msg_cs);
+    //@ chars_to_crypto_chars(message, MESSAGE_SIZE);
     memcpy(M, message, MESSAGE_SIZE);
-    //@ open [f2]optional_crypto_chars(false, message, MESSAGE_SIZE, msg_cs);
-    //@ close optional_crypto_chars(false, M, MESSAGE_SIZE, msg_cs);
     sha512_hmac(key, (unsigned int) key_len, M, 
                 (unsigned int) MESSAGE_SIZE, hmac, 0);
-    //@ open optional_crypto_chars(false, M, MESSAGE_SIZE, msg_cs);
     //@ assert cryptogram(hmac, 64, ?hmac_cs, ?hmac_cg);
     //@ close hmac_pub(hmac_cg);
     //@ leak hmac_pub(hmac_cg);
     //@ public_cryptogram(hmac, hmac_cg);
-    //@ close optional_crypto_chars(false, hmac, 64, hmac_cs);
+    //@ chars_to_crypto_chars(hmac, 64);
     memcpy(M + MESSAGE_SIZE, hmac, 64);
-    //@ open optional_crypto_chars(false, M + 40, 64, hmac_cs);
+    
+    //@ crypto_chars_to_chars(M, MESSAGE_SIZE);
+    //@ crypto_chars_to_chars(M + MESSAGE_SIZE, 64);
     //@ chars_join(M);
     net_send(&socket, M, (unsigned int) message_len);
     free(M);
@@ -63,7 +62,7 @@ void receiver(char *key, int key_len, char *message)
   /*@ ensures  principal(receiver, _) &*&
                [f1]cryptogram(key, key_len, key_cs, key_cg) &*&
                chars(message, MESSAGE_SIZE, ?msg_cs) &*&
-               collision_in_run || bad(sender) || bad(receiver) ||
+               col || bad(sender) || bad(receiver) ||
                send(sender, receiver, msg_cs); @*/
 {
   int socket1;
@@ -85,39 +84,33 @@ void receiver(char *key, int key_len, char *message)
     int expected_size = MESSAGE_SIZE + 64;
     if (size != expected_size) abort();
     //@ chars_split(buffer, expected_size);
+    //@ assert chars(buffer, MESSAGE_SIZE, ?msg_cs);
     /*@ close hide_chars((void*) buffer + expected_size, 
                          MAX_MESSAGE_SIZE - expected_size, _); @*/
     
     //Verify the hmac
-    //@ close optional_crypto_chars(false, buffer, MESSAGE_SIZE, ?msg_cs);
+    //@ chars_to_crypto_chars(buffer, MESSAGE_SIZE);
     sha512_hmac(key, (unsigned int) key_len, buffer, 
                 (unsigned int) MESSAGE_SIZE, hmac, 0);
     memcpy(message, (void*) buffer , MESSAGE_SIZE);
-    //@ open optional_crypto_chars(false, buffer, MESSAGE_SIZE, msg_cs);
     //@ open cryptogram(hmac, 64, ?hmac_cs, ?hmac_cg);
     //@ assert hmac_cg == cg_hmac(sender, id, msg_cs);
-    //@ close optional_crypto_chars(!collision_in_run, hmac, 64, hmac_cs);
-    //@ close optional_crypto_chars(false, (void*) buffer + MESSAGE_SIZE, 64, _);
+    //@ assert chars((void*) buffer + MESSAGE_SIZE, 64, ?hmac_cs2);
+    //@ chars_to_crypto_chars((void*) buffer + MESSAGE_SIZE, 64);
     if (memcmp((void*) buffer + MESSAGE_SIZE, hmac, 64) != 0) abort();
-    //@ open optional_crypto_chars(!collision_in_run, hmac, 64, hmac_cs);
-    //@ open optional_crypto_chars(false, (void*) buffer + MESSAGE_SIZE, 64, hmac_cs);
-    //@ assert chars((void*) buffer + MESSAGE_SIZE, 64, hmac_cs);
-    //@ assert chars(buffer, expected_size, append(msg_cs, hmac_cs));
-    //@ public_chars((void*) buffer + MESSAGE_SIZE, 64, hmac_cs);
+    //@ crypto_chars_join(buffer);
+    //@ crypto_chars_to_chars(buffer, expected_size);
     
-    /*@ if (!collision_in_run && !bad(sender) && !bad(receiver))
+    /*@ if (!col && !bad(sender) && !bad(receiver))
         {
-          public_chars((void*) buffer + MESSAGE_SIZE, 64, hmac_cs);
-          close cryptogram(hmac, 64, hmac_cs, hmac_cg);
-          public_cryptogram_extract(hmac);
+          public_chars(hmac, 64);
+          public_chars_extract(hmac, hmac_cg);
           open [_]hmac_pub(hmac_cg);
           assert (send(sender, receiver, msg_cs) == true); 
         }
     @*/
-    //@ chars_join(buffer);
     /*@ open hide_chars((void*) buffer + expected_size, 
                         MAX_MESSAGE_SIZE - expected_size, _); @*/
-    //@ if (!collision_in_run) public_crypto_chars(hmac, 64, hmac_cs);
   }
   net_close(socket2);
   net_close(socket1);

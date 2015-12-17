@@ -33,7 +33,7 @@ fixpoint bool auth_enc_public_key(int p, int c)
 predicate auth_enc_pub(cryptogram cg) =
   switch (cg)
   {
-    case cg_random(p0, c0):
+    case cg_nonce(p0, c0):
       return true;
     case cg_symmetric_key(p0, c0):
       return true == auth_enc_public_key(p0, c0);
@@ -46,14 +46,12 @@ predicate auth_enc_pub(cryptogram cg) =
     case cg_hmac(p0, c0, cs0):
       return true;
     case cg_encrypted(p0, c0, cs0, ent0):
-      return auth_enc_public_key(p0, c0) ? 
-               [_]public_generated(auth_enc_pub)(cs0)
-             :
-               cs0 == chars_for_cg(cg_symmetric_key(p0, c0));
+      return true == auth_enc_public_key(p0, c0) &*&
+             [_]public_generated(auth_enc_pub)(cs0);
     case cg_auth_encrypted(p0, c0, mac0, cs0, ent0):
       return auth_enc_public_key(p0, c0) ?
                [_]public_generated(auth_enc_pub)(cs0)
-             : 
+             :
                true == send(p0, shared_with(p0, c0), cs0);
     case cg_asym_encrypted(p0, c0, cs0, ent0):
       return [_]public_generated(auth_enc_pub)(cs0);
@@ -73,17 +71,15 @@ void sender(char *key, char *msg, unsigned int msg_len);
              principal(?sender, _) &*&
              [?f1]cryptogram(key, KEY_SIZE, ?key_cs, ?key_cg) &*&
                key_cg == cg_symmetric_key(sender, ?id) &*&
-             [?f2]crypto_chars(msg, msg_len, ?msg_cs) &*&
-               MAX_SIZE >= msg_len &*& msg_len >= MIN_ENC_SIZE &*&
+             [?f2]crypto_chars(secret, msg, msg_len, ?msg_cs) &*&
+               MAX_SIZE >= msg_len &*& msg_len >= MINIMAL_STRING_SIZE &*&
                bad(sender) || bad(shared_with(sender, id)) ?
                  [_]public_generated(auth_enc_pub)(msg_cs)
                :
-                 // Not saying anything about publicness of msg_cs established 
-                 // confidentiality
                  true == send(sender, shared_with(sender, id), msg_cs); @*/
 /*@ ensures  principal(sender, _) &*&
              [f1]cryptogram(key, KEY_SIZE, key_cs, key_cg) &*&
-             [f2]crypto_chars(msg, msg_len, msg_cs); @*/
+             [f2]crypto_chars(secret, msg, msg_len, msg_cs); @*/
 
 int receiver(char *key, char *msg);
 /*@ requires [_]public_invar(auth_enc_pub) &*&
@@ -95,9 +91,9 @@ int receiver(char *key, char *msg);
 /*@ ensures  principal(receiver, _) &*&
              [f1]cryptogram(key, KEY_SIZE, key_cs, key_cg) &*&
              chars(msg + result, MAX_SIZE - result, _) &*&
-             optional_crypto_chars(!collision_in_run, msg, result, ?msg_cs) &*&
-             collision_in_run || bad(sender) || bad(receiver) ||
-             send(sender, receiver, msg_cs); @*/
+             crypto_chars(secret, msg, result, ?msg_cs) &*&
+             col || bad(sender) || bad(receiver) ||
+               send(sender, receiver, msg_cs); @*/
 
 ///////////////////////////////////////////////////////////////////////////////
 // Attacker proof obligations for this protocol ///////////////////////////////

@@ -4,7 +4,7 @@
 #include "../../annotated_api/polarssl_definitions/polarssl_definitions.h"
 
 #define KEY_SIZE 32
-#define NONCE_SIZE 12
+#define NONCE_SIZE 10
 
 /*@
 
@@ -15,20 +15,20 @@
 
 // 1. sender -> receiver : NAME(sender), NONCE(sender)
 // 2. receiver -> server : NAME(receiver),
-//                         ASYM_ENC(K(receiver),
+//                         ENC(K(receiver),
 //                           {NAME(sender), NONCE(sender), NONCE(receiver)}
 //                         )
-// 3. server -> sender   : ASYM_ENC(K(sender),
+// 3. server -> sender   : ENC(K(sender),
 //                           {NAME(receiver), KEY(server),
 //                            NONCE(sender), NONCE(receiver)}
 //                         )
-//                         ASYM_ENC(K(receiver),
+//                         ENC(K(receiver),
 //                           {NAME(sender), KEY(server)}
 //                          )
-// 4. sender -> receiver : ASYM_ENC(K(receiver),
+// 4. sender -> receiver : ENC(K(receiver),
 //                           {NAME(sender), KEY(server)}
 //                         )
-//                         ASYM_ENC(K(server), NONCE(receiver))
+//                         ENC(K(server), NONCE(receiver))
 
 ///////////////////////////////////////////////////////////////////////////////
 // Encodings for this protocol ////////////////////////////////////////////////
@@ -90,7 +90,7 @@ predicate yahalom_pub_msg4(int server, int sender, int receiver,
 predicate yahalom_pub(cryptogram cg) =
   switch (cg)
   {
-    case cg_random(p0, c0):
+    case cg_nonce(p0, c0):
       return true == yahalom_public_nonce(p0, cg_info(cg));
     case cg_symmetric_key(p0, c0):
       return true == yahalom_public_key(p0, c0);
@@ -106,32 +106,31 @@ predicate yahalom_pub(cryptogram cg) =
       return yahalom_public_key(p0, c0) ?
         [_]public_generated(yahalom_pub)(cs0)
       :
-        cs0 == chars_for_cg(cg_symmetric_key(p0, c0)) ? true :
-        length(cs0) == 4 + NONCE_SIZE + NONCE_SIZE ?
+        length(cs0) == ID_SIZE + NONCE_SIZE + NONCE_SIZE ?
         (
           // ENC(KB, {A, NA, NB})
           yahalom_pub_msg1(?server, ?sender, ?NA, ?NB) &*&
           cg_info(cg_symmetric_key(p0, c0)) == IP(3, server) &*&
-          NA == cg_random(?sender2, ?a_id) &*&
+          NA == cg_nonce(?sender2, ?a_id) &*&
           true == cg_is_generated(NA) &*& [_]yahalom_pub(NA) &*&
-          NB == cg_random(p0, _) &*& true == cg_is_generated(NB) &*&
+          NB == cg_nonce(p0, _) &*& true == cg_is_generated(NB) &*&
           cg_info(NB) == IP(2, IP(server, IP(sender, IP(sender2, a_id)))) &*&
-          length(chars_of_int(sender)) == 4 &*&
+          length(identifier(sender)) == ID_SIZE &*&
           length(chars_for_cg(NA)) == NONCE_SIZE &*&
           length(chars_for_cg(NB)) == NONCE_SIZE &*&
-          cs0 == append(chars_of_int(sender), append(chars_for_cg(NA),
-                                                     chars_for_cg(NB)))
+          cs0 == append(identifier(sender), append(chars_for_cg(NA),
+                                                   chars_for_cg(NB)))
         ) :
-        length(cs0) == 4 + KEY_SIZE + NONCE_SIZE + NONCE_SIZE ?
+        length(cs0) == ID_SIZE + KEY_SIZE + NONCE_SIZE + NONCE_SIZE ?
         (
           // ENC(KA, {B, KAB, NA, NB})
           yahalom_pub_msg2(?server, ?receiver, ?NA, ?NB, ?KAB) &*&
           cg_info(cg_symmetric_key(p0, c0)) == IP(3, server) &*&
-          NA == cg_random(?sender2, ?a_id) &*&
+          NA == cg_nonce(?sender2, ?a_id) &*&
           true == cg_is_generated(NA) &*& [_]yahalom_pub(NA) &*&
-          NB == cg_random(?receiver2, ?b_id) &*&
+          NB == cg_nonce(?receiver2, ?b_id) &*&
           (
-          bad(receiver) ?
+          bad(server) || bad(receiver) ?
             [_]yahalom_pub(NB)
           :
             (cg_info(NB) == IP(2, IP(server, IP(p0, IP(sender2, a_id)))) &&
@@ -142,14 +141,14 @@ predicate yahalom_pub(cryptogram cg) =
           true == cg_is_generated(KAB) &*&
           cg_info(KAB) == IP(4, IP(p0, IP(receiver,
                             IP(sender2, IP(a_id, IP(receiver2, b_id)))))) &*&
-          length(chars_of_int(receiver)) == 4 &*&
+          length(identifier(receiver)) == ID_SIZE &*&
           length(chars_for_cg(KAB)) == KEY_SIZE &*&
           length(chars_for_cg(NA)) == NONCE_SIZE &*&
           length(chars_for_cg(NB)) == NONCE_SIZE &*&
-          cs0 == append(chars_of_int(receiver), append(chars_for_cg(KAB),
+          cs0 == append(identifier(receiver), append(chars_for_cg(KAB),
                  append(chars_for_cg(NA), chars_for_cg(NB))))
         ) :
-        length(cs0) == 4 + KEY_SIZE ?
+        length(cs0) == ID_SIZE + KEY_SIZE ?
         (
           // ENC(KB, {A, KAB})
           yahalom_pub_msg3(?server, ?sender, ?KAB, ?sender2, ?a_id,
@@ -159,15 +158,15 @@ predicate yahalom_pub(cryptogram cg) =
           cg_info(KAB) == IP(4, IP(sender, IP(p0,
                             IP(sender2, IP(a_id, IP(receiver2, b_id)))))) &*&
           true == cg_is_generated(KAB) &*&
-          length(chars_of_int(sender)) == 4 &*&
+          length(identifier(sender)) == ID_SIZE &*&
           length(chars_for_cg(KAB)) == KEY_SIZE &*&
-          cs0 == append(chars_of_int(sender), chars_for_cg(KAB))
+          cs0 == append(identifier(sender), chars_for_cg(KAB))
         ) :
         length(cs0) == NONCE_SIZE ?
         (
           // ENC(KAB, NB)
           yahalom_pub_msg4(?server, ?sender, ?receiver, ?a_id, ?NB) &*&
-          NB == cg_random(?receiver2, ?b_id) &*&
+          NB == cg_nonce(?receiver2, ?b_id) &*&
           cs0 == chars_for_cg(NB) &*&
           true == cg_is_generated(NB) &*&
           (
@@ -227,7 +226,7 @@ void sender(int server, int sender, int receiver,
              principal(sender, _) &*&
              [f]cryptogram(key, KEY_SIZE, key_cs, key_cg) &*&
              cryptogram(generated_key, KEY_SIZE, _, ?g_key_cg) &*&
-             collision_in_run || bad(server) || bad(sender) ?
+             col || bad(server) || bad(sender) ?
                true
              :
                g_key_cg == cg_symmetric_key(server, ?id) &*&
@@ -252,7 +251,7 @@ void receiver(int server, int sender, int receiver,
              principal(receiver, _) &*&
              [f]cryptogram(key, KEY_SIZE, key_cs, key_cg) &*&
              cryptogram(generated_key, KEY_SIZE, _, ?g_key_cg) &*&
-             collision_in_run || bad(server) || bad(sender) || bad(receiver) ?
+             col || bad(server) || bad(sender) || bad(receiver) ?
                true
              :
                g_key_cg == cg_symmetric_key(server, ?id) &*&

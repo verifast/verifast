@@ -36,8 +36,6 @@ int main()
   fprintf(f, "//Some self defined size limits\n");
   fprintf(f, "#define MAX_MESSAGE_SIZE 65536\n");
   fprintf(f, "#define MIN_RANDOM_SIZE 4\n");
-  fprintf(f, "#define MIN_HMAC_INPUT_SIZE 4\n");
-  fprintf(f, "#define MIN_ENC_SIZE 4\n");
   fprintf(f, "\n");
   
   fprintf(f, "#endif\n");

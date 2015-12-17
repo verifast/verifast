@@ -4,18 +4,18 @@
 #include <stddef.h>
 //@ #include <crypto.gh>
 
-#define MINIMAL_STRING_SIZE 4
-
 char *strcpy(char *d, char *s);
     //@ requires [?f]string(s, ?cs) &*& chars(d, length(cs) + 1, _);
     //@ ensures [f]string(s, cs) &*& chars(d, length(cs) + 1, append(cs, {0})) &*& result == d;
 
 void memcpy(void *array, void *array0, size_t count);
     /*@ requires chars(array, count, ?cs) &*&
-                 [?f]optional_crypto_chars(?cc, array0, count, ?cs0) &*&
-                 cc ? count >= MINIMAL_STRING_SIZE : true; @*/
-    /*@ ensures  optional_crypto_chars(cc, array, count, cs0) &*&
-                 [f]optional_crypto_chars(cc, array0, count, cs0); @*/
+                 [?f]crypto_chars(?kind, array0, count, ?cs0) &*&
+                 //minimum size prevents comparing sequence of same byte (see memcmp)
+                 //otherwise guessing would become easier complexity wise
+                 kind == normal || count >= MINIMAL_STRING_SIZE; @*/
+    /*@ ensures  crypto_chars(kind, array, count, cs0) &*&
+                 [f]crypto_chars(kind, array0, count, cs0); @*/
 
 void memmove(void *dest, void *src, size_t count);
     /*@
@@ -41,22 +41,31 @@ int strlen(char *string);
 
 int memcmp(char *array, char *array0, size_t count);
     /*@ requires principal(?principal, ?values_count) &*&
-                 [?f1]optional_crypto_chars(?cc, array, ?n, ?cs) &*&
-                 [?f2]optional_crypto_chars(?cc0, array0, ?n0, ?cs0) &*& 
-                 count <= n &*& count <= n0 &*&
-                 cc || cc0 ? count >= MINIMAL_STRING_SIZE : true; @*/
-    /*@ ensures  [f1]optional_crypto_chars(cc, array, n, cs) &*&
-                 [f2]optional_crypto_chars(cc0, array0, n0, cs0) &*&
-                 cc || cc0 ?
-                   (result == 0 ?
-                      principal(principal, values_count) &*&
-                      (take(count, cs) == take(count, cs0))
-                    : 
-                      true
-                   )
-                 :
-                   principal(principal, values_count) &*&
-                   true == ((result == 0) == (take(count, cs) == take(count, cs0))); @*/
+                 [?f1]crypto_chars(?kind1, array, ?n1, ?cs) &*&
+                 [?f2]crypto_chars(?kind2, array0, ?n2, ?cs0) &*& 
+                 count <= n1 &*& count <= n2 &*& 
+                 kind1 == normal && kind2 == normal ?
+                   true : count >= MINIMAL_STRING_SIZE; @*/
+    /*@ ensures  [f1]crypto_chars(?kind1_, array, n1, cs) &*&
+                 [f2]crypto_chars(?kind2_, array0, n2, cs0) &*&
+                 true == ((result == 0) == (take(count, cs) == take(count, cs0))) &*&
+                 (
+                   //if guessing a secret value failed, network permissions are revoked
+                   // *otherwise one could keep guessing untill success
+                   // *MINIMAL_STRING_SIZE ensures correct guess is unlikely
+                   result != 0 && (kind1 == secret || kind2 == secret) ?
+                       true : principal(principal, values_count)
+                 ) &*&
+                 result != 0 ? 
+                   //if comparison failed kinds remain
+                   kind1_ == kind1 && kind2_ == kind2
+                 : 
+                   //if comparison succeeded kinds become the same
+                   kind1_ == kind2_ &*&
+                   //the resulting kind follows the rules of memcmp_kinds
+                   kind1_ == memcmp_kinds(kind1, n1, kind2, n2) &*&
+                   //comparing a garbage value successfully to a non-garbage value results in a collision
+                   kind1 == kind2 || (kind1 != garbage && kind2 != garbage) || col; @*/
 
 int strcmp(char *s1, char *s2);
     //@ requires [?f1]string(s1, ?cs1) &*& [?f2]string(s2, ?cs2);

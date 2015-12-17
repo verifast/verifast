@@ -31,7 +31,7 @@ fixpoint bool enc_and_hmac_public_key(int p, int c)
 predicate enc_and_hmac_pub(cryptogram cg) =
   switch (cg)
   {
-    case cg_random(p0, c0):
+    case cg_nonce(p0, c0):
       return true;
     case cg_symmetric_key(p0, c0):
       return true == enc_and_hmac_public_key(p0, c0);
@@ -42,18 +42,15 @@ predicate enc_and_hmac_pub(cryptogram cg) =
     case cg_hash(cs0):
       return true;
     case cg_hmac(p0, c0, cs0):
-      return enc_and_hmac_public_key(p0, c0) ? 
-        [_]public_generated(enc_and_hmac_pub)(cs0) 
+      return enc_and_hmac_public_key(p0, c0) ?
+        [_]public_generated(enc_and_hmac_pub)(cs0)
       :
         true == send(p0, shared_with(p0, c0), cs0);
     case cg_encrypted(p0, c0, cs0, ent0):
-      return enc_and_hmac_public_key(p0, c0) ? 
+      return enc_and_hmac_public_key(p0, c0) ?
         [_]public_generated(enc_and_hmac_pub)(cs0)
       :
-        cs0 == chars_for_cg(cg_symmetric_key(p0, c0)) ?
-          true
-        :
-          true == send(p0, shared_with(p0, c0), cs0);
+        true == send(p0, shared_with(p0, c0), cs0);
     case cg_auth_encrypted(p0, c0, mac0, cs0, ent0):
       return true == enc_and_hmac_public_key(p0, c0) &*&
              [_]public_generated(enc_and_hmac_pub)(cs0);
@@ -78,18 +75,16 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len);
                enc_key_cg == cg_symmetric_key(sender, ?enc_id) &*&
                hmac_key_cg == cg_symmetric_key(sender, ?hmac_id) &*&
                shared_with(sender, enc_id) == shared_with(sender, hmac_id) &*&
-             [?f3]crypto_chars(msg, msg_len, ?msg_cs) &*&
-               MAX_SIZE >= msg_len &*& msg_len >= MIN_ENC_SIZE &*&
+             [?f3]crypto_chars(secret, msg, msg_len, ?msg_cs) &*&
+               MAX_SIZE >= msg_len &*& msg_len >= MINIMAL_STRING_SIZE &*&
                bad(sender) || bad(shared_with(sender, enc_id)) ?
                  [_]public_generated(enc_and_hmac_pub)(msg_cs)
                :
-                 // Not saying anything about publicness of msg_cs established 
-                 // confidentiality
                  true == send(sender, shared_with(sender, enc_id), msg_cs); @*/
 /*@ ensures  principal(sender, _) &*&
              [f1]cryptogram(enc_key, KEY_SIZE, enc_key_cs, enc_key_cg) &*&
              [f2]cryptogram(hmac_key, KEY_SIZE, hmac_key_cs, hmac_key_cg) &*&
-             [f3]crypto_chars(msg, msg_len, msg_cs); @*/
+             [f3]crypto_chars(secret, msg, msg_len, msg_cs); @*/
 
 int receiver(char *enc_key, char *hmac_key, char *msg);
 /*@ requires [_]public_invar(enc_and_hmac_pub) &*&
@@ -105,9 +100,9 @@ int receiver(char *enc_key, char *hmac_key, char *msg);
              [f1]cryptogram(enc_key, KEY_SIZE, enc_key_cs, enc_key_cg) &*&
              [f2]cryptogram(hmac_key, KEY_SIZE, hmac_key_cs, hmac_key_cg) &*&
              chars(msg + result, MAX_SIZE - result, _) &*&
-             optional_crypto_chars(!collision_in_run, msg, result, ?msg_cs) &*&
-             collision_in_run || bad(sender) || bad(receiver) ||
-             send(sender, receiver, msg_cs); @*/
+             crypto_chars(secret, msg, result, ?msg_cs) &*&
+             col || bad(sender) || bad(receiver) ||
+               send(sender, receiver, msg_cs); @*/
 
 ///////////////////////////////////////////////////////////////////////////////
 // Attacker proof obligations for this protocol ///////////////////////////////

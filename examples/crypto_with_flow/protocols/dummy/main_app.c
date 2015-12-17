@@ -153,8 +153,8 @@ int main(int argc, char **argv) //@ : main_full(main_app)
       pthread_join(c_thread, NULL);
       //@ open pthread_run_post(receiver_t)(msg2, _);
       
-      //@ close optional_crypto_chars(false, msg1, PACKAGE_SIZE, _);
-      //@ close optional_crypto_chars(false, msg2, PACKAGE_SIZE, _);
+      //@ chars_to_crypto_chars(msg1, PACKAGE_SIZE);
+      //@ chars_to_crypto_chars(msg2, PACKAGE_SIZE);
       if (memcmp(msg1, msg2, PACKAGE_SIZE) != 0)
         abort();
         

@@ -154,7 +154,7 @@ void *receiver_t(void* data) //@ : pthread_run_joinable
   //@ assert hmac_args_receiver(data, ?receiver);
   //@ assert hmac_args_message(data, ?msg);
   //@ assert chars(msg, MESSAGE_SIZE, ?msg_cs);
-  /*@ assert collision_in_run || bad(sender) || bad(receiver) || 
+  /*@ assert col || bad(sender) || bad(receiver) || 
              send(sender, receiver, msg_cs); @*/
   //@ close pthread_run_post(receiver_t)(data, _);
   return 0;
@@ -245,15 +245,14 @@ int main(int argc, char **argv) //@ : main_full(main_app)
       //@ open [1/2]cryptogram(key, KEY_SIZE, cs_key, _);
       //@ open [1/2]cryptogram(key, KEY_SIZE, cs_key, _);
       
-       //@ close optional_crypto_chars(false, r_message, MESSAGE_SIZE, _);
-       //@ close optional_crypto_chars(false, s_message, MESSAGE_SIZE, _);
+      //@ chars_to_crypto_chars(r_message, MESSAGE_SIZE);
+      //@ chars_to_crypto_chars(s_message, MESSAGE_SIZE);
       if (memcmp(s_message, r_message, MESSAGE_SIZE) != 0)
         abort();
         
       printf(" |%i| ", i);
     }
     //@ assert malloc_block(key, KEY_SIZE);
-    //@ close optional_crypto_chars(!collision_in_run, key, KEY_SIZE, cs_key);
     zeroize(key, KEY_SIZE);
     free((void*) key);
   }

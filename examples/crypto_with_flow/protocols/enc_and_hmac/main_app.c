@@ -68,7 +68,7 @@ predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
   [1/2]cryptogram(hmac_key, KEY_SIZE, ?hmac_key_cs, ?hmac_key_cg) &*&
     hmac_key_cg == cg_symmetric_key(sender, ?hmac_id) &*&
     receiver == shared_with(sender, hmac_id) &*&
-  crypto_chars(msg, MSG_LEN, ?msg_cs) &*&
+  crypto_chars(secret, msg, MSG_LEN, ?msg_cs) &*&
     true == send(sender, receiver, msg_cs) &*&
   info == cons(int_value(sender), 
             cons(int_value(receiver), 
@@ -96,7 +96,7 @@ predicate_family_instance pthread_run_post(sender_t)(void *data, any info) =
   [1/2]cryptogram(hmac_key, KEY_SIZE, ?hmac_key_cs, ?hmac_key_cg) &*&
     hmac_key_cg == cg_symmetric_key(sender, ?hmac_id) &*&
     receiver == shared_with(sender, hmac_id) &*&
-  crypto_chars(msg, MSG_LEN, ?msg_cs) &*&
+  crypto_chars(secret, msg, MSG_LEN, ?msg_cs) &*&
   info == cons(int_value(sender), 
             cons(int_value(receiver), 
               cons(pointer_value(enc_key),
@@ -166,9 +166,9 @@ predicate_family_instance pthread_run_post(receiver_t)(void *data, any info) =
   [1/2]cryptogram(hmac_key, KEY_SIZE, ?hmac_key_cs, ?hmac_key_cg) &*&
     hmac_key_cg == cg_symmetric_key(sender, ?hmac_id) &*&
     receiver == shared_with(sender, hmac_id) &*&
-  optional_crypto_chars(!collision_in_run, msg, length, ?msg_cs) &*&
+  crypto_chars(secret, msg, length, ?msg_cs) &*&
   chars(msg + length, MAX_SIZE - length, _) &*&
-  collision_in_run() || true == send(sender, receiver, msg_cs) &*&
+  col || true == send(sender, receiver, msg_cs) &*&
   info == cons(int_value(sender), 
             cons(int_value(receiver), 
               cons(pointer_value(enc_key),
@@ -258,8 +258,8 @@ int main(int argc, char **argv) //@ : main_full(main_app)
       char r_message[MAX_SIZE];
     
       //@ assert chars(s_message, MSG_LEN, ?msg_cs);
-      //@ public_chars(s_message, MSG_LEN, msg_cs);
-      //@ crypto_chars(s_message, MSG_LEN, msg_cs);
+      //@ public_chars(s_message, MSG_LEN);
+      //@ chars_to_secret_crypto_chars(s_message, MSG_LEN);
       //@ s_args.sender = sender;
       //@ s_args.receiver = receiver;
       s_args.enc_key = enc_key;
@@ -289,19 +289,15 @@ int main(int argc, char **argv) //@ : main_full(main_app)
 
       if (r_args.length != MSG_LEN)
         abort();
-      //@ public_crypto_chars(s_message, MSG_LEN, msg_cs);
-      //@ close optional_crypto_chars(false, s_message, MSG_LEN, msg_cs);
-      //@ close optional_crypto_chars(!collision_in_run, r_message, r_args.length, _);
       if (memcmp(s_message, r_message, MSG_LEN) != 0)
         abort();
+      //@ public_crypto_chars(s_message, MSG_LEN);
       zeroize(r_message, r_args.length);
     }
     //@ assert malloc_block(enc_key, KEY_SIZE);
-    //@ close optional_crypto_chars(!collision_in_run, enc_key, KEY_SIZE, enc_cs_key);
     zeroize(enc_key, KEY_SIZE);
     free((void*) enc_key);
     //@ assert malloc_block(hmac_key, KEY_SIZE);
-    //@ close optional_crypto_chars(!collision_in_run, hmac_key, KEY_SIZE, hmac_cs_key);
     zeroize(hmac_key, KEY_SIZE);
     free((void*) hmac_key);
     

@@ -1,10 +1,10 @@
 #ifndef ZEROIZE_H
 #define ZEROIZE_H
 
-//@ #include "crypto_chars.gh"
+//@ #include <crypto.gh>
 
 void zeroize(char *buffer, int size);
-  //@ requires optional_crypto_chars(_, buffer, size, _);
+  //@ requires crypto_chars(_, buffer, size, _);
   //@ ensures  chars(buffer, size, _);
 
 #endif

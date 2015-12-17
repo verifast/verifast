@@ -5,11 +5,11 @@
 
 void attacker();
   /*@ requires [_]public_invar(?pub) &*&
-               public_invariant_constraints(pub, ?proof_pred) &*& 
+               public_invariant_constraints(pub, ?proof_pred) &*&
                proof_pred() &*&
-               principals(?count1); @*/
-  /*@ ensures  public_invariant_constraints(pub, proof_pred) &*& 
+               principals(?count); @*/
+  /*@ ensures  public_invariant_constraints(pub, proof_pred) &*&
                proof_pred() &*&
-               principals(?count2) &*& count2 > count1; @*/
+               principals(count + 1); @*/
 
 #endif

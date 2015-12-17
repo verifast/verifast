@@ -33,7 +33,7 @@ fixpoint bool enc_then_hmac_public_key(int p, int c)
 predicate enc_then_hmac_pub(cryptogram cg) =
   switch (cg)
   {
-    case cg_random(p0, c0):
+    case cg_nonce(p0, c0):
       return true;
     case cg_symmetric_key(p0, c0):
       return true == enc_then_hmac_public_key(p0, c0);
@@ -44,7 +44,7 @@ predicate enc_then_hmac_pub(cryptogram cg) =
     case cg_hash(cs0):
       return true;
     case cg_hmac(p0, c0, cs0):
-      return collision_in_run || enc_then_hmac_public_key(p0, c0) ?
+      return col || enc_then_hmac_public_key(p0, c0) ?
         true
       :
         enc_then_hmac_pub_1(?c1, ?cs1, ?ent1) &*&
@@ -55,9 +55,9 @@ predicate enc_then_hmac_pub(cryptogram cg) =
         send(p0, shared_with(p0, c0), cs1);
     case cg_encrypted(p0, c0, cs0, ent0):
       return enc_then_hmac_public_key(p0, c0) ?
-        [_]public_generated(enc_then_hmac_pub)(cs0)
-      :
-        true;
+               [_]public_generated(enc_then_hmac_pub)(cs0)
+             :
+               true;
     case cg_auth_encrypted(p0, c0, mac0, cs0, ent0):
       return true == enc_then_hmac_public_key(p0, c0) &*&
              [_]public_generated(enc_then_hmac_pub)(cs0);
@@ -83,8 +83,8 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len);
                hmac_key_cg == cg_symmetric_key(sender, ?hmac_id) &*&
                  cg_info(hmac_key_cg) == enc_id &*&
                shared_with(sender, enc_id) == shared_with(sender, hmac_id) &*&
-             [?f3]crypto_chars(msg, msg_len, ?msg_cs) &*&
-               MAX_SIZE >= msg_len &*& msg_len >= MIN_ENC_SIZE &*&
+             [?f3]crypto_chars(secret, msg, msg_len, ?msg_cs) &*&
+               MAX_SIZE >= msg_len &*& msg_len >= MINIMAL_STRING_SIZE &*&
                bad(sender) || bad(shared_with(sender, enc_id)) ?
                  [_]public_generated(enc_then_hmac_pub)(msg_cs)
                :
@@ -94,7 +94,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len);
 /*@ ensures  principal(sender, _) &*&
              [f1]cryptogram(enc_key, KEY_SIZE, enc_key_cs, enc_key_cg) &*&
              [f2]cryptogram(hmac_key, KEY_SIZE, hmac_key_cs, hmac_key_cg) &*&
-             [f3]crypto_chars(msg, msg_len, msg_cs); @*/
+             [f3]crypto_chars(secret, msg, msg_len, msg_cs); @*/
 
 int receiver(char *enc_key, char *hmac_key, char *msg);
 /*@ requires [_]public_invar(enc_then_hmac_pub) &*&
@@ -111,9 +111,9 @@ int receiver(char *enc_key, char *hmac_key, char *msg);
              [f1]cryptogram(enc_key, KEY_SIZE, enc_key_cs, enc_key_cg) &*&
              [f2]cryptogram(hmac_key, KEY_SIZE, hmac_key_cs, hmac_key_cg) &*&
              chars(msg + result, MAX_SIZE - result, _) &*&
-             crypto_chars(msg, result, ?msg_cs) &*&
-             collision_in_run || bad(sender) || bad(receiver) ||
-             send(sender, receiver, msg_cs); @*/
+             crypto_chars(?kind, msg, result, ?msg_cs) &*&
+             col || bad(sender) || bad(receiver) ||
+               (kind == secret && send(sender, receiver, msg_cs)); @*/
 
 ///////////////////////////////////////////////////////////////////////////////
 // Attacker proof obligations for this protocol ///////////////////////////////

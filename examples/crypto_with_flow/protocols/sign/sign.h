@@ -30,7 +30,7 @@ fixpoint bool sign_public_key(int p, int c)
 predicate sign_pub(cryptogram cg) =
   switch (cg)
   {
-    case cg_random(p0, c0):
+    case cg_nonce(p0, c0):
       return true;
     case cg_symmetric_key(p0, c0):
       return true == sign_public_key(p0, c0);
@@ -44,17 +44,15 @@ predicate sign_pub(cryptogram cg) =
       return true == sign_public_key(p0, c0) &*&
              [_]public_generated(sign_pub)(cs0);
     case cg_encrypted(p0, c0, cs0, ent0):
-      return sign_public_key(p0, c0) ? 
-               [_]public_generated(sign_pub)(cs0)
-             :
-               cs0 == chars_for_cg(cg_symmetric_key(p0, c0));
+      return true == sign_public_key(p0, c0) &*&
+             [_]public_generated(sign_pub)(cs0);
     case cg_auth_encrypted(p0, c0, mac0, cs0, ent0):
       return true == sign_public_key(p0, c0) &*&
              [_]public_generated(sign_pub)(cs0);
     case cg_asym_encrypted(p0, c0, cs0, ent0):
       return [_]public_generated(sign_pub)(cs0);
     case cg_asym_signature(p0, c0, cs0, ent0):
-      return collision_in_run || bad(p0) ?
+      return col || bad(p0) ?
                true
              :
                sign_pub_1(?cs1, ?receiver) &*&
@@ -77,7 +75,7 @@ void sender(int recvr, char *key, int key_len, char *msg);
                [?f1]cryptogram(key, key_len, ?key_cs, ?key_cg) &*&
                  key_cg == cg_private_key(sender, ?id) &*&
                  key_len >= 384 &*& key_len < MAX_KEY_SIZE &*&
-               [?f2]chars(msg, MSG_SIZE, ?msg_cs) &*&               
+               [?f2]chars(msg, MSG_SIZE, ?msg_cs) &*&
                true == send(sender, recvr, msg_cs); @*/
   /*@ ensures  principal(sender, _) &*&
                [f1]cryptogram(key, key_len, key_cs, key_cg) &*&
@@ -93,8 +91,8 @@ void receiver(int recvr, char *key, int key_len, char *msg);
   /*@ ensures  principal(recvr, _) &*&
                [f1]cryptogram(key, key_len, key_cs, key_cg) &*&
                chars(msg, MSG_SIZE, ?msg_cs) &*&
-               bad(sender) || collision_in_run() ||
-               send(sender, recvr, msg_cs); @*/
+               col || bad(sender) ||
+                 send(sender, recvr, msg_cs); @*/
 
 ///////////////////////////////////////////////////////////////////////////////
 // Attacker proof obligations for this protocol ///////////////////////////////

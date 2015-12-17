@@ -30,7 +30,7 @@ void *attacker_t(void* data) //@ : pthread_run_joinable
     //@ open yahalom_proof_pred();
     //@ close pthread_run_pre(attacker_t)(data, info);
   }
-   
+
   return 0;
 }
 
@@ -39,7 +39,7 @@ struct yahalom_args
   int server;
   int sender;
   int receiver;
-  
+
   char* s_key;
   char* r_key;
   char* key;
@@ -66,9 +66,9 @@ predicate_family_instance pthread_run_pre(server_t)(void *data, any info) =
   [1/2]cryptogram(r_key, KEY_SIZE, ?r_key_cs, ?r_key_cg) &*&
     r_key_cg == cg_symmetric_key(receiver, ?r_id) &*&
     cg_info(r_key_cg) == int_pair(3, server) &*&
-  info == cons(int_value(server), 
-            cons(int_value(sender), 
-              cons(int_value(receiver), 
+  info == cons(int_value(server),
+            cons(int_value(sender),
+              cons(int_value(receiver),
                 cons(pointer_value(s_key),
                   cons(char_list_value(s_key_cs),
                     cons(int_value(s_id),
@@ -89,9 +89,9 @@ predicate_family_instance pthread_run_post(server_t)(void *data, any info) =
     s_key_cg == cg_symmetric_key(sender, ?s_id) &*&
   [1/2]cryptogram(r_key, KEY_SIZE, ?r_key_cs, ?r_key_cg) &*&
     r_key_cg == cg_symmetric_key(receiver, ?r_id) &*&
-  info == cons(int_value(server), 
-            cons(int_value(sender), 
-              cons(int_value(receiver), 
+  info == cons(int_value(server),
+            cons(int_value(sender),
+              cons(int_value(receiver),
                 cons(pointer_value(s_key),
                   cons(char_list_value(s_key_cs),
                     cons(int_value(s_id),
@@ -107,7 +107,7 @@ void *server_t(void* data) //@ : pthread_run_joinable
 {
   struct yahalom_args *args = data;
   //@ open pthread_run_pre(server_t)(data, _);
-  server(args->server, args->sender, args->receiver, 
+  server(args->server, args->sender, args->receiver,
          args->s_key, args->r_key);
   //@ close pthread_run_post(server_t)(data, _);
   return 0;
@@ -126,9 +126,9 @@ predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
     s_key_cg == cg_symmetric_key(sender, ?s_id) &*&
     cg_info(s_key_cg) == int_pair(3, server) &*&
   chars(key, KEY_SIZE, _) &*&
-  info == cons(int_value(server), 
-            cons(int_value(sender), 
-              cons(int_value(receiver), 
+  info == cons(int_value(server),
+            cons(int_value(sender),
+              cons(int_value(receiver),
                 cons(pointer_value(s_key),
                   cons(char_list_value(s_key_cs),
                     cons(int_value(s_id),
@@ -146,11 +146,11 @@ predicate_family_instance pthread_run_post(sender_t)(void *data, any info) =
   [1/2]cryptogram(s_key, KEY_SIZE, ?s_key_cs, ?s_key_cg) &*&
     s_key_cg == cg_symmetric_key(sender, ?s_id) &*&
   cryptogram(key, KEY_SIZE, _, ?key_cg) &*&
-    collision_in_run || bad(server) || bad(sender) ||
+    col || bad(server) || bad(sender) ||
     int_left(cg_info(key_cg)) == 4 &*&
-  info == cons(int_value(server), 
-            cons(int_value(sender), 
-              cons(int_value(receiver), 
+  info == cons(int_value(server),
+            cons(int_value(sender),
+              cons(int_value(receiver),
                 cons(pointer_value(s_key),
                   cons(char_list_value(s_key_cs),
                     cons(int_value(s_id),
@@ -164,7 +164,7 @@ void *sender_t(void* data) //@ : pthread_run_joinable
 {
   struct yahalom_args *args = data;
   //@ open pthread_run_pre(sender_t)(data, _);
-  sender(args->server, args->sender, args->receiver, 
+  sender(args->server, args->sender, args->receiver,
          args->s_key, args->key);
   //@ close pthread_run_post(sender_t)(data, _);
   return 0;
@@ -183,9 +183,9 @@ predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) =
     r_key_cg == cg_symmetric_key(receiver, ?r_id) &*&
     cg_info(r_key_cg) == int_pair(3, server) &*&
   chars(key, KEY_SIZE, _) &*&
-  info == cons(int_value(server), 
-            cons(int_value(sender), 
-              cons(int_value(receiver), 
+  info == cons(int_value(server),
+            cons(int_value(sender),
+              cons(int_value(receiver),
                 cons(pointer_value(r_key),
                   cons(char_list_value(r_key_cs),
                     cons(int_value(r_id),
@@ -203,11 +203,11 @@ predicate_family_instance pthread_run_post(receiver_t)(void *data, any info) =
   [1/2]cryptogram(r_key, KEY_SIZE, ?r_key_cs, ?r_key_cg) &*&
     r_key_cg == cg_symmetric_key(receiver, ?r_id) &*&
   cryptogram(key, KEY_SIZE, _, ?key_cg) &*&
-    collision_in_run || bad(server) || bad(sender) || bad(receiver) ||
+    col || bad(server) || bad(sender) || bad(receiver) ||
     int_left(cg_info(key_cg)) == 4 &*&
-  info == cons(int_value(server), 
-            cons(int_value(sender), 
-              cons(int_value(receiver), 
+  info == cons(int_value(server),
+            cons(int_value(sender),
+              cons(int_value(receiver),
                 cons(pointer_value(r_key),
                   cons(char_list_value(r_key_cs),
                     cons(int_value(r_id),
@@ -221,7 +221,7 @@ void *receiver_t(void* data) //@ : pthread_run_joinable
 {
   struct yahalom_args *args = data;
   //@ open pthread_run_pre(receiver_t)(data, _);
-  receiver(args->server, args->sender, args->receiver, 
+  receiver(args->server, args->sender, args->receiver,
            args->r_key, args->key);
   //@ close pthread_run_post(receiver_t)(data, _);
   return 0;
@@ -235,14 +235,14 @@ int main(int argc, char **argv) //@ : main_full(main_app)
 
   pthread_t a_thread;
   havege_state havege_state;
-  
+
   printf("\n\tExecuting \"");
   printf("yahalom protocol");
   printf("\" ... \n\n");
-  
+
   //@ PUBLIC_INVARIANT_CONSTRAINTS(yahalom)
   //@ public_invariant_init(yahalom_pub);
-  
+
   //@ principals_init();
   //@ int server = principal_create();
   //@ assert server == 1;
@@ -250,14 +250,14 @@ int main(int argc, char **argv) //@ : main_full(main_app)
   //@ assert sender == 2;
   //@ int receiver = principal_create();
   //@ assert receiver == 3;
-  
+
   //@ int attacker = principal_create();
   //@ assume (bad(attacker));
   //@ close havege_state(&havege_state);
   havege_init(&havege_state);
   //@ close pthread_run_pre(attacker_t)(NULL, nil);
   pthread_create(&a_thread, NULL, &attacker_t, NULL);
-  
+
   int i = 0;
 #ifdef EXECUTE
   while (i++ < 10)
@@ -275,7 +275,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
     char r_key[KEY_SIZE];
     char key1[KEY_SIZE];
     char key2[KEY_SIZE];
-    
+
     //@ close random_request(sender, int_pair(3, server), true);
     if (havege_random(&havege_state, s_key, KEY_SIZE) != 0) abort();
     //@ assert cryptogram(s_key, KEY_SIZE, ?cs_s_key, ?cg_s_key);
@@ -284,36 +284,36 @@ int main(int argc, char **argv) //@ : main_full(main_app)
     if (havege_random(&havege_state, r_key, KEY_SIZE) != 0) abort();
     //@ assert cryptogram(r_key, KEY_SIZE, ?cs_r_key, ?cg_r_key);
     //@ assert cg_r_key == cg_symmetric_key(receiver, rcvr_count + 1);
-    
+
     {
       pthread_t serv_thread, s_thread, r_thread;
       struct yahalom_args serv_args, s_args, r_args;
-      
+
       serv_args.server = 1;
       serv_args.sender = 2;
       serv_args.receiver = 3;
       serv_args.s_key = s_key;
       serv_args.r_key = r_key;
-      
+
       s_args.server = 1;
       s_args.sender = 2;
       s_args.receiver = 3;
       s_args.s_key = s_key;
       s_args.key = key1;
-      
+
       r_args.server = 1;
       r_args.sender = 2;
       r_args.receiver = 3;
       r_args.r_key = r_key;
       r_args.key = key2;
-      
+
       //@ close pthread_run_pre(server_t)(&serv_args, ?serv_data);
       pthread_create(&serv_thread, NULL, &server_t, &serv_args);
       //@ close pthread_run_pre(sender_t)(&s_args, ?s_data);
       pthread_create(&s_thread, NULL, &sender_t, &s_args);
       //@ close pthread_run_pre(receiver_t)(&r_args, ?r_data);
       pthread_create(&r_thread, NULL, &receiver_t, &r_args);
-      
+
       pthread_join(serv_thread, NULL);
       //@ open pthread_run_post(server_t)(&serv_args, serv_data);
       pthread_join(s_thread, NULL);
@@ -323,17 +323,18 @@ int main(int argc, char **argv) //@ : main_full(main_app)
     }
 
     //@ open cryptogram(key1, KEY_SIZE, ?cs_key1, _);
-    //@ close optional_crypto_chars(!collision_in_run, key1, KEY_SIZE, cs_key1);
     zeroize(key1, KEY_SIZE);
     //@ open cryptogram(key2, KEY_SIZE, ?cs_key2, _);
-    //@ close optional_crypto_chars(!collision_in_run, key2, KEY_SIZE, cs_key2);
     zeroize(key2, KEY_SIZE);
-    //@ close optional_crypto_chars(!collision_in_run, s_key, KEY_SIZE, cs_s_key);
+    //@ open [1/2]cryptogram(s_key, KEY_SIZE, _, _);
+    //@ open [1/2]cryptogram(s_key, KEY_SIZE, _, _);
     zeroize(s_key, KEY_SIZE);
-    //@ close optional_crypto_chars(!collision_in_run, r_key, KEY_SIZE, cs_r_key);
+    //@ open [1/2]cryptogram(r_key, KEY_SIZE, _, _);
+    //@ open [1/2]cryptogram(r_key, KEY_SIZE, _, _);
     zeroize(r_key, KEY_SIZE);
+    printf(" |%i| ", i);
   }
-  
+
   printf("\n\n\t\tDone\n");
   return 0;
 }

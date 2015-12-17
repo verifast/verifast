@@ -24,7 +24,7 @@ predicate random_state_predicate(predicate(void *) state_pred) = true;
     key_request ? \
       cg == cg_symmetric_key(principal, count + 1) \
     : \
-      cg == cg_random(principal, count + 1) \
+      cg == cg_nonce(principal, count + 1) \
   : \
     chars(output, len, _)
 

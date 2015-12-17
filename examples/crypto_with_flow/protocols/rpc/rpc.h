@@ -31,7 +31,7 @@ fixpoint bool rpc_public_key(int p, int c)
 predicate rpc_pub(cryptogram cg) =
   switch (cg)
   {
-    case cg_random(p0, c0):
+    case cg_nonce(p0, c0):
       return true;
     case cg_symmetric_key(p0, c0):
       return true == rpc_public_key(p0, c0);
@@ -44,7 +44,7 @@ predicate rpc_pub(cryptogram cg) =
     case cg_hmac(p0, c0, cs0):
       return
         rpc_public_key(p0, c0) ||
-        switch (cs0) 
+        switch (cs0)
         {
           case cons(c1, cs1): return
             c1 == '0' ?
@@ -59,10 +59,8 @@ predicate rpc_pub(cryptogram cg) =
             return false;
         };
     case cg_encrypted(p0, c0, cs0, ent0):
-      return rpc_public_key(p0, c0) ? 
-               [_]public_generated(rpc_pub)(cs0)
-             :
-               cs0 == chars_for_cg(cg_symmetric_key(p0, c0));
+      return true == rpc_public_key(p0, c0) &*&
+             [_]public_generated(rpc_pub)(cs0);
     case cg_auth_encrypted(p0, c0, mac0, cs0, ent0):
       return true == rpc_public_key(p0, c0) &*&
              [_]public_generated(rpc_pub)(cs0);
@@ -85,16 +83,15 @@ void client(char *key, int key_len, char *request, char *response);
                [?f1]cryptogram(key, key_len, ?key_cs, ?key_cg) &*&
                  key_cg == cg_symmetric_key(client, ?id) &*&
                [?f2]chars(request, PACKAGE_SIZE, ?req_cs) &*&
-                 bad(client) || 
+                 bad(client) ||
                  request(client, shared_with(client, id), req_cs) == true &*&
                chars(response, PACKAGE_SIZE, _); @*/
   /*@ ensures  principal(client, _) &*&
                [f1]cryptogram(key, key_len, key_cs, key_cg) &*&
                [f2]chars(request, PACKAGE_SIZE, req_cs) &*&
                chars(response, PACKAGE_SIZE, ?resp_cs) &*&
-                 collision_in_run || bad(client) || 
-                 bad(shared_with(client, id)) ||
-                 response(client, shared_with(client, id), 
+                 col || bad(client) || bad(shared_with(client, id)) ||
+                 response(client, shared_with(client, id),
                           req_cs, resp_cs); @*/
 
 void server(char *key, int key_len, char *request, char *response);
@@ -108,11 +105,10 @@ void server(char *key, int key_len, char *request, char *response);
   /*@ ensures  principal(server, _) &*&
                [f1]cryptogram(key, key_len, key_cs, key_cg) &*&
                chars(request, PACKAGE_SIZE, ?req_cs) &*&
-                 collision_in_run || bad(client) || 
+                 col || bad(client) ||
                  request(client, server, req_cs) &*&
                chars(response, PACKAGE_SIZE, ?resp_cs) &*&
-                 collision_in_run || 
-                 bad(client) || bad(server) ||
+                 col || bad(client) || bad(server) ||
                  response(client, server, req_cs, resp_cs); @*/
 
 ///////////////////////////////////////////////////////////////////////////////

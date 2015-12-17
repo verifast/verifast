@@ -4,10 +4,12 @@ include Makefile.include
 
 MODULES = \
   auxiliary_definitions \
-  crypto_chars \
+  cryptogram \
+  cryptogram_levels \
   public_chars \
-  key_util \
+  interpret \
   havege_util \
+  identifiers \
   attacker
 
 OBJECTS   = $(foreach src,$(MODULES),src/$(addsuffix .o, $(src))) \
@@ -20,7 +22,8 @@ all: \
 	stdlib \
 	bin/libann_polarssl.dll.vfmanifest \
 	bin/libann_polarssl.so \
-	protocols
+	protocols \
+	symbolic_model
 
 polarssl_library :
 	$(call pprint_big_begin, Downloading and compiling PolarSSL library)
@@ -89,7 +92,12 @@ bin/libann_polarssl.so : $(OBJECTS)
 protocols:
 	make -C protocols
 
+.PHONY: symbolic_model
+symbolic_model:
+	make -C symbolic_model
+
 clean:
+	make -C symbolic_model clean
 	make -C protocols clean
 	rm -f src/*.o
 	rm -f src/*.vfmanifest

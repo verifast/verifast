@@ -1,4 +1,4 @@
-CC = clang
+CC = clang -m32
 
 # debug
 CFLAGS += -g
@@ -41,5 +41,5 @@ endef
 	@$(VF) $(VFFLAGS) -c -enforce_annotations -emit_vfmanifest $< 
 
 %.o : %.c
-	$(call pprint, COMPILING $(notdir $<))
+	@$(call pprint, COMPILING $(notdir $<))
 	@$(CC) -c $(CFLAGS) $< -o $@

@@ -1,0 +1,46 @@
+#ifndef RANDOM_CRYPTO_CHARS_GH
+#define RANDOM_CRYPTO_CHARS_GH
+
+#include <crypto.gh>
+
+#include "principals.gh"
+#include "cryptogram.gh"
+
+fixpoint bool decrypted_garbage(list<char> payload);
+
+inductive structure =
+  | hmac(int plaintext_size, int p, int c) // [plaintext , hmac(p, c, plaintext)]
+;
+
+fixpoint bool has_structure(list<char> cs, structure s) 
+{
+  switch(s) 
+  {
+    case hmac(plaintext_size, p, c):
+      return length(take(plaintext_size, cs)) >= MINIMAL_STRING_SIZE &&
+             length(drop(plaintext_size, cs)) >= MINIMAL_STRING_SIZE &&
+             drop(plaintext_size, cs) == 
+               chars_for_cg(cg_hmac(p, c, take(plaintext_size, cs)));
+  }
+}
+
+//The normal way to transform a random buffer to a secret buffer is via memcmp
+//  *Its contract forces the caller to prove that he knows the content
+//  *This proves that the buffer is not random in the first place
+//All the other ways to perform such a transformation are listed below
+
+//Required by the attacker to send the result of a decryption with the wrong key
+lemma void bad_garbage_crypto_chars(char *array, int n, list<char> cs);
+  requires principal(?id, ?count) &*& true == bad(id) &*&
+           [?f]crypto_chars(garbage, array, n, cs);
+  ensures  principal(id, count) &*&
+           [f]chars(array, n, cs);
+
+lemma void known_garbage_collision(char *array, int n, list<char> cs, structure s);
+  requires [?f]crypto_chars(garbage, array, n, cs) &*&
+           true == decrypted_garbage(cs) &*&
+           true == has_structure(cs, s);
+  ensures  [f]crypto_chars(garbage, array, n, cs) &*&
+           true == col;
+
+#endif

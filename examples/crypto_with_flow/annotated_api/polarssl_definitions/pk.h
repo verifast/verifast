@@ -52,12 +52,12 @@ void pk_init(pk_context *ctx);
 const pk_info_t *pk_info_from_type(int pk_type);
   //@ requires pk_type == POLARSSL_PK_RSA;
   //@ ensures  pk_info(result);
-  
+
 int pk_init_ctx(pk_context *ctx, const pk_info_t *info);
   /*@ requires pk_context_initialized(ctx) &*&
                pk_info(info); @*/
   /*@ ensures  result == 0 ?
-                 pk_context_initialized2(ctx, ?subctx) &*& 
+                 pk_context_initialized2(ctx, ?subctx) &*&
                  ctx->pk_ctx |-> subctx
                :
                  pk_context_garbage(ctx); @*/
@@ -67,7 +67,7 @@ lemma void pk_release_context_initialized(pk_context *ctx);
   ensures  pk_context_garbage(ctx);
 
 lemma void pk_release_context_initialized2(pk_context *ctx);
-  requires pk_context_initialized2(ctx, ?subctx) &*& 
+  requires pk_context_initialized2(ctx, ?subctx) &*&
            ctx->pk_ctx |-> subctx;
   ensures  pk_context_garbage(ctx);
 
@@ -87,14 +87,14 @@ void pk_free(pk_context *ctx);
 int pk_write_pubkey_pem(pk_context *ctx, char *buf, size_t size);
   /*@ requires pk_context_with_keys(ctx, ?p, ?c, ?nbits, ?info) &*&
                //To fix size and to ensure that there is enough space.
-               chars(buf, size, _) &*& nbits == size; @*/ 
+               chars(buf, size, _) &*& nbits == size; @*/
   /*@ ensures  pk_context_with_keys(ctx, p, c, nbits, info) &*&
                result == 0 ?
                  cryptogram(buf, size, ?key_cs, ?key) &*&
                  key == cg_public_key(p, c) &*&
                  info == cg_info(key)
                :
-                 chars(buf, size, _); 
+                 chars(buf, size, _);
   @*/
 
 int pk_write_key_pem(pk_context *ctx, char *buf, size_t size);
@@ -107,7 +107,7 @@ int pk_write_key_pem(pk_context *ctx, char *buf, size_t size);
                  key == cg_private_key(p, c) &*&
                  info == cg_info(key)
                :
-                 chars(buf, size, _); 
+                 chars(buf, size, _);
   @*/
 
 /*@
@@ -126,7 +126,7 @@ int pk_parse_public_key(pk_context *ctx, const char *key, size_t keylen);
                  pk_context_with_key(ctx, pk_public, p, c, keylen)
                :
                  pk_context_garbage(ctx); @*/
-  
+
 int pk_parse_key(pk_context *ctx, const char *key, size_t keylen,
                                   const char *pwd, size_t pwdlen);
   /*@ requires pk_context_initialized(ctx) &*&
@@ -138,12 +138,12 @@ int pk_parse_key(pk_context *ctx, const char *key, size_t keylen,
                  pk_context_with_key(ctx, pk_private, p, c, keylen)
                :
                  pk_context_garbage(ctx); @*/
-  
-int pk_encrypt(pk_context *ctx, const char *input, size_t ilen, char *output, 
+
+int pk_encrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                size_t *olen, size_t osize, void *f_rng, void *p_rng);
   /*@ requires  pk_context_with_key(ctx, pk_public, ?p1, ?c1, ?nbits) &*&
-                [?f1]optional_crypto_chars(?cc, input, ilen, ?cs_input) &*&
-                  ilen >= MIN_ENC_SIZE &*&
+                [?f1]crypto_chars(?kind, input, ilen, ?cs_input) &*&
+                  ilen >= MINIMAL_STRING_SIZE &*&
                   // encrypted message can not be bigger than key
                   ilen * 8 <= nbits &*&
                 u_integer(olen, _) &*&
@@ -153,24 +153,30 @@ int pk_encrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                 [?f2]state_pred(p_rng) &*&
                 principal(?p2, ?c2); @*/
   /*@ ensures   pk_context_with_key(ctx, pk_public, p1, c1, nbits) &*&
-                [f1]optional_crypto_chars(cc, input, ilen, cs_input) &*&
+                [f1]crypto_chars(kind, input, ilen, cs_input) &*&
                 u_integer(olen, ?olen_val) &*&
                 [f2]state_pred(p_rng) &*&
                 principal(p2, c2 + 1) &*&
-                result == 0 ?
-                  olen_val > 0 &*& olen_val <= osize &*&
-                  8 * olen_val <= nbits &*&
-                  cryptogram(output, olen_val, ?cs_out, ?cg_out) &*&
-                  cg_out == cg_asym_encrypted(p1, c1, cs_input, _) &*&
-                  chars(output + olen_val, osize - olen_val, _)
+                kind == garbage ?
+                    // got garbage as input
+                    crypto_chars(garbage, output, osize, _)
+                : result != 0 ?
+                    // encryption failed
+                    chars(output, osize, _)
                 :
-                  chars(output, osize, _); @*/
+                    // encryption was successful
+                    olen_val > 0 &*& olen_val <= osize &*&
+                    8 * olen_val <= nbits &*&
+                    cryptogram(output, olen_val, _, ?cg_out) &*&
+                    cg_out == cg_asym_encrypted(p1, c1, cs_input, _) &*&
+                    chars(output + olen_val, osize - olen_val, _); @*/
 
-int pk_decrypt(pk_context *ctx, const char *input, size_t ilen, char *output, 
+int pk_decrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                size_t *olen, size_t osize, void *f_rng, void *p_rng);
   /*@ requires  pk_context_with_key(ctx, pk_private, ?p1, ?c1, ?nbits) &*&
-                [?f1]optional_crypto_chars(?cc, input, ilen, ?cs_input) &*&
-                  ilen >= MIN_ENC_SIZE &*&
+                [?f1]cryptogram(input, ilen, ?cs_input, ?cg_input) &*&
+                  cg_input == cg_asym_encrypted(?p2, ?c2, ?cs_output, _) &*&
+                  ilen >= MINIMAL_STRING_SIZE &*&
                   // message to decrypt can not be bigger than key
                   ilen * 8 <= nbits &*&
                 u_integer(olen, _) &*&
@@ -178,33 +184,32 @@ int pk_decrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                 random_state_predicate(?state_pred) &*&
                 [_]is_random_function(f_rng, state_pred) &*&
                 [?f2]state_pred(p_rng) &*&
-                principal(?p2, ?c2); @*/
+                principal(?p3, ?c3); @*/
   /*@ ensures   pk_context_with_key(ctx, pk_private, p1, c1, nbits) &*&
-                [f1]optional_crypto_chars(cc, input, ilen, cs_input) &*&
+                [f1]cryptogram(input, ilen, cs_input, cg_input) &*&
                 u_integer(olen, ?olen_val) &*&
                 [f2]state_pred(p_rng) &*&
-                principal(p2, c2 + 1) &*&
-                result == 0 ?
+                principal(p3, c3 + 1) &*&
+                result != 0 ?
+                  chars(output, osize, _)
+                : 
+                (
                   olen_val > 0 &*& olen_val <= osize &*&
-                  collision_in_run ?
-                    chars(output, osize, _)
+                  chars(output + olen_val, osize - olen_val, _) &*&
+                  col || p1 != p2 || c1 != c2 ?
+                    crypto_chars(garbage, output, olen_val, cs_output) &*&
+                    true == decrypted_garbage(cs_output)
                   :
-                    crypto_chars(output, olen_val, ?cs_output) &*&
-                    chars(output + olen_val, osize - olen_val, _) &*&
-                    [_]exists(?ent) &*&
-                    collision_in_run ||
-                    cs_input == chars_for_cg(
-                                  cg_asym_encrypted(p1, c1, cs_output, ent))
-                :
-                  chars(output, osize, _); @*/
+                    crypto_chars(secret, output, olen_val, cs_output)
+                ); @*/
 
 int pk_sign(pk_context *ctx, int md_alg, const char *hash, size_t hash_len,
             char *sig, size_t *sig_len, void *f_rng, void *p_rng);
   /*@ requires  pk_context_with_key(ctx, pk_private, ?p1, ?c1, ?nbits) &*&
                 // only signing of a general buffer for now
                 md_alg == POLARSSL_MD_NONE &*&
-                [?f1]optional_crypto_chars(?cc, hash, hash_len, ?cs_input) &*&
-                  hash_len >= MIN_HMAC_INPUT_SIZE &*&
+                [?f1]crypto_chars(?kind, hash, hash_len, ?cs_input) &*&
+                  hash_len >= MINIMAL_STRING_SIZE &*&
                   // hash to sign can not be bigger than key
                   hash_len * 8 <= nbits &*&
                 u_integer(sig_len, _) &*&
@@ -214,36 +219,38 @@ int pk_sign(pk_context *ctx, int md_alg, const char *hash, size_t hash_len,
                 [?f2]state_pred(p_rng) &*&
                 principal(?p2, ?c2); @*/
   /*@ ensures   pk_context_with_key(ctx, pk_private, p1, c1, nbits) &*&
-                [f1]optional_crypto_chars(cc, hash, hash_len, cs_input) &*&
+                [f1]crypto_chars(kind, hash, hash_len, cs_input) &*&
                 u_integer(sig_len, ?sig_len_val) &*&
                 [f2]state_pred(p_rng) &*&
                 principal(p2, c2 + 1) &*&
-                result == 0 ?
-                  sig_len_val > 0 &*& sig_len_val <= out_len &*& 
-                  cryptogram(sig, sig_len_val, ?cs_out, ?cg_output) &*&
-                  chars(sig + sig_len_val, out_len - sig_len_val, _) &*&
-                  cg_output == cg_asym_signature(p1, c1, cs_input, _)
+                kind == garbage ?
+                  // got garbage as input
+                  crypto_chars(garbage, sig, out_len, _)
+                : result != 0 ?
+                  // signing failed
+                  chars(sig, out_len, _)
                 :
-                  chars(sig, out_len, _); @*/
+                  // signing was successful
+                  sig_len_val > 0 &*& sig_len_val <= out_len &*&
+                  cryptogram(sig, sig_len_val, ?cs_out, ?cg) &*&
+                  chars(sig + sig_len_val, out_len - sig_len_val, _) &*&
+                  cg == cg_asym_signature(p1, c1, cs_input, _); @*/
 
-int pk_verify(pk_context *ctx, int md_alg, const char *hash, 
+int pk_verify(pk_context *ctx, int md_alg, const char *hash,
               size_t hash_len, const char *sig, size_t sig_len );
-  /*@ requires  pk_context_with_key(ctx, pk_public, ?p, ?c, ?nbits) &*&
+  /*@ requires  pk_context_with_key(ctx, pk_public, ?p1, ?c1, ?nbits) &*&
                 // only signing of a general buffer for now
                 md_alg == POLARSSL_MD_NONE &*&
-                [?f1]optional_crypto_chars(?cc1, hash, hash_len, ?cs_input) &*&
-                  hash_len >= MIN_ENC_SIZE &*&
+                [?f1]crypto_chars(?kind, hash, hash_len, ?cs_in) &*&
+                  hash_len >= MINIMAL_STRING_SIZE &*&
                   // hash to verify can not be bigger than key
                   hash_len * 8 <= nbits &*&
-                [?f2]optional_crypto_chars(?cc2, sig, sig_len, ?cs_sig); @*/
-  /*@ ensures   pk_context_with_key(ctx, pk_public, p, c, nbits) &*&
-                [f1]optional_crypto_chars(cc1, hash, hash_len, cs_input) &*&
-                [f2]optional_crypto_chars(cc2, sig, sig_len, cs_sig) &*&
-                result == 0 ?
-                  exists(?ent) &*&
-                  collision_in_run ||
-                  cs_sig == chars_for_cg(cg_asym_signature(p, c, cs_input, ent))
-                :
-                  true; @*/
+                [?f2]cryptogram(sig, sig_len, ?cs_sig, ?cg_sig) &*&
+                  cg_sig == cg_asym_signature(?p2, ?c2, ?cs_in2, _); @*/
+  /*@ ensures   pk_context_with_key(ctx, pk_public, p1, c1, nbits) &*&
+                [f1]crypto_chars(kind, hash, hash_len, cs_in) &*&
+                [f2]cryptogram(sig, sig_len, cs_sig, cg_sig) &*&
+                col || result != 0 ? true :
+                  p1 == p2 && c1 == c2 && cs_in == cs_in2; @*/
 
 #endif

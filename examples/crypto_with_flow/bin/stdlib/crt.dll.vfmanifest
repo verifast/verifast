@@ -1,6 +1,12 @@
-.predicate @./crypto.gh#crypto_chars
-.predicate @./crypto.gh#optional_crypto_chars
 .predicate @./crypto.gh#principal
+.predicate @./crypto.gh#crypto_chars
+.provides ./crypto.gh#crypto_chars_to_chars
+.provides ./crypto.gh#chars_to_crypto_chars
+.provides ./crypto.gh#chars_to_secret_crypto_chars
+.provides ./crypto.gh#crypto_chars_inv
+.provides ./crypto.gh#crypto_chars_limits
+.provides ./crypto.gh#crypto_chars_split
+.provides ./crypto.gh#crypto_chars_join
 .provides CRT/permutations.gh#is_permutation_reflexive
 .provides CRT/permutations.gh#is_perm_transitive
 .provides CRT/permutations.gh#is_perm_symmetric

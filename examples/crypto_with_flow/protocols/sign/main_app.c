@@ -134,7 +134,7 @@ predicate_family_instance pthread_run_post(receiver_t)(void *data, any info) =
   [1/2]cryptogram(key, 8 * KEY_SIZE, ?key_cs, ?key_cg) &*&
     key_cg == cg_public_key(sender, ?id) &*&
   chars(msg, MSG_SIZE, ?msg_cs) &*&
-    bad(sender) || collision_in_run() || send(sender, receiver, msg_cs) &*&
+    bad(sender) || col || send(sender, receiver, msg_cs) &*&
   info == cons(int_value(sender), 
             cons(int_value(receiver), 
               cons(pointer_value(key),
@@ -155,7 +155,7 @@ void *receiver_t(void* data) //@ : pthread_run_joinable
   //@ assert sign_args_receiver(data, ?receiver);
   //@ assert sign_args_message(data, ?msg);
   //@ assert chars(msg, MSG_SIZE, ?msg_cs);
-  //@ assert bad(sender) || collision_in_run() || send(sender, receiver, msg_cs);
+  //@ assert bad(sender) || col || send(sender, receiver, msg_cs);
   //@ close pthread_run_post(receiver_t)(data, _);
   return 0;
 }
@@ -272,21 +272,22 @@ int main(int argc, char **argv) //@ : main_full(main_app)
       pthread_join(r_thread, NULL);
       //@ open pthread_run_post(receiver_t)(&r_args, r_data);
     
-      //@ close optional_crypto_chars(false, s_message, MSG_SIZE, _);
-      //@ close optional_crypto_chars(false, r_message, MSG_SIZE, _);
+      //@ chars_to_crypto_chars(s_message, MSG_SIZE);
+      //@ chars_to_crypto_chars(r_message, MSG_SIZE);
       if (memcmp(s_message, r_message, MSG_SIZE) != 0)
         abort();
         
       printf(" |%i| ", i);
     }
-    //@ open cryptogram(priv_key, 8 * KEY_SIZE, cs_priv_key, _);
-    //@ close optional_crypto_chars(!collision_in_run, priv_key, 8 * KEY_SIZE, cs_priv_key);
+    //@ open [1/2]cryptogram(priv_key, 8 * KEY_SIZE, cs_priv_key, _);
+    //@ open [1/2]cryptogram(priv_key, 8 * KEY_SIZE, cs_priv_key, _);
     zeroize(priv_key, 8 * KEY_SIZE);
     free((void*) priv_key);
     //@ close sign_pub(cg_pub_key);
     //@ leak sign_pub(cg_pub_key);
-    //@ close [1/2]cryptogram(pub_key, 8 * KEY_SIZE, cs_pub_key, cg_pub_key);
-    //@ assert cryptogram(pub_key, 8 * KEY_SIZE, cs_pub_key, cg_pub_key);
+    //@ open [1/2]cryptogram(pub_key, 8 * KEY_SIZE, cs_pub_key, cg_pub_key);
+    //@ open [1/2]cryptogram(pub_key, 8 * KEY_SIZE, cs_pub_key, cg_pub_key);
+    //@ close cryptogram(pub_key, 8 * KEY_SIZE, cs_pub_key, cg_pub_key);
     //@ public_cryptogram(pub_key, cg_pub_key);
     //@ assert chars(pub_key, 8 * KEY_SIZE, cs_pub_key);
     free((void*) pub_key);

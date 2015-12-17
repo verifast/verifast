@@ -12,13 +12,15 @@ PROTOCOLS = \
 	dummy \
 	hmac \
 	rpc \
+	enc_and_hmac \
 	enc_then_hmac \
 	hmac_then_enc \
-	enc_and_hmac \
+	hmac_then_enc_tagged \
 	auth_enc \
 	sign \
-	yahalom \
 	nsl \
+	yahalom \
+
 
 PROT_APPS = $(foreach prot,$(PROTOCOLS),$(prot)/$(prot))
 

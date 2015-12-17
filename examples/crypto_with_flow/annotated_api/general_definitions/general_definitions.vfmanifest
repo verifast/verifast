@@ -7,22 +7,16 @@
 .predicate @./principals.gh#principals
 .provides ./principals.gh#principals_init
 .provides ./principals.gh#principals_exit
-.predicate @./principals.gh#generated_values
 .provides ./principals.gh#principal_create
 .provides ./principals.gh#principal_destroy
 .produces module principals_mod
 #
 #
 # cryptogram.gh
+.predicate @./cryptogram.gh#cryptogram
 .provides ./cryptogram.gh#cg_constraints
-.provides ./cryptogram.gh#chars_for_cg_inj_random
-.provides ./cryptogram.gh#chars_for_cg_inj_hash
-.provides ./cryptogram.gh#chars_for_cg_inj_hmac
-.provides ./cryptogram.gh#chars_for_cg_inj_encrypted
-.provides ./cryptogram.gh#chars_for_cg_sur_random
-.provides ./cryptogram.gh#chars_for_cg_sur_symmetric_key
-.provides ./cryptogram.gh#chars_for_cg_sur_public_key
-.provides ./cryptogram.gh#chars_for_cg_sur_private_key
+.provides ./cryptogram.gh#chars_for_cg_inj
+.provides ./cryptogram.gh#chars_for_cg_sur
 #
 #
 # cryptogram_bounds.gh
@@ -34,20 +28,18 @@
 #
 #
 # cryptogram_levels.gh
-.provides ./cryptogram_levels.gh#cg_level
+.provides ./cryptogram_levels.gh#cg_level_
 .provides ./cryptogram_levels.gh#cg_level_ind
 #
 #
-# crypto_chars_util.gh
-.provides ./crypto_chars.gh#crypto_chars
-.provides ./crypto_chars.gh#crypto_chars_inv
-.provides ./crypto_chars.gh#crypto_chars_split
-.provides ./crypto_chars.gh#crypto_chars_join
+# garbage_chars.gh
+.provides ./garbage_chars.gh#bad_garbage_crypto_chars
+.provides ./garbage_chars.gh#known_garbage_collision
 #
 #
 # public_invariant.gh
-.predicate @./public_invariant.gh#public_invar
 .provides ./public_invariant.gh#public_invariant_init
+.predicate @./public_invariant.gh#public_invar
 .predicate @./public_chars.gh#public_generated
 .predicate @./public_invariant.gh#public_invar_constraints
 .produces module public_invariant_mod

@@ -9,6 +9,7 @@
 .provides ./threading.h#thread_start
 .provides ./threading.h#thread_start_joinable
 .provides ./threading.h#thread_join
+.provides ./threading.h#mutex_ghost_use
 .predicate @./threading.h#mutex_held
 .predicate @./threading.h#mutex
 .predicate @./threading.h#create_mutex_ghost_arg

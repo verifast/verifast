@@ -28,7 +28,7 @@ fixpoint bool hmac_public_key(int p, int c)
 predicate hmac_pub(cryptogram cg) =
   switch (cg)
   {
-    case cg_random(p0, c0):
+    case cg_nonce(p0, c0):
       return true;
     case cg_symmetric_key(p0, c0):
       return true == hmac_public_key(p0, c0);
@@ -39,13 +39,11 @@ predicate hmac_pub(cryptogram cg) =
     case cg_hash(cs0):
       return true;
     case cg_hmac(p0, c0, cs0):
-      return hmac_public_key(p0, c0) || 
+      return hmac_public_key(p0, c0) ||
              send(p0, shared_with(p0, c0), cs0);
     case cg_encrypted(p0, c0, cs0, ent0):
-      return hmac_public_key(p0, c0) ? 
-               [_]public_generated(hmac_pub)(cs0)
-             :
-               cs0 == chars_for_cg(cg_symmetric_key(p0, c0));
+      return true == hmac_public_key(p0, c0) &*&
+             [_]public_generated(hmac_pub)(cs0);
     case cg_auth_encrypted(p0, c0, mac0, cs0, ent0):
       return true == hmac_public_key(p0, c0) &*&
              [_]public_generated(hmac_pub)(cs0);
@@ -83,7 +81,7 @@ void receiver(char *key, int key_len, char *message);
   /*@ ensures  principal(receiver, _) &*&
                [f1]cryptogram(key, key_len, key_cs, key_cg) &*&
                chars(message, MESSAGE_SIZE, ?msg_cs) &*&
-               collision_in_run || bad(sender) || bad(receiver) ||
+               col || bad(sender) || bad(receiver) ||
                send(sender, receiver, msg_cs); @*/
 
 ///////////////////////////////////////////////////////////////////////////////

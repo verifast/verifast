@@ -1,8 +1,9 @@
 #ifndef PUBLIC_INVARIANT_GH
 #define PUBLIC_INVARIANT_GH
 
+#include "auxiliary_definitions.gh"
 #include "principals.gh"
-#include "crypto_chars.gh"
+#include "cryptogram.gh"
 
 require_module public_invariant_mod;
 
@@ -18,13 +19,13 @@ predicate_ctor public_generated(predicate(cryptogram) pub)(list<char> cs) =
   true == forall(cgs_in_chars(cs), cg_is_generated)
 ;
 
-typedef lemma void bad_random_is_public(predicate(cryptogram) pub,
+typedef lemma void bad_nonce_is_public(predicate(cryptogram) pub,
                                         predicate() proof_pred)
-                                       (cryptogram random);
+                                       (cryptogram nonce);
   requires  proof_pred() &*&
-            random == cg_random(?p, _) &*& true == bad(p);
+            nonce == cg_nonce(?p, _) &*& true == bad(p);
   ensures   proof_pred() &*&
-            [_]pub(random);
+            [_]pub(nonce);
 
 typedef lemma void bad_key_is_public(predicate(cryptogram) pub,
                                      predicate() proof_pred)
@@ -96,16 +97,6 @@ typedef lemma void public_decryption_is_public(predicate(cryptogram) pub,
   ensures   proof_pred() &*&
             [_]public_generated(pub)(pay);
 
-typedef lemma void decryption_allowed(predicate(cryptogram) pub,
-                                      predicate() proof_pred)
-                                     (cryptogram key, list<char> cs);
-  requires  proof_pred() &*&
-            key == cg_symmetric_key(?p, ?c) &*&
-            [_]public_generated(pub)(cs);
-  ensures   proof_pred() &*&
-            exists<cryptogram>(?cg_pay) &*&
-            [_]pub(cg_encrypted(p, c, chars_for_cg(cg_pay), _));
-
 typedef lemma void public_auth_encryption_is_public(predicate(cryptogram) pub,
                                                     predicate() proof_pred)
                                                    (cryptogram encrypted);
@@ -165,7 +156,7 @@ typedef lemma void public_asym_signature_is_public(predicate(cryptogram) pub,
 
 predicate public_invariant_constraints(predicate(cryptogram) pub,
                                        predicate() pred) =
-  is_bad_random_is_public(_, pub, pred) &*&
+  is_bad_nonce_is_public(_, pub, pred) &*&
   is_bad_key_is_public(_, pub, pred) &*&
   is_public_key_is_public(_, pub, pred) &*&
   is_bad_private_key_is_public(_, pub, pred) &*&
@@ -173,7 +164,6 @@ predicate public_invariant_constraints(predicate(cryptogram) pub,
   is_public_hmac_is_public(_, pub, pred) &*&
   is_public_encryption_is_public(_, pub, pred) &*&
   is_public_decryption_is_public(_, pub, pred) &*&
-  is_decryption_allowed(_, pub, pred) &*&
   is_public_auth_encryption_is_public(_, pub, pred) &*&
   is_public_auth_decryption_is_public(_, pub, pred) &*&
   is_public_asym_encryption_is_public(_, pub, pred) &*&
@@ -181,16 +171,11 @@ predicate public_invariant_constraints(predicate(cryptogram) pub,
   is_public_asym_signature_is_public(_, pub, pred)
 ;
 
-#define PRODUCE_IS_DECRYPTION_ALLOWED(PREFIX) \
-produce_lemma_function_pointer_chunk(decryption_allowed) : \
-  decryption_allowed(PREFIX##_pub, PREFIX##_proof_pred) \
-                    (PREFIX##_key, PREFIX##_key){ call(); };
-
 #define PUBLIC_INVARIANT_CONSTRAINTS(PREFIX) \
 { \
-produce_lemma_function_pointer_chunk(PREFIX##_bad_random_is_public) : \
-  bad_random_is_public(PREFIX##_pub, PREFIX##_proof_pred) \
-                      (PREFIX##_random){ call(); }; \
+produce_lemma_function_pointer_chunk(PREFIX##_bad_nonce_is_public) : \
+  bad_nonce_is_public(PREFIX##_pub, PREFIX##_proof_pred) \
+                      (PREFIX##_nonce){ call(); }; \
   \
 produce_lemma_function_pointer_chunk(PREFIX##_bad_key_is_public) : \
   bad_key_is_public(PREFIX##_pub, PREFIX##_proof_pred) \
@@ -220,8 +205,6 @@ produce_lemma_function_pointer_chunk(public_decryption_is_public) : \
   public_decryption_is_public(PREFIX##_pub, PREFIX##_proof_pred) \
                              (PREFIX##_key, PREFIX##_encrypted){ call(); }; \
   \
-PRODUCE_IS_DECRYPTION_ALLOWED(PREFIX) \
-  \
 produce_lemma_function_pointer_chunk(public_auth_encryption_is_public) : \
   public_auth_encryption_is_public(PREFIX##_pub, PREFIX##_proof_pred) \
                                   (PREFIX##_encrypted){ call(); }; \
@@ -245,7 +228,7 @@ close public_invariant_constraints(PREFIX##_pub, PREFIX##_proof_pred); \
 }
 
 #define PUBLIC_INVARIANT_PROOFS(PREFIX) \
-  DEFAULT_IS_PUBLIC_RANDOM(PREFIX) \
+  DEFAULT_IS_PUBLIC_NONCE(PREFIX) \
   DEFAULT_IS_PUBLIC_KEY(PREFIX) \
   DEFAULT_IS_PUBLIC_PUBLIC_KEY(PREFIX) \
   DEFAULT_IS_PUBLIC_PRIVATE_KEY(PREFIX) \
@@ -253,21 +236,20 @@ close public_invariant_constraints(PREFIX##_pub, PREFIX##_proof_pred); \
   DEFAULT_IS_PUBLIC_HMAC(PREFIX) \
   DEFAULT_IS_PUBLIC_ENCRYPTED(PREFIX) \
   DEFAULT_IS_PUBLIC_DECRYPTED(PREFIX) \
-  DEFAULT_IS_DECRYPTION_ALLOWED(PREFIX) \
   DEFAULT_IS_PUBLIC_AUTH_ENCRYPTED(PREFIX) \
   DEFAULT_IS_PUBLIC_AUTH_DECRYPTED(PREFIX) \
   DEFAULT_IS_PUBLIC_ASYMMETRIC_ENCRYPTED(PREFIX) \
   DEFAULT_IS_PUBLIC_ASYMMETRIC_DECRYPTED(PREFIX) \
   DEFAULT_IS_PUBLIC_ASYMMETRIC_SIGNATURE(PREFIX) \
 
-#define DEFAULT_IS_PUBLIC_RANDOM(PREFIX) \
-lemma void PREFIX##_bad_random_is_public(cryptogram random) \
-  requires random == cg_random(?p, _) &*& \
+#define DEFAULT_IS_PUBLIC_NONCE(PREFIX) \
+lemma void PREFIX##_bad_nonce_is_public(cryptogram nonce) \
+  requires nonce == cg_nonce(?p, _) &*& \
            true == bad(p); \
-  ensures  [_]PREFIX##_pub(random); \
+  ensures  [_]PREFIX##_pub(nonce); \
 { \
-  close PREFIX##_pub(random); \
-  leak PREFIX##_pub(random); \
+  close PREFIX##_pub(nonce); \
+  leak PREFIX##_pub(nonce); \
 }
 
 #define DEFAULT_IS_PUBLIC_KEY(PREFIX) \
@@ -353,30 +335,6 @@ lemma void public_decryption_is_public(cryptogram key, \
   POLARSSL_SWITCH_1(PREFIX, cg_symmetric_key(p, c)); \
 }
 
-#define DEFAULT_IS_DECRYPTION_ALLOWED(PREFIX) \
-lemma void decryption_allowed(cryptogram key, list<char> cs) \
-  requires key == cg_symmetric_key(?p, ?c) &*& \
-           [_]public_generated(PREFIX##_pub)(cs); \
-  ensures  exists<cryptogram>(?cg_pay) &*& \
-           [_]PREFIX##_pub(cg_encrypted(p, c, chars_for_cg(cg_pay), _)); \
-{ \
-  cryptogram cg; \
-  if (PREFIX##_public_key(p, c)) \
-  { \
-    close PREFIX##_pub(key); \
-    leak PREFIX##_pub(key); \
-    cg = chars_for_cg_sur_random(cs); \
-  } \
-  else \
-  { \
-    cg = cg_symmetric_key(p, c); \
-  } \
-  close exists(cg); \
-  cryptogram cg_enc = cg_encrypted(p, c, chars_for_cg(cg), nil); \
-  close PREFIX##_pub(cg_enc); \
-  leak PREFIX##_pub(cg_enc); \
-}
-
 #define DEFAULT_IS_PUBLIC_AUTH_ENCRYPTED(PREFIX) \
 lemma void public_auth_encryption_is_public(cryptogram encrypted) \
   requires encrypted == cg_auth_encrypted(?p, ?c, ?mac, ?pay, ?ent) &*& \
@@ -448,7 +406,7 @@ lemma void public_asym_signature_is_public(cryptogram sig) \
 }
 
 #define PUBLIC_INVARIANT_ASSUME(PREFIX) \
-  ASSUME_IS_PUBLIC_RANDOM(PREFIX) \
+  ASSUME_IS_PUBLIC_NONCE(PREFIX) \
   ASSUME_IS_PUBLIC_KEY(PREFIX) \
   ASSUME_IS_PUBLIC_PUBLIC_KEY(PREFIX) \
   ASSUME_IS_PUBLIC_PRIVATE_KEY(PREFIX) \
@@ -456,18 +414,17 @@ lemma void public_asym_signature_is_public(cryptogram sig) \
   ASSUME_IS_PUBLIC_HMAC(PREFIX) \
   ASSUME_IS_PUBLIC_ENCRYPTED(PREFIX) \
   ASSUME_IS_PUBLIC_DECRYPTED(PREFIX) \
-  ASSUME_IS_ENCRYPTION_ALLOWED(PREFIX) \
   ASSUME_IS_PUBLIC_AUTH_ENCRYPTED(PREFIX) \
   ASSUME_IS_PUBLIC_AUTH_DECRYPTED(PREFIX) \
   ASSUME_IS_PUBLIC_ASYMMETRIC_ENCRYPTED(PREFIX) \
   ASSUME_IS_PUBLIC_ASYMMETRIC_DECRYPTED(PREFIX) \
   ASSUME_IS_PUBLIC_ASYMMETRIC_SIGNATURE(PREFIX) \
 
-#define ASSUME_IS_PUBLIC_RANDOM(PREFIX) \
-lemma void PREFIX##_bad_random_is_public(cryptogram random) \
-  requires random == cg_random(?p, _) &*& \
+#define ASSUME_IS_PUBLIC_NONCE(PREFIX) \
+lemma void PREFIX##_bad_nonce_is_public(cryptogram nonce) \
+  requires nonce == cg_nonce(?p, _) &*& \
            true == bad(p); \
-  ensures  [_]PREFIX##_pub(random); \
+  ensures  [_]PREFIX##_pub(nonce); \
 { \
   assume (false); \
 }
@@ -538,16 +495,6 @@ lemma void public_decryption_is_public(cryptogram key, \
            [_]PREFIX##_pub(key) &*& \
            [_]PREFIX##_pub(encrypted); \
   ensures  [_]public_generated(PREFIX##_pub)(pay); \
-{ \
-  assume (false); \
-}
-
-#define ASSUME_IS_DECRYPTION_ALLOWED(PREFIX) \
-lemma void decryption_allowed(cryptogram key, list<char> cs) \
-  requires key == cg_symmetric_key(?p, ?c) &*& \
-           [_]public_generated(PREFIX##_pub)(cs); \
-  ensures  exists<cryptogram>(?cg_pay) &*& \
-           [_]PREFIX##_pub(cg_encrypted(p, c, chars_for_cg(cg_pay), _)); \
 { \
   assume (false); \
 }
@@ -627,7 +574,7 @@ switch(root) \
 #define POLARSSL_SWITCH_1(PREFIX, root) \
 switch (root) \
 { \
-  case cg_random(p__1, c__1): \
+  case cg_nonce(p__1, c__1): \
     assert true; \
   case cg_symmetric_key(p__1, c__1): \
     assert true; \
@@ -688,7 +635,7 @@ switch (root) \
 #define POLARSSL_SWITCH_2(PREFIX, root) \
 switch (root) \
 { \
-  case cg_random(p__2, c__2): \
+  case cg_nonce(p__2, c__2): \
     assert true; \
   case cg_symmetric_key(p__2, c__2): \
     assert true; \

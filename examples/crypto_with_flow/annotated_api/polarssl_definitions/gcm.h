@@ -19,17 +19,17 @@ predicate gcm_context(gcm_context *context) =
   chars((void*) context, GCM_CONTEXT_SIZE, _) &*&
   struct_gcm_context_padding(context)
 ;
-predicate gcm_context_initialized(gcm_context *context, 
+predicate gcm_context_initialized(gcm_context *context,
                                   int principal, int count);
 
 @*/
 
-int gcm_init(gcm_context *ctx, int cipher, 
+int gcm_init(gcm_context *ctx, int cipher,
              const char *key, unsigned int keysize);
-  /*@ requires [?f]cryptogram(key, ?size_key, ?cs_key, ?cg_key) &*& 
+  /*@ requires [?f]cryptogram(key, ?size_key, ?cs_key, ?cg_key) &*&
                  keysize == size_key * 8 &*&
                  cg_key == cg_symmetric_key(?p, ?c) &*&
-               gcm_context(ctx) &*& 
+               gcm_context(ctx) &*&
                (keysize == 128 || keysize == 192 || keysize == 256) &*&
                // only AES supported for now
                cipher == POLARSSL_CIPHER_ID_AES; @*/
@@ -44,59 +44,71 @@ void gcm_free(gcm_context *ctx);
   //@ ensures  gcm_context(ctx);
 
 int gcm_crypt_and_tag(gcm_context *ctx, int mode, size_t length,
-                      const char *iv, size_t iv_len, 
+                      const char *iv, size_t iv_len,
                       const char *add, size_t add_len,
-                      const char *input, char *output, 
+                      const char *input, char *output,
                       size_t tag_len, char *tag);
-  /*@ requires gcm_context_initialized(ctx, ?p, ?c) &*&
-               // this function is only spec'ed for encryption, use the function 
-               // gcm_auth_decrypt to decrypt
+  /*@ requires principal(?p1, ?c1) &*&
+               gcm_context_initialized(ctx, ?p2, ?c2) &*&
+               // this function is only spec'ed for encryption
+               // use the function gcm_auth_decrypt to decrypt
                (mode == GCM_ENCRYPT) &*&
-               // iv_len must be 16 since only AES is supported
-               chars(iv, iv_len, ?cs_iv) &*& iv_len == 16 &*&
+               // iv_len must be 16 since only AES is supported (see gcm_init)
+               cryptogram(iv, iv_len, ?iv_cs, ?iv_cg) &*&
+                 iv_len == 16 &*& iv_cg == cg_nonce(p1, c1) &*&
                // no additional data supported yet
                add == NULL &*& add_len == 0 &*&
-               [?f]optional_crypto_chars(?cc, input, length, ?cs_in) &*&
-                 length >= MIN_ENC_SIZE &*&
-               chars(tag, 16, ?tag_cs_in) &*& 
+               [?f]crypto_chars(?kind, input, length, ?in_cs) &*&
+                 length >= MINIMAL_STRING_SIZE &*&
+               // only tags of 16 bytes for simplicity
+               chars(tag, tag_len, _) &*& tag_len == 16 &*&
                chars(output, length, _); @*/
-  /*@ ensures  gcm_context_initialized(ctx, p, c) &*&
-               chars(iv, 16, _) &*&
-               [f]optional_crypto_chars(cc, input, length, cs_in) &*&
-               chars(tag, tag_len, ?tag_cs_out) &*&
-               result == 0 ?
-                 cryptogram(output, length, _, ?cg_out) &*&
-                 cg_out == cg_auth_encrypted(p, c, tag_cs_out, cs_in, cs_iv)
+  /*@ ensures  principal(p1, c1) &*&
+               gcm_context_initialized(ctx, p2, c2) &*&
+               // content of updated iv is correlated with input
+               crypto_chars(kind, iv, iv_len, _) &*&
+               [f]crypto_chars(kind, input, length, in_cs) &*&
+               chars(tag, tag_len, ?tag_cs) &*&
+               kind == garbage ?
+                 // got garbage as input
+                 crypto_chars(garbage, output, length, _)
+               : result != 0 ?
+                 // encryption failed
+                 chars(output, length, _)
                :
-                 chars(output, length, _); @*/
+                 // encryption was successful
+                 cryptogram(output, length, _, ?cg_out) &*&
+                 cg_out == cg_auth_encrypted(p2, c2, tag_cs, in_cs, iv_cs); @*/
 
 int gcm_auth_decrypt(gcm_context *ctx, size_t length,
                      const char *iv, size_t iv_len,
                      const char *add, size_t add_len,
                      const char *tag, size_t tag_len,
                      const char *input, char *output);
-  /*@ requires gcm_context_initialized(ctx, ?p, ?c) &*&
-               // iv_len must be 16 since only AES is supported
-               chars(iv, iv_len, ?cs_iv) &*& iv_len == 16 &*&
+  /*@ requires gcm_context_initialized(ctx, ?p1, ?c1) &*&
+               // iv_len must be 16 since only AES is supported (see gcm_init)
+               cryptogram(iv, iv_len, ?iv_cs, ?iv_cg) &*& iv_len == 16 &*&
                // no additional data supported yet
                add == NULL &*& add_len == 0 &*&
-               [?f]optional_crypto_chars(?cc, input, length, ?cs_in) &*&
-                 length >= MIN_ENC_SIZE &*&
-               chars(tag, tag_len, ?tag_cs_in) &*& 
+               [?f]cryptogram(input, length, ?in_cs, ?in_cg) &*&
+                  in_cg == cg_auth_encrypted(?p2, ?c2, ?tag_cs2,
+                                             ?out_cs2, ?iv_cs2) &*&
+                  length >= MINIMAL_STRING_SIZE &*&
+               // only tags of 16 bytes for simplicity
+               chars(tag, tag_len, ?tag_cs) &*& tag_len == 16 &*&
                chars(output, length, _); @*/
-  /*@ ensures gcm_context_initialized(ctx, p, c) &*&
-              chars(iv, 16, _) &*&
-              [f]optional_crypto_chars(cc, input, length, cs_in) &*&
-              chars(tag, tag_len, _) &*&
-              result == 0 ?
-                collision_in_run ?
-                  chars(output, length, _)
-                :
-                  crypto_chars(output, length, ?cs_out) &*&
-                  collision_in_run ||
-                  cs_in == chars_for_cg(cg_auth_encrypted(p, c, tag_cs_in, 
-                                                          cs_out, cs_iv))
-              :
-                chars(output, length, _); @*/
+  /*@ ensures  gcm_context_initialized(ctx, p1, c1) &*&
+               [f]cryptogram(input, length, in_cs, in_cg) &*&
+               chars(tag, tag_len, _) &*&
+               result != 0 ?
+                 // content of updated iv is correlated with output
+                 chars(iv, iv_len, _) &*&
+                 chars(output, length, _)
+               :
+                 // content of updated iv is correlated with output
+                 crypto_chars(secret, iv, iv_len, _) &*&
+                 crypto_chars(secret, output, length, ?out_cs) &*&
+                 col || (p1 == p2 && c1 == c2 && tag_cs == tag_cs2 &&
+                         iv_cs == iv_cs2 && out_cs == out_cs2); @*/
 
 #endif

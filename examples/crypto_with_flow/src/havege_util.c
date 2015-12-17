@@ -14,17 +14,21 @@ void r_int(struct havege_state* state, int* i)
                integer(i, _); @*/
 {
   //@ open havege_util(pub, proof_pred, principal);
-  //@ assert is_principal_with_public_random(?proof, pub, proof_pred, principal);
+  //@ assert is_principal_with_public_nonces(?proof, pub, proof_pred, principal);
   char* temp = (void*) i;
   //@ close random_request(principal, 0, false);
   if (havege_random(state, temp, sizeof(int)) != 0) abort();
   //@ open cryptogram(temp, ?l, ?cs, ?random);
-  /*@ if (!collision_in_run)
+  /*@ if (!col)
       {
         proof(random);
         dummy_foreach_singleton(pub, random);
         close_public_generated(cs);
-        public_crypto_chars(temp, l, cs);
+        public_crypto_chars(temp, l);
+      }
+      else
+      {
+        crypto_chars_to_chars(temp, l);
       }
   @*/
   //@ chars_to_integer(temp);

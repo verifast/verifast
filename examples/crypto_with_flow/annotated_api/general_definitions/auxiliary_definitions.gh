@@ -4,6 +4,7 @@
 #include "nat.gh"
 #include "list.gh"
 #include "listex.gh"
+#include <crypto.gh>
 
 //Int pairs, to encode information
 fixpoint int int_left(int p);
@@ -31,8 +32,12 @@ predicate hide_chars(char *buffer, int length, list<char> cs) =
   chars(buffer, length, cs)
 ;
 
+predicate hide_crypto_chars(crypto_chars_kind kind, char *buffer, int length, list<char> cs) =
+  crypto_chars(kind, buffer, length, cs)
+;
+
 //Power fixpoint
-fixpoint int pow(int n, nat e) 
+fixpoint int pow(int n, nat e)
 {
   switch (e)
   {
@@ -46,12 +51,12 @@ fixpoint int maximum(list<int> ints)
 {
   switch (ints)
   {
-    case cons(i, r_ints): 
+    case cons(i, r_ints):
       return i >= maximum(r_ints) ?
         i
       :
         maximum(r_ints);
-    case nil: 
+    case nil:
       return INT_MIN;
   }
 }
@@ -60,19 +65,19 @@ fixpoint int minimum(list<int> ints)
 {
   switch (ints)
   {
-    case cons(i, r_ints): 
+    case cons(i, r_ints):
       return i <= minimum(r_ints) ?
         i
       :
         minimum(r_ints);
-    case nil: 
+    case nil:
       return INT_MAX;
   }
 }
 
 //Union of two set lists
-fixpoint list<t> union<t>(list<t> xs, list<t> ys) 
-{ 
+fixpoint list<t> union<t>(list<t> xs, list<t> ys)
+{
   switch(xs)
   {
     case cons(x0, xs0):
@@ -84,6 +89,17 @@ fixpoint list<t> union<t>(list<t> xs, list<t> ys)
       return ys;
   }
 }
+
+//Dummy foreach
+predicate dummy_foreach<t>(list<t> xs, predicate(t) p) =
+  switch (xs)
+  {
+    case nil: return true;
+    case cons(x, xs0): return [_]p(x) &*& [_]dummy_foreach(xs0, p);
+  }
+;
+
+//Proven lemmas
 
 lemma void union_nil<t>(list<t> xs);
   requires true;
@@ -104,15 +120,6 @@ lemma void forall_union<t>(list<t> xs, list<t> ys, fixpoint(t, bool) p);
 lemma void forall_subset<t>(list<t> xs, list<t> ys, fixpoint(t, bool) p);
   requires forall(ys, p) && subset(xs, ys);
   ensures  true == forall(xs, p);
-
-//Dummy foreach
-predicate dummy_foreach<t>(list<t> xs, predicate(t) p) =
-  switch (xs) 
-  {
-    case nil: return true;
-    case cons(x, xs0): return [_]p(x) &*& [_]dummy_foreach(xs0, p);
-  }
-;
 
 lemma void dummy_foreach_extract<t>(t x, list<t> xs);
   requires [_]dummy_foreach(xs, ?p) &*& mem(x, xs) == true;
