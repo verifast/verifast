@@ -179,28 +179,41 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
 
     //Verify the hmac
     //@ assert chars(buffer + size - 64, 64, ?hmac_cs);
+    //@ public_chars(buffer + size - 64, 64);
     //@ chars_to_crypto_chars(buffer + size - 64, 64);
     //@ assert crypto_chars(_, msg, size - 80, ?pay_cs);
     sha512_hmac(hmac_key, KEY_SIZE, msg,
                 (unsigned int) enc_size, hmac, 0);
-    //@ cryptogram hmac_cg;
+    //@ open exists(?hmac_cg);
     /*@ if (!col && p2 == sender && c2 == enc_id) 
         {
-          open cryptogram(hmac, 64, _, ?temp_cg); 
-          hmac_cg = temp_cg;
+          open cryptogram(hmac, 64, _, hmac_cg);
         }
     @*/
     if (memcmp((void*) buffer + size - 64, hmac, 64) != 0) abort();
-    //@ assert crypto_chars(normal, hmac, 64, hmac_cs);
+    //@ public_crypto_chars(hmac, 64);
     //@ crypto_chars_to_chars(buffer + size - 64, 64);
     /*@ if (!col)
         {
-          assert p2 == sender && c2 == enc_id;
-          if (!bad(sender) || !bad(receiver))
+          if (p2 != sender || c2 != enc_id)
           {
-            assert hmac_cg == cg_hmac(sender, hmac_id, dec_cs);
-            public_chars(buffer + size - 64, 64);
-            open [_]enc_and_hmac_pub(enc_cg);
+            structure s = 
+              plaintext_of_excl_one_way_value(1, normal, buffer + size - 64, 64);
+            close exists(hmac_cg);
+            close exists(pair(nil, nil));
+            close has_structure(pay_cs, s);
+            known_garbage_collision(msg, size - 80, s);
+            open has_structure(pay_cs, s);
+            assert false;
+          }
+          else
+          {
+            if (!bad(sender) || !bad(receiver))
+            {
+              assert hmac_cg == cg_hmac(sender, hmac_id, dec_cs);
+              public_chars(buffer + size - 64, 64);
+              open [_]enc_and_hmac_pub(enc_cg);
+            }
           }
         }
         else

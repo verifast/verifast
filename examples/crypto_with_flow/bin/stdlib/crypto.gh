@@ -39,6 +39,13 @@ lemma_auto void crypto_chars_limits(char *array);
   ensures  [f]crypto_chars(kind, array, n, cs) &*&
            true == ((char *)0 <= array) &*& array + n <= (char *)UINTPTR_MAX;
 
+lemma_auto void crypto_chars_distinct(char *array1, char *array2);
+  requires crypto_chars(?kind1, array1, ?count1, ?cs1) &*&
+           crypto_chars(?kind2, array2, ?count2, ?cs2);
+  ensures  crypto_chars(kind1, array1, count1, cs1) &*&
+           crypto_chars(kind2, array2, count2, cs2) &*& 
+           array1 != array2;
+
 lemma void crypto_chars_split(char *array, int offset);
   requires [?f]crypto_chars(?kind, array, ?n, ?cs) &*&
            0 <= offset &*& offset <= n;
@@ -51,37 +58,5 @@ lemma_auto void crypto_chars_join(char *array);
   requires [?f]crypto_chars(?kind, array, ?n, ?cs) &*&
            [f]crypto_chars(kind, array + n, ?n0, ?cs0);
   ensures  [f]crypto_chars(kind, array, n + n0, append(cs, cs0));
-
-fixpoint crypto_chars_kind memcmp_kinds_equal_size(crypto_chars_kind kind1,
-                                                   crypto_chars_kind kind2)
-{
-  return kind1 == normal || kind2 == normal ?
-           normal
-       : kind1 == secret || kind2 == secret ?
-           secret
-       :
-           garbage;  
-}
-
-fixpoint crypto_chars_kind memcmp_kinds_nequal_size(crypto_chars_kind kind1,
-                                                    crypto_chars_kind kind2)
-{
-  return kind1 == normal && kind2 == normal ?
-           normal
-       : kind1 == normal || kind1 == secret || 
-         kind2 == normal || kind2 == secret ?
-           secret
-       :
-           garbage;  
-}
-
-fixpoint crypto_chars_kind memcmp_kinds(crypto_chars_kind kind1, int size1,
-                                        crypto_chars_kind kind2, int size2)
-{
-  return size1 == size2 ?
-           memcmp_kinds_equal_size(kind1, kind2)
-         :
-           memcmp_kinds_nequal_size(kind1, kind2);
-}
 
 #endif

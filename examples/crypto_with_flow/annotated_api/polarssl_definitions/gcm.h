@@ -69,16 +69,18 @@ int gcm_crypt_and_tag(gcm_context *ctx, int mode, size_t length,
                crypto_chars(kind, iv, iv_len, _) &*&
                [f]crypto_chars(kind, input, length, in_cs) &*&
                chars(tag, tag_len, ?tag_cs) &*&
-               kind == garbage ?
-                 // got garbage as input
-                 crypto_chars(garbage, output, length, _)
-               : result != 0 ?
+               result != 0 ?
                  // encryption failed
                  chars(output, length, _)
                :
-                 // encryption was successful
-                 cryptogram(output, length, _, ?cg_out) &*&
-                 cg_out == cg_auth_encrypted(p2, c2, tag_cs, in_cs, iv_cs); @*/
+                 exists(?cg) &*&
+                 cg == cg_auth_encrypted(p2, c2, tag_cs, in_cs, iv_cs) &*&
+                 kind == garbage ?
+                   // got garbage as input
+                   crypto_chars(garbage, output, length, chars_for_cg(cg))
+                 : 
+                   // encryption was successful
+                   cryptogram(output, length, _, cg); @*/
 
 int gcm_auth_decrypt(gcm_context *ctx, size_t length,
                      const char *iv, size_t iv_len,

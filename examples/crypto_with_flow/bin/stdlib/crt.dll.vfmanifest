@@ -5,6 +5,7 @@
 .provides ./crypto.gh#chars_to_secret_crypto_chars
 .provides ./crypto.gh#crypto_chars_inv
 .provides ./crypto.gh#crypto_chars_limits
+.provides ./crypto.gh#crypto_chars_distinct
 .provides ./crypto.gh#crypto_chars_split
 .provides ./crypto.gh#crypto_chars_join
 .provides CRT/permutations.gh#is_permutation_reflexive

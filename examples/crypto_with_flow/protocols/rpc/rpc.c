@@ -81,6 +81,7 @@ void client(char *key, int key_len, char *request, char *response)
     if (memcmp((void*) buffer + 1 + 2 * PACKAGE_SIZE, hmac, 64) != 0) abort();
     //@ assert chars((void*) buffer + 1 + 2 * PACKAGE_SIZE, 64, hmac_cs);
     //@ public_chars((void*) buffer + 1 + 2 * PACKAGE_SIZE, 64);
+    //@ public_crypto_chars(hmac, 64);
     //@ crypto_chars_to_chars((void*) buffer, 1 + 2 * PACKAGE_SIZE);
     //@ assert chars(buffer, expected_size, append(cont_cs, hmac_cs));
 
@@ -106,7 +107,7 @@ void client(char *key, int key_len, char *request, char *response)
               if (c1 == '1')
               {
                 public_chars((void*) buffer + 1 + 2 * PACKAGE_SIZE, 64);
-                public_crypto_chars_extract(hmac, hmac_cg);
+                public_chars_extract(hmac, hmac_cg);
                 open [_]rpc_pub(hmac_cg);
               }
               else
@@ -215,8 +216,10 @@ void server(char *key, int key_len, char *request, char *response)
                 (unsigned int) (1 + PACKAGE_SIZE), hmac, 0);
     //@ open cryptogram(hmac, 64, ?hmac_cs, ?hmac_cg);
     //@ assert hmac_cg == cg_hmac(client, id, ?cont_cs);
+    //@ public_chars((void*) buffer + 1 + PACKAGE_SIZE, 64);
     //@ chars_to_crypto_chars((void*) buffer + 1 + PACKAGE_SIZE, 64);
     if (memcmp((void*) buffer + 1 + PACKAGE_SIZE, hmac, 64) != 0) abort();
+    //@ public_crypto_chars(hmac, 64);
     //@ crypto_chars_join(buffer);
     //@ crypto_chars_to_chars(buffer, expected_size);
     //@ assert chars(buffer, expected_size, append(cont_cs, hmac_cs));

@@ -253,13 +253,13 @@ struct item *asymmetric_decryption(struct item *key, struct item *item, char tag
       abort_crypto_lib("Decryption: Incorrect size");
     result->content = malloc(result->size);
     if (result->content == 0) {abort_crypto_lib("Malloc failed");}
-    memcpy(result->content, output, olen);
     //@ assert u_integer(&olen, ?olen_val);
-    //@ close [f]world(pub);
     //@ assert crypto_chars(?kind, output, olen_val, ?cs_out);
     //@ assert kind == secret || kind == garbage;
-    check_tag2(result->content, tag);
+    //@ close [f]world(pub);
+    check_tag2(output, tag);
     //@ switch(kind){case normal: case secret: case garbage:}
+    memcpy(result->content, output, olen);
     //@ assert result->content |-> ?cont;
     //@ assert crypto_chars(secret, cont, olen_val, cs_out);
     zeroize(output, (int) olen);

@@ -47,13 +47,15 @@ void write_identifier(char *array, int id)
 
 void check_identifier(char *array, int id)
   /*@ requires [_]public_invar(?pub) &*&
-               principal(?p, ?c) &*&
-               crypto_chars(?kind, array, ?size, ?cs) &*&
-               size >= ID_SIZE; @*/
-  /*@ ensures  principal(p, c) &*& kind != garbage || col &*&
-               crypto_chars(secret, array, size, cs) &*&
+               principal(?p, ?c) &*& 
+               [?f]crypto_chars(?kind, array, ?size, ?cs) &*&
+               size >= ID_SIZE &*&
+               kind != garbage || decrypted_garbage(cs); @*/
+  /*@ ensures  principal(p, c) &*& 
+               [f]crypto_chars(secret, array, size, cs) &*&
                take(ID_SIZE, cs) == identifier(id) &*&
-               [_]public_generated(pub)(take(ID_SIZE, cs)); @*/
+               [_]public_generated(pub)(take(ID_SIZE, cs)) &*&
+               kind != garbage || col; @*/
 {
   char temp[ID_SIZE];
   write_identifier(temp, id);
@@ -62,12 +64,19 @@ void check_identifier(char *array, int id)
   //@ chars_to_crypto_chars(temp, ID_SIZE);
   if (memcmp(temp, array, ID_SIZE) != 0) abort();
   //@ public_crypto_chars(temp, ID_SIZE);
-  //@ assert crypto_chars(?new_kind, array, size, cs);
-  //@ if (size == ID_SIZE) assert new_kind == normal;
-  /*@ if (col || new_kind == normal) 
+  //@ assert [f]crypto_chars(kind, array, size, cs);
+  /*@ switch (kind)
       {
-        crypto_chars_to_chars(array, size);
-        chars_to_secret_crypto_chars(array, size);
+        case normal:
+          chars_to_secret_crypto_chars(array, size);
+        case secret:
+        case garbage:
+          structure s = known_value(1, normal, temp, ID_SIZE, identifier(id));
+          close exists(pair(nil, drop(ID_SIZE, cs)));
+          close has_structure(cs, s);
+          known_garbage_collision(array, size, s);
+          open has_structure(cs, s);
+          chars_to_secret_crypto_chars(array, size);
       }
   @*/
 }

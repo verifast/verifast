@@ -211,42 +211,44 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //Verify the hmac
     sha512_hmac(hmac_key, KEY_SIZE, buffer_dec,
                 (unsigned int) (enc_size - 64), hmac, 0);
-    //@ cryptogram hmac_cg;
+    //@ open exists(?hmac_cg);
     /*@ if (!col && p2 == sender && c2 == enc_id) 
         {
-          open cryptogram(hmac, 64, _, ?temp_cg); 
-          hmac_cg = temp_cg;
+          open cryptogram(hmac, 64, _, hmac_cg);
         }
     @*/
+    //@ crypto_chars_distinct(hmac, (void*) buffer_dec + enc_size - 64);
     if (memcmp(hmac, (void*) buffer_dec + enc_size - 64, 64) != 0) abort();
+    /*@ if (col || p2 != sender || c2 != enc_id) 
+        {
+          if (p2 != sender || c2 != enc_id)
+          {
+            structure s = plaintext_of_incl_one_way_value;
+            assert crypto_chars(garbage, buffer_dec + enc_size - 64, 64, ?hmac_cs);
+            close exists(hmac_cg);
+            close exists(pair(pay_cs, nil));
+            close has_structure(dec_cs, s);
+            known_garbage_collision(buffer_dec, enc_size, s);
+            open  has_structure(dec_cs, s);
+            crypto_chars_to_chars(buffer_dec, enc_size);
+            assert col == true;
+          }
+          chars_to_crypto_chars(buffer_dec, enc_size - 64);
+          chars_to_crypto_chars(buffer_dec + enc_size - 64, 64);
+        }
+    @*/
     memcpy(msg, buffer_dec, (unsigned int) enc_size - 64);
-    
     /*@ if (!col && !bad(sender) && !bad(receiver))
         {
           open [_]hmac_then_enc_pub(enc_cg);
-          if (p2 != sender || c2 != enc_id)
-          {
-            crypto_chars_join;
-            assert crypto_chars(garbage, buffer_dec, enc_size, dec_cs);
-            structure s = hmac(enc_size - 64, sender, hmac_id);
-            assert length(take(enc_size - 64, dec_cs)) >= MINIMAL_STRING_SIZE;
-            assert length(drop(enc_size - 64, dec_cs)) >= MINIMAL_STRING_SIZE;
-            assert pay_cs == take(enc_size - 64, dec_cs);
-            assert true == has_structure(dec_cs, s);
-            known_garbage_collision(buffer_dec, enc_size, dec_cs, s);
-            assert col == true;
-          }
-          else
-          {
-            assert [_]hmac_then_enc_pub_1(?msg_cs, ?hmac_cg2);
-            assert length(pay_cs) == length(msg_cs);
-            drop_append(length(pay_cs), msg_cs, chars_for_cg(hmac_cg2));
-            drop_append(length(pay_cs), pay_cs, chars_for_cg(hmac_cg));            
-            assert (chars_for_cg(hmac_cg) == chars_for_cg(hmac_cg2));
-            assert (chars_for_cg(hmac_cg) == chars_for_cg(hmac_cg2));
-            chars_for_cg_inj(hmac_cg, hmac_cg2);
-            assert pay_cs == msg_cs;
-          }
+          assert [_]hmac_then_enc_pub_1(?msg_cs, ?hmac_cg2);
+          assert length(pay_cs) == length(msg_cs);
+          drop_append(length(pay_cs), msg_cs, chars_for_cg(hmac_cg2));
+          drop_append(length(pay_cs), pay_cs, chars_for_cg(hmac_cg));            
+          assert (chars_for_cg(hmac_cg) == chars_for_cg(hmac_cg2));
+          assert (chars_for_cg(hmac_cg) == chars_for_cg(hmac_cg2));
+          chars_for_cg_inj(hmac_cg, hmac_cg2);
+          assert pay_cs == msg_cs;
         }
     @*/
     //@ chars_join(buffer);

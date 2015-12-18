@@ -34,6 +34,7 @@
 #
 # garbage_chars.gh
 .provides ./garbage_chars.gh#bad_garbage_crypto_chars
+.predicate @./garbage_chars.gh#has_structure
 .provides ./garbage_chars.gh#known_garbage_collision
 #
 #

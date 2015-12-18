@@ -157,19 +157,21 @@ int pk_encrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                 u_integer(olen, ?olen_val) &*&
                 [f2]state_pred(p_rng) &*&
                 principal(p2, c2 + 1) &*&
-                kind == garbage ?
-                    // got garbage as input
-                    crypto_chars(garbage, output, osize, _)
-                : result != 0 ?
-                    // encryption failed
-                    chars(output, osize, _)
+                result != 0 ?
+                  // encryption failed
+                  chars(output, osize, _)
                 :
+                  exists(?cg) &*& cg == cg_asym_encrypted(p1, c1, cs_input, _) &*&
+                  olen_val > 0 &*& olen_val <= osize &*&
+                  8 * olen_val <= nbits &*&
+                  cg == cg_asym_encrypted(p1, c1, cs_input, _) &*&
+                  chars(output + olen_val, osize - olen_val, _) &*&
+                  kind == garbage ?
+                    // got garbage as input
+                    crypto_chars(garbage, output, osize, chars_for_cg(cg))
+                  : 
                     // encryption was successful
-                    olen_val > 0 &*& olen_val <= osize &*&
-                    8 * olen_val <= nbits &*&
-                    cryptogram(output, olen_val, _, ?cg_out) &*&
-                    cg_out == cg_asym_encrypted(p1, c1, cs_input, _) &*&
-                    chars(output + olen_val, osize - olen_val, _); @*/
+                    cryptogram(output, olen_val, _, cg); @*/
 
 int pk_decrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                size_t *olen, size_t osize, void *f_rng, void *p_rng);
@@ -223,18 +225,19 @@ int pk_sign(pk_context *ctx, int md_alg, const char *hash, size_t hash_len,
                 u_integer(sig_len, ?sig_len_val) &*&
                 [f2]state_pred(p_rng) &*&
                 principal(p2, c2 + 1) &*&
-                kind == garbage ?
-                  // got garbage as input
-                  crypto_chars(garbage, sig, out_len, _)
-                : result != 0 ?
+                result != 0 ?
                   // signing failed
                   chars(sig, out_len, _)
                 :
-                  // signing was successful
+                  exists(?cg) &*& cg == cg_asym_signature(p1, c1, cs_input, _) &*&
                   sig_len_val > 0 &*& sig_len_val <= out_len &*&
-                  cryptogram(sig, sig_len_val, ?cs_out, ?cg) &*&
                   chars(sig + sig_len_val, out_len - sig_len_val, _) &*&
-                  cg == cg_asym_signature(p1, c1, cs_input, _); @*/
+                  kind == garbage ?
+                    // got garbage as input
+                    crypto_chars(garbage, sig, out_len, chars_for_cg(cg))
+                  :
+                    // signing was successful
+                    cryptogram(sig, sig_len_val, _, cg); @*/
 
 int pk_verify(pk_context *ctx, int md_alg, const char *hash,
               size_t hash_len, const char *sig, size_t sig_len );

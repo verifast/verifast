@@ -312,7 +312,8 @@ void check_tag2(char* buffer, char tag);
   /*@ requires [?f1]world(?pub) &*&
                principal(?principal, ?values_count) &*&
                [?f2]crypto_chars(?kind1, buffer, ?size, ?cs) &*&
-               size > TAG_LENGTH; @*/
+               size > TAG_LENGTH &*&
+               kind1 != garbage || decrypted_garbage(cs); @*/
   /*@ ensures  [f1]world(pub) &*&
                principal(principal, values_count) &*&
                [f2]crypto_chars(?kind2, buffer, size, cs) &*&

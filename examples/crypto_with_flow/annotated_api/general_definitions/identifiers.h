@@ -3,6 +3,7 @@
 
 //@ #include <crypto.gh>
 //@ #include "public_chars.gh"
+//@ #include "garbage_chars.gh"
 
 #define ID_SIZE 12
 
@@ -29,12 +30,14 @@ void write_identifier(char *array, int id);
 
 void check_identifier(char *array, int id);
   /*@ requires [_]public_invar(?pub) &*&
-               principal(?p, ?c) &*&
-               crypto_chars(?kind, array, ?size, ?cs) &*&
-               size >= ID_SIZE; @*/
-  /*@ ensures  principal(p, c) &*& kind != garbage || col &*&
-               crypto_chars(secret, array, size, cs) &*&
+               principal(?p, ?c) &*& 
+               [?f]crypto_chars(?kind, array, ?size, ?cs) &*&
+               size >= ID_SIZE &*&
+               kind != garbage || decrypted_garbage(cs); @*/
+  /*@ ensures  principal(p, c) &*& 
+               [f]crypto_chars(secret, array, size, cs) &*&
                take(ID_SIZE, cs) == identifier(id) &*&
-               [_]public_generated(pub)(take(ID_SIZE, cs)); @*/
+               [_]public_generated(pub)(take(ID_SIZE, cs)) &*&
+               kind != garbage || col; @*/
 
 #endif

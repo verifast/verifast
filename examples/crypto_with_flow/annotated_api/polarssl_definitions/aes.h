@@ -60,16 +60,17 @@ int aes_crypt_cfb128(aes_context *ctx, int mode, size_t length, size_t *iv_off,
                    // content of updated iv is correlated with input
                    crypto_chars(kind, iv, 16, _) &*&
                    u_integer(iv_off, _) &*&
-                   kind == garbage ?
-                     // got garbage as input
-                     crypto_chars(garbage, output, length, _)
-                   : result != 0 ?
+                   result != 0 ?
                      // encryption failed
                      chars(output, length, _)
-                   : 
-                     // encryption was successful
-                     cryptogram(output, length, _, ?cg) &*&
-                     cg == cg_encrypted(p1, c1, in_cs, iv_cs)
+                   :
+                     exists(?cg) &*& cg == cg_encrypted(p1, c1, in_cs, iv_cs) &*&
+                     kind == garbage ?
+                       // got garbage as input
+                       crypto_chars(garbage, output, length, chars_for_cg(cg))
+                     :
+                       // encryption was successful
+                       cryptogram(output, length, _, cg)
                  )
                )
                :

@@ -634,7 +634,19 @@ void receiver_msg3(int* socket, havege_state* havege_state,
   // Interpret the message
   //@ open cryptogram(r_nonce, NONCE_SIZE, r_nonce_cs, r_nonce_cg);
   if (memcmp((void*) message, r_nonce, NONCE_SIZE) != 0) abort();
-  //@ assert crypto_chars(secret, message, NONCE_SIZE, r_nonce_cs);
+  //@ assert crypto_chars(?kind, message, NONCE_SIZE, r_nonce_cs);
+  /*@ if (kind == garbage)
+      {
+        structure st = known_value(1, secret, r_nonce, NONCE_SIZE, r_nonce_cs);
+        close exists(pair(nil, nil));
+        close has_structure(r_nonce_cs, st);
+        known_garbage_collision(message, NONCE_SIZE, st);
+        open has_structure(r_nonce_cs, st);
+        chars_to_secret_crypto_chars(message, NONCE_SIZE);
+        assert true == col;
+      }
+  @*/
+  
   /*@ if (!col && !bad(sender) && !bad(receiver))
       {
         open [_]nsl_pub(enc_cg);

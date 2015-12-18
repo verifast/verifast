@@ -79,7 +79,8 @@ void decrypt(char *key, char *msg, unsigned int msg_len, char* output)
              enc_cg == cg_encrypted(?p, ?c, ?dec_cs2, ?iv_cs2) &*&
              [_]yahalom_pub(enc_cg) &*&
              col || p != principal2 || c != id ?
-               kind == garbage
+               kind == garbage &&
+               decrypted_garbage(dec_cs)
              :
                kind == secret &*&
                msg_cs == chars_for_cg(enc_cg) &*&
@@ -520,6 +521,7 @@ void sender(int server, int sender, int receiver,
   //@ close yahalom_pub(cg_NA);
   //@ leak yahalom_pub(cg_NA);
   //@ public_cryptogram(NA, cg_NA);
+  //@ public_chars(NA, NONCE_SIZE);
   //@ chars_to_crypto_chars(NA, NONCE_SIZE);
 
   {
@@ -565,8 +567,7 @@ void sender(int server, int sender, int receiver,
     memcpy(generated_key, (void*) dec + ID_SIZE, KEY_SIZE);
     //@ assert crypto_chars(secret, generated_key, KEY_SIZE, ?cs_KAB);
     if (memcmp(NA, dec + ID_SIZE + KEY_SIZE, NONCE_SIZE) != 0) abort();
-    //@ assert crypto_chars(normal, dec + ID_SIZE + KEY_SIZE, NONCE_SIZE, cs_NA);
-    //@ crypto_chars_to_chars(dec + ID_SIZE + KEY_SIZE, NONCE_SIZE);
+    //@ public_crypto_chars(dec + ID_SIZE + KEY_SIZE, NONCE_SIZE);
     //@ chars_to_secret_crypto_chars(dec + ID_SIZE + KEY_SIZE, NONCE_SIZE);
     memcpy(NB, (void*) dec + ID_SIZE + KEY_SIZE + NONCE_SIZE, NONCE_SIZE);
     //@ assert crypto_chars(secret, NB, NONCE_SIZE, ?cs_NB);
@@ -958,8 +959,18 @@ void receiver(int server, int sender, int receiver,
     //@ assert enc_cg2 == cg_encrypted(?p3, ?c3, ?dec_cs3, ?iv_cs3);
     //@ open [_]yahalom_pub(enc_cg2);
     if (memcmp(dec2, NB, NONCE_SIZE) != 0) abort();
-    //@ assert crypto_chars(secret, NB, NONCE_SIZE, cs_NB);
-    
+    //@ assert crypto_chars(?kind, dec2, NONCE_SIZE, cs_NB);
+    /*@ if (kind == garbage)
+        {
+          structure st = known_value(1, secret, NB, NONCE_SIZE, cs_NB);
+          close exists(pair(nil, nil));
+          close has_structure(cs_NB, st);
+          known_garbage_collision(dec2, NONCE_SIZE, st);
+          open has_structure(cs_NB, st);
+          chars_to_secret_crypto_chars(dec2, NONCE_SIZE);
+        }
+    @*/
+    //@ assert crypto_chars(secret, dec2, NONCE_SIZE, cs_NB);
     /*@ if (!col && !bad(server) && !bad(sender) && !bad(receiver))
         {
           assert [_]yahalom_pub_msg4(?server2, ?sender2,

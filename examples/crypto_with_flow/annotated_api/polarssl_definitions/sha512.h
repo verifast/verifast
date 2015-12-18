@@ -13,12 +13,13 @@ void sha512(const char *input, size_t ilen, char* output, int is384);
                is384 == 0 && olen == 64 ||
                is384 == 1 && olen == 48; @*/
   /*@ ensures  [f]crypto_chars(kind, input, ilen, cs_pay) &*&
+               exists(?cg) &*& cg == cg_hash(cs_pay) &*&
                kind == garbage ?
                  // got garbage as 
-                 crypto_chars(garbage, output, olen, _)
+                 crypto_chars(garbage, output, olen, chars_for_cg(cg))
                :
                  // normal output
-                 cryptogram(output, olen, _, cg_hash(cs_pay)); @*/
+                 cryptogram(output, olen, _, cg); @*/
 
 void sha512_hmac(const char *key, size_t keylen, const char *input, size_t ilen,
                  char *output, int is384);
@@ -31,11 +32,12 @@ void sha512_hmac(const char *key, size_t keylen, const char *input, size_t ilen,
                is384 == 1 && length == 48; @*/
   /*@ ensures  [f1]cryptogram(key, keylen, cs_key, cg_key) &*&
                [f2]crypto_chars(kind, input, ilen, cs_pay) &*&
+               exists(?cg) &*& cg == cg_hmac(p, c, cs_pay) &*&
                kind == garbage ?
                  // got garbage as input
-                 crypto_chars(garbage, output, length, chars_for_cg(cg_hmac(p, c, cs_pay)))
+                 crypto_chars(garbage, output, length, chars_for_cg(cg))
                :
                  // normal output
-                 cryptogram(output, length, _, cg_hmac(p, c, cs_pay)); @*/
+                 cryptogram(output, length, _, cg); @*/
 
 #endif

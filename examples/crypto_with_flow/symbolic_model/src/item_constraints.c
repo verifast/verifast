@@ -512,7 +512,8 @@ void check_tag2(char* buffer, char tag)
   /*@ requires [?f1]world(?pub) &*&
                principal(?principal, ?values_count) &*&
                [?f2]crypto_chars(?kind1, buffer, ?size, ?cs) &*&
-               size > TAG_LENGTH; @*/
+               size > TAG_LENGTH &*&
+               kind1 != garbage || decrypted_garbage(cs); @*/
   /*@ ensures  [f1]world(pub) &*&
                principal(principal, values_count) &*&
                [f2]crypto_chars(?kind2, buffer, size, cs) &*&
@@ -534,7 +535,6 @@ void check_tag2(char* buffer, char tag)
   //@ drop_append(TAG_LENGTH, full_tag(tag), drop(TAG_LENGTH, cs));
   //@ head_append(full_tag(tag), drop(TAG_LENGTH, cs));
   //@ assert [f2]crypto_chars(?kind2, buffer, size, cs);
-  //@ assert kind2 == memcmp_kinds_nequal_size(kind1, normal);
   /*@ switch(kind1)
       {
         case normal:
@@ -544,6 +544,12 @@ void check_tag2(char* buffer, char tag)
           assert kind2 == secret;
           public_crypto_chars(tb, TAG_LENGTH);
         case garbage:
+          structure s = known_value(1, normal, tb, TAG_LENGTH, full_tag(tag));
+          close exists(pair(nil, drop(TAG_LENGTH, cs)));
+          close has_structure(cs, s);
+          known_garbage_collision(buffer, size, s);
+          open has_structure(cs, s);
+          chars_to_secret_crypto_chars(buffer, size);
           assert true == col;
           crypto_chars_to_chars(tb, TAG_LENGTH);
           crypto_chars_to_chars(buffer, size);

@@ -145,12 +145,13 @@ struct item *symmetric_encryption(struct item *key, struct item *payload)
                           GCM_TAG_SIZE, tag) != 0)
       abort_crypto_lib("Gcm encryption failed");
     zeroize(iv_buffer, GCM_IV_SIZE);
+    //@ open exists(?enc_cg);
     //@ assert chars(r_cont, TAG_LENGTH, tag_cs);
     //@ assert chars(r_cont + TAG_LENGTH, GCM_TAG_SIZE, ?gcm_tag_cs);
     //@ public_chars(r_cont + TAG_LENGTH, GCM_TAG_SIZE);
     //@ assert iv == r_cont + TAG_LENGTH + GCM_TAG_SIZE;
     //@ assert encrypted == r_cont + TAG_LENGTH + GCM_ENT_SIZE;
-    //@ open cryptogram(encrypted, p_size, ?enc_cs, ?enc_cg);
+    //@ open cryptogram(encrypted, p_size, ?enc_cs, enc_cg);
     //@ list<char> ent1 = append(gcm_tag_cs, iv_cs);
     //@ public_generated_join(polarssl_pub(pub), gcm_tag_cs, iv_cs);
     //@ list<char> ent2 = cons(length(gcm_tag_cs), ent1);

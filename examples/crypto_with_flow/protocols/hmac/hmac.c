@@ -96,14 +96,15 @@ void receiver(char *key, int key_len, char *message)
     //@ open cryptogram(hmac, 64, ?hmac_cs, ?hmac_cg);
     //@ assert hmac_cg == cg_hmac(sender, id, msg_cs);
     //@ assert chars((void*) buffer + MESSAGE_SIZE, 64, ?hmac_cs2);
+    //@ public_chars((void*) buffer + MESSAGE_SIZE, 64);
     //@ chars_to_crypto_chars((void*) buffer + MESSAGE_SIZE, 64);
     if (memcmp((void*) buffer + MESSAGE_SIZE, hmac, 64) != 0) abort();
     //@ crypto_chars_join(buffer);
     //@ crypto_chars_to_chars(buffer, expected_size);
+    //@ public_crypto_chars(hmac, 64);
     
     /*@ if (!col && !bad(sender) && !bad(receiver))
-        {
-          public_chars(hmac, 64);
+        {  
           public_chars_extract(hmac, hmac_cg);
           open [_]hmac_pub(hmac_cg);
           assert (send(sender, receiver, msg_cs) == true); 
