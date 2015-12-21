@@ -63,7 +63,6 @@ clean :
 	rm -f src/*.o
 	rm -f src/*.vfmanifest
 	rm -f bin/symbolic.dll.vfmanifest
-	rm -f include/switch_primitives.gh
 	make -C protocols clean
 	$(call pprint_big, Cleaned symbolic model library)
 
