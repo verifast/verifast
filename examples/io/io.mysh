@@ -32,7 +32,7 @@ cd work-in-progress
       verifast_both -c -allow_assume producer-consumer-weak-iostyle.c
     cd ..
     cd 04-split-invar
-      verifast_both -c buffer.c
+      ifz3 verifast -prover z3 -c buffer.c
     cd ..
   cd ..
 cd ..
