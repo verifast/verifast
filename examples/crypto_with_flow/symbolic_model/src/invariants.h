@@ -93,7 +93,7 @@ fixpoint int polarssl_info_for_item(item i)
     case private_key_item(p0, c0):
       return cg_info(cg_private_key(p0, c0));
     case hmac_item(p0, c0, pay0):
-      return 0;
+      return cg_info(cg_symmetric_key(p0, c0));
     case symmetric_encrypted_item(p0, c0, pay0, ent0):
       return cg_info(cg_symmetric_key(p0, c0));
     case asymmetric_encrypted_item(p0, c0, pay0, ent0):

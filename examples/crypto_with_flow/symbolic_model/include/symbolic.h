@@ -238,9 +238,9 @@ void check_is_pair(struct item *item);
 
 struct item *create_pair(struct item *first, struct item *second);
   /*@ requires [?f0]world(?pub) &*&
-               item(first, ?f, pub) &*& item(second, ?s, pub); @*/
+               [?f1]item(first, ?f, pub) &*& [?f2]item(second, ?s, pub); @*/
   /*@ ensures  [f0]world(pub) &*&
-               item(first, f, pub) &*& item(second, s, pub) &*&
+               [f1]item(first, f, pub) &*& [f2]item(second, s, pub) &*&
                item(result, pair_item(f, s), pub); @*/
 
 struct item *pair_get_first(struct item *pair);
@@ -338,10 +338,10 @@ void check_is_hash(struct item *item);
   //@ ensures  [f]world(pub) &*& item(item, i, pub) &*& i == hash_item(_);
 
 struct item *create_hash(struct item *payload);
-  /*@ requires [?f]world(?pub) &*&
-               item(payload, ?pay, pub); @*/
-  /*@ ensures  [f]world(pub) &*&
-               item(payload, pay, pub) &*& item(result, ?hash, pub) &*&
+  /*@ requires [?f0]world(?pub) &*&
+               [?f1]item(payload, ?pay, pub); @*/
+  /*@ ensures  [f0]world(pub) &*&
+               [f1]item(payload, pay, pub) &*& item(result, ?hash, pub) &*&
                col ? true :
                  hash == hash_item(some(pay)); @*/
 
@@ -460,13 +460,22 @@ void check_is_hmac(struct item *item);
                i == hmac_item(_, _, _); @*/
 
 struct item *create_hmac(struct item *key, struct item *payload);
-  /*@ requires [?f]world(?pub) &*&
-               item(payload, ?pay, pub) &*& item(key, ?k, pub) &*&
+  /*@ requires [?f0]world(?pub) &*&
+               [?f1]item(payload, ?pay, pub) &*& [?f2]item(key, ?k, pub) &*&
                k == symmetric_key_item(?creator, ?id); @*/
-  /*@ ensures  [f]world(pub) &*&
-               item(payload, pay, pub) &*& item(key, k, pub) &*&
+  /*@ ensures  [f0]world(pub) &*&
+               [f1]item(payload, pay, pub) &*& [f2]item(key, k, pub) &*&
                item(result, ?hmac, pub) &*&
                col || hmac == hmac_item(creator, id, some(pay)); @*/
+
+/*@
+lemma void info_for_hmac_item(item key, item hmac);
+  requires [_]info_for_item(key, ?info1) &*&
+           key == symmetric_key_item(?p, ?c) &*&
+           [_]info_for_item(hmac, ?info2) &*&
+           hmac == hmac_item(p, c, _);
+  ensures  info1 == info2;
+@*/
 
 ///////////////////////////////////////////////////////////////////////////////
 // Symmetric encrypted item ///////////////////////////////////////////////////

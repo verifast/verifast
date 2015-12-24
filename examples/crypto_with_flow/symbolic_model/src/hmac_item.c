@@ -28,35 +28,35 @@ void check_is_hmac(struct item *item)
 }
 
 struct item *create_hmac(struct item *key, struct item *payload)
-  /*@ requires [?f]world(?pub) &*&
-               item(payload, ?pay, pub) &*& item(key, ?k, pub) &*&
+  /*@ requires [?f0]world(?pub) &*&
+               [?f1]item(payload, ?pay, pub) &*& [?f2]item(key, ?k, pub) &*&
                k == symmetric_key_item(?creator, ?id); @*/
-  /*@ ensures  [f]world(pub) &*&
-               item(payload, pay, pub) &*& item(key, k, pub) &*&
+  /*@ ensures  [f0]world(pub) &*&
+               [f1]item(payload, pay, pub) &*& [f2]item(key, k, pub) &*&
                item(result, ?hmac, pub) &*&
                col || hmac == hmac_item(creator, id, some(pay)); @*/
 {
-  //@ open [f]world(pub);
-  //@ open item(key, k, pub);
-  //@ assert key->content |-> ?k_cont &*& key->size |-> ?k_size;
+  //@ open [f0]world(pub);
+  //@ open [f2]item(key, k, pub);
+  //@ assert [f2]key->content |-> ?k_cont &*& [f2]key->size |-> ?k_size;
   check_valid_symmetric_key_item_size(key->size);
   //@ open [_]item_constraints(k, ?k_cs0, pub);
   //@ assert [_]ic_parts(k)(?k_tag, ?k_cs);
   //@ crypto_chars_limits(k_cont);
   //@ crypto_chars_split(k_cont, TAG_LENGTH);
   //@ WELL_FORMED(k_tag, k_cs, TAG_SYMMETRIC_KEY)
-  //@ assert crypto_chars(secret, k_cont,TAG_LENGTH, k_tag);
-  //@ assert crypto_chars(secret, k_cont + TAG_LENGTH, GCM_KEY_SIZE, k_cs);
+  //@ assert [f2]crypto_chars(secret, k_cont,TAG_LENGTH, k_tag);
+  //@ assert [f2]crypto_chars(secret, k_cont + TAG_LENGTH, GCM_KEY_SIZE, k_cs);
   //@ cryptogram k_cg = cg_symmetric_key(creator, id);
   //@ if (col) k_cg = chars_for_cg_sur(k_cs, tag_symmetric_key);
   //@ if (col) crypto_chars_to_chars(k_cont + TAG_LENGTH, GCM_KEY_SIZE);
   //@ if (col) public_chars_extract(k_cont + TAG_LENGTH, k_cg);
   //@ if (col) chars_to_secret_crypto_chars(k_cont + TAG_LENGTH, GCM_KEY_SIZE);
-  //@ close cryptogram(k_cont + TAG_LENGTH, GCM_KEY_SIZE, k_cs, k_cg);
+  //@ close [f2]cryptogram(k_cont + TAG_LENGTH, GCM_KEY_SIZE, k_cs, k_cg);
 
-  //@ open item(payload, pay, pub);
+  //@ open [f1]item(payload, pay, pub);
   //@ open [_]item_constraints(pay, ?pay_cs, pub);
-  //@ assert payload->content |-> ?p_cont &*& payload->size |-> ?p_size;
+  //@ assert [f1]payload->content |-> ?p_cont &*& [f1]payload->size |-> ?p_size;
   struct item* hmac = malloc(sizeof(struct item));
   if (hmac == 0){abort_crypto_lib("malloc of item failed");}
   hmac->size = TAG_LENGTH + HMAC_SIZE;
@@ -81,7 +81,7 @@ struct item *create_hmac(struct item *key, struct item *payload)
   //@ list<char> cs = append(cs_tag, h_cs);
   //@ chars_to_secret_crypto_chars(cont, TAG_LENGTH);
   //@ crypto_chars_join(cont);
-  //@ close [f]world(pub);
+  //@ close [f0]world(pub);
   //@ WELL_FORMED(cs_tag, h_cs, TAG_HMAC)
   //@ close ic_parts(h)(cs_tag, h_cs);
   /*@ if (col)
@@ -101,7 +101,21 @@ struct item *create_hmac(struct item *key, struct item *payload)
   return hmac;
   //@ open cryptogram(k_cont + TAG_LENGTH, GCM_KEY_SIZE, k_cs, k_cg);
   //@ crypto_chars_join(k_cont);
-  //@ close item(key, k, pub);
-  //@ close item(payload, pay, pub);
+  //@ close [f2]item(key, k, pub);
+  //@ close [f1]item(payload, pay, pub);
 }
 
+/*@
+
+lemma void info_for_hmac_item(item key, item hmac)
+  requires [_]info_for_item(key, ?info1) &*&
+           key == symmetric_key_item(?p, ?c) &*&
+           [_]info_for_item(hmac, ?info2) &*&
+           hmac == hmac_item(p, c, _);
+  ensures  info1 == info2;
+{
+  open [_]info_for_item(key, info1);
+  open [_]info_for_item(hmac, info2);   
+}
+
+@*/

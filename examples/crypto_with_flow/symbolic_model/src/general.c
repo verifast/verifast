@@ -6,9 +6,9 @@ void abort_crypto_lib(const char* message)
   //@ requires [?f]string(message, ?cs);
   //@ ensures  false;
 {
-  printf("An error has"); 
-  printf("occurred while"); 
-  printf("using the crypto"); 
+  printf("An error has "); 
+  printf("occurred while "); 
+  printf("using the crypto "); 
   printf("library:\n\n\t"); 
   printf("%s\n\nAborting...\n", message);
 
@@ -24,7 +24,7 @@ void *malloc_wrapper(int size)
   @*/
 {
   if (size > MAX_PACKAGE_SIZE)
-    abort_crypto_lib("requested humongous malloc!!!!!!!!");
+    abort_crypto_lib("Requested humongous malloc!!!!!!!!");
 
   void* result = malloc(size);
   if (result == 0)

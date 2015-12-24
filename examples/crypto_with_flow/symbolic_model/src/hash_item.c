@@ -26,15 +26,15 @@ void check_is_hash(struct item *item)
 }
 
 struct item *create_hash(struct item *payload)
-  /*@ requires [?f]world(?pub) &*&
-               item(payload, ?pay, pub); @*/
-  /*@ ensures  [f]world(pub) &*&
-               item(payload, pay, pub) &*& item(result, ?hash, pub) &*& 
+  /*@ requires [?f0]world(?pub) &*&
+               [?f1]item(payload, ?pay, pub); @*/
+  /*@ ensures  [f0]world(pub) &*&
+               [f1]item(payload, pay, pub) &*& item(result, ?hash, pub) &*& 
                col || hash == hash_item(some(pay)); @*/
 {
-  //@ open item(payload, pay, pub);
+  //@ open [f1]item(payload, pay, pub);
   //@ open [_]item_constraints(pay, ?pay_cs, pub);
-  //@ assert payload->content |-> ?p_cont &*& payload->size |-> ?p_size;
+  //@ assert [f1]payload->content |-> ?p_cont &*& [f1]payload->size |-> ?p_size;
   struct item* hash = malloc(sizeof(struct item));
   if (hash == 0){abort_crypto_lib("malloc of item failed");}
   
@@ -46,7 +46,7 @@ struct item *create_hash(struct item *payload)
     {abort_crypto_lib("Payload of hash was to small");}
   sha512(payload->content, (unsigned int) payload->size, hash->content + TAG_LENGTH, 0);
   
-  //@ open [f]world(pub);  
+  //@ open [f0]world(pub);  
   //@ assert hash->content |-> ?cont &*& hash->size |-> ?size;
   //@ public_chars(cont, TAG_LENGTH);
   //@ assert chars(cont, TAG_LENGTH, ?cs_tag);
@@ -61,7 +61,7 @@ struct item *create_hash(struct item *payload)
   //@ if (col) chars_to_secret_crypto_chars(cont + TAG_LENGTH, HASH_SIZE);
   //@ chars_to_secret_crypto_chars(cont, TAG_LENGTH);
   //@ crypto_chars_join(cont);
-  //@ close [f]world(pub);
+  //@ close [f0]world(pub);
   //@ close ic_parts(h)(cs_tag, cs_cont);
   //@ WELL_FORMED(cs_tag, cs_cont, TAG_HASH)
   //@ close well_formed_item_chars(h)(pay_cs);
@@ -71,5 +71,5 @@ struct item *create_hash(struct item *payload)
   //@ close item(hash, h, pub);
   
   return hash;
-  //@ close item(payload, pay, pub);
+  //@ close [f1]item(payload, pay, pub);
 }

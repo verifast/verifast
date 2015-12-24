@@ -238,14 +238,20 @@ lemma void PREFIX##_public_hmac(item hmac) \
             }; \
   ensures   [_]PREFIX##_pub(hmac); \
 { \
-  get_info_for_item(hmac); \
-  switch(pay) \
+  if (!col) \
   { \
-    case some(pay0): \
-      open [_]PREFIX##_pub(symmetric_key_item(p, c)); \
-      open [_]PREFIX##_pub(pay0); \
-    case none: \
-  }; \
+    get_info_for_item(hmac); \
+    assert [_]info_for_item(hmac, ?info0); \
+    switch(pay) \
+    { \
+      case some(pay0): \
+        item key = symmetric_key_item(p, c); \
+        open [_]PREFIX##_pub(key); \
+        assert [_]info_for_item(key, ?info1); \
+        info_for_hmac_item(key, hmac); \
+      case none: \
+    }; \
+  } \
   close PREFIX##_pub(hmac); \
   leak PREFIX##_pub(hmac); \
 }

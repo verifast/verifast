@@ -16,6 +16,8 @@
       SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
     case nonce_item(p_dummy##LEVEL, c_dummy##LEVEL, inc_dummy##LEVEL): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case hash_item(pay_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
     case symmetric_key_item(p_dummy##LEVEL, c_dummy##LEVEL): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
     case public_key_item(p_dummy##LEVEL, c_dummy##LEVEL): return \
@@ -54,6 +56,8 @@
       SWITCH_CRYPTO_PRIMITIVES_DOWN_I(second##NESTED, LEVEL ## I, NESTED ## I); \
     case nonce_item(s_dummy##LEVEL, c_dummy##LEVEL, inc_dummy##LEVEL): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case hash_item(pay_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
     case symmetric_key_item(p_dummy##LEVEL, c_dummy##LEVEL): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
     case public_key_item(p_dummy##LEVEL, c_dummy##LEVEL): return \
@@ -79,6 +83,8 @@
     case pair_item(f_ddummyII, s_ddummyII): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_I(INDUCTIVE); \
     case nonce_item(s_ddummyII, c_ddummyII, inc_ddummyII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_I(INDUCTIVE); \
+    case hash_item(pay_ddummyII): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_I(INDUCTIVE); \
     case symmetric_key_item(p_ddummyII, c_ddummyII): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_I(INDUCTIVE); \
@@ -110,6 +116,8 @@
       SWITCH_CRYPTO_PRIMITIVES_DOWN_II(second##NESTED, LEVEL ## I, NESTED ## I); \
     case nonce_item(s_dummy##LEVEL, c_dummy##LEVEL, inc_dummy##LEVEL): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case hash_item(pay_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
     case symmetric_key_item(p_dummy##LEVEL, c_dummy##LEVEL): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
     case public_key_item(p_dummy##LEVEL, c_dummy##LEVEL): return \
@@ -135,6 +143,8 @@
     case pair_item(f_ddummyIII, s_ddummyIII): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_II(INDUCTIVE); \
     case nonce_item(s_ddummyIII, c_ddummyIII, inc_ddummyIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_II(INDUCTIVE); \
+    case hash_item(pay_ddummyIII): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_II(INDUCTIVE); \
     case symmetric_key_item(p_ddummyIII, c_ddummyIII): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_II(INDUCTIVE); \
@@ -166,6 +176,8 @@
       SWITCH_CRYPTO_PRIMITIVES_DOWN_III(second##NESTED, LEVEL ## I, NESTED ## I); \
     case nonce_item(s_dummy##LEVEL, c_dummy##LEVEL, inc_dummy##LEVEL): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case hash_item(pay_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
     case symmetric_key_item(p_dummy##LEVEL, c_dummy##LEVEL): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
     case public_key_item(p_dummy##LEVEL, c_dummy##LEVEL): return \
@@ -191,6 +203,8 @@
     case pair_item(f_ddummyIIII, s_ddummyIIII): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_III(INDUCTIVE); \
     case nonce_item(s_ddummyIIII, c_ddummyIIII, inc_ddummyIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_III(INDUCTIVE); \
+    case hash_item(pay_ddummyIIII): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_III(INDUCTIVE); \
     case symmetric_key_item(p_ddummyIIII, c_ddummyIIII): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_III(INDUCTIVE); \
@@ -222,6 +236,8 @@
       SWITCH_CRYPTO_PRIMITIVES_DOWN_IIII(second##NESTED, LEVEL ## I, NESTED ## I); \
     case nonce_item(s_dummy##LEVEL, c_dummy##LEVEL, inc_dummy##LEVEL): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case hash_item(pay_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
     case symmetric_key_item(p_dummy##LEVEL, c_dummy##LEVEL): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
     case public_key_item(p_dummy##LEVEL, c_dummy##LEVEL): return \
@@ -247,6 +263,8 @@
     case pair_item(f_ddummyIIIII, s_ddummyIIIII): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_IIII(INDUCTIVE); \
     case nonce_item(s_ddummyIIIII, c_ddummyIIIII, inc_ddummyIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIII(INDUCTIVE); \
+    case hash_item(pay_ddummyIIIII): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_IIII(INDUCTIVE); \
     case symmetric_key_item(p_ddummyIIIII, c_ddummyIIIII): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_IIII(INDUCTIVE); \
@@ -278,6 +296,8 @@
       SWITCH_CRYPTO_PRIMITIVES_DOWN_IIIII(second##NESTED, LEVEL ## I, NESTED ## I); \
     case nonce_item(s_dummy##LEVEL, c_dummy##LEVEL, inc_dummy##LEVEL): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case hash_item(pay_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
     case symmetric_key_item(p_dummy##LEVEL, c_dummy##LEVEL): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
     case public_key_item(p_dummy##LEVEL, c_dummy##LEVEL): return \
@@ -303,6 +323,8 @@
     case pair_item(f_ddummyIIIIII, s_ddummyIIIIII): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_IIIII(INDUCTIVE); \
     case nonce_item(s_ddummyIIIIII, c_ddummyIIIIII, inc_ddummyIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIII(INDUCTIVE); \
+    case hash_item(pay_ddummyIIIIII): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_IIIII(INDUCTIVE); \
     case symmetric_key_item(p_ddummyIIIIII, c_ddummyIIIIII): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_IIIII(INDUCTIVE); \
@@ -334,6 +356,8 @@
       SWITCH_CRYPTO_PRIMITIVES_DOWN_IIIIII(second##NESTED, LEVEL ## I, NESTED ## I); \
     case nonce_item(s_dummy##LEVEL, c_dummy##LEVEL, inc_dummy##LEVEL): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case hash_item(pay_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
     case symmetric_key_item(p_dummy##LEVEL, c_dummy##LEVEL): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
     case public_key_item(p_dummy##LEVEL, c_dummy##LEVEL): return \
@@ -359,6 +383,8 @@
     case pair_item(f_ddummyIIIIIII, s_ddummyIIIIIII): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_IIIIII(INDUCTIVE); \
     case nonce_item(s_ddummyIIIIIII, c_ddummyIIIIIII, inc_ddummyIIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIIII(INDUCTIVE); \
+    case hash_item(pay_ddummyIIIIIII): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_IIIIII(INDUCTIVE); \
     case symmetric_key_item(p_ddummyIIIIIII, c_ddummyIIIIIII): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_IIIIII(INDUCTIVE); \
@@ -390,6 +416,8 @@
       SWITCH_CRYPTO_PRIMITIVES_DOWN_IIIIIII(second##NESTED, LEVEL ## I, NESTED ## I); \
     case nonce_item(s_dummy##LEVEL, c_dummy##LEVEL, inc_dummy##LEVEL): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case hash_item(pay_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
     case symmetric_key_item(p_dummy##LEVEL, c_dummy##LEVEL): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
     case public_key_item(p_dummy##LEVEL, c_dummy##LEVEL): return \
@@ -415,6 +443,8 @@
     case pair_item(f_ddummyIIIIIIII, s_ddummyIIIIIIII): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIII(INDUCTIVE); \
     case nonce_item(s_ddummyIIIIIIII, c_ddummyIIIIIIII, inc_ddummyIIIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIII(INDUCTIVE); \
+    case hash_item(pay_ddummyIIIIIIII): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIII(INDUCTIVE); \
     case symmetric_key_item(p_ddummyIIIIIIII, c_ddummyIIIIIIII): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIII(INDUCTIVE); \
@@ -446,6 +476,8 @@
       SWITCH_CRYPTO_PRIMITIVES_DOWN_IIIIIIII(second##NESTED, LEVEL ## I, NESTED ## I); \
     case nonce_item(s_dummy##LEVEL, c_dummy##LEVEL, inc_dummy##LEVEL): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case hash_item(pay_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
     case symmetric_key_item(p_dummy##LEVEL, c_dummy##LEVEL): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
     case public_key_item(p_dummy##LEVEL, c_dummy##LEVEL): return \
@@ -471,6 +503,8 @@
     case pair_item(f_ddummyIIIIIIIII, s_ddummyIIIIIIIII): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIIII(INDUCTIVE); \
     case nonce_item(s_ddummyIIIIIIIII, c_ddummyIIIIIIIII, inc_ddummyIIIIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIIII(INDUCTIVE); \
+    case hash_item(pay_ddummyIIIIIIIII): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIIII(INDUCTIVE); \
     case symmetric_key_item(p_ddummyIIIIIIIII, c_ddummyIIIIIIIII): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIIII(INDUCTIVE); \
@@ -502,6 +536,8 @@
       SWITCH_CRYPTO_PRIMITIVES_DOWN_IIIIIIIII(second##NESTED, LEVEL ## I, NESTED ## I); \
     case nonce_item(s_dummy##LEVEL, c_dummy##LEVEL, inc_dummy##LEVEL): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case hash_item(pay_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
     case symmetric_key_item(p_dummy##LEVEL, c_dummy##LEVEL): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
     case public_key_item(p_dummy##LEVEL, c_dummy##LEVEL): return \
@@ -527,6 +563,8 @@
     case pair_item(f_ddummyIIIIIIIIII, s_ddummyIIIIIIIIII): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIIIII(INDUCTIVE); \
     case nonce_item(s_ddummyIIIIIIIIII, c_ddummyIIIIIIIIII, inc_ddummyIIIIIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIIIII(INDUCTIVE); \
+    case hash_item(pay_ddummyIIIIIIIIII): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIIIII(INDUCTIVE); \
     case symmetric_key_item(p_ddummyIIIIIIIIII, c_ddummyIIIIIIIIII): return \
       SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIIIII(INDUCTIVE); \

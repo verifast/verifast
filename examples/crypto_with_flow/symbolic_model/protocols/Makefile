@@ -15,6 +15,7 @@ PROTOCOLS = \
 	secure_storage \
 	secure_storage_asym \
 	rpc \
+	recursive_otway_rees \
 
 PROT_APPS = $(foreach prot,$(PROTOCOLS),$(prot)/$(prot))
 

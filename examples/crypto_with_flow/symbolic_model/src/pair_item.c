@@ -27,24 +27,24 @@ void check_is_pair(struct item *item)
 
 struct item *create_pair(struct item *first, struct item *second)
   /*@ requires [?f0]world(?pub) &*&
-               item(first, ?f, pub) &*& item(second, ?s, pub); @*/
+               [?f1]item(first, ?f, pub) &*& [?f2]item(second, ?s, pub); @*/
   /*@ ensures  [f0]world(pub) &*&
-               item(first, f, pub) &*& item(second, s, pub) &*&
+               [f1]item(first, f, pub) &*& [f2]item(second, s, pub) &*&
                item(result, pair_item(f, s), pub); @*/
 {
   //@ open [f0]world(pub);
   struct item* pair = malloc(sizeof(struct item));
   if (pair == 0){abort_crypto_lib("malloc of item failed");}
 
-  //@ open item(first, f, pub);
-  //@ assert first->content |-> ?cont_f &*& first->size |-> ?size_f;
-  //@ assert crypto_chars(secret, cont_f, size_f, ?cs_f);
+  //@ open [f1]item(first, f, pub);
+  //@ assert [f1]first->content |-> ?cont_f &*& [f1]first->size |-> ?size_f;
+  //@ assert [f1]crypto_chars(secret, cont_f, size_f, ?cs_f);
   //@ assert [_]item_constraints(f, cs_f, pub);
   //@ well_formed_item_constraints(f, f);
   //@ open [_]well_formed_item_chars(f)(cs_f);
-  //@ open item(second, s, pub);
-  //@ assert second->content |-> ?cont_s &*& second->size |-> ?size_s;
-  //@ assert crypto_chars(secret, cont_s, size_s, ?cs_s);
+  //@ open [f2]item(second, s, pub);
+  //@ assert [f2]second->content |-> ?cont_s &*& [f2]second->size |-> ?size_s;
+  //@ assert [f2]crypto_chars(secret, cont_s, size_s, ?cs_s);
   //@ well_formed_item_constraints(s, s);
   //@ open [_]well_formed_item_chars(s)(cs_s);
   //@ assert [_]item_constraints(s, cs_s, pub);
@@ -60,11 +60,11 @@ struct item *create_pair(struct item *first, struct item *second)
     //@ chars_to_secret_crypto_chars(cont, TAG_LENGTH);
     char* temp = pair->content + TAG_LENGTH;
     //@ chars_split(cont + TAG_LENGTH, sizeof(int));
-    //@ assert integer(&first->size, ?flen);
+    //@ assert [f1]integer(&first->size, ?flen);
     //@ integer_to_chars(&first->size);
     //@ open chars((void*) &first->size, sizeof(int), chars_of_int(flen));
     //@ character_limits((void*) &first->size);
-    //@ close chars((void*) &first->size, sizeof(int), chars_of_int(flen));
+    //@ close [f1]chars((void*) &first->size, sizeof(int), chars_of_int(flen));
     //@ public_chars((void*) &first->size, sizeof(int));
     //@ public_chars((void*) &first->size, sizeof(int));
     //@ chars_to_crypto_chars((void*) &first->size, sizeof(int));
@@ -119,8 +119,8 @@ struct item *create_pair(struct item *first, struct item *second)
   //@ leak item_constraints(p, cs, pub);
   //@ close item(pair, p, pub);
 
-  //@ close item(first, f, pub);
-  //@ close item(second, s, pub);
+  //@ close [f1]item(first, f, pub);
+  //@ close [f2]item(second, s, pub);
   return pair;
   //@ close [f0]world(pub);
 }
