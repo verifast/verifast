@@ -606,7 +606,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     let _ = buffer#create_tag ~name:"ghostRangeDelimiter" [`FOREGROUND "Gray"] in
     let _ = buffer#create_tag ~name:"error" [`UNDERLINE `DOUBLE; `FOREGROUND "Red"] in
     let _ = buffer#create_tag ~name:"currentLine" [`BACKGROUND "Yellow"] in
-    let _ = buffer#create_tag ~name:"currentCaller" [`BACKGROUND "Green"] in
+    let _ = buffer#create_tag ~name:"currentCaller" [`BACKGROUND "#44FF44"] in
     let currentStepMark = buffer#create_mark (buffer#start_iter) in
     let currentCallerMark = buffer#create_mark (buffer#start_iter) in
     let mainView = create_editor textNotebook buffer lineMarksTable in
