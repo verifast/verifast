@@ -371,7 +371,7 @@ clean::
 vfide.cmx: Fonts.cmx vfide.ml $(GTKSOURCEVIEW_DEPS)
 	@echo "  OCAMLOPT " $@
 ifndef WITHOUT_GTKSOURCEVIEW
-	make -C linemarks OCAMLOPT=${OCAMLOPT} LABLGTK_FLAGS="$(LABLGTK_FLAGS_)" linemarks.cmxa
+	make -C linemarks OCAMLOPT=${OCAMLOPT} OCAMLCFLAGS="${OCAMLCFLAGS}" LABLGTK_FLAGS="$(LABLGTK_FLAGS_)" linemarks.cmxa
 endif
 	$(SET_LDD); $(OCAMLOPT) $(OCAMLCFLAGS) -thread -c -w p -warn-error FSU -c $(INCLUDES) \
 	-pp ${CAMLP4O} nums.cmxa $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) vfide.ml
