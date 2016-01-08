@@ -4,6 +4,7 @@ open Unix;;
 open Printf;;
 
 let releases = [ (* Add new releases to the front *)
+  "16.01", 1820;
   "15.12", 1807;
   "15.11", 1802;
   "15.05", 1738;
@@ -61,10 +62,10 @@ let sys cmd =
 let is_macos = Sys.os_type = "Unix" && sys "uname" = "Darwin"
 let is_64bit = Sys.word_size = 64
 
-let sh cmd =
+let sh ?(allow_fail = false) cmd =
   print_endline cmd;
   let result = Sys.command cmd in
-  if result <> 0 then failwith (Printf.sprintf "Command failed with exit code %d" result)
+  if result <> 0 && not allow_fail then failwith (Printf.sprintf "Command failed with exit code %d" result)
 
 let rm_Rf_cmd = match Sys.os_type with "Win32" -> "rmdir /s /q " | _ -> "rm -Rf "
 let rm_Rf dir = sh (rm_Rf_cmd ^ dir)
@@ -120,7 +121,19 @@ let () =
   let zipname = releasename ^ os_suffix ^ zipext in
   let zippath = ".." // ".." // zipname in
   if Sys.file_exists zippath then Sys.remove zippath;
-  create_zip zippath releasename;
+  let zippath_tentative = zippath ^ "_tentative" in
+  if Sys.file_exists zippath_tentative then Sys.remove zippath_tentative;
+  create_zip zippath_tentative releasename;
+  if is_macos then sh ~allow_fail:true "mv ~/gtk ~/gtk_";
+  Sys.chdir releasename;
+  print_endline "Please test the release. (Please test especially bin/vfide.)";
+  sh "bash";
+  Sys.chdir "..";
+  if is_macos then sh ~allow_fail:true "mv ~/gtk_ ~/gtk";
+  print_endline "Does the release work correctly? [yes/no]";
+  let release_works = read_line () in
+  if release_works <> "yes" then failwith "The release does not work.";
+  sh (Printf.sprintf "mv %s %s" zippath_tentative zippath);
   Sys.chdir (".." // "..");
   sh (sprintf "%s %s" ("." // "upload") zipname)
   with
