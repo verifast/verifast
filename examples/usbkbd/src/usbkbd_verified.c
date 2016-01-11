@@ -833,28 +833,24 @@ static int usb_kbd_event(struct input_dev *dev, unsigned int type,
 
 	//@ uints_to_chars(dev->led);
 	int tmp_left = test_bit(LED_KANA, dev->led);
-	tmp_left = tmp_left == 0 ? 0 : 1;
-	tmp_left = tmp_left << 3;
+	tmp_left = tmp_left == 0 ? 0 : 8;
 	
 	int tmp_right = test_bit(LED_COMPOSE, dev->led);
-	tmp_right = tmp_right == 0 ? 0 : 1;
-	tmp_right = tmp_right << 3;
+	tmp_right = tmp_right == 0 ? 0 : 8;
 	
-	tmp_left = tmp_left | tmp_right;
+	tmp_left = tmp_left == 8 ? tmp_left : tmp_right;
 
 	tmp_right = test_bit(LED_SCROLLL, dev->led);
-	tmp_right = tmp_right == 0 ? 0 : 1;
-	tmp_right = tmp_right << 2;
-	tmp_left = tmp_left | tmp_right;
+	tmp_right = tmp_right == 0 ? 0 : 4;
+	tmp_left = tmp_left + tmp_right;
 	
 	tmp_right = test_bit(LED_CAPSL, dev->led);
-	tmp_right = tmp_right == 0 ? 0 : 1;
-	tmp_right = tmp_right << 1;
-	tmp_left = tmp_left | tmp_right;
+	tmp_right = tmp_right == 0 ? 0 : 2;
+	tmp_left = tmp_left + tmp_right;
 	
 	tmp_right = test_bit(LED_NUML, dev->led);
 	tmp_right = tmp_right == 0 ? 0 : 1;
-	tmp_left = tmp_left | tmp_right;
+	tmp_left = tmp_left + tmp_right;
 	
 	kbd->newleds = (unsigned char)tmp_left;
 	
@@ -1653,7 +1649,8 @@ static int usb_kbd_probe(struct usb_interface *iface,
 	
 	//@ uchars_to_chars(cr);
 	//@ close_struct(cr);
-	kbd->cr->bRequestType = ((unsigned char) (USB_TYPE_CLASS | USB_RECIP_INTERFACE)); // ISSUE 1477.
+	kbd->cr->bRequestType = ((unsigned char) (USB_TYPE_CLASS + USB_RECIP_INTERFACE)); // ISSUE 1477.
+	// was: kbd->cr->bRequestType = ((unsigned char) (USB_TYPE_CLASS | USB_RECIP_INTERFACE)); // ISSUE 1477.
 	kbd->cr->bRequest = 0x09; // This is actually USB_REQ_SET_CONFIGURATION.
 	__le16 tmp_le16 = cpu_to_le16(0x200);
 	kbd->cr->wValue = /* cpu_to_le16(0x200); */ tmp_le16;

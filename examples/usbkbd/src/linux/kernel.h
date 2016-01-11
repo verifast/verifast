@@ -16,7 +16,7 @@
 int test_bit (int nr, const /*volatile*/ void *addr);
 /*@ requires
 	[?f]chars(addr, ?length, ?cs)
-	&*& length * 8 >= nr;
+	&*& length * 8 > nr;
 @*/
 //@ ensures [f]chars(addr, length, cs);
 
@@ -24,7 +24,7 @@ int test_bit (int nr, const /*volatile*/ void *addr);
 void set_bit(int nr, /*unsigned long*/ int *addr); // XXX ??? why unsigned long?
 /*@ requires
 	ints(addr,?length, ?contents)
-	&*& nr <= length * sizeof(int) * 8;
+	&*& nr < length * sizeof(int) * 8;
 @*/
 //@ ensures ints(addr,length,?new_contents);
 
@@ -32,7 +32,7 @@ void set_bit(int nr, /*unsigned long*/ int *addr); // XXX ??? why unsigned long?
 void clear_bit(int nr, /*volatile unsigned long*/ int *addr); // XXX unsigned long pointer thing
 /*@ requires
 	ints(addr, ?length, ?contents)
-	&*& nr <= length * sizeof(int) * 8;
+	&*& nr < length * sizeof(int) * 8;
 @*/
 //@ ensures ints(addr,length,?new_contents);
 
