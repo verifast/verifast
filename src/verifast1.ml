@@ -389,17 +389,23 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let max_char_big_int = big_int_of_string "127"
   let max_char_term = ctxt#mk_intlit_of_string "127"
   
+  let limits_of_type t =
+    match t with
+    | Char -> (min_char_term, max_char_term)
+    | UChar -> (min_uchar_term, max_uchar_term)
+    | ShortType -> (min_short_term, max_short_term)
+    | UShortType -> (min_ushort_term, max_ushort_term)
+    | IntType -> (min_int_term, max_int_term)
+    | UintPtrType | PtrType _ -> (int_zero_term, max_uint_term)
+  
   let get_unique_var_symb x t = 
     ctxt#mk_app (mk_symbol x [] (typenode_of_type t) Uninterp) []
   
   let assume_bounds term tp = 
     match tp with
-      Char -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_char_term term) (ctxt#mk_le term max_char_term));
-    | UChar -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_uchar_term term) (ctxt#mk_le term max_uchar_term));
-    | ShortType -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_short_term term) (ctxt#mk_le term max_short_term));
-    | UShortType -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_ushort_term term) (ctxt#mk_le term max_ushort_term));
-    | IntType -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_int_term term) (ctxt#mk_le term max_int_term));
-    | PtrType _ | UintPtrType -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) term) (ctxt#mk_le term max_ptr_term));
+      Char|UChar|ShortType|UShortType|IntType|UintPtrType|PtrType _ ->
+      let min, max = limits_of_type tp in
+      ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min term) (ctxt#mk_le term max))
     | _ -> ()
   
   let get_unique_var_symb_non_ghost x t = 
@@ -2823,7 +2829,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (w1, t1, _) = check e1 in
       let (w2, t2, _) = check e2 in
       begin match (t1, t2) with
-        ((Char|ShortType|IntType|UintPtrType), (Char|ShortType|IntType|UintPtrType)) ->
+        ((Char|UChar|ShortType|UShortType|IntType|UintPtrType), (Char|UChar|ShortType|UShortType|IntType|UintPtrType)) ->
         let t = match (t1, t2) with (UintPtrType, _) | (_, UintPtrType) -> UintPtrType | _ -> IntType in
         ts := Some [t1; t2];
         (Operation (l, BitAnd, [w1; w2], ts), t, None)
@@ -2834,7 +2840,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (_, t2, _) = check e2 in
       begin
       match t1 with
-        (Char | ShortType | IntType) -> let w2 = checkt e2 IntType in ts := Some [t1;t2]; (Operation (l, operator, [w1; w2], ts), IntType, None)
+        (Char|UChar|ShortType|UShortType|IntType) -> let w2 = checkt e2 IntType in ts := Some [t1;t2]; (Operation (l, operator, [w1; w2], ts), IntType, None)
       | UintPtrType -> let w2 = checkt e2 UintPtrType in (Operation (l, operator, [w1; w2], ts), UintPtrType, None)
       | _ -> static_error l "Arguments to bitwise operators must be integral types." None
       end
@@ -5210,18 +5216,10 @@ let check_if_list_is_defined () =
           if ass_term <> None && not (le_big_int zero_big_int n &&
 le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out of range." None;
           cont state (ctxt#mk_intlit_of_string (string_of_big_int n))
-        | (e, Char, false) ->
+        | (e, (Char|UChar|ShortType|UShortType|IntType|UintPtrType as tp), false) ->
           ev state e $. fun state t ->
-          cont state (check_overflow l min_char_term t max_char_term)
-        | (e, ShortType, false) ->
-          ev state e $. fun state t ->
-          cont state (check_overflow l min_short_term t max_short_term)
-        | (e, IntType, false) ->
-          ev state e $. fun state t ->
-          cont state (check_overflow l min_int_term t max_int_term)
-        | (e, UintPtrType, false) ->
-          ev state e $. fun state t ->
-          cont state (check_overflow l min_uint_term t max_uint_term)
+          let min, max = limits_of_type tp in
+          cont state (check_overflow l min t max)
         | (e, Char, true) ->
           ev state e $. fun state t ->
           cont state (ctxt#mk_app truncate_int8_symbol [t])
