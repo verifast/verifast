@@ -5,30 +5,30 @@
 #include "serialization.h"
 
 bool is_hash(struct item *item)
-  //@ requires [?f]world(?pub) &*& item(item, ?i, pub);
-  /*@ ensures  [f]world(pub) &*& item(item, i, pub) &*&
+  //@ requires [?f]world(?pub, ?key_clsfy) &*& item(item, ?i, pub);
+  /*@ ensures  [f]world(pub, key_clsfy) &*& item(item, i, pub) &*&
                result ? i == hash_item(_) : true; @*/
 {
-  //@ open [f]world(pub);
+  //@ open [f]world(pub, key_clsfy);
   //@ open item(item, i, pub);
   //@ open [_]item_constraints(i, ?cs, pub);
   return item_tag(item->content, item->size) == TAG_HASH;
   //@ close item(item, i, pub);
-  //@ close [f]world(pub);
+  //@ close [f]world(pub, key_clsfy);
 }
 
 void check_is_hash(struct item *item)
-  //@ requires [?f]world(?pub) &*& item(item, ?i, pub);
-  //@ ensures  [f]world(pub) &*& item(item, i, pub) &*& i == hash_item(_);
+  //@ requires [?f]world(?pub, ?key_clsfy) &*& item(item, ?i, pub);
+  //@ ensures  [f]world(pub, key_clsfy) &*& item(item, i, pub) &*& i == hash_item(_);
 {
   if (!is_hash(item))
     abort_crypto_lib("Presented item is not a hash");
 }
 
 struct item *create_hash(struct item *payload)
-  /*@ requires [?f0]world(?pub) &*&
+  /*@ requires [?f0]world(?pub, ?key_clsfy) &*&
                [?f1]item(payload, ?pay, pub); @*/
-  /*@ ensures  [f0]world(pub) &*&
+  /*@ ensures  [f0]world(pub, key_clsfy) &*&
                [f1]item(payload, pay, pub) &*& item(result, ?hash, pub) &*& 
                col || hash == hash_item(some(pay)); @*/
 {
@@ -46,7 +46,7 @@ struct item *create_hash(struct item *payload)
     {abort_crypto_lib("Payload of hash was to small");}
   sha512(payload->content, (unsigned int) payload->size, hash->content + TAG_LENGTH, 0);
   
-  //@ open [f0]world(pub);  
+  //@ open [f0]world(pub, key_clsfy);  
   //@ assert hash->content |-> ?cont &*& hash->size |-> ?size;
   //@ public_chars(cont, TAG_LENGTH);
   //@ assert chars(cont, TAG_LENGTH, ?cs_tag);
@@ -61,7 +61,7 @@ struct item *create_hash(struct item *payload)
   //@ if (col) chars_to_secret_crypto_chars(cont + TAG_LENGTH, HASH_SIZE);
   //@ chars_to_secret_crypto_chars(cont, TAG_LENGTH);
   //@ crypto_chars_join(cont);
-  //@ close [f0]world(pub);
+  //@ close [f0]world(pub, key_clsfy);
   //@ close ic_parts(h)(cs_tag, cs_cont);
   //@ WELL_FORMED(cs_tag, cs_cont, TAG_HASH)
   //@ close well_formed_item_chars(h)(pay_cs);

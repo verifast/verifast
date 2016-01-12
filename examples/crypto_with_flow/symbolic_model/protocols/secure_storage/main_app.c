@@ -16,7 +16,7 @@ struct ss_args
 
 /*@
 predicate_family_instance pthread_run_pre(attacker_t)(void *data, any info) =
-    exists(ss_pub) &*& [_]world(ss_pub) &*&
+    exists(ss_pub) &*& [_]world(ss_pub, ss_key_clsfy) &*&
     ss_args_attacker(data, ?attacker) &*&
     true == bad(attacker) &*&
     principal(attacker, _) &*&
@@ -42,7 +42,7 @@ inductive info =
 ;
 
 predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) =
-  [_]world(ss_pub) &*&
+  [_]world(ss_pub, ss_key_clsfy) &*&
   ss_args_key(data, ?key) &*&    
     item(key, symmetric_key_item(?sender, _), ss_pub) &*&
   principal(sender, _) &*&
@@ -72,7 +72,7 @@ void *receiver_t(void* data) //@ : pthread_run_joinable
 
 /*@
 predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
-  [_]world(ss_pub) &*& 
+  [_]world(ss_pub, ss_key_clsfy) &*& 
   ss_args_key(data, ?key) &*&
     item(key, symmetric_key_item(?sender, _), ss_pub) &*&
   principal(?receiver, _) &*&
@@ -99,7 +99,6 @@ void *sender_t(void* data) //@ : pthread_run_joinable
   struct item *key = args->key;
   //@ assert principal(?p, ?c);
   //@ item nonce = nonce_item(p, c + 1, 0);
-  //@ get_info_for_item(nonce);
   //@ close ss_pub(nonce);
   //@ leak ss_pub(nonce);
   int i = random_int();
@@ -107,8 +106,7 @@ void *sender_t(void* data) //@ : pthread_run_joinable
   //@ assert item(key, symmetric_key_item(?sender, _), ss_pub);
   //@ item datai = data_item(chars_of_int(i));
   //@ assume (app_send_event(sender, datai));
-  //@ assert [_]world(ss_pub);
-  //@ get_info_for_item(datai);
+  //@ assert [_]world(ss_pub, ss_key_clsfy);
   //@ close ss_pub(datai);
   //@ leak ss_pub(datai);
   app_send(key, message);
@@ -146,7 +144,7 @@ int main() //@ : main_full(main_app)
   //@ close key_request(sender, int_pair(0, 0));
   s_key = create_symmetric_key();
   r_key = item_clone(s_key);
-  //@ leak  world(ss_pub);
+  //@ leak  world(ss_pub, ss_key_clsfy);
   
   void *null = (void *) 0;
 
@@ -166,7 +164,7 @@ int main() //@ : main_full(main_app)
 #else
   while (true)
 #endif
-    /*@ invariant [_]world(ss_pub) &*& 
+    /*@ invariant [_]world(ss_pub, ss_key_clsfy) &*& 
           principal(sender, _) &*&
           principal(receiver, _) &*&
           item(s_key, symmetric_key_item(sender, _), ss_pub) &*&

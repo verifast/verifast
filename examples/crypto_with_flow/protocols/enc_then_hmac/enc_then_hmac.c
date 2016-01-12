@@ -27,6 +27,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
              [f2]cryptogram(hmac_key, KEY_SIZE, hmac_key_cs, hmac_key_cg) &*&
              [f3]crypto_chars(secret, msg, msg_len, msg_cs); @*/
 {
+  //@ open principal(sender, _);
   int socket;
   havege_state havege_state;
 
@@ -88,9 +89,9 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
                 message + 16 + (int) msg_len, 0);
     //@ assert cryptogram(message + 16 + msg_len, 64, ?hmac_cs, ?hmac_cg);
     //@ assert hmac_cg == cg_hmac(sender, hmac_id, append(iv_cs, enc_cs));
-    /*@ if (!col && !enc_then_hmac_public_key(sender, enc_id))
+    /*@ if (!col && !enc_then_hmac_public_key(sender, enc_id, true))
           close enc_then_hmac_pub_1(enc_id, msg_cs, iv_cs); @*/
-    /*@ if (col || enc_then_hmac_public_key(sender, enc_id))
+    /*@ if (col || enc_then_hmac_public_key(sender, enc_id, true))
         { 
           assert [_]public_generated(enc_then_hmac_pub)(iv_cs);
           assert [_]public_generated(enc_then_hmac_pub)(enc_cs);
@@ -109,10 +110,12 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
     free(message);
   }
   net_close(socket);
+  //@ close principal(sender, _);
 }
 
 int receiver(char *enc_key, char *hmac_key, char *msg)
 /*@ requires [_]public_invar(enc_then_hmac_pub) &*&
+             [_]decryption_key_classifier(enc_then_hmac_public_key) &*&
              principal(?receiver, _) &*&
              [?f1]cryptogram(enc_key, KEY_SIZE, ?enc_key_cs, ?enc_key_cg) &*&
              [?f2]cryptogram(hmac_key, KEY_SIZE, ?hmac_key_cs, ?hmac_key_cg) &*&
@@ -130,6 +133,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
              col || bad(sender) || bad(receiver) ||
                (kind == secret && send(sender, receiver, msg_cs)); @*/
 {
+  //@ open principal(receiver, _);
   int socket1;
   int socket2;
 
@@ -190,6 +194,8 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     if (aes_setkey_enc(&aes_context, enc_key,
                         (unsigned int) (KEY_SIZE * 8)) != 0)
       abort();
+    //@ structure s = known_value(0, dec_cs2);
+    //@ close decryption_request(true, receiver, s, initial_request, enc_cs);
     if (aes_crypt_cfb128(&aes_context, AES_DECRYPT, (unsigned int) enc_size,
                          &iv_off, iv, buffer + 16, msg) != 0)
       abort();  
@@ -199,12 +205,13 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ open aes_context(&aes_context);
     //@ public_cryptogram_extract(buffer + 16);
     //@ public_cryptogram(buffer + 16, enc_cg);
-
+    /*@ open decryption_response(true, receiver, s, initial_request,
+                                 ?wrong_key, sender, enc_id, ?dec_cs); @*/
     /*@ if (!col)
         {
           open [_]enc_then_hmac_pub(hmac_cg);
           open [_]enc_then_hmac_pub(enc_cg);
-          if (!bad(sender) && !bad(shared_with(sender, enc_id)))
+          if (!enc_then_hmac_public_key(sender, enc_id, true))
           {
             assert [_]enc_then_hmac_pub_1(?id, ?dec_cs3, ?ent);
             cryptogram enc_cg3 = cg_encrypted(sender, id, dec_cs3, ent);
@@ -218,13 +225,17 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
             assert chars_for_cg(enc_cg) == chars_for_cg(enc_cg3);
             chars_for_cg_inj(enc_cg, enc_cg3);
             assert dec_cs2 == dec_cs3;
+            close exists(pair(nil, nil));
+            close has_structure(dec_cs2, s);
+            leak has_structure(dec_cs2, s);
           }
         }
         else
         {
           chars_to_secret_crypto_chars(msg, enc_size);
         }
-    @*/    
+    @*/  
+    //@ if (wrong_key) decryption_with_wrong_key(msg, enc_size, s);
     //@ open hide_chars((void*) buffer + size, max_size - size, _);
     //@ crypto_chars_to_chars(buffer, 16);
     //@ chars_join(buffer);
@@ -234,4 +245,5 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
   net_close(socket2);
   net_close(socket1);
   return enc_size;
+  //@ close principal(receiver, _);
 }

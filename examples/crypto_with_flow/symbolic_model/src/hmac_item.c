@@ -6,21 +6,21 @@
 #include "serialization.h"
 
 bool is_hmac(struct item *item)
-  //@ requires [?f]world(?pub) &*& item(item, ?i, pub);
-  /*@ ensures  [f]world(pub) &*& item(item, i, pub) &*&
+  //@ requires [?f]world(?pub, ?key_clsfy) &*& item(item, ?i, pub);
+  /*@ ensures  [f]world(pub, key_clsfy) &*& item(item, i, pub) &*&
                result ? i == hmac_item(_, _, _) : true; @*/
 {
-  //@ open [f]world(pub);
+  //@ open [f]world(pub, key_clsfy);
   //@ open item(item, i, pub);
   //@ open [_]item_constraints(i, ?cs, pub);
   return item_tag(item->content, item->size) == TAG_HMAC;
   //@ close item(item, i, pub);
-  //@ close [f]world(pub);
+  //@ close [f]world(pub, key_clsfy);
 }
 
 void check_is_hmac(struct item *item)
-  //@ requires [?f]world(?pub) &*& item(item, ?i, pub);
-  /*@ ensures  [f]world(pub) &*& item(item, i, pub) &*&
+  //@ requires [?f]world(?pub, ?key_clsfy) &*& item(item, ?i, pub);
+  /*@ ensures  [f]world(pub, key_clsfy) &*& item(item, i, pub) &*&
                i == hmac_item(_, _, _); @*/
 {
   if (!is_hmac(item))
@@ -28,15 +28,15 @@ void check_is_hmac(struct item *item)
 }
 
 struct item *create_hmac(struct item *key, struct item *payload)
-  /*@ requires [?f0]world(?pub) &*&
+  /*@ requires [?f0]world(?pub, ?key_clsfy) &*&
                [?f1]item(payload, ?pay, pub) &*& [?f2]item(key, ?k, pub) &*&
                k == symmetric_key_item(?creator, ?id); @*/
-  /*@ ensures  [f0]world(pub) &*&
+  /*@ ensures  [f0]world(pub, key_clsfy) &*&
                [f1]item(payload, pay, pub) &*& [f2]item(key, k, pub) &*&
                item(result, ?hmac, pub) &*&
                col || hmac == hmac_item(creator, id, some(pay)); @*/
 {
-  //@ open [f0]world(pub);
+  //@ open [f0]world(pub, key_clsfy);
   //@ open [f2]item(key, k, pub);
   //@ assert [f2]key->content |-> ?k_cont &*& [f2]key->size |-> ?k_size;
   check_valid_symmetric_key_item_size(key->size);
@@ -81,7 +81,7 @@ struct item *create_hmac(struct item *key, struct item *payload)
   //@ list<char> cs = append(cs_tag, h_cs);
   //@ chars_to_secret_crypto_chars(cont, TAG_LENGTH);
   //@ crypto_chars_join(cont);
-  //@ close [f0]world(pub);
+  //@ close [f0]world(pub, key_clsfy);
   //@ WELL_FORMED(cs_tag, h_cs, TAG_HMAC)
   //@ close ic_parts(h)(cs_tag, h_cs);
   /*@ if (col)
@@ -104,18 +104,3 @@ struct item *create_hmac(struct item *key, struct item *payload)
   //@ close [f2]item(key, k, pub);
   //@ close [f1]item(payload, pay, pub);
 }
-
-/*@
-
-lemma void info_for_hmac_item(item key, item hmac)
-  requires [_]info_for_item(key, ?info1) &*&
-           key == symmetric_key_item(?p, ?c) &*&
-           [_]info_for_item(hmac, ?info2) &*&
-           hmac == hmac_item(p, c, _);
-  ensures  info1 == info2;
-{
-  open [_]info_for_item(key, info1);
-  open [_]info_for_item(hmac, info2);   
-}
-
-@*/

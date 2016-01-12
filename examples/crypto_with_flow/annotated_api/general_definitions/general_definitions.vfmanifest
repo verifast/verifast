@@ -1,10 +1,12 @@
 # auxiliary_definitions.gh
 .provides ./auxiliary_definitions.gh#int_left_int_pair
-.provides ./auxiliary_definitions.gh#int_right_int_pair
 #
 #
 # principals.gh
 .predicate @./principals.gh#principals
+.predicate @./principals.gh#random_permission
+.predicate @./principals.gh#decryption_permission
+.predicate @./principals.gh#principal
 .provides ./principals.gh#principals_init
 .provides ./principals.gh#principals_exit
 .provides ./principals.gh#principal_create
@@ -32,12 +34,6 @@
 .provides ./cryptogram_levels.gh#cg_level_ind
 #
 #
-# garbage_chars.gh
-.provides ./garbage_chars.gh#bad_garbage_crypto_chars
-.predicate @./garbage_chars.gh#has_structure
-.provides ./garbage_chars.gh#known_garbage_collision
-#
-#
 # public_invariant.gh
 .provides ./public_invariant.gh#public_invariant_init
 .predicate @./public_invariant.gh#public_invar
@@ -49,7 +45,18 @@
 # public_chars.gh
 .provides ./public_chars.gh#public_chars
 .provides ./public_chars.gh#public_crypto_chars
+.provides ./auxiliary_definitions.gh#int_right_int_pair
 #
 #
 # zeroize.h
 .provides ./zeroize.h#zeroize
+#
+#
+# decryption.gh
+.predicate @./decryption.gh#decryption_key_classifier
+.predicate @./decryption.gh#decryption_request
+.predicate @./decryption.gh#decryption_with_wrong_key
+.predicate @./decryption.gh#has_structure
+.provides ./decryption.gh#decryption_init
+.provides ./decryption.gh#decryption_with_wrong_key
+.produces module decryption_mod

@@ -20,9 +20,13 @@ fixpoint bool app_send_event(int sender, item message);
 // Definition of pub for this protocol ////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
+fixpoint bool ss_key_clsfy(int p, int c, bool sym)
+{
+  return true == bad(p);
+}
+
 predicate ss_pub(item i) =
   col ? true :
-  [_]info_for_item(i, ?info0) &*&
   switch (i) 
   {
     case data_item(d0):
@@ -32,20 +36,14 @@ predicate ss_pub(item i) =
              [_]ss_pub(s0);
     case nonce_item(p0, c0, inc0): 
       return true;
-    case hash_item(pay0): return
-      switch (pay0)
-      {
-        case some(pay1):
-          return [_]ss_pub(pay1);
-        case none:
-          return true;
-      };
+    case hash_item(pay0):
+      return true;
     case symmetric_key_item(p0, c0):
-      return true == bad(p0);
+      return true == ss_key_clsfy(p0, c0, true);
     case public_key_item(p0, c0):
       return true;
     case private_key_item(p0, c0):
-      return true == bad(p0);
+      return true == ss_key_clsfy(p0, c0, false);
     case hmac_item(p0, c0, pay0): return
       switch(pay0)
       {
@@ -88,21 +86,21 @@ predicate ss_pub(item i) =
 ///////////////////////////////////////////////////////////////////////////////
 
 void app_send(struct item *key, struct item *message);
-  /*@ requires [?f0]world(ss_pub) &*& principal(?p, ?c) &*&
+  /*@ requires [?f0]world(ss_pub, ss_key_clsfy) &*& principal(?p, ?c) &*&
                item(key, symmetric_key_item(?creator, ?id), ss_pub) &*& 
                item(message, ?msg, ss_pub) &*& [_]ss_pub(msg) &*&
                app_send_event(creator, msg) == true;
   @*/
-  /*@ ensures  [f0]world(ss_pub) &*& principal(p, c) &*&
+  /*@ ensures  [f0]world(ss_pub, ss_key_clsfy) &*& principal(p, c) &*&
                item(key, symmetric_key_item(creator, id), ss_pub) &*&
                item(message, msg, ss_pub);
   @*/
 
 struct item *app_receive(struct item *key);
-  /*@ requires [?f0]world(ss_pub) &*& principal(?p, ?c) &*&
+  /*@ requires [?f0]world(ss_pub, ss_key_clsfy) &*& principal(?p, ?c) &*&
                item(key, symmetric_key_item(?creator, ?id), ss_pub);
   @*/
-  /*@ ensures  [f0]world(ss_pub) &*& principal(p, c) &*&
+  /*@ ensures  [f0]world(ss_pub, ss_key_clsfy) &*& principal(p, c) &*&
                item(key, symmetric_key_item(creator, id), ss_pub) &*&
                item(result, ?msg, ss_pub) &*& 
                col || bad(creator) || app_send_event(creator, msg);

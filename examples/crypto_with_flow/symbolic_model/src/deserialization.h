@@ -18,19 +18,19 @@ lemma void deserialize_item(list<char> cs, predicate(item) pub);
 @*/
 
 void parse_item(char* buffer, int size);
-  /*@ requires [?f1]world(?pub) &*&
+  /*@ requires [?f1]world(?pub, ?key_clsfy) &*&
                [?f2]crypto_chars(?kind, buffer, size, ?cs) &*&
-               kind != garbage &*& size > TAG_LENGTH &*&
+               size > TAG_LENGTH &*&
                kind == normal ? true :
                  [_]item_constraints(?i, cs, pub); @*/
-  /*@ ensures  [f1]world(pub) &*&
+  /*@ ensures  [f1]world(pub, key_clsfy) &*&
                [f2]crypto_chars(kind, buffer, size, cs) &*&
                true == well_formed(cs, nat_length(cs)); @*/
 
 struct item* deserialize(char* buffer, int size);
-  /*@ requires [?f0]world(?pub) &*&
+  /*@ requires [?f0]world(?pub, ?key_clsfy) &*&
                [?f1]chars(buffer, size, ?cs); @*/
-  /*@ ensures  [f0]world(pub) &*&
+  /*@ ensures  [f0]world(pub, key_clsfy) &*&
                [f1]chars(buffer, size, cs) &*&
                item(result, ?i, pub) &*& [_]pub(i); @*/
 

@@ -47,16 +47,27 @@ void write_identifier(char *array, int id)
 
 void check_identifier(char *array, int id)
   /*@ requires [_]public_invar(?pub) &*&
-               principal(?p, ?c) &*& 
+               [_]decryption_key_classifier(?key_classifier) &*&
+               network_permission(?p) &*& 
                [?f]crypto_chars(?kind, array, ?size, ?cs) &*&
                size >= ID_SIZE &*&
-               kind != garbage || decrypted_garbage(cs); @*/
-  /*@ ensures  principal(p, c) &*& 
+               check_identifier_ghost_args(?sym, ?wrong_key, ?p_key, ?c_key) &*&
+               wrong_key ?
+                 decryption_with_wrong_key(sym, p, ?s, p_key, c_key, cs) &*&
+                 s == known_value(0, identifier(id))
+               :
+                 true; @*/
+  /*@ ensures  network_permission(p) &*& 
                [f]crypto_chars(secret, array, size, cs) &*&
                take(ID_SIZE, cs) == identifier(id) &*&
                [_]public_generated(pub)(take(ID_SIZE, cs)) &*&
-               kind != garbage || col; @*/
+               wrong_key ?
+                 decryption_permission(p) &*& 
+                 key_classifier(p_key, c_key, sym) ? true : col
+               :
+                 true; @*/
 {
+  //@ open check_identifier_ghost_args(sym, wrong_key, p_key, c_key);
   char temp[ID_SIZE];
   write_identifier(temp, id);
   //@ crypto_chars_to_chars(temp, ID_SIZE);
@@ -65,18 +76,20 @@ void check_identifier(char *array, int id)
   if (memcmp(temp, array, ID_SIZE) != 0) abort();
   //@ public_crypto_chars(temp, ID_SIZE);
   //@ assert [f]crypto_chars(kind, array, size, cs);
+  /*@ if (wrong_key)
+      {
+        assert decryption_with_wrong_key(sym, p, ?s, p_key, c_key, cs);
+        close exists(pair(nil, drop(ID_SIZE, cs)));
+        close has_structure(cs, s);
+        leak has_structure(cs, s);
+        decryption_with_wrong_key(array, size, s);
+      }
+  @*/
   /*@ switch (kind)
       {
         case normal:
           chars_to_secret_crypto_chars(array, size);
         case secret:
-        case garbage:
-          structure s = known_value(1, normal, temp, ID_SIZE, identifier(id));
-          close exists(pair(nil, drop(ID_SIZE, cs)));
-          close has_structure(cs, s);
-          known_garbage_collision(array, size, s);
-          open has_structure(cs, s);
-          chars_to_secret_crypto_chars(array, size);
       }
   @*/
 }

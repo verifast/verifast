@@ -3,7 +3,7 @@
 
 //@ #include <crypto.gh>
 //@ #include "public_chars.gh"
-//@ #include "garbage_chars.gh"
+//@ #include "decryption.gh"
 
 #define ID_SIZE 12
 
@@ -28,16 +28,31 @@ void write_identifier(char *array, int id);
   /*@ ensures  crypto_chars(normal, array, ID_SIZE, identifier(id)) &*&
                [_]public_generated(pub)(identifier(id)); @*/
 
+/*@
+predicate check_identifier_ghost_args(bool sym, bool wrong_key, 
+                                      int p_key, int c_key) = true;
+@*/
+  
 void check_identifier(char *array, int id);
   /*@ requires [_]public_invar(?pub) &*&
-               principal(?p, ?c) &*& 
+               [_]decryption_key_classifier(?key_classifier) &*&
+               network_permission(?p) &*& 
                [?f]crypto_chars(?kind, array, ?size, ?cs) &*&
                size >= ID_SIZE &*&
-               kind != garbage || decrypted_garbage(cs); @*/
-  /*@ ensures  principal(p, c) &*& 
+               check_identifier_ghost_args(?sym, ?wrong_key, ?p_key, ?c_key) &*&
+               wrong_key ?
+                 decryption_with_wrong_key(sym, p, ?s, p_key, c_key, cs) &*&
+                 s == known_value(0, identifier(id))
+               :
+                 true; @*/
+  /*@ ensures  network_permission(p) &*& 
                [f]crypto_chars(secret, array, size, cs) &*&
                take(ID_SIZE, cs) == identifier(id) &*&
                [_]public_generated(pub)(take(ID_SIZE, cs)) &*&
-               kind != garbage || col; @*/
+               wrong_key ?
+                 decryption_permission(p) &*& 
+                 key_classifier(p_key, c_key, sym) ? true : col
+               :
+                 true; @*/
 
 #endif

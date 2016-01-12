@@ -4,8 +4,8 @@
 #define APP_RECEIVE_PORT 121212
 
 void send()
-  //@ requires [?f0]world(dummy_pub) &*& principal(?p, ?c); 
-  //@ ensures  [f0]world(dummy_pub) &*& principal(p, c);
+  //@ requires [?f0]world(dummy_pub, dummy_key_clsfy) &*& principal(?p, ?c); 
+  //@ ensures  [f0]world(dummy_pub, dummy_key_clsfy) &*& principal(p, c);
 {
     struct network_status *net_stat = 
                                  network_connect("localhost", APP_RECEIVE_PORT);
@@ -13,7 +13,6 @@ void send()
     char i;
     struct item *m = create_data_item_from_int(i);
     //@ assert item(m, ?data, dummy_pub);
-    //@ get_info_for_item(data);
     //@ close dummy_pub(data);
     //@ leak dummy_pub(data);
     network_send(net_stat, m);
@@ -23,17 +22,13 @@ void send()
 }
 
 struct item *receive()
-  //@ requires [?f0]world(dummy_pub) &*& principal(?p, ?c); 
-  /*@ ensures  [f0]world(dummy_pub) &*& principal(p, c) &*&
+  //@ requires [?f0]world(dummy_pub, dummy_key_clsfy) &*& principal(?p, ?c); 
+  /*@ ensures  [f0]world(dummy_pub, dummy_key_clsfy) &*& principal(p, c) &*&
                item(result, ?msg, dummy_pub) &*&  msg == data_item(_); @*/
 {
     struct network_status *net_stat = network_bind_and_accept(APP_RECEIVE_PORT);
-    
-    //@ PACK_PROOF_OBLIGATIONS(dummy)
     struct item *m = network_receive(net_stat);
     check_is_data(m);
-    //@ leak proof_obligations(dummy_pub);
-    
     network_disconnect(net_stat);
     return m;
 }

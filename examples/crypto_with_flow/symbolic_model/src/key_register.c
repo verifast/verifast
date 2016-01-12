@@ -68,14 +68,14 @@ void key_registry_exit()
 }
 
 void register_public_key(int participant, struct item *key)
-  /*@ requires world(?pub) &*&
+  /*@ requires world(?pub, ?key_clsfy) &*&
                item(key, public_key_item(participant, 1), pub); @*/
-  /*@ ensures  world(pub) &*&
+  /*@ ensures  world(pub, key_clsfy) &*&
                item(key, public_key_item(participant, 1), pub); @*/
 {
   struct item* clone = item_clone(key);
 
-  //@ open world(pub);
+  //@ open world(pub, key_clsfy);
   struct key_registry *kr = malloc(sizeof(struct key_registry));
   if (kr == 0) {abort_crypto_lib("malloc failed");}
 
@@ -88,16 +88,16 @@ void register_public_key(int participant, struct item *key)
   //@ assert pointer(&registered_keys, ?head);
   //@ close key_registry(head, pub);
   //@ close key_registry_initialized(pub);
-  //@ close world(pub);
+  //@ close world(pub, key_clsfy);
 }
 
 struct item *get_public_key(int participant)
-  //@ requires [?f]world(?pub);
-  /*@ ensures  [f]world(pub) &*&
+  //@ requires [?f]world(?pub, ?key_clsfy);
+  /*@ ensures  [f]world(pub, key_clsfy) &*&
                item(result, public_key_item(participant, 1), pub);
   @*/
 {
-  //@ open [f]world(pub);
+  //@ open [f]world(pub, key_clsfy);
   //@ open [f]key_registry_initialized(pub);
 
   if (participant < 1)
@@ -135,5 +135,5 @@ struct item *get_public_key(int participant)
 
   return result;
   //@ close [f]key_registry_initialized(pub);
-  //@ close [f]world(pub);
+  //@ close [f]world(pub, key_clsfy);
 }

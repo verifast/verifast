@@ -50,12 +50,12 @@ int aes_crypt_cfb128(aes_context *ctx, int mode, size_t length, size_t *iv_off,
                cryptogram(iv, 16, ?iv_cs, ?iv_cg) &*&  u_integer(iv_off, 0) &*&
                chars(output, length, _) &*& mode == AES_ENCRYPT ?
                (
-                 principal(?p2, ?c2) &*& iv_cg == cg_nonce(p2, c2) &*&
+                 random_permission(?p2, ?c2) &*& iv_cg == cg_nonce(p2, c2) &*&
                  [?f]crypto_chars(?kind, input, length, ?in_cs) &*&
                  ensures
                  (
-                   principal(p2, c2) &*&
-                   aes_context_initialized(ctx, p1, c1) &*&
+                   aes_context_initialized(ctx, p1, c1) &*& 
+                   random_permission(p2, c2) &*&
                    [f]crypto_chars(kind, input, length, in_cs) &*&
                    // content of updated iv is correlated with input
                    crypto_chars(kind, iv, 16, _) &*&
@@ -64,38 +64,32 @@ int aes_crypt_cfb128(aes_context *ctx, int mode, size_t length, size_t *iv_off,
                      // encryption failed
                      chars(output, length, _)
                    :
-                     exists(?cg) &*& cg == cg_encrypted(p1, c1, in_cs, iv_cs) &*&
-                     kind == garbage ?
-                       // got garbage as input
-                       crypto_chars(garbage, output, length, chars_for_cg(cg))
-                     :
-                       // encryption was successful
-                       cryptogram(output, length, _, cg)
+                     // encryption was successful
+                     cryptogram(output, length, _, ?cg) &*&
+                     cg == cg_encrypted(p1, c1, in_cs, iv_cs)
                  )
                )
                :
                (
-                 [?f]cryptogram(input, length, ?in_cs, ?cg) &*&
-                   cg == cg_encrypted(?p2, ?c2, ?out_cs2, ?iv_cs2) &*&
+                 decryption_request(true, ?p2, ?s, ?args, ?in_cs) &*&
+                 [?f]cryptogram(input, length, in_cs, ?cg) &*&
+                   cg == cg_encrypted(?p3, ?c3, ?out_cs3, ?iv_cs3) &*&
                  ensures
                  (
                    aes_context_initialized(ctx, p1, c1) &*&
                    [f]cryptogram(input, length, in_cs, cg) &*&
                    u_integer(iv_off, _) &*&
-                   result != 0 ?
-                     // content of updated iv is correlated with output
-                     chars(iv, 16, _) &*&
-                     chars(output, length, _)
-                   : col || p1 != p2 || c1 != c2 ?
-                     // content of updated iv is correlated with output
-                     crypto_chars(garbage, iv, 16, _) &*&
-                     crypto_chars(garbage, output, length, ?out_cs) &*&
-                     true == decrypted_garbage(out_cs)
+                   // content of updated iv is correlated with output
+                   crypto_chars(?kind, iv, 16, _) &*&
+                   crypto_chars(kind, output, length, ?out_cs) &*&
+                   decryption_response(true, p2, s, args, 
+                                       ?wrong_key, p1, c1, out_cs) &*&
+                   wrong_key == (p1 != p3 || c1 != c3) &*&                                             
+                   result != 0 || wrong_key ?
+                     kind == normal
                    :
-                     // content of updated iv is correlated with output
-                     crypto_chars(secret, iv, 16, _) &*&
-                     crypto_chars(secret, output, length, ?out_cs) &*&
-                     out_cs == out_cs2 && iv_cs == iv_cs2
+                     out_cs == out_cs3 && iv_cs == iv_cs3 &*& 
+                     kind == secret 
                  )
                ); @*/
   //@ ensures  true;

@@ -4,21 +4,21 @@
 #include "serialization.h"
 
 bool is_pair(struct item *item)
-  //@ requires [?f]world(?pub) &*& item(item, ?i, pub);
-  /*@ ensures  [f]world(pub) &*& item(item, i, pub) &*&
+  //@ requires [?f]world(?pub, ?key_clsfy) &*& item(item, ?i, pub);
+  /*@ ensures  [f]world(pub, key_clsfy) &*& item(item, i, pub) &*&
                result ? i == pair_item(_, _) : true; @*/
 {
-  //@ open [f]world(pub);
+  //@ open [f]world(pub, key_clsfy);
   //@ open item(item, i, pub);
   //@ open [_]item_constraints(i, ?cs, pub);
   return item_tag(item->content, item->size) == 'b';
   //@ close item(item, i, pub);
-  //@ close [f]world(pub);
+  //@ close [f]world(pub, key_clsfy);
 }
 
 void check_is_pair(struct item *item)
-  //@ requires [?f]world(?pub) &*& item(item, ?p, pub);
-  /*@ ensures  [f]world(pub) &*& item(item, p, pub) &*&
+  //@ requires [?f]world(?pub, ?key_clsfy) &*& item(item, ?p, pub);
+  /*@ ensures  [f]world(pub, key_clsfy) &*& item(item, p, pub) &*&
                p == pair_item(_, _); @*/
 {
   if (!is_pair(item))
@@ -26,13 +26,13 @@ void check_is_pair(struct item *item)
 }
 
 struct item *create_pair(struct item *first, struct item *second)
-  /*@ requires [?f0]world(?pub) &*&
+  /*@ requires [?f0]world(?pub, ?key_clsfy) &*&
                [?f1]item(first, ?f, pub) &*& [?f2]item(second, ?s, pub); @*/
-  /*@ ensures  [f0]world(pub) &*&
+  /*@ ensures  [f0]world(pub, key_clsfy) &*&
                [f1]item(first, f, pub) &*& [f2]item(second, s, pub) &*&
                item(result, pair_item(f, s), pub); @*/
 {
-  //@ open [f0]world(pub);
+  //@ open [f0]world(pub, key_clsfy);
   struct item* pair = malloc(sizeof(struct item));
   if (pair == 0){abort_crypto_lib("malloc of item failed");}
 
@@ -122,15 +122,15 @@ struct item *create_pair(struct item *first, struct item *second)
   //@ close [f1]item(first, f, pub);
   //@ close [f2]item(second, s, pub);
   return pair;
-  //@ close [f0]world(pub);
+  //@ close [f0]world(pub, key_clsfy);
 }
 
 void pair_get_components(struct item* pair,
                          struct item** firstp, struct item** secondp)
-  /*@ requires [?f]world(?pub) &*& item(pair, ?p, pub) &*&
+  /*@ requires [?f]world(?pub, ?key_clsfy) &*& item(pair, ?p, pub) &*&
                p == pair_item(?f0, ?s0) &*&
                pointer(firstp, _) &*& pointer(secondp, _); @*/
-  /*@ ensures  [f]world(pub) &*& item(pair, p, pub) &*&
+  /*@ ensures  [f]world(pub, key_clsfy) &*& item(pair, p, pub) &*&
                pointer(firstp, ?fp) &*& pointer(secondp, ?sp) &*&
                 item(fp, ?f1, pub) &*& item(sp, ?s1, pub) &*&
                col ? true : f0 == f1 && s0 == s1; @*/
@@ -166,7 +166,7 @@ void pair_get_components(struct item* pair,
   if (pair->size <= TAG_LENGTH + (int) sizeof(int))
     abort_crypto_lib("Found corrupted pair item 1");
 
-  //@ open [f]world(pub);
+  //@ open [f]world(pub, key_clsfy);
   //@ crypto_chars_split(temp, sizeof(int));
   //@ if (col) public_generated_split(polarssl_pub(pub), cs_cont, sizeof(int));
   //@ assert crypto_chars(secret, temp, sizeof(int), ?cs_size_f);
@@ -224,12 +224,12 @@ void pair_get_components(struct item* pair,
 
   *firstp = first;
   *secondp = second;
-  //@ close [f]world(pub);
+  //@ close [f]world(pub, key_clsfy);
 }
 
 struct item *pair_get_first(struct item *pair)
-  //@ requires [?f0]world(?pub) &*& item(pair, ?p, pub);
-  /*@ ensures  [f0]world(pub) &*& item(pair, p, pub) &*&
+  //@ requires [?f0]world(?pub, ?key_clsfy) &*& item(pair, ?p, pub);
+  /*@ ensures  [f0]world(pub, key_clsfy) &*& item(pair, p, pub) &*&
                p == pair_item(?fst, ?snd) &*&
                item(result, ?fst0, pub) &*&
                col ? true : fst == fst0; @*/
@@ -243,8 +243,8 @@ struct item *pair_get_first(struct item *pair)
 }
 
 struct item *pair_get_second(struct item *pair)
-  //@ requires [?f0]world(?pub) &*& item(pair, ?p, pub);
-  /*@ ensures  [f0]world(pub) &*&item(pair, p, pub) &*&
+  //@ requires [?f0]world(?pub, ?key_clsfy) &*& item(pair, ?p, pub);
+  /*@ ensures  [f0]world(pub, key_clsfy) &*&item(pair, p, pub) &*&
                p == pair_item(?fst, ?snd) &*&
                item(result, ?snd0, pub) &*&
                col ? true : snd == snd0; @*/

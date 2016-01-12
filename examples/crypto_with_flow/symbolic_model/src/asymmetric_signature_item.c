@@ -9,48 +9,35 @@
 #include <string.h>
 
 bool is_asymmetric_signature(struct item *item)
-  //@ requires [?f]world(?pub) &*& item(item, ?i, pub);
-  /*@ ensures  [f]world(pub) &*& item(item, i, pub) &*&
+  //@ requires [?f]world(?pub, ?key_clsfy) &*& item(item, ?i, pub);
+  /*@ ensures  [f]world(pub, key_clsfy) &*& item(item, i, pub) &*&
                result ? i == asymmetric_signature_item(_, _, _, _) : true; @*/
 {
-  //@ open [f]world(pub);
+  //@ open [f]world(pub, key_clsfy);
   //@ open item(item, i, pub);
   //@ open [_]item_constraints(i, ?cs, pub);
   return item_tag(item->content, item->size) == TAG_ASYMMETRIC_SIG;
   //@ close item(item, i, pub);
-  //@ close [f]world(pub);
+  //@ close [f]world(pub, key_clsfy);
 }
 
 void check_is_asymmetric_signature(struct item *item)
-  //@ requires [?f]world(?pub) &*& item(item, ?i, pub);
-  /*@ ensures  [f]world(pub) &*& item(item, i, pub) &*&
+  //@ requires [?f]world(?pub, ?key_clsfy) &*& item(item, ?i, pub);
+  /*@ ensures  [f]world(pub, key_clsfy) &*& item(item, i, pub) &*&
                i == asymmetric_signature_item(_, _, _, _); @*/
 {
   if (!is_asymmetric_signature(item))
     abort_crypto_lib("Presented item is not an asymmetric signature item");
 }
 
-/*@
-lemma void info_for_asymmetric_signature_item(item key, item sig)
-  requires [_]info_for_item(key, ?info1) &*&
-           key == private_key_item(?p, ?c) &*&
-           [_]info_for_item(sig, ?info2) &*&
-           sig == asymmetric_signature_item(p, c, _, _);
-  ensures  info1 == info2;
-{
-  open [_]info_for_item(key, info1);
-  open [_]info_for_item(sig, info2);
-}
-@*/
-
 int asym_sig_havege_random_stub(void *havege_state, char *output, size_t len)
   /*@ requires [?f]havege_state_initialized(havege_state) &*&
                random_request(?principal, ?info, ?key_request) &*&
-               principal(principal, ?count) &*&
+               random_permission(principal, ?count) &*&
                chars(output, len, _) &*& len >= MIN_RANDOM_SIZE;
   @*/
   /*@ ensures  [f]havege_state_initialized(havege_state) &*&
-               principal(principal, count + 1) &*&
+               random_permission(principal, count + 1) &*&
                result == 0 ?
                  cryptogram(output, len, ?cs, ?cg) &*&
                  info == cg_info(cg) &*&
@@ -66,11 +53,11 @@ int asym_sig_havege_random_stub(void *havege_state, char *output, size_t len)
 }
 
 struct item *asymmetric_signature(struct item *key, struct item *payload)
-  /*@ requires [?f]world(?pub) &*&
+  /*@ requires [?f]world(?pub, ?key_clsfy) &*&
                principal(?principal1, ?count1) &*&
                item(payload, ?pay, pub) &*& item(key, ?k, pub) &*&
                k == private_key_item(?principal2, ?count2); @*/
-  /*@ ensures  [f]world(pub) &*&
+  /*@ ensures  [f]world(pub, key_clsfy) &*&
                principal(principal1, count1 + 1) &*&
                item(payload, pay, pub) &*& item(key, k, pub) &*&
                item(result, ?sig, pub) &*&
@@ -96,11 +83,11 @@ struct item *asymmetric_signature(struct item *key, struct item *payload)
 
     // Key
     //@ close pk_context(&context);
-    //@ open [f]world(pub);
+    //@ open [f]world(pub, key_clsfy);
     pk_init(&context);
-    //@ close [f]world(pub);
+    //@ close [f]world(pub, key_clsfy);
     set_private_key(&context, key);
-    //@ open [f]world(pub);
+    //@ open [f]world(pub, key_clsfy);
     /*@ assert pk_context_with_key(&context, pk_private,
                                    ?principal, ?count, RSA_BIT_KEY_SIZE); @*/
     //@ assert col || principal == principal2;
@@ -120,11 +107,13 @@ struct item *asymmetric_signature(struct item *key, struct item *payload)
     /*@ produce_function_pointer_chunk random_function(
                       asym_sig_havege_random_stub)
                      (havege_state_initialized)(state, out, len) { call(); } @*/
+    //@ open principal(principal1, count1);
     if(pk_sign(&context, POLARSSL_MD_NONE,
                payload->content, (unsigned int) payload->size,
                output, &olen,
                asym_sig_havege_random_stub, random_state) != 0)
       abort_crypto_lib("Signing failed");
+    //@ open principal(principal1, count1 + 1);
     //@ open cryptogram(output, ?sig_length, ?sig_cs, ?sig_cg);
     //@ assert sig_cg == cg_asym_signature(principal, count, pay_cs, ?ent);
     //@ assert u_integer(&olen, sig_length);
@@ -133,7 +122,7 @@ struct item *asymmetric_signature(struct item *key, struct item *payload)
     //@ pk_release_context_with_key(&context);
     pk_free(&context);
     //@ open pk_context(&context);
-    //@ close [f]world(pub);
+    //@ close [f]world(pub, key_clsfy);
     debug_print("signed item\n");
     print_buffer(output, (int) olen);
 
@@ -183,13 +172,13 @@ struct item *asymmetric_signature(struct item *key, struct item *payload)
 
 void asymmetric_signature_verify(struct item *key, struct item *item,
                                  struct item *signature)
-  /*@ requires [?f]world(?pub) &*&
+  /*@ requires [?f]world(?pub, ?key_clsfy) &*&
                item(item, ?i, pub) &*& item(key, ?k, pub) &*&
                item(signature, ?sig, pub) &*&
                  sig == asymmetric_signature_item(?principal1, ?count1,
                                                   ?pay1, ?ent) &*&
                k == public_key_item(?principal2, ?count2); @*/
-  /*@ ensures  [f]world(pub) &*&
+  /*@ ensures  [f]world(pub, key_clsfy) &*&
                item(item, i, pub) &*& item(key, k, pub) &*&
                item(signature, sig, pub) &*&
                switch(pay1)
@@ -212,9 +201,9 @@ void asymmetric_signature_verify(struct item *key, struct item *item,
 
     // Key
     //@ close pk_context(&context);
-    //@ open [f]world(pub);
+    //@ open [f]world(pub, key_clsfy);
     pk_init(&context);
-    //@ close [f]world(pub);
+    //@ close [f]world(pub, key_clsfy);
     set_public_key(&context, key);
     /*@ assert pk_context_with_key(&context, pk_public,
                                    ?principal3, ?count3, RSA_BIT_KEY_SIZE); @*/

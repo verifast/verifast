@@ -17,10 +17,10 @@ lemma void serialize_item(item i);
 @*/
 
 int serialize_to_public_message(char** dest, struct item* item);
-  /*@ requires [?f0]world(?pub) &*& 
+  /*@ requires [?f0]world(?pub, ?key_clsfy) &*& 
                [?f1]item(item, ?i, pub) &*& pointer(dest, _) &*& 
                [_]pub(i); @*/
-  /*@ ensures  [f0]world(pub) &*& 
+  /*@ ensures  [f0]world(pub, key_clsfy) &*& 
                [f1]item(item, i, pub) &*& pointer(dest, ?d) &*& 
                malloc_block(d, result) &*& result > 1 &*&
                chars(d, result, ?cs) &*&

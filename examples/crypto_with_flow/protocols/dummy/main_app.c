@@ -1,21 +1,8 @@
 #include "dummy.h"
 
-#include <pthread.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "../general.h"
 
-//@ import_module public_invariant_mod;
-//@ import_module principals_mod;
-
-/*@
-predicate dummy_proof_pred() = true;
-
-predicate_family_instance pthread_run_pre(attacker_t)(void *data, any info) =
-    [_]public_invar(dummy_pub) &*&
-    public_invariant_constraints(dummy_pub, dummy_proof_pred) &*&
-    principals(_);
-@*/
+//@ ATTACKER_PRE(dummy)
 
 void *attacker_t(void* data) //@ : pthread_run_joinable
   //@ requires pthread_run_pre(attacker_t)(data, ?info);
@@ -36,25 +23,16 @@ void *attacker_t(void* data) //@ : pthread_run_joinable
 
 /*@
 
-inductive info =
-  | int_value(int v)
-  | char_list_value(list<char> p)
-;
-
 predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
   principal(?sender, _) &*&
   chars(data, PACKAGE_SIZE, ?cs) &*&
-  info == cons(int_value(sender),
-            cons(char_list_value(cs),
-                 nil))
+  info == IV(sender, CL(cs, nil))
 ;
 
 predicate_family_instance pthread_run_post(sender_t)(void *data, any info) =
   principal(?sender, _) &*&
   chars(data, PACKAGE_SIZE, ?cs) &*&
-  info == cons(int_value(sender),
-            cons(char_list_value(cs),
-                 nil))
+  info == IV(sender, CL(cs, nil))
 ;
 
 @*/
@@ -97,10 +75,6 @@ int main(int argc, char **argv) //@ : main_full(main_app)
     //@ requires module(main_app, true);
     //@ ensures true;
 {
-  //@ open_module();
-  //@ assert module(public_invariant_mod, true);
-  //@ assert module(principals_mod, true);
-  
   pthread_t a_thread;
   havege_state havege_state;
   
@@ -108,10 +82,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
   printf("dummy protocol");
   printf("\" ... \n\n");
   
-  //@ PUBLIC_INVARIANT_CONSTRAINTS(dummy)
-  //@ public_invariant_init(dummy_pub);
-  
-  //@ principals_init();
+  //@ PROTOCOL_INIT(dummy)
   //@ int attacker = principal_create();
   //@ int sender = principal_create();
   //@ int receiver = principal_create();
@@ -134,7 +105,9 @@ int main(int argc, char **argv) //@ : main_full(main_app)
   {
     char msg1[PACKAGE_SIZE];
     //@ close random_request(sender, 0, false);
+    //@ open principal(sender, _);
     if (havege_random(&havege_state, msg1, PACKAGE_SIZE) != 0) abort();
+    //@ close principal(sender, _);
     //@ assert cryptogram(msg1, PACKAGE_SIZE, ?cs, ?cg);
     //@ close dummy_pub(cg);
     //@ leak dummy_pub(cg);
@@ -155,9 +128,10 @@ int main(int argc, char **argv) //@ : main_full(main_app)
       
       //@ chars_to_crypto_chars(msg1, PACKAGE_SIZE);
       //@ chars_to_crypto_chars(msg2, PACKAGE_SIZE);
+      //@ open principal(sender, _);
       if (memcmp(msg1, msg2, PACKAGE_SIZE) != 0)
         abort();
-        
+      //@ close principal(sender, _);
       printf(" |%i| ", i);
     }
   }

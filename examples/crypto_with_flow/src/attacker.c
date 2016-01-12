@@ -4,6 +4,7 @@
 #include <string.h>
 //@ #include <quantifiers.gh>
 
+
 #define POLARSSL_ATTACKER_ITERATIONS 100
 
 /*@
@@ -41,12 +42,17 @@ lemma void open_havege_util(predicate(cryptogram) pub,
 
 predicate attacker_invariant(predicate(cryptogram) pub,
                              predicate() pred,
+                             fixpoint(int, int, bool, bool) classifier,
                              struct havege_state* state,
                              void* socket, int attacker) =
   [_]public_invar(pub) &*& pred() &*&
+  [_]decryption_key_classifier(classifier) &*&
   havege_state_initialized(state) &*&
   integer(socket, ?fd) &*& net_status(fd, ?ip, ?port, connected) &*&
-  true == bad(attacker) &*& principal(attacker, _) &*&
+  true == bad(attacker) &*& 
+  network_permission(attacker) &*&
+  random_permission(attacker, _) &*&
+  decryption_permission(attacker) &*&
   is_principal_with_public_nonces(_, pub,
                                   attacker_nonce_pred(pub, pred),
                                   attacker) &*&
@@ -62,32 +68,33 @@ predicate attacker_invariant(predicate(cryptogram) pub,
     is_public_auth_decryption_is_public(_, pub, pred) &*&
     is_public_asym_encryption_is_public(_, pub, pred) &*&
     is_public_asym_decryption_is_public(_, pub, pred) &*&
-    is_public_asym_signature_is_public(_, pub, pred)
+    is_public_asym_signature_is_public(_, pub, pred) &*&
+  is_public_key_classifier(_, pub, classifier, pred)
 ;
 
 @*/
 
 void attacker_send_data(havege_state *havege_state, void* socket)
-  //@ requires attacker_invariant(?pub, ?pred, havege_state, socket, ?attacker);
-  //@ ensures  attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ requires attacker_invariant(?pub, ?pred, ?kc, havege_state, socket, ?attacker);
+  //@ ensures  attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 {
   int temp;
   int size;
   char buffer[MAX_MESSAGE_SIZE];
 
-  //@ open attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ open attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
   //@ close_havege_util(pub, pred, attacker);
   r_int_with_bounds(havege_state, &temp, 1, MAX_MESSAGE_SIZE);
   //@ open_havege_util(pub, pred, attacker);
   size = temp;
   //@ chars_split(buffer, size);
   net_send(socket, buffer, (unsigned int) size);
-  //@ close attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 }
 
 void attacker_send_concatenation(havege_state *havege_state, void* socket)
-  //@ requires attacker_invariant(?pub, ?pred, havege_state, socket, ?attacker);
-  //@ ensures  attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ requires attacker_invariant(?pub, ?pred, ?kc, havege_state, socket, ?attacker);
+  //@ ensures  attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 {
   int size1;
   int size2;
@@ -95,13 +102,13 @@ void attacker_send_concatenation(havege_state *havege_state, void* socket)
   char buffer2[MAX_MESSAGE_SIZE];
   char buffer3[MAX_MESSAGE_SIZE];
 
-  //@ open attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ open attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 
   size1 = net_recv(socket, buffer1, MAX_MESSAGE_SIZE);
   size2 = net_recv(socket, buffer2, MAX_MESSAGE_SIZE);
   if (size1 <= 0 || size2 <= 0 || MAX_MESSAGE_SIZE - size1 <= size2)
   {
-    //@ close attacker_invariant(pub, pred, havege_state, socket, attacker);
+    //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
     return;
   }
 
@@ -111,25 +118,25 @@ void attacker_send_concatenation(havege_state *havege_state, void* socket)
   memcpy((char*) buffer3 + size1, buffer2, (unsigned int) size2);
   //@ crypto_chars_join(buffer3);
   net_send(socket, buffer3, (unsigned int) (size1 + size2));
-  //@ close attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
   //@ crypto_chars_to_chars(buffer1, size1);
   //@ crypto_chars_to_chars(buffer2, size2);
 }
 
 void attacker_send_split(havege_state *havege_state, void* socket)
-  //@ requires attacker_invariant(?pub, ?pred, havege_state, socket, ?attacker);
-  //@ ensures  attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ requires attacker_invariant(?pub, ?pred, ?kc, havege_state, socket, ?attacker);
+  //@ ensures  attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 {
   int temp;
   int size1;
   int size2;
   char buffer[MAX_MESSAGE_SIZE];
 
-  //@ open attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ open attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
   size1 = net_recv(socket, buffer, MAX_MESSAGE_SIZE);
   if (size1 <= 0)
   {
-    //@ close attacker_invariant(pub, pred, havege_state, socket, attacker);
+    //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
     return;
   }
   //@ assert chars(buffer, size1, ?cs);
@@ -143,18 +150,18 @@ void attacker_send_split(havege_state *havege_state, void* socket)
             (unsigned int) (size1 - size2));
 
   //@ chars_join(buffer);
-  //@ close attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 }
 
 void attacker_send_random(havege_state *havege_state, void* socket)
-  //@ requires attacker_invariant(?pub, ?pred, havege_state, socket, ?attacker);
-  //@ ensures  attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ requires attacker_invariant(?pub, ?pred, ?kc, havege_state, socket, ?attacker);
+  //@ ensures  attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 {
   int temp;
   int size;
   char buffer[MAX_MESSAGE_SIZE];
 
-  //@ open attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ open attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
   //@ close_havege_util(pub, pred, attacker);
   r_int_with_bounds(havege_state, &temp, MIN_RANDOM_SIZE, MAX_MESSAGE_SIZE);
   size = temp;
@@ -169,7 +176,7 @@ void attacker_send_random(havege_state *havege_state, void* socket)
     //@ public_cryptogram(buffer, cg);
     net_send(socket, buffer, (unsigned int) size);
   }
-  //@ close attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 }
 
 int attacker_key_item_havege_random_stub(void *havege_state,
@@ -181,15 +188,15 @@ int attacker_key_item_havege_random_stub(void *havege_state,
 }
 
 void attacker_send_keys(havege_state *havege_state, void* socket)
-  //@ requires attacker_invariant(?pub, ?pred, havege_state, socket, ?attacker);
-  //@ ensures  attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ requires attacker_invariant(?pub, ?pred, ?kc, havege_state, socket, ?attacker);
+  //@ ensures  attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 {
   pk_context context;
   pk_context context_pub;
   pk_context context_priv;
   unsigned int key_size;
 
-  //@ open attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ open attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 
   unsigned int temp;
   //@ close_havege_util(pub, pred, attacker);
@@ -260,23 +267,23 @@ void attacker_send_keys(havege_state *havege_state, void* socket)
   free(pub_key);
   free(priv_key);
 
-  //@ close attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 }
 
 void attacker_send_hash(havege_state *havege_state, void* socket)
-  //@ requires attacker_invariant(?pub, ?pred, havege_state, socket, ?attacker);
-  //@ ensures  attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ requires attacker_invariant(?pub, ?pred, ?kc, havege_state, socket, ?attacker);
+  //@ ensures  attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 {
   int temp;
   int size;
   char buffer[MAX_MESSAGE_SIZE];
 
-  //@ open attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ open attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 
   size = net_recv(socket, buffer, MAX_MESSAGE_SIZE);
   if (size < MINIMAL_STRING_SIZE)
   {
-    //@ close attacker_invariant(pub, pred, havege_state, socket, attacker);
+    //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
     return;
   }
   //@ assert chars(buffer, size, ?pay);
@@ -292,12 +299,12 @@ void attacker_send_hash(havege_state *havege_state, void* socket)
   //@ public_cryptogram(hash, h_cg);
   net_send(socket, hash, 64);
 
-  //@ close attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 }
 
 void attacker_send_hmac(havege_state *havege_state, void* socket)
-  //@ requires attacker_invariant(?pub, ?pred, havege_state, socket, ?attacker);
-  //@ ensures  attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ requires attacker_invariant(?pub, ?pred, ?kc, havege_state, socket, ?attacker);
+  //@ ensures  attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 {
   int temp;
   int size1;
@@ -306,13 +313,13 @@ void attacker_send_hmac(havege_state *havege_state, void* socket)
   char buffer2[MAX_MESSAGE_SIZE];
   char buffer3[64];
 
-  //@ open attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ open attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 
   size1 = net_recv(socket, buffer1, MAX_MESSAGE_SIZE);
   size2 = net_recv(socket, buffer2, MAX_MESSAGE_SIZE);
   if (size1 <= 0 || size2 < MINIMAL_STRING_SIZE)
   {
-    //@ close attacker_invariant(pub, pred, havege_state, socket, attacker);
+    //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
     return;
   }
 
@@ -329,12 +336,12 @@ void attacker_send_hmac(havege_state *havege_state, void* socket)
   net_send(socket, buffer3, 64);
   //@ public_cryptogram(buffer1, cg_symmetric_key(p, c));
 
-  //@ close attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 }
 
 void attacker_send_encrypted(havege_state *havege_state, void* socket)
-  //@ requires attacker_invariant(?pub, ?pred, havege_state, socket, ?attacker);
-  //@ ensures  attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ requires attacker_invariant(?pub, ?pred, ?kc, havege_state, socket, ?attacker);
+  //@ ensures  attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 {
   int temp;
   int size1;
@@ -346,14 +353,14 @@ void attacker_send_encrypted(havege_state *havege_state, void* socket)
   size_t iv_off = 0;
   char iv[16];
 
-  //@ open attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ open attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 
   size1 = net_recv(socket, buffer1, MAX_MESSAGE_SIZE);
   size2 = net_recv(socket, buffer2, MAX_MESSAGE_SIZE);
   if (size1 <= 0 || size2 < MINIMAL_STRING_SIZE ||
       (size1 != 16 && size1 != 24 && size1 != 32))
   {
-    //@ close attacker_invariant(pub, pred, havege_state, socket, attacker);
+    //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
     return;
   }
 
@@ -390,20 +397,20 @@ void attacker_send_encrypted(havege_state *havege_state, void* socket)
     }
     aes_free(&aes_context);
     //@ open aes_context(&aes_context);
-    //@ close attacker_invariant(pub, pred, havege_state, socket, attacker);
+    //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
     //@ public_cryptogram(buffer1, cg_symmetric_key(p, c));
     return;
   }
 
   //@ open aes_context(&aes_context);
-  //@ close attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
   //@ public_cryptogram(buffer1, cg_symmetric_key(p, c));
   return;
 }
 
 void attacker_send_decrypted(havege_state *havege_state, void* socket)
-  //@ requires attacker_invariant(?pub, ?pred, havege_state, socket, ?attacker);
-  //@ ensures  attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ requires attacker_invariant(?pub, ?pred, ?kc, havege_state, socket, ?attacker);
+  //@ ensures  attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 {
   int temp;
   int size1;
@@ -415,14 +422,14 @@ void attacker_send_decrypted(havege_state *havege_state, void* socket)
   char iv[16];
   size_t iv_off = 0;
 
-  //@ open attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ open attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 
   size1 = net_recv(socket, buffer1, MAX_MESSAGE_SIZE);
   size2 = net_recv(socket, buffer2, MAX_MESSAGE_SIZE);
   if (size1 <= 0 || size2 < MINIMAL_STRING_SIZE ||
        (size1 != 16 && size1 != 24 && size1 != 32))
   {
-    //@ close attacker_invariant(pub, pred, havege_state, socket, attacker);
+    //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
     return;
   }
 
@@ -440,43 +447,46 @@ void attacker_send_decrypted(havege_state *havege_state, void* socket)
       //@ open cryptogram(buffer2, size2, ?cs2, ?cg_enc);
       //@ close cryptogram(buffer2, size2, cs2, cg_enc);
       //@ assert cg_enc == cg_encrypted(?p2, ?c2, ?cs_output2, ?cs_iv2);
-      if (aes_crypt_cfb128(&aes_context, AES_DECRYPT,
-                            (unsigned int) size2, &iv_off, iv, buffer2,
-                            buffer3) == 0)
-      {
-        /*@ if (col || p != p2 || c != c2)
-            {
-              assert crypto_chars(garbage, buffer3, size2, ?cs_output);
-              bad_garbage_crypto_chars(buffer3, size2, cs_output);
-            }
-            else
-            {
-              assert crypto_chars(secret, buffer3, size2, ?cs_output);
-              assert cs_output == cs_output2;
-              assert cs_iv == cs_iv2;
-              assert cs2 == chars_for_cg(cg_enc);
-              public_cryptogram_extract(buffer2);
-              assert [_]pub(cg_enc);
-              assert is_public_decryption_is_public(?proof2, pub, pred);
-              proof2(cg_key, cg_enc);
-              public_crypto_chars(buffer3, size2);
-            }
-        @*/
-        zeroize(iv, 16);
-      }
+      //@ structure s = known_value(0, nil);
+      //@ close decryption_request(true, attacker, s, initial_request, cs2);
+      int success = aes_crypt_cfb128(&aes_context, AES_DECRYPT,  
+                                     (unsigned int) size2, &iv_off, iv, 
+                                     buffer2, buffer3);
+      /*@ open decryption_response(true, attacker, s, initial_request,
+                                   ?wrong_key, p, c, ?cs_output); @*/
+      /*@ if (wrong_key)
+          {
+            assert is_public_key_classifier(?proof, _, _, _);
+            proof(cg_key, p, c, true);
+            decryption_with_wrong_key(buffer3, size2, s);
+          }
+          else if (success == 0)
+          {
+            assert crypto_chars(secret, buffer3, size2, cs_output);
+            assert cs_output == cs_output2;
+            assert cs_iv == cs_iv2;
+            assert cs2 == chars_for_cg(cg_enc);
+            public_cryptogram_extract(buffer2);
+            assert [_]pub(cg_enc);
+            assert is_public_decryption_is_public(?proof2, pub, pred);
+            proof2(cg_key, cg_enc);
+            public_crypto_chars(buffer3, size2);              
+          }
+      @*/
+      if (success == 0) zeroize(iv, 16);
       net_send(socket, buffer3, (unsigned int) size2);
       //@ public_cryptogram(buffer2, cg_enc);
     }
     aes_free(&aes_context);
   }
   //@ open aes_context(&aes_context);
-  //@ close attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
   //@ public_cryptogram(buffer1, cg_key);
 }
 
 void attacker_send_auth_encrypted(havege_state *havege_state, void* socket)
-  //@ requires attacker_invariant(?pub, ?pred, havege_state, socket, ?attacker);
-  //@ ensures  attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ requires attacker_invariant(?pub, ?pred, ?kc, havege_state, socket, ?attacker);
+  //@ ensures  attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 {
   int temp;
   int size1;
@@ -488,14 +498,14 @@ void attacker_send_auth_encrypted(havege_state *havege_state, void* socket)
   char iv[16];
   char mac[16];
 
-  //@ open attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ open attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 
   size1 = net_recv(socket, buffer1, MAX_MESSAGE_SIZE);
   size2 = net_recv(socket, buffer2, MAX_MESSAGE_SIZE);
   if (size1 <= 0 || size2 < MINIMAL_STRING_SIZE ||
       (size1 != 16 && size1 != 24 && size1 != 32))
   {
-    //@ close attacker_invariant(pub, pred, havege_state, socket, attacker);
+    //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
     return;
   }
   //@ assert chars(buffer1, size1, ?cs1);
@@ -533,13 +543,13 @@ void attacker_send_auth_encrypted(havege_state *havege_state, void* socket)
     gcm_free(&gcm_context);
   }
   //@ open gcm_context(&gcm_context);
-  //@ close attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
   //@ public_cryptogram(buffer1, cg_key);
 }
 
 void attacker_send_auth_decrypted(havege_state *havege_state, void* socket)
-  //@ requires attacker_invariant(?pub, ?pred, havege_state, socket, ?attacker);
-  //@ ensures  attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ requires attacker_invariant(?pub, ?pred, ?kc, havege_state, socket, ?attacker);
+  //@ ensures  attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 {
   int temp;
   int size1;
@@ -551,14 +561,14 @@ void attacker_send_auth_decrypted(havege_state *havege_state, void* socket)
   char iv[16];
   char tag[16];
 
-  //@ open attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ open attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 
   size1 = net_recv(socket, buffer1, MAX_MESSAGE_SIZE);
   size2 = net_recv(socket, buffer2, MAX_MESSAGE_SIZE);
   if (size1 <= 0 || size2 < MINIMAL_STRING_SIZE ||
       (size1 != 16 && size1 != 24 && size1 != 32))
   {
-    //@ close attacker_invariant(pub, pred, havege_state, socket, attacker);
+    //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
     return;
   }
 
@@ -618,13 +628,13 @@ void attacker_send_auth_decrypted(havege_state *havege_state, void* socket)
     gcm_free(&gcm_context);
   }
   //@ open gcm_context(&gcm_context);
-  //@ close attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
   //@ public_cryptogram(buffer1, cg_key);
 }
 
 void attacker_send_asym_encrypted(havege_state *havege_state, void* socket)
-  //@ requires attacker_invariant(?pub, ?pred, havege_state, socket, ?attacker);
-  //@ ensures  attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ requires attacker_invariant(?pub, ?pred, ?kc, havege_state, socket, ?attacker);
+  //@ ensures  attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 {
   int temp;
   int size1;
@@ -635,13 +645,13 @@ void attacker_send_asym_encrypted(havege_state *havege_state, void* socket)
   char buffer3[MAX_MESSAGE_SIZE];
   pk_context context;
 
-  //@ open attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ open attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 
   size1 = net_recv(socket, buffer1, MAX_MESSAGE_SIZE);
   size2 = net_recv(socket, buffer2, MAX_MESSAGE_SIZE);
   if (size1 <= 0 || size2 < MINIMAL_STRING_SIZE)
   {
-    //@ close attacker_invariant(pub, pred, havege_state, socket, attacker);
+    //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
     return;
   }
 
@@ -684,13 +694,13 @@ void attacker_send_asym_encrypted(havege_state *havege_state, void* socket)
   }
   pk_free(&context);
   //@ open pk_context(&context);
-  //@ close attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
   //@ public_cryptogram(buffer1, cg_key);
 }
 
 void attacker_send_asym_decrypted(havege_state *havege_state, void* socket)
-  //@ requires attacker_invariant(?pub, ?pred, havege_state, socket, ?attacker);
-  //@ ensures  attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ requires attacker_invariant(?pub, ?pred, ?kc, havege_state, socket, ?attacker);
+  //@ ensures  attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 {
   int temp;
   int size1;
@@ -701,13 +711,13 @@ void attacker_send_asym_decrypted(havege_state *havege_state, void* socket)
   char buffer3[MAX_MESSAGE_SIZE];
   pk_context context;
 
-  //@ open attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ open attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 
   size1 = net_recv(socket, buffer1, MAX_MESSAGE_SIZE);
   size2 = net_recv(socket, buffer2, MAX_MESSAGE_SIZE);
   if (size1 <= 0 || size2 < MINIMAL_STRING_SIZE)
   {
-    //@ close attacker_invariant(pub, pred, havege_state, socket, attacker);
+    //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
     return;
   }
   //@ close pk_context(&context);
@@ -726,28 +736,34 @@ void attacker_send_asym_decrypted(havege_state *havege_state, void* socket)
       //@ interpret_asym_encrypted(buffer2, size2);
       //@ assert cryptogram(buffer2, size2, ?cs2, ?cg_enc);
       //@ assert cg_enc == cg_asym_encrypted(?p2, ?c2, ?cs_output2, ?ent);
-      if (pk_decrypt(&context, buffer2, (unsigned int) size2, buffer3, &osize,
-                    MAX_MESSAGE_SIZE,
-                    attacker_key_item_havege_random_stub, havege_state) == 0)
-      {
-        //@ assert u_integer(&osize, ?osize_val);
-        /*@ if (col || p != p2 || c != c2)
-            {
-              assert crypto_chars(garbage, buffer3, osize_val, ?cs_output);
-              bad_garbage_crypto_chars(buffer3, osize_val, cs_output);
-            }
-            else
-            {
-              assert crypto_chars(secret, buffer3, osize_val, ?cs_output);
-              public_cryptogram_extract(buffer2);
-              assert [_]pub(cg_enc);
-              assert is_public_asym_decryption_is_public(?proof, pub, pred);
-              proof(cg_key, cg_enc);
-              public_crypto_chars(buffer3, osize_val);
-            }
-        @*/
-        net_send(socket, buffer3, osize);
-      }
+      //@ structure s = known_value(0, nil);
+      //@ close decryption_request(false, attacker, s, initial_request, cs2);
+      int success = pk_decrypt(&context, buffer2, (unsigned int) size2, 
+                               buffer3, &osize, MAX_MESSAGE_SIZE,
+                               attacker_key_item_havege_random_stub, 
+                               havege_state);
+      /*@ open decryption_response(false, attacker, s, initial_request,
+                                   ?wrong_key, p, c, ?cs_output); @*/
+      //@ assert crypto_chars(?kind, buffer3, ?osize_val, cs_output);
+      /*@ if (wrong_key)
+          {
+            assert is_public_key_classifier(?proof, _, _, _);
+            proof(cg_key, p, c, false);
+            decryption_with_wrong_key(buffer3, osize_val, s);
+          }
+          else if (success == 0)
+          {
+            public_cryptogram_extract(buffer2);
+            assert [_]pub(cg_enc);
+            assert is_public_asym_decryption_is_public(?proof, pub, pred);
+            proof(cg_key, cg_enc);
+            public_crypto_chars(buffer3, osize_val);
+            chars_to_crypto_chars(buffer3, osize_val);
+          }
+      @*/
+      //@ crypto_chars_to_chars(buffer3, osize_val);
+      if (success == 0) net_send(socket, buffer3, osize);
+      //@ chars_join(buffer3);
       //@ open cryptogram(buffer2, size2, cs2, cg_enc);
       //@ public_crypto_chars(buffer2, size2);
     }
@@ -755,13 +771,13 @@ void attacker_send_asym_decrypted(havege_state *havege_state, void* socket)
   }
   pk_free(&context);
   //@ open pk_context(&context);
-  //@ close attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
   //@ public_cryptogram(buffer1, cg_key);
 }
 
 void attacker_send_asym_signature(havege_state *havege_state, void* socket)
-  //@ requires attacker_invariant(?pub, ?pred, havege_state, socket, ?attacker);
-  //@ ensures  attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ requires attacker_invariant(?pub, ?pred, ?kc, havege_state, socket, ?attacker);
+  //@ ensures  attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 {
   int temp;
   int size1;
@@ -772,13 +788,13 @@ void attacker_send_asym_signature(havege_state *havege_state, void* socket)
   char buffer3[MAX_MESSAGE_SIZE];
   pk_context context;
 
-  //@ open attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ open attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 
   size1 = net_recv(socket, buffer1, MAX_MESSAGE_SIZE);
   size2 = net_recv(socket, buffer2, MAX_MESSAGE_SIZE);
   if (size1 <= 0 || size2 < MINIMAL_STRING_SIZE)
   {
-    //@ close attacker_invariant(pub, pred, havege_state, socket, attacker);
+    //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
     return;
   }
 
@@ -820,20 +836,20 @@ void attacker_send_asym_signature(havege_state *havege_state, void* socket)
   }
   pk_free(&context);
   //@ open pk_context(&context);
-  //@ close attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
   //@ public_cryptogram(buffer1, cg_key);
 }
 
 void attacker_core(havege_state *havege_state, void* socket)
-  //@ requires attacker_invariant(?pub, ?pred, havege_state, socket, ?attacker);
-  //@ ensures  attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ requires attacker_invariant(?pub, ?pred, ?kc, havege_state, socket, ?attacker);
+  //@ ensures  attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 {
   int action;
-  //@ open attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ open attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
   //@ close_havege_util(pub, pred, attacker);
   r_int(havege_state, &action);
   //@ open_havege_util(pub, pred, attacker);
-  //@ close attacker_invariant(pub, pred, havege_state, socket, attacker);
+  //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 
   switch (action % 14)
   {
@@ -884,12 +900,15 @@ void attacker_core(havege_state *havege_state, void* socket)
 
 void attacker()
   /*@ requires [_]public_invar(?pub) &*&
-               public_invariant_constraints(pub, ?proof_pred) &*&
+               [_]decryption_key_classifier(?classifier) &*&
+               public_invariant_constraints(pub, ?proof_pred) &*& 
                proof_pred() &*&
-               principals(?count1); @*/
+               is_public_key_classifier(_, pub, classifier, proof_pred) &*&
+               principals(?count); @*/
   /*@ ensures  public_invariant_constraints(pub, proof_pred) &*&
                proof_pred() &*&
-               principals(?count2) &*& count2 == count1 + 1; @*/
+               is_public_key_classifier(_, pub, classifier, proof_pred) &*&
+               principals(count + 1); @*/
 {
   bool havege_failure = false;
   int server_or_client;
@@ -899,6 +918,7 @@ void attacker()
   int socket2;
   //@ int bad_one = principal_create();
   //@ assume (bad(bad_one));
+  //@ open principal(bad_one, 0);
 
   havege_state havege_state;
   //@ close havege_state(&havege_state);
@@ -954,16 +974,16 @@ void attacker()
 
   if (!network_failure)
   {
-    //@ close attacker_invariant(pub, proof_pred, &havege_state, socket, bad_one);
+    //@ close attacker_invariant(pub, proof_pred, ?kc, &havege_state, socket, bad_one);
     int j = 0;
     while(j < POLARSSL_ATTACKER_ITERATIONS)
-      /*@ invariant attacker_invariant(pub, proof_pred,
+      /*@ invariant attacker_invariant(pub, proof_pred, kc, 
                                        &havege_state, socket, bad_one); @*/
     {
-      //result += attacker_core(&havege_state, socket);
-      //j++;
+      attacker_core(&havege_state, socket);
+      j++;
     }
-    //@ open attacker_invariant(pub, proof_pred, &havege_state, socket, bad_one);
+    //@ open attacker_invariant(pub, proof_pred, kc, &havege_state, socket, bad_one);
 
     if (server_or_client % 2 == 0)
       net_close(socket1);
@@ -975,6 +995,7 @@ void attacker()
   }
 
   //@ close public_invariant_constraints(pub, proof_pred);
+  //@ close principal(bad_one, _);
   //@ principal_destroy(bad_one);
   havege_free(&havege_state);
   //@ open havege_state(&havege_state);

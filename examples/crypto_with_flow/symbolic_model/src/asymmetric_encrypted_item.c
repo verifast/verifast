@@ -9,48 +9,35 @@
 #include <string.h>
 
 bool is_asymmetric_encrypted(struct item *item)
-  //@ requires [?f]world(?pub) &*& item(item, ?i, pub);
-  /*@ ensures  [f]world(pub) &*& item(item, i, pub) &*&
+  //@ requires [?f]world(?pub, ?key_clsfy) &*& item(item, ?i, pub);
+  /*@ ensures  [f]world(pub, key_clsfy) &*& item(item, i, pub) &*&
                result ? i == asymmetric_encrypted_item(_, _, _, _) : true; @*/
 {
-  //@ open [f]world(pub);
+  //@ open [f]world(pub, key_clsfy);
   //@ open item(item, i, pub);
   //@ open [_]item_constraints(i, ?cs, pub);
   return item_tag(item->content, item->size) == TAG_ASYMMETRIC_ENC;
   //@ close item(item, i, pub);
-  //@ close [f]world(pub);
+  //@ close [f]world(pub, key_clsfy);
 }
 
 void check_is_asymmetric_encrypted(struct item *item)
-  //@ requires [?f]world(?pub) &*& item(item, ?i, pub);
-  /*@ ensures  [f]world(pub) &*& item(item, i, pub) &*&
+  //@ requires [?f]world(?pub, ?key_clsfy) &*& item(item, ?i, pub);
+  /*@ ensures  [f]world(pub, key_clsfy) &*& item(item, i, pub) &*&
                i == asymmetric_encrypted_item(_, _, _, _); @*/
 {
   if (!is_asymmetric_encrypted(item))
     abort_crypto_lib("Presented item is not an asymmetric encrypted item");
 }
 
-/*@
-lemma void info_for_asymmetric_encrypted_item(item key, item enc)
-  requires [_]info_for_item(key, ?info1) &*&
-           key == public_key_item(?p, ?c) &*&
-           [_]info_for_item(enc, ?info2) &*&
-           enc == asymmetric_encrypted_item(p, c, _, _);
-  ensures  info1 == info2;
-{
-  open [_]info_for_item(key, info1);
-  open [_]info_for_item(enc, info2);
-}
-@*/
-
 int asym_enc_havege_random_stub(void *havege_state, char *output, size_t len)
   /*@ requires [?f]havege_state_initialized(havege_state) &*&
                random_request(?principal, ?info, ?key_request) &*&
-               principal(principal, ?count) &*&
+               random_permission(principal, ?count) &*&
                chars(output, len, _) &*& len >= MIN_RANDOM_SIZE;
   @*/
   /*@ ensures  [f]havege_state_initialized(havege_state) &*&
-               principal(principal, count + 1) &*&
+               random_permission(principal, count + 1) &*&
                result == 0 ?
                  cryptogram(output, len, ?cs, ?cg) &*&
                  info == cg_info(cg) &*&
@@ -66,11 +53,11 @@ int asym_enc_havege_random_stub(void *havege_state, char *output, size_t len)
 }
 
 struct item *asymmetric_encryption(struct item *key, struct item *payload)
-  /*@ requires [?f]world(?pub) &*&
+  /*@ requires [?f]world(?pub, ?key_clsfy) &*&
                principal(?principal1, ?count1) &*&
                item(payload, ?pay, pub) &*& item(key, ?k, pub) &*&
                k == public_key_item(?principal2, ?count2); @*/
-  /*@ ensures  [f]world(pub) &*&
+  /*@ ensures  [f]world(pub, key_clsfy) &*&
                principal(principal1, count1 + 1) &*&
                item(payload, pay, pub) &*& item(key, k, pub) &*&
                item(result, ?enc, pub) &*&
@@ -92,11 +79,11 @@ struct item *asymmetric_encryption(struct item *key, struct item *payload)
 
     // Key
     //@ close pk_context(&context);
-    //@ open [f]world(pub);
+    //@ open [f]world(pub, key_clsfy);
     pk_init(&context);
-    //@ close [f]world(pub);
+    //@ close [f]world(pub, key_clsfy);
     set_public_key(&context, key);
-    //@ open [f]world(pub);
+    //@ open [f]world(pub, key_clsfy);
     /*@ assert pk_context_with_key(&context, pk_public,
                                    ?principal, ?count, RSA_BIT_KEY_SIZE); @*/
     //@ assert col || principal == principal2;
@@ -112,10 +99,12 @@ struct item *asymmetric_encryption(struct item *key, struct item *payload)
     /*@ produce_function_pointer_chunk random_function(
                       asym_enc_havege_random_stub)
                      (havege_state_initialized)(state, out, len) { call(); } @*/
+    //@ open principal(principal1, count1);
     if(pk_encrypt(&context, payload->content, (unsigned int) payload->size,
                   output, &olen, MAX_PACKAGE_SIZE,
                   asym_enc_havege_random_stub, random_state) != 0)
       abort_crypto_lib("Encryption failed");
+    //@ close principal(principal1, count1 + 1);
     //@ open cryptogram(output, ?enc_length, ?enc_cs, ?enc_cg);
     //@ assert enc_cg == cg_asym_encrypted(principal, count, pay_cs, ?ent);
     //@ close exists(enc_cg);
@@ -126,7 +115,7 @@ struct item *asymmetric_encryption(struct item *key, struct item *payload)
     //@ pk_release_context_with_key(&context);
     pk_free(&context);
     //@ open pk_context(&context);
-    //@ close [f]world(pub);
+    //@ close [f]world(pub, key_clsfy);
 
     // Create item
     result->size = TAG_LENGTH + (int) olen;
@@ -170,25 +159,29 @@ struct item *asymmetric_encryption(struct item *key, struct item *payload)
 }
 
 struct item *asymmetric_decryption(struct item *key, struct item *item, char tag)
-  /*@ requires [?f]world(?pub) &*& true == valid_tag(tag) &*&
+  /*@ requires [?f]world(?pub, ?key_clsfy) &*& true == valid_tag(tag) &*&
                principal(?principal1, ?count1) &*&
                item(item, ?enc, pub) &*& item(key, ?k, pub) &*&
                  enc == asymmetric_encrypted_item(?principal2, ?count2,
                                                   ?pay, ?ent) &*&
                k == private_key_item(?principal3, ?count3); @*/
-  /*@ ensures  [f]world(pub) &*&
+  /*@ ensures  [f]world(pub, key_clsfy) &*&
                principal(principal1, count1 + 1) &*&
                item(item, enc, pub) &*& item(key, k, pub) &*&
                item(result, ?dec, pub) &*& tag_for_item(dec) == tag &*&
-               col ? [_]pub(dec) :
-               switch(pay)
-               {
-                 case some(dec2):
-                   return principal2 == principal3 && count2 == count3 ?
-                          dec == dec2 : [_]pub(dec);
-                 case none:
-                   return false;
-               }; @*/
+               col ? 
+                 [_]pub(dec) 
+               : principal2 != principal3 || count2 != count3 ? 
+                 true == key_clsfy(principal3, count3, false) &*& 
+                 [_]pub(dec) 
+               :
+                 switch(pay)
+                 {
+                   case some(dec2):
+                     return dec == dec2;
+                   case none:
+                     return false;
+                 }; @*/
 {
   struct item* result = 0;
   debug_print("DECRYPTING:\n");
@@ -202,11 +195,11 @@ struct item *asymmetric_decryption(struct item *key, struct item *item, char tag
 
     // Key
     //@ close pk_context(&context);
-    //@ open [f]world(pub);
+    //@ open [f]world(pub, key_clsfy);
     pk_init(&context);
-    //@ close [f]world(pub);
+    //@ close [f]world(pub, key_clsfy);
     set_private_key(&context, key);
-    //@ open [f]world(pub);
+    //@ open [f]world(pub, key_clsfy);
     /*@ assert pk_context_with_key(&context, pk_private,
                                    ?principal, ?count, RSA_BIT_KEY_SIZE); @*/
 
@@ -234,11 +227,16 @@ struct item *asymmetric_decryption(struct item *key, struct item *item, char tag
     /*@ produce_function_pointer_chunk random_function(
                       asym_enc_havege_random_stub)
                      (havege_state_initialized)(state, out, len) { call(); } @*/
+    //@ open principal(principal1, count1);
+    //@ structure s = known_value(0, full_tag(tag));
+    //@ close decryption_request(false, principal1, s, initial_request, enc_cont);
     if(pk_decrypt(&context, item->content + TAG_LENGTH,
                   (unsigned int) item->size - TAG_LENGTH,
                   output, &olen, MAX_PACKAGE_SIZE,
                   asym_enc_havege_random_stub, random_state) != 0)
       abort_crypto_lib("Decryption failed");
+    /*@ open decryption_response(false, principal1, s, initial_request,
+                                 ?wrong_key, ?p_key, ?c_key, ?cs_out); @*/
     //@ assert u_integer(&olen, ?size_out);
     //@ pk_release_context_with_key(&context);
     //@ open cryptogram(i_cont + TAG_LENGTH, i_size - TAG_LENGTH, enc_cont, enc_cg);
@@ -254,14 +252,14 @@ struct item *asymmetric_decryption(struct item *key, struct item *item, char tag
     result->content = malloc(result->size);
     if (result->content == 0) {abort_crypto_lib("Malloc failed");}
     //@ assert u_integer(&olen, ?olen_val);
-    //@ assert crypto_chars(?kind, output, olen_val, ?cs_out);
-    //@ assert kind == secret || kind == garbage;
-    //@ close [f]world(pub);
+    //@ assert crypto_chars(?kind, output, olen_val, cs_out);
+    //@ close [f]world(pub, key_clsfy);
+    //@ close check_tag2_ghost_args(false, wrong_key, p_key, c_key);
     check_tag2(output, tag);
-    //@ switch(kind){case normal: case secret: case garbage:}
+    //@ switch(kind){case normal: case secret:}
     memcpy(result->content, output, olen);
     //@ assert result->content |-> ?cont;
-    //@ assert crypto_chars(secret, cont, olen_val, cs_out);
+    //@ assert crypto_chars(kind, cont, olen_val, cs_out);
     zeroize(output, (int) olen);
     //@ chars_join(output);
     //@ close item(item, enc, pub);
@@ -270,6 +268,12 @@ struct item *asymmetric_decryption(struct item *key, struct item *item, char tag
     /*@ if (col)
         {
           crypto_chars_to_chars(cont, olen_val);
+          public_chars(cont, olen_val);
+          chars_to_crypto_chars(cont, olen_val);
+        }
+        else if (wrong_key)
+        {
+          assert true == key_clsfy(principal3, count3, false);
           public_chars(cont, olen_val);
           chars_to_crypto_chars(cont, olen_val);
         }
@@ -291,7 +295,7 @@ struct item *asymmetric_decryption(struct item *key, struct item *item, char tag
         }
     @*/
     parse_item(result->content, (int) olen);
-    /*@ if (col)
+    /*@ if (col || wrong_key)
         {
           retreive_proof_obligations();
           deserialize_item(cs_out, pub);

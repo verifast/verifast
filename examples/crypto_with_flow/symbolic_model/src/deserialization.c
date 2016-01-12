@@ -77,7 +77,7 @@ switch(length_bound) \
     { \
       i = data_item(cs_cont); \
       assert is_public_data(?proof, pub); \
-      close exists(polarssl_info_for_item); \
+      close exists(info_for_item); \
       proof(i); \
     } \
     else if (head(cs) == TAG_PAIR) \
@@ -339,7 +339,7 @@ lemma void well_formed_pair_item(list<char> cs,
 @*/
 
 void parse_pair_item(char* message, int size)
-  /*@ requires [?f1]world(?pub) &*& exists(?cs_tag) &*&
+  /*@ requires [?f1]world(?pub, ?key_clsfy) &*& exists(?cs_tag) &*&
                cs_tag == full_tag(TAG_PAIR) &*& TAG_LENGTH == length(cs_tag) &*&
                size <= INT_MAX - TAG_LENGTH &*& head(cs_tag) == TAG_PAIR &*&
                [?f2]crypto_chars(?kind, message, size, ?cs_cont) &*&
@@ -350,16 +350,14 @@ void parse_pair_item(char* message, int size)
                  case secret:
                    return [_]item_constraints(pair_item(_, _),
                                               append(cs_tag, cs_cont), pub);
-                 case garbage:
-                   return false;
                }; @*/
-  /*@ ensures  [f1]world(pub) &*&
+  /*@ ensures  [f1]world(pub, key_clsfy) &*&
                [f2]crypto_chars(kind, message, size, cs_cont) &*&
                true == well_formed(append(cs_tag, cs_cont),
                                    nat_length(append(cs_tag, cs_cont))); @*/
 {
-  //@ open [f1]world(pub);
-  //@ close [f1]world(pub);
+  //@ open [f1]world(pub, key_clsfy);
+  //@ close [f1]world(pub, key_clsfy);
   if (size <= (int) sizeof(int))
     abort_crypto_lib("Incorrect size for pair item");
   //@ list<char> cs = append(cs_tag, cs_cont);
@@ -435,17 +433,17 @@ void parse_pair_item(char* message, int size)
 }
 
 void parse_item(char* buffer, int size)
-  /*@ requires [?f1]world(?pub) &*&
+  /*@ requires [?f1]world(?pub, ?key_clsfy) &*&
                [?f2]crypto_chars(?kind, buffer, size, ?cs) &*&
-               kind != garbage &*& size > TAG_LENGTH &*&
+               size > TAG_LENGTH &*&
                kind == normal ? true :
                  [_]item_constraints(?i, cs, pub); @*/
-  /*@ ensures  [f1]world(pub) &*&
+  /*@ ensures  [f1]world(pub, key_clsfy) &*&
                [f2]crypto_chars(kind, buffer, size, cs) &*&
                true == well_formed(cs, nat_length(cs)); @*/
 {
-  //@ open [f1]world(pub);
-  //@ close [f1]world(pub);
+  //@ open [f1]world(pub, key_clsfy);
+  //@ close [f1]world(pub, key_clsfy);
   //@ crypto_chars_limits(buffer);
   //@ crypto_chars_split(buffer, TAG_LENGTH);
   //@ assert [f2]crypto_chars(kind, buffer, TAG_LENGTH, ?cs_tag);
@@ -458,8 +456,6 @@ void parse_item(char* buffer, int size)
         case secret:
           open [_]item_constraints(_, cs, pub);
           public_crypto_chars(buffer, TAG_LENGTH);
-        case garbage:
-          assert false;
       }
   @*/
   //@ open [f2]chars(buffer, TAG_LENGTH, cs_tag);
@@ -532,9 +528,9 @@ void parse_item(char* buffer, int size)
 }
 
 struct item* deserialize(char* buffer, int size)
-  /*@ requires [?f0]world(?pub) &*&
+  /*@ requires [?f0]world(?pub, ?key_clsfy) &*&
                [?f1]chars(buffer, size, ?cs); @*/
-  /*@ ensures  [f0]world(pub) &*&
+  /*@ ensures  [f0]world(pub, key_clsfy) &*&
                [f1]chars(buffer, size, cs) &*&
                item(result, ?i, pub) &*& [_]pub(i); @*/
 {
@@ -544,9 +540,9 @@ struct item* deserialize(char* buffer, int size)
   struct item* item = malloc(sizeof(struct item));
   if (item == 0){abort_crypto_lib("malloc of item failed");}
 
-  //@ open [f0]world(pub);
+  //@ open [f0]world(pub, key_clsfy);
   //@ public_chars(buffer, size);
-  //@ close [f0]world(pub);
+  //@ close [f0]world(pub, key_clsfy);
   item->size = size;
   item->content = malloc_wrapper(item->size);
   //@ assert item->content |-> ?cont;

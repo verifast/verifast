@@ -5,6 +5,9 @@
 
 #define PACK_PROOF_OBLIGATIONS(PREFIX) \
 { \
+  produce_lemma_function_pointer_chunk(PREFIX##_key_classifier) : \
+    key_classifier(PREFIX##_pub, PREFIX##_key_clsfy) \
+                  (PREFIX##_key, PREFIX##_p, PREFIX##_c, PREFIX##_sym){ call(); }; \
   produce_lemma_function_pointer_chunk(PREFIX##_public_collision) : \
     public_collision(PREFIX##_pub)(PREFIX##_i){ call(); }; \
   produce_lemma_function_pointer_chunk(PREFIX##_public_none_payload_item) : \
@@ -48,6 +51,7 @@
 
 
 #define PROOFS_DEFAULT(PREFIX) \
+  DEFAULT_PUBLIC_CLASSIFIER(PREFIX) \
   DEFAULT_PUBLIC_COLLISION(PREFIX) \
   DEFAULT_PUBLIC_NONE_PAYLOAD_ITEM(PREFIX) \
   DEFAULT_PUBLIC_DATA(PREFIX) \
@@ -68,6 +72,17 @@
   DEFAULT_PUBLIC_ASYMMETRIC_DECRYPTED(PREFIX) \
   DEFAULT_PUBLIC_ASYMMETRIC_SIGNATURE(PREFIX)
 
+#define DEFAULT_PUBLIC_CLASSIFIER(PREFIX) \
+lemma void PREFIX##_key_classifier(item key, int p, int c, bool symmetric) \
+  requires [_]PREFIX##_pub(key) &*& \
+           symmetric ? \
+              key == symmetric_key_item(p, c) \
+            : \
+              key == private_key_item(p, c); \
+  ensures  col || PREFIX##_key_clsfy(p, c, symmetric); \
+{ \
+  open [_]PREFIX##_pub(key); \
+}
 
 #define DEFAULT_PUBLIC_COLLISION(PREFIX) \
 lemma void PREFIX##_public_collision(item i) \
@@ -83,7 +98,6 @@ lemma void PREFIX##_public_none_payload_item(item i) \
   requires true == none_payload_item(i); \
   ensures  [_]PREFIX##_pub(i); \
 { \
-  get_info_for_item(i); \
   switch(i) \
   { \
     case data_item(cs0): \
@@ -117,7 +131,6 @@ lemma void PREFIX##_public_data(item data) \
   requires data == data_item(?d); \
   ensures  [_]PREFIX##_pub(data); \
 { \
-  get_info_for_item(data); \
   close PREFIX##_pub(data); \
   leak PREFIX##_pub(data); \
 }
@@ -128,7 +141,6 @@ lemma void PREFIX##_public_pair_compose(item first, item second) \
   ensures  [_]PREFIX##_pub(pair_item(first, second)); \
 { \
   item pair = pair_item(first, second); \
-  get_info_for_item(pair); \
   close PREFIX##_pub(pair); \
   leak PREFIX##_pub(pair); \
 }
@@ -151,7 +163,6 @@ lemma void PREFIX##_public_nonce(item nonce) \
   requires  nonce == nonce_item(?p0, ?c0, ?inc0) &*& true == bad(p0); \
   ensures   [_]PREFIX##_pub(nonce); \
 { \
-  get_info_for_item(nonce); \
   close PREFIX##_pub(nonce); \
   leak PREFIX##_pub(nonce); \
 }
@@ -170,9 +181,7 @@ lemma void PREFIX##_public_incremented_nonce(item nonce1, item nonce2) \
   } \
   else \
   { \
-    get_info_for_item(nonce1); \
     open [_]PREFIX##_pub(nonce1); \
-    info_for_incremented_nonce(nonce1, inc1, inc2); \
     close PREFIX##_pub(nonce2); \
     leak PREFIX##_pub(nonce2); \
   } \
@@ -190,7 +199,6 @@ lemma void PREFIX##_public_hash(item hash) \
             }; \
   ensures   [_]PREFIX##_pub(hash); \
 { \
-  get_info_for_item(hash); \
   close PREFIX##_pub(hash); \
   leak PREFIX##_pub(hash); \
 }
@@ -200,7 +208,6 @@ lemma void PREFIX##_public_symmetric_key(item key) \
   requires  key == symmetric_key_item(?p0, _) &*& true == bad(p0); \
   ensures   [_]PREFIX##_pub(key); \
 { \
-  get_info_for_item(key); \
   close PREFIX##_pub(key); \
   leak PREFIX##_pub(key); \
 }
@@ -210,7 +217,6 @@ lemma void PREFIX##_public_public_key(item key) \
   requires  key == public_key_item(?p, _); \
   ensures   [_]PREFIX##_pub(key); \
 { \
-  get_info_for_item(key); \
   close PREFIX##_pub(key); \
   leak PREFIX##_pub(key); \
 }
@@ -220,7 +226,6 @@ lemma void PREFIX##_public_private_key(item key) \
   requires  key == private_key_item(?p0, _) &*& true == bad(p0); \
   ensures   [_]PREFIX##_pub(key); \
 { \
-  get_info_for_item(key); \
   close PREFIX##_pub(key); \
   leak PREFIX##_pub(key); \
 }
@@ -240,15 +245,11 @@ lemma void PREFIX##_public_hmac(item hmac) \
 { \
   if (!col) \
   { \
-    get_info_for_item(hmac); \
-    assert [_]info_for_item(hmac, ?info0); \
     switch(pay) \
     { \
       case some(pay0): \
         item key = symmetric_key_item(p, c); \
         open [_]PREFIX##_pub(key); \
-        assert [_]info_for_item(key, ?info1); \
-        info_for_hmac_item(key, hmac); \
       case none: \
     }; \
   } \
@@ -271,15 +272,11 @@ lemma void PREFIX##_public_symmetric_encrypted(item enc) \
 { \
   if (!col) \
   { \
-    get_info_for_item(enc); \
-    assert [_]info_for_item(enc, ?info0); \
     switch(pay) \
     { \
       case some(pay0): \
         item key = symmetric_key_item(p, c); \
         open [_]PREFIX##_pub(key); \
-        assert [_]info_for_item(key, ?info1); \
-        info_for_symmetric_encrypted_item(key, enc); \
         close PREFIX##_pub(enc); \
         leak PREFIX##_pub(enc); \
       case none: \
@@ -312,13 +309,6 @@ lemma void PREFIX##_public_symmetric_encrypted_entropy(item enc, list<char> ent)
     { \
       case some(pay1): \
         open [_]PREFIX##_pub(enc); \
-        assert [_]info_for_item(enc, ?info1); \
-        get_info_for_item(enc2); \
-        assert [_]info_for_item(enc2, ?info2); \
-        get_info_for_item(key); \
-        assert [_]info_for_item(key, ?info3); \
-        info_for_symmetric_encrypted_item(key, enc); \
-        info_for_symmetric_encrypted_item(key, enc2); \
         close PREFIX##_pub(enc2); \
         leak PREFIX##_pub(enc2); \
       case none: \
@@ -350,11 +340,8 @@ lemma void PREFIX##_public_symmetric_decrypted(item enc) \
       else \
       { \
         open [_]PREFIX##_pub(enc); \
-        assert [_]info_for_item(enc, ?info0); \
         item key = symmetric_key_item(p, c); \
         open [_]PREFIX##_pub(key); \
-        assert [_]info_for_item(key, ?info1); \
-        info_for_symmetric_encrypted_item(key, enc); \
       } \
     case none: \
   } \
@@ -375,15 +362,11 @@ lemma void PREFIX##_public_asymmetric_encrypted(item enc) \
 { \
   if (!col) \
   { \
-    get_info_for_item(enc); \
-    assert [_]info_for_item(enc, ?info0); \
     switch(pay) \
     { \
       case some(pay0): \
         item key = public_key_item(p, c); \
         open [_]PREFIX##_pub(key); \
-        assert [_]info_for_item(key, ?info1); \
-        info_for_asymmetric_encrypted_item(key, enc); \
         close PREFIX##_pub(enc); \
         leak PREFIX##_pub(enc); \
       case none: \
@@ -416,13 +399,6 @@ lemma void PREFIX##_public_asymmetric_encrypted_entropy(item enc, list<char> ent
     { \
       case some(pay1): \
         open [_]PREFIX##_pub(enc); \
-        assert [_]info_for_item(enc, ?info1); \
-        get_info_for_item(enc2); \
-        assert [_]info_for_item(enc2, ?info2); \
-        get_info_for_item(key); \
-        assert [_]info_for_item(key, ?info3); \
-        info_for_asymmetric_encrypted_item(key, enc); \
-        info_for_asymmetric_encrypted_item(key, enc2); \
         close PREFIX##_pub(enc2); \
         leak PREFIX##_pub(enc2); \
       case none: \
@@ -454,15 +430,9 @@ lemma void PREFIX##_public_asymmetric_decrypted(item enc) \
       else \
       { \
         open [_]PREFIX##_pub(enc); \
-        assert [_]info_for_item(enc, ?info0); \
         item key = private_key_item(p, c); \
         item key_pub = public_key_item(p, c); \
         open [_]PREFIX##_pub(key); \
-        assert [_]info_for_item(key, ?info1); \
-        get_info_for_item(key_pub); \
-        assert [_]info_for_item(key_pub, ?info2); \
-        info_for_asymmetric_keypair(key_pub, key); \
-        info_for_asymmetric_encrypted_item(key_pub, enc); \
       } \
     case none: \
   } \
@@ -483,15 +453,11 @@ lemma void PREFIX##_public_asymmetric_signature(item sig) \
 { \
   if (!col) \
   { \
-    get_info_for_item(sig); \
-    assert [_]info_for_item(sig, ?info0); \
     switch(pay) \
     { \
       case some(pay0): \
         item key = private_key_item(p, c); \
         open [_]PREFIX##_pub(key); \
-        assert [_]info_for_item(key, ?info1); \
-        info_for_asymmetric_signature_item(key, sig); \
         close PREFIX##_pub(sig); \
         leak PREFIX##_pub(sig); \
       case none: \

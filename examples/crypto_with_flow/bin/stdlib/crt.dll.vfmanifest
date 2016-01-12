@@ -1,4 +1,4 @@
-.predicate @./crypto.gh#principal
+.predicate @./crypto.gh#network_permission
 .predicate @./crypto.gh#crypto_chars
 .provides ./crypto.gh#crypto_chars_to_chars
 .provides ./crypto.gh#chars_to_crypto_chars

@@ -151,59 +151,60 @@ int pk_encrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                 random_state_predicate(?state_pred) &*&
                 [_]is_random_function(f_rng, state_pred) &*&
                 [?f2]state_pred(p_rng) &*&
-                principal(?p2, ?c2); @*/
+                random_permission(?p2, ?c2); @*/
   /*@ ensures   pk_context_with_key(ctx, pk_public, p1, c1, nbits) &*&
                 [f1]crypto_chars(kind, input, ilen, cs_input) &*&
                 u_integer(olen, ?olen_val) &*&
                 [f2]state_pred(p_rng) &*&
-                principal(p2, c2 + 1) &*&
+                random_permission(p2, c2 + 1) &*&
                 result != 0 ?
                   // encryption failed
                   chars(output, osize, _)
                 :
-                  exists(?cg) &*& cg == cg_asym_encrypted(p1, c1, cs_input, _) &*&
+                  // encryption was successful
+                  cryptogram(output, olen_val, _, ?cg) &*&
+                  cg == cg_asym_encrypted(p1, c1, cs_input, _) &*&
                   olen_val > 0 &*& olen_val <= osize &*&
                   8 * olen_val <= nbits &*&
                   cg == cg_asym_encrypted(p1, c1, cs_input, _) &*&
-                  chars(output + olen_val, osize - olen_val, _) &*&
-                  kind == garbage ?
-                    // got garbage as input
-                    crypto_chars(garbage, output, osize, chars_for_cg(cg))
-                  : 
-                    // encryption was successful
-                    cryptogram(output, olen_val, _, cg); @*/
+                  chars(output + olen_val, osize - olen_val, _); @*/
 
 int pk_decrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                size_t *olen, size_t osize, void *f_rng, void *p_rng);
-  /*@ requires  pk_context_with_key(ctx, pk_private, ?p1, ?c1, ?nbits) &*&
-                [?f1]cryptogram(input, ilen, ?cs_input, ?cg_input) &*&
-                  cg_input == cg_asym_encrypted(?p2, ?c2, ?cs_output, _) &*&
+  /*@ requires  decryption_request(false, ?p1, ?s, ?args, ?in_cs) &*&
+                pk_context_with_key(ctx, pk_private, ?p2, ?c2, ?nbits) &*&
+                // input
+                [?f1]cryptogram(input, ilen, in_cs, ?cg_input) &*&
+                  cg_input == cg_asym_encrypted(?p3, ?c3, ?cs_out3, _) &*&
                   ilen >= MINIMAL_STRING_SIZE &*&
                   // message to decrypt can not be bigger than key
                   ilen * 8 <= nbits &*&
+                // output
                 u_integer(olen, _) &*&
                 chars(output, osize, _) &*&
+                // entropy
+                random_permission(p1, ?c1) &*& 
                 random_state_predicate(?state_pred) &*&
                 [_]is_random_function(f_rng, state_pred) &*&
-                [?f2]state_pred(p_rng) &*&
-                principal(?p3, ?c3); @*/
-  /*@ ensures   pk_context_with_key(ctx, pk_private, p1, c1, nbits) &*&
-                [f1]cryptogram(input, ilen, cs_input, cg_input) &*&
+                [?f2]state_pred(p_rng); @*/
+  /*@ ensures   pk_context_with_key(ctx, pk_private, p2, c2, nbits) &*&
+                [f1]cryptogram(input, ilen, in_cs, cg_input) &*&
                 u_integer(olen, ?olen_val) &*&
+                random_permission(p1, c1 + 1) &*&
                 [f2]state_pred(p_rng) &*&
-                principal(p3, c3 + 1) &*&
+                crypto_chars(?kind, output, ?olen_val2, ?cs_out) &*&
+                chars(output + olen_val2, osize - olen_val2, _) &*&
+                decryption_response(false, p1, s, args,
+                                    ?wrong_key, p2, c2, cs_out) &*&
+                wrong_key == (p2 != p3 || c2 != c3) &*&
                 result != 0 ?
-                  chars(output, osize, _)
+                  kind == normal
                 : 
-                (
-                  olen_val > 0 &*& olen_val <= osize &*&
-                  chars(output + olen_val, osize - olen_val, _) &*&
-                  col || p1 != p2 || c1 != c2 ?
-                    crypto_chars(garbage, output, olen_val, cs_output) &*&
-                    true == decrypted_garbage(cs_output)
+                  olen_val == olen_val2 &*&
+                  wrong_key ?
+                    kind == normal
                   :
-                    crypto_chars(secret, output, olen_val, cs_output)
-                ); @*/
+                    kind == secret &*& cs_out == cs_out3; @*/
 
 int pk_sign(pk_context *ctx, int md_alg, const char *hash, size_t hash_len,
             char *sig, size_t *sig_len, void *f_rng, void *p_rng);
@@ -219,25 +220,21 @@ int pk_sign(pk_context *ctx, int md_alg, const char *hash, size_t hash_len,
                 random_state_predicate(?state_pred) &*&
                 [_]is_random_function(f_rng, state_pred) &*&
                 [?f2]state_pred(p_rng) &*&
-                principal(?p2, ?c2); @*/
+                random_permission(?p2, ?c2); @*/
   /*@ ensures   pk_context_with_key(ctx, pk_private, p1, c1, nbits) &*&
                 [f1]crypto_chars(kind, hash, hash_len, cs_input) &*&
                 u_integer(sig_len, ?sig_len_val) &*&
                 [f2]state_pred(p_rng) &*&
-                principal(p2, c2 + 1) &*&
+                random_permission(p2, c2 + 1) &*&
                 result != 0 ?
                   // signing failed
                   chars(sig, out_len, _)
                 :
-                  exists(?cg) &*& cg == cg_asym_signature(p1, c1, cs_input, _) &*&
+                  // signing was successful
+                  cryptogram(sig, sig_len_val, _, ?cg) &*&
+                  cg == cg_asym_signature(p1, c1, cs_input, _) &*&
                   sig_len_val > 0 &*& sig_len_val <= out_len &*&
-                  chars(sig + sig_len_val, out_len - sig_len_val, _) &*&
-                  kind == garbage ?
-                    // got garbage as input
-                    crypto_chars(garbage, sig, out_len, chars_for_cg(cg))
-                  :
-                    // signing was successful
-                    cryptogram(sig, sig_len_val, _, cg); @*/
+                  chars(sig + sig_len_val, out_len - sig_len_val, _); @*/
 
 int pk_verify(pk_context *ctx, int md_alg, const char *hash,
               size_t hash_len, const char *sig, size_t sig_len );

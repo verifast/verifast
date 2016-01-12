@@ -20,9 +20,14 @@ fixpoint bool send(int sender, int receiver, list<char> message);
 // Definition of pub for this protocol ////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-fixpoint bool hmac_public_key(int p, int c)
+predicate hmac_proof_pred() = true;
+
+fixpoint bool hmac_public_key(int p, int c, bool symmetric)
 {
-  return bad(p) || bad(shared_with(p, c));
+  return symmetric ?
+           bad(p) || bad(shared_with(p, c))
+         :
+           bad(p);
 }
 
 predicate hmac_pub(cryptogram cg) =
@@ -31,26 +36,26 @@ predicate hmac_pub(cryptogram cg) =
     case cg_nonce(p0, c0):
       return true;
     case cg_symmetric_key(p0, c0):
-      return true == hmac_public_key(p0, c0);
+      return true == hmac_public_key(p0, c0, true);
     case cg_public_key(p0, c0):
       return true;
     case cg_private_key(p0, c0):
-      return true == bad(p0);
+      return true == hmac_public_key(p0, c0, false);
     case cg_hash(cs0):
       return true;
     case cg_hmac(p0, c0, cs0):
-      return hmac_public_key(p0, c0) ||
+      return true == hmac_public_key(p0, c0, true) ||
              send(p0, shared_with(p0, c0), cs0);
     case cg_encrypted(p0, c0, cs0, ent0):
-      return true == hmac_public_key(p0, c0) &*&
+      return true == hmac_public_key(p0, c0, true) &*&
              [_]public_generated(hmac_pub)(cs0);
     case cg_auth_encrypted(p0, c0, mac0, cs0, ent0):
-      return true == hmac_public_key(p0, c0) &*&
+      return true == hmac_public_key(p0, c0, true) &*&
              [_]public_generated(hmac_pub)(cs0);
     case cg_asym_encrypted(p0, c0, cs0, ent0):
       return [_]public_generated(hmac_pub)(cs0);
     case cg_asym_signature(p0, c0, cs0, ent0):
-      return true == bad(p0);
+      return true == hmac_public_key(p0, c0, false);
   }
 ;
 
@@ -89,5 +94,6 @@ void receiver(char *key, int key_len, char *message);
 ///////////////////////////////////////////////////////////////////////////////
 
 //@ PUBLIC_INVARIANT_PROOFS(hmac)
+//@ DECRYPTION_PROOFS(hmac)
 
 #endif

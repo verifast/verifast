@@ -11,16 +11,16 @@
 //@ predicate principals_created_temp(int* counter);
 
 void principals_initialize();
-  /*@ requires [?f]world(?pub) &*&
+  /*@ requires [?f]world(?pub, ?key_clsfy) &*&
                module(principal_ids, true); @*/
-  /*@ ensures  [f]world(pub) &*& 
+  /*@ ensures  [f]world(pub, key_clsfy) &*& 
                principals_created(0); @*/
 
 /*@
 lemma void principals_finalize();
-  requires [?f]world(?pub) &*&
+  requires [?f]world(?pub, ?key_clsfy) &*&
            principals_created(?count);
-  ensures  [f]world(pub) &*&
+  ensures  [f]world(pub, key_clsfy) &*&
            module(principal_ids, false);
 @*/
 

@@ -7,6 +7,14 @@ require_module principals_mod;
 
 predicate principals(int id);
 
+predicate random_permission(int principal, int generated_values;);
+predicate decryption_permission(int principal;);
+
+predicate principal(int principal, int generated_values;) =
+  network_permission(principal) &*& decryption_permission(principal) &*&
+  random_permission(principal, generated_values)
+;
+
 lemma void principals_init();
   requires module(principals_mod, true);
   ensures  module(principals_mod, false) &*&
@@ -15,8 +23,6 @@ lemma void principals_init();
 lemma void principals_exit();
   requires principals(_);
   ensures  true;
-
-fixpoint bool bad(int principal);
 
 lemma int principal_create();
   requires principals(?count);

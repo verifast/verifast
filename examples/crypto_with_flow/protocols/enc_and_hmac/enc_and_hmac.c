@@ -27,6 +27,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
              [f2]cryptogram(hmac_key, KEY_SIZE, hmac_key_cs, hmac_key_cg) &*&
              [f3]crypto_chars(secret, msg, msg_len, msg_cs); @*/
 {
+  //@ open principal(sender, _);
   int socket;
   havege_state havege_state;
 
@@ -97,10 +98,12 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
     free(message);
   }
   net_close(socket);
+  //@ close principal(sender, _);
 }
 
 int receiver(char *enc_key, char *hmac_key, char *msg)
 /*@ requires [_]public_invar(enc_and_hmac_pub) &*&
+             [_]decryption_key_classifier(enc_and_hmac_public_key) &*&
              principal(?receiver, _) &*&
              [?f1]cryptogram(enc_key, KEY_SIZE, ?enc_key_cs, ?enc_key_cg) &*&
              [?f2]cryptogram(hmac_key, KEY_SIZE, ?hmac_key_cs, ?hmac_key_cg) &*&
@@ -117,6 +120,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
              col || bad(sender) || bad(receiver) ||
                send(sender, receiver , msg_cs); @*/
 {
+  //@ open principal(receiver, _);
   int socket1;
   int socket2;
 
@@ -146,7 +150,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ assert chars(buffer, size, ?all_cs);
     //@ close hide_chars((void*) buffer + size, max_size - size, _);
 
-    // IV stuff
+    // Interpret message
     //@ chars_split(buffer, 16);
     //@ assert chars(buffer, 16, ?iv_cs);
     //@ chars_to_crypto_chars(buffer, 16);
@@ -154,21 +158,27 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ interpret_nonce(iv, 16);
     //@ assert cryptogram(iv, 16, iv_cs, ?iv_cg);
 
-    //Decrypt
-    //@ close aes_context(&aes_context);
-    if (aes_setkey_enc(&aes_context, enc_key,
-                        (unsigned int) (KEY_SIZE * 8)) != 0)
-      abort();
     //@ assert chars(buffer + 16, enc_size, ?enc_cs);
     //@ interpret_encrypted(buffer + 16, enc_size);
     //@ open cryptogram(buffer + 16, enc_size, enc_cs, ?enc_cg);
     //@ close cryptogram(buffer + 16, enc_size, enc_cs, enc_cg);
     //@ assert enc_cg == cg_encrypted(?p2, ?c2, ?dec_cs2, ?iv_cs2);
-    {
-      if (aes_crypt_cfb128(&aes_context, AES_DECRYPT, (unsigned int) enc_size,
+    
+    //@ assert chars(buffer + 16 + enc_size, 64, ?hmac_cs);
+    //@ interpret_hmac(buffer + 16 + enc_size, 64);
+    //@ open cryptogram(buffer + 16 + enc_size, 64, hmac_cs, ?hmac_cg);
+    //@ assert hmac_cg == cg_hmac(?p3, ?c3, ?hmac_pay);
+    
+    // Decrypt
+    //@ close aes_context(&aes_context);
+    if (aes_setkey_enc(&aes_context, enc_key,
+                       (unsigned int) (KEY_SIZE * 8)) != 0)
+      abort();
+    //@ structure s = known_value(0, hmac_pay);
+    //@ close decryption_request(true, receiver, s, initial_request, enc_cs);
+    if (aes_crypt_cfb128(&aes_context, AES_DECRYPT, (unsigned int) enc_size,
                            &iv_off, iv, buffer + 16, msg) != 0)
         abort();
-    }
     zeroize(iv, 16);
     aes_free(&aes_context);
     //@ open aes_context(&aes_context);
@@ -176,49 +186,43 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ crypto_chars_to_chars(buffer, 16);
     //@ assert chars(buffer, 16 + enc_size, append(iv_cs, enc_cs));
     //@ assert crypto_chars(_, msg, enc_size, ?dec_cs);
-
+    /*@ open decryption_response(true, receiver, s, initial_request,
+                                 ?wrong_key, sender, enc_id, dec_cs); @*/
+    
     //Verify the hmac
-    //@ assert chars(buffer + size - 64, 64, ?hmac_cs);
-    //@ public_chars(buffer + size - 64, 64);
-    //@ chars_to_crypto_chars(buffer + size - 64, 64);
     //@ assert crypto_chars(_, msg, size - 80, ?pay_cs);
     sha512_hmac(hmac_key, KEY_SIZE, msg,
                 (unsigned int) enc_size, hmac, 0);
-    //@ open exists(?hmac_cg);
-    /*@ if (!col && p2 == sender && c2 == enc_id) 
-        {
-          open cryptogram(hmac, 64, _, hmac_cg);
-        }
-    @*/
+    //@ open cryptogram(hmac, 64, _, ?hmac_cg2);
+    //@ assert hmac_cg2 == cg_hmac(sender, hmac_id, pay_cs);
     if (memcmp((void*) buffer + size - 64, hmac, 64) != 0) abort();
+    //@ chars_for_cg_inj(hmac_cg, hmac_cg2);
+    //@ assert col || hmac_cg == hmac_cg2;
+    
     //@ public_crypto_chars(hmac, 64);
-    //@ crypto_chars_to_chars(buffer + size - 64, 64);
-    /*@ if (!col)
+    //@ public_crypto_chars(buffer + size - 64, 64);
+    /*@ if (wrong_key)
         {
-          if (p2 != sender || c2 != enc_id)
+          if (!col && !enc_and_hmac_public_key(sender, hmac_id, true))
           {
-            structure s = 
-              plaintext_of_excl_one_way_value(1, normal, buffer + size - 64, 64);
-            close exists(hmac_cg);
+            assert !bad(sender);
+            assert !bad(receiver);
+            assert !enc_and_hmac_public_key(sender, enc_id, true);
             close exists(pair(nil, nil));
-            close has_structure(pay_cs, s);
-            known_garbage_collision(msg, size - 80, s);
-            open has_structure(pay_cs, s);
-            assert false;
+            close has_structure(hmac_pay, s);
+            leak has_structure(hmac_pay, s);
           }
-          else
-          {
-            if (!bad(sender) || !bad(receiver))
-            {
-              assert hmac_cg == cg_hmac(sender, hmac_id, dec_cs);
-              public_chars(buffer + size - 64, 64);
-              open [_]enc_and_hmac_pub(enc_cg);
-            }
-          }
+          decryption_with_wrong_key(msg, size - 80, s);
+          chars_to_secret_crypto_chars(msg, enc_size);
         }
         else
         {
-          chars_to_secret_crypto_chars(msg, enc_size);
+          if (!col)
+          {
+            assert hmac_cg == cg_hmac(sender, hmac_id, dec_cs);
+            public_chars(buffer + size - 64, 64);
+            open [_]enc_and_hmac_pub(enc_cg);
+          }
         }
     @*/
     //@ assert all_cs == append(iv_cs, append(enc_cs, hmac_cs));
@@ -230,5 +234,6 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
   net_close(socket2);
   net_close(socket1);
   return enc_size;
+  //@ close principal(receiver, _);
 }
 

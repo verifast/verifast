@@ -3,7 +3,9 @@
 
 #define MINIMAL_STRING_SIZE 10
 
-predicate principal(int principal, int generated_values);
+predicate network_permission(int principal;);
+
+fixpoint bool bad(int principal);
 
 //is true if a cryptographic collision occurs in a protocol run
 fixpoint bool col();
@@ -11,7 +13,6 @@ fixpoint bool col();
 inductive crypto_chars_kind =
   | normal
   | secret
-  | garbage
 ;
 
 predicate crypto_chars(crypto_chars_kind kind,

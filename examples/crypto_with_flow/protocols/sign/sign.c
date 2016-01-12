@@ -26,6 +26,7 @@ void sender(int recvr, char *key, int key_len, char *msg)
                [f1]cryptogram(key, key_len, key_cs, key_cg) &*&
                [f2]chars(msg, MSG_SIZE, msg_cs); @*/
 {
+  //@ open principal(sender, _);
   int socket;
   char hash[48];
   pk_context context;
@@ -103,6 +104,7 @@ void sender(int recvr, char *key, int key_len, char *msg)
     free(M);
   }
   net_close(socket);
+  //@ close principal(sender, _);
 }
 
 void receiver(int recvr, char *key, int key_len, char *msg)
@@ -118,6 +120,7 @@ void receiver(int recvr, char *key, int key_len, char *msg)
                col || bad(sender) ||
                  send(sender, recvr, msg_cs); @*/
 {
+  //@ open principal(recvr, _);
   int socket1;
   int socket2;
 
@@ -212,4 +215,5 @@ void receiver(int recvr, char *key, int key_len, char *msg)
   }
   net_close(socket2);
   net_close(socket1);
+  //@ close principal(recvr, _);
 }

@@ -22,6 +22,7 @@ void sender(char *key, char *msg, unsigned int msg_len)
              [f1]cryptogram(key, KEY_SIZE, key_cs, key_cg) &*&
              [f2]crypto_chars(secret, msg, msg_len, msg_cs); @*/
 {
+  //@ open principal(sender, _);
   int socket;
   havege_state havege_state;
   
@@ -84,6 +85,7 @@ void sender(char *key, char *msg, unsigned int msg_len)
     free(message);
   }
   net_close(socket);
+  //@ close principal(sender, _);
 }
 
 int receiver(char *key, char *msg)
@@ -100,6 +102,7 @@ int receiver(char *key, char *msg)
              col || bad(sender) || bad(receiver) ||
                send(sender, receiver, msg_cs); @*/
 {
+  //@ open principal(receiver, _);
   int socket1;
   int socket2;
   
@@ -163,4 +166,5 @@ int receiver(char *key, char *msg)
   net_close(socket2);
   net_close(socket1);
   return enc_size;
+  //@ close principal(receiver, _);
 }

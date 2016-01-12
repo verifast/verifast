@@ -259,10 +259,10 @@ lemma void serialize_item(item i)
 
 lemma void retreive_proof_obligations()
   nonghost_callers_only
-  requires [?f]world(?pub);
-  ensures  [f]world(pub) &*& proof_obligations(pub);
+  requires [?f]world(?pub, ?key_clsfy);
+  ensures  [f]world(pub, key_clsfy) &*& proof_obligations(pub);
 {
-  open  [f]world(pub);
+  open  [f]world(pub, key_clsfy);
   open  [f]proof_obligations(pub);
 
   duplicate_lemma_function_pointer_chunk(public_collision);
@@ -287,16 +287,16 @@ lemma void retreive_proof_obligations()
   close proof_obligations(pub);
 
   close [f]proof_obligations(pub);
-  close [f]world(pub);
+  close [f]world(pub, key_clsfy);
 }
 
 @*/
 
 int serialize_to_public_message(char** dest, struct item* item)
-  /*@ requires [?f0]world(?pub) &*&
+  /*@ requires [?f0]world(?pub, ?key_clsfy) &*&
                [?f1]item(item, ?i, pub) &*& pointer(dest, _) &*&
                [_]pub(i); @*/
-  /*@ ensures  [f0]world(pub) &*&
+  /*@ ensures  [f0]world(pub, key_clsfy) &*&
                [f1]item(item, i, pub) &*& pointer(dest, ?d) &*&
                malloc_block(d, result) &*& result > 1 &*&
                chars(d, result, ?cs) &*&
@@ -313,8 +313,8 @@ int serialize_to_public_message(char** dest, struct item* item)
   memcpy(temp, item->content, (unsigned int) size);
   *dest = temp;
 
-  //@ open [f0]world(pub);
-  //@ close [f0]world(pub);
+  //@ open [f0]world(pub, key_clsfy);
+  //@ close [f0]world(pub, key_clsfy);
   //@ retreive_proof_obligations();
   //@ assert [_]item_constraints(i, cs, pub);
   //@ serialize_item(i);

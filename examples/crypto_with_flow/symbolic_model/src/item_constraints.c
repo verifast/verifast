@@ -509,22 +509,28 @@ void check_tag(char* buffer, char tag)
 }
 
 void check_tag2(char* buffer, char tag)
-  /*@ requires [?f1]world(?pub) &*&
-               principal(?principal, ?values_count) &*&
-               [?f2]crypto_chars(?kind1, buffer, ?size, ?cs) &*&
+  /*@ requires [_]public_invar(?pub) &*&
+               [_]decryption_key_classifier(?key_classifier) &*&
+               network_permission(?p) &*&
+               [?f2]crypto_chars(?kind, buffer, ?size, ?cs) &*&
                size > TAG_LENGTH &*&
-               kind1 != garbage || decrypted_garbage(cs); @*/
-  /*@ ensures  [f1]world(pub) &*&
-               principal(principal, values_count) &*&
-               [f2]crypto_chars(?kind2, buffer, size, cs) &*&
-               head(cs) == tag &*& take(TAG_LENGTH, cs) == full_tag(tag) &*&
-               kind1 == garbage ?
-                 col && kind2 == secret
+               check_tag2_ghost_args(?sym, ?wrong_key, ?p_key, ?c_key) &*&
+               wrong_key ?
+                 decryption_with_wrong_key(sym, p, ?s, p_key, c_key, cs) &*&
+                 s == known_value(0, full_tag(tag))
                :
-                 kind1 == kind2; @*/
+                 true; @*/
+  /*@ ensures  network_permission(p) &*&
+               [f2]crypto_chars(kind, buffer, size, cs) &*&
+               head(cs) == tag &*& take(TAG_LENGTH, cs) == full_tag(tag) &*&
+               [_]public_generated(pub)(take(TAG_LENGTH, cs)) &*&
+               wrong_key ?
+                 decryption_permission(p) &*&
+                 key_classifier(p_key, c_key, sym) ? true : col
+               :
+                 true; @*/
 {
-  //@ open [f1]world(pub);
-  //@ close [f1]world(pub);
+  //@ open check_tag2_ghost_args(sym, wrong_key, p_key, c_key);
   char tb[TAG_LENGTH];
   write_tag(tb, tag);
   //@ public_chars(tb, TAG_LENGTH);
@@ -535,25 +541,22 @@ void check_tag2(char* buffer, char tag)
   //@ drop_append(TAG_LENGTH, full_tag(tag), drop(TAG_LENGTH, cs));
   //@ head_append(full_tag(tag), drop(TAG_LENGTH, cs));
   //@ assert [f2]crypto_chars(?kind2, buffer, size, cs);
-  /*@ switch(kind1)
+  /*@ if (wrong_key)
+      {
+        assert decryption_with_wrong_key(sym, p, ?s, p_key, c_key, cs);
+        close exists(pair(nil, drop(TAG_LENGTH, cs)));
+        close has_structure(cs, s);
+        leak has_structure(cs, s);
+        decryption_with_wrong_key(buffer, size, s);
+      }
+  @*/
+  /*@ switch(kind)
       {
         case normal:
           assert kind2 == normal;
-          crypto_chars_to_chars(tb, TAG_LENGTH);
         case secret:
           assert kind2 == secret;
           public_crypto_chars(tb, TAG_LENGTH);
-        case garbage:
-          structure s = known_value(1, normal, tb, TAG_LENGTH, full_tag(tag));
-          close exists(pair(nil, drop(TAG_LENGTH, cs)));
-          close has_structure(cs, s);
-          known_garbage_collision(buffer, size, s);
-          open has_structure(cs, s);
-          chars_to_secret_crypto_chars(buffer, size);
-          assert true == col;
-          crypto_chars_to_chars(tb, TAG_LENGTH);
-          crypto_chars_to_chars(buffer, size);
-          chars_to_secret_crypto_chars(buffer, size);
       } @*/
 }
 
@@ -575,6 +578,7 @@ void item_check_equal(struct item* item1, struct item* item2)
   //@ open [_]item_constraints(i1, cs1, pub);
   //@ open [_]item_constraints(i2, cs2, pub);
 
+  //@ open principal(principal, count);
   if (item1->size == item2->size)
   {
     if (0 == memcmp((void*) (item1->content), (void*) (item2->content),
@@ -583,6 +587,7 @@ void item_check_equal(struct item* item1, struct item* item2)
       //@ item_constraints_injective(i1, i2, cs1);
       //@ close [f1]item(item1, i1, pub);
       //@ close [f2]item(item2, i2, pub);
+      //@ open principal(principal, count);
       return;
     }
   }

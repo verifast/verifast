@@ -48,14 +48,14 @@ int gcm_crypt_and_tag(gcm_context *ctx, int mode, size_t length,
                       const char *add, size_t add_len,
                       const char *input, char *output,
                       size_t tag_len, char *tag);
-  /*@ requires principal(?p1, ?c1) &*&
-               gcm_context_initialized(ctx, ?p2, ?c2) &*&
+  /*@ requires gcm_context_initialized(ctx, ?p1, ?c1) &*&
+               random_permission(?p2, ?c2) &*&
                // this function is only spec'ed for encryption
                // use the function gcm_auth_decrypt to decrypt
                (mode == GCM_ENCRYPT) &*&
                // iv_len must be 16 since only AES is supported (see gcm_init)
                cryptogram(iv, iv_len, ?iv_cs, ?iv_cg) &*&
-                 iv_len == 16 &*& iv_cg == cg_nonce(p1, c1) &*&
+                 iv_len == 16 &*& iv_cg == cg_nonce(p2, c2) &*&
                // no additional data supported yet
                add == NULL &*& add_len == 0 &*&
                [?f]crypto_chars(?kind, input, length, ?in_cs) &*&
@@ -63,8 +63,8 @@ int gcm_crypt_and_tag(gcm_context *ctx, int mode, size_t length,
                // only tags of 16 bytes for simplicity
                chars(tag, tag_len, _) &*& tag_len == 16 &*&
                chars(output, length, _); @*/
-  /*@ ensures  principal(p1, c1) &*&
-               gcm_context_initialized(ctx, p2, c2) &*&
+  /*@ ensures  gcm_context_initialized(ctx, p1, c1) &*&
+               random_permission(p2, c2) &*&
                // content of updated iv is correlated with input
                crypto_chars(kind, iv, iv_len, _) &*&
                [f]crypto_chars(kind, input, length, in_cs) &*&
@@ -73,14 +73,9 @@ int gcm_crypt_and_tag(gcm_context *ctx, int mode, size_t length,
                  // encryption failed
                  chars(output, length, _)
                :
-                 exists(?cg) &*&
-                 cg == cg_auth_encrypted(p2, c2, tag_cs, in_cs, iv_cs) &*&
-                 kind == garbage ?
-                   // got garbage as input
-                   crypto_chars(garbage, output, length, chars_for_cg(cg))
-                 : 
-                   // encryption was successful
-                   cryptogram(output, length, _, cg); @*/
+                 // encryption was successful
+                 cryptogram(output, length, _, ?cg) &*&
+                 cg == cg_auth_encrypted(p1, c1, tag_cs, in_cs, iv_cs); @*/
 
 int gcm_auth_decrypt(gcm_context *ctx, size_t length,
                      const char *iv, size_t iv_len,

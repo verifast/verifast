@@ -18,7 +18,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
                shared_with(sender, enc_id) == shared_with(sender, hmac_id) &*&
              [?f3]crypto_chars(secret, msg, msg_len, ?msg_cs) &*&
                MAX_SIZE >= msg_len &*& msg_len >= MINIMAL_STRING_SIZE &*&
-               col || bad(sender) || bad(shared_with(sender, enc_id)) ?
+               bad(sender) || bad(shared_with(sender, enc_id)) ?
                  [_]public_generated(hmac_then_enc_tagged_pub)(msg_cs)
                :
                  true == send(sender, shared_with(sender, enc_id), msg_cs); @*/
@@ -27,6 +27,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
              [f2]cryptogram(hmac_key, KEY_SIZE, hmac_key_cs, hmac_key_cg) &*&
              [f3]crypto_chars(secret, msg, msg_len, msg_cs); @*/
 {
+  //@ open principal(sender, _);
   int socket;
   havege_state havege_state;
 
@@ -106,7 +107,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
     //@ open aes_context(&aes_context);
     zeroize(enc_msg, enc_len);
     
-    /*@ if (col || hmac_then_enc_tagged_public_key(sender, enc_id))
+    /*@ if (hmac_then_enc_tagged_public_key(sender, enc_id, true))
         {
           public_generated_join(hmac_then_enc_tagged_pub, identifier(0), msg_cs);
           public_generated_join(hmac_then_enc_tagged_pub, 
@@ -125,10 +126,12 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
     free(message);
   }
   net_close(socket);
+  //@ close principal(sender, _);
 }
 
 int receiver(char *enc_key, char *hmac_key, char *msg)
 /*@ requires [_]public_invar(hmac_then_enc_tagged_pub) &*&
+             [_]decryption_key_classifier(hmac_then_enc_tagged_public_key) &*&
              principal(?receiver, _) &*&
              [?f1]cryptogram(enc_key, KEY_SIZE, ?enc_key_cs, ?enc_key_cg) &*&
              [?f2]cryptogram(hmac_key, KEY_SIZE, ?hmac_key_cs, ?hmac_key_cg) &*&
@@ -146,6 +149,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
              col || bad(sender) || bad(receiver) ||
                send(sender, receiver, msg_cs); @*/
 {
+  //@ open principal(receiver, _);
   int socket1;
   int socket2;
 
@@ -191,6 +195,9 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ interpret_encrypted(buffer + 16, enc_size);
     //@ assert cryptogram(buffer + 16, enc_size, enc_cs, ?enc_cg);
     //@ assert enc_cg == cg_encrypted(?p2, ?c2, ?dec_cs2, ?iv_cs2);
+    
+    //@ structure s = known_value(0, identifier(0));
+    //@ close decryption_request(true, receiver, s, initial_request, enc_cs);
     if (aes_crypt_cfb128(&aes_context, AES_DECRYPT, (unsigned int) enc_size,
                          &iv_off, iv, buffer + 16, buffer_dec) != 0)
       abort();
@@ -199,14 +206,19 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ open aes_context(&aes_context);
     //@ public_cryptogram_extract(buffer + 16);
     //@ public_cryptogram(buffer + 16, enc_cg);
+    /*@ open decryption_response(true, receiver, s, initial_request,
+                                 ?wrong_key, sender, enc_id, ?dec_cs); @*/               
+    //@ close check_identifier_ghost_args(true, wrong_key, sender, enc_id);
     check_identifier(buffer_dec, 0);
-    //@ assert crypto_chars(secret, buffer_dec, enc_size, ?dec_cs);
+    //@ assert crypto_chars(secret, buffer_dec, enc_size, dec_cs);
+    
     //@ assert take(ID_SIZE, dec_cs) == identifier(0);
     //@ crypto_chars_split(buffer_dec, ID_SIZE);
     //@ assert crypto_chars(secret, buffer_dec, ID_SIZE, identifier(0));
     //@ crypto_chars_split(buffer_dec + ID_SIZE, enc_size - ID_SIZE - 64);
     //@ assert crypto_chars(_, buffer_dec + ID_SIZE, enc_size - ID_SIZE - 64, ?pay_cs);
     //@ assert crypto_chars(_, buffer_dec + enc_size - 64, 64, ?hmac_cs);
+    
     //Verify the hmac
     sha512_hmac(hmac_key, KEY_SIZE, buffer_dec + ID_SIZE,
                 (unsigned int) (enc_size - ID_SIZE - 64), hmac, 0);
@@ -217,24 +229,18 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     /*@ if (!col && !bad(sender) && !bad(receiver))
         {
           open [_]hmac_then_enc_tagged_pub(enc_cg);
-          if (p2 != sender || c2 != enc_id)
-          {
-            assert false;
-          }
-          else
-          {
-            assert [_]hmac_then_enc_tagged_pub_1(?msg_cs, ?hmac_cg2);
-            assert length(pay_cs) == length(msg_cs);
-            drop_append(ID_SIZE, identifier(0), append(pay_cs, chars_for_cg(hmac_cg)));
-            drop_append(ID_SIZE, identifier(0), append(msg_cs, chars_for_cg(hmac_cg2)));
-            take_append(ID_SIZE, identifier(0), append(pay_cs, chars_for_cg(hmac_cg)));
-            take_append(ID_SIZE, identifier(0), append(msg_cs, chars_for_cg(hmac_cg2)));
-            drop_append(length(pay_cs), pay_cs, chars_for_cg(hmac_cg));
-            drop_append(length(pay_cs), msg_cs, chars_for_cg(hmac_cg2));
-            assert (chars_for_cg(hmac_cg) == chars_for_cg(hmac_cg2));
-            chars_for_cg_inj(hmac_cg, hmac_cg2);
-            assert pay_cs == msg_cs;
-          }
+          assert !wrong_key;
+          assert [_]hmac_then_enc_tagged_pub_1(?msg_cs, ?hmac_cg2);
+          assert length(pay_cs) == length(msg_cs);
+          drop_append(ID_SIZE, identifier(0), append(pay_cs, chars_for_cg(hmac_cg)));
+          drop_append(ID_SIZE, identifier(0), append(msg_cs, chars_for_cg(hmac_cg2)));
+          take_append(ID_SIZE, identifier(0), append(pay_cs, chars_for_cg(hmac_cg)));
+          take_append(ID_SIZE, identifier(0), append(msg_cs, chars_for_cg(hmac_cg2)));
+          drop_append(length(pay_cs), pay_cs, chars_for_cg(hmac_cg));
+          drop_append(length(pay_cs), msg_cs, chars_for_cg(hmac_cg2));
+          assert (chars_for_cg(hmac_cg) == chars_for_cg(hmac_cg2));
+          chars_for_cg_inj(hmac_cg, hmac_cg2);
+          assert pay_cs == msg_cs;
         }
     @*/
     //@ chars_join(buffer);
@@ -248,4 +254,5 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
   net_close(socket2);
   net_close(socket1);
   return enc_size - ID_SIZE - 64;
+  //@ close principal(receiver, _);
 }

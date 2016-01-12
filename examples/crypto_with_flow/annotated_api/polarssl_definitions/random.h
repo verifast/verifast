@@ -12,12 +12,12 @@ predicate random_state_predicate(predicate(void *) state_pred) = true;
 #define PRG_PRECONDITION(STATE_PRED, STATE) \
   [?f]STATE_PRED(STATE) &*& \
   random_request(?principal, ?info, ?key_request) &*& \
-  principal(principal, ?count) &*& \
+  random_permission(principal, ?count) &*& \
   chars(output, len, _) &*& len >= MIN_RANDOM_SIZE
   
 #define PRG_POSTCONDITION(STATE_PRED, STATE) \
   [f]STATE_PRED(STATE) &*& \
-  principal(principal, count + 1) &*& \
+  random_permission(principal, count + 1) &*& \
   result == 0 ? \
     cryptogram(output, len, ?cs, ?cg) &*& \
     info == cg_info(cg) &*& \

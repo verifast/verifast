@@ -24,11 +24,11 @@ void nonces_exit();
   //@ ensures  module(nonce_item, false);
 
 void create_havege_random(char *output, int len);
-  /*@ requires [?f]world(?pub) &*& 
+  /*@ requires [?f]world(?pub, ?key_clsfy) &*& 
                nonce_request(?principal, ?info) &*&
                principal(principal, ?count) &*&
                chars(output, len, _);  @*/
-  /*@ ensures  [f]world(pub) &*& 
+  /*@ ensures  [f]world(pub, key_clsfy) &*& 
                principal(principal, count + 1) &*&
                cryptogram(output, len, ?cs, ?cg) &*& 
                cg == cg_nonce(principal, count + 1) &*&

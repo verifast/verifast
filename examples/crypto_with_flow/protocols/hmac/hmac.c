@@ -18,6 +18,7 @@ void sender(char *key, int key_len, char *message)
                [f1]cryptogram(key, key_len, key_cs, key_cg) &*&
                [f2]chars(message, MESSAGE_SIZE, msg_cs); @*/
 {
+  //@ open principal(sender, _);
   int socket;
   char hmac[64];
   
@@ -50,6 +51,7 @@ void sender(char *key, int key_len, char *message)
     free(M);
   }
   net_close(socket);
+  //@ close principal(sender, _);
 }
 
 void receiver(char *key, int key_len, char *message)
@@ -65,6 +67,7 @@ void receiver(char *key, int key_len, char *message)
                col || bad(sender) || bad(receiver) ||
                send(sender, receiver, msg_cs); @*/
 {
+  //@ open principal(receiver, _);
   int socket1;
   int socket2;
   
@@ -115,4 +118,5 @@ void receiver(char *key, int key_len, char *message)
   }
   net_close(socket2);
   net_close(socket1);
+  //@ close principal(receiver, _);
 }

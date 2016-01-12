@@ -15,7 +15,7 @@
 // Definition of pub for this protocol ////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-fixpoint bool ror_pub_key(int principal, int info)
+fixpoint bool ror_public_sym_key(int principal, int info)
 {
   return bad(principal) ||
          int_left(info) == 0 &&
@@ -29,6 +29,14 @@ fixpoint bool ror_pub_key(int principal, int info)
          );
 }
 
+fixpoint bool ror_key_clsfy(int p, int c, bool sym)
+{
+  return sym ?
+           ror_public_sym_key(p, info_for_item(symmetric_key_item(p, c)))
+         :
+           bad(p);
+}
+
 predicate ror_pub_pred_hmac(int current, item pay, int k_info,
                             int server, int previous, int next) =
   k_info == int_pair(0, server) &*&
@@ -38,16 +46,15 @@ predicate ror_pub_pred_hmac(int current, item pay, int k_info,
   INT_MIN <= previous && previous <= INT_MAX &*&
   INT_MIN <= next && next <= INT_MAX &*&
   nonce == nonce_item(current, _, 0) &*&
-  [_]info_for_item(nonce, ?n_info) &*&
-  n_info == int_pair(previous, next) &*&
+  info_for_item(nonce) == int_pair(previous, next) &*&
   [_]ror_pub(rest) &*&
   rest == data_item(chars_of_int(INITIAL_MSG)) ?
     previous == INITIAL_MSG
   :
-    rest == pair_item(
-              pair_item(data_item(chars_of_int(previous)),
-                pair_item(data_item(chars_of_int(current)), _)),
-              _)
+    rest == 
+      pair_item(
+        pair_item(data_item(chars_of_int(previous)),
+          pair_item(data_item(chars_of_int(current)), _)), _)
 ;
 
 predicate ror_pub_pred_enc(int current, item pay, int k_info,
@@ -59,20 +66,17 @@ predicate ror_pub_pred_enc(int current, item pay, int k_info,
            pair_item(data_item(chars_of_int(p1)),
              pair_item(data_item(chars_of_int(p2)), ?nonce))) &*&
   key_gen == symmetric_key_item(server, _) &*&
-  [_]info_for_item(key_gen, ?k_gen_info) &*&
-  k_gen_info == int_pair(1, int_pair(p1, p2)) &*&
+  info_for_item(key_gen) == int_pair(1, int_pair(p1, p2)) &*&
   nonce == nonce_item(current, _, 0) &*&
-  [_]info_for_item(nonce, ?n_info) &*&
   p1 == current ?
-    p2 == int_right(n_info)
+    p2 == int_right(info_for_item(nonce))
   :
     p2 == current &*&
-    p1 == int_left(n_info)
+    p1 == int_left(info_for_item(nonce))
 ;
 
 predicate ror_pub(item i) =
   col ? true :
-  [_]info_for_item(i, ?info0) &*&
   switch (i)
   {
     case data_item(d0):
@@ -91,19 +95,20 @@ predicate ror_pub(item i) =
           return true;
       };
     case symmetric_key_item(p0, c0):
-      return true == ror_pub_key(p0, info0);
+      return true == ror_key_clsfy(p0, c0, true);
     case public_key_item(p0, c0):
       return true;
     case private_key_item(p0, c0):
-      return true == bad(p0);
+      return true == ror_key_clsfy(p0, c0, false);
     case hmac_item(p0, c0, pay0): return
       switch(pay0)
       {
         case some(pay1):
-          return ror_pub_key(p0, info0) ?
+          return ror_key_clsfy(p0, c0, true) ?
                    [_]ror_pub(pay1)
                  :
-                   [_]ror_pub_pred_hmac(p0, pay1, info0, _, _, _);
+                   [_]ror_pub_pred_hmac(p0, pay1, 
+                                        info_for_item(i), _, _, _);
         case none:
           return true;
       };
@@ -111,10 +116,11 @@ predicate ror_pub(item i) =
       switch(pay0)
       {
         case some(pay1):
-          return ror_pub_key(p0, info0) ?
+          return ror_key_clsfy(p0, c0, true) ?
                    [_]ror_pub(pay1)
                  :
-                   [_]ror_pub_pred_enc(p0, pay1, info0, _, _, _);
+                   [_]ror_pub_pred_enc(p0, pay1, 
+                                       info_for_item(i), _, _, _);
         case none:
           return true;
       };
@@ -159,7 +165,7 @@ predicate keys(int server, struct keys* k) =
     k->key |-> ?key &*& k->next |-> ?next &*&
     item(key, ?ikey, ror_pub) &*&
     ikey == symmetric_key_item(principal, _) &*&
-    [_]info_for_item(ikey, int_pair(0, server)) &*&
+    info_for_item(ikey) == int_pair(0, server) &*&
     keys(server, next)
 ;
 @*/
@@ -167,7 +173,7 @@ predicate keys(int server, struct keys* k) =
 struct keys * add_key(struct keys *keys, struct item *key, int principal);
   /*@ requires keys(?server, keys) &*& item(key, ?k, ror_pub) &*&
                  k == symmetric_key_item(principal, _) &*&
-                 [_]info_for_item(k, int_pair(0, server)); @*/
+                 info_for_item(k) == int_pair(0, server); @*/
   //@ ensures  keys(server, result);
 
 void remove_keys(struct keys *keys);
@@ -178,30 +184,35 @@ struct item *lookup_key(struct keys *keys, int principal);
   //@ requires [?f]keys(?server, keys);
   /*@ ensures  [f]keys(server, keys) &*& item(result, ?k, ror_pub) &*&
                  k == symmetric_key_item(principal, _) &*&
-                 [_]info_for_item(k, int_pair(0, server)); @*/
+                 info_for_item(k) == int_pair(0, server); @*/
 
 int participant(bool initial, int server, int current, int next,
                 int port_prev, int port_next, struct item *key,
                 struct item **key1, struct item **key2);
-  /*@ requires [?f0]world(ror_pub) &*& principal(current, ?count) &*&
+  /*@ requires [?f0]world(ror_pub, ror_key_clsfy) &*& 
+               principal(current, ?count) &*&
                item(key, ?k, ror_pub) &*&
-                 [_]info_for_item(k, int_pair(0, server)) &*&
-                 k == symmetric_key_item(current, _) &*&
+                 info_for_item(k) == int_pair(0, server) &*&
+                 k == symmetric_key_item(current, ?cc) &*&
                pointer(key1, _) &*& pointer(key2, _); @*/
-  /*@ ensures  [f0]world(ror_pub) &*& principal(current, count + 1) &*&
+  /*@ ensures  [f0]world(ror_pub, ror_key_clsfy) &*& 
+               principal(current, count + 1) &*&
                item(key, k, ror_pub) &*&
                pointer(key1, ?p_key1) &*& pointer(key2, ?p_key2) &*&
-               item(p_key2, ?k2, ror_pub) &*& [_]info_for_item(k2, ?k2_info) &*&
-               col || ror_pub_key(current, int_pair(0, server)) ||
-               k2_info == int_pair(1, int_pair(current, next)) &*&
+               item(p_key2, ?k2, ror_pub) &*&
+               col || ror_key_clsfy(current, cc, true) ||
+               info_for_item(k2) == int_pair(1, int_pair(current, next)) &*&
                initial ? true :
-                 item(p_key1, ?k1, ror_pub) &*& [_]info_for_item(k1, ?k1_info) &*&
-                 col || ror_pub_key(current, int_pair(0, server)) ||
-                 k1_info == int_pair(1, int_pair(result, current)); @*/
+                 item(p_key1, ?k1, ror_pub) &*&
+                 col || ror_key_clsfy(current, cc, true) ||
+                 info_for_item(k1) == 
+                   int_pair(1, int_pair(result, current)); @*/
 
 void server(int server, struct keys *k, int port);
-  //@ requires [?f0]world(ror_pub) &*& principal(server, _) &*& keys(server, k);
-  //@ ensures  [f0]world(ror_pub) &*& principal(server, _) &*& keys(server, k);
+  /*@ requires [?f0]world(ror_pub, ror_key_clsfy) &*& 
+               principal(server, _) &*& keys(server, k); @*/
+  /*@ ensures  [f0]world(ror_pub, ror_key_clsfy) &*& 
+               principal(server, _) &*& keys(server, k); @*/
 
 ///////////////////////////////////////////////////////////////////////////////
 // Attacker proof obligations for this protocol ///////////////////////////////

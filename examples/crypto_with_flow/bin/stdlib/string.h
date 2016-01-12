@@ -11,7 +11,6 @@ char *strcpy(char *d, char *s);
 void memcpy(void *array, void *array0, size_t count);
     /*@ requires chars(array, count, ?cs) &*&
                  [?f]crypto_chars(?kind, array0, count, ?cs0) &*& 
-                 kind != garbage &*& // garbage cannot be moved around in memory 
                  //minimum size prevents comparing sequence of same byte (see memcmp)
                  //otherwise guessing would become easier complexity wise
                  kind == normal || count >= MINIMAL_STRING_SIZE; @*/
@@ -41,11 +40,9 @@ int strlen(char *string);
     //@ ensures [f]string(string, cs) &*& result == length(cs);
 
 int memcmp(char *array, char *array0, size_t count);
-    /*@ requires principal(?principal, ?values_count) &*& 
+    /*@ requires network_permission(?principal) &*& 
                  [?f1]crypto_chars(?kind1, array, ?n1, ?cs) &*&
                  [?f2]crypto_chars(?kind2, array0, ?n2, ?cs0) &*& 
-                 // garbage cannot be compared to itself 
-                 kind1 != garbage || kind2 != garbage || array != array0 &*&
                  count <= n1 &*& count <= n2 &*& 
                  kind1 == normal && kind2 == normal ?
                    true : count >= MINIMAL_STRING_SIZE; @*/
@@ -53,11 +50,11 @@ int memcmp(char *array, char *array0, size_t count);
                  [f2]crypto_chars(kind2, array0, n2, cs0) &*&
                  true == ((result == 0) == (take(count, cs) == take(count, cs0))) &*&
                  (
-                   //if guessing a secret/random value failed, network permissions are revoked
+                   //if guessing a secret value failed, network permissions are revoked
                    // *otherwise one could keep guessing untill success
                    // *MINIMAL_STRING_SIZE ensures correct guess is unlikely
-                   result != 0 && !(kind1 == normal && kind2 == normal) ?
-                       true : principal(principal, values_count)
+                   result != 0 && (kind1 == secret || kind2 == secret) ?
+                       true : network_permission(principal)
                  ); @*/
 
 int strcmp(char *s1, char *s2);

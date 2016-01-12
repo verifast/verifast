@@ -25,9 +25,12 @@ predicate hmac_then_enc_tagged_proof_pred() = true;
 
 predicate hmac_then_enc_tagged_pub_1(list<char> cs, cryptogram cg) = true;
 
-fixpoint bool hmac_then_enc_tagged_public_key(int p, int c)
+fixpoint bool hmac_then_enc_tagged_public_key(int p, int c, bool symmetric)
 {
-  return col || bad(p) || bad(shared_with(p, c));
+  return symmetric ?
+           bad(p) || bad(shared_with(p, c))
+         :
+           bad(p);
 }
 
 predicate hmac_then_enc_tagged_pub(cryptogram cg) =
@@ -36,20 +39,20 @@ predicate hmac_then_enc_tagged_pub(cryptogram cg) =
     case cg_nonce(p0, c0):
       return true;
     case cg_symmetric_key(p0, c0):
-      return true == hmac_then_enc_tagged_public_key(p0, c0);
+      return true == hmac_then_enc_tagged_public_key(p0, c0, true);
     case cg_public_key(p0, c0):
       return true;
     case cg_private_key(p0, c0):
-      return true == bad(p0);
+      return true == hmac_then_enc_tagged_public_key(p0, c0, false);
     case cg_hash(cs0):
       return true;
     case cg_hmac(p0, c0, cs0):
-      return hmac_then_enc_tagged_public_key(p0, c0) ?
+      return hmac_then_enc_tagged_public_key(p0, c0, true) ?
         true
       :
         true == send(p0, shared_with(p0, c0), cs0);
     case cg_encrypted(p0, c0, cs0, ent0):
-      return col || hmac_then_enc_tagged_public_key(p0, c0) ?
+      return hmac_then_enc_tagged_public_key(p0, c0, true) ?
         [_]public_generated(hmac_then_enc_tagged_pub)(cs0)
       :
         hmac_then_enc_tagged_pub_1(?msg_cs, ?hmac_cg) &*&
@@ -62,12 +65,12 @@ predicate hmac_then_enc_tagged_pub(cryptogram cg) =
         shared_with(p0, c0) == shared_with(p0, c1) &*&
         true == send(p0, shared_with(p0, c0), msg_cs);
     case cg_auth_encrypted(p0, c0, mac0, cs0, ent0):
-      return true == hmac_then_enc_tagged_public_key(p0, c0) &*&
+      return true == hmac_then_enc_tagged_public_key(p0, c0, true) &*&
              [_]public_generated(hmac_then_enc_tagged_pub)(cs0);
     case cg_asym_encrypted(p0, c0, cs0, ent0):
       return [_]public_generated(hmac_then_enc_tagged_pub)(cs0);
     case cg_asym_signature(p0, c0, cs0, ent0):
-      return true == bad(p0);
+      return true == hmac_then_enc_tagged_public_key(p0, c0, false);
   }
 ;
 
@@ -88,7 +91,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len);
                shared_with(sender, enc_id) == shared_with(sender, hmac_id) &*&
              [?f3]crypto_chars(secret, msg, msg_len, ?msg_cs) &*&
                MAX_SIZE >= msg_len &*& msg_len >= MINIMAL_STRING_SIZE &*&
-               col || bad(sender) || bad(shared_with(sender, enc_id)) ?
+               bad(sender) || bad(shared_with(sender, enc_id)) ?
                  [_]public_generated(hmac_then_enc_tagged_pub)(msg_cs)
                :
                  // Not saying anything about publicness of msg_cs established
@@ -101,6 +104,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len);
 
 int receiver(char *enc_key, char *hmac_key, char *msg);
 /*@ requires [_]public_invar(hmac_then_enc_tagged_pub) &*&
+             [_]decryption_key_classifier(hmac_then_enc_tagged_public_key) &*&
              principal(?receiver, _) &*&
              [?f1]cryptogram(enc_key, KEY_SIZE, ?enc_key_cs, ?enc_key_cg) &*&
              [?f2]cryptogram(hmac_key, KEY_SIZE, ?hmac_key_cs, ?hmac_key_cg) &*&
@@ -123,5 +127,6 @@ int receiver(char *enc_key, char *hmac_key, char *msg);
 ///////////////////////////////////////////////////////////////////////////////
 
 //@ PUBLIC_INVARIANT_PROOFS(hmac_then_enc_tagged)
+//@ DECRYPTION_PROOFS(hmac_then_enc_tagged)
 
 #endif

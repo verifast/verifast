@@ -16,7 +16,7 @@ struct ss_auth_args
 
 /*@
 predicate_family_instance pthread_run_pre(attacker_t)(void *data, any info) =
-    exists(ss_auth_pub) &*& [_]world(ss_auth_pub) &*&
+    [_]world(ss_auth_pub, ss_auth_key_clsfy) &*&
     ss_auth_args_attacker(data, ?attacker) &*&
     true == bad(attacker) &*&
     principal(attacker, _) &*&
@@ -42,7 +42,7 @@ inductive info =
 ;
 
 predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) =
-  [_]world(ss_auth_pub) &*&
+  [_]world(ss_auth_pub, ss_auth_key_clsfy) &*&
   ss_auth_args_key(data, ?key) &*&  
   principal(?principal, ?count) &*&  
     item(key, public_key_item(?sender, _), ss_auth_pub) &*&
@@ -72,7 +72,7 @@ void *receiver_t(void* data) //@ : pthread_run_joinable
 
 /*@
 predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
-  [_]world(ss_auth_pub) &*& 
+  [_]world(ss_auth_pub, ss_auth_key_clsfy) &*& 
   ss_auth_args_key(data, ?key) &*&
     item(key, private_key_item(?sender, _), ss_auth_pub) &*&
   principal(?principal, ?count) &*&
@@ -97,7 +97,6 @@ void *sender_t(void* data) //@ : pthread_run_joinable
   struct item *key = args->key;
   //@ assert principal(?principal, ?count);
   //@ item n = nonce_item(principal, count + 1, 0);
-  //@ get_info_for_item(n);
   //@ close ss_auth_pub(n);
   //@ leak ss_auth_pub(n);
   int i = random_int();
@@ -106,8 +105,7 @@ void *sender_t(void* data) //@ : pthread_run_joinable
   //@ assert item(key, private_key_item(?sender, _), ss_auth_pub);
   //@ item datai = data_item(chars_of_int(i));
   //@ assume (app_send_event(sender, datai));
-  //@ assert [_]world(ss_auth_pub);
-  //@ get_info_for_item(datai);
+  //@ assert [_]world(ss_auth_pub, ss_auth_key_clsfy);
   //@ close ss_auth_pub(datai);
   //@ leak ss_auth_pub(datai);
   app_send(key, mess_authage);
@@ -146,7 +144,7 @@ int main() //@ : main_full(main_app)
   keypair_free(pair);
   
   void *null = (void *) 0;
-  //@ leak  world(ss_auth_pub);
+  //@ leak  world(ss_auth_pub, ss_auth_key_clsfy);
   { 
     pthread_t a_thread;
     struct ss_auth_args *args = malloc(sizeof(struct ss_auth_args));
@@ -163,7 +161,7 @@ int main() //@ : main_full(main_app)
 #else
   while (true)
 #endif
-    /*@ invariant [_]world(ss_auth_pub) &*& 
+    /*@ invariant [_]world(ss_auth_pub, ss_auth_key_clsfy) &*& 
           principal(_, _) &*& principal(_, _) &*&
           item(pub_key, public_key_item(sender, _), ss_auth_pub) &*&
           item(priv_key, private_key_item(sender, _), ss_auth_pub);

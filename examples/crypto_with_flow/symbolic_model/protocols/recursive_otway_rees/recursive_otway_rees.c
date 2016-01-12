@@ -14,17 +14,17 @@
 /*@
 #define CLOSE_PUB(I) \
   { \
-    get_info_for_item(I); \
     close ror_pub(I); \
     leak ror_pub(I); \
   }
 @*/
 
 struct item *get_int(int data)
-  //@ requires [?f0]world(ror_pub);
-  /*@ ensures  [f0]world(ror_pub) &*& item(result, ?d, ror_pub) &*&
+  //@ requires [?f0]world(ror_pub, ror_key_clsfy);
+  /*@ ensures  [f0]world(ror_pub, ror_key_clsfy) &*&
+               item(result, ?d, ror_pub) &*&
                d == data_item(chars_of_int(data)) &*&
-               [_]ror_pub(d) &*& [_]info_for_item(d, _); @*/
+               [_]ror_pub(d); @*/
 {
   return create_data_item_from_int(data);
   //@ assert item(_, ?d, ror_pub);
@@ -35,7 +35,7 @@ struct item *get_int(int data)
 struct keys *add_key(struct keys *keys, struct item *key, int principal)
   /*@ requires keys(?server, keys) &*& item(key, ?k, ror_pub) &*&
                  k == symmetric_key_item(principal, _) &*&
-                 [_]info_for_item(k, int_pair(0, server)); @*/
+                 info_for_item(k) == int_pair(0, server); @*/
   //@ ensures  keys(server, result);
 {
   struct keys *result = malloc(sizeof(struct keys));
@@ -64,7 +64,7 @@ struct item *lookup_key(struct keys *keys, int principal)
   //@ requires [?f]keys(?server, keys);
   /*@ ensures  [f]keys(server, keys) &*& item(result, ?k, ror_pub) &*&
                  k == symmetric_key_item(principal, _) &*&
-                 [_]info_for_item(k, int_pair(0, server)); @*/
+                 info_for_item(k) == int_pair(0, server); @*/
 {
   //@ open [f]keys(server, keys);
   if (keys == 0)
@@ -84,25 +84,25 @@ struct item *lookup_key(struct keys *keys, int principal)
 #endif
 
 #ifdef VERIFY_PRINCIPAL_1
-struct item *participant_construct(int server, int prev, int current, int next, 
-                                   struct item *nonce, struct item *key, 
+struct item *participant_construct(int server, int prev, int current, int next,
+                                   struct item *nonce, struct item *key,
                                    struct item* msg_prev)
-  /*@ requires [?f0]world(ror_pub) &*&
+  /*@ requires [?f0]world(ror_pub, ror_key_clsfy) &*&
                [?f1]item(nonce, ?n, ror_pub) &*& [_]ror_pub(n) &*&
-                 [_]info_for_item(n, int_pair(prev, next)) &*&
-                 n == nonce_item(current, _, 0) &*&
+                 info_for_item(n) == int_pair(prev, next) &*&
+                 n == nonce_item(current, ?c1, 0) &*&
                [?f2]item(key, ?k, ror_pub) &*&
-                 [_]info_for_item(k, int_pair(0, server)) &*&
-                 k == symmetric_key_item(current, _) &*&
+                 info_for_item(k) == int_pair(0, server) &*&
+                 k == symmetric_key_item(current, ?c2) &*&
                item(msg_prev, ?m, ror_pub) &*& [_]ror_pub(m) &*&
                  m == data_item(chars_of_int(INITIAL_MSG)) ?
                    prev == INITIAL_MSG
                  :
-                   col ? true : 
+                   col ? true :
                    m == pair_item(
                           pair_item(data_item(chars_of_int(prev)),
                             pair_item(data_item(chars_of_int(current)), _)), _); @*/
-  /*@ ensures  [f0]world(ror_pub) &*& 
+  /*@ ensures  [f0]world(ror_pub, ror_key_clsfy) &*&
                [f1]item(nonce, n, ror_pub) &*& [f2]item(key, k, ror_pub) &*&
                item(result, ?r, ror_pub) &*& [_]ror_pub(r); @*/
 {
@@ -126,16 +126,15 @@ struct item *participant_construct(int server, int prev, int current, int next,
   struct item *hmac = create_hmac(key, m3);
 
   //@ assert item(hmac, ?h, ror_pub);
-  //@ get_info_for_item(h);
-  //@ assert [_]info_for_item(h, ?info_h);
   /*@ if (!col)
       {
-        assert h == hmac_item(current, _, some(p_m3));
-        if (!ror_pub_key(current, info_h))
+        assert h == hmac_item(current, ?c3, some(p_m3));
+        if (!ror_key_clsfy(current, c3, true))
         {
-          info_for_hmac_item(k, h);
-          close ror_pub_pred_hmac(current, p_m3, info_h, server, prev, next);
-          leak ror_pub_pred_hmac(current, p_m3, info_h, server, prev, next);
+          close ror_pub_pred_hmac(current, p_m3,
+                  info_for_item(h), server, prev, next);
+          leak  ror_pub_pred_hmac(current, p_m3,
+                  info_for_item(h), server, prev, next);
         }
       }
   @*/
@@ -147,7 +146,7 @@ struct item *participant_construct(int server, int prev, int current, int next,
   item_free(p1); item_free(p2); item_free(hmac);
   item_free(m1); item_free(m2); item_free(m3);
   item_free(msg_prev);
-  
+
   return result;
 }
 #endif
@@ -156,23 +155,27 @@ struct item *participant_construct(int server, int prev, int current, int next,
 struct item *participant_process(int server, int previous, int current, int next,
                                  bool up, struct item *msg, struct item *nonce,
                                  struct item *key)
-  /*@ requires [?f0]world(ror_pub) &*& principal(current, ?count) &*&
+  /*@ requires [?f0]world(ror_pub, ror_key_clsfy) &*&
+               principal(current, ?count) &*&
                item(msg, ?m, ror_pub) &*& [_]ror_pub(m) &*&
                item(nonce, ?n, ror_pub) &*&
-                 [_]info_for_item(n, int_pair(previous, next)) &*&
+                 info_for_item(n) == int_pair(previous, next) &*&
                  n == nonce_item(current, _, 0) &*&
                item(key, ?k, ror_pub) &*&
-                 [_]info_for_item(k, int_pair(0, server)) &*&
-                 k == symmetric_key_item(current, _); @*/
-  /*@ ensures  [f0]world(ror_pub) &*& principal(current, count) &*&
+                 info_for_item(k) == int_pair(0, server) &*&
+                 k == symmetric_key_item(current, ?cc); @*/
+  /*@ ensures  [f0]world(ror_pub, ror_key_clsfy) &*&
+               principal(current, count) &*&
                item(nonce, n, ror_pub) &*& item(key, k, ror_pub) &*&
-               item(result, ?r, ror_pub) &*& [_]info_for_item(r, ?r_info) &*&
+               item(result, ?r, ror_pub) &*&
                up ?
-                 col || ror_pub_key(current, int_pair(0, server)) ||
-                 r_info == int_pair(1, int_pair(current, next))
+                 col || ror_key_clsfy(current, cc, true) ||
+                 info_for_item(r) ==
+                   int_pair(1, int_pair(current, next))
                :
-                 col || ror_pub_key(current, int_pair(0, server)) ||
-                 r_info == int_pair(1, int_pair(previous, current)); @*/
+                 col || ror_key_clsfy(current, cc, true) ||
+                 info_for_item(r) ==
+                   int_pair(1, int_pair(previous, current)); @*/
 {
   struct item *result;
 
@@ -225,26 +228,16 @@ struct item *participant_process(int server, int previous, int current, int next
   /*@ if (!col)
       {
         open [_]ror_pub(m);
-        assert [_]info_for_item(m, ?m_info);
-        info_for_symmetric_encrypted_item(k, m);
-        if (!ror_pub_key(current, m_info))
+        if (!ror_key_clsfy(current, cc, true))
         {
           open ror_pub_pred_enc(?current2, ?pay2, ?k_info2,
                                 ?server2, ?p1_2, ?p2_2);
           assert r == symmetric_key_item(server , _);
-          assert [_]info_for_item(r, ?r_info);
           int_of_chars_of_int(p1_2);
           int_of_chars_of_int(p2_2);
-          assert r_info == int_pair(1, int_pair(p1, p2));
+          assert info_for_item(r) ==
+                   int_pair(1, int_pair(p1, p2));
         }
-        else
-        {
-          get_info_for_item(r);
-        }
-      }
-      else
-      {
-        get_info_for_item(r);
       }
   @*/
   return result;
@@ -255,21 +248,25 @@ struct item *participant_process(int server, int previous, int current, int next
 int participant(bool initial, int server, int current, int next,
                 int port_prev, int port_next, struct item *key,
                 struct item **key1, struct item **key2)
-  /*@ requires [?f0]world(ror_pub) &*& principal(current, ?count) &*&
+  /*@ requires [?f0]world(ror_pub, ror_key_clsfy) &*&
+               principal(current, ?count) &*&
                item(key, ?k, ror_pub) &*&
-                 [_]info_for_item(k, int_pair(0, server)) &*&
-                 k == symmetric_key_item(current, _) &*&
+                 info_for_item(k) == int_pair(0, server) &*&
+                 k == symmetric_key_item(current, ?c1) &*&
                pointer(key1, _) &*& pointer(key2, _); @*/
-  /*@ ensures  [f0]world(ror_pub) &*& principal(current, count + 1) &*&
+  /*@ ensures  [f0]world(ror_pub, ror_key_clsfy) &*&
+               principal(current, count + 1) &*&
                item(key, k, ror_pub) &*&
                pointer(key1, ?p_key1) &*& pointer(key2, ?p_key2) &*&
-               item(p_key2, ?k2, ror_pub) &*& [_]info_for_item(k2, ?k2_info) &*&
-               col || ror_pub_key(current, int_pair(0, server)) ||
-               k2_info == int_pair(1, int_pair(current, next)) &*&
+               item(p_key2, ?k2, ror_pub) &*&
+               col || ror_key_clsfy(current, c1, true) ||
+               info_for_item(k2) ==
+                 int_pair(1, int_pair(current, next)) &*&
                initial ? true :
-                 item(p_key1, ?k1, ror_pub) &*& [_]info_for_item(k1, ?k1_info) &*&
-                 col || ror_pub_key(current, int_pair(0, server)) ||
-                 k1_info == int_pair(1, int_pair(result, current)); @*/
+                 item(p_key1, ?k1, ror_pub) &*&
+                 col || ror_key_clsfy(current, c1, true) ||
+                 info_for_item(k1) ==
+                   int_pair(1, int_pair(result, current)); @*/
 {
   struct network_status *net_stat_prev;
   if (!initial) net_stat_prev = network_bind_and_accept(port_prev);
@@ -302,16 +299,13 @@ int participant(bool initial, int server, int current, int next,
   }
 
   //@ assert item(msg_prev, ?i_msg_prev, ror_pub);
-  //@ get_info_for_item(i_msg_prev);
-  //@ assert [_]info_for_item(i_msg_prev, ?info_msg_prev);
-
   // Generate nonce for this session
   //@ close nonce_request(current, int_pair(prev, next));
   struct item *nonce = create_nonce();
   //@ assert item(nonce, ?n_nonce, ror_pub);
   //@ close ror_pub(n_nonce);
   //@ leak ror_pub(n_nonce);
-  
+
   // Forward the message to next participant
   struct item *msg = participant_construct(server, prev, current, next,
                                            nonce, key, msg_prev);
@@ -399,37 +393,36 @@ predicate processed_messages(struct processed_messages* m, int server,
     m->next |-> ?next_pm &*&
       processed_messages(next_pm, server, _, ?previous2, ?current2) &*&
       item(k2, ?ki, ror_pub) &*&
-      ki == symmetric_key_item(current, _) &*&
-      [_]info_for_item(ki, ?info_k) &*&
-      info_k == int_pair(0, server) &*&
-      item(n2, ?ni, ror_pub) &*& [_]info_for_item(ni, ?info_n) &*&
+      ki == symmetric_key_item(current, ?c2) &*&
+      info_for_item(ki) == int_pair(0, server) &*&
+      item(n2, ?ni, ror_pub) &*&
       ni == nonce_item(?p_n, ?c_n, ?inc_n) &*& [_]ror_pub(ni) &*&
-      col || ror_pub_key(current, info_k) ||
+      col || ror_key_clsfy(current, c2, true) ||
         (p_n == current && inc_n == 0 &&
-         info_n == int_pair(previous2, next)
+         info_for_item(ni) == int_pair(previous2, next)
         ) &*&
       item(k23, ?k23i, ror_pub) &*&
-      k23i == symmetric_key_item(server, _) &*&
-      [_]info_for_item(k23i, ?k23_info) &*&
-      k23_info == int_pair(1, int_pair(current, next)) &*&
-      (col || ror_pub_key(server, k23_info) ? [_]ror_pub(k23i) : true) &*&
+      k23i == symmetric_key_item(server, ?c23) &*&
+      info_for_item(k23i) == int_pair(1, int_pair(current, next)) &*&
+      (col || ror_key_clsfy(server, c23, true) ? [_]ror_pub(k23i) : true) &*&
       next_pm == 0 ?
         previous == INITIAL_MSG
       :
         previous == previous2 && current == current2 &*&
         item(k12, ?k12i, ror_pub) &*&
-        k12i == symmetric_key_item(server, _) &*&
-        [_]info_for_item(k12i, ?k12_info) &*&
-        k12_info == int_pair(1, int_pair(previous, current)) &*&
-        (col || ror_pub_key(server, k12_info) ? [_]ror_pub(k12i) : true)
+        k12i == symmetric_key_item(server, ?c12) &*&
+        info_for_item(k12i) == int_pair(1, int_pair(previous, current)) &*&
+        (col || ror_key_clsfy(server, c12, true) ? [_]ror_pub(k12i) : true)
 ;
 @*/
 
 #ifdef VERIFY_SERVER_1
 struct processed_messages *server_process(struct keys *keys, struct item *msg)
-  /*@ requires [?f0]world(ror_pub) &*& principal(?server, _) &*& keys(server, keys) &*&
+  /*@ requires [?f0]world(ror_pub, ror_key_clsfy) &*&
+               principal(?server, ?count) &*& keys(server, keys) &*&
                item(msg, ?msg_i, ror_pub) &*& [_]ror_pub(msg_i); @*/
-  /*@ ensures  [f0]world(ror_pub) &*& principal(server, _) &*& keys(server, keys) &*&
+  /*@ ensures  [f0]world(ror_pub, ror_key_clsfy) &*&
+               principal(server, _) &*& keys(server, keys) &*&
                processed_messages(result, server, ?previous, ?current, ?next) &*&
                col || result == 0  ? true :
                  msg_i == pair_item(pair_item(data_item(chars_of_int(current)),
@@ -466,7 +459,7 @@ struct processed_messages *server_process(struct keys *keys, struct item *msg)
     result->k2 = lookup_key(keys, result->p2);
     //@ assert result->k2 |-> ?k2;
     //@ assert item(k2, ?k2i, ror_pub);
-    //@ assert k2i == symmetric_key_item(p2_val, ?c);
+    //@ assert k2i == symmetric_key_item(p2_val, ?c2);
     struct item *hmac2 = create_hmac(result->k2, temp1);
     item_check_equal(hmac, hmac2);
     item_free(hmac2);
@@ -491,29 +484,22 @@ struct processed_messages *server_process(struct keys *keys, struct item *msg)
     //@ assert col || m3_i == pair_item(n2i, ri);
     /*@ if (!col)
         {
-          assert hmac_i == hmac_item(p2_val, _, some(m1_i));
+          assert hmac_i == hmac_item(p2_val, c2, some(m1_i));
           open [_]ror_pub(msg_i); open [_]ror_pub(hmac_i);
           open [_]ror_pub(m1_i); open [_]ror_pub(m2_i); open [_]ror_pub(m3_i);
-          assert [_]info_for_item(hmac_i, ?info_h);
-          info_for_hmac_item(k2i, hmac_i);
-          if (!ror_pub_key(p2_val, info_h))
+          if (!ror_key_clsfy(p2_val, c2, true))
           {
-            open [_]ror_pub_pred_hmac(p2_val, m1_i, info_h, ?server2, ?p1_val2, ?p3_val2);
+            open [_]ror_pub_pred_hmac(p2_val, m1_i, info_for_item(hmac_i),
+                                      ?server2, ?p1_val2, ?p3_val2);
             assert server == server2;
             int_of_chars_of_int(p3_val2);
             assert p3_val == p3_val2;
-            assert [_]info_for_item(n2i, ?n_info);
-            assert n_info == int_pair(p1_val2, p3_val2);
-          }
-          else
-          {
-            get_info_for_item(n2i);
+            assert info_for_item(n2i) == int_pair(p1_val2, p3_val2);
           }
         }
         else
         {
           close ror_pub(n2i); leak ror_pub(n2i);
-          get_info_for_item(n2i);
           close ror_pub(ri); leak ror_pub(ri);
         }
     @*/
@@ -522,8 +508,8 @@ struct processed_messages *server_process(struct keys *keys, struct item *msg)
     //@ close key_request(server, info);
     result->k23 = create_symmetric_key();
     //@ assert result->k23 |-> ?key &*& item(key, ?k, ror_pub);
-    //@ assert [_]info_for_item(k, info);
-    /*@ if (col || ror_pub_key(server, info))
+    //@ assert k == symmetric_key_item(server, ?c23);
+    /*@ if (col || ror_key_clsfy(server, c23, true))
         {
           close ror_pub(k);
           leak ror_pub(k);
@@ -549,17 +535,15 @@ struct processed_messages *server_process(struct keys *keys, struct item *msg)
     //@ assert result->next |-> ?next &*& result->p1 |-> ?p1;
     /*@ if (!col)
         {
-          assert [_]info_for_item(hmac_i, ?info_h);
-          if (!ror_pub_key(p2_val, info_h))
+          if (!ror_key_clsfy(p2_val, c2, true))
           {
             assert n2i == nonce_item(p2_val, _, 0);
-            assert [_]ror_pub_pred_hmac(p2_val, m1_i, info_h, ?server2, ?p1_val2, ?p3_val2);
-            assert [_]info_for_item(n2i, ?n_info);
-            assert n_info == int_pair(p1_val2, p3_val2);
+            assert [_]ror_pub_pred_hmac(p2_val, m1_i, info_for_item(k2i),
+                                        ?server2, ?p1_val2, ?p3_val2);
+            assert info_for_item(n2i) == int_pair(p1_val2, p3_val2);
             assert next == 0  ? true :
                 ri == pair_item(pair_item(data_item(chars_of_int(p2_n)),
                                 pair_item(data_item(chars_of_int(p3_n)), _)), _);
-            assert n_info == int_pair(p1_val2, p3_val2);
             int_of_chars_of_int(p3_val2);
             assert p3_val == p3_val2;
 
@@ -589,17 +573,18 @@ struct processed_messages *server_process(struct keys *keys, struct item *msg)
 
 #ifdef VERIFY_SERVER_2
 struct item *server_serialize(struct processed_messages *msgs)
-  /*@ requires [?f0]world(ror_pub) &*& principal(?server, ?s_id) &*&
+  /*@ requires [?f0]world(ror_pub, ror_key_clsfy) &*&
+               principal(?server, ?s_id) &*&
                processed_messages(msgs, server, _, _, _) &*& msgs != 0; @*/
-  /*@ ensures  [f0]world(ror_pub) &*& principal(server, _) &*&
+  /*@ ensures  [f0]world(ror_pub, ror_key_clsfy) &*&
+               principal(server, _) &*&
                item(result, ?r, ror_pub) &*& [_]ror_pub(r); @*/
 {
   //@ open processed_messages(msgs, server, _, _, _);
   //@ assert msgs->p1 |-> ?p1 &*& msgs->p2 |-> ?p2 &*& msgs->p3 |-> ?p3;
   //@ assert msgs->k2 |-> ?k2 &*& item(k2, ?k2i, ror_pub);
-  //@ assert [_]info_for_item(k2i, ?k2_info);
+  //@ assert k2i == symmetric_key_item(?s2, ?c2);
   //@ assert msgs->n2 |-> ?n2 &*& item(n2, ?n2i, ror_pub);
-  //@ assert [_]info_for_item(n2i, ?n2_info);
   //@ assert msgs->next |-> ?next;
 
   struct item *result = 0;
@@ -619,19 +604,13 @@ struct item *server_serialize(struct processed_messages *msgs)
     struct item *m3 = create_pair(msgs->k23, m2);
     //@ assert item(m3, ?m3i, ror_pub);
     //@ item n = nonce_item(server, s_id + 1, 0);
-    //@ get_info_for_item(n);
     //@ close ror_pub(n);
     //@ leak  ror_pub(n);
     result = symmetric_encryption(msgs->k2, m3);
     //@ assert item(result, ?r, ror_pub);
-    //@ get_info_for_item(r);
-    //@ assert [_]info_for_item(r, ?r_info);
-
     //@ assert msgs->k23 |-> ?k23 &*& item(k23, ?k23i, ror_pub);
-    //@ assert [_]info_for_item(k23i, ?k23_info);
-    //@ if (!col) info_for_symmetric_encrypted_item(k2i, r);
 
-    /*@ if (col || ror_pub_key(p2, k2_info))
+    /*@ if (col || ror_key_clsfy(s2, c2, true))
         {
           CLOSE_PUB(m3i)
         }
@@ -641,8 +620,8 @@ struct item *server_serialize(struct processed_messages *msgs)
           assert m3i == pair_item(k23i, m2i);
           assert m2i == pair_item(data_item(chars_of_int(p2)), m1i);
           assert m1i == pair_item(data_item(chars_of_int(p3)), n2i);
-          close ror_pub_pred_enc(p2, m3i, k2_info, server, p2, p3);
-          leak ror_pub_pred_enc(p2, m3i, k2_info, server, p2, p3);
+          close ror_pub_pred_enc(p2, m3i, info_for_item(k2i), server, p2, p3);
+          leak ror_pub_pred_enc(p2, m3i, info_for_item(k2i), server, p2, p3);
         }
     @*/
     //@ close ror_pub(r);
@@ -671,18 +650,13 @@ struct item *server_serialize(struct processed_messages *msgs)
     struct item *m3 = create_pair(msgs->k12, m2);
     //@ assert item(m3, ?m3i, ror_pub);
     //@ item n = nonce_item(server, s_id + 2, 0);
-    //@ get_info_for_item(n);
     //@ close ror_pub(n);
     //@ leak  ror_pub(n);
     result2 = symmetric_encryption(msgs->k2, m3);
     //@ assert item(result2, ?r, ror_pub);
-    //@ get_info_for_item(r);
-    //@ assert [_]info_for_item(r, ?r_info);
     //@ assert msgs->k12 |-> ?k12 &*& item(k12, ?k12i, ror_pub);
-    //@ assert [_]info_for_item(k12i, ?k12_info);
-    //@ if (!col) info_for_symmetric_encrypted_item(k2i, r);
 
-    /*@ if (col || ror_pub_key(p2, k2_info))
+    /*@ if (col || ror_key_clsfy(s2, c2, true))
         {
           CLOSE_PUB(m3i)
         }
@@ -692,8 +666,8 @@ struct item *server_serialize(struct processed_messages *msgs)
           assert m3i == pair_item(k12i, m2i);
           assert m2i == pair_item(data_item(chars_of_int(p1)), m1i);
           assert m1i == pair_item(data_item(chars_of_int(p2)), n2i);
-          close ror_pub_pred_enc(p2, m3i, k2_info, server, p1, p2);
-          leak ror_pub_pred_enc(p2, m3i, k2_info, server, p1, p2);
+          close ror_pub_pred_enc(p2, m3i, info_for_item(k2i), server, p1, p2);
+          leak ror_pub_pred_enc(p2, m3i, info_for_item(k2i), server, p1, p2);
         }
     @*/
     //@ close ror_pub(r);
@@ -725,8 +699,10 @@ struct item *server_serialize(struct processed_messages *msgs)
 
 #ifdef VERIFY_SERVER
 void server(int server, struct keys *keys, int port)
-  //@ requires [?f0]world(ror_pub) &*& principal(server, _) &*& keys(server, keys);
-  //@ ensures  [f0]world(ror_pub) &*& principal(server, _) &*& keys(server, keys);
+  /*@ requires [?f0]world(ror_pub, ror_key_clsfy) &*& 
+               principal(server, _) &*& keys(server, keys); @*/
+  /*@ ensures  [f0]world(ror_pub, ror_key_clsfy) &*& 
+               principal(server, _) &*& keys(server, keys); @*/
 {
   struct network_status *net_stat = network_bind_and_accept(port);
   struct item *msg = network_receive(net_stat);

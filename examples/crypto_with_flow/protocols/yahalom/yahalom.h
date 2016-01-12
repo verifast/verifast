@@ -70,10 +70,13 @@ fixpoint bool yahalom_public_key_(int principal, int info)
      (bad(IF(IS(info))) || bad(IF(IS(IS(info))))));
 }
 
-fixpoint bool yahalom_public_key(int principal, int count)
+fixpoint bool yahalom_public_key(int principal, int count, bool sym)
 {
-  return yahalom_public_key_(principal,
-                             cg_info(cg_symmetric_key(principal, count)));
+  return sym ? 
+           yahalom_public_key_(principal,
+                               cg_info(cg_symmetric_key(principal, count)))
+         :
+           bad(principal);
 }
 
 predicate yahalom_proof_pred() = true;
@@ -93,17 +96,17 @@ predicate yahalom_pub(cryptogram cg) =
     case cg_nonce(p0, c0):
       return true == yahalom_public_nonce(p0, cg_info(cg));
     case cg_symmetric_key(p0, c0):
-      return true == yahalom_public_key(p0, c0);
+      return true == yahalom_public_key(p0, c0, true);
     case cg_public_key(p0, c0):
       return true;
     case cg_private_key(p0, c0):
-      return true == bad(p0);
+      return true == yahalom_public_key(p0, c0, false);
     case cg_hash(cs0):
       return true;
     case cg_hmac(p0, c0, cs0):
       return true;
     case cg_encrypted(p0, c0, cs0, ent0):
-      return yahalom_public_key(p0, c0) ?
+      return yahalom_public_key(p0, c0, true) ?
         [_]public_generated(yahalom_pub)(cs0)
       :
         length(cs0) == ID_SIZE + NONCE_SIZE + NONCE_SIZE ?
@@ -184,12 +187,12 @@ predicate yahalom_pub(cryptogram cg) =
         ) :
         false;
     case cg_auth_encrypted(p0, c0, mac0, cs0, ent0):
-      return true == yahalom_public_key(p0, c0) &*&
+      return true == yahalom_public_key(p0, c0, true) &*&
              [_]public_generated(yahalom_pub)(cs0);
     case cg_asym_encrypted(p0, c0, cs0, ent0):
       return [_]public_generated(yahalom_pub)(cs0);
     case cg_asym_signature(p0, c0, cs0, ent0):
-      return true == bad(p0);
+      return true == yahalom_public_key(p0, c0, false);
   }
 ;
 
@@ -202,6 +205,7 @@ predicate yahalom_pub(cryptogram cg) =
 void server(int server, int sender, int receiver,
             char *s_key, char *r_key);
 /*@ requires [_]public_invar(yahalom_pub) &*&
+             [_]decryption_key_classifier(yahalom_public_key) &*&
              principal(server, _) &*&
              [?f1]cryptogram(s_key, KEY_SIZE, ?s_key_cs, ?s_key_cg) &*&
                s_key_cg == cg_symmetric_key(sender, _) &*&
@@ -209,21 +213,20 @@ void server(int server, int sender, int receiver,
              [?f2]cryptogram(r_key, KEY_SIZE, ?r_key_cs, ?r_key_cg) &*&
                r_key_cg == cg_symmetric_key(receiver, _) &*&
                cg_info(r_key_cg) == IP(3, server); @*/
-/*@ ensures  [_]public_invar(yahalom_pub) &*&
-             principal(server, _) &*&
+/*@ ensures  principal(server, _) &*&
              [f1]cryptogram(s_key, KEY_SIZE, s_key_cs, s_key_cg) &*&
              [f2]cryptogram(r_key, KEY_SIZE, r_key_cs, r_key_cg); @*/
 
 void sender(int server, int sender, int receiver,
             char *key, char *generated_key);
 /*@ requires [_]public_invar(yahalom_pub) &*&
+             [_]decryption_key_classifier(yahalom_public_key) &*&
              principal(sender, ?s_id) &*&
              [?f]cryptogram(key, KEY_SIZE, ?key_cs, ?key_cg) &*&
                key_cg == cg_symmetric_key(sender, _) &*&
                cg_info(key_cg) == IP(3, server) &*&
              chars(generated_key, KEY_SIZE, _); @*/
-/*@ ensures  [_]public_invar(yahalom_pub) &*&
-             principal(sender, _) &*&
+/*@ ensures  principal(sender, _) &*&
              [f]cryptogram(key, KEY_SIZE, key_cs, key_cg) &*&
              cryptogram(generated_key, KEY_SIZE, _, ?g_key_cg) &*&
              col || bad(server) || bad(sender) ?
@@ -237,18 +240,18 @@ void sender(int server, int sender, int receiver,
                IF(IS(IS(IS(IS(cg_info(g_key_cg)))))) ==  s_id + 1 &*&
                bad(receiver) ||
                  IF(IS(IS(IS(IS(IS(cg_info(g_key_cg))))))) == receiver &&
-                 !yahalom_public_key(server, id); @*/
+                 !yahalom_public_key(server, id, true); @*/
 
 void receiver(int server, int sender, int receiver,
               char *key, char *generated_key);
 /*@ requires [_]public_invar(yahalom_pub) &*&
+             [_]decryption_key_classifier(yahalom_public_key) &*&
              principal(receiver, ?r_id) &*&
              [?f]cryptogram(key, KEY_SIZE, ?key_cs, ?key_cg) &*&
                key_cg == cg_symmetric_key(receiver, _) &*&
                cg_info(key_cg) == IP(3, server) &*&
              chars(generated_key, KEY_SIZE, _); @*/
-/*@ ensures  [_]public_invar(yahalom_pub) &*&
-             principal(receiver, _) &*&
+/*@ ensures  principal(receiver, _) &*&
              [f]cryptogram(key, KEY_SIZE, key_cs, key_cg) &*&
              cryptogram(generated_key, KEY_SIZE, _, ?g_key_cg) &*&
              col || bad(server) || bad(sender) || bad(receiver) ?
@@ -267,5 +270,6 @@ void receiver(int server, int sender, int receiver,
 ///////////////////////////////////////////////////////////////////////////////
 
 //@ PUBLIC_INVARIANT_PROOFS(yahalom)
+//@ DECRYPTION_PROOFS(yahalom)
 
 #endif

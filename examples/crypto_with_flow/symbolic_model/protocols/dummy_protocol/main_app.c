@@ -14,7 +14,7 @@ struct dummy_args
 
 /*@
 predicate_family_instance pthread_run_pre(attacker_t)(void *data, any info) =
-    exists(dummy_pub) &*& [_]world(dummy_pub) &*&
+    exists(dummy_pub) &*& [_]world(dummy_pub, dummy_key_clsfy) &*&
     dummy_args_attacker(data, ?attacker) &*&
     true == bad(attacker) &*&
     principal(attacker, _) &*&
@@ -35,7 +35,8 @@ void *attacker_t(void* data) //@ : pthread_run_joinable
 
 /*@
 predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
-  [_]world(dummy_pub) &*& principal(?sender, _) &*& info == cons(sender, nil);
+  [_]world(dummy_pub, dummy_key_clsfy) &*& principal(?sender, _) &*& 
+  info == cons(sender, nil);
 predicate_family_instance pthread_run_post(sender_t)(void *data, any info) =
   principal(?sender, _) &*& info == cons(sender, nil);
 @*/
@@ -52,7 +53,8 @@ void *sender_t(void* data) //@ : pthread_run_joinable
 
 /*@
 predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) =
-  [_]world(dummy_pub) &*& principal(?receiver, _) &*& info == cons(receiver, nil);
+  [_]world(dummy_pub, dummy_key_clsfy) &*& principal(?receiver, _) &*& 
+  info == cons(receiver, nil);
 predicate_family_instance pthread_run_post(receiver_t)(void *data, any info) =
   principal(?receiver, _) &*& info == cons(receiver, nil);
 @*/
@@ -96,7 +98,7 @@ int main() //@ : main_full(main_app)
     if (args == 0) abort();
     args->attacker = attacker;
     args->keypair = apair;  
-    //@ leak world(dummy_pub);
+    //@ leak world(dummy_pub, dummy_key_clsfy);
     //@ close pthread_run_pre(attacker_t)(args, _);
     pthread_create(&a_thread, NULL, &attacker_t, args);
   }
@@ -107,8 +109,8 @@ int main() //@ : main_full(main_app)
 #else
   while (true)
 #endif
-    /*@ invariant [_]world(dummy_pub) &*& principal(sender, _) 
-                                      &*& principal(receiver, _); @*/
+    /*@ invariant [_]world(dummy_pub, dummy_key_clsfy) &*& 
+                  principal(sender, _) &*& principal(receiver, _); @*/
   {
     pthread_t s_thread, r_thread;
     {

@@ -16,6 +16,7 @@ PROTOCOLS = \
 	enc_then_hmac \
 	hmac_then_enc \
 	hmac_then_enc_tagged \
+	hmac_then_enc_nested \
 	auth_enc \
 	sign \
 	nsl \

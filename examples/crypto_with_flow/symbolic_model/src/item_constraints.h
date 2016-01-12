@@ -308,19 +308,31 @@ void check_tag(char* buffer, char tag);
   /*@ ensures  [f]chars(buffer, TAG_LENGTH, cs) &*&
                head(cs) == tag &*& cs == full_tag(tag); @*/
 
+/*@
+predicate check_tag2_ghost_args(bool sym, bool wrong_key,
+                                int p_key, int c_key) = true;
+@*/
+
 void check_tag2(char* buffer, char tag);
-  /*@ requires [?f1]world(?pub) &*&
-               principal(?principal, ?values_count) &*&
-               [?f2]crypto_chars(?kind1, buffer, ?size, ?cs) &*&
+  /*@ requires [_]public_invar(?pub) &*&
+               [_]decryption_key_classifier(?key_classifier) &*&
+               network_permission(?p) &*&
+               [?f2]crypto_chars(?kind, buffer, ?size, ?cs) &*&
                size > TAG_LENGTH &*&
-               kind1 != garbage || decrypted_garbage(cs); @*/
-  /*@ ensures  [f1]world(pub) &*&
-               principal(principal, values_count) &*&
-               [f2]crypto_chars(?kind2, buffer, size, cs) &*&
-               head(cs) == tag &*& take(TAG_LENGTH, cs) == full_tag(tag) &*&
-               kind1 == garbage ?
-                 col && kind2 == secret
+               check_tag2_ghost_args(?sym, ?wrong_key, ?p_key, ?c_key) &*&
+               wrong_key ?
+                 decryption_with_wrong_key(sym, p, ?s, p_key, c_key, cs) &*&
+                 s == known_value(0, full_tag(tag))
                :
-                 kind1 == kind2; @*/
+                 true; @*/
+  /*@ ensures  network_permission(p) &*&
+               [f2]crypto_chars(kind, buffer, size, cs) &*&
+               head(cs) == tag &*& take(TAG_LENGTH, cs) == full_tag(tag) &*&
+               [_]public_generated(pub)(take(TAG_LENGTH, cs)) &*&
+               wrong_key ?
+                 decryption_permission(p) &*&
+                 key_classifier(p_key, c_key, sym) ? true : col
+               :
+                 true; @*/
 
 #endif

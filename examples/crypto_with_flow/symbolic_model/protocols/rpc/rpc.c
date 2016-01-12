@@ -4,13 +4,15 @@
 #define SERVER_PORT 121212
 
 struct item *client(char server, struct item *key, struct item *request)
-  /*@ requires [?f0]world(rpc_pub) &*& principal(?client, ?count) &*&
+  /*@ requires [?f0]world(rpc_pub, rpc_key_clsfy) &*& 
+               principal(?client, ?count) &*&
                item(key, symmetric_key_item(?creator, ?id), rpc_pub) &*&
                item(request, ?req, rpc_pub) &*& [_]rpc_pub(req) &*&
                true == request(creator, server, req) &*&
                shared_with(creator, id) == server;
   @*/
-  /*@ ensures  [f0]world(rpc_pub) &*& principal(client, count) &*&
+  /*@ ensures  [f0]world(rpc_pub, rpc_key_clsfy) &*& 
+               principal(client, count) &*&
                item(key, symmetric_key_item(creator, id), rpc_pub) &*&
                item(request, req, rpc_pub) &*& item(result, ?resp, rpc_pub) &*& 
                (
@@ -25,27 +27,23 @@ struct item *client(char server, struct item *key, struct item *request)
         struct item *tag = create_data_item_from_int(0);
         //@ item d = data_item(chars_of_int(0));
         //@ assert item(tag, d, rpc_pub);
-        //@ get_info_for_item(d);
         //@ close rpc_pub(d);
         //@ leak rpc_pub(d);
         struct item *payload = create_pair(tag, request);
         //@ item p = pair_item(d, req);
         //@ assert item(payload, p, rpc_pub);
-        //@ get_info_for_item(p);
         //@ close rpc_pub(p);
         //@ leak rpc_pub(p);
         item_free(tag);
         struct item *hash = create_hmac(key, payload);
         //@ item h = hmac_item(creator, id, some(p));
         //@ if (!col) assert item(hash, h, rpc_pub);
-        //@ get_info_for_item(h);
         //@ close rpc_pub(h);
         //@ leak rpc_pub(h);
         struct item *m = create_pair(hash, payload);
         //@ assert item(m, ?msg, rpc_pub);
         //@ item msg0 = pair_item(h, p);
         //@ if (!col) msg == msg0;
-        //@ get_info_for_item(msg);
         //@ close rpc_pub(msg);
         //@ leak rpc_pub(msg);
         item_free(hash);
@@ -107,7 +105,7 @@ struct item *client(char server, struct item *key, struct item *request)
 // This function represents the server application.
 // We pass in the key predicate just to get hold of the creator principal id.
 struct item *compute_response(int server, struct item *request)
-  /*@ requires [?f]world(rpc_pub) &*&
+  /*@ requires [?f]world(rpc_pub, rpc_key_clsfy) &*&
                principal(server, ?count) &*&
                item(?key, symmetric_key_item(?creator, ?id), rpc_pub) &*&
                item(request, ?req, rpc_pub) &*&
@@ -116,7 +114,7 @@ struct item *compute_response(int server, struct item *request)
                  request(creator, shared_with(creator, id), req)
                );
   @*/
-  /*@ ensures  [f]world(rpc_pub) &*& 
+  /*@ ensures  [f]world(rpc_pub, rpc_key_clsfy) &*& 
                principal(server, count + 1) &*&
                item(key, symmetric_key_item(creator, id), rpc_pub) &*& 
                item(request, req, rpc_pub) &*& 
@@ -125,26 +123,24 @@ struct item *compute_response(int server, struct item *request)
   @*/
 {
   //@ item n = nonce_item(server, count + 1, 0);
-  //@ get_info_for_item(n);
   //@ close rpc_pub(n);  
   //@ leak rpc_pub(n);
   int random = random_int();
   struct item *response = create_data_item((void*) &random, (int) sizeof(int));
   //@ assert item(response, ?resp, rpc_pub);
   //@ assume (response(creator, shared_with(creator, id), req, resp) == true);
-  //@ get_info_for_item(resp);
   //@ close rpc_pub(resp);
   //@ leak rpc_pub(resp);
   return response;
 }
 
 void server(char server, struct item *key)
-  /*@ requires [?f0]world(rpc_pub) &*&
+  /*@ requires [?f0]world(rpc_pub, rpc_key_clsfy) &*&
                principal(server, ?count) &*&
                item(key, symmetric_key_item(?creator, ?id), rpc_pub) &*&  
                shared_with(creator, id) == server;
   @*/
-  /*@ ensures  [f0]world(rpc_pub) &*&
+  /*@ ensures  [f0]world(rpc_pub, rpc_key_clsfy) &*&
                principal(server, count + 1) &*&
                item(key, symmetric_key_item(creator, id), rpc_pub);
   @*/
@@ -199,11 +195,9 @@ void server(char server, struct item *key)
     //@ assert item(response, ?resp, rpc_pub);
     
     {
-        
         struct item *reqresp = create_pair(request, response);
         //@ item p = pair_item(req, resp);
         //@ assert item(reqresp, p, rpc_pub);
-        //@ get_info_for_item(p);
         //@ close rpc_pub(p);
         //@ leak rpc_pub(p);
         item_free(response);
@@ -211,11 +205,9 @@ void server(char server, struct item *key)
         struct item *tag = create_data_item_from_int(1);
         struct item *payload = create_pair(tag, reqresp);
         //@ item d = data_item(chars_of_int(1));
-        //@ get_info_for_item(d);
         //@ close rpc_pub(d);
         //@ leak rpc_pub(d);
         //@ assert item(payload, pair_item(d, p), rpc_pub);
-        //@ get_info_for_item(pair_item(d, p));
         //@ close rpc_pub(pair_item(d, p));
         //@ leak rpc_pub(pair_item(d, p));
         item_free(tag);
@@ -223,14 +215,12 @@ void server(char server, struct item *key)
         struct item *hash = create_hmac(key, payload);
         //@ item h = hmac_item(creator, id, some(pair_item(d, p)));
         //@ if (!col) assert item(hash, h, rpc_pub);
-        //@ get_info_for_item(h);
         //@ close rpc_pub(h);
         //@ leak rpc_pub(h);
         struct item *m = create_pair(hash, payload);
         //@ assert item(m, ?msg, rpc_pub);
         //@ if (!col) msg == pair_item(h, pair_item(d, p));
         //@ if (!col) assert item(m, msg, rpc_pub);
-        //@ get_info_for_item(msg);
         //@ close rpc_pub(msg);
         //@ leak rpc_pub(msg);
         item_free(hash);

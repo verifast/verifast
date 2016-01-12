@@ -9,7 +9,9 @@
 
 /*@
 
-fixpoint bool dummy_public_key(int p, int c)
+predicate dummy_proof_pred() = true;
+
+fixpoint bool dummy_public_key(int p, int c, bool symmetric)
 {
   return true == bad(p);
 }
@@ -17,22 +19,28 @@ fixpoint bool dummy_public_key(int p, int c)
 predicate dummy_pub(cryptogram cg) =
   switch (cg)
   {
-    case cg_nonce(p0, c0):        return true;
-    case cg_symmetric_key(p0, c0): return true == dummy_public_key(p0, c0);
-    case cg_public_key(p0, c0):    return true;
-    case cg_private_key(p0, c0):   return true == bad(p0);
-    case cg_hash(cs0):             return true;
-    case cg_hmac(p0, c0, cs0):     return true == dummy_public_key(p0, c0);
+    case cg_nonce(p0, c0):
+      return true;
+    case cg_symmetric_key(p0, c0): 
+      return true == dummy_public_key(p0, c0, true);
+    case cg_public_key(p0, c0):    
+      return true;
+    case cg_private_key(p0, c0):
+      return true == dummy_public_key(p0, c0, false);
+    case cg_hash(cs0):             
+      return true;
+    case cg_hmac(p0, c0, cs0):     
+      return true == dummy_public_key(p0, c0, true);
     case cg_encrypted(p0, c0, cs0, ent0):
-      return true == dummy_public_key(p0, c0) &*&
+      return true == dummy_public_key(p0, c0, true) &*&
              [_]public_generated(dummy_pub)(cs0);
     case cg_auth_encrypted(p0, c0, mac0, cs0, ent0):
-      return true == dummy_public_key(p0, c0) &*&
+      return true == dummy_public_key(p0, c0, true) &*&
              [_]public_generated(dummy_pub)(cs0);
     case cg_asym_encrypted(p0, c0, cs0, ent0):
       return [_]public_generated(dummy_pub)(cs0);
     case cg_asym_signature(p0, c0, cs0, ent0):
-      return true;
+      return true == dummy_public_key(p0, c0, false);
   }
 ;
 
@@ -51,5 +59,6 @@ void receiver(char* msg);
                chars(msg, PACKAGE_SIZE, ?cs); @*/
 
 //@ PUBLIC_INVARIANT_PROOFS(dummy)
+//@ DECRYPTION_PROOFS(dummy)
 
 #endif

@@ -24,6 +24,7 @@ void client(char *key, int key_len, char *request, char *response)
                  response(creator, shared_with(creator, id),
                           req_cs, resp_cs); @*/
 {
+  //@ open principal(client, _);
   int socket;
   char hmac[64];
 
@@ -133,6 +134,7 @@ void client(char *key, int key_len, char *request, char *response)
     //@ assert chars(buffer, MAX_MESSAGE_SIZE, _);
   }
   net_close(socket);
+  //@ close principal(client, _);
 }
 
 // This function represents the server application.
@@ -154,6 +156,7 @@ void compute_response(char* request, char* response)
                chars(response, PACKAGE_SIZE, ?resp_cs) &*&
                true == response(client, server, req_cs, resp_cs); @*/
 {
+  //@ open principal(server, count);
   havege_state havege_state;
   //@ close havege_state(&havege_state);
   havege_init(&havege_state);
@@ -169,6 +172,7 @@ void compute_response(char* request, char* response)
 
   havege_free(&havege_state);
   //@ open havege_state(&havege_state);
+  //@ close principal(server, count + 1);
 }
 
 void server(char *key, int key_len, char *request, char *response)
@@ -188,6 +192,7 @@ void server(char *key, int key_len, char *request, char *response)
                  col || bad(client) || bad(server) ||
                  response(client, server, req_cs, resp_cs); @*/
 {
+  //@ open principal(server, _);
   int socket1;
   int socket2;
 
@@ -254,7 +259,9 @@ void server(char *key, int key_len, char *request, char *response)
   }
 
   //@ assert chars(request, PACKAGE_SIZE, ?req_cs);
+  //@ close principal(server, _);
   compute_response(request, response);
+  //@ open principal(server, _);
   //@ assert chars(response, PACKAGE_SIZE, ?resp_cs);
 
   {
@@ -303,4 +310,5 @@ void server(char *key, int key_len, char *request, char *response)
 
   net_close(socket2);
   net_close(socket1);
+  //@ close principal(server, _);
 }

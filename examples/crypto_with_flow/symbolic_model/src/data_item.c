@@ -3,34 +3,35 @@
 #include "item_constraints.h"
 
 bool is_data(struct item *item)
-  //@ requires [?f]world(?pub) &*& item(item, ?i, pub);
-  /*@ ensures  [f]world(pub) &*& item(item, i, pub) &*&
+  //@ requires [?f]world(?pub, ?key_clsfy) &*& item(item, ?i, pub);
+  /*@ ensures  [f]world(pub, key_clsfy) &*& item(item, i, pub) &*&
                result ? i == data_item(_) : true; @*/
 {
-  //@ open [f]world(pub);
+  //@ open [f]world(pub, key_clsfy);
   //@ open item(item, i, pub);
   //@ open [_]item_constraints(i, ?cs, pub);
   return item_tag(item->content, item->size) == 'a';
   //@ close item(item, i, pub);
-  //@ close [f]world(pub);
+  //@ close [f]world(pub, key_clsfy);
 }
 
 void check_is_data(struct item *item)
-  //@ requires [?f]world(?pub) &*& item(item, ?i, pub);
-  //@ ensures  [f]world(pub) &*& item(item, i, pub) &*& i == data_item(_);
+  //@ requires [?f]world(?pub, ?key_clsfy) &*& item(item, ?i, pub);
+  /*@ ensures  [f]world(pub, key_clsfy) &*& item(item, i, pub) &*& 
+               i == data_item(_); @*/
 {
   if (!is_data(item))
     abort_crypto_lib("Presented item is not a data item");
 }
 
 struct item *create_data_item(char* data, int length)
-  /*@ requires [?f]world(?pub) &*&
+  /*@ requires [?f]world(?pub, ?key_clsfy) &*&
                chars(data, length, ?cs) &*& length >= MIN_DATA_SIZE; @*/
-  /*@ ensures  [f]world(pub) &*&
+  /*@ ensures  [f]world(pub, key_clsfy) &*&
                chars(data, length, cs) &*& 
                item(result, data_item(cs), pub); @*/
 {
-  //@ open [f]world(pub);
+  //@ open [f]world(pub, key_clsfy);
   struct item* item = malloc(sizeof(struct item));
   if (item == 0){abort_crypto_lib("malloc of item failed");}
   if (length >= INT_MAX - TAG_LENGTH) abort_crypto_lib("Requested data item was to big");
@@ -68,12 +69,12 @@ struct item *create_data_item(char* data, int length)
   //@ chars_to_secret_crypto_chars(cont, length(cs1));
   //@ close item(item, d, pub);
   return item;
-  //@ close [f]world(pub);
+  //@ close [f]world(pub, key_clsfy);
 }
 
 struct item *create_data_item_from_int(int i)
-  //@ requires [?f]world(?pub);
-  /*@ ensures  [f]world(pub) &*&
+  //@ requires [?f]world(?pub, ?key_clsfy);
+  /*@ ensures  [f]world(pub, key_clsfy) &*&
                item(result, data_item(chars_of_int(i)), pub); @*/
 {
   char* temp = (void*) &i;
@@ -83,13 +84,13 @@ struct item *create_data_item_from_int(int i)
 }
 
 int item_get_data(struct item *item, char** data)
-  /*@ requires [?f]world(?pub) &*& item(item, ?i, pub) &*& 
+  /*@ requires [?f]world(?pub, ?key_clsfy) &*& item(item, ?i, pub) &*& 
                i == data_item(?cs0) &*& pointer(data, _); @*/
-  /*@ ensures  [f]world(pub) &*& item(item, i, pub) &*& pointer(data, ?p) &*&
+  /*@ ensures  [f]world(pub, key_clsfy) &*& item(item, i, pub) &*& pointer(data, ?p) &*&
                chars(p, result, ?cs1) &*& malloc_block(p, result) &*&
                col || cs0 == cs1; @*/
 {
-  //@ open [f]world(pub);
+  //@ open [f]world(pub, key_clsfy);
   //@ open item(item, data_item(cs0), pub);
   //@ assert item->content |-> ?cont &*& item->size |-> ?size;
   //@ open [_]item_constraints(i, ?cs, pub);
@@ -107,13 +108,13 @@ int item_get_data(struct item *item, char** data)
   //@ close item(item, data_item(cs0), pub);
   *data = temp;
   return data_size;
-  //@ close [f]world(pub);  
+  //@ close [f]world(pub, key_clsfy);  
 }
 
 int item_get_data_as_int(struct item *item)
-  /*@ requires [?f]world(?pub) &*& item(item, ?i, pub) &*& 
+  /*@ requires [?f]world(?pub, ?key_clsfy) &*& item(item, ?i, pub) &*& 
                i == data_item(?cs0); @*/
-  /*@ ensures  [f]world(pub) &*& item(item, i, pub) &*&
+  /*@ ensures  [f]world(pub, key_clsfy) &*& item(item, i, pub) &*&
                col ?  true : result == int_of_chars(cs0); @*/
 {
   int result;

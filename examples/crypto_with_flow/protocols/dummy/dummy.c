@@ -13,6 +13,7 @@ void sender(char* msg)
   /*@ ensures  principal(sender, _) &*&
                [f]chars(msg, PACKAGE_SIZE, cs); @*/
 {
+  //@ open principal(sender, _);
   int socket;
   
   net_usleep(20000);
@@ -23,6 +24,7 @@ void sender(char* msg)
   
   net_send(&socket, msg, PACKAGE_SIZE);
   net_close(socket);
+  //@ close principal(sender, _);
 }
 
 void receiver(char* msg)
@@ -31,6 +33,7 @@ void receiver(char* msg)
   /*@ ensures  principal(receiver, _) &*&
                chars(msg, PACKAGE_SIZE, ?cs); @*/
 {
+  //@ open principal(receiver, _);
   int socket1;
   int socket2;
   char message[PACKAGE_SIZE];
@@ -45,4 +48,5 @@ void receiver(char* msg)
   net_recv(&socket2, msg, PACKAGE_SIZE);
   net_close(socket1);
   net_close(socket2);
+  //@ close principal(receiver, _);
 }

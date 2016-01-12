@@ -33,9 +33,16 @@ fixpoint bool response(int cl, int sv, item req, item resp);
 // Definition of pub for this protocol ////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
+fixpoint bool rpc_key_clsfy(int p, int c, bool sym)
+{
+  return sym ?
+           true == bad(p) || bad(shared_with(p, c))
+         :
+           true == bad(p);
+}
+
 predicate rpc_pub(item i) =
   col ? true :
-  [_]info_for_item(i, ?info0) &*&
   switch (i) 
   {
     case data_item(d0):
@@ -45,20 +52,14 @@ predicate rpc_pub(item i) =
              [_]rpc_pub(s0);
     case nonce_item(p0, c0, inc0): 
       return true;
-    case hash_item(pay0): return
-      switch (pay0)
-      {
-        case some(pay1):
-          return [_]rpc_pub(pay1);
-        case none:
-          return true;
-      };
+    case hash_item(pay0):
+      return true;
     case symmetric_key_item(p0, c0):
-      return true == bad(p0) || bad(shared_with(p0, c0));
+      return true == rpc_key_clsfy(p0, c0, true);
     case public_key_item(p0, c0):
       return true;
     case private_key_item(p0, c0):
-      return true == bad(p0);
+      return true == rpc_key_clsfy(p0, c0, false);
     case hmac_item(p0, c0, pay0): return
       switch(pay0)
       {
@@ -120,13 +121,15 @@ predicate rpc_pub(item i) =
 ///////////////////////////////////////////////////////////////////////////////
 
 struct item *client(char server, struct item *key, struct item *request);
-  /*@ requires [?f0]world(rpc_pub) &*& principal(?client, ?count) &*&
+  /*@ requires [?f0]world(rpc_pub, rpc_key_clsfy) &*& 
+               principal(?client, ?count) &*&
                item(key, symmetric_key_item(?creator, ?id), rpc_pub) &*&
                item(request, ?req, rpc_pub) &*& [_]rpc_pub(req) &*&
                true == request(creator, server, req) &*&
                shared_with(creator, id) == server;
   @*/
-  /*@ ensures  [f0]world(rpc_pub) &*& principal(client, count) &*&
+  /*@ ensures  [f0]world(rpc_pub, rpc_key_clsfy) &*& 
+               principal(client, count) &*&
                item(key, symmetric_key_item(creator, id), rpc_pub) &*&
                item(request, req, rpc_pub) &*& item(result, ?resp, rpc_pub) &*& 
                (
@@ -136,12 +139,12 @@ struct item *client(char server, struct item *key, struct item *request);
   @*/
 
 void server(char server, struct item *key);
-  /*@ requires [?f0]world(rpc_pub) &*&
+  /*@ requires [?f0]world(rpc_pub, rpc_key_clsfy) &*&
                principal(server, ?count) &*&
                item(key, symmetric_key_item(?creator, ?id), rpc_pub) &*&  
                shared_with(creator, id) == server;
   @*/
-  /*@ ensures  [f0]world(rpc_pub) &*&
+  /*@ ensures  [f0]world(rpc_pub, rpc_key_clsfy) &*&
                principal(server, count + 1) &*&
                item(key, symmetric_key_item(creator, id), rpc_pub);
   @*/

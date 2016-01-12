@@ -7,12 +7,12 @@
 #include "../../annotated_api/polarssl_definitions/polarssl_definitions.h"
 
 void random_buffer_(char* buffer, int size)
-  /*@ requires [?f]world(?pub) &*&
+  /*@ requires [?f]world(?pub, ?key_clsfy) &*&
                proof_obligations(pub) &*&
                chars(buffer, size, _) &*&
                principal(?principal, ?count) &*&
                true == bad(principal); @*/
-  /*@ ensures  [f]world(pub) &*&
+  /*@ ensures  [f]world(pub, key_clsfy) &*&
                proof_obligations(pub) &*&
                chars(buffer, size, _) &*&
                principal(principal, count + 1); @*/
@@ -25,11 +25,11 @@ void random_buffer_(char* buffer, int size)
 }
 
 int random_int_()
-  /*@ requires [?f]world(?pub) &*&
+  /*@ requires [?f]world(?pub, ?key_clsfy) &*&
                proof_obligations(pub) &*&
                principal(?principal, ?count) &*&
                true == bad(principal); @*/
-  /*@ ensures  [f]world(pub) &*&
+  /*@ ensures  [f]world(pub, key_clsfy) &*&
                proof_obligations(pub) &*&
                principal(principal, count + 1); @*/
 {
@@ -41,12 +41,12 @@ int random_int_()
 }
 
 void send_data(struct network_status *net_stat)
-  /*@ requires [?f0]world(?pub) &*&
+  /*@ requires [?f0]world(?pub, ?key_clsfy) &*&
                proof_obligations(pub) &*&
                network_status(net_stat) &*&
                principal(?principal, ?count1) &*&
                true == bad(principal); @*/
-  /*@ ensures  [f0]world(pub) &*&
+  /*@ ensures  [f0]world(pub, key_clsfy) &*&
                proof_obligations(pub) &*&
                network_status(net_stat) &*&
                principal(principal, ?count2); @*/
@@ -70,12 +70,12 @@ void send_data(struct network_status *net_stat)
 }
 
 void send_pair_composed(struct network_status *net_stat)
-  /*@ requires [?f0]world(?pub) &*&
+  /*@ requires [?f0]world(?pub, ?key_clsfy) &*&
                proof_obligations(pub) &*&
                network_status(net_stat) &*&
                principal(?principal, ?count1) &*&
                true == bad(principal); @*/
-  /*@ ensures  [f0]world(pub) &*&
+  /*@ ensures  [f0]world(pub, key_clsfy) &*&
                proof_obligations(pub) &*&
                network_status(net_stat) &*&
                principal(principal, ?count2); @*/
@@ -98,12 +98,12 @@ void send_pair_composed(struct network_status *net_stat)
 }
 
 void send_pair_decomposed(struct network_status *net_stat)
-  /*@ requires [?f0]world(?pub) &*&
+  /*@ requires [?f0]world(?pub, ?key_clsfy) &*&
                proof_obligations(pub) &*&
                network_status(net_stat) &*&
                principal(?principal, ?count1) &*&
                true == bad(principal); @*/
-  /*@ ensures  [f0]world(pub) &*&
+  /*@ ensures  [f0]world(pub, key_clsfy) &*&
                proof_obligations(pub) &*&
                network_status(net_stat) &*&
                principal(principal, ?count2); @*/
@@ -132,12 +132,12 @@ void send_pair_decomposed(struct network_status *net_stat)
 }
 
 void send_nonce(struct network_status *net_stat)
-  /*@ requires [?f0]world(?pub) &*&
+  /*@ requires [?f0]world(?pub, ?key_clsfy) &*&
                proof_obligations(pub) &*&
                network_status(net_stat) &*&
                principal(?principal, ?count1) &*&
                true == bad(principal); @*/
-  /*@ ensures  [f0]world(pub) &*&
+  /*@ ensures  [f0]world(pub, key_clsfy) &*&
                proof_obligations(pub) &*&
                network_status(net_stat) &*&
                principal(principal, ?count2); @*/
@@ -156,12 +156,12 @@ void send_nonce(struct network_status *net_stat)
 }
 
 void increment_and_send_nonce(struct network_status *net_stat)
-  /*@ requires [?f0]world(?pub) &*&
+  /*@ requires [?f0]world(?pub, ?key_clsfy) &*&
                proof_obligations(pub) &*&
                network_status(net_stat) &*&
                principal(?principal, ?count1) &*&
                true == bad(principal); @*/
-  /*@ ensures  [f0]world(pub) &*&
+  /*@ ensures  [f0]world(pub, key_clsfy) &*&
                proof_obligations(pub) &*&
                network_status(net_stat) &*&
                principal(principal, ?count2); @*/
@@ -191,13 +191,13 @@ void increment_and_send_nonce(struct network_status *net_stat)
 }
 
 void send_keys(struct network_status *net_stat, struct keypair *keypair)
-  /*@ requires [?f0]world(?pub) &*&
+  /*@ requires [?f0]world(?pub, ?key_clsfy) &*&
                keypair(keypair, ?attacker_id, ?id, ?info, pub) &*&
                proof_obligations(pub) &*&
                network_status(net_stat) &*&
                principal(attacker_id, ?count1) &*&
                true == bad(attacker_id); @*/
-  /*@ ensures  [f0]world(pub) &*&
+  /*@ ensures  [f0]world(pub, key_clsfy) &*&
                keypair(keypair, attacker_id, id, info, pub) &*&
                proof_obligations(pub) &*&
                network_status(net_stat) &*&
@@ -227,13 +227,13 @@ void send_keys(struct network_status *net_stat, struct keypair *keypair)
 }
 
 void send_hmac(struct network_status *net_stat, struct keypair *keypair)
-  /*@ requires [?f0]world(?pub) &*&
+  /*@ requires [?f0]world(?pub, ?key_clsfy) &*&
                keypair(keypair, ?attacker_id, ?id, ?info, pub) &*&
                proof_obligations(pub) &*&
                network_status(net_stat) &*&
                principal(attacker_id, ?count1) &*&
                true == bad(attacker_id); @*/
-  /*@ ensures  [f0]world(pub) &*&
+  /*@ ensures  [f0]world(pub, key_clsfy) &*&
                keypair(keypair, attacker_id, id, info, pub) &*&
                proof_obligations(pub) &*&
                network_status(net_stat) &*&
@@ -269,217 +269,205 @@ void send_hmac(struct network_status *net_stat, struct keypair *keypair)
   item_free(key);
 }
 
-// void send_symmetric_encrypted(struct network_status *net_stat, struct keypair *keypair)
-//   /*@ requires [?f0]world(?pub) &*&
-//                keypair(keypair, ?attacker_id, ?id, ?info, pub) &*&
-//                proof_obligations(pub) &*&
-//                network_status(net_stat) &*&
-//                principal(attacker_id, ?count1) &*&
-//                true == bad(attacker_id); @*/
-//   /*@ ensures  [f0]world(pub) &*&
-//                keypair(keypair, attacker_id, id, info, pub) &*&
-//                proof_obligations(pub) &*&
-//                network_status(net_stat) &*&
-//                principal(attacker_id, ?count2); @*/
-// {
-//   struct item *key = network_receive(net_stat);
-//   //@ assert item(key, ?k, pub);
-//   if (is_symmetric_key(key))
-//   {
-//     struct item *pay = network_receive(net_stat);
-//     //@ assert item(pay, ?p, pub);
-//     struct item *enc = symmetric_encryption(key, pay);
-//
-//     //@ assert item(enc, ?e, pub);
-//     //@ open proof_obligations(pub);
-//     /*@ if (col)
-//         {
-//           assert is_public_collision(?proof, pub);
-//           proof(e);
-//         }
-//         else
-//         {
-//           assert is_public_symmetric_encrypted(?proof, pub);
-//           proof(e);
-//         }
-//     @*/
-//     //@ close proof_obligations(pub);
-//     network_send(net_stat, enc);
-//
-//     item_free(enc);
-//     item_free(pay);
-//   }
-//   item_free(key);
-// }
-//
-// void send_symmetric_decrypted(struct network_status *net_stat, struct keypair *keypair)
-//   /*@ requires [?f0]world(?pub) &*&
-//                keypair(keypair, ?attacker_id, ?id, ?info, pub) &*&
-//                proof_obligations(pub) &*&
-//                network_status(net_stat) &*&
-//                principal(attacker_id, ?count1) &*&
-//                true == bad(attacker_id); @*/
-//   /*@ ensures  [f0]world(pub) &*&
-//                keypair(keypair, attacker_id, id, info, pub) &*&
-//                proof_obligations(pub) &*&
-//                network_status(net_stat) &*&
-//                principal(attacker_id, ?count2); @*/
-// {
-//   struct item *key = network_receive(net_stat);
-//   //@ assert item(key, ?k, pub);
-//   if (is_symmetric_key(key))
-//   {
-//     struct item *enc = network_receive(net_stat);
-//     //@ assert item(enc, ?e, pub);
-//     if (is_symmetric_encrypted(enc))
-//     {
-//       struct item *dec = symmetric_decryption(key, enc);
-//
-//       //@ assert item(dec, ?d, pub);
-//       //@ open proof_obligations(pub);
-//       /*@ if (col)
-//           {
-//             assert is_public_collision(?proof, pub);
-//             proof(d);
-//           }
-//           else
-//           {
-//             assert is_public_symmetric_decrypted(?proof, pub);
-//             proof(e);
-//           }
-//       @*/
-//       network_send(net_stat, dec);
-//
-//       struct item *enc2 = symmetric_encryption(key, dec);
-//       //@ assert item(enc2, ?e2, pub);
-//       /*@ if (col)
-//           {
-//             assert is_public_collision(?proof, pub);
-//             proof(e2);
-//           }
-//           else
-//           {
-//             assert e2 == symmetric_encrypted_item(?p, ?c, ?pay, ?ent0);
-//             assert is_public_symmetric_encrypted_entropy(?proof, pub);
-//             proof(e, ent0);
-//           }
-//       @*/
-//       network_send(net_stat, enc2);
-//       //@ close proof_obligations(pub);
-//
-//       item_free(dec);
-//       item_free(enc2);
-//     }
-//     item_free(enc);
-//   }
-//   item_free(key);
-// }
-//
-//
-// void send_asymmetric_encrypted(struct network_status *net_stat, struct keypair *keypair)
-//   /*@ requires [?f0]world(?pub) &*&
-//                keypair(keypair, ?attacker_id, ?id, ?info, pub) &*&
-//                proof_obligations(pub) &*&
-//                network_status(net_stat) &*&
-//                principal(attacker_id, ?count1) &*&
-//                true == bad(attacker_id); @*/
-//   /*@ ensures  [f0]world(pub) &*&
-//                keypair(keypair, attacker_id, id, info, pub) &*&
-//                proof_obligations(pub) &*&
-//                network_status(net_stat) &*&
-//                principal(attacker_id, ?count2); @*/
-// {
-//   struct item *key = network_receive(net_stat);
-//   //@ assert item(key, ?k, pub);
-//   if (is_public_key(key))
-//   {
-//     struct item *pay = network_receive(net_stat);
-//     //@ assert item(pay, ?p, pub);
-//     struct item *enc = asymmetric_encryption(key, pay);
-//
-//     //@ assert item(enc, ?e, pub);
-//     //@ open proof_obligations(pub);
-//     /*@ if (col)
-//         {
-//           assert is_public_collision(?proof, pub);
-//           proof(e);
-//         }
-//         else
-//         {
-//           assert is_public_asymmetric_encrypted(?proof, pub);
-//           proof(e);
-//         }
-//     @*/
-//     //@ close proof_obligations(pub);
-//     network_send(net_stat, enc);
-//
-//     item_free(enc);
-//     item_free(pay);
-//   }
-//   item_free(key);
-// }
-//
-// void send_asymmetric_decrypted(struct network_status *net_stat, struct keypair *keypair)
-//   /*@ requires [?f0]world(?pub) &*&
-//                keypair(keypair, ?attacker_id, ?id, ?info, pub) &*&
-//                proof_obligations(pub) &*&
-//                network_status(net_stat) &*&
-//                principal(attacker_id, ?count1) &*&
-//                true == bad(attacker_id); @*/
-//   /*@ ensures  [f0]world(pub) &*&
-//                keypair(keypair, attacker_id, id, info, pub) &*&
-//                proof_obligations(pub) &*&
-//                network_status(net_stat) &*&
-//                principal(attacker_id, ?count2); @*/
-// {
-//   struct item *key = network_receive(net_stat);
-//   //@ assert item(key, ?k, pub);
-//   if (is_private_key(key))
-//   {
-//     //@ assert k == private_key_item(?principal2, ?count2);
-//     struct item *enc = network_receive(net_stat);
-//     //@ assert item(enc, ?e, pub);
-//     if (is_asymmetric_encrypted(enc))
-//     {
-//       //@ assert e == asymmetric_encrypted_item(?principal3, ?count3, ?pay, ?ent);
-//       struct item *dec = asymmetric_decryption(key, enc);
-//
-//       //@ assert item(dec, ?d, pub);
-//       //@ open proof_obligations(pub);
-//       /*@ if (col)
-//           {
-//             assert is_public_collision(?proof, pub);
-//             proof(d);
-//           }
-//           else if (principal2 == principal3 && count2 == count3)
-//           {
-//             assert pay == some(d);
-//             assert is_public_asymmetric_decrypted(?proof, pub);
-//             proof(e);
-//           }
-//           else
-//           {
-//             assert [_]pub(d);
-//           }
-//       @*/
-//       network_send(net_stat, dec);
-//       //@ close proof_obligations(pub);
-//       item_free(dec);
-//     }
-//     item_free(enc);
-//   }
-//   item_free(key);
-// }
-
-void send_asymmetric_signature(struct network_status *net_stat,
-                               struct keypair *keypair)
-  /*@ requires [?f0]world(?pub) &*&
+void send_symmetric_encrypted(struct network_status *net_stat, struct keypair *keypair)
+  /*@ requires [?f0]world(?pub, ?key_clsfy) &*&
                keypair(keypair, ?attacker_id, ?id, ?info, pub) &*&
                proof_obligations(pub) &*&
                network_status(net_stat) &*&
                principal(attacker_id, ?count1) &*&
                true == bad(attacker_id); @*/
-  /*@ ensures  [f0]world(pub) &*&
+  /*@ ensures  [f0]world(pub, key_clsfy) &*&
+               keypair(keypair, attacker_id, id, info, pub) &*&
+               proof_obligations(pub) &*&
+               network_status(net_stat) &*&
+               principal(attacker_id, ?count2); @*/
+{
+  struct item *key = network_receive(net_stat);
+  //@ assert item(key, ?k, pub);
+  if (is_symmetric_key(key))
+  {
+    struct item *pay = network_receive(net_stat);
+    //@ assert item(pay, ?p, pub);
+    
+    //@ open proof_obligations(pub);
+    //@ item nonce = nonce_item(attacker_id, count1 + 1, 0);
+    //@ assert is_public_nonce(?proof1, pub);
+    //@ proof1(nonce);
+    struct item *enc = symmetric_encryption(key, pay);
+    //@ assert item(enc, ?e, pub);
+    /*@ if (col)
+        {
+          assert is_public_collision(?proof2, pub);
+          proof2(e);
+        }
+        else
+        {
+          assert is_public_symmetric_encrypted(?proof2, pub);
+          proof2(e);
+        }
+    @*/
+    //@ close proof_obligations(pub);
+    network_send(net_stat, enc);
+
+    item_free(enc);
+    item_free(pay);
+  }
+  item_free(key);
+}
+
+void send_symmetric_decrypted(struct network_status *net_stat, struct keypair *keypair)
+  /*@ requires [?f0]world(?pub, ?key_clsfy) &*&
+               keypair(keypair, ?attacker_id, ?id, ?info, pub) &*&
+               proof_obligations(pub) &*&
+               network_status(net_stat) &*&
+               principal(attacker_id, ?count1) &*&
+               true == bad(attacker_id); @*/
+  /*@ ensures  [f0]world(pub, key_clsfy) &*&
+               keypair(keypair, attacker_id, id, info, pub) &*&
+               proof_obligations(pub) &*&
+               network_status(net_stat) &*&
+               principal(attacker_id, ?count2); @*/
+{
+  struct item *key = network_receive(net_stat);
+  //@ assert item(key, ?k, pub);
+  if (is_symmetric_key(key))
+  {
+    struct item *enc = network_receive(net_stat);
+    //@ assert item(enc, ?e, pub);
+    if (is_symmetric_encrypted(enc))
+    {
+      struct item *dec = symmetric_decryption(key, enc);
+      //@ assert item(dec, ?d, pub);
+      //@ open proof_obligations(pub);
+      /*@ if (!col)
+          {
+            assert is_public_symmetric_decrypted(?proof, pub);
+            proof(e);
+          }
+      @*/
+      network_send(net_stat, dec);
+      //@ close proof_obligations(pub);
+      item_free(dec);
+    }
+    item_free(enc);
+  }
+  item_free(key);
+}
+
+void send_asymmetric_encrypted(struct network_status *net_stat, struct keypair *keypair)
+  /*@ requires [?f0]world(?pub, ?key_clsfy) &*&
+               keypair(keypair, ?attacker_id, ?id, ?info, pub) &*&
+               proof_obligations(pub) &*&
+               network_status(net_stat) &*&
+               principal(attacker_id, ?count1) &*&
+               true == bad(attacker_id); @*/
+  /*@ ensures  [f0]world(pub, key_clsfy) &*&
+               keypair(keypair, attacker_id, id, info, pub) &*&
+               proof_obligations(pub) &*&
+               network_status(net_stat) &*&
+               principal(attacker_id, ?count2); @*/
+{
+  struct item *key = network_receive(net_stat);
+  //@ assert item(key, ?k, pub);
+  if (is_public_key(key))
+  {
+    struct item *pay = network_receive(net_stat);
+    //@ assert item(pay, ?p, pub);
+    struct item *enc = asymmetric_encryption(key, pay);
+
+    //@ assert item(enc, ?e, pub);
+    //@ open proof_obligations(pub);
+    /*@ if (col)
+        {
+          assert is_public_collision(?proof, pub);
+          proof(e);
+        }
+        else
+        {
+          assert is_public_asymmetric_encrypted(?proof, pub);
+          proof(e);
+        }
+    @*/
+    //@ close proof_obligations(pub);
+    network_send(net_stat, enc);
+
+    item_free(enc);
+    item_free(pay);
+  }
+  item_free(key);
+}
+
+void send_asymmetric_decrypted(struct network_status *net_stat, struct keypair *keypair)
+  /*@ requires [?f0]world(?pub, ?key_clsfy) &*&
+               keypair(keypair, ?attacker_id, ?id, ?info, pub) &*&
+               proof_obligations(pub) &*&
+               network_status(net_stat) &*&
+               principal(attacker_id, ?count1) &*&
+               true == bad(attacker_id); @*/
+  /*@ ensures  [f0]world(pub, key_clsfy) &*&
+               keypair(keypair, attacker_id, id, info, pub) &*&
+               proof_obligations(pub) &*&
+               network_status(net_stat) &*&
+               principal(attacker_id, ?count2); @*/
+{
+  struct item *key = network_receive(net_stat);
+  //@ assert item(key, ?k, pub);
+  if (is_private_key(key))
+  {
+    //@ assert k == private_key_item(?principal2, ?count2);
+    struct item *enc = network_receive(net_stat);
+    //@ assert item(enc, ?e, pub);
+    if (is_asymmetric_encrypted(enc))
+    {
+      //@ assert e == asymmetric_encrypted_item(?principal3, ?count3, ?pay, ?ent);
+      char tag;
+      //@ close chars(&tag, 1, _);
+      random_buffer_(&tag, 1);
+      //@ open chars(&tag, 1, _);
+      if (tag == TAG_DATA || tag == TAG_PAIR ||           
+          tag == TAG_NONCE || tag == TAG_HASH ||          
+          tag == TAG_SYMMETRIC_KEY || tag == TAG_PUBLIC_KEY ||   
+          tag == TAG_PRIVATE_KEY || tag == TAG_HMAC ||    
+          tag == TAG_SYMMETRIC_ENC || tag == TAG_ASYMMETRIC_ENC ||  
+          tag == TAG_ASYMMETRIC_SIG)
+      {
+        struct item *dec = asymmetric_decryption(key, enc, tag);
+        //@ assert item(dec, ?d, pub);
+        //@ open proof_obligations(pub);
+        /*@ if (col)
+            {
+              assert [_]pub(d);
+            }
+            else if (principal2 == principal3 && count2 == count3)
+            {
+              assert pay == some(d);
+              assert is_public_asymmetric_decrypted(?proof, pub);
+              proof(e);
+            }
+            else
+            {
+              assert [_]pub(d);
+            }
+        @*/
+        network_send(net_stat, dec);
+        //@ close proof_obligations(pub);
+        item_free(dec);
+      }
+    }
+    item_free(enc);
+  }
+  item_free(key);
+}
+
+void send_asymmetric_signature(struct network_status *net_stat,
+                               struct keypair *keypair)
+  /*@ requires [?f0]world(?pub, ?key_clsfy) &*&
+               keypair(keypair, ?attacker_id, ?id, ?info, pub) &*&
+               proof_obligations(pub) &*&
+               network_status(net_stat) &*&
+               principal(attacker_id, ?count1) &*&
+               true == bad(attacker_id); @*/
+  /*@ ensures  [f0]world(pub, key_clsfy) &*&
                keypair(keypair, attacker_id, id, info, pub) &*&
                proof_obligations(pub) &*&
                network_status(net_stat) &*&
@@ -516,7 +504,7 @@ void send_asymmetric_signature(struct network_status *net_stat,
 }
 
 void symbolic_attacker(int attacker_id, struct keypair* keypair)
-  /*@ requires [?f]world(?pub) &*&
+  /*@ requires [?f]world(?pub, ?key_clsfy) &*&
                true == bad(attacker_id) &*&
                principal(attacker_id, ?count) &*&
                keypair(keypair, attacker_id, ?id, ?info, pub) &*&
@@ -526,7 +514,7 @@ void symbolic_attacker(int attacker_id, struct keypair* keypair)
   //@ retreive_proof_obligations();
 
   for (;;)
-    /*@ invariant [f]world(pub) &*&
+    /*@ invariant [f]world(pub, key_clsfy) &*&
                   proof_obligations(pub) &*&
                   principal(attacker_id, _) &*&
                   keypair(keypair, attacker_id, id, info, pub) &*&
@@ -546,17 +534,53 @@ void symbolic_attacker(int attacker_id, struct keypair* keypair)
       switch (action % 13)
       {
         case 0:
-          //@ open [f]world(pub);
+          //@ open [f]world(pub, key_clsfy);
+          //@ assert [_]is_key_classifier(_, pub, key_clsfy);
           counter = get_polarssl_principals();
-          //@ retreive_public_invariant_constraints();
-          //@ close polarssl_proof_pred(pub)();
+          //@ retreive_public_invariant_constraints(key_clsfy);
+          //@ duplicate_lemma_function_pointer_chunk(key_classifier);
+          /*@ {
+                lemma void public_key_classifier(cryptogram key, int p, int c,
+                                                bool symmetric)
+                  requires polarssl_proof_pred(pub, key_clsfy)() &*&
+                          [_]polarssl_pub(pub)(key) &*&
+                          symmetric ?
+                            key == cg_symmetric_key(p, c)
+                          :
+                            key == cg_private_key(p, c);
+                  ensures polarssl_proof_pred(pub, key_clsfy)() &*&
+                          col || true == key_clsfy(p, c, symmetric);
+                {
+                  open [_]polarssl_pub(pub)(key);
+                  item k;
+                  if (symmetric)
+                    k = symmetric_key_item(p, c);
+                  else
+                    k = private_key_item(p, c);
+                  
+                  open polarssl_proof_pred(pub, key_clsfy)();
+                  assert is_key_classifier(?proof, pub, key_clsfy);
+                  proof(k, p, c, symmetric);
+                  close polarssl_proof_pred(pub, key_clsfy)();
+                }
+                produce_lemma_function_pointer_chunk(public_key_classifier) :
+                  public_key_classifier(polarssl_pub(pub), key_clsfy,
+                                        polarssl_proof_pred(pub, key_clsfy))
+                                        (key__, p__, c__, sym__)
+                  { call(); }
+                  {duplicate_lemma_function_pointer_chunk(public_key_classifier);};
+              }
+          @*/
+          //@ close polarssl_proof_pred(pub, key_clsfy)();
           attacker();
           if (*counter >= INT_MAX) abort();
           (*counter)++;
-          //@ open polarssl_proof_pred(pub)();
-          //@ close [f]world(pub);
+          //@ open polarssl_proof_pred(pub, key_clsfy)();
+          //@ close [f]world(pub, key_clsfy);
           //@ return_polarssl_principals();
           //@ leak public_invariant_constraints(_, _);
+          //@ leak is_public_key_classifier(_, _, _, _);
+          //@ leak is_key_classifier(_, _, _);
           break;
         case 1:
           // Anyone can publish arbitrary data items...
@@ -586,22 +610,22 @@ void symbolic_attacker(int attacker_id, struct keypair* keypair)
           // Anyone can hmac public payload with public key
           send_hmac(net_stat, keypair);
           break;
-//         case 8:
-//           // Anyone can symmteric encrypt public payload with public key
-//           send_symmetric_encrypted(net_stat, keypair);
-//           break;
-//         case 9:
-//           // Anyone can symmteric decrypt message with public key
-//           send_symmetric_decrypted(net_stat, keypair);
-//           break;
-//         case 10:
-//           // Anyone can asymmteric encrypt public payload with public key
-//           send_asymmetric_encrypted(net_stat, keypair);
-//           break;
-//         case 11:
-//           // Anyone can asymmteric decrypt message with public key
-//           send_asymmetric_decrypted(net_stat, keypair);
-//           break;
+        case 8:
+          // Anyone can symmteric encrypt public payload with public key
+          send_symmetric_encrypted(net_stat, keypair);
+          break;
+        case 9:
+          // Anyone can symmteric decrypt message with public key
+          send_symmetric_decrypted(net_stat, keypair);
+          break;
+        case 10:
+          // Anyone can asymmteric encrypt public payload with public key
+          send_asymmetric_encrypted(net_stat, keypair);
+          break;
+        case 11:
+          // Anyone can asymmteric decrypt message with public key
+          send_asymmetric_decrypted(net_stat, keypair);
+          break;
         case 12:
           // Anyone can asymmteric sign public payload with public key
           send_asymmetric_signature(net_stat, keypair);

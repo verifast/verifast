@@ -4,14 +4,14 @@
 #define APP_RECEIVE_PORT 191919
 
 void app_send(struct item *KA_PRIVATE, struct item *message)
-  /*@ requires [?f0]world(ss_auth_pub) &*&
+  /*@ requires [?f0]world(ss_auth_pub, ss_auth_key_clsfy) &*&
                principal(?principal, ?count) &*&
                item(KA_PRIVATE, ?kap, ss_auth_pub) &*& 
                  kap == private_key_item(?sender, ?count_kap) &*&
                item(message, ?msg, ss_auth_pub) &*&
                  [_]ss_auth_pub(msg) &*& 
                  app_send_event(sender, msg) == true; @*/
-  /*@ ensures  [f0]world(ss_auth_pub) &*&
+  /*@ ensures  [f0]world(ss_auth_pub, ss_auth_key_clsfy) &*&
                principal(principal, count + 1) &*&
                item(KA_PRIVATE, kap, ss_auth_pub) &*& 
                item(message, msg, ss_auth_pub); @*/
@@ -21,12 +21,10 @@ void app_send(struct item *KA_PRIVATE, struct item *message)
     
     struct item *sign = asymmetric_signature(KA_PRIVATE, message);
     //@ assert item(sign, ?h, ss_auth_pub);
-    //@ get_info_for_item(h);
     //@ close ss_auth_pub(h);
     //@ leak ss_auth_pub(h);
     struct item *m = create_pair(sign, message);
     //@ assert item(m, ?pmessage, ss_auth_pub);
-    //@ get_info_for_item(pmessage);
     //@ close ss_auth_pub(pmessage);
     //@ leak ss_auth_pub(pmessage);
     network_send(net_stat, m);
@@ -37,11 +35,11 @@ void app_send(struct item *KA_PRIVATE, struct item *message)
 }
 
 struct item *app_receive(struct item *KA)
-  /*@ requires [?f0]world(ss_auth_pub) &*&
+  /*@ requires [?f0]world(ss_auth_pub, ss_auth_key_clsfy) &*&
                principal(?principal, ?count) &*&
                item(KA, ?ka, ss_auth_pub) &*&
                  ka == public_key_item(?sender, ?count_kap); @*/
-  /*@ ensures  [f0]world(ss_auth_pub) &*&
+  /*@ ensures  [f0]world(ss_auth_pub, ss_auth_key_clsfy) &*&
                principal(principal, count) &*&
                item(KA, ka, ss_auth_pub) &*&
                item(result, ?msg, ss_auth_pub) &*&

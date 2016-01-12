@@ -20,9 +20,9 @@ predicate principals_created_temp(int* c) =
 @*/
 
 void principals_initialize()
-  /*@ requires [?f]world(?pub) &*&
+  /*@ requires [?f]world(?pub, ?key_clsfy) &*&
                module(principal_ids, true); @*/
-  /*@ ensures  [f]world(pub) &*& 
+  /*@ ensures  [f]world(pub, key_clsfy) &*& 
                principals_created(0); @*/
 {
   //@ open_module();
@@ -33,9 +33,9 @@ void principals_initialize()
 
 /*@
 lemma void principals_finalize()
-  requires [?f]world(?pub) &*&
+  requires [?f]world(?pub, ?key_clsfy) &*&
            principals_created(?count);
-  ensures  [f]world(pub) &*&
+  ensures  [f]world(pub, key_clsfy) &*&
            module(principal_ids, false);
 {
   open principals_created(count);
@@ -45,10 +45,10 @@ lemma void principals_finalize()
 @*/
 
 int create_principal(struct keypair** keypair)
-  /*@ requires world(?pub) &*&
+  /*@ requires world(?pub, ?key_clsfy) &*&
                pointer(keypair, _) &*&
                principals_created(?count); @*/
-  /*@ ensures  world(pub) &*&
+  /*@ ensures  world(pub, key_clsfy) &*&
                principals_created(result) &*&
                result == count + 1 &*&
                principal(result, 1) &*&

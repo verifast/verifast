@@ -1,22 +1,10 @@
 #include "auth_enc.h"
 
-#include <pthread.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "../general.h"
 
 #define MSG_LEN 64
 
-//@ import_module public_invariant_mod;
-//@ import_module principals_mod;
-
-/*@
-
-predicate_family_instance pthread_run_pre(attacker_t)(void *data, any info) =
-    [_]public_invar(auth_enc_pub) &*&
-    public_invariant_constraints(auth_enc_pub, auth_enc_proof_pred) &*&
-    principals(_);
-@*/
+//@ ATTACKER_PRE(auth_enc)
 
 void *attacker_t(void* data) //@ : pthread_run_joinable
   //@ requires pthread_run_pre(attacker_t)(data, ?info);
@@ -47,11 +35,6 @@ struct auth_enc_args
 };
 
 /*@
-inductive info =
-  | int_value(int v)
-  | pointer_value(char* p)
-  | char_list_value(list<char> p)
-;
 
 predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
   [_]public_invar(auth_enc_pub) &*&
@@ -66,14 +49,8 @@ predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
     receiver == shared_with(sender, id) &*&
   crypto_chars(secret, msg, MSG_LEN, ?msg_cs) &*&
     true == send(sender, receiver, msg_cs) &*&
-  info == cons(int_value(sender), 
-            cons(int_value(receiver), 
-              cons(pointer_value(key),
-                cons(char_list_value(key_cs),
-                  cons(int_value(id),
-                    cons(pointer_value(msg),
-                      cons(char_list_value(msg_cs),
-                           nil)))))));
+  info == IV(sender, IV(receiver, PV(key, CL(key_cs, 
+             IV(id, PV(msg, CL(msg_cs, nil)))))));
 
 predicate_family_instance pthread_run_post(sender_t)(void *data, any info) =
   [_]public_invar(auth_enc_pub) &*&
@@ -86,14 +63,8 @@ predicate_family_instance pthread_run_post(sender_t)(void *data, any info) =
     key_cg == cg_symmetric_key(sender, ?id) &*&
     receiver == shared_with(sender, id) &*&
   crypto_chars(secret, msg, MSG_LEN, ?msg_cs) &*&
-  info == cons(int_value(sender), 
-            cons(int_value(receiver), 
-              cons(pointer_value(key),
-                cons(char_list_value(key_cs),
-                  cons(int_value(id),
-                    cons(pointer_value(msg),
-                      cons(char_list_value(msg_cs),
-                           nil)))))));
+  info == IV(sender, IV(receiver, PV(key, CL(key_cs, 
+             IV(id, PV(msg, CL(msg_cs, nil)))))));
 @*/
 
 void *sender_t(void* data) //@ : pthread_run_joinable
@@ -122,13 +93,7 @@ predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) =
     key_cg == cg_symmetric_key(sender, ?id) &*&
     receiver == shared_with(sender, id) &*&
   chars(msg, MAX_SIZE, _) &*&
-  info == cons(int_value(sender), 
-            cons(int_value(receiver), 
-              cons(pointer_value(key),
-                cons(char_list_value(key_cs),
-                  cons(int_value(id),
-                    cons(pointer_value(msg),
-                         nil))))));
+  info == IV(sender, IV(receiver, PV(key, CL(key_cs, IV(id, PV(msg, nil))))));
 
 predicate_family_instance pthread_run_post(receiver_t)(void *data, any info) =
   [_]public_invar(auth_enc_pub) &*&
@@ -144,13 +109,7 @@ predicate_family_instance pthread_run_post(receiver_t)(void *data, any info) =
   crypto_chars(secret, msg, length, ?msg_cs) &*&
   chars(msg + length, MAX_SIZE - length, _) &*&
   col || send(sender, receiver, msg_cs) &*&
-  info == cons(int_value(sender), 
-            cons(int_value(receiver), 
-              cons(pointer_value(key),
-                cons(char_list_value(key_cs),
-                  cons(int_value(id),
-                    cons(pointer_value(msg),
-                         nil))))));
+  info == IV(sender, IV(receiver, PV(key, CL(key_cs, IV(id, PV(msg, nil))))));
 @*/
 
 void *receiver_t(void* data) //@ : pthread_run_joinable
@@ -168,8 +127,6 @@ int main(int argc, char **argv) //@ : main_full(main_app)
     //@ requires module(main_app, true);
     //@ ensures true;
 {
-  //@ open_module();
-
   pthread_t a_thread;
   havege_state havege_state;
   
@@ -177,10 +134,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
   printf("auth_enc protocol");
   printf("\" ... \n\n");
   
-  //@ PUBLIC_INVARIANT_CONSTRAINTS(auth_enc)
-  //@ public_invariant_init(auth_enc_pub);
-  
-  //@ principals_init();
+  //@ PROTOCOL_INIT(auth_enc)
   //@ int attacker = principal_create();
   //@ int sender = principal_create();
   //@ int receiver = principal_create();
@@ -209,6 +163,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
     key = malloc(KEY_SIZE);
     if (key == 0) abort();
     //@ close random_request(sender, 0, true);
+    //@ open principal(sender, _);
     if (havege_random(&havege_state, key, KEY_SIZE) != 0) abort();
     //@ assume (shared_with(sender, count + 1) == receiver);
     //@ assert cryptogram(key, KEY_SIZE, ?cs_key, ?cg_key);
@@ -235,6 +190,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
       r_args.key = key;
       r_args.msg = r_message;
       
+      //@ close principal(sender, _);
       //@ close pthread_run_pre(sender_t)(&s_args, ?s_data);
       //@ close pthread_run_pre(receiver_t)(&r_args, ?r_data);
       pthread_create(&r_thread, NULL, &receiver_t, &r_args);
@@ -249,8 +205,10 @@ int main(int argc, char **argv) //@ : main_full(main_app)
 
       if (r_args.length != MSG_LEN)
         abort();
+      //@ open principal(sender, _);
       if (memcmp(s_message, r_message, MSG_LEN) != 0)
         abort();
+      //@ close principal(sender, _);
       //@ public_crypto_chars(s_message, MSG_LEN);
       zeroize(r_message, r_args.length);
     }

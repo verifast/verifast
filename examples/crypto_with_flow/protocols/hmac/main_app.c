@@ -1,23 +1,10 @@
 #include "hmac.h"
 
-#include <pthread.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "../general.h"
 
 #define KEY_SIZE 16
 
-//@ import_module public_invariant_mod;
-//@ import_module principals_mod;
-
-/*@
-predicate hmac_proof_pred() = true;
-
-predicate_family_instance pthread_run_pre(attacker_t)(void *data, any info) =
-    [_]public_invar(hmac_pub) &*&
-    public_invariant_constraints(hmac_pub, hmac_proof_pred) &*&
-    principals(_);
-@*/
+//@ ATTACKER_PRE(hmac)
 
 void *attacker_t(void* data) //@ : pthread_run_joinable
   //@ requires pthread_run_pre(attacker_t)(data, ?info);
@@ -47,12 +34,6 @@ struct hmac_args
 
 /*@
 
-inductive info =
-  | int_value(int v)
-  | pointer_value(char* p)
-  | char_list_value(list<char> p)
-;
-
 predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
   [_]public_invar(hmac_pub) &*&
   hmac_args_sender(data, ?sender) &*&
@@ -65,14 +46,8 @@ predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
     receiver == shared_with(sender, id) &*&
   chars(msg, MESSAGE_SIZE, ?msg_cs) &*&
     true == send(sender, receiver, msg_cs) &*&
-  info == cons(int_value(sender), 
-            cons(int_value(receiver), 
-              cons(pointer_value(key),
-                cons(char_list_value(key_cs),
-                  cons(int_value(id),
-                    cons(pointer_value(msg),
-                      cons(char_list_value(msg_cs),
-                           nil)))))));
+  info == IV(sender, IV(receiver, PV(key, CL(key_cs, 
+             IV(id, PV(msg, CL(msg_cs, nil)))))));
 
 predicate_family_instance pthread_run_post(sender_t)(void *data, any info) =
   hmac_args_sender(data, ?sender) &*&
@@ -83,14 +58,8 @@ predicate_family_instance pthread_run_post(sender_t)(void *data, any info) =
   [1/2]cryptogram(key, KEY_SIZE, ?key_cs, ?key_cg) &*&
     key_cg == cg_symmetric_key(sender, ?id) &*&
   chars(msg, MESSAGE_SIZE, ?msg_cs) &*&
-  info == cons(int_value(sender), 
-            cons(int_value(receiver), 
-              cons(pointer_value(key),
-                cons(char_list_value(key_cs),
-                  cons(int_value(id),
-                    cons(pointer_value(msg),
-                      cons(char_list_value(msg_cs),
-                           nil)))))));
+  info == IV(sender, IV(receiver, PV(key, CL(key_cs, 
+             IV(id, PV(msg, CL(msg_cs, nil)))))));
 @*/
 
 void *sender_t(void* data) //@ : pthread_run_joinable
@@ -117,13 +86,7 @@ predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) =
     key_cg == cg_symmetric_key(sender, ?id) &*&
     receiver == shared_with(sender, id) &*&
   chars(msg, MESSAGE_SIZE, _) &*&
-  info == cons(int_value(sender), 
-            cons(int_value(receiver), 
-              cons(pointer_value(key),
-                cons(char_list_value(key_cs),
-                  cons(int_value(id),
-                    cons(pointer_value(msg),
-                         nil))))));
+  info == IV(sender, IV(receiver, PV(key, CL(key_cs, IV(id, PV(msg, nil))))));
                          
 predicate_family_instance pthread_run_post(receiver_t)(void *data, any info) =
   hmac_args_sender(data, ?sender) &*&
@@ -134,13 +97,8 @@ predicate_family_instance pthread_run_post(receiver_t)(void *data, any info) =
   [1/2]cryptogram(key, KEY_SIZE, ?key_cs, ?key_cg) &*&
     key_cg == cg_symmetric_key(sender, ?id) &*&
   chars(msg, MESSAGE_SIZE, ?msg_cs) &*&
-  info == cons(int_value(sender), 
-            cons(int_value(receiver), 
-              cons(pointer_value(key),
-                cons(char_list_value(key_cs),
-                  cons(int_value(id),
-                    cons(pointer_value(msg),
-                         nil))))));
+  info == IV(sender, IV(receiver, PV(key, CL(key_cs, IV(id, PV(msg, nil))))));
+  
 @*/
 
 void *receiver_t(void* data) //@ : pthread_run_joinable
@@ -164,8 +122,6 @@ int main(int argc, char **argv) //@ : main_full(main_app)
     //@ requires module(main_app, true);
     //@ ensures true;
 {
-  //@ open_module();
-
   pthread_t a_thread;
   havege_state havege_state;
   
@@ -173,10 +129,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
   printf("hmac protocol");
   printf("\" ... \n\n");
   
-  //@ PUBLIC_INVARIANT_CONSTRAINTS(hmac)
-  //@ public_invariant_init(hmac_pub);
-  
-  //@ principals_init();
+  //@ PROTOCOL_INIT(hmac)
   //@ int attacker = principal_create();
   //@ int sender = principal_create();
   //@ int receiver = principal_create();
@@ -197,6 +150,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
                   principal(sender, ?count) &*& principal(receiver, _);
     @*/
   {
+    //@ open principal(sender, _);
     char* key;
     int temp;
     
@@ -233,6 +187,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
       r_args.key = key;
       r_args.message = r_message;
       
+      //@ close principal(sender, _);
       //@ close pthread_run_pre(sender_t)(&s_args, ?s_data);
       //@ close pthread_run_pre(receiver_t)(&r_args, ?r_data);
       pthread_create(&r_thread, NULL, &receiver_t, &r_args);
@@ -247,9 +202,10 @@ int main(int argc, char **argv) //@ : main_full(main_app)
       
       //@ chars_to_crypto_chars(r_message, MESSAGE_SIZE);
       //@ chars_to_crypto_chars(s_message, MESSAGE_SIZE);
+      //@ open principal(sender, _);
       if (memcmp(s_message, r_message, MESSAGE_SIZE) != 0)
         abort();
-        
+      //@ close principal(sender, _);
       printf(" |%i| ", i);
     }
     //@ assert malloc_block(key, KEY_SIZE);

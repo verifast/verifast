@@ -60,7 +60,7 @@ fixpoint bool nsl_public_nonce(int principal, int info)
     (int_left(info) == 2 && bad(int_left(int_right(info))));
 }
 
-fixpoint bool nsl_public_key(int p, int c)
+fixpoint bool nsl_public_key(int p, int c, bool symmetric)
 {
   return bad(p);
 }
@@ -71,20 +71,20 @@ predicate nsl_pub(cryptogram cg) =
     case cg_nonce(p0, c0):
       return true == nsl_public_nonce(p0, cg_info(cg));
     case cg_symmetric_key(p0, c0):
-      return true == nsl_public_key(p0, c0);
+      return true == nsl_public_key(p0, c0, true);
     case cg_public_key(p0, c0):
       return true;
     case cg_private_key(p0, c0):
-      return true == bad(p0);
+      return true == nsl_public_key(p0, c0, false);
     case cg_hash(cs0):
       return true;
     case cg_hmac(p0, c0, cs0):
       return true;
     case cg_encrypted(p0, c0, cs0, ent0):
-      return true == nsl_public_key(p0, c0) &*&
+      return true == nsl_public_key(p0, c0, true) &*&
              [_]public_generated(nsl_pub)(cs0);
     case cg_auth_encrypted(p0, c0, mac0, cs0, ent0):
-      return true == nsl_public_key(p0, c0) &*&
+      return true == nsl_public_key(p0, c0, true) &*&
              [_]public_generated(nsl_pub)(cs0);
     case cg_asym_encrypted(p0, c0, cs0, ent0):
       return [_]nsl_pub_msg_sender(?p1) &*&
@@ -140,7 +140,7 @@ predicate nsl_pub(cryptogram cg) =
           false
       );
     case cg_asym_signature(p0, c0, cs0, ent0):
-      return true == bad(p0);
+      return true == nsl_public_key(p0, c0, false);
   }
 ;
 
@@ -154,6 +154,7 @@ void sender(int sender, int receiver,
             char *s_priv_key, char *r_pub_key,
             char *s_nonce, char *r_nonce);
 /*@ requires [_]public_invar(nsl_pub) &*&
+             [_]decryption_key_classifier(nsl_public_key) &*&
              principal(sender, _) &*&
              [?f1]cryptogram(s_priv_key, 8 * KEY_SIZE,
                              ?s_priv_key_cs, ?s_priv_key_cg) &*&
@@ -183,6 +184,7 @@ void receiver(int sender, int receiver,
               char *s_pub_key, char *r_priv_key,
               char *s_nonce, char *r_nonce);
 /*@ requires [_]public_invar(nsl_pub) &*&
+             [_]decryption_key_classifier(nsl_public_key) &*&
              principal(receiver, _) &*&
              [?f1]cryptogram(s_pub_key, 8 * KEY_SIZE,
                              ?s_pub_key_cs, ?s_pub_key_cg) &*&
@@ -228,6 +230,7 @@ DEFAULT_IS_PUBLIC_AUTH_DECRYPTED(nsl)
 // DEFAULT_IS_PUBLIC_ASYMMETRIC_ENCRYPTED(nsl)
 // DEFAULT_IS_PUBLIC_ASYMMETRIC_DECRYPTED(nsl)
 DEFAULT_IS_PUBLIC_ASYMMETRIC_SIGNATURE(nsl)
+DECRYPTION_PROOFS(nsl)
 
 lemma void public_asym_encryption_is_public(cryptogram encrypted)
   requires nsl_proof_pred() &*&

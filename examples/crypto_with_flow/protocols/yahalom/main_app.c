@@ -1,19 +1,8 @@
 #include "yahalom.h"
 
-#include <pthread.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "../general.h"
 
-//@ import_module public_invariant_mod;
-//@ import_module principals_mod;
-
-/*@
-predicate_family_instance pthread_run_pre(attacker_t)(void *data, any info) =
-    [_]public_invar(yahalom_pub) &*&
-    public_invariant_constraints(yahalom_pub, yahalom_proof_pred) &*&
-    principals(_) &*& principal(?attacker, _) &*& true == bad(attacker);
-@*/
+//@ ATTACKER_PRE(yahalom)
 
 void *attacker_t(void* data) //@ : pthread_run_joinable
   //@ requires pthread_run_pre(attacker_t)(data, ?info);
@@ -23,8 +12,6 @@ void *attacker_t(void* data) //@ : pthread_run_joinable
     //@ invariant pthread_run_pre(attacker_t)(data, info);
   {
     //@ open pthread_run_pre(attacker_t)(data, info);
-    //@ assert principal(?attacker, _);
-    //@ close exists(attacker);
     //@ close yahalom_proof_pred();
     attacker();
     //@ open yahalom_proof_pred();
@@ -46,14 +33,10 @@ struct yahalom_args
 };
 
 /*@
-inductive info =
-  | int_value(int v)
-  | pointer_value(char* p)
-  | char_list_value(list<char> p)
-;
 
 predicate_family_instance pthread_run_pre(server_t)(void *data, any info) =
   [_]public_invar(yahalom_pub) &*&
+  [_]decryption_key_classifier(yahalom_public_key) &*&
   yahalom_args_server(data, ?server) &*&
   yahalom_args_sender(data, ?sender) &*&
   yahalom_args_receiver(data, ?receiver) &*&
@@ -66,19 +49,10 @@ predicate_family_instance pthread_run_pre(server_t)(void *data, any info) =
   [1/2]cryptogram(r_key, KEY_SIZE, ?r_key_cs, ?r_key_cg) &*&
     r_key_cg == cg_symmetric_key(receiver, ?r_id) &*&
     cg_info(r_key_cg) == int_pair(3, server) &*&
-  info == cons(int_value(server),
-            cons(int_value(sender),
-              cons(int_value(receiver),
-                cons(pointer_value(s_key),
-                  cons(char_list_value(s_key_cs),
-                    cons(int_value(s_id),
-                      cons(pointer_value(r_key),
-                        cons(char_list_value(r_key_cs),
-                          cons(int_value(r_id),
-                               nil)))))))));
+  info == IV(server, IV(sender, IV(receiver, PV(s_key, CL(s_key_cs, IV(s_id,
+             PV(r_key, CL(r_key_cs, IV(r_id, nil)))))))));
 
 predicate_family_instance pthread_run_post(server_t)(void *data, any info) =
-  [_]public_invar(yahalom_pub) &*&
   yahalom_args_server(data, ?server) &*&
   yahalom_args_sender(data, ?sender) &*&
   yahalom_args_receiver(data, ?receiver) &*&
@@ -89,16 +63,8 @@ predicate_family_instance pthread_run_post(server_t)(void *data, any info) =
     s_key_cg == cg_symmetric_key(sender, ?s_id) &*&
   [1/2]cryptogram(r_key, KEY_SIZE, ?r_key_cs, ?r_key_cg) &*&
     r_key_cg == cg_symmetric_key(receiver, ?r_id) &*&
-  info == cons(int_value(server),
-            cons(int_value(sender),
-              cons(int_value(receiver),
-                cons(pointer_value(s_key),
-                  cons(char_list_value(s_key_cs),
-                    cons(int_value(s_id),
-                      cons(pointer_value(r_key),
-                        cons(char_list_value(r_key_cs),
-                          cons(int_value(r_id),
-                               nil)))))))));
+  info == IV(server, IV(sender, IV(receiver, PV(s_key, CL(s_key_cs, IV(s_id,
+             PV(r_key, CL(r_key_cs, IV(r_id, nil)))))))));
 @*/
 
 void *server_t(void* data) //@ : pthread_run_joinable
@@ -116,6 +82,7 @@ void *server_t(void* data) //@ : pthread_run_joinable
 /*@
 predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
   [_]public_invar(yahalom_pub) &*&
+  [_]decryption_key_classifier(yahalom_public_key) &*&
   yahalom_args_server(data, ?server) &*&
   yahalom_args_sender(data, ?sender) &*&
   yahalom_args_receiver(data, ?receiver) &*&
@@ -126,17 +93,10 @@ predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
     s_key_cg == cg_symmetric_key(sender, ?s_id) &*&
     cg_info(s_key_cg) == int_pair(3, server) &*&
   chars(key, KEY_SIZE, _) &*&
-  info == cons(int_value(server),
-            cons(int_value(sender),
-              cons(int_value(receiver),
-                cons(pointer_value(s_key),
-                  cons(char_list_value(s_key_cs),
-                    cons(int_value(s_id),
-                      cons(pointer_value(key),
-                           nil)))))));
+  info == IV(server, IV(sender, IV(receiver, PV(s_key, CL(s_key_cs, IV(s_id,
+             PV(key, nil)))))));
 
 predicate_family_instance pthread_run_post(sender_t)(void *data, any info) =
-  [_]public_invar(yahalom_pub) &*&
   yahalom_args_server(data, ?server) &*&
   yahalom_args_sender(data, ?sender) &*&
   yahalom_args_receiver(data, ?receiver) &*&
@@ -148,14 +108,8 @@ predicate_family_instance pthread_run_post(sender_t)(void *data, any info) =
   cryptogram(key, KEY_SIZE, _, ?key_cg) &*&
     col || bad(server) || bad(sender) ||
     int_left(cg_info(key_cg)) == 4 &*&
-  info == cons(int_value(server),
-            cons(int_value(sender),
-              cons(int_value(receiver),
-                cons(pointer_value(s_key),
-                  cons(char_list_value(s_key_cs),
-                    cons(int_value(s_id),
-                      cons(pointer_value(key),
-                           nil)))))));
+  info == IV(server, IV(sender, IV(receiver, PV(s_key, CL(s_key_cs, IV(s_id,
+             PV(key, nil)))))));
 @*/
 
 void *sender_t(void* data) //@ : pthread_run_joinable
@@ -173,6 +127,7 @@ void *sender_t(void* data) //@ : pthread_run_joinable
 /*@
 predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) =
   [_]public_invar(yahalom_pub) &*&
+  [_]decryption_key_classifier(yahalom_public_key) &*&
   yahalom_args_server(data, ?server) &*&
   yahalom_args_sender(data, ?sender) &*&
   yahalom_args_receiver(data, ?receiver) &*&
@@ -183,17 +138,10 @@ predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) =
     r_key_cg == cg_symmetric_key(receiver, ?r_id) &*&
     cg_info(r_key_cg) == int_pair(3, server) &*&
   chars(key, KEY_SIZE, _) &*&
-  info == cons(int_value(server),
-            cons(int_value(sender),
-              cons(int_value(receiver),
-                cons(pointer_value(r_key),
-                  cons(char_list_value(r_key_cs),
-                    cons(int_value(r_id),
-                      cons(pointer_value(key),
-                           nil)))))));
+  info == IV(server, IV(sender, IV(receiver, PV(r_key, CL(r_key_cs, IV(r_id,
+             PV(key, nil)))))));
 
 predicate_family_instance pthread_run_post(receiver_t)(void *data, any info) =
-  [_]public_invar(yahalom_pub) &*&
   yahalom_args_server(data, ?server) &*&
   yahalom_args_sender(data, ?sender) &*&
   yahalom_args_receiver(data, ?receiver) &*&
@@ -205,14 +153,8 @@ predicate_family_instance pthread_run_post(receiver_t)(void *data, any info) =
   cryptogram(key, KEY_SIZE, _, ?key_cg) &*&
     col || bad(server) || bad(sender) || bad(receiver) ||
     int_left(cg_info(key_cg)) == 4 &*&
-  info == cons(int_value(server),
-            cons(int_value(sender),
-              cons(int_value(receiver),
-                cons(pointer_value(r_key),
-                  cons(char_list_value(r_key_cs),
-                    cons(int_value(r_id),
-                      cons(pointer_value(key),
-                           nil)))))));
+  info == IV(server, IV(sender, IV(receiver, PV(r_key, CL(r_key_cs, IV(r_id,
+             PV(key, nil)))))));
 @*/
 
 void *receiver_t(void* data) //@ : pthread_run_joinable
@@ -231,8 +173,6 @@ int main(int argc, char **argv) //@ : main_full(main_app)
     //@ requires module(main_app, true);
     //@ ensures true;
 {
-  //@ open_module();
-
   pthread_t a_thread;
   havege_state havege_state;
 
@@ -240,10 +180,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
   printf("yahalom protocol");
   printf("\" ... \n\n");
 
-  //@ PUBLIC_INVARIANT_CONSTRAINTS(yahalom)
-  //@ public_invariant_init(yahalom_pub);
-
-  //@ principals_init();
+  //@ PROTOCOL_INIT(yahalom)
   //@ int server = principal_create();
   //@ assert server == 1;
   //@ int sender = principal_create();
@@ -265,6 +202,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
   while (true)
 #endif
     /*@ invariant [_]public_invar(yahalom_pub) &*&
+                  [_]decryption_key_classifier(yahalom_public_key) &*&
                   havege_state_initialized(&havege_state) &*&
                   principal(server, ?serv_count) &*&
                   principal(sender, ?send_count) &*&
@@ -276,12 +214,17 @@ int main(int argc, char **argv) //@ : main_full(main_app)
     char key1[KEY_SIZE];
     char key2[KEY_SIZE];
 
+    //@ open principal(sender, _);
     //@ close random_request(sender, int_pair(3, server), true);
     if (havege_random(&havege_state, s_key, KEY_SIZE) != 0) abort();
+    //@ close principal(sender, _);
     //@ assert cryptogram(s_key, KEY_SIZE, ?cs_s_key, ?cg_s_key);
     //@ assert cg_s_key == cg_symmetric_key(sender, send_count + 1);
+
+    //@ open principal(receiver, _);
     //@ close random_request(receiver, int_pair(3, server), true);
     if (havege_random(&havege_state, r_key, KEY_SIZE) != 0) abort();
+    //@ close principal(receiver, _);
     //@ assert cryptogram(r_key, KEY_SIZE, ?cs_r_key, ?cg_r_key);
     //@ assert cg_r_key == cg_symmetric_key(receiver, rcvr_count + 1);
 

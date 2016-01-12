@@ -28,7 +28,7 @@ struct ror_args
 
 /*@
 predicate_family_instance pthread_run_pre(attacker_t)(void *data, any info) =
-    exists(ror_pub) &*& [_]world(ror_pub) &*&
+    exists(ror_pub) &*& [_]world(ror_pub, ror_key_clsfy) &*&
     ror_args_principal(data, ?attacker) &*&
     true == bad(attacker) &*&
     principal(attacker, _) &*&
@@ -49,7 +49,7 @@ void *attacker_t(void* data) //@ : pthread_run_joinable
 
 /*@
 predicate_family_instance pthread_run_pre(server_t)(void *data, any info) =
-  [_]world(ror_pub) &*&
+  [_]world(ror_pub, ror_key_clsfy) &*&
   ror_args_server(data, ?server) &*&
     principal(server, _) &*&
   ror_args_keys(data, ?keys) &*&
@@ -57,7 +57,6 @@ predicate_family_instance pthread_run_pre(server_t)(void *data, any info) =
   ror_args_in_port(data, _) &*&
   info == cons(server, nil);
 predicate_family_instance pthread_run_post(server_t)(void *data, any info) =
-  [_]world(ror_pub) &*&
   ror_args_server(data, ?server) &*&
     principal(server, _) &*&
   ror_args_keys(data, ?keys) &*&
@@ -79,7 +78,7 @@ void *server_t(void* data) //@ : pthread_run_joinable
 
 /*@
 predicate_family_instance pthread_run_pre(participant_t)(void *data, any info) =
-  [_]world(ror_pub) &*&
+  [_]world(ror_pub, ror_key_clsfy) &*&
   ror_args_initial(data, ?initial) &*&
   ror_args_server(data, ?server) &*&
   ror_args_principal(data, ?principal) &*&
@@ -90,7 +89,7 @@ predicate_family_instance pthread_run_pre(participant_t)(void *data, any info) =
   ror_args_key(data, ?key) &*&
     item(key, ?k, ror_pub) &*&
     k == symmetric_key_item(principal, _) &*&
-    [_]info_for_item(k, int_pair(0, server)) &*&
+    info_for_item(k) == int_pair(0, server) &*&
   info == cons(principal, nil);
 predicate_family_instance pthread_run_post(participant_t)(void *data, any info) =
   ror_args_initial(data, ?initial) &*&
@@ -143,7 +142,7 @@ int main() //@ : main_full(main_app)
   int server = create_principal(&pair); keypair_free(pair);
   int attacker = create_principal(&pair);
   //@ assume (bad(attacker));
-  //@ leak  world(ror_pub);
+  //@ leak  world(ror_pub, ror_key_clsfy);
 
   {
     pthread_t a_thread;
@@ -161,7 +160,8 @@ int main() //@ : main_full(main_app)
 #else
   while (true)
 #endif
-    /*@ invariant [_]world(ror_pub) &*& principal(server, _) &*&
+    /*@ invariant [_]world(ror_pub, ror_key_clsfy) &*& 
+                  principal(server, _) &*&
                   principal(p1, _) &*& principal(p2, _) &*&
                   principal(p3, _) &*& principal(p4, _); @*/
   {

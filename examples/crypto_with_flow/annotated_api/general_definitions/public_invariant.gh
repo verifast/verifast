@@ -20,7 +20,7 @@ predicate_ctor public_generated(predicate(cryptogram) pub)(list<char> cs) =
 ;
 
 typedef lemma void bad_nonce_is_public(predicate(cryptogram) pub,
-                                        predicate() proof_pred)
+                                       predicate() proof_pred)
                                        (cryptogram nonce);
   requires  proof_pred() &*&
             nonce == cg_nonce(?p, _) &*& true == bad(p);

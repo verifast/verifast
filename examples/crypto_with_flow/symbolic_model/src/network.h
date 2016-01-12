@@ -20,10 +20,10 @@ void network_accept(struct network_status *stat);
   //@ ensures  network_status_core(stat, true);
 
 struct item *network_receive_attempt(struct network_status *stat);
-  /*@ requires [?f0]world(?pub) &*& principal(?id, ?count) &*&
+  /*@ requires [?f0]world(?pub, ?key_clsfy) &*& principal(?id, ?count) &*&
                network_status(stat) &*&
                proof_obligations(pub); @*/
-  /*@ ensures  [f0]world(pub) &*& principal(id, count) &*&
+  /*@ ensures  [f0]world(pub, key_clsfy) &*& principal(id, count) &*&
                network_status(stat) &*&
                proof_obligations(pub) &*&
                result == 0 ? 

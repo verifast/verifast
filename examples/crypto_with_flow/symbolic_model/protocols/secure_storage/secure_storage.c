@@ -4,12 +4,12 @@
 #define APP_RECEIVE_PORT 121212
 
 void app_send(struct item *key, struct item *message)
-  /*@ requires [?f0]world(ss_pub) &*& principal(?p, ?c) &*&
+  /*@ requires [?f0]world(ss_pub, ss_key_clsfy) &*& principal(?p, ?c) &*&
                item(key, symmetric_key_item(?creator, ?id), ss_pub) &*& 
                item(message, ?msg, ss_pub) &*& [_]ss_pub(msg) &*&
                app_send_event(creator, msg) == true;
   @*/
-  /*@ ensures  [f0]world(ss_pub) &*& principal(p, c) &*&
+  /*@ ensures  [f0]world(ss_pub, ss_key_clsfy) &*& principal(p, c) &*&
                item(key, symmetric_key_item(creator, id), ss_pub) &*&
                item(message, msg, ss_pub);
   @*/
@@ -19,12 +19,10 @@ void app_send(struct item *key, struct item *message)
     
     struct item *hash = create_hmac(key, message);
     //@ assert item(hash, ?h, ss_pub);
-    //@ get_info_for_item(h);
     //@ close ss_pub(h);
     //@ leak ss_pub(h);
     struct item *m = create_pair(hash, message);
     //@ assert item(m, ?pmessage, ss_pub);
-    //@ get_info_for_item(pmessage);
     //@ close ss_pub(pmessage);
     //@ leak ss_pub(pmessage);
     network_send(net_stat, m);
@@ -35,10 +33,10 @@ void app_send(struct item *key, struct item *message)
 }
 
 struct item *app_receive(struct item *key)
-  /*@ requires [?f0]world(ss_pub) &*& principal(?p, ?c) &*&
+  /*@ requires [?f0]world(ss_pub, ss_key_clsfy) &*& principal(?p, ?c) &*&
                item(key, symmetric_key_item(?creator, ?id), ss_pub);
   @*/
-  /*@ ensures  [f0]world(ss_pub) &*& principal(p, c) &*&
+  /*@ ensures  [f0]world(ss_pub, ss_key_clsfy) &*& principal(p, c) &*&
                item(key, symmetric_key_item(creator, id), ss_pub) &*&
                item(result, ?msg, ss_pub) &*& 
                col || bad(creator) || app_send_event(creator, msg);

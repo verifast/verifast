@@ -17,9 +17,9 @@ void key_registry_exit();
   /*@ ensures  module(key_register, false); @*/
 
 void register_public_key(int participant, struct item *key);
-  /*@ requires world(?pub) &*&
+  /*@ requires world(?pub, ?key_clsfy) &*&
                item(key, public_key_item(participant, 1), pub); @*/
-  /*@ ensures  world(pub) &*&
+  /*@ ensures  world(pub, key_clsfy) &*&
                item(key, public_key_item(participant, 1), pub); @*/
 
 #endif

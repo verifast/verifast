@@ -1,22 +1,10 @@
 #include "hmac_then_enc_tagged.h"
 
-#include <pthread.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "../general.h"
 
 #define MSG_LEN 64
 
-//@ import_module public_invariant_mod;
-//@ import_module principals_mod;
-
-/*@
-
-predicate_family_instance pthread_run_pre(attacker_t)(void *data, any info) =
-    [_]public_invar(hmac_then_enc_tagged_pub) &*&
-    public_invariant_constraints(hmac_then_enc_tagged_pub, hmac_then_enc_tagged_proof_pred) &*&
-    principals(_);
-@*/
+//@ ATTACKER_PRE(hmac_then_enc_tagged)
 
 void *attacker_t(void* data) //@ : pthread_run_joinable
   //@ requires pthread_run_pre(attacker_t)(data, ?info);
@@ -48,11 +36,6 @@ struct hmac_then_enc_tagged_args
 };
 
 /*@
-inductive info =
-  | int_value(int v)
-  | pointer_value(char* p)
-  | char_list_value(list<char> p)
-;
 
 predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
   [_]public_invar(hmac_then_enc_tagged_pub) &*&
@@ -71,22 +54,14 @@ predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
     cg_info(enc_key_cg) == hmac_id &*&
   crypto_chars(secret, msg, MSG_LEN, ?msg_cs) &*&
   (
-    bad(sender) || bad(receiver) || col ?
+    bad(sender) || bad(receiver) ?
       [_]public_generated(hmac_then_enc_tagged_pub)(msg_cs)
     :
       true == send(sender, receiver, msg_cs) 
   ) &*&
-  info == cons(int_value(sender), 
-            cons(int_value(receiver), 
-              cons(pointer_value(enc_key),
-                cons(char_list_value(enc_key_cs),
-                  cons(int_value(enc_id),
-                    cons(pointer_value(hmac_key),
-                      cons(char_list_value(hmac_key_cs),
-                        cons(int_value(hmac_id),
-                          cons(pointer_value(msg),
-                            cons(char_list_value(msg_cs),
-                                 nil))))))))));
+  info == IV(sender, IV(receiver, PV(enc_key, CL(enc_key_cs, IV(enc_id, 
+             PV(hmac_key, CL(hmac_key_cs, IV(hmac_id, PV(msg, CL(msg_cs, 
+                nil))))))))));
 
 predicate_family_instance pthread_run_post(sender_t)(void *data, any info) =
   [_]public_invar(hmac_then_enc_tagged_pub) &*&
@@ -103,17 +78,9 @@ predicate_family_instance pthread_run_post(sender_t)(void *data, any info) =
     hmac_key_cg == cg_symmetric_key(sender, ?hmac_id) &*&
     receiver == shared_with(sender, hmac_id) &*&
   crypto_chars(secret, msg, MSG_LEN, ?msg_cs) &*&
-  info == cons(int_value(sender), 
-            cons(int_value(receiver), 
-              cons(pointer_value(enc_key),
-                cons(char_list_value(enc_key_cs),
-                  cons(int_value(enc_id),
-                    cons(pointer_value(hmac_key),
-                      cons(char_list_value(hmac_key_cs),
-                        cons(int_value(hmac_id),
-                          cons(pointer_value(msg),
-                            cons(char_list_value(msg_cs),
-                                 nil))))))))));
+  info == IV(sender, IV(receiver, PV(enc_key, CL(enc_key_cs, IV(enc_id, 
+             PV(hmac_key, CL(hmac_key_cs, IV(hmac_id, PV(msg, CL(msg_cs, 
+                nil))))))))));
 @*/
 
 void *sender_t(void* data) //@ : pthread_run_joinable
@@ -131,6 +98,7 @@ void *sender_t(void* data) //@ : pthread_run_joinable
 
 predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) =
   [_]public_invar(hmac_then_enc_tagged_pub) &*&
+  [_]decryption_key_classifier(hmac_then_enc_tagged_public_key) &*&
   hmac_then_enc_tagged_args_sender(data, ?sender) &*&
   hmac_then_enc_tagged_args_receiver(data, ?receiver) &*&
   hmac_then_enc_tagged_args_enc_key(data, ?enc_key) &*&
@@ -147,19 +115,10 @@ predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) =
     receiver == shared_with(sender, hmac_id) &*&
     cg_info(enc_key_cg) == hmac_id &*&
   chars(msg, MAX_SIZE, _) &*&
-  info == cons(int_value(sender), 
-            cons(int_value(receiver), 
-              cons(pointer_value(enc_key),
-                cons(char_list_value(enc_key_cs),
-                  cons(int_value(enc_id),
-                    cons(pointer_value(hmac_key),
-                      cons(char_list_value(hmac_key_cs),
-                        cons(int_value(hmac_id),
-                          cons(pointer_value(msg),
-                               nil)))))))));
+  info == IV(sender, IV(receiver, PV(enc_key, CL(enc_key_cs, IV(enc_id, 
+             PV(hmac_key, CL(hmac_key_cs, IV(hmac_id, PV(msg, nil)))))))));
 
 predicate_family_instance pthread_run_post(receiver_t)(void *data, any info) =
-  [_]public_invar(hmac_then_enc_tagged_pub) &*&
   hmac_then_enc_tagged_args_sender(data, ?sender) &*&
   hmac_then_enc_tagged_args_receiver(data, ?receiver) &*&
   hmac_then_enc_tagged_args_enc_key(data, ?enc_key) &*&
@@ -176,16 +135,8 @@ predicate_family_instance pthread_run_post(receiver_t)(void *data, any info) =
   crypto_chars(secret, msg, length, ?msg_cs) &*&
   chars(msg + length, MAX_SIZE - length, _) &*&
   col || send(sender, receiver, msg_cs) &*&
-  info == cons(int_value(sender), 
-            cons(int_value(receiver), 
-              cons(pointer_value(enc_key),
-                cons(char_list_value(enc_key_cs),
-                  cons(int_value(enc_id),
-                    cons(pointer_value(hmac_key),
-                      cons(char_list_value(hmac_key_cs),
-                        cons(int_value(hmac_id),
-                          cons(pointer_value(msg),
-                               nil)))))))));
+  info == IV(sender, IV(receiver, PV(enc_key, CL(enc_key_cs, IV(enc_id, 
+             PV(hmac_key, CL(hmac_key_cs, IV(hmac_id, PV(msg, nil)))))))));
 @*/
 
 void *receiver_t(void* data) //@ : pthread_run_joinable
@@ -203,8 +154,6 @@ int main(int argc, char **argv) //@ : main_full(main_app)
     //@ requires module(main_app, true);
     //@ ensures true;
 {
-  //@ open_module();
-
   pthread_t a_thread;
   havege_state havege_state;
   
@@ -212,10 +161,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
   printf("hmac_then_enc_tagged protocol");
   printf("\" ... \n\n");
   
-  //@ PUBLIC_INVARIANT_CONSTRAINTS(hmac_then_enc_tagged)
-  //@ public_invariant_init(hmac_then_enc_tagged_pub);
-  
-  //@ principals_init();
+  //@ PROTOCOL_INIT(hmac_then_enc_tagged)
   //@ int attacker = principal_create();
   //@ int sender = principal_create();
   //@ int receiver = principal_create();
@@ -233,6 +179,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
   while (true)
 #endif
     /*@ invariant [_]public_invar(hmac_then_enc_tagged_pub) &*&
+                  [_]decryption_key_classifier(hmac_then_enc_tagged_public_key) &*&
                   !bad(sender) && !bad(receiver) &*&
                   havege_state_initialized(&havege_state) &*&
                   principal(sender, ?count) &*& principal(receiver, _);
@@ -247,6 +194,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
     hmac_key = malloc(KEY_SIZE);
     if (hmac_key == 0) abort();
     
+    //@ open principal(sender, _);
     //@ close random_request(sender, 0, true);
     if (havege_random(&havege_state, hmac_key, KEY_SIZE) != 0) abort();
     //@ assume (shared_with(sender, count + 1) == receiver);
@@ -283,6 +231,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
       r_args.hmac_key = hmac_key;
       r_args.msg = r_message;
       
+      //@ close principal(sender, _);
       //@ close pthread_run_pre(sender_t)(&s_args, ?s_data);
       //@ close pthread_run_pre(receiver_t)(&r_args, ?r_data);
       pthread_create(&r_thread, NULL, &receiver_t, &r_args);
@@ -299,8 +248,10 @@ int main(int argc, char **argv) //@ : main_full(main_app)
 
       if (r_args.length != MSG_LEN)
         abort();
+      //@ open principal(sender, _);
       if (memcmp(s_message, r_message, MSG_LEN) != 0)
         abort();
+      //@ close principal(sender, _);
       //@ public_crypto_chars(s_message, MSG_LEN);
       zeroize(r_message, r_args.length);
     }

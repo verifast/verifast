@@ -1,19 +1,8 @@
 #include "nsl.h"
 
-#include <pthread.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "../general.h"
 
-//@ import_module public_invariant_mod;
-//@ import_module principals_mod;
-
-/*@
-predicate_family_instance pthread_run_pre(attacker_t)(void *data, any info) =
-    [_]public_invar(nsl_pub) &*&
-    public_invariant_constraints(nsl_pub, nsl_proof_pred) &*&
-    principals(_) &*& principal(?attacker, _) &*& true == bad(attacker);
-@*/
+//@ ATTACKER_PRE_EXTRA(nsl, exists(?attacker) &*& true == bad(attacker))
 
 void *attacker_t(void* data) //@ : pthread_run_joinable
   //@ requires pthread_run_pre(attacker_t)(data, ?info);
@@ -23,8 +12,6 @@ void *attacker_t(void* data) //@ : pthread_run_joinable
     //@ invariant pthread_run_pre(attacker_t)(data, info);
   {
     //@ open pthread_run_pre(attacker_t)(data, info);
-    //@ assert principal(?attacker, _);
-    //@ close exists(attacker);
     //@ close nsl_proof_pred();
     attacker();
     //@ open nsl_proof_pred();
@@ -46,14 +33,10 @@ struct nsl_args
 };
 
 /*@
-inductive info =
-  | int_value(int v)
-  | pointer_value(char* p)
-  | char_list_value(list<char> p)
-;
 
 predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
   [_]public_invar(nsl_pub) &*&
+  [_]decryption_key_classifier(nsl_public_key) &*&
   nsl_args_sender(data, ?sender) &*&
   nsl_args_receiver(data, ?receiver) &*&
   nsl_args_s_key(data, ?s_key) &*&
@@ -67,20 +50,10 @@ predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
     r_key_cg == cg_public_key(receiver, ?r_id) &*&
   chars(s_nonce, NONCE_SIZE, _) &*&
   chars(r_nonce, NONCE_SIZE, _) &*&
-  info == cons(int_value(sender), 
-            cons(int_value(receiver), 
-              cons(pointer_value(s_key),
-                cons(char_list_value(s_key_cs),
-                  cons(int_value(s_id),
-                    cons(pointer_value(r_key),
-                      cons(char_list_value(r_key_cs),
-                        cons(int_value(r_id),
-                          cons(pointer_value(s_nonce),
-                            cons(pointer_value(r_nonce),
-                                 nil))))))))));
+  info == IV(sender, IV(receiver, PV(s_key, CL(s_key_cs, IV(s_id,
+             PV(r_key, CL(r_key_cs, IV(r_id, PV(s_nonce, PV(r_nonce, nil))))))))));
 
 predicate_family_instance pthread_run_post(sender_t)(void *data, any info) =
-  [_]public_invar(nsl_pub) &*&
   nsl_args_sender(data, ?sender) &*&
   nsl_args_receiver(data, ?receiver) &*&
   nsl_args_s_key(data, ?s_key) &*&
@@ -129,6 +102,7 @@ void *sender_t(void* data) //@ : pthread_run_joinable
 
 predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) =
   [_]public_invar(nsl_pub) &*&
+  [_]decryption_key_classifier(nsl_public_key) &*&
   nsl_args_sender(data, ?sender) &*&
   nsl_args_receiver(data, ?receiver) &*&
   nsl_args_s_key(data, ?s_key) &*&
@@ -155,7 +129,6 @@ predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) =
                                  nil))))))))));
                          
 predicate_family_instance pthread_run_post(receiver_t)(void *data, any info) =
-  [_]public_invar(nsl_pub) &*&
   nsl_args_sender(data, ?sender) &*&
   nsl_args_receiver(data, ?receiver) &*&
   nsl_args_s_key(data, ?s_key) &*&
@@ -212,8 +185,6 @@ int main(int argc, char **argv) //@ : main_full(main_app)
     //@ requires module(main_app, true);
     //@ ensures true;
 {
-  //@ open_module();
-
   pthread_t a_thread;
   havege_state havege_state;
   
@@ -221,10 +192,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
   printf("nsl protocol");
   printf("\" ... \n\n");
   
-  //@ PUBLIC_INVARIANT_CONSTRAINTS(nsl)
-  //@ public_invariant_init(nsl_pub);
-  
-  //@ principals_init();
+  //@ PROTOCOL_INIT(nsl)
   //@ int sender = principal_create();
   //@ assert sender == 1;
   //@ int receiver = principal_create();
@@ -234,6 +202,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
   //@ assume (bad(attacker));
   //@ close havege_state(&havege_state);
   havege_init(&havege_state);
+  //@ close exists(attacker);
   //@ close pthread_run_pre(attacker_t)(NULL, nil);
   pthread_create(&a_thread, NULL, &attacker_t, NULL);
   
@@ -244,6 +213,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
   while (true)
 #endif
     /*@ invariant [_]public_invar(nsl_pub) &*&
+                  [_]decryption_key_classifier(nsl_public_key) &*&
                   havege_state_initialized(&havege_state) &*&
                   principal(sender, ?s_count) &*&
                   principal(receiver, ?r_count);
@@ -266,9 +236,11 @@ int main(int argc, char **argv) //@ : main_full(main_app)
     if (pk_init_ctx(&s_context, pk_info_from_type(POLARSSL_PK_RSA)) != 0)
       abort();
     //@ close rsa_key_request(sender, 0);
+    //@ open principal(sender, _);
     if (rsa_gen_key(s_context.pk_ctx, random_stub_main, (void*) &havege_state, 
                     (unsigned int) 8 * KEY_SIZE, 65537) != 0)
       abort();
+    //@ close principal(sender, _);
     if (pk_write_pubkey_pem(&s_context, s_pub_key, 
                             (unsigned int) 8 * KEY_SIZE) != 0) abort();
     if (pk_write_key_pem(&s_context, s_priv_key,
@@ -287,9 +259,11 @@ int main(int argc, char **argv) //@ : main_full(main_app)
     if (pk_init_ctx(&r_context, pk_info_from_type(POLARSSL_PK_RSA)) != 0)
       abort();
     //@ close rsa_key_request(receiver, 0);
+    //@ open principal(receiver, _);
     if (rsa_gen_key(r_context.pk_ctx, random_stub_main, (void*) &havege_state, 
                     (unsigned int) 8 * KEY_SIZE, 65537) != 0)
       abort();
+    //@ close principal(receiver, _);
     if (pk_write_pubkey_pem(&r_context, r_pub_key, 
                             (unsigned int) 8 * KEY_SIZE) != 0) abort();
     if (pk_write_key_pem(&r_context, r_priv_key, 

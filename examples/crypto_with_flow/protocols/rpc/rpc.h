@@ -23,7 +23,9 @@ fixpoint bool response(int cl, int sv, list<char> req, list<char> resp);
 // Definition of pub for this protocol ////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-fixpoint bool rpc_public_key(int p, int c)
+predicate rpc_proof_pred() = true;
+
+fixpoint bool rpc_public_key(int p, int c, bool symmetric)
 {
   return bad(p);
 }
@@ -34,16 +36,15 @@ predicate rpc_pub(cryptogram cg) =
     case cg_nonce(p0, c0):
       return true;
     case cg_symmetric_key(p0, c0):
-      return true == rpc_public_key(p0, c0);
+      return true == rpc_public_key(p0, c0, true);
     case cg_public_key(p0, c0):
       return true;
     case cg_private_key(p0, c0):
-      return true == bad(p0);
+      return true == rpc_public_key(p0, c0, false);
     case cg_hash(cs0):
       return true;
     case cg_hmac(p0, c0, cs0):
-      return
-        rpc_public_key(p0, c0) ||
+      return true == rpc_public_key(p0, c0, true) ||
         switch (cs0)
         {
           case cons(c1, cs1): return
@@ -59,15 +60,15 @@ predicate rpc_pub(cryptogram cg) =
             return false;
         };
     case cg_encrypted(p0, c0, cs0, ent0):
-      return true == rpc_public_key(p0, c0) &*&
+      return true == rpc_public_key(p0, c0, true) &*&
              [_]public_generated(rpc_pub)(cs0);
     case cg_auth_encrypted(p0, c0, mac0, cs0, ent0):
-      return true == rpc_public_key(p0, c0) &*&
+      return true == rpc_public_key(p0, c0, true) &*&
              [_]public_generated(rpc_pub)(cs0);
     case cg_asym_encrypted(p0, c0, cs0, ent0):
       return [_]public_generated(rpc_pub)(cs0);
     case cg_asym_signature(p0, c0, cs0, ent0):
-      return true == bad(p0);
+      return true == rpc_public_key(p0, c0, false);
   }
 ;
 
@@ -116,5 +117,6 @@ void server(char *key, int key_len, char *request, char *response);
 ///////////////////////////////////////////////////////////////////////////////
 
 //@ PUBLIC_INVARIANT_PROOFS(rpc)
+//@ DECRYPTION_PROOFS(rpc)
 
 #endif

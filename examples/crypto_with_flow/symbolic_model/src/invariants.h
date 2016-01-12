@@ -10,12 +10,15 @@
 
 /*@
 
-predicate world(predicate(item) pub) =
+predicate world(predicate(item) pub, fixpoint(int, int, bool, bool) key_clsfy) =
   nonces_initialized() &*&
   key_registry_initialized(pub) &*&
   [_]public_invar(polarssl_pub(pub)) &*&
   proof_obligations(pub) &*&
-  module(public_invariant_mod, false)
+  [_]decryption_key_classifier(key_clsfy) &*&
+  is_key_classifier(_, pub, key_clsfy) &*&
+  module(public_invariant_mod, false) &*&
+  module(decryption_mod, false)
 ;
 
 #define POLARSSL_PUB_PAY(ATTACK, NO_ATTACK) \
@@ -66,49 +69,17 @@ predicate_ctor polarssl_pub(predicate(item) pub)
   }
 ;
 
-predicate_ctor polarssl_proof_pred(predicate(item) pub)() =
-  proof_obligations(pub)
+predicate_ctor polarssl_proof_pred(predicate(item) pub, 
+                                   fixpoint(int, int, bool, bool) classifier)() =
+  proof_obligations(pub) &*& is_key_classifier(_, pub, classifier)
 ;
 
-predicate info_for_item(item i, int info) =
-  info == polarssl_info_for_item(i)
-;
-
-fixpoint int polarssl_info_for_item(item i)
-{
-  switch(i)
-  {
-    case data_item(cs0):
-      return 0;
-    case pair_item(f0, s0):
-      return 0;
-    case nonce_item(p0, c0, inc0):
-      return cg_info(cg_nonce(p0, c0));
-    case hash_item(pay0):
-      return 0;
-    case symmetric_key_item(p0, c0):
-      return cg_info(cg_symmetric_key(p0, c0));
-    case public_key_item(p0, c0):
-      return cg_info(cg_public_key(p0, c0));
-    case private_key_item(p0, c0):
-      return cg_info(cg_private_key(p0, c0));
-    case hmac_item(p0, c0, pay0):
-      return cg_info(cg_symmetric_key(p0, c0));
-    case symmetric_encrypted_item(p0, c0, pay0, ent0):
-      return cg_info(cg_symmetric_key(p0, c0));
-    case asymmetric_encrypted_item(p0, c0, pay0, ent0):
-      return cg_info(cg_public_key(p0, c0));
-    case asymmetric_signature_item(p0, c0, pay0, ent0):
-      return cg_info(cg_private_key(p0, c0));
-  }
-}
-
-lemma void retreive_public_invariant_constraints();
+lemma void retreive_public_invariant_constraints(fixpoint(int, int, bool, bool) clsfy);
   nonghost_callers_only
   requires proof_obligations(?pub);
   ensures  proof_obligations(pub) &*&
            public_invariant_constraints(polarssl_pub(pub),
-                                        polarssl_proof_pred(pub));
+                                        polarssl_proof_pred(pub, clsfy));
 
 @*/
 

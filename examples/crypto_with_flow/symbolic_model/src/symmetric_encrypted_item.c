@@ -9,47 +9,34 @@
 #include <string.h>
 
 bool is_symmetric_encrypted(struct item *item)
-  //@ requires [?f]world(?pub) &*& item(item, ?i, pub);
-  /*@ ensures  [f]world(pub) &*& item(item, i, pub) &*&
+  //@ requires [?f]world(?pub, ?key_clsfy) &*& item(item, ?i, pub);
+  /*@ ensures  [f]world(pub, key_clsfy) &*& item(item, i, pub) &*&
                result ? i == symmetric_encrypted_item(_, _, _, _) : true; @*/
 {
-  //@ open [f]world(pub);
+  //@ open [f]world(pub, key_clsfy);
   //@ open item(item, i, pub);
   //@ open [_]item_constraints(i, ?cs, pub);
   return item_tag(item->content, item->size) == TAG_SYMMETRIC_ENC;
   //@ close item(item, i, pub);
-  //@ close [f]world(pub);
+  //@ close [f]world(pub, key_clsfy);
 }
 
 void check_is_symmetric_encrypted(struct item *item)
-  //@ requires [?f]world(?pub) &*& item(item, ?i, pub);
-  /*@ ensures  [f]world(pub) &*& item(item, i, pub) &*&
+  //@ requires [?f]world(?pub, ?key_clsfy) &*& item(item, ?i, pub);
+  /*@ ensures  [f]world(pub, key_clsfy) &*& item(item, i, pub) &*&
                i == symmetric_encrypted_item(_, _, _, _); @*/
 {
   if (!is_symmetric_encrypted(item))
     abort_crypto_lib("Presented item is not an encrypted item");
 }
 
-/*@
-lemma void info_for_symmetric_encrypted_item(item key, item enc)
-  requires [_]info_for_item(key, ?info1) &*&
-           key == symmetric_key_item(?p, ?c) &*&
-           [_]info_for_item(enc, ?info2) &*&
-           enc == symmetric_encrypted_item(p, c, _, _);
-  ensures  info1 == info2;
-{
-  open [_]info_for_item(key, info1);
-  open [_]info_for_item(enc, info2);
-}
-@*/
-
 struct item *symmetric_encryption(struct item *key, struct item *payload)
-  /*@ requires [?f]world(?pub) &*&
+  /*@ requires [?f]world(?pub, ?key_clsfy) &*&
                principal(?principal1, ?count1) &*&
                  [_]pub(nonce_item(principal1, count1 + 1, 0)) &*&
                item(payload, ?pay, pub) &*& item(key, ?k, pub) &*&
                  k == symmetric_key_item(?principal2, ?count2); @*/
-  /*@ ensures  [f]world(pub) &*&
+  /*@ ensures  [f]world(pub, key_clsfy) &*&
                principal(principal1, count1 + 1) &*&
                item(payload, pay, pub) &*& item(key, k, pub) &*&
                item(result, ?enc, pub) &*&
@@ -57,7 +44,7 @@ struct item *symmetric_encryption(struct item *key, struct item *payload)
                  enc == symmetric_encrypted_item(principal2, count2,
                                                  some(pay), ?ent); @*/
 {
-  //@ open [f]world(pub);
+  //@ open [f]world(pub, key_clsfy);
   debug_print("ENCRYPTING:\n");
   print_item(payload);
 
@@ -126,7 +113,7 @@ struct item *symmetric_encryption(struct item *key, struct item *payload)
     iv = tag + GCM_TAG_SIZE;
     //@ chars_split(iv, GCM_IV_SIZE);
     //@ close nonce_request(principal1, 0);
-    //@ close [f]world(pub);
+    //@ close [f]world(pub, key_clsfy);
     create_havege_random(iv, GCM_IV_SIZE);
     //@ open cryptogram(iv, GCM_IV_SIZE, ?iv_cs, ?iv_cg);
     memcpy(iv_buffer, iv, GCM_IV_SIZE);
@@ -138,20 +125,21 @@ struct item *symmetric_encryption(struct item *key, struct item *payload)
     //@ close cryptogram(iv_buffer, GCM_IV_SIZE, iv_cs, iv_cg);
     encrypted = iv + GCM_IV_SIZE;
     //@ assert chars(encrypted, p_size, _);
+    //@ open principal(principal1, count1 + 1);
     if (gcm_crypt_and_tag(&gcm_context, GCM_ENCRYPT,
                           (unsigned int) payload->size,
                           iv_buffer, GCM_IV_SIZE, NULL, 0,
                           payload->content, encrypted,
                           GCM_TAG_SIZE, tag) != 0)
       abort_crypto_lib("Gcm encryption failed");
+    //@ close principal(principal1, count1 + 1);
     zeroize(iv_buffer, GCM_IV_SIZE);
-    //@ open exists(?enc_cg);
+    //@ open cryptogram(encrypted, p_size, ?enc_cs, ?enc_cg);
     //@ assert chars(r_cont, TAG_LENGTH, tag_cs);
     //@ assert chars(r_cont + TAG_LENGTH, GCM_TAG_SIZE, ?gcm_tag_cs);
     //@ public_chars(r_cont + TAG_LENGTH, GCM_TAG_SIZE);
     //@ assert iv == r_cont + TAG_LENGTH + GCM_TAG_SIZE;
     //@ assert encrypted == r_cont + TAG_LENGTH + GCM_ENT_SIZE;
-    //@ open cryptogram(encrypted, p_size, ?enc_cs, enc_cg);
     //@ list<char> ent1 = append(gcm_tag_cs, iv_cs);
     //@ public_generated_join(polarssl_pub(pub), gcm_tag_cs, iv_cs);
     //@ list<char> ent2 = cons(length(gcm_tag_cs), ent1);
@@ -229,13 +217,13 @@ void check_valid_symmetric_encrypted_item_size(int size)
 }
 
 struct item *symmetric_decryption(struct item *key, struct item *item)
-  /*@ requires [?f]world(?pub) &*&
+  /*@ requires [?f]world(?pub, ?key_clsfy) &*&
                item(item, ?enc, pub) &*&
                  enc == symmetric_encrypted_item(?principal1, ?count1,
                                                  ?pay, ?ent) &*&
                item(key, ?k, pub) &*&
                  k == symmetric_key_item(?principal2, ?count2); @*/
-  /*@ ensures  [f]world(pub) &*&
+  /*@ ensures  [f]world(pub, key_clsfy) &*&
                item(item, enc, pub) &*& item(key, k, pub) &*&
                item(result, ?dec, pub) &*&
                col ? [_]pub(dec) :
@@ -252,7 +240,7 @@ struct item *symmetric_decryption(struct item *key, struct item *item)
   print_item(item);
   check_is_symmetric_encrypted(item);
 
-  //@ open [f]world(pub);
+  //@ open [f]world(pub, key_clsfy);
   struct item* result;
   result = malloc(sizeof(struct item));
   if (result == 0) abort_crypto_lib("Malloc failed");
@@ -352,7 +340,7 @@ struct item *symmetric_decryption(struct item *key, struct item *item)
     if (size <= MINIMAL_STRING_SIZE) abort_crypto_lib("Gcm decryption failed");
     //@ open [1/2]cryptogram(encrypted, size, enc_cs, enc_cg);
     //@ open [1/2]hide_crypto_chars(_, i_cont, i_size, cs);
-    //@ close [f]world(pub);
+    //@ close [f]world(pub, key_clsfy);
     //@ crypto_chars_join(tag);
     //@ crypto_chars_join(tag);
     //@ crypto_chars_join(i_cont);

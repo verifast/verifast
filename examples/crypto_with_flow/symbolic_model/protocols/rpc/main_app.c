@@ -19,7 +19,7 @@ struct rpc_args
 
 /*@
 predicate_family_instance pthread_run_pre(attacker_t)(void *data, any info) =
-    exists(rpc_pub) &*& [_]world(rpc_pub) &*&
+    [_]world(rpc_pub, rpc_key_clsfy) &*&
     rpc_args_attacker(data, ?attacker) &*&
     true == bad(attacker) &*&
     principal(attacker, _) &*&
@@ -40,7 +40,7 @@ void *attacker_t(void* data) //@ : pthread_run_joinable
 
 /*@
 predicate_family_instance pthread_run_pre(server_t)(void *data, any info) =
-  [_]world(rpc_pub) &*&
+  [_]world(rpc_pub, rpc_key_clsfy) &*&
   rpc_args_server(data, ?server) &*&
   rpc_args_client(data, ?client) &*&
   rpc_args_key(data, ?key) &*&
@@ -49,7 +49,6 @@ predicate_family_instance pthread_run_pre(server_t)(void *data, any info) =
   shared_with(client, id) == server &*&
   info == cons(server, nil);
 predicate_family_instance pthread_run_post(server_t)(void *data, any info) =
-  [_]world(rpc_pub) &*&
   rpc_args_server(data, ?server) &*&
   rpc_args_client(data, ?client) &*&
   rpc_args_key(data, ?key) &*&
@@ -71,7 +70,7 @@ void *server_t(void* data) //@ : pthread_run_joinable
 
 /*@
 predicate_family_instance pthread_run_pre(client_t)(void *data, any info) =
-  [_]world(rpc_pub) &*&
+  [_]world(rpc_pub, rpc_key_clsfy) &*&
   rpc_args_server(data, ?server) &*&
   rpc_args_client(data, ?client) &*&
   rpc_args_key(data, ?key) &*&
@@ -134,7 +133,7 @@ int main() //@ : main_full(main_app)
   char server = (char) server_;
   //@ assert item(key, symmetric_key_item(_, ?id), rpc_pub);
   //@ assume (shared_with(client, id) == server);
-  //@ leak  world(rpc_pub);
+  //@ leak  world(rpc_pub, rpc_key_clsfy);
   
   { 
     pthread_t a_thread;
@@ -152,7 +151,7 @@ int main() //@ : main_full(main_app)
 #else
   while (true)
 #endif
-    /*@ invariant [_]world(rpc_pub) &*&
+    /*@ invariant [_]world(rpc_pub, rpc_key_clsfy) &*&
                   shared_with(client, id) == server &*&
                   principal(server, ?count) &*& principal(_, _) &*&
                   item(key, symmetric_key_item(client, id), rpc_pub);
@@ -163,7 +162,6 @@ int main() //@ : main_full(main_app)
     struct item *temp_key;
     {
       //@ item n = nonce_item(server, count + 1, 0);
-      //@ get_info_for_item(n);
       //@ close rpc_pub(n);
       //@ leak rpc_pub(n);
       int random = random_int();
@@ -174,7 +172,6 @@ int main() //@ : main_full(main_app)
       
       struct item *req = create_data_item((void*) &random, (int) sizeof(int));
       //@ assert item(req, ?request, rpc_pub);
-      //@ get_info_for_item(request);
       //@ close rpc_pub(request);
       //@ leak rpc_pub(request);
       c_args.request = req;

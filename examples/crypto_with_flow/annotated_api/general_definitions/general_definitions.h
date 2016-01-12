@@ -9,10 +9,10 @@
 //@ #include "cryptogram.gh"
 //@ #include "cryptogram_bounds.gh"
 //@ #include "cryptogram_levels.gh"
-//@ #include "garbage_chars.gh"
 //@ #include "public_invariant.gh"
 //@ #include "public_chars.gh"
 //@ #include "interpret.gh"
+//@ #include "decryption.gh"
 
 #define MINIMAL_STRING_SIZE 10
 

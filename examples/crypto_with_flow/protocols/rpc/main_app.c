@@ -1,23 +1,10 @@
 #include "rpc.h"
 
-#include <pthread.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "../general.h"
 
 #define KEY_SIZE 16
 
-//@ import_module public_invariant_mod;
-//@ import_module principals_mod;
-
-/*@
-predicate rpc_proof_pred() = true;
-
-predicate_family_instance pthread_run_pre(attacker_t)(void *data, any info) =
-    [_]public_invar(rpc_pub) &*&
-    public_invariant_constraints(rpc_pub, rpc_proof_pred) &*&
-    principals(_);
-@*/
+//@ ATTACKER_PRE(rpc)
 
 void *attacker_t(void* data) //@ : pthread_run_joinable
   //@ requires pthread_run_pre(attacker_t)(data, ?info);
@@ -48,12 +35,6 @@ struct rpc_args
 
 /*@
 
-inductive info =
-  | int_value(int v)
-  | pointer_value(char* p)
-  | char_list_value(list<char> p)
-;
-
 predicate_family_instance pthread_run_pre(client_t)(void *data, any info) =
   [_]public_invar(rpc_pub) &*&
   rpc_args_client(data, ?client) &*&
@@ -68,14 +49,8 @@ predicate_family_instance pthread_run_pre(client_t)(void *data, any info) =
     request(client, server, req_cs) == true &*&
   rpc_args_response(data, ?resp) &*&
     chars(resp, PACKAGE_SIZE, _) &*&
-  info == cons(int_value(client), 
-            cons(int_value(server), 
-              cons(pointer_value(key), 
-                cons(char_list_value(key_cs),
-                  cons(int_value(id),
-                    cons(pointer_value(req),
-                      cons(pointer_value(resp),
-                           nil)))))));
+  info == IV(client, IV(server, PV(key, CL(key_cs, 
+             IV(id, PV(req, PV(resp, nil)))))));
 
 predicate_family_instance pthread_run_post(client_t)(void *data, any info) =
   rpc_args_client(data, ?client) &*&
@@ -90,14 +65,9 @@ predicate_family_instance pthread_run_post(client_t)(void *data, any info) =
     chars(resp, PACKAGE_SIZE, ?resp_cs) &*&
     col || bad(client) || bad(server) ||
     response(client, server, req_cs, resp_cs) &*&
-  info == cons(int_value(client), 
-            cons(int_value(server), 
-              cons(pointer_value(key),
-                cons(char_list_value(key_cs),
-                  cons(int_value(id),
-                    cons(pointer_value(req), 
-                      cons(pointer_value(resp),                   
-                           nil)))))));
+  info == IV(client, IV(server, PV(key, CL(key_cs, 
+             IV(id, PV(req, PV(resp, nil)))))));
+
 @*/
 
 void *client_t(void* data) //@ : pthread_run_joinable
@@ -126,14 +96,8 @@ predicate_family_instance pthread_run_pre(server_t)(void *data, any info) =
     chars(req, PACKAGE_SIZE, _) &*&
   rpc_args_response(data, ?resp) &*&
     chars(resp, PACKAGE_SIZE, _) &*&
-  info == cons(int_value(client), 
-            cons(int_value(server), 
-              cons(pointer_value(key),
-                cons(char_list_value(key_cs), 
-                  cons(int_value(id),
-                    cons(pointer_value(req),
-                      cons(pointer_value(resp),
-                           nil)))))));
+  info == IV(client, IV(server, PV(key, CL(key_cs, 
+             IV(id, PV(req, PV(resp, nil)))))));
 
 predicate_family_instance pthread_run_post(server_t)(void *data, any info) =
   rpc_args_client(data, ?client) &*&
@@ -149,14 +113,9 @@ predicate_family_instance pthread_run_post(server_t)(void *data, any info) =
     chars(resp, PACKAGE_SIZE, ?resp_cs) &*&
     col || bad(client) || bad(server) || 
     response(client, server, req_cs, resp_cs) == true &*&
-  info == cons(int_value(client), 
-            cons(int_value(server), 
-              cons(pointer_value(key), 
-                cons(char_list_value(key_cs),
-                  cons(int_value(id),
-                    cons(pointer_value(req),
-                      cons(pointer_value(resp),
-                           nil)))))));
+  info == IV(client, IV(server, PV(key, CL(key_cs, 
+             IV(id, PV(req, PV(resp, nil)))))));
+
 @*/
 
 void *server_t(void* data) //@ : pthread_run_joinable
@@ -174,8 +133,6 @@ int main(int argc, char **argv) //@ : main_full(main_app)
     //@ requires module(main_app, true);
     //@ ensures true;
 {
-  //@ open_module();
-  
   pthread_t a_thread;
   havege_state havege_state;
   
@@ -183,10 +140,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
   printf("rpc protocol");
   printf("\" ... \n\n");
   
-  //@ PUBLIC_INVARIANT_CONSTRAINTS(rpc)
-  //@ public_invariant_init(rpc_pub);
-  
-  //@ principals_init();
+  //@ PROTOCOL_INIT(rpc)
   //@ int attacker = principal_create();
   //@ int client = principal_create();
   //@ int server = principal_create();
@@ -217,6 +171,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
     int message_len;
   
     //@ close random_request(client, 0, true);
+    //@ open principal(client, _);
     if (havege_random(&havege_state, key, KEY_SIZE) != 0) abort();
     //@ assume (shared_with(client, count_c + 1) == server);
     //@ assert cryptogram(key, KEY_SIZE, ?cs_key, ?cg_key);
@@ -249,6 +204,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
       //@ assume (request(client, server, msg_cs) == true);
       //@ close pthread_run_pre(server_t)(&s_args, ?s_data);
       pthread_create(&s_thread, NULL, &server_t, &s_args);
+      //@ close principal(client, _);
       //@ close pthread_run_pre(client_t)(&c_args, ?c_data);
       pthread_create(&c_thread, NULL, &client_t, &c_args);
       
@@ -259,6 +215,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
       //@ open [1/2]cryptogram(key, KEY_SIZE, cs_key, _);
       //@ open [1/2]cryptogram(key, KEY_SIZE, cs_key, _);
       
+      //@ open principal(client, _);
       //@ chars_to_crypto_chars(c_request, PACKAGE_SIZE);
       //@ chars_to_crypto_chars(s_request, PACKAGE_SIZE);
       if (memcmp(c_request, s_request, PACKAGE_SIZE) != 0)
@@ -267,6 +224,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
       //@ chars_to_crypto_chars(s_response, PACKAGE_SIZE);
       if (memcmp(c_response, s_response, PACKAGE_SIZE) != 0)
         abort();
+      //@ close principal(client, _);
     }
     zeroize(key, KEY_SIZE);
     

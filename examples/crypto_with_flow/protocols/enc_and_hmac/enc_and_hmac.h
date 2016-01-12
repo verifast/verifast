@@ -23,9 +23,12 @@ fixpoint bool send(int sender, int receiver, list<char> message);
 
 predicate enc_and_hmac_proof_pred() = true;
 
-fixpoint bool enc_and_hmac_public_key(int p, int c)
+fixpoint bool enc_and_hmac_public_key(int p, int c, bool symmetric)
 {
-  return bad(p) || bad(shared_with(p, c));
+  return symmetric ?
+           bad(p) || bad(shared_with(p, c))
+         :
+           bad(p);
 }
 
 predicate enc_and_hmac_pub(cryptogram cg) =
@@ -34,30 +37,30 @@ predicate enc_and_hmac_pub(cryptogram cg) =
     case cg_nonce(p0, c0):
       return true;
     case cg_symmetric_key(p0, c0):
-      return true == enc_and_hmac_public_key(p0, c0);
+      return true == enc_and_hmac_public_key(p0, c0, true);
     case cg_public_key(p0, c0):
       return true;
     case cg_private_key(p0, c0):
-      return true == bad(p0);
+      return true == enc_and_hmac_public_key(p0, c0, false);
     case cg_hash(cs0):
       return true;
     case cg_hmac(p0, c0, cs0):
-      return enc_and_hmac_public_key(p0, c0) ?
+      return enc_and_hmac_public_key(p0, c0, true) ?
         [_]public_generated(enc_and_hmac_pub)(cs0)
       :
         true == send(p0, shared_with(p0, c0), cs0);
     case cg_encrypted(p0, c0, cs0, ent0):
-      return enc_and_hmac_public_key(p0, c0) ?
+      return enc_and_hmac_public_key(p0, c0, true) ?
         [_]public_generated(enc_and_hmac_pub)(cs0)
       :
         true == send(p0, shared_with(p0, c0), cs0);
     case cg_auth_encrypted(p0, c0, mac0, cs0, ent0):
-      return true == enc_and_hmac_public_key(p0, c0) &*&
+      return true == enc_and_hmac_public_key(p0, c0, true) &*&
              [_]public_generated(enc_and_hmac_pub)(cs0);
     case cg_asym_encrypted(p0, c0, cs0, ent0):
       return [_]public_generated(enc_and_hmac_pub)(cs0);
     case cg_asym_signature(p0, c0, cs0, ent0):
-      return true == bad(p0);
+      return true == enc_and_hmac_public_key(p0, c0, false);
   }
 ;
 
@@ -88,6 +91,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len);
 
 int receiver(char *enc_key, char *hmac_key, char *msg);
 /*@ requires [_]public_invar(enc_and_hmac_pub) &*&
+             [_]decryption_key_classifier(enc_and_hmac_public_key) &*&
              principal(?receiver, _) &*&
              [?f1]cryptogram(enc_key, KEY_SIZE, ?enc_key_cs, ?enc_key_cg) &*&
              [?f2]cryptogram(hmac_key, KEY_SIZE, ?hmac_key_cs, ?hmac_key_cg) &*&
@@ -109,5 +113,6 @@ int receiver(char *enc_key, char *hmac_key, char *msg);
 ///////////////////////////////////////////////////////////////////////////////
 
 //@ PUBLIC_INVARIANT_PROOFS(enc_and_hmac)
+//@ DECRYPTION_PROOFS(enc_and_hmac)
 
 #endif
