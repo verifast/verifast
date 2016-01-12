@@ -35,7 +35,7 @@ fixpoint int bigtail_size(int size, int first, int len){
 }
 
 
-predicate ring_buffer(struct ring_buffer *buffer, int size; list<int> items) =
+predicate ring_buffer(struct ring_buffer *buffer; int size, list<int> items) =
 	buffer->fields |-> ?fields
 	&*& buffer->size |-> size
 	&*& buffer->first |-> ?first

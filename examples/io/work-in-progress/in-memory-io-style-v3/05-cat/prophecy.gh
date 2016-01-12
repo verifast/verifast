@@ -1,0 +1,22 @@
+#ifndef __PROPHECY_GH
+#define __PROPHECY_GH
+
+predicate prophecy<t>(t prophetic_value, predicate(t val) p);
+
+lemma void prophecy_assign<t>(t prophetic_value, t real_value);
+nonghost_callers_only // TODO: do we still need this? If yes, document why.
+requires
+  prophecy<t>(prophetic_value, ?p)
+  &*& p(real_value);
+ensures
+  [_]prophecy<t>(prophetic_value, p)
+  &*& p(real_value)
+  &*& real_value == prophetic_value;
+
+lemma t prophecy_create<t>(predicate (t val) p);
+requires true;
+ensures prophecy<t>(result, p);
+
+#endif
+
+
