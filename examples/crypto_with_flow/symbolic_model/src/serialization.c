@@ -168,14 +168,14 @@ lemma void serialize_symmetric_encrypted(int p0, int c0,
       case some(pay1):
         assert [_]well_formed_item_chars(enc)(?cs_pay0);
         assert [_]item_constraints(pay1, cs_pay0, pub);
-        penc = cg_auth_encrypted(p0, c0, mac0, cs_pay0, iv0);
+        penc = cg_auth_encrypted(p0, c0, cs_pay0, mac0, iv0);
         close exists(ent0);
         leak exists(ent0);
         close exists(false);
         leak exists(false);
       case none:
         assert [_]ill_formed_item_chars(enc)(?cs_pay0);
-        penc = cg_auth_encrypted(p0, c0, mac0, cs_pay0, iv0);
+        penc = cg_auth_encrypted(p0, c0, cs_pay0, mac0, iv0);
         cg_constraints(penc);
         close exists(true);
         leak exists(true);

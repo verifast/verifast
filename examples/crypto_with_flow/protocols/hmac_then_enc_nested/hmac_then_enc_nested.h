@@ -65,7 +65,7 @@ predicate hmac_then_enc_nested_pub(cryptogram cg) =
         shared_with(p0, c0) == shared_with(p0, c1) &*&
         shared_with(p0, c0) == shared_with(p0, c2) &*&
         true == send(p0, shared_with(p0, c0), msg_cs);
-    case cg_auth_encrypted(p0, c0, mac0, cs0, ent0):
+    case cg_auth_encrypted(p0, c0, cs0, mac0, ent0):
       return true == hmac_then_enc_nested_public_key(p0, c0, true) &*&
              [_]public_generated(hmac_then_enc_nested_pub)(cs0);
     case cg_asym_encrypted(p0, c0, cs0, ent0):

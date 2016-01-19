@@ -192,7 +192,7 @@ switch(length_bound) \
       cgs_in_chars_upper_bound_split(cs_cont, cgs, GCM_ENT_SIZE); \
       \
       DESERIALIZE_ITEM_PROOF_CG(tag_auth_encrypted, \
-                                cg_auth_encrypted(?p0, ?c0, ?mac0, ?cs_pay, ?iv0)) \
+                                cg_auth_encrypted(?p0, ?c0, ?cs_pay, ?mac0, ?iv0)) \
       list<char> ent2 = cons(length(mac0), append(mac0, iv0)); \
       take_append(length(mac0), mac0, iv0); \
       drop_append(length(mac0), mac0, iv0); \

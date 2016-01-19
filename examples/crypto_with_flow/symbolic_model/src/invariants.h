@@ -51,7 +51,7 @@ predicate_ctor polarssl_pub(predicate(item) pub)
                [_]pub(hmac_item(p0, c0, some(pay0))));
     case cg_encrypted(p0, c0, cs0, iv0):
       return [_]public_generated(polarssl_pub(pub))(cs0);
-    case cg_auth_encrypted(p0, c0, mac0, cs0, iv0):
+    case cg_auth_encrypted(p0, c0, cs0, mac0, iv0):
       return POLARSSL_PUB_PAY(
                [_]pub(symmetric_key_item(p0, c0)),
                [_]exists<list<char> >(?ent1) &*&

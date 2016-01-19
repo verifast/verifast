@@ -403,8 +403,8 @@ lemma void item_constraints_injective(item i1, item i2, list<char> cs)
       ITEM_CONSTRAINTS_INJECTIVE(TAG_SYMMETRIC_ENC,
         ITEM_CONSTRAINTS_INJECTIVE_PAYLOAD(
           ITEM_CONSTRAINTS_SYM_ENC(
-            cryptogram cg1 = cg_auth_encrypted(p1, c1, mac1, cs_pay1, iv1);
-            cryptogram cg2 = cg_auth_encrypted(p2, c2, mac2, cs_pay2, iv2);
+            cryptogram cg1 = cg_auth_encrypted(p1, c1, cs_pay1, mac1, iv1);
+            cryptogram cg2 = cg_auth_encrypted(p2, c2, cs_pay2, mac2, iv2);
             chars_for_cg_inj(cg1, cg2);
           )
         )

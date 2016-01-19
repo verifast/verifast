@@ -260,7 +260,7 @@ predicate item_constraints(item i, list<char> cs, predicate(item) pub) =
         GCM_ENT_SIZE <= length(ent0) &*&
         drop(GCM_ENT_SIZE, ent0) == cons(length(mac0), append(mac0, iv0)) &*&
         cg_cs == drop(GCM_ENT_SIZE, cs_content) &*&
-        ITEM_CONSTRAINTS_CG(cg_cs, cg_auth_encrypted(p0, c0, mac0, ?cs_pay1, iv0)) &*&
+        ITEM_CONSTRAINTS_CG(cg_cs, cg_auth_encrypted(p0, c0, ?cs_pay1, mac0, iv0)) &*&
         ITEM_CONSTRAINTS_PAY(cs_pay1, [_]pub(symmetric_key_item(p0, c0)));
     case asymmetric_encrypted_item(p0, c0, pay0, ent0): return
       tag == TAG_ASYMMETRIC_ENC &*&

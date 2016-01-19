@@ -155,7 +155,7 @@ struct item *symmetric_encryption(struct item *key, struct item *payload)
     /*@ if (col)
         {
           enc_cg = chars_for_cg_sur(cont_cs, tag_auth_encrypted);
-          assert enc_cg == cg_auth_encrypted(?p0, ?c0, ?tag0, ?pay0, ?iv0);
+          assert enc_cg == cg_auth_encrypted(?p0, ?c0, ?pay0, ?tag0, ?iv0);
           ent2 = cons(length(tag0), append(tag0, iv0));
           ent = append(ent1, ent2);
           take_append(GCM_ENT_SIZE, ent1, ent2);
@@ -174,7 +174,8 @@ struct item *symmetric_encryption(struct item *key, struct item *payload)
         }
         else
         {
-          assert enc_cg == cg_auth_encrypted(principal2, count2, gcm_tag_cs, pay_cs, iv_cs);
+          assert enc_cg == cg_auth_encrypted(principal2, count2, pay_cs, 
+                                             gcm_tag_cs, iv_cs);
           enc = symmetric_encrypted_item(principal2, count2, some(pay), ent);
           close polarssl_pub(pub)(cg_nonce(principal1, count1 + 1));
           leak  polarssl_pub(pub)(cg_nonce(principal1, count1 + 1));
@@ -359,8 +360,8 @@ struct item *symmetric_decryption(struct item *key, struct item *item)
         {
           assert enc == symmetric_encrypted_item(principal1, count1,
                                                  pay, ent);
-          assert enc_cg == cg_auth_encrypted(principal1, count1, enc_mac,
-                                             dec_cs, enc_iv);
+          assert enc_cg == cg_auth_encrypted(principal1, count1, dec_cs,
+                                             enc_mac, enc_iv);
           switch(pay)
           {
             case some(pay1):

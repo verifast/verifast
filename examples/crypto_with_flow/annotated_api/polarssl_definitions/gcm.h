@@ -75,7 +75,7 @@ int gcm_crypt_and_tag(gcm_context *ctx, int mode, size_t length,
                :
                  // encryption was successful
                  cryptogram(output, length, _, ?cg) &*&
-                 cg == cg_auth_encrypted(p1, c1, tag_cs, in_cs, iv_cs); @*/
+                 cg == cg_auth_encrypted(p1, c1, in_cs, tag_cs, iv_cs); @*/
 
 int gcm_auth_decrypt(gcm_context *ctx, size_t length,
                      const char *iv, size_t iv_len,
@@ -88,8 +88,8 @@ int gcm_auth_decrypt(gcm_context *ctx, size_t length,
                // no additional data supported yet
                add == NULL &*& add_len == 0 &*&
                [?f]cryptogram(input, length, ?in_cs, ?in_cg) &*&
-                  in_cg == cg_auth_encrypted(?p2, ?c2, ?tag_cs2,
-                                             ?out_cs2, ?iv_cs2) &*&
+                  in_cg == cg_auth_encrypted(?p2, ?c2, ?out_cs2,
+                                             ?tag_cs2, ?iv_cs2) &*&
                   length >= MINIMAL_STRING_SIZE &*&
                // only tags of 16 bytes for simplicity
                chars(tag, tag_len, ?tag_cs) &*& tag_len == 16 &*&

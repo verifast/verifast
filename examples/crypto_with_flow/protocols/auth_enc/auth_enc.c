@@ -71,7 +71,7 @@ void sender(char *key, char *msg, unsigned int msg_len)
 
     //@ assert cryptogram(message + 16, msg_len, ?enc_cs, ?enc_cg);
     //@ assert chars(message + 16 + msg_len, 16, ?tag_cs);
-    //@ assert enc_cg == cg_auth_encrypted(sender, id, tag_cs, msg_cs, iv_cs);
+    //@ assert enc_cg == cg_auth_encrypted(sender, id, msg_cs, tag_cs, iv_cs);
     //@ close auth_enc_pub(enc_cg);
     //@ leak auth_enc_pub(enc_cg);
     //@ public_cryptogram(message + 16, enc_cg);
@@ -150,7 +150,7 @@ int receiver(char *key, char *msg)
     
     /*@ if (!col)
         {
-          assert enc_cg == cg_auth_encrypted(sender, id, tag_cs, ?dec_cs, iv_cs);
+          assert enc_cg == cg_auth_encrypted(sender, id, ?dec_cs, tag_cs, iv_cs);
           assert chars_for_cg(enc_cg) == enc_cs;
           public_chars_extract(buffer + 16, enc_cg);
           open [_]auth_enc_pub(enc_cg);

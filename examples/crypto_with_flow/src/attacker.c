@@ -601,7 +601,8 @@ void attacker_send_auth_decrypted(havege_state *havege_state, void* socket)
         //@ interpret_auth_encrypted(buffer2, size2);
         //@ open cryptogram(buffer2, size2, ?cs2, ?cg_enc);
         //@ close cryptogram(buffer2, size2, cs2, cg_enc);
-        //@ assert cg_enc == cg_auth_encrypted(?p2, ?c2, ?cs_tag2, ?cs_output2, ?cs_iv2);
+        /*@ assert cg_enc == cg_auth_encrypted(?p2, ?c2, ?cs_output2, 
+                                               ?cs_tag2, ?cs_iv2); @*/
         if (gcm_auth_decrypt(&gcm_context, (unsigned int) size2,
                               iv, 16, NULL, 0, tag, 16,
                               buffer2, buffer3) == 0)

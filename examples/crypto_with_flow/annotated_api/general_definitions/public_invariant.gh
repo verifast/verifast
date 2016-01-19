@@ -101,7 +101,7 @@ typedef lemma void public_auth_encryption_is_public(predicate(cryptogram) pub,
                                                     predicate() proof_pred)
                                                    (cryptogram encrypted);
   requires  proof_pred() &*&
-            encrypted == cg_auth_encrypted(?p, ?c, ?mac, ?pay, ?ent) &*&
+            encrypted == cg_auth_encrypted(?p, ?c, ?pay, ?mac, ?ent) &*&
             length(pay) <= INT_MAX &*&
             [_]pub(cg_symmetric_key(p, c)) &*&
             [_]public_generated(pub)(pay);
@@ -114,7 +114,7 @@ typedef lemma void public_auth_decryption_is_public(predicate(cryptogram) pub,
                                                     cryptogram encrypted);
   requires  proof_pred() &*&
             key == cg_symmetric_key(?p, ?c) &*&
-            encrypted == cg_auth_encrypted(p, c, ?mac, ?pay, ?ent) &*&
+            encrypted == cg_auth_encrypted(p, c, ?pay, ?mac, ?ent) &*&
             [_]pub(key) &*&
             [_]pub(encrypted);
   ensures   proof_pred() &*&
@@ -337,7 +337,7 @@ lemma void public_decryption_is_public(cryptogram key, \
 
 #define DEFAULT_IS_PUBLIC_AUTH_ENCRYPTED(PREFIX) \
 lemma void public_auth_encryption_is_public(cryptogram encrypted) \
-  requires encrypted == cg_auth_encrypted(?p, ?c, ?mac, ?pay, ?ent) &*& \
+  requires encrypted == cg_auth_encrypted(?p, ?c, ?pay, ?mac, ?ent) &*& \
            [_]PREFIX##_pub(cg_symmetric_key(p, c)) &*& \
            [_]public_generated(PREFIX##_pub)(pay); \
   ensures  [_]PREFIX##_pub(encrypted); \
@@ -352,7 +352,7 @@ lemma void public_auth_encryption_is_public(cryptogram encrypted) \
 lemma void public_auth_decryption_is_public(cryptogram key, \
                                                          cryptogram encrypted) \
   requires key == cg_symmetric_key(?p, ?c) &*& \
-           encrypted == cg_auth_encrypted(p, c, ?mac, ?pay, ?ent) &*& \
+           encrypted == cg_auth_encrypted(p, c, ?pay, ?mac, ?ent) &*& \
            [_]PREFIX##_pub(key) &*& \
            [_]PREFIX##_pub(encrypted); \
   ensures  [_]public_generated(PREFIX##_pub)(pay); \
@@ -501,7 +501,7 @@ lemma void public_decryption_is_public(cryptogram key, \
 
 #define ASSUME_IS_PUBLIC_AUTH_ENCRYPTED(PREFIX) \
 lemma void public_auth_encryption_is_public(cryptogram encrypted) \
-  requires encrypted == cg_auth_encrypted(?p, ?c, ?mac, ?pay, ?ent) &*& \
+  requires encrypted == cg_auth_encrypted(?p, ?c, ?pay, ?mac, ?ent) &*& \
            [_]PREFIX##_pub(cg_symmetric_key(p, c)) &*& \
            [_]public_generated(PREFIX##_pub)(pay); \
   ensures  [_]PREFIX##_pub(encrypted); \
@@ -513,7 +513,7 @@ lemma void public_auth_encryption_is_public(cryptogram encrypted) \
 lemma void public_auth_decryption_is_public( \
                          cryptogram key, cryptogram encrypted) \
   requires key == cg_symmetric_key(?p, ?c) &*& \
-           encrypted == cg_auth_encrypted(p, c, ?mac, ?pay, ?ent) &*& \
+           encrypted == cg_auth_encrypted(p, c, ?pay, ?mac, ?ent) &*& \
            [_]PREFIX##_pub(key) &*& \
            [_]PREFIX##_pub(encrypted); \
   ensures  [_]public_generated(PREFIX##_pub)(pay); \
@@ -606,7 +606,7 @@ switch (root) \
       case nil: \
         assert true; \
     }; \
-  case cg_auth_encrypted(p__1, c__1, mac__1, cs__1, ent__1): \
+  case cg_auth_encrypted(p__1, c__1, cs__1, mac__1, ent__1): \
     switch(cs__1) \
     { \
       case cons(c__11, cs__11): \
@@ -667,7 +667,7 @@ switch (root) \
       case nil: \
         assert true; \
     }; \
-  case cg_auth_encrypted(p__2, c__2, mac__2, cs__2, ent__2): \
+  case cg_auth_encrypted(p__2, c__2, cs__2, mac__2, ent__2): \
     switch(cs__2) \
     { \
       case cons(c__22, cs__22): \
