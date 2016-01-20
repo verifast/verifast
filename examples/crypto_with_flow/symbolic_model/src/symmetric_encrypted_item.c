@@ -122,7 +122,6 @@ struct item *symmetric_encryption(struct item *key, struct item *payload)
     //@ leak polarssl_pub(pub)(iv_cg);
     //@ public_cryptogram(iv, iv_cg);
     //@ public_chars(iv, GCM_IV_SIZE);
-    //@ close cryptogram(iv_buffer, GCM_IV_SIZE, iv_cs, iv_cg);
     encrypted = iv + GCM_IV_SIZE;
     //@ assert chars(encrypted, p_size, _);
     //@ open principal(principal1, count1 + 1);
@@ -326,7 +325,6 @@ struct item *symmetric_decryption(struct item *key, struct item *item)
     //@ cryptogram iv_cg = chars_for_cg_sur(iv_cs, tag_nonce);
     //@ public_crypto_chars_extract(iv_buffer, iv_cg);
     //@ chars_to_secret_crypto_chars(iv_buffer, GCM_IV_SIZE);
-    //@ close cryptogram(iv_buffer, GCM_TAG_SIZE, iv_cs, iv_cg);
     //@ assert [1/2]crypto_chars(secret, encrypted, size, enc_cs);
     //@ if (col) enc_cg = chars_for_cg_sur(enc_cs, tag_auth_encrypted);
     //@ if (col) crypto_chars_to_chars(i_cont + TAG_LENGTH + GCM_ENT_SIZE, size);

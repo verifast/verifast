@@ -50,7 +50,6 @@ void sender(char *key, char *msg, unsigned int msg_len)
     memcpy(message, iv, 16);
     //@ close auth_enc_pub(iv_cg);
     //@ leak auth_enc_pub(iv_cg);
-    //@ close cryptogram(iv, 16, iv_cs, iv_cg);
     //@ close cryptogram(message, 16, iv_cs, iv_cg);
     //@ public_cryptogram(message, iv_cg);
     havege_free(&havege_state);
@@ -130,6 +129,7 @@ int receiver(char *key, char *msg)
     //@ chars_split(buffer + 16, enc_size);
     //@ assert chars(buffer, 16, ?iv_cs);
     //@ interpret_nonce(buffer, 16);
+    //@ open cryptogram(buffer, 16, iv_cs, _);
     //@ assert chars(buffer + 16, enc_size, ?enc_cs);
     //@ assert chars(buffer + 16 + enc_size, 16, ?tag_cs);
     

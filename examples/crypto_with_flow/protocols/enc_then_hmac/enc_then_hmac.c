@@ -55,7 +55,6 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
     //@ close enc_then_hmac_pub(iv_cg);
     //@ leak enc_then_hmac_pub(iv_cg);
     memcpy(message, iv, 16);
-    //@ close cryptogram(iv, 16, iv_cs, iv_cg);
     //@ close cryptogram(message, 16, iv_cs, iv_cg);
     //@ public_cryptogram(message, iv_cg);
     //@ public_chars(message, 16);
@@ -182,7 +181,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ assert chars(buffer, 16, ?iv_cs);
     memcpy(iv, buffer, 16);
     //@ interpret_nonce(iv, 16);
-    //@ assert cryptogram(iv, 16, iv_cs, ?iv_cg);
+    //@ open cryptogram(iv, 16, iv_cs, ?iv_cg);
     
     //Decrypt
     //@ assert chars(buffer + 16, enc_size, ?enc_cs);

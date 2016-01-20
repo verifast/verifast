@@ -74,7 +74,6 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
     //@ close hmac_then_enc_pub(iv_cg);
     //@ leak hmac_then_enc_pub(iv_cg);
     memcpy(message, iv, 16);
-    //@ close cryptogram(iv, 16, iv_cs, iv_cg);
     //@ close cryptogram(message, 16, iv_cs, iv_cg);
     //@ public_cryptogram(message, iv_cg);
     havege_free(&havege_state);
@@ -189,7 +188,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     memcpy(iv, buffer, 16);
     //@ crypto_chars_to_chars(buffer, 16);
     //@ interpret_nonce(iv, 16);
-    //@ assert cryptogram(iv, 16, iv_cs, ?iv_cg);
+    //@ open cryptogram(iv, 16, iv_cs, ?iv_cg);
 
     //Decrypt
     //@ close aes_context(&aes_context);

@@ -92,7 +92,6 @@ void sender(char *enc_key1, char *enc_key2, char *hmac_key,
     //@ close hmac_then_enc_nested_pub(iv_cg1);
     //@ leak hmac_then_enc_nested_pub(iv_cg1);
     memcpy(message, iv1, 16);
-    //@ close cryptogram(iv1, 16, iv_cs1, iv_cg1);
     //@ close cryptogram(message, 16, iv_cs1, iv_cg1);
     //@ public_cryptogram(message, iv_cg1);
     //@ assert chars(message, 16, iv_cs1);
@@ -118,7 +117,6 @@ void sender(char *enc_key1, char *enc_key2, char *hmac_key,
     //@ close hmac_then_enc_nested_pub(iv_cg2);
     //@ leak hmac_then_enc_nested_pub(iv_cg2);
     memcpy(message + 16, iv2, 16);
-    //@ close cryptogram(iv2, 16, iv_cs2, iv_cg2);
     //@ close cryptogram(message + 16, 16, iv_cs2, iv_cg2);
     //@ public_cryptogram(message + 16, iv_cg2);
     //@ assert chars(message + 16, 16, iv_cs2);
@@ -234,7 +232,7 @@ int receiver(char *enc_key1, char *enc_key2, char *hmac_key, char *msg)
     memcpy(iv1, buffer, 16);
     //@ crypto_chars_to_chars(buffer, 16);
     //@ interpret_nonce(iv1, 16);
-    //@ assert cryptogram(iv1, 16, iv_cs1, ?iv_cg1);
+    //@ open cryptogram(iv1, 16, iv_cs1, ?iv_cg1);
 
     // IV stuff 2
     //@ chars_split(buffer + 16, 16);
@@ -243,7 +241,7 @@ int receiver(char *enc_key1, char *enc_key2, char *hmac_key, char *msg)
     memcpy(iv2, buffer + 16, 16);
     //@ crypto_chars_to_chars(buffer + 16, 16);
     //@ interpret_nonce(iv2, 16);
-    //@ assert cryptogram(iv2, 16, iv_cs2, ?iv_cg2);
+    //@ open cryptogram(iv2, 16, iv_cs2, ?iv_cg2);
 
     //Decrypt 1
     //@ close aes_context(&aes_context);

@@ -15,6 +15,18 @@ inductive crypto_chars_kind =
   | secret
 ;
 
+fixpoint crypto_chars_kind join_kinds(crypto_chars_kind k1,
+                                      crypto_chars_kind k2)
+{
+  switch(k1)
+  {
+    case normal:
+      return k2;
+    case secret:
+      return secret;
+  }
+}
+
 predicate crypto_chars(crypto_chars_kind kind,
                        char *array, int n; list<char> cs);
 
@@ -44,7 +56,7 @@ lemma_auto void crypto_chars_distinct(char *array1, char *array2);
   requires crypto_chars(?kind1, array1, ?count1, ?cs1) &*&
            crypto_chars(?kind2, array2, ?count2, ?cs2);
   ensures  crypto_chars(kind1, array1, count1, cs1) &*&
-           crypto_chars(kind2, array2, count2, cs2) &*& 
+           crypto_chars(kind2, array2, count2, cs2) &*&
            array1 != array2;
 
 lemma void crypto_chars_split(char *array, int offset);

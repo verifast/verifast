@@ -49,7 +49,7 @@ predicate attacker_invariant(predicate(cryptogram) pub,
   [_]decryption_key_classifier(classifier) &*&
   havege_state_initialized(state) &*&
   integer(socket, ?fd) &*& net_status(fd, ?ip, ?port, connected) &*&
-  true == bad(attacker) &*& 
+  true == bad(attacker) &*&
   network_permission(attacker) &*&
   random_permission(attacker, _) &*&
   decryption_permission(attacker) &*&
@@ -339,6 +339,32 @@ void attacker_send_hmac(havege_state *havege_state, void* socket)
   //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 }
 
+int get_iv(havege_state *state, char* iv)
+  /*@ requires [_]public_invar(?pub) &*&
+               havege_state_initialized(state) &*&
+               random_permission(?p, ?c) &*& true == bad(p) &*&
+               is_bad_nonce_is_public(?proof, pub, ?pred) &*&
+               pred() &*& chars(iv, 16, _);@*/
+  /*@ ensures  havege_state_initialized(state) &*&
+               random_permission(p, c + 1) &*&
+               is_bad_nonce_is_public(proof, pub, pred) &*&
+               pred() &*& crypto_chars(normal, iv, 16, ?cs) &*&
+               result != 0 || cs == chars_for_cg(cg_nonce(p, c + 1));@*/
+{
+  //@ close random_request(p, 0, false);
+  if (havege_random(state, iv, 16) == 0)
+  {
+    //@ open cryptogram(iv, 16, ?cs_iv, ?cg_iv);
+    //@ close cryptogram(iv, 16, cs_iv, cg_iv);
+    //@ proof(cg_iv);
+    //@ public_cryptogram(iv, cg_iv);
+    //@ chars_to_crypto_chars(iv, 16);
+    return 0;
+  }
+
+  return -1;
+}
+
 void attacker_send_encrypted(havege_state *havege_state, void* socket)
   //@ requires attacker_invariant(?pub, ?pred, ?kc, havege_state, socket, ?attacker);
   //@ ensures  attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
@@ -370,10 +396,9 @@ void attacker_send_encrypted(havege_state *havege_state, void* socket)
   //@ assert cg_key == cg_symmetric_key(?p, ?c);
   if (aes_setkey_enc(&aes_context, buffer1, (unsigned int) size1 * 8) == 0)
   {
-    //@ close random_request(attacker, 0, false);
-    if (havege_random(havege_state, iv, 16) == 0)
+    if (get_iv(havege_state, iv) == 0)
     {
-      //@ assert cryptogram(iv, 16, ?cs_iv, ?cg_iv);
+      //@ assert crypto_chars(normal, iv, 16, ?cs_iv);
       //@ chars_to_crypto_chars(buffer2, size2);
       if (aes_crypt_cfb128(&aes_context, AES_ENCRYPT,
                             (unsigned int) size2, &iv_off, iv, buffer2,
@@ -439,18 +464,17 @@ void attacker_send_decrypted(havege_state *havege_state, void* socket)
   //@ assert cg_key == cg_symmetric_key(?p, ?c);
   if (aes_setkey_enc(&aes_context, buffer1, (unsigned int) size1 * 8) == 0)
   {
-    //@ close random_request(attacker, 0, false);
-    if (havege_random(havege_state, iv, 16) == 0)
+    if (get_iv(havege_state, iv) == 0)
     {
-      //@ assert cryptogram(iv, 16, ?cs_iv, ?cg_iv);
+      //@ assert crypto_chars(normal, iv, 16, ?cs_iv);
       //@ interpret_encrypted(buffer2, size2);
       //@ open cryptogram(buffer2, size2, ?cs2, ?cg_enc);
       //@ close cryptogram(buffer2, size2, cs2, cg_enc);
       //@ assert cg_enc == cg_encrypted(?p2, ?c2, ?cs_output2, ?cs_iv2);
       //@ structure s = known_value(0, nil);
       //@ close decryption_request(true, attacker, s, initial_request, cs2);
-      int success = aes_crypt_cfb128(&aes_context, AES_DECRYPT,  
-                                     (unsigned int) size2, &iv_off, iv, 
+      int success = aes_crypt_cfb128(&aes_context, AES_DECRYPT,
+                                     (unsigned int) size2, &iv_off, iv,
                                      buffer2, buffer3);
       /*@ open decryption_response(true, attacker, s, initial_request,
                                    ?wrong_key, p, c, ?cs_output); @*/
@@ -470,7 +494,7 @@ void attacker_send_decrypted(havege_state *havege_state, void* socket)
             assert [_]pub(cg_enc);
             assert is_public_decryption_is_public(?proof2, pub, pred);
             proof2(cg_key, cg_enc);
-            public_crypto_chars(buffer3, size2);              
+            public_crypto_chars(buffer3, size2);
           }
       @*/
       if (success == 0) zeroize(iv, 16);
@@ -518,8 +542,7 @@ void attacker_send_auth_encrypted(havege_state *havege_state, void* socket)
   if (gcm_init(&gcm_context, POLARSSL_CIPHER_ID_AES,
       buffer1, (unsigned int) size1 * 8) == 0)
   {
-    //@ close random_request(attacker, 0, false);
-    if (havege_random(havege_state, iv, 16) == 0)
+    if (get_iv(havege_state, iv) == 0)
     {
       //@ chars_to_crypto_chars(buffer2, size2);
       if (gcm_crypt_and_tag(&gcm_context, GCM_ENCRYPT,
@@ -591,17 +614,13 @@ void attacker_send_auth_decrypted(havege_state *havege_state, void* socket)
       //@ open attacker_nonce_pred(pub, pred)();
       //@ public_cryptogram(tag, cg_mac);
       //@ public_chars(tag, 16);
-      //@ close random_request(attacker, 0, false);
-      if (havege_random(havege_state, iv, 16) == 0)
+      if (get_iv(havege_state, iv) == 0)
       {
-        //@ assert cryptogram(iv, 16, ?cs_iv, ?cg_iv);
-        //@ close attacker_nonce_pred(pub, pred)();
-        //@ proof(cg_iv);
-        //@ open attacker_nonce_pred(pub, pred)();
+        //@ assert crypto_chars(normal, iv, 16, ?cs_iv);
         //@ interpret_auth_encrypted(buffer2, size2);
         //@ open cryptogram(buffer2, size2, ?cs2, ?cg_enc);
         //@ close cryptogram(buffer2, size2, cs2, cg_enc);
-        /*@ assert cg_enc == cg_auth_encrypted(?p2, ?c2, ?cs_output2, 
+        /*@ assert cg_enc == cg_auth_encrypted(?p2, ?c2, ?cs_output2,
                                                ?cs_tag2, ?cs_iv2); @*/
         if (gcm_auth_decrypt(&gcm_context, (unsigned int) size2,
                               iv, 16, NULL, 0, tag, 16,
@@ -739,9 +758,9 @@ void attacker_send_asym_decrypted(havege_state *havege_state, void* socket)
       //@ assert cg_enc == cg_asym_encrypted(?p2, ?c2, ?cs_output2, ?ent);
       //@ structure s = known_value(0, nil);
       //@ close decryption_request(false, attacker, s, initial_request, cs2);
-      int success = pk_decrypt(&context, buffer2, (unsigned int) size2, 
+      int success = pk_decrypt(&context, buffer2, (unsigned int) size2,
                                buffer3, &osize, MAX_MESSAGE_SIZE,
-                               attacker_key_item_havege_random_stub, 
+                               attacker_key_item_havege_random_stub,
                                havege_state);
       /*@ open decryption_response(false, attacker, s, initial_request,
                                    ?wrong_key, p, c, ?cs_output); @*/
@@ -902,7 +921,7 @@ void attacker_core(havege_state *havege_state, void* socket)
 void attacker()
   /*@ requires [_]public_invar(?pub) &*&
                [_]decryption_key_classifier(?classifier) &*&
-               public_invariant_constraints(pub, ?proof_pred) &*& 
+               public_invariant_constraints(pub, ?proof_pred) &*&
                proof_pred() &*&
                is_public_key_classifier(_, pub, classifier, proof_pred) &*&
                principals(?count); @*/
@@ -978,7 +997,7 @@ void attacker()
     //@ close attacker_invariant(pub, proof_pred, ?kc, &havege_state, socket, bad_one);
     int j = 0;
     while(j < POLARSSL_ATTACKER_ITERATIONS)
-      /*@ invariant attacker_invariant(pub, proof_pred, kc, 
+      /*@ invariant attacker_invariant(pub, proof_pred, kc,
                                        &havege_state, socket, bad_one); @*/
     {
       attacker_core(&havege_state, socket);

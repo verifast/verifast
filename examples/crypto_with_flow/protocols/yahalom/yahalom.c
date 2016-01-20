@@ -51,7 +51,6 @@ void encrypt(havege_state *state, char *key, char *msg,
   //@ close aes_context(&aes_context);
   if (aes_setkey_enc(&aes_context, key, (unsigned int) KEY_SIZE * 8) != 0)
     abort();
-  //@ close cryptogram(iv, 16, iv_cs, iv_cg);
   if (aes_crypt_cfb128(&aes_context, AES_ENCRYPT,
                        (unsigned int) msg_len,
                        &iv_off, iv, msg, output + 16) != 0)
@@ -103,7 +102,6 @@ void decrypt(char *key, char *msg, unsigned int msg_len, char* output)
   //@ chars_to_secret_crypto_chars(msg, 16);
   memcpy(iv, msg, 16);
   //@ public_crypto_chars(msg, 16);
-  //@ close cryptogram(iv, 16, iv_cs, iv_cg);
 
   //@ close aes_context(&aes_context);
   if (aes_setkey_enc(&aes_context, key, (unsigned int) KEY_SIZE * 8) != 0)

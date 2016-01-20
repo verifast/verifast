@@ -47,18 +47,19 @@ int aes_crypt_cfb128(aes_context *ctx, int mode, size_t length, size_t *iv_off,
                aes_context_initialized(ctx, ?p1, ?c1) &*&
                // AES only supports an iv with a length of 16 bytes
                // only zero offset allowed, not spec'ed for CBF mode
-               cryptogram(iv, 16, ?iv_cs, ?iv_cg) &*&  u_integer(iv_off, 0) &*&
+               crypto_chars(?iv_kind, iv, 16, ?iv_cs) &*&  u_integer(iv_off, 0) &*&
                chars(output, length, _) &*& mode == AES_ENCRYPT ?
                (
-                 random_permission(?p2, ?c2) &*& iv_cg == cg_nonce(p2, c2) &*&
+                 random_permission(?p2, ?c2) &*&
+                 iv_cs == chars_for_cg(cg_nonce(p2, c2)) &*&
                  [?f]crypto_chars(?kind, input, length, ?in_cs) &*&
                  ensures
                  (
-                   aes_context_initialized(ctx, p1, c1) &*& 
+                   aes_context_initialized(ctx, p1, c1) &*&
                    random_permission(p2, c2) &*&
                    [f]crypto_chars(kind, input, length, in_cs) &*&
                    // content of updated iv is correlated with input
-                   crypto_chars(kind, iv, 16, _) &*&
+                   crypto_chars(join_kinds(iv_kind, kind), iv, 16, _) &*&
                    u_integer(iv_off, _) &*&
                    result != 0 ?
                      // encryption failed
@@ -79,17 +80,17 @@ int aes_crypt_cfb128(aes_context *ctx, int mode, size_t length, size_t *iv_off,
                    aes_context_initialized(ctx, p1, c1) &*&
                    [f]cryptogram(input, length, in_cs, cg) &*&
                    u_integer(iv_off, _) &*&
+                   crypto_chars(?kind, output, length, ?out_cs) &*&
                    // content of updated iv is correlated with output
-                   crypto_chars(?kind, iv, 16, _) &*&
-                   crypto_chars(kind, output, length, ?out_cs) &*&
-                   decryption_response(true, p2, s, args, 
+                   crypto_chars(join_kinds(iv_kind, kind), iv, 16, _) &*&
+                   decryption_response(true, p2, s, args,
                                        ?wrong_key, p1, c1, out_cs) &*&
-                   wrong_key == (p1 != p3 || c1 != c3) &*&                                             
+                   wrong_key == (p1 != p3 || c1 != c3) &*&
                    result != 0 || wrong_key ?
                      kind == normal
                    :
-                     out_cs == out_cs3 && iv_cs == iv_cs3 &*& 
-                     kind == secret 
+                     out_cs == out_cs3 && iv_cs == iv_cs3 &*&
+                     kind == secret
                  )
                ); @*/
   //@ ensures  true;
