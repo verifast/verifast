@@ -501,7 +501,7 @@ struct item *symmetric_encryption(struct item *key, struct item *payload);
                item(payload, ?pay, pub) &*& item(key, ?k, pub) &*&
                  k == symmetric_key_item(?principal2, ?count2); @*/
   /*@ ensures  [f]world(pub, key_clsfy) &*&
-               principal(principal1, count1 + 1) &*&
+               principal(principal1, count1 + 2) &*&
                item(payload, pay, pub) &*& item(key, k, pub) &*&
                item(result, ?enc, pub) &*&
                col ? true :

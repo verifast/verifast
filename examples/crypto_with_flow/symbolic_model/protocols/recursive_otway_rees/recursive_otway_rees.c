@@ -649,7 +649,7 @@ struct item *server_serialize(struct processed_messages *msgs)
     //@ CLOSE_PUB(m2i)
     struct item *m3 = create_pair(msgs->k12, m2);
     //@ assert item(m3, ?m3i, ror_pub);
-    //@ item n = nonce_item(server, s_id + 2, 0);
+    //@ item n = nonce_item(server, s_id + 3, 0);
     //@ close ror_pub(n);
     //@ leak  ror_pub(n);
     result2 = symmetric_encryption(msgs->k2, m3);

@@ -56,7 +56,8 @@ int aes_crypt_cfb128(aes_context *ctx, int mode, size_t length, size_t *iv_off,
                  ensures
                  (
                    aes_context_initialized(ctx, p1, c1) &*&
-                   random_permission(p2, c2) &*&
+                   // this increment enforces a fresh IV on each invocation
+                   random_permission(p2, c2 + 1) &*&
                    [f]crypto_chars(kind, input, length, in_cs) &*&
                    // content of updated iv is correlated with input
                    crypto_chars(join_kinds(iv_kind, kind), iv, 16, _) &*&

@@ -37,7 +37,7 @@ struct item *symmetric_encryption(struct item *key, struct item *payload)
                item(payload, ?pay, pub) &*& item(key, ?k, pub) &*&
                  k == symmetric_key_item(?principal2, ?count2); @*/
   /*@ ensures  [f]world(pub, key_clsfy) &*&
-               principal(principal1, count1 + 1) &*&
+               principal(principal1, count1 + 2) &*&
                item(payload, pay, pub) &*& item(key, k, pub) &*&
                item(result, ?enc, pub) &*&
                col ? true :
@@ -131,7 +131,7 @@ struct item *symmetric_encryption(struct item *key, struct item *payload)
                           payload->content, encrypted,
                           GCM_TAG_SIZE, tag) != 0)
       abort_crypto_lib("Gcm encryption failed");
-    //@ close principal(principal1, count1 + 1);
+    //@ close principal(principal1, count1 + 2);
     zeroize(iv_buffer, GCM_IV_SIZE);
     //@ open cryptogram(encrypted, p_size, ?enc_cs, ?enc_cg);
     //@ assert chars(r_cont, TAG_LENGTH, tag_cs);

@@ -52,7 +52,7 @@ int gcm_crypt_and_tag(gcm_context *ctx, int mode, size_t length,
                random_permission(?p2, ?c2) &*&
                // this function is only spec'ed for encryption
                // use the function gcm_auth_decrypt to decrypt
-               (mode == GCM_ENCRYPT) &*&
+               mode == GCM_ENCRYPT &*&
                // iv_len must be 16 since only AES is supported (see gcm_init)
                crypto_chars(?iv_kind, iv, iv_len, ?iv_cs) &*&
                  iv_len == 16 &*& iv_cs == chars_for_cg(cg_nonce(p2, c2)) &*&
@@ -64,7 +64,8 @@ int gcm_crypt_and_tag(gcm_context *ctx, int mode, size_t length,
                chars(tag, tag_len, _) &*& tag_len == 16 &*&
                chars(output, length, _); @*/
   /*@ ensures  gcm_context_initialized(ctx, p1, c1) &*&
-               random_permission(p2, c2) &*&
+               // this increment enforces a fresh IV on each invocation
+               random_permission(p2, c2 + 1) &*&
                // content of updated iv is correlated with input
                crypto_chars(join_kinds(iv_kind, kind), iv, iv_len, _) &*&
                [f]crypto_chars(kind, input, length, in_cs) &*&
