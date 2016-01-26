@@ -1,0 +1,35 @@
+#ifndef GHOST_MUTEX_GH
+#define GHOST_MUTEX_GH
+
+inductive ghost_mutex = ghost_mutex(int id);
+predicate ghost_mutex(ghost_mutex mutex; predicate() p);
+
+lemma ghost_mutex create_ghost_mutex(predicate() p);
+  requires p();
+  ensures ghost_mutex(result, p);
+
+typedef lemma void ghost_mutex_critical_section_t
+  (predicate() p, predicate() pre, predicate() post)
+  ();
+requires p() &*& pre();
+ensures p() &*& post();
+
+lemma void ghost_mutex_use(ghost_mutex mutex, predicate() pre, predicate() post);
+nonghost_callers_only
+requires
+  [?f]ghost_mutex(mutex, ?p)
+  &*& pre()
+  &*& is_ghost_mutex_critical_section_t(?critical_section, p, pre, post);
+ensures
+  [f]ghost_mutex(mutex, p)
+  &*& post()
+  &*& is_ghost_mutex_critical_section_t(critical_section, p, pre, post);
+
+lemma void ghost_mutex_dispose(ghost_mutex mutex);
+nonghost_callers_only
+requires ghost_mutex(mutex, ?p);
+ensures p();
+  
+  
+
+#endif
