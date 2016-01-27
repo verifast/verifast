@@ -23,8 +23,8 @@ inductive decryption_request_args =
 predicate decryption_with_wrong_key(bool symmetric, int principal, structure s,
                                     int p_key, int c_key, list<char> cs_out);
 
-predicate decryption_request(bool symmetric, int principal, structure s,
-                             decryption_request_args args, list<char> cs_in) =
+predicate decryption_pre(bool symmetric, int principal, structure s,
+                         decryption_request_args args, list<char> cs_in) =
   switch(args)
   {
     case initial_request:
@@ -35,9 +35,9 @@ predicate decryption_request(bool symmetric, int principal, structure s,
   }
 ;
 
-predicate decryption_response(bool symmetric, int principal, structure s,
-                              decryption_request_args args, bool wrong_key,
-                              int p_key, int c_key, list<char> cs_out) =
+predicate decryption_post(bool symmetric, int principal, structure s,
+                          decryption_request_args args, bool wrong_key,
+                          int p_key, int c_key, list<char> cs_out) =
   args == initial_request && !wrong_key ?
     decryption_permission(principal)
   :

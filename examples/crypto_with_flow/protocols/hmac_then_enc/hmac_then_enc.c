@@ -201,7 +201,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ assert enc_cg == cg_encrypted(?p2, ?c2, ?dec_cs2, ?iv_cs2);
     
     //@ structure s = cryptogram_with_payload(enc_size - 64, 64);
-    //@ close decryption_request(true, receiver, s, initial_request, enc_cs);
+    //@ close decryption_pre(true, receiver, s, initial_request, enc_cs);
     if (aes_crypt_cfb128(&aes_context, AES_DECRYPT, (unsigned int) enc_size,
                          &iv_off, iv, buffer + 16, buffer_dec) != 0)
       abort();
@@ -211,8 +211,8 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ public_cryptogram_extract(buffer + 16);
     //@ public_cryptogram(buffer + 16, enc_cg);
     //@ assert crypto_chars(_, buffer_dec, enc_size, ?dec_cs);
-    /*@ open decryption_response(true, receiver, s, initial_request,
-                                 ?wrong_key, sender, enc_id, dec_cs); @*/
+    /*@ open decryption_post(true, receiver, s, initial_request,
+                             ?wrong_key, sender, enc_id, dec_cs); @*/
                         
     //@ crypto_chars_split(buffer_dec, enc_size - 64);
     //@ assert crypto_chars(_, buffer_dec, enc_size - 64, ?pay_cs);

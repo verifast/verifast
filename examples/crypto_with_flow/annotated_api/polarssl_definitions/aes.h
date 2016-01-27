@@ -73,7 +73,7 @@ int aes_crypt_cfb128(aes_context *ctx, int mode, size_t length, size_t *iv_off,
                )
                :
                (
-                 decryption_request(true, ?p2, ?s, ?args, ?in_cs) &*&
+                 decryption_pre(true, ?p2, ?s, ?args, ?in_cs) &*&
                  [?f]cryptogram(input, length, in_cs, ?cg) &*&
                    cg == cg_encrypted(?p3, ?c3, ?out_cs3, ?iv_cs3) &*&
                  ensures
@@ -84,8 +84,8 @@ int aes_crypt_cfb128(aes_context *ctx, int mode, size_t length, size_t *iv_off,
                    crypto_chars(?kind, output, length, ?out_cs) &*&
                    // content of updated iv is correlated with output
                    crypto_chars(join_kinds(iv_kind, kind), iv, 16, _) &*&
-                   decryption_response(true, p2, s, args,
-                                       ?wrong_key, p1, c1, out_cs) &*&
+                   decryption_post(true, p2, s, args, ?wrong_key, 
+                                   p1, c1, out_cs) &*&
                    wrong_key == (p1 != p3 || c1 != c3) &*&
                    result != 0 || wrong_key ?
                      kind == normal

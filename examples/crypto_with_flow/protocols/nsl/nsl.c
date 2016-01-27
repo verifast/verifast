@@ -160,7 +160,7 @@ void sender_msg2(int* socket, havege_state* havege_state, pk_context* s_context,
                     (havege_state_initialized)(state, out, len) { call(); } @*/
   //@ close random_state_predicate(havege_state_initialized);
   //@ structure st = known_value(0, identifier(recvr));
-  //@ close decryption_request(false, sender, st, initial_request, enc_cs);
+  //@ close decryption_pre(false, sender, st, initial_request, enc_cs);
   if (pk_decrypt(s_context, encrypted, KEY_SIZE, message,
                   &size, MSG2_SIZE, random_stub_nsl, havege_state) != 0)
     abort();
@@ -170,8 +170,8 @@ void sender_msg2(int* socket, havege_state* havege_state, pk_context* s_context,
   //@ public_cryptogram(encrypted, enc_cg);
   //@ assert enc_cg == cg_asym_encrypted(?p, ?c, ?pay, ?ent);
   //@ assert u_integer(&size, MSG2_SIZE);
-  /*@ open decryption_response(false, sender, st, initial_request, 
-                               ?wrong_key, sender, s_id, ?dec_cs); @*/
+  /*@ open decryption_post(false, sender, st, initial_request, 
+                           ?wrong_key, sender, s_id, ?dec_cs); @*/
   //@ if (wrong_key) public_chars(message, MSG2_SIZE);
   //@ if (wrong_key) chars_to_crypto_chars(message, MSG2_SIZE);
   
@@ -435,7 +435,7 @@ void receiver_msg1(int* socket, havege_state* havege_state,
                     (havege_state_initialized)(state, out, len) { call(); } @*/
   //@ close random_state_predicate(havege_state_initialized);
   //@ structure st = known_value(0, identifier(sender));
-  //@ close decryption_request(false, receiver, st, initial_request, enc_cs);
+  //@ close decryption_pre(false, receiver, st, initial_request, enc_cs);
   if (pk_decrypt(r_context, encrypted, KEY_SIZE, message,
                   &size, MSG1_SIZE, random_stub_nsl, havege_state) != 0)
     abort();
@@ -443,8 +443,8 @@ void receiver_msg1(int* socket, havege_state* havege_state,
     abort();
   //@ assert u_integer(&size, MSG1_SIZE);
   //@ assert crypto_chars(_, message, MSG1_SIZE, ?dec_cs);
-  /*@ open decryption_response(false, receiver, st, initial_request, 
-                               ?wrong_key, receiver, r_id, dec_cs); @*/
+  /*@ open decryption_post(false, receiver, st, initial_request, 
+                           ?wrong_key, receiver, r_id, dec_cs); @*/
   //@ if (wrong_key) public_chars(message, MSG1_SIZE);
   //@ if (wrong_key) chars_to_crypto_chars(message, MSG1_SIZE);
                                
@@ -650,7 +650,7 @@ void receiver_msg3(int* socket, havege_state* havege_state,
                     (havege_state_initialized)(state, out, len) { call(); } @*/
   //@ close random_state_predicate(havege_state_initialized);
   //@ structure st = known_value(0, r_nonce_cs);
-  //@ close decryption_request(false, receiver, st, initial_request, enc_cs);
+  //@ close decryption_pre(false, receiver, st, initial_request, enc_cs);
   if (pk_decrypt(r_context, encrypted, KEY_SIZE, message,
                   &size, MSG3_SIZE, random_stub_nsl, havege_state) != 0)
     abort();
@@ -661,8 +661,8 @@ void receiver_msg3(int* socket, havege_state* havege_state,
   //@ open cryptogram(r_nonce, NONCE_SIZE, r_nonce_cs, r_nonce_cg);
   if (memcmp((void*) message, r_nonce, NONCE_SIZE) != 0) abort();
   //@ assert crypto_chars(?kind, message, NONCE_SIZE, r_nonce_cs);
-  /*@ open decryption_response(false, receiver, st, initial_request, 
-                               ?wrong_key, receiver, r_id, r_nonce_cs); @*/
+  /*@ open decryption_post(false, receiver, st, initial_request, 
+                           ?wrong_key, receiver, r_id, r_nonce_cs); @*/
   /*@ if (wrong_key)
       {
         close exists(pair(nil, nil));

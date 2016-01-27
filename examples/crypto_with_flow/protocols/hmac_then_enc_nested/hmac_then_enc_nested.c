@@ -254,7 +254,7 @@ int receiver(char *enc_key1, char *enc_key2, char *hmac_key, char *msg)
     //@ assert enc_cg1 == cg_encrypted(?p1, ?c1, ?pay_cs1, ?ent1);
     
     //@ structure s = cryptogram_with_payload(enc_size - 64, 64);
-    //@ close decryption_request(true, receiver, s, initial_request, enc_cs1);
+    //@ close decryption_pre(true, receiver, s, initial_request, enc_cs1);
     if (aes_crypt_cfb128(&aes_context, AES_DECRYPT, (unsigned int) enc_size,
                          &iv_off2, iv2, buffer + 32, buffer_dec1) != 0)
       abort();
@@ -263,8 +263,8 @@ int receiver(char *enc_key1, char *enc_key2, char *hmac_key, char *msg)
     //@ public_cryptogram_extract(buffer + 32);
     //@ public_cryptogram(buffer + 32, enc_cg1);
     //@ assert crypto_chars(?kind1, buffer_dec1, enc_size, ?dec_cs1);
-    /*@ open decryption_response(true, receiver, s, initial_request,
-                                 ?wrong_key1, sender, enc_id2, dec_cs1); @*/
+    /*@ open decryption_post(true, receiver, s, initial_request,
+                             ?wrong_key1, sender, enc_id2, dec_cs1); @*/
     //@ assert wrong_key1 == (p1 != sender || c1 != enc_id2);
     //@ decryption_request_args nested_request;
     /*@ if (wrong_key1)
@@ -273,7 +273,7 @@ int receiver(char *enc_key1, char *enc_key2, char *hmac_key, char *msg)
           assert decryption_with_wrong_key(true, receiver, s, 
                                            sender, enc_id2, dec_cs1);
           nested_request = nested_request(nil, nil, sender, enc_id2, dec_cs1);
-          close decryption_request(true, receiver, s, nested_request, dec_cs1);
+          close decryption_pre(true, receiver, s, nested_request, dec_cs1);
           interpret_encrypted(buffer_dec1, enc_size);
         }
         else
@@ -292,12 +292,12 @@ int receiver(char *enc_key1, char *enc_key2, char *hmac_key, char *msg)
             close cryptogram(buffer_dec1, enc_size, dec_cs1, enc_cg);
           }
           nested_request = initial_request;
-          close decryption_request(true, receiver, s, nested_request, dec_cs1);
+          close decryption_pre(true, receiver, s, nested_request, dec_cs1);
         }
     @*/
     //@ assert cryptogram(buffer_dec1, enc_size, dec_cs1, ?enc_cg2);
     //@ assert enc_cg2 == cg_encrypted(?p2, ?c2, ?pay_cs2, ?ent2);
-    //@ assert decryption_request(true, receiver, s, nested_request, dec_cs1);
+    //@ assert decryption_pre(true, receiver, s, nested_request, dec_cs1);
     
     //Decrypt 2
     if (aes_setkey_enc(&aes_context, enc_key1,
@@ -311,8 +311,8 @@ int receiver(char *enc_key1, char *enc_key2, char *hmac_key, char *msg)
     //@ open aes_context(&aes_context);
     //@ open cryptogram(buffer_dec1, enc_size, dec_cs1, enc_cg2);
     //@ assert crypto_chars(?kind2, buffer_dec2, enc_size, ?dec_cs2);
-    /*@ open decryption_response(true, receiver, s, nested_request,
-                                 ?wrong_key2, sender, enc_id1, dec_cs2); @*/
+    /*@ open decryption_post(true, receiver, s, nested_request,
+                             ?wrong_key2, sender, enc_id1, dec_cs2); @*/
     //@ assert wrong_key2 == (p2 != sender || c2 != enc_id1);
     //Verify the hmac
     //@ crypto_chars_split(buffer_dec2, enc_size - 64);

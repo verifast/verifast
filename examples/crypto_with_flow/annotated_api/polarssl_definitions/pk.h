@@ -171,7 +171,7 @@ int pk_encrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
 
 int pk_decrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                size_t *olen, size_t osize, void *f_rng, void *p_rng);
-  /*@ requires  decryption_request(false, ?p1, ?s, ?args, ?in_cs) &*&
+  /*@ requires  decryption_pre(false, ?p1, ?s, ?args, ?in_cs) &*&
                 pk_context_with_key(ctx, pk_private, ?p2, ?c2, ?nbits) &*&
                 // input
                 [?f1]cryptogram(input, ilen, in_cs, ?cg_input) &*&
@@ -194,8 +194,8 @@ int pk_decrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                 [f2]state_pred(p_rng) &*&
                 crypto_chars(?kind, output, ?olen_val2, ?cs_out) &*&
                 chars(output + olen_val2, osize - olen_val2, _) &*&
-                decryption_response(false, p1, s, args,
-                                    ?wrong_key, p2, c2, cs_out) &*&
+                decryption_post(false, p1, s, args, ?wrong_key, 
+                                p2, c2, cs_out) &*&
                 wrong_key == (p2 != p3 || c2 != c3) &*&
                 result != 0 ?
                   kind == normal

@@ -173,7 +173,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
                        (unsigned int) (KEY_SIZE * 8)) != 0)
       abort();
     //@ structure s = known_value(0, hmac_pay);
-    //@ close decryption_request(true, receiver, s, initial_request, enc_cs);
+    //@ close decryption_pre(true, receiver, s, initial_request, enc_cs);
     if (aes_crypt_cfb128(&aes_context, AES_DECRYPT, (unsigned int) enc_size,
                            &iv_off, iv, buffer + 16, msg) != 0)
         abort();
@@ -184,8 +184,8 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ crypto_chars_to_chars(buffer, 16);
     //@ assert chars(buffer, 16 + enc_size, append(iv_cs, enc_cs));
     //@ assert crypto_chars(_, msg, enc_size, ?dec_cs);
-    /*@ open decryption_response(true, receiver, s, initial_request,
-                                 ?wrong_key, sender, enc_id, dec_cs); @*/
+    /*@ open decryption_post(true, receiver, s, initial_request,
+                             ?wrong_key, sender, enc_id, dec_cs); @*/
     
     //Verify the hmac
     //@ assert crypto_chars(_, msg, size - 80, ?pay_cs);

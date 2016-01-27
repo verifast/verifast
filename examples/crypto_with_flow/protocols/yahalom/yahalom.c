@@ -65,8 +65,8 @@ void encrypt(havege_state *state, char *key, char *msg,
 
 void decrypt(char *key, char *msg, unsigned int msg_len, char* output)
 /*@ requires [_]public_invar(yahalom_pub) &*&
-             decryption_request(true, ?principal1, ?s,
-                                initial_request, ?msg_cs) &*&
+             decryption_pre(true, ?principal1, ?s,
+                            initial_request, ?msg_cs) &*&
              random_permission(principal1, _) &*&
              [?f1]cryptogram(key, KEY_SIZE, ?key_cs, ?key_cg) &*&
                key_cg == cg_symmetric_key(?principal2, ?id) &*&
@@ -74,8 +74,8 @@ void decrypt(char *key, char *msg, unsigned int msg_len, char* output)
              [f2]chars(msg + 16, msg_len, msg_cs) &*&
                msg_len >= MINIMAL_STRING_SIZE &*& msg_len < 1024 &*&
              chars(output, msg_len, _); @*/
-/*@ ensures  decryption_response(true, principal1, s, initial_request,
-                                 ?wrong_key, principal2, id, ?dec_cs) &*&
+/*@ ensures  decryption_post(true, principal1, s, initial_request,
+                             ?wrong_key, principal2, id, ?dec_cs) &*&
              random_permission(principal1, _) &*&
              [f1]cryptogram(key, KEY_SIZE, key_cs, key_cg) &*&
              [f2]chars(msg, 16 + msg_len, append(iv_cs, msg_cs)) &*&
@@ -151,11 +151,11 @@ void decrypt_id(char *key, char *msg, unsigned int msg_len, char* output, int ta
                dec_cs == dec_cs2 && iv_cs == iv_cs2; @*/
 {
   //@ structure s = known_value(0, identifier(tag));
-  //@ close decryption_request(true, principal1, s, initial_request, msg_cs);
+  //@ close decryption_pre(true, principal1, s, initial_request, msg_cs);
   decrypt(key, msg, msg_len, output);
   //@ open [_]yahalom_pub(?enc_cg);
-  /*@ open decryption_response(true, principal1, s, initial_request,
-                               ?wrong_key, principal2, id, ?dec_cs); @*/
+  /*@ open decryption_post(true, principal1, s, initial_request,
+                           ?wrong_key, principal2, id, ?dec_cs); @*/
   //@ if (col || wrong_key) public_chars(output, msg_len);
   //@ if (col || wrong_key) chars_to_crypto_chars(output, msg_len);
   //@ close check_identifier_ghost_args(true, wrong_key, principal2, id);
@@ -1002,10 +1002,10 @@ void receiver(int server, int sender, int receiver,
     //@ structure st = known_value(0, cs_NB);
     //@ chars_split(msg + 16 + size1, 16);
     //@ assert chars(msg + 2 * 16 + size1, size2, ?msg_cs);
-    /*@ close decryption_request(true, receiver, st,
+    /*@ close decryption_pre(true, receiver, st,
                                  initial_request, msg_cs); @*/
     decrypt(generated_key, msg + 16 + size1, (unsigned int) size2, dec2);
-    /*@ open decryption_response(true, receiver, st, initial_request,
+    /*@ open decryption_post(true, receiver, st, initial_request,
                                  ?wrong_key, p4, c4, _); @*/
     //@ open exists(?enc_cg2);
     //@ assert enc_cg2 == cg_encrypted(?p3, ?c3, ?dec_cs3, ?iv_cs3);
