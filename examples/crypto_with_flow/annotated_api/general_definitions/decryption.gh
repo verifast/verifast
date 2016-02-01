@@ -14,31 +14,23 @@ lemma void decryption_init(fixpoint(int, int, bool, bool) key_classifier);
   ensures  module(decryption_mod, false) &*&
            [_]decryption_key_classifier(key_classifier);
 
-inductive decryption_request_args =
-  | initial_request
-  | nested_request(list<char> prefix, list<char> suffix,
-                   int p_key, int c_key, list<char> cs_out)
-;
-
 predicate decryption_with_wrong_key(bool symmetric, int principal, structure s,
                                     int p_key, int c_key, list<char> cs_out);
 
-predicate decryption_pre(bool symmetric, int principal, structure s,
-                         decryption_request_args args, list<char> cs_in) =
-  switch(args)
-  {
-    case initial_request:
-      return decryption_permission(principal);
-    case nested_request(prefix, suffix, p_key, c_key, cs_out):
-      return cs_out == append(prefix, append(cs_in, suffix)) &*&
-             decryption_with_wrong_key(symmetric, principal, s, p_key, c_key, cs_out);
-  }
+predicate decryption_pre(bool symmetric, bool initial,
+                         int principal, structure s, list<char> cs_in) =
+  initial ?
+    decryption_permission(principal)
+  :
+    decryption_with_wrong_key(symmetric, principal, s, _, _, ?cs_out) &*&
+    exists(pair(?prefix, ?suffix)) &*&
+    cs_out == append(prefix, append(cs_in, suffix))
 ;
 
-predicate decryption_post(bool symmetric, int principal, structure s,
-                          decryption_request_args args, bool wrong_key,
+predicate decryption_post(bool symmetric, bool initial, bool wrong_key,
+                          int principal, structure s,
                           int p_key, int c_key, list<char> cs_out) =
-  args == initial_request && !wrong_key ?
+  initial && !wrong_key ?
     decryption_permission(principal)
   :
     decryption_with_wrong_key(symmetric, principal, s, p_key, c_key, cs_out)

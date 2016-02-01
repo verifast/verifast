@@ -229,14 +229,14 @@ struct item *asymmetric_decryption(struct item *key, struct item *item, char tag
                      (havege_state_initialized)(state, out, len) { call(); } @*/
     //@ open principal(principal1, count1);
     //@ structure s = known_value(0, full_tag(tag));
-    //@ close decryption_pre(false, principal1, s, initial_request, enc_cont);
+    //@ close decryption_pre(false, true, principal1, s, enc_cont);
     if(pk_decrypt(&context, item->content + TAG_LENGTH,
                   (unsigned int) item->size - TAG_LENGTH,
                   output, &olen, MAX_PACKAGE_SIZE,
                   asym_enc_havege_random_stub, random_state) != 0)
       abort_crypto_lib("Decryption failed");
-    /*@ open decryption_post(false, principal1, s, initial_request,
-                             ?wrong_key, ?p_key, ?c_key, ?cs_out); @*/
+    /*@ open decryption_post(false, true, ?wrong_key,
+                             principal1, s, ?p_key, ?c_key, ?cs_out); @*/
     //@ assert u_integer(&olen, ?size_out);
     //@ pk_release_context_with_key(&context);
     //@ open cryptogram(i_cont + TAG_LENGTH, i_size - TAG_LENGTH, enc_cont, enc_cg);
