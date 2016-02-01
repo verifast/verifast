@@ -159,8 +159,12 @@ and
   | Operation of (* voor operaties met bovenstaande operators*)
       loc *
       operator *
+      expr list
+  | WOperation of
+      loc *
+      operator *
       expr list *
-      type_ list option ref
+      type_ list
   | IntLit of loc * big_int * type_ option ref (* int literal*)
   | RealLit of loc * num
   | StringLit of loc * string (* string literal *)
@@ -698,7 +702,8 @@ let rec expr_loc e =
   | RealLit (l, n) -> l
   | StringLit (l, s) -> l
   | ClassLit (l, s) -> l
-  | Operation (l, op, es, ts) -> l
+  | Operation (l, op, es) -> l
+  | WOperation (l, op, es, ts) -> l
   | SliceExpr (l, p1, p2) -> l
   | Read (l, e, f) -> l
   | ArrayLengthExpr (l, e) -> l
@@ -829,7 +834,8 @@ let expr_fold_open iter state e =
   | False l -> state
   | Null l -> state
   | Var (l, x, scope) -> state
-  | Operation (l, op, es, ts) -> iters state es
+  | Operation (l, op, es) -> iters state es
+  | WOperation (l, op, es, ts) -> iters state es
   | SliceExpr (l, p1, p2) -> iterpatopt (iterpatopt state p1) p2
   | IntLit (l, n, tp) -> state
   | RealLit(l, n) -> state

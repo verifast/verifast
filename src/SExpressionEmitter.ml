@@ -195,14 +195,15 @@ let sexpr_of_method_binding (binding : method_binding) : sexpression =
 
 let rec sexpr_of_expr (expr : expr) : sexpression =
   match expr with
-    | Operation (loc, op, exprs, types) -> 
+    | Operation (loc, op, exprs) -> 
+      build_list [ Symbol "expr-op"
+                 ; sexpr_of_operator op ]
+                 [ "operands", List (List.map sexpr_of_expr exprs) ]
+    | WOperation (loc, op, exprs, types) -> 
       build_list [ Symbol "expr-op"
                  ; sexpr_of_operator op ]
                  [ "operands", List (List.map sexpr_of_expr exprs)
-                 ; "types",
-                   match !types with
-                   | Some types -> List (List.map sexpr_of_type_ types)
-                   | None       -> Symbol "nil" ]
+                 ; "types", List (List.map sexpr_of_type_ types) ]
     | CallExpr (loc, name, targs, indices, args, binding) ->
       build_list [ Symbol "expr-call"
                  ; Symbol name ]

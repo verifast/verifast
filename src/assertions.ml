@@ -72,7 +72,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         branch
            (fun () -> assume (eval None env con) (fun () -> assert_expr_split e1 h env l msg url))
            (fun () -> assume (ctxt#mk_not (eval None env con)) (fun () -> assert_expr_split e2 h env l msg url))
-    | Operation(l0, And, [e1; e2], tps) ->
+    | WOperation(l0, And, [e1; e2], tps) ->
       branch
         (fun () -> assert_expr_split e1 h env l msg url)
         (fun () -> assert_expr_split e2 h env l msg url)
@@ -949,7 +949,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | WPredAsn (l, g, is_global_predref, targs, pats0, pats) -> pred_asn l real_unit_pat g is_global_predref targs (srcpats pats0) (srcpats pats)
     | WInstPredAsn (l, e_opt, st, cfin, tn, g, index, pats) ->
       inst_call_pred l real_unit_pat e_opt tn g index pats
-    | ExprAsn (l, Operation (lo, Eq, [Var (lx, x, scope); e], tps)) when !scope = Some LocalVar ->
+    | ExprAsn (l, WOperation (lo, Eq, [Var (lx, x, scope); e], tps)) when !scope = Some LocalVar ->
       begin match try_assoc x env with
         Some t -> assert_term (ctxt#mk_eq t (ev e)) h env l "Cannot prove condition." None; cont [] h ghostenv env env' None
       | None -> let binding = (x, ev e) in cont [] h ghostenv (binding::env) (binding::env') None
@@ -1095,10 +1095,10 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               iter conds asn1 (fun conds -> iter conds asn2 cont)
             | IfAsn (_, cond, asn1, asn2) ->
               if expr_is_fixed inputVars cond then
-                iter (cond::conds) asn1 cont @ iter (Operation (dummy_loc, Not, [cond], ref None)::conds) asn2 cont
+                iter (cond::conds) asn1 cont @ iter (WOperation (dummy_loc, Not, [cond], [boolt])::conds) asn2 cont
               else
                 []
-            | ExprAsn (_, Operation (_, Eq, [Var (_, x, _); e], _)) when not (List.mem x inputVars) && expr_is_fixed inputVars e ->
+            | ExprAsn (_, WOperation (_, Eq, [Var (_, x, _); e], _)) when not (List.mem x inputVars) && expr_is_fixed inputVars e ->
               cont conds
             | ExprAsn (_, e) when expr_is_fixed inputVars e ->
               cont (e::conds)
@@ -1108,7 +1108,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               flatmap 
                 (fun (SwitchAsnClause (l, casename, args, boxinginfo, asn)) ->
                   if (List.length args) = 0 then
-                    let cond = Operation (l, Eq, [e; Var (l, casename, ref (Some PureCtor))], ref (Some [AnyType; AnyType])) in
+                    let cond = WOperation (l, Eq, [e; Var (l, casename, ref (Some PureCtor))], [AnyType; AnyType]) in
                     iter (cond :: conds) asn cont
                   else 
                    []
@@ -1211,14 +1211,14 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match coef with
             None -> Some (LitPat frac)
           | Some DummyPat -> Some DummyPat
-          | Some (LitPat coef) -> Some (LitPat (Operation(dummy_loc, Mul, [frac;coef], ref (Some [RealType; RealType]))))
+          | Some (LitPat coef) -> Some (LitPat (WOperation(dummy_loc, Mul, [frac;coef], [RealType; RealType])))
         in
         iter new_coef conds asn
       | Sep(_, asn1, asn2) ->
         (iter coef conds asn1) @ (iter coef conds asn2)
       | IfAsn(_, cond, asn1, asn2) ->
         if expr_is_fixed inputParameters cond then
-          (iter coef (cond :: conds) asn1) @ (iter coef (Operation(dummy_loc, Not, [cond], ref None) :: conds) asn2)
+          (iter coef (cond :: conds) asn1) @ (iter coef (WOperation(dummy_loc, Not, [cond], [boolt]) :: conds) asn2)
         else
           (iter coef conds asn1) @ (iter coef conds asn2) (* replace this with []? *)
       | _ -> []
@@ -1296,9 +1296,9 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 [(outer_l, outer_symb, outer_nb_curried, outer_fun_sym, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds)] ->
                 let extra_conditions: expr list = List.map2 (fun cn e2 -> 
                     if language = Java then 
-                      Operation(dummy_loc, Eq, [ClassLit(dummy_loc, cn); e2], ref (Some [ObjType "java.lang.Class"; ObjType "java.lang.Class"]))
+                      WOperation(dummy_loc, Eq, [ClassLit(dummy_loc, cn); e2], [ObjType "java.lang.Class"; ObjType "java.lang.Class"])
                     else 
-                      Operation(dummy_loc, Eq, [Var(dummy_loc, cn, ref (Some FuncName)); e2], ref (Some [PtrType Void; PtrType Void]))
+                      WOperation(dummy_loc, Eq, [Var(dummy_loc, cn, ref (Some FuncName)); e2], [PtrType Void; PtrType Void])
                 ) outer_actual_indices0 inner_formal_indices in
                 (* these extra conditions ensure that the actual indices match the expected ones *)
                 [(outer_l, outer_symb, outer_nb_curried, outer_fun_sym, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, extra_conditions @ conds)]

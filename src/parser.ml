@@ -151,14 +151,14 @@ module Scala = struct
       [< e0 = parse_primary_expr; e = parse_add_expr_rest e0 >] -> e
   and
     parse_add_expr_rest e0 = parser
-      [< '(l, Kwd "+"); e1 = parse_primary_expr; e = parse_add_expr_rest (Operation (l, Add, [e0; e1], ref None)) >] -> e
+      [< '(l, Kwd "+"); e1 = parse_primary_expr; e = parse_add_expr_rest (Operation (l, Add, [e0; e1])) >] -> e
     | [< >] -> e0
   and
     parse_rel_expr = parser
       [< e0 = parse_add_expr; e = parse_rel_expr_rest e0 >] -> e
   and
     parse_rel_expr_rest e0 = parser
-      [< '(l, Kwd "=="); e1 = parse_add_expr; e = parse_rel_expr_rest (Operation (l, Eq, [e0; e1], ref None)) >] -> e
+      [< '(l, Kwd "=="); e1 = parse_add_expr; e = parse_rel_expr_rest (Operation (l, Eq, [e0; e1])) >] -> e
     | [< >] -> e0
   and
     parse_expr stream = parse_rel_expr stream
@@ -1006,7 +1006,7 @@ and
 | [< e = parse_expr; s = parser
     [< '(_, Kwd ";") >] ->
     begin match e with
-      AssignExpr (l, Operation (llhs, Mul, [Var (lt, t, _); Var (lx, x, _)], _), rhs) -> DeclStmt (l, [l, PtrTypeExpr (llhs, IdentTypeExpr (lt, None, t)), x, Some(rhs), ref false])
+      AssignExpr (l, Operation (llhs, Mul, [Var (lt, t, _); Var (lx, x, _)]), rhs) -> DeclStmt (l, [l, PtrTypeExpr (llhs, IdentTypeExpr (lt, None, t)), x, Some(rhs), ref false])
     | _ -> ExprStmt e
     end
   | [< '(l, Kwd ":") >] -> (match e with Var (_, lbl, _) -> LabelStmt (l, lbl) | _ -> raise (ParseException (l, "Label must be identifier.")))
@@ -1124,7 +1124,7 @@ and
     [< '(l, Kwd "|->"); rhs = parse_pattern >] -> 
     (match e with
        ReadArray (_, _, SliceExpr (_, _, _)) -> PointsTo (l, e, rhs)
-     | ReadArray (lr, e0, e1) when !language = CLang -> PointsTo (l, Deref(lr, Operation(lr, Add, [e0; e1], ref None), ref None), rhs) 
+     | ReadArray (lr, e0, e1) when !language = CLang -> PointsTo (l, Deref(lr, Operation(lr, Add, [e0; e1]), ref None), rhs) 
      | _ -> PointsTo (l, e, rhs)
     )
   | [< '(l, Kwd "?"); p1 = parse_pred; '(_, Kwd ":"); p2 = parse_pred >] -> IfAsn (l, e, p1, p2)
@@ -1139,7 +1139,7 @@ and
          | _ -> raise (ParseException (l, "Instance predicate call: single index expression expected"))
        in
        InstPredAsn (l, e, g, index, pats)
-     | Operation (l, Eq, [e1; e2], _) ->
+     | Operation (l, Eq, [e1; e2]) ->
        begin match pat_of_expr e2 with
          LitPat e2 -> ExprAsn (l, e)
        | e2 -> MatchAsn (l, e1, e2)
@@ -1293,15 +1293,15 @@ and
   >] -> SwitchExpr (l, e, cs, cdef_opt, ref None)
 | [< '(l, Kwd "sizeof"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")") >] -> SizeofExpr (l, t)
 | [< '(l, Kwd "super"); '(_, Kwd "."); '(l2, Ident n); '(_, Kwd "("); es = rep_comma parse_expr; '(_, Kwd ")") >] -> SuperMethodCall (l, n, es)
-| [< '(l, Kwd "!"); e = parse_expr_suffix >] -> Operation(l, Not, [e], ref None)
+| [< '(l, Kwd "!"); e = parse_expr_suffix >] -> Operation(l, Not, [e])
 | [< '(l, Kwd "@"); '(_, Ident g) >] -> PredNameExpr (l, g)
 | [< '(l, Kwd "*"); e = parse_expr_suffix >] -> Deref (l, e, ref None)
 | [< '(l, Kwd "&"); e = parse_expr_suffix >] -> AddressOf (l, e)
-| [< '(l, Kwd "~"); e = parse_expr_suffix >] -> Operation (l, BitNot, [e], ref None)
+| [< '(l, Kwd "~"); e = parse_expr_suffix >] -> Operation (l, BitNot, [e])
 | [< '(l, Kwd "-"); e = parse_expr_suffix >] ->
   begin match e with
     IntLit (_, n, t) -> IntLit (l, minus_big_int n, t)
-  | _ -> Operation (l, Sub, [IntLit (l, zero_big_int, ref None); e], ref None)
+  | _ -> Operation (l, Sub, [IntLit (l, zero_big_int, ref None); e])
   end
 | [< '(l, Kwd "++"); e = parse_expr_suffix >] -> AssignOpExpr (l, e, Add, IntLit (l, unit_big_int, ref None), false, ref None, ref None)
 | [< '(l, Kwd "--"); e = parse_expr_suffix >] -> AssignOpExpr (l, e, Sub, IntLit (l, unit_big_int, ref None), false, ref None, ref None)
@@ -1345,27 +1345,27 @@ and
 | [< >] -> e0
 and
   parse_expr_mul_rest e0 = parser
-  [< '(l, Kwd "*"); e1 = parse_expr_suffix; e = parse_expr_mul_rest (Operation (l, Mul, [e0; e1], ref None)) >] -> e
-| [< '(l, Kwd "/"); e1 = parse_expr_suffix; e = parse_expr_mul_rest (Operation (l, Div, [e0; e1], ref None)) >] -> e
-| [< '(l, Kwd "%"); e1 = parse_expr_suffix; e = parse_expr_mul_rest (Operation (l, Mod, [e0; e1], ref None)) >] -> e
+  [< '(l, Kwd "*"); e1 = parse_expr_suffix; e = parse_expr_mul_rest (Operation (l, Mul, [e0; e1])) >] -> e
+| [< '(l, Kwd "/"); e1 = parse_expr_suffix; e = parse_expr_mul_rest (Operation (l, Div, [e0; e1])) >] -> e
+| [< '(l, Kwd "%"); e1 = parse_expr_suffix; e = parse_expr_mul_rest (Operation (l, Mod, [e0; e1])) >] -> e
 | [< >] -> e0
 and
   parse_expr_arith_rest e0 = parser
-  [< '(l, Kwd "+"); e1 = parse_expr_mul; e = parse_expr_arith_rest (Operation (l, Add, [e0; e1], ref None)) >] -> e
-| [< '(l, Kwd "-"); e1 = parse_expr_mul; e = parse_expr_arith_rest (Operation (l, Sub, [e0; e1], ref None)) >] -> e
+  [< '(l, Kwd "+"); e1 = parse_expr_mul; e = parse_expr_arith_rest (Operation (l, Add, [e0; e1])) >] -> e
+| [< '(l, Kwd "-"); e1 = parse_expr_mul; e = parse_expr_arith_rest (Operation (l, Sub, [e0; e1])) >] -> e
 | [< >] -> e0
 and
   parse_shift_rest e0 = parser
-  [< '(l, Kwd "<<"); e1 = parse_expr_arith; e = parse_shift_rest (Operation (l, ShiftLeft, [e0; e1], ref None)) >] -> e
-| [< '(l, Kwd ">>"); e1 = parse_expr_arith; e = parse_shift_rest (Operation (l, ShiftRight, [e0; e1], ref None)) >] -> e
+  [< '(l, Kwd "<<"); e1 = parse_expr_arith; e = parse_shift_rest (Operation (l, ShiftLeft, [e0; e1])) >] -> e
+| [< '(l, Kwd ">>"); e1 = parse_expr_arith; e = parse_shift_rest (Operation (l, ShiftRight, [e0; e1])) >] -> e
 | [< >] -> e0
 and
   parse_expr_rel_rest e0 = parser
-  [< '(l, Kwd "=="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Eq, [e0; e1], ref None)) >] -> e
-| [< '(l, Kwd "!="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Neq, [e0; e1], ref None)) >] -> e
-| [< '(l, Kwd "<="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Le, [e0; e1], ref None)) >] -> e
-| [< '(l, Kwd ">"); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Gt, [e0; e1], ref None)) >] -> e
-| [< '(l, Kwd ">="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Ge, [e0; e1], ref None)) >] -> e
+  [< '(l, Kwd "=="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Eq, [e0; e1])) >] -> e
+| [< '(l, Kwd "!="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Neq, [e0; e1])) >] -> e
+| [< '(l, Kwd "<="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Le, [e0; e1])) >] -> e
+| [< '(l, Kwd ">"); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Gt, [e0; e1])) >] -> e
+| [< '(l, Kwd ">="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Ge, [e0; e1])) >] -> e
 | [< '(l, Kwd "instanceof"); tp = parse_expr; e = parse_expr_rel_rest (InstanceOfExpr (l, e0, type_expr_of_expr tp)) >] -> e
 | [< e = parse_expr_lt_rest e0 parse_expr_rel_rest >] -> e
 and
@@ -1373,11 +1373,11 @@ and
   match e with
     Var (lx, x, _) -> CallExpr (lx, x, targs, [], args, Static)
   | CastExpr (lc, trunc, te, e) -> CastExpr (lc, trunc, te, apply_type_args e targs args)
-  | Operation (l, Not, [e], ts) -> Operation (l, Not, [apply_type_args e targs args], ts)
-  | Operation (l, BitNot, [e], ts) -> Operation (l, BitNot, [apply_type_args e targs args], ts)
+  | Operation (l, Not, [e]) -> Operation (l, Not, [apply_type_args e targs args])
+  | Operation (l, BitNot, [e]) -> Operation (l, BitNot, [apply_type_args e targs args])
   | Deref (l, e, ts) -> Deref (l, apply_type_args e targs args, ts)
   | AddressOf (l, e) -> AddressOf (l, apply_type_args e targs args)
-  | Operation (l, op, [e1; e2], ts) -> Operation (l, op, [e1; apply_type_args e2 targs args], ts)
+  | Operation (l, op, [e1; e2]) -> Operation (l, op, [e1; apply_type_args e2 targs args])
   | _ -> raise (ParseException (expr_loc e, "Identifier expected before type argument list"))
 and
   parse_expr_lt_rest e0 cont = parser
@@ -1393,7 +1393,7 @@ and
                args = (parser [< args = parse_patlist >] -> args | [< >] -> []);
                e = cont (apply_type_args e0 ([type_expr_of_expr e1] @ ts) args)
             >] -> e
-          | [< e = cont (Operation (l, Lt, [e0; e1], ref None)) >] -> e
+          | [< e = cont (Operation (l, Lt, [e0; e1])) >] -> e
        >] -> e
      | [< ts = rep_comma parse_type; '(_, Kwd ">");
           args = (parser [< args = parse_patlist >] -> args | [< >] -> []);
@@ -1403,23 +1403,23 @@ and
 | [< >] -> e0
 and
   parse_bitand_expr_rest e0 = parser
-  [< '(l, Kwd "&"); e1 = parse_expr_rel; e = parse_bitand_expr_rest (Operation (l, BitAnd, [e0; e1], ref None)) >] -> e
+  [< '(l, Kwd "&"); e1 = parse_expr_rel; e = parse_bitand_expr_rest (Operation (l, BitAnd, [e0; e1])) >] -> e
 | [< >] -> e0
 and
   parse_bitxor_expr_rest e0 = parser
-  [< '(l, Kwd "^"); e1 = parse_bitand_expr; e = parse_bitxor_expr_rest (Operation (l, BitXor, [e0; e1], ref None)) >] -> e
+  [< '(l, Kwd "^"); e1 = parse_bitand_expr; e = parse_bitxor_expr_rest (Operation (l, BitXor, [e0; e1])) >] -> e
 | [< >] -> e0
 and
   parse_bitor_expr_rest e0 = parser
-  [< '(l, Kwd "|"); e1 = parse_bitxor_expr; e = parse_bitor_expr_rest (Operation (l, BitOr, [e0; e1], ref None)) >] -> e
+  [< '(l, Kwd "|"); e1 = parse_bitxor_expr; e = parse_bitor_expr_rest (Operation (l, BitOr, [e0; e1])) >] -> e
 | [< >] -> e0
 and
   parse_conj_expr_rest e0 = parser
-  [< '(l, Kwd "&&"); e1 = parse_expr_rel; e = parse_conj_expr_rest (Operation (l, And, [e0; e1], ref None)) >] -> e
+  [< '(l, Kwd "&&"); e1 = parse_expr_rel; e = parse_conj_expr_rest (Operation (l, And, [e0; e1])) >] -> e
 | [< >] -> e0
 and
   parse_disj_expr_rest e0 = parser
-  [< '(l, Kwd "||"); e1 = parse_conj_expr; e = parse_disj_expr_rest (Operation (l, Or, [e0; e1], ref None)) >] -> e
+  [< '(l, Kwd "||"); e1 = parse_conj_expr; e = parse_disj_expr_rest (Operation (l, Or, [e0; e1])) >] -> e
 | [< >] -> e0
 and
   parse_assign_expr_rest e0 = parser

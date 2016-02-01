@@ -27,7 +27,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | s::ss -> assigned_variables s @ block_assigned_variables ss
   and expr_assigned_variables e =
     match e with
-      Operation (l, op, es, _) -> flatmap expr_assigned_variables es
+      Operation (l, op, es) | WOperation (l, op, es, _) -> flatmap expr_assigned_variables es
     | Read (l, e, f) -> expr_assigned_variables e
     | WRead (l, e, fparent, fname, frange, fstatic, fvalue, fghost) -> expr_assigned_variables e
     | ReadArray (l, ea, ei) -> expr_assigned_variables ea @ expr_assigned_variables ei
@@ -974,7 +974,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let rec expr_mark_addr_taken e locals = 
     match e with
       True _ | False _ | Null _ | Var(_, _, _) | IntLit(_, _, _) | RealLit _ | StringLit(_, _) | ClassLit(_) -> ()
-    | Operation(_, _, es, _) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
+    | Operation(_, _, es) | WOperation (_, _, es, _) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
     | AddressOf(_, Var(_, x, scope)) -> mark_if_local locals x
     | Read(_, e, _) -> expr_mark_addr_taken e locals
     | ArrayLengthExpr(_, e) -> expr_mark_addr_taken e locals
@@ -1110,7 +1110,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     match e with
       True _ | False _ | Null _ | Var(_, _, _) | IntLit(_, _, _) | RealLit _ | StringLit(_, _) | ClassLit(_) -> []
-    | Operation(_, _, es, _) -> List.flatten (List.map (fun e -> expr_address_taken e) es)
+    | Operation(_, _, es) | WOperation (_, _, es, _) -> List.flatten (List.map (fun e -> expr_address_taken e) es)
     | Read(_, e, _) -> expr_address_taken e
     | ArrayLengthExpr(_, e) -> expr_address_taken e
     | WRead(_, e, _, _, _, _, _, _) -> expr_address_taken e
@@ -1636,7 +1636,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | True _ -> true
     | False _ -> true
     | Var(_, x, scope)  -> ! scope = (Some LocalVar)
-    | Operation(_, (Eq | Neq), es, _) -> List.for_all is_safe_expr es
+    | WOperation(_, (Eq | Neq), es, _) -> List.for_all is_safe_expr es
     | IfExpr(_, e1, e2, e3) -> List.for_all is_safe_expr [e1; e2; e3]
     | SizeofExpr(_, _) -> true
     | AddressOf(_, e) -> is_safe_expr e
@@ -1812,7 +1812,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | CastExpr (lc, false, ManifestTypeExpr (_, tp), (WFunCall (l, "malloc", [], [SizeofExpr (ls, StructTypeExpr (lt, tn))]) as e)) ->
       expect_type lc (Some pure) (PtrType (StructType tn)) tp;
       verify_expr readonly h env xo e cont
-    | WFunCall (l, "malloc", [], [Operation (lmul, Mul, ([e; SizeofExpr (ls, te)] | [SizeofExpr (ls, te); e]), _)]) ->
+    | WFunCall (l, "malloc", [], [Operation (lmul, Mul, ([e; SizeofExpr (ls, te)] | [SizeofExpr (ls, te); e]))]) ->
       if pure then static_error l "Cannot call a non-pure function from a pure context." None;
       let elemTp = check_pure_type (pn,ilist) tparams te in
       let w = check_expr_t (pn,ilist) tparams tenv e IntType in
@@ -1998,7 +1998,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         assume (ctxt#mk_eq (mk_char_list_of_c_string (String.length s) s) cs) $. fun () ->
         cont (Chunk ((string_symb, true), [], coef, [value; cs], None)::h) env value
       end
-    | Operation (l, Add, [e1; e2], t) when !t = Some [ObjType "java.lang.String"; ObjType "java.lang.String"] ->
+    | WOperation (l, Add, [e1; e2], [ObjType "java.lang.String"; ObjType "java.lang.String"]) ->
       eval_h h env e1 $. fun h env v1 ->
       eval_h h env e2 $. fun h env v2 ->
       let value = get_unique_var_symb "string" (ObjType "java.lang.String") in
@@ -2039,18 +2039,18 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       eval_h h env arr $. fun h env arr ->
       eval_h h env i $. fun h env i ->
       cont h env (read_c_array h env l arr i elem_tp)
-    | Operation (l, Not, [e], ts) -> eval_h_core readonly h env e (fun h env v -> cont h env (ctxt#mk_not v))
-    | Operation (l, ((Eq | Neq) as op), [e1; e2], ts) ->
+    | WOperation (l, Not, [e], ts) -> eval_h_core readonly h env e (fun h env v -> cont h env (ctxt#mk_not v))
+    | WOperation (l, ((Eq | Neq) as op), [e1; e2], ts) ->
       let create_term t1 t2 = match op with Eq -> ctxt#mk_eq t1 t2 | Neq -> ctxt#mk_not (ctxt#mk_eq t1 t2) in
       let e1_safe = is_safe_expr e1 in
       let e2_safe = is_safe_expr e2 in
       eval_h_core (true, heapReadonly || not e2_safe) h env e1 (fun h env v1 -> eval_h_core (true, heapReadonly || not e1_safe) h env e2 (fun h env v2 -> cont h env (create_term v1 v2)))
-    | Operation (l, And, [e1; e2], ts) ->
+    | WOperation (l, And, [e1; e2], ts) ->
       eval_h h env e1 $. fun h env v1 ->
       branch
         (fun () -> assume v1 (fun () -> eval_h h env e2 cont))
         (fun () -> assume (ctxt#mk_not v1) (fun () -> cont h env ctxt#mk_false))
-    | Operation (l, Or, [e1; e2], ts) -> 
+    | WOperation (l, Or, [e1; e2], ts) -> 
       eval_h h env e1 $. fun h env v1 ->
       branch
         (fun () -> assume v1 (fun () -> cont h env ctxt#mk_true))

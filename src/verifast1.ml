@@ -1092,7 +1092,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                       None -> static_error l "No such enumeration constant" None
                     | Some n -> n
                     end
-                  | Operation (l, op, [e1; e2], _) ->
+                  | Operation (l, op, [e1; e2]) ->
                     let n1 = eval e1 in
                     let n2 = eval e2 in
                     begin match op with
@@ -2558,12 +2558,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     if not (List.mem_assoc g funcmap) then static_error l "Must include header <math.h> when using floating-point operations." None;
     WFunCall (l, g, [], args)
   
-  let operation_expr funcmap l t operator arg1 arg2 ts =
+  let operation_expr funcmap l t operator arg1 arg2 =
     match t with
       Float|Double|LongDouble ->
-      let Some [t1; t2] = !ts in
-      floating_point_fun_call_expr funcmap l t (string_of_operator operator) [TypedExpr (arg1, t1); TypedExpr (arg2, t2)]
-    | _ -> Operation (l, operator, [arg1; arg2], ts)
+      floating_point_fun_call_expr funcmap l t (string_of_operator operator) [TypedExpr (arg1, t); TypedExpr (arg2, t)]
+    | _ -> WOperation (l, operator, [arg1; arg2], [t; t])
   
   let rec check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e: (expr (* typechecked expression *) * type_ (* expression type *) * big_int option (* constant integer expression => value*)) =
     let check e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
@@ -2808,59 +2807,55 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           (PredNameExpr (l, g), PredType (tparams, ts, inputParamCount, inductiveness), None)
         | None -> static_error l "No such predicate." None
       end
-    | Operation (l, (Eq | Neq as operator), [e1; e2], ts) -> 
+    | Operation (l, (Eq | Neq as operator), [e1; e2]) -> 
       let (w1, w2, t) = promote_numeric e1 e2 in
-      ts := Some [t; t];
-      (operation_expr funcmap l t operator w1 w2 ts, boolt, None)
-    | Operation (l, (Or | And as operator), [e1; e2], ts) -> 
+      (operation_expr funcmap l t operator w1 w2, boolt, None)
+    | Operation (l, (Or | And as operator), [e1; e2]) -> 
       let w1 = checkcon e1 in
       let w2 = checkcon e2 in
-      (Operation (l, operator, [w1; w2], ts), boolt, None)
-    | Operation (l, Not, [e], ts) -> 
+      (WOperation (l, operator, [w1; w2], [boolt; boolt]), boolt, None)
+    | Operation (l, Not, [e]) -> 
       let w = checkcon e in
-      (Operation (l, Not, [w], ts), boolt, None)
-    | Operation (l, BitAnd, [e1; e2], ts) ->
+      (WOperation (l, Not, [w], [boolt]), boolt, None)
+    | Operation (l, BitAnd, [e1; e2]) ->
       let (w1, t1, _) = check e1 in
       let (w2, t2, _) = check e2 in
       begin match (t1, t2) with
         ((Char|UChar|ShortType|UShortType|IntType|UintPtrType), (Char|UChar|ShortType|UShortType|IntType|UintPtrType)) ->
         let t = match (t1, t2) with (UintPtrType, _) | (_, UintPtrType) -> UintPtrType | _ -> IntType in
-        ts := Some [t1; t2];
-        (Operation (l, BitAnd, [w1; w2], ts), t, None)
+        (WOperation (l, BitAnd, [w1; w2], [t1; t2]), t, None)
       | _ -> static_error l "Arguments to bitwise operators must be integral types." None
       end
-    | Operation (l, (BitXor | BitOr as operator), [e1; e2], ts) ->
+    | Operation (l, (BitXor | BitOr as operator), [e1; e2]) ->
       let (w1, t1, _) = check e1 in
       let (_, t2, _) = check e2 in
       begin
       match t1 with
-        (Char|UChar|ShortType|UShortType|IntType) -> let w2 = checkt e2 IntType in ts := Some [t1;t2]; (Operation (l, operator, [w1; w2], ts), IntType, None)
-      | UintPtrType -> let w2 = checkt e2 UintPtrType in (Operation (l, operator, [w1; w2], ts), UintPtrType, None)
+        (Char|UChar|ShortType|UShortType|IntType) -> let w2 = checkt e2 IntType in (WOperation (l, operator, [w1; w2], [t1; t2]), IntType, None)
+      | UintPtrType -> let w2 = checkt e2 UintPtrType in (WOperation (l, operator, [w1; w2], [UintPtrType; UintPtrType]), UintPtrType, None)
       | _ -> static_error l "Arguments to bitwise operators must be integral types." None
       end
-    | Operation (l, Mod, [e1; e2], ts) ->
+    | Operation (l, Mod, [e1; e2]) ->
       let (w1, t1, _) = check e1 in
       let (_, t2, _) = check e2 in
       begin
       match t1 with
-        (Char | ShortType | IntType) -> let w2 = checkt e2 IntType in ts :=
-Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
-      | (UChar | UShortType | UintPtrType) -> let w2 = checkt e2 UintPtrType in (Operation (l, Mod, [w1; w2], ts), UintPtrType, None)
+        (Char | ShortType | IntType) -> let w2 = checkt e2 IntType in (WOperation (l, Mod, [w1; w2], [t1; t2]), IntType, None)
+      | (UChar | UShortType | UintPtrType) -> let w2 = checkt e2 UintPtrType in (WOperation (l, Mod, [w1; w2], [UintPtrType; UintPtrType]), UintPtrType, None)
       | _ -> static_error l "Arguments to modulus operator must be integral types." None
       end
-    | Operation (l, BitNot, [e], ts) ->
+    | Operation (l, BitNot, [e]) ->
       let (w, t, _) = check e in
       begin
       match t with
-        Char | ShortType | IntType -> ts := Some [IntType]; (Operation (l, BitNot, [w], ts), IntType, None)
-      | UintPtrType -> ts := Some [UintPtrType]; (Operation (l, BitNot, [w], ts), UintPtrType, None)
+        Char | ShortType | IntType -> (WOperation (l, BitNot, [w], [IntType]), IntType, None)
+      | UintPtrType -> (WOperation (l, BitNot, [w], [UintPtrType]), UintPtrType, None)
       | _ -> static_error l "argument to ~ must be char, short, int or uintptr" None
       end
-    | Operation (l, (Le | Lt | Ge | Gt as operator), [e1; e2], ts) -> 
+    | Operation (l, (Le | Lt | Ge | Gt as operator), [e1; e2]) -> 
       let (w1, w2, t) = promote l e1 e2 in
-      ts := Some [t; t];
-      (operation_expr funcmap l t operator w1 w2 ts, boolt, None)
-    | Operation (l, (Add | Sub as operator), [e1; e2], ts) ->
+      (operation_expr funcmap l t operator w1 w2, boolt, None)
+    | Operation (l, (Add | Sub as operator), [e1; e2]) ->
       let (w1, t1, value1) = check e1 in
       let (w2, t2, value2) = check e2 in
       let t1 = unfold_inferred_type t1 in
@@ -2870,15 +2865,12 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
           PtrType pt1, PtrType pt2 when operator = Sub ->
             if pt1 <> pt2 then static_error l "Pointers must be of same type" None;
             if pt1 <> Char && pt1 <> Void then static_error l "Subtracting non-char pointers is not yet supported" None;
-            ts:=Some [t1; t2];
-            (Operation (l, operator, [w1; w2], ts), IntType, None)
+            (WOperation (l, operator, [w1; w2], [t1; t2]), IntType, None)
         | PtrType pt1, _ ->
             let w2 = checkt e2 intt in
-            ts:=Some [t1; IntType];
-            (Operation (l, operator, [w1; w2], ts), t1, None)
+            (WOperation (l, operator, [w1; w2], [t1; IntType]), t1, None)
         | t1, t2 when is_arithmetic_type t1 && is_arithmetic_type t2 ->
           let (w1, w2, t) = promote_checkdone l e1 e2 (w1, t1, value1) (w2, t2, value2) in
-          ts := Some [t; t];
           let value =
             if t = IntType then
               match (value1, value2, operator) with
@@ -2888,23 +2880,20 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
             else
               None
           in
-          (operation_expr funcmap l t operator w1 w2 ts, t, value)
+          (operation_expr funcmap l t operator w1 w2, t, value)
         | (ObjType "java.lang.String" as t, _) when operator = Add ->
           let w2 = checkt e2 t in
-          ts:=Some [t1; ObjType "java.lang.String"];
-          (Operation (l, operator, [w1; w2], ts), t1, None)
+          (WOperation (l, operator, [w1; w2], [t1; ObjType "java.lang.String"]), t1, None)
         | _ -> static_error l ("Operand of addition or subtraction must be pointer, integer, char, short, or real number: t1 "^(string_of_type t1)^" t2 "^(string_of_type t2)) None
       end
-    | Operation (l, (Mul|Div as operator), [e1; e2], ts) ->
+    | Operation (l, (Mul|Div as operator), [e1; e2]) ->
       let (w1, w2, t) = promote l e1 e2 in
-      ts := Some [t; t];
       begin match t with PtrType _ -> static_error l "Operands should be arithmetic expressions, not pointer expressions" None | _ -> () end;
-      (operation_expr funcmap l t operator w1 w2 ts, t, None)
-    | Operation (l, (ShiftLeft | ShiftRight as op), [e1; e2], ts) ->
+      (operation_expr funcmap l t operator w1 w2, t, None)
+    | Operation (l, (ShiftLeft | ShiftRight as op), [e1; e2]) ->
       let w1 = checkt e1 IntType in
       let w2 = checkt e2 IntType in
-      ts := Some [IntType; IntType];
-      (Operation (l, op, [w1; w2], ts), IntType, None)
+      (WOperation (l, op, [w1; w2], [IntType; IntType]), IntType, None)
     | IntLit (l, n, t) -> (e, (match !t with None -> t := Some intt; intt | Some t -> t), Some n)
     | RealLit(l, n) ->
       if inAnnotation = Some true then
@@ -3255,7 +3244,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
     check_expr_t_core_core functypemap funcmap classmap interfmap (pn, ilist) tparams tenv inAnnotation e t0 false
   and check_expr_t_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e t0 isCast =
     match (e, unfold_inferred_type t0) with
-      (Operation(l, Div, [IntLit(_, i1, _); IntLit(_, i2, _)], _), RealType) -> RealLit(l, (num_of_big_int i1) // (num_of_big_int i2))
+      (Operation(l, Div, [IntLit(_, i1, _); IntLit(_, i2, _)]), RealType) -> RealLit(l, (num_of_big_int i1) // (num_of_big_int i2))
     | (IntLit (l, n, t), PtrType _) when isCast || eq_big_int n zero_big_int -> t:=Some t0; e
     | (IntLit (l, n, t), RealType) -> t:=Some RealType; e
     | (IntLit (l, n, t), UChar) ->
@@ -3344,7 +3333,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
     match t with
       Bool -> w
     | Char | UChar | ShortType | UShortType | IntType | UintPtrType | PtrType _ when language = CLang ->
-      Operation(expr_loc e, Neq, [w; IntLit(expr_loc e, big_int_of_int 0, ref (Some t))], ref (Some [t;t]))
+      WOperation (expr_loc e, Neq, [w; IntLit(expr_loc e, big_int_of_int 0, ref (Some t))], [t; t])
     | _ -> expect_type (expr_loc e) inAnnotation t Bool; w
   and check_deref_core functypemap funcmap classmap interfmap (pn,ilist) l tparams tenv e f =
     let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv None e in
@@ -3571,7 +3560,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
     let rec iter e =
       match e with
         True _ | False _ | Null _ | Var _ | IntLit _ | RealLit _ | StringLit _ | ClassLit _ -> ()
-      | Operation (l, _, es, _) -> List.iter iter es
+      | WOperation (l, _, es, _) -> List.iter iter es
       | NewArray (l, t, e) -> iter e
       | NewArrayWithInitializer (l, t, es) -> List.iter iter es
       | CastExpr (l, _, _, e) -> iter e
@@ -3659,19 +3648,19 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         True l -> BoolConst true
       | False l -> BoolConst false
       | Null l -> NullConst
-      | Operation (l, Add, [e1; e2], _) ->
+      | WOperation (l, Add, [e1; e2], _) ->
         begin match (ev e1, ev e2) with
           (IntConst n1, IntConst n2) -> IntConst (add_big_int n1 n2)
         | (StringConst s1, v) -> StringConst (s1 ^ string_of_const v)
         | (v, StringConst s2) -> StringConst (string_of_const v ^ s2)
         | _ -> raise NotAConstant
         end
-      | Operation (l, Sub, [e1; e2], _) ->
+      | WOperation (l, Sub, [e1; e2], _) ->
         begin match (ev e1, ev e2) with
           (IntConst n1, IntConst n2) -> IntConst (sub_big_int n1 n2)
         | _ -> raise NotAConstant
         end
-      | Operation (l, Mul, [e1; e2], _) ->
+      | WOperation (l, Mul, [e1; e2], _) ->
         begin match (ev e1, ev e2) with
           (IntConst n1, IntConst n2) -> IntConst (mult_big_int n1 n2)
         | _ -> raise NotAConstant
@@ -3955,8 +3944,8 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
             None, Some wend -> warray, wend
           | Some (LitPat (IntLit (_, n, _))), Some wend when eq_big_int n zero_big_int -> warray, wend
           | Some (LitPat wstart), Some (LitPat wend) ->
-            Operation (lslice, Add, [warray; wstart], ref (Some [PtrType elemtype; IntType])),
-            LitPat (Operation (lslice, Sub, [wend; wstart], ref (Some [IntType; IntType])))
+            WOperation (lslice, Add, [warray; wstart], [PtrType elemtype; IntType]),
+            LitPat (WOperation (lslice, Sub, [wend; wstart], [IntType; IntType]))
           | _ -> static_error l "Malformed array assertion." None
         in
         (WPredAsn (l, p, true, [], [], [LitPat wfirst; wlength; wrhs]), tenv, [])
@@ -4303,7 +4292,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       begin match e_opt with None -> () | Some e -> assert_expr_fixed fixed e end;
       assert_expr_fixed fixed index;
       assume_pats_fixed fixed pats
-    | ExprAsn (l, Operation (_, Eq, [Var (_, x, scope); e2], _)) when !scope = Some LocalVar ->
+    | ExprAsn (l, WOperation (_, Eq, [Var (_, x, scope); e2], _)) when !scope = Some LocalVar ->
       if not (List.mem x fixed) && expr_is_fixed fixed e2 then
         x::fixed
       else
@@ -5316,19 +5305,19 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     | IfExpr (l, e1, e2, e3) ->
       evs state [e1; e2; e3] $. fun state [v1; v2; v3] ->
       cont state (ctxt#mk_ifthenelse v1 v2 v3) (* Only sound if e2 and e3 are side-effect-free *)
-    | Operation (l, BitAnd, [e1; Operation (_, BitNot, [e2], ts2)], ts1) ->
+    | WOperation (l, BitAnd, [e1; WOperation (_, BitNot, [e2], ts2)], ts1) ->
       ev state e1 $. fun state v1 -> ev state e2 $. fun state v2 ->
       cont state (ctxt#mk_app bitwise_and_symbol [v1; ctxt#mk_app bitwise_not_symbol [v2]])
-    | Operation (l, Not, [e], ts) -> ev state e $. fun state v -> cont state (ctxt#mk_not v)
-    | Operation (l, BitNot, [e], ts) ->
-      begin match !ts with
-        Some [IntType] -> ev state e $. fun state v -> cont state (ctxt#mk_app bitwise_not_symbol [v])
+    | WOperation (l, Not, [e], ts) -> ev state e $. fun state v -> cont state (ctxt#mk_not v)
+    | WOperation (l, BitNot, [e], ts) ->
+      begin match ts with
+        [IntType] -> ev state e $. fun state v -> cont state (ctxt#mk_app bitwise_not_symbol [v])
       | _ ->
         static_error l "VeriFast does not currently support taking the bitwise complement (~) of an unsigned integer except as part of a bitwise AND (x & ~y)." None
       end
-    | Operation (l, Div, [e1; e2], ts) ->
-      begin match ! ts with
-        Some ([RealType; RealType]) ->
+    | WOperation (l, Div, [e1; e2], ts) ->
+      begin match ts with
+        [RealType; RealType] ->
         begin match (e1, e2) with
           (RealLit (_, n), IntLit (_, d, _)) when eq_num n (num_of_big_int unit_big_int) && eq_big_int d two_big_int -> cont state real_half
         | (IntLit (_, n, _), IntLit (_, d, _)) when eq_big_int n unit_big_int && eq_big_int d two_big_int -> cont state real_half
@@ -5341,7 +5330,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           in
           ev state e1 $. fun state v1 -> cont state (ctxt#mk_real_mul v1 (ctxt#mk_reallit_of_num (div_num (num_of_int 1) (eval_reallit e2)))) 
         end
-      | Some ([IntType; IntType]) -> 
+      | [IntType; IntType] -> 
         ev state e1 $. fun state v1 -> ev state e2 $. fun state v2 -> 
         begin match ass_term with
           Some assert_term -> assert_term l (ctxt#mk_not (ctxt#mk_eq v2 (ctxt#mk_intlit 0))) "Denominator might be 0." None
@@ -5349,7 +5338,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         end;
         cont state (ctxt#mk_div v1 v2)
       end
-    | Operation (l, BitAnd, [e1; IntLit(_, i, _)], ts) when le_big_int zero_big_int i && ass_term <> None -> (* optimization *)
+    | WOperation (l, BitAnd, [e1; IntLit(_, i, _)], ts) when le_big_int zero_big_int i && ass_term <> None -> (* optimization *)
       ev state e1 $. fun state v1 ->
         let iterm = ctxt#mk_intlit (int_of_big_int i) in
         let app = ctxt#mk_app bitwise_and_symbol [v1;iterm] in
@@ -5358,8 +5347,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_mod v1 (ctxt#mk_intlit 2)) app));
         end;
         cont state app
-    | Operation (l, op, ([e1; e2] as es), ts) ->
-      evs state es $. fun state [v1; v2] -> cont state (eval_op l op v1 v2 !ts ass_term) 
+    | WOperation (l, op, ([e1; e2] as es), ts) ->
+      evs state es $. fun state [v1; v2] -> cont state (eval_op l op v1 v2 (Some ts) ass_term) 
     | ArrayLengthExpr (l, e) ->
       ev state e $. fun state t ->
       begin match ass_term with
