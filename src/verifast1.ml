@@ -2609,33 +2609,27 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     (*
      * Docs: see "promote_checkdone"
      *)
-    let promote_numeric_checkdone e1 e2 ts check_e1 check_e2 =
+    let promote_numeric_checkdone e1 e2 check_e1 check_e2 =
       let (w1, t1, _) = check_e1 in
       let (w2, t2, _) = check_e2 in
       match (unfold_inferred_type t1, unfold_inferred_type t2) with
         (IntType, RealType) ->
         let w1 = checkt e1 RealType in
-        ts := Some [RealType; RealType];
         (w1, w2, RealType)
       | (RealType, IntType) ->
         let w2 = checkt e2 RealType in
-        ts := Some [RealType; RealType];
         (w1, w2, RealType)
       | ((UChar | UShortType | UintPtrType), (UChar | UShortType | UintPtrType)) ->
-        ts := Some [UintPtrType;UintPtrType];
         (w1, w2, UintPtrType)
       | ((Char|ShortType|IntType|UChar|UShortType), (Char|ShortType|IntType|UChar|UShortType)) ->
-        ts := Some [IntType; IntType];
         (w1, w2, IntType)
       | ((LongDouble, _)|(_, LongDouble)) ->
         let w1 = if t1 = LongDouble then w1 else checkt e1 LongDouble in
         let w2 = if t2 = LongDouble then w2 else checkt e2 LongDouble in
-        ts := Some [LongDouble; LongDouble];
         (w1, w2, LongDouble)
       | ((Double, _)|(_, Double)) ->
         let w1 = if t1 = Double then w1 else checkt e1 Double in
         let w2 = if t2 = Double then w2 else checkt e2 Double in
-        ts := Some [Double; Double];
         (w1, w2, Double)
       | ((Float, _)|(_, Float)) ->
         let w1 = if t1 = Float then w1 else checkt e1 Float in
@@ -2643,7 +2637,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         (w1, w2, Float)
       | (t1, t2) ->
         let w2 = checkt e2 t1 in
-        ts := Some [t1; t1];
         (w1, w2, t1)
     in
     (*
@@ -2656,16 +2649,16 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
      * If you add support for promoting to unsigned int, be sure to
      * insert a cast to enable overflow/underflow-checking.
      *)
-    let promote_checkdone l e1 e2 ts check_e1 check_e2 =
-      match promote_numeric_checkdone e1 e2 ts check_e1 check_e2 with
+    let promote_checkdone l e1 e2 check_e1 check_e2 =
+      match promote_numeric_checkdone e1 e2 check_e1 check_e2 with
         (w1, w2, (Char | ShortType | IntType | RealType | UintPtrType | PtrType _ | UShortType | UChar | Float | Double | LongDouble)) as result -> result
       | _ -> static_error l "Expression of arithmetic or pointer type expected." None
     in
-    let promote_numeric e1 e2 ts =
-      promote_numeric_checkdone e1 e2 ts (check e1) (check e2)
+    let promote_numeric e1 e2 =
+      promote_numeric_checkdone e1 e2 (check e1) (check e2)
     in
-    let promote l e1 e2 ts =
-      promote_checkdone l e1 e2 ts (check e1) (check e2)
+    let promote l e1 e2 =
+      promote_checkdone l e1 e2 (check e1) (check e2)
     in
     let check_pure_fun_value_call l w t es =
       if es = [] then static_error l "Zero-argument application of pure function value makes no sense." None;
@@ -2816,7 +2809,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | None -> static_error l "No such predicate." None
       end
     | Operation (l, (Eq | Neq as operator), [e1; e2], ts) -> 
-      let (w1, w2, t) = promote_numeric e1 e2 ts in
+      let (w1, w2, t) = promote_numeric e1 e2 in
+      ts := Some [t; t];
       (operation_expr funcmap l t operator w1 w2 ts, boolt, None)
     | Operation (l, (Or | And as operator), [e1; e2], ts) -> 
       let w1 = checkcon e1 in
@@ -2863,7 +2857,8 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       | _ -> static_error l "argument to ~ must be char, short, int or uintptr" None
       end
     | Operation (l, (Le | Lt | Ge | Gt as operator), [e1; e2], ts) -> 
-      let (w1, w2, t) = promote l e1 e2 ts in
+      let (w1, w2, t) = promote l e1 e2 in
+      ts := Some [t; t];
       (operation_expr funcmap l t operator w1 w2 ts, boolt, None)
     | Operation (l, (Add | Sub as operator), [e1; e2], ts) ->
       let (w1, t1, value1) = check e1 in
@@ -2882,7 +2877,8 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
             ts:=Some [t1; IntType];
             (Operation (l, operator, [w1; w2], ts), t1, None)
         | t1, t2 when is_arithmetic_type t1 && is_arithmetic_type t2 ->
-          let (w1, w2, t) = promote_checkdone l e1 e2 ts (w1, t1, value1) (w2, t2, value2) in
+          let (w1, w2, t) = promote_checkdone l e1 e2 (w1, t1, value1) (w2, t2, value2) in
+          ts := Some [t; t];
           let value =
             if t = IntType then
               match (value1, value2, operator) with
@@ -2900,7 +2896,8 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         | _ -> static_error l ("Operand of addition or subtraction must be pointer, integer, char, short, or real number: t1 "^(string_of_type t1)^" t2 "^(string_of_type t2)) None
       end
     | Operation (l, (Mul|Div as operator), [e1; e2], ts) ->
-      let (w1, w2, t) = promote l e1 e2 ts in
+      let (w1, w2, t) = promote l e1 e2 in
+      ts := Some [t; t];
       begin match t with PtrType _ -> static_error l "Operands should be arithmetic expressions, not pointer expressions" None | _ -> () end;
       (operation_expr funcmap l t operator w1 w2 ts, t, None)
     | Operation (l, (ShiftLeft | ShiftRight as op), [e1; e2], ts) ->
@@ -3219,7 +3216,8 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
             (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), t1, None)
           end
         | IntType | RealType | ShortType | Char ->
-          let (w1, w2, t) = promote_checkdone l e1 e2 ts (w1, t1, value1) (w2, t2, value2) in
+          let (w1, w2, t) = promote_checkdone l e1 e2 (w1, t1, value1) (w2, t2, value2) in
+          ts := Some [t; t];
           (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), t1, None)
         | ObjType "java.lang.String" as t when operator = Add ->
           let w2 = checkt e2 t in
