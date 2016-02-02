@@ -155,7 +155,8 @@ and
     True of loc
   | False of loc
   | Null of loc
-  | Var of loc * string * ident_scope option ref  (* An identifier. *)
+  | Var of loc * string
+  | WVar of loc * string * ident_scope
   | Operation of (* voor operaties met bovenstaande operators*)
       loc *
       operator *
@@ -697,7 +698,7 @@ let rec expr_loc e =
     True l -> l
   | False l -> l
   | Null l -> l
-  | Var (l, x, _) -> l
+  | Var (l, x) | WVar (l, x, _) -> l
   | IntLit (l, n, t) -> l
   | RealLit (l, n) -> l
   | StringLit (l, s) -> l
@@ -833,7 +834,7 @@ let expr_fold_open iter state e =
     True l -> state
   | False l -> state
   | Null l -> state
-  | Var (l, x, scope) -> state
+  | Var (l, x) | WVar (l, x, _) -> state
   | Operation (l, op, es) -> iters state es
   | WOperation (l, op, es, ts) -> iters state es
   | SliceExpr (l, p1, p2) -> iterpatopt (iterpatopt state p1) p2

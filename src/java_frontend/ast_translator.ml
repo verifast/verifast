@@ -768,7 +768,7 @@ and translate_expression expr =
   match expr with
     GEN.E_Identifier(Identifier(l, id)) -> 
       let l' = translate_location l in
-      VF.Var(l', id, ref None)
+      VF.Var(l', id)
   | GEN.Access(l, expr, id) ->
       let l' = translate_location l in
       let expr' = translate_expression expr in
@@ -790,7 +790,7 @@ and translate_expression expr =
             let expr' = translate_expression expr in
             begin
               match expr' with
-              | VF.Var(_, "super", _) ->    
+              | VF.Var(_, "super") ->    
                   SuperMethodCall (l', id, exprs')     
               | _ -> VF.CallExpr(l', id, [], [], (VF.LitPat expr')::pats', VF.Instance)
             end

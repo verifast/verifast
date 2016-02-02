@@ -47,9 +47,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | TypedExpr (e, t) -> expr_assigned_variables e
     | WidenedParameterArgument e -> expr_assigned_variables e
     | AddressOf (l, e) -> expr_assigned_variables e
-    | AssignExpr (l, Var (_, x, _), e) -> [x] @ expr_assigned_variables e
+    | AssignExpr (l, (Var (_, x) | WVar (_, x, _)), e) -> [x] @ expr_assigned_variables e
     | AssignExpr (l, e1, e2) -> expr_assigned_variables e1 @ expr_assigned_variables e2
-    | AssignOpExpr (l, Var (_, x, _), op, e, _, _, _) -> [x] @ expr_assigned_variables e
+    | AssignOpExpr (l, (Var (_, x) | WVar (_, x, _)), op, e, _, _, _) -> [x] @ expr_assigned_variables e
     | AssignOpExpr (l, e1, op, e2, _, _, _) -> expr_assigned_variables e1 @ expr_assigned_variables e2
     | InstanceOfExpr(_, e, _) -> expr_assigned_variables e
     | SliceExpr (l, p1, p2) -> flatmap (function Some (LitPat e) -> expr_assigned_variables e | _ -> []) [p1; p2]
@@ -729,7 +729,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     | ObjType _ | ArrayType _ -> LitPat (Null fl)
                     | _ -> DummyPat
                   in
-                  Sep (l, post, WPointsTo (fl, WRead (fl, Var (fl, "this", ref (Some LocalVar)), cn, f, ft, false, ref (Some None), Real), ft, value))
+                  Sep (l, post, WPointsTo (fl, WRead (fl, WVar (fl, "this", LocalVar), cn, f, ft, false, ref (Some None), Real), ft, value))
               end
               super_post
               fds
@@ -973,9 +973,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let rec expr_mark_addr_taken e locals = 
     match e with
-      True _ | False _ | Null _ | Var(_, _, _) | IntLit(_, _, _) | RealLit _ | StringLit(_, _) | ClassLit(_) -> ()
+      True _ | False _ | Null _ | Var _ | WVar _ | IntLit(_, _, _) | RealLit _ | StringLit(_, _) | ClassLit(_) -> ()
     | Operation(_, _, es) | WOperation (_, _, es, _) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
-    | AddressOf(_, Var(_, x, scope)) -> mark_if_local locals x
+    | AddressOf(_, (Var (_, x) | WVar (_, x, _))) -> mark_if_local locals x
     | Read(_, e, _) -> expr_mark_addr_taken e locals
     | ArrayLengthExpr(_, e) -> expr_mark_addr_taken e locals
     | WRead(_, e, _, _, _, _, _, _) -> expr_mark_addr_taken e locals
@@ -1109,7 +1109,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | _ -> []
     in
     match e with
-      True _ | False _ | Null _ | Var(_, _, _) | IntLit(_, _, _) | RealLit _ | StringLit(_, _) | ClassLit(_) -> []
+      True _ | False _ | Null _ | Var _ | WVar _ | IntLit(_, _, _) | RealLit _ | StringLit(_, _) | ClassLit(_) -> []
     | Operation(_, _, es) | WOperation (_, _, es, _) -> List.flatten (List.map (fun e -> expr_address_taken e) es)
     | Read(_, e, _) -> expr_address_taken e
     | ArrayLengthExpr(_, e) -> expr_address_taken e
@@ -1137,7 +1137,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | InstanceOfExpr(_, e, _) -> expr_address_taken e
     | SliceExpr (_, p1, p2) -> flatmap (function Some p -> pat_address_taken p | _ -> []) [p1; p2]
     | SizeofExpr _ -> []
-    | AddressOf(_, Var(_, x, scope)) -> [x]
+    | AddressOf(_, (Var (_, x) | WVar (_, x, _))) -> [x]
     | AddressOf(_, e) -> expr_address_taken e
     | ProverTypeConversion(_, _, e) -> expr_address_taken e
     | ArrayTypeExpr'(_, e) -> expr_address_taken e
@@ -1606,7 +1606,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   module LValues = struct
     type lvalue =
-      Var of loc * string * ident_scope option ref
+      Var of loc * string * ident_scope
     | Field of
         loc
       * termnode option (* target struct instance or object; None if static *)
@@ -1635,7 +1635,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       IntLit _ -> true
     | True _ -> true
     | False _ -> true
-    | Var(_, x, scope)  -> ! scope = (Some LocalVar)
+    | WVar (_, x, scope) -> scope = LocalVar
     | WOperation(_, (Eq | Neq), es, _) -> List.for_all is_safe_expr es
     | IfExpr(_, e1, e2, e3) -> List.for_all is_safe_expr [e1; e2; e3]
     | SizeofExpr(_, _) -> true
@@ -1696,7 +1696,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let lhs_to_lvalue h env lhs cont =
       match lhs with
-        Var (l, x, scope) -> cont h env (LValues.Var (l, x, scope))
+        WVar (l, x, scope) -> cont h env (LValues.Var (l, x, scope))
       | WRead (l, w, fparent, fname, tp, fstatic, fvalue, fghost) ->
         let (_, (_, _, _, _, f_symb, _, _)) = List.assoc (fparent, fname) field_pred_map in
         begin fun cont ->
@@ -1718,7 +1718,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let read_lvalue h env lvalue cont =
       match lvalue with
         LValues.Var (l, x, scope) ->
-        eval_h h env (Var (l, x, scope)) cont
+        eval_h h env (WVar (l, x, scope)) cont
       | LValues.Field (l, target, fparent, fname, tp, fvalue, fghost, f_symb) ->
         begin match target with
           Some target ->
@@ -2191,12 +2191,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         execute_assign_op_expr h env lhs get_values cont
     | AssignExpr (l, lhs, rhs) ->
       lhs_to_lvalue h env lhs $. fun h env lvalue ->
-      let varName = match lhs with Var (_, x, _) -> Some x | _ -> None in
+      let varName = match lhs with WVar (_, x, _) -> Some x | _ -> None in
       let rhsHeapReadOnly =
         match (lhs, rhs) with
-          (Var (_, _, _), WFunCall (_, _, _, _)) -> false (* Is this OK when the variable is a global? *)
-        | (Var (_, _, scope), _) when !scope = Some LocalVar -> false
-        | (WRead (l, Var(_, _, scope), fparent, fname, tp, false, fvalue, fghost), _) when !scope = Some LocalVar -> false
+          (WVar (_, _, _), WFunCall (_, _, _, _)) -> false (* Is this OK when the variable is a global? *)
+        | (WVar (_, _, LocalVar), _) -> false
+        | (WRead (l, WVar (_, _, LocalVar), fparent, fname, tp, false, fvalue, fghost), _) -> false
         | _ -> true
       in
       verify_expr (true, rhsHeapReadOnly) h env varName rhs $. fun h env vrhs ->

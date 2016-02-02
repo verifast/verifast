@@ -1087,7 +1087,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let rec eval e =
                   match e with
                     IntLit (_, n, _) -> n
-                  | Var (l, x, _) ->
+                  | Var (l, x) ->
                     begin match try_assoc2 x enummap1 enummap0 with
                       None -> static_error l "No such enumeration constant" None
                     | Some n -> n
@@ -1754,7 +1754,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           Some ([SwitchStmt (ls, e, cs) as body], _) ->
           let index = 
             match e with
-              Var (lx, x, _) ->
+              Var (lx, x) ->
               begin match try_assoc_i x pmap with
                 None -> static_error lx "Fixpoint function must switch on a parameter." None
               | Some (index, _) -> index
@@ -2678,11 +2678,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       True l -> (e, boolt, None)
     | False l -> (e, boolt, None)
     | Null l -> (e, ObjType "null", None)
-    | Var (l, x, scope) ->
+    | Var (l, x) ->
       begin
       match try_assoc x tenv with
-      | Some(RefType(t)) -> scope := Some LocalVar; (Deref(l, e, ref (Some t)), t, None)
-      | Some t -> scope := Some LocalVar; (e, t, None)
+      | Some(RefType(t)) -> (Deref(l, WVar (l, x, LocalVar), ref (Some t)), t, None)
+      | Some t -> (WVar (l, x, LocalVar), t, None)
       | None ->
       begin fun cont ->
       if language <> Java then cont () else
@@ -2700,7 +2700,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               else
                 None
             in
-            Some (WRead (l, Var (l, "this", ref (Some LocalVar)), fclass, x, ft, fbinding = Static, fvalue, fgh), ft, constant_value)
+            Some (WRead (l, WVar (l, "this", LocalVar), fclass, x, ft, fbinding = Static, fvalue, fgh), ft, constant_value)
           end
         | _ -> None
       in
@@ -2723,25 +2723,25 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               else
                 None
             in
-            Some (WRead (l, Var (l, current_class, ref (Some LocalVar)), fclass, x, ft, true, fvalue, fgh), ft, constant_value)
+            Some (WRead (l, WVar (l, current_class, LocalVar), fclass, x, ft, true, fvalue, fgh), ft, constant_value)
       in
       match field_of_class with
         Some result -> result
       | None ->
       match resolve Real (pn,ilist) l x classmap1 with
-        Some (cn, _) -> scope := Some ClassOrInterfaceNameScope; (e, ClassOrInterfaceName cn, None)
+        Some (cn, _) -> (WVar (l, x, ClassOrInterfaceNameScope), ClassOrInterfaceName cn, None)
       | None ->
       match resolve Real (pn,ilist) l x interfmap1 with
-        Some (cn, _) -> scope := Some ClassOrInterfaceNameScope; (e, ClassOrInterfaceName cn, None)
+        Some (cn, _) -> (WVar (l, x, ClassOrInterfaceNameScope), ClassOrInterfaceName cn, None)
       | None ->
       match resolve Real (pn,ilist) l x classmap0 with
-        Some (cn, _) -> scope := Some ClassOrInterfaceNameScope; (e, ClassOrInterfaceName cn, None)
+        Some (cn, _) -> (WVar (l, x, ClassOrInterfaceNameScope), ClassOrInterfaceName cn, None)
       | None ->
       match resolve Real (pn,ilist) l x interfmap0 with
-        Some (cn, _) -> scope := Some ClassOrInterfaceNameScope; (e, ClassOrInterfaceName cn, None)
+        Some (cn, _) -> (WVar (l, x, ClassOrInterfaceNameScope), ClassOrInterfaceName cn, None)
       | None ->
       if is_package x then begin
-        scope := Some PackageNameScope; (e, PackageName x, None)
+        (WVar (l, x, PackageNameScope), PackageName x, None)
       end else
         cont ()
       end $. fun () ->
@@ -2751,35 +2751,32 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         begin
           let targs = List.map (fun _ -> InferredType (object end, ref None)) tparams in
           let Some tpenv = zip tparams targs in
-          scope := Some PureCtor;
-          (Var (l, x, scope), instantiate_type tpenv t, None)
+          (WVar (l, x, PureCtor), instantiate_type tpenv t, None)
         end
         else
         begin
-          scope := Some PureCtor; (Var (l, x, scope), t, None)
+          (WVar (l, x, PureCtor), t, None)
         end
       | _ ->
       match try_assoc x all_funcnameterms with
         Some fterm when language = CLang ->
-        scope := Some FuncName; (e, PtrType Void, None)
+        (WVar (l, x, FuncName), PtrType Void, None)
       | None ->
       match resolve Ghost (pn,ilist) l x predfammap with
       | Some (x, (_, tparams, arity, ts, _, inputParamCount, inductiveness)) ->
         if arity <> 0 then static_error l "Using a predicate family as a value is not supported." None;
         if tparams <> [] then static_error l "Using a predicate with type parameters as a value is not supported." None;
-        scope := Some PredFamName;
-        (Var (l, x, scope), PredType (tparams, ts, inputParamCount, inductiveness), None)
+        (WVar (l, x, PredFamName), PredType (tparams, ts, inputParamCount, inductiveness), None)
       | None ->
       match try_assoc x enummap with
       | Some i ->
-        scope := Some (EnumElemName i);
-        (e, IntType, None)
+        (WVar (l, x, EnumElemName i), IntType, None)
       | None ->
       match try_assoc' Real (pn, ilist) x globalmap with
-      | Some ((l, tp, symbol, init)) -> scope := Some GlobalName; (e, tp, None)
+      | Some ((_, tp, symbol, init)) -> (WVar (l, x, GlobalName), tp, None)
       | None -> 
       match try_assoc x modulemap with
-      | Some _ when language <> Java -> scope := Some ModuleName; (e, IntType, None)
+      | Some _ when language <> Java -> (WVar (l, x, ModuleName), IntType, None)
       | _ ->
       match resolve Ghost (pn,ilist) l x purefuncmap with
         Some (x, (_, tparams, t, param_names_types, _)) ->
@@ -2791,7 +2788,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let tpenv = List.map (fun x -> (x, InferredType (object end, ref None))) tparams in
             (List.map (instantiate_type tpenv) pts, instantiate_type tpenv t)
         in
-        scope := Some PureFuncName; (Var (l, x, scope), List.fold_right (fun t1 t2 -> PureFuncType (t1, t2)) pts t, None)
+        (WVar (l, x, PureFuncName), List.fold_right (fun t1 t2 -> PureFuncType (t1, t2)) pts t, None)
       | None ->
       if language = Java then
         static_error l ("No such variable, field, class, interface, package, inductive datatype constructor, or predicate: " ^ x) None
@@ -2921,8 +2918,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           PtrType t0 -> tr := Some t0; (Deref (l, w, tr), t0, None)
         | _ -> static_error l "Operand must be pointer." None
       end
-    | AddressOf (l, Var(l2, x, scope)) when List.mem_assoc x tenv ->
-      scope := Some(LocalVar); (Var(l2, x, scope), PtrType(match List.assoc x tenv with RefType(t) -> t | _ -> static_error l "Taking the address of this expression is not supported." None), None)
+    | AddressOf (l, Var(l2, x)) when List.mem_assoc x tenv ->
+      let pointeeType =
+        match List.assoc x tenv with
+          RefType(t) -> t
+        | _ -> static_error l "Taking the address of this expression is not supported." None
+      in
+      (WVar (l2, x, LocalVar), PtrType pointeeType, None)
     | AddressOf (l, e) -> let (w, t, _) = check e in (AddressOf (l, w), PtrType t, None)
     | CallExpr (l, "getClass", [], [], [LitPat target], Instance) when language = Java ->
       let w = checkt target (ObjType "java.lang.Object") in
@@ -2963,7 +2965,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           (WFunPtrCall (l, g, es), rt, None)
         | Some ((PureFuncType (t1, t2) as t)) ->
           if targes <> [] then static_error l "Pure function value does not have type parameters." None;
-          check_pure_fun_value_call l (Var (l, g, ref (Some LocalVar))) t es
+          check_pure_fun_value_call l (WVar (l, g, LocalVar)) t es
         | _ ->
         match (g, es) with
           ("malloc", [SizeofExpr (ls, StructTypeExpr (lt, tn))]) ->
@@ -3022,7 +3024,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         begin fun on_fail ->
           match try_assoc "this" tenv with
             Some (ObjType cn) ->
-            try_qualified_call cn (Var (l, "this", ref (Some LocalVar))::es) es Instance on_fail
+            try_qualified_call cn (Var (l, "this")::es) es Instance on_fail
           | _ ->
           match try_assoc current_class tenv with
             Some (ClassOrInterfaceName tn) ->
@@ -3165,7 +3167,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           end
         | None -> None
       in
-      let args_checked = List.map (fun a -> let (w, tp, _) = check a in (w, tp)) args in 
+      let args_checked = List.map (fun a -> let (w, tp, _) = check a in (TypedExpr (w, tp), tp)) args in 
       let argtps = List.map snd args_checked in
       let wargs = List.map fst args_checked in
       let thistype = try_assoc "this" tenv in
@@ -3177,8 +3179,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | Some {csuper} ->
             begin match get_implemented_instance_method csuper mn argtps with
               None -> static_error l "No matching method." None
-            | Some(((mn', sign), (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, ss, fb, v, is_override, abstract))) -> 
-             (WSuperMethodCall(l, mn, (Var (l, "this", ref (Some LocalVar))) :: wargs, (lm, gh, rt, xmap, pre, post, epost, v)), (match rt with Some(tp) -> tp | _ -> Void), None)
+            | Some(((mn', sign), (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, ss, fb, v, is_override, abstract))) ->
+              let tp = match rt with Some(tp) -> tp | _ -> Void in
+              (WSuperMethodCall (l, mn, Var (l, "this") :: wargs, (lm, gh, rt, xmap, pre, post, epost, v)), tp, None)
             end
         end
       end 
@@ -3427,7 +3430,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         [] -> List.rev fpm_done
       | (g, (l, tparams, rt, pmap, index, body, pn, ilist, fsym))::fpm_todo ->
       match (index, body) with
-        (Some index, SwitchStmt (ls, Var (lx, x, _), cs)) ->
+        (Some index, SwitchStmt (ls, Var (lx, x), cs)) ->
         let (i, targs) =
           match List.assoc x pmap with
             InductiveType (i, targs) -> (i, targs)
@@ -3448,9 +3451,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let (cn, xs) =
               match e with
                 CallExpr (_, cn, _, _, pats, _) ->
-                let xs = List.map (function LitPat (Var (_, x, _)) -> x | _ -> static_error lc "Constructor arguments must be variable names" None) pats in
+                let xs = List.map (function LitPat (Var (_, x)) -> x | _ -> static_error lc "Constructor arguments must be variable names" None) pats in
                 (cn, xs)
-              | Var (_, cn, _) -> (cn, [])
+              | Var (_, cn) -> (cn, [])
               | _ -> static_error lc "Case expression must be constructor pattern" None
             in
             let ts =
@@ -3488,14 +3491,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot call a fixpoint function that appears later in the program text" None;
                   if g' = g then begin
                     match List.nth args index with
-                      Var (l, x, _) when List.mem x components -> ()
+                      WVar (l, x, LocalVar) when List.mem x components -> ()
                     | _ -> static_error l "Inductive argument of recursive call must be switch clause pattern variable." None
                   end;
                   List.iter iter1 args
-                | Var (l, g', scope) when (match !scope with Some PureFuncName -> true | _ -> false) ->
+                | WVar (l, g', PureFuncName) ->
                   if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot mention a fixpoint function that appears later in the program text" None;
                   if g' = g then static_error l "A fixpoint function that mentions itself is not yet supported." None
-                | SwitchExpr (l, Var (_, x, _), cs, def_opt, _) when List.mem x components ->
+                | SwitchExpr (l, WVar (_, x, LocalVar), cs, def_opt, _) when List.mem x components ->
                   List.iter (fun (SwitchExprClause (_, _, pats, e)) -> iter0 (pats @ components) e) cs;
                   (match def_opt with None -> () | Some (l, e) -> iter1 e)
                 | _ -> expr_fold_open iter () e
@@ -3517,7 +3520,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 WPureFunCall (l, g', targs, args) ->
                 if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot call a fixpoint function that appears later in the program text" None;
                 if g' = g then static_error l "Recursive calls are not allowed in a default clause." None
-              | Var (l, g', scope) when (match !scope with Some PureFuncName -> true | _ -> false) ->
+              | WVar (l, g', PureFuncName) ->
                 if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot mention a fixpoint function that appears later in the program text" None;
                 if g' = g then static_error l "A fixpoint function that mentions itself is not yet supported." None
               | _ -> ()
@@ -3531,7 +3534,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             clauses @ wcs
         in
         let wcs = check_cs ctormap [] cs in
-        iter ((g, (l, rt, pmap, Some index, SwitchExpr (ls, Var (lx, x, ref None), wcs, None, ref None), pn, ilist, fsym))::fpm_done) fpm_todo
+        iter ((g, (l, rt, pmap, Some index, SwitchExpr (ls, Var (lx, x), wcs, None, ref None), pn, ilist, fsym))::fpm_done) fpm_todo
       | (None, ReturnStmt (lr, Some e)) ->
         let tenv = pmap in
         let w = check_expr_t (pn,ilist) tparams tenv (Some true) e rt in
@@ -3543,7 +3546,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot call a fixpoint function that appears later in the program text" None;
               if g' = g then static_error l "A fixpoint function whose body is a return statement cannot call itself." None;
               List.iter iter1 args
-            | Var (l, g', scope) when (match !scope with Some PureFuncName -> true | _ -> false) ->
+            | WVar (l, g', PureFuncName) ->
               if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot mention a fixpoint function that appears later in the program text" None;
               if g' = g then static_error l "A fixpoint function whose body is a return statement cannot mention itself." None
             | _ -> expr_fold_open iter () e
@@ -3559,7 +3562,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let check_static_field_initializer e =
     let rec iter e =
       match e with
-        True _ | False _ | Null _ | Var _ | IntLit _ | RealLit _ | StringLit _ | ClassLit _ -> ()
+        True _ | False _ | Null _ | WVar _ | IntLit _ | RealLit _ | StringLit _ | ClassLit _ -> ()
       | WOperation (l, _, es, _) -> List.iter iter es
       | NewArray (l, t, e) -> iter e
       | NewArrayWithInitializer (l, t, es) -> List.iter iter es
@@ -3802,7 +3805,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (_, []) -> static_error l "Too few patterns" None
   
   let get_class_of_this =
-    WMethodCall (dummy_loc, "java.lang.Object", "getClass", [], [Var (dummy_loc, "this", ref (Some LocalVar))], Instance)
+    WMethodCall (dummy_loc, "java.lang.Object", "getClass", [], [WVar (dummy_loc, "this", LocalVar)], Instance)
   
   let get_class_finality tn = (* Returns ExtensibleClass if tn is an interface *)
     match try_assoc tn classmap1 with
@@ -3967,7 +3970,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (wlhs, t) = check_expr (pn,ilist) tparams tenv (Some true) lhs in
       begin match wlhs with
         WRead (_, _, _, _, _, _, _, _) | WReadArray (_, _, _, _) -> ()
-      | Var (_, _, scope) when !scope = Some GlobalName -> ()
+      | WVar (_, _, GlobalName) -> ()
       | Deref (_, _, _) -> ()
       | _ -> static_error l "The left-hand side of a points-to assertion must be a field dereference, a global variable, a pointer variable dereference or an array element expression." None
       end;
@@ -4225,7 +4228,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let rec vars_used e =
     let rec iter state e =
       match e with
-      | Var (l, x, scope) -> begin match !scope with Some LocalVar -> x::state | Some _ -> state end
+      | WVar (l, x, scope) -> begin match scope with LocalVar -> x::state | _ -> state end
       | SwitchExpr (l, e, cs, cdef_opt, _) ->
         vars_used e @
         flatmap
@@ -4249,7 +4252,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let rec fixed_pat_fixed_vars pat =
     match pat with
-      LitPat (Var (_, x, scope)) when !scope = Some LocalVar -> [x]
+      LitPat (WVar (_, x, LocalVar)) -> [x]
     | LitPat _ -> []
     | VarPat (_, x) -> [x]
     | DummyPat -> []
@@ -4275,7 +4278,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin match lhs with
         WRead (lr, et, _, _, _, _, _, _) -> assert_expr_fixed fixed et
       | WReadArray (la, ea, tp, ei) -> assert_expr_fixed fixed ea; assert_expr_fixed fixed ei
-      | Var (_, _, scope) when !scope = Some GlobalName -> ()
+      | WVar (_, _, GlobalName) -> ()
       end;
       assume_pat_fixed fixed pv
     | WPredAsn (l, g, is_global_predref, targs, pats0, pats) ->
@@ -4292,7 +4295,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin match e_opt with None -> () | Some e -> assert_expr_fixed fixed e end;
       assert_expr_fixed fixed index;
       assume_pats_fixed fixed pats
-    | ExprAsn (l, WOperation (_, Eq, [Var (_, x, scope); e2], _)) when !scope = Some LocalVar ->
+    | ExprAsn (l, WOperation (_, Eq, [WVar (_, x, LocalVar); e2], _)) ->
       if not (List.mem x fixed) && expr_is_fixed fixed e2 then
         x::fixed
       else
@@ -4349,8 +4352,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   p#set_inputParamCount (Some 1);
                   ((g, []),
                    ([], l, [], [sn, PtrType (StructType sn); "value", t], symb, Some 1,
-                    let r = WRead (l, Var (l, sn, ref (Some LocalVar)), sn, f, t, false, ref (Some None), Real) in
-                    WPredAsn (l, p, true, [], [], [LitPat (AddressOf (l, r)); LitPat (Var (l, "value", ref (Some LocalVar)))])
+                    let r = WRead (l, WVar (l, sn, LocalVar), sn, f, t, false, ref (Some None), Real) in
+                    WPredAsn (l, p, true, [], [], [LitPat (AddressOf (l, r)); LitPat (WVar (l, "value", LocalVar))])
                    )
                   )
                 in
@@ -4513,7 +4516,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let check_ghost ghostenv l e =
     expr_iter
       begin function
-        Var (l, x, _) -> if List.mem x ghostenv then static_error l "Cannot read a ghost variable in a non-pure context." None
+        Var (l, x) -> if List.mem x ghostenv then static_error l "Cannot read a ghost variable in a non-pure context." None
       | _ -> ()
       end
       e
@@ -5169,11 +5172,9 @@ let check_if_list_is_defined () =
       True l -> cont state ctxt#mk_true
     | False l -> cont state ctxt#mk_false
     | Null l -> cont state (ctxt#mk_intlit 0)
-    | Var (l, x, scope) ->
+    | WVar (l, x, scope) ->
       cont state
       begin
-        if !scope = None then print_endline (string_of_loc l);
-        let (Some scope) = !scope in
         match scope with
           LocalVar -> (try List.assoc x env with Not_found -> assert_false [] env l (Printf.sprintf "Unbound variable '%s'" x) None)
         | PureCtor -> let Some (lg, tparams, t, [], s) = try_assoc x purefuncmap in mk_app s []
@@ -5409,12 +5410,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           (* GCC documentation is not clear about it. *)
           ev state e $. fun state v ->
           cont state (field_address l v fparent fname)
-        | Var (l, x, scope) when !scope = Some GlobalName ->
+        | WVar (l, x, GlobalName) ->
           let Some (l, tp, symbol, init) = try_assoc x globalmap in cont state symbol
         (* The address of a function symbol is commonly used in the
            assignment of function pointers. We tread (&function) in the
            same way as (function), which is what most compilers do: *)
-        | Var (l, x, scope) when !scope = Some FuncName ->
+        | WVar (l, x, FuncName) ->
             cont state (List.assoc x all_funcnameterms)
         | _ -> static_error l "Taking the address of this expression is not supported." None
       end
@@ -5490,7 +5491,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   let _ =
     List.iter
     begin function
-       (g, (l, t, pmap, Some index, SwitchExpr (_, Var (_, x, _), cs, _, _), pn, ilist, fsym)) ->
+       (g, (l, t, pmap, Some index, SwitchExpr (_, Var (_, x), cs, _, _), pn, ilist, fsym)) ->
        let rec index_of_param i x0 ps =
          match ps with
            [] -> assert false

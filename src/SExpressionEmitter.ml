@@ -200,7 +200,7 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
                  ; sexpr_of_operator op ]
                  [ "operands", List (List.map sexpr_of_expr exprs) ]
     | WOperation (loc, op, exprs, types) -> 
-      build_list [ Symbol "expr-op"
+      build_list [ Symbol "expr-wop"
                  ; sexpr_of_operator op ]
                  [ "operands", List (List.map sexpr_of_expr exprs)
                  ; "types", List (List.map sexpr_of_type_ types) ]
@@ -214,13 +214,13 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
     | True loc   -> Symbol "expr-true"
     | False loc  -> Symbol "expr-false"
     | Null loc   -> Symbol "expr-null"
-    | Var (loc, name, scope) ->
-      let scope_kw =
-        match !scope with
-                 | Some scope -> [ "scope", sexpr_of_ident_scope scope ]
-                 | None       -> []
-      in
+    | Var (loc, name) ->
       build_list [ Symbol "expr-var"
+                 ; Symbol name ]
+                 []
+    | WVar (loc, name, scope) ->
+      let scope_kw = [ "scope", sexpr_of_ident_scope scope ] in
+      build_list [ Symbol "expr-wvar"
                  ; Symbol name ]
                  scope_kw
     | Read (loc, expr, str) ->

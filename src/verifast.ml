@@ -120,7 +120,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let fpe = match fpe with Some e -> e | None -> static_error l "Anonymous produce_lemma_function_pointer_chunk syntax not yet supported" None in
       let (lfn, fn) =
         match fpe with
-          Var (lfn, x, _) -> (lfn, x)
+          Var (lfn, x) -> (lfn, x)
         | _ -> static_error (expr_loc fpe) "Function name expected" None
       in
       match resolve Real (pn,ilist) l fn funcmap with
@@ -316,12 +316,12 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         verify_stmt (pn,ilist) blocks_done lblenv tparams boxes false leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont econt
       else
         static_error l "Non-pure statements are not allowed here." None
-    | ExprStmt (CallExpr (l, "produce_limits", [], [], [LitPat (Var (lv, x, _) as e)], Static)) ->
+    | ExprStmt (CallExpr (l, "produce_limits", [], [], [LitPat (Var (lv, x) as e)], Static)) ->
       if not pure then static_error l "This function may be called only from a pure context." None;
       if List.mem x ghostenv then static_error l "The argument for this call must be a non-ghost variable." None;
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       assume_is_of_type l (ev w) tp (fun () -> cont h env)
-    | ExprStmt (CallExpr (l, "produce_instanceof", [], [], [LitPat (Var (lv, x, _) as e)], Static)) when language = Java ->
+    | ExprStmt (CallExpr (l, "produce_instanceof", [], [], [LitPat (Var (lv, x) as e)], Static)) when language = Java ->
       if not pure then static_error l "This function may be called only from a pure context." None;
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       assume_instanceof l (ev w) tp (fun () -> cont h env)
@@ -339,7 +339,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end;
       let (lftn, ftn) =
         match e with
-          Var (lftn, x, _) -> (lftn, x)
+          Var (lftn, x) -> (lftn, x)
         | _ -> static_error (expr_loc e) "Function type expected" None
       in
       begin
@@ -573,7 +573,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       ))
     | SwitchStmt (l, e, cs) ->
       let sizemap = match e with 
-        | Var (_, x, _) ->
+        | Var (_, x) ->
           begin match try_assoc x env with 
             | None -> sizemap 
             | Some t -> (match try_assq t sizemap with None -> (t, (t, 0))::sizemap | Some _ -> sizemap)
@@ -602,9 +602,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let (cn, pats) =
               match e with
                 CallExpr (lcall, cn, [], [], args, Static) ->
-                let pats = List.map (function LitPat (Var (_, x, _)) -> x | _ -> static_error l "Constructor pattern arguments must be variable names" None) args in
+                let pats = List.map (function LitPat (Var (_, x)) -> x | _ -> static_error l "Constructor pattern arguments must be variable names" None) args in
                 (cn, pats)
-              | Var (_, cn, _) -> (cn, [])
+              | Var (_, cn) -> (cn, [])
               | _ -> static_error l "Case expression must be constructor pattern" None
             in
             let pts =
@@ -760,7 +760,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let open_pred_inst0 g =
           let fns = match file_type path with
             Java-> check_classnamelist (pn,ilist) (List.map (function LitPat (ClassLit (l, x))-> (l,x) | _ -> static_error l "Predicate family indices must be class names." None) pats0)
-          | _ -> List.map (function LitPat (Var (l, x, _)) -> x | _ -> static_error l "Predicate family indices must be function names." None) pats0
+          | _ -> List.map (function LitPat (Var (l, x)) -> x | _ -> static_error l "Predicate family indices must be function names." None) pats0
           in
           begin
             let index_term fn =
@@ -1087,7 +1087,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let close_pred_inst0 g =
           let fns = match file_type path with
             Java-> check_classnamelist (pn,ilist) (List.map (function LitPat (ClassLit (l, x)) -> (l, x) | _ -> static_error l "Predicate family indices must be class names." None) pats0)
-          | _ -> List.map (function LitPat (Var (l, x, _)) -> x | _ -> static_error l "Predicate family indices must be function names." None) pats0
+          | _ -> List.map (function LitPat (Var (l, x)) -> x | _ -> static_error l "Predicate family indices must be function names." None) pats0
           in
           begin
           match try_assoc (g, fns) predinstmap with
@@ -2175,7 +2175,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         else begin
           match (input_args, ts) with
             ([], []) -> assert false;
-          | (LitPat(Var(_, x, _)) :: input_args, t :: ts) when List.mem x unbound -> f input_args ts (remove (fun y -> x = y) unbound) ((x, t) :: env)
+          | (LitPat(WVar(_, x, LocalVar)) :: input_args, t :: ts) when List.mem x unbound -> f input_args ts (remove (fun y -> x = y) unbound) ((x, t) :: env)
           | (_ :: input_args, _ :: ts) -> f input_args ts unbound env
         end
       in
@@ -2190,7 +2190,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               match (actuals, pats) with
                 ([], []) ->
                  success_cont (hdone @ hrest) (consumed @ [chunk]) param_env env (fun () -> find_chunk (hdone @ [chunk]) hrest)
-              | (t :: actuals, LitPat(Var(_, x, _)) :: pats) when List.mem_assoc x ps && not (List.mem_assoc x param_env) -> 
+              | (t :: actuals, LitPat(WVar(_, x, LocalVar)) :: pats) when List.mem_assoc x ps && not (List.mem_assoc x param_env) -> 
                   match_pats ((x, t) :: param_env) ((x, t) :: env) actuals pats (nb_inputs - 1)
               | (t :: actuals, LitPat(e) :: pats) -> if nb_inputs <= 0 || (definitely_equal t (eval None env e)) then match_pats param_env env actuals pats (nb_inputs - 1) else find_chunk (hdone @ [chunk]) hrest
               | (t :: actuals, DummyPat :: pats) -> match_pats param_env env actuals pats (nb_inputs - 1)
@@ -2272,13 +2272,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   | (WPredAsn(p_loc, p_ref, true, p_targs, p_args1, p_args2), Sep(_, WPredAsn(_, q_ref, true, q_targs, q_args1, q_args2), conditions))
     when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_,_) -> true | _ -> false) (p_args1 @ p_args2) && 
          List.length p_targs = List.length tparams' && (List.for_all (fun (tp, t) -> match (tp, t) with (x, TypeParam(y)) when x = y -> true | _ -> false) (zip2 tparams' p_targs)) &&
-         p_ref#name = q_ref#name && List.for_all2 (fun (VarPat(_, x)) arg2 -> match arg2 with LitPat(Var(_, y, _)) -> x = y | _ -> false) (p_args1 @ p_args2) (q_args1 @ q_args2) &&
+         p_ref#name = q_ref#name && List.for_all2 (fun (VarPat(_, x)) arg2 -> match arg2 with LitPat(WVar(_, y, _)) -> x = y | _ -> false) (p_args1 @ p_args2) (q_args1 @ q_args2) &&
          List.for_all2 (fun ta1 ta2 -> ta1 = ta2) p_targs q_targs && is_pure_spatial_assertion conditions -> 
       (Hashtbl.add auto_lemmas (p_ref#name) (None, tparams', List.map (fun (VarPat(_,x)) -> x) p_args1, List.map (fun (VarPat(_,x)) -> x) p_args2, pre, post))
-  | (CoefAsn(loc, VarPat(_,f), WPredAsn(p_loc, p_ref, _, p_targs, p_args1, p_args2)), Sep(_, CoefAsn(_, LitPat(Var(_, g, _)), WPredAsn(_, q_ref, true, q_targs, q_args1, q_args2)), conditions)) 
+  | (CoefAsn(loc, VarPat(_,f), WPredAsn(p_loc, p_ref, _, p_targs, p_args1, p_args2)), Sep(_, CoefAsn(_, LitPat(WVar(_, g, _)), WPredAsn(_, q_ref, true, q_targs, q_args1, q_args2)), conditions)) 
     when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_,_) -> true | _ -> false) (p_args1 @ p_args2) && 
          List.length p_targs = List.length tparams' && (List.for_all (fun (tp, t) -> match (tp, t) with (x, TypeParam(y)) when x = y -> true | _ -> false) (zip2 tparams' p_targs)) &&
-         p_ref#name = q_ref#name && List.for_all2 (fun (VarPat(_, x)) arg2 -> match arg2 with LitPat(Var(_, y, _)) -> x = y | _ -> false) (p_args1 @ p_args2) (q_args1 @ q_args2) &&
+         p_ref#name = q_ref#name && List.for_all2 (fun (VarPat(_, x)) arg2 -> match arg2 with LitPat(WVar(_, y, _)) -> x = y | _ -> false) (p_args1 @ p_args2) (q_args1 @ q_args2) &&
          List.for_all2 (fun ta1 ta2 -> ta1 = ta2) p_targs q_targs && f = g && is_pure_spatial_assertion conditions->
       (Hashtbl.add auto_lemmas (p_ref#name) (Some(f), tparams', List.map (fun (VarPat(_,x)) -> x) p_args1, List.map (fun (VarPat(_,x)) -> x) p_args2, pre, post))
   | _ ->
@@ -2286,7 +2286,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let bound_param_vars_pred p_args vars must = 
      List.fold_left (fun (vars, must) arg ->
         match arg with 
-          LitPat(Var(_, x, _)) -> if List.mem_assoc x ps then (x :: vars, must) else (vars, must)
+          LitPat(WVar(_, x, _)) -> if List.mem_assoc x ps then (x :: vars, must) else (vars, must)
         | LitPat(e) ->
           let newmust = List.filter (fun x -> (List.mem_assoc x ps) && not (List.mem x vars)) (vars_used e) in
           (vars, must @ newmust)
@@ -2313,7 +2313,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let Some nb_inputs = q_ref#inputParamCount in
         let q_input_args = take nb_inputs q_args in
         let remaining_unbound = List.fold_left (fun unbound a -> match a with
-            LitPat(Var(_, x, _)) when List.mem x unbound -> remove (fun y -> x = y) unbound
+            LitPat(WVar(_, x, _)) when List.mem x unbound -> remove (fun y -> x = y) unbound
           | _ -> unbound
         ) unbound_ps q_input_args 
         in
@@ -2368,7 +2368,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let (sizemap, indinfo) =
       match ss with
-        [SwitchStmt (_, Var (_, x, _), _)] -> (
+        [SwitchStmt (_, Var (_, x), _)] -> (
         match try_assoc_i x penv with
           None -> ([], None)
         | Some(i, t) -> ([(t, (t, 0))], Some (x, i, List.map (fun (_, t) -> t) penv))
@@ -2456,7 +2456,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let switch_stmt ss env=
     match ss with
-      [SwitchStmt (_, Var (_, x, _), _)] ->
+      [SwitchStmt (_, Var (_, x), _)] ->
         (match try_assoc x env with
            None -> ([], None)
          | Some t -> ([(t, (t, 0))], Some x)

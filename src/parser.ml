@@ -145,7 +145,7 @@ module Scala = struct
       [< '(l, Kwd "true") >] -> True l
     | [< '(l, Kwd "false") >] -> False l
     | [< '(l, Int n) >] -> IntLit (l, n, ref None)
-    | [< '(l, Ident x) >] -> Var (l, x, ref None)
+    | [< '(l, Ident x) >] -> Var (l, x)
   and
     parse_add_expr = parser
       [< e0 = parse_primary_expr; e = parse_add_expr_rest e0 >] -> e
@@ -1006,10 +1006,10 @@ and
 | [< e = parse_expr; s = parser
     [< '(_, Kwd ";") >] ->
     begin match e with
-      AssignExpr (l, Operation (llhs, Mul, [Var (lt, t, _); Var (lx, x, _)]), rhs) -> DeclStmt (l, [l, PtrTypeExpr (llhs, IdentTypeExpr (lt, None, t)), x, Some(rhs), ref false])
+      AssignExpr (l, Operation (llhs, Mul, [Var (lt, t); Var (lx, x)]), rhs) -> DeclStmt (l, [l, PtrTypeExpr (llhs, IdentTypeExpr (lt, None, t)), x, Some(rhs), ref false])
     | _ -> ExprStmt e
     end
-  | [< '(l, Kwd ":") >] -> (match e with Var (_, lbl, _) -> LabelStmt (l, lbl) | _ -> raise (ParseException (l, "Label must be identifier.")))
+  | [< '(l, Kwd ":") >] -> (match e with Var (_, lbl) -> LabelStmt (l, lbl) | _ -> raise (ParseException (l, "Label must be identifier.")))
   | [< '(lx, Ident x); s = parse_decl_stmt_rest (type_expr_of_expr e) lx x >] -> s
   >] -> s
 (* parse variable declarations: *)
@@ -1043,13 +1043,13 @@ and
 and
   packagename_of_read l e =
   match e with
-  | Var(_, x, _) when x <> "this" -> x
+  | Var(_, x) when x <> "this" -> x
   | Read(_, e, f) -> (packagename_of_read l e) ^ "." ^ f
   | e -> raise (ParseException (l, "Type expected."))
 and
   type_expr_of_expr e =
   match e with
-    Var (l, x, _) -> IdentTypeExpr (l, None, x)
+    Var (l, x) -> IdentTypeExpr (l, None, x)
   | CallExpr (l, x, targs, [], [], Static) -> ConstructedTypeExpr (l, x, targs)
   | ArrayTypeExpr' (l, e) -> ArrayTypeExpr (l, type_expr_of_expr e)
   | Read(l, e, name) -> IdentTypeExpr(l, Some(packagename_of_read l e), name)
@@ -1218,8 +1218,8 @@ and
 | [< '(l, Kwd "false") >] -> False l
 | [< '(l, CharToken c) >] -> IntLit(l, big_int_of_int (Char.code c), ref (Some Char))
 | [< '(l, Kwd "null") >] -> Null l
-| [< '(l, Kwd "currentThread") >] -> Var (l, "currentThread", ref None)
-| [< '(l, Kwd "varargs") >] -> Var (l, "varargs", ref None)
+| [< '(l, Kwd "currentThread") >] -> Var (l, "currentThread")
+| [< '(l, Kwd "varargs") >] -> Var (l, "varargs")
 | [< '(l, Kwd "new"); tp = parse_primary_type; res = (parser 
                     [< args0 = parse_patlist >] -> 
                     begin match tp with
@@ -1245,11 +1245,11 @@ and
             '(lf, Ident f);
             e = parser
               [<args0 = parse_patlist; (args0, args) = (parser [< args = parse_patlist >] -> (args0, args) | [< >] -> ([], args0)) >] ->
-              CallExpr (lf, f, [], args0, LitPat(Var(lx,x,ref None))::args,Instance)
-            | [<>] -> Read (ldot, Var(lx,x, ref None), f)
+              CallExpr (lf, f, [], args0, LitPat(Var(lx,x))::args,Instance)
+            | [<>] -> Read (ldot, Var(lx,x), f)
           >]->e 
       >]-> r
-    | [< >] -> Var (lx, x, ref None)
+    | [< >] -> Var (lx, x)
   >] -> ex
 | [< '(l, Int i) >] -> IntLit (l, i, ref None)
 | [< '(l, RealToken i) >] -> RealLit (l, num_of_big_int i)
@@ -1274,8 +1274,8 @@ and
      e = parser
      [< e0 = parse_expr; '(_, Kwd ")");
          e = parser
-           [< '(l', Ident y); e = parse_expr_suffix_rest (Var (l', y, ref (Some LocalVar))) >] -> (match e0 with 
-             Var (lt, x, _) -> CastExpr (l, false, IdentTypeExpr (lt, None, x), e)
+           [< '(l', Ident y); e = parse_expr_suffix_rest (Var (l', y)) >] -> (match e0 with 
+             Var (lt, x) -> CastExpr (l, false, IdentTypeExpr (lt, None, x), e)
            | _ -> raise (ParseException (l, "Type expression of cast expression must be identifier: ")))
          | [<>] -> e0
      >] -> e
@@ -1316,7 +1316,7 @@ and
 and
   expr_to_class_name e =
     match e with
-      Var (_, x, _) -> x
+      Var (_, x) -> x
     | Read (_, e, f) -> expr_to_class_name e ^ "." ^ f
     | _ -> raise (ParseException (expr_loc e, "Class name expected"))
 and
@@ -1371,7 +1371,7 @@ and
 and
   apply_type_args e targs args =
   match e with
-    Var (lx, x, _) -> CallExpr (lx, x, targs, [], args, Static)
+    Var (lx, x) -> CallExpr (lx, x, targs, [], args, Static)
   | CastExpr (lc, trunc, te, e) -> CastExpr (lc, trunc, te, apply_type_args e targs args)
   | Operation (l, Not, [e]) -> Operation (l, Not, [apply_type_args e targs args])
   | Operation (l, BitNot, [e]) -> Operation (l, BitNot, [apply_type_args e targs args])
