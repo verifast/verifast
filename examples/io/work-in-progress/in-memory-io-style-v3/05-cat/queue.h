@@ -5,7 +5,7 @@
 #include <stdlib.h> // abort()
 //@ #include <ghost_cells.gh>
 #include "io.h"
-//@ #include "prophecy.gh"
+#include "prophecy.h"
 //@ #include "ghost_mutex.gh"
 
 
@@ -46,18 +46,10 @@ predicate write1_io(place t1, int family_buf1, predicate() logic_invar, int c, p
   t2 == place_io(t1, c)
   &*& is_can_queue_push(?f, c, family_buf1, logic_invar, t1, t2);
 
-predicate_ctor read2_io_proph_invar(place t1, int family_buf2, predicate() logic_invar)(int c) =
-  // Note that ghost cells allows us to both prove that fysical data remains the same and require that buffer2_contents != nil.
-  [1/4]ghost_cell<list<int> >(family_buf2, ?buffer2_contents)
-  &*& [1/2]token(t1, ?family_io) // [1/2] to allow to prove that family and system remains the same.
-  &*& logic_invar()
-  &*& buffer2_contents != nil
-  &*& c == head(buffer2_contents);
-
 predicate read2_io(place t1, int family2_buf, predicate() logic_invar, int c, place t2) =
   t2 == place_io(t1, c)
   &*& is_can_queue_pop(?f, c, family2_buf, logic_invar, t1, t2)
-  &*& prophecy(c, (read2_io_proph_invar)(t1, family2_buf, logic_invar));
+  &*& prophecy(_, c);
 
 
 typedef lemma void can_queue_push(int c, int family1_buf, predicate() logic_invar, place t1, place t2)();
@@ -75,7 +67,7 @@ typedef lemma void can_queue_pop(int c, int family2_buf, predicate() logic_invar
     [?fm]ghost_mutex(?ghost_mutex, logic_invar)
     &*& [1/2]ghost_cell<list<int> >(family2_buf, ?buffer2_contents)
     &*& buffer2_contents != nil
-    &*& prophecy(c, (read2_io_proph_invar)(t1, family2_buf, logic_invar))
+    &*& c == head(buffer2_contents)
     &*& token(t1, ?family_io);
   ensures
     [fm]ghost_mutex(ghost_mutex, logic_invar)

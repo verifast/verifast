@@ -89,6 +89,9 @@ int queue_pop(struct queue *queue)
   
   //@ open read2_io(t1, family_buf, logic_invar, x, t2);
   //@ assert is_can_queue_pop(?invar_updater, x, family_buf, logic_invar, t1, t2);
+  //@ assert prophecy(?id, _);
+  //@ close prophecy_assign_ghost_arg(id);
+  prophecy_assign(ret);
   //@ invar_updater();
   //@ leak is_can_queue_pop(_, _, _, _, _, _);
 

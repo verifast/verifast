@@ -9,7 +9,7 @@
  
 #include "io.h"
 #include "ids.h"
-#include "prophecy.gh"
+#include "prophecy.h"
 //@ #include "gcf.gh"
 
 #include <malloc.h>
@@ -235,7 +235,7 @@ ensures
 predicate_ctor close_read2_pre(int c, int family_buf, list<int> buffer_contents, place t1, place t2, int family_io, predicate() logic_invar)() =
   [1/2]ghost_cell<list<int> >(family_buf, buffer_contents)
   &*& buffer_contents != nil
-  &*& prophecy(c, (read2_io_proph_invar)(t1, family_buf, logic_invar))
+  &*& c == head(buffer_contents)
   &*& token(t1, family_io);
 predicate_ctor close_read2_post(int c, int family_buf, list<int> buffer_contents, place t1, place t2, int family_io, predicate() logic_invar)() =
   [1/2]ghost_cell<list<int> >(family_buf, tail(buffer_contents))
@@ -246,7 +246,7 @@ nonghost_callers_only
 requires place_id(tstart) == id_reader(family_io_read);
 ensures read2_io(tstart, family_buf2, system_logic_invar(family_buf1, family_buf2, family_io_read, family_io_cat, family_io_write), ?val, place_io(tstart, val)) &*& result == place_io(tstart, val) &*& exists(val);
 {
-  int val = prophecy_create((read2_io_proph_invar)(tstart, family_buf2, system_logic_invar(family_buf1, family_buf2, family_io_read, family_io_cat, family_io_write)));
+  int val = create_prophecy();
   place tstop = place_io(tstart, val);
   predicate() logic_invar = system_logic_invar(family_buf1, family_buf2, family_io_read, family_io_cat, family_io_write);
   produce_lemma_function_pointer_chunk(empty_lemma) : can_queue_pop(val, family_buf2, logic_invar, tstart, tstop)() {
@@ -261,10 +261,6 @@ ensures read2_io(tstart, family_buf2, system_logic_invar(family_buf1, family_buf
       assert system_logic_invar(family_buf1, family_buf2, family_io_read, family_io_cat, family_io_write)();
       
       assert [1/2]ghost_cell<list<int> >(family_buf2, ?buffer2_contents_before);
-    
-      close read2_io_proph_invar(tstart, family_buf2, system_logic_invar(family_buf1, family_buf2, family_io_read, family_io_cat, family_io_write))(head(buffer2_contents_before));
-      prophecy_assign(val, head(buffer2_contents_before));
-      open read2_io_proph_invar(tstart, family_buf2, system_logic_invar(family_buf1, family_buf2, family_io_read, family_io_cat, family_io_write))(head(buffer2_contents_before));
       
       open system_logic_invar(family_buf1, family_buf2, family_io_read, family_io_cat, family_io_write)();
       // Note that we do not have to prove that buffer1_contents remains the same during prophecy_assign, thanks to ghost cells.
