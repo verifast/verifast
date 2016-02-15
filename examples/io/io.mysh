@@ -35,9 +35,9 @@ cd work-in-progress
       ifz3 verifast -prover z3 -c buffer.c
     cd ..
     cd 05-cat
-      verifast_both -c -allow_assume cat.c
-      verifast_both -c queue.c
-      verifast_both -c -disable_overflow_check queue_string.c
+      verifast -prover redux -c -allow_assume main.c
+      verifast -prover redux -c cat.c  getchar.c  main.c  putchar.c  writer.c
+      verifast -prover redux -c -disable_overflow_check reader.c
     cd ..
   cd ..
 cd ..

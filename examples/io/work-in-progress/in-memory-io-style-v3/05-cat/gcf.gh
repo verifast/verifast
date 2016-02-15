@@ -1,31 +1,28 @@
 /**
  * Ghost cell families.
  *
- * Like ghost cells, but instead of mapping an ID to a value, an (ID,key) is mapped to a value.
- * The user can choose the key.
- * 
+ * Like ghost cells (see ghost_cells.h), but instead of mapping an ID to a value,
+ * an (ID,key) is mapped to a value. The user can choose the key.
  */
  
 
 #ifndef GCF_GH
 #define GCF_GH
 
-inductive wrap<t> = wrap(t);
-
 predicate gcf_instance<k,v>(int family, k key; v value);
 
-predicate gcf(int family, list<any> used);
+predicate gcf<k>(int family, list<k> used);
 
-lemma int create_gcf();
+lemma int create_gcf<k>();
   requires true;
-  ensures gcf(result, {});
+  ensures gcf<k>(result, {});
 
 lemma void create_gcf_instance<k,v>(int family, k k, v v);
-  requires gcf(family, ?used) &*& false==mem<any>(wrap(k),used);
-  ensures  gcf(family, cons<any>(wrap(k), used)) &*& gcf_instance<k,v>(family, k, v);
+  requires gcf<k>(family, ?used) &*& false==mem(k,used);
+  ensures  gcf(family, cons(k, used)) &*& gcf_instance<k,v>(family, k, v);
 
-lemma void gcf_update<k,v>(k k, v v);
-  requires gcf_instance<k,v>(?family, k, _);
+lemma void gcf_update<k,v>(int family, k k, v v);
+  requires gcf_instance<k,v>(family, k, _);
   ensures gcf_instance<k,v>(family, k, v);
 
 #endif

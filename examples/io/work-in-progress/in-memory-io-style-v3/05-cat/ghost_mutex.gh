@@ -26,7 +26,6 @@ ensures
   &*& is_ghost_mutex_critical_section_t(critical_section, p, pre, post);
 
 lemma void ghost_mutex_dispose(ghost_mutex mutex);
-nonghost_callers_only
 requires ghost_mutex(mutex, ?p);
 ensures p();
   
