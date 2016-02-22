@@ -208,7 +208,6 @@ let rec translate_asts packages anns reportRange reportShouldFail enforce_annota
 
 and translate_ast package anns report_range_ report_should_fail_ enforce_anns =
   annotations := anns;
-  report_range := report_range_;
   report_should_fail := report_should_fail_;
   enforce_annotations := enforce_anns;
   translate_package package 
