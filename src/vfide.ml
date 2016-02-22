@@ -1345,7 +1345,9 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
                   (fun forest -> postProcess := (fun () -> reportExecutionForest !forest))
               in
               if options.option_use_java_frontend then begin
-                perform_syntax_highlighting tab tab#buffer#start_iter tab#buffer#end_iter
+                !buffers |> List.iter begin fun tab ->
+                  perform_syntax_highlighting tab tab#buffer#start_iter tab#buffer#end_iter
+                end
               end;
               let stats = verify_program prover options path reportRange reportUseSite reportExecutionForest breakpoint targetPath in
               let success =
