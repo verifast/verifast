@@ -10,17 +10,13 @@ inductive iot =
   | iot_split_right(iot parent)
   | iot_join(iot parent1, iot parent2);
 
-#define action_t int
-#define progress_t list<action_t >
-#define init_progress nil
-
-inductive place =
+inductive place<u> =
   | place_none
   | place(
       // dynamic:
-      iot iot, progress_t progress, place parent1, place parent2,
+      iot iot, u progress, place<u> parent1, place<u> parent2,
       // static info:
-      predicate(;) io_invar, int family, real famfract, ghost_mutex mutex
+      predicate() io_invar, int family, real famfract, ghost_mutex mutex, u init_progress
     );
 
 fixpoint real iot_fract(iot iot) {
@@ -32,7 +28,7 @@ fixpoint real iot_fract(iot iot) {
   }
 }
 
-predicate token_without_invar(place t1;) =
+predicate token_without_invar<u>(place<u> t1;) =
   t1 != place_none // handy to know when opening token(t1)
   
   // We know the progress in the io invariant is place_progress(t1).
@@ -43,15 +39,17 @@ predicate token_without_invar(place t1;) =
     [1/2]token_without_invar(place_parent1(t1))
     &*& place_iot(t1) == iot_split_left(place_iot(place_parent1(t1)))
      || place_iot(t1) == iot_split_right(place_iot(place_parent1(t1)))
+    &*& true==place_static_eq(t1, place_parent1(t1))
   : place_parent1(t1) != place_none && place_parent2(t1) != place_none ?
     // This ghost-thread is a join. This child has both parents.
     token_without_invar(place_parent1(t1))
     &*& token_without_invar(place_parent2(t1))
     &*& place_iot(t1) == iot_join(place_iot(place_parent1(t1)), place_iot(place_parent2(t1)))
+    &*& place_static_eq(t1, place_parent1(t1)) && place_static_eq(t1, place_parent2(t1))
   : // No split, no join, thus an initial ghost thread.
     place_iot(t1) == iot_init;
 
-predicate io_invar_wrap(place t1;) =
+predicate io_invar_wrap<u>(place<u> t1;) =
   // We fix to use a ghost mutex. Alternatively we could let place_io_invar(t1)
   // contain the [...]ghost_mutex(...). That would be more generic,
   // but it would cause the can-the-invar-be-updated lemma chunks te deal with
@@ -62,15 +60,15 @@ predicate io_invar_wrap(place t1;) =
   // and written there once instead of copied for every lemma chunk.
   [iot_fract(place_iot(t1)) * place_famfract(t1)]ghost_mutex(place_mutex(t1), place_io_invar(t1));
 
-predicate token(place t1;) =
+predicate token<u>(place<u> t1;) =
   token_without_invar(t1)
   &*& io_invar_wrap(t1);
 
-predicate split(place t1; place t2, place t3) =
-  t2 == place(iot_split_left(place_iot(t1)), init_progress, t1, place_none,
-    place_io_invar(t1), place_family(t1), place_famfract(t1), place_mutex(t1))
-  &*& t3 == place(iot_split_right(place_iot(t1)), init_progress, t1, place_none,
-    place_io_invar(t1), place_family(t1), place_famfract(t1), place_mutex(t1))
+predicate split<u>(place<u> t1; place<u> t2, place<u> t3) =
+  t2 == place(iot_split_left(place_iot(t1)), place_init_progress(t1), t1, place_none,
+    place_io_invar(t1), place_family(t1), place_famfract(t1), place_mutex(t1), place_init_progress(t1))
+  &*& t3 == place(iot_split_right(place_iot(t1)), place_init_progress(t1), t1, place_none,
+    place_io_invar(t1), place_family(t1), place_famfract(t1), place_mutex(t1), place_init_progress(t1))
   &*& [1/2]gcf_instance(place_family(t2), place_iot(t2), place_progress(t2))
   &*& [1/2]gcf_instance(place_family(t3), place_iot(t3), place_progress(t3))
 ;
@@ -81,7 +79,7 @@ lemma void mult_replace(real x1, real x2, real y)
 {
 }
 
-lemma void split(place t1)
+lemma void split<u>(place<u> t1)
   requires split(t1, ?t2, ?t3) &*& token(t1);
   ensures token(t2) &*& token(t3);
 {
@@ -96,13 +94,13 @@ lemma void split(place t1)
   close token(t3);
 }
 
-predicate join(place t1, place t2; place t3) =
+predicate join<u>(place<u> t1, place<u> t2; place<u> t3) =
   place_family(t1) == place_family(t2)
   &*& place_io_invar(t1) == place_io_invar(t2)
   &*& place_mutex(t1) == place_mutex(t2)
   &*& place_famfract(t1) == place_famfract(t2)
-  &*& t3 == place(iot_join(place_iot(t1), place_iot(t2)), init_progress, t1, t2,
-    place_io_invar(t1), place_family(t1), place_famfract(t1), place_mutex(t1))
+  &*& t3 == place(iot_join(place_iot(t1), place_iot(t2)), place_init_progress(t1), t1, t2,
+    place_io_invar(t1), place_family(t1), place_famfract(t1), place_mutex(t1), place_init_progress(t1))
   &*& [1/2]gcf_instance(place_family(t3), place_iot(t3), place_progress(t3));
 
 lemma void times_cte_remains_eq(real x1, real x2, real y)
@@ -111,7 +109,7 @@ lemma void times_cte_remains_eq(real x1, real x2, real y)
 {
 }
 
-lemma void join(place t1)
+lemma void join<u>(place<u> t1)
   requires join(t1, ?t2, ?t3) &*& token(t1) &*& token(t2);
   ensures token(t3);
 {
@@ -137,59 +135,77 @@ ensures true;
 {
 }
 
+
 //---------------- getters of inductive data types ----------------//
-fixpoint int place_family(place t1) {
+fixpoint int place_family<u>(place<u> t1) {
   switch(t1) {
     case place_none: return default_value<int>;
-    case place(iot, progress, parent1, parent2, io_invar, family, famfract, mutex): return family;
+    case place(iot, progress, parent1, parent2, io_invar, family, famfract, mutex, init_progress): return family;
   }
 }
-fixpoint iot place_iot(place t1) {
+fixpoint iot place_iot<u>(place<u> t1) {
   switch(t1) {
     case place_none: return default_value<iot>;
-    case place(iot, progress, parent1, parent2,  io_invar, family, famfract, mutex): return iot;
+    case place(iot, progress, parent1, parent2,  io_invar, family, famfract, mutex, init_progress): return iot;
   }
 }
-fixpoint progress_t place_progress(place t1) {
+fixpoint u place_progress<u>(place<u> t1) {
   switch(t1) {
-    case place_none: return default_value<progress_t >;
-    case place(id, progress, parent1, parent2,  io_invar, family, famfract, mutex): return progress;
+    case place_none: return default_value<u>;
+    case place<u>(id, progress, parent1, parent2,  io_invar, family, famfract, mutex, init_progress): return progress;
   }
 }
-fixpoint place place_parent1(place t1) {
+fixpoint place<u> place_parent1<u>(place<u> t1) {
   switch(t1) {
-    case place_none: return default_value<place>;
-    case place(id, progress, parent1, parent2, io_invar, family, famfract, mutex): return parent1;
+    case place_none: return default_value<place<u> >;
+    case place(id, progress, parent1, parent2, io_invar, family, famfract, mutex, init_progress): return parent1;
   }
 }
-fixpoint place place_parent2(place t1) {
+fixpoint place<u> place_parent2<u>(place<u> t1) {
   switch(t1) {
-    case place_none: return default_value<place>;
-    case place(id, progress, parent1, parent2, io_invar, family, famfract, mutex): return parent2;
+    case place_none: return default_value<place<u> >;
+    case place(id, progress, parent1, parent2, io_invar, family, famfract, mutex, init_progress): return parent2;
   }
 }
-fixpoint predicate(;) place_io_invar(place t1) {
+fixpoint predicate() place_io_invar<u>(place<u> t1) {
   switch(t1) {
     case place_none: return default_value<predicate(;)>;
-    case place(id, progress, parent1, parent2, io_invar, family, famfract, mutex): return io_invar;
+    case place(id, progress, parent1, parent2, io_invar, family, famfract, mutex, init_progress): return io_invar;
   }
 }
-fixpoint real place_famfract(place t1) {
+fixpoint real place_famfract<u>(place<u> t1) {
   switch(t1) {
     case place_none: return default_value<real>;
-    case place(id, progress, parent1, parent2, io_invar, family, famfract, mutex): return famfract;
+    case place(id, progress, parent1, parent2, io_invar, family, famfract, mutex, init_progress): return famfract;
   }
 }
-fixpoint ghost_mutex place_mutex(place t1) {
+fixpoint ghost_mutex place_mutex<u>(place<u> t1) {
   switch(t1) {
     case place_none: return default_value<ghost_mutex>;
-    case place(id, progress, parent1, parent2, io_invar, family, famfract, mutex): return mutex;
+    case place(id, progress, parent1, parent2, io_invar, family, famfract, mutex, init_progress): return mutex;
+  }
+}
+fixpoint u place_init_progress<u>(place<u> t1) {
+  switch(t1) {
+    case place_none: return default_value<u>;
+    case place(id, progress, parent1, parent2, io_invar, family, famfract, mutex, init_progress): return init_progress;
   }
 }
 
+
 //---------------- functions to create values of inductive data types ----------------//
-fixpoint place place_upd_progress(place t1, progress_t new_progress){
-  return place(place_iot(t1), new_progress, place_parent1(t1), place_parent2(t1), place_io_invar(t1), place_family(t1), place_famfract(t1), place_mutex(t1));
+fixpoint place<u> place_upd_progress<u>(place<u> t1, u new_progress){
+  return place(place_iot(t1), new_progress, place_parent1(t1), place_parent2(t1), place_io_invar(t1), place_family(t1), place_famfract(t1), place_mutex(t1), place_init_progress(t1));
 }
+
+//---------------- other functions ----------------//
+fixpoint bool place_static_eq<u>(place<u> t1, place<u> t2) {
+  return
+    place_family(t1) == place_family(t2)
+    && place_io_invar(t1) == place_io_invar(t2)
+    && place_famfract(t1) == place_famfract(t2)
+    && place_mutex(t1) == place_mutex(t2);
+}
+
 
 #endif

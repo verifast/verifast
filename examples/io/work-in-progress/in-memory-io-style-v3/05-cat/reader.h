@@ -5,7 +5,7 @@
 //@ #include <listex.gh>
 
 /*@
-predicate reader_io(int queue_id, place t1, int n, list<int> read, place t2) =
+predicate reader_io<u>(int queue_id, place<u> t1, int n, list<int> read, place<u> t2) =
   n == 0 ?
     t2 == t1
     &*& read == nil
@@ -18,10 +18,10 @@ predicate reader_io(int queue_id, place t1, int n, list<int> read, place t2) =
 //@ fixpoint int plus(int a, int b) { return a + b; }
 
 /** Reads four ints and returns the sum. */
-int reader(struct queue *queue);
+int reader/*@<u> @*/(struct queue *queue);
 /*@ requires
   [?f_queue]queue(?queue_id, queue)
-  &*& reader_io(queue_id, ?t1, 4, ?read, ?t2)
+  &*& reader_io<u>(queue_id, ?t1, 4, ?read, ?t2)
   &*& token(t1);
 @*/
 /*@ ensures

@@ -1,10 +1,10 @@
 #include "reader.h"
 
 /** Reads four ints and returns the sum. */
-int reader(struct queue *queue)
+int reader/*@<u> @*/(struct queue *queue)
 /*@ requires
   [?f_queue]queue(?queue_id, queue)
-  &*& reader_io(queue_id, ?t1, 4, ?read, ?t2)
+  &*& reader_io<u>(queue_id, ?t1, 4, ?read, ?t2)
   &*& token(t1);
 @*/
 /*@ ensures

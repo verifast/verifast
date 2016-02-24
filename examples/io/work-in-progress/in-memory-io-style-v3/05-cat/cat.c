@@ -5,11 +5,11 @@
  * Buffering is allowed.
  */
 
-void cat(struct queue *queue_from, struct queue *queue_to)
+void cat/*@<u> @*/(struct queue *queue_from, struct queue *queue_to)
 /*@ requires
   [?f_queue_from]queue(?queue_id_from, queue_from)
   &*& [?f_queue_to]queue(?queue_id_to, queue_to)
-  &*& cat_io(queue_id_from, queue_id_to, ?t1, ?text, ?t2)
+  &*& cat_io<u>(queue_id_from, queue_id_to, ?t1, ?text, ?t2)
   &*& token(t1);
 @*/
 /*@ ensures

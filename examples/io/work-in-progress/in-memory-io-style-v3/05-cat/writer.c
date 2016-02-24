@@ -2,11 +2,11 @@
 
 
 /** Writes 1,2,3,4. */
-void writer(struct queue *queue)
+void writer/*@<u> @*/(struct queue *queue)
 /*@ requires
   [?f_queue]queue(?queue_id, queue)
-  &*& writer_io(queue_id, ?t1, {1,2,3,4}, ?t2)
-  &*& token(t1);
+  &*& writer_io<u>(queue_id, ?t1, {1,2,3,4}, ?t2)
+  &*& token<u>(t1);
 @*/
 /*@ ensures
   [f_queue]queue(queue_id, queue)

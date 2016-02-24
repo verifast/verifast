@@ -1,23 +1,12 @@
 #include "getchar.h"
 
-/*@
-predicate_ctor close_getchar_pre(int queue_id, place t1, int c, place t2, list<int> buffer_contents)() =
-  [1/2]ghost_cell<list<int> >(queue_id, buffer_contents)
-  &*& c == head(buffer_contents)
-  &*& token_without_invar(t1)
-  &*& is_getchar_invar_updatable(?invar_updater, queue_id, t1, c, t2);
-predicate_ctor close_getchar_post(int queue_id, place t1, int c, place t2, list<int> buffer_contents)() =
-  [1/2]ghost_cell(queue_id, tail(buffer_contents))
-  &*& token_without_invar(t2);
-@*/
-
 /**
  * Reads one integer from the given queue.
  * 
- * This is blocking. If the queue is empty, it waits until it is not empty anymore.
+ * This is blocking. If the queue is empty, this function waits until the queue is not empty anymore.
  */
-int getchar(struct queue *queue)
-//@ requires [?f_queue]queue(?queue_id, queue) &*& getchar_io(queue_id, ?t1, ?c, ?t2) &*& token(t1);
+int getchar/*@<u> @*/(struct queue *queue)
+//@ requires [?f_queue]queue(?queue_id, queue) &*& getchar_io<u>(queue_id, ?t1, ?c, ?t2) &*& token(t1);
 //@ ensures  [f_queue]queue(queue_id, queue) &*& token(t2) &*& result == c;
 {
   //@ open [f_queue]queue(_,_);
@@ -55,31 +44,38 @@ int getchar(struct queue *queue)
   }
   
   //@ open getchar_io(queue_id, t1, c, t2);
-  //@ assert prophecy(?id, _);
-  //@ close prophecy_assign_ghost_arg(id);
   prophecy_assign(ret);
   
-  //@ predicate() pre  = close_getchar_pre( queue_id, t1, c, t2, buffer_contents);
-  //@ predicate() post = close_getchar_post(queue_id, t1, c, t2, buffer_contents);
-  //@ close close_getchar_pre(queue_id, t1, c, t2, buffer_contents)();
   /*@
-  produce_lemma_function_pointer_chunk(empty_lemma) : ghost_mutex_critical_section_t(place_io_invar(t1), pre, post)()
   {
-    open close_getchar_pre( queue_id, t1, c, t2, buffer_contents)();
-    assert is_getchar_invar_updatable(?invar_updater, queue_id, t1, c, t2);
-    close exists(place_io_invar(t1));
-    open token_without_invar(t1);
-    invar_updater();
-    close token_without_invar(t2);
-    close close_getchar_post(queue_id, t1, c, t2, buffer_contents)();
-    leak is_getchar_invar_updatable(_, _, _, _, _);
-    call();
-  }
-  {
-    ghost_mutex_use(place_mutex(t1), pre, post);
+    predicate pre() =
+      [1/2]ghost_cell<list<int> >(queue_id, buffer_contents)
+      &*& c == head(buffer_contents)
+      &*& token_without_invar(t1)
+      &*& is_getchar_invar_updatable(?invar_updater, queue_id, t1, c, t2);
+    predicate post() =
+      [1/2]ghost_cell(queue_id, tail(buffer_contents))
+      &*& token_without_invar(t2);
+    
+    close pre();
+    produce_lemma_function_pointer_chunk(empty_lemma) : ghost_mutex_critical_section_t(place_io_invar(t1), pre, post)()
+    {
+      open pre();
+      assert is_getchar_invar_updatable(?invar_updater, queue_id, t1, c, t2);
+      close exists(place_io_invar(t1));
+      open token_without_invar(t1);
+      invar_updater();
+      close token_without_invar(t2);
+      close post();
+      leak is_getchar_invar_updatable(_, _, _, _, _);
+      call();
+    }
+    {
+      ghost_mutex_use(place_mutex(t1), pre, post);
+    }
+    open post();
   }
   @*/
-  //@ open close_getchar_post(queue_id, t1, c, t2, buffer_contents)();
   
   //@ close queue_invariant(queue_id, queue)();
   mutex_release(queue->mutex);
