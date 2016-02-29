@@ -11,8 +11,7 @@ predicate public_invar(predicate(cryptogram) pub);
 
 lemma void public_invariant_init(predicate(cryptogram) pub);
   requires module(public_invariant_mod, true);
-  ensures  module(public_invariant_mod, false) &*&
-           [_]public_invar(pub);
+  ensures  [_]public_invar(pub);
 
 predicate_ctor public_generated(predicate(cryptogram) pub)(list<char> cs) =
   [_]dummy_foreach(cgs_in_chars(cs), pub) &*&

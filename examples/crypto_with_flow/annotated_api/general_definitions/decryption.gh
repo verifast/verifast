@@ -11,8 +11,7 @@ predicate decryption_key_classifier(fixpoint(int, int, bool, bool) key_classifie
 
 lemma void decryption_init(fixpoint(int, int, bool, bool) key_classifier);
   requires module(decryption_mod, true);
-  ensures  module(decryption_mod, false) &*&
-           [_]decryption_key_classifier(key_classifier);
+  ensures  [_]decryption_key_classifier(key_classifier);
 
 predicate decryption_with_wrong_key(bool symmetric, int principal, structure s,
                                     int p_key, int c_key, list<char> cs_out);

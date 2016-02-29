@@ -507,8 +507,7 @@ void symbolic_attacker(int attacker_id, struct keypair* keypair)
   /*@ requires [?f]world(?pub, ?key_clsfy) &*&
                true == bad(attacker_id) &*&
                principal(attacker_id, ?count) &*&
-               keypair(keypair, attacker_id, ?id, ?info, pub) &*&
-               principals_created(_); @*/
+               keypair(keypair, attacker_id, ?id, ?info, pub); @*/
   //@ ensures false;
 {
   //@ retreive_proof_obligations();
@@ -517,8 +516,7 @@ void symbolic_attacker(int attacker_id, struct keypair* keypair)
     /*@ invariant [f]world(pub, key_clsfy) &*&
                   proof_obligations(pub) &*&
                   principal(attacker_id, _) &*&
-                  keypair(keypair, attacker_id, id, info, pub) &*&
-                  principals_created(_); @*/
+                  keypair(keypair, attacker_id, id, info, pub); @*/
   {
     struct network_status *net_stat = 0;
     int net_choise = random_int_();
@@ -536,7 +534,6 @@ void symbolic_attacker(int attacker_id, struct keypair* keypair)
         case 0:
           //@ open [f]world(pub, key_clsfy);
           //@ assert [_]is_key_classifier(_, pub, key_clsfy);
-          counter = get_polarssl_principals();
           //@ retreive_public_invariant_constraints(key_clsfy);
           //@ duplicate_lemma_function_pointer_chunk(key_classifier);
           /*@ {
@@ -573,11 +570,8 @@ void symbolic_attacker(int attacker_id, struct keypair* keypair)
           @*/
           //@ close polarssl_proof_pred(pub, key_clsfy)();
           attacker();
-          if (*counter >= INT_MAX) abort();
-          (*counter)++;
           //@ open polarssl_proof_pred(pub, key_clsfy)();
           //@ close [f]world(pub, key_clsfy);
-          //@ return_polarssl_principals();
           //@ leak public_invariant_constraints(_, _);
           //@ leak is_public_key_classifier(_, _, _, _);
           //@ leak is_key_classifier(_, _, _);

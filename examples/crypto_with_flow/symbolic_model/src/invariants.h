@@ -16,9 +16,7 @@ predicate world(predicate(item) pub, fixpoint(int, int, bool, bool) key_clsfy) =
   [_]public_invar(polarssl_pub(pub)) &*&
   proof_obligations(pub) &*&
   [_]decryption_key_classifier(key_clsfy) &*&
-  is_key_classifier(_, pub, key_clsfy) &*&
-  module(public_invariant_mod, false) &*&
-  module(decryption_mod, false)
+  is_key_classifier(_, pub, key_clsfy)
 ;
 
 #define POLARSSL_PUB_PAY(ATTACK, NO_ATTACK) \

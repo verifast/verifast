@@ -2,7 +2,7 @@
 
 #include "../general.h"
 
-//@ ATTACKER_PRE_EXTRA(nsl, exists(?attacker) &*& true == bad(attacker))
+//@ ATTACKER_PRE(nsl)
 
 void *attacker_t(void* data) //@ : pthread_run_joinable
   //@ requires pthread_run_pre(attacker_t)(data, ?info);
@@ -12,6 +12,8 @@ void *attacker_t(void* data) //@ : pthread_run_joinable
     //@ invariant pthread_run_pre(attacker_t)(data, info);
   {
     //@ open pthread_run_pre(attacker_t)(data, info);
+    //@ assert principal(?attacker, _);
+    //@ close exists(attacker);
     //@ close nsl_proof_pred();
     attacker();
     //@ open nsl_proof_pred();
@@ -203,7 +205,8 @@ int main(int argc, char **argv) //@ : main_full(main_app)
   //@ close havege_state(&havege_state);
   havege_init(&havege_state);
   //@ close exists(attacker);
-  //@ close pthread_run_pre(attacker_t)(NULL, nil);
+  //@ assume (bad(attacker));
+  //@ close pthread_run_pre(attacker_t)(NULL, some(attacker));
   pthread_create(&a_thread, NULL, &attacker_t, NULL);
   
   int i = 0;

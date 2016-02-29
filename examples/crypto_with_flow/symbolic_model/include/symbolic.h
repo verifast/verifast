@@ -976,8 +976,7 @@ void symbolic_attacker(int attacker_id, struct keypair* keypair);
   /*@ requires [?f]world(?pub, ?key_clsfy) &*&
                true == bad(attacker_id) &*&
                principal(attacker_id, ?count) &*&
-               keypair(keypair, attacker_id, ?id, ?info, pub) &*&
-               principals_created(_); @*/
+               keypair(keypair, attacker_id, ?id, ?info, pub); @*/
   //@ ensures  false;
 
 ///////////////////////////////////////////////////////////////////////////////

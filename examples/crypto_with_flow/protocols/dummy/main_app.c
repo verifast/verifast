@@ -87,7 +87,8 @@ int main(int argc, char **argv) //@ : main_full(main_app)
   //@ int sender = principal_create();
   //@ int receiver = principal_create();
   
-  //@ close pthread_run_pre(attacker_t)(NULL, nil);
+  //@ assume (bad(attacker));
+  //@ close pthread_run_pre(attacker_t)(NULL, some(attacker));
   pthread_create(&a_thread, NULL, &attacker_t, NULL);
   
   //@ close havege_state(&havege_state);

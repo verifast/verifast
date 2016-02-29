@@ -922,13 +922,11 @@ void attacker()
   /*@ requires [_]public_invar(?pub) &*&
                [_]decryption_key_classifier(?classifier) &*&
                public_invariant_constraints(pub, ?proof_pred) &*&
-               proof_pred() &*&
-               is_public_key_classifier(_, pub, classifier, proof_pred) &*&
-               principals(?count); @*/
+               proof_pred() &*& principal(?bad_one, _) &*& true == bad(bad_one) &*&
+               is_public_key_classifier(_, pub, classifier, proof_pred); @*/
   /*@ ensures  public_invariant_constraints(pub, proof_pred) &*&
-               proof_pred() &*&
-               is_public_key_classifier(_, pub, classifier, proof_pred) &*&
-               principals(count + 1); @*/
+               proof_pred() &*& principal(bad_one, _) &*&
+               is_public_key_classifier(_, pub, classifier, proof_pred); @*/
 {
   bool havege_failure = false;
   int server_or_client;
@@ -936,9 +934,7 @@ void attacker()
   int* socket;
   int socket1;
   int socket2;
-  //@ int bad_one = principal_create();
-  //@ assume (bad(bad_one));
-  //@ open principal(bad_one, 0);
+  //@ open principal(bad_one, _);
 
   havege_state havege_state;
   //@ close havege_state(&havege_state);
@@ -1016,7 +1012,6 @@ void attacker()
 
   //@ close public_invariant_constraints(pub, proof_pred);
   //@ close principal(bad_one, _);
-  //@ principal_destroy(bad_one);
   havege_free(&havege_state);
   //@ open havege_state(&havege_state);
   /*@ leak is_principal_with_public_nonces(_, pub,

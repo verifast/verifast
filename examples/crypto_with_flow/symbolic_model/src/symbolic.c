@@ -41,8 +41,6 @@ void exit_crypto_lib()
   key_registry_exit();
   //@ leak proof_obligations(pub);
   //@ leak is_key_classifier(_, _, _);
-  //@ leak module(decryption_mod, false);
-  //@ leak module(public_invariant_mod, false);
   //@ leak module(key_register, false);
   //@ leak module(nonce_item, false);
 }

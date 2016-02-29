@@ -192,7 +192,8 @@ int main(int argc, char **argv) //@ : main_full(main_app)
   //@ assume (bad(attacker));
   //@ close havege_state(&havege_state);
   havege_init(&havege_state);
-  //@ close pthread_run_pre(attacker_t)(NULL, nil);
+  //@ assume (bad(attacker));
+  //@ close pthread_run_pre(attacker_t)(NULL, some(attacker));
   pthread_create(&a_thread, NULL, &attacker_t, NULL);
 
   int i = 0;

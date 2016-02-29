@@ -11,7 +11,7 @@
 
 /*@
 
-#define ATTACKER_PRE_EXTRA(PREFIX, EXTRA) \
+#define ATTACKER_PRE(PREFIX) \
   predicate_family_instance pthread_run_pre(attacker_t)(void *data, any info) = \
   [_]public_invar(PREFIX##_pub) &*& \
   public_invariant_constraints(PREFIX##_pub, PREFIX##_proof_pred) &*& \
@@ -19,10 +19,8 @@
   is_public_key_classifier(_, PREFIX##_pub, \
                               PREFIX##_public_key, \
                               PREFIX##_proof_pred) &*& \
-  principals(_) &*& EXTRA;
-
-#define ATTACKER_PRE(PREFIX) \
-  ATTACKER_PRE_EXTRA(PREFIX, true)
+  info == some(?bad_one) &*& true == bad(bad_one) &*& \
+  principal(bad_one, _);
   
 inductive info =
   | int_value(int v)
