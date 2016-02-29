@@ -20,8 +20,7 @@ void principals_initialize();
 lemma void principals_finalize();
   requires [?f]world(?pub, ?key_clsfy) &*&
            principals_created(?count);
-  ensures  [f]world(pub, key_clsfy) &*&
-           module(principal_ids, false);
+  ensures  [f]world(pub, key_clsfy);
 @*/
 
 int* get_polarssl_principals();

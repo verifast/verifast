@@ -33,7 +33,7 @@ void init_crypto_lib()
 
 void exit_crypto_lib()
   //@ requires world(?pub, ?key_clsfy) &*& principals_created(_);
-  //@ ensures  module(symbolic, false);
+  //@ ensures  true;
 {
   //@ principals_finalize();
   //@ open world(pub, key_clsfy);
@@ -41,7 +41,10 @@ void exit_crypto_lib()
   key_registry_exit();
   //@ leak proof_obligations(pub);
   //@ leak is_key_classifier(_, _, _);
-  //@ close_module();
+  //@ leak module(decryption_mod, false);
+  //@ leak module(public_invariant_mod, false);
+  //@ leak module(key_register, false);
+  //@ leak module(nonce_item, false);
 }
 
 

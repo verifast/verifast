@@ -9,13 +9,11 @@ int counter;
 predicate principals_created(int count) =
   count >= 0 &*&
   integer(&counter, count) &*&
-  principals(count) &*&
-  module(principals_mod, false)
+  principals(count)
 ;
 
 predicate principals_created_temp(int* c) =
-  c == &counter &*&
-  module(principals_mod, false)
+  c == &counter
 ;
 @*/
 
@@ -35,12 +33,11 @@ void principals_initialize()
 lemma void principals_finalize()
   requires [?f]world(?pub, ?key_clsfy) &*&
            principals_created(?count);
-  ensures  [f]world(pub, key_clsfy) &*&
-           module(principal_ids, false);
+  ensures  [f]world(pub, key_clsfy);
 {
   open principals_created(count);
   principals_exit();
-  close_module();
+  leak integer(&counter, _);
 }
 @*/
 

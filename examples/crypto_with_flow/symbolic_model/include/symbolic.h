@@ -53,7 +53,7 @@ void abort_crypto_lib(const char* message);
 
 void exit_crypto_lib();
   //@ requires world(?pub, ?key_clsfy) &*& principals_created(_);
-  //@ ensures  module(symbolic, false);
+  //@ ensures  true;
 
 /*@
 

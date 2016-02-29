@@ -17,8 +17,7 @@ predicate principal(int principal, int generated_values;) =
 
 lemma void principals_init();
   requires module(principals_mod, true);
-  ensures  module(principals_mod, false) &*&
-           principals(0);
+  ensures  principals(0);
 
 lemma void principals_exit();
   requires principals(_);
