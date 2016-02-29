@@ -8,7 +8,6 @@
 
 void sha512(const char *input, size_t ilen, char* output, int is384);
   /*@ requires [?f]crypto_chars(?kind, input, ilen, ?cs_pay) &*&
-                 ilen >= MINIMAL_STRING_SIZE &*&
                chars(output, ?olen, _) &*&
                is384 == 0 && olen == 64 ||
                is384 == 1 && olen == 48; @*/
