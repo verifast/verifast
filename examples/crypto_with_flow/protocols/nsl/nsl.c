@@ -170,13 +170,13 @@ void sender_msg2(int* socket, havege_state* havege_state, pk_context* s_context,
   //@ public_cryptogram(encrypted, enc_cg);
   //@ assert enc_cg == cg_asym_encrypted(?p, ?c, ?pay, ?ent);
   //@ assert u_integer(&size, MSG2_SIZE);
-  /*@ open decryption_post(false, true, ?wrong_key,
+  /*@ open decryption_post(false, true, ?garbage,
                            sender, st, sender, s_id, ?dec_cs); @*/
-  //@ if (wrong_key) public_chars(message, MSG2_SIZE);
-  //@ if (wrong_key) chars_to_crypto_chars(message, MSG2_SIZE);
+  //@ if (garbage) public_chars(message, MSG2_SIZE);
+  //@ if (garbage) chars_to_crypto_chars(message, MSG2_SIZE);
   
   // Interpret the message
-  //@ close check_identifier_ghost_args(false, wrong_key, sender, s_id);
+  //@ close check_identifier_ghost_args(false, garbage, sender, s_id);
   check_identifier(message, recvr);
   //@ assert crypto_chars(secret, message, MSG2_SIZE, dec_cs);
   //@ crypto_chars_split(message, ID_SIZE);
@@ -443,12 +443,12 @@ void receiver_msg1(int* socket, havege_state* havege_state,
     abort();
   //@ assert u_integer(&size, MSG1_SIZE);
   //@ assert crypto_chars(_, message, MSG1_SIZE, ?dec_cs);
-  /*@ open decryption_post(false, true, ?wrong_key,
+  /*@ open decryption_post(false, true, ?garbage,
                            receiver, st, receiver, r_id, dec_cs); @*/
-  //@ if (wrong_key) public_chars(message, MSG1_SIZE);
-  //@ if (wrong_key) chars_to_crypto_chars(message, MSG1_SIZE);
+  //@ if (garbage) public_chars(message, MSG1_SIZE);
+  //@ if (garbage) chars_to_crypto_chars(message, MSG1_SIZE);
                                
-  //@ close check_identifier_ghost_args(false, wrong_key, receiver, r_id);
+  //@ close check_identifier_ghost_args(false, garbage, receiver, r_id);
   check_identifier(message, sender);
   //@ crypto_chars_split(message, ID_SIZE);
   memcpy(s_nonce, (void*) message + ID_SIZE, NONCE_SIZE);
@@ -661,14 +661,14 @@ void receiver_msg3(int* socket, havege_state* havege_state,
   //@ open cryptogram(r_nonce, NONCE_SIZE, r_nonce_cs, r_nonce_cg);
   if (memcmp((void*) message, r_nonce, NONCE_SIZE) != 0) abort();
   //@ assert crypto_chars(?kind, message, NONCE_SIZE, r_nonce_cs);
-  /*@ open decryption_post(false, true, ?wrong_key, 
+  /*@ open decryption_post(false, true, ?garbage, 
                            receiver, st, receiver, r_id, r_nonce_cs); @*/
-  /*@ if (wrong_key)
+  /*@ if (garbage)
       {
         close exists(pair(nil, nil));
         close has_structure(r_nonce_cs, st);
         leak has_structure(r_nonce_cs, st);
-        decryption_with_wrong_key(message, NONCE_SIZE, st);
+        decryption_garbage(message, NONCE_SIZE, st);
         chars_to_secret_crypto_chars(message, NONCE_SIZE);
       }
   @*/

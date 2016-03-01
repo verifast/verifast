@@ -235,7 +235,7 @@ struct item *asymmetric_decryption(struct item *key, struct item *item, char tag
                   output, &olen, MAX_PACKAGE_SIZE,
                   asym_enc_havege_random_stub, random_state) != 0)
       abort_crypto_lib("Decryption failed");
-    /*@ open decryption_post(false, true, ?wrong_key,
+    /*@ open decryption_post(false, true, ?garbage,
                              principal1, s, ?p_key, ?c_key, ?cs_out); @*/
     //@ assert u_integer(&olen, ?size_out);
     //@ pk_release_context_with_key(&context);
@@ -254,7 +254,7 @@ struct item *asymmetric_decryption(struct item *key, struct item *item, char tag
     //@ assert u_integer(&olen, ?olen_val);
     //@ assert crypto_chars(?kind, output, olen_val, cs_out);
     //@ close [f]world(pub, key_clsfy);
-    //@ close check_tag2_ghost_args(false, wrong_key, p_key, c_key);
+    //@ close check_tag2_ghost_args(false, garbage, p_key, c_key);
     check_tag2(output, tag);
     //@ switch(kind){case normal: case secret:}
     memcpy(result->content, output, olen);
@@ -271,7 +271,7 @@ struct item *asymmetric_decryption(struct item *key, struct item *item, char tag
           public_chars(cont, olen_val);
           chars_to_crypto_chars(cont, olen_val);
         }
-        else if (wrong_key)
+        else if (garbage)
         {
           assert true == key_clsfy(principal3, count3, false);
           public_chars(cont, olen_val);
@@ -295,7 +295,7 @@ struct item *asymmetric_decryption(struct item *key, struct item *item, char tag
         }
     @*/
     parse_item(result->content, (int) olen);
-    /*@ if (col || wrong_key)
+    /*@ if (col || garbage)
         {
           retreive_proof_obligations();
           deserialize_item(cs_out, pub);

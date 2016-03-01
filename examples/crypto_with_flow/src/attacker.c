@@ -476,13 +476,13 @@ void attacker_send_decrypted(havege_state *havege_state, void* socket)
       int success = aes_crypt_cfb128(&aes_context, AES_DECRYPT,
                                      (unsigned int) size2, &iv_off, iv,
                                      buffer2, buffer3);
-      /*@ open decryption_post(true, true, ?wrong_key, 
+      /*@ open decryption_post(true, true, ?garbage, 
                                attacker, s, p, c, ?cs_output); @*/
-      /*@ if (wrong_key)
+      /*@ if (garbage)
           {
             assert is_public_key_classifier(?proof, _, _, _);
             proof(cg_key, p, c, true);
-            decryption_with_wrong_key(buffer3, size2, s);
+            decryption_garbage(buffer3, size2, s);
           }
           else if (success == 0)
           {
@@ -762,14 +762,14 @@ void attacker_send_asym_decrypted(havege_state *havege_state, void* socket)
                                buffer3, &osize, MAX_MESSAGE_SIZE,
                                attacker_key_item_havege_random_stub,
                                havege_state);
-      /*@ open decryption_post(false, true, ?wrong_key, 
+      /*@ open decryption_post(false, true, ?garbage, 
                                attacker, s, p, c, ?cs_output); @*/
       //@ assert crypto_chars(?kind, buffer3, ?osize_val, cs_output);
-      /*@ if (wrong_key)
+      /*@ if (garbage)
           {
             assert is_public_key_classifier(?proof, _, _, _);
             proof(cg_key, p, c, false);
-            decryption_with_wrong_key(buffer3, osize_val, s);
+            decryption_garbage(buffer3, osize_val, s);
           }
           else if (success == 0)
           {

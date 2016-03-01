@@ -84,10 +84,10 @@ int aes_crypt_cfb128(aes_context *ctx, int mode, size_t length, size_t *iv_off,
                    crypto_chars(?kind, output, length, ?out_cs) &*&
                    // content of updated iv is correlated with output
                    crypto_chars(join_kinds(iv_kind, kind), iv, 16, _) &*&
-                   decryption_post(true, initial, ?wrong_key, 
+                   decryption_post(true, initial, ?garbage, 
                                    p2, s, p1, c1, out_cs) &*&
-                   wrong_key == (p1 != p3 || c1 != c3) &*&
-                   result != 0 || wrong_key ?
+                   garbage == (p1 != p3 || c1 != c3 || iv_cs != iv_cs3) &*&
+                   result != 0 || garbage ?
                      kind == normal
                    :
                      out_cs == out_cs3 && iv_cs == iv_cs3 &*&

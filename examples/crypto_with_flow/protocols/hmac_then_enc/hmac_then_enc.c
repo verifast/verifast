@@ -211,7 +211,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ public_cryptogram_extract(buffer + 16);
     //@ public_cryptogram(buffer + 16, enc_cg);
     //@ assert crypto_chars(_, buffer_dec, enc_size, ?dec_cs);
-    /*@ open decryption_post(true, true, ?wrong_key,
+    /*@ open decryption_post(true, true, ?garbage,
                              receiver, s, sender, enc_id, dec_cs); @*/
                         
     //@ crypto_chars_split(buffer_dec, enc_size - 64);
@@ -223,13 +223,13 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ crypto_chars_distinct(hmac, (void*) buffer_dec + enc_size - 64);
     if (memcmp(hmac, (void*) buffer_dec + enc_size - 64, 64) != 0) abort();
     memcpy(msg, buffer_dec, (unsigned int) enc_size - 64);
-    /*@ if (wrong_key)
+    /*@ if (garbage)
         { 
           close exists(hmac_cg);
           close exists(pair(pay_cs, nil));          
           close has_structure(dec_cs, s);
           leak has_structure(dec_cs, s);
-          decryption_with_wrong_key(msg, enc_size, s);
+          decryption_garbage(msg, enc_size, s);
         }
     @*/
     /*@ if (!col && !bad(sender) && !bad(receiver))

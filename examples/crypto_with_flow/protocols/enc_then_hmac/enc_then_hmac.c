@@ -204,7 +204,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ open aes_context(&aes_context);
     //@ public_cryptogram_extract(buffer + 16);
     //@ public_cryptogram(buffer + 16, enc_cg);
-    /*@ open decryption_post(true, true, ?wrong_key, 
+    /*@ open decryption_post(true, true, ?garbage, 
                              receiver, s, sender, enc_id, ?dec_cs); @*/
     /*@ if (!col)
         {
@@ -234,7 +234,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
           chars_to_secret_crypto_chars(msg, enc_size);
         }
     @*/  
-    //@ if (wrong_key) decryption_with_wrong_key(msg, enc_size, s);
+    //@ if (garbage) decryption_garbage(msg, enc_size, s);
     //@ open hide_chars((void*) buffer + size, max_size - size, _);
     //@ crypto_chars_to_chars(buffer, 16);
     //@ chars_join(buffer);

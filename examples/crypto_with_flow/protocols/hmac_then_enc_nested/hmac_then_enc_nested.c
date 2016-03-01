@@ -263,13 +263,12 @@ int receiver(char *enc_key1, char *enc_key2, char *hmac_key, char *msg)
     //@ public_cryptogram_extract(buffer + 32);
     //@ public_cryptogram(buffer + 32, enc_cg1);
     //@ assert crypto_chars(?kind1, buffer_dec1, enc_size, ?dec_cs1);
-    /*@ open decryption_post(true, true, ?wrong_key1, 
+    /*@ open decryption_post(true, true, ?garbage1, 
                              receiver, s, sender, enc_id2, dec_cs1); @*/
-    //@ assert wrong_key1 == (p1 != sender || c1 != enc_id2);
-    /*@ if (wrong_key1)
+    /*@ if (garbage1)
         {
           assert kind1 == normal;
-          assert decryption_with_wrong_key(true, receiver, s, 
+          assert decryption_garbage(true, receiver, s, 
                                            sender, enc_id2, dec_cs1);
           close exists(pair(nil,nil));
           close decryption_pre(true, false, receiver, s, dec_cs1);
@@ -309,9 +308,8 @@ int receiver(char *enc_key1, char *enc_key2, char *hmac_key, char *msg)
     //@ open aes_context(&aes_context);
     //@ open cryptogram(buffer_dec1, enc_size, dec_cs1, enc_cg2);
     //@ assert crypto_chars(?kind2, buffer_dec2, enc_size, ?dec_cs2);
-    /*@ open decryption_post(true, _, ?wrong_key2,
+    /*@ open decryption_post(true, _, ?garbage2,
                              receiver, s, sender, enc_id1, dec_cs2); @*/
-    //@ assert wrong_key2 == (p2 != sender || c2 != enc_id1);
     //Verify the hmac
     //@ crypto_chars_split(buffer_dec2, enc_size - 64);
     //@ assert crypto_chars(_, buffer_dec2, enc_size - 64, ?msg_cs);
@@ -323,15 +321,15 @@ int receiver(char *enc_key1, char *enc_key2, char *hmac_key, char *msg)
     //@ assert hmac_cs == hmac_cs2;
     memcpy(msg, buffer_dec2, (unsigned int) enc_size - 64);
 
-    /*@ if (wrong_key1 || wrong_key2)
+    /*@ if (garbage1 || garbage2)
         {
           close exists(hmac_cg);
           close exists(pair(msg_cs, nil));
           close has_structure(dec_cs2, s);
           leak has_structure(dec_cs2, s);
-          decryption_with_wrong_key(msg, enc_size, s);
+          decryption_garbage(msg, enc_size, s);
               
-          if (wrong_key2)
+          if (garbage2)
             chars_to_secret_crypto_chars(msg, enc_size - 64);
         }
     @*/

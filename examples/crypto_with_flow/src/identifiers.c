@@ -51,9 +51,9 @@ void check_identifier(char *array, int id)
                network_permission(?p) &*& 
                [?f]crypto_chars(?kind, array, ?size, ?cs) &*&
                size >= ID_SIZE &*&
-               check_identifier_ghost_args(?sym, ?wrong_key, ?p_key, ?c_key) &*&
-               wrong_key ?
-                 decryption_with_wrong_key(sym, p, ?s, p_key, c_key, cs) &*&
+               check_identifier_ghost_args(?sym, ?garbage, ?p_key, ?c_key) &*&
+               garbage ?
+                 decryption_garbage(sym, p, ?s, p_key, c_key, cs) &*&
                  s == known_value(0, identifier(id))
                :
                  true; @*/
@@ -61,13 +61,13 @@ void check_identifier(char *array, int id)
                [f]crypto_chars(secret, array, size, cs) &*&
                take(ID_SIZE, cs) == identifier(id) &*&
                [_]public_generated(pub)(take(ID_SIZE, cs)) &*&
-               wrong_key ?
+               garbage ?
                  decryption_permission(p) &*& 
                  key_classifier(p_key, c_key, sym) ? true : col
                :
                  true; @*/
 {
-  //@ open check_identifier_ghost_args(sym, wrong_key, p_key, c_key);
+  //@ open check_identifier_ghost_args(sym, garbage, p_key, c_key);
   char temp[ID_SIZE];
   write_identifier(temp, id);
   //@ crypto_chars_to_chars(temp, ID_SIZE);
@@ -76,13 +76,13 @@ void check_identifier(char *array, int id)
   if (memcmp(temp, array, ID_SIZE) != 0) abort();
   //@ public_crypto_chars(temp, ID_SIZE);
   //@ assert [f]crypto_chars(kind, array, size, cs);
-  /*@ if (wrong_key)
+  /*@ if (garbage)
       {
-        assert decryption_with_wrong_key(sym, p, ?s, p_key, c_key, cs);
+        assert decryption_garbage(sym, p, ?s, p_key, c_key, cs);
         close exists(pair(nil, drop(ID_SIZE, cs)));
         close has_structure(cs, s);
         leak has_structure(cs, s);
-        decryption_with_wrong_key(array, size, s);
+        decryption_garbage(array, size, s);
       }
   @*/
   /*@ switch (kind)

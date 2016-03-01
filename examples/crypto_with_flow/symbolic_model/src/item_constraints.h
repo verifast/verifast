@@ -309,7 +309,7 @@ void check_tag(char* buffer, char tag);
                head(cs) == tag &*& cs == full_tag(tag); @*/
 
 /*@
-predicate check_tag2_ghost_args(bool sym, bool wrong_key,
+predicate check_tag2_ghost_args(bool sym, bool garbage,
                                 int p_key, int c_key) = true;
 @*/
 
@@ -319,9 +319,9 @@ void check_tag2(char* buffer, char tag);
                network_permission(?p) &*&
                [?f2]crypto_chars(?kind, buffer, ?size, ?cs) &*&
                size > TAG_LENGTH &*&
-               check_tag2_ghost_args(?sym, ?wrong_key, ?p_key, ?c_key) &*&
-               wrong_key ?
-                 decryption_with_wrong_key(sym, p, ?s, p_key, c_key, cs) &*&
+               check_tag2_ghost_args(?sym, ?garbage, ?p_key, ?c_key) &*&
+               garbage ?
+                 decryption_garbage(sym, p, ?s, p_key, c_key, cs) &*&
                  s == known_value(0, full_tag(tag))
                :
                  true; @*/
@@ -329,7 +329,7 @@ void check_tag2(char* buffer, char tag);
                [f2]crypto_chars(kind, buffer, size, cs) &*&
                head(cs) == tag &*& take(TAG_LENGTH, cs) == full_tag(tag) &*&
                [_]public_generated(pub)(take(TAG_LENGTH, cs)) &*&
-               wrong_key ?
+               garbage ?
                  decryption_permission(p) &*&
                  key_classifier(p_key, c_key, sym) ? true : col
                :

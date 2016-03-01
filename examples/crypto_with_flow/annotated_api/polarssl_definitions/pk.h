@@ -194,14 +194,14 @@ int pk_decrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                 [f2]state_pred(p_rng) &*&
                 crypto_chars(?kind, output, ?olen_val2, ?cs_out) &*&
                 chars(output + olen_val2, osize - olen_val2, _) &*&
-                decryption_post(false, initial, ?wrong_key, 
+                decryption_post(false, initial, ?garbage, 
                                 p1, s, p2, c2, cs_out) &*&
-                wrong_key == (p2 != p3 || c2 != c3) &*&
+                garbage == (p2 != p3 || c2 != c3) &*&
                 result != 0 ?
                   kind == normal
                 : 
                   olen_val == olen_val2 &*&
-                  wrong_key ?
+                  garbage ?
                     kind == normal
                   :
                     kind == secret &*& cs_out == cs_out3; @*/

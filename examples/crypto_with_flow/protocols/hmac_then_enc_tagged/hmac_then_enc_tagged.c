@@ -205,9 +205,9 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ open aes_context(&aes_context);
     //@ public_cryptogram_extract(buffer + 16);
     //@ public_cryptogram(buffer + 16, enc_cg);
-    /*@ open decryption_post(true, true, ?wrong_key,
+    /*@ open decryption_post(true, true, ?garbage,
                              receiver, s, sender, enc_id, ?dec_cs); @*/               
-    //@ close check_identifier_ghost_args(true, wrong_key, sender, enc_id);
+    //@ close check_identifier_ghost_args(true, garbage, sender, enc_id);
     check_identifier(buffer_dec, 0);
     //@ assert crypto_chars(secret, buffer_dec, enc_size, dec_cs);
     
@@ -228,7 +228,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     /*@ if (!col && !bad(sender) && !bad(receiver))
         {
           open [_]hmac_then_enc_tagged_pub(enc_cg);
-          assert !wrong_key;
+          assert !garbage;
           assert [_]hmac_then_enc_tagged_pub_1(?msg_cs, ?hmac_cg2);
           assert length(pay_cs) == length(msg_cs);
           drop_append(ID_SIZE, identifier(0), append(pay_cs, chars_for_cg(hmac_cg)));

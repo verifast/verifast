@@ -514,9 +514,9 @@ void check_tag2(char* buffer, char tag)
                network_permission(?p) &*&
                [?f2]crypto_chars(?kind, buffer, ?size, ?cs) &*&
                size > TAG_LENGTH &*&
-               check_tag2_ghost_args(?sym, ?wrong_key, ?p_key, ?c_key) &*&
-               wrong_key ?
-                 decryption_with_wrong_key(sym, p, ?s, p_key, c_key, cs) &*&
+               check_tag2_ghost_args(?sym, ?garbage, ?p_key, ?c_key) &*&
+               garbage ?
+                 decryption_garbage(sym, p, ?s, p_key, c_key, cs) &*&
                  s == known_value(0, full_tag(tag))
                :
                  true; @*/
@@ -524,13 +524,13 @@ void check_tag2(char* buffer, char tag)
                [f2]crypto_chars(kind, buffer, size, cs) &*&
                head(cs) == tag &*& take(TAG_LENGTH, cs) == full_tag(tag) &*&
                [_]public_generated(pub)(take(TAG_LENGTH, cs)) &*&
-               wrong_key ?
+               garbage ?
                  decryption_permission(p) &*&
                  key_classifier(p_key, c_key, sym) ? true : col
                :
                  true; @*/
 {
-  //@ open check_tag2_ghost_args(sym, wrong_key, p_key, c_key);
+  //@ open check_tag2_ghost_args(sym, garbage, p_key, c_key);
   char tb[TAG_LENGTH];
   write_tag(tb, tag);
   //@ public_chars(tb, TAG_LENGTH);
@@ -541,13 +541,13 @@ void check_tag2(char* buffer, char tag)
   //@ drop_append(TAG_LENGTH, full_tag(tag), drop(TAG_LENGTH, cs));
   //@ head_append(full_tag(tag), drop(TAG_LENGTH, cs));
   //@ assert [f2]crypto_chars(?kind2, buffer, size, cs);
-  /*@ if (wrong_key)
+  /*@ if (garbage)
       {
-        assert decryption_with_wrong_key(sym, p, ?s, p_key, c_key, cs);
+        assert decryption_garbage(sym, p, ?s, p_key, c_key, cs);
         close exists(pair(nil, drop(TAG_LENGTH, cs)));
         close has_structure(cs, s);
         leak has_structure(cs, s);
-        decryption_with_wrong_key(buffer, size, s);
+        decryption_garbage(buffer, size, s);
       }
   @*/
   /*@ switch(kind)

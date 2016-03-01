@@ -29,7 +29,7 @@ void write_identifier(char *array, int id);
                [_]public_generated(pub)(identifier(id)); @*/
 
 /*@
-predicate check_identifier_ghost_args(bool sym, bool wrong_key, 
+predicate check_identifier_ghost_args(bool sym, bool garbage, 
                                       int p_key, int c_key) = true;
 @*/
   
@@ -39,9 +39,9 @@ void check_identifier(char *array, int id);
                network_permission(?p) &*& 
                [?f]crypto_chars(?kind, array, ?size, ?cs) &*&
                size >= ID_SIZE &*&
-               check_identifier_ghost_args(?sym, ?wrong_key, ?p_key, ?c_key) &*&
-               wrong_key ?
-                 decryption_with_wrong_key(sym, p, ?s, p_key, c_key, cs) &*&
+               check_identifier_ghost_args(?sym, ?garbage, ?p_key, ?c_key) &*&
+               garbage ?
+                 decryption_garbage(sym, p, ?s, p_key, c_key, cs) &*&
                  s == known_value(0, identifier(id))
                :
                  true; @*/
@@ -49,7 +49,7 @@ void check_identifier(char *array, int id);
                [f]crypto_chars(secret, array, size, cs) &*&
                take(ID_SIZE, cs) == identifier(id) &*&
                [_]public_generated(pub)(take(ID_SIZE, cs)) &*&
-               wrong_key ?
+               garbage ?
                  decryption_permission(p) &*& 
                  key_classifier(p_key, c_key, sym) ? true : col
                :

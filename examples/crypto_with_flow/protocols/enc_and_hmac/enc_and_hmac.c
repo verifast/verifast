@@ -184,7 +184,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ crypto_chars_to_chars(buffer, 16);
     //@ assert chars(buffer, 16 + enc_size, append(iv_cs, enc_cs));
     //@ assert crypto_chars(_, msg, enc_size, ?dec_cs);
-    /*@ open decryption_post(true, true, ?wrong_key, 
+    /*@ open decryption_post(true, true, ?garbage, 
                              receiver, s, sender, enc_id, dec_cs); @*/
     
     //Verify the hmac
@@ -199,7 +199,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     
     //@ public_crypto_chars(hmac, 64);
     //@ public_crypto_chars(buffer + size - 64, 64);
-    /*@ if (wrong_key)
+    /*@ if (garbage)
         {
           if (!col && !enc_and_hmac_public_key(sender, hmac_id, true))
           {
@@ -210,7 +210,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
             close has_structure(hmac_pay, s);
             leak has_structure(hmac_pay, s);
           }
-          decryption_with_wrong_key(msg, size - 80, s);
+          decryption_garbage(msg, size - 80, s);
           chars_to_secret_crypto_chars(msg, enc_size);
         }
         else

@@ -55,8 +55,8 @@
 # decryption.gh
 .predicate @./decryption.gh#decryption_key_classifier
 .predicate @./decryption.gh#decryption_request
-.predicate @./decryption.gh#decryption_with_wrong_key
+.predicate @./decryption.gh#decryption_garbage
 .predicate @./decryption.gh#has_structure
 .provides ./decryption.gh#decryption_init
-.provides ./decryption.gh#decryption_with_wrong_key
+.provides ./decryption.gh#decryption_garbage
 .produces module decryption_mod

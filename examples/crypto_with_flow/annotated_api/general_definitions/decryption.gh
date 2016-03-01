@@ -13,7 +13,7 @@ lemma void decryption_init(fixpoint(int, int, bool, bool) key_classifier);
   requires module(decryption_mod, true);
   ensures  [_]decryption_key_classifier(key_classifier);
 
-predicate decryption_with_wrong_key(bool symmetric, int principal, structure s,
+predicate decryption_garbage(bool symmetric, int principal, structure s,
                                     int p_key, int c_key, list<char> cs_out);
 
 predicate decryption_pre(bool symmetric, bool initial,
@@ -21,18 +21,18 @@ predicate decryption_pre(bool symmetric, bool initial,
   initial ?
     decryption_permission(principal)
   :
-    decryption_with_wrong_key(symmetric, principal, s, _, _, ?cs_out) &*&
+    decryption_garbage(symmetric, principal, s, _, _, ?cs_out) &*&
     exists(pair(?prefix, ?suffix)) &*&
     cs_out == append(prefix, append(cs_in, suffix))
 ;
 
-predicate decryption_post(bool symmetric, bool initial, bool wrong_key,
+predicate decryption_post(bool symmetric, bool initial, bool garbage,
                           int principal, structure s,
                           int p_key, int c_key, list<char> cs_out) =
-  initial && !wrong_key ?
+  initial && !garbage ?
     decryption_permission(principal)
   :
-    decryption_with_wrong_key(symmetric, principal, s, p_key, c_key, cs_out)
+    decryption_garbage(symmetric, principal, s, p_key, c_key, cs_out)
 ;
 
 inductive structure =
@@ -69,9 +69,9 @@ predicate has_structure(list<char> cs, structure s) =
   }
 ;
 
-lemma void decryption_with_wrong_key(char *array, int n, structure s);
+lemma void decryption_garbage(char *array, int n, structure s);
   requires [_]decryption_key_classifier(?key_classifier) &*&
-           decryption_with_wrong_key(?sym, ?p, s, ?p_k, ?c_k, ?cs) &*&
+           decryption_garbage(?sym, ?p, s, ?p_k, ?c_k, ?cs) &*&
            col || key_classifier(p_k, c_k, sym) ? true : [_]has_structure(cs, s);
   ensures  decryption_permission(p) &*&
            key_classifier(p_k, c_k, sym) ? true : true == col;

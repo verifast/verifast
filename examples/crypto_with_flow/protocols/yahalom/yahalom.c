@@ -73,7 +73,7 @@ void decrypt(char *key, char *msg, unsigned int msg_len, char* output)
              [f2]chars(msg + 16, msg_len, msg_cs) &*&
                msg_len >= MINIMAL_STRING_SIZE &*& msg_len < 1024 &*&
              chars(output, msg_len, _); @*/
-/*@ ensures  decryption_post(true, true, ?wrong_key,
+/*@ ensures  decryption_post(true, true, ?garbage,
                              principal1, s, principal2, id, ?dec_cs) &*&
              random_permission(principal1, _) &*&
              [f1]cryptogram(key, KEY_SIZE, key_cs, key_cg) &*&
@@ -82,8 +82,7 @@ void decrypt(char *key, char *msg, unsigned int msg_len, char* output)
              exists(?enc_cg) &*& [_]yahalom_pub(enc_cg) &*&
              msg_cs == chars_for_cg(enc_cg) &*&
              enc_cg == cg_encrypted(?p, ?c, ?dec_cs2, ?iv_cs2) &*&
-             wrong_key == (p != principal2 || c != id) &*&
-             wrong_key ?
+             garbage ?
                kind == normal
              :
                kind == secret &*&
@@ -153,11 +152,11 @@ void decrypt_id(char *key, char *msg, unsigned int msg_len, char* output, int ta
   //@ close decryption_pre(true, true, principal1, s, msg_cs);
   decrypt(key, msg, msg_len, output);
   //@ open [_]yahalom_pub(?enc_cg);
-  /*@ open decryption_post(true, true, ?wrong_key, principal1, s, 
+  /*@ open decryption_post(true, true, ?garbage, principal1, s, 
                            principal2, id, ?dec_cs); @*/
-  //@ if (col || wrong_key) public_chars(output, msg_len);
-  //@ if (col || wrong_key) chars_to_crypto_chars(output, msg_len);
-  //@ close check_identifier_ghost_args(true, wrong_key, principal2, id);
+  //@ if (col || garbage) public_chars(output, msg_len);
+  //@ if (col || garbage) chars_to_crypto_chars(output, msg_len);
+  //@ close check_identifier_ghost_args(true, garbage, principal2, id);
   check_identifier(output, tag);
   //@ assert crypto_chars(secret, output, msg_len, dec_cs);
   //@ close principal(principal1, _);
@@ -1003,7 +1002,7 @@ void receiver(int server, int sender, int receiver,
     //@ assert chars(msg + 2 * 16 + size1, size2, ?msg_cs);
     //@ close decryption_pre(true, true, receiver, st, msg_cs);
     decrypt(generated_key, msg + 16 + size1, (unsigned int) size2, dec2);
-    /*@ open decryption_post(true, true, ?wrong_key,
+    /*@ open decryption_post(true, true, ?garbage,
                              receiver, st, p4, c4, _); @*/
     //@ open exists(?enc_cg2);
     //@ assert enc_cg2 == cg_encrypted(?p3, ?c3, ?dec_cs3, ?iv_cs3);
@@ -1011,12 +1010,12 @@ void receiver(int server, int sender, int receiver,
     if (memcmp(dec2, NB, NONCE_SIZE) != 0) abort();
     //@ assert crypto_chars(_, dec2, NONCE_SIZE, cs_NB);
 
-    /*@ if (wrong_key)
+    /*@ if (garbage)
         {
           close exists(pair(nil, nil));
           close has_structure(cs_NB, st);
           leak has_structure(cs_NB, st);
-          decryption_with_wrong_key(dec2, NONCE_SIZE, st);
+          decryption_garbage(dec2, NONCE_SIZE, st);
           chars_to_secret_crypto_chars(dec2, NONCE_SIZE);
         }
     @*/
