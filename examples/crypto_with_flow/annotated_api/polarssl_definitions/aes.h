@@ -90,8 +90,7 @@ int aes_crypt_cfb128(aes_context *ctx, int mode, size_t length, size_t *iv_off,
                    result != 0 || garbage ?
                      kind == normal
                    :
-                     out_cs == out_cs3 && iv_cs == iv_cs3 &*&
-                     kind == secret
+                     kind == secret && out_cs == out_cs3
                  )
                ); @*/
   //@ ensures  true;
