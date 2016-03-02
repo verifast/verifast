@@ -28,7 +28,7 @@ predicate world(predicate(item) pub, fixpoint(int, int, bool, bool) key_clsfy) =
   )
 
 //Parser does not accept deeper nested macro in this proof
-fixpoint int gcm_ent_size() { return GCM_ENT_SIZE; }
+fixpoint int gcm_iv_size() { return GCM_IV_SIZE; }
 predicate_ctor polarssl_pub(predicate(item) pub)
                            (cryptogram cg) =
   switch (cg)
@@ -49,12 +49,12 @@ predicate_ctor polarssl_pub(predicate(item) pub)
                [_]pub(hmac_item(p0, c0, some(pay0))));
     case cg_encrypted(p0, c0, cs0, iv0):
       return [_]public_generated(polarssl_pub(pub))(cs0);
-    case cg_auth_encrypted(p0, c0, cs0, mac0, iv0):
+    case cg_auth_encrypted(p0, c0, cs0, iv0):
       return POLARSSL_PUB_PAY(
                [_]pub(symmetric_key_item(p0, c0)),
                [_]exists<list<char> >(?ent1) &*&
                [_]pub(symmetric_encrypted_item(p0, c0, some(pay0), ent1)) &*&
-               drop(gcm_ent_size, ent1) == cons(length(mac0), append(mac0, iv0))
+               drop(gcm_iv_size, ent1) == iv0
              );
     case cg_asym_encrypted(p0, c0, cs0, ent0):
       return POLARSSL_PUB_PAY(

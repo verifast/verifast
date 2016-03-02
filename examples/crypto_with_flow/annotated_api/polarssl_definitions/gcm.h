@@ -58,7 +58,7 @@ int gcm_crypt_and_tag(gcm_context *ctx, int mode, size_t length,
                  iv_len == 16 &*& iv_cs == chars_for_cg(cg_nonce(p2, c2)) &*&
                // no additional data supported yet
                add == NULL &*& add_len == 0 &*&
-               [?f]crypto_chars(?kind, input, length, ?in_cs) &*&
+               [?f]crypto_chars(?in_kind, input, length, ?in_cs) &*&
                  length >= MINIMAL_STRING_SIZE &*&
                // only tags of 16 bytes for simplicity
                chars(tag, tag_len, _) &*& tag_len == 16 &*&
@@ -67,16 +67,19 @@ int gcm_crypt_and_tag(gcm_context *ctx, int mode, size_t length,
                // this increment enforces a fresh IV on each invocation
                random_permission(p2, c2 + 1) &*&
                // content of updated iv is correlated with input
-               crypto_chars(join_kinds(iv_kind, kind), iv, iv_len, _) &*&
-               [f]crypto_chars(kind, input, length, in_cs) &*&
-               chars(tag, tag_len, ?tag_cs) &*&
+               crypto_chars(join_kinds(iv_kind, in_kind), iv, iv_len, _) &*&
+               [f]crypto_chars(in_kind, input, length, in_cs) &*&
+               crypto_chars(?out_kind, tag, tag_len, ?tag_cs) &*&
+               crypto_chars(out_kind, output, length, ?out_cs) &*&
                result != 0 ?
-                 // encryption failed
-                 chars(output, length, _)
+                 // encryption not successful
+                 out_kind == join_kinds(iv_kind, in_kind)
                :
                  // encryption was successful
-                 cryptogram(output, length, _, ?cg) &*&
-                 cg == cg_auth_encrypted(p1, c1, in_cs, tag_cs, iv_cs); @*/
+                 out_kind == secret &*&
+                 exists(?enc_cg) &*& cg_is_generated(enc_cg) &&
+                 append(tag_cs, out_cs) == chars_for_cg(enc_cg) &*&
+                 enc_cg == cg_auth_encrypted(p1, c1, in_cs, iv_cs); @*/
 
 int gcm_auth_decrypt(gcm_context *ctx, size_t length,
                      const char *iv, size_t iv_len,
@@ -88,24 +91,24 @@ int gcm_auth_decrypt(gcm_context *ctx, size_t length,
                crypto_chars(?iv_kind, iv, iv_len, ?iv_cs) &*& iv_len == 16 &*&
                // no additional data supported yet
                add == NULL &*& add_len == 0 &*&
-               [?f]cryptogram(input, length, ?in_cs, ?in_cg) &*&
-                  in_cg == cg_auth_encrypted(?p2, ?c2, ?out_cs2,
-                                             ?tag_cs2, ?iv_cs2) &*&
-                  length >= MINIMAL_STRING_SIZE &*&
-               // only tags of 16 bytes for simplicity
-               chars(tag, tag_len, ?tag_cs) &*& tag_len == 16 &*&
+               [?f1]crypto_chars(?in_kind, tag, tag_len, ?tag_cs) &*&
+                 tag_len == 16 &*&
+               [?f2]crypto_chars(in_kind, input, length, ?in_cs) &*&
+               exists(?in_cg) &*&
+               append(tag_cs, in_cs) == chars_for_cg(in_cg) &*&
+               in_cg == cg_auth_encrypted(?p2, ?c2, ?out_cs2, ?iv_cs2) &*&
                chars(output, length, _); @*/
   /*@ ensures  gcm_context_initialized(ctx, p1, c1) &*&
-               [f]cryptogram(input, length, in_cs, in_cg) &*&
-               chars(tag, tag_len, _) &*&
-               crypto_chars(?kind, output, length, ?out_cs) &*&
+               [f1]crypto_chars(in_kind, tag, tag_len, tag_cs) &*&
+               [f2]crypto_chars(in_kind, input, length, in_cs) &*&
+               crypto_chars(?out_kind, output, length, ?out_cs) &*&
                // content of updated iv is correlated with output
-               crypto_chars(join_kinds(iv_kind, kind), iv, iv_len, _) &*&
+               crypto_chars(join_kinds(iv_kind, out_kind), iv, iv_len, _) &*&
                result != 0 ?
-                 kind == normal
+                 out_kind == join_kinds(iv_kind, in_kind)
                :
-                 kind == secret &*&
-                 col || (p1 == p2 && c1 == c2 && tag_cs == tag_cs2 &&
-                         iv_cs == iv_cs2 && out_cs == out_cs2); @*/
+                 out_kind == secret &*&
+                 col || (p1 == p2 && c1 == c2 && iv_cs == iv_cs2 &&
+                         out_cs == out_cs2); @*/
 
 #endif

@@ -162,29 +162,21 @@ lemma void item_constraints_deterministic(list<char> cs1, list<char> cs2, item i
           {
             open [_]item_constraints(i, cs1, pub);
             open [_]ic_parts(i)(?tag_cs, ?cont1);
-            open [_]ic_sym_enc(i)(?mac1, ?iv1, ?cg_cs1);
+            open [_]ic_sym_enc(i)(?iv1, ?cg_cs1);
             open   [_]exists(?cg1);
             assert [_]item_constraints(pay, ?cs_pay1, pub);
             open [_]item_constraints(i, cs2, pub);
             open [_]ic_parts(i)(tag_cs, ?cont2);
-            open [_]ic_sym_enc(i)(?mac2, ?iv2, ?cg_cs2);
+            open [_]ic_sym_enc(i)(?iv2, ?cg_cs2);
             open   [_]exists(?cg2);
             assert [_]item_constraints(pay, ?cs_pay2, pub);
-            assert drop(GCM_ENT_SIZE, ent0) ==
-              cons(length(mac1), append(mac1, iv1));
-            assert drop(GCM_ENT_SIZE, ent0) ==
-              cons(length(mac2), append(mac2, iv2));
-            assert length(mac1) == length(mac2);
-            take_append(length(mac1), mac1, iv1);
-            take_append(length(mac2), mac2, iv2);
-            drop_append(length(mac1), mac1, iv1);
-            drop_append(length(mac2), mac2, iv2);
-            assert mac1 == mac2;
+            assert drop(GCM_IV_SIZE, ent0) == iv1;
+            assert drop(GCM_IV_SIZE, ent0) == iv2;
             assert iv1 == iv2;
             assert cs1 == append(tag_cs, cont1);
             assert cs2 == append(tag_cs, cont2);
-            append_take_drop_n(cont1, GCM_ENT_SIZE);
-            append_take_drop_n(cont2, GCM_ENT_SIZE);
+            append_take_drop_n(cont1, GCM_IV_SIZE);
+            append_take_drop_n(cont2, GCM_IV_SIZE);
             item_constraints_deterministic(cs_pay1, cs_pay2, pay);
             assert cs_pay1 == cs_pay2;
             assert cg_cs1 == chars_for_cg(cg1);
@@ -272,30 +264,16 @@ fixpoint int tag_symmetric_enc() { return TAG_SYMMETRIC_ENC; }
 #define ITEM_CONSTRAINTS_SYM_ENC(REST) \
   assert i1 == symmetric_encrypted_item(p1, c1, pay1, ent1); \
   assert i2 == symmetric_encrypted_item(p2, c2, pay2, ent2); \
-  assert [_]ic_sym_enc(i1)(?mac1, ?iv1, ?cs_cg1); \
-  assert [_]ic_sym_enc(i2)(?mac2, ?iv2, ?cs_cg2); \
-  list<char> ent1_1 = take(gcm_ent_size, ent1); \
-  list<char> ent1_2 = drop(gcm_ent_size, ent1); \
-  list<char> cs_mac1 = take(gcm_ent_size, ent1_1); \
-  list<char> cs_iv1 = drop(gcm_ent_size, ent1_1); \
-  append_take_drop_n(ent1_1, gcm_ent_size); \
-  assert ent1_1 == append(cs_mac1, cs_iv1); \
-  assert ent1_2 == cons(length(mac1), append(mac1, iv1)); \
-  assert ent1 == append(ent1_1, ent1_2); \
-  list<char> ent2_1 = take(gcm_ent_size, ent2); \
-  list<char> ent2_2 = drop(gcm_ent_size, ent2); \
-  list<char> cs_mac2 = take(gcm_ent_size, ent2_1); \
-  list<char> cs_iv2 = drop(gcm_ent_size, ent2_1); \
-  append_take_drop_n(ent2_1, gcm_ent_size); \
-  assert ent2_1 == append(cs_mac2, cs_iv2); \
-  assert ent2_2 == cons(length(mac2), append(mac2, iv2)); \
-  assert ent2 == append(ent2_1, ent2_2); \
-  assert cs == append(full_tag(tag_symmetric_enc), cs1); \
-  list<char> cs_cg = drop(gcm_ent_size, cs1); \
-  append_take_drop_n(cs1, gcm_ent_size); \
-  assert cs1 == append(ent1_1, cs_cg); \
-  assert cs1 == append(ent2_1, cs_cg); \
-  REST
+  assert [_]ic_sym_enc(i1)(?iv1, ?cs_cg1); \
+  assert [_]ic_sym_enc(i2)(?iv2, ?cs_cg2); \
+  assert iv1 == drop(gcm_iv_size, ent1); \
+  assert iv2 == drop(gcm_iv_size, ent2); \
+  list<char> cs_iv1 = take(gcm_iv_size, ent1); \
+  list<char> cs_iv2 = take(gcm_iv_size, ent2); \
+  assert cs_iv1 == cs_iv1; \
+  drop_append(gcm_iv_size, cs_iv1, iv1); \
+  drop_append(gcm_iv_size, cs_iv2, iv2); \
+  REST;
 
 lemma void item_constraints_injective(item i1, item i2, list<char> cs)
   requires [_]item_constraints(i1, cs, ?pub) &*&
@@ -403,8 +381,8 @@ lemma void item_constraints_injective(item i1, item i2, list<char> cs)
       ITEM_CONSTRAINTS_INJECTIVE(TAG_SYMMETRIC_ENC,
         ITEM_CONSTRAINTS_INJECTIVE_PAYLOAD(
           ITEM_CONSTRAINTS_SYM_ENC(
-            cryptogram cg1 = cg_auth_encrypted(p1, c1, cs_pay1, mac1, iv1);
-            cryptogram cg2 = cg_auth_encrypted(p2, c2, cs_pay2, mac2, iv2);
+            cryptogram cg1 = cg_auth_encrypted(p1, c1, cs_pay1, iv1);
+            cryptogram cg2 = cg_auth_encrypted(p2, c2, cs_pay2, iv2);
             chars_for_cg_inj(cg1, cg2);
           )
         )

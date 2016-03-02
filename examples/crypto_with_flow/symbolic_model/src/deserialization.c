@@ -184,23 +184,20 @@ switch(length_bound) \
     } \
     else if (head(cs) == TAG_SYMMETRIC_ENC) \
     { \
-      list<char> ent1 = take(GCM_ENT_SIZE, cs_cont); \
-      list<char> cs_cg = drop(GCM_ENT_SIZE, cs_cont); \
-      take_append(GCM_ENT_SIZE, ent1, cs_cg); \
-      drop_append(GCM_ENT_SIZE, ent1, cs_cg); \
-      public_generated_split(polarssl_pub(pub), cs_cont, GCM_ENT_SIZE); \
-      cgs_in_chars_upper_bound_split(cs_cont, cgs, GCM_ENT_SIZE); \
+      list<char> ent1 = take(GCM_IV_SIZE, cs_cont); \
+      list<char> cs_cg = drop(GCM_IV_SIZE, cs_cont); \
+      take_append(GCM_IV_SIZE, ent1, cs_cg); \
+      drop_append(GCM_IV_SIZE, ent1, cs_cg); \
+      public_generated_split(polarssl_pub(pub), cs_cont, GCM_IV_SIZE); \
+      cgs_in_chars_upper_bound_split(cs_cont, cgs, GCM_IV_SIZE); \
       \
       DESERIALIZE_ITEM_PROOF_CG(tag_auth_encrypted, \
-                                cg_auth_encrypted(?p0, ?c0, ?cs_pay, ?mac0, ?iv0)) \
-      list<char> ent2 = cons(length(mac0), append(mac0, iv0)); \
-      take_append(length(mac0), mac0, iv0); \
-      drop_append(length(mac0), mac0, iv0); \
-      list<char> ent3 = append(ent1, ent2); \
-      take_append(GCM_ENT_SIZE, ent1, ent2); \
-      drop_append(GCM_ENT_SIZE, ent1, ent2); \
-      DESERIALIZE_ITEM_PROOF_PAY(symmetric_encrypted_item(p0, c0, some(pay), ent3), \
-                                 symmetric_encrypted_item(p0, c0, none, ent3), \
+                                cg_auth_encrypted(?p0, ?c0, ?cs_pay, ?iv0)) \
+      list<char> ent2 = append(ent1, iv0); \
+      take_append(GCM_IV_SIZE, ent1, iv0); \
+      drop_append(GCM_IV_SIZE, ent1, iv0); \
+      DESERIALIZE_ITEM_PROOF_PAY(symmetric_encrypted_item(p0, c0, some(pay), ent2), \
+                                 symmetric_encrypted_item(p0, c0, none, ent2), \
                                  \
                                  assert is_public_symmetric_encrypted(?proof, pub); \
                                  proof(i);, \
@@ -209,10 +206,10 @@ switch(length_bound) \
                                  item i_orig = symmetric_encrypted_item(p0, c0, some(pay), ent); \
                                  assert [_]pub(i_orig); \
                                  assert is_public_symmetric_encrypted_entropy(?proof, pub); \
-                                 i = symmetric_encrypted_item(p0, c0, some(pay), ent3); \
-                                 proof(i_orig, ent3); \
+                                 i = symmetric_encrypted_item(p0, c0, some(pay), ent2); \
+                                 proof(i_orig, ent2); \
                                ) \
-      close ic_sym_enc(i)(mac0, iv0, cs_cg); \
+      close ic_sym_enc(i)(iv0, cs_cg); \
     } \
     else if (head(cs) == TAG_ASYMMETRIC_ENC) \
     { \
@@ -505,7 +502,7 @@ void parse_item(char* buffer, int size)
       //@ assert true == well_formed(cs, nat_length(cs));
       break;
     case TAG_SYMMETRIC_ENC:
-      if (size < TAG_LENGTH + GCM_ENT_SIZE)
+      if (size < TAG_LENGTH + GCM_IV_SIZE)
         abort_crypto_lib("Could not parse symmetric encrypted item: illegal size");
       //@ assert true == well_formed(cs, nat_length(cs));
       break;

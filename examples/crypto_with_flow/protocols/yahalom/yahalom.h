@@ -186,7 +186,7 @@ predicate yahalom_pub(cryptogram cg) =
           )
         ) :
         false;
-    case cg_auth_encrypted(p0, c0, cs0, mac0, ent0):
+    case cg_auth_encrypted(p0, c0, cs0, ent0):
       return true == yahalom_public_key(p0, c0, true) &*&
              [_]public_generated(yahalom_pub)(cs0);
     case cg_asym_encrypted(p0, c0, cs0, ent0):

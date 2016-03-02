@@ -137,7 +137,7 @@ fixpoint bool well_formed(list<char> cs, nat upper_bound)
         //correct symmetric_encrypted_item
         (
           head(cs) != TAG_SYMMETRIC_ENC ||
-          length(cs) >= TAG_LENGTH + GCM_ENT_SIZE
+          length(cs) >= TAG_LENGTH + GCM_IV_SIZE
         ) &&
         //correct asymmetric_encrypted_item
         (
@@ -200,7 +200,7 @@ predicate_ctor ill_formed_item_chars(item i)(list<char> cs) =
 
 predicate_ctor ic_parts(item i)(list<char> cs_tag, list<char> cs_cont) = true;
 predicate_ctor ic_pair(item i)(list<char> cs_f, list<char> cs_s) = true;
-predicate_ctor ic_sym_enc(item i)(list<char> mac, list<char> iv, list<char> cg_cs) = true;
+predicate_ctor ic_sym_enc(item i)(list<char> iv, list<char> cg_cs) = true;
 
 predicate item_constraints(item i, list<char> cs, predicate(item) pub) =
   true == well_formed(cs, nat_length(cs)) &*& length(cs) <= INT_MAX &*&
@@ -253,14 +253,14 @@ predicate item_constraints(item i, list<char> cs, predicate(item) pub) =
         ITEM_CONSTRAINTS_PAY(cs_pay1, [_]pub(symmetric_key_item(p0, c0)));
     case symmetric_encrypted_item(p0, c0, pay0, ent0): return
       tag == TAG_SYMMETRIC_ENC &*&
-        ic_sym_enc(i)(?mac0, ?iv0, ?cg_cs) &*&
-        take(GCM_ENT_SIZE, ent0) == take(GCM_ENT_SIZE, cs_content) &*&
-        [_]public_generated(polarssl_pub(pub))(take(GCM_ENT_SIZE, ent0)) &*&
-        GCM_ENT_SIZE <= length(cs_content) &*&
-        GCM_ENT_SIZE <= length(ent0) &*&
-        drop(GCM_ENT_SIZE, ent0) == cons(length(mac0), append(mac0, iv0)) &*&
-        cg_cs == drop(GCM_ENT_SIZE, cs_content) &*&
-        ITEM_CONSTRAINTS_CG(cg_cs, cg_auth_encrypted(p0, c0, ?cs_pay1, mac0, iv0)) &*&
+        ic_sym_enc(i)(?iv0, ?cg_cs) &*&
+        take(GCM_IV_SIZE, ent0) == take(GCM_IV_SIZE, cs_content) &*&
+        [_]public_generated(polarssl_pub(pub))(take(GCM_IV_SIZE, ent0)) &*&
+        GCM_IV_SIZE <= length(cs_content) &*&
+        GCM_IV_SIZE <= length(ent0) &*&
+        drop(GCM_IV_SIZE, ent0) == iv0 &*&
+        cg_cs == drop(GCM_IV_SIZE, cs_content) &*&
+        ITEM_CONSTRAINTS_CG(cg_cs, cg_auth_encrypted(p0, c0, ?cs_pay1, iv0)) &*&
         ITEM_CONSTRAINTS_PAY(cs_pay1, [_]pub(symmetric_key_item(p0, c0)));
     case asymmetric_encrypted_item(p0, c0, pay0, ent0): return
       tag == TAG_ASYMMETRIC_ENC &*&

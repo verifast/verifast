@@ -49,7 +49,7 @@ predicate hmac_pub(cryptogram cg) =
     case cg_encrypted(p0, c0, cs0, ent0):
       return true == hmac_public_key(p0, c0, true) &*&
              [_]public_generated(hmac_pub)(cs0);
-    case cg_auth_encrypted(p0, c0, cs0, mac0, ent0):
+    case cg_auth_encrypted(p0, c0, cs0, ent0):
       return true == hmac_public_key(p0, c0, true) &*&
              [_]public_generated(hmac_pub)(cs0);
     case cg_asym_encrypted(p0, c0, cs0, ent0):

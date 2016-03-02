@@ -151,15 +151,14 @@ lemma void serialize_symmetric_encrypted(int p0, int c0,
            [_]public_generated(polarssl_pub(pub))(cs);
 {
   open [_]item_constraints(enc, cs, pub);
+  assert [_]ic_sym_enc(enc)(?iv0, ?cs_cg0);
   assert [_]ic_parts(enc)(?tag_cs, ?cont_cs);
-  list<char> ent0_1 = take(GCM_ENT_SIZE, ent0);
-  list<char> ent0_2 = drop(GCM_ENT_SIZE, ent0);
-  assert ent0 == append(ent0_1, ent0_2);
-  list<char> cs_cg = drop(GCM_ENT_SIZE, cont_cs);
-  assert cont_cs == append(ent0_1, cs_cg);
-  assert [_]ic_sym_enc(enc)(?mac0, ?iv0, ?cs_cg0);
-  assert ent0_2 == cons(length(mac0), append(mac0, iv0));
-  append_assoc(tag_cs, ent0_1, cs_cg);
+  list<char> iv0_cs = take(GCM_IV_SIZE, ent0);
+  assert iv0 == drop(GCM_IV_SIZE, ent0);
+  assert ent0 == append(iv0_cs, iv0);
+  list<char> cs_cg = drop(GCM_IV_SIZE, cont_cs);
+  assert cont_cs == append(iv0_cs, cs_cg);
+  append_assoc(tag_cs, iv0_cs, cs_cg);
   if (!col)
   {
     cryptogram penc;
@@ -168,14 +167,14 @@ lemma void serialize_symmetric_encrypted(int p0, int c0,
       case some(pay1):
         assert [_]well_formed_item_chars(enc)(?cs_pay0);
         assert [_]item_constraints(pay1, cs_pay0, pub);
-        penc = cg_auth_encrypted(p0, c0, cs_pay0, mac0, iv0);
+        penc = cg_auth_encrypted(p0, c0, cs_pay0, iv0);
         close exists(ent0);
         leak exists(ent0);
         close exists(false);
         leak exists(false);
       case none:
         assert [_]ill_formed_item_chars(enc)(?cs_pay0);
-        penc = cg_auth_encrypted(p0, c0, cs_pay0, mac0, iv0);
+        penc = cg_auth_encrypted(p0, c0, cs_pay0, iv0);
         cg_constraints(penc);
         close exists(true);
         leak exists(true);
@@ -184,9 +183,9 @@ lemma void serialize_symmetric_encrypted(int p0, int c0,
     leak polarssl_pub(pub)(penc);
     public_generated(polarssl_pub(pub), penc);
     public_generated_join(polarssl_pub(pub), 
-                          full_tag(TAG_SYMMETRIC_ENC), ent0_1);
+                          full_tag(TAG_SYMMETRIC_ENC), iv0_cs);
     public_generated_join(polarssl_pub(pub),
-                          append(full_tag(TAG_SYMMETRIC_ENC), ent0_1), cs_cg);
+                          append(full_tag(TAG_SYMMETRIC_ENC), iv0_cs), cs_cg);
   }
 }
 

@@ -520,13 +520,12 @@ void attacker_send_auth_encrypted(havege_state *havege_state, void* socket)
   char buffer3[MAX_MESSAGE_SIZE];
   gcm_context gcm_context;
   char iv[16];
-  char mac[16];
 
   //@ open attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 
   size1 = net_recv(socket, buffer1, MAX_MESSAGE_SIZE);
   size2 = net_recv(socket, buffer2, MAX_MESSAGE_SIZE);
-  if (size1 <= 0 || size2 < MINIMAL_STRING_SIZE ||
+  if (size1 <= 0 || size2 <= 16 || size2 > MAX_MESSAGE_SIZE - 16 ||
       (size1 != 16 && size1 != 24 && size1 != 32))
   {
     //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
@@ -545,23 +544,36 @@ void attacker_send_auth_encrypted(havege_state *havege_state, void* socket)
     if (get_iv(havege_state, iv) == 0)
     {
       //@ chars_to_crypto_chars(buffer2, size2);
+      //@ chars_split(buffer3, 16);
       if (gcm_crypt_and_tag(&gcm_context, GCM_ENCRYPT,
-                            (unsigned int) size2, iv, 16, NULL, 0, buffer2,
-                            buffer3, 16, mac) == 0)
+                            (unsigned int) size2, iv, 16, NULL, 0, 
+                            buffer2, (void*) buffer3 + 16, 16, buffer3) == 0)
       {
         /*@
-          {
-            assert cryptogram(buffer3, size2, ?cs_enc, ?cg_enc);
+          { 
             public_chars(buffer2, size2);
+            chars_to_crypto_chars(buffer2, size2);
+            assert exists(?cg_enc);
             assert is_public_auth_encryption_is_public(?proof2, pub, pred);
             proof2(cg_enc);
-            public_cryptogram(buffer3, cg_enc);
-            chars_to_crypto_chars(buffer2, size2);
+            assert crypto_chars(secret, buffer3, 16, ?cs_tag);
+            assert crypto_chars(secret, (void*) buffer3 + 16, size2, ?cs_enc);
+            public_generated(pub, cg_enc);
+            public_generated_split(pub, append(cs_tag, cs_enc), 16);
+            take_append(16, cs_tag, cs_enc);
+            drop_append(16, cs_tag, cs_enc);
+            public_crypto_chars(buffer3, 16);
+            public_crypto_chars((void*) buffer3 + 16, size2);
           }
         @*/
-        net_send(socket, buffer3, (unsigned int) size2);
+        net_send(socket, buffer3, (unsigned int) size2 + 16);
+        //@ chars_to_crypto_chars(buffer3, 16);
+        //@ chars_to_crypto_chars((void*) buffer3 + 16, size2);
       }
       //@ crypto_chars_to_chars(buffer2, size2);
+      //@ crypto_chars_join(buffer3);
+      //@ crypto_chars_to_chars(buffer3, size2 + 16);
+      //@ crypto_chars_to_chars(iv, 16);
     }
     gcm_free(&gcm_context);
   }
@@ -582,13 +594,12 @@ void attacker_send_auth_decrypted(havege_state *havege_state, void* socket)
   char buffer3[MAX_MESSAGE_SIZE];
   gcm_context gcm_context;
   char iv[16];
-  char tag[16];
 
   //@ open attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
 
   size1 = net_recv(socket, buffer1, MAX_MESSAGE_SIZE);
   size2 = net_recv(socket, buffer2, MAX_MESSAGE_SIZE);
-  if (size1 <= 0 || size2 < MINIMAL_STRING_SIZE ||
+  if (size1 <= 16 || size2 <= 16 ||
       (size1 != 16 && size1 != 24 && size1 != 32))
   {
     //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
@@ -602,48 +613,38 @@ void attacker_send_auth_decrypted(havege_state *havege_state, void* socket)
   if (gcm_init(&gcm_context, POLARSSL_CIPHER_ID_AES,
       buffer1, (unsigned int) size1 * 8) == 0)
   {
-    //@ close random_request(attacker, 0, false);
-    if (havege_random(havege_state, tag, 16) == 0)
+    if (get_iv(havege_state, iv) == 0)
     {
-      //@ assert cryptogram(tag, 16, ?cs_mac, ?cg_mac);
-      /*@ assert is_principal_with_public_nonces(?proof, pub,
-                                  attacker_nonce_pred(pub, pred),
-                                  attacker); @*/
-      //@ close attacker_nonce_pred(pub, pred)();
-      //@ proof(cg_mac);
-      //@ open attacker_nonce_pred(pub, pred)();
-      //@ public_cryptogram(tag, cg_mac);
-      //@ public_chars(tag, 16);
-      if (get_iv(havege_state, iv) == 0)
+      //@ assert crypto_chars(normal, iv, 16, ?cs_iv);
+      //@ interpret_auth_encrypted(buffer2, size2);
+      //@ open  cryptogram(buffer2, size2, ?cs2, ?cg_enc);
+      //@ close exists(cg_enc);
+      //@ public_crypto_chars_extract(buffer2, cg_enc);
+      //@ assert cg_enc == cg_auth_encrypted(?p2, ?c2, ?cs_output2, ?cs_iv2);
+      //@ chars_to_crypto_chars(buffer2, size2);
+      //@ crypto_chars_split(buffer2, 16);
+      if (gcm_auth_decrypt(&gcm_context, (unsigned int) size2 - 16,
+                            iv, 16, NULL, 0, buffer2, 16,
+                            (void*) buffer2 + 16, buffer3) == 0)
       {
-        //@ assert crypto_chars(normal, iv, 16, ?cs_iv);
-        //@ interpret_auth_encrypted(buffer2, size2);
-        //@ open cryptogram(buffer2, size2, ?cs2, ?cg_enc);
-        //@ close cryptogram(buffer2, size2, cs2, cg_enc);
-        /*@ assert cg_enc == cg_auth_encrypted(?p2, ?c2, ?cs_output2,
-                                               ?cs_tag2, ?cs_iv2); @*/
-        if (gcm_auth_decrypt(&gcm_context, (unsigned int) size2,
-                              iv, 16, NULL, 0, tag, 16,
-                              buffer2, buffer3) == 0)
-        {
-          /*@ if (!col)
-              {
-                assert crypto_chars(secret, buffer3, size2, ?cs_output);
-                cs_output == cs_output2;
-                cs_iv == cs_iv2;
-                assert cs2 == chars_for_cg(cg_enc);
-                public_cryptogram_extract(buffer2);
-                assert [_]pub(cg_enc);
-                assert is_public_auth_decryption_is_public(?proof3, pub, pred);
-                proof3(cg_key, cg_enc);
-                public_crypto_chars(buffer3, size2);
-              }
-          @*/
-          zeroize(iv, 16);
-        }
-        net_send(socket, buffer3, (unsigned int) size2);
-        //@ public_cryptogram(buffer2, cg_enc);
+        /*@ if (!col)
+            {
+              assert crypto_chars(secret, buffer3, size2 - 16, ?cs_output);
+              cs_output == cs_output2;
+              cs_iv == cs_iv2;
+              assert cs2 == chars_for_cg(cg_enc);         
+              assert [_]pub(cg_enc);
+              assert is_public_auth_decryption_is_public(?proof3, pub, pred);
+              proof3(cg_key, cg_enc);
+              public_crypto_chars(buffer3, size2 - 16);
+            }
+        @*/
+        zeroize(iv, 16);
       }
+      net_send(socket, buffer3, (unsigned int) size2 - 16);
+      //@ crypto_chars_to_chars(buffer2, 16);
+      //@ crypto_chars_to_chars((void*) buffer2 + 16, size2 - 16);
+      //@ chars_join(buffer2);
     }
     gcm_free(&gcm_context);
   }

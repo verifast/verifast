@@ -18,7 +18,7 @@ GENERAL_INTERPRET_METHOD(private_key,    cg_private_key(_, _))
 GENERAL_INTERPRET_METHOD(hash,           cg_hash(_))
 GENERAL_INTERPRET_METHOD(hmac,           cg_hmac(_, _, _))
 GENERAL_INTERPRET_METHOD(encrypted,      cg_encrypted(_, _, _, _))
-GENERAL_INTERPRET_METHOD(auth_encrypted, cg_auth_encrypted(_, _, _, _, _))
+GENERAL_INTERPRET_METHOD(auth_encrypted, cg_auth_encrypted(_, _, _, _))
 GENERAL_INTERPRET_METHOD(asym_encrypted, cg_asym_encrypted(_, _, _, _))
 GENERAL_INTERPRET_METHOD(asym_signature, cg_asym_signature(_, _, _, _))
 

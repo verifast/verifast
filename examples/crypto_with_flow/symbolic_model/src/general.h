@@ -30,9 +30,7 @@
 #define HASH_SIZE 64
 #define HMAC_SIZE 64
 #define GCM_IV_SIZE 16
-#define GCM_TAG_SIZE 16
-#define GCM_ENT_SIZE 32 /* should be (GCM_IV_SIZE + GCM_TAG_SIZE),
-                           but VeriFast parser complains */
+#define GCM_MAC_SIZE 16
 #define GCM_KEY_SIZE 32
 #define RSA_KEY_SIZE 256
 #define RSA_BIT_KEY_SIZE (8 * RSA_KEY_SIZE)

@@ -176,7 +176,6 @@ int pk_decrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                 // input
                 [?f1]cryptogram(input, ilen, in_cs, ?cg_input) &*&
                   cg_input == cg_asym_encrypted(?p3, ?c3, ?cs_out3, _) &*&
-                  ilen >= MINIMAL_STRING_SIZE &*&
                   // message to decrypt can not be bigger than key
                   ilen * 8 <= nbits &*&
                 // output

@@ -61,7 +61,7 @@ predicate enc_then_hmac_pub(cryptogram cg) =
                [_]public_generated(enc_then_hmac_pub)(cs0)
              :
                true;
-    case cg_auth_encrypted(p0, c0, cs0, mac0, ent0):
+    case cg_auth_encrypted(p0, c0, cs0, ent0):
       return true == enc_then_hmac_public_key(p0, c0, true) &*&
              [_]public_generated(enc_then_hmac_pub)(cs0);
     case cg_asym_encrypted(p0, c0, cs0, ent0):

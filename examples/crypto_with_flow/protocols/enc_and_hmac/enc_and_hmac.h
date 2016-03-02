@@ -54,7 +54,7 @@ predicate enc_and_hmac_pub(cryptogram cg) =
         [_]public_generated(enc_and_hmac_pub)(cs0)
       :
         true == send(p0, shared_with(p0, c0), cs0);
-    case cg_auth_encrypted(p0, c0, cs0, mac0, ent0):
+    case cg_auth_encrypted(p0, c0, cs0, ent0):
       return true == enc_and_hmac_public_key(p0, c0, true) &*&
              [_]public_generated(enc_and_hmac_pub)(cs0);
     case cg_asym_encrypted(p0, c0, cs0, ent0):

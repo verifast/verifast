@@ -53,6 +53,7 @@ int aes_crypt_cfb128(aes_context *ctx, int mode, size_t length, size_t *iv_off,
                  random_permission(?p2, ?c2) &*&
                  iv_cs == chars_for_cg(cg_nonce(p2, c2)) &*&
                  [?f]crypto_chars(?kind, input, length, ?in_cs) &*&
+                   length >= MINIMAL_STRING_SIZE &*&
                  ensures
                  (
                    aes_context_initialized(ctx, p1, c1) &*&

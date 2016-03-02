@@ -255,7 +255,7 @@ lemma void retreive_public_auth_encryption_is_public(fixpoint(int, int, bool, bo
     lemma void crypto_public_auth_encryption_is_public(
                                               cryptogram encrypted)
       requires  polarssl_proof_pred(pub, clsfy)() &*&
-                encrypted == cg_auth_encrypted(?p, ?c, ?pay, ?mac, ?ent) &*&
+                encrypted == cg_auth_encrypted(?p, ?c, ?pay, ?ent) &*&
                 length(pay) <= INT_MAX &*&
                 [_]polarssl_pub(pub)(cg_symmetric_key(p, c)) &*&
                 [_]public_generated(polarssl_pub(pub))(pay);
@@ -289,7 +289,7 @@ lemma void retreive_public_auth_decryption_is_public(fixpoint(int, int, bool, bo
                                                        cryptogram encrypted)
       requires  polarssl_proof_pred(pub, clsfy)() &*&
                 key == cg_symmetric_key(?p, ?c) &*&
-                encrypted == cg_auth_encrypted(p, c, ?pay, ?mac, ?iv) &*&
+                encrypted == cg_auth_encrypted(p, c, ?pay, ?iv) &*&
                 [_]polarssl_pub(pub)(key) &*&
                 [_]polarssl_pub(pub)(encrypted);
       ensures   polarssl_proof_pred(pub, clsfy)() &*&
@@ -309,7 +309,7 @@ lemma void retreive_public_auth_decryption_is_public(fixpoint(int, int, bool, bo
         assert [_]item_constraints(?pay0, pay, pub);
         item enc = symmetric_encrypted_item(p, c, some(pay0), ent0);
         assert [_]pub(enc);
-        assert drop(GCM_ENT_SIZE, ent0) == cons(length(mac), append(mac, iv));
+        assert drop(GCM_IV_SIZE, ent0) == iv;
         
         open polarssl_proof_pred(pub, clsfy)();
         open proof_obligations(pub);
