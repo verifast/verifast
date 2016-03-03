@@ -24,7 +24,7 @@
     { \
       close proof_obligations(pub); \
       well_formed_upper_bound(cs_pay, nat_length(cs_pay), nat_of_int(INT_MAX)); \
-      forall_mem(cg, cgs_in_chars(cs), (cg_level_upper_bound)(level_bound)); \
+      forall_mem(cg, cgs_in_chars(cs), (cg_level_below)(level_bound)); \
       cg_level_pay(cg, level_bound0); \
       deserialize_item_(level_bound0, nat_of_int(INT_MAX), cs_pay, pub); \
       open [_]item_constraints(?pay, cs_pay, pub); \
@@ -109,9 +109,9 @@ switch(length_bound) \
         \
         cgs_in_chars_upper_bound_subset(f_cs, cgs); \
         cgs_in_chars_upper_bound_subset(s_cs, cgs); \
-        forall_subset(f_cgs, cgs, (cg_level_upper_bound) \
+        forall_subset(f_cgs, cgs, (cg_level_below) \
                                   (level_bound)); \
-        forall_subset(s_cgs, cgs, (cg_level_upper_bound) \
+        forall_subset(s_cgs, cgs, (cg_level_below) \
                                   (level_bound)); \
       } \
       else \
@@ -246,7 +246,7 @@ lemma void deserialize_item_(nat level_bound, nat length_bound,
                              list<char> cs, predicate(item) pub)
   requires proof_obligations(pub) &*&
            //knowledge about first inductive paramter
-           true == forall(cgs_in_chars(cs), (cg_level_upper_bound)(level_bound)) &*&
+           true == forall(cgs_in_chars(cs), (cg_level_below)(level_bound)) &*&
            //knowledge about second inductive paramter
            length(cs) <= int_of_nat(length_bound) &*&
            int_of_nat(length_bound) <= INT_MAX &*&

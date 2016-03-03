@@ -30,7 +30,8 @@
 #
 #
 # cryptogram_levels.gh
-.provides ./cryptogram_levels.gh#cg_level_
+.provides ./cryptogram_levels.gh#cg_level_max_
+.provides ./cryptogram_levels.gh#cg_level_base
 .provides ./cryptogram_levels.gh#cg_level_ind
 #
 #
