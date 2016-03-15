@@ -29,28 +29,28 @@ void write_identifier(char *array, int id);
                [_]public_generated(pub)(identifier(id)); @*/
 
 /*@
-predicate check_identifier_ghost_args(bool sym, bool garbage, 
-                                      int p_key, int c_key) = true;
+predicate check_identifier_ghost_args(bool sym, bool garbage, int p_key, 
+                                      int c_key, list<char> cs_rest) = true;
 @*/
   
 void check_identifier(char *array, int id);
   /*@ requires [_]public_invar(?pub) &*&
                [_]decryption_key_classifier(?key_classifier) &*&
-               network_permission(?p) &*& 
-               [?f]crypto_chars(?kind, array, ?size, ?cs) &*&
-               size >= ID_SIZE &*&
-               check_identifier_ghost_args(?sym, ?garbage, ?p_key, ?c_key) &*&
+               network_permission(?p) &*&
+               [?f]crypto_chars(normal, array, ID_SIZE, ?cs) &*&
+               check_identifier_ghost_args(?sym, ?garbage, ?p_key, 
+                                           ?c_key, ?cs_rest) &*&
                garbage ?
-                 decryption_garbage(sym, p, ?s, p_key, c_key, cs) &*&
+                 decryption_garbage(sym, p, ?s, p_key, c_key, 
+                                    append(cs, cs_rest)) &*&
                  s == known_value(0, identifier(id))
                :
                  true; @*/
-  /*@ ensures  network_permission(p) &*& 
-               [f]crypto_chars(secret, array, size, cs) &*&
-               take(ID_SIZE, cs) == identifier(id) &*&
-               [_]public_generated(pub)(take(ID_SIZE, cs)) &*&
+  /*@ ensures  network_permission(p) &*&
+               [f]crypto_chars(normal, array, ID_SIZE, cs) &*&
+               cs == identifier(id) &*&
                garbage ?
-                 decryption_permission(p) &*& 
+                 decryption_permission(p) &*&
                  key_classifier(p_key, c_key, sym) ? true : col
                :
                  true; @*/

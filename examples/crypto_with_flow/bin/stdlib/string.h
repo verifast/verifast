@@ -36,14 +36,20 @@ int strlen(char *string);
     //@ requires [?f]string(string, ?cs);
     //@ ensures [f]string(string, cs) &*& result == length(cs);
 
+//@ predicate memcmp_ghost_args(char* buffer, cryptogram cg) = true;
+
 int memcmp(char *array, char *array0, size_t count);
     /*@ requires network_permission(?principal) &*& 
-                 [?f1]crypto_chars(?kind1, array, ?n1, ?cs) &*&
-                 [?f2]crypto_chars(?kind2, array0, ?n2, ?cs0) &*& 
+                 [?f1]crypto_chars(?kind1, array, ?n1, ?cs1) &*&
+                   (kind1 == normal ? true : count >= MINIMAL_STRING_SIZE &*& 
+                    memcmp_ghost_args(array, ?cg1) &*& cs1 == chars_for_cg(cg1) && cg_is_generated(cg1)) &*&
+                 [?f2]crypto_chars(?kind2, array0, ?n2, ?cs2) &*& 
+                   (kind2 == normal ? true : count >= MINIMAL_STRING_SIZE &*& 
+                    memcmp_ghost_args(array0, ?cg2) &*& cs2 == chars_for_cg(cg2) && cg_is_generated(cg2)) &*&
                  count <= n1 &*& count <= n2; @*/
-    /*@ ensures  [f1]crypto_chars(kind1, array, n1, cs) &*&
-                 [f2]crypto_chars(kind2, array0, n2, cs0) &*&
-                 true == ((result == 0) == (take(count, cs) == take(count, cs0))) &*&
+    /*@ ensures  [f1]crypto_chars(kind1, array, n1, cs1) &*&
+                 [f2]crypto_chars(kind2, array0, n2, cs2) &*&
+                 true == ((result == 0) == (take(count, cs1) == take(count, cs2))) &*&
                  (
                    //if guessing a secret value failed, network permissions are revoked
                    // *otherwise one could keep guessing untill success

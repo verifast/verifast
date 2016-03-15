@@ -122,7 +122,8 @@ predicate yahalom_pub(cryptogram cg) =
           length(chars_for_cg(NA)) == NONCE_SIZE &*&
           length(chars_for_cg(NB)) == NONCE_SIZE &*&
           cs0 == append(identifier(sender), append(chars_for_cg(NA),
-                                                   chars_for_cg(NB)))
+                                                   chars_for_cg(NB))) &*&
+          [_]public_generated(yahalom_pub)(identifier(sender))
         ) :
         length(cs0) == ID_SIZE + KEY_SIZE + NONCE_SIZE + NONCE_SIZE ?
         (
@@ -149,7 +150,8 @@ predicate yahalom_pub(cryptogram cg) =
           length(chars_for_cg(NA)) == NONCE_SIZE &*&
           length(chars_for_cg(NB)) == NONCE_SIZE &*&
           cs0 == append(identifier(receiver), append(chars_for_cg(KAB),
-                 append(chars_for_cg(NA), chars_for_cg(NB))))
+                 append(chars_for_cg(NA), chars_for_cg(NB)))) &*&
+          [_]public_generated(yahalom_pub)(identifier(receiver))
         ) :
         length(cs0) == ID_SIZE + KEY_SIZE ?
         (
@@ -163,7 +165,8 @@ predicate yahalom_pub(cryptogram cg) =
           true == cg_is_generated(KAB) &*&
           length(identifier(sender)) == ID_SIZE &*&
           length(chars_for_cg(KAB)) == KEY_SIZE &*&
-          cs0 == append(identifier(sender), chars_for_cg(KAB))
+          cs0 == append(identifier(sender), chars_for_cg(KAB)) &*&
+          [_]public_generated(yahalom_pub)(identifier(sender))
         ) :
         length(cs0) == NONCE_SIZE ?
         (

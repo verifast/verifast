@@ -57,6 +57,7 @@ predicate hmac_then_enc_pub(cryptogram cg) =
       :
         hmac_then_enc_pub_1(?msg_cs, ?hmac_cg) &*&
         cs0 == append(msg_cs, chars_for_cg(hmac_cg)) &*&
+        true == cg_is_generated(hmac_cg) &*&
         length(chars_for_cg(hmac_cg)) == 64 &*&
         [_]hmac_then_enc_pub(hmac_cg) &*&
         hmac_cg == cg_hmac(p0, ?c1, msg_cs) &*&

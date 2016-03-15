@@ -107,7 +107,6 @@ struct item *asymmetric_encryption(struct item *key, struct item *payload)
     //@ close principal(principal1, count1 + 1);
     //@ open cryptogram(output, ?enc_length, ?enc_cs, ?enc_cg);
     //@ assert enc_cg == cg_asym_encrypted(principal, count, pay_cs, ?ent);
-    //@ close exists(enc_cg);
     //@ assert u_integer(&olen, enc_length);
     //@ assert enc_length > 0 &*& enc_length < MAX_PACKAGE_SIZE;
     //@ assert enc_length > 0 &*& enc_length <= RSA_SERIALIZED_KEY_SIZE;
@@ -135,6 +134,7 @@ struct item *asymmetric_encryption(struct item *key, struct item *payload)
     //@ list<char> cs = append(cs_tag, enc_cs);
     //@ WELL_FORMED(cs_tag, enc_cs, TAG_ASYMMETRIC_ENC)
     //@ close ic_parts(enc)(cs_tag, enc_cs);
+    //@ close ic_cg(enc)(enc_cs, enc_cg);
     /*@ if (col)
       {
         crypto_chars_to_chars(cont, size);
@@ -210,7 +210,7 @@ struct item *asymmetric_decryption(struct item *key, struct item *item, char tag
     //@ open [_]item_constraints(enc, ?enc_cs, pub);
     //@ assert [_]ic_parts(enc)(?enc_tag, ?enc_cont);
     //@ assert enc_cs == append(enc_tag, enc_cont);
-    //@ open [_]exists(?enc_cg);
+    //@ open [_]ic_cg(enc)(_, ?enc_cg);
     //@ assert enc_cg == cg_asym_encrypted(principal2, count2, ?cs_pay, ent);
     if (item->size - TAG_LENGTH > RSA_KEY_SIZE ||
         item->size - TAG_LENGTH < MINIMAL_STRING_SIZE)
@@ -229,14 +229,14 @@ struct item *asymmetric_decryption(struct item *key, struct item *item, char tag
                      (havege_state_initialized)(state, out, len) { call(); } @*/
     //@ open principal(principal1, count1);
     //@ structure s = known_value(0, full_tag(tag));
-    //@ close decryption_pre(false, true, principal1, s, enc_cont);
+    //@ close decryption_pre(false, false, principal1, s, enc_cont);
     if(pk_decrypt(&context, item->content + TAG_LENGTH,
                   (unsigned int) item->size - TAG_LENGTH,
                   output, &olen, MAX_PACKAGE_SIZE,
                   asym_enc_havege_random_stub, random_state) != 0)
       abort_crypto_lib("Decryption failed");
-    /*@ open decryption_post(false, true, ?garbage,
-                             principal1, s, ?p_key, ?c_key, ?cs_out); @*/
+    /*@ open decryption_post(false, ?garbage, principal1, 
+                             s, ?p_key, ?c_key, ?cs_out); @*/
     //@ assert u_integer(&olen, ?size_out);
     //@ pk_release_context_with_key(&context);
     //@ open cryptogram(i_cont + TAG_LENGTH, i_size - TAG_LENGTH, enc_cont, enc_cg);
@@ -251,20 +251,42 @@ struct item *asymmetric_decryption(struct item *key, struct item *item, char tag
       abort_crypto_lib("Decryption: Incorrect size");
     result->content = malloc(result->size);
     if (result->content == 0) {abort_crypto_lib("Malloc failed");}
-    //@ assert u_integer(&olen, ?olen_val);
-    //@ assert crypto_chars(?kind, output, olen_val, cs_out);
     //@ close [f]world(pub, key_clsfy);
-    //@ close check_tag2_ghost_args(false, garbage, p_key, c_key);
+    //@ assert u_integer(&olen, ?olen_val);
+    //@ assert crypto_chars(_, output, olen_val, cs_out);
+    //@ crypto_chars_split(output, TAG_LENGTH);
+    //@ assert crypto_chars(_, output, TAG_LENGTH, ?cs_tag);
+    //@ assert crypto_chars(_, (void*) output + TAG_LENGTH, olen_val - TAG_LENGTH, ?cs_i);
+    /*@ if (col)
+        {
+          crypto_chars_to_chars(output, TAG_LENGTH);
+          chars_to_crypto_chars(output, TAG_LENGTH);
+        }
+        else if (!garbage)
+        {
+          switch(pay)
+          {
+            case some(pay1):
+              open [_]item_constraints(pay1, cs_out, pub);
+            case none:
+              open [_]ill_formed_item_chars(enc)(cs_out);
+              public_generated_split(polarssl_pub(pub), cs_out, TAG_LENGTH);
+          }
+          public_crypto_chars(output, TAG_LENGTH);
+        }
+    @*/
+    //@ close check_tag2_ghost_args(false, garbage, p_key, c_key, cs_i);
     check_tag2(output, tag);
-    //@ switch(kind){case normal: case secret:}
+    //@ if (!garbage) chars_to_secret_crypto_chars(output, TAG_LENGTH);
+    //@ crypto_chars_join(output);
     memcpy(result->content, output, olen);
     //@ assert result->content |-> ?cont;
-    //@ assert crypto_chars(kind, cont, olen_val, cs_out);
+    //@ assert crypto_chars(?kind, cont, olen_val, cs_out);
     zeroize(output, (int) olen);
-    //@ chars_join(output);
     //@ close item(item, enc, pub);
     //@ assert enc == asymmetric_encrypted_item(principal2, count2, pay, ent);
     //@ assert col || enc_cg == cg_asym_encrypted(principal2, count2, cs_pay, ent);
+    
     /*@ if (col)
         {
           crypto_chars_to_chars(cont, olen_val);

@@ -173,19 +173,20 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
                        (unsigned int) (KEY_SIZE * 8)) != 0)
       abort();
     //@ structure s = known_value(0, hmac_pay);
-    //@ close decryption_pre(true, true, receiver, s, enc_cs);
+    //@ close decryption_pre(true, false, receiver, s, enc_cs);
     if (aes_crypt_cfb128(&aes_context, AES_DECRYPT, (unsigned int) enc_size,
                            &iv_off, iv, buffer + 16, msg) != 0)
         abort();
     zeroize(iv, 16);
     aes_free(&aes_context);
     //@ open aes_context(&aes_context);
+    //@ open [_]enc_and_hmac_pub(enc_cg);
     //@ public_cryptogram(buffer + 16, enc_cg);
     //@ crypto_chars_to_chars(buffer, 16);
     //@ assert chars(buffer, 16 + enc_size, append(iv_cs, enc_cs));
     //@ assert crypto_chars(_, msg, enc_size, ?dec_cs);
-    /*@ open decryption_post(true, true, ?garbage, 
-                             receiver, s, sender, enc_id, dec_cs); @*/
+    /*@ open decryption_post(true, ?garbage, receiver, 
+                             s, sender, enc_id, dec_cs); @*/
     
     //Verify the hmac
     //@ assert crypto_chars(_, msg, size - 80, ?pay_cs);
@@ -193,12 +194,15 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
                 (unsigned int) enc_size, hmac, 0);
     //@ open cryptogram(hmac, 64, _, ?hmac_cg2);
     //@ assert hmac_cg2 == cg_hmac(sender, hmac_id, pay_cs);
+    //@ public_crypto_chars(buffer + size - 64, 64);
+    //@ chars_to_crypto_chars(buffer + size - 64, 64);
+    //@ close memcmp_ghost_args(hmac, hmac_cg2);
     if (memcmp((void*) buffer + size - 64, hmac, 64) != 0) abort();
     //@ chars_for_cg_inj(hmac_cg, hmac_cg2);
     //@ assert col || hmac_cg == hmac_cg2;
-    
     //@ public_crypto_chars(hmac, 64);
-    //@ public_crypto_chars(buffer + size - 64, 64);
+    //@ crypto_chars_to_chars(buffer + size - 64, 64);
+    
     /*@ if (garbage)
         {
           if (!col && !enc_and_hmac_public_key(sender, hmac_id, true))

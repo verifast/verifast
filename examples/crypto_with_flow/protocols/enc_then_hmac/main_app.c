@@ -246,10 +246,11 @@ int main(int argc, char **argv) //@ : main_full(main_app)
       if (r_args.length != MSG_LEN)
         abort();
       //@ public_crypto_chars(s_message, MSG_LEN);
-      //@ chars_to_crypto_chars(s_message, MSG_LEN);
-      //@ open principal(sender, _);
+#ifdef EXECUTE
       if (memcmp(s_message, r_message, MSG_LEN) != 0)
         abort();
+#endif
+      //@ open principal(sender, _);
       //@ close principal(sender, _);
       zeroize(r_message, r_args.length);
     }

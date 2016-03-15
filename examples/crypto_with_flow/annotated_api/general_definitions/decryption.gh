@@ -16,9 +16,9 @@ lemma void decryption_init(fixpoint(int, int, bool, bool) key_classifier);
 predicate decryption_garbage(bool symmetric, int principal, structure s,
                                     int p_key, int c_key, list<char> cs_out);
 
-predicate decryption_pre(bool symmetric, bool initial,
+predicate decryption_pre(bool symmetric, bool garbage,
                          int principal, structure s, list<char> cs_in) =
-  initial ?
+  !garbage ?
     decryption_permission(principal)
   :
     decryption_garbage(symmetric, principal, s, _, _, ?cs_out) &*&
@@ -26,10 +26,10 @@ predicate decryption_pre(bool symmetric, bool initial,
     cs_out == append(prefix, append(cs_in, suffix))
 ;
 
-predicate decryption_post(bool symmetric, bool initial, bool garbage,
+predicate decryption_post(bool symmetric, bool garbage,
                           int principal, structure s,
                           int p_key, int c_key, list<char> cs_out) =
-  initial && !garbage ?
+  !garbage ?
     decryption_permission(principal)
   :
     decryption_garbage(symmetric, principal, s, p_key, c_key, cs_out)

@@ -101,7 +101,6 @@ struct item *create_nonce()
 
   //@ open cryptogram(cont + TAG_LENGTH + 1, NONCE_SIZE, ?n_cs, ?n_cg);
   //@ assert n_cg == cg_nonce(principal, count + 1);
-  //@ close exists(n_cg);
   //@ item nonce = nonce_item(principal, count + 1, 0);
   //@ list<char> cs_cont = cons(0, n_cs);
   //@ list<char> cs = append(cs_tag, cs_cont);
@@ -121,6 +120,7 @@ struct item *create_nonce()
   //@ if (col) public_chars(cont, TAG_LENGTH + 1 + NONCE_SIZE);
   //@ if (col) public_generated_split(polarssl_pub(pub), cs, TAG_LENGTH);
   //@ if (col) chars_to_secret_crypto_chars(cont, TAG_LENGTH + 1 + NONCE_SIZE);
+  //@ close ic_cg(nonce)(n_cs, n_cg);
   //@ close item_constraints(nonce, cs, pub);
   //@ leak item_constraints(nonce, cs, pub);
   //@ close item(item, nonce, pub);
@@ -189,6 +189,8 @@ void increment_nonce(struct item *item)
   @*/
   //@ WELL_FORMED(cs_tag, nonce_cont, TAG_NONCE)
   //@ close ic_parts(nonce)(cs_tag, nonce_cont);
+  //@ assert [_]ic_cg(i)(n_cs, ?n_cg); 
+  //@ close ic_cg(nonce)(n_cs, n_cg);
   //@ close item_constraints(nonce, nonce_cs, pub);
   //@ leak item_constraints(nonce, nonce_cs, pub);
   //@ close item(item, nonce, pub);

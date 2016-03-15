@@ -19,7 +19,7 @@
 #define SERIALIZE_DEFAULT(ITEM, TAG, CG, PAY) \
   open [_]item_constraints(ITEM, cs, pub); \
   assert [_]ic_parts(ITEM)(?tag_cs, ?cont_cs); \
-  assert [_]exists(?cg) &*& col || cont_cs == chars_for_cg(cg); \
+  assert [_]ic_cg(ITEM)(cont_cs, ?cg) &*& col || cont_cs == chars_for_cg(cg); \
   assert cg == CG; \
   if (PAY) {SERIALIZE_PAY} \
   if (!col) \

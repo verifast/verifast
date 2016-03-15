@@ -137,17 +137,19 @@ fixpoint bool well_formed(list<char> cs, nat upper_bound)
         //correct symmetric_encrypted_item
         (
           head(cs) != TAG_SYMMETRIC_ENC ||
-          length(cs) >= TAG_LENGTH + GCM_IV_SIZE
+          length(cs) >= TAG_LENGTH + MINIMAL_STRING_SIZE + GCM_IV_SIZE
         ) &&
         //correct asymmetric_encrypted_item
         (
           head(cs) != TAG_ASYMMETRIC_ENC ||
-          length(cs) <= TAG_LENGTH + RSA_SERIALIZED_KEY_SIZE
+          (length(cs) <= TAG_LENGTH + RSA_SERIALIZED_KEY_SIZE &&
+           length(cs) >= TAG_LENGTH + MINIMAL_STRING_SIZE)
         ) &&
         //correct asymmetric_signed_item
         (
           head(cs) != TAG_ASYMMETRIC_SIG ||
-          length(cs) <= TAG_LENGTH + RSA_SERIALIZED_KEY_SIZE
+          (length(cs) <= TAG_LENGTH + RSA_SERIALIZED_KEY_SIZE &&
+           length(cs) >= TAG_LENGTH + MINIMAL_STRING_SIZE)
         );
     case zero:
       return false;
@@ -173,6 +175,11 @@ predicate_ctor ill_formed_item_chars(item i)(list<char> cs) =
   false == well_formed(cs, nat_length(cs))
 ;
 
+predicate_ctor ic_parts(item i)(list<char> cs_tag, list<char> cs_cont) = true;
+predicate_ctor ic_pair(item i)(list<char> cs_f, list<char> cs_s) = true;
+predicate_ctor ic_sym_enc(item i)(list<char> iv, list<char> cg_cs) = true;
+predicate_ctor ic_cg(item i)(list<char> cs, cryptogram cg) = true;
+
 #define ITEM_CONSTRAINTS_PUBLIC \
   [_]public_generated(polarssl_pub(pub))(cs_content) &*& \
   [_]public_generated(polarssl_pub(pub))(cs)
@@ -181,7 +188,8 @@ predicate_ctor ill_formed_item_chars(item i)(list<char> cs) =
   (col ? ITEM_CONSTRAINTS_PUBLIC : true)
 
 #define ITEM_CONSTRAINTS_CG(CS, CG) \
-  exists(?cg) &*& cg == CG &*& \
+  length(CS) >= MINIMAL_STRING_SIZE &*& \
+  ic_cg(i)(CS, ?cg) &*& cg == CG &*& \
   col || (CS == chars_for_cg(cg) && cg_is_generated(cg))
 
 #define ITEM_CONSTRAINTS_PAY(PAY, NONE) \
@@ -198,9 +206,7 @@ predicate_ctor ill_formed_item_chars(item i)(list<char> cs) =
             col ? true : [_]public_generated(polarssl_pub(pub))(PAY) &*& NONE; \
   } \
 
-predicate_ctor ic_parts(item i)(list<char> cs_tag, list<char> cs_cont) = true;
-predicate_ctor ic_pair(item i)(list<char> cs_f, list<char> cs_s) = true;
-predicate_ctor ic_sym_enc(item i)(list<char> iv, list<char> cg_cs) = true;
+
 
 predicate item_constraints(item i, list<char> cs, predicate(item) pub) =
   true == well_formed(cs, nat_length(cs)) &*& length(cs) <= INT_MAX &*&
@@ -256,7 +262,6 @@ predicate item_constraints(item i, list<char> cs, predicate(item) pub) =
         ic_sym_enc(i)(?iv0, ?cg_cs) &*&
         take(GCM_IV_SIZE, ent0) == take(GCM_IV_SIZE, cs_content) &*&
         [_]public_generated(polarssl_pub(pub))(take(GCM_IV_SIZE, ent0)) &*&
-        GCM_IV_SIZE <= length(cs_content) &*&
         GCM_IV_SIZE <= length(ent0) &*&
         drop(GCM_IV_SIZE, ent0) == iv0 &*&
         cg_cs == drop(GCM_IV_SIZE, cs_content) &*&
@@ -309,26 +314,24 @@ void check_tag(char* buffer, char tag);
                head(cs) == tag &*& cs == full_tag(tag); @*/
 
 /*@
-predicate check_tag2_ghost_args(bool sym, bool garbage,
-                                int p_key, int c_key) = true;
+predicate check_tag2_ghost_args(bool sym, bool garbage, int p_key, 
+                                int c_key, list<char> cs_rest) = true;
 @*/
 
 void check_tag2(char* buffer, char tag);
   /*@ requires [_]public_invar(?pub) &*&
                [_]decryption_key_classifier(?key_classifier) &*&
                network_permission(?p) &*&
-               [?f2]crypto_chars(?kind, buffer, ?size, ?cs) &*&
-               size > TAG_LENGTH &*&
-               check_tag2_ghost_args(?sym, ?garbage, ?p_key, ?c_key) &*&
+               [?f2]crypto_chars(normal, buffer, TAG_LENGTH, ?cs) &*&
+               check_tag2_ghost_args(?sym, ?garbage, ?p_key, ?c_key, ?rest_cs) &*&
                garbage ?
-                 decryption_garbage(sym, p, ?s, p_key, c_key, cs) &*&
+                 decryption_garbage(sym, p, ?s, p_key, c_key, append(cs, rest_cs)) &*&
                  s == known_value(0, full_tag(tag))
                :
                  true; @*/
   /*@ ensures  network_permission(p) &*&
-               [f2]crypto_chars(kind, buffer, size, cs) &*&
-               head(cs) == tag &*& take(TAG_LENGTH, cs) == full_tag(tag) &*&
-               [_]public_generated(pub)(take(TAG_LENGTH, cs)) &*&
+               [f2]crypto_chars(normal, buffer, TAG_LENGTH, cs) &*&
+               head(cs) == tag &*& cs == full_tag(tag) &*&
                garbage ?
                  decryption_permission(p) &*&
                  key_classifier(p_key, c_key, sym) ? true : col

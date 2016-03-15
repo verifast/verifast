@@ -195,9 +195,11 @@ struct item* item_clone(struct item* item);
                item(result, i, pub) &*& result != 0; @*/
 
 void item_check_equal(struct item* item1, struct item* item2);
-  /*@ requires principal(?principal, ?count) &*&
-               [?f1]item(item1, ?i1, ?pub) &*& [?f2]item(item2, ?i2, pub); @*/
-  /*@ ensures  principal(principal, count) &*&
+  /*@ requires [?f]world(?pub, ?key_clsfy) &*&
+               principal(?principal, ?count) &*&
+               [?f1]item(item1, ?i1, pub) &*& [?f2]item(item2, ?i2, pub); @*/
+  /*@ ensures  [f]world(pub, key_clsfy) &*&
+               principal(principal, count) &*&
                [f1]item(item1, i1, pub) &*& [f2]item(item2, i2, pub) &*&
                col || i1 == i2; @*/
 

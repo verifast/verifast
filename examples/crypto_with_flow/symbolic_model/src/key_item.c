@@ -66,7 +66,7 @@ struct item *create_symmetric_key()
   //@ assert key->content |-> ?cont &*& key->size |-> ?size;
   //@ open cryptogram(cont + TAG_LENGTH, GCM_KEY_SIZE, ?cs_cont, ?k_cg);
   //@ assert k_cg == cg_symmetric_key(principal, count + 1);
-  //@ close exists(k_cg);
+  //@ close ic_cg(k)(cs_cont, k_cg);
   //@ assert chars(cont, TAG_LENGTH, ?cs_tag);
   //@ assert cs_tag == full_tag(TAG_SYMMETRIC_KEY);
   //@ public_chars(cont, TAG_LENGTH);
@@ -233,12 +233,12 @@ void retreive_keys(pk_context *ctx, struct item **public, struct item **private)
         public_generated_split(polarssl_pub(pub), cs2, TAG_LENGTH);
       }
   @*/
-  //@ close exists(cg_pub);
+  //@ close ic_cg(key_pub_i)(cs_pub, cg_pub);
   //@ close ic_parts(key_pub_i)(cs_pub_tag, cs_pub);
   //@ WELL_FORMED(cs_pub_tag, cs_pub, TAG_PUBLIC_KEY)
   //@ close item_constraints(key_pub_i, cs1, pub);
   //@ leak item_constraints(key_pub_i, cs1, pub);
-  //@ close exists(cg_priv);
+  //@ close ic_cg(key_priv_i)(cs_priv, cg_priv);
   //@ close ic_parts(key_priv_i)(cs_priv_tag, cs_priv);
   //@ WELL_FORMED(cs_priv_tag, cs_priv, TAG_PRIVATE_KEY)
   //@ close item_constraints(key_priv_i, cs2, pub);

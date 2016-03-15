@@ -177,7 +177,7 @@ struct item *symmetric_encryption(struct item *key, struct item *payload)
         }
     @*/
     //@ well_formed_item_constraints(pay, enc);
-    //@ close exists(enc_cg);
+    //@ close ic_cg(enc)(cg_cs, enc_cg);
     //@ close ic_parts(enc)(tag_cs, cont_cs);
     //@ WELL_FORMED(tag_cs, cont_cs, TAG_SYMMETRIC_ENC)
     //@ close item_constraints(enc, cs, pub);
@@ -267,7 +267,7 @@ struct item *symmetric_decryption(struct item *key, struct item *item)
     //@ assert item->content |-> ?i_cont &*& item->size |-> ?i_size;
     //@ open [_]item_constraints(enc, ?cs, pub);
     //@ open [_]ic_parts(enc)(?enc_tag, ?enc_cont);
-    //@ open [_]exists(?enc_cg);
+    //@ open [_]ic_cg(enc)(_, ?enc_cg);
     //@ take_append(TAG_LENGTH, enc_tag, enc_cont);
     //@ drop_append(TAG_LENGTH, enc_tag, enc_cont);
     //@ open [_]ic_sym_enc(enc)(?enc_iv, ?cg_cs);

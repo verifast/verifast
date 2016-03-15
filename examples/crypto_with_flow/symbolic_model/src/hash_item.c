@@ -53,8 +53,8 @@ struct item *create_hash(struct item *payload)
   //@ assert cs_tag == full_tag(TAG_HASH);
   //@ open cryptogram(cont + TAG_LENGTH, HASH_SIZE, ?cs_cont, ?h_cg);
   //@ assert h_cg == cg_hash(pay_cs);
-  //@ close exists(h_cg);
   //@ item h = hash_item(some(pay));
+  //@ close ic_cg(h)(cs_cont, h_cg);
   //@ list<char> cs = append(cs_tag, cs_cont);
   //@ if (col) public_chars(cont + TAG_LENGTH, HASH_SIZE);
   //@ if (col) public_generated_join(polarssl_pub(pub), cs_tag, cs_cont);  

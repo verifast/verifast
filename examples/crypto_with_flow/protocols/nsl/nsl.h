@@ -98,11 +98,11 @@ predicate nsl_pub(cryptogram cg) =
           nsl_pub_msg1(?sender, ?receiver, ?s_nonce) &*&
           p1 == sender && p0 == receiver &*&
           cs0 == append(identifier(sender), chars_for_cg(s_nonce)) &*&
+          [_]public_generated(nsl_pub)(take(ID_SIZE, cs0)) &*&
           length(identifier(sender)) == ID_SIZE &*&
           s_nonce == cg_nonce(sender, _) &*&
           cg_info(s_nonce) == int_pair(1, int_pair(p0, c0)) &*&
-          true == cg_is_generated(s_nonce) &*&
-          [_]public_generated(nsl_pub)(take(ID_SIZE, cs0))
+          true == cg_is_generated(s_nonce)
         )
       : length(cs0) == MSG2_SIZE ?
         (
@@ -112,19 +112,20 @@ predicate nsl_pub(cryptogram cg) =
           p1 == receiver && p0 == sender &*&
           cs0 == append(identifier(receiver),
                         append(s_nonce_cs, chars_for_cg(r_nonce))) &*&
+          [_]public_generated(nsl_pub)(take(ID_SIZE, cs0)) &*&
           r_nonce == cg_nonce(receiver, _) &*&
           cg_info(r_nonce) == int_pair(2, int_pair(sender, int_pair(p_inst,
                                           int_pair(p_orig, c_orig)))) &*&
           true == cg_is_generated(r_nonce) &*&
           length(s_nonce_cs) == NONCE_SIZE &*&
           length(identifier(receiver)) == ID_SIZE &*&
-          [_]public_generated(nsl_pub)(take(ID_SIZE, cs0)) &*&
           pub_ns ?
             [_]public_generated(nsl_pub)(s_nonce_cs)
           :
             s_nonce_cs == chars_for_cg(s_nonce) &*&
             s_nonce == cg_nonce(sender, _) &*&
             c_orig == int_right(int_right(cg_info(s_nonce))) &*&
+            cg_is_generated(s_nonce) &&
             p_inst == sender && p_orig == receiver
         )
       : length(cs0) == MSG3_SIZE ?

@@ -144,7 +144,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
              [f1]cryptogram(enc_key, KEY_SIZE, enc_key_cs, enc_key_cg) &*&
              [f2]cryptogram(hmac_key, KEY_SIZE, hmac_key_cs, hmac_key_cg) &*&
              chars(msg + result, MAX_SIZE - result, _) &*&
-             crypto_chars(secret, msg, result, ?msg_cs) &*&
+             crypto_chars(_, msg, result, ?msg_cs) &*&
              col || bad(sender) || bad(receiver) ||
                send(sender, receiver, msg_cs); @*/
 {
@@ -194,9 +194,10 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ interpret_encrypted(buffer + 16, enc_size);
     //@ assert cryptogram(buffer + 16, enc_size, enc_cs, ?enc_cg);
     //@ assert enc_cg == cg_encrypted(?p2, ?c2, ?dec_cs2, ?iv_cs2);
+    //@ open [_]hmac_then_enc_tagged_pub(enc_cg);
     
     //@ structure s = known_value(0, identifier(0));
-    //@ close decryption_pre(true, true, receiver, s, enc_cs);
+    //@ close decryption_pre(true, false, receiver, s, enc_cs);
     if (aes_crypt_cfb128(&aes_context, AES_DECRYPT, (unsigned int) enc_size,
                          &iv_off, iv, buffer + 16, buffer_dec) != 0)
       abort();
@@ -205,38 +206,67 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ open aes_context(&aes_context);
     //@ public_cryptogram_extract(buffer + 16);
     //@ public_cryptogram(buffer + 16, enc_cg);
-    /*@ open decryption_post(true, true, ?garbage,
-                             receiver, s, sender, enc_id, ?dec_cs); @*/               
-    //@ close check_identifier_ghost_args(true, garbage, sender, enc_id);
-    check_identifier(buffer_dec, 0);
-    //@ assert crypto_chars(secret, buffer_dec, enc_size, dec_cs);
-    
-    //@ assert take(ID_SIZE, dec_cs) == identifier(0);
+    /*@ open decryption_post(true, ?garbage, receiver, 
+                             s, sender, enc_id, ?dec_cs); @*/
+    //@ assert crypto_chars(?kind, buffer_dec, enc_size, dec_cs);
     //@ crypto_chars_split(buffer_dec, ID_SIZE);
-    //@ assert crypto_chars(secret, buffer_dec, ID_SIZE, identifier(0));
+    //@ assert crypto_chars(kind, buffer_dec, ID_SIZE, ?id_cs);
+    //@ assert crypto_chars(kind, buffer_dec + ID_SIZE, enc_size - ID_SIZE, ?rest_cs);
+    //@ take_append(ID_SIZE, id_cs, rest_cs);
+    //@ drop_append(ID_SIZE, id_cs, rest_cs);
     //@ crypto_chars_split(buffer_dec + ID_SIZE, enc_size - ID_SIZE - 64);
     //@ assert crypto_chars(_, buffer_dec + ID_SIZE, enc_size - ID_SIZE - 64, ?pay_cs);
     //@ assert crypto_chars(_, buffer_dec + enc_size - 64, 64, ?hmac_cs);
+    //@ assert rest_cs == append(pay_cs, hmac_cs);
+    
+    /*@ if (col)
+        {
+          crypto_chars_to_chars(buffer_dec, ID_SIZE);
+          crypto_chars_to_chars(buffer_dec + enc_size - 64, 64);
+          chars_to_crypto_chars(buffer_dec + enc_size - 64, 64);
+        }
+        else if (!garbage)
+        {
+          if (bad(sender) || bad(receiver))
+          {
+            public_generated_split(hmac_then_enc_tagged_pub, dec_cs, ID_SIZE);
+            public_generated_split(hmac_then_enc_tagged_pub, rest_cs, enc_size - ID_SIZE - 64);
+            public_crypto_chars(buffer_dec + enc_size - 64, 64);
+            chars_to_crypto_chars(buffer_dec + enc_size - 64, 64);
+          }
+          else
+          {
+            assert [_]hmac_then_enc_tagged_pub_1(?msg_cs, ?hmac_cg);
+            take_append(ID_SIZE, identifier(0), append(msg_cs, chars_for_cg(hmac_cg)));
+            drop_append(ID_SIZE, identifier(0), append(msg_cs, chars_for_cg(hmac_cg)));
+            drop_append(length(msg_cs), msg_cs, chars_for_cg(hmac_cg));
+            close memcmp_ghost_args(buffer_dec + enc_size - 64, hmac_cg);
+          }
+          public_crypto_chars(buffer_dec, ID_SIZE);
+        }
+    @*/
+    //@ chars_to_crypto_chars(buffer_dec, ID_SIZE);
+    //@ assert crypto_chars(normal, buffer_dec, ID_SIZE, _);
+    //@ close check_identifier_ghost_args(true, garbage, sender, enc_id, rest_cs);
+    check_identifier(buffer_dec, 0);
+    //@ assert id_cs == identifier(0);
     
     //Verify the hmac
     sha512_hmac(hmac_key, KEY_SIZE, buffer_dec + ID_SIZE,
                 (unsigned int) (enc_size - ID_SIZE - 64), hmac, 0);
     //@ open cryptogram(hmac, 64, ?hmac_cs2, ?hmac_cg);
+    //@ close memcmp_ghost_args(hmac, hmac_cg);
     if (memcmp(hmac, (void*) buffer_dec + enc_size - 64, 64) != 0) abort();
     //@ assert hmac_cs == hmac_cs2;
     memcpy(msg, buffer_dec + ID_SIZE, (unsigned int) enc_size - ID_SIZE - 64);
+    
     /*@ if (!col && !bad(sender) && !bad(receiver))
         {
-          open [_]hmac_then_enc_tagged_pub(enc_cg);
-          assert !garbage;
           assert [_]hmac_then_enc_tagged_pub_1(?msg_cs, ?hmac_cg2);
           assert length(pay_cs) == length(msg_cs);
           drop_append(ID_SIZE, identifier(0), append(pay_cs, chars_for_cg(hmac_cg)));
-          drop_append(ID_SIZE, identifier(0), append(msg_cs, chars_for_cg(hmac_cg2)));
           take_append(ID_SIZE, identifier(0), append(pay_cs, chars_for_cg(hmac_cg)));
-          take_append(ID_SIZE, identifier(0), append(msg_cs, chars_for_cg(hmac_cg2)));
           drop_append(length(pay_cs), pay_cs, chars_for_cg(hmac_cg));
-          drop_append(length(pay_cs), msg_cs, chars_for_cg(hmac_cg2));
           assert (chars_for_cg(hmac_cg) == chars_for_cg(hmac_cg2));
           chars_for_cg_inj(hmac_cg, hmac_cg2);
           assert pay_cs == msg_cs;
@@ -245,9 +275,10 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ chars_join(buffer);
     free(buffer);
     zeroize(hmac, 64);
-    //@ crypto_chars_join(buffer_dec);
-    //@ crypto_chars_join(buffer_dec);
-    zeroize(buffer_dec, enc_size);
+    zeroize(buffer_dec, ID_SIZE);
+    zeroize(buffer_dec + ID_SIZE, enc_size - ID_SIZE - 64);
+    zeroize(buffer_dec + enc_size - 64, 64);
+    //@ chars_join(buffer_dec);
     free(buffer_dec);
   }
   net_close(socket2);

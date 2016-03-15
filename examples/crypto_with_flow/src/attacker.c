@@ -472,12 +472,11 @@ void attacker_send_decrypted(havege_state *havege_state, void* socket)
       //@ close cryptogram(buffer2, size2, cs2, cg_enc);
       //@ assert cg_enc == cg_encrypted(?p2, ?c2, ?cs_output2, ?cs_iv2);
       //@ structure s = known_value(0, nil);
-      //@ close decryption_pre(true, true, attacker, s, cs2);
+      //@ close decryption_pre(true, false, attacker, s, cs2);
       int success = aes_crypt_cfb128(&aes_context, AES_DECRYPT,
                                      (unsigned int) size2, &iv_off, iv,
                                      buffer2, buffer3);
-      /*@ open decryption_post(true, true, ?garbage, 
-                               attacker, s, p, c, ?cs_output); @*/
+      //@ open decryption_post(true, ?garbage, attacker, s, p, c, ?cs_output);
       /*@ if (garbage)
           {
             assert is_public_key_classifier(?proof, _, _, _);
@@ -758,13 +757,12 @@ void attacker_send_asym_decrypted(havege_state *havege_state, void* socket)
       //@ assert cryptogram(buffer2, size2, ?cs2, ?cg_enc);
       //@ assert cg_enc == cg_asym_encrypted(?p2, ?c2, ?cs_output2, ?ent);
       //@ structure s = known_value(0, nil);
-      //@ close decryption_pre(false, true, attacker, s, cs2);
+      //@ close decryption_pre(false, false, attacker, s, cs2);
       int success = pk_decrypt(&context, buffer2, (unsigned int) size2,
                                buffer3, &osize, MAX_MESSAGE_SIZE,
                                attacker_key_item_havege_random_stub,
                                havege_state);
-      /*@ open decryption_post(false, true, ?garbage, 
-                               attacker, s, p, c, ?cs_output); @*/
+      //@ open decryption_post(false, ?garbage, attacker, s, p, c, ?cs_output);
       //@ assert crypto_chars(?kind, buffer3, ?osize_val, cs_output);
       /*@ if (garbage)
           {

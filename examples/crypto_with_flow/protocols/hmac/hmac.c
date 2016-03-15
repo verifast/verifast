@@ -97,6 +97,7 @@ void receiver(char *key, int key_len, char *message)
                 (unsigned int) MESSAGE_SIZE, hmac, 0);
     memcpy(message, (void*) buffer , MESSAGE_SIZE);
     //@ open cryptogram(hmac, 64, ?hmac_cs, ?hmac_cg);
+    //@ close memcmp_ghost_args(hmac, hmac_cg);
     //@ assert hmac_cg == cg_hmac(sender, id, msg_cs);
     //@ assert chars((void*) buffer + MESSAGE_SIZE, 64, ?hmac_cs2);
     //@ public_chars((void*) buffer + MESSAGE_SIZE, 64);

@@ -15,6 +15,8 @@ def update_part(path, old, new):
   f2.close()
 
 insert_part("string.h", 5, "//@ #include <crypto.gh>\r\n")
+insert_part("string.h", 37, "//@ predicate memcmp_ghost_args(char* buffer, cryptogram cg) = true;\r\n\n")
+
 update_part(
   "string.h",
   "    //@ requires chars(array, count, ?cs) &*& [?f]chars(array0, count, ?cs0);\r\n"
@@ -32,12 +34,16 @@ update_part(
   "    //@ ensures [f]chars(array, n, cs) &*& [f0]chars(array0, n0, cs0) &*& "
        "true == ((result == 0) == (take(count, cs) == take(count, cs0)));\r\n",
   "    /*@ requires network_permission(?principal) &*& \r\n"
-  "                 [?f1]crypto_chars(?kind1, array, ?n1, ?cs) &*&\r\n"
-  "                 [?f2]crypto_chars(?kind2, array0, ?n2, ?cs0) &*& \r\n"
+  "                 [?f1]crypto_chars(?kind1, array, ?n1, ?cs1) &*&\r\n"
+  "                   (kind1 == normal ? true : count >= MINIMAL_STRING_SIZE &*& \r\n"
+  "                    memcmp_ghost_args(array, ?cg1) &*& cs1 == chars_for_cg(cg1) && cg_is_generated(cg1)) &*&\r\n"
+  "                 [?f2]crypto_chars(?kind2, array0, ?n2, ?cs2) &*& \r\n"
+  "                   (kind2 == normal ? true : count >= MINIMAL_STRING_SIZE &*& \r\n"
+  "                    memcmp_ghost_args(array0, ?cg2) &*& cs2 == chars_for_cg(cg2) && cg_is_generated(cg2)) &*&\r\n"
   "                 count <= n1 &*& count <= n2; @*/\r\n"
-  "    /*@ ensures  [f1]crypto_chars(kind1, array, n1, cs) &*&\r\n"
-  "                 [f2]crypto_chars(kind2, array0, n2, cs0) &*&\r\n"
-  "                 true == ((result == 0) == (take(count, cs) == take(count, cs0))) &*&\r\n"
+  "    /*@ ensures  [f1]crypto_chars(kind1, array, n1, cs1) &*&\r\n"
+  "                 [f2]crypto_chars(kind2, array0, n2, cs2) &*&\r\n"
+  "                 true == ((result == 0) == (take(count, cs1) == take(count, cs2))) &*&\r\n"
   "                 (\r\n"
   "                   //if guessing a secret value failed, network permissions are revoked\r\n"
   "                   // *otherwise one could keep guessing untill success\r\n"

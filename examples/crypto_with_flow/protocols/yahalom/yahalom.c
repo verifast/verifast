@@ -65,7 +65,7 @@ void encrypt(havege_state *state, char *key, char *msg,
 
 void decrypt(char *key, char *msg, unsigned int msg_len, char* output)
 /*@ requires [_]public_invar(yahalom_pub) &*&
-             decryption_pre(true, true, ?principal1, ?s, ?msg_cs) &*&
+             decryption_pre(true, false, ?principal1, ?s, ?msg_cs) &*&
              random_permission(principal1, _) &*&
              [?f1]cryptogram(key, KEY_SIZE, ?key_cs, ?key_cg) &*&
                key_cg == cg_symmetric_key(?principal2, ?id) &*&
@@ -73,8 +73,8 @@ void decrypt(char *key, char *msg, unsigned int msg_len, char* output)
              [f2]chars(msg + 16, msg_len, msg_cs) &*&
                msg_len >= MINIMAL_STRING_SIZE &*& msg_len < 1024 &*&
              chars(output, msg_len, _); @*/
-/*@ ensures  decryption_post(true, true, ?garbage,
-                             principal1, s, principal2, id, ?dec_cs) &*&
+/*@ ensures  decryption_post(true, ?garbage, principal1,
+                             s, principal2, id, ?dec_cs) &*&
              random_permission(principal1, _) &*&
              [f1]cryptogram(key, KEY_SIZE, key_cs, key_cg) &*&
              [f2]chars(msg, 16 + msg_len, append(iv_cs, msg_cs)) &*&
@@ -119,53 +119,6 @@ void decrypt(char *key, char *msg, unsigned int msg_len, char* output)
   aes_free(&aes_context);
   //@ open aes_context(&aes_context);
   //@ chars_join(msg);
-}
-
-void decrypt_id(char *key, char *msg, unsigned int msg_len, char* output, int tag)
-/*@ requires [_]public_invar(yahalom_pub) &*&
-             [_]decryption_key_classifier(yahalom_public_key) &*&
-             principal(?principal1, _) &*&
-             [?f1]cryptogram(key, KEY_SIZE, ?key_cs, ?key_cg) &*&
-               key_cg == cg_symmetric_key(?principal2, ?id) &*&
-             [?f2]chars(msg, 16, ?iv_cs) &*&
-             [f2]chars(msg + 16, msg_len, ?msg_cs) &*&
-               msg_len >= ID_SIZE &*& msg_len < 1024 &*&
-             chars(output, msg_len, _); @*/
-/*@ ensures  principal(principal1, _) &*&
-             [f1]cryptogram(key, KEY_SIZE, key_cs, key_cg) &*&
-             [f2]chars(msg, 16 + msg_len, append(iv_cs, msg_cs)) &*&
-             crypto_chars(?kind, output, msg_len, ?dec_cs) &*&
-             take(ID_SIZE, dec_cs) == identifier(tag) &*&
-             [_]public_generated(yahalom_pub)(take(ID_SIZE, dec_cs)) &*&
-             exists(?enc_cg) &*&
-             enc_cg == cg_encrypted(?p, ?c, ?dec_cs2, ?iv_cs2) &*&
-             [_]yahalom_pub(enc_cg) &*&
-             col || yahalom_public_key(principal2, id, true) ?
-               kind == normal
-             :
-               kind == secret &*&
-               msg_cs == chars_for_cg(enc_cg) &*&
-               p == principal2 &*& c == id &*&
-               dec_cs == dec_cs2 && iv_cs == iv_cs2; @*/
-{
-  //@ structure s = known_value(0, identifier(tag));
-  //@ close decryption_pre(true, true, principal1, s, msg_cs);
-  decrypt(key, msg, msg_len, output);
-  //@ open [_]yahalom_pub(?enc_cg);
-  /*@ open decryption_post(true, true, ?garbage, principal1, s, 
-                           principal2, id, ?dec_cs); @*/
-  //@ if (col || garbage) public_chars(output, msg_len);
-  //@ if (col || garbage) chars_to_crypto_chars(output, msg_len);
-  //@ close check_identifier_ghost_args(true, garbage, principal2, id);
-  check_identifier(output, tag);
-  //@ assert crypto_chars(secret, output, msg_len, dec_cs);
-  //@ close principal(principal1, _);
-  /*@ if (col || yahalom_public_key(principal2, id, true))
-      {
-        public_crypto_chars(output, msg_len);
-        chars_to_crypto_chars(output, msg_len);
-      }
-  @*/
 }
 
 #ifdef INCLUDE_SERVER
@@ -225,45 +178,67 @@ void server(int server, int sender, int receiver,
     net_recv(&socket_in, message, (unsigned int) m_size);
     //@ chars_split(message, ID_SIZE);
     //@ chars_split(message + ID_SIZE, 16);
-    //@ chars_to_crypto_chars(message, ID_SIZE);
-    //@ close check_identifier_ghost_args(true, false, 0, 0);
-    check_identifier(message, receiver);
-    //@ public_crypto_chars(message, ID_SIZE);
-    //@ assert chars(message, ID_SIZE, identifier(receiver));
+    //@ assert chars(message, ID_SIZE, ?r_id_cs);
+    //@ public_chars(message, ID_SIZE);
     //@ assert chars(message + ID_SIZE, 16, ?iv_cs);
     //@ assert chars(message + ID_SIZE + 16, d_size, ?enc_cs);
-    //@ close principal(server, _);
-    decrypt_id(r_key, (void*) message + ID_SIZE, (unsigned int) d_size,
-               decrypted, sender);
-    //@ open principal(server, _);
+    //@ chars_to_crypto_chars(message, ID_SIZE);
+    //@ close check_identifier_ghost_args(true, false, 0, 0, append(iv_cs, enc_cs));
+    check_identifier(message, receiver);
+    //@ public_crypto_chars(message, ID_SIZE);
+    //@ assert r_id_cs == identifier(receiver);
+    //@ structure s = known_value(0, identifier(sender));
+    //@ close decryption_pre(true, false, server, s, enc_cs);
+    decrypt(r_key, (void*) message + ID_SIZE, (unsigned int) d_size, decrypted);
+    //@ open [_]yahalom_pub(?enc_cg);
+    /*@ open decryption_post(true, ?garbage, server, s,
+                             receiver, r_id, ?dec_cs); @*/
     //@ crypto_chars_split(decrypted, ID_SIZE);
     //@ crypto_chars_split((void*) decrypted + ID_SIZE, NONCE_SIZE);
     memcpy(NA, (void*) decrypted + ID_SIZE, NONCE_SIZE);
     memcpy(NB, (void*) decrypted + prefix_size, NONCE_SIZE);
-    //@ assert crypto_chars(?kind, decrypted + ID_SIZE, NONCE_SIZE, ?NA_cs);
+    //@ assert crypto_chars(?kind, decrypted, ID_SIZE, ?id_cs);
+    //@ assert crypto_chars(kind, decrypted + ID_SIZE, NONCE_SIZE, ?NA_cs);
     /*@ assert crypto_chars(kind, (void*) decrypted + ID_SIZE + NONCE_SIZE,
                                    NONCE_SIZE, ?NB_cs); @*/
     //@ NA_cg = chars_for_cg_sur(NA_cs, tag_nonce);
     //@ NB_cg = chars_for_cg_sur(NB_cs, tag_nonce);
-    //@ crypto_chars_join((void*) decrypted + ID_SIZE);
-    //@ crypto_chars_join(decrypted);
-
-    //@ open [_]yahalom_pub(?enc_cg);
     //@ condition = col || yahalom_public_key(receiver, r_id, true);
-    /*@ if (condition)
+    /*@ if (col || garbage || condition)
         {
-          crypto_chars_to_chars(decrypted, d_size);
-          chars_split(decrypted, ID_SIZE);
-          chars_split((void*) decrypted + ID_SIZE, NONCE_SIZE);
-          public_chars((void*) decrypted + ID_SIZE, NONCE_SIZE);
+          if (col || garbage)
+          {
+            chars_to_crypto_chars(decrypted, ID_SIZE);
+            public_chars(decrypted + ID_SIZE, NONCE_SIZE);
+            chars_to_crypto_chars(decrypted + ID_SIZE, NONCE_SIZE);
+            public_chars(decrypted + ID_SIZE + NONCE_SIZE, NONCE_SIZE);
+            chars_to_crypto_chars(decrypted + ID_SIZE + NONCE_SIZE, NONCE_SIZE);
+          }
+          else
+          {
+            public_generated_split(yahalom_pub, dec_cs, ID_SIZE);
+            public_generated_split(yahalom_pub, append(NA_cs, NB_cs), NONCE_SIZE);
+            public_crypto_chars(decrypted, ID_SIZE);
+          }
           public_crypto_chars_extract(NA, NA_cg);
-          public_chars((void*) decrypted + ID_SIZE + NONCE_SIZE, NONCE_SIZE);
           public_crypto_chars_extract(NB, NB_cg);
-          chars_join((void*) decrypted + ID_SIZE);
-          chars_join(decrypted);
-          chars_to_crypto_chars(decrypted, d_size);
+          chars_to_crypto_chars(NB, NONCE_SIZE);
         }
         else
+        {
+          assert [_]yahalom_pub_msg1(_, ?s2, ?NA2, ?NB2);
+          take_append(ID_SIZE, identifier(s2),
+                     append(chars_for_cg(NA2), chars_for_cg(NB2)));
+          public_crypto_chars(decrypted, ID_SIZE);
+        }
+    @*/
+    /*@ close check_identifier_ghost_args(true, garbage, receiver,
+                                          r_id, append(NA_cs, NB_cs)); @*/
+    check_identifier(decrypted, sender);
+    //@ crypto_chars_join((void*) decrypted + ID_SIZE);
+    //@ if (!col && !garbage) chars_to_secret_crypto_chars(decrypted, ID_SIZE);
+    //@ crypto_chars_join(decrypted);
+    /*@ if (!col && !garbage && !condition)
         {
           assert [_]yahalom_pub_msg1(?srv2, ?s2, ?NA2, ?NB2);
           take_append(ID_SIZE, identifier(sender), append(NA_cs, NB_cs));
@@ -296,12 +271,13 @@ void server(int server, int sender, int receiver,
 
   //@ assert chars(NA, NONCE_SIZE, ?cs_NA);
   //@ public_chars(NA, NONCE_SIZE);
+  //@ public_chars_extract(NA, NA_cg);
   //@ assert cs_NA == chars_for_cg(NA_cg);
   //@ assert NA_cg == cg_nonce(?s2, ?a_id);
-  //@ assert crypto_chars(secret, NB, NONCE_SIZE, ?cs_NB);
+  //@ assert true == cg_is_generated(NA_cg);
+  //@ assert crypto_chars(_, NB, NONCE_SIZE, ?cs_NB);
   //@ assert cs_NB == chars_for_cg(NB_cg);
   //@ assert NB_cg == cg_nonce(?r2, ?b_id);
-
   /*@ close random_request(server, IP(4, IP(sender, IP(receiver,
                                    IP(s2, IP(a_id, IP(r2, b_id)))))), true); @*/
 
@@ -538,6 +514,7 @@ void sender(int server, int sender, int receiver,
   char NA[NONCE_SIZE];
   char NB[NONCE_SIZE];
   char *MB;
+  //@ cryptogram cg_NA2;
   //@ cryptogram cg_NB;
   //@ cryptogram cg_KAB;
 
@@ -593,107 +570,127 @@ void sender(int server, int sender, int receiver,
     //@ chars_split(msg, 16 + size1);
     //@ chars_to_crypto_chars(msg + 16 + size1, size2);
     memcpy(MB, msg + 16 + size1, (unsigned int) size2);
-    //@ close principal(sender, _);
-    decrypt_id(key, (void*) msg, (unsigned int) size1, dec, receiver);
-    //@ open principal(sender, _);
+    //@ chars_split(msg, 16);
+    //@ assert chars(msg, 16, ?iv_cs);
+    //@ assert chars(msg + 16, size1, ?enc_cs);
+    //@ structure s = known_value(0, identifier(receiver));
+    //@ close decryption_pre(true, false, sender, s, enc_cs);
+    decrypt(key, (void*) msg, (unsigned int) size1, dec);
+    //@ open [_]yahalom_pub(?enc_cg);
+    /*@ open decryption_post(true, ?garbage, sender, s,
+                             sender, s_id2, ?dec_cs); @*/
     //@ crypto_chars_to_chars(msg + 16 + size1, size2);
     //@ chars_join(msg);
     free(msg);
-    //@ assert crypto_chars(?kind, dec, size1, ?dec_cs);
-    //@ bool condition = col || yahalom_public_key(sender, s_id2, true);
-    //@ if (condition) public_chars(dec, size1);
-    //@ if (condition) chars_to_crypto_chars(dec, size1);
-    //@ assert exists(?enc_cg);
+    //@ assert crypto_chars(?kind, dec, size1, dec_cs);
     //@ assert enc_cg == cg_encrypted(?p2, ?c2, ?dec_cs2, ?iv_cs2);
     //@ crypto_chars_split(dec, ID_SIZE);
     //@ crypto_chars_split(dec + ID_SIZE, KEY_SIZE);
     //@ crypto_chars_split(dec + ID_SIZE + KEY_SIZE, NONCE_SIZE);
+    //@ assert crypto_chars(kind, dec, ID_SIZE, ?id_cs);
+    //@ assert crypto_chars(kind, dec + ID_SIZE, KEY_SIZE, ?cs_KAB);
+    //@ assert crypto_chars(kind, dec + ID_SIZE + KEY_SIZE, NONCE_SIZE, ?cs_NA2);
+    /*@ assert crypto_chars(kind, dec + ID_SIZE + KEY_SIZE + NONCE_SIZE,
+                            NONCE_SIZE, ?cs_NB); @*/
+    //@ list<char> dec_cs0 = append(cs_KAB, append(cs_NA2, cs_NB));
+    /*@ take_append(ID_SIZE, identifier(receiver), append(cs_KAB,
+                    append(cs_NA, cs_NB))); @*/
+    /*@ drop_append(ID_SIZE, identifier(receiver), append(cs_KAB,
+                    append(cs_NA, cs_NB))); @*/
+    //@ take_append(KEY_SIZE, cs_KAB, append(cs_NA, cs_NB));
+    //@ drop_append(KEY_SIZE, cs_KAB, append(cs_NA, cs_NB));
+    //@ take_append(NONCE_SIZE, cs_NA, cs_NB);
+    //@ drop_append(NONCE_SIZE, cs_NA, cs_NB);
+    //@ take_append(NONCE_SIZE, cs_NA, cs_NB);
+    //@ drop_append(NONCE_SIZE, cs_NA, cs_NB);
+    //@ assert dec_cs == append(id_cs, dec_cs0);
 
-    //@ assert crypto_chars(kind, dec, ID_SIZE, identifier(receiver));
-    memcpy(generated_key, (void*) dec + ID_SIZE, KEY_SIZE);
-    //@ assert crypto_chars(kind, generated_key, KEY_SIZE, ?cs_KAB);
-    if (memcmp(NA, dec + ID_SIZE + KEY_SIZE, NONCE_SIZE) != 0) abort();
-    //@ public_crypto_chars(dec + ID_SIZE + KEY_SIZE, NONCE_SIZE);
-    /*@ if (kind == secret)
-          chars_to_secret_crypto_chars(dec + ID_SIZE + KEY_SIZE, NONCE_SIZE);
-        else
-          chars_to_crypto_chars(dec + ID_SIZE + KEY_SIZE, NONCE_SIZE);
-    @*/
-    memcpy(NB, (void*) dec + ID_SIZE + KEY_SIZE + NONCE_SIZE, NONCE_SIZE);
-    //@ assert crypto_chars(kind, NB, NONCE_SIZE, ?cs_NB);
-    /*@ assert dec_cs == append(identifier(receiver), append(cs_KAB,
-                                append(cs_NA, cs_NB))); @*/
-
-    //@ open [_]yahalom_pub(enc_cg);
+    //@ bool condition = col || yahalom_public_key(sender, s_id2, true);
+    //@ cg_NA2 = chars_for_cg_sur(cs_NA2, tag_nonce);
     //@ cg_NB = chars_for_cg_sur(cs_NB, tag_nonce);
     //@ cg_KAB = chars_for_cg_sur(cs_KAB, tag_symmetric_key);
-    /*@ if (condition)
+    memcpy(generated_key, (void*) dec + ID_SIZE, KEY_SIZE);
+    memcpy(NB, (void*) dec + ID_SIZE + KEY_SIZE + NONCE_SIZE, NONCE_SIZE);
+    /*@ if (col || garbage || condition)
         {
-          if (!col)
+          if (col || garbage)
           {
-            public_generated_split(yahalom_pub, dec_cs, ID_SIZE);
-            public_generated_split(yahalom_pub,
-              append(cs_KAB, append(cs_NA, cs_NB)), KEY_SIZE);
-            public_generated_split(yahalom_pub,
-              append(cs_NA, cs_NB), NONCE_SIZE);
-            public_crypto_chars(NB, NONCE_SIZE);
-            public_chars_extract(NB, cg_NB);
-            chars_to_secret_crypto_chars(NB, NONCE_SIZE);
-            public_crypto_chars(generated_key, KEY_SIZE);
-            public_chars_extract(generated_key, cg_KAB);
-            chars_to_secret_crypto_chars(generated_key, KEY_SIZE);
+            crypto_chars_to_chars(dec, ID_SIZE);
+            crypto_chars_to_chars(dec + ID_SIZE, KEY_SIZE);
+            crypto_chars_to_chars(dec + ID_SIZE + KEY_SIZE, NONCE_SIZE);
+            crypto_chars_to_chars(dec + ID_SIZE + KEY_SIZE + NONCE_SIZE, NONCE_SIZE);
           }
           else
           {
-            crypto_chars_to_chars(generated_key, KEY_SIZE);
-            public_chars_extract(generated_key, cg_KAB);
-            chars_to_secret_crypto_chars(generated_key, KEY_SIZE);
-            crypto_chars_to_chars(NB, NONCE_SIZE);
-            public_chars_extract(NB, cg_NB);
-            chars_to_secret_crypto_chars(NB, NONCE_SIZE);
+            public_generated_split(yahalom_pub, dec_cs, ID_SIZE);
+            public_generated_split(yahalom_pub, dec_cs0, KEY_SIZE);
+            public_generated_split(yahalom_pub, append(cs_NA2, cs_NB), NONCE_SIZE);
+            public_crypto_chars(dec, ID_SIZE);
+            public_crypto_chars(dec + ID_SIZE, KEY_SIZE);
+            public_crypto_chars(dec + ID_SIZE + KEY_SIZE, NONCE_SIZE);
+            public_crypto_chars(dec + ID_SIZE + KEY_SIZE + NONCE_SIZE, NONCE_SIZE);
+
           }
+          public_chars_extract(dec + ID_SIZE + KEY_SIZE + NONCE_SIZE, cg_NB);
+          public_chars_extract(dec + ID_SIZE, cg_KAB);
+          chars_to_crypto_chars(dec, ID_SIZE);
+          chars_to_crypto_chars(dec + ID_SIZE, KEY_SIZE);
+          chars_to_crypto_chars(dec + ID_SIZE + KEY_SIZE, NONCE_SIZE);
+          public_chars(dec + ID_SIZE + KEY_SIZE + NONCE_SIZE, NONCE_SIZE);
+          chars_to_crypto_chars(dec + ID_SIZE + KEY_SIZE + NONCE_SIZE, NONCE_SIZE);
         }
         else
+        {
+          assert [_]yahalom_pub_msg2(?s2, ?r2, ?NA2, ?NB2, ?KAB);
+          take_append(ID_SIZE, identifier(r2),append(chars_for_cg(KAB),
+                      append(chars_for_cg(NA2), chars_for_cg(NB2))));
+          drop_append(ID_SIZE, identifier(r2),append(chars_for_cg(KAB),
+                      append(chars_for_cg(NA2), chars_for_cg(NB2))));
+          take_append(KEY_SIZE, chars_for_cg(KAB),
+                      append(chars_for_cg(NA2), chars_for_cg(NB2)));
+          drop_append(KEY_SIZE, chars_for_cg(KAB),
+                      append(chars_for_cg(NA2), chars_for_cg(NB2)));
+          take_append(NONCE_SIZE, chars_for_cg(NA2), chars_for_cg(NB2));
+          drop_append(NONCE_SIZE, chars_for_cg(NA2), chars_for_cg(NB2));
+          public_crypto_chars(dec, ID_SIZE);
+          close cryptogram(dec + ID_SIZE + KEY_SIZE, NONCE_SIZE, chars_for_cg(NA2), NA2);
+          public_cryptogram(dec + ID_SIZE + KEY_SIZE, NA2);
+          chars_to_crypto_chars(dec + ID_SIZE + KEY_SIZE, NONCE_SIZE);
+        }
+    @*/
+    //@ close check_identifier_ghost_args(true, garbage, sender, s_id2, dec_cs0);
+    check_identifier(dec, receiver);
+    //@ assert id_cs == identifier(receiver);
+    if (memcmp(NA, dec + ID_SIZE + KEY_SIZE, NONCE_SIZE) != 0) abort();
+    //@ assert cs_NA == cs_NA2;
+    //@ assert crypto_chars(kind, NB, NONCE_SIZE, cs_NB);
+    /*@ if (!col && !garbage && !condition)
         {
           assert [_]yahalom_pub_msg2(?server2, ?receiver2, ?NA2, ?NB2,
                                      ?KAB2);
           assert length(identifier(receiver2)) == ID_SIZE;
-          take_append(ID_SIZE, identifier(receiver2), append(chars_for_cg(KAB2),
-                      append(chars_for_cg(NA2), chars_for_cg(NB2))));
-          drop_append(ID_SIZE, identifier(receiver2), append(chars_for_cg(KAB2),
-                      append(chars_for_cg(NA2), chars_for_cg(NB2))));
-          take_append(ID_SIZE, identifier(receiver), append(cs_KAB,
-                      append(cs_NA, cs_NB)));
-          drop_append(ID_SIZE, identifier(receiver), append(cs_KAB,
-                      append(cs_NA, cs_NB)));
           assert identifier(receiver2) == identifier(receiver);
-          take_append(KEY_SIZE, chars_for_cg(KAB2),
-                      append(chars_for_cg(NA2), chars_for_cg(NB2)));
-          drop_append(KEY_SIZE, chars_for_cg(KAB2),
-                      append(chars_for_cg(NA2), chars_for_cg(NB2)));
-          take_append(KEY_SIZE, cs_KAB, append(cs_NA, cs_NB));
-          drop_append(KEY_SIZE, cs_KAB, append(cs_NA, cs_NB));
           assert cs_KAB == chars_for_cg(KAB2);
-          take_append(NONCE_SIZE, chars_for_cg(NA2), chars_for_cg(NB2));
-          drop_append(NONCE_SIZE, chars_for_cg(NA2), chars_for_cg(NB2));
-          take_append(NONCE_SIZE, cs_NA, cs_NB);
-          drop_append(NONCE_SIZE, cs_NA, cs_NB);
           assert cs_NA == chars_for_cg(NA2);
           equal_identifiers(receiver2, receiver);
           assert receiver2 == receiver;
           cg_KAB = KAB2;
           assert cg_KAB == cg_symmetric_key(server, _);
           chars_for_cg_inj(cg_NA, NA2);
-          assert cg_NA == cg_nonce(?s, ?a_id);
-          assert NB2 == cg_nonce(?r, ?b_id);
+          assert cg_NA == cg_nonce(?s2, ?a_id);
+          assert NB2 == cg_nonce(?r2, ?b_id);
           cg_NB = NB2;
           chars_for_cg_inj(cg_NB, NB2);
           assert chars_for_cg(cg_NB) == cs_NB;
           assert server2 == server;
           assert cg_info(cg_KAB) == IP(4, IP(sender, IP(receiver,
-                                      IP(s, IP(a_id, IP(r, b_id))))));
+                                      IP(s2, IP(a_id, IP(r2, b_id))))));
+          chars_to_secret_crypto_chars(dec, ID_SIZE);
+          chars_to_secret_crypto_chars(dec + ID_SIZE + KEY_SIZE, NONCE_SIZE);
         }
     @*/
+    //@ assert crypto_chars(?k, generated_key, KEY_SIZE, cs_KAB);
+    //@ if (k == normal) chars_to_secret_crypto_chars(generated_key, KEY_SIZE);
     //@ close cryptogram(generated_key, KEY_SIZE, cs_KAB, cg_KAB);
     //@ crypto_chars_join(dec + ID_SIZE + KEY_SIZE);
     //@ crypto_chars_join(dec + ID_SIZE);
@@ -702,7 +699,9 @@ void sender(int server, int sender, int receiver,
     free(dec);
   }
 
-  //@ assert crypto_chars(secret, NB, NONCE_SIZE, ?cs_NB);
+  //@ assert crypto_chars(?k, NB, NONCE_SIZE, ?cs_NB);
+  //@ if (k == normal) chars_to_secret_crypto_chars(NB, NONCE_SIZE);
+  //@ assert crypto_chars(secret, NB, NONCE_SIZE, cs_NB);
   //@ assert cs_NB == chars_for_cg(cg_NB);
   //@ open cryptogram(generated_key, KEY_SIZE, ?cs_KAB, cg_KAB);
   //@ close cryptogram(generated_key, KEY_SIZE, cs_KAB, cg_KAB);
@@ -715,7 +714,6 @@ void sender(int server, int sender, int receiver,
   //@ assert cg_NB == cg_nonce(?receiver2, ?b_id);
   /*@ assert col || bad(server) || bad(sender) ||
                     bad(receiver) || receiver == receiver2; @*/
-
   {
     // 4. A -> B. ENC(KB, {A, KAB}), ENC(KAB, NB)
     int size1 = 16 + ID_SIZE + KEY_SIZE;
@@ -729,7 +727,7 @@ void sender(int server, int sender, int receiver,
           {
             if (yahalom_public_key(p0, c0, true))
             {
-              if (!bad(server) && !bad(sender) && bad(receiver))
+              if (bad(receiver))
               {
                 assert [_]yahalom_pub(cg_NB);
                 close cryptogram(NB, NONCE_SIZE, cs_NB, cg_NB);
@@ -740,7 +738,7 @@ void sender(int server, int sender, int receiver,
             }
             else
             {
-              if (bad(server) || bad(sender) || bad(server))
+              if (bad(server) || bad(sender))
               {
                 public_crypto_chars_extract(NB, cg_NB);
                 chars_to_crypto_chars(NB, NONCE_SIZE);
@@ -790,6 +788,179 @@ void sender(int server, int sender, int receiver,
 
 #endif
 #ifdef INCLUDE_RECEIVER
+
+void receiver_(int socket_in, int sender, int receiver, int server,
+               char *key, char *generated_key, char* NA, char* NB)
+  /*@ requires [_]public_invar(yahalom_pub) &*&
+               [_]decryption_key_classifier(yahalom_public_key) &*&
+               principal(receiver, _) &*&
+               net_status(socket_in, ?ip, ?port, connected) &*&
+               [?f1]cryptogram(key, KEY_SIZE, ?key_cs, ?key_cg) &*&
+                 key_cg == cg_symmetric_key(receiver, ?r_id1) &*&
+                 cg_info(key_cg) == int_pair(3, server) &*&
+               chars(generated_key, KEY_SIZE, _) &*&
+               crypto_chars(?kna, NA, NONCE_SIZE, ?cs_NA) &*&
+                 exists(?cg_NA) &*& cs_NA == chars_for_cg(cg_NA) &*&
+                 cg_NA == cg_nonce(?s, ?s_id) &*&
+               cryptogram(NB, NONCE_SIZE, ?cs_NB, ?cg_NB) &*&
+                 cg_NB == cg_nonce(receiver, ?r_id0) &*&
+                 cg_info(cg_NB) ==
+                   IP(2, IP(server, IP(sender, IP(s, s_id)))); @*/
+  /*@ ensures  principal(receiver, _) &*&
+               net_status(socket_in, ip, port, connected) &*&
+               [f1]cryptogram(key, KEY_SIZE, key_cs, key_cg) &*&
+               cryptogram(generated_key, KEY_SIZE, ?cs_KAB, ?cg_KAB) &*&
+               crypto_chars(kna, NA, NONCE_SIZE, cs_NA) &*&
+               cryptogram(NB, NONCE_SIZE, cs_NB, cg_NB) &*&
+               col || bad(server) || bad(sender) || bad(receiver) ?
+                 true
+               :
+                 cg_KAB == cg_symmetric_key(server, ?id) &*&
+                 IF(cg_info(cg_KAB)) == 4 &*&
+                 IF(IS(cg_info(cg_KAB))) == sender &*&
+                 IF(IS(IS(cg_info(cg_KAB)))) == receiver &*&
+                 IF(IS(IS(IS(cg_info(cg_KAB))))) == sender &*&
+                 IF(IS(IS(IS(IS(IS(cg_info(cg_KAB))))))) == receiver &*&
+                 IS(IS(IS(IS(IS(IS(cg_info(cg_KAB))))))) == r_id0; @*/
+{
+  //@ open principal(receiver, _);
+  // 4. A -> B. ENC(KB, {A, KAB}), ENC(KAB, NB)
+  int size1 = ID_SIZE + KEY_SIZE;
+  int size2 = NONCE_SIZE;
+  int size = 16 + size1 + 16 + size2;
+  char *msg = malloc(size); if (msg == 0) abort();
+  char *dec1 = malloc(size1); if (dec1 == 0) abort();
+  char *dec2 = malloc(size2); if (dec2 == 0) abort();
+  net_recv(&socket_in, msg, (unsigned int) size);
+  //@ chars_split(msg, 16);
+  //@ chars_split(msg + 16, size1);
+  //@ assert chars(msg, 16, ?iv_cs1);
+  //@ assert chars(msg + 16, size1, ?enc_cs1);
+  //@ structure s1 = known_value(0, identifier(sender));
+  //@ close decryption_pre(true, false, receiver, s1, enc_cs1);
+  decrypt(key, (void*) msg, (unsigned int) size1, dec1);
+  //@ open [_]yahalom_pub(?enc_cg);
+  //@ assert enc_cg == cg_encrypted(?p, ?c, ?dec_cs2, ?iv_cs2);
+  /*@ open decryption_post(true, ?garbage, receiver, s1,
+                            receiver, r_id1, ?dec_cs); @*/
+  //@ assert crypto_chars(?kind, dec1, size1, ?cs_dec1);
+  //@ crypto_chars_split(dec1, ID_SIZE);
+  //@ assert crypto_chars(kind, dec1, ID_SIZE, ?cs_id1);
+  //@ assert crypto_chars(kind, dec1 + ID_SIZE, KEY_SIZE, ?cs_KAB);
+  //@ take_append(ID_SIZE, cs_id1, cs_KAB);
+  //@ drop_append(ID_SIZE, cs_id1, cs_KAB);
+  //@ cryptogram cg_KAB = chars_for_cg_sur(cs_KAB, tag_symmetric_key);
+  /*@ if (col || garbage || yahalom_public_key(receiver, r_id1, true))
+      {
+        if (col || garbage)
+        {
+          public_chars(dec1, ID_SIZE);
+          public_chars(dec1 + ID_SIZE, KEY_SIZE);
+        }
+        else
+        {
+          public_generated_split(yahalom_pub, dec_cs, ID_SIZE);
+          public_crypto_chars(dec1, ID_SIZE);
+          public_crypto_chars(dec1 + ID_SIZE, KEY_SIZE);
+        }
+        public_chars_extract(dec1 + ID_SIZE, cg_KAB);
+        chars_to_crypto_chars(dec1, ID_SIZE);
+        chars_to_crypto_chars(dec1 + ID_SIZE, KEY_SIZE);
+      }
+      else
+      {
+        assert [_]yahalom_pub_msg3(?server2, ?sender2, ?KAB2, ?s2,
+                                    ?a_id2, ?r2, ?b_id2);
+        take_append(ID_SIZE, identifier(sender2), chars_for_cg(KAB2));
+        drop_append(ID_SIZE, identifier(sender2), chars_for_cg(KAB2));
+        public_crypto_chars(dec1, ID_SIZE);
+      }
+  @*/
+  memcpy(generated_key, dec1 + ID_SIZE, KEY_SIZE);
+  /*@ close check_identifier_ghost_args(true, garbage, receiver,
+                                        r_id1, cs_KAB); @*/
+  check_identifier(dec1, sender);
+  /*@ if(!col && !yahalom_public_key(receiver, r_id1, true))
+      {
+        chars_to_crypto_chars(dec1, ID_SIZE);
+        assert [_]yahalom_pub_msg3(?server2, ?sender2, ?KAB2, ?s2,
+                                    ?a_id2, ?r2, ?b_id2);
+        assert server2 == server;
+        equal_identifiers(sender2, sender);
+        assert sender2 == sender;
+        cg_KAB = KAB2;
+        assert cg_KAB == cg_symmetric_key(server, _);
+      }
+  @*/
+  //@ assert crypto_chars(?k, generated_key, KEY_SIZE, cs_KAB);
+  //@ if (k == normal) chars_to_secret_crypto_chars(generated_key, KEY_SIZE);
+  //@ close cryptogram(generated_key, KEY_SIZE, cs_KAB, cg_KAB);
+  //@ assert cg_KAB == cg_symmetric_key(?p4, ?c4);
+  //@ structure st = known_value(0, cs_NB);
+  //@ chars_split(msg + 16 + size1, 16);
+  //@ assert chars(msg + 2 * 16 + size1, size2, ?msg_cs);
+  //@ close decryption_pre(true, false, receiver, st, msg_cs);
+  decrypt(generated_key, msg + 16 + size1, (unsigned int) size2, dec2);
+  /*@ open decryption_post(true, ?garbage2, receiver,
+                            st, p4, c4, _); @*/
+  //@ open exists(?enc_cg2);
+  //@ assert enc_cg2 == cg_encrypted(?p3, ?c3, ?dec_cs3, ?iv_cs3);
+  //@ open [_]yahalom_pub(enc_cg2);
+  /*@ if (col || garbage2 || yahalom_public_key(p4, c4, true))
+      {
+        if (col || garbage2)
+          public_chars(dec2, NONCE_SIZE);
+        else
+          public_crypto_chars(dec2, NONCE_SIZE);
+        chars_to_crypto_chars(dec2, NONCE_SIZE);
+      }
+      else
+      {
+        assert [_]yahalom_pub_msg4(?server2, ?sender2,
+                                    ?receiver2, ?a_id2, ?NB2);
+        close memcmp_ghost_args(dec2, NB2);
+      }
+  @*/
+  //@ open cryptogram(NB, NONCE_SIZE, cs_NB, cg_NB);
+  //@ close memcmp_ghost_args(NB, cg_NB);
+  if (memcmp(dec2, NB, NONCE_SIZE) != 0) abort();
+  //@ close cryptogram(NB, NONCE_SIZE, cs_NB, cg_NB);
+  //@ assert crypto_chars(_, dec2, NONCE_SIZE, cs_NB);
+  /*@ if (garbage2)
+      {
+        close exists(pair(nil, nil));
+        close has_structure(cs_NB, st);
+        leak has_structure(cs_NB, st);
+        decryption_garbage(dec2, NONCE_SIZE, st);
+        chars_to_secret_crypto_chars(dec2, NONCE_SIZE);
+      }
+  @*/
+  /*@ if (!col && !bad(server) && !bad(sender) && !bad(receiver))
+      {
+        assert [_]yahalom_pub_msg4(?server2, ?sender2,
+                                    ?receiver2, ?a_id2, ?NB2);
+        chars_for_cg_inj(cg_NB, NB2);
+        if (bad(server2) || bad(sender2) || bad(receiver2))
+        {
+          open [_]yahalom_pub(cg_NB);
+          assert false;
+        }
+      }
+  @*/
+  //@ assert crypto_chars(?k1, dec2, NONCE_SIZE, cs_NB);
+  //@ if (k1 == normal) crypto_chars_to_chars(dec2, NONCE_SIZE);
+  //@ if (k1 == normal) chars_to_secret_crypto_chars(dec2, NONCE_SIZE);
+
+  free(msg);
+  //@ assert crypto_chars(?k2, dec1 + ID_SIZE, KEY_SIZE, _);
+  //@ if (k2 == secret) chars_to_secret_crypto_chars(dec1, ID_SIZE);
+  //@ crypto_chars_join(dec1);
+  zeroize(dec1, size1);
+  free(dec1);
+  zeroize(dec2, size2);
+  free(dec2);
+  //@ close principal(receiver, _);
+}
 
 void receiver(int server, int sender, int receiver,
               char *key, char *generated_key)
@@ -841,13 +1012,14 @@ void receiver(int server, int sender, int receiver,
     int size = ID_SIZE + NONCE_SIZE;
     char* message = malloc(size); if (message == 0) abort();
     net_recv(&socket_in, message, (unsigned int) size);
-    //@ chars_to_crypto_chars(message, ID_SIZE + NONCE_SIZE);
-    //@ crypto_chars_split(message, ID_SIZE);
-    //@ close check_identifier_ghost_args(true, false, 0, 0);
+    //@ chars_split(message, ID_SIZE);
+    //@ public_chars(message, ID_SIZE);
+    //@ close check_identifier_ghost_args(true, false, 0, 0, nil);
     check_identifier(message, sender);
     //@ public_crypto_chars(message, ID_SIZE);
     //@ assert chars(message, ID_SIZE, identifier(sender));
     //@ assert chars(message + ID_SIZE, NONCE_SIZE, ?cs_NA);
+    //@ chars_to_crypto_chars(message + ID_SIZE, NONCE_SIZE);
     memcpy(NA, (void*) message + ID_SIZE, NONCE_SIZE);
     //@ public_chars(message + ID_SIZE, NONCE_SIZE);
     //@ crypto_chars_to_chars(NA, NONCE_SIZE);
@@ -950,96 +1122,13 @@ void receiver(int server, int sender, int receiver,
     //@ crypto_chars_to_chars(message + ID_SIZE, 0);
     //@ crypto_chars_to_chars(plaintext + ID_SIZE, 0);
   }
-
-  {
-    // 4. A -> B. ENC(KB, {A, KAB}), ENC(KAB, NB)
-    int size1 = ID_SIZE + KEY_SIZE;
-    int size2 = NONCE_SIZE;
-    int size = 16 + size1 + 16 + size2;
-    char *msg = malloc(size); if (msg == 0) abort();
-    char *dec1 = malloc(size1); if (dec1 == 0) abort();
-    char *dec2 = malloc(size2); if (dec2 == 0) abort();
-    net_recv(&socket_in, msg, (unsigned int) size);
-    //@ close principal(receiver, _);
-    //@ chars_split(msg, 16);
-    //@ chars_split(msg + 16, size1);
-    decrypt_id(key, (void*) msg, (unsigned int) size1, dec1, sender);
-    //@ open principal(receiver, _);
-    //@ open exists(?enc_cg);
-    //@ assert enc_cg == cg_encrypted(?p, ?c, ?dec_cs2, ?iv_cs2);
-    //@ open [_]yahalom_pub(enc_cg);
-    //@ assert crypto_chars(?kind, dec1, size1, ?cs_dec1);
-    //@ crypto_chars_split(dec1, ID_SIZE);
-    memcpy(generated_key, dec1 + ID_SIZE, KEY_SIZE);
-    //@ assert crypto_chars(kind, generated_key, KEY_SIZE, ?cs_KAB);
-    //@ cg_KAB = chars_for_cg_sur(cs_KAB, tag_symmetric_key);
-    /*@ if(col || yahalom_public_key(receiver, r_id2, true))
-        {
-          public_chars(generated_key, KEY_SIZE);
-          crypto_chars_join(dec1);
-          public_chars_extract(generated_key, cg_KAB);
-        }
-        else
-        {
-          crypto_chars_join(dec1);
-          assert [_]yahalom_pub_msg3(?server2, ?sender2, ?KAB2, ?s2,
-                                      ?a_id2, ?r2, ?b_id2);
-          take_append(ID_SIZE, identifier(sender), cs_KAB);
-          take_append(ID_SIZE, identifier(sender2), chars_for_cg(KAB2));
-          drop_append(ID_SIZE, identifier(sender), cs_KAB);
-          drop_append(ID_SIZE, identifier(sender2), chars_for_cg(KAB2));
-          assert server2 == server;
-          equal_identifiers(sender2, sender);
-          assert sender2 == sender;
-          cg_KAB = KAB2;
-          assert cg_KAB == cg_symmetric_key(server, _);
-        }
-    @*/
-    //@ close cryptogram(generated_key, KEY_SIZE, cs_KAB, cg_KAB);
-    //@ assert cg_KAB == cg_symmetric_key(?p4, ?c4);
-    //@ structure st = known_value(0, cs_NB);
-    //@ chars_split(msg + 16 + size1, 16);
-    //@ assert chars(msg + 2 * 16 + size1, size2, ?msg_cs);
-    //@ close decryption_pre(true, true, receiver, st, msg_cs);
-    decrypt(generated_key, msg + 16 + size1, (unsigned int) size2, dec2);
-    /*@ open decryption_post(true, true, ?garbage,
-                             receiver, st, p4, c4, _); @*/
-    //@ open exists(?enc_cg2);
-    //@ assert enc_cg2 == cg_encrypted(?p3, ?c3, ?dec_cs3, ?iv_cs3);
-    //@ open [_]yahalom_pub(enc_cg2);
-    if (memcmp(dec2, NB, NONCE_SIZE) != 0) abort();
-    //@ assert crypto_chars(_, dec2, NONCE_SIZE, cs_NB);
-
-    /*@ if (garbage)
-        {
-          close exists(pair(nil, nil));
-          close has_structure(cs_NB, st);
-          leak has_structure(cs_NB, st);
-          decryption_garbage(dec2, NONCE_SIZE, st);
-          chars_to_secret_crypto_chars(dec2, NONCE_SIZE);
-        }
-    @*/
-    //@ assert crypto_chars(secret, dec2, NONCE_SIZE, cs_NB);
-    /*@ if (!col && !bad(server) && !bad(sender) && !bad(receiver))
-        {
-          assert [_]yahalom_pub_msg4(?server2, ?sender2,
-                                     ?receiver2, ?a_id2, ?NB2);
-          assert NB2 == cg_nonce(?b2, ?b_id2);
-          chars_for_cg_inj(cg_NB, NB2);
-          if (bad(server2) || bad(sender2) || bad(receiver2))
-          {
-            open [_]yahalom_pub(cg_NB);
-            assert false;
-          }
-        }
-    @*/
-
-    free(msg);
-    zeroize(dec1, size1);
-    free(dec1);
-    zeroize(dec2, size2);
-    free(dec2);
-  }
+  //@ close principal(receiver, _);
+  //@ close exists(cg_NA);
+  //@ close cryptogram(NB, NONCE_SIZE, cs_NB, cg_NB);
+  receiver_(socket_in, sender, receiver, server, key,
+            generated_key, NA, NB);
+  //@ open cryptogram(NB, NONCE_SIZE, cs_NB, cg_NB);
+  //@ close principal(receiver, _);
 
   //@ public_crypto_chars(NA, NONCE_SIZE);
   zeroize(NB, NONCE_SIZE);

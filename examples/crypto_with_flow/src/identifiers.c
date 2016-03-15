@@ -48,26 +48,26 @@ void write_identifier(char *array, int id)
 void check_identifier(char *array, int id)
   /*@ requires [_]public_invar(?pub) &*&
                [_]decryption_key_classifier(?key_classifier) &*&
-               network_permission(?p) &*& 
-               [?f]crypto_chars(?kind, array, ?size, ?cs) &*&
-               size >= ID_SIZE &*&
-               check_identifier_ghost_args(?sym, ?garbage, ?p_key, ?c_key) &*&
+               network_permission(?p) &*&
+               [?f]crypto_chars(normal, array, ID_SIZE, ?cs) &*&
+               check_identifier_ghost_args(?sym, ?garbage, ?p_key, 
+                                           ?c_key, ?cs_rest) &*&
                garbage ?
-                 decryption_garbage(sym, p, ?s, p_key, c_key, cs) &*&
+                 decryption_garbage(sym, p, ?s, p_key, c_key, 
+                                    append(cs, cs_rest)) &*&
                  s == known_value(0, identifier(id))
                :
                  true; @*/
   /*@ ensures  network_permission(p) &*& 
-               [f]crypto_chars(secret, array, size, cs) &*&
-               take(ID_SIZE, cs) == identifier(id) &*&
-               [_]public_generated(pub)(take(ID_SIZE, cs)) &*&
+               [f]crypto_chars(normal, array, ID_SIZE, cs) &*&
+               cs == identifier(id) &*&
                garbage ?
                  decryption_permission(p) &*& 
                  key_classifier(p_key, c_key, sym) ? true : col
                :
                  true; @*/
 {
-  //@ open check_identifier_ghost_args(sym, garbage, p_key, c_key);
+  //@ open check_identifier_ghost_args(sym, garbage, p_key, c_key, cs_rest);
   char temp[ID_SIZE];
   write_identifier(temp, id);
   //@ crypto_chars_to_chars(temp, ID_SIZE);
@@ -75,21 +75,14 @@ void check_identifier(char *array, int id)
   //@ chars_to_crypto_chars(temp, ID_SIZE);
   if (memcmp(temp, array, ID_SIZE) != 0) abort();
   //@ public_crypto_chars(temp, ID_SIZE);
-  //@ assert [f]crypto_chars(kind, array, size, cs);
+  //@ assert [f]crypto_chars(normal, array, ID_SIZE, cs);
   /*@ if (garbage)
       {
-        assert decryption_garbage(sym, p, ?s, p_key, c_key, cs);
-        close exists(pair(nil, drop(ID_SIZE, cs)));
-        close has_structure(cs, s);
-        leak has_structure(cs, s);
-        decryption_garbage(array, size, s);
-      }
-  @*/
-  /*@ switch (kind)
-      {
-        case normal:
-          chars_to_secret_crypto_chars(array, size);
-        case secret:
+        assert decryption_garbage(sym, p, ?s, _, _, _);
+        close exists(pair(nil, cs_rest));
+        close has_structure(append(cs, cs_rest), s);
+        leak has_structure(append(cs, cs_rest), s);
+        decryption_garbage(array, ID_SIZE, s);
       }
   @*/
 }

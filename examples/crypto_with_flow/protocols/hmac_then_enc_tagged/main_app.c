@@ -132,7 +132,7 @@ predicate_family_instance pthread_run_post(receiver_t)(void *data, any info) =
   [1/2]cryptogram(hmac_key, KEY_SIZE, ?hmac_key_cs, ?hmac_key_cg) &*&
     hmac_key_cg == cg_symmetric_key(sender, ?hmac_id) &*&
     receiver == shared_with(sender, hmac_id) &*&
-  crypto_chars(secret, msg, length, ?msg_cs) &*&
+  crypto_chars(_, msg, length, ?msg_cs) &*&
   chars(msg + length, MAX_SIZE - length, _) &*&
   col || send(sender, receiver, msg_cs) &*&
   info == IV(sender, IV(receiver, PV(enc_key, CL(enc_key_cs, IV(enc_id, 
@@ -249,10 +249,10 @@ int main(int argc, char **argv) //@ : main_full(main_app)
 
       if (r_args.length != MSG_LEN)
         abort();
-      //@ open principal(sender, _);
+#ifdef EXECUTE
       if (memcmp(s_message, r_message, MSG_LEN) != 0)
         abort();
-      //@ close principal(sender, _);
+#endif
       //@ public_crypto_chars(s_message, MSG_LEN);
       zeroize(r_message, r_args.length);
     }

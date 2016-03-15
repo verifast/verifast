@@ -144,8 +144,8 @@ struct item *asymmetric_signature(struct item *key, struct item *payload)
     //@ list<char> cs = append(tag_cs, sig_cs);
     //@ assert crypto_chars(secret, cont, size, cs);
 
-    //@ close exists(sig_cg);
     //@ item e = asymmetric_signature_item(principal, count, some(pay), ent);
+    //@ close ic_cg(e)(sig_cs, sig_cg);
     /*@ if (col)
         {
           public_chars(cont, size);
@@ -219,7 +219,7 @@ void asymmetric_signature_verify(struct item *key, struct item *item,
     //@ open ic_parts(sig)(?sig_tag, ?sig_cont);
     //@ take_append(TAG_LENGTH, sig_tag, sig_cont);
     //@ drop_append(TAG_LENGTH, sig_tag, sig_cont);
-    //@ open [_]exists<cryptogram>(?cg_sig);
+    //@ open [_]ic_cg(sig)(_, ?cg_sig);
     //@ assert cg_sig == cg_asym_signature(principal1, count1, ?cs_pay, ent);
 
     if (item->size > RSA_KEY_SIZE)

@@ -75,7 +75,7 @@ struct item *create_hmac(struct item *key, struct item *payload)
   //@ open cryptogram(cont + TAG_LENGTH, HMAC_SIZE, ?h_cs, ?h_cg);
   //@ assert col || h_cg == cg_hmac(creator, id, pay_cs);
   //@ if (col) h_cg == chars_for_cg_sur(h_cs, tag_hmac);
-  //@ close exists(h_cg);
+  
   //@ assert h_cg == cg_hmac(?p0, ?c0, _);
   //@ item h = hmac_item(p0, c0, some(pay));
   //@ list<char> cs = append(cs_tag, h_cs);
@@ -84,6 +84,7 @@ struct item *create_hmac(struct item *key, struct item *payload)
   //@ close [f0]world(pub, key_clsfy);
   //@ WELL_FORMED(cs_tag, h_cs, TAG_HMAC)
   //@ close ic_parts(h)(cs_tag, h_cs);
+  //@ close ic_cg(h)(h_cs, h_cg);
   /*@ if (col)
       {
         crypto_chars_to_chars(cont, TAG_LENGTH + HMAC_SIZE);

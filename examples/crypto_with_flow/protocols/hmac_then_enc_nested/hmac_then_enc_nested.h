@@ -58,6 +58,7 @@ predicate hmac_then_enc_nested_pub(cryptogram cg) =
         enc_cg == cg_encrypted(p0, ?c1, ?cs1, _) &*&
         true == cg_is_generated(enc_cg) &*&
         cs1 == append(msg_cs, chars_for_cg(hmac_cg)) &*&
+        true == cg_is_generated(hmac_cg) &*&
         length(chars_for_cg(hmac_cg)) == 64 &*&
         hmac_cg == cg_hmac(p0, ?c2, msg_cs) &*&
         cg_info(cg_symmetric_key(p0, c0)) == c2 &*&

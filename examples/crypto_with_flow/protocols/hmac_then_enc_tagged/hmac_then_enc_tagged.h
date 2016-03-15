@@ -58,7 +58,8 @@ predicate hmac_then_enc_tagged_pub(cryptogram cg) =
         hmac_then_enc_tagged_pub_1(?msg_cs, ?hmac_cg) &*&
         cs0 == append(identifier(0), 
                       append(msg_cs, chars_for_cg(hmac_cg))) &*&
-        length(chars_for_cg(hmac_cg)) == 64 &*&
+        [_]public_generated(hmac_then_enc_tagged_pub)(identifier(0)) &*&
+        length(chars_for_cg(hmac_cg)) == 64 && cg_is_generated(hmac_cg) &*&
         [_]hmac_then_enc_tagged_pub(hmac_cg) &*&
         hmac_cg == cg_hmac(p0, ?c1, msg_cs) &*&
         cg_info(cg_symmetric_key(p0, c0)) == c1 &*&
@@ -118,7 +119,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg);
              [f1]cryptogram(enc_key, KEY_SIZE, enc_key_cs, enc_key_cg) &*&
              [f2]cryptogram(hmac_key, KEY_SIZE, hmac_key_cs, hmac_key_cg) &*&
              chars(msg + result, MAX_SIZE - result, _) &*&
-             crypto_chars(secret, msg, result, ?msg_cs) &*&
+             crypto_chars(_, msg, result, ?msg_cs) &*&
              col || bad(sender) || bad(receiver) || 
                send(sender, receiver, msg_cs); @*/
 

@@ -21,7 +21,6 @@ lemma void cg_level_pay(cryptogram cg, nat bound)
            cg_level_below(succ(bound), cg);
   ensures  true == forall(cgs_in_chars(pay), (cg_level_below)(bound));
 {
-  assume (false);
   list<cryptogram> cgs = cgs_in_chars(pay);
   int l = length(cgs);
   

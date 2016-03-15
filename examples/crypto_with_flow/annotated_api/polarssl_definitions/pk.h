@@ -171,7 +171,7 @@ int pk_encrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
 
 int pk_decrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                size_t *olen, size_t osize, void *f_rng, void *p_rng);
-  /*@ requires  decryption_pre(false, ?initial, ?p1, ?s, ?in_cs) &*&
+  /*@ requires  decryption_pre(false, ?garbage_in, ?p1, ?s, ?in_cs) &*&
                 pk_context_with_key(ctx, pk_private, ?p2, ?c2, ?nbits) &*&
                 // input
                 [?f1]cryptogram(input, ilen, in_cs, ?cg_input) &*&
@@ -193,14 +193,14 @@ int pk_decrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                 [f2]state_pred(p_rng) &*&
                 crypto_chars(?kind, output, ?olen_val2, ?cs_out) &*&
                 chars(output + olen_val2, osize - olen_val2, _) &*&
-                decryption_post(false, initial, ?garbage, 
+                decryption_post(false, ?garbage_out, 
                                 p1, s, p2, c2, cs_out) &*&
-                garbage == (p2 != p3 || c2 != c3) &*&
+                garbage_out == (garbage_in || p2 != p3 || c2 != c3) &*&
                 result != 0 ?
                   kind == normal
                 : 
                   olen_val == olen_val2 &*&
-                  garbage ?
+                  garbage_out ?
                     kind == normal
                   :
                     kind == secret &*& cs_out == cs_out3; @*/

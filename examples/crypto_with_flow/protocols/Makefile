@@ -22,7 +22,6 @@ PROTOCOLS = \
 	nsl \
 	yahalom \
 
-
 PROT_APPS = $(foreach prot,$(PROTOCOLS),$(prot)/$(prot))
 
 all : $(PROT_APPS)

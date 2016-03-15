@@ -170,6 +170,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
                 (unsigned int) (size - 64), hmac, 0);
     //@ open cryptogram(hmac, 64, ?hmac_cs2, ?hmac_cg);
     //@ chars_to_crypto_chars((void*) buffer + size - 64, 64);
+    //@ close memcmp_ghost_args(hmac, hmac_cg);
     if (memcmp((void*) buffer + size - 64, hmac, 64) != 0) abort();
     //@ hmac_cs == hmac_cs2;
     //@ public_chars(buffer + size - 64, 64);
@@ -194,7 +195,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
                         (unsigned int) (KEY_SIZE * 8)) != 0)
       abort();
     //@ structure s = known_value(0, dec_cs2);
-    //@ close decryption_pre(true, true, receiver, s, enc_cs);
+    //@ close decryption_pre(true, false, receiver, s, enc_cs);
     if (aes_crypt_cfb128(&aes_context, AES_DECRYPT, (unsigned int) enc_size,
                          &iv_off, iv, buffer + 16, msg) != 0)
       abort();  
@@ -204,8 +205,8 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ open aes_context(&aes_context);
     //@ public_cryptogram_extract(buffer + 16);
     //@ public_cryptogram(buffer + 16, enc_cg);
-    /*@ open decryption_post(true, true, ?garbage, 
-                             receiver, s, sender, enc_id, ?dec_cs); @*/
+    /*@ open decryption_post(true, ?garbage, receiver, 
+                             s, sender, enc_id, ?dec_cs); @*/
     /*@ if (!col)
         {
           open [_]enc_then_hmac_pub(hmac_cg);

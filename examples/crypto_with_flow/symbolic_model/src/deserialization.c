@@ -11,7 +11,6 @@
 #define DESERIALIZE_ITEM_PROOF_CG(TAG, CG) \
   cryptogram cg = chars_for_cg_sur(cs_cg, TAG); \
   list<cryptogram> cgs_cg = cgs_in_chars(cs_cg); \
-  close exists(cg); \
   assert cg == CG; \
   public_generated_extract(polarssl_pub(pub), cs_cg, cg); \
   open [_]polarssl_pub(pub)(cg); \
@@ -145,6 +144,7 @@ switch(length_bound) \
       assert [_]pub(i0); \
       assert is_public_incremented_nonce(?proof, pub); \
       proof(i0, i); \
+      close ic_cg(i)(cs_cg, cg); \
     } \
     else if (head(cs) == TAG_HASH) \
     { \
@@ -154,24 +154,28 @@ switch(length_bound) \
                                  hash_item(none), \
                                  assert is_public_hash(?proof, pub); \
                                  proof(i);,) \
+      close ic_cg(i)(cs_cg, cg); \
     } \
     else if (head(cs) == TAG_SYMMETRIC_KEY) \
     { \
       list<char> cs_cg = cs_cont; \
       DESERIALIZE_ITEM_PROOF_CG(tag_symmetric_key, cg_symmetric_key(?p0, ?c0)) \
       i = symmetric_key_item(p0, c0); \
+      close ic_cg(i)(cs_cg, cg); \
     } \
     else if (head(cs) == TAG_PUBLIC_KEY) \
     { \
       list<char> cs_cg = cs_cont; \
       DESERIALIZE_ITEM_PROOF_CG(tag_public_key, cg_public_key(?p0, ?c0)) \
       i = public_key_item(p0, c0); \
+      close ic_cg(i)(cs_cg, cg); \
     } \
     else if (head(cs) == TAG_PRIVATE_KEY) \
     { \
       list<char> cs_cg = cs_cont; \
       DESERIALIZE_ITEM_PROOF_CG(tag_private_key, cg_private_key(?p0, ?c0)) \
       i = private_key_item(p0, c0); \
+      close ic_cg(i)(cs_cg, cg); \
     } \
     else if (head(cs) == TAG_HMAC) \
     { \
@@ -181,6 +185,7 @@ switch(length_bound) \
                                  hmac_item(p0, c0, none), \
                                  assert is_public_hmac(?proof, pub); \
                                  proof(i);,) \
+      close ic_cg(i)(cs_cg, cg); \
     } \
     else if (head(cs) == TAG_SYMMETRIC_ENC) \
     { \
@@ -210,6 +215,7 @@ switch(length_bound) \
                                  proof(i_orig, ent2); \
                                ) \
       close ic_sym_enc(i)(iv0, cs_cg); \
+      close ic_cg(i)(cs_cg, cg); \
     } \
     else if (head(cs) == TAG_ASYMMETRIC_ENC) \
     { \
@@ -219,6 +225,7 @@ switch(length_bound) \
                                  asymmetric_encrypted_item(p0, c0, none, ent0), \
                                  assert is_public_asymmetric_encrypted(?proof, pub); \
                                  proof(i);,) \
+      close ic_cg(i)(cs_cg, cg); \
     } \
     else if (head(cs) == TAG_ASYMMETRIC_SIG) \
     { \
@@ -229,6 +236,7 @@ switch(length_bound) \
                                  \
                                  assert is_public_asymmetric_signature(?proof, pub); \
                                  proof(i);,) \
+      close ic_cg(i)(cs_cg, cg); \
     } \
     else \
     { \
@@ -502,17 +510,19 @@ void parse_item(char* buffer, int size)
       //@ assert true == well_formed(cs, nat_length(cs));
       break;
     case TAG_SYMMETRIC_ENC:
-      if (size < TAG_LENGTH + GCM_IV_SIZE)
+      if (size < TAG_LENGTH + GCM_IV_SIZE + MINIMAL_STRING_SIZE)
         abort_crypto_lib("Could not parse symmetric encrypted item: illegal size");
       //@ assert true == well_formed(cs, nat_length(cs));
       break;
     case TAG_ASYMMETRIC_ENC:
-      if (size > TAG_LENGTH + RSA_SERIALIZED_KEY_SIZE)
+      if (size > TAG_LENGTH + RSA_SERIALIZED_KEY_SIZE ||
+          size < TAG_LENGTH + MINIMAL_STRING_SIZE)
         abort_crypto_lib("Could not parse asymmetric encrypted item: illegal size");
       //@ assert true == well_formed(cs, nat_length(cs));
       break;
     case TAG_ASYMMETRIC_SIG:
-      if (size > TAG_LENGTH + RSA_SERIALIZED_KEY_SIZE)
+      if (size > TAG_LENGTH + RSA_SERIALIZED_KEY_SIZE ||
+          size < TAG_LENGTH + MINIMAL_STRING_SIZE)
         abort_crypto_lib("Could not parse asymmetric signature item: illegal size");
       //@ assert true == well_formed(cs, nat_length(cs));
       break;
