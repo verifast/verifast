@@ -918,11 +918,11 @@ void receiver_(int socket_in, int sender, int receiver, int server,
       {
         assert [_]yahalom_pub_msg4(?server2, ?sender2,
                                     ?receiver2, ?a_id2, ?NB2);
-        close memcmp_ghost_args(dec2, NB2);
+        close memcmp_secret(dec2, NONCE_SIZE, dec_cs3, NB2);
       }
   @*/
   //@ open cryptogram(NB, NONCE_SIZE, cs_NB, cg_NB);
-  //@ close memcmp_ghost_args(NB, cg_NB);
+  //@ close memcmp_secret(NB, NONCE_SIZE, cs_NB, cg_NB);
   if (memcmp(dec2, NB, NONCE_SIZE) != 0) abort();
   //@ close cryptogram(NB, NONCE_SIZE, cs_NB, cg_NB);
   //@ assert crypto_chars(_, dec2, NONCE_SIZE, cs_NB);

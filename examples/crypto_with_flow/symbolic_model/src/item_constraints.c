@@ -730,8 +730,8 @@ void item_check_equal_(char* cont1, int size1, char* cont2, int size2)
          cg2 = cg2_;
        }
     @*/
-    //@ close memcmp_ghost_args(b_cg1, cg1);
-    //@ close memcmp_ghost_args(b_cg2, cg2);
+    //@ close memcmp_secret(b_cg1, size_cg, cs_cg1, cg1);
+    //@ close memcmp_secret(b_cg2, size_cg, cs_cg2, cg2);
     if (memcmp(b_cg1, b_cg2, (unsigned int) size_cg) != 0)
       abort_crypto_lib("Items were not equal");
     /*@ if (tag1 == TAG_NONCE || tag1 == TAG_SYMMETRIC_ENC)

@@ -77,7 +77,7 @@ void client(char *key, int key_len, char *request, char *response)
     sha512_hmac(key, (unsigned int) key_len, buffer,
                 (unsigned int) (1 + 2 * PACKAGE_SIZE), hmac, 0);
     //@ open cryptogram(hmac, 64, ?hmac_cs, ?hmac_cg);
-    //@ close memcmp_ghost_args(hmac, hmac_cg);
+    //@ close memcmp_secret(hmac, 64, hmac_cs, hmac_cg);
     //@ assert hmac_cg == cg_hmac(creator, id, cont_cs);
     //@ chars_to_crypto_chars((void*) buffer + 1 + 2 * PACKAGE_SIZE, 64);
     if (memcmp((void*) buffer + 1 + 2 * PACKAGE_SIZE, hmac, 64) != 0) abort();
@@ -224,7 +224,7 @@ void server(char *key, int key_len, char *request, char *response)
     //@ assert hmac_cg == cg_hmac(client, id, ?cont_cs);
     //@ public_chars((void*) buffer + 1 + PACKAGE_SIZE, 64);
     //@ chars_to_crypto_chars((void*) buffer + 1 + PACKAGE_SIZE, 64);
-    //@ close memcmp_ghost_args(hmac, hmac_cg);
+    //@ close memcmp_secret(hmac, 64, hmac_cs, hmac_cg);
     if (memcmp((void*) buffer + 1 + PACKAGE_SIZE, hmac, 64) != 0) abort();
     //@ public_crypto_chars(hmac, 64);
     //@ crypto_chars_join(buffer);

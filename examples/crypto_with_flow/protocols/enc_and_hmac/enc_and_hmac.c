@@ -192,11 +192,11 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ assert crypto_chars(_, msg, size - 80, ?pay_cs);
     sha512_hmac(hmac_key, KEY_SIZE, msg,
                 (unsigned int) enc_size, hmac, 0);
-    //@ open cryptogram(hmac, 64, _, ?hmac_cg2);
+    //@ open cryptogram(hmac, 64, ?hmac_cs2, ?hmac_cg2);
     //@ assert hmac_cg2 == cg_hmac(sender, hmac_id, pay_cs);
     //@ public_crypto_chars(buffer + size - 64, 64);
     //@ chars_to_crypto_chars(buffer + size - 64, 64);
-    //@ close memcmp_ghost_args(hmac, hmac_cg2);
+    //@ close memcmp_secret(hmac, 64, hmac_cs2, hmac_cg2);
     if (memcmp((void*) buffer + size - 64, hmac, 64) != 0) abort();
     //@ chars_for_cg_inj(hmac_cg, hmac_cg2);
     //@ assert col || hmac_cg == hmac_cg2;

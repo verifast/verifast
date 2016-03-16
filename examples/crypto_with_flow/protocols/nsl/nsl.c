@@ -221,7 +221,8 @@ void sender_msg2(int* socket, havege_state* havege_state, pk_context* s_context,
           }
           else
           {
-            close memcmp_ghost_args((void*) message + ID_SIZE, s_nonce_cg2);
+            close memcmp_secret((void*) message + ID_SIZE, NONCE_SIZE, 
+                                chars_for_cg(s_nonce_cg2), s_nonce_cg2);
           }
         }
         public_crypto_chars(message, ID_SIZE);
@@ -230,7 +231,7 @@ void sender_msg2(int* socket, havege_state* havege_state, pk_context* s_context,
   //@ close check_identifier_ghost_args(false, garbage, sender, s_id, append(s_cs, r_cs));
   check_identifier(message, recvr);                                                   
   //@ open cryptogram(s_nonce, NONCE_SIZE, s_nonce_cs, s_nonce_cg);
-  //@ close memcmp_ghost_args(s_nonce, s_nonce_cg);
+  //@ close memcmp_secret(s_nonce, NONCE_SIZE, s_nonce_cs, s_nonce_cg);
   if (memcmp((void*) message + ID_SIZE, s_nonce, NONCE_SIZE) != 0) abort();
   memcpy(r_nonce, (void*) message + ID_SIZE + NONCE_SIZE, NONCE_SIZE);
   //@ assert id_cs == identifier(recvr);
@@ -727,11 +728,11 @@ void receiver_msg3(int* socket, havege_state* havege_state,
         else
         {
           assert [_]nsl_pub_msg3(sender2, receiver, ?r_nonce_cg2);
-          close memcmp_ghost_args(message, r_nonce_cg2);
+          close memcmp_secret(message, NONCE_SIZE, dec_cs, r_nonce_cg2);
         }
       }
   @*/
-  //@ close memcmp_ghost_args(r_nonce, r_nonce_cg);
+  //@ close memcmp_secret(r_nonce, NONCE_SIZE, r_nonce_cs, r_nonce_cg);
   if (memcmp((void*) message, r_nonce, NONCE_SIZE) != 0) abort();
   //@ assert dec_cs == r_nonce_cs;
   /*@ if (garbage)

@@ -170,7 +170,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
                 (unsigned int) (size - 64), hmac, 0);
     //@ open cryptogram(hmac, 64, ?hmac_cs2, ?hmac_cg);
     //@ chars_to_crypto_chars((void*) buffer + size - 64, 64);
-    //@ close memcmp_ghost_args(hmac, hmac_cg);
+    //@ close memcmp_secret(hmac, 64, hmac_cs2, hmac_cg);
     if (memcmp((void*) buffer + size - 64, hmac, 64) != 0) abort();
     //@ hmac_cs == hmac_cs2;
     //@ public_chars(buffer + size - 64, 64);
