@@ -59,7 +59,6 @@ int gcm_crypt_and_tag(gcm_context *ctx, int mode, size_t length,
                // no additional data supported yet
                add == NULL &*& add_len == 0 &*&
                [?f]crypto_chars(?in_kind, input, length, ?in_cs) &*&
-                 length >= MINIMAL_STRING_SIZE &*&
                // only tags of 16 bytes for simplicity
                chars(tag, tag_len, _) &*& tag_len == 16 &*&
                chars(output, length, _); @*/
