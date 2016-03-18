@@ -298,7 +298,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | UChar -> ProverInt
     | Char -> ProverInt
     | InductiveType _ -> ProverInductive
-    | StructType sn -> assert false
+    | StructType sn -> failwith "Using a struct as a value is not yet supported."
     | ObjType n -> ProverInt
     | ArrayType t -> ProverInt
     | StaticArrayType (t, s) -> ProverInt
