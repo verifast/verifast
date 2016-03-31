@@ -1,2 +1,0 @@
-Todos:
-T0001: In the IDE, put component statements of compound statements in the step tree as toplevel nodes instead of child nodes.
