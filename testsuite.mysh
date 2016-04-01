@@ -403,5 +403,6 @@ cd tests
     verifast -c -allow_should_fail java_typing_array_assignment/Test2.java
     verifast_both -c -allow_should_fail fraction-of-fraction.c
     verifast_both -c -allow_should_fail test-precise-predicate-pointsto-errorcase.c
+    verifast_both -c -allow_should_fail test-ghost-break-from-real-loop.c
   cd ..
 cd ..

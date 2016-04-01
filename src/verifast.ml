@@ -51,6 +51,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | PureStmt _ | NonpureStmt _ | IfStmt _  | SwitchStmt _ | WhileStmt _ | BlockStmt _ -> ()
       | _ -> !stats#stmtExec l;
     in
+    let break_label () = if pure then "#ghostBreak" else "#break" in
     let free_locals closeBraceLoc h tenv env locals cont =
       let rec free_locals_core h locals =
         match locals with
@@ -580,7 +581,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           end
         | _ -> sizemap
       in
-      let lblenv = ("#break", fun blocks_done sizemap tenv ghostenv h env -> cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env))::lblenv in
+      let lblenv = (break_label (), fun blocks_done sizemap tenv ghostenv h env -> cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env))::lblenv in
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       let verify_expr ro h env opt e cont = verify_expr ro h env opt e cont econt in 
       verify_expr false h env None w $. fun h env v ->
@@ -1330,7 +1331,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if pure && dec = None then static_error l "Loops without a measure are not supported in a pure context." None;
       let endBodyLoc = match ss with BlockStmt(_, _, _, closeBraceLoc, _) :: _ -> closeBraceLoc | _-> l in
       let break h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
-      let lblenv = ("#break", fun blocks_done sizemap tenv ghostenv h env -> break h env)::lblenv in
+      let lblenv = (break_label (), fun blocks_done sizemap tenv ghostenv h env -> break h env)::lblenv in
       let e = check_condition (pn,ilist) tparams tenv e in
       if not pure then check_ghost ghostenv l e;
       let xs = (expr_assigned_variables e) @ (block_assigned_variables ss) in
@@ -1407,7 +1408,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if dec = None && should_terminate leminfo then static_error l "'decreases' clause required." None;
       let endBodyLoc = match ss with BlockStmt(_, _, _, closeBraceLoc, _) :: _ -> closeBraceLoc | _-> l in
       let break h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
-      let lblenv = ("#break", fun blocks_done sizemap tenv ghostenv h env -> break h env)::lblenv in
+      let lblenv = (break_label (), fun blocks_done sizemap tenv ghostenv h env -> break h env)::lblenv in
       let e = check_condition (pn,ilist) tparams tenv e in
       if not pure then check_ghost ghostenv l e;
       let (ss, locals_to_free) = (* do we really need to do this? Aren't locals freed automatically at the end of the loop if the body is a block? *)
@@ -1960,7 +1961,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | LabelStmt (l, _) -> static_error l "Label statements cannot appear in this position." None
     | InvariantStmt (l, _) -> static_error l "Invariant statements cannot appear in this position." None
     | Break l ->
-      begin match try_assoc "#break" lblenv with
+      begin match try_assoc (break_label ()) lblenv with
         None -> static_error l "Unexpected break statement" None
       | Some cont -> cont blocks_done sizemap tenv ghostenv h env
       end
