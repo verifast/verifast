@@ -460,7 +460,7 @@ testsuite: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
 assignment_tests: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
 	@echo "  MYSH     " assignments/run_model_solutions
 	$(SET_ENV); \
-        cd ../assignments; ../bin/mysh -cpus $(NUMCPU) < run_model_solutions.mysh
+        if [ -d ../assignments ]; then cd ../assignments; ../bin/mysh -cpus $(NUMCPU) < run_model_solutions.mysh; fi
 .PHONY: assignment_tests
 
 # Do not run the test targets in parallel because of GNU Make bug:
