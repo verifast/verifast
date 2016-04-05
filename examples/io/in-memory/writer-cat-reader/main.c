@@ -1,3 +1,21 @@
+/**
+ * This example is a program that has 3 threads and two buffers:
+ *  - The write thread writes to buffer1
+ *  - The cat thread reads from  buffer1 and writes to buffer2
+ *  - The reader thread reads from buffer2 and calculates the sum of the values.
+ *
+ * This program does not perform any "classic" input/output, like reading from
+ * keyboard or files, but is verified in an input/output verification style.
+ *
+ * The "main()" function does not have an input/output-style contract, but
+ * ensures in its postcondition that its return-value will be a certain value.
+ * The writer, cat, and reader thread use i/o style contracts and "main()"
+ * closes the required precondition to be able to launch these threads.
+ *
+ * After the threads terminate, main opens the postcondition (which is i/o style)
+ * and infers the value out of this.
+ */
+
 //@ #include "io.gh"
 #include "reader.h"
 #include "cat.h"
