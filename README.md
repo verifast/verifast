@@ -1,3 +1,4 @@
+[![Build Status](https://travis-ci.org/verifast/verifast.svg?branch=master)](https://travis-ci.org/verifast/verifast)
 VeriFast
 ========
 
