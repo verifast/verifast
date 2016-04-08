@@ -19,7 +19,13 @@ if [ $(uname -s) = "Linux" ]; then
     
 elif [ $(uname -s) = "Darwin" ]; then
   brew update
-  brew install gtk+ gtksourceview vala
+  function brewinstall {
+      if brew list $1 > /dev/null; then true; else brew install $1; fi
+  }  
+  brewinstall wget
+  brewinstall gtk+
+  brewinstall gtksourceview
+  brewinstall vala
   export PKG_CONFIG_PATH=/opt/X11/lib/pkgconfig
   
 else
@@ -33,13 +39,11 @@ mkdir -p ~/.local/bin && wget https://raw.github.com/ocaml/opam/master/shell/opa
 
 # Configure opam
 export PATH=$PATH:~/.local/bin && eval `opam config env`
+# Making configuration global
+echo "export PATH=$PATH:~/.local/bin && eval `opam config env`" >> ~/.bashrc
 
 # Initialize opam
 opam init -y --comp=4.02.1
 
 # Install ocaml prerequisites
 opam install -y core lablgtk camlidl
-
-# Now build VeriFast and run tests
-cd src && make -j 2
-

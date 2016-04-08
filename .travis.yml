@@ -6,6 +6,8 @@ os:
   
 sudo: required
 
-script:
-  - ./build-with-opam.sh
+install:
+  - ./setup-build-with-opam.sh
 
+script:
+  - source ~/.bashrc && cd src && make -j 2
