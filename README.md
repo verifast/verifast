@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/verifast/verifast.svg?branch=master)](https://travis-ci.org/verifast/verifast)
+[![Build Status](https://travis-ci.org/verifast/verifast.svg?branch=master)](https://travis-ci.org/verifast/verifast) [![Build status](https://ci.appveyor.com/api/projects/status/124a08cxh243jyqx?svg=true)](https://ci.appveyor.com/project/willempx/verifast-lx69x)
 VeriFast
 ========
 
