@@ -70,21 +70,22 @@ predicate sc_enc_polarssl_pub(polarssl_cryptogram cg) =
 ///////////////////////////////////////////////////////////////////////////////
 
 void app_send(char *key, char *message, int message_len);
-  /*@ requires [?f0]polarssl_world(sc_enc_polarssl_pub) &*&
+  /*@ requires polarssl_generated_values(?creator, ?count1) &*&
+               [?f0]polarssl_world(sc_enc_polarssl_pub) &*&
                [?f1]polarssl_cryptogram(key, KEY_BYTE_SIZE, ?key_cs, ?key_cg) &*&
-                 key_cg == polarssl_symmetric_key(?creator, ?key_id) &*&
-               [?f2]polarssl_public_message(sc_enc_polarssl_pub)
-                                           (message, message_len, ?m_cs) &*&
+                 key_cg == polarssl_symmetric_key(creator, ?key_id) &*&
+               [?f2]chars(message, message_len, ?m_cs) &*&
                  message_len >= POLARSSL_MIN_ENCRYPTED_BYTE_SIZE &*&
                  message_len < POLARSSL_MAX_MESSAGE_BYTE_SIZE - 84 &*&
-               polarssl_generated_values(creator, ?count1) &*&
-               app_send_event(creator, m_cs) == true;
+                 bad(creator) ?
+                   [_]polarssl_public_generated_chars(sc_enc_polarssl_pub)(m_cs)
+                 :
+                   true == app_send_event(creator, m_cs);
   @*/
-  /*@ ensures  [f0]polarssl_world(sc_enc_polarssl_pub) &*&
+  /*@ ensures  polarssl_generated_values(creator, ?count2) &*&
+               [f0]polarssl_world(sc_enc_polarssl_pub) &*&
                [f1]polarssl_cryptogram(key, KEY_BYTE_SIZE, key_cs, key_cg) &*&
-               [f2]polarssl_public_message(sc_enc_polarssl_pub)
-                                          (message, message_len, m_cs) &*&
-               polarssl_generated_values(creator, ?count2) &*&
+               [f2]chars(message, message_len, m_cs) &*&
                count2 > count1;
   @*/
 

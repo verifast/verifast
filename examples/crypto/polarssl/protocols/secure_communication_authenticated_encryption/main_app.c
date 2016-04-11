@@ -49,19 +49,21 @@ inductive info =
 ;
 
 predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
+  polarssl_generated_values(?sender, ?count) &*&
   [1/3]polarssl_world(sc_auth_polarssl_pub) &*&
     ss_args_key(data, ?key) &*&
     ss_args_message(data, ?message) &*&
     ss_args_message_len(data, ?message_len) &*&
   [1/2]polarssl_cryptogram(key, KEY_BYTE_SIZE, ?key_cs, ?key_cg) &*&
-    key_cg == polarssl_symmetric_key(?sender, ?id) &*&
-  polarssl_generated_values(sender, ?count) &*&
-  [1/2]polarssl_public_message(sc_auth_polarssl_pub)
-                              (message, message_len, ?msg_cs) &*&
+    key_cg == polarssl_symmetric_key(sender, ?id) &*&
+  [1/2]chars(message, message_len, ?msg_cs) &*&
     message_len >= POLARSSL_MIN_ENCRYPTED_BYTE_SIZE &*&
     message_len < POLARSSL_MAX_MESSAGE_BYTE_SIZE - 84 &*&
-  true == !bad(sender) &*&
-  true == app_send_event(sender, msg_cs) &*&
+    (bad(sender) ?
+       [_]polarssl_public_generated_chars(sc_auth_polarssl_pub)(msg_cs)
+     :
+       true == app_send_event(sender, msg_cs)
+     ) &*&
   info == cons(int_value(sender), 
             cons(int_value(id), 
               cons(pointer_value(key), 
@@ -69,15 +71,14 @@ predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
                   cons(int_value(message_len), 
                     nil)))));
 predicate_family_instance pthread_run_post(sender_t)(void *data, any info) =
+  polarssl_generated_values(?sender, ?count) &*&
   [1/3]polarssl_world(sc_auth_polarssl_pub) &*&
     ss_args_key(data, ?key) &*&
     ss_args_message(data, ?message) &*&
     ss_args_message_len(data, ?message_len) &*&
   [1/2]polarssl_cryptogram(key, KEY_BYTE_SIZE, ?key_cs, ?key_cg) &*&
-    key_cg == polarssl_symmetric_key(?sender, ?id) &*&
-  polarssl_generated_values(sender, ?count) &*&
-  [1/2]polarssl_public_message(sc_auth_polarssl_pub)
-                              (message, message_len, ?msg_cs) &*&
+    key_cg == polarssl_symmetric_key(sender, ?id) &*&
+  [1/2]chars(message, message_len, ?msg_cs) &*&
   info == cons(int_value(sender), 
             cons(int_value(id), 
               cons(pointer_value(key), 
@@ -202,8 +203,6 @@ int main() //@ : main
     //@ assume (!bad(sender));
     //@ assume (app_send_event(sender, msg_cs));
     //@ polarssl_public_generated_chars_assume(sc_auth_polarssl_pub, msg_cs);
-    /*@ close polarssl_public_message(sc_auth_polarssl_pub)
-                                     (message, message_len, msg_cs); @*/
     {
       pthread_t s_thread, r_thread;
       
@@ -237,10 +236,6 @@ int main() //@ : main
     }
     
     free(key);
-    /*@ open [1/2]polarssl_public_message(sc_auth_polarssl_pub)
-                                         (message, _, _); @*/
-    /*@ open [1/2]polarssl_public_message(sc_auth_polarssl_pub)
-                                         (message, _, _); @*/
     free(message);
   }
   
