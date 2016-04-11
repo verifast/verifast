@@ -12,38 +12,37 @@ OBJECTS   = $(foreach src,$(MODULES),src/$(addsuffix .o, $(src)))
 MANIFESTS = $(foreach src,$(MODULES),src/$(addsuffix .vfmanifest, $(src)))
 
 all: \
-	library \
+	polarssl_library \
 	annotated_api/polarssl_defines.h \
 	bin/libann_polarssl.dll.vfmanifest \
 	bin/libann_polarssl.so \
 	example_protocols
 
-library :
+polarssl_library :
 	$(call pprint_big_begin, Downloading and compiling PolarSSL library)
-	@test -d polarssl_library || \
-	  wget https://tls.mbed.org/download/polarssl-1.3.9-gpl.tgz || \
-	  tar xvf polarssl-1.3.9-gpl.tgz || \
-	  mv polarssl-1.3.9 polarssl_library; \
-	  cd polarssl_library; \
-	  sed -i 's/\/\/#define POLARSSL_HAVEGE_C/#define POLARSSL_HAVEGE_C/g' \
-	    include/polarssl/config.h; \
-	  sed -i 's/\/\/#define POLARSSL_RSA_C/#define POLARSSL_RSA_C/g' \
-	    include/polarssl/config.h; \
-	  sed -i 's/\/\/#define POLARSSL_PK_PARSE_C/#define POLARSSL_PK_PARSE_C/g' \
-	    include/polarssl/config.h; \
-	  sed -i 's/\/\/#define POLARSSL_PK_WRITE_C/#define POLARSSL_PK_WRITE_C/g' \
-	    include/polarssl/config.h; \
-	  sed -i 's/\/\/#define POLARSSL_PEM_WRITE_C/#define POLARSSL_PEM_WRITE_C/g' \
-	    include/polarssl/config.h; \
-	  sed -i 's/\/\/#define POLARSSL_THREADING_C/#define POLARSSL_THREADING_C/g' \
-	    include/polarssl/config.h; \
-	  sed -i 's/\/\/#define POLARSSL_THREADING_PTHREAD/#define POLARSSL_THREADING_PTHREAD/g' \
-	    include/polarssl/config.h; \
-	  sed -i 's/\/\/#define POLARSSL_MEMORY_DEBUG/#define POLARSSL_MEMORY_DEBUG/g' \
-	    include/polarssl/config.h; \
-	  sed -i 's/\/\/#define POLARSSL_MEMORY_BACKTRACE/#define POLARSSL_MEMORY_BACKTRACE/g' \
-	    include/polarssl/config.h
-	  make -C polarssl_library -j4;
+	@wget https://tls.mbed.org/download/polarssl-1.3.9-gpl.tgz; \
+	 tar xvf polarssl-1.3.9-gpl.tgz; \
+	 mv polarssl-1.3.9 polarssl_library; \
+	 cd polarssl_library; \
+	 sed -i 's/\/\/#define POLARSSL_HAVEGE_C/#define POLARSSL_HAVEGE_C/g' \
+	   include/polarssl/config.h; \
+	 sed -i 's/\/\/#define POLARSSL_RSA_C/#define POLARSSL_RSA_C/g' \
+	   include/polarssl/config.h; \
+	 sed -i 's/\/\/#define POLARSSL_PK_PARSE_C/#define POLARSSL_PK_PARSE_C/g' \
+	   include/polarssl/config.h; \
+	 sed -i 's/\/\/#define POLARSSL_PK_WRITE_C/#define POLARSSL_PK_WRITE_C/g' \
+	   include/polarssl/config.h; \
+	 sed -i 's/\/\/#define POLARSSL_PEM_WRITE_C/#define POLARSSL_PEM_WRITE_C/g' \
+	   include/polarssl/config.h; \
+	 sed -i 's/\/\/#define POLARSSL_THREADING_C/#define POLARSSL_THREADING_C/g' \
+	   include/polarssl/config.h; \
+	 sed -i 's/\/\/#define POLARSSL_THREADING_PTHREAD/#define POLARSSL_THREADING_PTHREAD/g' \
+	   include/polarssl/config.h; \
+	 sed -i 's/\/\/#define POLARSSL_MEMORY_DEBUG/#define POLARSSL_MEMORY_DEBUG/g' \
+	   include/polarssl/config.h; \
+	 sed -i 's/\/\/#define POLARSSL_MEMORY_BACKTRACE/#define POLARSSL_MEMORY_BACKTRACE/g' \
+	   include/polarssl/config.h
+	make -C polarssl_library CC='$(CC)' -j4;
 	$(call pprint_big_end)
 
 annotated_api/polarssl_defines.h : tools/polarssl_defines.c
