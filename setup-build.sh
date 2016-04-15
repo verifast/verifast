@@ -21,7 +21,11 @@ if [ $(uname -s) = "Linux" ]; then
 elif [ $(uname -s) = "Darwin" ]; then
   brew update
   function brewinstall {
-      if brew list $1 > /dev/null; then true; else brew install $1; fi
+      if brew list $1 1>/dev/null 2>/dev/null; then
+	  true;
+      else
+	  brew install $1;
+      fi
   }  
   brewinstall wget
   brewinstall gtk+
