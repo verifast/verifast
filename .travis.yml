@@ -12,4 +12,4 @@ install:
   - ./setup-build.sh
 
 script:
-  - source ~/.bashrc && cd src && make VERBOSE=yes -j 2
+  - cd src && make VERBOSE=yes -j 2
