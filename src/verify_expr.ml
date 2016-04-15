@@ -1895,10 +1895,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let [(_, (_, _, _, _, predsymb, inputParamCount, _))] = ft_predfammaps in
           let pats = TermPat fterm::List.map (fun _ -> SrcPat DummyPat) ftxmap in
           let targs = List.map (fun _ -> InferredType (object end, ref None)) fttparams in
-          consume_chunk rules h [] [] [] l (predsymb, true) targs real_unit dummypat inputParamCount pats $. fun _ h coef (_::args) _ _ _ _ ->
+          consume_chunk rules h [] [] [] l (predsymb, true) targs real_unit dummypat inputParamCount pats $. fun (Chunk (_, targs, _, _, _) as c) h coef (_::args) _ _ _ _ ->
           consume_call_perm h $. fun h ->
           check_call targs h args $. fun h env retval ->
-          cont (Chunk ((predsymb, true), [], coef, fterm::args, None)::h) env retval
+          cont (c::h) env retval
         | Ghost ->
           let [(_, (_, _, _, _, predsymb, inputParamCount, _))] = ft_predfammaps in
           let targs = List.map (fun _ -> InferredType (object end, ref None)) fttparams in
