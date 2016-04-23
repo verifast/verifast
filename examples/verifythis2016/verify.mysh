@@ -1,0 +1,3 @@
+verifast -prover redux -c -disable_overflow_check matmul.java
+verifast -prover redux -c tree_traversal.java
+verifast -prover redux -c tree_barrier.java
