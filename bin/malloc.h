@@ -1,6 +1,8 @@
 #ifndef MALLOC_H
 #define MALLOC_H
 
+#include <stddef.h>
+
 /*@
 
 // In Standard C, freeing a null pointer is allowed and is a no-op.
@@ -14,8 +16,8 @@ lemma void malloc_block_limits(void *array);
 
 @*/
 
-void *malloc(int size);
-    //@ requires 0 <= size;
+void *malloc(size_t size);
+    //@ requires true;
     /*@
     ensures
         result == 0 ?
