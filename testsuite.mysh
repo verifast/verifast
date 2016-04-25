@@ -195,6 +195,9 @@ cd examples
       verifast -I . -c -prover redux usbkbd_verified.c
     cd ..
   cd ..
+  cd verifythis2016
+    mysh < verify.mysh
+  cd ..
   cd generic_functypedef
     mysh < runtests.mysh
   cd ..
