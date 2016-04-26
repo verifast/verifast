@@ -700,7 +700,7 @@ and
 | [< '(l, Kwd "int") >] -> ManifestTypeExpr (l, intType)
 | [< '(l, Kwd "float") >] -> ManifestTypeExpr (l, Float)
 | [< '(l, Kwd "double") >] -> ManifestTypeExpr (l, Double)
-| [< '(l, Kwd "short") >] -> ManifestTypeExpr(l, ShortType)
+| [< '(l, Kwd "short") >] -> ManifestTypeExpr(l, Int (Signed, 2))
 | [< '(l, Kwd "long");
      t = begin parser
        [< '(_, Kwd "int") >] -> ManifestTypeExpr (l, intType);
@@ -711,13 +711,13 @@ and
    >] -> t
 | [< '(l, Kwd "signed"); t0 = parse_primary_type >] ->
   (match t0 with
-     (ManifestTypeExpr (_, Int (Signed, 4)) | ManifestTypeExpr (_, ShortType) |
+     (ManifestTypeExpr (_, Int (Signed, 4)) | ManifestTypeExpr (_, Int (Signed, 2)) |
       ManifestTypeExpr (_, Char)) -> t0
    | _ -> raise (ParseException (l, "This type cannot be signed.")))
 | [< '(l, Kwd "unsigned"); t0 = parse_primary_type >] ->
   (match t0 with
      ManifestTypeExpr (l, Int (Signed, 4)) -> ManifestTypeExpr (l, UintPtrType)
-   | ManifestTypeExpr (l, ShortType) -> ManifestTypeExpr (l, UShortType)
+   | ManifestTypeExpr (l, Int (Signed, 2)) -> ManifestTypeExpr (l, UShortType)
    | ManifestTypeExpr (l, Char) -> ManifestTypeExpr (l, UChar)
    | _ -> raise (ParseException (l, "This type cannot be unsigned.")))
 | [< '(l, Kwd "uintptr_t") >] -> ManifestTypeExpr (l, UintPtrType)

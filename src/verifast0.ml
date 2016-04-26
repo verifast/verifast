@@ -64,7 +64,7 @@ let rec string_of_type t =
   | Double -> "double"
   | LongDouble -> "long double"
   | UShortType -> "ushort"
-  | ShortType -> "short"
+  | Int (Signed, 2) -> "short"
   | UintPtrType -> "uintptr_t"
   | RealType -> "real"
   | UChar -> "uint8"

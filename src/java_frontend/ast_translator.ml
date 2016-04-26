@@ -581,7 +581,7 @@ and translate_prim_type typ =
   | GEN.CharType l -> VF.ManifestTypeExpr(translate_location l, VF.Char)
   (* TODO fix type here *)
   | GEN.ByteType l -> VF.ManifestTypeExpr(translate_location l, VF.Char)
-  | GEN.ShortType l -> VF.ManifestTypeExpr(translate_location l, VF.ShortType)
+  | GEN.ShortType l -> VF.ManifestTypeExpr(translate_location l, VF.Int (VF.Signed, 2))
   | GEN.IntType l -> VF.ManifestTypeExpr(translate_location l, VF.intType)
   (* TODO fix type here *)
   | GEN.LongType l -> VF.ManifestTypeExpr(translate_location l, VF.intType)

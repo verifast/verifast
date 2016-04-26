@@ -725,7 +725,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let value =
                     match ft with
                       Bool -> LitPat (False fl)
-                    | Int (Signed, 4) | ShortType | Char -> LitPat (IntLit (fl, zero_big_int, ref (Some ft)))
+                    | Int (Signed, 4) | Int (Signed, 2) | Char -> LitPat (IntLit (fl, zero_big_int, ref (Some ft)))
                     | ObjType _ | ArrayType _ -> LitPat (Null fl)
                     | _ -> DummyPat
                   in
@@ -1244,7 +1244,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let elems = get_unique_var_symb "elems" (InductiveType ("list", [elemTp])) in
         begin fun cont ->
           match init, elemTp with
-            Some _, (Int (Signed, 4)|UShortType|ShortType|UintPtrType|UChar|Char|PtrType _) ->
+            Some _, (Int (Signed, 4)|UShortType|Int (Signed, 2)|UintPtrType|UChar|Char|PtrType _) ->
             assume (mk_all_eq elemTp elems (ctxt#mk_intlit 0)) cont
           | _ ->
             cont ()
@@ -1361,7 +1361,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match tp with
       Int (Signed, 4) -> assume (ctxt#mk_and (ctxt#mk_le min_int_term t) (ctxt#mk_le t max_int_term)) cont
     | PtrType _ -> assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) t) (ctxt#mk_le t max_ptr_term)) cont
-    | ShortType -> assume (ctxt#mk_and (ctxt#mk_le min_short_term t) (ctxt#mk_le t max_short_term)) cont
+    | Int (Signed, 2) -> assume (ctxt#mk_and (ctxt#mk_le min_short_term t) (ctxt#mk_le t max_short_term)) cont
     | UShortType -> assume (ctxt#mk_and (ctxt#mk_le min_ushort_term t) (ctxt#mk_le t max_ushort_term)) cont
     | Char -> assume (ctxt#mk_and (ctxt#mk_le min_char_term t) (ctxt#mk_le t max_char_term)) cont
     | UChar -> assume (ctxt#mk_and (ctxt#mk_le min_uchar_term t) (ctxt#mk_le t max_uchar_term)) cont
@@ -1451,7 +1451,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               eval_h h env (SrcPat (LitPat w)) $. fun h env t ->
               let arg =
                 match tp with
-                  Int (Signed, 4)|ShortType|Char -> mk_vararg_int t
+                  Int (Signed, 4)|Int (Signed, 2)|Char -> mk_vararg_int t
                 | UintPtrType|UShortType|UChar -> mk_vararg_uint t
                 | PtrType _ | StaticArrayType _ -> mk_vararg_pointer t
                 | _ -> static_error (expr_loc e) ("Expressions of type '"^string_of_type tp^"' are not yet supported as arguments for a varargs function.") None
@@ -1600,7 +1600,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let default_value t =
     match t with
      Bool -> ctxt#mk_false
-    | Int (Signed, 4)|ShortType|Char|ObjType _|ArrayType _ -> ctxt#mk_intlit 0
+    | Int (Signed, 4)|Int (Signed, 2)|Char|ObjType _|ArrayType _ -> ctxt#mk_intlit 0
     | _ -> get_unique_var_symb_non_ghost "value" t
 
   
@@ -2096,7 +2096,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             match lhs_type with
               Char -> (min_char_term, max_char_term)
             | UChar -> (min_uchar_term, max_uchar_term)
-            | ShortType -> (min_short_term, max_short_term)
+            | Int (Signed, 2) -> (min_short_term, max_short_term)
             | UShortType -> (min_ushort_term, max_ushort_term)
             | Int (Signed, 4) -> (min_int_term, max_int_term)
             | UintPtrType -> (min_uint_term, max_uint_term)
@@ -2107,7 +2107,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             match !ts with
               Some ([UintPtrType; _] | [_; UintPtrType]) -> Some (int_zero_term, max_ptr_term)
             | Some ([Int (Signed, 4); _] | [_; Int (Signed, 4)]) -> Some (min_int_term, max_int_term)
-            | Some ([ShortType; _] | [_; ShortType]) -> Some (min_short_term, max_short_term)
+            | Some ([Int (Signed, 2); _] | [_; Int (Signed, 2)]) -> Some (min_short_term, max_short_term)
             | Some ([UShortType; _] | [_; UShortType]) -> Some (min_ushort_term, max_ushort_term)
             | Some ([Char; _] | [_; Char]) -> Some (min_char_term, max_char_term)
             | Some ([UChar; _] | [_; UChar]) -> Some (min_uchar_term, max_uchar_term)
@@ -2117,7 +2117,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           begin match op with
             Add ->
             begin match !ts with
-              (Some [Int (Signed, 4); Int (Signed, 4)]) | (Some [ShortType; ShortType]) | (Some [Char; Char]) | (Some [UintPtrType; UintPtrType]) ->
+              (Some [Int (Signed, 4); Int (Signed, 4)]) | (Some [Int (Signed, 2); Int (Signed, 2)]) | (Some [Char; Char]) | (Some [UintPtrType; UintPtrType]) ->
               check_overflow min_term (ctxt#mk_add v1 v2) max_term
             | Some [PtrType t; Int (Signed, 4)] ->
               let n = sizeof l t in
@@ -2128,7 +2128,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             end
           | Sub ->
             begin match !ts with
-              (Some [Int (Signed, 4); Int (Signed, 4)]) | (Some [ShortType; ShortType]) | (Some [Char; Char]) | 
+              (Some [Int (Signed, 4); Int (Signed, 4)]) | (Some [Int (Signed, 2); Int (Signed, 2)]) | (Some [Char; Char]) | 
               (Some [UintPtrType; UintPtrType]) | (Some [UChar; UChar]) | (Some [UShortType; UShortType])->
               check_overflow min_term (ctxt#mk_sub v1 v2) max_term
             | Some [PtrType t; Int (Signed, 4)] ->
@@ -2140,7 +2140,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             end
           | Mul ->
             begin match !ts with
-              (Some [Int (Signed, 4); Int (Signed, 4)]) | (Some [ShortType; ShortType]) | (Some [Char; Char]) ->
+              (Some [Int (Signed, 4); Int (Signed, 4)]) | (Some [Int (Signed, 2); Int (Signed, 2)]) | (Some [Char; Char]) ->
               check_overflow min_term (ctxt#mk_mul v1 v2) max_term
             | Some [RealType; RealType] ->
               ctxt#mk_real_mul v1 v2
