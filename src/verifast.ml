@@ -645,7 +645,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               (fun _ -> iter (List.filter (function cn' -> cn' <> cn) ctors) cs)
         in
         iter (List.map (function (cn, _) -> cn) ctormap) cs
-      | Char | ShortType | IntType -> 
+      | Char | ShortType | Int (Signed, 4) -> 
         let n = List.length (List.filter (function SwitchStmtDefaultClause (l, _) -> true | _ -> false) cs) in
         if n > 1 then static_error l "switch statement can have at most one default clause" None;
         let cs0 = cs in
@@ -669,7 +669,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | c::cs' ->
             begin match c with
               SwitchStmtClause (l, i, ss) ->
-              let w2 = check_expr_t (pn,ilist) tparams tenv i IntType in
+              let w2 = check_expr_t (pn,ilist) tparams tenv i intType in
               execute_branch $. fun () ->
               eval_h h env w2 $. fun h env t ->
               assume_eq t v $. fun () ->
@@ -681,7 +681,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   begin fun state clause -> 
                     match clause with
                       SwitchStmtClause (l, i, ss) -> 
-                        let w2 = check_expr_t (pn,ilist) tparams tenv i IntType in
+                        let w2 = check_expr_t (pn,ilist) tparams tenv i intType in
                         ctxt#mk_and state (ctxt#mk_not (ctxt#mk_eq v (ev w2))) 
                     | _ -> state
                   end
@@ -2730,7 +2730,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     let tenv = boxvarmap @ old_boxvarmap @ pmap @ apmap' in
                     execute_branch begin fun () ->
                     let boxId = get_unique_var_symb "this" BoxIdType in
-                    let currentThread = get_unique_var_symb "currentThread" IntType in
+                    let currentThread = get_unique_var_symb "currentThread" intType in
                     let actionHandles = get_unique_var_symb "actionHandles" (list_type HandleIdType) in
                     let predicateHandle = get_unique_var_symb "predicateHandle" HandleIdType in
                     assume (ctxt#mk_not (mk_mem HandleIdType predicateHandle actionHandles)) begin fun () ->
@@ -2770,7 +2770,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                                         let aarg_env = List.map (fun (x, y, t) -> (x, t)) aargs in
                                         let env = ["actionHandles", actionHandles; "predicateHandle", predicateHandle; "currentThread", currentThread] @
                                           post_boxvars @ old_boxvars @ aarg_env @ hpargs in
-                                        let tenv = ["actionHandles", list_type HandleIdType; "predicateHandle", HandleIdType; "currentThread", IntType] @ tenv in
+                                        let tenv = ["actionHandles", list_type HandleIdType; "predicateHandle", HandleIdType; "currentThread", intType] @ tenv in
                                         verify_cont (pn,ilist) [] [] [] boxes true leminfo funcmap predinstmap [] tenv ghostenv h_post_hinv env ss begin fun _ _ _ h _ ->
                                           let post_inv_env = [("predicateHandle", predicateHandle)] @ post_boxvars @ hpargs in
                                           (* does not consume extended handles, only suffices if one can only extend pure handles *)

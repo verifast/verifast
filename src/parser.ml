@@ -123,7 +123,7 @@ module Scala = struct
       begin
         match (tn, targs) with
           ("Unit", []) -> ManifestTypeExpr (l, Void)
-        | ("Int", []) -> ManifestTypeExpr (l, IntType)
+        | ("Int", []) -> ManifestTypeExpr (l, intType)
         | ("Array", [t]) -> ArrayTypeExpr (l, t)
         | (_, []) -> IdentTypeExpr (l, None, tn)
         | _ -> raise (ParseException (l, "Type arguments are not supported."))
@@ -696,27 +696,27 @@ and
 | [< '(l, Kwd "const"); t0 = parse_primary_type >] -> t0
 | [< '(l, Kwd "register"); t0 = parse_primary_type >] -> t0
 | [< '(l, Kwd "struct"); '(_, Ident s) >] -> StructTypeExpr (l, s)
-| [< '(l, Kwd "enum"); '(_, Ident _) >] -> ManifestTypeExpr (l, IntType)
-| [< '(l, Kwd "int") >] -> ManifestTypeExpr (l, IntType)
+| [< '(l, Kwd "enum"); '(_, Ident _) >] -> ManifestTypeExpr (l, intType)
+| [< '(l, Kwd "int") >] -> ManifestTypeExpr (l, intType)
 | [< '(l, Kwd "float") >] -> ManifestTypeExpr (l, Float)
 | [< '(l, Kwd "double") >] -> ManifestTypeExpr (l, Double)
 | [< '(l, Kwd "short") >] -> ManifestTypeExpr(l, ShortType)
 | [< '(l, Kwd "long");
      t = begin parser
-       [< '(_, Kwd "int") >] -> ManifestTypeExpr (l, IntType);
+       [< '(_, Kwd "int") >] -> ManifestTypeExpr (l, intType);
      | [< '(_, Kwd "double") >] -> ManifestTypeExpr (l, LongDouble);
      | [< '(_, Kwd "long") >] -> raise (ParseException (l, "long long types are not yet supported."));
-     | [< >] -> ManifestTypeExpr (l, IntType)
+     | [< >] -> ManifestTypeExpr (l, intType)
      end
    >] -> t
 | [< '(l, Kwd "signed"); t0 = parse_primary_type >] ->
   (match t0 with
-     (ManifestTypeExpr (_, IntType) | ManifestTypeExpr (_, ShortType) |
+     (ManifestTypeExpr (_, Int (Signed, 4)) | ManifestTypeExpr (_, ShortType) |
       ManifestTypeExpr (_, Char)) -> t0
    | _ -> raise (ParseException (l, "This type cannot be signed.")))
 | [< '(l, Kwd "unsigned"); t0 = parse_primary_type >] ->
   (match t0 with
-     ManifestTypeExpr (l, IntType) -> ManifestTypeExpr (l, UintPtrType)
+     ManifestTypeExpr (l, Int (Signed, 4)) -> ManifestTypeExpr (l, UintPtrType)
    | ManifestTypeExpr (l, ShortType) -> ManifestTypeExpr (l, UShortType)
    | ManifestTypeExpr (l, Char) -> ManifestTypeExpr (l, UChar)
    | _ -> raise (ParseException (l, "This type cannot be unsigned.")))

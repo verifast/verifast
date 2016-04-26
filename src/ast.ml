@@ -67,11 +67,12 @@ let string_of_inductiveness inductiveness =
   | Inductiveness_Inductive -> "inductive"
   | Inductiveness_CoInductive -> "coinductive"
   
+type signedness = Signed | Unsigned
 
 type type_ = (* ?type_ *)
     Bool
   | Void
-  | IntType
+  | Int of signedness * int   (* size in bytes *)
   | UShortType
   | ShortType
   | UintPtrType  (* The uintptr_t type from the C99 standard. It's an integer type big enough to hold a pointer value. *)
@@ -100,9 +101,11 @@ type type_ = (* ?type_ *)
   | RefType of type_ (* not a real type; used only for locals whose address is taken *)
   | PluginInternalType of DynType.dyn
 
+let intType = Int (Signed, 4)
+
 let is_arithmetic_type t =
   match t with
-    IntType|UintPtrType|ShortType|UShortType|Char|UChar|RealType|Float|Double|LongDouble -> true
+    Int (Signed, 4)|UintPtrType|ShortType|UShortType|Char|UChar|RealType|Float|Double|LongDouble -> true
   | _ -> false
 
 type prover_type = ProverInt | ProverBool | ProverReal | ProverInductive (* ?prover_type *)

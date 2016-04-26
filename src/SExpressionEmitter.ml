@@ -63,7 +63,7 @@ let rec sexpr_of_type_ (t : type_) : sexpression =
   match t with
     | Bool                    -> aux2 "type-bool"
     | Void                    -> aux2 "type-void"
-    | IntType                 -> aux2 "type-int"
+    | Int (Signed, 4)         -> aux2 "type-int"
     | ShortType               -> aux2 "type-short"
     | UintPtrType             -> aux2 "type-uint-ptr"
     | RealType                -> aux2 "type-real"

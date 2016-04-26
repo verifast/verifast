@@ -108,7 +108,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     get_points_to h t f_symb l cont
   
   let current_thread_name = "currentThread"
-  let current_thread_type = IntType
+  let current_thread_type = intType
   
   (* Region: function contracts *)
   
@@ -334,7 +334,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                         with Not_found ->
                           static_error larg "No such module or function" None
                         end, PtrType Void
-                      | Some term -> term, IntType
+                      | Some term -> term, intType
                     in
                     expect_type larg None type_ (instantiate_type fttpenv tp);
                     (x, value)
@@ -725,7 +725,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let value =
                     match ft with
                       Bool -> LitPat (False fl)
-                    | IntType | ShortType | Char -> LitPat (IntLit (fl, zero_big_int, ref (Some ft)))
+                    | Int (Signed, 4) | ShortType | Char -> LitPat (IntLit (fl, zero_big_int, ref (Some ft)))
                     | ObjType _ | ArrayType _ -> LitPat (Null fl)
                     | _ -> DummyPat
                   in
@@ -1244,7 +1244,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let elems = get_unique_var_symb "elems" (InductiveType ("list", [elemTp])) in
         begin fun cont ->
           match init, elemTp with
-            Some _, (IntType|UShortType|ShortType|UintPtrType|UChar|Char|PtrType _) ->
+            Some _, (Int (Signed, 4)|UShortType|ShortType|UintPtrType|UChar|Char|PtrType _) ->
             assume (mk_all_eq elemTp elems (ctxt#mk_intlit 0)) cont
           | _ ->
             cont ()
@@ -1359,7 +1359,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let assume_is_of_type l t tp cont =
     match tp with
-      IntType -> assume (ctxt#mk_and (ctxt#mk_le min_int_term t) (ctxt#mk_le t max_int_term)) cont
+      Int (Signed, 4) -> assume (ctxt#mk_and (ctxt#mk_le min_int_term t) (ctxt#mk_le t max_int_term)) cont
     | PtrType _ -> assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) t) (ctxt#mk_le t max_ptr_term)) cont
     | ShortType -> assume (ctxt#mk_and (ctxt#mk_le min_short_term t) (ctxt#mk_le t max_short_term)) cont
     | UShortType -> assume (ctxt#mk_and (ctxt#mk_le min_ushort_term t) (ctxt#mk_le t max_ushort_term)) cont
@@ -1451,7 +1451,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               eval_h h env (SrcPat (LitPat w)) $. fun h env t ->
               let arg =
                 match tp with
-                  IntType|ShortType|Char -> mk_vararg_int t
+                  Int (Signed, 4)|ShortType|Char -> mk_vararg_int t
                 | UintPtrType|UShortType|UChar -> mk_vararg_uint t
                 | PtrType _ | StaticArrayType _ -> mk_vararg_pointer t
                 | _ -> static_error (expr_loc e) ("Expressions of type '"^string_of_type tp^"' are not yet supported as arguments for a varargs function.") None
@@ -1600,7 +1600,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let default_value t =
     match t with
      Bool -> ctxt#mk_false
-    | IntType|ShortType|Char|ObjType _|ArrayType _ -> ctxt#mk_intlit 0
+    | Int (Signed, 4)|ShortType|Char|ObjType _|ArrayType _ -> ctxt#mk_intlit 0
     | _ -> get_unique_var_symb_non_ghost "value" t
 
   
@@ -1815,7 +1815,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | WFunCall (l, "malloc", [], [Operation (lmul, Mul, ([e; SizeofExpr (ls, te)] | [SizeofExpr (ls, te); e]))]) ->
       if pure then static_error l "Cannot call a non-pure function from a pure context." None;
       let elemTp = check_pure_type (pn,ilist) tparams te in
-      let w = check_expr_t (pn,ilist) tparams tenv e IntType in
+      let w = check_expr_t (pn,ilist) tparams tenv e intType in
       eval_h h env w $. fun h env n ->
       let arraySize = ctxt#mk_mul n (sizeof ls elemTp) in
       check_overflow lmul int_zero_term arraySize max_int_term (fun l t -> assert_term t h env l);
@@ -1963,7 +1963,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       check_correct xo (Some g) targs es (lg, tparams, tr, ps, funenv, pre, post, None, terminates, v) cont
     | NewArray(l, tp, e) ->
       let elem_tp = check_pure_type (pn,ilist) tparams tp in
-      let w = check_expr_t (pn,ilist) tparams tenv e IntType in
+      let w = check_expr_t (pn,ilist) tparams tenv e intType in
       eval_h h env w $. fun h env lv ->
       if not (ctxt#query (ctxt#mk_le (ctxt#mk_intlit 0) lv)) then assert_false h env l "array length might be negative" None;
       let elems = get_unique_var_symb "elems" (InductiveType ("list", [elem_tp])) in
@@ -2098,7 +2098,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | UChar -> (min_uchar_term, max_uchar_term)
             | ShortType -> (min_short_term, max_short_term)
             | UShortType -> (min_ushort_term, max_ushort_term)
-            | IntType -> (min_int_term, max_int_term)
+            | Int (Signed, 4) -> (min_int_term, max_int_term)
             | UintPtrType -> (min_uint_term, max_uint_term)
             | PtrType t -> ((ctxt#mk_intlit 0), max_ptr_term)
             | _ -> (min_int_term, max_int_term)
@@ -2106,7 +2106,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let bounds = if pure then (* in ghost code, where integer types do not imply limits *) None else 
             match !ts with
               Some ([UintPtrType; _] | [_; UintPtrType]) -> Some (int_zero_term, max_ptr_term)
-            | Some ([IntType; _] | [_; IntType]) -> Some (min_int_term, max_int_term)
+            | Some ([Int (Signed, 4); _] | [_; Int (Signed, 4)]) -> Some (min_int_term, max_int_term)
             | Some ([ShortType; _] | [_; ShortType]) -> Some (min_short_term, max_short_term)
             | Some ([UShortType; _] | [_; UShortType]) -> Some (min_ushort_term, max_ushort_term)
             | Some ([Char; _] | [_; Char]) -> Some (min_char_term, max_char_term)
@@ -2117,9 +2117,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           begin match op with
             Add ->
             begin match !ts with
-              (Some [IntType; IntType]) | (Some [ShortType; ShortType]) | (Some [Char; Char]) | (Some [UintPtrType; UintPtrType]) ->
+              (Some [Int (Signed, 4); Int (Signed, 4)]) | (Some [ShortType; ShortType]) | (Some [Char; Char]) | (Some [UintPtrType; UintPtrType]) ->
               check_overflow min_term (ctxt#mk_add v1 v2) max_term
-            | Some [PtrType t; IntType] ->
+            | Some [PtrType t; Int (Signed, 4)] ->
               let n = sizeof l t in
               check_overflow min_term (ctxt#mk_add v1 (ctxt#mk_mul n v2)) max_term
             | Some [RealType; RealType] ->
@@ -2128,10 +2128,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             end
           | Sub ->
             begin match !ts with
-              (Some [IntType; IntType]) | (Some [ShortType; ShortType]) | (Some [Char; Char]) | 
+              (Some [Int (Signed, 4); Int (Signed, 4)]) | (Some [ShortType; ShortType]) | (Some [Char; Char]) | 
               (Some [UintPtrType; UintPtrType]) | (Some [UChar; UChar]) | (Some [UShortType; UShortType])->
               check_overflow min_term (ctxt#mk_sub v1 v2) max_term
-            | Some [PtrType t; IntType] ->
+            | Some [PtrType t; Int (Signed, 4)] ->
               let n = sizeof l t in
               check_overflow min_term (ctxt#mk_sub v1 (ctxt#mk_mul n v2)) max_term
             | Some [RealType; RealType] ->
@@ -2140,7 +2140,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             end
           | Mul ->
             begin match !ts with
-              (Some [IntType; IntType]) | (Some [ShortType; ShortType]) | (Some [Char; Char]) ->
+              (Some [Int (Signed, 4); Int (Signed, 4)]) | (Some [ShortType; ShortType]) | (Some [Char; Char]) ->
               check_overflow min_term (ctxt#mk_mul v1 v2) max_term
             | Some [RealType; RealType] ->
               ctxt#mk_real_mul v1 v2
@@ -2150,7 +2150,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             assert_term (ctxt#mk_not (ctxt#mk_eq v2 (ctxt#mk_intlit 0))) h env l "Divisor might be zero." None;
             let res = (ctxt#mk_div v1 v2) in
             begin match lhs_type with
-              IntType -> res
+              Int (Signed, 4) -> res
             | _ -> check_overflow min_term res max_term
             end
           | Mod -> (ctxt#mk_mod v1 v2)
@@ -2167,10 +2167,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_term app) (ctxt#mk_le app max_term)));
             end;  
             begin match lhs_type with
-              IntType -> app
+              Int (Signed, 4) -> app
             | _ -> check_overflow min_term app max_term
             end 
-          | ShiftLeft when !ts = Some [IntType; IntType] ->
+          | ShiftLeft when !ts = Some [Int (Signed, 4); Int (Signed, 4)] ->
             let app = ctxt#mk_app shiftleft_int32_symbol [v1;v2] in
             begin match bounds with
               None -> ()
@@ -2178,7 +2178,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_int_term app) (ctxt#mk_le app max_int_term)));
             end; 
             begin match lhs_type with
-              IntType -> app
+              Int (Signed, 4) -> app
             | _ -> check_overflow min_term app max_term
             end
           | ShiftRight -> ctxt#mk_app shiftright_symbol [v1;v2]
