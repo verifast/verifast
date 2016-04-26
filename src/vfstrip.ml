@@ -116,10 +116,76 @@ let strip_annotations fin fout =
   in
   iter 0 0 0
 
+let strip_comments fin fout =
+  let text = readFile fin in
+  let n = String.length text in
+  let rec iter i0 white i text_on_line =
+    if i = n then
+      output fout text i0 (white - i0)
+    else
+      match text.[i] with
+        '/' when i + 1 <= n && (text.[i + 1] = '/' || text.[i + 1] = '*') ->
+        begin match text.[i + 1] with
+          '/' ->
+          let rec eat_comment j =
+            if j = n then
+              iter i0 white j text_on_line
+            else
+              match text.[j] with
+              | '\r'|'\n' ->
+                iter i0 white j text_on_line
+              | _ ->
+                eat_comment (j + 1)
+          in
+          eat_comment (i + 2)
+        | '*' ->
+          output fout text i0 (white - i0);
+          let rec eat_comment j text_on_line =
+            if j = n then
+              iter n n n text_on_line
+            else if text.[j] = '*' && j + 1 < n && text.[j + 1] = '/' then
+              let i = j + 2 in iter i i i text_on_line
+            else if text.[j] = '\n' && text_on_line then begin
+              output_string fout "\n";
+              eat_comment (j + 1) false
+            end else if text.[j] = '\r' && text_on_line then begin
+              if j + 1 < n && text.[j + 1] = '\n' then begin
+                output_string fout "\r\n";
+                eat_comment (j + 2) false
+              end else begin
+                output_string fout "\r";
+                eat_comment (j + 1) false
+              end
+            end else
+              eat_comment (j + 1) text_on_line
+          in
+          eat_comment (i + 2) text_on_line
+        end
+      | ' ' | '\t' -> iter i0 white (i + 1) text_on_line
+      | '\n'|'\r' ->
+        let i' = if text.[i] = '\r' && i + 1 < n && text.[i + 1] = '\n' then i + 2 else i + 1 in
+        if text_on_line then begin
+          if white = i then
+            iter i0 i' i' false
+          else begin
+            output fout text i0 (white - i0);
+            iter i i' i' false
+          end
+        end else begin
+          output fout text i0 (white - i0);
+          iter i' i' i' false
+        end
+      | _ -> let i = i + 1 in iter i0 i i true
+  in
+  iter 0 0 0 false
+
 let () =
   match Sys.argv with
     [| _ |] -> strip_annotations stdin stdout
+  | [| _; "--all-comments" |] -> strip_comments stdin stdout
   | _ ->
     print_endline "vfstrip: Copies stdin to stdout, removing all VeriFast annotations";
-    print_endline "Usage: vfstrip < inputfile > outputfile"
-
+    print_endline "Usage: vfstrip < inputfile > outputfile";
+    print_endline "";
+    print_endline "vfstrip --all-comments: Copies stdin to stdout, removing all comments and blank lines";
+    print_endline "Usage: vfstrip --all-comments < inputfile > outputfile"
