@@ -376,7 +376,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       eval_h h env w $. fun h env pointerTerm ->
       consume_c_object l pointerTerm (StructType sn) h true $. fun h ->
       let (_, _, _, _, chars_symb, _, _) = List.assoc "chars" predfammap in
-      let cs = get_unique_var_symb "cs" (InductiveType ("list", [Char])) in
+      let cs = get_unique_var_symb "cs" (InductiveType ("list", [Int (Signed, 1)])) in
       let Some (_, _, _, _, length_symb) = try_assoc' Ghost (pn,ilist) "length" purefuncmap in
       let size = List.assoc sn struct_sizes in
       assume (ctxt#mk_eq (mk_app length_symb [cs]) size) $. fun () ->
@@ -645,7 +645,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               (fun _ -> iter (List.filter (function cn' -> cn' <> cn) ctors) cs)
         in
         iter (List.map (function (cn, _) -> cn) ctormap) cs
-      | Char | Int (Signed, 2) | Int (Signed, 4) -> 
+      | Int (Signed, 1) | Int (Signed, 2) | Int (Signed, 4) -> 
         let n = List.length (List.filter (function SwitchStmtDefaultClause (l, _) -> true | _ -> false) cs) in
         if n > 1 then static_error l "switch statement can have at most one default clause" None;
         let cs0 = cs in

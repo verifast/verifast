@@ -68,7 +68,7 @@ let rec string_of_type t =
   | UintPtrType -> "uintptr_t"
   | RealType -> "real"
   | UChar -> "uint8"
-  | Char -> "int8"
+  | Int (Signed, 1) -> "int8"
   | InductiveType (i, []) -> i
   | InductiveType (i, targs) -> i ^ "<" ^ String.concat ", " (List.map string_of_type targs) ^ ">"
   | ObjType l -> "class " ^ l

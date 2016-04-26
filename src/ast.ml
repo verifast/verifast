@@ -80,7 +80,6 @@ type type_ = (* ?type_ *)
   | Double
   | LongDouble
   | UChar
-  | Char
   | StructType of string
   | PtrType of type_
   | FuncType of string   (* The name of a typedef whose body is a C function type. *)
@@ -104,7 +103,7 @@ let intType = Int (Signed, 4)
 
 let is_arithmetic_type t =
   match t with
-    Int (Signed, 4)|UintPtrType|Int (Signed, 2)|UShortType|Char|UChar|RealType|Float|Double|LongDouble -> true
+    Int (Signed, 4)|UintPtrType|Int (Signed, 2)|UShortType|Int (Signed, 1)|UChar|RealType|Float|Double|LongDouble -> true
   | _ -> false
 
 type prover_type = ProverInt | ProverBool | ProverReal | ProverInductive (* ?prover_type *)
