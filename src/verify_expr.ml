@@ -1244,7 +1244,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let elems = get_unique_var_symb "elems" (InductiveType ("list", [elemTp])) in
         begin fun cont ->
           match init, elemTp with
-            Some _, (Int (Signed, 4)|UShortType|Int (Signed, 2)|UintPtrType|UChar|Int (Signed, 1)|PtrType _) ->
+            Some _, (Int (Signed, 4)|UShortType|Int (Signed, 2)|Int (Unsigned, 4)|UChar|Int (Signed, 1)|PtrType _) ->
             assume (mk_all_eq elemTp elems (ctxt#mk_intlit 0)) cont
           | _ ->
             cont ()
@@ -1365,7 +1365,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | UShortType -> assume (ctxt#mk_and (ctxt#mk_le min_ushort_term t) (ctxt#mk_le t max_ushort_term)) cont
     | Int (Signed, 1) -> assume (ctxt#mk_and (ctxt#mk_le min_char_term t) (ctxt#mk_le t max_char_term)) cont
     | UChar -> assume (ctxt#mk_and (ctxt#mk_le min_uchar_term t) (ctxt#mk_le t max_uchar_term)) cont
-    | UintPtrType -> assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) t) (ctxt#mk_le t max_ptr_term)) cont
+    | Int (Unsigned, 4) -> assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) t) (ctxt#mk_le t max_ptr_term)) cont
     | ObjType _ -> cont ()
     | _ -> static_error l (Printf.sprintf "Producing the limits of a variable of type '%s' is not yet supported." (string_of_type tp)) None
   
@@ -1452,7 +1452,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               let arg =
                 match tp with
                   Int (Signed, 4)|Int (Signed, 2)|Int (Signed, 1) -> mk_vararg_int t
-                | UintPtrType|UShortType|UChar -> mk_vararg_uint t
+                | Int (Unsigned, 4)|UShortType|UChar -> mk_vararg_uint t
                 | PtrType _ | StaticArrayType _ -> mk_vararg_pointer t
                 | _ -> static_error (expr_loc e) ("Expressions of type '"^string_of_type tp^"' are not yet supported as arguments for a varargs function.") None
               in
@@ -2099,13 +2099,13 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | Int (Signed, 2) -> (min_short_term, max_short_term)
             | UShortType -> (min_ushort_term, max_ushort_term)
             | Int (Signed, 4) -> (min_int_term, max_int_term)
-            | UintPtrType -> (min_uint_term, max_uint_term)
+            | Int (Unsigned, 4) -> (min_uint_term, max_uint_term)
             | PtrType t -> ((ctxt#mk_intlit 0), max_ptr_term)
             | _ -> (min_int_term, max_int_term)
           in
           let bounds = if pure then (* in ghost code, where integer types do not imply limits *) None else 
             match !ts with
-              Some ([UintPtrType; _] | [_; UintPtrType]) -> Some (int_zero_term, max_ptr_term)
+              Some ([Int (Unsigned, 4); _] | [_; Int (Unsigned, 4)]) -> Some (int_zero_term, max_ptr_term)
             | Some ([Int (Signed, 4); _] | [_; Int (Signed, 4)]) -> Some (min_int_term, max_int_term)
             | Some ([Int (Signed, 2); _] | [_; Int (Signed, 2)]) -> Some (min_short_term, max_short_term)
             | Some ([UShortType; _] | [_; UShortType]) -> Some (min_ushort_term, max_ushort_term)
@@ -2117,7 +2117,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           begin match op with
             Add ->
             begin match !ts with
-              (Some [Int (Signed, 4); Int (Signed, 4)]) | (Some [Int (Signed, 2); Int (Signed, 2)]) | (Some [Int (Signed, 1); Int (Signed, 1)]) | (Some [UintPtrType; UintPtrType]) ->
+              (Some [Int (Signed, 4); Int (Signed, 4)]) | (Some [Int (Signed, 2); Int (Signed, 2)]) | (Some [Int (Signed, 1); Int (Signed, 1)]) | (Some [Int (Unsigned, 4); Int (Unsigned, 4)]) ->
               check_overflow min_term (ctxt#mk_add v1 v2) max_term
             | Some [PtrType t; Int (Signed, 4)] ->
               let n = sizeof l t in
@@ -2129,7 +2129,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | Sub ->
             begin match !ts with
               (Some [Int (Signed, 4); Int (Signed, 4)]) | (Some [Int (Signed, 2); Int (Signed, 2)]) | (Some [Int (Signed, 1); Int (Signed, 1)]) | 
-              (Some [UintPtrType; UintPtrType]) | (Some [UChar; UChar]) | (Some [UShortType; UShortType])->
+              (Some [Int (Unsigned, 4); Int (Unsigned, 4)]) | (Some [UChar; UChar]) | (Some [UShortType; UShortType])->
               check_overflow min_term (ctxt#mk_sub v1 v2) max_term
             | Some [PtrType t; Int (Signed, 4)] ->
               let n = sizeof l t in

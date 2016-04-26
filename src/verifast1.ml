@@ -293,7 +293,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | LongDouble -> ProverInductive
     | UShortType -> ProverInt
     | Int (Signed, 2) -> ProverInt
-    | UintPtrType -> ProverInt
+    | Int (Unsigned, 4) -> ProverInt
     | RealType -> ProverReal
     | UChar -> ProverInt
     | Int (Signed, 1) -> ProverInt
@@ -396,14 +396,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Int (Signed, 2) -> (min_short_term, max_short_term)
     | UShortType -> (min_ushort_term, max_ushort_term)
     | Int (Signed, 4) -> (min_int_term, max_int_term)
-    | UintPtrType | PtrType _ -> (int_zero_term, max_uint_term)
+    | Int (Unsigned, 4) | PtrType _ -> (int_zero_term, max_uint_term)
   
   let get_unique_var_symb x t = 
     ctxt#mk_app (mk_symbol x [] (typenode_of_type t) Uninterp) []
   
   let assume_bounds term (tp: type_) = 
     match tp with
-      Int (Signed, 1)|UChar|Int (Signed, 2)|UShortType|Int (Signed, 4)|UintPtrType|PtrType _ ->
+      Int (Signed, 1)|UChar|Int (Signed, 2)|UShortType|Int (Signed, 4)|Int (Unsigned, 4)|PtrType _ ->
       let min, max = limits_of_type tp in
       ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min term) (ctxt#mk_le term max))
     | _ -> ()
@@ -1653,13 +1653,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (UChar, Int (Signed, 4)) -> ()
     | (UChar, Int (Signed, 2)) -> ()
     | (UChar, UShortType) -> ()
-    | (UChar, UintPtrType) -> ()
+    | (UChar, Int (Unsigned, 4)) -> ()
     | (Int (Signed, 1), Int (Signed, 4)) -> ()
     | (Int (Signed, 1), Int (Signed, 2)) -> ()
     | (UShortType, Int (Signed, 4)) -> ()
-    | (UShortType, UintPtrType) -> ()
+    | (UShortType, Int (Unsigned, 4)) -> ()
     | (Int (Signed, 2), Int (Signed, 4)) -> ()
-    | ((Int (Signed, 1)|UChar|Int (Signed, 2)|UShortType|Int (Signed, 4)|UintPtrType), (Int (Signed, 1)|UChar|Int (Signed, 2)|UShortType|Int (Signed, 4)|UintPtrType)) when inAnnotation = Some true -> ()
+    | ((Int (Signed, 1)|UChar|Int (Signed, 2)|UShortType|Int (Signed, 4)|Int (Unsigned, 4)), (Int (Signed, 1)|UChar|Int (Signed, 2)|UShortType|Int (Signed, 4)|Int (Unsigned, 4))) when inAnnotation = Some true -> ()
     | (ObjType x, ObjType y) when is_subtype_of x y -> ()
     | (PredType ([], ts, inputParamCount, inductiveness), PredType ([], ts0, inputParamCount0, inductiveness0)) ->
       begin
@@ -1813,7 +1813,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let rec check_ctor (ctorname, (_, (_, _, _, parameter_names_and_types, _))) =
           let rec check_type negative pt =
             match pt with
-            | Bool | Void | Int (Signed, 4) | UShortType | Int (Signed, 2) | UintPtrType | RealType | UChar | Int (Signed, 1) | PtrType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> ()
+            | Bool | Void | Int (Signed, 4) | UShortType | Int (Signed, 2) | Int (Unsigned, 4) | RealType | UChar | Int (Signed, 1) | PtrType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> ()
             | TypeParam _ -> if negative then static_error l "A type parameter may not appear in a negative position in an inductive datatype definition." None
             | InductiveType (i0, tps) ->
               List.iter (fun t -> check_type negative t) tps;
@@ -1876,7 +1876,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let (_, pts) = List.split pts in
             let rec type_is_inhabited tp =
               match tp with
-                Bool | Int (Signed, 4) | Int (Signed, 2) | UintPtrType | RealType | Int (Signed, 1) | PtrType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> true
+                Bool | Int (Signed, 4) | Int (Signed, 2) | Int (Unsigned, 4) | RealType | Int (Signed, 1) | PtrType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> true
               | TypeParam _ -> true  (* Should be checked at instantiation site. *)
               | PredType (tps, pts, _, _) -> true
               | PureFuncType (t1, t2) -> type_is_inhabited t2
@@ -1919,7 +1919,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             match tp with
               Bool -> Some []
             | TypeParam x -> Some [x]
-            | Int (Signed, 4) | Int (Signed, 2) | UintPtrType | RealType | Int (Signed, 1) | PtrType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> None
+            | Int (Signed, 4) | Int (Signed, 2) | Int (Unsigned, 4) | RealType | Int (Signed, 1) | PtrType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> None
             | PureFuncType (_, _) -> None (* CAVEAT: This assumes we do *not* have extensionality *)
             | InductiveType (i0, targs) ->
               begin match try_assoc i0 infinite_map with
@@ -1968,7 +1968,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match tp with
       Bool -> false
     | TypeParam x -> true
-    | Int (Signed, 4) | Int (Signed, 2) | UintPtrType | RealType | Int (Signed, 1) | PtrType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> true
+    | Int (Signed, 4) | Int (Signed, 2) | Int (Unsigned, 4) | RealType | Int (Signed, 1) | PtrType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> true
     | PureFuncType (t1, t2) -> is_universal_type t1 && is_universal_type t2
     | InductiveType (i0, targs) ->
       let (_, _, _, cond) = List.assoc i0 inductivemap in
@@ -2549,7 +2549,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Double -> "double"
     | LongDouble -> "long_double"
     | Int (Signed, 4) -> "int"
-    | UintPtrType -> "unsigned_int"
+    | Int (Unsigned, 4) -> "unsigned_int"
     | RealType -> "real"
   
   let floating_point_fun_call_expr funcmap l t fun_name args =
@@ -2618,8 +2618,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | (RealType, Int (Signed, 4)) ->
         let w2 = checkt e2 RealType in
         (w1, w2, RealType)
-      | ((UChar | UShortType | UintPtrType), (UChar | UShortType | UintPtrType)) ->
-        (w1, w2, UintPtrType)
+      | ((UChar | UShortType | Int (Unsigned, 4)), (UChar | UShortType | Int (Unsigned, 4))) ->
+        (w1, w2, Int (Unsigned, 4))
       | ((Int (Signed, 1)|Int (Signed, 2)|Int (Signed, 4)|UChar|UShortType), (Int (Signed, 1)|Int (Signed, 2)|Int (Signed, 4)|UChar|UShortType)) ->
         (w1, w2, Int (Signed, 4))
       | ((LongDouble, _)|(_, LongDouble)) ->
@@ -2650,7 +2650,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
      *)
     let promote_checkdone l e1 e2 check_e1 check_e2 =
       match promote_numeric_checkdone e1 e2 check_e1 check_e2 with
-        (w1, w2, (Int (Signed, 1) | Int (Signed, 2) | Int (Signed, 4) | RealType | UintPtrType | PtrType _ | UShortType | UChar | Float | Double | LongDouble)) as result -> result
+        (w1, w2, (Int (Signed, 1) | Int (Signed, 2) | Int (Signed, 4) | RealType | Int (Unsigned, 4) | PtrType _ | UShortType | UChar | Float | Double | LongDouble)) as result -> result
       | _ -> static_error l "Expression of arithmetic or pointer type expected." None
     in
     let promote_numeric e1 e2 =
@@ -2818,8 +2818,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (w1, t1, _) = check e1 in
       let (w2, t2, _) = check e2 in
       begin match (t1, t2) with
-        ((Int (Signed, 1)|UChar|Int (Signed, 2)|UShortType|Int (Signed, 4)|UintPtrType), (Int (Signed, 1)|UChar|Int (Signed, 2)|UShortType|Int (Signed, 4)|UintPtrType)) ->
-        let t = match (t1, t2) with (UintPtrType, _) | (_, UintPtrType) -> UintPtrType | _ -> Int (Signed, 4) in
+        ((Int (Signed, 1)|UChar|Int (Signed, 2)|UShortType|Int (Signed, 4)|Int (Unsigned, 4)), (Int (Signed, 1)|UChar|Int (Signed, 2)|UShortType|Int (Signed, 4)|Int (Unsigned, 4))) ->
+        let t = match (t1, t2) with (Int (Unsigned, 4), _) | (_, Int (Unsigned, 4)) -> Int (Unsigned, 4) | _ -> Int (Signed, 4) in
         (WOperation (l, BitAnd, [w1; w2], [t1; t2]), t, None)
       | _ -> static_error l "Arguments to bitwise operators must be integral types." None
       end
@@ -2829,7 +2829,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin
       match t1 with
         (Int (Signed, 1)|UChar|Int (Signed, 2)|UShortType|Int (Signed, 4)) -> let w2 = checkt e2 intType in (WOperation (l, operator, [w1; w2], [t1; t2]), intType, None)
-      | UintPtrType -> let w2 = checkt e2 UintPtrType in (WOperation (l, operator, [w1; w2], [UintPtrType; UintPtrType]), UintPtrType, None)
+      | Int (Unsigned, 4) -> let w2 = checkt e2 (Int (Unsigned, 4)) in (WOperation (l, operator, [w1; w2], [Int (Unsigned, 4); Int (Unsigned, 4)]), Int (Unsigned, 4), None)
       | _ -> static_error l "Arguments to bitwise operators must be integral types." None
       end
     | Operation (l, Mod, [e1; e2]) ->
@@ -2838,7 +2838,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin
       match t1 with
         (Int (Signed, 1) | Int (Signed, 2) | Int (Signed, 4)) -> let w2 = checkt e2 intType in (WOperation (l, Mod, [w1; w2], [t1; t2]), intType, None)
-      | (UChar | UShortType | UintPtrType) -> let w2 = checkt e2 UintPtrType in (WOperation (l, Mod, [w1; w2], [UintPtrType; UintPtrType]), UintPtrType, None)
+      | (UChar | UShortType | Int (Unsigned, 4)) -> let w2 = checkt e2 (Int (Unsigned, 4)) in (WOperation (l, Mod, [w1; w2], [Int (Unsigned, 4); Int (Unsigned, 4)]), Int (Unsigned, 4), None)
       | _ -> static_error l "Arguments to modulus operator must be integral types." None
       end
     | Operation (l, BitNot, [e]) ->
@@ -2846,7 +2846,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin
       match t with
         Int (Signed, 1) | Int (Signed, 2) | Int (Signed, 4) -> (WOperation (l, BitNot, [w], [Int (Signed, 4)]), Int (Signed, 4), None)
-      | UintPtrType -> (WOperation (l, BitNot, [w], [UintPtrType]), UintPtrType, None)
+      | Int (Unsigned, 4) -> (WOperation (l, BitNot, [w], [Int (Unsigned, 4)]), Int (Unsigned, 4), None)
       | _ -> static_error l "argument to ~ must be char, short, int or uintptr" None
       end
     | Operation (l, (Le | Lt | Ge | Gt as operator), [e1; e2]) -> 
@@ -3143,7 +3143,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | SizeofExpr(l, te) ->
       let t = check_pure_type (pn,ilist) tparams te in
-      (SizeofExpr (l, ManifestTypeExpr (type_expr_loc te, t)), UintPtrType, None)
+      (SizeofExpr (l, ManifestTypeExpr (type_expr_loc te, t)), Int (Unsigned, 4), None)
     | InstanceOfExpr(l, e, te) ->
       let t = check_pure_type (pn,ilist) tparams te in
       let w = checkt e (ObjType "java.lang.Object") in
@@ -3292,8 +3292,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           static_error l "Integer literal used as short must be between -32768 and 32767." None
       else
         e
-    | (IntLit (l, n, t), UintPtrType) ->
-      t:=Some UintPtrType;
+    | (IntLit (l, n, t), Int (Unsigned, 4)) ->
+      t:=Some (Int (Unsigned, 4));
       if not (le_big_int min_ptr_big_int n && le_big_int n max_ptr_big_int) then
         if isCast then
           let n = int_of_big_int (mod_big_int n (big_int_of_string "4294967296")) in
@@ -3313,11 +3313,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let check () = begin match (t, t0) with
         | _ when t = t0 -> w
         | (ObjType _, ObjType _) when isCast -> w
-        | (PtrType _, UintPtrType) when isCast -> w
-        | (UintPtrType, PtrType _) when isCast -> w
-        | ((Int (Signed, 4)|UintPtrType|Int (Signed, 2)|UShortType|Int (Signed, 1)|UChar), (Int (Signed, 4)|UintPtrType|Int (Signed, 2)|UShortType|Int (Signed, 1)|UChar)) when isCast -> w
-        | ((Int (Signed, 4)|UintPtrType|Float|Double|LongDouble), (Float|Double|LongDouble)) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
-        | ((Float|Double|LongDouble), (Int (Signed, 4)|UintPtrType)) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
+        | (PtrType _, Int (Unsigned, 4)) when isCast -> w
+        | (Int (Unsigned, 4), PtrType _) when isCast -> w
+        | ((Int (Signed, 4)|Int (Unsigned, 4)|Int (Signed, 2)|UShortType|Int (Signed, 1)|UChar), (Int (Signed, 4)|Int (Unsigned, 4)|Int (Signed, 2)|UShortType|Int (Signed, 1)|UChar)) when isCast -> w
+        | ((Int (Signed, 4)|Int (Unsigned, 4)|Float|Double|LongDouble), (Float|Double|LongDouble)) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
+        | ((Float|Double|LongDouble), (Int (Signed, 4)|Int (Unsigned, 4))) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
         | (ObjType ("java.lang.Object"), ArrayType _) when isCast -> w
         | _ ->
           expect_type (expr_loc e) inAnnotation t t0;
@@ -3335,7 +3335,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
     match t with
       Bool -> w
-    | Int (Signed, 1) | UChar | Int (Signed, 2) | UShortType | Int (Signed, 4) | UintPtrType | PtrType _ when language = CLang ->
+    | Int (Signed, 1) | UChar | Int (Signed, 2) | UShortType | Int (Signed, 4) | Int (Unsigned, 4) | PtrType _ when language = CLang ->
       WOperation (expr_loc e, Neq, [w; IntLit(expr_loc e, big_int_of_int 0, ref (Some t))], [t; t])
     | _ -> expect_type (expr_loc e) inAnnotation t Bool; w
   and check_deref_core functypemap funcmap classmap interfmap (pn,ilist) l tparams tenv e f =
@@ -3894,7 +3894,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     begin match pointeeType with
       PtrType _ -> Some pointer_pointee_tuple
     | Int (Signed, 4) -> Some int_pointee_tuple
-    | UintPtrType -> Some uint_pointee_tuple
+    | Int (Unsigned, 4) -> Some uint_pointee_tuple
     | Int (Signed, 1) -> Some char_pointee_tuple
     | UChar -> Some uchar_pointee_tuple
     | _ -> None
@@ -4366,9 +4366,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let pref = new predref "integer" in
                   pref#set_domain [PtrType intType; intType];
                   [predinst pref]
-                | UintPtrType ->
+                | Int (Unsigned, 4) ->
                   let pref = new predref "u_integer" in
-                  pref#set_domain [PtrType UintPtrType; UintPtrType];
+                  pref#set_domain [PtrType (Int (Unsigned, 4)); Int (Unsigned, 4)];
                   [predinst pref]
                 | Int (Signed, 1) ->
                   let pref = new predref "character" in
@@ -4534,7 +4534,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match t with
       Void | Int (Signed, 1) | UChar -> ctxt#mk_intlit 1
     | Int (Signed, 2) | UShortType -> ctxt#mk_intlit 2
-    | Int (Signed, 4) | UintPtrType -> ctxt#mk_intlit 4
+    | Int (Signed, 4) | Int (Unsigned, 4) -> ctxt#mk_intlit 4
     | PtrType _ -> ctxt#mk_intlit 4
     | StructType sn -> List.assoc sn struct_sizes
     | StaticArrayType (elemTp, elemCount) -> ctxt#mk_mul (sizeof l elemTp) (ctxt#mk_intlit elemCount)
@@ -5028,7 +5028,7 @@ let check_if_list_is_defined () =
     in
     let bounds = if ass_term = None then (* in ghost code, where integer types do not imply limits *) None else 
     match ts with
-      Some ([UintPtrType; _] | [_; UintPtrType]) -> Some (int_zero_term, max_ptr_term)
+      Some ([Int (Unsigned, 4); _] | [_; Int (Unsigned, 4)]) -> Some (int_zero_term, max_ptr_term)
     | Some ([Int (Signed, 4); _] | [_; Int (Signed, 4)]) -> Some (min_int_term, max_int_term)
     | Some ([Int (Signed, 2); _] | [_; Int (Signed, 2)]) -> Some (min_short_term, max_short_term)
     | Some ([Int (Signed, 1); _] | [_; Int (Signed, 1)]) -> Some (min_char_term, max_char_term)
@@ -5058,7 +5058,7 @@ let check_if_list_is_defined () =
         check_overflow l min_short_term (ctxt#mk_add v1 v2) max_short_term
       | (Int (Signed, 1), Int (Signed, 1)) ->
         check_overflow l min_char_term (ctxt#mk_add v1 v2) max_char_term
-      | (UintPtrType, UintPtrType) ->
+      | (Int (Unsigned, 4), Int (Unsigned, 4)) ->
         check_overflow l min_uint_term (ctxt#mk_add v1 v2) max_uint_term
       | _ -> static_error l "Internal error in eval." None
       end
@@ -5078,7 +5078,7 @@ let check_if_list_is_defined () =
         check_overflow l min_char_term (ctxt#mk_sub v1 v2) max_char_term
       | (PtrType (Int (Signed, 1) | Void), PtrType (Int (Signed, 1) | Void)) ->
         check_overflow l min_int_term (ctxt#mk_sub v1 v2) max_int_term
-      | (UintPtrType, UintPtrType) ->
+      | (Int (Unsigned, 4), Int (Unsigned, 4)) ->
         check_overflow l min_uint_term (ctxt#mk_sub v1 v2) max_uint_term
       end
     | Mul ->
@@ -5086,7 +5086,7 @@ let check_if_list_is_defined () =
       begin match (tp1, tp2) with
         (Int (Signed, 4), Int (Signed, 4)) ->
         check_overflow l min_int_term (ctxt#mk_mul v1 v2) max_int_term
-      | (UintPtrType, UintPtrType) ->
+      | (Int (Unsigned, 4), Int (Unsigned, 4)) ->
         check_overflow l min_uint_term (ctxt#mk_mul v1 v2) max_uint_term
       | (RealType, RealType) ->
         ctxt#mk_real_mul v1 v2
@@ -5099,7 +5099,7 @@ let check_if_list_is_defined () =
       let Some [tp1; tp2] = ts in
       begin match (tp1, tp2) with
         ((Int (Signed, 4), Int (Signed, 4)) | (PtrType _, PtrType _) |
-         (UintPtrType, UintPtrType)) | (UShortType, UShortType) |
+         (Int (Unsigned, 4), Int (Unsigned, 4))) | (UShortType, UShortType) |
          (UChar, UChar)->
         begin match op with
           Le -> ctxt#mk_le v1 v2
@@ -5204,7 +5204,7 @@ let check_if_list_is_defined () =
           if ass_term <> None && not (le_big_int zero_big_int n &&
 le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out of range." None;
           cont state (ctxt#mk_intlit_of_string (string_of_big_int n))
-        | (e, (Int (Signed, 1)|UChar|Int (Signed, 2)|UShortType|Int (Signed, 4)|UintPtrType as tp), false) ->
+        | (e, (Int (Signed, 1)|UChar|Int (Signed, 2)|UShortType|Int (Signed, 4)|Int (Unsigned, 4) as tp), false) ->
           ev state e $. fun state t ->
           let min, max = limits_of_type tp in
           cont state (check_overflow l min t max)
@@ -5223,7 +5223,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         | (e, Int (Signed, 4), true) ->
           ev state e $. fun state t ->
           cont state (ctxt#mk_app truncate_int32_symbol [t])
-        | (e, UintPtrType, true) ->
+        | (e, Int (Unsigned, 4), true) ->
           ev state e $. fun state t ->
           cont state (ctxt#mk_app truncate_uint32_symbol [t])
         | (e_, _, true) ->
@@ -5261,7 +5261,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             | Int (Signed, 1) -> (min_char_big_int, max_char_big_int)
             | UShortType -> (min_ushort_big_int, max_ushort_big_int)
             | Int (Signed, 2) -> (min_short_big_int, max_short_big_int)
-            | UintPtrType -> (zero_big_int, max_ptr_big_int)
+            | Int (Unsigned, 4) -> (zero_big_int, max_ptr_big_int)
             | PtrType _ -> (zero_big_int, max_ptr_big_int)
           in
           if not (le_big_int min n && le_big_int n max) then static_error l "IntLit: Int literal is out of range." None

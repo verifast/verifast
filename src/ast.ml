@@ -74,7 +74,6 @@ type type_ = (* ?type_ *)
   | Void
   | Int of signedness * int   (* size in bytes *)
   | UShortType
-  | UintPtrType  (* The uintptr_t type from the C99 standard. It's an integer type big enough to hold a pointer value. *)
   | RealType  (* Mathematical real numbers. Used for fractional permission coefficients. Also used for reasoning about floating-point code. *)
   | Float
   | Double
@@ -103,7 +102,7 @@ let intType = Int (Signed, 4)
 
 let is_arithmetic_type t =
   match t with
-    Int (Signed, 4)|UintPtrType|Int (Signed, 2)|UShortType|Int (Signed, 1)|UChar|RealType|Float|Double|LongDouble -> true
+    Int (Signed, 4)|Int (Unsigned, 4)|Int (Signed, 2)|UShortType|Int (Signed, 1)|UChar|RealType|Float|Double|LongDouble -> true
   | _ -> false
 
 type prover_type = ProverInt | ProverBool | ProverReal | ProverInductive (* ?prover_type *)

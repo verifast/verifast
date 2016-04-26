@@ -716,11 +716,11 @@ and
    | _ -> raise (ParseException (l, "This type cannot be signed.")))
 | [< '(l, Kwd "unsigned"); t0 = parse_primary_type >] ->
   (match t0 with
-     ManifestTypeExpr (l, Int (Signed, 4)) -> ManifestTypeExpr (l, UintPtrType)
+     ManifestTypeExpr (l, Int (Signed, 4)) -> ManifestTypeExpr (l, Int (Unsigned, 4))
    | ManifestTypeExpr (l, Int (Signed, 2)) -> ManifestTypeExpr (l, UShortType)
    | ManifestTypeExpr (l, Int (Signed, 1)) -> ManifestTypeExpr (l, UChar)
    | _ -> raise (ParseException (l, "This type cannot be unsigned.")))
-| [< '(l, Kwd "uintptr_t") >] -> ManifestTypeExpr (l, UintPtrType)
+| [< '(l, Kwd "uintptr_t") >] -> ManifestTypeExpr (l, Int (Unsigned, 4))
 | [< '(l, Kwd "real") >] -> ManifestTypeExpr (l, RealType)
 | [< '(l, Kwd "bool") >] -> ManifestTypeExpr (l, Bool)
 | [< '(l, Kwd "boolean") >] -> ManifestTypeExpr (l, Bool)
