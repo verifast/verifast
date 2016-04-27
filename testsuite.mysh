@@ -31,6 +31,9 @@ cd examples
   cd BeepDriver
     mysh < BeepKernel.mysh
   cd ..
+  cd relaxed
+    mysh < relaxed.mysh
+  cd ..
   cd shared_boxes
     ifz3 verifast -c sblock.c
     verifast_both -c sglock.c
