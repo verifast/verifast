@@ -73,7 +73,6 @@ type type_ = (* ?type_ *)
     Bool
   | Void
   | Int of signedness * int   (* size in bytes *)
-  | UShortType
   | RealType  (* Mathematical real numbers. Used for fractional permission coefficients. Also used for reasoning about floating-point code. *)
   | Float
   | Double
@@ -102,7 +101,7 @@ let intType = Int (Signed, 4)
 
 let is_arithmetic_type t =
   match t with
-    Int (Signed, 4)|Int (Unsigned, 4)|Int (Signed, 2)|UShortType|Int (Signed, 1)|UChar|RealType|Float|Double|LongDouble -> true
+    Int (Signed, 4)|Int (Unsigned, 4)|Int (Signed, 2)|Int (Unsigned, 2)|Int (Signed, 1)|UChar|RealType|Float|Double|LongDouble -> true
   | _ -> false
 
 type prover_type = ProverInt | ProverBool | ProverReal | ProverInductive (* ?prover_type *)
