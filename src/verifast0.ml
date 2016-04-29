@@ -67,7 +67,7 @@ let rec string_of_type t =
   | Int (Signed, 2) -> "short"
   | Int (Unsigned, 4) -> "uintptr_t"
   | RealType -> "real"
-  | UChar -> "uint8"
+  | Int (Unsigned, 1) -> "uint8"
   | Int (Signed, 1) -> "int8"
   | InductiveType (i, []) -> i
   | InductiveType (i, targs) -> i ^ "<" ^ String.concat ", " (List.map string_of_type targs) ^ ">"

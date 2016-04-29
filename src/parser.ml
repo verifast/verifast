@@ -718,7 +718,7 @@ and
   (match t0 with
      ManifestTypeExpr (l, Int (Signed, 4)) -> ManifestTypeExpr (l, Int (Unsigned, 4))
    | ManifestTypeExpr (l, Int (Signed, 2)) -> ManifestTypeExpr (l, Int (Unsigned, 2))
-   | ManifestTypeExpr (l, Int (Signed, 1)) -> ManifestTypeExpr (l, UChar)
+   | ManifestTypeExpr (l, Int (Signed, 1)) -> ManifestTypeExpr (l, Int (Unsigned, 1))
    | _ -> raise (ParseException (l, "This type cannot be unsigned.")))
 | [< '(l, Kwd "uintptr_t") >] -> ManifestTypeExpr (l, Int (Unsigned, 4))
 | [< '(l, Kwd "real") >] -> ManifestTypeExpr (l, RealType)
