@@ -109,6 +109,7 @@ let usual_arithmetic_conversion t1 t2 = (* C11 6.3.1.8 *)
     LongDouble, _ | _, LongDouble -> LongDouble
   | Double, _ | _, Double -> Double
   | Float, _ | _, Float -> Float
+  | RealType, _ | _, RealType -> RealType
   | t1, t2 ->
     let t1 = integer_promotion t1 in
     let t2 = integer_promotion t2 in
@@ -119,7 +120,7 @@ let usual_arithmetic_conversion t1 t2 = (* C11 6.3.1.8 *)
 
 let is_arithmetic_type t =
   match t with
-    Int (Signed, 4)|Int (Unsigned, 4)|Int (Signed, 2)|Int (Unsigned, 2)|Int (Signed, 1)|Int (Unsigned, 1)|RealType|Float|Double|LongDouble -> true
+    Int (_, _)|RealType|Float|Double|LongDouble -> true
   | _ -> false
 
 type prover_type = ProverInt | ProverBool | ProverReal | ProverInductive (* ?prover_type *)

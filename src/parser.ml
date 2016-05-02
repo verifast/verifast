@@ -705,20 +705,17 @@ and
      t = begin parser
        [< '(_, Kwd "int") >] -> ManifestTypeExpr (l, intType);
      | [< '(_, Kwd "double") >] -> ManifestTypeExpr (l, LongDouble);
-     | [< '(_, Kwd "long") >] -> raise (ParseException (l, "long long types are not yet supported."));
+     | [< '(_, Kwd "long"); _ = opt (parser [< '(_, Kwd "int") >] -> ()) >] -> ManifestTypeExpr (l, Int (Signed, 8))
      | [< >] -> ManifestTypeExpr (l, intType)
      end
    >] -> t
 | [< '(l, Kwd "signed"); t0 = parse_primary_type >] ->
   (match t0 with
-     (ManifestTypeExpr (_, Int (Signed, 4)) | ManifestTypeExpr (_, Int (Signed, 2)) |
-      ManifestTypeExpr (_, Int (Signed, 1))) -> t0
+     (ManifestTypeExpr (_, Int (Signed, _))) -> t0
    | _ -> raise (ParseException (l, "This type cannot be signed.")))
 | [< '(l, Kwd "unsigned"); t0 = parse_primary_type >] ->
   (match t0 with
-     ManifestTypeExpr (l, Int (Signed, 4)) -> ManifestTypeExpr (l, Int (Unsigned, 4))
-   | ManifestTypeExpr (l, Int (Signed, 2)) -> ManifestTypeExpr (l, Int (Unsigned, 2))
-   | ManifestTypeExpr (l, Int (Signed, 1)) -> ManifestTypeExpr (l, Int (Unsigned, 1))
+   | ManifestTypeExpr (l, Int (Signed, n)) -> ManifestTypeExpr (l, Int (Unsigned, n))
    | _ -> raise (ParseException (l, "This type cannot be unsigned.")))
 | [< '(l, Kwd "uintptr_t") >] -> ManifestTypeExpr (l, Int (Unsigned, 4))
 | [< '(l, Kwd "real") >] -> ManifestTypeExpr (l, RealType)

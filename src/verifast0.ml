@@ -60,15 +60,12 @@ let rec string_of_type t =
     Bool -> "bool"
   | Void -> "void"
   | Int (Signed, 4) -> "int"
+  | Int (Signed, n) -> "int" ^ string_of_int (n * 8)
+  | Int (Unsigned, n) -> "uint" ^ string_of_int (n * 8)
   | Float -> "float"
   | Double -> "double"
   | LongDouble -> "long double"
-  | Int (Unsigned, 2) -> "ushort"
-  | Int (Signed, 2) -> "short"
-  | Int (Unsigned, 4) -> "uintptr_t"
   | RealType -> "real"
-  | Int (Unsigned, 1) -> "uint8"
-  | Int (Signed, 1) -> "int8"
   | InductiveType (i, []) -> i
   | InductiveType (i, targs) -> i ^ "<" ^ String.concat ", " (List.map string_of_type targs) ^ ">"
   | ObjType l -> "class " ^ l
