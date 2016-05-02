@@ -519,6 +519,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         loc
       * ghostness
       * type_
+      * termnode option (* offset *)
     type struct_info =
         loc
       * (string * struct_field_info) list option (* None if struct without body *)
@@ -1475,12 +1476,19 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                else
                  Some (get_unique_var_symb ("struct_" ^ sn ^ "_padding") (PredType ([], [PtrType (StructType sn)], Some 1, Inductiveness_Inductive)))
              in
-             (sn, (l, Some (List.rev fmap), padding_predsym_opt, s))
+             let fmap = List.rev fmap in
+             begin try
+               let (f, (lf, gh, t, Some offset0)) = List.find (fun (f, (lf, gh, t, offset)) -> gh = Real) fmap in 
+               ignore $. ctxt#assume (ctxt#mk_eq offset0 (ctxt#mk_intlit 0))
+             with Not_found -> ()
+             end;
+             (sn, (l, Some fmap, padding_predsym_opt, s))
            | Field (lf, gh, t, f, Instance, Public, final, init)::fds ->
-             if List.mem_assoc f fmap then
-               static_error lf "Duplicate field name." None
-             else
-               iter ((f, (lf, gh, check_pure_type ("", []) [] t))::fmap) fds (has_ghost_fields || gh = Ghost)
+             if List.mem_assoc f fmap then static_error lf "Duplicate field name." None;
+             let t = check_pure_type ("", []) [] t in
+             let offset = if gh = Ghost then None else Some (get_unique_var_symb (sn ^ "_" ^ f ^ "_offset") intType) in
+             let entry = (f, (lf, gh, t, offset)) in
+             iter (entry::fmap) fds (has_ghost_fields || gh = Ghost)
          in
          begin
            match fds_opt with
@@ -1489,8 +1497,15 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
          end
       )
       structdeclmap
-   
+
   let structmap = structmap1 @ structmap0
+
+  let field_offset l fparent fname =
+    let (_, Some fmap, _, _) = List.assoc fparent structmap in
+    let (_, gh, y, offset_opt) = List.assoc fname fmap in
+    match offset_opt with
+      Some term -> term
+    | None -> static_error l "Cannot take the address of a ghost field" None
 
   let struct_size sn =
     let (_, _, _, s) = List.assoc sn structmap in s
@@ -2085,7 +2100,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
            None -> []
          | Some fds ->
            List.map
-             (fun (fn, (l, gh, t)) ->
+             (fun (fn, (l, gh, t, offset)) ->
               ((sn, fn), mk_predfam (sn ^ "_" ^ fn) l [] 0 [PtrType (StructType sn); t] (Some 1) Inductiveness_Inductive)
              )
              fds
@@ -3370,7 +3385,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         begin
           match try_assoc f fds with
             None -> static_error l ("No such field in struct '" ^ sn ^ "'.") None
-          | Some (_, gh, t) -> (WRead (l, w, sn, f, t, false, ref (Some None), gh), t, None)
+          | Some (_, gh, t, offset) -> (WRead (l, w, sn, f, t, false, ref (Some None), gh), t, None)
         end
       | (_, None, _, _) -> static_error l ("Invalid dereference; struct type '" ^ sn ^ "' was declared without a body.") None
       end
@@ -3623,8 +3638,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let rec iter fds es =
         match fds, es with
           _, [] -> []
-        | (_, (_, Ghost, _))::fds, es -> iter fds es
-        | (_, (_, _, tp))::fds, e::es ->
+        | (_, (_, Ghost, _, _))::fds, es -> iter fds es
+        | (_, (_, _, tp, _))::fds, e::es ->
           let e = check_c_initializer e tp in
           let es = iter fds es in
           e::es
@@ -4349,7 +4364,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           flatmap
             begin
               function
-                (f, (l, Real, t)) ->
+                (f, (l, Real, t, offset)) ->
                 begin
                 let (g, (_, _, _, _, symb, _, inductiveness)) = List.assoc (sn, f) field_pred_map in (* TODO WILLEM: we moeten die inductiveness ergens gebruiken *)
                 let predinst p =
@@ -4534,28 +4549,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | StructType sn -> struct_size sn
     | StaticArrayType (elemTp, elemCount) -> ctxt#mk_mul (sizeof l elemTp) (ctxt#mk_intlit elemCount)
     | _ -> static_error l ("Taking the size of type " ^ string_of_type t ^ " is not yet supported.") None
-  
-  let field_offsets =
-    flatmap
-      begin
-        function
-          (sn, (_, Some fmap, _, _)) ->
-          let offsets = flatmap (fun (f, (_, gh, _)) -> if gh = Ghost then [] else [((sn, f), get_unique_var_symb (sn ^ "_" ^ f ^ "_offset") intType)]) fmap in
-          begin
-            match offsets with
-              ((_, _), offset0)::_ ->
-              ignore (ctxt#assume (ctxt#mk_eq offset0 (ctxt#mk_intlit 0)))
-            | _ -> ()
-          end;
-          offsets
-        | _ -> []
-      end
-      structmap
-  
-  let field_offset l fparent fname =
-    match try_assoc (fparent, fname) field_offsets with
-      Some term -> term
-    | None -> static_error l "Cannot take the address of a ghost field" None
   
   let field_address l t fparent fname = ctxt#mk_add t (field_offset l fparent fname)
   

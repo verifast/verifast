@@ -1273,7 +1273,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let rec iter h fields inits =
         match fields with
           [] -> cont h
-        | (f, (lf, gh, t))::fields ->
+        | (f, (lf, gh, t, offset))::fields ->
           if gh = Ghost && not allowGhostFields then static_error l "Cannot produce a struct instance with ghost fields in this context." None;
           let init, inits =
             if gh = Ghost then None, inits else
@@ -1342,7 +1342,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let rec iter h fields =
         match fields with
           [] -> cont h
-        | (f, (lf, gh, t))::fields ->
+        | (f, (lf, gh, t, offset))::fields ->
           match t with
             StaticArrayType (_, _) | StructType _ ->
             consume_c_object l (field_address l addr sn f) t h true $. fun h ->
