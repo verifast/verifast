@@ -523,6 +523,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         loc
       * (string * struct_field_info) list option (* None if struct without body *)
       * termnode option (* predicate symbol for struct_padding predicate *)
+      * termnode (* size *)
     type enum_info =
         big_int
     type global_info =
@@ -1038,8 +1039,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | Struct (l, sn, fds_opt)::ds ->
         begin
           match try_assoc sn structmap0 with
-            Some (_, Some _, _) -> static_error l "Duplicate struct name." None
-          | Some (ldecl, None, _) -> if fds_opt = None then static_error l "Duplicate struct declaration." None else delayed_struct_def sn ldecl l
+            Some (_, Some _, _, _) -> static_error l "Duplicate struct name." None
+          | Some (ldecl, None, _, _) -> if fds_opt = None then static_error l "Duplicate struct declaration." None else delayed_struct_def sn ldecl l
           | None -> ()
         end;
         begin
@@ -1463,18 +1464,18 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let structmap1 =
     List.map
       (fun (sn, (l, fds_opt)) ->
+         let s = get_unique_var_symb ("struct_" ^ sn ^ "_size") intType in
+         ignore $. ctxt#assume (ctxt#mk_lt (ctxt#mk_intlit 0) s);
          let rec iter fmap fds has_ghost_fields =
            match fds with
              [] ->
-             (sn,
-              (l,
-               Some (List.rev fmap),
+             let padding_predsym_opt =
                if has_ghost_fields then
                  None
                else
                  Some (get_unique_var_symb ("struct_" ^ sn ^ "_padding") (PredType ([], [PtrType (StructType sn)], Some 1, Inductiveness_Inductive)))
-              )
-             )
+             in
+             (sn, (l, Some (List.rev fmap), padding_predsym_opt, s))
            | Field (lf, gh, t, f, Instance, Public, final, init)::fds ->
              if List.mem_assoc f fmap then
                static_error lf "Duplicate field name." None
@@ -1484,12 +1485,15 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
          begin
            match fds_opt with
              Some fds -> iter [] fds false
-           | None -> (sn, (l, None, None))
+           | None -> (sn, (l, None, None, s))
          end
       )
       structdeclmap
    
   let structmap = structmap1 @ structmap0
+
+  let struct_size sn =
+    let (_, _, _, s) = List.assoc sn structmap in s
   
   let enummap = enummap1 @ enummap0
   
@@ -2033,7 +2037,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let struct_padding_predfams1 =
     flatmap
       (function
-         (sn, (l, fds, Some padding_predsymb)) -> [("struct_" ^ sn ^ "_padding", (l, [], 0, [PtrType (StructType sn)], padding_predsymb, Some 1, Inductiveness_Inductive))]
+         (sn, (l, fds, Some padding_predsymb, size)) -> [("struct_" ^ sn ^ "_padding", (l, [], 0, [PtrType (StructType sn)], padding_predsymb, Some 1, Inductiveness_Inductive))]
        | _ -> [])
       structmap1
   
@@ -2055,7 +2059,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let malloc_block_pred_map1: malloc_block_pred_info map = 
     structmap1 |> flatmap begin function
-      (sn, (l, Some _, _)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) l [] 0 [PtrType (StructType sn)] (Some 1) Inductiveness_Inductive)]
+      (sn, (l, Some _, _, _)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) l [] 0 [PtrType (StructType sn)] (Some 1) Inductiveness_Inductive)]
     | _ -> []
     end
   
@@ -2076,7 +2080,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | _ ->
     flatmap
-      (fun (sn, (_, fds_opt, _)) ->
+      (fun (sn, (_, fds_opt, _, _)) ->
          match fds_opt with
            None -> []
          | Some fds ->
@@ -3362,13 +3366,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | PtrType (StructType sn) ->
       begin
       match List.assoc sn structmap with
-        (_, Some fds, _) ->
+        (_, Some fds, _, _) ->
         begin
           match try_assoc f fds with
             None -> static_error l ("No such field in struct '" ^ sn ^ "'.") None
           | Some (_, gh, t) -> (WRead (l, w, sn, f, t, false, ref (Some None), gh), t, None)
         end
-      | (_, None, _) -> static_error l ("Invalid dereference; struct type '" ^ sn ^ "' was declared without a body.") None
+      | (_, None, _, _) -> static_error l ("Invalid dereference; struct type '" ^ sn ^ "' was declared without a body.") None
       end
     | ObjType cn ->
       begin
@@ -3613,7 +3617,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | StructType sn, InitializerList (ll, es) ->
       let fds =
         match List.assoc sn structmap with
-          (_, Some fds, _) -> fds
+          (_, Some fds, _, _) -> fds
         | _ -> static_error ll "Cannot initialize struct declared without a body." None
       in
       let rec iter fds es =
@@ -4341,7 +4345,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     flatmap
       begin
         function
-          (sn, (_, Some fmap, _)) ->
+          (sn, (_, Some fmap, _, _)) ->
           flatmap
             begin
               function
@@ -4521,22 +4525,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
       e
 
-  let struct_sizes =
-    List.map
-      begin fun (sn, _) ->
-        let s = get_unique_var_symb ("struct_" ^ sn ^ "_size") intType in
-        ignore $. ctxt#assume (ctxt#mk_lt (ctxt#mk_intlit 0) s);
-        (sn, s)
-      end
-      structmap
-  
   let rec sizeof l t =
     match t with
       Void | Int (Signed, 1) | Int (Unsigned, 1) -> ctxt#mk_intlit 1
     | Int (Signed, 2) | Int (Unsigned, 2) -> ctxt#mk_intlit 2
     | Int (Signed, 4) | Int (Unsigned, 4) -> ctxt#mk_intlit 4
     | PtrType _ -> ctxt#mk_intlit 4
-    | StructType sn -> List.assoc sn struct_sizes
+    | StructType sn -> struct_size sn
     | StaticArrayType (elemTp, elemCount) -> ctxt#mk_mul (sizeof l elemTp) (ctxt#mk_intlit elemCount)
     | _ -> static_error l ("Taking the size of type " ^ string_of_type t ^ " is not yet supported.") None
   
@@ -4544,7 +4539,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     flatmap
       begin
         function
-          (sn, (_, Some fmap, _)) ->
+          (sn, (_, Some fmap, _, _)) ->
           let offsets = flatmap (fun (f, (_, gh, _)) -> if gh = Ghost then [] else [((sn, f), get_unique_var_symb (sn ^ "_" ^ f ^ "_offset") intType)]) fmap in
           begin
             match offsets with

@@ -365,7 +365,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       eval_h h env w $. fun h env pointerTerm ->
       with_context (Executing (h, env, l, "Consuming character array")) $. fun () ->
       let (_, _, _, _, chars_symb, _, _) = List.assoc ("chars") predfammap in
-      consume_chunk rules h ghostenv [] [] l (chars_symb, true) [] real_unit dummypat None [TermPat pointerTerm; TermPat (List.assoc sn struct_sizes); SrcPat DummyPat] $. fun _ h coef _ _ _ _ _ ->
+      consume_chunk rules h ghostenv [] [] l (chars_symb, true) [] real_unit dummypat None [TermPat pointerTerm; TermPat (struct_size sn); SrcPat DummyPat] $. fun _ h coef _ _ _ _ _ ->
       if not (definitely_equal coef real_unit) then assert_false h env l "Closing a struct requires full permission to the character array." None;
       produce_c_object l real_unit pointerTerm (StructType sn) None false true h $. fun h ->
       cont h env
@@ -378,7 +378,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (_, _, _, _, chars_symb, _, _) = List.assoc "chars" predfammap in
       let cs = get_unique_var_symb "cs" (InductiveType ("list", [Int (Signed, 1)])) in
       let Some (_, _, _, _, length_symb) = try_assoc' Ghost (pn,ilist) "length" purefuncmap in
-      let size = List.assoc sn struct_sizes in
+      let size = struct_size sn in
       assume (ctxt#mk_eq (mk_app length_symb [cs]) size) $. fun () ->
       cont (Chunk ((chars_symb, true), [], real_unit, [pointerTerm; size; cs], None)::h) env
     | ExprStmt (CallExpr (l, "free", [], [], args,Static) as e) ->
