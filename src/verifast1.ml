@@ -3262,7 +3262,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match (e, unfold_inferred_type t0) with
       (Operation(l, Div, [IntLit(_, i1, _); IntLit(_, i2, _)]), RealType) -> RealLit(l, (num_of_big_int i1) // (num_of_big_int i2))
     | (IntLit (l, n, t), PtrType _) when isCast || eq_big_int n zero_big_int -> t:=Some t0; e
-    | (IntLit (l, n, t), RealType) -> t:=Some RealType; e
+    | (IntLit (l, n, t), RealType) -> RealLit (l, num_of_big_int n)
     | (IntLit (l, n, t), Int (Unsigned, 1)) ->
       t:=Some (Int (Unsigned, 1));
       if not (le_big_int min_uchar_big_int n && le_big_int n max_uchar_big_int) then
@@ -5225,14 +5225,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       end
     | IntLit (l, n, t) ->
       begin match !t with
-        Some RealType ->
-        cont state
-          begin
-            if eq_big_int n unit_big_int then
-              real_unit
-            else
-              ctxt#mk_reallit_of_num (num_of_big_int n)
-          end
       | Some t ->
         if ass_term <> None then
         begin
