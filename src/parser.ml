@@ -1253,10 +1253,10 @@ and
 | [< '(l, RationalToken n) >] -> RealLit (l, n)
 | [< '(l, Kwd "INT_MIN") >] -> IntLit (l, big_int_of_string "-2147483648", ref None)
 | [< '(l, Kwd "INT_MAX") >] -> IntLit (l, big_int_of_string "2147483647", ref None)
-| [< '(l, Kwd "UINTPTR_MAX") >] -> IntLit (l, big_int_of_string "4294967295", ref None)
+| [< '(l, Kwd "UINTPTR_MAX") >] -> CastExpr (l, false, ManifestTypeExpr (l, Int (Unsigned, 4)), IntLit (l, big_int_of_string "4294967295", ref None))
 | [< '(l, Kwd "UCHAR_MAX") >] -> IntLit (l, big_int_of_string "255", ref None)
 | [< '(l, Kwd "USHRT_MAX") >] -> IntLit (l, big_int_of_string "65535", ref None)
-| [< '(l, Kwd "UINT_MAX") >] -> IntLit (l, big_int_of_string "4294967295", ref None)
+| [< '(l, Kwd "UINT_MAX") >] -> CastExpr (l, false, ManifestTypeExpr (l, Int (Unsigned, 4)), IntLit (l, big_int_of_string "4294967295", ref None))
 | [< '(l, String s); ss = rep (parser [< '(_, String s) >] -> s) >] -> 
      (* TODO: support UTF-8 *)
      if !lexer_in_ghost_range then
