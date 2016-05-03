@@ -1213,7 +1213,10 @@ and
   parse_expr_primary = parser
   [< '(l, Kwd "true") >] -> True l
 | [< '(l, Kwd "false") >] -> False l
-| [< '(l, CharToken c) >] -> IntLit(l, big_int_of_int (Char.code c), ref (Some (Int (Signed, 1))))
+| [< '(l, CharToken c) >] ->
+  if Char.code c > 127 then raise (ParseException (l, "Non-ASCII character literals are not yet supported"));
+  let tp = match !language with CLang -> Int (Signed, 1) | Java -> Int (Unsigned, 2) in
+  CastExpr (l, false, ManifestTypeExpr (l, tp), IntLit (l, big_int_of_int (Char.code c), ref None))
 | [< '(l, Kwd "null") >] -> Null l
 | [< '(l, Kwd "currentThread") >] -> Var (l, "currentThread")
 | [< '(l, Kwd "varargs") >] -> Var (l, "varargs")
@@ -1261,7 +1264,7 @@ and
      (* TODO: support UTF-8 *)
      if !lexer_in_ghost_range then
        let chars = chars_of_string s in
-       let es = List.map (fun c -> IntLit(l, big_int_of_int (Char.code c), ref (Some (Int (Signed, 1))))) chars in
+       let es = List.map (fun c -> IntLit(l, big_int_of_int (Char.code c), ref None)) chars in
        InitializerList(l, es)
      else
        StringLit (l, String.concat "" (s::ss))

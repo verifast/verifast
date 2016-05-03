@@ -2904,7 +2904,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let w1 = checkt e1 intType in
       let w2 = checkt e2 intType in
       (WOperation (l, op, [w1; w2], [Int (Signed, 4); Int (Signed, 4)]), Int (Signed, 4), None)
-    | IntLit (l, n, t) -> (e, (match !t with None -> t := Some intt; intt | Some t -> t), Some n)
+    | IntLit (l, n, t) ->
+      if inAnnotation = Some true || le_big_int min_int_big_int n && le_big_int n max_int_big_int then begin
+        t := Some intt;
+        (e, intt, Some n)
+      end else
+        static_error l "int literal out of range" None
     | RealLit(l, n) ->
       if inAnnotation = Some true then
         (e, RealType, None)
@@ -5224,29 +5229,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         ctxt#mk_reallit_of_num n
       end
     | IntLit (l, n, t) ->
-      begin match !t with
-      | Some t ->
-        if ass_term <> None then
-        begin
-          let (min, max) =
-            match t with 
-              Int (Signed, 4) -> (min_int_big_int, max_int_big_int)
-            | Int (Unsigned, 1) -> (min_uchar_big_int, max_uchar_big_int)
-            | Int (Signed, 1) -> (min_char_big_int, max_char_big_int)
-            | Int (Unsigned, 2) -> (min_ushort_big_int, max_ushort_big_int)
-            | Int (Signed, 2) -> (min_short_big_int, max_short_big_int)
-            | Int (Unsigned, 4) -> (zero_big_int, max_ptr_big_int)
-            | PtrType _ -> (zero_big_int, max_ptr_big_int)
-          in
-          if not (le_big_int min n && le_big_int n max) then static_error l "IntLit: Int literal is out of range." None
-        end;
-        cont state
-          begin
-            try
-              let n = int_of_big_int n in ctxt#mk_intlit n
-            with Failure "int_of_big_int" -> ctxt#mk_intlit_of_string (string_of_big_int n)
-          end
-      end
+      let v =
+        try
+          ctxt#mk_intlit (int_of_big_int n)
+        with Failure "int_of_big_int" -> ctxt#mk_intlit_of_string (string_of_big_int n)
+      in
+      cont state v
     | ClassLit (l,s) -> cont state (List.assoc s classterms)
     | StringLit (l, s) ->
       if ass_term = None then static_error l "String literals are not allowed in ghost code." None;

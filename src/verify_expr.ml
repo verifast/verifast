@@ -1627,9 +1627,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * type_ (* pointee type *)
   end
   
-  (* This function checks whether e is a safe expression. An expression is safe if evaluation can never fail. 
-     For example, '1 == 0' is safe, but 'x / y' is not as evaluation fails when y is zero. 
-     Safe expressions never depend on the heap. *)
+  (* This function checks whether e is a safe expression.
+     An expression is safe if it does not read or write the heap, i.e., it does not require any chunks. *)
   let rec is_safe_expr e =
     match e with 
       IntLit _ -> true
@@ -1640,6 +1639,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | IfExpr(_, e1, e2, e3) -> List.for_all is_safe_expr [e1; e2; e3]
     | SizeofExpr(_, _) -> true
     | AddressOf(_, e) -> is_safe_expr e
+    | CastExpr (_, _, _, e) -> is_safe_expr e
     | _ -> false
   
   let rec verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont econt =
