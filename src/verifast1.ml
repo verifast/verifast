@@ -1088,7 +1088,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               | Some e ->
                 let rec eval e =
                   match e with
-                    IntLit (_, n, _) -> n
+                    IntLit (_, n) -> n
                   | Var (l, x) ->
                     begin match try_assoc2 x enummap1 enummap0 with
                       None -> static_error l "No such enumeration constant" None
@@ -2904,11 +2904,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let w1 = checkt e1 intType in
       let w2 = checkt e2 intType in
       (WOperation (l, op, [w1; w2], [Int (Signed, 4); Int (Signed, 4)]), Int (Signed, 4), None)
-    | IntLit (l, n, t) ->
-      if inAnnotation = Some true || le_big_int min_int_big_int n && le_big_int n max_int_big_int then begin
-        t := Some intt;
+    | IntLit (l, n) ->
+      if inAnnotation = Some true || le_big_int min_int_big_int n && le_big_int n max_int_big_int then
         (e, intt, Some n)
-      end else
+      else
         static_error l "int literal out of range" None
     | RealLit(l, n) ->
       if inAnnotation = Some true then
@@ -3265,57 +3264,52 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     check_expr_t_core_core functypemap funcmap classmap interfmap (pn, ilist) tparams tenv inAnnotation e t0 false
   and check_expr_t_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e t0 isCast =
     match (e, unfold_inferred_type t0) with
-      (Operation(l, Div, [IntLit(_, i1, _); IntLit(_, i2, _)]), RealType) -> RealLit(l, (num_of_big_int i1) // (num_of_big_int i2))
-    | (IntLit (l, n, t), PtrType _) when isCast || eq_big_int n zero_big_int -> t:=Some t0; e
-    | (IntLit (l, n, t), RealType) -> RealLit (l, num_of_big_int n)
-    | (IntLit (l, n, t), Int (Unsigned, 1)) ->
-      t:=Some (Int (Unsigned, 1));
+      (Operation(l, Div, [IntLit(_, i1); IntLit(_, i2)]), RealType) -> RealLit(l, (num_of_big_int i1) // (num_of_big_int i2))
+    | (IntLit (l, n), PtrType _) when isCast || eq_big_int n zero_big_int -> e
+    | (IntLit (l, n), RealType) -> RealLit (l, num_of_big_int n)
+    | (IntLit (l, n), Int (Unsigned, 1)) ->
       if not (le_big_int min_uchar_big_int n && le_big_int n max_uchar_big_int) then
         if isCast then
           let n = int_of_big_int (mod_big_int n (big_int_of_int 256)) in
-          IntLit (l, big_int_of_int n, t)
+          IntLit (l, big_int_of_int n)
         else
           static_error l "Integer literal used as uchar must be between 0 and 255." None
       else
         e
-    | (IntLit (l, n, t), Int (Signed, 1)) ->
-      t:=Some (Int (Signed, 1));
+    | (IntLit (l, n), Int (Signed, 1)) ->
       if not (le_big_int min_char_big_int n && le_big_int n max_char_big_int) then
         if isCast then
           let n = int_of_big_int (mod_big_int n (big_int_of_int 256)) in
           let n = if 128 <= n then n - 256 else n in
-          IntLit (l, big_int_of_int n, t)
+          IntLit (l, big_int_of_int n)
         else
           static_error l "Integer literal used as char must be between -128 and 127." None
       else
         e
-    | (IntLit (l, n, t), Int (Unsigned, 2)) ->
-      t:=Some (Int (Unsigned, 2));
+    | (IntLit (l, n), Int (Unsigned, 2)) ->
       if not (le_big_int min_ushort_big_int n && le_big_int n max_ushort_big_int) then
         if isCast then
           let n = int_of_big_int (mod_big_int n (big_int_of_int 65536)) in
-          IntLit (l, big_int_of_int n, t)
+          IntLit (l, big_int_of_int n)
         else
           static_error l "Integer literal used as ushort must be between 0 and 65535." None
       else
         e
-    | (IntLit (l, n, t), Int (Signed, 2)) ->
-      t:=Some (Int (Signed, 2));
+    | (IntLit (l, n), Int (Signed, 2)) ->
       if not (le_big_int min_short_big_int n && le_big_int n max_short_big_int) then
         if isCast then
           let n = int_of_big_int (mod_big_int n (big_int_of_int 65536)) in
           let n = if 32768 <= n then n - 65536 else n in
-          IntLit (l, big_int_of_int n, t)
+          IntLit (l, big_int_of_int n)
         else
           static_error l "Integer literal used as short must be between -32768 and 32767." None
       else
         e
-    | (IntLit (l, n, t), Int (Unsigned, 4)) ->
-      t:=Some (Int (Unsigned, 4));
+    | (IntLit (l, n), Int (Unsigned, 4)) ->
       if not (le_big_int min_ptr_big_int n && le_big_int n max_ptr_big_int) then
         if isCast then
           let n = int_of_big_int (mod_big_int n (big_int_of_string "4294967296")) in
-          IntLit (l, big_int_of_int n, t)
+          IntLit (l, big_int_of_int n)
         else
           static_error l "Integer literal used as ushort must be between 0 and 65535." None
       else
@@ -3354,7 +3348,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match t with
       Bool -> w
     | Int (Signed, 1) | Int (Unsigned, 1) | Int (Signed, 2) | Int (Unsigned, 2) | Int (Signed, 4) | Int (Unsigned, 4) | PtrType _ when language = CLang ->
-      WOperation (expr_loc e, Neq, [w; IntLit(expr_loc e, big_int_of_int 0, ref (Some t))], [t; t])
+      WOperation (expr_loc e, Neq, [w; IntLit(expr_loc e, big_int_of_int 0)], [t; t])
     | _ -> expect_type (expr_loc e) inAnnotation t Bool; w
   and check_deref_core functypemap funcmap classmap interfmap (pn,ilist) l tparams tenv e f =
     let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv None e in
@@ -3686,7 +3680,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           (IntConst n1, IntConst n2) -> IntConst (mult_big_int n1 n2)
         | _ -> raise NotAConstant
         end
-      | IntLit (l, n, _) -> IntConst n
+      | IntLit (l, n) -> IntConst n
       | StringLit (l, s) -> StringConst s
       | WRead (l, _, fparent, fname, _, fstatic, _, _) when fstatic -> eval_field callers (fparent, fname)
       | CastExpr (l, truncating, ManifestTypeExpr (_, t), e) ->
@@ -3963,7 +3957,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let wfirst, wlength =
           match wstart, wend with
             None, Some wend -> warray, wend
-          | Some (LitPat (IntLit (_, n, _))), Some wend when eq_big_int n zero_big_int -> warray, wend
+          | Some (LitPat (IntLit (_, n))), Some wend when eq_big_int n zero_big_int -> warray, wend
           | Some (LitPat wstart), Some (LitPat wend) ->
             WOperation (lslice, Add, [warray; wstart], [PtrType elemtype; intType]),
             LitPat (WOperation (lslice, Sub, [wend; wstart], [intType; intType]))
@@ -3979,7 +3973,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let (wrhs, tenv) = check_pat (pn,ilist) tparams tenv (list_type elemtype) rhs in
         let p = new predref "java.lang.array_slice" in
         p#set_domain [ArrayType elemtype; intType; intType; list_type elemtype]; p#set_inputParamCount (Some 3);
-        let wstart = match wstart with None -> LitPat (IntLit (lslice, zero_big_int, ref (Some intType))) | Some wstart -> wstart in
+        let wstart = match wstart with None -> LitPat (IntLit (lslice, zero_big_int)) | Some wstart -> wstart in
         let wend = match wend with None -> LitPat (ArrayLengthExpr (lslice, warray)) | Some wend -> wend in
         let args = [LitPat warray; wstart; wend; wrhs] in
         (WPredAsn (l, p, true, [elemtype], [], args), tenv, [])
@@ -5187,7 +5181,7 @@ let check_if_list_is_defined () =
     | CastExpr (l, truncating, ManifestTypeExpr (_, t), e) ->
       begin
         match (e, t, truncating) with
-          (IntLit (_, n, _), PtrType _, _) ->
+          (IntLit (_, n), PtrType _, _) ->
           if ass_term <> None && not (le_big_int zero_big_int n &&
 le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out of range." None;
           cont state (ctxt#mk_intlit_of_string (string_of_big_int n))
@@ -5228,7 +5222,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             else
         ctxt#mk_reallit_of_num n
       end
-    | IntLit (l, n, t) ->
+    | IntLit (l, n) ->
       let v =
         try
           ctxt#mk_intlit (int_of_big_int n)
@@ -5282,12 +5276,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       begin match ts with
         [RealType; RealType] ->
         begin match (e1, e2) with
-          (RealLit (_, n), IntLit (_, d, _)) when eq_num n (num_of_big_int unit_big_int) && eq_big_int d two_big_int -> cont state real_half
-        | (IntLit (_, n, _), IntLit (_, d, _)) when eq_big_int n unit_big_int && eq_big_int d two_big_int -> cont state real_half
+          (RealLit (_, n), IntLit (_, d)) when eq_num n (num_of_big_int unit_big_int) && eq_big_int d two_big_int -> cont state real_half
+        | (IntLit (_, n), IntLit (_, d)) when eq_big_int n unit_big_int && eq_big_int d two_big_int -> cont state real_half
         | _ -> 
           let rec eval_reallit e =
               match e with
-              IntLit (l, n, t) -> num_of_big_int n
+              IntLit (l, n) -> num_of_big_int n
             | RealLit (l, n) -> n
             | _ -> static_error (expr_loc e) "The denominator of a division must be a literal." None
           in
@@ -5301,7 +5295,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         end;
         cont state (ctxt#mk_div v1 v2)
       end
-    | WOperation (l, BitAnd, [e1; IntLit(_, i, _)], ts) when le_big_int zero_big_int i && ass_term <> None -> (* optimization *)
+    | WOperation (l, BitAnd, [e1; IntLit(_, i)], ts) when le_big_int zero_big_int i && ass_term <> None -> (* optimization *)
       ev state e1 $. fun state v1 ->
         let iterm = ctxt#mk_intlit (int_of_big_int i) in
         let app = ctxt#mk_app bitwise_and_symbol [v1;iterm] in

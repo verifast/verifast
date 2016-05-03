@@ -409,7 +409,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let (w, _) = check_expr (pn,ilist) tparams tenv e in
           verify_expr false h env None w (fun h env _ -> cont h env) econt
       end
-    | ExprStmt (CallExpr (l, "set_verifast_verbosity", [], [], [LitPat (IntLit (_, n, _))], Static)) when pure ->
+    | ExprStmt (CallExpr (l, "set_verifast_verbosity", [], [], [LitPat (IntLit (_, n))], Static)) when pure ->
       let oldv = !verbosity in
       set_verbosity (int_of_big_int n);
       let r = cont h env in

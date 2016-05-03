@@ -184,7 +184,7 @@ and
       operator *
       expr list *
       type_ list
-  | IntLit of loc * big_int * type_ option ref (* int literal*)
+  | IntLit of loc * big_int (* int literal*)
   | RealLit of loc * num
   | StringLit of loc * string (* string literal *)
   | ClassLit of loc * string (* class literal in java *)
@@ -717,7 +717,7 @@ let rec expr_loc e =
   | False l -> l
   | Null l -> l
   | Var (l, x) | WVar (l, x, _) -> l
-  | IntLit (l, n, t) -> l
+  | IntLit (l, n) -> l
   | RealLit (l, n) -> l
   | StringLit (l, s) -> l
   | ClassLit (l, s) -> l
@@ -856,7 +856,7 @@ let expr_fold_open iter state e =
   | Operation (l, op, es) -> iters state es
   | WOperation (l, op, es, ts) -> iters state es
   | SliceExpr (l, p1, p2) -> iterpatopt (iterpatopt state p1) p2
-  | IntLit (l, n, tp) -> state
+  | IntLit (l, n) -> state
   | RealLit(l, n) -> state
   | StringLit (l, s) -> state
   | ClassLit (l, cn) -> state

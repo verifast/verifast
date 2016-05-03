@@ -144,7 +144,7 @@ module Scala = struct
     parse_primary_expr = parser
       [< '(l, Kwd "true") >] -> True l
     | [< '(l, Kwd "false") >] -> False l
-    | [< '(l, Int n) >] -> IntLit (l, n, ref None)
+    | [< '(l, Int n) >] -> IntLit (l, n)
     | [< '(l, Ident x) >] -> Var (l, x)
   and
     parse_add_expr = parser
@@ -1216,7 +1216,7 @@ and
 | [< '(l, CharToken c) >] ->
   if Char.code c > 127 then raise (ParseException (l, "Non-ASCII character literals are not yet supported"));
   let tp = match !language with CLang -> Int (Signed, 1) | Java -> Int (Unsigned, 2) in
-  CastExpr (l, false, ManifestTypeExpr (l, tp), IntLit (l, big_int_of_int (Char.code c), ref None))
+  CastExpr (l, false, ManifestTypeExpr (l, tp), IntLit (l, big_int_of_int (Char.code c)))
 | [< '(l, Kwd "null") >] -> Null l
 | [< '(l, Kwd "currentThread") >] -> Var (l, "currentThread")
 | [< '(l, Kwd "varargs") >] -> Var (l, "varargs")
@@ -1251,20 +1251,20 @@ and
       >]-> r
     | [< >] -> Var (lx, x)
   >] -> ex
-| [< '(l, Int i) >] -> IntLit (l, i, ref None)
+| [< '(l, Int i) >] -> IntLit (l, i)
 | [< '(l, RealToken i) >] -> RealLit (l, num_of_big_int i)
 | [< '(l, RationalToken n) >] -> RealLit (l, n)
-| [< '(l, Kwd "INT_MIN") >] -> IntLit (l, big_int_of_string "-2147483648", ref None)
-| [< '(l, Kwd "INT_MAX") >] -> IntLit (l, big_int_of_string "2147483647", ref None)
-| [< '(l, Kwd "UINTPTR_MAX") >] -> CastExpr (l, false, ManifestTypeExpr (l, Int (Unsigned, 4)), IntLit (l, big_int_of_string "4294967295", ref None))
-| [< '(l, Kwd "UCHAR_MAX") >] -> IntLit (l, big_int_of_string "255", ref None)
-| [< '(l, Kwd "USHRT_MAX") >] -> IntLit (l, big_int_of_string "65535", ref None)
-| [< '(l, Kwd "UINT_MAX") >] -> CastExpr (l, false, ManifestTypeExpr (l, Int (Unsigned, 4)), IntLit (l, big_int_of_string "4294967295", ref None))
+| [< '(l, Kwd "INT_MIN") >] -> IntLit (l, big_int_of_string "-2147483648")
+| [< '(l, Kwd "INT_MAX") >] -> IntLit (l, big_int_of_string "2147483647")
+| [< '(l, Kwd "UINTPTR_MAX") >] -> CastExpr (l, false, ManifestTypeExpr (l, Int (Unsigned, 4)), IntLit (l, big_int_of_string "4294967295"))
+| [< '(l, Kwd "UCHAR_MAX") >] -> IntLit (l, big_int_of_string "255")
+| [< '(l, Kwd "USHRT_MAX") >] -> IntLit (l, big_int_of_string "65535")
+| [< '(l, Kwd "UINT_MAX") >] -> CastExpr (l, false, ManifestTypeExpr (l, Int (Unsigned, 4)), IntLit (l, big_int_of_string "4294967295"))
 | [< '(l, String s); ss = rep (parser [< '(_, String s) >] -> s) >] -> 
      (* TODO: support UTF-8 *)
      if !lexer_in_ghost_range then
        let chars = chars_of_string s in
-       let es = List.map (fun c -> IntLit(l, big_int_of_int (Char.code c), ref None)) chars in
+       let es = List.map (fun c -> IntLit(l, big_int_of_int (Char.code c))) chars in
        InitializerList(l, es)
      else
        StringLit (l, String.concat "" (s::ss))
@@ -1300,11 +1300,11 @@ and
 | [< '(l, Kwd "~"); e = parse_expr_suffix >] -> Operation (l, BitNot, [e])
 | [< '(l, Kwd "-"); e = parse_expr_suffix >] ->
   begin match e with
-    IntLit (_, n, t) -> IntLit (l, minus_big_int n, t)
-  | _ -> Operation (l, Sub, [IntLit (l, zero_big_int, ref None); e])
+    IntLit (_, n) -> IntLit (l, minus_big_int n)
+  | _ -> Operation (l, Sub, [IntLit (l, zero_big_int); e])
   end
-| [< '(l, Kwd "++"); e = parse_expr_suffix >] -> AssignOpExpr (l, e, Add, IntLit (l, unit_big_int, ref None), false, ref None, ref None)
-| [< '(l, Kwd "--"); e = parse_expr_suffix >] -> AssignOpExpr (l, e, Sub, IntLit (l, unit_big_int, ref None), false, ref None, ref None)
+| [< '(l, Kwd "++"); e = parse_expr_suffix >] -> AssignOpExpr (l, e, Add, IntLit (l, unit_big_int), false, ref None, ref None)
+| [< '(l, Kwd "--"); e = parse_expr_suffix >] -> AssignOpExpr (l, e, Sub, IntLit (l, unit_big_int), false, ref None, ref None)
 | [< '(l, Kwd "{"); es = rep_comma parse_expr; '(_, Kwd "}") >] -> InitializerList (l, es)
 and
   parse_switch_expr_clauses = parser
@@ -1339,8 +1339,8 @@ and
           end
        >] -> e
      end; e = parse_expr_suffix_rest e >] -> e
-| [< '(l, Kwd "++"); e = parse_expr_suffix_rest (AssignOpExpr (l, e0, Add, IntLit (l, unit_big_int, ref None), true, ref None, ref None)) >] -> e
-| [< '(l, Kwd "--"); e = parse_expr_suffix_rest (AssignOpExpr (l, e0, Sub, IntLit (l, unit_big_int, ref None), true, ref None, ref None)) >] -> e
+| [< '(l, Kwd "++"); e = parse_expr_suffix_rest (AssignOpExpr (l, e0, Add, IntLit (l, unit_big_int), true, ref None, ref None)) >] -> e
+| [< '(l, Kwd "--"); e = parse_expr_suffix_rest (AssignOpExpr (l, e0, Sub, IntLit (l, unit_big_int), true, ref None, ref None)) >] -> e
 | [< '(l, Kwd "("); es = rep_comma parse_expr; '(_, Kwd ")"); e = parse_expr_suffix_rest (match e0 with Read(l', e0', f') -> CallExpr (l', f', [], [], LitPat(e0'):: (List.map (fun e -> LitPat(e)) es), Instance) | _ -> ExprCallExpr (l, e0, es)) >] -> e
 | [< >] -> e0
 and

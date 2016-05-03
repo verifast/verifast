@@ -227,15 +227,10 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
       List [ Symbol "expr-read"
            ; sexpr_of_expr expr
            ; Symbol str ]
-    | IntLit (loc, n, t) ->
-      let kw_args =
-        match !t with
-          | Some t -> [ "type", sexpr_of_type_ t ]
-          | None   -> []
-      in
+    | IntLit (loc, n) ->
       build_list [ Symbol "expr-int"
                   ; Number n ]
-                  kw_args
+                 [] 
     | AssignExpr (loc, lhs, rhs) ->
       List [ Symbol "expr-assign"
            ; sexpr_of_expr lhs

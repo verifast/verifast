@@ -725,7 +725,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let value =
                     match ft with
                       Bool -> LitPat (False fl)
-                    | Int (Signed, 4) | Int (Signed, 2) | Int (Signed, 1) -> LitPat (IntLit (fl, zero_big_int, ref (Some ft)))
+                    | Int (Signed, 4) | Int (Signed, 2) | Int (Signed, 1) -> LitPat (IntLit (fl, zero_big_int))
                     | ObjType _ | ArrayType _ -> LitPat (Null fl)
                     | _ -> DummyPat
                   in
@@ -973,7 +973,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let rec expr_mark_addr_taken e locals = 
     match e with
-      True _ | False _ | Null _ | Var _ | WVar _ | IntLit(_, _, _) | RealLit _ | StringLit(_, _) | ClassLit(_) -> ()
+      True _ | False _ | Null _ | Var _ | WVar _ | IntLit(_, _) | RealLit _ | StringLit(_, _) | ClassLit(_) -> ()
     | Operation(_, _, es) | WOperation (_, _, es, _) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
     | AddressOf(_, (Var (_, x) | WVar (_, x, _))) -> mark_if_local locals x
     | Read(_, e, _) -> expr_mark_addr_taken e locals
@@ -1109,7 +1109,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | _ -> []
     in
     match e with
-      True _ | False _ | Null _ | Var _ | WVar _ | IntLit(_, _, _) | RealLit _ | StringLit(_, _) | ClassLit(_) -> []
+      True _ | False _ | Null _ | Var _ | WVar _ | IntLit(_, _) | RealLit _ | StringLit(_, _) | ClassLit(_) -> []
     | Operation(_, _, es) | WOperation (_, _, es, _) -> List.flatten (List.map (fun e -> expr_address_taken e) es)
     | Read(_, e, _) -> expr_address_taken e
     | ArrayLengthExpr(_, e) -> expr_address_taken e
