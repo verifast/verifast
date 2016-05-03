@@ -254,7 +254,8 @@ and
   | ProverTypeConversion of prover_type * prover_type * expr  (* Generated during type checking in the presence of type parameters, to get the prover types right *)
   | ArrayTypeExpr' of loc * expr (* horrible hack --- for well-formed programs, this exists only during parsing *)
   | AssignExpr of loc * expr * expr
-  | AssignOpExpr of loc * expr * operator * expr * bool (* true = return value of lhs before operation *) * type_ list option ref * type_ option ref
+  | AssignOpExpr of loc * expr * operator * expr * bool (* true = return value of lhs before operation *)
+  | WAssignOpExpr of loc * expr * operator * expr * bool (* true = return value of lhs before operation *) * type_ list * type_
   | InstanceOfExpr of loc * expr * type_expr
   | SuperMethodCall of loc * string * expr list
   | WSuperMethodCall of loc * string * expr list * (loc * ghostness * (type_ option) * (string * type_) list * asn * asn * ((type_ * asn) list) * visibility)
@@ -752,7 +753,8 @@ let rec expr_loc e =
   | AddressOf (l, e) -> l
   | ArrayTypeExpr' (l, e) -> l
   | AssignExpr (l, lhs, rhs) -> l
-  | AssignOpExpr (l, lhs, op, rhs, postOp, _, _) -> l
+  | AssignOpExpr (l, lhs, op, rhs, postOp) -> l
+  | WAssignOpExpr (l, lhs, op, rhs, postOp, ts, lhs_type) -> l
   | ProverTypeConversion (t1, t2, e) -> expr_loc e
   | InstanceOfExpr(l, e, tp) -> l
   | SuperMethodCall(l, _, _) -> l
@@ -888,7 +890,8 @@ let expr_fold_open iter state e =
   | AddressOf (l, e0) -> iter state e0
   | ProverTypeConversion (pt, pt0, e0) -> iter state e0
   | AssignExpr (l, lhs, rhs) -> iter (iter state lhs) rhs
-  | AssignOpExpr (l, lhs, op, rhs, post, _, _) -> iter (iter state lhs) rhs
+  | AssignOpExpr (l, lhs, op, rhs, post) -> iter (iter state lhs) rhs
+  | WAssignOpExpr (l, lhs, op, rhs, post, _, _) -> iter (iter state lhs) rhs
   | InstanceOfExpr(l, e, tp) -> iter state e
   | SuperMethodCall(_, _, args) -> iters state args
   | WSuperMethodCall(_, _, args, _) -> iters state args

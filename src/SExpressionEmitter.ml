@@ -238,7 +238,7 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
     | SizeofExpr (loc, texpr) ->
       List [ Symbol "expr-sizeof"
            ; sexpr_of_type_expr texpr ]
-    | AssignOpExpr (loc, lhs, op, rhs, post, ts, lhs_type) ->
+    | AssignOpExpr (loc, lhs, op, rhs, post) ->
       build_list [ Symbol "expr-assign-op" ]
                  [ "lhs", sexpr_of_expr lhs
                  ; "rhs", sexpr_of_expr rhs

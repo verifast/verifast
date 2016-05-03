@@ -821,7 +821,7 @@ and translate_expression expr =
         match op with 
           Some op -> 
             let (_, op') = translate_bin_operator op l' in
-            AssignOpExpr(l', expr_l', op', expr_r', false, ref None, ref None)
+            AssignOpExpr(l', expr_l', op', expr_r', false)
         | _ -> AssignExpr(l', expr_l', expr_r')
       end
   | GEN.Unary(l, op, expr) -> 
@@ -891,10 +891,10 @@ and translate_uni_operator op l expr =
   | GEN.O_Not     -> VF.Operation(l, VF.Eq, [VF.False(l); expr])
   | GEN.O_Pos     -> expr
   | GEN.O_Neg     -> VF.Operation(l, VF.Mul, [VF.IntLit(l, Big_int.big_int_of_int (-1)); expr])
-  | GEN.O_PreInc  -> VF.AssignOpExpr(l, expr, Add, unit_big_int, false, ref None, ref None)
-  | GEN.O_PreDec  -> VF.AssignOpExpr(l, expr, Sub, unit_big_int, false, ref None, ref None)
-  | GEN.O_PostInc -> VF.AssignOpExpr(l, expr, Add, unit_big_int, true, ref None, ref None)
-  | GEN.O_PostDec -> VF.AssignOpExpr(l, expr, Sub, unit_big_int, true, ref None, ref None)
+  | GEN.O_PreInc  -> VF.AssignOpExpr(l, expr, Add, unit_big_int, false)
+  | GEN.O_PreDec  -> VF.AssignOpExpr(l, expr, Sub, unit_big_int, false)
+  | GEN.O_PostInc -> VF.AssignOpExpr(l, expr, Add, unit_big_int, true)
+  | GEN.O_PostDec -> VF.AssignOpExpr(l, expr, Sub, unit_big_int, true)
   | GEN.O_Compl   -> VF.Operation(l, VF.BitNot, [expr])
 
 and translate_literal l typ value =

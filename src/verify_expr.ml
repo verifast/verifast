@@ -49,8 +49,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | AddressOf (l, e) -> expr_assigned_variables e
     | AssignExpr (l, (Var (_, x) | WVar (_, x, _)), e) -> [x] @ expr_assigned_variables e
     | AssignExpr (l, e1, e2) -> expr_assigned_variables e1 @ expr_assigned_variables e2
-    | AssignOpExpr (l, (Var (_, x) | WVar (_, x, _)), op, e, _, _, _) -> [x] @ expr_assigned_variables e
-    | AssignOpExpr (l, e1, op, e2, _, _, _) -> expr_assigned_variables e1 @ expr_assigned_variables e2
+    | AssignOpExpr (l, (Var (_, x) | WVar (_, x, _)), op, e, _) -> [x] @ expr_assigned_variables e
+    | AssignOpExpr (l, e1, op, e2, _) -> expr_assigned_variables e1 @ expr_assigned_variables e2
     | InstanceOfExpr(_, e, _) -> expr_assigned_variables e
     | SliceExpr (l, p1, p2) -> flatmap (function Some (LitPat e) -> expr_assigned_variables e | _ -> []) [p1; p2]
     | SuperMethodCall(_, _, args) -> flatmap expr_assigned_variables args
@@ -1006,7 +1006,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ProverTypeConversion(_, _, e) ->  expr_mark_addr_taken e locals
     | ArrayTypeExpr'(_, e) ->  expr_mark_addr_taken e locals
     | AssignExpr(_, e1, e2) ->  expr_mark_addr_taken e1 locals;  expr_mark_addr_taken e2 locals
-    | AssignOpExpr(_, e1, _, e2, _, _, _) -> expr_mark_addr_taken e1 locals;  expr_mark_addr_taken e2 locals
+    | AssignOpExpr(_, e1, _, e2, _) -> expr_mark_addr_taken e1 locals;  expr_mark_addr_taken e2 locals
     | InitializerList(_, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
   and pat_expr_mark_addr_taken pat locals = 
     match pat with
@@ -1142,7 +1142,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ProverTypeConversion(_, _, e) -> expr_address_taken e
     | ArrayTypeExpr'(_, e) -> expr_address_taken e
     | AssignExpr(_, e1, e2) -> (expr_address_taken e1) @ (expr_address_taken e2)
-    | AssignOpExpr(_, e1, _, e2, _, _, _) -> (expr_address_taken e1) @ (expr_address_taken e2)
+    | AssignOpExpr(_, e1, _, e2, _) -> (expr_address_taken e1) @ (expr_address_taken e2)
     | InitializerList (_, es) -> flatmap expr_address_taken es
   
   let rec stmt_address_taken s =
@@ -2060,7 +2060,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       branch
         (fun () -> assume v (fun () -> eval_h_core readonly h env e1 cont))
         (fun () -> assume (ctxt#mk_not v) (fun () -> eval_h_core readonly h env e2 cont))
-    | AssignOpExpr(l, lhs, op, rhs, postOp, ts, lhs_type) when !ts = Some [ObjType "java.lang.String"; ObjType "java.lang.String"] ->
+    | WAssignOpExpr(l, lhs, op, rhs, postOp, [ObjType "java.lang.String"; ObjType "java.lang.String"], lhs_type) ->
       eval_h h env lhs $. fun h env v1 ->
       let get_values = (fun h env v1 cont ->
         eval_h h env rhs $. fun h env v2 ->
@@ -2071,8 +2071,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       )
       in
       execute_assign_op_expr h env lhs get_values cont
-    | AssignOpExpr(l, lhs, ((And | Or | Xor) as op), rhs, postOp, ts, lhs_type) ->
-      assert(match !lhs_type with None -> false | _ -> true);
+    | WAssignOpExpr(l, lhs, ((And | Or | Xor) as op), rhs, postOp, ts, lhs_type) ->
       let get_values = (fun h env v1 cont -> eval_h h env rhs (fun h env v2 ->
           let new_value = 
             match op with
@@ -2085,8 +2084,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       ))
       in
       execute_assign_op_expr h env lhs get_values cont
-    | AssignOpExpr(l, lhs, ((Add | Sub | Mul | ShiftLeft | ShiftRight | Div | Mod | BitAnd | BitOr | BitXor) as op), rhs, postOp, ts, lhs_type) ->
-        let Some lhs_type = ! lhs_type in
+    | WAssignOpExpr(l, lhs, ((Add | Sub | Mul | ShiftLeft | ShiftRight | Div | Mod | BitAnd | BitOr | BitXor) as op), rhs, postOp, ts, lhs_type) ->
         let get_values = (fun h env v1 cont -> eval_h h env rhs (fun h env v2 ->
           let check_overflow min t max =
             if not pure then check_overflow l min t max (fun l t -> assert_term t h env l);
@@ -2104,45 +2102,45 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | _ -> (min_int_term, max_int_term)
           in
           let bounds = if pure then (* in ghost code, where integer types do not imply limits *) None else 
-            match !ts with
-              Some ([Int (Unsigned, 4); _] | [_; Int (Unsigned, 4)]) -> Some (int_zero_term, max_ptr_term)
-            | Some ([Int (Signed, 4); _] | [_; Int (Signed, 4)]) -> Some (min_int_term, max_int_term)
-            | Some ([Int (Signed, 2); _] | [_; Int (Signed, 2)]) -> Some (min_short_term, max_short_term)
-            | Some ([Int (Unsigned, 2); _] | [_; Int (Unsigned, 2)]) -> Some (min_ushort_term, max_ushort_term)
-            | Some ([Int (Signed, 1); _] | [_; Int (Signed, 1)]) -> Some (min_char_term, max_char_term)
-            | Some ([Int (Unsigned, 1); _] | [_; Int (Unsigned, 1)]) -> Some (min_uchar_term, max_uchar_term)
+            match ts with
+              [Int (Unsigned, 4); _] | [_; Int (Unsigned, 4)] -> Some (int_zero_term, max_ptr_term)
+            | [Int (Signed, 4); _] | [_; Int (Signed, 4)] -> Some (min_int_term, max_int_term)
+            | [Int (Signed, 2); _] | [_; Int (Signed, 2)] -> Some (min_short_term, max_short_term)
+            | [Int (Unsigned, 2); _] | [_; Int (Unsigned, 2)] -> Some (min_ushort_term, max_ushort_term)
+            | [Int (Signed, 1); _] | [_; Int (Signed, 1)] -> Some (min_char_term, max_char_term)
+            | [Int (Unsigned, 1); _] | [_; Int (Unsigned, 1)] -> Some (min_uchar_term, max_uchar_term)
             | _ -> None
           in
           let new_value = 
           begin match op with
             Add ->
-            begin match !ts with
-              (Some [Int (Signed, 4); Int (Signed, 4)]) | (Some [Int (Signed, 2); Int (Signed, 2)]) | (Some [Int (Signed, 1); Int (Signed, 1)]) | (Some [Int (Unsigned, 4); Int (Unsigned, 4)]) ->
+            begin match ts with
+              [Int (Signed, 4); Int (Signed, 4)] | [Int (Signed, 2); Int (Signed, 2)] | [Int (Signed, 1); Int (Signed, 1)] | [Int (Unsigned, 4); Int (Unsigned, 4)] ->
               check_overflow min_term (ctxt#mk_add v1 v2) max_term
-            | Some [PtrType t; Int (Signed, 4)] ->
+            | [PtrType t; Int (Signed, 4)] ->
               let n = sizeof l t in
               check_overflow min_term (ctxt#mk_add v1 (ctxt#mk_mul n v2)) max_term
-            | Some [RealType; RealType] ->
+            | [RealType; RealType] ->
               ctxt#mk_real_add v1 v2
             | _ -> static_error l "CompoundAssignment not supported for the given types." None
             end
           | Sub ->
-            begin match !ts with
-              (Some [Int (Signed, 4); Int (Signed, 4)]) | (Some [Int (Signed, 2); Int (Signed, 2)]) | (Some [Int (Signed, 1); Int (Signed, 1)]) | 
-              (Some [Int (Unsigned, 4); Int (Unsigned, 4)]) | (Some [Int (Unsigned, 1); Int (Unsigned, 1)]) | (Some [Int (Unsigned, 2); Int (Unsigned, 2)])->
+            begin match ts with
+              [Int (Signed, 4); Int (Signed, 4)] | [Int (Signed, 2); Int (Signed, 2)] | [Int (Signed, 1); Int (Signed, 1)] | 
+              [Int (Unsigned, 4); Int (Unsigned, 4)] | [Int (Unsigned, 1); Int (Unsigned, 1)] | [Int (Unsigned, 2); Int (Unsigned, 2)]->
               check_overflow min_term (ctxt#mk_sub v1 v2) max_term
-            | Some [PtrType t; Int (Signed, 4)] ->
+            | [PtrType t; Int (Signed, 4)] ->
               let n = sizeof l t in
               check_overflow min_term (ctxt#mk_sub v1 (ctxt#mk_mul n v2)) max_term
-            | Some [RealType; RealType] ->
+            | [RealType; RealType] ->
               ctxt#mk_real_sub v1 v2
             | _ -> static_error l "CompoundAssignment not supported for the given types." None
             end
           | Mul ->
-            begin match !ts with
-              (Some [Int (Signed, 4); Int (Signed, 4)]) | (Some [Int (Signed, 2); Int (Signed, 2)]) | (Some [Int (Signed, 1); Int (Signed, 1)]) ->
+            begin match ts with
+              [Int (Signed, 4); Int (Signed, 4)] | [Int (Signed, 2); Int (Signed, 2)] | [Int (Signed, 1); Int (Signed, 1)] ->
               check_overflow min_term (ctxt#mk_mul v1 v2) max_term
-            | Some [RealType; RealType] ->
+            | [RealType; RealType] ->
               ctxt#mk_real_mul v1 v2
             | _ -> static_error l "CompoundAssignment not supported for the given types." None
             end
@@ -2170,7 +2168,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               Int (Signed, 4) -> app
             | _ -> check_overflow min_term app max_term
             end 
-          | ShiftLeft when !ts = Some [Int (Signed, 4); Int (Signed, 4)] ->
+          | ShiftLeft when ts = [Int (Signed, 4); Int (Signed, 4)] ->
             let app = ctxt#mk_app shiftleft_int32_symbol [v1;v2] in
             begin match bounds with
               None -> ()
