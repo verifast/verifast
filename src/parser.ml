@@ -722,7 +722,7 @@ and
 | [< '(l, Kwd "bool") >] -> ManifestTypeExpr (l, Bool)
 | [< '(l, Kwd "boolean") >] -> ManifestTypeExpr (l, Bool)
 | [< '(l, Kwd "void") >] -> ManifestTypeExpr (l, Void)
-| [< '(l, Kwd "char") >] -> ManifestTypeExpr (l, Int (Signed, 1))
+| [< '(l, Kwd "char") >] -> ManifestTypeExpr (l, match !language with CLang -> Int (Signed, 1) | Java -> Int (Unsigned, 2))
 | [< '(l, Kwd "byte") >] -> ManifestTypeExpr (l, Int (Signed, 1))
 | [< '(l, Kwd "predicate");
      '(_, Kwd "(");
