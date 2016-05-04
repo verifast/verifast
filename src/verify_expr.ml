@@ -174,7 +174,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     check_breakpoint [] env l;
     SymExecSuccess
   
-  let check_func_header_compat l msg env00 (k, tparams, rt, xmap, nonghost_callers_only, pre, post, epost, terminates) (k0, tparams0, rt0, xmap0, nonghost_callers_only0, tpenv0, cenv0, pre0, post0, epost0, terminates0) =
+  let check_func_header_compat l msg0 msg env00 (k, tparams, rt, xmap, nonghost_callers_only, pre, post, epost, terminates) (k0, tparams0, rt0, xmap0, nonghost_callers_only0, tpenv0, cenv0, pre0, post0, epost0, terminates0) =
+    let msg1 = msg in
+    let msg = msg ^ ": " in
     if k <> k0 then 
       if (not (is_lemma k)) || (not (is_lemma k0)) then
         static_error l (msg ^ "Not the same kind of function.") None;
@@ -200,6 +202,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     end;
     if nonghost_callers_only <> nonghost_callers_only0 then static_error l (msg ^ "nonghost_callers_only clauses do not match.") None;
     execute_branch begin fun () ->
+    with_context (Executing ([], [], l, msg0 ^ ": " ^ msg1)) $. fun () ->
     let env0_0 = List.map (function (p, t) -> (p, get_unique_var_symb p t)) xmap0 in
     let currentThreadEnv = [(current_thread_name, get_unique_var_symb current_thread_name current_thread_type)] in
     let env0 = currentThreadEnv @ env0_0 @ cenv0 in
@@ -345,7 +348,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let cenv0 = [("this", fterm)] @ ftargenv in
             let k' = match gh with Real -> Regular | Ghost -> Lemma(true, None) in
             let xmap0 = List.map (fun (x, t) -> (x, instantiate_type fttpenv t)) xmap0 in
-            check_func_header_compat l "Function type implementation check: " env0
+            check_func_header_compat l ("Function '" ^ fn ^ "'") "Function type implementation check" env0
               (k, tparams, rt, xmap, nonghost_callers_only, pre, post, [], terminates)
               (k', [], rt0, xmap0, false, fttpenv, cenv0, pre0, post0, [], terminates0);
             if gh = Real then
@@ -384,7 +387,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               static_error l "Duplicate function implementation." None
           | Some (FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, nonghost_callers_only0, pre0, pre_tenv0, post0, terminates0, functype_opt0, None,Static,Public)) ->
             if body = None then static_error l "Duplicate function prototype." None;
-            check_func_header_compat l "Function prototype implementation check: " [] (k, tparams, rt, xmap, nonghost_callers_only, pre, post, [], terminates) (k0, tparams0, rt0, xmap0, nonghost_callers_only0, [], [], pre0, post0, [], terminates0);
+            check_func_header_compat l ("Function '" ^ fn ^ "'") "Function prototype implementation check" [] (k, tparams, rt, xmap, nonghost_callers_only, pre, post, [], terminates) (k0, tparams0, rt0, xmap0, nonghost_callers_only0, [], [], pre0, post0, [], terminates0);
             iter pn ilist ((fn, FuncInfo ([], fterm, l, k, tparams, rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body',Static,Public))::funcmap) ((fn, l0)::prototypes_implemented) ds
         end
       | _::ds -> iter pn ilist funcmap prototypes_implemented ds
@@ -475,7 +478,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             match try_assoc sign meths1 with
               None-> static_error l1 (".java file does not correctly implement .javaspec file: interface does not declare method " ^ string_of_sign sign) None
             | Some(lm1,gh1,rt1,xmap1,pre1,pre_tenv1,post1,epost1,v1,abstract1) ->
-              check_func_header_compat lm1 "Method specification check: " [] (func_kind_of_ghostness gh1,[],rt1, xmap1,false, pre1, post1, epost1, false) (func_kind_of_ghostness gh0, [], rt0, xmap0, false, [], [], pre0, post0, epost0, false);
+              let (mn, _) = sign in
+              check_func_header_compat lm1 ("Method '" ^ mn ^ "'") "Method specification check" [] (func_kind_of_ghostness gh1,[],rt1, xmap1,false, pre1, post1, epost1, false) (func_kind_of_ghostness gh0, [], rt0, xmap0, false, [], [], pre0, post0, epost0, false);
               match_meths meths0 (List.remove_assoc sign meths1)
         in
         match_fields fields0 fields1;
@@ -507,7 +511,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let ("this", thisType)::xmap = xmap in
             let ("this", _)::xmap' = xmap' in
             let thisTerm = get_unique_var_symb "this" thisType in
-            check_func_header_compat l "Method specification check: " [("this", thisTerm)]
+            let (mn, _) = sign in
+            check_func_header_compat l ("Method '" ^ mn ^ "'") "Method specification check" [("this", thisTerm)]
               (Regular, [], rt, xmap, false, pre, post, epost, false)
               (Regular, [], rt', xmap', false, [], [("this", thisTerm)], pre', post', epost', false);
             pop();
@@ -629,7 +634,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let ("this", _)::xmap' = xmap' in
                   let thisTerm = get_unique_var_symb "this" thisType in
                   assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [thisTerm]) (List.assoc cn classterms)) (fun _ ->
-                    check_func_header_compat l "Method specification check: " [("this", thisTerm)]
+                    check_func_header_compat l ("Method '" ^ n ^ "'") "Method specification check" [("this", thisTerm)]
                       (Regular, [], rt, xmap, false, pre, post, epost, false)
                       (Regular, [], rt', xmap', false, [], [("this", thisTerm)], pre', post', epost', false);
                     success()
@@ -794,7 +799,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   None-> iter rest (elem::meths1)
                 | Some(lm1,gh1,rt1,xmap1,pre1,pre_tenv1,post1,epost1,pre_dyn1,post_dyn1,epost_dyn1,ss1,fb1,v1,_,abstract1) -> 
                   let epost1: (type_ * asn) list = epost1 in
-                  check_func_header_compat lm1 "Method implementation check: " []
+                  let (mn, _) = sign0 in
+                  check_func_header_compat lm1 ("Method '" ^ mn ^ "'") "Method implementation check" []
                     (func_kind_of_ghostness gh1,[],rt1, xmap1,false, pre1, post1, epost1, false)
                     (func_kind_of_ghostness gh0, [], rt0, xmap0, false, [], [], pre0, post0, epost0, false);
                   if ss0=None then meths_impl:=(fst sign0,lm0)::!meths_impl;
@@ -813,7 +819,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | Some(lm1,xmap1,pre1,pre_tenv1,post1,epost1,ss1,v1) ->
                   let epost1: (type_ * asn) list = epost1 in
                   let rt= None in
-                  check_func_header_compat lm1 "Constructor implementation check: " []
+                  check_func_header_compat lm1 ("Class '" ^ cn ^ "'") "Constructor implementation check" []
                     (Regular,[],rt, ("this", ObjType cn)::xmap1,false, pre1, post1, epost1, false)
                     (Regular, [], rt, ("this", ObjType cn)::xmap0, false, [], [], pre0, post0, epost0, false);
                   if ss0=None then cons_impl:=(cn,lm0)::!cons_impl;

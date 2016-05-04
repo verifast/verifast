@@ -2512,6 +2512,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         record_fun_timing lm (cn ^ ".<ctor>") begin fun () ->
         if !verbosity >= 1 then Printf.printf "%10.6fs: %s: Verifying constructor %s\n" (Perf.time()) (string_of_loc lm) (string_of_sign (cn, sign));
         execute_branch begin fun () ->
+        with_context (Executing ([], [], lm, Printf.sprintf "Class '%s': verifying constructor" cn)) $. fun () ->
         let env = get_unique_var_symbs_non_ghost ([(current_thread_name, current_thread_type)] @ xmap) in
         let (sizemap, indinfo) = switch_stmt ss env in
         let (ss, explicitsupercall) = match ss with SuperConstructorCall(l, es) :: body -> (body, Some(SuperConstructorCall(l, es))) | _ -> (ss, None) in
@@ -2597,6 +2598,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if !verbosity >= 1 then Printf.printf "%10.6fs: %s: Verifying method %s\n" (Perf.time()) (string_of_loc l) g;
         if abstract then static_error l "Abstract method cannot have implementation." None;
         execute_branch $. fun () ->
+        with_context (Executing ([], [], l, Printf.sprintf "Verifying method '%s'" g)) $. fun () ->
         let (in_pure_context, leminfo, ghostenv) =
           match gh with
             Ghost -> (true, LemInfo (lems, "<method>", None, false), List.map (function (p, t) -> p) ps @ ["#result"])
