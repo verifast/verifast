@@ -1,0 +1,7 @@
+verifast -c -allow_should_fail call_nonghost.c
+verifast -c -allow_should_fail call_nonghost_in_ngco_lemma.c
+verifast -c -allow_should_fail CallNonghost.java
+verifast -allow_should_fail lemmafuncptr_call_nonghost_in_producelemfunptr.c
+verifast -c sunnydayscenario.c
+verifast -c SunnyDayScenario.java
+

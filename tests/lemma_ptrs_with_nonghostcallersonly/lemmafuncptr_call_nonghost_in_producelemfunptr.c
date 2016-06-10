@@ -2,8 +2,9 @@
  * Call a nonghost_callers_only lemma in a produce_lemma_function_pointer_chunk's body.
  *
  * Since lemma function pointers can be called in non-nonghost_callers_only context,
+ * and if lemma function pointers can call nonghost_callers_only_lemmas, then
  * we can indirectly still call a nonghost_callers_only lemma in a
- * no-nonghost_callers_only context. This allows to prove false.
+ * no-nonghost_callers_only context. This would allow to prove false.
  *
  * This example is based on lemmafuncptr_produce_invalid.c.
  */
@@ -37,7 +38,7 @@ lemma void lemma2()
   ensures false;
 {
   produce_lemma_function_pointer_chunk(lemma1) : evil_lemma()(){
-    duplicate_lemma_function_pointer_chunk(evil_lemma);
+    duplicate_lemma_function_pointer_chunk(evil_lemma); //~  <-- should fail
     call();
   }{
     assert is_evil_lemma(?proof);
@@ -49,7 +50,7 @@ lemma void lemma2()
 
 @*/
 
-void main()
+int main() //@ : main
   //@ requires true;
   //@ ensures false;
 {

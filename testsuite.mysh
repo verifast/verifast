@@ -376,6 +376,9 @@ cd tests
   cd copredicates
     mysh < run.mysh
   cd ..
+  cd lemma_ptrs_with_nonghostcallersonly
+    mysh < run.mysh
+  cd ..
   cd bugs
     cd z3-proves-false
       ifz3 verifast -c -runtime rt/rt.jarspec z3-proves-false.java
