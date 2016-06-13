@@ -44,7 +44,6 @@ void foo()
 
 - When including files using double quotes (e.g. 'include "xyz.h"', in contrast to 'include <xyz.h>'), VeriFast assumes the compiler searches first in the directory of the file in which the include statement is written. This is the behaviour of GCC. This is not enforced by the C standard.
 - When using a different include path to verify a 'static' library, than when using that library, the user can overwrite definitions from headers of that library and symbolic linking cannot detect this (see tests/bugs/include_paths).
-- It is possible to call a nonghost_callers_only lemma in a produce_lemma_function_pointer_chunk's body, see tests/bugs/lemmafuncptr_call_nonghost_in_producelemfunptr.c (this is ghostcode, so not C specific).
 
 Java Programs
 =============
