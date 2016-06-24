@@ -41,6 +41,9 @@ cd in-memory
     verifast -prover redux -c main.c cat.c getchar.c putchar.c writer.c
     verifast -prover redux -c -disable_overflow_check reader.c
   cd ..
+  cd non-reusable-writer-cat-reader
+    verifast -prover redux -c writer-cat-reader.c
+  cd ..
 cd ..
 cd matching_brackets
   verifast_both stdio_simple.o -shared -disable_overflow_check matching_brackets_input.c
