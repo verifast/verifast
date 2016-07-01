@@ -3,12 +3,12 @@ Building VeriFast on MacOS
 
 Instructions:
 - Make sure that you have Homebrew installed on your machine
-- Run setup-build-with-opam.sh from the verifast folder. (This will set up the environment)
-- Build and Compile VeriFast release by going to the src folder and run “make -j 8”. 
+- Run `setup-build-with-opam.sh` from the verifast folder. (This will set up the environment)
+- Compile VeriFast release by going to the src folder and run `make -j 8`.
 
 
-ALTERNATIVE: 
-============
+ALTERNATIVE (much harder) 
+-----------
 Note: You don’t need this if you use the above method
 
 I successfully built VeriFast on MacOS 10.5.8.

@@ -111,7 +111,7 @@ tests/errors
 How to build
 ------------
 
-See the appropriate README.xyz.txt file for your platform.
+See the appropriate README.xyz.md file for your platform.
 
 Commit guidelines
 -----------------

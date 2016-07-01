@@ -1,28 +1,34 @@
-Compiling VeriFast on Debian and Ubuntu (also works on 64bit)
-=======================================
+Compiling VeriFast on Linux
+===========================
+
+Debian-based (Ubuntu, Mint, ...) (32bit + 64bit)
+----------------------------------------
     
     
-1.  Run this (replace USERNAME with your departemental username)
+1.  Run this
     
-    $ sudo apt-get install --no-install-recommends \
-       subversion make ocaml-native-compilers gcc camlp4 \
-       liblablgtk2-ocaml-dev liblablgtksourceview2-ocaml-dev valac
-    $ VERIFASTDIR=$PWD
-    $ svn co --username USERNAME https://dnetcode.cs.kuleuven.be/svn/verifast/verifast/trunk verifast
-    $ cd verifast/src/
-    $ make -j 8
-    $ ../bin/vfide
+  ```sh    
+  $ sudo apt-get install --no-install-recommends \
+         subversion make ocaml-native-compilers gcc camlp4 \
+         liblablgtk2-ocaml-dev liblablgtksourceview2-ocaml-dev valac
+  $ VERIFASTDIR=$PWD
+  $ git clone https://github.com/verifast/verifast.git
+  $ cd verifast/src/
+  $ make -j 8
+  $ ../bin/vfide
+  ```
 
 2.  Enjoy!
     
     
 
 ALTERNATIVE: using Opam
-=======================
+-----------------------
 
 Note: you do not need this if you use the above method.
 
-1. # Note: without gtksourceview2.0-dev, opam builds lablgtk builds with sourceview bindings missing
+1. Note: without `gtksourceview2.0-dev`, `opam` builds `lablgtk` with `sourceview` bindings missing
+   ```sh
    sudo apt-get install --no-install-recommends wget ca-certificates make m4 gcc patch unzip libgtk2.0-dev subversion valac gtksourceview2.0-dev
    mkdir -p ~/.local/bin
    wget https://raw.github.com/ocaml/opam/master/shell/opam_installer.sh -O - | sh -s ~/.local/bin
@@ -37,45 +43,51 @@ Note: you do not need this if you use the above method.
    cd verifast/src/
    make -j 8
    ../bin/vfide
-
+   ```
+   
 2. Enjoy!
      
     
     
-Getting Z3 working on 32bit (optional)
-===========================
+Z3 on 32bit (OPTIONAL)
+----------------------
 
 Note: only tested with apt-get approach above, not with the Opam approach.
 
-3.  sudo apt-get install camlidl
+3.  `sudo apt-get install camlidl`
 
 4.  Download (requires login)
     https://dnetcode.cs.kuleuven.be/attachments/download/736/z3.tar.gz
 
 5.  Run this (replace DOWNLOADPATH with the directory you put z3.tar.gz in (in step 4))
+    ```sh
     $ cd
     $ Z3DIR=$PWD
     $ tar -xzf DOWNLOADPATH/z3.tar.gz
     $ cd z3/ocaml
-
+    ```
+    
 6.  Ignore the warnings on this one:
+    ```sh
     $ ./build-lib.sh $(ocamlc -where)
     $ echo "Z3=$PWD/../" >> $VERIFASTDIR/verifast/src/../GNUmakefile.settings
+    ```
     
 7.  Recompile VeriFast:
+    ```sh
     $ cd $VERIFASTDIR/verifast/src/
     $ make -j 8
+    ```
 
 8.  Run
+    ```sh
     $ export LD_LIBRARY_PATH="$Z3DIR/z3/lib:$LD_LIBRARY_PATH"
     $ $VERIFASTDIR/verifast/bin/vfide
+    ```
 
 
-
-
-
-What about Z3 on 64bit?
-=======================
+What about Z3 on 64bit? (OPTIONAL)
+-----------------------
 
 libz3.so is a 32bit library, so you cannot simply link it from a 64 bit
 executable.

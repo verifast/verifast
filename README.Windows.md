@@ -1,21 +1,23 @@
-Building VeriFast for Windows (automatic)
+Building VeriFast for Windows
 =============================
+
 
 Note: this creates extra directories in C:\
 
-1. Place VeriFast's files in c:\projects\verifast
+1. Place VeriFast's files in `c:\projects\verifast`
    (the scripts expect it to be there)
-2. Launch c:\projects\verifast\setup-windows.bat
+2. Launch `c:\projects\verifast\setup-windows.bat`
 3. Open Windows' commandline and execute
-     c:\cygwin\bin\bash -lc "cd /cygdrive/c/projects/verifast/src && make VERBOSE=yes"
-4. vfide can now be launched from c:\projects\verifast\bin\vfide.exe
+     `c:\cygwin\bin\bash -lc "cd /cygdrive/c/projects/verifast/src && make VERBOSE=yes"`
+4. vfide can now be launched from `c:\projects\verifast\bin\vfide.exe`
 
 Te recompile, you only need to re-execute step 3.
 
 
-Building VeriFast for Windows (by hand)
-=============================
+ALTERNATIVE: Building by hand
+-----------------------------
 
+```
 This builds native Win32 VeriFast executables that do not depend on Cygwin, but the build
 process requires Cygwin.
 
@@ -130,3 +132,5 @@ make install # (if this fails, do make uninstall first)
 To test:
 cd examples/sourceview
 ocaml -I +site-lib/lablgtk2 lablgtk.cma gtkInit.cmo lablgtksourceview2.cma test2.ml
+
+```
