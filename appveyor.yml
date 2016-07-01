@@ -1,5 +1,4 @@
 # Continuous integration for Windows.
-# No support for: vfide, z3.
 
 clone_depth: 30
 clone_folder: c:\projects\verifast
@@ -8,5 +7,5 @@ platform:
 install:
   - c:/projects/verifast/setup-windows.bat
 build_script:
-  - c:/cygwin/bin/bash -lc "cd /cygdrive/c/projects/verifast/src && make WITHOUT_LABLGTK=yes VERBOSE=yes"
+  - c:/cygwin/bin/bash -lc "cd /cygdrive/c/projects/verifast/src && make VERBOSE=yes"
 
