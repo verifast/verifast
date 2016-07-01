@@ -1,5 +1,5 @@
 /**
- * read-filed-of-file.c -- read all files mentioned in a file
+ * read-files-of-file.c -- read all files mentioned in a file
  *
  * Read a file "f", containing filenames. Reads
  * all these files and writes the contents to stdout.
@@ -105,7 +105,7 @@ predicate read_file_of_files_io(place t1, list<char> filename,
 @*/
 
 
-// We choose the simplest implementation (alternatives would bebuffering, threading, ...)
+// We choose the simplest implementation (alternatives would be buffering, threading, ...)
 
 void main()
 //@ requires read_file_of_files_io(?t1, {'f'}, stdout, ?t_end) &*& token(t1);
