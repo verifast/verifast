@@ -1,4 +1,7 @@
-// Note: this is the version where reusability is left out.
+// Example of non-reusable input/output-style verification.
+// This program prints "h" and "i" to a buffer of size one, concurrently.
+// The result can be "h" or "i", but nothing else.
+
 
 #include <threading.h>
 #include <stdlib.h> // abort() on malloc-fail.
