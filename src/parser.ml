@@ -678,11 +678,9 @@ and
      te = parser
         [< '(_, Kwd ";") >] -> te0
       | [< '(_, Kwd "["); '(ls, Int size); '(_, Kwd "]"); '(_, Kwd ";") >] ->
-          (match te0 with (ManifestTypeExpr (_, _) | PtrTypeExpr (_, _)) ->
-            if ( (int_of_big_int size) <= 0 ) then
+            if int_of_big_int size <= 0 then
               raise (ParseException (ls, "Array must have size > 0."));
-            StaticArrayTypeExpr (l, te0, (int_of_big_int size))
-          | _ -> raise (ParseException (l, "Array cannot be of this type.")))
+            StaticArrayTypeExpr (l, te0, int_of_big_int size)
    >] -> Field (l, gh, te, f, Instance, Public, false, None)
 and
   parse_return_type = parser
