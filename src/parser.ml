@@ -1256,7 +1256,7 @@ and
 | [< '(l, Kwd "INT_MAX") >] -> IntLit (l, big_int_of_string "2147483647")
 | [< '(l, Kwd "UINTPTR_MAX") >] -> CastExpr (l, false, ManifestTypeExpr (l, Int (Unsigned, 4)), IntLit (l, big_int_of_string "4294967295"))
 | [< '(l, Kwd "UCHAR_MAX") >] -> IntLit (l, big_int_of_string "255")
-| [< '(l, Kwd "SHRT_MIN") >] -> IntLit (l, big_int_of_string "-32767")
+| [< '(l, Kwd "SHRT_MIN") >] -> IntLit (l, big_int_of_string "-32768")
 | [< '(l, Kwd "SHRT_MAX") >] -> IntLit (l, big_int_of_string "32767")
 | [< '(l, Kwd "USHRT_MAX") >] -> IntLit (l, big_int_of_string "65535")
 | [< '(l, Kwd "UINT_MAX") >] -> CastExpr (l, false, ManifestTypeExpr (l, Int (Unsigned, 4)), IntLit (l, big_int_of_string "4294967295"))
