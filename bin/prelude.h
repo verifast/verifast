@@ -24,6 +24,9 @@ predicate u_character(unsigned char *p; unsigned char c);
 predicate integer(int *p; int v);
 predicate u_integer(unsigned int *p; unsigned int v);
 
+predicate short_integer(short *p; short s);
+predicate u_short_integer(unsigned short *p; unsigned short v);
+
 predicate pointer(void **pp; void *p);
 
 lemma void character_limits(char *pc);
@@ -202,6 +205,26 @@ lemma_auto void uints_inv();
     requires [?f]uints(?p, ?count, ?vs);
     ensures [f]uints(p, count, vs) &*& count == length(vs);
 
+predicate shorts(short *p, short count; list<short> vs) =
+    count == 0 ?
+        vs == nil
+    :
+        short_integer(p, ?v) &*& shorts(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0);
+
+lemma_auto void shorts_inv();
+    requires [?f]shorts(?p, ?count, ?vs);
+    ensures [f]shorts(p, count, vs) &*& count == length(vs);
+
+predicate ushorts(unsigned short *p, short count; list<unsigned short> vs) =
+    count == 0 ?
+        vs == nil
+    :
+        u_short_integer(p, ?v) &*& ushorts(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0);
+
+lemma_auto void ushorts_inv();
+    requires [?f]ushorts(?p, ?count, ?vs);
+    ensures [f]ushorts(p, count, vs) &*& count == length(vs);
+
 predicate pointers(void **pp, int count; list<void *> ps) =
     count == 0 ?
         ps == nil
@@ -272,6 +295,8 @@ predicate malloc_block_chars(char *p; int count) = malloc_block(p, count);
 predicate malloc_block_uchars(unsigned char *p; int count) = malloc_block(p, count);
 predicate malloc_block_ints(int *p; int count) = malloc_block(p, ?size) &*& divrem(size, sizeof(int), count, 0);
 predicate malloc_block_uints(unsigned int *p; int count) = malloc_block(p, ?size) &*& divrem(size, sizeof(unsigned int), count, 0);
+predicate malloc_block_shorts(short *p; int count) = malloc_block(p, ?size) &*& divrem(size, sizeof(short), count, 0);
+predicate malloc_block_ushorts(unsigned short *p; int count) = malloc_block(p, ?size) &*& divrem(size, sizeof(unsigned short), count, 0);
 predicate malloc_block_pointers(void **p; int count) = malloc_block(p, ?size) &*& divrem(size, sizeof(void *), count, 0);
 
 @*/

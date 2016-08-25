@@ -57,6 +57,8 @@
 .provides ./prelude.h#uchars_inv
 .provides ./prelude.h#ints_inv
 .provides ./prelude.h#uints_inv
+.provides ./prelude.h#shorts_inv
+.provides ./prelude.h#ushorts_inv
 .provides ./prelude.h#pointers_inv
 .provides ./prelude.h#pointers_split
 .provides ./prelude.h#pointers_join
@@ -76,6 +78,8 @@
 .predicate @./prelude.h#u_character
 .predicate @./prelude.h#integer
 .predicate @./prelude.h#u_integer
+.predicate @./prelude.h#short_integer
+.predicate @./prelude.h#u_short_integer
 .predicate @./prelude.h#pointer
 .predicate @./prelude.h#divrem
 .predicate @./prelude.h#malloc_block
