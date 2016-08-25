@@ -49,6 +49,14 @@ lemma void u_integer_limits(unsigned int *p);
     requires [?f]u_integer(p, ?v);
     ensures [f]u_integer(p, v) &*& p > (unsigned int *)0 &*& p + 1 <= (unsigned int *)UINTPTR_MAX &*& 0 <= v &*& v <= UINT_MAX;
 
+lemma void short_integer_limits(short *p);
+    requires [?f]short_integer(p, ?v);
+    ensures [f]short_integer(p, v) &*& p > (short *)0 &*& p + 1 <= (short *)UINTPTR_MAX &*& SHRT_MIN <= v &*& v <= SHRT_MAX;
+
+lemma void u_short_integer_limits(unsigned short *p);
+    requires [?f]u_short_integer(p, ?v);
+    ensures [f]u_short_integer(p, v) &*& p > (unsigned short *)0 &*& p + 1 <= (unsigned short *)UINTPTR_MAX &*& 0 <= v &*& v <= USHRT_MAX;
+
 lemma void pointer_distinct(void *pp1, void *pp2);
     requires pointer(pp1, ?p1) &*& pointer(pp2, ?p2);
     ensures pointer(pp1, p1) &*& pointer(pp2, p2) &*& pp1 != pp2;
@@ -148,6 +156,14 @@ lemma_auto void chars_to_u_integer(void *p);
     requires [?f]chars(p, sizeof(unsigned int), ?cs);
     ensures [f]u_integer(p, _);
 
+lemma_auto void chars_to_short_integer(void *p);
+    requires [?f]chars(p, sizeof(short), ?cs);
+    ensures [f]short_integer(p, _);
+
+lemma_auto void chars_to_u_short_integer(void *p);
+    requires [?f]chars(p, sizeof(unsigned short), ?cs);
+    ensures [f]u_short_integer(p, _);
+
 lemma_auto void chars_to_pointer(void *p);
     requires [?f]chars(p, sizeof(void *), ?cs);
     ensures [f]pointer(p, pointer_of_chars(cs));
@@ -160,6 +176,14 @@ lemma_auto void integer_to_chars(void *p);
 lemma_auto void u_integer_to_chars(void *p);
     requires [?f]u_integer(p, _);
     ensures [f]chars(p, sizeof(unsigned int), ?cs);
+
+lemma_auto void short_integer_to_chars(void *p);
+    requires [?f]short_integer(p, _);
+    ensures [f]chars(p, sizeof(short), ?cs);
+
+lemma_auto void u_short_integer_to_chars(void *p);
+    requires [?f]u_short_integer(p, _);
+    ensures [f]chars(p, sizeof(unsigned short), ?cs);
 
 lemma_auto void pointer_to_chars(void *p);
     requires [?f]pointer(p, ?v);

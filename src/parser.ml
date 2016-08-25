@@ -36,7 +36,7 @@ let c_keywords = [
   "define"; "endif"; "&"; "goto"; "uintptr_t"; "INT_MIN"; "INT_MAX";
   "UINTPTR_MAX"; "enum"; "static"; "signed"; "unsigned"; "long";
   "const"; "volatile"; "register"; "ifdef"; "elif"; "undef";
-  "USHRT_MAX"; "UINT_MAX"; "UCHAR_MAX"
+  "SHRT_MIN"; "SHRT_MAX"; "USHRT_MAX"; "UINT_MAX"; "UCHAR_MAX"
 ]
 
 let java_keywords = [
@@ -1256,6 +1256,8 @@ and
 | [< '(l, Kwd "INT_MAX") >] -> IntLit (l, big_int_of_string "2147483647")
 | [< '(l, Kwd "UINTPTR_MAX") >] -> CastExpr (l, false, ManifestTypeExpr (l, Int (Unsigned, 4)), IntLit (l, big_int_of_string "4294967295"))
 | [< '(l, Kwd "UCHAR_MAX") >] -> IntLit (l, big_int_of_string "255")
+| [< '(l, Kwd "SHRT_MIN") >] -> IntLit (l, big_int_of_string "-32767")
+| [< '(l, Kwd "SHRT_MAX") >] -> IntLit (l, big_int_of_string "32767")
 | [< '(l, Kwd "USHRT_MAX") >] -> IntLit (l, big_int_of_string "65535")
 | [< '(l, Kwd "UINT_MAX") >] -> CastExpr (l, false, ManifestTypeExpr (l, Int (Unsigned, 4)), IntLit (l, big_int_of_string "4294967295"))
 | [< '(l, String s); ss = rep (parser [< '(_, String s) >] -> s) >] -> 
