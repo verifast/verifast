@@ -24,6 +24,9 @@ predicate u_character(unsigned char *p; unsigned char c);
 predicate integer(int *p; int v);
 predicate u_integer(unsigned int *p; unsigned int v);
 
+predicate short_integer(short *p; short s);
+predicate u_short_integer(unsigned short *p; unsigned short v);
+
 predicate pointer(void **pp; void *p);
 
 lemma void character_limits(char *pc);
@@ -45,6 +48,14 @@ lemma void integer_limits(int *p);
 lemma void u_integer_limits(unsigned int *p);
     requires [?f]u_integer(p, ?v);
     ensures [f]u_integer(p, v) &*& p > (unsigned int *)0 &*& p + 1 <= (unsigned int *)UINTPTR_MAX &*& 0 <= v &*& v <= UINT_MAX;
+
+lemma void short_integer_limits(short *p);
+    requires [?f]short_integer(p, ?v);
+    ensures [f]short_integer(p, v) &*& p > (short *)0 &*& p + 1 <= (short *)UINTPTR_MAX &*& SHRT_MIN <= v &*& v <= SHRT_MAX;
+
+lemma void u_short_integer_limits(unsigned short *p);
+    requires [?f]u_short_integer(p, ?v);
+    ensures [f]u_short_integer(p, v) &*& p > (unsigned short *)0 &*& p + 1 <= (unsigned short *)UINTPTR_MAX &*& 0 <= v &*& v <= USHRT_MAX;
 
 lemma void pointer_distinct(void *pp1, void *pp2);
     requires pointer(pp1, ?p1) &*& pointer(pp2, ?p2);
@@ -145,6 +156,14 @@ lemma_auto void chars_to_u_integer(void *p);
     requires [?f]chars(p, sizeof(unsigned int), ?cs);
     ensures [f]u_integer(p, _);
 
+lemma_auto void chars_to_short_integer(void *p);
+    requires [?f]chars(p, sizeof(short), ?cs);
+    ensures [f]short_integer(p, _);
+
+lemma_auto void chars_to_u_short_integer(void *p);
+    requires [?f]chars(p, sizeof(unsigned short), ?cs);
+    ensures [f]u_short_integer(p, _);
+
 lemma_auto void chars_to_pointer(void *p);
     requires [?f]chars(p, sizeof(void *), ?cs);
     ensures [f]pointer(p, pointer_of_chars(cs));
@@ -157,6 +176,14 @@ lemma_auto void integer_to_chars(void *p);
 lemma_auto void u_integer_to_chars(void *p);
     requires [?f]u_integer(p, _);
     ensures [f]chars(p, sizeof(unsigned int), ?cs);
+
+lemma_auto void short_integer_to_chars(void *p);
+    requires [?f]short_integer(p, _);
+    ensures [f]chars(p, sizeof(short), ?cs);
+
+lemma_auto void u_short_integer_to_chars(void *p);
+    requires [?f]u_short_integer(p, _);
+    ensures [f]chars(p, sizeof(unsigned short), ?cs);
 
 lemma_auto void pointer_to_chars(void *p);
     requires [?f]pointer(p, ?v);
@@ -201,6 +228,26 @@ predicate uints(unsigned int *p, int count; list<unsigned int> vs) =
 lemma_auto void uints_inv();
     requires [?f]uints(?p, ?count, ?vs);
     ensures [f]uints(p, count, vs) &*& count == length(vs);
+
+predicate shorts(short *p, short count; list<short> vs) =
+    count == 0 ?
+        vs == nil
+    :
+        short_integer(p, ?v) &*& shorts(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0);
+
+lemma_auto void shorts_inv();
+    requires [?f]shorts(?p, ?count, ?vs);
+    ensures [f]shorts(p, count, vs) &*& count == length(vs);
+
+predicate ushorts(unsigned short *p, short count; list<unsigned short> vs) =
+    count == 0 ?
+        vs == nil
+    :
+        u_short_integer(p, ?v) &*& ushorts(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0);
+
+lemma_auto void ushorts_inv();
+    requires [?f]ushorts(?p, ?count, ?vs);
+    ensures [f]ushorts(p, count, vs) &*& count == length(vs);
 
 predicate pointers(void **pp, int count; list<void *> ps) =
     count == 0 ?
@@ -272,6 +319,8 @@ predicate malloc_block_chars(char *p; int count) = malloc_block(p, count);
 predicate malloc_block_uchars(unsigned char *p; int count) = malloc_block(p, count);
 predicate malloc_block_ints(int *p; int count) = malloc_block(p, ?size) &*& divrem(size, sizeof(int), count, 0);
 predicate malloc_block_uints(unsigned int *p; int count) = malloc_block(p, ?size) &*& divrem(size, sizeof(unsigned int), count, 0);
+predicate malloc_block_shorts(short *p; int count) = malloc_block(p, ?size) &*& divrem(size, sizeof(short), count, 0);
+predicate malloc_block_ushorts(unsigned short *p; int count) = malloc_block(p, ?size) &*& divrem(size, sizeof(unsigned short), count, 0);
 predicate malloc_block_pointers(void **p; int count) = malloc_block(p, ?size) &*& divrem(size, sizeof(void *), count, 0);
 
 @*/
