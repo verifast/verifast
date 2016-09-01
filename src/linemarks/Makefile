@@ -11,9 +11,9 @@ hello$(DOTEXE): hello.ml linemarks.cmxa
 
 linemarks.cmxa: liblinemarks.a
 ifeq ($(shell uname -o), Cygwin)
-	${OCAMLOPT} ${OCAMLCFLAGS} -a -o linemarks.cmxa -I +$(LABLGTK2) GtkLineMarks.mli GLineMarks.ml -cclib -L$(shell pwd) -cclib -llinemarks -cclib "`pkg-config --libs gtksourceview-2.0`"
+	${OCAMLOPT} ${OCAMLCFLAGS} -a -o linemarks.cmxa -I +$(LABLGTK2) GtkLineMarks.mli GtkLineMarks.ml GLineMarks.ml -cclib -L$(shell pwd) -cclib -llinemarks -cclib "`pkg-config --libs gtksourceview-2.0`"
 else
-	${OCAMLOPT} ${OCAMLCFLAGS} -a -o linemarks.cmxa $(LABLGTK_FLAGS) GtkLineMarks.mli GLineMarks.ml -cclib -L$(shell pwd) -cclib -llinemarks -cclib "`pkg-config --libs gtksourceview-2.0`"
+	${OCAMLOPT} ${OCAMLCFLAGS} -a -o linemarks.cmxa $(LABLGTK_FLAGS) GtkLineMarks.mli GtkLineMarks.ml GLineMarks.ml -cclib -L$(shell pwd) -cclib -llinemarks -cclib "`pkg-config --libs gtksourceview-2.0`"
 endif
 
 liblinemarks.a: linemarks.o

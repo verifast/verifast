@@ -10,7 +10,7 @@ external processor_ticks: unit -> int64 = "caml_stopwatch_processor_ticks"
 (** The type of stopwatches. *)
 type t
 
-external create: unit -> t = "caml_stopwatch_create"
+val create: unit -> t
 external start: t -> unit = "caml_stopwatch_start"
 external stop: t -> unit = "caml_stopwatch_stop"
 external ticks: t -> int64 = "caml_stopwatch_ticks"
