@@ -24,16 +24,24 @@ linux/libPerf_cobjs.a: linux/caml_stopwatch.o
 	@echo "  AR       " $@
 	cd linux ; ar rcs libPerf_cobjs.a caml_stopwatch.o
 
-linux/Stopwatch.cmx linux/Stopwatch.cmi: linux/Stopwatch.ml linux/Stopwatch.mli
+linux/Stopwatch.cmi: linux/Stopwatch.mli
 	@echo "  OCAMLOPT " $@
-	cd linux ; ${OCAMLOPT} -c Stopwatch.mli Stopwatch.ml
+	cd linux ; ${OCAMLOPT} -c Stopwatch.mli
 
-linux/Perf.cmxa: linux/Perf.ml linux/Stopwatch.cmi linux/Stopwatch.cmx
+linux/Stopwatch.cmx: linux/Stopwatch.ml linux/Stopwatch.cmi
 	@echo "  OCAMLOPT " $@
-	cd linux ; ${OCAMLOPT} $(OCAML_DEBUG_FLAG) -a -o $(PERF_OUT) Stopwatch.cmx Perf.ml -cclib -lPerf_cobjs
+	cd linux ; ${OCAMLOPT} -c Stopwatch.ml
+
+linux/Perf.cmx: linux/Perf.ml
+	@echo "  OCAMLOPT " $@
+	cd linux ; ${OCAMLOPT} -c Perf.ml
+
+linux/Perf.cmxa: linux/Perf.cmx linux/Stopwatch.cmi linux/Stopwatch.cmx
+	@echo "  OCAMLOPT " $@
+	cd linux ; ${OCAMLOPT} $(OCAML_DEBUG_FLAG) -a -o $(PERF_OUT) Stopwatch.cmx Perf.cmx -cclib -lPerf_cobjs
 
 # These targets are actually also built when building linux/Perf.cmxa.
-linux/Perf.a linux/Perf.cmi linux/Perf.cmx: linux/Perf.cmxa
+linux/Perf.a: linux/Perf.cmxa
 
 clean::
 	rm -f linux/*.a linux/*.o linux/*.cm*

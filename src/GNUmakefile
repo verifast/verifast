@@ -417,17 +417,17 @@ endif
 verifast: ../bin/verifast$(DOTEXE) $(STDLIB)
 .PHONY: verifast
 
-z3prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmx proverapi.cmx z3prover.ml
+z3prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmxa proverapi.cmx z3prover.ml
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -c -I $(Z3_OCAML) z3.cmxa -I ./$(INCLUDE_OS_DIR) Perf.cmx proverapi.cmx z3prover.ml
+	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -c -I $(Z3_OCAML) z3.cmxa -I ./$(INCLUDE_OS_DIR) Perf.cmxa proverapi.cmx z3prover.ml
 
-z3v2prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmx proverapi.cmx z3v2prover.ml
+z3v2prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmxa proverapi.cmx z3v2prover.ml
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -c -I $(Z3_OCAML) z3.cmxa -I ./$(INCLUDE_OS_DIR) Perf.cmx proverapi.cmx z3v2prover.ml
+	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -c -I $(Z3_OCAML) z3.cmxa -I ./$(INCLUDE_OS_DIR) Perf.cmxa proverapi.cmx z3v2prover.ml
 
-z3v4prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmx proverapi.cmx z3v4prover.ml
+z3v4prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmxa proverapi.cmx z3v4prover.ml
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -c -I $(Z3_OCAML) z3.cmxa -I ./$(INCLUDE_OS_DIR) Perf.cmx proverapi.cmx z3v4prover.ml
+	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -c -I $(Z3_OCAML) z3.cmxa -I ./$(INCLUDE_OS_DIR) Perf.cmxa proverapi.cmx z3v4prover.ml
 
 clean::
 	rm -f shape_analysis/*.cm[ix] shape_analysis/*.cmo
