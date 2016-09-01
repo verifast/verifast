@@ -1889,7 +1889,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let (_, pts) = List.split pts in
             let rec type_is_inhabited tp =
               match tp with
-                Bool | Int (Signed, 4) | Int (Signed, 2) | Int (Unsigned, 4) | RealType | Int (Signed, 1) | PtrType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> true
+                Bool | Int (Signed, 4) | Int (Signed, 2) | Int (Unsigned, 4) | Int (Unsigned, 1) | Int (Unsigned, 2) | RealType | Int (Signed, 1) | PtrType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> true
               | TypeParam _ -> true  (* Should be checked at instantiation site. *)
               | PredType (tps, pts, _, _) -> true
               | PureFuncType (t1, t2) -> type_is_inhabited t2
@@ -1932,7 +1932,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             match tp with
               Bool -> Some []
             | TypeParam x -> Some [x]
-            | Int (Signed, 4) | Int (Signed, 2) | Int (Unsigned, 4) | RealType | Int (Signed, 1) | PtrType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> None
+            | Int (Signed, 4) | Int (Signed, 2) | Int (Unsigned, 4) | Int (Unsigned, 1) | Int (Unsigned, 2) | RealType | Int (Signed, 1) | PtrType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> None
             | PureFuncType (_, _) -> None (* CAVEAT: This assumes we do *not* have extensionality *)
             | InductiveType (i0, targs) ->
               begin match try_assoc i0 infinite_map with
