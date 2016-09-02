@@ -3,10 +3,11 @@
 VeriFast
 ========
 
-By Bart Jacobs\*, Jan Smans\*, and Frank Piessens\*, with contributions by Pieter Agten\*, Cedric Cuypers\*, Lieven Desmet\*, Jan Tobias Muehlberg\*, Willem Penninckx\*, Pieter Philippaerts\*, Amin Timany\*, Thomas Van Eyck\*, Gijs Vanspauwen\*,  Frédéric Vogels\*, and Arseniy Zaostrovnykh\*\*
+By Bart Jacobs\*, Jan Smans\*, and Frank Piessens\*, with contributions by Pieter Agten\*, Cedric Cuypers\*, Lieven Desmet\*, Jan Tobias Muehlberg\*, Willem Penninckx\*, Jörg Pfähler\*\*\*, Pieter Philippaerts\*, Amin Timany\*, Thomas Van Eyck\*, Gijs Vanspauwen\*,  Frédéric Vogels\*, and Arseniy Zaostrovnykh\*\*
 
 \* iMinds-DistriNet research group, Department of Computer Science, KU Leuven - University of Leuven, Belgium  
-\*\* Institute of Computer and Communication Sciences, École Polytechnique Fédérale de Lausanne
+\*\* Institute of Computer and Communication Sciences, École Polytechnique Fédérale de Lausanne  
+\*\*\* Institute for Software & Systems Engineering, University of Augsburg
 
 VeriFast is a research prototype of a tool for modular formal verification of correctness properties of single-threaded and multithreaded C and Java programs annotated with preconditions and postconditions written in separation logic. To express rich specifications, the programmer can define inductive datatypes, primitive recursive pure functions over these datatypes, and abstract separation logic predicates. To verify these rich specifications, the programmer can write lemma functions, i.e., functions that serve only as proofs that their precondition implies their postcondition. The verifier checks that lemma functions terminate and do not have side-effects. Since neither VeriFast itself nor the underlying SMT solver need to do any significant search, verification time is predictable and low.
 
