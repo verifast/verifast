@@ -2067,133 +2067,15 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       branch
         (fun () -> assume v (fun () -> eval_h_core readonly h env e1 cont))
         (fun () -> assume (ctxt#mk_not v) (fun () -> eval_h_core readonly h env e2 cont))
-    | WAssignOpExpr(l, lhs, op, rhs, postOp, [ObjType "java.lang.String"; ObjType "java.lang.String"], lhs_type) ->
-      eval_h h env lhs $. fun h env v1 ->
-      let get_values = (fun h env v1 cont ->
-        eval_h h env rhs $. fun h env v2 ->
-        let new_value = get_unique_var_symb "string" (ObjType "java.lang.String") in
-        assume_neq new_value (ctxt#mk_intlit 0) $. fun () ->
-        let result_value = if postOp then v1 else new_value in
-        cont h env result_value new_value
-      )
+    | WAssignOpExpr (l, lhs, x, rhs, postOp) ->
+      let get_values h env vlhs cont =
+        eval_h h ((x, vlhs)::env) rhs $. fun h env vrhs ->
+        assert (List.mem_assoc x env);
+        let env = List.remove_assoc x env in
+        let r = if postOp then vlhs else vrhs in
+        cont h env r vrhs
       in
       execute_assign_op_expr h env lhs get_values cont
-    | WAssignOpExpr(l, lhs, ((And | Or | Xor) as op), rhs, postOp, ts, lhs_type) ->
-      let get_values = (fun h env v1 cont -> eval_h h env rhs (fun h env v2 ->
-          let new_value = 
-            match op with
-              And -> ctxt#mk_and v1 v2
-            | Or -> ctxt#mk_or v1 v2
-            | Xor -> (ctxt#mk_and (ctxt#mk_or v1 v2) (ctxt#mk_not (ctxt#mk_and v1 v2)))
-          in
-          let result_value = if postOp then v1 else new_value in
-          cont h env result_value new_value
-      ))
-      in
-      execute_assign_op_expr h env lhs get_values cont
-    | WAssignOpExpr(l, lhs, ((Add | Sub | Mul | ShiftLeft | ShiftRight | Div | Mod | BitAnd | BitOr | BitXor) as op), rhs, postOp, ts, lhs_type) ->
-        let get_values = (fun h env v1 cont -> eval_h h env rhs (fun h env v2 ->
-          let check_overflow min t max =
-            if not pure then check_overflow l min t max (fun l t -> assert_term t h env l);
-            t
-          in
-          let (min_term, max_term) = 
-            match lhs_type with
-              Int (Signed, 1) -> (min_char_term, max_char_term)
-            | Int (Unsigned, 1) -> (min_uchar_term, max_uchar_term)
-            | Int (Signed, 2) -> (min_short_term, max_short_term)
-            | Int (Unsigned, 2) -> (min_ushort_term, max_ushort_term)
-            | Int (Signed, 4) -> (min_int_term, max_int_term)
-            | Int (Unsigned, 4) -> (min_uint_term, max_uint_term)
-            | PtrType t -> ((ctxt#mk_intlit 0), max_ptr_term)
-            | _ -> (min_int_term, max_int_term)
-          in
-          let bounds = if pure then (* in ghost code, where integer types do not imply limits *) None else 
-            match ts with
-              [Int (Unsigned, 4); _] | [_; Int (Unsigned, 4)] -> Some (int_zero_term, max_ptr_term)
-            | [Int (Signed, 4); _] | [_; Int (Signed, 4)] -> Some (min_int_term, max_int_term)
-            | [Int (Signed, 2); _] | [_; Int (Signed, 2)] -> Some (min_short_term, max_short_term)
-            | [Int (Unsigned, 2); _] | [_; Int (Unsigned, 2)] -> Some (min_ushort_term, max_ushort_term)
-            | [Int (Signed, 1); _] | [_; Int (Signed, 1)] -> Some (min_char_term, max_char_term)
-            | [Int (Unsigned, 1); _] | [_; Int (Unsigned, 1)] -> Some (min_uchar_term, max_uchar_term)
-            | _ -> None
-          in
-          let new_value = 
-          begin match op with
-            Add ->
-            begin match ts with
-              [Int (Signed, 4); Int (Signed, 4)] | [Int (Signed, 2); Int (Signed, 2)] | [Int (Signed, 1); Int (Signed, 1)] | [Int (Unsigned, 4); Int (Unsigned, 4)] ->
-              check_overflow min_term (ctxt#mk_add v1 v2) max_term
-            | [PtrType t; Int (Signed, 4)] ->
-              let n = sizeof l t in
-              check_overflow min_term (ctxt#mk_add v1 (ctxt#mk_mul n v2)) max_term
-            | [RealType; RealType] ->
-              ctxt#mk_real_add v1 v2
-            | _ -> static_error l "CompoundAssignment not supported for the given types." None
-            end
-          | Sub ->
-            begin match ts with
-              [Int (Signed, 4); Int (Signed, 4)] | [Int (Signed, 2); Int (Signed, 2)] | [Int (Signed, 1); Int (Signed, 1)] | 
-              [Int (Unsigned, 4); Int (Unsigned, 4)] | [Int (Unsigned, 1); Int (Unsigned, 1)] | [Int (Unsigned, 2); Int (Unsigned, 2)]->
-              check_overflow min_term (ctxt#mk_sub v1 v2) max_term
-            | [PtrType t; Int (Signed, 4)] ->
-              let n = sizeof l t in
-              check_overflow min_term (ctxt#mk_sub v1 (ctxt#mk_mul n v2)) max_term
-            | [RealType; RealType] ->
-              ctxt#mk_real_sub v1 v2
-            | _ -> static_error l "CompoundAssignment not supported for the given types." None
-            end
-          | Mul ->
-            begin match ts with
-              [Int (Signed, 4); Int (Signed, 4)] | [Int (Signed, 2); Int (Signed, 2)] | [Int (Signed, 1); Int (Signed, 1)] ->
-              check_overflow min_term (ctxt#mk_mul v1 v2) max_term
-            | [RealType; RealType] ->
-              ctxt#mk_real_mul v1 v2
-            | _ -> static_error l "CompoundAssignment not supported for the given types." None
-            end
-          | Div ->
-            assert_term (ctxt#mk_not (ctxt#mk_eq v2 (ctxt#mk_intlit 0))) h env l "Divisor might be zero." None;
-            let res = (ctxt#mk_div v1 v2) in
-            begin match lhs_type with
-              Int (Signed, 4) -> res
-            | _ -> check_overflow min_term res max_term
-            end
-          | Mod -> (ctxt#mk_mod v1 v2)
-          | BitAnd | BitOr | BitXor ->
-            let symb = match op with
-              BitAnd -> bitwise_and_symbol
-            | BitXor -> bitwise_xor_symbol
-            | BitOr -> bitwise_or_symbol
-            in
-            let app = ctxt#mk_app symb [v1;v2] in
-            begin match bounds with
-              None -> ()
-            | Some(min_term, max_term) -> 
-              ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_term app) (ctxt#mk_le app max_term)));
-            end;  
-            begin match lhs_type with
-              Int (Signed, 4) -> app
-            | _ -> check_overflow min_term app max_term
-            end 
-          | ShiftLeft when ts = [Int (Signed, 4); Int (Signed, 4)] ->
-            let app = ctxt#mk_app shiftleft_int32_symbol [v1;v2] in
-            begin match bounds with
-              None -> ()
-            | Some(min_term, max_term) -> 
-              ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_int_term app) (ctxt#mk_le app max_int_term)));
-            end; 
-            begin match lhs_type with
-              Int (Signed, 4) -> app
-            | _ -> check_overflow min_term app max_term
-            end
-          | ShiftRight -> ctxt#mk_app shiftright_symbol [v1;v2]
-          | _ -> static_error l "Compound assignment not supported for this operator yet." None
-          end
-          in
-          let result_value = if postOp then v1 else new_value in
-          cont h env result_value new_value))
-        in
-        execute_assign_op_expr h env lhs get_values cont
     | AssignExpr (l, lhs, rhs) ->
       lhs_to_lvalue h env lhs $. fun h env lvalue ->
       let varName = match lhs with WVar (_, x, _) -> Some x | _ -> None in

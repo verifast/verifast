@@ -255,7 +255,14 @@ and
   | ArrayTypeExpr' of loc * expr (* horrible hack --- for well-formed programs, this exists only during parsing *)
   | AssignExpr of loc * expr * expr
   | AssignOpExpr of loc * expr * operator * expr * bool (* true = return value of lhs before operation *)
-  | WAssignOpExpr of loc * expr * operator * expr * bool (* true = return value of lhs before operation *) * type_ list * type_
+  | WAssignOpExpr of loc * expr * string * expr * bool
+    (* Semantics of [WAssignOpExpr (l, lhs, x, rhs, postOp)]:
+       1. Evaluate [lhs] to an lvalue L
+       2. Get the value of L, call it v
+       3. Evaluate [rhs] with x bound to v to an rvalue V
+       4. Assign V to L
+       5. Return (postOp ? v : V)
+    *)
   | InstanceOfExpr of loc * expr * type_expr
   | SuperMethodCall of loc * string * expr list
   | WSuperMethodCall of loc * string * expr list * (loc * ghostness * (type_ option) * (string * type_) list * asn * asn * ((type_ * asn) list) * visibility)
@@ -754,7 +761,7 @@ let rec expr_loc e =
   | ArrayTypeExpr' (l, e) -> l
   | AssignExpr (l, lhs, rhs) -> l
   | AssignOpExpr (l, lhs, op, rhs, postOp) -> l
-  | WAssignOpExpr (l, lhs, op, rhs, postOp, ts, lhs_type) -> l
+  | WAssignOpExpr (l, lhs, x, rhs, postOp) -> l
   | ProverTypeConversion (t1, t2, e) -> expr_loc e
   | InstanceOfExpr(l, e, tp) -> l
   | SuperMethodCall(l, _, _) -> l
@@ -891,7 +898,7 @@ let expr_fold_open iter state e =
   | ProverTypeConversion (pt, pt0, e0) -> iter state e0
   | AssignExpr (l, lhs, rhs) -> iter (iter state lhs) rhs
   | AssignOpExpr (l, lhs, op, rhs, post) -> iter (iter state lhs) rhs
-  | WAssignOpExpr (l, lhs, op, rhs, post, _, _) -> iter (iter state lhs) rhs
+  | WAssignOpExpr (l, lhs, x, rhs, post) -> iter (iter state lhs) rhs
   | InstanceOfExpr(l, e, tp) -> iter state e
   | SuperMethodCall(_, _, args) -> iters state args
   | WSuperMethodCall(_, _, args, _) -> iters state args
