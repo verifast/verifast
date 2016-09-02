@@ -187,6 +187,11 @@ let set_language lang = language := lang
 let enforce_annotations = ref false
 let set_enforce_annotations v = enforce_annotations := v
 
+(* Ugly hack *)
+let typedefs: (string, unit) Hashtbl.t = Hashtbl.create 64
+let register_typedef g = Hashtbl.add typedefs g ()
+let is_typedef g = Hashtbl.mem typedefs g
+
 let rec parse_decls lang enforceAnnotations ?inGhostHeader =
   set_language lang;
   set_enforce_annotations enforceAnnotations;
@@ -439,7 +444,7 @@ and
              | Some te -> [TypedefDecl (l, te, g)]
          end
     end
-  >] -> ds
+  >] -> register_typedef g; ds
 | [< '(_, Kwd "enum"); '(l, Ident n); '(_, Kwd "{");
      elems = rep_comma (parser [< '(_, Ident e); init = opt (parser [< '(_, Kwd "="); e = parse_expr >] -> e) >] -> (e, init));
      '(_, Kwd "}"); '(_, Kwd ";"); >] ->
@@ -1271,15 +1276,27 @@ and
 | [< '(l, Kwd "truncating"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")"); e = parse_expr_suffix >] -> CastExpr (l, true, t, e)
 | [< e = peek_in_ghost_range (parser [< '(l, Kwd "truncating"); '(_, Kwd "@*/"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")"); e = parse_expr_suffix >] -> CastExpr (l, true, t, e)) >] -> e
 | [< '(l, Kwd "(");
-     e = parser
-     [< e0 = parse_expr; '(_, Kwd ")");
-         e = parser
-           [< '(l', Ident y); e = parse_expr_suffix_rest (Var (l', y)) >] -> (match e0 with 
+     e =
+       let parse_cast = parser [< te = parse_type; '(_, Kwd ")"); e = parse_expr_suffix >] -> CastExpr (l, false, te, e) in
+       let parse_expr_rest e0 =
+         parser
+           [< '(l', Ident y); e = parse_expr_suffix_rest (Var (l', y)) >] ->
+           begin match e0 with
              Var (lt, x) -> CastExpr (l, false, IdentTypeExpr (lt, None, x), e)
-           | _ -> raise (ParseException (l, "Type expression of cast expression must be identifier: ")))
+           | _ -> raise (ParseException (l, "Type expression of cast expression must be identifier: "))
+           end
          | [<>] -> e0
-     >] -> e
-   | [< te = parse_type; '(_, Kwd ")"); e = parse_expr_suffix >] -> CastExpr (l, false, te, e)
+       in
+       let parse =
+         parser
+           [< e0 = parse_expr; '(_, Kwd ")"); e = parse_expr_rest e0 >] -> e
+         | [< e = parse_cast >] -> e
+       in
+       begin fun stream -> 
+         match Stream.peek stream with
+           Some (_, Ident x) when is_typedef x -> parse_cast stream
+         | _ -> parse stream
+       end
    >] -> e
 (*
 | [< '(l, Kwd "(");

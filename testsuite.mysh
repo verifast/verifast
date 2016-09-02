@@ -25,6 +25,7 @@ cd examples
   verifast_both -disable_overflow_check -c arraylist.c
   verifast_both -disable_overflow_check threading.o barrier.c
   verifast_both -c static_array.c
+  verifast -c -disable_overflow_check typedef_cast.c
   verifast_both -c automation.c
   ifz3 verifast -disable_overflow_check priorityqueue-forall_nth.c
   verifast_both set.c
