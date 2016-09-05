@@ -9,3 +9,5 @@ val emit : ?margin:int -> string -> Ast.package list -> unit
 val sexpr_of_decl : Ast.decl -> SExpressions.sexpression
 
 val sexpr_of_package : Ast.package -> SExpressions.sexpression
+
+val sexpr_of_expr : Ast.expr -> SExpressions.sexpression

@@ -289,16 +289,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let rec provertype_of_type t =
     match t with
       Bool -> ProverBool
-    | Int (Signed, 4) -> ProverInt
+    | Int (_, _) -> ProverInt
     | Float -> ProverInductive
     | Double -> ProverInductive
     | LongDouble -> ProverInductive
-    | Int (Unsigned, 2) -> ProverInt
-    | Int (Signed, 2) -> ProverInt
-    | Int (Unsigned, 4) -> ProverInt
     | RealType -> ProverReal
-    | Int (Unsigned, 1) -> ProverInt
-    | Int (Signed, 1) -> ProverInt
     | InductiveType _ -> ProverInductive
     | StructType sn -> failwith "Using a struct as a value is not yet supported."
     | ObjType n -> ProverInt
@@ -2632,28 +2627,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (w1, t1, _) = check_e1 in
       let (w2, t2, _) = check_e2 in
       match (unfold_inferred_type t1, unfold_inferred_type t2) with
-        (Int (Signed, 4), RealType) ->
-        let w1 = checkt e1 RealType in
-        (w1, w2, RealType)
-      | (RealType, Int (Signed, 4)) ->
-        let w2 = checkt e2 RealType in
-        (w1, w2, RealType)
-      | ((Int (Unsigned, 1) | Int (Unsigned, 2) | Int (Unsigned, 4)), (Int (Unsigned, 1) | Int (Unsigned, 2) | Int (Unsigned, 4))) ->
-        (w1, w2, Int (Unsigned, 4))
-      | ((Int (Signed, 1)|Int (Signed, 2)|Int (Signed, 4)|Int (Unsigned, 1)|Int (Unsigned, 2)), (Int (Signed, 1)|Int (Signed, 2)|Int (Signed, 4)|Int (Unsigned, 1)|Int (Unsigned, 2))) ->
-        (w1, w2, Int (Signed, 4))
-      | ((LongDouble, _)|(_, LongDouble)) ->
-        let w1 = if t1 = LongDouble then w1 else checkt e1 LongDouble in
-        let w2 = if t2 = LongDouble then w2 else checkt e2 LongDouble in
-        (w1, w2, LongDouble)
-      | ((Double, _)|(_, Double)) ->
-        let w1 = if t1 = Double then w1 else checkt e1 Double in
-        let w2 = if t2 = Double then w2 else checkt e2 Double in
-        (w1, w2, Double)
-      | ((Float, _)|(_, Float)) ->
-        let w1 = if t1 = Float then w1 else checkt e1 Float in
-        let w2 = if t2 = Float then w2 else checkt e2 Float in
-        (w1, w2, Float)
+        (t1, t2) when is_arithmetic_type t1 && is_arithmetic_type t2 ->
+        let t = usual_arithmetic_conversion t1 t2 in
+        let w1 = if t1 = t then w1 else checkt e1 t in
+        let w2 = if t2 = t then w2 else checkt e2 t in
+        (w1, w2, t)
       | (t1, t2) ->
         let w2 = checkt e2 t1 in
         (w1, w2, t1)
@@ -2670,7 +2648,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
      *)
     let promote_checkdone l e1 e2 check_e1 check_e2 =
       match promote_numeric_checkdone e1 e2 check_e1 check_e2 with
-        (w1, w2, (Int (Signed, 1) | Int (Signed, 2) | Int (Signed, 4) | RealType | Int (Unsigned, 4) | PtrType _ | Int (Unsigned, 2) | Int (Unsigned, 1) | Float | Double | LongDouble)) as result -> result
+        (w1, w2, PtrType _) as result -> result
+      | (w1, w2, t) as result when is_arithmetic_type t -> result
       | _ -> static_error l "Expression of arithmetic or pointer type expected." None
     in
     let promote_numeric e1 e2 =
@@ -3234,7 +3213,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (Operation(l, Div, [IntLit(_, i1); IntLit(_, i2)]), RealType) -> RealLit(l, (num_of_big_int i1) // (num_of_big_int i2))
     | (IntLit (l, n), PtrType _) when isCast || eq_big_int n zero_big_int -> e
     | (IntLit (l, n), RealType) -> RealLit (l, num_of_big_int n)
-    | (IntLit (l, n), Int (Unsigned, 1)) ->
+    | (IntLit (l, n), Int (Unsigned, 1)) when isCast || inAnnotation <> Some true ->
       if not (le_big_int min_uchar_big_int n && le_big_int n max_uchar_big_int) then
         if isCast then
           let n = int_of_big_int (mod_big_int n (big_int_of_int 256)) in
@@ -3243,7 +3222,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           static_error l "Integer literal used as uchar must be between 0 and 255." None
       else
         e
-    | (IntLit (l, n), Int (Signed, 1)) ->
+    | (IntLit (l, n), Int (Signed, 1)) when isCast || inAnnotation <> Some true ->
       if not (le_big_int min_char_big_int n && le_big_int n max_char_big_int) then
         if isCast then
           let n = int_of_big_int (mod_big_int n (big_int_of_int 256)) in
@@ -3253,7 +3232,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           static_error l "Integer literal used as char must be between -128 and 127." None
       else
         e
-    | (IntLit (l, n), Int (Unsigned, 2)) ->
+    | (IntLit (l, n), Int (Unsigned, 2)) when isCast || inAnnotation <> Some true ->
       if not (le_big_int min_ushort_big_int n && le_big_int n max_ushort_big_int) then
         if isCast then
           let n = int_of_big_int (mod_big_int n (big_int_of_int 65536)) in
@@ -3262,7 +3241,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           static_error l "Integer literal used as ushort must be between 0 and 65535." None
       else
         e
-    | (IntLit (l, n), Int (Signed, 2)) ->
+    | (IntLit (l, n), Int (Signed, 2)) when isCast || inAnnotation <> Some true ->
       if not (le_big_int min_short_big_int n && le_big_int n max_short_big_int) then
         if isCast then
           let n = int_of_big_int (mod_big_int n (big_int_of_int 65536)) in
@@ -3272,13 +3251,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           static_error l "Integer literal used as short must be between -32768 and 32767." None
       else
         e
-    | (IntLit (l, n), Int (Unsigned, 4)) ->
+    | (IntLit (l, n), Int (Unsigned, 4)) when isCast || inAnnotation <> Some true ->
       if not (le_big_int min_ptr_big_int n && le_big_int n max_ptr_big_int) then
         if isCast then
           let n = int_of_big_int (mod_big_int n (big_int_of_string "4294967296")) in
           IntLit (l, big_int_of_int n)
         else
-          static_error l "Integer literal used as ushort must be between 0 and 65535." None
+          static_error l "Integer literal used as uint must be between 0 and 4294967295." None
       else
         e  
     | _ ->
@@ -5020,7 +4999,6 @@ let check_if_list_is_defined () =
         check_overflow l min_char_term (ctxt#mk_add v1 v2) max_char_term
       | (Int (Unsigned, 4), Int (Unsigned, 4)) ->
         check_overflow l min_uint_term (ctxt#mk_add v1 v2) max_uint_term
-      | _ -> static_error l "Internal error in eval." None
       end
     | Sub ->
       let Some [tp1; tp2] = ts in
@@ -5058,9 +5036,7 @@ let check_if_list_is_defined () =
     | Le|Lt|Ge|Gt ->
       let Some [tp1; tp2] = ts in
       begin match (tp1, tp2) with
-        ((Int (Signed, 4), Int (Signed, 4)) | (PtrType _, PtrType _) |
-         (Int (Unsigned, 4), Int (Unsigned, 4))) | (Int (Unsigned, 2), Int (Unsigned, 2)) |
-         (Int (Unsigned, 1), Int (Unsigned, 1))->
+        (Int (_, _), Int (_, _)) | (PtrType _, PtrType _) ->
         begin match op with
           Le -> ctxt#mk_le v1 v2
         | Lt -> ctxt#mk_lt v1 v2

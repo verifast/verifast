@@ -1647,6 +1647,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | SizeofExpr(_, _) -> true
     | AddressOf(_, e) -> is_safe_expr e
     | CastExpr (_, _, _, e) -> is_safe_expr e
+    | Upcast (e, _, _) -> is_safe_expr e
     | _ -> false
   
   let rec verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont econt =
@@ -1816,6 +1817,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       cont h env result_value
     in
     match e with
+    | Upcast (w, _, _) -> eval_h_core readonly h env w cont
     | CastExpr (lc, false, ManifestTypeExpr (_, tp), (WFunCall (l, "malloc", [], [SizeofExpr (ls, StructTypeExpr (lt, tn))]) as e)) ->
       expect_type lc (Some pure) (PtrType (StructType tn)) tp;
       verify_expr readonly h env xo e cont

@@ -114,9 +114,9 @@ let usual_arithmetic_conversion t1 t2 = (* C11 6.3.1.8 *)
     let t1 = integer_promotion t1 in
     let t2 = integer_promotion t2 in
     match t1, t2 with
-      Int (s1, n1), Int (s2, n2) when s1 = s2 -> Int (s1, max n1 n2)
-    | Int (Signed, n1), Int (Unsigned, n2) -> if n1 <= n2 then t2 else t1
+      Int (Signed, n1), Int (Unsigned, n2) -> if n1 <= n2 then t2 else t1
     | Int (Unsigned, n1), Int (Signed, n2) -> if n2 <= n1 then t1 else t2
+    | Int (s, n1), Int (_, n2) -> Int (s, max n1 n2)
 
 let is_arithmetic_type t =
   match t with
