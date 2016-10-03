@@ -86,7 +86,8 @@ dl_and_unzip \
 cd ..
 
 # LablGTK
-wget -c https://forge.ocamlcore.org/frs/download.php/1261/lablgtk-2.18.3.tar.gz
+wget -c http://forge.ocamlcore.org/frs/download.php/1261/lablgtk-2.18.3.tar.gz
+echo "c76a7ae9454e89365666cf19728dbb51edb6810e2e57032b3bebd53ccec5946e *lablgtk-2.18.3.tar.gz" | sha256sum -c || exit 1
 tar -xzf lablgtk-2.18.3.tar.gz
 mv lablgtk-2.18.0 lablgtk-2.18.3 # Bug in lablgtk-2.18.3.tar.gz: the directory is still called lablgtk-2.18.0
 cd lablgtk-2.18.3
