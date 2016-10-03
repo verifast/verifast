@@ -37,11 +37,11 @@ cd work-in-progress
   cd ..
 cd ..
 cd in-memory
-  cd writer-cat-reader
+  cd writer_cat_reader
     verifast -prover redux -c main.c cat.c getchar.c putchar.c writer.c
     verifast -prover redux -c -disable_overflow_check reader.c
   cd ..
-  cd non-reusable-print-hi
+  cd non_reusable_print_hi
     verifast -prover redux -c print_hi.c
   cd ..
 cd ..

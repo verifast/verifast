@@ -5,8 +5,8 @@
 
 #include <threading.h>
 #include <stdlib.h> // abort() on malloc-fail.
-//@ #include "../writer-cat-reader/gcf.gh"
-
+//@ #include "../writer_cat_reader/gcf.gh"
+//@ #include "place_iot_no_read.gh"
 
 struct buffer{
   struct mutex *mutex;
@@ -42,74 +42,6 @@ predicate buffer(int id, struct buffer *b;) =
   &*& mutex(mutex, buffer_invar(id, b));
 
 
-inductive iot =
-  iot_init
-  | iot_split_left(iot)
-  | iot_split_right(iot)
-  | iot_join(iot, iot);
-
-fixpoint bool iot_is_split_left(iot iot){
-  switch(iot){
-    case iot_init: return false;
-    case iot_join(l, r): return false;
-    case iot_split_left(parent): return true;
-    case iot_split_right(parent): return false;
-  }
-}
-fixpoint bool iot_is_split_right(iot iot){
-  switch(iot){
-    case iot_init: return false;
-    case iot_join(l, r): return false;
-    case iot_split_left(parent): return false;
-    case iot_split_right(parent): return true;
-  }
-}
-fixpoint bool iot_is_join(iot iot){
-  switch(iot){
-    case iot_init: return false;
-    case iot_join(l, r): return true;
-    case iot_split_left(parent): return false;
-    case iot_split_right(parent): return false;
-  }
-}
-
-// id is kept in place such that split/join predicates can contain
-// the [1/2]gcf(id) without having an id argument.
-inductive place =
-  | place_none
-  | place(iot iot, list<int> progress, place parent1, place parent2,
-          int id);
-
-fixpoint iot place_iot(place t1){
-  switch(t1){
-    case place_none: return default_value<iot>;
-    case place(iot, progress, parent1, parent2, id): return iot;
-  }
-}
-fixpoint place place_parent1(place t1){
-  switch(t1){
-    case place_none: return default_value<place>;
-    case place(iot, progress, parent1, parent2, id): return parent1;
-  }
-}
-fixpoint place place_parent2(place t1){
-  switch(t1){
-    case place_none: return default_value<place>;
-    case place(iot, progress, parent1, parent2, id): return parent2;
-  }
-}
-fixpoint list<int> place_progress(place t1){
-  switch(t1){
-    case place_none: return default_value<list<int> >;
-    case place(iot, progress, parent1, parent2, id): return progress;
-  }
-}
-fixpoint int place_id(place t1){
-  switch(t1){
-    case place_none: return default_value<int>;
-    case place(iot, progress, parent1, parent2, id): return id;
-  }
-}
 
 predicate token(place t1) =
   [1/2]gcf_instance(place_id(t1), place_iot(t1), place_progress(t1))
@@ -147,26 +79,21 @@ void putchar(struct buffer *b, int c)
   mutex_acquire(b->mutex);
   //@ open buffer_invar(id, b)();
   b->c = c;
-  //@ open putchar_io(id, t1, c, t2);
-  //@ open token(t1);
   
+  
+  
+  //@ open putchar_io(id, t1, c, t2);
   /*@
   if (place_iot(t1) == iot_split_left(iot_init)){
-    // note: this merge_fractions needs the branching provided by the if.
-    // we put them inside the if to make this clear, although for VeriFast
-    // it'll also work if they are put after the if because the branching
-    // that VeriFast performs continues after the if.
-    merge_fractions(gcf_instance(id, iot_split_left(iot_init), _));
-    merge_fractions(gcf_instance(id, iot_split_right(iot_init), _));
     open exists<pair<int, list<int> > >(pair('l', ?l_todo));
     close exists<pair<int, list<int> > >(pair('l', {}));
   }else{
-    merge_fractions(gcf_instance(id, iot_split_left(iot_init), _));
-    merge_fractions(gcf_instance(id, iot_split_right(iot_init), _));
     open exists<pair<int, list<int> > >(pair('r', ?r_todo));
     close exists<pair<int, list<int> > >(pair('r', {}));
   }
   @*/
+  
+  //@ open token(t1);
     
   //@ gcf_update(id, place_iot(t1), {c});
   //@ assert place_id(t1) == place_id(t2);
@@ -177,7 +104,6 @@ void putchar(struct buffer *b, int c)
 }
 
 /*@
-
 predicate_family_instance thread_run_pre(print_h)(struct buffer *b, any p) =
   p == pair(?f, pair(?id, pair(?t1, ?t2)))
   &*& [f]buffer(id, b) &*& token(t1) &*& putchar_io(id, t1, 'h', t2);
@@ -232,7 +158,6 @@ lemma void join()
   open join(_, _, _);
   close token(t3);
 }
-
 @*/
 
 
@@ -290,7 +215,6 @@ int main()
   //@ close putchar_io(id, th1, 'h', th2);
   //@ close putchar_io(id, ti1, 'i', ti2);
   //@ close join(th2, ti2, t2);
-  
   print_hi(b);
   //@ open buffer(id, b);
   mutex_dispose(b->mutex);

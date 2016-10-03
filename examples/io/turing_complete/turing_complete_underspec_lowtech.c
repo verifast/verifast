@@ -1,5 +1,5 @@
 /**
- * First read turing-complete.c and turing-complete-lowtech.c.
+ * First read turing_complete.c and turing_complete_lowtech.c.
  *
  * This example uses a non-deterministic turing machine. This allows
  * you to write underspecified specifications: "the program is allowed
