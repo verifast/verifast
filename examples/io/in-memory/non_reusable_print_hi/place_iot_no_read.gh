@@ -1,0 +1,73 @@
+// Definition of place and iot, and getter functions.
+// These definitions do not support reusability
+// (hence no invar updater field in place)
+
+inductive iot =
+  iot_init
+  | iot_split_left(iot)
+  | iot_split_right(iot)
+  | iot_join(iot, iot);
+
+fixpoint bool iot_is_split_left(iot iot){
+  switch(iot){
+    case iot_init: return false;
+    case iot_join(l, r): return false;
+    case iot_split_left(parent): return true;
+    case iot_split_right(parent): return false;
+  }
+}
+fixpoint bool iot_is_split_right(iot iot){
+  switch(iot){
+    case iot_init: return false;
+    case iot_join(l, r): return false;
+    case iot_split_left(parent): return false;
+    case iot_split_right(parent): return true;
+  }
+}
+fixpoint bool iot_is_join(iot iot){
+  switch(iot){
+    case iot_init: return false;
+    case iot_join(l, r): return true;
+    case iot_split_left(parent): return false;
+    case iot_split_right(parent): return false;
+  }
+}
+
+// id is kept in place such that split/join predicates can contain
+// the [1/2]gcf(id) without having an id argument.
+inductive place =
+  | place_none
+  | place(iot iot, list<int> progress, place parent1, place parent2,
+          int id);
+
+fixpoint iot place_iot(place t1){
+  switch(t1){
+    case place_none: return default_value<iot>;
+    case place(iot, progress, parent1, parent2, id): return iot;
+  }
+}
+fixpoint place place_parent1(place t1){
+  switch(t1){
+    case place_none: return default_value<place>;
+    case place(iot, progress, parent1, parent2, id): return parent1;
+  }
+}
+fixpoint place place_parent2(place t1){
+  switch(t1){
+    case place_none: return default_value<place>;
+    case place(iot, progress, parent1, parent2, id): return parent2;
+  }
+}
+fixpoint list<int> place_progress(place t1){
+  switch(t1){
+    case place_none: return default_value<list<int> >;
+    case place(iot, progress, parent1, parent2, id): return progress;
+  }
+}
+fixpoint int place_id(place t1){
+  switch(t1){
+    case place_none: return default_value<int>;
+    case place(iot, progress, parent1, parent2, id): return id;
+  }
+}
+

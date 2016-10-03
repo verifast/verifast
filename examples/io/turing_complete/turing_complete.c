@@ -28,7 +28,7 @@
  * it reads (from the world).
  *
  * For a version that uses less annotation features,
- * see turing-complete-lowtech.c.
+ * see turing_complete_lowtech.c.
  *
  */
 

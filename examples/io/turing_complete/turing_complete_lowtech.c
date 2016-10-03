@@ -1,5 +1,5 @@
 /**
- * Read turing-machine.c first to know what this is about.
+ * Read turing_complete.c first to know what this is about.
  *
  * This example is similar, but it restricts the programming and
  * verification language constructs we are allowed to use.

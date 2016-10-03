@@ -37,14 +37,14 @@ int getchar/*@<u> @*/(struct queue *queue)
   
   bool was_full = ring_buffer_is_full(queue->ring_buffer);
   
+  //@ open getchar_io(queue_id, t1, c, t2);
+  
   int ret = ring_buffer_pop(queue->ring_buffer);
+  prophecy_assign(ret);
   
   if (was_full){
     mutex_cond_signal(queue->cond_can_push);
   }
-  
-  //@ open getchar_io(queue_id, t1, c, t2);
-  prophecy_assign(ret);
   
   /*@
   {
