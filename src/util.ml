@@ -5,7 +5,13 @@ open Num (* rational numbers *)
 
 (* Region: General-purpose utility functions *)
 
-let string_map f s = String.init (String.length s) (fun i -> f s.[i])
+let string_map f s =
+  let n = String.length s in
+  let result = String.create n in
+  for i = 0 to n - 1 do
+    result.[i] <- f s.[i]
+  done;
+  result
 
 let num_of_ints p q = div_num (num_of_int p) (num_of_int q)
 

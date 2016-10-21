@@ -711,7 +711,15 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   let load tab newPath =
     try
       let chan = open_in_bin newPath in
-      let text = channel_contents chan in
+      let buf = String.create 60000 in
+      let rec iter () =
+        let count = input chan buf 0 60000 in
+        if count = 0 then [] else
+          let chunk = String.sub buf 0 count in
+          chunk::iter ()
+      in
+      let chunks = iter() in
+      let text = String.concat "" chunks in
       let mtime = in_channel_last_modification_time chan in
       close_in chan;
       let text = file_to_utf8 text in
