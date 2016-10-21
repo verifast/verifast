@@ -98,6 +98,7 @@ type type_ = (* ?type_ *)
 
 let int_size = 4
 let intType = Int (Signed, int_size)
+let ptrdiff_t = intType
 
 let integer_promotion t = (* C11 6.3.1.1 *)
   match t with
@@ -167,7 +168,7 @@ type
 
 type
   operator =  (* ?operator *)
-  | Add | Sub | Le | Ge | Lt | Gt | Eq | Neq | And | Or | Xor | Not | Mul | Div | Mod | BitNot | BitAnd | BitXor | BitOr | ShiftLeft | ShiftRight
+  | Add | Sub | PtrDiff | Le | Ge | Lt | Gt | Eq | Neq | And | Or | Xor | Not | Mul | Div | Mod | BitNot | BitAnd | BitXor | BitOr | ShiftLeft | ShiftRight
 and
   expr = (* ?expr *)
     True of loc
@@ -179,11 +180,18 @@ and
       loc *
       operator *
       expr list
-  | WOperation of
+  | WOperation of (* see [woperation_result_type] *)
       loc *
       operator *
       expr list *
-      type_ list
+      type_
+      (* The type of the first operand, after promotion and the usual arithmetic conversions.
+         For all operators except the pointer offset and bitwise shift operators, this is also the type of the second operand, if any.
+         For the pointer offset operators (Add and Sub where the first operand is a pointer) the second operand is of integral type.
+         For all operators except the relational ones (whose result type is bool) and PtrDiff (whose result type is ptrdiff_t), this is also the type of the result.
+         Used to select the right semantics (e.g. Real vs. Int vs. Bool) and for overflow checking.
+         (Floating-point operations are turned into function calls by the type checker and do not appear as WOperation nodes.)
+         If the operands have narrower types before promotion and conversion, they will be of the form Upcast (_, _, _). *)
   | IntLit of loc * big_int (* int literal*)
   | RealLit of loc * num
   | StringLit of loc * string (* string literal *)
@@ -708,6 +716,15 @@ let func_kind_of_ghostness gh =
     Real -> Regular
   | Ghost -> Lemma (false, None)
   
+let woperation_type_result_type op t =
+  match op with
+    Le|Ge|Lt|Gt|Eq|Neq -> Bool 
+  | PtrDiff -> ptrdiff_t
+  | _ -> t
+
+let woperation_result_type (WOperation (l, op, es, t)) =
+  woperation_type_result_type op t
+
 (* Region: some AST inspector functions *)
 
 let string_of_func_kind f=
@@ -730,7 +747,7 @@ let rec expr_loc e =
   | StringLit (l, s) -> l
   | ClassLit (l, s) -> l
   | Operation (l, op, es) -> l
-  | WOperation (l, op, es, ts) -> l
+  | WOperation (l, op, es, t) -> l
   | SliceExpr (l, p1, p2) -> l
   | Read (l, e, f) -> l
   | ArrayLengthExpr (l, e) -> l
@@ -863,7 +880,7 @@ let expr_fold_open iter state e =
   | Null l -> state
   | Var (l, x) | WVar (l, x, _) -> state
   | Operation (l, op, es) -> iters state es
-  | WOperation (l, op, es, ts) -> iters state es
+  | WOperation (l, op, es, t) -> iters state es
   | SliceExpr (l, p1, p2) -> iterpatopt (iterpatopt state p1) p2
   | IntLit (l, n) -> state
   | RealLit(l, n) -> state

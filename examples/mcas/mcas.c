@@ -442,7 +442,7 @@ start:
         //@ open rdcss_read_operation_post(rdcssRop)(_);
         //@ leak rdcss_bs_membership_lemma(_)(_, _, _);
         if (((uintptr_t)r & 2) != 0) {
-            mcas_impl((struct cd *)((uintptr_t)r & ~2));
+            mcas_impl((struct cd *)((uintptr_t)r & ~(unsigned)2));
             goto start;
         }
         return r;
@@ -987,7 +987,7 @@ start:
                 //@ open rdcss_operation_post(rop)(_);
             }
             if (((uintptr_t)r & 2) == 2) {
-                struct cd *cd1 = (void *)((uintptr_t)r & ~2);
+                struct cd *cd1 = (void *)((uintptr_t)r & ~(unsigned)2);
                 if (cd1 != cd) {
                     mcas_impl(cd1);
                     //@ entries_unseparate_ith(i, es);

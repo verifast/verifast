@@ -2007,7 +2007,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         assume (ctxt#mk_eq (mk_char_list_of_c_string (String.length s) s) cs) $. fun () ->
         cont (Chunk ((string_symb, true), [], coef, [value; cs], None)::h) env value
       end
-    | WOperation (l, Add, [e1; e2], [ObjType "java.lang.String"; ObjType "java.lang.String"]) ->
+    | WOperation (l, Add, [e1; e2], ObjType "java.lang.String") ->
       eval_h h env e1 $. fun h env v1 ->
       eval_h h env e2 $. fun h env v2 ->
       let value = get_unique_var_symb "string" (ObjType "java.lang.String") in
@@ -2048,18 +2048,18 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       eval_h h env arr $. fun h env arr ->
       eval_h h env i $. fun h env i ->
       cont h env (read_c_array h env l arr i elem_tp)
-    | WOperation (l, Not, [e], ts) -> eval_h_core readonly h env e (fun h env v -> cont h env (ctxt#mk_not v))
-    | WOperation (l, ((Eq | Neq) as op), [e1; e2], ts) ->
+    | WOperation (l, Not, [e], t) -> eval_h_core readonly h env e (fun h env v -> cont h env (ctxt#mk_not v))
+    | WOperation (l, ((Eq | Neq) as op), [e1; e2], t) ->
       let create_term t1 t2 = match op with Eq -> ctxt#mk_eq t1 t2 | Neq -> ctxt#mk_not (ctxt#mk_eq t1 t2) in
       let e1_safe = is_safe_expr e1 in
       let e2_safe = is_safe_expr e2 in
       eval_h_core (true, heapReadonly || not e2_safe) h env e1 (fun h env v1 -> eval_h_core (true, heapReadonly || not e1_safe) h env e2 (fun h env v2 -> cont h env (create_term v1 v2)))
-    | WOperation (l, And, [e1; e2], ts) ->
+    | WOperation (l, And, [e1; e2], t) ->
       eval_h h env e1 $. fun h env v1 ->
       branch
         (fun () -> assume v1 (fun () -> eval_h h env e2 cont))
         (fun () -> assume (ctxt#mk_not v1) (fun () -> cont h env ctxt#mk_false))
-    | WOperation (l, Or, [e1; e2], ts) -> 
+    | WOperation (l, Or, [e1; e2], t) -> 
       eval_h h env e1 $. fun h env v1 ->
       branch
         (fun () -> assume v1 (fun () -> cont h env ctxt#mk_true))
