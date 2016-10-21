@@ -127,41 +127,35 @@ let get_file_options text =
     match toks with
       "verifast_annotation_char"::":"::c::toks when String.length c = 1 -> iter c.[0] tabSize toks
     | "tab_size"::":"::n::toks ->
-      begin
-        try
-          iter annotChar (int_of_string n) toks
-        with Failure "int_of_string" -> iter annotChar tabSize toks
+      begin match int_of_string n with
+        exception (Failure _) -> iter annotChar tabSize toks
+      | n -> iter annotChar n toks
       end
     | tok::toks -> iter annotChar tabSize toks
     | [] -> {file_opt_annot_char=annotChar; file_opt_tab_size=tabSize}
   in
   iter '@' 8 tokens
 
+let channel_contents chan =
+  let buffer = Buffer.create 60000 in
+  begin
+    try
+      while true do Buffer.add_channel buffer chan 60000 done
+    with End_of_file -> ()
+  end;
+  Buffer.contents buffer
+  
 let readFile path =
-  let chan, close_chan =
+  let s =
     if path = "<stdin>.c" || path = "<stdin>.java" then
-      (stdin, fun _ -> ())  (* read file from standard input; used for the web interface *)
-    else
-      (open_in_bin path, close_in)
+      channel_contents stdin
+    else begin
+      let chan = open_in_bin path in
+      let s = channel_contents chan in
+      close_in chan;
+      s
+    end
   in
-  let count = ref 0 in
-  let rec iter () =
-    let buf = String.create 60000 in
-    let result = input chan buf 0 60000 in
-    count := !count + result;
-    if result = 0 then [] else (buf, result)::iter()
-  in
-  let chunks = iter() in
-  close_chan chan;
-  let s = String.create !count in
-  let rec iter2 chunks offset =
-    match chunks with
-      [] -> ()
-    | (buf, size)::chunks ->
-      String.blit buf 0 s offset size;
-      iter2 chunks (offset + size)
-  in
-  iter2 chunks 0;
   file_to_utf8 s
 
 type include_kind =
@@ -376,29 +370,16 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
   let in_comment = ref inComment in
   let in_ghost_range = ref inGhostRange in
   
-  let initial_buffer = String.create 32
-  in
-
-  let buffer = ref initial_buffer
-  in
-  let bufpos = ref 0
-  in
+  let buffer = Buffer.create 32 in
   
-  let reset_buffer () = buffer := initial_buffer; bufpos := 0
-  in
+  let reset_buffer () = Buffer.reset buffer in
 
-  let store c =
-    if !bufpos >= String.length !buffer then
-      begin
-        let newbuffer = String.create (2 * !bufpos) in
-        String.blit !buffer 0 newbuffer 0 !bufpos; buffer := newbuffer
-      end;
-    String.set !buffer !bufpos c;
-    incr bufpos
-  in
+  let store c = Buffer.add_char buffer c in
 
   let get_string () =
-    let s = String.sub !buffer 0 !bufpos in buffer := initial_buffer; s
+    let s = Buffer.contents buffer in
+    Buffer.reset buffer;
+    s
   in
 
   let tokenpos = ref 0 in

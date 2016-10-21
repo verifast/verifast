@@ -5106,9 +5106,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       end
     | IntLit (l, n) ->
       let v =
-        try
-          ctxt#mk_intlit (int_of_big_int n)
-        with Failure "int_of_big_int" -> ctxt#mk_intlit_of_string (string_of_big_int n)
+        match int_of_big_int n with
+          exception (Failure _) -> ctxt#mk_intlit_of_string (string_of_big_int n)
+        | n -> ctxt#mk_intlit n
       in
       cont state v
     | ClassLit (l,s) -> cont state (List.assoc s classterms)

@@ -14,10 +14,9 @@ let gt_pstate (PluginState dstate) = gt (gt_dstate dstate)
 let (>>) f g x = g (f x)
 
 let typecheck_assertion tenv text =
-  try
-    mk_ptasn (int_of_string text), []
-  with
-    Failure "int_of_string" -> raise (PluginStaticError (0, String.length text, "Integer literal expected"))
+  match int_of_string text with
+    exception (Failure _) -> raise (PluginStaticError (0, String.length text, "Integer literal expected"))
+  | n -> mk_ptasn n, []
 
 let create_instance ctxt =
   object

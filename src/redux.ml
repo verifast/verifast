@@ -1467,7 +1467,7 @@ and context () =
       let pats =
         if pats = [] then
           let check_pat pat =
-            let env = Array.create (List.length tps) false in
+            let env = Array.make (List.length tps) false in
             let rec iter pat =
               match pat with
                 App (s, args, _) ->
