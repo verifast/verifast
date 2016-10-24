@@ -166,6 +166,8 @@ type
   | ClassOrInterfaceNameScope
   | PackageNameScope
 
+type int_literal_lsuffix = NoLSuffix | LSuffix | LLSuffix
+
 type
   operator =  (* ?operator *)
   | Add | Sub | PtrDiff | Le | Ge | Lt | Gt | Eq | Neq | And | Or | Xor | Not | Mul | Div | Mod | BitNot | BitAnd | BitXor | BitOr | ShiftLeft | ShiftRight
@@ -192,7 +194,8 @@ and
          Used to select the right semantics (e.g. Real vs. Int vs. Bool) and for overflow checking.
          (Floating-point operations are turned into function calls by the type checker and do not appear as WOperation nodes.)
          If the operands have narrower types before promotion and conversion, they will be of the form Upcast (_, _, _). *)
-  | IntLit of loc * big_int (* int literal*)
+  | IntLit of loc * big_int * bool (* decimal *) * bool (* U suffix *) * int_literal_lsuffix   (* int literal*)
+  | WIntLit of loc * big_int
   | RealLit of loc * num
   | StringLit of loc * string (* string literal *)
   | ClassLit of loc * string (* class literal in java *)
@@ -742,7 +745,8 @@ let rec expr_loc e =
   | False l -> l
   | Null l -> l
   | Var (l, x) | WVar (l, x, _) -> l
-  | IntLit (l, n) -> l
+  | IntLit (l, n, _, _, _) -> l
+  | WIntLit (l, n) -> l
   | RealLit (l, n) -> l
   | StringLit (l, s) -> l
   | ClassLit (l, s) -> l
@@ -882,7 +886,8 @@ let expr_fold_open iter state e =
   | Operation (l, op, es) -> iters state es
   | WOperation (l, op, es, t) -> iters state es
   | SliceExpr (l, p1, p2) -> iterpatopt (iterpatopt state p1) p2
-  | IntLit (l, n) -> state
+  | IntLit (l, n, _, _, _) -> state
+  | WIntLit (l, n) -> state
   | RealLit(l, n) -> state
   | StringLit (l, s) -> state
   | ClassLit (l, cn) -> state

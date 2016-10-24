@@ -373,6 +373,7 @@ cd tests
   verifast_both -c test-pattern-match-constructor-subtyping.c
   verifast_both -c test-octal-number.c
   verifast_both -c integral-ghost-types.c
+  verifast_both -c -allow_should_fail longlong.c
   verifast_both -c test-precise-predicate-pointsto.c
   cd copredicates
     mysh < run.mysh

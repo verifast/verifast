@@ -886,15 +886,15 @@ and translate_bin_operator op l =
 
 and translate_uni_operator op l expr =
   debug_print "uni_operator";
-  let unit_big_int = VF.IntLit(l, Big_int.big_int_of_int (1)) in
+  let intlit n = VF.IntLit(l, Big_int.big_int_of_int n, true, false, NoLSuffix) in
   match op with
   | GEN.O_Not     -> VF.Operation(l, VF.Eq, [VF.False(l); expr])
   | GEN.O_Pos     -> expr
-  | GEN.O_Neg     -> VF.Operation(l, VF.Mul, [VF.IntLit(l, Big_int.big_int_of_int (-1)); expr])
-  | GEN.O_PreInc  -> VF.AssignOpExpr(l, expr, Add, unit_big_int, false)
-  | GEN.O_PreDec  -> VF.AssignOpExpr(l, expr, Sub, unit_big_int, false)
-  | GEN.O_PostInc -> VF.AssignOpExpr(l, expr, Add, unit_big_int, true)
-  | GEN.O_PostDec -> VF.AssignOpExpr(l, expr, Sub, unit_big_int, true)
+  | GEN.O_Neg     -> VF.Operation(l, VF.Sub, [intlit 0; expr])
+  | GEN.O_PreInc  -> VF.AssignOpExpr(l, expr, Add, intlit 1, false)
+  | GEN.O_PreDec  -> VF.AssignOpExpr(l, expr, Sub, intlit 1, false)
+  | GEN.O_PostInc -> VF.AssignOpExpr(l, expr, Add, intlit 1, true)
+  | GEN.O_PostDec -> VF.AssignOpExpr(l, expr, Sub, intlit 1, true)
   | GEN.O_Compl   -> VF.Operation(l, VF.BitNot, [expr])
 
 and translate_literal l typ value =
@@ -913,19 +913,19 @@ and translate_literal l typ value =
         (* TODO: support all sizes of integers*)
         | GEN.CharType(l) ->
             let l' = translate_location l in
-            VF.IntLit(l', Big_int.big_int_of_string value)
+            VF.IntLit(l', Big_int.big_int_of_string value, true, false, NoLSuffix)
         | GEN.ByteType(l) ->
             let l' = translate_location l in
-            VF.IntLit(l', Big_int.big_int_of_string value)
+            VF.IntLit(l', Big_int.big_int_of_string value, true, false, NoLSuffix)
         | GEN.ShortType(l) ->
             let l' = translate_location l in
-            VF.IntLit(l', Big_int.big_int_of_string value)
+            VF.IntLit(l', Big_int.big_int_of_string value, true, false, NoLSuffix)
         | GEN.IntType(l) ->
             let l' = translate_location l in
-            VF.IntLit(l', Big_int.big_int_of_string value)
+            VF.IntLit(l', Big_int.big_int_of_string value, true, false, NoLSuffix)
         | GEN.LongType(l) ->
             let l' = translate_location l in
-            VF.IntLit(l', Big_int.big_int_of_string value)
+            VF.IntLit(l', Big_int.big_int_of_string value, true, false, LSuffix)
         | GEN.FloatType(l) ->
             let l' = translate_location l in
             error l' "floats not supported yet"

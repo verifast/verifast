@@ -171,7 +171,7 @@ type include_kind =
 type token = (* ?token *)
   | Kwd of string
   | Ident of string
-  | Int of big_int
+  | Int of big_int * bool (* true = decimal, false = hex or octal *) * bool (* true = suffix u or U *) * int_literal_lsuffix
   | RealToken of big_int  (* Tokens of the form 123r. Used to distinguish 1r/2, denoting one half, from 1/2, which evaluates to zero, in a context that does not require an expression of type 'real'. *)
   | RationalToken of num       (* Rational number literals. E.g. 0.5, 3.14, 3e8, 6.62607004E-34. Used for floating-point literals in real code, and for real number literals in annotations. Using the arbitrary-precision 'num' type instead of the OCaml 'float' type to avoid rounding errors. *)
   | String of string
@@ -201,7 +201,11 @@ let string_of_token t =
   begin match t with
     Kwd(s) -> "Keyword:" ^ s
   | Ident(s) -> "Identifier:" ^ s
-  | Int(bi) -> "Int:" ^ (Big_int.string_of_big_int bi)
+  | Int(bi, dec, usuffix, lsuffix) ->
+    "Int:" ^ Big_int.string_of_big_int bi ^
+      (if usuffix then "U" else "") ^
+      (match lsuffix with NoLSuffix -> "" | LSuffix -> "L" | LLSuffix -> "LL") ^
+      (if dec then "(decimal)" else "(originally hex or octal)")
   | RealToken(bi) -> "RealToken:" ^ (Big_int.string_of_big_int bi)
   | RationalToken(n) -> "RationalToken:" ^ (Num.string_of_num n)
   | String(s) -> "String: " ^ s
@@ -218,7 +222,7 @@ let string_of_token t =
 let compare_tokens t1 t2 =
   begin match (t1,t2) with
     (None,None) -> true
-  | (Some(_,Int(bi1)),Some(_,Int(bi2))) -> compare_big_int bi1 bi2 = 0
+  | (Some(_,Int(bi1,dec1,u1,l1)),Some(_,Int(bi2,dec2,u2,l2))) -> compare_big_int bi1 bi2 = 0 && (dec1,u1,l1) = (dec2,u2,l2)
   | (Some(_,RealToken(bi1)),Some(_,RealToken(bi2))) -> compare_big_int bi1 bi2 = 0
   | (Some(_,RationalToken(n1)),Some(_,RationalToken(n2))) -> Num.eq_num n1 n2
   | (Some(_,t1),Some(_,t2)) -> t1 = t2
@@ -593,14 +597,52 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
         begin
           let str = get_string () in
           if (str.[0] = '0') then
-            Some (Int (big_int_of_octal_string str))
+            int_suffix (big_int_of_octal_string str) false
           else
-            Some (Int (big_int_of_string str))
+            int_suffix (big_int_of_string str) true
         end
+  and int_suffix value is_decimal =
+    let cont usuffix lsuffix = Some (Int (value, is_decimal, usuffix, lsuffix)) in
+    match text_peek () with
+      'u'|'U' ->
+      text_junk ();
+      begin match text_peek () with
+        'l'|'L' ->
+        text_junk ();
+        begin match text_peek () with
+          'l'|'L' ->
+          text_junk ();
+          cont true LLSuffix
+        | _ ->
+          cont true LSuffix
+        end
+      | _ ->
+        cont true NoLSuffix
+      end
+    | 'l'|'L' ->
+      text_junk ();
+      begin match text_peek () with
+        'l'|'L' ->
+        text_junk ();
+        begin match text_peek () with
+          'u'|'U' ->
+          text_junk ();
+          cont true LLSuffix
+        | _ ->
+          cont false LLSuffix
+        end
+      | 'u'|'U' ->
+        text_junk ();
+        cont true LSuffix
+      | _ ->
+        cont false LSuffix
+      end
+    | _ ->
+      cont false NoLSuffix
   and hex_number () =
     match text_peek () with
       ('0'..'9' | 'A'..'F' | 'a'..'f') as c -> text_junk (); store c; hex_number ()
-    | _ -> Some (Int (big_int_of_hex_string (get_string ())))
+    | _ -> int_suffix (big_int_of_hex_string (get_string ())) false
   and decimal_part () =
     match text_peek () with
       ('0'..'9' as c) ->
@@ -976,9 +1018,9 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
           let cond = 
             if is_defined x then begin
               update_last_macro_used x;
-              (l, Int unit_big_int) 
+              (l, Int (unit_big_int, true, false, NoLSuffix))
             end
-            else (l, Int zero_big_int)
+            else (l, Int (zero_big_int, true, false, NoLSuffix))
           in
           cond::condition ()
         in
@@ -1009,7 +1051,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
     (* TODO: Support operators *)
     let isTrue =
       match condition with
-        [(_, Int n)] -> sign_big_int n <> 0
+        [(_, Int (n, _, _, _))] -> sign_big_int n <> 0
       | _ -> error "Operators in preprocessor conditions are not yet supported."
     in
     if isTrue then () else skip_branch ()
@@ -1200,7 +1242,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
                     if p = x then
                       match a with
                       | [(l1, Ident id1)] -> id1;
-                      | [(l1, Int i1)] -> string_of_big_int i1;
+                      | [(l1, Int (i1, _, _, _))] -> string_of_big_int i1;
                       | _ -> error "Unsupported use of concatenation operator in macro";
                     else
                       find_arg params args
@@ -1216,7 +1258,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
               begin
                 match second with
                 | (l2, Ident id2) -> (l2, Ident ((check_identifier id1) ^ (check_identifier id2)));
-                | (l2, Int i) -> (l2, Ident ((check_identifier id1) ^ (check_number l2 i)))
+                | (l2, Int (i, _, _, _)) -> (l2, Ident ((check_identifier id1) ^ (check_number l2 i)))
                 | _ -> error "Unsupported use of concatenation operator in macro";
               end
           | _ -> error "Unsupported use of concatenation operator in macro";

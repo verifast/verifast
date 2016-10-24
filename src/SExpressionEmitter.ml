@@ -227,7 +227,7 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
       List [ Symbol "expr-read"
            ; sexpr_of_expr expr
            ; Symbol str ]
-    | IntLit (loc, n) ->
+    | IntLit (loc, n, is_decimal, usuffix, lsuffix) ->
       build_list [ Symbol "expr-int"
                   ; Number n ]
                  [] 
