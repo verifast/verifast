@@ -730,7 +730,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let value =
                     match ft with
                       Bool -> LitPat (False fl)
-                    | Int (Signed, 4) | Int (Signed, 2) | Int (Signed, 1) -> LitPat (IntLit (fl, zero_big_int))
+                    | Int (Signed, 4) | Int (Signed, 2) | Int (Signed, 1) -> LitPat (WIntLit (fl, zero_big_int))
                     | ObjType _ | ArrayType _ -> LitPat (Null fl)
                     | _ -> DummyPat
                   in
@@ -979,7 +979,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let rec expr_mark_addr_taken e locals = 
     match e with
-      True _ | False _ | Null _ | Var _ | WVar _ | IntLit(_, _) | RealLit _ | StringLit(_, _) | ClassLit(_) -> ()
+      True _ | False _ | Null _ | Var _ | WVar _ | IntLit _ | WIntLit _ | RealLit _ | StringLit(_, _) | ClassLit(_) -> ()
     | Operation(_, _, es) | WOperation (_, _, es, _) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
     | AddressOf(_, (Var (_, x) | WVar (_, x, _))) -> mark_if_local locals x
     | Read(_, e, _) -> expr_mark_addr_taken e locals
@@ -1115,7 +1115,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | _ -> []
     in
     match e with
-      True _ | False _ | Null _ | Var _ | WVar _ | IntLit(_, _) | RealLit _ | StringLit(_, _) | ClassLit(_) -> []
+      True _ | False _ | Null _ | Var _ | WVar _ | IntLit _ | WIntLit _ | RealLit _ | StringLit(_, _) | ClassLit(_) -> []
     | Operation(_, _, es) | WOperation (_, _, es, _) -> List.flatten (List.map (fun e -> expr_address_taken e) es)
     | Read(_, e, _) -> expr_address_taken e
     | ArrayLengthExpr(_, e) -> expr_address_taken e
@@ -1638,11 +1638,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
      An expression is safe if it does not read or write the heap, i.e., it does not require any chunks. *)
   let rec is_safe_expr e =
     match e with 
-      IntLit _ -> true
+      WIntLit _ -> true
     | True _ -> true
     | False _ -> true
     | WVar (_, x, scope) -> scope = LocalVar
-    | WOperation(_, (Eq | Neq), es, _) -> List.for_all is_safe_expr es
+    | WOperation(_, _, es, _) -> List.for_all is_safe_expr es
     | IfExpr(_, e1, e2, e3) -> List.for_all is_safe_expr [e1; e2; e3]
     | SizeofExpr(_, _) -> true
     | AddressOf(_, e) -> is_safe_expr e
@@ -2007,7 +2007,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         assume (ctxt#mk_eq (mk_char_list_of_c_string (String.length s) s) cs) $. fun () ->
         cont (Chunk ((string_symb, true), [], coef, [value; cs], None)::h) env value
       end
-    | WOperation (l, Add, [e1; e2], [ObjType "java.lang.String"; ObjType "java.lang.String"]) ->
+    | WOperation (l, Add, [e1; e2], ObjType "java.lang.String") ->
       eval_h h env e1 $. fun h env v1 ->
       eval_h h env e2 $. fun h env v2 ->
       let value = get_unique_var_symb "string" (ObjType "java.lang.String") in
@@ -2048,18 +2048,18 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       eval_h h env arr $. fun h env arr ->
       eval_h h env i $. fun h env i ->
       cont h env (read_c_array h env l arr i elem_tp)
-    | WOperation (l, Not, [e], ts) -> eval_h_core readonly h env e (fun h env v -> cont h env (ctxt#mk_not v))
-    | WOperation (l, ((Eq | Neq) as op), [e1; e2], ts) ->
+    | WOperation (l, Not, [e], t) -> eval_h_core readonly h env e (fun h env v -> cont h env (ctxt#mk_not v))
+    | WOperation (l, ((Eq | Neq) as op), [e1; e2], t) ->
       let create_term t1 t2 = match op with Eq -> ctxt#mk_eq t1 t2 | Neq -> ctxt#mk_not (ctxt#mk_eq t1 t2) in
       let e1_safe = is_safe_expr e1 in
       let e2_safe = is_safe_expr e2 in
       eval_h_core (true, heapReadonly || not e2_safe) h env e1 (fun h env v1 -> eval_h_core (true, heapReadonly || not e1_safe) h env e2 (fun h env v2 -> cont h env (create_term v1 v2)))
-    | WOperation (l, And, [e1; e2], ts) ->
+    | WOperation (l, And, [e1; e2], t) ->
       eval_h h env e1 $. fun h env v1 ->
       branch
         (fun () -> assume v1 (fun () -> eval_h h env e2 cont))
         (fun () -> assume (ctxt#mk_not v1) (fun () -> cont h env ctxt#mk_false))
-    | WOperation (l, Or, [e1; e2], ts) -> 
+    | WOperation (l, Or, [e1; e2], t) -> 
       eval_h h env e1 $. fun h env v1 ->
       branch
         (fun () -> assume v1 (fun () -> cont h env ctxt#mk_true))

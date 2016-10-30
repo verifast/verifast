@@ -199,11 +199,11 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
       build_list [ Symbol "expr-op"
                  ; sexpr_of_operator op ]
                  [ "operands", List (List.map sexpr_of_expr exprs) ]
-    | WOperation (loc, op, exprs, types) -> 
+    | WOperation (loc, op, exprs, type_) -> 
       build_list [ Symbol "expr-wop"
                  ; sexpr_of_operator op ]
                  [ "operands", List (List.map sexpr_of_expr exprs)
-                 ; "types", List (List.map sexpr_of_type_ types) ]
+                 ; "type", sexpr_of_type_ type_ ]
     | CallExpr (loc, name, targs, indices, args, binding) ->
       build_list [ Symbol "expr-call"
                  ; Symbol name ]
@@ -227,7 +227,7 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
       List [ Symbol "expr-read"
            ; sexpr_of_expr expr
            ; Symbol str ]
-    | IntLit (loc, n) ->
+    | IntLit (loc, n, is_decimal, usuffix, lsuffix) ->
       build_list [ Symbol "expr-int"
                   ; Number n ]
                  [] 

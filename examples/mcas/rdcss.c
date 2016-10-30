@@ -480,7 +480,7 @@ loop:
         //@ open atomic_compare_and_store_pointer_context_post(context)();
     }
     if (((uintptr_t)r & 1) != 0) {
-        rdcss_complete((void *)((uintptr_t)r & ~1));
+        rdcss_complete((void *)((uintptr_t)r & ~(unsigned)1));
         //@ leak [_]rdcss_descriptor_detached((void *)((uintptr_t)r & ~1), _);
         //@ leak [_]descr((void *)((uintptr_t)r & ~1), _, _, _, _, _, _, _);
         //@ leak [_]ghost_cell3(id, ?asList, ?bsList, ?dsList);
@@ -621,7 +621,7 @@ loop:
         //@ open atomic_load_pointer_context_post(context)();
     }
     if (((uintptr_t)r & 1) != 0) {
-        rdcss_complete((void *)((uintptr_t)r & ~1));
+        rdcss_complete((void *)((uintptr_t)r & ~(unsigned)1));
         //@ leak [_]rdcss_descriptor_detached(_, _);
         //@ leak [_]ghost_cell3(_, _, _, _);
         //@ leak [_]ghost_list_member_handle(_, _);

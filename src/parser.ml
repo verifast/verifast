@@ -36,7 +36,8 @@ let c_keywords = [
   "define"; "endif"; "&"; "goto"; "uintptr_t"; "INT_MIN"; "INT_MAX";
   "UINTPTR_MAX"; "enum"; "static"; "signed"; "unsigned"; "long";
   "const"; "volatile"; "register"; "ifdef"; "elif"; "undef";
-  "SHRT_MIN"; "SHRT_MAX"; "USHRT_MAX"; "UINT_MAX"; "UCHAR_MAX"
+  "SHRT_MIN"; "SHRT_MAX"; "USHRT_MAX"; "UINT_MAX"; "UCHAR_MAX";
+  "LLONG_MIN"; "LLONG_MAX"; "ULLONG_MAX";
 ]
 
 let java_keywords = [
@@ -144,7 +145,7 @@ module Scala = struct
     parse_primary_expr = parser
       [< '(l, Kwd "true") >] -> True l
     | [< '(l, Kwd "false") >] -> False l
-    | [< '(l, Int n) >] -> IntLit (l, n)
+    | [< '(l, Int (n, dec, usuffix, lsuffix)) >] -> IntLit (l, n, dec, usuffix, lsuffix)
     | [< '(l, Ident x) >] -> Var (l, x)
   and
     parse_add_expr = parser
@@ -682,7 +683,7 @@ and
   [< te0 = parse_type; '(l, Ident f);
      te = parser
         [< '(_, Kwd ";") >] -> te0
-      | [< '(_, Kwd "["); '(ls, Int size); '(_, Kwd "]"); '(_, Kwd ";") >] ->
+      | [< '(_, Kwd "["); '(ls, Int (size, _, _, _)); '(_, Kwd "]"); '(_, Kwd ";") >] ->
             if int_of_big_int size <= 0 then
               raise (ParseException (ls, "Array must have size > 0."));
             StaticArrayTypeExpr (l, te0, int_of_big_int size)
@@ -709,16 +710,17 @@ and
        [< '(_, Kwd "int") >] -> ManifestTypeExpr (l, intType);
      | [< '(_, Kwd "double") >] -> ManifestTypeExpr (l, LongDouble);
      | [< '(_, Kwd "long"); _ = opt (parser [< '(_, Kwd "int") >] -> ()) >] -> ManifestTypeExpr (l, Int (Signed, 8))
-     | [< >] -> ManifestTypeExpr (l, intType)
+     | [< >] -> ManifestTypeExpr (l, match !language with CLang -> intType | Java -> Int (Signed, 8))
      end
    >] -> t
 | [< '(l, Kwd "signed"); t0 = parse_primary_type >] ->
   (match t0 with
      (ManifestTypeExpr (_, Int (Signed, _))) -> t0
    | _ -> raise (ParseException (l, "This type cannot be signed.")))
-| [< '(l, Kwd "unsigned"); t0 = parse_primary_type >] ->
+| [< '(l, Kwd "unsigned"); t0 = opt parse_primary_type >] ->
   (match t0 with
-   | ManifestTypeExpr (l, Int (Signed, n)) -> ManifestTypeExpr (l, Int (Unsigned, n))
+   | Some (ManifestTypeExpr (l, Int (Signed, n))) -> ManifestTypeExpr (l, Int (Unsigned, n))
+   | None -> ManifestTypeExpr (l, Int (Unsigned, int_size))
    | _ -> raise (ParseException (l, "This type cannot be unsigned.")))
 | [< '(l, Kwd "uintptr_t") >] -> ManifestTypeExpr (l, Int (Unsigned, 4))
 | [< '(l, Kwd "real") >] -> ManifestTypeExpr (l, RealType)
@@ -1057,7 +1059,7 @@ and
 and parse_array_braces te = parser
   [< '(l, Kwd "[");
      te = begin parser
-       [< '(lsize, Int size) >] ->
+       [< '(lsize, Int (size, _, _, _)) >] ->
        if sign_big_int size <= 0 then raise (ParseException (lsize, "Array must have size > 0."));
        StaticArrayTypeExpr (l, te, int_of_big_int size)
      | [< >] ->
@@ -1219,7 +1221,7 @@ and
 | [< '(l, CharToken c) >] ->
   if Char.code c > 127 then raise (ParseException (l, "Non-ASCII character literals are not yet supported"));
   let tp = match !language with CLang -> Int (Signed, 1) | Java -> Int (Unsigned, 2) in
-  CastExpr (l, false, ManifestTypeExpr (l, tp), IntLit (l, big_int_of_int (Char.code c)))
+  CastExpr (l, false, ManifestTypeExpr (l, tp), IntLit (l, big_int_of_int (Char.code c), true, false, NoLSuffix))
 | [< '(l, Kwd "null") >] -> Null l
 | [< '(l, Kwd "currentThread") >] -> Var (l, "currentThread")
 | [< '(l, Kwd "varargs") >] -> Var (l, "varargs")
@@ -1254,22 +1256,25 @@ and
       >]-> r
     | [< >] -> Var (lx, x)
   >] -> ex
-| [< '(l, Int i) >] -> IntLit (l, i)
+| [< '(l, Int (i, dec, usuffix, lsuffix)) >] -> IntLit (l, i, dec, usuffix, lsuffix)
 | [< '(l, RealToken i) >] -> RealLit (l, num_of_big_int i)
 | [< '(l, RationalToken n) >] -> RealLit (l, n)
-| [< '(l, Kwd "INT_MIN") >] -> IntLit (l, big_int_of_string "-2147483648")
-| [< '(l, Kwd "INT_MAX") >] -> IntLit (l, big_int_of_string "2147483647")
-| [< '(l, Kwd "UINTPTR_MAX") >] -> CastExpr (l, false, ManifestTypeExpr (l, Int (Unsigned, 4)), IntLit (l, big_int_of_string "4294967295"))
-| [< '(l, Kwd "UCHAR_MAX") >] -> IntLit (l, big_int_of_string "255")
-| [< '(l, Kwd "SHRT_MIN") >] -> IntLit (l, big_int_of_string "-32768")
-| [< '(l, Kwd "SHRT_MAX") >] -> IntLit (l, big_int_of_string "32767")
-| [< '(l, Kwd "USHRT_MAX") >] -> IntLit (l, big_int_of_string "65535")
-| [< '(l, Kwd "UINT_MAX") >] -> CastExpr (l, false, ManifestTypeExpr (l, Int (Unsigned, 4)), IntLit (l, big_int_of_string "4294967295"))
+| [< '(l, Kwd "INT_MIN") >] -> IntLit (l, big_int_of_string "-2147483648", true, false, NoLSuffix)
+| [< '(l, Kwd "INT_MAX") >] -> IntLit (l, big_int_of_string "2147483647", true, false, NoLSuffix)
+| [< '(l, Kwd "UINTPTR_MAX") >] -> IntLit (l, big_int_of_string "4294967295", true, true, NoLSuffix)
+| [< '(l, Kwd "UCHAR_MAX") >] -> IntLit (l, big_int_of_string "255", true, false, NoLSuffix)
+| [< '(l, Kwd "SHRT_MIN") >] -> IntLit (l, big_int_of_string "-32768", true, false, NoLSuffix)
+| [< '(l, Kwd "SHRT_MAX") >] -> IntLit (l, big_int_of_string "32767", true, false, NoLSuffix)
+| [< '(l, Kwd "USHRT_MAX") >] -> IntLit (l, big_int_of_string "65535", true, false, NoLSuffix)
+| [< '(l, Kwd "UINT_MAX") >] -> IntLit (l, big_int_of_string "4294967295", true, true, NoLSuffix)
+| [< '(l, Kwd "LLONG_MIN") >] -> IntLit (l, big_int_of_string "-9223372036854775808", true, false, NoLSuffix)
+| [< '(l, Kwd "LLONG_MAX") >] -> IntLit (l, big_int_of_string "9223372036854775807", true, false, NoLSuffix)
+| [< '(l, Kwd "ULLONG_MAX") >] -> IntLit (l, big_int_of_string "18446744073709551615", true, true, NoLSuffix)
 | [< '(l, String s); ss = rep (parser [< '(_, String s) >] -> s) >] -> 
      (* TODO: support UTF-8 *)
      if !lexer_in_ghost_range then
        let chars = chars_of_string s in
-       let es = List.map (fun c -> IntLit(l, big_int_of_int (Char.code c))) chars in
+       let es = List.map (fun c -> IntLit(l, big_int_of_int (Char.code c), true, false, NoLSuffix)) chars in
        InitializerList(l, es)
      else
        StringLit (l, String.concat "" (s::ss))
@@ -1317,11 +1322,11 @@ and
 | [< '(l, Kwd "~"); e = parse_expr_suffix >] -> Operation (l, BitNot, [e])
 | [< '(l, Kwd "-"); e = parse_expr_suffix >] ->
   begin match e with
-    IntLit (_, n) -> IntLit (l, minus_big_int n)
-  | _ -> Operation (l, Sub, [IntLit (l, zero_big_int); e])
+    IntLit (_, n, true, false, lsuffix) when !language = Java && sign_big_int n >= 0 -> IntLit (l, minus_big_int n, true, false, lsuffix)
+  | _ -> Operation (l, Sub, [IntLit (l, zero_big_int, true, false, NoLSuffix); e])
   end
-| [< '(l, Kwd "++"); e = parse_expr_suffix >] -> AssignOpExpr (l, e, Add, IntLit (l, unit_big_int), false)
-| [< '(l, Kwd "--"); e = parse_expr_suffix >] -> AssignOpExpr (l, e, Sub, IntLit (l, unit_big_int), false)
+| [< '(l, Kwd "++"); e = parse_expr_suffix >] -> AssignOpExpr (l, e, Add, IntLit (l, unit_big_int, true, false, NoLSuffix), false)
+| [< '(l, Kwd "--"); e = parse_expr_suffix >] -> AssignOpExpr (l, e, Sub, IntLit (l, unit_big_int, true, false, NoLSuffix), false)
 | [< '(l, Kwd "{"); es = rep_comma parse_expr; '(_, Kwd "}") >] -> InitializerList (l, es)
 and
   parse_switch_expr_clauses = parser
@@ -1356,8 +1361,8 @@ and
           end
        >] -> e
      end; e = parse_expr_suffix_rest e >] -> e
-| [< '(l, Kwd "++"); e = parse_expr_suffix_rest (AssignOpExpr (l, e0, Add, IntLit (l, unit_big_int), true)) >] -> e
-| [< '(l, Kwd "--"); e = parse_expr_suffix_rest (AssignOpExpr (l, e0, Sub, IntLit (l, unit_big_int), true)) >] -> e
+| [< '(l, Kwd "++"); e = parse_expr_suffix_rest (AssignOpExpr (l, e0, Add, IntLit (l, unit_big_int, true, false, NoLSuffix), true)) >] -> e
+| [< '(l, Kwd "--"); e = parse_expr_suffix_rest (AssignOpExpr (l, e0, Sub, IntLit (l, unit_big_int, true, false, NoLSuffix), true)) >] -> e
 | [< '(l, Kwd "("); es = rep_comma parse_expr; '(_, Kwd ")"); e = parse_expr_suffix_rest (match e0 with Read(l', e0', f') -> CallExpr (l', f', [], [], LitPat(e0'):: (List.map (fun e -> LitPat(e)) es), Instance) | _ -> ExprCallExpr (l, e0, es)) >] -> e
 | [< >] -> e0
 and
