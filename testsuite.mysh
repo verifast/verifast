@@ -350,6 +350,7 @@ cd tutorial_solutions
   verifast_both -c -disable_overflow_check predctors.c
   verifast_both -c -disable_overflow_check threads0.c
   verifast_both -c -disable_overflow_check threads.c
+  verifast_both -c -disable_overflow_check fractions0.c
   verifast_both -c -disable_overflow_check fractions.c
   verifast_both -c -disable_overflow_check precise.c
   verifast_both -c -disable_overflow_check precise_bad_merge.c
