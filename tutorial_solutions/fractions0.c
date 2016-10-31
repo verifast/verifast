@@ -1,6 +1,7 @@
 #include "stdlib.h"
 #include "malloc.h"
 #include "threading.h"
+#include "stdio.h"
 
 int rand();
     //@ requires true;
@@ -92,7 +93,7 @@ predicate_family_instance thread_run_post(folder)(struct fold_data *data, any in
 
 @*/
 
-void folder(struct fold_data *data) //@ : thread_run
+void folder(struct fold_data *data) //@ : thread_run_joinable
     //@ requires thread_run_pre(folder)(data, ?info);
     //@ ensures thread_run_post(folder)(data, info);
 {
@@ -114,7 +115,7 @@ struct fold_data *start_fold_thread(struct tree *tree, fold_function *f, int acc
     data->f = f;
     data->acc = acc;
     //@ close thread_run_pre(folder)(data, unit);
-    t = thread_start(folder, data);
+    t = thread_start_joinable(folder, data);
     data->thread = t;
     return data;
 }
