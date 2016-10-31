@@ -43,10 +43,10 @@ predicate read_file(place t1, list<char> filename;
     &*& fclose_io(t3, file_handle, t_end);
 
 predicate write_opened_file(place t1, FILE *file_handle,
-  list<unsigned char> text; place t_end) =
+  list<unsigned char> text, place t_end) =
   
   text == nil ?
-    t_end == t1
+    no_op(t1, t_end)
   :
     write_char_io(t1, file_handle, head(text), _, ?t2)
     &*& write_opened_file(t2, file_handle, tail(text), t_end);
@@ -182,6 +182,7 @@ void main()
     if (c < 0){
       open read_files_io(_, _, _, _);
       open write_opened_file(_, _, _, _);
+      no_op();
       no_op();
     }
     @*/
