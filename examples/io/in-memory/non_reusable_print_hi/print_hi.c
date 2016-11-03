@@ -41,21 +41,22 @@ predicate buffer(int id, struct buffer *b;) =
   b->mutex |-> ?mutex
   &*& mutex(mutex, buffer_invar(id, b));
 
-
-
-predicate token(place t1) =
+predicate token_inner(place t1) =
   [1/2]gcf_instance(place_id(t1), place_iot(t1), place_progress(t1))
    &*& iot_is_split_left(place_iot(t1)) || iot_is_split_right(place_iot(t1)) ?
-       [1/2]token(place_parent1(t1))
+       [1/2]token_inner(place_parent1(t1))
      : iot_is_join(place_iot(t1)) ?
-       token(place_parent1(t1))
-       &*& token(place_parent2(t1))
+       token_inner(place_parent1(t1))
+       &*& token_inner(place_parent2(t1))
      : emp
 ;
 
-predicate putchar_io(int id, place t1, int c, place t2) =
-  place_id(t1) == id
-  &*& place_id(t2) == id
+predicate token(struct buffer *b, place t) =
+  [iot_fract(place_iot(t))]buffer(place_id(t), b)
+  &*& token_inner(t);
+
+predicate putchar_io(place t1, int c, place t2) =
+  place_id(t1) == place_id(t2)
   &*& place_iot(t2) == place_iot(t1)
   &*& place_parent1(t2) == place_parent1(t1)
   &*& place_parent2(t2) == place_parent2(t1)
@@ -67,22 +68,19 @@ predicate putchar_io(int id, place t1, int c, place t2) =
 
 void putchar(struct buffer *b, int c)
 /*@ requires
-      [?f]buffer(?id, b)
-      &*& token(?t1)
-      &*& putchar_io(id, t1, c, ?t2);
+      token(b, ?t1)
+      &*& putchar_io(t1, c, ?t2);
 @*/
-/*@ ensures token(t2)
-     &*& [f]buffer(id, b);
+/*@ ensures token(b, t2);
 @*/
 {
-  //@ open buffer(id, b);
+  //@ open token(b, t1);
+  //@ open [iot_fract(place_iot(t1))]buffer(place_id(t1), b);
   mutex_acquire(b->mutex);
-  //@ open buffer_invar(id, b)();
+  //@ open buffer_invar(place_id(t1), b)();
   b->c = c;
   
-  
-  
-  //@ open putchar_io(id, t1, c, t2);
+  //@ open putchar_io(t1, c, t2);
   /*@
   if (place_iot(t1) == iot_split_left(iot_init)){
     open exists<pair<int, list<int> > >(pair('l', ?l_todo));
@@ -93,23 +91,23 @@ void putchar(struct buffer *b, int c)
   }
   @*/
   
-  //@ open token(t1);
-    
-  //@ gcf_update(id, place_iot(t1), {c});
+  //@ open token_inner(t1);
+  //@ gcf_update(place_id(t1), place_iot(t1), {c});
   //@ assert place_id(t1) == place_id(t2);
-  //@ close token(t2);
-  //@ close buffer_invar(id, b)();
+  //@ close token_inner(t2);
+  //@ close buffer_invar(place_id(t2), b)();
   mutex_release(b->mutex);
-  //@ close [f]buffer(id, b);
+  //@ close [iot_fract(place_iot(t2))]buffer(place_id(t2), b);
+  //@ close token(b, t2);
 }
 
 /*@
 predicate_family_instance thread_run_pre(print_h)(struct buffer *b, any p) =
-  p == pair(?f, pair(?id, pair(?t1, ?t2)))
-  &*& [f]buffer(id, b) &*& token(t1) &*& putchar_io(id, t1, 'h', t2);
+  p == pair(?t1, ?t2)
+  &*& token(b, t1) &*& putchar_io(t1, 'h', t2);
 predicate_family_instance thread_run_post(print_h)(struct buffer *b, any p) =
-  p == pair(?f, pair(?id, pair(?t1, ?t2)))
-  &*& [f]buffer(id, b) &*& token(t2);
+  p == pair(?t1, ?t2)
+  &*& token(b, t2);
 @*/
 
 void print_h(struct buffer *b) //@ : thread_run_joinable
@@ -122,58 +120,62 @@ void print_h(struct buffer *b) //@ : thread_run_joinable
 }
 
 void print_i(struct buffer *b)
-//@ requires [?f]buffer(?id, b) &*& token(?t1) &*& putchar_io(id, t1, 'i', ?t2);
-//@ ensures [f]buffer(id, b) &*& token(t2);
+//@ requires token(b, ?t1) &*& putchar_io(t1, 'i', ?t2);
+//@ ensures token(b, t2);
 {
   putchar(b, 'i');
 }
 
 /*@
-predicate split(place t1, place t2, place t3) =
+predicate split_io(place t1, place t2, place t3) =
   t2 == place(iot_split_left(place_iot(t1)), {}, t1, place_none, place_id(t1))
   &*& [1/2]gcf_instance<iot, list<int> >(place_id(t2), place_iot(t2), {})
   &*& t3 == place(iot_split_right(place_iot(t1)), {}, t1, place_none, place_id(t1))
   &*& [1/2]gcf_instance<iot, list<int> >(place_id(t3), place_iot(t3), {});
 
 lemma void split()
-  requires token(?t1) &*& split(t1, ?t2, ?t3);
-  ensures token(t2) &*& token(t3);
+  requires token(?b, ?t1) &*& split_io(t1, ?t2, ?t3);
+  ensures token(b, t2) &*& token(b, t3);
 {
-  open split(_, _, _);
-  close token(t2);
-  close token(t3);
+  open token(b, t1);
+  open split_io(_, _, _);
+  close token_inner(t2);
+  close token_inner(t3);
+  close token(b, t2);
+  close token(b, t3);
 }
 
 predicate join(place t1, place t2, place t3) =
   t3 == place(iot_join(place_iot(t1), place_iot(t2)), {}, t1, t2, place_id(t1))
-  // We don't actually need t1.id == t2.id because the io(id, t1, t2)-predicates
-  // will connect id with the ids stored in the places, so if the ids don't match
-  // you won't be able to link the progresses of the places with the progresses of the invar.
+  &*& place_id(t1) == place_id(t2) && place_id(t3) == place_id(t2)
   &*& [1/2]gcf_instance<iot, list<int> >(place_id(t3), place_iot(t3), {});
 
 lemma void join()
-  requires join(?t1, ?t2, ?t3) &*& token(t1) &*& token(t2);
-  ensures token(t3);
+  requires join(?t1, ?t2, ?t3) &*& token(?b, t1) &*& token(b, t2);
+  ensures token(b, t3);
 {
   open join(_, _, _);
-  close token(t3);
+  open token(b, t1);
+  open token(b, t2);
+  close token_inner(t3);
+  close token(b, t3);
 }
 @*/
 
 
 void print_hi(struct buffer *b)
-/*@ requires [?f]buffer(?id, b) &*& token(?t1) &*& split(t1, ?th1, ?ti1)
-          &*& putchar_io(id, th1, 'h', ?th2)
-          &*& putchar_io(id, ti1, 'i', ?ti2)
+/*@ requires token(b, ?t1) &*& split_io(t1, ?th1, ?ti1)
+          &*& putchar_io(th1, 'h', ?th2)
+          &*& putchar_io(ti1, 'i', ?ti2)
           &*& join(th2, ti2, ?t2); @*/
-//@ ensures [f]buffer(id, b) &*& token(t2);
+//@ ensures token(b, t2);
 {
   //@ split();
-  //@ close thread_run_pre(print_h)(b, pair(f/2, pair(id, pair(th1, th2))));
+  //@ close thread_run_pre(print_h)(b, pair(th1, th2));
   struct thread *thread = thread_start_joinable(print_h, b);
   print_i(b);
   thread_join(thread);
-  //@ open thread_run_post(print_h)(b, pair(f/2, pair(id, pair(th1, th2))));
+  //@ open thread_run_post(print_h)(b, pair(th1, th2));
   //@ join();
 }
 
@@ -210,12 +212,14 @@ int main()
   //@ place ti2 = place(ioti, {'i'}, t1, place_none, id);
   //@ place t2 = place(iot2, {}, th2, ti2, id);
   
-  //@ close token(t1);
-  //@ close split(t1, th1, ti1);
-  //@ close putchar_io(id, th1, 'h', th2);
-  //@ close putchar_io(id, ti1, 'i', ti2);
+  //@ close token_inner(t1);
+  //@ close token(b, t1);
+  //@ close split_io(t1, th1, ti1);
+  //@ close putchar_io(th1, 'h', th2);
+  //@ close putchar_io(ti1, 'i', ti2);
   //@ close join(th2, ti2, t2);
   print_hi(b);
+  //@ open token(b, t2);
   //@ open buffer(id, b);
   mutex_dispose(b->mutex);
   //@ open buffer_invar(id, b)();
@@ -223,13 +227,13 @@ int main()
   free(b);
   return x;
   
-  // Open tokens to obtain info about progresses.
+  // Open to obtain info about progresses.
   // We need this to prove the postcondition.
-  //@ open token(_);
-  //@ open token(_);
-  //@ open token(_);
-  //@ open token(_);
-  //@ open token(_);
+  //@ open token_inner(_);
+  //@ open token_inner(_);
+  //@ open token_inner(_);
+  //@ open token_inner(_);
+  //@ open token_inner(_);
   
   // Leak ghost data
   //@ leak gcf_instance(_, _, _);

@@ -32,6 +32,14 @@ fixpoint bool iot_is_join(iot iot){
     case iot_split_right(parent): return false;
   }
 }
+fixpoint real iot_fract(iot iot) {
+  switch(iot){
+    case iot_init: return 1;
+    case iot_split_left(parent): return iot_fract(parent)/2;
+    case iot_split_right(parent): return iot_fract(parent)/2;
+    case iot_join(parent1, parent2): return iot_fract(parent1) + iot_fract(parent2);
+  }
+}
 
 // id is kept in place such that split/join predicates can contain
 // the [1/2]gcf(id) without having an id argument.
