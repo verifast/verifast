@@ -1,0 +1,39 @@
+#ifndef CRYPTOGRAM_BOUNDS_GH
+#define CRYPTOGRAM_BOUNDS_GH
+
+#include "auxiliary_definitions.gh"
+#include "cryptogram.gh"
+
+//An upper bound on the the exact set of cryptograms exposed by a list of characters
+fixpoint bool cgs_in_ccs_upper_bound(list<crypto_char> ccs, list<cryptogram> cgs);
+
+lemma_auto void cgs_in_ccs_upper_bound_(list<crypto_char> ccs);
+  requires true;
+  ensures  true == cgs_in_ccs_upper_bound(ccs, cgs_in_ccs(ccs));
+
+lemma_auto void cgs_in_ccs_upper_bound_subset(list<crypto_char> ccs,
+                                              list<cryptogram> cgs);
+  requires true == cgs_in_ccs_upper_bound(ccs, cgs);
+  ensures  true == subset(cgs_in_ccs(ccs), cgs);
+
+lemma void cgs_in_ccs_upper_bound_superset(list<crypto_char> ccs,
+                                           list<cryptogram> cgs1,
+                                           list<cryptogram> cgs2);
+  requires true == subset(cgs1, cgs2) &*&
+           true == cgs_in_ccs_upper_bound(ccs, cgs1);
+  ensures  true == cgs_in_ccs_upper_bound(ccs, cgs2);
+
+lemma void cgs_in_ccs_upper_bound_split(list<crypto_char> ccs,
+                                        list<cryptogram> cgs, int i);
+  requires 0 <= i &*& i <= length(ccs) && cgs_in_ccs_upper_bound(ccs, cgs);
+  ensures  true == cgs_in_ccs_upper_bound(take(i, ccs), cgs) &*&
+           true == cgs_in_ccs_upper_bound(drop(i, ccs), cgs);
+
+lemma void cgs_in_ccs_upper_bound_join(list<crypto_char> ccs1, list<cryptogram> cgs1,
+                                       list<crypto_char> ccs2, list<cryptogram> cgs2);
+  requires true == cgs_in_ccs_upper_bound(ccs1, cgs1) &*&
+           true == cgs_in_ccs_upper_bound(ccs2, cgs2);
+  ensures  true == cgs_in_ccs_upper_bound(append(ccs1, ccs2),
+                                          union(cgs1, cgs2));
+
+#endif

@@ -1,0 +1,85 @@
+#ifndef PUBLIC_CHARS_GH
+#define PUBLIC_CHARS_GH
+
+#include "auxiliary_definitions.gh"
+#include "public_invariant.gh"
+#include "cryptogram_levels.gh"
+
+lemma void public_chars(char *array, int n);
+  requires [_]public_invar(?pub) &*&
+           [?f]chars(array, n, ?cs);
+  ensures  [f]chars(array, n, cs) &*& 
+           [_]public_generated(pub)(?ccs) &*&
+           ccs == cs_to_ccs(cs);
+
+lemma void public_crypto_chars(char *array, int n);
+  requires [_]public_invar(?pub) &*&
+           [?f]crypto_chars(_, array, n, ?ccs) &*&
+           [_]public_generated(pub)(ccs);
+  ensures  [f]chars(array, n, ?cs) &*& ccs == cs_to_ccs(cs);
+
+//Proven lemmas
+
+lemma void close_public_generated(list<crypto_char> ccs);
+  requires [_]public_invar(?pub) &*&
+           [_]dummy_foreach(cgs_in_ccs(ccs), pub) &*&
+           true == forall(cgs_in_ccs(ccs), cg_is_generated);
+  ensures  [_]public_generated(pub)(ccs);
+
+lemma void public_cryptogram(char *array, cryptogram cg);
+  requires [_]public_invar(?pub) &*&
+           [?f]cryptogram(array, ?n, ?ccs, cg) &*&
+           [_]pub(cg);
+  ensures  [f]chars(array, n, ?cs) &*& 
+           [_]public_generated(pub)(ccs) &*&
+           ccs == cs_to_ccs(cs);
+
+lemma void public_chars_extract(char *array, cryptogram cg);
+  requires [_]public_invar(?pub) &*&
+           [?f]chars(array, ?n, ?cs) &*&
+           ccs_for_cg(cg) == cs_to_ccs(cs);
+  ensures  [f]chars(array, n, cs) &*&
+           true == cg_is_generated(cg) &*& [_]pub(cg);
+
+lemma void public_crypto_chars_extract(char *array, cryptogram cg);
+  requires [_]public_invar(?pub) &*&
+           [?f]crypto_chars(_, array, ?n, ?ccs) &*&
+           ccs == ccs_for_cg(cg) &*&
+           [_]public_generated(pub)(ccs);
+  ensures  [f]chars(array, n, ?cs) &*& ccs == cs_to_ccs(cs) &*&
+           true == cg_is_generated(cg) &*& [_]pub(cg);
+
+lemma void public_cryptogram_extract(char *array);
+  requires [_]public_invar(?pub) &*&
+           [?f]cryptogram(array, ?n, ?cs, ?cg) &*&
+           [_]public_generated(pub)(cs);
+  ensures  [f]cryptogram(array, n, cs, cg) &*&
+           col ? true : [_]pub(cg);
+
+lemma void public_generated(predicate(cryptogram) pub,
+                            cryptogram cg);
+  requires [_]pub(cg) &*& true == cg_is_generated(cg);
+  ensures  [_]public_generated(pub)(ccs_for_cg(cg));
+
+lemma void public_generated_extract(predicate(cryptogram) pub,
+                                    list<crypto_char> ccs, 
+                                    cryptogram cg);
+  requires [_]public_generated(pub)(ccs) &*&
+           mem(cg,cgs_in_ccs(ccs)) || ccs == ccs_for_cg(cg);
+  ensures  true == cg_is_generated(cg) &*& [_]pub(cg);
+
+lemma void public_generated_split(predicate(cryptogram) pub,
+                                  list<crypto_char> ccs, int i);
+  requires 0 <= i && i <= length(ccs) &*&
+           [_]public_generated(pub)(ccs);
+  ensures  [_]public_generated(pub)(take(i, ccs)) &*&
+           [_]public_generated(pub)(drop(i, ccs));
+
+lemma void public_generated_join(predicate(cryptogram) pub,
+                                 list<crypto_char> ccs1, 
+                                 list<crypto_char> ccs2);
+  requires [_]public_generated(pub)(ccs1) &*&
+           [_]public_generated(pub)(ccs2);
+  ensures  [_]public_generated(pub)(append(ccs1, ccs2));
+
+#endif
