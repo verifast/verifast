@@ -379,6 +379,7 @@ cd tests
   cd copredicates
     mysh < run.mysh
   cd ..
+  verifast_both -c prodlemfuncptrchunk_local_lems.c
   cd lemma_ptrs_with_nonghostcallersonly
     mysh < run.mysh
   cd ..

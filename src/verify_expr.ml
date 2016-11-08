@@ -1414,7 +1414,6 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   type leminfo =
     RealFuncInfo of
       string list  (* Preceding functions *)
-      * string list  (* Preceding lemmas *)
       * string  (* Current function *)
       * bool  (* Current function has 'terminates' clause *)
   | LemInfo of
@@ -1425,12 +1424,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let leminfo_is_lemma leminfo =
     match leminfo with
-      RealFuncInfo (_, _, _, _) -> false
+      RealFuncInfo (_, _, _) -> false
     | LemInfo (_, _, _, _) -> true
   
   let should_terminate leminfo =
     match leminfo with
-      RealFuncInfo (gs, preceding_lemmas, g, terminates) -> terminates
+      RealFuncInfo (gs, g, terminates) -> terminates
     | LemInfo (lems, g, indinfo, nonghost_callers_only) -> true
   
   let verify_call funcmap eval_h l (pn, ilist) xo g targs pats (callee_tparams, tr, ps, funenv, pre, post, epost, terminates, v) pure leminfo sizemap h tparams tenv ghostenv env cont econt =
@@ -1504,7 +1503,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         let _ =
           match leminfo with
-            RealFuncInfo (gs, _, g0, caller_terminates) ->
+            RealFuncInfo (gs, g0, caller_terminates) ->
             if caller_terminates && not pure then begin
               if not terminates then static_error l "Callee should be declared as 'terminates'." None;
               begin match g with
@@ -1966,7 +1965,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if not pure && is_lemma k then static_error l "Cannot call lemma functions in a non-pure context." None;
       if nonghost_callers_only then begin
         match leminfo with
-          RealFuncInfo (_, _, _, _) | LemInfo (_, _, _, true) -> ()
+          RealFuncInfo (_, _, _) | LemInfo (_, _, _, true) -> ()
         | _ -> static_error l "A lemma function marked nonghost_callers_only cannot be called from a non-nonghost_callers_only lemma function." None
       end;
       check_correct xo (Some g) targs es (lg, tparams, tr, ps, funenv, pre, post, None, terminates, v) cont
