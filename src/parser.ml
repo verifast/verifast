@@ -92,6 +92,10 @@ type spec_clause = (* ?spec_clause *)
 | EnsuresClause of asn
 | TerminatesClause of loc
 
+let next_body_rank =
+  let counter = ref 0 in
+  fun () -> incr counter; !counter
+
 (* A toy Scala parser. *)
 module Scala = struct
 
@@ -108,7 +112,7 @@ module Scala = struct
     parse_method = parser
       [< '(l, Kwd "def"); '(_, Ident mn); ps = parse_paramlist; t = parse_type_ann; co = parse_contract; '(_, Kwd "=");'(_, Kwd "{"); ss = rep parse_stmt; '(closeBraceLoc, Kwd "}")>] ->
       let rt = match t with ManifestTypeExpr (_, Void) -> None | _ -> Some t in
-      Meth (l, Real, rt, mn, ps, Some co,Some (ss, closeBraceLoc), Static, Public, false)
+      Meth (l, Real, rt, mn, ps, Some co, Some ((ss, closeBraceLoc), next_body_rank ()), Static, Public, false)
   and
     parse_paramlist = parser
       [< '(_, Kwd "("); ps = rep_comma parse_param; '(_, Kwd ")") >] -> ps
@@ -136,7 +140,7 @@ module Scala = struct
   and
     parse_contract = parser
       [< '(_, Kwd "/*@"); '(_, Kwd "requires"); pre = parse_asn; '(_, Kwd "@*/");
-         '(_, Kwd "/*@"); '(_, Kwd "ensures"); post = parse_asn; '(_, Kwd "@*/") >] -> (pre, post, [])
+         '(_, Kwd "/*@"); '(_, Kwd "ensures"); post = parse_asn; '(_, Kwd "@*/") >] -> (pre, post, [], false)
   and
     parse_asn = parser
       [< '(_, Kwd "("); a = parse_asn; '(_, Kwd ")") >] -> a
@@ -376,26 +380,25 @@ and
     epost = opt parse_throws_clause;
     (ss, co) = parser
       [< '(_, Kwd ";"); spec = opt parse_spec >] -> (None, spec)
-    | [< spec = opt parse_spec; ss = parse_some_block >] -> (ss, spec)
+    | [< spec = opt parse_spec; '(l, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}") >] -> (Some ((ss, closeBraceLoc), next_body_rank ()), spec)
     >] ->
     let contract =
       let epost = match epost with None -> [] | Some(epost) -> epost in
       match co with
       | Some(pre, post, terminates) -> 
-        if terminates then raise (ParseException (l, "'terminates' clauses on methods are not yet supported."));
         let epost = List.map (fun (tp, e) -> 
           (tp, match e with 
             None -> raise (ParseException (l, "If you give a method a contract, you must also give ensures clauses for the thrown expceptions.")) | 
             Some(e) -> e)) epost 
         in
-        Some(pre, post, epost)
+        Some(pre, post, epost, terminates)
       | None -> 
         if !enforce_annotations then None else
         begin
          let pre = ExprAsn(l, False(l)) in
          let post = ExprAsn(l, True(l)) in
          let epost = List.map (fun (tp, e) -> (tp, match e with None -> ExprAsn(l, True(l)) | Some(e) -> e)) epost in
-         Some (pre, post, epost)
+         Some (pre, post, epost, false)
         end
     in
     (ps, contract, ss)
@@ -833,10 +836,6 @@ and
 and
   parse_block = parser
   [< '(l, Kwd "{"); ss = parse_stmts; '(_, Kwd "}") >] -> ss
-and
-  parse_some_block = parser
-  [< '(l, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}") >] -> Some (ss,closeBraceLoc)
-| [<>] -> None
 and
   parse_block_stmt = parser
   [< '(l, Kwd "{");

@@ -6,7 +6,7 @@ public class JoinableRunnable implements Runnable {
     
     /*@
     
-    lemma void closeIt()
+    lemma void closeIt();
         requires JoinableRunnable(?runnable, false) &*& runnable.pre();
         ensures JoinableRunnable(runnable, true) &*& pre();
     

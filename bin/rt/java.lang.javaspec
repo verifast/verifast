@@ -63,6 +63,9 @@ lemma_auto void bitand_modulo(int x);
 
 predicate class_init_token(Class c;);
 
+predicate call_perm_(Class c;);
+predicate call_below_perm_(Class c;);
+
 predicate array_element<T>(T[] array, int index; T value);
 predicate array_slice<T>(T[] array, int start, int end; list<T> elements);
 predicate array_slice_deep<T, A, V>(T[] array, int start, int end, predicate(A, T; V) p, A info; list<T> elements, list<V> values);
@@ -144,6 +147,7 @@ public class Object {
     public Object();
         //@ requires emp;
         //@ ensures emp;
+        //@ terminates;
     
 }
 

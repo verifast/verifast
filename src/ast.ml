@@ -276,7 +276,7 @@ and
     *)
   | InstanceOfExpr of loc * expr * type_expr
   | SuperMethodCall of loc * string * expr list
-  | WSuperMethodCall of loc * string * expr list * (loc * ghostness * (type_ option) * (string * type_) list * asn * asn * ((type_ * asn) list) * visibility)
+  | WSuperMethodCall of loc * string (*superclass*) * string * expr list * (loc * ghostness * (type_ option) * (string * type_) list * asn * asn * (type_ * asn) list * bool (*terminates*) * int (*rank*) option * visibility)
   | InitializerList of loc * expr list
   | SliceExpr of loc * pat option * pat option
 and
@@ -562,8 +562,8 @@ and
       type_expr option * 
       string * 
       (type_expr * string) list * 
-      (asn * asn * ((type_expr * asn) list)) option * 
-      (stmt list * loc (* Close brace *)) option * 
+      (asn * asn * ((type_expr * asn) list) * bool (*terminates*) ) option * 
+      ((stmt list * loc (* Close brace *)) * int (*rank*)) option * 
       method_binding * 
       visibility *
       bool (* is declared abstract? *)
@@ -572,8 +572,8 @@ and
   | Cons of
       loc * 
       (type_expr * string) list * 
-      (asn * asn * ((type_expr * asn) list)) option * 
-      (stmt list * loc (* Close brace *)) option * 
+      (asn * asn * ((type_expr * asn) list) * bool (*terminates*) ) option * 
+      ((stmt list * loc (* Close brace *)) * int (*rank*)) option * 
       visibility
 and
   instance_pred_decl = (* ?instance_pred_decl *)
@@ -786,7 +786,7 @@ let rec expr_loc e =
   | ProverTypeConversion (t1, t2, e) -> expr_loc e
   | InstanceOfExpr(l, e, tp) -> l
   | SuperMethodCall(l, _, _) -> l
-  | WSuperMethodCall(l, _, _, _) -> l
+  | WSuperMethodCall(l, _, _, _, _) -> l
   | InitializerList (l, _) -> l
   
 let asn_loc p =
@@ -923,7 +923,7 @@ let expr_fold_open iter state e =
   | WAssignOpExpr (l, lhs, x, rhs, post) -> iter (iter state lhs) rhs
   | InstanceOfExpr(l, e, tp) -> iter state e
   | SuperMethodCall(_, _, args) -> iters state args
-  | WSuperMethodCall(_, _, args, _) -> iters state args
+  | WSuperMethodCall(_, _, _, args, _) -> iters state args
 
 (* Postfix fold *)
 let expr_fold f state e = let rec iter state e = f (expr_fold_open iter state e) e in iter state e

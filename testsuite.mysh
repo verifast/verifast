@@ -284,6 +284,9 @@ cd examples
     verifast_both -c SpouseFinal.java
     verifast_both -c Stack.java
     verifast_both -c -disable_overflow_check -provides "main_class Program" StaticFields.java
+    cd termination
+      mysh < termination.mysh
+    cd ..
     verifast_both -c ThreadRun.java
     verifast_both -c Tree.java
     verifast_both -c StringLiterals.java

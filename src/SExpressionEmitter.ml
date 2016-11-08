@@ -363,7 +363,7 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
       build_list [ Symbol "expr-super-call" ]
                  [ "name", Symbol name 
                  ; "params", sexpr_of_list sexpr_of_expr params ]
-    | WSuperMethodCall (_, name, params, _) ->
+    | WSuperMethodCall (_, _, name, params, _) ->
       build_list [ Symbol "expr-w-super-call" ]
                  [ "name", Symbol name 
                  ; "params", sexpr_of_list sexpr_of_expr params ]
@@ -697,12 +697,12 @@ and sexpr_of_meths (meth : meth) : sexpression =
     let body =
       match body with
         | None           -> [ ]
-        | Some (body, _) -> [ "body", List (List.map sexpr_of_stmt body) ]
+        | Some ((body, _), _) -> [ "body", List (List.map sexpr_of_stmt body) ]
     in
     let contract =
       match contract with
         | None -> []
-        | Some (pre, post,_) -> [ "precondition", sexpr_of_pred pre
+        | Some (pre, post,_,_) -> [ "precondition", sexpr_of_pred pre
                                 ; "postcondition", sexpr_of_pred post ] 
     in        
     let kw = List.concat [ [ "ghos", sexpr_of_ghostness ghost
@@ -722,13 +722,13 @@ and sexpr_of_constructor (name : string) (cons : cons) : sexpression =
     let body =
       match body with
         | None           -> [ ]
-        | Some (body, _) -> [ "body", List (List.map sexpr_of_stmt body) ]
+        | Some ((body, _), _) -> [ "body", List (List.map sexpr_of_stmt body) ]
     in
     let contract =
       match contract with
         | None -> []
-        | Some (pre, post,_) -> [ "precondition", sexpr_of_pred pre
-                                ; "postcondition", sexpr_of_pred post ] 
+        | Some (pre, post, _, _) -> [ "precondition", sexpr_of_pred pre
+                                    ; "postcondition", sexpr_of_pred post ] 
     in        
     let kw = List.concat [ [ "parameters", List (List.map sexpr_of_arg params) ]
                           ; body

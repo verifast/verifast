@@ -1,0 +1,7 @@
+verifast -c SimpleTermination.java
+verifast -c -allow_should_fail SelfCall.java
+verifast -c -allow_should_fail MutualCall1.java
+verifast -c -allow_should_fail MutualCall2.java
+verifast -c -allow_should_fail CtorSelfCall.java
+verifast -c -allow_should_fail MutualCtorCall.java
+verifast -c -allow_assume -disable_overflow_check PlusOneFunc.jarsrc

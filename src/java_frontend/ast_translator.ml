@@ -373,17 +373,24 @@ and translate_staticness stat =
   | GEN.Static -> VF.Static
   | GEN.NonStatic -> VF.Instance
 
+and next_body_rank =
+  let counter = ref 0 in
+  fun () -> incr counter; !counter
+
 and translate_block l stmts =
   let l'= translate_location l in
   match stmts with
     Some stmts -> 
       begin
         let stmt' = translate_statements_as_block l' stmts in
-        match stmt' with
-        | VF.BlockStmt(l1, ds, VF.SuperConstructorCall(l2, exprs)::stms'', l3, _) -> 
-          Some ([VF.SuperConstructorCall(l2, exprs); 
-               VF.BlockStmt(l1, ds, stms'', l3, ref [])], l')
-        | _ -> Some ([stmt'], l')
+        let stmts' =
+          match stmt' with
+          | VF.BlockStmt(l1, ds, VF.SuperConstructorCall(l2, exprs)::stms'', l3, _) -> 
+            [VF.SuperConstructorCall(l2, exprs); 
+             VF.BlockStmt(l1, ds, stms'', l3, ref [])]
+          | _ -> [stmt']
+        in 
+        Some ((stmts', l'), next_body_rank ())
       end
   | None -> None
 
@@ -441,7 +448,6 @@ and check_contract l anns throws generate =
       anns
   in
   let (pre', post', terminates') = parse_contract l' anns' false in
-  if terminates' then error l' "'terminates' clauses are not yet supported.";
   let throws' = 
     List.map 
       (fun (t, c) -> 
@@ -459,7 +465,7 @@ and check_contract l anns throws generate =
       )      
     throws
   in
-  Some(pre', post', throws')
+  Some(pre', post', throws', terminates')
 
 and translate_methods cn decls = 
   debug_print "translate_methods";

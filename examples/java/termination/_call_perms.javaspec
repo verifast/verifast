@@ -1,0 +1,56 @@
+/*@
+
+fixpoint boolean exists<t>(list<t> xs, fixpoint(t, boolean) p) {
+    switch (xs) {
+        case nil: return false;
+        case cons(x, xs0): return p(x) || exists(xs0, p);
+    }
+}
+
+fixpoint boolean lt_some<t>(fixpoint(t, t, boolean) lt, list<t> ys, t x) {
+    return exists(ys, (lt)(x));
+}
+
+fixpoint boolean all_lt_some<t>(fixpoint(t, t, boolean) lt, list<t> xs, list<t> ys) {
+    return forall(xs, (lt_some)(lt, ys));
+}
+
+fixpoint boolean bag_le<t>(fixpoint(t, t, boolean) lt, list<t> xs, list<t> ys) {
+    return ys == xs || all_lt_some(lt, remove_all(ys, xs), remove_all(xs, ys)) == true;
+}
+
+fixpoint boolean bag_lt<t>(fixpoint(t, t, boolean) lt, list<t> xs, list<t> ys) {
+    return bag_le(lt, xs, ys) && remove_all(xs, ys) != nil;
+}
+
+fixpoint boolean Class_lt(Class c1, Class c2);
+
+fixpoint boolean level_le(list<Class> level1, list<Class> level2) { return bag_le(Class_lt, level1, level2); }
+
+fixpoint boolean level_lt(list<Class> level1, list<Class> level2) { return bag_lt(Class_lt, level1, level2); }
+
+lemma_auto void level_le_cons0(Class c, list<Class> cs)
+    requires true;
+    ensures level_le({c}, cons(c, cs)) == true;
+{ assume(false); }
+
+predicate call_perm(list<Class> level);
+
+lemma void call_perm_weaken(real frac)
+    requires call_perm(cons(_, ?level)) &*& 0 < frac;
+    ensures [frac]call_perm(level);
+{ assume(false); }
+
+lemma void consume_call_perm_for(Class c)
+    requires call_perm(?level) &*& level_le({c}, level) == true;
+    ensures call_perm_(c);
+{
+    assume(false);
+}
+
+lemma void call_below_perm__elim(list<Class> level)
+    requires call_below_perm_(?c) &*& level_lt(level, {c}) == true;
+    ensures call_perm(level);
+{ assume(false); }
+
+@*/
