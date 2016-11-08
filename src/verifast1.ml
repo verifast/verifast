@@ -53,7 +53,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let () = set_verbosity initial_verbosity
   
   let class_counter = ref 0
-  let func_counter = ref 1  (* 0 is reserved for functions declared in preceding modules used by the current module *)
+  let func_counter = ref 0
 
   (** Maps an identifier to a ref cell containing approximately the number of distinct symbols that have been generated for this identifier.
     * It is an approximation because of clashes such as the clash between the second symbol ('foo0') generated for 'foo'
@@ -318,7 +318,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let ancester_at_symbol = mk_symbol "ancester_at" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp
   let get_class_symbol = mk_symbol "getClass" [ctxt#type_int] ctxt#type_int Uninterp
   let class_serial_number = mk_symbol "class_serial_number" [ctxt#type_int] ctxt#type_int Uninterp
-  let func_rank = mk_symbol "func_rank" [ctxt#type_int] ctxt#type_int Uninterp
+  let func_rank = mk_symbol "func_rank" [ctxt#type_int] ctxt#type_real Uninterp
   let bitwise_or_symbol = mk_symbol "bitor" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp
   let bitwise_xor_symbol = mk_symbol "bitxor" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp
   let bitwise_and_symbol = mk_symbol "bitand" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp

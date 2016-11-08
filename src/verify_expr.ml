@@ -371,7 +371,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let fn = full_name pn fn in
         let fterm = List.assoc fn funcnameterms in
         if body <> None then
-          ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_app func_rank [fterm]) (ctxt#mk_intlit !func_counter)));
+          ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_app func_rank [fterm]) (ctxt#mk_reallit !func_counter)));
         incr func_counter;
         let (rt, xmap, functype_opt, pre, pre_tenv, post) =
           check_func_header pn ilist [] [] [] l k tparams rt fn (Some fterm) xs nonghost_callers_only functype_opt contract_opt terminates body
@@ -404,7 +404,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let register_prototype_used l g gterm =
     if not (List.mem (g, l) !prototypes_used) then
       prototypes_used := (g, l)::!prototypes_used;
-    ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_app func_rank [gterm]) int_zero_term))
+    ignore (ctxt#assume (ctxt#mk_lt (ctxt#mk_app func_rank [gterm]) int_zero_term))
   
   let interfmap1 =
     List.map
