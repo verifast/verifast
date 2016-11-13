@@ -18,7 +18,7 @@ cd ..
 cd ring_buffer_threadsafe
   verifast_both -c ring_buffer_threadsafe.c
 cd ..
-cd io/helpers/
+cd io/helpers
   verifast_both -c set.c
 cd ../..
 
