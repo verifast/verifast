@@ -4547,9 +4547,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let rec sizeof l t =
     match t with
-      Void | Int (Signed, 1) | Int (Unsigned, 1) -> ctxt#mk_intlit 1
-    | Int (Signed, 2) | Int (Unsigned, 2) -> ctxt#mk_intlit 2
-    | Int (Signed, 4) | Int (Unsigned, 4) -> ctxt#mk_intlit 4
+      Void -> ctxt#mk_intlit 1
+    | Int (_, n) -> ctxt#mk_intlit n
     | PtrType _ -> ctxt#mk_intlit 4
     | StructType sn -> struct_size sn
     | StaticArrayType (elemTp, elemCount) -> ctxt#mk_mul (sizeof l elemTp) (ctxt#mk_intlit elemCount)
