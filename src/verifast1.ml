@@ -2682,6 +2682,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let promote l e1 e2 =
       promote_checkdone l e1 e2 (check e1) (check e2)
     in
+    let perform_integral_promotion e =
+      let (w, t, _) = check e in
+      let t = unfold_inferred_type t in
+      match t with
+        Int (_, n) when n < int_size -> Upcast (w, t, intType), intType
+      | Int (_, _) -> w, t
+      | _ -> static_error (expr_loc e) "Expression must be of integral type" None
+    in
     let check_pure_fun_value_call l w t es =
       if es = [] then static_error l "Zero-argument application of pure function value makes no sense." None;
       let box e t = convert_provertype_expr e (provertype_of_type t) ProverInductive in
@@ -2845,12 +2853,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | _ -> static_error l "Arguments must be of integral type." None
       end
     | Operation (l, BitNot, [e]) ->
-      let (w, t, _) = check e in
-      let t = integer_promotion (unfold_inferred_type t) in
-      begin match t with
-      | Int (_, _) -> (WOperation (l, BitNot, [w], t), t, None)
-      | _ -> static_error l "Argument to bitwise negation must be of an integral type." None
-      end
+      let w, t = perform_integral_promotion e in
+      (WOperation (l, BitNot, [w], t), t, None)
     | Operation (l, (Le | Lt | Ge | Gt as operator), [e1; e2]) -> 
       let (w1, w2, t) = promote l e1 e2 in
       (operation_expr funcmap l t operator w1 w2, boolt, None)
@@ -2889,9 +2893,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin match t with PtrType _ -> static_error l "Operands should be arithmetic expressions, not pointer expressions" None | _ -> () end;
       (operation_expr funcmap l t operator w1 w2, t, None)
     | Operation (l, (ShiftLeft | ShiftRight as op), [e1; e2]) ->
-      let w1 = checkt e1 intType in
+      let w1, t1 = perform_integral_promotion e1 in
       let w2 = checkt e2 intType in
-      (WOperation (l, op, [w1; w2], intType), intType, None)
+      (WOperation (l, op, [w1; w2], t1), t1, None)
     | IntLit (l, n, is_decimal, usuffix, lsuffix) ->
       if inAnnotation = Some true then
         (wintlit l n, intt, Some n)
