@@ -2894,7 +2894,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (operation_expr funcmap l t operator w1 w2, t, None)
     | Operation (l, (ShiftLeft | ShiftRight as op), [e1; e2]) ->
       let w1, t1 = perform_integral_promotion e1 in
-      let w2 = checkt e2 intType in
+      let w2 = try checkt e2 intType with StaticError _ -> checkt e2 (Int (Unsigned, int_size)) in
       (WOperation (l, op, [w1; w2], t1), t1, None)
     | IntLit (l, n, is_decimal, usuffix, lsuffix) ->
       if inAnnotation = Some true then
