@@ -24,6 +24,9 @@ predicate u_character(unsigned char *p; unsigned char c);
 predicate integer(int *p; int v);
 predicate u_integer(unsigned int *p; unsigned int v);
 
+predicate llong_integer(long long *p; long long l);
+predicate u_llong_integer(unsigned long long *p; unsigned long long l);
+
 predicate short_integer(short *p; short s);
 predicate u_short_integer(unsigned short *p; unsigned short v);
 
@@ -214,6 +217,12 @@ predicate ints(int *p, int count; list<int> vs) =
         vs == nil
     :
         integer(p, ?v) &*& ints(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0);
+
+predicate llongs(long long *p, int count; list<long long> ls) = 
+    count == 0 ?
+        ls == nil
+    :
+        llong_integer(p, ?l) &*& llongs(p + 1, count - 1, ?ls0) &*& ls == cons(l, ls0);
 
 lemma_auto void ints_inv();
     requires [?f]ints(?p, ?count, ?vs);
