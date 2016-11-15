@@ -64,7 +64,7 @@ void client(char *key, int key_len, char *request, char *response)
     net_send(&socket, message, (unsigned int) message_len);
     free(message);
   }
-  
+
   {
     int size;
     char request2[PACKAGE_SIZE];
@@ -85,7 +85,7 @@ void client(char *key, int key_len, char *request, char *response)
     //@ close memcmp_secret(hmac, 64, hmac_ccs, hmac_cg);
     //@ assert hmac_cg == cg_hmac(creator, id, ?cont_ccs);
     //@ cs_to_ccs_crypto_chars(buffer, cont_cs);
-    
+
     //@ chars_split((void*) buffer + 1 + 2 * PACKAGE_SIZE, 64);
     //@ assert [1/2]chars((void*) buffer + 1 + 2 * PACKAGE_SIZE, 64, ?hmac_cs);
     //@ public_chars((void*) buffer + 1 + 2 * PACKAGE_SIZE, 64);
@@ -96,12 +96,12 @@ void client(char *key, int key_len, char *request, char *response)
     //@ assert chars(buffer, expected_size, append(cont_cs, hmac_cs));
     //@ chars_split(buffer, 1 + 2 * PACKAGE_SIZE);
     //@ close [1/2]hide_chars(buffer, 1 + 2 * PACKAGE_SIZE, cont_cs);
-    
+
     //Check the message tag hmac
     //@ chars_split(buffer, 1);
     if (buffer[0] != '1') abort();
     //@ close [1/2]chars(buffer, 1, cons('1', nil));
-    
+
     //Check if response is for the correct request
     //@ chars_split((void*) buffer + 1, PACKAGE_SIZE);
     //@ assert [f2]chars(request, PACKAGE_SIZE, req_cs);
@@ -110,18 +110,18 @@ void client(char *key, int key_len, char *request, char *response)
     if (memcmp(request, (void*) buffer + 1, PACKAGE_SIZE) != 0) abort();
     //@ cs_to_ccs_crypto_chars(request, req_cs);
     //@ cs_to_ccs_crypto_chars((void*) buffer + 1, req_cs);
-    
+
     //Retrieve the actual response
     //@ assert [1/2]chars((void*) buffer + 1 + PACKAGE_SIZE, PACKAGE_SIZE, ?resp_cs);
     //@ chars_to_crypto_chars((void*) buffer + 1 + PACKAGE_SIZE, PACKAGE_SIZE);
     memcpy(response, (void*) buffer + 1 + PACKAGE_SIZE, PACKAGE_SIZE);
     //@ cs_to_ccs_crypto_chars(response, resp_cs);
     //@ cs_to_ccs_crypto_chars((void*) buffer + 1 + PACKAGE_SIZE, resp_cs);
-    //@ chars_join(buffer); 
+    //@ chars_join(buffer);
     //@ chars_join(buffer);
     //@ open [1/2]hide_chars(buffer, 1 + 2 * PACKAGE_SIZE, cont_cs);
     //@ assert cont_cs == cons('1', append(req_cs, resp_cs));
-    
+
     /*@ if (!col && !bad(creator) && !bad(shared_with(creator, id)))
         {
           switch (cont_cs)
@@ -143,8 +143,8 @@ void client(char *key, int key_len, char *request, char *response)
             case nil:
               assert false;
           };
-          
-          assert true == response(creator, shared_with(creator, id), 
+
+          assert true == response(creator, shared_with(creator, id),
                                   req_cs, resp_cs);
         }
     @*/
@@ -321,6 +321,7 @@ void server(char *key, int key_len, char *request, char *response)
     //@ cs_to_ccs_crypto_chars(response, resp_cs);
     //@ crypto_chars_join(message + 1);
     //@ crypto_chars_join(message);
+    //@ cs_to_ccs_split(req_cs, resp_cs);
     //@ list<char> pay_cs = cons('1', append(req_cs, resp_cs));
     //@ cs_to_ccs_crypto_chars(message, pay_cs);
     

@@ -6,10 +6,10 @@ void abort_crypto_lib(const char* message)
   //@ requires [?f]string(message, ?cs);
   //@ ensures  false;
 {
-  printf("An error has "); 
-  printf("occurred while "); 
-  printf("using the crypto "); 
-  printf("library:\n\n\t"); 
+  printf("An error has ");
+  printf("occurred while ");
+  printf("using the crypto ");
+  printf("library:\n\n\t");
   printf("%s\n\nAborting...\n", message);
 
   abort();
@@ -36,8 +36,8 @@ void *malloc_wrapper(int size)
 void write_buffer(char **target, const char *source, int length)
   /*@ requires pointer(target, ?t) &*& chars(t, length, ?cs) &*&
                [?f]crypto_chars(?kind, source, length, ?ccs0) &*&
-               length > 0 &*& kind == normal || 
-                 (kind == secret && length >= MINIMAL_STRING_SIZE) 
+               length > 0 &*& kind == normal ||
+                 (kind == secret && length >= MINIMAL_STRING_SIZE)
                &*& length <= INT_MAX &*& t + length <= (void*) UINTPTR_MAX; @*/
   /*@ ensures  pointer(target, t + length) &*&
                crypto_chars(kind, t, length, ccs0) &*&
@@ -149,7 +149,7 @@ lemma void take_1<T>(list<T> xs)
   }
 }
 
-lemma void equal_append_chars_of_int(int i1, int i2, 
+lemma void equal_append_chars_of_int(int i1, int i2,
                                      list<char> cs1, list<char> cs2)
   requires INT_MIN <= i1 && i1 <= INT_MAX &*& INT_MIN <= i2 && i2 <= INT_MAX &*&
            append(chars_of_int(i1), cs1) == append(chars_of_int(i2), cs2);
@@ -160,18 +160,6 @@ lemma void equal_append_chars_of_int(int i1, int i2,
   drop_append(sizeof(int), chars_of_int(i1), cs1);
   drop_append(sizeof(int), chars_of_int(i2), cs2);
   chars_of_int_injective(i1, i2);
-}
-
-lemma void cs_to_ccs_length(list<char> cs)
-  requires true;
-  ensures  length(cs) == length(cs_to_ccs(cs));
-{
-  switch(cs)
-  {
-    case cons(c0, cs0):
-      cs_to_ccs_length(cs0);
-    case nil:
-  }
 }
 
 lemma void equal_append_ccs_of_int(int i1, int i2, list<crypto_char> ccs1,

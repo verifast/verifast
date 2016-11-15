@@ -111,7 +111,7 @@ void sender_msg1(int* socket, havege_state* havege_state, pk_context* r_context,
                           s_nonce_ccs, s_nonce_cg);
         public_cryptogram((void*) message + ID_SIZE, s_nonce_cg);
         assert chars((void*) message + ID_SIZE, NONCE_SIZE, ?s_nonce_cs');
-
+        cs_to_ccs_split(identifier(sender), s_nonce_cs');
         chars_join(message);
         public_chars(message, MSG1_SIZE);
         chars_to_crypto_chars(message, MSG1_SIZE);
@@ -660,6 +660,13 @@ void receiver_msg2(int* socket, havege_state* havege_state,
         close cryptogram((void*) message + ID_SIZE + NONCE_SIZE, NONCE_SIZE,
                          r_nonce_ccs, r_nonce_cg);
         public_cryptogram((void*) message + ID_SIZE + NONCE_SIZE, r_nonce_cg);
+        
+        assert chars((void*) message, ID_SIZE, ?rid_cs);
+        assert chars((void*) message + ID_SIZE, NONCE_SIZE, ?s_nonce_cs);
+        assert chars((void*) message + ID_SIZE + NONCE_SIZE, NONCE_SIZE, ?r_nonce_cs);        
+        cs_to_ccs_split(rid_cs, s_nonce_cs);
+        cs_to_ccs_split(append(rid_cs, s_nonce_cs), r_nonce_cs);
+
         chars_join(message);
         chars_join(message);
         public_chars(message, MSG2_SIZE);

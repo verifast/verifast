@@ -4,7 +4,7 @@
 #include <crypto.gh>
 #include "auxiliary_definitions.gh"
 
-lemma_auto void cs_to_ccs_split(list<char> xs, list<char> ys);
+lemma void cs_to_ccs_split(list<char> xs, list<char> ys);
   requires true;
   ensures append(cs_to_ccs(xs), cs_to_ccs(ys)) ==
           cs_to_ccs(append(xs, ys));
@@ -23,6 +23,10 @@ lemma void cs_to_ccs_chars(char* b, list<char> cs2);
   ensures  [f]chars(b, c, cs2);
 
 lemma void cs_to_ccs_crypto_chars(char *array, list<char> cs);
-  requires [?f]crypto_chars(?kind, array, ?n, cs_to_ccs(cs)) &*& 
+  requires [?f]crypto_chars(?kind, array, ?n, cs_to_ccs(cs)) &*&
            col || kind == normal;
   ensures  [f]chars(array, n, cs);
+
+lemma void cs_to_ccs_length(list<char> cs);
+  requires true;
+  ensures  length(cs) == length(cs_to_ccs(cs));

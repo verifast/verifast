@@ -8,10 +8,10 @@ CFLAGS += -I ../annotated_api/
 
 MODULES = \
 	general \
+	debug \
+	item \
+	item_constraints \
 
-# 	debug \
-# 	item \
-# 	item_constraints \
 # 	serialization \
 # 	deserialization \
 # 	invariants \

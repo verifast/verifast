@@ -89,6 +89,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
                 (unsigned int) (16 + (int) msg_len),
                 message + 16 + (int) msg_len, 0);
     //@ assert cryptogram(message + 16 + msg_len, 64, ?hmac_ccs, ?hmac_cg);
+    //@ cs_to_ccs_split(iv_cs, enc_cs);
     //@ assert hmac_cg == cg_hmac(sender, hmac_id, append(iv_ccs, enc_ccs));
     /*@ if (!col && !enc_then_hmac_public_key(sender, enc_id, true))
           close enc_then_hmac_pub_1(enc_id, msg_ccs, iv_ccs); @*/
@@ -211,6 +212,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
                          &iv_off, iv, buffer + 16, msg) != 0)
       abort();
     //@ assert pay_cs == append(iv_cs, enc_cs);
+    //@ cs_to_ccs_split(iv_cs, enc_cs);
     zeroize(iv, 16);
     aes_free(&aes_context);
     

@@ -50,8 +50,8 @@ void *malloc_wrapper(int size);
 void write_buffer(char **target, const char *source, int length);
   /*@ requires pointer(target, ?t) &*& chars(t, length, ?cs) &*&
                [?f]crypto_chars(?kind, source, length, ?ccs0) &*&
-               length > 0 &*& kind == normal || 
-                 (kind == secret && length >= MINIMAL_STRING_SIZE) 
+               length > 0 &*& kind == normal ||
+                 (kind == secret && length >= MINIMAL_STRING_SIZE)
                &*& length <= INT_MAX &*& t + length <= (void*) UINTPTR_MAX; @*/
   /*@ ensures  pointer(target, t + length) &*&
                crypto_chars(kind, t, length, ccs0) &*&
@@ -110,10 +110,6 @@ fixpoint list<crypto_char> ccs_of_int(int i)
 {
   return cs_to_ccs(chars_of_int(i));
 }
-
-lemma void cs_to_ccs_length(list<char> cs);
-  requires true;
-  ensures  length(cs) == length(cs_to_ccs(cs));
 
 lemma void equal_append_ccs_of_int(int i1, int i2, list<crypto_char> ccs1,
                                                    list<crypto_char> ccs2);

@@ -109,6 +109,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
           public_crypto_chars(enc_msg, msg_len);
           assert chars(enc_msg, msg_len, ?msg_cs);
           assert chars(enc_msg + msg_len, 64, ?hmac_cs);
+          cs_to_ccs_split(msg_cs, hmac_cs);
           chars_join(enc_msg);
           public_chars(enc_msg, msg_len + 64);
           chars_split(enc_msg, msg_len);

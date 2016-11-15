@@ -30,7 +30,8 @@ void write_identifier(char *array, int id)
   void *temp = &id;
   //@ assert integer(temp, ?id_val);
   //@ chars_to_integer(temp);
-  //@ assert chars(temp, 4, chars_of_int(id_val));
+  //@ list<char> csi = chars_of_int(id_val);
+  //@ assert chars(temp, 4, csi);
   
   //@ chars_limits(array);
   //@ chars_to_crypto_chars(temp, 4);
@@ -38,7 +39,9 @@ void write_identifier(char *array, int id)
   memcpy(array +  4, temp, 4);
   memcpy(array +  8, temp, 4);
   //@ crypto_chars_to_chars(temp, 4);
-  
+  //@ cs_to_ccs_split(csi, csi);
+  //@ cs_to_ccs_split(csi, append(csi, csi));
+  //@ cs_to_ccs_split(csi, append(csi, append(csi, csi)));
   //@ crypto_chars_join(array + 4);
   //@ crypto_chars_join(array);
   //@ crypto_chars_to_chars(array, 12);

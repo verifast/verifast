@@ -2,7 +2,7 @@
 
 /*@
 
-lemma_auto void cs_to_ccs_split(list<char> xs, list<char> ys)
+lemma void cs_to_ccs_split(list<char> xs, list<char> ys)
   requires true;
   ensures append(cs_to_ccs(xs), cs_to_ccs(ys)) ==
           cs_to_ccs(append(xs, ys));
@@ -57,13 +57,25 @@ lemma void cs_to_ccs_chars(char* b, list<char> cs2)
 }
 
 lemma void cs_to_ccs_crypto_chars(char *array, list<char> cs)
-  requires [?f]crypto_chars(?kind, array, ?n, cs_to_ccs(cs)) &*& 
+  requires [?f]crypto_chars(?kind, array, ?n, cs_to_ccs(cs)) &*&
            col || kind == normal;
   ensures  [f]chars(array, n, cs);
 {
   crypto_chars_to_chars(array, n);
   assert [f]chars(array, n, ?cs');
   cs_to_ccs_inj(cs, cs');
+}
+
+lemma void cs_to_ccs_length(list<char> cs)
+  requires true;
+  ensures  length(cs) == length(cs_to_ccs(cs));
+{
+  switch(cs)
+  {
+    case cons(c0, cs0):
+      cs_to_ccs_length(cs0);
+    case nil:
+  }
 }
 
 @*/

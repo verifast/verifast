@@ -11,7 +11,7 @@ struct item
 
 /*@
 
-predicate item_constraints(item i, list<crypto_char> cs, predicate(item) pub);
+predicate item_constraints(item i, list<crypto_char> ccs, predicate(item) pub);
 
 predicate item(struct item *item, item i, predicate(item) pub) =
   item != 0 &*&

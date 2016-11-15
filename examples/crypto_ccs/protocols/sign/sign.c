@@ -57,6 +57,7 @@ void sender(int recvr, char *key, int key_len, char *msg)
     //@ crypto_chars_join(M);
     //@ list<char> pay = append(chars_of_int(receiver), msg_cs);
     //@ cs_to_ccs_crypto_chars(msg, msg_cs);
+    //@ cs_to_ccs_split(chars_of_int(receiver), msg_cs);
     //@ cs_to_ccs_crypto_chars(M, pay);
 
     // create hash of plain text

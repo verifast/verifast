@@ -13,8 +13,8 @@ void debug_print(const char *message)
 }
 
 void print_buffer(const char *buffer, int size)
-  //@ requires [?f]crypto_chars(?kind, buffer, size, ?cs);
-  //@ ensures  [f]crypto_chars(kind, buffer, size, cs);
+  //@ requires [?f]crypto_chars(?kind, buffer, size, ?ccs);
+  //@ ensures  [f]crypto_chars(kind, buffer, size, ccs);
 {
 #ifdef DEBUG
   int i = 0;

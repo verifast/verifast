@@ -20,11 +20,11 @@ predicate world(predicate(item) pub, fixpoint(int, int, bool, bool) key_clsfy) =
 ;
 
 #define POLARSSL_PUB_PAY(ATTACK, NO_ATTACK) \
-  [_]exists<bool>(?attack) &*& length(cs0) <= INT_MAX &*& \
+  [_]exists<bool>(?attack) &*& length(ccs0) <= INT_MAX &*& \
   (attack ? \
-     [_]public_generated(polarssl_pub(pub))(cs0) &*& ATTACK \
+     [_]public_generated(polarssl_pub(pub))(ccs0) &*& ATTACK \
    : \
-     [_]item_constraints(?pay0, cs0, pub) &*& NO_ATTACK \
+     [_]item_constraints(?pay0, ccs0, pub) &*& NO_ATTACK \
   )
 
 //Parser does not accept deeper nested macro in this proof
@@ -41,26 +41,26 @@ predicate_ctor polarssl_pub(predicate(item) pub)
       return [_]pub(public_key_item(p0, c0));
     case cg_private_key(p0, c0):
       return [_]pub(private_key_item(p0, c0));
-    case cg_hash(cs0):
+    case cg_hash(ccs0):
       return POLARSSL_PUB_PAY(true, [_]pub(hash_item(some(pay0))));
-    case cg_hmac(p0, c0, cs0):
+    case cg_hmac(p0, c0, ccs0):
       return POLARSSL_PUB_PAY(
                [_]pub(symmetric_key_item(p0, c0)),
                [_]pub(hmac_item(p0, c0, some(pay0))));
-    case cg_encrypted(p0, c0, cs0, iv0):
-      return [_]public_generated(polarssl_pub(pub))(cs0);
-    case cg_auth_encrypted(p0, c0, cs0, iv0):
+    case cg_encrypted(p0, c0, ccs0, iv0):
+      return [_]public_generated(polarssl_pub(pub))(ccs0);
+    case cg_auth_encrypted(p0, c0, ccs0, iv0):
       return POLARSSL_PUB_PAY(
                [_]pub(symmetric_key_item(p0, c0)),
-               [_]exists<list<char> >(?ent1) &*&
+               [_]exists<list<crypto_char> >(?ent1) &*&
                [_]pub(symmetric_encrypted_item(p0, c0, some(pay0), ent1)) &*&
                drop(gcm_iv_size, ent1) == iv0
              );
-    case cg_asym_encrypted(p0, c0, cs0, ent0):
+    case cg_asym_encrypted(p0, c0, ccs0, ent0):
       return POLARSSL_PUB_PAY(
                [_]pub(public_key_item(p0, c0)),
                [_]pub(asymmetric_encrypted_item(p0, c0, some(pay0), ent0)));
-    case cg_asym_signature(p0, c0, cs0, ent0):
+    case cg_asym_signature(p0, c0, ccs0, ent0):
       return POLARSSL_PUB_PAY(
                [_]pub(private_key_item(p0, c0)),
                [_]pub(asymmetric_signature_item(p0, c0, some(pay0), ent0)));
