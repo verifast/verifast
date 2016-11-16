@@ -9,19 +9,21 @@ Debian-based (Ubuntu, Mint, ...) (32bit + 64bit)
     
   ```sh    
   $ sudo apt-get install --no-install-recommends \
-         subversion make ocaml-native-compilers gcc camlp4 \
-         liblablgtk2-ocaml-dev liblablgtksourceview2-ocaml-dev valac
-  $ VERIFASTDIR=$PWD
+      git wget ca-certificates make m4 \
+      ocaml-native-compilers gcc camlp4 patch unzip libgtk2.0-dev \
+      valac gtksourceview2.0-dev \
+      liblablgtk2-ocaml-dev liblablgtksourceview2-ocaml-dev
   $ git clone https://github.com/verifast/verifast.git
-  $ cd verifast/src/
-  $ make -j 8
-  $ ../bin/vfide
+  $ make -j 8 -C verifast/src/
+  $ verifast/bin/vfide
   ```
 
 2.  Enjoy!
-    
-    
 
+
+
+ 
+--- TEXT BELOW IS OUTDATED ---
 ALTERNATIVE: using Opam
 -----------------------
 

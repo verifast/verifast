@@ -14,8 +14,10 @@ set -x # Print what is being executed.
 if [ $(uname -s) = "Linux" ]; then
   # Note: without gtksourceview2.0-dev, opam builds lablgtk builds with
   # sourceview bindings missing
-  sudo apt-get install -y --no-install-recommends wget ca-certificates make m4 \
-       ocaml-native-compilers gcc camlp4 patch unzip libgtk2.0-dev valac gtksourceview2.0-dev \
+  sudo apt-get install -y --no-install-recommends \
+       git wget ca-certificates make m4 \
+       ocaml-native-compilers gcc camlp4 patch unzip libgtk2.0-dev \
+       valac gtksourceview2.0-dev \
        liblablgtk2-ocaml-dev liblablgtksourceview2-ocaml-dev
   
 elif [ $(uname -s) = "Darwin" ]; then
