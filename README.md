@@ -5,7 +5,7 @@ VeriFast
 
 By Bart Jacobs\*, Jan Smans\*, and Frank Piessens\*, with contributions by Pieter Agten\*, Cedric Cuypers\*, Lieven Desmet\*, Jan Tobias Muehlberg\*, Willem Penninckx\*, Jörg Pfähler\*\*\*, Pieter Philippaerts\*, Amin Timany\*, Thomas Van Eyck\*, Gijs Vanspauwen\*,  Frédéric Vogels\*, and Arseniy Zaostrovnykh\*\*
 
-\* iMinds-DistriNet research group, Department of Computer Science, KU Leuven - University of Leuven, Belgium  
+\* imec-DistriNet research group, Department of Computer Science, KU Leuven - University of Leuven, Belgium  
 \*\* Institute of Computer and Communication Sciences, École Polytechnique Fédérale de Lausanne  
 \*\*\* Institute for Software & Systems Engineering, University of Augsburg
 
