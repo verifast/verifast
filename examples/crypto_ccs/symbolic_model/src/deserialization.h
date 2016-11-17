@@ -11,20 +11,21 @@ lemma void deserialize_item(list<char> cs, predicate(item) pub);
   requires proof_obligations(pub) &*&
            length(cs) <= INT_MAX &*&
            true == well_formed(cs, nat_length(cs)) &*&
-           [_]public_generated(polarssl_pub(pub))(cs);
+           [_]public_generated(polarssl_pub(pub))(cs_to_ccs(cs));
   ensures  proof_obligations(pub) &*&
-           [_]item_constraints(?i, cs, pub) &*& [_]pub(i);
+           [_]item_constraints(?i, cs_to_ccs(cs), pub) &*& [_]pub(i);
 
 @*/
 
 void parse_item(char* buffer, int size);
   /*@ requires [?f1]world(?pub, ?key_clsfy) &*&
-               [?f2]crypto_chars(?kind, buffer, size, ?cs) &*&
+               [?f2]crypto_chars(?kind, buffer, size, ?ccs) &*&
                size > TAG_LENGTH &*&
                kind == normal ? true :
-                 [_]item_constraints(?i, cs, pub); @*/
+                 [_]item_constraints(?i, ccs, pub); @*/
   /*@ ensures  [f1]world(pub, key_clsfy) &*&
-               [f2]crypto_chars(kind, buffer, size, cs) &*&
+               [f2]crypto_chars(kind, buffer, size, ccs) &*&
+               exists(?cs) &*& ccs == cs_to_ccs(cs) &*&
                true == well_formed(cs, nat_length(cs)); @*/
 
 struct item* deserialize(char* buffer, int size);

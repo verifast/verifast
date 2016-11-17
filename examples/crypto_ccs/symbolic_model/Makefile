@@ -10,8 +10,10 @@ MODULES = \
 	general \
 	debug \
 	item \
-	item_constraints \
+	item_tags \
+	well_formed \
 
+# 	item_constraints \
 # 	serialization \
 # 	deserialization \
 # 	invariants \

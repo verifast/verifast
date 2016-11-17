@@ -17,9 +17,9 @@
   }
 
 #define SERIALIZE_DEFAULT(ITEM, TAG, CG, PAY) \
-  open [_]item_constraints(ITEM, cs, pub); \
-  assert [_]ic_parts(ITEM)(?tag_cs, ?cont_cs); \
-  assert [_]ic_cg(ITEM)(cont_cs, ?cg) &*& col || cont_cs == chars_for_cg(cg); \
+  open [_]item_constraints(ITEM, ccs, pub); \
+  assert [_]ic_parts(ITEM)(?tag_cs, ?cont_ccs); \
+  assert [_]ic_cg(ITEM)(cont_ccs, ?cg) &*& col || cont_ccs == ccs_for_cg(cg); \
   assert cg == CG; \
   if (PAY) {SERIALIZE_PAY} \
   if (!col) \
@@ -27,47 +27,49 @@
     close polarssl_pub(pub)(cg); \
     leak polarssl_pub(pub)(cg); \
     public_generated(polarssl_pub(pub), cg); \
-    public_generated_join(polarssl_pub(pub), full_tag(TAG), cont_cs); \
+    public_generated_join(polarssl_pub(pub), full_ctag(c_to_cc(TAG)), cont_ccs); \
   }
 
 lemma void serialize_data(list<char> data)
   requires proof_obligations(?pub) &*&
-           [_]item_constraints(?datai, ?cs, pub) &*&
+           [_]item_constraints(?datai, ?ccs, pub) &*&
            datai == data_item(data);
   ensures  proof_obligations(pub) &*&
-           [_]public_generated(polarssl_pub(pub))(cs);
+           [_]public_generated(polarssl_pub(pub))(ccs);
 {
-  open [_]item_constraints(datai, cs, pub);
+  open [_]item_constraints(datai, ccs, pub);
 }
 
-lemma void serialize_pair(list<char> cs, list<char> f_cs, list<char> s_cs)
+lemma void serialize_pair(list<crypto_char> ccs, list<crypto_char> lf_ccs,
+                          list<crypto_char> f_ccs, list<crypto_char> s_ccs)
   requires proof_obligations(?pub) &*&
-           [_]public_generated(polarssl_pub(pub))(full_tag(TAG_PAIR)) &*&
-           [_]public_generated(polarssl_pub(pub))(chars_of_unbounded_int(length(f_cs))) &*&
-           [_]public_generated(polarssl_pub(pub))(f_cs) &*&
-           [_]public_generated(polarssl_pub(pub))(s_cs) &*&
-           cs == append(full_tag(TAG_PAIR),
-                        append(chars_of_unbounded_int(length(f_cs)),
-                               append(f_cs, s_cs)));
+           [_]public_generated(polarssl_pub(pub))(full_ctag(c_to_cc(TAG_PAIR))) &*&
+           [_]public_generated(polarssl_pub(pub))(lf_ccs) &*&
+             lf_ccs == cs_to_ccs(chars_of_unbounded_int(length(f_ccs))) &*&
+           [_]public_generated(polarssl_pub(pub))(f_ccs) &*&
+           [_]public_generated(polarssl_pub(pub))(s_ccs) &*&
+           ccs == append(full_ctag(c_to_cc(TAG_PAIR)),
+                         append(lf_ccs, append(f_ccs, s_ccs)));
   ensures  proof_obligations(pub) &*&
-           [_]public_generated(polarssl_pub(pub))(cs);
+           [_]public_generated(polarssl_pub(pub))(ccs);
 {
-  int length_f = length(f_cs);
-  list<char> length_f_cs = chars_of_unbounded_int(length(f_cs));
-  public_generated_join(polarssl_pub(pub), full_tag(TAG_PAIR), length_f_cs);
-  public_generated_join(polarssl_pub(pub), append(full_tag(TAG_PAIR), length_f_cs), f_cs);
-  public_generated_join(polarssl_pub(pub), append(append(full_tag(TAG_PAIR), length_f_cs), f_cs), s_cs);
-  append_assoc(append(full_tag(TAG_PAIR), length_f_cs), f_cs, s_cs);
-  append_assoc(full_tag(TAG_PAIR), append(length_f_cs, f_cs), s_cs);
-  append_assoc(full_tag(TAG_PAIR), length_f_cs, append(f_cs, s_cs));
+  int length_f = length(f_ccs);
+  public_generated_join(polarssl_pub(pub), full_ctag(c_to_cc(TAG_PAIR)), lf_ccs);
+  public_generated_join(polarssl_pub(pub), 
+    append(full_ctag(c_to_cc(TAG_PAIR)), lf_ccs), f_ccs);
+  public_generated_join(polarssl_pub(pub), 
+    append(append(full_ctag(c_to_cc(TAG_PAIR)), lf_ccs), f_ccs), s_ccs);
+  append_assoc(append(full_ctag(c_to_cc(TAG_PAIR)), lf_ccs), f_ccs, s_ccs);
+  append_assoc(full_ctag(c_to_cc(TAG_PAIR)), append(lf_ccs, f_ccs), s_ccs);
+  append_assoc(full_ctag(c_to_cc(TAG_PAIR)), lf_ccs, append(f_ccs, s_ccs));
 }
 
 lemma void serialize_nonce(int p0, int c0, char inc0)
   requires proof_obligations(?pub) &*&
-           [_]item_constraints(?nonce, ?cs, pub) &*&
+           [_]item_constraints(?nonce, ?ccs, pub) &*&
            nonce == nonce_item(p0, c0, inc0) &*& [_]pub(nonce);
   ensures  proof_obligations(pub) &*&
-           [_]public_generated(polarssl_pub(pub))(cs);
+           [_]public_generated(polarssl_pub(pub))(ccs);
 {
   item nonce0 = nonce_item(p0, c0, 0);
   open proof_obligations(pub);
@@ -77,104 +79,104 @@ lemma void serialize_nonce(int p0, int c0, char inc0)
 
   assert [_]pub(nonce);
   assert [_]pub(nonce0);
-  open [_]item_constraints(nonce, cs, pub);
-  assert [_]ic_parts(nonce)(?cs_tag, ?cs_cont);
+  open [_]item_constraints(nonce, ccs, pub);
+  assert [_]ic_parts(nonce)(?ccs_tag, ?ccs_cont);
   cryptogram pnonce = cg_nonce(p0, c0);
   cg_constraints(pnonce);
   close polarssl_pub(pub)(pnonce);
   leak polarssl_pub(pub)(pnonce);
-  list<char> cs_cg = chars_for_cg(pnonce);
+  list<crypto_char> ccs_cg = ccs_for_cg(pnonce);
   if (!col)
   {
     public_generated(polarssl_pub(pub), pnonce);
-    public_generated_join(polarssl_pub(pub), cons(inc0, nil), cs_cg);
-    public_generated_join(polarssl_pub(pub), cs_tag, cons(inc0, cs_cg));
+    public_generated_join(polarssl_pub(pub), cons(c_to_cc(inc0), nil), ccs_cg);
+    public_generated_join(polarssl_pub(pub), ccs_tag, cons(c_to_cc(inc0), ccs_cg));
   }
 }
 
 lemma void serialize_hash(option<item> pay0)
   requires proof_obligations(?pub) &*&
-           [_]item_constraints(?hash, ?cs, pub) &*&
+           [_]item_constraints(?hash, ?ccs, pub) &*&
            hash == hash_item(pay0) &*& [_]pub(hash);
   ensures  proof_obligations(pub) &*&
-           [_]public_generated(polarssl_pub(pub))(cs);
+           [_]public_generated(polarssl_pub(pub))(ccs);
 {
   SERIALIZE_DEFAULT(hash, TAG_HASH, cg_hash(?cs_pay), true)
 }
 
 lemma void serialize_symmetric_key(int p0, int c0)
   requires proof_obligations(?pub) &*&
-           [_]item_constraints(?key, ?cs, pub) &*&
+           [_]item_constraints(?key, ?ccs, pub) &*&
            key == symmetric_key_item(p0, c0) &*& [_]pub(key);
   ensures  proof_obligations(pub) &*&
-           [_]public_generated(polarssl_pub(pub))(cs);
+           [_]public_generated(polarssl_pub(pub))(ccs);
 {
   SERIALIZE_DEFAULT(key, TAG_SYMMETRIC_KEY, cg_symmetric_key(p0, c0), false)
 }
 
 lemma void serialize_public_key(int p0, int c0)
   requires proof_obligations(?pub) &*&
-           [_]item_constraints(?key, ?cs, pub) &*&
+           [_]item_constraints(?key, ?ccs, pub) &*&
            key == public_key_item(p0, c0) &*& [_]pub(key);
   ensures  proof_obligations(pub) &*&
-           [_]public_generated(polarssl_pub(pub))(cs);
+           [_]public_generated(polarssl_pub(pub))(ccs);
 {
   SERIALIZE_DEFAULT(key, TAG_PUBLIC_KEY, cg_public_key(p0, c0), false)
 }
 
 lemma void serialize_private_key(int p0, int c0)
   requires proof_obligations(?pub) &*&
-           [_]item_constraints(?key, ?cs, pub) &*&
+           [_]item_constraints(?key, ?ccs, pub) &*&
            key == private_key_item(p0, c0) &*& [_]pub(key);
   ensures  proof_obligations(pub) &*&
-           [_]public_generated(polarssl_pub(pub))(cs);
+           [_]public_generated(polarssl_pub(pub))(ccs);
 {
   SERIALIZE_DEFAULT(key, TAG_PRIVATE_KEY, cg_private_key(p0, c0), false)
 }
 
 lemma void serialize_hmac(int p0, int c0, option<item> pay0)
   requires proof_obligations(?pub) &*&
-           [_]item_constraints(?hmac, ?cs, pub) &*&
+           [_]item_constraints(?hmac, ?ccs, pub) &*&
            hmac == hmac_item(p0, c0, pay0) &*& [_]pub(hmac);
   ensures  proof_obligations(pub) &*&
-           [_]public_generated(polarssl_pub(pub))(cs);
+           [_]public_generated(polarssl_pub(pub))(ccs);
 {
-  SERIALIZE_DEFAULT(hmac, TAG_HMAC, cg_hmac(p0, c0, ?cs_pay), true)
+  SERIALIZE_DEFAULT(hmac, TAG_HMAC, cg_hmac(p0, c0, ?ccs_pay), true)
 }
 
 lemma void serialize_symmetric_encrypted(int p0, int c0,
-                                          option<item> pay0, list<char> ent0)
+                                          option<item> pay0, list<crypto_char> ent0)
   requires proof_obligations(?pub) &*&
-           [_]item_constraints(?enc, ?cs, pub) &*&
+           [_]item_constraints(?enc, ?ccs, pub) &*&
            enc == symmetric_encrypted_item(p0, c0, pay0, ent0) &*& [_]pub(enc);
   ensures  proof_obligations(pub) &*&
-           [_]public_generated(polarssl_pub(pub))(cs);
+           [_]public_generated(polarssl_pub(pub))(ccs);
 {
-  open [_]item_constraints(enc, cs, pub);
-  assert [_]ic_sym_enc(enc)(?iv0, ?cs_cg0);
-  assert [_]ic_parts(enc)(?tag_cs, ?cont_cs);
-  list<char> iv0_cs = take(GCM_IV_SIZE, ent0);
+  OPEN_ITEM_CONSTRAINTS(enc, ccs, pub)
+  assert [_]ic_sym_enc(enc)(?iv0, ?ccs_cg0);
+  assert [_]ic_parts(enc)(?tag_ccs, ?cont_ccs);
+  list<crypto_char> iv0_ccs = take(GCM_IV_SIZE, ent0);
   assert iv0 == drop(GCM_IV_SIZE, ent0);
-  assert ent0 == append(iv0_cs, iv0);
-  list<char> cs_cg = drop(GCM_IV_SIZE, cont_cs);
-  assert cont_cs == append(iv0_cs, cs_cg);
-  append_assoc(tag_cs, iv0_cs, cs_cg);
+  assert ent0 == append(iv0_ccs, iv0);
+  list<crypto_char> ccs_cg = drop(GCM_IV_SIZE, cont_ccs);
+  assert cont_ccs == append(iv0_ccs, ccs_cg);
+  append_assoc(tag_ccs, iv0_ccs, ccs_cg);
   if (!col)
   {
     cryptogram penc;
     switch(pay0)
     {
       case some(pay1):
-        assert [_]well_formed_item_chars(enc)(?cs_pay0);
-        assert [_]item_constraints(pay1, cs_pay0, pub);
-        penc = cg_auth_encrypted(p0, c0, cs_pay0, iv0);
+        assert [_]well_formed_item_ccs(enc)(?ccs_pay0);
+        assert [_]item_constraints(pay1, ccs_pay0, pub);
+        penc = cg_auth_encrypted(p0, c0, ccs_pay0, iv0);
         close exists(ent0);
         leak exists(ent0);
         close exists(false);
         leak exists(false);
       case none:
-        assert [_]ill_formed_item_chars(enc)(?cs_pay0);
-        penc = cg_auth_encrypted(p0, c0, cs_pay0, iv0);
+        assert [_]ill_formed_item_ccs(enc)(?ccs_pay0);
+        penc = cg_auth_encrypted(p0, c0, ccs_pay0, iv0);
         cg_constraints(penc);
         close exists(true);
         leak exists(true);
@@ -183,49 +185,49 @@ lemma void serialize_symmetric_encrypted(int p0, int c0,
     leak polarssl_pub(pub)(penc);
     public_generated(polarssl_pub(pub), penc);
     public_generated_join(polarssl_pub(pub), 
-                          full_tag(TAG_SYMMETRIC_ENC), iv0_cs);
+                          full_ctag(c_to_cc(TAG_SYMMETRIC_ENC)), iv0_ccs);
     public_generated_join(polarssl_pub(pub),
-                          append(full_tag(TAG_SYMMETRIC_ENC), iv0_cs), cs_cg);
+                          append(full_ctag(c_to_cc(TAG_SYMMETRIC_ENC)), iv0_ccs), ccs_cg);
   }
 }
 
 lemma void serialize_asymmetric_encrypted(int p0, int c0,
-                                          option<item> pay0, list<char> ent0)
+                                          option<item> pay0, list<crypto_char> ent0)
   requires proof_obligations(?pub) &*&
-           [_]item_constraints(?enc, ?cs, pub) &*&
+           [_]item_constraints(?enc, ?ccs, pub) &*&
            enc == asymmetric_encrypted_item(p0, c0, pay0, ent0) &*& [_]pub(enc);
   ensures  proof_obligations(pub) &*&
-           [_]public_generated(polarssl_pub(pub))(cs);
+           [_]public_generated(polarssl_pub(pub))(ccs);
 {
   SERIALIZE_DEFAULT(enc, TAG_ASYMMETRIC_ENC, cg_asym_encrypted(p0, c0, ?cs_pay, ent0), true)
 }
 
 lemma void serialize_asymmetric_signature(int p0, int c0,
-                                          option<item> pay0, list<char> ent0)
+                                          option<item> pay0, list<crypto_char> ent0)
   requires proof_obligations(?pub) &*&
-           [_]item_constraints(?sig, ?cs, pub) &*&
+           [_]item_constraints(?sig, ?ccs, pub) &*&
            sig == asymmetric_signature_item(p0, c0, pay0, ent0) &*& [_]pub(sig);
   ensures  proof_obligations(pub) &*&
-           [_]public_generated(polarssl_pub(pub))(cs);
+           [_]public_generated(polarssl_pub(pub))(ccs);
 {
   SERIALIZE_DEFAULT(sig, TAG_ASYMMETRIC_SIG, cg_asym_signature(p0, c0, ?cs_pay, ent0), true)
 }
 
 lemma void serialize_item(item i)
   requires proof_obligations(?pub) &*&
-           [_]item_constraints(i, ?cs, pub) &*&
+           [_]item_constraints(i, ?ccs, pub) &*&
            [_]pub(i);
   ensures  proof_obligations(pub) &*&
-           [_]public_generated(polarssl_pub(pub))(cs);
+           [_]public_generated(polarssl_pub(pub))(ccs);
 {
   switch (i)
   {
     case data_item(d0):
       serialize_data(d0);
     case pair_item(first0, second0):
-      open [_]item_constraints(i, cs, pub);
-      assert [_]item_constraints(first0, ?f_cs, pub);
-      assert [_]item_constraints(second0, ?s_cs, pub);
+      OPEN_ITEM_CONSTRAINTS(i, ccs, pub);
+      assert [_]item_constraints(first0, ?f_ccs, pub);
+      assert [_]item_constraints(second0, ?s_ccs, pub);
       open proof_obligations(pub);
       assert is_public_pair_decompose(?proof, pub);
       proof(i);
@@ -234,7 +236,7 @@ lemma void serialize_item(item i)
       assert [_]pub(second0);
       serialize_item(first0);
       serialize_item(second0);
-      serialize_pair(cs, f_cs, s_cs);
+      serialize_pair(ccs, cs_to_ccs(chars_of_int(length(f_ccs))), f_ccs, s_ccs);
     case nonce_item(p0, c0, inc0):
       serialize_nonce(p0, c0, inc0);
     case hash_item(pay0):
@@ -299,14 +301,14 @@ int serialize_to_public_message(char** dest, struct item* item)
                [f1]item(item, i, pub) &*& pointer(dest, ?d) &*&
                malloc_block(d, result) &*& result > 1 &*&
                chars(d, result, ?cs) &*&
-               [_]item_constraints(i, cs, pub); @*/
+               [_]item_constraints(i, cs_to_ccs(cs), pub); @*/
 {
   int size;
   char* temp;
   //@ open [f1]item(item, i, pub);
   //@ assert [f1]item->content |-> ?cont;
   size = item->size;
-  //@ assert [f1]crypto_chars(secret, cont, size, ?cs);
+  //@ assert [f1]crypto_chars(secret, cont, size, ?ccs);
 
   temp = malloc_wrapper(size);
   memcpy(temp, item->content, (unsigned int) size);
@@ -315,7 +317,7 @@ int serialize_to_public_message(char** dest, struct item* item)
   //@ open [f0]world(pub, key_clsfy);
   //@ close [f0]world(pub, key_clsfy);
   //@ retreive_proof_obligations();
-  //@ assert [_]item_constraints(i, cs, pub);
+  //@ assert [_]item_constraints(i, ccs, pub);
   //@ serialize_item(i);
   //@ public_crypto_chars(temp, size);
   //@ leak proof_obligations(pub);

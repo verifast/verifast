@@ -24,6 +24,6 @@ int serialize_to_public_message(char** dest, struct item* item);
                [f1]item(item, i, pub) &*& pointer(dest, ?d) &*& 
                malloc_block(d, result) &*& result > 1 &*&
                chars(d, result, ?cs) &*&
-               [_]item_constraints(i, cs, pub); @*/
+               [_]item_constraints(i, cs_to_ccs(cs), pub); @*/
 
 #endif

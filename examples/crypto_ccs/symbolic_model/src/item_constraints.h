@@ -1,217 +1,11 @@
 #ifndef ITEM_CONSTRAINTS_H
 #define ITEM_CONSTRAINTS_H
 
-#include "item.h"
+#include "well_formed.h"
+// #include "item.h"
 #include "invariants.h"
-//@ #include "quantifiers.gh"
-
-#define TAG_DATA            'a'
-#define TAG_PAIR            'b'
-#define TAG_NONCE           'c'
-#define TAG_HASH            'd'
-#define TAG_SYMMETRIC_KEY   'e'
-#define TAG_PUBLIC_KEY      'f'
-#define TAG_PRIVATE_KEY     'g'
-#define TAG_HMAC            'h'
-#define TAG_SYMMETRIC_ENC   'i'
-#define TAG_ASYMMETRIC_ENC  'j'
-#define TAG_ASYMMETRIC_SIG  'k'
-
-# define TAG_LENGTH MINIMAL_STRING_SIZE
 
 /*@
-
-//Each item has the following serialized form:
-//  ______________________
-// | TAG | ACTUAL CONTENT |
-// |_____|________________|
-//
-//  TAG
-//    *unique for each kind of item
-//    *repetition of same character for simpler proofs
-//    *size(TAG) == TAG_LENGTH to easily support decryption
-//  ACTUAL CONTENT
-//    *depends on the kind of item
-
-// e.g. full_tag('a') == cons('a', cons('a', cons('a', cons('a', ...))))
-fixpoint list<char> full_tag(char tag)
-{
-  return repeat(tag, nat_of_int(TAG_LENGTH));
-}
-fixpoint list<crypto_char> full_ctag(crypto_char ctag)
-{
-  return repeat(ctag, nat_of_int(TAG_LENGTH));
-}
-
-lemma void cs_to_ccs_repeat(char c, nat n);
-  requires n != zero;
-  ensures  repeat(c_to_cc(c), n) == cs_to_ccs(repeat(c, n)) &*&
-           head(repeat(c_to_cc(c), n)) == c_to_cc(head(repeat(c, n)));
-
-lemma void cs_to_ccs_full_tag(char c);
-  requires true;
-  ensures  full_ctag(c_to_cc(c)) == cs_to_ccs(full_tag(c)) &*&
-           head(full_ctag(c_to_cc(c))) == c_to_cc(c) &*&
-           head(full_tag(c)) == c;
-
-// e.g. full_tag_for_item(data_item(...)) == cons('a', cons('a', cons('a', ...)))
-fixpoint list<char> full_tag_for_item(item i)
-{
-  return full_tag(tag_for_item(i));
-}
-fixpoint list<crypto_char> full_ctag_for_item(item i)
-{
-  return full_ctag(c_to_cc(tag_for_item(i)));
-}
-
-lemma void cs_to_ccs_full_tag_for_item(item i);
-  requires true;
-  ensures  full_ctag_for_item(i) == cs_to_ccs(full_tag_for_item(i)) &*&
-           head(full_ctag_for_item(i)) == c_to_cc(tag_for_item(i)) &*&
-           head(full_tag_for_item(i)) == tag_for_item(i);
-
-#define WELL_FORMED(CS_TAG, CS_CONT, TAG) \
-  { \
-    head_append(CS_TAG, CS_CONT); \
-    take_append(TAG_LENGTH, CS_TAG, CS_CONT); \
-    drop_append(TAG_LENGTH, CS_TAG, CS_CONT); \
-    assert length(append(CS_TAG, CS_CONT)) > TAG_LENGTH; \
-    assert head(append(CS_TAG, CS_CONT)) == TAG; \
-    assert true == valid_tag(head(append(CS_TAG, CS_CONT))); \
-    assert take(TAG_LENGTH, append(CS_TAG, CS_CONT)) == \
-           full_tag(head(append(CS_TAG, CS_CONT))); \
-    length_equals_nat_length(append(CS_TAG, CS_CONT)); \
-    switch(nat_length(append(CS_TAG, CS_CONT))) {case succ(s0): case zero:} \
-  }
-
-fixpoint bool well_formed(list<char> cs, nat upper_bound)
-{
-  switch(upper_bound)
-  {
-    case succ(n):
-      return
-        //correct total length
-        length(cs) > TAG_LENGTH &&
-        //correct tag
-        valid_tag(head(cs)) && take(TAG_LENGTH, cs) == full_tag(head(cs)) &&
-        //correct data_item
-        (
-          head(cs) != TAG_DATA ||
-          true
-        ) &&
-        //correct pair_item
-        (
-          head(cs) != TAG_PAIR ||
-          (
-            length(cs) > TAG_LENGTH + 1 &&
-            (
-              INT_MIN <= head(drop(TAG_LENGTH, cs)) &&
-              INT_MAX >= head(drop(TAG_LENGTH, cs)) ?
-              (
-                //size of first part within C bounds
-                int_of_chars(take(sizeof(int), drop(TAG_LENGTH, cs))) > 0 &&
-                length(cs) > TAG_LENGTH + sizeof(int) +
-                             int_of_chars(take(sizeof(int), drop(TAG_LENGTH, cs))) &&
-                well_formed(take(int_of_chars(take(sizeof(int), drop(TAG_LENGTH, cs))),
-                                 drop(TAG_LENGTH + sizeof(int), cs)), n) &&
-                well_formed(drop(int_of_chars(take(sizeof(int), drop(TAG_LENGTH, cs))),
-                                 drop(TAG_LENGTH + sizeof(int), cs)), n)
-              )
-              :
-              (
-                //size of first part NOT within C bounds
-                //only 1 char reserved for size of first part
-                head(drop(TAG_LENGTH, cs)) > 0 &&
-                length(cs) > TAG_LENGTH + 1 + head(drop(TAG_LENGTH, cs)) &&
-                well_formed(take(head(drop(TAG_LENGTH, cs)),
-                                 drop(TAG_LENGTH + 1, cs)), n) &&
-                well_formed(drop(head(drop(TAG_LENGTH, cs)),
-                                 drop(TAG_LENGTH + 1, cs)), n)
-              )
-            )
-          )
-        ) &&
-        //correct nonce_item
-        (
-          head(cs) != TAG_NONCE ||
-          length(cs) == TAG_LENGTH + 1 + NONCE_SIZE
-        ) &&
-        //correct hash_item
-        (
-          head(cs) != TAG_HASH ||
-          length(cs) == TAG_LENGTH + HASH_SIZE
-        ) &&
-        //correct symmetric_key_item
-        (
-          head(cs) != TAG_SYMMETRIC_KEY ||
-          length(cs) == TAG_LENGTH + GCM_KEY_SIZE
-        ) &&
-        //correct public_key_item
-        (
-          head(cs) != TAG_PUBLIC_KEY ||
-          length(cs) == TAG_LENGTH + RSA_SERIALIZED_KEY_SIZE
-        ) &&
-        //correct private_key_item
-        (
-          head(cs) != TAG_PRIVATE_KEY ||
-          length(cs) == TAG_LENGTH + RSA_SERIALIZED_KEY_SIZE
-        ) &&
-        //correct hmac_item
-        (
-          head(cs) != TAG_HMAC ||
-          length(cs) == TAG_LENGTH + HMAC_SIZE
-        ) &&
-        //correct symmetric_encrypted_item
-        (
-          head(cs) != TAG_SYMMETRIC_ENC ||
-          length(cs) >= TAG_LENGTH + MINIMAL_STRING_SIZE + GCM_IV_SIZE
-        ) &&
-        //correct asymmetric_encrypted_item
-        (
-          head(cs) != TAG_ASYMMETRIC_ENC ||
-          (length(cs) <= TAG_LENGTH + RSA_SERIALIZED_KEY_SIZE &&
-           length(cs) >= TAG_LENGTH + MINIMAL_STRING_SIZE)
-        ) &&
-        //correct asymmetric_signed_item
-        (
-          head(cs) != TAG_ASYMMETRIC_SIG ||
-          (length(cs) <= TAG_LENGTH + RSA_SERIALIZED_KEY_SIZE &&
-           length(cs) >= TAG_LENGTH + MINIMAL_STRING_SIZE)
-        );
-    case zero:
-      return false;
-  }
-}
-
-lemma void well_formed_upper_bound(list<char> cs, nat upper_bound1,
-                                                  nat upper_bound2);
-  requires true == well_formed(cs, upper_bound1) &*&
-           length(cs) <= int_of_nat(upper_bound2);
-  ensures  true == well_formed(cs, upper_bound2);
-
-lemma void well_formed_valid_tag(list<char> cs, nat len);
-  requires true == well_formed(cs, len);
-  ensures  valid_tag(head(cs)) &&
-           take(TAG_LENGTH, cs) == full_tag(head(cs));
-
-#define FORALL_CS  fixpoint(fixpoint(list<char>, bool), bool) forallcs
-#define FORALLP_CS [_]is_forall_t<list<char> >(?forallcs)
-fixpoint bool well_formed_ccs(list<crypto_char> ccs, list<char> cs)
-{
-  return ccs == cs_to_ccs(cs) && well_formed(cs, nat_length(cs));
-}
-fixpoint bool exists_well_formed(FORALL_CS, list<crypto_char> ccs)
-{
-  return exists_t<list<char> >(forallcs, (well_formed_ccs)(ccs));
-}
-
-predicate_ctor well_formed_item_ccs(item i)(list<crypto_char> ccs) =
-  FORALLP_CS &*& true == exists_well_formed(forallcs, ccs)
-;
-
-predicate_ctor ill_formed_item_ccs(item i)(list<crypto_char> ccs) =
-  FORALLP_CS &*& false == exists_well_formed(forallcs, ccs)
-;
 
 predicate_ctor ic_parts(item i)(list<crypto_char> ccs_tag,
                                 list<crypto_char> ccs_cont) = true;
@@ -253,25 +47,25 @@ predicate_ctor ic_info(item i)(char tag, list<char> cs_tag,
   if (true) \
   { \
     open [_]item_constraints(I, CCS, PUB); \
-    assert [_]ic_parts(I)(?ccs_tag, ?ccs_cont); \
-    take_append(TAG_LENGTH, ccs_tag, ccs_cont); \
-    drop_append(TAG_LENGTH, ccs_tag, ccs_cont); \
-    head_append(ccs_tag, ccs_cont); \
+    assert [_]ic_parts(I)(?ccs_tag00, ?ccs_cont00); \
+    take_append(TAG_LENGTH, ccs_tag00, ccs_cont00); \
+    drop_append(TAG_LENGTH, ccs_tag00, ccs_cont00); \
+    head_append(ccs_tag00, ccs_cont00); \
     cs_to_ccs_full_tag_for_item(I); \
     assert FORALLP_CS; \
-    list<char> cs = not_forall_t(forallcs, (notf)((well_formed_ccs)(CCS))); \
-    cs_to_ccs_length(cs); \
-    switch(cs){case cons(c00, cs00): case nil:} \
-    c_to_cc_inj(head(cs), tag_for_item(I)); \
-    list<char> cs_tag = take(TAG_LENGTH, cs); \
-    list<char> cs_cont = drop(TAG_LENGTH, cs); \
-    cs_to_ccs_take(TAG_LENGTH, cs); \
-    cs_to_ccs_drop(TAG_LENGTH, cs); \
-    assert ccs_tag == cs_to_ccs(cs_tag); \
-    assert ccs_cont == cs_to_ccs(cs_cont); \
-    cs_to_ccs_split(cs_tag, cs_cont); \
-    close ic_info(I)(tag_for_item(I), cs_tag, cs_cont); \
-    leak ic_info(I)(tag_for_item(I), cs_tag, cs_cont); \
+    list<char> cs00 = not_forall_t(forallcs, (notf)((well_formed_ccs)(CCS))); \
+    cs_to_ccs_length(cs00); \
+    switch(cs00){case cons(c000, cs000): case nil:} \
+    c_to_cc_inj(head(cs00), tag_for_item(I)); \
+    list<char> cs_tag00 = take(TAG_LENGTH, cs00); \
+    list<char> cs_cont00 = drop(TAG_LENGTH, cs00); \
+    cs_to_ccs_take(TAG_LENGTH, cs00); \
+    cs_to_ccs_drop(TAG_LENGTH, cs00); \
+    assert ccs_tag00 == cs_to_ccs(cs_tag00); \
+    assert ccs_cont00 == cs_to_ccs(cs_cont00); \
+    cs_to_ccs_split(cs_tag00, cs_cont00); \
+    close ic_info(I)(tag_for_item(I), cs_tag00, cs_cont00); \
+    leak ic_info(I)(tag_for_item(I), cs_tag00, cs_cont00); \
   }
 
 predicate item_constraints(item i, list<crypto_char> ccs, predicate(item) pub) =
@@ -360,41 +154,5 @@ char item_tag(char* content, int size);
                result == tag_for_item(i) &*&
                head(ccs) == c_to_cc(result) &*&
                take(TAG_LENGTH, ccs) == full_ctag(head(ccs)); @*/
-
-void write_tag(char* buffer, char tag);
-  //@ requires chars(buffer, TAG_LENGTH, _);
-  /*@ ensures  chars(buffer, TAG_LENGTH, ?cs) &*&
-               head(cs) == tag &*& cs == full_tag(tag); @*/
-
-void check_tag(char* buffer, char tag);
-  //@ requires [?f]chars(buffer, TAG_LENGTH, ?cs);
-  /*@ ensures  [f]chars(buffer, TAG_LENGTH, cs) &*&
-               head(cs) == tag &*& cs == full_tag(tag); @*/
-
-/*@
-predicate check_tag2_args(bool sym, bool garbage, int p_key,
-                          int c_key, list<crypto_char> ccs_rest) = true;
-@*/
-
-void check_tag2(char* buffer, char tag);
-  /*@ requires [_]public_invar(?pub) &*&
-               [_]decryption_key_classifier(?key_classifier) &*&
-               network_permission(?p) &*&
-               [?f2]crypto_chars(normal, buffer, TAG_LENGTH, ?ccs) &*&
-               check_tag2_args(?sym, ?garbage, ?p_key, ?c_key, ?rest_ccs) &*&
-               garbage ?
-                 decryption_garbage(sym, p, ?s, p_key, c_key,
-                                    append(ccs, rest_ccs)) &*&
-                 s == known_value(0, full_ctag(c_to_cc(tag)))
-               :
-                 true; @*/
-  /*@ ensures  network_permission(p) &*&
-               [f2]crypto_chars(normal, buffer, TAG_LENGTH, ccs) &*&
-               head(ccs) == c_to_cc(tag) &*& ccs == full_ctag(head(ccs)) &*&
-               garbage ?
-                 decryption_permission(p) &*&
-                 key_classifier(p_key, c_key, sym) ? true : col
-               :
-                 true; @*/
 
 #endif
