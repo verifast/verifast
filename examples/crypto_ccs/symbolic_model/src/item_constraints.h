@@ -3,6 +3,7 @@
 
 #include "item.h"
 #include "invariants.h"
+//@ #include "quantifiers.gh"
 
 #define TAG_DATA            'a'
 #define TAG_PAIR            'b'
@@ -32,11 +33,11 @@
 //  ACTUAL CONTENT
 //    *depends on the kind of item
 
+// e.g. full_tag('a') == cons('a', cons('a', cons('a', cons('a', ...))))
 fixpoint list<char> full_tag(char tag)
 {
   return repeat(tag, nat_of_int(TAG_LENGTH));
 }
-
 fixpoint list<crypto_char> full_ctag(crypto_char ctag)
 {
   return repeat(ctag, nat_of_int(TAG_LENGTH));
@@ -53,11 +54,11 @@ lemma void cs_to_ccs_full_tag(char c);
            head(full_ctag(c_to_cc(c))) == c_to_cc(c) &*&
            head(full_tag(c)) == c;
 
+// e.g. full_tag_for_item(data_item(...)) == cons('a', cons('a', cons('a', ...)))
 fixpoint list<char> full_tag_for_item(item i)
 {
   return full_tag(tag_for_item(i));
 }
-
 fixpoint list<crypto_char> full_ctag_for_item(item i)
 {
   return full_ctag(c_to_cc(tag_for_item(i)));
@@ -69,136 +70,147 @@ lemma void cs_to_ccs_full_tag_for_item(item i);
            head(full_ctag_for_item(i)) == c_to_cc(tag_for_item(i)) &*&
            head(full_tag_for_item(i)) == tag_for_item(i);
 
-fixpoint bool well_formed(list<crypto_char> ccs, nat upper_bound)
+#define WELL_FORMED(CS_TAG, CS_CONT, TAG) \
+  { \
+    head_append(CS_TAG, CS_CONT); \
+    take_append(TAG_LENGTH, CS_TAG, CS_CONT); \
+    drop_append(TAG_LENGTH, CS_TAG, CS_CONT); \
+    assert length(append(CS_TAG, CS_CONT)) > TAG_LENGTH; \
+    assert head(append(CS_TAG, CS_CONT)) == TAG; \
+    assert true == valid_tag(head(append(CS_TAG, CS_CONT))); \
+    assert take(TAG_LENGTH, append(CS_TAG, CS_CONT)) == \
+           full_tag(head(append(CS_TAG, CS_CONT))); \
+    length_equals_nat_length(append(CS_TAG, CS_CONT)); \
+    switch(nat_length(append(CS_TAG, CS_CONT))) {case succ(s0): case zero:} \
+  }
+
+fixpoint bool well_formed(list<char> cs, nat upper_bound)
 {
   switch(upper_bound)
   {
     case succ(n):
       return
         //correct total length
-        length(ccs) > TAG_LENGTH &&
+        length(cs) > TAG_LENGTH &&
         //correct tag
-        take(TAG_LENGTH, ccs) == full_ctag(head(ccs));
-// //   valid_tag(head(ccs)) && 
-// //         //correct data_item
-// //         (
-// //           head(cs) != TAG_DATA ||
-// //           true
-// //         ) &&
-// //         //correct pair_item
-// //         (
-// //           head(cs) != TAG_PAIR ||
-// //           (
-// //             length(cs) > TAG_LENGTH + 1 &&
-// //             (
-// //               INT_MIN <= head(drop(TAG_LENGTH, cs)) &&
-// //               INT_MAX >= head(drop(TAG_LENGTH, cs)) ?
-// //               (
-// //                 //size of first part within C bounds
-// //                 int_of_chars(take(sizeof(int), drop(TAG_LENGTH, cs))) > 0 &&
-// //                 length(cs) > TAG_LENGTH + sizeof(int) +
-// //                              int_of_chars(take(sizeof(int), drop(TAG_LENGTH, cs))) &&
-// //                 well_formed(take(int_of_chars(take(sizeof(int), drop(TAG_LENGTH, cs))),
-// //                                  drop(TAG_LENGTH + sizeof(int), cs)), n) &&
-// //                 well_formed(drop(int_of_chars(take(sizeof(int), drop(TAG_LENGTH, cs))),
-// //                                  drop(TAG_LENGTH + sizeof(int), cs)), n)
-// //               )
-// //               :
-// //               (
-// //                 //size of first part NOT within C bounds
-// //                 //only 1 char reserved for size of first part
-// //                 head(drop(TAG_LENGTH, cs)) > 0 &&
-// //                 length(cs) > TAG_LENGTH + 1 + head(drop(TAG_LENGTH, cs)) &&
-// //                 well_formed(take(head(drop(TAG_LENGTH, cs)),
-// //                                  drop(TAG_LENGTH + 1, cs)), n) &&
-// //                 well_formed(drop(head(drop(TAG_LENGTH, cs)),
-// //                                  drop(TAG_LENGTH + 1, cs)), n)
-// //               )
-// //             )
-// //           )
-// //         ) &&
-// //         //correct nonce_item
-// //         (
-// //           head(cs) != TAG_NONCE ||
-// //           length(cs) == TAG_LENGTH + 1 + NONCE_SIZE
-// //         ) &&
-// //         //correct hash_item
-// //         (
-// //           head(cs) != TAG_HASH ||
-// //           length(cs) == TAG_LENGTH + HASH_SIZE
-// //         ) &&
-// //         //correct symmetric_key_item
-// //         (
-// //           head(cs) != TAG_SYMMETRIC_KEY ||
-// //           length(cs) == TAG_LENGTH + GCM_KEY_SIZE
-// //         ) &&
-// //         //correct public_key_item
-// //         (
-// //           head(cs) != TAG_PUBLIC_KEY ||
-// //           length(cs) == TAG_LENGTH + RSA_SERIALIZED_KEY_SIZE
-// //         ) &&
-// //         //correct private_key_item
-// //         (
-// //           head(cs) != TAG_PRIVATE_KEY ||
-// //           length(cs) == TAG_LENGTH + RSA_SERIALIZED_KEY_SIZE
-// //         ) &&
-// //         //correct hmac_item
-// //         (
-// //           head(cs) != TAG_HMAC ||
-// //           length(cs) == TAG_LENGTH + HMAC_SIZE
-// //         ) &&
-// //         //correct symmetric_encrypted_item
-// //         (
-// //           head(cs) != TAG_SYMMETRIC_ENC ||
-// //           length(cs) >= TAG_LENGTH + MINIMAL_STRING_SIZE + GCM_IV_SIZE
-// //         ) &&
-// //         //correct asymmetric_encrypted_item
-// //         (
-// //           head(cs) != TAG_ASYMMETRIC_ENC ||
-// //           (length(cs) <= TAG_LENGTH + RSA_SERIALIZED_KEY_SIZE &&
-// //            length(cs) >= TAG_LENGTH + MINIMAL_STRING_SIZE)
-// //         ) &&
-// //         //correct asymmetric_signed_item
-// //         (
-// //           head(cs) != TAG_ASYMMETRIC_SIG ||
-// //           (length(cs) <= TAG_LENGTH + RSA_SERIALIZED_KEY_SIZE &&
-// //            length(cs) >= TAG_LENGTH + MINIMAL_STRING_SIZE)
-// //         );
+        valid_tag(head(cs)) && take(TAG_LENGTH, cs) == full_tag(head(cs)) &&
+        //correct data_item
+        (
+          head(cs) != TAG_DATA ||
+          true
+        ) &&
+        //correct pair_item
+        (
+          head(cs) != TAG_PAIR ||
+          (
+            length(cs) > TAG_LENGTH + 1 &&
+            (
+              INT_MIN <= head(drop(TAG_LENGTH, cs)) &&
+              INT_MAX >= head(drop(TAG_LENGTH, cs)) ?
+              (
+                //size of first part within C bounds
+                int_of_chars(take(sizeof(int), drop(TAG_LENGTH, cs))) > 0 &&
+                length(cs) > TAG_LENGTH + sizeof(int) +
+                             int_of_chars(take(sizeof(int), drop(TAG_LENGTH, cs))) &&
+                well_formed(take(int_of_chars(take(sizeof(int), drop(TAG_LENGTH, cs))),
+                                 drop(TAG_LENGTH + sizeof(int), cs)), n) &&
+                well_formed(drop(int_of_chars(take(sizeof(int), drop(TAG_LENGTH, cs))),
+                                 drop(TAG_LENGTH + sizeof(int), cs)), n)
+              )
+              :
+              (
+                //size of first part NOT within C bounds
+                //only 1 char reserved for size of first part
+                head(drop(TAG_LENGTH, cs)) > 0 &&
+                length(cs) > TAG_LENGTH + 1 + head(drop(TAG_LENGTH, cs)) &&
+                well_formed(take(head(drop(TAG_LENGTH, cs)),
+                                 drop(TAG_LENGTH + 1, cs)), n) &&
+                well_formed(drop(head(drop(TAG_LENGTH, cs)),
+                                 drop(TAG_LENGTH + 1, cs)), n)
+              )
+            )
+          )
+        ) &&
+        //correct nonce_item
+        (
+          head(cs) != TAG_NONCE ||
+          length(cs) == TAG_LENGTH + 1 + NONCE_SIZE
+        ) &&
+        //correct hash_item
+        (
+          head(cs) != TAG_HASH ||
+          length(cs) == TAG_LENGTH + HASH_SIZE
+        ) &&
+        //correct symmetric_key_item
+        (
+          head(cs) != TAG_SYMMETRIC_KEY ||
+          length(cs) == TAG_LENGTH + GCM_KEY_SIZE
+        ) &&
+        //correct public_key_item
+        (
+          head(cs) != TAG_PUBLIC_KEY ||
+          length(cs) == TAG_LENGTH + RSA_SERIALIZED_KEY_SIZE
+        ) &&
+        //correct private_key_item
+        (
+          head(cs) != TAG_PRIVATE_KEY ||
+          length(cs) == TAG_LENGTH + RSA_SERIALIZED_KEY_SIZE
+        ) &&
+        //correct hmac_item
+        (
+          head(cs) != TAG_HMAC ||
+          length(cs) == TAG_LENGTH + HMAC_SIZE
+        ) &&
+        //correct symmetric_encrypted_item
+        (
+          head(cs) != TAG_SYMMETRIC_ENC ||
+          length(cs) >= TAG_LENGTH + MINIMAL_STRING_SIZE + GCM_IV_SIZE
+        ) &&
+        //correct asymmetric_encrypted_item
+        (
+          head(cs) != TAG_ASYMMETRIC_ENC ||
+          (length(cs) <= TAG_LENGTH + RSA_SERIALIZED_KEY_SIZE &&
+           length(cs) >= TAG_LENGTH + MINIMAL_STRING_SIZE)
+        ) &&
+        //correct asymmetric_signed_item
+        (
+          head(cs) != TAG_ASYMMETRIC_SIG ||
+          (length(cs) <= TAG_LENGTH + RSA_SERIALIZED_KEY_SIZE &&
+           length(cs) >= TAG_LENGTH + MINIMAL_STRING_SIZE)
+        );
     case zero:
       return false;
   }
 }
 
-// #define WELL_FORMED(CS_TAG, CS_CONT, TAG) \
-//   { \
-//     head_append(CS_TAG, CS_CONT); \
-//     take_append(TAG_LENGTH, CS_TAG, CS_CONT); \
-//     drop_append(TAG_LENGTH, CS_TAG, CS_CONT); \
-//     assert length(append(CS_TAG, CS_CONT)) > TAG_LENGTH; \
-//     assert head(append(CS_TAG, CS_CONT)) == TAG; \
-//     assert true == valid_tag(head(append(CS_TAG, CS_CONT))); \
-//     assert take(TAG_LENGTH, append(CS_TAG, CS_CONT)) == full_tag(head(append(CS_TAG, CS_CONT))); \
-//     length_equals_nat_length(append(CS_TAG, CS_CONT)); \
-//     switch(nat_length(append(CS_TAG, CS_CONT))) {case succ(s0): case zero:} \
-//   }
+lemma void well_formed_upper_bound(list<char> cs, nat upper_bound1,
+                                                  nat upper_bound2);
+  requires true == well_formed(cs, upper_bound1) &*&
+           length(cs) <= int_of_nat(upper_bound2);
+  ensures  true == well_formed(cs, upper_bound2);
 
-lemma void well_formed_upper_bound(list<crypto_char> ccs,
-                                   nat upper_bound1, nat upper_bound2);
-  requires true == well_formed(ccs, upper_bound1) &*&
-           length(ccs) <= int_of_nat(upper_bound2);
-  ensures  true == well_formed(ccs, upper_bound2);
+lemma void well_formed_valid_tag(list<char> cs, nat len);
+  requires true == well_formed(cs, len);
+  ensures  valid_tag(head(cs)) &&
+           take(TAG_LENGTH, cs) == full_tag(head(cs));
 
-lemma char well_formed_valid_tag(list<crypto_char> ccs, nat len);
-  requires true == well_formed(ccs, len);
-  ensures  valid_tag(result) && head(ccs) == c_to_cc(result) &&
-           take(TAG_LENGTH, ccs) == full_ctag(head(ccs));
+#define FORALL_CS  fixpoint(fixpoint(list<char>, bool), bool) forallcs
+#define FORALLP_CS [_]is_forall_t<list<char> >(?forallcs)
+fixpoint bool well_formed_ccs(list<crypto_char> ccs, list<char> cs)
+{
+  return ccs == cs_to_ccs(cs) && well_formed(cs, nat_length(cs));
+}
+fixpoint bool exists_well_formed(FORALL_CS, list<crypto_char> ccs)
+{
+  return exists_t<list<char> >(forallcs, (well_formed_ccs)(ccs));
+}
 
 predicate_ctor well_formed_item_ccs(item i)(list<crypto_char> ccs) =
-  true == well_formed(ccs, nat_length(ccs))
+  FORALLP_CS &*& true == exists_well_formed(forallcs, ccs)
 ;
 
 predicate_ctor ill_formed_item_ccs(item i)(list<crypto_char> ccs) =
-  false == well_formed(ccs, nat_length(ccs))
+  FORALLP_CS &*& false == exists_well_formed(forallcs, ccs)
 ;
 
 predicate_ctor ic_parts(item i)(list<crypto_char> ccs_tag,
@@ -208,6 +220,8 @@ predicate_ctor ic_pair(item i)(list<crypto_char> ccs_f,
 predicate_ctor ic_sym_enc(item i)(list<crypto_char> iv,
                                   list<crypto_char> cg_ccs) = true;
 predicate_ctor ic_cg(item i)(list<crypto_char> ccs, cryptogram cg) = true;
+predicate_ctor ic_info(item i)(char tag, list<char> cs_tag,
+                               list<char> cs_cons) = true;
 
 #define IC_PUBLIC \
   [_]public_generated(polarssl_pub(pub))(ccs_cont) &*& \
@@ -244,11 +258,26 @@ predicate_ctor ic_cg(item i)(list<crypto_char> ccs, cryptogram cg) = true;
     drop_append(TAG_LENGTH, ccs_tag, ccs_cont); \
     head_append(ccs_tag, ccs_cont); \
     cs_to_ccs_full_tag_for_item(I); \
+    assert FORALLP_CS; \
+    list<char> cs = not_forall_t(forallcs, (notf)((well_formed_ccs)(CCS))); \
+    cs_to_ccs_length(cs); \
+    switch(cs){case cons(c00, cs00): case nil:} \
+    c_to_cc_inj(head(cs), tag_for_item(I)); \
+    list<char> cs_tag = take(TAG_LENGTH, cs); \
+    list<char> cs_cont = drop(TAG_LENGTH, cs); \
+    cs_to_ccs_take(TAG_LENGTH, cs); \
+    cs_to_ccs_drop(TAG_LENGTH, cs); \
+    assert ccs_tag == cs_to_ccs(cs_tag); \
+    assert ccs_cont == cs_to_ccs(cs_cont); \
+    cs_to_ccs_split(cs_tag, cs_cont); \
+    close ic_info(I)(tag_for_item(I), cs_tag, cs_cont); \
+    leak ic_info(I)(tag_for_item(I), cs_tag, cs_cont); \
   }
 
 predicate item_constraints(item i, list<crypto_char> ccs, predicate(item) pub) =
-  true == well_formed(ccs, nat_length(ccs)) &*& length(ccs) <= INT_MAX &*&
-  ic_parts(i)(?ccs_tag, ?ccs_cont) &*& ccs == append(ccs_tag, ccs_cont) &*&
+  FORALLP_CS &*& true == exists_well_formed(forallcs, ccs) &*&
+  length(ccs) <= INT_MAX &*& ic_parts(i)(?ccs_tag, ?ccs_cont) &*&
+  ccs == append(ccs_tag, ccs_cont) &*&
   length(ccs_tag) == TAG_LENGTH &*& ccs_tag == full_ctag(head(ccs_tag)) &*&
   head(ccs_tag) == c_to_cc(tag_for_item(i)) &*&
   [_]public_generated(polarssl_pub(pub))(ccs_tag) &*&

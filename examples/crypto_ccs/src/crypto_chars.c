@@ -15,6 +15,30 @@ lemma void cs_to_ccs_split(list<char> xs, list<char> ys)
   }
 }
 
+lemma void cs_to_ccs_take(int n, list<char> xs)
+  requires true;
+  ensures cs_to_ccs(take(n, xs)) == take(n, cs_to_ccs(xs));
+{
+  switch(xs)
+  {
+    case cons(x0, xs0):
+      cs_to_ccs_take(n - 1, xs0);
+    case nil:
+  }
+}
+
+lemma void cs_to_ccs_drop(int n, list<char> xs)
+  requires true;
+  ensures cs_to_ccs(drop(n, xs)) == drop(n, cs_to_ccs(xs));
+{
+  switch(xs)
+  {
+    case cons(x0, xs0):
+      cs_to_ccs_drop(n - 1, xs0);
+    case nil:
+  }
+}
+
 lemma void c_to_cc_inj(char c1, char c2)
   requires c_to_cc(c1) == c_to_cc(c2);
   ensures  c1 == c2;
