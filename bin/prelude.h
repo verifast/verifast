@@ -218,12 +218,6 @@ predicate ints(int *p, int count; list<int> vs) =
     :
         integer(p, ?v) &*& ints(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0);
 
-predicate llongs(long long *p, int count; list<long long> ls) = 
-    count == 0 ?
-        ls == nil
-    :
-        llong_integer(p, ?l) &*& llongs(p + 1, count - 1, ?ls0) &*& ls == cons(l, ls0);
-
 lemma_auto void ints_inv();
     requires [?f]ints(?p, ?count, ?vs);
     ensures [f]ints(p, count, vs) &*& count == length(vs);
@@ -237,6 +231,18 @@ predicate uints(unsigned int *p, int count; list<unsigned int> vs) =
 lemma_auto void uints_inv();
     requires [?f]uints(?p, ?count, ?vs);
     ensures [f]uints(p, count, vs) &*& count == length(vs);
+
+predicate llongs(long long *p, int count; list<long long> ls) = 
+    count == 0 ?
+        ls == nil
+    :
+        llong_integer(p, ?l) &*& llongs(p + 1, count - 1, ?ls0) &*& ls == cons(l, ls0);
+
+predicate ullongs(unsigned long long *p, int count; list<unsigned long long> ls) = 
+    count == 0 ?
+        ls == nil
+    :
+        u_llong_integer(p, ?l) &*& ullongs(p + 1, count - 1, ?ls0) &*& ls == cons(l, ls0);
 
 predicate shorts(short *p, short count; list<short> vs) =
     count == 0 ?
