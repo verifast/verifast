@@ -17,6 +17,30 @@ long double vf__long_double_of_real(real x);
     //@ requires true;
     //@ ensures true;
 
+float vf__float_of_long_long(long long x);
+    //@ requires true;
+    //@ ensures true;
+
+double vf__double_of_long_long(long long x);
+    //@ requires true;
+    //@ ensures true;
+
+long double vf__long_double_of_long_long (long long x);
+    //@ requires true;
+    //@ ensures true;
+
+float vf__float_of_unsigned_long_long(unsigned long long x);
+    //@ requires true;
+    //@ ensures true;
+
+double vf__double_of_unsigned_long_long(unsigned long long x);
+    //@ requires true;
+    //@ ensures true;
+
+long double vf__long_double_of_unsigned_long_long(unsigned long long x);
+    //@ requires true;
+    //@ ensures true;
+
 float vf__float_of_int(int x);
     //@ requires true;
     //@ ensures true;
@@ -38,6 +62,54 @@ double vf__double_of_unsigned_int(unsigned int x);
     //@ ensures true;
 
 long double vf__long_double_of_unsigned_int(unsigned int x);
+    //@ requires true;
+    //@ ensures true;
+
+float vf__float_of_short(short x);
+    //@ requires true;
+    //@ ensures true;
+
+double vf__double_of_short(short x);
+    //@ requires true;
+    //@ ensures true;
+
+long double vf__long_double_of_short(short x);
+    //@ requires true;
+    //@ ensures true;
+
+float vf__float_of_unsigned_short(unsigned short x);
+    //@ requires true;
+    //@ ensures true;
+
+double vf__double_of_unsigned_short(unsigned short x);
+    //@ requires true;
+    //@ ensures true;
+
+long double vf__long_double_of_unsigned_short(unsigned short x);
+    //@ requires true;
+    //@ ensures true;
+
+float vf__float_of_char(char x);
+    //@ requires true;
+    //@ ensures true;
+
+double vf__double_of_char(char x);
+    //@ requires true;
+    //@ ensures true;
+
+long double vf__long_double_of_char(char x);
+    //@ requires true;
+    //@ ensures true;
+
+float vf__float_of_unsigned_char(unsigned char x);
+    //@ requires true;
+    //@ ensures true;
+
+double vf__double_of_unsigned_char(unsigned char x);
+    //@ requires true;
+    //@ ensures true;
+
+long double vf__long_double_of_unsigned_char(unsigned char x);
     //@ requires true;
     //@ ensures true;
 

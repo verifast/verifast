@@ -2582,8 +2582,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       Float -> "float"
     | Double -> "double"
     | LongDouble -> "long_double"
+    | Int (Signed, 8) -> "long_long"
+    | Int (Unsigned, 8) -> "unsigned_long_long"
     | Int (Signed, 4) -> "int"
     | Int (Unsigned, 4) -> "unsigned_int"
+    | Int (Signed, 2) -> "short"
+    | Int (Unsigned, 2) -> "unsigned_short"
+    | Int (Signed, 1) -> "char"
+    | Int (Unsigned, 1) -> "unsigned_char"
     | RealType -> "real"
   
   let floating_point_fun_call_expr funcmap l t fun_name args =
@@ -3321,7 +3327,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | (PtrType _, Int (Unsigned, 4)) when isCast -> w
         | (Int (Unsigned, 4), PtrType _) when isCast -> w
         | (Int (_, _), Int (_, _)) when isCast -> w
-        | ((Int (Signed, 4)|Int (Unsigned, 4)|Float|Double|LongDouble), (Float|Double|LongDouble)) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
+        | ((Int (_, _)|Float|Double|LongDouble), (Float|Double|LongDouble)) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
         | ((Float|Double|LongDouble), (Int (Signed, 4)|Int (Unsigned, 4))) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
         | (ObjType ("java.lang.Object"), ArrayType _) when isCast -> w
         | _ ->
