@@ -10,10 +10,10 @@ fixpoint nat Am(fixpoint(nat, nat) Am1, nat n) {
     }
 }
 
-fixpoint fixpoint(nat, nat) A(nat m) {
+fixpoint nat A(nat m, nat n) {
     switch (m) {
-        case zero: return succ;
-        case succ(m1): return (Am)(A(m1));
+        case zero: return succ(n);
+        case succ(m1): return Am((A)(m1), n);
     }
 }
 

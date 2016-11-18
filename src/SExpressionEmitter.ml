@@ -231,6 +231,10 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
       build_list [ Symbol "expr-int"
                   ; Number n ]
                  [] 
+    | WIntLit (loc, n) ->
+      build_list [ Symbol "expr-wintlit"
+                  ; Number n ]
+                 []
     | AssignExpr (loc, lhs, rhs) ->
       List [ Symbol "expr-assign"
            ; sexpr_of_expr lhs
@@ -256,6 +260,13 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
                  ; "stat", sexpr_of_bool stat
                  ; "cons", sexpr_of_option (sexpr_of_option sexpr_of_constant_value) !cons
                  ; "ghost", sexpr_of_ghostness ghost ]
+    | WReadInductiveField (loc, e, i, c, f, targs) ->
+      build_list [ Symbol "expr-wreadinductivefield" ]
+                 [ "e", sexpr_of_expr e
+                 ; "ind", Symbol i
+                 ; "ctor", Symbol c
+                 ; "field", Symbol f
+                 ; "targs", sexpr_of_list sexpr_of_type_ targs ]
     | ReadArray (_, rhs, lhs) ->
       build_list [ Symbol "expr-read-array" ]
                  [ "lhs", sexpr_of_expr lhs

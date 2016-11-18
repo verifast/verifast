@@ -3496,10 +3496,15 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot call a fixpoint function that appears later in the program text" None;
                   if g' = g then begin
                     match List.nth args index with
-                      WVar (l, x, LocalVar) when List.mem x components -> ()
+                      WVar (l, x, LocalVar) when List.mem x components -> List.iter iter1 args
                     | _ -> static_error l "Inductive argument of recursive call must be switch clause pattern variable." None
                   end;
                   List.iter iter1 args
+                | WPureFunValueCall (l, WVar (l', g', PureFuncName), args) when g' = g && List.length args > index ->
+                  begin match List.nth args index with
+                    WVar (l'', x, LocalVar) when List.mem x components -> List.iter iter1 args
+                  | _ -> static_error l "Inductive argument of recursive call must be switch clause pattern variable." None
+                  end
                 | WVar (l, g', PureFuncName) ->
                   if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot mention a fixpoint function that appears later in the program text" None;
                   if g' = g then static_error l "A fixpoint function that mentions itself is not yet supported." None
