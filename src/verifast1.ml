@@ -3320,7 +3320,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | (ObjType _, ObjType _) when isCast -> w
         | (PtrType _, Int (Unsigned, 4)) when isCast -> w
         | (Int (Unsigned, 4), PtrType _) when isCast -> w
-        | ((Int (Signed, 8)|Int (Unsigned, 8)|Int (Signed, 4)|Int (Unsigned, 4)|Int (Signed, 2)|Int (Unsigned, 2)|Int (Signed, 1)|Int (Unsigned, 1)), (Int (Signed, 8)|Int (Unsigned, 8)|Int (Signed, 4)|Int (Unsigned, 4)|Int (Signed, 2)|Int (Unsigned, 2)|Int (Signed, 1)|Int (Unsigned, 1))) when isCast -> w
+        | (Int (_, _), Int (_, _)) when isCast -> w
         | ((Int (Signed, 4)|Int (Unsigned, 4)|Float|Double|LongDouble), (Float|Double|LongDouble)) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
         | ((Float|Double|LongDouble), (Int (Signed, 4)|Int (Unsigned, 4))) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
         | (ObjType ("java.lang.Object"), ArrayType _) when isCast -> w
@@ -5148,7 +5148,7 @@ let check_if_list_is_defined () =
           if ass_term <> None && not (le_big_int zero_big_int n &&
 le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out of range." None;
           cont state (ctxt#mk_intlit_of_string (string_of_big_int n))
-        | (e, (Int (Signed, 1)|Int (Unsigned, 1)|Int (Signed, 2)|Int (Unsigned, 2)|Int (Signed, 4)|Int (Unsigned, 4) as tp), false) ->
+        | (e, (Int (_, _) as tp), false) ->
           ev state e $. fun state t ->
           let min, max = limits_of_type tp in
           cont state (check_overflow l min t max)
