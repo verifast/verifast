@@ -332,6 +332,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let truncate_uint16_symbol = mk_symbol "truncate_uint16" [ctxt#type_int] ctxt#type_int Uninterp
   let truncate_int32_symbol = mk_symbol "truncate_int32" [ctxt#type_int] ctxt#type_int Uninterp
   let truncate_uint32_symbol = mk_symbol "truncate_uint32" [ctxt#type_int] ctxt#type_int Uninterp
+  let truncate_int64_symbol = mk_symbol "truncate_int64" [ctxt#type_int] ctxt#type_int Uninterp
+  let truncate_uint64_symbol = mk_symbol "truncate_uint64" [ctxt#type_int] ctxt#type_int Uninterp
   
   let () = ignore $. ctxt#assume (ctxt#mk_eq (ctxt#mk_unboxed_bool (ctxt#mk_boxed_int (ctxt#mk_intlit 0))) ctxt#mk_false) (* This allows us to use 0 as a default value for all types; see the treatment of array creation. *)
 
@@ -3318,7 +3320,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | (ObjType _, ObjType _) when isCast -> w
         | (PtrType _, Int (Unsigned, 4)) when isCast -> w
         | (Int (Unsigned, 4), PtrType _) when isCast -> w
-        | ((Int (Signed, 4)|Int (Unsigned, 4)|Int (Signed, 2)|Int (Unsigned, 2)|Int (Signed, 1)|Int (Unsigned, 1)), (Int (Signed, 4)|Int (Unsigned, 4)|Int (Signed, 2)|Int (Unsigned, 2)|Int (Signed, 1)|Int (Unsigned, 1))) when isCast -> w
+        | ((Int (Signed, 8)|Int (Unsigned, 8)|Int (Signed, 4)|Int (Unsigned, 4)|Int (Signed, 2)|Int (Unsigned, 2)|Int (Signed, 1)|Int (Unsigned, 1)), (Int (Signed, 8)|Int (Unsigned, 8)|Int (Signed, 4)|Int (Unsigned, 4)|Int (Signed, 2)|Int (Unsigned, 2)|Int (Signed, 1)|Int (Unsigned, 1))) when isCast -> w
         | ((Int (Signed, 4)|Int (Unsigned, 4)|Float|Double|LongDouble), (Float|Double|LongDouble)) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
         | ((Float|Double|LongDouble), (Int (Signed, 4)|Int (Unsigned, 4))) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
         | (ObjType ("java.lang.Object"), ArrayType _) when isCast -> w
@@ -5168,6 +5170,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         | (e, Int (Unsigned, 4), true) ->
           ev state e $. fun state t ->
           cont state (ctxt#mk_app truncate_uint32_symbol [t])
+        | (e, Int (Signed, 8), true) ->
+          ev state e $. fun state t ->
+          cont state (ctxt#mk_app truncate_int64_symbol [t])
+        | (e, Int (Unsigned, 8), true) ->
+          ev state e $. fun state t ->
+          cont state (ctxt#mk_app truncate_uint64_symbol [t])
         | (e_, _, true) ->
           static_error l "Unsupported truncating cast" None
         | (_, (ObjType _|ArrayType _), _) when ass_term = None -> static_error l "Class casts are not allowed in annotations." None
