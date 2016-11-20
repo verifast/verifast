@@ -14,8 +14,9 @@ predicate_ctor ic_pair(item i)(list<crypto_char> ccs_f,
 predicate_ctor ic_sym_enc(item i)(list<crypto_char> iv,
                                   list<crypto_char> cg_ccs) = true;
 predicate_ctor ic_cg(item i)(list<crypto_char> ccs, cryptogram cg) = true;
-predicate_ctor ic_info(item i)(char tag, list<char> cs_tag,
-                               list<char> cs_cons) = true;
+predicate_ctor ic_info(item i)(list<crypto_char> ccs, char tag,
+                               list<crypto_char> ccs_cont,
+                               list<crypto_char> ccs_tag) = true;
 
 #define IC_PUBLIC \
   [_]public_generated(polarssl_pub(pub))(ccs_cont) &*& \
@@ -50,26 +51,21 @@ predicate_ctor ic_info(item i)(char tag, list<char> cs_tag,
     assert [_]ic_parts(I)(?ccs_tag00, ?ccs_cont00); \
     take_append(TAG_LENGTH, ccs_tag00, ccs_cont00); \
     drop_append(TAG_LENGTH, ccs_tag00, ccs_cont00); \
+    assert CCS == append(ccs_tag00, ccs_cont00); \
     head_append(ccs_tag00, ccs_cont00); \
     cs_to_ccs_full_tag_for_item(I); \
-    assert FORALLP_CS; \
-    list<char> cs00 = not_forall_t(forallcs, (notf)((well_formed_ccs)(CCS))); \
-    cs_to_ccs_length(cs00); \
-    switch(cs00){case cons(c000, cs000): case nil:} \
-    c_to_cc_inj(head(cs00), tag_for_item(I)); \
-    list<char> cs_tag00 = take(TAG_LENGTH, cs00); \
-    list<char> cs_cont00 = drop(TAG_LENGTH, cs00); \
-    cs_to_ccs_take(TAG_LENGTH, cs00); \
-    cs_to_ccs_drop(TAG_LENGTH, cs00); \
-    assert ccs_tag00 == cs_to_ccs(cs_tag00); \
-    assert ccs_cont00 == cs_to_ccs(cs_cont00); \
-    cs_to_ccs_split(cs_tag00, cs_cont00); \
-    close ic_info(I)(tag_for_item(I), cs_tag00, cs_cont00); \
-    leak ic_info(I)(tag_for_item(I), cs_tag00, cs_cont00); \
+    assert FORALLP_C; \
+    char tag00 = well_formed_valid_tag(nat_length(CCS), CCS); \
+    c_to_cc_inj(tag00, tag_for_item(I)); \
+    assert ccs_tag00 == take(TAG_LENGTH, CCS); \
+    assert ccs_cont00 == drop(TAG_LENGTH, CCS); \
+    close ic_info(I)(CCS, tag00, ccs_tag00, ccs_cont00); \
+    leak ic_info(I)(CCS, tag00, ccs_tag00, ccs_cont00); \
   }
 
 predicate item_constraints(item i, list<crypto_char> ccs, predicate(item) pub) =
-  FORALLP_CS &*& true == exists_well_formed(forallcs, ccs) &*&
+  FORALLP_C &*& FORALLP_CS &*&
+  well_formed_ccs(forallc, forallcs, nat_length(ccs), ccs) &&
   length(ccs) <= INT_MAX &*& ic_parts(i)(?ccs_tag, ?ccs_cont) &*&
   ccs == append(ccs_tag, ccs_cont) &*&
   length(ccs_tag) == TAG_LENGTH &*& ccs_tag == full_ctag(head(ccs_tag)) &*&
@@ -114,7 +110,7 @@ predicate item_constraints(item i, list<crypto_char> ccs, predicate(item) pub) =
         ic_sym_enc(i)(?iv0, ?cg_ccs) &*&
         take(GCM_IV_SIZE, ent0) == take(GCM_IV_SIZE, ccs_cont) &*&
         [_]public_generated(polarssl_pub(pub))(take(GCM_IV_SIZE, ent0)) &*&
-        GCM_IV_SIZE <= length(ent0) &*&
+        length(ccs_cont) >= GCM_IV_SIZE &*& GCM_IV_SIZE <= length(ent0) &*&
         drop(GCM_IV_SIZE, ent0) == iv0 &*&
         cg_ccs == drop(GCM_IV_SIZE, ccs_cont) &*&
         IC_CG(cg_ccs, cg_auth_encrypted(p0, c0, ?cs_pay1, iv0)) &*&
@@ -154,5 +150,18 @@ char item_tag(char* content, int size);
                result == tag_for_item(i) &*&
                head(ccs) == c_to_cc(result) &*&
                take(TAG_LENGTH, ccs) == full_ctag(head(ccs)); @*/
+
+void ic_check_equal(char* cont1, int size1, char* cont2, int size2);
+  /*@ requires [?f]world(?pub, ?key_clsfy) &*&
+               principal(?principal, ?count) &*&
+               [?f1]crypto_chars(secret, cont1, size1, ?ccs1) &*&
+                 [_]item_constraints(?i1, ccs1, pub) &*&
+               [?f2]crypto_chars(secret, cont2, size2, ?ccs2) &*&
+                 [_]item_constraints(?i2, ccs2, pub); @*/
+  /*@ ensures  [f]world(pub, key_clsfy) &*&
+               principal(principal, count) &*&
+               [f1]crypto_chars(secret, cont1, size1, ccs1) &*&
+               [f2]crypto_chars(secret, cont2, size2, ccs2) &*&
+               ccs1 == ccs2; @*/
 
 #endif

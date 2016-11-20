@@ -37,9 +37,12 @@ lemma void well_formed_upper_bound(nat upper_bound1, nat upper_bound2,
           {
             assert length(ccs) > TAG_LENGTH + 1;
             list<crypto_char> ccs_cont = drop(TAG_LENGTH, ccs);
-            fixpoint(list<crypto_char>, bool) wf1 = (well_formed_ccs)(forallc, forallcs, n_ub1);
-            fixpoint(list<crypto_char>, bool) wf2 = (well_formed_ccs)(forallc, forallcs, n_ub2);
-            char c = not_forall_t(forallc, (notf)((well_formed_pair)(forallcs, wf1, ccs_cont)));
+            fixpoint(list<crypto_char>, bool) wf1 =
+              (well_formed_ccs)(forallc, forallcs, n_ub1);
+            fixpoint(list<crypto_char>, bool) wf2 =
+              (well_formed_ccs)(forallc, forallcs, n_ub2);
+            char c = not_forall_t(forallc,
+              (notf)((well_formed_pair)(forallcs, wf1, ccs_cont)));
 
             int length_f_ccs, length_s_ccs;
             list<crypto_char> p_ccs, f_ccs, s_ccs;
@@ -63,10 +66,11 @@ lemma void well_formed_upper_bound(nat upper_bound1, nat upper_bound2,
 
               well_formed_upper_bound(n_ub1, n_ub2, f_ccs);
               well_formed_upper_bound(n_ub1, n_ub2, s_ccs);
-              assert true == exists_t<list<char> >(forallcs, (well_formed_pair_bounded)(wf1, ccs_cont));
-              if (!exists_t<list<char> >(forallcs, (well_formed_pair_bounded)(wf2, ccs_cont)))
+              if (!exists_t<list<char> >(forallcs,
+                    (well_formed_pair_bounded)(wf2, ccs_cont)))
               {
-                forall_t_elim(forallcs, (notf)((well_formed_pair_bounded)(wf2, ccs_cont)), cs_flength);
+                forall_t_elim(forallcs,
+                  (notf)((well_formed_pair_bounded)(wf2, ccs_cont)), cs_flength);
                 assert false;
               }
             }
@@ -89,7 +93,8 @@ lemma void well_formed_upper_bound(nat upper_bound1, nat upper_bound2,
             }
             if (!exists_t(forallc, (well_formed_pair)(forallcs, wf2, ccs_cont)))
             {
-              forall_t_elim(forallc, (notf)((well_formed_pair)(forallcs, wf2, ccs_cont)), c);
+              forall_t_elim(forallc,
+                (notf)((well_formed_pair)(forallcs, wf2, ccs_cont)), c);
               assert false;
             }
             assert true == well_formed_ccs(forallc, forallcs, upper_bound2, ccs);

@@ -12,9 +12,9 @@ MODULES = \
 	item \
 	item_tags \
 	well_formed \
+	item_constraints \
+	serialization \
 
-# 	item_constraints \
-# 	serialization \
 # 	deserialization \
 # 	invariants \
 # 	key_register \
