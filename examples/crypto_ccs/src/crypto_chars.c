@@ -40,18 +40,21 @@ lemma void cs_to_ccs_drop(int n, list<char> xs)
 }
 
 lemma void c_to_cc_inj(char c1, char c2)
-  requires c_to_cc(c1) == c_to_cc(c2);
-  ensures  c1 == c2;
+  requires true;
+  ensures  true == ((c_to_cc(c1) == c_to_cc(c2)) == (c1 == c2));
 {
   fixpoint(fixpoint(int, list<char>), char) cc1, cc2;
   cc1 = (c_to_cc_const)(c1);
   cc2 = (c_to_cc_const)(c2);
-  assert cc1(chars_for_cg_dummy) == cc2(chars_for_cg_dummy);
+  if (c1 == c2)
+    assert cc1(chars_for_cg_dummy) == cc2(chars_for_cg_dummy);
+  else
+    assert cc1(chars_for_cg_dummy) != cc2(chars_for_cg_dummy);
 }
 
 lemma void cs_to_ccs_inj(list<char> cs1, list<char> cs2)
-  requires cs_to_ccs(cs1) == cs_to_ccs(cs2);
-  ensures  cs1 == cs2;
+  requires true;
+  ensures  true == ((cs_to_ccs(cs1) == cs_to_ccs(cs2)) == (cs1 == cs2));
 {
   switch(cs1)
   {

@@ -14,8 +14,8 @@ MODULES = \
 	well_formed \
 	item_constraints \
 	serialization \
+	deserialization \
 
-# 	deserialization \
 # 	invariants \
 # 	key_register \
 # 	data_item \

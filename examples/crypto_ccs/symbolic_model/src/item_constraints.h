@@ -54,7 +54,6 @@ predicate_ctor ic_info(item i)(list<crypto_char> ccs, char tag,
     assert CCS == append(ccs_tag00, ccs_cont00); \
     head_append(ccs_tag00, ccs_cont00); \
     cs_to_ccs_full_tag_for_item(I); \
-    assert FORALLP_C; \
     char tag00 = well_formed_valid_tag(nat_length(CCS), CCS); \
     c_to_cc_inj(tag00, tag_for_item(I)); \
     assert ccs_tag00 == take(TAG_LENGTH, CCS); \
