@@ -49,7 +49,7 @@ predicate enc_then_hmac_pub(cryptogram cg) =
       return true;
     case cg_hmac(p0, c0, ccs0):
       return col || enc_then_hmac_public_key(p0, c0, true) ?
-        [_]public_generated(enc_then_hmac_pub)(ccs0)
+        [_]public_ccs(ccs0)
       :
         enc_then_hmac_pub_1(?c1, ?ccs1, ?ent1) &*&
         cg_info(cg_symmetric_key(p0, c0)) == c1 &*&
@@ -59,14 +59,14 @@ predicate enc_then_hmac_pub(cryptogram cg) =
         send(p0, shared_with(p0, c0), ccs1);
     case cg_encrypted(p0, c0, ccs0, ent0):
       return enc_then_hmac_public_key(p0, c0, true) ?
-               [_]public_generated(enc_then_hmac_pub)(ccs0)
+               [_]public_ccs(ccs0)
              :
                true;
     case cg_auth_encrypted(p0, c0, ccs0, ent0):
       return true == enc_then_hmac_public_key(p0, c0, true) &*&
-             [_]public_generated(enc_then_hmac_pub)(ccs0);
+             [_]public_ccs(ccs0);
     case cg_asym_encrypted(p0, c0, ccs0, ent0):
-      return [_]public_generated(enc_then_hmac_pub)(ccs0);
+      return [_]public_ccs(ccs0);
     case cg_asym_signature(p0, c0, ccs0, ent0):
       return true == enc_then_hmac_public_key(p0, c0, false);
   }
@@ -90,7 +90,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len);
              [?f3]crypto_chars(secret, msg, msg_len, ?msg_ccs) &*&
                MAX_SIZE >= msg_len &*& msg_len >= MINIMAL_STRING_SIZE &*&
                bad(sender) || bad(shared_with(sender, enc_id)) ?
-                 [_]public_generated(enc_then_hmac_pub)(msg_ccs)
+                 [_]public_ccs(msg_ccs)
                :
                  // Not saying anything about publicness of msg_cs established
                  // confidentiality

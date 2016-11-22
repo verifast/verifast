@@ -62,12 +62,12 @@ predicate rpc_pub(cryptogram cg) =
         };
     case cg_encrypted(p0, c0, ccs0, ent0):
       return true == rpc_public_key(p0, c0, true) &*&
-             [_]public_generated(rpc_pub)(ccs0);
+             [_]public_ccs(ccs0);
     case cg_auth_encrypted(p0, c0, ccs0, ent0):
       return true == rpc_public_key(p0, c0, true) &*&
-             [_]public_generated(rpc_pub)(ccs0);
+             [_]public_ccs(ccs0);
     case cg_asym_encrypted(p0, c0, ccs0, ent0):
-      return [_]public_generated(rpc_pub)(ccs0);
+      return [_]public_ccs(ccs0);
     case cg_asym_signature(p0, c0, ccs0, ent0):
       return true == rpc_public_key(p0, c0, false);
   }

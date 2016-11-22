@@ -27,7 +27,7 @@ void write_identifier(char *array, int id);
                chars(array, ID_SIZE, _); @*/
   /*@ ensures  crypto_chars(normal, array, ID_SIZE, ?ccs) &*&
                ccs == cs_to_ccs(identifier(id)) &*&
-               [_]public_generated(pub)(ccs); @*/
+               [_]public_ccs(ccs); @*/
 
 /*@
 predicate check_identifier_ghost_args(bool sym, bool garbage, int p_key,

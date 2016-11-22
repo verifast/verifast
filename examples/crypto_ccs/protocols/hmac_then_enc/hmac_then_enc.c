@@ -19,7 +19,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
              [?f3]crypto_chars(secret, msg, msg_len, ?msg_ccs) &*&
                MAX_SIZE >= msg_len &*& msg_len >= MINIMAL_STRING_SIZE &*&
                bad(sender) || bad(shared_with(sender, enc_id)) ?
-                 [_]public_generated(hmac_then_enc_pub)(msg_ccs)
+                 [_]public_ccs(msg_ccs)
                :
                  true == send(sender, shared_with(sender, enc_id), msg_ccs); @*/
 /*@ ensures  principal(sender, _) &*&
@@ -104,12 +104,12 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
     
     /*@ if (hmac_then_enc_public_key(sender, enc_id, true))
         {
-          assert [_]public_generated(hmac_then_enc_pub)(msg_ccs);
-          assert [_]public_generated(hmac_then_enc_pub)(hmac_ccs);
+          assert [_]public_ccs(msg_ccs);
+          assert [_]public_ccs(hmac_ccs);
           public_crypto_chars(enc_msg, msg_len);
           assert chars(enc_msg, msg_len, ?msg_cs);
           assert chars(enc_msg + msg_len, 64, ?hmac_cs);
-          cs_to_ccs_split(msg_cs, hmac_cs);
+          cs_to_ccs_append(msg_cs, hmac_cs);
           chars_join(enc_msg);
           public_chars(enc_msg, msg_len + 64);
           chars_split(enc_msg, msg_len);
@@ -210,7 +210,6 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     zeroize(iv, 16);
     aes_free(&aes_context);
     //@ open aes_context(&aes_context);
-    //@ public_cryptogram_extract(buffer + 16);
     //@ public_cryptogram(buffer + 16, enc_cg);
     //@ assert crypto_chars(_, buffer_dec, enc_size, ?dec_ccs);
     /*@ open decryption_post(true, ?garbage, receiver,
@@ -236,7 +235,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
           open [_]hmac_then_enc_pub(enc_cg);
           if (bad(sender) || bad(receiver))
           {
-            public_generated_split(hmac_then_enc_pub, dec_ccs, enc_size - 64);
+            public_ccs_split(dec_ccs, enc_size - 64);
             public_crypto_chars(buffer_dec + enc_size - 64, 64);
             chars_to_crypto_chars(buffer_dec + enc_size - 64, 64);
           }

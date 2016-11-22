@@ -2,22 +2,14 @@
 #define CRYPTOGRAM_GH
 
 #include <crypto.gh>
-#include "crypto_chars.gh"
-
-//The exact set (as a list) of cryptograms exposed by a list of crypto_char
-fixpoint list<cryptogram> cgs_in_ccs(list<crypto_char> ccs);
 
 //Associated information of a cryptogram
 fixpoint int cg_info(cryptogram cg);
 
 predicate cryptogram(char* array, int len, list<crypto_char> ccs, cryptogram cg) =
   crypto_chars(secret, array, len, ccs) &*&
-  ccs == ccs_for_cg(cg) && cg_is_generated(cg)
+  ccs == ccs_for_cg(cg) && cg_is_gen_or_pub(cg)
 ;
-
-lemma_auto void cg_constraints(cryptogram cg);
-     requires true;
-     ensures  cons(cg, nil) == cgs_in_ccs(ccs_for_cg(cg));
 
 fixpoint option<list<crypto_char> > cg_payload(cryptogram cg)
 {
@@ -78,7 +70,7 @@ lemma cryptogram ccs_for_cg_sur(list<crypto_char> ccs, tag t);
 lemma_auto void cryptogram();
   requires [?f]cryptogram(?array, ?count, ?ccs, ?cg);
   ensures  [f]cryptogram(array, count, ccs, cg) &*&
-           ccs == ccs_for_cg(cg) && cg_is_generated(cg); 
+           ccs == ccs_for_cg(cg) && cg_is_gen_or_pub(cg);
 
 lemma_auto void cryptogram_inv();
   requires [?f]cryptogram(?array, ?count, ?cs, ?cg);

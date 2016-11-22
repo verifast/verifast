@@ -25,7 +25,7 @@ void sender(char *enc_key1, char *enc_key2, char *hmac_key,
              [?f4]crypto_chars(secret, msg, msg_len, ?msg_ccs) &*&
                MAX_SIZE >= msg_len &*& msg_len >= MINIMAL_STRING_SIZE &*&
                bad(sender) || bad(shared_with(sender, enc_id1)) ?
-                 [_]public_generated(hmac_then_enc_nested_pub)(msg_ccs)
+                 [_]public_ccs(msg_ccs)
                :
                  // Not saying anything about publicness of msg_cs established
                  // confidentiality
@@ -69,7 +69,7 @@ void sender(char *enc_key1, char *enc_key2, char *hmac_key,
     //@ leak hmac_then_enc_nested_pub(hmac_cg);
     //@ public_cryptogram(enc_msg  + msg_len, hmac_cg);
     //@ public_chars(enc_msg  + msg_len, 64);
-    //@ assert [_]public_generated(hmac_then_enc_nested_pub)(hmac_ccs);
+    //@ assert [_]public_ccs(hmac_ccs);
     //@ chars_to_secret_crypto_chars(enc_msg  + msg_len, 64);
     //@ crypto_chars_join(enc_msg);
     //@ append_assoc(cs_to_ccs(identifier(0)), msg_ccs, hmac_ccs);
@@ -141,7 +141,7 @@ void sender(char *enc_key1, char *enc_key2, char *hmac_key,
     /*@ if (hmac_then_enc_nested_public_key(sender, enc_id2, true))
         {
           assert true == hmac_then_enc_nested_public_key(sender, enc_id1, true);
-          public_generated_join(hmac_then_enc_nested_pub, msg_ccs, hmac_ccs);
+          public_ccs_join(msg_ccs, hmac_ccs);
           close hmac_then_enc_nested_pub(enc_cg1);
           leak hmac_then_enc_nested_pub(enc_cg1);
           close cryptogram(temp, enc_len, enc_ccs1, enc_cg1);
@@ -262,7 +262,6 @@ int receiver(char *enc_key1, char *enc_key2, char *hmac_key, char *msg)
       abort();
     zeroize(iv2, 16);
     aes_free(&aes_context);
-    //@ public_cryptogram_extract(buffer + 32);
     //@ public_cryptogram(buffer + 32, enc_cg1);
     //@ assert crypto_chars(?kind1, buffer_dec1, enc_size, ?dec_ccs1);
     /*@ open decryption_post(true, ?garbage1, receiver,
@@ -283,7 +282,7 @@ int receiver(char *enc_key1, char *enc_key2, char *hmac_key, char *msg)
           assert pay_ccs1 == dec_ccs1;
           if (hmac_then_enc_nested_public_key(p1, c1, true))
           {
-            assert [_]public_generated(hmac_then_enc_nested_pub)(pay_ccs1);
+            assert [_]public_ccs(pay_ccs1);
             public_crypto_chars(buffer_dec1, enc_size);
             interpret_encrypted(buffer_dec1, enc_size);
           }
@@ -334,7 +333,7 @@ int receiver(char *enc_key1, char *enc_key2, char *hmac_key, char *msg)
           assert !garbage1;
           if (bad(sender) || bad(receiver))
           {
-            public_generated_split(hmac_then_enc_nested_pub, dec_ccs2, enc_size - 64);
+            public_ccs_split(dec_ccs2, enc_size - 64);
             public_crypto_chars(buffer_dec2 + enc_size - 64, 64);
             chars_to_crypto_chars(buffer_dec2 + enc_size - 64, 64);
           }

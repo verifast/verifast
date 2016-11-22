@@ -9,16 +9,13 @@ lemma void interpret_##KIND(char *buffer, int size) \
            [?f]chars(buffer, size, ?cs); \
   ensures  [f]cryptogram(buffer, size, ?ccs, ?cg) &*& [_]pub(cg) &*& \
            ccs == cs_to_ccs(cs) &*& cg == CG &*& \
-           [_]public_generated(pub)(ccs); \
+           [_]public_ccs(ccs); \
 { \
   list<crypto_char> ccs = cs_to_ccs(cs); \
   cryptogram key = ccs_for_cg_sur(ccs, TAG); \
-  public_chars(buffer, size); \
-  public_chars_extract(buffer, key); \
   assert key == CG; \
-  public_chars(buffer, size); \
-  open [_]public_generated(pub)(ccs); \
-  if (!col) forall_mem(key, cgs_in_ccs(ccs), cg_is_generated); \
+  public_cs(cs); \
+  public_ccs_cg(key); \
   chars_to_secret_crypto_chars(buffer, size); \
   close [f]cryptogram(buffer, size, ccs, key); \
 }

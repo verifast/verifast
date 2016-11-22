@@ -41,7 +41,7 @@ predicate hmac_pub(cryptogram cg) =
       return true;
     case cg_private_key(p0, c0):
       return true == hmac_public_key(p0, c0, false);
-    case cg_hash(cs0):
+    case cg_hash(ccs0):
       return true;
     case cg_hmac(p0, c0, ccs0):
       return hmac_public_key(p0, c0, true) ? true :
@@ -49,12 +49,12 @@ predicate hmac_pub(cryptogram cg) =
                true == send(p0, shared_with(p0, c0), cs0);
     case cg_encrypted(p0, c0, ccs0, ent0):
       return true == hmac_public_key(p0, c0, true) &*&
-             [_]public_generated(hmac_pub)(ccs0);
+             [_]public_ccs(ccs0);
     case cg_auth_encrypted(p0, c0, ccs0, ent0):
       return true == hmac_public_key(p0, c0, true) &*&
-             [_]public_generated(hmac_pub)(ccs0);
+             [_]public_ccs(ccs0);
     case cg_asym_encrypted(p0, c0, ccs0, ent0):
-      return [_]public_generated(hmac_pub)(ccs0);
+      return [_]public_ccs(ccs0);
     case cg_asym_signature(p0, c0, ccs0, ent0):
       return true == hmac_public_key(p0, c0, false);
   }

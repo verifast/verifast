@@ -19,7 +19,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
              [?f3]crypto_chars(secret, msg, msg_len, ?msg_ccs) &*&
                MAX_SIZE >= msg_len &*& msg_len >= MINIMAL_STRING_SIZE &*&
                bad(sender) || bad(shared_with(sender, enc_id)) ?
-                 [_]public_generated(enc_then_hmac_pub)(msg_ccs)
+                 [_]public_ccs(msg_ccs)
                :
                  true == send(sender, shared_with(sender, enc_id), msg_ccs); @*/
 /*@ ensures  principal(sender, _) &*&
@@ -89,15 +89,15 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
                 (unsigned int) (16 + (int) msg_len),
                 message + 16 + (int) msg_len, 0);
     //@ assert cryptogram(message + 16 + msg_len, 64, ?hmac_ccs, ?hmac_cg);
-    //@ cs_to_ccs_split(iv_cs, enc_cs);
+    //@ cs_to_ccs_append(iv_cs, enc_cs);
     //@ assert hmac_cg == cg_hmac(sender, hmac_id, append(iv_ccs, enc_ccs));
     /*@ if (!col && !enc_then_hmac_public_key(sender, enc_id, true))
           close enc_then_hmac_pub_1(enc_id, msg_ccs, iv_ccs); @*/
     /*@ if (col || enc_then_hmac_public_key(sender, enc_id, true))
         { 
-          assert [_]public_generated(enc_then_hmac_pub)(iv_ccs);
-          assert [_]public_generated(enc_then_hmac_pub)(enc_ccs);
-          public_generated_join(enc_then_hmac_pub, iv_ccs, enc_ccs);
+          assert [_]public_ccs(iv_ccs);
+          assert [_]public_ccs(enc_ccs);
+          public_ccs_join(iv_ccs, enc_ccs);
         }
     @*/
     //@ close enc_then_hmac_pub(hmac_cg);
@@ -179,9 +179,14 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ close memcmp_secret(hmac, 64, hmac_ccs, hmac_cg);
     if (memcmp((void*) buffer + size - 64, hmac, 64) != 0) abort();
     /*@ if (!col) 
-          public_crypto_chars_extract(hmac, hmac_cg);
+        {
+          public_ccs_cg(hmac_cg);
+          public_crypto_chars(hmac, 64);
+        }
         else
+        {
           crypto_chars_to_chars(hmac, 64);
+        }
     @*/
     //@ assert all_cs == append(pay_cs, hmac_cs);
 
@@ -212,12 +217,12 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
                          &iv_off, iv, buffer + 16, msg) != 0)
       abort();
     //@ assert pay_cs == append(iv_cs, enc_cs);
-    //@ cs_to_ccs_split(iv_cs, enc_cs);
+    //@ cs_to_ccs_append(iv_cs, enc_cs);
     zeroize(iv, 16);
     aes_free(&aes_context);
     
     //@ open aes_context(&aes_context);
-    //@ public_cryptogram_extract(buffer + 16);
+    //@ public_cg_ccs(enc_cg);
     //@ public_cryptogram(buffer + 16, enc_cg);
     /*@ open decryption_post(true, ?garbage, receiver,
                              s, sender, enc_id, ?dec_ccs); @*/

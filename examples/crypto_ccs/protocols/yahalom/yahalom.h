@@ -107,7 +107,7 @@ predicate yahalom_pub(cryptogram cg) =
       return true;
     case cg_encrypted(p0, c0, ccs0, ent0):
       return yahalom_public_key(p0, c0, true) ?
-        [_]public_generated(yahalom_pub)(ccs0)
+        [_]public_ccs(ccs0)
       :
         length(ccs0) == ID_SIZE + NONCE_SIZE + NONCE_SIZE ?
         (
@@ -115,8 +115,8 @@ predicate yahalom_pub(cryptogram cg) =
           yahalom_pub_msg1(?server, ?sender, ?NA, ?NB) &*&
           cg_info(cg_symmetric_key(p0, c0)) == IP(3, server) &*&
           NA == cg_nonce(?sender2, ?a_id) &*&
-          true == cg_is_generated(NA) &*& [_]yahalom_pub(NA) &*&
-          NB == cg_nonce(p0, _) &*& true == cg_is_generated(NB) &*&
+          true == cg_is_gen_or_pub(NA) &*& [_]yahalom_pub(NA) &*&
+          NB == cg_nonce(p0, _) &*& true == cg_is_gen_or_pub(NB) &*&
           cg_info(NB) == IP(2, IP(server, IP(sender, IP(sender2, a_id)))) &*&
           length(identifier(sender)) == ID_SIZE &*&
           length(cs_to_ccs(identifier(sender))) == ID_SIZE &*&
@@ -124,7 +124,7 @@ predicate yahalom_pub(cryptogram cg) =
           length(ccs_for_cg(NB)) == NONCE_SIZE &*&
           ccs0 == append(cs_to_ccs(identifier(sender)),
                          append(ccs_for_cg(NA), ccs_for_cg(NB))) &*&
-          [_]public_generated(yahalom_pub)(cs_to_ccs(identifier(sender)))
+          [_]public_ccs(cs_to_ccs(identifier(sender)))
         ) :
         length(ccs0) == ID_SIZE + KEY_SIZE + NONCE_SIZE + NONCE_SIZE ?
         (
@@ -132,7 +132,7 @@ predicate yahalom_pub(cryptogram cg) =
           yahalom_pub_msg2(?server, ?receiver, ?NA, ?NB, ?KAB) &*&
           cg_info(cg_symmetric_key(p0, c0)) == IP(3, server) &*&
           NA == cg_nonce(?sender2, ?a_id) &*&
-          true == cg_is_generated(NA) &*& [_]yahalom_pub(NA) &*&
+          true == cg_is_gen_or_pub(NA) &*& [_]yahalom_pub(NA) &*&
           NB == cg_nonce(?receiver2, ?b_id) &*&
           (
           bad(server) || bad(receiver) ?
@@ -141,9 +141,9 @@ predicate yahalom_pub(cryptogram cg) =
             (cg_info(NB) == IP(2, IP(server, IP(p0, IP(sender2, a_id)))) &&
              receiver == receiver2)
           ) &*&
-          true == cg_is_generated(NB) &*&
+          true == cg_is_gen_or_pub(NB) &*&
           KAB == cg_symmetric_key(server, _) &*&
-          true == cg_is_generated(KAB) &*&
+          true == cg_is_gen_or_pub(KAB) &*&
           cg_info(KAB) == IP(4, IP(p0, IP(receiver,
                             IP(sender2, IP(a_id, IP(receiver2, b_id)))))) &*&
           length(identifier(receiver)) == ID_SIZE &*&
@@ -153,7 +153,7 @@ predicate yahalom_pub(cryptogram cg) =
           length(ccs_for_cg(NB)) == NONCE_SIZE &*&
           ccs0 == append(cs_to_ccs(identifier(receiver)), append(ccs_for_cg(KAB),
                   append(ccs_for_cg(NA), ccs_for_cg(NB)))) &*&
-          [_]public_generated(yahalom_pub)(cs_to_ccs(identifier(receiver)))
+          [_]public_ccs(cs_to_ccs(identifier(receiver)))
         ) :
         length(ccs0) == ID_SIZE + KEY_SIZE ?
         (
@@ -164,12 +164,12 @@ predicate yahalom_pub(cryptogram cg) =
           KAB == cg_symmetric_key(server, _) &*&
           cg_info(KAB) == IP(4, IP(sender, IP(p0,
                             IP(sender2, IP(a_id, IP(receiver2, b_id)))))) &*&
-          true == cg_is_generated(KAB) &*&
+          true == cg_is_gen_or_pub(KAB) &*&
           length(identifier(sender)) == ID_SIZE &*&
           length(cs_to_ccs(identifier(sender))) == ID_SIZE &*&
           length(ccs_for_cg(KAB)) == KEY_SIZE &*&
           ccs0 == append(cs_to_ccs(identifier(sender)), ccs_for_cg(KAB)) &*&
-          [_]public_generated(yahalom_pub)(cs_to_ccs(identifier(sender)))
+          [_]public_ccs(cs_to_ccs(identifier(sender)))
         ) :
         length(ccs0) == NONCE_SIZE ?
         (
@@ -177,7 +177,7 @@ predicate yahalom_pub(cryptogram cg) =
           yahalom_pub_msg4(?server, ?sender, ?receiver, ?a_id, ?NB) &*&
           NB == cg_nonce(?receiver2, ?b_id) &*&
           ccs0 == ccs_for_cg(NB) &*&
-          true == cg_is_generated(NB) &*&
+          true == cg_is_gen_or_pub(NB) &*&
           (
              bad(server) || bad(sender) || bad(receiver) ?
               [_]yahalom_pub(NB)
@@ -194,9 +194,9 @@ predicate yahalom_pub(cryptogram cg) =
         false;
     case cg_auth_encrypted(p0, c0, ccs0, ent0):
       return true == yahalom_public_key(p0, c0, true) &*&
-             [_]public_generated(yahalom_pub)(ccs0);
+             [_]public_ccs(ccs0);
     case cg_asym_encrypted(p0, c0, ccs0, ent0):
-      return [_]public_generated(yahalom_pub)(ccs0);
+      return [_]public_ccs(ccs0);
     case cg_asym_signature(p0, c0, ccs0, ent0):
       return true == yahalom_public_key(p0, c0, false);
   }

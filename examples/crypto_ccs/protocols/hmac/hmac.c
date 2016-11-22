@@ -112,7 +112,7 @@ void receiver(char *key, int key_len, char *message)
     
     /*@ if (!col && !bad(sender) && !bad(receiver))
         {  
-          public_chars_extract(hmac, hmac_cg);
+          public_ccs_cg(hmac_cg);
           open [_]hmac_pub(hmac_cg);
           assert [_]exists(?msg_cs');
           cs_to_ccs_inj(msg_cs, msg_cs');

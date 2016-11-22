@@ -82,14 +82,14 @@ predicate nsl_pub(cryptogram cg) =
       return true;
     case cg_encrypted(p0, c0, ccs0, ent0):
       return true == nsl_public_key(p0, c0, true) &*&
-             [_]public_generated(nsl_pub)(ccs0);
+             [_]public_ccs(ccs0);
     case cg_auth_encrypted(p0, c0, ccs0, ent0):
       return true == nsl_public_key(p0, c0, true) &*&
-             [_]public_generated(nsl_pub)(ccs0);
+             [_]public_ccs(ccs0);
     case cg_asym_encrypted(p0, c0, ccs0, ent0):
       return [_]nsl_pub_msg_sender(?p1) &*&
       col || bad(p0) || bad(p1) ?
-        [_]public_generated(nsl_pub)(ccs0)
+        [_]public_ccs(ccs0)
       :
       (
         length(ccs0) == MSG1_SIZE ?
@@ -99,12 +99,12 @@ predicate nsl_pub(cryptogram cg) =
           p1 == sender && p0 == receiver &*&
           ccs0 == append(cs_to_ccs(identifier(sender)),
                          ccs_for_cg(s_nonce)) &*&
-          [_]public_generated(nsl_pub)(take(ID_SIZE, ccs0)) &*&
+          [_]public_ccs(take(ID_SIZE, ccs0)) &*&
           length(identifier(sender)) == ID_SIZE &*&
           length(cs_to_ccs(identifier(sender))) == ID_SIZE &*&
           s_nonce == cg_nonce(sender, _) &*&
           cg_info(s_nonce) == int_pair(1, int_pair(p0, c0)) &*&
-          true == cg_is_generated(s_nonce)
+          true == cg_is_gen_or_pub(s_nonce)
         )
       : length(ccs0) == MSG2_SIZE ?
         (
@@ -114,21 +114,21 @@ predicate nsl_pub(cryptogram cg) =
           p1 == receiver && p0 == sender &*&
           ccs0 == append(cs_to_ccs(identifier(receiver)),
                          append(s_nonce_ccs, ccs_for_cg(r_nonce))) &*&
-          [_]public_generated(nsl_pub)(take(ID_SIZE, ccs0)) &*&
+          [_]public_ccs(take(ID_SIZE, ccs0)) &*&
           r_nonce == cg_nonce(receiver, _) &*&
           cg_info(r_nonce) == int_pair(2, int_pair(sender, int_pair(p_inst,
                                           int_pair(p_orig, c_orig)))) &*&
-          true == cg_is_generated(r_nonce) &*&
+          true == cg_is_gen_or_pub(r_nonce) &*&
           length(s_nonce_ccs) == NONCE_SIZE &*&
           length(identifier(receiver)) == ID_SIZE &*&
           length(cs_to_ccs(identifier(receiver))) == ID_SIZE &*&
           pub_ns ?
-            [_]public_generated(nsl_pub)(s_nonce_ccs)
+            [_]public_ccs(s_nonce_ccs)
           :
             s_nonce_ccs == ccs_for_cg(s_nonce) &*&
             s_nonce == cg_nonce(sender, _) &*&
             c_orig == int_right(int_right(cg_info(s_nonce))) &*&
-            cg_is_generated(s_nonce) &&
+            cg_is_gen_or_pub(s_nonce) &&
             p_inst == sender && p_orig == receiver
         )
       : length(ccs0) == MSG3_SIZE ?
@@ -139,7 +139,7 @@ predicate nsl_pub(cryptogram cg) =
           ccs0 == ccs_for_cg(r_nonce) &*&
           cg_info(r_nonce) == int_pair(2, int_pair(sender, int_pair(sender,
                                           int_pair(p0, c0)))) &*&
-          true == cg_is_generated(r_nonce)
+          true == cg_is_gen_or_pub(r_nonce)
       :
           false
       );
@@ -240,7 +240,7 @@ lemma void public_asym_encryption_is_public(cryptogram encrypted)
   requires nsl_proof_pred() &*&
            encrypted == cg_asym_encrypted(?p, ?c, ?pay, ?ent) &*&
            [_]nsl_pub(cg_public_key(p, c)) &*&
-           [_]public_generated(nsl_pub)(pay);
+           [_]public_ccs(pay);
   ensures  nsl_proof_pred() &*&
            [_]nsl_pub(encrypted);
 {
@@ -261,7 +261,7 @@ lemma void public_asym_decryption_is_public(cryptogram key,
            encrypted == cg_asym_encrypted(p, c, ?pay, ?ent) &*&
            [_]nsl_pub(key) &*&
            [_]nsl_pub(encrypted);
-  ensures  [_]public_generated(nsl_pub)(pay);
+  ensures  [_]public_ccs(pay);
 {
   open  [_]nsl_pub(key);
   open  [_]nsl_pub(encrypted);

@@ -5,7 +5,7 @@
 lemma_auto void cryptogram()
   requires [?f]cryptogram(?array, ?count, ?ccs, ?cg);
   ensures  [f]cryptogram(array, count, ccs, cg) &*&
-           ccs == ccs_for_cg(cg) && cg_is_generated(cg); 
+           ccs == ccs_for_cg(cg) && cg_is_gen_or_pub(cg); 
 {
   open [f]cryptogram(array, count, ccs, cg);
   close [f]cryptogram(array, count, ccs, cg);

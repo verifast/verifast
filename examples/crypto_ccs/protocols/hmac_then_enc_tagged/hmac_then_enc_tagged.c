@@ -19,7 +19,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
              [?f3]crypto_chars(secret, msg, msg_len, ?msg_ccs) &*&
                MAX_SIZE >= msg_len &*& msg_len >= MINIMAL_STRING_SIZE &*&
                bad(sender) || bad(shared_with(sender, enc_id)) ?
-                 [_]public_generated(hmac_then_enc_tagged_pub)(msg_ccs)
+                 [_]public_ccs(msg_ccs)
                :
                  true == send(sender, shared_with(sender, enc_id), msg_ccs); @*/
 /*@ ensures  principal(sender, _) &*&
@@ -50,8 +50,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
     // Copy message
     write_identifier(enc_msg, 0);
     //@ assert crypto_chars(normal, enc_msg, ID_SIZE, cs_to_ccs(identifier(0)));
-    /*@ assert [_]public_generated(hmac_then_enc_tagged_pub) 
-                                  (cs_to_ccs(identifier(0))); @*/
+    //@ assert [_]public_ccs(cs_to_ccs(identifier(0)));
     //@ crypto_chars_to_chars(enc_msg, ID_SIZE);
     //@ chars_to_secret_crypto_chars(enc_msg, ID_SIZE);
     memcpy(enc_msg + ID_SIZE, msg, msg_len);
@@ -66,7 +65,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
     //@ leak hmac_then_enc_tagged_pub(hmac_cg);
     //@ public_cryptogram(enc_msg + ID_SIZE + msg_len, hmac_cg);
     //@ public_chars(enc_msg + ID_SIZE + msg_len, 64);
-    //@ assert [_]public_generated(hmac_then_enc_tagged_pub)(hmac_ccs);
+    //@ assert [_]public_ccs(hmac_ccs);
     //@ chars_to_secret_crypto_chars(enc_msg + ID_SIZE + msg_len, 64);
     //@ crypto_chars_join(enc_msg);
     //@ append_assoc(cs_to_ccs(identifier(0)), msg_ccs, hmac_ccs);
@@ -110,11 +109,9 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
     
     /*@ if (hmac_then_enc_tagged_public_key(sender, enc_id, true))
         {
-          public_generated_join(hmac_then_enc_tagged_pub, 
-                                cs_to_ccs(identifier(0)), msg_ccs);
-          public_generated_join(hmac_then_enc_tagged_pub, 
-                                append(cs_to_ccs(identifier(0)), 
-                                       msg_ccs), hmac_ccs);
+          public_ccs_join(cs_to_ccs(identifier(0)), msg_ccs);
+          public_ccs_join(append(cs_to_ccs(identifier(0)), msg_ccs), 
+                          hmac_ccs);
         }
         else
         {
@@ -209,7 +206,6 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     zeroize(iv, 16);
     aes_free(&aes_context);
     //@ open aes_context(&aes_context);
-    //@ public_cryptogram_extract(buffer + 16);
     //@ public_cryptogram(buffer + 16, enc_cg);
     /*@ open decryption_post(true, ?garbage, receiver,
                              s, sender, enc_id, ?dec_ccs); @*/
@@ -234,8 +230,8 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
         {
           if (bad(sender) || bad(receiver))
           {
-            public_generated_split(hmac_then_enc_tagged_pub, dec_ccs, ID_SIZE);
-            public_generated_split(hmac_then_enc_tagged_pub, rest_ccs, enc_size - ID_SIZE - 64);
+            public_ccs_split(dec_ccs, ID_SIZE);
+            public_ccs_split(rest_ccs, enc_size - ID_SIZE - 64);
             public_crypto_chars(buffer_dec + enc_size - 64, 64);
             chars_to_crypto_chars(buffer_dec + enc_size - 64, 64);
           }
@@ -252,8 +248,12 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
           }
           public_crypto_chars(buffer_dec, ID_SIZE);
         }
+        else
+        {
+          crypto_chars_to_chars(buffer_dec, ID_SIZE);
+        }
     @*/
-    ///@ chars_to_crypto_chars(buffer_dec, ID_SIZE);
+    //@ chars_to_crypto_chars(buffer_dec, ID_SIZE);
     //@ assert crypto_chars(normal, buffer_dec, ID_SIZE, _);
     //@ close check_identifier_ghost_args(true, garbage, sender, enc_id, rest_ccs);
     check_identifier(buffer_dec, 0);

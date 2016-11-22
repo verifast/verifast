@@ -42,24 +42,24 @@ predicate enc_and_hmac_pub(cryptogram cg) =
       return true;
     case cg_private_key(p0, c0):
       return true == enc_and_hmac_public_key(p0, c0, false);
-    case cg_hash(cs0):
+    case cg_hash(ccs0):
       return true;
-    case cg_hmac(p0, c0, cs0):
+    case cg_hmac(p0, c0, ccs0):
       return enc_and_hmac_public_key(p0, c0, true) ?
-        [_]public_generated(enc_and_hmac_pub)(cs0)
+        [_]public_ccs(ccs0)
       :
-        true == send(p0, shared_with(p0, c0), cs0);
-    case cg_encrypted(p0, c0, cs0, ent0):
+        true == send(p0, shared_with(p0, c0), ccs0);
+    case cg_encrypted(p0, c0, ccs0, ent0):
       return enc_and_hmac_public_key(p0, c0, true) ?
-        [_]public_generated(enc_and_hmac_pub)(cs0)
+        [_]public_ccs(ccs0)
       :
-        true == send(p0, shared_with(p0, c0), cs0);
-    case cg_auth_encrypted(p0, c0, cs0, ent0):
+        true == send(p0, shared_with(p0, c0), ccs0);
+    case cg_auth_encrypted(p0, c0, ccs0, ent0):
       return true == enc_and_hmac_public_key(p0, c0, true) &*&
-             [_]public_generated(enc_and_hmac_pub)(cs0);
-    case cg_asym_encrypted(p0, c0, cs0, ent0):
-      return [_]public_generated(enc_and_hmac_pub)(cs0);
-    case cg_asym_signature(p0, c0, cs0, ent0):
+             [_]public_ccs(ccs0);
+    case cg_asym_encrypted(p0, c0, ccs0, ent0):
+      return [_]public_ccs(ccs0);
+    case cg_asym_signature(p0, c0, ccs0, ent0):
       return true == enc_and_hmac_public_key(p0, c0, false);
   }
 ;
@@ -81,7 +81,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len);
              [?f3]crypto_chars(secret, msg, msg_len, ?msg_ccs) &*&
                MAX_SIZE >= msg_len &*& msg_len >= MINIMAL_STRING_SIZE &*&
                bad(sender) || bad(shared_with(sender, enc_id)) ?
-                 [_]public_generated(enc_and_hmac_pub)(msg_ccs)
+                 [_]public_ccs(msg_ccs)
                :
                  true == send(sender, shared_with(sender, enc_id), msg_ccs); @*/
 /*@ ensures  principal(sender, _) &*&

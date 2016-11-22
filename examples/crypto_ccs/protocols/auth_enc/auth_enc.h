@@ -51,14 +51,14 @@ predicate auth_enc_pub(cryptogram cg) =
       return true;
     case cg_encrypted(p0, c0, ccs0, ent0):
       return true == auth_enc_public_key(p0, c0, true) &*&
-             [_]public_generated(auth_enc_pub)(ccs0);
+             [_]public_ccs(ccs0);
     case cg_auth_encrypted(p0, c0, ccs0, ent0):
       return auth_enc_public_key(p0, c0, true) ?
-               [_]public_generated(auth_enc_pub)(ccs0)
+               [_]public_ccs(ccs0)
              :
                true == send(p0, shared_with(p0, c0), ccs0);
     case cg_asym_encrypted(p0, c0, ccs0, ent0):
-      return [_]public_generated(auth_enc_pub)(ccs0);
+      return [_]public_ccs(ccs0);
     case cg_asym_signature(p0, c0, ccs0, ent0):
       return true == auth_enc_public_key(p0, c0, false);
   }
@@ -78,7 +78,7 @@ void sender(char *key, char *msg, unsigned int msg_len);
              [?f2]crypto_chars(secret, msg, msg_len, ?msg_ccs) &*&
                MAX_SIZE >= msg_len &*& msg_len >= MINIMAL_STRING_SIZE &*&
                bad(sender) || bad(shared_with(sender, id)) ?
-                 [_]public_generated(auth_enc_pub)(msg_ccs)
+                 [_]public_ccs(msg_ccs)
                :
                  true == send(sender, shared_with(sender, id), msg_ccs); @*/
 /*@ ensures  principal(sender, _) &*&

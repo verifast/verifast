@@ -111,7 +111,7 @@ void sender_msg1(int* socket, havege_state* havege_state, pk_context* r_context,
                           s_nonce_ccs, s_nonce_cg);
         public_cryptogram((void*) message + ID_SIZE, s_nonce_cg);
         assert chars((void*) message + ID_SIZE, NONCE_SIZE, ?s_nonce_cs');
-        cs_to_ccs_split(identifier(sender), s_nonce_cs');
+        cs_to_ccs_append(identifier(sender), s_nonce_cs');
         chars_join(message);
         public_chars(message, MSG1_SIZE);
         chars_to_crypto_chars(message, MSG1_SIZE);
@@ -197,7 +197,6 @@ void sender_msg2(int* socket, havege_state* havege_state, pk_context* s_context,
   /*@ if (col || garbage)
       {
         crypto_chars_to_chars(message, ID_SIZE);
-        chars_to_crypto_chars(message, ID_SIZE);
         crypto_chars_to_chars((void*) message + ID_SIZE, NONCE_SIZE);
         chars_to_crypto_chars((void*) message + ID_SIZE, NONCE_SIZE);
         crypto_chars_to_chars((void*) message + ID_SIZE + NONCE_SIZE, NONCE_SIZE);
@@ -207,9 +206,9 @@ void sender_msg2(int* socket, havege_state* havege_state, pk_context* s_context,
       {
         if (bad(sender) || bad(recvr2))
         {
-          assert [_]public_generated(nsl_pub)(dec_ccs);
-          public_generated_split(nsl_pub, dec_ccs, ID_SIZE);
-          public_generated_split(nsl_pub, append(s_ccs, r_ccs), NONCE_SIZE);
+          assert [_]public_ccs(dec_ccs);
+          public_ccs_split(dec_ccs, ID_SIZE);
+          public_ccs_split(append(s_ccs, r_ccs), NONCE_SIZE);
           public_crypto_chars((void*) message + ID_SIZE, NONCE_SIZE);
           chars_to_crypto_chars((void*) message + ID_SIZE, NONCE_SIZE);
         }
@@ -237,7 +236,7 @@ void sender_msg2(int* socket, havege_state* havege_state, pk_context* s_context,
         public_crypto_chars(message, ID_SIZE);
       }
   @*/
-
+  //@ chars_to_crypto_chars(message, ID_SIZE);
   /*@ close check_identifier_ghost_args(false, garbage, sender,
                                         s_id, append(s_ccs, r_ccs)); @*/
   check_identifier(message, recvr);
@@ -247,7 +246,6 @@ void sender_msg2(int* socket, havege_state* havege_state, pk_context* s_context,
   memcpy(r_nonce, (void*) message + ID_SIZE + NONCE_SIZE, NONCE_SIZE);
   //@ assert id_ccs == cs_to_ccs(identifier(recvr));
   //@ assert s_ccs == s_nonce_ccs;
-  ///@ cs_to_ccs_inj(s_ccs, s_nonce_ccs);
   //@ cryptogram r_nonce_cg = ccs_for_cg_sur(r_ccs, tag_nonce);
   //@ close sender_inter(r_ccs, r_nonce_cg);
 
@@ -255,13 +253,13 @@ void sender_msg2(int* socket, havege_state* havege_state, pk_context* s_context,
       {
         if (bad(sender) || bad(recvr2))
         {
-          assert [_]public_generated(nsl_pub)(dec_ccs);
-          public_generated_split(nsl_pub, dec_ccs, ID_SIZE);
-          public_generated_split(nsl_pub, append(s_nonce_ccs, r_ccs), NONCE_SIZE);
+          assert [_]public_ccs(dec_ccs);
+          public_ccs_split(dec_ccs, ID_SIZE);
+          public_ccs_split(append(s_nonce_ccs, r_ccs), NONCE_SIZE);
           public_crypto_chars(r_nonce, NONCE_SIZE);
-          public_crypto_chars_extract(s_nonce, s_nonce_cg);
+          chars_to_crypto_chars(r_nonce, NONCE_SIZE);
+          public_ccs_cg(s_nonce_cg);
           open [_]nsl_pub(s_nonce_cg);
-          chars_to_secret_crypto_chars(s_nonce, NONCE_SIZE);
           crypto_chars_to_chars((void*) message + ID_SIZE, NONCE_SIZE);
           chars_to_secret_crypto_chars((void*) message + ID_SIZE, NONCE_SIZE);
         }
@@ -277,7 +275,7 @@ void sender_msg2(int* socket, havege_state* havege_state, pk_context* s_context,
           equal_identifiers(recvr, recvr2);
           if (pub_ns)
           {
-            public_crypto_chars_extract(s_nonce, s_nonce_cg);
+            public_ccs_cg(s_nonce_cg);
             open [_]nsl_pub(s_nonce_cg);
             assert false;
           }
@@ -478,7 +476,6 @@ void receiver_msg1(int* socket, havege_state* havege_state,
   //@ interpret_asym_encrypted(encrypted, KEY_SIZE);
   //@ assert cryptogram(encrypted, KEY_SIZE, ?enc_ccs, ?enc_cg);
   //@ assert enc_cg == cg_asym_encrypted(?p, ?c, ?pay, ?ent);
-  //@ public_cryptogram_extract(encrypted);
 
   // Decrypt the message
   /*@ produce_function_pointer_chunk random_function(random_stub_nsl)
@@ -506,14 +503,13 @@ void receiver_msg1(int* socket, havege_state* havege_state,
   /*@ if (col || garbage)
       {
         crypto_chars_to_chars(message, ID_SIZE);
-        chars_to_crypto_chars(message, ID_SIZE);
       }
       else
       {
         if (bad(receiver) || bad(p_instigator2))
         {
-          assert [_]public_generated(nsl_pub)(dec_ccs);
-          public_generated_split(nsl_pub, dec_ccs, ID_SIZE);
+          assert [_]public_ccs(dec_ccs);
+          public_ccs_split(dec_ccs, ID_SIZE);
         }
         else
         {
@@ -526,6 +522,7 @@ void receiver_msg1(int* socket, havege_state* havege_state,
         public_crypto_chars(message, ID_SIZE);
       }
   @*/
+  //@ chars_to_crypto_chars(message, ID_SIZE);
   /*@ close check_identifier_ghost_args(false, garbage, receiver,
                                         r_id, s_nonce_ccs); @*/
   check_identifier(message, sender);
@@ -541,6 +538,7 @@ void receiver_msg1(int* socket, havege_state* havege_state,
         if (bad(p_inst) || bad(receiver))
         {
           public_crypto_chars(s_nonce, NONCE_SIZE);
+          chars_to_crypto_chars(s_nonce, NONCE_SIZE);
           crypto_chars_to_chars(message, ID_SIZE);
           chars_to_crypto_chars(message, ID_SIZE);
           public_crypto_chars((void*) message + ID_SIZE, NONCE_SIZE);
@@ -664,8 +662,8 @@ void receiver_msg2(int* socket, havege_state* havege_state,
         assert chars((void*) message, ID_SIZE, ?rid_cs);
         assert chars((void*) message + ID_SIZE, NONCE_SIZE, ?s_nonce_cs);
         assert chars((void*) message + ID_SIZE + NONCE_SIZE, NONCE_SIZE, ?r_nonce_cs);        
-        cs_to_ccs_split(rid_cs, s_nonce_cs);
-        cs_to_ccs_split(append(rid_cs, s_nonce_cs), r_nonce_cs);
+        cs_to_ccs_append(rid_cs, s_nonce_cs);
+        cs_to_ccs_append(append(rid_cs, s_nonce_cs), r_nonce_cs);
 
         chars_join(message);
         chars_join(message);
@@ -790,7 +788,7 @@ void receiver_msg3(int* socket, havege_state* havege_state,
         if (bad(receiver) || bad(sender2))
         {
           public_crypto_chars(r_nonce, NONCE_SIZE);
-          public_chars_extract(r_nonce, r_nonce_cg);
+          public_ccs_cg(r_nonce_cg);
           open [_]nsl_pub(r_nonce_cg);
           assert false;
         }
@@ -895,6 +893,7 @@ void receiver(int sender, int receiver,
   //@ close principal(receiver, _);
   receiver_msg2(&socket2, &havege_state, &s_context, receiver,
                 s_nonce, r_nonce);
+  //@ if (col || bad(p_inst) || bad(receiver)) chars_to_crypto_chars(s_nonce, NONCE_SIZE);
   //@ close receiver_inter(p_orig, c_orig, p_inst, s_nonce_ccs, s_nonce_cg);
   receiver_msg3(&socket2, &havege_state, &r_context, sender, receiver,
                 s_nonce, r_nonce);

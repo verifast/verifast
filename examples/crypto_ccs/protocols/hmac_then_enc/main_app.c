@@ -55,7 +55,7 @@ predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
   crypto_chars(secret, msg, MSG_LEN, ?msg_ccs) &*&
   (
     bad(sender) || bad(receiver) ?
-      [_]public_generated(hmac_then_enc_pub)(msg_ccs)
+      [_]public_ccs(msg_ccs)
     :
       true == send(sender, receiver, msg_ccs) 
   ) &*&

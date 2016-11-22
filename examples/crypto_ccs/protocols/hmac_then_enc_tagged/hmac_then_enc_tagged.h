@@ -53,15 +53,14 @@ predicate hmac_then_enc_tagged_pub(cryptogram cg) =
         true == send(p0, shared_with(p0, c0), ccs0);
     case cg_encrypted(p0, c0, ccs0, ent0):
       return hmac_then_enc_tagged_public_key(p0, c0, true) ?
-        [_]public_generated(hmac_then_enc_tagged_pub)(ccs0)
+        [_]public_ccs(ccs0)
       :
         hmac_then_enc_tagged_pub_1(?msg_ccs, ?hmac_cg) &*&
         ccs0 == append(cs_to_ccs(identifier(0)), 
                        append(msg_ccs, ccs_for_cg(hmac_cg))) &*&
-        [_]public_generated(hmac_then_enc_tagged_pub)
-                           (cs_to_ccs(identifier(0))) &*&
+        [_]public_ccs(cs_to_ccs(identifier(0))) &*&
         length(cs_to_ccs(identifier(0))) == ID_SIZE &*&
-        length(ccs_for_cg(hmac_cg)) == 64 && cg_is_generated(hmac_cg) &*&
+        length(ccs_for_cg(hmac_cg)) == 64 && cg_is_gen_or_pub(hmac_cg) &*&
         [_]hmac_then_enc_tagged_pub(hmac_cg) &*&
         hmac_cg == cg_hmac(p0, ?c1, msg_ccs) &*&
         cg_info(cg_symmetric_key(p0, c0)) == c1 &*&
@@ -69,9 +68,9 @@ predicate hmac_then_enc_tagged_pub(cryptogram cg) =
         true == send(p0, shared_with(p0, c0), msg_ccs);
     case cg_auth_encrypted(p0, c0, ccs0, ent0):
       return true == hmac_then_enc_tagged_public_key(p0, c0, true) &*&
-             [_]public_generated(hmac_then_enc_tagged_pub)(ccs0);
+             [_]public_ccs(ccs0);
     case cg_asym_encrypted(p0, c0, ccs0, ent0):
-      return [_]public_generated(hmac_then_enc_tagged_pub)(ccs0);
+      return [_]public_ccs(ccs0);
     case cg_asym_signature(p0, c0, ccs0, ent0):
       return true == hmac_then_enc_tagged_public_key(p0, c0, false);
   }
@@ -95,7 +94,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len);
              [?f3]crypto_chars(secret, msg, msg_len, ?msg_ccs) &*&
                MAX_SIZE >= msg_len &*& msg_len >= MINIMAL_STRING_SIZE &*&
                bad(sender) || bad(shared_with(sender, enc_id)) ?
-                 [_]public_generated(hmac_then_enc_tagged_pub)(msg_ccs)
+                 [_]public_ccs(msg_ccs)
                :
                  // Not saying anything about publicness of msg_cs established
                  // confidentiality

@@ -2,7 +2,7 @@ let verify_crypto
   verifast  -prover redux
 in
 
-verify_crypto -bindir bin/stdlib -allow_assume -shared -emit_dll_vfmanifest -emit_dll_vfmanifest_as bin/libann_polarssl.dll.vfmanifest annotated_api/general_definitions/general_definitions.vfmanifest annotated_api/polarssl_definitions/polarssl_definitions.vfmanifest src/auxiliary_definitions.c src/crypto_chars.c src/cryptogram.c src/cryptogram_levels.c src/public_chars.c src/interpret.c src/havege_util.c src/identifiers.c src/attacker.c
+verify_crypto -bindir bin/stdlib -allow_assume -shared -emit_dll_vfmanifest -emit_dll_vfmanifest_as bin/libann_polarssl.dll.vfmanifest annotated_api/general_definitions/general_definitions.vfmanifest annotated_api/polarssl_definitions/polarssl_definitions.vfmanifest src/auxiliary_definitions.c src/cs_to_ccs.c src/cryptogram.c src/public_chars.c src/interpret.c src/havege_util.c src/identifiers.c src/attacker.c
 
 cd protocols
   verify_crypto -bindir ../bin/stdlib -allow_assume pthread.o ../bin/libann_polarssl.dll.vfmanifest dummy/dummy.c dummy/main_app.c

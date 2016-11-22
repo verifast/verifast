@@ -76,7 +76,7 @@ int gcm_crypt_and_tag(gcm_context *ctx, int mode, size_t length,
                :
                  // encryption was successful
                  out_kind == secret &*&
-                 exists(?enc_cg) &*& cg_is_generated(enc_cg) &&
+                 exists(?enc_cg) &*& cg_is_gen_or_pub(enc_cg) &&
                  append(tag_ccs, out_ccs) == ccs_for_cg(enc_cg) &*&
                  enc_cg == cg_auth_encrypted(p1, c1, in_ccs, iv_ccs); @*/
 

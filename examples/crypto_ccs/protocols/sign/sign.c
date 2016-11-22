@@ -57,7 +57,7 @@ void sender(int recvr, char *key, int key_len, char *msg)
     //@ crypto_chars_join(M);
     //@ list<char> pay = append(chars_of_int(receiver), msg_cs);
     //@ cs_to_ccs_crypto_chars(msg, msg_cs);
-    //@ cs_to_ccs_split(chars_of_int(receiver), msg_cs);
+    //@ cs_to_ccs_append(chars_of_int(receiver), msg_cs);
     //@ cs_to_ccs_crypto_chars(M, pay);
 
     // create hash of plain text
@@ -199,7 +199,6 @@ void receiver(int recvr, char *key, int key_len, char *msg)
     
     /*@ if (!col && !bad(sender))
         {
-          public_chars_extract(buffer + 4 + MSG_SIZE, sign_cg);
           open [_]sign_pub(sign_cg);
           assert [_]sign_pub_1(?msg_cs2, ?receiver2);
           cryptogram hash_cg2 = 

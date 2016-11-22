@@ -19,7 +19,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
              [?f3]crypto_chars(secret, msg, msg_len, ?msg_ccs) &*&
                MAX_SIZE >= msg_len &*& msg_len >= MINIMAL_STRING_SIZE &*&
                bad(sender) || bad(shared_with(sender, enc_id)) ?
-                 [_]public_generated(enc_and_hmac_pub)(msg_ccs)
+                 [_]public_ccs(msg_ccs)
                :
                  true == send(sender, shared_with(sender, enc_id), msg_ccs); @*/
 /*@ ensures  principal(sender, _) &*&
@@ -83,7 +83,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
     //@ assert enc_cg == cg_encrypted(sender, enc_id, msg_ccs, iv_ccs);
     //@ assert chars(message, 16 + msg_len, append(iv_cs, enc_cs));
     //@ chars_to_crypto_chars(message, 16 + msg_len);
-    //@ cs_to_ccs_split(iv_cs, enc_cs);
+    //@ cs_to_ccs_append(iv_cs, enc_cs);
     //@ assert crypto_chars(normal, message, 16 + msg_len, append(iv_ccs, enc_ccs));
     //@ assert append(iv_ccs, enc_ccs) == cs_to_ccs(append(iv_cs, enc_cs));
     

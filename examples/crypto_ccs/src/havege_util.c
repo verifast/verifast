@@ -22,8 +22,7 @@ void r_int(struct havege_state* state, int* i)
   /*@ if (!col)
       {
         proof(random);
-        dummy_foreach_singleton(pub, random);
-        close_public_generated(cs);
+        public_cg_ccs(random);
         public_crypto_chars(temp, l);
       }
       else

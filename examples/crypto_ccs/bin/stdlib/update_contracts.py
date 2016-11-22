@@ -18,7 +18,7 @@ insert_part("string.h", 5, "//@ #include <crypto.gh>\r\n")
 insert_part("string.h", 37,
   "/*@\r\n"
   "predicate memcmp_secret(char* buffer, int count, list<crypto_char> ccs, cryptogram cg) =\r\n"
-  "  count == length(ccs) && ccs == ccs_for_cg(cg) && cg_is_generated(cg) \r\n"
+  "  count == length(ccs) && ccs == ccs_for_cg(cg) && cg_is_gen_or_pub(cg) \r\n"
   ";\r\n"
   "@*/\r\n\n"
 )

@@ -6,10 +6,8 @@
 
 //@ #include "auxiliary_definitions.gh"
 //@ #include "principals.gh"
-//@ #include "crypto_chars.gh"
+//@ #include "cs_to_ccs.gh"
 //@ #include "cryptogram.gh"
-//@ #include "cryptogram_bounds.gh"
-//@ #include "cryptogram_levels.gh"
 //@ #include "public_invariant.gh"
 //@ #include "public_chars.gh"
 //@ #include "interpret.gh"

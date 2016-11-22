@@ -38,7 +38,7 @@ int strlen(char *string);
 
 /*@
 predicate memcmp_secret(char* buffer, int count, list<crypto_char> ccs, cryptogram cg) =
-  count == length(ccs) && ccs == ccs_for_cg(cg) && cg_is_generated(cg) 
+  count == length(ccs) && ccs == ccs_for_cg(cg) && cg_is_gen_or_pub(cg) 
 ;
 @*/
 

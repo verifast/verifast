@@ -15,7 +15,7 @@ void sender(char *key, char *msg, unsigned int msg_len)
              [?f2]crypto_chars(secret, msg, msg_len, ?msg_ccs) &*&
                MAX_SIZE >= msg_len &*& msg_len >= MINIMAL_STRING_SIZE &*&
                bad(sender) || bad(shared_with(sender, id)) ?
-                 [_]public_generated(auth_enc_pub)(msg_ccs)
+                 [_]public_ccs(msg_ccs)
                :
                  true == send(sender, shared_with(sender, id), msg_ccs); @*/
 /*@ ensures  principal(sender, _) &*&
@@ -157,7 +157,6 @@ int receiver(char *key, char *msg)
           assert enc_cg == cg_auth_encrypted(sender, id, ?dec_ccs, iv_ccs);
           assert ccs_for_cg(enc_cg) == enc_ccs;
           enc_ccs == cs_to_ccs(append(tag_cs, enc_cs));
-          public_chars_extract(buffer + 16, enc_cg);
           open [_]auth_enc_pub(enc_cg);
         }
     @*/

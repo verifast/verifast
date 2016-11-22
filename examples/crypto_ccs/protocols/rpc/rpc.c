@@ -130,7 +130,7 @@ void client(char *key, int key_len, char *request, char *response)
               if (c1 == '1')
               {
                 public_chars((void*) buffer + 1 + 2 * PACKAGE_SIZE, 64);
-                public_chars_extract(hmac, hmac_cg);
+                public_ccs_cg(hmac_cg);
                 open [_]rpc_pub(hmac_cg);
                 assert [_]exists(?cont_cs');
                 cs_to_ccs_inj(cont_cs, cont_cs');
@@ -148,11 +148,10 @@ void client(char *key, int key_len, char *request, char *response)
                                   req_cs, resp_cs);
         }
     @*/
-
+    //@ chars_join(buffer);
+    //@ chars_join(buffer);
     /*@ open hide_chars((void*) buffer + expected_size,
                         MAX_MESSAGE_SIZE - expected_size, _); @*/
-    //@ chars_join(buffer);
-    //@ chars_join(buffer);
     //@ chars_join(buffer);
     //@ assert chars(buffer, MAX_MESSAGE_SIZE, _);
   }
@@ -277,7 +276,7 @@ void server(char *key, int key_len, char *request, char *response)
             assert cont_cs == cons('0', req_cs);
             if (!col && c1 == '0' && !bad(client))
             {
-              public_chars_extract((void*) buffer + 1 + PACKAGE_SIZE, hmac_cg);
+              public_ccs_cg(hmac_cg);
               open [_]rpc_pub(hmac_cg);
               assert [_]exists(?cont_cs');
               cs_to_ccs_inj(cont_cs, cont_cs');
@@ -321,7 +320,7 @@ void server(char *key, int key_len, char *request, char *response)
     //@ cs_to_ccs_crypto_chars(response, resp_cs);
     //@ crypto_chars_join(message + 1);
     //@ crypto_chars_join(message);
-    //@ cs_to_ccs_split(req_cs, resp_cs);
+    //@ cs_to_ccs_append(req_cs, resp_cs);
     //@ list<char> pay_cs = cons('1', append(req_cs, resp_cs));
     //@ cs_to_ccs_crypto_chars(message, pay_cs);
     

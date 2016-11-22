@@ -25,13 +25,12 @@ void write_identifier(char *array, int id)
                chars(array, ID_SIZE, _); @*/
   /*@ ensures  crypto_chars(normal, array, ID_SIZE, ?ccs) &*&
                ccs == cs_to_ccs(identifier(id)) &*&
-               [_]public_generated(pub)(ccs); @*/
+               [_]public_ccs(ccs); @*/
 {
   void *temp = &id;
   //@ assert integer(temp, ?id_val);
   //@ chars_to_integer(temp);
-  //@ list<char> csi = chars_of_int(id_val);
-  //@ assert chars(temp, 4, csi);
+  //@ assert chars(temp, 4, chars_of_int(id_val));
   
   //@ chars_limits(array);
   //@ chars_to_crypto_chars(temp, 4);
@@ -39,13 +38,13 @@ void write_identifier(char *array, int id)
   memcpy(array +  4, temp, 4);
   memcpy(array +  8, temp, 4);
   //@ crypto_chars_to_chars(temp, 4);
-  //@ cs_to_ccs_split(csi, csi);
-  //@ cs_to_ccs_split(csi, append(csi, csi));
-  //@ cs_to_ccs_split(csi, append(csi, append(csi, csi)));
+  
   //@ crypto_chars_join(array + 4);
   //@ crypto_chars_join(array);
-  //@ crypto_chars_to_chars(array, 12);
-  //@ public_chars(array, 12);
+  //@ cs_to_ccs_append(chars_of_int(id_val), chars_of_int(id_val));
+  /*@ cs_to_ccs_append(chars_of_int(id_val), 
+                       append(chars_of_int(id_val), chars_of_int(id_val))); @*/
+  //@ public_cs(identifier(id_val));
 }
 
 void check_identifier(char *array, int id)
@@ -73,9 +72,6 @@ void check_identifier(char *array, int id)
   //@ open check_identifier_ghost_args(sym, garbage, p_key, c_key, ccs_rest);
   char temp[ID_SIZE];
   write_identifier(temp, id);
-  //@ crypto_chars_to_chars(temp, ID_SIZE);
-  //@ public_chars(temp, ID_SIZE);
-  //@ chars_to_crypto_chars(temp, ID_SIZE);
   if (memcmp(temp, array, ID_SIZE) != 0) abort();
   //@ public_crypto_chars(temp, ID_SIZE);
   //@ assert [f]crypto_chars(normal, array, ID_SIZE, ccs);
