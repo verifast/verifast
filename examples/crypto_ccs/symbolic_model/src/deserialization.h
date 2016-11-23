@@ -7,13 +7,14 @@
 
 /*@
 
-lemma void deserialize_item(list<crypto_char> ccs, predicate(item) pub);
+lemma item deserialize_item(list<crypto_char> ccs);
   requires FORALLP_C &*& FORALLP_CS &*& 
-           proof_obligations(pub) &*& length(ccs) <= INT_MAX &*&
+           proof_obligations(?pub) &*& [_]public_invar(polarssl_pub(pub)) &*&
+           length(ccs) <= INT_MAX &*&
            true == well_formed_ccs(forallc, forallcs, nat_length(ccs), ccs) &*&
-           [_]public_generated(polarssl_pub(pub))(ccs);
+           [_]public_ccs(ccs);
   ensures  proof_obligations(pub) &*&
-           [_]item_constraints(?i, ccs, pub) &*& [_]pub(i);
+           [_]item_constraints(result, ccs, pub) &*& [_]pub(result);
 
 @*/
 

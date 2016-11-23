@@ -1,6 +1,8 @@
 #ifndef CRYPTOGRAM_LEVELS_GH
 #define CRYPTOGRAM_LEVELS_GH
 
+#include <quantifiers.gh>
+
 #include "auxiliary_definitions.gh"
 #include "cryptogram.gh"
 
@@ -24,10 +26,37 @@ lemma_auto void cg_level_max_(cryptogram cg);
 // crypto cycles during induction, e.g. E(...E(E(E(m)))) == m. If only
 // cryptograms generated in some run are considered, then no cycle
 // can occur unless there is a collision.
-lemma void cg_level_ind(cryptogram cg, cryptogram cg_pay,
-                        list<crypto_char> prefix, list<crypto_char> suffix);
+lemma void cg_level_ind(cryptogram cg, cryptogram cg_pay);
   requires cg_payload(cg) == some(?pay) &*&
-           pay == append(prefix, append(ccs_for_cg(cg_pay), suffix));
+           true == sublist(ccs_for_cg(cg_pay), pay);
   ensures  col || true == cg_level_below(cg_level(cg), cg_pay);
+
+//Proven lemmas
+
+fixpoint bool cg_in_ccs_implies_level_below(list<crypto_char> ccs,
+                                            nat level_bound,
+                                            cryptogram cg)
+{
+  return col || !sublist(ccs_for_cg(cg), ccs) ||
+           cg_level_below(level_bound, cg);
+}
+
+lemma void cg_level_ccs_max(list<crypto_char> ccs);
+  requires true;
+  ensures  [_]is_forall_t<cryptogram>(?forallcg) &*&
+           true == forallcg((cg_in_ccs_implies_level_below)(ccs, cg_level_max));
+
+lemma void cg_level_ccs_pay(cryptogram cg, nat bound);
+  requires cg_payload(cg) == some(?pay) &*& cg_is_gen_or_pub(cg) &&
+           cg_level_below(succ(bound), cg);
+  ensures  [_]is_forall_t<cryptogram>(?forallcg) &*&
+           true == forallcg((cg_in_ccs_implies_level_below)(pay, bound));
+
+lemma void cg_level_ccs_sublist(list<crypto_char> ccs,
+                                list<crypto_char> ccs_part, nat bound);
+  requires [_]is_forall_t<cryptogram>(?forallcg) &*&
+           true == sublist(ccs_part, ccs) &*&
+           true == forallcg((cg_in_ccs_implies_level_below)(ccs, bound));
+  ensures  true == forallcg((cg_in_ccs_implies_level_below)(ccs_part, bound));
 
 #endif

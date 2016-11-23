@@ -9,10 +9,11 @@
   
 lemma void serialize_item(item i);
   requires proof_obligations(?pub) &*&
-           [_]item_constraints(i, ?cs, pub) &*&
+           [_]public_invar(polarssl_pub(pub)) &*&
+           [_]item_constraints(i, ?ccs, pub) &*&
            [_]pub(i);
   ensures  proof_obligations(pub) &*& 
-           [_]public_generated(polarssl_pub(pub))(cs);
+           [_]public_ccs(ccs);
 
 @*/
 

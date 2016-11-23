@@ -365,8 +365,7 @@ void ic_check_equal_pair(char* c1, char* b1,
                  take(sizeof(int), ccs_cont1) ==
                    cs_to_ccs(chars_of_unbounded_int(length(ccs_f1))) &*&
                  drop(sizeof(int), ccs_cont1) == append(ccs_f1, ccs_s1) &*&
-                 [_]public_generated(polarssl_pub(pub))
-                                    (take(sizeof(int), ccs_cont1)) &*&
+                 [_]public_ccs(take(sizeof(int), ccs_cont1)) &*&
                [?f2]crypto_chars(secret, c2, TAG_LENGTH, ccs_tag) &*&
                [f2]crypto_chars(secret, b2, size, ?ccs_cont2) &*&
                  [_]item_constraints(?i2, append(ccs_tag, ccs_cont2), pub) &*&
@@ -377,8 +376,7 @@ void ic_check_equal_pair(char* c1, char* b1,
                  take(sizeof(int), ccs_cont2) ==
                    cs_to_ccs(chars_of_unbounded_int(length(ccs_f2))) &*&
                  drop(sizeof(int), ccs_cont2) == append(ccs_f2, ccs_s2) &*&
-                 [_]public_generated(polarssl_pub(pub))
-                                    (take(sizeof(int), ccs_cont2)); @*/
+                 [_]public_ccs(take(sizeof(int), ccs_cont2)); @*/
   /*@ ensures  [f]world(pub, key_clsfy) &*&
                principal(principal, count) &*&
                [f1]crypto_chars(secret, c1, TAG_LENGTH, ccs_tag) &*&
@@ -601,8 +599,10 @@ void ic_check_equal(char* cont1, int size1, char* cont2, int size2)
          assert [f2]crypto_chars(secret, b_cg2, size_cg, ccs_cg2);
          crypto_chars_to_chars(b_cg1, size_cg);
          crypto_chars_to_chars(b_cg2, size_cg);
-         public_chars_extract(b_cg1, cg1);
-         public_chars_extract(b_cg2, cg2);
+         public_chars(b_cg1, size_cg);
+         public_ccs_cg(cg1);
+         public_chars(b_cg2, size_cg);
+         public_ccs_cg(cg2);
          chars_to_secret_crypto_chars(b_cg1, size_cg);
          chars_to_secret_crypto_chars(b_cg2, size_cg);
        }

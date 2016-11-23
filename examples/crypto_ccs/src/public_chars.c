@@ -28,8 +28,8 @@ lemma void public_cryptogram(char *array, cryptogram cg)
 }
 
 lemma_auto void public_chars(char *array, int size)
-  requires chars(array, size, ?cs);
-  ensures  chars(array, size, cs) &*& [_]public_ccs(cs_to_ccs(cs));
+  requires [?f]chars(array, size, ?cs);
+  ensures  [f]chars(array, size, cs) &*& [_]public_ccs(cs_to_ccs(cs));
 {
   public_cs(cs);
 }

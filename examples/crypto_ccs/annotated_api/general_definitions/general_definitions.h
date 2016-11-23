@@ -8,6 +8,7 @@
 //@ #include "principals.gh"
 //@ #include "cs_to_ccs.gh"
 //@ #include "cryptogram.gh"
+//@ #include "cryptogram_levels.gh"
 //@ #include "public_invariant.gh"
 //@ #include "public_chars.gh"
 //@ #include "interpret.gh"

@@ -1,36 +1,39 @@
 #include "deserialization.h"
 
 #include <string.h>
+//@ #include <list.gh>
 
 #include "principal_ids.h"
-//@ #include "list.gh"
 #include "serialization.h"
 
 /*@
 
 #define DESERIALIZE_ITEM_PROOF_CG(TAG, CG) \
-  cryptogram cg = ccs_for_cg_sur(cs_cg, TAG); \
-  list<cryptogram> cgs_cg = cgs_in_chars(cs_cg); \
+  cryptogram cg = ccs_for_cg_sur(ccs_cg, TAG); \
   assert cg == CG; \
-  public_generated_extract(polarssl_pub(pub), cs_cg, cg); \
+  public_ccs_cg(cg); \
   open [_]polarssl_pub(pub)(cg); \
 
 #define DESERIALIZE_ITEM_PROOF_PAY(IPAY, INOPAY, PROOF, ATTACK_EXTRA) \
   open [_]exists<bool>(?attack); \
-  if (attack) \
+  if (attack || col) \
   { \
-    if (well_formed(cs_pay, nat_length(cs_pay))) \
+    forall_t_elim(forallcg, (cg_in_ccs_implies_level_below)(ccs, level_bound), cg); \
+    assert true == cg_in_ccs_implies_level_below(ccs, level_bound, cg); \
+    assert true == sublist(ccs_for_cg(cg), ccs); \
+    assert col || cg_level_below(level_bound, cg); \
+    if (!col && well_formed_ccs(forallc, forallcs, \
+                                nat_length(ccs_pay), ccs_pay)) \
     { \
       close proof_obligations(pub); \
-      well_formed_upper_bound(cs_pay, nat_length(cs_pay), nat_of_int(INT_MAX)); \
-      forall_mem(cg, cgs_in_chars(cs), (cg_level_below)(level_bound)); \
-      cg_level_pay(cg, level_bound0); \
-      deserialize_item_(level_bound0, nat_of_int(INT_MAX), cs_pay, pub); \
-      open [_]item_constraints(?pay, cs_pay, pub); \
+      well_formed_upper_bound(nat_length(ccs_pay), nat_of_int(INT_MAX), ccs_pay); \
+      cg_level_ccs_pay(cg, level_bound0); \
+      deserialize_item_(level_bound0, nat_of_int(INT_MAX), ccs_pay); \
+      open [_]item_constraints(?pay, ccs_pay, pub); \
       assert [_]pub(pay); \
       i = IPAY; \
-      close well_formed_item_chars(i)(cs_pay); \
-      leak well_formed_item_chars(i)(cs_pay); \
+      close well_formed_item_ccs(i)(ccs_pay); \
+      leak well_formed_item_ccs(i)(ccs_pay); \
       open proof_obligations(pub); \
       PROOF \
     } \
@@ -38,13 +41,16 @@
     { \
       i = INOPAY; \
       PROOF \
-      close ill_formed_item_chars(i)(cs_pay); \
-      leak ill_formed_item_chars(i)(cs_pay); \
+      if (!col) \
+      { \
+        close ill_formed_item_ccs(i)(ccs_pay); \
+        leak ill_formed_item_ccs(i)(ccs_pay); \
+      } \
     } \
   } \
   else \
   { \
-    assert [_]item_constraints(?pay, cs_pay, pub); \
+    assert [_]item_constraints(?pay, ccs_pay, pub); \
     ATTACK_EXTRA \
     i = IPAY; \
     well_formed_item_constraints(pay, i); \
@@ -52,250 +58,249 @@
   } \
 
 #define DESERIALIZE_ITEM_PROOF \
-switch(length_bound) \
-{ \
-  case succ(length_bound0): \
-    list<crypto_char> ccs_tag = take(TAG_LENGTH, ccs); \
-    list<crypto_char> ccs_cont = drop(TAG_LENGTH, ccs); \
-    take_append(TAG_LENGTH, ccs_tag, ccs_cont); \
-    drop_append(TAG_LENGTH, ccs_tag, ccs_cont); \
-    head_append(ccs_tag, ccs_cont); \
-    if (!exists_t<char>(forallc, (valid_ctag)(head(ccs_tag)))) \
-    { \
-      forall_t_elim(forallc, (notf)((valid_ctag)(head(ccs_tag))), TAG_PAIR); \
-      assert false; \
-    } \
-    assert ccs == append(ccs_tag, ccs_cont); \
-    assert ccs_tag == full_ctag(head(ccs)); \
-    length_equals_nat_length(ccs); \
-    \
-    list<cryptogram> cgs = cgs_in_ccs(ccs); \
-    well_formed_upper_bound(length_bound, nat_length(ccs), ccs); \
-    assert true == well_formed_ccs(forallc, forallcs, nat_length(ccs), ccs); \
-    public_generated_split(polarssl_pub(pub), ccs, TAG_LENGTH); \
-    open [_]public_generated(polarssl_pub(pub))(ccs_cont); \
-    cgs_in_ccs_upper_bound_split(ccs, cgs, TAG_LENGTH); \
-    \
-    item i; \
-    c_to_cc_inj(TAG_PAIR, TAG_DATA); \
-    c_to_cc_inj(TAG_PAIR, TAG_PAIR); \
-    c_to_cc_inj(TAG_PAIR, TAG_NONCE); \
-    c_to_cc_inj(TAG_PAIR, TAG_HASH); \
-    c_to_cc_inj(TAG_PAIR, TAG_SYMMETRIC_KEY); \
-    c_to_cc_inj(TAG_PAIR, TAG_PUBLIC_KEY); \
-    c_to_cc_inj(TAG_PAIR, TAG_PRIVATE_KEY); \
-    c_to_cc_inj(TAG_PAIR, TAG_HMAC); \
-    c_to_cc_inj(TAG_PAIR, TAG_SYMMETRIC_ENC); \
-    c_to_cc_inj(TAG_PAIR, TAG_ASYMMETRIC_ENC); \
-    c_to_cc_inj(TAG_PAIR, TAG_ASYMMETRIC_SIG); \
-    if (!exists_t<char>(forallc, (valid_ctag)(head(ccs_tag)))) \
-    { \
-      forall_t_elim(forallc, (notf)((valid_ctag)(head(ccs_tag))), TAG_PAIR); \
-      assert false; \
-    } \
-    assert true == valid_full_ctag(forallc, ccs_tag); \
-    open proof_obligations(pub); \
-    if (head(ccs) == TAG_DATA) \
-    { \
-      i = data_item(cs_cont); \
-      assert is_public_data(?proof, pub); \
-      close exists(info_for_item); \
-      proof(i); \
-    } \
-    else if (head(cs) == TAG_PAIR) \
-    { \
-      assume (false); \
-      int length_f_cs; \
-      list<char> p_cs, f_cs, s_cs; \
-      if (INT_MIN <= head(cs_cont) && head(cs_cont) <= INT_MAX) \
+  switch(length_bound) \
+  { \
+    case succ(length_bound0): \
+      list<crypto_char> ccs_tag = take(TAG_LENGTH, ccs); \
+      list<crypto_char> ccs_cont = drop(TAG_LENGTH, ccs); \
+      take_append(TAG_LENGTH, ccs_tag, ccs_cont); \
+      drop_append(TAG_LENGTH, ccs_tag, ccs_cont); \
+      head_append(ccs_tag, ccs_cont); \
+      length_equals_nat_length(ccs); \
+      public_ccs_split(ccs, TAG_LENGTH); \
+      assert ccs == append(ccs_tag, ccs_cont); \
+      assert ccs_tag == full_ctag(head(ccs)); \
+      assert [_]public_ccs(ccs_tag); \
+      \
+      char tag = not_forall_t(forallc, (notf)((valid_ctag)(head(ccs)))); \
+      assert head(ccs) == c_to_cc(tag); \
+      c_to_cc_inj(tag, TAG_DATA); \
+      c_to_cc_inj(tag, TAG_PAIR); \
+      c_to_cc_inj(tag, TAG_NONCE); \
+      c_to_cc_inj(tag, TAG_HASH); \
+      c_to_cc_inj(tag, TAG_SYMMETRIC_KEY); \
+      c_to_cc_inj(tag, TAG_PUBLIC_KEY); \
+      c_to_cc_inj(tag, TAG_PRIVATE_KEY); \
+      c_to_cc_inj(tag, TAG_HMAC); \
+      c_to_cc_inj(tag, TAG_SYMMETRIC_ENC); \
+      c_to_cc_inj(tag, TAG_ASYMMETRIC_ENC); \
+      c_to_cc_inj(tag, TAG_ASYMMETRIC_SIG); \
+      open proof_obligations(pub); \
+      well_formed_upper_bound(length_bound, nat_length(ccs), ccs);  \
+      assert true == well_formed_ccs(forallc, forallcs, nat_length(ccs), ccs); \
+      \
+      item i; \
+      if (head(ccs) == c_to_cc(TAG_DATA)) \
       { \
-        length_f_cs = int_of_chars(take(sizeof(int), cs_cont)); \
-        p_cs = drop(TAG_LENGTH + sizeof(int), cs); \
-        f_cs = take(length_f_cs, p_cs); \
-        s_cs = drop(length_f_cs, p_cs); \
+        open [_]public_ccs(ccs_cont); \
+        list<char> data = \
+          not_forall_t(forallcs, (notf)((cs_to_ccs_eq)(ccs_cont))); \
+        i = data_item(data); \
+        assert is_public_data(?proof, pub); \
+        proof(i); \
+      } \
+      else if (head(ccs) == c_to_cc(TAG_PAIR)) \
+      { \
+        int length_f_ccs, length_s_ccs; \
+        list<crypto_char> p_ccs, f_ccs, s_ccs; \
+        fixpoint(list<crypto_char>, bool) wf = \
+                (well_formed_ccs)(forallc, forallcs, length_bound0); \
+        char c = not_forall_t(forallc, \
+              (notf)((well_formed_pair)(forallcs, wf, ccs_cont))); \
         \
-        list<cryptogram> f_cgs = cgs_in_chars(f_cs); \
-        list<cryptogram> s_cgs = cgs_in_chars(s_cs); \
+        if (INT_MIN <= c && c <= INT_MAX) \
+        { \
+          list<char> cs_flength = not_forall_t(forallcs, \
+            (notf)((well_formed_pair_bounded)(wf, ccs_cont))); \
+          length_f_ccs = int_of_chars(cs_flength); \
+          length_s_ccs = length(ccs_cont) - sizeof(int) - length_f_ccs; \
+          assert length(ccs_cont) > sizeof(int) + length_f_ccs; \
+          p_ccs = drop(sizeof(int), ccs_cont); \
+          length_drop(sizeof(int), ccs_cont); \
+          drop_drop(sizeof(int), TAG_LENGTH, ccs); \
+          f_ccs = take(length_f_ccs, p_ccs); \
+          s_ccs = drop(length_f_ccs, p_ccs); \
+          assert length(ccs_cont) > sizeof(int) + length_f_ccs; \
+          append_drop_take(p_ccs, length_f_ccs); \
+          assert p_ccs == append(f_ccs, s_ccs); \
+          append_drop_take(ccs_cont, sizeof(int)); \
+          public_ccs_split(ccs_cont, sizeof(int)); \
+          public_ccs_split(p_ccs, length_f_ccs); \
+          \
+          append_assoc(ccs_tag, cs_to_ccs(cs_flength), p_ccs); \
+          append_assoc(ccs_tag, cs_to_ccs(cs_flength), f_ccs); \
+          append_assoc(cs_to_ccs(cs_flength), f_ccs, s_ccs); \
+          append_assoc(ccs_tag, append(cs_to_ccs(cs_flength), f_ccs), s_ccs); \
+          sublist_append(append(ccs_tag, cs_to_ccs(cs_flength)), f_ccs, s_ccs); \
+          sublist_append(append(ccs_tag, append(cs_to_ccs(cs_flength), f_ccs)), s_ccs, nil); \
+          cg_level_ccs_sublist(ccs, f_ccs, level_bound); \
+          cg_level_ccs_sublist(ccs, s_ccs, level_bound); \
+        } \
+        else \
+        { \
+          assert false; \
+        } \
+        close proof_obligations(pub); \
         \
-        drop_drop(sizeof(int), TAG_LENGTH, cs); \
-        length_drop(TAG_LENGTH + sizeof(int), cs); \
-        length_take(length_f_cs, p_cs); \
-        length_drop(length_f_cs, p_cs); \
+        deserialize_item_(level_bound, length_bound0, f_ccs); \
+        deserialize_item_(level_bound, length_bound0, s_ccs); \
         \
-        public_generated_split(polarssl_pub(pub), cs_cont, sizeof(int)); \
-        cgs_in_chars_upper_bound_split(cs_cont, cgs, sizeof(int)); \
-        public_generated_split(polarssl_pub(pub), p_cs, length_f_cs); \
-        cgs_in_chars_upper_bound_split(p_cs, cgs, length_f_cs); \
+        assert [_]item_constraints(?f, f_ccs, pub); \
+        assert [_]item_constraints(?s, s_ccs, pub); \
+        assert [_]pub(f); \
+        assert [_]pub(s); \
         \
-        open [_]public_generated(polarssl_pub(pub))(f_cs); \
-        open [_]public_generated(polarssl_pub(pub))(s_cs); \
+        open proof_obligations(pub); \
+        assert is_public_pair_compose(?proof, pub); \
+        proof(f, s); \
+        i = pair_item(f, s); \
+        close ic_pair(i)(f_ccs, s_ccs); \
+      } \
+      else if (head(ccs) == c_to_cc(TAG_NONCE)) \
+      { \
+        assert ccs_cont == cons(?cc_inc, ?ccs_cg); \
+        public_ccs_split(ccs_cont, 1); \
+        open [_]public_ccs(cons(cc_inc, nil)); \
+        list<char> cs_inc = \
+          not_forall_t(forallcs, (notf)((cs_to_ccs_eq)(cons(cc_inc, nil)))); \
+        assert cs_to_ccs(cs_inc) == cons(cc_inc, nil); \
+        assert cs_inc == cons(?inc, _); \
+        assert cc_inc == c_to_cc(inc); \
+        DESERIALIZE_ITEM_PROOF_CG(tag_nonce, cg_nonce(?p0, ?c0)) \
+        i = nonce_item(p0, c0, inc); \
+        item i0 = nonce_item(p0, c0, 0); \
+        assert [_]pub(i0); \
+        assert is_public_incremented_nonce(?proof, pub); \
+        proof(i0, i); \
+        close ic_cg(i)(ccs_cg, cg); \
+      } \
+      else if (head(ccs) == c_to_cc(TAG_HASH)) \
+      { \
+        list<crypto_char> ccs_cg = ccs_cont; \
+        sublist_append(ccs_tag, ccs_cont, nil); \
+        assert true == sublist(ccs_cg, append(ccs_tag, append(ccs_cont, nil))); \
+        assert true == sublist(ccs_cg, ccs); \
+        DESERIALIZE_ITEM_PROOF_CG(tag_hash, cg_hash(?ccs_pay)) \
+        DESERIALIZE_ITEM_PROOF_PAY(hash_item(some(pay)), \
+                                   hash_item(none), \
+                                   assert is_public_hash(?proof, pub); \
+                                   proof(i);,) \
+        close ic_cg(i)(ccs_cg, cg); \
+      } \
+      else if (head(ccs) == c_to_cc(TAG_SYMMETRIC_KEY)) \
+      { \
+        list<crypto_char> ccs_cg = ccs_cont; \
+        DESERIALIZE_ITEM_PROOF_CG(tag_symmetric_key, cg_symmetric_key(?p0, ?c0)) \
+        i = symmetric_key_item(p0, c0); \
+        close ic_cg(i)(ccs_cg, cg); \
+      } \
+      else if (head(ccs) == c_to_cc(TAG_PUBLIC_KEY)) \
+      { \
+        list<crypto_char> ccs_cg = ccs_cont; \
+        DESERIALIZE_ITEM_PROOF_CG(tag_public_key, cg_public_key(?p0, ?c0)) \
+        i = public_key_item(p0, c0); \
+        close ic_cg(i)(ccs_cg, cg); \
+      } \
+      else if (head(ccs) == c_to_cc(TAG_PRIVATE_KEY)) \
+      { \
+        list<crypto_char> ccs_cg = ccs_cont; \
+        DESERIALIZE_ITEM_PROOF_CG(tag_private_key, cg_private_key(?p0, ?c0)) \
+        i = private_key_item(p0, c0); \
+        close ic_cg(i)(ccs_cg, cg); \
+      } \
+      else if (head(ccs) == c_to_cc(TAG_HMAC)) \
+      { \
+        list<crypto_char> ccs_cg = ccs_cont; \
+        sublist_append(ccs_tag, ccs_cont, nil); \
+        DESERIALIZE_ITEM_PROOF_CG(tag_hmac, cg_hmac(?p0, ?c0, ?ccs_pay)) \
+        DESERIALIZE_ITEM_PROOF_PAY(hmac_item(p0, c0, some(pay)), \
+                                   hmac_item(p0, c0, none), \
+                                   assert is_public_hmac(?proof, pub); \
+                                   proof(i);,) \
+        close ic_cg(i)(ccs_cg, cg); \
+      } \
+      else if (head(ccs) == c_to_cc(TAG_SYMMETRIC_ENC)) \
+      { \
+        list<crypto_char> ent1 = take(GCM_IV_SIZE, ccs_cont); \
+        list<crypto_char> ccs_cg = drop(GCM_IV_SIZE, ccs_cont); \
+        append_assoc(ccs_tag, ent1, ccs_cg); \
+        sublist_append(append(ccs_tag, ent1), ccs_cg, nil); \
+        take_append(GCM_IV_SIZE, ent1, ccs_cg); \
+        drop_append(GCM_IV_SIZE, ent1, ccs_cg); \
+        public_ccs_split(ccs_cont, GCM_IV_SIZE); \
         \
-        cgs_in_chars_upper_bound_subset(f_cs, cgs); \
-        cgs_in_chars_upper_bound_subset(s_cs, cgs); \
-        forall_subset(f_cgs, cgs, (cg_level_below) \
-                                  (level_bound)); \
-        forall_subset(s_cgs, cgs, (cg_level_below) \
-                                  (level_bound)); \
+        DESERIALIZE_ITEM_PROOF_CG(tag_auth_encrypted, \
+                                  cg_auth_encrypted(?p0, ?c0, ?ccs_pay, ?iv0)) \
+        list<crypto_char> ent2 = append(ent1, iv0); \
+        take_append(GCM_IV_SIZE, ent1, iv0); \
+        drop_append(GCM_IV_SIZE, ent1, iv0); \
+        DESERIALIZE_ITEM_PROOF_PAY( \
+            symmetric_encrypted_item(p0, c0, some(pay), ent2), \
+            symmetric_encrypted_item(p0, c0, none, ent2), \
+            \
+            assert is_public_symmetric_encrypted(?proof, pub); \
+            proof(i);, \
+            \
+            assert [_]exists<list<crypto_char> >(?ent); \
+            item i_orig = symmetric_encrypted_item(p0, c0, some(pay), ent); \
+            assert [_]pub(i_orig); \
+            assert is_public_symmetric_encrypted_entropy(?proof, pub); \
+            i = symmetric_encrypted_item(p0, c0, some(pay), ent2); \
+            proof(i_orig, ent2); \
+        ) \
+        close ic_sym_enc(i)(iv0, ccs_cg); \
+        close ic_cg(i)(ccs_cg, cg); \
+      } \
+      else if (head(ccs) == c_to_cc(TAG_ASYMMETRIC_ENC)) \
+      { \
+        list<crypto_char> ccs_cg = ccs_cont; \
+        sublist_append(ccs_tag, ccs_cont, nil); \
+        DESERIALIZE_ITEM_PROOF_CG(tag_asym_encrypted, cg_asym_encrypted(?p0, ?c0, ?ccs_pay, ?ent0)) \
+        DESERIALIZE_ITEM_PROOF_PAY(asymmetric_encrypted_item(p0, c0, some(pay), ent0), \
+                                  asymmetric_encrypted_item(p0, c0, none, ent0), \
+                                  assert is_public_asymmetric_encrypted(?proof, pub); \
+                                  proof(i);,) \
+        close ic_cg(i)(ccs_cg, cg); \
+      } \
+      else if (head(ccs) == c_to_cc(TAG_ASYMMETRIC_SIG)) \
+      { \
+        list<crypto_char> ccs_cg = ccs_cont; \
+        sublist_append(ccs_tag, ccs_cont, nil); \
+        DESERIALIZE_ITEM_PROOF_CG(tag_asym_signature, cg_asym_signature(?p0, ?c0, ?ccs_pay, ?ent0)) \
+        DESERIALIZE_ITEM_PROOF_PAY(asymmetric_signature_item(p0, c0, some(pay), ent0), \
+                                  asymmetric_signature_item(p0, c0, none, ent0), \
+                                  assert is_public_asymmetric_signature(?proof, pub); \
+                                  proof(i);,) \
+        close ic_cg(i)(ccs_cg, cg); \
       } \
       else \
       { \
         assert false; \
       } \
+      \
+      close ic_parts(i)(ccs_tag, ccs_cont); \
+      close item_constraints(i, ccs, pub); \
+      leak item_constraints(i, ccs, pub); \
       close proof_obligations(pub); \
-      \
-      deserialize_item_(level_bound, length_bound0, f_cs, pub); \
-      deserialize_item_(level_bound, length_bound0, s_cs, pub); \
-      \
-      assert [_]item_constraints(?f, f_cs, pub); \
-      assert [_]item_constraints(?s, s_cs, pub); \
-      assert [_]pub(f); \
-      assert [_]pub(s); \
-      \
-      open proof_obligations(pub); \
-      assert is_public_pair_compose(?proof, pub); \
-      proof(f, s); \
-      i = pair_item(f, s); \
-      close ic_pair(i)(f_cs, s_cs); \
-    } \
-    else if (head(cs) == TAG_NONCE) \
-    { \
-      assume (false); \
-      assert cs_cont == cons(?inc, ?cs_cg); \
-      public_generated_split(polarssl_pub(pub), cs_cont, 1); \
-      DESERIALIZE_ITEM_PROOF_CG(tag_nonce, cg_nonce(?p0, ?c0)) \
-      i = nonce_item(p0, c0, inc); \
-      item i0 = nonce_item(p0, c0, 0); \
-      \
-      assert [_]pub(i0); \
-      assert is_public_incremented_nonce(?proof, pub); \
-      proof(i0, i); \
-      close ic_cg(i)(cs_cg, cg); \
-    } \
-    else if (head(cs) == TAG_HASH) \
-    { \
-      assume (false); \
-      list<char> cs_cg = cs_cont; \
-      DESERIALIZE_ITEM_PROOF_CG(tag_hash, cg_hash(?cs_pay)) \
-      DESERIALIZE_ITEM_PROOF_PAY(hash_item(some(pay)), \
-                                 hash_item(none), \
-                                 assert is_public_hash(?proof, pub); \
-                                 proof(i);,) \
-      close ic_cg(i)(cs_cg, cg); \
-    } \
-    else if (head(cs) == TAG_SYMMETRIC_KEY) \
-    { \
-      assume (false); \
-      list<char> cs_cg = cs_cont; \
-      DESERIALIZE_ITEM_PROOF_CG(tag_symmetric_key, cg_symmetric_key(?p0, ?c0)) \
-      i = symmetric_key_item(p0, c0); \
-      close ic_cg(i)(cs_cg, cg); \
-    } \
-    else if (head(cs) == TAG_PUBLIC_KEY) \
-    { \
-      assume (false); \
-      list<char> cs_cg = cs_cont; \
-      DESERIALIZE_ITEM_PROOF_CG(tag_public_key, cg_public_key(?p0, ?c0)) \
-      i = public_key_item(p0, c0); \
-      close ic_cg(i)(cs_cg, cg); \
-    } \
-    else if (head(cs) == TAG_PRIVATE_KEY) \
-    { \
-      assume (false); \
-      list<char> cs_cg = cs_cont; \
-      DESERIALIZE_ITEM_PROOF_CG(tag_private_key, cg_private_key(?p0, ?c0)) \
-      i = private_key_item(p0, c0); \
-      close ic_cg(i)(cs_cg, cg); \
-    } \
-    else if (head(cs) == TAG_HMAC) \
-    { \
-      assume (false); \
-      list<char> cs_cg = cs_cont; \
-      DESERIALIZE_ITEM_PROOF_CG(tag_hmac, cg_hmac(?p0, ?c0, ?cs_pay)) \
-      DESERIALIZE_ITEM_PROOF_PAY(hmac_item(p0, c0, some(pay)), \
-                                 hmac_item(p0, c0, none), \
-                                 assert is_public_hmac(?proof, pub); \
-                                 proof(i);,) \
-      close ic_cg(i)(cs_cg, cg); \
-    } \
-    else if (head(cs) == TAG_SYMMETRIC_ENC) \
-    { \
-      assume (false); \
-      list<char> ent1 = take(GCM_IV_SIZE, cs_cont); \
-      list<char> cs_cg = drop(GCM_IV_SIZE, cs_cont); \
-      take_append(GCM_IV_SIZE, ent1, cs_cg); \
-      drop_append(GCM_IV_SIZE, ent1, cs_cg); \
-      public_generated_split(polarssl_pub(pub), cs_cont, GCM_IV_SIZE); \
-      cgs_in_chars_upper_bound_split(cs_cont, cgs, GCM_IV_SIZE); \
-      \
-      DESERIALIZE_ITEM_PROOF_CG(tag_auth_encrypted, \
-                                cg_auth_encrypted(?p0, ?c0, ?cs_pay, ?iv0)) \
-      list<char> ent2 = append(ent1, iv0); \
-      take_append(GCM_IV_SIZE, ent1, iv0); \
-      drop_append(GCM_IV_SIZE, ent1, iv0); \
-      DESERIALIZE_ITEM_PROOF_PAY(symmetric_encrypted_item(p0, c0, some(pay), ent2), \
-                                 symmetric_encrypted_item(p0, c0, none, ent2), \
-                                 \
-                                 assert is_public_symmetric_encrypted(?proof, pub); \
-                                 proof(i);, \
-                                 \
-                                 assert [_]exists<list<char> >(?ent); \
-                                 item i_orig = symmetric_encrypted_item(p0, c0, some(pay), ent); \
-                                 assert [_]pub(i_orig); \
-                                 assert is_public_symmetric_encrypted_entropy(?proof, pub); \
-                                 i = symmetric_encrypted_item(p0, c0, some(pay), ent2); \
-                                 proof(i_orig, ent2); \
-                               ) \
-      close ic_sym_enc(i)(iv0, cs_cg); \
-      close ic_cg(i)(cs_cg, cg); \
-    } \
-    else if (head(cs) == TAG_ASYMMETRIC_ENC) \
-    { \
-      assume (false); \
-      list<char> cs_cg = cs_cont; \
-      DESERIALIZE_ITEM_PROOF_CG(tag_asym_encrypted, cg_asym_encrypted(?p0, ?c0, ?cs_pay, ?ent0)) \
-      DESERIALIZE_ITEM_PROOF_PAY(asymmetric_encrypted_item(p0, c0, some(pay), ent0), \
-                                 asymmetric_encrypted_item(p0, c0, none, ent0), \
-                                 assert is_public_asymmetric_encrypted(?proof, pub); \
-                                 proof(i);,) \
-      close ic_cg(i)(cs_cg, cg); \
-    } \
-    else if (head(cs) == TAG_ASYMMETRIC_SIG) \
-    { \
-      assume (false); \
-      list<char> cs_cg = cs_cont; \
-      DESERIALIZE_ITEM_PROOF_CG(tag_asym_signature, cg_asym_signature(?p0, ?c0, ?cs_pay, ?ent0)) \
-      DESERIALIZE_ITEM_PROOF_PAY(asymmetric_signature_item(p0, c0, some(pay), ent0), \
-                                 asymmetric_signature_item(p0, c0, none, ent0), \
-                                 \
-                                 assert is_public_asymmetric_signature(?proof, pub); \
-                                 proof(i);,) \
-      close ic_cg(i)(cs_cg, cg); \
-    } \
-    else \
-    { \
+      return i; \
+    case zero: \
       assert false; \
-    } \
-    close ic_parts(i)(cs_tag, cs_cont); \
-    close item_constraints(i, cs, pub); \
-    leak item_constraints(i, cs, pub); \
-    close proof_obligations(pub); \
-  case zero: \
-    assert false; \
-}
+  } \
 
-lemma void deserialize_item_(nat level_bound, nat length_bound,
-                             list<crypto_char> ccs, predicate(item) pub)
+lemma item deserialize_item_(nat level_bound, nat length_bound,
+                             list<crypto_char> ccs)
   requires FORALLP_C &*& FORALLP_CS &*&
-           proof_obligations(pub) &*&
+           proof_obligations(?pub) &*& [_]public_invar(polarssl_pub(pub)) &*&
            //knowledge about first inductive paramter
-           true == forall(cgs_in_ccs(ccs), (cg_level_below)(level_bound)) &*&
+           [_]is_forall_t<cryptogram>(?forallcg) &*&
+           true == forallcg((cg_in_ccs_implies_level_below)(ccs, level_bound)) &*&
            //knowledge about second inductive paramter
            length(ccs) <= int_of_nat(length_bound) &*&
            int_of_nat(length_bound) <= INT_MAX &*&
            true == well_formed_ccs(forallc, forallcs, length_bound, ccs) &*&
-           [_]public_generated(polarssl_pub(pub))(ccs);
+           [_]public_ccs(ccs);
   ensures  proof_obligations(pub) &*&
-           [_]item_constraints(?i, ccs, pub) &*& [_]pub(i);
+           [_]item_constraints(result, ccs, pub) &*& [_]pub(result);
 {
   // Dummy switch to enforce lexicographic induction
   switch(level_bound)
@@ -307,20 +312,20 @@ lemma void deserialize_item_(nat level_bound, nat length_bound,
   }
 }
 
-// lemma void deserialize_item(list<crypto_char> ccs, predicate(item) pub)
-//   requires FORALLP_C &*& FORALLP_CS &*&
-//            proof_obligations(pub) &*& length(ccs) <= INT_MAX &*&
-//            true == well_formed_ccs(forallc, forallcs, nat_length(ccs), ccs) &*&
-//            [_]public_generated(polarssl_pub(pub))(ccs);
-//   ensures  proof_obligations(pub) &*&
-//            [_]item_constraints(?i, ccs, pub) &*& [_]pub(i);
-// {
-//   well_formed_upper_bound(nat_length(ccs), nat_of_int(INT_MAX), ccs);
-//   open [_]public_generated(polarssl_pub(pub))(ccs);
-//   cg_level_max_forall(cgs_in_ccs(ccs));
-//   deserialize_item_(cg_level_max(), nat_of_int(INT_MAX), ccs, pub);
-// }
-//
+lemma item deserialize_item(list<crypto_char> ccs)
+  requires FORALLP_C &*& FORALLP_CS &*&
+           proof_obligations(?pub) &*& [_]public_invar(polarssl_pub(pub)) &*&
+           length(ccs) <= INT_MAX &*&
+           true == well_formed_ccs(forallc, forallcs, nat_length(ccs), ccs) &*&
+           [_]public_ccs(ccs);
+  ensures  proof_obligations(pub) &*&
+           [_]item_constraints(result, ccs, pub) &*& [_]pub(result);
+{
+  well_formed_upper_bound(nat_length(ccs), nat_of_int(INT_MAX), ccs);
+  cg_level_ccs_max(ccs);
+  return deserialize_item_(cg_level_max(), nat_of_int(INT_MAX), ccs);
+}
+
 // lemma void well_formed_pair_item(list<crypto_char> ccs,
 //                                  int length_ccs_f,
 //                                  list<crypto_char> ccs_f,

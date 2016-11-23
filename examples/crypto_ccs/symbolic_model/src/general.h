@@ -63,41 +63,6 @@ void write_buffer(char **target, const char *source, int length);
 
 /*@
 
-// general lists
-
-lemma void drop_drop<T>(int i1, int i2, list<T> xs);
-  requires i1 >= 0 &*& i2 >= 0 &*& i1 + i2 < length(xs);
-  ensures  drop(i1, drop(i2, xs)) == drop(i1 + i2, xs);
-
-lemma void equal_list_equal_prefix<T>(list<T> xs1, list<T> xs2, list<T> xs3);
-  requires append(xs1, xs3) == append(xs2, xs3);
-  ensures  xs1 == xs2;
-
-lemma void equal_append<T>(list<T> xs1, list<T> xs11,
-                           list<T> xs2, list<T> xs22);
-  requires length(xs1) == length(xs2) &*&
-           append(xs1, xs11) == append(xs2, xs22);
-  ensures  xs1 == xs2 && xs11 == xs22;
-
-lemma void equal_double_triple_append<T>(list<T> xs1, list<T> xs2, list<T> xs3,
-                                         list<T> xs4, list<T> xs5, list<T> xs6);
-  requires true;
-  ensures  append(xs1, append(xs2, append(xs3, append(xs4, append(xs5, xs6)))))
-           ==
-           append(append(xs1, append(xs2, xs3)), append(xs4, append(xs5, xs6)));
-
-lemma void head_append<T>(list<T> xs, list<T> ys);
-  requires length(xs) > 0;
-  ensures head(xs) == head(append(xs, ys));
-
-lemma void head_mem<T>(list<T> xs);
-  requires length(xs) > 0;
-  ensures  true == mem(head(xs), xs);
-
-lemma void take_1<T>(list<T> xs);
-  requires length(xs) > 0;
-  ensures  take(1, xs) == cons(head(xs), nil);
-
 // cs_to_ccs and ints
 
 lemma void equal_append_chars_of_int(int i1, int i2, list<char> cs1,

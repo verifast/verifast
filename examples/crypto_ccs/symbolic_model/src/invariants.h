@@ -22,7 +22,7 @@ predicate world(predicate(item) pub, fixpoint(int, int, bool, bool) key_clsfy) =
 #define POLARSSL_PUB_PAY(ATTACK, NO_ATTACK) \
   [_]exists<bool>(?attack) &*& length(ccs0) <= INT_MAX &*& \
   (attack ? \
-     [_]public_generated(polarssl_pub(pub))(ccs0) &*& ATTACK \
+     [_]public_ccs(ccs0) &*& ATTACK \
    : \
      [_]item_constraints(?pay0, ccs0, pub) &*& NO_ATTACK \
   )
@@ -48,7 +48,7 @@ predicate_ctor polarssl_pub(predicate(item) pub)
                [_]pub(symmetric_key_item(p0, c0)),
                [_]pub(hmac_item(p0, c0, some(pay0))));
     case cg_encrypted(p0, c0, ccs0, iv0):
-      return [_]public_generated(polarssl_pub(pub))(ccs0);
+      return [_]public_ccs(ccs0);
     case cg_auth_encrypted(p0, c0, ccs0, iv0):
       return POLARSSL_PUB_PAY(
                [_]pub(symmetric_key_item(p0, c0)),
