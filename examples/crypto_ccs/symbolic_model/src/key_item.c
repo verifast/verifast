@@ -64,26 +64,10 @@ struct item *create_symmetric_key()
 
   //@ item k = symmetric_key_item(principal, count + 1);
   //@ assert key->content |-> ?cont &*& key->size |-> ?size;
-  //@ open cryptogram(cont + TAG_LENGTH, GCM_KEY_SIZE, ?cs_cont, ?k_cg);
+  //@ open cryptogram(cont + TAG_LENGTH, GCM_KEY_SIZE, ?ccs_cont, ?k_cg);
   //@ assert k_cg == cg_symmetric_key(principal, count + 1);
-  //@ close ic_cg(k)(cs_cont, k_cg);
-  //@ assert chars(cont, TAG_LENGTH, ?cs_tag);
-  //@ assert cs_tag == full_tag(TAG_SYMMETRIC_KEY);
-  //@ public_chars(cont, TAG_LENGTH);
-  //@ chars_to_secret_crypto_chars(cont, TAG_LENGTH);
-  //@ crypto_chars_join(cont);
-  //@ list<char> cs = append(cs_tag, cs_cont);
-  /*@ if (col)
-      {
-        assert chars(cont, size, cs);
-        public_chars(cont, size);
-        public_generated_split(polarssl_pub(pub), cs, TAG_LENGTH);
-      }
-  @*/
-  //@ WELL_FORMED(cs_tag, cs_cont, TAG_SYMMETRIC_KEY)
-  //@ close ic_parts(k)(cs_tag, cs_cont);
-  //@ close item_constraints(k, cs, pub);
-  //@ leak item_constraints(k, cs, pub);
+  //@ close ic_cg(k)(ccs_cont, k_cg);
+  //@ CLOSE_ITEM_CONSTRAINTS(cont, TAG_SYMMETRIC_KEY, size, k)
   //@ close item(key, k, pub);
   //@ close [f0]world(pub, key_clsfy);
   return key;
@@ -184,10 +168,11 @@ void retreive_keys(pk_context *ctx, struct item **public, struct item **private)
   struct item* priv_i = malloc(sizeof(struct item));
   if (pub_i == 0 || priv_i == 0) {abort_crypto_lib("Malloc failed");}
 
-  pub_i->size = TAG_LENGTH + RSA_SERIALIZED_KEY_SIZE;
+  int size = TAG_LENGTH + RSA_SERIALIZED_KEY_SIZE;
+  pub_i->size = size;
   pub_i->content = malloc(pub_i->size);
   if (pub_i->content == 0) {abort_crypto_lib("Malloc failed");}
-  priv_i->size = TAG_LENGTH + RSA_SERIALIZED_KEY_SIZE;;
+  priv_i->size = size;
   priv_i->content = malloc(priv_i->size);
   if (priv_i->content == 0) {abort_crypto_lib("Malloc failed");}
 
@@ -210,39 +195,12 @@ void retreive_keys(pk_context *ctx, struct item **public, struct item **private)
   //@ item key_priv_i = private_key_item(principal, count);
   //@ assert pub_i->content |-> ?cont_pub &*& pub_i->size |-> ?size_pub;
   //@ assert priv_i->content |-> ?cont_priv &*& priv_i->size |-> ?size_priv;
-  //@ assert chars(cont_pub, TAG_LENGTH, ?cs_pub_tag) &*& cs_pub_tag == full_tag(TAG_PUBLIC_KEY);
-  //@ assert chars(cont_priv, TAG_LENGTH, ?cs_priv_tag) &*& cs_priv_tag == full_tag(TAG_PRIVATE_KEY);
-  //@ public_chars(cont_pub, TAG_LENGTH);
-  //@ public_chars(cont_priv, TAG_LENGTH);
   //@ open cryptogram(cont_pub + TAG_LENGTH, RSA_SERIALIZED_KEY_SIZE, ?cs_pub, ?cg_pub);
   //@ open cryptogram(cont_priv + TAG_LENGTH, RSA_SERIALIZED_KEY_SIZE, ?cs_priv, ?cg_priv);
-  //@ chars_to_secret_crypto_chars(cont_pub, TAG_LENGTH);
-  //@ chars_to_secret_crypto_chars(cont_priv, TAG_LENGTH);
-  //@ crypto_chars_join(cont_pub);
-  //@ crypto_chars_join(cont_priv);
-
-  //@ list<char> cs1 = append(cs_pub_tag, cs_pub);
-  //@ list<char> cs2 = append(cs_priv_tag, cs_priv);
-  /*@ if (col)
-      {
-        assert chars(cont_pub, size_pub, cs1);
-        public_chars(cont_pub, size_pub);
-        public_generated_split(polarssl_pub(pub), cs1, TAG_LENGTH);
-        assert chars(cont_priv, size_priv, cs2);
-        public_chars(cont_priv, size_priv);
-        public_generated_split(polarssl_pub(pub), cs2, TAG_LENGTH);
-      }
-  @*/
   //@ close ic_cg(key_pub_i)(cs_pub, cg_pub);
-  //@ close ic_parts(key_pub_i)(cs_pub_tag, cs_pub);
-  //@ WELL_FORMED(cs_pub_tag, cs_pub, TAG_PUBLIC_KEY)
-  //@ close item_constraints(key_pub_i, cs1, pub);
-  //@ leak item_constraints(key_pub_i, cs1, pub);
   //@ close ic_cg(key_priv_i)(cs_priv, cg_priv);
-  //@ close ic_parts(key_priv_i)(cs_priv_tag, cs_priv);
-  //@ WELL_FORMED(cs_priv_tag, cs_priv, TAG_PRIVATE_KEY)
-  //@ close item_constraints(key_priv_i, cs2, pub);
-  //@ leak item_constraints(key_priv_i, cs2, pub);
+  //@ CLOSE_ITEM_CONSTRAINTS(cont_pub, TAG_PUBLIC_KEY, size, key_pub_i)
+  //@ CLOSE_ITEM_CONSTRAINTS(cont_priv, TAG_PRIVATE_KEY, size, key_priv_i)
   //@ close item(pub_i, key_pub_i, pub);
   //@ close item(priv_i, key_priv_i, pub);
   //@ close [f]world(pub, key_clsfy);
@@ -265,22 +223,20 @@ void set_public_key(pk_context *ctx, struct item *pub_key)
   //@ open item(pub_key, pub_key_i, pub);
   //@ assert pub_key->size |-> ?size &*& pub_key->content |-> ?cont;
   check_valid_asymmetric_key_item_size(pub_key->size);
-  //@ open [_]item_constraints(pub_key_i, ?cs, pub);
-  //@ assert [_]ic_parts(pub_key_i)(?cs_tag, ?cs_cont);
+  //@ assert [_]item_constraints(pub_key_i, ?ccs, pub);
+  //@ OPEN_ITEM_CONSTRAINTS(pub_key_i, ccs, pub)
+  //@ assert [_]ic_parts(pub_key_i)(?ccs_tag, ?ccs_cont);
   //@ crypto_chars_split(cont, TAG_LENGTH);
-  //@ WELL_FORMED(cs_tag, cs_cont, TAG_PUBLIC_KEY)
   //@ cryptogram cg = cg_public_key(principal, count);
-  //@ if (col) cg = chars_for_cg_sur(cs_cont, tag_public_key);
-  //@ if (col) crypto_chars_to_chars(cont + TAG_LENGTH, size - TAG_LENGTH);
-  //@ if (col) public_chars_extract(cont + TAG_LENGTH, cg);
-  //@ if (col) chars_to_secret_crypto_chars(cont + TAG_LENGTH, size - TAG_LENGTH);
-  //@ close cryptogram(cont + TAG_LENGTH, RSA_BIT_KEY_SIZE, cs_cont, cg);
+  //@ if (col) cg = ccs_for_cg_sur(ccs_cont, tag_public_key);
+  //@ if (col) public_ccs_cg(cg);
+  //@ close cryptogram(cont + TAG_LENGTH, RSA_BIT_KEY_SIZE, ccs_cont, cg);
   if (pk_parse_public_key(ctx, (void*) pub_key->content + TAG_LENGTH,
       (unsigned int) (RSA_SERIALIZED_KEY_SIZE)) != 0)
   {
     abort_crypto_lib("Could not set public key context");
   }
-  //@ open cryptogram(cont + TAG_LENGTH, RSA_BIT_KEY_SIZE, cs_cont, cg);
+  //@ open cryptogram(cont + TAG_LENGTH, RSA_BIT_KEY_SIZE, ccs_cont, cg);
   //@ crypto_chars_join(cont);
   //@ close item(pub_key, pub_key_i, pub);
   //@ close [f]world(pub, key_clsfy);
@@ -300,22 +256,20 @@ void set_private_key(pk_context *ctx, struct item *priv_key)
   //@ open item(priv_key, priv_key_i, pub);
   //@ assert priv_key->size |-> ?size &*& priv_key->content |-> ?cont;
   check_valid_asymmetric_key_item_size(priv_key->size);
-  //@ open [_]item_constraints(priv_key_i, ?cs, pub);
-  //@ assert [_]ic_parts(priv_key_i)(?cs_tag, ?cs_cont);
+  //@ assert [_]item_constraints(priv_key_i, ?ccs, pub);
+  //@ OPEN_ITEM_CONSTRAINTS(priv_key_i, ccs, pub)
+  //@ assert [_]ic_parts(priv_key_i)(?ccs_tag, ?ccs_cont);
   //@ crypto_chars_split(cont, TAG_LENGTH);
-  //@ WELL_FORMED(cs_tag, cs_cont, TAG_PRIVATE_KEY)
   //@ cryptogram cg = cg_private_key(principal, count);
-  //@ if (col) cg = chars_for_cg_sur(cs_cont, tag_private_key);
-  //@ if (col) crypto_chars_to_chars(cont + TAG_LENGTH, size - TAG_LENGTH);
-  //@ if (col) public_chars_extract(cont + TAG_LENGTH, cg);
-  //@ if (col) chars_to_secret_crypto_chars(cont + TAG_LENGTH, size - TAG_LENGTH);
-  //@ close cryptogram(cont + TAG_LENGTH, RSA_BIT_KEY_SIZE, cs_cont, cg);
+  //@ if (col) cg = ccs_for_cg_sur(ccs_cont, tag_private_key);
+  //@ if (col) public_ccs_cg(cg);
+  //@ close cryptogram(cont + TAG_LENGTH, RSA_BIT_KEY_SIZE, ccs_cont, cg);
   if (pk_parse_key(ctx, (void*) priv_key->content + TAG_LENGTH,
       (unsigned int) (RSA_SERIALIZED_KEY_SIZE), NULL, 0) != 0)
   {
     abort_crypto_lib("Could not set private key context");
   }
-  //@ open cryptogram(cont + TAG_LENGTH, RSA_BIT_KEY_SIZE, cs_cont, cg);
+  //@ open cryptogram(cont + TAG_LENGTH, RSA_BIT_KEY_SIZE, ccs_cont, cg);
   //@ crypto_chars_join(cont);
   //@ close item(priv_key, priv_key_i, pub);
   //@ close [f]world(pub, key_clsfy);

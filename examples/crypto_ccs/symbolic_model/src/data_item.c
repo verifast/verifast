@@ -17,7 +17,7 @@ bool is_data(struct item *item)
 
 void check_is_data(struct item *item)
   //@ requires [?f]world(?pub, ?key_clsfy) &*& item(item, ?i, pub);
-  /*@ ensures  [f]world(pub, key_clsfy) &*& item(item, i, pub) &*& 
+  /*@ ensures  [f]world(pub, key_clsfy) &*& item(item, i, pub) &*&
                i == data_item(_); @*/
 {
   if (!is_data(item))
@@ -26,10 +26,10 @@ void check_is_data(struct item *item)
 
 struct item *create_data_item(char* data, int length)
   /*@ requires [?f]world(?pub, ?key_clsfy) &*&
-               chars(data, length, ?cs) &*& length >= MIN_DATA_SIZE; @*/
+               chars(data, length, ?cs_data) &*& length >= MIN_DATA_SIZE; @*/
   /*@ ensures  [f]world(pub, key_clsfy) &*&
-               chars(data, length, cs) &*& 
-               item(result, data_item(cs), pub); @*/
+               chars(data, length, cs_data) &*&
+               item(result, data_item(cs_data), pub); @*/
 {
   //@ open [f]world(pub, key_clsfy);
   struct item* item = malloc(sizeof(struct item));
@@ -41,32 +41,16 @@ struct item *create_data_item(char* data, int length)
   write_tag(item->content, TAG_DATA);
   //@ chars_to_crypto_chars(data, length);
   memcpy(item->content + TAG_LENGTH, data, (unsigned int) length);
-  //@ crypto_chars_to_chars(cont + TAG_LENGTH, length);
-  //@ assert chars(cont, TAG_LENGTH, full_tag(TAG_DATA));
-  //@ assert chars(cont + TAG_LENGTH, length, cs);
-  //@ chars_join(cont);
-  //@ assert chars(cont, size, ?cs1);
-  //@ assert cs1 == append(full_tag(TAG_DATA), cs);
-  //@ take_append(TAG_LENGTH, full_tag(TAG_DATA), cs);
-  //@ drop_append(TAG_LENGTH, full_tag(TAG_DATA), cs);
-  //@ head_append(full_tag(TAG_DATA), cs);
-  
-  //@ item d = data_item(cs);
-  
-  //@ assert length(cs1) > TAG_LENGTH;
-  //@ assert true == valid_tag(head(cs1));
-  //@ assert take(TAG_LENGTH, cs1) == full_tag(head(cs1));
-  //@ assert head(cs1) == TAG_DATA;
-  //@ length_equals_nat_length(cs1);
-  //@ switch(nat_length(cs1)) {case succ(s0): case zero:}
-  //@ close ic_parts(d)(full_tag(TAG_DATA), cs);
-  //@ public_chars(cont, TAG_LENGTH);
-  //@ public_chars(data, length);
-  //@ public_generated_join(polarssl_pub(pub), full_tag(TAG_DATA), cs);
-  //@ close item_constraints(d, cs1, pub);
-  //@ leak item_constraints(d, cs1, pub);
-  //@ chars_join(cont);
-  //@ chars_to_secret_crypto_chars(cont, length(cs1));
+  //@ cs_to_ccs_crypto_chars(data, cs_data);
+  //@ cs_to_ccs_crypto_chars(cont + TAG_LENGTH, cs_data);
+  //@ item d = data_item(cs_data);
+  //@ assert chars(cont + TAG_LENGTH, length, cs_data);
+  //@ chars_to_secret_crypto_chars(cont + TAG_LENGTH, length);
+  //@ public_cs(full_tag(TAG_DATA));
+  //@ public_cs(cs_data);
+  //@ cs_to_ccs_full_tag(TAG_DATA);
+  //@ public_ccs_join(full_ctag(c_to_cc(TAG_DATA)), cs_to_ccs(cs_data));
+  //@ CLOSE_ITEM_CONSTRAINTS(cont, TAG_DATA, size, d)
   //@ close item(item, d, pub);
   return item;
   //@ close [f]world(pub, key_clsfy);
@@ -84,7 +68,7 @@ struct item *create_data_item_from_int(int i)
 }
 
 int item_get_data(struct item *item, char** data)
-  /*@ requires [?f]world(?pub, ?key_clsfy) &*& item(item, ?i, pub) &*& 
+  /*@ requires [?f]world(?pub, ?key_clsfy) &*& item(item, ?i, pub) &*&
                i == data_item(?cs0) &*& pointer(data, _); @*/
   /*@ ensures  [f]world(pub, key_clsfy) &*& item(item, i, pub) &*& pointer(data, ?p) &*&
                chars(p, result, ?cs1) &*& malloc_block(p, result) &*&
@@ -93,26 +77,30 @@ int item_get_data(struct item *item, char** data)
   //@ open [f]world(pub, key_clsfy);
   //@ open item(item, data_item(cs0), pub);
   //@ assert item->content |-> ?cont &*& item->size |-> ?size;
-  //@ open [_]item_constraints(i, ?cs, pub);
+  //@ assert [_]item_constraints(i, ?ccs, pub);
+  //@ OPEN_ITEM_CONSTRAINTS(i, ccs, pub)
   int data_size = item->size - TAG_LENGTH;
   //@ crypto_chars_limits(cont);
   //@ crypto_chars_split(cont, TAG_LENGTH);
   char* temp = malloc_wrapper(data_size);
-  //@ public_generated_split(polarssl_pub(pub), cs, TAG_LENGTH);
+  //@ public_ccs_split(ccs, TAG_LENGTH);
   //@ public_crypto_chars(cont + TAG_LENGTH, data_size);
+  //@ assert chars(cont + TAG_LENGTH, data_size, ?cs_data);
+  //@ cs_to_ccs_inj(cs0, cs_data);
   //@ chars_to_crypto_chars(cont + TAG_LENGTH, data_size);
   memcpy(temp, (void*) item->content + TAG_LENGTH, (unsigned int) data_size);
+  //@ cs_to_ccs_crypto_chars(temp, cs_data);
+  //@ cs_to_ccs_crypto_chars(cont + TAG_LENGTH, cs_data);
   //@ chars_to_secret_crypto_chars(cont + TAG_LENGTH, data_size);
   //@ crypto_chars_join(cont);
-  //@ drop_append(TAG_LENGTH, full_tag(TAG_DATA), cs0);
   //@ close item(item, data_item(cs0), pub);
   *data = temp;
   return data_size;
-  //@ close [f]world(pub, key_clsfy);  
+  //@ close [f]world(pub, key_clsfy);
 }
 
 int item_get_data_as_int(struct item *item)
-  /*@ requires [?f]world(?pub, ?key_clsfy) &*& item(item, ?i, pub) &*& 
+  /*@ requires [?f]world(?pub, ?key_clsfy) &*& item(item, ?i, pub) &*&
                i == data_item(?cs0); @*/
   /*@ ensures  [f]world(pub, key_clsfy) &*& item(item, i, pub) &*&
                col ?  true : result == int_of_chars(cs0); @*/

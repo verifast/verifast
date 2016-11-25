@@ -62,31 +62,30 @@ struct item *symmetric_encryption(struct item *key, struct item *payload)
     //@ open item(key, k, pub);
     //@ assert key->content |-> ?k_cont &*& key->size |-> ?k_size;
     check_valid_symmetric_key_item_size(key->size);
-    //@ open [_]item_constraints(k, ?k_cs0, pub);
-    //@ assert [_]ic_parts(k)(?k_tag, ?k_cs);
+    //@ assert [_]item_constraints(k, ?k_ccs0, pub);
+    //@ OPEN_ITEM_CONSTRAINTS(k, k_ccs0, pub)
+    //@ assert [_]ic_parts(k)(?k_tag, ?k_ccs);
     //@ crypto_chars_limits(k_cont);
     //@ crypto_chars_split(k_cont, TAG_LENGTH);
-    //@ WELL_FORMED(k_tag, k_cs, TAG_SYMMETRIC_KEY)
     //@ assert crypto_chars(secret, k_cont, TAG_LENGTH, k_tag);
-    //@ assert crypto_chars(secret, k_cont + TAG_LENGTH, GCM_KEY_SIZE, k_cs);
+    //@ assert crypto_chars(secret, k_cont + TAG_LENGTH, GCM_KEY_SIZE, k_ccs);
     //@ cryptogram k_cg = cg_symmetric_key(principal2, count2);
-    //@ if (col) k_cg = chars_for_cg_sur(k_cs, tag_symmetric_key);
-    //@ if (col) crypto_chars_to_chars(k_cont + TAG_LENGTH, GCM_KEY_SIZE);
-    //@ if (col) public_chars_extract(k_cont + TAG_LENGTH, k_cg);
-    //@ if (col) chars_to_secret_crypto_chars(k_cont + TAG_LENGTH, GCM_KEY_SIZE);
-    //@ close cryptogram(k_cont + TAG_LENGTH, GCM_KEY_SIZE, k_cs, k_cg);
+    //@ if (col) k_cg = ccs_for_cg_sur(k_ccs, tag_symmetric_key);
+    //@ if (col) public_ccs_cg(k_cg);
+    //@ close cryptogram(k_cont + TAG_LENGTH, GCM_KEY_SIZE, k_ccs, k_cg);
     //@ close gcm_context(&gcm_context);
     if (gcm_init(&gcm_context, POLARSSL_CIPHER_ID_AES, (key->content + TAG_LENGTH),
                 (unsigned int) GCM_KEY_SIZE * 8) != 0)
       abort_crypto_lib("Init gcm failed");
     //@ assert gcm_context_initialized(&gcm_context, ?p, ?c);
     //@ assert col || (p == principal2 && c == count2);
-    //@ open cryptogram(k_cont + TAG_LENGTH, GCM_KEY_SIZE, k_cs, k_cg);
+    //@ open cryptogram(k_cont + TAG_LENGTH, GCM_KEY_SIZE, k_ccs, k_cg);
     //@ crypto_chars_join(k_cont);
     //@ close item(key, k, pub);
 
     //@ open item(payload, pay, pub);
-    //@ open [_]item_constraints(pay, ?pay_cs, pub);
+    //@ assert [_]item_constraints(pay, ?pay_ccs, pub);
+    //@ OPEN_ITEM_CONSTRAINTS(pay, pay_ccs, pub)
     //@ assert payload->content |-> ?p_cont &*& payload->size |-> ?p_size;
     //@ crypto_chars_limits(p_cont);
     if (payload->size >= INT_MAX - TAG_LENGTH - GCM_IV_SIZE - GCM_MAC_SIZE ||
@@ -94,7 +93,6 @@ struct item *symmetric_encryption(struct item *key, struct item *payload)
       abort_crypto_lib("Gcm encryption failed: incorrect sizes");
     result->size = TAG_LENGTH + GCM_IV_SIZE + GCM_MAC_SIZE + payload->size;
     result->content = malloc(result->size);
-
     //@ assert result->content |-> ?r_cont &*& result->size |-> ?r_size;
     if (result->content == 0)
       abort_crypto_lib("Malloc failed");
@@ -109,9 +107,9 @@ struct item *symmetric_encryption(struct item *key, struct item *payload)
     //@ close nonce_request(principal1, 0);
     //@ close [f]world(pub, key_clsfy);
     create_havege_random(iv, GCM_IV_SIZE);
-    //@ open cryptogram(iv, GCM_IV_SIZE, ?iv_cs, ?iv_cg);
+    //@ open cryptogram(iv, GCM_IV_SIZE, ?iv_ccs, ?iv_cg);
     memcpy(iv_buffer, iv, GCM_IV_SIZE);
-    //@ close cryptogram(iv, GCM_IV_SIZE, iv_cs, iv_cg);
+    //@ close cryptogram(iv, GCM_IV_SIZE, iv_ccs, iv_cg);
     //@ close polarssl_pub(pub)(iv_cg);
     //@ leak polarssl_pub(pub)(iv_cg);
     //@ public_cryptogram(iv, iv_cg);
@@ -120,68 +118,55 @@ struct item *symmetric_encryption(struct item *key, struct item *payload)
     //@ chars_split(encrypted, GCM_MAC_SIZE);
     //@ open principal(principal1, count1 + 1);
     if (gcm_crypt_and_tag(&gcm_context, GCM_ENCRYPT,
-                          (unsigned int) payload->size, iv_buffer, 
-                          GCM_IV_SIZE, NULL, 0, payload->content, 
+                          (unsigned int) payload->size, iv_buffer,
+                          GCM_IV_SIZE, NULL, 0, payload->content,
                           encrypted + GCM_MAC_SIZE,
                           GCM_MAC_SIZE, encrypted) != 0)
       abort_crypto_lib("Gcm encryption failed");
     //@ close principal(principal1, count1 + 2);
     zeroize(iv_buffer, GCM_IV_SIZE);
-    //@ assert crypto_chars(secret, encrypted, GCM_MAC_SIZE, ?mac_cs);
-    //@ assert crypto_chars(secret, encrypted + GCM_MAC_SIZE, p_size, ?enc_cs);
+    //@ assert crypto_chars(secret, encrypted, GCM_MAC_SIZE, ?mac_ccs);
+    //@ assert crypto_chars(secret, encrypted + GCM_MAC_SIZE, p_size, ?enc_ccs);
     //@ crypto_chars_join(encrypted);
     //@ assert exists(?enc_cg);
-    //@ list<char> cg_cs = append(mac_cs, enc_cs);
-    //@ assert cg_cs == chars_for_cg(enc_cg);
-    //@ list<char> cont_cs = append(iv_cs, cg_cs);
-    //@ take_append(GCM_IV_SIZE, iv_cs, cg_cs);
-    //@ drop_append(GCM_IV_SIZE, iv_cs, cg_cs);
-    //@ list<char> cs = append(tag_cs, cont_cs);
-    //@ take_append(TAG_LENGTH, tag_cs, cont_cs);
-    //@ drop_append(TAG_LENGTH, tag_cs, cont_cs);
-    
+    //@ list<crypto_char> cg_ccs = append(mac_ccs, enc_ccs);
+    //@ assert cg_ccs == ccs_for_cg(enc_cg);
+    //@ list<crypto_char> cont_ccs = append(iv_ccs, cg_ccs);
+    //@ take_append(GCM_IV_SIZE, iv_ccs, cg_ccs);
+    //@ drop_append(GCM_IV_SIZE, iv_ccs, cg_ccs);
+    //@ list<crypto_char> ccs = append(cs_to_ccs(tag_cs), cont_ccs);
+    //@ cs_to_ccs_length(tag_cs);
+    //@ take_append(TAG_LENGTH, cs_to_ccs(tag_cs), cont_ccs);
+    //@ drop_append(TAG_LENGTH, cs_to_ccs(tag_cs), cont_ccs);
     //@ item enc;
-    //@ list<char> ent = append(iv_cs, iv_cs);
-    //@ take_append(GCM_IV_SIZE, iv_cs, iv_cs);
-    //@ drop_append(GCM_IV_SIZE, iv_cs, iv_cs);
+    //@ list<crypto_char> ent = append(iv_ccs, iv_ccs);
+    //@ take_append(GCM_IV_SIZE, iv_ccs, iv_ccs);
+    //@ drop_append(GCM_IV_SIZE, iv_ccs, iv_ccs);
     /*@ if (col)
         {
-          enc_cg = chars_for_cg_sur(cg_cs, tag_auth_encrypted);
+          enc_cg = ccs_for_cg_sur(cg_ccs, tag_auth_encrypted);
           assert enc_cg == cg_auth_encrypted(?p0, ?c0, ?pay0, ?iv0);
-          ent = append(iv_cs, iv0);
-          take_append(GCM_IV_SIZE, iv_cs, iv0);
-          drop_append(GCM_IV_SIZE, iv_cs, iv0);
+          ent = append(iv_ccs, iv0);
+          take_append(GCM_IV_SIZE, iv_ccs, iv0);
+          drop_append(GCM_IV_SIZE, iv_ccs, iv0);
           enc = symmetric_encrypted_item(p0, c0, some(pay), ent);
-          public_chars(encrypted, GCM_MAC_SIZE + p_size);
-          assert chars(encrypted, GCM_MAC_SIZE + p_size, cg_cs);
-          chars_join(iv);
-          chars_join(r_cont);
-          assert chars(r_cont, r_size, cs);
-          public_chars(r_cont, r_size);
-          public_generated_split(polarssl_pub(pub), cs, TAG_LENGTH);
-          close ic_sym_enc(enc)(iv0, cg_cs);
+          close ic_sym_enc(enc)(iv0, cg_ccs);
         }
         else
         {
-          assert enc_cg == cg_auth_encrypted(principal2, count2, pay_cs, iv_cs);
+          assert enc_cg == cg_auth_encrypted(principal2, count2, pay_ccs, iv_ccs);
           enc = symmetric_encrypted_item(principal2, count2, some(pay), ent);
           close polarssl_pub(pub)(cg_nonce(principal1, count1 + 1));
           leak  polarssl_pub(pub)(cg_nonce(principal1, count1 + 1));
-          public_generated(polarssl_pub(pub), cg_nonce(principal1, count1 + 1));
-          chars_to_secret_crypto_chars(iv, GCM_IV_SIZE);
-          crypto_chars_join(iv);
-          chars_to_secret_crypto_chars(r_cont, TAG_LENGTH);
-          crypto_chars_join(r_cont);
-          assert crypto_chars(secret, r_cont, r_size, cs);
-          close ic_sym_enc(enc)(iv_cs, cg_cs);
+          public_cg_ccs(cg_nonce(principal1, count1 + 1));
+          close ic_sym_enc(enc)(iv_ccs, cg_ccs);
         }
     @*/
+    //@ chars_to_secret_crypto_chars(iv, GCM_IV_SIZE);
+    //@ crypto_chars_join(iv);
     //@ well_formed_item_constraints(pay, enc);
-    //@ close ic_cg(enc)(cg_cs, enc_cg);
-    //@ close ic_parts(enc)(tag_cs, cont_cs);
-    //@ WELL_FORMED(tag_cs, cont_cs, TAG_SYMMETRIC_ENC)
-    //@ close item_constraints(enc, cs, pub);
-    //@ leak item_constraints(enc, cs, pub);
+    //@ close ic_cg(enc)(cg_ccs, enc_cg);
+    //@ CLOSE_ITEM_CONSTRAINTS(r_cont, TAG_SYMMETRIC_ENC, r_size, enc)
     //@ close item(result, enc, pub);
     //@ close item(payload, pay, pub);
     gcm_free(&gcm_context);
@@ -240,83 +225,78 @@ struct item *symmetric_decryption(struct item *key, struct item *item)
     //@ open item(key, k, pub);
     //@ assert key->content |-> ?k_cont &*& key->size |-> ?k_size;
     check_valid_symmetric_key_item_size(key->size);
-    //@ open [_]item_constraints(k, ?k_cs0, pub);
-    //@ assert [_]ic_parts(k)(?k_tag, ?k_cs);
+    //@ assert [_]item_constraints(k, ?k_ccs0, pub);
+    //@ OPEN_ITEM_CONSTRAINTS(k, k_ccs0, pub)
+    //@ assert [_]ic_parts(k)(?k_tag, ?k_ccs);
     //@ crypto_chars_limits(k_cont);
     //@ crypto_chars_split(k_cont, TAG_LENGTH);
-    //@ WELL_FORMED(k_tag, k_cs, TAG_SYMMETRIC_KEY)
     //@ assert crypto_chars(secret, k_cont, TAG_LENGTH, k_tag);
-    //@ assert crypto_chars(secret, k_cont + TAG_LENGTH, GCM_KEY_SIZE, k_cs);
+    //@ assert crypto_chars(secret, k_cont + TAG_LENGTH, GCM_KEY_SIZE, k_ccs);
     //@ cryptogram k_cg = cg_symmetric_key(principal2, count2);
-    //@ if (col) k_cg = chars_for_cg_sur(k_cs, tag_symmetric_key);
-    //@ if (col) crypto_chars_to_chars(k_cont + TAG_LENGTH, GCM_KEY_SIZE);
-    //@ if (col) public_chars_extract(k_cont + TAG_LENGTH, k_cg);
-    //@ if (col) chars_to_secret_crypto_chars(k_cont + TAG_LENGTH, GCM_KEY_SIZE);
-    //@ close cryptogram(k_cont + TAG_LENGTH, GCM_KEY_SIZE, k_cs, k_cg);
+    //@ if (col) k_cg = ccs_for_cg_sur(k_ccs, tag_symmetric_key);
+    //@ if (col) public_ccs_cg(k_cg);
+    //@ close cryptogram(k_cont + TAG_LENGTH, GCM_KEY_SIZE, k_ccs, k_cg);
     //@ close gcm_context(&gcm_context);
     if (gcm_init(&gcm_context, POLARSSL_CIPHER_ID_AES, (key->content + TAG_LENGTH),
                 (unsigned int) GCM_KEY_SIZE * 8) != 0)
       abort_crypto_lib("Init gcm failed");
     //@ assert gcm_context_initialized(&gcm_context, ?p, ?c);
     //@ assert col || (p == principal2 && c == count2);
-    //@ open cryptogram(k_cont + TAG_LENGTH, GCM_KEY_SIZE, k_cs, k_cg);
+    //@ open cryptogram(k_cont + TAG_LENGTH, GCM_KEY_SIZE, k_ccs, k_cg);
     //@ crypto_chars_join(k_cont);
     //@ close item(key, k, pub);
 
     //@ open item(item, enc, pub);
     //@ assert item->content |-> ?i_cont &*& item->size |-> ?i_size;
-    //@ open [_]item_constraints(enc, ?cs, pub);
+    //@ assert [_]item_constraints(enc, ?ccs, pub);
+    //@ OPEN_ITEM_CONSTRAINTS(enc, ccs, pub)
     //@ open [_]ic_parts(enc)(?enc_tag, ?enc_cont);
     //@ open [_]ic_cg(enc)(_, ?enc_cg);
-    //@ take_append(TAG_LENGTH, enc_tag, enc_cont);
-    //@ drop_append(TAG_LENGTH, enc_tag, enc_cont);
-    //@ open [_]ic_sym_enc(enc)(?enc_iv, ?cg_cs);
-    //@ assert true == well_formed(cs, nat_length(cs));
-    //@ close [1/2]hide_crypto_chars(_, i_cont, i_size, cs);
+    //@ open [_]ic_sym_enc(enc)(?enc_iv, ?cg_ccs);
+    //@ close [1/2]hide_crypto_chars(_, i_cont, i_size, ccs);
     check_valid_symmetric_encrypted_item_size(item->size);
-    //@ assert length(cs) > TAG_LENGTH + GCM_IV_SIZE;
+    //@ assert length(ccs) > TAG_LENGTH + GCM_IV_SIZE;
     int size = item->size - TAG_LENGTH - GCM_IV_SIZE - GCM_MAC_SIZE;
     if (size <= MINIMAL_STRING_SIZE) abort_crypto_lib("Gcm decryption failed");
     //@ crypto_chars_limits(i_cont);
     //@ crypto_chars_split(i_cont, TAG_LENGTH);
     iv = item->content + TAG_LENGTH;
     //@ crypto_chars_split(iv, GCM_IV_SIZE);
-    //@ assert [1/2]crypto_chars(secret, iv, GCM_IV_SIZE, ?iv_cs);
+    //@ assert [1/2]crypto_chars(secret, iv, GCM_IV_SIZE, ?iv_ccs);
     memcpy(iv_buffer, iv, GCM_IV_SIZE);
-    //@ assert cs == append(enc_tag, enc_cont);
-    //@ assert enc_cont == append(iv_cs, cg_cs);
+    //@ assert ccs == append(enc_tag, enc_cont);
+    //@ assert enc_cont == append(iv_ccs, cg_ccs);
     //@ public_crypto_chars(iv, GCM_IV_SIZE);
     //@ chars_to_secret_crypto_chars(iv, GCM_IV_SIZE);
     encrypted = iv + GCM_IV_SIZE;
     //@ crypto_chars_limits(encrypted);
     //@ crypto_chars_split(encrypted, GCM_MAC_SIZE);
-    //@ assert [1/2]crypto_chars(secret, encrypted, GCM_MAC_SIZE, ?mac_cs);
-    /*@ assert [1/2]crypto_chars(secret, encrypted + GCM_MAC_SIZE, 
-                                 size, ?enc_cs); @*/
-    //@ assert cg_cs == append(mac_cs, enc_cs);                             
+    //@ assert [1/2]crypto_chars(secret, encrypted, GCM_MAC_SIZE, ?mac_ccs);
+    /*@ assert [1/2]crypto_chars(secret, encrypted + GCM_MAC_SIZE,
+                                 size, ?enc_ccs); @*/
+    //@ assert cg_ccs == append(mac_ccs, enc_ccs);
     result->size = size;
     result->content = malloc(size);
     if (result->content == 0) abort_crypto_lib("Malloc failed");
     //@ assert result->content |-> ?r_cont &*& result->size |-> size;
-    //@ if (col) enc_cg = chars_for_cg_sur(cg_cs, tag_auth_encrypted);
+    //@ if (col) enc_cg = ccs_for_cg_sur(cg_ccs, tag_auth_encrypted);
     //@ close exists(enc_cg);
     if (gcm_auth_decrypt(&gcm_context, (unsigned int) size,
-                         iv_buffer, GCM_IV_SIZE, NULL, 0, encrypted, 
+                         iv_buffer, GCM_IV_SIZE, NULL, 0, encrypted,
                          GCM_MAC_SIZE, encrypted + GCM_MAC_SIZE,
                          result->content) != 0)
       abort_crypto_lib("Gcm decryption failed");
-    //@ assert crypto_chars(secret, r_cont, size, ?dec_cs);
-    //@ assert col || enc_cg == cg_auth_encrypted(principal1, count1, dec_cs, iv_cs);
+    //@ assert crypto_chars(secret, r_cont, size, ?dec_ccs);
+    //@ assert col || enc_cg == cg_auth_encrypted(principal1, count1, dec_ccs, iv_ccs);
     //@ crypto_chars_join(encrypted);
     //@ crypto_chars_join(iv);
     //@ crypto_chars_join(i_cont);
-    //@ open [1/2]hide_crypto_chars(_, i_cont, i_size, cs);
+    //@ open [1/2]hide_crypto_chars(_, i_cont, i_size, ccs);
     //@ close item(item, enc, pub);
     gcm_free(&gcm_context);
     //@ open gcm_context(&gcm_context);
     zeroize(iv_buffer, GCM_IV_SIZE);
     //@ close [f]world(pub, key_clsfy);
-    
     /*@ if (col)
         {
           crypto_chars_to_chars(r_cont, size);
@@ -326,15 +306,15 @@ struct item *symmetric_decryption(struct item *key, struct item *item)
         {
           assert enc == symmetric_encrypted_item(principal1, count1,
                                                  pay, ent);
-          assert enc_cg == cg_auth_encrypted(principal1, count1, 
-                                             dec_cs, enc_iv);
+          assert enc_cg == cg_auth_encrypted(principal1, count1,
+                                             dec_ccs, enc_iv);
           switch(pay)
           {
             case some(pay1):
-              assert [_]item_constraints(pay1, dec_cs, pub);
+              assert [_]item_constraints(pay1, dec_ccs, pub);
             case none:
-              open [_]ill_formed_item_chars(enc)(dec_cs);
-              assert [_]public_generated(polarssl_pub(pub))(dec_cs);
+              open [_]ill_formed_item_ccs(enc)(dec_ccs);
+              assert [_]public_ccs(dec_ccs);
               public_crypto_chars(r_cont, size);
               chars_to_crypto_chars(r_cont, size);
           }
@@ -343,15 +323,17 @@ struct item *symmetric_decryption(struct item *key, struct item *item)
     parse_item(result->content, size);
     /*@ if (col)
         {
-          public_chars(r_cont, size);
+          crypto_chars_to_chars(r_cont, size);
+          assert chars(r_cont, size, ?dec_cs);
+          public_cs(dec_cs);
           chars_to_secret_crypto_chars(r_cont, size);
           retreive_proof_obligations();
-          deserialize_item(dec_cs, pub);
+          deserialize_item(dec_ccs);
           leak proof_obligations(pub);
         }
     @*/
-    //@ assert crypto_chars(secret, r_cont, size, dec_cs);
-    //@ assert [_]item_constraints(?r, dec_cs, pub);
+    //@ assert crypto_chars(secret, r_cont, size, dec_ccs);
+    //@ assert [_]item_constraints(?r, dec_ccs, pub);
     //@ close item(result, r, pub);
   }
 

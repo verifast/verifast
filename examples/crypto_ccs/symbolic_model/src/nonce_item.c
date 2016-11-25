@@ -89,40 +89,24 @@ struct item *create_nonce()
   item->size = TAG_LENGTH + 1 + NONCE_SIZE;
   item->content = malloc_wrapper(item->size);
   //@ assert item->content |-> ?cont;
+  //@ assert item->size |-> ?size;
   write_tag(item->content, TAG_NONCE);
   //@ assert chars(cont, TAG_LENGTH, ?cs_tag);
   //@ assert cs_tag == full_tag(TAG_NONCE);
-  //@ public_chars(cont, TAG_LENGTH);
   *(item->content + TAG_LENGTH) = 0;
   //@ assert chars(cont + TAG_LENGTH, 1, cons(0, nil));
-  //@ public_chars(cont + TAG_LENGTH, 1);
+  //@ public_cs(cons(0, nil));
+  //@ chars_to_secret_crypto_chars(cont + TAG_LENGTH, 1);
   //@ close [f]world(pub, key_clsfy);
   create_havege_random(item->content + TAG_LENGTH + 1, NONCE_SIZE);
 
-  //@ open cryptogram(cont + TAG_LENGTH + 1, NONCE_SIZE, ?n_cs, ?n_cg);
+  //@ open cryptogram(cont + TAG_LENGTH + 1, NONCE_SIZE, ?n_ccs, ?n_cg);
   //@ assert n_cg == cg_nonce(principal, count + 1);
   //@ item nonce = nonce_item(principal, count + 1, 0);
-  //@ list<char> cs_cont = cons(0, n_cs);
-  //@ list<char> cs = append(cs_tag, cs_cont);
-  //@ WELL_FORMED(cs_tag, cs_cont, TAG_NONCE)
-  //@ head_append(cs_tag, cons(0, n_cs));
-  //@ chars_to_secret_crypto_chars(cont, TAG_LENGTH);
-  //@ chars_to_secret_crypto_chars(cont + TAG_LENGTH, 1);
+  //@ list<crypto_char> ccs_cont = cons(c_to_cc(0), n_ccs);
   //@ crypto_chars_join(cont + TAG_LENGTH);
-  //@ crypto_chars_join(cont);
-  //@ append_assoc(cs_tag, cons(0, nil), n_cs);
-  //@ assert crypto_chars(secret, cont, TAG_LENGTH + 1 + NONCE_SIZE, cs);
-  //@ take_append(TAG_LENGTH, cs_tag, append(cons(0, nil), n_cs));
-  //@ drop_append(TAG_LENGTH, cs_tag, append(cons(0, nil), n_cs));
-  //@ WELL_FORMED(cs_tag, cs_cont, TAG_NONCE)
-  //@ close ic_parts(nonce)(cs_tag, cons(0, n_cs));
-  //@ if (col) crypto_chars_to_chars(cont, TAG_LENGTH + 1 + NONCE_SIZE);
-  //@ if (col) public_chars(cont, TAG_LENGTH + 1 + NONCE_SIZE);
-  //@ if (col) public_generated_split(polarssl_pub(pub), cs, TAG_LENGTH);
-  //@ if (col) chars_to_secret_crypto_chars(cont, TAG_LENGTH + 1 + NONCE_SIZE);
-  //@ close ic_cg(nonce)(n_cs, n_cg);
-  //@ close item_constraints(nonce, cs, pub);
-  //@ leak item_constraints(nonce, cs, pub);
+  //@ close ic_cg(nonce)(n_ccs, n_cg);
+  //@ CLOSE_ITEM_CONSTRAINTS(cont, TAG_NONCE, size, nonce)
   //@ close item(item, nonce, pub);
   return item;
 
@@ -140,59 +124,43 @@ void increment_nonce(struct item *item)
 {
   //@ open  item(item, i, pub);
   //@ assert item->size |-> ?size &*& item->content |-> ?cont;
-  //@ open [_]item_constraints(i, ?cs, pub);
-  //@ open [_]ic_parts(i)(?cs_tag, ?cs_cont);
-  //@ assert cs_tag == full_tag(TAG_NONCE);
-  //@ assert crypto_chars(secret, cont, size, cs);
-  //@ assert cs == append(cs_tag, cs_cont);
+  //@ assert [_]item_constraints(i, ?ccs, pub);
+  //@ OPEN_ITEM_CONSTRAINTS(i, ccs, pub)
+  //@ open [_]ic_parts(i)(?ccs_tag, ?ccs_cont);
   //@ crypto_chars_split(cont, TAG_LENGTH);
-  //@ take_append(TAG_LENGTH, cs_tag, cs_cont);
-  //@ drop_append(TAG_LENGTH, cs_tag, cs_cont);
-  //@ assert crypto_chars(secret, cont, TAG_LENGTH, cs_tag);
-  //@ assert crypto_chars(secret, cont + TAG_LENGTH, size - TAG_LENGTH, cs_cont);
+  //@ assert crypto_chars(secret, cont, TAG_LENGTH, ccs_tag);
+  //@ assert crypto_chars(secret, cont + TAG_LENGTH, size - TAG_LENGTH, ccs_cont);
+  //@ cs_to_ccs_crypto_chars(cont, full_tag(TAG_NONCE));
   //@ crypto_chars_split(cont + TAG_LENGTH, 1);
-  //@ assert crypto_chars(secret, cont + TAG_LENGTH, 1, cons(?inc1, nil));
-  //@ assert crypto_chars(secret, cont + TAG_LENGTH + 1, size - TAG_LENGTH - 1, ?n_cs);
-  //@ take_append(1, cons(inc1, nil), n_cs);
-  //@ drop_append(1, cons(inc1, nil), n_cs);
-  //@ assert cs_cont == cons(inc1, n_cs);
+  //@ assert crypto_chars(secret, cont + TAG_LENGTH, 1, cons(?cc_inc1, nil));
+  //@ assert crypto_chars(secret, cont + TAG_LENGTH + 1, size - TAG_LENGTH - 1, ?n_ccs);
+  //@ take_append(1, cons(cc_inc1, nil), n_ccs);
+  //@ drop_append(1, cons(cc_inc1, nil), n_ccs);
+  //@ assert ccs_cont == cons(cc_inc1, n_ccs);
   //@ open [f]world(pub, key_clsfy);
   //@ public_crypto_chars(cont + TAG_LENGTH, 1);
   char *increment = item->content + TAG_LENGTH;
   //@ chars_limits(cont + TAG_LENGTH);
-  //@ open chars(cont + TAG_LENGTH, 1, cons(inc1, nil));
+  //@ open chars(cont + TAG_LENGTH, 1, cons(?inc1, _));
+  //@ c_to_cc_inj(inc0, inc1);
+  //@ assert cc_inc1 == c_to_cc(inc1);
   if (*increment < 0 || *increment >= 126)
     abort_crypto_lib("Incremented nonce to many times");
   (*increment)++;
-  //@ close chars(cont + TAG_LENGTH, 1, cons(inc1 + 1, nil));
-  //@ public_chars(cont + TAG_LENGTH, 1);
+  //@ close chars(cont + TAG_LENGTH, 1, cons(inc1 + 1, _));
+  //@ public_cs(cons(inc1 + 1, nil));
   //@ close [f]world(pub, key_clsfy);
   //@ chars_to_secret_crypto_chars(cont + TAG_LENGTH, 1);
   //@ crypto_chars_join(cont + TAG_LENGTH);
-  //@ crypto_chars_join(cont);
 
   //@ item nonce = nonce_item(principal, count, inc1 + 1);
-  //@ close exists(cg_nonce(principal, count));
-  //@ list<char> nonce_cont = cons(inc1 + 1, n_cs);
-  //@ list<char> nonce_cs = append(cs_tag, nonce_cont);
-  //@ append_assoc(cs_tag, cons(inc1 + 1, nil), n_cs);
-  //@ WELL_FORMED(cs_tag, nonce_cont, TAG_NONCE)
-  //@ take_append(1, cons(inc1 + 1, nil), n_cs);
-  //@ drop_append(1, cons(inc1 + 1, nil), n_cs);
-  /*@ if (col)
-      {
-        public_generated_split(polarssl_pub(pub), cs, TAG_LENGTH);
-        public_generated_split(polarssl_pub(pub), cs_cont, 1);
-        public_generated_join(polarssl_pub(pub), cons(inc1 + 1, nil), n_cs);
-        public_generated_join(polarssl_pub(pub), cs_tag, nonce_cont);
-      }
-  @*/
-  //@ WELL_FORMED(cs_tag, nonce_cont, TAG_NONCE)
-  //@ close ic_parts(nonce)(cs_tag, nonce_cont);
-  //@ assert [_]ic_cg(i)(n_cs, ?n_cg); 
-  //@ close ic_cg(nonce)(n_cs, n_cg);
-  //@ close item_constraints(nonce, nonce_cs, pub);
-  //@ leak item_constraints(nonce, nonce_cs, pub);
+  //@ list<crypto_char> nonce_cont = cons(c_to_cc(inc1 + 1), n_ccs);
+  //@ list<crypto_char> nonce_ccs = append(ccs_tag, nonce_cont);
+  //@ take_append(1, cons(c_to_cc(inc1 + 1), nil), n_ccs);
+  //@ drop_append(1, cons(c_to_cc(inc1 + 1), nil), n_ccs);
+  //@ assert [_]ic_cg(i)(n_ccs, ?n_cg);
+  //@ close ic_cg(nonce)(n_ccs, n_cg);
+  //@ CLOSE_ITEM_CONSTRAINTS(cont, TAG_NONCE, size, nonce)
   //@ close item(item, nonce, pub);
 }
 

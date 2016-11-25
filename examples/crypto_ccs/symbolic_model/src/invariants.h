@@ -67,8 +67,9 @@ predicate_ctor polarssl_pub(predicate(item) pub)
   }
 ;
 
-predicate_ctor polarssl_proof_pred(predicate(item) pub, 
+predicate_ctor polarssl_proof_pred(predicate(item) pub,
                                    fixpoint(int, int, bool, bool) classifier)() =
+  [_]public_invar(polarssl_pub(pub)) &*&
   proof_obligations(pub) &*& is_key_classifier(_, pub, classifier)
 ;
 

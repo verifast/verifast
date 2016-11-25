@@ -40,22 +40,20 @@ struct item *create_hmac(struct item *key, struct item *payload)
   //@ open [f2]item(key, k, pub);
   //@ assert [f2]key->content |-> ?k_cont &*& [f2]key->size |-> ?k_size;
   check_valid_symmetric_key_item_size(key->size);
-  //@ open [_]item_constraints(k, ?k_cs0, pub);
-  //@ assert [_]ic_parts(k)(?k_tag, ?k_cs);
+  //@ assert [_]item_constraints(k, ?k_ccs0, pub);
+  //@ OPEN_ITEM_CONSTRAINTS(k, k_ccs0, pub)
+  //@ assert [_]ic_parts(k)(?k_tag, ?k_ccs);
   //@ crypto_chars_limits(k_cont);
   //@ crypto_chars_split(k_cont, TAG_LENGTH);
-  //@ WELL_FORMED(k_tag, k_cs, TAG_SYMMETRIC_KEY)
-  //@ assert [f2]crypto_chars(secret, k_cont,TAG_LENGTH, k_tag);
-  //@ assert [f2]crypto_chars(secret, k_cont + TAG_LENGTH, GCM_KEY_SIZE, k_cs);
+  //@ assert [f2]crypto_chars(secret, k_cont, TAG_LENGTH, k_tag);
+  //@ assert [f2]crypto_chars(secret, k_cont + TAG_LENGTH, GCM_KEY_SIZE, k_ccs);
   //@ cryptogram k_cg = cg_symmetric_key(creator, id);
-  //@ if (col) k_cg = chars_for_cg_sur(k_cs, tag_symmetric_key);
-  //@ if (col) crypto_chars_to_chars(k_cont + TAG_LENGTH, GCM_KEY_SIZE);
-  //@ if (col) public_chars_extract(k_cont + TAG_LENGTH, k_cg);
-  //@ if (col) chars_to_secret_crypto_chars(k_cont + TAG_LENGTH, GCM_KEY_SIZE);
-  //@ close [f2]cryptogram(k_cont + TAG_LENGTH, GCM_KEY_SIZE, k_cs, k_cg);
+  //@ if (col) k_cg = ccs_for_cg_sur(k_ccs, tag_symmetric_key);
+  //@ if (col) public_ccs_cg(k_cg);
+  //@ close [f2]cryptogram(k_cont + TAG_LENGTH, GCM_KEY_SIZE, k_ccs, k_cg);
 
   //@ open [f1]item(payload, pay, pub);
-  //@ open [_]item_constraints(pay, ?pay_cs, pub);
+  //@ open [_]item_constraints(pay, ?pay_ccs, pub);
   //@ assert [f1]payload->content |-> ?p_cont &*& [f1]payload->size |-> ?p_size;
   struct item* hmac = malloc(sizeof(struct item));
   if (hmac == 0){abort_crypto_lib("malloc of item failed");}
@@ -69,38 +67,20 @@ struct item *create_hmac(struct item *key, struct item *payload)
               payload->content, (unsigned int) payload->size,
               hmac->content + TAG_LENGTH, 0);
   //@ assert hmac->content |-> ?cont &*& hmac->size |-> ?size;
-  //@ assert chars(cont, TAG_LENGTH, ?cs_tag);
-  //@ assert cs_tag == full_tag(TAG_HMAC);
-  //@ public_chars(cont, TAG_LENGTH);
-  //@ open cryptogram(cont + TAG_LENGTH, HMAC_SIZE, ?h_cs, ?h_cg);
-  //@ assert col || h_cg == cg_hmac(creator, id, pay_cs);
-  //@ if (col) h_cg == chars_for_cg_sur(h_cs, tag_hmac);
-  
+  //@ open cryptogram(cont + TAG_LENGTH, HMAC_SIZE, ?h_ccs, ?h_cg);
+  //@ assert col || h_cg == cg_hmac(creator, id, pay_ccs);
+  //@ if (col) h_cg == ccs_for_cg_sur(h_ccs, tag_hmac);
   //@ assert h_cg == cg_hmac(?p0, ?c0, _);
   //@ item h = hmac_item(p0, c0, some(pay));
-  //@ list<char> cs = append(cs_tag, h_cs);
-  //@ chars_to_secret_crypto_chars(cont, TAG_LENGTH);
-  //@ crypto_chars_join(cont);
   //@ close [f0]world(pub, key_clsfy);
-  //@ WELL_FORMED(cs_tag, h_cs, TAG_HMAC)
-  //@ close ic_parts(h)(cs_tag, h_cs);
-  //@ close ic_cg(h)(h_cs, h_cg);
-  /*@ if (col)
-      {
-        crypto_chars_to_chars(cont, TAG_LENGTH + HMAC_SIZE);
-        public_chars(cont, TAG_LENGTH + HMAC_SIZE);
-        chars_to_secret_crypto_chars(cont, TAG_LENGTH + HMAC_SIZE);
-        public_generated_split(polarssl_pub(pub), cs, TAG_LENGTH);
-      }
-  @*/
-  //@ close well_formed_item_chars(h)(pay_cs);
-  //@ leak well_formed_item_chars(h)(pay_cs);
-  //@ close item_constraints(h, cs, pub);
-  //@ leak item_constraints(h, cs, pub);
+  //@ close ic_cg(h)(h_ccs, h_cg);
+  //@ close well_formed_item_ccs(h)(pay_ccs);
+  //@ leak well_formed_item_ccs(h)(pay_ccs);
+  //@ CLOSE_ITEM_CONSTRAINTS(cont, TAG_HMAC, size, h)
   //@ close item(hmac, h, pub);
 
   return hmac;
-  //@ open cryptogram(k_cont + TAG_LENGTH, GCM_KEY_SIZE, k_cs, k_cg);
+  //@ open cryptogram(k_cont + TAG_LENGTH, GCM_KEY_SIZE, k_ccs, k_cg);
   //@ crypto_chars_join(k_cont);
   //@ close [f2]item(key, k, pub);
   //@ close [f1]item(payload, pay, pub);

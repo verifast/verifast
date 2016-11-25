@@ -15,23 +15,23 @@ MODULES = \
 	item_constraints \
 	serialization \
 	deserialization \
+	invariants \
+	key_register \
+	data_item \
+	pair_item \
+	nonce_item \
+	key_item \
+	hash_item \
+	hmac_item \
+	symmetric_encrypted_item \
+	asymmetric_authenticated_encryption \
+	asymmetric_encrypted_item \
+	asymmetric_signature_item \
+	principal_ids \
+	network \
+	symbolic \
+	attacker \
 
-# 	invariants \
-# 	key_register \
-# 	data_item \
-# 	pair_item \
-# 	nonce_item \
-# 	hash_item \
-# 	key_item \
-# 	hmac_item \
-# 	symmetric_encrypted_item \
-# 	asymmetric_encrypted_item \
-# 	asymmetric_signature_item \
-# 	asymmetric_authenticated_encryption \
-# 	principal_ids \
-# 	network \
-# 	symbolic \
-# 	attacker \
 
 
 OBJECTS   = $(foreach module,$(MODULES),src/$(module).o)

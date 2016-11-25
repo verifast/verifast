@@ -141,7 +141,7 @@ lemma void retreive_hash_is_public(fixpoint(int, int, bool, bool) clsfy)
       requires  polarssl_proof_pred(pub, clsfy)() &*&
                 hash == cg_hash(?pay) &*&
                 length(pay) <= INT_MAX &*&
-                [_]public_generated(polarssl_pub(pub))(pay);
+                [_]public_ccs(pay);
       ensures   polarssl_proof_pred(pub, clsfy)() &*&
                 [_]polarssl_pub(pub)(hash);
     {
@@ -170,7 +170,7 @@ lemma void retreive_public_hmac_is_public(fixpoint(int, int, bool, bool) clsfy)
                 hmac == cg_hmac(?p, ?c, ?pay) &*&
                 length(pay) <= INT_MAX &*&
                 [_]polarssl_pub(pub)(cg_symmetric_key(p, c)) &*&
-                [_]public_generated(polarssl_pub(pub))(pay);
+                [_]public_ccs(pay);
       ensures   polarssl_proof_pred(pub, clsfy)() &*&
                 [_]polarssl_pub(pub)(hmac);
     {
@@ -199,7 +199,7 @@ lemma void retreive_public_encryption_is_public(fixpoint(int, int, bool, bool) c
       requires  polarssl_proof_pred(pub, clsfy)() &*&
                 encrypted == cg_encrypted(?p, ?c, ?pay, ?ent) &*&
                 [_]polarssl_pub(pub)(cg_symmetric_key(p, c)) &*&
-                [_]public_generated(polarssl_pub(pub))(pay);
+                [_]public_ccs(pay);
       ensures   polarssl_proof_pred(pub, clsfy)() &*&
                 [_]polarssl_pub(pub)(encrypted);
     {
@@ -231,7 +231,7 @@ lemma void retreive_public_decryption_is_public(fixpoint(int, int, bool, bool) c
                 [_]polarssl_pub(pub)(key) &*&
                 [_]polarssl_pub(pub)(encrypted);
       ensures   polarssl_proof_pred(pub, clsfy)() &*&
-                [_]public_generated(polarssl_pub(pub))(pay);
+                [_]public_ccs(pay);
     {
       open [_]polarssl_pub(pub)(key);
       open [_]polarssl_pub(pub)(encrypted);
@@ -258,7 +258,7 @@ lemma void retreive_public_auth_encryption_is_public(fixpoint(int, int, bool, bo
                 encrypted == cg_auth_encrypted(?p, ?c, ?pay, ?ent) &*&
                 length(pay) <= INT_MAX &*&
                 [_]polarssl_pub(pub)(cg_symmetric_key(p, c)) &*&
-                [_]public_generated(polarssl_pub(pub))(pay);
+                [_]public_ccs(pay);
       ensures   polarssl_proof_pred(pub, clsfy)() &*&
                 [_]polarssl_pub(pub)(encrypted);
     {
@@ -293,24 +293,24 @@ lemma void retreive_public_auth_decryption_is_public(fixpoint(int, int, bool, bo
                 [_]polarssl_pub(pub)(key) &*&
                 [_]polarssl_pub(pub)(encrypted);
       ensures   polarssl_proof_pred(pub, clsfy)() &*&
-                [_]public_generated(polarssl_pub(pub))(pay);
+                [_]public_ccs(pay);
     {
       open [_]polarssl_pub(pub)(key);
       open [_]polarssl_pub(pub)(encrypted);
       assert [_]exists<bool>(?b);
       if (b)
       {
-        assert [_]public_generated(polarssl_pub(pub))(pay);
+        assert [_]public_ccs(pay);
       }
       else
       {
-        assert [_]exists<list<char> >(?ent0);
+        assert [_]exists<list<crypto_char> >(?ent0);
         assert [_]polarssl_pub(pub)(key);
         assert [_]item_constraints(?pay0, pay, pub);
         item enc = symmetric_encrypted_item(p, c, some(pay0), ent0);
         assert [_]pub(enc);
         assert drop(GCM_IV_SIZE, ent0) == iv;
-        
+
         open polarssl_proof_pred(pub, clsfy)();
         open proof_obligations(pub);
         assert is_public_symmetric_decrypted(?proof, pub);
@@ -318,7 +318,7 @@ lemma void retreive_public_auth_decryption_is_public(fixpoint(int, int, bool, bo
         close proof_obligations(pub);
         assert [_]pub(pay0);
         serialize_item(pay0);
-        close polarssl_proof_pred(pub, clsfy)();      
+        close polarssl_proof_pred(pub, clsfy)();
       }
     }
     produce_lemma_function_pointer_chunk
@@ -343,7 +343,7 @@ lemma void retreive_public_asym_encryption_is_public(fixpoint(int, int, bool, bo
                 encrypted == cg_asym_encrypted(?p, ?c, ?pay, ?ent) &*&
                 length(pay) <= INT_MAX &*&
                 [_]polarssl_pub(pub)(cg_public_key(p, c)) &*&
-                [_]public_generated(polarssl_pub(pub))(pay);
+                [_]public_ccs(pay);
       ensures   polarssl_proof_pred(pub, clsfy)() &*&
                 [_]polarssl_pub(pub)(encrypted);
     {
@@ -378,14 +378,14 @@ lemma void retreive_public_asym_decryption_is_public(fixpoint(int, int, bool, bo
                 [_]polarssl_pub(pub)(key) &*&
                 [_]polarssl_pub(pub)(encrypted);
       ensures   polarssl_proof_pred(pub, clsfy)() &*&
-                [_]public_generated(polarssl_pub(pub))(pay);
+                [_]public_ccs(pay);
     {
       open [_]polarssl_pub(pub)(key);
       open [_]polarssl_pub(pub)(encrypted);
       assert [_]exists<bool>(?b);
       if (b)
       {
-        assert [_]public_generated(polarssl_pub(pub))(pay);
+        assert [_]public_ccs(pay);
       }
       else
       {
@@ -426,7 +426,7 @@ lemma void retreive_public_asym_signature_is_public(fixpoint(int, int, bool, boo
                 sig == cg_asym_signature(?p, ?c, ?pay, ?ent) &*&
                 length(pay) <= INT_MAX &*&
                 [_]polarssl_pub(pub)(cg_private_key(p, c)) &*&
-                [_]public_generated(polarssl_pub(pub))(pay);
+                [_]public_ccs(pay);
       ensures   polarssl_proof_pred(pub, clsfy)() &*&
                 [_]polarssl_pub(pub)(sig);
     {

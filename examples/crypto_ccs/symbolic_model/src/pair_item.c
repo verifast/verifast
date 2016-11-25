@@ -33,90 +33,97 @@ struct item *create_pair(struct item *first, struct item *second)
                item(result, pair_item(f, s), pub); @*/
 {
   //@ open [f0]world(pub, key_clsfy);
+  char* temp;
   struct item* pair = malloc(sizeof(struct item));
   if (pair == 0){abort_crypto_lib("malloc of item failed");}
 
   //@ open [f1]item(first, f, pub);
   //@ assert [f1]first->content |-> ?cont_f &*& [f1]first->size |-> ?size_f;
-  //@ assert [f1]crypto_chars(secret, cont_f, size_f, ?cs_f);
-  //@ assert [_]item_constraints(f, cs_f, pub);
+  //@ assert [f1]crypto_chars(secret, cont_f, size_f, ?ccs_f);
+  //@ assert [_]item_constraints(f, ccs_f, pub);
   //@ well_formed_item_constraints(f, f);
-  //@ open [_]well_formed_item_chars(f)(cs_f);
+  //@ open [_]well_formed_item_ccs(f)(ccs_f);
   //@ open [f2]item(second, s, pub);
   //@ assert [f2]second->content |-> ?cont_s &*& [f2]second->size |-> ?size_s;
-  //@ assert [f2]crypto_chars(secret, cont_s, size_s, ?cs_s);
+  //@ assert [f2]crypto_chars(secret, cont_s, size_s, ?ccs_s);
   //@ well_formed_item_constraints(s, s);
-  //@ open [_]well_formed_item_chars(s)(cs_s);
-  //@ assert [_]item_constraints(s, cs_s, pub);
+  //@ open [_]well_formed_item_ccs(s)(ccs_s);
+  //@ assert [_]item_constraints(s, ccs_s, pub);
   if (INT_MAX - TAG_LENGTH - (int) sizeof(int) - first->size < second->size)
     abort_crypto_lib("Requested pair item was to big");
   pair->size = TAG_LENGTH + (int) sizeof(int) + first->size + second->size;
   pair->content = malloc_wrapper(pair->size);
   //@ assert pair->content |-> ?cont &*& pair->size |-> ?size;
   write_tag(pair->content, TAG_PAIR);
-  {
-    //@ assert chars(cont, TAG_LENGTH, full_tag(TAG_PAIR));
-    //@ public_chars(cont, TAG_LENGTH);
-    //@ chars_to_secret_crypto_chars(cont, TAG_LENGTH);
-    char* temp = pair->content + TAG_LENGTH;
-    //@ chars_split(cont + TAG_LENGTH, sizeof(int));
-    //@ assert [f1]integer(&first->size, ?flen);
-    //@ integer_to_chars(&first->size);
-    //@ open chars((void*) &first->size, sizeof(int), chars_of_int(flen));
-    //@ character_limits((void*) &first->size);
-    //@ close [f1]chars((void*) &first->size, sizeof(int), chars_of_int(flen));
-    //@ public_chars((void*) &first->size, sizeof(int));
-    //@ public_chars((void*) &first->size, sizeof(int));
-    //@ chars_to_crypto_chars((void*) &first->size, sizeof(int));
-    write_buffer(&temp, (void*) &(first->size), (int) sizeof(int));
-    //@ crypto_chars_to_chars((void*) &first->size, sizeof(int));
-    //@ chars_to_secret_crypto_chars(temp - sizeof(int), sizeof(int));
-    //@ chars_to_integer(&first->size);
-    //@ chars_split(cont + TAG_LENGTH + sizeof(int), first->size);
-    write_buffer(&temp, first->content, first->size);
-    write_buffer(&temp, second->content, second->size);
-    //@ crypto_chars_join(cont + TAG_LENGTH + sizeof(int));
-    //@ crypto_chars_join(cont + TAG_LENGTH);
-    //@ crypto_chars_join(cont);
-  }
-  //@ list<char> size_f_cs = chars_of_int(size_f);
-  //@ list<char> cs0 = append(size_f_cs, append(cs_f, cs_s));
-  //@ list<char> cs = append(full_tag(TAG_PAIR), cs0);
-  //@ take_append(TAG_LENGTH, full_tag(TAG_PAIR), cs0);
-  //@ drop_append(TAG_LENGTH, full_tag(TAG_PAIR), cs0);
-  //@ assert length(size_f_cs) == sizeof(int);
-  //@ take_append(sizeof(int), size_f_cs, append(cs_f, cs_s));
-  //@ drop_append(sizeof(int), size_f_cs, append(cs_f, cs_s));
-  //@ take_append(size_f, cs_f, cs_s);
-  //@ drop_append(size_f, cs_f, cs_s);
-  //@ assert drop(sizeof(int), cs0) == append(cs_f, cs_s);
-  //@ assert size_f_cs == chars_of_unbounded_int(length(cs_f));
-  //@ append_assoc(size_f_cs, cs_f, cs_s);
-  //@ assert crypto_chars(secret, cont, size, cs);
+
+  //@ assert chars(cont, TAG_LENGTH, full_tag(TAG_PAIR));
+  //@ public_chars(cont, TAG_LENGTH);
+  temp = pair->content + TAG_LENGTH;
+  //@ chars_split(cont + TAG_LENGTH, sizeof(int));
+  //@ assert [f1]integer(&first->size, ?flen);
+  //@ integer_to_chars(&first->size);
+  //@ open chars((void*) &first->size, sizeof(int), chars_of_int(flen));
+  //@ character_limits((void*) &first->size);
+  //@ close [f1]chars((void*) &first->size, sizeof(int), chars_of_int(flen));
+  //@ public_chars((void*) &first->size, sizeof(int));
+  //@ public_chars((void*) &first->size, sizeof(int));
+  //@ chars_to_crypto_chars((void*) &first->size, sizeof(int));
+  write_buffer(&temp, (void*) &(first->size), (int) sizeof(int));
+  //@ cs_to_ccs_crypto_chars((void*) &first->size, chars_of_int(flen));
+  //@ cs_to_ccs_crypto_chars(temp - sizeof(int), chars_of_int(flen));
+  //@ chars_to_secret_crypto_chars(temp - sizeof(int), sizeof(int));
+  //@ chars_to_integer(&first->size);
+  //@ chars_split(cont + TAG_LENGTH + sizeof(int), first->size);
+  write_buffer(&temp, first->content, first->size);
+  write_buffer(&temp, second->content, second->size);
+  //@ crypto_chars_join(cont + TAG_LENGTH + sizeof(int));
+  //@ crypto_chars_join(cont + TAG_LENGTH);
+
+  //@ list<crypto_char> size_f_ccs = cs_to_ccs(chars_of_int(size_f));
+  //@ list<crypto_char> ccs0 = append(size_f_ccs, append(ccs_f, ccs_s));
+  //@ list<crypto_char> ccs_tag = full_ctag(c_to_cc(TAG_PAIR));
+  //@ list<crypto_char> ccs = append(ccs_tag, ccs0);
+  //@ assert length(size_f_ccs) == sizeof(int);
+
+  //@ take_append(sizeof(int), size_f_ccs, append(ccs_f, ccs_s));
+  //@ drop_append(sizeof(int), size_f_ccs, append(ccs_f, ccs_s));
+  //@ take_append(size_f, ccs_f, ccs_s);
+  //@ drop_append(size_f, ccs_f, ccs_s);
+  //@ assert drop(sizeof(int), ccs0) == append(ccs_f, ccs_s);
+  //@ assert size_f_ccs == cs_to_ccs(chars_of_unbounded_int(length(ccs_f)));
+  //@ append_assoc(size_f_ccs, ccs_f, ccs_s);
   //@ item p = pair_item(f, s);
-  //@ close ic_pair(p)(cs_f, cs_s);
-  //@ length_equals_nat_length(cs);
-  //@ length_equals_nat_length(cs0);
-  //@ drop_drop(sizeof(int), TAG_LENGTH, cs);
-  //@ head_append(full_tag(TAG_PAIR), cs0);
-  /*@ switch(nat_length(cs))
+  //@ close ic_pair(p)(ccs_f, ccs_s);
+  //@ length_equals_nat_length(ccs);
+  //@ length_equals_nat_length(ccs0);
+  //@ drop_drop(sizeof(int), TAG_LENGTH, ccs);
+  /*@ switch(nat_length(ccs))
       {
         case succ(n):
-          well_formed_upper_bound(cs_f, nat_length(cs_f), n);
-          well_formed_upper_bound(cs_s, nat_length(cs_s), n);
+          well_formed_upper_bound(nat_length(ccs_f), n, ccs_f);
+          well_formed_upper_bound(nat_length(ccs_s), n, ccs_s);
+          get_forall_t<char>();
+          get_forall_t<list<char> >();
+          assert FORALLP_C &*& FORALLP_CS;
+          fixpoint(list<crypto_char>, bool) wf =
+            (well_formed_ccs)(forallc, forallcs, n);
+          if (!exists_t<char>(forallc,
+                (well_formed_pair)(forallcs, wf, ccs0)))
+          {
+            if (!exists_t<list<char> >(forallcs,
+                (well_formed_pair_bounded)(wf, ccs0)))
+            {
+              forall_t_elim(forallcs, (notf)((well_formed_pair_bounded)(wf, ccs0)),
+                            chars_of_int(size_f));
+            }
+            forall_t_elim(forallc, (notf)((well_formed_pair)(forallcs, wf, ccs0)),
+                          head(chars_of_int(size_f)));
+          }
         case zero:
           assert false;
       }
   @*/
-  /*@ if(col)
-      {
-        public_chars(cont, size);
-        public_generated_split(polarssl_pub(pub), cs, TAG_LENGTH);
-      }
-  @*/
-  //@ close ic_parts(p)(full_tag(TAG_PAIR), cs0);
-  //@ close item_constraints(p, cs, pub);
-  //@ leak item_constraints(p, cs, pub);
+  //@ CLOSE_ITEM_CONSTRAINTS(cont, TAG_PAIR, size, p)
   //@ close item(pair, p, pub);
 
   //@ close [f1]item(first, f, pub);
@@ -140,40 +147,32 @@ void pair_get_components(struct item* pair,
   check_is_pair(pair);
   //@ open item(pair, p, pub);
   //@ assert pair->content |-> ?cont &*& pair->size |-> ?size;
-  //@ assert crypto_chars(secret, cont, size, ?cs);
-  //@ open [_]item_constraints(p, cs, pub);
-  //@ assert [_]ic_parts(p)(?cs_tag, ?cs_cont);
-  //@ take_append(TAG_LENGTH, cs_tag, cs_cont);
-  //@ drop_append(TAG_LENGTH, cs_tag, cs_cont);
-  //@ assert [_]ic_pair(p)(?cs_f, ?cs_s);
-  
+  //@ assert crypto_chars(secret, cont, size, ?ccs);
+  //@ OPEN_ITEM_CONSTRAINTS(p, ccs, pub)
+  //@ assert [_]ic_parts(p)(?ccs_tag, ?ccs_cont);
+  //@ assert [_]ic_pair(p)(?ccs_f, ?ccs_s);
+
   struct item *first  = malloc(sizeof(struct item));
   struct item *second = malloc(sizeof(struct item));
   if (first == 0 || second == 0){abort_crypto_lib("malloc of item failed");}
 
   temp = pair->content;
   //@ crypto_chars_split(cont, TAG_LENGTH);
-  //@ if (col) public_generated_split(polarssl_pub(pub), cs, TAG_LENGTH);
-  //@ assert crypto_chars(secret, temp, TAG_LENGTH, cs_tag);
-  //@ assert crypto_chars(secret, temp + TAG_LENGTH, size - TAG_LENGTH, cs_cont);
-  //@ assert cs_tag == full_tag(TAG_PAIR);
-  //@ assert cs == append(cs_tag, cs_cont);
-  //@ switch(cs_tag) {case cons(c0, cs0): case nil: assert false;}
-  //@ assert cs_tag == cons(TAG_PAIR, _);
-  
-
+  //@ if (col) public_ccs_split(ccs, TAG_LENGTH);
+  //@ assert crypto_chars(secret, temp, TAG_LENGTH, ccs_tag);
+  //@ assert crypto_chars(secret, temp + TAG_LENGTH, size - TAG_LENGTH, ccs_cont);
   temp = temp + TAG_LENGTH;
   if (pair->size <= TAG_LENGTH + (int) sizeof(int))
     abort_crypto_lib("Found corrupted pair item 1");
 
   //@ open [f]world(pub, key_clsfy);
   //@ crypto_chars_split(temp, sizeof(int));
-  //@ if (col) public_generated_split(polarssl_pub(pub), cs_cont, sizeof(int));
-  //@ assert crypto_chars(secret, temp, sizeof(int), ?cs_size_f);
-  //@ assert crypto_chars(secret, temp + sizeof(int), size - TAG_LENGTH - sizeof(int), ?cs_p);
-  //@ take_append(sizeof(int), cs_size_f, cs_p);
-  //@ drop_append(sizeof(int), cs_size_f, cs_p);
-  //@ public_crypto_chars(temp, sizeof(int));
+  //@ if (col) public_ccs_split(ccs_cont, sizeof(int));
+  //@ assert crypto_chars(secret, temp, sizeof(int), ?ccs_size_f);
+  //@ assert crypto_chars(secret, temp + sizeof(int), size - TAG_LENGTH - sizeof(int), ?ccs_p);
+  //@ take_append(sizeof(int), ccs_size_f, ccs_p);
+  //@ drop_append(sizeof(int), ccs_size_f, ccs_p);
+  //@ cs_to_ccs_crypto_chars(temp, chars_of_int(length(ccs_f)));
   //@ chars_to_integer(temp);
   first->size = *((int*) (void*) temp);
   second->size = pair->size - TAG_LENGTH - (int) sizeof(int) - first->size;
@@ -183,15 +182,15 @@ void pair_get_components(struct item* pair,
     abort_crypto_lib("Found corrupted pair item 2");
   //@ integer_to_chars(temp);
   temp = temp + (int) sizeof(int);
-  //@ assert cs_cont == append(cs_size_f, cs_p);
-  //@ append_assoc(cs_cont, cs_size_f, cs_p);
+  //@ assert ccs_cont == append(ccs_size_f, ccs_p);
+  //@ append_assoc(ccs_cont, ccs_size_f, ccs_p);
   //@ crypto_chars_split(temp, first->size);
-  //@ if (col) public_generated_split(polarssl_pub(pub), cs_p, first->size);
-  //@ take_append(size_f, cs_f, cs_s);
-  //@ drop_append(size_f, cs_f, cs_s);
-  //@ assert crypto_chars(secret, temp, size_f, cs_f);
-  //@ assert crypto_chars(secret, temp + size_f, size_s, cs_s);
-  //@ assert cs_p == append(cs_f, cs_s);
+  //@ if (col) public_ccs_split(ccs_p, first->size);
+  //@ take_append(size_f, ccs_f, ccs_s);
+  //@ drop_append(size_f, ccs_f, ccs_s);
+  //@ assert crypto_chars(secret, temp, size_f, ccs_f);
+  //@ assert crypto_chars(secret, temp + size_f, size_s, ccs_s);
+  //@ assert ccs_p == append(ccs_f, ccs_s);
   first->content = malloc_wrapper(first->size);
   if (first->size <= MINIMAL_STRING_SIZE)
     abort_crypto_lib("Found corrupted pair item 3");
@@ -205,19 +204,16 @@ void pair_get_components(struct item* pair,
   //@ chars_to_secret_crypto_chars(cont + TAG_LENGTH, sizeof(int));
   //@ crypto_chars_join(cont + TAG_LENGTH);
   //@ assert first->content |-> ?cont_f &*& second->content |-> ?cont_s;
-  //@ assert crypto_chars(secret, cont_f, size_f, cs_f);
-  //@ assert crypto_chars(secret, cont_s, size_s, cs_s);
-  //@ assert size_f == int_of_chars(cs_size_f);
-  //@ assert chars_of_unbounded_int(size_f) == cs_size_f;
-  //@ assert length(cs_f) == size_f;
-  //@ assert [_]item_constraints(f0, ?cs_f0, pub);
-  //@ assert [_]item_constraints(s0, ?cs_s0, pub);
-  /*@ drop_append(sizeof(int), chars_of_int(length(cs_f0)),
-                  append(cs_f0, cs_s0)); @*/
-  /*@ take_append(sizeof(int), chars_of_int(length(cs_f0)),
-                  append(cs_f0, cs_s0)); @*/
-  //@ drop_append(length(cs_f0), cs_f0, cs_s0);
-  //@ take_append(length(cs_f0), cs_f0, cs_s0);
+  //@ assert crypto_chars(secret, cont_f, size_f, ccs_f);
+  //@ assert crypto_chars(secret, cont_s, size_s, ccs_s);
+  //@ assert cs_to_ccs(chars_of_unbounded_int(size_f)) == ccs_size_f;
+  //@ assert length(ccs_f) == size_f;
+  //@ assert [_]item_constraints(f0, ?ccs_f0, pub);
+  //@ assert [_]item_constraints(s0, ?ccs_s0, pub);
+  //@ drop_append(sizeof(int), ccs_size_f, append(ccs_f0, ccs_s0));
+  //@ take_append(sizeof(int), ccs_size_f, append(ccs_f0, ccs_s0));
+  //@ drop_append(length(ccs_f0), ccs_f0, ccs_s0);
+  //@ take_append(length(ccs_f0), ccs_f0, ccs_s0);
   //@ close item(first, f0, pub);
   //@ close item(second, s0, pub);
   //@ close item(pair, pair_item(f0, s0), pub);

@@ -68,6 +68,22 @@ lemma void cs_to_ccs_full_tag_for_item(item i);
            head(full_ctag_for_item(i)) == c_to_cc(tag_for_item(i)) &*&
            head(full_tag_for_item(i)) == tag_for_item(i);
 
+#define SWITCH_TAG(TAG) \
+  if (true) \
+  { \
+    c_to_cc_inj(TAG, TAG_DATA); \
+    c_to_cc_inj(TAG, TAG_PAIR); \
+    c_to_cc_inj(TAG, TAG_NONCE); \
+    c_to_cc_inj(TAG, TAG_HASH); \
+    c_to_cc_inj(TAG, TAG_SYMMETRIC_KEY); \
+    c_to_cc_inj(TAG, TAG_PUBLIC_KEY); \
+    c_to_cc_inj(TAG, TAG_PRIVATE_KEY); \
+    c_to_cc_inj(TAG, TAG_HMAC); \
+    c_to_cc_inj(TAG, TAG_SYMMETRIC_ENC); \
+    c_to_cc_inj(TAG, TAG_ASYMMETRIC_ENC); \
+    c_to_cc_inj(TAG, TAG_ASYMMETRIC_SIG); \
+  } \
+
 @*/
 
 void write_tag(char* buffer, char tag);
