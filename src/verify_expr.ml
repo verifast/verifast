@@ -1769,6 +1769,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
         consume_chunk rules h [] [] [] l (array_element_symb(), true) [elem_tp] real_unit dummypat (Some 2) pats $. fun chunk h _ [_; _; value] _ _ _ _ ->
         cont (chunk::h) env value
+      | LValues.ArrayElement (l, arr, elem_tp, i) when language = CLang ->
+        cont h env (read_c_array h env l arr i elem_tp)
       | LValues.Deref (l, target, pointeeType) ->
         let predSymb = pointee_pred_symb l pointeeType in
         consume_chunk rules h [] [] [] l (predSymb, true) [] real_unit dummypat (Some 1) [TermPat target; dummypat] $. fun chunk h _ [_; value] _ _ _ _ ->
