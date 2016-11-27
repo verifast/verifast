@@ -292,7 +292,7 @@ lemma void PREFIX##_public_symmetric_encrypted(item enc) \
 }
 
 #define DEFAULT_PUBLIC_SYMMETRIC_ENCRYPTED_ENTROPY(PREFIX) \
-lemma void PREFIX##_public_symmetric_encrypted_entropy(item enc, list<char> ent) \
+lemma void PREFIX##_public_symmetric_encrypted_entropy(item enc, list<crypto_char> ent) \
   requires  [_]PREFIX##_pub(enc) &*& \
             enc == symmetric_encrypted_item(?p, ?c, ?pay, ?ent0); \
   ensures   [_]PREFIX##_pub(symmetric_encrypted_item(p, c, pay, ent)); \
@@ -382,7 +382,7 @@ lemma void PREFIX##_public_asymmetric_encrypted(item enc) \
 }
 
 #define DEFAULT_PUBLIC_ASYMMETRIC_ENCRYPTED_ENTROPY(PREFIX) \
-lemma void PREFIX##_public_asymmetric_encrypted_entropy(item enc, list<char> ent) \
+lemma void PREFIX##_public_asymmetric_encrypted_entropy(item enc, list<crypto_char> ent) \
   requires  [_]PREFIX##_pub(enc) &*& \
             enc == asymmetric_encrypted_item(?p, ?c, ?pay, ?ent0); \
   ensures   [_]PREFIX##_pub(asymmetric_encrypted_item(p, c, pay, ent)); \

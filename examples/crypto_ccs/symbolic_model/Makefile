@@ -24,23 +24,20 @@ MODULES = \
 	hash_item \
 	hmac_item \
 	symmetric_encrypted_item \
-	asymmetric_authenticated_encryption \
 	asymmetric_encrypted_item \
 	asymmetric_signature_item \
+	asymmetric_authenticated_encryption \
 	principal_ids \
 	network \
 	symbolic \
 	attacker \
-
-
 
 OBJECTS   = $(foreach module,$(MODULES),src/$(module).o)
 MANIFESTS = $(foreach module,$(MODULES),src/$(module).vfmanifest)
 
 OUT_LIB = libsymbolic.so
 
-all: bin/symbolic.dll.vfmanifest $(OUT_LIB)
-# all: bin/symbolic.dll.vfmanifest $(OUT_LIB) example_protocols
+all: bin/symbolic.dll.vfmanifest $(OUT_LIB) example_protocols
 
 include/switch_primitives.gh : tools/switch_primitives.py
 	cd tools; \
