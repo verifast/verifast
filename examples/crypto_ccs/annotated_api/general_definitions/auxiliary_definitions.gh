@@ -1,0 +1,216 @@
+#ifndef AUXILIARY_DEFINITIONS_GH
+#define AUXILIARY_DEFINITIONS_GH
+
+#include "nat.gh"
+#include "list.gh"
+#include "listex.gh"
+#include <crypto.gh>
+
+//Int pairs, to encode information
+fixpoint int int_left(int p);
+fixpoint int int_right(int p);
+fixpoint int int_pair(int f, int s);
+
+lemma_auto void int_left_int_pair(int f, int s);
+  requires true;
+  ensures  int_left(int_pair(f, s)) == f;
+
+lemma_auto void int_right_int_pair(int f, int s);
+  requires true;
+  ensures  int_right(int_pair(f, s)) == s;
+
+//The optional string type
+predicate option_string(char *s; list<char> cs) =
+  s == 0 ?
+    cs == nil
+  :
+    string(s, cs)
+;
+
+//Hide a char chunck
+predicate hide_chars(char *buffer, int length, list<char> cs) =
+  chars(buffer, length, cs)
+;
+
+predicate hide_crypto_chars(crypto_chars_kind kind, char *buffer,
+                            int length, list<crypto_char> ccs) =
+  crypto_chars(kind, buffer, length, ccs)
+;
+
+//Power fixpoint
+fixpoint int pow(int n, nat e)
+{
+  switch (e)
+  {
+    case succ(e0): return n * pow(n, e0);
+    case zero: return 1;
+  }
+}
+
+//Maximum/minimum of a list of ints
+fixpoint int maximum(list<int> ints)
+{
+  switch (ints)
+  {
+    case cons(i, r_ints):
+      return i >= maximum(r_ints) ?
+        i
+      :
+        maximum(r_ints);
+    case nil:
+      return INT_MIN;
+  }
+}
+
+fixpoint int minimum(list<int> ints)
+{
+  switch (ints)
+  {
+    case cons(i, r_ints):
+      return i <= minimum(r_ints) ?
+        i
+      :
+        minimum(r_ints);
+    case nil:
+      return INT_MAX;
+  }
+}
+
+//Union of two set lists
+fixpoint list<T> union<T>(list<T> xs, list<T> ys)
+{
+  switch(xs)
+  {
+    case cons(x0, xs0):
+      return mem(x0, ys) ?
+        union(xs0, ys)
+      :
+        cons(x0, union(xs0, ys));
+    case nil:
+      return ys;
+  }
+}
+
+//Dummy foreach
+predicate dummy_foreach<T>(list<T> xs, predicate(T) p) =
+  switch (xs)
+  {
+    case nil: return true;
+    case cons(x, xs0): return [_]p(x) &*& [_]dummy_foreach(xs0, p);
+  }
+;
+
+//Proven lemmas
+
+lemma void union_nil<T>(list<T> xs);
+  requires true;
+  ensures  union(xs, nil) == xs && union(nil, xs) == xs;
+
+lemma void union_subset<T>(list<T> xs, list<T> ys);
+  requires subset(xs, ys) == true;
+  ensures  union(xs, ys) == ys;
+
+lemma void union_refl<T>(list<T> xs);
+  requires true;
+  ensures  union(xs, xs) == xs;
+
+lemma void forall_union<T>(list<T> xs, list<T> ys, fixpoint(T, bool) p);
+  requires forall(xs, p) && forall(ys, p);
+  ensures  true == forall(union(xs,ys), p);
+
+lemma void forall_subset<T>(list<T> xs, list<T> ys, fixpoint(T, bool) p);
+  requires forall(ys, p) && subset(xs, ys);
+  ensures  true == forall(xs, p);
+
+lemma void dummy_foreach_extract<T>(T x, list<T> xs);
+  requires [_]dummy_foreach(xs, ?p) &*& mem(x, xs) == true;
+  ensures  [_]p(x);
+
+lemma void dummy_foreach_singleton<T>(predicate(T) p, T x);
+  requires [_]p(x);
+  ensures  [_]dummy_foreach(cons(x, nil), p);
+
+lemma void dummy_foreach_union<T>(list<T> xs, list<T> ys);
+  requires [_]dummy_foreach(xs, ?p) &*& [_]dummy_foreach(ys, p);
+  ensures  [_]dummy_foreach(union(xs, ys), p);
+
+lemma void dummy_foreach_subset<T>(list<T> xs, list<T> ys);
+  requires [_]dummy_foreach(ys, ?p) &*& true == subset(xs, ys);
+  ensures  [_]dummy_foreach(xs, p);
+
+//List stuff
+
+fixpoint bool prefix<T>(list<T> xs, list<T> ys)
+{
+  return take(length(xs), ys) == xs;
+}
+
+lemma void prefix_append<T>(list<T> xs, list<T> ys);
+  requires true;
+  ensures  true == prefix(xs, append(xs, ys));
+
+lemma void prefix_length<T>(list<T> xs, list<T> ys);
+  requires true == prefix(xs, ys);
+  ensures  length(xs) <= length(ys);
+
+lemma void prefix_trans<T>(list<T> xs1, list<T> xs2, list<T> xs3);
+  requires prefix(xs1, xs2) && prefix(xs2, xs3);
+  ensures  true == prefix(xs1, xs3);
+
+fixpoint bool sublist<T>(list<T> xs, list<T> ys)
+{
+  switch(ys)
+  {
+    case cons(y0, ys0):
+      return prefix(xs, ys) || sublist(xs, ys0);
+    case nil:
+      return xs == nil;
+  }
+}
+
+lemma void sublist_append<T>(list<T> xs1, list<T> xs, list<T> xs2);
+  requires true;
+  ensures  true == sublist(xs, append(xs1, append(xs, xs2)));
+
+lemma void sublist_length<T>(list<T> xs, list<T> ys);
+  requires true == sublist(xs, ys);
+  ensures  length(xs) <= length(ys);
+
+lemma void sublist_trans<T>(list<T> xs1, list<T> xs2, list<T> xs3);
+  requires sublist(xs1, xs2) && sublist(xs2, xs3);
+  ensures  true == sublist(xs1, xs3);
+
+lemma void drop_drop<T>(int i1, int i2, list<T> xs);
+  requires i1 >= 0 &*& i2 >= 0 &*& i1 + i2 < length(xs);
+  ensures  drop(i1, drop(i2, xs)) == drop(i1 + i2, xs);
+
+lemma void equal_list_equal_prefix<T>(list<T> xs1, list<T> xs2, list<T> xs3);
+  requires append(xs1, xs3) == append(xs2, xs3);
+  ensures  xs1 == xs2;
+
+lemma void equal_append<T>(list<T> xs1, list<T> xs11,
+                           list<T> xs2, list<T> xs22);
+  requires length(xs1) == length(xs2) &*&
+           append(xs1, xs11) == append(xs2, xs22);
+  ensures  xs1 == xs2 && xs11 == xs22;
+
+lemma void equal_double_triple_append<T>(list<T> xs1, list<T> xs2, list<T> xs3,
+                                         list<T> xs4, list<T> xs5, list<T> xs6);
+  requires true;
+  ensures  append(xs1, append(xs2, append(xs3, append(xs4, append(xs5, xs6)))))
+           ==
+           append(append(xs1, append(xs2, xs3)), append(xs4, append(xs5, xs6)));
+
+lemma void head_append<T>(list<T> xs, list<T> ys);
+  requires length(xs) > 0;
+  ensures head(xs) == head(append(xs, ys));
+
+lemma void head_mem<T>(list<T> xs);
+  requires length(xs) > 0;
+  ensures  true == mem(head(xs), xs);
+
+lemma void take_1<T>(list<T> xs);
+  requires length(xs) > 0;
+  ensures  take(1, xs) == cons(head(xs), nil);
+
+#endif

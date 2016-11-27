@@ -1,0 +1,40 @@
+#ifndef CRYPTO_CHARS_GH
+#define CRYPTO_CHARS_GH
+
+#include <crypto.gh>
+#include "auxiliary_definitions.gh"
+
+fixpoint bool cs_to_ccs_eq(list<crypto_char> ccs, list<char> cs)
+{
+  return ccs == cs_to_ccs(cs);
+}
+
+lemma void cs_to_ccs_length(list<char> xs);
+  requires true;
+  ensures length(xs) == length(cs_to_ccs(xs));
+
+lemma void cs_to_ccs_append(list<char> xs, list<char> ys);
+  requires true;
+  ensures append(cs_to_ccs(xs), cs_to_ccs(ys)) ==
+          cs_to_ccs(append(xs, ys));
+
+lemma void cs_to_ccs_take(int i, list<char> xs);
+  requires true;
+  ensures take(i, cs_to_ccs(xs)) == cs_to_ccs(take(i, xs));
+
+lemma void cs_to_ccs_drop(int i, list<char> xs);
+  requires true;
+  ensures drop(i, cs_to_ccs(xs)) == cs_to_ccs(drop(i, xs));
+
+lemma void c_to_cc_inj(char c1, char c2);
+  requires true;
+  ensures  true == ((c_to_cc(c1) == c_to_cc(c2)) == (c1 == c2));
+
+lemma void cs_to_ccs_inj(list<char> cs1, list<char> cs2);
+  requires true;
+  ensures  true == ((cs1 == cs2) == (cs_to_ccs(cs1) == cs_to_ccs(cs2)));
+
+lemma void cs_to_ccs_chars(char* b, list<char> cs2);
+  requires [?f]chars(b, ?c, ?cs1) &*&
+           cs_to_ccs(cs1) == cs_to_ccs(cs2);
+  ensures  [f]chars(b, c, cs2);
