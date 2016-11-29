@@ -3916,6 +3916,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     chunk_pred_name, lazy_predfamsymb chunk_pred_name, array_pred_name, lazy_predfamsymb array_pred_name, array_malloc_block_pred_name, lazy_predfamsymb array_malloc_block_pred_name
   
   let _, pointer_pred_symb, _, pointers_pred_symb, _, malloc_block_pointers_pred_symb as pointer_pointee_tuple = pointee_tuple "pointer" "pointers"
+  let _, llong_pred_symb, _, llongs_pred_symb, _, malloc_block_llongs_pred_symb as llong_pointee_tuple = pointee_tuple "llong_integer" "llongs"
+  let _, ullong_pred_symb, _, ullongs_pred_symb, _, malloc_block_ullongs_pred_symb as ullong_pointee_tuple = pointee_tuple "u_llong_integer" "ullongs"
   let _, int_pred_symb, _, ints_pred_symb, _, malloc_block_ints_pred_symb as int_pointee_tuple = pointee_tuple "integer" "ints"
   let _, uint_pred_symb, _, uints_pred_symb, _, malloc_block_uints_pred_symb as uint_pointee_tuple = pointee_tuple "u_integer" "uints"
   let _, short_pred_symb, _, shorts_pred_symb, _, malloc_block_shorts_pred_symb as short_pointee_tuple = pointee_tuple "short_integer" "shorts"
@@ -3929,6 +3931,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     option_map deref_pointee_tuple
     begin match pointeeType with
       PtrType _ -> Some pointer_pointee_tuple
+    | Int (Signed, 8) -> Some llong_pointee_tuple
+    | Int (Unsigned, 8) -> Some ullong_pointee_tuple
     | Int (Signed, 4) -> Some int_pointee_tuple
     | Int (Unsigned, 4) -> Some uint_pointee_tuple
     | Int (Signed, 2) -> Some short_pointee_tuple
@@ -4399,6 +4403,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   PtrType _ ->
                   let pref = new predref "pointer" in
                   pref#set_domain [PtrType (PtrType Void); PtrType Void];
+                  [predinst pref]
+                | Int (Signed, 8) ->
+                  let pref = new predref "long_long" in
+                  pref#set_domain [PtrType (Int(Signed, 8)); (Int(Signed, 8))];
+                  [predinst pref]
+                | Int (Unsigned, 8) ->
+                  let pref = new predref "u_long_long" in
+                  pref#set_domain [PtrType (Int (Unsigned, 8)); Int (Unsigned, 8)];
                   [predinst pref]
                 | Int (Signed, 4) ->
                   let pref = new predref "integer" in

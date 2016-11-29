@@ -337,6 +337,8 @@ predicate malloc_block_uints(unsigned int *p; int count) = malloc_block(p, ?size
 predicate malloc_block_shorts(short *p; int count) = malloc_block(p, ?size) &*& divrem(size, sizeof(short), count, 0);
 predicate malloc_block_ushorts(unsigned short *p; int count) = malloc_block(p, ?size) &*& divrem(size, sizeof(unsigned short), count, 0);
 predicate malloc_block_pointers(void **p; int count) = malloc_block(p, ?size) &*& divrem(size, sizeof(void *), count, 0);
+predicate malloc_block_llongs(long long *p; int count) = malloc_block(p, ?size) &*& divrem(size, sizeof(long long), count, 0);
+predicate malloc_block_ullongs(unsigned long long *p; int count) = malloc_block(p, ?size) &*& divrem(size, sizeof(unsigned long long), count, 0);
 
 @*/
 
