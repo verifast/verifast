@@ -23,8 +23,6 @@ fixpoint boolean bag_lt<t>(fixpoint(t, t, boolean) lt, list<t> xs, list<t> ys) {
     return bag_le(lt, xs, ys) && remove_all(xs, ys) != nil;
 }
 
-fixpoint boolean Class_lt(Class c1, Class c2);
-
 fixpoint boolean level_le(list<Class> level1, list<Class> level2) { return bag_le(Class_lt, level1, level2); }
 
 fixpoint boolean level_lt(list<Class> level1, list<Class> level2) { return bag_lt(Class_lt, level1, level2); }

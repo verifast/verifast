@@ -318,6 +318,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let ancester_at_symbol = mk_symbol "ancester_at" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp
   let get_class_symbol = mk_symbol "getClass" [ctxt#type_int] ctxt#type_int Uninterp
   let class_serial_number = mk_symbol "class_serial_number" [ctxt#type_int] ctxt#type_int Uninterp
+  let class_rank = mk_symbol "class_rank" [ctxt#type_int] ctxt#type_real Uninterp
   let func_rank = mk_symbol "func_rank" [ctxt#type_int] ctxt#type_real Uninterp
   let bitwise_or_symbol = mk_symbol "bitor" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp
   let bitwise_xor_symbol = mk_symbol "bitxor" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp
@@ -1473,6 +1474,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let serialNumber = !class_counter in
       class_counter := !class_counter + 1;
       ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_app class_serial_number [t]) (ctxt#mk_intlit serialNumber)));
+      if is_import_spec then
+        ignore (ctxt#assume (ctxt#mk_lt (ctxt#mk_app class_rank [t]) (ctxt#mk_reallit 0)))
+      else
+        ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_app class_rank [t]) (ctxt#mk_reallit serialNumber)));
       (x, t)
     end
   let classterms1 =  terms_of classmap1

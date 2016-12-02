@@ -1416,6 +1416,18 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let body = ctxt#mk_eq app (ctxt#mk_lt (ctxt#mk_app func_rank [f]) (ctxt#mk_app func_rank [g])) in
         ctxt#end_formal;
         ctxt#assume_forall "func_lt" [app] [ctxt#type_int; ctxt#type_int] body
+    end else begin
+      match try_assoc "java.lang.Class_lt" purefuncmap with
+        None -> ()
+      | Some (_, _, _, _, (class_lt, _)) ->
+        (* forall C1, C2. Class_lt(C1, C2) = (class_rank(C1) < class_rank(C2)) *)
+        ctxt#begin_formal;
+        let c1 = ctxt#mk_bound 0 ctxt#type_int in
+        let c2 = ctxt#mk_bound 1 ctxt#type_int in
+        let app = ctxt#mk_app class_lt [c1; c2] in
+        let body = ctxt#mk_eq app (ctxt#mk_lt (ctxt#mk_app class_rank [c1]) (ctxt#mk_app class_rank [c2])) in
+        ctxt#end_formal;
+        ctxt#assume_forall "Class_lt" [app] [ctxt#type_int; ctxt#type_int] body
     end
   
   type leminfo =

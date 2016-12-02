@@ -88,10 +88,6 @@ class Main {
         //@ ensures true;
         //@ terminates;
     {
-        //@ assume(Class_lt(Util.class, Main.class));
-        //@ assume(Class_lt(ZeroFunc.class, Main.class));
-        //@ assume(Class_lt(PlusOneFunc.class, Main.class));
-
         Func f1 = new ZeroFunc();
         Func f2 = new PlusOneFunc(f1);
         Func f3 = new PlusOneFunc(f2);
