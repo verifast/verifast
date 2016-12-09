@@ -32,10 +32,25 @@ lemma_auto void level_le_cons0(Class c, list<Class> cs)
     ensures level_le({c}, cons(c, cs)) == true;
 { assume(false); }
 
+lemma void level_cons_mono(Class c, list<Class> level1, list<Class> level2)
+    requires level_le(level1, level2) == true;
+    ensures level_le(cons(c, level1), cons(c, level2)) == true;
+{ assume(false); }
+
+lemma void level_le_trans(list<Class> level1, list<Class> level2, list<Class> level3)
+    requires level_le(level1, level2) && level_le(level2, level3);
+    ensures level_le(level1, level3) == true;
+{ assume(false); }
+
 predicate call_perm(list<Class> level);
 
-lemma void call_perm_weaken(real frac)
+lemma void call_perm_weaken_and_dup(real frac)
     requires call_perm(cons(_, ?level)) &*& 0 < frac;
+    ensures [frac]call_perm(level);
+{ assume(false); }
+
+lemma void call_perm_weaken(real frac, list<Class> level)
+    requires [frac]call_perm(?level0) &*& level_le(level, level0) == true;
     ensures [frac]call_perm(level);
 { assume(false); }
 
@@ -46,9 +61,9 @@ lemma void consume_call_perm_for(Class c)
     assume(false);
 }
 
-lemma void call_below_perm__elim(list<Class> level)
-    requires call_below_perm_(?c) &*& level_lt(level, {c}) == true;
-    ensures call_perm(level);
+lemma void call_below_perm__elim(real frac, list<Class> level)
+    requires call_below_perm_(?c) &*& level_lt(level, {c}) == true &*& 0 < frac;
+    ensures [frac]call_perm(level);
 { assume(false); }
 
 @*/
