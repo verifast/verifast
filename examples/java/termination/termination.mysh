@@ -3,3 +3,5 @@ cd tests
 cd ..
 verifast -c -allow_assume -disable_overflow_check PlusOneFunc.jarsrc
 verifast -c -allow_assume -disable_overflow_check AbstractObjectConstruction.jarsrc
+verifast -c -allow_assume -disable_overflow_check SumFunc.jarsrc
+verifast -c -allow_assume -disable_overflow_check Set.jarsrc

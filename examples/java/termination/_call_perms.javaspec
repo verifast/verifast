@@ -37,9 +37,53 @@ lemma void level_cons_mono(Class c, list<Class> level1, list<Class> level2)
     ensures level_le(cons(c, level1), cons(c, level2)) == true;
 { assume(false); }
 
+lemma void level_cons_mono_l(Class c1, Class c2, list<Class> level)
+    requires Class_lt(c1, c2) == true;
+    ensures level_lt(cons(c1, level), cons(c2, level)) == true;
+{ assume(false); }
+
 lemma void level_le_trans(list<Class> level1, list<Class> level2, list<Class> level3)
     requires level_le(level1, level2) && level_le(level2, level3);
     ensures level_le(level1, level3) == true;
+{ assume(false); }
+
+fixpoint list<Class> level_max(list<Class> level1, list<Class> level2);
+
+// Note that if level1 and level2 are equivalent but not equal (i.e. they are permutations) then level_max picks its second argument, not its first.
+
+lemma void level_max_def(list<Class> level1, list<Class> level2)
+    requires true;
+    ensures level_max(level1, level2) == (level_le(level1, level2) ? level2 : level1);
+{ assume(false); }
+
+lemma_auto(level_max(level1, level2)) void level_le_max(list<Class> level1, list<Class> level2)
+    requires true;
+    ensures level_le(level1, level_max(level1, level2)) && level_le(level2, level_max(level1, level2));
+{ assume(false); }
+
+lemma void level_max_le(list<Class> level1, list<Class> level2, list<Class> level3)
+    requires level_le(level1, level3) && level_le(level2, level3);
+    ensures level_le(level_max(level1, level2), level3) == true;
+{ assume(false); }
+
+lemma_auto(level_max(level, level)) void level_max_same(list<Class> level)
+    requires true;
+    ensures level_max(level, level) == level;
+{ assume(false); }
+
+lemma void level_le_append_l(list<Class> level1, list<Class> level2)
+    requires true;
+    ensures level_le(level1, append(level1, level2)) == true;
+{ assume(false); }
+    
+lemma void level_le_append_r(list<Class> level1, list<Class> level2)
+    requires true;
+    ensures level_le(level2, append(level1, level2)) == true;
+{ assume(false); }
+
+lemma void level_append_mono_l(list<Class> level1, list<Class> level2, list<Class> level3)
+    requires level_le(level1, level2) == true;
+    ensures level_le(append(level1, level3), append(level2, level3)) == true;
 { assume(false); }
 
 predicate call_perm(list<Class> level);
