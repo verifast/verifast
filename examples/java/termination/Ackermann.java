@@ -32,7 +32,7 @@ public class Math {
         //@ produce_call_below_perm_();
         //@ is_wf_int_lt();
         //@ is_wf_pair_lt(int_lt, int_lt);
-        //@ create_call_perm_rec(1, {MathImpl.class}, (pair_lt)(int_lt, int_lt), pair(m, n));
+        //@ call_below_perm__elim_rec(1, {MathImpl.class}, (pair_lt)(int_lt, int_lt), pair(m, n));
         return MathImpl.ackermannIter(m, n);
     }
 }

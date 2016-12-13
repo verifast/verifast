@@ -6,3 +6,4 @@ verifast -c -disable_overflow_check AbstractObjectConstruction.jarsrc
 verifast -c -disable_overflow_check SumFunc.jarsrc
 verifast -c -disable_overflow_check Set.jarsrc
 verifast -c -disable_overflow_check Ackermann.jarsrc
+verifast -c -disable_overflow_check IsEvenFunc.jarsrc

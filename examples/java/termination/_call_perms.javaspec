@@ -37,6 +37,10 @@ lemma_auto void level_le_cons0(Class c, list<Class> cs);
     requires true;
     ensures level_le({c}, cons(c, cs)) == true;
 
+lemma_auto void level_lt_cons(Class c, list<Class> cs);
+    requires true;
+    ensures level_lt(cs, cons(c, cs)) == true;
+
 lemma void level_cons_mono(Class c, list<Class> level1, list<Class> level2);
     requires level_le(level1, level2) == true;
     ensures level_le(cons(c, level1), cons(c, level2)) == true;
@@ -128,8 +132,12 @@ predicate is_wf<t>(fixpoint(t, t, boolean) lt) =
 
 predicate call_perm_rec<t>(list<Class> globalLevel, fixpoint(t, t, boolean) lt, t localLevel;);
 
-lemma void create_call_perm_rec<t>(real frac, list<Class> globalLevel, fixpoint(t, t, boolean) lt, t localLevel);
+lemma void call_below_perm__elim_rec<t>(real frac, list<Class> globalLevel, fixpoint(t, t, boolean) lt, t localLevel);
     requires call_below_perm_(?c) &*& level_lt(globalLevel, {c}) == true &*& [_]is_wf(lt);
+    ensures [frac]call_perm_rec(globalLevel, lt, localLevel);
+
+lemma void create_call_perm_rec<t>(real frac, list<Class> globalLevel, fixpoint(t, t, boolean) lt, t localLevel);
+    requires call_perm(?level) &*& level_lt(globalLevel, level) == true &*& [_]is_wf(lt);
     ensures [frac]call_perm_rec(globalLevel, lt, localLevel);
 
 lemma void call_perm_rec_weaken<t>(real frac, t newLocalLevel);
