@@ -21,6 +21,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
                bad(sender) || bad(shared_with(sender, enc_id)) ?
                  [_]public_ccs(msg_ccs)
                :
+                 [_]hash_payload(_, msg_ccs) &*&
                  true == send(sender, shared_with(sender, enc_id), msg_ccs); @*/
 /*@ ensures  principal(sender, _) &*&
              [f1]cryptogram(enc_key, KEY_SIZE, enc_key_ccs, enc_key_cg) &*&
@@ -57,6 +58,12 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
     //@ assert crypto_chars(secret, enc_msg + ID_SIZE, msg_len, msg_ccs);
     //@ crypto_chars_join(enc_msg);
     // hmac
+    /*@ if (bad(sender) || bad(shared_with(sender, enc_id)))
+        {
+          close hash_payload(true, msg_ccs);
+          leak hash_payload(true, msg_ccs);
+        }
+    @*/
     sha512_hmac(hmac_key, KEY_SIZE, msg, msg_len,
                 enc_msg + ID_SIZE + (int) msg_len, 0);
     //@ open cryptogram(enc_msg + ID_SIZE + msg_len, 64, ?hmac_ccs, ?hmac_cg);
@@ -210,6 +217,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     /*@ open decryption_post(true, ?garbage, receiver,
                              s, sender, enc_id, ?dec_ccs); @*/
     //@ assert crypto_chars(?kind, buffer_dec, enc_size, dec_ccs);
+    //@ public_ccs(buffer_dec, enc_size);
     //@ crypto_chars_split(buffer_dec, ID_SIZE);
     //@ assert crypto_chars(kind, buffer_dec, ID_SIZE, ?id_ccs);
     //@ assert crypto_chars(kind, buffer_dec + ID_SIZE, enc_size - ID_SIZE, ?rest_ccs);
@@ -220,37 +228,28 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ assert crypto_chars(_, buffer_dec + enc_size - 64, 64, ?hmac_ccs);
     //@ assert rest_ccs == append(pay_ccs, hmac_ccs);
 
-    /*@ if (col)
+    /*@ if (col || garbage || bad(sender) || bad(receiver))
         {
-          crypto_chars_to_chars(buffer_dec, ID_SIZE);
-          crypto_chars_to_chars(buffer_dec + enc_size - 64, 64);
-          chars_to_crypto_chars(buffer_dec + enc_size - 64, 64);
-        }
-        else if (!garbage)
-        {
-          if (bad(sender) || bad(receiver))
-          {
-            public_ccs_split(dec_ccs, ID_SIZE);
-            public_ccs_split(rest_ccs, enc_size - ID_SIZE - 64);
-            public_crypto_chars(buffer_dec + enc_size - 64, 64);
-            chars_to_crypto_chars(buffer_dec + enc_size - 64, 64);
-          }
-          else
-          {
-            assert [_]hmac_then_enc_tagged_pub_1(?msg_ccs, ?hmac_cg);
-            take_append(ID_SIZE, cs_to_ccs(identifier(0)), 
-                        append(msg_ccs, ccs_for_cg(hmac_cg)));
-            drop_append(ID_SIZE, cs_to_ccs(identifier(0)),
-                        append(msg_ccs, ccs_for_cg(hmac_cg)));
-            drop_append(length(msg_ccs), msg_ccs, ccs_for_cg(hmac_cg));
-            close memcmp_secret(buffer_dec + enc_size - 64, 64,
-                                ccs_for_cg(hmac_cg), hmac_cg);
-          }
+          public_ccs_split(dec_ccs, ID_SIZE);
+          public_ccs_split(rest_ccs, enc_size - ID_SIZE - 64);
+          close hash_payload(true, pay_ccs);
+          leak hash_payload(true, pay_ccs);
           public_crypto_chars(buffer_dec, ID_SIZE);
+          public_crypto_chars(buffer_dec + enc_size - 64, 64);
+          chars_to_crypto_chars(buffer_dec + enc_size - 64, 64);
         }
         else
         {
-          crypto_chars_to_chars(buffer_dec, ID_SIZE);
+          assert [_]hmac_then_enc_tagged_pub_1(?msg_ccs, ?hmac_cg);
+          take_append(ID_SIZE, cs_to_ccs(identifier(0)),
+                      append(msg_ccs, ccs_for_cg(hmac_cg)));
+          drop_append(ID_SIZE, cs_to_ccs(identifier(0)),
+                      append(msg_ccs, ccs_for_cg(hmac_cg)));
+          take_append(length(msg_ccs), msg_ccs, ccs_for_cg(hmac_cg));
+          drop_append(length(msg_ccs), msg_ccs, ccs_for_cg(hmac_cg));
+          close memcmp_secret(buffer_dec + enc_size - 64, 64,
+                              ccs_for_cg(hmac_cg), hmac_cg);
+          public_crypto_chars(buffer_dec, ID_SIZE);
         }
     @*/
     //@ chars_to_crypto_chars(buffer_dec, ID_SIZE);

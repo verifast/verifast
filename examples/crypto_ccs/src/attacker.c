@@ -291,6 +291,7 @@ void attacker_send_hash(havege_state *havege_state, void* socket)
 
   char hash[64];
   //@ chars_to_crypto_chars(buffer, size);
+  //@ HASH_PUB_PAYLOAD(pay)
   sha512(buffer, (unsigned int) size, hash, 0);
   //@ assert cryptogram(hash, 64, ?h_ccs, ?h_cg);
   //@ assert h_cg == cg_hash(cs_to_ccs(pay));
@@ -327,7 +328,10 @@ void attacker_send_hmac(havege_state *havege_state, void* socket)
 
   //@ interpret_symmetric_key(buffer1, size1);
   //@ assert cryptogram(buffer1, size1, ?ccs1, cg_symmetric_key(?p, ?c));
+  //@ assert chars(buffer2, size2, ?pay);
   //@ chars_to_crypto_chars(buffer2, size2);
+  //@ public_cs(pay);
+  //@ HASH_PUB_PAYLOAD(pay)
   sha512_hmac(buffer1, (unsigned int) size1, buffer2,
               (unsigned int) size2, buffer3, 0);
   //@ assert cryptogram(buffer3, 64, ?ccs_hmac, ?hmac);

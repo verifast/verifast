@@ -16,6 +16,44 @@ lemma void public_cs(list<char> cs)
   leak public_ccs(cs_to_ccs(cs));
 }
 
+lemma_auto void public_chars(char *array, int size)
+  requires [?f]chars(array, size, ?cs);
+  ensures  [f]chars(array, size, cs) &*& [_]public_ccs(cs_to_ccs(cs));
+{
+  public_cs(cs);
+}
+
+lemma void public_ccs(char *array, int size)
+  requires [?f]crypto_chars(?kind, array, size, ?ccs);
+  ensures  switch(kind)
+           {
+             case normal:
+               return [_]public_ccs(ccs);
+             case secret:
+                return col ? [_]public_ccs(ccs) : true;
+           } &*& [f]crypto_chars(kind, array, size, ccs);
+{
+  if (kind == normal || col)
+  {
+    crypto_chars_to_chars(array, size);
+    assert [f]chars(array, size, ?cs);
+    public_cs(cs);
+    if (kind == normal)
+      chars_to_crypto_chars(array, size);
+    else
+      chars_to_secret_crypto_chars(array, size);
+  }
+//  switch(kind)
+//  {
+//    case normal:
+//      crypto_chars_to_chars(array, size);
+//      assert [f]chars(array, size, ?cs);
+//      public_cs(cs);
+//      chars_to_crypto_chars(array, size);
+//    case secret:
+//  }
+}
+
 lemma void public_cryptogram(char *array, cryptogram cg)
   requires [_]public_invar(?pub) &*&
            [?f]cryptogram(array, ?n, ?ccs, cg) &*& [_]pub(cg);
@@ -25,13 +63,6 @@ lemma void public_cryptogram(char *array, cryptogram cg)
   open [f]cryptogram(array, n, ccs, cg);
   public_cg_ccs(cg);
   public_crypto_chars(array, n);
-}
-
-lemma_auto void public_chars(char *array, int size)
-  requires [?f]chars(array, size, ?cs);
-  ensures  [f]chars(array, size, cs) &*& [_]public_ccs(cs_to_ccs(cs));
-{
-  public_cs(cs);
 }
 
 lemma void public_ccs_split(list<crypto_char> ccs, int i)

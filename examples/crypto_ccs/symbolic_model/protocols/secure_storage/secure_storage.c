@@ -16,7 +16,8 @@ void app_send(struct item *key, struct item *message)
 {
     struct network_status *net_stat = 
                                  network_connect("localhost", APP_RECEIVE_PORT);
-    
+    //@ close hash_item_payload(ss_pub, true, msg);
+    //@ leak hash_item_payload(ss_pub, true, msg);
     struct item *hash = create_hmac(key, message);
     //@ assert item(hash, ?h, ss_pub);
     //@ close ss_pub(h);
@@ -47,6 +48,11 @@ struct item *app_receive(struct item *key)
     struct item *m = network_receive(net_stat);
     struct item *hmac1 = pair_get_first(m);
     struct item *message = pair_get_second(m);
+    //@ assert item(message, ?msg, ss_pub);
+    //@ open [_]ss_pub(_);
+    //@ if (col) {close ss_pub(msg); leak [_]ss_pub(msg);}
+    //@ close hash_item_payload(ss_pub, true, msg);
+    //@ leak hash_item_payload(ss_pub, true, msg);
     struct item *hmac2 = create_hmac(key, message);
     item_check_equal(hmac1, hmac2);
     //@ assert item(m, pair_item(?hmac_i, ?message_i), ss_pub);

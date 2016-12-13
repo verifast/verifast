@@ -12,8 +12,8 @@ PROTOCOLS = \
 	dummy \
 	hmac \
 	rpc \
-	enc_and_hmac \
 	enc_then_hmac \
+	enc_and_hmac \
 	hmac_then_enc \
 	hmac_then_enc_tagged \
 	hmac_then_enc_nested \
@@ -21,6 +21,7 @@ PROTOCOLS = \
 	sign \
 	nsl \
 	yahalom \
+
 
 PROT_APPS = $(foreach prot,$(PROTOCOLS),$(prot)/$(prot))
 

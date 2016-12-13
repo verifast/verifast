@@ -35,6 +35,8 @@ struct item *client(char server, struct item *key, struct item *request)
         //@ close rpc_pub(p);
         //@ leak rpc_pub(p);
         item_free(tag);
+        //@ close hash_item_payload(rpc_pub, true, p);
+        //@ leak hash_item_payload(rpc_pub, true, p);
         struct item *hash = create_hmac(key, payload);
         //@ item h = hmac_item(creator, id, some(p));
         //@ if (!col) assert item(hash, h, rpc_pub);
@@ -70,7 +72,14 @@ struct item *client(char server, struct item *key, struct item *request)
               open [_]rpc_pub(h);
               open [_]rpc_pub(p);
             }
+            else
+            {
+              close rpc_pub(p);
+              leak rpc_pub(p);
+            }
         @*/
+        //@ close hash_item_payload(rpc_pub, true, p);
+        //@ leak hash_item_payload(rpc_pub, true, p);
         struct item *hmac2 = create_hmac(key, payload);
         item_check_equal(hmac1, hmac2);
         item_free(hmac1);
@@ -165,7 +174,14 @@ void server(char server, struct item *key)
               open [_]rpc_pub(h);
               open [_]rpc_pub(p);
             }
+            else
+            {
+              close rpc_pub(p);
+              leak rpc_pub(p);
+            }
         @*/
+        //@ close hash_item_payload(rpc_pub, true, p);
+        //@ leak hash_item_payload(rpc_pub, true, p);
         struct item *hmac2 = create_hmac(key, payload);
         item_check_equal(hmac1, hmac2);
         item_free(hmac1);
@@ -212,6 +228,8 @@ void server(char server, struct item *key)
         //@ leak rpc_pub(pair_item(d, p));
         item_free(tag);
         item_free(reqresp);
+        //@ close hash_item_payload(rpc_pub, true, pair_item(d, p));
+        //@ leak hash_item_payload(rpc_pub, true, pair_item(d, p));
         struct item *hash = create_hmac(key, payload);
         //@ item h = hmac_item(creator, id, some(pair_item(d, p)));
         //@ if (!col) assert item(hash, h, rpc_pub);

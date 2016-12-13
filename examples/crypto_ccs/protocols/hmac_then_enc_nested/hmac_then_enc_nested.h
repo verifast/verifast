@@ -66,6 +66,7 @@ predicate hmac_then_enc_nested_pub(cryptogram cg) =
         cg_info(cg_symmetric_key(p0, c1)) == c2 &*&
         shared_with(p0, c0) == shared_with(p0, c1) &*&
         shared_with(p0, c0) == shared_with(p0, c2) &*&
+        [_]hash_payload(_, msg_ccs) &*&
         true == send(p0, shared_with(p0, c0), msg_ccs);
     case cg_auth_encrypted(p0, c0, ccs0, ent0):
       return true == hmac_then_enc_nested_public_key(p0, c0, true) &*&
@@ -102,8 +103,7 @@ void sender(char *enc_key1, char *enc_key2, char *hmac_key,
                bad(sender) || bad(shared_with(sender, enc_id1)) ?
                  [_]public_ccs(msg_ccs)
                :
-                 // Not saying anything about publicness of msg_cs established
-                 // confidentiality
+                 [_]hash_payload(_, msg_ccs) &*&
                  true == send(sender, shared_with(sender, enc_id1), msg_ccs); @*/
 /*@ ensures  principal(sender, _) &*&
              [f1]cryptogram(enc_key1, KEY_SIZE, enc_key_ccs1, enc_key_cg1) &*&

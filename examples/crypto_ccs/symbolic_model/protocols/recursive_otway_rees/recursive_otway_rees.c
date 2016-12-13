@@ -123,6 +123,8 @@ struct item *participant_construct(int server, int prev, int current, int next,
   //@ assert item(m3, ?p_m3, ror_pub);
   //@ assert p_m3 == pair_item(d_p1, p_m2);
   //@ CLOSE_PUB(p_m3)
+  //@ close hash_item_payload(ror_pub, true, p_m3);
+  //@ leak hash_item_payload(ror_pub, true, p_m3);
   struct item *hmac = create_hmac(key, m3);
 
   //@ assert item(hmac, ?h, ror_pub);
@@ -443,6 +445,7 @@ struct processed_messages *server_process(struct keys *keys, struct item *msg)
     result = malloc(sizeof(struct processed_messages));
     if (result == 0) abort_crypto_lib("Malloc failed");
 
+    //@ open [_]ror_pub(msg_i);
     check_is_pair(msg);
     struct item *temp1 = pair_get_first(msg);
     //@ assert item(temp1, ?m1_i, ror_pub);
@@ -460,6 +463,9 @@ struct processed_messages *server_process(struct keys *keys, struct item *msg)
     //@ assert result->k2 |-> ?k2;
     //@ assert item(k2, ?k2i, ror_pub);
     //@ assert k2i == symmetric_key_item(p2_val, ?c2);
+    //@ if (col) {close ror_pub(m1_i); leak ror_pub(m1_i);}
+    //@ close hash_item_payload(ror_pub, true, m1_i);
+    //@ leak hash_item_payload(ror_pub, true, m1_i);
     struct item *hmac2 = create_hmac(result->k2, temp1);
     item_check_equal(hmac, hmac2);
     item_free(hmac2);
@@ -485,7 +491,7 @@ struct processed_messages *server_process(struct keys *keys, struct item *msg)
     /*@ if (!col)
         {
           assert hmac_i == hmac_item(p2_val, c2, some(m1_i));
-          open [_]ror_pub(msg_i); open [_]ror_pub(hmac_i);
+          open [_]ror_pub(hmac_i);
           open [_]ror_pub(m1_i); open [_]ror_pub(m2_i); open [_]ror_pub(m3_i);
           if (!ror_key_clsfy(p2_val, c2, true))
           {

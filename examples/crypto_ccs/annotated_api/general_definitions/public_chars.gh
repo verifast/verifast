@@ -26,6 +26,17 @@ lemma_auto void public_chars(char *array, int size);
   requires [?f]chars(array, size, ?cs);
   ensures  [f]chars(array, size, cs) &*& [_]public_ccs(cs_to_ccs(cs));
 
+lemma void public_ccs(char *array, int size);
+  requires [?f]crypto_chars(?kind, array, size, ?ccs);
+  ensures  [f]crypto_chars(kind, array, size, ccs) &*&
+           switch(kind)
+           {
+             case normal:
+               return [_]public_ccs(ccs);
+             case secret:
+               return col ? [_]public_ccs(ccs) : true;
+           };
+
 lemma void public_cryptogram(char *array, cryptogram cg);
   requires [_]public_invar(?pub) &*&
            [?f]cryptogram(array, ?n, ?ccs, cg) &*& [_]pub(cg);

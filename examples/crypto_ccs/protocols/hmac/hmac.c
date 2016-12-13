@@ -35,6 +35,7 @@ void sender(char *key, int key_len, char *message)
     
     //@ chars_to_crypto_chars(message, MESSAGE_SIZE);
     memcpy(M, message, MESSAGE_SIZE);
+    //@ HASH_PUB_PAYLOAD(msg_cs)
     sha512_hmac(key, (unsigned int) key_len, M, 
                 (unsigned int) MESSAGE_SIZE, hmac, 0);
     //@ assert cryptogram(hmac, 64, ?hmac_ccs, ?hmac_cg);
@@ -96,6 +97,7 @@ void receiver(char *key, int key_len, char *message)
     
     //Verify the hmac
     //@ chars_to_crypto_chars(buffer, MESSAGE_SIZE);
+    //@ HASH_PUB_PAYLOAD(msg_cs)
     sha512_hmac(key, (unsigned int) key_len, buffer, 
                 (unsigned int) MESSAGE_SIZE, hmac, 0);
     memcpy(message, (void*) buffer , MESSAGE_SIZE);

@@ -342,6 +342,32 @@ unsigned int random_u_int();
 // Hash item //////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
+/*@
+fixpoint bool item_with_entropy(item i)
+{
+  switch(i)
+  {
+    case data_item(cs0):
+      return false;
+    case hash_item(pay0):
+      return false;
+    case hmac_item(p0, c0, pay0):
+      return false;
+    case pair_item(f0, s0):
+      return item_with_entropy(f0) || item_with_entropy(s0);
+    default:
+      return true;
+  }
+}
+
+predicate hash_item_payload(predicate(item) pub, bool public, item pay) =
+  public ?
+    [_]pub(pay)
+  :
+    item_with_entropy(pay) ? true : pay == data_item(_)
+;
+@*/
+
 bool is_hash(struct item *item);
   //@ requires [?f]world(?pub, ?key_clsfy) &*& item(item, ?i, pub);
   /*@ ensures  [f]world(pub, key_clsfy) &*& item(item, i, pub) &*&
@@ -354,11 +380,11 @@ void check_is_hash(struct item *item);
 
 struct item *create_hash(struct item *payload);
   /*@ requires [?f0]world(?pub, ?key_clsfy) &*&
-               [?f1]item(payload, ?pay, pub); @*/
+               [?f1]item(payload, ?pay, pub) &*&
+               [_]hash_item_payload(pub, _, pay); @*/
   /*@ ensures  [f0]world(pub, key_clsfy) &*&
                [f1]item(payload, pay, pub) &*& item(result, ?hash, pub) &*&
-               col ? true :
-                 hash == hash_item(some(pay)); @*/
+               col || hash == hash_item(some(pay)); @*/
 
 ///////////////////////////////////////////////////////////////////////////////
 // Key item ///////////////////////////////////////////////////////////////////
@@ -475,8 +501,10 @@ void check_is_hmac(struct item *item);
 
 struct item *create_hmac(struct item *key, struct item *payload);
   /*@ requires [?f0]world(?pub, ?key_clsfy) &*&
-               [?f1]item(payload, ?pay, pub) &*& [?f2]item(key, ?k, pub) &*&
-               k == symmetric_key_item(?creator, ?id); @*/
+               [?f1]item(payload, ?pay, pub) &*&
+                 [_]hash_item_payload(pub, _, pay) &*&
+               [?f2]item(key, ?k, pub) &*&
+                 k == symmetric_key_item(?creator, ?id); @*/
   /*@ ensures  [f0]world(pub, key_clsfy) &*&
                [f1]item(payload, pay, pub) &*& [f2]item(key, k, pub) &*&
                item(result, ?hmac, pub) &*&

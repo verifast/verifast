@@ -245,6 +245,8 @@ void send_hmac(struct network_status *net_stat, struct keypair *keypair)
   {
     struct item *pay = network_receive(net_stat);
     //@ assert item(pay, ?p, pub);
+    //@ close hash_item_payload(pub, true, p);
+    //@ leak hash_item_payload(pub, true, p);
     struct item *mac = create_hmac(key, pay);
 
     //@ assert item(mac, ?h, pub);

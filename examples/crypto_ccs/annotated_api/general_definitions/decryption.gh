@@ -45,10 +45,10 @@ predicate has_structure(list<crypto_char> ccs, structure s) =
   exists(pair(?prefix, ?suffix)) &*&
   switch(s)
   {
-    //  ___________________ ________
-    // |        |          |        |
-    // | prefix | cs_known | suffix |
-    // |________|__________|________|
+    //  ____________________ ________
+    // |        |           |        |
+    // | prefix | ccs_known | suffix |
+    // |________|___________|________|
     //
     case known_value(offset, ccs_known):
       return ccs == append(prefix, append(ccs_known, suffix)) &*&

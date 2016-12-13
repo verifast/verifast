@@ -85,6 +85,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
     
     // hmac
     //@ chars_to_crypto_chars(message, 16 + msg_len);
+    //@ HASH_PUB_PAYLOAD(append(iv_cs, enc_cs))
     sha512_hmac(hmac_key, KEY_SIZE, message,
                 (unsigned int) (16 + (int) msg_len),
                 message + 16 + (int) msg_len, 0);
@@ -172,6 +173,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ assert chars(buffer + size - 64, 64, ?hmac_cs);
     //@ assert chars(buffer, size - 64, ?pay_cs);
     //@ chars_to_crypto_chars(buffer, size - 64);
+    //@ HASH_PUB_PAYLOAD(pay_cs)
     sha512_hmac(hmac_key, KEY_SIZE, buffer,
                 (unsigned int) (size - 64), hmac, 0);
     //@ open cryptogram(hmac, 64, ?hmac_ccs, ?hmac_cg);

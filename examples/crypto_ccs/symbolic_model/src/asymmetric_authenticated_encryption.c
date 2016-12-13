@@ -27,6 +27,19 @@ struct item *asymmetric_authenticated_encryption(int recipient,
                                      hash_item(some(enc))); @*/
 {
   struct item* encrypted = asymmetric_encryption(public_key, payload);
+  //@ assert item(encrypted, ?e, pub);
+  /*@ if (col)
+      {
+        retreive_proof_obligations();
+        open proof_obligations(pub);
+        assert is_public_collision(?proof, pub);
+        proof(e);
+        close proof_obligations(pub);
+        leak proof_obligations(pub);
+      }
+  @*/
+  //@ close hash_item_payload(pub, col, e);
+  //@ leak hash_item_payload(pub, col, e);
   struct item* hash = create_hash(encrypted);
   struct item* rcp = create_data_item_from_int(recipient);
   struct item* msg_id = create_pair(rcp, hash);
@@ -85,6 +98,19 @@ struct item *asymmetric_authenticated_decryption(int recipient, char tag,
   check_is_asymmetric_encrypted(encrypted);
   struct item* signature = pair_get_second(message);
   struct item* rcp = create_data_item_from_int(recipient);
+  //@ assert item(encrypted, ?e, pub);
+  /*@ if (col)
+      {
+        retreive_proof_obligations();
+        open proof_obligations(pub);
+        assert is_public_collision(?proof, pub);
+        proof(e);
+        close proof_obligations(pub);
+        leak proof_obligations(pub);
+      }
+  @*/
+  //@ close hash_item_payload(pub, col, e);
+  //@ leak hash_item_payload(pub, col, e);
   struct item* hash = create_hash(encrypted);
   struct item* pair = create_pair(rcp, hash);
   check_is_asymmetric_signature(signature);

@@ -57,6 +57,7 @@ predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
     bad(sender) || bad(receiver) ?
       [_]public_ccs(msg_ccs)
     :
+      [_]hash_payload(_, msg_ccs) &*&
       true == send(sender, receiver, msg_ccs) 
   ) &*&
   info == IV(sender, IV(receiver, PV(enc_key, CCL(enc_key_ccs, IV(enc_id, 
@@ -217,7 +218,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
       char r_message[MAX_SIZE];
     
       //@ assert chars(s_message, MSG_LEN, ?msg_cs);
-      //@ public_chars(s_message, MSG_LEN);
+      //@ HASH_PUB_PAYLOAD(msg_cs)
       //@ chars_to_secret_crypto_chars(s_message, MSG_LEN);
       //@ assert crypto_chars(secret, s_message, MSG_LEN, ?msg_ccs);
       //@ s_args.sender = sender;

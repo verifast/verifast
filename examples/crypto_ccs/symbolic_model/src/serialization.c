@@ -1,7 +1,6 @@
 #include "serialization.h"
 
 #include "principal_ids.h"
-#include "item_constraints.h"
 
 /*@
 
