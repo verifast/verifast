@@ -89,6 +89,10 @@ lemma void level_append_mono_l(list<Class> level1, list<Class> level2, list<Clas
     requires level_le(level1, level2) == true;
     ensures level_le(append(level1, level3), append(level2, level3)) == true;
 
+lemma void level_le_append_flip(list<Class> level1, list<Class> level2);
+    requires true;
+    ensures level_le(append(level1, level2), append(level2, level1)) == true;
+
 /**** Call permissions ****/
 
 predicate call_perm(list<Class> level);
