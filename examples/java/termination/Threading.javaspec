@@ -5,6 +5,10 @@ fixpoint pair<list<Class>, real> wait_level_of(Object waitableObject);
 fixpoint boolean wait_level_lt(pair<list<Class>, real> w1, pair<list<Class>, real> w2)
 { return level_lt(fst(w1), fst(w2)) || level_le(fst(w1), fst(w2)) && snd(w1) < snd(w2); }
 
+lemma void wait_level_lt_trans(pair<list<Class>, real> w1, pair<list<Class>, real> w2, pair<list<Class>, real> w3);
+    requires wait_level_lt(w1, w2) && wait_level_lt(w2, w3);
+    ensures wait_level_lt(w1, w3) == true;
+
 predicate obs(list<Object> O;);
 
 fixpoint boolean wait_level_below_object(pair<list<Class>, real> w, Object o) { return wait_level_lt(w, wait_level_of(o)); }
@@ -21,11 +25,61 @@ interface Forkee {
         //@ terminates;
 }
 
+interface JoinableForkee {
+    //@ predicate pre(pair<list<Class>, real> waitLevel, list<Object> O);
+    //@ predicate post();
+    void run();
+        //@ requires obs(cons(?thisThread, ?O)) &*& pre(wait_level_of(thisThread), O);
+        //@ ensures obs({thisThread}) &*& post();
+        //@ terminates;
+}
+
+final class Thread {
+    //@ predicate thread(JoinableForkee forkee);
+    void join();
+        //@ requires obs(?O) &*& thread(?forkee) &*& wait_level_below_obs(wait_level_of(this), O) == true;
+        //@ ensures obs(O) &*& forkee.post();
+        //@ terminates;
+}
+
 class ThreadUtil {
     static void fork(Forkee forkee);
-        //@ requires obs(?O) &*& forkee.pre(?Of) &*& exists(?Or) &*& O == append(Of, Or);
+        //@ requires obs(?O) &*& forkee.pre(?Of) &*& exists(?Or) &*& O == append(Of, Or) &*& call_perm({forkee.getClass()});
         //@ ensures obs(Or);
         //@ terminates;
+    
+    static Thread forkJoinable(JoinableForkee forkee);
+        //@ requires obs(?O) &*& forkee.pre(?waitLevel, ?Of) &*& exists(?Or) &*& O == append(Of, Or) &*& call_perm({forkee.getClass()});
+        //@ ensures obs(Or) &*& result.thread(forkee) &*& wait_level_of(result) == waitLevel;
+        //@ terminates;
+}
+
+final class Lock {
+    //@ predicate lock(predicate() I);
+    //@ predicate locked(real frac, predicate() I, int thread);
+    
+    Lock();
+        //@ requires exists<predicate()>(?I) &*& I() &*& exists<pair<list<Class>, real> >(?waitLevel);
+        //@ ensures lock(I) &*& wait_level_of(this) == waitLevel;
+        //@ terminates;
+    
+    void acquire();
+        //@ requires obs(?O) &*& [?f]lock(?I) &*& wait_level_below_obs(wait_level_of(this), O) == true;
+        //@ ensures obs(cons<Object>(this, O)) &*& locked(f, I, currentThread) &*& I();
+        //@ terminates;
+    
+    void release();
+        //@ requires obs(cons(this, ?O)) &*& locked(?f, ?I, currentThread) &*& I();
+        //@ ensures obs(O) &*& [f]lock(I);
+        //@ terminates;
+    
+    /*@
+    
+    lemma void destroy();
+        requires lock(?I);
+        ensures I();
+    
+    @*/
 }
 
 //@ predicate credits(Channel channel, int count;) = count == 0 ? true : 0 < count &*& channel.credit() &*& credits(channel, count - 1);

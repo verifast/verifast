@@ -28,6 +28,9 @@ class ProdCons {
         //@ ensures obs(nil);
         //@ terminates;
     {
+        //@ produce_call_below_perm_();
+        //@ call_below_perm__elim(1, {Consumer.class});
+        
         //@ close exists(True);
         Channel c = new Channel();
         //@ c.create_obs(10);
