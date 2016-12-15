@@ -1985,15 +1985,17 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | WMethodCall (l, tn, m, pts, args, fb) when m <> "getClass" ->
       let (lm, gh, rt, xmap, pre, post, epost, terminates, is_upcall, target_class, fb', v) =
         match try_assoc tn classmap with
-          Some {cmeths} ->
+          Some {cfinal; cmeths} ->
           let MethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, terminates, ss, fb, v, is_override, abstract) = List.assoc (m, pts) cmeths in
+          let can_be_overridden = fb = Instance && cfinal = ExtensibleClass && v <> Private in 
           let is_upcall =
-            match ss, fb, leminfo with
-              None, Static, _ -> true
-            | Some (Some (_, rank)), Static, RealMethodInfo (Some rank') when rank < rank' -> true
+            not can_be_overridden &&
+            match ss, leminfo with
+              None, _ -> true
+            | Some (Some (_, rank)), RealMethodInfo (Some rank') when rank < rank' -> true
             | _ -> false
           in
-          let target_class = match fb with Static -> Some tn | Instance -> None in
+          let target_class = if can_be_overridden then None else Some tn in
           (lm, gh, rt, xmap, pre_dyn, post_dyn, epost_dyn, terminates, is_upcall, target_class, fb, v)
         | _ ->
           let InterfaceInfo (_, _, methods, _, _) = List.assoc tn interfmap in

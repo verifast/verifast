@@ -8,3 +8,4 @@ verifast -c -disable_overflow_check Set.jarsrc
 verifast -c -disable_overflow_check Ackermann.jarsrc
 verifast -c -disable_overflow_check IsEvenFunc.jarsrc
 verifast -c -disable_overflow_check Reverse.jarsrc
+verifast -c -disable_overflow_check ProdCons.jarsrc

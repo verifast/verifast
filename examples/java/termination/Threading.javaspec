@@ -1,0 +1,66 @@
+/*@
+
+fixpoint pair<list<Class>, real> wait_level_of(Object waitableObject);
+
+fixpoint boolean wait_level_lt(pair<list<Class>, real> w1, pair<list<Class>, real> w2)
+{ return level_lt(fst(w1), fst(w2)) || level_le(fst(w1), fst(w2)) && snd(w1) < snd(w2); }
+
+predicate obs(list<Object> O;);
+
+fixpoint boolean wait_level_below_object(pair<list<Class>, real> w, Object o) { return wait_level_lt(w, wait_level_of(o)); }
+
+fixpoint boolean wait_level_below_obs(pair<list<Class>, real> w, list<Object> O) { return forall(O, (wait_level_below_object)(w)); }
+
+@*/
+
+interface Forkee {
+    //@ predicate pre(list<Object> O);
+    void run();
+        //@ requires obs(?O) &*& pre(O);
+        //@ ensures obs(nil);
+        //@ terminates;
+}
+
+class ThreadUtil {
+    static void fork(Forkee forkee);
+        //@ requires obs(?O) &*& forkee.pre(?Of) &*& exists(?Or) &*& O == append(Of, Or);
+        //@ ensures obs(Or);
+        //@ terminates;
+}
+
+//@ predicate credits(Channel channel, int count;) = count == 0 ? true : 0 < count &*& channel.credit() &*& credits(channel, count - 1);
+
+//@ predicate repeat<t>(t x, int count; list<t> xs) = count == 0 ? xs == nil : 0 < count &*& repeat(x, count - 1, ?xs0) &*& xs == cons(x, xs0);
+
+final class Channel {
+    //@ predicate channel(predicate(Object) P);
+    //@ predicate credit();
+    
+    /*@
+    
+    lemma void create_obs(int count);
+        requires obs(?O) &*& 0 <= count;
+        ensures repeat<Object>(this, count, ?O1) &*& obs(append(O1, O)) &*& credits(this, count);
+    
+    lemma void destroy_ob();
+        requires obs(cons(this, ?O)) &*& credit();
+        ensures obs(O);
+    
+    @*/
+    
+    Channel();
+        //@ requires exists<predicate(Object)>(?P);
+        //@ ensures [_]channel(P);
+        //@ terminates;
+    
+    void send(Object element);
+        //@ requires [_]channel(?P) &*& P(element);
+        //@ ensures this.credit();
+        //@ terminates;
+    
+    Object receive();
+        //@ requires obs(?O) &*& [_]channel(?P) &*& credit() &*& wait_level_below_obs(wait_level_of(this), O) == true;
+        //@ ensures obs(O) &*& P(result);
+        //@ terminates;
+    
+}
