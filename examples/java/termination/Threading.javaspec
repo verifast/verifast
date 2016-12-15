@@ -15,6 +15,10 @@ fixpoint boolean wait_level_below_object(pair<list<Class>, real> w, Object o) { 
 
 fixpoint boolean wait_level_below_obs(pair<list<Class>, real> w, list<Object> O) { return forall(O, (wait_level_below_object)(w)); }
 
+lemma void wait_level_lt_below_obs(pair<list<Class>, real> w1, pair<list<Class>, real> w2, list<Object> O);
+    requires wait_level_lt(w1, w2) && wait_level_below_obs(w2, O);
+    ensures wait_level_below_obs(w1, O) == true;
+
 @*/
 
 interface Forkee {
