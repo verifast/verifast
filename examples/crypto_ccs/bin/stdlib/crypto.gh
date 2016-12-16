@@ -12,10 +12,10 @@ fixpoint bool col();
 // crypto_char
 
 inductive crypto_char =
-  crypto_char(fixpoint(fixpoint(int, list<char>), char) crypto_char)
+  crypto_char(fixpoint(fixpoint(int, bool), char) crypto_char)
 ;
 
-fixpoint char crypto_char_const(char c, fixpoint(int, list<char>) cs_for_cg)
+fixpoint char crypto_char_const(char c, fixpoint(int, bool) samplings)
 {
   return c;
 }
