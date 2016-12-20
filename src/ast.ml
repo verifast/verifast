@@ -95,6 +95,7 @@ type type_ = (* ?type_ *)
   | PackageName of string (* not a real type; used only during type checking *)
   | RefType of type_ (* not a real type; used only for locals whose address is taken *)
   | PluginInternalType of DynType.dyn
+  | AbstractType of string
 
 let int_size = 4
 let intType = Int (Signed, int_size)
@@ -590,6 +591,7 @@ and
       string *
       string list *
       ctor list
+  | AbstractTypeDecl of loc * string
   | Class of
       loc *
       bool (* abstract *) *

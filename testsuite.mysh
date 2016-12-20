@@ -156,6 +156,7 @@ cd examples
   cd module_imports
     mysh -cpus 1 < module_imports.mysh
   cd ..
+  verifast_both -c multiset_abstract_type.c
   cd linking
     mysh < linking.mysh
   cd ..

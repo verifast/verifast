@@ -104,6 +104,7 @@ let rec string_of_type t =
   | ClassOrInterfaceName(n) -> n (* not a real type; used only during type checking *)
   | PackageName(n) -> n (* not a real type; used only during type checking *)
   | RefType(t) -> "ref " ^ (string_of_type t)
+  | AbstractType x -> x
 
 let string_of_targs targs =
   if targs = [] then "" else "<" ^ String.concat ", " (List.map string_of_type targs) ^ ">"

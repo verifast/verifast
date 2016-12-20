@@ -309,6 +309,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | TypeParam _ -> ProverInductive
     | Void -> ProverInductive
     | InferredType (_, t) -> begin match !t with None -> t := Some (InductiveType ("unit", [])); ProverInductive | Some t -> provertype_of_type t end
+    | AbstractType _ -> ProverInductive
   
   let typenode_of_type t = typenode_of_provertype (provertype_of_type t)
    
@@ -738,6 +739,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * type_ map (* variables bound by invariant *)
       * box_action_info map
       * box_handle_predicate_info map
+    type abstract_type_info = loc
     type maps =
         struct_info map
       * enum_info map
@@ -760,6 +762,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * termnode map (* classterms *)
       * termnode map (* interfaceterms *)
       * plugin_info map
+      * abstract_type_info map
     
     type implemented_prototype_info =
         string
@@ -850,7 +853,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (interfmap0: interface_info map),
       (classterms0: termnode map),
       (interfaceterms0: termnode map),
-      (pluginmap0: plugin_info map)
+      (pluginmap0: plugin_info map),
+      (abstract_types_map0: abstract_type_info map)
       : maps
     ) =
 
@@ -866,8 +870,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let id x = x in
     let merge_maps l
-      (structmap, enummap, globalmap, modulemap, importmodulemap, inductivemap, purefuncmap, predctormap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, pluginmap)
-      (structmap0, enummap0, globalmap0, modulemap0, importmodulemap0, inductivemap0, purefuncmap0, predctormap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, pluginmap0)
+      (structmap, enummap, globalmap, modulemap, importmodulemap, inductivemap, purefuncmap, predctormap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, pluginmap, abstract_types_map)
+      (structmap0, enummap0, globalmap0, modulemap0, importmodulemap0, inductivemap0, purefuncmap0, predctormap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, pluginmap0, abstract_types_map0)
       =
       (
 (*     append_nodups structmap structmap0 id l "struct", *)
@@ -894,8 +898,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
        append_nodups interfmap interfmap0 id l "interface",
        classterms @ classterms0, 
        interfaceterms @ interfaceterms0,
-       if pluginmap0 <> [] && pluginmap <> [] then static_error l "VeriFast does not yet support loading multiple plugins" None else
-       append_nodups pluginmap pluginmap0 id l "plugin")
+       (if pluginmap0 <> [] && pluginmap <> [] then static_error l "VeriFast does not yet support loading multiple plugins" None else
+       append_nodups pluginmap pluginmap0 id l "plugin"),
+       append_nodups abstract_types_map abstract_types_map0 id l "abstract type")
     in
 
     (** [merge_header_maps maps0 headers] returns [maps0] plus all elements transitively declared in [headers]. *)
@@ -973,7 +978,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
     in
 
-    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
+    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
     
     let (maps0, headers_included) =
       if include_prelude then
@@ -1158,6 +1163,25 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match ps with
       PackageDecl(l,pn,ilist,ds)::rest -> iter' (iter pn idm ds) rest
       | [] -> List.rev idm
+    in
+    iter' [] ps
+
+  let abstract_types_map1 =
+    let rec iter pn atm ds =
+      match ds with
+        [] -> atm
+      | (AbstractTypeDecl (l, t))::ds ->
+        let n = full_name pn t in
+        if List.mem_assoc n atm || List.mem_assoc n abstract_types_map0 then
+          static_error l "Duplicate abstract type name." None
+        else
+          iter pn ((n, l)::atm) ds
+      | _::ds -> iter pn atm ds
+    in
+    let rec iter' atm ps =
+      match ps with
+        PackageDecl (l, pn, ilist, ds)::rest -> iter' (iter pn atm ds) rest
+      | [] -> List.rev atm
     in
     iter' [] ps
    
@@ -1348,6 +1372,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     List.map (fun (i, (l, tparams, _)) -> (i, (l, List.length tparams))) inductivedeclmap
     @ List.map (fun (i, (l, tparams, _, _)) -> (i, (l, List.length tparams))) inductivemap0
   
+  let abstract_types_map = abstract_types_map1 @ abstract_types_map0
+  
   (* Region: check_pure_type: checks validity of type expressions *)
   
   let check_pure_type_core typedefmap1 (pn,ilist) tpenv te =
@@ -1374,15 +1400,20 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         reportUseSite DeclKind_InductiveType ld l;
         InductiveType (s, [])
       | None ->
-        match (search2' Real id (pn,ilist) classmap1 classmap0) with
-          Some s -> ObjType s
-        | None -> match (search2' Real id (pn,ilist) interfmap1 interfmap0) with
-                    Some s->ObjType s
-                  | None ->
-                    if List.mem_assoc id functypenames || List.mem_assoc id functypemap0 then
-                      FuncType id
-                    else
-                      static_error l ("No such type parameter, inductive datatype, class, interface, or function type: " ^pn^" "^id) None
+      match (search2' Real id (pn,ilist) classmap1 classmap0) with
+        Some s -> ObjType s
+      | None ->
+      match (search2' Real id (pn,ilist) interfmap1 interfmap0) with
+        Some s -> ObjType s
+      | None ->
+      if List.mem_assoc id functypenames || List.mem_assoc id functypemap0 then
+        FuncType id
+      else
+      match resolve Ghost (pn,ilist) l id abstract_types_map with
+        Some (n, l) ->
+        AbstractType n
+      | None ->
+      static_error l ("No such type parameter, inductive datatype, class, interface, or function type: " ^pn^" "^id) None
       end
     | IdentTypeExpr (l, Some(pac), id) ->
       let full_name = pac ^ "." ^ id in
@@ -2001,11 +2032,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
   
   let inductivemap = inductivemap1 @ inductivemap0
-  
+
   (* A universal type is one that is isomorphic to the universe for purposes of type erasure *)
   let rec is_universal_type tp =
     match tp with
-      Bool -> false
+      Bool | AbstractType _ -> false
     | TypeParam x -> true
     | Int (_, _) | RealType | PtrType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> true
     | PureFuncType (t1, t2) -> is_universal_type t1 && is_universal_type t2

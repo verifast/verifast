@@ -101,6 +101,8 @@ let rec sexpr_of_type_ (t : type_) : sexpression =
                                         Symbol s ]
     | RefType (t)             -> List [ Symbol "type-ref-type";
                                         sexpr_of_type_ t ]
+    | AbstractType (s)         -> List [ Symbol "type-abstract";
+                                        Symbol s ]
 
 let rec sexpr_of_type_expr : type_expr -> sexpression = function
   | StructTypeExpr (_, name)  -> 
