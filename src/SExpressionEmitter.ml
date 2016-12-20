@@ -63,11 +63,12 @@ let rec sexpr_of_type_ (t : type_) : sexpression =
   match t with
     | Bool                    -> aux2 "type-bool"
     | Void                    -> aux2 "type-void"
-    | Int (Signed, 4)         -> aux2 "type-int"
-    | Int (Signed, 2)         -> aux2 "type-short"
-    | Int (Unsigned, 4)       -> aux2 "type-uint-ptr"
+    | Int (Signed, n)         -> aux2 ("type-int" ^ string_of_int (n * 8))
+    | Int (Unsigned, n)       -> aux2 ("type-uint" ^ string_of_int (n * 8))
     | RealType                -> aux2 "type-real"
-    | Int (Signed, 1)         -> aux2 "type-char"
+    | Float                   -> aux2 "type-float"
+    | Double                  -> aux2 "type-double"
+    | LongDouble              -> aux2 "type-long-double"
     | StructType s            -> List [ Symbol "type-struct"; Symbol s ]
     | PtrType t               -> List [ Symbol "type-pointer-to"; sexpr_of_type_ t ]
     | FuncType s              -> List [ Symbol "type-function"; Symbol s ]
@@ -88,6 +89,9 @@ let rec sexpr_of_type_ (t : type_) : sexpression =
                                         Symbol s ]
     | ArrayType (t)           -> List [ Symbol "type-array-type";
                                         sexpr_of_type_ t ]
+    | StaticArrayType (t, n)  -> List [ Symbol "type-static-array-type";
+                                        sexpr_of_type_ t;
+                                        Number (Big_int.big_int_of_int n) ]
     | BoxIdType               -> aux2 "type-box-id"
     | HandleIdType            -> aux2 "type-handle-id-type"
     | AnyType                 -> aux2 "AnyType"
@@ -101,6 +105,7 @@ let rec sexpr_of_type_ (t : type_) : sexpression =
                                         Symbol s ]
     | RefType (t)             -> List [ Symbol "type-ref-type";
                                         sexpr_of_type_ t ]
+    | PluginInternalType v    -> aux2 "type-plugin-internal-type"
     | AbstractType (s)         -> List [ Symbol "type-abstract";
                                         Symbol s ]
 

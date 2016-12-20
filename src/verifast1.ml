@@ -310,6 +310,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Void -> ProverInductive
     | InferredType (_, t) -> begin match !t with None -> t := Some (InductiveType ("unit", [])); ProverInductive | Some t -> provertype_of_type t end
     | AbstractType _ -> ProverInductive
+    (* Using expressions of the types below as values is wrong, but we must not crash here because this function is in some cases called by the type checker before it detects that there is a problem and produces a proper error message. *)
+    | ClassOrInterfaceName n -> ProverInt
+    | PackageName n -> ProverInt
   
   let typenode_of_type t = typenode_of_provertype (provertype_of_type t)
    
