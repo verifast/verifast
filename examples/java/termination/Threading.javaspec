@@ -107,8 +107,8 @@ final class Channel {
     @*/
     
     Channel();
-        //@ requires exists<predicate(Object)>(?P);
-        //@ ensures [_]channel(P);
+        //@ requires exists<pair<predicate(Object), pair<list<Class>, real> > >(pair(?P, ?waitLevel));
+        //@ ensures [_]channel(P) &*& wait_level_of(this) == waitLevel;
         //@ terminates;
     
     void send(Object element);

@@ -31,7 +31,7 @@ class ProdCons {
         //@ produce_call_below_perm_();
         //@ call_below_perm__elim(1, {Consumer.class});
         
-        //@ close exists(True);
+        //@ close exists(pair(True, pair({ProdCons.class}, 0r)));
         Channel c = new Channel();
         //@ c.create_obs(10);
         //@ assert obs(?O0);
