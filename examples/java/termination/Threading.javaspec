@@ -46,6 +46,47 @@ final class Thread {
         //@ terminates;
 }
 
+/*
+
+NOTE
+====
+
+The specifications of methods ThreadUtil.fork and ThreadUtil.forkJoinable are
+not sound if these methods are implemented naively using Java's threading API,
+for two reasons:
+
+1) in Java, if a thread terminates because of an exception, the program as a
+   whole is not terminated; other threads are allowed to continue to run.
+   However, the terminated thread may not have fulfilled all of its
+   obligations; this may cause other threads to deadlock. For example, if a
+   thread A waits for a thread B to send on a channel, but thread B
+   terminates because of an exception before it sends on the channel, thread
+   A will wait forever.
+
+   A sufficient condition for an implementation to be sound in this respect is
+   for it to terminate the program as a whole when a thread terminates
+   because of an exception.
+
+   Note that such behavior cannot be implemented provably correctly in pure
+   Java, because the Java Language Specification allows the JVM to throw
+   an InternalError at any point in the program. Implementing such behavior
+   requires either the use of native methods, modifying the JVM, or
+   relying on JVM-specific information.
+
+2) Java's Thread.join() method returns normally even if the thread being joined
+   terminated because of an exception. In that case, the thread may not have
+   established its postcondition.
+
+   One way to implement method Thread.join() specified above soundly is to
+   throw an exception if the joined thread terminated because of an
+   exception.
+
+See also
+
+   Bart Jacobs. Provably live exception handling. FTfJP 2015.
+
+*/
+
 class ThreadUtil {
     static void fork(Forkee forkee);
         //@ requires obs(?O) &*& forkee.pre(?Of) &*& exists(?Or) &*& O == append(Of, Or) &*& call_perm({forkee.getClass()});
