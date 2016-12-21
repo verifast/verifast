@@ -550,6 +550,9 @@ depend: $(filter-out vfversion.ml vfversion.mli, $(META_DEPS)) $(AUTOGENERATE_TA
 include .depend
 
 #------------------------------- Release ------------------------------------#
+
+VFVERSION ?= $(shell git describe --always --dirty)
+
 release: release_core
 release_core: test build
 	rm -Rf verifast-$(VFVERSION); mkdir verifast-$(VFVERSION)
@@ -629,4 +632,10 @@ ifeq ($(OS), Cygwin)
 	cp ../test.bat verifast-$(VFVERSION)
 else
 	cp ../test.sh verifast-$(VFVERSION)
+endif
+
+nightly: release
+ifeq ($(OS), Cygwin)
+	rm verifast-nightly.zip || true
+	7z a verifast-nightly.zip verifast-$(VFVERSION)
 endif

@@ -8,4 +8,7 @@ install:
   - c:/projects/verifast/setup-windows.bat
 build_script:
   - c:/cygwin/bin/bash -lc "cd /cygdrive/c/projects/verifast/src && make VERBOSE=yes"
-
+artifacts:
+  - path: src/verifast-nightly.zip
+    name: nightly build
+    type: zip
