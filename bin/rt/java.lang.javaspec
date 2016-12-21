@@ -231,6 +231,7 @@ public class Integer {
     public Integer(int v);
         //@ requires emp;
         //@ ensures Integer_intValue(this) == v;
+        //@ terminates;
 
     public static final int MAX_VALUE = 0x7fffffff;
     public static final int MIN_VALUE = -0x80000000;
@@ -238,14 +239,18 @@ public class Integer {
     public static int parseInt(String s);
         //@ requires s != null;
         //@ ensures true;
+        //@ terminates;
 
     public static Integer valueOf(int v);
         //@ requires emp;
         //@ ensures result != null &*& Integer_intValue(result) == v;
+        //@ terminates;
 
     public int intValue();
         //@ requires true;
         //@ ensures result == Integer_intValue(this);
+        //@ terminates;
+    
 }
 
 //@ fixpoint boolean Boolean_booleanValue(Boolean b);

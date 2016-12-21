@@ -12,3 +12,4 @@ verifast -c -disable_overflow_check ProdCons.jarsrc
 verifast -c -disable_overflow_check Dining.jarsrc
 verifast -c -disable_overflow_check SqrtCache.jarsrc
 verifast -c -disable_overflow_check ThreadPool.jarsrc
+verifast -c -disable_overflow_check Stack.jarsrc

@@ -1,0 +1,32 @@
+/*@
+
+typedef lemma void AtomicReference_get(predicate(Object) I, predicate() pre, predicate(Object) post)();
+    requires I(?o) &*& pre();
+    ensures I(o) &*& post(o);
+
+typedef lemma void AtomicReference_compareAndSet(Object expectedValue, Object newValue, predicate(Object) I, predicate() pre, predicate(boolean) post)();
+    requires I(?o) &*& pre();
+    ensures I(o == expectedValue ? newValue : o) &*& post(o == expectedValue);
+
+@*/
+
+final class AtomicReference {
+
+    //@ predicate valid(predicate(Object) I);
+    
+    AtomicReference(Object initialValue);
+        //@ requires exists<predicate(Object)>(?I) &*& I(initialValue);
+        //@ ensures [_]valid(I);
+        //@ terminates;
+    
+    Object get();
+        //@ requires [_]valid(?I) &*& is_AtomicReference_get(?op, I, ?pre, ?post) &*& pre();
+        //@ ensures post(result);
+        //@ terminates;
+    
+    boolean compareAndSet(Object expectedValue, Object newValue);
+        //@ requires [_]valid(?I) &*& is_AtomicReference_compareAndSet(?op, expectedValue, newValue, I, ?pre, ?post) &*& pre();
+        //@ ensures post(result);
+        //@ terminates;
+
+}
