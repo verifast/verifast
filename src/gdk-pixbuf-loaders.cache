@@ -1,0 +1,6 @@
+"@executable_path/../lib/libpixbufloader-png.so"
+"png" 5 "gdk-pixbuf" "PNG" "LGPL"
+"image/png" ""
+"png" ""
+"\211PNG\r\n\032\n" "" 100
+

@@ -618,9 +618,10 @@ endif
 ifeq ($(OS), Darwin)
 	cd verifast-$(VFVERSION)/bin; mv vfide vfide-core
 	cp vfide-mac.sh verifast-$(VFVERSION)/bin/vfide
-ifndef TRAVIS # FIXME
-	cp -R ~/Desktop/GtkDemo.app/Contents/Resources/* verifast-$(VFVERSION)
-endif
+	mkdir verifast-$(VFVERSION)/lib
+	for i in $$( cat vfide-osx-local-dlls.txt ); do cp $$i verifast-$(VFVERSION)/lib; done
+	mkdir -p verifast-$(VFVERSION)/lib/gdk-pixbuf-2.0/2.10.0
+	cp gdk-pixbuf-loaders.cache verifast-$(VFVERSION)/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache
 endif
 	cp -R ../examples verifast-$(VFVERSION)
 	cp -R ../help verifast-$(VFVERSION)
