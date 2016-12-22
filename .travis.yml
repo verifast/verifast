@@ -14,7 +14,7 @@ install:
 script:
   - cd src && make nightly VERBOSE=yes -j 2
 
-before_deploy: "cd upload"
+before_deploy: "cd ../upload"
 deploy:
   provider: cloudfiles
   username: bartjacobs
