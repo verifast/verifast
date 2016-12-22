@@ -13,16 +13,23 @@ VeriFast is a research prototype of a tool for modular formal verification of co
 
 The VeriFast source code and binaries are released under the [MIT license](LICENSE.md).
 
-Binary releases
----------------
+Binaries
+--------
 
-For now, see [here](http://distrinet.cs.kuleuven.be/software/VeriFast/) for binary releases.
+A few minutes after each push to the master branch, binary packages become available at the following URLs:
+
+- [Windows](https://ci.appveyor.com/api/projects/verifast/verifast/artifacts/src/verifast-nightly.zip?branch=master)
+- [Linux/x64](http://82076e0e62875f063ae8-929808a701855dfb71539d0a4342d4be.r54.cf5.rackcdn.com/verifast-nightly.tar.gz)
+  (requires `sudo apt-get install libgtksourceview2.0`)
+- OS X (coming soon)
+
+For the latest named releases, for now see [here](http://distrinet.cs.kuleuven.be/software/VeriFast/).
 
 Compiling
 ---------
 - [Windows](README.Windows.md)
 - [Linux](README.Linux.md)
-- [Mac OS X](README.MacOS.md)
+- [OS X](README.MacOS.md)
 
 Documentation
 -------------
