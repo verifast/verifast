@@ -618,7 +618,9 @@ endif
 ifeq ($(OS), Darwin)
 	cd verifast-$(VFVERSION)/bin; mv vfide vfide-core
 	cp vfide-mac.sh verifast-$(VFVERSION)/bin/vfide
+ifndef TRAVIS # FIXME
 	cp -R ~/Desktop/GtkDemo.app/Contents/Resources/* verifast-$(VFVERSION)
+endif
 endif
 	cp -R ../examples verifast-$(VFVERSION)
 	cp -R ../help verifast-$(VFVERSION)
@@ -634,8 +636,18 @@ else
 	cp ../test.sh verifast-$(VFVERSION)
 endif
 
+ifeq ($(OS), Darwin)
+  RELEASE_SUFFIX=-osx
+else
+  RELEASE_SUFFIX=
+endif
+
 nightly: release
 ifeq ($(OS), Cygwin)
 	rm verifast-nightly.zip || true
 	7z a verifast-nightly.zip verifast-$(VFVERSION)
+else
+	rm -Rf ../upload || true
+	mkdir ../upload || true
+	tar czf ../upload/verifast-nightly$(RELEASE_SUFFIX).tar.gz verifast-$(VFVERSION)
 endif
