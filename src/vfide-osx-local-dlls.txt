@@ -21,5 +21,4 @@
 /usr/local/opt/pcre/lib/libpcre.1.dylib
 /usr/local/opt/pixman/lib/libpixman-1.0.dylib
 /usr/local/opt/libpng/lib/libpng16.16.dylib
-/usr/local/lib/gdk-pixbuf-2.0/2.10.0/loaders/libpixbufloader-png.so
 /usr/local/Cellar/gtk+/2.24.31/lib/gtk-2.0/2.10.0/immodules/im-quartz.so

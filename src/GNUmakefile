@@ -367,8 +367,20 @@ ifndef WITHOUT_LABLGTK
 clean::
 	cd linemarks; make clean
 
+branchleft_png.ml: branch-left.png
+	gdk_pixbuf_mlsource branch-left.png > branchleft_png.ml
+
+branchleft_png.cmx: branchleft_png.ml
+	$(OCAMLOPT) $(OCAMLCFLAGS) -c $(LABLGTK_FLAGS) branchleft_png.ml
+
+branchright_png.ml: branch-right.png
+	gdk_pixbuf_mlsource branch-right.png > branchright_png.ml
+
+branchright_png.cmx: branchright_png.ml
+	$(OCAMLOPT) $(OCAMLCFLAGS) -c $(LABLGTK_FLAGS) branchright_png.ml
+
 # Also depend on "vfide.ml": Make ignores our dependency "%.cmx: %.ml".
-vfide.cmx: Fonts.cmx vfide.ml $(GTKSOURCEVIEW_DEPS)
+vfide.cmx: branchleft_png.cmx branchright_png.cmx Fonts.cmx vfide.ml $(GTKSOURCEVIEW_DEPS)
 	@echo "  OCAMLOPT " $@
 ifndef WITHOUT_GTKSOURCEVIEW
 	make -C linemarks OCAMLOPT=${OCAMLOPT} OCAMLCFLAGS="${OCAMLCFLAGS}" LABLGTK_FLAGS="$(LABLGTK_FLAGS_)" linemarks.cmxa
@@ -390,7 +402,7 @@ endif
 	  verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml \
 	  shape_analysis/shape_analysis_backend.cmx \
 	  shape_analysis/changelog.cmx shape_analysis/shape_analysis_frontend.cmx \
-	  $(Z3ARGS) Fonts.cmx vfide.cmx
+	  $(Z3ARGS) Fonts.cmx branchleft_png.cmx branchright_png.cmx vfide.cmx
 endif
 ifneq ($(OS), Cygwin)
   ../bin/vfide$(DOTEXE): linux/libPerf_cobjs.a
@@ -620,8 +632,6 @@ ifeq ($(OS), Darwin)
 	cp vfide-mac.sh verifast-$(VFVERSION)/bin/vfide
 	mkdir verifast-$(VFVERSION)/lib
 	for i in $$( cat vfide-osx-local-dlls.txt ); do cp $$i verifast-$(VFVERSION)/lib; done
-	mkdir -p verifast-$(VFVERSION)/lib/gdk-pixbuf-2.0/2.10.0
-	cp gdk-pixbuf-loaders.cache verifast-$(VFVERSION)/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache
 endif
 	cp -R ../examples verifast-$(VFVERSION)
 	cp -R ../help verifast-$(VFVERSION)

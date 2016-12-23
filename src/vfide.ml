@@ -125,8 +125,8 @@ module TreeMetrics = struct
 end
 
 let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend enforceAnnotations =
-  let leftBranchPixbuf = GdkPixbuf.from_file (default_bindir ^ "/branch-left.png") in
-  let rightBranchPixbuf = GdkPixbuf.from_file (default_bindir ^ "/branch-right.png") in
+  let leftBranchPixbuf = Branchleft_png.pixbuf () in
+  let rightBranchPixbuf = Branchright_png.pixbuf () in
   let ctxts_lifo = ref None in
   let msg = ref None in
   let url = ref None in
