@@ -12,7 +12,7 @@
 /usr/local/opt/gettext/lib/libintl.8.dylib
 /usr/local/lib/libgtkmacintegration-gtk2.2.dylib
 /usr/local/opt/glib/lib/libgmodule-2.0.0.dylib
-/usr/local/Cellar/pango/1.40.2/lib/libpangoft2-1.0.0.dylib
+/usr/local/Cellar/pango/1.40.3/lib/libpangoft2-1.0.0.dylib
 /usr/local/opt/glib/lib/libgthread-2.0.0.dylib
 /usr/local/opt/harfbuzz/lib/libharfbuzz.0.dylib
 /usr/local/opt/fontconfig/lib/libfontconfig.1.dylib
@@ -22,4 +22,4 @@
 /usr/local/opt/pixman/lib/libpixman-1.0.dylib
 /usr/local/opt/libpng/lib/libpng16.16.dylib
 /usr/local/lib/gdk-pixbuf-2.0/2.10.0/loaders/libpixbufloader-png.so
-/usr/local/Cellar/gtk+/2.24.30/lib/gtk-2.0/2.10.0/immodules/im-quartz.so
+/usr/local/Cellar/gtk+/2.24.31/lib/gtk-2.0/2.10.0/immodules/im-quartz.so
