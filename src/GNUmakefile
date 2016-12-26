@@ -621,8 +621,8 @@ ifeq ($(OS), Linux)
 	cp vfide.sh verifast-$(VFVERSION)/bin/vfide
 ifdef Z3
 	cp $(Z3)/lib/libz3-gmp.so verifast-$(VFVERSION)/bin
-	cp /usr/lib/libgtksourceview-2.0.so.0.0.0 verifast-$(VFVERSION)/bin/libgtksourceview-2.0.so.0
 endif
+	cp /usr/lib/libgtksourceview-2.0.so.0.0.0 verifast-$(VFVERSION)/bin/libgtksourceview-2.0.so.0
 endif
 ifdef Z3
 	cp ../Z3.LICENSE.txt verifast-$(VFVERSION)

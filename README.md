@@ -20,7 +20,6 @@ A few minutes after each push to the master branch, binary packages become avail
 
 - [Windows](https://ci.appveyor.com/api/projects/verifast/verifast/artifacts/src/verifast-nightly.zip?branch=master)
 - [Linux/x64](http://82076e0e62875f063ae8-929808a701855dfb71539d0a4342d4be.r54.cf5.rackcdn.com/verifast-nightly.tar.gz)
-  (requires `sudo apt-get install libgtksourceview2.0`)
 - [OS X](http://82076e0e62875f063ae8-929808a701855dfb71539d0a4342d4be.r54.cf5.rackcdn.com/verifast-nightly-osx.tar.gz)
 
 For the latest named releases, for now see [here](http://distrinet.cs.kuleuven.be/software/VeriFast/).
