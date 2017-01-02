@@ -96,6 +96,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let check_expr (pn,ilist) tparams tenv e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some pure) e in
     let check_condition (pn,ilist) tparams tenv e = check_condition_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some pure) e in
     let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some pure) e tp in
+    let check_expr_t_pure tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some true) e tp in
     let eval env e = if not pure then check_ghost ghostenv l e; eval_non_pure pure h env e in
     let eval_h_core sideeffectfree pure h env e cont =
       if not pure then check_ghost ghostenv l e;
@@ -1364,7 +1365,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let xs = (expr_assigned_variables e) @ (block_assigned_variables ss) in
       let xs = List.filter (fun x -> match try_assoc x tenv with None -> false | Some (RefType _) -> false | _ -> true) xs in
       let (p, tenv') = check_asn (pn,ilist) tparams tenv p in
-      let dec = (match dec with None -> None | Some(e) -> Some(check_expr_t (pn,ilist) tparams tenv' e intt)) in
+      let dec = (match dec with None -> None | Some(e) -> Some(check_expr_t_pure tenv' e intt)) in
       consume_asn rules [] h ghostenv env p true real_unit $. fun _ h _ _ _ ->
       let lblenv =
         List.map
@@ -1455,7 +1456,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let old_xs_tenv = List.map (fun x -> ("old_" ^ x, List.assoc x tenv)) xs in
       let tenv'' = old_xs_tenv @ tenv' in
       let (post, tenv''') = check_asn (pn,ilist) tparams tenv'' post in
-      let dec = match dec with None -> None | Some e -> Some (check_expr_t (pn,ilist) tparams tenv' e intt) in
+      let dec = match dec with None -> None | Some e -> Some (check_expr_t_pure tenv' e intt) in
       let ghostenv' = ghostenv in
       let env' = env in
       consume_asn rules [] h ghostenv env pre true real_unit $. fun _ h ghostenv env _ ->
