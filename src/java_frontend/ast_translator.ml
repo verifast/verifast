@@ -632,7 +632,7 @@ and add_casts_in_method_call arg_types exprs l =
       let t = translate_type t in
       let e' =
         let l_e = expr_loc e in
-        CastExpr(l_e, false, t, e)
+        CastExpr(l_e, t, e)
       in
       e'::(iter(exprs, arg_types))
     | ([], []) -> []
@@ -858,7 +858,7 @@ and translate_expression expr =
       let l' = translate_location l in
       let typ' = translate_type typ in
       let expr' = translate_expression expr in
-      VF.CastExpr(l', false, typ', expr')
+      VF.CastExpr(l', typ', expr')
   | GEN.Literal(l, typ, value) ->
       translate_literal l typ value 
   | GEN.ArrayAccess(l, expr1, expr2) ->

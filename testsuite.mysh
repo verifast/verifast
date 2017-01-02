@@ -173,6 +173,7 @@ cd examples
     verifast_both threading.o atomics.o queue.c queue_client.c
   cd ..
   verifast_both -c tokenizer_test.c
+  verifast_both -c truncating.c
   verifast_both -disable_overflow_check stringBuffers.c tokenizer.c ghostlist.o rcl.c
   verifast_both reallittest.c
   verifast_both -disable_overflow_check ref_points_to_syntax.c

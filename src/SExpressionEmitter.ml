@@ -340,7 +340,10 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
     | PredNameExpr (_, name) ->
        List [ Symbol "expr-pred-name"
             ; Symbol name ]
-    | CastExpr (_, trunc, texpr, expr) ->
+    | TruncatingExpr (_, expr) ->
+      build_list [ Symbol "expr-truncating" ]
+                 [ "expr", sexpr_of_expr expr ]
+    | CastExpr (_, texpr, expr) ->
       build_list [ Symbol "expr-cast" ]
                  [ "typ", sexpr_of_type_expr texpr 
                  ; "expr", sexpr_of_expr expr ]

@@ -699,6 +699,19 @@ and
   parse_type = parser
   [< t0 = parse_primary_type; t = parse_type_suffix t0 >] -> t
 and
+  parse_integer_size_specifier = parser
+  [< '(_, Kwd "char") >] -> 1
+| [< '(_, Kwd "short") >] -> 2
+| [< '(_, Kwd "long");
+     n = begin parser
+       [< '(_, Kwd "long") >] -> 8
+     | [< >] -> 4
+     end >] -> n
+| [< >] -> 4
+and
+  parse_integer_type_rest = parser
+  [< n = parse_integer_size_specifier; _ = opt (parser [< '(_, Kwd "int") >] -> ()) >] -> n
+and
   parse_primary_type = parser
   [< '(l, Kwd "volatile"); t0 = parse_primary_type >] -> t0
 | [< '(l, Kwd "const"); t0 = parse_primary_type >] -> t0
@@ -717,15 +730,8 @@ and
      | [< >] -> ManifestTypeExpr (l, match !language with CLang -> intType | Java -> Int (Signed, 8))
      end
    >] -> t
-| [< '(l, Kwd "signed"); t0 = parse_primary_type >] ->
-  (match t0 with
-     (ManifestTypeExpr (_, Int (Signed, _))) -> t0
-   | _ -> raise (ParseException (l, "This type cannot be signed.")))
-| [< '(l, Kwd "unsigned"); t0 = opt parse_primary_type >] ->
-  (match t0 with
-   | Some (ManifestTypeExpr (l, Int (Signed, n))) -> ManifestTypeExpr (l, Int (Unsigned, n))
-   | None -> ManifestTypeExpr (l, Int (Unsigned, int_size))
-   | _ -> raise (ParseException (l, "This type cannot be unsigned.")))
+| [< '(l, Kwd "signed"); n = parse_integer_type_rest >] -> ManifestTypeExpr (l, Int (Signed, n))
+| [< '(l, Kwd "unsigned"); n = parse_integer_type_rest >] -> ManifestTypeExpr (l, Int (Unsigned, n))
 | [< '(l, Kwd "uintptr_t") >] -> ManifestTypeExpr (l, Int (Unsigned, 4))
 | [< '(l, Kwd "real") >] -> ManifestTypeExpr (l, RealType)
 | [< '(l, Kwd "bool") >] -> ManifestTypeExpr (l, Bool)
@@ -1190,7 +1196,12 @@ and
   [< e0 = parse_expr_rel; e = parse_bitand_expr_rest e0 >] -> e
 and
   parse_expr_rel = parser
-  [< e0 = parse_shift; e = parse_expr_rel_rest e0 >] -> e
+  [< e0 = parse_truncating_expr; e = parse_expr_rel_rest e0 >] -> e
+and
+  parse_truncating_expr = parser
+  [< '(l, Kwd "truncating"); e = parse_expr_suffix >] -> TruncatingExpr (l, e)
+| [< e = peek_in_ghost_range (parser [< '(l, Kwd "truncating"); '(_, Kwd "@*/"); e = parse_expr_suffix >] -> TruncatingExpr (l, e)) >] -> e
+| [< e = parse_shift >] -> e
 and
   parse_shift = parser
   [< e0 = parse_expr_arith; e = parse_shift_rest e0 >] -> e
@@ -1221,7 +1232,7 @@ and
 | [< '(l, CharToken c) >] ->
   if Char.code c > 127 then raise (ParseException (l, "Non-ASCII character literals are not yet supported"));
   let tp = match !language with CLang -> Int (Signed, 1) | Java -> Int (Unsigned, 2) in
-  CastExpr (l, false, ManifestTypeExpr (l, tp), IntLit (l, big_int_of_int (Char.code c), true, false, NoLSuffix))
+  CastExpr (l, ManifestTypeExpr (l, tp), IntLit (l, big_int_of_int (Char.code c), true, false, NoLSuffix))
 | [< '(l, Kwd "null") >] -> Null l
 | [< '(l, Kwd "currentThread") >] -> Var (l, "currentThread")
 | [< '(l, Kwd "varargs") >] -> Var (l, "varargs")
@@ -1278,16 +1289,14 @@ and
        InitializerList(l, es)
      else
        StringLit (l, String.concat "" (s::ss))
-| [< '(l, Kwd "truncating"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")"); e = parse_expr_suffix >] -> CastExpr (l, true, t, e)
-| [< e = peek_in_ghost_range (parser [< '(l, Kwd "truncating"); '(_, Kwd "@*/"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")"); e = parse_expr_suffix >] -> CastExpr (l, true, t, e)) >] -> e
 | [< '(l, Kwd "(");
      e =
-       let parse_cast = parser [< te = parse_type; '(_, Kwd ")"); e = parse_expr_suffix >] -> CastExpr (l, false, te, e) in
+       let parse_cast = parser [< te = parse_type; '(_, Kwd ")"); e = parse_expr_suffix >] -> CastExpr (l, te, e) in
        let parse_expr_rest e0 =
          parser
            [< '(l', Ident y); e = parse_expr_suffix_rest (Var (l', y)) >] ->
            begin match e0 with
-             Var (lt, x) -> CastExpr (l, false, IdentTypeExpr (lt, None, x), e)
+             Var (lt, x) -> CastExpr (l, IdentTypeExpr (lt, None, x), e)
            | _ -> raise (ParseException (l, "Type expression of cast expression must be identifier: "))
            end
          | [<>] -> e0
@@ -1383,18 +1392,18 @@ and
 | [< >] -> e0
 and
   parse_expr_rel_rest e0 = parser
-  [< '(l, Kwd "=="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Eq, [e0; e1])) >] -> e
-| [< '(l, Kwd "!="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Neq, [e0; e1])) >] -> e
-| [< '(l, Kwd "<="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Le, [e0; e1])) >] -> e
-| [< '(l, Kwd ">"); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Gt, [e0; e1])) >] -> e
-| [< '(l, Kwd ">="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Ge, [e0; e1])) >] -> e
+  [< '(l, Kwd "=="); e1 = parse_truncating_expr; e = parse_expr_rel_rest (Operation (l, Eq, [e0; e1])) >] -> e
+| [< '(l, Kwd "!="); e1 = parse_truncating_expr; e = parse_expr_rel_rest (Operation (l, Neq, [e0; e1])) >] -> e
+| [< '(l, Kwd "<="); e1 = parse_truncating_expr; e = parse_expr_rel_rest (Operation (l, Le, [e0; e1])) >] -> e
+| [< '(l, Kwd ">"); e1 = parse_truncating_expr; e = parse_expr_rel_rest (Operation (l, Gt, [e0; e1])) >] -> e
+| [< '(l, Kwd ">="); e1 = parse_truncating_expr; e = parse_expr_rel_rest (Operation (l, Ge, [e0; e1])) >] -> e
 | [< '(l, Kwd "instanceof"); tp = parse_expr; e = parse_expr_rel_rest (InstanceOfExpr (l, e0, type_expr_of_expr tp)) >] -> e
 | [< e = parse_expr_lt_rest e0 parse_expr_rel_rest >] -> e
 and
   apply_type_args e targs args =
   match e with
     Var (lx, x) -> CallExpr (lx, x, targs, [], args, Static)
-  | CastExpr (lc, trunc, te, e) -> CastExpr (lc, trunc, te, apply_type_args e targs args)
+  | CastExpr (lc, te, e) -> CastExpr (lc, te, apply_type_args e targs args)
   | Operation (l, Not, [e]) -> Operation (l, Not, [apply_type_args e targs args])
   | Operation (l, BitNot, [e]) -> Operation (l, BitNot, [apply_type_args e targs args])
   | Deref (l, e, ts) -> Deref (l, apply_type_args e targs args, ts)
@@ -1405,7 +1414,7 @@ and
   parse_expr_lt_rest e0 cont = parser
   [< '(l, Kwd "<");
      e = parser
-       [< e1 = parse_expr_arith; e1 = parse_expr_lt_rest e1 (let rec iter e0 = parse_expr_lt_rest e0 iter in iter);
+       [< e1 = parse_truncating_expr; e1 = parse_expr_lt_rest e1 (let rec iter e0 = parse_expr_lt_rest e0 iter in iter);
           e = parser
             [< '(_, Kwd ">"); (* Type argument *)
                args = (parser [< args = parse_patlist >] -> args | [< >] -> []);
@@ -1437,7 +1446,7 @@ and
 | [< >] -> e0
 and
   parse_conj_expr_rest e0 = parser
-  [< '(l, Kwd "&&"); e1 = parse_expr_rel; e = parse_conj_expr_rest (Operation (l, And, [e0; e1])) >] -> e
+  [< '(l, Kwd "&&"); e1 = parse_bitor_expr; e = parse_conj_expr_rest (Operation (l, And, [e0; e1])) >] -> e
 | [< >] -> e0
 and
   parse_disj_expr_rest e0 = parser

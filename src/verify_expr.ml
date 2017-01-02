@@ -28,6 +28,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   and expr_assigned_variables e =
     match e with
       Operation (l, op, es) | WOperation (l, op, es, _) -> flatmap expr_assigned_variables es
+    | TruncatingExpr (l, e) -> expr_assigned_variables e
     | Read (l, e, f) -> expr_assigned_variables e
     | WRead (l, e, fparent, fname, frange, fstatic, fvalue, fghost) -> expr_assigned_variables e
     | ReadArray (l, ea, ei) -> expr_assigned_variables ea @ expr_assigned_variables ei
@@ -42,7 +43,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | IfExpr (l, e1, e2, e3) -> expr_assigned_variables e1 @ expr_assigned_variables e2 @ expr_assigned_variables e3
     | SwitchExpr (l, e, cs, cdef_opt, _) ->
       expr_assigned_variables e @ flatmap (fun (SwitchExprClause (l, ctor, xs, e)) -> expr_assigned_variables e) cs @ (match cdef_opt with None -> [] | Some (l, e) -> expr_assigned_variables e)
-    | CastExpr (l, trunc, te, e) -> expr_assigned_variables e
+    | CastExpr (l, te, e) -> expr_assigned_variables e
     | Upcast (e, fromType, toType) -> expr_assigned_variables e
     | TypedExpr (e, t) -> expr_assigned_variables e
     | WidenedParameterArgument e -> expr_assigned_variables e
@@ -988,6 +989,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match e with
       True _ | False _ | Null _ | Var _ | WVar _ | IntLit _ | WIntLit _ | RealLit _ | StringLit(_, _) | ClassLit(_) -> ()
     | Operation(_, _, es) | WOperation (_, _, es, _) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
+    | TruncatingExpr (_, e) -> expr_mark_addr_taken e locals
     | AddressOf(_, (Var (_, x) | WVar (_, x, _))) -> mark_if_local locals x
     | Read(_, e, _) -> expr_mark_addr_taken e locals
     | ArrayLengthExpr(_, e) -> expr_mark_addr_taken e locals
@@ -1008,7 +1010,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | IfExpr(_, e1, e2, e3) -> List.iter (fun e -> expr_mark_addr_taken e locals) [e1;e2;e3]
     | SwitchExpr(_, e, cls, dcl, _) -> List.iter (fun (SwitchExprClause(_, _, _, e)) -> expr_mark_addr_taken e locals) cls; (match dcl with None -> () | Some((_, e)) -> expr_mark_addr_taken e locals)
     | PredNameExpr _ -> ()
-    | CastExpr(_, _, _, e) ->  expr_mark_addr_taken e locals
+    | CastExpr(_, _, e) ->  expr_mark_addr_taken e locals
     | Upcast (e, _, _) -> expr_mark_addr_taken e locals
     | TypedExpr (e, t) -> expr_mark_addr_taken e locals
     | WidenedParameterArgument e -> expr_mark_addr_taken e locals
@@ -1124,6 +1126,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match e with
       True _ | False _ | Null _ | Var _ | WVar _ | IntLit _ | WIntLit _ | RealLit _ | StringLit(_, _) | ClassLit(_) -> []
     | Operation(_, _, es) | WOperation (_, _, es, _) -> List.flatten (List.map (fun e -> expr_address_taken e) es)
+    | TruncatingExpr (_, e) -> expr_address_taken e
     | Read(_, e, _) -> expr_address_taken e
     | ArrayLengthExpr(_, e) -> expr_address_taken e
     | WRead(_, e, _, _, _, _, _, _) -> expr_address_taken e
@@ -1143,7 +1146,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | IfExpr(_, e1, e2, e3) -> (expr_address_taken e1) @ (expr_address_taken e2) @ (expr_address_taken e3)
     | SwitchExpr(_, e, cls, dcl, _) -> List.flatten (List.map (fun (SwitchExprClause(_, _, _, e)) -> expr_address_taken e) cls) @ (match dcl with None -> [] | Some((_, e)) -> expr_address_taken e)
     | PredNameExpr _ -> []
-    | CastExpr(_, _, _, e) -> expr_address_taken e
+    | CastExpr(_, _, e) -> expr_address_taken e
     | Upcast (e, fromType, toType) -> expr_address_taken e
     | TypedExpr (e, t) -> expr_address_taken e
     | WidenedParameterArgument e -> expr_address_taken e
@@ -1684,10 +1687,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | False _ -> true
     | WVar (_, x, scope) -> scope = LocalVar
     | WOperation(_, _, es, _) -> List.for_all is_safe_expr es
+    | TruncatingExpr (_, e) -> is_safe_expr e
     | IfExpr(_, e1, e2, e3) -> List.for_all is_safe_expr [e1; e2; e3]
     | SizeofExpr(_, _) -> true
     | AddressOf(_, e) -> is_safe_expr e
-    | CastExpr (_, _, _, e) -> is_safe_expr e
+    | CastExpr (_, _, e) -> is_safe_expr e
     | Upcast (e, _, _) -> is_safe_expr e
     | _ -> false
   
@@ -1861,7 +1865,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     match e with
     | Upcast (w, _, _) -> eval_h_core readonly h env w cont
-    | CastExpr (lc, false, ManifestTypeExpr (_, tp), (WFunCall (l, "malloc", [], [SizeofExpr (ls, StructTypeExpr (lt, tn))]) as e)) ->
+    | CastExpr (lc, ManifestTypeExpr (_, tp), (WFunCall (l, "malloc", [], [SizeofExpr (ls, StructTypeExpr (lt, tn))]) as e)) ->
       expect_type lc (Some pure) (PtrType (StructType tn)) tp;
       verify_expr readonly h env xo e cont
     | WFunCall (l, "malloc", [], [Operation (lmul, Mul, ([e; SizeofExpr (ls, te)] | [SizeofExpr (ls, te); e]))]) ->

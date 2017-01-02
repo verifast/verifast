@@ -329,7 +329,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let bitwise_and_symbol = mk_symbol "bitand" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp
   let bitwise_not_symbol = mk_symbol "bitnot" [ctxt#type_int] ctxt#type_int Uninterp
   let arraylength_symbol = mk_symbol "arraylength" [ctxt#type_int] ctxt#type_int Uninterp
-  let shiftleft_int32_symbol = mk_symbol "shiftleft_int32" [ctxt#type_int;ctxt#type_int] ctxt#type_int Uninterp (* shift left and truncate to 32-bit signed integer; Java's "<<" operator on two ints *)
+  let shiftleft_symbol = mk_symbol "shiftleft" [ctxt#type_int;ctxt#type_int] ctxt#type_int Uninterp (* shift left on an integer's infinite binary representation. Not truncated. May overflow. *)
   let shiftright_symbol = mk_symbol "shiftright" [ctxt#type_int;ctxt#type_int] ctxt#type_int Uninterp (* shift right with sign extension; Java's ">>" operator. For nonnegative n, "x >> n" is equivalent to floor(x / 2^n). *)
   let truncate_int8_symbol = mk_symbol "truncate_int8" [ctxt#type_int] ctxt#type_int Uninterp
   let truncate_uint8_symbol = mk_symbol "truncate_uint8" [ctxt#type_int] ctxt#type_int Uninterp
@@ -339,6 +339,17 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let truncate_uint32_symbol = mk_symbol "truncate_uint32" [ctxt#type_int] ctxt#type_int Uninterp
   let truncate_int64_symbol = mk_symbol "truncate_int64" [ctxt#type_int] ctxt#type_int Uninterp
   let truncate_uint64_symbol = mk_symbol "truncate_uint64" [ctxt#type_int] ctxt#type_int Uninterp
+
+  let truncate_symbol t =
+    match t with
+      Int (Signed, 1) -> truncate_int8_symbol
+    | Int (Signed, 2) -> truncate_int16_symbol
+    | Int (Signed, 4) -> truncate_int32_symbol
+    | Int (Signed, 8) -> truncate_int64_symbol
+    | Int (Unsigned, 1) -> truncate_uint8_symbol
+    | Int (Unsigned, 2) -> truncate_uint16_symbol
+    | Int (Unsigned, 4) -> truncate_uint32_symbol
+    | Int (Unsigned, 8) -> truncate_uint64_symbol
   
   let () = ignore $. ctxt#assume (ctxt#mk_eq (ctxt#mk_unboxed_bool (ctxt#mk_boxed_int (ctxt#mk_intlit 0))) ctxt#mk_false) (* This allows us to use 0 as a default value for all types; see the treatment of array creation. *)
 
@@ -2882,6 +2893,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           (PredNameExpr (l, g), PredType (tparams, ts, inputParamCount, inductiveness), None)
         | None -> static_error l "No such predicate." None
       end
+    | TruncatingExpr (l, e) ->
+      let (w, t, _) = check e in
+      begin match t with
+        Int (_, _) -> ()
+      | _ -> static_error l "Keyword 'truncating' applies only to expressions of integer type" None
+      end;
+      (TruncatingExpr (l, w), t, None)
     | Operation (l, (Eq | Neq as operator), [e1; e2]) -> 
       let (w1, w2, t) = promote_numeric e1 e2 in
       (operation_expr funcmap l t operator w1 w2, boolt, None)
@@ -2997,10 +3015,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | StringLit (l, s) -> (match file_type path with
         Java-> (e, ObjType "java.lang.String", None)
       | _ -> (e, (PtrType (Int (Signed, 1))), None))
-    | CastExpr (l, truncating, te, e) ->
+    | CastExpr (l, te, e) ->
       let t = check_pure_type (pn,ilist) tparams te in
       let w = checkt_cast e t in
-      (CastExpr (l, truncating, ManifestTypeExpr (type_expr_loc te, t), w), t, None)
+      (CastExpr (l, ManifestTypeExpr (type_expr_loc te, t), w), t, None)
     | TypedExpr (w, t) ->
       (w, t, None)
     | Read (l, e, f) ->
@@ -3028,7 +3046,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let t = unfold_inferred_type t in
       begin match (t, es) with
         (PureFuncType (_, _), _) -> check_pure_fun_value_call l w t es
-      | (ClassOrInterfaceName(cn), [e2]) -> check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation (CastExpr(l, false, IdentTypeExpr(expr_loc e, None, cn), e2))
+      | (ClassOrInterfaceName(cn), [e2]) -> check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation (CastExpr(l, IdentTypeExpr(expr_loc e, None, cn), e2))
       | _ -> static_error l "The callee of a call of this form must be a pure function value." None
       end 
     | CallExpr (l, g, targes, [], pats, fb) ->
@@ -3292,7 +3310,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (w1, t1, _) = check e1 in
       let x = next_temp_var_name () in
       let (w2, t2, _) = check_with_extra_bindings [(x, t1)] (Operation (l, op, [Var (l, x); e2])) in
-      let w2', _, _ = check (CastExpr (l, false, ManifestTypeExpr (l, t1), TypedExpr (w2, t2))) in
+      let w2', _, _ = check (CastExpr (l, ManifestTypeExpr (l, t1), TypedExpr (w2, t2))) in
       (WAssignOpExpr (l, w1, x, w2', postOp), t1, None)
     | InitializerList (l, es) ->
       let rec to_list_expr es =
@@ -3622,10 +3640,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter e =
       match e with
         True _ | False _ | Null _ | WVar _ | WIntLit _ | IntLit _ | RealLit _ | StringLit _ | ClassLit _ -> ()
+      | TruncatingExpr (l, e) -> iter e
       | WOperation (l, _, es, _) -> List.iter iter es
       | NewArray (l, t, e) -> iter e
       | NewArrayWithInitializer (l, t, es) -> List.iter iter es
-      | CastExpr (l, _, _, e) -> iter e
+      | CastExpr (l, _, e) -> iter e
       | Upcast (e, _, _) -> iter e
       | TypedExpr (e, _) -> iter e
       | WRead (_, e, _, _, _, _, _, _) -> iter e
@@ -3743,7 +3762,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | WIntLit (l, n) -> IntConst n
       | StringLit (l, s) -> StringConst s
       | WRead (l, _, fparent, fname, _, fstatic, _, _) when fstatic -> eval_field callers (fparent, fname)
-      | CastExpr (l, truncating, ManifestTypeExpr (_, t), e) ->
+      | CastExpr (l, ManifestTypeExpr (_, t), e) ->
         let v = ev e in
         begin match (t, v) with
           (Int (Signed, 1), IntConst n) ->
@@ -5082,8 +5101,8 @@ let check_if_list_is_defined () =
       assert_term l (ctxt#mk_le t max) "Potential arithmetic overflow." (Some "potentialarithmeticoverflow")
     end
   
-  let eval_op l op v1 v2 t ass_term =
-    let check_overflow v =
+  let eval_op l truncating op e1 v1 e2 v2 t ass_term =
+    let check_overflow0 v =
       begin match ass_term with
         Some assert_term ->
         let min, max = limits_of_type (woperation_type_result_type op t) in
@@ -5091,6 +5110,12 @@ let check_if_list_is_defined () =
       | _ -> ()
       end;
       v
+    in
+    let check_overflow v =
+      if truncating then
+        ctxt#mk_app (truncate_symbol (woperation_type_result_type op t)) [v]
+      else
+        check_overflow0 v
     in
     begin match op with
       And -> ctxt#mk_and v1 v2
@@ -5157,7 +5182,14 @@ let check_if_list_is_defined () =
         (ctxt#mk_div v1 v2)
       end
     | Mod -> ctxt#mk_mod v1 v2
-    | ShiftLeft when t = Int (Signed, 4) -> ctxt#mk_app shiftleft_int32_symbol [v1;v2]
+    | ShiftLeft ->
+      let v = ctxt#mk_app shiftleft_symbol [v1;v2] in
+      begin match e2 with
+        WIntLit (_, n) when le_big_int zero_big_int n && le_big_int n (big_int_of_int 64) ->
+        ignore (ctxt#assume (ctxt#mk_eq v (ctxt#mk_mul v1 (ctxt#mk_intlit_of_string (string_of_big_int (power_int_positive_big_int 2 n))))))
+      | _ -> ()
+      end;
+      check_overflow v
     | _ -> static_error l "This operator is not supported in this position." None
     end
   
@@ -5207,44 +5239,27 @@ let check_if_list_is_defined () =
         | PureFuncName -> let (lg, tparams, t, tps, (fsymb, vsymb)) = List.assoc x purefuncmap in vsymb
       end
     | PredNameExpr (l, g) -> let Some (_, _, _, _, symb, _, _) = try_assoc g predfammap in cont state symb
-    | CastExpr (l, truncating, ManifestTypeExpr (_, t), e) ->
+    | TruncatingExpr (l, CastExpr (lc, ManifestTypeExpr (_, t), e)) ->
       begin
-        match (e, t, truncating) with
-          (WIntLit (_, n), PtrType _, _) ->
+        match (e, t) with
+        | (e, (Int (_, _) as tp)) ->
+          ev state e $. fun state t ->
+          cont state (ctxt#mk_app (truncate_symbol tp) [t])
+        | _ ->
+          static_error l "Unsupported truncating cast" None
+      end
+    | CastExpr (l, ManifestTypeExpr (_, t), e) ->
+      begin
+        match (e, t) with
+          (WIntLit (_, n), PtrType _) ->
           if ass_term <> None && not (le_big_int zero_big_int n &&
 le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out of range." None;
           cont state (ctxt#mk_intlit_of_string (string_of_big_int n))
-        | (e, (Int (_, _) as tp), false) ->
+        | (e, (Int (_, _) as tp)) ->
           ev state e $. fun state t ->
           let min, max = limits_of_type tp in
           cont state (check_overflow l min t max)
-        | (e, Int (Signed, 1), true) ->
-          ev state e $. fun state t ->
-          cont state (ctxt#mk_app truncate_int8_symbol [t])
-        | (e, Int (Unsigned, 1), true) ->
-          ev state e $. fun state t ->
-          cont state (ctxt#mk_app truncate_uint8_symbol [t])
-        | (e, Int (Signed, 2), true) ->
-          ev state e $. fun state t ->
-          cont state (ctxt#mk_app truncate_int16_symbol [t])
-        | (e, Int (Unsigned, 2), true) ->
-          ev state e $. fun state t ->
-          cont state (ctxt#mk_app truncate_uint16_symbol [t])
-        | (e, Int (Signed, 4), true) ->
-          ev state e $. fun state t ->
-          cont state (ctxt#mk_app truncate_int32_symbol [t])
-        | (e, Int (Unsigned, 4), true) ->
-          ev state e $. fun state t ->
-          cont state (ctxt#mk_app truncate_uint32_symbol [t])
-        | (e, Int (Signed, 8), true) ->
-          ev state e $. fun state t ->
-          cont state (ctxt#mk_app truncate_int64_symbol [t])
-        | (e, Int (Unsigned, 8), true) ->
-          ev state e $. fun state t ->
-          cont state (ctxt#mk_app truncate_uint64_symbol [t])
-        | (e_, _, true) ->
-          static_error l "Unsupported truncating cast" None
-        | (_, (ObjType _|ArrayType _), _) when ass_term = None -> static_error l "Class casts are not allowed in annotations." None
+        | (_, (ObjType _|ArrayType _)) when ass_term = None -> static_error l "Class casts are not allowed in annotations." None
         | _ -> ev state e cont (* No other cast allowed by the type checker changes the value *)
       end
     | Upcast (e, fromType, toType) -> ev state e cont
@@ -5369,8 +5384,10 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       | _ -> ()
       end;
       cont state v
+    | TruncatingExpr (l, WOperation (lo, op, ([e1; e2] as es), t)) ->
+      evs state es $. fun state [v1; v2] -> cont state (eval_op l true op e1 v1 e2 v2 t ass_term)
     | WOperation (l, op, ([e1; e2] as es), t) ->
-      evs state es $. fun state [v1; v2] -> cont state (eval_op l op v1 v2 t ass_term) 
+      evs state es $. fun state [v1; v2] -> cont state (eval_op l false op e1 v1 e2 v2 t ass_term)
     | ArrayLengthExpr (l, e) ->
       ev state e $. fun state t ->
       begin match ass_term with
