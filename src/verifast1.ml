@@ -3149,7 +3149,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | ReadArray(l, arr, index) ->
       let (w1, arr_t, _) = check arr in
-      let w2 = checkt index intt in
+      let (w2, index_t, _) = check index in
+      begin match index_t with
+        Int (_, _) -> ()
+      | _ -> static_error l "Subscript must be of integer type" None
+      end;
       begin match unfold_inferred_type arr_t with
         ArrayType tp -> (WReadArray (l, w1, tp, w2), tp, None)
       | StaticArrayType (tp, _) -> (WReadArray (l, w1, tp, w2), tp, None)
