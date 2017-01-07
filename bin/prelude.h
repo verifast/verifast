@@ -238,11 +238,19 @@ predicate llongs(long long *p, int count; list<long long> ls) =
     :
         llong_integer(p, ?l) &*& llongs(p + 1, count - 1, ?ls0) &*& ls == cons(l, ls0);
 
+lemma_auto void llongs_inv();
+    requires [?f]llongs(?p, ?count, ?vs);
+    ensures [f]llongs(p, count, vs) &*& count == length(vs);
+
 predicate ullongs(unsigned long long *p, int count; list<unsigned long long> ls) = 
     count == 0 ?
         ls == nil
     :
         u_llong_integer(p, ?l) &*& ullongs(p + 1, count - 1, ?ls0) &*& ls == cons(l, ls0);
+
+lemma_auto void ullongs_inv();
+    requires [?f]ullongs(?p, ?count, ?vs);
+    ensures [f]ullongs(p, count, vs) &*& count == length(vs);
 
 predicate shorts(short *p, short count; list<short> vs) =
     count == 0 ?

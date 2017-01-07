@@ -63,6 +63,8 @@
 .provides ./prelude.h#uchars_inv
 .provides ./prelude.h#ints_inv
 .provides ./prelude.h#uints_inv
+.provides ./prelude.h#llongs_inv
+.provides ./prelude.h#ullongs_inv
 .provides ./prelude.h#shorts_inv
 .provides ./prelude.h#ushorts_inv
 .provides ./prelude.h#pointers_inv
