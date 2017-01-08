@@ -197,6 +197,38 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     a#set_label "Show _right margin ruler"; ignore $. a#connect#toggled (fun () -> showRightMargin a#get_active);
     a
   in
+  let launch_browser url =
+    match platform with
+      MacOS -> ignore $. Sys.command ("open '" ^ url ^ "'")
+    | Linux -> ignore $. Sys.command ("xdg-open '" ^ url ^ "'")
+    | Windows ->
+      (* The below command asynchronously launches a "cmd" process that launches the help topic.
+         Launching the help topic synchronously seems to cause vfide to hang for between 6 and 30 seconds.
+         My hypothesis is that "cmd /C start xyz.html" performs a DDE broadcast to all windows on the desktop,
+         which apparently blocks until a timeout happens if some window is not responding. If the
+         Help topic is launched synchronously inside the GUI event handler thread, the vfide window is not
+         responsive until the Help topic is launched. Ergo the deadlock.
+         This seems to be confirmed here <http://wiki.tcl.tk/996> and here <http://blogs.msdn.com/b/oldnewthing/archive/2007/02/26/1763683.aspx>.
+      *)
+      ignore $. Unix.create_process "cmd" [| "/C"; "start"; "Dummy Title"; url |] Unix.stdin Unix.stdout Unix.stderr
+  in
+  let showBannerDialog () =
+    let dialog = GWindow.dialog ~title:"About VeriFast" ~parent:root () in
+    dialog#action_area#set_border_width 0;
+    let vbox = dialog#vbox in
+    ignore $. GMisc.label ~xpad:2 ~ypad:2 ~line_wrap:true ~text:(Verifast.banner ()) ~packing:vbox#pack ();
+    ignore $. (GButton.button ~stock:`OK ~packing:dialog#action_area#add ())#connect#clicked (fun () ->
+      dialog#response `DELETE_EVENT
+    );
+    ignore $. (GButton.button ~label:"Launch Homepage" ~packing:dialog#action_area#add ())#connect#clicked (fun () ->
+      launch_browser "https://github.com/verifast/verifast/"
+    );
+    ignore $. (GButton.button ~label:"Show Contributors" ~packing:dialog#action_area#add ())#connect#clicked (fun () ->
+      launch_browser "https://github.com/verifast/verifast/graphs/contributors"
+    );
+    ignore $. dialog#run();
+    dialog#destroy()
+  in
   let _ =
     let a = GAction.add_action in
     GAction.add_actions actionGroup [
@@ -233,7 +265,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       a "BottomWindow" ~label:"Window(_Bottom)";
       a "Stub";
       a "Help" ~label:"_Help";
-      a "About" ~stock:`ABOUT ~callback:(fun _ -> GToolbox.message_box "VeriFast IDE" (Verifast.banner ()))
+      a "About" ~stock:`ABOUT ~callback:(fun _ -> showBannerDialog ())
     ]
   in
   let ui = GAction.ui_manager() in
@@ -326,21 +358,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   messageEntry#coerce#misc#modify_font_by_name !scaledTraceFont;
   let helpButton = GButton.button ~show:false ~label:" ? " ~packing:(messageHBox#pack) () in
   let show_help url =
-    if Sys.os_type = "Unix" then
-     if sys "uname" = "Darwin" then
-        ignore (Sys.command ("open " ^ "'" ^ !bindir ^ "/../help/" ^ url ^ ".html" ^ "'"))
-      else
-        ignore (Sys.command ("xdg-open " ^ "'" ^ !bindir ^ "/../help/" ^ url ^ ".html" ^ "'"))
-    else
-      (* The below command asynchronously launches a "cmd" process that launches the help topic.
-         Launching the help topic synchronously seems to cause vfide to hang for between 6 and 30 seconds.
-         My hypothesis is that "cmd /C start xyz.html" performs a DDE broadcast to all windows on the desktop,
-         which apparently blocks until a timeout happens if some window is not responding. If the
-         Help topic is launched synchronously inside the GUI event handler thread, the vfide window is not
-         responsive until the Help topic is launched. Ergo the deadlock.
-         This seems to be confirmed here <http://wiki.tcl.tk/996> and here <http://blogs.msdn.com/b/oldnewthing/archive/2007/02/26/1763683.aspx>.
-      *)
-      ignore (Unix.create_process "cmd" [| "/C"; "start"; "Dummy Title"; !bindir ^ "\\..\\help\\" ^ url ^ ".html" |] Unix.stdin Unix.stdout Unix.stderr)
+    launch_browser (!bindir ^ "/../help/" ^ url ^ ".html")
   in
   ignore (helpButton#connect#clicked (fun () -> (match(!url) with None -> () | Some(url) -> show_help url);));
   toolbar#insert messageToolItem;
