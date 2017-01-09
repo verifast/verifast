@@ -367,67 +367,35 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let int_zero_term = ctxt#mk_intlit 0
   let int_unit_term = ctxt#mk_intlit 1
 
-  (* unsigned long long int *)
-  let min_ullong_big_int = big_int_of_string "0"
-  let min_ullong_term = ctxt#mk_intlit_of_string "0"
-  let max_ullong_big_int = big_int_of_string "18446744073709551615"
-  let max_ullong_term = ctxt#mk_intlit_of_string "18446744073709551615"
+  let term_of_big_int n = ctxt#mk_intlit_of_string (string_of_big_int n)
 
-  (* signed long long int *)
-  let min_llong_big_int = big_int_of_string "-9223372036854775808"
-  let min_llong_term = ctxt#mk_intlit_of_string "-9223372036854775808"
-  let max_llong_big_int = big_int_of_string "9223372036854775807"
-  let max_llong_term = ctxt#mk_intlit_of_string "9223372036854775807"
+  type integer_limits = {max_unsigned_big_int: big_int; min_signed_big_int: big_int; max_signed_big_int: big_int; max_unsigned_term: termnode; min_signed_term: termnode; max_signed_term: termnode}
 
-  (* unsigned int & pointer types *)
-  let min_uint_big_int = big_int_of_string "0"
-  let min_uint_term = ctxt#mk_intlit_of_string "0"
-  let max_uint_big_int = big_int_of_string "4294967295"
-  let max_uint_term = ctxt#mk_intlit_of_string "4294967295"
-  let min_ptr_big_int = big_int_of_string "0"
-  let max_ptr_big_int = big_int_of_string "4294967295"
-  let max_ptr_term = ctxt#mk_intlit_of_string "4294967295"
+  let max_rank = 4 (* (u)int128 *)
 
-  (* signed int *)
-  let min_int_big_int = big_int_of_string "-2147483648"
-  let min_int_term = ctxt#mk_intlit_of_string "-2147483648"
-  let max_int_big_int = big_int_of_string "2147483647"
-  let max_int_term = ctxt#mk_intlit_of_string "2147483647"
+  let integer_limits_table =
+    Array.init (max_rank + 1) begin fun k ->
+      let max_unsigned_big_int = pred_big_int (shift_left_big_int unit_big_int (8 * (1 lsl k))) in
+      let max_signed_big_int = shift_right_big_int max_unsigned_big_int 1 in
+      let min_signed_big_int = pred_big_int (minus_big_int max_signed_big_int) in
+      let max_unsigned_term = term_of_big_int max_unsigned_big_int in
+      let max_signed_term = term_of_big_int max_signed_big_int in
+      let min_signed_term = term_of_big_int min_signed_big_int in
+      {max_unsigned_big_int; max_signed_big_int; min_signed_big_int; max_unsigned_term; max_signed_term; min_signed_term}
+    end
 
-  (* unsigned short *)
-  let min_ushort_big_int = big_int_of_string "0"
-  let min_ushort_term = ctxt#mk_intlit_of_string "0"
-  let max_ushort_big_int = big_int_of_string "65535"
-  let max_ushort_term = ctxt#mk_intlit_of_string "65535"
-
-  (* signed short *)
-  let min_short_big_int = big_int_of_string "-32768"
-  let min_short_term = ctxt#mk_intlit_of_string "-32768"
-  let max_short_big_int = big_int_of_string "32767"
-  let max_short_term = ctxt#mk_intlit_of_string "32767"
-
-  (* unsigned char *)
-  let min_uchar_big_int = big_int_of_string "0"
-  let min_uchar_term = ctxt#mk_intlit_of_string "0"
-  let max_uchar_big_int = big_int_of_string "255"
-  let max_uchar_term = ctxt#mk_intlit_of_string "255"
-
-  (* signed char *)
-  let min_char_big_int = big_int_of_string "-128"
-  let min_char_term = ctxt#mk_intlit_of_string "-128"
-  let max_char_big_int = big_int_of_string "127"
-  let max_char_term = ctxt#mk_intlit_of_string "127"
+  let max_unsigned_big_int k = integer_limits_table.(k).max_unsigned_big_int
+  let min_signed_big_int k = integer_limits_table.(k).min_signed_big_int
+  let max_signed_big_int k = integer_limits_table.(k).max_signed_big_int
+  let max_unsigned_term k = integer_limits_table.(k).max_unsigned_term
+  let min_signed_term k = integer_limits_table.(k).min_signed_term
+  let max_signed_term k = integer_limits_table.(k).max_signed_term
 
   let limits_of_type t =
     match t with
-    | Int (Signed, 0) -> (min_char_term, max_char_term)
-    | Int (Unsigned, 0) -> (min_uchar_term, max_uchar_term)
-    | Int (Signed, 1) -> (min_short_term, max_short_term)
-    | Int (Unsigned, 1) -> (min_ushort_term, max_ushort_term)
-    | Int (Signed, 2) -> (min_int_term, max_int_term)
-    | Int (Unsigned, 2) | PtrType _ -> (int_zero_term, max_uint_term)
-    | Int (Signed, 3) -> (min_llong_term, max_llong_term)
-    | Int (Unsigned, 3) -> (min_ullong_term, max_ullong_term)
+      Int (Signed, k) -> let {min_signed_term; max_signed_term} = integer_limits_table.(k) in (min_signed_term, max_signed_term)
+    | Int (Unsigned, k) -> let {max_unsigned_term} = integer_limits_table.(k) in (int_zero_term, max_unsigned_term)
+    | PtrType _ -> let {max_unsigned_term} = integer_limits_table.(ptr_rank) in (int_zero_term, max_unsigned_term)
   
   let get_unique_var_symb x t = 
     ctxt#mk_app (mk_symbol x [] (typenode_of_type t) Uninterp) []
@@ -2970,38 +2938,44 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             NoLSuffix ->
             intt,
             if is_decimal then
-              if le_big_int min_int_big_int n && le_big_int n max_int_big_int then
+              if le_big_int (min_signed_big_int 2) n && le_big_int n (max_signed_big_int 2) then
                 n
               else
                 static_error l "Integer literal out of range" None
             else
-              if le_big_int n max_int_big_int then n else
-              if le_big_int max_uint_big_int n then static_error l "Integer literal too large" None else
-              sub_big_int n max_uint_big_int
+              if le_big_int n (max_signed_big_int 2) then n else
+              if lt_big_int (max_unsigned_big_int 2) n then static_error l "Integer literal too large" None else
+              sub_big_int n (succ_big_int (max_unsigned_big_int 2))
           | LSuffix ->
             Int (Signed, 3),
             if is_decimal then
-              if le_big_int min_llong_big_int n && le_big_int n max_llong_big_int then
+              if le_big_int (min_signed_big_int 3) n && le_big_int n (max_signed_big_int 3) then
                 n
               else
                 static_error l "Integer literal out of range" None
             else
-              if le_big_int n max_llong_big_int then n else
-              if le_big_int max_ullong_big_int n then static_error l "Integer literal too large" None else
-              sub_big_int n max_ullong_big_int
+              if le_big_int n (max_signed_big_int 3) then n else
+              if lt_big_int (max_unsigned_big_int 3) n then static_error l "Integer literal too large" None else
+              sub_big_int n (succ_big_int (max_unsigned_big_int 3))
         in (wintlit l value, type_, Some value)
       else
         let type_ =
-          if not usuffix && lsuffix <> LLSuffix && le_big_int min_int_big_int n && le_big_int n max_int_big_int then
-            intt
-          else if (usuffix || not is_decimal) && lsuffix <> LLSuffix && le_big_int n max_uint_big_int then
-            Int (Unsigned, int_rank)
-          else if not usuffix && le_big_int min_llong_big_int n && le_big_int n max_llong_big_int then
-            Int (Signed, 3)
-          else if (usuffix || not is_decimal) && le_big_int n max_ullong_big_int then
-            Int (Unsigned, 3)
-          else
-            static_error l "Integer literal out of range" None
+          let minrank =
+            match lsuffix with
+              NoLSuffix -> int_rank
+            | LSuffix -> long_rank
+            | LLSuffix -> llong_rank
+          in
+          let rec iter rank =
+            if rank > max_rank then static_error l "Integer literal out of range" None;
+            if not usuffix && le_big_int (min_signed_big_int rank) n && le_big_int n (max_signed_big_int rank) then
+              Int (Signed, rank)
+            else if (usuffix || not is_decimal) && le_big_int n (max_unsigned_big_int rank) then
+              Int (Unsigned, rank)
+            else
+              iter (rank + 1)
+          in
+          iter minrank
         in
           (wintlit l n, type_, Some n)
     | RealLit(l, n) ->
@@ -3327,51 +3301,22 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (Operation(l, Div, [IntLit(_, i1, _, _, _); IntLit(_, i2, _, _, _)]), RealType) -> RealLit(l, (num_of_big_int i1) // (num_of_big_int i2))
     | (IntLit (l, n, _, _, _), PtrType _) when isCast || eq_big_int n zero_big_int -> wintlit l n
     | (IntLit (l, n, _, _, _), RealType) -> RealLit (l, num_of_big_int n)
-    | (IntLit (l, n, _, _, _), Int (Unsigned, 0)) when isCast || inAnnotation <> Some true ->
-      if not (le_big_int min_uchar_big_int n && le_big_int n max_uchar_big_int) then
+    | (IntLit (l, n, _, _, _), (Int (Unsigned, k) as tp)) when isCast || inAnnotation <> Some true ->
+      if not (le_big_int zero_big_int n && le_big_int n (max_unsigned_big_int k)) then
         if isCast then
-          let n = int_of_big_int (mod_big_int n (big_int_of_int 256)) in
-          wintlit l (big_int_of_int n)
+          wintlit l (extract_big_int n 0 (8 * (1 lsl k)))
         else
-          static_error l "Integer literal used as uint8 must be between 0 and 255." None
+          static_error l (Printf.sprintf "Integer literal used as %s must be between 0 and %s." (string_of_type tp) (string_of_big_int (max_unsigned_big_int k))) None
       else
         wintlit l n
-    | (IntLit (l, n, _, _, _), Int (Signed, 0)) when isCast || inAnnotation <> Some true ->
-      if not (le_big_int min_char_big_int n && le_big_int n max_char_big_int) then
+    | (IntLit (l, n, _, _, _), (Int (Signed, k) as tp)) when isCast || inAnnotation <> Some true ->
+      if not (le_big_int (min_signed_big_int k) n && le_big_int n (max_signed_big_int k)) then
         if isCast then
-          let n = int_of_big_int (mod_big_int n (big_int_of_int 256)) in
-          let n = if 128 <= n then n - 256 else n in
-          wintlit l (big_int_of_int n)
+          let n = extract_big_int n 0 (8 * (1 lsl k)) in
+          let n = if lt_big_int (max_signed_big_int k) n then sub_big_int n (succ_big_int (max_unsigned_big_int k)) else n in
+          wintlit l n
         else
-          static_error l "Integer literal used as int8 must be between -128 and 127." None
-      else
-        wintlit l n
-    | (IntLit (l, n, _, _, _), Int (Unsigned, 1)) when isCast || inAnnotation <> Some true ->
-      if not (le_big_int min_ushort_big_int n && le_big_int n max_ushort_big_int) then
-        if isCast then
-          let n = int_of_big_int (mod_big_int n (big_int_of_int 65536)) in
-          wintlit l (big_int_of_int n)
-        else
-          static_error l "Integer literal used as ushort must be between 0 and 65535." None
-      else
-        wintlit l n
-    | (IntLit (l, n, _, _, _), Int (Signed, 1)) when isCast || inAnnotation <> Some true ->
-      if not (le_big_int min_short_big_int n && le_big_int n max_short_big_int) then
-        if isCast then
-          let n = int_of_big_int (mod_big_int n (big_int_of_int 65536)) in
-          let n = if 32768 <= n then n - 65536 else n in
-          wintlit l (big_int_of_int n)
-        else
-          static_error l "Integer literal used as short must be between -32768 and 32767." None
-      else
-        wintlit l n
-    | (IntLit (l, n, _, _, _), Int (Unsigned, 2)) when isCast || inAnnotation <> Some true ->
-      if not (le_big_int min_ptr_big_int n && le_big_int n max_ptr_big_int) then
-        if isCast then
-          let n = int_of_big_int (mod_big_int n (big_int_of_string "4294967296")) in
-          wintlit l (big_int_of_int n)
-        else
-          static_error l "Integer literal used as uint must be between 0 and 4294967295." None
+          static_error l (Printf.sprintf "Integer literal used as %s must be between %s and %s." (string_of_type tp) (string_of_big_int (min_signed_big_int k)) (string_of_big_int (max_signed_big_int k))) None
       else
         wintlit l n
     | _ ->
@@ -3400,8 +3345,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
       in
       match (value, t, t0) with
-        (Some(value), Int (Signed, 2), Int (Signed, 0)) when le_big_int min_char_big_int value && le_big_int value max_char_big_int -> w 
-      | (Some(value), Int (Signed, 2), Int (Signed, 1)) when le_big_int min_short_big_int value && le_big_int value max_short_big_int -> w
+        (Some(value), Int (Signed, k1), Int (Signed, k2)) when k2 < k1 && le_big_int (min_signed_big_int k2) value && le_big_int value (max_signed_big_int k2) -> w
       | _ -> check ()
   and check_condition_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e =
     let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
@@ -5252,8 +5196,7 @@ let check_if_list_is_defined () =
       begin
         match (e, t) with
           (WIntLit (_, n), PtrType _) ->
-          if ass_term <> None && not (le_big_int zero_big_int n &&
-le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out of range." None;
+          if ass_term <> None && not (le_big_int zero_big_int n && le_big_int n (max_unsigned_big_int ptr_rank)) then static_error l "CastExpr: Int literal is out of range." None;
           cont state (ctxt#mk_intlit_of_string (string_of_big_int n))
         | (e, (Int (_, _) as tp)) ->
           ev state e $. fun state t ->

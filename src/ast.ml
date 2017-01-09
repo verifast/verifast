@@ -98,6 +98,9 @@ type type_ = (* ?type_ *)
   | AbstractType of string
 
 let int_rank = 2
+let long_rank = 2
+let llong_rank = 3
+let ptr_rank = 2
 let int_size = 1 lsl int_rank
 let intType = Int (Signed, int_rank)
 let ptrdiff_t = intType

@@ -1212,7 +1212,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       StaticArrayType (elemTp, elemCount) ->
       let elemSize = sizeof l elemTp in
       let arraySize = ctxt#mk_mul (ctxt#mk_intlit elemCount) elemSize in
-      ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le int_zero_term addr) (ctxt#mk_le (ctxt#mk_add addr arraySize) max_ptr_term)));
+      ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le int_zero_term addr) (ctxt#mk_le (ctxt#mk_add addr arraySize) (max_unsigned_term ptr_rank))));
       let produce_char_array_chunk h addr elemCount =
         let elems = get_unique_var_symb "elems" (InductiveType ("list", [Int (Signed, 0)])) in
         let length = ctxt#mk_mul (ctxt#mk_intlit elemCount) elemSize in
@@ -1874,7 +1874,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let w = check_expr_t (pn,ilist) tparams tenv e intType in
       eval_h h env w $. fun h env n ->
       let arraySize = ctxt#mk_mul n (sizeof ls elemTp) in
-      check_overflow lmul int_zero_term arraySize max_int_term (fun l t -> assert_term t h env l);
+      check_overflow lmul int_zero_term arraySize (max_signed_term int_rank) (fun l t -> assert_term t h env l);
       let resultType = PtrType elemTp in
       let result = get_unique_var_symb (match xo with None -> "array" | Some x -> x) resultType in
       let cont h = cont h env result in
@@ -1890,7 +1890,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               Some (_, _, _, asym, _, mbsym) -> n, elemTp, asym, mbsym
             | None -> arraySize, Int (Signed, 0), chars_pred_symb(), malloc_block_chars_pred_symb()
           in
-          assume (ctxt#mk_and (ctxt#mk_le int_zero_term result) (ctxt#mk_le (ctxt#mk_add result arraySize) max_ptr_term)) $. fun () ->
+          assume (ctxt#mk_and (ctxt#mk_le int_zero_term result) (ctxt#mk_le (ctxt#mk_add result arraySize) (max_unsigned_term ptr_rank))) $. fun () ->
           let values = get_unique_var_symb "values" (list_type elemTp) in
           assume (ctxt#mk_eq (mk_length values) n) $. fun () ->
           let mallocBlockChunk = Chunk ((mallocBlockSymb, true), [], real_unit, [result; n], None) in
