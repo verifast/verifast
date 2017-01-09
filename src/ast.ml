@@ -72,7 +72,7 @@ type signedness = Signed | Unsigned
 type type_ = (* ?type_ *)
     Bool
   | Void
-  | Int of signedness * int   (* size in bytes *)
+  | Int of signedness * int (*rank*)  (* The size of Int (_, k) is 2^k bytes. For example: uint8 is denoted as Int (Unsigned, 0). *)
   | RealType  (* Mathematical real numbers. Used for fractional permission coefficients. Also used for reasoning about floating-point code. *)
   | Float
   | Double
@@ -97,13 +97,14 @@ type type_ = (* ?type_ *)
   | PluginInternalType of DynType.dyn
   | AbstractType of string
 
-let int_size = 4
-let intType = Int (Signed, int_size)
+let int_rank = 2
+let int_size = 1 lsl int_rank
+let intType = Int (Signed, int_rank)
 let ptrdiff_t = intType
 
 let integer_promotion t = (* C11 6.3.1.1 *)
   match t with
-  | Int (_, n) when n < int_size -> intType
+  | Int (_, k) when k < int_rank -> intType
   | _ -> t
 
 let usual_arithmetic_conversion t1 t2 = (* C11 6.3.1.8 *)

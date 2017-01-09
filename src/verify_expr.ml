@@ -733,7 +733,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let value =
                     match ft with
                       Bool -> LitPat (False fl)
-                    | Int (Signed, 4) | Int (Signed, 2) | Int (Signed, 1) -> LitPat (WIntLit (fl, zero_big_int))
+                    | Int (_, _) -> LitPat (WIntLit (fl, zero_big_int))
                     | ObjType _ | ArrayType _ -> LitPat (Null fl)
                     | _ -> DummyPat
                   in
@@ -1214,11 +1214,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let arraySize = ctxt#mk_mul (ctxt#mk_intlit elemCount) elemSize in
       ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le int_zero_term addr) (ctxt#mk_le (ctxt#mk_add addr arraySize) max_ptr_term)));
       let produce_char_array_chunk h addr elemCount =
-        let elems = get_unique_var_symb "elems" (InductiveType ("list", [Int (Signed, 1)])) in
+        let elems = get_unique_var_symb "elems" (InductiveType ("list", [Int (Signed, 0)])) in
         let length = ctxt#mk_mul (ctxt#mk_intlit elemCount) elemSize in
         begin fun cont ->
           if init <> None then
-            assume (mk_all_eq (Int (Signed, 1)) elems (ctxt#mk_intlit 0)) cont
+            assume (mk_all_eq (Int (Signed, 0)) elems (ctxt#mk_intlit 0)) cont
           else
             cont ()
         end $. fun () ->
@@ -1235,7 +1235,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           produce_char_array_chunk h addr elemCount
       in
       begin match elemTp, init with
-        Int (Signed, 1), Some (Some (StringLit (_, s))) ->
+        Int (Signed, 0), Some (Some (StringLit (_, s))) ->
         produce_array_chunk addr (mk_char_list_of_c_string elemCount s) elemCount
       | (StructType _ | StaticArrayType (_, _)), Some (Some (InitializerList (ll, es))) ->
         let rec iter h i es =
@@ -1260,7 +1260,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let elems = get_unique_var_symb "elems" (InductiveType ("list", [elemTp])) in
         begin fun cont ->
           match init, elemTp with
-            Some _, (Int (Signed, 4)|Int (Unsigned, 2)|Int (Signed, 2)|Int (Unsigned, 4)|Int (Unsigned, 1)|Int (Signed, 1)|PtrType _) ->
+            Some _, (Int (_, _)|PtrType _) ->
             assume (mk_all_eq elemTp elems (ctxt#mk_intlit 0)) cont
           | _ ->
             cont ()
@@ -1375,14 +1375,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let assume_is_of_type l t tp cont =
     match tp with
-      Int (Signed, 4) -> assume (ctxt#mk_and (ctxt#mk_le min_int_term t) (ctxt#mk_le t max_int_term)) cont
-    | PtrType _ -> assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) t) (ctxt#mk_le t max_ptr_term)) cont
-    | Int (Signed, 2) -> assume (ctxt#mk_and (ctxt#mk_le min_short_term t) (ctxt#mk_le t max_short_term)) cont
-    | Int (Unsigned, 2) -> assume (ctxt#mk_and (ctxt#mk_le min_ushort_term t) (ctxt#mk_le t max_ushort_term)) cont
-    | Int (Signed, 1) -> assume (ctxt#mk_and (ctxt#mk_le min_char_term t) (ctxt#mk_le t max_char_term)) cont
-    | Int (Unsigned, 1) -> assume (ctxt#mk_and (ctxt#mk_le min_uchar_term t) (ctxt#mk_le t max_uchar_term)) cont
-    | Int (Unsigned, 4) -> assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) t) (ctxt#mk_le t max_ptr_term)) cont
-    | ObjType _ -> cont ()
+      Int (_, _) | PtrType _ ->
+      let (min_term, max_term) = limits_of_type tp in
+      assume (ctxt#mk_and (ctxt#mk_le min_term t) (ctxt#mk_le t max_term)) cont
     | _ -> static_error l (Printf.sprintf "Producing the limits of a variable of type '%s' is not yet supported." (string_of_type tp)) None
   
   let assume_instanceof l t tp cont =
@@ -1487,9 +1482,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               let (w, tp) = check_expr (pn,ilist) tparams tenv (Some pure) e in
               eval_h h env (SrcPat (LitPat w)) $. fun h env t ->
               let arg =
-                match tp with
-                  Int (Signed, 4)|Int (Signed, 2)|Int (Signed, 1) -> mk_vararg_int t
-                | Int (Unsigned, 4)|Int (Unsigned, 2)|Int (Unsigned, 1) -> mk_vararg_uint t
+                let tp_promoted =
+                  match tp with
+                    Int (_, _) -> integer_promotion tp
+                  | _ -> tp
+                in
+                match tp_promoted with
+                  Int (Signed, k) when k = int_rank -> mk_vararg_int t
+                | Int (Unsigned, k) when k = int_rank -> mk_vararg_uint t
                 | PtrType _ | StaticArrayType _ -> mk_vararg_pointer t
                 | _ -> static_error (expr_loc e) ("Expressions of type '"^string_of_type tp^"' are not yet supported as arguments for a varargs function.") None
               in
@@ -1651,7 +1651,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let default_value t =
     match t with
      Bool -> ctxt#mk_false
-    | Int (Signed, 4)|Int (Signed, 2)|Int (Signed, 1)|ObjType _|ArrayType _ -> ctxt#mk_intlit 0
+    | Int (_, _)|ObjType _|ArrayType _ -> ctxt#mk_intlit 0
     | _ -> get_unique_var_symb_non_ghost "value" t
 
   
@@ -1888,7 +1888,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let n, elemTp, arrayPredSymb, mallocBlockSymb =
             match try_pointee_pred_symb0 elemTp with
               Some (_, _, _, asym, _, mbsym) -> n, elemTp, asym, mbsym
-            | None -> arraySize, Int (Signed, 1), chars_pred_symb(), malloc_block_chars_pred_symb()
+            | None -> arraySize, Int (Signed, 0), chars_pred_symb(), malloc_block_chars_pred_symb()
           in
           assume (ctxt#mk_and (ctxt#mk_le int_zero_term result) (ctxt#mk_le (ctxt#mk_add result arraySize) max_ptr_term)) $. fun () ->
           let values = get_unique_var_symb "values" (list_type elemTp) in
@@ -2066,8 +2066,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | _ ->
         if unloadable then static_error l "The use of string literals as expressions in unloadable modules is not supported. Put the string literal in a named global array variable instead." None;
         let (_, _, _, _, string_symb, _, _) = List.assoc "string" predfammap in
-        let cs = get_unique_var_symb "stringLiteralChars" (InductiveType ("list", [Int (Signed, 1)])) in
-        let value = get_unique_var_symb "stringLiteral" (PtrType (Int (Signed, 1))) in
+        let cs = get_unique_var_symb "stringLiteralChars" (InductiveType ("list", [Int (Signed, 0)])) in
+        let value = get_unique_var_symb "stringLiteral" (PtrType (Int (Signed, 0))) in
         let coef = get_dummy_frac_term () in
         assume (ctxt#mk_not (ctxt#mk_eq value (ctxt#mk_intlit 0))) $. fun () ->
         assume (ctxt#mk_eq (mk_char_list_of_c_string (String.length s) s) cs) $. fun () ->

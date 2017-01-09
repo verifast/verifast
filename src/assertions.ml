@@ -116,10 +116,9 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let (_, (_, _, _, _, symb, _, _)) = List.assoc (fparent, fname) field_pred_map in
     if fghost = Real then begin
       match frange with
-         Int (Signed, 1) -> ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_char_term tv) (ctxt#mk_le tv max_char_term)))
-      | Int (Signed, 2) -> ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_short_term tv) (ctxt#mk_le tv max_short_term)))
-      | Int (Signed, 4) -> ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_int_term tv) (ctxt#mk_le tv max_int_term)))
-      | PtrType _ | Int (Unsigned, 4) -> ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) tv) (ctxt#mk_le tv max_ptr_term)))
+        Int (_, _) | PtrType _ ->
+        let (min_term, max_term) = limits_of_type frange in
+        ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_term tv) (ctxt#mk_le tv max_term))
       | _ -> ()
     end; 
     (* automatic generation of t1 != t2 if t1.f |-> _ &*& t2.f |-> _ *)
@@ -833,7 +832,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   (** [cont] is called as [cont chunk h coef ts size ghostenv env env']. See docs at consume_chunk_core. *)
   let consume_chunk rules h ghostenv env env' l g targs coef coefpat inputParamCount pats cont =
-    let tps = List.map (fun _ -> Int (Signed, 4)) pats in (* dummies, to indicate that no prover type conversions are needed *)
+    let tps = List.map (fun _ -> Int (Signed, 2)) pats in (* dummies, to indicate that no prover type conversions are needed *)
     consume_chunk_core rules h ghostenv env env' l g targs coef coefpat inputParamCount pats tps tps cont
   
   let srcpat pat = SrcPat pat

@@ -342,14 +342,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let truncate_symbol t =
     match t with
-      Int (Signed, 1) -> truncate_int8_symbol
-    | Int (Signed, 2) -> truncate_int16_symbol
-    | Int (Signed, 4) -> truncate_int32_symbol
-    | Int (Signed, 8) -> truncate_int64_symbol
-    | Int (Unsigned, 1) -> truncate_uint8_symbol
-    | Int (Unsigned, 2) -> truncate_uint16_symbol
-    | Int (Unsigned, 4) -> truncate_uint32_symbol
-    | Int (Unsigned, 8) -> truncate_uint64_symbol
+      Int (Signed, 0) -> truncate_int8_symbol
+    | Int (Signed, 1) -> truncate_int16_symbol
+    | Int (Signed, 2) -> truncate_int32_symbol
+    | Int (Signed, 3) -> truncate_int64_symbol
+    | Int (Unsigned, 0) -> truncate_uint8_symbol
+    | Int (Unsigned, 1) -> truncate_uint16_symbol
+    | Int (Unsigned, 2) -> truncate_uint32_symbol
+    | Int (Unsigned, 3) -> truncate_uint64_symbol
   
   let () = ignore $. ctxt#assume (ctxt#mk_eq (ctxt#mk_unboxed_bool (ctxt#mk_boxed_int (ctxt#mk_intlit 0))) ctxt#mk_false) (* This allows us to use 0 as a default value for all types; see the treatment of array creation. *)
 
@@ -420,14 +420,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let limits_of_type t =
     match t with
-    | Int (Signed, 1) -> (min_char_term, max_char_term)
-    | Int (Unsigned, 1) -> (min_uchar_term, max_uchar_term)
-    | Int (Signed, 2) -> (min_short_term, max_short_term)
-    | Int (Unsigned, 2) -> (min_ushort_term, max_ushort_term)
-    | Int (Signed, 4) -> (min_int_term, max_int_term)
-    | Int (Unsigned, 4) | PtrType _ -> (int_zero_term, max_uint_term)
-    | Int (Signed, 8) -> (min_llong_term, max_llong_term)
-    | Int (Unsigned, 8) -> (min_ullong_term, max_ullong_term)
+    | Int (Signed, 0) -> (min_char_term, max_char_term)
+    | Int (Unsigned, 0) -> (min_uchar_term, max_uchar_term)
+    | Int (Signed, 1) -> (min_short_term, max_short_term)
+    | Int (Unsigned, 1) -> (min_ushort_term, max_ushort_term)
+    | Int (Signed, 2) -> (min_int_term, max_int_term)
+    | Int (Unsigned, 2) | PtrType _ -> (int_zero_term, max_uint_term)
+    | Int (Signed, 3) -> (min_llong_term, max_llong_term)
+    | Int (Unsigned, 3) -> (min_ullong_term, max_ullong_term)
   
   let get_unique_var_symb x t = 
     ctxt#mk_app (mk_symbol x [] (typenode_of_type t) Uninterp) []
@@ -2632,14 +2632,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       Float -> "float"
     | Double -> "double"
     | LongDouble -> "long_double"
-    | Int (Signed, 8) -> "long_long"
-    | Int (Unsigned, 8) -> "unsigned_long_long"
-    | Int (Signed, 4) -> "int"
-    | Int (Unsigned, 4) -> "unsigned_int"
-    | Int (Signed, 2) -> "short"
-    | Int (Unsigned, 2) -> "unsigned_short"
-    | Int (Signed, 1) -> "char"
-    | Int (Unsigned, 1) -> "unsigned_char"
+    | Int (Signed, 3) -> "long_long"
+    | Int (Unsigned, 3) -> "unsigned_long_long"
+    | Int (Signed, 2) -> "int"
+    | Int (Unsigned, 2) -> "unsigned_int"
+    | Int (Signed, 1) -> "short"
+    | Int (Unsigned, 1) -> "unsigned_short"
+    | Int (Signed, 0) -> "char"
+    | Int (Unsigned, 0) -> "unsigned_char"
     | RealType -> "real"
   
   let floating_point_fun_call_expr funcmap l t fun_name args =
@@ -2744,7 +2744,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (w, t, _) = check e in
       let t = unfold_inferred_type t in
       match t with
-        Int (_, n) when n < int_size -> Upcast (w, t, intType), intType
+        Int (_, k) when k < int_rank -> Upcast (w, t, intType), intType
       | Int (_, _) -> w, t
       | _ -> static_error (expr_loc e) "Expression must be of integral type" None
     in
@@ -2931,7 +2931,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin match t1, t2 with
         PtrType pt1, PtrType pt2 when operator = Sub ->
         if pt1 <> pt2 then static_error l "Pointers must be of same type" None;
-        if pt1 <> Int (Signed, 1) && pt1 <> Void then static_error l "Subtracting non-char pointers is not yet supported" None;
+        if pt1 <> Int (Signed, 0) && pt1 <> Void then static_error l "Subtracting non-char pointers is not yet supported" None;
         (WOperation (l, PtrDiff, [w1; w2], t1), ptrdiff_t, None)
       | PtrType pt1, _ ->
         let w2 = checkt e2 intt in
@@ -2939,7 +2939,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | t1, t2 when is_arithmetic_type t1 && is_arithmetic_type t2 ->
         let (w1, w2, t) = promote_checkdone l e1 e2 (w1, t1, value1) (w2, t2, value2) in
         let value =
-          if t = Int (Signed, 4) then
+          if t = Int (Signed, 2) then
             match (value1, value2, operator) with
               (Some value1, Some value2, Add) -> Some (add_big_int value1 value2)
             | (Some value1, Some value2, Sub) -> Some (sub_big_int value1 value2)
@@ -2979,7 +2979,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               if le_big_int max_uint_big_int n then static_error l "Integer literal too large" None else
               sub_big_int n max_uint_big_int
           | LSuffix ->
-            Int (Signed, 8),
+            Int (Signed, 3),
             if is_decimal then
               if le_big_int min_llong_big_int n && le_big_int n max_llong_big_int then
                 n
@@ -2995,11 +2995,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           if not usuffix && lsuffix <> LLSuffix && le_big_int min_int_big_int n && le_big_int n max_int_big_int then
             intt
           else if (usuffix || not is_decimal) && lsuffix <> LLSuffix && le_big_int n max_uint_big_int then
-            Int (Unsigned, int_size)
+            Int (Unsigned, int_rank)
           else if not usuffix && le_big_int min_llong_big_int n && le_big_int n max_llong_big_int then
-            Int (Signed, 8)
+            Int (Signed, 3)
           else if (usuffix || not is_decimal) && le_big_int n max_ullong_big_int then
-            Int (Unsigned, 8)
+            Int (Unsigned, 3)
           else
             static_error l "Integer literal out of range" None
         in
@@ -3014,7 +3014,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (ClassLit (l, s), ObjType "java.lang.Class", None)
     | StringLit (l, s) -> (match file_type path with
         Java-> (e, ObjType "java.lang.String", None)
-      | _ -> (e, (PtrType (Int (Signed, 1))), None))
+      | _ -> (e, (PtrType (Int (Signed, 0))), None))
     | CastExpr (l, te, e) ->
       let t = check_pure_type (pn,ilist) tparams te in
       let w = checkt_cast e t in
@@ -3259,7 +3259,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | SizeofExpr(l, te) ->
       let t = check_pure_type (pn,ilist) tparams te in
-      (SizeofExpr (l, ManifestTypeExpr (type_expr_loc te, t)), Int (Unsigned, 4), None)
+      (SizeofExpr (l, ManifestTypeExpr (type_expr_loc te, t)), Int (Unsigned, 2), None)
     | InstanceOfExpr(l, e, te) ->
       let t = check_pure_type (pn,ilist) tparams te in
       let w = checkt e (ObjType "java.lang.Object") in
@@ -3327,7 +3327,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (Operation(l, Div, [IntLit(_, i1, _, _, _); IntLit(_, i2, _, _, _)]), RealType) -> RealLit(l, (num_of_big_int i1) // (num_of_big_int i2))
     | (IntLit (l, n, _, _, _), PtrType _) when isCast || eq_big_int n zero_big_int -> wintlit l n
     | (IntLit (l, n, _, _, _), RealType) -> RealLit (l, num_of_big_int n)
-    | (IntLit (l, n, _, _, _), Int (Unsigned, 1)) when isCast || inAnnotation <> Some true ->
+    | (IntLit (l, n, _, _, _), Int (Unsigned, 0)) when isCast || inAnnotation <> Some true ->
       if not (le_big_int min_uchar_big_int n && le_big_int n max_uchar_big_int) then
         if isCast then
           let n = int_of_big_int (mod_big_int n (big_int_of_int 256)) in
@@ -3336,7 +3336,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           static_error l "Integer literal used as uint8 must be between 0 and 255." None
       else
         wintlit l n
-    | (IntLit (l, n, _, _, _), Int (Signed, 1)) when isCast || inAnnotation <> Some true ->
+    | (IntLit (l, n, _, _, _), Int (Signed, 0)) when isCast || inAnnotation <> Some true ->
       if not (le_big_int min_char_big_int n && le_big_int n max_char_big_int) then
         if isCast then
           let n = int_of_big_int (mod_big_int n (big_int_of_int 256)) in
@@ -3346,7 +3346,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           static_error l "Integer literal used as int8 must be between -128 and 127." None
       else
         wintlit l n
-    | (IntLit (l, n, _, _, _), Int (Unsigned, 2)) when isCast || inAnnotation <> Some true ->
+    | (IntLit (l, n, _, _, _), Int (Unsigned, 1)) when isCast || inAnnotation <> Some true ->
       if not (le_big_int min_ushort_big_int n && le_big_int n max_ushort_big_int) then
         if isCast then
           let n = int_of_big_int (mod_big_int n (big_int_of_int 65536)) in
@@ -3355,7 +3355,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           static_error l "Integer literal used as ushort must be between 0 and 65535." None
       else
         wintlit l n
-    | (IntLit (l, n, _, _, _), Int (Signed, 2)) when isCast || inAnnotation <> Some true ->
+    | (IntLit (l, n, _, _, _), Int (Signed, 1)) when isCast || inAnnotation <> Some true ->
       if not (le_big_int min_short_big_int n && le_big_int n max_short_big_int) then
         if isCast then
           let n = int_of_big_int (mod_big_int n (big_int_of_int 65536)) in
@@ -3365,7 +3365,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           static_error l "Integer literal used as short must be between -32768 and 32767." None
       else
         wintlit l n
-    | (IntLit (l, n, _, _, _), Int (Unsigned, 4)) when isCast || inAnnotation <> Some true ->
+    | (IntLit (l, n, _, _, _), Int (Unsigned, 2)) when isCast || inAnnotation <> Some true ->
       if not (le_big_int min_ptr_big_int n && le_big_int n max_ptr_big_int) then
         if isCast then
           let n = int_of_big_int (mod_big_int n (big_int_of_string "4294967296")) in
@@ -3385,11 +3385,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let check () = begin match (t, t0) with
         | _ when t = t0 -> w
         | (ObjType _, ObjType _) when isCast -> w
-        | (PtrType _, Int (Unsigned, 4)) when isCast -> w
-        | (Int (Unsigned, 4), PtrType _) when isCast -> w
+        | (PtrType _, Int (Unsigned, 2)) when isCast -> w
+        | (Int (Unsigned, 2), PtrType _) when isCast -> w
         | (Int (_, _), Int (_, _)) when isCast -> w
         | ((Int (_, _)|Float|Double|LongDouble), (Float|Double|LongDouble)) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
-        | ((Float|Double|LongDouble), (Int (Signed, 4)|Int (Unsigned, 4))) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
+        | ((Float|Double|LongDouble), (Int (Signed, 2)|Int (Unsigned, 2))) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
         | (ObjType ("java.lang.Object"), ArrayType _) when isCast -> w
         | _ ->
           expect_type (expr_loc e) inAnnotation t t0;
@@ -3400,14 +3400,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
       in
       match (value, t, t0) with
-        (Some(value), Int (Signed, 4), Int (Signed, 1)) when le_big_int min_char_big_int value && le_big_int value max_char_big_int -> w 
-      | (Some(value), Int (Signed, 4), Int (Signed, 2)) when le_big_int min_short_big_int value && le_big_int value max_short_big_int -> w
+        (Some(value), Int (Signed, 2), Int (Signed, 0)) when le_big_int min_char_big_int value && le_big_int value max_char_big_int -> w 
+      | (Some(value), Int (Signed, 2), Int (Signed, 1)) when le_big_int min_short_big_int value && le_big_int value max_short_big_int -> w
       | _ -> check ()
   and check_condition_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e =
     let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
     match t with
       Bool -> w
-    | Int (Signed, 1) | Int (Unsigned, 1) | Int (Signed, 2) | Int (Unsigned, 2) | Int (Signed, 4) | Int (Unsigned, 4) | PtrType _ when language = CLang ->
+    | Int (_, _) | PtrType _ when language = CLang ->
       WOperation (expr_loc e, Neq, [w; wintlit (expr_loc e) (big_int_of_int 0)], t)
     | _ -> expect_type (expr_loc e) inAnnotation t Bool; w
   and check_deref_core functypemap funcmap classmap interfmap (pn,ilist) l tparams tenv e f =
@@ -3687,7 +3687,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let rec check_c_initializer e tp =
     match tp, e with
-    | StaticArrayType (Int (Signed, 1), n), StringLit (ls, s) ->
+    | StaticArrayType (Int (Signed, 0), n), StringLit (ls, s) ->
       if String.length s + 1 > n then static_error ls "String literal does not fit inside character array." None;
       e
     | StaticArrayType (elemTp, elemCount), InitializerList (ll, es) ->
@@ -3765,7 +3765,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | CastExpr (l, ManifestTypeExpr (_, t), e) ->
         let v = ev e in
         begin match (t, v) with
-          (Int (Signed, 1), IntConst n) ->
+          (Int (Signed, 0), IntConst n) ->
           let n =
             if not (le_big_int (big_int_of_int (-128)) n && le_big_int n (big_int_of_int 127)) then
               let n = int_of_big_int (mod_big_int n (big_int_of_int 256)) in
@@ -3775,7 +3775,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               n
           in
           IntConst n
-        | (Int (Signed, 2), IntConst n) ->
+        | (Int (Signed, 1), IntConst n) ->
           let n =
             if not (le_big_int (big_int_of_int (-32768)) n && le_big_int n (big_int_of_int 32767)) then
               let n = int_of_big_int (mod_big_int n (big_int_of_int 65536)) in
@@ -3988,14 +3988,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     option_map deref_pointee_tuple
     begin match pointeeType with
       PtrType _ -> Some pointer_pointee_tuple
-    | Int (Signed, 8) -> Some llong_pointee_tuple
-    | Int (Unsigned, 8) -> Some ullong_pointee_tuple
-    | Int (Signed, 4) -> Some int_pointee_tuple
-    | Int (Unsigned, 4) -> Some uint_pointee_tuple
-    | Int (Signed, 2) -> Some short_pointee_tuple
-    | Int (Unsigned, 2) -> Some ushort_pointee_tuple
-    | Int (Signed, 1) -> Some char_pointee_tuple
-    | Int (Unsigned, 1) -> Some uchar_pointee_tuple
+    | Int (Signed, 3) -> Some llong_pointee_tuple
+    | Int (Unsigned, 3) -> Some ullong_pointee_tuple
+    | Int (Signed, 2) -> Some int_pointee_tuple
+    | Int (Unsigned, 2) -> Some uint_pointee_tuple
+    | Int (Signed, 1) -> Some short_pointee_tuple
+    | Int (Unsigned, 1) -> Some ushort_pointee_tuple
+    | Int (Signed, 0) -> Some char_pointee_tuple
+    | Int (Unsigned, 0) -> Some uchar_pointee_tuple
     | _ -> None
     end
   
@@ -4461,35 +4461,35 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let pref = new predref "pointer" in
                   pref#set_domain [PtrType (PtrType Void); PtrType Void];
                   [predinst pref]
-                | Int (Signed, 8) ->
+                | Int (Signed, 3) ->
                   let pref = new predref "long_long" in
                   pref#set_domain [PtrType (Int(Signed, 8)); (Int(Signed, 8))];
                   [predinst pref]
-                | Int (Unsigned, 8) ->
+                | Int (Unsigned, 3) ->
                   let pref = new predref "u_long_long" in
                   pref#set_domain [PtrType (Int (Unsigned, 8)); Int (Unsigned, 8)];
                   [predinst pref]
-                | Int (Signed, 4) ->
+                | Int (Signed, 2) ->
                   let pref = new predref "integer" in
                   pref#set_domain [PtrType intType; intType];
                   [predinst pref]
-                | Int (Unsigned, 4) ->
+                | Int (Unsigned, 2) ->
                   let pref = new predref "u_integer" in
                   pref#set_domain [PtrType (Int (Unsigned, 4)); Int (Unsigned, 4)];
                   [predinst pref]
-                | Int (Signed, 2) ->
+                | Int (Signed, 1) ->
                   let pref = new predref "short_integer" in
                   pref#set_domain [PtrType (Int (Signed, 2)); (Int (Signed, 2))];
                   [predinst pref]
-                | Int (Unsigned, 2) ->
+                | Int (Unsigned, 1) ->
                   let pref = new predref "u_short_integer" in
                   pref#set_domain [PtrType (Int (Unsigned, 2)); Int (Unsigned, 2)];
                   [predinst pref]
-                | Int (Signed, 1) ->
+                | Int (Signed, 0) ->
                   let pref = new predref "character" in
                   pref#set_domain [PtrType (Int (Signed, 1)); Int (Signed, 1)];
                   [predinst pref]
-                | Int (Unsigned, 1) ->
+                | Int (Unsigned, 0) ->
                   let pref = new predref "u_character" in
                   pref#set_domain [PtrType (Int (Unsigned, 1)); Int (Unsigned, 1)];
                   [predinst pref]
@@ -4639,7 +4639,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let rec sizeof l t =
     match t with
       Void -> ctxt#mk_intlit 1
-    | Int (_, n) -> ctxt#mk_intlit n
+    | Int (_, k) -> ctxt#mk_intlit (1 lsl k)
     | PtrType _ -> ctxt#mk_intlit 4
     | StructType sn -> struct_size sn
     | StaticArrayType (elemTp, elemCount) -> ctxt#mk_mul (sizeof l elemTp) (ctxt#mk_intlit elemCount)
@@ -4711,7 +4711,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     if n = 0 then
       mk_nil ()
     else
-      mk_cons (Int (Signed, 1)) (ctxt#mk_intlit 0) (mk_zero_list (n - 1))
+      mk_cons (Int (Signed, 0)) (ctxt#mk_intlit 0) (mk_zero_list (n - 1))
   
   let mk_char_list_of_c_string size s =
     let n = String.length s in
@@ -4720,7 +4720,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if k = n then
         mk_zero_list (size - n)
       else
-        mk_cons (Int (Signed, 1)) (ctxt#mk_intlit (as_signed_char (Char.code s.[k]))) (iter (k + 1))
+        mk_cons (Int (Signed, 0)) (ctxt#mk_intlit (as_signed_char (Char.code s.[k]))) (iter (k + 1))
     in
     iter 0
   
@@ -5285,7 +5285,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       cont state
         begin match file_type path with
           Java -> get_unique_var_symb "stringLiteral" (ObjType "java.lang.String")
-        | _ -> get_unique_var_symb "stringLiteral" (PtrType (Int (Signed, 1)))
+        | _ -> get_unique_var_symb "stringLiteral" (PtrType (Int (Signed, 0)))
         end
     | WMethodCall (l, "java.lang.Object", "getClass", [], [target], Instance) ->
       ev state target $. fun state t ->

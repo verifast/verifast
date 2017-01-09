@@ -59,9 +59,8 @@ let rec string_of_type t =
   match t with
     Bool -> "bool"
   | Void -> "void"
-  | Int (Signed, 4) -> "int"
-  | Int (Signed, n) -> "int" ^ string_of_int (n * 8)
-  | Int (Unsigned, n) -> "uint" ^ string_of_int (n * 8)
+  | Int (Signed, k) -> "int" ^ string_of_int ((1 lsl k) * 8)
+  | Int (Unsigned, k) -> "uint" ^ string_of_int ((1 lsl k) * 8)
   | Float -> "float"
   | Double -> "double"
   | LongDouble -> "long double"

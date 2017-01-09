@@ -700,14 +700,14 @@ and
   [< t0 = parse_primary_type; t = parse_type_suffix t0 >] -> t
 and
   parse_integer_size_specifier = parser
-  [< '(_, Kwd "char") >] -> 1
-| [< '(_, Kwd "short") >] -> 2
+  [< '(_, Kwd "char") >] -> 0
+| [< '(_, Kwd "short") >] -> 1
 | [< '(_, Kwd "long");
      n = begin parser
-       [< '(_, Kwd "long") >] -> 8
-     | [< >] -> 4
+       [< '(_, Kwd "long") >] -> 3
+     | [< >] -> 2
      end >] -> n
-| [< >] -> 4
+| [< >] -> 2
 and
   parse_integer_type_rest = parser
   [< n = parse_integer_size_specifier; _ = opt (parser [< '(_, Kwd "int") >] -> ()) >] -> n
@@ -721,24 +721,24 @@ and
 | [< '(l, Kwd "int") >] -> ManifestTypeExpr (l, intType)
 | [< '(l, Kwd "float") >] -> ManifestTypeExpr (l, Float)
 | [< '(l, Kwd "double") >] -> ManifestTypeExpr (l, Double)
-| [< '(l, Kwd "short") >] -> ManifestTypeExpr(l, Int (Signed, 2))
+| [< '(l, Kwd "short") >] -> ManifestTypeExpr(l, Int (Signed, 1))
 | [< '(l, Kwd "long");
      t = begin parser
        [< '(_, Kwd "int") >] -> ManifestTypeExpr (l, intType);
      | [< '(_, Kwd "double") >] -> ManifestTypeExpr (l, LongDouble);
-     | [< '(_, Kwd "long"); _ = opt (parser [< '(_, Kwd "int") >] -> ()) >] -> ManifestTypeExpr (l, Int (Signed, 8))
-     | [< >] -> ManifestTypeExpr (l, match !language with CLang -> intType | Java -> Int (Signed, 8))
+     | [< '(_, Kwd "long"); _ = opt (parser [< '(_, Kwd "int") >] -> ()) >] -> ManifestTypeExpr (l, Int (Signed, 3))
+     | [< >] -> ManifestTypeExpr (l, match !language with CLang -> intType | Java -> Int (Signed, 3))
      end
    >] -> t
 | [< '(l, Kwd "signed"); n = parse_integer_type_rest >] -> ManifestTypeExpr (l, Int (Signed, n))
 | [< '(l, Kwd "unsigned"); n = parse_integer_type_rest >] -> ManifestTypeExpr (l, Int (Unsigned, n))
-| [< '(l, Kwd "uintptr_t") >] -> ManifestTypeExpr (l, Int (Unsigned, 4))
+| [< '(l, Kwd "uintptr_t") >] -> ManifestTypeExpr (l, Int (Unsigned, 2))
 | [< '(l, Kwd "real") >] -> ManifestTypeExpr (l, RealType)
 | [< '(l, Kwd "bool") >] -> ManifestTypeExpr (l, Bool)
 | [< '(l, Kwd "boolean") >] -> ManifestTypeExpr (l, Bool)
 | [< '(l, Kwd "void") >] -> ManifestTypeExpr (l, Void)
-| [< '(l, Kwd "char") >] -> ManifestTypeExpr (l, match !language with CLang -> Int (Signed, 1) | Java -> Int (Unsigned, 2))
-| [< '(l, Kwd "byte") >] -> ManifestTypeExpr (l, Int (Signed, 1))
+| [< '(l, Kwd "char") >] -> ManifestTypeExpr (l, match !language with CLang -> Int (Signed, 0) | Java -> Int (Unsigned, 1))
+| [< '(l, Kwd "byte") >] -> ManifestTypeExpr (l, Int (Signed, 0))
 | [< '(l, Kwd "predicate");
      '(_, Kwd "(");
      ts = rep_comma parse_paramtype;
@@ -1231,7 +1231,7 @@ and
 | [< '(l, Kwd "false") >] -> False l
 | [< '(l, CharToken c) >] ->
   if Char.code c > 127 then raise (ParseException (l, "Non-ASCII character literals are not yet supported"));
-  let tp = match !language with CLang -> Int (Signed, 1) | Java -> Int (Unsigned, 2) in
+  let tp = match !language with CLang -> Int (Signed, 0) | Java -> Int (Unsigned, 1) in
   CastExpr (l, ManifestTypeExpr (l, tp), IntLit (l, big_int_of_int (Char.code c), true, false, NoLSuffix))
 | [< '(l, Kwd "null") >] -> Null l
 | [< '(l, Kwd "currentThread") >] -> Var (l, "currentThread")
