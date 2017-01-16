@@ -25,9 +25,9 @@ lemma void bitand_def(int x1, int x2, Z z1, Z z2);
 
 lemma void test()
     requires true;
-    ensures true; //0 == (0x01 & 0x10);
+    ensures 0 == (0x01 & 0x10);
 {
-    //bitand_def(0x01, 0x10, digit(sign(false), true), digit(digit(digit(digit(digit(sign(false), true), false), false), false), false));
+    bitand_def(0x01, 0x10, digit(sign(false), true), digit(digit(digit(digit(digit(sign(false), true), false), false), false), false));
 }
 
 lemma Z Z_of_uint8(int x);
