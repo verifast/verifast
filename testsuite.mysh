@@ -27,6 +27,7 @@ cd examples
   verifast_both -disable_overflow_check array_of_struct.c
   verifast_both -disable_overflow_check -c arraylist.c
   verifast_both -disable_overflow_check threading.o barrier.c
+  ifz3v4.5 verifast -prover z3v4.5 -c bitops.c
   verifast_both -c static_array.c
   verifast -c -disable_overflow_check typedef_cast.c
   verifast_both -c automation.c

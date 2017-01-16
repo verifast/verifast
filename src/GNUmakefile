@@ -80,11 +80,24 @@ ifndef NOZ3
   else ifdef Z3V4 # Note that using Z3 v4 is experimental and not supported
     Z3VERSION = v4
     Z3 = $(Z3V4)
+  else ifdef Z3V4DOT5
+    Z3VERSION = v4dot5
+    Z3 = $(Z3V4DOT5)
   else
     NOZ3=1
   endif
 endif
-ifndef NOZ3
+Z3V4DOT5PRESENT=false
+ifdef Z3V4DOT5
+  Z3_OCAML ?= `ocamlfind query z3`
+  Z3_DLL_DIR ?= /usr/local/lib
+  Z3DEPS = z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml
+  Z3CCOPTS = -cclib "-L $(Z3_DLL_DIR)"
+  Z3ARGS_EARLY = -I $(Z3_OCAML) z3ml.cmxa z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml $(Z3CCOPTS)
+  VERIFAST := ../bin/verifast
+  Z3PRESENT=false
+  Z3V4DOT5PRESENT=true
+else ifndef NOZ3
   Z3DEPS  = z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml
   ifeq ($(OS), Cygwin)
     Z3CCOPTS=
@@ -316,7 +329,7 @@ clean::
 	rm -f vfversion.ml
 AUTOGENERATE_TARGETS += vfversion_autogen
 
-VFCONFIG_CONTENT=let z3_present = $(Z3PRESENT)
+VFCONFIG_CONTENT=let z3_present = $(Z3PRESENT);; let z3v4dot5_present = $(Z3V4DOT5PRESENT)
 vfconfig_autogen:
 	if [ ! -e vfconfig.ml ] || [ "$$(cat vfconfig.ml)" != "$(VFCONFIG_CONTENT)" ]; then \
 	  echo "$(VFCONFIG_CONTENT)" > vfconfig.ml ;\
@@ -399,7 +412,9 @@ endif
 	  Printexc_proxy.cmx vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx \
 	  plugins_private.cmx plugins2.cmx util.cmx ast.cmx stats.cmx lexer.cmx \
 	  parser.cmx ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx \
-	  verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml \
+	  verify_expr.cmx verifast.cmx \
+          $(Z3ARGS_EARLY) \
+          simplex.cmx redux.cmx verifastPluginRedux.ml \
 	  shape_analysis/shape_analysis_backend.cmx \
 	  shape_analysis/changelog.cmx shape_analysis/shape_analysis_frontend.cmx \
 	  $(Z3ARGS) Fonts.cmx branchleft_png.cmx branchright_png.cmx vfide.cmx
@@ -418,6 +433,7 @@ vfide: ../bin/vfide$(DOTEXE) $(STDLIB)
 	  plugins2.cmx util.cmx ast.cmx stats.cmx lexer.cmx parser.cmx \
 	  ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx \
 	  verify_expr.cmx verifast.cmx simplex.cmx redux.cmx \
+          $(Z3ARGS_EARLY) \
 	  verifastPluginRedux.ml $(Z3ARGS) vfconsole.cmx
 
 
@@ -440,6 +456,10 @@ z3v2prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmxa proverapi.cmx z3v2prover.ml
 z3v4prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmxa proverapi.cmx z3v4prover.ml
 	@echo "  OCAMLOPT " $@
 	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -c -I $(Z3_OCAML) z3.cmxa -I ./$(INCLUDE_OS_DIR) Perf.cmxa proverapi.cmx z3v4prover.ml
+
+z3v4dot5prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmxa proverapi.cmx z3v4dot5prover.ml
+	@echo "  OCAMLOPT " $@
+	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -c -I $(Z3_OCAML) -I ./$(INCLUDE_OS_DIR) Perf.cmxa proverapi.cmx z3v4dot5prover.ml
 
 clean::
 	rm -f shape_analysis/*.cm[ix] shape_analysis/*.cmo
