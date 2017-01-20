@@ -198,7 +198,7 @@ void server(int server, int sender, int receiver,
     //@ chars_to_crypto_chars(message, ID_SIZE);
     //@ chars_to_crypto_chars(message + ID_SIZE + 16, d_size);
     //@ assert crypto_chars(normal, message + ID_SIZE + 16, d_size, ?enc_ccs);
-    //@ close check_identifier_ghost_args(true, false, 0, 0, append(iv_ccs, enc_ccs));
+    //@ close check_identifier_ghost_args(true, false, 0, 0, 0, append(iv_ccs, enc_ccs));
     check_identifier(message, receiver);
     //@ cs_to_ccs_crypto_chars(message, identifier(receiver));
     //@ assert chars(message, ID_SIZE, ?r_id_cs');
@@ -255,7 +255,7 @@ void server(int server, int sender, int receiver,
         }
     @*/
     //@ chars_to_crypto_chars(decrypted, ID_SIZE);
-    /*@ close check_identifier_ghost_args(true, garbage, receiver,
+    /*@ close check_identifier_ghost_args(true, garbage, server, receiver,
                                           r_id, append(NA_ccs, NB_ccs)); @*/
     check_identifier(decrypted, sender);
     //@ crypto_chars_join((void*) decrypted + ID_SIZE);
@@ -718,7 +718,7 @@ void sender(int server, int sender, int receiver,
         }
     @*/
     //@ chars_to_crypto_chars(dec, ID_SIZE);
-    //@ close check_identifier_ghost_args(true, garbage, sender, s_id2, dec_ccs0);
+    //@ close check_identifier_ghost_args(true, garbage, sender, sender, s_id2, dec_ccs0);
     check_identifier(dec, receiver);
     //@ assert id_ccs == rid_ccs;
     if (memcmp(NA, dec + ID_SIZE + KEY_SIZE, NONCE_SIZE) != 0) abort();
@@ -961,7 +961,7 @@ void receiver_(int socket_in, int sender, int receiver, int server,
   @*/
   memcpy(generated_key, dec1 + ID_SIZE, KEY_SIZE);
   //@ chars_to_crypto_chars(dec1, ID_SIZE);
-  /*@ close check_identifier_ghost_args(true, garbage, receiver,
+  /*@ close check_identifier_ghost_args(true, garbage, receiver, receiver,
                                         r_id1, ccs_KAB); @*/
   check_identifier(dec1, sender);
   /*@ if(!col && !yahalom_public_key(receiver, r_id1, true))
@@ -1117,7 +1117,7 @@ void receiver(int server, int sender, int receiver,
     net_recv(&socket_in, message, (unsigned int) size);
     //@ chars_split(message, ID_SIZE);
     //@ public_chars(message, ID_SIZE);
-    //@ close check_identifier_ghost_args(true, false, 0, 0, nil);
+    //@ close check_identifier_ghost_args(true, false, 0, 0, 0, nil);
     //@ chars_to_crypto_chars(message, ID_SIZE);
     check_identifier(message, sender);
     //@ public_crypto_chars(message, ID_SIZE);
@@ -1247,7 +1247,6 @@ void receiver(int server, int sender, int receiver,
   receiver_(socket_in, sender, receiver, server, key,
             generated_key, NA, NB);
   //@ open cryptogram(NB, NONCE_SIZE, ccs_NB, cg_NB);
-  //@ close principal(receiver, _);
 
   //@ public_crypto_chars(NA, NONCE_SIZE);
   zeroize(NB, NONCE_SIZE);
@@ -1258,7 +1257,6 @@ void receiver(int server, int sender, int receiver,
   net_close(socket);
   net_close(socket_in);
   net_close(socket_out);
-  //@ close principal(receiver, _);
 }
 
 #endif

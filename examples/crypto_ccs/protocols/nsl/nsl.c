@@ -237,7 +237,7 @@ void sender_msg2(int* socket, havege_state* havege_state, pk_context* s_context,
       }
   @*/
   //@ chars_to_crypto_chars(message, ID_SIZE);
-  /*@ close check_identifier_ghost_args(false, garbage, sender,
+  /*@ close check_identifier_ghost_args(false, garbage, sender, sender,
                                         s_id, append(s_ccs, r_ccs)); @*/
   check_identifier(message, recvr);
   //@ open cryptogram(s_nonce, NONCE_SIZE, s_nonce_ccs, s_nonce_cg);
@@ -523,7 +523,7 @@ void receiver_msg1(int* socket, havege_state* havege_state,
       }
   @*/
   //@ chars_to_crypto_chars(message, ID_SIZE);
-  /*@ close check_identifier_ghost_args(false, garbage, receiver,
+  /*@ close check_identifier_ghost_args(false, garbage, receiver, receiver,
                                         r_id, s_nonce_ccs); @*/
   check_identifier(message, sender);
   //@ assert id_ccs == cs_to_ccs(identifier(sender));

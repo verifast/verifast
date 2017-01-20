@@ -259,7 +259,7 @@ struct item *asymmetric_decryption(struct item *key, struct item *item, char tag
           chars_to_crypto_chars(output, TAG_LENGTH);
         }
     @*/
-    //@ close check_tag2_args(false, garbage, p_key, c_key, ccs_i);
+    //@ close check_tag2_args(false, garbage, principal1, p_key, c_key, ccs_i);
     check_tag2(output, tag);
     /*@ if (!garbage) 
         {

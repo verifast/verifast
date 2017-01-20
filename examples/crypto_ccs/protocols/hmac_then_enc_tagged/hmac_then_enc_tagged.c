@@ -254,7 +254,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     @*/
     //@ chars_to_crypto_chars(buffer_dec, ID_SIZE);
     //@ assert crypto_chars(normal, buffer_dec, ID_SIZE, _);
-    //@ close check_identifier_ghost_args(true, garbage, sender, enc_id, rest_ccs);
+    //@ close check_identifier_ghost_args(true, garbage, receiver, sender, enc_id, rest_ccs);
     check_identifier(buffer_dec, 0);
     //@ assert id_ccs == cs_to_ccs(identifier(0));
 

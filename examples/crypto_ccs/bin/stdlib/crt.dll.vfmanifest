@@ -1,4 +1,3 @@
-.predicate @./crypto.gh#network_permission
 .predicate @./crypto.gh#crypto_chars
 .provides ./crypto.gh#crypto_chars_to_chars
 .provides ./crypto.gh#chars_to_crypto_chars
@@ -182,6 +181,8 @@
 .provides CRT/prelude.h#pointers_inv
 .provides CRT/prelude.h#ushorts_inv
 .provides CRT/prelude.h#shorts_inv
+.provides CRT/prelude.h#ullongs_inv
+.provides CRT/prelude.h#llongs_inv
 .provides CRT/prelude.h#uints_inv
 .provides CRT/prelude.h#ints_inv
 .provides CRT/prelude.h#uchars_inv

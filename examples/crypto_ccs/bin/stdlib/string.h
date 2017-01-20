@@ -43,8 +43,7 @@ predicate memcmp_secret(char* buffer, int count, list<crypto_char> ccs, cryptogr
 @*/
 
 int memcmp(char *array, char *array0, size_t count);
-    /*@ requires network_permission(?principal) &*& 
-                 [?f1]crypto_chars(?kind1, array, ?n1, ?ccs1) &*&
+    /*@ requires [?f1]crypto_chars(?kind1, array, ?n1, ?ccs1) &*&
                    (kind1 == normal ? true : 
                       memcmp_secret(array, count, ccs1, _)) &*&
                  [?f2]crypto_chars(?kind2, array0, ?n2, ?ccs2) &*& 
@@ -53,13 +52,7 @@ int memcmp(char *array, char *array0, size_t count);
                  count <= n1 &*& count <= n2; @*/
     /*@ ensures  [f1]crypto_chars(kind1, array, n1, ccs1) &*&
                  [f2]crypto_chars(kind2, array0, n2, ccs2) &*&
-                 true == ((result == 0) == (take(count, ccs1) == take(count, ccs2))) &*&
-                 (
-                   //if guessing a secret value failed, network permissions are revoked
-                   // *otherwise one could keep guessing untill success
-                   result != 0 && (kind1 == secret || kind2 == secret) ?
-                       true : network_permission(principal)
-                 ); @*/
+                 true == ((result == 0) == (take(count, ccs1) == take(count, ccs2))); @*/
 
 int strcmp(char *s1, char *s2);
     //@ requires [?f1]string(s1, ?cs1) &*& [?f2]string(s2, ?cs2);

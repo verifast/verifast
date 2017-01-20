@@ -39,8 +39,7 @@ update_part(
        "count <= n &*& count <= n0;\r\n"
   "    //@ ensures [f]chars(array, n, cs) &*& [f0]chars(array0, n0, cs0) &*& "
        "true == ((result == 0) == (take(count, cs) == take(count, cs0)));\r\n",
-  "    /*@ requires network_permission(?principal) &*& \r\n"
-  "                 [?f1]crypto_chars(?kind1, array, ?n1, ?ccs1) &*&\r\n"
+  "    /*@ requires [?f1]crypto_chars(?kind1, array, ?n1, ?ccs1) &*&\r\n"
   "                   (kind1 == normal ? true : \r\n"
   "                      memcmp_secret(array, count, ccs1, _)) &*&\r\n"
   "                 [?f2]crypto_chars(?kind2, array0, ?n2, ?ccs2) &*& \r\n"
@@ -49,17 +48,10 @@ update_part(
   "                 count <= n1 &*& count <= n2; @*/\r\n"
   "    /*@ ensures  [f1]crypto_chars(kind1, array, n1, ccs1) &*&\r\n"
   "                 [f2]crypto_chars(kind2, array0, n2, ccs2) &*&\r\n"
-  "                 true == ((result == 0) == (take(count, ccs1) == take(count, ccs2))) &*&\r\n"
-  "                 (\r\n"
-  "                   //if guessing a secret value failed, network permissions are revoked\r\n"
-  "                   // *otherwise one could keep guessing untill success\r\n"
-  "                   result != 0 && (kind1 == secret || kind2 == secret) ?\r\n"
-  "                       true : network_permission(principal)\r\n"
-  "                 ); @*/\r\n"
+  "                 true == ((result == 0) == (take(count, ccs1) == take(count, ccs2))); @*/\r\n"
 )
 
 insert_part("crt.dll.vfmanifest", 1,
-  ".predicate @./crypto.gh#network_permission\r\n"
   ".predicate @./crypto.gh#crypto_chars\r\n"
   ".provides ./crypto.gh#crypto_chars_to_chars\r\n"
   ".provides ./crypto.gh#chars_to_crypto_chars\r\n"

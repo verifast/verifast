@@ -204,11 +204,9 @@ void network_disconnect(struct network_status *stat)
 }
 
 void network_send(struct network_status *stat, struct item* datagram)
-  /*@ requires [?f]world(?pub, ?key_clsfy) &*& principal(?id, ?count) &*&
-               network_status(stat) &*&
+  /*@ requires [?f]world(?pub, ?key_clsfy) &*& network_status(stat) &*&
                item(datagram, ?d, pub) &*& [_]pub(d); @*/
-  /*@ ensures  [f]world(pub, key_clsfy) &*& principal(id, count) &*&
-               network_status(stat) &*&
+  /*@ ensures  [f]world(pub, key_clsfy) &*& network_status(stat) &*&
                item(datagram, d, pub); @*/
 {
   int socket = -1;
@@ -230,11 +228,7 @@ void network_send(struct network_status *stat, struct item* datagram)
     if (size > MAX_PACKAGE_SIZE)
        abort_crypto_lib("Message to send is to big");
 
-    //@ open [f]world(pub, key_clsfy);
-    //@ open principal(id, count);
     net_send(&socket, message, (unsigned int) size);
-    //@ close principal(id, count);
-    //@ close [f]world(pub, key_clsfy);
     free(message);
   }
   //@ close network_status_core(stat, true);
@@ -242,11 +236,9 @@ void network_send(struct network_status *stat, struct item* datagram)
 }
 
 struct item *network_receive_attempt(struct network_status *stat)
-  /*@ requires [?f0]world(?pub, ?key_clsfy) &*& principal(?id, ?count) &*&
-               network_status(stat) &*&
+  /*@ requires [?f0]world(?pub, ?key_clsfy) &*& network_status(stat) &*&
                proof_obligations(pub); @*/
-  /*@ ensures  [f0]world(pub, key_clsfy) &*& principal(id, count) &*&
-               network_status(stat) &*&
+  /*@ ensures  [f0]world(pub, key_clsfy) &*& network_status(stat) &*&
                proof_obligations(pub) &*&
                result == 0 ? 
                  true 
@@ -266,12 +258,7 @@ struct item *network_receive_attempt(struct network_status *stat)
   if (socket > 0)
   {
     char receive_buffer[MAX_PACKAGE_SIZE];
-    //@ open [f0]world(pub, key_clsfy);
-    //@ open principal(id, count);
     int received = net_recv(&socket, receive_buffer, MAX_PACKAGE_SIZE);
-    //@ close principal(id, count);
-    //@ close [f0]world(pub, key_clsfy);
-    
     //receiving failed?
     if (received > 0)
     {
@@ -289,10 +276,8 @@ struct item *network_receive_attempt(struct network_status *stat)
 }
 
 struct item *network_receive(struct network_status *stat)
-  /*@ requires [?f]world(?pub, ?key_clsfy) &*& principal(?id, ?count) &*&
-               network_status(stat); @*/
-  /*@ ensures  [f]world(pub, key_clsfy) &*& principal(id, count) &*&
-               network_status(stat) &*&
+  /*@ requires [?f]world(?pub, ?key_clsfy) &*& network_status(stat); @*/
+  /*@ ensures  [f]world(pub, key_clsfy) &*& network_status(stat) &*&
                item(result, ?d, pub) &*& [_]pub(d); @*/
 {
   //@ retreive_proof_obligations();

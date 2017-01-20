@@ -50,6 +50,7 @@
 .requires CRT/prelude.h#integer_to_chars
 .requires CRT/prelude.h#ints_inv
 .requires CRT/prelude.h#ints_to_chars
+.requires CRT/prelude.h#llongs_inv
 .requires CRT/prelude.h#pointer_nonzero
 .requires CRT/prelude.h#pointer_of_chars_of_pointer
 .requires CRT/prelude.h#pointer_to_chars
@@ -68,6 +69,7 @@
 .requires CRT/prelude.h#uchars_to_chars
 .requires CRT/prelude.h#uints_inv
 .requires CRT/prelude.h#uints_to_chars
+.requires CRT/prelude.h#ullongs_inv
 .requires CRT/prelude.h#ushorts_inv
 .requires CRT/prelude_core.gh#default_value_eq_zero
 .provides CRT/arrays.gh#ints_join

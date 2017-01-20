@@ -50,9 +50,8 @@ void write_identifier(char *array, int id)
 void check_identifier(char *array, int id)
   /*@ requires [_]public_invar(?pub) &*&
                [_]decryption_key_classifier(?key_classifier) &*&
-               network_permission(?p) &*&
                [?f]crypto_chars(normal, array, ID_SIZE, ?ccs) &*&
-               check_identifier_ghost_args(?sym, ?garbage, ?p_key, 
+               check_identifier_ghost_args(?sym, ?garbage, ?p, ?p_key, 
                                            ?c_key, ?ccs_rest) &*&
                garbage ?
                  decryption_garbage(sym, p, ?s, p_key, c_key, 
@@ -60,8 +59,7 @@ void check_identifier(char *array, int id)
                  s == known_value(0, cs_to_ccs(identifier(id)))
                :
                  true; @*/
-  /*@ ensures  network_permission(p) &*&
-               [f]crypto_chars(normal, array, ID_SIZE, ccs) &*&
+  /*@ ensures  [f]crypto_chars(normal, array, ID_SIZE, ccs) &*&
                ccs == cs_to_ccs(identifier(id)) &*&
                garbage ?
                  decryption_permission(p) &*&
@@ -69,7 +67,7 @@ void check_identifier(char *array, int id)
                :
                  true; @*/
 {
-  //@ open check_identifier_ghost_args(sym, garbage, p_key, c_key, ccs_rest);
+  //@ open check_identifier_ghost_args(sym, garbage, p, p_key, c_key, ccs_rest);
   char temp[ID_SIZE];
   write_identifier(temp, id);
   if (memcmp(temp, array, ID_SIZE) != 0) abort();

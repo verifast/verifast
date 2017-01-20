@@ -800,18 +800,15 @@ void network_disconnect(struct network_status *stat);
   //@ ensures  true;
 
 void network_send(struct network_status *stat, struct item *datagram);
-  /*@ requires [?f]world(?pub, ?key_clsfy) &*& principal(?id, ?count) &*&
-               network_status(stat) &*&
+  /*@ requires [?f]world(?pub, ?key_clsfy) &*& network_status(stat) &*&
                item(datagram, ?d, pub) &*& [_]pub(d); @*/
-  /*@ ensures  [f]world(pub, key_clsfy) &*& principal(id, count) &*&
+  /*@ ensures  [f]world(pub, key_clsfy) &*&
                network_status(stat) &*&
                item(datagram, d, pub); @*/
 
 struct item *network_receive(struct network_status *stat);
-  /*@ requires [?f]world(?pub, ?key_clsfy) &*& principal(?id, ?count) &*&
-               network_status(stat); @*/
-  /*@ ensures  [f]world(pub, key_clsfy) &*& principal(id, count) &*&
-               network_status(stat) &*&
+  /*@ requires [?f]world(?pub, ?key_clsfy) &*& network_status(stat); @*/
+  /*@ ensures  [f]world(pub, key_clsfy) &*& network_status(stat) &*&
                item(result, ?d, pub) &*& [_]pub(d); @*/
 
 ///////////////////////////////////////////////////////////////////////////////

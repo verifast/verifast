@@ -11,8 +11,8 @@ predicate random_permission(int principal, int generated_values;);
 predicate decryption_permission(int principal;);
 
 predicate principal(int principal, int generated_values;) =
-  network_permission(principal) &*& decryption_permission(principal) &*&
-  random_permission(principal, generated_values)
+  random_permission(principal, generated_values) &*&
+  decryption_permission(principal)
 ;
 
 lemma void principals_init();

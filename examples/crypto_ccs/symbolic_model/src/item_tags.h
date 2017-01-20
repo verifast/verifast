@@ -97,24 +97,22 @@ void check_tag(char* buffer, char tag);
                head(cs) == tag &*& cs == full_tag(tag); @*/
 
 /*@
-predicate check_tag2_args(bool sym, bool garbage, int p_key,
+predicate check_tag2_args(bool sym, bool garbage, int p, int p_key,
                           int c_key, list<crypto_char> ccs_rest) = true;
 @*/
 
 void check_tag2(char* buffer, char tag);
   /*@ requires [_]public_invar(?pub) &*&
                [_]decryption_key_classifier(?key_classifier) &*&
-               network_permission(?p) &*&
                [?f2]crypto_chars(normal, buffer, TAG_LENGTH, ?ccs) &*&
-               check_tag2_args(?sym, ?garbage, ?p_key, ?c_key, ?rest_ccs) &*&
+               check_tag2_args(?sym, ?garbage, ?p, ?p_key, ?c_key, ?rest_ccs) &*&
                garbage ?
                  decryption_garbage(sym, p, ?s, p_key, c_key,
                                     append(ccs, rest_ccs)) &*&
                  s == known_value(0, full_ctag(c_to_cc(tag)))
                :
                  true; @*/
-  /*@ ensures  network_permission(p) &*&
-               [f2]crypto_chars(normal, buffer, TAG_LENGTH, ccs) &*&
+  /*@ ensures  [f2]crypto_chars(normal, buffer, TAG_LENGTH, ccs) &*&
                head(ccs) == c_to_cc(tag) &*& ccs == full_ctag(head(ccs)) &*&
                garbage ?
                  decryption_permission(p) &*&

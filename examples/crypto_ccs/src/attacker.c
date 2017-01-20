@@ -50,7 +50,6 @@ predicate attacker_invariant(predicate(cryptogram) pub,
   havege_state_initialized(state) &*&
   integer(socket, ?fd) &*& net_status(fd, ?ip, ?port, connected) &*&
   true == bad(attacker) &*&
-  network_permission(attacker) &*&
   random_permission(attacker, _) &*&
   decryption_permission(attacker) &*&
   is_principal_with_public_nonces(_, pub,

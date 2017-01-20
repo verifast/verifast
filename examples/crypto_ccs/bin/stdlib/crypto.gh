@@ -3,8 +3,6 @@
 
 #define MINIMAL_STRING_SIZE 10
 
-predicate network_permission(int principal;);
-
 fixpoint bool bad(int principal);
 
 fixpoint bool col();
