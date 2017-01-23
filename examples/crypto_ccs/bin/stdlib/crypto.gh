@@ -9,11 +9,13 @@ fixpoint bool col();
 
 // crypto_char
 
+abstract_type random_oracle; // Finite list of random coin tosses
+
 inductive crypto_char =
-  crypto_char(fixpoint(fixpoint(int, bool), char) crypto_char)
+  crypto_char(fixpoint(random_oracle, char) crypto_char)
 ;
 
-fixpoint char crypto_char_const(char c, fixpoint(int, bool) samplings)
+fixpoint char crypto_char_const(char c, random_oracle samplings)
 {
   return c;
 }
