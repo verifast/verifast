@@ -1,8 +1,6 @@
 #ifndef PRINCIPALS_GH
 #define PRINCIPALS_GH
 
-#include <crypto.gh>
-
 require_module principals_mod;
 
 predicate principals(int id);
@@ -14,6 +12,8 @@ predicate principal(int principal, int generated_values;) =
   random_permission(principal, generated_values) &*&
   decryption_permission(principal)
 ;
+
+fixpoint bool bad(int principal);
 
 lemma void principals_init();
   requires module(principals_mod, true);

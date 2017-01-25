@@ -14,14 +14,8 @@ def update_part(path, old, new):
   f2.write(m)
   f2.close()
 
-insert_part("string.h", 5, "//@ #include <crypto.gh>\r\n")
-insert_part("string.h", 37,
-  "/*@\r\n"
-  "predicate memcmp_secret(char* buffer, int count, list<crypto_char> ccs, cryptogram cg) =\r\n"
-  "  count == length(ccs) && ccs == ccs_for_cg(cg) && cg_is_gen_or_pub(cg) \r\n"
-  ";\r\n"
-  "@*/\r\n\n"
-)
+insert_part("stdlib.h", 6, "#include \"crypto.h\"\r\n")
+insert_part("string.h", 6, "//@ #include \"crypto/memcmp.gh\"\r\n\r\n")
 
 update_part(
   "string.h",
@@ -40,25 +34,11 @@ update_part(
   "    //@ ensures [f]chars(array, n, cs) &*& [f0]chars(array0, n0, cs0) &*& "
        "true == ((result == 0) == (take(count, cs) == take(count, cs0)));\r\n",
   "    /*@ requires [?f1]crypto_chars(?kind1, array, ?n1, ?ccs1) &*&\r\n"
-  "                   (kind1 == normal ? true : \r\n"
-  "                      memcmp_secret(array, count, ccs1, _)) &*&\r\n"
+  "                 [_]memcmp_ccs(_, take(count, ccs1)) &*& \r\n"
   "                 [?f2]crypto_chars(?kind2, array0, ?n2, ?ccs2) &*& \r\n"
-  "                   (kind2 == normal ? true : \r\n"
-  "                      memcmp_secret(array0, count, ccs2, _)) &*&\r\n"
+  "                 [_]memcmp_ccs(_, take(count, ccs2)) &*& \r\n"
   "                 count <= n1 &*& count <= n2; @*/\r\n"
   "    /*@ ensures  [f1]crypto_chars(kind1, array, n1, ccs1) &*&\r\n"
   "                 [f2]crypto_chars(kind2, array0, n2, ccs2) &*&\r\n"
   "                 true == ((result == 0) == (take(count, ccs1) == take(count, ccs2))); @*/\r\n"
-)
-
-insert_part("crt.dll.vfmanifest", 1,
-  ".predicate @./crypto.gh#crypto_chars\r\n"
-  ".provides ./crypto.gh#crypto_chars_to_chars\r\n"
-  ".provides ./crypto.gh#chars_to_crypto_chars\r\n"
-  ".provides ./crypto.gh#chars_to_secret_crypto_chars\r\n"
-  ".provides ./crypto.gh#crypto_chars_inv\r\n"
-  ".provides ./crypto.gh#crypto_chars_limits\r\n"
-  ".provides ./crypto.gh#crypto_chars_distinct\r\n"
-  ".provides ./crypto.gh#crypto_chars_split\r\n"
-  ".provides ./crypto.gh#crypto_chars_join\r\n"
 )

@@ -1,8 +1,8 @@
 #ifndef HAVEGE_H
 #define HAVEGE_H
 
+#include <stdlib.h>
 #include "macro_defines.h"
-#include "random.h"
 
 struct havege_state
 {

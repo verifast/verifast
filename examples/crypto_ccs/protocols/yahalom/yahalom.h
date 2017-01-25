@@ -1,7 +1,7 @@
 #ifndef YAHALOM_H
 #define YAHALOM_H
 
-#include "../../annotated_api/polarssl_definitions/polarssl_definitions.h"
+#include "../../annotated_api/polarssl_definitions.h"
 
 #define KEY_SIZE 32
 #define NONCE_SIZE 10

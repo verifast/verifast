@@ -1,4 +1,4 @@
-#include "../annotated_api/polarssl_definitions/polarssl_definitions.h"
+#include "../annotated_api/polarssl_definitions.h"
 
 #include <pthread.h>
 #include <stdio.h>

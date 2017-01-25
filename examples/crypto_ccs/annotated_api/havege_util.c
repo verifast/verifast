@@ -1,4 +1,4 @@
-#include "../annotated_api/polarssl_definitions/polarssl_definitions.h"
+#include "havege_util.h"
 
 #include <stdlib.h>
 

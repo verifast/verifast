@@ -1,4 +1,4 @@
-//@ #include "../annotated_api/general_definitions/public_chars.gh"
+//@ #include "public_chars.gh"
 
 /*@
 

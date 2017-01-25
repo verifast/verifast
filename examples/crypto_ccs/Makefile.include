@@ -1,4 +1,4 @@
-CC = clang -m32
+CC = clang -m32 -Wno-implicit-function-declaration -Wno-incompatible-library-redeclaration
 
 # debug
 CFLAGS += -g

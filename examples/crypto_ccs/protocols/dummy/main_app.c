@@ -130,6 +130,8 @@ int main(int argc, char **argv) //@ : main_full(main_app)
       //@ chars_to_crypto_chars(msg1, PACKAGE_SIZE);
       //@ chars_to_crypto_chars(msg2, PACKAGE_SIZE);
       //@ open principal(sender, _);
+      //@ MEMCMP_PUB(msg1)
+      //@ MEMCMP_PUB(msg2)
       if (memcmp(msg1, msg2, PACKAGE_SIZE) != 0)
         abort();
       //@ close principal(sender, _);

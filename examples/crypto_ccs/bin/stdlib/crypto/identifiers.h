@@ -1,14 +1,14 @@
 #ifndef IDENTIFIERS_H
 #define IDENTIFIERS_H
 
-//@ #include <crypto.gh>
+//@ #include "cryptogram.gh"
 //@ #include "public_chars.gh"
 //@ #include "decryption.gh"
 
 #define ID_SIZE 12
 
 /*@
- 
+
 fixpoint list<char> identifier(int i)
 {
   return append(chars_of_int(i), append(chars_of_int(i), chars_of_int(i)));
@@ -34,7 +34,7 @@ predicate check_identifier_ghost_args(bool sym, bool garbage, int p, int p_key,
                                       int c_key, list<crypto_char> ccs_rest) =
   true;
 @*/
-  
+
 void check_identifier(char *array, int id);
   /*@ requires [_]public_invar(?pub) &*&
                [_]decryption_key_classifier(?key_classifier) &*&
@@ -42,7 +42,7 @@ void check_identifier(char *array, int id);
                check_identifier_ghost_args(?sym, ?garbage, ?p, ?p_key,
                                            ?c_key, ?ccs_rest) &*&
                garbage ?
-                 decryption_garbage(sym, p, ?s, p_key, c_key, 
+                 decryption_garbage(sym, p, ?s, p_key, c_key,
                                     append(ccs, ccs_rest)) &*&
                  s == known_value(0, cs_to_ccs(identifier(id)))
                :

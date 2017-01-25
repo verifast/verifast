@@ -123,8 +123,6 @@ struct item *participant_construct(int server, int prev, int current, int next,
   //@ assert item(m3, ?p_m3, ror_pub);
   //@ assert p_m3 == pair_item(d_p1, p_m2);
   //@ CLOSE_PUB(p_m3)
-  //@ close hash_item_payload(ror_pub, true, p_m3);
-  //@ leak hash_item_payload(ror_pub, true, p_m3);
   struct item *hmac = create_hmac(key, m3);
 
   //@ assert item(hmac, ?h, ror_pub);
@@ -464,8 +462,6 @@ struct processed_messages *server_process(struct keys *keys, struct item *msg)
     //@ assert item(k2, ?k2i, ror_pub);
     //@ assert k2i == symmetric_key_item(p2_val, ?c2);
     //@ if (col) {close ror_pub(m1_i); leak ror_pub(m1_i);}
-    //@ close hash_item_payload(ror_pub, true, m1_i);
-    //@ leak hash_item_payload(ror_pub, true, m1_i);
     struct item *hmac2 = create_hmac(result->k2, temp1);
     item_check_equal(hmac, hmac2);
     item_free(hmac2);

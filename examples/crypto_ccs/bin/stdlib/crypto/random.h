@@ -1,7 +1,13 @@
 #ifndef RANDOM_H
 #define RANDOM_H
 
-#include "macro_defines.h"
+#include <stddef.h>
+
+//@ #include "principals.gh"
+//@ #include "cryptogram.gh"
+
+#define MIN_RANDOM_SIZE 4
+#define MINIMAL_STRING_SIZE 10
 
 /*@
 

@@ -1,13 +1,47 @@
-#ifndef CRYPTO_CHARS_GH
-#define CRYPTO_CHARS_GH
+#ifndef CCS_GH
+#define CCS_GH
 
-#include <crypto.gh>
+#include <quantifiers.gh>
 #include "auxiliary_definitions.gh"
+
+abstract_type coin_tosses; // Finite list of random coin tosses
+
+inductive crypto_char =
+  crypto_char(fixpoint(coin_tosses, char) crypto_char)
+;
+
+fixpoint char crypto_char_const(char c, coin_tosses sampling)
+{
+  return c;
+}
+
+fixpoint crypto_char c_to_cc(char c)
+{
+  return crypto_char((crypto_char_const)(c));
+}
+
+fixpoint list<crypto_char> cs_to_ccs(list<char> cs)
+{
+  switch(cs)
+  {
+    case cons(c, cs0):
+      return cons(c_to_cc(c), cs_to_ccs(cs0));
+    case nil:
+      return nil;
+  }
+}
 
 fixpoint bool cs_to_ccs_eq(list<crypto_char> ccs, list<char> cs)
 {
   return ccs == cs_to_ccs(cs);
 }
+
+predicate public_ccs(list<crypto_char> ccs) =
+  [_]is_forall_t<list<char> >(?forallcs) &*&
+  true == exists_t<list<char> >(forallcs, (cs_to_ccs_eq)(ccs))
+;
+
+// Proven lemmas
 
 lemma void cs_to_ccs_length(list<char> xs);
   requires true;
@@ -38,3 +72,5 @@ lemma void cs_to_ccs_chars(char* b, list<char> cs2);
   requires [?f]chars(b, ?c, ?cs1) &*&
            cs_to_ccs(cs1) == cs_to_ccs(cs2);
   ensures  [f]chars(b, c, cs2);
+
+#endif

@@ -1,5 +1,5 @@
-//@ #include "../annotated_api/general_definitions/interpret.gh"
-//@ #include "../annotated_api/general_definitions/public_chars.gh"
+//@ #include "interpret.gh"
+//@ #include "public_chars.gh"
 
 /*@
 

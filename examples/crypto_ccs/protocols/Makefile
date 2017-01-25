@@ -31,7 +31,7 @@ all : $(PROT_APPS)
 
 MSG = Verified, compiled and executed protocol:
 
-$(PROT_APPS) : ../annotated_api/polarssl_definitions/polarssl_definitions.h \
+$(PROT_APPS) : ../annotated_api/polarssl_definitions.h \
 	       $$(addsuffix .vfmanifest, $$@) $$(addsuffix .o, $$@) \
 	       $$(dir $$@)main_app.vfmanifest $$(dir $$@)main_app.o
 	$(VF) $(VFFLAGS) -allow_assume pthread.o ../bin/libann_polarssl.dll.vfmanifest \

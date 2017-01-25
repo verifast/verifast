@@ -4,22 +4,27 @@ include Makefile.include
 
 MODULES = \
   auxiliary_definitions \
-  cs_to_ccs \
+  ccs \
   cryptogram \
   cryptogram_levels \
   public_chars \
   interpret \
-  havege_util \
   identifiers \
+
+PMODULES = \
+  havege_util \
   attacker
 
-OBJECTS   = $(foreach src,$(MODULES),src/$(addsuffix .o, $(src))) \
-	    src/zeroize.o
-MANIFESTS = $(foreach src,$(MODULES),src/$(addsuffix .vfmanifest, $(src)))
+OBJECTS   = $(foreach src,$(MODULES),bin/stdlib/crypto/$(addsuffix .o, $(src))) \
+	    bin/stdlib/crypto/zeroize.o
+MANIFESTS = $(foreach src,$(MODULES),bin/stdlib/crypto/$(addsuffix .vfmanifest, $(src)))
+
+POBJECTS   = $(foreach src,$(PMODULES),annotated_api/$(addsuffix .o, $(src)))
+PMANIFESTS = $(foreach src,$(PMODULES),annotated_api/$(addsuffix .vfmanifest, $(src)))
 
 all: \
 	polarssl_library \
-	annotated_api/polarssl_definitions/macro_defines.h \
+	annotated_api/macro_defines.h \
 	stdlib \
 	bin/libann_polarssl.dll.vfmanifest \
 	bin/libann_polarssl.so \
@@ -53,14 +58,14 @@ polarssl_library :
 	make -C polarssl_library CC='$(CC)' -j4;
 	$(call pprint_big_end)
 
-.PHONY: annotated_api/polarssl_definitions/macro_defines.h
-annotated_api/polarssl_definitions/macro_defines.h : polarssl_library tools/macro_defines.c
+.PHONY: annotated_api/macro_defines.h
+annotated_api/macro_defines.h : polarssl_library tools/macro_defines.c
 	@cd tools; \
 	  ${CC} -I ../polarssl_library/include/polarssl/ macro_defines.c \
 	    -lpthread -L ../polarssl_library/library -lpolarssl ; \
 	  ./a.out; \
 	  rm a.out; \
-	  mv macro_defines.h ../annotated_api/polarssl_definitions;
+	  mv macro_defines.h ../annotated_api;
 	$(call pprint_big, Generated header with size and other defines for annotated PolarSSL library)
 
 .PHONY: stdlib
@@ -73,19 +78,19 @@ stdlib:
 	cp -r ../../bin/bits/ bin/stdlib
 	@cd bin/stdlib/; chmod +x update_contracts.py; python ./update_contracts.py
 
-bin/libann_polarssl.dll.vfmanifest : annotated_api/general_definitions/general_definitions.vfmanifest \
-                                     annotated_api/polarssl_definitions/polarssl_definitions.vfmanifest \
-                                     $(MANIFESTS)
+bin/libann_polarssl.dll.vfmanifest : bin/stdlib/crypto.vfmanifest \
+                                     annotated_api/polarssl_definitions.vfmanifest \
+                                     $(MANIFESTS) $(PMANIFESTS)
 	${VF} $(VFFLAGS) -shared -allow_assume \
 	  -emit_dll_vfmanifest -emit_dll_vfmanifest_as \
 	  bin/libann_polarssl.dll.vfmanifest \
-	  annotated_api/general_definitions/general_definitions.vfmanifest \
-	  annotated_api/polarssl_definitions/polarssl_definitions.vfmanifest \
-	  $(MANIFESTS)
+	  bin/stdlib/crypto.vfmanifest \
+	  annotated_api/polarssl_definitions.vfmanifest \
+	  $(MANIFESTS) $(PMANIFESTS)
 	$(call pprint_big, Link time verification of annotated PolarSSL library done)
 
-bin/libann_polarssl.so : $(OBJECTS)
-	@${CC} -shared $(OBJECTS) -o bin/libann_polarssl.so
+bin/libann_polarssl.so : $(OBJECTS) $(POBJECTS)
+	@${CC} -shared $(OBJECTS) $(POBJECTS) -o bin/libann_polarssl.so
 	$(call pprint_big, Linked verified annotated PolarSSL library)
 
 .PHONY: protocols
@@ -99,8 +104,7 @@ symbolic_model:
 clean:
 	make -C symbolic_model clean
 	make -C protocols clean
-	rm -f src/*.o
-	rm -f src/*.vfmanifest
+	rm -f $(OBJECTS) $(POBJECTS) $(MANIFESTS) $(PMANIFESTS)
 	rm -f bin/libann_polarssl.so
 	rm -f bin/libann_polarssl.dll.vfmanifest
 	$(call pprint_big, Cleaned PolarSSL library)

@@ -163,7 +163,6 @@ int pk_encrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                 :
                   // encryption was successful
                   cryptogram(output, olen_val, _, ?cg) &*&
-                  cg == cg_asym_encrypted(p1, c1, ccs_input, _) &*&
                   olen_val > 0 &*& olen_val <= osize &*&
                   8 * olen_val <= nbits &*&
                   cg == cg_asym_encrypted(p1, c1, ccs_input, _) &*&

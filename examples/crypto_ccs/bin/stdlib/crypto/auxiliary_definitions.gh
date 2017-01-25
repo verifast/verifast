@@ -1,10 +1,9 @@
 #ifndef AUXILIARY_DEFINITIONS_GH
 #define AUXILIARY_DEFINITIONS_GH
 
-#include "nat.gh"
-#include "list.gh"
-#include "listex.gh"
-#include <crypto.gh>
+#include <nat.gh>
+#include <list.gh>
+#include <listex.gh>
 
 //Int pairs, to encode information
 fixpoint int int_left(int p);
@@ -30,11 +29,6 @@ predicate option_string(char *s; list<char> cs) =
 //Hide a char chunck
 predicate hide_chars(char *buffer, int length, list<char> cs) =
   chars(buffer, length, cs)
-;
-
-predicate hide_crypto_chars(crypto_chars_kind kind, char *buffer,
-                            int length, list<crypto_char> ccs) =
-  crypto_chars(kind, buffer, length, ccs)
 ;
 
 //Power fixpoint
@@ -167,6 +161,10 @@ fixpoint bool sublist<T>(list<T> xs, list<T> ys)
       return xs == nil;
   }
 }
+
+lemma void sublist_refl<T>(list<T> xs);
+  requires true;
+  ensures  true == sublist(xs, xs);
 
 lemma void sublist_append<T>(list<T> xs1, list<T> xs, list<T> xs2);
   requires true;

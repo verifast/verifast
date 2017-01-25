@@ -1,0 +1,75 @@
+#ifndef CRYPTO_CHARS_GH
+#define CRYPTO_CHARS_GH
+
+#include "ccs.gh"
+
+fixpoint bool col();
+
+inductive crypto_chars_kind =
+  | normal
+  | secret
+;
+
+fixpoint crypto_chars_kind join_kinds(crypto_chars_kind k1,
+                                      crypto_chars_kind k2)
+{
+  switch(k1)
+  {
+    case normal:
+      return k2;
+    case secret:
+      return secret;
+  }
+}
+
+predicate crypto_chars(crypto_chars_kind kind,
+                       char *array, int n; list<crypto_char> ccs);
+
+predicate hide_crypto_chars(crypto_chars_kind kind,
+                            char *buffer, int length, list<crypto_char> ccs) =
+  crypto_chars(kind, buffer, length, ccs)
+;
+
+lemma void crypto_chars_to_chars(char *array, int n);
+  requires [?f]crypto_chars(?kind, array, n, ?ccs) &*& col || kind == normal;
+  ensures  [f]chars(array, n, ?cs) &*& ccs == cs_to_ccs(cs);
+
+lemma void chars_to_crypto_chars(char *array, int n);
+  requires [?f]chars(array, n, ?cs);
+  ensures  [f]crypto_chars(normal, array, n, cs_to_ccs(cs));
+
+lemma void chars_to_secret_crypto_chars(char *array, int n);
+  requires [?f]chars(array, n, ?cs);
+  ensures  [f]crypto_chars(secret, array, n, cs_to_ccs(cs));
+
+lemma_auto void crypto_chars_inv();
+  requires [?f]crypto_chars(?kind, ?array, ?count, ?ccs);
+  ensures  [f]crypto_chars(kind, array, count, ccs) &*& length(ccs) == count;
+
+lemma_auto void crypto_chars_limits(char *array);
+  requires [?f]crypto_chars(?kind, array, ?n, ?ccs) &*&
+           true == ((char *)0 <= array) &*& array <= (char *)UINTPTR_MAX;
+  ensures  [f]crypto_chars(kind, array, n, ccs) &*&
+           true == ((char *)0 <= array) &*& array + n <= (char *)UINTPTR_MAX;
+
+lemma_auto void crypto_chars_distinct(char *array1, char *array2);
+  requires crypto_chars(?kind1, array1, ?count1, ?ccs1) &*&
+           crypto_chars(?kind2, array2, ?count2, ?ccs2);
+  ensures  crypto_chars(kind1, array1, count1, ccs1) &*&
+           crypto_chars(kind2, array2, count2, ccs2) &*&
+           array1 != array2;
+
+lemma void crypto_chars_split(char *array, int offset);
+  requires [?f]crypto_chars(?kind, array, ?n, ?ccs) &*&
+           0 <= offset &*& offset <= n;
+  ensures  [f]crypto_chars(kind, array, offset, ?ccs1) &*&
+           [f]crypto_chars(kind, array + offset, n - offset, ?ccs2) &*&
+           ccs1 == take(offset, ccs) &*& ccs2 == drop(offset, ccs) &*&
+           ccs == append(ccs1, ccs2);
+
+lemma_auto void crypto_chars_join(char *array);
+  requires [?f]crypto_chars(?kind, array, ?n, ?ccs) &*&
+           [f]crypto_chars(kind, array + n, ?n0, ?ccs0);
+  ensures  [f]crypto_chars(kind, array, n + n0, append(ccs, ccs0));
+
+#endif

@@ -2,7 +2,8 @@
 #define STRING_H
 
 #include <stddef.h>
-//@ #include <crypto.gh>
+
+//@ #include "crypto/memcmp.gh"
 
 char *strcpy(char *d, char *s);
     //@ requires [?f]string(s, ?cs) &*& chars(d, length(cs) + 1, _);
@@ -36,19 +37,11 @@ int strlen(char *string);
     //@ requires [?f]string(string, ?cs);
     //@ ensures [f]string(string, cs) &*& result == length(cs);
 
-/*@
-predicate memcmp_secret(char* buffer, int count, list<crypto_char> ccs, cryptogram cg) =
-  count == length(ccs) && ccs == ccs_for_cg(cg) && cg_is_gen_or_pub(cg) 
-;
-@*/
-
 int memcmp(char *array, char *array0, size_t count);
     /*@ requires [?f1]crypto_chars(?kind1, array, ?n1, ?ccs1) &*&
-                   (kind1 == normal ? true : 
-                      memcmp_secret(array, count, ccs1, _)) &*&
+                 [_]memcmp_ccs(_, take(count, ccs1)) &*& 
                  [?f2]crypto_chars(?kind2, array0, ?n2, ?ccs2) &*& 
-                   (kind2 == normal ? true : 
-                      memcmp_secret(array0, count, ccs2, _)) &*&
+                 [_]memcmp_ccs(_, take(count, ccs2)) &*& 
                  count <= n1 &*& count <= n2; @*/
     /*@ ensures  [f1]crypto_chars(kind1, array, n1, ccs1) &*&
                  [f2]crypto_chars(kind2, array0, n2, ccs2) &*&

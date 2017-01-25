@@ -1,7 +1,7 @@
 #ifndef NSL_H
 #define NSL_H
 
-#include "../../annotated_api/polarssl_definitions/polarssl_definitions.h"
+#include "../../annotated_api/polarssl_definitions.h"
 
 #define NONCE_SIZE 16
 #define KEY_SIZE 128

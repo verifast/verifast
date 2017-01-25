@@ -1,8 +1,7 @@
 #ifndef POLARSSL_MACRO_DEFINES
 #define POLARSSL_MACRO_DEFINES
 
-#include "../general_definitions/general_definitions.h"
-
+#include <stdlib.h>
 #include <stddef.h>
 #include <limits.h>
 #include <stdbool.h>
@@ -18,8 +17,10 @@
 #define POLARSSL_MD_NONE       0
 
 //Some self defined size limits
+#define ID_SIZE 12
 #define MAX_MESSAGE_SIZE 65536
 #define MIN_RANDOM_SIZE 4
+#define MINIMAL_STRING_SIZE 10
 
 #endif
 

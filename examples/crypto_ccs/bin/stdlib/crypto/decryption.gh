@@ -1,9 +1,11 @@
-#ifndef RANDOM_CRYPTO_CHARS_GH
-#define RANDOM_CRYPTO_CHARS_GH
+#ifndef DECRYPTION_GH
+#define DECRYPTION_GH
 
-#include <crypto.gh>
+#include "auxiliary_definitions.gh"
 #include "principals.gh"
 #include "cryptogram.gh"
+
+#define MINIMAL_STRING_SIZE 10
 
 require_module decryption_mod;
 

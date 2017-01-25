@@ -5,7 +5,7 @@
 #include <stdbool.h>
 #include <string.h>
 
-#include "../../annotated_api/polarssl_definitions/polarssl_definitions.h"
+#include "../../annotated_api/polarssl_definitions.h"
 //@ #include "proof_obligations.gh"
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -342,32 +342,6 @@ unsigned int random_u_int();
 // Hash item //////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-/*@
-fixpoint bool item_with_entropy(item i)
-{
-  switch(i)
-  {
-    case data_item(cs0):
-      return false;
-    case hash_item(pay0):
-      return false;
-    case hmac_item(p0, c0, pay0):
-      return false;
-    case pair_item(f0, s0):
-      return item_with_entropy(f0) || item_with_entropy(s0);
-    default:
-      return true;
-  }
-}
-
-predicate hash_item_payload(predicate(item) pub, bool public, item pay) =
-  public ?
-    [_]pub(pay)
-  :
-    item_with_entropy(pay) ? true : pay == data_item(_)
-;
-@*/
-
 bool is_hash(struct item *item);
   //@ requires [?f]world(?pub, ?key_clsfy) &*& item(item, ?i, pub);
   /*@ ensures  [f]world(pub, key_clsfy) &*& item(item, i, pub) &*&
@@ -380,8 +354,7 @@ void check_is_hash(struct item *item);
 
 struct item *create_hash(struct item *payload);
   /*@ requires [?f0]world(?pub, ?key_clsfy) &*&
-               [?f1]item(payload, ?pay, pub) &*&
-               [_]hash_item_payload(pub, _, pay); @*/
+               [?f1]item(payload, ?pay, pub); @*/
   /*@ ensures  [f0]world(pub, key_clsfy) &*&
                [f1]item(payload, pay, pub) &*& item(result, ?hash, pub) &*&
                col || hash == hash_item(some(pay)); @*/
@@ -502,7 +475,6 @@ void check_is_hmac(struct item *item);
 struct item *create_hmac(struct item *key, struct item *payload);
   /*@ requires [?f0]world(?pub, ?key_clsfy) &*&
                [?f1]item(payload, ?pay, pub) &*&
-                 [_]hash_item_payload(pub, _, pay) &*&
                [?f2]item(key, ?k, pub) &*&
                  k == symmetric_key_item(?creator, ?id); @*/
   /*@ ensures  [f0]world(pub, key_clsfy) &*&

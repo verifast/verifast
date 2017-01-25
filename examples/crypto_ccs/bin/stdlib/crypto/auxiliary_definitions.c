@@ -1,4 +1,4 @@
-//@ #include "../annotated_api/general_definitions/auxiliary_definitions.gh"
+//@ #include "auxiliary_definitions.gh"
 
 /*@
 
@@ -254,6 +254,17 @@ lemma void prefix_trans<T>(list<T> xs1, list<T> xs2, list<T> xs3)
   {
     case cons(x0, xs0):
       prefix_trans(drop(1, xs1), drop(1, xs2), xs0);
+    case nil:
+  }
+}
+
+lemma void sublist_refl<T>(list<T> xs)
+  requires true;
+  ensures  true == sublist(xs, xs);
+{
+  switch(xs)
+  {
+    case cons(x0, xs0):
     case nil:
   }
 }

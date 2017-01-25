@@ -1,4 +1,4 @@
-#include "../annotated_api/general_definitions/zeroize.h"
+#include "zeroize.h"
 
 void zeroize(char *buffer, int size)
 {

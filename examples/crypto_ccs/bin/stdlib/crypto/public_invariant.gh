@@ -1,11 +1,9 @@
 #ifndef PUBLIC_INVARIANT_GH
 #define PUBLIC_INVARIANT_GH
 
-#include <quantifiers.gh>
 #include "auxiliary_definitions.gh"
 #include "principals.gh"
 #include "cryptogram.gh"
-#include "cs_to_ccs.gh"
 
 require_module public_invariant_mod;
 
@@ -14,11 +12,6 @@ predicate public_invar(predicate(cryptogram) pub);
 lemma void public_invariant_init(predicate(cryptogram) pub);
   requires module(public_invariant_mod, true);
   ensures  [_]public_invar(pub);
-
-predicate public_ccs(list<crypto_char> ccs) =
-  [_]is_forall_t<list<char> >(?forallcs) &*&
-  true == exists_t<list<char> >(forallcs, (cs_to_ccs_eq)(ccs))
-;
 
 typedef lemma void bad_nonce_is_public(predicate(cryptogram) pub,
                                        predicate() proof_pred)

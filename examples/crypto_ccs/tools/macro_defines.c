@@ -16,8 +16,7 @@ int main()
   fprintf(f, "#ifndef POLARSSL_MACRO_DEFINES\n");
   fprintf(f, "#define POLARSSL_MACRO_DEFINES\n");
   fprintf(f, "\n");
-  fprintf(f, "#include \"../general_definitions/general_definitions.h\"\n");
-  fprintf(f, "\n");
+  fprintf(f, "#include <stdlib.h>\n");
   fprintf(f, "#include <stddef.h>\n");
   fprintf(f, "#include <limits.h>\n");
   fprintf(f, "#include <stdbool.h>\n");
@@ -34,8 +33,10 @@ int main()
   fprintf(f, "#define POLARSSL_MD_NONE       %i\n", POLARSSL_MD_NONE);
   fprintf(f, "\n");
   fprintf(f, "//Some self defined size limits\n");
+  fprintf(f, "#define ID_SIZE 12\n");
   fprintf(f, "#define MAX_MESSAGE_SIZE 65536\n");
   fprintf(f, "#define MIN_RANDOM_SIZE 4\n");
+  fprintf(f, "#define MINIMAL_STRING_SIZE 10\n");
   fprintf(f, "\n");
   
   fprintf(f, "#endif\n");

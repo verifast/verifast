@@ -1,4 +1,4 @@
-//@ #include "../annotated_api/general_definitions/cs_to_ccs.gh"
+//@ #include "ccs.gh"
 
 /*@
 

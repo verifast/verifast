@@ -63,7 +63,6 @@ void sender(int recvr, char *key, int key_len, char *msg)
     // create hash of plain text
     //@ assert chars(M, 4 + MSG_SIZE, pay);
     //@ chars_to_crypto_chars(M, 4 + MSG_SIZE);
-    //@ HASH_PUB_PAYLOAD(pay)
     sha512(M, (unsigned int) (4 + MSG_SIZE), hash, 1);
     //@ open cryptogram(hash, 48, ?hash_cs, ?hash_cg);
     //@ close cryptogram(hash, 48, hash_cs, hash_cg);
@@ -172,7 +171,6 @@ void receiver(int recvr, char *key, int key_len, char *msg)
     //@ assert chars(buffer, 4 + MSG_SIZE, ?pay);
     //@ chars_to_crypto_chars(buffer, 4 + MSG_SIZE);
     //@ assert pay == append(chars_of_int(receiver), msg_cs);
-    //@ HASH_PUB_PAYLOAD(pay)
     sha512(buffer, (unsigned int) (4 + MSG_SIZE), hash, 1);
     //@ open cryptogram(hash, 48, ?hash_cs, ?hash_cg);
     //@ close sign_pub(hash_cg);

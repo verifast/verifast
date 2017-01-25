@@ -1,8 +1,7 @@
-#include "../annotated_api/general_definitions/identifiers.h"
+#include "identifiers.h"
 
-//@ #include <crypto.gh>
-#include <string.h>
-#include <stdlib.h>
+#include "../stdlib.h"
+#include "../string.h"
 
 /*@
 
@@ -20,6 +19,7 @@ lemma void equal_identifiers(int id1, int id2)
 }
 
 @*/
+
 void write_identifier(char *array, int id)
   /*@ requires [_]public_invar(?pub) &*&
                chars(array, ID_SIZE, _); @*/
@@ -31,18 +31,18 @@ void write_identifier(char *array, int id)
   //@ assert integer(temp, ?id_val);
   //@ chars_to_integer(temp);
   //@ assert chars(temp, 4, chars_of_int(id_val));
-  
+
   //@ chars_limits(array);
   //@ chars_to_crypto_chars(temp, 4);
   memcpy(array +  0, temp, 4);
   memcpy(array +  4, temp, 4);
   memcpy(array +  8, temp, 4);
   //@ crypto_chars_to_chars(temp, 4);
-  
+
   //@ crypto_chars_join(array + 4);
   //@ crypto_chars_join(array);
   //@ cs_to_ccs_append(chars_of_int(id_val), chars_of_int(id_val));
-  /*@ cs_to_ccs_append(chars_of_int(id_val), 
+  /*@ cs_to_ccs_append(chars_of_int(id_val),
                        append(chars_of_int(id_val), chars_of_int(id_val))); @*/
   //@ public_cs(identifier(id_val));
 }
@@ -51,10 +51,10 @@ void check_identifier(char *array, int id)
   /*@ requires [_]public_invar(?pub) &*&
                [_]decryption_key_classifier(?key_classifier) &*&
                [?f]crypto_chars(normal, array, ID_SIZE, ?ccs) &*&
-               check_identifier_ghost_args(?sym, ?garbage, ?p, ?p_key, 
+               check_identifier_ghost_args(?sym, ?garbage, ?p, ?p_key,
                                            ?c_key, ?ccs_rest) &*&
                garbage ?
-                 decryption_garbage(sym, p, ?s, p_key, c_key, 
+                 decryption_garbage(sym, p, ?s, p_key, c_key,
                                     append(ccs, ccs_rest)) &*&
                  s == known_value(0, cs_to_ccs(identifier(id)))
                :
@@ -70,6 +70,8 @@ void check_identifier(char *array, int id)
   //@ open check_identifier_ghost_args(sym, garbage, p, p_key, c_key, ccs_rest);
   char temp[ID_SIZE];
   write_identifier(temp, id);
+  //@ MEMCMP_PUB(temp)
+  //@ MEMCMP_PUB(array)
   if (memcmp(temp, array, ID_SIZE) != 0) abort();
   //@ public_crypto_chars(temp, ID_SIZE);
   //@ assert [f]crypto_chars(normal, array, ID_SIZE, ccs);

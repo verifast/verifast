@@ -1,9 +1,9 @@
 #ifndef ATTACKER_H
 #define ATTACKER_H
 
-#include "../general_definitions/general_definitions.h"
-
+#include <stdlib.h>
 #include <pthread.h>
+#include "macro_defines.h"
 
 void attacker();
   /*@ requires [_]public_invar(?pub) &*&

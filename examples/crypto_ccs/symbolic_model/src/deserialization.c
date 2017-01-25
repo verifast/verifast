@@ -30,6 +30,7 @@
       cg_level_ccs_pay(cg, level_bound0); \
       deserialize_item_(level_bound0, nat_of_int(INT_MAX), ccs_pay); \
       open [_]item_constraints(?pay, ccs_pay, pub); \
+      item_constraints_memcmp(pay); \
       assert [_]pub(pay); \
       i = IPAY; \
       close well_formed_item_ccs(i)(ccs_pay); \
@@ -46,11 +47,21 @@
         close ill_formed_item_ccs(i)(ccs_pay); \
         leak ill_formed_item_ccs(i)(ccs_pay); \
       } \
+      if (attack) \
+      { \
+        MEMCMP_CCS(normal, ccs_pay); \
+      } \
+      else \
+      { \
+        assert [_]item_constraints(?pay, ccs_pay, pub); \
+        item_constraints_memcmp(pay); \
+      } \
     } \
   } \
   else \
   { \
     assert [_]item_constraints(?pay, ccs_pay, pub); \
+    item_constraints_memcmp(pay); \
     ATTACK_EXTRA \
     i = IPAY; \
     well_formed_item_constraints(pay, i); \

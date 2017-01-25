@@ -53,7 +53,7 @@ predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
     hmac_key_cg == cg_symmetric_key(sender, ?hmac_id) &*&
     receiver == shared_with(sender, hmac_id) &*&
   crypto_chars(secret, msg, MSG_LEN, ?msg_ccs) &*&
-    [_]hash_payload(_, msg_ccs) &*&
+    [_]memcmp_ccs(_, msg_ccs) &*&
     true == send(sender, receiver, msg_ccs) &*&
   info == IV(sender, IV(receiver, PV(enc_key, CCL(enc_key_ccs, IV(enc_id, 
              PV(hmac_key, CCL(hmac_key_ccs, IV(hmac_id, PV(msg, CCL(msg_ccs, 
@@ -211,8 +211,9 @@ int main(int argc, char **argv) //@ : main_full(main_app)
       char r_message[MAX_SIZE];
     
       //@ assert chars(s_message, MSG_LEN, ?msg_cs);
-      //@ HASH_PUB_PAYLOAD(msg_cs)
+      //@ public_chars(s_message, MSG_LEN);
       //@ chars_to_secret_crypto_chars(s_message, MSG_LEN);
+      //@ MEMCMP_CCS(normal, cs_to_ccs(msg_cs))
       //@ assert crypto_chars(secret, s_message, MSG_LEN, ?msg_ccs);
       //@ s_args.sender = sender;
       //@ s_args.receiver = receiver;

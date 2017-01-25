@@ -21,7 +21,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
                bad(sender) || bad(shared_with(sender, enc_id)) ?
                  [_]public_ccs(msg_ccs)
                :
-                 [_]hash_payload(_, msg_ccs) &*&
+                 [_]memcmp_ccs(_, msg_ccs) &*&
                  true == send(sender, shared_with(sender, enc_id), msg_ccs); @*/
 /*@ ensures  principal(sender, _) &*&
              [f1]cryptogram(enc_key, KEY_SIZE, enc_key_ccs, enc_key_cg) &*&
@@ -55,10 +55,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
 
     // hmac
     /*@ if (bad(sender) || bad(shared_with(sender, enc_id)))
-        {
-          close hash_payload(true, msg_ccs);
-          leak hash_payload(true, msg_ccs);
-        }
+          MEMCMP_CCS(normal, msg_ccs)
     @*/
     sha512_hmac(hmac_key, KEY_SIZE, msg, msg_len,
                 enc_msg + (int) msg_len, 0);
@@ -232,13 +229,12 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
         {
           if (!garbage && !col)
             public_ccs_split(dec_ccs, enc_size - 64);
-          close hash_payload(true, pay_ccs);
-          leak hash_payload(true, pay_ccs);
+          MEMCMP_CCS(normal, pay_ccs)
         }
         else
         {
           assert [_]hmac_then_enc_pub_1(?msg_ccs, ?hmac_cg2);
-          assert [_]hash_payload(_, msg_ccs);
+          assert [_]memcmp_ccs(_, msg_ccs);
           take_append(enc_size - 64, msg_ccs, ccs_for_cg(hmac_cg2));
           take_append(enc_size - 64, pay_ccs, drop(enc_size - 64, dec_ccs));
         }
@@ -248,12 +244,11 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
                 
     //@ open cryptogram(hmac, 64, ?hmac_cs, ?hmac_cg);
     //@ crypto_chars_distinct(hmac, (void*) buffer_dec + enc_size - 64);
-    //@ close memcmp_secret(hmac, 64, hmac_cs, hmac_cg);
-    
     /*@ if (col)
         {
           crypto_chars_to_chars(buffer_dec + enc_size - 64, 64);
           chars_to_crypto_chars(buffer_dec + enc_size - 64, 64);
+          MEMCMP_PUB((void*) buffer_dec + enc_size - 64)
         }
         else if (!garbage)
         {
@@ -262,18 +257,22 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
             public_ccs_split(dec_ccs, enc_size - 64);
             public_crypto_chars(buffer_dec + enc_size - 64, 64);
             chars_to_crypto_chars(buffer_dec + enc_size - 64, 64);
+            MEMCMP_PUB((void*) buffer_dec + enc_size - 64)
           }
           else
           {
             assert [_]hmac_then_enc_pub_1(?msg_ccs, ?hmac_cg2);
-            close memcmp_secret(buffer_dec + enc_size - 64, 64,
-                                ccs_for_cg(hmac_cg2), hmac_cg2);
             drop_append(length(pay_ccs), msg_ccs, ccs_for_cg(hmac_cg2));
             drop_append(length(pay_ccs), pay_ccs, ccs_for_cg(hmac_cg));
+            MEMCMP_SEC((void*) buffer_dec + enc_size - 64, hmac_cg2)
           }
         }
+        else
+        {
+          MEMCMP_PUB((void*) buffer_dec + enc_size - 64)
+        }
     @*/
-    
+    //@ MEMCMP_SEC(hmac, hmac_cg)
     if (memcmp(hmac, (void*) buffer_dec + enc_size - 64, 64) != 0) abort();
     memcpy(msg, buffer_dec, (unsigned int) enc_size - 64);
     /*@ if (garbage)

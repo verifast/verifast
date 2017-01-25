@@ -298,7 +298,7 @@ void server(int server, int sender, int receiver,
     //@ chars_join(message);
     free(message);
   }
-  
+
   //@ chars_to_crypto_chars(NA, NONCE_SIZE);
   //@ assert crypto_chars(normal, NA, NONCE_SIZE, ?ccs_NA);
   //@ assert ccs_NA == ccs_for_cg(NA_cg);
@@ -325,7 +325,7 @@ void server(int server, int sender, int receiver,
         assert [_]public_ccs(ccs_KAB);
       }
   @*/
-  
+
   {
     // 3. S -> A. ENC(KA, {B, KAB, NA, NB}), ENC(KB, {A, KAB})
     int size1 = 16 + ID_SIZE + KEY_SIZE + NONCE_SIZE + NONCE_SIZE;
@@ -406,7 +406,7 @@ void server(int server, int sender, int receiver,
               cs_to_ccs_append(NA_cs, NB_cs);
               cs_to_ccs_append(KAB_cs, append(NA_cs, NB_cs));
               cs_to_ccs_append(rid_cs, append(KAB_cs, append(NA_cs, NB_cs)));
-        
+
               chars_join(m + ID_SIZE + KEY_SIZE);
               chars_join(m + ID_SIZE);
               chars_join(m);
@@ -465,11 +465,11 @@ void server(int server, int sender, int receiver,
               close yahalom_pub(cg_KAB);
               leak yahalom_pub(cg_KAB);
               public_cryptogram(m + ID_SIZE, cg_KAB);
-              
+
               assert chars(m, ID_SIZE, ?sid_cs);
               assert chars(m + ID_SIZE, KEY_SIZE, ?KAB_cs);
               cs_to_ccs_append(sid_cs, KAB_cs);
-              
+
               chars_join(m);
               public_chars(m, s);
               chars_to_crypto_chars(m, s);
@@ -695,6 +695,8 @@ void sender(int server, int sender, int receiver,
           chars_to_crypto_chars(dec + ID_SIZE + KEY_SIZE, NONCE_SIZE);
           public_chars(dec + ID_SIZE + KEY_SIZE + NONCE_SIZE, NONCE_SIZE);
           chars_to_crypto_chars(dec + ID_SIZE + KEY_SIZE + NONCE_SIZE, NONCE_SIZE);
+          public_ccs(dec + ID_SIZE + KEY_SIZE, NONCE_SIZE);
+          MEMCMP_CCS(normal, ccs_NA2)
         }
         else
         {
@@ -715,12 +717,15 @@ void sender(int server, int sender, int receiver,
           close cryptogram(dec + ID_SIZE + KEY_SIZE, NONCE_SIZE, ccs_for_cg(NA2), NA2);
           public_cryptogram(dec + ID_SIZE + KEY_SIZE, NA2);
           chars_to_crypto_chars(dec + ID_SIZE + KEY_SIZE, NONCE_SIZE);
+          public_ccs(dec + ID_SIZE + KEY_SIZE, NONCE_SIZE);
+          MEMCMP_CCS(normal, ccs_for_cg(NA2))
         }
     @*/
     //@ chars_to_crypto_chars(dec, ID_SIZE);
     //@ close check_identifier_ghost_args(true, garbage, sender, sender, s_id2, dec_ccs0);
     check_identifier(dec, receiver);
     //@ assert id_ccs == rid_ccs;
+    //@ MEMCMP_PUB(NA)
     if (memcmp(NA, dec + ID_SIZE + KEY_SIZE, NONCE_SIZE) != 0) abort();
     //@ assert ccs_NA == ccs_NA2;
     //@ assert crypto_chars(kind, NB, NONCE_SIZE, ccs_NB);
@@ -1009,16 +1014,17 @@ void receiver_(int socket_in, int sender, int receiver, int server,
         else
           public_crypto_chars(dec2, NONCE_SIZE);
         chars_to_crypto_chars(dec2, NONCE_SIZE);
+        MEMCMP_PUB(dec2)
       }
       else
       {
         assert [_]yahalom_pub_msg4(?server2, ?sender2,
                                    ?receiver2, ?a_id2, ?NB2);
-        close memcmp_secret(dec2, NONCE_SIZE, dec_ccs3, NB2);
+        MEMCMP_SEC(dec2, NB2)
       }
   @*/
   //@ open cryptogram(NB, NONCE_SIZE, ccs_NB, cg_NB);
-  //@ close memcmp_secret(NB, NONCE_SIZE, ccs_NB, cg_NB);
+  //@ MEMCMP_SEC(NB, cg_NB)
   if (memcmp(dec2, NB, NONCE_SIZE) != 0) abort();
   //@ close cryptogram(NB, NONCE_SIZE, ccs_NB, cg_NB);
   //@ assert crypto_chars(_, dec2, NONCE_SIZE, ccs_NB);
@@ -1205,14 +1211,14 @@ void receiver(int server, int sender, int receiver,
             public_crypto_chars(plaintext, ID_SIZE);
             public_crypto_chars((void*) plaintext + ID_SIZE, NONCE_SIZE);
             public_crypto_chars((void*) plaintext + ID_SIZE + NONCE_SIZE, NONCE_SIZE);
-            
+
             assert chars(plaintext, ID_SIZE, ?cs_sid);
             assert chars((void*) plaintext + ID_SIZE, NONCE_SIZE, ?cs_NA0);
             cs_to_ccs_inj(cs_NA, cs_NA0);
             assert chars((void*) plaintext + ID_SIZE + NONCE_SIZE, NONCE_SIZE, ?cs_NB);
             cs_to_ccs_append(cs_NA, cs_NB);
             cs_to_ccs_append(cs_sid, append(cs_NA, cs_NB));
-            
+
             chars_join(plaintext + ID_SIZE);
             chars_join(plaintext);
             public_chars(plaintext, p_size);

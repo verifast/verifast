@@ -1,7 +1,7 @@
 #ifndef SIGN_H
 #define SIGN_H
 
-#include "../../annotated_api/polarssl_definitions/polarssl_definitions.h"
+#include "../../annotated_api/polarssl_definitions.h"
 
 #define MSG_SIZE 1024
 #define MAX_KEY_SIZE 8192

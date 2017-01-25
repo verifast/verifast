@@ -4,7 +4,7 @@
 #include "general.h"
 //To start the polarssl attacker
 #include "principal_ids.h"
-#include "../../annotated_api/polarssl_definitions/polarssl_definitions.h"
+#include "../../annotated_api/polarssl_definitions.h"
 
 void random_buffer_(char* buffer, int size)
   /*@ requires [?f]world(?pub, ?key_clsfy) &*&
@@ -245,8 +245,6 @@ void send_hmac(struct network_status *net_stat, struct keypair *keypair)
   {
     struct item *pay = network_receive(net_stat);
     //@ assert item(pay, ?p, pub);
-    //@ close hash_item_payload(pub, true, p);
-    //@ leak hash_item_payload(pub, true, p);
     struct item *mac = create_hmac(key, pay);
 
     //@ assert item(mac, ?h, pub);
