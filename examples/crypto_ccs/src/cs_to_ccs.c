@@ -55,12 +55,12 @@ lemma void c_to_cc_inj(char c1, char c2)
   requires true;
   ensures  true == ((c_to_cc(c1) == c_to_cc(c2)) == (c1 == c2));
 {
-  fixpoint(random_oracle, char) cc1, cc2;
-  random_oracle oracle;
+  fixpoint(coin_tosses, char) cc1, cc2;
+  coin_tosses sampling;
   cc1 = (crypto_char_const)(c1);
   cc2 = (crypto_char_const)(c2);
-  cc1(oracle);
-  cc2(oracle);
+  cc1(sampling);
+  cc2(sampling);
 }
 
 lemma void cs_to_ccs_inj(list<char> cs1, list<char> cs2)
