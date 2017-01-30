@@ -2114,6 +2114,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       eval_h h env arr $. fun h env arr ->
       eval_h h env i $. fun h env i ->
       cont h env (read_c_array h env l arr i elem_tp)
+    | Deref (l, w, pointeeType) as e ->
+      lhs_to_lvalue h env e $. fun h env lvalue ->
+      read_lvalue h env lvalue cont
     | WOperation (l, Not, [e], t) -> eval_h_core readonly h env e (fun h env v -> cont h env (ctxt#mk_not v))
     | WOperation (l, ((Eq | Neq) as op), [e1; e2], t) ->
       let create_term t1 t2 = match op with Eq -> ctxt#mk_eq t1 t2 | Neq -> ctxt#mk_not (ctxt#mk_eq t1 t2) in
