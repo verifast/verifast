@@ -2,22 +2,22 @@ C Programs
 ==========
 
 Target soundness statement:
-If "verifast A.c B.c C.c" succeeds, then "gcc -o ./program.exe A.c B.c C.c && ./program.exe" does not throw any assertion failures.
+If `verifast A.c B.c C.c` succeeds, then `gcc -o ./program.exe A.c B.c C.c && ./program.exe` does not throw any assertion failures.
 
 Known VeriFast unsoundnesses:
-- VeriFast allows a ghost break in a real loop.
 - predicate preciseness analysis: does not deal correctly with the local variable scopes induced by conditional assertions and switch assertions
 - disallow the use of regular function pointers as predicate family indices in unloadable modules. (Note: using lemma function pointers as predicate family indices is fine.)
 - VeriFast assumes that the C compiler does not assume that the C program obeys strict aliasing rules.
-  For example, gcc -O2 assumes that a pointer-to-float does not alias a pointer-to-int, and therefore that an assignment through one of these
+  For example, `gcc -O2` assumes that a pointer-to-float does not alias a pointer-to-int, and therefore that an assignment through one of these
   does not affect the value at the other location.
-  VeriFast does not check that the program obeys strict aliasing rules. Therefore, VeriFast is currently unsound for gcc -O2.
-  However, this unsoundness does not apply to gcc -O2 -fno-strict-aliasing.
+  VeriFast does not check that the program obeys strict aliasing rules. Therefore, VeriFast is currently unsound for `gcc -O2`.
+  However, this unsoundness does not apply to `gcc -O2 -fno-strict-aliasing`.
 - The C standard says that reading an uninitialized variable or using the value so obtained can cause a trap. VeriFast does not check that the program does not read or use uninitialized variables.
-- I am not 100% sure that a statement of the form "x = foo();" where x is a global and foo modifies x is allowed by the C standard. VeriFast allows this statement.
+- I am not 100% sure that a statement of the form `x = foo();` where x is a global and foo modifies x is allowed by the C standard. VeriFast allows this statement.
 - The pointer arithmetic implied by field or array dereference should be checked for arithmetic overflow. For example, the following program verifies, even though
-  the assert(false); is reachable:
+  the `assert(false);` is reachable:
 
+```c
 struct bar { int x; int y; };
 
 void foo()
@@ -41,22 +41,22 @@ void foo()
   //@ integer_distinct(&b.x, &b.x);
   assert(false);
 }
-
-- When including files using double quotes (e.g. 'include "xyz.h"', in contrast to 'include <xyz.h>'), VeriFast assumes the compiler searches first in the directory of the file in which the include statement is written. This is the behaviour of GCC. This is not enforced by the C standard.
-- When using a different include path to verify a 'static' library, than when using that library, the user can overwrite definitions from headers of that library and symbolic linking cannot detect this (see tests/bugs/include_paths).
+```
 
 Java Programs
 =============
 
 Target soundness statement:
-If "javac A.java B.java C.java" succeeds, and program.jarsrc contains the following lines:
+If `javac A.java B.java C.java` succeeds, and `program.jarsrc` contains the following lines:
 
+```
 A.java
 B.java
 C.java
 main-class A
+```
 
-and "verifast -c program.jarsrc" succeeds, then "java A" does not throw any assertion failures.
+and `verifast -c program.jarsrc` succeeds, then `java A` does not throw any assertion failures.
 
 Known VeriFast unsoundnesses:
 - Java: ClassCastExceptions are currently not prevented
