@@ -8,6 +8,12 @@ cd bin
   cd ..
 cd ..
 cd examples
+  cd clhlock
+    verifast -prover redux -c clhlock.c
+  cd ..
+  cd splitcounter
+    verifast -prover redux -c -disable_overflow_check splitcounter.c
+  cd ..
   cd crypto
     mysh -cpus 1 < crypto.mysh
   cd ..
