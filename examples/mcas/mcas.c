@@ -674,7 +674,8 @@ start:
     @*/
     //@ length_nonnegative(es);
     void *status = 0;
-    //@ void *statusProphecy = create_prophecy_pointer();
+    prophecy_id statusProphecyId = create_prophecy_pointer();
+    //@ assert prophecy_pointer(statusProphecyId, ?statusProphecy);
     {
         /*@
         predicate_family_instance atomic_load_pointer_context_pre(context)(predicate() inv_, void *pp, void *prophecy) =
@@ -719,7 +720,7 @@ start:
         @*/
         //@ close atomic_load_pointer_context_pre(context)(inv, &cd->status, statusProphecy);
         //@ produce_lemma_function_pointer_chunk(context);
-        status = atomic_load_pointer(&cd->status);
+        status = atomic_load_pointer(statusProphecyId, &cd->status);
         //@ leak is_atomic_load_pointer_context(context);
         //@ open atomic_load_pointer_context_post(context)();
     }
@@ -1003,7 +1004,8 @@ start:
         }
     done:
         //@ entries_length_lemma();
-        //@ void *casProphecy = create_prophecy_pointer();
+        prophecy_id casProphecyId = create_prophecy_pointer();
+        //@ assert prophecy_pointer(casProphecyId, ?casProphecy);
         {
             /*@
             predicate_family_instance tracked_cas_ctxt_pre(context)
@@ -1215,7 +1217,7 @@ start:
             @*/
             //@ close tracked_cas_ctxt_pre(context)(tracker, inv, &cd->status, 0, (void *)s, casProphecy);
             //@ produce_lemma_function_pointer_chunk(context);
-            status = tracked_cas(cd->tracker, &cd->status, 0, (void *)s);
+            status = tracked_cas(casProphecyId, cd->tracker, &cd->status, 0, (void *)s);
             //@ leak is_tracked_cas_ctxt(context);
             //@ open tracked_cas_ctxt_post(context)();
         }

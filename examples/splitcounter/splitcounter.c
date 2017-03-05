@@ -163,16 +163,15 @@ void incr_right(struct counter *counter)
     //@ close [f]counter(counter, inv);
 }
 
-//@ predicate prophecy_wrapper(int value) = prophecy(value);
-
 int read(struct counter *counter)
     //@ requires [?f]counter(counter, ?inv) &*& is_read_ghop(?ghop, inv, ?pre, ?post) &*& pre();
     //@ ensures [f]counter(counter, inv) &*& post(result);
 {
     //@ open counter(counter, inv);
-    //@ int readerRight = create_prophecy();
-    //@ close prophecy_wrapper(readerRight);
-    //@ int readerLeft = create_prophecy();
+    prophecy_id leftId = create_prophecy();
+    //@ assert prophecy(leftId, ?readerLeft);
+    prophecy_id rightId = create_prophecy();
+    //@ assert prophecy(rightId, ?readerRight);
     int l;
     {
         /*@
@@ -201,7 +200,7 @@ int read(struct counter *counter)
         @*/
         //@ close pre_();
         //@ produce_lemma_function_pointer_chunk(ghop_) : atomic_load_int_ghop(counter_inv(counter, inv), &counter->left, readerLeft, pre_, post_)() { call(); };
-        l = atomic_load_int(&counter->left);
+        l = atomic_load_int(leftId, &counter->left);
         //@ leak is_atomic_load_int_ghop(_, _, _, _, _, _);
         //@ open post_();
     }
@@ -256,8 +255,7 @@ int read(struct counter *counter)
         @*/
         //@ close pre_();
         //@ produce_lemma_function_pointer_chunk(ghop_) : atomic_load_int_ghop(counter_inv(counter, inv), &counter->right, readerRight, pre_, post_)() { call(); };
-        //@ open prophecy_wrapper(readerRight);
-        r = atomic_load_int(&counter->right);
+        r = atomic_load_int(rightId, &counter->right);
         //@ leak is_atomic_load_int_ghop(_, _, _, _, _, _);
         //@ open post_();
     }

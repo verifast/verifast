@@ -16,11 +16,17 @@ lemma void dispose_atomic_space(predicate() inv);
     requires atomic_space(inv);
     ensures inv();
 
-predicate prophecy_pointer(void *prophecy);
+@*/
 
-lemma void *create_prophecy_pointer();
-    requires true;
-    ensures prophecy_pointer(result);
+typedef long long prophecy_id;
+
+//@ predicate prophecy_pointer(prophecy_id id, void *prophecy);
+
+prophecy_id create_prophecy_pointer();
+    //@ requires true;
+    //@ ensures prophecy_pointer(result, _);
+
+/*@
 
 predicate_family atomic_load_pointer_operation_pre(void *op)(void *pp, void *prophecy);
 predicate_family atomic_load_pointer_operation_post(void *op)();
@@ -42,10 +48,10 @@ typedef lemma void atomic_load_pointer_context(atomic_load_pointer_operation *op
 
 @*/
 
-void *atomic_load_pointer(void **pp);
+void *atomic_load_pointer(prophecy_id prophecyId, void **pp);
     /*@
     requires
-        [?f]atomic_space(?inv) &*& prophecy_pointer(?prophecy) &*&
+        [?f]atomic_space(?inv) &*& prophecy_pointer(prophecyId, ?prophecy) &*&
         is_atomic_load_pointer_context(?ctxt) &*&
         atomic_load_pointer_context_pre(ctxt)(inv, pp, prophecy);
     @*/
@@ -88,10 +94,10 @@ typedef lemma void atomic_compare_and_store_pointer_context(atomic_compare_and_s
 
 @*/
 
-void *atomic_compare_and_store_pointer(void **pp, void *old, void *new);
+void *atomic_compare_and_store_pointer(prophecy_id prophecyId, void **pp, void *old, void *new);
     /*@
     requires
-        [?f]atomic_space(?inv) &*& prophecy_pointer(?prophecy) &*&
+        [?f]atomic_space(?inv) &*& prophecy_pointer(prophecyId, ?prophecy) &*&
         is_atomic_compare_and_store_pointer_context(?ctxt) &*&
         atomic_compare_and_store_pointer_context_pre(ctxt)(inv, pp, old, new, prophecy);
     @*/
@@ -176,10 +182,10 @@ typedef lemma void tracked_cas_ctxt(tracked_cas_operation *op);
 
 @*/
 
-void *tracked_cas(struct cas_tracker *tracker, void **pp, void *old, void *new);
+void *tracked_cas(prophecy_id prophecyId, struct cas_tracker *tracker, void **pp, void *old, void *new);
     /*@
     requires
-        [?f]atomic_space(?inv) &*& prophecy_pointer(?prophecy) &*&
+        [?f]atomic_space(?inv) &*& prophecy_pointer(prophecyId, ?prophecy) &*&
         is_tracked_cas_ctxt(?ctxt) &*&
         tracked_cas_ctxt_pre(ctxt)(tracker, inv, pp, old, new, prophecy);
     @*/

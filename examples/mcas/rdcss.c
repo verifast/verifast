@@ -154,8 +154,10 @@ void rdcss_complete(struct rdcss_descriptor *d)
         [_]d->detached |-> true;
     @*/
 {
-    //@ void *a1Prophecy = create_prophecy_pointer();
-    //@ void *a2Prophecy = create_prophecy_pointer();
+    prophecy_id a1ProphecyId = create_prophecy_pointer();
+    //@ assert prophecy_pointer(a1ProphecyId, ?a1Prophecy);
+    prophecy_id a2ProphecyId = create_prophecy_pointer();
+    //@ assert prophecy_pointer(a2ProphecyId, ?a2Prophecy);
     void *r = 0;
     {
         /*@
@@ -240,7 +242,7 @@ void rdcss_complete(struct rdcss_descriptor *d)
         //@ close atomic_load_pointer_context_pre(context1)(inv, a1, a1Prophecy);
         //@ produce_lemma_function_pointer_chunk(context1);
         //@ open descr(d, _, _, _, _, _, _, _);
-        r = atomic_load_pointer(d->a1);
+        r = atomic_load_pointer(a1ProphecyId, d->a1);
         //@ leak is_atomic_load_pointer_context(context1);
         //@ open atomic_load_pointer_context_post(context1)();
     }
@@ -324,7 +326,7 @@ void rdcss_complete(struct rdcss_descriptor *d)
         @*/
         //@ close tracked_cas_ctxt_pre(context2)(tracker, inv, a2, (void *)((uintptr_t)d | 1), v, a2Prophecy);
         //@ produce_lemma_function_pointer_chunk(context2);
-        tracked_cas(d->tracker, d->a2, (void *)((uintptr_t)d | 1), v);
+        tracked_cas(a2ProphecyId, d->tracker, d->a2, (void *)((uintptr_t)d | 1), v);
         //@ leak is_tracked_cas_ctxt(context2);
         //@ open tracked_cas_ctxt_post(context2)();
     }
@@ -380,7 +382,8 @@ loop:
         is_rdcss_bs_membership_lemma(bsMem) &*& rdcss_bs_membership_lemma(bsMem)(unsep, info, a2) &*&
         is_rdcss_operation_lemma(op) &*& rdcss_operation_pre(op)(unsep, info, a1, o1, a2, o2, n2);
     @*/
-    //@ void *prophecy = create_prophecy_pointer();
+    prophecy_id prophecyId = create_prophecy_pointer();
+    //@ assert prophecy_pointer(prophecyId, ?prophecy);
     void *r = 0;
     {
         /*@
@@ -475,7 +478,7 @@ loop:
         @*/
         //@ close atomic_compare_and_store_pointer_context_pre(context)(inv, a2, o2, (void *)((uintptr_t)d | 1), prophecy);
         //@ produce_lemma_function_pointer_chunk(context);
-        r = atomic_compare_and_store_pointer(a2, o2, (void *)((uintptr_t)d | 1));
+        r = atomic_compare_and_store_pointer(prophecyId, a2, o2, (void *)((uintptr_t)d | 1));
         //@ leak is_atomic_compare_and_store_pointer_context(context);
         //@ open atomic_compare_and_store_pointer_context_post(context)();
     }
@@ -565,7 +568,8 @@ loop:
         is_rdcss_read_operation_lemma(op) &*& rdcss_read_operation_pre(op)(unsep, info, a2);
     @*/
     void *r = 0;
-    //@ void *prophecy = create_prophecy_pointer();
+    prophecy_id prophecyId = create_prophecy_pointer();
+    //@ assert prophecy_pointer(prophecyId, ?prophecy);
     {
         /*@
         predicate_family_instance atomic_load_pointer_context_pre(context)(predicate() inv_, void **pp, void *prophecy_) =
@@ -616,7 +620,7 @@ loop:
         @*/
         //@ close atomic_load_pointer_context_pre(context)(inv, a2, prophecy);
         //@ produce_lemma_function_pointer_chunk(context);
-        r = atomic_load_pointer(a2);
+        r = atomic_load_pointer(prophecyId, a2);
         //@ leak is_atomic_load_pointer_context(context);
         //@ open atomic_load_pointer_context_post(context)();
     }
@@ -649,7 +653,8 @@ bool rdcss_compare_and_store(void **a2, void *o2, void *n2)
         is_rdcss_cas_lemma(op) &*& rdcss_cas_post(op)(result);
     @*/
 {
-    //@ void *casProphecy = create_prophecy_pointer();
+    prophecy_id casProphecyId = create_prophecy_pointer();
+    //@ assert prophecy_pointer(casProphecyId, ?casProphecy);
     void *r = 0;
     {
         /*@
@@ -695,7 +700,7 @@ bool rdcss_compare_and_store(void **a2, void *o2, void *n2)
         @*/
         //@ close atomic_compare_and_store_pointer_context_pre(context)(inv, a2, o2, n2, casProphecy);
         //@ produce_lemma_function_pointer_chunk(context);
-        r = atomic_compare_and_store_pointer(a2, o2, n2);
+        r = atomic_compare_and_store_pointer(casProphecyId, a2, o2, n2);
         //@ leak is_atomic_compare_and_store_pointer_context(context);
         //@ open atomic_compare_and_store_pointer_context_post(context)();
     }

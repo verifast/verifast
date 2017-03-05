@@ -10,7 +10,7 @@
 
 predicate prophecy_bool(bool prophecy);
 
-lemma int create_prophecy_int();
+lemma int create_prophecy_int(); // FIXME: Unsound: Introduce explicit prophecy IDs (see e.g. examples/splitcounter)
     requires true;
     ensures prophecy_int(result);
 

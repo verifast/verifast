@@ -11,13 +11,15 @@ lemma void create_atomic_space(predicate() inv);
 
 @*/
 
+typedef long long prophecy_id;
+
+//@ predicate prophecy(prophecy_id id, int value);
+
+prophecy_id create_prophecy();
+    //@ requires true;
+    //@ ensures prophecy(result, _);
+
 /*@
-
-predicate prophecy(int value);
-
-lemma int create_prophecy();
-    requires true;
-    ensures prophecy(result);
 
 typedef lemma void atomic_load_int_op(int *object, int value, predicate() P, predicate() Q)();
     requires *object |-> ?value1 &*& P();
@@ -29,10 +31,10 @@ typedef lemma void atomic_load_int_ghop(predicate() inv, int *object, int value,
 
 @*/
 
-int atomic_load_int(int *object);
+int atomic_load_int(prophecy_id prophecy, int *object);
     /*@
     requires
-        prophecy(?value) &*&
+        prophecy(prophecy, ?value) &*&
         [?f]atomic_space(?inv) &*&
         is_atomic_load_int_ghop(?ghop, inv, object, value, ?pre, ?post) &*& pre();
     @*/
