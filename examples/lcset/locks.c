@@ -15,7 +15,8 @@ void lock(void **lock)
 {
 loop:
     //@ invariant [f]atomic_space(inv) &*& is_lock_context(ctxt) &*& lock_context_pre(ctxt)(inv, lock);
-    //@ void *prophecy = create_prophecy_pointer();
+    prophecy_id prophecyId = create_prophecy_pointer();
+    //@ assert prophecy_pointer(prophecyId, ?prophecy);
     {
         /*@
         predicate_family_instance atomic_compare_and_store_pointer_context_pre(context)(predicate() inv_, void **pp, void *old, void *new, void *prophecy_) =
@@ -58,7 +59,7 @@ loop:
         @*/
         //@ close atomic_compare_and_store_pointer_context_pre(context)(inv, lock, 0, (void *)1, prophecy);
         //@ produce_lemma_function_pointer_chunk(context);
-        void *v = atomic_compare_and_store_pointer(lock, 0, (void *)1);
+        void *v = atomic_compare_and_store_pointer(prophecyId, lock, 0, (void *)1);
         //@ leak is_atomic_compare_and_store_pointer_context(context);
         //@ open atomic_compare_and_store_pointer_context_post(context)();
         if (v != 0) goto loop;
