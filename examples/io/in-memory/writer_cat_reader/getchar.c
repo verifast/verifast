@@ -5,8 +5,8 @@
  * 
  * This is blocking. If the queue is empty, this function waits until the queue is not empty anymore.
  */
-int getchar/*@<u> @*/(struct queue *queue)
-//@ requires [?f_queue]queue(?queue_id, queue) &*& getchar_io<u>(queue_id, ?t1, ?c, ?t2) &*& token(t1);
+int getchar/*@<u> @*/(struct queue *queue, struct proph_tree *tree)
+//@ requires [?f_queue]queue(?queue_id, queue) &*& getchar_io<u>(queue_id, ?t1, ?c, ?t2, tree) &*& token(t1);
 //@ ensures  [f_queue]queue(queue_id, queue) &*& token(t2) &*& result == c;
 {
   //@ open [f_queue]queue(_,_);
@@ -37,10 +37,12 @@ int getchar/*@<u> @*/(struct queue *queue)
   
   bool was_full = ring_buffer_is_full(queue->ring_buffer);
   
-  //@ open getchar_io(queue_id, t1, c, t2);
+  //@ open getchar_io(queue_id, t1, c, t2, _);
   
   int ret = ring_buffer_pop(queue->ring_buffer);
-  prophecy_assign(ret);
+  //@ open proph_tree(_, _, _, _, _);
+  prophecy_assign(tree->id, ret);
+  free(tree);
   
   if (was_full){
     mutex_cond_signal(queue->cond_can_push);

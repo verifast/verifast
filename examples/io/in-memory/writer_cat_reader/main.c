@@ -124,23 +124,25 @@ struct cat_thread_info {
   //@ int queue_id_from;
   //@ int queue_id_to;
   //@ place<progress_t> t2;
+  struct proph_tree *tree;
 };
 /*@
 predicate cat_thread_info(struct cat_thread_info *info; struct queue *queue_from,
-    struct queue *queue_to, int queue_id_from, int queue_id_to, place<progress_t > t2) =
+    struct queue *queue_to, int queue_id_from, int queue_id_to, place<progress_t > t2, struct proph_tree *tree) =
   info->queue_from |-> queue_from
   &*& info->queue_to |-> queue_to
   &*& info->queue_id_from |-> queue_id_from
   &*& info->queue_id_to |-> queue_id_to
-  &*& info->t2 |-> t2;
+  &*& info->t2 |-> t2
+  &*& info->tree |-> tree;
 predicate_family_instance thread_run_pre(cat_thread)(struct cat_thread_info *cat_thread_info, any info) =
-  [1/2]cat_thread_info(cat_thread_info, ?queue_from, ?queue_to, ?queue_id_from, ?queue_id_to, ?t2)
+  [1/2]cat_thread_info(cat_thread_info, ?queue_from, ?queue_to, ?queue_id_from, ?queue_id_to, ?t2, ?tree)
   &*& [1/2]queue(queue_id_from, queue_from)
   &*& [1/2]queue(queue_id_to, queue_to)
-  &*& cat_io(queue_id_from, queue_id_to, ?t1, _, t2)
+  &*& cat_io(queue_id_from, queue_id_to, ?t1, _, t2, tree)
   &*& token(t1);
 predicate_family_instance thread_run_post(cat_thread)(struct cat_thread_info *cat_thread_info, any info) =
-  [1/2]cat_thread_info(cat_thread_info, ?queue_from, ?queue_to, ?queue_id_from, ?queue_id_to, ?t2)
+  [1/2]cat_thread_info(cat_thread_info, ?queue_from, ?queue_to, ?queue_id_from, ?queue_id_to, ?t2, ?tree)
   &*& [1/2]queue(queue_id_from, queue_from)
   &*& [1/2]queue(queue_id_to, queue_to)
   &*& token(t2);
@@ -150,7 +152,7 @@ void cat_thread(struct cat_thread_info *cat_thread_info) //@ : thread_run_joinab
 //@ ensures thread_run_post(cat_thread)(cat_thread_info, info);
 {
   //@ open thread_run_pre(cat_thread)(cat_thread_info, info);
-  cat(cat_thread_info->queue_from, cat_thread_info->queue_to);
+  cat(cat_thread_info->queue_from, cat_thread_info->queue_to, cat_thread_info->tree);
   //@ close thread_run_post(cat_thread)(cat_thread_info, info);
 }
 
@@ -172,17 +174,18 @@ lemma void append_eq<t>(list<t> x, list<t> y, list<t> z)
 lemma place<progress_t> close_reader_getchar_io(
   int queue1_id, int queue2_id, int family_reader, int family_cat, int family_writer,
   place<progress_t> t1, ghost_mutex mutex,
-  int c, list<int> todo
+  int c, list<int> todo,
+  struct proph_tree *tree
 )
 nonghost_callers_only
 requires place_io_invar(t1) == invar(queue1_id, queue2_id, family_reader, family_cat, family_writer)
   &*& place_iot(t1) == iot_init
   &*& place_family(t1) == family_reader
-  &*& prophecy(c)
+  &*& proph_tree(tree, true, c, 0, 0)
   &*& head(todo) == c
   &*& todo != nil
   &*& progress_read_prophecy(place_progress(t1)) == append(progress_thread_done(place_progress(t1)), todo);
-ensures getchar_io(queue2_id, t1, c, result)
+ensures getchar_io(queue2_id, t1, c, result, tree)
   &*& result == place_upd_progress(t1, progress_append(place_progress(t1), {c}));
 {
   place<progress_t> t2 = place_upd_progress(t1, progress_append(place_progress(t1), {c}));
@@ -213,7 +216,7 @@ ensures getchar_io(queue2_id, t1, c, result)
   {
     duplicate_lemma_function_pointer_chunk(getchar_invar_updatable);
   }
-  close getchar_io(queue2_id, t1, c, t2);
+  close getchar_io(queue2_id, t1, c, t2, tree);
   return t2;
 }
 @*/
@@ -222,17 +225,18 @@ ensures getchar_io(queue2_id, t1, c, result)
 lemma place<progress_t> close_cat_getchar_io(
   int queue1_id, int queue2_id, int family_reader, int family_cat, int family_writer,
   place<progress_t> t1, ghost_mutex mutex,
-  int c, list<int> todo
+  int c, list<int> todo,
+  struct proph_tree *tree
 )
 nonghost_callers_only
 requires place_io_invar(t1) == invar(queue1_id, queue2_id, family_reader, family_cat, family_writer)
   &*& place_iot(t1) == iot_split_left(iot_init)
   &*& place_family(t1) == family_cat
-  &*& prophecy(c)
+  &*& proph_tree(tree, true, c, 0, 0)
   &*& head(todo) == c
   &*& todo != nil
   &*& progress_cat_prophecy(place_progress(t1)) == append(progress_thread_done(place_progress(t1)), todo);
-ensures getchar_io(queue1_id, t1, c, result)
+ensures getchar_io(queue1_id, t1, c, result, tree)
   &*& result == place_upd_progress(t1, progress_append(place_progress(t1), {c}));
 {
   place<progress_t> t2 = place_upd_progress(t1, progress_append(place_progress(t1), {c}));
@@ -263,7 +267,7 @@ ensures getchar_io(queue1_id, t1, c, result)
   {
     duplicate_lemma_function_pointer_chunk(getchar_invar_updatable);
   }
-  close getchar_io(queue1_id, t1, c, t2);
+  close getchar_io(queue1_id, t1, c, t2, tree);
   return t2;
 }
 
@@ -316,7 +320,8 @@ ensures putchar_io(queue2_id, t1, c, result)
 
 lemma place<progress_t> close_cat_io(
   int queue1_id, int queue2_id, int family_reader, int family_cat, int family_writer,
-  place<progress_t> t1, ghost_mutex mutex
+  place<progress_t> t1, ghost_mutex mutex,
+  struct proph_tree *tree
 )
 nonghost_callers_only
 requires place_io_invar(t1) == invar(queue1_id, queue2_id, family_reader, family_cat, family_writer)
@@ -324,12 +329,15 @@ requires place_io_invar(t1) == invar(queue1_id, queue2_id, family_reader, family
   &*& place_family(t1) == family_cat
   &*& place_init_progress(t1) == progress({1,2,3,4}, ?cat_prophecy, _, {})
   &*& cat_prophecy == cons(?c1, cons(?c2, cons(?c3, cons(?c4, nil))))
-  &*& prophecy(c1) &*& prophecy(c2) &*& prophecy(c3) &*& prophecy(c4)
+  &*& proph_tree(tree   , false, _, ?pr_gc_1, ?pr_rd_2) &*& proph_tree(pr_gc_1, true, c1, 0, 0)
+  &*& proph_tree(pr_rd_2, false, _, ?pr_gc_2, ?pr_rd_3) &*& proph_tree(pr_gc_2, true, c2, 0, 0)
+  &*& proph_tree(pr_rd_3, false, _, ?pr_gc_3, ?pr_rd_4) &*& proph_tree(pr_gc_3, true, c3, 0, 0)
+  &*& proph_tree(pr_rd_4, false, _, ?pr_gc_4, 0)        &*& proph_tree(pr_gc_4, true, c4, 0, 0)
   &*& [1/2]gcf_instance<iot, progress_t >(family_cat, iot_split_left(iot_init), place_init_progress(t1))
   &*& [1/2]gcf_instance<iot, progress_t >(family_cat, iot_split_right(iot_init), place_init_progress(t1))
   &*& [1/2]gcf_instance<iot, progress_t >(family_cat, iot_join(iot_split_left(iot_init), iot_split_right(iot_init)), place_init_progress(t1))
   ;
-ensures cat_io(queue1_id, queue2_id, t1, cat_prophecy, result)
+ensures cat_io(queue1_id, queue2_id, t1, cat_prophecy, result, tree)
   &*& true==place_static_eq(result, t1)
   
   &*& place_parent1(place_parent1(result)) == t1
@@ -342,15 +350,15 @@ ensures cat_io(queue1_id, queue2_id, t1, cat_prophecy, result)
 {
   close split(t1, ?t1_read, ?t1_write);
    
-  place<progress_t> t2_read = close_cat_getchar_io(queue1_id, queue2_id, family_reader, family_cat, family_writer, t1_read, mutex, c1, {c1, c2, c3, c4});
-  place<progress_t> t3_read = close_cat_getchar_io(queue1_id, queue2_id, family_reader, family_cat, family_writer, t2_read, mutex, c2, {c2, c3, c4});
-  place<progress_t> t4_read = close_cat_getchar_io(queue1_id, queue2_id, family_reader, family_cat, family_writer, t3_read, mutex, c3, {c3, c4});
-  place<progress_t> t5_read = close_cat_getchar_io(queue1_id, queue2_id, family_reader, family_cat, family_writer, t4_read, mutex, c4, {c4});
-  close reader_io(queue1_id, t5_read, 0, _, t5_read);
-  close reader_io(queue1_id, t4_read, 1, _, t5_read);
-  close reader_io(queue1_id, t3_read, 2, _, t5_read);
-  close reader_io(queue1_id, t2_read, 3, _, t5_read);
-  close reader_io(queue1_id, t1_read, 4, _, t5_read);
+  place<progress_t> t2_read = close_cat_getchar_io(queue1_id, queue2_id, family_reader, family_cat, family_writer, t1_read, mutex, c1, {c1, c2, c3, c4}, pr_gc_1);
+  place<progress_t> t3_read = close_cat_getchar_io(queue1_id, queue2_id, family_reader, family_cat, family_writer, t2_read, mutex, c2, {c2, c3, c4}    , pr_gc_2);
+  place<progress_t> t4_read = close_cat_getchar_io(queue1_id, queue2_id, family_reader, family_cat, family_writer, t3_read, mutex, c3, {c3, c4}        , pr_gc_3);
+  place<progress_t> t5_read = close_cat_getchar_io(queue1_id, queue2_id, family_reader, family_cat, family_writer, t4_read, mutex, c4, {c4}            , pr_gc_4);
+  close reader_io(queue1_id, t5_read, 0, _, t5_read, 0);
+  close reader_io(queue1_id, t4_read, 1, _, t5_read, pr_rd_4);
+  close reader_io(queue1_id, t3_read, 2, _, t5_read, pr_rd_3);
+  close reader_io(queue1_id, t2_read, 3, _, t5_read, pr_rd_2);
+  close reader_io(queue1_id, t1_read, 4, _, t5_read, tree);
   
   place<progress_t> t2_write = close_cat_putchar_io(queue1_id, queue2_id, family_reader, family_cat, family_writer, t1_write, mutex, c1, {c1, c2, c3, c4});
   place<progress_t> t3_write = close_cat_putchar_io(queue1_id, queue2_id, family_reader, family_cat, family_writer, t2_write, mutex, c2, {c2, c3, c4});
@@ -363,7 +371,7 @@ ensures cat_io(queue1_id, queue2_id, t1, cat_prophecy, result)
   close writer_io(queue2_id, t1_write, {c1,c2,c3,c4}, t5_write);
   
   close join(t5_read, t5_write, ?t2);
-  close cat_io(queue1_id, queue2_id, t1, ?cs, t2);
+  close cat_io(queue1_id, queue2_id, t1, ?cs, t2, tree);
   return t2;
 }
 @*/
@@ -423,16 +431,41 @@ int main() //@ : main
 {
   // Define init_progress
   //@ list<int> writer_todo = {1, 2, 3, 4};
-  //@ int c1_c = create_prophecy();
-  //@ int c2_c = create_prophecy();
-  //@ int c3_c = create_prophecy();
-  //@ int c4_c = create_prophecy();
+  
+  // cat's inner reader's getchar prophecy trees
+  struct proph_tree *tree_cat_gc1 = create_proph_tree(true, 0, 0);
+  struct proph_tree *tree_cat_gc2 = create_proph_tree(true, 0, 0);
+  struct proph_tree *tree_cat_gc3 = create_proph_tree(true, 0, 0);
+  struct proph_tree *tree_cat_gc4 = create_proph_tree(true, 0, 0);
+  //@ assert proph_tree(tree_cat_gc1, true, ?c1_c, _, _);
+  //@ assert proph_tree(tree_cat_gc2, true, ?c2_c, _, _);
+  //@ assert proph_tree(tree_cat_gc3, true, ?c3_c, _, _);
+  //@ assert proph_tree(tree_cat_gc4, true, ?c4_c, _, _);
   //@ list<int> cat_prophecy = {c1_c, c2_c, c3_c, c4_c};
-  //@ int c1_r = create_prophecy();
-  //@ int c2_r = create_prophecy();
-  //@ int c3_r = create_prophecy();
-  //@ int c4_r = create_prophecy();
+  
+  // cat's inner reader's prophecy trees
+  struct proph_tree *tree_cat_r4 = create_proph_tree(false, tree_cat_gc4, 0);
+  struct proph_tree *tree_cat_r3 = create_proph_tree(false, tree_cat_gc3, tree_cat_r4);
+  struct proph_tree *tree_cat_r2 = create_proph_tree(false, tree_cat_gc2, tree_cat_r3);
+  struct proph_tree *tree_cat_r1 = create_proph_tree(false, tree_cat_gc1, tree_cat_r2);
+
+  // prophecy trees getchars of of reader (outside cat)
+  struct proph_tree *tree_rd_gc1 = create_proph_tree(true, 0, 0);
+  struct proph_tree *tree_rd_gc2 = create_proph_tree(true, 0, 0);
+  struct proph_tree *tree_rd_gc3 = create_proph_tree(true, 0, 0);
+  struct proph_tree *tree_rd_gc4 = create_proph_tree(true, 0, 0);
+  //@ assert proph_tree(tree_rd_gc1, true, ?c1_r, _, _);
+  //@ assert proph_tree(tree_rd_gc2, true, ?c2_r, _, _);
+  //@ assert proph_tree(tree_rd_gc3, true, ?c3_r, _, _);
+  //@ assert proph_tree(tree_rd_gc4, true, ?c4_r, _, _);
   //@ list<int> read_prophecy = {c1_r, c2_r, c3_r, c4_r};
+  
+  // prophecy trees of reader
+  struct proph_tree *tree_rd4 = create_proph_tree(false, tree_rd_gc4, 0);
+  struct proph_tree *tree_rd3 = create_proph_tree(false, tree_rd_gc3, tree_rd4);
+  struct proph_tree *tree_rd2 = create_proph_tree(false, tree_rd_gc2, tree_rd3);
+  struct proph_tree *tree_rd1 = create_proph_tree(false, tree_rd_gc1, tree_rd2);
+  
   //@ progress_t init_progress = progress(writer_todo, cat_prophecy, read_prophecy, nil);
 
   // Create queues.
@@ -464,17 +497,18 @@ int main() //@ : main
   //@ close token(t1_cat);
   
   // close cat_io
-  //@ place<progress_t> t2_cat = close_cat_io(queue1_id, queue2_id, family_reader, family_cat, family_writer, t1_cat, mutex);
+  //@ place<progress_t> t2_cat = close_cat_io(queue1_id, queue2_id, family_reader, family_cat, family_writer, t1_cat, mutex, tree_cat_r1);
   
   // start cat
   struct cat_thread_info *cat_info = malloc(sizeof(struct cat_thread_info));
   if (cat_info == 0) abort();
   cat_info->queue_from = queue1;
   cat_info->queue_to = queue2;
+  cat_info->tree = tree_cat_r1;
   //@ cat_info->queue_id_from = queue1_id;
   //@ cat_info->queue_id_to = queue2_id;
   //@ cat_info->t2 = t2_cat;
-  //@ close cat_thread_info(cat_info, _, _, _, _, _);
+  //@ close cat_thread_info(cat_info, _, _, _, _, _, tree_cat_r1);
   //@ close thread_run_pre(cat_thread)(cat_info, unit);
   struct thread *thread_cat = thread_start_joinable(cat_thread, cat_info);
     
@@ -504,18 +538,18 @@ int main() //@ : main
   //@ close token(t1_reader);
   
   // close reader io
-  //@ place<progress_t> t2_reader = close_reader_getchar_io(queue1_id, queue2_id, family_reader, family_cat, family_writer, t1_reader, mutex, c1_r, {c1_r, c2_r, c3_r, c4_r});
-  //@ place<progress_t> t3_reader = close_reader_getchar_io(queue1_id, queue2_id, family_reader, family_cat, family_writer, t2_reader, mutex, c2_r, {c2_r, c3_r, c4_r});
-  //@ place<progress_t> t4_reader = close_reader_getchar_io(queue1_id, queue2_id, family_reader, family_cat, family_writer, t3_reader, mutex, c3_r, {c3_r, c4_r});
-  //@ place<progress_t> t5_reader = close_reader_getchar_io(queue1_id, queue2_id, family_reader, family_cat, family_writer, t4_reader, mutex, c4_r, {c4_r});
-  //@ close reader_io(queue2_id, t5_reader, 0, nil, t5_reader);
-  //@ close reader_io(queue2_id, t4_reader, 1, _, t5_reader);
-  //@ close reader_io(queue2_id, t3_reader, 2, _, t5_reader);
-  //@ close reader_io(queue2_id, t2_reader, 3, _, t5_reader);
-  //@ close reader_io(queue2_id, t1_reader, 4, _, t5_reader);
+  //@ place<progress_t> t2_reader = close_reader_getchar_io(queue1_id, queue2_id, family_reader, family_cat, family_writer, t1_reader, mutex, c1_r, {c1_r, c2_r, c3_r, c4_r}, tree_rd_gc1);
+  //@ place<progress_t> t3_reader = close_reader_getchar_io(queue1_id, queue2_id, family_reader, family_cat, family_writer, t2_reader, mutex, c2_r, {c2_r, c3_r, c4_r}      , tree_rd_gc2);
+  //@ place<progress_t> t4_reader = close_reader_getchar_io(queue1_id, queue2_id, family_reader, family_cat, family_writer, t3_reader, mutex, c3_r, {c3_r, c4_r}            , tree_rd_gc3);
+  //@ place<progress_t> t5_reader = close_reader_getchar_io(queue1_id, queue2_id, family_reader, family_cat, family_writer, t4_reader, mutex, c4_r, {c4_r}                  , tree_rd_gc4);
+  //@ close reader_io(queue2_id, t5_reader, 0, nil, t5_reader, 0);
+  //@ close reader_io(queue2_id, t4_reader, 1, _, t5_reader, tree_rd4);
+  //@ close reader_io(queue2_id, t3_reader, 2, _, t5_reader, tree_rd3);
+  //@ close reader_io(queue2_id, t2_reader, 3, _, t5_reader, tree_rd2);
+  //@ close reader_io(queue2_id, t1_reader, 4, _, t5_reader, tree_rd1);
   
   // start reader
-  int ret = reader(queue2);
+  int ret = reader(queue2, tree_rd1);
 
   // wait for cat thread
   thread_join(thread_cat);
@@ -532,7 +566,7 @@ int main() //@ : main
   //@ open io_invar_wrap(_);
   //@ open io_invar_wrap(_);
   //@ open io_invar_wrap(_);
-  //@ open cat_thread_info(_, _, _, _, _, _);
+  //@ open cat_thread_info(_, _, _, _, _, _, _);
   //@ ghost_mutex_dispose(mutex); // gives us the invariant.
   
   // Open predicates to obtain information about the fysical state
