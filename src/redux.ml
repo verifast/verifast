@@ -1312,8 +1312,10 @@ and context () =
               [] -> ts3
             | (t, scale)::ts2 ->
               let mult_values v v' =
-                let args = if Oo.id v' < Oo.id v then [v'; v] else [v; v'] in
-                self#get_node mul_symbol args
+                let mul1 = self#get_node mul_symbol [v; v'] in
+                let mul2 = self#get_node mul_symbol [v'; v] in
+                self#add_redex (fun () -> self#assert_eq mul1#value mul2#value);
+                mul1
               in
               let ts4 = if sign_num n1 = 0 then [] else [(t, mult_num scale n1)] in
               let ts4 = ts4 @ List.map (fun (t', scale') -> (mult_values t#value t'#value, mult_num scale scale')) ts1 in
