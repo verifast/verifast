@@ -76,7 +76,7 @@ void sender(int recvr, char *key, int key_len, char *msg);
                principal(?sender, _) &*&
                [?f1]cryptogram(key, key_len, ?key_ccs, ?key_cg) &*&
                  key_cg == cg_private_key(sender, ?id) &*&
-                 key_len >= 384 &*& key_len < MAX_KEY_SIZE &*&
+                 key_len >= 512 &*& key_len < MAX_KEY_SIZE &*&
                [?f2]chars(msg, MSG_SIZE, ?msg_cs) &*&
                true == send(sender, recvr, msg_cs); @*/
   /*@ ensures  principal(sender, _) &*&

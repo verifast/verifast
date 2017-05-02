@@ -65,6 +65,8 @@
 .requires CRT/prelude.h#u_integer_to_chars
 .requires CRT/prelude.h#u_short_integer_to_chars
 .requires CRT/prelude.h#uchars_inv
+.requires CRT/prelude.h#uchars_join
+.requires CRT/prelude.h#uchars_split
 .requires CRT/prelude.h#uchars_to_chars
 .requires CRT/prelude.h#uints_inv
 .requires CRT/prelude.h#uints_to_chars

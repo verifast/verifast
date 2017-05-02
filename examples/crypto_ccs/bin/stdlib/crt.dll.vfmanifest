@@ -156,6 +156,7 @@
 .provides CRT/quantifiers.gh#get_forall_t
 .provides CRT/prelude_core.gh#default_value_eq_zero
 .provides CRT/prelude.h#is_handle_unique
+.provides CRT/prelude.h#u_character_limits
 .provides CRT/prelude.h#character_limits
 .provides CRT/prelude.h#pointers_to_chars
 .provides CRT/prelude.h#divrem_elim
@@ -176,6 +177,8 @@
 .provides CRT/prelude.h#llongs_inv
 .provides CRT/prelude.h#uints_inv
 .provides CRT/prelude.h#ints_inv
+.provides CRT/prelude.h#uchars_join
+.provides CRT/prelude.h#uchars_split
 .provides CRT/prelude.h#uchars_inv
 .provides CRT/prelude.h#chars_inv
 .provides CRT/prelude.h#string_limits
