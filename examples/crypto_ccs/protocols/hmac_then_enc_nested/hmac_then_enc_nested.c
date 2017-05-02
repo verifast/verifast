@@ -62,7 +62,7 @@ void sender(char *enc_key1, char *enc_key2, char *hmac_key,
     //@ assert crypto_chars(secret, enc_msg, msg_len, msg_ccs);
     // hmac
     /*@ if (bad(sender) || bad(shared_with(sender, enc_id1)))
-          MEMCMP_CCS(normal, msg_ccs)
+          MEMCMP_CCS(memcmp_leaf_pub(msg_ccs), msg_ccs)
     @*/
     sha512_hmac(hmac_key, KEY_SIZE, msg, msg_len, enc_msg + (int) msg_len, 0);
     //@ open cryptogram(enc_msg + msg_len, 64, ?hmac_ccs, ?hmac_cg);
@@ -325,7 +325,7 @@ int receiver(char *enc_key1, char *enc_key2, char *hmac_key, char *msg)
     /*@ if (garbage2 || col || hmac_then_enc_nested_public_key(sender, enc_id2, true))
         {
           public_ccs_split(dec_ccs2, enc_size - 64);
-          MEMCMP_CCS(normal, msg_ccs)
+          MEMCMP_CCS(memcmp_leaf_pub(msg_ccs), msg_ccs)
         }
         else
         {

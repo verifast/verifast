@@ -59,7 +59,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
     //@ crypto_chars_join(enc_msg);
     // hmac
     /*@ if (bad(sender) || bad(shared_with(sender, enc_id)))
-          MEMCMP_CCS(normal, msg_ccs)
+          MEMCMP_CCS(memcmp_leaf_pub(msg_ccs), msg_ccs)
     @*/
     sha512_hmac(hmac_key, KEY_SIZE, msg, msg_len,
                 enc_msg + ID_SIZE + (int) msg_len, 0);
@@ -232,7 +232,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
           public_crypto_chars(buffer_dec, ID_SIZE);
           public_crypto_chars(buffer_dec + enc_size - 64, 64);
           chars_to_crypto_chars(buffer_dec + enc_size - 64, 64);
-          MEMCMP_CCS(normal, pay_ccs)
+          MEMCMP_CCS(memcmp_leaf_pub(pay_ccs), pay_ccs)
           MEMCMP_PUB(buffer_dec + enc_size - 64)
         }
         else

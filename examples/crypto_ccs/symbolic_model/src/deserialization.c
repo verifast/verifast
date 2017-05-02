@@ -49,7 +49,7 @@
       } \
       if (attack) \
       { \
-        MEMCMP_CCS(normal, ccs_pay); \
+        MEMCMP_CCS(memcmp_leaf_pub(ccs_pay), ccs_pay); \
       } \
       else \
       { \

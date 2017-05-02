@@ -11,12 +11,15 @@ lemma void well_formed_item_constraints(item i1, item i2)
   leak well_formed_item_ccs(i2)(ccs);
 }
 
-#define IC_MEMCMP_DEFAULT \
+#define IC_MEMCMP_DEFAULT(CCS_PREFIX) \
   assert [_]ic_cg(i)(_, ?cg); \
-  close exists(cg); \
-  leak exists(cg); \
-  sublist_append(ccs_tag, ccs_cont, nil); \
-  MEMCMP_CCS(secret, ccs)
+  memcmp_tree t1 = memcmp_leaf_pub(CCS_PREFIX); \
+  memcmp_tree t2 = memcmp_leaf_sec(cg); \
+  take_append(length(CCS_PREFIX), CCS_PREFIX, ccs_for_cg(cg)); \
+  drop_append(length(CCS_PREFIX), CCS_PREFIX, ccs_for_cg(cg)); \
+  MEMCMP_CCS(t1, CCS_PREFIX); \
+  MEMCMP_CCS(t2, ccs_for_cg(cg)); \
+  MEMCMP_CCS(memcmp_node(t1, t2), append(CCS_PREFIX, ccs_for_cg(cg)));
 
 lemma void item_constraints_memcmp(item i)
   requires [_]item_constraints(i, ?ccs, ?pub);
@@ -25,64 +28,50 @@ lemma void item_constraints_memcmp(item i)
   OPEN_ITEM_CONSTRAINTS(i, ccs, pub)
   assert [_]ic_parts(i)(?ccs_tag, ?ccs_cont);
   sublist_append(ccs_tag, ccs_cont, nil);
-  if (col) MEMCMP_CCS(normal, ccs) else switch(i)
+  if (col) MEMCMP_CCS(memcmp_leaf_pub(ccs), ccs) else switch(i)
   {
     case data_item(d0):
-      MEMCMP_CCS(normal, ccs)
+      MEMCMP_CCS(memcmp_leaf_pub(ccs), ccs)
     case pair_item(f0, s0):
       assert [_]ic_pair(i)(?f_ccs, ?s_ccs);
       assert [_]item_constraints(f0, f_ccs, pub);
       assert [_]item_constraints(s0, s_ccs, pub);
       item_constraints_memcmp(f0);
       item_constraints_memcmp(s0);
-      sublist_append(cs_to_ccs(chars_of_unbounded_int(length(f_ccs))), f_ccs, s_ccs);
-      sublist_trans(f_ccs, ccs_cont, ccs);
-      sublist_append(append(cs_to_ccs(chars_of_unbounded_int(length(f_ccs))), f_ccs), s_ccs, nil);
-      append_assoc(cs_to_ccs(chars_of_unbounded_int(length(f_ccs))), f_ccs, s_ccs);
-      sublist_trans(s_ccs, ccs_cont, ccs);
-      open [_]memcmp_ccs(?fkind, f_ccs);
-      switch(fkind)
-      {
-        case secret:
-          assert [_]exists(?fcg);
-          sublist_trans(ccs_for_cg(fcg), f_ccs, ccs);
-          MEMCMP_CCS(secret, ccs)
-        case normal:
-          open [_]memcmp_ccs(?skind, s_ccs);
-          switch(skind)
-          {
-            case secret:
-              assert [_]exists(?scg);
-              sublist_trans(ccs_for_cg(scg), s_ccs, ccs);
-              MEMCMP_CCS(secret, ccs)
-            case normal:
-              public_ccs_join(f_ccs, s_ccs);
-              public_ccs_join(cs_to_ccs(chars_of_unbounded_int(length(f_ccs))), append(f_ccs, s_ccs));
-              public_ccs_join(ccs_tag, ccs_cont);
-              MEMCMP_CCS(normal, ccs)
-          }
-      }
+      assert [_]memcmp_ccs(?tf, f_ccs);
+      assert [_]memcmp_ccs(?ts, s_ccs);
+      list <crypto_char> ccs_fsize = cs_to_ccs(chars_of_unbounded_int(length(f_ccs)));
+      append_assoc(ccs_fsize, f_ccs, s_ccs);
+      memcmp_tree t_fsize = memcmp_leaf_pub(ccs_fsize);
+      MEMCMP_CCS(t_fsize, ccs_fsize);
+      memcmp_tree t_tag = memcmp_leaf_pub(ccs_tag);
+      MEMCMP_CCS(t_tag, ccs_tag);
+      memcmp_tree t1 = memcmp_node(tf, ts);
+      MEMCMP_CCS(t1, append(f_ccs, s_ccs));
+      memcmp_tree t2 = memcmp_node(t_fsize, t1);
+      MEMCMP_CCS(t2, append(ccs_fsize, append(f_ccs, s_ccs)));
+      memcmp_tree t3 = memcmp_node(t_tag, t2);
+      MEMCMP_CCS(t3, append(ccs_tag, append(ccs_fsize, append(f_ccs, s_ccs))));
     case nonce_item(p0, c0, inc0):
-      assert [_]ic_cg(i)(?ccs_cg, ?cg);
-      close exists(cg);
-      leak exists(cg);      
-      sublist_append(append(ccs_tag, cons(c_to_cc(inc0), nil)), ccs_cg, nil);
+      assert [_]ic_cg(i)(?ccs_cg, _);
+      list<crypto_char> ccs_prefix = append(ccs_tag, cons(c_to_cc(inc0), nil));
       append_assoc(ccs_tag, cons(c_to_cc(inc0), nil), ccs_cg);
-      MEMCMP_CCS(secret, ccs)
+      drop_append(length(ccs_prefix), ccs_prefix, ccs_cg);
+      public_ccs_join(ccs_tag, cons(c_to_cc(inc0), nil));
+      IC_MEMCMP_DEFAULT(ccs_prefix)
     case symmetric_encrypted_item(p0, c0, pay0, ent0):
-      assert [_]ic_cg(i)(?ccs_cg, ?cg);
-      close exists(cg);
-      leak exists(cg);      
-      sublist_append(append(ccs_tag, take(GCM_IV_SIZE, ent0)), ccs_cg, nil);
+      assert [_]ic_cg(i)(?ccs_cg, _);
+      list<crypto_char> ccs_prefix = append(ccs_tag, take(GCM_IV_SIZE, ent0));
       append_assoc(ccs_tag, take(GCM_IV_SIZE, ent0), ccs_cg);
-      MEMCMP_CCS(secret, ccs)
-    case hash_item(pay0):                               IC_MEMCMP_DEFAULT
-    case symmetric_key_item(p0, c0):                    IC_MEMCMP_DEFAULT
-    case public_key_item(p0, c0):                       IC_MEMCMP_DEFAULT
-    case private_key_item(p0, c0):                      IC_MEMCMP_DEFAULT
-    case hmac_item(p0, c0, pay0):                       IC_MEMCMP_DEFAULT  
-    case asymmetric_encrypted_item(p0, c0, pay0, ent0): IC_MEMCMP_DEFAULT
-    case asymmetric_signature_item(p0, c0, pay0, ent0): IC_MEMCMP_DEFAULT
+      public_ccs_join(ccs_tag, take(GCM_IV_SIZE, ent0));
+      IC_MEMCMP_DEFAULT(ccs_prefix)
+    case hash_item(pay0):                               IC_MEMCMP_DEFAULT(ccs_tag)
+    case symmetric_key_item(p0, c0):                    IC_MEMCMP_DEFAULT(ccs_tag)
+    case public_key_item(p0, c0):                       IC_MEMCMP_DEFAULT(ccs_tag)
+    case private_key_item(p0, c0):                      IC_MEMCMP_DEFAULT(ccs_tag)
+    case hmac_item(p0, c0, pay0):                       IC_MEMCMP_DEFAULT(ccs_tag)
+    case asymmetric_encrypted_item(p0, c0, pay0, ent0): IC_MEMCMP_DEFAULT(ccs_tag)
+    case asymmetric_signature_item(p0, c0, pay0, ent0): IC_MEMCMP_DEFAULT(ccs_tag)
   }
 }
 
@@ -684,8 +673,8 @@ void ic_check_equal(char* cont1, int size1, char* cont2, int size2)
          public_ccs_cg(cg2);
          chars_to_secret_crypto_chars(b_cg1, size_cg);
          chars_to_secret_crypto_chars(b_cg2, size_cg);
-         MEMCMP_CCS(normal, ccs_cg1)
-         MEMCMP_CCS(normal, ccs_cg2)
+         MEMCMP_CCS(memcmp_leaf_pub(ccs_cg1), ccs_cg1)
+         MEMCMP_CCS(memcmp_leaf_pub(ccs_cg2), ccs_cg2)
        }
        else
        {

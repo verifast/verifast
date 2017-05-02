@@ -219,7 +219,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
     
       //@ assert chars(s_message, MSG_LEN, ?msg_cs);
       //@ public_chars(s_message, MSG_LEN);
-      //@ MEMCMP_CCS(normal, cs_to_ccs(msg_cs))
+      //@ MEMCMP_CCS(memcmp_leaf_pub(cs_to_ccs(msg_cs)), cs_to_ccs(msg_cs))
       //@ chars_to_secret_crypto_chars(s_message, MSG_LEN);
       //@ assert crypto_chars(secret, s_message, MSG_LEN, ?msg_ccs);
       //@ s_args.sender = sender;

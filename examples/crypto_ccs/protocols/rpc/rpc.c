@@ -122,6 +122,7 @@ void client(char *key, int key_len, char *request, char *response)
     //@ cs_to_ccs_crypto_chars((void*) buffer + 1 + PACKAGE_SIZE, resp_cs);
     //@ chars_join(buffer);
     //@ chars_join(buffer);
+    //@ chars_join(buffer);
     //@ open [1/2]hide_chars(buffer, 1 + 2 * PACKAGE_SIZE, cont_cs);
     //@ assert cont_cs == cons('1', append(req_cs, resp_cs));
 

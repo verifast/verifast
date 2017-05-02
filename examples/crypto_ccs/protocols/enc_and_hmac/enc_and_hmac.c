@@ -207,7 +207,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ assert crypto_chars(?kind, msg, size - 80, ?pay_ccs);
     //@ public_ccs(msg, size - 80);
     /*@ if (garbage || col || enc_and_hmac_public_key(sender, enc_id, true))
-          MEMCMP_CCS(normal, pay_ccs)
+          MEMCMP_CCS(memcmp_leaf_pub(pay_ccs), pay_ccs)
     @*/
     sha512_hmac(hmac_key, KEY_SIZE, msg,
                 (unsigned int) enc_size, hmac, 0);

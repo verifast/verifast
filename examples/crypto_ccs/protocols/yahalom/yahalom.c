@@ -696,7 +696,7 @@ void sender(int server, int sender, int receiver,
           public_chars(dec + ID_SIZE + KEY_SIZE + NONCE_SIZE, NONCE_SIZE);
           chars_to_crypto_chars(dec + ID_SIZE + KEY_SIZE + NONCE_SIZE, NONCE_SIZE);
           public_ccs(dec + ID_SIZE + KEY_SIZE, NONCE_SIZE);
-          MEMCMP_CCS(normal, ccs_NA2)
+          MEMCMP_CCS(memcmp_leaf_pub(ccs_NA2), ccs_NA2)
         }
         else
         {
@@ -718,7 +718,7 @@ void sender(int server, int sender, int receiver,
           public_cryptogram(dec + ID_SIZE + KEY_SIZE, NA2);
           chars_to_crypto_chars(dec + ID_SIZE + KEY_SIZE, NONCE_SIZE);
           public_ccs(dec + ID_SIZE + KEY_SIZE, NONCE_SIZE);
-          MEMCMP_CCS(normal, ccs_for_cg(NA2))
+          MEMCMP_CCS(memcmp_leaf_pub(ccs_for_cg(NA2)), ccs_for_cg(NA2))
         }
     @*/
     //@ chars_to_crypto_chars(dec, ID_SIZE);

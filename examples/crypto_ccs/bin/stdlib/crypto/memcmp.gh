@@ -3,7 +3,13 @@
 
 #include "cryptogram.gh"
 
-fixpoint option<list<crypto_char> > memcmp_payload_rec(cryptogram cg)
+inductive memcmp_tree =
+  | memcmp_leaf_pub(list<crypto_char> ccs)
+  | memcmp_leaf_sec(cryptogram cg)
+  | memcmp_node(memcmp_tree t1, memcmp_tree t2)
+;
+
+fixpoint option<list<crypto_char> > memcmp_payload(cryptogram cg)
 {
   switch(cg)
   {
@@ -13,43 +19,44 @@ fixpoint option<list<crypto_char> > memcmp_payload_rec(cryptogram cg)
   }
 }
 
-predicate memcmp_ccs(crypto_chars_kind kind, list<crypto_char> ccs) =
-  switch(kind)
+predicate memcmp_ccs(memcmp_tree t, list<crypto_char> ccs) =
+  switch(t)
   {
-    case normal: return
-      [_]public_ccs(ccs);
-    case secret: return
-      [_]exists(?cg) &*& sublist(ccs_for_cg(cg), ccs) && cg_is_gen_or_pub(cg) &*&
-      switch(memcmp_payload_rec(cg))
-      {
-        case none:
-          return true;
-        case some(ccs0):
-          return [_]memcmp_ccs(_, ccs0);
-      };
-  };
+    case memcmp_leaf_pub(ccs0):
+      return ccs == ccs0 &*& [_]public_ccs(ccs);
+    case memcmp_leaf_sec(cg0):
+      return ccs == ccs_for_cg(cg0) && cg_is_gen_or_pub(cg0) &*&
+             switch(memcmp_payload(cg0))
+             {
+               case none:
+                 return true;
+               case some(ccs0):
+                 return [_]memcmp_ccs(_, ccs0);
+             } ;
+    case memcmp_node(t1, t2):
+      return [_]memcmp_ccs(t1, ?ccs1) &*& [_]memcmp_ccs(t2, ?ccs2) &*&
+             ccs == append(ccs1, ccs2);
+  }
+;
 
-#define MEMCMP_CCS(KIND, CCS) \
+#define MEMCMP_CCS(TREE, CCS) \
 { \
-  close memcmp_ccs(KIND, CCS); \
-  leak memcmp_ccs(KIND, CCS); \
+  close memcmp_ccs(TREE, CCS); \
+  leak memcmp_ccs(TREE, CCS); \
 }
 
 #define MEMCMP_PUB(BUFFER) \
 { \
   assert [?f00]crypto_chars(normal, BUFFER, ?size00, ?ccs00); \
   public_ccs(BUFFER, size00); \
-  MEMCMP_CCS(normal, ccs00); \
+  MEMCMP_CCS(memcmp_leaf_pub(ccs00), ccs00); \
 }
 
 #define MEMCMP_SEC(BUFFER, CG) \
 { \
-  assert [?f00]crypto_chars(secret, BUFFER, _, ?ccs00); \
+  assert [?f00]crypto_chars(secret, BUFFER, ?size00, ?ccs00); \
   assert ccs_for_cg(CG) == ccs00; \
-  sublist_refl(ccs00); \
-  close exists(CG); \
-  leak exists(CG); \
-  MEMCMP_CCS(secret, ccs00); \
+  MEMCMP_CCS(memcmp_leaf_sec(CG), ccs00); \
 }
 
 #endif
