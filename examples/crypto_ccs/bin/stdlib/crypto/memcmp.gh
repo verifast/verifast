@@ -3,60 +3,83 @@
 
 #include "cryptogram.gh"
 
-inductive memcmp_tree =
-  | memcmp_leaf_pub(list<crypto_char> ccs)
-  | memcmp_leaf_sec(cryptogram cg)
-  | memcmp_node(memcmp_tree t1, memcmp_tree t2)
+inductive memcmp_part =
+  | memcmp_pub(list<crypto_char> ccs)
+  | memcmp_sec(cryptogram cg)
 ;
 
-fixpoint option<list<crypto_char> > memcmp_payload(cryptogram cg)
+fixpoint list<crypto_char> memcmp_part_ccs(memcmp_part p)
 {
-  switch(cg)
+  switch(p)
   {
-    case cg_hash(ccs):         return some(ccs);
-    case cg_hmac(p1, c1, ccs): return some(ccs);
-    default: return none;
+    case memcmp_pub(ccs): return ccs;
+    case memcmp_sec(cg):  return ccs_for_cg(cg);
   }
 }
 
-predicate memcmp_ccs(memcmp_tree t, list<crypto_char> ccs) =
-  switch(t)
+fixpoint bool memcmp_match(list<memcmp_part> l1, list<memcmp_part> l2)
+{
+  switch(l1)
   {
-    case memcmp_leaf_pub(ccs0):
-      return ccs == ccs0 &*& [_]public_ccs(ccs);
-    case memcmp_leaf_sec(cg0):
-      return ccs == ccs_for_cg(cg0) && cg_is_gen_or_pub(cg0) &*&
-             switch(memcmp_payload(cg0))
-             {
-               case none:
-                 return true;
-               case some(ccs0):
-                 return [_]memcmp_ccs(_, ccs0);
-             } ;
-    case memcmp_node(t1, t2):
-      return [_]memcmp_ccs(t1, ?ccs1) &*& [_]memcmp_ccs(t2, ?ccs2) &*&
-             ccs == append(ccs1, ccs2);
+    case cons(p1, l10):
+      return switch(l2)
+      {
+        case cons(p2, l20):
+          return length(memcmp_part_ccs(p1)) == length(memcmp_part_ccs(p2)) &&
+                 memcmp_match(l10, l20);
+        case nil:
+          return false;
+      };
+    case nil:
+      return l2 == nil;
   }
+}
+
+fixpoint bool memcmp_region(list<memcmp_part> l, list<crypto_char> ccs)
+{
+  switch(l)
+  {
+    case nil:
+      return ccs == nil;
+    case cons(p0, l0):
+      return memcmp_part_ccs(p0) == take(length(memcmp_part_ccs(p0)), ccs) &&
+             memcmp_region(l0, drop(length(memcmp_part_ccs(p0)), ccs));
+  }
+}
+
+predicate memcmp_region(list<memcmp_part> l, list<crypto_char> ccs) =
+  true == memcmp_region(l, ccs)
 ;
 
-#define MEMCMP_CCS(TREE, CCS) \
+lemma void memcmp_append(list<crypto_char> ccs1, list<crypto_char> ccs2);
+  requires [_]memcmp_region(?l1, ccs1) &*& [_]memcmp_region(?l2, ccs2);
+  ensures  [_]memcmp_region(append(l1, l2), append(ccs1, ccs2));
+
+#define MEMCMP_REGION(LIST, CCS) \
 { \
-  close memcmp_ccs(TREE, CCS); \
-  leak memcmp_ccs(TREE, CCS); \
+  close memcmp_region(nil, nil); \
+  leak memcmp_region(nil, nil); \
+  close memcmp_region(LIST, CCS); \
+  leak memcmp_region(LIST, CCS); \
 }
+
+#define MEMCMP_CCS(CCS) \
+  MEMCMP_REGION(cons(memcmp_pub(CCS), nil), CCS)
 
 #define MEMCMP_PUB(BUFFER) \
 { \
   assert [?f00]crypto_chars(normal, BUFFER, ?size00, ?ccs00); \
   public_ccs(BUFFER, size00); \
-  MEMCMP_CCS(memcmp_leaf_pub(ccs00), ccs00); \
+  MEMCMP_REGION(nil, nil); \
+  MEMCMP_REGION(cons(memcmp_pub(ccs00), nil), ccs00); \
 }
 
 #define MEMCMP_SEC(BUFFER, CG) \
 { \
   assert [?f00]crypto_chars(secret, BUFFER, ?size00, ?ccs00); \
   assert ccs_for_cg(CG) == ccs00; \
-  MEMCMP_CCS(memcmp_leaf_sec(CG), ccs00); \
+  MEMCMP_REGION(nil, nil); \
+  MEMCMP_REGION(cons(memcmp_sec(CG), nil), ccs00); \
 }
 
 #endif

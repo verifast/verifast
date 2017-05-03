@@ -232,7 +232,10 @@ void sender_msg2(int* socket, havege_state* havege_state, pk_context* s_context,
           }
           else
           {
-            MEMCMP_SEC((void*) message + ID_SIZE, s_nonce_cg2)
+            close exists(s_nonce_cg2);
+            leak exists(s_nonce_cg2);
+            sublist_refl(s_nonce_ccs2);
+            MEMCMP_REGION(cons(memcmp_sec(s_nonce_cg2), nil), s_nonce_ccs2)
           }
         }
         public_crypto_chars(message, ID_SIZE);

@@ -21,7 +21,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
                bad(sender) || bad(shared_with(sender, enc_id)) ?
                  [_]public_ccs(msg_ccs)
                :
-                 [_]memcmp_ccs(_, msg_ccs) &*&
+                 [_]memcmp_region(_, msg_ccs) &*&
                  true == send(sender, shared_with(sender, enc_id), msg_ccs); @*/
 /*@ ensures  principal(sender, _) &*&
              [f1]cryptogram(enc_key, KEY_SIZE, enc_key_ccs, enc_key_cg) &*&
@@ -89,6 +89,9 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
     //@ assert append(iv_ccs, enc_ccs) == cs_to_ccs(append(iv_cs, enc_cs));
     
     // hmac
+    /*@ if (bad(sender) || bad(shared_with(sender, enc_id)))
+          MEMCMP_CCS(msg_ccs)
+    @*/
     sha512_hmac(hmac_key, KEY_SIZE, msg, (unsigned int) (msg_len),
                 message + 16 + (int) msg_len, 0);
     //@ assert cryptogram(message + 16 + msg_len, 64, ?hmac_ccs, ?hmac_cg);
@@ -125,7 +128,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
              [f2]cryptogram(hmac_key, KEY_SIZE, hmac_key_ccs, hmac_key_cg) &*&
              chars(msg + result, MAX_SIZE - result, _) &*&
              crypto_chars(secret, msg, result, ?msg_ccs) &*&
-             [_]memcmp_ccs(_, msg_ccs) &*&
+             [_]memcmp_region(_, msg_ccs) &*&
              col || bad(sender) || bad(receiver) ||
                send(sender, receiver , msg_ccs); @*/
 {
@@ -207,7 +210,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ assert crypto_chars(?kind, msg, size - 80, ?pay_ccs);
     //@ public_ccs(msg, size - 80);
     /*@ if (garbage || col || enc_and_hmac_public_key(sender, enc_id, true))
-          MEMCMP_CCS(memcmp_leaf_pub(pay_ccs), pay_ccs)
+          MEMCMP_CCS(pay_ccs)
     @*/
     sha512_hmac(hmac_key, KEY_SIZE, msg,
                 (unsigned int) enc_size, hmac, 0);

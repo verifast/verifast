@@ -134,6 +134,10 @@ lemma void dummy_foreach_subset<T>(list<T> xs, list<T> ys);
 
 //List stuff
 
+lemma void take_length_bound<T>(int i, list<T> xs);
+  requires i >= 0;
+  ensures  length(take(i, xs)) <= i && length(take(i, xs)) <= length(xs);
+  
 fixpoint bool prefix<T>(list<T> xs, list<T> ys)
 {
   return take(length(xs), ys) == xs;

@@ -74,7 +74,6 @@ predicate item_constraints(item i, list<crypto_char> ccs, predicate(item) pub) =
     case hash_item(pay0): return
         length(ccs_cont) == HASH_SIZE &*&
         IC_CG(ccs_cont, cg_hash(?ccs_pay1)) &*&
-        [_]memcmp_ccs(_, ccs_pay1) &*&
         IC_PAY(ccs_pay1, true);
     case symmetric_key_item(p0, c0): return
         length(ccs_cont) == GCM_KEY_SIZE &*&
@@ -87,7 +86,6 @@ predicate item_constraints(item i, list<crypto_char> ccs, predicate(item) pub) =
         IC_CG(ccs_cont, cg_private_key(p0, c0));
     case hmac_item(p0, c0, pay0): return
         IC_CG(ccs_cont, cg_hmac(p0, c0, ?ccs_pay1)) &*&
-        [_]memcmp_ccs(_, ccs_pay1) &*&
         IC_PAY(ccs_pay1, [_]pub(symmetric_key_item(p0, c0)));
     case symmetric_encrypted_item(p0, c0, pay0, ent0): return
         ic_sym_enc(i)(?iv0, ?cg_ccs) &*&
@@ -174,7 +172,7 @@ lemma void well_formed_item_constraints(item i1, item i2);
 
 lemma void item_constraints_memcmp(item i);
   requires [_]item_constraints(i, ?ccs, ?pub);
-  ensures  [_]memcmp_ccs(_, ccs);
+  ensures  [_]memcmp_region(_, ccs);
 
 lemma void item_constraints_deterministic(list<crypto_char> ccs1,
                                           list<crypto_char> ccs2, item i);

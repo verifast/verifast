@@ -10,6 +10,7 @@ MODULES = \
   public_chars \
   interpret \
   identifiers \
+  memcmp \
 
 PMODULES = \
   havege_util \

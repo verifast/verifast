@@ -39,13 +39,13 @@ int strlen(char *string);
 
 int memcmp(char *array, char *array0, size_t count);
     /*@ requires [?f1]crypto_chars(?kind1, array, ?n1, ?ccs1) &*&
-                 [_]memcmp_ccs(?t1, take(count, ccs1)) &*& 
+                 [_]memcmp_region(?l1, take(count, ccs1)) &*& 
                  [?f2]crypto_chars(?kind2, array0, ?n2, ?ccs2) &*& 
-                 [_]memcmp_ccs(?t2, take(count, ccs2)) &*& 
-                 count <= n1 &*& count <= n2; @*/
+                 [_]memcmp_region(?l2, take(count, ccs2)) &*& 
+                 memcmp_match(l1, l2) && count <= n1 &*& count <= n2; @*/
     /*@ ensures  [f1]crypto_chars(kind1, array, n1, ccs1) &*&
                  [f2]crypto_chars(kind2, array0, n2, ccs2) &*&
-                 true == ((result == 0) == (t1 == t2)); @*/
+                 true == ((result == 0) == (take(count, ccs1) == take(count, ccs2))); @*/
 
 int strcmp(char *s1, char *s2);
     //@ requires [?f1]string(s1, ?cs1) &*& [?f2]string(s2, ?cs2);

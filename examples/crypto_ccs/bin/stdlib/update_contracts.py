@@ -34,11 +34,11 @@ update_part(
   "    //@ ensures [f]chars(array, n, cs) &*& [f0]chars(array0, n0, cs0) &*& "
        "true == ((result == 0) == (take(count, cs) == take(count, cs0)));\r\n",
   "    /*@ requires [?f1]crypto_chars(?kind1, array, ?n1, ?ccs1) &*&\r\n"
-  "                 [_]memcmp_ccs(?t1, take(count, ccs1)) &*& \r\n"
+  "                 [_]memcmp_region(?l1, take(count, ccs1)) &*& \r\n"
   "                 [?f2]crypto_chars(?kind2, array0, ?n2, ?ccs2) &*& \r\n"
-  "                 [_]memcmp_ccs(?t2, take(count, ccs2)) &*& \r\n"
-  "                 count <= n1 &*& count <= n2; @*/\r\n"
+  "                 [_]memcmp_region(?l2, take(count, ccs2)) &*& \r\n"
+  "                 memcmp_match(l1, l2) && count <= n1 &*& count <= n2; @*/\r\n"
   "    /*@ ensures  [f1]crypto_chars(kind1, array, n1, ccs1) &*&\r\n"
   "                 [f2]crypto_chars(kind2, array0, n2, ccs2) &*&\r\n"
-  "                 true == ((result == 0) == (t1 == t2)); @*/\r\n"
+  "                 true == ((result == 0) == (take(count, ccs1) == take(count, ccs2))); @*/\r\n"
 )

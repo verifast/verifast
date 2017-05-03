@@ -85,6 +85,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
     
     // hmac
     //@ chars_to_crypto_chars(message, 16 + msg_len);
+    //@ MEMCMP_PUB(message)
     sha512_hmac(hmac_key, KEY_SIZE, message,
                 (unsigned int) (16 + (int) msg_len),
                 message + 16 + (int) msg_len, 0);

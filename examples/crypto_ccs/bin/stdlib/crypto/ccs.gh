@@ -4,13 +4,13 @@
 #include <quantifiers.gh>
 #include "auxiliary_definitions.gh"
 
-abstract_type coin_tosses; // Finite list of random coin tosses
+abstract_type secret_coin_tosses; // Finite list of secret coin tosses
 
 inductive crypto_char =
-  crypto_char(fixpoint(coin_tosses, char) crypto_char)
+  crypto_char(fixpoint(secret_coin_tosses, char) crypto_char)
 ;
 
-fixpoint char crypto_char_const(char c, coin_tosses sampling)
+fixpoint char crypto_char_const(char c, secret_coin_tosses sampling)
 {
   return c;
 }

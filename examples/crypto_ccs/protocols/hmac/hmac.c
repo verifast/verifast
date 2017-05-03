@@ -35,6 +35,7 @@ void sender(char *key, int key_len, char *message)
     
     //@ chars_to_crypto_chars(message, MESSAGE_SIZE);
     memcpy(M, message, MESSAGE_SIZE);
+    //@ MEMCMP_PUB(M)
     sha512_hmac(key, (unsigned int) key_len, M, 
                 (unsigned int) MESSAGE_SIZE, hmac, 0);
     //@ assert cryptogram(hmac, 64, ?hmac_ccs, ?hmac_cg);

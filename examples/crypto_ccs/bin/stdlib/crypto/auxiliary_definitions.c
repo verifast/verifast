@@ -345,4 +345,17 @@ lemma void sublist_trans<T>(list<T> xs1, list<T> xs2, list<T> xs3)
   }
 }
 
+lemma void take_length_bound<T>(int i, list<T> xs)
+  requires i >= 0;
+  ensures  length(take(i, xs)) <= i && length(take(i, xs)) <= length(xs);
+{
+  switch(xs)
+  {
+    case cons(x0, xs0):
+      if (i > 0)
+        take_length_bound<T>(i - 1, xs0);
+    case nil:
+  }
+}
+
 @*/

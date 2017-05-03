@@ -287,6 +287,7 @@ void attacker_send_hash(havege_state *havege_state, void* socket)
 
   char hash[64];
   //@ chars_to_crypto_chars(buffer, size);
+  //@ MEMCMP_PUB(buffer)
   sha512(buffer, (unsigned int) size, hash, 0);
   //@ assert cryptogram(hash, 64, ?h_ccs, ?h_cg);
   //@ assert h_cg == cg_hash(cs_to_ccs(pay));
@@ -326,6 +327,7 @@ void attacker_send_hmac(havege_state *havege_state, void* socket)
   //@ assert chars(buffer2, size2, ?pay);
   //@ chars_to_crypto_chars(buffer2, size2);
   //@ public_cs(pay);
+  //@ MEMCMP_PUB(buffer2)
   sha512_hmac(buffer1, (unsigned int) size1, buffer2,
               (unsigned int) size2, buffer3, 0);
   //@ assert cryptogram(buffer3, 64, ?ccs_hmac, ?hmac);

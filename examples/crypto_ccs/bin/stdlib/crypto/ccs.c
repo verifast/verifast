@@ -55,8 +55,8 @@ lemma void c_to_cc_inj(char c1, char c2)
   requires true;
   ensures  true == ((c_to_cc(c1) == c_to_cc(c2)) == (c1 == c2));
 {
-  fixpoint(coin_tosses, char) cc1, cc2;
-  coin_tosses sampling;
+  fixpoint(secret_coin_tosses, char) cc1, cc2;
+  secret_coin_tosses sampling;
   cc1 = (crypto_char_const)(c1);
   cc2 = (crypto_char_const)(c2);
   cc1(sampling);
