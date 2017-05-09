@@ -544,7 +544,7 @@ void symbolic_attacker(int attacker_id, struct keypair* keypair)
                           symmetric ?
                             key == cg_symmetric_key(p, c)
                           :
-                            key == cg_private_key(p, c);
+                            key == cg_rsa_private_key(p, c);
                   ensures polarssl_proof_pred(pub, key_clsfy)() &*&
                           col || true == key_clsfy(p, c, symmetric);
                 {

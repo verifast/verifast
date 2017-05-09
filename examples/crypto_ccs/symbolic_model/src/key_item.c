@@ -227,7 +227,7 @@ void set_public_key(pk_context *ctx, struct item *pub_key)
   //@ OPEN_ITEM_CONSTRAINTS(pub_key_i, ccs, pub)
   //@ assert [_]ic_parts(pub_key_i)(?ccs_tag, ?ccs_cont);
   //@ crypto_chars_split(cont, TAG_LENGTH);
-  //@ cryptogram cg = cg_public_key(principal, count);
+  //@ cryptogram cg = cg_rsa_public_key(principal, count);
   //@ if (col) cg = ccs_for_cg_sur(ccs_cont, tag_public_key);
   //@ if (col) public_ccs_cg(cg);
   //@ close cryptogram(cont + TAG_LENGTH, RSA_BIT_KEY_SIZE, ccs_cont, cg);
@@ -260,7 +260,7 @@ void set_private_key(pk_context *ctx, struct item *priv_key)
   //@ OPEN_ITEM_CONSTRAINTS(priv_key_i, ccs, pub)
   //@ assert [_]ic_parts(priv_key_i)(?ccs_tag, ?ccs_cont);
   //@ crypto_chars_split(cont, TAG_LENGTH);
-  //@ cryptogram cg = cg_private_key(principal, count);
+  //@ cryptogram cg = cg_rsa_private_key(principal, count);
   //@ if (col) cg = ccs_for_cg_sur(ccs_cont, tag_private_key);
   //@ if (col) public_ccs_cg(cg);
   //@ close cryptogram(cont + TAG_LENGTH, RSA_BIT_KEY_SIZE, ccs_cont, cg);

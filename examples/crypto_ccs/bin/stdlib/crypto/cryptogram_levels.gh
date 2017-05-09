@@ -27,7 +27,7 @@ lemma_auto void cg_level_max_(cryptogram cg);
 // cryptograms generated in some run are considered, then no cycle
 // can occur unless there is a collision.
 lemma void cg_level_ind(cryptogram cg, cryptogram cg_pay);
-  requires cg_payload(cg) == some(?pay) &*&
+  requires cg_payload(cg) == some(?pay) &*& cg_is_gen_or_pub(cg) &&
            true == sublist(ccs_for_cg(cg_pay), pay);
   ensures  col || true == cg_level_below(cg_level(cg), cg_pay);
 

@@ -12,6 +12,8 @@ lemma void public_cs(list<char> cs)
   {
     forall_t_elim(forallcs, (notf)((cs_to_ccs_eq)(cs_to_ccs(cs))), cs);
   }
+  close exists(cs);
+  leak exists(cs);
   close public_ccs(cs_to_ccs(cs));
   leak public_ccs(cs_to_ccs(cs));
 }
@@ -43,15 +45,6 @@ lemma void public_ccs(char *array, int size)
     else
       chars_to_secret_crypto_chars(array, size);
   }
-//  switch(kind)
-//  {
-//    case normal:
-//      crypto_chars_to_chars(array, size);
-//      assert [f]chars(array, size, ?cs);
-//      public_cs(cs);
-//      chars_to_crypto_chars(array, size);
-//    case secret:
-//  }
 }
 
 lemma void public_cryptogram(char *array, cryptogram cg)
@@ -71,8 +64,7 @@ lemma void public_ccs_split(list<crypto_char> ccs, int i)
   ensures  [_]public_ccs(take(i, ccs)) &*&
            [_]public_ccs(drop(i, ccs));
 {
-  open [_]public_ccs(ccs);
-  get_forall_t<list<char> >();
+  public_cs_to_ccs(ccs);
   assert [_]is_forall_t<list<char> >(?forallcs);
   list<char> cs = not_forall_t(forallcs, (notf)((cs_to_ccs_eq)(ccs)));
   list<char> cs1 = take(i, cs);
@@ -88,8 +80,8 @@ lemma void public_ccs_join(list<crypto_char> ccs1, list<crypto_char> ccs2)
            [_]public_ccs(ccs2);
   ensures  [_]public_ccs(append(ccs1, ccs2));
 {
-  open [_]public_ccs(ccs1);
-  open [_]public_ccs(ccs2);
+  public_cs_to_ccs(ccs1);
+  public_cs_to_ccs(ccs2);
   get_forall_t<list<char> >();
   assert [_]is_forall_t<list<char> >(?forallcs);
   list<char> cs1 = not_forall_t(forallcs, (notf)((cs_to_ccs_eq)(ccs1)));

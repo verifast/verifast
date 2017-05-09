@@ -37,13 +37,13 @@ predicate rpc_pub(cryptogram cg) =
       return true;
     case cg_symmetric_key(p0, c0):
       return true == rpc_public_key(p0, c0, true);
-    case cg_public_key(p0, c0):
+    case cg_rsa_public_key(p0, c0):
       return true;
-    case cg_private_key(p0, c0):
+    case cg_rsa_private_key(p0, c0):
       return true == rpc_public_key(p0, c0, false);
-    case cg_hash(ccs0):
+    case cg_sha512_hash(ccs0):
       return true;
-    case cg_hmac(p0, c0, ccs0):
+    case cg_sha512_hmac(p0, c0, ccs0):
       return rpc_public_key(p0, c0, true) ? true :
         exists(?cs0) &*& ccs0 == cs_to_ccs(cs0) &*&
         switch (cs0)
@@ -60,15 +60,15 @@ predicate rpc_pub(cryptogram cg) =
           case nil:
             return false;
         };
-    case cg_encrypted(p0, c0, ccs0, ent0):
+    case cg_aes_encrypted(p0, c0, ccs0, ent0):
       return true == rpc_public_key(p0, c0, true) &*&
              [_]public_ccs(ccs0);
-    case cg_auth_encrypted(p0, c0, ccs0, ent0):
+    case cg_aes_auth_encrypted(p0, c0, ccs0, ent0):
       return true == rpc_public_key(p0, c0, true) &*&
              [_]public_ccs(ccs0);
-    case cg_asym_encrypted(p0, c0, ccs0, ent0):
+    case cg_rsa_encrypted(p0, c0, ccs0, ent0):
       return [_]public_ccs(ccs0);
-    case cg_asym_signature(p0, c0, ccs0, ent0):
+    case cg_rsa_signature(p0, c0, ccs0, ent0):
       return true == rpc_public_key(p0, c0, false);
   }
 ;

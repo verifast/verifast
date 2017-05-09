@@ -47,6 +47,7 @@ void sender(char *key, char *msg, unsigned int msg_len)
     //@ close random_request(sender, 0, false);
     if (havege_random(&havege_state, iv, 16) != 0) abort();
     //@ open cryptogram(iv, 16, ?iv_ccs, ?iv_cg);
+    //@ chars_to_crypto_chars(message, 16);
     memcpy(message, iv, 16);
     //@ close auth_enc_pub(iv_cg);
     //@ leak auth_enc_pub(iv_cg);
@@ -74,7 +75,7 @@ void sender(char *key, char *msg, unsigned int msg_len)
     //@ assert crypto_chars(secret, (void*) message + 32, msg_len, ?enc_ccs);
     //@ crypto_chars_join(message + 16);
     //@ close cryptogram(message + 16, 16 + msg_len, append(tag_ccs, enc_ccs), enc_cg);
-    //@ assert enc_cg == cg_auth_encrypted(sender, id, msg_ccs, iv_ccs);
+    //@ assert enc_cg == cg_aes_auth_encrypted(sender, id, msg_ccs, iv_ccs);
     //@ close auth_enc_pub(enc_cg);
     //@ leak auth_enc_pub(enc_cg);
     //@ public_cryptogram(message + 16, enc_cg);
@@ -154,7 +155,7 @@ int receiver(char *key, char *msg)
     //@ open gcm_context(&gcm_context);
     /*@ if (!col)
         {
-          assert enc_cg == cg_auth_encrypted(sender, id, ?dec_ccs, iv_ccs);
+          assert enc_cg == cg_aes_auth_encrypted(sender, id, ?dec_ccs, iv_ccs);
           assert ccs_for_cg(enc_cg) == enc_ccs;
           enc_ccs == cs_to_ccs(append(tag_cs, enc_cs));
           open [_]auth_enc_pub(enc_cg);

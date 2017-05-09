@@ -109,8 +109,10 @@ void attacker_send_concatenation(havege_state *havege_state, void* socket)
   }
 
   //@ chars_to_crypto_chars(buffer1, size1);
+  //@ chars_to_crypto_chars(buffer3, size1);
   memcpy(buffer3, buffer1, (unsigned int) size1);
   //@ chars_to_crypto_chars(buffer2, size2);
+  //@ chars_to_crypto_chars((char*) buffer3 + size1, size2);
   memcpy((char*) buffer3 + size1, buffer2, (unsigned int) size2);
   //@ crypto_chars_join(buffer3);
   //@ crypto_chars_to_chars(buffer3, size1 + size2);
@@ -290,7 +292,7 @@ void attacker_send_hash(havege_state *havege_state, void* socket)
   //@ MEMCMP_PUB(buffer)
   sha512(buffer, (unsigned int) size, hash, 0);
   //@ assert cryptogram(hash, 64, ?h_ccs, ?h_cg);
-  //@ assert h_cg == cg_hash(cs_to_ccs(pay));
+  //@ assert h_cg == cg_sha512_hash(cs_to_ccs(pay));
   //@ assert is_hash_is_public(?proof, pub, pred);
   //@ crypto_chars_to_chars(buffer, size);
   //@ public_chars(buffer, size);
@@ -411,7 +413,7 @@ void attacker_send_encrypted(havege_state *havege_state, void* socket)
         /*@
           {
             assert cryptogram(buffer3, size2, ?ccs_enc, ?cg_enc);
-            assert cg_enc == cg_encrypted(p, c, ?cs2, ccs_iv);
+            assert cg_enc == cg_aes_encrypted(p, c, ?cs2, ccs_iv);
             assert [_]pub(cg_key);
             assert is_public_encryption_is_public(?proof2, pub, pred);
             crypto_chars_to_chars(buffer2, size2);
@@ -476,7 +478,7 @@ void attacker_send_decrypted(havege_state *havege_state, void* socket)
       //@ interpret_encrypted(buffer2, size2);
       //@ open cryptogram(buffer2, size2, ?ccs2, ?cg_enc);
       //@ close cryptogram(buffer2, size2, ccs2, cg_enc);
-      //@ assert cg_enc == cg_encrypted(?p2, ?c2, ?ccs_output2, ?ccs_iv2);
+      //@ assert cg_enc == cg_aes_encrypted(?p2, ?c2, ?ccs_output2, ?ccs_iv2);
       //@ structure s = known_value(0, nil);
       //@ close decryption_pre(true, false, attacker, s, ccs2);
       int success = aes_crypt_cfb128(&aes_context, AES_DECRYPT,
@@ -632,7 +634,7 @@ void attacker_send_auth_decrypted(havege_state *havege_state, void* socket)
       //@ cs_to_ccs_crypto_chars(buffer2, cs2);
       //@ chars_to_crypto_chars(buffer2, size2);
       //@ close exists(cg_enc);
-      //@ assert cg_enc == cg_auth_encrypted(?p2, ?c2, ?ccs_output2, ?ccs_iv2);
+      //@ assert cg_enc == cg_aes_auth_encrypted(?p2, ?c2, ?ccs_output2, ?ccs_iv2);
       //@ crypto_chars_split(buffer2, 16);
       if (gcm_auth_decrypt(&gcm_context, (unsigned int) size2 - 16,
                             iv, 16, NULL, 0, buffer2, 16,
@@ -695,7 +697,7 @@ void attacker_send_asym_encrypted(havege_state *havege_state, void* socket)
   pk_init(&context);
   //@ interpret_public_key(buffer1, size1);
   //@ assert cryptogram(buffer1, size1, ?ccs1, ?cg_key);
-  //@ assert cg_key == cg_public_key(?p, ?c);
+  //@ assert cg_key == cg_rsa_public_key(?p, ?c);
   if (pk_parse_public_key(&context, buffer1, (unsigned int) size1) == 0)
   {
     if (size2 * 8 <= size1)
@@ -713,7 +715,7 @@ void attacker_send_asym_encrypted(havege_state *havege_state, void* socket)
         /*@
           {
             assert cryptogram(buffer3, osize_val, ?ccs_enc, ?cg_enc);
-            assert cg_enc == cg_asym_encrypted(p, c, ?cs2, _);
+            assert cg_enc == cg_rsa_encrypted(p, c, ?cs2, _);
             assert is_public_asym_encryption_is_public(?proof, pub, pred);
             crypto_chars_to_chars(buffer2, size2);
             public_chars(buffer2, size2);
@@ -761,7 +763,7 @@ void attacker_send_asym_decrypted(havege_state *havege_state, void* socket)
   pk_init(&context);
   //@ interpret_private_key(buffer1, size1);
   //@ assert cryptogram(buffer1, size1, ?ccs1, ?cg_key);
-  //@ assert cg_key == cg_private_key(?p, ?c);
+  //@ assert cg_key == cg_rsa_private_key(?p, ?c);
   if (pk_parse_key(&context, buffer1, (unsigned int) size1, NULL, 0) == 0)
   {
     if (size2 * 8 <= size1)
@@ -772,7 +774,7 @@ void attacker_send_asym_decrypted(havege_state *havege_state, void* socket)
                   (havege_state_initialized)(state, out, len) { call(); } @*/
       //@ interpret_asym_encrypted(buffer2, size2);
       //@ assert cryptogram(buffer2, size2, ?ccs2, ?cg_enc);
-      //@ assert cg_enc == cg_asym_encrypted(?p2, ?c2, ?ccs_output2, ?ent);
+      //@ assert cg_enc == cg_rsa_encrypted(?p2, ?c2, ?ccs_output2, ?ent);
       //@ structure s = known_value(0, nil);
       //@ close decryption_pre(false, false, attacker, s, ccs2);
       int success = pk_decrypt(&context, buffer2, (unsigned int) size2,
@@ -837,7 +839,7 @@ void attacker_send_asym_signature(havege_state *havege_state, void* socket)
   pk_init(&context);
   //@ interpret_private_key(buffer1, size1);
   //@ assert cryptogram(buffer1, size1, ?ccs1, ?cg_key);
-  //@ assert cg_key == cg_private_key(?p, ?c);
+  //@ assert cg_key == cg_rsa_private_key(?p, ?c);
   if (pk_parse_key(&context, buffer1, (unsigned int) size1, NULL, 0) == 0)
   {
     if (size2 * 8 < size1)
@@ -855,7 +857,7 @@ void attacker_send_asym_signature(havege_state *havege_state, void* socket)
           {
             assert u_integer(&osize, ?osize_val);
             assert cryptogram(buffer3, osize_val, ?ccs_enc, ?cg_sig);
-            assert cg_sig == cg_asym_signature(p, c, ?cs2, _);
+            assert cg_sig == cg_rsa_signature(p, c, ?cs2, _);
             assert is_public_asym_signature_is_public(?proof, pub, pred);
             crypto_chars_to_chars(buffer2, size2);
             public_chars(buffer2, size2);

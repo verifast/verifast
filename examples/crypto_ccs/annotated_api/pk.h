@@ -91,7 +91,7 @@ int pk_write_pubkey_pem(pk_context *ctx, char *buf, size_t size);
   /*@ ensures  pk_context_with_keys(ctx, p, c, nbits, info) &*&
                result == 0 ?
                  cryptogram(buf, size, ?key_ccs, ?key) &*&
-                 key == cg_public_key(p, c) &*&
+                 key == cg_rsa_public_key(p, c) &*&
                  info == cg_info(key)
                :
                  chars(buf, size, _);
@@ -104,7 +104,7 @@ int pk_write_key_pem(pk_context *ctx, char *buf, size_t size);
   /*@ ensures  pk_context_with_keys(ctx, p, c, nbits, info) &*&
                result == 0 ?
                  cryptogram(buf, size, ?key_ccs, ?key) &*&
-                 key == cg_private_key(p, c) &*&
+                 key == cg_rsa_private_key(p, c) &*&
                  info == cg_info(key)
                :
                  chars(buf, size, _);
@@ -113,14 +113,14 @@ int pk_write_key_pem(pk_context *ctx, char *buf, size_t size);
 /*@
 lemma void pk_info_for_keypair(int principal, int count);
   requires true;
-  ensures  cg_info(cg_public_key(principal, count)) ==
-           cg_info(cg_private_key(principal, count));
+  ensures  cg_info(cg_rsa_public_key(principal, count)) ==
+           cg_info(cg_rsa_private_key(principal, count));
 @*/
 
 int pk_parse_public_key(pk_context *ctx, const char *key, size_t keylen);
   /*@ requires pk_context_initialized(ctx) &*&
                [?f]cryptogram(key, keylen, ?ccs_key, ?cg_key) &*&
-               cg_key == cg_public_key(?p, ?c); @*/
+               cg_key == cg_rsa_public_key(?p, ?c); @*/
   /*@ ensures  [f]cryptogram(key, keylen, ccs_key, cg_key) &*&
                result == 0 ?
                  pk_context_with_key(ctx, pk_public, p, c, keylen)
@@ -132,7 +132,7 @@ int pk_parse_key(pk_context *ctx, const char *key, size_t keylen,
   /*@ requires pk_context_initialized(ctx) &*&
                pwd == NULL &*& pwdlen == 0 &*&
                [?f]cryptogram(key, keylen, ?ccs_key, ?cg_key) &*&
-               cg_key == cg_private_key(?p, ?c); @*/
+               cg_key == cg_rsa_private_key(?p, ?c); @*/
   /*@ ensures  [f]cryptogram(key, keylen, ccs_key, cg_key) &*&
                result == 0 ?
                  pk_context_with_key(ctx, pk_private, p, c, keylen)
@@ -165,7 +165,7 @@ int pk_encrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                   cryptogram(output, olen_val, _, ?cg) &*&
                   olen_val > 0 &*& olen_val <= osize &*&
                   8 * olen_val <= nbits &*&
-                  cg == cg_asym_encrypted(p1, c1, ccs_input, _) &*&
+                  cg == cg_rsa_encrypted(p1, c1, ccs_input, _) &*&
                   chars(output + olen_val, osize - olen_val, _); @*/
 
 int pk_decrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
@@ -174,7 +174,7 @@ int pk_decrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                 pk_context_with_key(ctx, pk_private, ?p2, ?c2, ?nbits) &*&
                 // input
                 [?f1]cryptogram(input, ilen, in_ccs, ?cg_input) &*&
-                  cg_input == cg_asym_encrypted(?p3, ?c3, ?ccs_out3, _) &*&
+                  cg_input == cg_rsa_encrypted(?p3, ?c3, ?ccs_out3, _) &*&
                   // message to decrypt can not be bigger than key
                   ilen * 8 <= nbits &*&
                 // output
@@ -230,7 +230,7 @@ int pk_sign(pk_context *ctx, int md_alg, const char *hash, size_t hash_len,
                 :
                   // signing was successful
                   cryptogram(sig, sig_len_val, _, ?cg) &*&
-                  cg == cg_asym_signature(p1, c1, ccs_input, _) &*&
+                  cg == cg_rsa_signature(p1, c1, ccs_input, _) &*&
                   sig_len_val > 0 &*& sig_len_val <= out_len &*&
                   chars(sig + sig_len_val, out_len - sig_len_val, _); @*/
 
@@ -244,7 +244,7 @@ int pk_verify(pk_context *ctx, int md_alg, const char *hash,
                   // hash to verify can not be bigger than key
                   hash_len * 8 <= nbits &*&
                 [?f2]cryptogram(sig, sig_len, ?ccs_sig, ?cg_sig) &*&
-                  cg_sig == cg_asym_signature(?p2, ?c2, ?ccs_in2, _); @*/
+                  cg_sig == cg_rsa_signature(?p2, ?c2, ?ccs_in2, _); @*/
   /*@ ensures   pk_context_with_key(ctx, pk_public, p1, c1, nbits) &*&
                 [f1]crypto_chars(kind, hash, hash_len, ccs_in) &*&
                 [f2]cryptogram(sig, sig_len, ccs_sig, cg_sig) &*&

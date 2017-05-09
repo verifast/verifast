@@ -14,7 +14,7 @@ lemma void public_cg_ccs(cryptogram cg);
 
 lemma void public_ccs_cg(cryptogram cg);
   requires [_]public_invar(?pub) &*& [_]public_ccs(ccs_for_cg(cg));
-  ensures  [_]pub(cg) &*& true == cg_is_gen_or_pub(cg);
+  ensures  [_]pub(cg) &*& true== cg_is_gen_or_pub(cg);
 
 // Proven lemmas
 

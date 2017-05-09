@@ -37,11 +37,14 @@ fixpoint bool cs_to_ccs_eq(list<crypto_char> ccs, list<char> cs)
 }
 
 predicate public_ccs(list<crypto_char> ccs) =
-  [_]is_forall_t<list<char> >(?forallcs) &*&
-  true == exists_t<list<char> >(forallcs, (cs_to_ccs_eq)(ccs))
-;
+  [_]exists(?cs) &*& ccs == cs_to_ccs(cs);
 
 // Proven lemmas
+
+lemma void public_cs_to_ccs(list<crypto_char> ccs);
+  requires [_]public_ccs(ccs);
+  ensures [_]is_forall_t<list<char> >(?forallcs) &*&
+          true == exists_t<list<char> >(forallcs, (cs_to_ccs_eq)(ccs));
 
 lemma void cs_to_ccs_length(list<char> xs);
   requires true;

@@ -2,6 +2,29 @@
 
 /*@
 
+lemma void memcmp_match(list<memcmp_part> l, list<memcmp_part> l1, 
+                                             list<memcmp_part> l2)
+  requires memcmp_match(l, l1) && memcmp_match(l, l2);
+  ensures  true == memcmp_match(l1, l2);
+{
+  switch(l)
+  {
+    case cons(p, l0):
+      switch(l1)
+      {
+        case cons(p1, l01):
+          switch(l2)
+          {
+            case cons(p2, l02):
+              memcmp_match(l0, l01, l02);
+            case nil:
+          }
+        case nil:
+      }
+    case nil:
+  }
+}
+
 lemma void memcmp_append0(list<memcmp_part> l1, list<memcmp_part> l2)
   requires [_]memcmp_region(l1, ?ccs1) &*& [_]memcmp_region(l2, ?ccs2);
   ensures  [_]memcmp_region(append(l1, l2), append(ccs1, ccs2));

@@ -20,6 +20,7 @@ struct item* item_clone(struct item* item)
   if (clone == 0){abort_crypto_lib("malloc of item failed");}
   clone->size = item->size;
   clone->content = malloc_wrapper(clone->size);
+  //@ chars_to_crypto_chars(clone->content, clone->size);
   memcpy(clone->content, item->content, (unsigned int) clone->size);
   return clone;
   //@ close [f]item(item, i, pub);

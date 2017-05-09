@@ -194,11 +194,13 @@ void pair_get_components(struct item* pair,
   first->content = malloc_wrapper(first->size);
   if (first->size <= MINIMAL_STRING_SIZE)
     abort_crypto_lib("Found corrupted pair item 3");
+  //@ chars_to_crypto_chars(first->content, first->size);
   memcpy(first->content, temp, (unsigned int) first->size);
   temp = temp + first->size;
   if (second->size <= MINIMAL_STRING_SIZE)
     abort_crypto_lib("Found corrupted pair item 4");
   second->content = malloc_wrapper(second->size);
+  //@ chars_to_crypto_chars(second->content, second->size);
   memcpy(second->content, temp, (unsigned int) second->size);
   //@ crypto_chars_join(cont + TAG_LENGTH + sizeof(int));
   //@ chars_to_secret_crypto_chars(cont + TAG_LENGTH, sizeof(int));

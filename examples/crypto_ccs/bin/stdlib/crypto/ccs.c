@@ -2,6 +2,21 @@
 
 /*@
 
+lemma void public_cs_to_ccs(list<crypto_char> ccs)
+  requires [_]public_ccs(ccs);
+  ensures [_]is_forall_t<list<char> >(?forallcs) &*&
+          true == exists_t<list<char> >(forallcs, (cs_to_ccs_eq)(ccs));
+{ 
+  open [_]public_ccs(ccs);
+  get_forall_t<list<char> >();
+  assert [_]is_forall_t<list<char> >(?forallcs);
+  assert [_]exists(?cs) &*& ccs == cs_to_ccs(cs);
+  if (!exists_t<list<char> >(forallcs, (cs_to_ccs_eq)(ccs)))
+  {
+    forall_t_elim(forallcs, (notf)((cs_to_ccs_eq)(cs_to_ccs(cs))), cs);
+  }
+}
+
 lemma void cs_to_ccs_length(list<char> xs)
   requires true;
   ensures length(xs) == length(cs_to_ccs(xs));

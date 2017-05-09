@@ -72,21 +72,21 @@ predicate nsl_pub(cryptogram cg) =
       return true == nsl_public_nonce(p0, cg_info(cg));
     case cg_symmetric_key(p0, c0):
       return true == nsl_public_key(p0, c0, true);
-    case cg_public_key(p0, c0):
+    case cg_rsa_public_key(p0, c0):
       return true;
-    case cg_private_key(p0, c0):
+    case cg_rsa_private_key(p0, c0):
       return true == nsl_public_key(p0, c0, false);
-    case cg_hash(ccs0):
+    case cg_sha512_hash(ccs0):
       return true;
-    case cg_hmac(p0, c0, ccs0):
+    case cg_sha512_hmac(p0, c0, ccs0):
       return true;
-    case cg_encrypted(p0, c0, ccs0, ent0):
+    case cg_aes_encrypted(p0, c0, ccs0, ent0):
       return true == nsl_public_key(p0, c0, true) &*&
              [_]public_ccs(ccs0);
-    case cg_auth_encrypted(p0, c0, ccs0, ent0):
+    case cg_aes_auth_encrypted(p0, c0, ccs0, ent0):
       return true == nsl_public_key(p0, c0, true) &*&
              [_]public_ccs(ccs0);
-    case cg_asym_encrypted(p0, c0, ccs0, ent0):
+    case cg_rsa_encrypted(p0, c0, ccs0, ent0):
       return [_]nsl_pub_msg_sender(?p1) &*&
       col || bad(p0) || bad(p1) ?
         [_]public_ccs(ccs0)
@@ -143,7 +143,7 @@ predicate nsl_pub(cryptogram cg) =
       :
           false
       );
-    case cg_asym_signature(p0, c0, ccs0, ent0):
+    case cg_rsa_signature(p0, c0, ccs0, ent0):
       return true == nsl_public_key(p0, c0, false);
   }
 ;
@@ -162,10 +162,10 @@ void sender(int sender, int receiver,
              principal(sender, _) &*&
              [?f1]cryptogram(s_priv_key, 8 * KEY_SIZE,
                              ?s_priv_key_ccs, ?s_priv_key_cg) &*&
-               s_priv_key_cg == cg_private_key(sender, ?s_id) &*&
+               s_priv_key_cg == cg_rsa_private_key(sender, ?s_id) &*&
              [?f2]cryptogram(r_pub_key, 8 * KEY_SIZE,
                              ?r_pub_key_ccs, ?r_pub_key_cg) &*&
-               r_pub_key_cg == cg_public_key(receiver, ?r_id) &*&
+               r_pub_key_cg == cg_rsa_public_key(receiver, ?r_id) &*&
              chars(s_nonce, NONCE_SIZE, _) &*&
              chars(r_nonce, NONCE_SIZE, _); @*/
 /*@ ensures  principal(sender, _) &*&
@@ -192,10 +192,10 @@ void receiver(int sender, int receiver,
              principal(receiver, _) &*&
              [?f1]cryptogram(s_pub_key, 8 * KEY_SIZE,
                              ?s_pub_key_ccs, ?s_pub_key_cg) &*&
-               s_pub_key_cg == cg_public_key(sender, ?s_id) &*&
+               s_pub_key_cg == cg_rsa_public_key(sender, ?s_id) &*&
              [?f2]cryptogram(r_priv_key, 8 * KEY_SIZE,
                              ?r_priv_key_ccs, ?r_priv_key_cg) &*&
-               r_priv_key_cg == cg_private_key(receiver, ?r_id) &*&
+               r_priv_key_cg == cg_rsa_private_key(receiver, ?r_id) &*&
              chars(s_nonce, NONCE_SIZE, _) &*&
              chars(r_nonce, NONCE_SIZE, _); @*/
 /*@ ensures  principal(receiver, _) &*&
@@ -238,14 +238,14 @@ DECRYPTION_PROOFS(nsl)
 
 lemma void public_asym_encryption_is_public(cryptogram encrypted)
   requires nsl_proof_pred() &*&
-           encrypted == cg_asym_encrypted(?p, ?c, ?pay, ?ent) &*&
-           [_]nsl_pub(cg_public_key(p, c)) &*&
+           encrypted == cg_rsa_encrypted(?p, ?c, ?pay, ?ent) &*&
+           [_]nsl_pub(cg_rsa_public_key(p, c)) &*&
            [_]public_ccs(pay);
   ensures  nsl_proof_pred() &*&
            [_]nsl_pub(encrypted);
 {
-  open  [_]nsl_pub(cg_public_key(p, c));
-  POLARSSL_SWITCH_1(PREFIX, cg_public_key(p, c));
+  open  [_]nsl_pub(cg_rsa_public_key(p, c));
+  POLARSSL_SWITCH_1(PREFIX, cg_rsa_public_key(p, c));
   open nsl_proof_pred();
   assert exists(?attacker);
   close nsl_proof_pred();
@@ -257,8 +257,8 @@ lemma void public_asym_encryption_is_public(cryptogram encrypted)
 
 lemma void public_asym_decryption_is_public(cryptogram key,
                                             cryptogram encrypted)
-  requires key == cg_private_key(?p, ?c) &*&
-           encrypted == cg_asym_encrypted(p, c, ?pay, ?ent) &*&
+  requires key == cg_rsa_private_key(?p, ?c) &*&
+           encrypted == cg_rsa_encrypted(p, c, ?pay, ?ent) &*&
            [_]nsl_pub(key) &*&
            [_]nsl_pub(encrypted);
   ensures  [_]public_ccs(pay);
@@ -266,7 +266,7 @@ lemma void public_asym_decryption_is_public(cryptogram key,
   open  [_]nsl_pub(key);
   open  [_]nsl_pub(encrypted);
 
-  POLARSSL_SWITCH_1(PREFIX, cg_private_key(p, c));
+  POLARSSL_SWITCH_1(PREFIX, cg_rsa_private_key(p, c));
   assert true == bad(p);
 }
 

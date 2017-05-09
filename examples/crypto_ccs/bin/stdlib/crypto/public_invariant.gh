@@ -34,7 +34,7 @@ typedef lemma void public_key_is_public(predicate(cryptogram) pub,
                                         predicate() proof_pred)
                                        (cryptogram key);
   requires  proof_pred() &*&
-            key == cg_public_key(_, _);
+            key == cg_rsa_public_key(_, _);
   ensures   proof_pred() &*&
             [_]pub(key);
 
@@ -42,7 +42,7 @@ typedef lemma void bad_private_key_is_public(predicate(cryptogram) pub,
                                              predicate() proof_pred)
                                             (cryptogram key);
   requires  proof_pred() &*&
-            key == cg_private_key(?p, _) &*&
+            key == cg_rsa_private_key(?p, _) &*&
             true == bad(p);
   ensures   proof_pred() &*&
             [_]pub(key);
@@ -51,7 +51,7 @@ typedef lemma void hash_is_public(predicate(cryptogram) pub,
                                   predicate() proof_pred)
                                  (cryptogram hash);
   requires  proof_pred() &*&
-            hash == cg_hash(?pay) &*&
+            hash == cg_sha512_hash(?pay) &*&
             length(pay) <= INT_MAX &*&
             [_]public_ccs(pay);
   ensures   proof_pred() &*&
@@ -61,7 +61,7 @@ typedef lemma void public_hmac_is_public(predicate(cryptogram) pub,
                                          predicate() proof_pred)
                                         (cryptogram hmac);
   requires  proof_pred() &*&
-            hmac == cg_hmac(?p, ?c, ?pay) &*&
+            hmac == cg_sha512_hmac(?p, ?c, ?pay) &*&
             length(pay) <= INT_MAX &*&
             [_]pub(cg_symmetric_key(p, c)) &*&
             [_]public_ccs(pay);
@@ -72,7 +72,7 @@ typedef lemma void public_encryption_is_public(predicate(cryptogram) pub,
                                                predicate() proof_pred)
                                               (cryptogram encrypted);
   requires  proof_pred() &*&
-            encrypted == cg_encrypted(?p, ?c, ?pay, ?ent) &*&
+            encrypted == cg_aes_encrypted(?p, ?c, ?pay, ?ent) &*&
             length(pay) <= INT_MAX &*&
             [_]pub(cg_symmetric_key(p, c)) &*&
             [_]public_ccs(pay);
@@ -85,7 +85,7 @@ typedef lemma void public_decryption_is_public(predicate(cryptogram) pub,
                                                cryptogram encrypted);
   requires  proof_pred() &*&
             key == cg_symmetric_key(?p, ?c) &*&
-            encrypted == cg_encrypted(p, c, ?pay, ?ent) &*&
+            encrypted == cg_aes_encrypted(p, c, ?pay, ?ent) &*&
             [_]pub(key) &*&
             [_]pub(encrypted);
   ensures   proof_pred() &*&
@@ -95,7 +95,7 @@ typedef lemma void public_auth_encryption_is_public(predicate(cryptogram) pub,
                                                     predicate() proof_pred)
                                                    (cryptogram encrypted);
   requires  proof_pred() &*&
-            encrypted == cg_auth_encrypted(?p, ?c, ?pay, ?ent) &*&
+            encrypted == cg_aes_auth_encrypted(?p, ?c, ?pay, ?ent) &*&
             length(pay) <= INT_MAX &*&
             [_]pub(cg_symmetric_key(p, c)) &*&
             [_]public_ccs(pay);
@@ -108,7 +108,7 @@ typedef lemma void public_auth_decryption_is_public(predicate(cryptogram) pub,
                                                     cryptogram encrypted);
   requires  proof_pred() &*&
             key == cg_symmetric_key(?p, ?c) &*&
-            encrypted == cg_auth_encrypted(p, c, ?pay, ?ent) &*&
+            encrypted == cg_aes_auth_encrypted(p, c, ?pay, ?ent) &*&
             [_]pub(key) &*&
             [_]pub(encrypted);
   ensures   proof_pred() &*&
@@ -118,9 +118,9 @@ typedef lemma void public_asym_encryption_is_public(predicate(cryptogram) pub,
                                                     predicate() proof_pred)
                                                    (cryptogram encrypted);
   requires  proof_pred() &*&
-            encrypted == cg_asym_encrypted(?p, ?c, ?pay, ?ent) &*&
+            encrypted == cg_rsa_encrypted(?p, ?c, ?pay, ?ent) &*&
             length(pay) <= INT_MAX &*&
-            [_]pub(cg_public_key(p, c)) &*&
+            [_]pub(cg_rsa_public_key(p, c)) &*&
             [_]public_ccs(pay);
   ensures   proof_pred() &*&
             [_]pub(encrypted);
@@ -130,8 +130,8 @@ typedef lemma void public_asym_decryption_is_public(predicate(cryptogram) pub,
                                                    (cryptogram key,
                                                     cryptogram encrypted);
   requires  proof_pred() &*&
-            key == cg_private_key(?p, ?c) &*&
-            encrypted == cg_asym_encrypted(p, c, ?pay, ?ent) &*&
+            key == cg_rsa_private_key(?p, ?c) &*&
+            encrypted == cg_rsa_encrypted(p, c, ?pay, ?ent) &*&
             [_]pub(key) &*&
             [_]pub(encrypted);
   ensures   proof_pred() &*&
@@ -141,9 +141,9 @@ typedef lemma void public_asym_signature_is_public(predicate(cryptogram) pub,
                                                    predicate() proof_pred)
                                                   (cryptogram sig);
   requires  proof_pred() &*&
-            sig == cg_asym_signature(?p, ?c, ?pay, ?ent) &*&
+            sig == cg_rsa_signature(?p, ?c, ?pay, ?ent) &*&
             length(pay) <= INT_MAX &*&
-            [_]pub(cg_private_key(p, c)) &*&
+            [_]pub(cg_rsa_private_key(p, c)) &*&
             [_]public_ccs(pay);
   ensures   proof_pred() &*&
             [_]pub(sig);
@@ -258,7 +258,7 @@ lemma void PREFIX##_bad_key_is_public(cryptogram key) \
 
 #define DEFAULT_IS_PUBLIC_PUBLIC_KEY(PREFIX) \
 lemma void public_key_is_public(cryptogram key) \
-  requires key == cg_public_key(_, _); \
+  requires key == cg_rsa_public_key(_, _); \
   ensures  [_]PREFIX##_pub(key); \
 { \
   close PREFIX##_pub(key); \
@@ -267,7 +267,7 @@ lemma void public_key_is_public(cryptogram key) \
 
 #define DEFAULT_IS_PUBLIC_PRIVATE_KEY(PREFIX) \
 lemma void PREFIX##_bad_private_key_is_public(cryptogram key) \
-  requires key == cg_private_key(?p, _) &*& \
+  requires key == cg_rsa_private_key(?p, _) &*& \
            bad(p) == true; \
   ensures  [_]PREFIX##_pub(key); \
 { \
@@ -277,7 +277,7 @@ lemma void PREFIX##_bad_private_key_is_public(cryptogram key) \
 
 #define DEFAULT_IS_PUBLIC_HASH(PREFIX) \
 lemma void PREFIX##_hash_is_public(cryptogram hash) \
-  requires hash == cg_hash(?pay) &*& \
+  requires hash == cg_sha512_hash(?pay) &*& \
            length(pay) <= INT_MAX &*& \
            [_]public_ccs(pay); \
   ensures  [_]PREFIX##_pub(hash); \
@@ -288,7 +288,7 @@ lemma void PREFIX##_hash_is_public(cryptogram hash) \
 
 #define DEFAULT_IS_PUBLIC_HMAC(PREFIX) \
 lemma void public_hmac_is_public(cryptogram hmac) \
-  requires hmac == cg_hmac(?p, ?c, ?pay) &*& \
+  requires hmac == cg_sha512_hmac(?p, ?c, ?pay) &*& \
            length(pay) <= INT_MAX &*& \
            [_]PREFIX##_pub(cg_symmetric_key(p, c)) &*& \
            [_]public_ccs(pay); \
@@ -302,7 +302,7 @@ lemma void public_hmac_is_public(cryptogram hmac) \
 
 #define DEFAULT_IS_PUBLIC_ENCRYPTED(PREFIX) \
 lemma void public_encryption_is_public(cryptogram encrypted) \
-  requires encrypted == cg_encrypted(?p, ?c, ?pay, ?ent) &*& \
+  requires encrypted == cg_aes_encrypted(?p, ?c, ?pay, ?ent) &*& \
            length(pay) <= INT_MAX &*& \
            [_]PREFIX##_pub(cg_symmetric_key(p, c)) &*& \
            [_]public_ccs(pay); \
@@ -316,9 +316,9 @@ lemma void public_encryption_is_public(cryptogram encrypted) \
 
 #define DEFAULT_IS_PUBLIC_DECRYPTED(PREFIX) \
 lemma void public_decryption_is_public(cryptogram key, \
-                                                    cryptogram encrypted) \
+                                       cryptogram encrypted) \
   requires key == cg_symmetric_key(?p, ?c) &*& \
-           encrypted == cg_encrypted(p, c, ?pay, ?ent) &*& \
+           encrypted == cg_aes_encrypted(p, c, ?pay, ?ent) &*& \
            [_]PREFIX##_pub(key) &*& \
            [_]PREFIX##_pub(encrypted); \
   ensures  [_]public_ccs(pay); \
@@ -331,7 +331,7 @@ lemma void public_decryption_is_public(cryptogram key, \
 
 #define DEFAULT_IS_PUBLIC_AUTH_ENCRYPTED(PREFIX) \
 lemma void public_auth_encryption_is_public(cryptogram encrypted) \
-  requires encrypted == cg_auth_encrypted(?p, ?c, ?pay, ?ent) &*& \
+  requires encrypted == cg_aes_auth_encrypted(?p, ?c, ?pay, ?ent) &*& \
            [_]PREFIX##_pub(cg_symmetric_key(p, c)) &*& \
            [_]public_ccs(pay); \
   ensures  [_]PREFIX##_pub(encrypted); \
@@ -344,9 +344,9 @@ lemma void public_auth_encryption_is_public(cryptogram encrypted) \
 
 #define DEFAULT_IS_PUBLIC_AUTH_DECRYPTED(PREFIX) \
 lemma void public_auth_decryption_is_public(cryptogram key, \
-                                                         cryptogram encrypted) \
+                                            cryptogram encrypted) \
   requires key == cg_symmetric_key(?p, ?c) &*& \
-           encrypted == cg_auth_encrypted(p, c, ?pay, ?ent) &*& \
+           encrypted == cg_aes_auth_encrypted(p, c, ?pay, ?ent) &*& \
            [_]PREFIX##_pub(key) &*& \
            [_]PREFIX##_pub(encrypted); \
   ensures  [_]public_ccs(pay); \
@@ -359,13 +359,13 @@ lemma void public_auth_decryption_is_public(cryptogram key, \
 
 #define DEFAULT_IS_PUBLIC_ASYMMETRIC_ENCRYPTED(PREFIX) \
 lemma void public_asym_encryption_is_public(cryptogram encrypted) \
-  requires encrypted == cg_asym_encrypted(?p, ?c, ?pay, ?ent) &*& \
-           [_]PREFIX##_pub(cg_public_key(p, c)) &*& \
+  requires encrypted == cg_rsa_encrypted(?p, ?c, ?pay, ?ent) &*& \
+           [_]PREFIX##_pub(cg_rsa_public_key(p, c)) &*& \
            [_]public_ccs(pay); \
   ensures  [_]PREFIX##_pub(encrypted); \
 { \
-  open  [_]PREFIX##_pub(cg_public_key(p, c)); \
-  POLARSSL_SWITCH_1(PREFIX, cg_public_key(p, c)); \
+  open  [_]PREFIX##_pub(cg_rsa_public_key(p, c)); \
+  POLARSSL_SWITCH_1(PREFIX, cg_rsa_public_key(p, c)); \
   close PREFIX##_pub(encrypted); \
   leak PREFIX##_pub(encrypted); \
 }
@@ -373,8 +373,8 @@ lemma void public_asym_encryption_is_public(cryptogram encrypted) \
 #define DEFAULT_IS_PUBLIC_ASYMMETRIC_DECRYPTED(PREFIX) \
 lemma void public_asym_decryption_is_public(cryptogram key, \
                                             cryptogram encrypted) \
-  requires key == cg_private_key(?p, ?c) &*& \
-           encrypted == cg_asym_encrypted(p, c, ?pay, ?ent) &*& \
+  requires key == cg_rsa_private_key(?p, ?c) &*& \
+           encrypted == cg_rsa_encrypted(p, c, ?pay, ?ent) &*& \
            [_]PREFIX##_pub(key) &*& \
            [_]PREFIX##_pub(encrypted); \
   ensures  [_]public_ccs(pay); \
@@ -382,19 +382,18 @@ lemma void public_asym_decryption_is_public(cryptogram key, \
   open  [_]PREFIX##_pub(key); \
   open  [_]PREFIX##_pub(encrypted); \
   \
-  POLARSSL_SWITCH_1(PREFIX, cg_private_key(p, c)); \
-  assert true == bad(p); \
+  POLARSSL_SWITCH_1(PREFIX, cg_rsa_private_key(p, c)); \
 }
 
 #define DEFAULT_IS_PUBLIC_ASYMMETRIC_SIGNATURE(PREFIX) \
 lemma void public_asym_signature_is_public(cryptogram sig) \
-  requires sig == cg_asym_signature(?p, ?c, ?pay, ?ent) &*& \
-           [_]PREFIX##_pub(cg_private_key(p, c)) &*& \
+  requires sig == cg_rsa_signature(?p, ?c, ?pay, ?ent) &*& \
+           [_]PREFIX##_pub(cg_rsa_private_key(p, c)) &*& \
            [_]public_ccs(pay); \
   ensures  [_]PREFIX##_pub(sig); \
 { \
-  open  [_]PREFIX##_pub(cg_private_key(p, c)); \
-  POLARSSL_SWITCH(PREFIX, cg_private_key(p, c), 1); \
+  open  [_]PREFIX##_pub(cg_rsa_private_key(p, c)); \
+  POLARSSL_SWITCH(PREFIX, cg_rsa_private_key(p, c), 1); \
   close PREFIX##_pub(sig); \
   leak PREFIX##_pub(sig); \
 }
@@ -434,7 +433,7 @@ lemma void PREFIX##_bad_key_is_public(cryptogram key) \
 
 #define ASSUME_IS_PUBLIC_PUBLIC_KEY(PREFIX) \
 lemma void public_key_is_public(cryptogram key) \
-  requires key == cg_public_key(_, _); \
+  requires key == cg_rsa_public_key(_, _); \
   ensures  [_]PREFIX##_pub(key); \
 { \
   assume (false); \
@@ -442,7 +441,7 @@ lemma void public_key_is_public(cryptogram key) \
 
 #define ASSUME_IS_PUBLIC_PRIVATE_KEY(PREFIX) \
 lemma void PREFIX##_bad_private_key_is_public(cryptogram key) \
-  requires key == cg_private_key(?p, _) &*& \
+  requires key == cg_rsa_private_key(?p, _) &*& \
            bad(p) == true; \
   ensures  [_]PREFIX##_pub(key); \
 { \
@@ -451,7 +450,7 @@ lemma void PREFIX##_bad_private_key_is_public(cryptogram key) \
 
 #define ASSUME_IS_PUBLIC_HASH(PREFIX) \
 lemma void PREFIX##_hash_is_public(cryptogram hash) \
-  requires hash == cg_hash(?pay) &*& \
+  requires hash == cg_sha512_hash(?pay) &*& \
            length(pay) <= INT_MAX &*& \
            [_]public_ccs(pay); \
   ensures  [_]PREFIX##_pub(hash); \
@@ -461,7 +460,7 @@ lemma void PREFIX##_hash_is_public(cryptogram hash) \
 
 #define ASSUME_IS_PUBLIC_HMAC(PREFIX) \
 lemma void public_hmac_is_public(cryptogram hmac) \
-  requires hmac == cg_hmac(?p, ?c, ?pay) &*& \
+  requires hmac == cg_sha512_hmac(?p, ?c, ?pay) &*& \
            length(pay) <= INT_MAX &*& \
            [_]PREFIX##_pub(cg_symmetric_key(p, c)) &*& \
            [_]public_ccs(pay); \
@@ -472,7 +471,7 @@ lemma void public_hmac_is_public(cryptogram hmac) \
 
 #define ASSUME_IS_PUBLIC_ENCRYPTED(PREFIX) \
 lemma void public_encryption_is_public(cryptogram encrypted) \
-  requires encrypted == cg_encrypted(?p, ?c, ?pay, ?ent) &*& \
+  requires encrypted == cg_aes_encrypted(?p, ?c, ?pay, ?ent) &*& \
            length(pay) <= INT_MAX &*& \
            [_]PREFIX##_pub(cg_symmetric_key(p, c)) &*& \
            [_]public_ccs(pay); \
@@ -485,7 +484,7 @@ lemma void public_encryption_is_public(cryptogram encrypted) \
 lemma void public_decryption_is_public(cryptogram key, \
                                                     cryptogram encrypted) \
   requires key == cg_symmetric_key(?p, ?c) &*& \
-           encrypted == cg_encrypted(p, c, ?pay, ?ent) &*& \
+           encrypted == cg_aes_encrypted(p, c, ?pay, ?ent) &*& \
            [_]PREFIX##_pub(key) &*& \
            [_]PREFIX##_pub(encrypted); \
   ensures  [_]public_ccs(pay); \
@@ -495,7 +494,7 @@ lemma void public_decryption_is_public(cryptogram key, \
 
 #define ASSUME_IS_PUBLIC_AUTH_ENCRYPTED(PREFIX) \
 lemma void public_auth_encryption_is_public(cryptogram encrypted) \
-  requires encrypted == cg_auth_encrypted(?p, ?c, ?pay, ?ent) &*& \
+  requires encrypted == cg_aes_auth_encrypted(?p, ?c, ?pay, ?ent) &*& \
            [_]PREFIX##_pub(cg_symmetric_key(p, c)) &*& \
            [_]public_ccs(pay); \
   ensures  [_]PREFIX##_pub(encrypted); \
@@ -507,7 +506,7 @@ lemma void public_auth_encryption_is_public(cryptogram encrypted) \
 lemma void public_auth_decryption_is_public( \
                          cryptogram key, cryptogram encrypted) \
   requires key == cg_symmetric_key(?p, ?c) &*& \
-           encrypted == cg_auth_encrypted(p, c, ?pay, ?ent) &*& \
+           encrypted == cg_aes_auth_encrypted(p, c, ?pay, ?ent) &*& \
            [_]PREFIX##_pub(key) &*& \
            [_]PREFIX##_pub(encrypted); \
   ensures  [_]public_ccs(pay); \
@@ -517,8 +516,8 @@ lemma void public_auth_decryption_is_public( \
 
 #define ASSUME_IS_PUBLIC_ASYMMETRIC_ENCRYPTED(PREFIX) \
 lemma void public_asym_encryption_is_public(cryptogram encrypted) \
-  requires encrypted == cg_asym_encrypted(?p, ?c, ?pay, ?ent) &*& \
-           [_]PREFIX##_pub(cg_public_key(p, c)) &*& \
+  requires encrypted == cg_rsa_encrypted(?p, ?c, ?pay, ?ent) &*& \
+           [_]PREFIX##_pub(cg_rsa_public_key(p, c)) &*& \
            [_]public_ccs(pay); \
   ensures  [_]PREFIX##_pub(encrypted); \
 { \
@@ -528,8 +527,8 @@ lemma void public_asym_encryption_is_public(cryptogram encrypted) \
 #define ASSUME_IS_PUBLIC_ASYMMETRIC_DECRYPTED(PREFIX) \
 lemma void public_asym_decryption_is_public(cryptogram key, \
                                                          cryptogram encrypted) \
-  requires key == cg_private_key(?p, ?c) &*& \
-           encrypted == cg_asym_encrypted(p, c, ?pay, ?ent) &*& \
+  requires key == cg_rsa_private_key(?p, ?c) &*& \
+           encrypted == cg_rsa_encrypted(p, c, ?pay, ?ent) &*& \
            [_]PREFIX##_pub(key) &*& \
            [_]PREFIX##_pub(encrypted); \
   ensures  [_]public_ccs(pay); \
@@ -539,8 +538,8 @@ lemma void public_asym_decryption_is_public(cryptogram key, \
 
 #define ASSUME_IS_PUBLIC_ASYMMETRIC_SIGNATURE(PREFIX) \
 lemma void public_asym_signature_is_public(cryptogram sig) \
-  requires sig == cg_asym_signature(?p, ?c, ?pay, ?ent) &*& \
-           [_]PREFIX##_pub(cg_private_key(p, c)) &*& \
+  requires sig == cg_rsa_signature(?p, ?c, ?pay, ?ent) &*& \
+           [_]PREFIX##_pub(cg_rsa_private_key(p, c)) &*& \
            [_]public_ccs(pay); \
   ensures  [_]PREFIX##_pub(sig); \
 { \
@@ -572,11 +571,11 @@ switch (root) \
     assert true; \
   case cg_symmetric_key(p__1, c__1): \
     assert true; \
-  case cg_public_key(p__1, c__1): \
+  case cg_rsa_public_key(p__1, c__1): \
     assert true; \
-  case cg_private_key(p__1, c__1): \
+  case cg_rsa_private_key(p__1, c__1): \
     assert true; \
-  case cg_hash(cs__1): \
+  case cg_sha512_hash(cs__1): \
     switch(cs__1) \
     { \
       case cons(c__11, cs__11): \
@@ -584,7 +583,7 @@ switch (root) \
       case nil: \
         assert true; \
     }; \
-  case cg_hmac(p__1, c__1, cs__1): \
+  case cg_sha512_hmac(p__1, c__1, cs__1): \
     switch(cs__1) \
     { \
       case cons(c__11, cs__11): \
@@ -592,7 +591,7 @@ switch (root) \
       case nil: \
         assert true; \
     }; \
-  case cg_encrypted(p__1, c__1, cs__1, ent__1): \
+  case cg_aes_encrypted(p__1, c__1, cs__1, ent__1): \
     switch(cs__1) \
     { \
       case cons(c__11, cs__11): \
@@ -600,7 +599,7 @@ switch (root) \
       case nil: \
         assert true; \
     }; \
-  case cg_auth_encrypted(p__1, c__1, cs__1, ent__1): \
+  case cg_aes_auth_encrypted(p__1, c__1, cs__1, ent__1): \
     switch(cs__1) \
     { \
       case cons(c__11, cs__11): \
@@ -608,7 +607,7 @@ switch (root) \
       case nil: \
         assert true; \
     }; \
-  case cg_asym_encrypted(p__1, c__1, cs__1, ent__1): \
+  case cg_rsa_encrypted(p__1, c__1, cs__1, ent__1): \
     switch(cs__1) \
     { \
       case cons(c__11, cs__11): \
@@ -616,7 +615,7 @@ switch (root) \
       case nil: \
         assert true; \
     }; \
-  case cg_asym_signature(p__1, c__1, cs__1, ent__1): \
+  case cg_rsa_signature(p__1, c__1, cs__1, ent__1): \
     switch(cs__1) \
     { \
       case cons(c__11, cs__11): \
@@ -633,11 +632,11 @@ switch (root) \
     assert true; \
   case cg_symmetric_key(p__2, c__2): \
     assert true; \
-  case cg_public_key(p__2, c__2): \
+  case cg_rsa_public_key(p__2, c__2): \
     assert true; \
-  case cg_private_key(p__2, c__2): \
+  case cg_rsa_private_key(p__2, c__2): \
     assert true; \
-  case cg_hash(cs__2): \
+  case cg_sha512_hash(cs__2): \
     switch(cs__2) \
     { \
       case cons(c__22, cs__22): \
@@ -645,7 +644,7 @@ switch (root) \
       case nil: \
         assert true; \
     }; \
-  case cg_hmac(p__2, c__2, cs__2): \
+  case cg_sha512_hmac(p__2, c__2, cs__2): \
     switch(cs__2) \
     { \
       case cons(c__22, cs__22): \
@@ -653,7 +652,7 @@ switch (root) \
       case nil: \
         assert true; \
     }; \
-  case cg_encrypted(p__2, c__2, cs__2, ent__2): \
+  case cg_aes_encrypted(p__2, c__2, cs__2, ent__2): \
     switch(cs__2) \
     { \
       case cons(c__22, cs__22): \
@@ -661,7 +660,7 @@ switch (root) \
       case nil: \
         assert true; \
     }; \
-  case cg_auth_encrypted(p__2, c__2, cs__2, ent__2): \
+  case cg_aes_auth_encrypted(p__2, c__2, cs__2, ent__2): \
     switch(cs__2) \
     { \
       case cons(c__22, cs__22): \
@@ -669,7 +668,7 @@ switch (root) \
       case nil: \
         assert true; \
     }; \
-  case cg_asym_encrypted(p__2, c__2, cs__2, ent__2): \
+  case cg_rsa_encrypted(p__2, c__2, cs__2, ent__2): \
     switch(cs__2) \
     { \
       case cons(c__22, cs__22): \
@@ -677,7 +676,7 @@ switch (root) \
       case nil: \
         assert true; \
     }; \
-  case cg_asym_signature(p__2, c__2, cs__2, ent__2): \
+  case cg_rsa_signature(p__2, c__2, cs__2, ent__2): \
     switch(cs__2) \
     { \
       case cons(c__22, cs__22): \

@@ -106,7 +106,7 @@ struct item *asymmetric_encryption(struct item *key, struct item *payload)
       abort_crypto_lib("Encryption failed");
     //@ close principal(principal1, count1 + 1);
     //@ open cryptogram(output, ?enc_length, ?enc_ccs, ?enc_cg);
-    //@ assert enc_cg == cg_asym_encrypted(principal, count, pay_ccs, ?ent);
+    //@ assert enc_cg == cg_rsa_encrypted(principal, count, pay_ccs, ?ent);
     //@ assert u_integer(&olen, enc_length);
     //@ assert enc_length > 0 &*& enc_length < MAX_PACKAGE_SIZE;
     //@ assert enc_length > 0 &*& enc_length <= RSA_SERIALIZED_KEY_SIZE;
@@ -123,6 +123,7 @@ struct item *asymmetric_encryption(struct item *key, struct item *payload)
     write_tag(result->content, TAG_ASYMMETRIC_ENC);
     //@ assert result->content |-> ?cont &*& result->size |-> ?size;
     if (olen < MINIMAL_STRING_SIZE) {abort_crypto_lib("Asymmetric encryption failed: to small");}
+    //@ chars_to_crypto_chars(result->content + TAG_LENGTH, olen);
     memcpy(result->content + TAG_LENGTH, output, olen);
 
     //@ item enc = asymmetric_encrypted_item(principal, count, some(pay), ent);
@@ -194,7 +195,7 @@ struct item *asymmetric_decryption(struct item *key, struct item *item, char tag
     //@ OPEN_ITEM_CONSTRAINTS(enc, enc_ccs, pub)
     //@ assert [_]ic_parts(enc)(?enc_tag, ?enc_cont);
     //@ open [_]ic_cg(enc)(_, ?enc_cg);
-    //@ assert enc_cg == cg_asym_encrypted(principal2, count2, ?ccs_pay, ent);
+    //@ assert enc_cg == cg_rsa_encrypted(principal2, count2, ?ccs_pay, ent);
     if (item->size - TAG_LENGTH > RSA_KEY_SIZE ||
         item->size - TAG_LENGTH < MINIMAL_STRING_SIZE)
       abort_crypto_lib("Asymmetric decryption failed: incorrect sizes");
@@ -268,13 +269,14 @@ struct item *asymmetric_decryption(struct item *key, struct item *item, char tag
         }
     @*/
     //@ crypto_chars_join(output);
+    //@ chars_to_crypto_chars(result->content, olen);
     memcpy(result->content, output, olen);
     //@ assert result->content |-> ?cont;
     //@ assert crypto_chars(?kind, cont, olen_val, ccs_out);
     zeroize(output, (int) olen);
     //@ close item(item, enc, pub);
     //@ assert enc == asymmetric_encrypted_item(principal2, count2, pay, ent);
-    //@ assert col || enc_cg == cg_asym_encrypted(principal2, count2, ccs_pay, ent);
+    //@ assert col || enc_cg == cg_rsa_encrypted(principal2, count2, ccs_pay, ent);
     
     /*@ if (col || garbage)
         {

@@ -70,14 +70,14 @@ int aes_crypt_cfb128(aes_context *ctx, int mode, size_t length, size_t *iv_off,
                    :
                      // encryption was successful
                      cryptogram(output, length, _, ?cg) &*&
-                     cg == cg_encrypted(p1, c1, in_ccs, iv_ccs)
+                     cg == cg_aes_encrypted(p1, c1, in_ccs, iv_ccs)
                  )
                )
                :
                (
                  decryption_pre(true, ?garbage_in, ?p2, ?s, ?in_ccs) &*&
                  [?f]cryptogram(input, length, in_ccs, ?cg) &*&
-                   cg == cg_encrypted(?p3, ?c3, ?out_ccs3, ?iv_ccs3) &*&
+                   cg == cg_aes_encrypted(?p3, ?c3, ?out_ccs3, ?iv_ccs3) &*&
                  ensures
                  (
                    aes_context_initialized(ctx, p1, c1) &*&

@@ -42,7 +42,7 @@ predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
   sign_args_message(data, ?msg) &*&
   principal(sender, _) &*&
   [1/2]cryptogram(key, 8 * KEY_SIZE, ?key_ccs, ?key_cg) &*&
-    key_cg == cg_private_key(sender, ?id) &*&
+    key_cg == cg_rsa_private_key(sender, ?id) &*&
   chars(msg, MSG_SIZE, ?msg_cs) &*&
     true == send(sender, receiver, msg_cs) &*&
   info == IV(sender, IV(receiver, PV(key, CCL(key_ccs, 
@@ -56,7 +56,7 @@ predicate_family_instance pthread_run_post(sender_t)(void *data, any info) =
   sign_args_message(data, ?msg) &*&
   principal(sender, _) &*&
   [1/2]cryptogram(key, 8 * KEY_SIZE, ?key_ccs, ?key_cg) &*&
-    key_cg == cg_private_key(sender, ?id) &*&
+    key_cg == cg_rsa_private_key(sender, ?id) &*&
   chars(msg, MSG_SIZE, ?msg_cs) &*&
     true == send(sender, receiver, msg_cs) &*&
   info == IV(sender, IV(receiver, PV(key, CCL(key_ccs, 
@@ -84,7 +84,7 @@ predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) =
   sign_args_message(data, ?msg) &*&
   principal(receiver, _) &*&
   [1/2]cryptogram(key, 8 * KEY_SIZE, ?key_ccs, ?key_cg) &*&
-    key_cg == cg_public_key(sender, ?id) &*&
+    key_cg == cg_rsa_public_key(sender, ?id) &*&
   chars(msg, MSG_SIZE, _) &*&
   info == IV(sender, IV(receiver, PV(key, CCL(key_ccs, IV(id, PV(msg, nil))))));
                          
@@ -96,7 +96,7 @@ predicate_family_instance pthread_run_post(receiver_t)(void *data, any info) =
   sign_args_message(data, ?msg) &*&
   principal(receiver, _) &*&
   [1/2]cryptogram(key, 8 * KEY_SIZE, ?key_ccs, ?key_cg) &*&
-    key_cg == cg_public_key(sender, ?id) &*&
+    key_cg == cg_rsa_public_key(sender, ?id) &*&
   chars(msg, MSG_SIZE, ?msg_cs) &*&
     bad(sender) || col || send(sender, receiver, msg_cs) &*&
   info == IV(sender, IV(receiver, PV(key, CCL(key_ccs, IV(id, PV(msg, nil))))));
@@ -185,8 +185,8 @@ int main(int argc, char **argv) //@ : main_full(main_app)
     if (pk_write_key_pem(&context, priv_key, key_size) != 0) abort();
     //@ assert cryptogram(priv_key, key_size, ?ccs_priv_key, ?cg_priv_key);
     //@ assert cryptogram(pub_key, key_size, ?ccs_pub_key, ?cg_pub_key);
-    //@ assert cg_priv_key == cg_private_key(sender, count + 1);
-    //@ assert cg_pub_key == cg_public_key(sender, count + 1);
+    //@ assert cg_priv_key == cg_rsa_private_key(sender, count + 1);
+    //@ assert cg_pub_key == cg_rsa_public_key(sender, count + 1);
     //@ open random_state_predicate(havege_state_initialized);
     //@ pk_release_context_with_keys(&context);
     pk_free(&context);

@@ -105,17 +105,17 @@ fixpoint int info_for_item(item i)
     case symmetric_key_item(p0, c0):
       return cg_info(cg_symmetric_key(p0, c0));
     case public_key_item(p0, c0):
-      return cg_info(cg_public_key(p0, c0));
+      return cg_info(cg_rsa_public_key(p0, c0));
     case private_key_item(p0, c0):
-      return cg_info(cg_private_key(p0, c0));
+      return cg_info(cg_rsa_private_key(p0, c0));
     case hmac_item(p0, c0, pay0):
       return cg_info(cg_symmetric_key(p0, c0));
     case symmetric_encrypted_item(p0, c0, pay0, ent0):
       return cg_info(cg_symmetric_key(p0, c0));
     case asymmetric_encrypted_item(p0, c0, pay0, ent0):
-      return cg_info(cg_public_key(p0, c0));
+      return cg_info(cg_rsa_public_key(p0, c0));
     case asymmetric_signature_item(p0, c0, pay0, ent0):
-      return cg_info(cg_private_key(p0, c0));
+      return cg_info(cg_rsa_private_key(p0, c0));
   }
 }
 

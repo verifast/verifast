@@ -72,9 +72,9 @@ struct item *create_hmac(struct item *key, struct item *payload)
               hmac->content + TAG_LENGTH, 0);
   //@ assert hmac->content |-> ?cont &*& hmac->size |-> ?size;
   //@ open cryptogram(cont + TAG_LENGTH, HMAC_SIZE, ?h_ccs, ?h_cg);
-  //@ assert col || h_cg == cg_hmac(creator, id, pay_ccs);
+  //@ assert col || h_cg == cg_sha512_hmac(creator, id, pay_ccs);
   //@ if (col) h_cg == ccs_for_cg_sur(h_ccs, tag_hmac);
-  //@ assert h_cg == cg_hmac(?p0, ?c0, _);
+  //@ assert h_cg == cg_sha512_hmac(?p0, ?c0, _);
   //@ item h = hmac_item(p0, c0, some(pay));
   //@ close ic_cg(h)(h_ccs, h_cg);
   //@ close well_formed_item_ccs(h)(pay_ccs);

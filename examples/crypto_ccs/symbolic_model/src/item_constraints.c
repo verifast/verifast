@@ -324,8 +324,8 @@ lemma void item_constraints_injective(item i1, item i2, list<crypto_char> ccs)
     case hash_item(pay1):
       ITEM_CONSTRAINTS_INJECTIVE(TAG_HASH,
         ITEM_CONSTRAINTS_INJECTIVE_PAYLOAD(
-          cryptogram cg1 = cg_hash(ccs_pay1);
-          cryptogram cg2 = cg_hash(ccs_pay2);
+          cryptogram cg1 = cg_sha512_hash(ccs_pay1);
+          cryptogram cg2 = cg_sha512_hash(ccs_pay2);
           ccs_for_cg_inj(cg1, cg2);
         )
       )
@@ -338,23 +338,23 @@ lemma void item_constraints_injective(item i1, item i2, list<crypto_char> ccs)
       )
     case public_key_item(p1, c1):
       ITEM_CONSTRAINTS_INJECTIVE(TAG_PUBLIC_KEY,
-        cryptogram cg1 = cg_public_key(p1, c1);
-        cryptogram cg2 = cg_public_key(p2, c2);
+        cryptogram cg1 = cg_rsa_public_key(p1, c1);
+        cryptogram cg2 = cg_rsa_public_key(p2, c2);
         ccs_for_cg_inj(cg1, cg2);
         assert i1 == i2;
       )
     case private_key_item(p1, c1):
       ITEM_CONSTRAINTS_INJECTIVE(TAG_PRIVATE_KEY,
-        cryptogram cg1 = cg_private_key(p1, c1);
-        cryptogram cg2 = cg_private_key(p2, c2);
+        cryptogram cg1 = cg_rsa_private_key(p1, c1);
+        cryptogram cg2 = cg_rsa_private_key(p2, c2);
         ccs_for_cg_inj(cg1, cg2);
         assert i1 == i2;
       )
     case hmac_item(p1, c1, pay1):
       ITEM_CONSTRAINTS_INJECTIVE(TAG_HMAC,
         ITEM_CONSTRAINTS_INJECTIVE_PAYLOAD(
-          cryptogram cg1 = cg_hmac(p1, c1, ccs_pay1);
-          cryptogram cg2 = cg_hmac(p2, c2, ccs_pay2);
+          cryptogram cg1 = cg_sha512_hmac(p1, c1, ccs_pay1);
+          cryptogram cg2 = cg_sha512_hmac(p2, c2, ccs_pay2);
           ccs_for_cg_inj(cg1, cg2);
         )
       )
@@ -362,8 +362,8 @@ lemma void item_constraints_injective(item i1, item i2, list<crypto_char> ccs)
       ITEM_CONSTRAINTS_INJECTIVE(TAG_SYMMETRIC_ENC,
         ITEM_CONSTRAINTS_INJECTIVE_PAYLOAD(
           ITEM_CONSTRAINTS_SYM_ENC(
-            cryptogram cg1 = cg_auth_encrypted(p1, c1, ccs_pay1, iv1);
-            cryptogram cg2 = cg_auth_encrypted(p2, c2, ccs_pay2, iv2);
+            cryptogram cg1 = cg_aes_auth_encrypted(p1, c1, ccs_pay1, iv1);
+            cryptogram cg2 = cg_aes_auth_encrypted(p2, c2, ccs_pay2, iv2);
             ccs_for_cg_inj(cg1, cg2);
           )
         )
@@ -371,16 +371,16 @@ lemma void item_constraints_injective(item i1, item i2, list<crypto_char> ccs)
     case asymmetric_encrypted_item(p1, c1, pay1, ent1):
       ITEM_CONSTRAINTS_INJECTIVE(TAG_ASYMMETRIC_ENC,
         ITEM_CONSTRAINTS_INJECTIVE_PAYLOAD(
-          cryptogram cg1 = cg_asym_encrypted(p1, c1, ccs_pay1, ent1);
-          cryptogram cg2 = cg_asym_encrypted(p2, c2, ccs_pay2, ent2);
+          cryptogram cg1 = cg_rsa_encrypted(p1, c1, ccs_pay1, ent1);
+          cryptogram cg2 = cg_rsa_encrypted(p2, c2, ccs_pay2, ent2);
           ccs_for_cg_inj(cg1, cg2);
         )
       )
     case asymmetric_signature_item(p1, c1, pay1, ent1):
       ITEM_CONSTRAINTS_INJECTIVE(TAG_ASYMMETRIC_SIG,
         ITEM_CONSTRAINTS_INJECTIVE_PAYLOAD(
-          cryptogram cg1 = cg_asym_signature(p1, c1, ccs_pay1, ent1);
-          cryptogram cg2 = cg_asym_signature(p2, c2, ccs_pay2, ent2);
+          cryptogram cg1 = cg_rsa_signature(p1, c1, ccs_pay1, ent1);
+          cryptogram cg2 = cg_rsa_signature(p2, c2, ccs_pay2, ent2);
           ccs_for_cg_inj(cg1, cg2);
         )
       )

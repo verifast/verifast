@@ -18,7 +18,7 @@ void sender(int recvr, char *key, int key_len, char *msg)
   /*@ requires [_]public_invar(sign_pub) &*&
                principal(?sender, _) &*&
                [?f1]cryptogram(key, key_len, ?key_ccs, ?key_cg) &*&
-                 key_cg == cg_private_key(sender, ?id) &*&
+                 key_cg == cg_rsa_private_key(sender, ?id) &*&
                  key_len >= 512 &*& key_len < MAX_KEY_SIZE &*&
                [?f2]chars(msg, MSG_SIZE, ?msg_cs) &*&
                true == send(sender, recvr, msg_cs); @*/
@@ -48,11 +48,13 @@ void sender(int recvr, char *key, int key_len, char *msg)
     //@ assert integer(&recvr, ?receiver);
     //@ integer_to_chars(&recvr);
     //@ chars_to_crypto_chars((void*) &recvr, 4);
+    //@ chars_to_crypto_chars(M, 4);
     memcpy(M, &recvr, 4);
     //@ cs_to_ccs_crypto_chars((void*) &recvr, chars_of_int(receiver));
     //@ chars_to_integer(&recvr);
     
     //@ chars_to_crypto_chars(msg, MSG_SIZE);
+    //@ chars_to_crypto_chars(M + 4, MSG_SIZE);
     memcpy(M + 4, msg, (unsigned int) MSG_SIZE);
     //@ crypto_chars_join(M);
     //@ list<char> pay = append(chars_of_int(receiver), msg_cs);
@@ -95,7 +97,7 @@ void sender(int recvr, char *key, int key_len, char *msg)
     //@ open cryptogram(M + 4 + MSG_SIZE, sign_len_val, ?cs_sign, ?cg_sign);
     //@ close cryptogram(M + 4 + MSG_SIZE, sign_len_val, cs_sign, cg_sign);
     //@ assert chars(M + 4 + MSG_SIZE + sign_len_val, key_len - sign_len_val, _);
-    //@ assert cg_sign == cg_asym_signature(sender, id, hash_cs, _);
+    //@ assert cg_sign == cg_rsa_signature(sender, id, hash_cs, _);
     //@ if (!col && !bad(sender)) close sign_pub_1(msg_cs, recvr);
     
     //@ close sign_pub(cg_sign);
@@ -116,7 +118,7 @@ void receiver(int recvr, char *key, int key_len, char *msg)
   /*@ requires [_]public_invar(sign_pub) &*&
                principal(recvr, _) &*&
                [?f1]cryptogram(key, key_len, ?key_ccs, ?key_cg) &*&
-                 key_cg == cg_public_key(?sender, ?id) &*&
+                 key_cg == cg_rsa_public_key(?sender, ?id) &*&
                  key_len <= MAX_KEY_SIZE &*&
                chars(msg, MSG_SIZE, _); @*/
   /*@ ensures  principal(recvr, _) &*&
@@ -161,6 +163,7 @@ void receiver(int recvr, char *key, int key_len, char *msg)
     //@ chars_split(buffer + 4, MSG_SIZE);
     //@ assert chars(buffer + 4, MSG_SIZE, ?msg_cs);
     //@ chars_to_crypto_chars(buffer + 4, MSG_SIZE);
+    //@ chars_to_crypto_chars(msg, MSG_SIZE);
     memcpy(msg, buffer + 4, MSG_SIZE);
     //@ cs_to_ccs_crypto_chars(msg, msg_cs);
     //@ cs_to_ccs_crypto_chars(buffer + 4, msg_cs);
@@ -204,7 +207,7 @@ void receiver(int recvr, char *key, int key_len, char *msg)
           open [_]sign_pub(sign_cg);
           assert [_]sign_pub_1(?msg_cs2, ?receiver2);
           cryptogram hash_cg2 = 
-            cg_hash(cs_to_ccs(append(chars_of_int(receiver2), msg_cs2)));
+            cg_sha512_hash(cs_to_ccs(append(chars_of_int(receiver2), msg_cs2)));
           ccs_for_cg_inj(hash_cg, hash_cg2);
           cs_to_ccs_inj(append(chars_of_int(receiver), msg_cs),
                         append(chars_of_int(receiver2), msg_cs2));

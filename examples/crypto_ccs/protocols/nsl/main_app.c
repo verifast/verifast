@@ -47,9 +47,9 @@ predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
   nsl_args_r_nonce(data, ?r_nonce) &*&
   principal(sender, _) &*&
   [1/2]cryptogram(s_key, 8 * KEY_SIZE, ?s_key_ccs, ?s_key_cg) &*&
-    s_key_cg == cg_private_key(sender, ?s_id) &*&
+    s_key_cg == cg_rsa_private_key(sender, ?s_id) &*&
   [1/2]cryptogram(r_key, 8 * KEY_SIZE, ?r_key_ccs, ?r_key_cg) &*&
-    r_key_cg == cg_public_key(receiver, ?r_id) &*&
+    r_key_cg == cg_rsa_public_key(receiver, ?r_id) &*&
   chars(s_nonce, NONCE_SIZE, _) &*&
   chars(r_nonce, NONCE_SIZE, _) &*&
   info == IV(sender, IV(receiver, PV(s_key, CCL(s_key_ccs, IV(s_id,
@@ -64,9 +64,9 @@ predicate_family_instance pthread_run_post(sender_t)(void *data, any info) =
   nsl_args_r_nonce(data, ?r_nonce) &*&
   principal(sender, _) &*&
   [1/2]cryptogram(s_key, 8 * KEY_SIZE, ?s_key_ccs, ?s_key_cg) &*&
-    s_key_cg == cg_private_key(sender, ?s_id) &*&
+    s_key_cg == cg_rsa_private_key(sender, ?s_id) &*&
   [1/2]cryptogram(r_key, 8 * KEY_SIZE, ?r_key_ccs, ?r_key_cg) &*&
-    r_key_cg == cg_public_key(receiver, ?r_id) &*&
+    r_key_cg == cg_rsa_public_key(receiver, ?r_id) &*&
   cryptogram(s_nonce, NONCE_SIZE, _, ?s_nonce_cg) &*&
   (
     col || bad(sender) || bad(receiver) ?
@@ -113,9 +113,9 @@ predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) =
   nsl_args_r_nonce(data, ?r_nonce) &*&
   principal(receiver, _) &*&
   [1/2]cryptogram(s_key, 8 * KEY_SIZE, ?s_key_ccs, ?s_key_cg) &*&
-    s_key_cg == cg_public_key(sender, ?s_id) &*&
+    s_key_cg == cg_rsa_public_key(sender, ?s_id) &*&
   [1/2]cryptogram(r_key, 8 * KEY_SIZE, ?r_key_ccs, ?r_key_cg) &*&
-    r_key_cg == cg_private_key(receiver, ?r_id) &*&
+    r_key_cg == cg_rsa_private_key(receiver, ?r_id) &*&
   chars(s_nonce, NONCE_SIZE, _) &*&
   chars(r_nonce, NONCE_SIZE, _) &*&
   info == cons(int_value(sender), 
@@ -139,9 +139,9 @@ predicate_family_instance pthread_run_post(receiver_t)(void *data, any info) =
   nsl_args_r_nonce(data, ?r_nonce) &*&
   principal(receiver, _) &*&
   [1/2]cryptogram(s_key, 8 * KEY_SIZE, ?s_key_ccs, ?s_key_cg) &*&
-    s_key_cg == cg_public_key(sender, ?s_id) &*&
+    s_key_cg == cg_rsa_public_key(sender, ?s_id) &*&
   [1/2]cryptogram(r_key, 8 * KEY_SIZE, ?r_key_ccs, ?r_key_cg) &*&
-    r_key_cg == cg_private_key(receiver, ?r_id) &*&
+    r_key_cg == cg_rsa_private_key(receiver, ?r_id) &*&
   cryptogram(r_nonce, NONCE_SIZE, _, ?r_nonce_cg) &*&
     r_nonce_cg == cg_nonce(receiver, _) &*&
   (
@@ -250,8 +250,8 @@ int main(int argc, char **argv) //@ : main_full(main_app)
                          (unsigned int) 8 * KEY_SIZE) != 0) abort();
     //@ assert cryptogram(s_priv_key, 8 * KEY_SIZE, ?ccs_s_priv_key, ?cg_s_priv_key);
     //@ assert cryptogram(s_pub_key, 8 * KEY_SIZE, ?ccs_s_pub_key, ?cg_s_pub_key);
-    //@ assert cg_s_priv_key == cg_private_key(sender, s_count + 1);
-    //@ assert cg_s_pub_key == cg_public_key(sender, s_count + 1);
+    //@ assert cg_s_priv_key == cg_rsa_private_key(sender, s_count + 1);
+    //@ assert cg_s_pub_key == cg_rsa_public_key(sender, s_count + 1);
     //@ pk_release_context_with_keys(&s_context);
     pk_free(&s_context);
     //@ open pk_context(&s_context);
@@ -273,8 +273,8 @@ int main(int argc, char **argv) //@ : main_full(main_app)
                          (unsigned int) 8 * KEY_SIZE) != 0) abort();
     //@ assert cryptogram(r_priv_key, 8 * KEY_SIZE, ?ccs_r_priv_key, ?cg_r_priv_key);
     //@ assert cryptogram(r_pub_key, 8 * KEY_SIZE, ?ccs_r_pub_key, ?cg_r_pub_key);
-    //@ assert cg_r_priv_key == cg_private_key(receiver, r_count + 1);
-    //@ assert cg_r_pub_key == cg_public_key(receiver, r_count + 1);
+    //@ assert cg_r_priv_key == cg_rsa_private_key(receiver, r_count + 1);
+    //@ assert cg_r_pub_key == cg_rsa_public_key(receiver, r_count + 1);
     //@ pk_release_context_with_keys(&r_context);
     pk_free(&r_context);
     //@ open pk_context(&r_context);

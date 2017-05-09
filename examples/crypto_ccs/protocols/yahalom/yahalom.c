@@ -31,7 +31,7 @@ void encrypt(havege_state *state, char *key, char *msg,
              [f2]crypto_chars(kind, msg, msg_len, msg_ccs) &*&
              crypto_chars(normal, output, 16, ?iv_ccs) &*&
              cryptogram(output + 16, msg_len, _, ?enc_cg) &*&
-             enc_cg == cg_encrypted(principal2, id, msg_ccs, iv_ccs); @*/
+             enc_cg == cg_aes_encrypted(principal2, id, msg_ccs, iv_ccs); @*/
 {
   //@ open principal(principal1, _);
   char iv[16];
@@ -44,6 +44,7 @@ void encrypt(havege_state *state, char *key, char *msg,
   //@ open cryptogram(iv, 16, ?iv_ccs, ?iv_cg);
   //@ close yahalom_pub(iv_cg);
   //@ leak yahalom_pub(iv_cg);
+  //@ chars_to_crypto_chars(output, 16);
   memcpy(output, iv, 16);
   //@ close cryptogram(output, 16, iv_ccs, iv_cg);
   //@ public_cryptogram(output, iv_cg);
@@ -60,7 +61,7 @@ void encrypt(havege_state *state, char *key, char *msg,
   //@ open aes_context(&aes_context);
   //@ chars_to_crypto_chars(output, 16);
   //@ assert cryptogram(output + 16, msg_len, ?enc_cs, ?enc_cg);
-  //@ assert enc_cg == cg_encrypted(principal2, id, msg_ccs, iv_ccs);
+  //@ assert enc_cg == cg_aes_encrypted(principal2, id, msg_ccs, iv_ccs);
   //@ close principal(principal1, _);
 }
 
@@ -82,7 +83,7 @@ void decrypt(char *key, char *msg, unsigned int msg_len, char* output)
              crypto_chars(?kind, output, msg_len, dec_ccs) &*&
              exists(?enc_cg) &*& [_]yahalom_pub(enc_cg) &*&
              msg_ccs == ccs_for_cg(enc_cg) &*&
-             enc_cg == cg_encrypted(?p, ?c, ?dec_ccs2, ?iv_ccs2) &*&
+             enc_cg == cg_aes_encrypted(?p, ?c, ?dec_ccs2, ?iv_ccs2) &*&
              garbage ?
                kind == normal
              :
@@ -101,6 +102,7 @@ void decrypt(char *key, char *msg, unsigned int msg_len, char* output)
   //@ public_cs(iv_cs);
   //@ public_ccs_cg(iv_cg);
   //@ chars_to_secret_crypto_chars(msg, 16);
+  //@ chars_to_crypto_chars(iv, 16);
   memcpy(iv, msg, 16);
   //@ public_crypto_chars(msg, 16);
   //@ assert [f2]chars(msg, 16, ?iv_cs0);
@@ -114,7 +116,7 @@ void decrypt(char *key, char *msg, unsigned int msg_len, char* output)
   //@ interpret_encrypted(msg + 16, msg_len);
   //@ open [f2]cryptogram(msg + 16, msg_len, msg_ccs, ?enc_cg);
   //@ close [f2]cryptogram(msg + 16, msg_len, msg_ccs, enc_cg);
-  //@ assert enc_cg == cg_encrypted(?p, ?c, ?pay_ccs2, ?iv_ccs2);
+  //@ assert enc_cg == cg_aes_encrypted(?p, ?c, ?pay_ccs2, ?iv_ccs2);
   //@ open [_]yahalom_pub(enc_cg);
   //@ close exists(enc_cg);
   if (aes_crypt_cfb128(&aes_context, AES_DECRYPT,
@@ -214,6 +216,8 @@ void server(int server, int sender, int receiver,
                              receiver, r_id, ?dec_ccs); @*/
     //@ crypto_chars_split(decrypted, ID_SIZE);
     //@ crypto_chars_split((void*) decrypted + ID_SIZE, NONCE_SIZE);
+    //@ chars_to_crypto_chars(NA, NONCE_SIZE);
+    //@ chars_to_crypto_chars(NB, NONCE_SIZE);
     memcpy(NA, (void*) decrypted + ID_SIZE, NONCE_SIZE);
     memcpy(NB, (void*) decrypted + prefix_size, NONCE_SIZE);
     //@ assert crypto_chars(?kind, decrypted, ID_SIZE, ?id_ccs);
@@ -341,9 +345,11 @@ void server(int server, int sender, int receiver,
       //@ chars_to_secret_crypto_chars(m, ID_SIZE);
       //@ list<crypto_char> rid_ccs = cs_to_ccs(identifier(receiver));
       //@ assert crypto_chars(secret, m, ID_SIZE, rid_ccs);
+      //@ chars_to_crypto_chars(m + ID_SIZE, KEY_SIZE);
       memcpy(m + ID_SIZE, KAB, KEY_SIZE);
       //@ crypto_chars_to_chars(NA, NONCE_SIZE);
       //@ chars_to_secret_crypto_chars(NA, NONCE_SIZE);
+      //@ chars_to_crypto_chars(m + ID_SIZE + KEY_SIZE, NONCE_SIZE);
       memcpy(m + ID_SIZE + KEY_SIZE, NA, NONCE_SIZE);
       //@ public_crypto_chars(NA, NONCE_SIZE);
       /*@ if (col || yahalom_public_key(receiver, r_id, true))
@@ -352,6 +358,7 @@ void server(int server, int sender, int receiver,
             chars_to_secret_crypto_chars(NB, NONCE_SIZE);
           }
       @*/
+      //@ chars_to_crypto_chars(m + ID_SIZE + KEY_SIZE + NONCE_SIZE, NONCE_SIZE);
       memcpy(m + ID_SIZE + KEY_SIZE + NONCE_SIZE, NB, NONCE_SIZE);
       //@ crypto_chars_join(m + ID_SIZE + KEY_SIZE);
       //@ crypto_chars_join(m + ID_SIZE);
@@ -364,7 +371,7 @@ void server(int server, int sender, int receiver,
           {
             list <crypto_char> dec_ccs = append(rid_ccs, append(ccs_KAB,
                                                 append(ccs_NA, ccs_NB)));
-            assert enc_cg == cg_encrypted(sender, s_id, dec_ccs, ?ent);
+            assert enc_cg == cg_aes_encrypted(sender, s_id, dec_ccs, ?ent);
 
             if (yahalom_public_key(sender, s_id, true))
             {
@@ -445,6 +452,7 @@ void server(int server, int sender, int receiver,
       //@ crypto_chars_to_chars(m, ID_SIZE);
       //@ chars_to_secret_crypto_chars(m, ID_SIZE);
       //@ assert crypto_chars(secret, m, ID_SIZE, cs_to_ccs(identifier(sender)));
+      //@ chars_to_crypto_chars(m + ID_SIZE, KEY_SIZE);
       memcpy(m + ID_SIZE, KAB, KEY_SIZE);
       //@ crypto_chars_join(m);
 
@@ -452,7 +460,7 @@ void server(int server, int sender, int receiver,
       //@ open cryptogram(enc2 + 16, ID_SIZE + KEY_SIZE, ?enc_ccs, ?enc_cg);
       /*@ if (!col)
           {
-            assert enc_cg == cg_encrypted(receiver, r_id,
+            assert enc_cg == cg_aes_encrypted(receiver, r_id,
               append(cs_to_ccs(identifier(sender)), ccs_KAB), ?ent);
             if (yahalom_public_key(receiver, r_id, true))
             {
@@ -500,6 +508,8 @@ void server(int server, int sender, int receiver,
     {
       int size = size1 + size2;
       char *message = malloc(size); if (message == 0) abort();
+      //@ chars_to_crypto_chars(message, size1);
+      //@ chars_to_crypto_chars(message + size1, size2);
       memcpy(message, enc1, (unsigned int) size1);
       memcpy(message + size1, enc2, (unsigned int) size2);
       //@ crypto_chars_join(message);
@@ -601,6 +611,7 @@ void sender(int server, int sender, int receiver,
 
     write_identifier(message, sender);
     //@ crypto_chars_split(message, ID_SIZE);
+    //@ chars_to_crypto_chars((void*) message + ID_SIZE, NONCE_SIZE);
     memcpy((void*) message + ID_SIZE, NA, NONCE_SIZE);
     //@ crypto_chars_join(message);
     //@ crypto_chars_join(message);
@@ -621,6 +632,7 @@ void sender(int server, int sender, int receiver,
     net_recv(&socket_in, msg, (unsigned int) size);
     //@ chars_split(msg, 16 + size1);
     //@ chars_to_crypto_chars(msg + 16 + size1, size2);
+    //@ chars_to_crypto_chars(MB, size2);
     memcpy(MB, msg + 16 + size1, (unsigned int) size2);
     //@ chars_split(msg, 16);
     //@ assert chars(msg, 16, ?iv_cs);
@@ -639,7 +651,7 @@ void sender(int server, int sender, int receiver,
     //@ chars_join(msg);
     free(msg);
     //@ assert crypto_chars(?kind, dec, size1, dec_ccs);
-    //@ assert enc_cg == cg_encrypted(?p2, ?c2, ?dec_ccs2, ?iv_ccs2);
+    //@ assert enc_cg == cg_aes_encrypted(?p2, ?c2, ?dec_ccs2, ?iv_ccs2);
     //@ crypto_chars_split(dec, ID_SIZE);
     //@ crypto_chars_split(dec + ID_SIZE, KEY_SIZE);
     //@ crypto_chars_split(dec + ID_SIZE + KEY_SIZE, NONCE_SIZE);
@@ -665,7 +677,9 @@ void sender(int server, int sender, int receiver,
     //@ cg_NA2 = ccs_for_cg_sur(ccs_NA2, tag_nonce);
     //@ cg_NB = ccs_for_cg_sur(ccs_NB, tag_nonce);
     //@ cg_KAB = ccs_for_cg_sur(ccs_KAB, tag_symmetric_key);
+    //@ chars_to_crypto_chars(generated_key, KEY_SIZE);
     memcpy(generated_key, (void*) dec + ID_SIZE, KEY_SIZE);
+    //@ chars_to_crypto_chars(NB, NONCE_SIZE);
     memcpy(NB, (void*) dec + ID_SIZE + KEY_SIZE + NONCE_SIZE, NONCE_SIZE);
     /*@ if (col || garbage || condition)
         {
@@ -842,8 +856,10 @@ void sender(int server, int sender, int receiver,
     {
       int size = size1 + size2;
       char *message = malloc(size); if (message == 0) abort();
+      //@ chars_to_crypto_chars(message, size1);
       memcpy(message, MB, (unsigned int) size1);
       //@ crypto_chars_to_chars(MB, size1);
+      //@ chars_to_crypto_chars(message + size1, size2);
       memcpy(message + size1, enc2, (unsigned int) size2);
       //@ crypto_chars_to_chars(enc2, size2);
       //@ crypto_chars_join(message);
@@ -925,7 +941,7 @@ void receiver_(int socket_in, int sender, int receiver, int server,
   //@ chars_to_crypto_chars(msg, 16);
   decrypt(key, (void*) msg, (unsigned int) size1, dec1);
   //@ open [_]yahalom_pub(?enc_cg);
-  //@ assert enc_cg == cg_encrypted(?p, ?c, ?dec_ccs2, ?iv_ccs2);
+  //@ assert enc_cg == cg_aes_encrypted(?p, ?c, ?dec_ccs2, ?iv_ccs2);
   /*@ open decryption_post(true, ?garbage, receiver, s1,
                             receiver, r_id1, ?dec_ccs); @*/
   //@ assert crypto_chars(?kind, dec1, size1, ?cs_dec1);
@@ -964,6 +980,7 @@ void receiver_(int socket_in, int sender, int receiver, int server,
         public_crypto_chars(dec1, ID_SIZE);
       }
   @*/
+  //@ chars_to_crypto_chars(generated_key, KEY_SIZE);
   memcpy(generated_key, dec1 + ID_SIZE, KEY_SIZE);
   //@ chars_to_crypto_chars(dec1, ID_SIZE);
   /*@ close check_identifier_ghost_args(true, garbage, receiver, receiver,
@@ -1001,7 +1018,7 @@ void receiver_(int socket_in, int sender, int receiver, int server,
   /*@ open decryption_post(true, ?garbage2, receiver,
                             st, p4, c4, _); @*/
   //@ open exists(?enc_cg2);
-  //@ assert enc_cg2 == cg_encrypted(?p3, ?c3, ?dec_ccs3, ?iv_ccs3);
+  //@ assert enc_cg2 == cg_aes_encrypted(?p3, ?c3, ?dec_ccs3, ?iv_ccs3);
   //@ open [_]yahalom_pub(enc_cg2);
 
   /*@ if (col || garbage2 || yahalom_public_key(p4, c4, true))
@@ -1133,6 +1150,7 @@ void receiver(int server, int sender, int receiver,
     //@ assert chars(message + ID_SIZE, NONCE_SIZE, ?cs_NA);
     //@ public_chars(message + ID_SIZE, NONCE_SIZE);
     //@ chars_to_crypto_chars(message + ID_SIZE, NONCE_SIZE);
+    //@ chars_to_crypto_chars(NA, NONCE_SIZE);
     memcpy(NA, (void*) message + ID_SIZE, NONCE_SIZE);
     //@ cs_to_ccs_crypto_chars(NA, cs_NA);
     //@ cs_to_ccs_crypto_chars(message + ID_SIZE, cs_NA);
@@ -1187,6 +1205,8 @@ void receiver(int server, int sender, int receiver,
     //@ chars_to_secret_crypto_chars(plaintext, ID_SIZE);
     //@ assert crypto_chars(secret, plaintext, ID_SIZE, sid_ccs);
 
+    //@ chars_to_crypto_chars((void*) plaintext + ID_SIZE, NONCE_SIZE);
+    //@ chars_to_crypto_chars((void*) plaintext + ID_SIZE + NONCE_SIZE, NONCE_SIZE);
     memcpy((void*) plaintext + ID_SIZE, NA, NONCE_SIZE);
     memcpy((void*) plaintext + ID_SIZE + NONCE_SIZE, NB, NONCE_SIZE);
     //@ crypto_chars_join(plaintext);

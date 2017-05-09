@@ -50,6 +50,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
 
     // Copy message
     //@ chars_split(enc_msg, msg_len);
+    //@ chars_to_crypto_chars(enc_msg, msg_len);
     memcpy(enc_msg, msg, msg_len);
     //@ assert crypto_chars(secret, enc_msg, msg_len, msg_ccs);
 
@@ -77,6 +78,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
     //@ open cryptogram(iv, 16, ?iv_ccs, ?iv_cg);
     //@ close hmac_then_enc_pub(iv_cg);
     //@ leak hmac_then_enc_pub(iv_cg);
+    //@ chars_to_crypto_chars(message, 16);
     memcpy(message, iv, 16);
     //@ close cryptogram(message, 16, iv_ccs, iv_cg);
     //@ public_cryptogram(message, iv_cg);
@@ -190,6 +192,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ chars_split(buffer, 16);
     //@ assert chars(buffer, 16, ?iv_cs);
     //@ chars_to_crypto_chars(buffer, 16);
+    //@ chars_to_crypto_chars(iv, 16);
     memcpy(iv, buffer, 16);
     //@ cs_to_ccs_crypto_chars(iv, iv_cs);
     //@ cs_to_ccs_crypto_chars(buffer, iv_cs);
@@ -204,7 +207,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ assert chars(buffer + 16, enc_size, ?enc_cs);
     //@ interpret_encrypted(buffer + 16, enc_size);
     //@ assert cryptogram(buffer + 16, enc_size, ?enc_ccs, ?enc_cg);
-    //@ assert enc_cg == cg_encrypted(?p2, ?c2, ?dec_ccs2, ?iv_cs2);
+    //@ assert enc_cg == cg_aes_encrypted(?p2, ?c2, ?dec_ccs2, ?iv_cs2);
 
     //@ structure s = cryptogram_with_payload(enc_size - 64, 64);
     //@ close decryption_pre(true, false, receiver, s, enc_ccs);
@@ -274,6 +277,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     @*/
     //@ MEMCMP_SEC(hmac, hmac_cg)
     if (memcmp(hmac, (void*) buffer_dec + enc_size - 64, 64) != 0) abort();
+    //@ chars_to_crypto_chars(msg, enc_size - 64);
     memcpy(msg, buffer_dec, (unsigned int) enc_size - 64);
     /*@ if (garbage)
         {

@@ -35,6 +35,11 @@ fixpoint bool memcmp_match(list<memcmp_part> l1, list<memcmp_part> l2)
   }
 }
 
+lemma void memcmp_match(list<memcmp_part> l, list<memcmp_part> l1, 
+                                             list<memcmp_part> l2);
+  requires memcmp_match(l, l1) && memcmp_match(l, l2);
+  ensures  true == memcmp_match(l1, l2);
+
 fixpoint bool memcmp_region(list<memcmp_part> l, list<crypto_char> ccs)
 {
   switch(l)
@@ -42,7 +47,8 @@ fixpoint bool memcmp_region(list<memcmp_part> l, list<crypto_char> ccs)
     case nil:
       return ccs == nil;
     case cons(p0, l0):
-      return memcmp_part_ccs(p0) == take(length(memcmp_part_ccs(p0)), ccs) &&
+      return length(memcmp_part_ccs(p0)) <= length(ccs) &&
+             memcmp_part_ccs(p0) == take(length(memcmp_part_ccs(p0)), ccs) &&
              memcmp_region(l0, drop(length(memcmp_part_ccs(p0)), ccs));
   }
 }
@@ -50,11 +56,11 @@ fixpoint bool memcmp_region(list<memcmp_part> l, list<crypto_char> ccs)
 predicate memcmp_region(list<memcmp_part> l, list<crypto_char> ccs) =
   true == memcmp_region(l, ccs)
 ;
-
+  
 lemma void memcmp_append(list<crypto_char> ccs1, list<crypto_char> ccs2);
   requires [_]memcmp_region(?l1, ccs1) &*& [_]memcmp_region(?l2, ccs2);
   ensures  [_]memcmp_region(append(l1, l2), append(ccs1, ccs2));
-
+  
 #define MEMCMP_REGION(LIST, CCS) \
 { \
   close memcmp_region(nil, nil); \

@@ -82,7 +82,7 @@
       item i; \
       if (head(ccs) == c_to_cc(TAG_DATA)) \
       { \
-        open [_]public_ccs(ccs_cont); \
+        public_cs_to_ccs(ccs_cont); \
         list<char> data = \
           not_forall_t(forallcs, (notf)((cs_to_ccs_eq)(ccs_cont))); \
         i = data_item(data); \
@@ -150,7 +150,7 @@
       { \
         assert ccs_cont == cons(?cc_inc, ?ccs_cg); \
         public_ccs_split(ccs_cont, 1); \
-        open [_]public_ccs(cons(cc_inc, nil)); \
+        public_cs_to_ccs(cons(cc_inc, nil)); \
         list<char> cs_inc = \
           not_forall_t(forallcs, (notf)((cs_to_ccs_eq)(cons(cc_inc, nil)))); \
         assert cs_to_ccs(cs_inc) == cons(cc_inc, nil); \
@@ -170,7 +170,7 @@
         sublist_append(ccs_tag, ccs_cont, nil); \
         assert true == sublist(ccs_cg, append(ccs_tag, append(ccs_cont, nil))); \
         assert true == sublist(ccs_cg, ccs); \
-        DESERIALIZE_ITEM_PROOF_CG(tag_hash, cg_hash(?ccs_pay)) \
+        DESERIALIZE_ITEM_PROOF_CG(tag_hash, cg_sha512_hash(?ccs_pay)) \
         DESERIALIZE_ITEM_PROOF_PAY(hash_item(some(pay)), \
                                    hash_item(none), \
                                    assert is_public_hash(?proof, pub); \
@@ -187,14 +187,14 @@
       else if (head(ccs) == c_to_cc(TAG_PUBLIC_KEY)) \
       { \
         list<crypto_char> ccs_cg = ccs_cont; \
-        DESERIALIZE_ITEM_PROOF_CG(tag_public_key, cg_public_key(?p0, ?c0)) \
+        DESERIALIZE_ITEM_PROOF_CG(tag_public_key, cg_rsa_public_key(?p0, ?c0)) \
         i = public_key_item(p0, c0); \
         close ic_cg(i)(ccs_cg, cg); \
       } \
       else if (head(ccs) == c_to_cc(TAG_PRIVATE_KEY)) \
       { \
         list<crypto_char> ccs_cg = ccs_cont; \
-        DESERIALIZE_ITEM_PROOF_CG(tag_private_key, cg_private_key(?p0, ?c0)) \
+        DESERIALIZE_ITEM_PROOF_CG(tag_private_key, cg_rsa_private_key(?p0, ?c0)) \
         i = private_key_item(p0, c0); \
         close ic_cg(i)(ccs_cg, cg); \
       } \
@@ -202,7 +202,7 @@
       { \
         list<crypto_char> ccs_cg = ccs_cont; \
         sublist_append(ccs_tag, ccs_cont, nil); \
-        DESERIALIZE_ITEM_PROOF_CG(tag_hmac, cg_hmac(?p0, ?c0, ?ccs_pay)) \
+        DESERIALIZE_ITEM_PROOF_CG(tag_hmac, cg_sha512_hmac(?p0, ?c0, ?ccs_pay)) \
         DESERIALIZE_ITEM_PROOF_PAY(hmac_item(p0, c0, some(pay)), \
                                    hmac_item(p0, c0, none), \
                                    assert is_public_hmac(?proof, pub); \
@@ -220,7 +220,7 @@
         public_ccs_split(ccs_cont, GCM_IV_SIZE); \
         \
         DESERIALIZE_ITEM_PROOF_CG(tag_auth_encrypted, \
-                                  cg_auth_encrypted(?p0, ?c0, ?ccs_pay, ?iv0)) \
+                                  cg_aes_auth_encrypted(?p0, ?c0, ?ccs_pay, ?iv0)) \
         list<crypto_char> ent2 = append(ent1, iv0); \
         take_append(GCM_IV_SIZE, ent1, iv0); \
         drop_append(GCM_IV_SIZE, ent1, iv0); \
@@ -245,7 +245,7 @@
       { \
         list<crypto_char> ccs_cg = ccs_cont; \
         sublist_append(ccs_tag, ccs_cont, nil); \
-        DESERIALIZE_ITEM_PROOF_CG(tag_asym_encrypted, cg_asym_encrypted(?p0, ?c0, ?ccs_pay, ?ent0)) \
+        DESERIALIZE_ITEM_PROOF_CG(tag_asym_encrypted, cg_rsa_encrypted(?p0, ?c0, ?ccs_pay, ?ent0)) \
         DESERIALIZE_ITEM_PROOF_PAY(asymmetric_encrypted_item(p0, c0, some(pay), ent0), \
                                   asymmetric_encrypted_item(p0, c0, none, ent0), \
                                   assert is_public_asymmetric_encrypted(?proof, pub); \
@@ -256,7 +256,7 @@
       { \
         list<crypto_char> ccs_cg = ccs_cont; \
         sublist_append(ccs_tag, ccs_cont, nil); \
-        DESERIALIZE_ITEM_PROOF_CG(tag_asym_signature, cg_asym_signature(?p0, ?c0, ?ccs_pay, ?ent0)) \
+        DESERIALIZE_ITEM_PROOF_CG(tag_asym_signature, cg_rsa_signature(?p0, ?c0, ?ccs_pay, ?ent0)) \
         DESERIALIZE_ITEM_PROOF_PAY(asymmetric_signature_item(p0, c0, some(pay), ent0), \
                                   asymmetric_signature_item(p0, c0, none, ent0), \
                                   assert is_public_asymmetric_signature(?proof, pub); \
@@ -620,6 +620,7 @@ struct item* deserialize(char* buffer, int size)
   //@ assert item->content |-> ?cont;
   //@ chars_to_crypto_chars(buffer, size);
   //@ assert [f1]crypto_chars(normal, buffer, size, ?ccs);
+  //@ chars_to_crypto_chars(item->content, size);
   memcpy(item->content, buffer, (unsigned int) size);
   //@ get_forall_t<char>();
   //@ get_forall_t<list<char> >();

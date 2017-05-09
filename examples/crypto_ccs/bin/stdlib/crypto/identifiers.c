@@ -34,6 +34,9 @@ void write_identifier(char *array, int id)
 
   //@ chars_limits(array);
   //@ chars_to_crypto_chars(temp, 4);
+  //@ chars_to_crypto_chars(array, 4);
+  //@ chars_to_crypto_chars((void*) array + 4, 4);
+  //@ chars_to_crypto_chars((void*) array + 8, 4);
   memcpy(array +  0, temp, 4);
   memcpy(array +  4, temp, 4);
   memcpy(array +  8, temp, 4);

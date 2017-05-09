@@ -73,19 +73,19 @@ predicate item_constraints(item i, list<crypto_char> ccs, predicate(item) pub) =
         IC_CG(cs_cg, cg_nonce(p0, c0));
     case hash_item(pay0): return
         length(ccs_cont) == HASH_SIZE &*&
-        IC_CG(ccs_cont, cg_hash(?ccs_pay1)) &*&
+        IC_CG(ccs_cont, cg_sha512_hash(?ccs_pay1)) &*&
         IC_PAY(ccs_pay1, true);
     case symmetric_key_item(p0, c0): return
         length(ccs_cont) == GCM_KEY_SIZE &*&
         IC_CG(ccs_cont, cg_symmetric_key(p0, c0));
     case public_key_item(p0, c0): return
         length(ccs_cont) == RSA_SERIALIZED_KEY_SIZE &*&
-        IC_CG(ccs_cont, cg_public_key(p0, c0));
+        IC_CG(ccs_cont, cg_rsa_public_key(p0, c0));
     case private_key_item(p0, c0): return
         length(ccs_cont) == RSA_SERIALIZED_KEY_SIZE &*&
-        IC_CG(ccs_cont, cg_private_key(p0, c0));
+        IC_CG(ccs_cont, cg_rsa_private_key(p0, c0));
     case hmac_item(p0, c0, pay0): return
-        IC_CG(ccs_cont, cg_hmac(p0, c0, ?ccs_pay1)) &*&
+        IC_CG(ccs_cont, cg_sha512_hmac(p0, c0, ?ccs_pay1)) &*&
         IC_PAY(ccs_pay1, [_]pub(symmetric_key_item(p0, c0)));
     case symmetric_encrypted_item(p0, c0, pay0, ent0): return
         ic_sym_enc(i)(?iv0, ?cg_ccs) &*&
@@ -94,13 +94,13 @@ predicate item_constraints(item i, list<crypto_char> ccs, predicate(item) pub) =
         length(ccs_cont) >= GCM_IV_SIZE &*& GCM_IV_SIZE <= length(ent0) &*&
         drop(GCM_IV_SIZE, ent0) == iv0 &*&
         cg_ccs == drop(GCM_IV_SIZE, ccs_cont) &*&
-        IC_CG(cg_ccs, cg_auth_encrypted(p0, c0, ?ccs_pay1, iv0)) &*&
+        IC_CG(cg_ccs, cg_aes_auth_encrypted(p0, c0, ?ccs_pay1, iv0)) &*&
         IC_PAY(ccs_pay1, [_]pub(symmetric_key_item(p0, c0)));
     case asymmetric_encrypted_item(p0, c0, pay0, ent0): return
-        IC_CG(ccs_cont, cg_asym_encrypted(p0, c0, ?ccs_pay1, ent0)) &*&
+        IC_CG(ccs_cont, cg_rsa_encrypted(p0, c0, ?ccs_pay1, ent0)) &*&
         IC_PAY(ccs_pay1, [_]pub(public_key_item(p0, c0)));
     case asymmetric_signature_item(p0, c0, pay0, ent0): return
-        IC_CG(ccs_cont, cg_asym_signature(p0, c0, ?ccs_pay1, ent0)) &*&
+        IC_CG(ccs_cont, cg_rsa_signature(p0, c0, ?ccs_pay1, ent0)) &*&
         IC_PAY(ccs_pay1, [_]pub(private_key_item(p0, c0)));
   }
 ;

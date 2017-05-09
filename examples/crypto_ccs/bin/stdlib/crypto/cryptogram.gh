@@ -4,20 +4,20 @@
 #include "crypto_chars.gh"
 
 inductive cryptogram =
-  | cg_nonce         (int principal, int count)
-  | cg_symmetric_key (int principal, int count)
-  | cg_public_key    (int principal, int count)
-  | cg_private_key   (int principal, int count)
-  | cg_hash          (list<crypto_char> payload)
-  | cg_hmac          (int principal, int count, list<crypto_char> payload)
-  | cg_encrypted     (int principal, int count, list<crypto_char> payload,
-                      list<crypto_char> entropy)
-  | cg_auth_encrypted(int principal, int count, list<crypto_char> payload,
-                      list<crypto_char> entropy)
-  | cg_asym_encrypted(int principal, int count, list<crypto_char> payload,
-                      list<crypto_char> entropy)
-  | cg_asym_signature(int principal, int count, list<crypto_char> payload,
-                      list<crypto_char> entropy)
+  | cg_nonce             (int principal, int count)
+  | cg_symmetric_key     (int principal, int count)
+  | cg_sha512_hash       (list<crypto_char> payload)
+  | cg_sha512_hmac       (int principal, int count, list<crypto_char> payload)
+  | cg_aes_encrypted     (int principal, int count, list<crypto_char> payload,
+                          list<crypto_char> entropy)
+  | cg_aes_auth_encrypted(int principal, int count, list<crypto_char> payload,
+                          list<crypto_char> entropy)
+  | cg_rsa_public_key    (int principal, int count)
+  | cg_rsa_private_key   (int principal, int count)
+  | cg_rsa_encrypted     (int principal, int count, list<crypto_char> payload,
+                          list<crypto_char> entropy)
+  | cg_rsa_signature     (int principal, int count, list<crypto_char> payload,
+                          list<crypto_char> entropy)
 ;
 
 //The character representation of a cryptogram
@@ -38,12 +38,12 @@ fixpoint option<list<crypto_char> > cg_payload(cryptogram cg)
 {
   switch(cg)
   {
-    case cg_hash(ccs1):                         return some(ccs1);
-    case cg_hmac(p1, c1, ccs1):                 return some(ccs1);
-    case cg_encrypted(p1, c1, ccs1, ent1):      return some(ccs1);
-    case cg_auth_encrypted(p1, c1, ccs1, ent1): return some(ccs1);
-    case cg_asym_encrypted(p1, c1, ccs1, ent1): return some(ccs1);
-    case cg_asym_signature(p1, c1, ccs1, ent1): return some(ccs1);
+    case cg_sha512_hash(ccs1):                      return some(ccs1);
+    case cg_sha512_hmac(p1, c1, ccs1):              return some(ccs1);
+    case cg_aes_encrypted(p1, c1, ccs1, ent1):      return some(ccs1);
+    case cg_aes_auth_encrypted(p1, c1, ccs1, ent1): return some(ccs1);
+    case cg_rsa_encrypted(p1, c1, ccs1, ent1):      return some(ccs1);
+    case cg_rsa_signature(p1, c1, ccs1, ent1):      return some(ccs1);
     default: return none;
   }
 }
@@ -65,16 +65,16 @@ fixpoint tag tag_for_cg(cryptogram cg)
 {
   switch(cg)
   {
-    case cg_nonce(p1, c1):                      return tag_nonce;
-    case cg_symmetric_key(p1, c1):              return tag_symmetric_key;
-    case cg_public_key(p1, c1):                 return tag_public_key;
-    case cg_private_key(p1, c1):                return tag_private_key;
-    case cg_hash(ccs1):                         return tag_hash;
-    case cg_hmac(p1, c1, ccs1):                 return tag_hmac;
-    case cg_encrypted(p1, c1, ccs1, ent1):      return tag_encrypted;
-    case cg_auth_encrypted(p1, c1, ccs1, ent1): return tag_auth_encrypted;
-    case cg_asym_encrypted(p1, c1, ccs1, ent1): return tag_asym_encrypted;
-    case cg_asym_signature(p1, c1, ccs1, ent1): return tag_asym_signature;
+    case cg_nonce(p1, c1):                          return tag_nonce;
+    case cg_symmetric_key(p1, c1):                  return tag_symmetric_key;
+    case cg_rsa_public_key(p1, c1):                 return tag_public_key;
+    case cg_rsa_private_key(p1, c1):                return tag_private_key;
+    case cg_sha512_hash(ccs1):                      return tag_hash;
+    case cg_sha512_hmac(p1, c1, ccs1):              return tag_hmac;
+    case cg_aes_encrypted(p1, c1, ccs1, ent1):      return tag_encrypted;
+    case cg_aes_auth_encrypted(p1, c1, ccs1, ent1): return tag_auth_encrypted;
+    case cg_rsa_encrypted(p1, c1, ccs1, ent1):      return tag_asym_encrypted;
+    case cg_rsa_signature(p1, c1, ccs1, ent1):      return tag_asym_signature;
   }
 }
 

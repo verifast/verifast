@@ -102,7 +102,7 @@ lemma void serialize_hash(option<item> pay0)
   ensures  proof_obligations(pub) &*&
            [_]public_ccs(ccs);
 {
-  SERIALIZE_DEFAULT(hash, TAG_HASH, cg_hash(?cs_pay), true)
+  SERIALIZE_DEFAULT(hash, TAG_HASH, cg_sha512_hash(?cs_pay), true)
 }
 
 lemma void serialize_symmetric_key(int p0, int c0)
@@ -124,7 +124,7 @@ lemma void serialize_public_key(int p0, int c0)
   ensures  proof_obligations(pub) &*&
            [_]public_ccs(ccs);
 {
-  SERIALIZE_DEFAULT(key, TAG_PUBLIC_KEY, cg_public_key(p0, c0), false)
+  SERIALIZE_DEFAULT(key, TAG_PUBLIC_KEY, cg_rsa_public_key(p0, c0), false)
 }
 
 lemma void serialize_private_key(int p0, int c0)
@@ -135,7 +135,7 @@ lemma void serialize_private_key(int p0, int c0)
   ensures  proof_obligations(pub) &*&
            [_]public_ccs(ccs);
 {
-  SERIALIZE_DEFAULT(key, TAG_PRIVATE_KEY, cg_private_key(p0, c0), false)
+  SERIALIZE_DEFAULT(key, TAG_PRIVATE_KEY, cg_rsa_private_key(p0, c0), false)
 }
 
 lemma void serialize_hmac(int p0, int c0, option<item> pay0)
@@ -146,7 +146,7 @@ lemma void serialize_hmac(int p0, int c0, option<item> pay0)
   ensures  proof_obligations(pub) &*&
            [_]public_ccs(ccs);
 {
-  SERIALIZE_DEFAULT(hmac, TAG_HMAC, cg_hmac(p0, c0, ?ccs_pay), true)
+  SERIALIZE_DEFAULT(hmac, TAG_HMAC, cg_sha512_hmac(p0, c0, ?ccs_pay), true)
 }
 
 lemma void serialize_symmetric_encrypted(int p0, int c0,
@@ -175,14 +175,14 @@ lemma void serialize_symmetric_encrypted(int p0, int c0,
       case some(pay1):
         assert [_]well_formed_item_ccs(enc)(?ccs_pay0);
         assert [_]item_constraints(pay1, ccs_pay0, pub);
-        penc = cg_auth_encrypted(p0, c0, ccs_pay0, iv0);
+        penc = cg_aes_auth_encrypted(p0, c0, ccs_pay0, iv0);
         close exists(ent0);
         leak exists(ent0);
         close exists(false);
         leak exists(false);
       case none:
         assert [_]ill_formed_item_ccs(enc)(?ccs_pay0);
-        penc = cg_auth_encrypted(p0, c0, ccs_pay0, iv0);
+        penc = cg_aes_auth_encrypted(p0, c0, ccs_pay0, iv0);
         close exists(true);
         leak exists(true);
     }
@@ -204,7 +204,7 @@ lemma void serialize_asymmetric_encrypted(int p0, int c0,
   ensures  proof_obligations(pub) &*&
            [_]public_ccs(ccs);
 {
-  SERIALIZE_DEFAULT(enc, TAG_ASYMMETRIC_ENC, cg_asym_encrypted(p0, c0, ?cs_pay, ent0), true)
+  SERIALIZE_DEFAULT(enc, TAG_ASYMMETRIC_ENC, cg_rsa_encrypted(p0, c0, ?cs_pay, ent0), true)
 }
 
 lemma void serialize_asymmetric_signature(int p0, int c0,
@@ -216,7 +216,7 @@ lemma void serialize_asymmetric_signature(int p0, int c0,
   ensures  proof_obligations(pub) &*&
            [_]public_ccs(ccs);
 {
-  SERIALIZE_DEFAULT(sig, TAG_ASYMMETRIC_SIG, cg_asym_signature(p0, c0, ?cs_pay, ent0), true)
+  SERIALIZE_DEFAULT(sig, TAG_ASYMMETRIC_SIG, cg_rsa_signature(p0, c0, ?cs_pay, ent0), true)
 }
 
 lemma void serialize_item(item i)
@@ -318,6 +318,7 @@ int serialize_to_public_message(char** dest, struct item* item)
   //@ assert [f1]crypto_chars(secret, cont, size, ?ccs);
 
   temp = malloc_wrapper(size);
+  //@ chars_to_crypto_chars(temp, size);
   memcpy(temp, item->content, (unsigned int) size);
   *dest = temp;
 

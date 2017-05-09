@@ -5,7 +5,7 @@
 #include "principals.gh"
 #include "cryptogram.gh"
 
-#define MINIMAL_STRING_SIZE 10
+#define MIN_DEC_SIZE 10
 
 require_module decryption_mod;
 
@@ -54,7 +54,7 @@ predicate has_structure(list<crypto_char> ccs, structure s) =
     //
     case known_value(offset, ccs_known):
       return ccs == append(prefix, append(ccs_known, suffix)) &*&
-             length(ccs_known) >= MINIMAL_STRING_SIZE &*&
+             length(ccs_known) >= MIN_DEC_SIZE &*&
              length(prefix) == offset;
     //  ______________________________ ________
     // |        |                     |        |
@@ -65,9 +65,9 @@ predicate has_structure(list<crypto_char> ccs, structure s) =
       return exists(?cg) &*& cg_payload(cg) == some(?ccs_pay) &*&
              ccs == append(prefix, append(ccs_for_cg(cg), suffix)) &*&
              ccs_pay == append(prefix, suffix) &*&
-             length(ccs_pay) >= MINIMAL_STRING_SIZE &*&
+             length(ccs_pay) >= MIN_DEC_SIZE &*&
              length == length(ccs_for_cg(cg)) &*&
-             length >= MINIMAL_STRING_SIZE &*&
+             length >= MIN_DEC_SIZE &*&
              length(prefix) == offset;
   }
 ;
@@ -90,7 +90,7 @@ typedef lemma void public_key_classifier
             symmetric ?
               key == cg_symmetric_key(p, c)
             :
-              key == cg_private_key(p, c);
+              key == cg_rsa_private_key(p, c);
   ensures   proof_pred() &*&
             col || true == key_classifier(p, c, symmetric);
 
@@ -101,7 +101,7 @@ typedef lemma void public_key_classifier
              symmetric ? \
                key == cg_symmetric_key(p, c) \
              : \
-               key == cg_private_key(p, c); \
+               key == cg_rsa_private_key(p, c); \
     ensures  true == PREFIX##_public_key(p, c, symmetric); \
   { \
     open [_]PREFIX##_pub(key); \

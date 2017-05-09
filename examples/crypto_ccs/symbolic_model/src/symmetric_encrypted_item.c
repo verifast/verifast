@@ -108,6 +108,7 @@ struct item *symmetric_encryption(struct item *key, struct item *payload)
     //@ close [f]world(pub, key_clsfy);
     create_havege_random(iv, GCM_IV_SIZE);
     //@ open cryptogram(iv, GCM_IV_SIZE, ?iv_ccs, ?iv_cg);
+    //@ chars_to_crypto_chars(iv_buffer, GCM_IV_SIZE);
     memcpy(iv_buffer, iv, GCM_IV_SIZE);
     //@ close cryptogram(iv, GCM_IV_SIZE, iv_ccs, iv_cg);
     //@ close polarssl_pub(pub)(iv_cg);
@@ -145,7 +146,7 @@ struct item *symmetric_encryption(struct item *key, struct item *payload)
     /*@ if (col)
         {
           enc_cg = ccs_for_cg_sur(cg_ccs, tag_auth_encrypted);
-          assert enc_cg == cg_auth_encrypted(?p0, ?c0, ?pay0, ?iv0);
+          assert enc_cg == cg_aes_auth_encrypted(?p0, ?c0, ?pay0, ?iv0);
           ent = append(iv_ccs, iv0);
           take_append(GCM_IV_SIZE, iv_ccs, iv0);
           drop_append(GCM_IV_SIZE, iv_ccs, iv0);
@@ -154,7 +155,7 @@ struct item *symmetric_encryption(struct item *key, struct item *payload)
         }
         else
         {
-          assert enc_cg == cg_auth_encrypted(principal2, count2, pay_ccs, iv_ccs);
+          assert enc_cg == cg_aes_auth_encrypted(principal2, count2, pay_ccs, iv_ccs);
           enc = symmetric_encrypted_item(principal2, count2, some(pay), ent);
           close polarssl_pub(pub)(cg_nonce(principal1, count1 + 1));
           leak  polarssl_pub(pub)(cg_nonce(principal1, count1 + 1));
@@ -263,6 +264,7 @@ struct item *symmetric_decryption(struct item *key, struct item *item)
     iv = item->content + TAG_LENGTH;
     //@ crypto_chars_split(iv, GCM_IV_SIZE);
     //@ assert [1/2]crypto_chars(secret, iv, GCM_IV_SIZE, ?iv_ccs);
+    //@ chars_to_crypto_chars(iv_buffer, GCM_IV_SIZE);
     memcpy(iv_buffer, iv, GCM_IV_SIZE);
     //@ assert ccs == append(enc_tag, enc_cont);
     //@ assert enc_cont == append(iv_ccs, cg_ccs);
@@ -287,7 +289,7 @@ struct item *symmetric_decryption(struct item *key, struct item *item)
                          result->content) != 0)
       abort_crypto_lib("Gcm decryption failed");
     //@ assert crypto_chars(secret, r_cont, size, ?dec_ccs);
-    //@ assert col || enc_cg == cg_auth_encrypted(principal1, count1, dec_ccs, iv_ccs);
+    //@ assert col || enc_cg == cg_aes_auth_encrypted(principal1, count1, dec_ccs, iv_ccs);
     //@ crypto_chars_join(encrypted);
     //@ crypto_chars_join(iv);
     //@ crypto_chars_join(i_cont);
@@ -306,7 +308,7 @@ struct item *symmetric_decryption(struct item *key, struct item *item)
         {
           assert enc == symmetric_encrypted_item(principal1, count1,
                                                  pay, ent);
-          assert enc_cg == cg_auth_encrypted(principal1, count1,
+          assert enc_cg == cg_aes_auth_encrypted(principal1, count1,
                                              dec_ccs, enc_iv);
           switch(pay)
           {
