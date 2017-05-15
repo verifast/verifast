@@ -26,6 +26,13 @@ static __inline__ unsigned long long __rdtsc(void)
     return ( (unsigned long long)lo)|( ((unsigned long long)hi)<<32 );
 }
 
+#else
+
+static __inline__ unsigned long long __rdtsc(void)
+{
+    return 0;
+}
+
 #endif
 
 value caml_lock_process_to_processor_1() {
