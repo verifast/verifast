@@ -13,7 +13,8 @@ lemma void well_formed_item_constraints(item i1, item i2)
 
 #define IC_MEMCMP_CG \
   assert [_]ic_cg(i)(?ccs_cg, ?cg); \
-  memcmp_part p_tag = memcmp_pub(ccs_tag); \
+  list<char> cs_tag = full_tag(tag_for_item(i)); \
+  memcmp_part p_tag = memcmp_pub(cs_tag); \
   memcmp_part p_cg = memcmp_sec(cg); \
   MEMCMP_REGION(cons(p_cg, nil), ccs_cg); \
   
@@ -50,7 +51,9 @@ lemma void item_constraints_memcmp(item i)
       take_append(TAG_LENGTH + 1, append(ccs_tag, cons(c_to_cc(inc0), nil)), ccs_cg);
       drop_append(TAG_LENGTH + 1, append(ccs_tag, cons(c_to_cc(inc0), nil)), ccs_cg);
       public_ccs_join(ccs_tag, cons(c_to_cc(inc0), nil));
-      memcmp_part p_pre = memcmp_pub(append(ccs_tag, cons(c_to_cc(inc0), nil)));
+      open [_]public_ccs(append(ccs_tag, cons(c_to_cc(inc0), nil)));
+      assert [_]exists(?cs);
+      memcmp_part p_pre = memcmp_pub(cs);
       MEMCMP_REGION(cons(p_pre, cons(p_cg, nil)), ccs);
     case symmetric_encrypted_item(p0, c0, pay0, ent0):
       IC_MEMCMP_CG
@@ -58,7 +61,9 @@ lemma void item_constraints_memcmp(item i)
       take_append(TAG_LENGTH + GCM_IV_SIZE, append(ccs_tag, take(GCM_IV_SIZE, ent0)), ccs_cg);
       drop_append(TAG_LENGTH + GCM_IV_SIZE, append(ccs_tag, take(GCM_IV_SIZE, ent0)), ccs_cg);
       public_ccs_join(ccs_tag, take(GCM_IV_SIZE, ent0));
-      memcmp_part p_pre = memcmp_pub(append(ccs_tag, take(GCM_IV_SIZE, ent0)));
+      open [_]public_ccs(append(ccs_tag, take(GCM_IV_SIZE, ent0)));
+      assert [_]exists(?cs);
+      memcmp_part p_pre = memcmp_pub(cs);
       MEMCMP_REGION(cons(p_pre, cons(p_cg, nil)), ccs);
     case hash_item(pay0):                               IC_MEMCMP_DEFAULT
     case symmetric_key_item(p0, c0):                    IC_MEMCMP_DEFAULT

@@ -4,7 +4,7 @@
 #include "cryptogram.gh"
 
 inductive memcmp_part =
-  | memcmp_pub(list<crypto_char> ccs)
+  | memcmp_pub(list<char> cs)
   | memcmp_sec(cryptogram cg)
 ;
 
@@ -12,8 +12,8 @@ fixpoint list<crypto_char> memcmp_part_ccs(memcmp_part p)
 {
   switch(p)
   {
-    case memcmp_pub(ccs): return ccs;
-    case memcmp_sec(cg):  return ccs_for_cg(cg);
+    case memcmp_pub(cs): return cs_to_ccs(cs);
+    case memcmp_sec(cg): return ccs_for_cg(cg);
   }
 }
 
@@ -70,14 +70,21 @@ lemma void memcmp_append(list<crypto_char> ccs1, list<crypto_char> ccs2);
 }
 
 #define MEMCMP_CCS(CCS) \
-  MEMCMP_REGION(cons(memcmp_pub(CCS), nil), CCS)
+{ \
+  open [_]public_ccs(CCS); \
+  assert [_]exists<list<char > >(?cs00); \
+  MEMCMP_REGION(cons(memcmp_pub(cs00), nil), CCS) \
+}
 
 #define MEMCMP_PUB(BUFFER) \
 { \
   assert [?f00]crypto_chars(normal, BUFFER, ?size00, ?ccs00); \
+  crypto_chars_to_chars(BUFFER, size00); \
+  assert [f00]chars(BUFFER, size00, ?cs00); \
+  chars_to_crypto_chars(BUFFER, size00); \
   public_ccs(BUFFER, size00); \
   MEMCMP_REGION(nil, nil); \
-  MEMCMP_REGION(cons(memcmp_pub(ccs00), nil), ccs00); \
+  MEMCMP_REGION(cons(memcmp_pub(cs00), nil), ccs00); \
 }
 
 #define MEMCMP_SEC(BUFFER, CG) \
