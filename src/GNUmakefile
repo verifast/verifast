@@ -89,7 +89,7 @@ ifndef NOZ3
 endif
 Z3V4DOT5PRESENT=false
 ifdef Z3V4DOT5
-  Z3_OCAML ?= `ocamlfind query z3`
+  Z3_OCAML ?= `ocamlfind query Z3`
   Z3_DLL_DIR ?= /usr/local/lib
   Z3DEPS = z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml
   Z3CCOPTS = -cclib "-L $(Z3_DLL_DIR)"
