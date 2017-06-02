@@ -63,7 +63,7 @@ lemma_auto(length(values(map))) void length_values<t1, t2>(list<pair<t1, t2> > m
   requires true;
   ensures length(values(map)) == length(map);
 
-lemma_auto void take_values<t1, t2>(int i, list<pair<t1, t2> > map);
+lemma_auto(take(i, values(map))) void take_values<t1, t2>(int i, list<pair<t1, t2> > map);
   requires 0 <= i && i <= length(map);
   ensures take(i, values(map)) == values(take(i, map));
   
