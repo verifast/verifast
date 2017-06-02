@@ -3135,6 +3135,11 @@ let banner () =
   "By Bart Jacobs, Jan Smans, and Frank Piessens, with contributions by Pieter Agten, Cedric Cuypers, Lieven Desmet, Jan Tobias Muehlberg, Willem Penninckx, Pieter Philippaerts, Amin Timany, Thomas Van Eyck, Gijs Vanspauwen, Frederic Vogels, and external contributors <https://github.com/verifast/verifast/graphs/contributors>" ^
   prover_banners ()
 
+let list_provers () =
+  let prover_names = List.map fst !prover_table in
+  let plural = if List.length prover_names > 1 then "s" else "" in
+  sprintf "available prover%s: %s" plural (String.concat ", " prover_names)
+
 let lookup_prover prover =
   match prover with
     None ->
@@ -3146,7 +3151,9 @@ let lookup_prover prover =
   | Some name ->
     begin
       match try_assoc name !prover_table with
-        None -> failwith ("No such prover: " ^ name)
+        None ->
+          failwith (sprintf "No such prover: %s; %s."
+                            name (list_provers()))
       | Some (banner, f) -> f
     end
       

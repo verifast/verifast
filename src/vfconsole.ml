@@ -189,7 +189,7 @@ let _ =
   let cla = [ "-stats", Set stats, " "
             ; "-verbose", Set_int verbose, "-1 = file processing; 1 = statement executions; 2 = produce/consume steps; 4 = prover queries."
             ; "-disable_overflow_check", Set disable_overflow_check, " "
-            ; "-prover", String (fun str -> prover := Some str), "Set SMT prover (e.g. redux, z3)."
+            ; "-prover", String (fun str -> prover := Some str), "Set SMT prover (" ^ list_provers() ^ ")."
             ; "-c", Set compileOnly, "Compile only, do not perform link checking."
             ; "-shared", Set isLibrary, "The file is a library (i.e. no main function required)."
             ; "-allow_assume", Set allowAssume, "Allow assume(expr) annotations."
