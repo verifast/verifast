@@ -124,7 +124,7 @@ module TreeMetrics = struct
   let cw = dotWidth + 2 * padding
 end
 
-let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend enforceAnnotations =
+let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend enforceAnnotations overflowCheck =
   let leftBranchPixbuf = Branchleft_png.pixbuf () in
   let rightBranchPixbuf = Branchright_png.pixbuf () in
   let ctxts_lifo = ref None in
@@ -149,7 +149,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   let traceFont = ref traceFont in
   let scaledTraceFont = ref !traceFont in
   let actionGroup = GAction.action_group ~name:"Actions" () in
-  let disableOverflowCheck = ref false in
+  let disableOverflowCheck = ref (not overflowCheck) in
   let useJavaFrontend = ref false in
   let toggle_java_frontend active =
     (useJavaFrontend := active;
@@ -1688,6 +1688,7 @@ let () =
   let layout = ref FourThree in
   let javaFrontend = ref false in
   let enforceAnnotations = ref false in
+  let overflow_check = ref true in
   let rec iter args =
     match args with
       "-prover"::arg::args -> prover := Some arg; iter args
@@ -1702,14 +1703,15 @@ let () =
     | "-layout"::"widescreen"::args -> layout := Widescreen; iter args
     | "-javac"::args -> javaFrontend := true; iter args
     | "-enforce_annotations"::args -> enforceAnnotations := true; iter args
+    | "-disable_overflow_check"::args -> overflow_check := false; iter args
     | arg::args when not (startswith arg "-") -> path := Some arg; iter args
-    | [] -> show_ide !path !prover !codeFont !traceFont !runtime !layout !javaFrontend !enforceAnnotations
+    | [] -> show_ide !path !prover !codeFont !traceFont !runtime !layout !javaFrontend !enforceAnnotations !overflow_check
     | _ ->
       GToolbox.message_box "VeriFast IDE" begin
         "Invalid command line.\n\n" ^ 
         "Usage: vfide [filepath] [-prover z3|redux] [-codeFont fontSpec] " ^
         "[-traceFont fontSpec] [-I IncludeDir] [-layout fourthree|widescreen] " ^
-        "[-javac] "
+        "[-javac] [-runtime] [-bindir] [-enforce_annotations] [-disable_overflow_check]"
       end
   in
   let args = 
