@@ -409,6 +409,7 @@ cd tests
   cd errors
     verifast_both -c -allow_should_fail basics.c
     verifast_both -c -allow_should_fail typecheck1.c
+    verifast_both -c -allow_should_fail ghost_assignment.c
     verifast_both -c -allow_should_fail ghost_field.c
     verifast_both -c -allow_should_fail inhabited.c
     verifast_both -c -allow_should_fail lemmafuncptr.c

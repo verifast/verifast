@@ -2433,6 +2433,20 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | Some post' ->
             post'
         in
+        let do_return h env_post =
+          consume_asn rules [] h ghostenv env_post post true real_unit (fun _ h ghostenv env size_first ->
+            cleanup_heapy_locals (pn, ilist) closeBraceLoc h env heapy_ps (fun h ->
+              check_leaks h env closeBraceLoc "Function leaks heap chunks."
+            )
+          )
+        in
+        let return_cont h tenv2 env2 retval =
+          match (rt, retval) with
+            (None, None) -> do_return h env
+          | (Some tp, Some t) -> do_return h (("result", t)::env)
+          | (None, Some _) -> assert_false h env l "Void function returns a value." None
+          | (Some _, None) -> assert_false h env l "Non-void function does not return a value." None
+        in
         let (prolog, ss) =
           if in_pure_context then
             ([], ss)
@@ -2457,20 +2471,6 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           else
             cont h tenv ghostenv env
         end $. fun h tenv ghostenv env ->
-        let do_return h env_post =
-          consume_asn rules [] h ghostenv env_post post true real_unit (fun _ h ghostenv env size_first ->
-            cleanup_heapy_locals (pn, ilist) closeBraceLoc h env heapy_ps (fun h ->
-              check_leaks h env closeBraceLoc "Function leaks heap chunks."
-            )
-          )
-        in
-        let return_cont h tenv2 env2 retval =
-          match (rt, retval) with
-            (None, None) -> do_return h env
-          | (Some tp, Some t) -> do_return h (("result", t)::env)
-          | (None, Some _) -> assert_false h env l "Void function returns a value." None
-          | (Some _, None) -> assert_false h env l "Non-void function does not return a value." None
-        in
         begin fun tcont ->
           let (h,tenv,env) = heapify_params h tenv env heapy_ps in
           let outerlocals = ref [] in

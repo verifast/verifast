@@ -42,10 +42,6 @@ void foo()
   assert(false);
 }
 ```
-- Ghost variable assignment in C functions where the ghost variable is a
-  variable of the precondition, also changes the value used when checking
-  the postcondition.
-  See https://github.com/verifast/verifast/issues/93
 
 Java Programs
 =============
