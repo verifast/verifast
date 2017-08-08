@@ -39,7 +39,8 @@ type 'termnode context =
 | PushSubcontext
 | PopSubcontext
 | Branching of branch
-type node = Node of string * int list * node list ref
+type node_type = ExecNode of string * int list | BranchNode | SuccessNode | ErrorNode
+type node = Node of node_type * node list ref
 
 (* Returns the locations of the "call stack" of the current execution step. *)
 let get_callers (ctxts: 'termnode context list): loc option list =
@@ -121,7 +122,7 @@ let string_of_context c =
   | PushSubcontext -> "Entering subcontext"
   | PopSubcontext -> "Leaving subcontext"
 
-exception SymbolicExecutionError of string context list * string * loc * string * string option
+exception SymbolicExecutionError of string context list * loc * string * string option
 
 let full_name pn n = if pn = "" then n else pn ^ "." ^ n
 

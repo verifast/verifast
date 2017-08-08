@@ -5,6 +5,8 @@ open Num (* rational numbers *)
 
 (* Region: General-purpose utility functions *)
 
+let push x rxs = rxs := x::!rxs
+
 let string_map f s =
   let n = String.length s in
   let result = String.create n in

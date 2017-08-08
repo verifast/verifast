@@ -115,7 +115,7 @@ let in_channel_last_modification_time chan =
 let out_channel_last_modification_time chan =
   (Unix.fstat (Unix.descr_of_out_channel chan)).st_mtime
 
-type tree_node = TreeNode of string * int list * int * int * tree_node list
+type tree_node = TreeNode of node_type * int * int * tree_node list
 
 module TreeMetrics = struct
   let dotWidth = 15
@@ -374,36 +374,37 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   treeSeparator#set_position (match layout with FourThree -> 800 | Widescreen -> 1024);
   let executionForest = ref [] in
   let reportExecutionForest forest =
-    let rec findFork (Node (msg, p, ns) as n) =
+    let rec findFork (Node (nodeType, ns) as n) =
       match !ns with
-        [n] -> findFork n
+        [Node (ExecNode _, _) as n] -> findFork n
+      | [n] when nodeType = BranchNode -> findFork n
       | _ -> n
     in
     let rec convert forest =
-      forest |> List.rev |> List.map begin fun (Node (msg, p, ns)) ->
+      forest |> List.rev |> List.map begin fun (Node (nodeType, ns)) ->
         let ns = convert (List.map findFork !ns) in
         let width =
           ns
-            |> List.map (fun (TreeNode (msg, p, width, _, _)) -> width)
+            |> List.map (fun (TreeNode (_, width, _, _)) -> width)
             |> List.fold_left (+) 0
             |> max 1
         in
         let height =
           ns
-            |> List.map (fun (TreeNode (msg, p, width, height, _)) -> height)
+            |> List.map (fun (TreeNode (_, width, height, _)) -> height)
             |> List.fold_left max 0
         in
-        TreeNode (msg, p, width, height + 1, ns)
+        TreeNode (nodeType, width, height + 1, ns)
       end
     in
     executionForest := convert forest;
     treeComboListStore#clear ();
-    !executionForest |> List.iter (fun (TreeNode (msg, _, _, _, _)) -> GEdit.text_combo_add treeComboText msg)
+    !executionForest |> List.iter (fun (TreeNode (ExecNode (msg, _), _, _, _)) -> GEdit.text_combo_add treeComboText msg)
   in
   ignore $. treeCombo#connect#changed begin fun () ->
     let active = treeCombo#active in
     if 0 <= active then begin
-      let TreeNode (msg, p, w, h, ns) = List.nth !executionForest active in
+      let TreeNode (_, w, h, ns) = List.nth !executionForest active in
       let open TreeMetrics in
       treeDrawingArea#set_size ~width:(cw * w) ~height:(cw * h)
     end;
@@ -1394,7 +1395,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
               updateMessageEntry(false)
             | StaticError (l, emsg, eurl) ->
               handleStaticError l emsg eurl 
-            | SymbolicExecutionError (ctxts, phi, l, emsg, eurl) ->
+            | SymbolicExecutionError (ctxts, l, emsg, eurl) ->
               ctxts_lifo := Some ctxts;
               updateStepItems();
               ignore $. updateStepListView();
@@ -1466,10 +1467,30 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     let open TreeMetrics in
     ignore $. treeDrawingArea#event#connect#expose begin fun event ->
       let d = new GDraw.drawable treeDrawingArea#misc#window in
-      let rec drawNode x y (TreeNode (msg, p, w, h, ns)) =
+      let delayedCommands = ref [] in
+      let performDelayed f = delayedCommands := f::!delayedCommands in
+      let rec drawNode x y (TreeNode (nodeType, w, h, ns)) =
         let px = x + cw * w / 2 in
         let py = y + cw / 2 in
-        d#arc ~x:(px - dotWidth / 2) ~y:(py - dotWidth / 2) ~width:dotWidth ~height:dotWidth ~filled:true ();
+        let (outlineColor, fillColor) =
+          match nodeType with
+            ExecNode _ -> None, `BLACK
+          | BranchNode -> if ns = [] then Some `BLACK, `NAME "lightgray" else None, `NAME "darkgray"
+          | SuccessNode -> None, `NAME "green"
+          | ErrorNode -> None, `NAME "red"
+        in
+        performDelayed begin fun () ->
+          d#set_foreground fillColor;
+          let x = px - dotWidth / 2 in
+          let y = py - dotWidth / 2 in
+          d#arc ~x ~y ~width:dotWidth ~height:dotWidth ~filled:true ();
+          begin match outlineColor with
+            None -> ()
+          | Some outlineColor ->
+            d#set_foreground outlineColor;
+            d#arc ~x ~y ~width:dotWidth ~height:dotWidth ~filled:false ()
+          end
+        end;
         let rec drawChildren x y ns =
           match ns with
             [] -> ()
@@ -1481,24 +1502,31 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
         drawChildren x (y + cw) ns;
         (w, px, py)
       in
+      let drawTree tree =
+        ignore $. drawNode 0 0 tree;
+        !delayedCommands |> List.iter (fun f -> f ())
+      in
       let active = treeCombo#active in
-      if 0 <= active then ignore $. drawNode 0 0 (List.nth !executionForest active);
+      if 0 <= active then drawTree (List.nth !executionForest active);
       true
     end;
     treeDrawingArea#event#add [`BUTTON_PRESS; `BUTTON_RELEASE];
     ignore $. treeDrawingArea#event#connect#button_release begin fun event ->
       let bx, by = int_of_float (GdkEvent.Button.x event), int_of_float (GdkEvent.Button.y event) in
-      let rec hitTest x y (TreeNode (msg, p, w, h, ns)) =
+      let rec hitTest x y (TreeNode (nodeType, w, h, ns)) =
         if by < y + cw then begin
           let px = x + cw * w / 2 in
           let py = y + cw / 2 in
           if abs (by - py) <= dotRadius && abs (bx - px) <= dotRadius then
-            verifyProgram false (Some p) ()
+            begin match nodeType with
+              ExecNode (msg, p) -> verifyProgram false (Some p) ()
+            | _ -> ()
+            end
         end else begin
           let rec testChildren x y ns =
             match ns with
               [] -> ()
-            | (TreeNode (msg, p, w, _, _) as n)::ns ->
+            | (TreeNode (_, w, _, _) as n)::ns ->
               if bx < x + cw * w then
                 hitTest x y n
               else

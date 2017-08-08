@@ -120,7 +120,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     pred_ctor_applications := (t, (symbol, symbol_term, ts, inputParamCount)) :: !pred_ctor_applications
 
   let assert_false h env l msg url =
-    raise (SymbolicExecutionError (pprint_context_stack !contextStack, "false", l, msg, url))
+    push (Node (ErrorNode, ref [])) !currentForest;
+    raise (SymbolicExecutionError (pprint_context_stack !contextStack, l, msg, url))
   
   let push_node l msg =
     let oldPath, oldBranch, oldTargetPath = !currentPath, !currentBranch, !targetPath in
@@ -141,10 +142,16 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     push_undo_item (fun () -> currentPath := oldPath; currentBranch := oldBranch + 1; targetPath := oldTargetPath);
     let newForest = ref [] in
     let oldForest = !currentForest in
-    oldForest := Node (msg, !currentPath, newForest)::!oldForest;
+    push (Node (ExecNode (msg, !currentPath), newForest)) oldForest;
     push_undo_item (fun () -> currentForest := oldForest);
     currentForest := newForest
   
+  let success () = SymExecSuccess
+
+  let major_success () =  (* A major success is a successful completion of a symbolic execution path that shows up as a green node in the execution tree. *)
+    push (Node (SuccessNode, ref [])) !currentForest;
+    success ()
+
   let push_context msg =
     contextStack := msg::!contextStack;
     begin match msg with
@@ -466,7 +473,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       body ()
     with
     | StaticError (l, msg, url) when should_fail l -> has_failed l
-    | SymbolicExecutionError (ctxts, phi, l, msg, url) when should_fail (loc_of_ctxts ctxts l) -> has_failed (loc_of_ctxts ctxts l)
+    | SymbolicExecutionError (ctxts, l, msg, url) when should_fail (loc_of_ctxts ctxts l) -> has_failed (loc_of_ctxts ctxts l)
     | PreprocessorDivergence (l,s) when should_fail l -> has_failed l
     | ParseException (l,s) when should_fail l -> has_failed l
  
@@ -5004,7 +5011,7 @@ let check_if_list_is_defined () =
     let result =
       match ctxt#assume t with
         Unknown -> cont()
-      | Unsat -> SymExecSuccess
+      | Unsat -> major_success ()
     in
     pop_context();
     ctxt#pop;
@@ -5025,7 +5032,7 @@ let check_if_list_is_defined () =
   let assert_term t h env l msg url = 
     !stats#proverOtherQuery;
     if not (ctxt#query t) then
-      raise (SymbolicExecutionError (pprint_context_stack !contextStack, ctxt#pprint t, l, msg, url))
+      assert_false h env l msg url
 
   let rec prover_type_term l tp = 
     match tp with

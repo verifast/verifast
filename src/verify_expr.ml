@@ -158,7 +158,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       Java ->
       with_context (Executing (h, env, l, "Leaking remaining chunks")) $. fun () ->
       check_breakpoint h env l;
-      SymExecSuccess
+      major_success ()
     | _ ->
     with_context (Executing (h, env, l, "Cleaning up dummy fraction chunks")) $. fun () ->
     let h = List.filter (fun (Chunk (_, _, coef, _, _)) -> not (is_dummy_frac_term coef)) h in
@@ -173,7 +173,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let h = List.filter (function Chunk ((name, true), targs, frac, args, Some (PluginChunkInfo info)) -> check_plugin_state h env l name info; false | _ -> true) h in
     if h <> [] then assert_false h env l msg (Some "leak");
     check_breakpoint [] env l;
-    SymExecSuccess
+    major_success ()
   
   let check_func_header_compat l msg0 msg env00 (k, tparams, rt, xmap, nonghost_callers_only, pre, post, epost, terminates) (k0, tparams0, rt0, xmap0, nonghost_callers_only0, tpenv0, cenv0, pre0, post0, epost0, terminates0) =
     let msg1 = msg in

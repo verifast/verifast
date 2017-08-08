@@ -37,8 +37,6 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   (* Region: production of assertions *)
   
-  let success() = SymExecSuccess
-
   let rec is_pure_spatial_assertion a =
     match a with
       ExprAsn(_, _) -> true
@@ -58,12 +56,21 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   and branch cont1 cont2 =
     !stats#branch;
+    let oldForest = !currentForest in
+    let leftForest = ref [] in
+    let rightForest = ref [] in
+    oldForest := Node (BranchNode, rightForest)::Node (BranchNode, leftForest)::!oldForest;
+    currentForest := leftForest;
     push_context (Branching LeftBranch);
     execute_branch cont1;
     pop_context ();
+    if !leftForest = [] then leftForest := [Node (SuccessNode, ref [])];
+    currentForest := rightForest;
     push_context (Branching RightBranch);
     execute_branch cont2;
     pop_context ();
+    if !rightForest = [] then rightForest := [Node (SuccessNode, ref [])];
+    currentForest := oldForest;
     SymExecSuccess
   
   and assert_expr_split e h env l msg url = 

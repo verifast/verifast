@@ -26,13 +26,12 @@ let _ =
     | ParseException (l, msg) -> print_msg l ("Parse error" ^ (if msg = "" then "." else ": " ^ msg)); exit 1
     | CompilationError(msg) -> print_endline (msg); exit 1
     | StaticError (l, msg, url) -> print_msg l msg; exit 1
-    | SymbolicExecutionError (ctxts, phi, l, msg, url) ->
+    | SymbolicExecutionError (ctxts, l, msg, url) ->
         (*
         let _ = print_endline "Trace:" in
         let _ = List.iter (fun c -> print_endline (string_of_context c)) (List.rev ctxts) in
         let _ = print_endline ("Heap: " ^ string_of_heap h) in
         let _ = print_endline ("Env: " ^ string_of_env env) in
-        let _ = print_endline ("Failed query: " ^ phi) in
         *)
         let _ = print_msg l msg in
         exit 1
