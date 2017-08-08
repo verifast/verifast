@@ -1276,8 +1276,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let inits =
         match init with
           Some (Some (InitializerList (_, es))) -> Some (Some es)
+        | Some (Some _) -> static_error l "Struct assignment is not yet supported." None
         | Some None -> Some None (* Initialize to default value (= zero) *)
-        | _ -> None (* Do not initialize; i.e. arbitrary initial value *)
+        | None -> None (* Do not initialize; i.e. arbitrary initial value *)
       in
       begin fun cont ->
         match producePaddingChunk, padding_predsymb_opt with
