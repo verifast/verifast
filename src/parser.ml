@@ -427,9 +427,9 @@ and
 and
   parse_decl = parser
   [< '(l, Kwd "struct"); '(_, Ident s); d = parser
-    [< '(_, Kwd "{"); fs = parse_fields; '(_, Kwd ";") >] -> Struct (l, s, Some fs)
+    [< fs = parse_fields; '(_, Kwd ";") >] -> Struct (l, s, Some fs)
   | [< '(_, Kwd ";") >] -> Struct (l, s, None)
-  | [< t = parse_type_suffix (StructTypeExpr (l, s)); d = parse_func_rest Regular (Some t) Public >] -> d
+  | [< t = parse_type_suffix (StructTypeExpr (l, Some s, None)); d = parse_func_rest Regular (Some t) Public >] -> d
   >] -> check_function_for_contract d
 | [< '(l, Kwd "typedef");
      rt = parse_return_type; '(_, Ident g);
@@ -445,7 +445,14 @@ and
          begin
            match rt with
              None -> raise (ParseException (l, "Void not allowed here."))
-             | Some te -> [TypedefDecl (l, te, g)]
+             | Some (StructTypeExpr (ls, s_opt, Some fs)) ->
+               let s = match s_opt with None -> g | Some s -> s in
+               [Struct (l, s, Some fs); TypedefDecl (l, StructTypeExpr (ls, Some s, None), g)]
+             | Some PtrTypeExpr (lp, (StructTypeExpr (ls, s_opt, Some fs))) ->
+               let s = match s_opt with None -> g | Some s -> s in
+               [Struct (l, s, Some fs); TypedefDecl (l, PtrTypeExpr (lp, StructTypeExpr (ls, Some s, None)), g)]
+             | Some te ->
+               [TypedefDecl (l, te, g)]
          end
     end
   >] -> register_typedef g; ds
@@ -676,8 +683,11 @@ and
   parse_paramtype = parser [< t = parse_type; _ = opt (parser [< '(_, Ident _) >] -> ()) >] -> t
 and
   parse_fields = parser
+  [< '(_, Kwd "{"); fs = parse_fields_rest >] -> fs
+and
+  parse_fields_rest = parser
   [< '(_, Kwd "}") >] -> []
-| [< f = parse_field; fs = parse_fields >] -> f::fs
+| [< f = parse_field; fs = parse_fields_rest >] -> f::fs
 and
   parse_field = parser
   [< '(_, Kwd "/*@"); f = parse_field_core Ghost; '(_, Kwd "@*/") >] -> f
@@ -716,7 +726,9 @@ and
   [< '(l, Kwd "volatile"); t0 = parse_primary_type >] -> t0
 | [< '(l, Kwd "const"); t0 = parse_primary_type >] -> t0
 | [< '(l, Kwd "register"); t0 = parse_primary_type >] -> t0
-| [< '(l, Kwd "struct"); '(_, Ident s) >] -> StructTypeExpr (l, s)
+| [< '(l, Kwd "struct"); sn = opt (parser [< '(_, Ident s) >] -> s); fs = opt parse_fields >] ->
+  if sn = None && fs = None then raise (ParseException (l, "Struct name or body expected"));
+  StructTypeExpr (l, sn, fs)
 | [< '(l, Kwd "enum"); '(_, Ident _) >] -> ManifestTypeExpr (l, intType)
 | [< '(l, Kwd "int") >] -> ManifestTypeExpr (l, intType)
 | [< '(l, Kwd "float") >] -> ManifestTypeExpr (l, Float)
@@ -1015,6 +1027,7 @@ and
     [< '(_, Kwd ";") >] ->
     begin match e with
       AssignExpr (l, Operation (llhs, Mul, [Var (lt, t); Var (lx, x)]), rhs) -> DeclStmt (l, [l, PtrTypeExpr (llhs, IdentTypeExpr (lt, None, t)), x, Some(rhs), ref false])
+    | Operation (l, Mul, [Var (lt, t); Var (lx, x)]) -> DeclStmt (l, [l, PtrTypeExpr (l, IdentTypeExpr (lt, None, t)), x, None, ref false])
     | _ -> ExprStmt e
     end
   | [< '(l, Kwd ":") >] -> (match e with Var (_, lbl) -> LabelStmt (l, lbl) | _ -> raise (ParseException (l, "Label must be identifier.")))

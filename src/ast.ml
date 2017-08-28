@@ -131,18 +131,6 @@ let is_arithmetic_type t =
 
 type prover_type = ProverInt | ProverBool | ProverReal | ProverInductive (* ?prover_type *)
 
-(** Types as they appear in source code, before validity checking and resolution. *)
-type type_expr = (* ?type_expr *)
-    StructTypeExpr of loc * string
-  | PtrTypeExpr of loc * type_expr
-  | ArrayTypeExpr of loc * type_expr
-  | StaticArrayTypeExpr of loc * type_expr (* type *) * int (* number of elements*)
-  | ManifestTypeExpr of loc * type_  (* A type expression that is obviously a given type. *)
-  | IdentTypeExpr of loc * string option (* package name *) * string
-  | ConstructedTypeExpr of loc * string * type_expr list  (* A type of the form x<T1, T2, ...> *)
-  | PredTypeExpr of loc * type_expr list * int option (* if None, not necessarily precise; if Some n, precise with n input parameters *)
-  | PureFuncTypeExpr of loc * type_expr list   (* Potentially uncurried *)
-
 (** An object used in predicate assertion ASTs. Created by the parser and filled in by the type checker.
     TODO: Since the type checker now generates a new AST anyway, we can eliminate this hack. *)
 class predref (name: string) = (* ?predref *)
@@ -173,7 +161,18 @@ type
 
 type int_literal_lsuffix = NoLSuffix | LSuffix | LLSuffix
 
-type
+(** Types as they appear in source code, before validity checking and resolution. *)
+type type_expr = (* ?type_expr *)
+    StructTypeExpr of loc * string option * field list option
+  | PtrTypeExpr of loc * type_expr
+  | ArrayTypeExpr of loc * type_expr
+  | StaticArrayTypeExpr of loc * type_expr (* type *) * int (* number of elements*)
+  | ManifestTypeExpr of loc * type_  (* A type expression that is obviously a given type. *)
+  | IdentTypeExpr of loc * string option (* package name *) * string
+  | ConstructedTypeExpr of loc * string * type_expr list  (* A type of the form x<T1, T2, ...> *)
+  | PredTypeExpr of loc * type_expr list * int option (* if None, not necessarily precise; if Some n, precise with n input parameters *)
+  | PureFuncTypeExpr of loc * type_expr list   (* Potentially uncurried *)
+and
   operator =  (* ?operator *)
   | Add | Sub | PtrDiff | Le | Ge | Lt | Gt | Eq | Neq | And | Or | Xor | Not | Mul | Div | Mod | BitNot | BitAnd | BitXor | BitOr | ShiftLeft | ShiftRight
 and
@@ -856,7 +855,7 @@ let stmt_loc s =
 let type_expr_loc t =
   match t with
     ManifestTypeExpr (l, t) -> l
-  | StructTypeExpr (l, sn) -> l
+  | StructTypeExpr (l, sn, _) -> l
   | IdentTypeExpr (l, _, x) -> l
   | ConstructedTypeExpr (l, x, targs) -> l
   | PtrTypeExpr (l, te) -> l

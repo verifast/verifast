@@ -6,39 +6,39 @@ Stephan van Staden, 2009
 */
 
 
-struct node {
+typedef struct node {
 	int item;
 	struct node *next;
 	struct node *prev;
-};
+} *node;
 
 /*@
 
-predicate node(struct node *no, int i, struct node *ne, struct node *pr)
+predicate node(node no, int i, node ne, node pr)
     = no->item |-> i &*& no->next |-> ne &*& no->prev |-> pr;
     
 @*/
 
-struct dllist {
-	struct node *head;
-	struct node *tail;
-};
+typedef struct dllist {
+	node head;
+	node tail;
+} *dllist;
 
 /*@
 
 inductive intlist = | inil | icons(int, intlist);
 
-inductive nodeptrlist = | nnil | ncons(struct node *, nodeptrlist);
+inductive nodeptrlist = | nnil | ncons(node , nodeptrlist);
 
-predicate linked(struct node *l2, nodeptrlist lambda1, nodeptrlist lambda2, struct node *l3)
+predicate linked(node l2, nodeptrlist lambda1, nodeptrlist lambda2, node l3)
     = lambda1 == nnil ? l2 == l3 &*& lambda2 == nnil
                       : linked(l2, ?lambda1p, ?lambda2p, ?l) &*& lambda2 == ncons(l3, lambda2p) &*& lambda1 == ncons(l, lambda1p);
 
-predicate list(struct node *l1, intlist alpha, nodeptrlist lambda1, nodeptrlist lambda2)
+predicate list(node l1, intlist alpha, nodeptrlist lambda1, nodeptrlist lambda2)
     = l1 == 0 ? alpha == inil &*& lambda1 == nnil &*& lambda2 == nnil
                  : node(l1, ?i, ?n, ?p) &*& list(n, ?alphap, ?lambda1p, ?lambda2p) &*& alpha == icons(i, alphap) &*& lambda1 == ncons(l1, lambda1p) &*& lambda2 == ncons(p, lambda2p); 
 
-predicate dll(struct dllist *d, intlist alpha)
+predicate dll(dllist d, intlist alpha)
     = d->head |-> ?l1 &*& d->tail |-> ?l2 &*& list(l1,alpha,?lambda1,?lambda2) &*& linked(l2,lambda1,lambda2,0);
 
 @*/
@@ -115,14 +115,14 @@ lemma void rev_twice(intlist l)
 
 @*/
 
-void reverse(struct dllist *arg)
+void reverse(dllist arg)
 	//@ requires dll(arg, ?alpha);
  	//@ ensures dll(arg, rev(alpha));
 {
 	//@ open dll(arg, alpha);
-	struct node *ptr = arg->head;
-	struct node *temp1 = 0;
-	struct node *temp2 = 0;
+	node ptr = arg->head;
+	node temp1 = 0;
+	node temp2 = 0;
 	//@ close list(0, inil, nnil, nnil);
 	//@ close linked(ptr, nnil, nnil, ptr);
 	while (ptr != 0)

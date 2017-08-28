@@ -110,9 +110,9 @@ let rec sexpr_of_type_ (t : type_) : sexpression =
                                         Symbol s ]
 
 let rec sexpr_of_type_expr : type_expr -> sexpression = function
-  | StructTypeExpr (_, name)  -> 
+  | StructTypeExpr (_, name, _)  -> 
     List [ Symbol "type-expr-struct"
-         ; Symbol name ]
+         ; sexpr_of_option (fun s -> Symbol s) name ]
   | PtrTypeExpr (_, te) -> 
     List [ Symbol "type-expr-pointer-to"
          ; sexpr_of_type_expr te ]

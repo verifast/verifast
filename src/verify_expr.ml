@@ -1062,7 +1062,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           (* There is always an array chunk generated for a StaticArrayTypeExpr.
              Hence, we have to add this chunk to the list of locals to be freed
              at the end of the program block. *)
-          StaticArrayTypeExpr (_, _, _) | StructTypeExpr (_, _) ->
+          StaticArrayTypeExpr (_, _, _) | StructTypeExpr (_, _, _) ->
           (* TODO: handle array initialisers *)
           block := x::!block
         | _ -> ()
@@ -1866,8 +1866,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     match e with
     | Upcast (w, _, _) -> eval_h_core readonly h env w cont
-    | CastExpr (lc, ManifestTypeExpr (_, tp), (WFunCall (l, "malloc", [], [SizeofExpr (ls, StructTypeExpr (lt, tn))]) as e)) ->
-      expect_type lc (Some pure) (PtrType (StructType tn)) tp;
+    | CastExpr (lc, ManifestTypeExpr (_, tp), (WFunCall (l, "malloc", [], [SizeofExpr (ls, te)]) as e)) ->
+      let t = check_pure_type (pn,ilist) tparams te in
+      expect_type lc (Some pure) (PtrType t) tp;
       verify_expr readonly h env xo e cont
     | WFunCall (l, "malloc", [], [Operation (lmul, Mul, ([e; SizeofExpr (ls, te)] | [SizeofExpr (ls, te); e]))]) ->
       if pure then static_error l "Cannot call a non-pure function from a pure context." None;

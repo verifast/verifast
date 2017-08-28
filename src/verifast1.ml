@@ -1421,7 +1421,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         InductiveType (id, List.map check targs)
       | None -> static_error l "No such inductive datatype." None
       end
-    | StructTypeExpr (l, sn) ->
+    | StructTypeExpr (l, sn, Some _) ->
+      static_error l "A struct type with a body is not supported in this position." None
+    | StructTypeExpr (l, Some sn, None) ->
       if not (List.mem_assoc sn structmap0 || List.mem_assoc sn structdeclmap) then
         static_error l ("No such struct: \"" ^ sn ^ "\".") None
       else
@@ -3061,9 +3063,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           check_pure_fun_value_call l (WVar (l, g, LocalVar)) t es
         | _ ->
         match (g, es) with
-          ("malloc", [SizeofExpr (ls, StructTypeExpr (lt, tn))]) ->
-          if not (List.mem_assoc tn structmap) then static_error lt ("No such struct: " ^ tn) None;
-          (WFunCall (l, g, [], es), PtrType (StructType tn), None)
+          ("malloc", [SizeofExpr (ls, te)]) ->
+          let t = check_pure_type (pn,ilist) tparams te in
+          (WFunCall (l, g, [], es), PtrType t, None)
         | _ ->
         match resolve2 (pn,ilist) l g funcmap with
           Some (g, FuncInfo (funenv, fterm, lg, k, callee_tparams, tr, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, fbf, v)) ->
