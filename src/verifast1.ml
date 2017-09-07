@@ -28,7 +28,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   include VerifyProgramArgs
 
-  let () = Hashtbl.clear Parser.typedefs
+  let () = Hashtbl.clear typedefs
 
   let path = program_path
   

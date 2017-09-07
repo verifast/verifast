@@ -181,25 +181,21 @@ end
 
 type modifier = StaticModifier | FinalModifier | AbstractModifier | VisibilityModifier of visibility
 
-(* 
-   To make parsing functions accessible from elsewhere, 
-   without adding the argument 'language' to every function.
-   TODO: find a better solution
-*)
-let language = ref CLang
-let set_language lang = language := lang
-(* TODO: find a better solution *)
-let enforce_annotations = ref false
-let set_enforce_annotations v = enforce_annotations := v
-
 (* Ugly hack *)
 let typedefs: (string, unit) Hashtbl.t = Hashtbl.create 64
 let register_typedef g = Hashtbl.add typedefs g ()
 let is_typedef g = Hashtbl.mem typedefs g
 
-let rec parse_decls lang enforceAnnotations ?inGhostHeader =
-  set_language lang;
-  set_enforce_annotations enforceAnnotations;
+module type PARSER_ARGS = sig
+  val language: language
+  val enforce_annotations: bool
+end
+
+module Parser(ParserArgs: PARSER_ARGS) = struct
+
+open ParserArgs
+
+let rec parse_decls ?inGhostHeader =
   if match inGhostHeader with None -> false | Some b -> b then
     parse_pure_decls
   else
@@ -393,7 +389,7 @@ and
         in
         Some(pre, post, epost, terminates)
       | None -> 
-        if !enforce_annotations then None else
+        if enforce_annotations then None else
         begin
          let pre = ExprAsn(l, False(l)) in
          let post = ExprAsn(l, True(l)) in
@@ -466,7 +462,7 @@ and check_for_contract: 'a. 'a option -> loc -> string -> (asn * asn -> 'a) -> '
   match contract with
     | Some spec -> spec 
     | None -> 
-      if !enforce_annotations then 
+      if enforce_annotations then 
         raise (ParseException (l, m)) 
       else
         f (ExprAsn(l, False(l)), ExprAsn(l, True(l)))
@@ -739,7 +735,7 @@ and
        [< '(_, Kwd "int") >] -> ManifestTypeExpr (l, intType);
      | [< '(_, Kwd "double") >] -> ManifestTypeExpr (l, LongDouble);
      | [< '(_, Kwd "long"); _ = opt (parser [< '(_, Kwd "int") >] -> ()) >] -> ManifestTypeExpr (l, Int (Signed, 3))
-     | [< >] -> ManifestTypeExpr (l, match !language with CLang -> intType | Java -> Int (Signed, 3))
+     | [< >] -> ManifestTypeExpr (l, match language with CLang -> intType | Java -> Int (Signed, 3))
      end
    >] -> t
 | [< '(l, Kwd "signed"); n = parse_integer_type_rest >] -> ManifestTypeExpr (l, Int (Signed, n))
@@ -749,7 +745,7 @@ and
 | [< '(l, Kwd "bool") >] -> ManifestTypeExpr (l, Bool)
 | [< '(l, Kwd "boolean") >] -> ManifestTypeExpr (l, Bool)
 | [< '(l, Kwd "void") >] -> ManifestTypeExpr (l, Void)
-| [< '(l, Kwd "char") >] -> ManifestTypeExpr (l, match !language with CLang -> Int (Signed, 0) | Java -> Int (Unsigned, 1))
+| [< '(l, Kwd "char") >] -> ManifestTypeExpr (l, match language with CLang -> Int (Signed, 0) | Java -> Int (Unsigned, 1))
 | [< '(l, Kwd "byte") >] -> ManifestTypeExpr (l, Int (Signed, 0))
 | [< '(l, Kwd "predicate");
      '(_, Kwd "(");
@@ -1145,7 +1141,7 @@ and
     [< '(l, Kwd "|->"); rhs = parse_pattern >] -> 
     (match e with
        ReadArray (_, _, SliceExpr (_, _, _)) -> PointsTo (l, e, rhs)
-     | ReadArray (lr, e0, e1) when !language = CLang -> PointsTo (l, Deref(lr, Operation(lr, Add, [e0; e1]), ref None), rhs) 
+     | ReadArray (lr, e0, e1) when language = CLang -> PointsTo (l, Deref(lr, Operation(lr, Add, [e0; e1]), ref None), rhs) 
      | _ -> PointsTo (l, e, rhs)
     )
   | [< '(l, Kwd "?"); p1 = parse_pred; '(_, Kwd ":"); p2 = parse_pred >] -> IfAsn (l, e, p1, p2)
@@ -1244,7 +1240,7 @@ and
 | [< '(l, Kwd "false") >] -> False l
 | [< '(l, CharToken c) >] ->
   if Char.code c > 127 then raise (ParseException (l, "Non-ASCII character literals are not yet supported"));
-  let tp = match !language with CLang -> Int (Signed, 0) | Java -> Int (Unsigned, 1) in
+  let tp = match language with CLang -> Int (Signed, 0) | Java -> Int (Unsigned, 1) in
   CastExpr (l, ManifestTypeExpr (l, tp), IntLit (l, big_int_of_int (Char.code c), true, false, NoLSuffix))
 | [< '(l, Kwd "null") >] -> Null l
 | [< '(l, Kwd "currentThread") >] -> Var (l, "currentThread")
@@ -1267,7 +1263,7 @@ and
         | [< >] -> CallExpr (lx, x, [], [], args0,Static)
       >] -> e
     | [<
-        '(ldot, Kwd ".") when !language = Java;
+        '(ldot, Kwd ".") when language = Java;
         r = parser
           [<'(lc, Kwd "class")>] -> ClassLit(ldot,x)
         | [<
@@ -1344,7 +1340,7 @@ and
 | [< '(l, Kwd "~"); e = parse_expr_suffix >] -> Operation (l, BitNot, [e])
 | [< '(l, Kwd "-"); e = parse_expr_suffix >] ->
   begin match e with
-    IntLit (_, n, true, false, lsuffix) when !language = Java && sign_big_int n >= 0 -> IntLit (l, minus_big_int n, true, false, lsuffix)
+    IntLit (_, n, true, false, lsuffix) when language = Java && sign_big_int n >= 0 -> IntLit (l, minus_big_int n, true, false, lsuffix)
   | _ -> Operation (l, Sub, [IntLit (l, zero_big_int, true, false, NoLSuffix); e])
   end
 | [< '(l, Kwd "++"); e = parse_expr_suffix >] -> AssignOpExpr (l, e, Add, IntLit (l, unit_big_int, true, false, NoLSuffix), false)
@@ -1366,7 +1362,7 @@ and
 and
   parse_expr_suffix_rest e0 = parser
   [< '(l, Kwd "->"); '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, f)) >] -> e
-| [< '(l, Kwd ".") when !language = CLang; '(_, Ident f); e = parse_expr_suffix_rest (Read (l, AddressOf(l, e0), f)) >] -> e
+| [< '(l, Kwd ".") when language = CLang; '(_, Ident f); e = parse_expr_suffix_rest (Read (l, AddressOf(l, e0), f)) >] -> e
 | [< '(l, Kwd ".");
      e = begin parser
        [< '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, f)) >] -> e
@@ -1494,6 +1490,12 @@ and
   parse_patlist_rest = parser
   [< '(_, Kwd ","); pat0 = parse_pattern; pats = parse_patlist_rest >] -> pat0::pats
 | [< '(_, Kwd ")") >] -> []
+
+end
+
+let parse_decls lang enforceAnnotations ?inGhostHeader =
+  let module MyParser = Parser (struct let language = lang let enforce_annotations = enforceAnnotations end) in
+  MyParser.parse_decls ?inGhostHeader
 
 let rec parse_package_name= parser
   [<'(_, Ident n);x=parser
