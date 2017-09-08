@@ -167,6 +167,7 @@ let _ =
   let linkShouldFail = ref false in
   let useJavaFrontend = ref false in
   let enforceAnnotations = ref false in
+  let dataModel = ref data_model_32bit in
   let vroots = ref [Util.crt_vroot Util.default_bindir] in
   let add_vroot vroot =
     let (root, expansion) = Util.split_around_char vroot '=' in
@@ -222,6 +223,7 @@ let _ =
             ; "-link_should_fail", Set linkShouldFail, "Specify that the linking phase is expected to fail."
             ; "-javac", Unit (fun _ -> (useJavaFrontend := true; Java_frontend_bridge.load ())), " "
             ; "-enforce_annotations", Unit (fun _ -> (enforceAnnotations := true)), " "
+            ; "-target", String (fun s -> dataModel := data_model_of_string s), "Target platform of the program being verified. Determines the size of pointer and integer types. Supported targets: " ^ String.concat ", " (List.map fst data_models)
             ]
   in
   let process_file filename =
@@ -243,7 +245,8 @@ let _ =
           option_safe_mode = !safe_mode;
           option_header_whitelist = !header_whitelist;
           option_use_java_frontend = !useJavaFrontend;
-          option_enforce_annotations = !enforceAnnotations
+          option_enforce_annotations = !enforceAnnotations;
+          option_data_model = !dataModel
         } in
         print_endline filename;
         let emitter_callback (packages : package list) =

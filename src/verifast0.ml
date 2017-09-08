@@ -141,7 +141,8 @@ type options = {
   option_safe_mode: bool; (* for invocation through web interface *)
   option_header_whitelist: string list;
   option_use_java_frontend : bool;
-  option_enforce_annotations : bool
+  option_enforce_annotations : bool;
+  option_data_model: data_model
 } (* ?options *)
 
 (* Region: verify_program_core: the toplevel function *)

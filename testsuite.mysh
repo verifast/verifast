@@ -8,6 +8,8 @@ cd bin
   cd ..
 cd ..
 cd examples
+  verifast -target IP16 -c -allow_should_fail 16bittest.c
+  verifast -target LP64 -c 64bittest.c
   cd clhlock
     verifast -prover redux -c clhlock.c
   cd ..

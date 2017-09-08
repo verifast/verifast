@@ -41,9 +41,18 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     option_emit_manifest=emit_manifest;
     option_include_paths=include_paths;
     option_use_java_frontend=use_java_frontend;
-    option_enforce_annotations=enforce_annotations
+    option_enforce_annotations=enforce_annotations;
+    option_data_model=data_model
   } = options
   
+  let data_model = match language with Java -> data_model_java | CLang -> data_model
+  let {int_rank; long_rank; ptr_rank} = data_model
+  let llong_rank = 3
+  let int_size = 1 lsl int_rank
+  let intType = Int (Signed, int_rank)
+  let sizeType = Int (Unsigned, ptr_rank)
+  let ptrdiff_t = Int (Signed, ptr_rank)
+
   let verbosity = ref 0
   
   let set_verbosity v =
@@ -990,7 +999,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 (maps0, [])
           end
           | CLang ->
-            let (prelude_headers, prelude_decls) = parse_header_file (concat !bindir "prelude.h") reportRange reportShouldFail initial_verbosity [] enforce_annotations in
+            let (prelude_headers, prelude_decls) = parse_header_file (concat !bindir "prelude.h") reportRange reportShouldFail initial_verbosity [] enforce_annotations data_model in
             let prelude_header_names = List.map (fun (_, (_, _, h), _, _) -> h) prelude_headers in
             let prelude_headers = (dummy_loc, (AngleBracketInclude, "prelude.h", concat !bindir "prelude.h"), prelude_header_names, prelude_decls)::prelude_headers in
             let headers = (dummy_loc, (AngleBracketInclude, "prelude.h", concat !bindir "prelude.h"), prelude_header_names, prelude_decls)::prelude_headers in
@@ -2611,8 +2620,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | LongDouble -> "long_double"
     | Int (Signed, 3) -> "long_long"
     | Int (Unsigned, 3) -> "unsigned_long_long"
-    | Int (Signed, 2) -> "int"
-    | Int (Unsigned, 2) -> "unsigned_int"
+    | Int (Signed, 2) -> if int_rank = 2 then "int" else "int32"
+    | Int (Unsigned, 2) -> if int_rank = 2 then "unsigned_int" else "uint32"
     | Int (Signed, 1) -> "short"
     | Int (Unsigned, 1) -> "unsigned_short"
     | Int (Signed, 0) -> "char"
@@ -2636,6 +2645,25 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     fun () -> let n = !counter in incr counter; Printf.sprintf "#x%d" n
   
   let wintlit l n = WIntLit (l, n)
+
+  let integer_promotion t = (* C11 6.3.1.1 *)
+    match t with
+    | Int (_, k) when k < int_rank -> intType
+    | _ -> t
+
+  let usual_arithmetic_conversion t1 t2 = (* C11 6.3.1.8 *)
+    match t1, t2 with
+      LongDouble, _ | _, LongDouble -> LongDouble
+    | Double, _ | _, Double -> Double
+    | Float, _ | _, Float -> Float
+    | RealType, _ | _, RealType -> RealType
+    | t1, t2 ->
+      let t1 = integer_promotion t1 in
+      let t2 = integer_promotion t2 in
+      match t1, t2 with
+        Int (Signed, n1), Int (Unsigned, n2) -> if n1 <= n2 then t2 else t1
+      | Int (Unsigned, n1), Int (Signed, n2) -> if n2 <= n1 then t1 else t2
+      | Int (s, n1), Int (_, n2) -> Int (s, max n1 n2)
 
   let rec check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e: (expr (* typechecked expression *) * type_ (* expression type *) * big_int option (* constant integer expression => value*)) =
     let check e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
@@ -2916,13 +2944,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | t1, t2 when is_arithmetic_type t1 && is_arithmetic_type t2 ->
         let (w1, w2, t) = promote_checkdone l e1 e2 (w1, t1, value1) (w2, t2, value2) in
         let value =
-          if t = Int (Signed, 2) then
-            match (value1, value2, operator) with
+          match t with
+            Int (_, _) ->
+            begin match (value1, value2, operator) with
               (Some value1, Some value2, Add) -> Some (add_big_int value1 value2)
             | (Some value1, Some value2, Sub) -> Some (sub_big_int value1 value2)
             | _ -> None
-          else
-            None
+            end
+          | _ -> None
         in
         (operation_expr funcmap l t operator w1 w2, t, value)
       | (ObjType "java.lang.String" as t, _) when operator = Add ->
@@ -3242,7 +3271,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | SizeofExpr(l, te) ->
       let t = check_pure_type (pn,ilist) tparams te in
-      (SizeofExpr (l, ManifestTypeExpr (type_expr_loc te, t)), Int (Unsigned, 2), None)
+      (SizeofExpr (l, ManifestTypeExpr (type_expr_loc te, t)), sizeType, None)
     | InstanceOfExpr(l, e, te) ->
       let t = check_pure_type (pn,ilist) tparams te in
       let w = checkt e (ObjType "java.lang.Object") in
@@ -3339,11 +3368,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let check () = begin match (t, t0) with
         | _ when t = t0 -> w
         | (ObjType _, ObjType _) when isCast -> w
-        | (PtrType _, Int (Unsigned, 2)) when isCast -> w
-        | (Int (Unsigned, 2), PtrType _) when isCast -> w
+        | (PtrType _, Int (_, _)) when isCast -> w
+        | (Int (_, _), PtrType _) when isCast -> w
         | (Int (_, _), Int (_, _)) when isCast -> w
         | ((Int (_, _)|Float|Double|LongDouble), (Float|Double|LongDouble)) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
-        | ((Float|Double|LongDouble), (Int (Signed, 2)|Int (Unsigned, 2))) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
+        | ((Float|Double|LongDouble), (Int (_, _))) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
         | (ObjType ("java.lang.Object"), ArrayType _) when isCast -> w
         | _ ->
           expect_type (expr_loc e) inAnnotation t t0;
@@ -3937,14 +3966,19 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let deref_pointee_tuple (cn, csym, an, asym, mban, mbasym) = (cn, csym(), an, asym(), mban, mbasym())
   
+  let int32_pointee_tuple =
+    if int_rank = 2 then Some int_pointee_tuple else None
+  let uint32_pointee_tuple =
+    if int_rank = 2 then Some uint_pointee_tuple else None
+
   let try_pointee_pred_symb0 pointeeType =
     option_map deref_pointee_tuple
     begin match pointeeType with
       PtrType _ -> Some pointer_pointee_tuple
     | Int (Signed, 3) -> Some llong_pointee_tuple
     | Int (Unsigned, 3) -> Some ullong_pointee_tuple
-    | Int (Signed, 2) -> Some int_pointee_tuple
-    | Int (Unsigned, 2) -> Some uint_pointee_tuple
+    | Int (Signed, 2) -> int32_pointee_tuple
+    | Int (Unsigned, 2) -> uint32_pointee_tuple
     | Int (Signed, 1) -> Some short_pointee_tuple
     | Int (Unsigned, 1) -> Some ushort_pointee_tuple
     | Int (Signed, 0) -> Some char_pointee_tuple
@@ -4422,11 +4456,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let pref = new predref "u_long_long" in
                   pref#set_domain [PtrType (Int (Unsigned, 8)); Int (Unsigned, 8)];
                   [predinst pref]
-                | Int (Signed, 2) ->
+                | Int (Signed, 2) when int_rank = 2 ->
                   let pref = new predref "integer" in
                   pref#set_domain [PtrType intType; intType];
                   [predinst pref]
-                | Int (Unsigned, 2) ->
+                | Int (Unsigned, 2) when int_rank = 2 ->
                   let pref = new predref "u_integer" in
                   pref#set_domain [PtrType (Int (Unsigned, 4)); Int (Unsigned, 4)];
                   [predinst pref]
@@ -4593,7 +4627,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match t with
       Void -> ctxt#mk_intlit 1
     | Int (_, k) -> ctxt#mk_intlit (1 lsl k)
-    | PtrType _ -> ctxt#mk_intlit 4
+    | PtrType _ -> ctxt#mk_intlit (1 lsl ptr_rank)
     | StructType sn -> struct_size sn
     | StaticArrayType (elemTp, elemCount) -> ctxt#mk_mul (sizeof l elemTp) (ctxt#mk_intlit elemCount)
     | _ -> static_error l ("Taking the size of type " ^ string_of_type t ^ " is not yet supported.") None
@@ -5053,6 +5087,15 @@ let check_if_list_is_defined () =
       assert_term l (ctxt#mk_le min t) "Potential arithmetic underflow." (Some "potentialarithmeticunderflow");
       assert_term l (ctxt#mk_le t max) "Potential arithmetic overflow." (Some "potentialarithmeticoverflow")
     end
+
+  let woperation_type_result_type op t =
+    match op with
+      Le|Ge|Lt|Gt|Eq|Neq -> Bool 
+    | PtrDiff -> ptrdiff_t
+    | _ -> t
+
+  let woperation_result_type (WOperation (l, op, es, t)) =
+    woperation_type_result_type op t
   
   let eval_op l truncating op e1 v1 e2 v2 t ass_term =
     let check_overflow0 v =

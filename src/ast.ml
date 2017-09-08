@@ -97,32 +97,45 @@ type type_ = (* ?type_ *)
   | PluginInternalType of DynType.dyn
   | AbstractType of string
 
-let int_rank = 2
-let long_rank = 2
-let llong_rank = 3
-let ptr_rank = 2
-let int_size = 1 lsl int_rank
-let intType = Int (Signed, int_rank)
-let ptrdiff_t = intType
+type integer_limits = {max_unsigned_big_int: big_int; min_signed_big_int: big_int; max_signed_big_int: big_int}
 
-let integer_promotion t = (* C11 6.3.1.1 *)
-  match t with
-  | Int (_, k) when k < int_rank -> intType
-  | _ -> t
+let max_rank = 4 (* (u)int128 *)
 
-let usual_arithmetic_conversion t1 t2 = (* C11 6.3.1.8 *)
-  match t1, t2 with
-    LongDouble, _ | _, LongDouble -> LongDouble
-  | Double, _ | _, Double -> Double
-  | Float, _ | _, Float -> Float
-  | RealType, _ | _, RealType -> RealType
-  | t1, t2 ->
-    let t1 = integer_promotion t1 in
-    let t2 = integer_promotion t2 in
-    match t1, t2 with
-      Int (Signed, n1), Int (Unsigned, n2) -> if n1 <= n2 then t2 else t1
-    | Int (Unsigned, n1), Int (Signed, n2) -> if n2 <= n1 then t1 else t2
-    | Int (s, n1), Int (_, n2) -> Int (s, max n1 n2)
+let integer_limits_table =
+  Array.init (max_rank + 1) begin fun k ->
+    let max_unsigned_big_int = pred_big_int (shift_left_big_int unit_big_int (8 * (1 lsl k))) in
+    let max_signed_big_int = shift_right_big_int max_unsigned_big_int 1 in
+    let min_signed_big_int = pred_big_int (minus_big_int max_signed_big_int) in
+    {max_unsigned_big_int; max_signed_big_int; min_signed_big_int}
+  end
+
+let max_unsigned_big_int k = integer_limits_table.(k).max_unsigned_big_int
+let min_signed_big_int k = integer_limits_table.(k).min_signed_big_int
+let max_signed_big_int k = integer_limits_table.(k).max_signed_big_int
+
+type data_model = {int_rank: int; long_rank: int; ptr_rank: int}
+let data_model_32bit = {int_rank=2; long_rank=2; ptr_rank=2}
+let data_model_java = {int_rank=2; long_rank=3; ptr_rank=3 (*arbitrary value; ptr_rank is not relevant to Java programs*)}
+let data_model_lp64 = {int_rank=2; long_rank=3; ptr_rank=3}
+let data_model_llp64 = {int_rank=2; long_rank=2; ptr_rank=3}
+let data_models = [
+  "IP16", {int_rank=1; long_rank=2; ptr_rank=1};
+  "I16", {int_rank=1; long_rank=2; ptr_rank=2};
+  "ILP32", data_model_32bit;
+  "32bit", data_model_32bit;
+  "LLP64", data_model_llp64;
+  "Win64", data_model_llp64;
+  "LP64", data_model_lp64;
+  "Unix64", data_model_lp64;
+  "Linux64", data_model_lp64;
+  "OSX", data_model_lp64;
+  "macOS", data_model_lp64
+]
+let data_model_of_string s =
+  let s = String.uppercase s in
+  match head_flatmap_option (fun (k, v) -> if String.uppercase k = s then Some v else None) data_models with
+    None -> failwith "No such data model"
+  | Some v -> v
 
 let is_arithmetic_type t =
   match t with
@@ -725,15 +738,6 @@ let func_kind_of_ghostness gh =
     Real -> Regular
   | Ghost -> Lemma (false, None)
   
-let woperation_type_result_type op t =
-  match op with
-    Le|Ge|Lt|Gt|Eq|Neq -> Bool 
-  | PtrDiff -> ptrdiff_t
-  | _ -> t
-
-let woperation_result_type (WOperation (l, op, es, t)) =
-  woperation_type_result_type op t
-
 (* Region: some AST inspector functions *)
 
 let string_of_func_kind f=
