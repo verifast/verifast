@@ -1,3 +1,4 @@
+@echo on
 @rem Pushbutton installation of VeriFast dependencies.
 @rem 
 @rem WARNING: creates files/directories in c:\, such as c:\cygwin and c:\OCaml
