@@ -108,8 +108,8 @@ lemma void chars_zero();
     ensures cs == nil;
 
 lemma void chars_limits(char *array);
-    requires [?f]chars(array, ?n, ?cs) &*& true == ((char *)0 <= array) &*& array <= (char *)UINTPTR_MAX;
-    ensures [f]chars(array, n, cs) &*& true == ((char *)0 <= array) &*& array + n <= (char *)UINTPTR_MAX;
+    requires [?f]chars(array, ?n, ?cs) &*& (char *)0 <= array &*& array <= (char *)UINTPTR_MAX;
+    ensures [f]chars(array, n, cs) &*& (char *)0 <= array &*& array + n <= (char *)UINTPTR_MAX;
 
 lemma_auto void chars_split(char *array, int offset);
    requires [?f]chars(array, ?n, ?cs) &*& 0 <= offset &*& offset <= n;
@@ -135,11 +135,11 @@ lemma_auto(chars_of_int(int_of_chars(cs))) void chars_of_int_of_chars(list<char>
 
 lemma void int_of_chars_injective(list<char> cs1, list<char> cs2);
     requires true;
-    ensures true == ((cs1 == cs2) == (int_of_chars(cs1) == int_of_chars(cs2)));
+    ensures (cs1 == cs2) == (int_of_chars(cs1) == int_of_chars(cs2));
 
 lemma void chars_of_int_injective(int i1, int i2);
     requires true;
-    ensures true == ((i1 == i2) == (chars_of_int(i1) == chars_of_int(i2)));
+    ensures (i1 == i2) == (chars_of_int(i1) == chars_of_int(i2));
 
 lemma_auto void chars_of_int_size(int i);
     requires INT_MIN <= i && i <= INT_MAX;

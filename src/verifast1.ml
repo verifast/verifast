@@ -4156,12 +4156,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (p1, tenv, infTps1) = check_asn (pn,ilist) tparams tenv p1 in
       let (p2, tenv, infTps2) = check_asn (pn,ilist) tparams tenv p2 in
       (Sep (l, p1, p2), tenv, infTps1 @ infTps2)
-    | IfAsn (l, e, p1, p2) ->
+    | IfExpr (l, e, p1, p2) ->
       let w = check_expr_t (pn,ilist) tparams tenv (Some true) e boolt in
       let (wp1, _, infTps1) = check_asn (pn,ilist) tparams tenv p1 in
       let (wp2, _, infTps2) = check_asn (pn,ilist) tparams tenv p2 in
       (IfAsn (l, w, wp1, wp2), tenv, infTps1 @ infTps2)
-    | SwitchAsn (l, e, cs) ->
+    | SwitchExpr (l, e, cs, cdef) ->
+      if cdef <> None then static_error l "A default clause is not yet supported in a switch assertion." None;
       let (w, t) = check_expr (pn,ilist) tparams tenv (Some true) e in
       begin
       match unfold_inferred_type t with
@@ -4180,7 +4181,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | (cn, _)::_ ->
                   static_error l ("Missing case: '" ^ cn ^ "'.") None
               in (WSwitchAsn (l, w, i, wcs), tenv, infTps)
-            | SwitchAsnClause (lc, cn, xs, body)::cs ->
+            | SwitchExprClause (lc, cn, xs, body)::cs ->
               begin
               match try_assoc cn ctormap with
                 None -> static_error lc "No such constructor." None
@@ -4237,7 +4238,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         (EnsuresAsn (l, wbody), tenv, infTps)
       end
     | PluginAsn (l, text) ->
-      match pluginmap with
+      begin match pluginmap with
         [] -> static_error l "Load a plugin before using a plugin assertion" None
       | [_, ((plugin, _), _)] ->
         let to_plugin_type t =
@@ -4263,6 +4264,27 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let l = ((path, line, col + 1 + off), (path, line, col + 1 + off + len)) in (* TODO: Suport multiline assertions *)
           static_error l msg None
         end
+      end
+    | e ->
+      let a =
+        match e with
+        | CallExpr (l, g, targs, pats0, pats, Static) -> PredAsn (l, new predref g, targs, pats0, pats)
+        | CallExpr (l, g, [], pats0, LitPat e::pats, Instance) ->
+          let index =
+            match pats0 with
+              [] -> CallExpr (l, "getClass", [], [], [LitPat e], Instance)
+            | [LitPat e] -> e
+            | _ -> raise (ParseException (l, "Instance predicate call: single index expression expected"))
+          in
+          InstPredAsn (l, e, g, index, pats)
+        | Operation (l, Eq, [e1; e2]) ->
+          begin match pat_of_expr e2 with
+            LitPat e2 -> ExprAsn (l, e)
+          | e2 -> MatchAsn (l, e1, e2)
+          end
+        | _ -> ExprAsn (expr_loc e, e)
+      in
+      check_asn (pn,ilist) tparams tenv a
   
   let rec fix_inferred_type r =
     match !r with

@@ -724,16 +724,23 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         success()
       | _ -> static_error l "Switch statement operand is not an inductive value or integer." None
       end
-    | Assert(_, ExprAsn(le, e)) -> 
-      let we = check_expr_t (pn,ilist) tparams tenv e boolt in
+    | Assert (l, p) when not pure ->
+      let we = check_expr_t (pn,ilist) tparams tenv p boolt in
       let t = eval env we in
-      assert_term t h env le ("Assertion might not hold: " ^ (ctxt#pprint t)) None;
+      assert_term t h env l ("Assertion might not hold: " ^ (ctxt#pprint t)) None;
       cont h env
     | Assert (l, p) ->
       let (wp, tenv, _) = check_asn_core (pn,ilist) tparams tenv p in
-      consume_asn rules [] h ghostenv env wp false real_unit (fun _ _ ghostenv env _ ->
-        tcont sizemap tenv ghostenv h env
-      )
+      begin match wp with
+        ExprAsn (le, we) ->
+        let t = eval env we in
+        assert_term t h env le ("Assertion might not hold: " ^ (ctxt#pprint t)) None;
+        cont h env
+      | _ ->
+        consume_asn rules [] h ghostenv env wp false real_unit (fun _ _ ghostenv env _ ->
+          tcont sizemap tenv ghostenv h env
+        )
+      end
     | Leak (l, p) ->
       let (wp, tenv, _) = check_asn_core (pn,ilist) tparams tenv p in
       consume_asn rules [] h ghostenv env wp false real_unit (fun chunks h ghostenv env size ->

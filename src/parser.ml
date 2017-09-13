@@ -144,7 +144,7 @@ module Scala = struct
   and
     parse_asn = parser
       [< '(_, Kwd "("); a = parse_asn; '(_, Kwd ")") >] -> a
-    | [< e = parse_expr >] -> ExprAsn (expr_loc e, e)
+    | [< e = parse_expr >] -> e
   and
     parse_primary_expr = parser
       [< '(l, Kwd "true") >] -> True l
@@ -178,6 +178,12 @@ end
    The difference is in the scanner: when parsing a C file, the scanner treats "class" like an identifier, not a keyword.
    And Kwd "class" does not match Ident "class".
    *)
+
+let pat_of_expr e =
+  match e with
+    CallExpr (l, g, [], [], pats, Static) when List.exists (function LitPat _ -> false | _ -> true) pats ->
+    CtorPat (l, g, pats)
+  | _ -> LitPat e
 
 type modifier = StaticModifier | FinalModifier | AbstractModifier | VisibilityModifier of visibility
 
@@ -1121,60 +1127,20 @@ and
   [< '(_, Kwd ")") >] -> []
 | [< '(_, Kwd ","); '(lx, Ident x); xs = parse_more_pats >] -> x::xs
 and
-  parse_asn = parser
-  [< p0 = parse_asn0; p = parse_sep_rest p0 >] -> p
-and
-  parse_sep_rest p1 = parser
-  [< '(l, Kwd "&*&"); p2 = parse_asn >] -> Sep (l, p1, p2)
-| [< >] -> p1
-and
-  pat_of_expr e =
-  match e with
-    CallExpr (l, g, [], [], pats, Static) when List.exists (function LitPat _ -> false | _ -> true) pats ->
-    CtorPat (l, g, pats)
-  | _ -> LitPat e
+  parse_asn stream = parse_expr stream
 and
   parse_asn0 = parser
-  [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_asn_clauses; '(_, Kwd "}") >] -> SwitchAsn (l, e, cs)
 | [< '(l, Kwd "emp") >] -> EmpAsn l
 | [< '(l, Kwd "forall_"); '(_, Kwd "("); tp = parse_type; '(_, Ident x); '(_, Kwd ";"); e = parse_expr; '(_, Kwd ")") >] -> ForallAsn(l, tp, x, e)
-| [< '(_, Kwd "("); p = parse_asn; '(_, Kwd ")") >] -> p
-| [< '(l, Kwd "["); coef = parse_pattern; '(_, Kwd "]"); p = parse_asn0 >] -> CoefAsn (l, coef, p)
+| [< '(l, Kwd "["); coef = parse_pattern; '(_, Kwd "]"); p = parse_pointsto_expr >] -> CoefAsn (l, coef, p)
 | [< '(_, Kwd "#"); '(l, String s) >] -> PluginAsn (l, s)
 | [< '(l, Kwd "ensures"); p = parse_asn >] -> EnsuresAsn (l, p)
-| [< e = parse_disj_expr; p = parser
-    [< '(l, Kwd "|->"); rhs = parse_pattern >] -> 
-    (match e with
-       ReadArray (_, _, SliceExpr (_, _, _)) -> PointsTo (l, e, rhs)
-     | ReadArray (lr, e0, e1) when language = CLang -> PointsTo (l, Deref(lr, Operation(lr, Add, [e0; e1]), ref None), rhs) 
-     | _ -> PointsTo (l, e, rhs)
-    )
-  | [< '(l, Kwd "?"); p1 = parse_asn; '(_, Kwd ":"); p2 = parse_asn >] -> IfAsn (l, e, p1, p2)
-  | [< >] ->
-    (match e with
-     | CallExpr (l, g, targs, pats0, pats, Static) -> PredAsn (l, new predref g, targs, pats0, pats)
-     | CallExpr (l, g, [], pats0, LitPat e::pats, Instance) ->
-       let index =
-         match pats0 with
-           [] -> CallExpr (l, "getClass", [], [], [LitPat e], Instance)
-         | [LitPat e] -> e
-         | _ -> raise (ParseException (l, "Instance predicate call: single index expression expected"))
-       in
-       InstPredAsn (l, e, g, index, pats)
-     | Operation (l, Eq, [e1; e2]) ->
-       begin match pat_of_expr e2 with
-         LitPat e2 -> ExprAsn (l, e)
-       | e2 -> MatchAsn (l, e1, e2)
-       end
-     | _ -> ExprAsn (expr_loc e, e)
-    )
-  >] -> p
 and
   parse_pattern = parser
   [< '(_, Kwd "_") >] -> DummyPat
 | [< '(_, Kwd "?"); '(lx, Ident x) >] -> VarPat (lx, x)
 | [< '(_, Kwd "^"); e = parse_expr >] -> LitPat (WidenedParameterArgument e)
-| [< e = parse_expr >] -> pat_of_expr e
+| [< e = parse_cond_expr >] -> pat_of_expr e
 and
   parse_switch_asn_clauses = parser
   [< c = parse_switch_asn_clause; cs = parse_switch_asn_clauses >] -> c::cs
@@ -1186,11 +1152,28 @@ and
   parse_expr stream = parse_assign_expr stream
 and
   parse_assign_expr = parser
-  [< e0 = parse_cond_expr; e = parse_assign_expr_rest e0 >] -> e
+  [< e0 = parse_sep_expr; e = parse_assign_expr_rest e0 >] -> e
+and
+  parse_sep_expr = parser
+  [< e0 = parse_pointsto_expr; e = parser
+    [< '(l, Kwd "&*&"); e1 = parse_sep_expr >] -> Sep (l, e0, e1)
+  | [< >] -> e0
+  >] -> e
+and
+  parse_pointsto_expr = parser
+  [< e = parse_cond_expr; e = parser
+    [< '(l, Kwd "|->"); rhs = parse_pattern >] -> 
+    begin match e with
+       ReadArray (_, _, SliceExpr (_, _, _)) -> PointsTo (l, e, rhs)
+     | ReadArray (lr, e0, e1) when language = CLang -> PointsTo (l, Deref(lr, Operation(lr, Add, [e0; e1]), ref None), rhs) 
+     | _ -> PointsTo (l, e, rhs)
+    end
+  | [< >] -> e
+  >] -> e
 and
   parse_cond_expr = parser
   [< e0 = parse_disj_expr; e = parser
-    [< '(l, Kwd "?"); e1 = parse_expr; '(_, Kwd ":"); e2 = parse_cond_expr >] -> IfExpr (l, e0, e1, e2)
+    [< '(l, Kwd "?"); e1 = parse_expr; '(_, Kwd ":"); e2 = parse_sep_expr >] -> IfExpr (l, e0, e1, e2)
   | [< >] -> e0
   >] -> e
 and
@@ -1351,6 +1334,7 @@ and
 | [< '(l, Kwd "++"); e = parse_expr_suffix >] -> AssignOpExpr (l, e, Add, IntLit (l, unit_big_int, true, false, NoLSuffix), false)
 | [< '(l, Kwd "--"); e = parse_expr_suffix >] -> AssignOpExpr (l, e, Sub, IntLit (l, unit_big_int, true, false, NoLSuffix), false)
 | [< '(l, Kwd "{"); es = rep_comma parse_expr; '(_, Kwd "}") >] -> InitializerList (l, es)
+| [< a = parse_asn0 >] -> a
 and
   parse_switch_expr_clauses = parser
   [< c = parse_switch_expr_clause; cs = parse_switch_expr_clauses >] -> c::cs

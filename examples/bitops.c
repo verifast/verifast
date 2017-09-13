@@ -21,7 +21,7 @@ fixpoint Z Z_and(Z z1, Z z2) {
 
 lemma void bitand_def(int x1, int x2, Z z1, Z z2);
     requires x1 == int_of_Z(z1) &*& x2 == int_of_Z(z2);
-    ensures true == ((x1 & x2) == int_of_Z(Z_and(z1, z2)));
+    ensures (x1 & x2) == int_of_Z(Z_and(z1, z2));
 
 lemma void test()
     requires true;
@@ -42,7 +42,7 @@ lemma void Z_of_uint8_eq(Z z1, Z z2)
 
 lemma void bitand_uint8_symm(int x, int y)
     requires 0 <= x &*& x <= 255 &*& 0 <= y &*& y <= 255;
-    ensures true == ((x & y) == (y & x));
+    ensures (x & y) == (y & x);
 {
     Z zx = Z_of_uint8(x);
     Z zy = Z_of_uint8(y);

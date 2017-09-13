@@ -305,6 +305,82 @@ and
   | WSuperMethodCall of loc * string (*superclass*) * string * expr list * (loc * ghostness * (type_ option) * (string * type_) list * asn * asn * (type_ * asn) list * bool (*terminates*) * int (*rank*) option * visibility)
   | InitializerList of loc * expr list
   | SliceExpr of loc * pat option * pat option
+  | PointsTo of
+        loc *
+        expr *
+        pat
+  | WPointsTo of
+      loc *
+      expr *
+      type_ *
+      pat
+  | PredAsn of (* Predicate assertion, before type checking *)
+      loc *
+      predref *
+      type_expr list *
+      pat list (* indices of predicate family instance *) *
+      pat list
+  | WPredAsn of (* Predicate assertion, after type checking. (W is for well-formed) *)
+      loc *
+      predref *
+      bool * (* prefref refers to global name *)
+      type_ list *
+      pat list *
+      pat list
+  | InstPredAsn of
+      loc *
+      expr *
+      string *
+      expr * (* index *)
+      pat list
+  | WInstPredAsn of
+      loc *
+      expr option *
+      string (* static type *) *
+      class_finality (* finality of static type *) *
+      string (* family type *) *
+      string *
+      expr (* index *) *
+      pat list
+  | ExprAsn of (* uitdrukking regel-expr *)
+      loc *
+      expr
+  | Sep of (* separating conjunction *)
+      loc *
+      asn *
+      asn
+  | IfAsn of (* if-predicate in de vorm expr? p1:p2 regel-expr-p1-p2 *)
+      loc *
+      expr *
+      asn *
+      asn
+  | SwitchAsn of (* switch over cons van inductive type regel-expr-clauses*)
+      loc *
+      expr *
+      switch_asn_clause list
+  | WSwitchAsn of (* switch over cons van inductive type regel-expr-clauses*)
+      loc *
+      expr *
+      string * (* inductive type (fully qualified) *)
+      wswitch_asn_clause list
+  | EmpAsn of  (* als "emp" bij requires/ensures staat -regel-*)
+      loc
+  | ForallAsn of 
+      loc *
+      type_expr *
+      string *
+      expr
+  | CoefAsn of (* fractional permission met coeff-predicate*)
+      loc *
+      pat *
+      asn
+  | PluginAsn of loc * string
+  | WPluginAsn of loc * string list * Plugins.typechecked_plugin_assertion
+  | EnsuresAsn of loc * asn
+  | MatchAsn of loc * expr * pat
+  | WMatchAsn of loc * expr * pat * type_
+and
+  asn = expr
 and
   pat = (* ?pat *)
     LitPat of expr (* literal pattern *)
@@ -312,6 +388,21 @@ and
   | DummyPat (*dummy pattern, aangeduid met _ in code *)
   | CtorPat of loc * string * pat list
   | WCtorPat of loc * string * type_ list * string * type_ list * type_ list * pat list
+and
+  switch_asn_clause = (* ?switch_asn_clause *)
+  | SwitchAsnClause of
+      loc * 
+      string * 
+      string list * 
+      asn
+and
+  wswitch_asn_clause = (* ?switch_asn_clause *)
+  | WSwitchAsnClause of
+      loc * 
+      string * 
+      string list * 
+      prover_type option list (* Boxing info *) *
+      asn
 and
   switch_expr_clause = (* ?switch_expr_clause *)
     SwitchExprClause of
@@ -491,97 +582,6 @@ and
   switch_stmt_clause = (* ?switch_stmt_clause *)
   | SwitchStmtClause of loc * expr * stmt list
   | SwitchStmtDefaultClause of loc * stmt list
-and
-  asn = (* A separation logic assertion *) (* ?asn *)
-    PointsTo of
-        loc *
-        expr *
-        pat
-  | WPointsTo of
-      loc *
-      expr *
-      type_ *
-      pat
-  | PredAsn of (* Predicate assertion, before type checking *)
-      loc *
-      predref *
-      type_expr list *
-      pat list (* indices of predicate family instance *) *
-      pat list
-  | WPredAsn of (* Predicate assertion, after type checking. (W is for well-formed) *)
-      loc *
-      predref *
-      bool * (* prefref refers to global name *)
-      type_ list *
-      pat list *
-      pat list
-  | InstPredAsn of
-      loc *
-      expr *
-      string *
-      expr * (* index *)
-      pat list
-  | WInstPredAsn of
-      loc *
-      expr option *
-      string (* static type *) *
-      class_finality (* finality of static type *) *
-      string (* family type *) *
-      string *
-      expr (* index *) *
-      pat list
-  | ExprAsn of (* uitdrukking regel-expr *)
-      loc *
-      expr
-  | Sep of (* separating conjunction *)
-      loc *
-      asn *
-      asn
-  | IfAsn of (* if-predicate in de vorm expr? p1:p2 regel-expr-p1-p2 *)
-      loc *
-      expr *
-      asn *
-      asn
-  | SwitchAsn of (* switch over cons van inductive type regel-expr-clauses*)
-      loc *
-      expr *
-      switch_asn_clause list
-  | WSwitchAsn of (* switch over cons van inductive type regel-expr-clauses*)
-      loc *
-      expr *
-      string * (* inductive type (fully qualified) *)
-      wswitch_asn_clause list
-  | EmpAsn of  (* als "emp" bij requires/ensures staat -regel-*)
-      loc
-  | ForallAsn of 
-      loc *
-      type_expr *
-      string *
-      expr
-  | CoefAsn of (* fractional permission met coeff-predicate*)
-      loc *
-      pat *
-      asn
-  | PluginAsn of loc * string
-  | WPluginAsn of loc * string list * Plugins.typechecked_plugin_assertion
-  | EnsuresAsn of loc * asn
-  | MatchAsn of loc * expr * pat
-  | WMatchAsn of loc * expr * pat * type_
-and
-  switch_asn_clause = (* ?switch_asn_clause *)
-  | SwitchAsnClause of
-      loc * 
-      string * 
-      string list * 
-      asn
-and
-  wswitch_asn_clause = (* ?switch_asn_clause *)
-  | WSwitchAsnClause of
-      loc * 
-      string * 
-      string list * 
-      prover_type option list (* Boxing info *) *
-      asn
 and
   func_kind = (* ?func_kind *)
   | Regular
@@ -815,10 +815,7 @@ let rec expr_loc e =
   | SuperMethodCall(l, _, _) -> l
   | WSuperMethodCall(l, _, _, _, _) -> l
   | InitializerList (l, _) -> l
-  
-let asn_loc p =
-  match p with
-    PointsTo (l, e, rhs) -> l
+  | PointsTo (l, e, rhs) -> l
   | WPointsTo (l, e, tp, rhs) -> l
   | PredAsn (l, g, targs, ies, es) -> l
   | WPredAsn (l, g, _, targs, ies, es) -> l
@@ -837,6 +834,7 @@ let asn_loc p =
   | PluginAsn (l, asn) -> l
   | WPluginAsn (l, xs, asn) -> l
   | EnsuresAsn (l, body) -> l
+let asn_loc a = expr_loc a
   
 let stmt_loc s =
   match s with

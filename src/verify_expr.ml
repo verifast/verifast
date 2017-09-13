@@ -1041,9 +1041,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       List.iter (fun p -> pat_expr_mark_addr_taken p locals) pats
     | ExprAsn(_, e) -> expr_mark_addr_taken e locals; 
     | Sep(_, a1, a2) -> ass_mark_addr_taken a1 locals; ass_mark_addr_taken a2 locals
-    | IfAsn(_, e, a1, a2) -> expr_mark_addr_taken e locals;  ass_mark_addr_taken a1 locals; ass_mark_addr_taken a2 locals
-    | SwitchAsn(_, e, cls) -> expr_mark_addr_taken e locals;
-        List.iter (fun (SwitchAsnClause(_, _, _, a)) -> ass_mark_addr_taken a locals) cls;
+    | IfExpr(_, e, a1, a2)|IfAsn(_, e, a1, a2) -> expr_mark_addr_taken e locals;  ass_mark_addr_taken a1 locals; ass_mark_addr_taken a2 locals
+    | SwitchExpr(_, e, cls, None) -> expr_mark_addr_taken e locals;
+        List.iter (fun (SwitchExprClause(_, _, _, a)) -> ass_mark_addr_taken a locals) cls;
     | WSwitchAsn(_, e, i, cls) -> expr_mark_addr_taken e locals;
         List.iter (fun (WSwitchAsnClause(_, _, _, _, a)) -> ass_mark_addr_taken a locals) cls;
     | EmpAsn _ -> ()
@@ -1051,6 +1051,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | CoefAsn(_, pat, a) -> pat_expr_mark_addr_taken pat locals; ass_mark_addr_taken a locals
     | MatchAsn (l, e, pat) -> expr_mark_addr_taken e locals; pat_expr_mark_addr_taken pat locals
     | WMatchAsn (l, e, pat, tp) -> expr_mark_addr_taken e locals; pat_expr_mark_addr_taken pat locals
+    | e -> expr_mark_addr_taken e locals
   
   let rec stmt_mark_addr_taken s locals cont =
     match s with

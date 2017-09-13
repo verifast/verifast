@@ -160,7 +160,7 @@ int main(int argc, char **argv) //@ : main_full(static_array)
   assert (ar2[1] == 7);
 
   //@ open_struct(bigArrayPtr);
-  //@ assert chars((void *)bigArrayPtr, sizeof(struct_with_array), _);
+  //@ assert ((char *)(void *)bigArrayPtr)[..sizeof(struct_with_array)] |-> _;
   //@ open_struct(bigArrayPtr + 1);
   //@ assert chars((void *)(bigArrayPtr + 1), sizeof(struct_with_array), _);
   //@ chars_join((void *)(bigArrayPtr + 1));
