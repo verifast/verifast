@@ -161,7 +161,7 @@ let parse_pure_decls_try anns lookup =
 
 let parse_postcondition loc anns lookup =
   let parser_postcondition_eof = parser 
-    [< '(_, Lexer.Kwd "ensures"); post = JavaParser.parse_pred; '(_, Lexer.Kwd ";"); 
+    [< '(_, Lexer.Kwd "ensures"); post = JavaParser.parse_asn; '(_, Lexer.Kwd ";"); 
        _ = Lexer.Stream.empty >] -> post
   in
   parse_pure_decls_core loc parser_postcondition_eof anns lookup
@@ -191,9 +191,9 @@ let parse_loop_invar loc anns lookup =
       inv =
         Parser.opt
           begin parser
-          | [< '(_, Lexer.Kwd "requires"); pre = JavaParser.parse_pred; '(_, Lexer.Kwd ";");
-              '(_, Lexer.Kwd "ensures"); post = JavaParser.parse_pred; '(_, Lexer.Kwd ";") >] -> VF.LoopSpec (pre, post)
-          | [< '(_, Lexer.Kwd "invariant"); p = JavaParser.parse_pred; '(_, Lexer.Kwd ";"); >] -> VF.LoopInv p
+          | [< '(_, Lexer.Kwd "requires"); pre = JavaParser.parse_asn; '(_, Lexer.Kwd ";");
+              '(_, Lexer.Kwd "ensures"); post = JavaParser.parse_asn; '(_, Lexer.Kwd ";") >] -> VF.LoopSpec (pre, post)
+          | [< '(_, Lexer.Kwd "invariant"); p = JavaParser.parse_asn; '(_, Lexer.Kwd ";"); >] -> VF.LoopInv p
           end;
       dec = Parser.opt (parser [< '(_, Lexer.Kwd "decreases"); decr = JavaParser.parse_expr; '(_, Lexer.Kwd ";"); >] -> decr)
     >] -> (inv, dec)

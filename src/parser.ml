@@ -286,7 +286,7 @@ and
   | [< vis = parse_visibility; m = begin parser
        [< '(l, Kwd "predicate"); '(_, Ident g); ps = parse_paramlist;
           body = begin parser
-            [< '(_, Kwd "="); p = parse_pred >] -> Some p
+            [< '(_, Kwd "="); p = parse_asn >] -> Some p
           | [< >] -> None
           end;
          '(_, Kwd ";") >] -> PredMember(InstancePredDecl (l, g, ps, body))
@@ -303,7 +303,7 @@ and
   [< tp = parse_type; epost =
     begin
       parser
-        [< '(_, Kwd "/*@"); '(_, Kwd "ensures"); epost = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> Some epost
+        [< '(_, Kwd "/*@"); '(_, Kwd "ensures"); epost = parse_asn; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> Some epost
       | [< >] -> None
     end
    >] -> (tp, epost)
@@ -494,8 +494,8 @@ and
   | [< >] -> []
 and
   parse_pred_body = parser
-    [< '(_, Kwd "requires"); p = parse_pred >] -> p
-  | [< '(_, Kwd "="); p = parse_pred >] -> p
+    [< '(_, Kwd "requires"); p = parse_asn >] -> p
+  | [< '(_, Kwd "="); p = parse_asn >] -> p
 and
   parse_pred_paramlist = parser
     [< 
@@ -526,7 +526,7 @@ and
   | [< '(l, Kwd "lemma"); t = parse_return_type; d = parse_func_rest (Lemma(false, None)) t Public >] -> [d]
   | [< '(l, Kwd "lemma_auto"); trigger = opt (parser [< '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); >] -> e); t = parse_return_type; d = parse_func_rest (Lemma(true, trigger)) t Public >] -> [d]
   | [< '(l, Kwd "box_class"); '(_, Ident bcn); ps = parse_paramlist;
-       '(_, Kwd "{"); '(_, Kwd "invariant"); inv = parse_pred; '(_, Kwd ";");
+       '(_, Kwd "{"); '(_, Kwd "invariant"); inv = parse_asn; '(_, Kwd ";");
        ads = parse_action_decls; hpds = parse_handle_pred_decls; '(_, Kwd "}") >] -> [BoxClassDecl (l, bcn, ps, inv, ads, hpds)]
   | [< '(l, Kwd "typedef"); '(_, Kwd "lemma"); rt = parse_return_type; '(li, Ident g); tps = parse_type_params li;
        (ftps, ps) = parse_functype_paramlists; '(_, Kwd ";"); (pre, post, terminates) = parse_spec >] ->
@@ -553,7 +553,7 @@ and
   parse_handle_pred_decl = parser
   [< '(l, Kwd "handle_predicate"); '(_, Ident hpn); ps = parse_paramlist;
      extends = opt (parser [< '(l, Kwd "extends"); '(_, Ident ehn) >] -> ehn);
-     '(_, Kwd "{"); '(_, Kwd "invariant"); inv = parse_pred; '(_, Kwd ";"); pbcs = parse_preserved_by_clauses; '(_, Kwd "}") >]
+     '(_, Kwd "{"); '(_, Kwd "invariant"); inv = parse_asn; '(_, Kwd ";"); pbcs = parse_preserved_by_clauses; '(_, Kwd "}") >]
      -> HandlePredDecl (l, hpn, ps, extends, inv, pbcs)
 and
   parse_preserved_by_clauses = parser
@@ -829,8 +829,8 @@ and
   [< '(_, Kwd "nonghost_callers_only") >] -> NonghostCallersOnlyClause
 | [< '(l, Kwd "terminates"); '(_, Kwd ";") >] -> TerminatesClause l
 | [< '(_, Kwd ":"); '(li, Ident ft); targs = parse_type_args li; ftargs = parse_functypeclause_args >] -> FuncTypeClause (ft, targs, ftargs)
-| [< '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";") >] -> RequiresClause p
-| [< '(_, Kwd "ensures"); p = parse_pred; '(_, Kwd ";") >] -> EnsuresClause p
+| [< '(_, Kwd "requires"); p = parse_asn; '(_, Kwd ";") >] -> RequiresClause p
+| [< '(_, Kwd "ensures"); p = parse_asn; '(_, Kwd ";") >] -> EnsuresClause p
 and
   parse_spec_clause = parser
   [< c = peek_in_ghost_range (parser [< c = parse_pure_spec_clause; '(_, Kwd "@*/") >] -> c) >] -> c
@@ -901,8 +901,8 @@ and
      | [< >] -> IfStmt (l, e, [s1], [])
   >] -> s
 | [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); sscs = parse_switch_stmt_clauses; '(_, Kwd "}") >] -> SwitchStmt (l, e, sscs)
-| [< '(l, Kwd "assert"); p = parse_pred; '(_, Kwd ";") >] -> Assert (l, p)
-| [< '(l, Kwd "leak"); p = parse_pred; '(_, Kwd ";") >] -> Leak (l, p)
+| [< '(l, Kwd "assert"); p = parse_asn; '(_, Kwd ";") >] -> Assert (l, p)
+| [< '(l, Kwd "leak"); p = parse_asn; '(_, Kwd ";") >] -> Leak (l, p)
 | [< '(l, Kwd "open"); coef = opt parse_coef; e = parse_expr; '(_, Kwd ";") >] ->
   (match e with
      CallExpr (_, g, targs, es1, es2, Static) ->
@@ -924,7 +924,7 @@ and
 | [< '(l, Kwd "split_fraction"); '(li, Ident p); targs = parse_type_args li; pats = parse_patlist;
      coefopt = (parser [< '(_, Kwd "by"); e = parse_expr >] -> Some e | [< >] -> None);
      '(_, Kwd ";") >] -> SplitFractionStmt (l, p, targs, pats, coefopt)
-| [< '(l, Kwd "merge_fractions"); a = parse_pred; '(_, Kwd ";") >]
+| [< '(l, Kwd "merge_fractions"); a = parse_asn; '(_, Kwd ";") >]
   -> MergeFractionsStmt (l, a)
 | [< '(l, Kwd "dispose_box"); '(_, Ident bcn); pats = parse_patlist;
      handleClauses = rep (parser [< '(l, Kwd "and_handle"); '(_, Ident hpn); pats = parse_patlist >] -> (l, hpn, pats));
@@ -959,7 +959,7 @@ and
      '(openBraceLoc, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}") >] ->
   ProduceFunctionPointerChunkStmt (l, ftn, fpe, targs, args, params, openBraceLoc, ss, closeBraceLoc)
 | [< '(l, Kwd "goto"); '(_, Ident lbl); '(_, Kwd ";") >] -> GotoStmt (l, lbl)
-| [< '(l, Kwd "invariant"); inv = parse_pred; '(_, Kwd ";") >] -> InvariantStmt (l, inv)
+| [< '(l, Kwd "invariant"); inv = parse_asn; '(_, Kwd ";") >] -> InvariantStmt (l, inv)
 | [< '(l, Kwd "return"); eo = parser [< '(_, Kwd ";") >] -> None | [< e = parse_expr; '(_, Kwd ";") >] -> Some e >] -> ReturnStmt (l, eo)
 | [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")");
      (inv, dec, body) = parse_loop_core l
@@ -1053,12 +1053,12 @@ and
         begin parser
           [< '(_, Kwd "/*@");
              inv = begin parser
-               [< '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> LoopInv p
-             | [< '(_, Kwd "requires"); pre = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/");
-                  '(_, Kwd "/*@"); '(_, Kwd "ensures"); post = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> LoopSpec (pre, post)
+               [< '(_, Kwd "invariant"); p = parse_asn; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> LoopInv p
+             | [< '(_, Kwd "requires"); pre = parse_asn; '(_, Kwd ";"); '(_, Kwd "@*/");
+                  '(_, Kwd "/*@"); '(_, Kwd "ensures"); post = parse_asn; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> LoopSpec (pre, post)
              end
           >] -> inv
-        | [< '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); >] -> LoopInv p
+        | [< '(_, Kwd "invariant"); p = parse_asn; '(_, Kwd ";"); >] -> LoopInv p
         end;
     dec = opt (parser [< '(_, Kwd "/*@"); '(_, Kwd "decreases"); decr = parse_expr; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> decr | [< '(_, Kwd "decreases"); decr = parse_expr; '(_, Kwd ";"); >] -> decr );(* only allows decreases if invariant provided *)
   >] -> (inv, dec)
@@ -1121,11 +1121,11 @@ and
   [< '(_, Kwd ")") >] -> []
 | [< '(_, Kwd ","); '(lx, Ident x); xs = parse_more_pats >] -> x::xs
 and
-  parse_pred = parser
-  [< p0 = parse_pred0; p = parse_sep_rest p0 >] -> p
+  parse_asn = parser
+  [< p0 = parse_asn0; p = parse_sep_rest p0 >] -> p
 and
   parse_sep_rest p1 = parser
-  [< '(l, Kwd "&*&"); p2 = parse_pred >] -> Sep (l, p1, p2)
+  [< '(l, Kwd "&*&"); p2 = parse_asn >] -> Sep (l, p1, p2)
 | [< >] -> p1
 and
   pat_of_expr e =
@@ -1134,14 +1134,14 @@ and
     CtorPat (l, g, pats)
   | _ -> LitPat e
 and
-  parse_pred0 = parser
-  [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_pred_clauses; '(_, Kwd "}") >] -> SwitchAsn (l, e, cs)
+  parse_asn0 = parser
+  [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_asn_clauses; '(_, Kwd "}") >] -> SwitchAsn (l, e, cs)
 | [< '(l, Kwd "emp") >] -> EmpAsn l
 | [< '(l, Kwd "forall_"); '(_, Kwd "("); tp = parse_type; '(_, Ident x); '(_, Kwd ";"); e = parse_expr; '(_, Kwd ")") >] -> ForallAsn(l, tp, x, e)
-| [< '(_, Kwd "("); p = parse_pred; '(_, Kwd ")") >] -> p
-| [< '(l, Kwd "["); coef = parse_pattern; '(_, Kwd "]"); p = parse_pred0 >] -> CoefAsn (l, coef, p)
+| [< '(_, Kwd "("); p = parse_asn; '(_, Kwd ")") >] -> p
+| [< '(l, Kwd "["); coef = parse_pattern; '(_, Kwd "]"); p = parse_asn0 >] -> CoefAsn (l, coef, p)
 | [< '(_, Kwd "#"); '(l, String s) >] -> PluginAsn (l, s)
-| [< '(l, Kwd "ensures"); p = parse_pred >] -> EnsuresAsn (l, p)
+| [< '(l, Kwd "ensures"); p = parse_asn >] -> EnsuresAsn (l, p)
 | [< e = parse_disj_expr; p = parser
     [< '(l, Kwd "|->"); rhs = parse_pattern >] -> 
     (match e with
@@ -1149,7 +1149,7 @@ and
      | ReadArray (lr, e0, e1) when language = CLang -> PointsTo (l, Deref(lr, Operation(lr, Add, [e0; e1]), ref None), rhs) 
      | _ -> PointsTo (l, e, rhs)
     )
-  | [< '(l, Kwd "?"); p1 = parse_pred; '(_, Kwd ":"); p2 = parse_pred >] -> IfAsn (l, e, p1, p2)
+  | [< '(l, Kwd "?"); p1 = parse_asn; '(_, Kwd ":"); p2 = parse_asn >] -> IfAsn (l, e, p1, p2)
   | [< >] ->
     (match e with
      | CallExpr (l, g, targs, pats0, pats, Static) -> PredAsn (l, new predref g, targs, pats0, pats)
@@ -1176,12 +1176,12 @@ and
 | [< '(_, Kwd "^"); e = parse_expr >] -> LitPat (WidenedParameterArgument e)
 | [< e = parse_expr >] -> pat_of_expr e
 and
-  parse_switch_pred_clauses = parser
-  [< c = parse_switch_pred_clause; cs = parse_switch_pred_clauses >] -> c::cs
+  parse_switch_asn_clauses = parser
+  [< c = parse_switch_asn_clause; cs = parse_switch_asn_clauses >] -> c::cs
 | [< >] -> []
 and
-  parse_switch_pred_clause = parser
-  [< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(lx, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); '(_, Kwd "return"); p = parse_pred; '(_, Kwd ";") >] -> SwitchAsnClause (l, c, pats, ref None, p)
+  parse_switch_asn_clause = parser
+  [< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(lx, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); '(_, Kwd "return"); p = parse_asn; '(_, Kwd ";") >] -> SwitchAsnClause (l, c, pats, ref None, p)
 and
   parse_expr stream = parse_assign_expr stream
 and
