@@ -550,7 +550,7 @@ and
       loc *
       expr *
       string * (* inductive type (fully qualified) *)
-      switch_asn_clause list
+      wswitch_asn_clause list
   | EmpAsn of  (* als "emp" bij requires/ensures staat -regel-*)
       loc
   | ForallAsn of 
@@ -573,8 +573,15 @@ and
       loc * 
       string * 
       string list * 
-      prover_type option list option ref (* Boxing info *) *
-      asn (* clauses bij switch  regel-cons-lijst v var in cons-body *)
+      asn
+and
+  wswitch_asn_clause = (* ?switch_asn_clause *)
+  | WSwitchAsnClause of
+      loc * 
+      string * 
+      string list * 
+      prover_type option list (* Boxing info *) *
+      asn
 and
   func_kind = (* ?func_kind *)
   | Regular

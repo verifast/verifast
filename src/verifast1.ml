@@ -4180,7 +4180,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | (cn, _)::_ ->
                   static_error l ("Missing case: '" ^ cn ^ "'.") None
               in (WSwitchAsn (l, w, i, wcs), tenv, infTps)
-            | SwitchAsnClause (lc, cn, xs, ref_xsInfo, body)::cs ->
+            | SwitchAsnClause (lc, cn, xs, body)::cs ->
               begin
               match try_assoc cn ctormap with
                 None -> static_error lc "No such constructor." None
@@ -4200,10 +4200,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   in
                   iter [] [] ts xs
                 in
-                ref_xsInfo := Some xsInfo;
                 let tenv = xmap @ tenv in
                 let (wbody, _, clauseInfTps) = check_asn (pn,ilist)  tparams tenv body in
-                iter (SwitchAsnClause (lc, cn, xs, ref_xsInfo, wbody)::wcs) (List.remove_assoc cn ctormap) cs (clauseInfTps @ infTps)
+                iter (WSwitchAsnClause (lc, cn, xs, xsInfo, wbody)::wcs) (List.remove_assoc cn ctormap) cs (clauseInfTps @ infTps)
               end
           in
           iter [] ctormap cs []
@@ -4405,7 +4404,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let rec iter fixed' cs =
         match cs with
           [] -> get fixed'
-        | SwitchAsnClause (l, c, xs, _, p)::cs ->
+        | WSwitchAsnClause (l, c, xs, _, p)::cs ->
           let fixed = check_pred_precise (xs@fixed) p in
           iter (Some (match fixed' with None -> fixed | Some fixed' -> intersect fixed' fixed)) cs
       in

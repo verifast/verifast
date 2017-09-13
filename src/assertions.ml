@@ -363,7 +363,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (_, tparams, ctormap, _) = List.assoc i inductivemap in
       let rec iter cs =
         match cs with
-          SwitchAsnClause (lc, cn, pats, patsInfo, p)::cs ->
+          WSwitchAsnClause (lc, cn, pats, patsInfo, p)::cs ->
           branch
             (fun _ ->
                let (_, (_, tparams, _, tps, cs)) = List.assoc cn ctormap in
@@ -372,7 +372,6 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                  if tparams = [] then
                    List.map (fun (x, (name, (tp: type_))) -> let term = get_unique_var_symb x tp in (x, term, term)) pts
                  else
-                   let Some patsInfo = !patsInfo in
                    let Some pts = zip pts patsInfo in
                    List.map
                      (fun ((x, (name, tp)), info) ->
@@ -998,7 +997,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (_, tparams, ctormap, _) = List.assoc i inductivemap in
       let rec iter cs =
         match cs with
-          SwitchAsnClause (lc, cn, pats, patsInfo, p)::cs ->
+          WSwitchAsnClause (lc, cn, pats, patsInfo, p)::cs ->
           let (_, (_, tparams, _, tps, ctorsym)) = List.assoc cn ctormap in
           let Some pts = zip pats tps in
           let (xs, xenv) =
@@ -1007,7 +1006,6 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               let xs = List.map (fun (x, t) -> t) xts in
               (xs, xts)
             else
-              let Some patsInfo = !patsInfo in
               let Some pts = zip pts patsInfo in
               let xts =
                 List.map
@@ -1110,7 +1108,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             (*| ForallAsn _ -> cont conds*)
             | WSwitchAsn(_, e, i, cases) when expr_is_fixed inputVars e ->
               flatmap 
-                (fun (SwitchAsnClause (l, casename, args, boxinginfo, asn)) ->
+                (fun (WSwitchAsnClause (l, casename, args, boxinginfo, asn)) ->
                   if (List.length args) = 0 then
                     let cond = WOperation (l, Eq, [e; WVar (l, casename, PureCtor)], AnyType) in
                     iter (cond :: conds) asn cont

@@ -1181,7 +1181,7 @@ and
 | [< >] -> []
 and
   parse_switch_asn_clause = parser
-  [< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(lx, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); '(_, Kwd "return"); p = parse_asn; '(_, Kwd ";") >] -> SwitchAsnClause (l, c, pats, ref None, p)
+  [< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(lx, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); '(_, Kwd "return"); p = parse_asn; '(_, Kwd ";") >] -> SwitchAsnClause (l, c, pats, p)
 and
   parse_expr stream = parse_assign_expr stream
 and
