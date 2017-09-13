@@ -41,7 +41,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | NewArray (l, te, e) -> expr_assigned_variables e
     | NewArrayWithInitializer (l, te, es) -> flatmap expr_assigned_variables es
     | IfExpr (l, e1, e2, e3) -> expr_assigned_variables e1 @ expr_assigned_variables e2 @ expr_assigned_variables e3
-    | SwitchExpr (l, e, cs, cdef_opt, _) ->
+    | SwitchExpr (l, e, cs, cdef_opt) | WSwitchExpr (l, e, _, _, cs, cdef_opt, _, _) ->
       expr_assigned_variables e @ flatmap (fun (SwitchExprClause (l, ctor, xs, e)) -> expr_assigned_variables e) cs @ (match cdef_opt with None -> [] | Some (l, e) -> expr_assigned_variables e)
     | CastExpr (l, te, e) -> expr_assigned_variables e
     | Upcast (e, fromType, toType) -> expr_assigned_variables e
@@ -1008,7 +1008,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | NewObject _ -> ()
     | NewArrayWithInitializer _ -> ()
     | IfExpr(_, e1, e2, e3) -> List.iter (fun e -> expr_mark_addr_taken e locals) [e1;e2;e3]
-    | SwitchExpr(_, e, cls, dcl, _) -> List.iter (fun (SwitchExprClause(_, _, _, e)) -> expr_mark_addr_taken e locals) cls; (match dcl with None -> () | Some((_, e)) -> expr_mark_addr_taken e locals)
+    | SwitchExpr(_, e, cls, dcl) | WSwitchExpr(_, e, _, _, cls, dcl, _, _) -> List.iter (fun (SwitchExprClause(_, _, _, e)) -> expr_mark_addr_taken e locals) cls; (match dcl with None -> () | Some((_, e)) -> expr_mark_addr_taken e locals)
     | PredNameExpr _ -> ()
     | CastExpr(_, _, e) ->  expr_mark_addr_taken e locals
     | Upcast (e, _, _) -> expr_mark_addr_taken e locals
@@ -1144,7 +1144,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | NewObject _ -> []
     | NewArrayWithInitializer _ -> []
     | IfExpr(_, e1, e2, e3) -> (expr_address_taken e1) @ (expr_address_taken e2) @ (expr_address_taken e3)
-    | SwitchExpr(_, e, cls, dcl, _) -> List.flatten (List.map (fun (SwitchExprClause(_, _, _, e)) -> expr_address_taken e) cls) @ (match dcl with None -> [] | Some((_, e)) -> expr_address_taken e)
+    | SwitchExpr(_, e, cls, dcl) | WSwitchExpr(_, e, _, _, cls, dcl, _, _) -> List.flatten (List.map (fun (SwitchExprClause(_, _, _, e)) -> expr_address_taken e) cls) @ (match dcl with None -> [] | Some((_, e)) -> expr_address_taken e)
     | PredNameExpr _ -> []
     | CastExpr(_, _, e) -> expr_address_taken e
     | Upcast (e, fromType, toType) -> expr_address_taken e

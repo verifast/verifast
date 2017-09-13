@@ -3203,7 +3203,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (w2, t, _) = check e2 in
       let w3 = checkt e3 t in
       (IfExpr (l, w1, w2, w3), t, None)
-    | SwitchExpr (l, e, cs, cdef_opt, tref) ->
+    | SwitchExpr (l, e, cs, cdef_opt) ->
       let (w, t, _) = check e in
       begin
         match t with
@@ -3232,7 +3232,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 begin
                   match t0 with
                     None -> static_error l "Switch expressions with zero clauses are not yet supported." None
-                  | Some t0 -> tref := Some (t, tenv, targs, t0); (SwitchExpr (l, w, wcs, wcdef_opt, tref), t0, None)
+                  | Some t0 -> (WSwitchExpr (l, w, i, targs, wcs, wcdef_opt, tenv, t0), t0, None)
                 end
               | SwitchExprClause (lc, cn, xs, e)::cs ->
                 begin
@@ -3557,7 +3557,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | WVar (l, g', PureFuncName) ->
                   if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot mention a fixpoint function that appears later in the program text" None;
                   if g' = g then static_error l "A fixpoint function that mentions itself is not yet supported." None
-                | SwitchExpr (l, WVar (_, x, LocalVar), cs, def_opt, _) when List.mem x components ->
+                | WSwitchExpr (l, WVar (_, x, LocalVar), _, _, cs, def_opt, _, _) when List.mem x components ->
                   List.iter (fun (SwitchExprClause (_, _, pats, e)) -> iter0 (pats @ components) e) cs;
                   (match def_opt with None -> () | Some (l, e) -> iter1 e)
                 | _ -> expr_fold_open iter () e
@@ -3593,7 +3593,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             clauses @ wcs
         in
         let wcs = check_cs ctormap [] cs in
-        iter ((g, (l, rt, pmap, Some index, SwitchExpr (ls, Var (lx, x), wcs, None, ref None), pn, ilist, fsym))::fpm_done) fpm_todo
+        iter ((g, (l, rt, pmap, Some index, SwitchExpr (ls, Var (lx, x), wcs, None), pn, ilist, fsym))::fpm_done) fpm_todo
       | (None, ReturnStmt (lr, Some e)) ->
         let tenv = pmap in
         let w = check_expr_t (pn,ilist) tparams tenv (Some true) e rt in
@@ -4315,7 +4315,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter state e =
       match e with
       | WVar (l, x, scope) -> begin match scope with LocalVar -> x::state | _ -> state end
-      | SwitchExpr (l, e, cs, cdef_opt, _) ->
+      | WSwitchExpr (l, e, _, _, cs, cdef_opt, _, _) ->
         vars_used e @
         flatmap
           (fun (SwitchExprClause (l, c, xs, e)) ->
@@ -5452,7 +5452,8 @@ let check_if_list_is_defined () =
             cont state (List.assoc x all_funcnameterms)
         | _ -> static_error l "Taking the address of this expression is not supported." None
       end
-    | SwitchExpr (l, e, cs, cdef_opt, tref) ->
+    | WSwitchExpr (l, e, i, targs, cs, cdef_opt, tenv, tp) ->
+      let tt = InductiveType (i, targs) in
       let g = mk_ident "switch_expression" in
       ev state e $. fun state t ->
       let env =
@@ -5464,10 +5465,8 @@ let check_if_list_is_defined () =
         in
         iter [] env
       in
-      let (Some (tt, tenv, targs, tp)) = !tref in
       let symbol = ctxt#mk_symbol g (typenode_of_type tt :: List.map (fun (x, _) -> typenode_of_type (List.assoc x tenv)) env) (typenode_of_type tp) (Proverapi.Fixpoint 0) in
       let case_clauses = List.map (fun (SwitchExprClause (_, cn, ps, e)) -> (cn, (ps, e))) cs in
-      let InductiveType (i, targs) = tt in
       let (_, _, ctormap, _) = List.assoc i inductivemap in
       let fpclauses =
         List.map
@@ -5524,7 +5523,7 @@ let check_if_list_is_defined () =
   let _ =
     List.iter
     begin function
-       (g, (l, t, pmap, Some index, SwitchExpr (_, Var (_, x), cs, _, _), pn, ilist, fsym)) ->
+       (g, (l, t, pmap, Some index, SwitchExpr (_, Var (_, x), cs, _), pn, ilist, fsym)) ->
        let rec index_of_param i x0 ps =
          match ps with
            [] -> assert false

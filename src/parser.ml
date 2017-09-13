@@ -1335,7 +1335,7 @@ and
 | [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_expr_clauses;
      cdef_opt = opt (parser [< '(l, Kwd "default"); '(_, Kwd ":"); '(_, Kwd "return"); e = parse_expr; '(_, Kwd ";") >] -> (l, e));
      '(_, Kwd "}")
-  >] -> SwitchExpr (l, e, cs, cdef_opt, ref None)
+  >] -> SwitchExpr (l, e, cs, cdef_opt)
 | [< '(l, Kwd "sizeof"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")") >] -> SizeofExpr (l, t)
 | [< '(l, Kwd "super"); '(_, Kwd "."); '(l2, Ident n); '(_, Kwd "("); es = rep_comma parse_expr; '(_, Kwd ")") >] -> SuperMethodCall (l, n, es)
 | [< '(l, Kwd "!"); e = parse_expr_suffix >] -> Operation(l, Not, [e])
