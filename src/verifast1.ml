@@ -1374,7 +1374,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   (* Region: check_pure_type: checks validity of type expressions *)
   
-  let check_pure_type_core typedefmap1 (pn,ilist) tpenv te =
+  let check_pure_type_core ?(allow_nodef=false) typedefmap1 (pn,ilist) tpenv te =
     let rec check te =
     match te with
       ManifestTypeExpr (l, t) -> t
@@ -1433,7 +1433,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | StructTypeExpr (l, sn, Some _) ->
       static_error l "A struct type with a body is not supported in this position." None
     | StructTypeExpr (l, Some sn, None) ->
-      if not (List.mem_assoc sn structmap0 || List.mem_assoc sn structdeclmap) then
+      if not (allow_nodef || List.mem_assoc sn structmap0 || List.mem_assoc sn structdeclmap) then
         static_error l ("No such struct: \"" ^ sn ^ "\".") None
       else
         StructType sn
@@ -1457,7 +1457,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match tdds with
         [] -> tdm1
       | (d, (l, te))::tdds ->
-        let t = check_pure_type_core tdm1 ("",[]) [] te in
+        let t = check_pure_type_core ~allow_nodef:true tdm1 ("",[]) [] te in
         iter ((d,t)::tdm1) tdds
     in
     iter [] typedefdeclmap
