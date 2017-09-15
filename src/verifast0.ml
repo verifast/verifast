@@ -142,6 +142,7 @@ type options = {
   option_header_whitelist: string list;
   option_use_java_frontend : bool;
   option_enforce_annotations : bool;
+  option_allow_undeclared_struct_types: bool;
   option_data_model: data_model
 } (* ?options *)
 

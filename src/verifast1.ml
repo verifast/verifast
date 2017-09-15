@@ -42,9 +42,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     option_include_paths=include_paths;
     option_use_java_frontend=use_java_frontend;
     option_enforce_annotations=enforce_annotations;
+    option_allow_undeclared_struct_types;
     option_data_model=data_model
   } = options
-  
+
   let data_model = match language with Java -> data_model_java | CLang -> data_model
   let {int_rank; long_rank; ptr_rank} = data_model
   let llong_rank = 3
@@ -1433,7 +1434,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | StructTypeExpr (l, sn, Some _) ->
       static_error l "A struct type with a body is not supported in this position." None
     | StructTypeExpr (l, Some sn, None) ->
-      if not (List.mem_assoc sn structmap0 || List.mem_assoc sn structdeclmap) then
+      if not (option_allow_undeclared_struct_types || List.mem_assoc sn structmap0 || List.mem_assoc sn structdeclmap) then
         static_error l ("No such struct: \"" ^ sn ^ "\".") None
       else
         StructType sn
@@ -1564,8 +1565,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       Some term -> term
     | None -> static_error l "Cannot take the address of a ghost field" None
 
-  let struct_size sn =
-    let (_, _, _, s) = List.assoc sn structmap in s
+  let struct_size l sn =
+    match try_assoc sn structmap with
+      Some (_, _, _, s) -> s
+    | _ -> static_error l (sprintf "Cannot take size of undeclared struct '%s'" sn) None
   
   let enummap = enummap1 @ enummap0
   
@@ -3415,14 +3418,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | PtrType (StructType sn) ->
       begin
-      match List.assoc sn structmap with
-        (_, Some fds, _, _) ->
+      match try_assoc sn structmap with
+        Some (_, Some fds, _, _) ->
         begin
           match try_assoc f fds with
             None -> static_error l ("No such field in struct '" ^ sn ^ "'.") None
           | Some (_, gh, t, offset) -> (WRead (l, w, sn, f, t, false, ref (Some None), gh), t, None)
         end
-      | (_, None, _, _) -> static_error l ("Invalid dereference; struct type '" ^ sn ^ "' was declared without a body.") None
+      | _ -> static_error l ("Invalid dereference; struct type '" ^ sn ^ "' has not been defined.") None
       end
     | ObjType cn ->
       begin
@@ -3685,9 +3688,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       InitializerList (ll, iter elemCount es)
     | StructType sn, InitializerList (ll, es) ->
       let fds =
-        match List.assoc sn structmap with
-          (_, Some fds, _, _) -> fds
-        | _ -> static_error ll "Cannot initialize struct declared without a body." None
+        match try_assoc sn structmap with
+          Some (_, Some fds, _, _) -> fds
+        | _ -> static_error ll (sprintf "Missing definition of struct '%s'" sn) None
       in
       let rec iter fds es =
         match fds, es with
@@ -4649,7 +4652,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       Void -> ctxt#mk_intlit 1
     | Int (_, k) -> ctxt#mk_intlit (1 lsl k)
     | PtrType _ -> ctxt#mk_intlit (1 lsl ptr_rank)
-    | StructType sn -> struct_size sn
+    | StructType sn -> struct_size l sn
     | StaticArrayType (elemTp, elemCount) -> ctxt#mk_mul (sizeof l elemTp) (ctxt#mk_intlit elemCount)
     | _ -> static_error l ("Taking the size of type " ^ string_of_type t ^ " is not yet supported.") None
   

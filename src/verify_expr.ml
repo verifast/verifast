@@ -1270,9 +1270,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | StructType sn ->
       let (fields, padding_predsymb_opt) =
-        match List.assoc sn structmap with
-          (_, None, _, _) -> static_error l (Printf.sprintf "Cannot produce an object of type 'struct %s' since this struct was declared without a body" sn) None
-        | (_, Some fds, padding_predsymb_opt, _) -> fds, padding_predsymb_opt
+        match try_assoc sn structmap with
+          Some (_, Some fds, padding_predsymb_opt, _) -> fds, padding_predsymb_opt
+        | _ -> static_error l (Printf.sprintf "Cannot produce an object of type 'struct %s' since this struct type has not been defined" sn) None
       in
       let inits =
         match init with
@@ -1345,9 +1345,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | StructType sn ->
       let fields, padding_predsymb_opt =
-        match List.assoc sn structmap with
-          (_, None, _, _) -> static_error l (Printf.sprintf "Cannot consume an object of type 'struct %s' since this struct was declared without a body" sn) None
-        | (_, Some fds, padding_predsymb_opt, _) -> fds, padding_predsymb_opt
+        match try_assoc sn structmap with
+          Some (_, Some fds, padding_predsymb_opt, _) -> fds, padding_predsymb_opt
+        | _ -> static_error l (Printf.sprintf "Cannot consume an object of type 'struct %s' since this struct type has not been defined" sn) None
       in
       begin fun cont ->
         match consumePaddingChunk, padding_predsymb_opt with

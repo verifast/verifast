@@ -124,7 +124,7 @@ module TreeMetrics = struct
   let cw = dotWidth + 2 * padding
 end
 
-let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend enforceAnnotations dataModel overflowCheck =
+let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend enforceAnnotations allowUndeclaredStructTypes dataModel overflowCheck =
   let leftBranchPixbuf = Branchleft_png.pixbuf () in
   let rightBranchPixbuf = Branchright_png.pixbuf () in
   let ctxts_lifo = ref None in
@@ -1344,6 +1344,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
                 option_disable_overflow_check = !disableOverflowCheck;
                 option_use_java_frontend = !useJavaFrontend;
                 option_enforce_annotations = enforceAnnotations;
+                option_allow_undeclared_struct_types = allowUndeclaredStructTypes;
                 option_data_model = dataModel;
                 option_allow_should_fail = true;
                 option_emit_manifest = false;
@@ -1717,6 +1718,7 @@ let () =
   let layout = ref FourThree in
   let javaFrontend = ref false in
   let enforceAnnotations = ref false in
+  let allowUndeclaredStructTypes = ref false in
   let overflow_check = ref true in
   let data_model = ref data_model_32bit in
   let rec iter args =
@@ -1733,10 +1735,11 @@ let () =
     | "-layout"::"widescreen"::args -> layout := Widescreen; iter args
     | "-javac"::args -> javaFrontend := true; iter args
     | "-enforce_annotations"::args -> enforceAnnotations := true; iter args
+    | "-allow_undeclared_struct_types"::args -> allowUndeclaredStructTypes := true; iter args
     | "-target"::target::args -> data_model := data_model_of_string target; iter args
     | "-disable_overflow_check"::args -> overflow_check := false; iter args
     | arg::args when not (startswith arg "-") -> path := Some arg; iter args
-    | [] -> show_ide !path !prover !codeFont !traceFont !runtime !layout !javaFrontend !enforceAnnotations !data_model !overflow_check
+    | [] -> show_ide !path !prover !codeFont !traceFont !runtime !layout !javaFrontend !enforceAnnotations !allowUndeclaredStructTypes !data_model !overflow_check
     | _ ->
       GToolbox.message_box "VeriFast IDE" begin
         "Invalid command line.\n\n" ^ 
