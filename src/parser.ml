@@ -38,6 +38,7 @@ let c_keywords = [
   "const"; "volatile"; "register"; "ifdef"; "elif"; "undef";
   "SHRT_MIN"; "SHRT_MAX"; "USHRT_MAX"; "UINT_MAX"; "UCHAR_MAX";
   "LLONG_MIN"; "LLONG_MAX"; "ULLONG_MAX";
+  "__int8"; "__int16"; "__int32"; "__int64"; "__int128"
 ]
 
 let java_keywords = [
@@ -716,8 +717,19 @@ and
   parse_type = parser
   [< t0 = parse_primary_type; t = parse_type_suffix t0 >] -> t
 and
+  parse_int_opt = parser
+  [< '(_, Kwd "int") >] -> ()
+| [< >] -> ()
+and
+  parse_integer_type_keyword = parser
+  [< '(l, Kwd "int") >] -> (l, int_rank)
+| [< '(l, Kwd "__int8") >] -> (l, 0)
+| [< '(l, Kwd "__int16") >] -> (l, 1)
+| [< '(l, Kwd "__int32") >] -> (l, 2)
+| [< '(l, Kwd "__int64") >] -> (l, 3)
+| [< '(l, Kwd "__int128") >] -> (l, 4)
+and
   parse_integer_size_specifier = parser
-  [< '(_, Kwd "char") >] -> 0
 | [< '(_, Kwd "short") >] -> 1
 | [< '(_, Kwd "long");
      n = begin parser
@@ -727,7 +739,9 @@ and
 | [< >] -> int_rank
 and
   parse_integer_type_rest = parser
-  [< n = parse_integer_size_specifier; _ = opt (parser [< '(_, Kwd "int") >] -> ()) >] -> n
+  [< '(_, Kwd "char") >] -> 0
+| [< (_, k) = parse_integer_type_keyword >] -> k
+| [< n = parse_integer_size_specifier; _ = opt (parser [< '(_, Kwd "int") >] -> ()) >] -> n
 and
   parse_primary_type = parser
   [< '(l, Kwd "volatile"); t0 = parse_primary_type >] -> t0
@@ -737,7 +751,7 @@ and
   if sn = None && fs = None then raise (ParseException (l, "Struct name or body expected"));
   StructTypeExpr (l, sn, fs)
 | [< '(l, Kwd "enum"); '(_, Ident _) >] -> ManifestTypeExpr (l, intType)
-| [< '(l, Kwd "int") >] -> ManifestTypeExpr (l, intType)
+| [< (l, k) = parse_integer_type_keyword >] -> ManifestTypeExpr (l, Int (Signed, k))
 | [< '(l, Kwd "float") >] -> ManifestTypeExpr (l, Float)
 | [< '(l, Kwd "double") >] -> ManifestTypeExpr (l, Double)
 | [< '(l, Kwd "short") >] -> ManifestTypeExpr(l, Int (Signed, 1))
