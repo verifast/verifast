@@ -52,3 +52,4 @@ Third-Party Resources
 
 - Kiwamu Okabe created a [Google Groups forum](https://groups.google.com/forum/#!forum/verifast) on VeriFast
 - Kiwamu Okabe translated the VeriFast Tutorial into [Japanese](https://github.com/jverifast-ug/translate/blob/master/Manual/Tutorial/Tutorial.md). Thanks, Kiwamu!
+- Joseph Benden created [Ubuntu packages](https://launchpad.net/%7Ejbenden/+archive/ubuntu/verifast)
