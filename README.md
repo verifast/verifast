@@ -20,7 +20,7 @@ A few minutes after each push to the master branch, binary packages become avail
 - [Linux/x64](http://82076e0e62875f063ae8-929808a701855dfb71539d0a4342d4be.r54.cf5.rackcdn.com/verifast-nightly.tar.gz)
 - [OS X](http://82076e0e62875f063ae8-929808a701855dfb71539d0a4342d4be.r54.cf5.rackcdn.com/verifast-nightly-osx.tar.gz)
 
-For the latest named releases, for now see [here](http://distrinet.cs.kuleuven.be/software/VeriFast/).
+These "nightly" builds are very stable and are recommended. Still, named releases are available [here](https://github.com/verifast/verifast/releases). (An archive of older named releases is [here](https://people.cs.kuleuven.be/~bart.jacobs/verifast/releases/).)
 
 Simply extract the files from the archive to any location in your filesystem. All files in the archive are in a directory named `verifast-HASH` where `HASH` is the Git commit hash. For example, on Linux:
 
