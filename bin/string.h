@@ -35,11 +35,11 @@ int strlen(char *string);
 
 int memcmp(char *array, char *array0, size_t count);
     //@ requires [?f]chars(array, ?n, ?cs) &*& [?f0]chars(array0, ?n0, ?cs0) &*& count <= n &*& count <= n0;
-    //@ ensures [f]chars(array, n, cs) &*& [f0]chars(array0, n0, cs0) &*& true == ((result == 0) == (take(count, cs) == take(count, cs0)));
+    //@ ensures [f]chars(array, n, cs) &*& [f0]chars(array0, n0, cs0) &*& (result == 0) == (take(count, cs) == take(count, cs0));
 
 int strcmp(char *s1, char *s2);
     //@ requires [?f1]string(s1, ?cs1) &*& [?f2]string(s2, ?cs2);
-    //@ ensures [f1]string(s1, cs1) &*& [f2]string(s2, cs2) &*& true == ((result == 0) == (cs1 == cs2));
+    //@ ensures [f1]string(s1, cs1) &*& [f2]string(s2, cs2) &*& (result == 0) == (cs1 == cs2);
 
 char *memchr(char *array, char c, size_t count);
     //@ requires [?f]chars(array, count, ?cs);

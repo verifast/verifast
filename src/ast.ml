@@ -97,32 +97,45 @@ type type_ = (* ?type_ *)
   | PluginInternalType of DynType.dyn
   | AbstractType of string
 
-let int_rank = 2
-let long_rank = 2
-let llong_rank = 3
-let ptr_rank = 2
-let int_size = 1 lsl int_rank
-let intType = Int (Signed, int_rank)
-let ptrdiff_t = intType
+type integer_limits = {max_unsigned_big_int: big_int; min_signed_big_int: big_int; max_signed_big_int: big_int}
 
-let integer_promotion t = (* C11 6.3.1.1 *)
-  match t with
-  | Int (_, k) when k < int_rank -> intType
-  | _ -> t
+let max_rank = 4 (* (u)int128 *)
 
-let usual_arithmetic_conversion t1 t2 = (* C11 6.3.1.8 *)
-  match t1, t2 with
-    LongDouble, _ | _, LongDouble -> LongDouble
-  | Double, _ | _, Double -> Double
-  | Float, _ | _, Float -> Float
-  | RealType, _ | _, RealType -> RealType
-  | t1, t2 ->
-    let t1 = integer_promotion t1 in
-    let t2 = integer_promotion t2 in
-    match t1, t2 with
-      Int (Signed, n1), Int (Unsigned, n2) -> if n1 <= n2 then t2 else t1
-    | Int (Unsigned, n1), Int (Signed, n2) -> if n2 <= n1 then t1 else t2
-    | Int (s, n1), Int (_, n2) -> Int (s, max n1 n2)
+let integer_limits_table =
+  Array.init (max_rank + 1) begin fun k ->
+    let max_unsigned_big_int = pred_big_int (shift_left_big_int unit_big_int (8 * (1 lsl k))) in
+    let max_signed_big_int = shift_right_big_int max_unsigned_big_int 1 in
+    let min_signed_big_int = pred_big_int (minus_big_int max_signed_big_int) in
+    {max_unsigned_big_int; max_signed_big_int; min_signed_big_int}
+  end
+
+let max_unsigned_big_int k = integer_limits_table.(k).max_unsigned_big_int
+let min_signed_big_int k = integer_limits_table.(k).min_signed_big_int
+let max_signed_big_int k = integer_limits_table.(k).max_signed_big_int
+
+type data_model = {int_rank: int; long_rank: int; ptr_rank: int}
+let data_model_32bit = {int_rank=2; long_rank=2; ptr_rank=2}
+let data_model_java = {int_rank=2; long_rank=3; ptr_rank=3 (*arbitrary value; ptr_rank is not relevant to Java programs*)}
+let data_model_lp64 = {int_rank=2; long_rank=3; ptr_rank=3}
+let data_model_llp64 = {int_rank=2; long_rank=2; ptr_rank=3}
+let data_models = [
+  "IP16", {int_rank=1; long_rank=2; ptr_rank=1};
+  "I16", {int_rank=1; long_rank=2; ptr_rank=2};
+  "ILP32", data_model_32bit;
+  "32bit", data_model_32bit;
+  "LLP64", data_model_llp64;
+  "Win64", data_model_llp64;
+  "LP64", data_model_lp64;
+  "Unix64", data_model_lp64;
+  "Linux64", data_model_lp64;
+  "OSX", data_model_lp64;
+  "macOS", data_model_lp64
+]
+let data_model_of_string s =
+  let s = String.uppercase s in
+  match head_flatmap_option (fun (k, v) -> if String.uppercase k = s then Some v else None) data_models with
+    None -> failwith "No such data model"
+  | Some v -> v
 
 let is_arithmetic_type t =
   match t with
@@ -130,18 +143,6 @@ let is_arithmetic_type t =
   | _ -> false
 
 type prover_type = ProverInt | ProverBool | ProverReal | ProverInductive (* ?prover_type *)
-
-(** Types as they appear in source code, before validity checking and resolution. *)
-type type_expr = (* ?type_expr *)
-    StructTypeExpr of loc * string
-  | PtrTypeExpr of loc * type_expr
-  | ArrayTypeExpr of loc * type_expr
-  | StaticArrayTypeExpr of loc * type_expr (* type *) * int (* number of elements*)
-  | ManifestTypeExpr of loc * type_  (* A type expression that is obviously a given type. *)
-  | IdentTypeExpr of loc * string option (* package name *) * string
-  | ConstructedTypeExpr of loc * string * type_expr list  (* A type of the form x<T1, T2, ...> *)
-  | PredTypeExpr of loc * type_expr list * int option (* if None, not necessarily precise; if Some n, precise with n input parameters *)
-  | PureFuncTypeExpr of loc * type_expr list   (* Potentially uncurried *)
 
 (** An object used in predicate assertion ASTs. Created by the parser and filled in by the type checker.
     TODO: Since the type checker now generates a new AST anyway, we can eliminate this hack. *)
@@ -173,7 +174,18 @@ type
 
 type int_literal_lsuffix = NoLSuffix | LSuffix | LLSuffix
 
-type
+(** Types as they appear in source code, before validity checking and resolution. *)
+type type_expr = (* ?type_expr *)
+    StructTypeExpr of loc * string option * field list option
+  | PtrTypeExpr of loc * type_expr
+  | ArrayTypeExpr of loc * type_expr
+  | StaticArrayTypeExpr of loc * type_expr (* type *) * int (* number of elements*)
+  | ManifestTypeExpr of loc * type_  (* A type expression that is obviously a given type. *)
+  | IdentTypeExpr of loc * string option (* package name *) * string
+  | ConstructedTypeExpr of loc * string * type_expr list  (* A type of the form x<T1, T2, ...> *)
+  | PredTypeExpr of loc * type_expr list * int option (* if None, not necessarily precise; if Some n, precise with n input parameters *)
+  | PureFuncTypeExpr of loc * type_expr list   (* Potentially uncurried *)
+and
   operator =  (* ?operator *)
   | Add | Sub | PtrDiff | Le | Ge | Lt | Gt | Eq | Neq | And | Or | Xor | Not | Mul | Div | Mod | BitNot | BitAnd | BitXor | BitOr | ShiftLeft | ShiftRight
 and
@@ -259,8 +271,16 @@ and
       loc *
       expr *
       switch_expr_clause list *
+      (loc * expr) option (* default clause *)
+  | WSwitchExpr of
+      loc *
+      expr *
+      string * (* inductive type, fully qualified *)
+      type_ list * (* type arguments *)
+      switch_expr_clause list *
       (loc * expr) option * (* default clause *)
-      (type_ * (string * type_) list * type_ list * type_) option ref (* used during evaluation when generating an anonymous fixpoint function, to get the prover types right *)
+      (string * type_) list * (* type environment *)
+      type_ (* result type *)
   | PredNameExpr of loc * string (* naam van predicaat en line of code*)
   | CastExpr of loc * type_expr * expr (* cast *)
   | Upcast of expr * type_ (* from *) * type_ (* to *)  (* Not generated by the parser; inserted by the typechecker. Required to prevent bad downcasts during autoclose. *)
@@ -285,6 +305,82 @@ and
   | WSuperMethodCall of loc * string (*superclass*) * string * expr list * (loc * ghostness * (type_ option) * (string * type_) list * asn * asn * (type_ * asn) list * bool (*terminates*) * int (*rank*) option * visibility)
   | InitializerList of loc * expr list
   | SliceExpr of loc * pat option * pat option
+  | PointsTo of
+        loc *
+        expr *
+        pat
+  | WPointsTo of
+      loc *
+      expr *
+      type_ *
+      pat
+  | PredAsn of (* Predicate assertion, before type checking *)
+      loc *
+      predref *
+      type_expr list *
+      pat list (* indices of predicate family instance *) *
+      pat list
+  | WPredAsn of (* Predicate assertion, after type checking. (W is for well-formed) *)
+      loc *
+      predref *
+      bool * (* prefref refers to global name *)
+      type_ list *
+      pat list *
+      pat list
+  | InstPredAsn of
+      loc *
+      expr *
+      string *
+      expr * (* index *)
+      pat list
+  | WInstPredAsn of
+      loc *
+      expr option *
+      string (* static type *) *
+      class_finality (* finality of static type *) *
+      string (* family type *) *
+      string *
+      expr (* index *) *
+      pat list
+  | ExprAsn of (* uitdrukking regel-expr *)
+      loc *
+      expr
+  | Sep of (* separating conjunction *)
+      loc *
+      asn *
+      asn
+  | IfAsn of (* if-predicate in de vorm expr? p1:p2 regel-expr-p1-p2 *)
+      loc *
+      expr *
+      asn *
+      asn
+  | SwitchAsn of (* switch over cons van inductive type regel-expr-clauses*)
+      loc *
+      expr *
+      switch_asn_clause list
+  | WSwitchAsn of (* switch over cons van inductive type regel-expr-clauses*)
+      loc *
+      expr *
+      string * (* inductive type (fully qualified) *)
+      wswitch_asn_clause list
+  | EmpAsn of  (* als "emp" bij requires/ensures staat -regel-*)
+      loc
+  | ForallAsn of 
+      loc *
+      type_expr *
+      string *
+      expr
+  | CoefAsn of (* fractional permission met coeff-predicate*)
+      loc *
+      pat *
+      asn
+  | PluginAsn of loc * string
+  | WPluginAsn of loc * string list * Plugins.typechecked_plugin_assertion
+  | EnsuresAsn of loc * asn
+  | MatchAsn of loc * expr * pat
+  | WMatchAsn of loc * expr * pat * type_
+and
+  asn = expr
 and
   pat = (* ?pat *)
     LitPat of expr (* literal pattern *)
@@ -292,6 +388,21 @@ and
   | DummyPat (*dummy pattern, aangeduid met _ in code *)
   | CtorPat of loc * string * pat list
   | WCtorPat of loc * string * type_ list * string * type_ list * type_ list * pat list
+and
+  switch_asn_clause = (* ?switch_asn_clause *)
+  | SwitchAsnClause of
+      loc * 
+      string * 
+      string list * 
+      asn
+and
+  wswitch_asn_clause = (* ?switch_asn_clause *)
+  | WSwitchAsnClause of
+      loc * 
+      string * 
+      string list * 
+      prover_type option list (* Boxing info *) *
+      asn
 and
   switch_expr_clause = (* ?switch_expr_clause *)
     SwitchExprClause of
@@ -472,90 +583,6 @@ and
   | SwitchStmtClause of loc * expr * stmt list
   | SwitchStmtDefaultClause of loc * stmt list
 and
-  asn = (* A separation logic assertion *) (* ?asn *)
-    PointsTo of
-        loc *
-        expr *
-        pat
-  | WPointsTo of
-      loc *
-      expr *
-      type_ *
-      pat
-  | PredAsn of (* Predicate assertion, before type checking *)
-      loc *
-      predref *
-      type_expr list *
-      pat list (* indices of predicate family instance *) *
-      pat list
-  | WPredAsn of (* Predicate assertion, after type checking. (W is for well-formed) *)
-      loc *
-      predref *
-      bool * (* prefref refers to global name *)
-      type_ list *
-      pat list *
-      pat list
-  | InstPredAsn of
-      loc *
-      expr *
-      string *
-      expr * (* index *)
-      pat list
-  | WInstPredAsn of
-      loc *
-      expr option *
-      string (* static type *) *
-      class_finality (* finality of static type *) *
-      string (* family type *) *
-      string *
-      expr (* index *) *
-      pat list
-  | ExprAsn of (* uitdrukking regel-expr *)
-      loc *
-      expr
-  | Sep of (* separating conjunction *)
-      loc *
-      asn *
-      asn
-  | IfAsn of (* if-predicate in de vorm expr? p1:p2 regel-expr-p1-p2 *)
-      loc *
-      expr *
-      asn *
-      asn
-  | SwitchAsn of (* switch over cons van inductive type regel-expr-clauses*)
-      loc *
-      expr *
-      switch_asn_clause list
-  | WSwitchAsn of (* switch over cons van inductive type regel-expr-clauses*)
-      loc *
-      expr *
-      string * (* inductive type (fully qualified) *)
-      switch_asn_clause list
-  | EmpAsn of  (* als "emp" bij requires/ensures staat -regel-*)
-      loc
-  | ForallAsn of 
-      loc *
-      type_expr *
-      string *
-      expr
-  | CoefAsn of (* fractional permission met coeff-predicate*)
-      loc *
-      pat *
-      asn
-  | PluginAsn of loc * string
-  | WPluginAsn of loc * string list * Plugins.typechecked_plugin_assertion
-  | EnsuresAsn of loc * asn
-  | MatchAsn of loc * expr * pat
-  | WMatchAsn of loc * expr * pat * type_
-and
-  switch_asn_clause = (* ?switch_asn_clause *)
-  | SwitchAsnClause of
-      loc * 
-      string * 
-      string list * 
-      prover_type option list option ref (* Boxing info *) *
-      asn (* clauses bij switch  regel-cons-lijst v var in cons-body *)
-and
   func_kind = (* ?func_kind *)
   | Regular
   | Fixpoint
@@ -726,15 +753,6 @@ let func_kind_of_ghostness gh =
     Real -> Regular
   | Ghost -> Lemma (false, None)
   
-let woperation_type_result_type op t =
-  match op with
-    Le|Ge|Lt|Gt|Eq|Neq -> Bool 
-  | PtrDiff -> ptrdiff_t
-  | _ -> t
-
-let woperation_result_type (WOperation (l, op, es, t)) =
-  woperation_type_result_type op t
-
 (* Region: some AST inspector functions *)
 
 let string_of_func_kind f=
@@ -779,7 +797,8 @@ let rec expr_loc e =
   | NewArray(l, _, _) -> l
   | NewArrayWithInitializer (l, _, _) -> l
   | IfExpr (l, e1, e2, e3) -> l
-  | SwitchExpr (l, e, secs, _, _) -> l
+  | SwitchExpr (l, e, secs, _) -> l
+  | WSwitchExpr (l, e, i, targs, secs, cdef, tenv, t0) -> l
   | SizeofExpr (l, t) -> l
   | PredNameExpr (l, g) -> l
   | CastExpr (l, te, e) -> l
@@ -796,10 +815,7 @@ let rec expr_loc e =
   | SuperMethodCall(l, _, _) -> l
   | WSuperMethodCall(l, _, _, _, _) -> l
   | InitializerList (l, _) -> l
-  
-let asn_loc p =
-  match p with
-    PointsTo (l, e, rhs) -> l
+  | PointsTo (l, e, rhs) -> l
   | WPointsTo (l, e, tp, rhs) -> l
   | PredAsn (l, g, targs, ies, es) -> l
   | WPredAsn (l, g, _, targs, ies, es) -> l
@@ -818,6 +834,7 @@ let asn_loc p =
   | PluginAsn (l, asn) -> l
   | WPluginAsn (l, xs, asn) -> l
   | EnsuresAsn (l, body) -> l
+let asn_loc a = expr_loc a
   
 let stmt_loc s =
   match s with
@@ -856,7 +873,7 @@ let stmt_loc s =
 let type_expr_loc t =
   match t with
     ManifestTypeExpr (l, t) -> l
-  | StructTypeExpr (l, sn) -> l
+  | StructTypeExpr (l, sn, _) -> l
   | IdentTypeExpr (l, _, x) -> l
   | ConstructedTypeExpr (l, x, targs) -> l
   | PtrTypeExpr (l, te) -> l
@@ -918,7 +935,7 @@ let expr_fold_open iter state e =
   | NewArray (l, te, e0) -> iter state e0
   | NewArrayWithInitializer (l, te, es) -> iters state es
   | IfExpr (l, e1, e2, e3) -> iters state [e1; e2; e3]
-  | SwitchExpr (l, e0, cs, cdef_opt, info) -> let state = itercs (iter state e0) cs in (match cdef_opt with Some (l, e) -> iter state e | None -> state)
+  | SwitchExpr (l, e0, cs, cdef_opt) | WSwitchExpr (l, e0, _, _, cs, cdef_opt, _, _) -> let state = itercs (iter state e0) cs in (match cdef_opt with Some (l, e) -> iter state e | None -> state)
   | PredNameExpr (l, p) -> state
   | CastExpr (l, te, e0) -> iter state e0
   | Upcast (e, fromType, toType) -> iter state e

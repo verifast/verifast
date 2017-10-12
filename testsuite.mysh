@@ -8,6 +8,8 @@ cd bin
   cd ..
 cd ..
 cd examples
+  verifast -target IP16 -c -allow_should_fail 16bittest.c
+  verifast -target LP64 -c 64bittest.c
   cd clhlock
     verifast -prover redux -c clhlock.c
   cd ..
@@ -385,6 +387,7 @@ cd tutorial_solutions
   verifast_both students.c
 cd ..
 cd tests
+  verifast_both -c -allow_should_fail -allow_undeclared_struct_types undeclared_structs.c
   verifast_both stresstest-one-plus-one.c
   cd test-includepath
     mysh < runthistest.mysh
@@ -409,6 +412,7 @@ cd tests
   cd errors
     verifast_both -c -allow_should_fail basics.c
     verifast_both -c -allow_should_fail typecheck1.c
+    verifast_both -c -allow_should_fail ghost_assignment.c
     verifast_both -c -allow_should_fail ghost_field.c
     verifast_both -c -allow_should_fail inhabited.c
     verifast_both -c -allow_should_fail lemmafuncptr.c

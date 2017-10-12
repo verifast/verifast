@@ -14,18 +14,18 @@ void check (bool b)
   assert(b);
 }
 
-struct struct_with_array
+typedef struct
  {
   int x;
   int ar [7];
   int y;
- };
+ } struct_with_array;
 
 void check_local_inits()
   //@ requires true;
   //@ ensures true;
 {
-  struct struct_with_array foo = {123, {2, 3, 5, 7, 11, 13, 17}, 456};
+  struct_with_array foo = {123, {2, 3, 5, 7, 11, 13, 17}, 456};
   char buf[3] = {1, 2, 3};
   
   check((&foo)->x == 123);
@@ -33,10 +33,10 @@ void check_local_inits()
   check(buf[1] == 2);
 }
 
-//@ predicate struct_with_array(struct struct_with_array *s;) = s->x |-> _ &*& ints(s->ar, 7, _) &*& s->y |-> _;
+//@ predicate struct_with_array(struct_with_array *s;) = s->x |-> _ &*& ints(s->ar, 7, _) &*& s->y |-> _;
 
 struct mystruct {
-  struct struct_with_array s1;
+  struct_with_array s1;
   int s2;
 };
 
@@ -54,7 +54,7 @@ static void foo()
   //@ close_struct(&my_local_nested_struct);
   
   //@ open_struct(&(&my_local_nested_struct)->s1);
-  memset(&(&my_local_nested_struct)->s1, 0, sizeof(struct struct_with_array));
+  memset(&(&my_local_nested_struct)->s1, 0, sizeof(struct_with_array));
   //@ close_struct(&(&my_local_nested_struct)->s1);
   
   //@ open mystruct(_);
@@ -84,7 +84,7 @@ void mod_ar2 (void)
   return;
  }
 
-static struct struct_with_array bigArray[10] = {{100, {1,2,3,4}, 200}, {300, {5,6,7}, 400}}; // Incomplete initializer lists; remaining elements get default value.
+static struct_with_array bigArray[10] = {{100, {1,2,3,4}, 200}, {300, {5,6,7}, 400}}; // Incomplete initializer lists; remaining elements get default value.
 
 int main(int argc, char **argv) //@ : main_full(static_array)
 //@ requires module(static_array, true);
@@ -97,13 +97,13 @@ int main(int argc, char **argv) //@ : main_full(static_array)
   check((&(&my_global_nested_struct)->s1)->y == -3);
   check((&my_global_nested_struct)->s2 == -99);
   
-  struct struct_with_array *bigArrayPtr = bigArray;
+  struct_with_array *bigArrayPtr = bigArray;
   check((bigArrayPtr + 1)->x == 300);
   check((bigArrayPtr + 1)->ar[2] == 7);
   
   foo();
 
-  struct struct_with_array *s;
+  struct_with_array *s;
   int    i = 1;
   int    ar1 [55];
   int    t;
@@ -123,7 +123,7 @@ int main(int argc, char **argv) //@ : main_full(static_array)
   assert (ar1[26] == 2);
 
   /* array inside a struct */
-  s = malloc (sizeof (struct struct_with_array));
+  s = malloc (sizeof (struct_with_array));
   if (s == 0) { abort(); }
 
   s->ar[ 0] = 1;
@@ -160,12 +160,12 @@ int main(int argc, char **argv) //@ : main_full(static_array)
   assert (ar2[1] == 7);
 
   //@ open_struct(bigArrayPtr);
-  //@ assert chars((void *)bigArrayPtr, sizeof(struct struct_with_array), _);
+  //@ assert ((char *)(void *)bigArrayPtr)[..sizeof(struct_with_array)] |-> _;
   //@ open_struct(bigArrayPtr + 1);
-  //@ assert chars((void *)(bigArrayPtr + 1), sizeof(struct struct_with_array), _);
+  //@ assert chars((void *)(bigArrayPtr + 1), sizeof(struct_with_array), _);
   //@ chars_join((void *)(bigArrayPtr + 1));
   //@ chars_join((void *)bigArrayPtr);
-  //@ assert chars((void *)bigArrayPtr, sizeof(struct struct_with_array) * 10, _);
+  //@ assert chars((void *)bigArrayPtr, sizeof(struct_with_array) * 10, _);
   //@ close_module();
   //@ leak module(static_array, _);
 

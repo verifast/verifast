@@ -382,7 +382,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       eval_h h env w $. fun h env pointerTerm ->
       with_context (Executing (h, env, l, "Consuming character array")) $. fun () ->
       let (_, _, _, _, chars_symb, _, _) = List.assoc ("chars") predfammap in
-      consume_chunk rules h ghostenv [] [] l (chars_symb, true) [] real_unit dummypat None [TermPat pointerTerm; TermPat (struct_size sn); SrcPat DummyPat] $. fun _ h coef _ _ _ _ _ ->
+      consume_chunk rules h ghostenv [] [] l (chars_symb, true) [] real_unit dummypat None [TermPat pointerTerm; TermPat (struct_size l sn); SrcPat DummyPat] $. fun _ h coef _ _ _ _ _ ->
       if not (definitely_equal coef real_unit) then assert_false h env l "Closing a struct requires full permission to the character array." None;
       produce_c_object l real_unit pointerTerm (StructType sn) None false true h $. fun h ->
       cont h env
@@ -395,7 +395,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (_, _, _, _, chars_symb, _, _) = List.assoc "chars" predfammap in
       let cs = get_unique_var_symb "cs" (InductiveType ("list", [Int (Signed, 0)])) in
       let Some (_, _, _, _, length_symb) = try_assoc' Ghost (pn,ilist) "length" purefuncmap in
-      let size = struct_size sn in
+      let size = struct_size l sn in
       assume (ctxt#mk_eq (mk_app length_symb [cs]) size) $. fun () ->
       cont (Chunk ((chars_symb, true), [], real_unit, [pointerTerm; size; cs], None)::h) env
     | ExprStmt (CallExpr (l, "free", [], [], args,Static) as e) ->
@@ -724,16 +724,23 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         success()
       | _ -> static_error l "Switch statement operand is not an inductive value or integer." None
       end
-    | Assert(_, ExprAsn(le, e)) -> 
-      let we = check_expr_t (pn,ilist) tparams tenv e boolt in
+    | Assert (l, p) when not pure ->
+      let we = check_expr_t (pn,ilist) tparams tenv p boolt in
       let t = eval env we in
-      assert_term t h env le ("Assertion might not hold: " ^ (ctxt#pprint t)) None;
+      assert_term t h env l ("Assertion might not hold: " ^ (ctxt#pprint t)) None;
       cont h env
     | Assert (l, p) ->
       let (wp, tenv, _) = check_asn_core (pn,ilist) tparams tenv p in
-      consume_asn rules [] h ghostenv env wp false real_unit (fun _ _ ghostenv env _ ->
-        tcont sizemap tenv ghostenv h env
-      )
+      begin match wp with
+        ExprAsn (le, we) ->
+        let t = eval env we in
+        assert_term t h env le ("Assertion might not hold: " ^ (ctxt#pprint t)) None;
+        cont h env
+      | _ ->
+        consume_asn rules [] h ghostenv env wp false real_unit (fun _ _ ghostenv env _ ->
+          tcont sizemap tenv ghostenv h env
+        )
+      end
     | Leak (l, p) ->
       let (wp, tenv, _) = check_asn_core (pn,ilist) tparams tenv p in
       consume_asn rules [] h ghostenv env wp false real_unit (fun chunks h ghostenv env size ->
@@ -2433,6 +2440,20 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | Some post' ->
             post'
         in
+        let do_return h env_post =
+          consume_asn rules [] h ghostenv env_post post true real_unit (fun _ h ghostenv env size_first ->
+            cleanup_heapy_locals (pn, ilist) closeBraceLoc h env heapy_ps (fun h ->
+              check_leaks h env closeBraceLoc "Function leaks heap chunks."
+            )
+          )
+        in
+        let return_cont h tenv2 env2 retval =
+          match (rt, retval) with
+            (None, None) -> do_return h env
+          | (Some tp, Some t) -> do_return h (("result", t)::env)
+          | (None, Some _) -> assert_false h env l "Void function returns a value." None
+          | (Some _, None) -> assert_false h env l "Non-void function does not return a value." None
+        in
         let (prolog, ss) =
           if in_pure_context then
             ([], ss)
@@ -2457,20 +2478,6 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           else
             cont h tenv ghostenv env
         end $. fun h tenv ghostenv env ->
-        let do_return h env_post =
-          consume_asn rules [] h ghostenv env_post post true real_unit (fun _ h ghostenv env size_first ->
-            cleanup_heapy_locals (pn, ilist) closeBraceLoc h env heapy_ps (fun h ->
-              check_leaks h env closeBraceLoc "Function leaks heap chunks."
-            )
-          )
-        in
-        let return_cont h tenv2 env2 retval =
-          match (rt, retval) with
-            (None, None) -> do_return h env
-          | (Some tp, Some t) -> do_return h (("result", t)::env)
-          | (None, Some _) -> assert_false h env l "Void function returns a value." None
-          | (Some _, None) -> assert_false h env l "Non-void function does not return a value." None
-        in
         begin fun tcont ->
           let (h,tenv,env) = heapify_params h tenv env heapy_ps in
           let outerlocals = ref [] in
@@ -2934,9 +2941,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           (headers, ds)
         | CLang ->
           if Filename.check_suffix path ".h" then
-            parse_header_file path reportRange reportShouldFail options.option_verbose [] options.option_enforce_annotations
+            parse_header_file path reportRange reportShouldFail options.option_verbose [] options.option_enforce_annotations data_model
           else
-            parse_c_file path reportRange reportShouldFail options.option_verbose options.option_include_paths options.option_enforce_annotations
+            parse_c_file path reportRange reportShouldFail options.option_verbose options.option_include_paths options.option_enforce_annotations data_model
     in
     emitter_callback ds;
     check_should_fail ([], [], [], [], []) $. fun () ->

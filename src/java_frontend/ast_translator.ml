@@ -75,11 +75,12 @@ let report_range : (Lexer.range_kind -> Ast.loc -> unit) ref = ref (fun _ _ -> (
 let report_should_fail : (Ast.loc -> unit) ref = ref (fun _ -> ())
 let enforce_annotations : bool ref = ref false
 
+module JavaParser = Parser.Parser (struct let language = Java let enforce_annotations = true let data_model = data_model_java end)
+
 (* this function creates a lexer for each of 
    the annotations and composes them before
    passing the resulting stream to the parser *)
 let parse_pure_decls_core loc used_parser anns lookup =
-  Parser.set_language Java;
   if (List.length anns < 1) then
     error loc "Parsing failed due to missing annotations";
   let (loc, token_stream) =
@@ -148,7 +149,7 @@ let parse_ghost_import loc anns lookup =
 
 let parse_pure_decls loc anns lookup =
   let parser_pure_decls_eof = parser 
-    [< ds = Parser.parse_decls VF.Java ~inGhostHeader:true true;
+    [< ds = Parser.parse_decls VF.Java data_model_java ~inGhostHeader:true true;
       _ = Lexer.Stream.empty >] -> ds
   in
   parse_pure_decls_core loc parser_pure_decls_eof anns lookup
@@ -160,27 +161,27 @@ let parse_pure_decls_try anns lookup =
 
 let parse_postcondition loc anns lookup =
   let parser_postcondition_eof = parser 
-    [< '(_, Lexer.Kwd "ensures"); post = Parser.parse_pred; '(_, Lexer.Kwd ";"); 
+    [< '(_, Lexer.Kwd "ensures"); post = JavaParser.parse_asn; '(_, Lexer.Kwd ";"); 
        _ = Lexer.Stream.empty >] -> post
   in
   parse_pure_decls_core loc parser_postcondition_eof anns lookup
 
 let parse_contract loc anns lookup =
   let parse_contract_eof = parser 
-    [< s = Parser.parse_spec; _ = Lexer.Stream.empty >] -> s
+    [< s = JavaParser.parse_spec; _ = Lexer.Stream.empty >] -> s
   in
   parse_pure_decls_core loc parse_contract_eof anns lookup
   
 let parse_ghost_members loc classname ann =
   let rec parse_ghost_members_eof = parser
   | [< _ = Lexer.Stream.empty >] -> []
-  | [< m = Parser.parse_ghost_java_member classname; mems = parse_ghost_members_eof >] -> m::mems
+  | [< m = JavaParser.parse_ghost_java_member classname; mems = parse_ghost_members_eof >] -> m::mems
   in
   parse_pure_decls_core loc parse_ghost_members_eof [ann] false
 
 let parse_pure_statement loc ann lookup =
   let parse_pure_statement_eof = parser
-    [< s = Parser.parse_stmt0; _ = Lexer.Stream.empty >] -> PureStmt (loc, s)
+    [< s = JavaParser.parse_stmt0; _ = Lexer.Stream.empty >] -> PureStmt (loc, s)
   in
   parse_pure_decls_core loc parse_pure_statement_eof [ann] lookup
 
@@ -190,11 +191,11 @@ let parse_loop_invar loc anns lookup =
       inv =
         Parser.opt
           begin parser
-          | [< '(_, Lexer.Kwd "requires"); pre = Parser.parse_pred; '(_, Lexer.Kwd ";");
-              '(_, Lexer.Kwd "ensures"); post = Parser.parse_pred; '(_, Lexer.Kwd ";") >] -> VF.LoopSpec (pre, post)
-          | [< '(_, Lexer.Kwd "invariant"); p = Parser.parse_pred; '(_, Lexer.Kwd ";"); >] -> VF.LoopInv p
+          | [< '(_, Lexer.Kwd "requires"); pre = JavaParser.parse_asn; '(_, Lexer.Kwd ";");
+              '(_, Lexer.Kwd "ensures"); post = JavaParser.parse_asn; '(_, Lexer.Kwd ";") >] -> VF.LoopSpec (pre, post)
+          | [< '(_, Lexer.Kwd "invariant"); p = JavaParser.parse_asn; '(_, Lexer.Kwd ";"); >] -> VF.LoopInv p
           end;
-      dec = Parser.opt (parser [< '(_, Lexer.Kwd "decreases"); decr = Parser.parse_expr; '(_, Lexer.Kwd ";"); >] -> decr)
+      dec = Parser.opt (parser [< '(_, Lexer.Kwd "decreases"); decr = JavaParser.parse_expr; '(_, Lexer.Kwd ";"); >] -> decr)
     >] -> (inv, dec)
   in
   parse_pure_decls_core loc parse_loop_invar_eof anns lookup
@@ -584,17 +585,13 @@ and translate_prim_type typ =
   match typ with
   | GEN.VoidType l -> VF.ManifestTypeExpr(translate_location l, VF.Void)
   | GEN.BoolType l -> VF.ManifestTypeExpr(translate_location l, VF.Bool)
-  | GEN.CharType l -> VF.ManifestTypeExpr(translate_location l, VF.Int (VF.Signed, 1))
-  (* TODO fix type here *)
-  | GEN.ByteType l -> VF.ManifestTypeExpr(translate_location l, VF.Int (VF.Signed, 1))
-  | GEN.ShortType l -> VF.ManifestTypeExpr(translate_location l, VF.Int (VF.Signed, 2))
-  | GEN.IntType l -> VF.ManifestTypeExpr(translate_location l, VF.intType)
-  (* TODO fix type here *)
-  | GEN.LongType l -> VF.ManifestTypeExpr(translate_location l, VF.intType)
-  (* TODO fix type here *)
-  | GEN.FloatType l -> VF.ManifestTypeExpr(translate_location l, VF.RealType)
-  (* TODO fix type here *)
-  | GEN.DoubleType l -> VF.ManifestTypeExpr(translate_location l, VF.RealType)
+  | GEN.CharType l -> VF.ManifestTypeExpr(translate_location l, VF.Int (VF.Unsigned, 1))
+  | GEN.ByteType l -> VF.ManifestTypeExpr(translate_location l, VF.Int (VF.Signed, 0))
+  | GEN.ShortType l -> VF.ManifestTypeExpr(translate_location l, VF.Int (VF.Signed, 1))
+  | GEN.IntType l -> VF.ManifestTypeExpr(translate_location l, VF.Int (VF.Signed, 2))
+  | GEN.LongType l -> VF.ManifestTypeExpr(translate_location l, VF.Int (VF.Signed, 3))
+  | GEN.FloatType l -> VF.ManifestTypeExpr(translate_location l, VF.Float)
+  | GEN.DoubleType l -> VF.ManifestTypeExpr(translate_location l, VF.Double)
 
 and translate_ref_type typ = 
   debug_print "translate_ref_type";

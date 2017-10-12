@@ -41,7 +41,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | NewArray (l, te, e) -> expr_assigned_variables e
     | NewArrayWithInitializer (l, te, es) -> flatmap expr_assigned_variables es
     | IfExpr (l, e1, e2, e3) -> expr_assigned_variables e1 @ expr_assigned_variables e2 @ expr_assigned_variables e3
-    | SwitchExpr (l, e, cs, cdef_opt, _) ->
+    | SwitchExpr (l, e, cs, cdef_opt) | WSwitchExpr (l, e, _, _, cs, cdef_opt, _, _) ->
       expr_assigned_variables e @ flatmap (fun (SwitchExprClause (l, ctor, xs, e)) -> expr_assigned_variables e) cs @ (match cdef_opt with None -> [] | Some (l, e) -> expr_assigned_variables e)
     | CastExpr (l, te, e) -> expr_assigned_variables e
     | Upcast (e, fromType, toType) -> expr_assigned_variables e
@@ -158,7 +158,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       Java ->
       with_context (Executing (h, env, l, "Leaking remaining chunks")) $. fun () ->
       check_breakpoint h env l;
-      SymExecSuccess
+      major_success ()
     | _ ->
     with_context (Executing (h, env, l, "Cleaning up dummy fraction chunks")) $. fun () ->
     let h = List.filter (fun (Chunk (_, _, coef, _, _)) -> not (is_dummy_frac_term coef)) h in
@@ -173,7 +173,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let h = List.filter (function Chunk ((name, true), targs, frac, args, Some (PluginChunkInfo info)) -> check_plugin_state h env l name info; false | _ -> true) h in
     if h <> [] then assert_false h env l msg (Some "leak");
     check_breakpoint [] env l;
-    SymExecSuccess
+    major_success ()
   
   let check_func_header_compat l msg0 msg env00 (k, tparams, rt, xmap, nonghost_callers_only, pre, post, epost, terminates) (k0, tparams0, rt0, xmap0, nonghost_callers_only0, tpenv0, cenv0, pre0, post0, epost0, terminates0) =
     let msg1 = msg in
@@ -540,9 +540,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let rec iter cs =
         match cs with
           [] -> cs
-        | SwitchAsnClause (l, ctor, pats, info, body) as c::cs0 ->
+        | WSwitchAsnClause (l, ctor, pats, info, body) as c::cs0 ->
           let body' = dynamic_of body in
-          let c' = if body' == body then c else SwitchAsnClause (l, ctor, pats, info, body') in
+          let c' = if body' == body then c else WSwitchAsnClause (l, ctor, pats, info, body') in
           let cs0' = iter cs0 in
           if c' == c && cs0' == cs0 then cs else c'::cs0'
       in
@@ -1008,7 +1008,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | NewObject _ -> ()
     | NewArrayWithInitializer _ -> ()
     | IfExpr(_, e1, e2, e3) -> List.iter (fun e -> expr_mark_addr_taken e locals) [e1;e2;e3]
-    | SwitchExpr(_, e, cls, dcl, _) -> List.iter (fun (SwitchExprClause(_, _, _, e)) -> expr_mark_addr_taken e locals) cls; (match dcl with None -> () | Some((_, e)) -> expr_mark_addr_taken e locals)
+    | SwitchExpr(_, e, cls, dcl) | WSwitchExpr(_, e, _, _, cls, dcl, _, _) -> List.iter (fun (SwitchExprClause(_, _, _, e)) -> expr_mark_addr_taken e locals) cls; (match dcl with None -> () | Some((_, e)) -> expr_mark_addr_taken e locals)
     | PredNameExpr _ -> ()
     | CastExpr(_, _, e) ->  expr_mark_addr_taken e locals
     | Upcast (e, _, _) -> expr_mark_addr_taken e locals
@@ -1041,16 +1041,17 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       List.iter (fun p -> pat_expr_mark_addr_taken p locals) pats
     | ExprAsn(_, e) -> expr_mark_addr_taken e locals; 
     | Sep(_, a1, a2) -> ass_mark_addr_taken a1 locals; ass_mark_addr_taken a2 locals
-    | IfAsn(_, e, a1, a2) -> expr_mark_addr_taken e locals;  ass_mark_addr_taken a1 locals; ass_mark_addr_taken a2 locals
-    | SwitchAsn(_, e, cls) -> expr_mark_addr_taken e locals;
-        List.iter (fun (SwitchAsnClause(_, _, _, _, a)) -> ass_mark_addr_taken a locals) cls;
+    | IfExpr(_, e, a1, a2)|IfAsn(_, e, a1, a2) -> expr_mark_addr_taken e locals;  ass_mark_addr_taken a1 locals; ass_mark_addr_taken a2 locals
+    | SwitchExpr(_, e, cls, None) -> expr_mark_addr_taken e locals;
+        List.iter (fun (SwitchExprClause(_, _, _, a)) -> ass_mark_addr_taken a locals) cls;
     | WSwitchAsn(_, e, i, cls) -> expr_mark_addr_taken e locals;
-        List.iter (fun (SwitchAsnClause(_, _, _, _, a)) -> ass_mark_addr_taken a locals) cls;
+        List.iter (fun (WSwitchAsnClause(_, _, _, _, a)) -> ass_mark_addr_taken a locals) cls;
     | EmpAsn _ -> ()
     | ForallAsn (l, tp, i, e) -> expr_mark_addr_taken e locals; 
     | CoefAsn(_, pat, a) -> pat_expr_mark_addr_taken pat locals; ass_mark_addr_taken a locals
     | MatchAsn (l, e, pat) -> expr_mark_addr_taken e locals; pat_expr_mark_addr_taken pat locals
     | WMatchAsn (l, e, pat, tp) -> expr_mark_addr_taken e locals; pat_expr_mark_addr_taken pat locals
+    | e -> expr_mark_addr_taken e locals
   
   let rec stmt_mark_addr_taken s locals cont =
     match s with
@@ -1062,7 +1063,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           (* There is always an array chunk generated for a StaticArrayTypeExpr.
              Hence, we have to add this chunk to the list of locals to be freed
              at the end of the program block. *)
-          StaticArrayTypeExpr (_, _, _) | StructTypeExpr (_, _) ->
+          StaticArrayTypeExpr (_, _, _) | StructTypeExpr (_, _, _) ->
           (* TODO: handle array initialisers *)
           block := x::!block
         | _ -> ()
@@ -1144,7 +1145,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | NewObject _ -> []
     | NewArrayWithInitializer _ -> []
     | IfExpr(_, e1, e2, e3) -> (expr_address_taken e1) @ (expr_address_taken e2) @ (expr_address_taken e3)
-    | SwitchExpr(_, e, cls, dcl, _) -> List.flatten (List.map (fun (SwitchExprClause(_, _, _, e)) -> expr_address_taken e) cls) @ (match dcl with None -> [] | Some((_, e)) -> expr_address_taken e)
+    | SwitchExpr(_, e, cls, dcl) | WSwitchExpr(_, e, _, _, cls, dcl, _, _) -> List.flatten (List.map (fun (SwitchExprClause(_, _, _, e)) -> expr_address_taken e) cls) @ (match dcl with None -> [] | Some((_, e)) -> expr_address_taken e)
     | PredNameExpr _ -> []
     | CastExpr(_, _, e) -> expr_address_taken e
     | Upcast (e, fromType, toType) -> expr_address_taken e
@@ -1269,15 +1270,16 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | StructType sn ->
       let (fields, padding_predsymb_opt) =
-        match List.assoc sn structmap with
-          (_, None, _, _) -> static_error l (Printf.sprintf "Cannot produce an object of type 'struct %s' since this struct was declared without a body" sn) None
-        | (_, Some fds, padding_predsymb_opt, _) -> fds, padding_predsymb_opt
+        match try_assoc sn structmap with
+          Some (_, Some fds, padding_predsymb_opt, _) -> fds, padding_predsymb_opt
+        | _ -> static_error l (Printf.sprintf "Cannot produce an object of type 'struct %s' since this struct type has not been defined" sn) None
       in
       let inits =
         match init with
           Some (Some (InitializerList (_, es))) -> Some (Some es)
+        | Some (Some _) -> static_error l "Struct assignment is not yet supported." None
         | Some None -> Some None (* Initialize to default value (= zero) *)
-        | _ -> None (* Do not initialize; i.e. arbitrary initial value *)
+        | None -> None (* Do not initialize; i.e. arbitrary initial value *)
       in
       begin fun cont ->
         match producePaddingChunk, padding_predsymb_opt with
@@ -1343,9 +1345,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | StructType sn ->
       let fields, padding_predsymb_opt =
-        match List.assoc sn structmap with
-          (_, None, _, _) -> static_error l (Printf.sprintf "Cannot consume an object of type 'struct %s' since this struct was declared without a body" sn) None
-        | (_, Some fds, padding_predsymb_opt, _) -> fds, padding_predsymb_opt
+        match try_assoc sn structmap with
+          Some (_, Some fds, padding_predsymb_opt, _) -> fds, padding_predsymb_opt
+        | _ -> static_error l (Printf.sprintf "Cannot consume an object of type 'struct %s' since this struct type has not been defined" sn) None
       in
       begin fun cont ->
         match consumePaddingChunk, padding_predsymb_opt with
@@ -1865,8 +1867,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     match e with
     | Upcast (w, _, _) -> eval_h_core readonly h env w cont
-    | CastExpr (lc, ManifestTypeExpr (_, tp), (WFunCall (l, "malloc", [], [SizeofExpr (ls, StructTypeExpr (lt, tn))]) as e)) ->
-      expect_type lc (Some pure) (PtrType (StructType tn)) tp;
+    | CastExpr (lc, ManifestTypeExpr (_, tp), (WFunCall (l, "malloc", [], [SizeofExpr (ls, te)]) as e)) ->
+      let t = check_pure_type (pn,ilist) tparams te in
+      expect_type lc (Some pure) (PtrType t) tp;
       verify_expr readonly h env xo e cont
     | WFunCall (l, "malloc", [], [Operation (lmul, Mul, ([e; SizeofExpr (ls, te)] | [SizeofExpr (ls, te); e]))]) ->
       if pure then static_error l "Cannot call a non-pure function from a pure context." None;
