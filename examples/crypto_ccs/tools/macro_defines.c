@@ -28,9 +28,9 @@ int main()
   fprintf(f, "#define GCM_CONTEXT_SIZE  %i\n", sizeof(gcm_context) / sizeof(char));
   fprintf(f, "\n");
   fprintf(f, "//Some PolarSSL cryptographic algorithm configuration constants\n");
-  fprintf(f, "#define POLARSSL_CIPHER_ID_AES %i\n", POLARSSL_CIPHER_ID_AES);
-  fprintf(f, "#define POLARSSL_PK_RSA        %i\n", POLARSSL_PK_RSA);
-  fprintf(f, "#define POLARSSL_MD_NONE       %i\n", POLARSSL_MD_NONE);
+  fprintf(f, "#define MBEDTLS_CIPHER_ID_AES %i\n", POLARSSL_CIPHER_ID_AES);
+  fprintf(f, "#define MBEDTLS_PK_RSA        %i\n", POLARSSL_PK_RSA);
+  fprintf(f, "#define MBEDTLS_MD_NONE       %i\n", POLARSSL_MD_NONE);
   fprintf(f, "\n");
   fprintf(f, "//Some self defined size limits\n");
   fprintf(f, "#define ID_SIZE 12\n");

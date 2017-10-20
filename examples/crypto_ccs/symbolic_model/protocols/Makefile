@@ -3,12 +3,12 @@ VF = ../../../../bin/verifast -bindir ../../bin/stdlib/
 include ../../Makefile.include
 
 LIBS += -L ../bin -lsymbolic
-LIBS += -L ../../bin/ -lann_polarssl
-LIBS += -L ../../polarssl_library/library/ -lpolarssl
+LIBS += -L ../../bin/ -lann_mbedTLS
+LIBS += -L ../../mbedTLS_library/library/ -lpolarssl
 LIBS += -pthreads -lpthread
 LIBS += -lm
 
-LD_PATH = ../bin/:../../bin:../../polarssl_library/library
+LD_PATH = ../bin/:../../bin:../../mbedTLS_library/library
 
 PROTOCOLS = \
 	dummy_protocol \
@@ -28,7 +28,7 @@ MSG = Verified, compiled and executed protocol:
 $(PROT_APPS) : $$(addsuffix .vfmanifest, $$@) $$(addsuffix .o, $$@) \
 	       $$(dir $$@)main_app.vfmanifest $$(dir $$@)main_app.o
 	@$(VF) -allow_assume pthread.o \
-	  ../../bin/libann_polarssl.dll.vfmanifest \
+	  ../../bin/libann_mbedTLS.dll.vfmanifest \
 	  ../bin/symbolic.dll.vfmanifest \
 	   $(addsuffix .vfmanifest, $@) $(dir $@)main_app.vfmanifest
 	@$(CC) $(CFLAGS) $(addsuffix .o, $@) $(dir $@)main_app.o -o $@ $(LIBS)

@@ -1,8 +1,8 @@
 #include "attacker.h"
 
-#include "polarssl_definitions.h"
+#include "mbedTLS_definitions.h"
 
-#define POLARSSL_ATTACKER_ITERATIONS 100
+#define ATTACKER_ITERATIONS 100
 
 /*@
 
@@ -219,7 +219,7 @@ void attacker_send_keys(havege_state *havege_state, void* socket)
   //@ close pk_context(&context_priv);
   pk_init(&context_priv);
 
-  if (pk_init_ctx(&context, pk_info_from_type(POLARSSL_PK_RSA)) != 0)
+  if (pk_init_ctx(&context, pk_info_from_type(MBEDTLS_PK_RSA)) != 0)
     abort();
   //@ close rsa_key_request(attacker, 0);
   //@ close random_state_predicate(havege_state_initialized);
@@ -549,7 +549,7 @@ void attacker_send_auth_encrypted(havege_state *havege_state, void* socket)
   //@ interpret_symmetric_key(buffer1, size1);
   //@ assert cryptogram(buffer1, size1, cs_to_ccs(cs1), ?cg_key);
   //@ assert cg_key == cg_symmetric_key(?p, ?c);
-  if (gcm_init(&gcm_context, POLARSSL_CIPHER_ID_AES,
+  if (gcm_init(&gcm_context, MBEDTLS_CIPHER_ID_AES,
       buffer1, (unsigned int) size1 * 8) == 0)
   {
     if (get_iv(havege_state, iv) == 0)
@@ -622,7 +622,7 @@ void attacker_send_auth_decrypted(havege_state *havege_state, void* socket)
   //@ interpret_symmetric_key(buffer1, size1);
   //@ assert cryptogram(buffer1, size1, ?ccs1, ?cg_key);
   //@ assert cg_key == cg_symmetric_key(?p, ?c);
-  if (gcm_init(&gcm_context, POLARSSL_CIPHER_ID_AES,
+  if (gcm_init(&gcm_context, MBEDTLS_CIPHER_ID_AES,
       buffer1, (unsigned int) size1 * 8) == 0)
   {
     if (get_iv(havege_state, iv) == 0)
@@ -849,7 +849,7 @@ void attacker_send_asym_signature(havege_state *havege_state, void* socket)
                   attacker_key_item_havege_random_stub)
                   (havege_state_initialized)(state, out, len) { call(); } @*/
       //@ chars_to_crypto_chars(buffer2, size2);
-      if (pk_sign(&context, POLARSSL_MD_NONE, buffer2, (unsigned int) size2,
+      if (pk_sign(&context, MBEDTLS_MD_NONE, buffer2, (unsigned int) size2,
                   buffer3, &osize, attacker_key_item_havege_random_stub,
                   havege_state) == 0)
       {
@@ -1010,7 +1010,7 @@ void attacker()
   {
     //@ close attacker_invariant(pub, proof_pred, ?kc, &havege_state, socket, bad_one);
     int j = 0;
-    while(j < POLARSSL_ATTACKER_ITERATIONS)
+    while(j < ATTACKER_ITERATIONS)
       /*@ invariant attacker_invariant(pub, proof_pred, kc,
                                        &havege_state, socket, bad_one); @*/
     {

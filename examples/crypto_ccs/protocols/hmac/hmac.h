@@ -1,7 +1,7 @@
 #ifndef HMAC_H
 #define HMAC_H
 
-#include "../../annotated_api/polarssl_definitions.h"
+#include "../../annotated_api/mbedTLS_definitions.h"
 
 #define MESSAGE_SIZE 40
 

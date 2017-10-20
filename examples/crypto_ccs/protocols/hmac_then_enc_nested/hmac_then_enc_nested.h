@@ -1,7 +1,7 @@
 #ifndef HMAC_THEN_ENC_NESTED_H
 #define HMAC_THEN_ENC_NESTED_H
 
-#include "../../annotated_api/polarssl_definitions.h"
+#include "../../annotated_api/mbedTLS_definitions.h"
 
 #define MAX_SIZE 1024
 #define KEY_SIZE 32

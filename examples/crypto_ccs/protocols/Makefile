@@ -3,8 +3,8 @@ VF = ../../../bin/verifast -bindir ../bin/stdlib -vroot CRT=../bin/stdlib/
 
 include ../Makefile.include
 
-LIBS += -L ../bin -lann_polarssl
-LIBS += -L ../polarssl_library/library -lpolarssl
+LIBS += -L ../bin -lann_mbedTLS
+LIBS += -L ../mbedTLS_library/library -lpolarssl
 LIBS += -pthreads -lpthread
 LIBS += -lm
 
@@ -31,10 +31,10 @@ all : $(PROT_APPS)
 
 MSG = Verified, compiled and executed protocol:
 
-$(PROT_APPS) : ../annotated_api/polarssl_definitions.h \
+$(PROT_APPS) : ../annotated_api/mbedTLS_definitions.h \
 	       $$(addsuffix .vfmanifest, $$@) $$(addsuffix .o, $$@) \
 	       $$(dir $$@)main_app.vfmanifest $$(dir $$@)main_app.o
-	$(VF) $(VFFLAGS) -allow_assume pthread.o ../bin/libann_polarssl.dll.vfmanifest \
+	$(VF) $(VFFLAGS) -allow_assume pthread.o ../bin/libann_mbedTLS.dll.vfmanifest \
 	                $(addsuffix .vfmanifest, $@) $(dir $@)main_app.vfmanifest
 	$(CC) $(CFLAGS) $(addsuffix .o, $@) $(dir $@)main_app.o -o $@ $(LIBS)
 	@LD_LIBRARY_PATH=:../bin ; ./$@
@@ -46,7 +46,7 @@ stats :
 	  cd $(prot); \
 	  cloc .; \
 	  time -v ../../../../bin/verifast -bindir ../../bin/stdlib -vroot CRT=../../bin/stdlib/ \
-	                -allow_assume pthread.o  ../../bin/libann_polarssl.dll.vfmanifest \
+	                -allow_assume pthread.o  ../../bin/libann_mbedTLS.dll.vfmanifest \
 	                $(addsuffix .c, $(prot)) main_app.vfmanifest; \
 	  cd ..; \
 	)
@@ -55,5 +55,5 @@ clean :
 	@rm -f $(PROT_APPS)
 	rm -f */*.o
 	rm -f */*.vfmanifest
-	$(call pprint_big, Cleaned PolarSSL example protocols)
+	$(call pprint_big, Cleaned mbed TLS example protocols)
 

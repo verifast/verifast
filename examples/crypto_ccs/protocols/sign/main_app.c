@@ -171,7 +171,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
     
     //@ close pk_context(&context);
     pk_init(&context);
-    if (pk_init_ctx(&context, pk_info_from_type(POLARSSL_PK_RSA)) != 0)
+    if (pk_init_ctx(&context, pk_info_from_type(MBEDTLS_PK_RSA)) != 0)
       abort();
     //@ open principal(sender, _);
     //@ close rsa_key_request(sender, 0);

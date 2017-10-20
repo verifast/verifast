@@ -4,7 +4,7 @@
 #include "general.h"
 //To start the polarssl attacker
 #include "principal_ids.h"
-#include "../../annotated_api/polarssl_definitions.h"
+#include "../../annotated_api/mbedTLS_definitions.h"
 
 void random_buffer_(char* buffer, int size)
   /*@ requires [?f]world(?pub, ?key_clsfy) &*&

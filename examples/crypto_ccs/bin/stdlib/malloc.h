@@ -10,7 +10,7 @@ lemma_auto void malloc_block_null();
 
 lemma void malloc_block_limits(void *array);
     requires [?f]malloc_block(array, ?size);
-    ensures [f]malloc_block(array, size) &*& true == ((void *)0 <= array) &*& 0 <= size &*& array + size <= (void *)UINTPTR_MAX;
+    ensures [f]malloc_block(array, size) &*& (void *)0 <= array &*& 0 <= size &*& array + size <= (void *)UINTPTR_MAX;
 
 @*/
 
@@ -22,7 +22,7 @@ void *malloc(int size);
             emp
         :
             chars(result, size, ?cs) &*& malloc_block(result, size) &*&
-            true == ((char *)0 < result && result + size <= (char *)UINTPTR_MAX); // one-past-end does not overflow
+            (char *)0 < result && result + size <= (char *)UINTPTR_MAX; // one-past-end does not overflow
     @*/
 
 void free(void *array);

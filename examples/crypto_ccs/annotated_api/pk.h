@@ -50,7 +50,7 @@ void pk_init(pk_context *ctx);
   //@ ensures  pk_context_initialized(ctx);
 
 const pk_info_t *pk_info_from_type(int pk_type);
-  //@ requires pk_type == POLARSSL_PK_RSA;
+  //@ requires pk_type == MBEDTLS_PK_RSA;
   //@ ensures  pk_info(result);
 
 int pk_init_ctx(pk_context *ctx, const pk_info_t *info);
@@ -208,7 +208,7 @@ int pk_sign(pk_context *ctx, int md_alg, const char *hash, size_t hash_len,
             char *sig, size_t *sig_len, void *f_rng, void *p_rng);
   /*@ requires  pk_context_with_key(ctx, pk_private, ?p1, ?c1, ?nbits) &*&
                 // only signing of a general buffer for now
-                md_alg == POLARSSL_MD_NONE &*&
+                md_alg == MBEDTLS_MD_NONE &*&
                 [?f1]crypto_chars(?kind, hash, hash_len, ?ccs_input) &*&
                   hash_len >= MINIMAL_STRING_SIZE &*&
                   // hash to sign can not be bigger than key
@@ -238,7 +238,7 @@ int pk_verify(pk_context *ctx, int md_alg, const char *hash,
               size_t hash_len, const char *sig, size_t sig_len );
   /*@ requires  pk_context_with_key(ctx, pk_public, ?p1, ?c1, ?nbits) &*&
                 // only signing of a general buffer for now
-                md_alg == POLARSSL_MD_NONE &*&
+                md_alg == MBEDTLS_MD_NONE &*&
                 [?f1]crypto_chars(?kind, hash, hash_len, ?ccs_in) &*&
                   hash_len >= MINIMAL_STRING_SIZE &*&
                   // hash to verify can not be bigger than key

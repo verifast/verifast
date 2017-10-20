@@ -1,7 +1,7 @@
 #ifndef RPC_H
 #define RPC_H
 
-#include "../../annotated_api/polarssl_definitions.h"
+#include "../../annotated_api/mbedTLS_definitions.h"
 
 #define PACKAGE_SIZE 40
 
