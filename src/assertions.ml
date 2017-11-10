@@ -125,7 +125,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match frange with
         Int (_, _) | PtrType _ ->
         let (min_term, max_term) = limits_of_type frange in
-        ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_term tv) (ctxt#mk_le tv max_term))
+        ctxt#assert_term (ctxt#mk_and (ctxt#mk_le min_term tv) (ctxt#mk_le tv max_term))
       | _ -> ()
     end; 
     (* automatic generation of t1 != t2 if t1.f |-> _ &*& t2.f |-> _ *)
@@ -189,12 +189,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 if is_dummy_frac_term coef' then
                   coef'
                 else begin
-                  ignore $. ctxt#assume (ctxt#mk_lt real_zero coef);
+                  ctxt#assert_term (ctxt#mk_lt real_zero coef);
                   ctxt#mk_real_add coef coef'
                 end
               else
                 if is_dummy_frac_term coef' then begin
-                  ignore $. ctxt#assume (ctxt#mk_lt real_zero coef');
+                  ctxt#assert_term (ctxt#mk_lt real_zero coef');
                   ctxt#mk_real_add coef coef'
                 end else
                   ctxt#mk_real_add coef coef'
@@ -453,7 +453,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let vs = List.map2 (fun tp0 tp -> let v = get_unique_var_symb "value" tp in (v, prover_convert_term v tp tp0)) ts0 ts in
         let formula = ctxt#mk_eq t (ctxt#mk_app symb (List.map snd vs)) in
         push_context (Assuming formula);
-        ignore (ctxt#assume formula);
+        ctxt#assert_term formula;
         let inputParamCount = if isInputParam then max_int else 0 in
         let pats = List.map (fun pat -> SrcPat pat) pats in
         match match_pats h l ghostenv env env' inputParamCount 0 pats ts ts (List.map fst vs) cont with
