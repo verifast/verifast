@@ -39,7 +39,7 @@ let input_fully c =
   let b = Buffer.create 60000 in
   try
     while true do
-      Buffer.add_channel b c max_int
+      Buffer.add_channel b c 60000
     done;
     assert false
   with End_of_file ->
