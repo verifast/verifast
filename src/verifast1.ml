@@ -101,8 +101,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     else
       ctxt#pprint t
   
-  let globalPluginMap = ref []
-  
   let pprint_context_stack cs =
     List.map
       (function
@@ -111,9 +109,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
          let h' =
            List.map
              begin function
-               (Chunk ((g, literal), targs, coef, ts, Some (PluginChunkInfo info))) ->
-               let [_, ((_, plugin), _)] = !globalPluginMap in
-               Chunk ((ctxt#pprint g, literal), targs, pprint_context_term coef, [plugin#string_of_state info], None)
              | (Chunk ((g, literal), targs, coef, ts, size)) ->
                Chunk ((ctxt#pprint g, literal), targs, pprint_context_term coef, List.map (fun t -> pprint_context_term t) ts, size)
              end
@@ -447,14 +442,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let real_unit_pat = TermPat real_unit
   
-  let plugin_context = object
-    method mk_symbol x tp = get_unique_var_symb x (match tp with Plugins.PointerTerm -> PtrType Void | Plugins.IntTerm -> intType | Plugins.CharListTerm -> InductiveType ("list", [intType]))
-    method query_formula t1 r t2 = ctxt#query (match r with Plugins.Eq -> ctxt#mk_eq t1 t2 | Plugins.Neq -> ctxt#mk_not (ctxt#mk_eq t1 t2) | Plugins.Lt -> ctxt#mk_lt t1 t2)
-    method push = ctxt#push
-    method assert_formula t1 r t2 = ctxt#assume (match r with Plugins.Eq -> ctxt#mk_eq t1 t2 | Plugins.Neq -> ctxt#mk_not (ctxt#mk_eq t1 t2) | Plugins.Lt -> ctxt#mk_lt t1 t2) = Unsat
-    method pop = ctxt#pop
-  end
-  
   let current_module_name =
     match language with
       | Java -> "current_module"
@@ -712,10 +699,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       cpn: string; (* package *)
       cilist: import list
     }
-    type plugin_info = (* logic plugins, e.g. to enable the use of Philippa Gardner's context logic for reasoning about tree data structures *)
-        (  Plugins.plugin
-         * termnode Plugins.plugin_instance)
-      * termnode (* predicate symbol for plugin chunk *)
     type box_action_permission_info =
         termnode (* term representing action permission predicate *)
       * termnode option (* term representing action permission dispenser predicate *)
@@ -760,7 +743,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * interface_info map
       * termnode map (* classterms *)
       * termnode map (* interfaceterms *)
-      * plugin_info map
       * abstract_type_info map
     
     type implemented_prototype_info =
@@ -852,7 +834,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (interfmap0: interface_info map),
       (classterms0: termnode map),
       (interfaceterms0: termnode map),
-      (pluginmap0: plugin_info map),
       (abstract_types_map0: abstract_type_info map)
       : maps
     ) =
@@ -869,8 +850,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let id x = x in
     let merge_maps l
-      (structmap, enummap, globalmap, modulemap, importmodulemap, inductivemap, purefuncmap, predctormap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, pluginmap, abstract_types_map)
-      (structmap0, enummap0, globalmap0, modulemap0, importmodulemap0, inductivemap0, purefuncmap0, predctormap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, pluginmap0, abstract_types_map0)
+      (structmap, enummap, globalmap, modulemap, importmodulemap, inductivemap, purefuncmap, predctormap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, abstract_types_map)
+      (structmap0, enummap0, globalmap0, modulemap0, importmodulemap0, inductivemap0, purefuncmap0, predctormap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, abstract_types_map0)
       =
       (
 (*     append_nodups structmap structmap0 id l "struct", *)
@@ -897,8 +878,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
        append_nodups interfmap interfmap0 id l "interface",
        classterms @ classterms0, 
        interfaceterms @ interfaceterms0,
-       (if pluginmap0 <> [] && pluginmap <> [] then static_error l "VeriFast does not yet support loading multiple plugins" None else
-       append_nodups pluginmap pluginmap0 id l "plugin"),
        append_nodups abstract_types_map abstract_types_map0 id l "abstract type")
     in
 
@@ -977,7 +956,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
     in
 
-    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
+    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
     
     let (maps0, headers_included) =
       if include_prelude then
@@ -1013,28 +992,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     maps
 
   (* Region: structdeclmap, enumdeclmap, inductivedeclmap, modulemap *)
-  
-  let pluginmap1 =
-    ps |> List.fold_left begin fun pluginmap1 (PackageDecl (l, pn, ilist, ds)) ->
-      ds |> List.fold_left begin fun pluginmap1 decl ->
-        match decl with
-          LoadPluginDecl (l, lx, x) ->
-          if pluginmap0 <> [] || pluginmap1 <> [] then static_error l "VeriFast does not yet support loading multiple plugins" None;
-          if options.option_safe_mode then static_error l "Loading plugins is not allowed in safe mode" None;
-          begin try
-            let p = Plugins_private.load_plugin (concat dir (x ^ "_verifast_plugin")) in
-            let x = full_name pn x in
-            (x, ((p, p#create_instance plugin_context), get_unique_var_symb x (PredType ([], [], None, Inductiveness_Inductive))))::pluginmap1
-          with
-            Plugins_private.LoadPluginError msg -> static_error l ("Could not load plugin: " ^ msg) None
-          end
-        | _ -> pluginmap1
-      end pluginmap1
-    end []
-  
-  let pluginmap = pluginmap1 @ pluginmap0
-  
-  let () = globalPluginMap := pluginmap1 @ !globalPluginMap
   
   let unloadable =
     match language with
@@ -4239,34 +4196,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let tenv = if rt = Void then tenv else ("result", rt)::tenv in
         let (wbody, tenv, infTps) = check_asn (pn,ilist) tparams tenv body in
         (EnsuresAsn (l, wbody), tenv, infTps)
-      end
-    | PluginAsn (l, text) ->
-      begin match pluginmap with
-        [] -> static_error l "Load a plugin before using a plugin assertion" None
-      | [_, ((plugin, _), _)] ->
-        let to_plugin_type t =
-          match t with
-            PtrType (StructType sn) -> Plugins.StructPointerType sn
-          | PluginInternalType t -> Plugins.PluginInternalType t
-          | _ -> Plugins.VeriFastInternalType
-        in
-        let from_plugin_type t =
-          match t with
-            Plugins.StructPointerType sn -> PtrType (StructType sn)
-          | Plugins.VeriFastInternalType -> failwith "plugin_typecheck_assertion must not create binding with type VeriFastInternalType"
-          | Plugins.PluginInternalType t -> PluginInternalType t
-        in        
-        let plugin_tenv = List.map (fun (x, t) -> (x, to_plugin_type t)) tenv in
-        begin try
-          let (w, plugin_bindings) = plugin#typecheck_assertion plugin_tenv text in
-          let bindings = List.map (fun (x, t) -> (x, from_plugin_type t)) plugin_bindings in
-          (WPluginAsn (l, List.map fst bindings, w), bindings @ tenv, [])
-        with
-          Plugins.PluginStaticError (off, len, msg) ->
-          let ((path, line, col), _) = l in
-          let l = ((path, line, col + 1 + off), (path, line, col + 1 + off + len)) in (* TODO: Suport multiline assertions *)
-          static_error l msg None
-        end
       end
     | e ->
       let a =

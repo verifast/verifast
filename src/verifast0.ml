@@ -21,7 +21,6 @@ type 'termnode pat0 = SrcPat of pat | TermPat of 'termnode
 (** A heap chunk. *)
 type chunk_info =
   PredicateChunkSize of int (* Size of this chunk with respect to the first chunk of the precondition; used to check lemma termination. *)
-| PluginChunkInfo of Plugins.plugin_state
 type 'termnode chunk =
   Chunk of
     ('termnode (* Predicate name *) * bool (* true if a declared predicate's symbol; false in a scenario where predicate names are passed as values. Used to avoid prover queries. *) ) *

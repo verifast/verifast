@@ -27,7 +27,7 @@ let ghost_keywords = [
   "create_box"; "above"; "below"; "and_handle"; "and_fresh_handle"; "create_handle"; "create_fresh_handle"; "dispose_box"; 
   "produce_lemma_function_pointer_chunk"; "duplicate_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
   "producing_box_predicate"; "producing_handle_predicate"; "producing_fresh_handle_predicate"; "box"; "handle"; "any"; "split_fraction"; "by"; "merge_fractions";
-  "unloadable_module"; "decreases"; "load_plugin"; "forall_"; "import_module"; "require_module"; ".."; "extends"; "permbased";
+  "unloadable_module"; "decreases"; "forall_"; "import_module"; "require_module"; ".."; "extends"; "permbased";
   "terminates"; "abstract_type"
 ]
 
@@ -539,7 +539,6 @@ and
        (ftps, ps) = parse_functype_paramlists; '(_, Kwd ";"); (pre, post, terminates) = parse_spec >] ->
     [FuncTypeDecl (l, Ghost, rt, g, tps, ftps, ps, (pre, post, terminates))]
   | [< '(l, Kwd "unloadable_module"); '(_, Kwd ";") >] -> [UnloadableModuleDecl l]
-  | [< '(l, Kwd "load_plugin"); '(lx, Ident x); '(_, Kwd ";") >] -> [LoadPluginDecl (l, lx, x)]
   | [< '(l, Kwd "import_module"); '(_, Ident g); '(lx, Kwd ";") >] -> [ImportModuleDecl (l, g)]
   | [< '(l, Kwd "require_module"); '(_, Ident g); '(lx, Kwd ";") >] -> [RequireModuleDecl (l, g)]
   | [< '(l, Kwd "abstract_type"); '(_, Ident t); '(_, Kwd ";") >] -> [AbstractTypeDecl (l, t)]
@@ -1147,7 +1146,6 @@ and
 | [< '(l, Kwd "emp") >] -> EmpAsn l
 | [< '(l, Kwd "forall_"); '(_, Kwd "("); tp = parse_type; '(_, Ident x); '(_, Kwd ";"); e = parse_expr; '(_, Kwd ")") >] -> ForallAsn(l, tp, x, e)
 | [< '(l, Kwd "["); coef = parse_pattern; '(_, Kwd "]"); p = parse_pointsto_expr >] -> CoefAsn (l, coef, p)
-| [< '(_, Kwd "#"); '(l, String s) >] -> PluginAsn (l, s)
 | [< '(l, Kwd "ensures"); p = parse_asn >] -> EnsuresAsn (l, p)
 and
   parse_pattern = parser

@@ -285,28 +285,6 @@ clean::
 	rm -f $(STDLIB_FILES_GEN)
 
 #------------------------------- Auto code generation -----------------------#
-DynType.mli: ../examples/plugin/DynType.mli
-	@echo "  CAT      " $@
-	cat generated_file_warning.txt ../examples/plugin/DynType.mli > DynType.mli
-clean::
-	rm -f DynType.mli
-AUTOGENERATE_TARGETS += DynType.mli
-
-
-plugins.mli: ../examples/plugin/plugins.mli
-	@echo "  CAT      " $@
-	cat generated_file_warning.txt ../examples/plugin/plugins.mli > plugins.mli
-clean::
-	rm -f plugins.mli
-AUTOGENERATE_TARGETS += plugins.mli
-
-
-plugins2.mli: ../examples/plugin/plugins2.mli
-	@echo "  CAT      " $@
-	cat generated_file_warning.txt ../examples/plugin/plugins2.mli > plugins2.mli
-clean::
-	rm -f plugins2.mli
-AUTOGENERATE_TARGETS += plugins2.mli
 
 ifeq ($(OS), Darwin)
 Fonts.ml: Fonts_mac.ml
@@ -401,7 +379,7 @@ endif
 	$(SET_LDD); $(OCAMLOPT) $(OCAMLCFLAGS) -thread -c -w p -warn-error FSU -c $(INCLUDES) \
 	-pp ${CAMLP4O} nums.cmxa $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) vfide.ml
 
-../bin/vfide$(DOTEXE): vfide.cmx redux.cmx $(Z3DEPS) plugins2.cmx $(GTKSOURCEVIEW_DEPS)
+../bin/vfide$(DOTEXE): vfide.cmx redux.cmx $(Z3DEPS) $(GTKSOURCEVIEW_DEPS)
 	@echo "  OCAMLOPT " $@
 ifndef WITHOUT_GTKSOURCEVIEW
 	cd linemarks; make linemarks.cmxa
@@ -409,8 +387,8 @@ endif
 	$(SET_LDD); ${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/vfide$(DOTEXE)	\
 	  $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) unix.cmxa \
 	  nums.cmxa str.cmxa $(INCLUDES) Perf.cmxa proverapi.cmx \
-	  Printexc_proxy.cmx vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx \
-	  plugins_private.cmx plugins2.cmx util.cmx ast.cmx stats.cmx lexer.cmx \
+	  Printexc_proxy.cmx vfversion.cmx dynlink.cmxa \
+	  util.cmx ast.cmx stats.cmx lexer.cmx \
 	  parser.cmx ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx \
 	  verify_expr.cmx verifast.cmx \
           $(Z3ARGS_EARLY) \
@@ -425,12 +403,12 @@ endif
 vfide: ../bin/vfide$(DOTEXE) $(STDLIB)
 .PHONY: vfide
 
-../bin/verifast$(DOTEXE): vfconsole.cmx redux.cmx $(Z3DEPS) plugins2.cmx
+../bin/verifast$(DOTEXE): vfconsole.cmx redux.cmx $(Z3DEPS)
 	@echo "  OCAMLOPT " $@
 	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/verifast$(DOTEXE) unix.cmxa \
 	  nums.cmxa str.cmxa $(INCLUDES) Perf.cmxa proverapi.cmx \
-	  vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx \
-	  plugins2.cmx util.cmx ast.cmx stats.cmx lexer.cmx parser.cmx \
+	  vfversion.cmx \
+	  util.cmx ast.cmx stats.cmx lexer.cmx parser.cmx \
 	  ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx \
 	  verify_expr.cmx verifast.cmx simplex.cmx redux.cmx \
           $(Z3ARGS_EARLY) \
@@ -470,18 +448,9 @@ vfversion.cmi: vfversion.mli
 vfversion.cmo: vfversion.cmi	
 vfversion.cmx: vfversion.cmi vfversion.ml
 vfconfig.cmx: vfconfig.ml
-plugins2.cmi : plugins.cmi
-plugins.cmi : DynType.cmi
 vfide.cmx: SExpressionEmitter.cmx
 
 #------------------------------- Tests --------------------------------------#
-test_plugin: verifast
-	$(SET_ENV); \
-	  ${MAKE} -C ../examples/plugin clean OCAMLOPT=${OCAMLOPT}
-	$(SET_ENV); \
-	  ${MAKE} -C ../examples/plugin all OCAMLOPT=${OCAMLOPT}
-.PHONY: test_plugin
-
 testsuite: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
 	@echo "  MYSH     " testsuite
 	$(SET_ENV); \
@@ -502,9 +471,8 @@ assignment_tests: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
 # the tests passed. (someone reported this years ago here:
 # https://lists.gnu.org/archive/html/bug-make/2010-09/msg00033.html)
 # So we serialize the test targets.
-test: test_plugin testsuite assignment_tests
+test: testsuite assignment_tests
 .PHONY: test
-test_plugin: testsuite      # dependency to enforce serialization
 testsuite: assignment_tests # dependency to enforce serialization
 
 ifdef VERIFAST_JAVA_AST_SERVER

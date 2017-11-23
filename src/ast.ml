@@ -94,7 +94,6 @@ type type_ = (* ?type_ *)
   | ClassOrInterfaceName of string (* not a real type; used only during type checking *)
   | PackageName of string (* not a real type; used only during type checking *)
   | RefType of type_ (* not a real type; used only for locals whose address is taken *)
-  | PluginInternalType of DynType.dyn
   | AbstractType of string
 
 type integer_limits = {max_unsigned_big_int: big_int; min_signed_big_int: big_int; max_signed_big_int: big_int}
@@ -374,8 +373,6 @@ and
       loc *
       pat *
       asn
-  | PluginAsn of loc * string
-  | WPluginAsn of loc * string list * Plugins.typechecked_plugin_assertion
   | EnsuresAsn of loc * asn
   | MatchAsn of loc * expr * pat
   | WMatchAsn of loc * expr * pat * type_
@@ -708,7 +705,6 @@ and
   | EnumDecl of loc * string * (string * expr option) list
   | Global of loc * type_expr * string * expr option
   | UnloadableModuleDecl of loc
-  | LoadPluginDecl of loc * loc * string
   | ImportModuleDecl of loc * string
   | RequireModuleDecl of loc * string
 and (* shared box is deeltje ghost state, waarde kan enkel via actions gewijzigd worden, handle predicates geven info over de ghost state, zelfs als er geen eigendom over de box is*)
@@ -831,8 +827,6 @@ let rec expr_loc e =
   | EmpAsn l -> l
   | ForallAsn (l, tp, i, e) -> l
   | CoefAsn (l, coef, body) -> l
-  | PluginAsn (l, asn) -> l
-  | WPluginAsn (l, xs, asn) -> l
   | EnsuresAsn (l, body) -> l
 let asn_loc a = expr_loc a
   
