@@ -5,15 +5,25 @@ open Num (* rational numbers *)
 
 (* Region: General-purpose utility functions *)
 
+let input_fully c =
+  let b = Buffer.create 60000 in
+  try
+    while true do
+      Buffer.add_channel b c 60000
+    done;
+    assert false
+  with End_of_file ->
+    Buffer.contents b
+
 let push x rxs = rxs := x::!rxs
 
 let string_map f s =
   let n = String.length s in
-  let result = String.create n in
+  let result = Bytes.create n in
   for i = 0 to n - 1 do
-    result.[i] <- f s.[i]
+    Bytes.set result i (f s.[i])
   done;
-  result
+  Bytes.unsafe_to_string result
 
 let num_of_ints p q = div_num (num_of_int p) (num_of_int q)
 

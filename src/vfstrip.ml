@@ -24,43 +24,34 @@ let get_file_options text =
     match toks with
       "verifast_annotation_char"::":"::c::toks when String.length c = 1 -> iter c.[0] tabSize toks
     | "tab_size"::":"::n::toks ->
-      begin
-        try
-          iter annotChar (int_of_string n) toks
-        with Failure "int_of_string" -> iter annotChar tabSize toks
-      end
+      let tabSize =
+        match int_of_string n with
+          exception Failure _ -> tabSize
+        | n -> n
+      in
+      iter annotChar tabSize toks
     | tok::toks -> iter annotChar tabSize toks
     | [] -> {file_opt_annot_char=annotChar; file_opt_tab_size=tabSize}
   in
   iter '@' 8 tokens
 
-let readFile chan =
-  let count = ref 0 in
-  let rec iter () =
-    let buf = String.create 60000 in
-    let result = input chan buf 0 60000 in
-    count := !count + result;
-    if result = 0 then [] else (buf, result)::iter()
-  in
-  let chunks = iter() in
-  let s = String.create !count in
-  let rec iter2 chunks offset =
-    match chunks with
-      [] -> ()
-    | (buf, size)::chunks ->
-      String.blit buf 0 s offset size;
-      iter2 chunks (offset + size)
-  in
-  iter2 chunks 0;
-  s
+let input_fully c =
+  let b = Buffer.create 60000 in
+  try
+    while true do
+      Buffer.add_channel b c max_int
+    done;
+    assert false
+  with End_of_file ->
+    Buffer.contents b
 
 let strip_annotations fin fout =
-  let text = readFile fin in
+  let text = input_fully fin in
   let n = String.length text in
   let {file_opt_annot_char=annotChar} = get_file_options text in
   let rec iter i0 white i =
     if i = n then
-      output fout text i0 (n - i0)
+      output_substring fout text i0 (n - i0)
     else
       match text.[i] with
         '/' when i + 3 <= n && (text.[i + 1] = '/' || text.[i + 1] = '*') && text.[i + 2] = annotChar ->
@@ -71,17 +62,17 @@ let strip_annotations fin fout =
           in
           let rec eat_annot j =
             if j = n then
-              output fout text i0 (white - i0)
+              output_substring fout text i0 (white - i0)
             else
               match text.[j] with
                 '\r' ->
                 let j' =
                   if j + 1 < n && text.[j + 1] = '\n' then j + 2 else j + 1
                 in
-                output fout text i0 (white - i0);
+                output_substring fout text i0 (white - i0);
                 after_annot j j'
               | '\n' ->
-                output fout text i0 (white - i0);
+                output_substring fout text i0 (white - i0);
                 after_annot j (j + 1)
               | _ -> eat_annot (j + 1)
           in
@@ -90,18 +81,18 @@ let strip_annotations fin fout =
           let rec eat_trailing_white_lines j0 =
             let rec iter' j =
               if j = n then
-                output fout text i0 (white - i0)
+                output_substring fout text i0 (white - i0)
               else
                 match text.[j] with
                   ' ' | '\t' -> iter' (j + 1)
                 | '\r' | '\n' -> eat_trailing_white_lines (j + 1)
-                | _ -> output fout text i0 (white - i0); iter j0 j0 j
+                | _ -> output_substring fout text i0 (white - i0); iter j0 j0 j
             in
             iter' j0
           in
           let rec eat_annot j =
             if j = n then
-              output fout text i0 (white - i0)
+              output_substring fout text i0 (white - i0)
             else
               match text.[j] with
                 c when c = annotChar && j + 3 <= n && text.[j + 1] = '*' && text.[j + 2] = '/' ->
@@ -117,11 +108,11 @@ let strip_annotations fin fout =
   iter 0 0 0
 
 let strip_comments fin fout =
-  let text = readFile fin in
+  let text = input_fully fin in
   let n = String.length text in
   let rec iter i0 white i text_on_line =
     if i = n then
-      output fout text i0 (white - i0)
+      output_substring fout text i0 (white - i0)
     else
       match text.[i] with
         '/' when i + 1 <= n && (text.[i + 1] = '/' || text.[i + 1] = '*') ->
@@ -139,7 +130,7 @@ let strip_comments fin fout =
           in
           eat_comment (i + 2)
         | '*' ->
-          output fout text i0 (white - i0);
+          output_substring fout text i0 (white - i0);
           let rec eat_comment j text_on_line =
             if j = n then
               iter n n n text_on_line
@@ -168,11 +159,11 @@ let strip_comments fin fout =
           if white = i then
             iter i0 i' i' false
           else begin
-            output fout text i0 (white - i0);
+            output_substring fout text i0 (white - i0);
             iter i i' i' false
           end
         end else begin
-          output fout text i0 (white - i0);
+          output_substring fout text i0 (white - i0);
           iter i' i' i' false
         end
       | _ -> let i = i + 1 in iter i0 i i true

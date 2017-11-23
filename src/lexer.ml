@@ -127,11 +127,12 @@ let get_file_options text =
     match toks with
       "verifast_annotation_char"::":"::c::toks when String.length c = 1 -> iter c.[0] tabSize toks
     | "tab_size"::":"::n::toks ->
-      begin
-        try
-          iter annotChar (int_of_string n) toks
-        with Failure "int_of_string" -> iter annotChar tabSize toks
-      end
+      let tabSize =
+        match int_of_string n with
+          exception Failure _ -> tabSize
+        | n -> n
+      in
+      iter annotChar tabSize toks
     | tok::toks -> iter annotChar tabSize toks
     | [] -> {file_opt_annot_char=annotChar; file_opt_tab_size=tabSize}
   in
@@ -144,24 +145,8 @@ let readFile path =
     else
       (open_in_bin path, close_in)
   in
-  let count = ref 0 in
-  let rec iter () =
-    let buf = String.create 60000 in
-    let result = input chan buf 0 60000 in
-    count := !count + result;
-    if result = 0 then [] else (buf, result)::iter()
-  in
-  let chunks = iter() in
+  let s = input_fully chan in
   close_chan chan;
-  let s = String.create !count in
-  let rec iter2 chunks offset =
-    match chunks with
-      [] -> ()
-    | (buf, size)::chunks ->
-      String.blit buf 0 s offset size;
-      iter2 chunks (offset + size)
-  in
-  iter2 chunks 0;
   file_to_utf8 s
 
 type include_kind =
@@ -380,29 +365,14 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
   let in_comment = ref inComment in
   let in_ghost_range = ref inGhostRange in
   
-  let initial_buffer = String.create 32
-  in
-
-  let buffer = ref initial_buffer
-  in
-  let bufpos = ref 0
-  in
+  let buffer = Buffer.create 32 in
   
-  let reset_buffer () = buffer := initial_buffer; bufpos := 0
-  in
+  let reset_buffer () = Buffer.reset buffer in
 
-  let store c =
-    if !bufpos >= String.length !buffer then
-      begin
-        let newbuffer = String.create (2 * !bufpos) in
-        String.blit !buffer 0 newbuffer 0 !bufpos; buffer := newbuffer
-      end;
-    String.set !buffer !bufpos c;
-    incr bufpos
-  in
+  let store c = Buffer.add_char buffer c in
 
   let get_string () =
-    let s = String.sub !buffer 0 !bufpos in buffer := initial_buffer; s
+    let s = Buffer.contents buffer in Buffer.reset buffer; s
   in
 
   let tokenpos = ref 0 in

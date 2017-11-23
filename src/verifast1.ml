@@ -5222,9 +5222,9 @@ let check_if_list_is_defined () =
       end
     | WIntLit (l, n) ->
       let v =
-        try
-          ctxt#mk_intlit (int_of_big_int n)
-        with Failure "int_of_big_int" -> ctxt#mk_intlit_of_string (string_of_big_int n)
+        match int_of_big_int n with
+          exception Failure _ -> ctxt#mk_intlit_of_string (string_of_big_int n)
+        | n -> ctxt#mk_intlit n
       in
       cont state v
     | ClassLit (l,s) -> cont state (List.assoc s classterms)
