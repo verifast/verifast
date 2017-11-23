@@ -32,6 +32,7 @@ elif [ $(uname -s) = "Darwin" ]; then
   brewinstall gtksourceview
   brewinstall vala
   brewinstall ocaml
+  brewinstall ocaml-num
   brewinstall lablgtk
   brewinstall camlp4
   export PKG_CONFIG_PATH=/opt/X11/lib/pkgconfig
