@@ -12,7 +12,7 @@ install:
   - ./setup-build.sh
 
 script:
-  - cd src && make nightly VERBOSE=yes -j 2
+  - cd src && PATH=/tmp/vfdeps/bin:$PATH make nightly VERBOSE=yes -j 2
 
 before_deploy: "cd ../upload"
 deploy:
