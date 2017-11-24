@@ -36,14 +36,18 @@ let get_file_options text =
   iter '@' 8 tokens
 
 let input_fully c =
+  let buf = Bytes.create 60000 in
   let b = Buffer.create 60000 in
-  try
-    while true do
-      Buffer.add_channel b c 60000
-    done;
-    assert false
-  with End_of_file ->
-    Buffer.contents b
+  let rec iter () =
+    let n = input c buf 0 60000 in
+    if n = 0 then
+      Buffer.contents b
+    else begin
+      Buffer.add_subbytes b buf 0 n;
+      iter ()
+    end
+  in
+  iter ()
 
 let strip_annotations fin fout =
   let text = input_fully fin in
