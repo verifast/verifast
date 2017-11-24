@@ -1,4 +1,4 @@
-ifeq ($(shell uname -o), Cygwin)
+ifeq ($(OS), Windows_NT)
 DOTEXE=.exe
 LABLGTK2=site-lib/lablgtk2
 else
@@ -10,7 +10,7 @@ hello$(DOTEXE): hello.ml linemarks.cmxa
 	${OCAMLOPT} ${OCAMLCFLAGS} -o hello$(DOTEXE) -I +$(LABLGTK2) lablgtk.cmxa lablgtksourceview2.cmxa linemarks.cmxa gtkInit.cmx hello.ml
 
 linemarks.cmxa: liblinemarks.a
-ifeq ($(shell uname -o), Cygwin)
+ifeq ($(OS), Windows_NT)
 	${OCAMLOPT} ${OCAMLCFLAGS} -a -o linemarks.cmxa -I +$(LABLGTK2) GtkLineMarks.mli GtkLineMarks.ml GLineMarks.ml -cclib -L$(shell pwd) -cclib -llinemarks -cclib "`pkg-config --libs gtksourceview-2.0`"
 else
 	${OCAMLOPT} ${OCAMLCFLAGS} -a -o linemarks.cmxa $(LABLGTK_FLAGS) GtkLineMarks.mli GtkLineMarks.ml GLineMarks.ml -cclib -L$(shell pwd) -cclib -llinemarks -cclib "`pkg-config --libs gtksourceview-2.0`"

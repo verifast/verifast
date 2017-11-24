@@ -161,7 +161,7 @@ endif
 
 # Always include debug information. This seems necessary to prevent vfide crashes on OS X (see https://dnetcode.cs.kuleuven.be/issues/1975).
 # Also, this is necessary to get stack traces.
-OCAMLCFLAGS += -g
+OCAMLCFLAGS += -g -w p
 ifdef ANNOT
   OCAMLCFLAGS += -annot
 endif
