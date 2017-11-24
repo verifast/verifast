@@ -33,14 +33,14 @@ help:
 # Note: OS is defined by the operating system as Windows_NT on Windows.
 ifeq ($(OS), Linux)
 else ifeq ($(OS), Darwin)
-else ifeq ($(OS), Cygwin)
+else ifeq ($(OS), Windows_NT)
 else
   ifeq ($(shell uname -s), Linux)
           OS = Linux
   else ifeq ($(shell uname -s), Darwin)
           OS = Darwin
   else ifeq ($(shell uname -o), Cygwin)
-          OS = Cygwin
+          OS = Windows_NT
   else
           $(error "Could not recognize your platform")
   endif
@@ -48,7 +48,7 @@ endif
 
 # Lablgtk configuration
 ifndef WITHOUT_LABLGTK
-  ifeq ($(OS), Cygwin)
+  ifeq ($(OS), Windows_NT)
     LABLGTK_FLAGS += -I +site-lib/lablgtk2 lablgtk.cmxa
   else
     LABLGTK_FLAGS_ += -I +../lablgtk2 -I +lablgtk2
@@ -63,7 +63,7 @@ ifndef WITHOUT_LABLGTK
   endif
 endif
 
-ifeq ($(OS), Cygwin)
+ifeq ($(OS), Windows_NT)
   LDLPATHVAR=PATH
 else
   LDLPATHVAR=LD_LIBRARY_PATH
@@ -99,7 +99,7 @@ ifdef Z3V4DOT5
   Z3V4DOT5PRESENT=true
 else ifndef NOZ3
   Z3DEPS  = z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml
-  ifeq ($(OS), Cygwin)
+  ifeq ($(OS), Windows_NT)
     Z3CCOPTS=
     LDLPATH=$(Z3)/bin
     Z3_OCAML=$(shell cygpath -m $(Z3)/ocaml)
@@ -124,7 +124,7 @@ ifndef VERBOSE
   .SILENT:
 endif
 
-ifeq ($(OS), Cygwin)
+ifeq ($(OS), Windows_NT)
   DOTEXE=.exe
 endif
 
@@ -137,14 +137,14 @@ OCAML        = ${OCAMLBIN}/ocaml
 OCAMLC       = $(firstword $(wildcard ${OCAMLBIN}/ocamlc.opt ${OCAMLBIN}/ocamlc))
 OCAMLOPT     = $(firstword $(wildcard ${OCAMLBIN}/ocamlopt.opt ${OCAMLBIN}/ocamlopt))
 OCAMLDEP     = $(firstword $(wildcard ${OCAMLBIN}/ocamldep.opt ${OCAMLBIN}/ocamldep))
-ifeq ($(OS), Cygwin)
+ifeq ($(OS), Windows_NT)
   CAMLP4O    = camlp4o.opt
 else
   CAMLP4O      = $(firstword $(wildcard ${OCAMLBIN}/camlp4o.opt ${OCAMLBIN}/camlp4o))
 endif
 
 # Do we build with "-I ./linux" or "-I ./win":
-ifeq ($(OS), Cygwin)
+ifeq ($(OS), Windows_NT)
   INCLUDE_OS_DIR = win
 else
 # Also for mac.
@@ -195,7 +195,7 @@ endif
 ifeq ($(OS), Darwin)
   include linux/GNUmakefile
 endif
-ifeq ($(OS), Cygwin)
+ifeq ($(OS), Windows_NT)
   include win/GNUmakefile
 endif
 
@@ -397,7 +397,7 @@ endif
 	  shape_analysis/changelog.cmx shape_analysis/shape_analysis_frontend.cmx \
 	  $(Z3ARGS) Fonts.cmx branchleft_png.cmx branchright_png.cmx vfide.cmx
 endif
-ifneq ($(OS), Cygwin)
+ifneq ($(OS), Windows_NT)
   ../bin/vfide$(DOTEXE): linux/libPerf_cobjs.a
 endif
 vfide: ../bin/vfide$(DOTEXE) $(STDLIB)
@@ -415,7 +415,7 @@ vfide: ../bin/vfide$(DOTEXE) $(STDLIB)
 	  verifastPluginRedux.ml $(Z3ARGS) vfconsole.cmx
 
 
-ifneq ($(OS), Cygwin)
+ifneq ($(OS), Windows_NT)
   ../bin/verifast$(DOTEXE): linux/libPerf_cobjs.a
 else
   ../bin/verifast$(DOTEXE): win/Perf.cmxa
@@ -557,7 +557,7 @@ release: release_core
 release_core: test build
 	rm -Rf verifast-$(VFVERSION); mkdir verifast-$(VFVERSION)
 	cp -R ../bin verifast-$(VFVERSION)
-ifeq ($(OS), Cygwin)
+ifeq ($(OS), Windows_NT)
 	cd $(GTK)/bin && cp -v \
     FREETYPE6.DLL \
     INTL.DLL \
@@ -631,7 +631,7 @@ endif
 	mkdir verifast-$(VFVERSION)/tutorial
 	cd verifast-$(VFVERSION)/tutorial_solutions; for f in *.c; do ../bin/vfstrip < $$f > ../tutorial/$$f; done; cd ../..
 	cp ../testsuite.mysh verifast-$(VFVERSION)
-ifeq ($(OS), Cygwin)
+ifeq ($(OS), Windows_NT)
 	cp ../test.bat verifast-$(VFVERSION)
 else
 	cp ../test.sh verifast-$(VFVERSION)
@@ -644,7 +644,7 @@ else
 endif
 
 nightly: release
-ifeq ($(OS), Cygwin)
+ifeq ($(OS), Windows_NT)
 	rm verifast-nightly.zip || true
 	7z a verifast-nightly.zip verifast-$(VFVERSION)
 else
