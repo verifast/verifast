@@ -551,7 +551,7 @@ include .depend
 
 #------------------------------- Release ------------------------------------#
 
-VFVERSION ?= $(shell git describe --always --dirty)
+VFVERSION ?= $(shell git describe --tags --always --dirty)
 
 release: release_core
 release_core: test build
