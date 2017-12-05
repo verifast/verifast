@@ -20,5 +20,5 @@ cd /cygdrive/c
 
 dl_and_unzip http://www.cs.kuleuven.be/~bartj/verifast/vfdeps-17.12-win32.zip 9046d38717c0de448a2d454e7186443edd342dd6
 
-echo 'export PATH="$PATH:/cygdrive/c/vfdeps-17.12/bin"' >> ~/.bash_profile
-      export PATH="$PATH:/cygdrive/c/vfdeps-17.12/bin"
+echo 'export PATH="/cygdrive/c/vfdeps-17.12/bin:$PATH"' >> ~/.bash_profile
+      export PATH="/cygdrive/c/vfdeps-17.12/bin:$PATH"
