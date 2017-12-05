@@ -15,4 +15,3 @@ bitsadmin.exe /transfer "cygwin" https://cygwin.com/setup-x86.exe %TEMP%\setup-c
 echo none /cygdrive cygdrive binary,posix=0,user,noacl 0 0 > c:\cygwin\etc\fstab || exit /b
 
 c:\cygwin\bin\bash -lc "cd /cygdrive/c/projects/verifast && bash setup-windows.sh" || exit /b
-copy /y c:\gtk\bin\zlib1.dll c:\projects\verifast\bin

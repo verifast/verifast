@@ -167,7 +167,10 @@ $(GTK_BINARY):
 	    ftp://ftp.gnome.org/pub/gnome/binaries/win32/dependencies/libxml2-dev_2.9.0-1_win32.zip \
 	  ; do \
 	    download_and_unzip --dlcache "$(MAKEDIR)" "$$url" \
-	  ; done
+	  ; done && \
+	  mv bin/pkg-config.exe bin/pkg-config.exe_ && \
+	  cp "$(MAKEDIR)/pkg-config" bin && \
+	  mv bin/pkg-config.exe_ bin/pkg-config.exe
 
 gtk: $(GTK_BINARY)
 .PHONY: gtk

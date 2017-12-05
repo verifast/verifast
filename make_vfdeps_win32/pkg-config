@@ -1,3 +1,4 @@
 #!/bin/bash
 set -o pipefail # A pipe fails if any component fails
-/cygdrive/c/vfdeps-17.12/bin/pkg-config $* | dos2unix
+DIRNAME=`dirname "$0"`
+"$DIRNAME/pkg-config.exe" $* | conv --dos2unix
