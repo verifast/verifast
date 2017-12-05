@@ -31,7 +31,7 @@ let () =
       try
         let file = open_out proxyheaderpath in
         Printf.fprintf file "/* Automatically generated from %s */\n" (Filename.basename specpath);
-        let define = String.uppercase specname ^ "_PROXY_H" in
+        let define = String.uppercase_ascii specname ^ "_PROXY_H" in
         Printf.fprintf file "#ifndef %s\n" define;
         Printf.fprintf file "#define %s\n" define;
         Printf.fprintf file "\n";

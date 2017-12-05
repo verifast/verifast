@@ -131,8 +131,8 @@ let data_models = [
   "macOS", data_model_lp64
 ]
 let data_model_of_string s =
-  let s = String.uppercase s in
-  match head_flatmap_option (fun (k, v) -> if String.uppercase k = s then Some v else None) data_models with
+  let s = String.uppercase_ascii s in
+  match head_flatmap_option (fun (k, v) -> if String.uppercase_ascii k = s then Some v else None) data_models with
     None -> failwith "No such data model"
   | Some v -> v
 
