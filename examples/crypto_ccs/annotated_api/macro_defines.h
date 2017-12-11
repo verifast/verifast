@@ -12,9 +12,9 @@
 #define GCM_CONTEXT_SIZE  388
 
 //Some PolarSSL cryptographic algorithm configuration constants
-#define POLARSSL_CIPHER_ID_AES 2
-#define POLARSSL_PK_RSA        1
-#define POLARSSL_MD_NONE       0
+#define MBEDTLS_CIPHER_ID_AES 2
+#define MBEDTLS_PK_RSA        1
+#define MBEDTLS_MD_NONE       0
 
 //Some self defined size limits
 #define ID_SIZE 12

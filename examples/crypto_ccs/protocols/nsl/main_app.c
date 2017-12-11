@@ -236,7 +236,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
     // sender keys
     //@ close pk_context(&s_context);
     pk_init(&s_context);
-    if (pk_init_ctx(&s_context, pk_info_from_type(POLARSSL_PK_RSA)) != 0)
+    if (pk_init_ctx(&s_context, pk_info_from_type(MBEDTLS_PK_RSA)) != 0)
       abort();
     //@ close rsa_key_request(sender, 0);
     //@ open principal(sender, _);
@@ -259,7 +259,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
     // receiver keys
     //@ close pk_context(&r_context);
     pk_init(&r_context);
-    if (pk_init_ctx(&r_context, pk_info_from_type(POLARSSL_PK_RSA)) != 0)
+    if (pk_init_ctx(&r_context, pk_info_from_type(MBEDTLS_PK_RSA)) != 0)
       abort();
     //@ close rsa_key_request(receiver, 0);
     //@ open principal(receiver, _);

@@ -12,14 +12,12 @@ set -e # Stop as soon as a command fails.
 set -x # Print what is being executed.
 
 if [ $(uname -s) = "Linux" ]; then
-  # Note: without gtksourceview2.0-dev, opam builds lablgtk builds with
-  # sourceview bindings missing
   sudo apt-get install -y --no-install-recommends \
        git wget ca-certificates make m4 \
-       ocaml-native-compilers gcc camlp4 patch unzip libgtk2.0-dev \
-       valac gtksourceview2.0-dev \
-       liblablgtk2-ocaml-dev liblablgtksourceview2-ocaml-dev
-  
+       gcc patch unzip libgtk2.0-dev \
+       valac gtksourceview2.0-dev
+  cd /tmp && curl -Lf http://people.cs.kuleuven.be/~bart.jacobs/verifast/vfdeps-ocaml-4.06.0-trusty.tar.xz | tar xj
+
 elif [ $(uname -s) = "Darwin" ]; then
   brew update
   function brewinstall {
@@ -34,6 +32,7 @@ elif [ $(uname -s) = "Darwin" ]; then
   brewinstall gtksourceview
   brewinstall vala
   brewinstall ocaml
+  brewinstall ocaml-num
   brewinstall lablgtk
   brewinstall camlp4
   export PKG_CONFIG_PATH=/opt/X11/lib/pkgconfig

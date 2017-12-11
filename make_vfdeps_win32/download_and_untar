@@ -1,0 +1,24 @@
+#!/bin/bash
+
+set -e # Stop as soon as a command fails.
+set -x # Print what is being executed.
+
+dlcache=.
+
+while [ "$#" != "0" ]; do
+    case "$1" in
+        --dlcache)
+            dlcache=$2
+            shift 2
+            ;;
+        *)
+            url=$1
+            shift 1
+            ;;
+    esac
+done
+
+filename=$(basename "$url")
+filepath=$dlcache/$filename
+if [ ! -f "$filepath" ]; then curl -Lfo "$filepath" "$url"; fi
+tar xzfm "$filepath"

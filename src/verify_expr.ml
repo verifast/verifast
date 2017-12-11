@@ -164,13 +164,6 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let h = List.filter (fun (Chunk (_, _, coef, _, _)) -> not (is_dummy_frac_term coef)) h in
     with_context (Executing (h, env, l, "Leak check.")) $. fun () ->
     let h = List.filter (function (Chunk(name, targs, frac, args, _)) when is_empty_chunk name targs frac args -> false | _ -> true) h in
-    let check_plugin_state h env l symb state =
-      let [_, ((_, plugin), _)] = pluginmap in
-      match plugin#check_leaks state with
-        None -> ()
-      | Some msg -> assert_false h env l msg None
-    in
-    let h = List.filter (function Chunk ((name, true), targs, frac, args, Some (PluginChunkInfo info)) -> check_plugin_state h env l name info; false | _ -> true) h in
     if h <> [] then assert_false h env l msg (Some "leak");
     check_breakpoint [] env l;
     major_success ()

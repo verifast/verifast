@@ -6,7 +6,7 @@
 
 
 # ----------------------------------------------------------------------------
-# OS is autodeteted. If that fails, set OS to "Linux", "Darwin", or "Cygwin"
+# OS is autodeteted. If that fails, set OS to "Linux", "Darwin", or "Windows_NT"
 # OS = Linux
 
 # ----------------------------------------------------------------------------

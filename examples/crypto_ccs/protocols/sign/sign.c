@@ -84,7 +84,7 @@ void sender(int recvr, char *key, int key_len, char *msg)
     //@ close random_state_predicate(havege_state_initialized);
     /*@ produce_function_pointer_chunk random_function(random_stub_sign)
                      (havege_state_initialized)(state, out, len) { call(); } @*/
-    if (pk_sign(&context, POLARSSL_MD_NONE, hash, 64, M + 4 + MSG_SIZE,
+    if (pk_sign(&context, MBEDTLS_MD_NONE, hash, 64, M + 4 + MSG_SIZE,
                 &sign_len, random_stub_sign, &havege_state) != 0)
       abort();
     //@ pk_release_context_with_key(&context);
@@ -188,7 +188,7 @@ void receiver(int recvr, char *key, int key_len, char *msg)
       abort();
     //@ assert chars(buffer + 4 + MSG_SIZE, sign_size, sign_cs);
     //@ interpret_asym_signature(buffer + 4 + MSG_SIZE, sign_size);
-    if (pk_verify(&context, POLARSSL_MD_NONE, hash, 64,
+    if (pk_verify(&context, MBEDTLS_MD_NONE, hash, 64,
                   buffer + 4 + MSG_SIZE, (unsigned int) sign_size) != 0)
       abort();
     //@ open cryptogram(buffer + 4 + MSG_SIZE, sign_size, ?sign_ccs, ?sign_cg);

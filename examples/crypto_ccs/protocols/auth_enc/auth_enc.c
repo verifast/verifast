@@ -60,7 +60,7 @@ void sender(char *key, char *msg, unsigned int msg_len)
     // auth encrypt
     //@ chars_split(message + 16, 16);
     //@ close gcm_context(&gcm_context);
-    if (gcm_init(&gcm_context, POLARSSL_CIPHER_ID_AES, key, 
+    if (gcm_init(&gcm_context, MBEDTLS_CIPHER_ID_AES, key, 
                 (unsigned int) KEY_SIZE * 8) != 0) abort();
     if (gcm_crypt_and_tag(&gcm_context, GCM_ENCRYPT, 
                           (unsigned int) msg_len,
@@ -139,7 +139,7 @@ int receiver(char *key, char *msg)
     
     // auth decrypt
     //@ close gcm_context(&gcm_context);
-    if (gcm_init(&gcm_context, POLARSSL_CIPHER_ID_AES, key, 
+    if (gcm_init(&gcm_context, MBEDTLS_CIPHER_ID_AES, key, 
                 (unsigned int) KEY_SIZE * 8) != 0) abort();
     //@ interpret_auth_encrypted(buffer + 16, 16 + enc_size);
     //@ open cryptogram(buffer + 16, 16 + enc_size, ?enc_ccs, ?enc_cg);

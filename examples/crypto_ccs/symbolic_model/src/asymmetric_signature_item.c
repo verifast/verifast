@@ -108,7 +108,7 @@ struct item *asymmetric_signature(struct item *key, struct item *payload)
                       asym_sig_havege_random_stub)
                      (havege_state_initialized)(state, out, len) { call(); } @*/
     //@ open principal(principal1, count1);
-    if(pk_sign(&context, POLARSSL_MD_NONE,
+    if(pk_sign(&context, MBEDTLS_MD_NONE,
                payload->content, (unsigned int) payload->size,
                output, &olen,
                asym_sig_havege_random_stub, random_state) != 0)
@@ -214,7 +214,7 @@ void asymmetric_signature_verify(struct item *key, struct item *item,
     //@ if (col) cg_sig = ccs_for_cg_sur(sig_cont, tag_asym_signature);
     //@ if (col) public_ccs_cg(cg_sig);
     //@ close cryptogram(s_cont + TAG_LENGTH, s, sig_cont, cg_sig);
-    if(pk_verify(&context, POLARSSL_MD_NONE, item->content,
+    if(pk_verify(&context, MBEDTLS_MD_NONE, item->content,
                  (unsigned int) item->size,
                  signature->content + TAG_LENGTH,
                  (unsigned int) (signature->size - TAG_LENGTH)) != 0)

@@ -1,0 +1,8 @@
+20c20
+< PREFIX=C:/ocamlmgw
+---
+> PREFIX=C:/vfdeps-17.12
+35c35
+< LIBDIR=$(PREFIX)/lib
+---
+> LIBDIR=$(PREFIX)/lib/ocaml

@@ -1,19 +1,16 @@
 #ifndef STDINT_H
 #define STDINT_H
 
-// Note that this relies on which assumptions VeriFast
-// makes about the sizes of the data types, i.e.
-// you cannot change this soundly without changing
-// VeriFast.
+typedef __int8   int8_t;
+typedef __int16  int16_t;
+typedef __int32  int32_t;
+typedef __int64  int64_t;
+typedef __int128 int128_t;
 
-typedef char  int8_t;
-typedef short int16_t;
-typedef int   int32_t;
-typedef long long int int64_t;
-
-typedef unsigned char   uint8_t;
-typedef unsigned short  uint16_t;
-typedef unsigned int    uint32_t;
-typedef unsigned long long int uint64_t;
+typedef unsigned __int8   uint8_t;
+typedef unsigned __int16  uint16_t;
+typedef unsigned __int32  uint32_t;
+typedef unsigned __int64  uint64_t;
+typedef unsigned __int128 uint128_t;
 
 #endif // STDINT_H

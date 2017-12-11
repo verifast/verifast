@@ -74,7 +74,7 @@ struct item *symmetric_encryption(struct item *key, struct item *payload)
     //@ if (col) public_ccs_cg(k_cg);
     //@ close cryptogram(k_cont + TAG_LENGTH, GCM_KEY_SIZE, k_ccs, k_cg);
     //@ close gcm_context(&gcm_context);
-    if (gcm_init(&gcm_context, POLARSSL_CIPHER_ID_AES, (key->content + TAG_LENGTH),
+    if (gcm_init(&gcm_context, MBEDTLS_CIPHER_ID_AES, (key->content + TAG_LENGTH),
                 (unsigned int) GCM_KEY_SIZE * 8) != 0)
       abort_crypto_lib("Init gcm failed");
     //@ assert gcm_context_initialized(&gcm_context, ?p, ?c);
@@ -238,7 +238,7 @@ struct item *symmetric_decryption(struct item *key, struct item *item)
     //@ if (col) public_ccs_cg(k_cg);
     //@ close cryptogram(k_cont + TAG_LENGTH, GCM_KEY_SIZE, k_ccs, k_cg);
     //@ close gcm_context(&gcm_context);
-    if (gcm_init(&gcm_context, POLARSSL_CIPHER_ID_AES, (key->content + TAG_LENGTH),
+    if (gcm_init(&gcm_context, MBEDTLS_CIPHER_ID_AES, (key->content + TAG_LENGTH),
                 (unsigned int) GCM_KEY_SIZE * 8) != 0)
       abort_crypto_lib("Init gcm failed");
     //@ assert gcm_context_initialized(&gcm_context, ?p, ?c);

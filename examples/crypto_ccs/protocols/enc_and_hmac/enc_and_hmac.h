@@ -1,7 +1,7 @@
 #ifndef ENC_AND_HMAC_H
 #define ENC_AND_HMAC_H
 
-#include "../../annotated_api/polarssl_definitions.h"
+#include "../../annotated_api/mbedTLS_definitions.h"
 
 #define MAX_SIZE 1024
 #define KEY_SIZE 32

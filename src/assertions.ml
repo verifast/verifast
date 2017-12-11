@@ -406,15 +406,6 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       produce_asn_core_with_post tpenv h ghostenv env body (real_mul l coef coef') size_first size_all assuming cont_with_post
     | EnsuresAsn (l, body) ->
       cont_with_post h ghostenv env (Some body)
-    | WPluginAsn (l, xs, wasn) ->
-      let [_, ((_, plugin), symb)] = pluginmap in
-      let (pluginState, h) =
-        match extract (function Chunk ((p, true), _, _, _, Some (PluginChunkInfo info)) when p == symb -> Some info | _ -> None) h with
-          None -> (plugin#empty_state, h)
-        | Some (s, h) -> (s, h)
-      in
-      plugin#produce_assertion pluginState env wasn $. fun pluginState env ->
-      cont (Chunk ((symb, true), [], real_unit, [], Some (PluginChunkInfo pluginState))::h) (xs @ ghostenv) env
     )
   
   let rec produce_asn_core tpenv h ghostenv env p coef size_first size_all (assuming: bool) cont: symexec_result =
@@ -1039,20 +1030,6 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | CoefAsn (l, coefpat, WInstPredAsn (_, e_opt, st, cfin, tn, g, index, pats)) -> inst_call_pred l (SrcPat coefpat) e_opt tn g index pats
     | EnsuresAsn (l, body) ->
       cont_with_post [] h ghostenv env env' None (Some body)
-    | WPluginAsn (l, xs, wasn) ->
-      let [_, ((_, plugin), symb)] = pluginmap in
-      let (pluginState, h) =
-        match extract (function Chunk ((p, true), _, _, _, Some (PluginChunkInfo info)) when p == symb -> Some info | _ -> None) h with
-          None -> (plugin#empty_state, h)
-        | Some (s, h) -> (s, h)
-      in
-      try 
-        plugin#consume_assertion pluginState env wasn $. fun pluginState env ->
-        cont [] (Chunk ((symb, true), [], real_unit, [], Some (PluginChunkInfo pluginState))::h) (xs @ ghostenv) env env' None
-      with Plugins.PluginConsumeError (off, len, msg) ->
-        let ((path, line, col), _) = l in
-        let l = ((path, line, col + 1 + off), (path, line, col + 1 + off + len)) in
-        assert_false h env l msg None
     )
   
   let rec consume_asn_core rules tpenv h ghostenv env env' p checkDummyFracs coef cont =

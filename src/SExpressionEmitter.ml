@@ -105,7 +105,6 @@ let rec sexpr_of_type_ (t : type_) : sexpression =
                                         Symbol s ]
     | RefType (t)             -> List [ Symbol "type-ref-type";
                                         sexpr_of_type_ t ]
-    | PluginInternalType v    -> aux2 "type-plugin-internal-type"
     | AbstractType (s)         -> List [ Symbol "type-abstract";
                                         Symbol s ]
 

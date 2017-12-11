@@ -48,7 +48,7 @@ bin/symbolic.dll.vfmanifest : include/switch_primitives.gh $(MANIFESTS)
 	mkdir -p bin
 	@${VF} -shared -allow_assume -emit_dll_vfmanifest \
 	         -emit_dll_vfmanifest_as bin/symbolic.dll.vfmanifest \
-	         ../bin/libann_polarssl.dll.vfmanifest $(MANIFESTS)
+	         ../bin/libann_mbedTLS.dll.vfmanifest $(MANIFESTS)
 	$(call pprint_big, Link time verification of crypto library done)
 
 $(OUT_LIB) : include/switch_primitives.gh $(OBJECTS)

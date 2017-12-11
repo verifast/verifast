@@ -32,7 +32,7 @@ int gcm_init(gcm_context *ctx, int cipher,
                gcm_context(ctx) &*&
                (keysize == 128 || keysize == 192 || keysize == 256) &*&
                // only AES supported for now
-               cipher == POLARSSL_CIPHER_ID_AES; @*/
+               cipher == MBEDTLS_CIPHER_ID_AES; @*/
   /*@ ensures  [f]cryptogram(key, size_key, ccs_key, cg_key) &*&
                result == 0 ?
                  gcm_context_initialized(ctx, p, c)

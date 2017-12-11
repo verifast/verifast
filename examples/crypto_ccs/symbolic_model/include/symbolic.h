@@ -5,7 +5,7 @@
 #include <stdbool.h>
 #include <string.h>
 
-#include "../../annotated_api/polarssl_definitions.h"
+#include "../../annotated_api/mbedTLS_definitions.h"
 //@ #include "proof_obligations.gh"
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -327,7 +327,7 @@ struct keypair *create_keypair(int principal)
 
   //@ close pk_context(&context);
   pk_init(&context);
-  if (pk_init_ctx(&context, pk_info_from_type(POLARSSL_PK_RSA)) != 0)
+  if (pk_init_ctx(&context, pk_info_from_type(MBEDTLS_PK_RSA)) != 0)
     abort_crypto_lib("Could not generate key_pair: pk_init_ctx failed");
   void *random_state = nonces_expose_state();
 
