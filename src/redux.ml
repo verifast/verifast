@@ -919,8 +919,12 @@ and context () =
         assumes_with_more_pending_splits <- assumes_with_more_pending_splits + 1;
     
     method assert_term t =
+      let time0 = if verbosity > 0 then begin printff "%10.6fs: Entering       Redux.assert_term(%s)\n" (Perf.time()) (self#pprint t); Perf.time() end else 0.0 in
+      Stopwatch.start stopwatch;
       self#register_pending_splits_count;
-      ignore (self#assume_internal t)
+      ignore (self#assume_internal t);
+      Stopwatch.stop stopwatch;
+      if verbosity > 0 then begin let time1 = Perf.time() in printff "%10.6fs: Exiting Redux.assert_term: %.6f seconds\n" time1 (time1 -. time0) end
     
     method assume t =
       let time0 = if verbosity > 0 then begin printff "%10.6fs: Entering Redux.assume(%s)\n" (Perf.time()) (self#pprint t); Perf.time() end else 0.0 in
