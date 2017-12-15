@@ -215,6 +215,7 @@ class z3_context () =
     method mk_real_le t1 t2 = Z3.mk_le ctxt t1 t2
     method get_type t = Z3.get_type ctxt t
     method pprint t = string_of_sexpr (simplify (parse_sexpr (Z3.ast_to_string ctxt t)))
+    method assert_term t = Z3.assert_cnstr ctxt t
     method query t =
       (* printf "Z3prover.query (%s)... " (Z3.ast_to_string ctxt t); *)
       let t0 = if verbosity >= 1 then Perf.time() else 0.0 in

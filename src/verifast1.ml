@@ -363,7 +363,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Int (Unsigned, 2) -> truncate_uint32_symbol
     | Int (Unsigned, 3) -> truncate_uint64_symbol
   
-  let () = ignore $. ctxt#assume (ctxt#mk_eq (ctxt#mk_unboxed_bool (ctxt#mk_boxed_int (ctxt#mk_intlit 0))) ctxt#mk_false) (* This allows us to use 0 as a default value for all types; see the treatment of array creation. *)
+  let () = ctxt#assert_term (ctxt#mk_eq (ctxt#mk_unboxed_bool (ctxt#mk_boxed_int (ctxt#mk_intlit 0))) ctxt#mk_false) (* This allows us to use 0 as a default value for all types; see the treatment of array creation. *)
 
   let boolt = Bool
   let intt = intType
@@ -416,7 +416,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match tp with
       Int (_, _)|PtrType _ ->
       let min, max = limits_of_type tp in
-      ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min term) (ctxt#mk_le term max))
+      ctxt#assert_term (ctxt#mk_and (ctxt#mk_le min term) (ctxt#mk_le term max))
     | _ -> ()
   
   let get_unique_var_symb_non_ghost x t = 
@@ -1462,11 +1462,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let t = ctxt#mk_app (mk_symbol x [] ctxt#type_int Uninterp) [] in
       let serialNumber = !class_counter in
       class_counter := !class_counter + 1;
-      ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_app class_serial_number [t]) (ctxt#mk_intlit serialNumber)));
+      ctxt#assert_term (ctxt#mk_eq (ctxt#mk_app class_serial_number [t]) (ctxt#mk_intlit serialNumber));
       if is_import_spec then
-        ignore (ctxt#assume (ctxt#mk_lt (ctxt#mk_app class_rank [t]) (ctxt#mk_reallit 0)))
+        ctxt#assert_term (ctxt#mk_lt (ctxt#mk_app class_rank [t]) (ctxt#mk_reallit 0))
       else
-        ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_app class_rank [t]) (ctxt#mk_reallit serialNumber)));
+        ctxt#assert_term (ctxt#mk_eq (ctxt#mk_app class_rank [t]) (ctxt#mk_reallit serialNumber));
       (x, t)
     end
   let classterms1 =  terms_of classmap1
@@ -1481,7 +1481,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     List.map
       (fun (sn, (l, fds_opt)) ->
          let s = get_unique_var_symb ("struct_" ^ sn ^ "_size") intType in
-         ignore $. ctxt#assume (ctxt#mk_lt (ctxt#mk_intlit 0) s);
+         ctxt#assert_term (ctxt#mk_lt (ctxt#mk_intlit 0) s);
          let rec iter fmap fds has_ghost_fields =
            match fds with
              [] ->
@@ -1494,7 +1494,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
              let fmap = List.rev fmap in
              begin try
                let (f, (lf, gh, t, Some offset0)) = List.find (fun (f, (lf, gh, t, offset)) -> gh = Real) fmap in 
-               ignore $. ctxt#assume (ctxt#mk_eq offset0 (ctxt#mk_intlit 0))
+               ctxt#assert_term (ctxt#mk_eq offset0 (ctxt#mk_intlit 0))
              with Not_found -> ()
              end;
              (sn, (l, Some fmap, padding_predsym_opt, s))
@@ -2206,7 +2206,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let action_permission_pred = (mk_predfam action_permission_pred_name l [] 0 action_permission_pred_param_types action_permission_pred_inputParamCount) Inductiveness_Inductive in
                   let  (_, (_, _, _, _, action_permission_pred_symb, _, Inductiveness_Inductive)) = action_permission_pred in
                   let (_, _, _, _, is_action_permissionx_symb) = List.assoc ("is_action_permission" ^ (string_of_int nb_action_parameters)) purefuncmap0 in
-                  ignore (ctxt#assume (mk_app is_action_permissionx_symb [action_permission_pred_symb]));
+                  ctxt#assert_term (mk_app is_action_permissionx_symb [action_permission_pred_symb]);
                   if ps = [] then
                     (action_permission_pred :: pfm, Some (action_permission_pred_symb, None))
                   else begin
@@ -2220,10 +2220,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     let  (_, (_, _, _, _, action_permission_dispenser_pred_symb, _, _)) = action_permission_dispenser_pred in
                     (* assuming is_action_permission1_dispenser(action_permission_dispenser_pred_symb) *)
                     let (_, _, _, _, is_action_permission1_dispenser_symb) = List.assoc "is_action_permission1_dispenser" purefuncmap0 in
-                    ignore (ctxt#assume (mk_app is_action_permission1_dispenser_symb [action_permission_dispenser_pred_symb]));
+                    ctxt#assert_term (mk_app is_action_permission1_dispenser_symb [action_permission_dispenser_pred_symb]);
                     (* assuming get_action_permission1_for_dispenser(action_permission_dispenser_pred_symb) = action_permission_pred_symb *)
                     let (_, _, _, _, get_action_permission1_for_dispenser_symb) = List.assoc "get_action_permission1_for_dispenser" purefuncmap0 in
-                    ignore (ctxt#assume (ctxt#mk_eq (mk_app get_action_permission1_for_dispenser_symb [action_permission_dispenser_pred_symb]) action_permission_pred_symb));
+                    ctxt#assert_term (ctxt#mk_eq (mk_app get_action_permission1_for_dispenser_symb [action_permission_dispenser_pred_symb]) action_permission_pred_symb);
                     (action_permission_pred :: action_permission_dispenser_pred :: pfm, Some (action_permission_pred_symb, Some action_permission_dispenser_pred_symb))
                   end
                 end
@@ -4847,7 +4847,7 @@ let add_ancestries_to_prover ancestries =
       let eq_assertion =
         ctxt#mk_eq (ctxt#mk_app ancestry_symbol [cintf]) prover_ancestry_list
       in
-      ignore (ctxt#assume eq_assertion)
+      ctxt#assert_term eq_assertion
     in
     let add_hierarchy_and_instance_of_ancestry cintf ancestry hierarchy =
       let ancester_at_of length var offset i a =
@@ -5135,7 +5135,7 @@ let check_if_list_is_defined () =
       let v = ctxt#mk_app shiftleft_symbol [v1;v2] in
       begin match e2 with
         WIntLit (_, n) when le_big_int zero_big_int n && le_big_int n (big_int_of_int 64) ->
-        ignore (ctxt#assume (ctxt#mk_eq v (ctxt#mk_mul v1 (ctxt#mk_intlit_of_string (string_of_big_int (power_int_positive_big_int 2 n))))))
+        ctxt#assert_term (ctxt#mk_eq v (ctxt#mk_mul v1 (ctxt#mk_intlit_of_string (string_of_big_int (power_int_positive_big_int 2 n)))))
       | _ -> ()
       end;
       check_overflow v
@@ -5291,9 +5291,9 @@ let check_if_list_is_defined () =
       ev state e1 $. fun state v1 ->
         let iterm = ctxt#mk_intlit (int_of_big_int i) in
         let app = ctxt#mk_app bitwise_and_symbol [v1;iterm] in
-        ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le int_zero_term app) (ctxt#mk_le app iterm)));
+        ctxt#assert_term (ctxt#mk_and (ctxt#mk_le int_zero_term app) (ctxt#mk_le app iterm));
         begin if eq_big_int i unit_big_int then
-          ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_mod v1 (ctxt#mk_intlit 2)) app));
+          ctxt#assert_term (ctxt#mk_eq (ctxt#mk_mod v1 (ctxt#mk_intlit 2)) app);
         end;
         cont state app
     | WOperation (l, (BitAnd|BitOr|BitXor as op), [e1; e2], t) ->

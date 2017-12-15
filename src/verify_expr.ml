@@ -258,7 +258,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     *)
   let assume_is_functype fn ftn =
     let (_, _, _, _, symb) = List.assoc ("is_" ^ ftn) purefuncmap in
-    ignore (ctxt#assume (ctxt#mk_eq (mk_app symb [List.assoc fn funcnameterms]) ctxt#mk_true))
+    ctxt#assert_term (ctxt#mk_eq (mk_app symb [List.assoc fn funcnameterms]) ctxt#mk_true)
    
   let funcnameterm_of funcmap fn =
     let FuncInfo (env, fterm, l, k, tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, _, _) = List.assoc fn funcmap in fterm
@@ -365,7 +365,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let fn = full_name pn fn in
         let fterm = List.assoc fn funcnameterms in
         if body <> None then
-          ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_app func_rank [fterm]) (ctxt#mk_reallit !func_counter)));
+          ctxt#assert_term (ctxt#mk_eq (ctxt#mk_app func_rank [fterm]) (ctxt#mk_reallit !func_counter));
         incr func_counter;
         let (rt, xmap, functype_opt, pre, pre_tenv, post) =
           check_func_header pn ilist [] [] [] l k tparams rt fn (Some fterm) xs nonghost_callers_only functype_opt contract_opt terminates body
@@ -398,7 +398,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let register_prototype_used l g gterm =
     if not (List.mem (g, l) !prototypes_used) then
       prototypes_used := (g, l)::!prototypes_used;
-    ignore (ctxt#assume (ctxt#mk_lt (ctxt#mk_app func_rank [gterm]) int_zero_term))
+    ctxt#assert_term (ctxt#mk_lt (ctxt#mk_app func_rank [gterm]) int_zero_term)
   
   let interfmap1 =
     List.map
@@ -1206,7 +1206,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       StaticArrayType (elemTp, elemCount) ->
       let elemSize = sizeof l elemTp in
       let arraySize = ctxt#mk_mul (ctxt#mk_intlit elemCount) elemSize in
-      ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le int_zero_term addr) (ctxt#mk_le (ctxt#mk_add addr arraySize) (max_unsigned_term ptr_rank))));
+      ctxt#assert_term (ctxt#mk_and (ctxt#mk_le int_zero_term addr) (ctxt#mk_le (ctxt#mk_add addr arraySize) (max_unsigned_term ptr_rank)));
       let produce_char_array_chunk h addr elemCount =
         let elems = get_unique_var_symb "elems" (InductiveType ("list", [Int (Signed, 0)])) in
         let length = ctxt#mk_mul (ctxt#mk_intlit elemCount) elemSize in
