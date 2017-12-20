@@ -234,6 +234,8 @@ class z3_context () =
     method mk_real_le t1 t2 = Z3native.mk_le ctxt t1 t2
     method get_type t = Z3native.get_sort ctxt t
     method pprint t = string_of_sexpr (simplify (parse_sexpr (Z3native.ast_to_string ctxt t)))
+    method pprint_sort (s : Z3native.sort) = Z3native.ast_to_string ctxt s
+    method pprint_sym (s : Z3native.func_decl) = Z3native.ast_to_string ctxt s
     method assert_term t = Z3native.solver_assert ctxt solver t
     method query t =
       (* printf "Z3prover.query (%s)... " (Z3native.ast_to_string ctxt t); *)
