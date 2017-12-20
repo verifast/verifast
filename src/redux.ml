@@ -1207,6 +1207,9 @@ and context () =
       | BoundVar i -> Printf.sprintf "bound.%i" i
       | Implies (t1, t2) -> self#pprint t1 ^ " ==> " ^ self#pprint t2
     
+    method pprint_sym (s : symbol) : string = s#name
+    method pprint_sort (s : unit) : string = "()"
+    
     method get_node s vs =
       match vs with
         [] ->
