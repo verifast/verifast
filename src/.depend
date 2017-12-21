@@ -1,7 +1,5 @@
 # These dependencies are automatically generated.
 # Do not edit by hand. To generate, run 'make depend'.
-proverapi.cmo :
-proverapi.cmx :
 simplex.cmo : linux/Stopwatch.cmi simplex.cmi
 simplex.cmx : linux/Stopwatch.cmx simplex.cmi
 vfconsole.cmo : verifast0.cmx verifast.cmx util.cmx SExpressionEmitter.cmi \
@@ -50,6 +48,10 @@ assertions.cmo : verifast1.cmx verifast0.cmx util.cmx stats.cmx \
     proverapi.cmx linux/Perf.cmx parser.cmx ast.cmx
 assertions.cmx : verifast1.cmx verifast0.cmx util.cmx stats.cmx \
     proverapi.cmx linux/Perf.cmx parser.cmx ast.cmx
+verifastPluginCvc4.cmo : verifast.cmx smtlibprover.cmx smtlib.cmx \
+    proverapi.cmx
+verifastPluginCvc4.cmx : verifast.cmx smtlibprover.cmx smtlib.cmx \
+    proverapi.cmx
 vfide.cmo : vfversion.cmi verifast0.cmx verifast.cmx util.cmx \
     shape_analysis/shape_analysis_frontend.cmx Printexc_proxy.cmx parser.cmx \
     lexer.cmx java_frontend/java_frontend_bridge.cmx Fonts.cmx \
@@ -88,14 +90,6 @@ verifastPluginZ3.cmo : z3prover.cmx verifast.cmx proverapi.cmx
 verifastPluginZ3.cmx : z3prover.cmx verifast.cmx proverapi.cmx
 ast.cmo : util.cmx
 ast.cmx : util.cmx
-verifast.cmo : vfversion.cmi verify_expr.cmx verifast1.cmx verifast0.cmx \
-    util.cmx linux/Stopwatch.cmi stats.cmx proverapi.cmx linux/Perf.cmx \
-    parser.cmx lexer.cmx java_frontend/java_frontend_bridge.cmx ast.cmx \
-    assertions.cmx
-verifast.cmx : vfversion.cmx verify_expr.cmx verifast1.cmx verifast0.cmx \
-    util.cmx linux/Stopwatch.cmx stats.cmx proverapi.cmx linux/Perf.cmx \
-    parser.cmx lexer.cmx java_frontend/java_frontend_bridge.cmx ast.cmx \
-    assertions.cmx
 z3prover.cmo : proverapi.cmx linux/Perf.cmx
 z3prover.cmx : proverapi.cmx linux/Perf.cmx
 verifastPluginReduxSmtlib.cmo : verifast.cmx smtlibprover.cmx smtlib.cmx \
@@ -106,16 +100,24 @@ vfstrip.cmo :
 vfstrip.cmx :
 verifast0.cmo : util.cmx ast.cmx
 verifast0.cmx : util.cmx ast.cmx
+verifast.cmo : vfversion.cmi verify_expr.cmx verifast1.cmx verifast0.cmx \
+    util.cmx linux/Stopwatch.cmi stats.cmx proverapi.cmx linux/Perf.cmx \
+    parser.cmx lexer.cmx java_frontend/java_frontend_bridge.cmx ast.cmx \
+    assertions.cmx
+verifast.cmx : vfversion.cmx verify_expr.cmx verifast1.cmx verifast0.cmx \
+    util.cmx linux/Stopwatch.cmx stats.cmx proverapi.cmx linux/Perf.cmx \
+    parser.cmx lexer.cmx java_frontend/java_frontend_bridge.cmx ast.cmx \
+    assertions.cmx
 verifastPluginZ3v2.cmo : z3v2prover.cmx verifast.cmx proverapi.cmx
 verifastPluginZ3v2.cmx : z3v2prover.cmx verifast.cmx proverapi.cmx
-smtlib.cmo :
-smtlib.cmx :
 stats.cmo : util.cmx linux/Stopwatch.cmi linux/Perf.cmx ast.cmx
 stats.cmx : util.cmx linux/Stopwatch.cmx linux/Perf.cmx ast.cmx
 mysh.cmo : vfconfig.cmx Fonts.cmx
 mysh.cmx : vfconfig.cmx Fonts.cmx
 verifastPluginZ3v4.cmo : z3v4prover.cmx verifast.cmx proverapi.cmx
 verifastPluginZ3v4.cmx : z3v4prover.cmx verifast.cmx proverapi.cmx
+smtlib.cmo :
+smtlib.cmx :
 record_backtrace.cmo :
 record_backtrace.cmx :
 SExpressions.cmo : SExpressions.cmi
@@ -126,6 +128,8 @@ branchright_png.cmo :
 branchright_png.cmx :
 mynum.cmo :
 mynum.cmx :
+proverapi.cmo :
+proverapi.cmx :
 verifastPluginZ3v4dot5.cmo : z3v4dot5prover.cmx verifast.cmx proverapi.cmx
 verifastPluginZ3v4dot5.cmx : z3v4dot5prover.cmx verifast.cmx proverapi.cmx
 SExpressionEmitter.cmi : SExpressions.cmi ast.cmx
