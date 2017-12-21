@@ -30,11 +30,11 @@ FILE* fopen(char* filename, char* mode); // todo: check that mode is a valid mod
 
 int fread(void* buffer, int size, int n, FILE* fp);
     //@ requires chars(buffer, ?m, ?cs) &*& 0<=size &*& 0<=n &*& size * n <= m &*& file(fp);
-    //@ ensures chars(buffer, m, ?cs2) &*& file(fp) &*& result <= n;
+    //@ ensures chars(buffer, m, ?cs2) &*& file(fp) &*& 0 <= result &*& result <= n;
   
 int fwrite(void* buffer, int size, int n, FILE* fp);
     //@ requires chars(buffer, ?m, ?cs) &*& 0<=size &*& 0<=n &*& size * n <= m &*& file(fp);
-    //@ ensures chars(buffer, m, cs) &*& file(fp);
+    //@ ensures chars(buffer, m, cs) &*& file(fp) &*& 0 <= result &*& result <= n;
   
 char* fgets(char* buffer, int n, FILE* fp);
     //@ requires chars(buffer, n, ?cs) &*& file(fp);
