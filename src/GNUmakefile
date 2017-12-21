@@ -388,7 +388,7 @@ endif
 	  parser.cmx ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx \
 	  verify_expr.cmx verifast.cmx combineprovers.cmx \
           simplex.cmx redux.cmx verifastPluginRedux.ml \
-          smtlib.cmx smtlibprover.cmx verifastPluginReduxSmtlib.ml \
+          smtlib.cmx smtlibprover.cmx verifastPluginCvc4.ml verifastPluginReduxSmtlib.ml \
           $(Z3ARGS_EARLY) \
 	  shape_analysis/shape_analysis_backend.cmx \
 	  shape_analysis/changelog.cmx shape_analysis/shape_analysis_frontend.cmx \
@@ -408,7 +408,7 @@ vfide: ../bin/vfide$(DOTEXE) $(STDLIB)
 	  util.cmx ast.cmx stats.cmx lexer.cmx parser.cmx \
 	  ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx \
 	  verify_expr.cmx verifast.cmx simplex.cmx redux.cmx combineprovers.cmx \
-          smtlib.cmx smtlibprover.cmx verifastPluginReduxSmtlib.ml \
+          smtlib.cmx smtlibprover.cmx verifastPluginCvc4.ml verifastPluginReduxSmtlib.ml \
           $(Z3ARGS_EARLY) \
 	  verifastPluginRedux.ml $(Z3ARGS) vfconsole.cmx
 

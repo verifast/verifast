@@ -1,19 +1,25 @@
 open Proverapi
 
-(* This "prover" is a simple SMTLib dump of all SMT queries, it cannot
-   work alone since Verifast workflow requires interaction with the
-   prover.  To use it, combine it with a real prover using the
-   Combineprovers module. *)
+(* A generic prover using the SMTLib language. Depending on the
+   parameters input_fun and output, this can be used as either:
+
+   - an interface for SMT solvers that have no OCaml binding such as
+   CVC4; communication with the solver process is done through a
+   pipe. See the function dump_smtlib_ctxt.
+
+   - a simple SMTLib dump of all SMT queries, it cannot work alone
+   since Verifast workflow requires interaction with the prover.  To
+   use it, combine it with a real prover using the Combineprovers
+   module. See the function external_smtlib_ctxt. *)
 
 (* This code is largely inspired from the modules for the Z3 prover. *)
 
-class smtlib_context () =
+class smtlib_context input_fun output =
   let statements : Smtlib.statement list ref = ref [] in
-  let dump_fmt =
-    Format.formatter_of_out_channel (open_out "dump.smt2")
-  in
+  let dump_fmt = Format.formatter_of_out_channel output in
   let add_statement st =
     Format.fprintf dump_fmt "%a@\n" Smtlib.print_statement st;
+    flush output;
     statements := st :: !statements
   in
   (* /!\ The argument "ALL" to "set-logic" is quite new in SMTlib
@@ -48,10 +54,9 @@ class smtlib_context () =
     ctor_counter := Big_int.succ_big_int k;
     k
   in
-  (* This is a fake prover, it always answers Unknown. *)
   let check () =
     add_statement Smtlib.check_sat;
-    Unknown
+    input_fun ()
   in
   let add_assert t = add_statement (Smtlib.sassert t) in
   let assert_term t = add_assert t; check () in
@@ -126,17 +131,6 @@ class smtlib_context () =
         | Uninterp -> ()
       end;
       c
-
-    method get_symbol_domain n (fc : Smtlib.symbol) =
-      let d = Smtlib.get_domain fc in
-      if (List.length d <> n) then begin
-          Format.eprintf
-            "Error in function Smtlibprover.get_symbol_domain: symbol %a has domain (%a) but %d arguments are expected"
-            Smtlib.Sym.print fc
-            (Smtlib.print_list_space Smtlib.Sort.print) d
-            n
-        end;
-      d
 
     method set_fpclauses (fc : Smtlib.symbol) (k : int) cs : unit =
       add_statement (Smtlib.comment "set_fpclauses");
@@ -244,3 +238,20 @@ class smtlib_context () =
         add_assert quant
    method simplify (t : Smtlib.term) = Some t
   end
+
+let dump_smtlib_ctxt filename =
+  (new smtlib_context
+     (fun _ -> Unknown)
+     (open_out filename)
+   : smtlib_context :> (Smtlib.sort, Smtlib.symbol, Smtlib.term) context)
+
+let external_smtlib_ctxt command =
+  let (input, output) = Unix.open_process command in
+  (new smtlib_context
+     (fun _ ->
+       match input_line input with
+       | "unsat" -> Unsat
+       | "unknown" -> Unknown
+       | _ -> assert false)
+     output
+   : smtlib_context :> (Smtlib.sort, Smtlib.symbol, Smtlib.term) context)
