@@ -87,9 +87,9 @@ Z3V4DOT5PRESENT=false
 ifdef Z3V4DOT5
   Z3_OCAML ?= `ocamlfind query Z3`
   Z3_DLL_DIR ?= /usr/local/lib
-  Z3DEPS = z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml verifastPluginReduxZ3$(Z3VERSION).ml
+  Z3DEPS = z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml verifastPluginReduxZ3$(Z3VERSION).ml verifastPluginZ3$(Z3VERSION)Smtlib.ml
   Z3CCOPTS = -cclib "-L $(Z3_DLL_DIR)"
-  Z3ARGS_EARLY = -I $(Z3_OCAML) z3ml.cmxa z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml verifastPluginReduxZ3$(Z3VERSION).ml $(Z3CCOPTS)
+  Z3ARGS_EARLY = -I $(Z3_OCAML) z3ml.cmxa z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml verifastPluginReduxZ3$(Z3VERSION).ml  verifastPluginZ3$(Z3VERSION)Smtlib.ml $(Z3CCOPTS)
   VERIFAST := ../bin/verifast
   Z3PRESENT=false
   Z3V4DOT5PRESENT=true
@@ -388,6 +388,7 @@ endif
 	  parser.cmx ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx \
 	  verify_expr.cmx verifast.cmx combineprovers.cmx \
           simplex.cmx redux.cmx verifastPluginRedux.ml \
+          smtlib.cmx smtlibprover.cmx verifastPluginReduxSmtlib.ml \
           $(Z3ARGS_EARLY) \
 	  shape_analysis/shape_analysis_backend.cmx \
 	  shape_analysis/changelog.cmx shape_analysis/shape_analysis_frontend.cmx \
@@ -399,7 +400,7 @@ endif
 vfide: ../bin/vfide$(DOTEXE) $(STDLIB)
 .PHONY: vfide
 
-../bin/verifast$(DOTEXE): vfconsole.cmx redux.cmx combineprovers.cmx $(Z3DEPS)
+../bin/verifast$(DOTEXE): vfconsole.cmx redux.cmx combineprovers.cmx smtlib.cmx smtlibprover.cmx $(Z3DEPS)
 	@echo "  OCAMLOPT " $@
 	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/verifast$(DOTEXE) unix.cmxa \
 	  nums.cmxa str.cmxa $(INCLUDES) Perf.cmxa proverapi.cmx \
@@ -407,6 +408,7 @@ vfide: ../bin/vfide$(DOTEXE) $(STDLIB)
 	  util.cmx ast.cmx stats.cmx lexer.cmx parser.cmx \
 	  ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx \
 	  verify_expr.cmx verifast.cmx simplex.cmx redux.cmx combineprovers.cmx \
+          smtlib.cmx smtlibprover.cmx verifastPluginReduxSmtlib.ml \
           $(Z3ARGS_EARLY) \
 	  verifastPluginRedux.ml $(Z3ARGS) vfconsole.cmx
 
