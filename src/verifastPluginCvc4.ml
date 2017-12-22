@@ -8,6 +8,9 @@ let _ =
     (
       fun client ->
       let cvc4_ctxt =
-        Sp.external_smtlib_ctxt "cvc4 --incremental --lang smt" in
+        Sp.external_smtlib_ctxt
+          "cvc4 --incremental --lang smt"
+          ["cvc4"; "I"; "Q"; "NDT"; "LIA"; "LRA"]
+      in
       client#run cvc4_ctxt
     )

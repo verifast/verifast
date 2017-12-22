@@ -13,6 +13,10 @@ let _ =
         (new R.context ():
            R.context :> (unit, R.symbol, (R.symbol, R.termnode) R.term) P.context)
       in
-      let smtlib_ctxt = Sp.dump_smtlib_ctxt "redux_dump.smt2" in
+      let smtlib_ctxt =
+        Sp.dump_smtlib_ctxt
+          "redux_dump.smt2"
+          ["dump"; "I"; "Q"; "NDT"; "LIA"; "LRA"]
+      in
       client#run (C.combine redux_ctxt smtlib_ctxt C.Sync)
     )
