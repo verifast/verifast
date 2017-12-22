@@ -5,6 +5,41 @@
 
    We use modules and functors to enforce abstraction barriers. *)
 
+(* Features:
+
+   To each sort, symbol, variable, term, and statement, we associate a
+   set of features required from the solver for them to make
+   sense. The features used for now are the following ones:
+
+   - "I" (Incrementality): the prover handles a stack of assumptions
+     manipulated with the SMTLib commands "push" and "pop",
+   - "Q" (Quantifiers): the prover understands quantified axioms,
+   - "NDT" (No algebraic Data Types): algebraic datatypes needs to be encoded
+        using the "Inductive" sort
+   - "LIA" (Linear Integer Arithmetic),
+   - "LRA" (Linear Real Arithmetic),
+
+   Planned features:
+   - "DT" (algebraic Data Types), incompatible with "NDT"
+   - "R" (Recursive functions),
+   - "P" (Polymorphism),
+   - "NIA" (Non-linear Integer Arithmetic): this is LIA + multiplication,
+   - "NRA" (Non-linear Real Arithmetic): same for reals,
+   - "BV" (Bit Vectors),
+   - "A" (Arrays),
+   - "Ind" (Induction): the prover is able to reason by induction,
+   - "SL" (Separation Logic): the prover understands separation logic,
+
+    For now the implementation is very naive: the feature sets are
+    string lists that are kept duplicate free using
+    Util.list_remove_dups the features are recomputed each time, if
+    this impacts performance too much, it may me wise to use a better
+    implementation of sets, to use a custom type for features and to
+    store them.
+
+ *)
+
+
 let print_string o = Format.fprintf o "%s"
 
 (* Very general pretty-printing function for lists *)
@@ -46,6 +81,9 @@ module type SORT = sig
   val int : t
   val real : t
   val inductive : t
+
+  (* The features required for the sort to be defined *)
+  val features : t -> string list
 end
 
 module Sort : SORT = struct
@@ -66,6 +104,12 @@ module Sort : SORT = struct
     | Inductive -> "Inductive"
 
   let print o sort = print_string o (to_string sort)
+
+  let features = function
+    | Bool -> []
+    | Int -> ["LIA"]
+    | Real -> ["LRA"]
+    | Inductive -> ["NDT"]
 end
 
 type sort = Sort.t
@@ -90,6 +134,9 @@ module type SYMBOL = sig
   val ite : sort -> t
   val get_domain : t -> sort list
   val get_range : t -> sort
+
+  (* The features required for the symbol domain and range to be defined *)
+  val features : t -> string list
 end
 
 module Symbol (S : SORT) : SYMBOL with type sort = S.t = struct
@@ -163,6 +210,10 @@ module Symbol (S : SORT) : SYMBOL with type sort = S.t = struct
   let get_range (_, _, range) = range
 
   let print o f = print_string o (to_string f)
+
+  let features (_, domain, range) =
+    Util.list_remove_dups
+      (Util.flatmap S.features (range :: domain))
 end
 
 module Sym : SYMBOL with type sort = Sort.t = Symbol(Sort)
@@ -180,6 +231,8 @@ module type VAR = sig
   val get_type : t -> sort
   val to_string_with_type : t -> string
   val print_with_type : Format.formatter -> t -> unit
+  (* The features required for the sort of the variable to be defined *)
+  val features : t -> string list
 end
 
 module Variable (S : SORT) (Sy : SYMBOL with type sort = S.t)
@@ -207,6 +260,8 @@ module Variable (S : SORT) (Sy : SYMBOL with type sort = S.t)
     Format.fprintf o "@[<3>(%a@ %a)@]"
        print_string name
        S.print sort
+
+  let features (_, sort) = S.features sort
 end
 
 module Var = Variable(Sort)(Sym)
@@ -229,6 +284,9 @@ module type TERM = sig
   val forall : var list -> t list -> t -> t
 
   val get_type : t -> sort
+
+  (* The features required for the term to be defined *)
+  val features : t -> string list
 end
 
 module Term (S : SORT)
@@ -309,6 +367,19 @@ module Term (S : SORT)
            (String.concat " " (List.map V.to_string_with_type vars))
            (to_string t)
            (String.concat " " (List.map to_string patterns))
+
+  let rec features = function
+    | Int _ -> ["LIA"]
+    | Real _ -> ["LRA"]
+    | Var _ -> []
+    | App (f, l) ->
+       Util.list_remove_dups (Sy.features f @ Util.flatmap features l)
+    | Forall (vars, _, t) ->
+       (* variables cannot have feature "Q" *)
+       let l = features t in
+       let l' = Util.list_remove_dups (l @ Util.flatmap V.features vars) in
+       if List.mem "Q" l then l' else "Q" :: l'
+
 end
 
 module T = Term(Sort)(Sym)(Var)
@@ -365,6 +436,8 @@ module type STATEMENT = sig
   val pop : int -> t
   val comment : string -> t
   val check_sat : t
+
+  val features : t -> string list
 end
 
 module Statement
@@ -441,6 +514,14 @@ module Statement
     | Comment s ->
        Printf.sprintf "; %s\n" s
     | CheckSat -> "(check-sat)"
+
+  let features = function
+    | SetLogic _ | Comment _ | CheckSat -> []
+    | Push | Pop _ -> ["I"]
+    | Assert t -> T.features t
+    | SortDecl s -> S.features s
+    | FunDecl f -> Sy.features f
+
 end
 
 module St = Statement(Sort)(Sym)(Var)(T)

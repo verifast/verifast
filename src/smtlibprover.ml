@@ -14,13 +14,20 @@ open Proverapi
 
 (* This code is largely inspired from the modules for the Z3 prover. *)
 
-class smtlib_context input_fun output =
+class smtlib_context input_fun output (features : string list) =
   let statements : Smtlib.statement list ref = ref [] in
   let dump_fmt = Format.formatter_of_out_channel output in
   let add_statement st =
     Format.fprintf dump_fmt "%a@\n" Smtlib.print_statement st;
     flush output;
     statements := st :: !statements
+  in
+  let has_features l =
+    List.for_all (fun f -> List.mem f features) l
+  in
+  let maybe_add_statement st =
+    if has_features (Smtlib.St.features st) then
+      add_statement st;
   in
   (* /!\ The argument "ALL" to "set-logic" is quite new in SMTlib
      (version 2.5+). At time of writing, it is not yet supported by
@@ -38,13 +45,14 @@ class smtlib_context input_fun output =
   let real_type = Smtlib.real in
   let ttrue = Smtlib.ttrue in
   let tfalse = Smtlib.tfalse in
+  (* true iff we have all features in l *)
   let inductive_type =
-    add_statement (Smtlib.declare_sort Smtlib.inductive);
+    maybe_add_statement (Smtlib.declare_sort Smtlib.inductive);
     Smtlib.inductive
   in
   let declare_fun s sorts sort =
     let f = Smtlib.fresh_symbol s sorts sort in
-    add_statement (Smtlib.declare_fun f);
+    maybe_add_statement (Smtlib.declare_fun f);
     f
   in
   let tag_func = declare_fun "ctortag" [ inductive_type ] int_type in
@@ -54,17 +62,35 @@ class smtlib_context input_fun output =
     ctor_counter := Big_int.succ_big_int k;
     k
   in
+  (* We remember the last answer as long as it is still valid, that is
+     until we add an assertion or pop the stack. We do that to avoid
+     asking the prover the same question several times. *)
+  let last_prover_answer = ref None in
   let check () =
-    add_statement Smtlib.check_sat;
-    input_fun ()
+    match !last_prover_answer with
+    | None ->
+       add_statement Smtlib.check_sat;
+       input_fun ()
+    | Some ans -> ans
   in
-  let add_assert t = add_statement (Smtlib.sassert t) in
+  let add_assert t =
+    (* Only add an assertion if the prover has the required features to understand it *)
+    if has_features (Smtlib.T.features t) then
+      begin
+        last_prover_answer := None;
+        add_statement (Smtlib.sassert t)
+      end
+  in
   let assert_term t = add_assert t; check () in
   let query t =
-    add_statement Smtlib.push;
-    let result = assert_term (Smtlib.tnot t) = Unsat in
-    add_statement (Smtlib.pop 1);
-    result
+    if has_features (Smtlib.T.features t) then
+      begin
+        add_statement Smtlib.push;
+        let result = assert_term (Smtlib.tnot t) = Unsat in
+        add_statement (Smtlib.pop 1);
+        result
+      end
+    else false   (* Same as an "unknown" answer *)
   in
   let assume_is_inverse f1 f2 dom2 =
     let x = Smtlib.mk_var 0 dom2 in
@@ -86,6 +112,7 @@ class smtlib_context input_fun output =
   let () = assume_is_inverse boxed_real unboxed_real inductive_type in
   object
     val mutable verbosity = 0
+    method features = features
     method set_verbosity v = verbosity <- v
     method type_bool = bool_type
     method type_int = int_type
@@ -219,7 +246,7 @@ class smtlib_context input_fun output =
         (Smtlib.comment (Printf.sprintf "Assert: %s" (Smtlib.T.to_string t)));
       add_assert t
     method push = add_statement (Smtlib.push)
-    method pop = add_statement (Smtlib.pop 1)
+    method pop = last_prover_answer := None; add_statement (Smtlib.pop 1)
     method perform_pending_splits (cont: Smtlib.term list -> bool) = cont []
     method stats: string * (string * int64) list = "(no statistiques for SMTlib)", []
     method begin_formal = ()
@@ -239,13 +266,14 @@ class smtlib_context input_fun output =
    method simplify (t : Smtlib.term) = Some t
   end
 
-let dump_smtlib_ctxt filename =
+let dump_smtlib_ctxt filename features =
   (new smtlib_context
      (fun _ -> Unknown)
      (open_out filename)
+     features
    : smtlib_context :> (Smtlib.sort, Smtlib.symbol, Smtlib.term) context)
 
-let external_smtlib_ctxt command =
+let external_smtlib_ctxt command features =
   let (input, output) = Unix.open_process command in
   (new smtlib_context
      (fun _ ->
@@ -254,4 +282,5 @@ let external_smtlib_ctxt command =
        | "unknown" -> Unknown
        | _ -> assert false)
      output
+     features
    : smtlib_context :> (Smtlib.sort, Smtlib.symbol, Smtlib.term) context)
