@@ -273,7 +273,7 @@ $(STDLIB): $(STDLIB_FILES)
 	@echo "  VERIFAST " $@
 	${VERIFAST} -shared $(STDLIB_FILES) -emit_dll_vfmanifest \
 	  -emit_dll_vfmanifest_as $@  || (rm -f $(STDLIB) ; false)
-	
+
 ../bin/%.vfmanifest: ../bin/%.c ../bin/%.gh ../bin/verifast$(DOTEXE)
 	$(SET_ENV); ../bin/verifast -c -emit_vfmanifest ../bin/$*.c
 clean::
