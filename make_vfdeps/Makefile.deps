@@ -1,3 +1,5 @@
+PATH:=$(PREFIX)/bin:$(PATH)
+
 all: ocaml findlib num ocamlbuild camlp4 lablgtk z3
 
 # ---- OCaml ----
@@ -19,6 +21,9 @@ $(OCAML_BINARY): | ocaml-$(OCAML_VERSION)
 
 ocaml: $(OCAML_BINARY)
 .PHONY: ocaml
+
+clean::
+	-rm -Rf ocaml-$(OCAML_VERSION)
 
 # ---- Findlib ----
 
@@ -48,6 +53,9 @@ $(FINDLIB_BINARY): findlib-$(FINDLIB_VERSION)/Makefile.config
 findlib: $(FINDLIB_BINARY)
 .PHONY: findlib
 
+clean::
+	-rm -Rf findlib-$(FINDLIB_VERSION)
+
 # ---- Num ----
 
 NUM_VERSION=1.1
@@ -64,6 +72,9 @@ $(NUM_BINARY): $(FINDLIB_BINARY) | num-$(NUM_VERSION)
 
 num: $(NUM_BINARY)
 .PHONY: num
+
+clean::
+	-rm -Rf num-$(NUM_VERSION)
 
 # ---- ocamlbuild ----
 
@@ -82,6 +93,9 @@ $(OCAMLBUILD_BINARY): $(FINDLIB_BINARY) | ocamlbuild-$(OCAMLBUILD_VERSION)
 
 ocamlbuild: $(OCAMLBUILD_BINARY)
 .PHONY: ocamlbuild
+
+clean::
+	-rm -Rf ocamlbuild-$(OCAMLBUILD_VERSION)
 
 # ---- camlp4 ----
 
@@ -102,6 +116,9 @@ $(CAMLP4_BINARY): $(OCAMLBUILD_BINARY) | $(CAMLP4_DIR)
 camlp4: $(CAMLP4_BINARY)
 .PHONY: camlp4
 
+clean::
+	-rm -Rf $(CAMLP4_DIR)
+
 # ---- lablgtk ----
 
 LABLGTK_VERSION=2.18.6
@@ -119,6 +136,9 @@ $(LABLGTK_BINARY): $(FINDLIB_BINARY) | lablgtk-$(LABLGTK_VERSION)
 
 lablgtk: $(LABLGTK_BINARY)
 .PHONY: lablgtk
+
+clean::
+	-rm -Rf lablgtk-$(LABLGTK_VERSION)
 
 # ---- Z3 ----
 
@@ -139,3 +159,6 @@ $(Z3_BINARY): $(FINDLIB_BINARY) | $(Z3_DIR)
 
 z3: $(Z3_BINARY)
 .PHONY: z3
+
+clean::
+	-rm -Rf $(Z3_DIR)

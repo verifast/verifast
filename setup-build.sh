@@ -4,9 +4,6 @@
 # Installs dependencies, builds VeriFast, and runs tests.
 # Suitable for home use and for continuous integration.
 #
-# Supported: vfide
-# Not supported: z3
-#
 
 set -e # Stop as soon as a command fails.
 set -x # Print what is being executed.
@@ -31,11 +28,10 @@ elif [ $(uname -s) = "Darwin" ]; then
   brewinstall gtk+
   brewinstall gtksourceview
   brewinstall vala
-  brewinstall ocaml
-  brewinstall ocaml-num
-  brewinstall lablgtk
-  brewinstall camlp4
   export PKG_CONFIG_PATH=/opt/X11/lib/pkgconfig
+  cd /usr/local && curl -Lf http://people.cs.kuleuven.be/~bart.jacobs/verifast/vfdeps-17.12-el-capitan.txz | tar xj
+  export PATH=/usr/local/vfdeps-17.12/bin:$PATH
+  export DYLD_LIBRARY_PATH=/usr/local/vfdeps-17.12/lib:$DYLD_LIBRARY_PATH
   
 else
   echo "Your OS is not supported by this script."
