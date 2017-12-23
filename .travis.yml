@@ -12,7 +12,7 @@ install:
   - ./setup-build.sh
 
 script:
-  - cd src && PATH=/tmp/vfdeps/bin:$PATH make nightly VERBOSE=yes -j 2
+  - cd src && PATH=/tmp/vfdeps/bin:/usr/local/vfdeps-17.12/bin:$PATH DYLD_LIBRARY_PATH=/usr/local/vfdeps-17.12/lib:$DYLD_LIBRARY_PATH make nightly VERBOSE=yes -j 2
 
 before_deploy: "cd ../upload"
 deploy:
