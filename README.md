@@ -60,6 +60,7 @@ We gratefully acknowledge the authors and contributors of the following software
 #### Software used at build time
 
 - findlib, ocamlbuild, camlp4, valac
+- Cygwin, Homebrew, Debian, Ubuntu
 - The usual infrastructure: GNU/Linux, GNU make, gcc, etc.
 
 ### Infrastructure
