@@ -22,7 +22,7 @@ A few minutes after each push to the master branch, binary packages become avail
 
 These "nightly" builds are very stable and are recommended. Still, named releases are available [here](https://github.com/verifast/verifast/releases). (An archive of older named releases is [here](https://people.cs.kuleuven.be/~bart.jacobs/verifast/releases/).)
 
-Simply extract the files from the archive to any location in your filesystem. All files in the archive are in a directory named `verifast-HASH` where `HASH` is the Git commit hash. For example, on Linux:
+Simply extract the files from the archive to any location in your filesystem. All files in the archive are in a directory named `verifast-COMMIT` where `COMMIT` describes the Git commit. For example, on Linux:
 
     tar xzf ~/Downloads/verifast-nightly.tar.gz
     cd verifast-<TAB>  # Press Tab to autocomplete
@@ -44,6 +44,33 @@ Documentation
 
 Acknowledgements
 ----------------
+
+### Dependencies
+
+We gratefully acknowledge the authors and contributors of the following software packages.
+
+#### Bits that we ship in our binary packages
+
+- [OCaml](http://caml.inria.fr)
+- [OCaml-Num](https://github.com/ocaml/num)
+- [Lablgtk](http://lablgtk.forge.ocamlcore.org)
+- [GTK+](https://www.gtk.org) and its dependencies (including GLib, Cairo, Pango, ATK, gdk-pixbuf, gettext, fontconfig, freetype, expat, libpng, zlib, Harfbuzz, and Graphite)
+- [GtkSourceView](https://wiki.gnome.org/Projects/GtkSourceView)
+
+#### Software used at build time
+
+- findlib, ocamlbuild, camlp4, valac
+- The usual infrastructure: GNU/Linux, GNU make, gcc, etc.
+
+### Infrastructure
+
+We gratefully acknowledge the following infrastructure providers.
+
+- GitHub
+- Travis CI
+- AppVeyor CI
+
+### Funding
 
 This work is supported in part by the Flemish Research Fund (FWO-Vlaanderen), by the EU FP7 projects SecureChange, STANCE, ADVENT, and VESSEDIA, by Microsoft Research Cambridge as part of the Verified Software Initiative, and by the Research Fund KU Leuven.
 
