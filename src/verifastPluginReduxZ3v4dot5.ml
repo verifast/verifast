@@ -5,8 +5,8 @@ module C = Combineprovers
 module P = Proverapi
 
 let _ =
-  Verifast.register_prover "redux+z3v4.5"
-    "\nSequential combination of Redux and Z3v4.5."
+  Verifast.register_prover "Redux+Z3v4.5"
+    "(experimental) run Redux and Z3v4.5 in sequence."
     (
       fun client ->
       let redux_ctxt =

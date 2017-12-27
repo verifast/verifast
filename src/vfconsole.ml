@@ -9,7 +9,7 @@ let _ =
   let print_msg l msg =
     print_endline (string_of_loc l ^ ": " ^ msg)
   in
-  let verify ?(emitter_callback = fun _ -> ()) (print_stats : bool) (options : options) (prover : string option) (path : string) (emitHighlightedSourceFiles : bool) =
+  let verify ?(emitter_callback = fun _ -> ()) (print_stats : bool) (options : options) (prover : string) (path : string) (emitHighlightedSourceFiles : bool) =
     let verify range_callback =
     let exit l =
       Java_frontend_bridge.unload();
@@ -144,7 +144,7 @@ let _ =
   let stats = ref false in
   let verbose = ref 0 in
   let disable_overflow_check = ref false in
-  let prover: string option ref = ref None in
+  let prover: string ref = ref default_prover in
   let compileOnly = ref false in
   let isLibrary = ref false in
   let allowAssume = ref false in
@@ -190,7 +190,7 @@ let _ =
   let cla = [ "-stats", Set stats, " "
             ; "-verbose", Set_int verbose, "-1 = file processing; 1 = statement executions; 2 = produce/consume steps; 4 = prover queries."
             ; "-disable_overflow_check", Set disable_overflow_check, " "
-            ; "-prover", String (fun str -> prover := Some str), "Set SMT prover (" ^ list_provers() ^ ")."
+            ; "-prover", String (fun str -> prover := str), "Set SMT prover (" ^ list_provers() ^ ")."
             ; "-c", Set compileOnly, "Compile only, do not perform link checking."
             ; "-shared", Set isLibrary, "The file is a library (i.e. no main function required)."
             ; "-allow_assume", Set allowAssume, "Allow assume(expr) annotations."
@@ -282,7 +282,8 @@ let _ =
       end
   in
   let usage_string =
-    Verifast.banner () ^ "\nUsage: verifast [options] {sourcefile|objectfile}\n"
+    Verifast.banner ()
+    ^ "\nUsage: verifast [options] {sourcefile|objectfile}\n"
   in
   if Array.length Sys.argv = 1
   then usage cla usage_string

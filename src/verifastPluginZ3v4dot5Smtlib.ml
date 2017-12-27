@@ -6,8 +6,8 @@ module P = Proverapi
 module C = Combineprovers
 
 let _ =
-  Verifast.register_prover "z3v4.5+smtlib"
-    "\nRun Z3 version 4.5 and perform an SMTLib dump."
+  Verifast.register_prover "Z3v4.5+SMTLib"
+    "(experimental) run Z3 version 4.5 and dump the session to a file in SMTLib format."
     (
       fun client ->
       let z3_ctxt =

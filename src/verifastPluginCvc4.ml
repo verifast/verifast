@@ -3,8 +3,8 @@ module S = Smtlib
 module P = Proverapi
 
 let _ =
-  Verifast.register_prover "cvc4"
-    "\brun CVC4."
+  Verifast.register_prover "CVC4"
+    "(experimental) the CVC4 theorem prover. (Does not ship with VeriFast; make sure the 'cvc4' command is in your PATH.)"
     (
       fun client ->
       let cvc4_ctxt =

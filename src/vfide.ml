@@ -1703,7 +1703,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
 
 let () =
   let path = ref None in
-  let prover = ref None in
+  let prover = ref default_prover in
   let codeFont = ref Fonts.code_font in
   let traceFont = ref Fonts.trace_font in
   let runtime = ref None in
@@ -1715,7 +1715,7 @@ let () =
   let data_model = ref data_model_32bit in
   let rec iter args =
     match args with
-      "-prover"::arg::args -> prover := Some arg; iter args
+      "-prover"::arg::args -> prover := arg; iter args
     | "-codeFont"::arg::args -> codeFont := arg; iter args
     | "-traceFont"::arg::args -> traceFont := arg; iter args
     | "-runtime"::arg::args -> runtime := Some arg; iter args
@@ -1733,12 +1733,24 @@ let () =
     | arg::args when not (startswith arg "-") -> path := Some arg; iter args
     | [] -> show_ide !path !prover !codeFont !traceFont !runtime !layout !javaFrontend !enforceAnnotations !allowUndeclaredStructTypes !data_model !overflow_check
     | _ ->
+      let options = [
+        "-prover prover    (" ^ list_provers () ^ ")";
+        "-codeFont fontSpec";
+        "-traceFont fontSpec";
+        "-I IncludeDir";
+        "-layout fourthree|widescreen";
+        "-javac";
+        "-runtime";
+        "-bindir";
+        "-enforce_annotations";
+        "-disable_overflow_check";
+        "-target target    (supported targets: " ^ String.concat ", " (List.map fst data_models) ^ ")"
+      ] in
       GToolbox.message_box "VeriFast IDE" begin
         "Invalid command line.\n\n" ^ 
-        "Usage: vfide [filepath] [-prover z3|redux] [-codeFont fontSpec] " ^
-        "[-traceFont fontSpec] [-I IncludeDir] [-layout fourthree|widescreen] " ^
-        "[-javac] [-runtime] [-bindir] [-enforce_annotations] [-disable_overflow_check]" ^
-        "[-target " ^ String.concat "|" (List.map fst data_models) ^ "]"
+        "Usage: vfide [options] [filepath]\n\n" ^
+        "Options:\n" ^
+        String.concat "" (List.map (fun opt -> "  " ^ opt ^ "\n") options)
       end
   in
   let args = 

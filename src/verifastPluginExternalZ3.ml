@@ -4,7 +4,7 @@ module P = Proverapi
 
 let _ =
   Verifast.register_prover "ext_z3"
-    "\brun Z3 as an external prover. This is to measure the impact of communicating with Z3 using a pipe instead of the API. This is also more portable."
+    "(experimental) runs Z3 as an external prover. This is to measure the impact of communicating with Z3 using a pipe instead of the API. This is also more portable."
     (
       fun client ->
       let z3_ctxt =

@@ -3130,43 +3130,42 @@ class virtual prover_client =
     method virtual run: 'typenode 'symbol 'termnode. ('typenode, 'symbol, 'termnode) Proverapi.context -> Stats.stats
   end
 
+let default_prover = "Redux"
+
 let prover_table: (string * (string * (prover_client -> Stats.stats))) list ref = ref []
 
-let register_prover name banner f =
-  prover_table := (name, (banner, f))::!prover_table
+let register_prover name description f =
+  prover_table := (name, (description, f))::!prover_table
 
-let prover_banners () = String.concat "" (List.map (fun (_, (banner, _)) -> "\n" ^ banner) !prover_table)
+let prover_descriptions indent =
+  !prover_table
+    |> List.map (fun (name, (description, f)) -> indent ^ name ^ ": " ^ description ^ "\n")
+    |> String.concat ""
 
 let banner () =
   "VeriFast " ^ Vfversion.version ^ " for C and Java (released " ^ Vfversion.release_date ^ ") <https://github.com/verifast/verifast/>\n" ^
   "By Bart Jacobs, Jan Smans, and Frank Piessens, with contributions by Pieter Agten, Cedric Cuypers, Lieven Desmet, Jan Tobias Muehlberg, Willem Penninckx, Pieter Philippaerts, Amin Timany, Thomas Van Eyck, Gijs Vanspauwen, Frederic Vogels, and external contributors <https://github.com/verifast/verifast/graphs/contributors>" ^
-  prover_banners ()
+  "\n\nProvers:\n" ^ prover_descriptions "  "
 
 let list_provers () =
-  let prover_names = List.map fst !prover_table in
+  let prover_names =
+    !prover_table
+    |> List.map fst
+    |> List.map (fun n -> if n = default_prover then n ^ " (default)" else n)
+  in
   let plural = if List.length prover_names > 1 then "s" else "" in
   sprintf "available prover%s: %s" plural (String.concat ", " prover_names)
 
 let lookup_prover prover =
-  match prover with
+  match try_assoc_case_insensitive prover !prover_table with
     None ->
-    begin
-      match !prover_table with
-        [] -> assert false
-      | (_, (_, f))::_ -> f
-    end
-  | Some name ->
-    begin
-      match try_assoc name !prover_table with
-        None ->
-          failwith (sprintf "No such prover: %s; %s."
-                            name (list_provers()))
-      | Some (banner, f) -> f
-    end
-      
+    failwith (sprintf "No such prover: %s; %s."
+                      prover (list_provers()))
+  | Some (banner, f) -> f
+
 let verify_program (* ?verify_program *)
     ?(emitter_callback : package list -> unit = fun _ -> ())
-    (prover : string option)
+    (prover : string)
     (options : options)
     (path : string)
     (reportRange : range_kind -> loc -> unit)

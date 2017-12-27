@@ -5,8 +5,8 @@ module P = Proverapi
 module C = Combineprovers
 
 let _ =
-  Verifast.register_prover "redux+smtlib"
-    "\nRun redux and perform an SMTLib dump."
+  Verifast.register_prover "Redux+SMTLib"
+    "(experimental) run Redux and dump the session to a file in SMTLib format."
     (
       fun client ->
       let redux_ctxt =
