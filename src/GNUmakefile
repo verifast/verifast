@@ -46,6 +46,14 @@ else
   endif
 endif
 
+ifeq ($(OS), Linux)
+  PLATFORM = Linux
+else ifeq ($(OS), Darwin)
+  PLATFORM = MacOS
+else ifeq ($(OS), Windows_NT)
+  PLATFORM = Windows
+endif
+
 # Lablgtk configuration
 ifndef WITHOUT_LABLGTK
   LABLGTK_FLAGS_ += -I +lablgtk2
@@ -282,19 +290,6 @@ clean::
 
 #------------------------------- Auto code generation -----------------------#
 
-ifeq ($(OS), Darwin)
-Fonts.ml: Fonts_mac.ml
-	@echo "  CAT      " $@
-	cat generated_file_warning.txt Fonts_mac.ml > Fonts.ml
-else
-Fonts.ml: Fonts_default.ml
-	@echo "  CAT      " $@
-	cat generated_file_warning.txt Fonts_default.ml > Fonts.ml
-endif
-clean::
-	rm -f Fonts.ml
-AUTOGENERATE_TARGETS += Fonts.ml
-
 vfversion_autogen:
 	@echo "  OCAML    " generate_vfversion.ml
 	${OCAML} generate_vfversion.ml $(Z3PRESENT)
@@ -303,7 +298,7 @@ clean::
 	rm -f vfversion.ml
 AUTOGENERATE_TARGETS += vfversion_autogen
 
-VFCONFIG_CONTENT=let z3_present = $(Z3PRESENT);; let z3v4dot5_present = $(Z3V4DOT5PRESENT)
+VFCONFIG_CONTENT=let z3_present = $(Z3PRESENT);; let z3v4dot5_present = $(Z3V4DOT5PRESENT);; type platform = Windows | MacOS | Linux;; let platform = $(PLATFORM)
 vfconfig_autogen:
 	if [ ! -e vfconfig.ml ] || [ "$$(cat vfconfig.ml)" != "$(VFCONFIG_CONTENT)" ]; then \
 	  echo "$(VFCONFIG_CONTENT)" > vfconfig.ml ;\
@@ -331,9 +326,9 @@ tabhunt:
 	${OCAML} tabhunter.ml
 .PHONY: tabhunt
 
-../bin/mysh$(DOTEXE): Fonts.cmx vfconfig.cmx mysh.ml
+../bin/mysh$(DOTEXE): vfconfig.cmx mysh.ml
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} $(OCAMLCFLAGS) -thread -o ../bin/mysh$(DOTEXE) unix.cmxa threads.cmxa Fonts.cmx vfconfig.cmx mysh.ml
+	${OCAMLOPT} $(OCAMLCFLAGS) -thread -o ../bin/mysh$(DOTEXE) unix.cmxa threads.cmxa vfconfig.cmx mysh.ml
 mysh: ../bin/mysh$(DOTEXE)
 .PHONY: mysh
 
@@ -367,7 +362,7 @@ branchright_png.cmx: branchright_png.ml
 	$(OCAMLOPT) $(OCAMLCFLAGS) -c $(LABLGTK_FLAGS) branchright_png.ml
 
 # Also depend on "vfide.ml": Make ignores our dependency "%.cmx: %.ml".
-vfide.cmx: branchleft_png.cmx branchright_png.cmx Fonts.cmx vfide.ml $(GTKSOURCEVIEW_DEPS)
+vfide.cmx: branchleft_png.cmx branchright_png.cmx vfide.ml $(GTKSOURCEVIEW_DEPS)
 	@echo "  OCAMLOPT " $@
 ifndef WITHOUT_GTKSOURCEVIEW
 	make -C linemarks OCAMLOPT=${OCAMLOPT} OCAMLCFLAGS="${OCAMLCFLAGS}" LABLGTK_FLAGS="$(LABLGTK_FLAGS_)" linemarks.cmxa
@@ -392,7 +387,7 @@ endif
           $(Z3ARGS_EARLY) \
 	  shape_analysis/shape_analysis_backend.cmx \
 	  shape_analysis/changelog.cmx shape_analysis/shape_analysis_frontend.cmx \
-	  $(Z3ARGS) Fonts.cmx branchleft_png.cmx branchright_png.cmx vfide.cmx
+	  $(Z3ARGS) branchleft_png.cmx branchright_png.cmx vfconfig.cmx vfide.cmx
 endif
 ifneq ($(OS), Windows_NT)
   ../bin/vfide$(DOTEXE): linux/libPerf_cobjs.a

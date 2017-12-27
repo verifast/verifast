@@ -8,12 +8,9 @@ open Verifast
 open GMain
 open Pervasives
 open Shape_analysis_frontend
-
-type platform = Windows | Linux | MacOS
+open Vfconfig
 
 type layout = FourThree | Widescreen
-
-let platform = if Sys.os_type = "Win32" then Windows else if Fonts.is_macos then MacOS else Linux
 
 let include_paths: string list ref = ref []
 
@@ -1701,11 +1698,16 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   ignore $. Glib.Idle.add (fun () -> textPaned#set_position 0; false);
   GMain.main()
 
+let (code_font, trace_font) =
+  match platform with
+    MacOS -> ("Courier 12", "Sans 12")
+  | _ -> ("Monospace 10", "Sans 8")
+
 let () =
   let path = ref None in
   let prover = ref default_prover in
-  let codeFont = ref Fonts.code_font in
-  let traceFont = ref Fonts.trace_font in
+  let codeFont = ref code_font in
+  let traceFont = ref trace_font in
   let runtime = ref None in
   let layout = ref FourThree in
   let javaFrontend = ref false in
