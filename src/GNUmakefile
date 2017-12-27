@@ -93,9 +93,12 @@ ifndef NOZ3
 endif
 Z3V4DOT5PRESENT=false
 ifdef Z3V4DOT5
-  Z3_OCAML ?= `ocamlfind query Z3`
-  Z3_DLL_DIR ?= /usr/local/lib
-  Z3DEPS = z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml verifastPluginReduxZ3$(Z3VERSION).ml verifastPluginZ3$(Z3VERSION)Smtlib.ml
+  Z3_OCAML ?= $(shell ocamlfind query Z3)
+  Z3_DLL_DIR ?= $(Z3_OCAML)/../..
+  Z3DEPS := z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml verifastPluginReduxZ3$(Z3VERSION).ml verifastPluginZ3$(Z3VERSION)Smtlib.ml
+  ifeq ($(OS), Darwin)
+    Z3DEPS := $(Z3DEPS) ../lib/libz3.dylib
+  endif
   Z3CCOPTS = -cclib "-L $(Z3_DLL_DIR)"
   Z3ARGS_EARLY = -I $(Z3_OCAML) z3ml.cmxa z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml verifastPluginReduxZ3$(Z3VERSION).ml  verifastPluginZ3$(Z3VERSION)Smtlib.ml $(Z3CCOPTS)
   VERIFAST := ../bin/verifast
@@ -122,6 +125,10 @@ else
   VERIFAST := ../bin/verifast
   Z3PRESENT=false
 endif
+
+../lib/libz3.dylib:
+	mkdir -p ../lib
+	cp $(Z3_DLL_DIR)/libz3.dylib ../lib
 
 # Should Make print each commandline? Then use "make VERBOSE=yes".
 ifndef VERBOSE
@@ -395,9 +402,13 @@ endif
 vfide: ../bin/vfide$(DOTEXE) $(STDLIB)
 .PHONY: vfide
 
+ifeq ($(OS), Darwin)
+  OCAMLOPT_LINKFLAGS = -cclib "-Xlinker -headerpad_max_install_names"
+endif
+
 ../bin/verifast$(DOTEXE): vfconsole.cmx redux.cmx combineprovers.cmx smtlib.cmx smtlibprover.cmx $(Z3DEPS)
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/verifast$(DOTEXE) unix.cmxa \
+	${OCAMLOPT} $(OCAMLOPT_LINKFLAGS) $(OCAMLCFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/verifast$(DOTEXE) unix.cmxa \
 	  nums.cmxa str.cmxa $(INCLUDES) Perf.cmxa proverapi.cmx \
 	  vfversion.cmx \
 	  util.cmx ast.cmx stats.cmx lexer.cmx parser.cmx \
@@ -406,6 +417,9 @@ vfide: ../bin/vfide$(DOTEXE) $(STDLIB)
           smtlib.cmx smtlibprover.cmx verifastPluginCvc4.ml verifastPluginExternalZ3.ml verifastPluginReduxSmtlib.ml \
           $(Z3ARGS_EARLY) \
 	  verifastPluginRedux.ml $(Z3ARGS) vfconsole.cmx
+ifeq ($(OS), Darwin)
+	install_name_tool -change libz3.dylib @executable_path/../lib/libz3.dylib ../bin/verifast
+endif
 
 
 ifneq ($(OS), Windows_NT)
