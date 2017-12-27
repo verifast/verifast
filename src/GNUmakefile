@@ -64,6 +64,9 @@ ifndef WITHOUT_LABLGTK
   else
     GTKSOURCEVIEW_LFLAGS += -I linemarks lablgtksourceview2.cmxa linemarks.cmxa
     GTKSOURCEVIEW_LIBS   += ${LABLLIBS}
+    ifeq ($(OS), Darwin)
+      GTKSOURCEVIEW_DEPS   += ../lib/libgtksourceview-2.0.0.dylib
+    endif
   endif
 endif
 
@@ -71,6 +74,10 @@ ifeq ($(OS), Windows_NT)
   LDLPATHVAR=PATH
 else
   LDLPATHVAR=LD_LIBRARY_PATH
+endif
+
+ifeq ($(OS), Darwin)
+  Z3V4DOT5=yes
 endif
 
 # Z3 configuration
@@ -125,6 +132,12 @@ else
   VERIFAST := ../bin/verifast
   Z3PRESENT=false
 endif
+
+../lib/libgtksourceview-2.0.0.dylib:
+	mkdir -p ../lib
+	for i in $$( cat vfide-osx-local-dlls.txt ); do cp $$i ../lib; done
+	mkdir -p ../lib/gdk-pixbuf-2.0/2.10.0
+	echo > ../lib/gdk-pixbuf-2.0/2.10.0/loaders.cache
 
 ../lib/libz3.dylib:
 	mkdir -p ../lib
@@ -625,10 +638,7 @@ endif
 ifeq ($(OS), Darwin)
 	cd verifast-$(VFVERSION)/bin; mv vfide vfide-core
 	cp vfide-mac.sh verifast-$(VFVERSION)/bin/vfide
-	mkdir verifast-$(VFVERSION)/lib
-	for i in $$( cat vfide-osx-local-dlls.txt ); do cp $$i verifast-$(VFVERSION)/lib; done
-	mkdir -p verifast-$(VFVERSION)/lib/gdk-pixbuf-2.0/2.10.0
-	echo > verifast-$(VFVERSION)/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache
+	cp -R ../lib verifast-$(VFVERSION)
 endif
 	cp -R ../examples verifast-$(VFVERSION)
 	cp -R ../help verifast-$(VFVERSION)
