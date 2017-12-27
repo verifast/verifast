@@ -48,7 +48,7 @@ endif
 
 # Lablgtk configuration
 ifndef WITHOUT_LABLGTK
-  LABLGTK_FLAGS_ += -I +../lablgtk2 -I +lablgtk2
+  LABLGTK_FLAGS_ += -I +lablgtk2
   LABLGTK_FLAGS  += ${LABLGTK_FLAGS_} lablgtk.cmxa
   ifdef WITHOUT_GTKSOURCEVIEW
     GTKSOURCEVIEW_LFLAGS += -I macos GSourceView2.cmx GLineMarks.cmx
