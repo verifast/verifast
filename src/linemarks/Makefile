@@ -27,20 +27,12 @@ endif
 linemarks.o: linemarks.c
 	${OCAMLOPT} ${OCAMLCFLAGS} -c -ccopt "`pkg-config --cflags gtksourceview-2.0` ${MYCFLAGS}" linemarks.c ml_GtkLineMarks.c
 
-ifeq ($(shell valac --version &>/dev/null ; echo $$?), 0)
-
-linemarks.c: linemarks.vala
+# After modifying 'linemarks.vala', run 'make vala' to update 'linemarks.c'.
+vala:
 	valac --vapidir . -C -H linemarks.h --pkg gtksourceview-2.0 --pkg mystuff linemarks.vala
 
-clean::
+vala-clean:
 	rm -f linemarks.c
-
-else
-
-linemarks.c: linemarks.vala
-	@echo linemarks.vala is newer than linemarks.c, but no Vala compiler present. Touch linemarks.c to eliminate this message.
-
-endif
 
 clean::
 	rm -f *.o *.a *.cm* hello$(DOTEXE)
