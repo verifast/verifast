@@ -76,7 +76,7 @@ else
   LDLPATHVAR=LD_LIBRARY_PATH
 endif
 
-ifeq ($(OS), Darwin)
+ifneq ($(OS), Windows_NT)
   Z3V4DOT5=yes
 endif
 
@@ -108,7 +108,8 @@ ifdef Z3V4DOT5
   endif
   Z3CCOPTS = -cclib "-L $(Z3_DLL_DIR)"
   Z3ARGS_EARLY = -I $(Z3_OCAML) z3ml.cmxa z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml verifastPluginReduxZ3$(Z3VERSION).ml  verifastPluginZ3$(Z3VERSION)Smtlib.ml $(Z3CCOPTS)
-  VERIFAST := ../bin/verifast
+  LDLPATH=$(Z3_DLL_DIR)
+  VERIFAST := $(LDLPATHVAR)=${LDLPATH}:$$$(LDLPATHVAR) ../bin/verifast
   Z3PRESENT=false
   Z3V4DOT5PRESENT=true
 else ifndef NOZ3
@@ -628,7 +629,7 @@ ifeq ($(OS), Linux)
 	cp verifast.sh verifast-$(VFVERSION)/bin/verifast
 	cp vfide.sh verifast-$(VFVERSION)/bin/vfide
 ifdef Z3
-	cp $(Z3)/lib/libz3-gmp.so verifast-$(VFVERSION)/bin
+	cp $(Z3_DLL_DIR)/libz3.so verifast-$(VFVERSION)/bin
 endif
 	cp /usr/lib/libgtksourceview-2.0.so.0.0.0 verifast-$(VFVERSION)/bin/libgtksourceview-2.0.so.0
 endif
