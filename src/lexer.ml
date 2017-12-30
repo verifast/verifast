@@ -214,6 +214,12 @@ let compare_tokens t1 t2 =
   | _ -> false
 end
 
+let rec print_tokens tokens =
+  match tokens with
+    [(_, tok)] -> Printf.printf "%s\n" (string_of_token tok)
+  | (_, tok) :: xs -> Printf.printf "%s, " (string_of_token tok); print_tokens xs
+  | [] -> Printf.printf "\n"
+
 exception ParseException of loc * string
 let error l msg = raise (ParseException(l, msg))
 exception PreprocessorDivergence of loc * string
@@ -913,6 +919,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
     end
   in
   let expanding_macro = ref false in
+  let oneline_macro = ref false in
   let defining_macro = ref false in
   let is_concatenation_token t =
     match t with (_, Kwd "##") -> true | _ -> false
@@ -1017,7 +1024,9 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
       | Some t -> junk (); t::condition ()
     in
     let condition = condition () in
+    oneline_macro := true;
     let condition = macro_expand [] condition in
+    oneline_macro := false;
     (* TODO: Support operators *)
     let isTrue =
       match condition with
@@ -1050,14 +1059,18 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
         end
         else begin
           pop_stream ();
-          if !expanding_macro then
+          if !expanding_macro && not !oneline_macro then
             None
           else
             next_token ()
         end
     | Some t ->
     match t with
-      (_, Eol) -> junk (); next_at_start_of_line := true; next_token ()
+      (_, Eol) ->
+       if !oneline_macro then
+         None
+       else
+         begin junk (); next_at_start_of_line := true; next_token () end
     | (l, Kwd "/*@") -> 
         if !tlexer#isGhostHeader() then raise (ParseException (l, "Ghost range delimiters are not allowed inside ghost headers."));
         junk (); in_ghost_range := true; 
@@ -1299,7 +1312,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
     | t -> junk (); Some t
   and macro_expand newCallers tokens =
     let expending_macro_old = !expanding_macro in
-    expanding_macro := true;
+    if not !oneline_macro then expanding_macro := true;
     let oldStreams = !streams in
     streams := [];
     push_list newCallers tokens;
