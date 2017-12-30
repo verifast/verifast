@@ -22,6 +22,7 @@ help:
 	@echo "- Use e.g. 'make build VERBOSE=yes' to see more."
 	@echo "- Use e.g. 'make build -j 4' to use 4 cores."
 	@echo "- Use e.g. 'make ANNOT=yes' to output .annot files containing"
+	@echo "- Use e.g. 'make BINANNOT=yes' to output .cmt and .cmti files containing"
 	@echo "  type information."
 	@echo "- To see stack trace, launch with 'OCAMLRUNPARAM=b verifast <args>'."
 .PHONY: help
@@ -188,6 +189,9 @@ endif
 OCAMLCFLAGS += -g -w p
 ifdef ANNOT
   OCAMLCFLAGS += -annot
+endif
+ifdef BINANNOT
+  OCAMLCFLAGS += -bin-annot
 endif
 
 CWD ?= $(CURDIR)

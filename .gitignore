@@ -78,6 +78,8 @@ src/*.cmxs
 src/*.annot
 src/*.cmo
 src/*.cma
+src/*.cmt
+src/*.cmti
 src/*/*.cmx
 src/*/*.cmi
 src/*/*.o
@@ -87,6 +89,8 @@ src/*/*.cmxs
 src/*/*.annot
 src/*/*.cmo
 src/*/*.cma
+src/*/*.cmt
+src/*/*.cmti
 examples/*/*.cmx
 examples/*/*.cmi
 examples/*/*.o
@@ -96,6 +100,8 @@ examples/*/*.cmxs
 examples/*/*.annot
 examples/*/*.cmo
 examples/*/*.cma
+examples/*/*.cmt
+examples/*/*.cmti
 
 *.kdev4
 
