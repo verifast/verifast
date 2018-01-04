@@ -10,8 +10,14 @@ hello$(DOTEXE): hello.ml linemarks.cmxa
 linemarks.cmxa: liblinemarks.a
 	${OCAMLOPT} ${OCAMLCFLAGS} -a -o linemarks.cmxa $(LABLGTK_FLAGS) GtkLineMarks.mli GtkLineMarks.ml GLineMarks.ml -cclib -L$(shell pwd) -cclib -llinemarks -cclib "`pkg-config --libs gtksourceview-2.0`"
 
+ifeq ($(OS), Windows_NT)
+  AR=i686-w64-mingw32-ar
+else
+  AR=ar
+endif
+
 liblinemarks.a: linemarks.o
-	ar r liblinemarks.a linemarks.o ml_GtkLineMarks.o
+	$(AR) r liblinemarks.a linemarks.o ml_GtkLineMarks.o
 
 ifeq ($(shell uname -s), Darwin)
   # Keep Cocoa from stack-walking into OCaml frames and crashing.
