@@ -14,7 +14,7 @@ The VeriFast source code and binaries are released under the [MIT license](LICEN
 Binaries
 --------
 
-A few minutes after each push to the master branch, binary packages become available at the following URLs:
+Within an hour after each push to the master branch, binary packages become available at the following URLs:
 
 - [Windows](https://ci.appveyor.com/api/projects/verifast/verifast/artifacts/src/verifast-nightly.zip?branch=master)
 - [Linux/x64](http://82076e0e62875f063ae8-929808a701855dfb71539d0a4342d4be.r54.cf5.rackcdn.com/verifast-nightly.tar.gz)
