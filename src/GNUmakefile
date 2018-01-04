@@ -146,7 +146,7 @@ endif
 	echo > ../lib/gdk-pixbuf-2.0/2.10.0/loaders.cache
 
 ../bin/libz3.dll:
-	cp $(Z3_DLL_DIR)/libz3.dll $(Z3_DLL_DEPS_DIR)/libstdc++-6.dll $(Z3_DLL_DEPS_DIR)/libwinpthread-1.dll $(Z3_DLL_DEPS_DIR)/libgomp-1.dll $(Z3_DLL_DEPS_DIR)/libgcc_s_sjlj-1.dll ../bin
+	cp $(Z3_DLL_DIR)/libz3.dll $(Z3_DLL_DEPS_DIR)/libwinpthread-1.dll $(Z3_DLL_DEPS_DIR)/libgomp-1.dll $(Z3_DLL_DEPS_DIR)/libgcc_s_sjlj-1.dll ../bin
 
 ../lib/libz3.dylib:
 	mkdir -p ../lib
