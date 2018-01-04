@@ -76,9 +76,7 @@ else
   LDLPATHVAR=LD_LIBRARY_PATH
 endif
 
-ifneq ($(OS), Windows_NT)
-  Z3V4DOT5=yes
-endif
+Z3V4DOT5=yes
 
 # Z3 configuration
 # TODO: refactor variable names: "Z3" could be anything (path? version? boolean?)
@@ -108,7 +106,12 @@ ifdef Z3V4DOT5
   endif
   Z3CCOPTS = -cclib "-L $(Z3_DLL_DIR)"
   Z3ARGS_EARLY = -I $(Z3_OCAML) z3ml.cmxa z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml verifastPluginReduxZ3$(Z3VERSION).ml  verifastPluginZ3$(Z3VERSION)Smtlib.ml $(Z3CCOPTS)
-  LDLPATH=$(Z3_DLL_DIR)
+  ifeq ($(OS), Windows_NT)
+    Z3_DLL_DEPS_DIR:=/usr/i686-w64-mingw32/sys-root/mingw/bin
+    LDLPATH:=$(Z3_DLL_DEPS_DIR):$(shell cygpath $(Z3_DLL_DIR))
+  else
+    LDLPATH:=$(Z3_DLL_DIR)
+  endif
   VERIFAST := $(LDLPATHVAR)=${LDLPATH}:$$$(LDLPATHVAR) ../bin/verifast
   Z3PRESENT=false
   Z3V4DOT5PRESENT=true
@@ -619,8 +622,7 @@ ifeq ($(OS), Windows_NT)
 	mkdir -p lib/gtk-2.0/2.10.0/engines && \
 	cp $(GTK)/lib/gtk-2.0/2.10.0/engines/libwimp.dll lib/gtk-2.0/2.10.0/engines
 ifdef Z3
-	cp $(Z3)/bin/z3.dll verifast-$(VFVERSION)/bin
-	cp -R $(Z3)/bin/Microsoft.VC90.CRT verifast-$(VFVERSION)/bin
+	cp $(Z3_DLL_DIR)/libz3.dll $(Z3_DLL_DEPS_DIR)/libwinpthread-1.dll $(Z3_DLL_DEPS_DIR)/libstdc++-6.dll verifast-$(VFVERSION)/bin
 endif
 endif
 ifeq ($(OS), Linux)
