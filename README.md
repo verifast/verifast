@@ -56,6 +56,7 @@ We gratefully acknowledge the authors and contributors of the following software
 - [Lablgtk](http://lablgtk.forge.ocamlcore.org)
 - [GTK+](https://www.gtk.org) and its dependencies (including GLib, Cairo, Pango, ATK, gdk-pixbuf, gettext, fontconfig, freetype, expat, libpng, zlib, Harfbuzz, and Graphite)
 - [GtkSourceView](https://wiki.gnome.org/Projects/GtkSourceView)
+- The excellent [Z3](https://github.com/Z3Prover/z3) theorem prover by Leonardo de Moura and Nikolaj Bjorner at Microsoft Research, and co-authors
 
 #### Software used at build time
 
