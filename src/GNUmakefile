@@ -103,12 +103,14 @@ ifdef Z3V4DOT5
   Z3DEPS := z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml verifastPluginReduxZ3$(Z3VERSION).ml verifastPluginZ3$(Z3VERSION)Smtlib.ml
   ifeq ($(OS), Darwin)
     Z3DEPS := $(Z3DEPS) ../lib/libz3.dylib
+  else ifeq ($(OS), Windows_NT)
+    Z3DEPS := $(Z3DEPS) ../bin/libz3.dll
   endif
   Z3CCOPTS = -cclib "-L $(Z3_DLL_DIR)"
   Z3ARGS_EARLY = -I $(Z3_OCAML) z3ml.cmxa z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml verifastPluginReduxZ3$(Z3VERSION).ml  verifastPluginZ3$(Z3VERSION)Smtlib.ml $(Z3CCOPTS)
   ifeq ($(OS), Windows_NT)
     Z3_DLL_DEPS_DIR:=/usr/i686-w64-mingw32/sys-root/mingw/bin
-    LDLPATH:=$(Z3_DLL_DEPS_DIR):$(shell cygpath $(Z3_DLL_DIR))
+    LDLPATH:=$(shell pwd)/../bin
   else
     LDLPATH:=$(Z3_DLL_DIR)
   endif
@@ -142,6 +144,9 @@ endif
 	for i in $$( cat vfide-osx-local-dlls.txt ); do cp $$i ../lib; done
 	mkdir -p ../lib/gdk-pixbuf-2.0/2.10.0
 	echo > ../lib/gdk-pixbuf-2.0/2.10.0/loaders.cache
+
+../bin/libz3.dll:
+	cp $(Z3_DLL_DIR)/libz3.dll $(Z3_DLL_DEPS_DIR)/libstdc++-6.dll $(Z3_DLL_DEPS_DIR)/libwinpthread-1.dll $(Z3_DLL_DEPS_DIR)/libgomp-1.dll $(Z3_DLL_DEPS_DIR)/libgcc_s_sjlj-1.dll ../bin
 
 ../lib/libz3.dylib:
 	mkdir -p ../lib
@@ -621,9 +626,6 @@ ifeq ($(OS), Windows_NT)
 	cd ../../../.. && \
 	mkdir -p lib/gtk-2.0/2.10.0/engines && \
 	cp $(GTK)/lib/gtk-2.0/2.10.0/engines/libwimp.dll lib/gtk-2.0/2.10.0/engines
-ifdef Z3
-	cp $(Z3_DLL_DIR)/libz3.dll $(Z3_DLL_DEPS_DIR)/libwinpthread-1.dll $(Z3_DLL_DEPS_DIR)/libstdc++-6.dll verifast-$(VFVERSION)/bin
-endif
 endif
 ifeq ($(OS), Linux)
 	cd verifast-$(VFVERSION)/bin; mv verifast verifast-core
