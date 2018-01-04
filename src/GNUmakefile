@@ -632,9 +632,6 @@ ifdef Z3
 endif
 	cp /usr/lib/libgtksourceview-2.0.so.0.0.0 verifast-$(VFVERSION)/bin/libgtksourceview-2.0.so.0
 endif
-ifdef Z3
-	cp ../Z3.LICENSE.txt verifast-$(VFVERSION)
-endif
 ifeq ($(OS), Darwin)
 	cd verifast-$(VFVERSION)/bin; mv vfide vfide-core
 	cp vfide-mac.sh verifast-$(VFVERSION)/bin/vfide
