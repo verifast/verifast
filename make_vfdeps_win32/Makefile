@@ -222,7 +222,7 @@ $(Z3_BUILD): $(Z3_CFG)
 	cd $(Z3_DIR)/build && make
 
 $(Z3_BINARY): $(Z3_BUILD)
-	cd $(Z3_DIR)/build && make install
+	cd $(Z3_DIR)/build && make install && cp build/libz3.dll.a $(PREFIX)/lib
 
 z3: $(Z3_BINARY)
 .PHONY: z3
