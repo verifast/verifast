@@ -403,7 +403,9 @@ endif
 	$(SET_LDD); $(OCAMLOPT) $(OCAMLCFLAGS) -thread -c -w p -warn-error FSU -c $(INCLUDES) \
 	-pp ${CAMLP4O} nums.cmxa $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) vfide.ml
 
-../bin/vfide$(DOTEXE): vfide.cmx redux.cmx $(Z3DEPS) $(GTKSOURCEVIEW_DEPS)
+VERIFAST_PLUGINS=Redux Cvc4 ExternalZ3 ReduxSmtlib
+
+../bin/vfide$(DOTEXE): vfide.cmx $(VERIFAST_PLUGINS:%=verifastPlugin%.cmx) $(Z3DEPS) $(GTKSOURCEVIEW_DEPS) 
 	@echo "  OCAMLOPT " $@
 ifndef WITHOUT_GTKSOURCEVIEW
 	cd linemarks; make linemarks.cmxa
@@ -415,8 +417,8 @@ endif
 	  util.cmx ast.cmx stats.cmx lexer.cmx \
 	  parser.cmx ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx \
 	  verify_expr.cmx verifast.cmx combineprovers.cmx \
-          simplex.cmx redux.cmx verifastPluginRedux.ml \
-          smtlib.cmx smtlibprover.cmx verifastPluginCvc4.ml verifastPluginExternalZ3.ml verifastPluginReduxSmtlib.ml \
+          simplex.cmx redux.cmx verifastPluginRedux.cmx \
+          smtlib.cmx smtlibprover.cmx verifastPluginCvc4.cmx verifastPluginExternalZ3.cmx verifastPluginReduxSmtlib.cmx \
           $(Z3ARGS_EARLY) \
 	  shape_analysis/shape_analysis_backend.cmx \
 	  shape_analysis/changelog.cmx shape_analysis/shape_analysis_frontend.cmx \
@@ -432,7 +434,7 @@ ifeq ($(OS), Darwin)
   OCAMLOPT_LINKFLAGS = -cclib "-Xlinker -headerpad_max_install_names"
 endif
 
-../bin/verifast$(DOTEXE): vfconsole.cmx redux.cmx combineprovers.cmx smtlib.cmx smtlibprover.cmx $(Z3DEPS)
+../bin/verifast$(DOTEXE): vfconsole.cmx $(VERIFAST_PLUGINS:%=verifastPlugin%.cmx) $(Z3DEPS)
 	@echo "  OCAMLOPT " $@
 	${OCAMLOPT} $(OCAMLOPT_LINKFLAGS) $(OCAMLCFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/verifast$(DOTEXE) unix.cmxa \
 	  nums.cmxa str.cmxa $(INCLUDES) Perf.cmxa proverapi.cmx \
@@ -440,9 +442,9 @@ endif
 	  util.cmx ast.cmx stats.cmx lexer.cmx parser.cmx \
 	  ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx \
 	  verify_expr.cmx verifast.cmx simplex.cmx redux.cmx combineprovers.cmx \
-          smtlib.cmx smtlibprover.cmx verifastPluginCvc4.ml verifastPluginExternalZ3.ml verifastPluginReduxSmtlib.ml \
+          smtlib.cmx smtlibprover.cmx verifastPluginCvc4.cmx verifastPluginExternalZ3.cmx verifastPluginReduxSmtlib.cmx \
           $(Z3ARGS_EARLY) \
-	  verifastPluginRedux.ml $(Z3ARGS) vfconsole.cmx
+	  verifastPluginRedux.cmx $(Z3ARGS) vfconsole.cmx
 ifeq ($(OS), Darwin)
 	install_name_tool -change libz3.dylib @executable_path/../lib/libz3.dylib ../bin/verifast
 endif
