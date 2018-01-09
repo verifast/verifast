@@ -98,12 +98,23 @@ let sys cmd =
   if exitStatus <> Unix.WEXITED 0 then failwith (Printf.sprintf "Command '%s' failed with exit status %s" cmd (string_of_process_status exitStatus));
   line
 
+let string_of_time time =
+  let tm = Unix.gmtime time in
+  Printf.sprintf "%04d-%02d-%02d %02d:%02d:%02d%9f" (tm.tm_year + 1900) (tm.tm_mon + 1) tm.tm_mday tm.tm_hour tm.tm_min tm.tm_sec (fst (modf time))
+
 let path_last_modification_time path =
   (Unix.stat path).st_mtime
 
 let file_has_changed path mtime =
   try
-    path_last_modification_time path <> mtime
+    let mtime' = path_last_modification_time path in
+    let result = mtime' <> mtime in
+    if result then begin
+      Printf.printf "File '%s' was last read by vfide at '%s' but was modified by another process at '%s'.\n"
+        path (string_of_time mtime) (string_of_time mtime');
+      flush stdout
+    end;
+    result
   with Unix.Unix_error (_, _, _) -> true
 
 let in_channel_last_modification_time chan =
@@ -771,8 +782,9 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     let text = (tab#buffer: GSourceView2.source_buffer)#get_text () in
     output_string chan (utf8_to_file (convert_eol !(tab#eol) text));
     flush chan;
-    let mtime = out_channel_last_modification_time chan in
+    (* let mtime = out_channel_last_modification_time chan in *)
     close_out chan;
+    let mtime = path_last_modification_time thePath in
     tab#path := Some (thePath, mtime);
     tab#buffer#set_modified false;
     updateBufferTitle tab;
