@@ -147,7 +147,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             end;
             (fterm, functype_opt, Some (funenv, rt, ps, pre, post, terminates))
       in
-      if stmt_ghostness = Ghost && (match leminfo with LemInfo _ -> true | _ -> false) && scope_opt = None then
+      if stmt_ghostness = Ghost && (match leminfo with LemInfo (_, _, _, nonghost_callers_only) -> not nonghost_callers_only | _ -> false) && scope_opt = None then
         static_error l "produce_lemma_function_pointer_chunk statement must have a body." None;
       let (ftn, ft_predfammaps, fttargs, ftargs) =
         match ftclause_opt with
