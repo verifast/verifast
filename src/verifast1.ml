@@ -1673,6 +1673,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (InferredType (_, t), t0) -> t := Some t0; true
     | (InductiveType (i1, args1), InductiveType (i2, args2)) ->
       i1=i2 && List.for_all2 unify args1 args2
+    | (PureFuncType (d1, r1), PureFuncType(d2, r2)) -> unify d1 d2 && unify r1 r2
+    | (PredType ([], ts1, inputParamCount1, inductiveness1), PredType ([], ts2, inputParamCount2, inductiveness2)) ->
+      for_all2 unify ts1 ts2 && inputParamCount1 = inputParamCount2 && inductiveness1 = inductiveness2
     | (ArrayType t1, ArrayType t2) -> unify t1 t2
     | (PtrType t1, PtrType t2) -> compatible_pointees t1 t2
     | (t1, t2) -> t1 = t2
