@@ -2,6 +2,10 @@
 .provides ./threading.h#mutex_acquire
 .provides ./threading.h#mutex_release
 .provides ./threading.h#mutex_dispose
+.provides ./threading.h#create_mutex_cond
+.provides ./threading.h#mutex_cond_dispose
+.provides ./threading.h#mutex_cond_wait
+.provides ./threading.h#mutex_cond_signal
 .provides ./threading.h#create_lock
 .provides ./threading.h#lock_acquire
 .provides ./threading.h#lock_release
@@ -13,6 +17,7 @@
 .predicate @./threading.h#mutex_held
 .predicate @./threading.h#mutex
 .predicate @./threading.h#create_mutex_ghost_arg
+.predicate @./threading.h#mutex_cond
 .predicate @./threading.h#lock
 .predicate @./threading.h#locked
 .predicate @./threading.h#create_lock_ghost_args
@@ -20,4 +25,5 @@
 .predicate @./threading.h#thread
 .structure @./threading.h#thread
 .structure @./threading.h#mutex
+.structure @./threading.h#mutex_cond
 .structure @./threading.h#lock
