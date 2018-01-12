@@ -1,0 +1,3 @@
+.predicate @./write.h#write_char_
+.provides ./write.h#write_char__weaken
+.provides ./write.h#write_stdout

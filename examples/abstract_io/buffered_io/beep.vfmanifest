@@ -1,0 +1,3 @@
+.predicate @./beep.h#beep_
+.provides ./beep.h#beep__weaken
+.provides ./beep.h#beep

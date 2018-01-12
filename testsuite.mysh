@@ -8,6 +8,9 @@ cd bin
   cd ..
 cd ..
 cd examples
+  cd abstract_io
+    mysh < io2.mysh
+  cd ..
   verifast -target IP16 -c -allow_should_fail 16bittest.c
   verifast -target LP64 -c 64bittest.c
   cd clhlock

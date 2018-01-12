@@ -1,0 +1,4 @@
+.predicate @./network.h#receiveFromNick_
+.provides ./network.h#receiveFromNick
+.predicate @./network.h#sendToNick_
+.provides ./network.h#sendToNick

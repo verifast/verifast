@@ -1,0 +1,6 @@
+cd buffered_io
+  verifast -shared -I .. ../abstract_io_trusted_funcs.o ../abstract_io.c write_trusted_funcs.o write.c beep.o stdio.c buffered_io.c buffered_io_start.c
+cd ..
+cd chat_server
+  verifast -shared -I .. threading.o ../abstract_io_trusted_funcs.o ../abstract_io.c sequences.o prophecies.o queues.c channels.c network.o pumps.c chat_server.c
+cd ..

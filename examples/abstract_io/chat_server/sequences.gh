@@ -1,0 +1,50 @@
+#ifndef SEQUENCES_GH
+#define SEQUENCES_GH
+
+#include <nat.gh>
+
+fixpoint t cons_<t>(t head, fixpoint(nat, t) tail, nat k) {
+    switch (k) {
+        case zero: return head;
+        case succ(k0): return tail(k0);
+    }
+}
+
+fixpoint t tail_<t>(fixpoint(nat, t) seq, nat k) { return seq(succ(k)); }
+
+lemma void tail_cons_eq<t>(t value, fixpoint(nat, t) seq);
+    requires true;
+    ensures (tail_)((cons_)(value, seq)) == seq;
+
+lemma void eq_cons_tail<t>(fixpoint(nat, t) seq);
+    requires true;
+    ensures seq == (cons_)(seq(zero), (tail_)(seq));
+
+fixpoint b map_<a, b>(fixpoint(a, b) f, fixpoint(nat, a) seq, nat k) { return f(seq(k)); }
+
+lemma void tail__map<a, b>(fixpoint(a, b) f, fixpoint(nat, a) seq);
+    requires true;
+    ensures (tail_)((map_)(f, seq)) == (map_)(f, (tail_)(seq));
+
+fixpoint bool is_interleaving<t>(fixpoint(nat, t) seq1, fixpoint(nat, t) seq2, fixpoint(nat, t) seq3);
+
+lemma void is_interleaving_def<t>(fixpoint(nat, t) seq1, fixpoint(nat, t) seq2, fixpoint(nat, t) seq3);
+    requires true;
+    ensures
+        is_interleaving(seq1, seq2, seq3) == (
+            seq3(zero) == seq1(zero) && is_interleaving((tail_)(seq1), seq2, (tail_)(seq3))
+        ||
+            seq3(zero) == seq2(zero) && is_interleaving(seq1, (tail_)(seq2), (tail_)(seq3))
+        );
+
+lemma void is_interleaving_trivial1<t>(fixpoint(nat, t) seq1, fixpoint(nat, t) seq2);
+    requires true;
+    ensures is_interleaving(seq1, seq2, seq1) == true;
+
+lemma void is_interleaving_trivial2<t>(fixpoint(nat, t) seq1, fixpoint(nat, t) seq2);
+    requires true;
+    ensures is_interleaving(seq1, seq2, seq2) == true;
+
+fixpoint bool contains_cons_<t>(fixpoint(fixpoint(nat, t), bool) p, t v, fixpoint(nat, t) seq) { return p((cons_)(v, seq)); }
+
+#endif

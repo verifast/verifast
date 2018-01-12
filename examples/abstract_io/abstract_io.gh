@@ -1,0 +1,58 @@
+#ifndef ABSTRACT_IO_GH
+#define ABSTRACT_IO_GH
+
+// ---- General logical notions
+
+fixpoint bool eq<t>(t x, t y) { return x == y; }
+
+predicate True(;) = true;
+
+typedef lemma void implies(predicate() P1, predicate() P2, predicate() Q1, predicate() Q2)();
+    requires P1() &*& P2();
+    ensures Q1() &*& Q2();
+
+lemma void implies_refl(predicate() P1, predicate() P2);
+    requires true;
+    ensures is_implies(_, P1, P2, P1, P2);
+
+lemma void modus_ponens();
+    requires is_implies(?imp, ?P1, ?P2, ?Q1, ?Q2) &*& P1() &*& P2();
+    ensures Q1() &*& Q2();
+
+predicate bigsep<t>(fixpoint(t, bool) p, predicate(t) body);
+
+fixpoint bool setminus<t>(fixpoint(t, bool) p, t x, t y) {
+    return y == x ? false : p(y);
+}
+
+lemma void bigsep_extract<t>(t x);
+    requires bigsep<t>(?p, ?body) &*& p(x) == true;
+    ensures bigsep((setminus)(p, x), body) &*& body(x);
+
+// ---- Abstract I/O
+
+predicate token(predicate() p) = p();
+
+predicate conseq(predicate() P1, predicate() P2, predicate() Q1, predicate() Q2) =
+    is_implies(_, P1, True, P2, ?Frame) &*&
+    is_implies(_, Q1, Frame, Q2, True);
+
+lemma void conseq_refl(predicate() P, predicate() Q);
+    requires true;
+    ensures conseq(P, P, Q, Q);
+
+lemma void conseq_elim();
+    requires token(?P1) &*& conseq(P1, ?P2, ?Q1, ?Q2);
+    ensures P2() &*& is_implies(_, Q1, ?Frame, Q2, True) &*& Frame();
+
+lemma void conseq_trans(predicate() P1);
+    requires conseq(P1, ?P2, ?Q1, ?Q2) &*& conseq(P2, ?P3, ?Q0, Q1);
+    ensures conseq(P1, P3, Q0, Q2);
+
+predicate split_(predicate() P, predicate() Q1, predicate() Q2) = is_implies(_, P, True, Q1, Q2);
+
+lemma void do_split();
+    requires split_(?P, ?Q1, ?Q2) &*& token(P);
+    ensures token(Q1) &*& token(Q2);
+
+#endif
