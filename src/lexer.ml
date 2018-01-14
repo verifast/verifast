@@ -912,7 +912,10 @@ and
   [< e0 = parse_expr_rel; e = parse_bitand_expr_rest e0 >] -> e
 and
   parse_expr_rel = parser
-  [< e0 = parse_shift; e = parse_expr_rel_rest e0 >] -> e
+  [< e0 = parse_truncating_expr; e = parse_expr_rel_rest e0 >] -> e
+and
+  parse_truncating_expr = parser
+  [< e = parse_shift >] -> e
 and
   parse_shift = parser
   [< e0 = parse_expr_arith; e = parse_shift_rest e0 >] -> e
@@ -921,15 +924,19 @@ and
   [< e0 = parse_expr_mul; e = parse_expr_arith_rest e0 >] -> e
 and
   parse_expr_mul = parser
-  [< e0 = parse_expr_primary; e = parse_expr_mul_rest e0 >] -> e
+  [< e0 = parse_expr_suffix; e = parse_expr_mul_rest e0 >] -> e
+and
+  parse_expr_suffix = parser
+  [< e = parse_expr_primary >] -> e
 and
   parse_expr_primary = parser (* TODO: parse true/false *)
-| [< '(l, Int (n, dec, usuffix, lsuffix)) >] -> IntLit (l, n, dec, usuffix, lsuffix)
+  [< '(l, Int (n, dec, usuffix, lsuffix)) >] -> IntLit (l, n, dec, usuffix, lsuffix)
+| [< '(l, Kwd "!"); e = parse_expr_suffix >] -> Operation(l, Not, [e])
 and
   parse_expr_mul_rest e0 = parser
-  [< '(l, Kwd "*"); e1 = parse_expr_primary; e = parse_expr_mul_rest (Operation (l, Mul, [e0; e1])) >] -> e
-| [< '(l, Kwd "/"); e1 = parse_expr_primary; e = parse_expr_mul_rest (Operation (l, Div, [e0; e1])) >] -> e
-| [< '(l, Kwd "%"); e1 = parse_expr_primary; e = parse_expr_mul_rest (Operation (l, Mod, [e0; e1])) >] -> e
+  [< '(l, Kwd "*"); e1 = parse_expr_suffix; e = parse_expr_mul_rest (Operation (l, Mul, [e0; e1])) >] -> e
+| [< '(l, Kwd "/"); e1 = parse_expr_suffix; e = parse_expr_mul_rest (Operation (l, Div, [e0; e1])) >] -> e
+| [< '(l, Kwd "%"); e1 = parse_expr_suffix; e = parse_expr_mul_rest (Operation (l, Mod, [e0; e1])) >] -> e
 | [< >] -> e0
 and
   parse_expr_arith_rest e0 = parser
@@ -943,12 +950,12 @@ and
 | [< >] -> e0
 and
   parse_expr_rel_rest e0 = parser
-  [< '(l, Kwd "=="); e1 = parse_shift; e = parse_expr_rel_rest (Operation (l, Eq, [e0; e1])) >] -> e
-| [< '(l, Kwd "!="); e1 = parse_shift; e = parse_expr_rel_rest (Operation (l, Neq, [e0; e1])) >] -> e
-| [< '(l, Kwd "<"); e1 = parse_shift; e = parse_expr_rel_rest (Operation (l, Lt, [e0; e1])) >] -> e
-| [< '(l, Kwd "<="); e1 = parse_shift; e = parse_expr_rel_rest (Operation (l, Le, [e0; e1])) >] -> e
-| [< '(l, Kwd ">"); e1 = parse_shift; e = parse_expr_rel_rest (Operation (l, Gt, [e0; e1])) >] -> e
-| [< '(l, Kwd ">="); e1 = parse_shift; e = parse_expr_rel_rest (Operation (l, Ge, [e0; e1])) >] -> e
+  [< '(l, Kwd "=="); e1 = parse_truncating_expr; e = parse_expr_rel_rest (Operation (l, Eq, [e0; e1])) >] -> e
+| [< '(l, Kwd "!="); e1 = parse_truncating_expr; e = parse_expr_rel_rest (Operation (l, Neq, [e0; e1])) >] -> e
+| [< '(l, Kwd "<"); e1 = parse_truncating_expr; e = parse_expr_rel_rest (Operation (l, Lt, [e0; e1])) >] -> e
+| [< '(l, Kwd "<="); e1 = parse_truncating_expr; e = parse_expr_rel_rest (Operation (l, Le, [e0; e1])) >] -> e
+| [< '(l, Kwd ">"); e1 = parse_truncating_expr; e = parse_expr_rel_rest (Operation (l, Gt, [e0; e1])) >] -> e
+| [< '(l, Kwd ">="); e1 = parse_truncating_expr; e = parse_expr_rel_rest (Operation (l, Ge, [e0; e1])) >] -> e
 | [< >] -> e0
 and
   parse_bitand_expr_rest e0 = parser
@@ -1013,6 +1020,9 @@ let rec eval_operators e =
      then Int64.one else
        if Int64.compare (eval_operators e1) Int64.zero != 0
        then Int64.one else Int64.zero
+  | Operation (_, Not, [e0]) ->
+     if Int64.compare (eval_operators e0) Int64.zero = 0
+     then Int64.one else Int64.zero
 
 let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_ghost_range =
   let macros = ref [Hashtbl.create 10] in
