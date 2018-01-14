@@ -137,6 +137,7 @@ type options = {
   option_provides: string list;
   option_keep_provide_files: bool;
   option_include_paths: string list;
+  option_define_macros: string list;
   option_safe_mode: bool; (* for invocation through web interface *)
   option_header_whitelist: string list;
   option_use_java_frontend : bool;

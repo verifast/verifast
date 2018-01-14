@@ -979,7 +979,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 (maps0, [])
           end
           | CLang ->
-            let (prelude_headers, prelude_decls) = parse_header_file (concat !bindir "prelude.h") reportRange reportShouldFail initial_verbosity [] enforce_annotations data_model in
+            let (prelude_headers, prelude_decls) = parse_header_file (concat !bindir "prelude.h") reportRange reportShouldFail initial_verbosity [] [] enforce_annotations data_model in
             let prelude_header_names = List.map (fun (_, (_, _, h), _, _) -> h) prelude_headers in
             let prelude_headers = (dummy_loc, (AngleBracketInclude, "prelude.h", concat !bindir "prelude.h"), prelude_header_names, prelude_decls)::prelude_headers in
             let headers = (dummy_loc, (AngleBracketInclude, "prelude.h", concat !bindir "prelude.h"), prelude_header_names, prelude_decls)::prelude_headers in

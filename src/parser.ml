@@ -1607,7 +1607,7 @@ let rec parse_include_directives (ignore_eol: bool ref) (verbose: int) (enforceA
   parse_include_directives_core []
 
 let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit) (verbose: int) 
-            (include_paths: string list) (enforceAnnotations: bool) (dataModel: data_model): ((loc * (include_kind * string * string) * string list * package list) list * package list) = (* ?parse_c_file *)
+            (include_paths: string list) (define_macros: string list) (enforceAnnotations: bool) (dataModel: data_model): ((loc * (include_kind * string * string) * string list * package list) list * package list) = (* ?parse_c_file *)
   Stopwatch.start parsing_stopwatch;
   if verbose = -1 then Printf.printf "%10.6fs: >> parsing C file: %s \n" (Perf.time()) path;
   let result =
@@ -1615,7 +1615,7 @@ let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (report
       let text = readFile path in
       make_lexer (common_keywords @ c_keywords) ghost_keywords path text reportRange ~inGhostRange reportShouldFail
     in
-    let (loc, ignore_eol, token_stream) = make_preprocessor make_lexer path verbose include_paths in
+    let (loc, ignore_eol, token_stream) = make_preprocessor make_lexer path verbose include_paths define_macros in
     let parse_c_file =
       parser
         [< (headers, _) = parse_include_directives ignore_eol verbose enforceAnnotations dataModel; 
@@ -1631,7 +1631,7 @@ let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (report
   result
 
 let parse_header_file (path: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit) (verbose: int) 
-         (include_paths: string list) (enforceAnnotations: bool) (dataModel: data_model): ((loc * (include_kind * string * string) * string list * package list) list * package list) =
+         (include_paths: string list) (define_macros: string list) (enforceAnnotations: bool) (dataModel: data_model): ((loc * (include_kind * string * string) * string list * package list) list * package list) =
   Stopwatch.start parsing_stopwatch;
   if verbose = -1 then Printf.printf "%10.6fs: >> parsing Header file: %s \n" (Perf.time()) path;
   let isGhostHeader = Filename.check_suffix path ".gh" in
@@ -1640,7 +1640,7 @@ let parse_header_file (path: string) (reportRange: range_kind -> loc -> unit) (r
       let text = readFile path in
       make_lexer (common_keywords @ c_keywords) ghost_keywords path text reportRange ~inGhostRange:inGhostRange reportShouldFail
     in
-    let (loc, ignore_eol, token_stream) = make_preprocessor make_lexer path verbose include_paths in
+    let (loc, ignore_eol, token_stream) = make_preprocessor make_lexer path verbose include_paths define_macros in
     let p = parser
       [< (headers, _) = parse_include_directives ignore_eol verbose enforceAnnotations dataModel; 
          ds = parse_decls CLang dataModel enforceAnnotations ~inGhostHeader:isGhostHeader; 
