@@ -1,1 +1,2 @@
 verifast -c simple_operators.c
+verifast -c simple_not.c
