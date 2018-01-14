@@ -395,6 +395,9 @@ cd tests
   cd test-includepath
     mysh < runthistest.mysh
   cd ..
+  cd preprocessor_if
+    mysh < run.mysh
+  cd ..
   verifast_both -c test-pattern-match-constructor-subtyping.c
   verifast_both -c test-octal-number.c
   verifast_both -c integral-ghost-types.c
