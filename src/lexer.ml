@@ -1025,8 +1025,11 @@ let rec eval_operators e =
      if Int64.compare (eval_operators e0) Int64.zero = 0
      then Int64.one else Int64.zero
 
-let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_ghost_range =
+let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_ghost_range define_macros =
   let macros = ref [Hashtbl.create 10] in
+  List.iter
+    (fun x -> Hashtbl.replace (List.hd !macros) x (dummy_loc, None, [(dummy_loc, Int (unit_big_int, false, false, NoLSuffix))]))
+    define_macros;
   let ghost_macros = ref [Hashtbl.create 10] in
   let get_macros () = if !in_ghost_range then !ghost_macros else !macros in
   let is_defined x =
@@ -1458,7 +1461,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
   in
   (next_token, fun _ -> !last_macro_used)
 
-let make_sound_preprocessor make_lexer path verbose include_paths =
+let make_sound_preprocessor make_lexer path verbose include_paths define_macros =
   if verbose = -1 then Printf.printf "%10.6fs: >> start preprocessing file: %s\n" (Perf.time()) path;
   let tlexers = ref [] in
   let curr_tlexer = ref (new tentative_lexer (fun () -> dummy_loc) (ref false) (Stream.of_list [])) in
@@ -1498,8 +1501,8 @@ let make_sound_preprocessor make_lexer path verbose include_paths =
     macros2
   in
   let current_loc () = !curr_tlexer#loc() in
-  let (p_next,last_macro_used) = make_plugin_preprocessor p_begin_include p_end_include curr_tlexer (List.hd !p_in_ghost_range) in
-  let (cfp_next,_) = make_plugin_preprocessor cfp_begin_include cfp_end_include curr_tlexer (List.hd !cfp_in_ghost_range) in
+  let (p_next,last_macro_used) = make_plugin_preprocessor p_begin_include p_end_include curr_tlexer (List.hd !p_in_ghost_range) define_macros in
+  let (cfp_next,_) = make_plugin_preprocessor cfp_begin_include cfp_end_include curr_tlexer (List.hd !cfp_in_ghost_range) define_macros in
   let divergence l s = 
     pop_tlexer();
     raise (PreprocessorDivergence (l , s))    
@@ -1607,5 +1610,5 @@ let make_sound_preprocessor make_lexer path verbose include_paths =
   in
   ((fun () -> current_loc()), ref true, Stream.from (fun _ -> next_token ()))
 
-let make_preprocessor make_lexer path verbose include_paths =
-  make_sound_preprocessor make_lexer path verbose include_paths
+let make_preprocessor make_lexer path verbose include_paths define_macros =
+  make_sound_preprocessor make_lexer path verbose include_paths define_macros

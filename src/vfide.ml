@@ -13,6 +13,7 @@ open Vfconfig
 type layout = FourThree | Widescreen
 
 let include_paths: string list ref = ref []
+let define_macros: string list ref = ref []
 
 let () = Unix.putenv "LANG" "en_US" (* This works around a problem that causes vfide to become unusable in the Chinese locale. *)
 
@@ -1356,6 +1357,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
                 option_provides = [];
                 option_keep_provide_files = true;
                 option_include_paths = !include_paths;
+                option_define_macros = !define_macros;
                 option_safe_mode = false;
                 option_header_whitelist = [];
               }
@@ -1449,7 +1451,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
             (* Save all tabs to disk firsts. Only continue on success. *)
             if not (List.exists sync_with_disk !buffers) then begin
               try begin
-                let new_contents = shape_analyse_frontend path !include_paths (getCursor ()) in
+                let new_contents = shape_analyse_frontend path !include_paths !define_macros (getCursor ()) in
                 let buffer = tab#buffer in
                 buffer#set_text new_contents;
                 (* syntax highlighting gets updated automatically *)
@@ -1737,6 +1739,9 @@ let () =
     | "-I"::arg::args -> ( match (Some arg) with
        None -> ( ) | Some arg -> include_paths := arg :: !include_paths);
        iter args
+    | "-D"::arg::args -> ( match (Some arg) with
+       None -> ( ) | Some arg -> define_macros := arg :: !define_macros);
+       iter args
     | "-layout"::"fourthree"::args -> layout := FourThree; iter args
     | "-layout"::"widescreen"::args -> layout := Widescreen; iter args
     | "-javac"::args -> javaFrontend := true; iter args
@@ -1752,6 +1757,7 @@ let () =
         "-codeFont fontSpec";
         "-traceFont fontSpec";
         "-I IncludeDir";
+        "-D DefineName";
         "-layout fourthree|widescreen";
         "-javac";
         "-runtime";

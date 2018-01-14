@@ -161,6 +161,7 @@ let _ =
   let provides = ref [] in
   let keepProvideFiles = ref false in
   let include_paths: string list ref = ref [] in
+  let define_macros: string list ref = ref [] in
   let library_paths: string list ref = ref ["CRT"] in
   let safe_mode = ref false in
   let header_whitelist: string list ref = ref [] in
@@ -218,6 +219,7 @@ let _ =
               "Emits the AST as an s-expression to the specified file; raises exception on unsupported constructs."
             ; "-export", String (fun str -> exports := str :: !exports), " "
             ; "-I", String (fun str -> include_paths := str :: !include_paths), "Add a directory to the list of directories to be searched for header files."
+            ; "-D", String (fun str -> define_macros := str :: !define_macros), "Predefine name as a macro, with definition 1."
             ; "-L", String (fun str -> library_paths := str :: !library_paths), "Add a directory to the list of directories to be searched for manifest files during linking."
             ; "-safe_mode", Set safe_mode, "Safe mode (for use in CGI scripts)."
             ; "-allow_header", String (fun str -> header_whitelist := str::!header_whitelist), "Add the specified header to the whitelist."
@@ -244,6 +246,7 @@ let _ =
           option_provides = !provides;
           option_keep_provide_files = !keepProvideFiles;
           option_include_paths = List.map (Util.replace_vroot !vroots) !include_paths;
+          option_define_macros = !define_macros;
           option_safe_mode = !safe_mode;
           option_header_whitelist = !header_whitelist;
           option_use_java_frontend = !useJavaFrontend;
