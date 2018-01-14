@@ -930,7 +930,8 @@ and
   [< e = parse_expr_primary >] -> e
 and
   parse_expr_primary = parser (* TODO: parse true/false *)
-  [< '(l, Int (n, dec, usuffix, lsuffix)) >] -> IntLit (l, n, dec, usuffix, lsuffix)
+  [< '(l, Ident _) >] -> IntLit (l, zero_big_int, false, false, NoLSuffix)
+| [< '(l, Int (n, dec, usuffix, lsuffix)) >] -> IntLit (l, n, dec, usuffix, lsuffix)
 | [< '(l, Kwd "!"); e = parse_expr_suffix >] -> Operation(l, Not, [e])
 and
   parse_expr_mul_rest e0 = parser
