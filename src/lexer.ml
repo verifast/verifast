@@ -892,6 +892,128 @@ class tentative_lexer (lloc:unit -> loc) (lignore_eol:bool ref) (lstream:(loc * 
       end
   end
 
+(* Parser for operators *)
+let rec (* TODO: parse brackets *)
+  parse_operators stream = parse_disj_expr stream
+and
+  parse_disj_expr = parser
+  [< e0 = parse_conj_expr; e = parse_disj_expr_rest e0 >] -> e
+and
+  parse_conj_expr = parser
+  [< e0 = parse_bitor_expr; e = parse_conj_expr_rest e0 >] -> e
+and
+  parse_bitor_expr = parser
+  [< e0 = parse_bitxor_expr; e = parse_bitor_expr_rest e0 >] -> e
+and
+  parse_bitxor_expr = parser
+  [< e0 = parse_bitand_expr; e = parse_bitxor_expr_rest e0 >] -> e
+and
+  parse_bitand_expr = parser
+  [< e0 = parse_expr_rel; e = parse_bitand_expr_rest e0 >] -> e
+and
+  parse_expr_rel = parser
+  [< e0 = parse_shift; e = parse_expr_rel_rest e0 >] -> e
+and
+  parse_shift = parser
+  [< e0 = parse_expr_arith; e = parse_shift_rest e0 >] -> e
+and
+  parse_expr_arith = parser
+  [< e0 = parse_expr_mul; e = parse_expr_arith_rest e0 >] -> e
+and
+  parse_expr_mul = parser
+  [< e0 = parse_expr_primary; e = parse_expr_mul_rest e0 >] -> e
+and
+  parse_expr_primary = parser (* TODO: parse true/false *)
+| [< '(l, Int (n, dec, usuffix, lsuffix)) >] -> IntLit (l, n, dec, usuffix, lsuffix)
+and
+  parse_expr_mul_rest e0 = parser
+  [< '(l, Kwd "*"); e1 = parse_expr_primary; e = parse_expr_mul_rest (Operation (l, Mul, [e0; e1])) >] -> e
+| [< '(l, Kwd "/"); e1 = parse_expr_primary; e = parse_expr_mul_rest (Operation (l, Div, [e0; e1])) >] -> e
+| [< '(l, Kwd "%"); e1 = parse_expr_primary; e = parse_expr_mul_rest (Operation (l, Mod, [e0; e1])) >] -> e
+| [< >] -> e0
+and
+  parse_expr_arith_rest e0 = parser
+  [< '(l, Kwd "+"); e1 = parse_expr_mul; e = parse_expr_arith_rest (Operation (l, Add, [e0; e1])) >] -> e
+| [< '(l, Kwd "-"); e1 = parse_expr_mul; e = parse_expr_arith_rest (Operation (l, Sub, [e0; e1])) >] -> e
+| [< >] -> e0
+and
+  parse_shift_rest e0 = parser
+  [< '(l, Kwd "<<"); e1 = parse_expr_arith; e = parse_shift_rest (Operation (l, ShiftLeft, [e0; e1])) >] -> e
+| [< '(l, Kwd ">>"); e1 = parse_expr_arith; e = parse_shift_rest (Operation (l, ShiftRight, [e0; e1])) >] -> e
+| [< >] -> e0
+and
+  parse_expr_rel_rest e0 = parser
+  [< '(l, Kwd "=="); e1 = parse_shift; e = parse_expr_rel_rest (Operation (l, Eq, [e0; e1])) >] -> e
+| [< '(l, Kwd "!="); e1 = parse_shift; e = parse_expr_rel_rest (Operation (l, Neq, [e0; e1])) >] -> e
+| [< '(l, Kwd "<"); e1 = parse_shift; e = parse_expr_rel_rest (Operation (l, Lt, [e0; e1])) >] -> e
+| [< '(l, Kwd "<="); e1 = parse_shift; e = parse_expr_rel_rest (Operation (l, Le, [e0; e1])) >] -> e
+| [< '(l, Kwd ">"); e1 = parse_shift; e = parse_expr_rel_rest (Operation (l, Gt, [e0; e1])) >] -> e
+| [< '(l, Kwd ">="); e1 = parse_shift; e = parse_expr_rel_rest (Operation (l, Ge, [e0; e1])) >] -> e
+| [< >] -> e0
+and
+  parse_bitand_expr_rest e0 = parser
+  [< '(l, Kwd "&"); e1 = parse_expr_rel; e = parse_bitand_expr_rest (Operation (l, BitAnd, [e0; e1])) >] -> e
+| [< >] -> e0
+and
+  parse_bitxor_expr_rest e0 = parser
+  [< '(l, Kwd "^"); e1 = parse_bitand_expr; e = parse_bitxor_expr_rest (Operation (l, BitXor, [e0; e1])) >] -> e
+| [< >] -> e0
+and
+  parse_bitor_expr_rest e0 = parser
+  [< '(l, Kwd "|"); e1 = parse_bitxor_expr; e = parse_bitor_expr_rest (Operation (l, BitOr, [e0; e1])) >] -> e
+| [< >] -> e0
+and
+  parse_conj_expr_rest e0 = parser
+  [< '(l, Kwd "&&"); e1 = parse_bitor_expr; e = parse_conj_expr_rest (Operation (l, And, [e0; e1])) >] -> e
+| [< >] -> e0
+and
+  parse_disj_expr_rest e0 = parser
+  [< '(l, Kwd "||"); e1 = parse_conj_expr; e = parse_disj_expr_rest (Operation (l, Or, [e0; e1])) >] -> e
+| [< >] -> e0
+
+(* Evaluator for operators *)
+let rec eval_operators e =
+  match e with
+    IntLit (_, n, dec, usuffix, lsuffix) -> int64_of_big_int n (* TODO: use dec/usuffix/lsuffix *)
+  | Operation (_, Mul, [e0; e1]) -> Int64.mul (eval_operators e0) (eval_operators e1)
+  | Operation (_, Div, [e0; e1]) -> Int64.div (eval_operators e0) (eval_operators e1)
+  | Operation (_, Mod, [e0; e1]) -> Int64.rem (eval_operators e0) (eval_operators e1)
+  | Operation (_, Add, [e0; e1]) -> Int64.add (eval_operators e0) (eval_operators e1)
+  | Operation (_, Sub, [e0; e1]) -> Int64.sub (eval_operators e0) (eval_operators e1)
+  | Operation (_, ShiftLeft, [e0; e1]) -> Int64.shift_left (eval_operators e0) (Int64.to_int (eval_operators e1))
+  | Operation (_, ShiftRight, [e0; e1]) -> Int64.shift_right (eval_operators e0) (Int64.to_int (eval_operators e1))
+  | Operation (_, Eq, [e0; e1]) ->
+     if Int64.compare (eval_operators e0) (eval_operators e1) = 0
+     then Int64.one else Int64.zero
+  | Operation (_, Neq, [e0; e1]) ->
+     if Int64.compare (eval_operators e0) (eval_operators e1) != 0
+     then Int64.one else Int64.zero
+  | Operation (_, Lt, [e0; e1]) ->
+     if Int64.compare (eval_operators e0) (eval_operators e1) < 0
+     then Int64.one else Int64.zero
+  | Operation (_, Le, [e0; e1]) ->
+     if Int64.compare (eval_operators e0) (eval_operators e1) <= 0
+     then Int64.one else Int64.zero
+  | Operation (_, Gt, [e0; e1]) ->
+     if Int64.compare (eval_operators e0) (eval_operators e1) > 0
+     then Int64.one else Int64.zero
+  | Operation (_, Ge, [e0; e1]) ->
+     if Int64.compare (eval_operators e0) (eval_operators e1) >= 0
+     then Int64.one else Int64.zero
+  | Operation (_, BitAnd, [e0; e1]) -> Int64.logand (eval_operators e0) (eval_operators e1)
+  | Operation (_, BitXor, [e0; e1]) -> Int64.logxor (eval_operators e0) (eval_operators e1)
+  | Operation (_, BitOr, [e0; e1]) -> Int64.logor (eval_operators e0) (eval_operators e1)
+  | Operation (_, And, [e0; e1]) ->
+     if Int64.compare (eval_operators e0) Int64.zero = 0
+     then Int64.zero else
+       if Int64.compare (eval_operators e1) Int64.zero = 0
+       then Int64.zero else Int64.one
+  | Operation (_, Or, [e0; e1]) ->
+     if Int64.compare (eval_operators e0) Int64.zero != 0
+     then Int64.one else
+       if Int64.compare (eval_operators e1) Int64.zero != 0
+       then Int64.one else Int64.zero
+
 let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_ghost_range =
   let macros = ref [Hashtbl.create 10] in
   let ghost_macros = ref [Hashtbl.create 10] in
@@ -1027,12 +1149,9 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
     oneline_macro := true;
     let condition = macro_expand [] condition in
     oneline_macro := false;
-    (* TODO: Support operators *)
-    let isTrue =
-      match condition with
-        [(_, Int (n, _, _, _))] -> sign_big_int n <> 0
-      | _ -> error "Operators in preprocessor conditions are not yet supported."
-    in
+    let condition = parse_operators (Stream.of_list condition) in
+    let condition = eval_operators condition in
+    let isTrue = Int64.compare condition Int64.zero <> 0 in
     if isTrue then () else skip_branch ()
   and next_token () =
     let at_start_of_line = !next_at_start_of_line in
