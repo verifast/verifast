@@ -100,7 +100,7 @@ ifndef NOZ3
 endif
 Z3V4DOT5PRESENT=false
 ifdef Z3V4DOT5
-  Z3_OCAML ?= $(shell ocamlfind query Z3)
+  Z3_OCAML ?= $(shell ocamlfind query z3)
   Z3_DLL_DIR ?= $(Z3_OCAML)/../..
   Z3DEPS := z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml verifastPluginReduxZ3$(Z3VERSION).ml verifastPluginZ3$(Z3VERSION)Smtlib.ml
   ifeq ($(OS), Darwin)
