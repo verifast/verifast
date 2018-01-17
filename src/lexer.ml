@@ -892,9 +892,11 @@ class tentative_lexer (lloc:unit -> loc) (lignore_eol:bool ref) (lstream:(loc * 
       end
   end
 
-(* Parser for operators *)
-let rec (* TODO: parse brackets *)
+(* Mini parser which is a subset of Parser.parse_decls_core *)
+let rec
   parse_operators stream = parse_disj_expr stream
+and
+  parse_operators_rest stream = parse_disj_expr_rest stream
 and
   parse_disj_expr = parser
   [< e0 = parse_conj_expr; e = parse_disj_expr_rest e0 >] -> e
@@ -929,9 +931,10 @@ and
   parse_expr_suffix = parser
   [< e = parse_expr_primary >] -> e
 and
-  parse_expr_primary = parser (* TODO: parse true/false *)
+  parse_expr_primary = parser
   [< '(l, Ident _) >] -> IntLit (l, zero_big_int, false, false, NoLSuffix)
 | [< '(l, Int (n, dec, usuffix, lsuffix)) >] -> IntLit (l, n, dec, usuffix, lsuffix)
+| [< '(l, Kwd "("); e0 = parse_operators; '(_, Kwd ")"); e = parse_operators_rest e0 >] -> e
 | [< '(l, Kwd "!"); e = parse_expr_suffix >] -> Operation(l, Not, [e])
 and
   parse_expr_mul_rest e0 = parser
