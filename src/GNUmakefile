@@ -100,7 +100,7 @@ ifndef NOZ3
 endif
 Z3V4DOT5PRESENT=false
 ifdef Z3V4DOT5
-  Z3_OCAML ?= $(shell ocamlfind query -qe Z3 || shell ocamlfind query z3) # It's Z3 when installed using `make install` and z3 when installed using OPAM
+  Z3_OCAML ?= $(shell ocamlfind query -qe Z3 || ocamlfind query z3) # It's Z3 when installed using `make install` and z3 when installed using OPAM
   Z3_DLL_DIR ?= $(Z3_OCAML)/../..
   Z3DEPS := z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml verifastPluginReduxZ3$(Z3VERSION).ml verifastPluginZ3$(Z3VERSION)Smtlib.ml
   ifeq ($(OS), Darwin)
