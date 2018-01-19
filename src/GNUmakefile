@@ -107,16 +107,21 @@ ifdef Z3V4DOT5
     Z3DEPS := $(Z3DEPS) ../lib/libz3.dylib
   else ifeq ($(OS), Windows_NT)
     Z3DEPS := $(Z3DEPS) ../bin/libz3.dll
+  else ifeq ($(OS), Linux)
+    Z3DEPS := $(Z3DEPS) ../bin/libz3.so
   endif
   Z3CCOPTS = -cclib "-L $(Z3_DLL_DIR)"
   Z3ARGS_EARLY = -I $(Z3_OCAML) z3ml.cmxa z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml verifastPluginReduxZ3$(Z3VERSION).ml  verifastPluginZ3$(Z3VERSION)Smtlib.ml $(Z3CCOPTS)
   ifeq ($(OS), Windows_NT)
     Z3_DLL_DEPS_DIR:=/usr/i686-w64-mingw32/sys-root/mingw/bin
     LDLPATH:=$(shell pwd)/../bin
-  else
+    VERIFAST := $(LDLPATHVAR)=${LDLPATH}:$$$(LDLPATHVAR) ../bin/verifast
+  else ifeq ($(OS), Darwin)
     LDLPATH:=$(Z3_DLL_DIR)
+    VERIFAST := $(LDLPATHVAR)=${LDLPATH}:$$$(LDLPATHVAR) ../bin/verifast
+  else
+    VERIFAST := ../bin/verifast
   endif
-  VERIFAST := $(LDLPATHVAR)=${LDLPATH}:$$$(LDLPATHVAR) ../bin/verifast
   Z3PRESENT=false
   Z3V4DOT5PRESENT=true
 else ifndef NOZ3
@@ -149,6 +154,9 @@ endif
 
 ../bin/libz3.dll:
 	cp $(Z3_DLL_DIR)/libz3.dll $(Z3_DLL_DEPS_DIR)/libwinpthread-1.dll $(Z3_DLL_DEPS_DIR)/libgomp-1.dll $(Z3_DLL_DEPS_DIR)/libgcc_s_sjlj-1.dll ../bin
+
+../bin/libz3.so:
+	cp $(Z3_DLL_DIR)/libz3.so ../bin
 
 ../lib/libz3.dylib:
 	mkdir -p ../lib
@@ -406,12 +414,18 @@ endif
 
 VERIFAST_PLUGINS=Redux Cvc4 ExternalZ3 ReduxSmtlib
 
+ifeq ($(OS), Darwin)
+  OCAMLOPT_LINKFLAGS = -cclib "-Xlinker -headerpad_max_install_names"
+else ifeq ($(OS), Linux)
+  OCAMLOPT_LINKFLAGS = -cclib -Wl,-rpath='$$ORIGIN'
+endif
+
 ../bin/vfide$(DOTEXE): vfide.cmx $(VERIFAST_PLUGINS:%=verifastPlugin%.cmx) $(Z3DEPS) $(GTKSOURCEVIEW_DEPS) 
 	@echo "  OCAMLOPT " $@
 ifndef WITHOUT_GTKSOURCEVIEW
 	cd linemarks; make linemarks.cmxa
 endif
-	$(SET_LDD); ${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/vfide$(DOTEXE)	\
+	$(SET_LDD); ${OCAMLOPT} $(OCAMLOPT_LINKFLAGS) $(OCAMLCFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/vfide$(DOTEXE)	\
 	  $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) unix.cmxa \
 	  nums.cmxa str.cmxa $(INCLUDES) Perf.cmxa proverapi.cmx \
 	  Printexc_proxy.cmx vfversion.cmx dynlink.cmxa \
@@ -430,10 +444,6 @@ ifneq ($(OS), Windows_NT)
 endif
 vfide: ../bin/vfide$(DOTEXE) $(STDLIB)
 .PHONY: vfide
-
-ifeq ($(OS), Darwin)
-  OCAMLOPT_LINKFLAGS = -cclib "-Xlinker -headerpad_max_install_names"
-endif
 
 ../bin/verifast$(DOTEXE): vfconsole.cmx $(VERIFAST_PLUGINS:%=verifastPlugin%.cmx) $(Z3DEPS)
 	@echo "  OCAMLOPT " $@
@@ -635,13 +645,6 @@ ifeq ($(OS), Windows_NT)
 	cp $(GTK)/lib/gtk-2.0/2.10.0/engines/libwimp.dll lib/gtk-2.0/2.10.0/engines
 endif
 ifeq ($(OS), Linux)
-	cd verifast-$(VFVERSION)/bin; mv verifast verifast-core
-	cd verifast-$(VFVERSION)/bin; mv vfide vfide-core
-	cp verifast.sh verifast-$(VFVERSION)/bin/verifast
-	cp vfide.sh verifast-$(VFVERSION)/bin/vfide
-ifdef Z3
-	cp $(Z3_DLL_DIR)/libz3.so verifast-$(VFVERSION)/bin
-endif
 	cp /usr/lib/libgtksourceview-2.0.so.0.0.0 verifast-$(VFVERSION)/bin/libgtksourceview-2.0.so.0
 endif
 ifeq ($(OS), Darwin)

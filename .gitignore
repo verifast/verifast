@@ -27,6 +27,7 @@
 
 /bin/*.exe
 /bin/*.dll
+/bin/*.so
 /bin/assoclist.vfmanifest
 /bin/java_card_applet
 /bin/main_class
