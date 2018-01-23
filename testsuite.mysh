@@ -427,6 +427,8 @@ cd tests
     verifast_both -c -allow_should_fail superctor.java
     verifast_both -c -allow_should_fail inhabited_tparams.c
     verifast_both -c -allow_should_fail inductive_welldefined.c
+    verifast -c -allow_should_fail chars_split_chars_join_loop.c
+    verifast -c -allow_should_fail chars_split_chars_join_loop2.c
     verifast_both -c -allow_should_fail predtype_contra.c
     verifast_both -c -allow_should_fail fixpoint_recursive_value.c
     verifast_both -c -allow_should_fail if_while_component_pure.c

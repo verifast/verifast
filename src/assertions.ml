@@ -721,6 +721,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             env': (string * term) list -- Updated list of bindings of declared but unbound variables
     *)
   let consume_chunk_core rules h ghostenv env env' l g targs coef coefpat inputParamCount pats tps0 tps cont =
+    let old_depth = !consume_chunk_recursion_depth in
     let rec consume_chunk_core_core h =
       let rec iter hprefix h =
         match h with
@@ -733,12 +734,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match iter [] h with
         [] ->
         begin fun cont ->
-          if !consume_chunk_recursion_depth > 100 then begin
+          if !consume_chunk_recursion_depth > 20 then begin
             if !verbosity >= 2 then printff "%10.6fs: Recursively consuming chunk: maximum recursion depth exceeded; giving up\n" (Perf.time());
             cont ()
           end else begin
           if !verbosity >= 2 && !consume_chunk_recursion_depth > 0 then printff "%10.6fs: Recursively consuming chunk (recursion depth %d)\n" (Perf.time()) !consume_chunk_recursion_depth;
-          with_updated_ref consume_chunk_recursion_depth ((+) 1) $. fun () ->
+          incr consume_chunk_recursion_depth;
           let (g, inputParamCount) = match inputParamCount with 
             Some (n) -> (g, inputParamCount)
           | None when not (snd g) ->
@@ -828,7 +829,9 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | [(h, ts, ghostenv, env)] -> cont h ts ghostenv env
       | _ -> assert_false h env l "Multiple matching heap chunks." None
   *)
-      | (chunk, h, coef, ts, size, ghostenv, env, env')::_ -> cont chunk h coef ts size ghostenv env env'
+      | (chunk, h, coef, ts, size, ghostenv, env, env')::_ ->
+        consume_chunk_recursion_depth := old_depth;
+        cont chunk h coef ts size ghostenv env env'
     in
     consume_chunk_core_core h
   
