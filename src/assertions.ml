@@ -733,7 +733,11 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match iter [] h with
         [] ->
         begin fun cont ->
-          if !consume_chunk_recursion_depth > 100 then cont () else
+          if !consume_chunk_recursion_depth > 100 then begin
+            if !verbosity >= 2 then printff "%10.6fs: Recursively consuming chunk: maximum recursion depth exceeded; giving up\n" (Perf.time());
+            cont ()
+          end else begin
+          if !verbosity >= 2 && !consume_chunk_recursion_depth > 0 then printff "%10.6fs: Recursively consuming chunk (recursion depth %d)\n" (Perf.time()) !consume_chunk_recursion_depth;
           with_updated_ref consume_chunk_recursion_depth ((+) 1) $. fun () ->
           let (g, inputParamCount) = match inputParamCount with 
             Some (n) -> (g, inputParamCount)
@@ -794,6 +798,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               end
             | rules -> try_rules rules ts
             end
+          end
         end $. fun () ->
         let message =
           let predname = match g with (g, _) -> ctxt#pprint g in
