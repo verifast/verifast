@@ -636,13 +636,15 @@ and sexpr_of_decl (decl : decl) : sexpression =
                       index_count,
                       params,
                       precise,
-                      inductiveness) ->
+                      inductiveness,
+                      nonemptiness) ->
       build_list [ Symbol "declare-predicate-family"
                  ; Symbol name ]
                  [ "type-parameters", List (List.map symbol tparams)
                  ; "parameters", List (List.map sexpr_of_type_expr params)
                  ; "index-count", sexpr_of_int index_count
-                 ; "coinductive", sexpr_of_bool (inductiveness = Inductiveness_CoInductive)]
+                 ; "coinductive", sexpr_of_bool (inductiveness = Inductiveness_CoInductive)
+                 ; "non-empty", sexpr_of_bool nonemptiness ]
     | PredFamilyInstanceDecl (loc,
                               name,
                               tparams,

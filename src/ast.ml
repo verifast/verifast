@@ -646,7 +646,8 @@ and
       int (* number of indices *) *
       type_expr list *
       int option (* (Some n) means the predicate is precise and the first n parameters are input parameters *) *
-      inductiveness
+      inductiveness *
+      bool (* non-emptiness *)
   | PredFamilyInstanceDecl of
       loc *
       string *
