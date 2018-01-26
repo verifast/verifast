@@ -38,7 +38,8 @@ let c_keywords = [
   "const"; "volatile"; "register"; "ifdef"; "elif"; "undef";
   "SHRT_MIN"; "SHRT_MAX"; "USHRT_MAX"; "UINT_MAX"; "UCHAR_MAX";
   "LLONG_MIN"; "LLONG_MAX"; "ULLONG_MAX";
-  "__int8"; "__int16"; "__int32"; "__int64"; "__int128"
+  "__int8"; "__int16"; "__int32"; "__int64"; "__int128";
+  "inline"; "__inline"; "__inline__"; "__forceinline"
 ]
 
 let java_keywords = [
@@ -433,6 +434,13 @@ and
     (noneToEmptyList functiontypetypeparams, noneToEmptyList functiontypeparams, params)
   | [< params = parse_paramlist >] -> ([], [], params)
 and
+  parse_ignore_inline = parser
+  [< '(l, Kwd "inline") >] -> ()
+| [< '(l, Kwd "__inline") >] -> ()
+| [< '(l, Kwd "__inline__") >] -> ()
+| [< '(l, Kwd "__forceinline") >] -> ()
+| [< >] -> ()
+and
   parse_decl = parser
   [< '(l, Kwd "struct"); '(_, Ident s); d = parser
     [< fs = parse_fields; '(_, Kwd ";") >] -> Struct (l, s, Some fs)
@@ -468,7 +476,7 @@ and
      elems = rep_comma (parser [< '(_, Ident e); init = opt (parser [< '(_, Kwd "="); e = parse_expr >] -> e) >] -> (e, init));
      '(_, Kwd "}"); '(_, Kwd ";"); >] ->
   [EnumDecl(l, n, elems)]
-| [< '(_, Kwd "static"); t = parse_return_type; d = parse_func_rest Regular t Private >] -> check_function_for_contract d
+| [< '(_, Kwd "static"); _ = parse_ignore_inline; t = parse_return_type; d = parse_func_rest Regular t Private >] -> check_function_for_contract d
 | [< t = parse_return_type; d = parse_func_rest Regular t Public >] -> check_function_for_contract d
 and check_for_contract: 'a. 'a option -> loc -> string -> (asn * asn -> 'a) -> 'a = fun contract l m f ->
   match contract with
