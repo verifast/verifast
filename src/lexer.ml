@@ -214,10 +214,10 @@ let compare_tokens t1 t2 =
   | _ -> false
 end
 
-let rec print_tokens tokens =
+let rec print_tokens_list tokens =
   match tokens with
     [(_, tok)] -> Printf.printf "%s\n" (string_of_token tok)
-  | (_, tok) :: xs -> Printf.printf "%s, " (string_of_token tok); print_tokens xs
+  | (_, tok) :: xs -> Printf.printf "%s, " (string_of_token tok); print_tokens_list xs
   | [] -> Printf.printf "\n"
 
 exception ParseException of loc * string
@@ -275,6 +275,11 @@ module Stream = struct
     in
     iter ()
 end
+
+let rec print_tokens_stream tokens =
+  Printf.printf "[\n";
+  Stream.iter (fun (_, tok) -> Printf.printf " %s\n" (string_of_token tok)) tokens;
+  Printf.printf "]\n"
 
 (* The lexer *)
 
