@@ -662,7 +662,7 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
             Stream.Failure -> error "Bad string literal."
         in
         store c; string ()
-    | c when c < ' ' -> raise Stream.Failure
+    | c when c = '\n' -> raise Stream.Failure
     | c -> text_junk (); store c; string ()
   and char () =
     match text_peek () with
