@@ -12,7 +12,8 @@ Debian-based (Ubuntu, Mint, ...) (32bit + 64bit)
       git wget ca-certificates make m4 \
       ocaml-native-compilers gcc camlp4 patch unzip libgtk2.0-dev \
       valac gtksourceview2.0-dev \
-      liblablgtk2-ocaml-dev liblablgtksourceview2-ocaml-dev
+      liblablgtk2-ocaml-dev liblablgtksourceview2-ocaml-dev \
+      ocaml-findlib
   $ git clone https://github.com/verifast/verifast.git
   $ make -j 8 -C verifast/src/
   $ verifast/bin/vfide
