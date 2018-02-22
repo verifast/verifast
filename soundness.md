@@ -5,6 +5,7 @@ Target soundness statement:
 If `verifast A.c B.c C.c` succeeds, then `gcc -o ./program.exe A.c B.c C.c && ./program.exe` does not throw any assertion failures.
 
 Known VeriFast unsoundnesses:
+- The lemma `mutex_ghost_use` (declared in `bin/threading.h`) is unsound. For example, it can be called after a `mutex_acquire` call, causing re-entry. A version for locks that requires that the lock be below the current thread's lockset would be sound.
 - We currently assume the same macros are defined on the command line when verifying the various modules that include a particular header file. (Otherwise, different modules may interpret the same header file differently.) TODO: Record the defined macros in the .vfmanifest?
 - predicate preciseness analysis: does not deal correctly with the local variable scopes induced by conditional assertions and switch assertions
 - disallow the use of regular function pointers as predicate family indices in unloadable modules. (Note: using lemma function pointers as predicate family indices is fine.)
