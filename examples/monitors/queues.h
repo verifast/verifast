@@ -20,7 +20,7 @@ int size_of(struct queue *q);
     //@ ensures queue(q,s) &*& result == s;
 
 int dequeue(struct queue *q);
-    //@ requires queue(q,?s) &*& s>=1;
+    //@ requires queue(q,?s) &*& s >= 1;
     //@ ensures queue(q,s-1);
 
 void enqueue(struct queue *q,int x);

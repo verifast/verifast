@@ -1,20 +1,20 @@
 /*
-  A Sleeping Barber Program Implemented by Condition Variables: Deadlock-free Verification
+  A Sleeping Barber Program Synchronized Using Monitors: Verification of Deadlock-Freedom
 */
 
 #include "stdlib.h"
 #include "monitors.h"
-#include "auth_monoid.h"
+//@ #include "ghost_counters.gh"
 
 struct barbershop {
    int barber;
    int chair;
    int door;
    struct mutex *m;
-   struct mutex_cond *cbarber;
-   struct mutex_cond *cchair;
-   struct mutex_cond *cdoor;
-   struct mutex_cond *ccustomer;
+   struct condvar *cbarber;
+   struct condvar *cchair;
+   struct condvar *cdoor;
+   struct condvar *ccustomer;
    //@ int gba;
    //@ int gch;
    //@ int gdo;
@@ -22,7 +22,7 @@ struct barbershop {
 };
 
 /*@
-predicate protected_permissions(struct barbershop *b; int barber, int chair, int door, struct mutex_cond *cbarber, struct mutex_cond *cchair, struct mutex_cond *cdoor, struct mutex_cond *ccustomer, struct mutex *m) =
+predicate protected_permissions(struct barbershop *b; int barber, int chair, int door, struct condvar *cbarber, struct condvar *cchair, struct condvar *cdoor, struct condvar *ccustomer, struct mutex *m) =
   b->barber |-> barber &*& b->chair |-> chair &*& b->door |-> door
   &*& [_]b->cbarber |-> cbarber &*& [_]b->cchair |-> cchair &*& [_]b->cdoor |-> cdoor &*& [_]b->ccustomer |-> ccustomer &*& [_]b->m |-> m
   &*& mutex_of(cbarber) == m &*& mutex_of(cchair) == m &*& mutex_of(cdoor) == m &*& mutex_of(ccustomer) == m  
@@ -33,7 +33,7 @@ predicate protected_permissions(struct barbershop *b; int barber, int chair, int
 predicate_ctor barbershop(struct barbershop *b)(fixpoint(void*, unsigned int) Wt, fixpoint(void*, unsigned int) Ot) = 
   protected_permissions(b,?barber,?chair,?door,?cbarber,?cchair,?cdoor,?ccustomer,?m)
   &*& [_]b->gba |-> ?gba &*& [_]b->gch |-> ?gch &*& [_]b->gdo |-> ?gdo &*& [_]b->gcu |-> ?gcu
-  &*& authfull(gba,?Cba) &*& authfull(gch,?Cch) &*& authfull(gdo,?Cdo) &*& authfull(gcu,?Ccu)
+  &*& ctr(gba,?Cba) &*& ctr(gch,?Cch) &*& ctr(gdo,?Cdo) &*& ctr(gcu,?Ccu)
   &*& Wt(cbarber) + Cba <= Ot(cbarber) + barber
   &*& Wt(cbarber) <= Ot(cbarber)
   &*& Wt(cdoor) + Cdo <= Ot(cdoor) + door
@@ -43,13 +43,13 @@ predicate_ctor barbershop(struct barbershop *b)(fixpoint(void*, unsigned int) Wt
   &*& Wt(ccustomer) + Ccu + door <= Ot(ccustomer) + 1
   &*& Wt(ccustomer) <= Ot(ccustomer);
 
-predicate unprotected_permissions(struct barbershop *b, struct mutex_cond *cbarber, struct mutex_cond *cchair, struct mutex_cond *cdoor, struct mutex_cond *ccustomer, int gba, int gch, int gdo, int gcu, struct mutex *m) =
+predicate unprotected_permissions(struct barbershop *b, struct condvar *cbarber, struct condvar *cchair, struct condvar *cdoor, struct condvar *ccustomer, int gba, int gch, int gdo, int gcu, struct mutex *m) =
   [_]b->cbarber |-> cbarber &*& [_]b->cchair |-> cchair &*& [_]b->cdoor |-> cdoor &*& [_]b->ccustomer |-> ccustomer &*& [_]b->m |-> m
   &*& inv(m) == barbershop(b) &*& mutex_of(cbarber) == m &*& mutex_of(cchair) == m &*& mutex_of(cdoor) == m &*& mutex_of(ccustomer) == m
   &*& [_]b->gba |-> gba &*& [_]b->gch |-> gch &*& [_]b->gdo |-> gdo &*& [_]b->gcu |-> gcu
   &*& Trn(cbarber) == vtrn(gba) &*& Trn(cchair) == vtrn(gch) &*& Trn(cdoor) == vtrn(gdo) &*& Trn(ccustomer) == vtrn(gcu);
 
-predicate_ctor vtrn(int i)() = authfrag(i,1);
+predicate_ctor vtrn(int i)() = tic(i);
     
 @*/
   
@@ -60,26 +60,26 @@ predicate_family_instance thread_run_data(get_haircut_thread)(list<void*> tobs, 
   &*& no_cycle(m,cons(cchair,cons(ccustomer,nil)))==true 
   &*& no_cycle(cbarber,cons(cchair,cons(ccustomer,nil)))==true   
   &*& no_cycle(cdoor,cons(ccustomer,nil))==true
-  &*& tobs == cons(cchair,cons(ccustomer,nil)) &*& authfrag(gba,1) &*& authfrag(gdo,1) &*& authfrag(gch,0) &*& authfrag(gcu,0);
+  &*& tobs == cons(cchair,cons(ccustomer,nil)) &*& tic(gba) &*& tic(gdo);
   
 predicate_family_instance thread_run_data(finished_cut_customer_thread)(list<void*> tobs, struct barbershop *b) =
   unprotected_permissions(b,?cbarber,?cchair,?cdoor,?ccustomer,?gba,?gch,?gdo,?gcu,?m)
   &*& [_]mutex(m)
   &*& no_cycle(m,cons(cdoor,nil))==true 
   &*& no_cycle(ccustomer,nil)==true
-  &*& tobs == cons(cdoor,nil) &*& authfrag(gcu,2) &*& authfrag(gdo,0);
+  &*& tobs == cons(cdoor,nil) &*& tic(gcu) &*& tic(gcu);
 
 predicate_family_instance thread_run_data(get_next_customer_thread)(list<void*> tobs, struct barbershop *b) =
   unprotected_permissions(b,?cbarber,?cchair,?cdoor,?ccustomer,?gba,?gch,?gdo,?gcu,?m)
   &*& [_]mutex(m)
   &*& no_cycle(m,cons(cbarber,nil))==true 
   &*& no_cycle(cchair,nil)==true
-  &*& tobs == cons(cbarber,nil) &*& authfrag(gch,1) &*& authfrag(gba,0);
+  &*& tobs == cons(cbarber,nil) &*& tic(gch);
 @*/
 
 void get_haircut1(struct barbershop *b)
   /*@ requires unprotected_permissions(b, ?cbarber, ?cchair, ?cdoor, ?ccustomer, ?gba, ?gch, ?gdo, ?gcu, ?m) &*& [_]mutex(m)
-    &*& obs(cons(cchair,cons(ccustomer,?O))) &*& authfrag(gba,1) &*& authfrag(gdo,1) &*& authfrag(gch,0) &*& authfrag(gcu,0)
+    &*& obs(cons(cchair,cons(ccustomer,?O))) &*& tic(gba) &*& tic(gdo)
     &*& no_cycle(m,cons(cchair,cons(ccustomer,O)))==true 
     &*& no_cycle(cbarber,cons(cchair,cons(ccustomer,O)))==true   
     &*& no_cycle(cdoor,cons(ccustomer,O))==true;
@@ -95,7 +95,7 @@ void get_haircut1(struct barbershop *b)
           &*& [_]b->m |-> m &*& b->barber |-> ?barber &*& b->chair |-> ?chair &*& b->door |-> ?door
           &*& barber >= 0 &*& chair >= 0 &*& door >= 0 &*& mutex_held(m, _, ?Wt, ?Ot)
           &*& [_]b->gba |-> gba &*& [_]b->gch |-> gch &*& [_]b->gdo |-> gdo &*& [_]b->gcu |-> gcu
-          &*& authfull(gba,?Cba) &*& authfull(gch,?Cch) &*& authfull(gdo,?Cdo) &*& authfull(gcu,?Ccu)
+          &*& ctr(gba,?Cba) &*& ctr(gch,?Cch) &*& ctr(gdo,?Cdo) &*& ctr(gcu,?Ccu)
           &*& Wt(cbarber) + Cba <= Ot(cbarber) + barber
           &*& Wt(cbarber) <= Ot(cbarber)
           &*& Wt(cdoor) + Cdo <= Ot(cdoor) + door
@@ -104,38 +104,34 @@ void get_haircut1(struct barbershop *b)
           &*& Wt(cchair) <= Ot(cchair)
           &*& Wt(ccustomer) + Ccu + door <= Ot(ccustomer) + 1
           &*& Wt(ccustomer) <= Ot(ccustomer)     
-          &*& obs(cons(m,cons((void*)cchair,cons(ccustomer,O)))) &*& authfrag(gba,1) &*& authfrag(gdo,1);
+          &*& obs(cons(m,cons((void*)cchair,cons(ccustomer,O)))) &*& tic(gba) &*& tic(gdo);
     @*/
   {
-    //@ upd_ghost(gba,-1);
+    //@ dec_ctr(gba);
     //@ close barbershop(b)(finc(Wt,cbarber),Ot);
     //@ close mutex_inv(m,barbershop(b));
-    //@ close cond_trn(cbarber,vtrn(gba));
-    mutex_cond_wait(b->cbarber, b->m);
+    //@ close condvar_trn(cbarber,vtrn(gba));
+    condvar_wait(b->cbarber, b->m);
     //@ open barbershop(b)(_,_); 
     //@ open vtrn(gba)();  
-    //@ leak authfrag(gba,0);
   }
   b->barber = b->barber - 1;
   b->chair = b->chair + 1;
-  //@ close cond_trn(cchair,vtrn(gch));
+  //@ close condvar_trn(cchair,vtrn(gch));
   /*@ if (Wt(cchair)>0){
-        upd_ghost(gch,1);
+        inc_ctr(gch);
         close vtrn(gch)();
       }
-      else
-        leak authfrag(gch,0);
   @*/
-  mutex_cond_signal(b->cchair);
+  condvar_signal(b->cchair);
   //@ g_dischl(cchair);
-  //@ upd_ghost(gba,-1);
+  //@ dec_ctr(gba);
   //@ assert mutex_held(m,_,?Wte,?Ote);
   //@ close barbershop(b)(Wte,Ote);
   //@ close mutex_inv(m, barbershop(b));
   mutex_release(b->m);
   //@ leak [_]mutex(m);
   //@ close unprotected_permissions(b,cbarber,cchair,cdoor,ccustomer,gba,gch,gdo,gcu,m); 
-  //@ leak authfrag(gba,0);
   get_haircut2(b);
   //@ leak [_]mutex(m);
 }
@@ -143,7 +139,7 @@ void get_haircut1(struct barbershop *b)
 
 void get_haircut2(struct barbershop *b)
   /*@ requires unprotected_permissions(b, ?cbarber, ?cchair, ?cdoor, ?ccustomer, ?gba, ?gch, ?gdo, ?gcu, ?m) &*& [_]mutex(m)
-    &*& obs(cons(ccustomer,?O)) &*& authfrag(gdo,1) &*& authfrag(gcu,0)
+    &*& obs(cons(ccustomer,?O)) &*& tic(gdo)
     &*& no_cycle(m,cons(cchair,cons(ccustomer,O)))==true 
     &*& no_cycle(cbarber,cons(cchair,cons(ccustomer,O)))==true   
     &*& no_cycle(cdoor,cons(ccustomer,O))==true;
@@ -159,7 +155,7 @@ void get_haircut2(struct barbershop *b)
           &*& [_]b->m |-> m &*& b->barber |-> ?barber &*& b->chair |-> ?chair &*& b->door |-> ?door
           &*& barber >= 0 &*& chair >= 0 &*& door >= 0 &*& mutex_held(m, _, ?Wt, ?Ot)
           &*& [_]b->gba |-> gba &*& [_]b->gch |-> gch &*& [_]b->gdo |-> gdo &*& [_]b->gcu |-> gcu
-          &*& authfull(gba,?Cba) &*& authfull(gch,?Cch) &*& authfull(gdo,?Cdo) &*& authfull(gcu,?Ccu)
+          &*& ctr(gba,?Cba) &*& ctr(gch,?Cch) &*& ctr(gdo,?Cdo) &*& ctr(gcu,?Ccu)
           &*& Wt(cbarber) + Cba <= Ot(cbarber) + barber
           &*& Wt(cbarber) <= Ot(cbarber)
           &*& Wt(cdoor) + Cdo <= Ot(cdoor) + door
@@ -168,35 +164,31 @@ void get_haircut2(struct barbershop *b)
           &*& Wt(cchair) <= Ot(cchair)
           &*& Wt(ccustomer) + Ccu + door <= Ot(ccustomer) + 1
           &*& Wt(ccustomer) <= Ot(ccustomer)     
-          &*& obs(cons(m,cons((void*)ccustomer,O))) &*& authfrag(gdo,1);
+          &*& obs(cons(m,cons((void*)ccustomer,O))) &*& tic(gdo);
     @*/
   {
-    //@ upd_ghost(gdo,-1);
+    //@ dec_ctr(gdo);
     
     //@ close barbershop(b)(finc(Wt,cdoor),Ot);
     //@ close mutex_inv(m,barbershop(b));
-    //@ close cond_trn(cdoor,vtrn(gdo));
-    mutex_cond_wait(b->cdoor, b->m);
+    //@ close condvar_trn(cdoor,vtrn(gdo));
+    condvar_wait(b->cdoor, b->m);
     //@ open barbershop(b)(_,_);  
     //@ open vtrn(gdo)();
-    //@ leak authfrag(gdo,0); 
   }
   b->door = b->door - 1;
-  //@ close cond_trn(ccustomer,vtrn(gcu));
+  //@ close condvar_trn(ccustomer,vtrn(gcu));
   /*@ if (Wt(ccustomer)>0){
-        upd_ghost(gcu,1);
+        inc_ctr(gcu);
         close vtrn(gcu)();
       }
-      else
-        leak authfrag(gcu,0);
   @*/
-  mutex_cond_signal(b->ccustomer);
+  condvar_signal(b->ccustomer);
   //@ g_dischl(ccustomer);
-  //@ upd_ghost(gdo,-1);
+  //@ dec_ctr(gdo);
   //@ assert mutex_held(m,_,?Wte,?Ote);
   //@ close barbershop(b)(Wte,Ote);
   //@ close mutex_inv(m, barbershop(b));
-  //@ leak authfrag(gdo,0);
   mutex_release(b->m);
   //@ leak [_]mutex(m);
   //@ close unprotected_permissions(_,_,_,_,_,_,_,_,_,_);  
@@ -204,7 +196,7 @@ void get_haircut2(struct barbershop *b)
 
 void get_next_customer(struct barbershop *b)
   /*@ requires unprotected_permissions(b, ?cbarber, ?cchair, ?cdoor, ?ccustomer, ?gba, ?gch, ?gdo, ?gcu, ?m) &*& [_]mutex(m)
-    &*& obs(cons(cbarber,?O)) &*& authfrag(gch,1) &*& authfrag(gba,0)
+    &*& obs(cons(cbarber,?O)) &*& tic(gch)
     &*& no_cycle(m,cons(cbarber,O))==true 
     &*& no_cycle(cchair,O)==true;
   @*/
@@ -219,22 +211,20 @@ void get_next_customer(struct barbershop *b)
   if (b->barber <= 0)
     abort();
   b->barber = b->barber + 1;
-  //@ close cond_trn(cbarber,vtrn(gba));
+  //@ close condvar_trn(cbarber,vtrn(gba));
   /*@ if (Wt0(cbarber)>0){
-        upd_ghost(gba,1);
+        inc_ctr(gba);
         close vtrn(gba)();
       }
-      else
-        leak authfrag(gba,0);
   @*/
-  mutex_cond_signal(b->cbarber);   
+  condvar_signal(b->cbarber);   
   //@ g_dischl(cbarber);
   while (b->chair==0)
     /*@ invariant [_]b->cbarber |-> cbarber &*& [_]b->cchair |-> cchair &*& [_]b->cdoor |-> cdoor &*& [_]b->ccustomer |-> ccustomer
           &*& [_]b->m |-> m &*& b->barber |-> ?barber &*& b->chair |-> ?chair &*& b->door |-> ?door
           &*& barber >= 0 &*& chair >= 0 &*& door >= 0 &*& mutex_held(m, _, ?Wt, ?Ot)
           &*& [_]b->gba |-> gba &*& [_]b->gch |-> gch &*& [_]b->gdo |-> gdo &*& [_]b->gcu |-> gcu
-          &*& authfull(gba,?Cba) &*& authfull(gch,?Cch) &*& authfull(gdo,?Cdo) &*& authfull(gcu,?Ccu)
+          &*& ctr(gba,?Cba) &*& ctr(gch,?Cch) &*& ctr(gdo,?Cdo) &*& ctr(gcu,?Ccu)
           &*& Wt(cbarber) + Cba <= Ot(cbarber) + barber
           &*& Wt(cbarber) <= Ot(cbarber)
           &*& Wt(cdoor) + Cdo <= Ot(cdoor) + door
@@ -243,23 +233,21 @@ void get_next_customer(struct barbershop *b)
           &*& Wt(cchair) <= Ot(cchair)
           &*& Wt(ccustomer) + Ccu + door <= Ot(ccustomer) + 1
           &*& Wt(ccustomer) <= Ot(ccustomer)     
-          &*& obs(cons(m,O)) &*& authfrag(gch,1);
+          &*& obs(cons(m,O)) &*& tic(gch);
     @*/
   {
-    //@ upd_ghost(gch,-1);
+    //@ dec_ctr(gch);
     //@ close barbershop(b)(finc(Wt,cchair),Ot);
     //@ close mutex_inv(m,barbershop(b));
-    //@ close cond_trn(cchair,vtrn(gch));
-    mutex_cond_wait(b->cchair, b->m);
+    //@ close condvar_trn(cchair,vtrn(gch));
+    condvar_wait(b->cchair, b->m);
     //@ open barbershop(b)(_,_);  
     //@ open vtrn(gch)();
-    //@ leak authfrag(gch,0); 
   }    
   b->chair = b->chair - 1;
-  //@ upd_ghost(gch,-1);
+  //@ dec_ctr(gch);
   //@ close barbershop(b)(Wt,Ot);
   //@ close mutex_inv(m, barbershop(b));
-  //@ leak authfrag(gch,0);
   mutex_release(b->m);
   //@ leak [_]mutex(m);  
   //@ close unprotected_permissions(_,_,_,_,_,_,_,_,_,_);
@@ -267,7 +255,7 @@ void get_next_customer(struct barbershop *b)
 
 void finished_cut_customer(struct barbershop *b)
   /*@ requires unprotected_permissions(b, ?cbarber, ?cchair, ?cdoor, ?ccustomer, ?gba, ?gch, ?gdo, ?gcu, ?m) &*& [_]mutex(m)
-    &*& obs(cons(cdoor,?O)) &*& authfrag(gcu,2) &*& authfrag(gdo,0)
+    &*& obs(cons(cdoor,?O)) &*& tic(gcu) &*& tic(gcu)
     &*& no_cycle(m,cons(cdoor,O))==true 
     &*& no_cycle(ccustomer,O)==true;
   @*/
@@ -278,23 +266,21 @@ void finished_cut_customer(struct barbershop *b)
   mutex_acquire(b->m);
   //@ open barbershop(b)(?Wt0,?Ot0);
   b->door = b->door + 1;
-  //@ close cond_trn(cdoor,vtrn(gdo));
+  //@ close condvar_trn(cdoor,vtrn(gdo));
   /*@ if (Wt0(cdoor)>0){
-        upd_ghost(gdo,1);
+        inc_ctr(gdo);
         close vtrn(gdo)();
       }
-      else
-        leak authfrag(gdo,0);
   @*/
-  mutex_cond_signal(b->cdoor);
+  condvar_signal(b->cdoor);
   //@ g_dischl(cdoor);
-  //@ upd_ghost(gcu,-1);
+  //@ dec_ctr(gcu);
   while (b->door>0)
     /*@ invariant [_]b->cbarber |-> cbarber &*& [_]b->cchair |-> cchair &*& [_]b->cdoor |-> cdoor &*& [_]b->ccustomer |-> ccustomer
           &*& [_]b->m |-> m &*& b->barber |-> ?barber &*& b->chair |-> ?chair &*& b->door |-> ?door
           &*& barber >= 0 &*& chair >= 0 &*& door >= 0 &*& mutex_held(m, _, ?Wt, ?Ot)
           &*& [_]b->gba |-> gba &*& [_]b->gch |-> gch &*& [_]b->gdo |-> gdo &*& [_]b->gcu |-> gcu
-          &*& authfull(gba,?Cba) &*& authfull(gch,?Cch) &*& authfull(gdo,?Cdo) &*& authfull(gcu,?Ccu)
+          &*& ctr(gba,?Cba) &*& ctr(gch,?Cch) &*& ctr(gdo,?Cdo) &*& ctr(gcu,?Ccu)
           &*& Wt(cbarber) + Cba <= Ot(cbarber) + barber
           &*& Wt(cbarber) <= Ot(cbarber)
           &*& Wt(cdoor) + Cdo <= Ot(cdoor) + door
@@ -303,24 +289,23 @@ void finished_cut_customer(struct barbershop *b)
           &*& Wt(cchair) <= Ot(cchair)
           &*& Wt(ccustomer) + Ccu + door <= Ot(ccustomer) + 1
           &*& Wt(ccustomer) <= Ot(ccustomer)     
-          &*& obs(cons(m,O)) &*& authfrag(gcu,1);
+          &*& obs(cons(m,O)) &*& tic(gcu);
     @*/
   {
-    //@ upd_ghost(gcu,-1);   
+    //@ dec_ctr(gcu);   
     //@ close barbershop(b)(finc(Wt,ccustomer),Ot);
     //@ close mutex_inv(m,barbershop(b));
-    //@ close cond_trn(ccustomer,vtrn(gcu));
-    mutex_cond_wait(b->ccustomer, b->m);
+    //@ close condvar_trn(ccustomer,vtrn(gcu));
+    condvar_wait(b->ccustomer, b->m);
     //@ open barbershop(b)(_,_); 
     //@ open vtrn(gcu)(); 
-    //@ leak authfrag(gcu,0); 
   }
   //@ close barbershop(b)(Wt,Ot);
   //@ close mutex_inv(m, barbershop(b));
   mutex_release(b->m);
   //@ leak [_]mutex(m);
   //@ close unprotected_permissions(_,_,_,_,_,_,_,_,_,_);
-  //@ leak authfrag(gcu,1);
+  //@ leak tic(gcu);
 }
 
 void get_haircut_thread(struct barbershop *b)  //@ : thread_run
@@ -357,21 +342,21 @@ void main()
     //@ close create_mutex_ghost_args(0,nil);
     struct mutex *m = create_mutex();
     
-    //@ int gba = ghost_create2(0,1);
-    //@ close create_mutex_cond_ghost_args(m,1,false,vtrn(gba));
-    struct mutex_cond *cbarber = create_mutex_cond();
+    //@ int gba = new_ctr();
+    //@ close create_condvar_ghost_args(m,1,false,vtrn(gba));
+    struct condvar *cbarber = create_condvar();
 
-    //@ int gch = ghost_create2(0,1);
-    //@ close create_mutex_cond_ghost_args(m,2,false,vtrn(gch));
-    struct mutex_cond *cchair = create_mutex_cond();
+    //@ int gch = new_ctr();
+    //@ close create_condvar_ghost_args(m,2,false,vtrn(gch));
+    struct condvar *cchair = create_condvar();
 
-    //@ int gdo = ghost_create2(0,1);
-    //@ close create_mutex_cond_ghost_args(m,3,false,vtrn(gdo));
-    struct mutex_cond *cdoor = create_mutex_cond();
+    //@ int gdo = new_ctr();
+    //@ close create_condvar_ghost_args(m,3,false,vtrn(gdo));
+    struct condvar *cdoor = create_condvar();
     
-    //@ int gcu = ghost_create2(0,2);
-    //@ close create_mutex_cond_ghost_args(m,4,false,vtrn(gcu));
-    struct mutex_cond *ccustomer = create_mutex_cond();
+    //@ int gcu = new_ctr();
+    //@ close create_condvar_ghost_args(m,4,false,vtrn(gcu));
+    struct condvar *ccustomer = create_condvar();
     
     struct barbershop *b = malloc(sizeof(struct barbershop));
     if (b==0)
@@ -405,6 +390,11 @@ void main()
     //@ g_chrgu(cchair);    
     //@ g_chrgu(cdoor);    
     //@ g_chrgu(ccustomer);    
+    //@ inc_ctr(gba);
+    //@ inc_ctr(gch);
+    //@ inc_ctr(gdo);
+    //@ inc_ctr(gcu);
+    //@ inc_ctr(gcu);
     //@ close barbershop(b)(empb,finc(finc(finc(finc(empb,cbarber),cchair),cdoor),ccustomer));    
     //@ init_mutex(m);
     //@ leak [_]mutex(m);
