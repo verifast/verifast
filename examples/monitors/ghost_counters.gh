@@ -1,0 +1,19 @@
+#ifndef GHOST_COUNTERS_H
+#define GHOST_COUNTERS_H
+
+predicate ctr(int id; int n);
+predicate tic(int id);
+
+lemma int new_ctr();
+  requires true;
+  ensures ctr(result, 0);
+
+lemma void inc_ctr(int id);
+  requires ctr(id,?n);
+  ensures ctr(id,n+1) &*& tic(id);
+
+lemma void dec_ctr(int id);
+  requires ctr(id,?n) &*& tic(id);
+  ensures ctr(id,n-1) &*& n > 0;
+
+#endif
