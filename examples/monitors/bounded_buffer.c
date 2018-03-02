@@ -5,7 +5,7 @@
 #include "stdlib.h"
 #include "monitors.h"
 #include "queues.h"
-#include "ghost_counters.gh"
+//@ #include "ghost_counters.gh"
 
 struct buffer {
    struct queue *q;

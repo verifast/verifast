@@ -17,11 +17,12 @@ cd examples
     verifast -prover redux -c clhlock.c
   cd ..
   cd monitors
-    verifast -prover z3v4.5 -c -disable_overflow_check buffer.c
-    verifast -prover z3v4.5 -c -disable_overflow_check bounded_buffer.c
-    verifast -prover z3v4.5 -c -disable_overflow_check barrier.c
-    verifast -prover z3v4.5 -c -disable_overflow_check barbershop.c
-    verifast -prover z3v4.5 -c -disable_overflow_check readers_writers.c
+    verifast -prover z3v4.5 -disable_overflow_check -shared ghost_counters.c 
+    verifast -prover z3v4.5 -disable_overflow_check -shared ghost_counters.c monitors.o queues.o buffer.c 
+    verifast -prover z3v4.5 -disable_overflow_check -shared ghost_counters.c monitors.o queues.o bounded_buffer.c 
+    verifast -prover z3v4.5 -disable_overflow_check -shared monitors.o barrier.c 
+    verifast -prover z3v4.5 -disable_overflow_check -shared ghost_counters.c monitors.o barbershop.c 
+    verifast -prover z3v4.5 -disable_overflow_check -shared ghost_counters.c monitors.o readers_writers.c 
   cd ..
   cd splitcounter
     verifast -prover redux -c -disable_overflow_check splitcounter.c

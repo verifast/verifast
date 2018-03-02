@@ -1,4 +1,5 @@
 //@ #include "ghost_cells.gh"
+//@ #include "ghost_counters.gh"
 
 /*@
 inductive node = empty | node(int value_id, int is_last_id, int next_id);

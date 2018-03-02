@@ -48,8 +48,14 @@ predicate condvar_trn(condvar condvar, predicate() condvarp) = Trn(condvar) == c
 @*/
 
 /*@
+predicate no_transfer() = true;
+
 predicate n_times(int n, predicate() p) =
   n <= 0 ? true : p() &*& n_times(n-1,p);
+
+lemma void n_times_no_transfer(int n);
+  requires true;
+  ensures n_times(n,no_transfer);  
 @*/
 
 /*@
@@ -87,7 +93,9 @@ fixpoint fixpoint(void*, int) removeAll<t>(fixpoint(void*, unsigned int) f, void
 @*/
 
 /*@
-fixpoint bool eXc(void* o){ return mem(w_level(o),X(mutex_of(o)));}
+fixpoint bool eXc(void* o){ 
+  return mem(w_level(o),X(mutex_of(o)));
+}
 
 fixpoint bool one_obs(condvar condvar, fixpoint(void*, unsigned int) Wt, fixpoint(void*, unsigned int) Ot){ 
   return Wt(condvar) < 1 || Ot(condvar) > 0;
@@ -179,11 +187,11 @@ lemma void g_Ot_isbag(mutex mutex, condvar condvar);
 @*/
 
 mutex create_mutex();
-    //@ requires create_mutex_ghost_args(?wlevel,?Xs);
+    //@ requires create_mutex_ghost_args(?wlevel,?Xs) &*& mem(wlevel,Xs) == false;
     //@ ensures result != 0 &*& umutex(result, empb ,empb) &*& mutex_of(result)==result &*& w_level(result) == wlevel &*& X(result) == Xs;
     
 void mutex_acquire(mutex mutex);
-    //@ requires [?f]mutex(mutex) &*& obs(?O) &*& mutex_inv(mutex, ?p) &*& no_cycle(mutex,O)==true;
+    //@ requires [?f]mutex(mutex) &*& obs(?O) &*& mutex_inv(mutex, ?p) &*& no_cycle(mutex,O) == true;
     //@ ensures mutex_held(mutex, f, ?Wt, ?Ot) &*& p(Wt,Ot) &*& obs(cons(mutex,O));
 
 void mutex_release(mutex mutex);

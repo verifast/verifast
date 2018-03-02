@@ -20,11 +20,6 @@ struct read_write {
 
 /*@
 predicate_ctor vwtrn(int i)() = tic(i);
-predicate vrtrn() = true;
-
-lemma void vperms(int n,condvar condvar);
-  requires true;
-  ensures n_times(n,vrtrn);
 
 predicate_ctor read_write(struct read_write *b)(fixpoint(void*, unsigned int) Wt, fixpoint(void*, unsigned int) Ot) = 
   b->aw |-> ?aw &*& 
@@ -42,7 +37,7 @@ predicate_ctor read_write(struct read_write *b)(fixpoint(void*, unsigned int) Wt
   mutex_of(vw)==m &*&
   P(vr)==false &*& 
   Trn(vw) == vwtrn(gw) &*& 
-  Trn(vr) == vrtrn &*&
+  Trn(vr) == no_transfer &*&
   ctr(gw,?Cw) &*&
   (Wt(vr) <= 0 || 0 < aw + ww) &*&
   aw + ww <= Ot(vr) &*&
@@ -58,7 +53,6 @@ predicate_family_instance thread_run_data(reader_thread)(list<void*> tobs, struc
    [_]mutex(m) &*& 
    [_]b->gw |-> ?gw &*& 
    inv(m) == read_write(b) &*& 
-   gw != 0 &*&
    P(vr)==false &*& 
    !eXc(vr) &*&
    tobs == nil &*&
@@ -160,8 +154,8 @@ void writer(struct read_write *b)
   //@ dec_ctr(gw);  
   //@ g_dischl(vw);   
   if (b->ww == 0){   
-    //@ close condvar_trn(vr,vrtrn);
-    //@ vperms(Wt2(vr),vr);
+    //@ close condvar_trn(vr,no_transfer);
+    //@ n_times_no_transfer(Wt2(vr));
     condvar_broadcast(b->vr);
   }
   //@ g_dischl(vr);
@@ -179,7 +173,6 @@ void reader(struct read_write *b)
                [_]mutex(m) &*& 
                inv(m) == read_write(b) &*& 
                [_]b->gw |-> ?gw &*& 
-               gw != 0 &*&
                !eXc(vr) &*&
                obs(?O) &*&
                no_cycle(vr,O) == true &*& 
@@ -218,10 +211,10 @@ void reader(struct read_write *b)
   {
     //@ close read_write(b)(finc(Wt,vr),Ot);
     //@ close mutex_inv(m,read_write(b));
-    //@ close condvar_trn(vr,vrtrn);
+    //@ close condvar_trn(vr,no_transfer);
     condvar_wait(b->vr, b->m);
     //@ open read_write(b)(_,_);        
-    //@ open vrtrn();
+    //@ open no_transfer();
   }
   b->ar = b->ar + 1;
   //@ g_chrgl(vw);
@@ -281,7 +274,7 @@ void main()
     //@ close create_condvar_ghost_args(m,1,true,vwtrn(gw));    
     condvar vw = create_condvar();
 
-    //@ close create_condvar_ghost_args(m,2,false,vrtrn);    
+    //@ close create_condvar_ghost_args(m,2,false,no_transfer);    
     condvar vr = create_condvar();
    
     struct read_write *b = malloc(sizeof(struct read_write));

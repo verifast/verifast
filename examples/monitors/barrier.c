@@ -12,15 +12,13 @@ struct barrier {
 };
 
 /*@
-predicate vtrn() = true;
-
 predicate_ctor barrier(struct barrier *b)(fixpoint(void*, unsigned int) Wt, fixpoint(void*, unsigned int) Ot) = 
   b->r |-> ?r &*& 
   [_]b->v |-> ?v &*& 
   [_]b->m |-> ?m &*& 
   r >= 0 &*& 
   mutex_of(v)==m &*& 
-  Trn(v) == vtrn &*&
+  Trn(v) == no_transfer &*&
   P(v)==false &*&
   Wt(v) <= 0 || 0 < r &*& 
   r <= Ot(v);
@@ -35,10 +33,6 @@ predicate_family_instance thread_run_data(wait_barrier_thread)(list<void*> tobs,
    !eXc(v) &*& 
    no_cycle(m,(cons(v,nil))) == true &*&
    tobs == cons(v,nil);
-
-lemma void vtrn_lem(int n,struct condvar *condvar);
-  requires true;
-  ensures n_times(n,vtrn);
 @*/
 
 void wait_barrier(struct barrier *b)
@@ -62,8 +56,8 @@ void wait_barrier(struct barrier *b)
     abort();
   b->r = b->r - 1;
   if (b->r==0){
-    //@ close condvar_trn(v,vtrn);
-    //@ vtrn_lem(Wt1(v),v);
+    //@ close condvar_trn(v,no_transfer);
+    //@ n_times_no_transfer(Wt1(v));
     condvar_broadcast(b->v);
     //@ g_dischl(v);
   }
@@ -81,10 +75,10 @@ void wait_barrier(struct barrier *b)
     {
       //@ close barrier(b)(finc(Wt,v),Ot);
       //@ close mutex_inv(m,barrier(b));
-      //@ close condvar_trn(v,vtrn);
+      //@ close condvar_trn(v,no_transfer);
       condvar_wait(b->v, b->m);
       //@ open barrier(b)(_,_); 
-      //@ open vtrn();   
+      //@ open no_transfer();   
     }
 }
   //@ assert mutex_held(m,_,?Wte,?Ote);
@@ -108,7 +102,7 @@ void main()
 {
   //@ close create_mutex_ghost_args(0,nil);
   struct mutex *m = create_mutex();
-  //@ close create_condvar_ghost_args(m,1,false,vtrn);
+  //@ close create_condvar_ghost_args(m,1,false,no_transfer);
   struct condvar *v = create_condvar();
   struct barrier *b = malloc(sizeof(struct barrier));
   if (b==0)

@@ -1,0 +1,7 @@
+.provides ./queues.h#create_queue
+.provides ./queues.h#dispose_queue
+.provides ./queues.h#size_of
+.provides ./queues.h#dequeue
+.provides ./queues.h#enqueue
+.predicate @./queues.h#queue
+.structure @./queues.h#queue
