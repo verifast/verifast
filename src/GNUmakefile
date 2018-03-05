@@ -348,7 +348,7 @@ vfconfig_autogen:
 .PHONY: vfconfig_autogen 
 clean::
 	rm -f vfconfig.ml
-AUTOGENERATE_TARGETS += vfversion_autogen
+AUTOGENERATE_TARGETS += vfconfig_autogen
 
 # We only want to rebuild vfversion.ml and everything that depends on it
 # when it actually changes. But make itself causes vfversion.ml to change,
@@ -598,6 +598,7 @@ include .depend
 #------------------------------- Release ------------------------------------#
 
 VFVERSION ?= $(shell git describe --tags --always --dirty)
+export VFVERSION
 
 release: release_core
 release_core: test build
