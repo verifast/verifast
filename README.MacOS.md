@@ -1,27 +1,32 @@
-Building VeriFast on MacOS
+Building VeriFast on macOS
 ==========================
 
-Instructions:
-- Make sure that you have Homebrew installed on your machine
-- Run `setup-build.sh` from the verifast folder. (This will set up the environment)
-- Compile VeriFast release by going to the src folder and run `make -j 8`.
+Note: binary downloads are available, both ["nightly" builds](https://github.com/verifast/verifast#binaries) of the latest commit, and binaries for [named releases](https://github.com/verifast/verifast/releases).
 
+Note: The instructions below may get out of date. When that happens, please submit an issue. In the meantime, guaranteed up-to-date instructions can be found by looking at the script, [.travis.yml](https://github.com/verifast/verifast/blob/master/.travis.yml), used by the Travis CI service that automatically builds and tests VeriFast after each commit. This script first runs the command listed below `install:`, and then the command listed below `script:`.
 
-ALTERNATIVE (much harder) 
------------
-Note: You don’t need this if you use the above method
+Dependencies
+------------
 
-I successfully built VeriFast on MacOS 10.5.8.
+To install the software needed to build VeriFast, first install Xcode (at least the command-line tools) and Homebrew. Then run [setup-build.sh](https://github.com/verifast/verifast/blob/master/setup-build.sh). This script does the following:
 
-Instructions:
-- Install Xcode
-- Install Ocaml
-- Set up the gtk-osx build environment (with the jhbuild tool) as described at http://gtk-osx.sourceforge.net/
-- Inside a jhbuild shell, build lablgtk from source
-- Build VeriFast
-- To isolate the Gtk files that need to be shipped with VeriFast, use the bundling tool (ige-mac-bundler) from http://gtk-osx.sourceforge.net/ to create the example gtk-demo bundle. This will generate an application at ~/Desktop/GtkDemo.app. The VeriFast release build script will get the Gtk libraries and auxiliary files from ~/Desktop/GtkDemo.app/Contents/Resources.
-- Build the VeriFast release
+- It installs the `gtk+`, `gtksourceview`, and `vala` packages using `brew install`.
+- It installs the OCaml-based dependencies:
+  - OCaml 4.06.0
+  - Findlib 1.7.3 (for the `ocamlfind` tool, used by Z3's install script)
+  - OCaml-Num (arbitrary-precision arithmetic)
+  - Ocamlbuild (to build Camlp4)
+  - Camlp4 (an OCaml preprocessor, for the streams notation used in VeriFast's parser)
+  - Lablgtk (OCaml bindings to the GTK+ GUI toolkit)
+  - Z3 4.5.0 (a powerful theorem prover, including OCaml bindings)
+  
+  It does so by downloading a [VFDeps](http://people.cs.kuleuven.be/~bart.jacobs/verifast/vfdeps-17.12-el-capitan.txz) package from my (Bart Jacobs') homepage with pre-compiled versions of these dependencies. I created this package by running the [make_vfdeps/Makefile.deps](https://github.com/verifast/verifast/blob/master/make_vfdeps/Makefile.deps) Makefile using GNU make. Note: these binaries are location-dependent. They need to be below `/usr/local/vfdeps-17.12`; that is, extract the archive into `/usr/local`. You may need to run `sudo chown -R $(whoami):admin /usr/local` to get write access to that directory.
 
+Building VeriFast
+-----------------
 
-
-
+To build VeriFast:
+1. `cd src`
+2. Make sure all dependencies are in your `PATH`. For example: `export PATH=/usr/local/vfdeps-17.12/bin:$PATH`.
+3. Make sure the dependencies' DLLs can be found by the macOS DLL loader. For example: `export DYLD_LIBRARY_PATH=/usr/local/vfdeps-17.12/lib:$DYLD_LIBRARY_PATH`.
+4. `make`
