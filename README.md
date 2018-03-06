@@ -77,6 +77,11 @@ We gratefully acknowledge the following infrastructure providers.
 
 This work is supported in part by the Flemish Research Fund (FWO-Vlaanderen), by the EU FP7 projects SecureChange, STANCE, ADVENT, and VESSEDIA, by Microsoft Research Cambridge as part of the Verified Software Initiative, and by the Research Fund KU Leuven.
 
+Mailing lists
+-------------
+
+To be notified whenever commits are pushed to this repository, join the [verifast-commits](https://groups.google.com/forum/#!forum/verifast-commits) Google Groups forum.
+
 Third-Party Resources
 ---------------------
 
