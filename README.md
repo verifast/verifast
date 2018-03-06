@@ -32,9 +32,9 @@ Simply extract the files from the archive to any location in your filesystem. Al
 Compiling
 ---------
 
-The only build instructions that are guaranteed to work are the ones used by the build & test bots: Travis CI for Linux/x64 and macOS (see `.travis.yml`) and AppVeyor for Windows (see `appveyor.yml`).
-
-These instructions use `vfdeps` packages, created using the scripts in `make_vfdeps` (for Linux and macOS) and `make_vfdeps_win32` (for Windows).
+- [Windows](README.Windows.md)
+- [Linux](README.Linux.md)
+- [macOS](README.MacOS.md)
 
 Documentation
 -------------
