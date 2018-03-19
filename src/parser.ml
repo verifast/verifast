@@ -229,6 +229,7 @@ and
        -> type_params_pop();
           Interface (l, cn, il, fields mem, methods cn mem, instance_preds mem)::ds
      | [< d = parse_decl; ds = parse_decls_core >] -> d@ds
+     | [< '(_, Kwd ";"); ds = parse_decls_core >] -> ds
      | [< >] -> []
      end
   >] -> ds
