@@ -406,6 +406,9 @@ cd tests
   cd preprocessor_if
     mysh < run.mysh
   cd ..
+  cd string_literals
+    mysh < run.mysh
+  cd ..
   verifast_both -c test-pattern-match-constructor-subtyping.c
   verifast_both -c test-octal-number.c
   verifast_both -c integral-ghost-types.c
