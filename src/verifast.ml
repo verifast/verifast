@@ -3257,10 +3257,20 @@ let link_program vroots library_paths isLibrary allModulepaths dllManifest expor
       raise (LinkError ("Manifest file '" ^ modulepath ^ "': error parsing line: cannot find symbol '" ^ (Char.escaped symbol) ^ "'."));
     (first, second)
   in
+  let errors = ref [] in
+  let link_error msg =
+    errors := msg::!errors
+  in
+  let check_errors () =
+    if !errors <> [] then begin
+      !errors |> List.rev |> List.iter (fun msg -> print_endline msg);
+      raise (LinkError (Printf.sprintf "%d link errors" (List.length !errors)))
+    end
+  in
   let consume msg x xs =
     let rec iter xs' xs =
       match xs with
-        [] -> raise (LinkError (msg x))
+        [] -> link_error (msg x); xs'
       | (x', modp')::xs -> if x = x' then xs' @ xs else iter ((x', modp')::xs') xs
     in
     iter [] xs
@@ -3356,9 +3366,8 @@ let link_program vroots library_paths isLibrary allModulepaths dllManifest expor
                 match try_assoc dcl_part structs with
                 | Some (def_file2, _) ->
                   if def_file <> def_file2 then 
-                    raise (LinkError ("Module '" ^ modulepath ^ "': Structure " ^ dcl_part ^ " is defined twice."))
-                  else 
-                    iter0 (impls', structs', preds') mods' lines
+                    link_error ("Module '" ^ modulepath ^ "': Structure " ^ dcl_part ^ " is defined twice.");
+                  iter0 (impls', structs', preds') mods' lines
                 | None -> iter0 (impls', entry::structs', preds') mods' lines
               end
             | ".predicate" -> 
@@ -3378,9 +3387,8 @@ let link_program vroots library_paths isLibrary allModulepaths dllManifest expor
                 match try_assoc dcl_part preds with
                 | Some (def_file2, _) ->
                   if def_file <> def_file2 then
-                    raise (LinkError ("Module '" ^ modulepath ^ "': Predicates " ^ dcl_part ^ " is given a body twice."))
-                  else
-                    iter0 (impls', structs', preds') mods' lines
+                    link_error ("Module '" ^ modulepath ^ "': Predicates " ^ dcl_part ^ " is given a body twice.");
+                  iter0 (impls', structs', preds') mods' lines
                 | None -> iter0 (impls', structs', entry::preds') mods' lines
               end
             | ".provides"   ->
@@ -3394,9 +3402,11 @@ let link_program vroots library_paths isLibrary allModulepaths dllManifest expor
                 end;
                 let symbol = rebase_path symbol in
                 let entry = (symbol, manifest_path) in
-                match try_assoc0 symbol impls' with
-                | Some _ -> raise (LinkError ("Module '" ^ modulepath ^ "': Function " ^ symbol ^ " is implemented twice."))
-                | None -> iter0 (entry::impls', structs', preds') mods' lines  
+                begin match try_assoc0 symbol impls' with
+                | Some _ -> link_error ("Module '" ^ modulepath ^ "': Function " ^ symbol ^ " is implemented twice.")
+                | None -> ()
+                end;
+                iter0 (entry::impls', structs', preds') mods' lines
               end
             | ".requires"   ->
               begin
@@ -3408,9 +3418,11 @@ let link_program vroots library_paths isLibrary allModulepaths dllManifest expor
                   check_file_name path;
                 end;
                 let symbol = rebase_path symbol in
-                match try_assoc0 symbol impls' with
-                | Some _ -> iter0 (impls', structs', preds') mods' lines 
-                | None -> raise (LinkError ("Module '" ^ modulepath ^ "': unsatisfied requirement '" ^ symbol ^ "'."))
+                begin match try_assoc0 symbol impls' with
+                | Some _ -> ()
+                | None -> link_error ("Module '" ^ modulepath ^ "': unsatisfied requirement '" ^ symbol ^ "'.")
+                end;
+                iter0 (impls', structs', preds') mods' lines
               end
             | ".produces" ->
               iter0 (impls', structs', preds') ((symbol, manifest_path)::mods') lines
@@ -3430,14 +3442,17 @@ let link_program vroots library_paths isLibrary allModulepaths dllManifest expor
     begin
       let main = "CRT/prelude.h#main : main()" in 
       let main_full = (Printf.sprintf "CRT/prelude.h#main : main_full(%s)" mainModuleName) in
-      match (try_assoc main impls, try_assoc main_full impls) with
+      begin match (try_assoc main impls, try_assoc main_full impls) with
       | (None, None) ->
-          raise (LinkError ("Program does not implement a function 'main' that implements function type 'main' or 'main_full' declared in prelude.h. Use the '-shared' option to suppress this error."))
-      | _ -> consume (fun _ -> "Could not consume the main module") ("module " ^ mainModuleName) mods
+        link_error ("Program does not implement a function 'main' that implements function type 'main' or 'main_full' declared in prelude.h. Use the '-shared' option to suppress this error.")
+      | _ -> ()
+      end;
+      consume (fun _ -> "Could not consume the main module") ("module " ^ mainModuleName) mods
     end
     else
       mods
   in
+  check_errors ();
   let (impls, mods) =
     let rec iter (impls, mods) exports =
       match exports with
