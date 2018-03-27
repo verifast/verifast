@@ -84,6 +84,8 @@ object
   method type_int = (p1#type_int, p2#type_int)
   method type_real = (p1#type_real, p2#type_real)
   method type_inductive = (p1#type_inductive, p2#type_inductive)
+  method type_array a b =
+    (p1#type_array (fst a) (fst b), p2#type_array (snd a) (snd b))
   method mk_boxed_int = map {f = fun p -> p#mk_boxed_int}
   method mk_unboxed_int = map {f = fun p -> p#mk_unboxed_int}
   method mk_boxed_real = map {f = fun p -> p#mk_boxed_real}
@@ -128,6 +130,12 @@ object
   method mk_real_mul = map2 {f = fun p -> p#mk_real_mul}
   method mk_real_lt = map2 {f = fun p -> p#mk_real_lt}
   method mk_real_le = map2 {f = fun p -> p#mk_real_le}
+  method mk_select = map2 {f = fun p -> p#mk_select}
+  method mk_store = map3 {f = fun p -> p#mk_store}
+  method mk_constant s t = match t with
+    | Left t -> Left (p1#mk_constant (fst s) t)
+    | Right t -> Right (p2#mk_constant (snd s) t)
+    | Both (t1, t2) -> Both (p1#mk_constant (fst s) t1, p2#mk_constant (snd s) t2)
   method set_fpclauses ((fc1 : 'b), (fc2 : 'e)) (k : int) cs =
     (* This method is used to register a recursive definition: the function fc is defined by recursion on its
        argument number k; cs is the list of cases; each case is a pair

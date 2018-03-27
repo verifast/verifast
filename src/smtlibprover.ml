@@ -50,6 +50,7 @@ class smtlib_context input_fun output (features : string list) =
     maybe_add_statement (Smtlib.declare_sort Smtlib.inductive);
     Smtlib.inductive
   in
+  let array_type a b = Smtlib.arr a b in
   let declare_fun s sorts sort =
     let f = Smtlib.fresh_symbol s sorts sort in
     maybe_add_statement (Smtlib.declare_fun f);
@@ -118,6 +119,7 @@ class smtlib_context input_fun output (features : string list) =
     method type_int = int_type
     method type_real = real_type
     method type_inductive = inductive_type
+    method type_array a b = array_type a b
     method mk_boxed_int = Smtlib.uapp boxed_int
     method mk_unboxed_int = Smtlib.uapp unboxed_int
     method mk_boxed_bool = Smtlib.uapp boxed_bool
@@ -230,6 +232,9 @@ class smtlib_context input_fun output (features : string list) =
     method mk_real_mul = Smtlib.rmul
     method mk_real_lt = Smtlib.rlt
     method mk_real_le = Smtlib.rle
+    method mk_select = Smtlib.select
+    method mk_store = Smtlib.store
+    method mk_constant = Smtlib.constant
     method pprint = Smtlib.T.to_string
     method pprint_sort = Smtlib.Sort.to_string
     method pprint_sym = Smtlib.Sym.to_string
