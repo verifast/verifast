@@ -2492,9 +2492,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let all_funcnameterms = funcnameterms @ funcnameterms0
   
   let check_classname (pn, ilist) (l, c) =
-    match resolve Real (pn, ilist) l c classmap1 with 
+    match search2' Real c (pn,ilist) classmap1 classmap0 with
       None -> static_error l "No such class name." None
-    | Some (s, _) -> s
+    | Some s -> s
   
   let check_classnamelist (pn,ilist) is =
     List.map (check_classname (pn, ilist)) is
