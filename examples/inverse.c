@@ -35,58 +35,58 @@ fixpoint bool is_inverse(list<int> bs, pair<int, int> ia) {
     }
 }
 
-lemma void ints_split(int *array, int offset)
-    requires ints(array, ?N, ?as) &*& 0 <= offset &*& offset <= N;
-    ensures ints(array, offset, take(offset, as)) &*& ints(array + offset, N - offset, drop(offset, as));
+lemma void ints_split(int *arr, int offset)
+    requires ints(arr, ?N, ?as) &*& 0 <= offset &*& offset <= N;
+    ensures ints(arr, offset, take(offset, as)) &*& ints(arr + offset, N - offset, drop(offset, as));
 {
     if (offset == 0) {
-        close ints(array, 0, nil);
+        close ints(arr, 0, nil);
     } else {
-        open ints(array, N, as);
-        ints_split(array + 1, offset - 1);
-        close ints(array, offset, take(offset, as));
+        open ints(arr, N, as);
+        ints_split(arr + 1, offset - 1);
+        close ints(arr, offset, take(offset, as));
     }
 }
 
-lemma void ints_unseparate_same(int *array, list<int> xs)
-    requires ints(array, ?M, take(M, xs)) &*& integer(array + M, head(drop(M, xs))) &*& ints(array + M + 1, ?N, tail(drop(M, xs))) &*& length(xs) == M + N + 1;
-    ensures ints(array, M + N + 1, xs) &*& head(drop(M, xs)) == nth(M, xs);
+lemma void ints_unseparate_same(int *arr, list<int> xs)
+    requires ints(arr, ?M, take(M, xs)) &*& integer(arr + M, head(drop(M, xs))) &*& ints(arr + M + 1, ?N, tail(drop(M, xs))) &*& length(xs) == M + N + 1;
+    ensures ints(arr, M + N + 1, xs) &*& head(drop(M, xs)) == nth(M, xs);
 {
-    open ints(array, M, _);
+    open ints(arr, M, _);
     switch (drop(M, xs)) { case nil: case cons(x0, xs0): }
     if (M != 0) {
         switch (xs) {
             case nil:
             case cons(h, t):
-                ints_unseparate_same(array + 1, t);
-                close ints(array, M + N + 1, _);
+                ints_unseparate_same(arr + 1, t);
+                close ints(arr, M + N + 1, _);
         }
     }
 }
 
-lemma void ints_merge(int *array)
-    requires ints(array, ?M, ?as) &*& ints(array + M, ?N, ?bs);
-    ensures ints(array, M + N, append(as, bs));
+lemma void ints_merge(int *arr)
+    requires ints(arr, ?M, ?as) &*& ints(arr + M, ?N, ?bs);
+    ensures ints(arr, M + N, append(as, bs));
 {
-    open ints(array, M, _);
+    open ints(arr, M, _);
     if (M != 0) {
-        ints_merge(array + 1);
-        close ints(array, M + N, append(as, bs));
+        ints_merge(arr + 1);
+        close ints(arr, M + N, append(as, bs));
     }
 }
 
-lemma void ints_unseparate(int *array, int i, list<int> xs)
-    requires ints(array, i, take(i, xs)) &*& integer(array + i, ?y) &*& ints(array + i + 1, length(xs) - i - 1, tail(drop(i, xs)));
-    ensures ints(array, length(xs), update(i, y, xs));
+lemma void ints_unseparate(int *arr, int i, list<int> xs)
+    requires ints(arr, i, take(i, xs)) &*& integer(arr + i, ?y) &*& ints(arr + i + 1, length(xs) - i - 1, tail(drop(i, xs)));
+    ensures ints(arr, length(xs), update(i, y, xs));
 {
-    open ints(array, _, _);
+    open ints(arr, _, _);
     if (i == 0) {
         switch (xs) { case nil: case cons(x, xs0): }
     } else {
         switch (xs) { case nil: case cons(x, xs0): }
-        ints_unseparate(array + 1, i - 1, tail(xs));
+        ints_unseparate(arr + 1, i - 1, tail(xs));
     }
-    close ints(array, length(xs), update(i, y, xs));
+    close ints(arr, length(xs), update(i, y, xs));
 }
 
 lemma void forall_with_index_take_is_inverse(list<int> as, int i, list<int> bs, int ai, int k)

@@ -12,11 +12,11 @@ fixpoint int length<t>(list<t> xs) {
     }
 }
 
-predicate custom_chars(char *array, int size, list<char> cs);
+predicate custom_chars(char *arr, int size, list<char> cs);
 
 lemma_auto void custom_chars_inv();
-    requires [?f]custom_chars(?array, ?count, ?cs);
-    ensures [f]custom_chars(array, count, cs) &*& length(cs) == count;
+    requires [?f]custom_chars(?arr, ?count, ?cs);
+    ensures [f]custom_chars(arr, count, cs) &*& length(cs) == count;
 
 predicate malloc_block(void *p; int size);
 

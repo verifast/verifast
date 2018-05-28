@@ -22,10 +22,10 @@ lemma void equal_identifiers(int id1, int id2);
 
 @*/
 
-void write_identifier(char *array, int id);
+void write_identifier(char *arr, int id);
   /*@ requires [_]public_invar(?pub) &*&
-               chars(array, ID_SIZE, _); @*/
-  /*@ ensures  crypto_chars(normal, array, ID_SIZE, ?ccs) &*&
+               chars(arr, ID_SIZE, _); @*/
+  /*@ ensures  crypto_chars(normal, arr, ID_SIZE, ?ccs) &*&
                ccs == cs_to_ccs(identifier(id)) &*&
                [_]public_ccs(ccs); @*/
 
@@ -35,10 +35,10 @@ predicate check_identifier_ghost_args(bool sym, bool garbage, int p, int p_key,
   true;
 @*/
 
-void check_identifier(char *array, int id);
+void check_identifier(char *arr, int id);
   /*@ requires [_]public_invar(?pub) &*&
                [_]decryption_key_classifier(?key_classifier) &*&
-               [?f]crypto_chars(normal, array, ID_SIZE, ?ccs) &*&
+               [?f]crypto_chars(normal, arr, ID_SIZE, ?ccs) &*&
                check_identifier_ghost_args(?sym, ?garbage, ?p, ?p_key,
                                            ?c_key, ?ccs_rest) &*&
                garbage ?
@@ -47,7 +47,7 @@ void check_identifier(char *array, int id);
                  s == known_value(0, cs_to_ccs(identifier(id)))
                :
                  true; @*/
-  /*@ ensures  [f]crypto_chars(normal, array, ID_SIZE, ccs) &*&
+  /*@ ensures  [f]crypto_chars(normal, arr, ID_SIZE, ccs) &*&
                ccs == cs_to_ccs(identifier(id)) &*&
                garbage ?
                  decryption_permission(p) &*&

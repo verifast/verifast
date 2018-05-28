@@ -16,24 +16,24 @@ predicate element(list<byte> values, int offset; byte value) =
 
 public final class MyApplet extends Applet {
     static byte someByteArray[];
-    
+
     /*@
-    
+
     predicate valid() =
-        someByteArray |-> ?array &*&
-        array_slice(array, 0, array.length, _) &*& 20 <= array.length;
-    
+        someByteArray |-> ?arr &*&
+        array_slice(arr, 0, arr.length, _) &*& 20 <= arr.length;
+
     @*/
-    
+
     // Example init data:
     // 5,1,2,3,4,5,  // AID
     // 0,  // info
     // 1,20 // applet data
-    public static void install(byte[] array, short offset, byte length)
+    public static void install(byte[] arr, short offset, byte length)
         /*@
         requires
             class_init_token(MyApplet.class) &*&
-            array_slice(array, offset, length, ?values) &*&
+            array_slice(arr, offset, length, ?values) &*&
             length_value_record(values, 0, ?oInfo) &*&
             length_value_record(values, oInfo, ?oAppData) &*&
             element(values, oAppData, _) &*&
@@ -45,23 +45,23 @@ public final class MyApplet extends Applet {
         //@ ensures true;
     {
         //@ init_class(MyApplet.class);
-        
+
         // make all my allocations here, so I do not run
         // out of memory later
         MyApplet theApplet = new MyApplet();
-        
+
         // check incoming parameter data
         //@ open length_value_record(values, 0, oInfo);
-        byte iLen = array[offset]; // aid length
+        byte iLen = arr[offset]; // aid length
         offset = (short)(offset + iLen + 1);
         //@ open length_value_record(values, oInfo, oAppData);
-        byte cLen = array[offset]; // info length
+        byte cLen = arr[offset]; // info length
         offset = (short)(offset + cLen + 1);
         //@ open element(values, oAppData, _);
-        byte aLen = array[offset]; // applet data length
+        byte aLen = arr[offset]; // applet data length
         //@ open element(values, oAppData + 1, _);
         // read first applet data byte
-        byte bLen = array[(short)(offset + 1)];
+        byte bLen = arr[(short)(offset + 1)];
         if (bLen != 0) {
             someByteArray = new byte[bLen];
             //@ close theApplet.valid();
@@ -70,7 +70,7 @@ public final class MyApplet extends Applet {
         } else
             ISOException.throwIt(ISO7816.SW_FUNC_NOT_SUPPORTED);
     }
-    
+
     public boolean select()
         //@ requires current_applet(this) &*& [1/2]this.valid();
         //@ ensures current_applet(this) &*& [1/2]this.valid();
@@ -83,7 +83,7 @@ public final class MyApplet extends Applet {
         JCSystem.commitTransaction();
         return true;
     }
-    
+
     public void process(APDU apdu)
         //@ requires current_applet(this) &*& [1/2]this.valid() &*& APDU(apdu, ?buffer0) &*& array_slice(buffer0, 0, buffer0.length, _);
         //@ ensures current_applet(this) &*& [1/2]this.valid() &*& APDU(apdu, buffer0) &*& array_slice(buffer0, 0, buffer0.length, _);

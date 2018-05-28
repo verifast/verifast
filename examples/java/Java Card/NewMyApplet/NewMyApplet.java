@@ -34,40 +34,40 @@ predicate element(list<byte> values, int offset; byte value) =
     offset < length(values) &*&
     value == nth(offset, values);
 
-predicate optional_data_records(byte[] array, int start, int count;) =
+predicate optional_data_records(byte[] arr, int start, int count;) =
     count == 0 ?
         true
     :
         0 < count &*&
-        array[start..start + 2] |-> _ &*&
-        array[start + 2] |-> ?length &*& 0 <= length &*& length <= NewMyApplet.MAX_LEN_OPTIONAL_DATA &*&
-        array[start + 3..start + 3 + NewMyApplet.MAX_LEN_OPTIONAL_DATA] |-> _ &*&
-        optional_data_records(array, start + 3 + NewMyApplet.MAX_LEN_OPTIONAL_DATA, count - 1);
+        arr[start..start + 2] |-> _ &*&
+        arr[start + 2] |-> ?length &*& 0 <= length &*& length <= NewMyApplet.MAX_LEN_OPTIONAL_DATA &*&
+        arr[start + 3..start + 3 + NewMyApplet.MAX_LEN_OPTIONAL_DATA] |-> _ &*&
+        optional_data_records(arr, start + 3 + NewMyApplet.MAX_LEN_OPTIONAL_DATA, count - 1);
 
-lemma void optional_data_records_split(byte[] array, int start, int offset)
-    requires [?f]optional_data_records(array, start, ?count) &*& 0 <= offset &*& offset <= count;
-    ensures [f]optional_data_records(array, start, offset) &*& [f]optional_data_records(array, start + offset * 13, count - offset);
+lemma void optional_data_records_split(byte[] arr, int start, int offset)
+    requires [?f]optional_data_records(arr, start, ?count) &*& 0 <= offset &*& offset <= count;
+    ensures [f]optional_data_records(arr, start, offset) &*& [f]optional_data_records(arr, start + offset * 13, count - offset);
 {
     if (offset == 0) {
-        close [f]optional_data_records(array, start, 0);
+        close [f]optional_data_records(arr, start, 0);
     } else {
-        open optional_data_records(array, start, count);
-        optional_data_records_split(array, start + 13, offset - 1);
-        close [f]optional_data_records(array, start, offset);
+        open optional_data_records(arr, start, count);
+        optional_data_records_split(arr, start + 13, offset - 1);
+        close [f]optional_data_records(arr, start, offset);
     }
 }
 
-lemma void optional_data_records_merge(byte[] array, int start)
-    requires [?f]optional_data_records(array, start, ?count1) &*& [f]optional_data_records(array, start + count1 * 13, ?count2);
-    ensures [f]optional_data_records(array, start, count1 + count2) &*& 0 <= count1 + count2;
+lemma void optional_data_records_merge(byte[] arr, int start)
+    requires [?f]optional_data_records(arr, start, ?count1) &*& [f]optional_data_records(arr, start + count1 * 13, ?count2);
+    ensures [f]optional_data_records(arr, start, count1 + count2) &*& 0 <= count1 + count2;
 {
-    open optional_data_records(array, start, count1);
+    open optional_data_records(arr, start, count1);
     if (count1 == 0) {
-        open optional_data_records(array, start, count2);
-        close [f]optional_data_records(array, start, count2);
+        open optional_data_records(arr, start, count2);
+        close [f]optional_data_records(arr, start, count2);
     } else {
-        optional_data_records_merge(array, start + 13);
-        close [f]optional_data_records(array, start, count1 + count2);
+        optional_data_records_merge(arr, start + 13);
+        close [f]optional_data_records(arr, start, count1 + count2);
     }
 }
 
@@ -161,7 +161,7 @@ public final class NewMyApplet extends Applet {
   {
 	NewMyAppletPointsObject = new NewMyAppletPoints();
 	//@ NewMyAppletPointsObject.applet = this;
-		
+
     by_MaxNbRecord   = byMaxNbRecord;
     by_MaxSizeRecord = byMaxSizeRecord;
 
@@ -687,24 +687,24 @@ public final class NewMyApplet extends Applet {
     //@ ensures current_applet(this) &*& [1/2]valid();
   {
 	AID NewEid_AID = JCSystem.lookupAID(NewEidAID,(short)0, (byte)NewEidAID.length);
-		
+
 	if (NewEid_AID == null)
 		ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
-		
+
 	JCSystem.beginTransaction(); // Added for VeriFast
 	NewEidPointsObject = (INewEidPoints)
 		(JCSystem.getAppletShareableInterfaceObject(NewEid_AID, (byte) 0x00));
-		
+
 	INewEidPoints newEidPoints = NewEidPointsObject;
 	byte points = Points;
-	
+
 	if (newEidPoints != null) {
 	    points = newEidPoints.sharePoints(points);
 	}
-	
+
 	Points = points;
 	JCSystem.commitTransaction(); // Added for VeriFast
-		
+
   }
 
   private void askForPayment()
@@ -712,16 +712,16 @@ public final class NewMyApplet extends Applet {
     //@ ensures current_applet(this) &*& [1/2]valid();
   {
 	AID NewEPurse_AID = JCSystem.lookupAID(NewEPurseAID,(short)0, (byte)NewEPurseAID.length);
-		
+
 	if (NewEPurse_AID == null)
 		ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
-		
+
 	JCSystem.beginTransaction(); // Added for VeriFast
 	NewEPurseDebitObject = (IEPurseServicesDebit)
 		(JCSystem.getAppletShareableInterfaceObject(NewEPurse_AID, (byte) 0x00));
 	IEPurseServicesDebit newEPurseDebitObject = NewEPurseDebitObject;
 	byte points = Points;
-		
+
 	if (newEPurseDebitObject != null) {
         //@ Shareable epurseServiceSIO = newEPurseDebitObject;
         //@ assert epurseServiceSIO.Shareable(?epurseApplet1);
@@ -737,11 +737,11 @@ public final class NewMyApplet extends Applet {
         //@ set_current_applet(this);
         //@ foreachp_remove<Applet>(this, as2);
         }
-	
+
 	NewEPurseCreditObject = (IEPurseServicesCredit)
 	(JCSystem.getAppletShareableInterfaceObject(NewEPurse_AID, (byte) 0x01));
 	IEPurseServicesCredit newEPurseCreditObject = NewEPurseCreditObject;
-	
+
 	if (newEPurseCreditObject != null) {
         //@ Shareable epurseServiceSIO = newEPurseCreditObject;
         //@ assert epurseServiceSIO.Shareable(?epurseApplet2);
@@ -757,25 +757,25 @@ public final class NewMyApplet extends Applet {
         //@ set_current_applet(this);
         //@ foreachp_remove<Applet>(this, as2);
         }
-	
+
 	JCSystem.commitTransaction(); // Added for VeriFast
   }
-  
+
   public Shareable getShareableInterfaceObject(AID oAid, byte bArg)
         //@ requires [1/2]this.valid() &*& registered_applets(?as) &*& foreachp(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& AID(oAid);
         //@ ensures [1/2]this.valid() &*& registered_applets(as) &*& foreachp(remove<Applet>(this, as), semi_valid) &*& AID(oAid) &*& result == null ? true : result.Shareable(?a) &*& mem<Applet>(a, as) == true;
   {
-		
+
 		//check if AID is allowed
 		//@ NewMyAppletPointsObject.getShareable();
-		
+
 		if (bArg == (byte)0x0) // Based on argument, return
 												// object reference
 			return (Shareable) (NewMyAppletPointsObject);
 
-          else 
+          else
 			    ISOException.throwIt(ISO7816.SW_WRONG_DATA);
-		
+
 		return null;
 	}
 }

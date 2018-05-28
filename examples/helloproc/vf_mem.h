@@ -4,7 +4,7 @@
 /* Credits: vf_kmalloc* is based on VeriFast's malloc.h. */
 
 
-//@ predicate vf_kmalloc_block(void *array, int size);
+//@ predicate vf_kmalloc_block(void *arr, int size);
 
 
 void vf_kfree(void *ptr);
@@ -61,7 +61,7 @@ void *vf_kzalloc(int size);
 
 
 /**
- * vf_memcpy - Copies count bytes from src to dest. 
+ * vf_memcpy - Copies count bytes from src to dest.
  *
  * Overlap is not allowed.  Copying 0 bytes is not allowed.
  */
@@ -88,4 +88,3 @@ void vf_memcpy(void *dest, void *src, int count);
 
 
 #endif /* VF_MEM_H */
-

@@ -13,62 +13,62 @@ lemma void close_public_generated(list<char> cs)
   leak public_generated(pub)(cs);
 }
 
-lemma void public_cryptogram(char *array, cryptogram cg)
+lemma void public_cryptogram(char *arr, cryptogram cg)
   requires [_]public_invar(?pub) &*&
-           [?f]cryptogram(array, ?n, ?cs, cg) &*&
+           [?f]cryptogram(arr, ?n, ?cs, cg) &*&
            [_]pub(cg);
-  ensures  [f]chars(array, n, cs);
+  ensures  [f]chars(arr, n, cs);
 {
-  open [f]cryptogram(array, n, cs, cg);
+  open [f]cryptogram(arr, n, cs, cg);
   if (!col)
   {
     dummy_foreach_singleton(pub, cg);
     close_public_generated(cs);
-    public_crypto_chars(array, n);
+    public_crypto_chars(arr, n);
   }
   else
   {
-    crypto_chars_to_chars(array, n);
+    crypto_chars_to_chars(arr, n);
   }
 }
 
-lemma void public_chars_extract(char *array, cryptogram cg)
+lemma void public_chars_extract(char *arr, cryptogram cg)
   requires [_]public_invar(?pub) &*&
-           [?f]chars(array, ?n, ?cs) &*&
+           [?f]chars(arr, ?n, ?cs) &*&
            cs == chars_for_cg(cg);
-  ensures  [f]chars(array, n, cs) &*&
+  ensures  [f]chars(arr, n, cs) &*&
            true == cg_is_generated(cg) &*& [_]pub(cg);
 {
-  public_chars(array, n);
+  public_chars(arr, n);
   open [_]public_generated(pub)(cs);
   dummy_foreach_extract(cg, cgs_in_chars(cs));
 }
 
-lemma void public_crypto_chars_extract(char *array, cryptogram cg)
+lemma void public_crypto_chars_extract(char *arr, cryptogram cg)
   requires [_]public_invar(?pub) &*&
-           [?f]crypto_chars(_, array, ?n, ?cs) &*&
+           [?f]crypto_chars(_, arr, ?n, ?cs) &*&
            cs == chars_for_cg(cg) &*&
            [_]public_generated(pub)(cs);
-  ensures  [f]chars(array, n, cs) &*&
+  ensures  [f]chars(arr, n, cs) &*&
            true == cg_is_generated(cg) &*& [_]pub(cg);
 {
   open [_]public_generated(pub)(cs);
   dummy_foreach_extract(cg, cgs_in_chars(cs));
-  public_crypto_chars(array, n);
+  public_crypto_chars(arr, n);
 }
 
-lemma void public_cryptogram_extract(char *array)
+lemma void public_cryptogram_extract(char *arr)
   requires [_]public_invar(?pub) &*&
-           [?f]cryptogram(array, ?n, ?cs, ?cg) &*&
+           [?f]cryptogram(arr, ?n, ?cs, ?cg) &*&
            [_]public_generated(pub)(cs);
-  ensures  [f]cryptogram(array, n, cs, cg) &*&
+  ensures  [f]cryptogram(arr, n, cs, cg) &*&
            col ? true : [_]pub(cg);
 {
-  open [f]cryptogram(array, n, cs, cg);
-  if (!col) public_crypto_chars_extract(array, cg);
-  if (col) crypto_chars_to_chars(array, n);
-  chars_to_secret_crypto_chars(array, n);
-  close [f]cryptogram(array, n, cs, cg);
+  open [f]cryptogram(arr, n, cs, cg);
+  if (!col) public_crypto_chars_extract(arr, cg);
+  if (col) crypto_chars_to_chars(arr, n);
+  chars_to_secret_crypto_chars(arr, n);
+  close [f]cryptogram(arr, n, cs, cg);
 }
 
 lemma void public_generated(predicate(cryptogram) pub,
@@ -138,7 +138,7 @@ lemma void public_generated_join(predicate(cryptogram) pub,
   dummy_foreach_union(cgs1, cgs2);
   dummy_foreach_subset(cgs_in_chars(cs3), union(cgs1, cgs2));
   forall_union(cgs1, cgs2, cg_is_generated);
-  forall_subset(cgs3, union(cgs1, cgs2), 
+  forall_subset(cgs3, union(cgs1, cgs2),
                 cg_is_generated);
   close public_generated(pub)(cs3);
   leak public_generated(pub)(cs3);

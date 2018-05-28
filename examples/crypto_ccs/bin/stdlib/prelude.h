@@ -93,34 +93,34 @@ lemma_auto(chars_of_pointer(pointer_of_chars(cs))) void chars_of_pointer_of_char
     ensures chars_of_pointer(pointer_of_chars(cs)) == cs;
 
 
-predicate chars(char *array, int count; list<char> cs) =
+predicate chars(char *arr, int count; list<char> cs) =
     count == 0 ?
         cs == nil
     :
-        character(array, ?c) &*& chars(array + 1, count - 1, ?cs0) &*& cs == cons(c, cs0);
+        character(arr, ?c) &*& chars(arr + 1, count - 1, ?cs0) &*& cs == cons(c, cs0);
 
 lemma_auto void chars_inv();
-    requires [?f]chars(?array, ?count, ?cs);
-    ensures [f]chars(array, count, cs) &*& length(cs) == count;
+    requires [?f]chars(?arr, ?count, ?cs);
+    ensures [f]chars(arr, count, cs) &*& length(cs) == count;
 
 lemma void chars_zero();
     requires [?f]chars(0, _, ?cs);
     ensures cs == nil;
 
-lemma void chars_limits(char *array);
-    requires [?f]chars(array, ?n, ?cs) &*& (char *)0 <= array &*& array <= (char *)UINTPTR_MAX;
-    ensures [f]chars(array, n, cs) &*& (char *)0 <= array &*& array + n <= (char *)UINTPTR_MAX;
+lemma void chars_limits(char *arr);
+    requires [?f]chars(arr, ?n, ?cs) &*& (char *)0 <= arr &*& arr <= (char *)UINTPTR_MAX;
+    ensures [f]chars(arr, n, cs) &*& (char *)0 <= arr &*& arr + n <= (char *)UINTPTR_MAX;
 
-lemma_auto void chars_split(char *array, int offset);
-   requires [?f]chars(array, ?n, ?cs) &*& 0 <= offset &*& offset <= n;
+lemma_auto void chars_split(char *arr, int offset);
+   requires [?f]chars(arr, ?n, ?cs) &*& 0 <= offset &*& offset <= n;
    ensures
-       [f]chars(array, offset, take(offset, cs))
-       &*& [f]chars(array + offset, n - offset, drop(offset, cs))
+       [f]chars(arr, offset, take(offset, cs))
+       &*& [f]chars(arr + offset, n - offset, drop(offset, cs))
        &*& append(take(offset, cs), drop(offset, cs)) == cs;
 
-lemma_auto void chars_join(char *array);
-    requires [?f]chars(array, ?n, ?cs) &*& [f]chars(array + n, ?n0, ?cs0);
-    ensures [f]chars(array, n + n0, append(cs, cs0));
+lemma_auto void chars_join(char *arr);
+    requires [?f]chars(arr, ?n, ?cs) &*& [f]chars(arr + n, ?n0, ?cs0);
+    ensures [f]chars(arr, n + n0, append(cs, cs0));
 
 fixpoint int int_of_chars(list<char> cs);
 fixpoint list<char> chars_of_int(int i);
@@ -217,16 +217,16 @@ lemma_auto void uchars_inv();
     requires [?f]uchars(?p, ?count, ?cs);
     ensures [f]uchars(p, count, cs) &*& count == length(cs) &*& true == ((char *)0 <= (void *)p) &*& p + count <= (void *)UINTPTR_MAX;
 
-lemma_auto void uchars_split(unsigned char *array, int offset);
-   requires [?f]uchars(array, ?n, ?cs) &*& 0 <= offset &*& offset <= n;
+lemma_auto void uchars_split(unsigned char *arr, int offset);
+   requires [?f]uchars(arr, ?n, ?cs) &*& 0 <= offset &*& offset <= n;
    ensures
-       [f]uchars(array, offset, take(offset, cs))
-       &*& [f]uchars(array + offset, n - offset, drop(offset, cs))
+       [f]uchars(arr, offset, take(offset, cs))
+       &*& [f]uchars(arr + offset, n - offset, drop(offset, cs))
        &*& append(take(offset, cs), drop(offset, cs)) == cs;
 
-lemma_auto void uchars_join(unsigned char *array);
-    requires [?f]uchars(array, ?n, ?cs) &*& [f]uchars((void *)array + n, ?n0, ?cs0);
-    ensures [f]uchars(array, n + n0, append(cs, cs0));
+lemma_auto void uchars_join(unsigned char *arr);
+    requires [?f]uchars(arr, ?n, ?cs) &*& [f]uchars((void *)arr + n, ?n0, ?cs0);
+    ensures [f]uchars(arr, n + n0, append(cs, cs0));
 
 predicate ints(int *p, int count; list<int> vs) =
     count == 0 ?
@@ -248,7 +248,7 @@ lemma_auto void uints_inv();
     requires [?f]uints(?p, ?count, ?vs);
     ensures [f]uints(p, count, vs) &*& count == length(vs);
 
-predicate llongs(long long *p, int count; list<long long> ls) = 
+predicate llongs(long long *p, int count; list<long long> ls) =
     count == 0 ?
         ls == nil
     :
@@ -258,7 +258,7 @@ lemma_auto void llongs_inv();
     requires [?f]llongs(?p, ?count, ?vs);
     ensures [f]llongs(p, count, vs) &*& count == length(vs);
 
-predicate ullongs(unsigned long long *p, int count; list<unsigned long long> ls) = 
+predicate ullongs(unsigned long long *p, int count; list<unsigned long long> ls) =
     count == 0 ?
         ls == nil
     :
@@ -449,7 +449,7 @@ fixpoint bool is_action_permission0(predicate(box;) p);
 lemma void action_permission0_unique(predicate(box;) p, box id);
   requires [?f]p(id) &*& is_action_permission0(p) == true;
   ensures [f]p(id) &*& f <= 1;
-  
+
 fixpoint bool is_action_permission1_dispenser<t>(predicate(box, list<t>) p);
 fixpoint predicate(box, t) get_action_permission1_for_dispenser<t>(predicate(box, list<t>) p);
 
@@ -464,13 +464,13 @@ lemma void action_permission1_split2<t>(predicate(box, list<t>) dispenser, predi
 lemma void action_permission1_merge<t>(predicate(box, list<t>) dispenser, predicate(box, t) p, box id, t x);
   requires is_action_permission1_dispenser(dispenser) == true &*& dispenser(id, ?used) &*& get_action_permission1_for_dispenser(dispenser) == p &*& p(id, x);
   ensures dispenser(id, remove(x, used));
-  
+
 fixpoint bool is_action_permission1<t>(predicate(box, t;) p);
 
 lemma void action_permission1_unique<t>(predicate(box, t;) p, box id, t x);
   requires [?f]p(id, x) &*& is_action_permission1<t>(p) == true;
   ensures [f]p(id, x) &*& f <= 1;
-  
+
 predicate is_handle(handle ha);
 
 lemma void is_handle_unique(handle ha1, handle ha2);

@@ -67,77 +67,77 @@ fixpoint boolean Class_lt(Class c1, Class c2);
 predicate call_perm_(Class c;);
 predicate call_below_perm_(Class c;);
 
-predicate array_element<T>(T[] array, int index; T value);
-predicate array_slice<T>(T[] array, int start, int end; list<T> elements);
-predicate array_slice_deep<T, A, V>(T[] array, int start, int end, predicate(A, T; V) p, A info; list<T> elements, list<V> values);
+predicate array_element<T>(T[] arr, int index; T value);
+predicate array_slice<T>(T[] arr, int start, int end; list<T> elements);
+predicate array_slice_deep<T, A, V>(T[] arr, int start, int end, predicate(A, T; V) p, A info; list<T> elements, list<V> values);
 
 lemma_auto void array_element_inv<T>();
-    requires [?f]array_element<T>(?array, ?index, ?value);
-    ensures [f]array_element<T>(array, index, value) &*& array != null &*& 0 <= index &*& index < array.length;
+    requires [?f]array_element<T>(?arr, ?index, ?value);
+    ensures [f]array_element<T>(arr, index, value) &*& arr != null &*& 0 <= index &*& index < arr.length;
 
 lemma_auto void array_slice_inv<T>();
-    requires [?f]array_slice<T>(?array, ?start, ?end, ?elems);
-    ensures [f]array_slice<T>(array, start, end, elems) &*& array != null &*& 0 <= start &*& start <= end &*& end <= array.length &*& start + length(elems) == end &*& end <= Integer.MAX_VALUE;
+    requires [?f]array_slice<T>(?arr, ?start, ?end, ?elems);
+    ensures [f]array_slice<T>(arr, start, end, elems) &*& arr != null &*& 0 <= start &*& start <= end &*& end <= arr.length &*& start + length(elems) == end &*& end <= Integer.MAX_VALUE;
 
 lemma_auto void array_slice_deep_inv<T, A, V>();
-    requires [?f]array_slice_deep<T, A, V>(?array, ?start, ?end, ?p, ?info, ?elems, ?vs);
-    ensures [f]array_slice_deep<T, A, V>(array, start, end, p, info, elems, vs) &*& array != null &*& 0 <= start &*& start <= end &*& end <= array.length &*& start + length(elems) == end &*& start + length(vs) == end;
+    requires [?f]array_slice_deep<T, A, V>(?arr, ?start, ?end, ?p, ?info, ?elems, ?vs);
+    ensures [f]array_slice_deep<T, A, V>(arr, start, end, p, info, elems, vs) &*& arr != null &*& 0 <= start &*& start <= end &*& end <= arr.length &*& start + length(elems) == end &*& start + length(vs) == end;
 
-lemma void array_slice_deep_close<T, A, V>(T[] array, int start, predicate(A, T; V) p, A a);
-    requires [?f]array_slice<T>(array, start, start + 1, ?elems) &*& [f]p(a, head(elems), ?v);
-    ensures [f]array_slice_deep<T, A, V>(array, start, start + 1, p, a, elems, cons(v, nil));
+lemma void array_slice_deep_close<T, A, V>(T[] arr, int start, predicate(A, T; V) p, A a);
+    requires [?f]array_slice<T>(arr, start, start + 1, ?elems) &*& [f]p(a, head(elems), ?v);
+    ensures [f]array_slice_deep<T, A, V>(arr, start, start + 1, p, a, elems, cons(v, nil));
 
-lemma void array_slice_deep_close_precise<T, A, V>(real f, T[] array, int start, predicate(A, T; V) p, A a);
-    requires [f]array_slice<T>(array, start, start + 1, ?elems) &*& [f]p(a, head(elems), ?v);
-    ensures [f]array_slice_deep<T, A, V>(array, start, start + 1, p, a, elems, cons(v, nil));
+lemma void array_slice_deep_close_precise<T, A, V>(real f, T[] arr, int start, predicate(A, T; V) p, A a);
+    requires [f]array_slice<T>(arr, start, start + 1, ?elems) &*& [f]p(a, head(elems), ?v);
+    ensures [f]array_slice_deep<T, A, V>(arr, start, start + 1, p, a, elems, cons(v, nil));
 
-lemma void array_slice_deep_open<T, A, V>(T[] array, int start);
-    requires array_slice_deep<T, A, V>(array, start, start + 1, ?p, ?a, ?elems, ?vs);
-    ensures array_slice<T>(array, start, start + 1, elems) &*& p(a, head(elems), head(vs));
+lemma void array_slice_deep_open<T, A, V>(T[] arr, int start);
+    requires array_slice_deep<T, A, V>(arr, start, start + 1, ?p, ?a, ?elems, ?vs);
+    ensures array_slice<T>(arr, start, start + 1, elems) &*& p(a, head(elems), head(vs));
 
-lemma void array_slice_deep_open_precise<T, A, V>(real f, T[] array, int start);
-    requires [f]array_slice_deep<T, A, V>(array, start, start + 1, ?p, ?a, ?elems, ?vs);
-    ensures [f]array_slice<T>(array, start, start + 1, elems) &*& [f]p(a, head(elems), head(vs)) &*& elems == cons(head(elems), tail(elems)) &*& vs == cons(head(vs), tail(vs));
+lemma void array_slice_deep_open_precise<T, A, V>(real f, T[] arr, int start);
+    requires [f]array_slice_deep<T, A, V>(arr, start, start + 1, ?p, ?a, ?elems, ?vs);
+    ensures [f]array_slice<T>(arr, start, start + 1, elems) &*& [f]p(a, head(elems), head(vs)) &*& elems == cons(head(elems), tail(elems)) &*& vs == cons(head(vs), tail(vs));
 
-lemma void array_slice_split<T>(T[] array, int start, int start1);
-    requires array_slice<T>(array, start, ?end, ?elems) &*& start <= start1 &*& start1 <= end;
+lemma void array_slice_split<T>(T[] arr, int start, int start1);
+    requires array_slice<T>(arr, start, ?end, ?elems) &*& start <= start1 &*& start1 <= end;
     ensures
-        array_slice<T>(array, start, start1, take(start1 - start, elems)) &*&
-        array_slice<T>(array, start1, end, drop(start1 - start, elems)) &*&
+        array_slice<T>(arr, start, start1, take(start1 - start, elems)) &*&
+        array_slice<T>(arr, start1, end, drop(start1 - start, elems)) &*&
         elems == append(take(start1 - start, elems), drop(start1 - start, elems));
 
-lemma void array_slice_join<T>(T[] array, int start);
+lemma void array_slice_join<T>(T[] arr, int start);
     requires
-        array_slice<T>(array, start, ?start1, ?elems1) &*& array_slice<T>(array, start1, ?end, ?elems2);
-    ensures array_slice<T>(array, start, end, append(elems1, elems2));
+        array_slice<T>(arr, start, ?start1, ?elems1) &*& array_slice<T>(arr, start1, ?end, ?elems2);
+    ensures array_slice<T>(arr, start, end, append(elems1, elems2));
 
-lemma void array_slice_deep_split<T, A, V>(T[] array, int start, int start1);
-    requires [?f]array_slice_deep<T, A, V>(array, start, ?end, ?p, ?a, ?elems, ?vs) &*& start <= start1 &*& start1 <= end;
+lemma void array_slice_deep_split<T, A, V>(T[] arr, int start, int start1);
+    requires [?f]array_slice_deep<T, A, V>(arr, start, ?end, ?p, ?a, ?elems, ?vs) &*& start <= start1 &*& start1 <= end;
     ensures
-        [f]array_slice_deep<T, A, V>(array, start, start1, p, a, take(start1 - start, elems), take(start1 - start, vs)) &*&
-        [f]array_slice_deep<T, A, V>(array, start1, end, p, a, drop(start1 - start, elems), drop(start1 - start, vs));
+        [f]array_slice_deep<T, A, V>(arr, start, start1, p, a, take(start1 - start, elems), take(start1 - start, vs)) &*&
+        [f]array_slice_deep<T, A, V>(arr, start1, end, p, a, drop(start1 - start, elems), drop(start1 - start, vs));
 
-lemma void array_slice_deep_split_precise<T, A, V>(real f, T[] array, int start, int end, predicate(A, T; V) p, A a, int start1);
-    requires [f]array_slice_deep<T, A, V>(array, start, end, p, a, ?elems, ?vs) &*& start <= start1 &*& start1 <= end;
+lemma void array_slice_deep_split_precise<T, A, V>(real f, T[] arr, int start, int end, predicate(A, T; V) p, A a, int start1);
+    requires [f]array_slice_deep<T, A, V>(arr, start, end, p, a, ?elems, ?vs) &*& start <= start1 &*& start1 <= end;
     ensures
-        [f]array_slice_deep<T, A, V>(array, start, start1, p, a, take(start1 - start, elems), take(start1 - start, vs)) &*&
-        [f]array_slice_deep<T, A, V>(array, start1, end, p, a, drop(start1 - start, elems), drop(start1 - start, vs));
+        [f]array_slice_deep<T, A, V>(arr, start, start1, p, a, take(start1 - start, elems), take(start1 - start, vs)) &*&
+        [f]array_slice_deep<T, A, V>(arr, start1, end, p, a, drop(start1 - start, elems), drop(start1 - start, vs));
 
-lemma void array_slice_deep_join<T, A, V>(T[] array, int start);
+lemma void array_slice_deep_join<T, A, V>(T[] arr, int start);
     requires
-        array_slice_deep<T, A, V>(array, start, ?start1, ?p, ?a, ?elems1, ?vs1) &*&
-        array_slice_deep<T, A, V>(array, start1, ?end, p, a, ?elems2, ?vs2);
-    ensures array_slice_deep<T, A, V>(array, start, end, p, a, append(elems1, elems2), append(vs1, vs2));
+        array_slice_deep<T, A, V>(arr, start, ?start1, ?p, ?a, ?elems1, ?vs1) &*&
+        array_slice_deep<T, A, V>(arr, start1, ?end, p, a, ?elems2, ?vs2);
+    ensures array_slice_deep<T, A, V>(arr, start, end, p, a, append(elems1, elems2), append(vs1, vs2));
 
-lemma void array_slice_deep_join_precise<T, A, V>(real f, T[] array, int start, int start1, predicate(A, T; V) p, A a, int end);
+lemma void array_slice_deep_join_precise<T, A, V>(real f, T[] arr, int start, int start1, predicate(A, T; V) p, A a, int end);
     requires
-        [f]array_slice_deep<T, A, V>(array, start, start1, p, a, ?elems1, ?vs1) &*&
-        [f]array_slice_deep<T, A, V>(array, start1, end, p, a, ?elems2, ?vs2);
-    ensures [f]array_slice_deep<T, A, V>(array, start, end, p, a, append(elems1, elems2), append(vs1, vs2));
+        [f]array_slice_deep<T, A, V>(arr, start, start1, p, a, ?elems1, ?vs1) &*&
+        [f]array_slice_deep<T, A, V>(arr, start1, end, p, a, ?elems2, ?vs2);
+    ensures [f]array_slice_deep<T, A, V>(arr, start, end, p, a, append(elems1, elems2), append(vs1, vs2));
 
-lemma void array_slice_deep_empty_close<T, A, V>(T[] array, int start, predicate(A, T; V) p, A a);
-    requires array != null &*& 0 <= start &*& start <= array.length;
-    ensures array_slice_deep<T, A, V>(array, start, start, p, a, nil, nil);
+lemma void array_slice_deep_empty_close<T, A, V>(T[] arr, int start, predicate(A, T; V) p, A a);
+    requires arr != null &*& 0 <= start &*& start <= arr.length;
+    ensures array_slice_deep<T, A, V>(arr, start, start, p, a, nil, nil);
 
 predicate exists<t>(t x;) = true;
 
@@ -295,11 +295,11 @@ fixpoint array_slice_elems drop_dynamic(int n, array_slice_elems es) {
 
 inductive array_slice_elemtype = array_slice_byte | array_slice_int | array_slice_Object;
 
-predicate array_slice_dynamic(array_slice_elemtype type, Object array, int start, int end; array_slice_elems elems) =
+predicate array_slice_dynamic(array_slice_elemtype type, Object arr, int start, int end; array_slice_elems elems) =
     switch (type) {
-        case array_slice_byte: return array_slice<byte>(^array, start, end, ?bs) &*& elems == array_slice_bytes(bs);
-        case array_slice_int: return array_slice<int>(^array, start, end, ?is) &*& elems == array_slice_ints(is);
-        case array_slice_Object: return array_slice<Object>(^array, start, end, ?os) &*& elems == array_slice_Objects(os);
+        case array_slice_byte: return array_slice<byte>(^arr, start, end, ?bs) &*& elems == array_slice_bytes(bs);
+        case array_slice_int: return array_slice<int>(^arr, start, end, ?is) &*& elems == array_slice_ints(is);
+        case array_slice_Object: return array_slice<Object>(^arr, start, end, ?os) &*& elems == array_slice_Objects(os);
     };
 
 predicate arraycopy_pre(array_slice_elemtype type, boolean overlap, real frac, Object src, int srcPos, int length, array_slice_elems elems, Object dest, int destPos;) =

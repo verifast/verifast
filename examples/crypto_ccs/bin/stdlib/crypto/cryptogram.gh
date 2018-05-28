@@ -29,8 +29,8 @@ fixpoint bool cg_is_gen_or_pub(cryptogram cg);
 //Associated information of a cryptogram
 fixpoint int cg_info(cryptogram cg);
 
-predicate cryptogram(char* array, int len, list<crypto_char> ccs, cryptogram cg) =
-  crypto_chars(secret, array, len, ccs) &*&
+predicate cryptogram(char* arr, int len, list<crypto_char> ccs, cryptogram cg) =
+  crypto_chars(secret, arr, len, ccs) &*&
   ccs == ccs_for_cg(cg) && cg_is_gen_or_pub(cg)
 ;
 
@@ -91,18 +91,18 @@ lemma cryptogram ccs_for_cg_sur(list<crypto_char> ccs, tag t);
 //Proven lemmas
 
 lemma_auto void cryptogram();
-  requires [?f]cryptogram(?array, ?count, ?ccs, ?cg);
-  ensures  [f]cryptogram(array, count, ccs, cg) &*&
+  requires [?f]cryptogram(?arr, ?count, ?ccs, ?cg);
+  ensures  [f]cryptogram(arr, count, ccs, cg) &*&
            ccs == ccs_for_cg(cg) && cg_is_gen_or_pub(cg);
 
 lemma_auto void cryptogram_inv();
-  requires [?f]cryptogram(?array, ?count, ?cs, ?cg);
-  ensures  [f]cryptogram(array, count, cs, cg) &*& length(cs) == count;
+  requires [?f]cryptogram(?arr, ?count, ?cs, ?cg);
+  ensures  [f]cryptogram(arr, count, cs, cg) &*& length(cs) == count;
 
-lemma void cryptogram_limits(char *array);
-  requires [?f]cryptogram(array, ?count, ?cs, ?cg) &*&
-           true == ((char *)0 <= array) &*& array <= (char *)UINTPTR_MAX;
-  ensures  [f]cryptogram(array, count, cs, cg) &*&
-           true == ((char *)0 <= array) &*& array + count <= (char *)UINTPTR_MAX;
+lemma void cryptogram_limits(char *arr);
+  requires [?f]cryptogram(arr, ?count, ?cs, ?cg) &*&
+           true == ((char *)0 <= arr) &*& arr <= (char *)UINTPTR_MAX;
+  ensures  [f]cryptogram(arr, count, cs, cg) &*&
+           true == ((char *)0 <= arr) &*& arr + count <= (char *)UINTPTR_MAX;
 
 #endif

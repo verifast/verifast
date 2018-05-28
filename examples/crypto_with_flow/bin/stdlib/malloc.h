@@ -8,9 +8,9 @@ lemma_auto void malloc_block_null();
     requires emp;
     ensures malloc_block(0, 0);
 
-lemma void malloc_block_limits(void *array);
-    requires [?f]malloc_block(array, ?size);
-    ensures [f]malloc_block(array, size) &*& true == ((void *)0 <= array) &*& 0 <= size &*& array + size <= (void *)UINTPTR_MAX;
+lemma void malloc_block_limits(void *arr);
+    requires [?f]malloc_block(arr, ?size);
+    ensures [f]malloc_block(arr, size) &*& true == ((void *)0 <= arr) &*& 0 <= size &*& arr + size <= (void *)UINTPTR_MAX;
 
 @*/
 
@@ -25,8 +25,8 @@ void *malloc(int size);
             true == ((char *)0 < result && result + size <= (char *)UINTPTR_MAX); // one-past-end does not overflow
     @*/
 
-void free(void *array);
-    //@ requires malloc_block(array, ?size) &*& chars(array, size, ?cs);
+void free(void *arr);
+    //@ requires malloc_block(arr, ?size) &*& chars(arr, size, ?cs);
     //@ ensures emp;
 
 #endif
