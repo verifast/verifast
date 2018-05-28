@@ -256,9 +256,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (ProverBool, ProverInductive) -> ctxt#mk_boxed_bool t
     | (ProverInt, ProverInductive) -> ctxt#mk_boxed_int t
     | (ProverReal, ProverInductive) -> ctxt#mk_boxed_real t
+    | (ProverArray, ProverInductive) -> ctxt#mk_boxed_array t
     | (ProverInductive, ProverBool) -> ctxt#mk_unboxed_bool t
     | (ProverInductive, ProverInt) -> ctxt#mk_unboxed_int t
     | (ProverInductive, ProverReal) -> ctxt#mk_unboxed_real t
+    | (ProverInductive, ProverArray) -> ctxt#mk_unboxed_array t
     | (t1, t2) when t1 = t2 -> t
 
   let typenode_of_provertype t =
@@ -267,6 +269,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ProverBool -> ctxt#type_bool
     | ProverReal -> ctxt#type_real
     | ProverInductive -> ctxt#type_inductive
+    | ProverArray -> ctxt#type_array ctxt#type_inductive ctxt#type_inductive
 
   let mk_symbol s domain range kind =
     ctxt#mk_symbol (mk_ident s) domain range kind
@@ -325,6 +328,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     (* Using expressions of the types below as values is wrong, but we must not crash here because this function is in some cases called by the type checker before it detects that there is a problem and produces a proper error message. *)
     | ClassOrInterfaceName n -> ProverInt
     | PackageName n -> ProverInt
+    | StructArray _ -> ProverArray
 
   let typenode_of_type t = typenode_of_provertype (provertype_of_type t)
 
@@ -1342,6 +1346,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | StaticArrayTypeExpr (l, t, s) ->
         let tp = check t in
         StaticArrayType(tp, s)
+    | StructArrayTypeExpr (l, tes) ->
+       begin match tes with
+       | [t1; t2] -> StructArray (check t1, check t2)
+       | _ -> static_error l "Array take two argument (key,value)" None
+       end
     | IdentTypeExpr (l, None, id) ->
       if List.mem id tpenv then
         TypeParam id
@@ -1446,6 +1455,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | InductiveType (i, targs) -> InductiveType (i, List.map (instantiate_type tpenv) targs)
     | PredType ([], pts, inputParamCount, inductiveness) -> PredType ([], List.map (instantiate_type tpenv) pts, inputParamCount, inductiveness)
     | PureFuncType (t1, t2) -> PureFuncType (instantiate_type tpenv t1, instantiate_type tpenv t2)
+    | StructArray (t1, t2) -> StructArray (instantiate_type tpenv t1, instantiate_type tpenv t2)
     | InferredType (_, t) ->
       begin match !t with
         None -> assert false
@@ -1677,6 +1687,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (PredType ([], ts1, inputParamCount1, inductiveness1), PredType ([], ts2, inputParamCount2, inductiveness2)) ->
       for_all2 unify ts1 ts2 && inputParamCount1 = inputParamCount2 && inductiveness1 = inductiveness2
     | (ArrayType t1, ArrayType t2) -> unify t1 t2
+    | (StructArray (t1, t2), StructArray (t1', t2')) ->
+       unify t1 t1' && unify t2 t2'
     | (PtrType t1, PtrType t2) -> compatible_pointees t1 t2
     | (t1, t2) -> t1 = t2
 
@@ -1689,6 +1701,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (ArrayType et, ArrayType et0) when et = et0 -> ()
     | (ArrayType (ObjType objtype), ArrayType (ObjType objtype0)) -> expect_type_core l msg None (ObjType objtype) (ObjType objtype0)
     | (StaticArrayType _, PtrType _) -> ()
+    | (StructArray (t1, t2), StructArray (t1', t2')) ->
+       expect_type_core l msg inAnnotation t1 t1';
+       expect_type_core l msg inAnnotation t2 t2'
     | (Int (Signed, m), Int (Signed, n)) when m <= n -> ()
     | (Int (Unsigned, m), Int (Unsigned, n)) when m <= n -> ()
     | (Int (Unsigned, m), Int (Signed, n)) when m < n -> ()
@@ -1877,7 +1892,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               assert (tps = []);
               List.iter (fun t -> check_type true t) pts
             | PureFuncType (t1, t2) ->
-              check_type true t1; check_type negative t2
+               check_type true t1; check_type negative t2
+            | StructArray(t1, t2) ->
+               begin match t1 with
+               | TypeParam _ -> check_type false t2
+               | _ -> check_type true t1; check_type false t2
+               end
             | t -> static_error l (Printf.sprintf "Type '%s' is not supported as an inductive constructor parameter type." (string_of_type t)) None
           in
           let (_, parameter_types) = List.split parameter_names_and_types in
@@ -1913,6 +1933,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               | TypeParam _ -> true  (* Should be checked at instantiation site. *)
               | PredType (tps, pts, _, _) -> true
               | PureFuncType (t1, t2) -> type_is_inhabited t2
+              | StructArray (t1, t2) ->
+                 type_is_inhabited t1 && type_is_inhabited t2
               | InductiveType (i0, tps) ->
                 List.for_all type_is_inhabited tps &&
                 begin match try_assoc i0 inhabited_map with
@@ -1954,6 +1976,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | TypeParam x -> Some [x]
             | Int (_, _) | RealType | PtrType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> None
             | PureFuncType (_, _) -> None (* CAVEAT: This assumes we do *not* have extensionality *)
+            | StructArray (t1, t2) ->
+               begin match type_is_infinite t1, type_is_infinite t2 with
+               | Some t1, Some t2 -> Some (t1@t2)
+               | _, Some t | Some t, _ -> Some t
+               | _ -> None
+               end
             | InductiveType (i0, targs) ->
               begin match try_assoc i0 infinite_map with
                 Some (info0, status0) ->
@@ -2003,6 +2031,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | TypeParam x -> true
     | Int (_, _) | RealType | PtrType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> true
     | PureFuncType (t1, t2) -> is_universal_type t1 && is_universal_type t2
+    | StructArray(t1, t2) -> is_universal_type t1 && is_universal_type t2
     | InductiveType (i0, targs) ->
       let (_, _, _, cond) = List.assoc i0 inductivemap in
       cond <> Some [] && List.for_all is_universal_type targs

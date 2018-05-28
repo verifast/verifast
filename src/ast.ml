@@ -95,6 +95,7 @@ type type_ = (* ?type_ *)
   | PackageName of string (* not a real type; used only during type checking *)
   | RefType of type_ (* not a real type; used only for locals whose address is taken *)
   | AbstractType of string
+  | StructArray of type_ * type_
 
 type integer_limits = {max_unsigned_big_int: big_int; min_signed_big_int: big_int; max_signed_big_int: big_int}
 
@@ -141,7 +142,8 @@ let is_arithmetic_type t =
     Int (_, _)|RealType|Float|Double|LongDouble -> true
   | _ -> false
 
-type prover_type = ProverInt | ProverBool | ProverReal | ProverInductive (* ?prover_type *)
+type prover_type = ProverInt | ProverBool | ProverReal | ProverInductive
+                   | ProverArray(* ?prover_type *)
 
 (** An object used in predicate assertion ASTs. Created by the parser and filled in by the type checker.
     TODO: Since the type checker now generates a new AST anyway, we can eliminate this hack. *)
@@ -179,6 +181,7 @@ type type_expr = (* ?type_expr *)
   | PtrTypeExpr of loc * type_expr
   | ArrayTypeExpr of loc * type_expr
   | StaticArrayTypeExpr of loc * type_expr (* type *) * int (* number of elements*)
+  | StructArrayTypeExpr of loc * type_expr list (* domain and range *)
   | ManifestTypeExpr of loc * type_  (* A type expression that is obviously a given type. *)
   | IdentTypeExpr of loc * string option (* package name *) * string
   | ConstructedTypeExpr of loc * string * type_expr list  (* A type of the form x<T1, T2, ...> *)
@@ -874,6 +877,7 @@ let type_expr_loc t =
   | ArrayTypeExpr(l, te) -> l
   | PredTypeExpr(l, te, _) -> l
   | PureFuncTypeExpr (l, tes) -> l
+  | StructArrayTypeExpr (l, _) -> l
 
 let expr_fold_open iter state e =
   let rec iters state es =

@@ -71,6 +71,7 @@ let rec string_of_type t =
   | StructType sn -> "struct " ^ sn
   | PtrType t -> string_of_type t ^ " *"
   | FuncType ft -> ft
+  | StructArray (t1, t2) -> "array(" ^ string_of_type t1 ^ "," ^ string_of_type t2 ^ ")"
   | PredType (tparams, ts, inputParamCount, inductiveness) ->
     let tparamsText = if tparams = [] then "" else "<" ^ String.concat ", " tparams ^ ">" in
     let paramTypesText =

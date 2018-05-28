@@ -92,6 +92,8 @@ object
   method mk_unboxed_real = map {f = fun p -> p#mk_unboxed_real}
   method mk_boxed_bool = map {f = fun p -> p#mk_boxed_bool}
   method mk_unboxed_bool = map {f = fun p -> p#mk_unboxed_bool}
+  method mk_boxed_array = map {f = fun p -> p#mk_boxed_array}
+  method mk_unboxed_array = map {f = fun p -> p#mk_unboxed_array}
   method mk_symbol s l (ty1, ty2) k =
     (p1#mk_symbol s (List.map fst l) ty1 k,
      p2#mk_symbol s (List.map snd l) ty2 k)

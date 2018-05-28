@@ -28,7 +28,7 @@ let ghost_keywords = [
   "produce_lemma_function_pointer_chunk"; "duplicate_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
   "producing_box_predicate"; "producing_handle_predicate"; "producing_fresh_handle_predicate"; "box"; "handle"; "any"; "split_fraction"; "by"; "merge_fractions";
   "unloadable_module"; "decreases"; "forall_"; "import_module"; "require_module"; ".."; "extends"; "permbased";
-  "terminates"; "abstract_type"
+  "terminates"; "abstract_type"; "array"
 ]
 
 let c_keywords = [
@@ -787,6 +787,7 @@ and
      '(_, Kwd ")")
   >] -> begin match ts' with None -> PredTypeExpr (l, ts, None) | Some ts' -> PredTypeExpr (l, ts @ ts', Some (List.length ts)) end
 | [< '(l, Kwd "fixpoint"); '(_, Kwd "("); ts = rep_comma parse_paramtype; '(_, Kwd ")") >] -> PureFuncTypeExpr (l, ts)
+| [< '(l, Kwd "array"); '(_, Kwd "("); ts = rep_comma parse_paramtype; '(_, Kwd ")") >] -> StructArrayTypeExpr (l, ts)
 | [< '(l, Kwd "box") >] -> ManifestTypeExpr (l, BoxIdType)
 | [< '(l, Kwd "handle") >] -> ManifestTypeExpr (l, HandleIdType)
 | [< '(l, Kwd "any") >] -> ManifestTypeExpr (l, AnyType)

@@ -642,9 +642,11 @@ and context () =
     val real_lt_symbol = new symbol Uninterp "</"
     val int_div_symbol = new symbol Uninterp "/"
     val int_mod_symbol = new symbol Uninterp "%"
+
     val select_symbol = new symbol Uninterp "select"
     val store_symbol = new symbol Uninterp "store"
     val constant_symbol = new symbol Uninterp "constant"
+
     val mutable numnodes: termnode NumMap.t = NumMap.empty (* Sorted *)
     val mutable ttrue = None
     val mutable tfalse = None
@@ -782,6 +784,8 @@ and context () =
     method mk_unboxed_real (t: (symbol, termnode) term) = t
     method mk_boxed_bool (t: (symbol, termnode) term) = t
     method mk_unboxed_bool (t: (symbol, termnode) term) = t
+    method mk_boxed_array (t: (symbol, termnode) term) = t
+    method mk_unboxed_array (t: (symbol, termnode) term) = t
     method mk_true: (symbol, termnode) term = True
     method mk_false: (symbol, termnode) term = False
     method mk_and (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = And (t1, t2)

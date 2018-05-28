@@ -24,6 +24,8 @@ class virtual ['typenode, 'symbol, 'termnode] context =
     method virtual mk_unboxed_real: 'termnode -> 'termnode
     method virtual mk_boxed_bool: 'termnode -> 'termnode
     method virtual mk_unboxed_bool: 'termnode -> 'termnode
+    method virtual mk_boxed_array: 'termnode -> 'termnode
+    method virtual mk_unboxed_array: 'termnode -> 'termnode
     method virtual mk_symbol: string -> 'typenode list -> 'typenode -> symbol_kind -> 'symbol
     method virtual set_fpclauses: 'symbol -> int -> ('symbol * ('termnode list -> 'termnode list -> 'termnode)) list -> unit
     method virtual mk_app: 'symbol -> 'termnode list -> 'termnode
