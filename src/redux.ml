@@ -642,7 +642,7 @@ and context () =
     val real_lt_symbol = new symbol Uninterp "</"
     val int_div_symbol = new symbol Uninterp "/"
     val int_mod_symbol = new symbol Uninterp "%"
-    
+
     val mutable numnodes: termnode NumMap.t = NumMap.empty (* Sorted *)
     val mutable ttrue = None
     val mutable tfalse = None
@@ -660,7 +660,7 @@ and context () =
     val mutable formal_depth = 0  (* If formal_depth = 0, App terms are eagerly turned into E-graph nodes. *)
     (* For diagnostics only. *)
     val mutable values = []
-    
+
     (* Statistics *)
     val mutable max_truenode_childcount = 0
     val mutable max_falsenode_childcount = 0
@@ -672,13 +672,13 @@ and context () =
     val mutable axioms: (string * int ref) list = []
     val assumes_with_pending_splits = Array.make 30 0
     val mutable assumes_with_more_pending_splits = 0
-    
+
     val mutable verbosity = 0
-    
+
     method verbosity = verbosity
-    
+
     method set_verbosity v = verbosity <- v
-    
+
     method report_truenode_childcount n =
       if n > max_truenode_childcount then max_truenode_childcount <- n
     method report_falsenode_childcount n =
@@ -730,19 +730,19 @@ and context () =
         axiomTriggerCounts
       in
         (text, ["Time spent in query, assume, push, pop", Stopwatch.ticks stopwatch; "Time spent in Simplex", simplex#get_ticks])
-    
+
     initializer
       simplex#register_listeners (fun u1 u2 -> simplex_eqs <- (u1, u2)::simplex_eqs) (fun u n -> simplex_consts <- (u, n)::simplex_consts);
       ttrue <- Some (self#get_node (self#mk_symbol "true" [] () (Ctor (CtorByOrdinal 0))) []);
       tfalse <- Some (self#get_node (self#mk_symbol "false" [] () (Ctor (CtorByOrdinal 1))) [])
-    
+
     method simplex = simplex
     method eq_symbol = eq_symbol
     method iff_symbol = iff_symbol
-    
+
     method register_valuenode v =
       values <- v::values
-    
+
     method get_numnode n =
       try
         NumMap.find n numnodes
@@ -768,7 +768,7 @@ and context () =
 
     method true_node = let Some ttrue = ttrue in ttrue
     method false_node = let Some tfalse = tfalse in tfalse
-    
+
     method type_bool = ()
     method type_int = ()
     method type_real = ()
@@ -805,11 +805,11 @@ and context () =
     method mk_real_mul (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Mul (t1, t2)
     method mk_real_lt (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = RealLt (t1, t2)
     method mk_real_le (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = RealLe (t1, t2)
-    
+
     method simplex_assert_eq n ts =
       if verbosity > 10 then printff "Redux.simplex_assert_eq %s [%s]\n" (Num.string_of_num n) (String.concat "; " (List.map (fun (scale, u) -> Num.string_of_num scale ^ ", " ^ (the (Simplex.unknown_tag u))#pprint) ts));
       simplex#assert_eq n ts
-    
+
     method assume_core (t: (symbol, termnode) term): assume_result3 =
       assume_core_count <- assume_core_count + 1;
       (* print_endline ("Assume: " ^ self#pprint t); *)
@@ -884,7 +884,7 @@ and context () =
       let result = assume_true t in
       if verbosity > 3 then printff "Exiting Redux.assume_core\n";
       result
-    
+
     method assume_with_implications t =
       if verbosity > 2 then begin printff "Entering Redux.assume_with_implications(%s)\n" (self#pprint t) end;
       let result =
@@ -897,7 +897,7 @@ and context () =
       in
       if verbosity > 2 then begin printff "Exiting Redux.assume_with_implications\n" end;
       result
-    
+
     method assume_internal t =
       let time0 = if verbosity > 1 then begin printff "%10.6fs: Entering Redux.assume_internal(%s)\n" (Perf.time()) (self#pprint t); Perf.time() end else 0.0 in
       let result =
@@ -910,14 +910,14 @@ and context () =
       in
       if verbosity > 1 then begin let time1 = Perf.time() in printff "%10.6fs: Exiting Redux.assume_internal: %.6f seconds\n" time1 (time1 -. time0) end;
       result
-    
+
     method register_pending_splits_count =
       let pendingSplitsCount = self#count_pending_splits in
       if pendingSplitsCount < Array.length assumes_with_pending_splits then
         assumes_with_pending_splits.(pendingSplitsCount) <- assumes_with_pending_splits.(pendingSplitsCount) + 1
       else
         assumes_with_more_pending_splits <- assumes_with_more_pending_splits + 1;
-    
+
     method assert_term t =
       let time0 = if verbosity > 0 then begin printff "%10.6fs: Entering       Redux.assert_term(%s)\n" (Perf.time()) (self#pprint t); Perf.time() end else 0.0 in
       Stopwatch.start stopwatch;
@@ -925,7 +925,7 @@ and context () =
       ignore (self#assume_internal t);
       Stopwatch.stop stopwatch;
       if verbosity > 0 then begin let time1 = Perf.time() in printff "%10.6fs: Exiting Redux.assert_term: %.6f seconds\n" time1 (time1 -. time0) end
-    
+
     method assume t =
       let time0 = if verbosity > 0 then begin printff "%10.6fs: Entering Redux.assume(%s)\n" (Perf.time()) (self#pprint t); Perf.time() end else 0.0 in
       Stopwatch.start stopwatch;
@@ -946,9 +946,9 @@ and context () =
       Stopwatch.stop stopwatch;
       if verbosity > 0 then printff "%10.6fs: Exiting Redux.query\n" (Perf.time());
       result = Unsat
-    
+
     method get_type (term: (symbol, termnode) term) = ()
-    
+
     method termnode_of_term t =
       let get_node s ts = self#get_node s (List.map (fun t -> (self#termnode_of_term t)#value) ts) in
       match t with
@@ -987,7 +987,7 @@ and context () =
       Stopwatch.start stopwatch;
       self#push_internal;
       Stopwatch.stop stopwatch
-    
+
     method push_internal =
       (* print_endline "Push"; *)
       self#reduce;
@@ -1000,7 +1000,7 @@ and context () =
       pushdepth <- pushdepth + 1;
       popactionlist <- [];
       simplex#push
-    
+
     method register_popaction action =
       popactionlist <- action::popactionlist
 
@@ -1008,7 +1008,7 @@ and context () =
       Stopwatch.start stopwatch;
       self#pop_internal;
       Stopwatch.stop stopwatch
-      
+
     method pop_internal =
       (* print_endline "Pop"; *)
       redexes <- [];
@@ -1027,12 +1027,12 @@ and context () =
 
     method add_redex n =
       redexes <- redexes @ [n] (* Add to end; order matters due to axiom precondition checks. *)
-    
+
     method add_implication p q =
       let is = implications in
       implications <- (p, q)::implications;
       self#register_popaction (fun () -> implications <- is)
-    
+
     method perform_implications =
       match implications with
         [] -> false
@@ -1049,7 +1049,7 @@ and context () =
             result = Unsat3
         in
         holds p && self#assume_core q = Unsat3 || self#perform_implications
-    
+
     method add_pending_split branch1 branch2 =
       (* printff "Adding pending split: (%s, %s)\n" (self#pprint branch1) (self#pprint branch2); *)
       let back = pending_splits_back in
@@ -1057,7 +1057,7 @@ and context () =
       self#register_popaction (fun () -> back := None; pending_splits_back <- back);
       pending_splits_back <- ref None;
       back := Some (`SplitNode (branch1, branch2, pending_splits_back))
-(*    
+(*
     method prune_pending_splits =
       let rec iter () =
         let rec iter0 badSplits splits =
@@ -1089,7 +1089,7 @@ and context () =
       in
       iter ()
 *)
-    
+
     method count_pending_splits =
       let rec iter n node =
         match !node with
@@ -1098,7 +1098,7 @@ and context () =
           iter (n + 1) nextNode
       in
       iter 0 pending_splits_front
-    
+
     (** If this method returns true, then the current theory is unsatisfiable. *)
     method perform_pending_splits cont =
       let rec iter assumptions currentNode =
@@ -1152,7 +1152,7 @@ and context () =
           continue
       in
       iter [] pending_splits_front
-    
+
     method prune_pending_splits =
       let rec iter () =
         let pendingSplitsFront = pending_splits_front in
@@ -1164,10 +1164,10 @@ and context () =
         | _ -> false
       in
       iter ()
-    
+
     method mk_symbol name (domain: unit list) (range: unit) kind =
       let s = new symbol kind name in if List.length domain = 0 then ignore (self#get_node s []); s
-    
+
     method set_fpclauses (s: symbol) (k: int) (cs: (symbol * ((symbol, termnode) term list -> (symbol, termnode) term list -> (symbol, termnode) term)) list) =
       s#set_fpclauses cs
 
@@ -1183,7 +1183,7 @@ and context () =
           None
       in
       App (s, ts, termnode)
-    
+
     method pprint (t: (symbol, termnode) term): string =
       match t with
         TermNode t -> t#pprint
@@ -1206,10 +1206,10 @@ and context () =
       | IfThenElse (t1, t2, t3) -> "(" ^ self#pprint t1 ^ " ? " ^ self#pprint t2 ^ " : " ^ self#pprint t3 ^ ")"
       | BoundVar i -> Printf.sprintf "bound.%i" i
       | Implies (t1, t2) -> self#pprint t1 ^ " ==> " ^ self#pprint t2
-    
+
     method pprint_sym (s : symbol) : string = s#name
     method pprint_sort (s : unit) : string = "()"
-    
+
     method get_node s vs =
       match vs with
         [] ->
@@ -1230,7 +1230,7 @@ and context () =
           node
         | Some n -> n
         end
-    
+
     method assert_neq (v1: valuenode) (v2: valuenode) =
       if verbosity > 7 then printff "assert_neq %s %s\n" (v1#pprint) (v2#pprint);
       if v1 = v2 then
@@ -1254,14 +1254,14 @@ and context () =
 
     method assert_eq_and_reduce v1 v2 =
       self#do_and_reduce (fun () -> self#assert_eq v1 v2)
-    
+
     method assume_eq (t1: termnode) (t2: termnode) = self#reduce; self#assert_eq_and_reduce t1#value t2#value
-    
+
     method assert_ge c ts =
       (* let the x = match x with Some x -> x in *)
       (* printff "assert_ge %s [%s]\n" (string_of_num c) (String.concat " " (List.map (fun (c, u) -> Printf.sprintf "%s*%s(%s)" (string_of_num c) (the (unknown_tag u))#pprint u#name) ts)); *)
       simplex#assert_ge c ts
-    
+
     method assert_le t1 offset t2 =
       let (n1, ts1) = t1#to_poly in
       let (n2, ts2) = t2#to_poly in
@@ -1280,7 +1280,7 @@ and context () =
       | Sub (_, _) -> true
       | Mul (_, _) -> true
       | _ -> false
-    
+
     method pprint_poly (offset, terms) =
       String.concat " + " (string_of_num offset::List.map (fun (t, scale) -> Printf.sprintf "%s*%s" (string_of_num scale) (t#pprint)) terms)
 
@@ -1343,7 +1343,7 @@ and context () =
           end
       in
       iter unit_num t
-    
+
     method assume_le t1 offset t2 =   (* t1 + offset <= t2 *)
       let (offset', terms) = self#to_poly (Sub (t2, t1)) in
       let offset = sub_num offset' offset in
@@ -1356,16 +1356,16 @@ and context () =
         | Simplex.Sat -> Unknown3
       )
       end
-    
+
     method assert_neq_and_reduce v1 v2 =
       self#do_and_reduce (fun () -> self#assert_neq v1 v2)
-      
+
     method assume_neq (t1: termnode) (t2: termnode) = self#reduce; self#assert_neq_and_reduce t1#value t2#value
 
     method assert_eq v1 v2 =
       if verbosity > 7 then printff "assert_eq %s %s\n" (v1#pprint) (v2#pprint);
       self#assert_eq_core false v1 v2
-    
+
     method assert_eq_core fromSimplex v1 v2 =
       (* printff "assert_eq %s %s\n" (v1#pprint) (v2#pprint); *)
       if v1 = v2 then
@@ -1382,9 +1382,9 @@ and context () =
         (* print_endline "assert_eq: merging v1 into v2"; *)
         if v1#merge_into fromSimplex v2 = Unsat then Unsat3 else Unknown3
       end
-    
+
     val mutable reducing = false
-    
+
     method pump_simplex_eqs =
       let rec iter result =
         match simplex_eqs with
@@ -1412,7 +1412,7 @@ and context () =
           | _ -> iter Unknown3
       in
       iter Valid3
-    
+
     method reduce0 =
       let rec reduce_step result =
         match redexes with
@@ -1433,7 +1433,7 @@ and context () =
       let result = iter Valid3 in
       reducing <- false;
       result
-    
+
     method reduce =
       if verbosity > 4 then printff "Entering Redux.reduce\n";
       let result =
@@ -1457,7 +1457,7 @@ and context () =
       in
       if verbosity > 4 then printff "Exiting Redux.reduce\n";
       result
-    
+
     method do_and_reduce action =
       match action() with
         Unsat3 -> Unsat3
@@ -1466,12 +1466,12 @@ and context () =
           (_, Unsat3) -> Unsat3
         | (Valid3, r) -> r
         | _ -> Unknown3
-    
+
     method dump_state =
       (* print_endline ("==== Redux query failed: State report ====");
       List.iter (fun v -> if v#initial_child#value = v then (v#dump_state)) values; *)
       ()
-      
+
     method begin_formal = formal_depth <- formal_depth + 1
     method end_formal = formal_depth <- formal_depth - 1
     method mk_bound (i: int) (s: unit): (symbol, termnode) term = BoundVar i

@@ -66,7 +66,7 @@ let string_of_inductiveness inductiveness =
   match inductiveness with
   | Inductiveness_Inductive -> "inductive"
   | Inductiveness_CoInductive -> "coinductive"
-  
+
 type signedness = Signed | Unsigned
 
 type type_ = (* ?type_ *)
@@ -155,7 +155,7 @@ class predref (name: string) = (* ?predref *)
     method inputParamCount = match inputParamCount with None -> assert false | Some c -> c
     method set_domain d = domain <- Some d
     method set_inputParamCount c = inputParamCount <- Some c
-    method is_precise = match inputParamCount with None -> assert false; | Some None -> false | Some (Some _) -> true 
+    method is_precise = match inputParamCount with None -> assert false; | Some None -> false | Some (Some _) -> true
   end
 
 type
@@ -364,7 +364,7 @@ and
       wswitch_asn_clause list
   | EmpAsn of  (* als "emp" bij requires/ensures staat -regel-*)
       loc
-  | ForallAsn of 
+  | ForallAsn of
       loc *
       type_expr *
       string *
@@ -388,16 +388,16 @@ and
 and
   switch_asn_clause = (* ?switch_asn_clause *)
   | SwitchAsnClause of
-      loc * 
-      string * 
-      string list * 
+      loc *
+      string *
+      string list *
       asn
 and
   wswitch_asn_clause = (* ?switch_asn_clause *)
   | WSwitchAsnClause of
-      loc * 
-      string * 
-      string list * 
+      loc *
+      string *
+      string list *
       prover_type option list (* Boxing info *) *
       asn
 and
@@ -431,12 +431,12 @@ and
         ghostness *
         string *
         string option (* None betekent heel package, Some string betekent 1 ding eruit *)
-and 
+and
   producing_handle_predicate =
     ConditionalProducingHandlePredicate of loc * expr (* condition *) * string (* handle name *) * (expr list) (* args *) * producing_handle_predicate
   | BasicProducingHandlePredicate of loc * string (* handle name *) * (expr list) (* args *)
 and
-  consuming_handle_predicate = 
+  consuming_handle_predicate =
     ConsumingHandlePredicate of loc * string * (pat list)
 and
   stmt = (* ?stmt *)
@@ -587,23 +587,23 @@ and
 and
   meth = (* ?meth *)
   | Meth of
-      loc * 
-      ghostness * 
-      type_expr option * 
-      string * 
-      (type_expr * string) list * 
-      (asn * asn * ((type_expr * asn) list) * bool (*terminates*) ) option * 
-      ((stmt list * loc (* Close brace *)) * int (*rank*)) option * 
-      method_binding * 
+      loc *
+      ghostness *
+      type_expr option *
+      string *
+      (type_expr * string) list *
+      (asn * asn * ((type_expr * asn) list) * bool (*terminates*) ) option *
+      ((stmt list * loc (* Close brace *)) * int (*rank*)) option *
+      method_binding *
       visibility *
       bool (* is declared abstract? *)
 and
   cons = (* ?cons *)
   | Cons of
-      loc * 
-      (type_expr * string) list * 
-      (asn * asn * ((type_expr * asn) list) * bool (*terminates*) ) option * 
-      ((stmt list * loc (* Close brace *)) * int (*rank*)) option * 
+      loc *
+      (type_expr * string) list *
+      (asn * asn * ((type_expr * asn) list) * bool (*terminates*) ) option *
+      ((stmt list * loc (* Close brace *)) * int (*rank*)) option *
       visibility
 and
   instance_pred_decl = (* ?instance_pred_decl *)
@@ -632,7 +632,7 @@ and
       string (* superclass *) *
       string list (* itfs *) *
       instance_pred_decl list
-  | Interface of 
+  | Interface of
       loc *
       string *
       string list *
@@ -675,13 +675,13 @@ and
       (stmt list * loc (* Close brace *)) option *  (* body *)
       method_binding *  (* static or instance *)
       visibility
-      
+
   (** Do not confuse with FuncTypeDecl *)
   | TypedefDecl of
       loc *
       type_expr *
       string
-      
+
   (** Used for declaring a function type like "typedef void myfunc();"
     * or "typedef lemma ..."
     *)
@@ -748,7 +748,7 @@ let func_kind_of_ghostness gh =
   match gh with
     Real -> Regular
   | Ghost -> Lemma (false, None)
-  
+
 (* Region: some AST inspector functions *)
 
 let string_of_func_kind f=
@@ -829,7 +829,7 @@ let rec expr_loc e =
   | CoefAsn (l, coef, body) -> l
   | EnsuresAsn (l, body) -> l
 let asn_loc a = expr_loc a
-  
+
 let stmt_loc s =
   match s with
     PureStmt (l, _) -> l

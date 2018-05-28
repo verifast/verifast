@@ -180,7 +180,7 @@ class z3_context () =
         | Uninterp -> ()
       end;
       c
-          
+
     method set_fpclauses fc k cs =
       List.iter
         (fun (csym, fbody) ->
@@ -258,7 +258,7 @@ class z3_context () =
     method begin_formal = ()
     method end_formal = ()
     method mk_bound (i: int) (tp: Z3native.sort) = Z3native.mk_bound ctxt i tp
-    method assume_forall (description: string) (triggers: Z3native.ast list) (tps: Z3native.sort list) (body: Z3native.ast): unit = 
+    method assume_forall (description: string) (triggers: Z3native.ast list) (tps: Z3native.sort list) (body: Z3native.ast): unit =
       if List.length tps = 0 then
         Z3native.solver_assert ctxt solver body
       else

@@ -11,7 +11,7 @@ let common_keywords = [
   "switch"; "case"; ":"; "return"; "for";
   "void"; "if"; "else"; "while"; "!="; "<"; ">"; "<="; ">="; "&&"; "++"; "--"; "+="; "-="; "*="; "/="; "&="; "|="; "^="; "%="; "<<="; ">>="; ">>>=";
   "||"; "!"; "."; "["; "]"; "{"; "break"; "default";
-  "}"; ";"; "int"; "true"; "false"; "("; ")"; ","; "="; "|"; "+"; "-"; "=="; "?"; "%"; 
+  "}"; ";"; "int"; "true"; "false"; "("; ")"; ","; "="; "|"; "+"; "-"; "=="; "?"; "%";
 (* Note: it's important for soundness that currentCodeFractions, currentThread, and varargs be considered keywords both inside and outside of annotations. *)
   "*"; "/"; "&"; "^"; "~"; "assert"; "currentCodeFraction"; "currentThread"; "varargs"; "short"; ">>"; "<<";
   "truncating"; "typedef"; "do"; "...";
@@ -24,7 +24,7 @@ let ghost_keywords = [
   "ensures"; "close"; "lemma"; "open"; "emp"; "invariant"; "lemma_auto";
   "_"; "@*/"; "predicate_family"; "predicate_family_instance"; "predicate_ctor"; "leak"; "@";
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action"; "nonghost_callers_only";
-  "create_box"; "above"; "below"; "and_handle"; "and_fresh_handle"; "create_handle"; "create_fresh_handle"; "dispose_box"; 
+  "create_box"; "above"; "below"; "and_handle"; "and_fresh_handle"; "create_handle"; "create_fresh_handle"; "dispose_box";
   "produce_lemma_function_pointer_chunk"; "duplicate_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
   "producing_box_predicate"; "producing_handle_predicate"; "producing_fresh_handle_predicate"; "box"; "handle"; "any"; "split_fraction"; "by"; "merge_fractions";
   "unloadable_module"; "decreases"; "forall_"; "import_module"; "require_module"; ".."; "extends"; "permbased";
@@ -217,7 +217,7 @@ and
   parse_decls_core = parser
   [< '((p1, _), Kwd "/*@"); ds = parse_pure_decls; '((_, p2), Kwd "@*/"); ds' = parse_decls_core >] -> ds @ ds'
 | [< _ = opt (parser [< '(_, Kwd "public") >] -> ());
-     abstract = (parser [< '(_, Kwd "abstract") >] -> true | [< >] -> false); 
+     abstract = (parser [< '(_, Kwd "abstract") >] -> true | [< >] -> false);
      final = (parser [< '(_, Kwd "final") >] -> FinalClass | [< >] -> ExtensibleClass);
      ds = begin parser
        [< '(l, Kwd "class"); '(_, Ident s); _ = type_params_parse_and_push();
@@ -241,17 +241,17 @@ and parse_qualified_type = parser
   [<'(_, Ident s); rest = parse_qualified_type_rest >] -> s ^ rest
 and
   parse_super_class= parser
-    [<'(_, Kwd "extends"); s = parse_qualified_type >] -> s 
+    [<'(_, Kwd "extends"); s = parse_qualified_type >] -> s
   | [<>] -> "java.lang.Object"
 and
   parse_interfaces= parser
-  [< '(_, Kwd "implements"); is = rep_comma (parser 
+  [< '(_, Kwd "implements"); is = rep_comma (parser
     [< i = parse_qualified_type; e=parser
       [<>]->(i)>] -> e); '(_, Kwd "{") >] -> is
 | [<'(_, Kwd "{")>]-> []
 and
   parse_extended_interfaces= parser
-  [< '(_, Kwd "extends"); is = rep_comma (parser 
+  [< '(_, Kwd "extends"); is = rep_comma (parser
     [< i = parse_qualified_type; e=parser
       [<>]->(i)>] -> e); '(_, Kwd "{") >] -> is
 | [<'(_, Kwd "{")>]-> []
@@ -299,8 +299,8 @@ and
           | [< >] -> None
           end;
          '(_, Kwd ";") >] -> PredMember(InstancePredDecl (l, g, ps, body))
-     | [< '(l, Kwd "lemma"); t = parse_return_type; 
-          '(l, Ident x); (ps, co, ss) = parse_method_rest l >] -> 
+     | [< '(l, Kwd "lemma"); t = parse_return_type;
+          '(l, Ident x); (ps, co, ss) = parse_method_rest l >] ->
         let ps = (IdentTypeExpr (l, None, cn), "this")::ps in
         MethMember(Meth (l, Ghost, t, x, ps, co, ss, Instance, vis, false))
      | [< binding = (parser [< '(_, Kwd "static") >] -> Static | [< >] -> Instance); t = parse_type; '(l, Ident x); '(_, Kwd ";") >] ->
@@ -308,7 +308,7 @@ and
     end
   >] -> m
 and
-  parse_thrown l = parser 
+  parse_thrown l = parser
   [< tp = parse_type; epost =
     begin
       parser
@@ -323,9 +323,9 @@ and
   parse_array_dims t = parser
   [< '(l, Kwd "["); '(_, Kwd "]"); t = parse_array_dims (ArrayTypeExpr (l, t)) >] -> t
 | [< >] -> t
-and 
+and
   id x = parser [< >] -> x
-and 
+and
   parse_java_modifier = parser [< '(_, Kwd "public") >] -> VisibilityModifier(Public) | [< '(_, Kwd "protected") >] -> VisibilityModifier(Protected) | [< '(_, Kwd "private") >] -> VisibilityModifier(Private) | [< '(_, Kwd "static") >] -> StaticModifier | [< '(_, Kwd "final") >] -> FinalModifier | [< '(_, Kwd "abstract") >] -> AbstractModifier
 and
   parse_java_member cn = parser
@@ -395,14 +395,14 @@ and
     let contract =
       let epost = match epost with None -> [] | Some(epost) -> epost in
       match co with
-      | Some(pre, post, terminates) -> 
-        let epost = List.map (fun (tp, e) -> 
-          (tp, match e with 
-            None -> raise (ParseException (l, "If you give a method a contract, you must also give ensures clauses for the thrown expceptions.")) | 
-            Some(e) -> e)) epost 
+      | Some(pre, post, terminates) ->
+        let epost = List.map (fun (tp, e) ->
+          (tp, match e with
+            None -> raise (ParseException (l, "If you give a method a contract, you must also give ensures clauses for the thrown expceptions.")) |
+            Some(e) -> e)) epost
         in
         Some(pre, post, epost, terminates)
-      | None -> 
+      | None ->
         if enforce_annotations then None else
         begin
          let pre = ExprAsn(l, False(l)) in
@@ -427,8 +427,8 @@ and
      '(_, Kwd "@*/");
      params = parse_paramlist
   >] ->
-    let noneToEmptyList value = 
-      match value with 
+    let noneToEmptyList value =
+      match value with
         None -> []
         | Some x -> x
     in
@@ -481,10 +481,10 @@ and
 | [< t = parse_return_type; d = parse_func_rest Regular t Public >] -> check_function_for_contract d
 and check_for_contract: 'a. 'a option -> loc -> string -> (asn * asn -> 'a) -> 'a = fun contract l m f ->
   match contract with
-    | Some spec -> spec 
-    | None -> 
-      if enforce_annotations then 
-        raise (ParseException (l, m)) 
+    | Some spec -> spec
+    | None ->
+      if enforce_annotations then
+        raise (ParseException (l, m))
       else
         f (ExprAsn(l, False(l)), ExprAsn(l, True(l)))
 
@@ -500,7 +500,7 @@ and
 | [< >] -> []
 and
   parse_index_list = parser
-  [< '(_, Kwd "("); is = rep_comma (parser 
+  [< '(_, Kwd "("); is = rep_comma (parser
     [< '(l, Ident i); e=parser
       [<'(_, Kwd ".");'(_, Kwd "class")>]-> (l,i)
       |[<>]->(l,i)>] -> e); '(_, Kwd ")") >] -> is
@@ -514,13 +514,13 @@ and
   | [< '(_, Kwd "="); p = parse_asn >] -> p
 and
   parse_pred_paramlist = parser
-    [< 
+    [<
       '(_, Kwd "("); ps = rep_comma parse_param;
       (ps, inputParamCount) = (parser [< '(_, Kwd ";"); ps' = rep_comma parse_param >] -> (ps @ ps', Some (List.length ps)) | [< >] -> (ps, None)); '(_, Kwd ")")
     >] -> (ps, inputParamCount)
 and
-  parse_predicate_decl l (inductiveness: inductiveness) = parser 
-    [< '(li, Ident g); tparams = parse_type_params li; 
+  parse_predicate_decl l (inductiveness: inductiveness) = parser
+    [< '(li, Ident g); tparams = parse_type_params li;
      (ps, inputParamCount) = parse_pred_paramlist;
      body = opt parse_pred_body;
      '(_, Kwd ";");
@@ -790,15 +790,15 @@ and
 | [< '(l, Kwd "box") >] -> ManifestTypeExpr (l, BoxIdType)
 | [< '(l, Kwd "handle") >] -> ManifestTypeExpr (l, HandleIdType)
 | [< '(l, Kwd "any") >] -> ManifestTypeExpr (l, AnyType)
-| [< '(l, Ident n); rest = rep(parser [< '(l, Kwd "."); '(l, Ident n) >] -> n); targs = parse_type_args l;  >] -> 
-    if targs <> [] then 
+| [< '(l, Ident n); rest = rep(parser [< '(l, Kwd "."); '(l, Ident n) >] -> n); targs = parse_type_args l;  >] ->
+    if targs <> [] then
       match rest with
-      | [] ->  ConstructedTypeExpr (l, n, targs) 
+      | [] ->  ConstructedTypeExpr (l, n, targs)
       | _ -> raise (ParseException (l, "Package name not supported for generic types."))
     else
       match rest with
         [] -> IdentTypeExpr(l, None, n)
-      | _ -> 
+      | _ ->
       let pac = (String.concat "." (n :: (take ((List.length rest) -1) rest))) in
       IdentTypeExpr(l, Some (pac), List.nth rest ((List.length rest) - 1))
 and
@@ -824,17 +824,17 @@ and
       fp_params = opt(parser [< '(l1, Kwd "("); fpp0 = parse_type;
         '(_, Kwd ")") >] -> fpp0) >] ->
     begin match t with
-      ManifestTypeExpr (_, Void) -> 
+      ManifestTypeExpr (_, Void) ->
       begin match pn with
         None -> (t, "")
       | Some((l, pname)) -> raise (ParseException (l, "A parameter cannot be of type void."))
       end
-    | _ -> 
+    | _ ->
       begin match pn with
         None -> raise (ParseException (type_expr_loc t, "Illegal parameter."));
-      | Some((l, pname)) -> 
+      | Some((l, pname)) ->
         begin match is_array with
-          None -> ( match fp_params with 
+          None -> ( match fp_params with
                       None -> (t, pname)
                     | Some(_) -> (t, pname) )
         | Some(_) -> (ArrayTypeExpr(type_expr_loc t, t), pname)
@@ -845,7 +845,7 @@ and
 and
   parse_param_name = parser
     [< '(l, Ident pn) >] -> Some (l, pn)
-  | [< '(l, Kwd "("); '(l, Kwd "*"); '(l, Ident pn); '(l, Kwd ")") >] -> 
+  | [< '(l, Kwd "("); '(l, Kwd "*"); '(l, Ident pn); '(l, Kwd ")") >] ->
      Some (l, pn) (* function pointer identifier *)
   | [< >] -> None
 and
@@ -909,7 +909,7 @@ and parse_producing_handle_predicate = parser
   [< '(lph, Ident post_hpn); post_hp_args = parse_arglist; >] -> (lph, post_hpn, post_hp_args)
 and
   parse_producing_handle_predicate_list = parser
-  [< '(l, Kwd "if"); '(_, Kwd "("); condition = parse_expr; '(_, Kwd ")"); (lph, post_hpn, post_hp_args) = parse_producing_handle_predicate; '(_, Kwd "else"); rest = parse_producing_handle_predicate_list >] -> ConditionalProducingHandlePredicate(lph, condition, post_hpn, post_hp_args, rest); 
+  [< '(l, Kwd "if"); '(_, Kwd "("); condition = parse_expr; '(_, Kwd ")"); (lph, post_hpn, post_hp_args) = parse_producing_handle_predicate; '(_, Kwd "else"); rest = parse_producing_handle_predicate_list >] -> ConditionalProducingHandlePredicate(lph, condition, post_hpn, post_hp_args, rest);
 | [< (lph, post_hpn, post_hp_args) = parse_producing_handle_predicate >] -> BasicProducingHandlePredicate(lph, post_hpn, post_hp_args)
 and
   parse_produce_lemma_function_pointer_chunk_stmt_function_type_clause = parser
@@ -960,7 +960,7 @@ and
 | [< '(l, Kwd "create_box"); '(_, Ident x); '(_, Kwd "="); '(_, Ident bcn); args = parse_arglist;
      lower_bounds = opt (parser [< '(l, Kwd "above"); es = rep_comma parse_expr >] -> es);
      upper_bounds = opt (parser [< '(l, Kwd "below"); es = rep_comma parse_expr >] -> es);
-     handleClauses = rep (parser 
+     handleClauses = rep (parser
        [< '(l, Kwd "and_handle"); '(_, Ident x); '(_, Kwd "="); '(_, Ident hpn); args = parse_arglist >] -> (l, x, false, hpn, args)
      | [< '(l, Kwd "and_fresh_handle"); '(_, Ident x); '(_, Kwd "="); '(_, Ident hpn); args = parse_arglist >] -> (l, x, true, hpn, args)
      );
@@ -1048,7 +1048,7 @@ and
      '(_, Kwd ";") >] ->
      PerformActionStmt (lcb, ref false, pre_bpn, pre_bp_args, consumed_handle_predicates, lpa, an, aargs, ss, closeBraceLoc, post_bp_args, produced_handles)
 | [< '(l, Kwd ";") >] -> NoopStmt l
-| [< '(l, Kwd "super"); s = parser 
+| [< '(l, Kwd "super"); s = parser
      [< '(_, Kwd "."); '(l2, Ident n); '(_, Kwd "("); es = rep_comma parse_expr; '(_, Kwd ")") >] -> ExprStmt(SuperMethodCall (l, n, es))
    | [<'(_, Kwd "("); es = rep_comma parse_expr; '(_, Kwd ")"); '(_, Kwd ";") >] -> SuperConstructorCall (l, es)
   >] -> s
@@ -1115,7 +1115,7 @@ and parse_array_braces te = parser
      end;
      '(_, Kwd "]") >] -> te
 | [< >] -> te
-and parse_create_handle_keyword = parser 
+and parse_create_handle_keyword = parser
     [< '(l, Kwd "create_handle") >] -> (l, false)
   | [< '(l, Kwd "create_fresh_handle") >] -> (l, true)
 and
@@ -1183,10 +1183,10 @@ and
 and
   parse_pointsto_expr = parser
   [< e = parse_cond_expr; e = parser
-    [< '(l, Kwd "|->"); rhs = parse_pattern >] -> 
+    [< '(l, Kwd "|->"); rhs = parse_pattern >] ->
     begin match e with
        ReadArray (_, _, SliceExpr (_, _, _)) -> PointsTo (l, e, rhs)
-     | ReadArray (lr, e0, e1) when language = CLang -> PointsTo (l, Deref(lr, Operation(lr, Add, [e0; e1]), ref None), rhs) 
+     | ReadArray (lr, e0, e1) when language = CLang -> PointsTo (l, Deref(lr, Operation(lr, Add, [e0; e1]), ref None), rhs)
      | _ -> PointsTo (l, e, rhs)
     end
   | [< >] -> e
@@ -1254,8 +1254,8 @@ and
 | [< '(l, Kwd "null") >] -> Null l
 | [< '(l, Kwd "currentThread") >] -> Var (l, "currentThread")
 | [< '(l, Kwd "varargs") >] -> Var (l, "varargs")
-| [< '(l, Kwd "new"); tp = parse_primary_type; res = (parser 
-                    [< args0 = parse_patlist >] -> 
+| [< '(l, Kwd "new"); tp = parse_primary_type; res = (parser
+                    [< args0 = parse_patlist >] ->
                     begin match tp with
                       IdentTypeExpr(_, pac, cn) -> NewObject (l, (match pac with None -> "" | Some(pac) -> pac ^ ".") ^ cn, List.map (function LitPat e -> e | _ -> raise (Stream.Error "Patterns are not allowed in this position")) args0)
                     | _ -> raise (ParseException (type_expr_loc tp, "Class name expected"))
@@ -1281,7 +1281,7 @@ and
               [<args0 = parse_patlist; (args0, args) = (parser [< args = parse_patlist >] -> (args0, args) | [< >] -> ([], args0)) >] ->
               CallExpr (lf, f, [], args0, LitPat(Var(lx,x))::args,Instance)
             | [<>] -> Read (ldot, Var(lx,x), f)
-          >]->e 
+          >]->e
       >]-> r
     | [< >] -> Var (lx, x)
   >] -> ex
@@ -1299,7 +1299,7 @@ and
 | [< '(l, Kwd "LLONG_MIN") >] -> IntLit (l, big_int_of_string "-9223372036854775808", true, false, NoLSuffix)
 | [< '(l, Kwd "LLONG_MAX") >] -> IntLit (l, big_int_of_string "9223372036854775807", true, false, NoLSuffix)
 | [< '(l, Kwd "ULLONG_MAX") >] -> IntLit (l, big_int_of_string "18446744073709551615", true, true, NoLSuffix)
-| [< '(l, String s); ss = rep (parser [< '(_, String s) >] -> s) >] -> 
+| [< '(l, String s); ss = rep (parser [< '(_, String s) >] -> s) >] ->
      (* TODO: support UTF-8 *)
      if !lexer_in_ghost_range then
        let chars = chars_of_string s in
@@ -1324,7 +1324,7 @@ and
            [< e0 = parse_expr; '(_, Kwd ")"); e = parse_expr_rest e0 >] -> e
          | [< e = parse_cast >] -> e
        in
-       begin fun stream -> 
+       begin fun stream ->
          match Stream.peek stream with
            Some (_, Ident x) when is_typedef x -> parse_cast stream
          | _ -> parse stream
@@ -1379,7 +1379,7 @@ and
      | [< '(_, Kwd "class"); e = parse_expr_suffix_rest (ClassLit (l, expr_to_class_name e0)) >] -> e
      end
   >] -> e
-| [< '(l, Kwd "["); 
+| [< '(l, Kwd "[");
      e = begin parser
        [< '(_, Kwd "]") >] -> ArrayTypeExpr' (l, e0)
      | [< p1 = opt parse_pattern;
@@ -1517,11 +1517,11 @@ let rec parse_package_name= parser
     [<'(_, Kwd ".");rest=parse_package_name>] -> n^"."^rest
   | [<'(_, Kwd ";")>] -> n
   >] -> x
-  
+
 let parse_package= parser
   [<'(l, Kwd "package");n= parse_package_name>] ->(l,n)
 | [<>] -> (dummy_loc,"")
-  
+
 let rec parse_import_names= parser
   [<'(_, Kwd ".");y=parser
         [<'(_, Kwd "*");'(_, Kwd ";")>] -> ("",None)
@@ -1533,7 +1533,7 @@ let rec parse_import_names= parser
 
 let parse_import_name= parser
   [<'(_, Ident n);(n',el)=parse_import_names>] -> (n^n',el)
-  
+
 let parse_import0= parser
   [<'(l, Kwd "import");n= parse_import_name>] -> let (pn,el)=n in Import(l,Real,pn,el)
 
@@ -1580,33 +1580,33 @@ let parse_java_file_old (path: string) (reportRange: range_kind -> loc -> unit) 
 
 type 'result parser_ = (loc * token) Stream.t -> 'result
 
-let rec parse_include_directives (ignore_eol: bool ref) (verbose: int) (enforceAnnotations: bool) (dataModel: data_model): 
+let rec parse_include_directives (ignore_eol: bool ref) (verbose: int) (enforceAnnotations: bool) (dataModel: data_model):
     ((loc * (include_kind * string * string) * string list * package list) list * string list) parser_ =
   let active_headers = ref [] in
   let test_include_cycle l totalPath =
     if List.mem totalPath !active_headers then raise (ParseException (l, "Include cycles (even with header guards) are not supported"));
   in
   let rec parse_include_directives_core header_names = parser
-  | [< (headers, header_name) = parse_include_directive; (headers', header_names') = parse_include_directives_core (header_name::header_names) >] 
+  | [< (headers, header_name) = parse_include_directive; (headers', header_names') = parse_include_directives_core (header_name::header_names) >]
           -> (List.append headers headers', header_names')
   | [< >] -> ([], header_names)
-  and parse_include_directive = 
+  and parse_include_directive =
     let isGhostHeader header = Filename.check_suffix header ".gh" in
     parser
-      [< '(l, SecondaryInclude(h, totalPath)) >] -> 
+      [< '(l, SecondaryInclude(h, totalPath)) >] ->
         if verbose = -1 then Printf.printf "%10.6fs: >>>> ignored secondary include: %s \n" (Perf.time()) totalPath;
         test_include_cycle l totalPath; ([], totalPath)
-    | [< (l,h,totalPath) = peek_in_ghost_range begin parser [< '(l, SecondaryInclude(h, p)) >] -> (l,h,p) end; '(_, Kwd "@*/") >] -> 
+    | [< (l,h,totalPath) = peek_in_ghost_range begin parser [< '(l, SecondaryInclude(h, p)) >] -> (l,h,p) end; '(_, Kwd "@*/") >] ->
         if verbose = -1 then Printf.printf "%10.6fs: >>>> ignored secondary include: %s \n" (Perf.time()) totalPath;
         test_include_cycle l totalPath; ([], totalPath)
-    | [< '(l, BeginInclude(kind, h, totalPath)); (headers, header_names) = (active_headers := totalPath::!active_headers; parse_include_directives_core []); 
+    | [< '(l, BeginInclude(kind, h, totalPath)); (headers, header_names) = (active_headers := totalPath::!active_headers; parse_include_directives_core []);
                                            ds = parse_decls CLang dataModel enforceAnnotations ~inGhostHeader:(isGhostHeader h); '(_, EndInclude) >] ->
                                                         if verbose = -1 then Printf.printf "%10.6fs: >>>> parsed include: %s \n" (Perf.time()) totalPath;
                                                         active_headers := List.filter (fun h -> h <> totalPath) !active_headers;
                                                         let ps = [PackageDecl(dummy_loc,"",[],ds)] in
                                                         (List.append headers [(l, (kind, h, totalPath), header_names, ps)], totalPath)
-    | [< (l,kind,h,totalPath) = peek_in_ghost_range begin parser [< '(l, BeginInclude(kind, h, p)) >] -> (l,kind,h,p) end; 
-                                                (headers, header_names) = (active_headers := totalPath::!active_headers; parse_include_directives_core []); 
+    | [< (l,kind,h,totalPath) = peek_in_ghost_range begin parser [< '(l, BeginInclude(kind, h, p)) >] -> (l,kind,h,p) end;
+                                                (headers, header_names) = (active_headers := totalPath::!active_headers; parse_include_directives_core []);
                                                 ds = parse_decls CLang dataModel enforceAnnotations ~inGhostHeader:(isGhostHeader h); '(_, EndInclude); '(_, Kwd "@*/") >] ->
                                                         if verbose = -1 then Printf.printf "%10.6fs: >>>> parsed include: %s \n" (Perf.time()) totalPath;
                                                         active_headers := List.filter (fun h -> h <> totalPath) !active_headers;
@@ -1615,7 +1615,7 @@ let rec parse_include_directives (ignore_eol: bool ref) (verbose: int) (enforceA
   in
   parse_include_directives_core []
 
-let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit) (verbose: int) 
+let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit) (verbose: int)
             (include_paths: string list) (define_macros: string list) (enforceAnnotations: bool) (dataModel: data_model): ((loc * (include_kind * string * string) * string list * package list) list * package list) = (* ?parse_c_file *)
   Stopwatch.start parsing_stopwatch;
   if verbose = -1 then Printf.printf "%10.6fs: >> parsing C file: %s \n" (Perf.time()) path;
@@ -1627,7 +1627,7 @@ let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (report
     let (loc, ignore_eol, token_stream) = make_preprocessor make_lexer path verbose include_paths define_macros in
     let parse_c_file =
       parser
-        [< (headers, _) = parse_include_directives ignore_eol verbose enforceAnnotations dataModel; 
+        [< (headers, _) = parse_include_directives ignore_eol verbose enforceAnnotations dataModel;
                             ds = parse_decls CLang dataModel enforceAnnotations ~inGhostHeader:false; _ = Stream.empty >] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])
     in
     try
@@ -1639,7 +1639,7 @@ let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (report
   Stopwatch.stop parsing_stopwatch;
   result
 
-let parse_header_file (path: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit) (verbose: int) 
+let parse_header_file (path: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit) (verbose: int)
          (include_paths: string list) (define_macros: string list) (enforceAnnotations: bool) (dataModel: data_model): ((loc * (include_kind * string * string) * string list * package list) list * package list) =
   Stopwatch.start parsing_stopwatch;
   if verbose = -1 then Printf.printf "%10.6fs: >> parsing Header file: %s \n" (Perf.time()) path;
@@ -1651,9 +1651,9 @@ let parse_header_file (path: string) (reportRange: range_kind -> loc -> unit) (r
     in
     let (loc, ignore_eol, token_stream) = make_preprocessor make_lexer path verbose include_paths define_macros in
     let p = parser
-      [< (headers, _) = parse_include_directives ignore_eol verbose enforceAnnotations dataModel; 
-         ds = parse_decls CLang dataModel enforceAnnotations ~inGhostHeader:isGhostHeader; 
-         _ = (fun _ -> ignore_eol := true);_ = Stream.empty 
+      [< (headers, _) = parse_include_directives ignore_eol verbose enforceAnnotations dataModel;
+         ds = parse_decls CLang dataModel enforceAnnotations ~inGhostHeader:isGhostHeader;
+         _ = (fun _ -> ignore_eol := true);_ = Stream.empty
       >] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])
     in
     try
