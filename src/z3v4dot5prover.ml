@@ -243,6 +243,7 @@ class z3_context () =
     method mk_select t1 t2 = Z3native.mk_select ctxt t1 t2
     method mk_store t1 t2 t3 = Z3native.mk_store ctxt t1 t2 t3
     method mk_constant s t = Z3native.mk_const_array ctxt s t
+    method mk_array_ext t1 t2 = Z3native.mk_array_ext ctxt t1 t2
     method get_type t = Z3native.get_sort ctxt t
     method pprint t = string_of_sexpr (simplify (parse_sexpr (Z3native.ast_to_string ctxt t)))
     method pprint_sort (s : Z3native.sort) = Z3native.ast_to_string ctxt s

@@ -646,6 +646,7 @@ and context () =
     val select_symbol = new symbol Uninterp "select"
     val store_symbol = new symbol Uninterp "store"
     val constant_symbol = new symbol Uninterp "constant"
+    val array_ext_symbol = new symbol Uninterp "array_ext"
 
     val mutable numnodes: termnode NumMap.t = NumMap.empty (* Sorted *)
     val mutable ttrue = None
@@ -815,6 +816,7 @@ and context () =
     method mk_select (t1: (symbol, termnode) term) (t2: (symbol, termnode) term) : (symbol, termnode) term = self#mk_app select_symbol [t1; t2]
     method mk_store (t1: (symbol, termnode) term) (t2: (symbol, termnode) term) (t3: (symbol, termnode) term) : (symbol, termnode) term = self#mk_app store_symbol [t1; t2; t3]
     method mk_constant () (t1: (symbol, termnode) term) : (symbol, termnode) term = self#mk_app constant_symbol [t1]
+    method mk_array_ext (t1: (symbol, termnode) term) (t2: (symbol, termnode) term)  : (symbol, termnode) term = self#mk_app array_ext_symbol [t1;t2]
     method simplex_assert_eq n ts =
       if verbosity > 10 then printff "Redux.simplex_assert_eq %s [%s]\n" (Num.string_of_num n) (String.concat "; " (List.map (fun (scale, u) -> Num.string_of_num scale ^ ", " ^ (the (Simplex.unknown_tag u))#pprint) ts));
       simplex#assert_eq n ts

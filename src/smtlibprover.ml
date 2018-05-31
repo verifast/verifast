@@ -241,6 +241,7 @@ class smtlib_context input_fun output (features : string list) =
     method mk_select = Smtlib.select
     method mk_store = Smtlib.store
     method mk_constant = Smtlib.constant
+    method mk_array_ext = Smtlib.array_ext
     method pprint = Smtlib.T.to_string
     method pprint_sort = Smtlib.Sort.to_string
     method pprint_sym = Smtlib.Sym.to_string

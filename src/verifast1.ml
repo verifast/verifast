@@ -2760,6 +2760,18 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       (unbox (WPureFunValueCall (l, w, ws)) tp, tp, None)
     in
+    let array_theory l g t args targs t0 =
+      match g, args with
+      | "store", [e0; e1; e2] ->
+         (unbox (StoreArray(l, e0, e1, e2)) t0 t, t, None)
+      | "select", [e0; e1] ->
+         (unbox (SelectArray(l, e0, e1)) t0 t, t, None)
+      | "constant_array", [e] ->
+         (unbox (ConstantArray(l, e)) t0 t, t, None)
+      | "array_ext", [e0; e1] ->
+         (unbox (ExtArray(l, e0, e1)) t0 t, t, None)
+      | _ -> (unbox (WPureFunCall (l, g, targs, args)) t0 t, t, None)
+    in
     match e with
       True l -> (e, boolt, None)
     | False l -> (e, boolt, None)
@@ -3106,7 +3118,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           let args = List.map (fun (e, t0) -> let t = instantiate_type tpenv t0 in box (checkt e t) t t0) pts in
           let t = instantiate_type tpenv t0 in
-          (unbox (WPureFunCall (l, g, targs, args)) t0 t, t, None)
+          array_theory l g t args targs t0
         | None ->
           static_error l (match language with CLang -> "No such function: " ^ g | Java -> "No such method or function: " ^ g) None
       in
@@ -5494,7 +5506,15 @@ let check_if_list_is_defined () =
     | SizeofExpr (l, ManifestTypeExpr (_, t)) ->
       cont state (sizeof l t)
     | InstanceOfExpr(l, e, ManifestTypeExpr (l2, tp)) ->
-      ev state e $. fun state v -> cont state (ctxt#mk_app instanceof_symbol [v; prover_type_term l2 tp])
+       ev state e $. fun state v -> cont state (ctxt#mk_app instanceof_symbol [v; prover_type_term l2 tp])
+    | SelectArray (_, e0, e1) ->
+       evs state [e0;e1] $. fun state [v1; v2] -> cont state (ctxt#mk_select v1 v2)
+    | StoreArray (_, e0, e1, e2) ->
+      evs state [e0; e1; e2] $. fun state [v1; v2; v3] -> cont state (ctxt#mk_store v1 v2 v3)
+    | ConstantArray (_, e) ->
+       ev state e $. fun state v -> cont state (ctxt#mk_constant ctxt#type_inductive v)
+    | ExtArray(_, e0, e1) ->
+       evs state [e0; e1] $. fun state [v0; v1] -> cont state (ctxt#mk_array_ext v0 v1)
     | _ -> static_error (expr_loc e) "Construct not supported in this position." None
 
   let rec eval_core ass_term read_field env e =

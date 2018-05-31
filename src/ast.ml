@@ -379,6 +379,10 @@ and
   | EnsuresAsn of loc * asn
   | MatchAsn of loc * expr * pat
   | WMatchAsn of loc * expr * pat * type_
+  | SelectArray of loc * expr * expr (* u get<t,u>(array(t,u),t) *)
+  | StoreArray of loc * expr * expr * expr (* array(t,u) set<t,u>(array(t,u),t,u) *)
+  | ConstantArray of loc * expr (* val *)
+  | ExtArray of loc * expr * expr
 and
   asn = expr
 and
@@ -831,6 +835,11 @@ let rec expr_loc e =
   | ForallAsn (l, tp, i, e) -> l
   | CoefAsn (l, coef, body) -> l
   | EnsuresAsn (l, body) -> l
+  | SelectArray (l, _, _) -> l
+  | StoreArray (l, _, _, _) -> l
+  | ConstantArray (l, _) -> l
+  | ExtArray (l, _, _) -> l
+
 let asn_loc a = expr_loc a
 
 let stmt_loc s =
@@ -948,7 +957,10 @@ let expr_fold_open iter state e =
   | InstanceOfExpr(l, e, tp) -> iter state e
   | SuperMethodCall(_, _, args) -> iters state args
   | WSuperMethodCall(_, _, _, args, _) -> iters state args
-
+  | SelectArray (_, e0, e1) -> iters state [e0; e1]
+  | StoreArray (_, e0, e1, e2) -> iters state [e0; e1; e2]
+  | ConstantArray (_, e) -> iter state e
+  | ExtArray (_, e0, e1) -> iters state [e0; e1]
 (* Postfix fold *)
 let expr_fold f state e = let rec iter state e = f (expr_fold_open iter state e) e in iter state e
 

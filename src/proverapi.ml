@@ -57,6 +57,7 @@ class virtual ['typenode, 'symbol, 'termnode] context =
     method virtual mk_select: 'termnode -> 'termnode -> 'termnode
     method virtual mk_store: 'termnode -> 'termnode -> 'termnode -> 'termnode
     method virtual mk_constant: 'typenode -> 'termnode -> 'termnode
+    method virtual mk_array_ext: 'termnode -> 'termnode -> 'termnode
     method virtual pprint: 'termnode -> string
     method virtual pprint_sort: 'typenode -> string
     method virtual pprint_sym: 'symbol -> string

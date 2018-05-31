@@ -154,6 +154,7 @@ module type SYMBOL = sig
   val select : sort -> sort -> t
   val store : sort -> sort -> t
   val constant : sort -> sort -> t
+  val array_ext : sort -> sort -> t
   val get_domain : t -> sort list
   val get_range : t -> sort
 
@@ -237,6 +238,9 @@ module Symbol (S : SORT) : SYMBOL with type sort = S.t = struct
   let constant =
     let name = fresh_name "const" in
     fun dom range -> (name, [range], S.arr dom range)
+  let array_ext =
+    let name = fresh_name "array_ext" in
+    fun dom range -> (name, [S.arr dom range; S.arr dom range], dom)
 
   let to_string (name, _, _) = name
   let get_domain (_, domain, _) = domain
@@ -478,6 +482,15 @@ let store t1 t2 t3 =
 let constant dom t =
   let range = T.get_type t in
   T.app_as (Sym.constant dom range) [t]
+
+let array_ext t1 t2 =
+  let dom = match Sort.arr_domain (T.get_type t1) with
+    | Some dom -> dom
+    | None -> failwith "first argument of array_ext should be an array"
+  in
+  match Sort.arr_range (T.get_type t1) with
+  | Some range -> bapp (Sym.array_ext dom range) t1 t2
+  | None -> failwith "first argument of array_ext should be an array"
 
 let get_type = T.get_type
 let print_term = T.print

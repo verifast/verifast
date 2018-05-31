@@ -138,6 +138,7 @@ object
     | Left t -> Left (p1#mk_constant (fst s) t)
     | Right t -> Right (p2#mk_constant (snd s) t)
     | Both (t1, t2) -> Both (p1#mk_constant (fst s) t1, p2#mk_constant (snd s) t2)
+  method mk_array_ext = map2 {f = fun p -> p#mk_array_ext}
   method set_fpclauses ((fc1 : 'b), (fc2 : 'e)) (k : int) cs =
     (* This method is used to register a recursive definition: the function fc is defined by recursion on its
        argument number k; cs is the list of cases; each case is a pair
