@@ -89,6 +89,7 @@ class z3_context () =
   let bool_type = Z3native.mk_bool_sort ctxt in
   let int_type = Z3native.mk_int_sort ctxt in
   let real_type = Z3native.mk_real_sort ctxt in
+  let array_type a b = Z3native.mk_array_sort ctxt a b in
   let ttrue = Z3native.mk_true ctxt in
   let tfalse = Z3native.mk_false ctxt in
   (* HACK: for now, all inductive values have the same Z3 type. *)
@@ -130,6 +131,10 @@ class z3_context () =
   let unboxed_real = Z3.mk_func_decl ctxt (Z3native.mk_string_symbol ctxt "(real)") [| inductive_type |] real_type in
   let () = assume_is_inverse unboxed_real boxed_real real_type in
   let () = assume_is_inverse boxed_real unboxed_real inductive_type in
+  let boxed_array = Z3.mk_func_decl ctxt (Z3native.mk_string_symbol ctxt "(arraybox)") [| array_type inductive_type inductive_type |] inductive_type in
+  let unboxed_array = Z3.mk_func_decl ctxt (Z3native.mk_string_symbol ctxt "(array)") [| inductive_type |] (array_type inductive_type inductive_type) in
+  let () = assume_is_inverse unboxed_array boxed_array (array_type inductive_type inductive_type) in
+  let () = assume_is_inverse boxed_array unboxed_array inductive_type in
   let div = Z3.mk_func_decl ctxt (Z3native.mk_string_symbol ctxt "div") [| int_type; int_type |] int_type in
   let modulo = Z3.mk_func_decl ctxt (Z3native.mk_string_symbol ctxt "mod") [| int_type; int_type |] int_type in
   object
@@ -139,12 +144,15 @@ class z3_context () =
     method type_int = int_type
     method type_real = real_type
     method type_inductive = inductive_type
+    method type_array a b = array_type a b
     method mk_boxed_int t = Z3.mk_app ctxt boxed_int [| t |]
     method mk_unboxed_int t = Z3.mk_app ctxt unboxed_int [| t |]
     method mk_boxed_bool t = Z3.mk_app ctxt boxed_bool [| t |]
     method mk_unboxed_bool t = Z3.mk_app ctxt unboxed_bool [| t |]
     method mk_boxed_real t = Z3.mk_app ctxt boxed_real [| t |]
     method mk_unboxed_real t = Z3.mk_app ctxt unboxed_real [| t |]
+    method mk_boxed_array t = Z3.mk_app ctxt boxed_array [| t |]
+    method mk_unboxed_array t = Z3.mk_app ctxt unboxed_array [| t |]
     method mk_symbol name domain range kind =
       let tps = Array.of_list domain in
       let c = Z3.mk_func_decl ctxt (Z3native.mk_string_symbol ctxt name) tps range in
@@ -180,7 +188,7 @@ class z3_context () =
         | Uninterp -> ()
       end;
       c
-          
+
     method set_fpclauses fc k cs =
       List.iter
         (fun (csym, fbody) ->
@@ -232,6 +240,10 @@ class z3_context () =
     method mk_real_mul t1 t2 = Z3native.mk_mul ctxt 2 [t1; t2]
     method mk_real_lt t1 t2 = Z3native.mk_lt ctxt t1 t2
     method mk_real_le t1 t2 = Z3native.mk_le ctxt t1 t2
+    method mk_select t1 t2 = Z3native.mk_select ctxt t1 t2
+    method mk_store t1 t2 t3 = Z3native.mk_store ctxt t1 t2 t3
+    method mk_constant s t = Z3native.mk_const_array ctxt s t
+    method mk_array_ext t1 t2 = Z3native.mk_array_ext ctxt t1 t2
     method get_type t = Z3native.get_sort ctxt t
     method pprint t = string_of_sexpr (simplify (parse_sexpr (Z3native.ast_to_string ctxt t)))
     method pprint_sort (s : Z3native.sort) = Z3native.ast_to_string ctxt s
@@ -258,7 +270,7 @@ class z3_context () =
     method begin_formal = ()
     method end_formal = ()
     method mk_bound (i: int) (tp: Z3native.sort) = Z3native.mk_bound ctxt i tp
-    method assume_forall (description: string) (triggers: Z3native.ast list) (tps: Z3native.sort list) (body: Z3native.ast): unit = 
+    method assume_forall (description: string) (triggers: Z3native.ast list) (tps: Z3native.sort list) (body: Z3native.ast): unit =
       if List.length tps = 0 then
         Z3native.solver_assert ctxt solver body
       else

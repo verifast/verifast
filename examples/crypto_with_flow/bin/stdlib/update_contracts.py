@@ -25,30 +25,30 @@ insert_part("string.h", 37,
 
 update_part(
   "string.h",
-  "    //@ requires chars(array, count, ?cs) &*& [?f]chars(array0, count, ?cs0);\r\n"
-  "    //@ ensures chars(array, count, cs0) &*& [f]chars(array0, count, cs0);\r\n",
-  "    /*@ requires chars(array, count, ?cs) &*&\r\n"
-  "                 [?f]crypto_chars(?kind, array0, count, ?cs0); @*/\r\n"
-  "    /*@ ensures  crypto_chars(kind, array, count, cs0) &*&\r\n"
-  "                 [f]crypto_chars(kind, array0, count, cs0); @*/\r\n"
+  "    //@ requires chars(arr, count, ?cs) &*& [?f]chars(arr0, count, ?cs0);\r\n"
+  "    //@ ensures chars(arr, count, cs0) &*& [f]chars(arr0, count, cs0);\r\n",
+  "    /*@ requires chars(arr, count, ?cs) &*&\r\n"
+  "                 [?f]crypto_chars(?kind, arr0, count, ?cs0); @*/\r\n"
+  "    /*@ ensures  crypto_chars(kind, arr, count, cs0) &*&\r\n"
+  "                 [f]crypto_chars(kind, arr0, count, cs0); @*/\r\n"
 )
 
 update_part(
   "string.h",
-  "    //@ requires [?f]chars(array, ?n, ?cs) &*& [?f0]chars(array0, ?n0, ?cs0) &*& "
+  "    //@ requires [?f]chars(arr, ?n, ?cs) &*& [?f0]chars(arr0, ?n0, ?cs0) &*& "
        "count <= n &*& count <= n0;\r\n"
-  "    //@ ensures [f]chars(array, n, cs) &*& [f0]chars(array0, n0, cs0) &*& "
+  "    //@ ensures [f]chars(arr, n, cs) &*& [f0]chars(arr0, n0, cs0) &*& "
        "true == ((result == 0) == (take(count, cs) == take(count, cs0)));\r\n",
   "    /*@ requires network_permission(?principal) &*& \r\n"
-  "                 [?f1]crypto_chars(?kind1, array, ?n1, ?cs1) &*&\r\n"
+  "                 [?f1]crypto_chars(?kind1, arr, ?n1, ?cs1) &*&\r\n"
   "                   (kind1 == normal ? true : \r\n"
-  "                      memcmp_secret(array, count, cs1, _)) &*&\r\n"
-  "                 [?f2]crypto_chars(?kind2, array0, ?n2, ?cs2) &*& \r\n"
+  "                      memcmp_secret(arr, count, cs1, _)) &*&\r\n"
+  "                 [?f2]crypto_chars(?kind2, arr0, ?n2, ?cs2) &*& \r\n"
   "                   (kind2 == normal ? true : \r\n"
-  "                      memcmp_secret(array0, count, cs2, _)) &*&\r\n"
+  "                      memcmp_secret(arr0, count, cs2, _)) &*&\r\n"
   "                 count <= n1 &*& count <= n2; @*/\r\n"
-  "    /*@ ensures  [f1]crypto_chars(kind1, array, n1, cs1) &*&\r\n"
-  "                 [f2]crypto_chars(kind2, array0, n2, cs2) &*&\r\n"
+  "    /*@ ensures  [f1]crypto_chars(kind1, arr, n1, cs1) &*&\r\n"
+  "                 [f2]crypto_chars(kind2, arr0, n2, cs2) &*&\r\n"
   "                 true == ((result == 0) == (take(count, cs1) == take(count, cs2))) &*&\r\n"
   "                 (\r\n"
   "                   //if guessing a secret value failed, network permissions are revoked\r\n"

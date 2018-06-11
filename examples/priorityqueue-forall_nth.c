@@ -11,21 +11,21 @@ typedef int ElementType;
 /*@
 
 fixpoint bool heap_index(list<int> xs, int i) {
-  return 
-    i < 1 || 
-    i >= length(xs) || 
+  return
+    i < 1 ||
+    i >= length(xs) ||
     (
-      (2*i >= length(xs) || nth(i,xs) >= nth(2*i,xs)) && 
+      (2*i >= length(xs) || nth(i,xs) >= nth(2*i,xs)) &&
       (2*i + 1 >= length(xs) || nth(i,xs) >= nth(2*i + 1,xs))
     );
 }
 
 fixpoint bool heap_index_e(int except, list<int> xs, int i) {
-  return 
-    i < 1 || 
-    i >= length(xs) || 
+  return
+    i < 1 ||
+    i >= length(xs) ||
     (
-      (2*i >= length(xs) || 2*i == except || nth(i,xs) >= nth(2*i,xs)) && 
+      (2*i >= length(xs) || 2*i == except || nth(i,xs) >= nth(2*i,xs)) &&
       (2*i + 1 >= length(xs) || 2*i + 1 == except || nth(i,xs) >= nth(2*i + 1,xs))
     );
 }
@@ -50,13 +50,13 @@ predicate heap(struct heap *heap; list<int> values) =
   &*& malloc_block_ints(elems, capacity)
   &*& forall_nth(vs, heap_index) == true
   &*& switch(values) { case nil: return true; case cons(h, t): return forall_nth(vs, (ge_nth)(1)) == true; };
-@*/		
+@*/
 
 struct heap
 {
     int capacity;
     int size;
-    ElementType *elems; 
+    ElementType *elems;
 };
 
 struct heap* heap_create(int capacity)
@@ -68,14 +68,14 @@ struct heap* heap_create(int capacity)
   if (q == 0) abort();
   if (sizeof(ElementType) == 0) abort();
   int acapacity = capacity + 1;
-  int *array = malloc(acapacity * sizeof(int));
-  if (array == 0) abort();
-  q->elems = array;
+  int *arr = malloc(acapacity * sizeof(int));
+  if (arr == 0) abort();
+  q->elems = arr;
   if (q->elems == 0) abort();
   q->capacity = capacity + 1;
   q->size = 0;
-  //@ open ints(array, capacity + 1, _);
-  //@ close ints(array, 1, _);
+  //@ open ints(arr, capacity + 1, _);
+  //@ close ints(arr, 1, _);
   //@ close heap(q,nil);
   return q;
 }
@@ -120,7 +120,7 @@ void heap_insert(struct heap* heap, ElementType x)
     forall_nth_elim(vs, heap_index, i);
     nth_append(vs, cons(head(rest), nil), 2*i);
     nth_append(vs, cons(head(rest), nil), 2*i + 1);
-  } 
+  }
   @*/
   int in = ++heap->size;
   //@ assert ints(arr, length(values) + 2, ?es);
@@ -170,12 +170,12 @@ lemma_auto(i/2) void div_mul(int i)
 @*/
 
 void swim(int* arr, int N, int k)
-  /*@ requires arr[0..N] |-> ?vs &*& 0 < k &*& k < N &*& 
+  /*@ requires arr[0..N] |-> ?vs &*& 0 < k &*& k < N &*&
                forall_nth(vs, (heap_index_e)(k)) == true &*&
                (k == 1 || 2*k >= length(vs) || nth(k/2, vs) >= nth(2*k, vs)) &*&
                (k == 1 || 2*k + 1 >= length(vs) || nth(k/2, vs) >= nth(2*k + 1, vs)) &*&
                forall_nth(vs, (ge_nth_except)(1, k)) == true; @*/
-  /*@ ensures arr[0..N] |-> ?vs2 &*& 
+  /*@ ensures arr[0..N] |-> ?vs2 &*&
               forall_nth(vs2, heap_index) == true &*&
               forall_nth(vs2, (ge_nth)(1)) == true; @*/
 {
@@ -240,7 +240,7 @@ ElementType heap_max(struct heap* heap)
   //@ requires heap(heap, ?values) &*& 0 < length(values);
   //@ ensures heap(heap, values) &*& forall_nth(values, (ge)(result)) == true &*& mem(result, values) == true;
 {
- 
+
   //@ int tmp = heap->elems[1];
   //@ int* elems = heap->elems;
   //@ assert ints(elems, _, ?vs);
@@ -291,6 +291,3 @@ int main() //@: main
     heap_dispose(q);
     return 0;
 }
-
-
-

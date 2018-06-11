@@ -1,0 +1,213 @@
+#ifndef VFARRAY_H
+#define VFARRAY_H
+
+#include "intdiff.gh"
+
+/*
+   Axiomatic theory of arrays.
+
+   The theory of arrays provides a built-in type array(t, u) of possibly infinite arrays indexed by t and ranging over u.
+   The primitive functions are: select, store, constant_array, and array_ext.
+
+   When using Z3, these functions are directly mapped to their conterpart in Z3.
+*/
+
+fixpoint u select<t,u> (array(t,u) arr, t x);
+fixpoint array(t, u) store<t, u> (array(t, u) arr, t x, u y);
+fixpoint array(t, u) constant_array<t,u> (u v);
+fixpoint t array_ext<t, u> (array(t, u) a, array(t, u) b);
+
+lemma void constant_select<t,u> (u v, t i)
+  requires true;
+  ensures select (constant_array<t,u>(v), i) == v;
+{}
+
+lemma void select_store<t,u> (array(t,u) arr, t x, u y, t z)
+    requires true;
+    ensures select (store(arr, x, y), z) == ((x == z) ? y : select (arr, z));
+{}
+
+lemma void array_extensionality<t, u>(array(t, u) a, array(t, u) b)
+requires select(a, array_ext<t, u>(a, b)) == select(b, array_ext<t, u>(a, b));
+ensures a == b;
+{}
+
+predicate array_model (int* a, int b, int e, array(int,int) arr) =
+  (b >= e) ? true : (integer(a+b,?v) &*& select(arr, b) == v &*& array_model(a, b+1, e, arr));
+
+lemma void empty_array(int* a, int i, array(int, int) arr)
+requires true;
+ensures array_model(a, i, i, arr);
+{
+  close array_model(a, i, i, arr);
+}
+
+lemma void array_model_out_of_range_diff(int* a, int b, int e, array(int,int) arr, int i, int v, nat n)
+  requires (i < b || i >= e) &*& array_model(a, b, e, arr) &*& int_diff(b, e, n) == true;
+  ensures array_model(a, b, e, store(arr, i, v));
+{ switch (n) {
+    case zero : {
+      open array_model(a, b, e, arr);
+      close array_model(a, b, e, store(arr, i, v));
+    }
+    case succ(p) : {
+      open array_model(a, b, e, arr);
+      array_model_out_of_range_diff(a, b+1, e, arr, i, v, p);
+      close array_model(a, b, e, store(arr, i, v));
+    }
+  }
+}
+
+lemma void array_model_out_of_range(int* a, int b, int e, array(int,int) arr, int i, int v)
+  requires (i < b || i >= e) &*& array_model(a, b, e, arr);
+  ensures array_model(a, b, e, store(arr, i, v));
+{
+  nat n = int_diff_always(b, e);
+  array_model_out_of_range_diff(a, b, e, arr, i, v, n);
+}
+
+lemma void close_array_model_right(nat n)
+requires array_model(?a, ?b, ?e, ?arr) &*& b <= e &*& int_diff(b, e, n) == true &*& a[e] |-> select(arr, e);
+ensures array_model(a, b, e+1, arr);
+{
+  switch(n) {
+    case zero: {
+      open array_model(a, b, e, arr);
+      assert (b == e);
+      close array_model(a, e+1, e+1, arr);
+      close array_model(a, b, e+1, arr);
+    }
+    case succ(p): {
+      open array_model(a, b, e, arr);
+      close_array_model_right(p);
+      close array_model(a, b, e+1, arr);
+    }
+  }
+}
+
+lemma void open_array_model_right(int* a, int b, int e, array(int, int) arr, nat n)
+requires array_model(a, b, e+1, arr) &*& b <= e &*& int_diff(b, e, n) == true;
+ensures array_model(a, b, e, arr) &*& a[e] |-> select(arr, e);
+{
+  switch(n) {
+    case zero: {
+      open array_model(a, b, e+1, arr);
+      open array_model(a, b+1, e+1, arr);
+      close array_model(a, b, e, arr);
+    }
+    case succ(p): {
+      open array_model(a, b, e+1, arr);
+      open_array_model_right(a, b+1, e, arr, p);
+      close array_model(a, b, e, arr);
+    }
+  }
+}
+
+lemma void array_model_init_diff(int* a, int length, nat n)
+requires ints((void*)a, length, _) &*& length >= 0 &*& int_diff(0, length, n) == true;
+ensures array_model(a, 0, length, _);
+{
+   switch (n) {
+     case zero: {
+     	empty_array(a,0,constant_array<int,int>(0));
+     }
+     case succ(p): {
+     	open_ints_right(p);
+     	int_diff_translate(1,length,-1,p);
+     	array_model_init_diff(a,length-1,p);
+     	assert a[length-1] |-> ?v;
+     	assert array_model(a, 0, length-1, ?arr);
+        array_model_out_of_range(a, 0, length-1, arr, length-1, v);
+     	close_array_model_right(p);
+     	int_diff_translate(0,length-1,1,p);
+     }
+  }
+}
+
+lemma void array_model_init(int* a, int length)
+requires ints((void*)a, length, _) &*& length >= 0;
+ensures array_model(a, 0, length, _);
+{
+  nat n = int_diff_always(0, length);
+  array_model_init_diff(a, length, n);
+}
+
+lemma void array_model_delete(int* a, int length, nat len)
+requires array_model(a, 0, length, ?arr) &*& length >= 0 &*& int_diff(0, length, len) == true;
+ensures ints((void*)a, length, _);
+{
+   switch(len) {
+     case zero: {
+       open array_model(a, 0, length, arr);
+       close ints((void*)a, 0, nil);
+     }
+     case succ(p): {
+       int_diff_translate(1, length, -1, p);
+       open_array_model_right(a, 0, length-1, arr, p);
+       array_model_delete(a, length-1, p);
+       close_ints_right(p);
+     }
+   }
+}
+
+lemma void array_model_select_unfold_diff(int* a, int b, int e, array(int,int) arr, int i, nat n)
+requires array_model(a, b, e, arr) &*& b <= i &*& i < e &*& int_diff(b, i+1, n) == true;
+ensures array_model(a, b, i, arr) &*& a[i] |-> select(arr, i) &*& array_model(a, i+1, e, arr);
+{
+  switch (n) {
+    case zero : {
+       open int_diff(b,i+1,n);
+    }
+    case succ(p) : {
+      open array_model(a, b, e, arr);
+      if (b+1 <= i) {
+        array_model_select_unfold_diff(a, b+1, e, arr, i, p);
+      }
+      close array_model(a, b, i, arr);
+    }
+  }
+}
+
+lemma void array_model_select_unfold(int* a, int b, int e, array(int,int) arr, int i)
+requires array_model(a, b, e, arr) &*& b <= i &*& i < e;
+ensures array_model(a, b, i, arr) &*& a[i] |-> select(arr, i) &*& array_model(a, i+1, e, arr);
+{
+  nat n = int_diff_always(b, i+1);
+  array_model_select_unfold_diff(a, b, e, arr, i, n);
+}
+
+lemma void array_model_store_fold_diff(int* a, int b, int e, array(int,int) arr, int i, nat n)
+requires array_model(a, b, i, arr) &*& a[i] |-> ?v &*& array_model(a, i+1, e, arr) &*& b <= i &*& i < e &*& int_diff(b, i+1, n) == true;
+ensures array_model(a, b, e, store(arr, i, v));
+{
+  switch (n) {
+    case zero : {}
+    case succ(p) : {
+      open array_model(a, b, i, arr);
+      if (b < i){
+        array_model_store_fold_diff(a, b+1, e, arr, i, p);
+        close array_model(a, b, e, store(arr, i, v));
+      }else{
+        array_model_out_of_range(a, b+1, e, arr, i, v);
+        close array_model(a, b, e, store(arr, i, v));
+      }
+    }
+  }
+}
+
+lemma void array_model_store_fold(int* a, int b, int e, array(int,int) arr, int i)
+requires array_model(a, b, i, arr) &*& a[i] |-> ?v &*& array_model(a, i+1, e, arr) &*& b <= i &*& i < e;
+ensures array_model(a, b, e, store(arr, i, v));
+{
+  nat n = int_diff_always(b, i+1);
+  array_model_store_fold_diff(a, b, e, arr, i, n);
+}
+
+lemma void array_model_select_fold(int* a, int b, int e, array(int,int) arr, int i)
+requires array_model(a, b, i, arr) &*& a[i] |-> select(arr, i) &*& array_model(a, i+1, e, arr) &*& b <= i &*& i < e;
+ensures array_model(a, b, e, arr);
+{
+   array_model_store_fold(a, b, e, arr, i);
+}
+
+#endif

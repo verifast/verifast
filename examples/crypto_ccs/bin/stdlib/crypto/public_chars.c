@@ -18,44 +18,44 @@ lemma void public_cs(list<char> cs)
   leak public_ccs(cs_to_ccs(cs));
 }
 
-lemma_auto void public_chars(char *array, int size)
-  requires [?f]chars(array, size, ?cs);
-  ensures  [f]chars(array, size, cs) &*& [_]public_ccs(cs_to_ccs(cs));
+lemma_auto void public_chars(char *arr, int size)
+  requires [?f]chars(arr, size, ?cs);
+  ensures  [f]chars(arr, size, cs) &*& [_]public_ccs(cs_to_ccs(cs));
 {
   public_cs(cs);
 }
 
-lemma void public_ccs(char *array, int size)
-  requires [?f]crypto_chars(?kind, array, size, ?ccs);
+lemma void public_ccs(char *arr, int size)
+  requires [?f]crypto_chars(?kind, arr, size, ?ccs);
   ensures  switch(kind)
            {
              case normal:
                return [_]public_ccs(ccs);
              case secret:
                 return col ? [_]public_ccs(ccs) : true;
-           } &*& [f]crypto_chars(kind, array, size, ccs);
+           } &*& [f]crypto_chars(kind, arr, size, ccs);
 {
   if (kind == normal || col)
   {
-    crypto_chars_to_chars(array, size);
-    assert [f]chars(array, size, ?cs);
+    crypto_chars_to_chars(arr, size);
+    assert [f]chars(arr, size, ?cs);
     public_cs(cs);
     if (kind == normal)
-      chars_to_crypto_chars(array, size);
+      chars_to_crypto_chars(arr, size);
     else
-      chars_to_secret_crypto_chars(array, size);
+      chars_to_secret_crypto_chars(arr, size);
   }
 }
 
-lemma void public_cryptogram(char *array, cryptogram cg)
+lemma void public_cryptogram(char *arr, cryptogram cg)
   requires [_]public_invar(?pub) &*&
-           [?f]cryptogram(array, ?n, ?ccs, cg) &*& [_]pub(cg);
-  ensures  [f]chars(array, n, ?cs) &*&
+           [?f]cryptogram(arr, ?n, ?ccs, cg) &*& [_]pub(cg);
+  ensures  [f]chars(arr, n, ?cs) &*&
            [_]public_ccs(ccs) &*& ccs == cs_to_ccs(cs);
 {
-  open [f]cryptogram(array, n, ccs, cg);
+  open [f]cryptogram(arr, n, ccs, cg);
   public_cg_ccs(cg);
-  public_crypto_chars(array, n);
+  public_crypto_chars(arr, n);
 }
 
 lemma void public_ccs_split(list<crypto_char> ccs, int i)
@@ -91,13 +91,13 @@ lemma void public_ccs_join(list<crypto_char> ccs1, list<crypto_char> ccs2)
   public_cs(cs);
 }
 
-lemma void cs_to_ccs_crypto_chars(char *array, list<char> cs)
-  requires [?f]crypto_chars(?kind, array, ?n, cs_to_ccs(cs));
-  ensures  [f]chars(array, n, cs);
+lemma void cs_to_ccs_crypto_chars(char *arr, list<char> cs)
+  requires [?f]crypto_chars(?kind, arr, ?n, cs_to_ccs(cs));
+  ensures  [f]chars(arr, n, cs);
 {
   public_cs(cs);
-  public_crypto_chars(array, n);
-  assert [f]chars(array, n, ?cs0);
+  public_crypto_chars(arr, n);
+  assert [f]chars(arr, n, ?cs0);
   cs_to_ccs_inj(cs, cs0);
 }
 

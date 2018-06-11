@@ -78,10 +78,10 @@ int main()
     //@ requires true;
     //@ ensures true;
 {
-    char *array = malloc(100);
-    getchars(array, 100);
-    putchars(array, 100);
-    putchars(array, 100);
-    //@ leak characters(array, 100);
+    char *arr = malloc(100);
+    getchars(arr, 100);
+    putchars(arr, 100);
+    putchars(arr, 100);
+    //@ leak characters(arr, 100);
     return 0;
 }

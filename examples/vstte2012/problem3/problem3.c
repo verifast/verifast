@@ -40,44 +40,44 @@ predicate ring_buffer(struct ring_buffer *buffer; int size, list<int> items) =
 	&*& buffer->size |-> size
 	&*& buffer->first |-> ?first
 	&*& buffer->len |-> ?len
-	
+
 	&*& size >= 0 && size * 4 < INT_MAX
 	&*& len <= size
 	&*& first >= 0 && first < size
 	&*& length(items) == len
-	
+
 	&*& malloc_block_ints(fields, size)
 	&*& malloc_block_ring_buffer(buffer)
 
 	&*& fields + size <= (void*)UINTPTR_MAX
-	
+
 	&*& is_split_up_fp(size, first, len) ?
-	
+
 		// Bigtail
 		fields[0..bigtail_size(size, first, len)] |-> ?bigtail_elems
-	
+
 		// emptyness
 		&*& ints(fields + bigtail_size(size, first, len), size - len, _)
-		
+
 		// Bighead
 		&*& ints(fields + first, bighead_size(size, first, len), ?bighead_elems)
-		
+
 		// make sure verification knows all arrays are next to each other.
 		&*& first == bigtail_size(size, first, len) + (size - len)
-		
+
 		&*& items == append(bighead_elems, bigtail_elems)
-		
+
 	:
 		// leading emptyness
 		ints(fields, first, _)
-		
+
 		// Elems
 		&*& ints(fields + first, len, items)
-		
+
 		// trailing emptyness
 		&*& ints(fields + first + len, size - len - first, _)
 	;
-	
+
 @*/
 
 
@@ -88,7 +88,7 @@ struct ring_buffer *ring_buffer_create(int size)
 	: ring_buffer(result, size, nil)
 ;
 @*/
-{	
+{
 	struct ring_buffer *ring_buffer = malloc(sizeof (struct ring_buffer));
 	if (ring_buffer == 0) return 0;
 	int *fields = malloc(size * sizeof (int));
@@ -100,7 +100,7 @@ struct ring_buffer *ring_buffer_create(int size)
 	ring_buffer->size = size;
 	ring_buffer->first = 0;
 	ring_buffer->len = 0;
-	
+
 	//@ close ring_buffer(ring_buffer, size, nil);
 	return ring_buffer;
 }
@@ -119,11 +119,11 @@ void ring_buffer_push(struct ring_buffer *ring_buffer, int element)
 	//@ assert ring_buffer->fields |-> ?fields;
 	//@ assert ring_buffer->first |-> ?first;
 	//@ assert ring_buffer->len |-> ?len;
-	
+
 	int put_at;
 	if (is_split_up(ring_buffer->size, ring_buffer->first, ring_buffer->len+1)){
 		put_at = ring_buffer->len - (ring_buffer->size - ring_buffer->first);
-		
+
 		//@ assert ints(fields, bigtail_size(size, first, len), ?bigtail_elems);
 		//@ assert ints(fields + first, bighead_size(size, first, len), ?bighead_elems);
 
@@ -132,14 +132,14 @@ void ring_buffer_push(struct ring_buffer *ring_buffer, int element)
 
 		//@ close ints(ring_buffer->fields+put_at, 1, cons(element, nil)); // array of size one
 		//@ append_assoc(bighead_elems, bigtail_elems, cons(element, nil));
-		
+
 		/*@
 		// Only need to merge if there is something to merge width, i.e. this is not the first element of bigtail.
 		if (is_split_up_fp(size,first,len)){
 			ints_join(ring_buffer->fields);
 		}
 		@*/
-		
+
 	}else{
 		//@ assert ! is_split_up_fp(size, first, len) == true;
 		put_at = ring_buffer->first + ring_buffer->len;
@@ -189,7 +189,7 @@ int ring_buffer_head(struct ring_buffer *ring_buffer)
 	//@ open ints(ring_buffer->fields + ring_buffer->first, _, _);
 	return *(ring_buffer->fields + ring_buffer->first);
 	//@ close ring_buffer(ring_buffer, size, elems);
-	
+
 }
 
 // i.e. remove from beginning of queue
@@ -208,19 +208,19 @@ int ring_buffer_pop(struct ring_buffer *ring_buffer)
 	int elem;
 	//@ int  newfirst = first + 1 == size ? 0 : first + 1;
 	//@ assert ring_buffer->fields |-> ?fields;
-	
+
 	//@ open ints(ring_buffer->fields + first, _, ?elems_bighead);
 	elem = *(ring_buffer->fields + take_at);
 	ring_buffer->len = ring_buffer->len - 1;
 	ring_buffer->first = ring_buffer->first + 1;
 	if (ring_buffer->first == ring_buffer->size) ring_buffer->first = 0; // XXX hmm why can we also assign "first = ..." here if first is ghost??
 
-	
+
 	/*@
 	if (bighead_size(size, first, len) == 1){
 		assert newfirst == 0;
 		switch (elems_bighead) { case nil: case cons(h, t): switch (t) { case nil: case cons(th, tt): } }
-		
+
 		close ints(fields + take_at, 1, cons(elem, nil)); // array size one
 		ints_join(fields + len-1);
 	}else{
@@ -231,24 +231,24 @@ int ring_buffer_pop(struct ring_buffer *ring_buffer)
 			ints_join(ring_buffer->fields + bigtail_size(size, first, len));
 			if ( ! is_split_up_fp(size, newfirst, len-1)){
 				// convert to non-split up data structure
-			
+
 				// zero-size leading emptyness
-				close array<int>(fields, 0, sizeof(int), integer, nil);
+				close arr<int>(fields, 0, sizeof(int), integer, nil);
 				assert bighead_size(size, first, len) == 1;
 				//assert false;
 			}
 		}else{
 			// Make trailing emptyness a bit larger
 			assert ints(fields + first + len, size - first - len, ?trailing_emptyness_data);
-		
+
 			ints_join(ring_buffer->fields);
 		}
 	}
 	@*/
 	//@close ring_buffer(ring_buffer, size, tail(elems));
-	
+
 	return elem;
-		
+
 }
 
 void ring_buffer_dispose(struct ring_buffer *ring_buffer)
@@ -297,7 +297,7 @@ void harness(int x, int y, int z)
 	h = ring_buffer_pop(b);
 	//@ assert h == z;
 	ring_buffer_dispose(b);
-	
+
 }
 
 int main() //@ : main

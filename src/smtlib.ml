@@ -18,6 +18,7 @@
         using the "Inductive" sort
    - "LIA" (Linear Integer Arithmetic),
    - "LRA" (Linear Real Arithmetic),
+   - "A" (Arrays),
 
    Planned features:
    - "DT" (algebraic Data Types), incompatible with "NDT"
@@ -26,7 +27,6 @@
    - "NIA" (Non-linear Integer Arithmetic): this is LIA + multiplication,
    - "NRA" (Non-linear Real Arithmetic): same for reals,
    - "BV" (Bit Vectors),
-   - "A" (Arrays),
    - "Ind" (Induction): the prover is able to reason by induction,
    - "SL" (Separation Logic): the prover understands separation logic,
 
@@ -81,6 +81,10 @@ module type SORT = sig
   val int : t
   val real : t
   val inductive : t
+  val arr : t -> t -> t
+
+  val arr_domain : t -> t option
+  val arr_range : t -> t option
 
   (* The features required for the sort to be defined *)
   val features : t -> string list
@@ -92,24 +96,38 @@ module Sort : SORT = struct
     | Int
     | Real
     | Inductive
+    | Array of t * t
 
   let bool = Bool
   let int = Int
   let real = Real
   let inductive = Inductive
-  let to_string = function
+  let arr a b = Array (a, b)
+  let rec to_string = function
     | Bool -> "Bool"
     | Int -> "Int"
     | Real -> "Real"
     | Inductive -> "Inductive"
+    | Array (a, b) ->
+       Printf.sprintf "(Array %s %s)"
+         (to_string a) (to_string b)
+
+  let arr_domain = function
+    | Array(a, _) -> Some a
+    | _ -> None
+
+  let arr_range = function
+    | Array(_, b) -> Some b
+    | _ -> None
 
   let print o sort = print_string o (to_string sort)
 
-  let features = function
+  let rec features = function
     | Bool -> []
     | Int -> ["LIA"]
     | Real -> ["LRA"]
     | Inductive -> ["NDT"]
+    | Array (a, b) -> Util.list_remove_dups ("A" :: features a @ features b)
 end
 
 type sort = Sort.t
@@ -117,6 +135,7 @@ let bool = Sort.bool
 let int = Sort.int
 let real = Sort.real
 let inductive = Sort.inductive
+let arr a b = Sort.arr a b
 
 module type SYMBOL = sig
   include PRINTABLE
@@ -132,11 +151,17 @@ module type SYMBOL = sig
      symbol named "ite" of domain [[bool; s; s]] and range [s]. *)
   val eq : sort -> t
   val ite : sort -> t
+  val select : sort -> sort -> t
+  val store : sort -> sort -> t
+  val constant : sort -> sort -> t
+  val array_ext : sort -> sort -> t
   val get_domain : t -> sort list
   val get_range : t -> sort
 
   (* The features required for the symbol domain and range to be defined *)
   val features : t -> string list
+
+  val print_as : Format.formatter -> t -> unit
 end
 
 module Symbol (S : SORT) : SYMBOL with type sort = S.t = struct
@@ -204,12 +229,28 @@ module Symbol (S : SORT) : SYMBOL with type sort = S.t = struct
   let ite =
     let name = fresh_name "ite" in
     fun sort -> (name, [S.bool; sort; sort], sort)
+  let select =
+    let name = fresh_name "select" in
+    fun dom range -> (name, [S.arr dom range; dom], range)
+  let store =
+    let name = fresh_name "store" in
+    fun dom range -> (name, [S.arr dom range; dom; range], S.arr dom range)
+  let constant =
+    let name = fresh_name "const" in
+    fun dom range -> (name, [range], S.arr dom range)
+  let array_ext =
+    let name = fresh_name "array_ext" in
+    fun dom range -> (name, [S.arr dom range; S.arr dom range], dom)
 
   let to_string (name, _, _) = name
   let get_domain (_, domain, _) = domain
   let get_range (_, _, range) = range
 
   let print o f = print_string o (to_string f)
+  let print_as o f =
+    Format.fprintf o "@[<3>(as %a@ %a)@]"
+       print_string (to_string f)
+       S.print (get_range f)
 
   let features (_, domain, range) =
     Util.list_remove_dups
@@ -281,6 +322,7 @@ module type TERM = sig
   val var : var -> t
   (* /!\ We do no sort nor arity checking! *)
   val app : symbol -> t list -> t
+  val app_as : symbol -> t list -> t
   val forall : var list -> t list -> t -> t
 
   val get_type : t -> sort
@@ -304,6 +346,7 @@ module Term (S : SORT)
     | Real of Num.num
     | Var of var
     | App of symbol * t list
+    | AppAs of symbol * t list
     | Forall of var list * t list * t
 
   let get_type = function
@@ -311,12 +354,14 @@ module Term (S : SORT)
     | Real _ -> S.real
     | Var v -> V.get_type v
     | App (f, _) -> Sy.get_range f
+    | AppAs (f, _) -> Sy.get_range f
     | Forall _ -> S.bool
 
   let int i = Int i
   let real r = Real r
   let var v = Var v
   let app f l = App (f, l)
+  let app_as f l = AppAs (f, l)
   let forall vars patterns t = Forall (vars, patterns, t)
 
   let rec print o = function
@@ -333,6 +378,11 @@ module Term (S : SORT)
     | App (head, l) ->
        Format.fprintf o "@[<3>(%a@ %a)@]"
           Sy.print head
+          (print_list_space print) l
+    | AppAs (head, []) -> Sy.print_as o head
+    | AppAs (head, l) ->
+       Format.fprintf o "@[<3>(%a@ %a)@]"
+          Sy.print_as head
           (print_list_space print) l
     | Forall (vars, [], t) ->
        Format.fprintf o "@[<3>(@[forall@ @[<3>(%a)@]@]@ %a)@]"
@@ -418,6 +468,29 @@ let rsub = bapp (Sym.fresh "-." [Sort.int; Sort.int] Sort.int)
 let rmul = bapp (Sym.fresh "*." [Sort.int; Sort.int] Sort.int)
 let rlt = bapp (Sym.fresh "<." [Sort.int; Sort.int] Sort.bool)
 let rle = bapp (Sym.fresh "<=." [Sort.int; Sort.int] Sort.bool)
+let select t1 t2 =
+  let dom = T.get_type t2 in
+  match Sort.arr_range (T.get_type t1) with
+  | Some range -> bapp (Sym.select dom range) t1 t2
+  | None -> failwith "first argument of select should be an array"
+
+let store t1 t2 t3 =
+  let dom = T.get_type t2 in
+  let range = T.get_type t3 in
+  T.app (Sym.store dom range) [t1; t2; t3]
+
+let constant dom t =
+  let range = T.get_type t in
+  T.app_as (Sym.constant dom range) [t]
+
+let array_ext t1 t2 =
+  let dom = match Sort.arr_domain (T.get_type t1) with
+    | Some dom -> dom
+    | None -> failwith "first argument of array_ext should be an array"
+  in
+  match Sort.arr_range (T.get_type t1) with
+  | Some range -> bapp (Sym.array_ext dom range) t1 t2
+  | None -> failwith "first argument of array_ext should be an array"
 
 let get_type = T.get_type
 let print_term = T.print

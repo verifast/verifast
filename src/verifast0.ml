@@ -71,6 +71,7 @@ let rec string_of_type t =
   | StructType sn -> "struct " ^ sn
   | PtrType t -> string_of_type t ^ " *"
   | FuncType ft -> ft
+  | StructArray (t1, t2) -> "array(" ^ string_of_type t1 ^ "," ^ string_of_type t2 ^ ")"
   | PredType (tparams, ts, inputParamCount, inductiveness) ->
     let tparamsText = if tparams = [] then "" else "<" ^ String.concat ", " tparams ^ ">" in
     let paramTypesText =
@@ -99,7 +100,7 @@ let rec string_of_type t =
   | TypeParam x -> x
   | InferredType (_, t) -> begin match !t with None -> "?" | Some t -> string_of_type t end
   | ArrayType(t) -> (string_of_type t) ^ "[]"
-  | StaticArrayType(t, s) -> (string_of_type t) ^ "[" ^ (string_of_int s) ^ "]" 
+  | StaticArrayType(t, s) -> (string_of_type t) ^ "[" ^ (string_of_int s) ^ "]"
   | ClassOrInterfaceName(n) -> n (* not a real type; used only during type checking *)
   | PackageName(n) -> n (* not a real type; used only during type checking *)
   | RefType(t) -> "ref " ^ (string_of_type t)
@@ -143,7 +144,8 @@ type options = {
   option_use_java_frontend : bool;
   option_enforce_annotations : bool;
   option_allow_undeclared_struct_types: bool;
-  option_data_model: data_model
+  option_data_model: data_model;
+  option_disable_array_theory : bool
 } (* ?options *)
 
 (* Region: verify_program_core: the toplevel function *)

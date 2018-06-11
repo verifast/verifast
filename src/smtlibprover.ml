@@ -50,6 +50,7 @@ class smtlib_context input_fun output (features : string list) =
     maybe_add_statement (Smtlib.declare_sort Smtlib.inductive);
     Smtlib.inductive
   in
+  let array_type a b = Smtlib.arr a b in
   let declare_fun s sorts sort =
     let f = Smtlib.fresh_symbol s sorts sort in
     maybe_add_statement (Smtlib.declare_fun f);
@@ -110,6 +111,10 @@ class smtlib_context input_fun output (features : string list) =
   let unboxed_real = declare_fun "unbox_real" [ inductive_type ] real_type in
   let () = assume_is_inverse unboxed_real boxed_real real_type in
   let () = assume_is_inverse boxed_real unboxed_real inductive_type in
+  let boxed_array = declare_fun "box_array" [ array_type inductive_type inductive_type ] inductive_type in
+  let unboxed_array = declare_fun "unbox_array" [ inductive_type ] (array_type inductive_type inductive_type) in
+  let () = assume_is_inverse unboxed_array boxed_array (array_type inductive_type inductive_type) in
+  let () = assume_is_inverse boxed_array unboxed_array inductive_type in
   object
     val mutable verbosity = 0
     method features = features
@@ -118,12 +123,15 @@ class smtlib_context input_fun output (features : string list) =
     method type_int = int_type
     method type_real = real_type
     method type_inductive = inductive_type
+    method type_array a b = array_type a b
     method mk_boxed_int = Smtlib.uapp boxed_int
     method mk_unboxed_int = Smtlib.uapp unboxed_int
     method mk_boxed_bool = Smtlib.uapp boxed_bool
     method mk_unboxed_bool = Smtlib.uapp unboxed_bool
     method mk_boxed_real = Smtlib.uapp boxed_real
     method mk_unboxed_real = Smtlib.uapp unboxed_real
+    method mk_boxed_array = Smtlib.uapp boxed_array
+    method mk_unboxed_array = Smtlib.uapp unboxed_array
     method mk_symbol name domain range kind =
       let c = declare_fun name domain range in
       begin
@@ -230,6 +238,10 @@ class smtlib_context input_fun output (features : string list) =
     method mk_real_mul = Smtlib.rmul
     method mk_real_lt = Smtlib.rlt
     method mk_real_le = Smtlib.rle
+    method mk_select = Smtlib.select
+    method mk_store = Smtlib.store
+    method mk_constant = Smtlib.constant
+    method mk_array_ext = Smtlib.array_ext
     method pprint = Smtlib.T.to_string
     method pprint_sort = Smtlib.Sort.to_string
     method pprint_sym = Smtlib.Sym.to_string

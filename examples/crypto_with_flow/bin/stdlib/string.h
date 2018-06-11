@@ -8,11 +8,11 @@ char *strcpy(char *d, char *s);
     //@ requires [?f]string(s, ?cs) &*& chars(d, length(cs) + 1, _);
     //@ ensures [f]string(s, cs) &*& chars(d, length(cs) + 1, append(cs, {0})) &*& result == d;
 
-void memcpy(void *array, void *array0, size_t count);
-    /*@ requires chars(array, count, ?cs) &*&
-                 [?f]crypto_chars(?kind, array0, count, ?cs0); @*/
-    /*@ ensures  crypto_chars(kind, array, count, cs0) &*&
-                 [f]crypto_chars(kind, array0, count, cs0); @*/
+void memcpy(void *arr, void *arr0, size_t count);
+    /*@ requires chars(arr, count, ?cs) &*&
+                 [?f]crypto_chars(?kind, arr0, count, ?cs0); @*/
+    /*@ ensures  crypto_chars(kind, arr, count, cs0) &*&
+                 [f]crypto_chars(kind, arr0, count, cs0); @*/
 
 void memmove(void *dest, void *src, size_t count);
     /*@
@@ -42,17 +42,17 @@ predicate memcmp_secret(char* buffer, int count, list<char> cs, cryptogram cg) =
 ;
 @*/
 
-int memcmp(char *array, char *array0, size_t count);
+int memcmp(char *arr, char *arr0, size_t count);
     /*@ requires network_permission(?principal) &*& 
-                 [?f1]crypto_chars(?kind1, array, ?n1, ?cs1) &*&
+                 [?f1]crypto_chars(?kind1, arr, ?n1, ?cs1) &*&
                    (kind1 == normal ? true : 
-                      memcmp_secret(array, count, cs1, _)) &*&
-                 [?f2]crypto_chars(?kind2, array0, ?n2, ?cs2) &*& 
+                      memcmp_secret(arr, count, cs1, _)) &*&
+                 [?f2]crypto_chars(?kind2, arr0, ?n2, ?cs2) &*& 
                    (kind2 == normal ? true : 
-                      memcmp_secret(array0, count, cs2, _)) &*&
+                      memcmp_secret(arr0, count, cs2, _)) &*&
                  count <= n1 &*& count <= n2; @*/
-    /*@ ensures  [f1]crypto_chars(kind1, array, n1, cs1) &*&
-                 [f2]crypto_chars(kind2, array0, n2, cs2) &*&
+    /*@ ensures  [f1]crypto_chars(kind1, arr, n1, cs1) &*&
+                 [f2]crypto_chars(kind2, arr0, n2, cs2) &*&
                  true == ((result == 0) == (take(count, cs1) == take(count, cs2))) &*&
                  (
                    //if guessing a secret value failed, network permissions are revoked
@@ -65,9 +65,9 @@ int strcmp(char *s1, char *s2);
     //@ requires [?f1]string(s1, ?cs1) &*& [?f2]string(s2, ?cs2);
     //@ ensures [f1]string(s1, cs1) &*& [f2]string(s2, cs2) &*& true == ((result == 0) == (cs1 == cs2));
 
-char *memchr(char *array, char c, size_t count);
-    //@ requires [?f]chars(array, count, ?cs);
-    //@ ensures [f]chars(array, count, cs) &*& result == 0 ? mem(c, cs) == false : mem(c, cs) == true &*& result == array + index_of(c, cs);
+char *memchr(char *arr, char c, size_t count);
+    //@ requires [?f]chars(arr, count, ?cs);
+    //@ ensures [f]chars(arr, count, cs) &*& result == 0 ? mem(c, cs) == false : mem(c, cs) == true &*& result == arr + index_of(c, cs);
 
 char* strchr(char *str, char c);
     //@ requires [?f]string(str, ?cs);
@@ -82,9 +82,9 @@ char* strchr(char *str, char c);
                     mem(c, cs) == true &*& result == str + index_of(c, cs);
     @*/
 
-void* memset(void *array, char value, size_t size);
-    //@ requires chars(array, size, ?cs);
-    //@ ensures chars(array, size, ?cs1) &*& all_eq(cs1, value) == true &*& result == array;
+void* memset(void *arr, char value, size_t size);
+    //@ requires chars(arr, size, ?cs);
+    //@ ensures chars(arr, size, ?cs1) &*& all_eq(cs1, value) == true &*& result == arr;
 
 char *strdup(char *string);
     //@ requires [?f]string(string, ?cs);

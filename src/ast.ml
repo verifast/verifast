@@ -66,7 +66,7 @@ let string_of_inductiveness inductiveness =
   match inductiveness with
   | Inductiveness_Inductive -> "inductive"
   | Inductiveness_CoInductive -> "coinductive"
-  
+
 type signedness = Signed | Unsigned
 
 type type_ = (* ?type_ *)
@@ -95,6 +95,7 @@ type type_ = (* ?type_ *)
   | PackageName of string (* not a real type; used only during type checking *)
   | RefType of type_ (* not a real type; used only for locals whose address is taken *)
   | AbstractType of string
+  | StructArray of type_ * type_
 
 type integer_limits = {max_unsigned_big_int: big_int; min_signed_big_int: big_int; max_signed_big_int: big_int}
 
@@ -141,7 +142,8 @@ let is_arithmetic_type t =
     Int (_, _)|RealType|Float|Double|LongDouble -> true
   | _ -> false
 
-type prover_type = ProverInt | ProverBool | ProverReal | ProverInductive (* ?prover_type *)
+type prover_type = ProverInt | ProverBool | ProverReal | ProverInductive
+                   | ProverArray(* ?prover_type *)
 
 (** An object used in predicate assertion ASTs. Created by the parser and filled in by the type checker.
     TODO: Since the type checker now generates a new AST anyway, we can eliminate this hack. *)
@@ -155,7 +157,7 @@ class predref (name: string) = (* ?predref *)
     method inputParamCount = match inputParamCount with None -> assert false | Some c -> c
     method set_domain d = domain <- Some d
     method set_inputParamCount c = inputParamCount <- Some c
-    method is_precise = match inputParamCount with None -> assert false; | Some None -> false | Some (Some _) -> true 
+    method is_precise = match inputParamCount with None -> assert false; | Some None -> false | Some (Some _) -> true
   end
 
 type
@@ -179,6 +181,7 @@ type type_expr = (* ?type_expr *)
   | PtrTypeExpr of loc * type_expr
   | ArrayTypeExpr of loc * type_expr
   | StaticArrayTypeExpr of loc * type_expr (* type *) * int (* number of elements*)
+  | StructArrayTypeExpr of loc * type_expr list (* domain and range *)
   | ManifestTypeExpr of loc * type_  (* A type expression that is obviously a given type. *)
   | IdentTypeExpr of loc * string option (* package name *) * string
   | ConstructedTypeExpr of loc * string * type_expr list  (* A type of the form x<T1, T2, ...> *)
@@ -364,7 +367,7 @@ and
       wswitch_asn_clause list
   | EmpAsn of  (* als "emp" bij requires/ensures staat -regel-*)
       loc
-  | ForallAsn of 
+  | ForallAsn of
       loc *
       type_expr *
       string *
@@ -376,6 +379,10 @@ and
   | EnsuresAsn of loc * asn
   | MatchAsn of loc * expr * pat
   | WMatchAsn of loc * expr * pat * type_
+  | SelectArray of loc * expr * expr (* u get<t,u>(array(t,u),t) *)
+  | StoreArray of loc * expr * expr * expr (* array(t,u) set<t,u>(array(t,u),t,u) *)
+  | ConstantArray of loc * expr (* val *)
+  | ExtArray of loc * expr * expr
 and
   asn = expr
 and
@@ -388,16 +395,16 @@ and
 and
   switch_asn_clause = (* ?switch_asn_clause *)
   | SwitchAsnClause of
-      loc * 
-      string * 
-      string list * 
+      loc *
+      string *
+      string list *
       asn
 and
   wswitch_asn_clause = (* ?switch_asn_clause *)
   | WSwitchAsnClause of
-      loc * 
-      string * 
-      string list * 
+      loc *
+      string *
+      string list *
       prover_type option list (* Boxing info *) *
       asn
 and
@@ -431,12 +438,12 @@ and
         ghostness *
         string *
         string option (* None betekent heel package, Some string betekent 1 ding eruit *)
-and 
+and
   producing_handle_predicate =
     ConditionalProducingHandlePredicate of loc * expr (* condition *) * string (* handle name *) * (expr list) (* args *) * producing_handle_predicate
   | BasicProducingHandlePredicate of loc * string (* handle name *) * (expr list) (* args *)
 and
-  consuming_handle_predicate = 
+  consuming_handle_predicate =
     ConsumingHandlePredicate of loc * string * (pat list)
 and
   stmt = (* ?stmt *)
@@ -587,23 +594,23 @@ and
 and
   meth = (* ?meth *)
   | Meth of
-      loc * 
-      ghostness * 
-      type_expr option * 
-      string * 
-      (type_expr * string) list * 
-      (asn * asn * ((type_expr * asn) list) * bool (*terminates*) ) option * 
-      ((stmt list * loc (* Close brace *)) * int (*rank*)) option * 
-      method_binding * 
+      loc *
+      ghostness *
+      type_expr option *
+      string *
+      (type_expr * string) list *
+      (asn * asn * ((type_expr * asn) list) * bool (*terminates*) ) option *
+      ((stmt list * loc (* Close brace *)) * int (*rank*)) option *
+      method_binding *
       visibility *
       bool (* is declared abstract? *)
 and
   cons = (* ?cons *)
   | Cons of
-      loc * 
-      (type_expr * string) list * 
-      (asn * asn * ((type_expr * asn) list) * bool (*terminates*) ) option * 
-      ((stmt list * loc (* Close brace *)) * int (*rank*)) option * 
+      loc *
+      (type_expr * string) list *
+      (asn * asn * ((type_expr * asn) list) * bool (*terminates*) ) option *
+      ((stmt list * loc (* Close brace *)) * int (*rank*)) option *
       visibility
 and
   instance_pred_decl = (* ?instance_pred_decl *)
@@ -632,7 +639,7 @@ and
       string (* superclass *) *
       string list (* itfs *) *
       instance_pred_decl list
-  | Interface of 
+  | Interface of
       loc *
       string *
       string list *
@@ -675,13 +682,13 @@ and
       (stmt list * loc (* Close brace *)) option *  (* body *)
       method_binding *  (* static or instance *)
       visibility
-      
+
   (** Do not confuse with FuncTypeDecl *)
   | TypedefDecl of
       loc *
       type_expr *
       string
-      
+
   (** Used for declaring a function type like "typedef void myfunc();"
     * or "typedef lemma ..."
     *)
@@ -748,7 +755,7 @@ let func_kind_of_ghostness gh =
   match gh with
     Real -> Regular
   | Ghost -> Lemma (false, None)
-  
+
 (* Region: some AST inspector functions *)
 
 let string_of_func_kind f=
@@ -828,8 +835,13 @@ let rec expr_loc e =
   | ForallAsn (l, tp, i, e) -> l
   | CoefAsn (l, coef, body) -> l
   | EnsuresAsn (l, body) -> l
+  | SelectArray (l, _, _) -> l
+  | StoreArray (l, _, _, _) -> l
+  | ConstantArray (l, _) -> l
+  | ExtArray (l, _, _) -> l
+
 let asn_loc a = expr_loc a
-  
+
 let stmt_loc s =
   match s with
     PureStmt (l, _) -> l
@@ -874,6 +886,7 @@ let type_expr_loc t =
   | ArrayTypeExpr(l, te) -> l
   | PredTypeExpr(l, te, _) -> l
   | PureFuncTypeExpr (l, tes) -> l
+  | StructArrayTypeExpr (l, _) -> l
 
 let expr_fold_open iter state e =
   let rec iters state es =
@@ -944,7 +957,10 @@ let expr_fold_open iter state e =
   | InstanceOfExpr(l, e, tp) -> iter state e
   | SuperMethodCall(_, _, args) -> iters state args
   | WSuperMethodCall(_, _, _, args, _) -> iters state args
-
+  | SelectArray (_, e0, e1) -> iters state [e0; e1]
+  | StoreArray (_, e0, e1, e2) -> iters state [e0; e1; e2]
+  | ConstantArray (_, e) -> iter state e
+  | ExtArray (_, e0, e1) -> iters state [e0; e1]
 (* Postfix fold *)
 let expr_fold f state e = let rec iter state e = f (expr_fold_open iter state e) e in iter state e
 

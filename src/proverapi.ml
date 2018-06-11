@@ -17,12 +17,15 @@ class virtual ['typenode, 'symbol, 'termnode] context =
     method virtual type_int: 'typenode
     method virtual type_real: 'typenode
     method virtual type_inductive: 'typenode
+    method virtual type_array: 'typenode -> 'typenode -> 'typenode
     method virtual mk_boxed_int: 'termnode -> 'termnode
     method virtual mk_unboxed_int: 'termnode -> 'termnode
     method virtual mk_boxed_real: 'termnode -> 'termnode
     method virtual mk_unboxed_real: 'termnode -> 'termnode
     method virtual mk_boxed_bool: 'termnode -> 'termnode
     method virtual mk_unboxed_bool: 'termnode -> 'termnode
+    method virtual mk_boxed_array: 'termnode -> 'termnode
+    method virtual mk_unboxed_array: 'termnode -> 'termnode
     method virtual mk_symbol: string -> 'typenode list -> 'typenode -> symbol_kind -> 'symbol
     method virtual set_fpclauses: 'symbol -> int -> ('symbol * ('termnode list -> 'termnode list -> 'termnode)) list -> unit
     method virtual mk_app: 'symbol -> 'termnode list -> 'termnode
@@ -51,6 +54,10 @@ class virtual ['typenode, 'symbol, 'termnode] context =
     method virtual mk_real_mul: 'termnode -> 'termnode -> 'termnode
     method virtual mk_real_lt: 'termnode -> 'termnode -> 'termnode
     method virtual mk_real_le: 'termnode -> 'termnode -> 'termnode
+    method virtual mk_select: 'termnode -> 'termnode -> 'termnode
+    method virtual mk_store: 'termnode -> 'termnode -> 'termnode -> 'termnode
+    method virtual mk_constant: 'typenode -> 'termnode -> 'termnode
+    method virtual mk_array_ext: 'termnode -> 'termnode -> 'termnode
     method virtual pprint: 'termnode -> string
     method virtual pprint_sort: 'typenode -> string
     method virtual pprint_sym: 'symbol -> string

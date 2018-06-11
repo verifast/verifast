@@ -28,40 +28,40 @@ predicate element(list<byte> values, int offset; byte value) =
     offset < length(values) &*&
     value == nth(offset, values);
 
-predicate optional_data_records(byte[] array, int start, int count;) =
+    predicate optional_data_records(byte[] arr, int start, int count;) =
     count == 0 ?
         true
     :
         0 < count &*&
-        array_slice(array, start, start + 2, _) &*&
-        array[start + 2] |-> ?length &*& 0 <= length &*& length <= MyApplet.MAX_LEN_OPTIONAL_DATA &*&
-        array_slice(array, start + 3, start + 3 + MyApplet.MAX_LEN_OPTIONAL_DATA, _) &*&
-        optional_data_records(array, start + 3 + MyApplet.MAX_LEN_OPTIONAL_DATA, count - 1);
+        array_slice(arr, start, start + 2, _) &*&
+        arr[start + 2] |-> ?length &*& 0 <= length &*& length <= MyApplet.MAX_LEN_OPTIONAL_DATA &*&
+        array_slice(arr, start + 3, start + 3 + MyApplet.MAX_LEN_OPTIONAL_DATA, _) &*&
+        optional_data_records(arr, start + 3 + MyApplet.MAX_LEN_OPTIONAL_DATA, count - 1);
 
-lemma void optional_data_records_split(byte[] array, int start, int offset)
-    requires [?f]optional_data_records(array, start, ?count) &*& 0 <= offset &*& offset <= count;
-    ensures [f]optional_data_records(array, start, offset) &*& [f]optional_data_records(array, start + offset * 13, count - offset);
+lemma void optional_data_records_split(byte[] arr, int start, int offset)
+    requires [?f]optional_data_records(arr, start, ?count) &*& 0 <= offset &*& offset <= count;
+    ensures [f]optional_data_records(arr, start, offset) &*& [f]optional_data_records(arr, start + offset * 13, count - offset);
 {
     if (offset == 0) {
-        close [f]optional_data_records(array, start, 0);
+        close [f]optional_data_records(arr, start, 0);
     } else {
-        open optional_data_records(array, start, count);
-        optional_data_records_split(array, start + 13, offset - 1);
-        close [f]optional_data_records(array, start, offset);
+        open optional_data_records(arr, start, count);
+        optional_data_records_split(arr, start + 13, offset - 1);
+        close [f]optional_data_records(arr, start, offset);
     }
 }
 
-lemma void optional_data_records_merge(byte[] array, int start)
-    requires [?f]optional_data_records(array, start, ?count1) &*& [f]optional_data_records(array, start + count1 * 13, ?count2);
-    ensures [f]optional_data_records(array, start, count1 + count2) &*& 0 <= count1 + count2;
+lemma void optional_data_records_merge(byte[] arr, int start)
+    requires [?f]optional_data_records(arr, start, ?count1) &*& [f]optional_data_records(arr, start + count1 * 13, ?count2);
+    ensures [f]optional_data_records(arr, start, count1 + count2) &*& 0 <= count1 + count2;
 {
-    open optional_data_records(array, start, count1);
+    open optional_data_records(arr, start, count1);
     if (count1 == 0) {
-        open optional_data_records(array, start, count2);
-        close [f]optional_data_records(array, start, count2);
+        open optional_data_records(arr, start, count2);
+        close [f]optional_data_records(arr, start, count2);
     } else {
-        optional_data_records_merge(array, start + 13);
-        close [f]optional_data_records(array, start, count1 + count2);
+        optional_data_records_merge(arr, start + 13);
+        close [f]optional_data_records(arr, start, count1 + count2);
     }
 }
 

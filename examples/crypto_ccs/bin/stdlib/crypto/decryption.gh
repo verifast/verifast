@@ -72,7 +72,7 @@ predicate has_structure(list<crypto_char> ccs, structure s) =
   }
 ;
 
-lemma void decryption_garbage(char *array, int n, structure s);
+lemma void decryption_garbage(char *arr, int n, structure s);
   requires [_]decryption_key_classifier(?key_classifier) &*&
            decryption_garbage(?sym, ?p, s, ?p_k, ?c_k, ?ccs) &*&
            col || key_classifier(p_k, c_k, sym) ?

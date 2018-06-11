@@ -1,0 +1,91 @@
+#ifndef INTDIFF_H
+#define INTDIFF_H
+
+// This file introduces a boolean ternary predicate int_diff such that int_diff(b, e, n) means n == nat_of_int(e-b) when b <= e (and zero otherwise)
+
+#include "nat.gh"
+
+fixpoint bool int_diff(int b, int e, nat n) {
+  switch (n) {
+    case zero: return (b >= e);
+    case succ(p): return (b < e && int_diff(b+1, e, p));
+}}
+
+lemma void int_diff_le(int b, int e, nat n)
+requires b <= e &*& int_diff(b, e, n) == true;
+ensures n == nat_of_int(e - b);
+{
+  switch(n) {
+    case zero:
+    case succ(p): int_diff_le(b+1, e, p);
+  }
+}
+
+lemma nat int_diff_always(int b, int e)
+requires true;
+ensures int_diff(b, e, result) == true;
+{
+  if (b >= e) {
+    return zero;
+  } else {
+    int i = e;
+    nat l = zero;
+    for (; i > b; i--)
+    invariant b <= i &*& i <= e &*& int_diff(i, e, l) == true;
+    decreases i - b;
+    {
+       l = succ(l);
+    }
+    return l;
+  }
+}
+
+lemma void int_diff_translate(int b, int e, int delta, nat l)
+requires int_diff(b, e, l) == true;
+ensures int_diff(b+delta, e+delta, l) == true;
+{
+  switch(l) {
+    case zero: {}
+    case succ(p): int_diff_translate(b+1, e, delta, p);
+  }
+}
+
+// We can use int_diff to reason on the ints predicate
+
+lemma void open_ints_right(nat n)
+requires ints(?p, ?count, ?vs) &*& int_diff(0, count, succ(n)) == true;
+ensures ints(p, count-1, ?bl) &*& integer(p+count-1, ?lst) &*& vs == append(bl, cons(lst, nil));
+{
+  switch(n) {
+    case zero: {
+      open ints(p, count, vs);
+      open ints(p+1, count-1, _);
+      close ints(p, count-1, nil);
+    }
+    case succ(m): {
+      int_diff_translate(1, count, -1, n);
+      open ints(p, count, vs);
+      assert ints(p+1, count-1, ?l);
+      open_ints_right(m);
+      close ints(p, count-1, _);
+    }
+  }
+}
+
+lemma void close_ints_right(nat n)
+requires ints(?a, ?count, ?vs) &*& int_diff(0, count, n) == true &*& integer(a+count, ?lst);
+ensures ints(a, count+1, ?bl)  &*& bl == append(vs, cons(lst, nil));
+{
+  switch (n) {
+    case zero : {
+      open ints(a, count, vs);
+      close ints(a, 1, cons(lst, nil));
+    }
+    case succ(p) : {
+      int_diff_translate(1, count, -1, p);
+      open ints(a, count, vs);
+      close_ints_right(p);
+    }
+  }
+}
+#endif
