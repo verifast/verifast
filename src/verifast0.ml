@@ -144,7 +144,8 @@ type options = {
   option_use_java_frontend : bool;
   option_enforce_annotations : bool;
   option_allow_undeclared_struct_types: bool;
-  option_data_model: data_model
+  option_data_model: data_model;
+  option_disable_array_theory : bool
 } (* ?options *)
 
 (* Region: verify_program_core: the toplevel function *)

@@ -39,7 +39,7 @@ let _ =
     if emitHighlightedSourceFiles then
     begin
       let sourceFiles : (string * (((int * int) * (int * int)) * range_kind) list ref) list ref = ref [] in
-      let range_callback kind ((path1, line1, col1), (path2, line2, col2)) =    
+      let range_callback kind ((path1, line1, col1), (path2, line2, col2)) =
         assert (path1 = path2);
         let path = path1 in
         let ranges =
@@ -144,6 +144,7 @@ let _ =
   let stats = ref false in
   let verbose = ref 0 in
   let disable_overflow_check = ref false in
+  let disable_array_theory = ref false in
   let prover: string ref = ref default_prover in
   let compileOnly = ref false in
   let isLibrary = ref false in
@@ -191,6 +192,7 @@ let _ =
   let cla = [ "-stats", Set stats, " "
             ; "-verbose", Set_int verbose, "-1 = file processing; 1 = statement executions; 2 = produce/consume steps; 4 = prover queries."
             ; "-disable_overflow_check", Set disable_overflow_check, " "
+            ; "-disable_array_theory", Set disable_array_theory, " "
             ; "-prover", String (fun str -> prover := str), "Set SMT prover (" ^ list_provers() ^ ")."
             ; "-c", Set compileOnly, "Compile only, do not perform link checking."
             ; "-shared", Set isLibrary, "The file is a library (i.e. no main function required)."
@@ -237,6 +239,7 @@ let _ =
         let options = {
           option_verbose = !verbose;
           option_disable_overflow_check = !disable_overflow_check;
+          option_disable_array_theory = !disable_array_theory;
           option_allow_should_fail = !allowShouldFail;
           option_emit_manifest = !emitManifest;
           option_vroots = !vroots;
@@ -259,7 +262,7 @@ let _ =
           match !outputSExpressions with
             | Some target_file ->
               Printf.printf "Emitting s-expressions to %s\n" target_file;
-              SExpressionEmitter.emit target_file packages          
+              SExpressionEmitter.emit target_file packages
             | None             -> ()
         in
         verify ~emitter_callback:emitter_callback !stats options !prover filename !emitHighlightedSourceFiles;
@@ -271,7 +274,7 @@ let _ =
       begin
         let filename =
           if Filename.check_suffix filename ".so" then (Filename.chop_extension filename) ^ ".dll.vfmanifest"
-          else if Filename.check_suffix filename ".dll" then (filename ^ ".vfmanifest") 
+          else if Filename.check_suffix filename ".dll" then (filename ^ ".vfmanifest")
           else filename
         in
         allModules := filename::!allModules;
@@ -280,7 +283,7 @@ let _ =
       allModules := filename::!allModules
     else
       begin
-        print_endline ("Don't know what to do with file \'" ^ filename ^ "\'."); 
+        print_endline ("Don't know what to do with file \'" ^ filename ^ "\'.");
         exit 1
       end
   in
@@ -312,7 +315,7 @@ let _ =
             if !emitDllManifest then Some (!dllManifestName) else None
           in
           link_program !vroots library_paths (!isLibrary) allModules dllManifest !exports;
-          if (!linkShouldFail) then 
+          if (!linkShouldFail) then
             (print_endline "Error: link phase succeeded, while expected to fail (option -link_should_fail)."; exit 1)
           else print_endline "Program linked successfully."
         with

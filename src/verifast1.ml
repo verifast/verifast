@@ -43,7 +43,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     option_use_java_frontend=use_java_frontend;
     option_enforce_annotations=enforce_annotations;
     option_allow_undeclared_struct_types;
-    option_data_model=data_model
+    option_data_model=data_model;
+    option_disable_array_theory=disable_array_theory
   } = options
 
   let data_model = match language with Java -> data_model_java | CLang -> data_model
@@ -3118,9 +3119,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           let args = List.map (fun (e, t0) -> let t = instantiate_type tpenv t0 in box (checkt e t) t t0) pts in
           let t = instantiate_type tpenv t0 in
-          array_theory l g t args targs t0
+          if not disable_array_theory
+          then array_theory l g t args targs t0
+          else unbox (WPureFunCall (l, g, targs, args)) t0 t, t, None
         | None ->
-          static_error l (match language with CLang -> "No such function: " ^ g | Java -> "No such method or function: " ^ g) None
+           static_error l (match language with CLang -> "No such function: " ^ g | Java -> "No such method or function: " ^ g) None
       in
       if language = CLang || classmap = [] then func_call () else
       let try_qualified_call tn es args fb on_fail =

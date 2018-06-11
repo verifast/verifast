@@ -85,13 +85,13 @@ let index_of_byref x xs =
     | x0::xs -> if x0 == x then k else iter (k + 1) xs
   in
   iter 0 xs
-  
+
 let string_of_process_status s =
   match s with
     Unix.WEXITED n -> Printf.sprintf "WEXITED %d" n
   | Unix.WSIGNALED n -> Printf.sprintf "WSIGNALED %d" n
   | Unix.WSTOPPED n -> Printf.sprintf "WSTOPPED %d" n
-  
+
 let sys cmd =
   let chan = Unix.open_process_in cmd in
   let line = input_line chan in
@@ -133,7 +133,7 @@ module TreeMetrics = struct
   let cw = dotWidth + 2 * padding
 end
 
-let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend enforceAnnotations allowUndeclaredStructTypes dataModel overflowCheck =
+let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend enforceAnnotations allowUndeclaredStructTypes dataModel overflowCheck arraytheory =
   let leftBranchPixbuf = Branchleft_png.pixbuf () in
   let rightBranchPixbuf = Branchright_png.pixbuf () in
   let ctxts_lifo = ref None in
@@ -159,6 +159,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   let scaledTraceFont = ref !traceFont in
   let actionGroup = GAction.action_group ~name:"Actions" () in
   let disableOverflowCheck = ref (not overflowCheck) in
+  let disableArrayTheory = ref (not arraytheory) in
   let useJavaFrontend = ref false in
   let toggle_java_frontend active =
     (useJavaFrontend := active;
@@ -449,7 +450,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     | Some (path, mtime) -> path
   in
   let updateWindowTitle (): unit =
-    let filename = 
+    let filename =
       match !buffers with
         [] -> "(no file)"
       | tab::tabs -> getTitleOfTab tab
@@ -457,7 +458,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     root#set_title (filename ^ " - " ^ appTitle)
   in
   let updateBufferMenu () =
-    let menu notebook = 
+    let menu notebook =
       let gtk_menu = GMenu.menu () in
       let items = !buffers |> List.map (fun tab -> getTitleOfTab tab, tab) in
       let items = List.sort (fun (name1, _) (name2, _) -> compare name1 name2) items in
@@ -692,7 +693,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       begin
         let offset = start#offset in
         let text = buffer#get_text ~start:start ~stop:stop () in
-        undoList := 
+        undoList :=
           begin
             match !undoList with
               Delete (offset0, text0)::acs when offset = offset0 ->
@@ -945,12 +946,12 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
         stepStore#set ~row:it ~column:stepCol msg;
         stepItem::iter (Some stepItem) itstack (Some it) ass locstack (Some l) (Some env) cs
       | PushSubcontext::cs ->
-        (match (last_it, last_loc, last_env) with 
+        (match (last_it, last_loc, last_env) with
           | (Some it, Some l, Some env) -> iter lastItem (it::itstack) None ass ((l, env)::locstack) None None cs
           | _ -> assert false
         )
       | PopSubcontext::cs ->
-        (match (itstack, locstack) with 
+        (match (itstack, locstack) with
           |(it::itstack, (l, env)::locstack) -> iter lastItem itstack (Some it) ass locstack (Some l) (Some env) cs
           | _ -> assert false
         )
@@ -1052,7 +1053,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
             let k = index_of_byref tab !buffers in
             subNotebook#goto_page k;
             tab#buffer#move_mark (`MARK tab#currentStepMark) ~where:(tab#buffer#get_iter_at_mark (`MARK mark1));
-            ignore $. Glib.Idle.add (fun () -> tab#subView#view#scroll_to_mark ~within_margin:0.2 (`MARK tab#currentStepMark); false); 
+            ignore $. Glib.Idle.add (fun () -> tab#subView#view#scroll_to_mark ~within_margin:0.2 (`MARK tab#currentStepMark); false);
             append_assoc_items subEnvStore subEnvKCol subEnvCol1 subEnvCol2 (strings_of_env env)
           end;
           begin
@@ -1253,7 +1254,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
           undoAction#set_sensitive (acs <> []);
           redoAction#set_sensitive true;
           buffer#place_cursor ~where:(buffer#get_iter (`OFFSET offset));
-          tab#mainView#view#scroll_to_mark ~within_margin:0.2 `INSERT 
+          tab#mainView#view#scroll_to_mark ~within_margin:0.2 `INSERT
       end
   in
   let redo () =
@@ -1344,6 +1345,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
               let options = {
                 option_verbose = 0;
                 option_disable_overflow_check = !disableOverflowCheck;
+                option_disable_array_theory = !disableArrayTheory;
                 option_use_java_frontend = !useJavaFrontend;
                 option_enforce_annotations = enforceAnnotations;
                 option_allow_undeclared_struct_types = allowUndeclaredStructTypes;
@@ -1399,7 +1401,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
               msg := Some(emsg);
               updateMessageEntry(false)
             | StaticError (l, emsg, eurl) ->
-              handleStaticError l emsg eurl 
+              handleStaticError l emsg eurl
             | SymbolicExecutionError (ctxts, l, emsg, eurl) ->
               ctxts_lifo := Some ctxts;
               updateStepItems();
@@ -1588,7 +1590,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     ignore $. dialog#run();
     dialog#destroy()
   in
-  
+
   (** Dialog that allows the user to select a tab of the notebook by simply typing (part of) the name.
    *  This is sometimes faster than searching visually. *)
   let showFindFileDialog notebook () =
@@ -1599,10 +1601,10 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     let vbox = dialog#vbox in
     let entry = GEdit.entry ~text:"" ~max_length:500 ~packing:(vbox#pack ~from:`START ~expand: true) ~activates_default:true () in
     let label = GMisc.label ~text:"(no search results yet)" ~packing:(vbox#pack ~expand:true) () in
-    
-    
-    let google (haystack: string list) (needle: string) : string option = 
-      
+
+
+    let google (haystack: string list) (needle: string) : string option =
+
       let rec get_first_filter_match (filters : ('a -> bool) list) (haystack : 'a list) : 'a option =
         match filters with
         | [] -> None
@@ -1612,7 +1614,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
           with
           Not_found -> get_first_filter_match tail haystack
       in
-      
+
       (* This is probably a bit inefficient. *)
       let contains (haystack: string) (needle: string) : bool =
         let rec iter i =
@@ -1627,25 +1629,25 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
         in
         iter ((String.length haystack) - (String.length needle))
       in
-      
+
       let filters = [
-        
+
         (* Find a file that starts with what the user types *)
         (startswith needle);
-        
+
         (* Find matches of the form "x/yz" for a search "y" *)
         (fun bigstring -> contains bigstring ("/" ^ needle));
-        
+
         (* Find matches that just contain what the user types*)
         (fun bigstring -> contains bigstring needle)
       ] in
-      
+
       if needle = "" then
         None
       else
         get_first_filter_match filters haystack
     in
-    
+
     (* Gets the list of names of tabs and tabs. *)
     let search_tabs () =
       let items = !buffers |> List.map (fun tab -> (getTitleOfTab tab), tab) in
@@ -1653,13 +1655,13 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       let (item_strings, _) = List.split items in
       (item_strings, items)
     in
-    
+
     (* Jump to the tab that matches the best with the entry's text *)
     let jump_to_tab () =
       (* If you do this somewhere else, you will sooner or later
        * end up using outdated data. *)
       let (item_strings, items) = search_tabs() in
-      
+
       begin match google item_strings entry#text with
         | None -> ()
         | Some(match_) ->
@@ -1667,7 +1669,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
           goto_tab tab notebook
       end
     in
-    
+
     (* Performs search and updates the search results in the GUI *)
     let show_finds () =
       let (item_strings, items) = search_tabs() in
@@ -1677,7 +1679,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       in
       label#set_text text
     in
-    
+
     ignore $. entry#connect#changed ~callback:show_finds;
     match dialog#run () with
       `OK ->
@@ -1685,7 +1687,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
         dialog#destroy()
       | `DELETE_EVENT | `CANCEL -> dialog#destroy()
   in
-  
+
   ignore $. (actionGroup#get_action "ClearTrace")#connect#activate clearTrace;
   ignore $. (actionGroup#get_action "Preferences")#connect#activate showPreferencesDialog;
   ignore $. (actionGroup#get_action "VerifyProgram")#connect#activate (verifyProgram false None);
@@ -1728,6 +1730,7 @@ let () =
   let enforceAnnotations = ref false in
   let allowUndeclaredStructTypes = ref false in
   let overflow_check = ref true in
+  let array_theory = ref true in
   let data_model = ref data_model_32bit in
   let rec iter args =
     match args with
@@ -1749,8 +1752,9 @@ let () =
     | "-allow_undeclared_struct_types"::args -> allowUndeclaredStructTypes := true; iter args
     | "-target"::target::args -> data_model := data_model_of_string target; iter args
     | "-disable_overflow_check"::args -> overflow_check := false; iter args
+    | "-disable_array_theory"::args -> array_theory := false; iter args
     | arg::args when not (startswith arg "-") -> path := Some arg; iter args
-    | [] -> show_ide !path !prover !codeFont !traceFont !runtime !layout !javaFrontend !enforceAnnotations !allowUndeclaredStructTypes !data_model !overflow_check
+    | [] -> show_ide !path !prover !codeFont !traceFont !runtime !layout !javaFrontend !enforceAnnotations !allowUndeclaredStructTypes !data_model !overflow_check !array_theory
     | _ ->
       let options = [
         "-prover prover    (" ^ list_provers () ^ ")";
@@ -1764,16 +1768,17 @@ let () =
         "-bindir";
         "-enforce_annotations";
         "-disable_overflow_check";
+        "-disable_array_theory";
         "-target target    (supported targets: " ^ String.concat ", " (List.map fst data_models) ^ ")"
       ] in
       GToolbox.message_box "VeriFast IDE" begin
-        "Invalid command line.\n\n" ^ 
+        "Invalid command line.\n\n" ^
         "Usage: vfide [options] [filepath]\n\n" ^
         "Options:\n" ^
         String.concat "" (List.map (fun opt -> "  " ^ opt ^ "\n") options)
       end
   in
-  let args = 
+  let args =
     match Array.to_list (Sys.argv) with
     | _::args -> args
     | _ -> assert false
