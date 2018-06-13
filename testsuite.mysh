@@ -195,6 +195,7 @@ cd examples
   cd queue
     verifast_both threading.o atomics.o queue.c queue_client.c
   cd ..
+  verifast_both -c -disable_overflow_check quicksort.c
   verifast_both -c tokenizer_test.c
   verifast_both -c truncating.c
   verifast_both -disable_overflow_check stringBuffers.c tokenizer.c ghostlist.o rcl.c
