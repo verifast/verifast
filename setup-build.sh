@@ -12,7 +12,7 @@ if [ $(uname -s) = "Linux" ]; then
   sudo apt-get install -y --no-install-recommends \
        git wget ca-certificates make m4 \
        gcc patch unzip libgtk2.0-dev \
-       valac gtksourceview2.0-dev
+       valac libgtksourceview2.0-dev
   cd /tmp && curl -Lf http://people.cs.kuleuven.be/~bart.jacobs/verifast/vfdeps-ocaml-4.06.0-trusty.tar.xz | tar xj
 
 elif [ $(uname -s) = "Darwin" ]; then
