@@ -282,10 +282,13 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
                  [ "lhs", sexpr_of_expr lhs
                  ; "t", sexpr_of_type_ t
                  ; "rhs", sexpr_of_expr rhs]
-    | Deref (_, e, t) ->
+    | Deref (_, e) ->
       build_list [ Symbol "expr-deref" ]
+                 [ "e", sexpr_of_expr e]
+    | WDeref (_, e, t) ->
+      build_list [ Symbol "expr-w-deref" ]
                  [ "e", sexpr_of_expr e
-                 ; "t", sexpr_of_option sexpr_of_type_ !t]
+                 ; "t", sexpr_of_type_ t]
     | ExprCallExpr (_, expr, args) ->
       build_list [ Symbol "expr-call-expr" ]
                  [ "expr", sexpr_of_expr expr

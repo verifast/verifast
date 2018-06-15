@@ -32,7 +32,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Read (l, e, f) -> expr_assigned_variables e
     | WRead (l, e, fparent, fname, frange, fstatic, fvalue, fghost) -> expr_assigned_variables e
     | ReadArray (l, ea, ei) -> expr_assigned_variables ea @ expr_assigned_variables ei
-    | Deref (l, e, _) -> expr_assigned_variables e
+    | Deref (l, e) -> expr_assigned_variables e
+    | WDeref (l, e, _) -> expr_assigned_variables e
     | CallExpr (l, g, _, _, pats, _) -> flatmap (function (LitPat e) -> expr_assigned_variables e | _ -> []) pats
     | ExprCallExpr (l, e, es) -> flatmap expr_assigned_variables (e::es)
     | WPureFunCall (l, g, targs, args) -> flatmap expr_assigned_variables args
@@ -989,7 +990,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | WRead(_, e, _, _, _, _, _, _) -> expr_mark_addr_taken e locals
     | ReadArray(_, e1, e2) -> (expr_mark_addr_taken e1 locals); (expr_mark_addr_taken e2 locals)
     | WReadArray(_, e1, _, e2) -> (expr_mark_addr_taken e1 locals); (expr_mark_addr_taken e2 locals)
-    | Deref(_, e, _) -> expr_mark_addr_taken e locals
+    | Deref(_, e) -> expr_mark_addr_taken e locals
+    | WDeref(_, e, _) -> expr_mark_addr_taken e locals
     | CallExpr(_, _, _, ps1, ps2, _) -> List.iter (fun pat -> pat_expr_mark_addr_taken pat locals) (ps1 @ ps2)
     | ExprCallExpr(_, e, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) (e :: es)
     | WFunPtrCall(_, _, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
@@ -1126,7 +1128,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | WRead(_, e, _, _, _, _, _, _) -> expr_address_taken e
     | ReadArray(_, e1, e2) -> (expr_address_taken e1) @ (expr_address_taken e2)
     | WReadArray(_, e1, _, e2) -> (expr_address_taken e1) @ (expr_address_taken e2)
-    | Deref(_, e, _) -> (expr_address_taken e)
+    | Deref(_, e) -> (expr_address_taken e)
+    | WDeref(_, e, _) -> (expr_address_taken e)
     | CallExpr(_, _, _, ps1, ps2, _) -> List.flatten (List.map (fun pat -> pat_address_taken pat) (ps1 @ ps2))
     | ExprCallExpr(_, e, es) -> List.flatten (List.map (fun e -> expr_address_taken e) (e :: es))
     | WFunPtrCall(_, _, es) -> List.flatten (List.map (fun e -> expr_address_taken e) es)
@@ -1758,9 +1761,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         eval_h h env arr $. fun h env arr ->
         eval_h h env i $. fun h env i ->
         cont h env (LValues.ArrayElement (l, arr, elem_tp, i))
-      | Deref (l, w, pointeeType) ->
+      | WDeref (l, w, pointeeType) ->
         eval_h h env w $. fun h env target ->
-        cont h env (LValues.Deref (l, target, get !pointeeType))
+        cont h env (LValues.Deref (l, target, pointeeType))
       | _ -> static_error (expr_loc lhs) "Cannot assign to this expression." None
     in
     let read_lvalue h env lvalue cont =
@@ -2110,7 +2113,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       eval_h h env arr $. fun h env arr ->
       eval_h h env i $. fun h env i ->
       cont h env (read_c_array h env l arr i elem_tp)
-    | Deref (l, w, pointeeType) as e ->
+    | WDeref (l, w, pointeeType) as e ->
       lhs_to_lvalue h env e $. fun h env lvalue ->
       read_lvalue h env lvalue cont
     | WOperation (l, Not, [e], t) -> eval_h_core readonly h env e (fun h env v -> cont h env (ctxt#mk_not v))

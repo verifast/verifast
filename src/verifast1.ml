@@ -2738,7 +2738,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Var (l, x) ->
       begin
       match try_assoc x tenv with
-      | Some(RefType(t)) -> (Deref(l, WVar (l, x, LocalVar), ref (Some t)), t, None)
+      | Some(RefType(t)) -> (WDeref (l, WVar (l, x, LocalVar), t), t, None)
       | Some t -> (WVar (l, x, LocalVar), t, None)
       | None ->
       begin fun cont ->
@@ -2998,11 +2998,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (w, t, None)
     | Read (l, e, f) ->
       check_deref_core functypemap funcmap classmap interfmap (pn,ilist) l tparams tenv e f
-    | Deref (l, e, tr) ->
+    | Deref (l, e) ->
       let (w, t, _) = check e in
       begin
         match t with
-          PtrType t0 -> tr := Some t0; (Deref (l, w, tr), t0, None)
+          PtrType t0 -> (WDeref (l, w, t0), t0, None)
         | _ -> static_error l "Operand must be pointer." None
       end
     | AddressOf (l, Var(l2, x)) when List.mem_assoc x tenv ->
@@ -4020,7 +4020,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin match wlhs with
         WRead (_, _, _, _, _, _, _, _) | WReadArray (_, _, _, _) -> ()
       | WVar (_, _, GlobalName) -> ()
-      | Deref (_, _, _) -> ()
+      | WDeref (_, _, _) -> ()
       | _ -> static_error l "The left-hand side of a points-to assertion must be a field dereference, a global variable, a pointer variable dereference or an array element expression." None
       end;
       let (wv, tenv') = check_pat (pn,ilist) tparams tenv t v in
@@ -5382,13 +5382,12 @@ let check_if_list_is_defined () =
           None -> static_error l "Cannot use array indexing in this context." None
         | Some (read_field, read_static_field, deref_pointer, read_array) -> cont state (read_array l arr i tp)
       end
-    | Deref (l, e, t) ->
+    | WDeref (l, e, t) ->
       ev state e $. fun state v ->
       begin
         match read_field with
           None -> static_error l "Cannot perform dereference in this context." None
         | Some (read_field, read_static_field, deref_pointer, read_array) ->
-          let (Some t) = !t in
           cont state (deref_pointer l v t)
       end
     | AddressOf (l, e) ->

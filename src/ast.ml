@@ -239,7 +239,13 @@ and
       type_ list (* type arguments *)
   | ReadArray of loc * expr * expr
   | WReadArray of loc * expr * type_ * expr
-  | Deref of loc * expr * type_ option ref (* pointee type *) (* pointer dereference *)
+  | Deref of (* pointer dereference *)
+      loc *
+      expr
+  | WDeref of
+      loc *
+      expr *
+      type_ (* pointee type *)
   | CallExpr of (* oproep van functie/methode/lemma/fixpoint *)
       loc *
       string *
@@ -781,7 +787,8 @@ let rec expr_loc e =
   | WReadInductiveField(l, _, _, _, _, _) -> l
   | ReadArray (l, _, _) -> l
   | WReadArray (l, _, _, _) -> l
-  | Deref (l, e, t) -> l
+  | Deref (l, e) -> l
+  | WDeref (l, e, t) -> l
   | CallExpr (l, g, targs, pats0, pats,_) -> l
   | ExprCallExpr (l, e, es) -> l
   | WPureFunCall (l, g, targs, args) -> l
@@ -917,7 +924,8 @@ let expr_fold_open iter state e =
   | WReadInductiveField (l, e0, ind_name, constr_name, field_name, targs) -> iter state e0
   | ReadArray (l, a, i) -> let state = iter state a in let state = iter state i in state
   | WReadArray (l, a, tp, i) -> let state = iter state a in let state = iter state i in state
-  | Deref (l, e0, tp) -> iter state e0
+  | Deref (l, e0) -> iter state e0
+  | WDeref (l, e0, tp) -> iter state e0
   | CallExpr (l, g, targes, pats0, pats, mb) -> let state = iterpats state pats0 in let state = iterpats state pats in state
   | ExprCallExpr (l, e, es) -> iters state (e::es)
   | WPureFunCall (l, g, targs, args) -> iters state args

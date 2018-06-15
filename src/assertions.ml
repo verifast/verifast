@@ -244,7 +244,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       produce_chunk h (symb, true) [] coef (Some 1) [symbn; t] None $. fun h ->
       cont h ghostenv env
-    | WPointsTo (l, Deref(ld, e, td), tp, rhs) ->  
+    | WPointsTo (l, WDeref(ld, e, td), tp, rhs) ->  
       let symbn = eval None env e in
       evalpat false ghostenv env rhs tp tp $. fun ghostenv env t ->
       let symb = 
@@ -887,11 +887,10 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         consume_chunk rules h ghostenv env env' l (symb, true) [] coef coefpat (Some 1) [TermPat symbn; rhs]
           (fun chunk h coef ts size ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' size)
-      | Deref(ld, e, td) ->  
+      | WDeref(ld, e, td) ->  
         let symbn = eval None env e in
-        let Some(td') = !td in 
         let symb = 
-          match try_pointee_pred_symb td' with
+          match try_pointee_pred_symb td with
             Some s -> s
           | _ -> static_error l "The left-hand side of this points-to assertion must be of a primitive type" None
         in

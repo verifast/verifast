@@ -1186,7 +1186,7 @@ and
     [< '(l, Kwd "|->"); rhs = parse_pattern >] -> 
     begin match e with
        ReadArray (_, _, SliceExpr (_, _, _)) -> PointsTo (l, e, rhs)
-     | ReadArray (lr, e0, e1) when language = CLang -> PointsTo (l, Deref(lr, Operation(lr, Add, [e0; e1]), ref None), rhs) 
+     | ReadArray (lr, e0, e1) when language = CLang -> PointsTo (l, Deref(lr, Operation(lr, Add, [e0; e1])), rhs) 
      | _ -> PointsTo (l, e, rhs)
     end
   | [< >] -> e
@@ -1344,7 +1344,7 @@ and
 | [< '(l, Kwd "super"); '(_, Kwd "."); '(l2, Ident n); '(_, Kwd "("); es = rep_comma parse_expr; '(_, Kwd ")") >] -> SuperMethodCall (l, n, es)
 | [< '(l, Kwd "!"); e = parse_expr_suffix >] -> Operation(l, Not, [e])
 | [< '(l, Kwd "@"); '(_, Ident g) >] -> PredNameExpr (l, g)
-| [< '(l, Kwd "*"); e = parse_expr_suffix >] -> Deref (l, e, ref None)
+| [< '(l, Kwd "*"); e = parse_expr_suffix >] -> Deref (l, e)
 | [< '(l, Kwd "&"); e = parse_expr_suffix >] -> AddressOf (l, e)
 | [< '(l, Kwd "~"); e = parse_expr_suffix >] -> Operation (l, BitNot, [e])
 | [< '(l, Kwd "-"); e = parse_expr_suffix >] ->
@@ -1425,7 +1425,7 @@ and
   | CastExpr (lc, te, e) -> CastExpr (lc, te, apply_type_args e targs args)
   | Operation (l, Not, [e]) -> Operation (l, Not, [apply_type_args e targs args])
   | Operation (l, BitNot, [e]) -> Operation (l, BitNot, [apply_type_args e targs args])
-  | Deref (l, e, ts) -> Deref (l, apply_type_args e targs args, ts)
+  | Deref (l, e) -> Deref (l, apply_type_args e targs args)
   | AddressOf (l, e) -> AddressOf (l, apply_type_args e targs args)
   | Operation (l, op, [e1; e2]) -> Operation (l, op, [e1; apply_type_args e2 targs args])
   | _ -> raise (ParseException (expr_loc e, "Identifier expected before type argument list"))
