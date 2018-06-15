@@ -9,6 +9,7 @@ set -e # Stop as soon as a command fails.
 set -x # Print what is being executed.
 
 if [ $(uname -s) = "Linux" ]; then
+  sudo apt-get update
   sudo apt-get install -y --no-install-recommends \
        git wget ca-certificates make m4 \
        gcc patch unzip libgtk2.0-dev \
