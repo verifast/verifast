@@ -16,6 +16,8 @@ void modify_int_refs_new_syntax(int* first, int* second)
     (*second)--;
 }
 
+//@ predicate intptr_pointsto(int **p; int *v) = *p |-> v;
+
 void modify_uint_refs_old_syntax(unsigned int* first, unsigned int* second)
     //@ requires u_integer(first, ?val1) &*& u_integer(second, ?val2);
     //@ ensures u_integer(first, val1 + 1) &*& u_integer(second, val2 - 1);

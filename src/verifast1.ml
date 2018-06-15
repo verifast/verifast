@@ -4321,6 +4321,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         WRead (lr, et, _, _, _, _, _, _) -> assert_expr_fixed fixed et
       | WReadArray (la, ea, tp, ei) -> assert_expr_fixed fixed ea; assert_expr_fixed fixed ei
       | WVar (_, _, GlobalName) -> ()
+      | WDeref (_, ed, _) -> assert_expr_fixed fixed ed
       end;
       assume_pat_fixed fixed pv
     | WPredAsn (l, g, is_global_predref, targs, pats0, pats) ->
