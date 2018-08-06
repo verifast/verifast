@@ -35,7 +35,9 @@ elif [ $(uname -s) = "Darwin" ]; then
   brewinstall gtksourceview
   brewinstall vala
   export PKG_CONFIG_PATH=/opt/X11/lib/pkgconfig
-  sudo chown -R $(whoami):admin /usr/local
+  sudo mkdir /usr/local/include
+  sudo mkdir /usr/local/Frameworks
+  sudo chown -R $(whoami):admin /usr/local/*
   cd /usr/local && curl -Lf http://people.cs.kuleuven.be/~bart.jacobs/verifast/vfdeps-17.12-el-capitan.txz | tar xj
   export PATH=/usr/local/vfdeps-17.12/bin:$PATH
   export DYLD_LIBRARY_PATH=/usr/local/vfdeps-17.12/lib:$DYLD_LIBRARY_PATH
