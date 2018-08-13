@@ -37,7 +37,15 @@ cd examples
     mysh -cpus 1 < crypto_ccs.mysh
   cd ..
   cd floating_point
-    verifast_both -c sqrt.c
+    cd sqrt_exact
+      verifast -prover redux -c sqrt_exact.c
+    cd ..
+    cd sqrt_with_rounding
+      verifast -prover redux -c sqrt_with_rounding.c
+    cd ..
+    cd interval_arithmetic
+      verifast -prover z3v4.5 -c interval.c
+    cd ..
   cd ..
   verifast_both -c -disable_overflow_check -allow_should_fail forall.c
   verifast_both -c -disable_overflow_check -allow_should_fail address_of_local.c
