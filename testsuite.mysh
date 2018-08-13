@@ -38,13 +38,13 @@ cd examples
   cd ..
   cd floating_point
     cd sqrt_exact
-      verifast -prover redux sqrt_exact.c
+      verifast -prover redux -c sqrt_exact.c
     cd ..
     cd sqrt_with_rounding
-      verifast -prover redux sqrt_with_rounding.c
+      verifast -prover redux -c sqrt_with_rounding.c
     cd ..
     cd interval_arithmetic
-      verifast -prover z3v4.5 interval.c
+      verifast -prover z3v4.5 -c interval.c
     cd ..
   cd ..
   verifast_both -c -disable_overflow_check -allow_should_fail forall.c
