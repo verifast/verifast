@@ -4406,12 +4406,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   pref#set_domain [PtrType (PtrType Void); PtrType Void];
                   [predinst pref]
                 | Int (Signed, 3) ->
-                  let pref = new predref "long_long" in
-                  pref#set_domain [PtrType (Int(Signed, 8)); (Int(Signed, 8))];
+                  let pref = new predref "llong_integer" in
+                  pref#set_domain [PtrType (Int (Signed, 3)); (Int(Signed, 3))];
                   [predinst pref]
                 | Int (Unsigned, 3) ->
-                  let pref = new predref "u_long_long" in
-                  pref#set_domain [PtrType (Int (Unsigned, 8)); Int (Unsigned, 8)];
+                  let pref = new predref "u_llong_integer" in
+                  pref#set_domain [PtrType (Int (Unsigned, 3)); Int (Unsigned, 3)];
                   [predinst pref]
                 | Int (Signed, 2) when int_rank = 2 ->
                   let pref = new predref "integer" in
@@ -4419,7 +4419,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   [predinst pref]
                 | Int (Unsigned, 2) when int_rank = 2 ->
                   let pref = new predref "u_integer" in
-                  pref#set_domain [PtrType (Int (Unsigned, 4)); Int (Unsigned, 4)];
+                  pref#set_domain [PtrType (Int (Unsigned, 2)); Int (Unsigned, 2)];
                   [predinst pref]
                 | Int (Signed, 1) ->
                   let pref = new predref "short_integer" in
