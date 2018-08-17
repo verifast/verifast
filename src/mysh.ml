@@ -79,8 +79,6 @@ let read_line_canon file =
   let n = String.length line in
   if n > 0 && line.[n - 1] = '\r' then String.sub line 0 (n - 1) else line
 
-let macros = ref []
-
 let processes_started_count = ref 0
 let active_processes_count = ref 0
 let failed_processes_log: string list list ref = ref []
@@ -199,7 +197,9 @@ let getcwd () =
     [] -> "."
   | cs -> String.concat "/" (List.rev cs)
 
-let rec exec_lines filepath file lineno =
+let rec exec_lines macros filepath file =
+  let macros = ref macros in
+  let rec exec_lines_at lineno =
   if !failed_processes_log = [] then
   let error msg =
     failwith (Printf.sprintf "mysh: %s: line %d: %s" filepath lineno msg)
@@ -249,7 +249,7 @@ let rec exec_lines filepath file lineno =
         macros := (macroName, lines)::!macros
       | ["include"; includepath] ->
         let file = try open_in includepath with Sys_error s -> error (Printf.sprintf "Could not open include file '%s': %s" includepath s) in
-        exec_lines includepath file 1;
+        exec_lines !macros includepath file;
         close_in file
       | [cmdName; args] when List.mem_assoc cmdName !macros ->
         List.iter (fun line -> exec_line (Printf.sprintf "%s %s" line args)) (List.assoc cmdName !macros)
@@ -317,12 +317,14 @@ let rec exec_lines filepath file lineno =
       end
     in
     exec_line line;
-    exec_lines filepath file (lineno + 1)
+    exec_lines_at (lineno + 1)
   with End_of_file -> ()
+  in
+  exec_lines_at 1
 
 let () =
   let time0 = Unix.gettimeofday() in
-  exec_lines !main_filename !main_file 1;
+  exec_lines [] !main_filename !main_file;
   while !active_processes_count > 0 do pump_events () done;
   let time1 = Unix.gettimeofday() in
   Printf.printf "Total execution time: %f seconds\n" (time1 -. time0);
