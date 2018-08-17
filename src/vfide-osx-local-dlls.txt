@@ -23,3 +23,4 @@
 /usr/local/opt/libpng/lib/libpng16.16.dylib
 /usr/local/opt/graphite2/lib/libgraphite2.3.dylib
 /usr/local/lib/gtk-2.0/2.10.0/immodules/im-quartz.so
+/usr/local/opt/fribidi/lib/libfribidi.0.dylib
