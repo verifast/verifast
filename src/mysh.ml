@@ -228,8 +228,9 @@ let rec exec_lines filepath file lineno =
       match parse_cmdline line with
         ["cd"; dir] -> cd dir
       | ["del"; file] -> while !active_processes_count > 0 do pump_events() done; Sys.remove file
-      | ["ifnotmac"; line] -> if not Fonts.is_macos then exec_line line
+      | ["ifnotmac"; line] -> if Vfconfig.platform <> MacOS then exec_line line
       | ["ifz3"; line] -> if Vfconfig.z3_present then exec_line line
+      | ["ifz3v4.5"; line] -> if Vfconfig.z3v4dot5_present then exec_line line
       | ["ifdef"; line] ->
         let space = try String.index line ' ' with Not_found -> error "Syntax error: 'ifdef ENVVAR CMD' expected" in
         let var = String.sub line 0 space in

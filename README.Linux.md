@@ -1,102 +1,37 @@
-Compiling VeriFast on Linux
-===========================
+Building VeriFast on Linux
+==========================
 
-Debian-based (Ubuntu, Mint, ...) (32bit + 64bit)
-----------------------------------------
-    
-    
-1.  Run this
-    
-  ```sh    
-  $ sudo apt-get install --no-install-recommends \
-      git wget ca-certificates make m4 \
-      ocaml-native-compilers gcc camlp4 patch unzip libgtk2.0-dev \
-      valac gtksourceview2.0-dev \
-      liblablgtk2-ocaml-dev liblablgtksourceview2-ocaml-dev
-  $ git clone https://github.com/verifast/verifast.git
-  $ make -j 8 -C verifast/src/
-  $ verifast/bin/vfide
-  ```
+Note: binary downloads are available, both ["nightly" builds](https://github.com/verifast/verifast#binaries) of the latest commit, and binaries for [named releases](https://github.com/verifast/verifast/releases).
 
-2.  Enjoy!
+Note: The instructions below may get out of date. When that happens, please submit an issue. In the meantime, guaranteed up-to-date instructions can be found by looking at the script, [.travis.yml](https://github.com/verifast/verifast/blob/master/.travis.yml), used by the Travis CI service that automatically builds and tests VeriFast after each commit. This script, which runs on a Ubuntu 14.04 (Trusty) virtual machine, first runs the command listed below `install:`, and then the command listed below `script:`.
 
+Dependencies
+------------
 
+To install the software needed to build VeriFast, run [setup-build.sh](https://github.com/verifast/verifast/blob/master/setup-build.sh). This script does the following:
 
- 
---- TEXT BELOW IS OUTDATED ---
-ALTERNATIVE: using Opam
------------------------
-
-Note: you do not need this if you use the above method.
-
-1. Note: without `gtksourceview2.0-dev`, `opam` builds `lablgtk` with `sourceview` bindings missing
-   ```sh
-   sudo apt-get install --no-install-recommends wget ca-certificates make m4 gcc patch unzip libgtk2.0-dev subversion valac gtksourceview2.0-dev
-   mkdir -p ~/.local/bin
-   wget https://raw.github.com/ocaml/opam/master/shell/opam_installer.sh -O - | sh -s ~/.local/bin
-   export PATH=$PATH:~/.local/bin
-   echo 'export PATH=$PATH:~/.local/bin' >> ~/.bashrc
-   eval `opam config env`
-   echo "eval `opam config env`" >> ~/.bashrc
-   opam init --comp=4.02.1
-   opam install core lablgtk camlidl
-   VERIFASTDIR=$PWD
-   svn co --username USERNAME https://dnetcode.cs.kuleuven.be/svn/verifast/verifast/trunk verifast
-   cd verifast/src/
-   make -j 8
-   ../bin/vfide
-   ```
-   
-2. Enjoy!
-     
-    
-    
-Z3 on 32bit (OPTIONAL)
-----------------------
-
-Note: only tested with apt-get approach above, not with the Opam approach.
-
-3.  `sudo apt-get install camlidl`
-
-4.  Download (requires login)
-    https://dnetcode.cs.kuleuven.be/attachments/download/736/z3.tar.gz
-
-5.  Run this (replace DOWNLOADPATH with the directory you put z3.tar.gz in (in step 4))
-    ```sh
-    $ cd
-    $ Z3DIR=$PWD
-    $ tar -xzf DOWNLOADPATH/z3.tar.gz
-    $ cd z3/ocaml
+- It installs some non-OCaml-based dependencies using `apt-get`:
     ```
-    
-6.  Ignore the warnings on this one:
-    ```sh
-    $ ./build-lib.sh $(ocamlc -where)
-    $ echo "Z3=$PWD/../" >> $VERIFASTDIR/verifast/src/../GNUmakefile.settings
+    sudo apt-get install -y --no-install-recommends \
+         git wget ca-certificates make m4 \
+         gcc patch unzip libgtk2.0-dev \
+         valac gtksourceview2.0-dev
     ```
-    
-7.  Recompile VeriFast:
-    ```sh
-    $ cd $VERIFASTDIR/verifast/src/
-    $ make -j 8
-    ```
+- It installs the OCaml-based dependencies:
+  - OCaml 4.06.0
+  - Findlib 1.7.3 (for the `ocamlfind` tool, used by Z3's install script)
+  - OCaml-Num (arbitrary-precision arithmetic)
+  - Ocamlbuild (to build Camlp4)
+  - Camlp4 (an OCaml preprocessor, for the streams notation used in VeriFast's parser)
+  - Lablgtk (OCaml bindings to the GTK+ GUI toolkit)
+  - Z3 4.5.0 (a powerful theorem prover, including OCaml bindings)
+  
+  It does so by downloading a [VFDeps](http://people.cs.kuleuven.be/~bart.jacobs/verifast/vfdeps-ocaml-4.06.0-trusty.tar.xz) package from my (Bart Jacobs') homepage with pre-compiled versions of these dependencies. I created this package by running the [make_vfdeps/Makefile.deps](https://github.com/verifast/verifast/blob/master/make_vfdeps/Makefile.deps) Makefile using GNU make. Note: these binaries are location-dependent. They need to be below `/tmp/vfdeps`; that is, extract the archive into `/tmp`. (You can also extract it elsewhere and then create a symlink called `/tmp/vfdeps` that points there.)
 
-8.  Run
-    ```sh
-    $ export LD_LIBRARY_PATH="$Z3DIR/z3/lib:$LD_LIBRARY_PATH"
-    $ $VERIFASTDIR/verifast/bin/vfide
-    ```
+Building VeriFast
+-----------------
 
-
-What about Z3 on 64bit? (OPTIONAL)
------------------------
-
-libz3.so is a 32bit library, so you cannot simply link it from a 64 bit
-executable.
-However, you can compile verifast as 32bit application (including Z3) and run
-that 32bit application in a 64bit Linux installation.
-Instructions how to run 32bit VeriFast on a 64bit Ubuntu can be found in
-Z3-on-Ubuntu64.txt
-
-
-
+To build VeriFast:
+1. `cd src`
+2. Make sure all dependencies are in your `PATH`. For example: `export PATH=/tmp/vfdeps/bin:$PATH`.
+3. `make`

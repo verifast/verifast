@@ -1,0 +1,5 @@
+verifast -c simple_operators.c
+verifast -c simple_not.c
+verifast -c not_defined.c
+verifast -D __STDC__ -c define_option.c
+verifast -c parenthesis.c

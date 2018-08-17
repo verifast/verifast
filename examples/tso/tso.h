@@ -59,13 +59,19 @@ void tso_noop/*@ <a> @*/(int fid, ...);
     //@ requires [?frac]tso<a>(?id, ?p, ?le, ?fs, ?a0) &*& is_tso_noop_body(?body, p, le, a0, (nth(fid, fs))(varargs), ?P, ?Q) &*& P();
     //@ ensures [frac]tso<a>(id, p, le, fs, (nth(fid, fs))(varargs, a0)) &*& Q();
 
+typedef long long prophecy_id;
+
 /*@
 
-predicate tso_prophecy(void *v);
+predicate tso_prophecy(prophecy_id id, void *v);
 
-lemma void *create_tso_prophecy();
-    requires true;
-    ensures tso_prophecy(result);
+@*/
+
+prophecy_id create_tso_prophecy();
+    //@ requires true;
+    //@ ensures tso_prophecy(result, _);
+
+/*@
 
 typedef lemma void tso_read_op(void **pp, void *v, predicate() pre, predicate() post)();
     requires pre() &*& *pp |-> ?v1;
@@ -77,8 +83,8 @@ typedef lemma void tso_read_ctxt<a>(void **pp, void *v, predicate(a) p, fixpoint
 
 @*/
 
-void *tso_read/*@ <a> @*/(void **pp, int fid, ...);
-    //@ requires [?f]tso<a>(?id, ?p, ?le, ?fs, ?a0) &*& tso_prophecy(?v) &*& is_tso_read_ctxt(?ctxt, pp, v, p, le, a0, (nth(fid, fs))(cons(vararg_pointer(v), varargs), default_value), ?P) &*& [_]P();
+void *tso_read/*@ <a> @*/(prophecy_id prophecyId, void **pp, int fid, ...);
+    //@ requires [?f]tso<a>(?id, ?p, ?le, ?fs, ?a0) &*& tso_prophecy(prophecyId, ?v) &*& is_tso_read_ctxt(?ctxt, pp, v, p, le, a0, (nth(fid, fs))(cons(vararg_pointer(v), varargs), default_value), ?P) &*& [_]P();
     //@ ensures [f]tso<a>(id, p, le, fs, (nth(fid, fs))(cons(vararg_pointer(v), varargs), default_value)) &*& result == v;
 
 /*@
@@ -93,8 +99,8 @@ typedef lemma void tso_cas_ctxt<a>(void **pp, void *old, void *new, void *v, pre
 
 @*/
 
-void *tso_compare_and_swap/*@ <a> @*/(void **pp, void *old, void *new);
-    //@ requires [?f]tso<a>(?id, ?p, ?le, ?fs, ?a0) &*& tso_prophecy(?v) &*& is_tso_cas_ctxt(?ctxt, pp, old, new, v, p, le, a0, ?P, ?Q) &*& P();
+void *tso_compare_and_swap/*@ <a> @*/(prophecy_id prophecyId, void **pp, void *old, void *new);
+    //@ requires [?f]tso<a>(?id, ?p, ?le, ?fs, ?a0) &*& tso_prophecy(prophecyId, ?v) &*& is_tso_cas_ctxt(?ctxt, pp, old, new, v, p, le, a0, ?P, ?Q) &*& P();
     //@ ensures Q(?a1) &*& [f]tso<a>(id, p, le, fs, a1) &*& result == v;
 
 #endif

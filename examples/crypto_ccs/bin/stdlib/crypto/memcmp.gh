@@ -1,0 +1,98 @@
+#ifndef MEMCMP_GH
+#define MEMCMP_GH
+
+#include "cryptogram.gh"
+
+inductive memcmp_part =
+  | memcmp_pub(list<char> cs)
+  | memcmp_sec(cryptogram cg)
+;
+
+fixpoint list<crypto_char> memcmp_part_ccs(memcmp_part p)
+{
+  switch(p)
+  {
+    case memcmp_pub(cs): return cs_to_ccs(cs);
+    case memcmp_sec(cg): return ccs_for_cg(cg);
+  }
+}
+
+fixpoint bool memcmp_match(list<memcmp_part> l1, list<memcmp_part> l2)
+{
+  switch(l1)
+  {
+    case cons(p1, l10):
+      return switch(l2)
+      {
+        case cons(p2, l20):
+          return length(memcmp_part_ccs(p1)) == length(memcmp_part_ccs(p2)) &&
+                 memcmp_match(l10, l20);
+        case nil:
+          return false;
+      };
+    case nil:
+      return l2 == nil;
+  }
+}
+
+lemma void memcmp_match(list<memcmp_part> l, list<memcmp_part> l1, 
+                                             list<memcmp_part> l2);
+  requires memcmp_match(l, l1) && memcmp_match(l, l2);
+  ensures  true == memcmp_match(l1, l2);
+
+fixpoint bool memcmp_region(list<memcmp_part> l, list<crypto_char> ccs)
+{
+  switch(l)
+  {
+    case nil:
+      return ccs == nil;
+    case cons(p0, l0):
+      return length(memcmp_part_ccs(p0)) <= length(ccs) &&
+             memcmp_part_ccs(p0) == take(length(memcmp_part_ccs(p0)), ccs) &&
+             memcmp_region(l0, drop(length(memcmp_part_ccs(p0)), ccs));
+  }
+}
+
+predicate memcmp_region(list<memcmp_part> l, list<crypto_char> ccs) =
+  true == memcmp_region(l, ccs)
+;
+  
+lemma void memcmp_append(list<crypto_char> ccs1, list<crypto_char> ccs2);
+  requires [_]memcmp_region(?l1, ccs1) &*& [_]memcmp_region(?l2, ccs2);
+  ensures  [_]memcmp_region(append(l1, l2), append(ccs1, ccs2));
+  
+#define MEMCMP_REGION(LIST, CCS) \
+{ \
+  close memcmp_region(nil, nil); \
+  leak memcmp_region(nil, nil); \
+  close memcmp_region(LIST, CCS); \
+  leak memcmp_region(LIST, CCS); \
+}
+
+#define MEMCMP_CCS(CCS) \
+{ \
+  open [_]public_ccs(CCS); \
+  assert [_]exists<list<char > >(?cs00); \
+  MEMCMP_REGION(cons(memcmp_pub(cs00), nil), CCS) \
+}
+
+#define MEMCMP_PUB(BUFFER) \
+{ \
+  assert [?f00]crypto_chars(normal, BUFFER, ?size00, ?ccs00); \
+  crypto_chars_to_chars(BUFFER, size00); \
+  assert [f00]chars(BUFFER, size00, ?cs00); \
+  chars_to_crypto_chars(BUFFER, size00); \
+  public_ccs(BUFFER, size00); \
+  MEMCMP_REGION(nil, nil); \
+  MEMCMP_REGION(cons(memcmp_pub(cs00), nil), ccs00); \
+}
+
+#define MEMCMP_SEC(BUFFER, CG) \
+{ \
+  assert [?f00]crypto_chars(secret, BUFFER, ?size00, ?ccs00); \
+  assert ccs_for_cg(CG) == ccs00; \
+  MEMCMP_REGION(nil, nil); \
+  MEMCMP_REGION(cons(memcmp_sec(CG), nil), ccs00); \
+}
+
+#endif

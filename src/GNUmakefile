@@ -22,6 +22,7 @@ help:
 	@echo "- Use e.g. 'make build VERBOSE=yes' to see more."
 	@echo "- Use e.g. 'make build -j 4' to use 4 cores."
 	@echo "- Use e.g. 'make ANNOT=yes' to output .annot files containing"
+	@echo "- Use e.g. 'make BINANNOT=yes' to output .cmt and .cmti files containing"
 	@echo "  type information."
 	@echo "- To see stack trace, launch with 'OCAMLRUNPARAM=b verifast <args>'."
 .PHONY: help
@@ -33,41 +34,51 @@ help:
 # Note: OS is defined by the operating system as Windows_NT on Windows.
 ifeq ($(OS), Linux)
 else ifeq ($(OS), Darwin)
-else ifeq ($(OS), Cygwin)
+else ifeq ($(OS), Windows_NT)
 else
   ifeq ($(shell uname -s), Linux)
           OS = Linux
   else ifeq ($(shell uname -s), Darwin)
           OS = Darwin
   else ifeq ($(shell uname -o), Cygwin)
-          OS = Cygwin
+          OS = Windows_NT
   else
           $(error "Could not recognize your platform")
   endif
 endif
 
+ifeq ($(OS), Linux)
+  PLATFORM = Linux
+else ifeq ($(OS), Darwin)
+  PLATFORM = MacOS
+else ifeq ($(OS), Windows_NT)
+  PLATFORM = Windows
+endif
+
 # Lablgtk configuration
 ifndef WITHOUT_LABLGTK
-  ifeq ($(OS), Cygwin)
-    LABLGTK_FLAGS += -I +site-lib/lablgtk2 lablgtk.cmxa
-  else
-    LABLGTK_FLAGS_ += -I +../lablgtk2 -I +lablgtk2
-    LABLGTK_FLAGS  += ${LABLGTK_FLAGS_} lablgtk.cmxa
-  endif
+  LABLGTK_PATH ?= $(shell ocamlfind query lablgtk2)
+  LABLGTK_FLAGS_ += -I $(LABLGTK_PATH)
+  LABLGTK_FLAGS  += ${LABLGTK_FLAGS_} lablgtk.cmxa
   ifdef WITHOUT_GTKSOURCEVIEW
     GTKSOURCEVIEW_LFLAGS += -I macos GSourceView2.cmx GLineMarks.cmx
     GTKSOURCEVIEW_DEPS   += macos/GSourceView2.cmx macos/GLineMarks.cmx
   else
     GTKSOURCEVIEW_LFLAGS += -I linemarks lablgtksourceview2.cmxa linemarks.cmxa
     GTKSOURCEVIEW_LIBS   += ${LABLLIBS}
+    ifeq ($(OS), Darwin)
+      GTKSOURCEVIEW_DEPS   += ../lib/libgtksourceview-2.0.0.dylib
+    endif
   endif
 endif
 
-ifeq ($(OS), Cygwin)
+ifeq ($(OS), Windows_NT)
   LDLPATHVAR=PATH
 else
   LDLPATHVAR=LD_LIBRARY_PATH
 endif
+
+Z3V4DOT5=yes
 
 # Z3 configuration
 # TODO: refactor variable names: "Z3" could be anything (path? version? boolean?)
@@ -80,13 +91,42 @@ ifndef NOZ3
   else ifdef Z3V4 # Note that using Z3 v4 is experimental and not supported
     Z3VERSION = v4
     Z3 = $(Z3V4)
+  else ifdef Z3V4DOT5
+    Z3VERSION = v4dot5
+    Z3 = $(Z3V4DOT5)
   else
     NOZ3=1
   endif
 endif
-ifndef NOZ3
+Z3V4DOT5PRESENT=false
+ifdef Z3V4DOT5
+  Z3_OCAML ?= $(shell ocamlfind query -qe Z3 || ocamlfind query z3)# It's Z3 when installed using `make install` and z3 when installed using OPAM
+  Z3_DLL_DIR ?= $(Z3_OCAML)/../..
+  Z3DEPS := z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml verifastPluginReduxZ3$(Z3VERSION).ml verifastPluginZ3$(Z3VERSION)Smtlib.ml
+  ifeq ($(OS), Darwin)
+    Z3DEPS := $(Z3DEPS) ../lib/libz3.dylib
+  else ifeq ($(OS), Windows_NT)
+    Z3DEPS := $(Z3DEPS) ../bin/libz3.dll
+  else ifeq ($(OS), Linux)
+    Z3DEPS := $(Z3DEPS) ../bin/libz3.so
+  endif
+  Z3CCOPTS = -cclib "-L $(Z3_DLL_DIR)"
+  Z3ARGS_EARLY = -I $(Z3_OCAML) z3ml.cmxa z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml verifastPluginReduxZ3$(Z3VERSION).ml  verifastPluginZ3$(Z3VERSION)Smtlib.ml $(Z3CCOPTS)
+  ifeq ($(OS), Windows_NT)
+    Z3_DLL_DEPS_DIR:=/usr/i686-w64-mingw32/sys-root/mingw/bin
+    LDLPATH:=$(shell pwd)/../bin
+    VERIFAST := $(LDLPATHVAR)=${LDLPATH}:$$$(LDLPATHVAR) ../bin/verifast
+  else ifeq ($(OS), Darwin)
+    LDLPATH:=$(Z3_DLL_DIR)
+    VERIFAST := $(LDLPATHVAR)=${LDLPATH}:$$$(LDLPATHVAR) ../bin/verifast
+  else
+    VERIFAST := ../bin/verifast
+  endif
+  Z3PRESENT=false
+  Z3V4DOT5PRESENT=true
+else ifndef NOZ3
   Z3DEPS  = z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml
-  ifeq ($(OS), Cygwin)
+  ifeq ($(OS), Windows_NT)
     Z3CCOPTS=
     LDLPATH=$(Z3)/bin
     Z3_OCAML=$(shell cygpath -m $(Z3)/ocaml)
@@ -106,12 +146,28 @@ else
   Z3PRESENT=false
 endif
 
+../lib/libgtksourceview-2.0.0.dylib:
+	mkdir -p ../lib
+	for i in $$( cat vfide-osx-local-dlls.txt ); do cp $$i ../lib; done
+	mkdir -p ../lib/gdk-pixbuf-2.0/2.10.0
+	echo > ../lib/gdk-pixbuf-2.0/2.10.0/loaders.cache
+
+../bin/libz3.dll:
+	cp $(Z3_DLL_DIR)/libz3.dll $(Z3_DLL_DEPS_DIR)/libwinpthread-1.dll $(Z3_DLL_DEPS_DIR)/libgomp-1.dll $(Z3_DLL_DEPS_DIR)/libgcc_s_sjlj-1.dll ../bin
+
+../bin/libz3.so:
+	cp $(Z3_DLL_DIR)/libz3.so ../bin
+
+../lib/libz3.dylib:
+	mkdir -p ../lib
+	cp $(Z3_DLL_DIR)/libz3.dylib ../lib
+
 # Should Make print each commandline? Then use "make VERBOSE=yes".
 ifndef VERBOSE
   .SILENT:
 endif
 
-ifeq ($(OS), Cygwin)
+ifeq ($(OS), Windows_NT)
   DOTEXE=.exe
 endif
 
@@ -124,14 +180,14 @@ OCAML        = ${OCAMLBIN}/ocaml
 OCAMLC       = $(firstword $(wildcard ${OCAMLBIN}/ocamlc.opt ${OCAMLBIN}/ocamlc))
 OCAMLOPT     = $(firstword $(wildcard ${OCAMLBIN}/ocamlopt.opt ${OCAMLBIN}/ocamlopt))
 OCAMLDEP     = $(firstword $(wildcard ${OCAMLBIN}/ocamldep.opt ${OCAMLBIN}/ocamldep))
-ifeq ($(OS), Cygwin)
+ifeq ($(OS), Windows_NT)
   CAMLP4O    = camlp4o.opt
 else
   CAMLP4O      = $(firstword $(wildcard ${OCAMLBIN}/camlp4o.opt ${OCAMLBIN}/camlp4o))
 endif
 
 # Do we build with "-I ./linux" or "-I ./win":
-ifeq ($(OS), Cygwin)
+ifeq ($(OS), Windows_NT)
   INCLUDE_OS_DIR = win
 else
 # Also for mac.
@@ -148,9 +204,12 @@ endif
 
 # Always include debug information. This seems necessary to prevent vfide crashes on OS X (see https://dnetcode.cs.kuleuven.be/issues/1975).
 # Also, this is necessary to get stack traces.
-OCAMLCFLAGS += -g
+OCAMLCFLAGS += -g -w p
 ifdef ANNOT
   OCAMLCFLAGS += -annot
+endif
+ifdef BINANNOT
+  OCAMLCFLAGS += -bin-annot
 endif
 
 CWD ?= $(CURDIR)
@@ -182,7 +241,7 @@ endif
 ifeq ($(OS), Darwin)
   include linux/GNUmakefile
 endif
-ifeq ($(OS), Cygwin)
+ifeq ($(OS), Windows_NT)
   include win/GNUmakefile
 endif
 
@@ -264,7 +323,7 @@ $(STDLIB): $(STDLIB_FILES)
 	@echo "  VERIFAST " $@
 	${VERIFAST} -shared $(STDLIB_FILES) -emit_dll_vfmanifest \
 	  -emit_dll_vfmanifest_as $@  || (rm -f $(STDLIB) ; false)
-	
+
 ../bin/%.vfmanifest: ../bin/%.c ../bin/%.gh ../bin/verifast$(DOTEXE)
 	$(SET_ENV); ../bin/verifast -c -emit_vfmanifest ../bin/$*.c
 clean::
@@ -272,41 +331,6 @@ clean::
 	rm -f $(STDLIB_FILES_GEN)
 
 #------------------------------- Auto code generation -----------------------#
-DynType.mli: ../examples/plugin/DynType.mli
-	@echo "  CAT      " $@
-	cat generated_file_warning.txt ../examples/plugin/DynType.mli > DynType.mli
-clean::
-	rm -f DynType.mli
-AUTOGENERATE_TARGETS += DynType.mli
-
-
-plugins.mli: ../examples/plugin/plugins.mli
-	@echo "  CAT      " $@
-	cat generated_file_warning.txt ../examples/plugin/plugins.mli > plugins.mli
-clean::
-	rm -f plugins.mli
-AUTOGENERATE_TARGETS += plugins.mli
-
-
-plugins2.mli: ../examples/plugin/plugins2.mli
-	@echo "  CAT      " $@
-	cat generated_file_warning.txt ../examples/plugin/plugins2.mli > plugins2.mli
-clean::
-	rm -f plugins2.mli
-AUTOGENERATE_TARGETS += plugins2.mli
-
-ifeq ($(OS), Darwin)
-Fonts.ml: Fonts_mac.ml
-	@echo "  CAT      " $@
-	cat generated_file_warning.txt Fonts_mac.ml > Fonts.ml
-else
-Fonts.ml: Fonts_default.ml
-	@echo "  CAT      " $@
-	cat generated_file_warning.txt Fonts_default.ml > Fonts.ml
-endif
-clean::
-	rm -f Fonts.ml
-AUTOGENERATE_TARGETS += Fonts.ml
 
 vfversion_autogen:
 	@echo "  OCAML    " generate_vfversion.ml
@@ -316,7 +340,7 @@ clean::
 	rm -f vfversion.ml
 AUTOGENERATE_TARGETS += vfversion_autogen
 
-VFCONFIG_CONTENT=let z3_present = $(Z3PRESENT)
+VFCONFIG_CONTENT=let z3_present = $(Z3PRESENT);; let z3v4dot5_present = $(Z3V4DOT5PRESENT);; type platform = Windows | MacOS | Linux;; let platform = $(PLATFORM)
 vfconfig_autogen:
 	if [ ! -e vfconfig.ml ] || [ "$$(cat vfconfig.ml)" != "$(VFCONFIG_CONTENT)" ]; then \
 	  echo "$(VFCONFIG_CONTENT)" > vfconfig.ml ;\
@@ -324,7 +348,7 @@ vfconfig_autogen:
 .PHONY: vfconfig_autogen 
 clean::
 	rm -f vfconfig.ml
-AUTOGENERATE_TARGETS += vfversion_autogen
+AUTOGENERATE_TARGETS += vfconfig_autogen
 
 # We only want to rebuild vfversion.ml and everything that depends on it
 # when it actually changes. But make itself causes vfversion.ml to change,
@@ -344,9 +368,9 @@ tabhunt:
 	${OCAML} tabhunter.ml
 .PHONY: tabhunt
 
-../bin/mysh$(DOTEXE): Fonts.cmx vfconfig.cmx mysh.ml
+../bin/mysh$(DOTEXE): vfconfig.cmx mysh.ml
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} $(OCAMLCFLAGS) -thread -o ../bin/mysh$(DOTEXE) unix.cmxa threads.cmxa Fonts.cmx vfconfig.cmx mysh.ml
+	${OCAMLOPT} $(OCAMLCFLAGS) -thread -o ../bin/mysh$(DOTEXE) unix.cmxa threads.cmxa vfconfig.cmx mysh.ml
 mysh: ../bin/mysh$(DOTEXE)
 .PHONY: mysh
 
@@ -367,8 +391,20 @@ ifndef WITHOUT_LABLGTK
 clean::
 	cd linemarks; make clean
 
+branchleft_png.ml: branch-left.png
+	gdk_pixbuf_mlsource branch-left.png > branchleft_png.ml
+
+branchleft_png.cmx: branchleft_png.ml
+	$(OCAMLOPT) $(OCAMLCFLAGS) -c $(LABLGTK_FLAGS) branchleft_png.ml
+
+branchright_png.ml: branch-right.png
+	gdk_pixbuf_mlsource branch-right.png > branchright_png.ml
+
+branchright_png.cmx: branchright_png.ml
+	$(OCAMLOPT) $(OCAMLCFLAGS) -c $(LABLGTK_FLAGS) branchright_png.ml
+
 # Also depend on "vfide.ml": Make ignores our dependency "%.cmx: %.ml".
-vfide.cmx: Fonts.cmx vfide.ml $(GTKSOURCEVIEW_DEPS)
+vfide.cmx: branchleft_png.cmx branchright_png.cmx vfide.ml $(GTKSOURCEVIEW_DEPS)
 	@echo "  OCAMLOPT " $@
 ifndef WITHOUT_GTKSOURCEVIEW
 	make -C linemarks OCAMLOPT=${OCAMLOPT} OCAMLCFLAGS="${OCAMLCFLAGS}" LABLGTK_FLAGS="$(LABLGTK_FLAGS_)" linemarks.cmxa
@@ -376,40 +412,56 @@ endif
 	$(SET_LDD); $(OCAMLOPT) $(OCAMLCFLAGS) -thread -c -w p -warn-error FSU -c $(INCLUDES) \
 	-pp ${CAMLP4O} nums.cmxa $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) vfide.ml
 
-../bin/vfide$(DOTEXE): vfide.cmx redux.cmx $(Z3DEPS) plugins2.cmx $(GTKSOURCEVIEW_DEPS)
+VERIFAST_PLUGINS=Redux Cvc4 ExternalZ3 ReduxSmtlib
+
+ifeq ($(OS), Darwin)
+  OCAMLOPT_LINKFLAGS = -cclib "-Xlinker -headerpad_max_install_names"
+else ifeq ($(OS), Linux)
+  OCAMLOPT_LINKFLAGS = -cclib -Wl,-rpath='$$ORIGIN'
+endif
+
+../bin/vfide$(DOTEXE): vfide.cmx $(VERIFAST_PLUGINS:%=verifastPlugin%.cmx) $(Z3DEPS) $(GTKSOURCEVIEW_DEPS) 
 	@echo "  OCAMLOPT " $@
 ifndef WITHOUT_GTKSOURCEVIEW
 	cd linemarks; make linemarks.cmxa
 endif
-	$(SET_LDD); ${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/vfide$(DOTEXE)	\
+	$(SET_LDD); ${OCAMLOPT} $(OCAMLOPT_LINKFLAGS) $(OCAMLCFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/vfide$(DOTEXE)	\
 	  $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) unix.cmxa \
 	  nums.cmxa str.cmxa $(INCLUDES) Perf.cmxa proverapi.cmx \
-	  Printexc_proxy.cmx vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx \
-	  plugins_private.cmx plugins2.cmx util.cmx ast.cmx stats.cmx lexer.cmx \
+	  Printexc_proxy.cmx vfversion.cmx dynlink.cmxa \
+	  util.cmx ast.cmx stats.cmx lexer.cmx \
 	  parser.cmx ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx \
-	  verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml \
+	  verify_expr.cmx verifast.cmx combineprovers.cmx \
+          simplex.cmx redux.cmx verifastPluginRedux.cmx \
+          smtlib.cmx smtlibprover.cmx verifastPluginCvc4.cmx verifastPluginExternalZ3.cmx verifastPluginReduxSmtlib.cmx \
+          $(Z3ARGS_EARLY) \
 	  shape_analysis/shape_analysis_backend.cmx \
 	  shape_analysis/changelog.cmx shape_analysis/shape_analysis_frontend.cmx \
-	  $(Z3ARGS) Fonts.cmx vfide.cmx
+	  $(Z3ARGS) branchleft_png.cmx branchright_png.cmx vfconfig.cmx vfide.cmx
 endif
-ifneq ($(OS), Cygwin)
+ifneq ($(OS), Windows_NT)
   ../bin/vfide$(DOTEXE): linux/libPerf_cobjs.a
 endif
 vfide: ../bin/vfide$(DOTEXE) $(STDLIB)
 .PHONY: vfide
 
-../bin/verifast$(DOTEXE): vfconsole.cmx redux.cmx $(Z3DEPS) plugins2.cmx
+../bin/verifast$(DOTEXE): vfconsole.cmx $(VERIFAST_PLUGINS:%=verifastPlugin%.cmx) $(Z3DEPS)
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/verifast$(DOTEXE) unix.cmxa \
+	${OCAMLOPT} $(OCAMLOPT_LINKFLAGS) $(OCAMLCFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/verifast$(DOTEXE) unix.cmxa \
 	  nums.cmxa str.cmxa $(INCLUDES) Perf.cmxa proverapi.cmx \
-	  vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx \
-	  plugins2.cmx util.cmx ast.cmx stats.cmx lexer.cmx parser.cmx \
+	  vfversion.cmx \
+	  util.cmx ast.cmx stats.cmx lexer.cmx parser.cmx \
 	  ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx \
-	  verify_expr.cmx verifast.cmx simplex.cmx redux.cmx \
-	  verifastPluginRedux.ml $(Z3ARGS) vfconsole.cmx
+	  verify_expr.cmx verifast.cmx simplex.cmx redux.cmx combineprovers.cmx \
+          smtlib.cmx smtlibprover.cmx verifastPluginCvc4.cmx verifastPluginExternalZ3.cmx verifastPluginReduxSmtlib.cmx \
+          $(Z3ARGS_EARLY) \
+	  verifastPluginRedux.cmx $(Z3ARGS) vfconsole.cmx
+ifeq ($(OS), Darwin)
+	install_name_tool -change libz3.dylib @executable_path/../lib/libz3.dylib ../bin/verifast
+endif
 
 
-ifneq ($(OS), Cygwin)
+ifneq ($(OS), Windows_NT)
   ../bin/verifast$(DOTEXE): linux/libPerf_cobjs.a
 else
   ../bin/verifast$(DOTEXE): win/Perf.cmxa
@@ -429,6 +481,10 @@ z3v4prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmxa proverapi.cmx z3v4prover.ml
 	@echo "  OCAMLOPT " $@
 	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -c -I $(Z3_OCAML) z3.cmxa -I ./$(INCLUDE_OS_DIR) Perf.cmxa proverapi.cmx z3v4prover.ml
 
+z3v4dot5prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmxa proverapi.cmx z3v4dot5prover.ml
+	@echo "  OCAMLOPT " $@
+	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -c -I $(Z3_OCAML) -I ./$(INCLUDE_OS_DIR) Perf.cmxa proverapi.cmx z3v4dot5prover.ml
+
 clean::
 	rm -f shape_analysis/*.cm[ix] shape_analysis/*.cmo
 
@@ -438,18 +494,9 @@ vfversion.cmi: vfversion.mli
 vfversion.cmo: vfversion.cmi	
 vfversion.cmx: vfversion.cmi vfversion.ml
 vfconfig.cmx: vfconfig.ml
-plugins2.cmi : plugins.cmi
-plugins.cmi : DynType.cmi
 vfide.cmx: SExpressionEmitter.cmx
 
 #------------------------------- Tests --------------------------------------#
-test_plugin: verifast
-	$(SET_ENV); \
-	  ${MAKE} -C ../examples/plugin clean OCAMLOPT=${OCAMLOPT}
-	$(SET_ENV); \
-	  ${MAKE} -C ../examples/plugin all OCAMLOPT=${OCAMLOPT}
-.PHONY: test_plugin
-
 testsuite: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
 	@echo "  MYSH     " testsuite
 	$(SET_ENV); \
@@ -470,9 +517,8 @@ assignment_tests: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
 # the tests passed. (someone reported this years ago here:
 # https://lists.gnu.org/archive/html/bug-make/2010-09/msg00033.html)
 # So we serialize the test targets.
-test: test_plugin testsuite assignment_tests
+test: testsuite assignment_tests
 .PHONY: test
-test_plugin: testsuite      # dependency to enforce serialization
 testsuite: assignment_tests # dependency to enforce serialization
 
 ifdef VERIFAST_JAVA_AST_SERVER
@@ -550,11 +596,15 @@ depend: $(filter-out vfversion.ml vfversion.mli, $(META_DEPS)) $(AUTOGENERATE_TA
 include .depend
 
 #------------------------------- Release ------------------------------------#
+
+VFVERSION ?= $(shell git describe --tags --always --dirty)
+export VFVERSION
+
 release: release_core
 release_core: test build
 	rm -Rf verifast-$(VFVERSION); mkdir verifast-$(VFVERSION)
 	cp -R ../bin verifast-$(VFVERSION)
-ifeq ($(OS), Cygwin)
+ifeq ($(OS), Windows_NT)
 	cd $(GTK)/bin && cp -v \
     FREETYPE6.DLL \
     INTL.DLL \
@@ -594,28 +644,14 @@ ifeq ($(OS), Cygwin)
 	cd ../../../.. && \
 	mkdir -p lib/gtk-2.0/2.10.0/engines && \
 	cp $(GTK)/lib/gtk-2.0/2.10.0/engines/libwimp.dll lib/gtk-2.0/2.10.0/engines
-ifdef Z3
-	cp $(Z3)/bin/z3.dll verifast-$(VFVERSION)/bin
-	cp -R $(Z3)/bin/Microsoft.VC90.CRT verifast-$(VFVERSION)/bin
-endif
 endif
 ifeq ($(OS), Linux)
-	cd verifast-$(VFVERSION)/bin; mv verifast verifast-core
-	cd verifast-$(VFVERSION)/bin; mv vfide vfide-core
-	cp verifast.sh verifast-$(VFVERSION)/bin/verifast
-	cp vfide.sh verifast-$(VFVERSION)/bin/vfide
-ifdef Z3
-	cp $(Z3)/lib/libz3-gmp.so verifast-$(VFVERSION)/bin
 	cp /usr/lib/libgtksourceview-2.0.so.0.0.0 verifast-$(VFVERSION)/bin/libgtksourceview-2.0.so.0
-endif
-endif
-ifdef Z3
-	cp ../Z3.LICENSE.txt verifast-$(VFVERSION)
 endif
 ifeq ($(OS), Darwin)
 	cd verifast-$(VFVERSION)/bin; mv vfide vfide-core
 	cp vfide-mac.sh verifast-$(VFVERSION)/bin/vfide
-	cp -R ~/Desktop/GtkDemo.app/Contents/Resources/* verifast-$(VFVERSION)
+	cp -R ../lib verifast-$(VFVERSION)
 endif
 	cp -R ../examples verifast-$(VFVERSION)
 	cp -R ../help verifast-$(VFVERSION)
@@ -625,8 +661,24 @@ endif
 	mkdir verifast-$(VFVERSION)/tutorial
 	cd verifast-$(VFVERSION)/tutorial_solutions; for f in *.c; do ../bin/vfstrip < $$f > ../tutorial/$$f; done; cd ../..
 	cp ../testsuite.mysh verifast-$(VFVERSION)
-ifeq ($(OS), Cygwin)
+ifeq ($(OS), Windows_NT)
 	cp ../test.bat verifast-$(VFVERSION)
 else
 	cp ../test.sh verifast-$(VFVERSION)
+endif
+
+ifeq ($(OS), Darwin)
+  RELEASE_SUFFIX=-osx
+else
+  RELEASE_SUFFIX=
+endif
+
+nightly: release
+ifeq ($(OS), Windows_NT)
+	rm verifast-nightly.zip || true
+	7z a verifast-nightly.zip verifast-$(VFVERSION)
+else
+	rm -Rf ../upload || true
+	mkdir ../upload || true
+	tar czf ../upload/verifast-nightly$(RELEASE_SUFFIX).tar.gz verifast-$(VFVERSION)
 endif

@@ -5,13 +5,29 @@ open Num (* rational numbers *)
 
 (* Region: General-purpose utility functions *)
 
+let input_fully c =
+  let buf = Bytes.create 60000 in
+  let b = Buffer.create 60000 in
+  let rec iter () =
+    let n = input c buf 0 60000 in
+    if n = 0 then
+      Buffer.contents b
+    else begin
+      Buffer.add_subbytes b buf 0 n;
+      iter ()
+    end
+  in
+  iter ()
+
+let push x rxs = rxs := x::!rxs
+
 let string_map f s =
   let n = String.length s in
-  let result = String.create n in
+  let result = Bytes.create n in
   for i = 0 to n - 1 do
-    result.[i] <- f s.[i]
+    Bytes.set result i (f s.[i])
   done;
-  result
+  Bytes.unsafe_to_string result
 
 let num_of_ints p q = div_num (num_of_int p) (num_of_int q)
 
@@ -209,6 +225,16 @@ let rec try_assoc x xys =
     [] -> None
   | (x', y)::xys when x' = x -> Some y
   | _::xys -> try_assoc x xys
+
+let rec try_assoc_case_insensitive x xys =
+  let x = String.uppercase_ascii x in
+  let rec iter xys =
+    match xys with
+      [] -> None
+    | (x', y)::xys when String.uppercase_ascii x' = x -> Some y
+    | _::xys -> iter xys
+  in
+  iter xys
 
 (** Same as [try_assoc], except returns the binding [(x, y)] instead of just [y]. *)
 let rec try_assoc0 x xys =

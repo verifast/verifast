@@ -315,6 +315,8 @@ class z3_context () =
     method mk_real_le t1 t2 = Z3.mk_le ctxt t1 t2
     method get_type t = Z3.get_sort ctxt t
     method pprint t = string_of_sexpr (simplify (parse_sexpr (Z3.ast_to_string ctxt t)))
+    method pprint_sort (s : Z3.sort) = Z3.ast_to_string ctxt s
+    method pprint_sym (s : Z3.func_decl) = Z3.ast_to_string ctxt s
     method query t =
       printf "Z3prover.query (%s)... " (Z3.ast_to_string ctxt t); (*dbg*)
       let t0 = if verbosity >= 1 then Perf.time() else 0.0 in
@@ -327,6 +329,7 @@ class z3_context () =
       let result = assert_term t in
       if verbosity >= 1 then begin let t1 = Perf.time() in Printf.printf "%10.6fs: Z3 assume %s: %.6f seconds\n" t0 (Z3.ast_to_string ctxt t) (t1-. t0) end;
       result
+    method assert_term t = assert_cnstr ctxt solver t
     method push =
       Z3.solver_push ctxt solver
     method pop =

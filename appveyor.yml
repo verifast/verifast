@@ -1,11 +1,14 @@
 # Continuous integration for Windows.
 
-clone_depth: 30
+# clone_depth: 30 # 'git describe' does not see version tag
 clone_folder: c:\projects\verifast
 platform:
   - x86
 install:
   - c:/projects/verifast/setup-windows.bat
 build_script:
-  - c:/cygwin/bin/bash -lc "cd /cygdrive/c/projects/verifast/src && make VERBOSE=yes"
-
+  - c:/cygwin/bin/bash -lc "cd /cygdrive/c/projects/verifast/src && make nightly VERBOSE=yes GTK=/cygdrive/c/vfdeps-17.12"
+artifacts:
+  - path: src/verifast-nightly.zip
+    name: nightly build
+    type: zip

@@ -27,8 +27,8 @@ let ghost_keywords = [
   "create_box"; "above"; "below"; "and_handle"; "and_fresh_handle"; "create_handle"; "create_fresh_handle"; "dispose_box"; 
   "produce_lemma_function_pointer_chunk"; "duplicate_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
   "producing_box_predicate"; "producing_handle_predicate"; "producing_fresh_handle_predicate"; "box"; "handle"; "any"; "split_fraction"; "by"; "merge_fractions";
-  "unloadable_module"; "decreases"; "load_plugin"; "forall_"; "import_module"; "require_module"; ".."; "extends"; "permbased";
-  "terminates";
+  "unloadable_module"; "decreases"; "forall_"; "import_module"; "require_module"; ".."; "extends"; "permbased";
+  "terminates"; "abstract_type"
 ]
 
 let c_keywords = [
@@ -38,6 +38,8 @@ let c_keywords = [
   "const"; "volatile"; "register"; "ifdef"; "elif"; "undef";
   "SHRT_MIN"; "SHRT_MAX"; "USHRT_MAX"; "UINT_MAX"; "UCHAR_MAX";
   "LLONG_MIN"; "LLONG_MAX"; "ULLONG_MAX";
+  "__int8"; "__int16"; "__int32"; "__int64"; "__int128";
+  "inline"; "__inline"; "__inline__"; "__forceinline"
 ]
 
 let java_keywords = [
@@ -128,7 +130,7 @@ module Scala = struct
       begin
         match (tn, targs) with
           ("Unit", []) -> ManifestTypeExpr (l, Void)
-        | ("Int", []) -> ManifestTypeExpr (l, intType)
+        | ("Int", []) -> ManifestTypeExpr (l, Int (Signed, 2))
         | ("Array", [t]) -> ArrayTypeExpr (l, t)
         | (_, []) -> IdentTypeExpr (l, None, tn)
         | _ -> raise (ParseException (l, "Type arguments are not supported."))
@@ -144,7 +146,7 @@ module Scala = struct
   and
     parse_asn = parser
       [< '(_, Kwd "("); a = parse_asn; '(_, Kwd ")") >] -> a
-    | [< e = parse_expr >] -> ExprAsn (expr_loc e, e)
+    | [< e = parse_expr >] -> e
   and
     parse_primary_expr = parser
       [< '(l, Kwd "true") >] -> True l
@@ -179,27 +181,34 @@ end
    And Kwd "class" does not match Ident "class".
    *)
 
-type modifier = StaticModifier | FinalModifier | AbstractModifier | VisibilityModifier of visibility
+let pat_of_expr e =
+  match e with
+    CallExpr (l, g, [], [], pats, Static) when List.exists (function LitPat _ -> false | _ -> true) pats ->
+    CtorPat (l, g, pats)
+  | _ -> LitPat e
 
-(* 
-   To make parsing functions accessible from elsewhere, 
-   without adding the argument 'language' to every function.
-   TODO: find a better solution
-*)
-let language = ref CLang
-let set_language lang = language := lang
-(* TODO: find a better solution *)
-let enforce_annotations = ref false
-let set_enforce_annotations v = enforce_annotations := v
+type modifier = StaticModifier | FinalModifier | AbstractModifier | VisibilityModifier of visibility
 
 (* Ugly hack *)
 let typedefs: (string, unit) Hashtbl.t = Hashtbl.create 64
 let register_typedef g = Hashtbl.add typedefs g ()
 let is_typedef g = Hashtbl.mem typedefs g
 
-let rec parse_decls lang enforceAnnotations ?inGhostHeader =
-  set_language lang;
-  set_enforce_annotations enforceAnnotations;
+module type PARSER_ARGS = sig
+  val language: language
+  val enforce_annotations: bool
+  val data_model: data_model
+end
+
+module Parser(ParserArgs: PARSER_ARGS) = struct
+
+open ParserArgs
+
+let {int_rank; long_rank; ptr_rank} = data_model
+let intType = Int (Signed, int_rank)
+let longType = Int (Signed, long_rank)
+
+let rec parse_decls ?inGhostHeader =
   if match inGhostHeader with None -> false | Some b -> b then
     parse_pure_decls
   else
@@ -220,6 +229,7 @@ and
        -> type_params_pop();
           Interface (l, cn, il, fields mem, methods cn mem, instance_preds mem)::ds
      | [< d = parse_decl; ds = parse_decls_core >] -> d@ds
+     | [< '(_, Kwd ";"); ds = parse_decls_core >] -> ds
      | [< >] -> []
      end
   >] -> ds
@@ -285,7 +295,7 @@ and
   | [< vis = parse_visibility; m = begin parser
        [< '(l, Kwd "predicate"); '(_, Ident g); ps = parse_paramlist;
           body = begin parser
-            [< '(_, Kwd "="); p = parse_pred >] -> Some p
+            [< '(_, Kwd "="); p = parse_asn >] -> Some p
           | [< >] -> None
           end;
          '(_, Kwd ";") >] -> PredMember(InstancePredDecl (l, g, ps, body))
@@ -302,7 +312,7 @@ and
   [< tp = parse_type; epost =
     begin
       parser
-        [< '(_, Kwd "/*@"); '(_, Kwd "ensures"); epost = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> Some epost
+        [< '(_, Kwd "/*@"); '(_, Kwd "ensures"); epost = parse_asn; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> Some epost
       | [< >] -> None
     end
    >] -> (tp, epost)
@@ -393,7 +403,7 @@ and
         in
         Some(pre, post, epost, terminates)
       | None -> 
-        if !enforce_annotations then None else
+        if enforce_annotations then None else
         begin
          let pre = ExprAsn(l, False(l)) in
          let post = ExprAsn(l, True(l)) in
@@ -425,11 +435,18 @@ and
     (noneToEmptyList functiontypetypeparams, noneToEmptyList functiontypeparams, params)
   | [< params = parse_paramlist >] -> ([], [], params)
 and
+  parse_ignore_inline = parser
+  [< '(l, Kwd "inline") >] -> ()
+| [< '(l, Kwd "__inline") >] -> ()
+| [< '(l, Kwd "__inline__") >] -> ()
+| [< '(l, Kwd "__forceinline") >] -> ()
+| [< >] -> ()
+and
   parse_decl = parser
   [< '(l, Kwd "struct"); '(_, Ident s); d = parser
-    [< '(_, Kwd "{"); fs = parse_fields; '(_, Kwd ";") >] -> Struct (l, s, Some fs)
+    [< fs = parse_fields; '(_, Kwd ";") >] -> Struct (l, s, Some fs)
   | [< '(_, Kwd ";") >] -> Struct (l, s, None)
-  | [< t = parse_type_suffix (StructTypeExpr (l, s)); d = parse_func_rest Regular (Some t) Public >] -> d
+  | [< t = parse_type_suffix (StructTypeExpr (l, Some s, None)); d = parse_func_rest Regular (Some t) Public >] -> d
   >] -> check_function_for_contract d
 | [< '(l, Kwd "typedef");
      rt = parse_return_type; '(_, Ident g);
@@ -445,7 +462,14 @@ and
          begin
            match rt with
              None -> raise (ParseException (l, "Void not allowed here."))
-             | Some te -> [TypedefDecl (l, te, g)]
+             | Some (StructTypeExpr (ls, s_opt, Some fs)) ->
+               let s = match s_opt with None -> g | Some s -> s in
+               [Struct (l, s, Some fs); TypedefDecl (l, StructTypeExpr (ls, Some s, None), g)]
+             | Some PtrTypeExpr (lp, (StructTypeExpr (ls, s_opt, Some fs))) ->
+               let s = match s_opt with None -> g | Some s -> s in
+               [Struct (l, s, Some fs); TypedefDecl (l, PtrTypeExpr (lp, StructTypeExpr (ls, Some s, None)), g)]
+             | Some te ->
+               [TypedefDecl (l, te, g)]
          end
     end
   >] -> register_typedef g; ds
@@ -453,13 +477,13 @@ and
      elems = rep_comma (parser [< '(_, Ident e); init = opt (parser [< '(_, Kwd "="); e = parse_expr >] -> e) >] -> (e, init));
      '(_, Kwd "}"); '(_, Kwd ";"); >] ->
   [EnumDecl(l, n, elems)]
-| [< '(_, Kwd "static"); t = parse_return_type; d = parse_func_rest Regular t Private >] -> check_function_for_contract d
+| [< '(_, Kwd "static"); _ = parse_ignore_inline; t = parse_return_type; d = parse_func_rest Regular t Private >] -> check_function_for_contract d
 | [< t = parse_return_type; d = parse_func_rest Regular t Public >] -> check_function_for_contract d
 and check_for_contract: 'a. 'a option -> loc -> string -> (asn * asn -> 'a) -> 'a = fun contract l m f ->
   match contract with
     | Some spec -> spec 
     | None -> 
-      if !enforce_annotations then 
+      if enforce_annotations then 
         raise (ParseException (l, m)) 
       else
         f (ExprAsn(l, False(l)), ExprAsn(l, True(l)))
@@ -486,8 +510,8 @@ and
   | [< >] -> []
 and
   parse_pred_body = parser
-    [< '(_, Kwd "requires"); p = parse_pred >] -> p
-  | [< '(_, Kwd "="); p = parse_pred >] -> p
+    [< '(_, Kwd "requires"); p = parse_asn >] -> p
+  | [< '(_, Kwd "="); p = parse_asn >] -> p
 and
   parse_pred_paramlist = parser
     [< 
@@ -518,15 +542,15 @@ and
   | [< '(l, Kwd "lemma"); t = parse_return_type; d = parse_func_rest (Lemma(false, None)) t Public >] -> [d]
   | [< '(l, Kwd "lemma_auto"); trigger = opt (parser [< '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); >] -> e); t = parse_return_type; d = parse_func_rest (Lemma(true, trigger)) t Public >] -> [d]
   | [< '(l, Kwd "box_class"); '(_, Ident bcn); ps = parse_paramlist;
-       '(_, Kwd "{"); '(_, Kwd "invariant"); inv = parse_pred; '(_, Kwd ";");
+       '(_, Kwd "{"); '(_, Kwd "invariant"); inv = parse_asn; '(_, Kwd ";");
        ads = parse_action_decls; hpds = parse_handle_pred_decls; '(_, Kwd "}") >] -> [BoxClassDecl (l, bcn, ps, inv, ads, hpds)]
   | [< '(l, Kwd "typedef"); '(_, Kwd "lemma"); rt = parse_return_type; '(li, Ident g); tps = parse_type_params li;
        (ftps, ps) = parse_functype_paramlists; '(_, Kwd ";"); (pre, post, terminates) = parse_spec >] ->
     [FuncTypeDecl (l, Ghost, rt, g, tps, ftps, ps, (pre, post, terminates))]
   | [< '(l, Kwd "unloadable_module"); '(_, Kwd ";") >] -> [UnloadableModuleDecl l]
-  | [< '(l, Kwd "load_plugin"); '(lx, Ident x); '(_, Kwd ";") >] -> [LoadPluginDecl (l, lx, x)]
   | [< '(l, Kwd "import_module"); '(_, Ident g); '(lx, Kwd ";") >] -> [ImportModuleDecl (l, g)]
   | [< '(l, Kwd "require_module"); '(_, Ident g); '(lx, Kwd ";") >] -> [RequireModuleDecl (l, g)]
+  | [< '(l, Kwd "abstract_type"); '(_, Ident t); '(_, Kwd ";") >] -> [AbstractTypeDecl (l, t)]
 and
   parse_action_decls = parser
   [< ad = parse_action_decl; ads = parse_action_decls >] -> ad::ads
@@ -544,7 +568,7 @@ and
   parse_handle_pred_decl = parser
   [< '(l, Kwd "handle_predicate"); '(_, Ident hpn); ps = parse_paramlist;
      extends = opt (parser [< '(l, Kwd "extends"); '(_, Ident ehn) >] -> ehn);
-     '(_, Kwd "{"); '(_, Kwd "invariant"); inv = parse_pred; '(_, Kwd ";"); pbcs = parse_preserved_by_clauses; '(_, Kwd "}") >]
+     '(_, Kwd "{"); '(_, Kwd "invariant"); inv = parse_asn; '(_, Kwd ";"); pbcs = parse_preserved_by_clauses; '(_, Kwd "}") >]
      -> HandlePredDecl (l, hpn, ps, extends, inv, pbcs)
 and
   parse_preserved_by_clauses = parser
@@ -675,8 +699,11 @@ and
   parse_paramtype = parser [< t = parse_type; _ = opt (parser [< '(_, Ident _) >] -> ()) >] -> t
 and
   parse_fields = parser
+  [< '(_, Kwd "{"); fs = parse_fields_rest >] -> fs
+and
+  parse_fields_rest = parser
   [< '(_, Kwd "}") >] -> []
-| [< f = parse_field; fs = parse_fields >] -> f::fs
+| [< f = parse_field; fs = parse_fields_rest >] -> f::fs
 and
   parse_field = parser
   [< '(_, Kwd "/*@"); f = parse_field_core Ghost; '(_, Kwd "@*/") >] -> f
@@ -698,40 +725,61 @@ and
   parse_type = parser
   [< t0 = parse_primary_type; t = parse_type_suffix t0 >] -> t
 and
+  parse_int_opt = parser
+  [< '(_, Kwd "int") >] -> ()
+| [< >] -> ()
+and
+  parse_integer_type_keyword = parser
+  [< '(l, Kwd "int") >] -> (l, int_rank)
+| [< '(l, Kwd "__int8") >] -> (l, 0)
+| [< '(l, Kwd "__int16") >] -> (l, 1)
+| [< '(l, Kwd "__int32") >] -> (l, 2)
+| [< '(l, Kwd "__int64") >] -> (l, 3)
+| [< '(l, Kwd "__int128") >] -> (l, 4)
+and
+  parse_integer_size_specifier = parser
+| [< '(_, Kwd "short") >] -> 1
+| [< '(_, Kwd "long");
+     n = begin parser
+       [< '(_, Kwd "long") >] -> 3
+     | [< >] -> long_rank
+     end >] -> n
+| [< >] -> int_rank
+and
+  parse_integer_type_rest = parser
+  [< '(_, Kwd "char") >] -> 0
+| [< (_, k) = parse_integer_type_keyword >] -> k
+| [< n = parse_integer_size_specifier; _ = opt (parser [< '(_, Kwd "int") >] -> ()) >] -> n
+and
   parse_primary_type = parser
   [< '(l, Kwd "volatile"); t0 = parse_primary_type >] -> t0
 | [< '(l, Kwd "const"); t0 = parse_primary_type >] -> t0
 | [< '(l, Kwd "register"); t0 = parse_primary_type >] -> t0
-| [< '(l, Kwd "struct"); '(_, Ident s) >] -> StructTypeExpr (l, s)
+| [< '(l, Kwd "struct"); sn = opt (parser [< '(_, Ident s) >] -> s); fs = opt parse_fields >] ->
+  if sn = None && fs = None then raise (ParseException (l, "Struct name or body expected"));
+  StructTypeExpr (l, sn, fs)
 | [< '(l, Kwd "enum"); '(_, Ident _) >] -> ManifestTypeExpr (l, intType)
-| [< '(l, Kwd "int") >] -> ManifestTypeExpr (l, intType)
+| [< (l, k) = parse_integer_type_keyword >] -> ManifestTypeExpr (l, Int (Signed, k))
 | [< '(l, Kwd "float") >] -> ManifestTypeExpr (l, Float)
 | [< '(l, Kwd "double") >] -> ManifestTypeExpr (l, Double)
-| [< '(l, Kwd "short") >] -> ManifestTypeExpr(l, Int (Signed, 2))
+| [< '(l, Kwd "short") >] -> ManifestTypeExpr(l, Int (Signed, 1))
 | [< '(l, Kwd "long");
      t = begin parser
-       [< '(_, Kwd "int") >] -> ManifestTypeExpr (l, intType);
+       [< '(_, Kwd "int") >] -> ManifestTypeExpr (l, longType);
      | [< '(_, Kwd "double") >] -> ManifestTypeExpr (l, LongDouble);
-     | [< '(_, Kwd "long"); _ = opt (parser [< '(_, Kwd "int") >] -> ()) >] -> ManifestTypeExpr (l, Int (Signed, 8))
-     | [< >] -> ManifestTypeExpr (l, match !language with CLang -> intType | Java -> Int (Signed, 8))
+     | [< '(_, Kwd "long"); _ = opt (parser [< '(_, Kwd "int") >] -> ()) >] -> ManifestTypeExpr (l, Int (Signed, 3))
+     | [< >] -> ManifestTypeExpr (l, longType)
      end
    >] -> t
-| [< '(l, Kwd "signed"); t0 = parse_primary_type >] ->
-  (match t0 with
-     (ManifestTypeExpr (_, Int (Signed, _))) -> t0
-   | _ -> raise (ParseException (l, "This type cannot be signed.")))
-| [< '(l, Kwd "unsigned"); t0 = opt parse_primary_type >] ->
-  (match t0 with
-   | Some (ManifestTypeExpr (l, Int (Signed, n))) -> ManifestTypeExpr (l, Int (Unsigned, n))
-   | None -> ManifestTypeExpr (l, Int (Unsigned, int_size))
-   | _ -> raise (ParseException (l, "This type cannot be unsigned.")))
-| [< '(l, Kwd "uintptr_t") >] -> ManifestTypeExpr (l, Int (Unsigned, 4))
+| [< '(l, Kwd "signed"); n = parse_integer_type_rest >] -> ManifestTypeExpr (l, Int (Signed, n))
+| [< '(l, Kwd "unsigned"); n = parse_integer_type_rest >] -> ManifestTypeExpr (l, Int (Unsigned, n))
+| [< '(l, Kwd "uintptr_t") >] -> ManifestTypeExpr (l, Int (Unsigned, ptr_rank))
 | [< '(l, Kwd "real") >] -> ManifestTypeExpr (l, RealType)
 | [< '(l, Kwd "bool") >] -> ManifestTypeExpr (l, Bool)
 | [< '(l, Kwd "boolean") >] -> ManifestTypeExpr (l, Bool)
 | [< '(l, Kwd "void") >] -> ManifestTypeExpr (l, Void)
-| [< '(l, Kwd "char") >] -> ManifestTypeExpr (l, match !language with CLang -> Int (Signed, 1) | Java -> Int (Unsigned, 2))
-| [< '(l, Kwd "byte") >] -> ManifestTypeExpr (l, Int (Signed, 1))
+| [< '(l, Kwd "char") >] -> ManifestTypeExpr (l, match language with CLang -> Int (Signed, 0) | Java -> Int (Unsigned, 1))
+| [< '(l, Kwd "byte") >] -> ManifestTypeExpr (l, Int (Signed, 0))
 | [< '(l, Kwd "predicate");
      '(_, Kwd "(");
      ts = rep_comma parse_paramtype;
@@ -809,8 +857,8 @@ and
   [< '(_, Kwd "nonghost_callers_only") >] -> NonghostCallersOnlyClause
 | [< '(l, Kwd "terminates"); '(_, Kwd ";") >] -> TerminatesClause l
 | [< '(_, Kwd ":"); '(li, Ident ft); targs = parse_type_args li; ftargs = parse_functypeclause_args >] -> FuncTypeClause (ft, targs, ftargs)
-| [< '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";") >] -> RequiresClause p
-| [< '(_, Kwd "ensures"); p = parse_pred; '(_, Kwd ";") >] -> EnsuresClause p
+| [< '(_, Kwd "requires"); p = parse_asn; '(_, Kwd ";") >] -> RequiresClause p
+| [< '(_, Kwd "ensures"); p = parse_asn; '(_, Kwd ";") >] -> EnsuresClause p
 and
   parse_spec_clause = parser
   [< c = peek_in_ghost_range (parser [< c = parse_pure_spec_clause; '(_, Kwd "@*/") >] -> c) >] -> c
@@ -881,8 +929,8 @@ and
      | [< >] -> IfStmt (l, e, [s1], [])
   >] -> s
 | [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); sscs = parse_switch_stmt_clauses; '(_, Kwd "}") >] -> SwitchStmt (l, e, sscs)
-| [< '(l, Kwd "assert"); p = parse_pred; '(_, Kwd ";") >] -> Assert (l, p)
-| [< '(l, Kwd "leak"); p = parse_pred; '(_, Kwd ";") >] -> Leak (l, p)
+| [< '(l, Kwd "assert"); p = parse_asn; '(_, Kwd ";") >] -> Assert (l, p)
+| [< '(l, Kwd "leak"); p = parse_asn; '(_, Kwd ";") >] -> Leak (l, p)
 | [< '(l, Kwd "open"); coef = opt parse_coef; e = parse_expr; '(_, Kwd ";") >] ->
   (match e with
      CallExpr (_, g, targs, es1, es2, Static) ->
@@ -904,7 +952,7 @@ and
 | [< '(l, Kwd "split_fraction"); '(li, Ident p); targs = parse_type_args li; pats = parse_patlist;
      coefopt = (parser [< '(_, Kwd "by"); e = parse_expr >] -> Some e | [< >] -> None);
      '(_, Kwd ";") >] -> SplitFractionStmt (l, p, targs, pats, coefopt)
-| [< '(l, Kwd "merge_fractions"); a = parse_pred; '(_, Kwd ";") >]
+| [< '(l, Kwd "merge_fractions"); a = parse_asn; '(_, Kwd ";") >]
   -> MergeFractionsStmt (l, a)
 | [< '(l, Kwd "dispose_box"); '(_, Ident bcn); pats = parse_patlist;
      handleClauses = rep (parser [< '(l, Kwd "and_handle"); '(_, Ident hpn); pats = parse_patlist >] -> (l, hpn, pats));
@@ -939,7 +987,7 @@ and
      '(openBraceLoc, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}") >] ->
   ProduceFunctionPointerChunkStmt (l, ftn, fpe, targs, args, params, openBraceLoc, ss, closeBraceLoc)
 | [< '(l, Kwd "goto"); '(_, Ident lbl); '(_, Kwd ";") >] -> GotoStmt (l, lbl)
-| [< '(l, Kwd "invariant"); inv = parse_pred; '(_, Kwd ";") >] -> InvariantStmt (l, inv)
+| [< '(l, Kwd "invariant"); inv = parse_asn; '(_, Kwd ";") >] -> InvariantStmt (l, inv)
 | [< '(l, Kwd "return"); eo = parser [< '(_, Kwd ";") >] -> None | [< e = parse_expr; '(_, Kwd ";") >] -> Some e >] -> ReturnStmt (l, eo)
 | [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")");
      (inv, dec, body) = parse_loop_core l
@@ -1008,6 +1056,7 @@ and
     [< '(_, Kwd ";") >] ->
     begin match e with
       AssignExpr (l, Operation (llhs, Mul, [Var (lt, t); Var (lx, x)]), rhs) -> DeclStmt (l, [l, PtrTypeExpr (llhs, IdentTypeExpr (lt, None, t)), x, Some(rhs), ref false])
+    | Operation (l, Mul, [Var (lt, t); Var (lx, x)]) -> DeclStmt (l, [l, PtrTypeExpr (l, IdentTypeExpr (lt, None, t)), x, None, ref false])
     | _ -> ExprStmt e
     end
   | [< '(l, Kwd ":") >] -> (match e with Var (_, lbl) -> LabelStmt (l, lbl) | _ -> raise (ParseException (l, "Label must be identifier.")))
@@ -1032,12 +1081,12 @@ and
         begin parser
           [< '(_, Kwd "/*@");
              inv = begin parser
-               [< '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> LoopInv p
-             | [< '(_, Kwd "requires"); pre = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/");
-                  '(_, Kwd "/*@"); '(_, Kwd "ensures"); post = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> LoopSpec (pre, post)
+               [< '(_, Kwd "invariant"); p = parse_asn; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> LoopInv p
+             | [< '(_, Kwd "requires"); pre = parse_asn; '(_, Kwd ";"); '(_, Kwd "@*/");
+                  '(_, Kwd "/*@"); '(_, Kwd "ensures"); post = parse_asn; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> LoopSpec (pre, post)
              end
           >] -> inv
-        | [< '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); >] -> LoopInv p
+        | [< '(_, Kwd "invariant"); p = parse_asn; '(_, Kwd ";"); >] -> LoopInv p
         end;
     dec = opt (parser [< '(_, Kwd "/*@"); '(_, Kwd "decreases"); decr = parse_expr; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> decr | [< '(_, Kwd "decreases"); decr = parse_expr; '(_, Kwd ";"); >] -> decr );(* only allows decreases if invariant provided *)
   >] -> (inv, dec)
@@ -1100,76 +1149,52 @@ and
   [< '(_, Kwd ")") >] -> []
 | [< '(_, Kwd ","); '(lx, Ident x); xs = parse_more_pats >] -> x::xs
 and
-  parse_pred = parser
-  [< p0 = parse_pred0; p = parse_sep_rest p0 >] -> p
+  parse_asn stream = parse_expr stream
 and
-  parse_sep_rest p1 = parser
-  [< '(l, Kwd "&*&"); p2 = parse_pred >] -> Sep (l, p1, p2)
-| [< >] -> p1
-and
-  pat_of_expr e =
-  match e with
-    CallExpr (l, g, [], [], pats, Static) when List.exists (function LitPat _ -> false | _ -> true) pats ->
-    CtorPat (l, g, pats)
-  | _ -> LitPat e
-and
-  parse_pred0 = parser
-  [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_pred_clauses; '(_, Kwd "}") >] -> SwitchAsn (l, e, cs)
+  parse_asn0 = parser
 | [< '(l, Kwd "emp") >] -> EmpAsn l
 | [< '(l, Kwd "forall_"); '(_, Kwd "("); tp = parse_type; '(_, Ident x); '(_, Kwd ";"); e = parse_expr; '(_, Kwd ")") >] -> ForallAsn(l, tp, x, e)
-| [< '(_, Kwd "("); p = parse_pred; '(_, Kwd ")") >] -> p
-| [< '(l, Kwd "["); coef = parse_pattern; '(_, Kwd "]"); p = parse_pred0 >] -> CoefAsn (l, coef, p)
-| [< '(_, Kwd "#"); '(l, String s) >] -> PluginAsn (l, s)
-| [< '(l, Kwd "ensures"); p = parse_pred >] -> EnsuresAsn (l, p)
-| [< e = parse_disj_expr; p = parser
-    [< '(l, Kwd "|->"); rhs = parse_pattern >] -> 
-    (match e with
-       ReadArray (_, _, SliceExpr (_, _, _)) -> PointsTo (l, e, rhs)
-     | ReadArray (lr, e0, e1) when !language = CLang -> PointsTo (l, Deref(lr, Operation(lr, Add, [e0; e1]), ref None), rhs) 
-     | _ -> PointsTo (l, e, rhs)
-    )
-  | [< '(l, Kwd "?"); p1 = parse_pred; '(_, Kwd ":"); p2 = parse_pred >] -> IfAsn (l, e, p1, p2)
-  | [< >] ->
-    (match e with
-     | CallExpr (l, g, targs, pats0, pats, Static) -> PredAsn (l, new predref g, targs, pats0, pats)
-     | CallExpr (l, g, [], pats0, LitPat e::pats, Instance) ->
-       let index =
-         match pats0 with
-           [] -> CallExpr (l, "getClass", [], [], [LitPat e], Instance)
-         | [LitPat e] -> e
-         | _ -> raise (ParseException (l, "Instance predicate call: single index expression expected"))
-       in
-       InstPredAsn (l, e, g, index, pats)
-     | Operation (l, Eq, [e1; e2]) ->
-       begin match pat_of_expr e2 with
-         LitPat e2 -> ExprAsn (l, e)
-       | e2 -> MatchAsn (l, e1, e2)
-       end
-     | _ -> ExprAsn (expr_loc e, e)
-    )
-  >] -> p
+| [< '(l, Kwd "["); coef = parse_pattern; '(_, Kwd "]"); p = parse_pointsto_expr >] -> CoefAsn (l, coef, p)
+| [< '(l, Kwd "ensures"); p = parse_asn >] -> EnsuresAsn (l, p)
 and
   parse_pattern = parser
   [< '(_, Kwd "_") >] -> DummyPat
 | [< '(_, Kwd "?"); '(lx, Ident x) >] -> VarPat (lx, x)
 | [< '(_, Kwd "^"); e = parse_expr >] -> LitPat (WidenedParameterArgument e)
-| [< e = parse_expr >] -> pat_of_expr e
+| [< e = parse_cond_expr >] -> pat_of_expr e
 and
-  parse_switch_pred_clauses = parser
-  [< c = parse_switch_pred_clause; cs = parse_switch_pred_clauses >] -> c::cs
+  parse_switch_asn_clauses = parser
+  [< c = parse_switch_asn_clause; cs = parse_switch_asn_clauses >] -> c::cs
 | [< >] -> []
 and
-  parse_switch_pred_clause = parser
-  [< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(lx, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); '(_, Kwd "return"); p = parse_pred; '(_, Kwd ";") >] -> SwitchAsnClause (l, c, pats, ref None, p)
+  parse_switch_asn_clause = parser
+  [< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(lx, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); '(_, Kwd "return"); p = parse_asn; '(_, Kwd ";") >] -> SwitchAsnClause (l, c, pats, p)
 and
   parse_expr stream = parse_assign_expr stream
 and
   parse_assign_expr = parser
-  [< e0 = parse_cond_expr; e = parse_assign_expr_rest e0 >] -> e
+  [< e0 = parse_sep_expr; e = parse_assign_expr_rest e0 >] -> e
+and
+  parse_sep_expr = parser
+  [< e0 = parse_pointsto_expr; e = parser
+    [< '(l, Kwd "&*&"); e1 = parse_sep_expr >] -> Sep (l, e0, e1)
+  | [< >] -> e0
+  >] -> e
+and
+  parse_pointsto_expr = parser
+  [< e = parse_cond_expr; e = parser
+    [< '(l, Kwd "|->"); rhs = parse_pattern >] -> 
+    begin match e with
+       ReadArray (_, _, SliceExpr (_, _, _)) -> PointsTo (l, e, rhs)
+     | ReadArray (lr, e0, e1) when language = CLang -> PointsTo (l, Deref(lr, Operation(lr, Add, [e0; e1])), rhs) 
+     | _ -> PointsTo (l, e, rhs)
+    end
+  | [< >] -> e
+  >] -> e
 and
   parse_cond_expr = parser
   [< e0 = parse_disj_expr; e = parser
-    [< '(l, Kwd "?"); e1 = parse_expr; '(_, Kwd ":"); e2 = parse_cond_expr >] -> IfExpr (l, e0, e1, e2)
+    [< '(l, Kwd "?"); e1 = parse_expr; '(_, Kwd ":"); e2 = parse_sep_expr >] -> IfExpr (l, e0, e1, e2)
   | [< >] -> e0
   >] -> e
 and
@@ -1189,7 +1214,12 @@ and
   [< e0 = parse_expr_rel; e = parse_bitand_expr_rest e0 >] -> e
 and
   parse_expr_rel = parser
-  [< e0 = parse_shift; e = parse_expr_rel_rest e0 >] -> e
+  [< e0 = parse_truncating_expr; e = parse_expr_rel_rest e0 >] -> e
+and
+  parse_truncating_expr = parser
+  [< '(l, Kwd "truncating"); e = parse_expr_suffix >] -> TruncatingExpr (l, e)
+| [< e = peek_in_ghost_range (parser [< '(l, Kwd "truncating"); '(_, Kwd "@*/"); e = parse_expr_suffix >] -> TruncatingExpr (l, e)) >] -> e
+| [< e = parse_shift >] -> e
 and
   parse_shift = parser
   [< e0 = parse_expr_arith; e = parse_shift_rest e0 >] -> e
@@ -1219,8 +1249,8 @@ and
 | [< '(l, Kwd "false") >] -> False l
 | [< '(l, CharToken c) >] ->
   if Char.code c > 127 then raise (ParseException (l, "Non-ASCII character literals are not yet supported"));
-  let tp = match !language with CLang -> Int (Signed, 1) | Java -> Int (Unsigned, 2) in
-  CastExpr (l, false, ManifestTypeExpr (l, tp), IntLit (l, big_int_of_int (Char.code c), true, false, NoLSuffix))
+  let tp = match language with CLang -> Int (Signed, 0) | Java -> Int (Unsigned, 1) in
+  CastExpr (l, ManifestTypeExpr (l, tp), IntLit (l, big_int_of_int (Char.code c), true, false, NoLSuffix))
 | [< '(l, Kwd "null") >] -> Null l
 | [< '(l, Kwd "currentThread") >] -> Var (l, "currentThread")
 | [< '(l, Kwd "varargs") >] -> Var (l, "varargs")
@@ -1242,7 +1272,7 @@ and
         | [< >] -> CallExpr (lx, x, [], [], args0,Static)
       >] -> e
     | [<
-        '(ldot, Kwd ".") when !language = Java;
+        '(ldot, Kwd ".") when language = Java;
         r = parser
           [<'(lc, Kwd "class")>] -> ClassLit(ldot,x)
         | [<
@@ -1258,14 +1288,14 @@ and
 | [< '(l, Int (i, dec, usuffix, lsuffix)) >] -> IntLit (l, i, dec, usuffix, lsuffix)
 | [< '(l, RealToken i) >] -> RealLit (l, num_of_big_int i)
 | [< '(l, RationalToken n) >] -> RealLit (l, n)
-| [< '(l, Kwd "INT_MIN") >] -> IntLit (l, big_int_of_string "-2147483648", true, false, NoLSuffix)
-| [< '(l, Kwd "INT_MAX") >] -> IntLit (l, big_int_of_string "2147483647", true, false, NoLSuffix)
-| [< '(l, Kwd "UINTPTR_MAX") >] -> IntLit (l, big_int_of_string "4294967295", true, true, NoLSuffix)
+| [< '(l, Kwd "INT_MIN") >] -> IntLit (l, min_signed_big_int int_rank, true, false, NoLSuffix)
+| [< '(l, Kwd "INT_MAX") >] -> IntLit (l, max_signed_big_int int_rank, true, false, NoLSuffix)
+| [< '(l, Kwd "UINTPTR_MAX") >] -> IntLit (l, max_unsigned_big_int ptr_rank, true, true, NoLSuffix)
 | [< '(l, Kwd "UCHAR_MAX") >] -> IntLit (l, big_int_of_string "255", true, false, NoLSuffix)
 | [< '(l, Kwd "SHRT_MIN") >] -> IntLit (l, big_int_of_string "-32768", true, false, NoLSuffix)
 | [< '(l, Kwd "SHRT_MAX") >] -> IntLit (l, big_int_of_string "32767", true, false, NoLSuffix)
 | [< '(l, Kwd "USHRT_MAX") >] -> IntLit (l, big_int_of_string "65535", true, false, NoLSuffix)
-| [< '(l, Kwd "UINT_MAX") >] -> IntLit (l, big_int_of_string "4294967295", true, true, NoLSuffix)
+| [< '(l, Kwd "UINT_MAX") >] -> IntLit (l, max_unsigned_big_int int_rank, true, true, NoLSuffix)
 | [< '(l, Kwd "LLONG_MIN") >] -> IntLit (l, big_int_of_string "-9223372036854775808", true, false, NoLSuffix)
 | [< '(l, Kwd "LLONG_MAX") >] -> IntLit (l, big_int_of_string "9223372036854775807", true, false, NoLSuffix)
 | [< '(l, Kwd "ULLONG_MAX") >] -> IntLit (l, big_int_of_string "18446744073709551615", true, true, NoLSuffix)
@@ -1277,16 +1307,14 @@ and
        InitializerList(l, es)
      else
        StringLit (l, String.concat "" (s::ss))
-| [< '(l, Kwd "truncating"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")"); e = parse_expr_suffix >] -> CastExpr (l, true, t, e)
-| [< e = peek_in_ghost_range (parser [< '(l, Kwd "truncating"); '(_, Kwd "@*/"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")"); e = parse_expr_suffix >] -> CastExpr (l, true, t, e)) >] -> e
 | [< '(l, Kwd "(");
      e =
-       let parse_cast = parser [< te = parse_type; '(_, Kwd ")"); e = parse_expr_suffix >] -> CastExpr (l, false, te, e) in
+       let parse_cast = parser [< te = parse_type; '(_, Kwd ")"); e = parse_expr_suffix >] -> CastExpr (l, te, e) in
        let parse_expr_rest e0 =
          parser
            [< '(l', Ident y); e = parse_expr_suffix_rest (Var (l', y)) >] ->
            begin match e0 with
-             Var (lt, x) -> CastExpr (l, false, IdentTypeExpr (lt, None, x), e)
+             Var (lt, x) -> CastExpr (l, IdentTypeExpr (lt, None, x), e)
            | _ -> raise (ParseException (l, "Type expression of cast expression must be identifier: "))
            end
          | [<>] -> e0
@@ -1311,22 +1339,23 @@ and
 | [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_expr_clauses;
      cdef_opt = opt (parser [< '(l, Kwd "default"); '(_, Kwd ":"); '(_, Kwd "return"); e = parse_expr; '(_, Kwd ";") >] -> (l, e));
      '(_, Kwd "}")
-  >] -> SwitchExpr (l, e, cs, cdef_opt, ref None)
+  >] -> SwitchExpr (l, e, cs, cdef_opt)
 | [< '(l, Kwd "sizeof"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")") >] -> SizeofExpr (l, t)
 | [< '(l, Kwd "super"); '(_, Kwd "."); '(l2, Ident n); '(_, Kwd "("); es = rep_comma parse_expr; '(_, Kwd ")") >] -> SuperMethodCall (l, n, es)
 | [< '(l, Kwd "!"); e = parse_expr_suffix >] -> Operation(l, Not, [e])
 | [< '(l, Kwd "@"); '(_, Ident g) >] -> PredNameExpr (l, g)
-| [< '(l, Kwd "*"); e = parse_expr_suffix >] -> Deref (l, e, ref None)
+| [< '(l, Kwd "*"); e = parse_expr_suffix >] -> Deref (l, e)
 | [< '(l, Kwd "&"); e = parse_expr_suffix >] -> AddressOf (l, e)
 | [< '(l, Kwd "~"); e = parse_expr_suffix >] -> Operation (l, BitNot, [e])
 | [< '(l, Kwd "-"); e = parse_expr_suffix >] ->
   begin match e with
-    IntLit (_, n, true, false, lsuffix) when !language = Java && sign_big_int n >= 0 -> IntLit (l, minus_big_int n, true, false, lsuffix)
+    IntLit (_, n, true, false, lsuffix) when language = Java && sign_big_int n >= 0 -> IntLit (l, minus_big_int n, true, false, lsuffix)
   | _ -> Operation (l, Sub, [IntLit (l, zero_big_int, true, false, NoLSuffix); e])
   end
 | [< '(l, Kwd "++"); e = parse_expr_suffix >] -> AssignOpExpr (l, e, Add, IntLit (l, unit_big_int, true, false, NoLSuffix), false)
 | [< '(l, Kwd "--"); e = parse_expr_suffix >] -> AssignOpExpr (l, e, Sub, IntLit (l, unit_big_int, true, false, NoLSuffix), false)
 | [< '(l, Kwd "{"); es = rep_comma parse_expr; '(_, Kwd "}") >] -> InitializerList (l, es)
+| [< a = parse_asn0 >] -> a
 and
   parse_switch_expr_clauses = parser
   [< c = parse_switch_expr_clause; cs = parse_switch_expr_clauses >] -> c::cs
@@ -1343,7 +1372,7 @@ and
 and
   parse_expr_suffix_rest e0 = parser
   [< '(l, Kwd "->"); '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, f)) >] -> e
-| [< '(l, Kwd ".") when !language = CLang; '(_, Ident f); e = parse_expr_suffix_rest (Read (l, AddressOf(l, e0), f)) >] -> e
+| [< '(l, Kwd ".") when language = CLang; '(_, Ident f); e = parse_expr_suffix_rest (Read (l, AddressOf(l, e0), f)) >] -> e
 | [< '(l, Kwd ".");
      e = begin parser
        [< '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, f)) >] -> e
@@ -1382,21 +1411,21 @@ and
 | [< >] -> e0
 and
   parse_expr_rel_rest e0 = parser
-  [< '(l, Kwd "=="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Eq, [e0; e1])) >] -> e
-| [< '(l, Kwd "!="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Neq, [e0; e1])) >] -> e
-| [< '(l, Kwd "<="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Le, [e0; e1])) >] -> e
-| [< '(l, Kwd ">"); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Gt, [e0; e1])) >] -> e
-| [< '(l, Kwd ">="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Ge, [e0; e1])) >] -> e
+  [< '(l, Kwd "=="); e1 = parse_truncating_expr; e = parse_expr_rel_rest (Operation (l, Eq, [e0; e1])) >] -> e
+| [< '(l, Kwd "!="); e1 = parse_truncating_expr; e = parse_expr_rel_rest (Operation (l, Neq, [e0; e1])) >] -> e
+| [< '(l, Kwd "<="); e1 = parse_truncating_expr; e = parse_expr_rel_rest (Operation (l, Le, [e0; e1])) >] -> e
+| [< '(l, Kwd ">"); e1 = parse_truncating_expr; e = parse_expr_rel_rest (Operation (l, Gt, [e0; e1])) >] -> e
+| [< '(l, Kwd ">="); e1 = parse_truncating_expr; e = parse_expr_rel_rest (Operation (l, Ge, [e0; e1])) >] -> e
 | [< '(l, Kwd "instanceof"); tp = parse_expr; e = parse_expr_rel_rest (InstanceOfExpr (l, e0, type_expr_of_expr tp)) >] -> e
 | [< e = parse_expr_lt_rest e0 parse_expr_rel_rest >] -> e
 and
   apply_type_args e targs args =
   match e with
     Var (lx, x) -> CallExpr (lx, x, targs, [], args, Static)
-  | CastExpr (lc, trunc, te, e) -> CastExpr (lc, trunc, te, apply_type_args e targs args)
+  | CastExpr (lc, te, e) -> CastExpr (lc, te, apply_type_args e targs args)
   | Operation (l, Not, [e]) -> Operation (l, Not, [apply_type_args e targs args])
   | Operation (l, BitNot, [e]) -> Operation (l, BitNot, [apply_type_args e targs args])
-  | Deref (l, e, ts) -> Deref (l, apply_type_args e targs args, ts)
+  | Deref (l, e) -> Deref (l, apply_type_args e targs args)
   | AddressOf (l, e) -> AddressOf (l, apply_type_args e targs args)
   | Operation (l, op, [e1; e2]) -> Operation (l, op, [e1; apply_type_args e2 targs args])
   | _ -> raise (ParseException (expr_loc e, "Identifier expected before type argument list"))
@@ -1404,7 +1433,7 @@ and
   parse_expr_lt_rest e0 cont = parser
   [< '(l, Kwd "<");
      e = parser
-       [< e1 = parse_expr_arith; e1 = parse_expr_lt_rest e1 (let rec iter e0 = parse_expr_lt_rest e0 iter in iter);
+       [< e1 = parse_truncating_expr; e1 = parse_expr_lt_rest e1 (let rec iter e0 = parse_expr_lt_rest e0 iter in iter);
           e = parser
             [< '(_, Kwd ">"); (* Type argument *)
                args = (parser [< args = parse_patlist >] -> args | [< >] -> []);
@@ -1436,7 +1465,7 @@ and
 | [< >] -> e0
 and
   parse_conj_expr_rest e0 = parser
-  [< '(l, Kwd "&&"); e1 = parse_expr_rel; e = parse_conj_expr_rest (Operation (l, And, [e0; e1])) >] -> e
+  [< '(l, Kwd "&&"); e1 = parse_bitor_expr; e = parse_conj_expr_rest (Operation (l, And, [e0; e1])) >] -> e
 | [< >] -> e0
 and
   parse_disj_expr_rest e0 = parser
@@ -1472,6 +1501,17 @@ and
   [< '(_, Kwd ","); pat0 = parse_pattern; pats = parse_patlist_rest >] -> pat0::pats
 | [< '(_, Kwd ")") >] -> []
 
+end
+
+let parse_decls lang dataModel enforceAnnotations ?inGhostHeader =
+  let module MyParserArgs = struct
+    let language = lang
+    let enforce_annotations = enforceAnnotations
+    let data_model = dataModel
+  end in
+  let module MyParser = Parser(MyParserArgs) in
+  MyParser.parse_decls ?inGhostHeader
+
 let rec parse_package_name= parser
   [<'(_, Ident n);x=parser
     [<'(_, Kwd ".");rest=parse_package_name>] -> n^"."^rest
@@ -1503,7 +1543,7 @@ let parse_import = parser
       (match i with Import(l, Real, pn,el) -> Import(l, Ghost, pn,el))
 
 let parse_package_decl enforceAnnotations = parser
-  [< (l,p) = parse_package; is=rep parse_import; ds=parse_decls Java enforceAnnotations;>] -> PackageDecl(l,p,Import(dummy_loc,Real,"java.lang",None)::is, ds)
+  [< (l,p) = parse_package; is=rep parse_import; ds=parse_decls Java data_model_java enforceAnnotations;>] -> PackageDecl(l,p,Import(dummy_loc,Real,"java.lang",None)::is, ds)
 
 let parse_scala_file (path: string) (reportRange: range_kind -> loc -> unit): package =
   let lexer = make_lexer Scala.keywords ghost_keywords in
@@ -1540,7 +1580,7 @@ let parse_java_file_old (path: string) (reportRange: range_kind -> loc -> unit) 
 
 type 'result parser_ = (loc * token) Stream.t -> 'result
 
-let rec parse_include_directives (ignore_eol: bool ref) (verbose: int) (enforceAnnotations: bool) : 
+let rec parse_include_directives (ignore_eol: bool ref) (verbose: int) (enforceAnnotations: bool) (dataModel: data_model): 
     ((loc * (include_kind * string * string) * string list * package list) list * string list) parser_ =
   let active_headers = ref [] in
   let test_include_cycle l totalPath =
@@ -1560,14 +1600,14 @@ let rec parse_include_directives (ignore_eol: bool ref) (verbose: int) (enforceA
         if verbose = -1 then Printf.printf "%10.6fs: >>>> ignored secondary include: %s \n" (Perf.time()) totalPath;
         test_include_cycle l totalPath; ([], totalPath)
     | [< '(l, BeginInclude(kind, h, totalPath)); (headers, header_names) = (active_headers := totalPath::!active_headers; parse_include_directives_core []); 
-                                           ds = parse_decls CLang enforceAnnotations ~inGhostHeader:(isGhostHeader h); '(_, EndInclude) >] ->
+                                           ds = parse_decls CLang dataModel enforceAnnotations ~inGhostHeader:(isGhostHeader h); '(_, EndInclude) >] ->
                                                         if verbose = -1 then Printf.printf "%10.6fs: >>>> parsed include: %s \n" (Perf.time()) totalPath;
                                                         active_headers := List.filter (fun h -> h <> totalPath) !active_headers;
                                                         let ps = [PackageDecl(dummy_loc,"",[],ds)] in
                                                         (List.append headers [(l, (kind, h, totalPath), header_names, ps)], totalPath)
     | [< (l,kind,h,totalPath) = peek_in_ghost_range begin parser [< '(l, BeginInclude(kind, h, p)) >] -> (l,kind,h,p) end; 
                                                 (headers, header_names) = (active_headers := totalPath::!active_headers; parse_include_directives_core []); 
-                                                ds = parse_decls CLang enforceAnnotations ~inGhostHeader:(isGhostHeader h); '(_, EndInclude); '(_, Kwd "@*/") >] ->
+                                                ds = parse_decls CLang dataModel enforceAnnotations ~inGhostHeader:(isGhostHeader h); '(_, EndInclude); '(_, Kwd "@*/") >] ->
                                                         if verbose = -1 then Printf.printf "%10.6fs: >>>> parsed include: %s \n" (Perf.time()) totalPath;
                                                         active_headers := List.filter (fun h -> h <> totalPath) !active_headers;
                                                         let ps = [PackageDecl(dummy_loc,"",[],ds)] in
@@ -1576,7 +1616,7 @@ let rec parse_include_directives (ignore_eol: bool ref) (verbose: int) (enforceA
   parse_include_directives_core []
 
 let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit) (verbose: int) 
-            (include_paths: string list) (enforceAnnotations: bool): ((loc * (include_kind * string * string) * string list * package list) list * package list) = (* ?parse_c_file *)
+            (include_paths: string list) (define_macros: string list) (enforceAnnotations: bool) (dataModel: data_model): ((loc * (include_kind * string * string) * string list * package list) list * package list) = (* ?parse_c_file *)
   Stopwatch.start parsing_stopwatch;
   if verbose = -1 then Printf.printf "%10.6fs: >> parsing C file: %s \n" (Perf.time()) path;
   let result =
@@ -1584,11 +1624,11 @@ let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (report
       let text = readFile path in
       make_lexer (common_keywords @ c_keywords) ghost_keywords path text reportRange ~inGhostRange reportShouldFail
     in
-    let (loc, ignore_eol, token_stream) = make_preprocessor make_lexer path verbose include_paths in
+    let (loc, ignore_eol, token_stream) = make_preprocessor make_lexer path verbose include_paths define_macros in
     let parse_c_file =
       parser
-        [< (headers, _) = parse_include_directives ignore_eol verbose enforceAnnotations; 
-                            ds = parse_decls CLang enforceAnnotations ~inGhostHeader:false; _ = Stream.empty >] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])
+        [< (headers, _) = parse_include_directives ignore_eol verbose enforceAnnotations dataModel; 
+                            ds = parse_decls CLang dataModel enforceAnnotations ~inGhostHeader:false; _ = Stream.empty >] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])
     in
     try
       parse_c_file token_stream
@@ -1600,7 +1640,7 @@ let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (report
   result
 
 let parse_header_file (path: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit) (verbose: int) 
-         (include_paths: string list) (enforceAnnotations: bool): ((loc * (include_kind * string * string) * string list * package list) list * package list) =
+         (include_paths: string list) (define_macros: string list) (enforceAnnotations: bool) (dataModel: data_model): ((loc * (include_kind * string * string) * string list * package list) list * package list) =
   Stopwatch.start parsing_stopwatch;
   if verbose = -1 then Printf.printf "%10.6fs: >> parsing Header file: %s \n" (Perf.time()) path;
   let isGhostHeader = Filename.check_suffix path ".gh" in
@@ -1609,10 +1649,10 @@ let parse_header_file (path: string) (reportRange: range_kind -> loc -> unit) (r
       let text = readFile path in
       make_lexer (common_keywords @ c_keywords) ghost_keywords path text reportRange ~inGhostRange:inGhostRange reportShouldFail
     in
-    let (loc, ignore_eol, token_stream) = make_preprocessor make_lexer path verbose include_paths in
+    let (loc, ignore_eol, token_stream) = make_preprocessor make_lexer path verbose include_paths define_macros in
     let p = parser
-      [< (headers, _) = parse_include_directives ignore_eol verbose enforceAnnotations; 
-         ds = parse_decls CLang enforceAnnotations ~inGhostHeader:isGhostHeader; 
+      [< (headers, _) = parse_include_directives ignore_eol verbose enforceAnnotations dataModel; 
+         ds = parse_decls CLang dataModel enforceAnnotations ~inGhostHeader:isGhostHeader; 
          _ = (fun _ -> ignore_eol := true);_ = Stream.empty 
       >] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])
     in

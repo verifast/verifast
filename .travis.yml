@@ -1,3 +1,6 @@
+git:
+  depth: 100
+
 language: C
 
 os:
@@ -12,4 +15,17 @@ install:
   - ./setup-build.sh
 
 script:
-  - cd src && make VERBOSE=yes -j 2
+  - cd src && PATH=/tmp/vfdeps/bin:/usr/local/vfdeps-17.12/bin:$PATH DYLD_LIBRARY_PATH=/usr/local/vfdeps-17.12/lib:$DYLD_LIBRARY_PATH make nightly VERBOSE=yes -j 2
+
+before_deploy: "cd ../upload"
+deploy:
+  provider: cloudfiles
+  username: bartjacobs
+  api_key:
+    secure: baA3fxWQyKkFa4L/b4tUkpxqMOelR062xpbq/RVADzWLO82DcBg1uwRTNUQz1Cr+Z50/0QIK9S/TNYUdAya7YNV8yCVFUal8o+r5pt2X3s1hUFFl5u8DRt8aYhD8FJ5zdtdxBqVdF7FeX74Zl1eWmz1dNrTs3fDNKqekuEfg1DcN7EF2cpo29yjrcYTgIqy5LCVBkQ1OKQS/hz+LX3AWJHxBh3a16H8fy6lTJmspwJHwLCyv+XXGvvY6n9iE+lEOmTI5cPbeQp2v7mWnNcz7aRFao8qOg2SmLDgArpkq8geQK1iJdGtkfeUxDpxAWU1S24GOnddY9qTwBTygp1QE7N7gaNxht/yu0c3/mvF5gnKwg1SlZYESRCWOKjDUJz3rA9PPep4JZ/T1cT0eQyT9e6EB6kpYm+OFk+DMCHEWzgByUX5Y3Aiz39lrbXRtxib47yAcbpMEjDm07aFtKlqrJozSqGvBF0hpf9NnIp0HLlGafw4tnJHRjQHOGLMayW6XZEixPXo5Ql9Ft9Bo9IzXLuSLA3HdbSzRWQCZQQT+Q3DyfsMzzgwGqUkSwvjOvblMUQ00DzAO2zh0sNAcjgvAOJ4i0oqfBkEDJELwnEADUdLd7QY2M4Z0wq9YD34BEecsnLfQt3nEOn11H8m1wDatM4RAX9qcxXb19B0hwT71o5E=
+  region: IAD
+  container: verifast
+  skip_cleanup: true
+  on:
+    repo: verifast/verifast
+    branch: master

@@ -1,0 +1,6 @@
+.provides ./sequences.gh#tail_cons_eq
+.provides ./sequences.gh#eq_cons_tail
+.provides ./sequences.gh#tail__map
+.provides ./sequences.gh#is_interleaving_def
+.provides ./sequences.gh#is_interleaving_trivial1
+.provides ./sequences.gh#is_interleaving_trivial2

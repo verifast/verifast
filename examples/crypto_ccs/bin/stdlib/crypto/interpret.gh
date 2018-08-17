@@ -1,0 +1,26 @@
+#ifndef INTERPRET_GH
+#define INTERPRET_GH
+
+#include "cryptogram.gh"
+#include "public_chars.gh"
+
+#define GENERAL_INTERPRET_METHOD(KIND, CG) \
+lemma void interpret_##KIND(char *buffer, int size); \
+  requires [_]public_invar(?pub) &*& \
+           [?f]chars(buffer, size, ?cs); \
+  ensures  [f]cryptogram(buffer, size, ?ccs, ?cg) &*& [_]pub(cg) &*& \
+           ccs == cs_to_ccs(cs) &*& cg == CG &*& \
+           [_]public_ccs(ccs);
+
+GENERAL_INTERPRET_METHOD(nonce,          cg_nonce(_,_))
+GENERAL_INTERPRET_METHOD(symmetric_key,  cg_symmetric_key(_, _))
+GENERAL_INTERPRET_METHOD(public_key,     cg_rsa_public_key(_, _))
+GENERAL_INTERPRET_METHOD(private_key,    cg_rsa_private_key(_, _))
+GENERAL_INTERPRET_METHOD(hash,           cg_sha512_hash(_))
+GENERAL_INTERPRET_METHOD(hmac,           cg_sha512_hmac(_, _, _))
+GENERAL_INTERPRET_METHOD(encrypted,      cg_aes_encrypted(_, _, _, _))
+GENERAL_INTERPRET_METHOD(auth_encrypted, cg_aes_auth_encrypted(_, _, _, _))
+GENERAL_INTERPRET_METHOD(asym_encrypted, cg_rsa_encrypted(_, _, _, _))
+GENERAL_INTERPRET_METHOD(asym_signature, cg_rsa_signature(_, _, _, _))
+
+#endif

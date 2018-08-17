@@ -1,0 +1,79 @@
+#ifndef CCS_GH
+#define CCS_GH
+
+#include <quantifiers.gh>
+#include "auxiliary_definitions.gh"
+
+abstract_type secret_coin_tosses; // Finite list of secret coin tosses
+
+inductive crypto_char =
+  crypto_char(fixpoint(secret_coin_tosses, char) crypto_char)
+;
+
+fixpoint char crypto_char_const(char c, secret_coin_tosses sampling)
+{
+  return c;
+}
+
+fixpoint crypto_char c_to_cc(char c)
+{
+  return crypto_char((crypto_char_const)(c));
+}
+
+fixpoint list<crypto_char> cs_to_ccs(list<char> cs)
+{
+  switch(cs)
+  {
+    case cons(c, cs0):
+      return cons(c_to_cc(c), cs_to_ccs(cs0));
+    case nil:
+      return nil;
+  }
+}
+
+fixpoint bool cs_to_ccs_eq(list<crypto_char> ccs, list<char> cs)
+{
+  return ccs == cs_to_ccs(cs);
+}
+
+predicate public_ccs(list<crypto_char> ccs) =
+  [_]exists(?cs) &*& ccs == cs_to_ccs(cs);
+
+// Proven lemmas
+
+lemma void public_cs_to_ccs(list<crypto_char> ccs);
+  requires [_]public_ccs(ccs);
+  ensures [_]is_forall_t<list<char> >(?forallcs) &*&
+          true == exists_t<list<char> >(forallcs, (cs_to_ccs_eq)(ccs));
+
+lemma void cs_to_ccs_length(list<char> xs);
+  requires true;
+  ensures length(xs) == length(cs_to_ccs(xs));
+
+lemma void cs_to_ccs_append(list<char> xs, list<char> ys);
+  requires true;
+  ensures append(cs_to_ccs(xs), cs_to_ccs(ys)) ==
+          cs_to_ccs(append(xs, ys));
+
+lemma void cs_to_ccs_take(int i, list<char> xs);
+  requires true;
+  ensures take(i, cs_to_ccs(xs)) == cs_to_ccs(take(i, xs));
+
+lemma void cs_to_ccs_drop(int i, list<char> xs);
+  requires true;
+  ensures drop(i, cs_to_ccs(xs)) == cs_to_ccs(drop(i, xs));
+
+lemma void c_to_cc_inj(char c1, char c2);
+  requires true;
+  ensures  true == ((c_to_cc(c1) == c_to_cc(c2)) == (c1 == c2));
+
+lemma void cs_to_ccs_inj(list<char> cs1, list<char> cs2);
+  requires true;
+  ensures  true == ((cs1 == cs2) == (cs_to_ccs(cs1) == cs_to_ccs(cs2)));
+
+lemma void cs_to_ccs_chars(char* b, list<char> cs2);
+  requires [?f]chars(b, ?c, ?cs1) &*&
+           cs_to_ccs(cs1) == cs_to_ccs(cs2);
+  ensures  [f]chars(b, c, cs2);
+
+#endif

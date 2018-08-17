@@ -1,0 +1,3 @@
+.provides ./bigstar.gh#bigstar_extract
+.provides ./bigstar.gh#bigstar_inject
+.predicate @./bigstar.gh#bigstar

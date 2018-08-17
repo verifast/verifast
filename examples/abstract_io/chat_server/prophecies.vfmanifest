@@ -1,0 +1,3 @@
+.predicate @./prophecies.h#prophecy_var
+.provides ./prophecies.h#create_prophecy_var
+.provides ./prophecies.h#prophecy_var_assign

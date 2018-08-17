@@ -11,7 +11,4 @@
  * macro definitions.
  */
 
-/* Does not make a difference for VeriFast, so just empty */
-#define inline
-
 #endif

@@ -1,0 +1,123 @@
+/*@
+
+lemma t not_forall<t>(list<t> vs, fixpoint(t, boolean) p);
+    requires !forall(vs, p);
+    ensures mem(result, vs) == true &*& !p(result);
+
+lemma void forall_elim<t>(list<t> vs, fixpoint(t, boolean) p, t x);
+    requires forall(vs, p) == true &*& mem(x, vs) == true;
+    ensures p(x) == true;
+
+fixpoint boolean forall_nth_core<t>(list<t> xs, fixpoint(list<t>, int, boolean) p, nat n) {
+    switch(n) {
+        case zero: return p(xs, int_of_nat(zero));
+        case succ(n0): return p(xs, int_of_nat(n)) && forall_nth_core(xs, p, n0);
+    }
+}
+
+fixpoint boolean forall_nth<t>(list<t> xs, fixpoint(list<t>, int, boolean) p) {
+    switch(xs) {
+        case nil: return true;
+        case cons(h, t): return forall_nth_core(xs, p, nat_of_int(length(xs) - 1));
+    }
+}
+
+lemma int not_forall_nth<t>(list<t> vs, fixpoint (list<t>, int, boolean) p);
+    requires !forall_nth(vs, p);
+    ensures 0 <= result &*& result < length(vs) &*& !p(vs, result);
+
+lemma void forall_nth_elim<t>(list<t> vs, fixpoint (list<t>, int, boolean) p, int i);
+    requires forall_nth(vs, p) == true &*& 0 <= i &*& i < length(vs);
+    ensures p(vs, i) == true;
+
+/*
+
+Quantifiers over all values of a type
+=====================================
+
+Note: a quantifier "fixpoint boolean forall__<t>(fixpoint(t, boolean) p);" would be great but
+the elimination lemma for this quantifier would be unsound due to type erasure. The following
+verifies:
+
+fixpoint boolean forall__<t>(fixpoint(t, boolean) p);
+
+lemma t not_forall__<t>(fixpoint(t, boolean) p); // UNSOUND!!
+    requires !forall__(p);
+    ensures !p(result);
+
+lemma void forall___intro<t>(fixpoint(t, boolean) p, t x); // UNSOUND!!
+    requires forall__(p) == true;
+    ensures p(x) == true;
+
+fixpoint boolean eq<t>(t x, t y) { return x == y; }
+
+fixpoint boolean all_eq_<t>(t x) { return forall__((eq)(x)); }
+
+lemma void absurd()
+    requires true;
+    ensures false;
+{
+    if (!forall__(all_eq_)) {
+        unit u1 = not_forall__<unit>(all_eq_);
+        unit u2 = not_forall__<unit>((eq)(u1));
+        switch (u1) {
+            case unit:
+                switch (u2) {
+                    case unit:
+                }
+        }
+    }
+    forall___intro<boolean>(all_eq_, true);
+    forall___intro<boolean>((eq)(true), false);
+}
+
+*/
+
+predicate is_forall_t<t>(; fixpoint(fixpoint(t, boolean), boolean) f);
+
+/**
+ * Returns a fixpoint f such that f(p) is true iff p(x) is true for all x.
+ */
+lemma fixpoint(fixpoint(t, boolean), boolean) get_forall_t<t>();
+    requires true;
+    ensures [_]is_forall_t<t>(result);
+
+/**
+ * Given p(x) is not true for all x, returns a witness w such that p(w) is not true.
+ */
+lemma t not_forall_t<t>(fixpoint(fixpoint(t, boolean), boolean) f, fixpoint(t, boolean) p);
+    requires [_]is_forall_t<t>(f) &*& !f(p);
+    ensures !p(result);
+
+/**
+ * Given p(x) is true for all x, ensures it is also true for the given x.
+ */
+lemma void forall_t_elim<t>(fixpoint(fixpoint(t, boolean), boolean) f, fixpoint(t, boolean) p, t x);
+    requires [_]is_forall_t<t>(f) &*& f(p) == true;
+    ensures p(x) == true;
+
+fixpoint boolean notf<t>(fixpoint(t, boolean) p, t x) {
+    return !p(x);
+}
+
+fixpoint boolean exists_t<t>(fixpoint(fixpoint(t, boolean), boolean) forall_t, fixpoint(t, boolean) p) {
+    return !forall_t((notf)(p));
+}
+
+// Instantiation for int (for convenience)
+
+fixpoint boolean forall_int(fixpoint(int, boolean) p);
+
+lemma void get_forall_int();
+    requires true;
+    ensures [_]is_forall_t<int>(forall_int);
+
+lemma int not_forall_int(fixpoint(int, boolean) p);
+    requires !forall_int(p);
+    ensures !p(result);
+
+lemma void forall_int_elim(fixpoint(int, boolean) p, int x);
+    requires forall_int(p) == true;
+    ensures p(x) == true;
+
+@*/

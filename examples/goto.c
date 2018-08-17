@@ -25,7 +25,7 @@ int abs(int x)
     //@ ensures 0 <= x ? result == x : 0 - result == x;
 {
     if (0 <= x) goto end;
-    if (x == -2147483648) abort();
+    if (x < -2147483647) abort();
     x = 0 - x;
 end:
     return x;

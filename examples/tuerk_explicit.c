@@ -16,7 +16,7 @@ predicate nodes(struct node *node, list<int> values) =
 
 lemma_auto void nodes_inv()
     requires nodes(?node, ?values);
-    ensures nodes(node, values) &*& true == ((values == nil) == (node == 0));
+    ensures nodes(node, values) &*& (values == nil) == (node == 0);
 {
     open nodes(node, values);
     close nodes(node, values);

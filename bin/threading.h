@@ -14,6 +14,7 @@
 // Mutexes are non-re-entrant. Specifically, if a thread attempts to acquire a mutex that it already holds, the program aborts.
 
 struct mutex;
+typedef struct mutex *mutex;
 
 /*@
 predicate mutex(struct mutex *mutex; predicate() p);
@@ -43,6 +44,8 @@ void mutex_dispose(struct mutex *mutex);
 
 // Condition variable, see e.g. pthread_cond_wait(3).
 struct mutex_cond;
+typedef struct mutex_cond *mutex_cond;
+
 //@ predicate mutex_cond(struct mutex_cond *cond; struct mutex *mutex);
 
 //@ predicate create_mutex_cond_ghost_args(struct mutex *mutex) = emp;
@@ -138,6 +141,7 @@ fixpoint bool lock_below_top(int l, list<int> ls) {
 // The contracts enforce that a thread releases a lock only if it is currently holding the lock.
 
 struct lock;
+typedef struct lock *lock;
 
 /*@
 
@@ -198,6 +202,7 @@ typedef void thread_run_joinable(void *data);
     //@ ensures thread_run_post(this)(data, info) &*& lockset(currentThread, nil);
 
 struct thread;
+typedef struct thread *thread;
 
 /*@
 predicate thread(struct thread *thread, void *thread_run, void *data, any info);

@@ -61,13 +61,19 @@
 .provides ./prelude.h#string_limits
 .provides ./prelude.h#chars_inv
 .provides ./prelude.h#uchars_inv
+.provides ./prelude.h#uchars_split
+.provides ./prelude.h#uchars_join
 .provides ./prelude.h#ints_inv
 .provides ./prelude.h#uints_inv
+.provides ./prelude.h#llongs_inv
+.provides ./prelude.h#ullongs_inv
 .provides ./prelude.h#shorts_inv
 .provides ./prelude.h#ushorts_inv
 .provides ./prelude.h#pointers_inv
 .provides ./prelude.h#pointers_split
 .provides ./prelude.h#pointers_join
+.provides ./prelude.h#map_uchar_of_char_char_of_uchar
+.provides ./prelude.h#map_char_of_uchar_uchar_of_char
 .provides ./prelude.h#chars_to_uchars
 .provides ./prelude.h#uchars_to_chars
 .provides ./prelude.h#chars_to_ints
@@ -79,6 +85,7 @@
 .provides ./prelude.h#divrem_elim
 .provides ./prelude.h#pointers_to_chars
 .provides ./prelude.h#character_limits
+.provides ./prelude.h#u_character_limits
 .provides ./prelude.h#is_handle_unique
 .predicate @./prelude.h#character
 .predicate @./prelude.h#u_character

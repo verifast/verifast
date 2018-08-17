@@ -108,7 +108,8 @@ void *read_cell_contents0(void *cell)
     //@ ensures [f]mytso(id, cons(result, nil));
 {
     struct cell *cell_ = cell;
-    //@ void *contents0 = create_tso_prophecy();
+    prophecy_id contents0Id = create_tso_prophecy();
+    //@ assert tso_prophecy(contents0Id, ?contents0);
     struct object *contents;
     {
         /*@
@@ -135,7 +136,7 @@ void *read_cell_contents0(void *cell)
         //@ assert [?f1]object_class(cell, _);
         //@ close [f1]P();
         //@ open [f]mytso(id, _);
-        contents = tso_read(&cell_->contents, 2, cell);
+        contents = tso_read(contents0Id, &cell_->contents, 2, cell);
         //@ close [f]mytso(id, cons(contents0, nil));
     }
     return contents;

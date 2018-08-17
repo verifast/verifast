@@ -8,14 +8,12 @@ open Verifast
 open GMain
 open Pervasives
 open Shape_analysis_frontend
-
-type platform = Windows | Linux | MacOS
+open Vfconfig
 
 type layout = FourThree | Widescreen
 
-let platform = if Sys.os_type = "Win32" then Windows else if Fonts.is_macos then MacOS else Linux
-
 let include_paths: string list ref = ref []
+let define_macros: string list ref = ref []
 
 let () = Unix.putenv "LANG" "en_US" (* This works around a problem that causes vfide to become unusable in the Chinese locale. *)
 
@@ -101,12 +99,23 @@ let sys cmd =
   if exitStatus <> Unix.WEXITED 0 then failwith (Printf.sprintf "Command '%s' failed with exit status %s" cmd (string_of_process_status exitStatus));
   line
 
+let string_of_time time =
+  let tm = Unix.gmtime time in
+  Printf.sprintf "%04d-%02d-%02d %02d:%02d:%02d%9f" (tm.tm_year + 1900) (tm.tm_mon + 1) tm.tm_mday tm.tm_hour tm.tm_min tm.tm_sec (fst (modf time))
+
 let path_last_modification_time path =
   (Unix.stat path).st_mtime
 
 let file_has_changed path mtime =
   try
-    path_last_modification_time path <> mtime
+    let mtime' = path_last_modification_time path in
+    let result = mtime' <> mtime in
+    if result then begin
+      Printf.printf "File '%s' was last read by vfide at '%s' but was modified by another process at '%s'.\n"
+        path (string_of_time mtime) (string_of_time mtime');
+      flush stdout
+    end;
+    result
   with Unix.Unix_error (_, _, _) -> true
 
 let in_channel_last_modification_time chan =
@@ -115,7 +124,7 @@ let in_channel_last_modification_time chan =
 let out_channel_last_modification_time chan =
   (Unix.fstat (Unix.descr_of_out_channel chan)).st_mtime
 
-type tree_node = TreeNode of string * int list * int * int * tree_node list
+type tree_node = TreeNode of node_type * int * int * tree_node list
 
 module TreeMetrics = struct
   let dotWidth = 15
@@ -124,9 +133,9 @@ module TreeMetrics = struct
   let cw = dotWidth + 2 * padding
 end
 
-let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend enforceAnnotations =
-  let leftBranchPixbuf = GdkPixbuf.from_file (default_bindir ^ "/branch-left.png") in
-  let rightBranchPixbuf = GdkPixbuf.from_file (default_bindir ^ "/branch-right.png") in
+let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend enforceAnnotations allowUndeclaredStructTypes dataModel overflowCheck =
+  let leftBranchPixbuf = Branchleft_png.pixbuf () in
+  let rightBranchPixbuf = Branchright_png.pixbuf () in
   let ctxts_lifo = ref None in
   let msg = ref None in
   let url = ref None in
@@ -149,7 +158,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   let traceFont = ref traceFont in
   let scaledTraceFont = ref !traceFont in
   let actionGroup = GAction.action_group ~name:"Actions" () in
-  let disableOverflowCheck = ref false in
+  let disableOverflowCheck = ref (not overflowCheck) in
   let useJavaFrontend = ref false in
   let toggle_java_frontend active =
     (useJavaFrontend := active;
@@ -197,6 +206,38 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     a#set_label "Show _right margin ruler"; ignore $. a#connect#toggled (fun () -> showRightMargin a#get_active);
     a
   in
+  let launch_browser url =
+    match platform with
+      MacOS -> ignore $. Sys.command ("open '" ^ url ^ "'")
+    | Linux -> ignore $. Sys.command ("xdg-open '" ^ url ^ "'")
+    | Windows ->
+      (* The below command asynchronously launches a "cmd" process that launches the help topic.
+         Launching the help topic synchronously seems to cause vfide to hang for between 6 and 30 seconds.
+         My hypothesis is that "cmd /C start xyz.html" performs a DDE broadcast to all windows on the desktop,
+         which apparently blocks until a timeout happens if some window is not responding. If the
+         Help topic is launched synchronously inside the GUI event handler thread, the vfide window is not
+         responsive until the Help topic is launched. Ergo the deadlock.
+         This seems to be confirmed here <http://wiki.tcl.tk/996> and here <http://blogs.msdn.com/b/oldnewthing/archive/2007/02/26/1763683.aspx>.
+      *)
+      ignore $. Unix.create_process "cmd" [| "/C"; "start"; "Dummy Title"; url |] Unix.stdin Unix.stdout Unix.stderr
+  in
+  let showBannerDialog () =
+    let dialog = GWindow.dialog ~title:"About VeriFast" ~parent:root () in
+    dialog#action_area#set_border_width 0;
+    let vbox = dialog#vbox in
+    ignore $. GMisc.label ~xpad:2 ~ypad:2 ~line_wrap:true ~text:(Verifast.banner ()) ~packing:vbox#pack ();
+    ignore $. (GButton.button ~stock:`OK ~packing:dialog#action_area#add ())#connect#clicked (fun () ->
+      dialog#response `DELETE_EVENT
+    );
+    ignore $. (GButton.button ~label:"Launch Homepage" ~packing:dialog#action_area#add ())#connect#clicked (fun () ->
+      launch_browser "https://github.com/verifast/verifast/"
+    );
+    ignore $. (GButton.button ~label:"Show Contributors" ~packing:dialog#action_area#add ())#connect#clicked (fun () ->
+      launch_browser "https://github.com/verifast/verifast/graphs/contributors"
+    );
+    ignore $. dialog#run();
+    dialog#destroy()
+  in
   let _ =
     let a = GAction.add_action in
     GAction.add_actions actionGroup [
@@ -233,7 +274,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       a "BottomWindow" ~label:"Window(_Bottom)";
       a "Stub";
       a "Help" ~label:"_Help";
-      a "About" ~stock:`ABOUT ~callback:(fun _ -> GToolbox.message_box "VeriFast IDE" (Verifast.banner ()))
+      a "About" ~stock:`ABOUT ~callback:(fun _ -> showBannerDialog ())
     ]
   in
   let ui = GAction.ui_manager() in
@@ -326,21 +367,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   messageEntry#coerce#misc#modify_font_by_name !scaledTraceFont;
   let helpButton = GButton.button ~show:false ~label:" ? " ~packing:(messageHBox#pack) () in
   let show_help url =
-    if Sys.os_type = "Unix" then
-     if sys "uname" = "Darwin" then
-        ignore (Sys.command ("open " ^ "'" ^ !bindir ^ "/../help/" ^ url ^ ".html" ^ "'"))
-      else
-        ignore (Sys.command ("xdg-open " ^ "'" ^ !bindir ^ "/../help/" ^ url ^ ".html" ^ "'"))
-    else
-      (* The below command asynchronously launches a "cmd" process that launches the help topic.
-         Launching the help topic synchronously seems to cause vfide to hang for between 6 and 30 seconds.
-         My hypothesis is that "cmd /C start xyz.html" performs a DDE broadcast to all windows on the desktop,
-         which apparently blocks until a timeout happens if some window is not responding. If the
-         Help topic is launched synchronously inside the GUI event handler thread, the vfide window is not
-         responsive until the Help topic is launched. Ergo the deadlock.
-         This seems to be confirmed here <http://wiki.tcl.tk/996> and here <http://blogs.msdn.com/b/oldnewthing/archive/2007/02/26/1763683.aspx>.
-      *)
-      ignore (Unix.create_process "cmd" [| "/C"; "start"; "Dummy Title"; !bindir ^ "\\..\\help\\" ^ url ^ ".html" |] Unix.stdin Unix.stdout Unix.stderr)
+    launch_browser (!bindir ^ "/../help/" ^ url ^ ".html")
   in
   ignore (helpButton#connect#clicked (fun () -> (match(!url) with None -> () | Some(url) -> show_help url);));
   toolbar#insert messageToolItem;
@@ -356,36 +383,37 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   treeSeparator#set_position (match layout with FourThree -> 800 | Widescreen -> 1024);
   let executionForest = ref [] in
   let reportExecutionForest forest =
-    let rec findFork (Node (msg, p, ns) as n) =
+    let rec findFork (Node (nodeType, ns) as n) =
       match !ns with
-        [n] -> findFork n
+        [Node (ExecNode _, _) as n] -> findFork n
+      | [n] when nodeType = BranchNode -> findFork n
       | _ -> n
     in
     let rec convert forest =
-      forest |> List.rev |> List.map begin fun (Node (msg, p, ns)) ->
+      forest |> List.rev |> List.map begin fun (Node (nodeType, ns)) ->
         let ns = convert (List.map findFork !ns) in
         let width =
           ns
-            |> List.map (fun (TreeNode (msg, p, width, _, _)) -> width)
+            |> List.map (fun (TreeNode (_, width, _, _)) -> width)
             |> List.fold_left (+) 0
             |> max 1
         in
         let height =
           ns
-            |> List.map (fun (TreeNode (msg, p, width, height, _)) -> height)
+            |> List.map (fun (TreeNode (_, width, height, _)) -> height)
             |> List.fold_left max 0
         in
-        TreeNode (msg, p, width, height + 1, ns)
+        TreeNode (nodeType, width, height + 1, ns)
       end
     in
     executionForest := convert forest;
     treeComboListStore#clear ();
-    !executionForest |> List.iter (fun (TreeNode (msg, _, _, _, _)) -> GEdit.text_combo_add treeComboText msg)
+    !executionForest |> List.iter (fun (TreeNode (ExecNode (msg, _), _, _, _)) -> GEdit.text_combo_add treeComboText msg)
   in
   ignore $. treeCombo#connect#changed begin fun () ->
     let active = treeCombo#active in
     if 0 <= active then begin
-      let TreeNode (msg, p, w, h, ns) = List.nth !executionForest active in
+      let TreeNode (_, w, h, ns) = List.nth !executionForest active in
       let open TreeMetrics in
       treeDrawingArea#set_size ~width:(cw * w) ~height:(cw * h)
     end;
@@ -711,15 +739,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   let load tab newPath =
     try
       let chan = open_in_bin newPath in
-      let buf = String.create 60000 in
-      let rec iter () =
-        let count = input chan buf 0 60000 in
-        if count = 0 then [] else
-          let chunk = String.sub buf 0 count in
-          chunk::iter ()
-      in
-      let chunks = iter() in
-      let text = String.concat "" chunks in
+      let text = input_fully chan in
       let mtime = in_channel_last_modification_time chan in
       close_in chan;
       let text = file_to_utf8 text in
@@ -763,8 +783,9 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     let text = (tab#buffer: GSourceView2.source_buffer)#get_text () in
     output_string chan (utf8_to_file (convert_eol !(tab#eol) text));
     flush chan;
-    let mtime = out_channel_last_modification_time chan in
+    (* let mtime = out_channel_last_modification_time chan in *)
     close_out chan;
+    let mtime = path_last_modification_time thePath in
     tab#path := Some (thePath, mtime);
     tab#buffer#set_modified false;
     updateBufferTitle tab;
@@ -1325,6 +1346,8 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
                 option_disable_overflow_check = !disableOverflowCheck;
                 option_use_java_frontend = !useJavaFrontend;
                 option_enforce_annotations = enforceAnnotations;
+                option_allow_undeclared_struct_types = allowUndeclaredStructTypes;
+                option_data_model = dataModel;
                 option_allow_should_fail = true;
                 option_emit_manifest = false;
                 option_vroots = [crt_vroot default_bindir];
@@ -1334,6 +1357,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
                 option_provides = [];
                 option_keep_provide_files = true;
                 option_include_paths = !include_paths;
+                option_define_macros = !define_macros;
                 option_safe_mode = false;
                 option_header_whitelist = [];
               }
@@ -1376,7 +1400,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
               updateMessageEntry(false)
             | StaticError (l, emsg, eurl) ->
               handleStaticError l emsg eurl 
-            | SymbolicExecutionError (ctxts, phi, l, emsg, eurl) ->
+            | SymbolicExecutionError (ctxts, l, emsg, eurl) ->
               ctxts_lifo := Some ctxts;
               updateStepItems();
               ignore $. updateStepListView();
@@ -1427,7 +1451,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
             (* Save all tabs to disk firsts. Only continue on success. *)
             if not (List.exists sync_with_disk !buffers) then begin
               try begin
-                let new_contents = shape_analyse_frontend path !include_paths (getCursor ()) in
+                let new_contents = shape_analyse_frontend path !include_paths !define_macros (getCursor ()) in
                 let buffer = tab#buffer in
                 buffer#set_text new_contents;
                 (* syntax highlighting gets updated automatically *)
@@ -1448,10 +1472,30 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     let open TreeMetrics in
     ignore $. treeDrawingArea#event#connect#expose begin fun event ->
       let d = new GDraw.drawable treeDrawingArea#misc#window in
-      let rec drawNode x y (TreeNode (msg, p, w, h, ns)) =
+      let delayedCommands = ref [] in
+      let performDelayed f = delayedCommands := f::!delayedCommands in
+      let rec drawNode x y (TreeNode (nodeType, w, h, ns)) =
         let px = x + cw * w / 2 in
         let py = y + cw / 2 in
-        d#arc ~x:(px - dotWidth / 2) ~y:(py - dotWidth / 2) ~width:dotWidth ~height:dotWidth ~filled:true ();
+        let (outlineColor, fillColor) =
+          match nodeType with
+            ExecNode _ -> None, `BLACK
+          | BranchNode -> if ns = [] then Some `BLACK, `NAME "lightgray" else None, `NAME "darkgray"
+          | SuccessNode -> None, `NAME "green"
+          | ErrorNode -> None, `NAME "red"
+        in
+        performDelayed begin fun () ->
+          d#set_foreground fillColor;
+          let x = px - dotWidth / 2 in
+          let y = py - dotWidth / 2 in
+          d#arc ~x ~y ~width:dotWidth ~height:dotWidth ~filled:true ();
+          begin match outlineColor with
+            None -> ()
+          | Some outlineColor ->
+            d#set_foreground outlineColor;
+            d#arc ~x ~y ~width:dotWidth ~height:dotWidth ~filled:false ()
+          end
+        end;
         let rec drawChildren x y ns =
           match ns with
             [] -> ()
@@ -1463,24 +1507,31 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
         drawChildren x (y + cw) ns;
         (w, px, py)
       in
+      let drawTree tree =
+        ignore $. drawNode 0 0 tree;
+        !delayedCommands |> List.iter (fun f -> f ())
+      in
       let active = treeCombo#active in
-      if 0 <= active then ignore $. drawNode 0 0 (List.nth !executionForest active);
+      if 0 <= active then drawTree (List.nth !executionForest active);
       true
     end;
     treeDrawingArea#event#add [`BUTTON_PRESS; `BUTTON_RELEASE];
     ignore $. treeDrawingArea#event#connect#button_release begin fun event ->
       let bx, by = int_of_float (GdkEvent.Button.x event), int_of_float (GdkEvent.Button.y event) in
-      let rec hitTest x y (TreeNode (msg, p, w, h, ns)) =
+      let rec hitTest x y (TreeNode (nodeType, w, h, ns)) =
         if by < y + cw then begin
           let px = x + cw * w / 2 in
           let py = y + cw / 2 in
           if abs (by - py) <= dotRadius && abs (bx - px) <= dotRadius then
-            verifyProgram false (Some p) ()
+            begin match nodeType with
+              ExecNode (msg, p) -> verifyProgram false (Some p) ()
+            | _ -> ()
+            end
         end else begin
           let rec testChildren x y ns =
             match ns with
               [] -> ()
-            | (TreeNode (msg, p, w, _, _) as n)::ns ->
+            | (TreeNode (_, w, _, _) as n)::ns ->
               if bx < x + cw * w then
                 hitTest x y n
               else
@@ -1661,18 +1712,26 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   ignore $. Glib.Idle.add (fun () -> textPaned#set_position 0; false);
   GMain.main()
 
+let (code_font, trace_font) =
+  match platform with
+    MacOS -> ("Courier 12", "Sans 12")
+  | _ -> ("Monospace 10", "Sans 8")
+
 let () =
   let path = ref None in
-  let prover = ref None in
-  let codeFont = ref Fonts.code_font in
-  let traceFont = ref Fonts.trace_font in
+  let prover = ref default_prover in
+  let codeFont = ref code_font in
+  let traceFont = ref trace_font in
   let runtime = ref None in
   let layout = ref FourThree in
   let javaFrontend = ref false in
   let enforceAnnotations = ref false in
+  let allowUndeclaredStructTypes = ref false in
+  let overflow_check = ref true in
+  let data_model = ref data_model_32bit in
   let rec iter args =
     match args with
-      "-prover"::arg::args -> prover := Some arg; iter args
+      "-prover"::arg::args -> prover := arg; iter args
     | "-codeFont"::arg::args -> codeFont := arg; iter args
     | "-traceFont"::arg::args -> traceFont := arg; iter args
     | "-runtime"::arg::args -> runtime := Some arg; iter args
@@ -1680,18 +1739,38 @@ let () =
     | "-I"::arg::args -> ( match (Some arg) with
        None -> ( ) | Some arg -> include_paths := arg :: !include_paths);
        iter args
+    | "-D"::arg::args -> ( match (Some arg) with
+       None -> ( ) | Some arg -> define_macros := arg :: !define_macros);
+       iter args
     | "-layout"::"fourthree"::args -> layout := FourThree; iter args
     | "-layout"::"widescreen"::args -> layout := Widescreen; iter args
     | "-javac"::args -> javaFrontend := true; iter args
     | "-enforce_annotations"::args -> enforceAnnotations := true; iter args
+    | "-allow_undeclared_struct_types"::args -> allowUndeclaredStructTypes := true; iter args
+    | "-target"::target::args -> data_model := data_model_of_string target; iter args
+    | "-disable_overflow_check"::args -> overflow_check := false; iter args
     | arg::args when not (startswith arg "-") -> path := Some arg; iter args
-    | [] -> show_ide !path !prover !codeFont !traceFont !runtime !layout !javaFrontend !enforceAnnotations
+    | [] -> show_ide !path !prover !codeFont !traceFont !runtime !layout !javaFrontend !enforceAnnotations !allowUndeclaredStructTypes !data_model !overflow_check
     | _ ->
+      let options = [
+        "-prover prover    (" ^ list_provers () ^ ")";
+        "-codeFont fontSpec";
+        "-traceFont fontSpec";
+        "-I IncludeDir";
+        "-D DefineName";
+        "-layout fourthree|widescreen";
+        "-javac";
+        "-runtime";
+        "-bindir";
+        "-enforce_annotations";
+        "-disable_overflow_check";
+        "-target target    (supported targets: " ^ String.concat ", " (List.map fst data_models) ^ ")"
+      ] in
       GToolbox.message_box "VeriFast IDE" begin
         "Invalid command line.\n\n" ^ 
-        "Usage: vfide [filepath] [-prover z3|redux] [-codeFont fontSpec] " ^
-        "[-traceFont fontSpec] [-I IncludeDir] [-layout fourthree|widescreen] " ^
-        "[-javac] "
+        "Usage: vfide [options] [filepath]\n\n" ^
+        "Options:\n" ^
+        String.concat "" (List.map (fun opt -> "  " ^ opt ^ "\n") options)
       end
   in
   let args = 

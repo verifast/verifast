@@ -1,0 +1,4 @@
+#!/bin/bash
+set -o pipefail # A pipe fails if any component fails
+DIRNAME=`dirname "$0"`
+"$DIRNAME/pkg-config.exe" $* | conv --dos2unix

@@ -25,8 +25,8 @@ exception ShapeAnalysisException of (loc * string);;
  * The contents is passed as a filename (instead of e.g. the real contents)
  * because the rest of VeriFast works like that.
  *)
-let shape_analyse_frontend path include_paths position : string =
-  let (_, ast_all) = parse_c_file path (fun _ _ -> ()) (fun _ -> ()) 0 include_paths true in
+let shape_analyse_frontend path include_paths define_macros position : string =
+  let (_, ast_all) = parse_c_file path (fun _ _ -> ()) (fun _ -> ()) 0 include_paths define_macros true data_model_32bit in
   let ast_function =
     match ast_all with
     | [PackageDecl (loc, package_name, imports, declarations)] -> begin

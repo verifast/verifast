@@ -9,7 +9,7 @@ let _ =
   let print_msg l msg =
     print_endline (string_of_loc l ^ ": " ^ msg)
   in
-  let verify ?(emitter_callback = fun _ -> ()) (print_stats : bool) (options : options) (prover : string option) (path : string) (emitHighlightedSourceFiles : bool) =
+  let verify ?(emitter_callback = fun _ -> ()) (print_stats : bool) (options : options) (prover : string) (path : string) (emitHighlightedSourceFiles : bool) =
     let verify range_callback =
     let exit l =
       Java_frontend_bridge.unload();
@@ -26,13 +26,12 @@ let _ =
     | ParseException (l, msg) -> print_msg l ("Parse error" ^ (if msg = "" then "." else ": " ^ msg)); exit 1
     | CompilationError(msg) -> print_endline (msg); exit 1
     | StaticError (l, msg, url) -> print_msg l msg; exit 1
-    | SymbolicExecutionError (ctxts, phi, l, msg, url) ->
+    | SymbolicExecutionError (ctxts, l, msg, url) ->
         (*
         let _ = print_endline "Trace:" in
         let _ = List.iter (fun c -> print_endline (string_of_context c)) (List.rev ctxts) in
         let _ = print_endline ("Heap: " ^ string_of_heap h) in
         let _ = print_endline ("Env: " ^ string_of_env env) in
-        let _ = print_endline ("Failed query: " ^ phi) in
         *)
         let _ = print_msg l msg in
         exit 1
@@ -145,7 +144,7 @@ let _ =
   let stats = ref false in
   let verbose = ref 0 in
   let disable_overflow_check = ref false in
-  let prover: string option ref = ref None in
+  let prover: string ref = ref default_prover in
   let compileOnly = ref false in
   let isLibrary = ref false in
   let allowAssume = ref false in
@@ -162,12 +161,15 @@ let _ =
   let provides = ref [] in
   let keepProvideFiles = ref false in
   let include_paths: string list ref = ref [] in
+  let define_macros: string list ref = ref [] in
   let library_paths: string list ref = ref ["CRT"] in
   let safe_mode = ref false in
   let header_whitelist: string list ref = ref [] in
   let linkShouldFail = ref false in
   let useJavaFrontend = ref false in
   let enforceAnnotations = ref false in
+  let allowUndeclaredStructTypes = ref false in
+  let dataModel = ref data_model_32bit in
   let vroots = ref [Util.crt_vroot Util.default_bindir] in
   let add_vroot vroot =
     let (root, expansion) = Util.split_around_char vroot '=' in
@@ -189,7 +191,7 @@ let _ =
   let cla = [ "-stats", Set stats, " "
             ; "-verbose", Set_int verbose, "-1 = file processing; 1 = statement executions; 2 = produce/consume steps; 4 = prover queries."
             ; "-disable_overflow_check", Set disable_overflow_check, " "
-            ; "-prover", String (fun str -> prover := Some str), "Set SMT prover (e.g. redux, z3)."
+            ; "-prover", String (fun str -> prover := str), "Set SMT prover (" ^ list_provers() ^ ")."
             ; "-c", Set compileOnly, "Compile only, do not perform link checking."
             ; "-shared", Set isLibrary, "The file is a library (i.e. no main function required)."
             ; "-allow_assume", Set allowAssume, "Allow assume(expr) annotations."
@@ -217,12 +219,15 @@ let _ =
               "Emits the AST as an s-expression to the specified file; raises exception on unsupported constructs."
             ; "-export", String (fun str -> exports := str :: !exports), " "
             ; "-I", String (fun str -> include_paths := str :: !include_paths), "Add a directory to the list of directories to be searched for header files."
+            ; "-D", String (fun str -> define_macros := str :: !define_macros), "Predefine name as a macro, with definition 1."
             ; "-L", String (fun str -> library_paths := str :: !library_paths), "Add a directory to the list of directories to be searched for manifest files during linking."
             ; "-safe_mode", Set safe_mode, "Safe mode (for use in CGI scripts)."
             ; "-allow_header", String (fun str -> header_whitelist := str::!header_whitelist), "Add the specified header to the whitelist."
             ; "-link_should_fail", Set linkShouldFail, "Specify that the linking phase is expected to fail."
             ; "-javac", Unit (fun _ -> (useJavaFrontend := true; Java_frontend_bridge.load ())), " "
             ; "-enforce_annotations", Unit (fun _ -> (enforceAnnotations := true)), " "
+            ; "-allow_undeclared_struct_types", Unit (fun () -> (allowUndeclaredStructTypes := true)), " "
+            ; "-target", String (fun s -> dataModel := data_model_of_string s), "Target platform of the program being verified. Determines the size of pointer and integer types. Supported targets: " ^ String.concat ", " (List.map fst data_models)
             ]
   in
   let process_file filename =
@@ -241,10 +246,13 @@ let _ =
           option_provides = !provides;
           option_keep_provide_files = !keepProvideFiles;
           option_include_paths = List.map (Util.replace_vroot !vroots) !include_paths;
+          option_define_macros = !define_macros;
           option_safe_mode = !safe_mode;
           option_header_whitelist = !header_whitelist;
           option_use_java_frontend = !useJavaFrontend;
-          option_enforce_annotations = !enforceAnnotations
+          option_enforce_annotations = !enforceAnnotations;
+          option_allow_undeclared_struct_types = !allowUndeclaredStructTypes;
+          option_data_model = !dataModel
         } in
         print_endline filename;
         let emitter_callback (packages : package list) =
@@ -277,7 +285,8 @@ let _ =
       end
   in
   let usage_string =
-    Verifast.banner () ^ "\nUsage: verifast [options] {sourcefile|objectfile}\n"
+    Verifast.banner ()
+    ^ "\nUsage: verifast [options] {sourcefile|objectfile}\n"
   in
   if Array.length Sys.argv = 1
   then usage cla usage_string

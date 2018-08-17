@@ -1,0 +1,18 @@
+/*@
+
+predicate GhostBag(int id, list<Object> elems);
+predicate GhostBagHandle(int id, Object elem);
+
+lemma int GhostBag_create();
+    requires true;
+    ensures GhostBag(result, nil);
+
+lemma void GhostBag_add(int id, Object value);
+    requires GhostBag(id, ?elems);
+    ensures GhostBag(id, cons(value, elems)) &*& GhostBagHandle(id, value);
+
+lemma void GhostBag_remove(int id, Object value);
+    requires GhostBag(id, ?elems) &*& GhostBagHandle(id, value);
+    ensures GhostBag(id, remove(value, elems)) &*& mem(value, elems) == true;
+   
+@*/

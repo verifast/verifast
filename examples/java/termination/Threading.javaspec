@@ -1,0 +1,165 @@
+/*@
+
+fixpoint pair<list<Class>, real> wait_level_of(Object waitableObject);
+
+fixpoint boolean wait_level_lt(pair<list<Class>, real> w1, pair<list<Class>, real> w2)
+{ return level_lt(fst(w1), fst(w2)) || level_le(fst(w1), fst(w2)) && snd(w1) < snd(w2); }
+
+lemma void wait_level_lt_trans(pair<list<Class>, real> w1, pair<list<Class>, real> w2, pair<list<Class>, real> w3);
+    requires wait_level_lt(w1, w2) && wait_level_lt(w2, w3);
+    ensures wait_level_lt(w1, w3) == true;
+
+predicate obs(list<Object> O;);
+
+fixpoint boolean wait_level_below_object(pair<list<Class>, real> w, Object o) { return wait_level_lt(w, wait_level_of(o)); }
+
+fixpoint boolean wait_level_below_obs(pair<list<Class>, real> w, list<Object> O) { return forall(O, (wait_level_below_object)(w)); }
+
+lemma void wait_level_lt_below_obs(pair<list<Class>, real> w1, pair<list<Class>, real> w2, list<Object> O);
+    requires wait_level_lt(w1, w2) && wait_level_below_obs(w2, O);
+    ensures wait_level_below_obs(w1, O) == true;
+
+@*/
+
+interface Forkee {
+    //@ predicate pre(list<Object> O);
+    void run();
+        //@ requires obs(?O) &*& pre(O);
+        //@ ensures obs(nil);
+        //@ terminates;
+}
+
+interface JoinableForkee {
+    //@ predicate pre(pair<list<Class>, real> waitLevel, list<Object> O);
+    //@ predicate post();
+    void run();
+        //@ requires obs(cons(?thisThread, ?O)) &*& pre(wait_level_of(thisThread), O);
+        //@ ensures obs({thisThread}) &*& post();
+        //@ terminates;
+}
+
+final class Thread {
+    //@ predicate thread(JoinableForkee forkee);
+    void join();
+        //@ requires obs(?O) &*& thread(?forkee) &*& wait_level_below_obs(wait_level_of(this), O) == true;
+        //@ ensures obs(O) &*& forkee.post();
+        //@ terminates;
+}
+
+/*
+
+NOTE
+====
+
+The specifications of methods ThreadUtil.fork and ThreadUtil.forkJoinable are
+not sound if these methods are implemented naively using Java's threading API,
+for two reasons:
+
+1) in Java, if a thread terminates because of an exception, the program as a
+   whole is not terminated; other threads are allowed to continue to run.
+   However, the terminated thread may not have fulfilled all of its
+   obligations; this may cause other threads to deadlock. For example, if a
+   thread A waits for a thread B to send on a channel, but thread B
+   terminates because of an exception before it sends on the channel, thread
+   A will wait forever.
+
+   A sufficient condition for an implementation to be sound in this respect is
+   for it to terminate the program as a whole when a thread terminates
+   because of an exception.
+
+   Note that such behavior cannot be implemented provably correctly in pure
+   Java, because the Java Language Specification allows the JVM to throw
+   an InternalError at any point in the program. Implementing such behavior
+   requires either the use of native methods, modifying the JVM, or
+   relying on JVM-specific information.
+
+2) Java's Thread.join() method returns normally even if the thread being joined
+   terminated because of an exception. In that case, the thread may not have
+   established its postcondition.
+
+   One way to implement method Thread.join() specified above soundly is to
+   throw an exception if the joined thread terminated because of an
+   exception.
+
+See also
+
+   Bart Jacobs. Provably live exception handling. FTfJP 2015.
+
+*/
+
+class ThreadUtil {
+    static void fork(Forkee forkee);
+        //@ requires obs(?O) &*& forkee.pre(?Of) &*& exists(?Or) &*& O == append(Of, Or) &*& call_perm({forkee.getClass()});
+        //@ ensures obs(Or);
+        //@ terminates;
+    
+    static Thread forkJoinable(JoinableForkee forkee);
+        //@ requires obs(?O) &*& forkee.pre(?waitLevel, ?Of) &*& exists(?Or) &*& O == append(Of, Or) &*& call_perm({forkee.getClass()});
+        //@ ensures obs(Or) &*& result.thread(forkee) &*& wait_level_of(result) == waitLevel;
+        //@ terminates;
+}
+
+final class Lock {
+    //@ predicate lock(predicate() I);
+    //@ predicate locked(real frac, predicate() I, int thread);
+    
+    Lock();
+        //@ requires exists<predicate()>(?I) &*& I() &*& exists<pair<list<Class>, real> >(?waitLevel);
+        //@ ensures lock(I) &*& wait_level_of(this) == waitLevel;
+        //@ terminates;
+    
+    void acquire();
+        //@ requires obs(?O) &*& [?f]lock(?I) &*& wait_level_below_obs(wait_level_of(this), O) == true;
+        //@ ensures obs(cons<Object>(this, O)) &*& locked(f, I, currentThread) &*& I();
+        //@ terminates;
+    
+    void release();
+        //@ requires obs(cons(this, ?O)) &*& locked(?f, ?I, currentThread) &*& I();
+        //@ ensures obs(O) &*& [f]lock(I);
+        //@ terminates;
+    
+    /*@
+    
+    lemma void destroy();
+        requires lock(?I);
+        ensures I();
+    
+    @*/
+}
+
+//@ predicate credits(Channel channel, int count;) = count == 0 ? true : 0 < count &*& channel.credit() &*& credits(channel, count - 1);
+
+//@ predicate repeat<t>(t x, int count; list<t> xs) = count == 0 ? xs == nil : 0 < count &*& repeat(x, count - 1, ?xs0) &*& xs == cons(x, xs0);
+
+final class Channel {
+    //@ predicate channel(predicate(Object) P);
+    //@ predicate credit();
+    
+    /*@
+    
+    lemma void create_obs(int count);
+        requires obs(?O) &*& 0 <= count;
+        ensures repeat<Object>(this, count, ?O1) &*& obs(append(O1, O)) &*& credits(this, count);
+    
+    lemma void destroy_ob();
+        requires obs(cons(this, ?O)) &*& credit();
+        ensures obs(O);
+    
+    @*/
+    
+    Channel();
+        //@ requires exists<pair<predicate(Object), pair<list<Class>, real> > >(pair(?P, ?waitLevel));
+        //@ ensures [_]channel(P) &*& wait_level_of(this) == waitLevel;
+        //@ terminates;
+    
+    void send(Object element);
+        //@ requires [_]channel(?P) &*& P(element);
+        //@ ensures this.credit();
+        //@ terminates;
+    
+    Object receive();
+        //@ requires obs(?O) &*& [_]channel(?P) &*& credit() &*& wait_level_below_obs(wait_level_of(this), O) == true;
+        //@ ensures obs(O) &*& P(result);
+        //@ terminates;
+    
+}

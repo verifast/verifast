@@ -18,7 +18,7 @@ lemma void dispose_atomic_space(predicate() inv);
 
 predicate prophecy_pointer(void *prophecy);
 
-lemma void *create_prophecy_pointer();
+lemma void *create_prophecy_pointer(); // FIXME: Unsound: Introduce explicit prophecy IDs (see e.g. examples/splitcounter)
     requires true;
     ensures prophecy_pointer(result);
 

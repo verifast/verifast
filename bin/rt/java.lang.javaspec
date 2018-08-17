@@ -63,6 +63,7 @@ lemma_auto void bitand_modulo(int x);
 
 predicate class_init_token(Class c;);
 
+fixpoint boolean Class_lt(Class c1, Class c2);
 predicate call_perm_(Class c;);
 predicate call_below_perm_(Class c;);
 
@@ -230,6 +231,7 @@ public class Integer {
     public Integer(int v);
         //@ requires emp;
         //@ ensures Integer_intValue(this) == v;
+        //@ terminates;
 
     public static final int MAX_VALUE = 0x7fffffff;
     public static final int MIN_VALUE = -0x80000000;
@@ -237,14 +239,18 @@ public class Integer {
     public static int parseInt(String s);
         //@ requires s != null;
         //@ ensures true;
+        //@ terminates;
 
     public static Integer valueOf(int v);
         //@ requires emp;
         //@ ensures result != null &*& Integer_intValue(result) == v;
+        //@ terminates;
 
     public int intValue();
         //@ requires true;
         //@ ensures result == Integer_intValue(this);
+        //@ terminates;
+    
 }
 
 //@ fixpoint boolean Boolean_booleanValue(Boolean b);

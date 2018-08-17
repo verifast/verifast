@@ -74,7 +74,8 @@ void lock_acquire(struct lock *lock)
         //@ invariant [f]lock(lock, inv);
     {
         //@ open lock(_, _);
-        //@ void *v0 = create_tso_prophecy();
+        prophecy_id v0Id = create_tso_prophecy();
+        //@ assert tso_prophecy(v0Id, ?v0);
         void *v;
         {
             /*@
@@ -97,7 +98,7 @@ void lock_acquire(struct lock *lock)
             @*/
             //@ produce_lemma_function_pointer_chunk(ctxt) : tso_cas_ctxt<unit>(&lock->locked, 0, (void *)1, v0, lock_inv(lock, inv), unit_le, unit, P, Q)(u) { call(); };
             //@ close P();
-            v = tso_compare_and_swap(&lock->locked, 0, (void *)1);
+            v = tso_compare_and_swap(v0Id, &lock->locked, 0, (void *)1);
             //@ open Q(?u1);
             //@ switch (u1) { case unit: }
         }

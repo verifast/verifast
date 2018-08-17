@@ -1,0 +1,118 @@
+#ifndef DECRYPTION_GH
+#define DECRYPTION_GH
+
+#include "auxiliary_definitions.gh"
+#include "principals.gh"
+#include "cryptogram.gh"
+
+#define MIN_DEC_SIZE 10
+
+require_module decryption_mod;
+
+predicate decryption_key_classifier(fixpoint(int, int, bool, bool)
+                                    key_classifier);
+
+lemma void decryption_init(fixpoint(int, int, bool, bool) key_classifier);
+  requires module(decryption_mod, true);
+  ensures  [_]decryption_key_classifier(key_classifier);
+
+predicate decryption_garbage(bool symmetric, int principal, structure s,
+                             int p_key, int c_key, list<crypto_char> ccs_out);
+
+predicate decryption_pre(bool symmetric, bool garbage,
+                         int principal, structure s, list<crypto_char> ccs_in) =
+  !garbage ?
+    decryption_permission(principal)
+  :
+    decryption_garbage(symmetric, principal, s, _, _, ?ccs_out) &*&
+    exists(pair(?prefix, ?suffix)) &*&
+    ccs_out == append(prefix, append(ccs_in, suffix))
+;
+
+predicate decryption_post(bool symmetric, bool garbage,
+                          int principal, structure s,
+                          int p_key, int c_key, list<crypto_char> ccs_out) =
+  !garbage ?
+    decryption_permission(principal)
+  :
+    decryption_garbage(symmetric, principal, s, p_key, c_key, ccs_out)
+;
+
+inductive structure =
+  | known_value(int offset, list<crypto_char> ccs_known)
+  | cryptogram_with_payload(int offset, int length)
+;
+
+predicate has_structure(list<crypto_char> ccs, structure s) =
+  exists(pair(?prefix, ?suffix)) &*&
+  switch(s)
+  {
+    //  ____________________ ________
+    // |        |           |        |
+    // | prefix | ccs_known | suffix |
+    // |________|___________|________|
+    //
+    case known_value(offset, ccs_known):
+      return ccs == append(prefix, append(ccs_known, suffix)) &*&
+             length(ccs_known) >= MIN_DEC_SIZE &*&
+             length(prefix) == offset;
+    //  ______________________________ ________
+    // |        |                     |        |
+    // | prefix | F(prefix || suffix) | suffix |
+    // |________|_____________________|________|
+    //
+    case cryptogram_with_payload(offset, length):
+      return exists(?cg) &*& cg_payload(cg) == some(?ccs_pay) &*&
+             ccs == append(prefix, append(ccs_for_cg(cg), suffix)) &*&
+             ccs_pay == append(prefix, suffix) &*&
+             length(ccs_pay) >= MIN_DEC_SIZE &*&
+             length == length(ccs_for_cg(cg)) &*&
+             length >= MIN_DEC_SIZE &*&
+             length(prefix) == offset;
+  }
+;
+
+lemma void decryption_garbage(char *array, int n, structure s);
+  requires [_]decryption_key_classifier(?key_classifier) &*&
+           decryption_garbage(?sym, ?p, s, ?p_k, ?c_k, ?ccs) &*&
+           col || key_classifier(p_k, c_k, sym) ?
+             true : [_]has_structure(ccs, s);
+  ensures  decryption_permission(p) &*&
+           key_classifier(p_k, c_k, sym) ? true : true == col;
+
+typedef lemma void public_key_classifier
+                                (predicate(cryptogram) pub,
+                                 fixpoint(int, int, bool, bool) key_classifier,
+                                 predicate() proof_pred)
+                                (cryptogram key, int p, int c, bool symmetric);
+  requires  proof_pred() &*&
+            [_]pub(key) &*&
+            symmetric ?
+              key == cg_symmetric_key(p, c)
+            :
+              key == cg_rsa_private_key(p, c);
+  ensures   proof_pred() &*&
+            col || true == key_classifier(p, c, symmetric);
+
+#define DECRYPTION_PROOFS(PREFIX) \
+  lemma void PREFIX##_public_key_classifier(cryptogram key, int p, int c, \
+                                            bool symmetric) \
+    requires [_]PREFIX##_pub(key) &*& \
+             symmetric ? \
+               key == cg_symmetric_key(p, c) \
+             : \
+               key == cg_rsa_private_key(p, c); \
+    ensures  true == PREFIX##_public_key(p, c, symmetric); \
+  { \
+    open [_]PREFIX##_pub(key); \
+  }
+
+#define DECRYPTION_CONSTRAINTS(PREFIX) \
+{ \
+  produce_lemma_function_pointer_chunk(PREFIX##_public_key_classifier) : \
+    public_key_classifier(PREFIX##_pub, PREFIX##_public_key, PREFIX##_proof_pred) \
+                         (PREFIX##_key, PREFIX##_p, PREFIX##_c, \
+                          PREFIX##_symmetric){ call(); }; \
+}
+
+#endif

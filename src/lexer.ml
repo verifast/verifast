@@ -127,11 +127,12 @@ let get_file_options text =
     match toks with
       "verifast_annotation_char"::":"::c::toks when String.length c = 1 -> iter c.[0] tabSize toks
     | "tab_size"::":"::n::toks ->
-      begin
-        try
-          iter annotChar (int_of_string n) toks
-        with Failure "int_of_string" -> iter annotChar tabSize toks
-      end
+      let tabSize =
+        match int_of_string n with
+          exception Failure _ -> tabSize
+        | n -> n
+      in
+      iter annotChar tabSize toks
     | tok::toks -> iter annotChar tabSize toks
     | [] -> {file_opt_annot_char=annotChar; file_opt_tab_size=tabSize}
   in
@@ -144,24 +145,8 @@ let readFile path =
     else
       (open_in_bin path, close_in)
   in
-  let count = ref 0 in
-  let rec iter () =
-    let buf = String.create 60000 in
-    let result = input chan buf 0 60000 in
-    count := !count + result;
-    if result = 0 then [] else (buf, result)::iter()
-  in
-  let chunks = iter() in
+  let s = input_fully chan in
   close_chan chan;
-  let s = String.create !count in
-  let rec iter2 chunks offset =
-    match chunks with
-      [] -> ()
-    | (buf, size)::chunks ->
-      String.blit buf 0 s offset size;
-      iter2 chunks (offset + size)
-  in
-  iter2 chunks 0;
   file_to_utf8 s
 
 type include_kind =
@@ -228,6 +213,12 @@ let compare_tokens t1 t2 =
   | (Some(_,t1),Some(_,t2)) -> t1 = t2
   | _ -> false
 end
+
+let rec print_tokens tokens =
+  match tokens with
+    [(_, tok)] -> Printf.printf "%s\n" (string_of_token tok)
+  | (_, tok) :: xs -> Printf.printf "%s, " (string_of_token tok); print_tokens xs
+  | [] -> Printf.printf "\n"
 
 exception ParseException of loc * string
 let error l msg = raise (ParseException(l, msg))
@@ -380,29 +371,14 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
   let in_comment = ref inComment in
   let in_ghost_range = ref inGhostRange in
   
-  let initial_buffer = String.create 32
-  in
-
-  let buffer = ref initial_buffer
-  in
-  let bufpos = ref 0
-  in
+  let buffer = Buffer.create 32 in
   
-  let reset_buffer () = buffer := initial_buffer; bufpos := 0
-  in
+  let reset_buffer () = Buffer.reset buffer in
 
-  let store c =
-    if !bufpos >= String.length !buffer then
-      begin
-        let newbuffer = String.create (2 * !bufpos) in
-        String.blit !buffer 0 newbuffer 0 !bufpos; buffer := newbuffer
-      end;
-    String.set !buffer !bufpos c;
-    incr bufpos
-  in
+  let store c = Buffer.add_char buffer c in
 
   let get_string () =
-    let s = String.sub !buffer 0 !bufpos in buffer := initial_buffer; s
+    let s = Buffer.contents buffer in Buffer.reset buffer; s
   in
 
   let tokenpos = ref 0 in
@@ -916,8 +892,147 @@ class tentative_lexer (lloc:unit -> loc) (lignore_eol:bool ref) (lstream:(loc * 
       end
   end
 
-let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_ghost_range =
+(* Mini parser which is a subset of Parser.parse_decls_core *)
+let rec
+  parse_operators stream = parse_disj_expr stream
+and
+  parse_operators_rest stream = parse_disj_expr_rest stream
+and
+  parse_disj_expr = parser
+  [< e0 = parse_conj_expr; e = parse_disj_expr_rest e0 >] -> e
+and
+  parse_conj_expr = parser
+  [< e0 = parse_bitor_expr; e = parse_conj_expr_rest e0 >] -> e
+and
+  parse_bitor_expr = parser
+  [< e0 = parse_bitxor_expr; e = parse_bitor_expr_rest e0 >] -> e
+and
+  parse_bitxor_expr = parser
+  [< e0 = parse_bitand_expr; e = parse_bitxor_expr_rest e0 >] -> e
+and
+  parse_bitand_expr = parser
+  [< e0 = parse_expr_rel; e = parse_bitand_expr_rest e0 >] -> e
+and
+  parse_expr_rel = parser
+  [< e0 = parse_truncating_expr; e = parse_expr_rel_rest e0 >] -> e
+and
+  parse_truncating_expr = parser
+  [< e = parse_shift >] -> e
+and
+  parse_shift = parser
+  [< e0 = parse_expr_arith; e = parse_shift_rest e0 >] -> e
+and
+  parse_expr_arith = parser
+  [< e0 = parse_expr_mul; e = parse_expr_arith_rest e0 >] -> e
+and
+  parse_expr_mul = parser
+  [< e0 = parse_expr_suffix; e = parse_expr_mul_rest e0 >] -> e
+and
+  parse_expr_suffix = parser
+  [< e = parse_expr_primary >] -> e
+and
+  parse_expr_primary = parser
+  [< '(l, Ident _) >] -> IntLit (l, zero_big_int, false, false, NoLSuffix)
+| [< '(l, Int (n, dec, usuffix, lsuffix)) >] -> IntLit (l, n, dec, usuffix, lsuffix)
+| [< '(l, Kwd "("); e0 = parse_operators; '(_, Kwd ")"); e = parse_operators_rest e0 >] -> e
+| [< '(l, Kwd "!"); e = parse_expr_suffix >] -> Operation(l, Not, [e])
+and
+  parse_expr_mul_rest e0 = parser
+  [< '(l, Kwd "*"); e1 = parse_expr_suffix; e = parse_expr_mul_rest (Operation (l, Mul, [e0; e1])) >] -> e
+| [< '(l, Kwd "/"); e1 = parse_expr_suffix; e = parse_expr_mul_rest (Operation (l, Div, [e0; e1])) >] -> e
+| [< '(l, Kwd "%"); e1 = parse_expr_suffix; e = parse_expr_mul_rest (Operation (l, Mod, [e0; e1])) >] -> e
+| [< >] -> e0
+and
+  parse_expr_arith_rest e0 = parser
+  [< '(l, Kwd "+"); e1 = parse_expr_mul; e = parse_expr_arith_rest (Operation (l, Add, [e0; e1])) >] -> e
+| [< '(l, Kwd "-"); e1 = parse_expr_mul; e = parse_expr_arith_rest (Operation (l, Sub, [e0; e1])) >] -> e
+| [< >] -> e0
+and
+  parse_shift_rest e0 = parser
+  [< '(l, Kwd "<<"); e1 = parse_expr_arith; e = parse_shift_rest (Operation (l, ShiftLeft, [e0; e1])) >] -> e
+| [< '(l, Kwd ">>"); e1 = parse_expr_arith; e = parse_shift_rest (Operation (l, ShiftRight, [e0; e1])) >] -> e
+| [< >] -> e0
+and
+  parse_expr_rel_rest e0 = parser
+  [< '(l, Kwd "=="); e1 = parse_truncating_expr; e = parse_expr_rel_rest (Operation (l, Eq, [e0; e1])) >] -> e
+| [< '(l, Kwd "!="); e1 = parse_truncating_expr; e = parse_expr_rel_rest (Operation (l, Neq, [e0; e1])) >] -> e
+| [< '(l, Kwd "<"); e1 = parse_truncating_expr; e = parse_expr_rel_rest (Operation (l, Lt, [e0; e1])) >] -> e
+| [< '(l, Kwd "<="); e1 = parse_truncating_expr; e = parse_expr_rel_rest (Operation (l, Le, [e0; e1])) >] -> e
+| [< '(l, Kwd ">"); e1 = parse_truncating_expr; e = parse_expr_rel_rest (Operation (l, Gt, [e0; e1])) >] -> e
+| [< '(l, Kwd ">="); e1 = parse_truncating_expr; e = parse_expr_rel_rest (Operation (l, Ge, [e0; e1])) >] -> e
+| [< >] -> e0
+and
+  parse_bitand_expr_rest e0 = parser
+  [< '(l, Kwd "&"); e1 = parse_expr_rel; e = parse_bitand_expr_rest (Operation (l, BitAnd, [e0; e1])) >] -> e
+| [< >] -> e0
+and
+  parse_bitxor_expr_rest e0 = parser
+  [< '(l, Kwd "^"); e1 = parse_bitand_expr; e = parse_bitxor_expr_rest (Operation (l, BitXor, [e0; e1])) >] -> e
+| [< >] -> e0
+and
+  parse_bitor_expr_rest e0 = parser
+  [< '(l, Kwd "|"); e1 = parse_bitxor_expr; e = parse_bitor_expr_rest (Operation (l, BitOr, [e0; e1])) >] -> e
+| [< >] -> e0
+and
+  parse_conj_expr_rest e0 = parser
+  [< '(l, Kwd "&&"); e1 = parse_bitor_expr; e = parse_conj_expr_rest (Operation (l, And, [e0; e1])) >] -> e
+| [< >] -> e0
+and
+  parse_disj_expr_rest e0 = parser
+  [< '(l, Kwd "||"); e1 = parse_conj_expr; e = parse_disj_expr_rest (Operation (l, Or, [e0; e1])) >] -> e
+| [< >] -> e0
+
+(* Evaluator for operators *)
+let rec eval_operators e =
+  match e with
+    IntLit (_, n, dec, usuffix, lsuffix) -> int64_of_big_int n (* TODO: use dec/usuffix/lsuffix *)
+  | Operation (_, Mul, [e0; e1]) -> Int64.mul (eval_operators e0) (eval_operators e1)
+  | Operation (_, Div, [e0; e1]) -> Int64.div (eval_operators e0) (eval_operators e1)
+  | Operation (_, Mod, [e0; e1]) -> Int64.rem (eval_operators e0) (eval_operators e1)
+  | Operation (_, Add, [e0; e1]) -> Int64.add (eval_operators e0) (eval_operators e1)
+  | Operation (_, Sub, [e0; e1]) -> Int64.sub (eval_operators e0) (eval_operators e1)
+  | Operation (_, ShiftLeft, [e0; e1]) -> Int64.shift_left (eval_operators e0) (Int64.to_int (eval_operators e1))
+  | Operation (_, ShiftRight, [e0; e1]) -> Int64.shift_right (eval_operators e0) (Int64.to_int (eval_operators e1))
+  | Operation (_, Eq, [e0; e1]) ->
+     if Int64.compare (eval_operators e0) (eval_operators e1) = 0
+     then Int64.one else Int64.zero
+  | Operation (_, Neq, [e0; e1]) ->
+     if Int64.compare (eval_operators e0) (eval_operators e1) != 0
+     then Int64.one else Int64.zero
+  | Operation (_, Lt, [e0; e1]) ->
+     if Int64.compare (eval_operators e0) (eval_operators e1) < 0
+     then Int64.one else Int64.zero
+  | Operation (_, Le, [e0; e1]) ->
+     if Int64.compare (eval_operators e0) (eval_operators e1) <= 0
+     then Int64.one else Int64.zero
+  | Operation (_, Gt, [e0; e1]) ->
+     if Int64.compare (eval_operators e0) (eval_operators e1) > 0
+     then Int64.one else Int64.zero
+  | Operation (_, Ge, [e0; e1]) ->
+     if Int64.compare (eval_operators e0) (eval_operators e1) >= 0
+     then Int64.one else Int64.zero
+  | Operation (_, BitAnd, [e0; e1]) -> Int64.logand (eval_operators e0) (eval_operators e1)
+  | Operation (_, BitXor, [e0; e1]) -> Int64.logxor (eval_operators e0) (eval_operators e1)
+  | Operation (_, BitOr, [e0; e1]) -> Int64.logor (eval_operators e0) (eval_operators e1)
+  | Operation (_, And, [e0; e1]) ->
+     if Int64.compare (eval_operators e0) Int64.zero = 0
+     then Int64.zero else
+       if Int64.compare (eval_operators e1) Int64.zero = 0
+       then Int64.zero else Int64.one
+  | Operation (_, Or, [e0; e1]) ->
+     if Int64.compare (eval_operators e0) Int64.zero != 0
+     then Int64.one else
+       if Int64.compare (eval_operators e1) Int64.zero != 0
+       then Int64.one else Int64.zero
+  | Operation (_, Not, [e0]) ->
+     if Int64.compare (eval_operators e0) Int64.zero = 0
+     then Int64.one else Int64.zero
+
+let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_ghost_range define_macros =
   let macros = ref [Hashtbl.create 10] in
+  List.iter
+    (fun x -> Hashtbl.replace (List.hd !macros) x (dummy_loc, None, [(dummy_loc, Int (unit_big_int, false, false, NoLSuffix))]))
+    define_macros;
   let ghost_macros = ref [Hashtbl.create 10] in
   let get_macros () = if !in_ghost_range then !ghost_macros else !macros in
   let is_defined x =
@@ -943,6 +1058,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
     end
   in
   let expanding_macro = ref false in
+  let oneline_macro = ref false in
   let defining_macro = ref false in
   let is_concatenation_token t =
     match t with (_, Kwd "##") -> true | _ -> false
@@ -1047,13 +1163,12 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
       | Some t -> junk (); t::condition ()
     in
     let condition = condition () in
+    oneline_macro := true;
     let condition = macro_expand [] condition in
-    (* TODO: Support operators *)
-    let isTrue =
-      match condition with
-        [(_, Int (n, _, _, _))] -> sign_big_int n <> 0
-      | _ -> error "Operators in preprocessor conditions are not yet supported."
-    in
+    oneline_macro := false;
+    let condition = parse_operators (Stream.of_list condition) in
+    let condition = eval_operators condition in
+    let isTrue = Int64.compare condition Int64.zero <> 0 in
     if isTrue then () else skip_branch ()
   and next_token () =
     let at_start_of_line = !next_at_start_of_line in
@@ -1080,14 +1195,18 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
         end
         else begin
           pop_stream ();
-          if !expanding_macro then
+          if !expanding_macro && not !oneline_macro then
             None
           else
             next_token ()
         end
     | Some t ->
     match t with
-      (_, Eol) -> junk (); next_at_start_of_line := true; next_token ()
+      (_, Eol) ->
+       if !oneline_macro then
+         None
+       else
+         begin junk (); next_at_start_of_line := true; next_token () end
     | (l, Kwd "/*@") -> 
         if !tlexer#isGhostHeader() then raise (ParseException (l, "Ghost range delimiters are not allowed inside ghost headers."));
         junk (); in_ghost_range := true; 
@@ -1329,7 +1448,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
     | t -> junk (); Some t
   and macro_expand newCallers tokens =
     let expending_macro_old = !expanding_macro in
-    expanding_macro := true;
+    if not !oneline_macro then expanding_macro := true;
     let oldStreams = !streams in
     streams := [];
     push_list newCallers tokens;
@@ -1345,7 +1464,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
   in
   (next_token, fun _ -> !last_macro_used)
 
-let make_sound_preprocessor make_lexer path verbose include_paths =
+let make_sound_preprocessor make_lexer path verbose include_paths define_macros =
   if verbose = -1 then Printf.printf "%10.6fs: >> start preprocessing file: %s\n" (Perf.time()) path;
   let tlexers = ref [] in
   let curr_tlexer = ref (new tentative_lexer (fun () -> dummy_loc) (ref false) (Stream.of_list [])) in
@@ -1385,8 +1504,8 @@ let make_sound_preprocessor make_lexer path verbose include_paths =
     macros2
   in
   let current_loc () = !curr_tlexer#loc() in
-  let (p_next,last_macro_used) = make_plugin_preprocessor p_begin_include p_end_include curr_tlexer (List.hd !p_in_ghost_range) in
-  let (cfp_next,_) = make_plugin_preprocessor cfp_begin_include cfp_end_include curr_tlexer (List.hd !cfp_in_ghost_range) in
+  let (p_next,last_macro_used) = make_plugin_preprocessor p_begin_include p_end_include curr_tlexer (List.hd !p_in_ghost_range) define_macros in
+  let (cfp_next,_) = make_plugin_preprocessor cfp_begin_include cfp_end_include curr_tlexer (List.hd !cfp_in_ghost_range) define_macros in
   let divergence l s = 
     pop_tlexer();
     raise (PreprocessorDivergence (l , s))    
@@ -1494,5 +1613,5 @@ let make_sound_preprocessor make_lexer path verbose include_paths =
   in
   ((fun () -> current_loc()), ref true, Stream.from (fun _ -> next_token ()))
 
-let make_preprocessor make_lexer path verbose include_paths =
-  make_sound_preprocessor make_lexer path verbose include_paths
+let make_preprocessor make_lexer path verbose include_paths define_macros =
+  make_sound_preprocessor make_lexer path verbose include_paths define_macros

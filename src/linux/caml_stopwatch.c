@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include <sched.h>
+#include <x86intrin.h>
 #include <caml/mlvalues.h>
 #include <caml/alloc.h>
 #include <unistd.h>
@@ -7,26 +8,6 @@
 value caml_stopwatch_getpid() {
     return copy_int32(getpid());
 }
-
-#if defined(__i386__)
-
-static __inline__ unsigned long long __rdtsc(void)
-{
-    unsigned long long int x;
-    __asm__ volatile (".byte 0x0f, 0x31" : "=A" (x));
-    return x;
-}
-
-#elif defined(__x86_64__)
-
-static __inline__ unsigned long long __rdtsc(void)
-{
-    unsigned hi, lo;
-    __asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));
-    return ( (unsigned long long)lo)|( ((unsigned long long)hi)<<32 );
-}
-
-#endif
 
 value caml_lock_process_to_processor_1() {
 #ifdef __linux__ // MacOS does not support thread affinity; see http://developer.apple.com/library/mac/#releasenotes/Performance/RN-AffinityAPI/

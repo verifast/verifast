@@ -38,6 +38,10 @@ lemma void character_limits(char *pc);
     requires [?f]character(pc, ?c);
     ensures [f]character(pc, c) &*& pc > (char *)0 &*& pc < (char *)UINTPTR_MAX &*& -128 <= c &*& c <= 127;
 
+lemma void u_character_limits(unsigned char *pc);
+    requires [?f]u_character(pc, ?c);
+    ensures [f]u_character(pc, c) &*& pc > (unsigned char *)0 &*& pc < (unsigned char *)UINTPTR_MAX &*& 0 <= c &*& c <= 255;
+
 lemma void integer_distinct(int* i, int* j);
     requires integer(i, ?v1) &*& integer(j, ?v2);
     ensures integer(i, v1) &*& integer(j, v2) &*& i != j;
@@ -114,8 +118,8 @@ lemma void chars_zero();
     ensures cs == nil;
 
 lemma void chars_limits(char *array);
-    requires [?f]chars(array, ?n, ?cs) &*& true == ((char *)0 <= array) &*& array <= (char *)UINTPTR_MAX;
-    ensures [f]chars(array, n, cs) &*& true == ((char *)0 <= array) &*& array + n <= (char *)UINTPTR_MAX;
+    requires [?f]chars(array, ?n, ?cs) &*& (char *)0 <= array &*& array <= (char *)UINTPTR_MAX;
+    ensures [f]chars(array, n, cs) &*& (char *)0 <= array &*& array + n <= (char *)UINTPTR_MAX;
 
 lemma_auto void chars_split(char *array, int offset);
    requires [?f]chars(array, ?n, ?cs) &*& 0 <= offset &*& offset <= n;
@@ -141,11 +145,11 @@ lemma_auto(chars_of_int(int_of_chars(cs))) void chars_of_int_of_chars(list<char>
 
 lemma void int_of_chars_injective(list<char> cs1, list<char> cs2);
     requires true;
-    ensures true == ((cs1 == cs2) == (int_of_chars(cs1) == int_of_chars(cs2)));
+    ensures (cs1 == cs2) == (int_of_chars(cs1) == int_of_chars(cs2));
 
 lemma void chars_of_int_injective(int i1, int i2);
     requires true;
-    ensures true == ((i1 == i2) == (chars_of_int(i1) == chars_of_int(i2)));
+    ensures (i1 == i2) == (chars_of_int(i1) == chars_of_int(i2));
 
 lemma_auto void chars_of_int_size(int i);
     requires INT_MIN <= i && i <= INT_MAX;
@@ -213,6 +217,7 @@ lemma_auto void character_to_u_character(void *p);
 
 
 predicate uchars(unsigned char *p, int count; list<unsigned char> cs) =
+    true == ((unsigned char *)0 <= p) &*& p <= (unsigned char *)UINTPTR_MAX &*&
     count == 0 ?
         cs == nil
     :
@@ -220,7 +225,18 @@ predicate uchars(unsigned char *p, int count; list<unsigned char> cs) =
 
 lemma_auto void uchars_inv();
     requires [?f]uchars(?p, ?count, ?cs);
-    ensures [f]uchars(p, count, cs) &*& count == length(cs);
+    ensures [f]uchars(p, count, cs) &*& count == length(cs) &*& true == ((char *)0 <= (void *)p) &*& p + count <= (void *)UINTPTR_MAX;
+
+lemma_auto void uchars_split(unsigned char *array, int offset);
+   requires [?f]uchars(array, ?n, ?cs) &*& 0 <= offset &*& offset <= n;
+   ensures
+       [f]uchars(array, offset, take(offset, cs))
+       &*& [f]uchars(array + offset, n - offset, drop(offset, cs))
+       &*& append(take(offset, cs), drop(offset, cs)) == cs;
+
+lemma_auto void uchars_join(unsigned char *array);
+    requires [?f]uchars(array, ?n, ?cs) &*& [f]uchars((void *)array + n, ?n0, ?cs0);
+    ensures [f]uchars(array, n + n0, append(cs, cs0));
 
 predicate ints(int *p, int count; list<int> vs) =
     count == 0 ?
@@ -248,11 +264,19 @@ predicate llongs(long long *p, int count; list<long long> ls) =
     :
         llong_integer(p, ?l) &*& llongs(p + 1, count - 1, ?ls0) &*& ls == cons(l, ls0);
 
+lemma_auto void llongs_inv();
+    requires [?f]llongs(?p, ?count, ?vs);
+    ensures [f]llongs(p, count, vs) &*& count == length(vs);
+
 predicate ullongs(unsigned long long *p, int count; list<unsigned long long> ls) = 
     count == 0 ?
         ls == nil
     :
         u_llong_integer(p, ?l) &*& ullongs(p + 1, count - 1, ?ls0) &*& ls == cons(l, ls0);
+
+lemma_auto void ullongs_inv();
+    requires [?f]ullongs(?p, ?count, ?vs);
+    ensures [f]ullongs(p, count, vs) &*& count == length(vs);
 
 predicate shorts(short *p, short count; list<short> vs) =
     count == 0 ?
@@ -298,14 +322,24 @@ lemma_auto void pointers_join(void **pp);
     requires [?f]pointers(pp, ?count1, ?ps1) &*& [f]pointers(pp + count1, ?count2, ?ps2);
     ensures [f]pointers(pp, count1 + count2, append(ps1, ps2));
 
+fixpoint char char_of_uchar(unsigned char c);
+fixpoint unsigned char uchar_of_char(char c);
+
+lemma_auto void map_uchar_of_char_char_of_uchar(list<unsigned char> ucs);
+    requires true;
+    ensures map(uchar_of_char, map(char_of_uchar, ucs)) == ucs;
+
+lemma_auto void map_char_of_uchar_uchar_of_char(list<char> cs);
+    requires true;
+    ensures map(char_of_uchar, map(uchar_of_char, cs)) == cs;
 
 lemma_auto void chars_to_uchars(void *p);
-    requires [?f]chars(p, ?n, _);
-    ensures [f]uchars(p, n, _);
+    requires [?f]chars(p, ?n, ?cs);
+    ensures [f]uchars(p, n, map(uchar_of_char, cs));
 
 lemma_auto void uchars_to_chars(void *p);
-    requires [?f]uchars(p, ?n, _);
-    ensures [f]chars(p, n, _);
+    requires [?f]uchars(p, ?n, ?ucs);
+    ensures [f]chars(p, n, map(char_of_uchar, ucs));
 
 lemma_auto void chars_to_ints(void *p, int n);
     requires [?f]chars(p, n * sizeof(int), _);
@@ -353,6 +387,8 @@ predicate malloc_block_uints(unsigned int *p; int count) = malloc_block(p, ?size
 predicate malloc_block_shorts(short *p; int count) = malloc_block(p, ?size) &*& divrem(size, sizeof(short), count, 0);
 predicate malloc_block_ushorts(unsigned short *p; int count) = malloc_block(p, ?size) &*& divrem(size, sizeof(unsigned short), count, 0);
 predicate malloc_block_pointers(void **p; int count) = malloc_block(p, ?size) &*& divrem(size, sizeof(void *), count, 0);
+predicate malloc_block_llongs(long long *p; int count) = malloc_block(p, ?size) &*& divrem(size, sizeof(long long), count, 0);
+predicate malloc_block_ullongs(unsigned long long *p; int count) = malloc_block(p, ?size) &*& divrem(size, sizeof(unsigned long long), count, 0);
 predicate malloc_block_bools(bool *p; int count) =  malloc_block(p, ?size) &*& divrem(size, sizeof(bool), count, 0);
 
 @*/

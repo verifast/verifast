@@ -37,8 +37,6 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   (* Region: production of assertions *)
   
-  let success() = SymExecSuccess
-
   let rec is_pure_spatial_assertion a =
     match a with
       ExprAsn(_, _) -> true
@@ -58,12 +56,21 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   and branch cont1 cont2 =
     !stats#branch;
+    let oldForest = !currentForest in
+    let leftForest = ref [] in
+    let rightForest = ref [] in
+    oldForest := Node (BranchNode, rightForest)::Node (BranchNode, leftForest)::!oldForest;
+    currentForest := leftForest;
     push_context (Branching LeftBranch);
     execute_branch cont1;
     pop_context ();
+    if !leftForest = [] then leftForest := [Node (SuccessNode, ref [])];
+    currentForest := rightForest;
     push_context (Branching RightBranch);
     execute_branch cont2;
     pop_context ();
+    if !rightForest = [] then rightForest := [Node (SuccessNode, ref [])];
+    currentForest := oldForest;
     SymExecSuccess
   
   and assert_expr_split e h env l msg url = 
@@ -116,10 +123,9 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let (_, (_, _, _, _, symb, _, _)) = List.assoc (fparent, fname) field_pred_map in
     if fghost = Real then begin
       match frange with
-         Int (Signed, 1) -> ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_char_term tv) (ctxt#mk_le tv max_char_term)))
-      | Int (Signed, 2) -> ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_short_term tv) (ctxt#mk_le tv max_short_term)))
-      | Int (Signed, 4) -> ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_int_term tv) (ctxt#mk_le tv max_int_term)))
-      | PtrType _ | Int (Unsigned, 4) -> ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) tv) (ctxt#mk_le tv max_ptr_term)))
+        Int (_, _) | PtrType _ ->
+        let (min_term, max_term) = limits_of_type frange in
+        ctxt#assert_term (ctxt#mk_and (ctxt#mk_le min_term tv) (ctxt#mk_le tv max_term))
       | _ -> ()
     end; 
     (* automatic generation of t1 != t2 if t1.f |-> _ &*& t2.f |-> _ *)
@@ -183,12 +189,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 if is_dummy_frac_term coef' then
                   coef'
                 else begin
-                  ignore $. ctxt#assume (ctxt#mk_lt real_zero coef);
+                  ctxt#assert_term (ctxt#mk_lt real_zero coef);
                   ctxt#mk_real_add coef coef'
                 end
               else
                 if is_dummy_frac_term coef' then begin
-                  ignore $. ctxt#assume (ctxt#mk_lt real_zero coef');
+                  ctxt#assert_term (ctxt#mk_lt real_zero coef');
                   ctxt#mk_real_add coef coef'
                 end else
                   ctxt#mk_real_add coef coef'
@@ -238,7 +244,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       produce_chunk h (symb, true) [] coef (Some 1) [symbn; t] None $. fun h ->
       cont h ghostenv env
-    | WPointsTo (l, Deref(ld, e, td), tp, rhs) ->  
+    | WPointsTo (l, WDeref(ld, e, td), tp, rhs) ->  
       let symbn = eval None env e in
       evalpat false ghostenv env rhs tp tp $. fun ghostenv env t ->
       let symb = 
@@ -357,7 +363,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (_, tparams, ctormap, _) = List.assoc i inductivemap in
       let rec iter cs =
         match cs with
-          SwitchAsnClause (lc, cn, pats, patsInfo, p)::cs ->
+          WSwitchAsnClause (lc, cn, pats, patsInfo, p)::cs ->
           branch
             (fun _ ->
                let (_, (_, tparams, _, tps, cs)) = List.assoc cn ctormap in
@@ -366,7 +372,6 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                  if tparams = [] then
                    List.map (fun (x, (name, (tp: type_))) -> let term = get_unique_var_symb x tp in (x, term, term)) pts
                  else
-                   let Some patsInfo = !patsInfo in
                    let Some pts = zip pts patsInfo in
                    List.map
                      (fun ((x, (name, tp)), info) ->
@@ -401,15 +406,6 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       produce_asn_core_with_post tpenv h ghostenv env body (real_mul l coef coef') size_first size_all assuming cont_with_post
     | EnsuresAsn (l, body) ->
       cont_with_post h ghostenv env (Some body)
-    | WPluginAsn (l, xs, wasn) ->
-      let [_, ((_, plugin), symb)] = pluginmap in
-      let (pluginState, h) =
-        match extract (function Chunk ((p, true), _, _, _, Some (PluginChunkInfo info)) when p == symb -> Some info | _ -> None) h with
-          None -> (plugin#empty_state, h)
-        | Some (s, h) -> (s, h)
-      in
-      plugin#produce_assertion pluginState env wasn $. fun pluginState env ->
-      cont (Chunk ((symb, true), [], real_unit, [], Some (PluginChunkInfo pluginState))::h) (xs @ ghostenv) env
     )
   
   let rec produce_asn_core tpenv h ghostenv env p coef size_first size_all (assuming: bool) cont: symexec_result =
@@ -457,7 +453,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let vs = List.map2 (fun tp0 tp -> let v = get_unique_var_symb "value" tp in (v, prover_convert_term v tp tp0)) ts0 ts in
         let formula = ctxt#mk_eq t (ctxt#mk_app symb (List.map snd vs)) in
         push_context (Assuming formula);
-        ignore (ctxt#assume formula);
+        ctxt#assert_term formula;
         let inputParamCount = if isInputParam then max_int else 0 in
         let pats = List.map (fun pat -> SrcPat pat) pats in
         match match_pats h l ghostenv env env' inputParamCount 0 pats ts ts (List.map fst vs) cont with
@@ -725,6 +721,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             env': (string * term) list -- Updated list of bindings of declared but unbound variables
     *)
   let consume_chunk_core rules h ghostenv env env' l g targs coef coefpat inputParamCount pats tps0 tps cont =
+    let old_depth = !consume_chunk_recursion_depth in
     let rec consume_chunk_core_core h =
       let rec iter hprefix h =
         match h with
@@ -737,8 +734,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match iter [] h with
         [] ->
         begin fun cont ->
-          if !consume_chunk_recursion_depth > 100 then cont () else
-          with_updated_ref consume_chunk_recursion_depth ((+) 1) $. fun () ->
+          if !consume_chunk_recursion_depth > 20 then begin
+            if !verbosity >= 2 then printff "%10.6fs: Recursively consuming chunk: maximum recursion depth exceeded; giving up\n" (Perf.time());
+            cont ()
+          end else begin
+          if !verbosity >= 2 && !consume_chunk_recursion_depth > 0 then printff "%10.6fs: Recursively consuming chunk (recursion depth %d)\n" (Perf.time()) !consume_chunk_recursion_depth;
+          incr consume_chunk_recursion_depth;
           let (g, inputParamCount) = match inputParamCount with 
             Some (n) -> (g, inputParamCount)
           | None when not (snd g) ->
@@ -798,6 +799,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               end
             | rules -> try_rules rules ts
             end
+          end
         end $. fun () ->
         let message =
           let predname = match g with (g, _) -> ctxt#pprint g in
@@ -827,13 +829,15 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | [(h, ts, ghostenv, env)] -> cont h ts ghostenv env
       | _ -> assert_false h env l "Multiple matching heap chunks." None
   *)
-      | (chunk, h, coef, ts, size, ghostenv, env, env')::_ -> cont chunk h coef ts size ghostenv env env'
+      | (chunk, h, coef, ts, size, ghostenv, env, env')::_ ->
+        consume_chunk_recursion_depth := old_depth;
+        cont chunk h coef ts size ghostenv env env'
     in
     consume_chunk_core_core h
   
   (** [cont] is called as [cont chunk h coef ts size ghostenv env env']. See docs at consume_chunk_core. *)
   let consume_chunk rules h ghostenv env env' l g targs coef coefpat inputParamCount pats cont =
-    let tps = List.map (fun _ -> Int (Signed, 4)) pats in (* dummies, to indicate that no prover type conversions are needed *)
+    let tps = List.map (fun _ -> Int (Signed, 2)) pats in (* dummies, to indicate that no prover type conversions are needed *)
     consume_chunk_core rules h ghostenv env env' l g targs coef coefpat inputParamCount pats tps tps cont
   
   let srcpat pat = SrcPat pat
@@ -883,11 +887,10 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         consume_chunk rules h ghostenv env env' l (symb, true) [] coef coefpat (Some 1) [TermPat symbn; rhs]
           (fun chunk h coef ts size ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' size)
-      | Deref(ld, e, td) ->  
+      | WDeref(ld, e, td) ->  
         let symbn = eval None env e in
-        let Some(td') = !td in 
         let symb = 
-          match try_pointee_pred_symb td' with
+          match try_pointee_pred_symb td with
             Some s -> s
           | _ -> static_error l "The left-hand side of this points-to assertion must be of a primitive type" None
         in
@@ -992,7 +995,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (_, tparams, ctormap, _) = List.assoc i inductivemap in
       let rec iter cs =
         match cs with
-          SwitchAsnClause (lc, cn, pats, patsInfo, p)::cs ->
+          WSwitchAsnClause (lc, cn, pats, patsInfo, p)::cs ->
           let (_, (_, tparams, _, tps, ctorsym)) = List.assoc cn ctormap in
           let Some pts = zip pats tps in
           let (xs, xenv) =
@@ -1001,7 +1004,6 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               let xs = List.map (fun (x, t) -> t) xts in
               (xs, xts)
             else
-              let Some patsInfo = !patsInfo in
               let Some pts = zip pts patsInfo in
               let xts =
                 List.map
@@ -1035,20 +1037,6 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | CoefAsn (l, coefpat, WInstPredAsn (_, e_opt, st, cfin, tn, g, index, pats)) -> inst_call_pred l (SrcPat coefpat) e_opt tn g index pats
     | EnsuresAsn (l, body) ->
       cont_with_post [] h ghostenv env env' None (Some body)
-    | WPluginAsn (l, xs, wasn) ->
-      let [_, ((_, plugin), symb)] = pluginmap in
-      let (pluginState, h) =
-        match extract (function Chunk ((p, true), _, _, _, Some (PluginChunkInfo info)) when p == symb -> Some info | _ -> None) h with
-          None -> (plugin#empty_state, h)
-        | Some (s, h) -> (s, h)
-      in
-      try 
-        plugin#consume_assertion pluginState env wasn $. fun pluginState env ->
-        cont [] (Chunk ((symb, true), [], real_unit, [], Some (PluginChunkInfo pluginState))::h) (xs @ ghostenv) env env' None
-      with Plugins.PluginConsumeError (off, len, msg) ->
-        let ((path, line, col), _) = l in
-        let l = ((path, line, col + 1 + off), (path, line, col + 1 + off + len)) in
-        assert_false h env l msg None
     )
   
   let rec consume_asn_core rules tpenv h ghostenv env env' p checkDummyFracs coef cont =
@@ -1104,7 +1092,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             (*| ForallAsn _ -> cont conds*)
             | WSwitchAsn(_, e, i, cases) when expr_is_fixed inputVars e ->
               flatmap 
-                (fun (SwitchAsnClause (l, casename, args, boxinginfo, asn)) ->
+                (fun (WSwitchAsnClause (l, casename, args, boxinginfo, asn)) ->
                   if (List.length args) = 0 then
                     let cond = WOperation (l, Eq, [e; WVar (l, casename, PureCtor)], AnyType) in
                     iter (cond :: conds) asn cont

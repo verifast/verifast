@@ -21,7 +21,6 @@ type 'termnode pat0 = SrcPat of pat | TermPat of 'termnode
 (** A heap chunk. *)
 type chunk_info =
   PredicateChunkSize of int (* Size of this chunk with respect to the first chunk of the precondition; used to check lemma termination. *)
-| PluginChunkInfo of Plugins.plugin_state
 type 'termnode chunk =
   Chunk of
     ('termnode (* Predicate name *) * bool (* true if a declared predicate's symbol; false in a scenario where predicate names are passed as values. Used to avoid prover queries. *) ) *
@@ -39,7 +38,8 @@ type 'termnode context =
 | PushSubcontext
 | PopSubcontext
 | Branching of branch
-type node = Node of string * int list * node list ref
+type node_type = ExecNode of string * int list | BranchNode | SuccessNode | ErrorNode
+type node = Node of node_type * node list ref
 
 (* Returns the locations of the "call stack" of the current execution step. *)
 let get_callers (ctxts: 'termnode context list): loc option list =
@@ -59,9 +59,8 @@ let rec string_of_type t =
   match t with
     Bool -> "bool"
   | Void -> "void"
-  | Int (Signed, 4) -> "int"
-  | Int (Signed, n) -> "int" ^ string_of_int (n * 8)
-  | Int (Unsigned, n) -> "uint" ^ string_of_int (n * 8)
+  | Int (Signed, k) -> "int" ^ string_of_int ((1 lsl k) * 8)
+  | Int (Unsigned, k) -> "uint" ^ string_of_int ((1 lsl k) * 8)
   | Float -> "float"
   | Double -> "double"
   | LongDouble -> "long double"
@@ -104,6 +103,7 @@ let rec string_of_type t =
   | ClassOrInterfaceName(n) -> n (* not a real type; used only during type checking *)
   | PackageName(n) -> n (* not a real type; used only during type checking *)
   | RefType(t) -> "ref " ^ (string_of_type t)
+  | AbstractType x -> x
 
 let string_of_targs targs =
   if targs = [] then "" else "<" ^ String.concat ", " (List.map string_of_type targs) ^ ">"
@@ -121,7 +121,7 @@ let string_of_context c =
   | PushSubcontext -> "Entering subcontext"
   | PopSubcontext -> "Leaving subcontext"
 
-exception SymbolicExecutionError of string context list * string * loc * string * string option
+exception SymbolicExecutionError of string context list * loc * string * string option
 
 let full_name pn n = if pn = "" then n else pn ^ "." ^ n
 
@@ -137,10 +137,13 @@ type options = {
   option_provides: string list;
   option_keep_provide_files: bool;
   option_include_paths: string list;
+  option_define_macros: string list;
   option_safe_mode: bool; (* for invocation through web interface *)
   option_header_whitelist: string list;
   option_use_java_frontend : bool;
-  option_enforce_annotations : bool
+  option_enforce_annotations : bool;
+  option_allow_undeclared_struct_types: bool;
+  option_data_model: data_model
 } (* ?options *)
 
 (* Region: verify_program_core: the toplevel function *)

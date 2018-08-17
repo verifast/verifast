@@ -17,7 +17,7 @@ class Util {
         //@ ensures true;
         //@ terminates;
     {
-        //@ call_perm_weaken(4);
+        //@ call_perm_weaken_and_dup(4);
         //@ f.getClass_le_level();
         //@ consume_call_perm_for(f.getClass());
         //@ consume_call_perm_for(f.getClass());
@@ -75,7 +75,7 @@ final class PlusOneFunc implements Func {
         //@ terminates;
     {
         //@ open valid(_);
-        //@ call_perm_weaken(2);
+        //@ call_perm_weaken_and_dup(2);
         //@ f.getClass_le_level();
         //@ consume_call_perm_for(f.getClass());
         return f.apply(x) + 1;
@@ -88,15 +88,11 @@ class Main {
         //@ ensures true;
         //@ terminates;
     {
-        //@ assume(Class_lt(Util.class, Main.class));
-        //@ assume(Class_lt(ZeroFunc.class, Main.class));
-        //@ assume(Class_lt(PlusOneFunc.class, Main.class));
-
         Func f1 = new ZeroFunc();
         Func f2 = new PlusOneFunc(f1);
         Func f3 = new PlusOneFunc(f2);
         //@ produce_call_below_perm_();
-        //@ call_below_perm__elim({Util.class, PlusOneFunc.class, PlusOneFunc.class, ZeroFunc.class});
+        //@ call_below_perm__elim(1, {Util.class, PlusOneFunc.class, PlusOneFunc.class, ZeroFunc.class});
         Util.deriv(f3, 0);
     }
 }

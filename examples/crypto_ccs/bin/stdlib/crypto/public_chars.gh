@@ -1,0 +1,61 @@
+#ifndef PUBLIC_CHARS_GH
+#define PUBLIC_CHARS_GH
+
+#include "auxiliary_definitions.gh"
+#include "public_invariant.gh"
+
+lemma void public_crypto_chars(char *array, int n);
+  requires [?f]crypto_chars(_, array, n, ?ccs) &*& [_]public_ccs(ccs);
+  ensures  [f]chars(array, n, ?cs) &*& ccs == cs_to_ccs(cs);
+
+lemma void public_cg_ccs(cryptogram cg);
+  requires [_]public_invar(?pub) &*& [_]pub(cg);
+  ensures  [_]public_ccs(ccs_for_cg(cg)) &*& true == cg_is_gen_or_pub(cg);
+
+lemma void public_ccs_cg(cryptogram cg);
+  requires [_]public_invar(?pub) &*& [_]public_ccs(ccs_for_cg(cg));
+  ensures  [_]pub(cg) &*& true== cg_is_gen_or_pub(cg);
+
+// Proven lemmas
+
+lemma void public_cs(list<char> cs);
+  requires true;
+  ensures  [_]public_ccs(cs_to_ccs(cs));
+
+lemma_auto void public_chars(char *array, int size);
+  requires [?f]chars(array, size, ?cs);
+  ensures  [f]chars(array, size, cs) &*& [_]public_ccs(cs_to_ccs(cs));
+
+lemma void public_ccs(char *array, int size);
+  requires [?f]crypto_chars(?kind, array, size, ?ccs);
+  ensures  [f]crypto_chars(kind, array, size, ccs) &*&
+           switch(kind)
+           {
+             case normal:
+               return [_]public_ccs(ccs);
+             case secret:
+               return col ? [_]public_ccs(ccs) : true;
+           };
+
+lemma void public_cryptogram(char *array, cryptogram cg);
+  requires [_]public_invar(?pub) &*&
+           [?f]cryptogram(array, ?n, ?ccs, cg) &*& [_]pub(cg);
+  ensures  [f]chars(array, n, ?cs) &*&
+           [_]public_ccs(ccs) &*& ccs == cs_to_ccs(cs);
+
+lemma void public_ccs_split(list<crypto_char> ccs, int i);
+  requires 0 <= i && i <= length(ccs) &*&
+           [_]public_ccs(ccs);
+  ensures  [_]public_ccs(take(i, ccs)) &*&
+           [_]public_ccs(drop(i, ccs));
+
+lemma void public_ccs_join(list<crypto_char> ccs1, list<crypto_char> ccs2);
+  requires [_]public_ccs(ccs1) &*&
+           [_]public_ccs(ccs2);
+  ensures  [_]public_ccs(append(ccs1, ccs2));
+
+lemma void cs_to_ccs_crypto_chars(char *array, list<char> cs);
+  requires [?f]crypto_chars(?kind, array, ?n, cs_to_ccs(cs));
+  ensures  [f]chars(array, n, cs);
+
+#endif

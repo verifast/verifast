@@ -19,6 +19,13 @@ void array_test2(int* a)
   assert(a1_old == a1);
 }
 
+int to_verify(int* arr)
+//@ requires arr[..10] |-> {0, 10, 20, 30, 40, 50, 60, 70, 80, 90};
+//@ ensures arr[..10] |-> {0, 10, 20, 31, 40, 50, 60, 70, 80, 90} &*& result == 30;
+{
+  return arr[3]++;
+}
+
 //@ predicate p(int* a, int n;) = a[0..n] |-> ?vs &*& 0 < n;
 
 void array_test_fail(int* a, int n)

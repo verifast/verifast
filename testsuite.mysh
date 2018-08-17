@@ -8,14 +8,44 @@ cd bin
   cd ..
 cd ..
 cd examples
+  cd abstract_io
+    mysh < io2.mysh
+  cd ..
+  verifast -target IP16 -c -allow_should_fail 16bittest.c
+  verifast -target LP64 -c 64bittest.c
+  cd clhlock
+    verifast -prover redux -c clhlock.c
+  cd ..
+  cd monitors
+    verifast -prover z3v4.5 -disable_overflow_check -shared ghost_counters.c 
+    verifast -prover z3v4.5 -disable_overflow_check -shared ghost_counters.c monitors.o queues.o buffer.c 
+    verifast -prover z3v4.5 -disable_overflow_check -shared ghost_counters.c monitors.o queues.o bounded_buffer.c 
+    verifast -prover z3v4.5 -disable_overflow_check -shared monitors.o barrier.c 
+    verifast -prover z3v4.5 -disable_overflow_check -shared ghost_counters.c monitors.o barbershop.c 
+    verifast -prover z3v4.5 -disable_overflow_check -shared ghost_counters.c monitors.o readers_writers.c 
+  cd ..
+  cd splitcounter
+    verifast -prover redux -c -disable_overflow_check splitcounter.c
+  cd ..
   cd crypto
     mysh -cpus 1 < crypto.mysh
   cd ..
   cd crypto_with_flow
     mysh -cpus 1 < crypto_with_flow.mysh
   cd ..
+  cd crypto_ccs
+    mysh -cpus 1 < crypto_ccs.mysh
+  cd ..
   cd floating_point
-    verifast_both -c sqrt.c
+    cd sqrt_exact
+      verifast -prover redux -c sqrt_exact.c
+    cd ..
+    cd sqrt_with_rounding
+      verifast -prover redux -c sqrt_with_rounding.c
+    cd ..
+    cd interval_arithmetic
+      verifast -prover z3v4.5 -c interval.c
+    cd ..
   cd ..
   verifast_both -c -disable_overflow_check -allow_should_fail forall.c
   verifast_both -c -disable_overflow_check -allow_should_fail address_of_local.c
@@ -24,6 +54,7 @@ cd examples
   verifast_both -disable_overflow_check array_of_struct.c
   verifast_both -disable_overflow_check -c arraylist.c
   verifast_both -disable_overflow_check threading.o barrier.c
+  ifz3v4.5 verifast -prover z3v4.5 -c bitops.c
   verifast_both -c static_array.c
   verifast -c -disable_overflow_check typedef_cast.c
   verifast_both -c automation.c
@@ -110,6 +141,9 @@ cd examples
   verifast_both -disable_overflow_check global_points_to_syntax.c
   verifast_both -shared goto.c
   verifast_both -disable_overflow_check -c gui-app.c
+  cd heartbleed
+    verifast_both -c t1_lib.c
+  cd ..
   verifast_both -c icap_mt_event_loop.c
   verifast_both -c ifs.c
   verifast_both threading.o incr.c
@@ -153,6 +187,7 @@ cd examples
   cd module_imports
     mysh -cpus 1 < module_imports.mysh
   cd ..
+  verifast_both -c multiset_abstract_type.c
   cd linking
     mysh < linking.mysh
   cd ..
@@ -168,7 +203,9 @@ cd examples
   cd queue
     verifast_both threading.o atomics.o queue.c queue_client.c
   cd ..
+  verifast_both -c -disable_overflow_check quicksort.c
   verifast_both -c tokenizer_test.c
+  verifast_both -c truncating.c
   verifast_both -disable_overflow_check stringBuffers.c tokenizer.c ghostlist.o rcl.c
   verifast_both reallittest.c
   verifast_both -disable_overflow_check ref_points_to_syntax.c
@@ -186,6 +223,7 @@ cd examples
   verifast_both -c -disable_overflow_check tuerk.c
   verifast_both -c -disable_overflow_check tuerk_explicit.c
   verifast_both -c typedefs.c
+  verifast_both -c umemcpy.c
   verifast_both -disable_overflow_check wc.c
   verifast_both -c -allow_should_fail carrays.c
   cd helloproc
@@ -370,10 +408,16 @@ cd tutorial_solutions
   verifast_both students.c
 cd ..
 cd tests
+  verifast_both -c llong_fields.c
+  verifast_both -c -allow_should_fail -allow_undeclared_struct_types undeclared_structs.c
   verifast_both stresstest-one-plus-one.c
   cd test-includepath
     mysh < runthistest.mysh
   cd ..
+  cd preprocessor_if
+    mysh < run.mysh
+  cd ..
+  verifast -c nodecl_and_semicolon.c
   verifast_both -c test-pattern-match-constructor-subtyping.c
   verifast_both -c test-octal-number.c
   verifast_both -c integral-ghost-types.c
@@ -394,6 +438,7 @@ cd tests
   cd errors
     verifast_both -c -allow_should_fail basics.c
     verifast_both -c -allow_should_fail typecheck1.c
+    verifast_both -c -allow_should_fail ghost_assignment.c
     verifast_both -c -allow_should_fail ghost_field.c
     verifast_both -c -allow_should_fail inhabited.c
     verifast_both -c -allow_should_fail lemmafuncptr.c
@@ -405,6 +450,8 @@ cd tests
     verifast_both -c -allow_should_fail superctor.java
     verifast_both -c -allow_should_fail inhabited_tparams.c
     verifast_both -c -allow_should_fail inductive_welldefined.c
+    verifast -c -allow_should_fail chars_split_chars_join_loop.c
+    verifast -c -allow_should_fail chars_split_chars_join_loop2.c
     verifast_both -c -allow_should_fail predtype_contra.c
     verifast_both -c -allow_should_fail fixpoint_recursive_value.c
     verifast_both -c -allow_should_fail if_while_component_pure.c

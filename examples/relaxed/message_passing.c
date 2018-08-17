@@ -21,28 +21,21 @@ int c = 0;
 
 /*@
 
-lemma void empty_lemma1(int value)
-    requires true;
-    ensures true;
-{}
-
 lemma void qsplit()
     requires true;
     ensures Q == sep1(Qa, Qb);
 {
-    produce_lemma_function_pointer_chunk(empty_lemma1) : implies1(Q, sep1(Qa,Qb))(value) {
+    produce_lemma_function_pointer_chunk implies1(Q, sep1(Qa,Qb))(value) {
         open Q(value);
         close Qa(value);
         close Qb(value);
         close sep1(Qa, Qb)(value);
-        call();
     } {
-        produce_lemma_function_pointer_chunk(empty_lemma1) : implies1(sep1(Qa,Qb), Q)(value) {
+        produce_lemma_function_pointer_chunk implies1(sep1(Qa,Qb), Q)(value) {
             open sep1(Qa, Qb)(value);
             open Qa(value);
             open Qb(value);
             close Q(value);
-            call();
         } {
             pred_ext1(Q, sep1(Qa, Qb));
         }

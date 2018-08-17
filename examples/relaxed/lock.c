@@ -16,8 +16,6 @@ Based on:
 
 //@ predicate Lock(int *loc, predicate() J) = Write(loc, lock_internal_inv(J)) &*& RMW(loc, lock_internal_inv(J)) ;
 
-//@ lemma void empty_fun0() requires true; ensures true; {}
-
 void release_lock(int *lock)
     //@ requires Lock(lock, ?J) &*& J();
     //@ ensures Lock(lock, J);
@@ -38,11 +36,10 @@ void acquire_lock(int *lock)
     { 
         //@ open Lock(_,_);
         /*@ 
-            produce_lemma_function_pointer_chunk(empty_fun0) : CAS_premise(0, 1, True, lock_internal_inv(J), J)() { 
+            produce_lemma_function_pointer_chunk CAS_premise(0, 1, True, lock_internal_inv(J), J)() { 
                 open lock_internal_inv(J)(0); 
                 open True(); 
                 close lock_internal_inv(J)(1); 
-                call();
             };
         @*/
         //@ close True();

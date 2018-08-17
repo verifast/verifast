@@ -150,7 +150,8 @@ void produce(void *element)
         //@ open producer(p);
         void *lastWritten = buffer.lastWritten;
         int prodCycle = buffer.prodCycle1;
-        //@ void *contents0 = create_tso_prophecy();
+        prophecy_id contents0Id = create_tso_prophecy();
+        //@ assert tso_prophecy(contents0Id, ?contents0);
         void *contents;
         {
             /*@
@@ -167,7 +168,7 @@ void produce(void *element)
             //@ produce_lemma_function_pointer_chunk(ctxt) : tso_read_ctxt<state>(&(&buffer)->contents, contents0, prodcons(p), state_le, state(prodCycle, lastWritten), prod_read_f0(contents0, prodCycle, lastWritten), P)(s) { call(); };
             //@ close P();
             //@ leak P();
-            contents = tso_read(&(&buffer)->contents, 0, prodCycle, lastWritten);
+            contents = tso_read(contents0Id, &(&buffer)->contents, 0, prodCycle, lastWritten);
         }
         if (contents == 0) {
             {
@@ -218,7 +219,8 @@ void *consumer()
         //@ invariant consumer(p);
     {
         //@ open consumer(p);
-        //@ void *contents0 = create_tso_prophecy();
+        prophecy_id contents0Id = create_tso_prophecy();
+        //@ assert tso_prophecy(contents0Id, ?contents0);
         int cycle = buffer.cycle1;
         void *contents;
         {
@@ -238,7 +240,7 @@ void *consumer()
             //@ produce_lemma_function_pointer_chunk(ctxt) : tso_read_ctxt<state>(&(&buffer)->contents, contents0, prodcons(p), state_le, state(cycle, 0), state(cycle, contents0), P)(s) { call(); };
             //@ close P();
             //@ leak P();
-            contents = tso_read(&(&buffer)->contents, 2, cycle);
+            contents = tso_read(contents0Id, &(&buffer)->contents, 2, cycle);
         }
         if (contents != 0) {
             {
