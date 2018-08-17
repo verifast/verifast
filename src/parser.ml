@@ -22,7 +22,7 @@ let common_keywords = [
 let ghost_keywords = [
   "predicate"; "copredicate"; "requires"; "|->"; "&*&"; "inductive"; "fixpoint";
   "ensures"; "close"; "lemma"; "open"; "emp"; "invariant"; "lemma_auto";
-  "_"; "@*/"; "predicate_family"; "predicate_family_instance"; "predicate_ctor"; "leak"; "@";
+  "_"; "@*/"; "predicate_family"; "predicate_family_instance"; "predicate_ctor"; "predicate_nonempty"; "leak"; "@";
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action"; "nonghost_callers_only";
   "create_box"; "above"; "below"; "and_handle"; "and_fresh_handle"; "create_handle"; "create_fresh_handle"; "dispose_box"; 
   "produce_lemma_function_pointer_chunk"; "duplicate_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
@@ -519,22 +519,28 @@ and
       (ps, inputParamCount) = (parser [< '(_, Kwd ";"); ps' = rep_comma parse_param >] -> (ps @ ps', Some (List.length ps)) | [< >] -> (ps, None)); '(_, Kwd ")")
     >] -> (ps, inputParamCount)
 and
-  parse_predicate_decl l (inductiveness: inductiveness) = parser 
-    [< '(li, Ident g); tparams = parse_type_params li; 
+  parse_predicate_decl l (inductiveness: inductiveness) nonempty = parser
+    [< '(li, Ident g); tparams = parse_type_params li;
      (ps, inputParamCount) = parse_pred_paramlist;
      body = opt parse_pred_body;
      '(_, Kwd ";");
     >] ->
-    [PredFamilyDecl (l, g, tparams, 0, List.map (fun (t, p) -> t) ps, inputParamCount, inductiveness)] @
-    (match body with None -> [] | Some body -> [PredFamilyInstanceDecl (l, g, tparams, [], ps, body)])
+    [PredFamilyDecl (l, g, tparams, 0, List.map (fun (t, p) -> t) ps, inputParamCount, inductiveness, nonempty)] @
+    (match body with
+     | None -> []
+     | Some body ->
+       if nonempty then
+         static_error l "nonempty not allowed when a body is provided (TODO)" None;
+       [PredFamilyInstanceDecl (l, g, tparams, [], ps, body)])
 and
   parse_pure_decl = parser
     [< '(l, Kwd "inductive"); '(li, Ident i); tparams = parse_type_params li; '(_, Kwd "="); cs = (parser [< cs = parse_ctors >] -> cs | [< cs = parse_ctors_suffix >] -> cs); '(_, Kwd ";") >] -> [Inductive (l, i, tparams, cs)]
   | [< '(l, Kwd "fixpoint"); t = parse_return_type; d = parse_func_rest Fixpoint t Public>] -> [d]
-  | [< '(l, Kwd "predicate"); result = parse_predicate_decl l Inductiveness_Inductive >] -> result
-  | [< '(l, Kwd "copredicate"); result = parse_predicate_decl l Inductiveness_CoInductive >] -> result
+  | [< '(l, Kwd "predicate"); result = parse_predicate_decl l Inductiveness_Inductive false >] -> result
+  | [< '(l, Kwd "predicate_nonempty"); result = parse_predicate_decl l Inductiveness_Inductive true >] -> result
+  | [< '(l, Kwd "copredicate"); result = parse_predicate_decl l Inductiveness_CoInductive false >] -> result
   | [< '(l, Kwd "predicate_family"); '(_, Ident g); is = parse_paramlist; (ps, inputParamCount) = parse_pred_paramlist; '(_, Kwd ";") >]
-  -> [PredFamilyDecl (l, g, [], List.length is, List.map (fun (t, p) -> t) ps, inputParamCount, Inductiveness_Inductive)]
+  -> [PredFamilyDecl (l, g, [], List.length is, List.map (fun (t, p) -> t) ps, inputParamCount, Inductiveness_Inductive, false)]
   | [< '(l, Kwd "predicate_family_instance"); '(_, Ident g); is = parse_index_list; ps = parse_paramlist;
      p = parse_pred_body; '(_, Kwd ";"); >] -> [PredFamilyInstanceDecl (l, g, [], is, ps, p)]
   | [< '(l, Kwd "predicate_ctor"); '(_, Ident g); ps1 = parse_paramlist; (ps2, inputParamCount) = parse_pred_paramlist;

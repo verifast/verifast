@@ -18,19 +18,19 @@ lemma void div_rem(int D, int d);
     requires d != 0;
     ensures D == D / d * d + D % d &*& abs(D % d) < abs(d) &*& abs(D / d * d) <= abs(D);
 
-predicate character(char *p; char c);
-predicate u_character(unsigned char *p; unsigned char c);
+predicate_nonempty character(char *p; char c);
+predicate_nonempty u_character(unsigned char *p; unsigned char c);
 
-predicate integer(int *p; int v);
-predicate u_integer(unsigned int *p; unsigned int v);
+predicate_nonempty integer(int *p; int v);
+predicate_nonempty u_integer(unsigned int *p; unsigned int v);
 
-predicate llong_integer(long long *p; long long l);
-predicate u_llong_integer(unsigned long long *p; unsigned long long l);
+predicate_nonempty llong_integer(long long *p; long long l);
+predicate_nonempty u_llong_integer(unsigned long long *p; unsigned long long l);
 
-predicate short_integer(short *p; short s);
-predicate u_short_integer(unsigned short *p; unsigned short v);
+predicate_nonempty short_integer(short *p; short s);
+predicate_nonempty u_short_integer(unsigned short *p; unsigned short v);
 
-predicate pointer(void **pp; void *p);
+predicate_nonempty pointer(void **pp; void *p);
 
 lemma void character_limits(char *pc);
     requires [?f]character(pc, ?c);
@@ -378,6 +378,7 @@ predicate malloc_block_ullongs(unsigned long long *p; int count) = malloc_block(
 
 /*@
 
+// TODO: could be marked predicate_nonempty if bodies were accepted
 predicate string(char *s; list<char> cs) =
     character(s, ?c) &*&
     c == 0 ?
