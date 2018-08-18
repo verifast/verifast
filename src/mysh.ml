@@ -82,15 +82,8 @@ let read_line_canon file =
 let processes_started_count = ref 0
 let active_processes_count = ref 0
 let failed_processes_log: string list list ref = ref []
-let queue = Queue.create ()
-let queueNonempty = Condition.create ()
-let queueMutex = Mutex.create ()
-
-let enqueue x =
-  Mutex.lock queueMutex;
-  Queue.add x queue;
-  Condition.signal queueNonempty;
-  Mutex.unlock queueMutex
+let global_mutex = Mutex.create ()
+let active_processes_cond = Condition.create ()
 
 let dots_printed = ref false
 
@@ -104,30 +97,15 @@ let print_endline s =
   print_endline s;
   dots_printed := false
 
+let with_global_lock body =
+  Mutex.lock global_mutex;
+  body ();
+  Mutex.unlock global_mutex
+
 let do_print_line s =
-  enqueue (fun () -> print_endline s)
+  with_global_lock (fun () -> print_endline s)
 
-(* Pump events until a process finishes *)
-let pump_events () =
-  let count0 = !active_processes_count in
-  Mutex.lock queueMutex;
-  let rec iter () =
-    if !active_processes_count < count0 then
-      ()
-    else if Queue.is_empty queue then begin
-      Condition.wait queueNonempty queueMutex;
-      iter ()
-    end else
-      let event = Queue.take queue in
-      Mutex.unlock queueMutex;
-      event ();
-      Mutex.lock queueMutex;
-      iter ()
-  in
-  iter ();
-  Mutex.unlock queueMutex
-
-type alarm = {mutable alarm_prev: alarm; alarm_time: float; mutable alarm_handler: unit -> unit; mutable alarm_next: alarm}
+type alarm = {mutable alarm_prev: alarm; alarm_time: float; alarm_handler: unit -> unit; mutable alarm_next: alarm}
 
 let remove_alarm alarm =
   alarm.alarm_prev.alarm_next <- alarm.alarm_next;
@@ -152,7 +130,9 @@ let alarm_thread = Thread.create begin fun () ->
         let delta = next.alarm_time -. tnow in
         if delta <= 0.2 then begin
           remove_alarm next;
-          enqueue begin fun () -> next.alarm_handler () end
+          Mutex.unlock alarm_mutex;
+          next.alarm_handler ();
+          Mutex.lock alarm_mutex
         end else begin
           Mutex.unlock alarm_mutex;
           Thread.delay delta;
@@ -182,7 +162,6 @@ let create_alarm t h =
 let cancel_alarm alarm =
   Mutex.lock alarm_mutex;
   remove_alarm alarm;
-  alarm.alarm_handler <- (fun () -> ());
   Mutex.unlock alarm_mutex
 
 let cwd = ref []
@@ -199,6 +178,21 @@ let getcwd () =
 
 let rec exec_lines macros filepath file =
   let macros = ref macros in
+  let children_started_count = ref 0 in
+  let children_finished_count = ref 0 in
+  let children_finished_cond = Condition.create () in
+  let child_finished () =
+    incr children_finished_count;
+    if !children_finished_count = !children_started_count then
+      Condition.signal children_finished_cond
+  in
+  let join_children () =
+    Mutex.lock global_mutex;
+    while !children_finished_count < !children_started_count do
+      Condition.wait children_finished_cond global_mutex
+    done;
+    Mutex.unlock global_mutex
+  in
   let rec exec_lines_at lineno =
   if !failed_processes_log = [] then
   let error msg =
@@ -227,7 +221,7 @@ let rec exec_lines macros filepath file =
       if !verbose then print_endline line;
       match parse_cmdline line with
         ["cd"; dir] -> cd dir
-      | ["del"; file] -> while !active_processes_count > 0 do pump_events() done; Sys.remove file
+      | ["del"; file] -> join_children (); Sys.remove file
       | ["ifnotmac"; line] -> if Vfconfig.platform <> MacOS then exec_line line
       | ["ifz3"; line] -> if Vfconfig.z3_present then exec_line line
       | ["ifz3v4.5"; line] -> if Vfconfig.z3v4dot5_present then exec_line line
@@ -254,6 +248,11 @@ let rec exec_lines macros filepath file =
       | [cmdName; args] when List.mem_assoc cmdName !macros ->
         List.iter (fun line -> exec_line (Printf.sprintf "%s %s" line args)) (List.assoc cmdName !macros)
       | _ ->
+        Mutex.lock global_mutex;
+        while not (!active_processes_count < !max_processes) do
+          Condition.wait active_processes_cond global_mutex
+        done;
+        incr children_started_count;
         incr processes_started_count;
         let pid = !processes_started_count in
         if !verbose then Printf.printf "Starting process %d\n" pid;
@@ -266,8 +265,10 @@ let rec exec_lines macros filepath file =
         let rec produce_alarm i =
           let runtime = i * 5 in
           let alarm = create_alarm (time0 +. float_of_int runtime) begin fun () ->
+              Mutex.lock global_mutex;
               print_endline (Printf.sprintf "SLOW: %s has been running for %ds" line' runtime);
-              produce_alarm (i + 1)
+              produce_alarm (i + 1);
+              Mutex.unlock global_mutex
             end
           in
           current_alarm := Some alarm
@@ -285,12 +286,11 @@ let rec exec_lines macros filepath file =
               done
             with End_of_file -> ();
             let status = Unix.close_process_in cin in
+            Mutex.lock global_mutex;
             let time1 = Unix.gettimeofday() in
-            if !verbose then do_print_line (Printf.sprintf "[%d]%f seconds\n" pid (time1 -. time0));
-            enqueue begin fun () ->
-                let Some alarm = !current_alarm in
-                cancel_alarm alarm
-              end;
+            if !verbose then print_endline (Printf.sprintf "[%d]%f seconds\n" pid (time1 -. time0));
+            let Some alarm = !current_alarm in
+            cancel_alarm alarm;
             if status <> Unix.WEXITED 0 then begin
               let msg =
                 if !verbose then
@@ -300,32 +300,35 @@ let rec exec_lines macros filepath file =
               in
               let lines = msg::List.map (fun s -> "> " ^ s) (List.rev !output) in
               let msg = if !verbose then msg else String.concat "\n" lines in
-              do_print_line msg;
-              enqueue (fun () -> push failed_processes_log lines)
+              print_endline msg;
+              push failed_processes_log lines
             end else begin
               if !dots then
-                enqueue (fun () -> print_dot ())
+                print_dot ()
               else
-                do_print_line (Printf.sprintf "PASS: %s (%.2fs)" line' (time1 -. time0))
+                print_endline (Printf.sprintf "PASS: %s (%.2fs)" line' (time1 -. time0))
             end;
-            enqueue (fun () -> decr active_processes_count)
+            decr active_processes_count;
+            Condition.signal active_processes_cond;
+            child_finished ();
+            Mutex.unlock global_mutex
           end
           ()
         in
         ignore t;
-        if !active_processes_count = !max_processes then pump_events ()
+        Mutex.unlock global_mutex
       end
     in
     exec_line line;
     exec_lines_at (lineno + 1)
   with End_of_file -> ()
   in
-  exec_lines_at 1
+  exec_lines_at 1;
+  join_children ()
 
 let () =
   let time0 = Unix.gettimeofday() in
   exec_lines [] !main_filename !main_file;
-  while !active_processes_count > 0 do pump_events () done;
   let time1 = Unix.gettimeofday() in
   Printf.printf "Total execution time: %f seconds\n" (time1 -. time0);
   List.rev !failed_processes_log |> List.iter begin fun lines ->
