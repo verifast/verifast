@@ -4,6 +4,7 @@ else
 DOTEXE=
 endif
 
+# make hello OCAMLOPT=ocamlopt "LABLGTK_FLAGS=`ocamlfind query -predicates native -a-format lablgtk2` `ocamlfind query -predicates native -i-format lablgtk2`" OCAMLCFLAGS="-ccopt -no-pie"
 hello$(DOTEXE): hello.ml linemarks.cmxa
 	${OCAMLOPT} ${OCAMLCFLAGS} -o hello$(DOTEXE) $(LABLGTK_FLAGS) lablgtksourceview2.cmxa linemarks.cmxa gtkInit.cmx hello.ml
 
@@ -38,6 +39,9 @@ linemarks.o: linemarks.c
 # After modifying 'linemarks.vala', run 'make vala' to update 'linemarks.c'.
 vala:
 	valac --vapidir . -C -H linemarks.h --pkg gtksourceview-2.0 --pkg mystuff linemarks.vala
+
+hello-vala: linemarks.vala hello-vala.vala
+	valac -o hello-vala --vapidir . --pkg gtksourceview-2.0 --pkg mystuff linemarks.vala hello-vala.vala
 
 vala-clean:
 	rm -f linemarks.c

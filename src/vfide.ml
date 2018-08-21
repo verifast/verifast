@@ -569,7 +569,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       else if Filename.check_suffix path ".java" || Filename.check_suffix path ".javaspec" then highlight (common_keywords @ java_keywords)
       else ()
   in
-  let create_editor (textNotebook: GPack.notebook) buffer lineMarksTable =
+  let create_editor (textNotebook: GPack.notebook) buffer lineMarksTable stmtExecCountsColumn =
     let textLabel = GMisc.label ~text:"(untitled)" () in
     let textVbox = GPack.vbox ~spacing:2 ~packing:(fun widget -> ignore (textNotebook#append_page ~tab_label:textLabel#coerce widget)) () in
     let textFindBox = GPack.hbox ~show:false ~border_width:2 ~spacing:2 ~packing:(textVbox#pack ~expand:false) () in
@@ -580,6 +580,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
         ~packing:textVbox#add () in
     let srcText = (*GText.view*) GSourceView2.source_view ~source_buffer:buffer ~packing:textScroll#add () in
     lineMarksTable#show_in_source_view srcText;
+    stmtExecCountsColumn#show_in_source_view srcText;
     srcText#misc#modify_font_by_name !scaledCodeFont;
     ignore $. textFindEntry#event#connect#key_press (fun key ->
       if GdkEvent.Key.keyval key = GdkKeysyms._Escape then begin
@@ -624,6 +625,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     let path = ref None in
     let buffer = GSourceView2.source_buffer () in
     let lineMarksTable = GLineMarks.table () in
+    let stmtExecCountsColumn = GLineMarks.source_gutter_text_column "99x" 1.0 in
     buffer#begin_not_undoable_action (); (* Disable the source view's undo manager since we handle undos ourselves. *)
     let apply_tag_enabled = ref false in (* To prevent tag copying when pasting from clipboard *)
     ignore $. buffer#connect#apply_tag (fun tag ~start ~stop -> if not !apply_tag_enabled then GtkSignal.emit_stop_by_name buffer#as_buffer "apply-tag");
@@ -637,8 +639,8 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     let _ = buffer#create_tag ~name:"currentCaller" [`BACKGROUND "#44FF44"] in
     let currentStepMark = buffer#create_mark (buffer#start_iter) in
     let currentCallerMark = buffer#create_mark (buffer#start_iter) in
-    let mainView = create_editor textNotebook buffer lineMarksTable in
-    let subView = create_editor subNotebook buffer lineMarksTable in
+    let mainView = create_editor textNotebook buffer lineMarksTable stmtExecCountsColumn in
+    let subView = create_editor subNotebook buffer lineMarksTable stmtExecCountsColumn in
     let undoList: undo_action list ref = ref [] in
     let redoList: undo_action list ref = ref [] in
     let eol = ref (if platform = Windows then "\r\n" else "\n") in
@@ -656,6 +658,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       method currentCallerMark = currentCallerMark
       method useSiteTags = useSiteTags
       method lineMarksTable = lineMarksTable
+      method stmtExecCountsColumn = stmtExecCountsColumn
     end in
     ignore $. buffer#connect#modified_changed (fun () ->
       updateBufferTitle tab;
@@ -1119,7 +1122,8 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       stepStore#clear();
       List.iter (fun tab ->
         let buffer = tab#buffer in
-        buffer#remove_tag_by_name "error" ~start:buffer#start_iter ~stop:buffer#end_iter
+        buffer#remove_tag_by_name "error" ~start:buffer#start_iter ~stop:buffer#end_iter;
+        tab#stmtExecCountsColumn#clear
       ) !buffers
     end
   in
@@ -1373,7 +1377,27 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
                   perform_syntax_highlighting tab tab#buffer#start_iter tab#buffer#end_iter
                 end
               end;
-              let stats = verify_program prover options path {Verifast1.noop_callbacks with reportRange; reportUseSite; reportExecutionForest} breakpoint targetPath in
+              let hasStmts = Array.make 10000 false in
+              let lineCount = ref 0 in
+              let reportStmt ((path', line, _), _) =
+                if path' == path then begin
+                  hasStmts.(line - 1) <- true;
+                  lineCount := max !lineCount line
+                end
+              in
+              let stmtExecCounts = Array.make 10000 0 in
+              let reportStmtExec ((path', line, _), _) =
+                if path' == path then
+                  stmtExecCounts.(line - 1) <- stmtExecCounts.(line - 1) + 1
+              in
+              let stats = verify_program prover options path {reportRange; reportUseSite; reportStmt; reportStmtExec; reportExecutionForest} breakpoint targetPath in
+              begin
+                let _, tab = get_tab_for_path path in
+                let column = tab#stmtExecCountsColumn in
+                for i = 0 to !lineCount - 1 do
+                  column#add_line (if hasStmts.(i) then Printf.sprintf "%dx" stmtExecCounts.(i) else "")
+                done
+              end;
               let success =
                 if targetPath <> None then
                   (msg := Some("0 errors found (target path not reached)"); false)
