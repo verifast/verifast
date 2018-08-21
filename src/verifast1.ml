@@ -12,10 +12,11 @@ open Ast
 type callbacks = {
   reportRange: range_kind -> loc -> unit;
   reportUseSite: decl_kind -> loc -> loc -> unit;
-  reportExecutionForest: node list ref -> unit
+  reportExecutionForest: node list ref -> unit;
+  reportStmtExec: loc -> unit
 }
 
-let noop_callbacks = {reportRange = (fun _ _ -> ()); reportUseSite = (fun _ _ _ -> ()); reportExecutionForest = (fun _ -> ())}
+let noop_callbacks = {reportRange = (fun _ _ -> ()); reportUseSite = (fun _ _ _ -> ()); reportExecutionForest = (fun _ -> ()); reportStmtExec = (fun _ -> ())}
 
 module type VERIFY_PROGRAM_ARGS = sig
   val emitter_callback: package list -> unit
@@ -52,7 +53,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     option_data_model=data_model
   } = options
 
-  let {reportRange; reportUseSite; reportExecutionForest} = callbacks
+  let {reportRange; reportUseSite; reportExecutionForest; reportStmtExec} = callbacks
 
   let data_model = match language with Java -> data_model_java | CLang -> data_model
   let {int_rank; long_rank; ptr_rank} = data_model

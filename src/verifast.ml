@@ -47,9 +47,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let l = stmt_loc s in
     let _ =
       match s with
-      (* Make sure that nested statements are not counted *)
-      | PureStmt _ | NonpureStmt _ | IfStmt _  | SwitchStmt _ | WhileStmt _ | BlockStmt _ -> ()
-      | _ -> !stats#stmtExec l;
+      (* Ignore transparent statements *)
+      | PureStmt _ | NonpureStmt _ | BlockStmt _ -> ()
+      | _ -> !stats#stmtExec l; reportStmtExec l
     in
     let break_label () = if pure then "#ghostBreak" else "#break" in
     let free_locals closeBraceLoc h tenv env locals cont =
@@ -2219,6 +2219,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         let tcont sizemap tenv ghostenv h env =
           let epilog = List.map (function (PureStmt (l, s)) -> s | s -> static_error (stmt_loc s) "An epilog statement must be a pure statement." None) epilog in
+          reportStmtExec lr;
           verify_return_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env true lr eo epilog return_cont econt
         in
         (ss, tcont)

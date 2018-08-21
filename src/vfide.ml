@@ -1373,7 +1373,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
                   perform_syntax_highlighting tab tab#buffer#start_iter tab#buffer#end_iter
                 end
               end;
-              let stats = verify_program prover options path {reportRange; reportUseSite; reportExecutionForest} breakpoint targetPath in
+              let stats = verify_program prover options path {Verifast1.noop_callbacks with reportRange; reportUseSite; reportExecutionForest} breakpoint targetPath in
               let success =
                 if targetPath <> None then
                   (msg := Some("0 errors found (target path not reached)"); false)

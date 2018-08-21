@@ -9,15 +9,41 @@ let _ =
   let print_msg l msg =
     print_endline (string_of_loc l ^ ": " ^ msg)
   in
-  let verify ?(emitter_callback = fun _ -> ()) (print_stats : bool) (options : options) (prover : string) (path : string) (emitHighlightedSourceFiles : bool) =
+  let verify ?(emitter_callback = fun _ -> ()) (print_stats : bool) (options : options) (prover : string) (path : string) (emitHighlightedSourceFiles : bool) (dumpPerLineStmtExecCounts : bool) =
     let verify range_callback =
     let exit l =
       Java_frontend_bridge.unload();
       exit l
     in
     try
-      let callbacks = {Verifast1.noop_callbacks with reportRange=range_callback} in
+      let reportStmtExec, dumpPerLineStmtExecCounts =
+        if dumpPerLineStmtExecCounts then
+          let counts = Array.make 10000 0 in
+          let reportStmtExec l =
+            let ((lpath, line, col), _) = l in
+            let line = line - 1 in
+            if lpath == path then
+              counts.(line) <- counts.(line) + 1
+          in
+          let dumpPerLineStmtExecCounts () =
+            let text = readFile path in
+            let lines = String.split_on_char '\n' text in
+            let rec iter k lines =
+              match lines with
+                [] -> ()
+              | line::lines ->
+                Printf.printf "%5dx %s\n" counts.(k) line;
+                iter (k + 1) lines
+            in
+            iter 0 lines
+          in
+          reportStmtExec, dumpPerLineStmtExecCounts
+        else
+          (fun _ -> ()), (fun _ -> ())
+      in
+      let callbacks = {Verifast1.noop_callbacks with reportRange=range_callback; reportStmtExec=reportStmtExec} in
       let stats = verify_program ~emitter_callback:emitter_callback prover options path callbacks None None in
+      dumpPerLineStmtExecCounts ();
       if print_stats then stats#printStats;
       print_endline ("0 errors found (" ^ (string_of_int (stats#getStmtExec)) ^ " statements verified)");
       Java_frontend_bridge.unload();
@@ -155,6 +181,7 @@ let _ =
   let allModules: string list ref = ref [] in
   let dllManifestName = ref None in
   let emitHighlightedSourceFiles = ref false in
+  let dumpPerLineStmtExecCounts = ref false in
   let exports: string list ref = ref [] in
   let outputSExpressions : string option ref = ref None in
   let runtime: string option ref = ref None in
@@ -203,6 +230,7 @@ let _ =
             ; "-bindir", String (fun str -> let p = Util.abs_path str in Util.set_bindir p; add_vroot ("CRT=" ^ p)), "Set custom bindir with standard library"
             ; "-vroot", String (fun str -> add_vroot str), "Add a virtual root for include paths and, creating or linking vfmanifest files (e.g. MYLIB=../../lib). Ill-formed roots are ignored."
             ; "-emit_highlighted_source_files", Set emitHighlightedSourceFiles, " "
+            ; "-dump_per_line_stmt_exec_counts", Set dumpPerLineStmtExecCounts, " "
             ; "-provides", String (fun path -> provides := !provides @ [path]), " "
             ; "-keep_provide_files", Set keepProvideFiles, " "
             ; "-emit_sexpr",
@@ -262,7 +290,7 @@ let _ =
               SExpressionEmitter.emit target_file packages          
             | None             -> ()
         in
-        verify ~emitter_callback:emitter_callback !stats options !prover filename !emitHighlightedSourceFiles;
+        verify ~emitter_callback:emitter_callback !stats options !prover filename !emitHighlightedSourceFiles !dumpPerLineStmtExecCounts;
         allModules := ((Filename.chop_extension filename) ^ ".vfmanifest")::!allModules
       end
     else if Filename.check_suffix filename ".o" then
