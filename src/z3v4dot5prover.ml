@@ -216,7 +216,11 @@ class z3_context () =
     method mk_iff t1 t2 = Z3native.mk_eq ctxt t1 t2
     method mk_implies t1 t2 = Z3native.mk_implies ctxt t1 t2
     method mk_eq t1 t2 = Z3native.mk_eq ctxt t1 t2
-    method mk_intlit n = Z3native.mk_int ctxt n int_type
+    method mk_intlit n =
+      if Sys.int_size <= 32 || n land 0xffffffff = n then
+        Z3native.mk_int ctxt n int_type
+      else
+        Z3native.mk_numeral ctxt (string_of_int n) int_type
     method mk_intlit_of_string s = Z3native.mk_numeral ctxt s int_type
     method mk_add t1 t2 = Z3native.mk_add ctxt 2 [t1; t2]
     method mk_sub t1 t2 = Z3native.mk_sub ctxt 2 [t1; t2]
