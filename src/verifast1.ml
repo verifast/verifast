@@ -9,6 +9,14 @@ open Parser
 open Verifast0
 open Ast
 
+type callbacks = {
+  reportRange: range_kind -> loc -> unit;
+  reportUseSite: decl_kind -> loc -> loc -> unit;
+  reportExecutionForest: node list ref -> unit
+}
+
+let noop_callbacks = {reportRange = (fun _ _ -> ()); reportUseSite = (fun _ _ _ -> ()); reportExecutionForest = (fun _ -> ())}
+
 module type VERIFY_PROGRAM_ARGS = sig
   val emitter_callback: package list -> unit
   type typenode
@@ -17,9 +25,7 @@ module type VERIFY_PROGRAM_ARGS = sig
   val ctxt: (typenode, symbol, termnode) Proverapi.context
   val options: options
   val program_path: string
-  val reportRange: range_kind -> loc -> unit
-  val reportUseSite: decl_kind -> loc -> loc -> unit
-  val reportExecutionForest: node list ref -> unit
+  val callbacks: callbacks
   val breakpoint: (string * int) option
   val targetPath: int list option
 end
@@ -45,6 +51,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     option_allow_undeclared_struct_types;
     option_data_model=data_model
   } = options
+
+  let {reportRange; reportUseSite; reportExecutionForest} = callbacks
 
   let data_model = match language with Java -> data_model_java | CLang -> data_model
   let {int_rank; long_rank; ptr_rank} = data_model

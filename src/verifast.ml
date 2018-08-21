@@ -3111,7 +3111,7 @@ end
 
 (** Verifies the .c/.jarsrc/.scala file at path [path].
     Uses the SMT solver [ctxt].
-    Reports syntax highlighting regions using the callback [reportRange].
+    Reports syntax highlighting regions using the callback [reportRange] in [callbacks].
     Stops at source line [breakpoint], if not None.
     This function is generic in the types of SMT solver types, symbols, and terms.
     *)
@@ -3121,9 +3121,7 @@ let verify_program_core (* ?verify_program_core *)
     (ctxt: (typenode', symbol', termnode') Proverapi.context)
     (options : options)
     (program_path : string)
-    (reportRange : range_kind -> loc -> unit)
-    (reportUseSite : decl_kind -> loc -> loc -> unit)
-    (reportExecutionForest : node list ref -> unit)
+    (callbacks : callbacks)
     (breakpoint : (string * int) option)
     (targetPath : int list option) : unit =
 
@@ -3135,9 +3133,7 @@ let verify_program_core (* ?verify_program_core *)
     let ctxt = ctxt
     let options = options
     let program_path = program_path
-    let reportRange = reportRange
-    let reportUseSite = reportUseSite
-    let reportExecutionForest = reportExecutionForest
+    let callbacks = callbacks
     let breakpoint = breakpoint
     let targetPath = targetPath
   end) in
@@ -3188,16 +3184,14 @@ let verify_program (* ?verify_program *)
     (prover : string)
     (options : options)
     (path : string)
-    (reportRange : range_kind -> loc -> unit)
-    (reportUseSite : decl_kind -> loc -> loc -> unit)
-    (reportExecutionForest : node list ref -> unit)
+    (callbacks : callbacks)
     (breakpoint : (string * int) option)
     (targetPath : int list option) : Stats.stats =
   lookup_prover prover
     (object
        method run: 'typenode 'symbol 'termnode. ('typenode, 'symbol, 'termnode) Proverapi.context -> Stats.stats =
          fun ctxt -> clear_stats ();
-                     verify_program_core ~emitter_callback:emitter_callback ctxt options path reportRange reportUseSite reportExecutionForest breakpoint targetPath;
+                     verify_program_core ~emitter_callback:emitter_callback ctxt options path callbacks breakpoint targetPath;
                      !stats
      end)
 

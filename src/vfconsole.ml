@@ -16,8 +16,8 @@ let _ =
       exit l
     in
     try
-      let use_site_callback declKind declLoc useSiteLoc = () in
-      let stats = verify_program ~emitter_callback:emitter_callback prover options path range_callback use_site_callback (fun _ -> ()) None None in
+      let callbacks = {Verifast1.noop_callbacks with reportRange=range_callback} in
+      let stats = verify_program ~emitter_callback:emitter_callback prover options path callbacks None None in
       if print_stats then stats#printStats;
       print_endline ("0 errors found (" ^ (string_of_int (stats#getStmtExec)) ^ " statements verified)");
       Java_frontend_bridge.unload();
