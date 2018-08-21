@@ -45,12 +45,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let rec verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont econt =
     let l = stmt_loc s in
-    let _ =
-      match s with
-      (* Ignore transparent statements *)
-      | PureStmt _ | NonpureStmt _ | BlockStmt _ -> ()
-      | _ -> !stats#stmtExec l; reportStmtExec l
-    in
+    if not (is_transparent_stmt s) then begin !stats#stmtExec l; reportStmtExec l end;
     let break_label () = if pure then "#ghostBreak" else "#break" in
     let free_locals closeBraceLoc h tenv env locals cont =
       let rec free_locals_core h locals =

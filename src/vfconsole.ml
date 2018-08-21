@@ -16,9 +16,16 @@ let _ =
       exit l
     in
     try
-      let reportStmtExec, dumpPerLineStmtExecCounts =
+      let reportStmt, reportStmtExec, dumpPerLineStmtExecCounts =
         if dumpPerLineStmtExecCounts then
+          let hasStmts = Array.make 10000 false in
           let counts = Array.make 10000 0 in
+          let reportStmt l =
+            let ((lpath, line, col), _) = l in
+            let line = line - 1 in
+            if lpath == path then
+              hasStmts.(line) <- true
+          in
           let reportStmtExec l =
             let ((lpath, line, col), _) = l in
             let line = line - 1 in
@@ -32,16 +39,19 @@ let _ =
               match lines with
                 [] -> ()
               | line::lines ->
-                Printf.printf "%5dx %s\n" counts.(k) line;
+                if hasStmts.(k) then
+                  Printf.printf "%5dx %s\n" counts.(k) line
+                else
+                  Printf.printf "       %s\n" line;
                 iter (k + 1) lines
             in
             iter 0 lines
           in
-          reportStmtExec, dumpPerLineStmtExecCounts
+          reportStmt, reportStmtExec, dumpPerLineStmtExecCounts
         else
-          (fun _ -> ()), (fun _ -> ())
+          (fun _ -> ()), (fun _ -> ()), (fun _ -> ())
       in
-      let callbacks = {Verifast1.noop_callbacks with reportRange=range_callback; reportStmtExec=reportStmtExec} in
+      let callbacks = {Verifast1.noop_callbacks with reportRange=range_callback; reportStmt; reportStmtExec} in
       let stats = verify_program ~emitter_callback:emitter_callback prover options path callbacks None None in
       dumpPerLineStmtExecCounts ();
       if print_stats then stats#printStats;

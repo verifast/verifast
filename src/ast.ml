@@ -871,6 +871,51 @@ let stmt_loc s =
   | Break (l) -> l
   | SuperConstructorCall(l, _) -> l
 
+let stmt_fold_open f state s =
+  match s with
+    PureStmt (l, s) -> f state s
+  | NonpureStmt (l, _, s) -> f state s
+  | IfStmt (l, _, sst, ssf) -> let state = List.fold_left f state sst in List.fold_left f state ssf
+  | SwitchStmt (l, _, cs) ->
+    let rec iter state c =
+      match c with
+        SwitchStmtClause (l, e, ss) -> List.fold_left f state ss
+      | SwitchStmtDefaultClause (l, ss) -> List.fold_left f state ss
+    in
+    List.fold_left iter state cs
+  | WhileStmt (l, _, _, _, ss) -> List.fold_left f state ss
+  | TryCatch (l, ss, ccs) ->
+    let state = List.fold_left f state ss in
+    List.fold_left (fun state (_, _, _, ss) -> List.fold_left f state ss) state ccs
+  | TryFinally (l, ssb, _, ssf) ->
+    let state = List.fold_left f state ssb in
+    List.fold_left f state ssf
+  | BlockStmt (l, ds, ss, _, _) -> List.fold_left f state ss
+  | PerformActionStmt (l, _, _, _, _, _, _, _, ss, _, _, _) -> List.fold_left f state ss
+  | ProduceLemmaFunctionPointerChunkStmt (l, _, proofo, ssbo) ->
+    let state =
+      match proofo with
+        None -> state
+      | Some (_, _, _, _, _, ss, _) -> List.fold_left f state ss
+    in
+    begin match ssbo with
+      None -> state
+    | Some ss -> f state ss
+    end
+  | ProduceFunctionPointerChunkStmt (l, ftn, fpe, targs, args, params, openBraceLoc, ss, closeBraceLoc) -> List.fold_left f state ss
+  | _ -> state
+
+(* Postfix fold *)
+let stmt_fold f state s =
+  let rec iter state s =
+    let state = stmt_fold_open iter state s in
+    f state s
+  in
+  iter state s
+
+(* Postfix iter *)
+let stmt_iter f s = stmt_fold (fun _ s -> f s) () s
+
 let type_expr_loc t =
   match t with
     ManifestTypeExpr (l, t) -> l
