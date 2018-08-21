@@ -217,7 +217,7 @@ class z3_context () =
     method mk_implies t1 t2 = Z3native.mk_implies ctxt t1 t2
     method mk_eq t1 t2 = Z3native.mk_eq ctxt t1 t2
     method mk_intlit n =
-      if Sys.int_size <= 32 || n land 0xffffffff = n then
+      if -2147483648 <= n && n <= 2147483647 then (* See issue #138 *)
         Z3native.mk_int ctxt n int_type
       else
         Z3native.mk_numeral ctxt (string_of_int n) int_type

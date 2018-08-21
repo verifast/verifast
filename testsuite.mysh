@@ -436,6 +436,7 @@ cd tests
     cd ..
   cd ..
   cd errors
+    verifast -c -prover z3v4.5 int_lit_overflow.c
     verifast_both -c -allow_should_fail basics.c
     verifast_both -c -allow_should_fail typecheck1.c
     verifast_both -c -allow_should_fail ghost_assignment.c
