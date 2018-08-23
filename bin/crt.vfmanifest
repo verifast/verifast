@@ -65,6 +65,7 @@
 .provides ./prelude.h#uchars_split
 .provides ./prelude.h#uchars_join
 .provides ./prelude.h#ints_inv
+.provides ./prelude.h#integers__inv
 .provides ./prelude.h#uints_inv
 .provides ./prelude.h#llongs_inv
 .provides ./prelude.h#ullongs_inv
