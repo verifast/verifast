@@ -105,10 +105,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     consume_chunk rules h [] [] [] l (predSymb, true) [] real_unit dummypat (Some 1) [TermPat p; dummypat] (fun chunk h coef [_; t] size ghostenv env env' ->
       cont h coef t)
     
-  let get_field h t fparent fname l cont =
-    let (_, (_, _, _, _, f_symb, _, _)) = List.assoc (fparent, fname) field_pred_map in
-    get_points_to h t f_symb l cont
-  
+  let get_points_to' h p tpx l cont =
+    consume_points_to_chunk rules h [] [] [] l tpx real_unit dummypat p dummypat $. fun chunk h coef value ghostenv env env' ->
+    cont h coef value
+
   let current_thread_name = "currentThread"
   let current_thread_type = intType
   
@@ -1330,7 +1330,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | Some (Some e) -> eval e
         | None -> get_unique_var_symb "value" tp
       in
-      cont (Chunk ((pointee_pred_symb l tp, true), [], coef, [addr; value], None)::h)
+      produce_points_to_chunk l h tp coef addr value cont
   
   let rec consume_c_object l addr tp h consumePaddingChunk cont =
     match tp with
@@ -1374,7 +1374,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       iter h fields
     | _ ->
-      consume_chunk rules h [] [] [] l (pointee_pred_symb l tp, true) [] real_unit real_unit_pat (Some 1) [TermPat addr; dummypat] $. fun _ h _ _ _ _ _ _ ->
+      consume_points_to_chunk rules h [] [] [] l tp real_unit real_unit_pat addr dummypat $. fun _ h _ _ _ _ _ ->
       cont h
   
   let assume_is_of_type l t tp cont =
@@ -1732,10 +1732,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         None -> has_env_effects(); cont h (update env x w)
       | Some(symb) -> 
           has_heap_effects();
-          let predSymb = pointee_pred_symb l tpx in
-          get_points_to h symb predSymb l (fun h coef _ ->
-            if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a global variable requires full permission." None;
-            cont (Chunk ((predSymb, true), [], real_unit, [symb; w], None)::h) env)
+          get_points_to' h symb tpx l $. fun h coef _ ->
+          if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a global variable requires full permission." None;
+          produce_points_to_chunk l h tpx real_unit symb w $. fun h ->
+          cont h env
     in
     let check_correct h xo g targs args (lg, callee_tparams, tr, ps, funenv, pre, post, epost, terminates, v) is_upcall target_class cont =
       (* check_expr is needed here because args are not typechecked yet. Why does check_expr_t not check the arguments of a WFunCall? *)
@@ -1792,8 +1792,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | LValues.ArrayElement (l, arr, elem_tp, i) when language = CLang ->
         cont h env (read_c_array h env l arr i elem_tp)
       | LValues.Deref (l, target, pointeeType) ->
-        let predSymb = pointee_pred_symb l pointeeType in
-        consume_chunk rules h [] [] [] l (predSymb, true) [] real_unit dummypat (Some 1) [TermPat target; dummypat] $. fun chunk h _ [_; value] _ _ _ _ ->
+        consume_points_to_chunk rules h [] [] [] l pointeeType real_unit dummypat target dummypat $. fun chunk h _ value _ _ _ ->
         cont (chunk::h) env value
     in
     let rec write_lvalue h env lvalue value cont =
@@ -1856,9 +1855,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | LValues.Deref (l, target, pointeeType) ->
         has_heap_effects();
         if pure then static_error l "Cannot write in a pure context." None;
-        let predSymb = pointee_pred_symb l pointeeType in
-        consume_chunk rules h [] [] [] l (predSymb, true) [] real_unit real_unit_pat (Some 1) [TermPat target; dummypat] $. fun _ h _ _ _ _ _ _ ->
-        cont (Chunk ((predSymb, true), [], real_unit, [target; value], None)::h) env
+        consume_points_to_chunk rules h [] [] [] l pointeeType real_unit real_unit_pat target dummypat $. fun _ h _ _ _ _ _ ->
+        produce_points_to_chunk l h pointeeType real_unit target value $. fun h ->
+        cont h env
     in
     let rec execute_assign_op_expr h env lhs get_values cont =
       lhs_to_lvalue h env lhs $. fun h env lvalue ->

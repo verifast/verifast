@@ -205,6 +205,23 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       iter [] h
 
+  let int_rank_and_signedness tp =
+    match tp with
+      Int (signedness, rank) -> Some (rank, signedness)
+    | PtrType _ -> Some (ptr_rank, Unsigned)
+    | _ -> None
+
+  let produce_points_to_chunk l h type_ coef addr value cont =
+    match try_pointee_pred_symb type_ with
+      Some symb ->
+      produce_chunk h (symb, true) [] coef (Some 1) [addr; value] None cont
+    | None ->
+    match int_rank_and_signedness type_ with
+      Some (k, signedness) ->
+      produce_chunk h (integer__symb (), true) [] coef (Some 3) [addr; ctxt#mk_intlit (1 lsl k); mk_bool (signedness = Signed); value] None cont
+    | None ->
+      static_error l (Printf.sprintf "Cannot produce points-to chunk for variable of type '%s'" (string_of_type type_)) None
+
   let rec produce_asn_core_with_post tpenv h ghostenv env p coef size_first size_all (assuming: bool) cont_with_post: symexec_result =
     let cont h env ghostenv = cont_with_post h env ghostenv None in
     let with_context_helper cont =
@@ -237,22 +254,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | WPointsTo (l, WVar (lv, x, GlobalName), tp, rhs) -> 
       let (_, type_, symbn, _) = List.assoc x globalmap in    
       evalpat false ghostenv env rhs tp tp $. fun ghostenv env t ->
-      let symb = 
-        match try_pointee_pred_symb type_ with
-          Some s -> s
-        | _ -> static_error l "A global variable in the left-hand side of a points-to assertion must be of a primitive type" None 
-      in
-      produce_chunk h (symb, true) [] coef (Some 1) [symbn; t] None $. fun h ->
+      produce_points_to_chunk l h type_ coef symbn t $. fun h ->
       cont h ghostenv env
     | WPointsTo (l, WDeref(ld, e, td), tp, rhs) ->  
       let symbn = eval None env e in
       evalpat false ghostenv env rhs tp tp $. fun ghostenv env t ->
-      let symb = 
-        match try_pointee_pred_symb tp with
-          Some s -> s
-        | _ -> static_error l "The left-hand side of this points-to assertion must be of a primitive type" None 
-      in
-      produce_chunk h (symb, true) [] coef (Some 1) [symbn; t] None $. fun h ->
+      produce_points_to_chunk l h tp coef symbn t $. fun h ->
       cont h ghostenv env
     | WPredAsn (l, g, is_global_predref, targs, pats0, pats) ->
       let (g_symb, pats0, pats, types, auto_info) =
@@ -842,6 +849,20 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let srcpat pat = SrcPat pat
   let srcpats pats = List.map srcpat pats
+
+  let consume_points_to_chunk rules h ghostenv env env' l type_ coef coefpat addr rhs cont =
+    match try_pointee_pred_symb type_ with
+      Some symb ->
+      consume_chunk rules h ghostenv env env' l (symb, true) [] coef coefpat (Some 1) [TermPat addr; rhs]
+        (fun chunk h coef [_; value] size ghostenv env env' -> cont chunk h coef value ghostenv env env')
+    | None ->
+    match int_rank_and_signedness type_ with
+      Some (k, signedness) ->
+      consume_chunk rules h ghostenv env env' l (integer__symb (), true) [] coef coefpat (Some 3)
+        [TermPat addr; TermPat (ctxt#mk_intlit (1 lsl k)); TermPat (mk_bool (signedness = Signed)); rhs]
+        (fun chunk h coef [_; _; _; value] size ghostenv env env' -> cont chunk h coef value ghostenv env env')
+    | None ->
+      static_error l (Printf.sprintf "Cannot consume points-to chunk for variable of type '%s'" (string_of_type type_)) None
   
   let rec consume_asn_core_with_post rules tpenv h ghostenv env env' p checkDummyFracs coef cont_with_post =
     let cont chunks h ghostenv env env' size_first = cont_with_post chunks h ghostenv env env' size_first None in
@@ -880,22 +901,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         cont [chunk] h ghostenv env env' size
       | WVar (lv, x, GlobalName) -> 
         let (_, type_, symbn, _) = List.assoc x globalmap in  
-        let symb = 
-          match try_pointee_pred_symb type_ with
-            Some s -> s
-          | _ -> static_error l "A global variable in the left-hand side of a points-to assertion must be of a primitive type" None
-        in
-        consume_chunk rules h ghostenv env env' l (symb, true) [] coef coefpat (Some 1) [TermPat symbn; rhs]
-          (fun chunk h coef ts size ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' size)
+        consume_points_to_chunk rules h ghostenv env env' l type_ coef coefpat symbn rhs
+          (fun chunk h coef value ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' None)
       | WDeref(ld, e, td) ->  
         let symbn = eval None env e in
-        let symb = 
-          match try_pointee_pred_symb td with
-            Some s -> s
-          | _ -> static_error l "The left-hand side of this points-to assertion must be of a primitive type" None
-        in
-        consume_chunk rules h ghostenv env env' l (symb, true) [] coef coefpat (Some 1) [TermPat symbn; rhs]
-          (fun chunk h coef ts size ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' size)
+        consume_points_to_chunk rules h ghostenv env env' l td coef coefpat symbn rhs
+          (fun chunk h coef value ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' None)
     in
     let pred_asn l coefpat g is_global_predref targs pats0 pats =
       let (g_symb, pats0, pats, types) =

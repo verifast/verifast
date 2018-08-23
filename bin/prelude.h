@@ -32,6 +32,8 @@ predicate u_short_integer(unsigned short *p; unsigned short v);
 
 predicate pointer(void **pp; void *p);
 
+predicate integer_(void *p, int size, bool signed_; int v);
+
 lemma void character_limits(char *pc);
     requires [?f]character(pc, ?c);
     ensures [f]character(pc, c) &*& pc > (char *)0 &*& pc < (char *)UINTPTR_MAX &*& -128 <= c &*& c <= 127;
