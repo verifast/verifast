@@ -64,6 +64,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let sizeType = Int (Unsigned, ptr_rank)
   let ptrdiff_t = Int (Signed, ptr_rank)
 
+  let int_rank_and_signedness tp =
+    match tp with
+      Int (signedness, rank) -> Some (rank, signedness)
+    | PtrType _ -> Some (ptr_rank, Unsigned)
+    | _ -> None
+
   let verbosity = ref 0
   
   let set_verbosity v =
@@ -3998,13 +4004,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | StaticArrayType (t, _) -> t
           | _ -> static_error lread "Array in array dereference must be of pointer type." None
         in
-        let (pointee_pred_name, pointee_pred_symb, array_pred_name, array_pred_symb, _, _) =
-          match try_pointee_pred_symb0 elemtype with
-            Some info -> info
-          | None -> static_error l ("Only arrays whose element type is "^supported_types_text^" are currently supported here.") None
-        in
         let (wrhs, tenv) = check_pat (pn,ilist) tparams tenv (list_type elemtype) rhs in
-        let p = new predref array_pred_name [PtrType elemtype; intType; list_type elemtype] (Some 2) in
         let wfirst, wlength =
           match wstart, wend with
             None, Some wend -> warray, wend
@@ -4014,7 +4014,18 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             LitPat (WOperation (lslice, Sub, [wend; wstart], intType))
           | _ -> static_error l "Malformed array assertion." None
         in
-        (WPredAsn (l, p, true, [], [], [LitPat wfirst; wlength; wrhs]), tenv, [])
+        begin match try_pointee_pred_symb0 elemtype with
+          Some (pointee_pred_name, pointee_pred_symb, array_pred_name, array_pred_symb, _, _) ->
+          let p = new predref array_pred_name [PtrType elemtype; intType; list_type elemtype] (Some 2) in
+          (WPredAsn (l, p, true, [], [], [LitPat wfirst; wlength; wrhs]), tenv, [])
+        | None ->
+        match int_rank_and_signedness elemtype with
+          Some (k, signedness) ->
+          let p = new predref "integers_" [PtrType Void; intType; Bool; intType; list_type elemtype] (Some 4) in
+          (WPredAsn (l, p, true, [], [], [LitPat wfirst; LitPat (WIntLit (l, big_int_of_int (1 lsl k))); LitPat (if signedness = Signed then True l else False l); wlength; wrhs]), tenv, [])
+        | None ->
+          static_error l (Printf.sprintf "Array points-to notation is not supported for element type '%s'" (string_of_type elemtype)) None
+        end
       | Java ->
         let elemtype =
           match tarray with

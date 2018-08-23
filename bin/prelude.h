@@ -354,6 +354,15 @@ lemma_auto void pointers_to_chars(void *pp);
     requires [?f]pointers(pp, ?n, ?ps) &*& true;
     ensures [f]chars(pp, n * sizeof(void *), chars_of_pointers(ps)) &*& pointers_of_chars(chars_of_pointers(ps)) == ps;
 
+predicate integers_(void *p, int size, bool signed_, int count; list<int> vs) =
+    count == 0 ?
+        vs == nil
+    :
+        integer_(p, size, signed_, ?v0) &*& integers_(p + size, size, signed_, count - 1, ?vs0) &*& vs == cons(v0, vs0);
+
+lemma_auto void integers__inv();
+    requires [?f]integers_(?p, ?size, ?signed_, ?count, ?vs);
+    ensures [f]integers_(p, size, signed_, count, vs) &*& length(vs) == count &*& 0 <= (uintptr_t)p &*& (uintptr_t)p <= UINTPTR_MAX;
 
 predicate divrem(int D, int d; int q, int r); // Rounds towards negative infinity, unlike C integer division and remainder.
 

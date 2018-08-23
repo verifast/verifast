@@ -205,12 +205,6 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       iter [] h
 
-  let int_rank_and_signedness tp =
-    match tp with
-      Int (signedness, rank) -> Some (rank, signedness)
-    | PtrType _ -> Some (ptr_rank, Unsigned)
-    | _ -> None
-
   let produce_points_to_chunk l h type_ coef addr value cont =
     match try_pointee_pred_symb type_ with
       Some symb ->
