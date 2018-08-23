@@ -177,6 +177,10 @@ lemma_auto void chars_to_pointer(void *p);
     requires [?f]chars(p, sizeof(void *), ?cs);
     ensures [f]pointer(p, pointer_of_chars(cs));
 
+lemma_auto void chars_to_integer_(void *p, int size, bool signed_);
+    requires [?f]chars(p, size, ?cs);
+    ensures [f]integer_(p, size, signed_, _);
+
 // ... to chars
 lemma_auto void integer_to_chars(void *p);
     requires [?f]integer(p, ?i);
@@ -197,6 +201,10 @@ lemma_auto void u_short_integer_to_chars(void *p);
 lemma_auto void pointer_to_chars(void *p);
     requires [?f]pointer(p, ?v);
     ensures [f]chars(p, sizeof(void *), chars_of_pointer(v));
+
+lemma_auto void integer__to_chars(void *p, int size, bool signed_);
+    requires [?f]integer_(p, size, signed_, ?v);
+    ensures [f]chars(p, size, _);
 
 // u_character to/from character
 lemma_auto void u_character_to_character(void *p);
