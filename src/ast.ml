@@ -143,19 +143,12 @@ let is_arithmetic_type t =
 
 type prover_type = ProverInt | ProverBool | ProverReal | ProverInductive (* ?prover_type *)
 
-(** An object used in predicate assertion ASTs. Created by the parser and filled in by the type checker.
-    TODO: Since the type checker now generates a new AST anyway, we can eliminate this hack. *)
-class predref (name: string) = (* ?predref *)
+class predref (name: string) (domain: type_ list) (inputParamCount: int option) = (* ?predref *)
   object
-    val mutable tparamcount: int option = None  (* Number of type parameters. *)
-    val mutable domain: type_ list option = None  (* Parameter types. *)
-    val mutable inputParamCount: int option option = None  (* Number of input parameters, or None if the predicate is not precise. *)
     method name = name
-    method domain = match domain with None -> assert false | Some d -> d
-    method inputParamCount = match inputParamCount with None -> assert false | Some c -> c
-    method set_domain d = domain <- Some d
-    method set_inputParamCount c = inputParamCount <- Some c
-    method is_precise = match inputParamCount with None -> assert false; | Some None -> false | Some (Some _) -> true 
+    method domain = domain
+    method inputParamCount = inputParamCount
+    method is_precise = match inputParamCount with None -> false | Some _ -> true 
   end
 
 type
