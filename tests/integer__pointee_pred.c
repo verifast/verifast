@@ -31,6 +31,15 @@ void bar(int32_t *p)
     (*p)++; p++;
 }
 
+void baz(int32_t *p)
+//@ requires p[..3] |-> {10, 20, 30};
+//@ ensures p[..3] |-> {11, 21, 31};
+{
+    p[0] = 11;
+    p[1] = 21;
+    p[2] = 31;
+}
+
 void foo3(int32_t *p1, int128_t *p2)
 //@ requires p1 == (void *)p2 &*& [1/2]*p1 |-> _ &*& [1/2]*p2 |-> _;
 //@ ensures *p1 |-> _; //~ should_fail

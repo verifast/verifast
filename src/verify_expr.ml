@@ -1825,14 +1825,19 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | LValues.ArrayElement (l, arr, elem_tp, i) when language = CLang ->
         has_heap_effects();
         if pure then static_error l "Cannot write in a pure context." None;
-        let predSymb, arrayPredSymb =
-          match try_pointee_pred_symb0 elem_tp with
-            Some (_, psymb, _, asymb, _, _) -> psymb, asymb
-          | None -> static_error l ("Dereferencing array elements of type "^string_of_type elem_tp^" is not yet supported.") None
+        let consume_elem () =
+          let target = ctxt#mk_add arr (ctxt#mk_mul i (sizeof l elem_tp)) in
+          consume_points_to_chunk rules h [] [] [] l elem_tp real_unit real_unit_pat target dummypat $. fun _ h _ _ _ _ _ ->
+          produce_points_to_chunk l h elem_tp real_unit target value $. fun h ->
+          cont h env
         in
+        begin match try_pointee_pred_symb0 elem_tp with
+        | None ->
+          consume_elem ()
+        | Some (_, _, _, arrayPredSymb, _, _) ->
         let arrayPredSymb1 = (arrayPredSymb, true) in
         let h0 = h in
-        begin match h |> extract begin function
+        match h |> extract begin function
           Chunk (g, [], coef, [arr'; size'; elems'], _) as c
             when
               predname_eq g arrayPredSymb1 &&
@@ -1847,9 +1852,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let updated = mk_app update_symb [i; apply_conversion (provertype_of_type elem_tp) ProverInductive value; vs] in
           cont (Chunk (arrayPredSymb1, [], real_unit, [a; n; updated], None) :: h) env
         | None ->
-          let target = ctxt#mk_add arr (ctxt#mk_mul i (sizeof l elem_tp)) in
-          consume_chunk rules h [] [] [] l (predSymb, true) [] real_unit real_unit_pat (Some 1) [TermPat target; dummypat] $. fun _ h _ _ _ _ _ _ ->
-          cont (Chunk ((predSymb, true), [], real_unit, [target; value], None)::h) env
+          consume_elem ()
         end
       | LValues.Deref (l, target, pointeeType) ->
         has_heap_effects();
