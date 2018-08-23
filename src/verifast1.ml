@@ -4044,10 +4044,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | PredAsn (l, p, targs, ps0, ps) ->
       let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
       begin fun cont ->
-         match try_assoc p#name tenv |> option_map unfold_inferred_type with
-           Some (PredType (callee_tparams, ts, inputParamCount, inductiveness)) -> cont (new predref (p#name), false, callee_tparams, [], ts, inputParamCount)
+         match try_assoc p tenv |> option_map unfold_inferred_type with
+           Some (PredType (callee_tparams, ts, inputParamCount, inductiveness)) -> cont (new predref p, false, callee_tparams, [], ts, inputParamCount)
          | None | Some _ ->
-          begin match resolve Ghost (pn,ilist) l p#name predfammap with
+          begin match resolve Ghost (pn,ilist) l p predfammap with
             Some (pname, (_, callee_tparams, arity, xs, _, inputParamCount, inductiveness)) ->
             let ts0 = match file_type path with
               Java-> list_make arity (ObjType "java.lang.Class")
@@ -4056,20 +4056,20 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             cont (new predref pname, true, callee_tparams, ts0, xs, inputParamCount)
           | None ->
             begin match
-              match try_assoc p#name predctormap1 with
+              match try_assoc p predctormap1 with
                 Some (l, ps1, ps2, inputParamCount, body, funcsym, pn, ilist) -> Some (ps1, ps2, inputParamCount)
               | None ->
-              match try_assoc p#name predctormap0 with
+              match try_assoc p predctormap0 with
                 Some (PredCtorInfo (l, ps1, ps2, inputParamCount, body, funcsym)) -> Some (ps1, ps2, inputParamCount)
               | None -> None
             with
               Some (ps1, ps2, inputParamCount) ->
-              cont (new predref (p#name), true, [], List.map snd ps1, List.map snd ps2, inputParamCount)
+              cont (new predref p, true, [], List.map snd ps1, List.map snd ps2, inputParamCount)
             | None ->
               let error () = 
-                begin match try_assoc p#name tenv with
-                  None ->  static_error l ("No such predicate: " ^ p#name) None 
-                | Some _ -> static_error l ("Variable " ^ p#name ^ " is not of predicate type.") None 
+                begin match try_assoc p tenv with
+                  None ->  static_error l ("No such predicate: " ^ p) None 
+                | Some _ -> static_error l ("Variable " ^ p ^ " is not of predicate type.") None 
                 end
               in
               begin match try_assoc "this" tenv with
@@ -4085,9 +4085,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     else
                       get_class_of_this
                   in
-                  (WInstPredAsn (l, None, cn, get_class_finality cn, family, p#name, index, wps), tenv, [])
+                  (WInstPredAsn (l, None, cn, get_class_finality cn, family, p, index, wps), tenv, [])
                 in
-                check_inst_pred_asn l cn p#name check_call error
+                check_inst_pred_asn l cn p check_call error
               | Some(_) -> error ()
               end
             end
@@ -4219,7 +4219,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | e ->
       let a =
         match e with
-        | CallExpr (l, g, targs, pats0, pats, Static) -> PredAsn (l, new predref g, targs, pats0, pats)
+        | CallExpr (l, g, targs, pats0, pats, Static) -> PredAsn (l, g, targs, pats0, pats)
         | CallExpr (l, g, [], pats0, LitPat e::pats, Instance) ->
           let index =
             match pats0 with

@@ -321,7 +321,7 @@ and
       pat
   | PredAsn of (* Predicate assertion, before type checking *)
       loc *
-      predref *
+      string *
       type_expr list *
       pat list (* indices of predicate family instance *) *
       pat list

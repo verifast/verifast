@@ -421,9 +421,9 @@ let rec sexpr_of_pred (asn : asn) : sexpression =
            ; sexpr_of_expr expr
            ; sexpr_of_pred thenp
            ; sexpr_of_pred elsep ]
-    | PredAsn (loc, predref, types, indices, patterns) ->
+    | PredAsn (loc, p, types, indices, patterns) ->
       build_list [ Symbol "pred-call-predicate"
-                 ; Symbol predref#name ]
+                 ; Symbol p ]
                  [ "types", List (List.map sexpr_of_type_expr types)
                  ; "indices", List (List.map sexpr_of_pat indices)
                  ; "arguments", List (List.map sexpr_of_pat patterns) ]
