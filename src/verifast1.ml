@@ -405,6 +405,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let max_rank = 4 (* (u)int128 *)
 
+  let rank_size_terms_table = Array.init (max_rank + 1) (fun k -> ctxt#mk_intlit (1 lsl k))
+
+  let rank_size_term k = rank_size_terms_table.(k)
+
   let integer_limits_table =
     Array.init (max_rank + 1) begin fun k ->
       let max_unsigned_big_int = pred_big_int (shift_left_big_int unit_big_int (8 * (1 lsl k))) in
@@ -4590,7 +4594,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let rec sizeof l t =
     match t with
       Void -> ctxt#mk_intlit 1
-    | Int (_, k) -> ctxt#mk_intlit (1 lsl k)
+    | Int (_, k) -> rank_size_term k
     | PtrType _ -> ctxt#mk_intlit (1 lsl ptr_rank)
     | StructType sn -> struct_size l sn
     | StaticArrayType (elemTp, elemCount) -> ctxt#mk_mul (sizeof l elemTp) (ctxt#mk_intlit elemCount)

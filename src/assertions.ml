@@ -212,7 +212,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | None ->
     match int_rank_and_signedness type_ with
       Some (k, signedness) ->
-      produce_chunk h (integer__symb (), true) [] coef (Some 3) [addr; ctxt#mk_intlit (1 lsl k); mk_bool (signedness = Signed); value] None cont
+      produce_chunk h (integer__symb (), true) [] coef (Some 3) [addr; rank_size_term k; mk_bool (signedness = Signed); value] None cont
     | None ->
       static_error l (Printf.sprintf "Cannot produce points-to chunk for variable of type '%s'" (string_of_type type_)) None
 
@@ -424,7 +424,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let match_terms v t =
       if
         if tp = Bool then
-          ctxt#query (ctxt#mk_iff v t)
+          v == t || ctxt#query (ctxt#mk_iff v t)
         else
           definitely_equal v t
       then
@@ -853,7 +853,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match int_rank_and_signedness type_ with
       Some (k, signedness) ->
       consume_chunk rules h ghostenv env env' l (integer__symb (), true) [] coef coefpat (Some 3)
-        [TermPat addr; TermPat (ctxt#mk_intlit (1 lsl k)); TermPat (mk_bool (signedness = Signed)); rhs]
+        [TermPat addr; TermPat (rank_size_term k); TermPat (mk_bool (signedness = Signed)); rhs]
         (fun chunk h coef [_; _; _; value] size ghostenv env env' -> cont chunk h coef value ghostenv env env')
     | None ->
       static_error l (Printf.sprintf "Cannot consume points-to chunk for variable of type '%s'" (string_of_type type_)) None
