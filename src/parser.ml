@@ -1624,7 +1624,7 @@ let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (report
       let text = readFile path in
       make_lexer (common_keywords @ c_keywords) ghost_keywords path text reportRange ~inGhostRange reportShouldFail
     in
-    let (loc, ignore_eol, token_stream) = make_preprocessor make_lexer path verbose include_paths define_macros in
+    let (loc, ignore_eol, token_stream) = make_preprocessor make_lexer path verbose include_paths dataModel define_macros in
     let parse_c_file =
       parser
         [< (headers, _) = parse_include_directives ignore_eol verbose enforceAnnotations dataModel; 
@@ -1649,7 +1649,7 @@ let parse_header_file (path: string) (reportRange: range_kind -> loc -> unit) (r
       let text = readFile path in
       make_lexer (common_keywords @ c_keywords) ghost_keywords path text reportRange ~inGhostRange:inGhostRange reportShouldFail
     in
-    let (loc, ignore_eol, token_stream) = make_preprocessor make_lexer path verbose include_paths define_macros in
+    let (loc, ignore_eol, token_stream) = make_preprocessor make_lexer path verbose include_paths dataModel define_macros in
     let p = parser
       [< (headers, _) = parse_include_directives ignore_eol verbose enforceAnnotations dataModel; 
          ds = parse_decls CLang dataModel enforceAnnotations ~inGhostHeader:isGhostHeader; 

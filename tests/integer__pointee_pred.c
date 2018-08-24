@@ -1,5 +1,9 @@
 #include <stdint.h>
 
+#if UINT_MAX != UINT16_MAX || UINTPTR_MAX != UINT16_MAX
+  #error This file assumes a 16-bit architecture
+#endif
+
 void foo1(int32_t *p1, int128_t *p2)
 //@ requires [1/2]*p1 |-> 10 &*& [1/2]*p2 |-> 20;
 //@ ensures [1/2]*p1 |-> 10 &*& [1/2]*p2 |-> 20;

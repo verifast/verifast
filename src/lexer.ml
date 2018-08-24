@@ -893,6 +893,8 @@ class tentative_lexer (lloc:unit -> loc) (lignore_eol:bool ref) (lstream:(loc * 
   end
 
 (* Mini parser which is a subset of Parser.parse_decls_core *)
+let parse_operators dataModel =
+let {int_rank; long_rank; ptr_rank} = dataModel in
 let rec
   parse_operators stream = parse_disj_expr stream
 and
@@ -936,6 +938,17 @@ and
 | [< '(l, Int (n, dec, usuffix, lsuffix)) >] -> IntLit (l, n, dec, usuffix, lsuffix)
 | [< '(l, Kwd "("); e0 = parse_operators; '(_, Kwd ")"); e = parse_operators_rest e0 >] -> e
 | [< '(l, Kwd "!"); e = parse_expr_suffix >] -> Operation(l, Not, [e])
+| [< '(l, Kwd "INT_MIN") >] -> IntLit (l, min_signed_big_int int_rank, true, false, NoLSuffix)
+| [< '(l, Kwd "INT_MAX") >] -> IntLit (l, max_signed_big_int int_rank, true, false, NoLSuffix)
+| [< '(l, Kwd "UINTPTR_MAX") >] -> IntLit (l, max_unsigned_big_int ptr_rank, true, true, NoLSuffix)
+| [< '(l, Kwd "UCHAR_MAX") >] -> IntLit (l, big_int_of_string "255", true, false, NoLSuffix)
+| [< '(l, Kwd "SHRT_MIN") >] -> IntLit (l, big_int_of_string "-32768", true, false, NoLSuffix)
+| [< '(l, Kwd "SHRT_MAX") >] -> IntLit (l, big_int_of_string "32767", true, false, NoLSuffix)
+| [< '(l, Kwd "USHRT_MAX") >] -> IntLit (l, big_int_of_string "65535", true, false, NoLSuffix)
+| [< '(l, Kwd "UINT_MAX") >] -> IntLit (l, max_unsigned_big_int int_rank, true, true, NoLSuffix)
+| [< '(l, Kwd "LLONG_MIN") >] -> IntLit (l, big_int_of_string "-9223372036854775808", true, false, NoLSuffix)
+| [< '(l, Kwd "LLONG_MAX") >] -> IntLit (l, big_int_of_string "9223372036854775807", true, false, NoLSuffix)
+| [< '(l, Kwd "ULLONG_MAX") >] -> IntLit (l, big_int_of_string "18446744073709551615", true, true, NoLSuffix)
 and
   parse_expr_mul_rest e0 = parser
   [< '(l, Kwd "*"); e1 = parse_expr_suffix; e = parse_expr_mul_rest (Operation (l, Mul, [e0; e1])) >] -> e
@@ -981,6 +994,8 @@ and
   parse_disj_expr_rest e0 = parser
   [< '(l, Kwd "||"); e1 = parse_conj_expr; e = parse_disj_expr_rest (Operation (l, Or, [e0; e1])) >] -> e
 | [< >] -> e0
+in
+parse_operators
 
 (* Evaluator for operators *)
 let rec eval_operators e =
@@ -1028,7 +1043,7 @@ let rec eval_operators e =
      if Int64.compare (eval_operators e0) Int64.zero = 0
      then Int64.one else Int64.zero
 
-let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_ghost_range define_macros =
+let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_ghost_range dataModel define_macros =
   let macros = ref [Hashtbl.create 10] in
   List.iter
     (fun x -> Hashtbl.replace (List.hd !macros) x (dummy_loc, None, [(dummy_loc, Int (unit_big_int, false, false, NoLSuffix))]))
@@ -1166,7 +1181,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
     oneline_macro := true;
     let condition = macro_expand [] condition in
     oneline_macro := false;
-    let condition = parse_operators (Stream.of_list condition) in
+    let condition = parse_operators dataModel (Stream.of_list condition) in
     let condition = eval_operators condition in
     let isTrue = Int64.compare condition Int64.zero <> 0 in
     if isTrue then () else skip_branch ()
@@ -1464,7 +1479,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
   in
   (next_token, fun _ -> !last_macro_used)
 
-let make_sound_preprocessor make_lexer path verbose include_paths define_macros =
+let make_sound_preprocessor make_lexer path verbose include_paths dataModel define_macros =
   if verbose = -1 then Printf.printf "%10.6fs: >> start preprocessing file: %s\n" (Perf.time()) path;
   let tlexers = ref [] in
   let curr_tlexer = ref (new tentative_lexer (fun () -> dummy_loc) (ref false) (Stream.of_list [])) in
@@ -1504,8 +1519,8 @@ let make_sound_preprocessor make_lexer path verbose include_paths define_macros 
     macros2
   in
   let current_loc () = !curr_tlexer#loc() in
-  let (p_next,last_macro_used) = make_plugin_preprocessor p_begin_include p_end_include curr_tlexer (List.hd !p_in_ghost_range) define_macros in
-  let (cfp_next,_) = make_plugin_preprocessor cfp_begin_include cfp_end_include curr_tlexer (List.hd !cfp_in_ghost_range) define_macros in
+  let (p_next,last_macro_used) = make_plugin_preprocessor p_begin_include p_end_include curr_tlexer (List.hd !p_in_ghost_range) dataModel define_macros in
+  let (cfp_next,_) = make_plugin_preprocessor cfp_begin_include cfp_end_include curr_tlexer (List.hd !cfp_in_ghost_range) dataModel define_macros in
   let divergence l s = 
     pop_tlexer();
     raise (PreprocessorDivergence (l , s))    
@@ -1613,5 +1628,5 @@ let make_sound_preprocessor make_lexer path verbose include_paths define_macros 
   in
   ((fun () -> current_loc()), ref true, Stream.from (fun _ -> next_token ()))
 
-let make_preprocessor make_lexer path verbose include_paths define_macros =
-  make_sound_preprocessor make_lexer path verbose include_paths define_macros
+let make_preprocessor make_lexer path verbose include_paths dataModel define_macros =
+  make_sound_preprocessor make_lexer path verbose include_paths dataModel define_macros
