@@ -40,6 +40,14 @@ void baz(int32_t *p)
     p[2] = 31;
 }
 
+void quux()
+//@ requires true;
+//@ ensures true;
+{
+    uint32_t xs[3] = {444, 333, 222};
+    //@ assert xs[..3] |-> {444, 333, 222};
+}
+
 void foo3(int32_t *p1, int128_t *p2)
 //@ requires p1 == (void *)p2 &*& [1/2]*p1 |-> _ &*& [1/2]*p2 |-> _;
 //@ ensures *p1 |-> _; //~ should_fail

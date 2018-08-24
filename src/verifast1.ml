@@ -3934,6 +3934,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let array_slice_deep_symb = lazy_predfamsymb "java.lang.array_slice_deep"
   
   let integer__symb = lazy_predfamsymb "integer_"
+  let integers__symb = lazy_predfamsymb "integers_"
 
   let pointee_tuple chunk_pred_name array_pred_name =
     let array_malloc_block_pred_name = "malloc_block_" ^ array_pred_name in

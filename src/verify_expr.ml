@@ -1233,7 +1233,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let length = ctxt#mk_intlit elemCount in
           assume_eq (mk_length elems) length $. fun () ->
           cont (Chunk ((arrayPredSymb, true), [], coef, [addr; length; elems], None)::h)
-        | None -> (* Produce a character array of the correct size *)
+        | None ->
+        match int_rank_and_signedness elemTp with
+          Some (k, signedness) ->
+          let length = ctxt#mk_intlit elemCount in
+          assume_eq (mk_length elems) length $. fun () ->
+          cont (Chunk ((integers__symb (), true), [], coef, [addr; ctxt#mk_intlit (1 lsl k); mk_bool (signedness = Signed); length; elems], None)::h)
+        | None ->
+          (* Produce a character array of the correct size *)
           produce_char_array_chunk h addr elemCount
       in
       begin match elemTp, init with
@@ -1338,6 +1345,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         Some (_, _, _, arrayPredSymb, _, _) ->
         let pats = [TermPat addr; TermPat (ctxt#mk_intlit elemCount); dummypat] in
         consume_chunk rules h [] [] [] l (arrayPredSymb, true) [] real_unit real_unit_pat (Some 2) pats $. fun _ h _ _ _ _ _ _ ->
+        cont h
+      | None ->
+      match int_rank_and_signedness elemTp with
+        Some (k, signedness) ->
+        let pats = [TermPat addr; TermPat (ctxt#mk_intlit (1 lsl k)); TermPat (mk_bool (signedness = Signed)); TermPat (ctxt#mk_intlit elemCount); dummypat] in
+        consume_chunk rules h [] [] [] l (integers__symb (), true) [] real_unit real_unit_pat (Some 4) pats $. fun _ h _ _ _ _ _ _ ->
         cont h
       | None ->
         let pats = [TermPat addr; TermPat (sizeof l tp); dummypat] in
