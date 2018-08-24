@@ -351,6 +351,22 @@ lemma_auto void uints_to_chars(void *p);
     requires [?f]uints(p, ?n, _);
     ensures [f]chars(p, n * sizeof(unsigned int), _);
 
+lemma_auto void chars_to_integers_(void *p, int size, bool signed_, int n);
+    requires [?f]chars(p, n * size, _);
+    ensures [f]integers_(p, size, signed_, n, _);
+
+lemma_auto void integers__to_chars(void *p);
+    requires [?f]integers_(p, ?size, ?signed_, ?n, _);
+    ensures [f]chars(p, n * size, _);
+
+lemma_auto void uchars_to_integers_(void *p, int size, bool signed_, int n);
+    requires [?f]uchars(p, n * size, _);
+    ensures [f]integers_(p, size, signed_, n, _);
+
+lemma_auto void integers__to_uchars(void *p);
+    requires [?f]integers_(p, ?size, ?signed_, ?n, _);
+    ensures [f]uchars(p, n * size, _);
+
 fixpoint list<void *> pointers_of_chars(list<char> cs);
 fixpoint list<char> chars_of_pointers(list<void *> ps);
 
