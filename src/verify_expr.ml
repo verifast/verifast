@@ -1844,9 +1844,36 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           produce_points_to_chunk l h elem_tp real_unit target value $. fun h ->
           cont h env
         in
+        let write_integer__array_element () =
+          match int_rank_and_signedness elem_tp with
+            Some (k, signedness) ->
+            let integers__symb = (integers__symb (), true) in
+            let size = rank_size_term k in
+            let signed = mk_bool (signedness = Signed) in
+            let h0 = h in
+            begin match h |> extract begin function
+              Chunk (g, [], coef, [arr'; size'; signed'; count'; elems'], _) as c
+                when
+                  predname_eq g integers__symb &&
+                  definitely_equal arr' arr &&
+                  definitely_equal size' size &&
+                  definitely_equal signed' signed &&
+                  ctxt#query (ctxt#mk_and (ctxt#mk_le int_zero_term i) (ctxt#mk_lt i count')) ->
+                  Some c
+            | _ -> None
+            end with
+            | Some (Chunk (_, _, coef, [arr'; size'; signed'; count'; vs], _), h) ->
+              if not (definitely_equal coef real_unit) then assert_false h0 env l "Assignment requires full permission." None;
+              let (_, _, _, _, update_symb) = List.assoc "update" purefuncmap in
+              let updated = mk_app update_symb [i; apply_conversion (provertype_of_type elem_tp) ProverInductive value; vs] in
+              cont (Chunk (integers__symb, [], real_unit, [arr'; size'; signed'; count'; updated], None)::h) env
+            | None ->
+              consume_elem()
+            end
+          | None -> consume_elem ()
+        in
         begin match try_pointee_pred_symb0 elem_tp with
-        | None ->
-          consume_elem ()
+        | None -> write_integer__array_element ()
         | Some (_, _, _, arrayPredSymb, _, _) ->
         let arrayPredSymb1 = (arrayPredSymb, true) in
         let h0 = h in
