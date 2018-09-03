@@ -173,10 +173,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     push (Node (SuccessNode, ref [])) !currentForest;
     success ()
 
-  let push_context msg =
+  let push_context ?(verbosity_level=1) msg =
     contextStack := msg::!contextStack;
     begin match msg with
       Executing (h, env, l, msg) ->
+      if !verbosity >= verbosity_level then printff "%10.6fs: %s: %s\n" (Perf.time ()) (string_of_loc l) msg;
       push_node l msg
     | _ -> ()
     end
@@ -195,10 +196,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     pop_contextStack ();
     result
   
-  let with_context msg cont =
+  let with_context ?(verbosity_level=1) msg cont =
     !stats#execStep;
     push_contextStack ();
-    push_context msg;
+    push_context ~verbosity_level msg;
     let result =
       if !targetPath <> Some [] then
         cont()

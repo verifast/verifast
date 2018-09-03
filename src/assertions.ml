@@ -222,8 +222,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match p with
         Sep (_, _, _) -> cont()
       | _ ->
-        if !verbosity >= 2 then Printf.printf "%10.6fs: %s: Producing assertion\n" (Perf.time()) (string_of_loc (asn_loc p));
-        with_context (Executing (h, env, asn_loc p, "Producing assertion")) cont
+        with_context ~verbosity_level:2 (Executing (h, env, asn_loc p, "Producing assertion")) cont
     in
     with_context_helper (fun _ ->
     let ev = eval None env in
@@ -914,8 +913,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match p with
         Sep (_, _, _) -> cont()
       | _ ->
-        if !verbosity >= 2 then Printf.printf "%10.6fs: %s: Consuming assertion\n" (Perf.time()) (string_of_loc (asn_loc p));
-        with_context (Executing (h, env, asn_loc p, "Consuming assertion")) cont
+        with_context ~verbosity_level:2 (Executing (h, env, asn_loc p, "Consuming assertion")) cont
     in
     with_context_helper (fun _ ->
     let ev = eval None env in
