@@ -49,11 +49,13 @@ and ['tag] row context own c =
     val mutable owner: 'tag unknown = own
     val mutable constant: num = c
     val mutable terms: ('tag column * 'tag coeff) list = []
+    val mutable closed: bool = false
 
     method print =
       owner#print ^ " = " ^ string_of_num constant ^ " + " ^ String.concat " + " (List.map (fun (col, coef) -> string_of_num coef#value ^ "*" ^ col#owner#print) terms)
     method constant = constant
     method owner = owner
+    method closed = closed
     method set_owner u =
       let oldowner = owner in
       context#register_popaction (fun () -> owner <- oldowner);
@@ -87,7 +89,13 @@ and ['tag] row context own c =
         )
         terms
     
+    method try_close =
+      if sign_num constant = 0 && List.for_all (fun (col, coef) -> col#dead || sign_num coef#value = 0 || col#owner#restricted && sign_num coef#value < 0) terms then self#close
+    
     method close =
+      assert (not closed);
+      context#register_popaction (fun () -> closed <- false);
+      closed <- true;
       List.iter (fun (col, coef) -> if not col#dead && sign_num coef#value < 0 then col#die) terms
     
     method live_terms =
@@ -160,7 +168,8 @@ and ['tag] column context own =
       begin
       if owner#tag <> None then
         context#propagate_eq_constant owner (num_of_int 0);
-      List.iter (fun (row, coef) -> if (row#owner#tag <> None || row#owner#nonzero) && sign_num coef#value <> 0 then row#propagate_eq) terms
+      List.iter (fun (row, coef) -> if (row#owner#tag <> None || row#owner#nonzero) && sign_num coef#value <> 0 then row#propagate_eq) terms;
+      List.iter (fun (row, coef) -> if row#owner#restricted && not row#closed && sign_num coef#value > 0 then row#try_close) terms
       end
   end
 and ['tag] simplex () =
