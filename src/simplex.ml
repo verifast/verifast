@@ -355,7 +355,8 @@ type 'tag simplex0 = <
   assert_ge: Num.num -> (Num.num * 'tag unknown) list -> result;
   assert_eq: Num.num -> (Num.num * 'tag unknown) list -> result;
   assert_neq: Num.num -> (Num.num * 'tag unknown) list -> result;
-  get_ticks: int64
+  get_ticks: int64;
+  print: string
 >
 
 let print_unknown u = u#print
