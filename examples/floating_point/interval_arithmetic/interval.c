@@ -360,9 +360,9 @@ double double_mult_lower_bound(struct interval *first, struct interval *second)
     //@ open pos_interval_pred(first,x1);
     //@ open pos_interval_pred(second,x2);
     //@ real_of_int_lemma_UNSAFE(0,0);
-    //@ assert first->a |-> ?fa;
+    //@ assert first->a |-> ?fa &*& fp_of_double(fa) == real_double(?rfa);
     //@ assert first->b |-> ?fb;
-    //@ assert second->a |-> ?sa;
+    //@ assert second->a |-> ?sa &*& fp_of_double(sa) == real_double(?rsa);
     //@ assert second->b |-> ?sb;
     
     double l = first->a * second->a;
@@ -376,10 +376,6 @@ double double_mult_lower_bound(struct interval *first, struct interval *second)
     //@ assert is_real_double(fa) || fp_of_double(fa) == pos_inf;
     /*@
 
-    switch (fp_of_double(fa)){
-        case real_double(rfa):
-            switch (fp_of_double(sa)){
-                case real_double(rsa):
                     if (fp_of_double(l) == pos_inf){
                         assert real_mult_gt(rfa,rsa,max_dbl) == true;
                         real_mult_gt_lemma(rfa,rsa,max_dbl);
@@ -438,15 +434,6 @@ double double_mult_lower_bound(struct interval *first, struct interval *second)
                         }
                         
                     }
-                case pos_inf: assert false;
-                case neg_inf: assert false;
-                case NaN: assert false;
-            }
-        case pos_inf: assert false;
-        case neg_inf: assert false;
-        case NaN: assert false;
-    
-    }
     @*/
     //@ assert is_pos_double(fp_of_double(ra)) == true;
     //@ assert leq_double_real(fp_of_double(ra), x1 * x2) == true;
