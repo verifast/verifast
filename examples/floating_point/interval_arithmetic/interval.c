@@ -1,15 +1,13 @@
-#ifndef INTERVAL_H
-#define INTERVAL_H
 #include "stdlib.h"
 #include "interval_math.h"
-
-
 
 struct interval {
     double a;
     double b;
 };
+
 /*@
+
 fixpoint bool leq_double_real(fp_double a, real x){
     switch (a) {
     	case real_double(ra): return ra <= x;
@@ -57,8 +55,8 @@ lemma void between_lemma(fp_double a, real x, fp_double b)
     requires leq_double_real(a,x) == true &*& leq_real_double(x,b) == true;
     ensures between(a,b,x) == true;
 {}
-@*/
 
+@*/
 
 struct interval *double_add(struct interval *first, struct interval *second)
     /*@ requires interval_pred(first,?x1) &*&
@@ -751,5 +749,3 @@ struct interval *double_div(struct interval *first, struct interval *second)
     //@ close(pos_interval_pred(second,x2));
     return result;
 }
-
-#endif
