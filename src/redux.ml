@@ -531,7 +531,7 @@ and valuenode (ctxt: context) =
             let Ctor (NumberCtor n) = t#symbol#kind in
             context#add_redex (fun () ->
               ctxt#reportExportingConstant;
-              match context#simplex#assert_eq n [(neg_unit_num, u)] with
+              match context#simplex_assert_eq n [(neg_unit_num, u)] with
                 Simplex.Unsat -> Unsat3
               | Simplex.Sat -> Unknown3
             )
@@ -602,7 +602,7 @@ and valuenode (ctxt: context) =
           begin
             (* print_endline ("Exporting equality to Simplex: " ^ u1#name ^ " = " ^ u2#name); *)
             ctxt#reportExportingEquality;
-            match ctxt#simplex#assert_eq zero_num [unit_num, u1; neg_unit_num, u2] with
+            match ctxt#simplex_assert_eq zero_num [unit_num, u1; neg_unit_num, u2] with
               Simplex.Unsat -> Unsat
             | Simplex.Sat -> process_ctorchildren()
           end
@@ -1278,8 +1278,7 @@ and context () =
     method assume_eq (t1: termnode) (t2: termnode) = self#reduce; self#assert_eq_and_reduce t1#value t2#value
     
     method assert_ge c ts =
-      (* let the x = match x with Some x -> x in *)
-      (* printff "assert_ge %s [%s]\n" (string_of_num c) (String.concat " " (List.map (fun (c, u) -> Printf.sprintf "%s*%s(%s)" (string_of_num c) (the (unknown_tag u))#pprint u#name) ts)); *)
+      if verbosity > 10 then trace "simplex#assert_ge %s [%s]" (string_of_num c) (String.concat "; " (List.map (fun (c, u) -> Printf.sprintf "%s*%s(%s)" (string_of_num c) (the (unknown_tag u))#pprint (print_unknown u)) ts));
       simplex#assert_ge c ts
     
     method assert_le t1 offset t2 =
