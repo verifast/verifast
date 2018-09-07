@@ -408,6 +408,7 @@ cd tutorial_solutions
   verifast_both students.c
 cd ..
 cd tests
+  verifast_both -c redux_nonlinear_mult.c
   verifast_both -c simplex_secondary_closes.c
   verifast_both -c simplex_secondary_closes2.c
   verifast_both -c match_ctor_pat.c

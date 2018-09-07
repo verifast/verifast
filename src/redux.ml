@@ -276,6 +276,18 @@ and termnode (ctxt: context) s initial_children =
         | ("||", [v1; v2], 1) ->
           let newNode = if v2#ctorchild = Some ctxt#true_node then ctxt#true_node else v1#initial_child in
           ctxt#add_redex (fun () -> ctxt#assert_eq value newNode#value)
+        | ("*", [v1; v2], 0) ->
+          let Some n1 = v1#as_number in
+          if n1 =/ zero_num then
+            ctxt#add_redex (fun () -> ctxt#assert_eq value (ctxt#get_numnode zero_num)#value)
+          else
+          begin match v2#as_number with
+            None ->
+            let t2 = v2#initial_child in
+            ctxt#add_redex (fun () -> ctxt#simplex_assert_eq zero_num [neg_unit_num, value#mk_unknown; n1, t2#value#mk_unknown])
+          | Some n2 ->
+            ctxt#add_redex (fun () -> ctxt#assert_eq value (ctxt#get_numnode (n1 */ n2))#value)
+          end
         | _ -> ()
     method parent_ctorchild_added =
       match (symbol#name, children) with
