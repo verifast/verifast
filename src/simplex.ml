@@ -30,6 +30,7 @@ class ['tag] unknown (context: 'tag simplex) (name: string) (restricted: bool) (
       context#register_popaction (fun () -> pos <- oldpos);
       pos <- Some p
     method pos = match pos with None -> assert false | Some pos -> pos
+    method dead = match pos with None -> false | Some (Row row) -> row#closed | Some (Column col) -> col#dead
     method print =
       if restricted then "[" ^ name ^ "]" else name
   end
@@ -106,14 +107,11 @@ and ['tag] row context own c =
         )
         terms
     
-    method try_close =
-      if sign_num constant = 0 && List.for_all (fun (col, coef) -> col#dead || sign_num coef#value = 0 || col#owner#restricted && sign_num coef#value < 0) terms then self#close
-    
-    method close =
+    method close enqueue =
       assert (not closed);
       context#register_popaction (fun () -> closed <- false);
       closed <- true;
-      List.iter (fun (col, coef) -> if not col#dead && sign_num coef#value < 0 then col#die) terms
+      List.iter (fun (col, coef) -> if not col#dead && sign_num coef#value < 0 then col#die enqueue) terms
     
     method live_terms =
       List.filter (fun (col, coef) -> not col#dead && sign_num coef#value <> 0) terms
@@ -177,7 +175,7 @@ and ['tag] column context own =
       terms <- (row, coef)::terms
     method dead = dead
     
-    method die =
+    method die enqueue =
       assert (not dead);
       context#register_popaction (fun () -> dead <- false);
       dead <- true;
@@ -186,7 +184,7 @@ and ['tag] column context own =
       if owner#tag <> None then
         context#propagate_eq_constant owner (num_of_int 0);
       List.iter (fun (row, coef) -> if (row#owner#tag <> None || row#owner#nonzero) && sign_num coef#value <> 0 then row#propagate_eq) terms;
-      List.iter (fun (row, coef) -> if row#owner#restricted && not row#closed && sign_num coef#value > 0 then row#try_close) terms
+      List.iter (fun (row, coef) -> if row#owner#restricted && sign_num coef#value > 0 then enqueue row#owner) terms
       end
   end
 and ['tag] simplex () =
@@ -330,6 +328,24 @@ and ['tag] simplex () =
     method propagate_eq_constant u n =
       const_listener u n
       
+    method close_row row =
+      let queue: 'tag unknown list ref = ref [] in
+      let enqueue u = queue := u::!queue in
+      row#close enqueue;
+      (* TODO: Prove that we catch all unknowns that need to be re-maximized. The Simplify paper says that *all restricted unknowns in the system* should be re-maximized. *)
+      let rec iter () =
+        match !queue with
+          [] -> ()
+        | u::us ->
+          queue := us;
+          if not u#dead && self#sign_of_max_of_unknown u = 0 then begin
+            let Row row = u#pos in
+            row#close enqueue
+          end;
+          iter ()
+      in
+      iter ()
+
     method assert_ge (c: num) (ts: (num * 'tag unknown) list) =
       Stopwatch.start stopwatch;
       let y = new unknown (self :> 'tag simplex) ("r" ^ string_of_int (self#get_unique_index())) true None false in
@@ -348,7 +364,7 @@ and ['tag] simplex () =
       let result =
         match self#sign_of_max_of_row row with
           -1 -> Unsat
-        | 0 -> row#close; if unsat then Unsat else Sat
+        | 0 -> self#close_row row; if unsat then Unsat else Sat
         | 1 -> Sat
         | _ -> assert false
       in
