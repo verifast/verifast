@@ -531,9 +531,7 @@ and valuenode (ctxt: context) =
             let Ctor (NumberCtor n) = t#symbol#kind in
             context#add_redex (fun () ->
               ctxt#reportExportingConstant;
-              match context#simplex_assert_eq n [(neg_unit_num, u)] with
-                Simplex.Unsat -> Unsat3
-              | Simplex.Sat -> Unknown3
+              context#simplex_assert_eq n [(neg_unit_num, u)]
             )
         in
         match (ctorchild, v#ctorchild) with
@@ -603,8 +601,8 @@ and valuenode (ctxt: context) =
             (* print_endline ("Exporting equality to Simplex: " ^ u1#name ^ " = " ^ u2#name); *)
             ctxt#reportExportingEquality;
             match ctxt#simplex_assert_eq zero_num [unit_num, u1; neg_unit_num, u2] with
-              Simplex.Unsat -> Unsat
-            | Simplex.Sat -> process_ctorchildren()
+              Unsat3 -> Unsat
+            | _ -> process_ctorchildren()
           end
         | _ -> process_ctorchildren()
       end
@@ -834,9 +832,18 @@ and context () =
     method mk_real_lt (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = RealLt (t1, t2)
     method mk_real_le (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = RealLe (t1, t2)
     
+    method string_of_simplex_poly n ts =
+      Printf.sprintf "%s [%s]" (Num.string_of_num n) (String.concat "; " (List.map (fun (scale, u) -> Num.string_of_num scale ^ ", " ^ (the (Simplex.unknown_tag u))#pprint) ts))
+
     method simplex_assert_eq n ts =
-      if verbosity > 10 then trace "Redux.simplex_assert_eq %s [%s]" (Num.string_of_num n) (String.concat "; " (List.map (fun (scale, u) -> Num.string_of_num scale ^ ", " ^ (the (Simplex.unknown_tag u))#pprint) ts));
-      simplex#assert_eq n ts
+      if verbosity > 10 then trace "Redux.simplex_assert_eq %s" (self#string_of_simplex_poly n ts);
+      match simplex#assert_eq n ts with
+        Simplex.Unsat -> Unsat3
+      | Simplex.Sat -> Unknown3
+    
+    method simplex_assert_neq n ts =
+      if verbosity > 10 then trace "Redux.simplex_assert_neq %s" (self#string_of_simplex_poly n ts);
+      simplex#assert_neq n ts
     
     method assume_core (t: (symbol, termnode) term): assume_result3 =
       assume_core_count <- assume_core_count + 1;
@@ -852,9 +859,7 @@ and context () =
           | _ ->
             self#do_and_reduce (fun () ->
               simplex_assert_eq_count <- simplex_assert_eq_count + 1;
-              match self#simplex_assert_eq n (List.map (fun (t, scale) -> (scale, t#value#mk_unknown)) ts) with
-                Simplex.Unsat -> Unsat3
-              | Simplex.Sat -> Unknown3
+              self#simplex_assert_eq n (List.map (fun (t, scale) -> (scale, t#value#mk_unknown)) ts)
             )
           end
         | Eq (t1, t2) -> self#assume_eq (self#termnode_of_term t1) (self#termnode_of_term t2)
@@ -896,7 +901,7 @@ and context () =
           | terms ->
             self#do_and_reduce $. fun () ->
             simplex_assert_neq_count <- simplex_assert_neq_count + 1;
-            match simplex#assert_neq offset (List.map (fun (t, scale) -> (scale, t#value#mk_unknown)) terms) with
+            match self#simplex_assert_neq offset (List.map (fun (t, scale) -> (scale, t#value#mk_unknown)) terms) with
               Simplex.Unsat -> Unsat3
             | Simplex.Sat -> Unknown3
           end
