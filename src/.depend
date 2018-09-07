@@ -58,7 +58,7 @@ shape_analysis/shape_analysis_backend.cmx : shape_analysis/changelog.cmx
 shape_analysis/shape_analysis_frontend.cmx : \
     shape_analysis/shape_analysis_backend.cmx parser.cmx \
     shape_analysis/changelog.cmx ast.cmx
-simplex.cmx : linux/Stopwatch.cmx simplex.cmi
+simplex.cmx : util.cmx linux/Stopwatch.cmx simplex.cmi
 simplex.cmi :
 smtlib.cmx : util.cmx
 smtlibprover.cmx : util.cmx smtlib.cmx proverapi.cmx
@@ -91,8 +91,8 @@ verifastPluginZ3v4dot5Smtlib.cmx : z3v4dot5prover.cmx verifast.cmx \
     smtlibprover.cmx smtlib.cmx proverapi.cmx combineprovers.cmx
 verify_expr.cmx : verifast1.cmx verifast0.cmx util.cmx stats.cmx \
     proverapi.cmx parser.cmx ast.cmx assertions.cmx
-vfconsole.cmx : verifast0.cmx verifast.cmx util.cmx SExpressionEmitter.cmx \
-    linux/Perf.cmx parser.cmx lexer.cmx \
+vfconsole.cmx : verifast1.cmx verifast0.cmx verifast.cmx util.cmx \
+    SExpressionEmitter.cmx linux/Perf.cmx parser.cmx lexer.cmx \
     java_frontend/java_frontend_bridge.cmx ast.cmx
 vfide.cmx : vfversion.cmx vfconfig.cmx verifast0.cmx verifast.cmx util.cmx \
     shape_analysis/shape_analysis_frontend.cmx Printexc_proxy.cmx parser.cmx \
