@@ -128,10 +128,6 @@ fixpoint fp_double double_div(fp_double x, fp_double y){
     		    return rx == 0 && ry == 0 ? NaN : 
     			rx > 0 && ry == 0 ? pos_inf :
     			rx < 0 && ry == 0 ? neg_inf :
-    			rx > 0 && ry > 0 && rx > ry * max_dbl / md_eps ? pos_inf:
-    			rx < 0 && ry < 0 && rx < ry * max_dbl / md_eps ? pos_inf:
-    			rx > 0 && ry < 0 && rx > ry * min_dbl / md_eps ? neg_inf:
-    			rx < 0 && ry > 0 && rx < ry * min_dbl / md_eps ? neg_inf:
     			real_double(23);
         	case pos_inf: return real_double(0);
         	case neg_inf: return real_double(0);
@@ -164,9 +160,7 @@ fixpoint fp_double double_add(fp_double x, fp_double y){
         case real_double(rx): return 
             switch (y) {
         	case real_double(ry): 
-        	    return rx + ry > max_dbl / md_eps ? pos_inf:
-        	        rx + ry < min_dbl / md_eps ? neg_inf:
-        		real_double(23);
+        	    return real_double(23);
         	case pos_inf: return pos_inf;
         	case neg_inf: return neg_inf;
         	case NaN: return NaN;
@@ -199,9 +193,7 @@ fixpoint fp_double double_sub(fp_double x, fp_double y){
         case real_double(rx): return 
             switch (y) {
     		case real_double(ry): 
-    		    return rx - ry > max_dbl / md_eps ? pos_inf:
-    			rx - ry < min_dbl / md_eps ? neg_inf:
-    			real_double(23);
+    		    return real_double(23);
         	case pos_inf: return neg_inf;
         	case neg_inf: return pos_inf;
         	case NaN: return NaN;
@@ -234,9 +226,7 @@ fixpoint fp_double double_mult(fp_double x, fp_double y){
         case real_double(rx): return 
             switch (y) {
     		case real_double(ry): 
-    		    return rx * ry > max_dbl / md_eps ? pos_inf:
-    			rx * ry < min_dbl / md_eps ? neg_inf:
-    			real_double(23);
+    		    return real_double(23);
         	case pos_inf: 
         	    return rx > 0 ? pos_inf:
         	        rx < 0 ? neg_inf:

@@ -160,7 +160,6 @@ double double_add_upper_bound(struct interval *first, struct interval *second)
     	    	        assert leq_real_double(x1 + x2, fp_of_double(rb)) == true;
     	    	    } else { 
     	    	        assert rfb + rsb < min_dbl;
-    	    	        assert rfb + rsb >= min_dbl / md_eps;
     	    	        assert fp_of_double(rb) == real_double(?rrb);
     	    	        assert ru <= round_up_double(rfb + rsb);
     	    	        round_up_min_dbl_lemma(rfb + rsb);
@@ -304,7 +303,6 @@ double double_sub_upper_bound(struct interval *first, struct interval *second)
     	    	        assert leq_real_double(x1 - x2, fp_of_double(rb)) == true;
     	    	    } else { 
     	    	        assert rfb - rsa < min_dbl;
-    	    	        assert rfb - rsa >= min_dbl / md_eps;
     	    	        assert fp_of_double(rb) == real_double(?rrb);
     	    	        assert ru <= round_up_double(rfb  - rsa);
     	    	        round_up_min_dbl_lemma(rfb - rsa);
