@@ -1,9 +1,0 @@
-.provides ./stdio_simple.h#fgetc
-.provides ./stdio_simple.h#getchar
-.provides ./stdio_simple.h#putchar
-.provides ./stdio_simple.h#fputc
-.provides ./stdio_simple.h#get_stderr
-.provides ./stdio_simple.h#fopen
-.provides ./stdio_simple.h#fclose
-.predicate @./stdio_simple.h#read_char_io
-.predicate @./stdio_simple.h#write_char_io
