@@ -2,6 +2,7 @@
 
 open Big_int
 open Num
+open Util
 
 let stopwatch = Stopwatch.create ()
 
@@ -52,7 +53,23 @@ and ['tag] row context own c =
     val mutable closed: bool = false
 
     method print =
-      owner#print ^ " = " ^ string_of_num constant ^ " + " ^ String.concat " + " (List.map (fun (col, coef) -> string_of_num coef#value ^ "*" ^ col#owner#print) terms)
+      let print_term (coef, col) =
+        match col with
+          None -> string_of_num coef
+        | Some col ->
+          if eq_num coef (num_of_int 1) then col else
+          if eq_num coef (num_of_int (-1)) then "-" ^ col else
+          string_of_num coef ^ "*" ^ col
+      in
+      let print_sum terms =
+        let terms = List.filter (fun (coef, col) -> sign_num coef <> 0) terms in
+        match terms with
+          [] -> "0"
+        | term::terms ->
+          print_term term ^
+          String.concat "" (List.map (fun (coef, col) -> if sign_num coef < 0 then " - " ^ print_term (minus_num coef, col) else " + " ^ print_term (coef, col)) terms)
+      in
+      owner#print ^ " = " ^ print_sum ((constant, None)::flatmap (fun (col, coef) -> if col#dead then [] else [coef#value, Some col#owner#print]) terms)
     method constant = constant
     method owner = owner
     method closed = closed
@@ -212,7 +229,7 @@ and ['tag] simplex () =
       u
     
     method print =
-      "Rows:\n" ^ String.concat "" (List.map (fun row -> row#print ^ "\n") rows)
+      "Rows:\n" ^ String.concat "" (List.map (fun row -> row#print ^ "\n") (List.filter (fun row -> not row#closed) rows))
 
     method pivot (row: 'tag row) (col: 'tag column) =
       let rowOwner = row#owner in
