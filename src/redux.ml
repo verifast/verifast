@@ -498,7 +498,7 @@ and valuenode (ctxt: context) =
       in
       iter parents
       in
-      if ctxt#verbosity > 10 then trace "%d.lookup_parent %s returns %s" (Oo.id self) (String.concat ", " (List.map (fun s -> sprintf "%s(%d)" s#name (Oo.id s)) s)) (match result with None -> "None" | Some v -> v#pprint);
+      if ctxt#verbosity > 20 then trace "%d.lookup_parent %s returns %s" (Oo.id self) (String.concat ", " (List.map (fun s -> sprintf "%s(%d)" s#name (Oo.id s)) s)) (match result with None -> "None" | Some v -> v#pprint);
       result
     method parents = parents
     method children = children
@@ -752,7 +752,15 @@ and context () =
         (text, ["Time spent in query, assume, push, pop", Stopwatch.ticks stopwatch; "Time spent in Simplex", simplex#get_ticks])
     
     initializer
-      simplex#register_listeners (fun u1 u2 -> simplex_eqs <- (u1, u2)::simplex_eqs) (fun u n -> simplex_consts <- (u, n)::simplex_consts);
+      let eq_listener u1 u2 =
+        if verbosity > 10 then trace "Receiving equality from Simplex: %s(%s) = %s(%s)" (the (unknown_tag u1))#pprint (Simplex.print_unknown u1) (the (unknown_tag u2))#pprint (Simplex.print_unknown u2);
+        simplex_eqs <- (u1, u2)::simplex_eqs
+      in
+      let const_listener u n =
+        if verbosity > 10 then trace "Receiving constant from Simplex: %s(%s) = %s" (the (unknown_tag u))#pprint (Simplex.print_unknown u) (string_of_num n);
+        simplex_consts <- (u, n)::simplex_consts
+      in
+      simplex#register_listeners eq_listener const_listener;
       ttrue <- Some (self#get_node (self#mk_symbol "true" [] () (Ctor (CtorByOrdinal 0))) []);
       tfalse <- Some (self#get_node (self#mk_symbol "false" [] () (Ctor (CtorByOrdinal 1))) [])
     
@@ -919,16 +927,16 @@ and context () =
       result
     
     method assume_internal t =
-      let time0 = if verbosity > 1 then begin trace_entering "Redux.assume_internal(%s)" (self#pprint t); Perf.time() end else 0.0 in
+      (* let time0 = if verbosity > 1 then begin trace_entering "Redux.assume_internal(%s)" (self#pprint t); Perf.time() end else 0.0 in *)
       let result =
-      let result = (* with_timing "assume: assume_core" $. fun () -> *) if unsat then Unsat3 else self#assume_with_implications t in
+      let result = if unsat then Unsat3 else self#assume_with_implications t in
       match result with
         Unsat3 -> Unsat
       | Valid3 -> Unknown
       | Unknown3 ->
-        if (* with_timing "assume: perform_pending_splits" $. fun () -> *) self#perform_pending_splits (fun _ -> false) then Unsat else Unknown
+        if self#perform_pending_splits (fun _ -> false) then Unsat else Unknown
       in
-      if verbosity > 1 then begin let time1 = Perf.time() in trace_exiting "Redux.assume_internal: %.6f seconds" (time1 -. time0) end;
+      (* if verbosity > 1 then begin let time1 = Perf.time() in trace_exiting "Redux.assume_internal: %.6f seconds" (time1 -. time0) end; *)
       result
     
     method register_pending_splits_count =
@@ -942,8 +950,9 @@ and context () =
       let time0 = if verbosity > 0 then begin trace_entering "Redux.assert_term(%s)" (self#pprint t); Perf.time() end else 0.0 in
       Stopwatch.start stopwatch;
       self#register_pending_splits_count;
-      ignore (self#assume_internal t);
+      let result = self#assume_internal t in
       Stopwatch.stop stopwatch;
+      if verbosity > 0 && result = Unsat then trace "Redux.assert_term: dropping Unsat result!";
       if verbosity > 0 then begin let time1 = Perf.time() in trace_exiting "Redux.assert_term: %.6f seconds" (time1 -. time0) end
     
     method assume t =
@@ -989,7 +998,7 @@ and context () =
       | True -> self#true_node
       | False -> self#false_node
       | App (s, ts, None) -> get_node s ts
-      | App (s, ts, Some t) -> if verbosity > 10 then trace "termnode_of_term: using cached App termnode %s" t#pprint; t
+      | App (s, ts, Some t) -> if verbosity > 20 then trace "termnode_of_term: using cached App termnode %s" t#pprint; t
       | IfThenElse (t1, t2, t3) -> self#get_ifthenelsenode t1 t2 t3
       | Iff (t1, t2) -> get_node iff_symbol [t1; t2]
       | Eq (t1, t2) -> get_node eq_symbol [t1; t2]
@@ -1197,7 +1206,7 @@ and context () =
           let ts = List.map self#termnode_of_term ts in
           let vs = List.map (fun t -> t#value) ts in
           let t = self#get_node s vs in
-          if verbosity > 10 then trace "mk_app: caching termnode %s" t#pprint;
+          if verbosity > 20 then trace "mk_app: caching termnode %s" t#pprint;
           Some t
         else
           None
@@ -1454,7 +1463,8 @@ and context () =
       result
     
     method reduce =
-      if verbosity > 4 then trace_entering "Redux.reduce";
+      let do_trace = verbosity > 4 && redexes <> [] || verbosity > 20 in
+      if do_trace then trace_entering "Redux.reduce";
       let result =
       if not reducing then
         unsat <-
@@ -1474,7 +1484,7 @@ and context () =
                 true
               end
       in
-      if verbosity > 4 then trace_exiting "Redux.reduce";
+      if do_trace then trace_exiting "Redux.reduce";
       result
     
     method do_and_reduce action =
