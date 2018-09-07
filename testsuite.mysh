@@ -27,12 +27,6 @@ cd examples
   cd splitcounter
     verifast -prover redux -c -disable_overflow_check splitcounter.c
   cd ..
-  cd crypto
-    mysh -cpus 1 < crypto.mysh
-  cd ..
-  cd crypto_with_flow
-    mysh -cpus 1 < crypto_with_flow.mysh
-  cd ..
   cd crypto_ccs
     mysh -cpus 1 < crypto_ccs.mysh
   cd ..
