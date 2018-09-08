@@ -43,7 +43,7 @@ fixpoint option<real> real_of_float(float x);
 fixpoint real real_of_int(int x);
 
 fixpoint bool relative_error(real x, real approximation, real epsilon) {
-    return x == 0 ? approximation == 0 : approximation <= x + real_abs(epsilon * x) && approximation >= x - real_abs(epsilon * x);
+    return x - real_abs(epsilon * x) <= approximation && approximation <= x + real_abs(epsilon * x);
 }
 @*/
 
@@ -110,12 +110,14 @@ bool vf__double_ge(double x, double y);
     //@ ensures result == (rx >= ry);
     //@ terminates;
 
+//@ predicate implies(bool antecedent, bool consequent) = antecedent ? consequent : true;
+
 double vf__double_add(double x, double y);
     //@ requires real_of_double(x) == some(?rx) &*& real_of_double(y) == some(?ry);
     /*@ ensures real_of_double(result) == some(?rr) &*& 
     	relative_error(rx + ry, rr, double_eps) == true &*& 
-    	rx == 0 ? rr == ry : true &*& 
-    	ry == 0 ? rr == rx : true;
+    	[_]implies(rx == 0, rr == ry) &*& 
+    	[_]implies(ry == 0, rr == rx);
     @*/
     //@ terminates;
 

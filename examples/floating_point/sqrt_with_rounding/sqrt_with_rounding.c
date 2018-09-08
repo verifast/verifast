@@ -6,16 +6,17 @@ float vector_size(float x, float y)
     //@ requires real_of_float(x) == some(?rx) &*& real_of_float(y) == some(?ry);
     //@ ensures real_of_float(result) == some(?rr) &*& relative_error(real_vector_size(rx,ry),rr,0.0000102) == true;
 {
-    //@ strict_product_sign_lemma(rx,rx);
-    //@ strict_product_sign_lemma(ry,ry);
+    //@ product_sign_lemma(rx,rx);
+    //@ product_sign_lemma(ry,ry);
+    //@ sqrt_nonneg_lemma(rx * rx + ry * ry);
     double x2 = (double)x * x;
-    double y2 = (double)y * y;
-    double sum = x2 + y2;
-    double sqrt = my_sqrt(sum);
-    //double sqrt = my_sqrt((double)x * x + (double)y * y);
     //@ assert real_of_double(x2) == some(?rx2);
+    double y2 = (double)y * y;
     //@ assert real_of_double(y2) == some(?ry2);
+    double sum = x2 + y2;
     //@ assert real_of_double(sum) == some(?rsum);
+    //@ sqrt_nonneg_lemma(rsum);
+    double sqrt = my_sqrt(sum);
     //@ assert real_of_double(sqrt) == some(?rsqrt);
     //@ sqrt_zero_lemma(0);
 
@@ -67,33 +68,35 @@ double next(double r, double x)
     /*@ 
     ensures real_of_double(result) == some(?rresult) &*& 
     	rresult > 0 &*& 
+    	0 <= real_div(rx, rr) &*&
     	relative_error((rr + real_div(rx,rr)) / 2,rresult,(1 + ld_eps) * (1 + ld_eps) * (1 + ld_eps) * (1 + d_eps) - 1) == true;
     @*/
     //@ terminates;
 {
     //@ real_of_int_lemma_UNSAFE(2,2);
     double oldResult = r;
+    //@ assert real_of_double(oldResult) == some(?orr1);
+    //@ real_div_pos_lemma(rx, rr);
     long double div = (long double) x / r;
+    //@ assert real_of_long_double(div) == some(?ordiv1);
     long double sum = oldResult + div;
+    //@ assert real_of_long_double(sum) == some(?rsum);
+    //@ real_div_pos_lemma(rsum, 2);
     long double longResult = sum / 2;
     double result = (double) longResult;
     return result;
-    //@ assert real_of_double(oldResult) == some(?orr1);
-    //@ assert real_of_long_double(div) == some(?ordiv1);
     //@ assert real_of_double(result) == some(?nrr1);
-    //@ assert real_of_long_double(sum) == some(?rsum);
     //@ assert real_of_long_double(longResult) == some(?rlr);
+    //@ real_div_pos_lemma(rx, orr1);
     //@ real nrre = (orr1 + real_div(rx,orr1)) / 2;
     //@ real sqrx = real_sqrt(rx);
     //@ real_sqrt_lemma2(rx,sqrx);
     //@ sqrt_pos_lemma(rx);
     //@ real_div_lemma2(rx,sqrx,sqrx);
-    //@ sqrt_pos_lemma(rx);
     //@ error_lemma(orr1, ordiv1, rx, nrr1, rsum, rlr);
     //@ real eps = (1 + ld_eps) * (1 + ld_eps) * (1 + ld_eps) * (1 + d_eps) - 1;
     //@ assert relative_error((orr1 + real_div(rx,orr1)) / 2,nrr1,eps) == true;
     //@ real_sqrt_lemma(orr1 * orr1,orr1);   	    
-
     
     //@ assert rx >= 0;
     //@ assert orr1 > 0;
@@ -128,21 +131,25 @@ bool test(double r, double x)
     //@ ensures result == true ? relative_error(real_sqrt(rx), rr, 0.00001) == true : rr > real_sqrt(rx) * 1.000001 || rr < real_sqrt(rx) * 0.999999;
     //@ terminates;
 {
+    //@ product_sign_lemma(rr, rr);
     double a = r * r;
-    double ct1 = 1.00001;
-    double ct2 = 0.99999;
-    double u = ct1 * x;
-    double l = ct2 * x;
     //@ assert real_of_double(a) == some(?ra);
+    double ct1 = 1.00001;
+    //@ assert real_of_double(ct1) == some(?rct1);
+    double ct2 = 0.99999;
+    //@ assert real_of_double(ct2) == some(?rct2);
+    //@ product_sign_lemma(rct1, rx);
+    double u = ct1 * x;
+    //@ product_sign_lemma(rct2, rx);
+    double l = ct2 * x;
     //@ assert real_of_double(u) == some(?ru);
     //@ assert real_of_double(l) == some(?rl);
-    //@ assert real_of_double(ct1) == some(?rct1);
-    //@ assert real_of_double(ct2) == some(?rct2);
     if (a <= u && a >= l) {
         return true;
 
     	//@ stop_condition_lemma(ra,ru,rl,rct1,rct2,rr,rx);
     } else {
+        //@ close not_between(rl, ra, ru);
     	//@ not_stop_condition_lemma(ra,ru,rl,rct1,rct2,rr,rx);
         return false;
     } 
@@ -155,28 +162,32 @@ double my_sqrt(double x)
     	0 <= rx;
     @*/ 
     /*@
-    ensures real_of_double(result) == some(?rr) &*& rx == 0 ? rr == 0 : 0 < rr &*& 
-    	relative_error(real_sqrt(rx),rr,0.00001) == true; @*/
+    ensures real_of_double(result) == some(?rr) &*& relative_error(real_sqrt(rx),rr,0.00001) == true; @*/
     //@ terminates;
 {
-    if (x == 0.0) return 0.0;
+    if (x == 0.0) {
+        //@ sqrt_zero_lemma(0);
+        return 0.0;
+    } else {
+    double result = 1;
+    //@ real sqrx = real_sqrt(rx);
+    //@ real_sqrt_lemma2(rx,sqrx);
+    //@ sqrt_pos_lemma(rx);
+    //@ real_div_lemma2(rx,sqrx,sqrx);
+    {
     //@ real_of_int_lemma_UNSAFE(1,1);
-    double result = 1;  
     //@ assert real_of_double(result) == some(?nrr0);
     if (test(result,x)) {
         return result;
     }
     //@ assert nrr0 > real_sqrt(rx) * 1.000001 || nrr0 < real_sqrt(rx) * 0.999999;
+    {
     double oldResult = result;
     result = next(oldResult,x);
     //@ assert real_of_double(oldResult) == some(?orr1);
     //@ assert real_of_double(result) == some(?nrr1);
     //@ real eps = (1 + ld_eps) * (1 + ld_eps) * (1 + ld_eps) * (1 + d_eps) - 1;
     //@ real_sqrt_lemma(orr1 * orr1,orr1);   	    
-    //@ real sqrx = real_sqrt(rx);
-    //@ real_sqrt_lemma2(rx,sqrx);
-    //@ sqrt_pos_lemma(rx);
-    //@ real_div_lemma2(rx,sqrx,sqrx);
     /*@ if (orr1 * orr1 >= rx) {
     	    sqrt_congruence_lemma(rx, orr1 * orr1);
     	    division_lemma(rx,sqrx,orr1);
@@ -188,32 +199,22 @@ double my_sqrt(double x)
     	    assert orr1 <= 0.999999 * sqrx;
 	    real_div_lemma(rx,orr1,real_div(rx,orr1));
     	    overestimation_lemma2(orr1,sqrx,rx,real_div(rx,orr1),eps);
+    	    assert nrr1 >= sqrx;
     	}
     @*/
-    if (test(result,x)) {
-        return result;
-    } 
-    oldResult = result;
-    result = next(oldResult,x);
-    //@ assert real_of_double(oldResult) == some(?orr2);
-    //@ assert real_of_double(result) == some(?nrr2);
-    //@ real_div_lemma(rx, orr2, real_div(rx,orr2));
-    //@ overestimation_lemma1(orr2,sqrx,rx, real_div(rx,orr2), eps);
-    //@ assert nrr2 >= sqrx;
+    }
+    //@ invariant real_of_double(result) == some(?rr_) &*& rr_ >= real_sqrt(rx);
     for (;;)
         /*@ invariant 
         real_of_double(result) == some(?rr) &*& 
-        real_of_double(oldResult) == some(?orr) &*& 
-        rr >= real_sqrt(rx) &*&
-        rr - real_sqrt(rx) <= real_abs(real_sqrt(rx) - orr) &*&
-        relative_error((orr + real_div(rx,orr))/2,rr, eps) == true;
+        rr >= real_sqrt(rx);
         @*/
         //@ decreases real_ceiling(real_div(rr,sqrx)*1e14);
     {
     	if (test(result,x)) {
             break;
     	}
- 	oldResult = result;
+ 	double oldResult = result;
     	result = next(oldResult,x);
     	//@ assert real_of_double(oldResult) == some(?orr3);
     	//@ assert real_of_double(result) == some(?nrr3);
@@ -222,6 +223,8 @@ double my_sqrt(double x)
         //@ decreases_lemma(orr3,nrr3,sqrx);
     }
     return result;
+    }
+    }
 }
 
 
@@ -378,6 +381,9 @@ lemma void decreases_lemma(real rr, real nrr, real sqrx)
 lemma void error_lemma(real orr, real ordiv, real rx, real nrr, real rsum, real rlr)
     requires rx > 0 &*&
     	orr > 0 &*&
+    	0 <= real_div(rx, orr) &*&
+    	0 <= real_div(rsum, 2) &*&
+    	0 <= rlr &*&
     	relative_error(real_div(rx,orr), ordiv, long_double_eps) == true &*&
     	relative_error(orr + ordiv, rsum, long_double_eps) == true &*&
     	relative_error(real_div(rsum,2), rlr, long_double_eps) == true &*&
@@ -402,6 +408,10 @@ lemma void stop_condition_lemma(real ra, real ru, real rl, real rct1, real rct2,
     	ra >= rl &*&
     	rx > 0 &*&
     	nrr > 0 &*&
+    	rct1 >= 0 &*&
+    	rct2 >= 0 &*&
+    	rx * rct2 >= 0 &*&
+    	rx * rct1 >= 0 &*&
     	relative_error(nrr * nrr, ra, double_eps) == true &*&
     	relative_error(0.99999, rct2, d_eps) == true &*&
     	relative_error(1.00001, rct1, d_eps) == true &*&
@@ -409,7 +419,6 @@ lemma void stop_condition_lemma(real ra, real ru, real rl, real rct1, real rct2,
     	relative_error(rx * rct1, ru , d_eps) == true;
     ensures relative_error(real_sqrt(rx), nrr, 0.00001) == true;
 {
-        
     product_sign_lemma(rx,rct2);
     assert rl >= rx * rct2 * md_eps;
     assert rct2 >= 0.99999 * md_eps;
@@ -461,10 +470,18 @@ lemma void stop_condition_lemma(real ra, real ru, real rl, real rct1, real rct2,
     assert relative_error(real_sqrt(rx), nrr, 0.00001) == true;
 }
 
+predicate not_between(real rl, real ra, real ru) = ra < rl || ru < ra;
+
 lemma void not_stop_condition_lemma(real ra, real ru, real rl, real rct1, real rct2, real nrr, real rx)
-    requires ra > ru || ra < rl &*&
+    requires not_between(rl, ra, ru) &*&
     	nrr > 0 &*&
     	rx > 0 &*&
+    	0 <= nrr &*&
+    	0 <= nrr * nrr &*&
+    	0 <= rct2 &*&
+    	0 <= rx * rct2 &*&
+    	0 <= rct1 &*&
+    	0 <= rx * rct1 &*&
     	relative_error(nrr * nrr, ra, double_eps) == true &*&
     	relative_error(0.99999, rct2, d_eps) == true &*&
     	relative_error(1.00001, rct1, d_eps) == true &*&
@@ -497,6 +514,7 @@ lemma void not_stop_condition_lemma(real ra, real ru, real rl, real rct1, real r
     assert nrr >= real_sqrt(ra / 1.0000000000000002220446);
     assert nrr <= real_sqrt(ra / 0.9999999999999997779554);
     if (ra > ru) {
+        leak not_between(rl, ra, ru);
     	sqrt_congruence_lemma(ru / 1.0000000000000002220446, ra / 1.0000000000000002220446);
     	assert nrr >= real_sqrt(ru / 1.0000000000000002220446);
     	sqrt_congruence_lemma(1.00001 * rx * (1 - d_eps) * (1 - d_eps) / 1.0000000000000002220446, ru / 1.0000000000000002220446);
@@ -511,6 +529,7 @@ lemma void not_stop_condition_lemma(real ra, real ru, real rl, real rct1, real r
     	leq_preservation_lemma(1.000004,real_sqrt(1.000009),real_sqrt(rx));
     	assert nrr >= real_sqrt(rx) * 1.000004;   	
     } else {
+        open not_between(rl, ra, ru);
         assert ra < rl;
         sqrt_congruence_lemma(ra / 0.9999999999999997779554, rl / 0.9999999999999997779554);
         assert nrr <= real_sqrt(rl / 0.9999999999999997779554);
