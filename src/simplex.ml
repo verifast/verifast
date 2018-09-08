@@ -1,4 +1,4 @@
-(* #load "nums.cma" *)
+(* Based on Detlefs, Nelson, Saxe. Simplify: A Theorem Prover for Program Checking. 2003. *)
 
 open Big_int
 open Num
@@ -39,6 +39,7 @@ and ['tag] coeff (context: 'tag simplex) v =
     val mutable value: num = v
     
     method value = value
+    method set_value_no_undo v = value <- v
     method set_value v =
       let oldvalue = value in
       context#register_popaction (fun () -> value <- oldvalue);
@@ -79,6 +80,7 @@ and ['tag] row context own c =
       context#register_popaction (fun () -> owner <- oldowner);
       owner <- u
     method terms = terms
+    method set_constant_no_undo v = constant <- v
     method set_constant v =
       let oldconstant = constant in
       context#register_popaction (fun () -> constant <- oldconstant);
@@ -229,7 +231,8 @@ and ['tag] simplex () =
     method print =
       "Rows:\n" ^ String.concat "" (List.map (fun row -> row#print ^ "\n") (List.filter (fun row -> not row#closed) rows))
 
-    method pivot (row: 'tag row) (col: 'tag column) =
+    method pivot pivotListener (row: 'tag row) (col: 'tag column) =
+      pivotListener row col;
       let rowOwner = row#owner in
       let colOwner = col#owner in
       row#set_owner colOwner;
@@ -274,20 +277,20 @@ and ['tag] simplex () =
       in
       iter None col#terms
 
-    method sign_of_max_of_unknown (u: 'tag unknown): int =
+    method sign_of_max_of_unknown pivotListener (u: 'tag unknown): int =
       match u#pos with
-        Row r -> self#sign_of_max_of_row r
+        Row r -> self#sign_of_max_of_row pivotListener r
       | Column col ->
         begin
           match self#find_pivot_row 1 col with
             None -> (* column is manifestly unbounded. *)
             1
           | Some (row, _) ->
-            self#pivot row col;
-            self#sign_of_max_of_row row
+            self#pivot pivotListener row col;
+            self#sign_of_max_of_row pivotListener row
         end
 
-    method sign_of_max_of_row row =
+    method sign_of_max_of_row pivotListener row =
       let rec maximize_row () =
         if sign_num row#constant > 0 then
           1
@@ -313,10 +316,10 @@ and ['tag] simplex () =
             match self#find_pivot_row sign col with
               None ->
               (* col is manifestly unbounded *)
-              self#pivot row col;
+              self#pivot pivotListener row col;
               1
             | Some (r, _) ->
-              self#pivot r col;
+              self#pivot pivotListener r col;
               maximize_row()
         end
       in
@@ -338,7 +341,8 @@ and ['tag] simplex () =
           [] -> ()
         | u::us ->
           queue := us;
-          if not u#dead && self#sign_of_max_of_unknown u = 0 then begin
+          let pivotListener row column = () in
+          if not u#dead && self#sign_of_max_of_unknown pivotListener u = 0 then begin
             let Row row = u#pos in
             row#close enqueue
           end;
@@ -346,8 +350,8 @@ and ['tag] simplex () =
       in
       iter ()
 
-    method assert_ge (c: num) (ts: (num * 'tag unknown) list) =
-      Stopwatch.start stopwatch;
+    (* fac: formal affine combination *)
+    method row_for_fac (c: num) (ts: (num * 'tag unknown) list) =
       let y = new unknown (self :> 'tag simplex) ("r" ^ string_of_int (self#get_unique_index())) true None false in
       let row = new row (self :> 'tag simplex) y c in
       rows <- row::rows;
@@ -361,8 +365,14 @@ and ['tag] simplex () =
              row#add a col
         )
         ts;
+      row
+
+    method assert_ge (c: num) (ts: (num * 'tag unknown) list) =
+      Stopwatch.start stopwatch;
+      let row = self#row_for_fac c ts in
       let result =
-        match self#sign_of_max_of_row row with
+        let pivotListener row column = () in
+        match self#sign_of_max_of_row pivotListener row with
           -1 -> Unsat
         | 0 -> self#close_row row; if unsat then Unsat else Sat
         | 1 -> Sat
@@ -374,9 +384,42 @@ and ['tag] simplex () =
     method get_ticks: int64 = Stopwatch.ticks stopwatch
     
     method assert_eq (c: num) (ts: (num * 'tag unknown) list) =
-      match self#assert_ge c ts with
-        Unsat -> Unsat
-      | Sat -> self#assert_ge (minus_num c) (List.map (fun (a, u) -> (minus_num a, u)) ts)
+      Stopwatch.start stopwatch;
+      let result =
+        let row = self#row_for_fac c ts in
+        let u = row#owner in
+        let pivotListener row column = () in
+        match self#sign_of_max_of_row pivotListener row with
+          -1 -> Unsat
+        | 0 -> self#close_row row; if unsat then Unsat else Sat
+        | 1 ->
+        begin match u#pos with
+          Column col ->
+          List.iter (fun (row, coef) -> coef#set_value_no_undo (minus_num coef#value)) col#terms
+        | Row row ->
+          row#set_constant_no_undo (minus_num row#constant);
+          List.iter (fun (col, coef) -> coef#set_value_no_undo (minus_num coef#value)) row#terms
+        end;
+        let pivotCol = ref None in
+        let pivotListener row column = pivotCol := Some column in
+        match self#sign_of_max_of_unknown pivotListener u with
+          -1 -> Unsat
+        | 0 -> let Row row = u#pos in self#close_row row; if unsat then Unsat else Sat
+        | 1 ->
+        let col =  match u#pos with
+            Column col -> col
+          | Row row ->
+            let Some col = !pivotCol in
+            let pivotListener row column = () in
+            self#pivot pivotListener row col;
+            col
+        in
+        let enqueue _ = () in
+        col#die enqueue;
+        if unsat then Unsat else Sat
+      in
+      Stopwatch.stop stopwatch;
+      result
     
     method assert_neq (c: num) (ts: (num * 'tag unknown) list) =
       let u = new unknown (self :> 'tag simplex) ("nz" ^ string_of_int (self#get_unique_index())) false None true in
