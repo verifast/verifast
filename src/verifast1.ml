@@ -801,6 +801,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let headermap: ((loc * (include_kind * string * string) * string list * package list) list * maps) map ref = ref []
   let spec_classes= ref []
   let spec_lemmas= ref []
+
+  let prelude_maps = ref None
   
   (** Verify the .c/.h/.jarsrc/.jarspec file whose headers are given by [headers] and which declares packages [ps].
       As a side-effect, adds all processed headers to the header map.
@@ -1004,11 +1006,19 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 (maps0, [])
           end
           | CLang ->
-            let (prelude_headers, prelude_decls) = parse_header_file (concat !bindir "prelude.h") reportRange reportShouldFail initial_verbosity [] [] enforce_annotations data_model in
-            let prelude_header_names = List.map (fun (_, (_, _, h), _, _) -> h) prelude_headers in
-            let prelude_headers = (dummy_loc, (AngleBracketInclude, "prelude.h", concat !bindir "prelude.h"), prelude_header_names, prelude_decls)::prelude_headers in
-            let headers = (dummy_loc, (AngleBracketInclude, "prelude.h", concat !bindir "prelude.h"), prelude_header_names, prelude_decls)::prelude_headers in
-            merge_header_maps false maps0 [] !bindir headers headers
+            begin match !prelude_maps with
+              None ->
+              let maps =
+                let prelude_path = concat !bindir "prelude.h" in
+                let (prelude_headers, prelude_decls) = parse_header_file prelude_path reportRange reportShouldFail initial_verbosity [] [] enforce_annotations data_model in
+                let prelude_header_names = List.map (fun (_, (_, _, h), _, _) -> h) prelude_headers in
+                let prelude_headers = (dummy_loc, (AngleBracketInclude, "prelude.h", prelude_path), prelude_header_names, prelude_decls)::prelude_headers in
+                merge_header_maps false maps0 [] !bindir prelude_headers prelude_headers
+              in
+              prelude_maps := Some maps;
+              maps
+            | Some maps -> maps
+            end
       else
         (maps0, [])
     in
