@@ -93,12 +93,6 @@
 .provides ./prelude.h#character_limits
 .provides ./prelude.h#u_character_limits
 .provides ./prelude.h#is_handle_unique
-.predicate @./prelude.h#character
-.predicate @./prelude.h#u_character
-.predicate @./prelude.h#integer
-.predicate @./prelude.h#u_integer
-.predicate @./prelude.h#short_integer
-.predicate @./prelude.h#u_short_integer
 .predicate @./prelude.h#pointer
 .predicate @./prelude.h#divrem
 .predicate @./prelude.h#malloc_block

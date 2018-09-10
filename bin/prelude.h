@@ -21,21 +21,21 @@ lemma void div_rem(int D, int d);
     requires d != 0;
     ensures D == D / d * d + D % d &*& abs(D % d) < abs(d) &*& abs(D / d * d) <= abs(D);
 
-predicate character(char *p; char c);
-predicate u_character(unsigned char *p; unsigned char c);
+predicate integer_(void *p, int size, bool signed_; int v);
 
-predicate integer(int *p; int v);
-predicate u_integer(unsigned int *p; unsigned int v);
+predicate character(char *p; char c) = integer_(p, 1, true, c);
+predicate u_character(unsigned char *p; unsigned char c) = integer_(p, 1, false, c);
 
-predicate llong_integer(long long *p; long long l);
-predicate u_llong_integer(unsigned long long *p; unsigned long long l);
+predicate integer(int *p; int v) = integer_(p, sizeof(int), true, v);
+predicate u_integer(unsigned int *p; unsigned int v) = integer_(p, sizeof(int), false, v);
 
-predicate short_integer(short *p; short s);
-predicate u_short_integer(unsigned short *p; unsigned short v);
+predicate llong_integer(long long *p; long long l) = integer_(p, sizeof(long long), true, l);
+predicate u_llong_integer(unsigned long long *p; unsigned long long l) = integer_(p, sizeof(long long), false, l);
+
+predicate short_integer(short *p; short s) = integer_(p, sizeof(short), true, s);
+predicate u_short_integer(unsigned short *p; unsigned short v) = integer_(p, sizeof(short), false, v);
 
 predicate pointer(void **pp; void *p);
-
-predicate integer_(void *p, int size, bool signed_; int v);
 
 lemma void character_limits(char *pc);
     requires [?f]character(pc, ?c);
