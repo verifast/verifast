@@ -360,26 +360,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let arraylength_symbol = mk_symbol "arraylength" [ctxt#type_int] ctxt#type_int Uninterp
   let shiftleft_symbol = mk_symbol "shiftleft" [ctxt#type_int;ctxt#type_int] ctxt#type_int Uninterp (* shift left on an integer's infinite binary representation. Not truncated. May overflow. *)
   let shiftright_symbol = mk_symbol "shiftright" [ctxt#type_int;ctxt#type_int] ctxt#type_int Uninterp (* shift right with sign extension; Java's ">>" operator. For nonnegative n, "x >> n" is equivalent to floor(x / 2^n). *)
-  let truncate_int8_symbol = mk_symbol "truncate_int8" [ctxt#type_int] ctxt#type_int Uninterp
-  let truncate_uint8_symbol = mk_symbol "truncate_uint8" [ctxt#type_int] ctxt#type_int Uninterp
-  let truncate_int16_symbol = mk_symbol "truncate_int16" [ctxt#type_int] ctxt#type_int Uninterp
-  let truncate_uint16_symbol = mk_symbol "truncate_uint16" [ctxt#type_int] ctxt#type_int Uninterp
-  let truncate_int32_symbol = mk_symbol "truncate_int32" [ctxt#type_int] ctxt#type_int Uninterp
-  let truncate_uint32_symbol = mk_symbol "truncate_uint32" [ctxt#type_int] ctxt#type_int Uninterp
-  let truncate_int64_symbol = mk_symbol "truncate_int64" [ctxt#type_int] ctxt#type_int Uninterp
-  let truncate_uint64_symbol = mk_symbol "truncate_uint64" [ctxt#type_int] ctxt#type_int Uninterp
 
-  let truncate_symbol t =
-    match t with
-      Int (Signed, 0) -> truncate_int8_symbol
-    | Int (Signed, 1) -> truncate_int16_symbol
-    | Int (Signed, 2) -> truncate_int32_symbol
-    | Int (Signed, 3) -> truncate_int64_symbol
-    | Int (Unsigned, 0) -> truncate_uint8_symbol
-    | Int (Unsigned, 1) -> truncate_uint16_symbol
-    | Int (Unsigned, 2) -> truncate_uint32_symbol
-    | Int (Unsigned, 3) -> truncate_uint64_symbol
-  
   let () = ctxt#assert_term (ctxt#mk_eq (ctxt#mk_unboxed_bool (ctxt#mk_boxed_int (ctxt#mk_intlit 0))) ctxt#mk_false) (* This allows us to use 0 as a default value for all types; see the treatment of array creation. *)
 
   let boolt = Bool
@@ -3944,6 +3925,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let lazy_predfamsymb name = lazy_value (fun () -> get_pred_symb name)
   let lazy_purefuncsymb name = lazy_value (fun () -> get_pure_func_symb name)
   
+  let truncate_unsigned_symb = lazy_purefuncsymb "truncate_unsigned"
+  let truncate_signed_symb = lazy_purefuncsymb "truncate_signed"
+  
+  let mk_truncate_term tp t =
+    match tp with
+      Int (Unsigned, k) -> mk_app !!truncate_unsigned_symb [t; ctxt#mk_intlit (1 lsl k lsl 3)]
+    | Int (Signed, k) -> mk_app !!truncate_signed_symb [t; ctxt#mk_intlit (1 lsl k lsl 3 - 1)]
+  
   let array_element_symb = lazy_predfamsymb "java.lang.array_element"
   let array_slice_symb = lazy_predfamsymb "java.lang.array_slice"
   let array_slice_deep_symb = lazy_predfamsymb "java.lang.array_slice_deep"
@@ -5088,7 +5077,7 @@ let check_if_list_is_defined () =
     in
     let check_overflow v =
       if truncating then
-        ctxt#mk_app (truncate_symbol (woperation_type_result_type op t)) [v]
+        mk_truncate_term (woperation_type_result_type op t) v
       else
         check_overflow0 v
     in
@@ -5219,7 +5208,7 @@ let check_if_list_is_defined () =
         match (e, t) with
         | (e, (Int (_, _) as tp)) ->
           ev state e $. fun state t ->
-          cont state (ctxt#mk_app (truncate_symbol tp) [t])
+          cont state (mk_truncate_term tp t)
         | _ ->
           static_error l "Unsupported truncating cast" None
       end

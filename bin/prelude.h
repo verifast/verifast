@@ -12,6 +12,9 @@ lemma void assume(bool b);
 
 predicate exists<t>(t x;) = true;
 
+fixpoint int truncate_unsigned(int x, int nbBits);
+fixpoint int truncate_signed(int x, int nbBits); // nbBits does not include the sign bit
+
 fixpoint int abs(int x) { return x < 0 ? -x : x; }
 
 lemma void div_rem(int D, int d);

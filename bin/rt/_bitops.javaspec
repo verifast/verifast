@@ -1,5 +1,8 @@
 /*@
 
+fixpoint int truncate_unsigned(int x, int nbBits);
+fixpoint int truncate_signed(int x, int nbBits); // nbBits does not include the sign bit
+
 fixpoint int pow(int x, nat y) {
     switch (y) {
         case zero: return 1;
