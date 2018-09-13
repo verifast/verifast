@@ -162,7 +162,6 @@ type token = (* ?token *)
   | String of string
   | AngleBracketString of string
   | CharToken of char
-  | PreprocessorSymbol of string
   | BeginInclude of
       include_kind
       (** string of file included as written in the sourcecode, e.g. "../test.h" *)
@@ -195,7 +194,6 @@ let string_of_token t =
   | RationalToken(n) -> "RationalToken:" ^ (Num.string_of_num n)
   | String(s) -> "String: " ^ s
   | CharToken(ch) -> "Char: " ^ (Char.escaped ch)
-  | PreprocessorSymbol(s) -> "PPSymbol: " ^ s
   | BeginInclude(kind, s, _) -> "BeginInclude(" ^ string_of_include_kind kind ^ "): " ^ s
   | SecondaryInclude(s, _) -> "SecondaryInclude: " ^ s
   | EndInclude -> "EndInclude"
@@ -433,8 +431,7 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
       if id = "include" then in_include_directive := true; 
       t
     with
-      Not_found -> let n = String.length id in
-      if n > 2 && id.[n - 2] = '_' && id.[n - 1] = 'H' then PreprocessorSymbol id else Ident id
+      Not_found -> Ident id
   and keyword_or_error s =
     try Hashtbl.find (get_kwd_table()) s with
       Not_found -> error ("Illegal character: " ^ s)
@@ -1157,13 +1154,13 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
         in
         junk ();
         begin match peek () with
-          Some (_, (Ident x | PreprocessorSymbol x)) ->
+          Some (_, Ident x) ->
           junk ();
           check x
         | Some (_, Kwd "(") ->
           junk ();
           begin match peek () with
-            Some (_, (Ident x | PreprocessorSymbol x)) ->
+            Some (_, Ident x) ->
             junk ();
             begin match peek () with
               Some (_, Kwd ")") ->
@@ -1261,7 +1258,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
         defining_macro := true;
         junk ();
         begin match peek () with
-          Some (lx, Ident x) | Some (lx, PreprocessorSymbol x) ->
+          Some (lx, Ident x) ->
           junk ();
           let has_no_whitespace_between location1 location2 =
             let (start1, stop1) = location1 in
@@ -1282,7 +1279,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
               let params =
                 match peek () with
                   Some (_, Kwd ")") -> junk (); []
-                | Some (_, Ident x) | Some (_, PreprocessorSymbol x) ->
+                | Some (_, Ident x) ->
                   junk ();
                   let rec params () =
                     match peek () with
@@ -1290,7 +1287,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
                     | Some (_, Kwd ",") ->
                       junk ();
                       begin match peek () with
-                        Some (_, Ident x) | Some (_, PreprocessorSymbol x) -> junk (); x::params ()
+                        Some (_, Ident x) -> junk (); x::params ()
                       | _ -> error "Macro parameter expected"
                       end
                     | _ -> error "Expected ',' for separating macro parameters or ')' for ending macro parameter list"
@@ -1319,7 +1316,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
       | Some (l, Kwd "undef") ->
         junk ();
         begin match peek () with
-          Some (_, (Ident x | PreprocessorSymbol x)) ->
+          Some (_, Ident x) ->
           junk ();
           Hashtbl.remove (List.hd (get_macros ())) x;
           next_token ()
@@ -1328,7 +1325,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
       | Some (l, Kwd ("ifdef"|"ifndef" as cond)) ->
         junk ();
         begin match peek () with
-          Some (_, (Ident x | PreprocessorSymbol x)) ->
+          Some (_, Ident x) ->
           junk ();
           update_last_macro_used x;
           if is_defined x <> (cond = "ifdef") then
@@ -1347,7 +1344,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
       | Some (l, Kwd "endif") -> junk (); next_token ()
       | _ -> syntax_error ()
       end
-    | (l, (Ident x|PreprocessorSymbol x)) as t when is_defined x && not (List.mem x (List.hd !callers)) ->
+    | (l, Ident x) as t when is_defined x && not (List.mem x (List.hd !callers)) ->
       update_last_macro_used x;
       junk ();
       let (_,params, body) = get_macro x in
@@ -1449,7 +1446,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
           in
           let body =
             body |> flatmap begin function
-              (_, (Ident x|PreprocessorSymbol x)) as t ->
+              (_, Ident x) as t ->
               begin match try_assoc x bindings with
                 None -> [t]
               | Some value -> value
