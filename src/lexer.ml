@@ -1623,7 +1623,7 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
         (l,m) -> divergence l ("The expansion of a header (" ^ (string_of_loc (current_loc())) ^ ") cannot depend upon its context of defined macros (macro " ^ m ^ ")")
     end
   in
-  ((fun () -> current_loc()), ref true, Stream.from (fun _ -> next_token ()))
+  ((fun () -> current_loc()), Stream.from (fun _ -> next_token ()))
 
 let make_preprocessor make_lexer path verbose include_paths dataModel define_macros =
   make_sound_preprocessor make_lexer path verbose include_paths dataModel define_macros

@@ -1580,7 +1580,7 @@ let parse_java_file_old (path: string) (reportRange: range_kind -> loc -> unit) 
 
 type 'result parser_ = (loc * token) Stream.t -> 'result
 
-let rec parse_include_directives (ignore_eol: bool ref) (verbose: int) (enforceAnnotations: bool) (dataModel: data_model): 
+let rec parse_include_directives (verbose: int) (enforceAnnotations: bool) (dataModel: data_model): 
     ((loc * (include_kind * string * string) * string list * package list) list * string list) parser_ =
   let active_headers = ref [] in
   let test_include_cycle l totalPath =
@@ -1624,10 +1624,10 @@ let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (report
       let text = readFile path in
       make_lexer (common_keywords @ c_keywords) ghost_keywords path text reportRange ~inGhostRange reportShouldFail
     in
-    let (loc, ignore_eol, token_stream) = make_preprocessor make_lexer path verbose include_paths dataModel define_macros in
+    let (loc, token_stream) = make_preprocessor make_lexer path verbose include_paths dataModel define_macros in
     let parse_c_file =
       parser
-        [< (headers, _) = parse_include_directives ignore_eol verbose enforceAnnotations dataModel; 
+        [< (headers, _) = parse_include_directives verbose enforceAnnotations dataModel; 
                             ds = parse_decls CLang dataModel enforceAnnotations ~inGhostHeader:false; _ = Stream.empty >] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])
     in
     try
@@ -1649,11 +1649,11 @@ let parse_header_file (path: string) (reportRange: range_kind -> loc -> unit) (r
       let text = readFile path in
       make_lexer (common_keywords @ c_keywords) ghost_keywords path text reportRange ~inGhostRange:inGhostRange reportShouldFail
     in
-    let (loc, ignore_eol, token_stream) = make_preprocessor make_lexer path verbose include_paths dataModel define_macros in
+    let (loc, token_stream) = make_preprocessor make_lexer path verbose include_paths dataModel define_macros in
     let p = parser
-      [< (headers, _) = parse_include_directives ignore_eol verbose enforceAnnotations dataModel; 
+      [< (headers, _) = parse_include_directives verbose enforceAnnotations dataModel; 
          ds = parse_decls CLang dataModel enforceAnnotations ~inGhostHeader:isGhostHeader; 
-         _ = (fun _ -> ignore_eol := true);_ = Stream.empty 
+         _ = Stream.empty 
       >] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])
     in
     try
