@@ -1073,19 +1073,19 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
   let is_concatenation_token t =
     match t with (_, Kwd "##") -> true | _ -> false
   in
-  let streams = ref [] in
-  let callers = ref [[]] in
-  let push_list newCallers body =
-    streams := Stream.of_list body::!streams;
-    callers := (newCallers @ List.hd !callers)::!callers;
-  in
-  let pop_stream () =
-    streams := List.tl !streams;
-    callers := List.tl !callers;
-  in
   let next_at_start_of_line = ref true in
   let ghost_range_delimiter_allowed = ref false in
-  let rec make_subpreprocessor peek junk cont =
+  let rec make_subpreprocessor callers peek junk cont =
+    let streams = ref [] in
+    let callers = ref [callers] in
+    let push_list newCallers body =
+      streams := Stream.of_list body::!streams;
+      callers := (newCallers @ List.hd !callers)::!callers;
+    in
+    let pop_stream () =
+      streams := List.tl !streams;
+      callers := List.tl !callers;
+    in
     let peek () =
       let t = 
         match !streams with 
@@ -1439,17 +1439,14 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
         end
       | t -> junk (); Some t
     and macro_expand newCallers tokens =
-      let oldStreams = !streams in
-      streams := [];
-      push_list newCallers tokens;
-      let next_token = make_subpreprocessor (fun () -> None) (fun () -> assert false) (fun _ -> None) in
+      let tokensStream = Stream.of_list tokens in
+      let next_token = make_subpreprocessor (newCallers @ List.hd !callers) (fun () -> Stream.peek tokensStream) (fun () -> Stream.junk tokensStream) (fun _ -> None) in
       let rec get_tokens ts =
         match next_token () with
           None -> List.rev ts
         | Some t -> get_tokens (t::ts)
       in
       let ts = get_tokens [] in
-      streams := oldStreams;
       ts
     in
     next_token
@@ -1468,7 +1465,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
       else
         None
     in
-    make_subpreprocessor (fun () -> !tlexer#peek ()) (fun () -> !tlexer#junk ()) cont
+    make_subpreprocessor [] (fun () -> !tlexer#peek ()) (fun () -> !tlexer#junk ()) cont
   in
   (next_token, fun _ -> !last_macro_used)
 
