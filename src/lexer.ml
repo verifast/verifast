@@ -1048,26 +1048,21 @@ let rec eval_operators e =
      if Int64.compare (eval_operators e0) Int64.zero = 0
      then Int64.one else Int64.zero
 
-let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_ghost_range dataModel define_macros =
+let make_file_preprocessor macros ghost_macros peek junk in_ghost_range dataModel =
   let isGhostHeader = !in_ghost_range in
-  let macros = ref [Hashtbl.create 10] in
-  List.iter
-    (fun x -> Hashtbl.replace (List.hd !macros) x (dummy_loc, None, [(dummy_loc, Int (unit_big_int, false, false, NoLSuffix))]))
-    define_macros;
-  let ghost_macros = ref [Hashtbl.create 10] in
-  let get_macros () = if !in_ghost_range then !ghost_macros else !macros in
+  let get_macros () = if !in_ghost_range then ghost_macros else macros in
   let is_defined x =
-    if Hashtbl.mem (List.hd !macros) x then 
+    if Hashtbl.mem macros x then 
       true
     else
-      !in_ghost_range && Hashtbl.mem (List.hd !ghost_macros) x
+      !in_ghost_range && Hashtbl.mem ghost_macros x
   in
   let get_macro x =
     if is_defined x then
-      if !in_ghost_range && Hashtbl.mem (List.hd !ghost_macros) x then
-        Hashtbl.find (List.hd !ghost_macros) x
+      if !in_ghost_range && Hashtbl.mem ghost_macros x then
+        Hashtbl.find ghost_macros x
       else
-        Hashtbl.find (List.hd !macros) x
+        Hashtbl.find macros x
     else
       (dummy_loc, None, [])
   in
@@ -1081,7 +1076,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
   let defining_macro = ref false in
   let next_at_start_of_line = ref true in
   let ghost_range_delimiter_allowed = ref false in
-  let rec make_subpreprocessor callers peek junk cont =
+  let rec make_subpreprocessor callers peek junk =
     let streams = ref [] in
     let callers = ref [callers] in
     let push_list newCallers body =
@@ -1195,7 +1190,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
       with
         None -> 
           if !streams = [] then
-            cont next_token
+            None
           else begin
             pop_stream ();
             next_token ()
@@ -1225,14 +1220,12 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
             if List.mem s ["include_ignored_by_verifast.h"; "assert.h"; "limits.h"] then 
               next_token () 
             else begin
-              if isGhostHeader then
+              if isGhostHeader then begin
                 if not (Filename.check_suffix s ".gh") then raise (ParseException (l, "#include directive in ghost header should specify a ghost header file (whose name ends in .gh)."))
-              else begin
+              end else begin
                 if !in_ghost_range && not (Filename.check_suffix s ".gh") then raise (ParseException (l, "Ghost #include directive should specify a ghost header file (whose name ends in .gh)."));
                 if not !in_ghost_range && (Filename.check_suffix s ".gh") then raise (ParseException (l, "Non-ghost #include directive should not specify a ghost header file."))
               end;
-              macros := (plugin_begin_include (List.hd !macros))::!macros;
-              ghost_macros := (plugin_begin_include (List.hd !ghost_macros))::!ghost_macros; 
               next_at_start_of_line := true;
               let includeKind = match ss with String _ -> DoubleQuoteInclude | AngleBracketString _ -> AngleBracketInclude in
               Some (l, BeginInclude(includeKind, s, ""))
@@ -1289,7 +1282,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
               | Some t -> junk (); t::body ()
             in 
             let body = body () in
-            Hashtbl.replace (List.hd (get_macros ())) x (lx, params, body);
+            Hashtbl.replace (get_macros ()) x (lx, params, body);
             defining_macro := false;
             begin match body with
               (l, Kwd "##")::_ -> error l "## operator cannot appear at the start of a macro"
@@ -1307,7 +1300,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
           begin match peek () with
             Some (_, Ident x) ->
             junk ();
-            Hashtbl.remove (List.hd (get_macros ())) x;
+            Hashtbl.remove (get_macros ()) x;
             next_token ()
           | Some (l, _) -> syntax_error l
           end
@@ -1454,7 +1447,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
       | t -> junk (); Some t
     and macro_expand newCallers tokens =
       let tokensStream = Stream.of_list tokens in
-      let next_token = make_subpreprocessor (newCallers @ List.hd !callers) (fun () -> Stream.peek tokensStream) (fun () -> Stream.junk tokensStream) (fun _ -> None) in
+      let next_token = make_subpreprocessor (newCallers @ List.hd !callers) (fun () -> Stream.peek tokensStream) (fun () -> Stream.junk tokensStream) in
       let rec get_tokens ts =
         match next_token () with
           None -> List.rev ts
@@ -1465,23 +1458,44 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
     in
     next_token
   in
-  let next_token =
-    let cont next_token =
-      let update_macros macros =
-        match !macros with
-          m1::m2::mrest -> macros := (plugin_end_include m1 m2)::mrest;
-        | _ -> ()
-      in
-      update_macros macros;
-      update_macros ghost_macros;
-      if List.length !macros > 1 then
-        next_token ()
-      else
-        None
-    in
-    make_subpreprocessor [] (fun () -> !tlexer#peek ()) (fun () -> !tlexer#junk ()) cont
+  (make_subpreprocessor [] peek junk, fun _ -> !last_macro_used)
+
+type ghostness = Real | Ghost
+
+let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_ghost_range dataModel define_macros =
+  let make_pp macros ghost_macros = make_file_preprocessor macros ghost_macros (fun () -> !tlexer#peek ()) (fun () -> !tlexer#junk ()) in_ghost_range dataModel in
+  let macros0 = Hashtbl.create 10 in
+  List.iter
+    (fun x -> Hashtbl.replace macros0 x (dummy_loc, None, [(dummy_loc, Int (unit_big_int, false, false, NoLSuffix))]))
+    define_macros;
+  let ghost_macros0 = Hashtbl.create 10 in
+  let pp0, last_macro_used0 = make_pp macros0 ghost_macros0 in
+  let stack = ref [(macros0, ghost_macros0, pp0, last_macro_used0)] in
+  let next_token () =
+    let (macros, ghost_macros, pp, _)::stack0 = !stack in
+    match pp () with
+      None ->
+      begin match stack0 with
+        [] -> ()
+      | (macros0, ghost_macros0, pp0, _)::_ ->
+        plugin_end_include Real macros macros0;
+        plugin_end_include Ghost ghost_macros ghost_macros0;
+        stack := stack0
+      end;
+      None
+    | Some (l, BeginInclude (includeKind, s, "")) as t ->
+      let macros = plugin_begin_include macros in
+      let ghost_macros = plugin_begin_include ghost_macros in
+      let pp, last_macro_used = make_pp macros ghost_macros in
+      stack := (macros, ghost_macros, pp, last_macro_used)::!stack;
+      t
+    | t -> t
   in
-  (next_token, fun _ -> !last_macro_used)
+  let last_macro_used () =
+    let (_, _, _, last_macro_used)::_ = !stack in
+    last_macro_used ()
+  in
+  next_token, last_macro_used
 
 let make_sound_preprocessor make_lexer path verbose include_paths dataModel define_macros =
   if verbose = -1 then Printf.printf "%10.6fs: >> start preprocessing file: %s\n" (Perf.time()) path;
@@ -1512,15 +1526,31 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
   let p_begin_include macros =
     macros
   in
-  let p_end_include macros1 macros2 =
-    macros1
+  let p_end_include _ macros1 macros2 =
+    ()
   in
   let cfp_begin_include macros =
     Hashtbl.create 10
   in
-  let cfp_end_include macros1 macros2 =
-    Hashtbl.iter (fun k v -> Hashtbl.replace macros2 k v) macros1;
-    macros2
+  let cfp_header_macros_cache = ref [] in
+  let cfp_header_ghost_macros_cache = ref [] in
+  let get_cfp_header_macros_cache gh =
+    match gh with
+      Real -> cfp_header_macros_cache
+    | Ghost -> cfp_header_ghost_macros_cache
+  in
+  let cfp_end_include gh macros1 macros2 =
+    let cache = get_cfp_header_macros_cache gh in
+    let path = List.hd !paths in
+    let macros1 =
+      match List.assoc_opt path !cache with
+        None ->
+        cache := (path, macros1)::!cache;
+        macros1
+      | Some macros1 ->
+        macros1
+    in
+    Hashtbl.iter (fun k v -> Hashtbl.replace macros2 k v) macros1
   in
   let current_loc () = !curr_tlexer#loc() in
   let (p_next,last_macro_used) = make_plugin_preprocessor p_begin_include p_end_include curr_tlexer (List.hd !p_in_ghost_range) dataModel define_macros in
@@ -1597,15 +1627,9 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
           if List.mem path !included_files then begin
             match p_next() with
             | Some (_, Eof) -> 
+                let None = p_next () in
                 if verbose = -1 then Printf.printf "%10.6fs: >>>> secondary include: %s\n" (Perf.time()) path;
-                (* possible TODO: needs caching for more efficiency, but overhead is negligible *)
-                let rec import_macros () =
-                  match cfp_next() with 
-                    Some _ -> import_macros ()
-                  | None -> ()
-                in
-                import_macros ();
-                (* end *)
+                let None = cfp_next () in
                 (pop_tlexer(); Some(l, SecondaryInclude(i, path)))
             | Some _ -> divergence l ("Preprocessor does not skip secondary inclusion of file \n" ^ path)
           end else begin
@@ -1627,7 +1651,7 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
     end
     else begin
       match last_macro_used() with
-        (l,m) -> divergence l ("The expansion of a header (" ^ (string_of_loc (current_loc())) ^ ") cannot depend upon its context of defined macros (macro " ^ m ^ ")")
+        (l,m) -> divergence (current_loc ()) ("The expansion of a header cannot depend upon its context of defined macros (macro " ^ m ^ ")")
     end
   in
   ((fun () -> current_loc()), Stream.from (fun _ -> next_token ()))

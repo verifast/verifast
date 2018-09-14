@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include "threading_terminates.h"
 #include "mutexes.h"
-#include "ghost_lists.gh"
+//@ #include "ghost_lists.gh"
 
 struct mutex {
     semaphore semaphore;

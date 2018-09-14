@@ -1,4 +1,4 @@
-//@ #include "../buffer_iostyle/buffer_iostyle.h"
+#include "../buffer_iostyle/buffer_iostyle.h"
 
 void memcopy(int *from, int *to, int count)
 /*@ requires
