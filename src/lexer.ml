@@ -1078,9 +1078,6 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
     end
   in
   let defining_macro = ref false in
-  let is_concatenation_token t =
-    match t with (_, Kwd "##") -> true | _ -> false
-  in
   let next_at_start_of_line = ref true in
   let ghost_range_delimiter_allowed = ref false in
   let rec make_subpreprocessor callers peek junk cont =
@@ -1111,8 +1108,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
         s::_ -> Stream.junk s
       | [] -> junk ()
     in
-    let error msg = error (!tlexer#loc()) msg in
-    let syntax_error () = error "Preprocessor syntax error" in
+    let syntax_error l = error l "Preprocessor syntax error" in
     let rec skip_block () =
       let at_start_of_line = !next_at_start_of_line in
       next_at_start_of_line := false;
@@ -1132,7 +1128,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
     and skip_branches () =
       skip_block ();
       match peek () with
-        Some (_, Eof) -> syntax_error ()
+        Some (l, Eof) -> syntax_error l
       | Some (_, Kwd "endif") -> junk (); ()
       | _ -> junk (); skip_branches ()
     in
@@ -1173,11 +1169,11 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
                 Some (_, Kwd ")") ->
                 junk ();
                 check x
-              | _ -> syntax_error ()
+              | Some (l, _) -> syntax_error l
               end
-            | _ -> syntax_error ()
+            | Some (l, _) -> syntax_error l
             end
-          | _ -> syntax_error ()
+          | Some (l, _) -> syntax_error l
           end
         | Some t -> junk (); t::condition ()
       in
@@ -1238,9 +1234,9 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
               ghost_macros := (plugin_begin_include (List.hd !ghost_macros))::!ghost_macros; 
               next_at_start_of_line := true;
               let includeKind = match ss with String _ -> DoubleQuoteInclude | AngleBracketString _ -> AngleBracketInclude in
-              Some (!tlexer#loc(), BeginInclude(includeKind, s, ""))
+              Some (l, BeginInclude(includeKind, s, ""))
             end
-          | _ -> error "Filename expected"
+          | Some (l, _) -> error l "Filename expected"
           end
         | Some (l, Kwd "define") ->
           defining_macro := true;
@@ -1276,12 +1272,12 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
                         junk ();
                         begin match peek () with
                           Some (_, Ident x) -> junk (); x::params ()
-                        | _ -> error "Macro parameter expected"
+                        | Some (l, _) -> error l "Macro parameter expected"
                         end
-                      | _ -> error "Expected ',' for separating macro parameters or ')' for ending macro parameter list"
+                      | Some (l, _) -> error l "Expected ',' for separating macro parameters or ')' for ending macro parameter list"
                     in
                     x::params ()
-                  | _ -> error "Macro definition syntax error"
+                  | Some (l, _) -> error l "Macro definition syntax error"
                 in
                 Some params
               | _ -> None
@@ -1294,12 +1290,16 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
             let body = body () in
             Hashtbl.replace (List.hd (get_macros ())) x (lx, params, body);
             defining_macro := false;
-            if ((List.length body) > 0) && 
-                 ((is_concatenation_token (List.hd body)) || 
-                  (is_concatenation_token (List.hd (List.rev body)))) then
-              error "'##'-operator cannot appear at either end of a macro";
+            begin match body with
+              (l, Kwd "##")::_ -> error l "## operator cannot appear at the start of a macro"
+            | _ -> ()
+            end;
+            begin match List.rev body with
+              (l, Kwd "##")::_ -> error l "## operator cannot appear at the end of a macro"
+            | _ -> ()
+            end;
             next_token ()
-          | _ -> error "Macro definition syntax error"
+          | Some (l, _) -> error l "Macro definition syntax error"
           end
         | Some (l, Kwd "undef") ->
           junk ();
@@ -1308,7 +1308,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
             junk ();
             Hashtbl.remove (List.hd (get_macros ())) x;
             next_token ()
-          | _ -> syntax_error ()
+          | Some (l, _) -> syntax_error l
           end
         | Some (l, Kwd ("ifdef"|"ifndef" as cond)) ->
           junk ();
@@ -1319,7 +1319,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
             if is_defined x <> (cond = "ifdef") then
               skip_branch ();
             next_token ()
-          | _ -> syntax_error ()
+          | Some (l, _) -> syntax_error l
           end
         | Some (l, Kwd "if") ->
           junk ();
@@ -1330,14 +1330,15 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
           skip_branches ();
           next_token ()
         | Some (l, Kwd "endif") -> junk (); next_token ()
-        | _ -> syntax_error ()
+        | Some (l, _) -> syntax_error l
         end
       | (l, Ident x) as t when is_defined x && not (List.mem x (List.hd !callers)) ->
+        let lmacro_call = l in
         update_last_macro_used x;
         junk ();
         let (_,params, body) = get_macro x in
         let concatenate tokens params args =
-          let concat_tokens first second =
+          let concat_tokens l first second =
             let check_number ((_, _, c1), (_, _, c2)) i = 
               let number = (string_of_big_int i) in
               if lt_big_int i (big_int_of_int 0) || gt_big_int i (big_int_of_int 99) || 
@@ -1347,9 +1348,11 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
                    are dealing wit a decimal literal without preceeding zeros, a very strict condition
                    is enforced here.
                 *)
-                error ("Unsupported use of concatenation operator in macro " ^
-                       "(only decimal numbers i (0 <= i < 100) without leading zeros " ^ 
-                       "are allowed for technical reasons)");
+                error l begin
+                  "Unsupported use of concatenation operator in macro " ^
+                  "(only decimal numbers i (0 <= i < 100) without leading zeros " ^ 
+                  "are allowed for technical reasons)"
+                end;
               number
             in
             let check_identifier x =
@@ -1362,11 +1365,11 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
                         match a with
                         | [(l1, Ident id1)] -> id1;
                         | [(l1, Int (i1, _, _, _))] -> string_of_big_int i1;
-                        | _ -> error "Unsupported use of concatenation operator in macro";
+                        | _ -> error l "Unsupported use of concatenation operator in macro";
                       else
                         find_arg params args
                     end
-                  | _ -> error "Incorrect number of macro arguments"
+                  | _ -> error lmacro_call "Incorrect number of macro arguments"
                 in
                 find_arg params args
               else
@@ -1378,19 +1381,21 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
                   match second with
                   | (l2, Ident id2) -> (l2, Ident ((check_identifier id1) ^ (check_identifier id2)));
                   | (l2, Int (i, _, _, _)) -> (l2, Ident ((check_identifier id1) ^ (check_number l2 i)))
-                  | _ -> error "Unsupported use of concatenation operator in macro";
+                  | _ -> error l "Unsupported use of concatenation operator in macro";
                 end
-            | _ -> error "Unsupported use of concatenation operator in macro";
+            | _ -> error l "Unsupported use of concatenation operator in macro";
           in
           let rec concat_core tokens =
             match tokens with
-            | t1::(_, Kwd "##")::t2::rest -> concat_core ((concat_tokens t1 t2)::rest)
+            | t1::(l, Kwd "##")::t2::rest -> concat_core ((concat_tokens l t1 t2)::rest)
             | t::rest -> t::(concat_core rest)
             | [] -> []
           in
           let result = concat_core tokens in
-          if List.exists is_concatenation_token result
-            then error "Invalid use of concatenation operator in macro";
+          begin match flatmap (function (l, Kwd "##") -> [l] | _ -> []) result with
+            l::_ -> error l "Invalid use of concatenation operator in macro"
+          | [] -> ()
+          end;
           result
         in
         begin match params with
@@ -1402,7 +1407,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
             let args =
               let rec term parenDepth =
                 match peek () with
-                  Some (_, Eof) -> syntax_error ()
+                  Some (l, Eof) -> syntax_error l
                 | Some ((_, Kwd ")") as t) -> junk (); t::if parenDepth = 1 then arg () else term (parenDepth - 1)
                 | Some ((_, Kwd "(") as t) -> junk (); t::term (parenDepth + 1)
                 | Some t -> junk (); t::term parenDepth
@@ -1410,7 +1415,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
                 match peek () with
                   Some (_, Kwd (")"|",")) -> []
                 | Some (_, Kwd "(") -> term 0
-                | Some (_, Eof) -> syntax_error ()
+                | Some (l, Eof) -> syntax_error l
                 | Some t -> junk (); t::arg ()
               in
               let rec args () =
@@ -1429,7 +1434,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
                 [], ([]|[[]]) -> []
               | _ ->
                 match zip params args with
-                  None -> error "Incorrect number of macro arguments"
+                  None -> error l "Incorrect number of macro arguments"
                 | Some bs -> bs
             in
             let body =
