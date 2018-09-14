@@ -1069,8 +1069,6 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
         (l, _, _) -> last_macro_used := (l, x);
     end
   in
-  let expanding_macro = ref false in
-  let oneline_macro = ref false in
   let defining_macro = ref false in
   let is_concatenation_token t =
     match t with (_, Kwd "##") -> true | _ -> false
@@ -1087,11 +1085,12 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
   in
   let next_at_start_of_line = ref true in
   let ghost_range_delimiter_allowed = ref false in
+  let rec make_subpreprocessor peek junk cont =
   let peek () =
     let t = 
       match !streams with 
         s::_ -> Stream.peek s
-      | [] -> !tlexer#peek()
+      | [] -> peek ()
     in
     if not !ghost_range_delimiter_allowed then begin match t with
       (Some (l, Kwd "/*@") | Some (l, Kwd "@*/")) -> error l "Ghost range delimiters not allowed inside preprocessor directives."
@@ -1102,7 +1101,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
   let junk () = 
     match !streams with 
       s::_ -> Stream.junk s
-    | [] -> !tlexer#junk()
+    | [] -> junk ()
   in
   let error msg = error (!tlexer#loc()) msg in
   let syntax_error () = error "Preprocessor syntax error" in
@@ -1175,9 +1174,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
       | Some t -> junk (); t::condition ()
     in
     let condition = condition () in
-    oneline_macro := true;
     let condition = macro_expand [] condition in
-    oneline_macro := false;
     let condition = parse_operators dataModel (Stream.of_list condition) in
     let condition = eval_operators condition in
     let isTrue = Int64.compare condition Int64.zero <> 0 in
@@ -1192,32 +1189,15 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
       t
     with
       None -> 
-        if !streams = [] then begin
-          let update_macros macros =
-            match !macros with
-              m1::m2::mrest -> macros := (plugin_end_include m1 m2)::mrest;
-            | _ -> ()
-          in
-          update_macros macros;
-          update_macros ghost_macros;
-          if List.length !macros > 1 then
-            next_token ()
-          else
-            None
-        end
+        if !streams = [] then
+          cont next_token
         else begin
           pop_stream ();
-          if !expanding_macro && not !oneline_macro then
-            None
-          else
-            next_token ()
+          next_token ()
         end
     | Some t ->
     match t with
       (_, Eol) ->
-       if !oneline_macro then
-         None
-       else
          begin junk (); next_at_start_of_line := true; next_token () end
     | (l, Kwd "/*@") -> 
         if !tlexer#isGhostHeader() then raise (ParseException (l, "Ghost range delimiters are not allowed inside ghost headers."));
@@ -1459,20 +1439,36 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
       end
     | t -> junk (); Some t
   and macro_expand newCallers tokens =
-    let expending_macro_old = !expanding_macro in
-    if not !oneline_macro then expanding_macro := true;
     let oldStreams = !streams in
     streams := [];
     push_list newCallers tokens;
+    let next_token = make_subpreprocessor (fun () -> None) (fun () -> assert false) (fun _ -> None) in
     let rec get_tokens ts =
       match next_token () with
         None -> List.rev ts
       | Some t -> get_tokens (t::ts)
     in
     let ts = get_tokens [] in
-    if expending_macro_old = false then expanding_macro := false;
     streams := oldStreams;
     ts
+  in
+  next_token
+  in
+  let next_token =
+    let cont next_token =
+      let update_macros macros =
+        match !macros with
+          m1::m2::mrest -> macros := (plugin_end_include m1 m2)::mrest;
+        | _ -> ()
+      in
+      update_macros macros;
+      update_macros ghost_macros;
+      if List.length !macros > 1 then
+        next_token ()
+      else
+        None
+    in
+    make_subpreprocessor (fun () -> !tlexer#peek ()) (fun () -> !tlexer#junk ()) cont
   in
   (next_token, fun _ -> !last_macro_used)
 
