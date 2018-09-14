@@ -1086,373 +1086,373 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
   let next_at_start_of_line = ref true in
   let ghost_range_delimiter_allowed = ref false in
   let rec make_subpreprocessor peek junk cont =
-  let peek () =
-    let t = 
-      match !streams with 
-        s::_ -> Stream.peek s
-      | [] -> peek ()
+    let peek () =
+      let t = 
+        match !streams with 
+          s::_ -> Stream.peek s
+        | [] -> peek ()
+      in
+      if not !ghost_range_delimiter_allowed then begin match t with
+        (Some (l, Kwd "/*@") | Some (l, Kwd "@*/")) -> error l "Ghost range delimiters not allowed inside preprocessor directives."
+      | _ -> ()
+      end;
+      t
     in
-    if not !ghost_range_delimiter_allowed then begin match t with
-      (Some (l, Kwd "/*@") | Some (l, Kwd "@*/")) -> error l "Ghost range delimiters not allowed inside preprocessor directives."
-    | _ -> ()
-    end;
-    t
-  in
-  let junk () = 
-    match !streams with 
-      s::_ -> Stream.junk s
-    | [] -> junk ()
-  in
-  let error msg = error (!tlexer#loc()) msg in
-  let syntax_error () = error "Preprocessor syntax error" in
-  let rec skip_block () =
-    let at_start_of_line = !next_at_start_of_line in
-    next_at_start_of_line := false;
-    ghost_range_delimiter_allowed := true;
-    match peek () with
-      None -> ghost_range_delimiter_allowed := false
-    | Some (_, Eol) -> junk (); next_at_start_of_line := true; skip_block ()
-    | Some (_, Kwd "#") when at_start_of_line ->
-      junk ();
-      begin match peek () with
-        Some (_, Kwd ("endif"|"else"|"elif")) -> ghost_range_delimiter_allowed := false
-      | Some (_, Kwd ("ifdef"|"ifndef"|"if")) -> junk (); skip_branches (); skip_block ()
-      | Some _ -> junk (); skip_block ()
-      | None -> ghost_range_delimiter_allowed := false
-      end
-    | _ -> junk (); skip_block ()
-  and skip_branches () =
-    skip_block ();
-    match peek () with
-      None -> syntax_error ()
-    | Some (_, Kwd "endif") -> junk (); ()
-    | _ -> junk (); skip_branches ()
-  in
-  let rec skip_branch () =
-    skip_block ();
-    begin match peek () with
-      Some (_, Kwd "endif") -> junk (); ()
-    | Some (_, Kwd "elif") -> junk (); conditional ()
-    | Some (_, Kwd "else") -> junk (); ()
-    | None -> ()
-    end
-  and conditional () =
-    let rec condition () =
+    let junk () = 
+      match !streams with 
+        s::_ -> Stream.junk s
+      | [] -> junk ()
+    in
+    let error msg = error (!tlexer#loc()) msg in
+    let syntax_error () = error "Preprocessor syntax error" in
+    let rec skip_block () =
+      let at_start_of_line = !next_at_start_of_line in
+      next_at_start_of_line := false;
+      ghost_range_delimiter_allowed := true;
       match peek () with
-        None | Some (_, Eol) -> []
-      | Some (l, Ident "defined") ->
-        let check x = 
-          let cond = 
-            if is_defined x then begin
-              update_last_macro_used x;
-              (l, Int (unit_big_int, true, false, NoLSuffix))
-            end
-            else (l, Int (zero_big_int, true, false, NoLSuffix))
-          in
-          cond::condition ()
-        in
+        None -> ghost_range_delimiter_allowed := false
+      | Some (_, Eol) -> junk (); next_at_start_of_line := true; skip_block ()
+      | Some (_, Kwd "#") when at_start_of_line ->
         junk ();
         begin match peek () with
-          Some (_, Ident x) ->
-          junk ();
-          check x
-        | Some (_, Kwd "(") ->
+          Some (_, Kwd ("endif"|"else"|"elif")) -> ghost_range_delimiter_allowed := false
+        | Some (_, Kwd ("ifdef"|"ifndef"|"if")) -> junk (); skip_branches (); skip_block ()
+        | Some _ -> junk (); skip_block ()
+        | None -> ghost_range_delimiter_allowed := false
+        end
+      | _ -> junk (); skip_block ()
+    and skip_branches () =
+      skip_block ();
+      match peek () with
+        None -> syntax_error ()
+      | Some (_, Kwd "endif") -> junk (); ()
+      | _ -> junk (); skip_branches ()
+    in
+    let rec skip_branch () =
+      skip_block ();
+      begin match peek () with
+        Some (_, Kwd "endif") -> junk (); ()
+      | Some (_, Kwd "elif") -> junk (); conditional ()
+      | Some (_, Kwd "else") -> junk (); ()
+      | None -> ()
+      end
+    and conditional () =
+      let rec condition () =
+        match peek () with
+          None | Some (_, Eol) -> []
+        | Some (l, Ident "defined") ->
+          let check x = 
+            let cond = 
+              if is_defined x then begin
+                update_last_macro_used x;
+                (l, Int (unit_big_int, true, false, NoLSuffix))
+              end
+              else (l, Int (zero_big_int, true, false, NoLSuffix))
+            in
+            cond::condition ()
+          in
           junk ();
           begin match peek () with
             Some (_, Ident x) ->
             junk ();
+            check x
+          | Some (_, Kwd "(") ->
+            junk ();
             begin match peek () with
-              Some (_, Kwd ")") ->
+              Some (_, Ident x) ->
               junk ();
-              check x
+              begin match peek () with
+                Some (_, Kwd ")") ->
+                junk ();
+                check x
+              | _ -> syntax_error ()
+              end
             | _ -> syntax_error ()
             end
           | _ -> syntax_error ()
           end
+        | Some t -> junk (); t::condition ()
+      in
+      let condition = condition () in
+      let condition = macro_expand [] condition in
+      let condition = parse_operators dataModel (Stream.of_list condition) in
+      let condition = eval_operators condition in
+      let isTrue = Int64.compare condition Int64.zero <> 0 in
+      if isTrue then () else skip_branch ()
+    and next_token () =
+      let at_start_of_line = !next_at_start_of_line in
+      next_at_start_of_line := false;
+      match
+        ghost_range_delimiter_allowed := true;
+        let t = peek () in
+        ghost_range_delimiter_allowed := false;
+        t
+      with
+        None -> 
+          if !streams = [] then
+            cont next_token
+          else begin
+            pop_stream ();
+            next_token ()
+          end
+      | Some t ->
+      match t with
+        (_, Eol) ->
+           begin junk (); next_at_start_of_line := true; next_token () end
+      | (l, Kwd "/*@") -> 
+          if !tlexer#isGhostHeader() then raise (ParseException (l, "Ghost range delimiters are not allowed inside ghost headers."));
+          junk (); in_ghost_range := true; 
+          next_at_start_of_line := at_start_of_line; Some t
+      | (l, Kwd "@*/") -> 
+          if !tlexer#isGhostHeader() then raise (ParseException (l, "Ghost range delimiters are not allowed inside ghost headers."));
+          junk (); in_ghost_range := false; 
+          next_at_start_of_line := true; Some t
+      | (l, Kwd "##") when !defining_macro -> Some t
+      | (l, Kwd "#") when at_start_of_line ->
+        junk ();
+        begin match peek () with
+        | None -> next_token ()
+        | Some (l, Kwd "include") ->
+          junk ();
+          begin match peek () with
+          | Some (l, (String s | AngleBracketString s as ss)) ->
+            junk ();
+            if List.mem s ["include_ignored_by_verifast.h"; "assert.h"; "limits.h"] then 
+              next_token () 
+            else begin
+              if !tlexer#isGhostHeader() then
+                if not (Filename.check_suffix s ".gh") then raise (ParseException (l, "#include directive in ghost header should specify a ghost header file (whose name ends in .gh)."))
+              else begin
+                if !in_ghost_range && not (Filename.check_suffix s ".gh") then raise (ParseException (l, "Ghost #include directive should specify a ghost header file (whose name ends in .gh)."));
+                if not !in_ghost_range && (Filename.check_suffix s ".gh") then raise (ParseException (l, "Non-ghost #include directive should not specify a ghost header file."))
+              end;
+              macros := (plugin_begin_include (List.hd !macros))::!macros;
+              ghost_macros := (plugin_begin_include (List.hd !ghost_macros))::!ghost_macros; 
+              next_at_start_of_line := true;
+              let includeKind = match ss with String _ -> DoubleQuoteInclude | AngleBracketString _ -> AngleBracketInclude in
+              Some (!tlexer#loc(), BeginInclude(includeKind, s, ""))
+            end
+          | _ -> error "Filename expected"
+          end
+        | Some (l, Kwd "define") ->
+          defining_macro := true;
+          junk ();
+          begin match peek () with
+            Some (lx, Ident x) ->
+            junk ();
+            let has_no_whitespace_between location1 location2 =
+              let (start1, stop1) = location1 in
+              let (path1, line1, col1) = stop1 in
+              let (start2, stop2) = location2 in
+              let (path2, line2, col2) = start2 in
+              col1 = col2
+            in
+            let params =
+              match peek () with
+                (* For a macro "#define FIVE (2+3)" there are no parameters
+                 * even though there is a open bracket "(", so we must
+                 * check whether the open bracket has preceding whitespace,
+                 * hence the "when has_no_whitespace_between lx l":
+                 *)
+                Some (l, Kwd "(") when has_no_whitespace_between lx l->
+                junk ();
+                let params =
+                  match peek () with
+                    Some (_, Kwd ")") -> junk (); []
+                  | Some (_, Ident x) ->
+                    junk ();
+                    let rec params () =
+                      match peek () with
+                        Some (_, Kwd ")") -> junk (); []
+                      | Some (_, Kwd ",") ->
+                        junk ();
+                        begin match peek () with
+                          Some (_, Ident x) -> junk (); x::params ()
+                        | _ -> error "Macro parameter expected"
+                        end
+                      | _ -> error "Expected ',' for separating macro parameters or ')' for ending macro parameter list"
+                    in
+                    x::params ()
+                  | _ -> error "Macro definition syntax error"
+                in
+                Some params
+              | _ -> None
+            in
+            let rec body () =
+              match peek () with
+                None | Some (_, Eol) -> []
+              | Some t -> junk (); t::body ()
+            in 
+            let body = body () in
+            Hashtbl.replace (List.hd (get_macros ())) x (lx, params, body);
+            defining_macro := false;
+            if ((List.length body) > 0) && 
+                 ((is_concatenation_token (List.hd body)) || 
+                  (is_concatenation_token (List.hd (List.rev body)))) then
+              error "'##'-operator cannot appear at either end of a macro";
+            next_token ()
+          | _ -> error "Macro definition syntax error"
+          end
+        | Some (l, Kwd "undef") ->
+          junk ();
+          begin match peek () with
+            Some (_, Ident x) ->
+            junk ();
+            Hashtbl.remove (List.hd (get_macros ())) x;
+            next_token ()
+          | _ -> syntax_error ()
+          end
+        | Some (l, Kwd ("ifdef"|"ifndef" as cond)) ->
+          junk ();
+          begin match peek () with
+            Some (_, Ident x) ->
+            junk ();
+            update_last_macro_used x;
+            if is_defined x <> (cond = "ifdef") then
+              skip_branch ();
+            next_token ()
+          | _ -> syntax_error ()
+          end
+        | Some (l, Kwd "if") ->
+          junk ();
+          conditional ();
+          next_token ()
+        | Some (l, Kwd ("elif"|"else")) ->
+          junk ();
+          skip_branches ();
+          next_token ()
+        | Some (l, Kwd "endif") -> junk (); next_token ()
         | _ -> syntax_error ()
         end
-      | Some t -> junk (); t::condition ()
-    in
-    let condition = condition () in
-    let condition = macro_expand [] condition in
-    let condition = parse_operators dataModel (Stream.of_list condition) in
-    let condition = eval_operators condition in
-    let isTrue = Int64.compare condition Int64.zero <> 0 in
-    if isTrue then () else skip_branch ()
-  and next_token () =
-    let at_start_of_line = !next_at_start_of_line in
-    next_at_start_of_line := false;
-    match
-      ghost_range_delimiter_allowed := true;
-      let t = peek () in
-      ghost_range_delimiter_allowed := false;
-      t
-    with
-      None -> 
-        if !streams = [] then
-          cont next_token
-        else begin
-          pop_stream ();
-          next_token ()
-        end
-    | Some t ->
-    match t with
-      (_, Eol) ->
-         begin junk (); next_at_start_of_line := true; next_token () end
-    | (l, Kwd "/*@") -> 
-        if !tlexer#isGhostHeader() then raise (ParseException (l, "Ghost range delimiters are not allowed inside ghost headers."));
-        junk (); in_ghost_range := true; 
-        next_at_start_of_line := at_start_of_line; Some t
-    | (l, Kwd "@*/") -> 
-        if !tlexer#isGhostHeader() then raise (ParseException (l, "Ghost range delimiters are not allowed inside ghost headers."));
-        junk (); in_ghost_range := false; 
-        next_at_start_of_line := true; Some t
-    | (l, Kwd "##") when !defining_macro -> Some t
-    | (l, Kwd "#") when at_start_of_line ->
-      junk ();
-      begin match peek () with
-      | None -> next_token ()
-      | Some (l, Kwd "include") ->
+      | (l, Ident x) as t when is_defined x && not (List.mem x (List.hd !callers)) ->
+        update_last_macro_used x;
         junk ();
-        begin match peek () with
-        | Some (l, (String s | AngleBracketString s as ss)) ->
-          junk ();
-          if List.mem s ["include_ignored_by_verifast.h"; "assert.h"; "limits.h"] then 
-            next_token () 
-          else begin
-            if !tlexer#isGhostHeader() then
-              if not (Filename.check_suffix s ".gh") then raise (ParseException (l, "#include directive in ghost header should specify a ghost header file (whose name ends in .gh)."))
-            else begin
-              if !in_ghost_range && not (Filename.check_suffix s ".gh") then raise (ParseException (l, "Ghost #include directive should specify a ghost header file (whose name ends in .gh)."));
-              if not !in_ghost_range && (Filename.check_suffix s ".gh") then raise (ParseException (l, "Non-ghost #include directive should not specify a ghost header file."))
-            end;
-            macros := (plugin_begin_include (List.hd !macros))::!macros;
-            ghost_macros := (plugin_begin_include (List.hd !ghost_macros))::!ghost_macros; 
-            next_at_start_of_line := true;
-            let includeKind = match ss with String _ -> DoubleQuoteInclude | AngleBracketString _ -> AngleBracketInclude in
-            Some (!tlexer#loc(), BeginInclude(includeKind, s, ""))
-          end
-        | _ -> error "Filename expected"
-        end
-      | Some (l, Kwd "define") ->
-        defining_macro := true;
-        junk ();
-        begin match peek () with
-          Some (lx, Ident x) ->
-          junk ();
-          let has_no_whitespace_between location1 location2 =
-            let (start1, stop1) = location1 in
-            let (path1, line1, col1) = stop1 in
-            let (start2, stop2) = location2 in
-            let (path2, line2, col2) = start2 in
-            col1 = col2
+        let (_,params, body) = get_macro x in
+        let concatenate tokens params args =
+          let concat_tokens first second =
+            let check_number ((_, _, c1), (_, _, c2)) i = 
+              let number = (string_of_big_int i) in
+              if lt_big_int i (big_int_of_int 0) || gt_big_int i (big_int_of_int 99) || 
+                  ((c2 - c1 - (String.length number)) <> 0) then
+                (* This is necessary because the preceeding lexing fase translates literals like
+                   0xFFFF way to decimal format, so we can not differentiate anymore. To ensure we 
+                   are dealing wit a decimal literal without preceeding zeros, a very strict condition
+                   is enforced here.
+                *)
+                error ("Unsupported use of concatenation operator in macro " ^
+                       "(only decimal numbers i (0 <= i < 100) without leading zeros " ^ 
+                       "are allowed for technical reasons)");
+              number
+            in
+            let check_identifier x =
+              if List.mem x params then
+                let rec find_arg params args =
+                  match (params,args) with
+                  | (p::params, a::args) ->
+                    begin
+                      if p = x then
+                        match a with
+                        | [(l1, Ident id1)] -> id1;
+                        | [(l1, Int (i1, _, _, _))] -> string_of_big_int i1;
+                        | _ -> error "Unsupported use of concatenation operator in macro";
+                      else
+                        find_arg params args
+                    end
+                  | _ -> error "Incorrect number of macro arguments"
+                in
+                find_arg params args
+              else
+                x
+            in
+            match first with
+            | (l1, Ident id1) -> 
+                begin
+                  match second with
+                  | (l2, Ident id2) -> (l2, Ident ((check_identifier id1) ^ (check_identifier id2)));
+                  | (l2, Int (i, _, _, _)) -> (l2, Ident ((check_identifier id1) ^ (check_number l2 i)))
+                  | _ -> error "Unsupported use of concatenation operator in macro";
+                end
+            | _ -> error "Unsupported use of concatenation operator in macro";
           in
-          let params =
-            match peek () with
-              (* For a macro "#define FIVE (2+3)" there are no parameters
-               * even though there is a open bracket "(", so we must
-               * check whether the open bracket has preceding whitespace,
-               * hence the "when has_no_whitespace_between lx l":
-               *)
-              Some (l, Kwd "(") when has_no_whitespace_between lx l->
-              junk ();
-              let params =
+          let rec concat_core tokens =
+            match tokens with
+            | t1::(_, Kwd "##")::t2::rest -> concat_core ((concat_tokens t1 t2)::rest)
+            | t::rest -> t::(concat_core rest)
+            | [] -> []
+          in
+          let result = concat_core tokens in
+          if List.exists is_concatenation_token result
+            then error "Invalid use of concatenation operator in macro";
+          result
+        in
+        begin match params with
+          None -> push_list [x] (concatenate body [] []); next_token ()
+        | Some params ->
+          match peek () with
+            Some (_, Kwd "(") ->
+            junk ();
+            let args =
+              let rec term parenDepth =
+                match peek () with
+                  None -> syntax_error ()
+                | Some ((_, Kwd ")") as t) -> junk (); t::if parenDepth = 1 then arg () else term (parenDepth - 1)
+                | Some ((_, Kwd "(") as t) -> junk (); t::term (parenDepth + 1)
+                | Some t -> junk (); t::term parenDepth
+              and arg () =
+                match peek () with
+                  Some (_, Kwd (")"|",")) -> []
+                | Some (_, Kwd "(") -> term 0
+                | None -> syntax_error ()
+                | Some t -> junk (); t::arg ()
+              in
+              let rec args () =
                 match peek () with
                   Some (_, Kwd ")") -> junk (); []
-                | Some (_, Ident x) ->
-                  junk ();
-                  let rec params () =
-                    match peek () with
-                      Some (_, Kwd ")") -> junk (); []
-                    | Some (_, Kwd ",") ->
-                      junk ();
-                      begin match peek () with
-                        Some (_, Ident x) -> junk (); x::params ()
-                      | _ -> error "Macro parameter expected"
-                      end
-                    | _ -> error "Expected ',' for separating macro parameters or ')' for ending macro parameter list"
-                  in
-                  x::params ()
-                | _ -> error "Macro definition syntax error"
+                | Some (_, Kwd ",") -> junk (); let arg = arg () in arg::args ()
               in
-              Some params
-            | _ -> None
-          in
-          let rec body () =
-            match peek () with
-              None | Some (_, Eol) -> []
-            | Some t -> junk (); t::body ()
-          in 
-          let body = body () in
-          Hashtbl.replace (List.hd (get_macros ())) x (lx, params, body);
-          defining_macro := false;
-          if ((List.length body) > 0) && 
-               ((is_concatenation_token (List.hd body)) || 
-                (is_concatenation_token (List.hd (List.rev body)))) then
-            error "'##'-operator cannot appear at either end of a macro";
-          next_token ()
-        | _ -> error "Macro definition syntax error"
-        end
-      | Some (l, Kwd "undef") ->
-        junk ();
-        begin match peek () with
-          Some (_, Ident x) ->
-          junk ();
-          Hashtbl.remove (List.hd (get_macros ())) x;
-          next_token ()
-        | _ -> syntax_error ()
-        end
-      | Some (l, Kwd ("ifdef"|"ifndef" as cond)) ->
-        junk ();
-        begin match peek () with
-          Some (_, Ident x) ->
-          junk ();
-          update_last_macro_used x;
-          if is_defined x <> (cond = "ifdef") then
-            skip_branch ();
-          next_token ()
-        | _ -> syntax_error ()
-        end
-      | Some (l, Kwd "if") ->
-        junk ();
-        conditional ();
-        next_token ()
-      | Some (l, Kwd ("elif"|"else")) ->
-        junk ();
-        skip_branches ();
-        next_token ()
-      | Some (l, Kwd "endif") -> junk (); next_token ()
-      | _ -> syntax_error ()
-      end
-    | (l, Ident x) as t when is_defined x && not (List.mem x (List.hd !callers)) ->
-      update_last_macro_used x;
-      junk ();
-      let (_,params, body) = get_macro x in
-      let concatenate tokens params args =
-        let concat_tokens first second =
-          let check_number ((_, _, c1), (_, _, c2)) i = 
-            let number = (string_of_big_int i) in
-            if lt_big_int i (big_int_of_int 0) || gt_big_int i (big_int_of_int 99) || 
-                ((c2 - c1 - (String.length number)) <> 0) then
-              (* This is necessary because the preceeding lexing fase translates literals like
-                 0xFFFF way to decimal format, so we can not differentiate anymore. To ensure we 
-                 are dealing wit a decimal literal without preceeding zeros, a very strict condition
-                 is enforced here.
-              *)
-              error ("Unsupported use of concatenation operator in macro " ^
-                     "(only decimal numbers i (0 <= i < 100) without leading zeros " ^ 
-                     "are allowed for technical reasons)");
-            number
-          in
-          let check_identifier x =
-            if List.mem x params then
-              let rec find_arg params args =
-                match (params,args) with
-                | (p::params, a::args) ->
-                  begin
-                    if p = x then
-                      match a with
-                      | [(l1, Ident id1)] -> id1;
-                      | [(l1, Int (i1, _, _, _))] -> string_of_big_int i1;
-                      | _ -> error "Unsupported use of concatenation operator in macro";
-                    else
-                      find_arg params args
-                  end
-                | _ -> error "Incorrect number of macro arguments"
-              in
-              find_arg params args
-            else
-              x
-          in
-          match first with
-          | (l1, Ident id1) -> 
-              begin
-                match second with
-                | (l2, Ident id2) -> (l2, Ident ((check_identifier id1) ^ (check_identifier id2)));
-                | (l2, Int (i, _, _, _)) -> (l2, Ident ((check_identifier id1) ^ (check_number l2 i)))
-                | _ -> error "Unsupported use of concatenation operator in macro";
+              let arg = arg () in arg::args ()
+            in
+            let body =
+              concatenate body params args
+            in
+            let args = List.map (macro_expand []) args in
+            let bindings =
+              match params, args with
+                [], ([]|[[]]) -> []
+              | _ ->
+                match zip params args with
+                  None -> error "Incorrect number of macro arguments"
+                | Some bs -> bs
+            in
+            let body =
+              body |> flatmap begin function
+                (_, Ident x) as t ->
+                begin match try_assoc x bindings with
+                  None -> [t]
+                | Some value -> value
+                end
+              | t -> [t]
               end
-          | _ -> error "Unsupported use of concatenation operator in macro";
-        in
-        let rec concat_core tokens =
-          match tokens with
-          | t1::(_, Kwd "##")::t2::rest -> concat_core ((concat_tokens t1 t2)::rest)
-          | t::rest -> t::(concat_core rest)
-          | [] -> []
-        in
-        let result = concat_core tokens in
-        if List.exists is_concatenation_token result
-          then error "Invalid use of concatenation operator in macro";
-        result
+            in
+            push_list [x] body; next_token ()
+          | _ -> Some t
+        end
+      | t -> junk (); Some t
+    and macro_expand newCallers tokens =
+      let oldStreams = !streams in
+      streams := [];
+      push_list newCallers tokens;
+      let next_token = make_subpreprocessor (fun () -> None) (fun () -> assert false) (fun _ -> None) in
+      let rec get_tokens ts =
+        match next_token () with
+          None -> List.rev ts
+        | Some t -> get_tokens (t::ts)
       in
-      begin match params with
-        None -> push_list [x] (concatenate body [] []); next_token ()
-      | Some params ->
-        match peek () with
-          Some (_, Kwd "(") ->
-          junk ();
-          let args =
-            let rec term parenDepth =
-              match peek () with
-                None -> syntax_error ()
-              | Some ((_, Kwd ")") as t) -> junk (); t::if parenDepth = 1 then arg () else term (parenDepth - 1)
-              | Some ((_, Kwd "(") as t) -> junk (); t::term (parenDepth + 1)
-              | Some t -> junk (); t::term parenDepth
-            and arg () =
-              match peek () with
-                Some (_, Kwd (")"|",")) -> []
-              | Some (_, Kwd "(") -> term 0
-              | None -> syntax_error ()
-              | Some t -> junk (); t::arg ()
-            in
-            let rec args () =
-              match peek () with
-                Some (_, Kwd ")") -> junk (); []
-              | Some (_, Kwd ",") -> junk (); let arg = arg () in arg::args ()
-            in
-            let arg = arg () in arg::args ()
-          in
-          let body =
-            concatenate body params args
-          in
-          let args = List.map (macro_expand []) args in
-          let bindings =
-            match params, args with
-              [], ([]|[[]]) -> []
-            | _ ->
-              match zip params args with
-                None -> error "Incorrect number of macro arguments"
-              | Some bs -> bs
-          in
-          let body =
-            body |> flatmap begin function
-              (_, Ident x) as t ->
-              begin match try_assoc x bindings with
-                None -> [t]
-              | Some value -> value
-              end
-            | t -> [t]
-            end
-          in
-          push_list [x] body; next_token ()
-        | _ -> Some t
-      end
-    | t -> junk (); Some t
-  and macro_expand newCallers tokens =
-    let oldStreams = !streams in
-    streams := [];
-    push_list newCallers tokens;
-    let next_token = make_subpreprocessor (fun () -> None) (fun () -> assert false) (fun _ -> None) in
-    let rec get_tokens ts =
-      match next_token () with
-        None -> List.rev ts
-      | Some t -> get_tokens (t::ts)
+      let ts = get_tokens [] in
+      streams := oldStreams;
+      ts
     in
-    let ts = get_tokens [] in
-    streams := oldStreams;
-    ts
-  in
-  next_token
+    next_token
   in
   let next_token =
     let cont next_token =
