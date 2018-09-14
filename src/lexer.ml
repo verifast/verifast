@@ -176,6 +176,7 @@ type token = (* ?token *)
   | EndInclude
   | Eol
   | ErrorToken
+  | Eof
 
 let string_of_include_kind = function
   DoubleQuoteInclude -> "DoubleQuoteInclude"
@@ -198,7 +199,8 @@ let string_of_token t =
   | SecondaryInclude(s, _) -> "SecondaryInclude: " ^ s
   | EndInclude -> "EndInclude"
   | Eol -> "Eol"
-  | _ -> "Error"
+  | Eof -> "Eof"
+  | ErrorToken -> "Error"
   end
 
 (* necessary because e.g. for two Big_ints bi1 bi2, the comparison bi1 = bi2 is not allowed *)
@@ -368,6 +370,8 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
   
   let in_comment = ref inComment in
   let in_ghost_range = ref inGhostRange in
+
+  let eof_emitted = ref false in
   
   let buffer = Buffer.create 32 in
   
@@ -529,10 +533,14 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
         reset_buffer (); Some (String (string ()))
     | '/' -> start_token(); text_junk (); maybe_comment ()
     | '\000' ->
+      if !eof_emitted then None else begin
+      start_token();
       in_ghost_range := !ghost_range_start <> None;
       ghost_range_end();
       !stats#overhead ~path:path ~nonGhostLineCount:!non_ghost_line_count ~ghostLineCount:!ghost_line_count ~mixedLineCount:!mixed_line_count;
-      None
+      eof_emitted := true;
+      Some Eof
+      end
     | '*' -> start_token(); text_junk(); begin match text_peek() with '=' -> text_junk(); Some (keyword_or_error "*=") | _ -> Some (keyword_or_error "*") end
     | c -> start_token(); text_junk (); Some (keyword_or_error (String.make 1 c))
   and ident () =
@@ -1110,21 +1118,21 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
       next_at_start_of_line := false;
       ghost_range_delimiter_allowed := true;
       match peek () with
-        None -> ghost_range_delimiter_allowed := false
+        Some (_, Eof) -> ghost_range_delimiter_allowed := false
       | Some (_, Eol) -> junk (); next_at_start_of_line := true; skip_block ()
       | Some (_, Kwd "#") when at_start_of_line ->
         junk ();
         begin match peek () with
           Some (_, Kwd ("endif"|"else"|"elif")) -> ghost_range_delimiter_allowed := false
         | Some (_, Kwd ("ifdef"|"ifndef"|"if")) -> junk (); skip_branches (); skip_block ()
+        | Some (_, Eof) -> ghost_range_delimiter_allowed := false
         | Some _ -> junk (); skip_block ()
-        | None -> ghost_range_delimiter_allowed := false
         end
       | _ -> junk (); skip_block ()
     and skip_branches () =
       skip_block ();
       match peek () with
-        None -> syntax_error ()
+        Some (_, Eof) -> syntax_error ()
       | Some (_, Kwd "endif") -> junk (); ()
       | _ -> junk (); skip_branches ()
     in
@@ -1134,12 +1142,12 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
         Some (_, Kwd "endif") -> junk (); ()
       | Some (_, Kwd "elif") -> junk (); conditional ()
       | Some (_, Kwd "else") -> junk (); ()
-      | None -> ()
+      | Some (_, Eof) -> ()
       end
     and conditional () =
       let rec condition () =
         match peek () with
-          None | Some (_, Eol) -> []
+          Some (_, Eof) | Some (_, Eol) -> []
         | Some (l, Ident "defined") ->
           let check x = 
             let cond = 
@@ -1211,7 +1219,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
       | (l, Kwd "#") when at_start_of_line ->
         junk ();
         begin match peek () with
-        | None -> next_token ()
+        | Some (_, Eof) -> next_token ()
         | Some (l, Kwd "include") ->
           junk ();
           begin match peek () with
@@ -1280,7 +1288,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
             in
             let rec body () =
               match peek () with
-                None | Some (_, Eol) -> []
+                Some (_, Eof) | Some (_, Eol) -> []
               | Some t -> junk (); t::body ()
             in 
             let body = body () in
@@ -1394,7 +1402,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
             let args =
               let rec term parenDepth =
                 match peek () with
-                  None -> syntax_error ()
+                  Some (_, Eof) -> syntax_error ()
                 | Some ((_, Kwd ")") as t) -> junk (); t::if parenDepth = 1 then arg () else term (parenDepth - 1)
                 | Some ((_, Kwd "(") as t) -> junk (); t::term (parenDepth + 1)
                 | Some t -> junk (); t::term parenDepth
@@ -1402,7 +1410,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
                 match peek () with
                   Some (_, Kwd (")"|",")) -> []
                 | Some (_, Kwd "(") -> term 0
-                | None -> syntax_error ()
+                | Some (_, Eof) -> syntax_error ()
                 | Some t -> junk (); t::arg ()
               in
               let rec args () =
@@ -1582,8 +1590,7 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
           let path = find_include_file includepaths in push_tlexer path;
           if List.mem path !included_files then begin
             match p_next() with
-              Some _ -> divergence l ("Preprocessor does not skip secondary inclusion of file \n" ^ path)
-            | None -> 
+            | Some (_, Eof) -> 
                 if verbose = -1 then Printf.printf "%10.6fs: >>>> secondary include: %s\n" (Perf.time()) path;
                 (* possible TODO: needs caching for more efficiency, but overhead is negligible *)
                 let rec import_macros () =
@@ -1594,6 +1601,7 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
                 import_macros ();
                 (* end *)
                 (pop_tlexer(); Some(l, SecondaryInclude(i, path)))
+            | Some _ -> divergence l ("Preprocessor does not skip secondary inclusion of file \n" ^ path)
           end else begin
             if verbose = -1 then Printf.printf "%10.6fs: >>>> including file: %s\n" (Perf.time()) path;
             included_files := path::!included_files;

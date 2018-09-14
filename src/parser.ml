@@ -1548,7 +1548,7 @@ let parse_package_decl enforceAnnotations = parser
 let parse_scala_file (path: string) (reportRange: range_kind -> loc -> unit): package =
   let lexer = make_lexer Scala.keywords ghost_keywords in
   let (loc, ignore_eol, token_stream) = lexer path (readFile path) reportRange (fun x->()) in
-  let parse_decls_eof = parser [< ds = rep Scala.parse_decl; _ = Stream.empty >] -> PackageDecl(dummy_loc,"",[Import(dummy_loc,Real,"java.lang",None)],ds) in
+  let parse_decls_eof = parser [< ds = rep Scala.parse_decl; '(_, Eof) >] -> PackageDecl(dummy_loc,"",[Import(dummy_loc,Real,"java.lang",None)],ds) in
   try
     parse_decls_eof token_stream
   with
@@ -1568,7 +1568,7 @@ let parse_java_file_old (path: string) (reportRange: range_kind -> loc -> unit) 
   else
   let lexer = make_lexer (common_keywords @ java_keywords) ghost_keywords in
   let (loc, ignore_eol, token_stream) = lexer path (readFile path) reportRange reportShouldFail in
-  let parse_decls_eof = parser [< p = parse_package_decl enforceAnnotations; _ = Stream.empty >] -> p in
+  let parse_decls_eof = parser [< p = parse_package_decl enforceAnnotations; '(_, Eof) >] -> p in
   try
     parse_decls_eof token_stream
   with
@@ -1600,14 +1600,14 @@ let rec parse_include_directives (verbose: int) (enforceAnnotations: bool) (data
         if verbose = -1 then Printf.printf "%10.6fs: >>>> ignored secondary include: %s \n" (Perf.time()) totalPath;
         test_include_cycle l totalPath; ([], totalPath)
     | [< '(l, BeginInclude(kind, h, totalPath)); (headers, header_names) = (active_headers := totalPath::!active_headers; parse_include_directives_core []); 
-                                           ds = parse_decls CLang dataModel enforceAnnotations ~inGhostHeader:(isGhostHeader h); '(_, EndInclude) >] ->
+                                           ds = parse_decls CLang dataModel enforceAnnotations ~inGhostHeader:(isGhostHeader h); '(_, Eof); '(_, EndInclude) >] ->
                                                         if verbose = -1 then Printf.printf "%10.6fs: >>>> parsed include: %s \n" (Perf.time()) totalPath;
                                                         active_headers := List.filter (fun h -> h <> totalPath) !active_headers;
                                                         let ps = [PackageDecl(dummy_loc,"",[],ds)] in
                                                         (List.append headers [(l, (kind, h, totalPath), header_names, ps)], totalPath)
     | [< (l,kind,h,totalPath) = peek_in_ghost_range begin parser [< '(l, BeginInclude(kind, h, p)) >] -> (l,kind,h,p) end; 
                                                 (headers, header_names) = (active_headers := totalPath::!active_headers; parse_include_directives_core []); 
-                                                ds = parse_decls CLang dataModel enforceAnnotations ~inGhostHeader:(isGhostHeader h); '(_, EndInclude); '(_, Kwd "@*/") >] ->
+                                                ds = parse_decls CLang dataModel enforceAnnotations ~inGhostHeader:(isGhostHeader h); '(_, Eof); '(_, EndInclude); '(_, Kwd "@*/") >] ->
                                                         if verbose = -1 then Printf.printf "%10.6fs: >>>> parsed include: %s \n" (Perf.time()) totalPath;
                                                         active_headers := List.filter (fun h -> h <> totalPath) !active_headers;
                                                         let ps = [PackageDecl(dummy_loc,"",[],ds)] in
@@ -1628,7 +1628,7 @@ let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (report
     let parse_c_file =
       parser
         [< (headers, _) = parse_include_directives verbose enforceAnnotations dataModel; 
-                            ds = parse_decls CLang dataModel enforceAnnotations ~inGhostHeader:false; _ = Stream.empty >] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])
+                            ds = parse_decls CLang dataModel enforceAnnotations ~inGhostHeader:false; '(_, Eof) >] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])
     in
     try
       parse_c_file token_stream
@@ -1653,7 +1653,7 @@ let parse_header_file (path: string) (reportRange: range_kind -> loc -> unit) (r
     let p = parser
       [< (headers, _) = parse_include_directives verbose enforceAnnotations dataModel; 
          ds = parse_decls CLang dataModel enforceAnnotations ~inGhostHeader:isGhostHeader; 
-         _ = Stream.empty 
+         '(_, Eof)
       >] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])
     in
     try
