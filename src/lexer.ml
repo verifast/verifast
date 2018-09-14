@@ -1049,6 +1049,7 @@ let rec eval_operators e =
      then Int64.one else Int64.zero
 
 let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_ghost_range dataModel define_macros =
+  let isGhostHeader = !in_ghost_range in
   let macros = ref [Hashtbl.create 10] in
   List.iter
     (fun x -> Hashtbl.replace (List.hd !macros) x (dummy_loc, None, [(dummy_loc, Int (unit_big_int, false, false, NoLSuffix))]))
@@ -1204,11 +1205,11 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
         (_, Eol) ->
            begin junk (); next_at_start_of_line := true; next_token () end
       | (l, Kwd "/*@") -> 
-          if !tlexer#isGhostHeader() then raise (ParseException (l, "Ghost range delimiters are not allowed inside ghost headers."));
+          if isGhostHeader then raise (ParseException (l, "Ghost range delimiters are not allowed inside ghost headers."));
           junk (); in_ghost_range := true; 
           next_at_start_of_line := at_start_of_line; Some t
       | (l, Kwd "@*/") -> 
-          if !tlexer#isGhostHeader() then raise (ParseException (l, "Ghost range delimiters are not allowed inside ghost headers."));
+          if isGhostHeader then raise (ParseException (l, "Ghost range delimiters are not allowed inside ghost headers."));
           junk (); in_ghost_range := false; 
           next_at_start_of_line := true; Some t
       | (l, Kwd "##") when !defining_macro -> Some t
@@ -1224,7 +1225,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
             if List.mem s ["include_ignored_by_verifast.h"; "assert.h"; "limits.h"] then 
               next_token () 
             else begin
-              if !tlexer#isGhostHeader() then
+              if isGhostHeader then
                 if not (Filename.check_suffix s ".gh") then raise (ParseException (l, "#include directive in ghost header should specify a ghost header file (whose name ends in .gh)."))
               else begin
                 if !in_ghost_range && not (Filename.check_suffix s ".gh") then raise (ParseException (l, "Ghost #include directive should specify a ghost header file (whose name ends in .gh)."));
