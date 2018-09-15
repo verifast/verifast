@@ -332,8 +332,6 @@ let string_of_range_kind = function
     @param reportShouldFail Function that will be called whenever a should-fail directive is found in the source code.
       Should-fail directives are of the form //~ and are used for writing negative VeriFast test inputs. See tests/errors.
   *)
-let lexer_in_ghost_range = ref false
-
 let make_lexer_core keywords ghostKeywords startpos text reportRange inComment inGhostRange exceptionOnError reportShouldFail annotChar =
   let textlength = String.length text in
   let textpos = ref 0 in
@@ -793,12 +791,9 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
    ignore_eol,
    Stream.from (fun count ->
      (try
-        let t = 
-          match next_token () with
-            Some t -> Some (current_loc(), t)
-          | None -> None
-        in 
-        lexer_in_ghost_range := !ghost_range_start <> None; t
+        match next_token () with
+          Some t -> Some (current_loc(), t)
+        | None -> None
       with
         Stream.Error msg when not exceptionOnError -> reportRange ErrorRange (current_loc()); Some (current_loc(), ErrorToken)
       | Stream.Failure when not exceptionOnError -> reportRange ErrorRange (current_loc()); Some (current_loc(), ErrorToken)

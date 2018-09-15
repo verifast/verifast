@@ -1300,13 +1300,8 @@ and
 | [< '(l, Kwd "LLONG_MAX") >] -> IntLit (l, big_int_of_string "9223372036854775807", true, false, NoLSuffix)
 | [< '(l, Kwd "ULLONG_MAX") >] -> IntLit (l, big_int_of_string "18446744073709551615", true, true, NoLSuffix)
 | [< '(l, String s); ss = rep (parser [< '(_, String s) >] -> s) >] -> 
-     (* TODO: support UTF-8 *)
-     if !lexer_in_ghost_range then
-       let chars = chars_of_string s in
-       let es = List.map (fun c -> IntLit(l, big_int_of_int (Char.code c), true, false, NoLSuffix)) chars in
-       InitializerList(l, es)
-     else
-       StringLit (l, String.concat "" (s::ss))
+     let s = String.concat "" (s::ss) in
+     StringLit (l, s)
 | [< '(l, Kwd "(");
      e =
        let parse_cast = parser [< te = parse_type; '(_, Kwd ")"); e = parse_expr_suffix >] -> CastExpr (l, te, e) in

@@ -3003,9 +3003,17 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ClassLit (l, s) ->
       let s = check_classname (pn, ilist) (l, s) in
       (ClassLit (l, s), ObjType "java.lang.Class", None)
-    | StringLit (l, s) -> (match file_type path with
-        Java-> (e, ObjType "java.lang.String", None)
-      | _ -> (e, (PtrType (Int (Signed, 0))), None))
+    | StringLit (l, s) ->
+      if inAnnotation = Some true then
+        (* TODO: Do the right thing for non-ASCII characters *)
+        let cs = chars_of_string s in
+        let es = List.map (fun c -> IntLit(l, big_int_of_int (Char.code c), true, false, NoLSuffix)) cs in
+        check (InitializerList (l, es))
+      else
+        begin match language with
+          Java-> (e, ObjType "java.lang.String", None)
+        | _ -> (e, (PtrType (Int (Signed, 0))), None)
+        end
     | CastExpr (l, te, e) ->
       let t = check_pure_type (pn,ilist) tparams te in
       let w = checkt_cast e t in
