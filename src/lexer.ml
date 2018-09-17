@@ -1492,27 +1492,26 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
   in
   next_token, last_macro_used
 
+let is_ghost_header h = Filename.check_suffix h ".gh"
+
 let make_sound_preprocessor make_lexer path verbose include_paths dataModel define_macros =
   if verbose = -1 then Printf.printf "%10.6fs: >> start preprocessing file: %s\n" (Perf.time()) path;
   let tlexers = ref [] in
   let curr_tlexer = ref (new tentative_lexer (fun () -> dummy_loc) (ref false) (Stream.of_list [])) in
-  let is_ghost_header h = Filename.check_suffix h ".gh" in
-  let p_in_ghost_range = ref [] in
-  let cfp_in_ghost_range = ref [] in
+  let path_is_ghost_header = is_ghost_header path in
+  let p_in_ghost_range = ref path_is_ghost_header in
+  let cfp_in_ghost_range = ref path_is_ghost_header in
   let included_files = ref [] in
   let paths = ref [] in  
   let push_tlexer path =
-    p_in_ghost_range := (ref (is_ghost_header path))::!p_in_ghost_range;
-    cfp_in_ghost_range := (ref (is_ghost_header path))::!cfp_in_ghost_range;
-    let (loc, lexer_ignore_eol, stream) = make_lexer path include_paths ~inGhostRange:!(List.hd !p_in_ghost_range) in
+    assert (!p_in_ghost_range = is_ghost_header path);
+    let (loc, lexer_ignore_eol, stream) = make_lexer path include_paths ~inGhostRange:!p_in_ghost_range in
     lexer_ignore_eol := false;
     curr_tlexer := new tentative_lexer loc lexer_ignore_eol stream;
     tlexers := !curr_tlexer::!tlexers;
     paths := path::!paths
   in
   let pop_tlexer () =
-    p_in_ghost_range := List.tl !p_in_ghost_range;
-    cfp_in_ghost_range := List.tl !cfp_in_ghost_range;
     tlexers := List.tl !tlexers;
     curr_tlexer := List.hd !tlexers;
     paths := List.tl !paths
@@ -1548,8 +1547,8 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
     Hashtbl.iter (fun k v -> Hashtbl.replace macros2 k v) macros1
   in
   let current_loc () = !curr_tlexer#loc() in
-  let (p_next,last_macro_used) = make_plugin_preprocessor p_begin_include p_end_include curr_tlexer (List.hd !p_in_ghost_range) dataModel define_macros in
-  let (cfp_next,_) = make_plugin_preprocessor cfp_begin_include cfp_end_include curr_tlexer (List.hd !cfp_in_ghost_range) dataModel define_macros in
+  let (p_next,last_macro_used) = make_plugin_preprocessor p_begin_include p_end_include curr_tlexer p_in_ghost_range dataModel define_macros in
+  let (cfp_next,_) = make_plugin_preprocessor cfp_begin_include cfp_end_include curr_tlexer cfp_in_ghost_range dataModel define_macros in
   let divergence l s = 
     pop_tlexer();
     raise (PreprocessorDivergence (l , s))    
@@ -1559,7 +1558,7 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
     !curr_tlexer#reset();
     let cfp_t = cfp_next() in
     !curr_tlexer#commit();
-    if (compare_tokens p_t cfp_t) && (!(List.hd !p_in_ghost_range) = !(List.hd !cfp_in_ghost_range)) then begin
+    if compare_tokens p_t cfp_t && !p_in_ghost_range = !cfp_in_ghost_range then begin
       begin match p_t with
         Some (l,BeginInclude(kind, i, _)) ->    
           let path0 = List.hd !paths in
