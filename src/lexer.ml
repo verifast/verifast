@@ -1630,16 +1630,17 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
             if verbose = -1 then Printf.printf "%10.6fs: >>>> including file: %s\n" (Perf.time()) path;
             included_files := path::!included_files;
             Some (l,BeginInclude(kind, i, path))
-          end;  
-      | None -> if List.length !tlexers > 1 then begin 
-                  if verbose = -1 then begin let path = List.hd !paths in Printf.printf "%10.6fs: >>>> end including file: %s\n" (Perf.time()) path end;
-                  let l = current_loc () in pop_tlexer();
-                  Some (l, EndInclude)
-                end 
-                else begin 
-                  if verbose = -1 then Printf.printf "%10.6fs: >> finished preprocessing file: %s\n" (Perf.time()) path; 
-                  None
-                end
+          end
+      | None ->
+        if List.length !tlexers > 1 then begin
+          if verbose = -1 then begin let path = List.hd !paths in Printf.printf "%10.6fs: >>>> end including file: %s\n" (Perf.time()) path end;
+          let l = current_loc () in
+          pop_tlexer();
+          Some (l, EndInclude)
+        end else begin
+          if verbose = -1 then Printf.printf "%10.6fs: >> finished preprocessing file: %s\n" (Perf.time()) path; 
+          None
+        end
       | _ -> p_t
       end
     end
