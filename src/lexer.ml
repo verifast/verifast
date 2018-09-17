@@ -1045,12 +1045,12 @@ let rec eval_operators e =
 
 let make_file_preprocessor0 get_macro set_macro peek junk in_ghost_range dataModel =
   let isGhostHeader = !in_ghost_range in
-  let is_defined x = get_macro x <> None in
-  let get_macro x = let Some v = get_macro x in v in
+  let is_defined l x = get_macro l x <> None in
+  let get_macro l x = let Some v = get_macro l x in v in
   let last_macro_used = ref (dummy_loc, "") in
-  let update_last_macro_used x =
-    if is_defined x then begin
-      match get_macro x with
+  let update_last_macro_used l x =
+    if is_defined l x then begin
+      match get_macro l x with
         (l, _, _) -> last_macro_used := (l, x);
     end
   in
@@ -1122,10 +1122,10 @@ let make_file_preprocessor0 get_macro set_macro peek junk in_ghost_range dataMod
         match peek () with
           Some (_, Eof) | Some (_, Eol) -> []
         | Some (l, Ident "defined") ->
-          let check x = 
+          let check lx x = 
             let cond = 
-              if is_defined x then begin
-                update_last_macro_used x;
+              if is_defined lx x then begin
+                update_last_macro_used lx x;
                 (l, Int (unit_big_int, true, false, NoLSuffix))
               end
               else (l, Int (zero_big_int, true, false, NoLSuffix))
@@ -1134,18 +1134,18 @@ let make_file_preprocessor0 get_macro set_macro peek junk in_ghost_range dataMod
           in
           junk ();
           begin match peek () with
-            Some (_, Ident x) ->
+            Some (lx, Ident x) ->
             junk ();
-            check x
+            check lx x
           | Some (_, Kwd "(") ->
             junk ();
             begin match peek () with
-              Some (_, Ident x) ->
+              Some (lx, Ident x) ->
               junk ();
               begin match peek () with
                 Some (_, Kwd ")") ->
                 junk ();
-                check x
+                check lx x
               | Some (l, _) -> syntax_error l
               end
             | Some (l, _) -> syntax_error l
@@ -1288,10 +1288,10 @@ let make_file_preprocessor0 get_macro set_macro peek junk in_ghost_range dataMod
         | Some (l, Kwd ("ifdef"|"ifndef" as cond)) ->
           junk ();
           begin match peek () with
-            Some (_, Ident x) ->
+            Some (lx, Ident x) ->
             junk ();
-            update_last_macro_used x;
-            if is_defined x <> (cond = "ifdef") then
+            update_last_macro_used lx x;
+            if is_defined lx x <> (cond = "ifdef") then
               skip_branch ();
             next_token ()
           | Some (l, _) -> syntax_error l
@@ -1307,11 +1307,11 @@ let make_file_preprocessor0 get_macro set_macro peek junk in_ghost_range dataMod
         | Some (l, Kwd "endif") -> junk (); next_token ()
         | Some (l, _) -> syntax_error l
         end
-      | (l, Ident x) as t when is_defined x && not (List.mem x (List.hd !callers)) ->
+      | (l, Ident x) as t when is_defined l x && not (List.mem x (List.hd !callers)) ->
         let lmacro_call = l in
-        update_last_macro_used x;
+        update_last_macro_used l x;
         junk ();
-        let (_,params, body) = get_macro x in
+        let (_,params, body) = get_macro l x in
         let concatenate tokens params args =
           let concat_tokens l first second =
             let check_number ((_, _, c1), (_, _, c2)) i = 
@@ -1448,7 +1448,7 @@ let make_file_preprocessor macros ghost_macros peek junk in_ghost_range dataMode
       Some v -> Hashtbl.replace (get_macros ()) x v
     | None -> Hashtbl.remove (get_macros ()) x
   in
-  let get_macro x =
+  let get_macro l x =
     if !in_ghost_range then
       match Hashtbl.find_opt ghost_macros x with
         None -> Hashtbl.find_opt macros x
