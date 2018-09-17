@@ -1043,24 +1043,10 @@ let rec eval_operators e =
      if Int64.compare (eval_operators e0) Int64.zero = 0
      then Int64.one else Int64.zero
 
-let make_file_preprocessor macros ghost_macros peek junk in_ghost_range dataModel =
+let make_file_preprocessor0 get_macro set_macro peek junk in_ghost_range dataModel =
   let isGhostHeader = !in_ghost_range in
-  let get_macros () = if !in_ghost_range then ghost_macros else macros in
-  let is_defined x =
-    if Hashtbl.mem macros x then 
-      true
-    else
-      !in_ghost_range && Hashtbl.mem ghost_macros x
-  in
-  let get_macro x =
-    if is_defined x then
-      if !in_ghost_range && Hashtbl.mem ghost_macros x then
-        Hashtbl.find ghost_macros x
-      else
-        Hashtbl.find macros x
-    else
-      (dummy_loc, None, [])
-  in
+  let is_defined x = get_macro x <> None in
+  let get_macro x = let Some v = get_macro x in v in
   let last_macro_used = ref (dummy_loc, "") in
   let update_last_macro_used x =
     if is_defined x then begin
@@ -1277,7 +1263,7 @@ let make_file_preprocessor macros ghost_macros peek junk in_ghost_range dataMode
               | Some t -> junk (); t::body ()
             in 
             let body = body () in
-            Hashtbl.replace (get_macros ()) x (lx, params, body);
+            set_macro x (Some (lx, params, body));
             defining_macro := false;
             begin match body with
               (l, Kwd "##")::_ -> error l "## operator cannot appear at the start of a macro"
@@ -1295,7 +1281,7 @@ let make_file_preprocessor macros ghost_macros peek junk in_ghost_range dataMode
           begin match peek () with
             Some (_, Ident x) ->
             junk ();
-            Hashtbl.remove (get_macros ()) x;
+            set_macro x None;
             next_token ()
           | Some (l, _) -> syntax_error l
           end
@@ -1454,6 +1440,23 @@ let make_file_preprocessor macros ghost_macros peek junk in_ghost_range dataMode
     next_token
   in
   (make_subpreprocessor [] peek junk, fun _ -> !last_macro_used)
+
+let make_file_preprocessor macros ghost_macros peek junk in_ghost_range dataModel =
+  let get_macros () = if !in_ghost_range then ghost_macros else macros in
+  let set_macro x v =
+    match v with
+      Some v -> Hashtbl.replace (get_macros ()) x v
+    | None -> Hashtbl.remove (get_macros ()) x
+  in
+  let get_macro x =
+    if !in_ghost_range then
+      match Hashtbl.find_opt ghost_macros x with
+        None -> Hashtbl.find_opt macros x
+      | result -> result
+    else
+      Hashtbl.find_opt macros x
+  in
+  make_file_preprocessor0 get_macro set_macro peek junk in_ghost_range dataModel
 
 type ghostness = Real | Ghost
 
