@@ -1461,9 +1461,16 @@ let is_ghost_header h = Filename.check_suffix h ".gh"
 
 let make_sound_preprocessor make_lexer path verbose include_paths dataModel define_macros =
   if verbose = -1 then Printf.printf "%10.6fs: >> start preprocessing file: %s\n" (Perf.time()) path;
+  let mk_macros0 () =
+    let macros0 = Hashtbl.create 10 in
+    List.iter
+      (fun x -> Hashtbl.replace macros0 x (dummy_loc, None, [(dummy_loc, Int (unit_big_int, false, false, NoLSuffix))]))
+      define_macros;
+    macros0
+  in
   let tlexers = ref [] in
-  let p_macros = ref [] in
-  let p_ghost_macros = ref [] in
+  let p_macros = mk_macros0 () in
+  let p_ghost_macros = Hashtbl.create 10 in
   let pps = ref [] in
   let p_last_macro_used = ref [] in
   let cfp_macros = ref [] in
@@ -1489,15 +1496,6 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
     paths := List.tl !paths
   in
   push_tlexer path;
-  let p_begin_include macros =
-    macros
-  in
-  let p_end_include _ macros1 macros2 =
-    ()
-  in
-  let cfp_begin_include macros =
-    Hashtbl.create 10
-  in
   let cfp_header_macros_cache = ref [] in
   let cfp_header_ghost_macros_cache = ref [] in
   let get_cfp_header_macros_cache gh =
@@ -1519,21 +1517,10 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
     Hashtbl.iter (fun k v -> Hashtbl.replace macros2 k v) macros1
   in
   let current_loc () = !curr_tlexer#loc() in
-  let mk_macros0 () =
-    let macros0 = Hashtbl.create 10 in
-    List.iter
-      (fun x -> Hashtbl.replace macros0 x (dummy_loc, None, [(dummy_loc, Int (unit_big_int, false, false, NoLSuffix))]))
-      define_macros;
-    macros0
-  in
   let () =
-    let macros0 = mk_macros0 () in
-    let ghost_macros0 = Hashtbl.create 10 in
-    p_macros := macros0::!p_macros;
-    p_ghost_macros := ghost_macros0::!p_ghost_macros;
-    let pp0, last_macro_used0 = make_file_preprocessor macros0 ghost_macros0 (fun () -> !curr_tlexer#peek ()) (fun () -> !curr_tlexer#junk ()) p_in_ghost_range dataModel in
-    pps := pp0::!pps;
-    p_last_macro_used := last_macro_used0::!p_last_macro_used
+    let pp0, last_macro_used0 = make_file_preprocessor p_macros p_ghost_macros (fun () -> !curr_tlexer#peek ()) (fun () -> !curr_tlexer#junk ()) p_in_ghost_range dataModel in
+    pps := [pp0];
+    p_last_macro_used := [last_macro_used0]
   in
   let last_macro_used () =
     (List.hd !p_last_macro_used) ()
@@ -1541,19 +1528,13 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
   let () =
     let macros0 = mk_macros0 () in
     let ghost_macros0 = Hashtbl.create 10 in
-    cfp_macros := macros0::!p_macros;
-    cfp_ghost_macros := ghost_macros0::!p_ghost_macros;
+    cfp_macros := [macros0];
+    cfp_ghost_macros := [ghost_macros0];
     let cfpp0, _ = make_file_preprocessor macros0 ghost_macros0 (fun () -> !curr_tlexer#peek ()) (fun () -> !curr_tlexer#junk ()) cfp_in_ghost_range dataModel in
-    cfpps := cfpp0::!cfpps
+    cfpps := [cfpp0]
   in
   let pop_pps () =
     begin
-      let macros1::macros = !p_macros in
-      p_end_include Real macros1 (List.hd macros);
-      p_macros := macros;
-      let ghost_macros1::ghost_macros = !p_ghost_macros in
-      p_end_include Ghost ghost_macros1 (List.hd ghost_macros);
-      p_ghost_macros := ghost_macros;
       pps := List.tl !pps;
       p_last_macro_used := List.tl !p_last_macro_used
     end;
@@ -1639,17 +1620,13 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
           in
           let path = find_include_file includepaths in push_tlexer path;
           let () =
-            let macros = p_begin_include (List.hd !p_macros) in
-            let ghost_macros = p_begin_include (List.hd !p_ghost_macros) in
-            p_macros := macros::!p_macros;
-            p_ghost_macros := ghost_macros::!p_ghost_macros;
-            let pp1, last_macro_used1 = make_file_preprocessor macros ghost_macros (fun () -> !curr_tlexer#peek ()) (fun () -> !curr_tlexer#junk ()) p_in_ghost_range dataModel in
+            let pp1, last_macro_used1 = make_file_preprocessor p_macros p_ghost_macros (fun () -> !curr_tlexer#peek ()) (fun () -> !curr_tlexer#junk ()) p_in_ghost_range dataModel in
             pps := pp1::!pps;
             p_last_macro_used := last_macro_used1::!p_last_macro_used
           in
           let () =
-            let macros = cfp_begin_include (List.hd !cfp_macros) in
-            let ghost_macros = cfp_begin_include (List.hd !cfp_ghost_macros) in
+            let macros = Hashtbl.create 10 in
+            let ghost_macros = Hashtbl.create 10 in
             cfp_macros := macros::!cfp_macros;
             cfp_ghost_macros := ghost_macros::!cfp_ghost_macros;
             let cfpp1, _ = make_file_preprocessor macros ghost_macros (fun () -> !curr_tlexer#peek ()) (fun () -> !curr_tlexer#junk ()) cfp_in_ghost_range dataModel in
