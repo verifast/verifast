@@ -819,6 +819,7 @@ class type t_lexer =
     method loc           : unit -> loc
     method reset         : unit -> unit
     method commit        : unit -> unit
+    method reset_fully   : unit
   end
 
 class tentative_lexer (lloc:unit -> loc) (lstream:(loc * token) Stream.t) : t_lexer =
@@ -868,6 +869,12 @@ class tentative_lexer (lloc:unit -> loc) (lstream:(loc * token) Stream.t) : t_le
         locs <- l;
         this#fetch();
       end
+
+    method reset_fully =
+      base <- 0;
+      counter <- 0;
+      counter_old <- 0
+
   end
 
 (* Mini parser which is a subset of Parser.parse_decls_core *)
@@ -1463,11 +1470,26 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
   let cfp_in_ghost_range = ref path_is_ghost_header in
   let included_files = ref [] in
   let paths = ref [] in  
-  let push_tlexer path =
+  let mk_tlexer path =
     assert (!p_in_ghost_range = is_ghost_header path);
     let (loc, lexer_ignore_eol, stream) = make_lexer path include_paths ~inGhostRange:!p_in_ghost_range in
     lexer_ignore_eol := false;
-    curr_tlexer := new tentative_lexer loc stream;
+    new tentative_lexer loc stream
+  in
+  let tlexer_cache = ref [] in
+  let get_tlexer l path =
+    match List.assoc_opt path !tlexer_cache with
+      Some tlexer ->
+      if List.mem path !paths then raise (ParseException (l, "Recursive inclusion of header '" ^ path ^ "' by header '" ^ String.concat "' included by '" !paths ^ "'. Recursive inclusion is not supported by VeriFast."));
+      tlexer#reset_fully;
+      tlexer
+    | None ->
+      let tlexer = mk_tlexer path in
+      tlexer_cache := (path, tlexer)::!tlexer_cache;
+      tlexer
+  in
+  let push_tlexer l path =
+    curr_tlexer := get_tlexer l path;
     tlexers := !curr_tlexer::!tlexers;
     paths := path::!paths
   in
@@ -1476,7 +1498,7 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
     curr_tlexer := List.hd !tlexers;
     paths := List.tl !paths
   in
-  push_tlexer path;
+  push_tlexer dummy_loc path;
   let cfp_header_macros_cache = ref [] in
   let cfp_header_ghost_macros_cache = ref [] in
   let get_cfp_header_macros_cache gh =
@@ -1599,7 +1621,7 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
               (* The safest version: *)
               (* error (current_loc()) (Printf.sprintf "Cannot include file '%s' because multiple possible include paths are found." i) *)
           in
-          let path = find_include_file includepaths in push_tlexer path;
+          let path = find_include_file includepaths in push_tlexer l path;
           let () =
             let pp1, last_macro_used1 = make_file_preprocessor p_macros p_ghost_macros (fun () -> !curr_tlexer#peek ()) (fun () -> !curr_tlexer#junk ()) p_in_ghost_range dataModel in
             pps := pp1::!pps;
