@@ -176,7 +176,50 @@ let getcwd () =
     [] -> "."
   | cs -> String.concat "/" (List.rev cs)
 
-let rec exec_lines macros filepath file =
+let read_file_lines path file =
+  let rec iter lines lineno =
+    match read_line_canon file with
+      exception End_of_file -> List.rev (((path, lineno), None)::lines)
+    | line ->
+      let line = remove_leading_whitespace line in
+      iter (((path, lineno), Some line)::lines) (lineno + 1)
+  in
+  iter [] 1
+
+type loc = string * int
+
+type cmd =
+  LineCmd of loc * string
+| LetCmd of loc * string * string list
+
+let startswith small big =
+  String.length small <= String.length big &&
+  String.sub big 0 (String.length small) = small
+
+let error (path, lineno) msg =
+  failwith (Printf.sprintf "mysh: %s: line %d: %s" path lineno msg)
+
+let parse_cmds lines =
+  let rec iter cmds lines =
+    match lines with
+      [(l, None)] -> List.rev cmds
+    | (l, Some line)::lines when startswith "let " line ->
+      let macroname = String.sub line 4 (String.length line - 4) in
+      let rec iter' body lines = 
+        match lines with
+          [(l, None)] -> error l "Unexpected end of 'let' block"
+        | (_, Some "in")::lines ->
+          iter (LetCmd (l, macroname, List.rev body)::cmds) lines
+        | (_, Some line)::lines ->
+          iter' (line::body) lines
+      in
+      iter' [] lines
+    | (l, Some line)::lines ->
+      iter (LineCmd (l, line)::cmds) lines
+  in
+  iter [] lines
+
+let rec exec_cmds macros cmds =
   let macros = ref macros in
   let children_started_count = ref 0 in
   let children_finished_count = ref 0 in
@@ -193,34 +236,37 @@ let rec exec_lines macros filepath file =
     done;
     Mutex.unlock global_mutex
   in
-  let rec exec_lines_at lineno =
+  let rec exec_cmds0 cmds =
   if !failed_processes_log = [] then
-  let error msg =
-    failwith (Printf.sprintf "mysh: %s: line %d: %s" filepath lineno msg)
-  in
-  let cd s =
+  let cd l s =
     decompose_path s |> List.iter begin fun s ->
       if s = "." then
         ()
       else if s = ".." then
         match !cwd with
           _::cs -> cwd := cs
-        | [] -> error "cd ..: already at script base directory"
+        | [] -> error l "cd ..: already at script base directory"
       else begin
-        if has_char s '/' || has_char s '\\' then error "cd: composite paths are not supported; split into multiple cd commands";
+        if has_char s '/' || has_char s '\\' then error l "cd: composite paths are not supported; split into multiple cd commands";
         push cwd s
       end;
       Sys.chdir s
     end
   in
-  try
-    let line = read_line_canon file in
-    let rec exec_line line =
-      let line = remove_leading_whitespace line in
+  match cmds with
+    [] -> ()
+  | cmd::cmds ->
+    let rec exec_cmd cmd =
       if !failed_processes_log = [] then begin
+      match cmd with
+        LetCmd (l, macroName, lines) ->
+        macros := (macroName, lines)::!macros
+      | LineCmd (l, line) ->
+      let error msg = error l msg in
+      let rec exec_line line =
       if !verbose then print_endline line;
       match parse_cmdline line with
-        ["cd"; dir] -> cd dir
+        ["cd"; dir] -> cd l dir
       | ["del"; file] -> join_children (); Sys.remove file
       | ["ifnotmac"; line] -> if Vfconfig.platform <> MacOS then exec_line line
       | ["ifz3"; line] -> if Vfconfig.z3_present then exec_line line
@@ -232,19 +278,12 @@ let rec exec_lines macros filepath file =
         if try ignore (Sys.getenv var); true with Not_found -> false then
           exec_line cmd
       | [""] -> () (* Do not launch a process for empty lines. *)
-      | ["let"; macroName] ->
-        let lines =
-          let rec read_macro_lines () =
-            let line = read_line_canon file in
-            if line = "in" then [] else line::read_macro_lines ()
-          in
-          read_macro_lines ()
-        in
-        macros := (macroName, lines)::!macros
-      | ["include"; includepath] ->
-        let file = try open_in includepath with Sys_error s -> error (Printf.sprintf "Could not open include file '%s': %s" includepath s) in
-        exec_lines !macros includepath file;
-        close_in file
+      | ["call"|"include"; calleepath] ->
+        let file = try open_in calleepath with Sys_error s -> error (Printf.sprintf "Could not open callee file '%s': %s" calleepath s) in
+        let lines = read_file_lines calleepath file in
+        close_in file;
+        let cmds = parse_cmds lines in
+        exec_cmds !macros cmds
       | [cmdName; args] when List.mem_assoc cmdName !macros ->
         List.iter (fun line -> exec_line (Printf.sprintf "%s %s" line args)) (List.assoc cmdName !macros)
       | _ ->
@@ -317,18 +356,21 @@ let rec exec_lines macros filepath file =
         in
         ignore t;
         Mutex.unlock global_mutex
+      in
+      exec_line line
       end
     in
-    exec_line line;
-    exec_lines_at (lineno + 1)
-  with End_of_file -> ()
+    exec_cmd cmd;
+    exec_cmds0 cmds
   in
-  exec_lines_at 1;
+  exec_cmds0 cmds;
   join_children ()
 
 let () =
   let time0 = Unix.gettimeofday() in
-  exec_lines [] !main_filename !main_file;
+  let lines = read_file_lines !main_filename !main_file in
+  let cmds = parse_cmds lines in
+  exec_cmds [] cmds;
   let time1 = Unix.gettimeofday() in
   Printf.printf "Total execution time: %f seconds\n" (time1 -. time0);
   List.rev !failed_processes_log |> List.iter begin fun lines ->
