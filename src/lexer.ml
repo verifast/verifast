@@ -815,17 +815,13 @@ let make_lexer keywords ghostKeywords path text reportRange ?inGhostRange report
 class type t_lexer =
   object
     method peek          : unit -> (loc * token) option
-    method peekn         : int  -> ((loc * token) option) list
     method junk          : unit -> unit
-    method push          : (loc * token) option -> unit
     method loc           : unit -> loc
-    method ignore_eol    : unit -> bool
     method reset         : unit -> unit
     method commit        : unit -> unit
-    method isGhostHeader : unit -> bool
   end
 
-class tentative_lexer (lloc:unit -> loc) (lignore_eol:bool ref) (lstream:(loc * token) Stream.t) : t_lexer =
+class tentative_lexer (lloc:unit -> loc) (lstream:(loc * token) Stream.t) : t_lexer =
   object (this)
     val mutable base = 0
     val mutable fetched = 0
@@ -842,23 +838,10 @@ class tentative_lexer (lloc:unit -> loc) (lignore_eol:bool ref) (lstream:(loc * 
         this#fetch();
         this#peek()
       end
-    method peekn(n) =
-      if base + counter + n < fetched then
-        Array.to_list (Array.sub buffer counter n)
-      else begin
-        this#fetch();
-        this#peekn(n)
-      end
     method junk() =
       counter <- counter + 1;
-    method push(tok) =
-      counter <- counter - 1;
-      if (tok <> Array.get buffer (base + counter)) then
-        raise (Stream.Error "Pushing incorrect token back into tentative lexer");
     method loc() =
       Array.get locs (base + counter)
-    method ignore_eol() =
-      !lignore_eol
     method reset() =
       counter_old <- counter;
       counter <- 0;
@@ -868,11 +851,6 @@ class tentative_lexer (lloc:unit -> loc) (lignore_eol:bool ref) (lstream:(loc * 
       base <- base + counter;
       counter <- 0;
       counter_old <- 0;
-    method isGhostHeader() =
-      begin match this#peek() with 
-        None -> false
-      | Some (((f, _, _),_), _) -> Filename.check_suffix f ".gh"
-      end
     
     method private fetch () =
       if fetched < (Array.length buffer) then begin
@@ -1479,7 +1457,7 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
   let cfp_macros = ref [] in
   let cfp_ghost_macros = ref [] in
   let cfpps = ref [] in
-  let curr_tlexer = ref (new tentative_lexer (fun () -> dummy_loc) (ref false) (Stream.of_list [])) in
+  let curr_tlexer = ref (new tentative_lexer (fun () -> dummy_loc) (Stream.of_list [])) in
   let path_is_ghost_header = is_ghost_header path in
   let p_in_ghost_range = ref path_is_ghost_header in
   let cfp_in_ghost_range = ref path_is_ghost_header in
@@ -1489,7 +1467,7 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
     assert (!p_in_ghost_range = is_ghost_header path);
     let (loc, lexer_ignore_eol, stream) = make_lexer path include_paths ~inGhostRange:!p_in_ghost_range in
     lexer_ignore_eol := false;
-    curr_tlexer := new tentative_lexer loc lexer_ignore_eol stream;
+    curr_tlexer := new tentative_lexer loc stream;
     tlexers := !curr_tlexer::!tlexers;
     paths := path::!paths
   in
