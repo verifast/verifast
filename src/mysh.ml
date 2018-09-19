@@ -2,6 +2,8 @@ let push xs x = xs := x::!xs
 
 let (|>) x f = f x
 
+let ($) f x = f x
+
 let string_of_status status =
   match status with
     Unix.WEXITED 0 -> "terminated successfully"
@@ -79,11 +81,42 @@ let read_line_canon file =
   let n = String.length line in
   if n > 0 && line.[n - 1] = '\r' then String.sub line 0 (n - 1) else line
 
-let processes_started_count = ref 0
-let active_processes_count = ref 0
+let atomic_counter () =
+  let count = ref 0 in
+  let mutex = Mutex.create () in
+  fun () ->
+    Mutex.lock mutex;
+    incr count;
+    let value = !count in
+    Mutex.unlock mutex;
+    value
+
+let semaphore initialValue =
+  let count = ref initialValue in
+  let mutex = Mutex.create () in
+  let cond = Condition.create () in
+  let acquire () =
+    Mutex.lock mutex;
+    while !count = 0 do
+      Condition.wait cond mutex
+    done;
+    decr count;
+    Mutex.unlock mutex
+  in
+  let release () =
+    Mutex.lock mutex;
+    incr count;
+    Condition.signal cond;
+    Mutex.unlock mutex
+  in
+  acquire, release
+
+let processes_started_counter = atomic_counter ()
+
+let acquire_run_permission, release_run_permission = semaphore !max_processes
+
 let failed_processes_log: string list list ref = ref []
 let global_mutex = Mutex.create ()
-let active_processes_cond = Condition.create ()
 
 let dots_printed = ref false
 
@@ -236,6 +269,19 @@ let rec exec_cmds macros cmds =
     done;
     Mutex.unlock global_mutex
   in
+  let run_child body =
+    Mutex.lock global_mutex;
+    incr children_started_count;
+    Mutex.unlock global_mutex;
+    ignore $ Thread.create
+      begin fun () ->
+        body ();
+        Mutex.lock global_mutex;
+        child_finished ();
+        Mutex.unlock global_mutex
+      end
+      ()
+  in
   let rec exec_cmds0 cmds =
   if !failed_processes_log = [] then
   let cd l s =
@@ -287,15 +333,9 @@ let rec exec_cmds macros cmds =
       | [cmdName; args] when List.mem_assoc cmdName !macros ->
         List.iter (fun line -> exec_line (Printf.sprintf "%s %s" line args)) (List.assoc cmdName !macros)
       | _ ->
-        Mutex.lock global_mutex;
-        while not (!active_processes_count < !max_processes) do
-          Condition.wait active_processes_cond global_mutex
-        done;
-        incr children_started_count;
-        incr processes_started_count;
-        let pid = !processes_started_count in
-        if !verbose then Printf.printf "Starting process %d\n" pid;
-        incr active_processes_count;
+        acquire_run_permission ();
+        let pid = processes_started_counter () in
+        if !verbose then do_print_line (Printf.sprintf "Starting process %d" pid);
         let time0 = Unix.gettimeofday () in
         let cwd = getcwd () in
         let line' = if cwd = "." then line else cwd ^ "$ " ^ line in
@@ -313,7 +353,7 @@ let rec exec_cmds macros cmds =
           current_alarm := Some alarm
         in
         produce_alarm 1;
-        let t = Thread.create
+        run_child
           begin fun () ->
             let output = ref [] in
             if !verbose then push output line';
@@ -347,15 +387,9 @@ let rec exec_cmds macros cmds =
               else
                 print_endline (Printf.sprintf "PASS: %s (%.2fs)" line' (time1 -. time0))
             end;
-            decr active_processes_count;
-            Condition.signal active_processes_cond;
-            child_finished ();
-            Mutex.unlock global_mutex
+            Mutex.unlock global_mutex;
+            release_run_permission ()
           end
-          ()
-        in
-        ignore t;
-        Mutex.unlock global_mutex
       in
       exec_line line
       end
