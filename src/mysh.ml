@@ -197,17 +197,10 @@ let cancel_alarm alarm =
   remove_alarm alarm;
   Mutex.unlock alarm_mutex
 
-let cwd = ref []
-
 let has_char s c =
   try
     ignore (String.index s c); true
   with Not_found -> false
-
-let getcwd () =
-  match !cwd with
-    [] -> "."
-  | cs -> String.concat "/" (List.rev cs)
 
 let read_file_lines path file =
   let rec iter lines lineno =
@@ -224,6 +217,7 @@ type loc = string * int
 type cmd =
   LineCmd of loc * string
 | LetCmd of loc * string * string list
+| BlockCmd of loc * bool (* parallel *) * cmd list
 
 let startswith small big =
   String.length small <= String.length big &&
@@ -232,28 +226,57 @@ let startswith small big =
 let error (path, lineno) msg =
   failwith (Printf.sprintf "mysh: %s: line %d: %s" path lineno msg)
 
-let parse_cmds lines =
-  let rec iter cmds lines =
+let parse_file lines =
+  let rec parse_cmds cmds lines =
     match lines with
-      [(l, None)] -> List.rev cmds
+      (l, (None|Some "end_sequential"|Some "end_parallel"))::_ -> List.rev cmds, lines
+    | lines ->
+      let cmd, lines = parse_cmd lines in
+      parse_cmds (cmd::cmds) lines
+  and parse_cmd lines =
+    match lines with
+    | (l, Some "begin_sequential")::lines ->
+      let body, lines = parse_cmds [] lines in
+      begin match lines with
+        (_, Some "end_sequential")::lines -> BlockCmd (l, false, body), lines
+      | (l, _)::_ -> error l "'end_sequential' expected"
+      end
+    | (l, Some "begin_parallel")::lines ->
+      let body, lines = parse_cmds [] lines in
+      begin match lines with
+        (_, Some "end_parallel")::lines -> BlockCmd (l, true, body), lines
+      | (l, _)::_ -> error l "'end_parallel' expected"
+      end
     | (l, Some line)::lines when startswith "let " line ->
       let macroname = String.sub line 4 (String.length line - 4) in
       let rec iter' body lines = 
         match lines with
           [(l, None)] -> error l "Unexpected end of 'let' block"
         | (_, Some "in")::lines ->
-          iter (LetCmd (l, macroname, List.rev body)::cmds) lines
+          LetCmd (l, macroname, List.rev body), lines
         | (_, Some line)::lines ->
           iter' (line::body) lines
       in
       iter' [] lines
     | (l, Some line)::lines ->
-      iter (LineCmd (l, line)::cmds) lines
+      LineCmd (l, line), lines
   in
-  iter [] lines
+  let cmds, lines = parse_cmds [] lines in
+  match lines with
+    [(_, None)] -> cmds
+  | (l, _)::_ -> error l "End of file expected"
 
-let rec exec_cmds macros cmds =
+let rootdir = Sys.getcwd ()
+
+let rec exec_cmds macros cwd parallel cmds =
   let macros = ref macros in
+  let cwd = ref cwd in
+  let getcwd () =
+    match !cwd with
+      [] -> "."
+    | cs -> String.concat "/" (List.rev cs)
+  in
+  let get_abs_path relpath = rootdir ^ "/" ^ getcwd () ^ "/" ^ relpath in
   let children_started_count = ref 0 in
   let children_finished_count = ref 0 in
   let children_finished_cond = Condition.create () in
@@ -270,17 +293,25 @@ let rec exec_cmds macros cmds =
     Mutex.unlock global_mutex
   in
   let run_child body =
-    Mutex.lock global_mutex;
-    incr children_started_count;
-    Mutex.unlock global_mutex;
-    ignore $ Thread.create
-      begin fun () ->
-        body ();
-        Mutex.lock global_mutex;
-        child_finished ();
-        Mutex.unlock global_mutex
-      end
-      ()
+    if parallel then begin
+      Mutex.lock global_mutex;
+      incr children_started_count;
+      Mutex.unlock global_mutex;
+      ignore $ Thread.create
+        begin fun () ->
+          body ();
+          Mutex.lock global_mutex;
+          child_finished ();
+          Mutex.unlock global_mutex
+        end
+        ()
+    end else
+      body ()
+  in
+  let run_child_cmds parallel cmds =
+    let macros = !macros in
+    let cwd = !cwd in
+    run_child (fun () -> exec_cmds macros cwd parallel cmds)
   in
   let rec exec_cmds0 cmds =
   if !failed_processes_log = [] then
@@ -295,8 +326,7 @@ let rec exec_cmds macros cmds =
       else begin
         if has_char s '/' || has_char s '\\' then error l "cd: composite paths are not supported; split into multiple cd commands";
         push cwd s
-      end;
-      Sys.chdir s
+      end
     end
   in
   match cmds with
@@ -307,13 +337,15 @@ let rec exec_cmds macros cmds =
       match cmd with
         LetCmd (l, macroName, lines) ->
         macros := (macroName, lines)::!macros
+      | BlockCmd (l, parallel, cmds) ->
+        run_child_cmds parallel cmds
       | LineCmd (l, line) ->
       let error msg = error l msg in
       let rec exec_line line =
       if !verbose then print_endline line;
       match parse_cmdline line with
         ["cd"; dir] -> cd l dir
-      | ["del"; file] -> join_children (); Sys.remove file
+      | ["del"; file] -> join_children (); Sys.remove (get_abs_path file)
       | ["ifnotmac"; line] -> if Vfconfig.platform <> MacOS then exec_line line
       | ["ifz3"; line] -> if Vfconfig.z3_present then exec_line line
       | ["ifz3v4.5"; line] -> if Vfconfig.z3v4dot5_present then exec_line line
@@ -325,11 +357,11 @@ let rec exec_cmds macros cmds =
           exec_line cmd
       | [""] -> () (* Do not launch a process for empty lines. *)
       | ["call"|"include"; calleepath] ->
-        let file = try open_in calleepath with Sys_error s -> error (Printf.sprintf "Could not open callee file '%s': %s" calleepath s) in
+        let file = try open_in (get_abs_path calleepath) with Sys_error s -> error (Printf.sprintf "Could not open callee file '%s': %s" calleepath s) in
         let lines = read_file_lines calleepath file in
         close_in file;
-        let cmds = parse_cmds lines in
-        exec_cmds !macros cmds
+        let cmds = parse_file lines in
+        run_child_cmds false cmds
       | [cmdName; args] when List.mem_assoc cmdName !macros ->
         List.iter (fun line -> exec_line (Printf.sprintf "%s %s" line args)) (List.assoc cmdName !macros)
       | _ ->
@@ -339,7 +371,10 @@ let rec exec_cmds macros cmds =
         let time0 = Unix.gettimeofday () in
         let cwd = getcwd () in
         let line' = if cwd = "." then line else cwd ^ "$ " ^ line in
+        Mutex.lock global_mutex;
+        Sys.chdir (get_abs_path ".");
         let cin = Unix.open_process_in (line ^ " 2>&1") in
+        Mutex.unlock global_mutex;
         let current_alarm = ref None in
         let rec produce_alarm i =
           let runtime = i * 5 in
@@ -403,8 +438,8 @@ let rec exec_cmds macros cmds =
 let () =
   let time0 = Unix.gettimeofday() in
   let lines = read_file_lines !main_filename !main_file in
-  let cmds = parse_cmds lines in
-  exec_cmds [] cmds;
+  let cmds = parse_file lines in
+  exec_cmds [] [] false cmds;
   let time1 = Unix.gettimeofday() in
   Printf.printf "Total execution time: %f seconds\n" (time1 -. time0);
   List.rev !failed_processes_log |> List.iter begin fun lines ->

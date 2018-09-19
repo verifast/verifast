@@ -1,3 +1,4 @@
+begin_parallel
 let verifast_both
 ifz3 verifast
 verifast -prover redux
@@ -28,7 +29,7 @@ cd examples
     verifast -prover redux -c -disable_overflow_check splitcounter.c
   cd ..
   cd crypto_ccs
-    mysh -cpus 1 < crypto_ccs.mysh
+    call crypto_ccs.mysh
   cd ..
   cd floating_point
     cd sqrt_exact
@@ -473,3 +474,4 @@ cd tests
     cd ..
   cd ..
 cd ..
+end_parallel
