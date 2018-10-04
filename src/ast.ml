@@ -8,10 +8,10 @@ open Util
 type srcpos = (string * int * int) (* ?srcpos *)
 
 (** A range of source code: start position, end position *)
-type loc = (srcpos * srcpos) (* ?loc *)
+type loc0 = (srcpos * srcpos) (* ?loc *)
 
 let dummy_srcpos = ("<nowhere>", 0, 0)
-let dummy_loc = (dummy_srcpos, dummy_srcpos)
+let dummy_loc0 = (dummy_srcpos, dummy_srcpos)
 
 (*
 Visual Studio format:
@@ -32,7 +32,7 @@ http://www.gnu.org/prep/standards/standards.html#Errors
 
 let string_of_srcpos (p,l,c) = p ^ "(" ^ string_of_int l ^ "," ^ string_of_int c ^ ")"
 
-let string_of_loc ((p1, l1, c1), (p2, l2, c2)) =
+let string_of_loc0 ((p1, l1, c1), (p2, l2, c2)) =
   p1 ^ "(" ^ string_of_int l1 ^ "," ^ string_of_int c1 ^
   if p1 = p2 then
     if l1 = l2 then
@@ -44,6 +44,33 @@ let string_of_loc ((p1, l1, c1), (p2, l2, c2)) =
       "-" ^ string_of_int l2 ^ "," ^ string_of_int c2 ^ ")"
   else
     ")-" ^ p2 ^ "(" ^ string_of_int l2 ^ "," ^ string_of_int c2 ^ ")"
+
+(* A token provenance. Complex because of the C preprocessor. *)
+
+type loc =
+  Lexed of loc0
+| DummyLoc
+| MacroExpansion of
+    loc (* Call site *)
+    * loc (* Body token *)
+| MacroParamExpansion of
+    loc (* Parameter occurrence being expanded *)
+    * loc (* Argument token *)
+ 
+let dummy_loc = DummyLoc
+
+let rec root_caller_token l =
+  match l with
+    Lexed l -> l
+  | MacroExpansion (lcall, _) -> root_caller_token lcall
+  | MacroParamExpansion (lparam, _) -> root_caller_token lparam
+
+let rec string_of_loc l =
+  match l with
+    Lexed l0 -> string_of_loc0 l0
+  | DummyLoc -> "<dummy location>"
+  | MacroExpansion (lcall, lbody) -> Printf.sprintf "%s (body token %s)" (string_of_loc lcall) (string_of_loc lbody)
+  | MacroParamExpansion (lparam, larg) -> Printf.sprintf "%s (argument token %s)" (string_of_loc lparam) (string_of_loc larg)
 
 (* Some types for dealing with constants *)
 

@@ -908,7 +908,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     in
     iter 0 !buffers
   in
-  let create_marks_of_loc ((p1, p2): loc) =
+  let create_marks_of_loc (p1, p2) =
     let (path1, line1, col1) = p1 in
     let (path2, line2, col2) = p2 in
     assert (path1 = path2);
@@ -942,7 +942,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       | Assuming t::cs -> iter lastItem itstack last_it (t::ass) locstack last_loc last_env cs
       | Executing (h, env, l, msg)::cs ->
         let it = stepStore#append ?parent:(match itstack with [] -> None | it::_ -> Some it) () in
-        let l = create_marks_of_loc l in
+        let l = create_marks_of_loc (root_caller_token l) in
         let stepItem = (ass, h, env, l, msg, locstack) in
         stepStore#set ~row:it ~column:stepDataCol stepItem;
         stepStore#set ~row:it ~column:stepCol msg;
@@ -1010,7 +1010,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     let buffer = tab#buffer in
     apply_tag_by_name tab name ~start:(buffer#get_iter_at_mark (`MARK mark1)) ~stop:(buffer#get_iter_at_mark (`MARK mark2))
   in
-  let apply_tag_by_loc name ((p1, p2): loc) =
+  let apply_tag_by_loc name (p1, p2) =
     let (path1, line1, col1) = p1 in
     let (path2, line2, col2) = p2 in
     assert (path1 = path2);
@@ -1189,12 +1189,12 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   in
   let handleStaticError l emsg eurl =
     if l <> dummy_loc then
-      apply_tag_by_loc "error" l;
+      apply_tag_by_loc "error" (root_caller_token l);
     msg := Some emsg;
     url := eurl;
     updateMessageEntry(false);
     if l <> dummy_loc then
-      go_to_loc l
+      go_to_loc (root_caller_token l)
   in
   let reportRange kind l =
     apply_tag_by_loc (tag_name_of_range_kind kind) l
@@ -1409,7 +1409,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
               updateMessageEntry(success)
             with
               PreprocessorDivergence (l, emsg) ->
-              handleStaticError l ("Preprocessing error" ^ (if emsg = "" then "." else ": " ^ emsg)) None
+              handleStaticError (Lexed l) ("Preprocessing error" ^ (if emsg = "" then "." else ": " ^ emsg)) None
             | ParseException (l, emsg) ->
               let message = "Parse error" ^ (if emsg = "" then "." else ": " ^ emsg) in
               if (l = Ast.dummy_loc) then begin
@@ -1432,7 +1432,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
               (* let (ass, h, env, steploc, stepmsg, locstack) = get_step_of_path (get_last_step_path()) in *)
               begin match ctxts with
                 Executing (_, _, steploc, _)::_ when l = steploc ->
-                apply_tag_by_loc "error" l;
+                apply_tag_by_loc "error" (root_caller_token l);
                 msg := Some emsg;
                 url := eurl;
                 updateMessageEntry(false)

@@ -222,7 +222,7 @@ let rec print_tokens tokens =
 
 exception ParseException of loc * string
 let error l msg = raise (ParseException(l, msg))
-exception PreprocessorDivergence of loc * string
+exception PreprocessorDivergence of loc0 * string
 
 (** Like the Stream module of the O'Caml library, except that it supports a limited form of backtracking using [push].
     Used implicitly by the parser. *)
@@ -386,7 +386,7 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
 
   let current_srcpos() = (path, !line, !textpos - !linepos + 1) in
   let current_loc() = (!token_srcpos, current_srcpos()) in
-  let error msg = error (current_loc()) msg in
+  let error msg = error (Lexed (current_loc())) msg in
 
   let in_single_line_annotation = ref false in
   
@@ -814,15 +814,15 @@ let make_lexer keywords ghostKeywords path text reportRange ?inGhostRange report
 
 class type t_lexer =
   object
-    method peek          : unit -> (loc * token) option
+    method peek          : unit -> (loc0 * token) option
     method junk          : unit -> unit
-    method loc           : unit -> loc
+    method loc           : unit -> loc0
     method reset         : unit -> unit
     method commit        : unit -> unit
     method reset_fully   : unit
   end
 
-class tentative_lexer (lloc:unit -> loc) (lstream:(loc * token) Stream.t) : t_lexer =
+class tentative_lexer (lloc:unit -> loc0) (lstream:(loc0 * token) Stream.t) : t_lexer =
   object (this)
     val mutable base = 0
     val mutable fetched = 0
@@ -862,7 +862,7 @@ class tentative_lexer (lloc:unit -> loc) (lstream:(loc * token) Stream.t) : t_le
       end else begin
         let length = 2 * (Array.length buffer) in
         let b = Array.make length None in
-        let l = Array.make (length + 1) dummy_loc in
+        let l = Array.make (length + 1) dummy_loc0 in
         Array.blit buffer 0 b 0 (Array.length buffer);
         Array.blit locs 0 l 0 (Array.length locs);
         buffer <- b;
@@ -1029,6 +1029,11 @@ let rec eval_operators e =
      then Int64.one else Int64.zero
 
 let make_file_preprocessor0 get_macro set_macro peek junk in_ghost_range dataModel =
+  let peek () =
+    match peek () with
+      None -> None
+    | Some (l, t) -> Some (Lexed l, t)
+  in
   let isGhostHeader = !in_ghost_range in
   let is_defined l x = get_macro l x <> None in
   let get_macro l x = let Some v = get_macro l x in v in
@@ -1205,9 +1210,9 @@ let make_file_preprocessor0 get_macro set_macro peek junk in_ghost_range dataMod
             Some (lx, Ident x) ->
             junk ();
             let has_no_whitespace_between location1 location2 =
-              let (start1, stop1) = location1 in
+              let Lexed (start1, stop1) = location1 in
               let (path1, line1, col1) = stop1 in
-              let (start2, stop2) = location2 in
+              let Lexed (start2, stop2) = location2 in
               let (path2, line2, col2) = start2 in
               col1 = col2
             in
@@ -1299,22 +1304,6 @@ let make_file_preprocessor0 get_macro set_macro peek junk in_ghost_range dataMod
         let (_,params, body) = get_macro l x in
         let concatenate tokens params args =
           let concat_tokens l first second =
-            let check_number ((_, _, c1), (_, _, c2)) i = 
-              let number = (string_of_big_int i) in
-              if lt_big_int i (big_int_of_int 0) || gt_big_int i (big_int_of_int 99) || 
-                  ((c2 - c1 - (String.length number)) <> 0) then
-                (* This is necessary because the preceeding lexing fase translates literals like
-                   0xFFFF way to decimal format, so we can not differentiate anymore. To ensure we 
-                   are dealing wit a decimal literal without preceeding zeros, a very strict condition
-                   is enforced here.
-                *)
-                error l begin
-                  "Unsupported use of concatenation operator in macro " ^
-                  "(only decimal numbers i (0 <= i < 100) without leading zeros " ^ 
-                  "are allowed for technical reasons)"
-                end;
-              number
-            in
             let check_identifier x =
               if List.mem x params then
                 let rec find_arg params args =
@@ -1340,7 +1329,7 @@ let make_file_preprocessor0 get_macro set_macro peek junk in_ghost_range dataMod
                 begin
                   match second with
                   | (l2, Ident id2) -> (l2, Ident ((check_identifier id1) ^ (check_identifier id2)));
-                  | (l2, Int (i, _, _, _)) -> (l2, Ident ((check_identifier id1) ^ (check_number l2 i)))
+                  | (l2, Int (i, _, _, _)) -> (l2, Ident ((check_identifier id1) ^ (string_of_big_int i)))
                   | _ -> error l "Unsupported use of concatenation operator in macro";
                 end
             | _ -> error l "Unsupported use of concatenation operator in macro";
@@ -1399,14 +1388,15 @@ let make_file_preprocessor0 get_macro set_macro peek junk in_ghost_range dataMod
             in
             let body =
               body |> flatmap begin function
-                (_, Ident x) as t ->
+                (lparam, Ident x) as t ->
                 begin match try_assoc x bindings with
                   None -> [t]
-                | Some value -> value
+                | Some value -> List.map (fun (l, t) -> (MacroParamExpansion (lparam, l), t)) value
                 end
               | t -> [t]
               end
             in
+            let body = List.map (fun (l, t) -> MacroExpansion (lmacro_call, l), t) body in
             push_list [x] body; next_token ()
           | _ -> Some t
         end
@@ -1464,7 +1454,7 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
   let cfp_macros = ref [] in
   let cfp_ghost_macros = ref [] in
   let cfpps = ref [] in
-  let curr_tlexer = ref (new tentative_lexer (fun () -> dummy_loc) (Stream.of_list [])) in
+  let curr_tlexer = ref (new tentative_lexer (fun () -> dummy_loc0) (Stream.of_list [])) in
   let path_is_ghost_header = is_ghost_header path in
   let p_in_ghost_range = ref path_is_ghost_header in
   let cfp_in_ghost_range = ref path_is_ghost_header in
@@ -1613,7 +1603,7 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
             (* Remove filenames that don't exist: *)
             let possiblepaths = List.filter Sys.file_exists possiblepaths in
             match possiblepaths with
-              [] -> error (current_loc()) (Printf.sprintf "No such file '%s'." i)
+              [] -> error (Lexed (current_loc())) (Printf.sprintf "No such file '%s'." i)
             | [p] -> p
             | h::t ->
               (* The aggressive version that does not break examples: *)
@@ -1643,7 +1633,7 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
                 let None = cfp_next () in
                 pop_pps ();
                 (pop_tlexer(); Some(l, SecondaryInclude(i, path)))
-            | Some _ -> divergence l ("Preprocessor does not skip secondary inclusion of file \n" ^ path)
+            | Some _ -> let Lexed l = l in divergence l ("Preprocessor does not skip secondary inclusion of file \n" ^ path)
           end else begin
             if verbose = -1 then Printf.printf "%10.6fs: >>>> including file: %s\n" (Perf.time()) path;
             included_files := path::!included_files;
@@ -1655,7 +1645,7 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
           let l = current_loc () in
           pop_pps ();
           pop_tlexer();
-          Some (l, EndInclude)
+          Some (Lexed l, EndInclude)
         end else begin
           if verbose = -1 then Printf.printf "%10.6fs: >> finished preprocessing file: %s\n" (Perf.time()) path; 
           None
@@ -1668,7 +1658,16 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
         (l,m) -> divergence (current_loc ()) ("The expansion of a header cannot depend upon its context of defined macros (macro " ^ m ^ ")")
     end
   in
-  ((fun () -> current_loc()), Stream.from (fun _ -> next_token ()))
+  let current_loc = ref dummy_loc in
+  let next _ =
+    let result = next_token () in
+    begin match result with
+      None -> ()
+    | Some (l, t) -> current_loc := l
+    end;
+    result
+  in
+  ((fun () -> !current_loc), Stream.from next)
 
 let make_preprocessor make_lexer path verbose include_paths dataModel define_macros =
   make_sound_preprocessor make_lexer path verbose include_paths dataModel define_macros

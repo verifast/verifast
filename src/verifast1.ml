@@ -10,11 +10,11 @@ open Verifast0
 open Ast
 
 type callbacks = {
-  reportRange: range_kind -> loc -> unit;
-  reportUseSite: decl_kind -> loc -> loc -> unit;
+  reportRange: range_kind -> loc0 -> unit;
+  reportUseSite: decl_kind -> loc0 -> loc0 -> unit;
   reportExecutionForest: node list ref -> unit;
-  reportStmt: loc -> unit;
-  reportStmtExec: loc -> unit
+  reportStmt: loc0 -> unit;
+  reportStmtExec: loc0 -> unit
 }
 
 let noop_callbacks = {reportRange = (fun _ _ -> ()); reportUseSite = (fun _ _ _ -> ()); reportExecutionForest = (fun _ -> ()); reportStmt = (fun _ -> ()); reportStmtExec = (fun _ -> ())}
@@ -55,6 +55,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   } = options
 
   let {reportRange; reportUseSite; reportExecutionForest; reportStmt; reportStmtExec} = callbacks
+
+  let reportUseSite dk ld lu =
+    reportUseSite dk (root_caller_token ld) (root_caller_token lu)
+
+  let reportStmt l = reportStmt (root_caller_token l)
+  let reportStmtExec l = reportStmtExec (root_caller_token l)
 
   let data_model = match language with Java -> data_model_java | CLang -> data_model
   let {int_rank; long_rank; ptr_rank} = data_model
@@ -458,26 +464,26 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let programDir = Filename.dirname path
   let rtpath = match options.option_runtime with None -> concat (rtdir()) "rt.jarspec" | Some path -> path
   (** Records the source lines containing //~, indicating that VeriFast is supposed to detect an error on that line. *)
-  let shouldFailLocs = ref []
+  let shouldFailLocs: loc0 list ref = ref []
   
   (* Callback function called from the lexer. *)
   let reportShouldFail l =
     if allow_should_fail then
       shouldFailLocs := l::!shouldFailLocs
     else
-      static_error l "Should fail directives are not allowed; use the -allow_should_fail command-line option to allow them." None
+      static_error (Lexed l) "Should fail directives are not allowed; use the -allow_should_fail command-line option to allow them." None
 
   let check_should_fail default body =
     let locs_match ((path0, line0, _), _) ((path1, line1, _), _) = path0 = path1 && line0 = line1 in
-    let should_fail l = List.exists (locs_match l) !shouldFailLocs in
-    let has_failed l = shouldFailLocs := remove (locs_match l) !shouldFailLocs; default in
+    let should_fail l = let l = root_caller_token l in List.exists (locs_match l) !shouldFailLocs in
+    let has_failed l = let l = root_caller_token l in shouldFailLocs := remove (locs_match l) !shouldFailLocs; default in
     let loc_of_ctxts ctxts l = match get_root_caller ctxts with None -> l | Some l -> l in
     try
       body ()
     with
     | StaticError (l, msg, url) when should_fail l -> has_failed l
     | SymbolicExecutionError (ctxts, l, msg, url) when should_fail (loc_of_ctxts ctxts l) -> has_failed (loc_of_ctxts ctxts l)
-    | PreprocessorDivergence (l,s) when should_fail l -> has_failed l
+    | PreprocessorDivergence (l,s) when should_fail (Lexed l) -> has_failed (Lexed l)
     | ParseException (l,s) when should_fail l -> has_failed l
  
   let prototypes_used : (string * loc) list ref = ref []
@@ -943,7 +949,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                       spec_classes := classes;
                       spec_lemmas := lemmas
                     end;
-                    let l = file_loc path in
+                    let l = Lexed (file_loc path) in
                     let spec_include_for_jar jar =
                       let jarspec = (Filename.chop_extension jar) ^ ".jarspec" in
                       (l, (DoubleQuoteInclude, jarspec, concat !bindir jarspec), [], [])

@@ -63,16 +63,16 @@ let error l m =
 let translate_location l =
   match l with 
   | GEN.NoSource -> dummy_loc
-  | GEN.SourceLine(f, l, c1 ,c2) -> ((f, l, c1), (f, l, c2))
-  | GEN.SourceLines(f, l1, c1, l2 ,c2) -> ((f, l1, c1), (f, l2, c2))
+  | GEN.SourceLine(f, l, c1 ,c2) -> Lexed ((f, l, c1), (f, l, c2))
+  | GEN.SourceLines(f, l1, c1, l2 ,c2) -> Lexed ((f, l1, c1), (f, l2, c2))
 
 (* ------------------------------------------------ *)
 (* Parsing of annotations using the VeriFast parser *)
 (* ------------------------------------------------ *)
 
 let annotations : (string, string list) Hashtbl.t ref = ref (Hashtbl.create 1)
-let report_range : (Lexer.range_kind -> Ast.loc -> unit) ref = ref (fun _ _ -> ())
-let report_should_fail : (Ast.loc -> unit) ref = ref (fun _ -> ())
+let report_range : (Lexer.range_kind -> Ast.loc0 -> unit) ref = ref (fun _ _ -> ())
+let report_should_fail : (Ast.loc0 -> unit) ref = ref (fun _ -> ())
 let enforce_annotations : bool ref = ref false
 
 module JavaParser = Parser.Parser (struct let language = Java let enforce_annotations = true let data_model = data_model_java end)
@@ -103,7 +103,7 @@ let parse_pure_decls_core loc used_parser anns lookup =
         let a = Str.global_replace (Str.regexp "\\\\\"") "\"" a in
         debug_print (Printf.sprintf "Handling annotation \n%s\n" a);
         begin
-          let (srcpos1, _) = translate_location l in
+          let Lexed (srcpos1, _) = translate_location l in
           let annotChar = '*' in (*No nested annotations allowed, so no problem. JDK takes care of annotation char*)
           let (loc, _, token_stream, _, _) =
             Lexer.make_lexer_core (Parser.common_keywords @ Parser.java_keywords) 
@@ -135,10 +135,10 @@ let parse_pure_decls_core loc used_parser anns lookup =
     (current_loc, stream)
   in
   try
-    used_parser token_stream
+    used_parser (Parser.noop_preprocessor token_stream)
   with
-    Lexer.Stream.Error msg -> error (loc()) msg
-  | Lexer.Stream.Failure -> error (loc()) "Parse error"
+    Lexer.Stream.Error msg -> error (Lexed (loc())) msg
+  | Lexer.Stream.Failure -> error (Lexed (loc())) "Parse error"
 
 let parse_ghost_import loc anns lookup =
   let parse_ghost_import_eof = parser 

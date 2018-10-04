@@ -68,8 +68,16 @@ let opt p = parser [< v = p >] -> Some v | [< >] -> None
 let rec comma_rep p = parser [< '(_, Kwd ","); v = p; vs = comma_rep p >] -> v::vs | [< >] -> []
 let rep_comma p = parser [< v = p; vs = comma_rep p >] -> v::vs | [< >] -> []
 let rec rep p = parser [< v = p; vs = rep p >] -> v::vs | [< >] -> []
-let parse_angle_brackets (_, sp) p =
-  parser [< '((sp', _), Kwd "<") when sp = sp'; v = p; '(_, Kwd ">") >] -> v
+let rec adjacent_locs l0 l1 =
+  match l0, l1 with
+    MacroExpansion (lcall1, lbody1), MacroExpansion (lcall2, lbody2) when lcall1 == lcall2 ->
+    adjacent_locs lbody1 lbody2
+  | _ ->
+    let (_, sp0) = root_caller_token l0 in
+    let (sp1, _) = root_caller_token l1 in
+    sp0 = sp1
+let parse_angle_brackets l0 p =
+  parser [< '(l1, Kwd "<") when adjacent_locs l0 l1; v = p; '(_, Kwd ">") >] -> v
 
 (* Does a two-token lookahead.
    Succeeds if it sees a /*@ followed by something that matches [p].
@@ -215,7 +223,7 @@ let rec parse_decls ?inGhostHeader =
     parse_decls_core
 and
   parse_decls_core = parser
-  [< '((p1, _), Kwd "/*@"); ds = parse_pure_decls; '((_, p2), Kwd "@*/"); ds' = parse_decls_core >] -> ds @ ds'
+  [< '(_, Kwd "/*@"); ds = parse_pure_decls; '(_, Kwd "@*/"); ds' = parse_decls_core >] -> ds @ ds'
 | [< _ = opt (parser [< '(_, Kwd "public") >] -> ());
      abstract = (parser [< '(_, Kwd "abstract") >] -> true | [< >] -> false); 
      final = (parser [< '(_, Kwd "final") >] -> FinalClass | [< >] -> ExtensibleClass);
@@ -888,10 +896,10 @@ and
   parse_block_stmt = parser
   [< '(l, Kwd "{");
      (l, ds, ss, locals_to_free) = (parser
-       [< '((sp1, _), Kwd "/*@");
+       [< '(Lexed (sp1, _), Kwd "/*@");
           b = parser
           | [< d = parse_pure_decl; ds = parse_pure_decls; '(_, Kwd "@*/"); ss = parse_stmts >] -> (l, d @ ds, ss, ref [])
-          | [< s = parse_stmt0; '((_, sp2), Kwd "@*/"); ss = parse_stmts >] -> (l, [], PureStmt ((sp1, sp2), s)::ss, ref [])
+          | [< s = parse_stmt0; '(Lexed (_, sp2), Kwd "@*/"); ss = parse_stmts >] -> (l, [], PureStmt (Lexed (sp1, sp2), s)::ss, ref [])
        >] -> b
      | [< ds = parse_pure_decls; ss = parse_stmts >] -> (l, ds, ss, ref []));
      '(closeBraceLoc, Kwd "}")
@@ -921,8 +929,8 @@ and
      (ftn, targs, args, params, openBraceLoc, ss, closeBraceLoc)
 and
   parse_stmt0 = parser
-  [< '((sp1, _), Kwd "/*@"); s = parse_stmt0; '((_, sp2), Kwd "@*/") >] -> PureStmt ((sp1, sp2), s)
-| [< '((sp1, _), Kwd "@*/"); s = parse_stmt; '((_, sp2), Kwd "/*@") >] -> NonpureStmt ((sp1, sp2), false, s)
+  [< '(Lexed (sp1, _), Kwd "/*@"); s = parse_stmt0; '(Lexed (_, sp2), Kwd "@*/") >] -> PureStmt (Lexed (sp1, sp2), s)
+| [< '(Lexed (sp1, _), Kwd "@*/"); s = parse_stmt; '(Lexed (_, sp2), Kwd "/*@") >] -> NonpureStmt (Lexed (sp1, sp2), false, s)
 | [< '(l, Kwd "if"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); s1 = parse_stmt;
      s = parser
        [< '(_, Kwd "else"); s2 = parse_stmt >] -> IfStmt (l, e, [s1], [s2])
@@ -1540,21 +1548,32 @@ let parse_import = parser
 let parse_package_decl enforceAnnotations = parser
   [< (l,p) = parse_package; is=rep parse_import; ds=parse_decls Java data_model_java enforceAnnotations;>] -> PackageDecl(l,p,Import(dummy_loc,Real,"java.lang",None)::is, ds)
 
-let parse_scala_file (path: string) (reportRange: range_kind -> loc -> unit): package =
+let noop_preprocessor stream =
+  let next _ =
+    let result = Stream.peek stream in
+    match result with
+      None -> None
+    | Some (l, t) ->
+      Stream.junk stream;
+      Some (Lexed l, t)
+  in
+  Stream.from next
+
+let parse_scala_file (path: string) (reportRange: range_kind -> loc0 -> unit): package =
   let lexer = make_lexer Scala.keywords ghost_keywords in
   let (loc, ignore_eol, token_stream) = lexer path (readFile path) reportRange (fun x->()) in
   let parse_decls_eof = parser [< ds = rep Scala.parse_decl; '(_, Eof) >] -> PackageDecl(dummy_loc,"",[Import(dummy_loc,Real,"java.lang",None)],ds) in
   try
-    parse_decls_eof token_stream
+    parse_decls_eof (noop_preprocessor token_stream)
   with
-    Stream.Error msg -> raise (ParseException (loc(), msg))
-  | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
+    Stream.Error msg -> raise (ParseException (Lexed (loc()), msg))
+  | Stream.Failure -> raise (ParseException (Lexed (loc()), "Parse error"))
 
 (*
   old way to parse java files, these files (including non-run-time javaspec files)
   can now be handled by the Java frontend
 *)
-let parse_java_file_old (path: string) (reportRange: range_kind -> loc -> unit) reportShouldFail verbose enforceAnnotations: package =
+let parse_java_file_old (path: string) (reportRange: range_kind -> loc0 -> unit) reportShouldFail verbose enforceAnnotations: package =
   Stopwatch.start parsing_stopwatch;
   if verbose = -1 then Printf.printf "%10.6fs: >> parsing Java file: %s \n" (Perf.time()) path;
   let result =
@@ -1565,10 +1584,10 @@ let parse_java_file_old (path: string) (reportRange: range_kind -> loc -> unit) 
   let (loc, ignore_eol, token_stream) = lexer path (readFile path) reportRange reportShouldFail in
   let parse_decls_eof = parser [< p = parse_package_decl enforceAnnotations; '(_, Eof) >] -> p in
   try
-    parse_decls_eof token_stream
+    parse_decls_eof (noop_preprocessor token_stream)
   with
-    Stream.Error msg -> raise (ParseException (loc(), msg))
-  | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
+    Stream.Error msg -> raise (ParseException (Lexed (loc()), msg))
+  | Stream.Failure -> raise (ParseException (Lexed (loc()), "Parse error"))
   in
   Stopwatch.stop parsing_stopwatch;
   result
@@ -1610,7 +1629,7 @@ let rec parse_include_directives (verbose: int) (enforceAnnotations: bool) (data
   in
   parse_include_directives_core []
 
-let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit) (verbose: int) 
+let parse_c_file (path: string) (reportRange: range_kind -> loc0 -> unit) (reportShouldFail: loc0 -> unit) (verbose: int) 
             (include_paths: string list) (define_macros: string list) (enforceAnnotations: bool) (dataModel: data_model): ((loc * (include_kind * string * string) * string list * package list) list * package list) = (* ?parse_c_file *)
   Stopwatch.start parsing_stopwatch;
   if verbose = -1 then Printf.printf "%10.6fs: >> parsing C file: %s \n" (Perf.time()) path;
@@ -1634,7 +1653,7 @@ let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (report
   Stopwatch.stop parsing_stopwatch;
   result
 
-let parse_header_file (path: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit) (verbose: int) 
+let parse_header_file (path: string) (reportRange: range_kind -> loc0 -> unit) (reportShouldFail: loc0 -> unit) (verbose: int) 
          (include_paths: string list) (define_macros: string list) (enforceAnnotations: bool) (dataModel: data_model): ((loc * (include_kind * string * string) * string list * package list) list * package list) =
   Stopwatch.start parsing_stopwatch;
   if verbose = -1 then Printf.printf "%10.6fs: >> parsing Header file: %s \n" (Perf.time()) path;
@@ -1740,7 +1759,7 @@ let parse_jarspec_file_core path =
       begin fun line ->
         if line = "" then [] else
         if not (Filename.check_suffix line ".javaspec") then
-          raise (ParseException (file_loc path, "A .jarspec file must consists of a list of .jarspec file paths followed by a list of .javaspec file paths"))
+          raise (ParseException (Lexed (file_loc path), "A .jarspec file must consists of a list of .jarspec file paths followed by a list of .javaspec file paths"))
         else
           [line]
       end
@@ -1791,6 +1810,6 @@ let parse_jarsrc_file_core path =
       let mainClass = String.sub line (String.length "main-class ") (String.length line - String.length "main-class ") in
       provides @ [(Util.concat !Util.bindir "main_class ") ^ mainClass]
     | _ ->
-      raise (ParseException (file_loc path, "A .jarsrc file must consists of a list of .jar file paths followed by a list of .java file paths, optionally followed by a line of the form \"main-class mymainpackage.MyMainClass\""))
+      raise (ParseException (Lexed (file_loc path), "A .jarsrc file must consists of a list of .jar file paths followed by a list of .java file paths, optionally followed by a line of the form \"main-class mymainpackage.MyMainClass\""))
   in
   (jars, javas, provides)

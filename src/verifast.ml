@@ -2559,7 +2559,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (sign, CtorInfo (lm, xmap, pre, pre_tenv, post, epost, terminates, ss, v))::rest ->
       match ss with
         None ->
-        let ((p, _, _), (_, _, _)) = lm in 
+        let ((p, _, _), (_, _, _)) = root_caller_token lm in 
         if Filename.check_suffix p ".javaspec" then
           verify_cons (pn,ilist) cfin cn supercn superctors boxes lems rest
         else
@@ -2652,7 +2652,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ((g,sign), MethodInfo (l,gh, rt, ps,pre,pre_tenv,post,epost,pre_dyn,post_dyn,epost_dyn,terminates,sts,fb,v, _,abstract))::meths ->
       if abstract && not cabstract then static_error l "Abstract method can only appear in abstract class." None;
       match sts with
-        None -> let ((p,_,_),(_,_,_))=l in 
+        None -> let ((p,_,_),(_,_,_))= root_caller_token l in 
           if (Filename.check_suffix p ".javaspec") || abstract then verify_meths (pn,ilist) cfin cabstract boxes lems meths
           else static_error l "Method specification is only allowed in javaspec files!" None
       | Some (Some ((ss, closeBraceLoc), rank)) ->
@@ -2723,7 +2723,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
      [] -> (boxes, gs, lems)
     | Func (l, Lemma(auto, trigger), _, rt, g, ps, _, _, _, _, None, _, _)::ds -> 
       let g = full_name pn g in
-      let ((g_file_name, _, _), _) = l in
+      let ((g_file_name, _, _), _) = root_caller_token l in
       if language = Java && not (Filename.check_suffix g_file_name ".javaspec") then
         static_error l "A lemma function outside a .javaspec file must have a body. To assume a lemma, use the body '{ assume(false); }'." None;
       let FuncInfo ([], fterm, _, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, fb,v) = List.assoc g funcmap in
@@ -2917,7 +2917,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let (headers, ds)=
       match file_type path with
         | Java ->
-          let l = file_loc path in
+          let l = Lexed (file_loc path) in
           let (headers, javas, provides) =
             if Filename.check_suffix path ".jarsrc" then
               let (jars, javas, provides) = parse_jarsrc_file_core path in
@@ -2950,7 +2950,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           provide_files := provide_javas;
           let javas = javas @ provide_javas in
-          let context = List.map (fun (((b, _, _), _), (_, p, _), _, _) -> Util.concat (Filename.dirname b) ((Filename.chop_extension p) ^ ".jar")) headers in
+          let context = List.map (fun (Lexed ((b, _, _), _), (_, p, _), _, _) -> Util.concat (Filename.dirname b) ((Filename.chop_extension p) ^ ".jar")) headers in
           let ds = Java_frontend_bridge.parse_java_files javas context reportRange reportShouldFail options.option_verbose options.option_enforce_annotations options.option_use_java_frontend in
           (headers, ds)
         | CLang ->
@@ -2967,7 +2967,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     begin
       match !shouldFailLocs with
         [] -> ()
-      | l::_ -> static_error l "No error found on line." None
+      | l::_ -> static_error (Lexed l) "No error found on line." None
     end;
     result
   
@@ -3042,7 +3042,8 @@ There are 7 kinds of entries possible in a vfmanifest/dll_vfmanifest file
     in
     let sorted_lines symbol protos =
       let lines =
-        protos |> List.map begin fun (g, ((path, _, _), _)) ->
+        protos |> List.map begin fun (g, l) ->
+          let ((path, _, _), _) = root_caller_token l in
           qualified_path path ^ (Char.escaped symbol) ^ g
         end
       in
@@ -3057,7 +3058,9 @@ There are 7 kinds of entries possible in a vfmanifest/dll_vfmanifest file
     in
     let sorted_delayed_definition_lines defs =
       let lines =
-        defs |> List.map begin fun (x, ((declpath, _, _), _), ((defpath, _, _), _)) ->
+        defs |> List.map begin fun (x, ldecl, ldef) ->
+          let ((declpath, _, _), _) = root_caller_token ldecl in
+          let ((defpath, _, _), _) = root_caller_token ldef in
           Printf.sprintf "%s@%s#%s" (qualified_path defpath) (qualified_path declpath) x
         end
       in
@@ -3075,7 +3078,8 @@ There are 7 kinds of entries possible in a vfmanifest/dll_vfmanifest file
       List.sort compare
         begin
           List.map
-            begin fun (fn, ((header, _, _), _), ftn, ftargs, unloadable) ->
+            begin fun (fn, lf, ftn, ftargs, unloadable) ->
+              let ((header, _, _), _) = root_caller_token lf in
               Printf.sprintf
                 ".provides %s#%s : %s(%s)%s" (qualified_path header) fn ftn (String.concat "," ftargs) (if unloadable then " unloadable" else "")
             end

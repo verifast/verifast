@@ -131,7 +131,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let functypemap = functypemap1 @ functypemap0
   
-  let check_breakpoint h env (((path, line, col), _) as l) =
+  let check_breakpoint h env l =
+    let ((path, line, col), _) = root_caller_token l in
     match breakpoint with
       None -> ()
     | Some (path0, line0) ->
