@@ -5298,11 +5298,11 @@ let check_if_list_is_defined () =
          then bitwise_not_symbol maps signed n-bit integers to signed n-bit integers (of the opposite sign),
          but it maps unsigned integers to negative integers.
        *)
-      begin match t with
-        Int (Signed, n) -> ev state e $. fun state v -> cont state (ctxt#mk_app bitwise_not_symbol [v])
-      | _ ->
+      let is_signed_int = match t with Int (Signed, n) -> true | _ -> false in
+      if is_signed_int || ass_term = None then
+        ev state e $. fun state v -> cont state (ctxt#mk_app bitwise_not_symbol [v])
+      else
         static_error l "VeriFast does not currently support taking the bitwise complement (~) of an unsigned integer except as part of a bitwise AND (x & ~y)." None
-      end
     | WOperation (l, Div, [e1; e2], RealType) ->
       begin match (e1, e2) with
         (RealLit (_, n), WIntLit (_, d)) when eq_num n (num_of_big_int unit_big_int) && eq_big_int d two_big_int -> cont state real_half
