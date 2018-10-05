@@ -9,10 +9,6 @@ lemma void test()
     bitand_def(0x01, Zdigit(Zsign(false), true), 0x10, Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zsign(false), true), false), false), false), false));
 }
 
-lemma Z Z_of_uint8(int x);
-    requires 0 <= x &*& x <= 255;
-    ensures result == Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zsign(false), _), _), _), _), _), _), _), _) &*& x == int_of_Z(result);
-
 lemma void Z_of_uint8_eq(Z z1, Z z2)
     requires z1 == Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zsign(false), ?b7), ?b6), ?b5), ?b4), ?b3), ?b2), ?b1), ?b0) &*& z2 == Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zsign(false), b7), b6), b5), b4), b3), b2), b1), b0);
     ensures z1 == z2;
