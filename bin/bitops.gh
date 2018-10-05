@@ -96,7 +96,7 @@ fixpoint Z Z_truncate_signed(Z z, nat n) { // n = number of bits, not including 
             case Zdigit(z0, b0): return Zsign(b0);
         };
         case succ(n0): return switch (z) {
-            case Zsign(b): return z;
+            case Zsign(b): return Zdigit(Z_truncate_signed(z, n0), b);
             case Zdigit(z0, b0): return Zdigit(Z_truncate_signed(z0, n0), b0);
         };
     }
