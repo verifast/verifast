@@ -162,6 +162,8 @@
 .provides ./nat.gh#nat_of_127
 .provides ./nat.gh#nat_of_128
 .provides ./nat.gh#succ_int
+.provides ./nat.gh#pow_nat_nonnegative
+.provides ./nat.gh#pow_nat_nat_minus
 .provides ./maps.gh#apply_fupdate
 .provides ./bitops.gh#bitand_def
 .provides ./bitops.gh#bitnot_def

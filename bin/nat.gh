@@ -12,9 +12,9 @@ fixpoint nat nat_plus(nat m, nat n) {
 
 fixpoint nat nat_minus(nat m, nat n) {
     switch (m) {
-        case zero: return n;
+        case zero: return zero;
         case succ(m0): return switch (n) {
-            case zero: return zero;
+            case zero: return m;
             case succ(n0): return nat_minus(m0, n0);
         };
     }
@@ -210,5 +210,13 @@ fixpoint int pow_nat(int x, nat n) {
         case succ(n0): return x * pow_nat(x, n0);
     }
 }
+
+lemma_auto void pow_nat_nonnegative(int x, nat n);
+    requires 0 <= x;
+    ensures 0 <= pow_nat(x, n);
+
+lemma void pow_nat_nat_minus(int x, nat m, nat n);
+    requires 1 <= x;
+    ensures pow_nat(x, nat_minus(m, n)) <= pow_nat(x, m);
 
 #endif
