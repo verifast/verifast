@@ -48,4 +48,22 @@ lemma void limits_test_24(int x, int y)
     bitxor_limits(x, y, Ndec({N2, N4}));
 }
 
+lemma unsigned char truncate_unsigned_test(int x)
+    requires x == 0x123;
+    ensures result == 0x23;
+{
+    truncate_unsigned_def(0x123, N8);
+    div_rem(0x123, 0x100);
+    return truncating (unsigned char) x;
+}
+
+lemma signed char truncate_signed_test(int x)
+    requires x == 0xff;
+    ensures result == -1;
+{
+    Z z = Z_of_uint8(0xff);
+    truncate_signed_def(0xff, z, N7);
+    return truncating (signed char) x;
+}
+
 @*/
