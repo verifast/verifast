@@ -843,13 +843,15 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     let collist = new GTree.column_list in
     let col_k = collist#add Gobject.Data.int in
     let col_text = collist#add Gobject.Data.string in
+    let col_foreground = collist#add Gobject.Data.string in
+    let col_strikethrough = collist#add Gobject.Data.boolean in
     let store = GTree.list_store collist in
     let scrollWin = GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN () in
     let lb = GTree.view ~model:store ~packing:scrollWin#add () in
     lb#coerce#misc#modify_font_by_name !scaledTraceFont;
-    let col = GTree.view_column ~title:title ~renderer:(GTree.cell_renderer_text [], ["text", col_text]) () in
+    let col = GTree.view_column ~title:title ~renderer:(GTree.cell_renderer_text [], ["text", col_text; "foreground", col_foreground; "strikethrough", (Obj.magic (col_strikethrough: bool GTree.column): string GTree.column)]) () in (* Using Obj.magic to work around the fact that the type of GTree.view_column is more strict than necessary: it incorrectly requires that all columns be of the same type. *)
     let _ = lb#append_column col in
-    (scrollWin, lb, col_k, col_text, col, store)
+    (scrollWin, lb, col_k, col_text, col_foreground, col_strikethrough, col, store)
   in
   let create_assoc_list_box title1 title2 =
     let collist = new GTree.column_list in
@@ -869,9 +871,9 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   in
   let (steplistFrame, stepList, stepDataCol, stepCol, stepViewCol, stepStore) = create_steplistbox in
   let _ = bottomTable#pack1 ~resize:true ~shrink:true (steplistFrame#coerce) in
-  let (assumptionsFrame, assumptionsList, assumptionsKCol, assumptionsCol, _, assumptionsStore) = create_listbox "Assumptions" in
+  let (assumptionsFrame, assumptionsList, assumptionsKCol, assumptionsCol, assumptionsForegroundCol, assumptionsStrikethroughCol, _, assumptionsStore) = create_listbox "Assumptions" in
   let _ = bottomTable2#pack1 ~resize:true ~shrink:true (assumptionsFrame#coerce) in
-  let (chunksFrame, chunksList, chunksKCol, chunksCol, _, chunksStore) = create_listbox "Heap chunks" in
+  let (chunksFrame, chunksList, chunksKCol, chunksCol, chunksForegroundCol, chunksStrikethroughCol, _, chunksStore) = create_listbox "Heap chunks" in
   let _ = bottomTable2#pack2 ~resize:true ~shrink:true (chunksFrame#coerce) in
   let (srcEnvFrame, srcEnvList, srcEnvKCol, srcEnvCol1, srcEnvCol2, _, _, srcEnvStore) = create_assoc_list_box "Local" "Value" in
   let _ = srcPaned#pack2 ~resize:true ~shrink:true (srcEnvFrame#coerce) in
@@ -970,14 +972,16 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     in
     stepItems := Some (iter None [] None [] [] None None ctxts_fifo)
   in
-  let append_items (store:GTree.list_store) kcol col items =
+  let append_items (store:GTree.list_store) kcol col foreground_col strikethrough_col items =
     let rec iter k items =
       match items with
         [] -> ()
-      | item::items ->
+      | (item, foreground, strikethrough)::items ->
         let gIter = store#append() in
         store#set ~row:gIter ~column:kcol k;
         store#set ~row:gIter ~column:col item;
+        store#set ~row:gIter ~column:foreground_col foreground;
+        store#set ~row:gIter ~column:strikethrough_col strikethrough;
         iter (k + 1) items
     in
     iter 0 items
@@ -1028,6 +1032,24 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     let env = List.sort compare_bindings env in
     List.filter (fun entry -> entry <> ("currentThread", "currentThread")) env
   in
+  let rec get_last_visible_descendant (treeView: GTree.view) path =
+    if treeView#row_expanded path then
+      let iter = treeView#model#get_iter path in
+      let n = treeView#model#iter_n_children (Some iter) in
+      let iter = treeView#model#iter_children ~nth:(n - 1) (Some iter) in
+      get_last_visible_descendant treeView (treeView#model#get_path iter)
+    else
+      path
+  in
+  let get_path_of_preceding_visible_row treeView path =
+    let path = GtkTree.TreePath.copy path in
+    if GtkTree.TreePath.prev path then
+      Some (get_last_visible_descendant treeView path)
+    else if GtkTree.TreePath.up path && GtkTree.TreePath.get_depth path > 0 then
+      Some path
+    else
+      None
+  in
   let stepSelected _ =
     match !stepItems with
       None -> ()
@@ -1035,6 +1057,8 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       clearStepInfo();
       let selpath = List.hd stepList#selection#get_selected_rows in
       let (ass, h, env, l, msg, locstack) = get_step_of_path selpath in
+      let prevRowPath = get_path_of_preceding_visible_row stepList selpath in
+      let prevStep = option_map get_step_of_path prevRowPath in
       begin
         match locstack with
           [] ->
@@ -1067,7 +1091,24 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
             append_assoc_items srcEnvStore srcEnvKCol srcEnvCol1 srcEnvCol2 (strings_of_env caller_env)
           end
       end;
-      append_items assumptionsStore assumptionsKCol assumptionsCol (List.rev ass);
+      let unchangedRowColor = "#000000" in
+      let newRowColor = "#00C000" in
+      let deletedRowColor = "#FF0000" in
+      let assRows =
+        match prevStep with
+          None -> List.map (fun s -> (s, unchangedRowColor, false)) ass
+        | Some (ass', _, _, _, _, _) ->
+          let delta = List.length ass - List.length ass' in
+          let rec iter delta ass =
+            if delta = 0 then
+              List.map (fun s -> (s, unchangedRowColor, false)) ass
+            else
+              let s::ass = ass in
+              (s, newRowColor, false)::iter (delta - 1) ass
+          in
+          iter delta ass
+      in
+      append_items assumptionsStore assumptionsKCol assumptionsCol assumptionsForegroundCol assumptionsStrikethroughCol (List.rev assRows);
       let compare_chunks (Chunk ((g, literal), targs, coef, ts, size)) (Chunk ((g', literal'), targs', coef', ts', size')) =
         let r = compare g g' in
         if r <> 0 then r else
@@ -1085,7 +1126,25 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
         if r <> 0 then r else
         compare coef coef'
       in
-      append_items chunksStore chunksKCol chunksCol (List.map string_of_chunk (List.sort compare_chunks h))
+      let chunksRows =
+        let h = List.map string_of_chunk (List.sort compare_chunks h) in
+        match prevStep with
+          None -> List.map (fun c -> (c, unchangedRowColor, false)) h
+        | Some (_, h', _, _, _, _) ->
+          let h' = List.map string_of_chunk (List.sort compare_chunks h') in
+          let rec iter h h' =
+            match h, h' with
+              [], [] -> []
+            | c::h, c'::h' when c = c' ->
+              (c, unchangedRowColor, false)::iter h h'
+            | h, c'::h' when not (List.mem c' h) ->
+              (c', deletedRowColor, true)::iter h h'
+            | c::h, h' ->
+              (c, newRowColor, false)::iter h h'
+          in
+          iter h h'
+      in
+      append_items chunksStore chunksKCol chunksCol chunksForegroundCol chunksStrikethroughCol chunksRows
   in
   let _ = stepList#connect#cursor_changed ~callback:stepSelected in
   let _ = (new GObj.misc_ops stepList#as_widget)#grab_focus() in
