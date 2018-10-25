@@ -364,6 +364,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   let messageHBox = GPack.hbox ~packing:(messageToolItem#add) () in
   messageToolItem#set_border_width 3;
   let messageEntry = GEdit.entry ~show:false ~editable:false ~has_frame:false ~packing:(messageHBox#add) () in
+  let messageEntryCheckDone = ref false in
   messageEntry#coerce#misc#modify_font_by_name !scaledTraceFont;
   let helpButton = GButton.button ~show:false ~label:" ? " ~packing:(messageHBox#pack) () in
   let show_help url =
@@ -732,6 +733,10 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       let (backColor, textColor) = if success then ("green", "black") else ("red", "white") in
       messageEntry#coerce#misc#show();
       messageEntry#set_text msg;
+      if not !messageEntryCheckDone then begin
+        messageEntryCheckDone := true;
+        if messageEntry#misc#get_flag `NO_WINDOW then Printf.printf "warning: GtkEntry has flag GTK_NO_WINDOW; error message may not be visible in toolbar\n";
+      end;
       messageEntry#coerce#misc#modify_base [`NORMAL, `NAME backColor];
       messageEntry#coerce#misc#modify_text [`NORMAL, `NAME textColor]);
     (match !url with
