@@ -17,6 +17,10 @@ let define_macros: string list ref = ref []
 
 let () = Unix.putenv "LANG" "en_US" (* This works around a problem that causes vfide to become unusable in the Chinese locale. *)
 
+let () =
+  if platform = Linux && Sys.getenv_opt "VERIFAST_USE_PLATFORM_GTK_THEME" = None then
+    Unix.putenv "GTK_DATA_PREFIX" "bogus dir" (* See https://github.com/verifast/verifast/issues/147 *)
+
 (* The lablgtk.init has a problem that automatically finding
  * this package does not always work. To avoid that problem,
  * we just do what this package do: calling GTKMain.Main.init().
