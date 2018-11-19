@@ -280,6 +280,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           if List.mem_assoc x xm then static_error l "Duplicate parameter name." None;
           if List.mem_assoc x tenv0 then static_error l ("Parameter '" ^ x ^ "' hides existing variable '" ^ x ^ "'.") None;
           let t = check_pure_type (pn,ilist) tparams1 te in
+          let t =
+            match t with
+              ArrayType elemType | StaticArrayType (elemType, _) when language = CLang -> PtrType elemType
+            | _ -> t
+          in
           iter ((x, t)::xm) xs
       in
       iter [] xs

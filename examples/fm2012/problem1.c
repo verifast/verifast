@@ -13,7 +13,7 @@ fixpoint int lcp_<t>(list<t> xs, list<t> ys) {
 
 @*/
 
-int lcp(int *a, int N, int x, int y)
+int lcp(int a[], int N, int x, int y)
     //@ requires [?f]a[0..N] |-> ?elems &*& 0 <= x &*& x < N &*& 0 <= y &*& y < N;
     //@ ensures [f]a[0..N] |-> elems &*& result == lcp_(drop(x, elems), drop(y, elems));
 {
