@@ -15,10 +15,10 @@ int main() //@ : main
     //@ chars_split((void *)points, sizeof(struct point));
     //@ close_struct(points);
     //@ close_struct(points + 1);
-    (points + 0)->x = 10;
-    (points + 0)->y = 20;
-    (points + 1)->x = 30;
-    (points + 1)->y = 40;
+    points[0].x = 10;
+    points[0].y = 20;
+    points[1].x = 30;
+    points[1].y = 40;
     //@ open_struct(points);
     //@ open_struct(points + 1);
     //@ chars_join((void *)points);

@@ -5424,6 +5424,11 @@ let check_if_list_is_defined () =
           (* GCC documentation is not clear about it. *)
           ev state e $. fun state v ->
           cont state (field_address l v fparent fname)
+        | WReadArray (le, w1, tp, w2) ->
+          ev state w1 $. fun state arr ->
+          ev state w2 $. fun state index ->
+          let n = sizeof le tp in
+          cont state (ctxt#mk_add arr (ctxt#mk_mul n index))
         | WVar (l, x, GlobalName) ->
           let Some (l, tp, symbol, init) = try_assoc x globalmap in cont state symbol
         (* The address of a function symbol is commonly used in the
