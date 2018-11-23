@@ -450,6 +450,12 @@ and
 | [< '(l, Kwd "__forceinline") >] -> ()
 | [< >] -> ()
 and
+  parse_enum_body = parser
+  [< '(_, Kwd "{");
+     elems = rep_comma (parser [< '(_, Ident e); init = opt (parser [< '(_, Kwd "="); e = parse_expr >] -> e) >] -> (e, init));
+     '(_, Kwd "}")
+   >] -> elems
+and
   parse_decl = parser
   [< '(l, Kwd "struct"); '(_, Ident s); d = parser
     [< fs = parse_fields; '(_, Kwd ";") >] -> Struct (l, s, Some fs)
@@ -470,6 +476,9 @@ and
          begin
            match rt with
              None -> raise (ParseException (l, "Void not allowed here."))
+             | Some (EnumTypeExpr (le, en_opt, Some body)) ->
+               let en = match en_opt with None -> g | Some en -> en in
+               [EnumDecl (l, en, body); TypedefDecl (l, EnumTypeExpr (le, Some en, None), g)]
              | Some (StructTypeExpr (ls, s_opt, Some fs)) ->
                let s = match s_opt with None -> g | Some s -> s in
                [Struct (l, s, Some fs); TypedefDecl (l, StructTypeExpr (ls, Some s, None), g)]
@@ -481,9 +490,7 @@ and
          end
     end
   >] -> register_typedef g; ds
-| [< '(_, Kwd "enum"); '(l, Ident n); '(_, Kwd "{");
-     elems = rep_comma (parser [< '(_, Ident e); init = opt (parser [< '(_, Kwd "="); e = parse_expr >] -> e) >] -> (e, init));
-     '(_, Kwd "}"); '(_, Kwd ";"); >] ->
+| [< '(_, Kwd "enum"); '(l, Ident n); elems = parse_enum_body; '(_, Kwd ";"); >] ->
   [EnumDecl(l, n, elems)]
 | [< '(_, Kwd "static"); _ = parse_ignore_inline; t = parse_return_type; d = parse_func_rest Regular t Private >] -> check_function_for_contract d
 | [< '(_, Kwd "_Noreturn"); _ = parse_ignore_inline; t = parse_return_type; d = parse_func_rest Regular t Public >] ->
@@ -777,7 +784,9 @@ and
 | [< '(l, Kwd "struct"); sn = opt (parser [< '(_, Ident s) >] -> s); fs = opt parse_fields >] ->
   if sn = None && fs = None then raise (ParseException (l, "Struct name or body expected"));
   StructTypeExpr (l, sn, fs)
-| [< '(l, Kwd "enum"); '(_, Ident _) >] -> ManifestTypeExpr (l, intType)
+| [< '(l, Kwd "enum"); en = opt (parser [< '(_, Ident en) >] -> en); body = opt parse_enum_body >] ->
+  if en = None && body = None then raise (ParseException (l, "Enum name or body expected"));
+  EnumTypeExpr (l, en, body)
 | [< (l, k) = parse_integer_type_keyword >] -> ManifestTypeExpr (l, Int (Signed, k))
 | [< '(l, Kwd "float") >] -> ManifestTypeExpr (l, Float)
 | [< '(l, Kwd "double") >] -> ManifestTypeExpr (l, Double)

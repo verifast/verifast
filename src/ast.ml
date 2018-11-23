@@ -196,6 +196,7 @@ type int_literal_lsuffix = NoLSuffix | LSuffix | LLSuffix
 (** Types as they appear in source code, before validity checking and resolution. *)
 type type_expr = (* ?type_expr *)
     StructTypeExpr of loc * string option * field list option
+  | EnumTypeExpr of loc * string option * (string * expr option) list option
   | PtrTypeExpr of loc * type_expr
   | ArrayTypeExpr of loc * type_expr
   | StaticArrayTypeExpr of loc * type_expr (* type *) * int (* number of elements*)

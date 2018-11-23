@@ -1417,6 +1417,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         static_error l ("No such struct: \"" ^ sn ^ "\".") None
       else
         StructType sn
+    | EnumTypeExpr (l, en, Some _) ->
+      static_error l "An enum type with a body is not supported in this position." None
+    | EnumTypeExpr (l, Some en, None) ->
+      intType
     | PtrTypeExpr (l, te) -> PtrType (check te)
     | PredTypeExpr (l, tes, inputParamCount) ->
       PredType ([], List.map check tes, inputParamCount, Inductiveness_Inductive)
