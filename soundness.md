@@ -67,3 +67,12 @@ Known VeriFast unsoundnesses:
 - API specs: Not all specs of methods that throw checked exceptions (such as IOException) declare them
 - Linking soundness (i.e. soundness for multi-jar programs) has not yet been thoroughly dealt with
 - See tests/bugs/z3-proves-false.java. Reduced test case at tests/bugs/z3-proves-false/z3-proves-false.java. This seems to be an unsoundness in Z3 1.3.6, but further research is necessary.
+
+Language-independent
+====================
+
+- (Not an unsoundness but a soundness caveat) Predicate extensionality does not hold in VeriFast, so introducing it as an axiom would be unsound. Specifically, predicate extensionality is
+  incompatible with the ability to compare predicate values. Given extensionality, we could prove false by defining the predicate `predicate P() = P == False;` where `predicate False() = false;`.
+  Indeed, we first prove `P()`, by case analysis on `P == False`. If `P == False`, then we simply close `P()`. Otherwise, we have that `P()` is equivalent to `False()` so, by extensionality,
+  `P == False`. Now that we have `P()`, we obtain `False()` by substitution. Then, opening `False()` finishes the proof.
+  Indeed, in VeriFast we can prove `P != False`, by contradiction.
