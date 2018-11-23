@@ -39,7 +39,7 @@ let c_keywords = [
   "SHRT_MIN"; "SHRT_MAX"; "USHRT_MAX"; "UINT_MAX"; "UCHAR_MAX";
   "LLONG_MIN"; "LLONG_MAX"; "ULLONG_MAX";
   "__int8"; "__int16"; "__int32"; "__int64"; "__int128";
-  "inline"; "__inline"; "__inline__"; "__forceinline"
+  "inline"; "__inline"; "__inline__"; "__forceinline"; "_Noreturn"
 ]
 
 let java_keywords = [
@@ -486,6 +486,17 @@ and
      '(_, Kwd "}"); '(_, Kwd ";"); >] ->
   [EnumDecl(l, n, elems)]
 | [< '(_, Kwd "static"); _ = parse_ignore_inline; t = parse_return_type; d = parse_func_rest Regular t Private >] -> check_function_for_contract d
+| [< '(_, Kwd "_Noreturn"); _ = parse_ignore_inline; t = parse_return_type; d = parse_func_rest Regular t Public >] ->
+  let ds = check_function_for_contract d in
+  begin match ds with
+    [Func (l, k, tparams, t, g, ps, gc, ft, Some (pre, post), terminates, ss, static, v)] ->
+    begin match pre, post with
+      ExprAsn (_, False _), _ | False _, _ | _, False _ -> ()
+    | _ -> raise (ParseException (l, "Function marked 'noreturn' must declare 'ensures false'."))
+    end
+  | _ -> ()
+  end;
+  ds
 | [< t = parse_return_type; d = parse_func_rest Regular t Public >] -> check_function_for_contract d
 and check_for_contract: 'a. 'a option -> loc -> string -> (asn * asn -> 'a) -> 'a = fun contract l m f ->
   match contract with

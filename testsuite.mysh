@@ -406,6 +406,7 @@ cd tutorial_solutions
   verifast_both students.c
 cd ..
 cd tests
+  verifast -c -allow_should_fail noreturn.c
   verifast_both -c redux_nonlinear_mult.c
   verifast_both -c simplex_secondary_closes.c
   verifast_both -c simplex_secondary_closes2.c
