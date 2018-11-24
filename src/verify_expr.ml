@@ -1717,6 +1717,20 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Upcast (e, _, _) -> is_safe_expr e
     | _ -> false
   
+  let rec asserts_exclusive_ownership a =
+    match a with
+      ExprAsn (l, e) -> false
+    | Sep (l, a1, a2) -> asserts_exclusive_ownership a1 || asserts_exclusive_ownership a2
+    | IfAsn (l, e, a1, a2) -> asserts_exclusive_ownership a1 || asserts_exclusive_ownership a2
+    | WSwitchAsn (l, e, i, cs) ->
+      List.exists (function WSwitchAsnClause (l, c, xs, _, a) -> asserts_exclusive_ownership a) cs
+    | EmpAsn _ -> false
+    | ForallAsn (_, _, _, _) -> false
+    | CoefAsn (l, DummyPat, a) -> false (* TODO: Support more coefpats *)
+    | EnsuresAsn (l, _) -> false
+    | WMatchAsn (_, _, _, _) -> false
+    | _ -> true
+
   let rec verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont econt =
     let (envReadonly, heapReadonly) = readonly in
     let verify_expr readonly h env xo e cont = verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e (fun h env v -> cont h env v) econt in
@@ -2078,7 +2092,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       check_correct h None None [] args (lm, [], rt, xmap, [], pre, post, Some epost, terminates, v) is_upcall (Some supercn) cont
     | WFunCall (l, g, targs, es) ->
       let FuncInfo (funenv, fterm, lg, k, tparams, tr, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, fbf, v) = List.assoc g funcmap in
-      if not (startswith g "vf__") then has_heap_effects ();
+      if heapReadonly && language = CLang && not (startswith g "vf__") && asserts_exclusive_ownership pre then has_heap_effects ();
       if body = None then register_prototype_used lg g fterm;
       if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." None;
       if not pure && is_lemma k then static_error l "Cannot call lemma functions in a non-pure context." None;

@@ -108,9 +108,13 @@
 .provides ./quantifiers.gh#get_forall_int
 .provides ./quantifiers.gh#not_forall_int
 .provides ./quantifiers.gh#forall_int_elim
+.provides ./stdio.h#__get_stdin
+.provides ./stdio.h#__get_stdout
+.provides ./stdio.h#__get_stderr
 .provides ./stdio.h#fopen
 .provides ./stdio.h#fclose
 .provides ./stdio.h#fgets
+.provides ./stdio.h#fputs
 .provides ./stdio.h#puts
 .provides ./stdio.h#fread
 .provides ./stdio.h#fwrite

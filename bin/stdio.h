@@ -18,7 +18,25 @@ typedef struct file FILE;
 
 struct file;
 
-//@ predicate file(struct file* fp);
+//@ predicate file(struct file* fp;);
+
+FILE* __get_stdin();
+    //@ requires true;
+    //@ ensures [_]file(result);
+
+#define stdin __get_stdin()
+
+FILE* __get_stdout();
+    //@ requires true;
+    //@ ensures [_]file(result);
+
+#define stdout __get_stdout()
+
+FILE* __get_stderr();
+    //@ requires true;
+    //@ ensures [_]file(result);
+
+#define stderr __get_stderr()
 
 FILE* fopen(char* filename, char* mode); // todo: check that mode is a valid mode string
     /*@ requires [?f]string(filename, ?fcs) &*& [?g]string(mode, ?mcs) &*&
@@ -29,36 +47,40 @@ FILE* fopen(char* filename, char* mode); // todo: check that mode is a valid mod
     //@ ensures [f]string(filename, fcs) &*& [g]string(mode, mcs) &*& result == 0 ? true : file(result);
 
 int fread(void* buffer, int size, int n, FILE* fp);
-    //@ requires chars(buffer, ?m, ?cs) &*& 0<=size &*& 0<=n &*& size * n <= m &*& file(fp);
-    //@ ensures chars(buffer, m, ?cs2) &*& file(fp) &*& 0 <= result &*& result <= n;
+    //@ requires chars(buffer, ?m, ?cs) &*& 0<=size &*& 0<=n &*& size * n <= m &*& [?f]file(fp);
+    //@ ensures chars(buffer, m, ?cs2) &*& [f]file(fp) &*& 0 <= result &*& result <= n;
   
 int fwrite(void* buffer, int size, int n, FILE* fp);
-    //@ requires chars(buffer, ?m, ?cs) &*& 0<=size &*& 0<=n &*& size * n <= m &*& file(fp);
-    //@ ensures chars(buffer, m, cs) &*& file(fp) &*& 0 <= result &*& result <= n;
+    //@ requires [?fb]chars(buffer, ?m, ?cs) &*& 0<=size &*& 0<=n &*& size * n <= m &*& [?ff]file(fp);
+    //@ ensures [fb]chars(buffer, m, cs) &*& [ff]file(fp) &*& 0 <= result &*& result <= n;
   
 char* fgets(char* buffer, int n, FILE* fp);
-    //@ requires chars(buffer, n, ?cs) &*& file(fp);
-    //@ ensures chars(buffer, n, ?cs2) &*& file(fp) &*& result == 0 ? true : mem('\0', cs2) == true;
+    //@ requires chars(buffer, n, ?cs) &*& [?f]file(fp);
+    //@ ensures chars(buffer, n, ?cs2) &*& [f]file(fp) &*& result == 0 ? true : mem('\0', cs2) == true;
+
+int fputs(char* s, FILE* fp);
+    //@ requires [?fs]string(s, ?cs) &*& [?ff]file(fp);
+    //@ ensures [fs]string(s, cs) &*& [ff]file(fp);
 
 int fseek (FILE* fp, /*long*/ int offset, int origin);
-    //@ requires file(fp) &*& origin == 0 || origin == 1 || origin == 2;
-    //@ ensures file(fp);
+    //@ requires [?f]file(fp) &*& origin == 0 || origin == 1 || origin == 2;
+    //@ ensures [f]file(fp);
   
 /* long */ int ftell(FILE* fp);
-    //@ requires file(fp);
-    //@ ensures file(fp);
+    //@ requires [?f]file(fp);
+    //@ ensures [f]file(fp);
   
 void rewind(FILE* fp);
-    //@ requires file(fp);
-    //@ ensures file(fp);
+    //@ requires [?f]file(fp);
+    //@ ensures [f]file(fp);
 
 int puts(char* text);
     //@ requires [?f]string(text, ?cs);
     //@ ensures [f]string(text, cs);
   
 int feof(FILE* fp);
-    //@ requires file(fp);
-    //@ ensures file(fp);
+    //@ requires [?f]file(fp);
+    //@ ensures [f]file(fp);
 
 int fclose(FILE* fp); 
     //@ requires file(fp);
