@@ -9,9 +9,9 @@ char *create_quoted_msg(char *nick, char *msg)
     //@ requires [?f1]string(nick, ?nickChars) &*& [?f2]string(msg, ?msgChars);
     //@ ensures [f1]string(nick, nickChars) &*& [f2]string(msg, msgChars) &*& malloced_string(result, quote(nickChars, msgChars));
 {
-    int nickLen = strlen(nick);
-    int msgLen = strlen(msg);
-    if (INT_MAX - nickLen - 7 < msgLen) abort();
+    size_t nickLen = strlen(nick);
+    size_t msgLen = strlen(msg);
+    if ((size_t)INT_MAX - 7 < nickLen || (size_t)INT_MAX - 7 - nickLen < msgLen) abort();
     char *result = malloc(nickLen + 6 + msgLen + 1);
     if (result == 0) abort();
     memcpy(result, nick, (unsigned)nickLen);

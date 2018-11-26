@@ -33,7 +33,7 @@ let ghost_keywords = [
 
 let c_keywords = [
   "struct"; "bool"; "char"; "sizeof"; "#"; "##"; "include"; "ifndef";
-  "define"; "endif"; "&"; "goto"; "uintptr_t"; "INT_MIN"; "INT_MAX";
+  "define"; "endif"; "&"; "goto"; "uintptr_t"; "intptr_t"; "INT_MIN"; "INT_MAX";
   "UINTPTR_MAX"; "enum"; "static"; "signed"; "unsigned"; "long";
   "const"; "volatile"; "register"; "ifdef"; "elif"; "undef";
   "SHRT_MIN"; "SHRT_MAX"; "USHRT_MAX"; "UINT_MAX"; "UCHAR_MAX";
@@ -802,6 +802,7 @@ and
 | [< '(l, Kwd "signed"); n = parse_integer_type_rest >] -> ManifestTypeExpr (l, Int (Signed, n))
 | [< '(l, Kwd "unsigned"); n = parse_integer_type_rest >] -> ManifestTypeExpr (l, Int (Unsigned, n))
 | [< '(l, Kwd "uintptr_t") >] -> ManifestTypeExpr (l, Int (Unsigned, ptr_rank))
+| [< '(l, Kwd "intptr_t") >] -> ManifestTypeExpr (l, Int (Signed, ptr_rank))
 | [< '(l, Kwd "real") >] -> ManifestTypeExpr (l, RealType)
 | [< '(l, Kwd "bool") >] -> ManifestTypeExpr (l, Bool)
 | [< '(l, Kwd "boolean") >] -> ManifestTypeExpr (l, Bool)

@@ -107,7 +107,7 @@ void string_buffer_ensure_capacity(struct string_buffer *buffer, int newCapacity
     @*/
 {
     if (buffer->capacity < newCapacity) {
-        char *newChars = malloc(newCapacity);
+        char *newChars = malloc((size_t)newCapacity);
         if (newChars == 0) abort();
         buffer->capacity = newCapacity;
         memcpy(newChars, buffer->chars, (size_t) buffer->length);
@@ -140,8 +140,9 @@ void string_buffer_append_string(struct string_buffer *buffer, char *string)
     //@ requires string_buffer(buffer, ?bcs) &*& [?f]string(string, ?cs);
     //@ ensures string_buffer(buffer, append(bcs, cs)) &*& [f]string(string, cs);
 {
-    int length = strlen(string);
-    string_buffer_append_chars(buffer, string, length);
+    size_t length = strlen(string);
+    if ((size_t)INT_MAX < length) abort();
+    string_buffer_append_chars(buffer, string, (int)length);
 }
 
 struct string_buffer *string_buffer_copy(struct string_buffer *buffer)
@@ -149,7 +150,7 @@ struct string_buffer *string_buffer_copy(struct string_buffer *buffer)
     //@ ensures [f]string_buffer(buffer, cs) &*& string_buffer(result, cs);
 {
     struct string_buffer *copy = malloc(sizeof(struct string_buffer));
-    char *chars = malloc(buffer->length);
+    char *chars = malloc((size_t)buffer->length);
     if (copy == 0 || chars == 0) abort();
     copy->length = buffer->length;
     copy->capacity = buffer->length;
@@ -175,8 +176,8 @@ bool string_buffer_equals_string(struct string_buffer *buffer, char *string)
     //@ ensures [f1]string_buffer(buffer, cs1) &*& [f2]string(string, cs2) &*& result == (cs1 == cs2);
 {
     bool result = false;
-    int length = strlen(string);
-    if (length == buffer->length) {
+    size_t length = strlen(string);
+    if (length == (size_t)buffer->length) {
         //@ string_to_body_chars(string);
         int result0 = memcmp(buffer->chars, string, (size_t) length);
         result = result0 == 0;
@@ -202,7 +203,7 @@ int chars_index_of_string(char *chars, int length, char *string)
         result == -1 ? true : 0 <= result &*& result + length(stringChars) <= length(charsChars);
     @*/
 {
-    int n = strlen(string);
+    size_t n = strlen(string);
     char *p = chars;
     char *end = 0;
     //@ chars_limits(chars);
@@ -210,7 +211,7 @@ int chars_index_of_string(char *chars, int length, char *string)
     while (true)
         //@ invariant [f1]chars(chars, length, charsChars) &*& [f2]string(string, stringChars) &*& chars <= p &*& p <= end;
     {
-        if (end - p < n) return -1;
+        if ((size_t)(end - p) < n) return -1;
         //@ chars_split(chars, p - chars);
         //@ chars_split(p, n);
         //@ string_to_body_chars(string);
@@ -232,7 +233,7 @@ bool string_buffer_split(struct string_buffer *buffer, char *separator, struct s
     //@ requires [?f1]string_buffer(buffer, ?bcs) &*& [?f2]string(separator, ?cs) &*& string_buffer(before, _) &*& string_buffer(after, _);
     //@ ensures [f1]string_buffer(buffer, bcs) &*& [f2]string(separator, cs) &*& string_buffer(before, _) &*& string_buffer(after, _);
 {
-    int n = strlen(separator);
+    size_t n = strlen(separator);
     char *chars = buffer->chars;
     int length = buffer->length;
     int index = chars_index_of_string(chars, length, separator);
@@ -244,7 +245,7 @@ bool string_buffer_split(struct string_buffer *buffer, char *separator, struct s
     //@ chars_limits(chars);
     //@ chars_split(chars, index + n);
     //@ chars_split(chars + index + n, length - index - n);
-    string_buffer_append_chars(after, chars + index + n, length - index - n);
+    string_buffer_append_chars(after, chars + index + n, length - index - (int)n);
     return true;
 }
 

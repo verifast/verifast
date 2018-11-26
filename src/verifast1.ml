@@ -2928,7 +2928,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if pt1 <> Int (Signed, 0) && pt1 <> Void then static_error l "Subtracting non-char pointers is not yet supported" None;
         (WOperation (l, PtrDiff, [w1; w2], t1), ptrdiff_t, None)
       | PtrType pt1, _ ->
-        let w2 = checkt e2 intt in
+        let (w2, t2, _) = check e2 in
+        let t2 = unfold_inferred_type t2 in
+        begin match t2 with Int (_, _) -> () | _ -> static_error l "Second operand must be of integer type." None end;
         (WOperation (l, operator, [w1; w2], t1), t1, None)
       | t1, t2 when is_arithmetic_type t1 && is_arithmetic_type t2 ->
         let (w1, w2, t) = promote_checkdone l e1 e2 (w1, t1, value1) (w2, t2, value2) in

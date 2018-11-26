@@ -29,7 +29,7 @@ void memmove(void *dest, void *src, size_t count);
             chars(src, dest - src, _);
     @*/
 
-int strlen(char *string);
+size_t strlen(char *string);
     //@ requires [?f]string(string, ?cs);
     //@ ensures [f]string(string, cs) &*& result == length(cs);
 
