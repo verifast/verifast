@@ -215,11 +215,11 @@ int fprintf(FILE *file, char* format, ...);
 
 /*@
 
-inductive formatted_part =
-  formatted_part_char(char) |
-  formatted_part_int_specifier(int) |
-  formatted_part_uint_specifier(unsigned int) |
-  formatted_part_string_specifier(char*);
+inductive format_part =
+  format_part_char(char) |
+  format_part_int_specifier(int) |
+  format_part_uint_specifier(unsigned int) |
+  format_part_string_specifier(char*);
 
 fixpoint int option_length<t>(option<list<t> > xs) {
     switch (xs) {
@@ -250,27 +250,26 @@ fixpoint option<list<t> > option_option_append<t>(option<list<t> > xs0, option<l
     }
 }
 
-fixpoint option<list<formatted_part> > sprintf_parse_format(list<char> fcs, list<vararg> args) {
+fixpoint option<list<format_part> > sprintf_parse_format(list<char> fcs, list<vararg> args) {
     switch (fcs) {
         case nil: return some(nil);
         case cons(fc, fcs0): return
             fc != '%' ?
-                option_cons(formatted_part_char(fc), sprintf_parse_format(fcs0, args))
+                option_cons(format_part_char(fc), sprintf_parse_format(fcs0, args))
             :
                 switch (fcs0) {
                     case nil: return none;
                     case cons(fc1, fcs1): return
                         fc1 == '%' ?
-                            option_cons(formatted_part_char('%'),
-                              option_cons(formatted_part_char('%'), 
-                                sprintf_parse_format(fcs1, args)))
+                            option_cons(format_part_char('%'),
+                              sprintf_parse_format(fcs1, args))
                         : fc1 == 'd' || fc1 == 'i' || fc1 == 'c' ?
                             switch (args) {
                                 case nil: return none;
                                 case cons(arg, args1): return
                                     switch (arg) {
                                         case vararg_int(v): return
-                                           option_cons(formatted_part_int_specifier(v), sprintf_parse_format(fcs1, args1));
+                                           option_cons(format_part_int_specifier(v), sprintf_parse_format(fcs1, args1));
                                         default: return none;
                                     };
                             }
@@ -280,7 +279,7 @@ fixpoint option<list<formatted_part> > sprintf_parse_format(list<char> fcs, list
                                 case cons(arg, args1): return
                                     switch (arg) {
                                         case vararg_uint(v): return
-                                          option_cons(formatted_part_uint_specifier(v), sprintf_parse_format(fcs1, args1));
+                                          option_cons(format_part_uint_specifier(v), sprintf_parse_format(fcs1, args1));
                                         default: return none;
                                     };
                             }
@@ -290,7 +289,7 @@ fixpoint option<list<formatted_part> > sprintf_parse_format(list<char> fcs, list
                                 case cons(arg, args1): return
                                     switch (arg) {
                                         case vararg_pointer(v): return 
-                                          option_cons(formatted_part_string_specifier(v), sprintf_parse_format(fcs1, args1));
+                                          option_cons(format_part_string_specifier(v), sprintf_parse_format(fcs1, args1));
                                         default: return none;
                                     };
                             }
@@ -309,18 +308,18 @@ fixpoint option<list<char> > chars_for_int(int i) {
                i < 0 ? option_cons('-', chars_for_uint(-i)) : chars_for_uint(i);
 }
 
-fixpoint option<list<char> > sprintf_filled_in_args(list<formatted_part> parts, list<list<char> > string_args) {
+fixpoint option<list<char> > sprintf_filled_in_args(list<format_part> parts, list<list<char> > string_args) {
     switch (parts) {
         case nil: return some(cons(0, nil));
         case cons(arg0, args0): return
             switch (arg0) {
-                case formatted_part_char(c):
+                case format_part_char(c):
                     return option_cons(c, sprintf_filled_in_args(args0, string_args));
-                case formatted_part_int_specifier(i): 
+                case format_part_int_specifier(i): 
                     return option_option_append(chars_for_int(i), sprintf_filled_in_args(args0, string_args));
-                case formatted_part_uint_specifier(i):
+                case format_part_uint_specifier(i):
                     return option_option_append(chars_for_uint(i), sprintf_filled_in_args(args0, string_args));
-                case formatted_part_string_specifier(s): return
+                case format_part_string_specifier(s): return
                     switch(string_args) {
                         case cons(cs, string_args0):
                             return option_append(cs, sprintf_filled_in_args(args0, string_args0));
