@@ -866,7 +866,19 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               TermPat t -> ctxt#pprint t
             | SrcPat pat -> string_of_pat pat
           in
-          Printf.sprintf "No matching heap chunks: %s%s(%s)" predname targs (String.concat ", " (List.map string_of_pat0 pats))
+          let coef =
+            if coef == real_unit then
+              if coefpat == real_unit_pat then
+                ""
+              else
+                "[" ^ string_of_pat0 coefpat ^ "]"
+            else
+              if coefpat == real_unit_pat then
+                "[" ^ ctxt#pprint coef ^ "]"
+              else
+                "[" ^ ctxt#pprint coef ^ " * " ^ string_of_pat0 coefpat ^ "]"
+          in
+          Printf.sprintf "No matching heap chunks: %s%s%s(%s)" coef predname targs (String.concat ", " (List.map string_of_pat0 pats))
         in
         assert_false h env l message (Some "nomatchingheapchunks")
   (*      
@@ -1391,7 +1403,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (fun (from_symb, indices, to_symb, path) ->
         let transitive_auto_close_rule l h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
           (*let _ = print_endline ("trying to auto-close:" ^ (ctxt#pprint from_symb)) in*)
-          let rec can_apply_rule current_this_opt current_targs current_indices current_input_args path =
+          let rec can_apply_rule wanted_coef current_this_opt current_targs current_indices current_input_args path =
             match path with
               [] -> 
                 begin match try_find
@@ -1449,6 +1461,16 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   None -> env
                 | Some t -> ("this", t) :: env
                 in
+                let new_wanted_coef =
+                  match wanted_coef with None -> None | Some wanted_coef ->
+                  match inner_frac_expr_opt with
+                    None -> Some wanted_coef
+                  | Some DummyPat -> None
+                  | Some (LitPat f) ->
+                    let fterm = eval None env f in
+                    Some (ctxt#mk_real_mul fterm wanted_coef)
+                  | Some _ -> None
+                in
                 let new_this_opt = match inner_target_opt with
                   None -> None
                 | Some thisExpr -> Some (eval None env thisExpr)
@@ -1456,7 +1478,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let new_actual_targs = List.map (fun tp0 -> (instantiate_type tpenv tp0)) inner_formal_targs in
                 let new_actual_indices = List.map (fun index -> (eval None env index)) inner_formal_indices in
                 let new_actual_input_args = List.map (fun input_e -> (eval None env input_e)) inner_input_exprs in
-                match can_apply_rule new_this_opt new_actual_targs new_actual_indices new_actual_input_args path with
+                match can_apply_rule new_wanted_coef new_this_opt new_actual_targs new_actual_indices new_actual_input_args path with
                   None -> None
                 | Some exec_rule -> Some (fun h cont ->
                     exec_rule h (fun h coef ->
@@ -1469,7 +1491,6 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                       | Some t -> ("this", t) :: env
                       in
                       with_context PushSubcontext $. fun () ->
-                      with_context (Executing (h, env, outer_l, "Auto-closing predicate")) $. fun () ->
                         let new_coef = 
                           match inner_frac_expr_opt with
                             None -> coef
@@ -1483,6 +1504,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                                 coef 
                           | Some _ -> coef (* todo *)
                         in
+                        let new_coef = match wanted_coef with Some coef -> coef | None -> new_coef in
+                        with_context (Executing (h, env, outer_l, ("Auto-closing predicate with coefficient " ^ ctxt#pprint new_coef))) $. fun () ->
                         consume_asn rules tpenv h ghostenv env outer_wbody checkDummyFracs new_coef $. fun _ h ghostenv env2 size_first ->
                           let outputParams = drop (List.length outer_formal_input_args) outer_formal_args in
                           let outputArgs = List.map (fun (x, tp0) -> let tp = instantiate_type tpenv tp0 in (prover_convert_term (List.assoc x env2) tp0 tp)) outputParams in
@@ -1522,7 +1545,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | (_, _, _, _, false, _, _, _, _, _, _, _, _, _, _, _) -> 
                   (None, (take (List.length indices) wanted_indices_and_input_ts), (drop (List.length indices) wanted_indices_and_input_ts))
             in
-            match can_apply_rule wanted_target_opt wanted_targs wanted_indices wanted_inputs path with
+            let wanted_coef =
+              match wanted_coefpat with
+                TermPat coef -> if wanted_coef == real_unit then Some coef else Some (ctxt#mk_real_mul wanted_coef coef)
+              | _ -> None
+            in
+            match can_apply_rule wanted_coef wanted_target_opt wanted_targs wanted_indices wanted_inputs path with
               None -> cont None
             | Some exec_rule -> exec_rule h (fun h _ -> cont (Some h))
           else
