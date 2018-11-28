@@ -2217,10 +2217,13 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       lhs_to_lvalue h env lhs $. fun h env lvalue ->
       let varName = match lhs with WVar (_, x, _) -> Some x | _ -> None in
       let rhsHeapReadOnly =
+        (* 'E = ++E + 1' has undefined behavior. This is true for any lvalue E. *)
+        (* We interpret the C standard as saying that 'E = f(++E)' does not have undefined behavior because argument expression evaluation is sequenced before function call. *)
         match (lhs, rhs) with
           (WVar (_, _, _), WFunCall (_, _, _, _)) -> false (* Is this OK when the variable is a global? *)
         | (WVar (_, _, LocalVar), _) -> false
-        | (WRead (l, WVar (_, _, LocalVar), fparent, fname, tp, false, fvalue, fghost), _) -> false
+        | (WRead (l, WVar (_, _, LocalVar), fparent, fname, tp, false, fvalue, fghost), WFunCall (_, _, _, _)) -> false
+        | (WDeref (l, WVar (_, _, LocalVar), _), WFunCall (_, _, _, _)) -> false
         | _ -> true
       in
       verify_expr (true, rhsHeapReadOnly) h env varName rhs $. fun h env vrhs ->
