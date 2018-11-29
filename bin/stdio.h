@@ -82,6 +82,10 @@ int feof(FILE* fp);
     //@ requires [?f]file(fp);
     //@ ensures [f]file(fp);
 
+int fflush(FILE* fp);
+    //@ requires [?f]file(fp);
+    //@ ensures [f]file(fp);
+
 int fclose(FILE* fp); 
     //@ requires file(fp);
     //@ ensures true;
