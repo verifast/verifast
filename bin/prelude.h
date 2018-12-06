@@ -473,7 +473,7 @@ predicate module_code(int moduleId;);
 
 predicate argv(char **argv, int argc; list<list<char> > arguments) =
     argc <= 0 ?
-        arguments == nil
+        pointer(argv, 0) &*& arguments == nil
     :
         pointer(argv, ?arg)
         &*& string(arg, ?head_arguments)
