@@ -529,4 +529,19 @@ int scanf(char *format, ...);
     @*/
     //@ ensures emp;
 
+int sscanf(char *s, char *format, ...);
+    /*@
+    requires // scanf_targets unrolled once to reduce reliance on auto-open/close
+        [?fs]string(s, ?scs) &*& [?f]string(format, ?fcs) &*& scanf_parse_format(fcs, scanf_format, 0, varargs) == some(?targets) &*&
+        switch (targets) {
+            case nil: return ensures [fs]string(s, scs) &*& [f]string(format, fcs);
+            case cons(t0, ts0): return scanf_targets(ts0, 0) &*&
+                fst(t0) == 'i' ?
+                    integer(fst(snd(t0)), _) &*& ensures [fs]string(s, scs) &*& [f]string(format, fcs) &*& integer(fst(snd(t0)), _) &*& scanf_targets(ts0, result - 1)
+                :
+                    chars(fst(snd(t0)), snd(snd(t0)) + 1, _) &*& ensures [fs]string(s, scs) &*& [f]string(format, fcs) &*& chars(fst(snd(t0)), snd(snd(t0)) + 1, ?cs) &*& result < 1 || mem('\0', cs) &*& scanf_targets(ts0, result - 1);
+        };
+    @*/
+    //@ ensures emp;
+
 #endif
