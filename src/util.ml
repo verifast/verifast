@@ -126,6 +126,11 @@ let ($.) f x = f x
   *)
 let (|>) x f = f x
 
+let rec for_all_rev p xs =
+  match xs with
+    [] -> true
+  | x::xs -> for_all_rev p xs && p x
+
 (** Like List.for_all2, except returns false if the lists have different length. *)
 let rec for_all2 p xs ys =
   match (xs, ys) with

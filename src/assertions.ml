@@ -1437,7 +1437,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                              let Some tpenv = zip predinst_tparams current_targs in
                              let env = List.map2 (fun (x, tp0) actual -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term actual tp tp0)) (take inputParamCount xs) current_input_args in 
                              let env = match current_this_opt with None -> env | Some t -> ("this", t) :: env in
-                             List.exists (fun conds -> (List.for_all (fun cond -> ctxt#query (eval None env cond)) conds)) conds
+                             List.exists (fun conds -> (for_all_rev (fun cond -> ctxt#query (eval None env cond)) conds)) conds
                            )
                          )
                         empty_preds 
@@ -1455,7 +1455,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 None -> env
               | Some t ->  ("this", t) :: env
               in
-              if (List.for_all (fun cond -> ctxt#query (eval None env cond)) conds) then
+              if (for_all_rev (fun cond -> ctxt#query (eval None env cond)) conds) then
                 let env = List.map2 (fun (x, tp0) actual -> (x, actual)) outer_formal_input_args current_input_args in
                 let env = match current_this_opt with
                   None -> env
@@ -1579,7 +1579,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   None -> env
                 | Some t -> ("this", t) :: env
               in
-              if (List.for_all (fun cond -> ctxt#query (eval None env cond)) conds) then
+              if (for_all_rev (fun cond -> ctxt#query (eval None env cond)) conds) then
                 let env = List.map2 (fun (x, tp0) actual -> (x, actual)) outer_formal_input_args actual_input_args in
                 let env = match actual_this_opt with
                   None -> env
@@ -1713,7 +1713,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             List.for_all2 definitely_equal indices fsymbs &&
             let Some tpenv = zip predinst_tparams targs in
             let env = List.map2 (fun (x, tp0) t -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term t tp tp0)) inputParams inputArgs in
-            List.exists (fun conds -> List.for_all (fun cond -> ctxt#query (eval None env cond)) conds) conds
+            List.exists (fun conds -> for_all_rev (fun cond -> ctxt#query (eval None env cond)) conds) conds
           in
           let exec_func h targs coef coefpat ts cont =
             let rules = rules_cell in
