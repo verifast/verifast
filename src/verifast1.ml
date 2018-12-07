@@ -1872,7 +1872,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let rec check_ctor (ctorname, (_, (_, _, _, parameter_names_and_types, _))) =
           let rec check_type negative pt =
             match pt with
-            | Bool | Void | Int (_, _) | RealType | PtrType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType | AbstractType _ -> ()
+            | Bool | Void | Int (_, _) | RealType | PtrType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AbstractType _ -> ()
+            | AnyType -> if negative then static_error l "Type 'any' may not appear in a negative position in an inductive datatype definition since it is the union of all inductive datatypes." None
             | TypeParam _ -> if negative then static_error l "A type parameter may not appear in a negative position in an inductive datatype definition." None
             | InductiveType (i0, tps) ->
               List.iter (fun t -> check_type negative t) tps;
