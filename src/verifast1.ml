@@ -5294,7 +5294,10 @@ let check_if_list_is_defined () =
       evs state (e::es) $. fun state (f::args) ->
       cont state (List.fold_left (fun f arg -> ctxt#mk_app apply_symbol [f; arg]) f args)
     | IfExpr (l, e1, e2, e3) ->
-      evs state [e1; e2; e3] $. fun state [v1; v2; v3] ->
+      ev state e1 $. fun state v1 ->
+      ctxt#begin_formal;
+      evs state [e2; e3] $. fun state [v2; v3] ->
+      ctxt#end_formal;
       cont state (ctxt#mk_ifthenelse v1 v2 v3) (* Only sound if e2 and e3 are side-effect-free *)
     | WOperation (l, BitAnd, [e1; WOperation (_, BitNot, [e2], _)], _) ->
       ev state e1 $. fun state v1 -> ev state e2 $. fun state v2 ->

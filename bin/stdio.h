@@ -98,6 +98,10 @@ int putchar(char c);
     //@ requires true;
     //@ ensures c == result || EOF == result;
 
+void setbuf(FILE* fp, char* buffer);
+    //@ requires [?f]file(fp) &*& buffer == 0;
+    //@ ensures [f]file(fp);
+
 /*@
 
 fixpoint option<list<t> > option_cons<t>(t x, option<list<t> > xs) {
@@ -462,8 +466,8 @@ fixpoint option<list<pair<char, pair<void *, int> > > > scanf_parse_format(list<
                             };
                     }
             :
-                '0' <= fc0 && fc0 <= '9' ?
-                    scanf_parse_format(fcs0, scanf_format_spec, width * 10 + fc0 - '0', args)
+                fc0 == '0' || fc0 == '1' || fc0 == '2' || fc0 == '3' || fc0 == '4' || fc0 == '5' || fc0 == '6' || fc0 == '7' || fc0 == '8' || fc0 == '9' ?
+                    width == 0 && fc0 == '0' ? none : scanf_parse_format(fcs0, scanf_format_spec, width * 10 + fc0 - '0', args)
                 : fc0 == 'i' || fc0 == 'd' ?
                     switch (args) {
                         case nil: return none;
@@ -498,6 +502,15 @@ fixpoint option<list<pair<char, pair<void *, int> > > > scanf_parse_format(list<
                             :
                                 scanf_parse_format(fcs1, scanf_scanset, width, args);
                     }
+                : fc0 == 'c' ?
+                    switch (args) {
+                        case nil: return none;
+                        case cons(arg0, args0): return
+                            switch (arg0) {
+                                case vararg_pointer(p): return option_cons(pair('c', pair(p, width == 0 ? 1 : width)), scanf_parse_format(fcs0, scanf_format, 0, args0));
+                                default: return none;
+                            };
+                    }
                 : none;
     }
 }
@@ -509,6 +522,8 @@ predicate scanf_targets(list<pair<char, pair<void *, int> > > targets, int fillC
         scanf_targets(tail(targets), fillCount - 1) &*&
         fst(head(targets)) == 'i' ?
             integer(fst(snd(head(targets))), _)
+        : fst(head(targets)) == 'c' ?
+            chars(fst(snd(head(targets))), snd(snd(head(targets))), _)
         :
             chars(fst(snd(head(targets))), snd(snd(head(targets))) + 1, ?cs) &*& fillCount <= 0 || mem('\0', cs) == true;
 
@@ -538,6 +553,8 @@ int sscanf(char *s, char *format, ...);
             case cons(t0, ts0): return scanf_targets(ts0, 0) &*&
                 fst(t0) == 'i' ?
                     integer(fst(snd(t0)), _) &*& ensures [fs]string(s, scs) &*& [f]string(format, fcs) &*& integer(fst(snd(t0)), _) &*& scanf_targets(ts0, result - 1)
+                : fst(t0) == 'c' ?
+                    chars(fst(snd(t0)), snd(snd(t0)), _) &*& ensures [fs]string(s, scs) &*& [f]string(format, fcs) &*& chars(fst(snd(t0)), snd(snd(t0)), _) &*& scanf_targets(ts0, result - 1)
                 :
                     chars(fst(snd(t0)), snd(snd(t0)) + 1, _) &*& ensures [fs]string(s, scs) &*& [f]string(format, fcs) &*& chars(fst(snd(t0)), snd(snd(t0)) + 1, ?cs) &*& result < 1 || mem('\0', cs) &*& scanf_targets(ts0, result - 1);
         };
