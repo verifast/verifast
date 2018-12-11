@@ -130,6 +130,10 @@
 .provides ./stdio.h#ftell
 .provides ./stdio.h#rewind
 .provides ./stdio.h#scanf
+.provides ./stdio.h#fflush
+.provides ./stdio.h#setbuf
+.provides ./stdio.h#snprintf
+.provides ./stdio.h#sscanf
 .structure @./stdio.h#file
 .predicate @./stdio.h#file
 .predicate @./stdio.h#scanf_targets
