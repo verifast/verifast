@@ -311,6 +311,10 @@ lemma_auto void pointers_inv();
     requires [?f]pointers(?pp, ?count, ?ps);
     ensures [f]pointers(pp, count, ps) &*& count == length(ps);
 
+lemma void pointers_limits(void **array);
+    requires [?f]pointers(array, ?n, ?ps) &*& (void **)0 <= array &*& array <= (void **)UINTPTR_MAX;
+    ensures [f]pointers(array, n, ps) &*& array + n <= (void **)UINTPTR_MAX;
+
 lemma_auto void pointers_split(void **pp, int offset);
     requires [?f]pointers(pp, ?count, ?ps) &*& 0 <= offset &*& offset <= count;
     ensures [f]pointers(pp, offset, take(offset, ps)) &*& [f]pointers(pp + offset, count - offset, drop(offset, ps));

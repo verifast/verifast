@@ -1937,10 +1937,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | WFunCall (l, "malloc", [], [Operation (lmul, Mul, ([e; SizeofExpr (ls, te)] | [SizeofExpr (ls, te); e]))]) ->
       if pure then static_error l "Cannot call a non-pure function from a pure context." None;
       let elemTp = check_pure_type (pn,ilist) tparams te in
-      let w = check_expr_t (pn,ilist) tparams tenv e intType in
+      let w, tp = check_expr (pn,ilist) tparams tenv e in
+      begin match tp with
+        Int (_, _) -> ()
+      | _ -> static_error (expr_loc e) "Expression of integer type expected" None
+      end;
       eval_h h env w $. fun h env n ->
       let arraySize = ctxt#mk_mul n (sizeof ls elemTp) in
-      check_overflow lmul int_zero_term arraySize (max_signed_term int_rank) (fun l t -> assert_term t h env l);
+      check_overflow lmul int_zero_term arraySize (max_unsigned_term ptr_rank) (fun l t -> assert_term t h env l);
       let resultType = PtrType elemTp in
       let result = get_unique_var_symb (match xo with None -> "array" | Some x -> x) resultType in
       let cont h = cont h env result in

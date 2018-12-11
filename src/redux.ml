@@ -832,8 +832,34 @@ and context () =
     method mk_add (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Add (t1, t2)
     method mk_sub (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Sub (t1, t2)
     method mk_mul (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Mul (t1, t2)
-    method mk_div (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = self#mk_app int_div_symbol [t1;t2]
-    method mk_mod(t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = self#mk_app int_mod_symbol [t1;t2]
+    method eval_term t =
+      match t with
+        NumLit n -> Some n
+      | TermNode t -> t#value#as_number
+      | Add (t1, t2) ->
+        begin match self#eval_term t1, self#eval_term t2 with
+          Some n1, Some n2 -> Some (n1 +/ n2)
+        | _ -> None
+        end
+      | Sub (t1, t2) ->
+        begin match self#eval_term t1, self#eval_term t2 with
+          Some n1, Some n2 -> Some (n1 -/ n2)
+        | _ -> None
+        end
+      | Mul (t1, t2) ->
+        begin match self#eval_term t1, self#eval_term t2 with
+          Some n1, Some n2 -> Some (n1 */ n2)
+        | _ -> None
+        end
+      | _ -> None
+    method mk_div (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term =
+      match self#eval_term t1, self#eval_term t2 with
+        Some n1, Some n2 -> NumLit (quo_num n1 n2)
+      | _ -> self#mk_app int_div_symbol [t1;t2]
+    method mk_mod(t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term =
+      match self#eval_term t1, self#eval_term t2 with
+        Some n1, Some n2 -> NumLit (mod_num n1 n2)
+      | _ -> self#mk_app int_mod_symbol [t1;t2]
     method mk_lt (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Lt (t1, t2)
     method mk_le (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Le (t1, t2)
     method mk_reallit (n: int): (symbol, termnode) term = NumLit (num_of_int n)
