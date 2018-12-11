@@ -17,9 +17,17 @@ fixpoint int truncate_signed(int x, int nbBits); // nbBits does not include the 
 
 fixpoint int abs(int x) { return x < 0 ? -x : x; }
 
+lemma void mul_mono_l(int x, int y, int z);
+    requires x <= y &*& 0 <= z;
+    ensures x * z <= y * z;
+
 lemma void div_rem(int D, int d);
     requires d != 0;
     ensures D == D / d * d + D % d &*& abs(D % d) < abs(d) &*& abs(D / d * d) <= abs(D);
+
+lemma void div_rem_nonneg(int D, int d);
+    requires 0 <= D &*& 0 < d;
+    ensures D == D / d * d + D % d &*& 0 <= D / d &*& D / d <= D &*& 0 <= D % d &*& D % d < d;
 
 predicate integer_(void *p, int size, bool signed_; int v);
 

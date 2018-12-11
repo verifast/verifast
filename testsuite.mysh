@@ -49,7 +49,7 @@ cd examples
   verifast_both -c -disable_overflow_check -allow_should_fail address_of_local.c
   verifast_both -c -disable_overflow_check alt_threading.c
   verifast_both -c args.c
-  verifast_both -disable_overflow_check array_of_struct.c
+  verifast_both array_of_struct.c
   verifast_both -c arraylist.c
   verifast_both -disable_overflow_check threading.o barrier.c
   ifz3v4.5 verifast -prover z3v4.5 -c bitops.c

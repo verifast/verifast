@@ -72,6 +72,7 @@
 .provides ./prelude.h#shorts_inv
 .provides ./prelude.h#ushorts_inv
 .provides ./prelude.h#pointers_inv
+.provides ./prelude.h#pointers_limits
 .provides ./prelude.h#pointers_split
 .provides ./prelude.h#pointers_join
 .provides ./prelude.h#map_uchar_of_char_char_of_uchar
@@ -86,7 +87,9 @@
 .provides ./prelude.h#integers__to_chars
 .provides ./prelude.h#uchars_to_integers_
 .provides ./prelude.h#integers__to_uchars
+.provides ./prelude.h#mul_mono_l
 .provides ./prelude.h#div_rem
+.provides ./prelude.h#div_rem_nonneg
 .provides ./prelude.h#divrem_intro
 .provides ./prelude.h#divrem_elim
 .provides ./prelude.h#pointers_to_chars

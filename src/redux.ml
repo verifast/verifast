@@ -1020,23 +1020,25 @@ and context () =
       result = Unsat
     
     method get_type (term: (symbol, termnode) term) = ()
+
+    method termnode_of_poly n ts =
+      match ts with
+        [] -> self#get_numnode n
+      | [(t, scale)] when sign_num n = 0 && scale =/ num_of_int 1 -> t
+      | _ ->
+        let s = "{" ^ self#pprint_poly (n, ts) ^ "}" in
+        let tnode = self#get_node (new symbol Uninterp s) [] in
+        let u = tnode#value#mk_unknown in
+        ignore (self#simplex_assert_eq n ((neg_unit_num, u)::List.map (fun (t, scale) -> (scale, t#value#mk_unknown)) ts));
+        assert (self#pump_simplex_eqs <> Unsat3);
+        tnode
     
     method termnode_of_term t =
       let get_node s ts = self#get_node s (List.map (fun t -> (self#termnode_of_term t)#value) ts) in
       match t with
         t when self#is_poly t ->
         let (n, ts) = self#to_poly t in
-        begin match ts with
-          [] -> self#get_numnode n
-        | [(t, scale)] when sign_num n = 0 && scale =/ num_of_int 1 -> t
-        | _ ->
-          let s = "{" ^ self#pprint_poly (n, ts) ^ "}" in
-          let tnode = self#get_node (new symbol Uninterp s) [] in
-          let u = tnode#value#mk_unknown in
-          ignore (self#simplex_assert_eq n ((neg_unit_num, u)::List.map (fun (t, scale) -> (scale, t#value#mk_unknown)) ts));
-          assert (self#pump_simplex_eqs <> Unsat3);
-          tnode
-        end
+        self#termnode_of_poly n ts
       | TermNode t -> t
       | True -> self#true_node
       | False -> self#false_node
@@ -1374,6 +1376,16 @@ and context () =
           [] -> ts2
         | (t, scale)::ts1 -> merge_terms ts1 (merge_term t scale ts2)
       in
+      let scale_poly scale n ts =
+        if sign_num scale = 0 then (zero_num, []) else
+        (mult_num scale n, List.map (fun (v, scale') -> (v, mult_num scale scale')) ts)
+      in
+      let mult_values v v' =
+        let mul1 = self#get_node mul_symbol [v; v'] in
+        let mul2 = self#get_node mul_symbol [v'; v] in
+        self#add_redex (fun () -> self#assert_eq mul1#value mul2#value);
+        mul1
+      in
       let rec iter scale t =
         match t with
           NumLit n -> (mult_num scale n, [])
@@ -1386,26 +1398,29 @@ and context () =
           let (n2, ts2) = iter (minus_num scale) t2 in
           (add_num n1 n2, merge_terms ts1 ts2)
         | Mul (t1, t2) ->
-          let (n1, ts1) = iter scale t1 in
+          let (n1, ts1) = iter unit_num t1 in
           let (n2, ts2) = iter unit_num t2 in
+          if ts1 = [] then
+            scale_poly (mult_num scale n1) n2 ts2
+          else if ts2 = [] then
+            scale_poly (mult_num scale n2) n1 ts1
+          else
+          let tn1 = self#termnode_of_poly n1 ts1 in
+          let tn2 = self#termnode_of_poly n2 ts2 in
+          let tn = mult_values tn1#value tn2#value in
           let (n3, ts3) = (mult_num n1 n2, if sign_num n2 = 0 then [] else List.map (fun (v, scale) -> (v, mult_num n2 scale)) ts1) in
           let rec iter ts3 ts2 =
             match ts2 with
               [] -> ts3
             | (t, scale)::ts2 ->
-              let mult_values v v' =
-                let mul1 = self#get_node mul_symbol [v; v'] in
-                let mul2 = self#get_node mul_symbol [v'; v] in
-                self#add_redex (fun () -> self#assert_eq mul1#value mul2#value);
-                mul1
-              in
               let ts4 = if sign_num n1 = 0 then [] else [(t, mult_num scale n1)] in
               let ts4 = ts4 @ List.map (fun (t', scale') -> (mult_values t#value t'#value, mult_num scale scale')) ts1 in
               iter (ts4 @ ts3) ts2
           in
           let ts3 = iter ts3 ts2 in
-          (* Printf.printf "Mul %s %s %s = %s\n" (string_of_num scale) (self#pprint t1) (self#pprint t2) (self#pprint_poly (n3, ts3)); *)
-          (n3, ts3)
+          let tn' = self#termnode_of_poly n3 ts3 in
+          self#add_redex (fun () -> self#assert_eq tn#value tn'#value);
+          (zero_num, [(tn, scale)])
         | _ ->
           let t = self#termnode_of_term t in
           begin match t#value#as_number with
