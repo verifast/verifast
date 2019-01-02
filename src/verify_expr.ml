@@ -1168,6 +1168,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | AssignExpr(_, e1, e2) -> (expr_address_taken e1) @ (expr_address_taken e2)
     | AssignOpExpr(_, e1, _, e2, _) -> (expr_address_taken e1) @ (expr_address_taken e2)
     | InitializerList (_, es) -> flatmap expr_address_taken es
+    | _ -> []
   
   let rec stmt_address_taken s =
     (* incomplete: might miss &x expressions *)
