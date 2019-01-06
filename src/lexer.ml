@@ -1544,7 +1544,7 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
   let p_next () = (List.hd !pps) () in
   let cfp_next () = (List.hd !cfpps) () in
   let divergence l s = 
-    pop_tlexer();
+    begin match !tlexers with _::_::_ -> pop_tlexer() | _ -> () end;
     raise (PreprocessorDivergence (l , s))    
   in
   let rec next_token () =
@@ -1655,7 +1655,7 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
     end
     else begin
       match last_macro_used() with
-        (l,m) -> divergence (current_loc ()) ("The expansion of a header cannot depend upon its context of defined macros (macro " ^ m ^ ")")
+        (l,m) -> divergence (current_loc ()) ("The C preprocessor and the context-free preprocessor produced different tokens. The expansion of a header cannot depend upon its context of defined macros (macro " ^ m ^ ")")
     end
   in
   let current_loc = ref dummy_loc in
