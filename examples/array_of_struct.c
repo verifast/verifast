@@ -26,7 +26,6 @@ struct student *read_students(int *count)
     printf("How many students?\n");
     scanf(" %d", count);
     //@ integer_limits(count);
-    //@ open scanf_targets(_, _);
     //@ assert *count |-> ?nb;
     if (*count < 0 || SIZE_MAX / sizeof(struct student) < (size_t)*count) abort();
     //@ div_rem_nonneg(SIZE_MAX, sizeof(struct student));
@@ -43,10 +42,8 @@ struct student *read_students(int *count)
         //@ close_struct(result + i);
         printf("Please enter the name of student %d:\n", i);
         if (scanf(" %99s", &result[i].name) != 1) abort();
-        //@ open scanf_targets(_, _);
         printf("Please enter the age of student %d:\n", i);
         scanf(" %d", &result[i].age);
-        //@ open scanf_targets(_, _);
     }
     return result;
 }
