@@ -206,6 +206,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       iter [] h
 
   let produce_points_to_chunk l h type_ coef addr value cont =
+    begin fun cont ->
+      if coef != real_unit && coef != real_half then
+        assume (ctxt#mk_real_lt real_zero coef) cont
+      else
+        cont()
+    end $. fun () ->
     match try_pointee_pred_symb type_ with
       Some symb ->
       produce_chunk h (symb, true) [] coef (Some 1) [addr; value] None cont
