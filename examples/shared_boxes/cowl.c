@@ -407,7 +407,7 @@ void cow_list_dispose(struct list* l)
     if(curr->refcount == 0) {
       struct node* next = curr->next;
       //@ dispose_box nbox(id, ?owners) and_handle is_client(ha, f);
-      //@ switch(owners) { case nil: case cons(h, t): switch(h) { case pair(k, v): assert k == ha; } switch(t) { case nil: case cons(hh, tt): } }
+      //@ switch(owners) { case nil: case cons(h, t): switch(t) { case nil: case cons(hh, tt): } switch(h) { case pair(k, v): assert k == ha; } }
       //@ assert length(owners) == 1;
       merge_locks(&curr->lock);
       finalize(&curr->lock);
