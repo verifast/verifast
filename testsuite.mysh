@@ -74,7 +74,7 @@ cd examples
     ifz3 verifast -c ticket_lock.c
     verifast_both -c gotsmanlock.c
     verifast_both -c spinlock.c
-    ifz3 verifast -c concurrentqueue.c
+    verifast -prover z3v4.5 -c concurrentqueue.c
     ifz3 verifast -c concurrentstack.c
     ifz3 verifast -c concurrentstackclient.c
     ifz3 verifast -allow_assume threading.o atomics.o concurrentqueue.c concurrentqueue_client.c

@@ -2287,7 +2287,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               | Some(ehn) -> 
                 if not (List.mem_assoc ehn hpm) then static_error l "Extended handle must appear earlier in same box class." None;
                 let (el, epmap, extendedInv, einv, epbcs) = List.assoc ehn hpm in
-                (match einv with ExprAsn(_, _) -> () | _ -> static_error l "Extended handle's invariant must be pure assertion." None); 
                 if (List.length pmap) < (List.length epmap) then static_error l "Extended handle's parameter list must be prefix of extending handle's parameter list." None;
                 if not
                 (List.for_all2
@@ -4311,6 +4310,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           )
           hpmap
         in
+        hpmap |> List.iter begin fun (hpn, (l, pmap, einv, inv, pncs)) ->
+          match einv with 
+            None -> ()
+          | Some ehn -> 
+            let (el, epmap, extendedInv, einv, epbcs) = List.assoc ehn hpmap in
+            match einv with ExprAsn (_, _) -> () | _ -> static_error l "Extended handle's invariant must be pure assertion." None
+        end; 
         (bcn, (l, boxpmap, winv, boxvarmap, amap, hpmap))
       end
       boxmap
