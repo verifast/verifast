@@ -56,7 +56,7 @@ cd examples
   verifast_both -c static_array.c
   verifast -c -disable_overflow_check typedef_cast.c
   verifast_both -c automation.c
-  ifz3 verifast -disable_overflow_check priorityqueue-forall_nth.c
+  verifast -prover z3v4.5 -disable_overflow_check priorityqueue-forall_nth.c
   verifast_both set.c
   cd BeepDriver
     mysh < BeepKernel.mysh
@@ -99,7 +99,7 @@ cd examples
     verifast_both -c lock.c
     verifast_both -c -disable_overflow_check prodcons.c
   cd ..
-  ifz3 verifast stringBuffers.c sockets.o bot.c
+  verifast stringBuffers.c sockets.o bot.c
   verifast_both -disable_overflow_check cat.c
   verifast_both char.c
   mysh < chat.mysh
@@ -118,7 +118,7 @@ cd examples
     mysh < custom_bindir.mysh
   cd ..
   verifast_both -disable_overflow_check cp.c
-  ifz3 verifast -c decreases.c
+  verifast -c decreases.c
   verifast_both -c default_clause_test.c
   cd nested_induction
     mysh < nested_induction.mysh
@@ -286,8 +286,8 @@ cd examples
     verifast_both -c -disable_overflow_check ArraysAuto.java
     verifast_both -c -disable_overflow_check ArraysManual.java
     verifast_both -c -disable_overflow_check Automation.java
-    ifz3 verifast -c Bag.java
-    ifz3 verifast -c -disable_overflow_check Comprehensions.java
+    verifast -c Bag.java
+    verifast -c -disable_overflow_check Comprehensions.java
     verifast_both -c Constants.java
     verifast_both -c FieldInitializers.java
     verifast_both -c -allow_should_fail CompoundAssignments.java
@@ -350,10 +350,10 @@ cd examples
     cd ..
   cd ..
   cd vstte2010
-    ifz3 verifast -c -disable_overflow_check problem1.c
-    ifz3 verifast -c -disable_overflow_check problem2.c
+    verifast -c -disable_overflow_check problem1.c
+    verifast -c -disable_overflow_check problem2.c
     verifast_both -c -disable_overflow_check problem3.java
-    ifz3 verifast -c -disable_overflow_check problem4.java
+    verifast -prover z3v4.5 -c -disable_overflow_check problem4.java
     verifast_both -c -disable_overflow_check problem5.java
   cd ..
   cd vstte2012

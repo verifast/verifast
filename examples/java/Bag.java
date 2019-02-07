@@ -116,8 +116,8 @@ class Bag {
     @*/
   {
     int mindex = 0;
-    int m = a[mindex];
     //@ switch (xs) { case nil: case cons(x0, xs0): }
+    int m = a[mindex];
     for (int i = 1; i < n; i++)
       /*@
       invariant
@@ -138,9 +138,15 @@ class Bag {
     a[mindex] = a[n];
     return m;
     //@ assert a |-> ?array &*& n |-> ?number &*& array_slice(array, 0, number, ?xs1);
+    //@ assert xs == append(take(number, xs), drop(number, xs));
+    //@ assert drop(number, xs) == cons(?nv, ?tail);
+    //@ switch (tail) { case nil: case cons(h, t): length_nonnegative(t); }
+    /*@
+    if (mindex < number) {
+        update_append_l(mindex, nv, take(number, xs), cons(m, nil));
+    }
+    @*/
     //@ close permut(xs, cons(pair(mindex, number), nil), append(xs1, cons(m, nil)));
-    
-    //@ assert m == min(xs);
   }
   
 } 
