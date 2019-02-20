@@ -66,6 +66,33 @@ void modify_array_new_syntax(int* foo)
     *(foo + 2) = *(foo + 2) - 5;
 }
 
+void float_swap(float *f1, float *f2)
+    //@ requires *f1 |-> ?v1 &*& *f2 |-> ?v2;
+    //@ ensures *f1 |-> v2 &*& *f2 |-> v1;
+{
+    float v1_ = *f1;
+    *f1 = *f2;
+    *f2 = v1_;
+}
+
+void double_swap(double *f1, double *f2)
+    //@ requires *f1 |-> ?v1 &*& *f2 |-> ?v2;
+    //@ ensures *f1 |-> v2 &*& *f2 |-> v1;
+{
+    double v1_ = *f1;
+    *f1 = *f2;
+    *f2 = v1_;
+}
+
+void long_double_swap(long double *f1, long double *f2)
+    //@ requires *f1 |-> ?v1 &*& *f2 |-> ?v2;
+    //@ ensures *f1 |-> v2 &*& *f2 |-> v1;
+{
+    long double v1_ = *f1;
+    *f1 = *f2;
+    *f2 = v1_;
+}
+
 int main() //@ : main
     //@ requires true;
     //@ ensures true;
