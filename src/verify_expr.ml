@@ -1887,6 +1887,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               if not (definitely_equal coef real_unit) then assert_false h0 env l "Assignment requires full permission." None;
               let (_, _, _, _, update_symb) = List.assoc "update" purefuncmap in
               let updated = mk_app update_symb [i; apply_conversion (provertype_of_type elem_tp) ProverInductive value; vs] in
+              assume (ctxt#mk_eq (mk_length updated) count') $. fun () ->
               cont (Chunk (integers__symb, [], real_unit, [arr'; size'; signed'; count'; updated], None)::h) env
             | None ->
               consume_elem()
@@ -1911,6 +1912,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           if not (definitely_equal coef real_unit) then assert_false h0 env l "Assignment requires full permission." None;
           let (_, _, _, _, update_symb) = List.assoc "update" purefuncmap in
           let updated = mk_app update_symb [i; apply_conversion (provertype_of_type elem_tp) ProverInductive value; vs] in
+          assume (ctxt#mk_eq (mk_length updated) n) $. fun () ->
           cont (Chunk (arrayPredSymb1, [], real_unit, [a; n; updated], None) :: h) env
         | None ->
           consume_elem ()
