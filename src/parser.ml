@@ -39,7 +39,8 @@ let c_keywords = [
   "SHRT_MIN"; "SHRT_MAX"; "USHRT_MAX"; "UINT_MAX"; "UCHAR_MAX";
   "LLONG_MIN"; "LLONG_MAX"; "ULLONG_MAX";
   "__int8"; "__int16"; "__int32"; "__int64"; "__int128";
-  "inline"; "__inline"; "__inline__"; "__forceinline"; "_Noreturn"
+  "inline"; "__inline"; "__inline__"; "__forceinline"; "_Noreturn";
+  "__signed__"; "__always_inline"; "extern"
 ]
 
 let java_keywords = [
@@ -448,6 +449,7 @@ and
 | [< '(l, Kwd "__inline") >] -> ()
 | [< '(l, Kwd "__inline__") >] -> ()
 | [< '(l, Kwd "__forceinline") >] -> ()
+| [< '(l, Kwd "__always_inline") >] -> ()
 | [< >] -> ()
 and
   parse_enum_body = parser
@@ -493,6 +495,7 @@ and
 | [< '(_, Kwd "enum"); '(l, Ident n); elems = parse_enum_body; '(_, Kwd ";"); >] ->
   [EnumDecl(l, n, elems)]
 | [< '(_, Kwd "static"); _ = parse_ignore_inline; t = parse_return_type; d = parse_func_rest Regular t Private >] -> check_function_for_contract d
+| [< '(_, Kwd "extern"); t = parse_return_type; d = parse_func_rest Regular t Public >] -> check_function_for_contract d
 | [< '(_, Kwd "_Noreturn"); _ = parse_ignore_inline; t = parse_return_type; d = parse_func_rest Regular t Public >] ->
   let ds = check_function_for_contract d in
   begin match ds with
@@ -800,6 +803,7 @@ and
      end
    >] -> t
 | [< '(l, Kwd "signed"); n = parse_integer_type_rest >] -> ManifestTypeExpr (l, Int (Signed, n))
+| [< '(l, Kwd "__signed__"); n = parse_integer_type_rest >] -> ManifestTypeExpr (l, Int (Signed, n))
 | [< '(l, Kwd "unsigned"); n = parse_integer_type_rest >] -> ManifestTypeExpr (l, Int (Unsigned, n))
 | [< '(l, Kwd "uintptr_t") >] -> ManifestTypeExpr (l, Int (Unsigned, ptr_rank))
 | [< '(l, Kwd "intptr_t") >] -> ManifestTypeExpr (l, Int (Signed, ptr_rank))
@@ -833,6 +837,8 @@ and
 and
   parse_type_suffix t0 = parser
   [< '(l, Kwd "*"); t = parse_type_suffix (PtrTypeExpr (l, t0)) >] -> t
+| [< '(l, Kwd "volatile"); t = parse_type_suffix t0 >] -> t
+| [< '(l, Kwd "const"); t = parse_type_suffix t0 >] -> t
 | [< '(l, Kwd "["); '(_, Kwd "]"); t = parse_type_suffix (ArrayTypeExpr (l,t0)) >] -> t
 | [< >] -> t0
 and
