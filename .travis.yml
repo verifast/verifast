@@ -17,7 +17,7 @@ install:
 script:
   - ./build.sh
 
-before_deploy: "cd ../upload"
+before_deploy: "cd upload"
 deploy:
   provider: cloudfiles
   username: bartjacobs
