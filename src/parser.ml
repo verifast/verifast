@@ -38,6 +38,7 @@ let c_keywords = [
   "const"; "volatile"; "register"; "ifdef"; "elif"; "undef";
   "SHRT_MIN"; "SHRT_MAX"; "USHRT_MAX"; "UINT_MAX"; "UCHAR_MAX";
   "LLONG_MIN"; "LLONG_MAX"; "ULLONG_MAX";
+  "LONG_MIN"; "LONG_MAX"; "ULONG_MAX";
   "__int8"; "__int16"; "__int32"; "__int64"; "__int128";
   "inline"; "__inline"; "__inline__"; "__forceinline"; "_Noreturn";
   "__signed__"; "__always_inline"; "extern"
@@ -1331,6 +1332,9 @@ and
 | [< '(l, Kwd "SHRT_MAX") >] -> IntLit (l, big_int_of_string "32767", true, false, NoLSuffix)
 | [< '(l, Kwd "USHRT_MAX") >] -> IntLit (l, big_int_of_string "65535", true, false, NoLSuffix)
 | [< '(l, Kwd "UINT_MAX") >] -> IntLit (l, max_unsigned_big_int int_rank, true, true, NoLSuffix)
+| [< '(l, Kwd "LONG_MIN") >] -> IntLit (l, min_signed_big_int long_rank, true, false, NoLSuffix)
+| [< '(l, Kwd "LONG_MAX") >] -> IntLit (l, max_signed_big_int long_rank, true, false, NoLSuffix)
+| [< '(l, Kwd "ULONG_MAX") >] -> IntLit (l, max_unsigned_big_int long_rank, true, true, NoLSuffix)
 | [< '(l, Kwd "LLONG_MIN") >] -> IntLit (l, big_int_of_string "-9223372036854775808", true, false, NoLSuffix)
 | [< '(l, Kwd "LLONG_MAX") >] -> IntLit (l, big_int_of_string "9223372036854775807", true, false, NoLSuffix)
 | [< '(l, Kwd "ULLONG_MAX") >] -> IntLit (l, big_int_of_string "18446744073709551615", true, true, NoLSuffix)
