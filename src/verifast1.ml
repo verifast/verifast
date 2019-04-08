@@ -5178,7 +5178,12 @@ let check_if_list_is_defined () =
         end;
         (ctxt#mk_div v1 v2)
       end
-    | Mod -> ctxt#mk_mod v1 v2
+    | Mod ->
+      begin match ass_term with
+        Some assert_term -> assert_term l (ctxt#mk_not (ctxt#mk_eq v2 (ctxt#mk_intlit 0))) "Denominator might be 0." None
+      | None -> ()
+      end;
+      ctxt#mk_mod v1 v2
     | ShiftLeft ->
       let v = ctxt#mk_app shiftleft_symbol [v1;v2] in
       begin match e2 with

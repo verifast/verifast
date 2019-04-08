@@ -443,6 +443,7 @@ cd tests
     cd ..
   cd ..
   cd errors
+    verifast -c -allow_should_fail div_mod_by_zero.c
     verifast_both -c -allow_should_fail macro_in_macro_arg.c
     verifast -c -prover z3v4.5 int_lit_overflow.c
     verifast_both -c -allow_should_fail basics.c
