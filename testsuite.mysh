@@ -103,6 +103,7 @@ cd examples
   verifast_both -disable_overflow_check cat.c
   verifast_both char.c
   mysh < chat.mysh
+  verifast -c close_struct_zero.c
   verifast_both -c closetest.c
   verifast_both Composite.c
   verifast_both composite4.c
