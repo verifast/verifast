@@ -73,7 +73,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match ss with
           [] -> ()
         | DeclStmt(l, ds) :: rest -> 
-          ds |> List.iter begin fun (_, _, _, _, addresstaken) ->
+          ds |> List.iter begin fun (_, _, _, _, (addresstaken, _)) ->
               if !addresstaken then
                 static_error l "A local variable whose address is taken must be declared at the start of a block." None
             end;
@@ -562,12 +562,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let rec iter h tenv ghostenv env xs =
         match xs with
           [] -> tcont sizemap tenv ghostenv h env
-        | (l, te, x, e, address_taken)::xs ->
+        | (l, te, x, e, (address_taken, blockPtr))::xs ->
           let t = check_pure_type (pn,ilist) tparams te in
           if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.") None;
           let ghostenv = if pure then x::ghostenv else List.filter (fun y -> y <> x) ghostenv in
           let produce_object envTp =
             if pure then static_error l "Cannot declare a variable of this type in a ghost context." None;
+            begin let Some block = !blockPtr in if not (List.mem x !block) then block := x::!block end;
             let init =
               match e with
                 None -> None
@@ -2497,7 +2498,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let (h,tenv,env) = heapify_params h tenv env heapy_ps in
           let outerlocals = ref [] in
           stmts_mark_addr_taken ss [(outerlocals, [])] (fun _ -> ());
-          let body = if List.length !outerlocals = 0 then ss else [BlockStmt(l, [], ss, closeBraceLoc, outerlocals)] in
+          let body = [BlockStmt(l, [], ss, closeBraceLoc, outerlocals)] in
           verify_block (pn,ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont (fun _ _ _ -> assert false)
         end $. fun sizemap tenv ghostenv h env ->
         verify_return_stmt (pn,ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env false closeBraceLoc None [] return_cont (fun _ _ _ -> assert false)

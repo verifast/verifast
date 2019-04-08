@@ -181,7 +181,7 @@ module Scala = struct
     parse_expr stream = parse_rel_expr stream
   and
     parse_stmt = parser
-      [< '(l, Kwd "var"); '(_, Ident x); t = parse_type_ann; '(_, Kwd "="); e = parse_expr; '(_, Kwd ";") >] -> DeclStmt (l, [l, t, x, Some(e), ref false])
+      [< '(l, Kwd "var"); '(_, Ident x); t = parse_type_ann; '(_, Kwd "="); e = parse_expr; '(_, Kwd ";") >] -> DeclStmt (l, [l, t, x, Some(e), (ref false, ref None)])
     | [< '(l, Kwd "assert"); a = parse_asn; '(_, Kwd ";") >] -> Assert (l, a)
 
 end
@@ -360,7 +360,7 @@ and
                ds = comma_rep (parse_declarator t); '(_, Kwd ";")
             >] ->
             let fds =
-              ((l, tx, x, init, ref false)::ds) |> List.map begin fun (l, tx, x, init, _) ->
+              ((l, tx, x, init, (ref false, ref None))::ds) |> List.map begin fun (l, tx, x, init, _) ->
                 Field (l, Real, tx, x, binding, vis, final, init)
               end
             in
@@ -393,7 +393,7 @@ and
   [< '(l, Ident x);
      tx = parse_array_braces t;
      init = opt (parser [< '(_, Kwd "="); e = parse_declaration_rhs tx >] -> e);
-  >] -> (l, tx, x, init, ref false)
+  >] -> (l, tx, x, init, (ref false, ref None))
 and
   parse_method_rest l = parser
   [< ps = parse_paramlist;
@@ -1091,8 +1091,8 @@ and
 | [< e = parse_expr; s = parser
     [< '(_, Kwd ";") >] ->
     begin match e with
-      AssignExpr (l, Operation (llhs, Mul, [Var (lt, t); Var (lx, x)]), rhs) -> DeclStmt (l, [l, PtrTypeExpr (llhs, IdentTypeExpr (lt, None, t)), x, Some(rhs), ref false])
-    | Operation (l, Mul, [Var (lt, t); Var (lx, x)]) -> DeclStmt (l, [l, PtrTypeExpr (l, IdentTypeExpr (lt, None, t)), x, None, ref false])
+      AssignExpr (l, Operation (llhs, Mul, [Var (lt, t); Var (lx, x)]), rhs) -> DeclStmt (l, [l, PtrTypeExpr (llhs, IdentTypeExpr (lt, None, t)), x, Some(rhs), (ref false, ref None)])
+    | Operation (l, Mul, [Var (lt, t); Var (lx, x)]) -> DeclStmt (l, [l, PtrTypeExpr (l, IdentTypeExpr (lt, None, t)), x, None, (ref false, ref None)])
     | _ -> ExprStmt e
     end
   | [< '(l, Kwd ":") >] -> (match e with Var (_, lbl) -> LabelStmt (l, lbl) | _ -> raise (ParseException (l, "Label must be identifier.")))
@@ -1164,14 +1164,14 @@ and
          end;
          CreateHandleStmt (l, x, fresh, hpn, e)
        | [< rhs = parse_declaration_rhs te; ds = comma_rep (parse_declarator te); '(_, Kwd ";") >] ->
-         DeclStmt (l, (l, te, x, Some(rhs), ref false)::ds)
+         DeclStmt (l, (l, te, x, Some(rhs), (ref false, ref None))::ds)
     >] -> s
   | [< tx = parse_array_braces te;
        init = opt (parser [< '(_, Kwd "="); e = parse_declaration_rhs tx >] -> e);
        ds = comma_rep (parse_declarator te);
        '(_, Kwd ";")
     >] ->
-    DeclStmt(type_expr_loc te, (lx, tx, x, init, ref false)::ds)
+    DeclStmt(type_expr_loc te, (lx, tx, x, init, (ref false, ref None))::ds)
 and
   parse_switch_stmt_clauses = parser
   [< c = parse_switch_stmt_clause; cs = parse_switch_stmt_clauses >] -> c::cs

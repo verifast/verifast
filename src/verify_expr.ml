@@ -1063,19 +1063,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match s with
       DeclStmt(_, ds) ->
       let (block, mylocals)::rest = locals in
-      ds |> List.iter begin fun (_, tp, x, e, _) ->
+      ds |> List.iter begin fun (_, tp, x, e, (_, blockPtr)) ->
         begin match e with None -> () | Some(e) -> expr_mark_addr_taken e locals end;
-        begin match tp with
-          (* There is always an array chunk generated for a StaticArrayTypeExpr.
-             Hence, we have to add this chunk to the list of locals to be freed
-             at the end of the program block. *)
-          StaticArrayTypeExpr (_, _, _) | StructTypeExpr (_, _, _) ->
-          (* TODO: handle array initialisers *)
-          block := x::!block
-        | _ -> ()
-        end
+        blockPtr := Some block
       end;
-      cont ((block, List.map (fun (lx, tx, x, e, addrtaken) -> (x, addrtaken)) ds @ mylocals) :: rest)
+      cont ((block, List.map (fun (lx, tx, x, e, (addrtaken, _)) -> (x, addrtaken)) ds @ mylocals) :: rest)
     | BlockStmt(_, _, ss, _, locals_to_free) -> stmts_mark_addr_taken ss ((locals_to_free, []) :: locals) (fun _ -> cont locals)
     | ExprStmt(e) -> expr_mark_addr_taken e locals; cont locals
     | PureStmt(_, s) ->  stmt_mark_addr_taken s locals cont

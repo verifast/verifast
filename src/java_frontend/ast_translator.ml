@@ -648,7 +648,7 @@ and translate_statement stmt =
       let typ' = translate_type typ in
       let id' = translate_identifier id in
       let init' = Misc.apply_option translate_expression init in
-      VF.DeclStmt (l', [(l', typ', id', init', ref false)])
+      VF.DeclStmt (l', [(l', typ', id', init', (ref false, ref None))])
   | GEN.S_Expression(e) ->
       begin
         match e with

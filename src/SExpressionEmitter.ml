@@ -517,18 +517,15 @@ let rec sexpr_of_stmt (stmt : stmt) : sexpression =
                  ; "unknown", sexpr_of_option sexpr_of_expr expr
                  ; "body", sexpr_of_list sexpr_of_stmt body ]
     | DeclStmt (loc, xs) ->
-      let sexpr_of_local (lx, tx, str, expr, address) =
+      let sexpr_of_local (lx, tx, str, expr, _) =
         let initialization =
           match expr with
             | Some expr -> [ "init", sexpr_of_expr expr ]
             | None      -> []
         in
-        let address =
-          [ "pointer", sexpr_of_bool !address ]
-        in
         build_list [ Symbol "local"
                    ; Symbol str ]
-                   ( initialization @ address )
+                   initialization
       in
       build_list [ Symbol "stmt-declaration" ]
                  [ "locals", sexpr_of_list sexpr_of_local xs ]
