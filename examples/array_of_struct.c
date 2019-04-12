@@ -58,6 +58,7 @@ int main() //@ : main
     //@ ensures true;
 {
     if (SIZE_MAX / 2 < sizeof(struct point)) abort();
+    //@ div_rem_nonneg(SIZE_MAX, 2);
     struct point *points = malloc(2 * sizeof(struct point));
     if (points == 0) abort();
     //@ chars_split((void *)points, sizeof(struct point));

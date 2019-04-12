@@ -199,7 +199,7 @@ void fix(struct Node* node)
   /*@ ensures context(node, value, c + 1) &*& node->count |-> c + 1; @*/
 {
   int tmp = node->count;
-  if (tmp == 2147483647) {
+  if (tmp == INT_MAX) {
     abort();
   }
   node->count = tmp + 1;

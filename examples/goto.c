@@ -26,7 +26,7 @@ int abs(int x)
     //@ terminates;
 {
     if (0 <= x) goto end;
-    if (x < -2147483647) abort();
+    if (x == INT_MIN) abort();
     x = 0 - x;
 end:
     return x;

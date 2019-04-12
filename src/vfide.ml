@@ -138,6 +138,7 @@ module TreeMetrics = struct
 end
 
 let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend enforceAnnotations allowUndeclaredStructTypes dataModel overflowCheck verifyAndQuit =
+  let dataModel = ref dataModel in
   let leftBranchPixbuf = Branchleft_png.pixbuf () in
   let rightBranchPixbuf = Branchright_png.pixbuf () in
   let ctxts_lifo = ref None in
@@ -277,6 +278,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       a "RunShapeAnalysis" ~label:"Run shape analysis on function" ~stock:`MEDIA_FORWARD ~accel:"F9" ~tooltip:"Run shape analysis on the function where the cursor is in";
       a "TopWindow" ~label:"Window(_Top)";
       a "BottomWindow" ~label:"Window(_Bottom)";
+      a "TargetArchitecture" ~label:"_Target architecture";
       a "Stub";
       a "Help" ~label:"_Help";
       a "About" ~stock:`ABOUT ~callback:(fun _ -> showBannerDialog ())
@@ -329,6 +331,10 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
           <menuitem action='UseJavaFrontend' />
           <menuitem action='SimplifyTerms' />
           <menuitem action='Include paths' />
+          <separator />
+          <menu action='TargetArchitecture'>
+            <menuitem action='Stub' />
+          </menu>
         </menu>
         <menu action='TopWindow'>
            <menuitem action='Stub' />
@@ -356,6 +362,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   let redoAction = actionGroup#get_action "Redo" in
   let windowMenuItemTop = new GMenu.menu_item (GtkMenu.MenuItem.cast (ui#get_widget "/MenuBar/TopWindow")#as_widget) in
   let windowMenuItemBottom = new GMenu.menu_item (GtkMenu.MenuItem.cast (ui#get_widget "/MenuBar/BottomWindow")#as_widget) in
+  let targetMenuItem = new GMenu.menu_item (GtkMenu.MenuItem.cast (ui#get_widget "/MenuBar/Verify/TargetArchitecture")#as_widget) in
   let ignore_text_changes = ref false in
   let rootVbox = GPack.vbox ~packing:root#add () in
   root#resize
@@ -478,6 +485,23 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       windowMenuItemTop#set_submenu (menu subNotebook);
       windowMenuItemBottom#set_submenu (menu textNotebook)
   in
+  let targetMenu = GMenu.menu () in
+  let targetMenuGroup = ref None in
+  let targetMenuItems =
+    data_models_ |> List.map begin fun (name, model) ->
+      let {int_rank; long_rank; ptr_rank} = model in
+      let item = GMenu.radio_menu_item ~active:(!dataModel = Some model) ?group:!targetMenuGroup ~label:(Printf.sprintf "sizeof(int, long, void *) = %d, %d, %d - %s" (1 lsl int_rank) (1 lsl long_rank) (1 lsl ptr_rank) name) ~packing:targetMenu#add () in
+      targetMenuGroup := Some item#group;
+      (Some model, item)
+    end
+  in
+  let targetMenuItems =
+    ignore (GMenu.separator_item ~packing:targetMenu#add ());
+    let item = GMenu.radio_menu_item ~active:(!dataModel = None) ?group:!targetMenuGroup ~label:"All of the above" ~packing:targetMenu#add () in
+    targetMenuItems @ [(None, item)]
+  in
+  targetMenuItem#set_submenu targetMenu;
+  targetMenuItems |> List.iter (fun (model, item) -> ignore (item#connect#activate ~callback:(fun () -> dataModel := model)));
   let updateWhenTabListChanges () =
     updateBufferMenu ();
     updateWindowTitle ()
@@ -1437,7 +1461,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
                 option_use_java_frontend = !useJavaFrontend;
                 option_enforce_annotations = enforceAnnotations;
                 option_allow_undeclared_struct_types = allowUndeclaredStructTypes;
-                option_data_model = dataModel;
+                option_data_model = !dataModel;
                 option_allow_should_fail = true;
                 option_emit_manifest = false;
                 option_check_manifest = false;
@@ -1858,7 +1882,7 @@ let () =
   let enforceAnnotations = ref false in
   let allowUndeclaredStructTypes = ref false in
   let overflow_check = ref true in
-  let data_model = ref data_model_32bit in
+  let data_model = ref None in
   let verify_and_quit = ref false in
   let rec iter args =
     match args with
@@ -1878,7 +1902,7 @@ let () =
     | "-javac"::args -> javaFrontend := true; iter args
     | "-enforce_annotations"::args -> enforceAnnotations := true; iter args
     | "-allow_undeclared_struct_types"::args -> allowUndeclaredStructTypes := true; iter args
-    | "-target"::target::args -> data_model := data_model_of_string target; iter args
+    | "-target"::target::args -> data_model := Some (data_model_of_string target); iter args
     | "-disable_overflow_check"::args -> overflow_check := false; iter args
     | "-verify_and_quit"::args -> verify_and_quit := true; iter args
     | arg::args when not (startswith arg "-") -> path := Some arg; iter args

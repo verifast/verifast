@@ -224,7 +224,7 @@ void print_interval(void *interval)
 
 struct class interval_class = {print_interval};
 
-#define HEAP_SIZE 65536
+#define HEAP_SIZE 10000
 
 char heap_[HEAP_SIZE];
 char *heap_free_space;

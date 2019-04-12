@@ -1,4 +1,5 @@
 //@ #include <bitops.gh>
+//@ #include <target.gh>
 
 /*@
 
@@ -30,6 +31,7 @@ lemma void limits_test(int x, int y)
     requires 0 <= x &*& x <= UINT_MAX &*& 0 <= y &*& y <= UINT_MAX;
     ensures 0 <= (x | y) &*& (x | y) <= UINT_MAX;
 {
+    case_split_sizeof_int();
     bitor_limits(x, y, nat_of_int(8*sizeof(unsigned int)));
 }
 

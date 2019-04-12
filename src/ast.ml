@@ -96,10 +96,16 @@ let string_of_inductiveness inductiveness =
   
 type signedness = Signed | Unsigned
 
+type int_rank =
+  LitRank of int  (* The size of an integer of rank k is 2^k bytes. *)
+| IntRank
+| LongRank
+| PtrRank
+
 type type_ = (* ?type_ *)
     Bool
   | Void
-  | Int of signedness * int (*rank*)  (* The size of Int (_, k) is 2^k bytes. For example: uint8 is denoted as Int (Unsigned, 0). *)
+  | Int of signedness * int_rank (*rank*)  (* The size of Int (_, k) is 2^k bytes. For example: uint8 is denoted as Int (Unsigned, 0). *)
   | RealType  (* Mathematical real numbers. Used for fractional permission coefficients. Also used for reasoning about floating-point code. *)
   | Float
   | Double
@@ -162,9 +168,18 @@ let data_model_32bit = {int_rank=2; long_rank=2; ptr_rank=2}
 let data_model_java = {int_rank=2; long_rank=3; ptr_rank=3 (*arbitrary value; ptr_rank is not relevant to Java programs*)}
 let data_model_lp64 = {int_rank=2; long_rank=3; ptr_rank=3}
 let data_model_llp64 = {int_rank=2; long_rank=2; ptr_rank=3}
+let data_model_ip16 = {int_rank=1; long_rank=2; ptr_rank=1}
+let data_model_i16 = {int_rank=1; long_rank=2; ptr_rank=2}
+let data_models_ = [
+  "IP16", data_model_ip16;
+  "I16", data_model_i16;
+  "32bit/ILP32", data_model_32bit;
+  "Win64/LLP64", data_model_llp64;
+  "Linux64/macOS/LP64", data_model_lp64
+]
 let data_models = [
-  "IP16", {int_rank=1; long_rank=2; ptr_rank=1};
-  "I16", {int_rank=1; long_rank=2; ptr_rank=2};
+  "IP16", data_model_ip16;
+  "I16", data_model_i16;
   "ILP32", data_model_32bit;
   "32bit", data_model_32bit;
   "LLP64", data_model_llp64;
@@ -234,6 +249,7 @@ type type_expr = (* ?type_expr *)
 and
   operator =  (* ?operator *)
   | Add | Sub | PtrDiff | Le | Ge | Lt | Gt | Eq | Neq | And | Or | Xor | Not | Mul | Div | Mod | BitNot | BitAnd | BitXor | BitOr | ShiftLeft | ShiftRight
+  | MinValue of type_ | MaxValue of type_
 and
   expr = (* ?expr *)
     True of loc

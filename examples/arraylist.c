@@ -54,13 +54,20 @@ void list_add(struct arraylist *a, void *v)
     data = a->data;
     size = a->size;
     int capacity = a->capacity;
-    if (SIZE_MAX / sizeof(void *) / 2 - 1 < (size_t)capacity) abort();
-    void** newData = malloc((capacity * 2 + 1) * sizeof(void*));
+    //@ assert capacity == size;
+    if (SIZE_MAX / sizeof(void *) < (size_t)capacity * 2 + 1) abort();
+    //@ mul_mono_l(0, sizeof(void *), capacity * 2 + 1);
+    //@ div_rem_nonneg(SIZE_MAX, sizeof(void *));
+    //@ mul_mono_l(capacity * 2 + 1, SIZE_MAX / sizeof(void *), sizeof(void *));
+    void** newData = malloc(((size_t)capacity * 2 + 1) * sizeof(void*));
     if(newData == 0) abort();
     //@ pointers_split(newData, size);
-    memcpy(newData, data, (unsigned int) size * sizeof(void*));
+    //@ mul_mono_l(0, size, sizeof(void *));
+    memcpy(newData, data, (size_t)size * sizeof(void*));
     //@ chars_to_pointers(newData, size);
     a->data = newData;
+    //@ div_rem_nonneg(INT_MAX, 2);
+    if (INT_MAX / 2 - 1 < capacity) abort();
     a->capacity = capacity * 2 + 1;
     free(data);
   }
@@ -78,6 +85,8 @@ void list_remove_nth(struct arraylist *a, int n)
   void** data = a->data;
   int size = a->size;
   //@ pointers_limits(data);
+  //@ mul_mono_l(0, n, sizeof(void *));
+  //@ mul_mono_l(n + 1, length(vs), sizeof(void *));
   //@ pointers_split(data, n);
   //@ open pointers(data + n, _, _);
   memmove(data + n, data + n + 1, (unsigned int) (size - n - 1) * sizeof(void *));

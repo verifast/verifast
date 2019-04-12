@@ -178,6 +178,7 @@ void shift_interval(struct interval *interval) //@ : thread_run
         }
         
         if (SIZE_MAX / 2 < sizeof(struct mcas_entry)) abort();
+        //@ div_rem_nonneg(SIZE_MAX, 2);
         struct mcas_entry *entries = malloc(2 * sizeof(struct mcas_entry));
         if (entries == 0) abort();
         //@ leak malloc_block(entries, _); // We assume the presence of a garbage collector.

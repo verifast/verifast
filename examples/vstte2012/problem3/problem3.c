@@ -15,7 +15,7 @@ struct ring_buffer{
 };
 
 bool is_split_up(int size, int first, int len)
-//@ requires size * 4 < INT_MAX &*& len <= size &*& len >= 0;
+//@ requires size * sizeof(int) < INT_MAX &*& len <= size &*& len >= 0;
 //@ ensures result == is_split_up_fp(size, first, len);
 {
 	return first > size - len;
@@ -41,7 +41,7 @@ predicate ring_buffer(struct ring_buffer *buffer; int size, list<int> items) =
 	&*& buffer->first |-> ?first
 	&*& buffer->len |-> ?len
 	
-	&*& size >= 0 && size * 4 < INT_MAX
+	&*& size >= 0 && size * sizeof(int) < INT_MAX
 	&*& len <= size
 	&*& first >= 0 && first < size
 	&*& length(items) == len

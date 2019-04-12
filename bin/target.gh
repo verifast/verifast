@@ -1,0 +1,46 @@
+#ifndef TARGET_GH
+#define TARGET_GH
+
+lemma_auto void int_size_int_max();
+    requires true;
+    ensures INT_MAX == (1 << (8 * sizeof(int) - 1)) - 1;
+
+lemma_auto void long_size_long_max();
+    requires true;
+    ensures __maxvalue(long) == (1 << (8 * sizeof(long) - 1)) - 1;
+
+lemma_auto void ptr_size_ptr_max();
+    requires true;
+    ensures __maxvalue(intptr_t) == (1 << (8 * sizeof(intptr_t) - 1)) - 1;
+
+inductive target = IP16 | I16 | ILP32 | LLP64 | LP64;
+
+fixpoint target __target();
+
+lemma_auto void target_sizes();
+    requires true;
+    ensures switch (__target) {
+        case IP16: return sizeof(int) == 2 && INT_MAX == 0x7fff && sizeof(long) == 4 && __maxvalue(long) == 0x7fffffff && sizeof(void *) == 2 && __maxvalue(intptr_t) == 0x7fff;
+        case I16: return sizeof(int) == 2 && INT_MAX == 0x7fff && sizeof(long) == 4 && __maxvalue(long) == 0x7fffffff && sizeof(void *) == 4 && __maxvalue(intptr_t) == 0x7fffffff;
+        case ILP32: return sizeof(int) == 4 && INT_MAX == 0x7fffffff && sizeof(long) == 4 && __maxvalue(long) == 0x7fffffff && sizeof(void *) == 4 && __maxvalue(intptr_t) == 0x7fffffff;
+        case LLP64: return sizeof(int) == 4 && INT_MAX == 0x7fffffff && sizeof(long) == 4 && __maxvalue(long) == 0x7fffffff && sizeof(void *) == 8 && __maxvalue(intptr_t) == 0x7fffffffffffffff;
+        case LP64: return sizeof(int) == 4 && INT_MAX == 0x7fffffff && sizeof(long) == 8 && __maxvalue(long) == 0x7fffffffffffffff && sizeof(void *) == 8 && __maxvalue(intptr_t) == 0x7fffffffffffffff;
+    } == true;
+
+lemma void case_split_target();
+    requires true;
+    ensures switch (__target) { case IP16: return true; case I16: return true; case ILP32: return true; case LLP64: return true; case LP64: return true; };
+
+lemma void case_split_sizeof_int();
+    requires true;
+    ensures sizeof(int) == 2 ? INT_MAX == 0x7fff : sizeof(int) == 4 &*& INT_MAX == 0x7fffffff;
+
+lemma void case_split_sizeof_long();
+    requires true;
+    ensures sizeof(long) == 4 ? __maxvalue(long) == 0x7fffffff : sizeof(long) == 8 &*& __maxvalue(long) == 0x7fffffffffffffff;
+
+lemma void case_split_sizeof_ptr();
+    requires true;
+    ensures sizeof(void *) == 2 ? __maxvalue(intptr_t) == 0x7fff : sizeof(void *) == 4 ? __maxvalue(intptr_t) == 0x7fffffff : sizeof(void *) == 8 &*& __maxvalue(intptr_t) == 0x7fffffffffffffff;
+
+#endif

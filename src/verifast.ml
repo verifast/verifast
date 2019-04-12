@@ -431,7 +431,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match name with
           "close_struct" -> Unspecified
         | "close_struct_zero" ->
-          let cond = mk_all_eq (Int (Signed, 0)) elems (ctxt#mk_intlit 0) in
+          let cond = mk_all_eq charType elems (ctxt#mk_intlit 0) in
           if not (ctxt#query cond) then assert_false h env l ("Could not prove condition " ^ ctxt#pprint cond) None;
           Default
       in
@@ -445,7 +445,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       eval_h h env w $. fun h env pointerTerm ->
       consume_c_object l pointerTerm (StructType sn) h true $. fun h ->
       let (_, _, _, _, chars_symb, _, _) = List.assoc "chars" predfammap in
-      let cs = get_unique_var_symb "cs" (InductiveType ("list", [Int (Signed, 0)])) in
+      let cs = get_unique_var_symb "cs" (InductiveType ("list", [charType])) in
       let Some (_, _, _, _, length_symb) = try_assoc' Ghost (pn,ilist) "length" purefuncmap in
       let size = struct_size l sn in
       assume (ctxt#mk_eq (mk_app length_symb [cs]) size) $. fun () ->
@@ -810,14 +810,14 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Assert (l, p) when not pure ->
       let we = check_expr_t (pn,ilist) tparams tenv p boolt in
       let t = eval env we in
-      assert_term t h env l ("Assertion might not hold: " ^ (ctxt#pprint t)) None;
+      assert_term t h env l "Assertion might not hold." None;
       cont h env
     | Assert (l, p) ->
       let (wp, tenv, _) = check_asn_core (pn,ilist) tparams tenv p in
       begin match wp with
         ExprAsn (le, we) ->
         let t = eval env we in
-        assert_term t h env le ("Assertion might not hold: " ^ (ctxt#pprint t)) None;
+        assert_term t h env le "Assertion might not hold." None;
         cont h env
       | _ ->
         consume_asn rules [] h ghostenv env wp false real_unit (fun _ _ ghostenv env _ ->
@@ -1508,9 +1508,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | (Some t_dec, Some dec) ->
         eval_h_pure h' env''' dec $. fun _ _ t_dec2 ->
         let dec_check1 = ctxt#mk_lt t_dec2 t_dec in
-        assert_term dec_check1 h' env''' (expr_loc dec) (sprintf "Cannot prove that loop measure decreases: %s" (ctxt#pprint dec_check1)) None;
+        assert_term dec_check1 h' env''' (expr_loc dec) "Cannot prove that loop measure decreases." None;
         let dec_check2 = ctxt#mk_le (ctxt#mk_intlit 0) t_dec in
-        assert_term dec_check2 h' env''' (expr_loc dec) (sprintf "Cannot prove that the loop measure remains non-negative: %s" (ctxt#pprint dec_check2)) None;
+        assert_term dec_check2 h' env''' (expr_loc dec) "Cannot prove that the loop measure remains non-negative." None;
         cont h'''
       end $. fun h''' ->
       check_leaks h''' env endBodyLoc "Loop leaks heap chunks."
@@ -1613,9 +1613,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | (Some t_dec, Some dec) ->
         eval_h_pure h' env'' dec $. fun _ _ t_dec2 ->
         let dec_check1 = ctxt#mk_lt t_dec2 t_dec in
-        assert_term dec_check1 h' env'' (expr_loc dec) (sprintf "Cannot prove that loop measure decreases: %s" (ctxt#pprint dec_check1)) None;
+        assert_term dec_check1 h' env'' (expr_loc dec) "Cannot prove that loop measure decreases." None;
         let dec_check2 = ctxt#mk_le (ctxt#mk_intlit 0) t_dec in
-        assert_term dec_check2 h' env'' (expr_loc dec) (sprintf "Cannot prove that the loop measure remains non-negative: %s" (ctxt#pprint dec_check2)) None;
+        assert_term dec_check2 h' env'' (expr_loc dec) "Cannot prove that the loop measure remains non-negative." None;
         success()
       end;
       let bs' = List.map (fun x -> (x, get_unique_var_symb_ x (List.assoc x tenv) (List.mem x ghostenv))) xs in

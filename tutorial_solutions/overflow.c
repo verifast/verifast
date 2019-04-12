@@ -1,3 +1,4 @@
+#include <assert.h>
 #include "stdlib.h"
 
 int int_add(int x, int y)
@@ -18,6 +19,6 @@ int main()
     //@ requires true;
     //@ ensures true;
 {
-    int x = int_add(2000000000, 2000000000);
-    assert false;
+    int x = int_add(INT_MAX, 1);
+    assert(false);
 }

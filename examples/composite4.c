@@ -149,7 +149,7 @@ void fixup_ancestors(struct node * n, struct node * p, int count)
       leftCount = subtree_get_count(left);
       rightCount = count;
     }
-    if (2147483647 - 1 - leftCount < rightCount) {
+    if (INT_MAX - 1 - leftCount < rightCount) {
       abort();
     }
     {

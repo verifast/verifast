@@ -63,8 +63,14 @@ let rec sexpr_of_type_ (t : type_) : sexpression =
   match t with
     | Bool                    -> aux2 "type-bool"
     | Void                    -> aux2 "type-void"
-    | Int (Signed, n)         -> aux2 ("type-int" ^ string_of_int (n * 8))
-    | Int (Unsigned, n)       -> aux2 ("type-uint" ^ string_of_int (n * 8))
+    | Int (Signed, IntRank)   -> aux2 "type-int"
+    | Int (Unsigned, IntRank) -> aux2 "type-uint"
+    | Int (Signed, LongRank)  -> aux2 "type-long"
+    | Int (Unsigned, LongRank)-> aux2 "type-ulong"
+    | Int (Signed, PtrRank)   -> aux2 "type-intptr"
+    | Int (Unsigned, PtrRank) -> aux2 "type-uintptr"
+    | Int (Signed, LitRank n) -> aux2 ("type-int" ^ string_of_int (n * 8))
+    | Int (Unsigned, LitRank n) -> aux2 ("type-uint" ^ string_of_int (n * 8))
     | RealType                -> aux2 "type-real"
     | Float                   -> aux2 "type-float"
     | Double                  -> aux2 "type-double"

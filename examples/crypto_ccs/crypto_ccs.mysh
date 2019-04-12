@@ -1,5 +1,5 @@
 let verify_crypto
-  verifast  -prover redux
+  verifast  -prover redux -target 32bit
 in
 
 verify_crypto -bindir bin/stdlib -allow_assume -shared -emit_dll_vfmanifest -emit_dll_vfmanifest_as bin/libann_polarssl.dll.vfmanifest bin/stdlib/crypto.vfmanifest annotated_api/mbedTLS_definitions.vfmanifest bin/stdlib/crypto/auxiliary_definitions.c bin/stdlib/crypto/ccs.c bin/stdlib/crypto/cryptogram.c bin/stdlib/crypto/cryptogram_levels.c bin/stdlib/crypto/public_chars.c bin/stdlib/crypto/interpret.c bin/stdlib/crypto/identifiers.c bin/stdlib/crypto/memcmp.c annotated_api/havege_util.c annotated_api/attacker.c

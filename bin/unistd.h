@@ -3,7 +3,7 @@
 
 unsigned int sleep(unsigned int seconds);
 /*@ requires seconds >= (unsigned int) 0
-    && seconds <= (unsigned int) 4294967295;
+    && seconds <= UINT_MAX;
   @*/
 /*@ ensures result <= seconds;
   @*/

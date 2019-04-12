@@ -13,11 +13,11 @@ tls1_process_heartbeat(SSL *s)
 
 	hbtype = *p; p++;
 	n2s(p, payload);
-	if (payload + 19 > s->s3->rrec.length)
+	if (payload + 19UL > s->s3->rrec.length)
 	    return 0;
 	pl = p;
 
-	if (hbtype == TLS1_HB_REQUEST)
+	if ((unsigned)hbtype == TLS1_HB_REQUEST)
 	{
 		unsigned char *buffer;
 		unsigned char *bp;

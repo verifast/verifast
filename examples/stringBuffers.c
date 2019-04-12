@@ -219,7 +219,7 @@ int chars_index_of_string(char *chars, int length, char *string)
             int cmp = memcmp(p, string, (size_t) n);
             //@ chars_join(p);
             //@ chars_join(chars);
-            if (cmp == 0) return p - chars;
+            if (cmp == 0) return (int)(p - chars);
             p++;
             //@ open string(string, stringChars);
             //@ chars_split(chars, p - chars);

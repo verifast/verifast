@@ -34,10 +34,10 @@ long long foo(long long x, int64_t y)
     //@ requires 0 <= x &*& 0 < y &*& x <= LLONG_MAX - y;
     //@ ensures result == x + y;  //~ should_fail
 {
-    assert(LLONG_MAX == 0x7fffffffffffffff);
-    assert(LLONG_MIN == -0x7fffffffffffffff - 1);
-    long long z = 8001002003004005006;
-    z = -8001002003004005006;
+    assert(LLONG_MAX == 0x7fffffffffffffffLL);
+    assert(LLONG_MIN == -0x7fffffffffffffffLL - 1);
+    long long z = 8001002003004005006LL;
+    z = -8001002003004005006LL;
     z = x + y;
     z = x - y;
     if (x <= LLONG_MAX / y) {

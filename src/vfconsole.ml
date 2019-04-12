@@ -255,7 +255,7 @@ let _ =
   let useJavaFrontend = ref false in
   let enforceAnnotations = ref false in
   let allowUndeclaredStructTypes = ref false in
-  let dataModel = ref data_model_32bit in
+  let dataModel = ref None in
   let vroots = ref [Util.crt_vroot Util.default_bindir] in
   let add_vroot vroot =
     let (root, expansion) = Util.split_around_char vroot '=' in
@@ -316,7 +316,7 @@ let _ =
             ; "-javac", Unit (fun _ -> (useJavaFrontend := true; Java_frontend_bridge.load ())), " "
             ; "-enforce_annotations", Unit (fun _ -> (enforceAnnotations := true)), " "
             ; "-allow_undeclared_struct_types", Unit (fun () -> (allowUndeclaredStructTypes := true)), " "
-            ; "-target", String (fun s -> dataModel := data_model_of_string s), "Target platform of the program being verified. Determines the size of pointer and integer types. Supported targets: " ^ String.concat ", " (List.map fst data_models)
+            ; "-target", String (fun s -> dataModel := Some (data_model_of_string s)), "Target platform of the program being verified. Determines the size of pointer and integer types. Supported targets: " ^ String.concat ", " (List.map fst data_models)
             ]
   in
   let process_file filename =

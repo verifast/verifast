@@ -59,8 +59,14 @@ let rec string_of_type t =
   match t with
     Bool -> "bool"
   | Void -> "void"
-  | Int (Signed, k) -> "int" ^ string_of_int ((1 lsl k) * 8)
-  | Int (Unsigned, k) -> "uint" ^ string_of_int ((1 lsl k) * 8)
+  | Int (Signed, IntRank) -> "int"
+  | Int (Unsigned, IntRank) -> "unsigned int"
+  | Int (Signed, LongRank) -> "long"
+  | Int (Unsigned, LongRank) -> "unsigned long"
+  | Int (Signed, PtrRank) -> "intptr_t"
+  | Int (Unsigned, PtrRank) -> "uintptr_t"
+  | Int (Signed, LitRank k) -> "int" ^ string_of_int ((1 lsl k) * 8)
+  | Int (Unsigned, LitRank k) -> "uint" ^ string_of_int ((1 lsl k) * 8)
   | Float -> "float"
   | Double -> "double"
   | LongDouble -> "long double"
@@ -150,7 +156,7 @@ type options = {
   option_use_java_frontend : bool;
   option_enforce_annotations : bool;
   option_allow_undeclared_struct_types: bool;
-  option_data_model: data_model;
+  option_data_model: data_model option;
   option_report_skipped_stmts: bool; (* Report statements in functions or methods that have no contract. *)
 } (* ?options *)
 

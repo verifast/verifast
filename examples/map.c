@@ -105,7 +105,7 @@ int plusOneFunc(void *data, int x) //@ : mapfunc
     //@ requires mapfunc(plusOneFunc)(data, ?in, ?out, ?info) &*& in != nil &*& x == head(in);
     //@ ensures mapfunc(plusOneFunc)(data, tail(in), append(out, cons(result, nil)), info);
 {
-    if (x == 2147483647) abort();
+    if (x == INT_MAX) abort();
     //@ open mapfunc(plusOneFunc)(data, in, out, ?info_);
     //@ append_assoc(out, cons(x + 1, nil), map(plusOne, tail(in)));
     //@ switch (in) { case nil: case cons(h, t): }

@@ -103,12 +103,12 @@ int pthread_create (pthread_t *pthread,
 /*@ requires
         is_pthread_run_joinable(start_routine) == true
     &*& pthread_run_pre(start_routine)(arg, ?info)
-    &*& u_integer(pthread, _)
+    &*& *pthread |-> _
     &*& attr == (void *) 0;
   @*/
 /*@ ensures
         pthread_thread(?pthread_id, start_routine, arg, info)
-    &*& u_integer(pthread, pthread_id)
+    &*& *pthread |-> pthread_id
     &*& result == 0;
   @*/
 

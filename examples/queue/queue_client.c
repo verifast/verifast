@@ -186,7 +186,7 @@ int main() //@ : main
             //@ leak is_queue_enqueue_context(_, _, _, _, _, _);
             //@ open post();
         }
-        if (id == 2147483647) abort();
+        if (id == INT_MAX) abort();
         id++;
     }
 }

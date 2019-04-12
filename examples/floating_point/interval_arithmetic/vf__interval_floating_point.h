@@ -294,12 +294,12 @@ double vf__double_of_real(real x);
     /*@ ensures true; @*/
     //@ terminates;
 
-double vf__double_of_int(int x);
+double vf__double_of_int128(__int128 x);
     //@ requires true;
     //@ ensures fp_of_double(result) == real_double(real_of_int(x));
     //@ terminates;
 
-long double vf__long_double_of_int(int x);
+long double vf__long_double_of_int128(__int128 x);
     //@ requires true;
     //@ ensures real_of_long_double(result) == some(real_of_int(x));
     //@ terminates;

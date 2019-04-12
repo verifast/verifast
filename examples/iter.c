@@ -209,7 +209,7 @@ int llist_length(struct llist *list)
     //@ close [frac]node(n, next, n->value);
     //@ lseg2_add(f);
     n = next;
-    if (c == 2147483647) abort();
+    if (c == INT_MAX) abort();
     c = c + 1;
     //@ assert [frac]lseg(next, l, ?ls3);
     //@ append_assoc(_ls1, cons(value, nil), ls3);

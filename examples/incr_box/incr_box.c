@@ -57,7 +57,7 @@ void incrementor(void *data) //@ : thread_run
         @*/
         {
             count0 = counter->count;
-            if (count0 == 2147483647) {
+            if (count0 == INT_MAX) {
                 abort();
             }
             counter->count = count0 + 1;

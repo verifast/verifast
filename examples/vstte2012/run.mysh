@@ -8,8 +8,8 @@ verifast -prover redux -c Combinators.java
 cd ..
 cd ..
 cd problem3
-verifast -prover redux problem3.c
-ifnotmac verifast problem3_alt.c
+verifast -target 32bit -prover redux problem3.c
+ifnotmac verifast -target 32bit problem3_alt.c
 cd ..
 cd problem4
 verifast -prover redux treerec_list.c treerec_tree.c treerec.c

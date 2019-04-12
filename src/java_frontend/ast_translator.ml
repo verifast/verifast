@@ -75,7 +75,7 @@ let report_range : (Lexer.range_kind -> Ast.loc0 -> unit) ref = ref (fun _ _ -> 
 let report_should_fail : (string -> Ast.loc0 -> unit) ref = ref (fun _ _ -> ())
 let enforce_annotations : bool ref = ref false
 
-module JavaParser = Parser.Parser (struct let language = Java let enforce_annotations = true let data_model = data_model_java end)
+module JavaParser = Parser.Parser (struct let language = Java let enforce_annotations = true let data_model = Some data_model_java end)
 
 (* this function creates a lexer for each of 
    the annotations and composes them before
@@ -149,7 +149,7 @@ let parse_ghost_import loc anns lookup =
 
 let parse_pure_decls loc anns lookup =
   let parser_pure_decls_eof = parser 
-    [< ds = Parser.parse_decls VF.Java data_model_java ~inGhostHeader:true true;
+    [< ds = Parser.parse_decls VF.Java (Some data_model_java) ~inGhostHeader:true true;
       _ = Lexer.Stream.empty >] -> ds
   in
   parse_pure_decls_core loc parser_pure_decls_eof anns lookup
@@ -598,11 +598,11 @@ and translate_prim_type typ =
   match typ with
   | GEN.VoidType l -> VF.ManifestTypeExpr(translate_location l, VF.Void)
   | GEN.BoolType l -> VF.ManifestTypeExpr(translate_location l, VF.Bool)
-  | GEN.CharType l -> VF.ManifestTypeExpr(translate_location l, VF.Int (VF.Unsigned, 1))
-  | GEN.ByteType l -> VF.ManifestTypeExpr(translate_location l, VF.Int (VF.Signed, 0))
-  | GEN.ShortType l -> VF.ManifestTypeExpr(translate_location l, VF.Int (VF.Signed, 1))
-  | GEN.IntType l -> VF.ManifestTypeExpr(translate_location l, VF.Int (VF.Signed, 2))
-  | GEN.LongType l -> VF.ManifestTypeExpr(translate_location l, VF.Int (VF.Signed, 3))
+  | GEN.CharType l -> VF.ManifestTypeExpr(translate_location l, VF.Int (VF.Unsigned, LitRank 1))
+  | GEN.ByteType l -> VF.ManifestTypeExpr(translate_location l, VF.Int (VF.Signed, LitRank 0))
+  | GEN.ShortType l -> VF.ManifestTypeExpr(translate_location l, VF.Int (VF.Signed, LitRank 1))
+  | GEN.IntType l -> VF.ManifestTypeExpr(translate_location l, VF.Int (VF.Signed, LitRank 2))
+  | GEN.LongType l -> VF.ManifestTypeExpr(translate_location l, VF.Int (VF.Signed, LitRank 3))
   | GEN.FloatType l -> VF.ManifestTypeExpr(translate_location l, VF.Float)
   | GEN.DoubleType l -> VF.ManifestTypeExpr(translate_location l, VF.Double)
 

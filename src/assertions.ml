@@ -900,7 +900,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   (** [cont] is called as [cont chunk h coef ts size ghostenv env env']. See docs at consume_chunk_core. *)
   let consume_chunk rules h ghostenv env env' l g targs coef coefpat inputParamCount pats cont =
-    let tps = List.map (fun _ -> Int (Signed, 2)) pats in (* dummies, to indicate that no prover type conversions are needed *)
+    let tps = List.map (fun _ -> intType) pats in (* dummies, to indicate that no prover type conversions are needed *)
     consume_chunk_core rules h ghostenv env env' l g targs coef coefpat inputParamCount pats tps tps cont
   
   let srcpat pat = SrcPat pat

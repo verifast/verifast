@@ -40,6 +40,7 @@ let c_keywords = [
   "CHAR_MIN"; "CHAR_MAX"; "UCHAR_MAX";
   "LLONG_MIN"; "LLONG_MAX"; "ULLONG_MAX";
   "LONG_MIN"; "LONG_MAX"; "ULONG_MAX";
+  "__minvalue"; "__maxvalue";
   "__int8"; "__int16"; "__int32"; "__int64"; "__int128";
   "inline"; "__inline"; "__inline__"; "__forceinline"; "_Noreturn";
   "__signed__"; "__always_inline"; "extern"
@@ -141,7 +142,7 @@ module Scala = struct
       begin
         match (tn, targs) with
           ("Unit", []) -> ManifestTypeExpr (l, Void)
-        | ("Int", []) -> ManifestTypeExpr (l, Int (Signed, 2))
+        | ("Int", []) -> ManifestTypeExpr (l, Int (Signed, LitRank 2))
         | ("Array", [t]) -> ArrayTypeExpr (l, t)
         | (_, []) -> IdentTypeExpr (l, None, tn)
         | _ -> raise (ParseException (l, "Type arguments are not supported."))
@@ -208,14 +209,18 @@ let is_typedef g = Hashtbl.mem typedefs g
 module type PARSER_ARGS = sig
   val language: language
   val enforce_annotations: bool
-  val data_model: data_model
+  val data_model: data_model option
 end
 
 module Parser(ParserArgs: PARSER_ARGS) = struct
 
 open ParserArgs
 
-let {int_rank; long_rank; ptr_rank} = data_model
+let int_rank, long_rank, ptr_rank =
+  match data_model with
+    Some {int_rank; long_rank; ptr_rank} -> LitRank int_rank, LitRank long_rank, LitRank ptr_rank
+  | None -> IntRank, LongRank, PtrRank
+
 let intType = Int (Signed, int_rank)
 let longType = Int (Signed, long_rank)
 
@@ -716,23 +721,23 @@ and
 and
   parse_integer_type_keyword = parser
   [< '(l, Kwd "int") >] -> (l, int_rank)
-| [< '(l, Kwd "__int8") >] -> (l, 0)
-| [< '(l, Kwd "__int16") >] -> (l, 1)
-| [< '(l, Kwd "__int32") >] -> (l, 2)
-| [< '(l, Kwd "__int64") >] -> (l, 3)
-| [< '(l, Kwd "__int128") >] -> (l, 4)
+| [< '(l, Kwd "__int8") >] -> (l, LitRank 0)
+| [< '(l, Kwd "__int16") >] -> (l, LitRank 1)
+| [< '(l, Kwd "__int32") >] -> (l, LitRank 2)
+| [< '(l, Kwd "__int64") >] -> (l, LitRank 3)
+| [< '(l, Kwd "__int128") >] -> (l, LitRank 4)
 and
   parse_integer_size_specifier = parser
-| [< '(_, Kwd "short") >] -> 1
+| [< '(_, Kwd "short") >] -> LitRank 1
 | [< '(_, Kwd "long");
      n = begin parser
-       [< '(_, Kwd "long") >] -> 3
+       [< '(_, Kwd "long") >] -> LitRank 3
      | [< >] -> long_rank
      end >] -> n
 | [< >] -> int_rank
 and
   parse_integer_type_rest = parser
-  [< '(_, Kwd "char") >] -> 0
+  [< '(_, Kwd "char") >] -> LitRank 0
 | [< (_, k) = parse_integer_type_keyword >] -> k
 | [< n = parse_integer_size_specifier; _ = opt (parser [< '(_, Kwd "int") >] -> ()) >] -> n
 and
@@ -752,12 +757,12 @@ and
 | [< (l, k) = parse_integer_type_keyword >] -> ManifestTypeExpr (l, Int (Signed, k))
 | [< '(l, Kwd "float") >] -> ManifestTypeExpr (l, Float)
 | [< '(l, Kwd "double") >] -> ManifestTypeExpr (l, Double)
-| [< '(l, Kwd "short") >] -> ManifestTypeExpr(l, Int (Signed, 1))
+| [< '(l, Kwd "short") >] -> ManifestTypeExpr(l, Int (Signed, LitRank 1))
 | [< '(l, Kwd "long");
      t = begin parser
        [< '(_, Kwd "int") >] -> ManifestTypeExpr (l, longType);
      | [< '(_, Kwd "double") >] -> ManifestTypeExpr (l, LongDouble);
-     | [< '(_, Kwd "long"); _ = opt (parser [< '(_, Kwd "int") >] -> ()) >] -> ManifestTypeExpr (l, Int (Signed, 3))
+     | [< '(_, Kwd "long"); _ = opt (parser [< '(_, Kwd "int") >] -> ()) >] -> ManifestTypeExpr (l, Int (Signed, LitRank 3))
      | [< >] -> ManifestTypeExpr (l, longType)
      end
    >] -> t
@@ -770,8 +775,8 @@ and
 | [< '(l, Kwd "bool") >] -> ManifestTypeExpr (l, Bool)
 | [< '(l, Kwd "boolean") >] -> ManifestTypeExpr (l, Bool)
 | [< '(l, Kwd "void") >] -> ManifestTypeExpr (l, Void)
-| [< '(l, Kwd "char") >] -> ManifestTypeExpr (l, match language with CLang -> Int (Signed, 0) | Java -> Int (Unsigned, 1))
-| [< '(l, Kwd "byte") >] -> ManifestTypeExpr (l, Int (Signed, 0))
+| [< '(l, Kwd "char") >] -> ManifestTypeExpr (l, match language with CLang -> Int (Signed, LitRank 0) | Java -> Int (Unsigned, LitRank 1))
+| [< '(l, Kwd "byte") >] -> ManifestTypeExpr (l, Int (Signed, LitRank 0))
 | [< '(l, Kwd "predicate");
      '(_, Kwd "(");
      ts = rep_comma parse_paramtype;
@@ -1256,7 +1261,7 @@ and
 | [< '(l, Kwd "false") >] -> False l
 | [< '(l, CharToken c) >] ->
   if Char.code c > 127 then raise (ParseException (l, "Non-ASCII character literals are not yet supported"));
-  let tp = match language with CLang -> Int (Signed, 0) | Java -> Int (Unsigned, 1) in
+  let tp = match language with CLang -> Int (Signed, LitRank 0) | Java -> Int (Unsigned, LitRank 1) in
   CastExpr (l, ManifestTypeExpr (l, tp), IntLit (l, big_int_of_int (Char.code c), true, false, NoLSuffix))
 | [< '(l, Kwd "null") >] -> Null l
 | [< '(l, Kwd "currentThread") >] -> Var (l, "currentThread")
@@ -1305,22 +1310,24 @@ and
 | [< '(l, Int (i, dec, usuffix, lsuffix)) >] -> IntLit (l, i, dec, usuffix, lsuffix)
 | [< '(l, RealToken i) >] -> RealLit (l, num_of_big_int i)
 | [< '(l, RationalToken n) >] -> RealLit (l, n)
-| [< '(l, Kwd "INT_MIN") >] -> IntLit (l, min_signed_big_int int_rank, true, false, NoLSuffix)
-| [< '(l, Kwd "INT_MAX") >] -> IntLit (l, max_signed_big_int int_rank, true, false, NoLSuffix)
-| [< '(l, Kwd "UINTPTR_MAX") >] -> IntLit (l, max_unsigned_big_int ptr_rank, true, true, NoLSuffix)
+| [< '(l, Kwd "INT_MIN") >] -> (match int_rank with LitRank k -> IntLit (l, min_signed_big_int k, true, false, NoLSuffix) | IntRank -> Operation (l, MinValue (Int (Signed, IntRank)), []))
+| [< '(l, Kwd "INT_MAX") >] -> (match int_rank with LitRank k -> IntLit (l, max_signed_big_int k, true, false, NoLSuffix) | IntRank -> Operation (l, MaxValue (Int (Signed, IntRank)), []))
+| [< '(l, Kwd "UINTPTR_MAX") >] -> (match ptr_rank with LitRank k -> IntLit (l, max_unsigned_big_int k, true, true, NoLSuffix) | PtrRank -> Operation (l, MaxValue (Int (Unsigned, PtrRank)), []))
 | [< '(l, Kwd "CHAR_MIN") >] -> IntLit (l, big_int_of_string "-128", true, false, NoLSuffix)
 | [< '(l, Kwd "CHAR_MAX") >] -> IntLit (l, big_int_of_string "127", true, false, NoLSuffix)
 | [< '(l, Kwd "UCHAR_MAX") >] -> IntLit (l, big_int_of_string "255", true, false, NoLSuffix)
 | [< '(l, Kwd "SHRT_MIN") >] -> IntLit (l, big_int_of_string "-32768", true, false, NoLSuffix)
 | [< '(l, Kwd "SHRT_MAX") >] -> IntLit (l, big_int_of_string "32767", true, false, NoLSuffix)
 | [< '(l, Kwd "USHRT_MAX") >] -> IntLit (l, big_int_of_string "65535", true, false, NoLSuffix)
-| [< '(l, Kwd "UINT_MAX") >] -> IntLit (l, max_unsigned_big_int int_rank, true, true, NoLSuffix)
-| [< '(l, Kwd "LONG_MIN") >] -> IntLit (l, min_signed_big_int long_rank, true, false, NoLSuffix)
-| [< '(l, Kwd "LONG_MAX") >] -> IntLit (l, max_signed_big_int long_rank, true, false, NoLSuffix)
-| [< '(l, Kwd "ULONG_MAX") >] -> IntLit (l, max_unsigned_big_int long_rank, true, true, NoLSuffix)
-| [< '(l, Kwd "LLONG_MIN") >] -> IntLit (l, big_int_of_string "-9223372036854775808", true, false, NoLSuffix)
-| [< '(l, Kwd "LLONG_MAX") >] -> IntLit (l, big_int_of_string "9223372036854775807", true, false, NoLSuffix)
-| [< '(l, Kwd "ULLONG_MAX") >] -> IntLit (l, big_int_of_string "18446744073709551615", true, true, NoLSuffix)
+| [< '(l, Kwd "LONG_MIN") >] -> (match long_rank with LitRank k -> IntLit (l, min_signed_big_int k, true, false, NoLSuffix) | LongRank -> Operation (l, MinValue (Int (Signed, LongRank)), []))
+| [< '(l, Kwd "LONG_MAX") >] -> (match long_rank with LitRank k -> IntLit (l, max_signed_big_int k, true, false, NoLSuffix) | LongRank -> Operation (l, MaxValue (Int (Signed, LongRank)), []))
+| [< '(l, Kwd "ULONG_MAX") >] -> (match long_rank with LitRank k -> IntLit (l, max_unsigned_big_int k, true, true, NoLSuffix) | LongRank -> Operation (l, MaxValue (Int (Unsigned, LongRank)), []))
+| [< '(l, Kwd "UINT_MAX") >] -> (match int_rank with LitRank k -> IntLit (l, max_unsigned_big_int k, true, true, NoLSuffix) | IntRank -> Operation (l, MaxValue (Int (Unsigned, IntRank)), []))
+| [< '(l, Kwd "LLONG_MIN") >] -> IntLit (l, big_int_of_string "-9223372036854775808", true, false, LLSuffix)
+| [< '(l, Kwd "LLONG_MAX") >] -> IntLit (l, big_int_of_string "9223372036854775807", true, false, LLSuffix)
+| [< '(l, Kwd "ULLONG_MAX") >] -> IntLit (l, big_int_of_string "18446744073709551615", true, true, LLSuffix)
+| [< '(l, Kwd "__minvalue"); '(_, Kwd "("); te = parse_type; '(_, Kwd ")") >] -> (match te with ManifestTypeExpr (_, t) -> Operation (l, MinValue t, []))
+| [< '(l, Kwd "__maxvalue"); '(_, Kwd "("); te = parse_type; '(_, Kwd ")") >] -> (match te with ManifestTypeExpr (_, t) -> Operation (l, MaxValue t, []))
 | [< '(l, String s); ss = rep (parser [< '(_, String s) >] -> s) >] -> 
      let s = String.concat "" (s::ss) in
      StringLit (l, s)
@@ -1562,7 +1569,7 @@ let parse_import = parser
       (match i with Import(l, Real, pn,el) -> Import(l, Ghost, pn,el))
 
 let parse_package_decl enforceAnnotations = parser
-  [< (l,p) = parse_package; is=rep parse_import; ds=parse_decls Java data_model_java enforceAnnotations;>] -> PackageDecl(l,p,Import(dummy_loc,Real,"java.lang",None)::is, ds)
+  [< (l,p) = parse_package; is=rep parse_import; ds=parse_decls Java (Some data_model_java) enforceAnnotations;>] -> PackageDecl(l,p,Import(dummy_loc,Real,"java.lang",None)::is, ds)
 
 let noop_preprocessor stream =
   let next _ =
@@ -1610,7 +1617,7 @@ let parse_java_file_old (path: string) (reportRange: range_kind -> loc0 -> unit)
 
 type 'result parser_ = (loc * token) Stream.t -> 'result
 
-let rec parse_include_directives (verbose: int) (enforceAnnotations: bool) (dataModel: data_model): 
+let rec parse_include_directives (verbose: int) (enforceAnnotations: bool) (dataModel: data_model option): 
     ((loc * (include_kind * string * string) * string list * package list) list * string list) parser_ =
   let active_headers = ref [] in
   let test_include_cycle l totalPath =
@@ -1646,7 +1653,7 @@ let rec parse_include_directives (verbose: int) (enforceAnnotations: bool) (data
   parse_include_directives_core []
 
 let parse_c_file (path: string) (reportRange: range_kind -> loc0 -> unit) (reportShouldFail: string -> loc0 -> unit) (verbose: int) 
-            (include_paths: string list) (define_macros: string list) (enforceAnnotations: bool) (dataModel: data_model): ((loc * (include_kind * string * string) * string list * package list) list * package list) = (* ?parse_c_file *)
+            (include_paths: string list) (define_macros: string list) (enforceAnnotations: bool) (dataModel: data_model option): ((loc * (include_kind * string * string) * string list * package list) list * package list) = (* ?parse_c_file *)
   Stopwatch.start parsing_stopwatch;
   if verbose = -1 then Printf.printf "%10.6fs: >> parsing C file: %s \n" (Perf.time()) path;
   let result =
@@ -1670,7 +1677,7 @@ let parse_c_file (path: string) (reportRange: range_kind -> loc0 -> unit) (repor
   result
 
 let parse_header_file (path: string) (reportRange: range_kind -> loc0 -> unit) (reportShouldFail: string -> loc0 -> unit) (verbose: int) 
-         (include_paths: string list) (define_macros: string list) (enforceAnnotations: bool) (dataModel: data_model): ((loc * (include_kind * string * string) * string list * package list) list * package list) =
+         (include_paths: string list) (define_macros: string list) (enforceAnnotations: bool) (dataModel: data_model option): ((loc * (include_kind * string * string) * string list * package list) list * package list) =
   Stopwatch.start parsing_stopwatch;
   if verbose = -1 then Printf.printf "%10.6fs: >> parsing Header file: %s \n" (Perf.time()) path;
   let isGhostHeader = Filename.check_suffix path ".gh" in

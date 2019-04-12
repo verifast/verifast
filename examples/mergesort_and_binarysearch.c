@@ -2,6 +2,7 @@
 #include "stdio.h"
 //@ #include "arrays.gh"
 //@ #include "quantifiers.gh"
+//@ #include "target.gh"
 
 int read_int()
     //@ requires true;
@@ -271,6 +272,7 @@ void merge_sort_core(int *pxs, int *pys, int n)
         int nleft = n / 2;
         //@ div_rem(n, 2);
         //@ ints_limits(pxs);
+        //@ case_split_sizeof_int();
         int *right = pxs + nleft;
         int nright = n - n / 2;
         //@ ints_split(pxs, nleft);
@@ -366,9 +368,10 @@ void merge_sort_core(int *pxs, int *pys, int n)
 }
 
 void merge_sort(int *pxs, int n)
-    //@ requires pxs[0..n] |-> ?vs &*& n < 0x20000000;
+    //@ requires pxs[0..n] |-> ?vs &*& n <= 15000;
     //@ ensures pxs[0..n] |-> sorted(vs);
 {
+    //@ case_split_sizeof_int();
     int *pys = malloc(n * sizeof(int));
     if (pys == 0) abort();
     merge_sort_core(pxs, pys, n);
@@ -527,7 +530,8 @@ int main()
     
     puts("How many numbers do you want to search?");
     n = read_int();
-    if (n < 0 || 0x20000000 <= n) abort();
+    if (n < 0 || 15000 <= n) abort();
+    //@ case_split_sizeof_int();
     xs = malloc(n * sizeof(int));
     if (xs == 0) abort();
     for (int i = 0; i < n; i++)

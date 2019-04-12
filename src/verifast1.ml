@@ -9,6 +9,22 @@ open Parser
 open Verifast0
 open Ast
 
+(* Hide the polymorphic comparison operators; they are error-prone *)
+
+module Polymorphic = struct
+  let (<=) = (<=)
+  let (<) = (<)
+  let (>=) = (>=)
+  let (>) = (>)
+end
+
+let (<=) (x: int) (y: int) = x <= y
+let (<) (x: int) (y: int) = x < y
+let (>=) (x: int) (y: int) = x >= y
+let (>) (x: int) (y: int) = x > y
+let min (x: int) (y: int) = min x y
+let max (x: int) (y: int) = max x y
+
 type callbacks = {
   reportRange: range_kind -> loc0 -> unit;
   reportUseSite: decl_kind -> loc0 -> loc0 -> unit;
@@ -66,13 +82,17 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let reportStmt l = reportStmt (root_caller_token l)
   let reportStmtExec l = reportStmtExec (root_caller_token l)
 
-  let data_model = match language with Java -> data_model_java | CLang -> data_model
-  let {int_rank; long_rank; ptr_rank} = data_model
-  let llong_rank = 3
-  let int_size = 1 lsl int_rank
+  let data_model = match language with Java -> Some data_model_java | CLang -> data_model
+  let int_rank, long_rank, ptr_rank =
+    match data_model with
+      Some {int_rank; long_rank; ptr_rank} -> LitRank int_rank, LitRank long_rank, LitRank ptr_rank
+    | None -> IntRank, LongRank, PtrRank
+  let llong_rank = LitRank 3
   let intType = Int (Signed, int_rank)
   let sizeType = Int (Unsigned, ptr_rank)
   let ptrdiff_t = Int (Signed, ptr_rank)
+
+  let charType = Int (Signed, LitRank 0)
 
   let int_rank_and_signedness tp =
     match tp with
@@ -413,7 +433,35 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let rank_size_terms_table = Array.init (max_rank + 1) (fun k -> ctxt#mk_intlit (1 lsl k))
 
-  let rank_size_term k = rank_size_terms_table.(k)
+  let rank_size_term_ k = rank_size_terms_table.(k)
+
+  let get_unique_var_symb x t = 
+    ctxt#mk_app (mk_symbol x [] (typenode_of_type t) Uninterp) []
+
+  let int_size_term, long_size_term, ptr_size_term =
+    match data_model with
+      Some {int_rank; long_rank; ptr_rank} ->
+      rank_size_term_ int_rank, rank_size_term_ long_rank, rank_size_term_ ptr_rank
+    | None ->
+      let int_size_term = get_unique_var_symb "sizeof_int" intType in
+      ctxt#assert_term (ctxt#mk_le (ctxt#mk_intlit 2) int_size_term);
+      ctxt#assert_term (ctxt#mk_le int_size_term (ctxt#mk_intlit 4));
+      let long_size_term = get_unique_var_symb "sizeof_long" intType in
+      ctxt#assert_term (ctxt#mk_le (ctxt#mk_intlit 4) long_size_term);
+      ctxt#assert_term (ctxt#mk_le long_size_term (ctxt#mk_intlit 8));
+      ctxt#assert_term (ctxt#mk_le int_size_term long_size_term);
+      let ptr_size_term = get_unique_var_symb "sizeof_ptr" intType in
+      ctxt#assert_term (ctxt#mk_le (ctxt#mk_intlit 2) ptr_size_term);
+      ctxt#assert_term (ctxt#mk_le int_size_term ptr_size_term);
+      ctxt#assert_term (ctxt#mk_le ptr_size_term (ctxt#mk_intlit 8));
+      int_size_term, long_size_term, ptr_size_term
+
+  let rank_size_term rank =
+    match rank with
+      LitRank k -> rank_size_term_ k
+    | IntRank -> int_size_term
+    | LongRank -> long_size_term
+    | PtrRank -> ptr_size_term
 
   let integer_limits_table =
     Array.init (max_rank + 1) begin fun k ->
@@ -433,14 +481,46 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let min_signed_term k = integer_limits_table.(k).min_signed_term
   let max_signed_term k = integer_limits_table.(k).max_signed_term
 
+  let get_fresh_integer_type_limits_symbols name signed_max_lowerBounds signed_max_upperBounds =
+    let signed_min_term = get_unique_var_symb (name ^ "_MIN") intType in
+    let signed_max_term = get_unique_var_symb (name ^ "_MAX") intType in
+    let unsigned_max_term = get_unique_var_symb ("U" ^ name ^ "_MAX") intType in
+    ctxt#assert_term (ctxt#mk_eq signed_min_term (ctxt#mk_add (ctxt#mk_mul (ctxt#mk_intlit (-1)) signed_max_term) (ctxt#mk_intlit (-1))));
+    ctxt#assert_term (ctxt#mk_eq unsigned_max_term (ctxt#mk_add (ctxt#mk_mul (ctxt#mk_intlit 2) signed_max_term) (ctxt#mk_intlit 1)));
+    signed_max_lowerBounds |> List.iter (fun lb -> ctxt#assert_term (ctxt#mk_le lb signed_max_term));
+    signed_max_upperBounds |> List.iter (fun ub -> ctxt#assert_term (ctxt#mk_le signed_max_term ub));
+    signed_min_term, signed_max_term, unsigned_max_term
+
+  let min_int_term, max_int_term, max_uint_term, min_long_term, max_long_term, max_ulong_term, min_intptr_term, max_intptr_term, max_uintptr_term =
+    match data_model with
+      Some {int_rank; long_rank; ptr_rank} ->
+      min_signed_term int_rank,
+      max_signed_term int_rank,
+      max_unsigned_term int_rank,
+      min_signed_term long_rank,
+      max_signed_term long_rank,
+      max_unsigned_term long_rank,
+      min_signed_term ptr_rank,
+      max_signed_term ptr_rank,
+      max_unsigned_term ptr_rank
+    | None ->
+      let min_int_term, max_int_term, max_uint_term = get_fresh_integer_type_limits_symbols "INT" [max_signed_term 1] [max_signed_term 2] in
+      let min_long_term, max_long_term, max_ulong_term = get_fresh_integer_type_limits_symbols "LONG" [max_int_term; max_signed_term 2] [max_signed_term 3] in
+      let min_intptr_term, max_intptr_term, max_uintptr_term = get_fresh_integer_type_limits_symbols "INTPTR" [max_int_term] [max_signed_term 3] in
+      min_int_term, max_int_term, max_uint_term,
+      min_long_term, max_long_term, max_ulong_term,
+      min_intptr_term, max_intptr_term, max_uintptr_term
+  
   let limits_of_type t =
     match t with
-      Int (Signed, k) -> let {min_signed_term; max_signed_term} = integer_limits_table.(k) in (min_signed_term, max_signed_term)
-    | Int (Unsigned, k) -> let {max_unsigned_term} = integer_limits_table.(k) in (int_zero_term, max_unsigned_term)
-    | PtrType _ -> let {max_unsigned_term} = integer_limits_table.(ptr_rank) in (int_zero_term, max_unsigned_term)
-  
-  let get_unique_var_symb x t = 
-    ctxt#mk_app (mk_symbol x [] (typenode_of_type t) Uninterp) []
+      Int (Signed, LitRank k) -> let {min_signed_term; max_signed_term} = integer_limits_table.(k) in (min_signed_term, max_signed_term)
+    | Int (Unsigned, LitRank k) -> let {max_unsigned_term} = integer_limits_table.(k) in (int_zero_term, max_unsigned_term)
+    | PtrType _ | Int (Unsigned, PtrRank) -> (int_zero_term, max_uintptr_term)
+    | Int (Signed, IntRank) -> (min_int_term, max_int_term)
+    | Int (Unsigned, IntRank) -> (int_zero_term, max_uint_term)
+    | Int (Signed, LongRank) -> (min_long_term, max_long_term)
+    | Int (Unsigned, LongRank) -> (int_zero_term, max_ulong_term)
+    | Int (Signed, PtrRank) -> (min_intptr_term, max_intptr_term)
   
   let assume_bounds term (tp: type_) = 
     match tp with
@@ -2360,6 +2440,44 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (PtrType t1, PtrType t2) -> compatible_pointees t1 t2
     | (t1, t2) -> t1 = t2
   
+  let rank_group r =
+    match r with
+      PtrRank -> 1
+    | LitRank 2 | LongRank -> 2
+    | _ -> 0
+
+  let rank_ordinal r =
+    match r with
+      LitRank 0 -> 0
+    | LitRank 1 -> 1
+    | IntRank -> 2
+    | LitRank 2 -> 3
+    | PtrRank -> 3
+    | LongRank -> 4
+    | LitRank k -> 2 + k
+
+  let rank_le l r1 r2 =
+    if rank_group r1 lor rank_group r2 = 3 then
+      static_error l "This expression's type depends on the target architecture, which is not supported by VeriFast. Insert casts or specify a target (using the -target command-line option) to eliminate this error." None;
+    rank_ordinal r1 <= rank_ordinal r2
+
+  let definitely_rank_le r1 r2 = rank_group r1 lor rank_group r2 <> 3 && rank_ordinal r1 <= rank_ordinal r2
+
+  let rank_lt r1 r2 =
+    match r1, r2 with
+      LitRank k1, LitRank k2 -> k1 < k2
+    | LitRank k1, (IntRank|PtrRank) -> k1 < 1
+    | LitRank k1, LongRank -> k1 < 2
+    | IntRank, LitRank k2 -> 2 < k2
+    | (LongRank|PtrRank), LitRank k2 -> 3 < k2
+    | _ -> false
+
+  let definitely_is_upcast (Some (r, s)) (Some (r0, s0)) =
+    match s, s0 with
+      Unsigned, Signed -> rank_lt r r0
+    | Signed, Unsigned -> false
+    | _, _ -> definitely_rank_le r r0
+
   let rec expect_type_core l msg (inAnnotation: bool option) t t0 =
     match (unfold_inferred_type t, unfold_inferred_type t0) with
       (ObjType ("null", _), ObjType _) -> ()
@@ -2373,9 +2491,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (ArrayType et, ArrayType et0) when et = et0 -> ()
     | (ArrayType (ObjType(t0, ts0)), ArrayType (ObjType(t1, ts1))) -> expect_type_core l msg None (ObjType (t0, ts0)) (ObjType(t1, ts1))
     | (StaticArrayType _, PtrType _) -> ()
-    | (Int (Signed, m), Int (Signed, n)) when m <= n -> ()
-    | (Int (Unsigned, m), Int (Unsigned, n)) when m <= n -> ()
-    | (Int (Unsigned, m), Int (Signed, n)) when m < n -> ()
+    | (Int (Signed, m), Int (Signed, n)) when rank_le l m n -> ()
+    | (Int (Unsigned, m), Int (Unsigned, n)) when rank_le l m n -> ()
+    | (Int (Unsigned, m), Int (Signed, n)) when rank_lt m n -> ()
     | (Int (_, _), Int (_, _)) when inAnnotation = Some true -> ()
     | (ObjType (x, _), ObjType (y, _)) when is_subtype_of x y -> ()
     | (PredType ([], ts, inputParamCount, inductiveness), PredType ([], ts0, inputParamCount0, inductiveness0)) ->
@@ -3033,14 +3151,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       Float -> "float"
     | Double -> "double"
     | LongDouble -> "long_double"
-    | Int (Signed, 3) -> "long_long"
-    | Int (Unsigned, 3) -> "unsigned_long_long"
-    | Int (Signed, 2) -> if int_rank = 2 then "int" else "int32"
-    | Int (Unsigned, 2) -> if int_rank = 2 then "unsigned_int" else "uint32"
-    | Int (Signed, 1) -> "short"
-    | Int (Unsigned, 1) -> "unsigned_short"
-    | Int (Signed, 0) -> "char"
-    | Int (Unsigned, 0) -> "unsigned_char"
+    | Int (_, LitRank _) -> string_of_type t
     | RealType -> "real"
   
   let floating_point_fun_call_expr funcmap l t fun_name args =
@@ -3058,7 +3169,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       WMethodCall (l, className, methodName, signature, args, Static, [])
     else
     let g = "vf__" ^ prefix ^ "_" ^ fun_name in
-    if not (List.mem_assoc g funcmap) then static_error l "Must include header <math.h> when using floating-point operations." None;
+    if not (List.mem_assoc g funcmap) then static_error l (Printf.sprintf "Must include header <math.h> when using floating-point operations. (Pseudo-function %s not found.)" g) None;
     WFunCall (l, g, [], args)
   
   let operation_expr funcmap l t operator arg1 arg2 =
@@ -3073,24 +3184,31 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let wintlit l n = WIntLit (l, n)
 
-  let integer_promotion t = (* C11 6.3.1.1 *)
+  let integer_promotion l t = (* C11 6.3.1.1 *)
     match t with
-    | Int (_, k) when k < int_rank -> intType
-    | _ -> t
+    | Int (Signed, k) -> if rank_le dummy_loc k int_rank then intType else t
+    | Int (Unsigned, k) -> if rank_lt k int_rank then intType else if rank_le dummy_loc int_rank k then t else static_error l "Computing the type of this expression involves an integer promotion whose result depends on the target architecture. This is not supported by VeriFast. Insert casts or specify a target (using the -target command-line option) to work around this problem." None
 
-  let usual_arithmetic_conversion t1 t2 = (* C11 6.3.1.8 *)
+  let usual_arithmetic_conversion inAnnotation l t1 t2 = (* C11 6.3.1.8 *)
     match t1, t2 with
       LongDouble, _ | _, LongDouble -> LongDouble
     | Double, _ | _, Double -> Double
     | Float, _ | _, Float -> Float
     | RealType, _ | _, RealType -> RealType
     | t1, t2 ->
-      let t1 = integer_promotion t1 in
-      let t2 = integer_promotion t2 in
+      match inAnnotation with Some true -> intType | _ ->
+      let t1 = integer_promotion l t1 in
+      let t2 = integer_promotion l t2 in
       match t1, t2 with
-        Int (Signed, n1), Int (Unsigned, n2) -> if n1 <= n2 then t2 else t1
-      | Int (Unsigned, n1), Int (Signed, n2) -> if n2 <= n1 then t1 else t2
-      | Int (s, n1), Int (_, n2) -> Int (s, max n1 n2)
+        Int (Signed, n1), Int (Unsigned, n2) -> if rank_le l n1 n2 then t2 else t1
+      | Int (Unsigned, n1), Int (Signed, n2) -> if rank_le l n2 n1 then t1 else t2
+      | Int (s, n1), Int (_, n2) -> Int (s, if rank_le l n1 n2 then n2 else n1)
+
+  let get_glb_litrank rank =
+    match rank with
+      LitRank k -> k, true
+    | IntRank|PtrRank -> 1, false
+    | LongRank -> 2, false
 
   let rec super_types (ObjType (cn, targs)) =
     let supers =
@@ -3233,12 +3351,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     (*
      * Docs: see "promote_checkdone"
      *)
-    let promote_numeric_checkdone e1 e2 check_e1 check_e2 =
+    let promote_numeric_checkdone l e1 e2 check_e1 check_e2 =
       let (w1, t1, _) = check_e1 in
       let (w2, t2, _) = check_e2 in
       match (unfold_inferred_type t1, unfold_inferred_type t2) with
         (t1, t2) when is_arithmetic_type t1 && is_arithmetic_type t2 ->
-        let t = usual_arithmetic_conversion t1 t2 in
+        let t = usual_arithmetic_conversion inAnnotation l t1 t2 in
         let w1 = if t1 = t then w1 else checkt e1 t in
         let w2 = if t2 = t then w2 else checkt e2 t in
         (w1, w2, t)
@@ -3257,13 +3375,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
      * insert a cast to enable overflow/underflow-checking.
      *)
     let promote_checkdone l e1 e2 check_e1 check_e2 =
-      match promote_numeric_checkdone e1 e2 check_e1 check_e2 with
+      match promote_numeric_checkdone l e1 e2 check_e1 check_e2 with
         (w1, w2, PtrType _) as result -> result
       | (w1, w2, t) as result when is_arithmetic_type t -> result
       | _ -> static_error l "Expression of arithmetic or pointer type expected." None
     in
-    let promote_numeric e1 e2 =
-      promote_numeric_checkdone e1 e2 (check e1) (check e2)
+    let promote_numeric l e1 e2 =
+      promote_numeric_checkdone l e1 e2 (check e1) (check e2)
     in
     let promote l e1 e2 =
       promote_checkdone l e1 e2 (check e1) (check e2)
@@ -3272,8 +3390,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (w, t, _) = check e in
       let t = unfold_inferred_type t in
       match t with
-        Int (_, k) when k < int_rank -> Upcast (w, t, intType), intType
-      | Int (_, _) -> w, t
+        Int (Signed, k) -> if rank_le dummy_loc k int_rank then Upcast (w, t, intType), intType else w, t
+      | Int (Unsigned, k) -> if rank_lt k int_rank then Upcast (w, t, intType), intType else if rank_le dummy_loc int_rank k then w, t else static_error (expr_loc e) "The promoted type of this expression depends on the target architecture. This is not supported by VeriFast. Insert a cast or specify the target (using the -target command-line option) to work around this problem." None
       | _ -> static_error (expr_loc e) "Expression must be of integral type" None
     in
     let check_pure_fun_value_call l w t es =
@@ -3442,8 +3560,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | _ -> static_error l "Keyword 'truncating' applies only to expressions of integer type" None
       end;
       (TruncatingExpr (l, w), t, None)
+    | Operation (l, (MinValue tp | MaxValue tp as operator), []) ->
+      (WOperation (l, operator, [], tp), tp, None)
     | Operation (l, (Eq | Neq as operator), [e1; e2]) -> 
-      let (w1, w2, t) = promote_numeric e1 e2 in
+      let (w1, w2, t) = promote_numeric l e1 e2 in
       (operation_expr funcmap l t operator w1 w2, boolt, None)
     | Operation (l, (Or | And as operator), [e1; e2]) -> 
       let w1 = checkcon e1 in
@@ -3473,7 +3593,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin match t1, t2 with
         PtrType pt1, PtrType pt2 when operator = Sub ->
         if pt1 <> pt2 then static_error l "Pointers must be of same type" None;
-        if pt1 <> Int (Signed, 0) && pt1 <> Void then static_error l "Subtracting non-char pointers is not yet supported" None;
+        if pt1 <> charType && pt1 <> Void then static_error l "Subtracting non-char pointers is not yet supported" None;
         (WOperation (l, PtrDiff, [w1; w2], t1), ptrdiff_t, None)
       | PtrType pt1, _ ->
         let (w2, t2, _) = check e2 in
@@ -3524,7 +3644,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               if lt_big_int (max_unsigned_big_int 2) n then static_error l "Integer literal too large" None else
               sub_big_int n (succ_big_int (max_unsigned_big_int 2))
           | LSuffix ->
-            Int (Signed, 3),
+            Int (Signed, LitRank 3),
             if is_decimal then
               if le_big_int (min_signed_big_int 3) n && le_big_int n (max_signed_big_int 3) then
                 n
@@ -3537,22 +3657,33 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in (wintlit l value, type_, Some value)
       else
         let type_ =
-          let minrank =
+          let rec iter ranks =
+            match ranks with
+              [] -> static_error l "Integer literal out of range" None
+            | (rank, k)::ranks ->
+              if not usuffix && le_big_int (min_signed_big_int k) n && le_big_int n (max_signed_big_int k) then
+                Int (Signed, rank)
+              else if (usuffix || not is_decimal) && le_big_int n (max_unsigned_big_int k) then
+                Int (Unsigned, rank)
+              else
+                iter ranks
+          in
+          let ranks_of int_rank int_k long_rank long_k =
             match lsuffix with
-              NoLSuffix -> int_rank
-            | LSuffix -> long_rank
-            | LLSuffix -> llong_rank
+              NoLSuffix -> [int_rank, int_k; long_rank, long_k; LitRank 3, 3; LitRank 4, 4]
+            | LSuffix -> [long_rank, long_k; LitRank 3, 3; LitRank 4, 4]
+            | LLSuffix -> [LitRank 3, 3; LitRank 4, 4]
           in
-          let rec iter rank =
-            if rank > max_rank then static_error l "Integer literal out of range" None;
-            if not usuffix && le_big_int (min_signed_big_int rank) n && le_big_int n (max_signed_big_int rank) then
-              Int (Signed, rank)
-            else if (usuffix || not is_decimal) && le_big_int n (max_unsigned_big_int rank) then
-              Int (Unsigned, rank)
+          match data_model with
+            Some {int_rank; long_rank} ->
+            iter (ranks_of (LitRank int_rank) int_rank (LitRank long_rank) long_rank)
+          | None ->
+            let rank1 = iter (ranks_of IntRank 1 LongRank 2) in
+            let rank2 = iter (ranks_of IntRank 2 LongRank 3) in
+            if rank1 <> rank2 then
+              static_error l "This expression's type depends on the target architecture. Such expressions are not supported by VeriFast. Add a suffix (U or (U)L or LL) or specify the target architecture (using the -target command-line option) to work around this problem." None
             else
-              iter (rank + 1)
-          in
-          iter minrank
+              rank1
         in
           (wintlit l n, type_, Some n)
     | RealLit(l, n) ->
@@ -3572,7 +3703,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       else
         begin match language with
           Java-> (e, ObjType ("java.lang.String", []), None)
-        | _ -> (e, (PtrType (Int (Signed, 0))), None)
+        | _ -> (e, (PtrType charType), None)
         end
     | CastExpr (l, te, e) ->
       let t = check_pure_type (pn,ilist) tparams Ghost te in
@@ -4006,21 +4137,27 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (Operation(l, Div, [IntLit(_, i1, _, _, _); IntLit(_, i2, _, _, _)]), RealType) -> RealLit(l, (num_of_big_int i1) // (num_of_big_int i2))
     | (IntLit (l, n, _, _, _), PtrType _) when isCast || eq_big_int n zero_big_int -> wintlit l n
     | (IntLit (l, n, _, _, _), RealType) -> RealLit (l, num_of_big_int n)
-    | (IntLit (l, n, _, _, _), (Int (Unsigned, k) as tp)) when isCast || inAnnotation <> Some true ->
+    | (IntLit (l, n, _, _, _), (Int (Unsigned, rank) as tp)) when isCast || inAnnotation <> Some true ->
+      let k, isTight = get_glb_litrank rank in
       if not (le_big_int zero_big_int n && le_big_int n (max_unsigned_big_int k)) then
         if isCast then
-          wintlit l (extract_big_int n 0 (8 * (1 lsl k)))
+          if isTight then
+            wintlit l (extract_big_int n 0 (8 * (1 lsl k)))
+          else
+            static_error l "Truncating cast to target-dependent-sized integer type is not yet supported." None
         else
           static_error l (Printf.sprintf "Integer literal used as %s must be between 0 and %s." (string_of_type tp) (string_of_big_int (max_unsigned_big_int k))) None
       else
         wintlit l n
-    | (IntLit (l, n, _, _, _), (Int (Signed, k) as tp)) when isCast || inAnnotation <> Some true ->
+    | (IntLit (l, n, _, _, _), (Int (Signed, rank) as tp)) when isCast || inAnnotation <> Some true ->
+      let k, isTight = get_glb_litrank rank in
       if not (le_big_int (min_signed_big_int k) n && le_big_int n (max_signed_big_int k)) then
-        if isCast then
+        if isCast then begin
+          if not isTight then static_error l "Truncating cast to target-dependent-sized integer type is not yet supported." None;
           let n = extract_big_int n 0 (8 * (1 lsl k)) in
           let n = if lt_big_int (max_signed_big_int k) n then sub_big_int n (succ_big_int (max_unsigned_big_int k)) else n in
           wintlit l n
-        else
+        end else
           static_error l (Printf.sprintf "Integer literal used as %s must be between %s and %s." (string_of_type tp) (string_of_big_int (min_signed_big_int k)) (string_of_big_int (max_signed_big_int k))) None
       else
         wintlit l n
@@ -4036,22 +4173,21 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         begin match (t, t0) with
         | _ when t = t0 -> w
         | (ObjType _, ObjType _) when isCast -> w
-        | (PtrType _, Int (_, _)) when isCast -> w
-        | (Int (_, _), PtrType _) when isCast -> w
-        | (Int (_, _), Int (_, _)) when isCast -> w
-        | ((Int (_, _)|Float|Double|LongDouble), (Float|Double|LongDouble)) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
-        | ((Float|Double|LongDouble), (Int (_, _))) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
+        | (Int (_, _)|PtrType _), (Int (_, _)|PtrType _) when isCast -> if definitely_is_upcast (int_rank_and_signedness t) (int_rank_and_signedness t0) then Upcast (w, t, t0) else w
+        | (Int (signedness, _), (Float|Double|LongDouble)) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type (Int (signedness, LitRank max_rank))) [TypedExpr (w, t)]
+        | ((Float|Double|LongDouble), (Float|Double|LongDouble)) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
+        | ((Float|Double|LongDouble), (Int (signedness, _))) when isCast -> floating_point_fun_call_expr funcmap (expr_loc w) (Int (signedness, LitRank max_rank)) ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
         | (ObjType ("java.lang.Object", []), ArrayType _) when isCast -> w
         | _ ->
           expect_type (expr_loc e) inAnnotation t t0;
-          if try expect_type dummy_loc inAnnotation t0 t; false with StaticError _ -> true then
+          if isCast || try expect_type dummy_loc inAnnotation t0 t; false with StaticError _ -> true then
             Upcast (w, t, t0)
           else
             w
         end
       in
       match (value, t, t0) with
-        (Some(value), Int (Signed, k1), Int (Signed, k2)) when k2 < k1 && le_big_int (min_signed_big_int k2) value && le_big_int value (max_signed_big_int k2) -> w
+        (Some(value), Int (Signed, LitRank k1), Int (Signed, LitRank k2)) when k2 < k1 && le_big_int (min_signed_big_int k2) value && le_big_int value (max_signed_big_int k2) -> w
       | _ -> check ()
   and check_condition_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e =
     let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
@@ -4356,7 +4492,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let check_c_initializer (pn,ilist) tparams tenv e tp =
     let rec check e tp =
     match tp, e with
-    | StaticArrayType (Int (Signed, 0), n), StringLit (ls, s) ->
+    | StaticArrayType (Int (Signed, LitRank 0), n), StringLit (ls, s) ->
       if String.length s + 1 > n then static_error ls "String literal does not fit inside character array." None;
       e
     | StaticArrayType (elemTp, elemCount), InitializerList (ll, es) ->
@@ -4436,7 +4572,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | CastExpr (l, ManifestTypeExpr (_, t), e) ->
         let v = ev e in
         begin match (t, v) with
-          (Int (Signed, 0), IntConst n) ->
+          (Int (Signed, LitRank 0), IntConst n) ->
           let n =
             if not (le_big_int (big_int_of_int (-128)) n && le_big_int n (big_int_of_int 127)) then
               let n = int_of_big_int (mod_big_int n (big_int_of_int 256)) in
@@ -4446,7 +4582,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               n
           in
           IntConst n
-        | (Int (Signed, 1), IntConst n) ->
+        | (Int (Signed, LitRank 1), IntConst n) ->
           let n =
             if not (le_big_int (big_int_of_int (-32768)) n && le_big_int n (big_int_of_int 32767)) then
               let n = int_of_big_int (mod_big_int n (big_int_of_int 65536)) in
@@ -4640,8 +4776,20 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let mk_truncate_term tp t =
     match tp with
-      Int (Unsigned, k) -> mk_app !!truncate_unsigned_symb [t; ctxt#mk_intlit (1 lsl (k + 3))]
-    | Int (Signed, k) -> mk_app !!truncate_signed_symb [t; ctxt#mk_intlit (1 lsl (k + 3) - 1)]
+      Int (Unsigned, rank) ->
+      let nbBits =
+        match rank with
+          LitRank k -> ctxt#mk_intlit (1 lsl (k + 3))
+        | rank -> ctxt#mk_mul (ctxt#mk_intlit 8) (rank_size_term rank)
+      in
+      mk_app !!truncate_unsigned_symb [t; nbBits]
+    | Int (Signed, rank) ->
+      let nbBits =
+        match rank with
+          LitRank k -> ctxt#mk_intlit (1 lsl (k + 3) - 1)
+        | rank -> ctxt#mk_sub (ctxt#mk_mul (ctxt#mk_intlit 8) (rank_size_term rank)) (ctxt#mk_intlit 1)
+      in
+      mk_app !!truncate_signed_symb [t; nbBits]
   
   let array_element_symb = lazy_predfamsymb "java.lang.array_element"
   let array_slice_symb = lazy_predfamsymb "java.lang.array_slice"
@@ -4671,22 +4819,24 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let deref_pointee_tuple (cn, csym, an, asym, mban, mbasym) = (cn, csym(), an, asym(), mban, mbasym())
   
   let int32_pointee_tuple =
-    if int_rank = 2 then Some int_pointee_tuple else None
+    if int_rank = LitRank 2 then Some int_pointee_tuple else None
   let uint32_pointee_tuple =
-    if int_rank = 2 then Some uint_pointee_tuple else None
+    if int_rank = LitRank 2 then Some uint_pointee_tuple else None
 
   let try_pointee_pred_symb0 pointeeType =
     option_map deref_pointee_tuple
     begin match pointeeType with
       PtrType _ -> Some pointer_pointee_tuple
-    | Int (Signed, 3) -> Some llong_pointee_tuple
-    | Int (Unsigned, 3) -> Some ullong_pointee_tuple
-    | Int (Signed, 2) -> int32_pointee_tuple
-    | Int (Unsigned, 2) -> uint32_pointee_tuple
-    | Int (Signed, 1) -> Some short_pointee_tuple
-    | Int (Unsigned, 1) -> Some ushort_pointee_tuple
-    | Int (Signed, 0) -> Some char_pointee_tuple
-    | Int (Unsigned, 0) -> Some uchar_pointee_tuple
+    | Int (Signed, IntRank) -> Some int_pointee_tuple
+    | Int (Unsigned, IntRank) -> Some uint_pointee_tuple
+    | Int (Signed, LitRank 3) -> Some llong_pointee_tuple
+    | Int (Unsigned, LitRank 3) -> Some ullong_pointee_tuple
+    | Int (Signed, LitRank 2) -> int32_pointee_tuple
+    | Int (Unsigned, LitRank 2) -> uint32_pointee_tuple
+    | Int (Signed, LitRank 1) -> Some short_pointee_tuple
+    | Int (Unsigned, LitRank 1) -> Some ushort_pointee_tuple
+    | Int (Signed, LitRank 0) -> Some char_pointee_tuple
+    | Int (Unsigned, LitRank 0) -> Some uchar_pointee_tuple
     | Bool -> Some bool_pointee_tuple
     | Float -> Some float_pointee_tuple
     | Double -> Some double_pointee_tuple
@@ -4745,7 +4895,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match int_rank_and_signedness elemtype with
           Some (k, signedness) ->
           let p = new predref "integers_" [PtrType Void; intType; Bool; intType; list_type elemtype] (Some 4) in
-          (WPredAsn (l, p, true, [], [], [LitPat wfirst; LitPat (WIntLit (l, big_int_of_int (1 lsl k))); LitPat (if signedness = Signed then True l else False l); wlength; wrhs]), tenv, [])
+          (WPredAsn (l, p, true, [], [], [LitPat wfirst; LitPat (SizeofExpr (l, ManifestTypeExpr (l, elemtype))); LitPat (if signedness = Signed then True l else False l); wlength; wrhs]), tenv, [])
         | None ->
           static_error l (Printf.sprintf "Array points-to notation is not supported for element type '%s'" (string_of_type elemtype)) None
         end
@@ -5150,7 +5300,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 (f, (l, Real, t, offset)) ->
                 begin
                 let (g, (_, _, _, _, symb, _, inductiveness)) = List.assoc (sn, f) field_pred_map in (* TODO WILLEM: we moeten die inductiveness ergens gebruiken *)
-                let predinst p domain =
+                let predinst__ p domain =
                   let p = new predref p domain (Some 1) in
                   ((g, []),
                    ([], l, [], [sn, PtrType (StructType sn); "value", t], symb, Some 1,
@@ -5159,27 +5309,21 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                    )
                   )
                 in
+                let predinst_ p t = [predinst__ p [PtrType t; t]] in
+                let predinst p = predinst_ p t in
                 match t with
-                  PtrType _ ->
-                  [predinst "pointer" [PtrType (PtrType Void); PtrType Void]]
-                | Int (Signed, 3) ->
-                  [predinst "llong_integer" [PtrType (Int (Signed, 3)); (Int(Signed, 3))]]
-                | Int (Unsigned, 3) ->
-                  [predinst "u_llong_integer" [PtrType (Int (Unsigned, 3)); Int (Unsigned, 3)]]
-                | Int (Signed, 2) when int_rank = 2 ->
-                  [predinst "integer" [PtrType intType; intType]]
-                | Int (Unsigned, 2) when int_rank = 2 ->
-                  [predinst "u_integer" [PtrType (Int (Unsigned, 2)); Int (Unsigned, 2)]]
-                | Int (Signed, 1) ->
-                  [predinst "short_integer" [PtrType (Int (Signed, 2)); (Int (Signed, 2))]]
-                | Int (Unsigned, 1) ->
-                  [predinst "u_short_integer" [PtrType (Int (Unsigned, 2)); Int (Unsigned, 2)]]
-                | Int (Signed, 0) ->
-                  [predinst "character" [PtrType (Int (Signed, 1)); Int (Signed, 1)]]
-                | Int (Unsigned, 0) ->
-                  [predinst "u_character" [PtrType (Int (Unsigned, 1)); Int (Unsigned, 1)]]
-                | Bool ->
-                  [predinst "boolean" [PtrType Bool; Bool]]
+                  PtrType _ -> predinst_ "pointer" (PtrType Void)
+                | Int (Signed, IntRank) -> predinst "integer"
+                | Int (Unsigned, IntRank) -> predinst "u_integer"
+                | Int (Signed, LitRank 3) -> predinst "llong_integer"
+                | Int (Unsigned, LitRank 3) -> predinst "u_llong_integer"
+                | Int (Signed, LitRank 2) when int_rank = LitRank 2 -> predinst "integer"
+                | Int (Unsigned, LitRank 2) when int_rank = LitRank 2 -> predinst "u_integer"
+                | Int (Signed, LitRank 1) -> predinst "short_integer"
+                | Int (Unsigned, LitRank 1) -> predinst "u_short_integer"
+                | Int (Signed, LitRank 0) -> predinst "character"
+                | Int (Unsigned, LitRank 0) -> predinst "u_character"
+                | Bool -> predinst_ "boolean" Bool
                 | _ -> []
                 end
               | _ -> []
@@ -5326,9 +5470,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let rec sizeof l t =
     match t with
       Void -> ctxt#mk_intlit 1
-    | Bool -> rank_size_term 0
+    | Bool -> rank_size_term (LitRank 0)
     | Int (_, k) -> rank_size_term k
-    | PtrType _ -> ctxt#mk_intlit (1 lsl ptr_rank)
+    | PtrType _ -> rank_size_term ptr_rank
     | StructType sn -> struct_size l sn
     | UnionType un -> union_size l un
     | StaticArrayType (elemTp, elemCount) -> ctxt#mk_mul (sizeof l elemTp) (ctxt#mk_intlit elemCount)
@@ -5410,7 +5554,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     if n = 0 then
       mk_nil ()
     else
-      mk_cons (Int (Signed, 0)) (ctxt#mk_intlit 0) (mk_zero_list (n - 1))
+      mk_cons charType (ctxt#mk_intlit 0) (mk_zero_list (n - 1))
   
   let mk_char_list_of_c_string size s =
     let n = String.length s in
@@ -5419,7 +5563,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if k = n then
         mk_zero_list (size - n)
       else
-        mk_cons (Int (Signed, 0)) (ctxt#mk_intlit (as_signed_char (Char.code s.[k]))) (iter (k + 1))
+        mk_cons charType (ctxt#mk_intlit (as_signed_char (Char.code s.[k]))) (iter (k + 1))
     in
     iter 0
   
@@ -5782,7 +5926,7 @@ let check_if_list_is_defined () =
   let assert_term t h env l msg url = 
     !stats#proverOtherQuery;
     if not (ctxt#query t) then
-      assert_false h env l msg url
+      assert_false h env l (Printf.sprintf "%s (Cannot prove %s.)" msg (ctxt#pprint t)) url
 
   let rec prover_type_term l tp = 
     match tp with
@@ -5816,11 +5960,11 @@ let check_if_list_is_defined () =
       CLang, Some assert_term ->
       let width =
         match t with
-          Int (Signed, k) -> (1 lsl k) * 8 - 1
-        | Int (Unsigned, k) -> (1 lsl k) * 8
+          Int (Signed, k) -> ctxt#mk_sub (ctxt#mk_mul (ctxt#mk_intlit 8) (rank_size_term k)) (ctxt#mk_intlit 1)
+        | Int (Unsigned, k) -> ctxt#mk_mul (ctxt#mk_intlit 8) (rank_size_term k)
       in
       assert_term l (ctxt#mk_le (ctxt#mk_intlit 0) v) "Shifting by a negative amount has undefined behavior." None;
-      assert_term l (ctxt#mk_lt v (ctxt#mk_intlit width)) "Shifting by an amount greater than or equal to the width of the operand has undefined behavior." None
+      assert_term l (ctxt#mk_lt v width) "Shifting by an amount greater than or equal to the width of the operand has undefined behavior." None
     | _ -> ()
   
   let eval_op l truncating op e1 v1 e2 v2 t ass_term =
@@ -5918,7 +6062,7 @@ let check_if_list_is_defined () =
       check_shift_amount ass_term l t v2;
       let v = ctxt#mk_app shiftleft_symbol [v1;v2] in
       begin match e2 with
-        WIntLit (_, n) when le_big_int zero_big_int n && le_big_int n (big_int_of_int 64) ->
+        WIntLit (_, n) | Upcast (WIntLit (_, n), _, _) when le_big_int zero_big_int n && le_big_int n (big_int_of_int 64) ->
         ctxt#assert_term (ctxt#mk_eq v (ctxt#mk_mul v1 (ctxt#mk_intlit_of_string (string_of_big_int (power_int_positive_big_int 2 n)))))
       | _ -> ()
       end;
@@ -5981,13 +6125,11 @@ let check_if_list_is_defined () =
         | _ ->
           static_error l "Unsupported truncating cast" None
       end
+    | CastExpr (l, ManifestTypeExpr (_, t0), Upcast (e, t, t0')) when t0 == t0' -> ev state e cont
     | CastExpr (l, ManifestTypeExpr (_, t), e) ->
       begin
         match (e, t) with
-          (WIntLit (_, n), PtrType _) ->
-          if ass_term <> None && not (le_big_int zero_big_int n && le_big_int n (max_unsigned_big_int ptr_rank)) then static_error l "CastExpr: Int literal is out of range." None;
-          cont state (ctxt#mk_intlit_of_string (string_of_big_int n))
-        | (e, (Int (_, _) as tp)) ->
+          (e, (Int (_, _) | PtrType _ as tp)) ->
           ev state e $. fun state t ->
           let min, max = limits_of_type tp in
           cont state (check_overflow l min t max)
@@ -6017,7 +6159,7 @@ let check_if_list_is_defined () =
       cont state
         begin match file_type path with
           Java -> get_unique_var_symb "stringLiteral" (ObjType ("java.lang.String", []))
-        | _ -> get_unique_var_symb "stringLiteral" (PtrType (Int (Signed, 0)))
+        | _ -> get_unique_var_symb "stringLiteral" (PtrType charType)
         end
     | WMethodCall (l, "java.lang.Object", "getClass", [], [target], Instance, _) ->
       ev state target $. fun state t ->
@@ -6047,6 +6189,8 @@ let check_if_list_is_defined () =
       evs state [e2; e3] $. fun state [v2; v3] ->
       ctxt#end_formal;
       cont state (ctxt#mk_ifthenelse v1 v2 v3) (* Only sound if e2 and e3 are side-effect-free *)
+    | WOperation (l, MinValue tp, [], _) -> cont state (fst (limits_of_type tp))
+    | WOperation (l, MaxValue tp, [], _) -> cont state (snd (limits_of_type tp))
     | WOperation (l, BitAnd, [e1; WOperation (_, BitNot, [e2], _)], _) ->
       ev state e1 $. fun state v1 -> ev state e2 $. fun state v2 ->
       cont state (ctxt#mk_app bitwise_and_symbol [v1; ctxt#mk_app bitwise_not_symbol [v2]])
@@ -6089,10 +6233,10 @@ let check_if_list_is_defined () =
         match e1, e2 with
           Upcast (_, t1, _), Upcast (_, t2, _) ->
           begin match t1, t2 with
-            Int (Signed, n1), Int (Signed, n2) -> Some (Int (Signed, max n1 n2))
-          | Int (Unsigned, n1), Int (Unsigned, n2) -> Some (Int (Unsigned, max n1 n2))
-          | Int (Signed, n1), Int (Unsigned, n2) when n2 < n1 -> Some (Int (Signed, n1))
-          | Int (Unsigned, n1), Int (Signed, n2) when n1 < n2 -> Some (Int (Signed, n2))
+            Int (Signed, LitRank n1), Int (Signed, LitRank n2) -> Some (Int (Signed, LitRank (max n1 n2)))
+          | Int (Unsigned, LitRank n1), Int (Unsigned, LitRank n2) -> Some (Int (Unsigned, LitRank (max n1 n2)))
+          | Int (Signed, LitRank n1), Int (Unsigned, LitRank n2) when n2 < n1 -> Some (Int (Signed, LitRank n1))
+          | Int (Unsigned, LitRank n1), Int (Signed, LitRank n2) when n1 < n2 -> Some (Int (Signed, LitRank n2))
           | _ -> None
           end
         | _ -> None
