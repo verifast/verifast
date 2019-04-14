@@ -134,6 +134,7 @@ class z3_context () =
   let modulo = Z3.mk_func_decl ctxt (Z3native.mk_string_symbol ctxt "mod") [| int_type; int_type |] int_type in
   object
     val mutable verbosity = 0
+    val mutable pushlevel = 0
     method set_verbosity v = verbosity <- v
     method type_bool = bool_type
     method type_int = int_type
@@ -206,7 +207,9 @@ class z3_context () =
         )
         cs
 
-    method mk_app s ts = Z3.mk_app ctxt s (Array.of_list ts)
+    method mk_app s ts =
+      if verbosity >= 100 then printff "Z3#mk_app %s [%s]\n" (Z3native.func_decl_to_string ctxt s) (String.concat "; " (List.map (Z3native.ast_to_string ctxt) ts));
+      Z3.mk_app ctxt s (Array.of_list ts)
     method mk_true = ttrue
     method mk_false = tfalse
     method mk_and t1 t2 = Z3native.mk_and ctxt 2 [t1; t2]
@@ -215,7 +218,9 @@ class z3_context () =
     method mk_ifthenelse t1 t2 t3 = Z3native.mk_ite ctxt t1 t2 t3
     method mk_iff t1 t2 = Z3native.mk_eq ctxt t1 t2
     method mk_implies t1 t2 = Z3native.mk_implies ctxt t1 t2
-    method mk_eq t1 t2 = Z3native.mk_eq ctxt t1 t2
+    method mk_eq t1 t2 =
+      if verbosity >= 100 then printff "Z3#mk_eq %s %s\n" (Z3native.ast_to_string ctxt t1) (Z3native.ast_to_string ctxt t2);
+      Z3native.mk_eq ctxt t1 t2
     method mk_intlit n =
       if n land (lnot 0x7fffffff) = 0 then (* See issue #138 *)
         Z3native.mk_int ctxt n int_type
@@ -240,12 +245,13 @@ class z3_context () =
     method pprint t = string_of_sexpr (simplify (parse_sexpr (Z3native.ast_to_string ctxt t)))
     method pprint_sort (s : Z3native.sort) = Z3native.ast_to_string ctxt s
     method pprint_sym (s : Z3native.func_decl) = Z3native.ast_to_string ctxt s
-    method assert_term t = Z3native.solver_assert ctxt solver t
+    method assert_term t =
+      Z3native.solver_assert ctxt solver t
     method query t =
       (* printf "Z3prover.query (%s)... " (Z3native.ast_to_string ctxt t); *)
       let t0 = if verbosity >= 1 then Perf.time() else 0.0 in
       let result = query t in
-      if verbosity >= 1 then begin let t1 = Perf.time() in Printf.printf "%10.6fs: Z3 query %s: %.6f seconds\n" t0 (Z3native.ast_to_string ctxt t) (t1 -. t0) end;
+      if verbosity >= 1 then begin let t1 = Perf.time() in Printf.printf "%10.6fs: Z3 query %s returns %s: %.6f seconds\n" t0 (Z3native.ast_to_string ctxt t) (if result then "true" else "false") (t1 -. t0) end;
       result
     method assume t =
       (* printf "Z3prover.assume (%s)\n" (Z3native.ast_to_string ctxt t); *)
@@ -254,8 +260,12 @@ class z3_context () =
       if verbosity >= 1 then begin let t1 = Perf.time() in Printf.printf "%10.6fs: Z3 assume %s: %.6f seconds\n" t0 (Z3native.ast_to_string ctxt t) (t1-. t0) end;
       result
     method push =
+      if verbosity >= 10 then Printf.printf "Pushing from level %d to %d\n" pushlevel (pushlevel + 1);
+      pushlevel <- pushlevel + 1;
       Z3native.solver_push ctxt solver
     method pop =
+      if verbosity >= 10 then Printf.printf "Popping from level %d to %d\n" pushlevel (pushlevel - 1);
+      pushlevel <- pushlevel - 1;
       Z3native.solver_pop ctxt solver 1
     method perform_pending_splits (cont: Z3native.ast list -> bool) = cont []
     method stats: string * (string * int64) list = "(no statistics for Z3)", []
