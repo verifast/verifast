@@ -26,9 +26,11 @@ void *malloc(size_t size);
             chars(result, size, ?cs) &*& malloc_block(result, size) &*&
             (char *)0 < result && result + size <= (char *)UINTPTR_MAX; // one-past-end does not overflow
     @*/
+    //@ terminates;
 
 void free(void *array);
     //@ requires malloc_block(array, ?size) &*& chars(array, size, ?cs);
     //@ ensures emp;
+    //@ terminates;
 
 #endif

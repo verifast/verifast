@@ -208,11 +208,11 @@ void stack_push_iter(stack stack, void *value)
 }
 
 bool stack_pop_iter(stack stack, void **pvalue)
-    //@ requires [_]stack(stack, ?p) &*& *pvalue |-> _ &*& call_perm_level(pair((pair_lt)(lt, lt), pair(1, 0)), {stack_pop_iter});
+    //@ requires [_]stack(stack, ?p) &*& *pvalue |-> _ &*& call_perm_(stack_pop_iter) &*& call_perm_level(pair((pair_lt)(lt, lt), pair(1, 0)), {stack_pop_iter});
     //@ ensures *pvalue |-> ?value &*& result ? p(value) : true;
     //@ terminates;
 {
-    for (;;)
+loop:
         /*@
         invariant
             [_]stack(stack, p) &*& *pvalue |-> _ &*& call_perm_level(pair((pair_lt)(lt, lt), pair(1, 0)), {stack_pop_iter});
@@ -332,6 +332,7 @@ bool stack_pop_iter(stack stack, void **pvalue)
             *pvalue = head->value;
             return true;
         }
+        goto loop;
     }
 }
 
@@ -351,6 +352,9 @@ bool stack_pop(stack stack, void **pvalue)
     //@ ensures *pvalue |-> ?value &*& result ? p(value) : true;
     //@ terminates;
 {
+    //@ produce_call_below_perm_();
+    //@ call_below_perm__elim(stack_pop);
+    //@ consume_call_perm_for(stack_pop_iter);
     //@ produce_call_below_perm_();
     //@ call_below_perm__elim(stack_pop);
     //@ call_perm_level(1, pair((pair_lt)(lt, lt), pair(1, 0)), {stack_pop_iter});

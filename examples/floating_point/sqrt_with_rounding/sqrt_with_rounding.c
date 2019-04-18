@@ -203,7 +203,6 @@ double my_sqrt(double x)
     	}
     @*/
     }
-    //@ invariant real_of_double(result) == some(?rr_) &*& rr_ >= real_sqrt(rx);
     for (;;)
         /*@ invariant 
         real_of_double(result) == some(?rr) &*& 
