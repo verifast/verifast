@@ -146,6 +146,9 @@ else
   Z3PRESENT=false
 endif
 
+clean::
+	rm -Rf ../lib
+
 ../lib/libgtksourceview-2.0.0.dylib:
 	mkdir -p ../lib
 	for i in $$( cat vfide-osx-local-dlls.txt ); do cp $$i ../lib; done
