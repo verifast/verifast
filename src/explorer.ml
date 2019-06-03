@@ -12,12 +12,12 @@ open Util
 let _ =
 
   let is_first_arg = ref true in
-  let pattern = ref "" in
+  let pattern_str = ref "" in
   let files_to_explore: string list ref = ref [] in
 
   let process_args (arg: string): unit =
     if (!is_first_arg) then
-      (is_first_arg := false ; pattern := arg)
+      (is_first_arg := false ; pattern_str := arg)
     else
       files_to_explore := arg :: !files_to_explore
   in
@@ -30,12 +30,11 @@ let _ =
 
   (* Parse command-line arguments and check that a pattern and at least one file to explore were provided *)
   parse [] process_args "Failed to parse command-line arguments.";
-  Printf.printf "Pattern is %s and number of files to explore is %d.\n" !pattern (List.length !files_to_explore);
+  Printf.printf "Pattern is %s and number of files to explore is %d.\n" !pattern_str (List.length !files_to_explore);
   if (not (check_args_valid ()) ) then (Printf.printf "Program exiting\n" ; exit 1);
-
-  let sourceFiles : (string * (((int * int) * (int * int)) * range_kind) list ref) list ref = ref [] in
   
   (* Callbacks *)
+  let sourceFiles : (string * (((int * int) * (int * int)) * range_kind) list ref) list ref = ref [] in
   let reportRange kind ((path1, line1, col1), (path2, line2, col2)) =    
     assert (path1 = path2);
     let path = path1 in
@@ -61,7 +60,7 @@ let _ =
       let make_lexer path include_paths ~inGhostRange =
         let text = 
           if (parsePattern) then 
-            "/*@ lemma void dummy_function() requires true ; ensures " ^ !pattern ^ "; {} @*/"
+            "/*@ lemma void dummy_function() requires true ; ensures " ^ !pattern_str ^ "; {} @*/"
           else
             readFile path
         in
@@ -81,7 +80,34 @@ let _ =
     in
     result
   in
-  
+
+  let extract_postcond _ : expr =
+    let (_, package_list) = parse_c_file "dummy.c" reportRange reportShouldFail 0 [] [] true data_model_32bit true in
+    match package_list with
+      | pack_head :: _ -> 
+        begin
+          match pack_head with 
+            | PackageDecl(_, _, _, declarations) -> 
+              begin
+                match declarations with
+                  | decl_head :: _ -> 
+                    begin
+                      match decl_head with
+                        | Func(_, _, _, _, _, _, _, _, contract_opt, _, _, _, _) -> 
+                          begin 
+                            match contract_opt with
+                              | Some contract -> 
+                                let (_, postcond) = contract in 
+                                postcond
+                          end
+                    end
+              end
+
+        end
+  in
+
+  let pattern_expr = extract_postcond () in
+
   let check_file_for_pattern (filepath: string): unit =
     
     let rec check_expr_for_pattern (expr: expr) (pattern: expr) : bool = 
@@ -162,7 +188,7 @@ let _ =
                       | None -> Printf.printf "Function %s has no contract.\n" name;
                       | Some contract -> 
                         let (_, postcond) = contract in 
-                        let res = check_expr_for_pattern postcond (Var(DummyLoc, "dummy")) in
+                        let res = check_expr_for_pattern postcond pattern_expr in
                         Printf.printf "Checking postcondition of function %s -> %B\n" name res;
                   end
                 | _ -> Printf.printf "\tNot a function\n";
