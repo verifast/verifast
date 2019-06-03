@@ -55,6 +55,33 @@ let _ =
   let shouldFailLocs: loc0 list ref = ref [] in
   let reportShouldFail l = shouldFailLocs := l::!shouldFailLocs in
 
+  let parse_c_file (path: string) (reportRange: range_kind -> loc0 -> unit) (reportShouldFail: loc0 -> unit) (verbose: int) 
+          (include_paths: string list) (define_macros: string list) (enforceAnnotations: bool) (dataModel: data_model) (parsePattern: bool): ((loc * (include_kind * string * string) * string list * package list) list * package list) = (* ?parse_c_file *)
+    let result =
+      let make_lexer path include_paths ~inGhostRange =
+        let text = 
+          if (parsePattern) then 
+            "/*@ lemma void dummy_function() requires true ; ensures " ^ !pattern ^ "; {} @*/"
+          else
+            readFile path
+        in
+        make_lexer (common_keywords @ c_keywords) ghost_keywords path text reportRange ~inGhostRange reportShouldFail
+      in
+      let (loc, token_stream) = make_preprocessor make_lexer path verbose include_paths dataModel define_macros in
+      let parse_c_file =
+        parser
+          [< (headers, _) = parse_include_directives verbose enforceAnnotations dataModel; 
+                              ds = parse_decls CLang dataModel enforceAnnotations ~inGhostHeader:false; '(_, Eof) >] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])
+      in
+      try
+        parse_c_file token_stream
+      with
+        Stream.Error msg -> raise (ParseException (loc(), msg))
+      | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
+    in
+    result
+  in
+  
   let check_file_for_pattern (filepath: string): unit =
     
     let rec check_expr_for_pattern (expr: expr) (pattern: expr) : bool = 
@@ -154,10 +181,12 @@ let _ =
           end
     in
 
-    let (_, package_list) = parse_c_file filepath reportRange reportShouldFail 0 [] [] true data_model_32bit in
+    let (_, package_list) = parse_c_file filepath reportRange reportShouldFail 0 [] [] true data_model_32bit false in
     let () = check_packages package_list in
     Printf.printf "Parsed %s\n" filepath
   in
 
+  let _  = parse_c_file "fake.c" reportRange reportShouldFail 0 [] [] true data_model_32bit true in
   List.iter check_file_for_pattern !files_to_explore
     
+(*  *)
