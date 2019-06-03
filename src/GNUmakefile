@@ -282,7 +282,7 @@ TOOLS = $(TOOLS_EXCEPT_VFIDE) ../bin/vfide$(DOTEXE)
 
 
 ifndef WITHOUT_LABLGTK
-build: $(TOOLS) $(STDLIB) tabhunt vfversion_autogen vfconfig_autogen
+build: $(TOOLS) $(STDLIB) ../bin/explorer$(DOTEXE) tabhunt vfversion_autogen vfconfig_autogen
 else
 build: $(TOOLS_EXCEPT_VFIDE) $(STDLIB) tabhunt vfversion_autogen
 endif
@@ -467,6 +467,17 @@ ifeq ($(OS), Darwin)
 	install_name_tool -change libz3.dylib @executable_path/../lib/libz3.dylib ../bin/verifast
 endif
 
+../bin/explorer$(DOTEXE): explorer.cmx $(VERIFAST_PLUGINS:%=verifastPlugin%.cmx) $(Z3DEPS)
+	@echo "  OCAMLOPT " $@
+	${OCAMLOPT} $(OCAMLOPT_LINKFLAGS) $(OCAMLCFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/explorer$(DOTEXE) unix.cmxa \
+	  nums.cmxa str.cmxa $(INCLUDES) Perf.cmxa proverapi.cmx \
+	  vfversion.cmx \
+	  util.cmx ast.cmx stats.cmx lexer.cmx parser.cmx \
+	  ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx \
+	  verify_expr.cmx verifast.cmx simplex.cmx redux.cmx combineprovers.cmx \
+          smtlib.cmx smtlibprover.cmx verifastPluginCvc4.cmx verifastPluginExternalZ3.cmx verifastPluginReduxSmtlib.cmx \
+          $(Z3ARGS_EARLY) \
+	  verifastPluginRedux.cmx $(Z3ARGS) explorer.cmx
 
 ifneq ($(OS), Windows_NT)
   ../bin/verifast$(DOTEXE): linux/libPerf_cobjs.a
