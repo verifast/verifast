@@ -284,7 +284,7 @@ TOOLS = $(TOOLS_EXCEPT_VFIDE) ../bin/vfide$(DOTEXE)
 ifndef WITHOUT_LABLGTK
 build: $(TOOLS) $(STDLIB) ../bin/explorer$(DOTEXE) tabhunt vfversion_autogen vfconfig_autogen
 else
-build: $(TOOLS_EXCEPT_VFIDE) $(STDLIB) tabhunt vfversion_autogen
+build: $(TOOLS_EXCEPT_VFIDE) $(STDLIB) ../bin/explorer$(DOTEXE) tabhunt vfversion_autogen
 endif
 .PHONY: build
 
