@@ -11,6 +11,8 @@ open Arg
 let files_blacklist = ["threading.c"]
 let verifast_explore_path = "/home/lucas/VeriFast/verifast/bin"
 
+type explore_result = (loc * string) 
+
 let _ =
 
   (* Callbacks for parser *)
@@ -62,7 +64,7 @@ let _ =
     result
   in
 
-  let parse_header_file_custom (path: string) (reportRange: range_kind -> loc0 -> unit) (reportShouldFail: loc0 -> unit) (verbose: int) 
+  (* let parse_header_file_custom (path: string) (reportRange: range_kind -> loc0 -> unit) (reportShouldFail: loc0 -> unit) (verbose: int) 
           (include_paths: string list) (define_macros: string list) (enforceAnnotations: bool) (dataModel: data_model): ((loc * (include_kind * string * string) * string list * package list) list * package list) =
     let isGhostHeader = Filename.check_suffix path ".gh" in
     let result =
@@ -84,21 +86,9 @@ let _ =
       | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
     in
     result
-  in
+  in *)
 
   (* My code *)
-
-  let is_first_arg = ref true in
-  let pattern_str = ref "" in
-  let include_paths: string list ref = ref [] in
-  let explore_paths: string list ref = ref [] in
-
-  let cla = [ "-I", String (fun str -> include_paths := str :: !include_paths), "Add a directory to the list of directories to be searched for header files." ] in
-
-  (* Parse command-line arguments *)
-  parse cla (fun str -> explore_paths := str :: !explore_paths) "Failed to parse command-line arguments.";
-  Printf.printf "%d directories will be explored.\n" ((List.length !explore_paths) + 1);
-  Printf.printf "%d directories will be included.\n" (List.length !include_paths);
 
   let file_filter (filename: string): bool =
     (Filename.check_suffix filename ".c" || Filename.check_suffix filename ".h" || Filename.check_suffix filename ".gh") && not (List.mem filename files_blacklist)
@@ -114,7 +104,7 @@ let _ =
         List.append absolute_files (get_files_from_explore_paths tail)
   in
 
-  let rec get_decl_from_filepaths (filepaths: string list): (decl list) list =
+  let rec get_decl_from_filepaths (filepaths: string list) (include_paths: string list): (decl list) list =
     match filepaths with
       | [] -> []
       | filepath :: tail ->
@@ -122,7 +112,7 @@ let _ =
         if (Filename.check_suffix filepath ".gh" || Filename.check_suffix filepath ".h") then
               let packages = 
                 try
-                  let (_, packages_tmp) = parse_header_file filepath reportRange reportShouldFail 0 !include_paths [] false data_model_32bit in
+                  let (_, packages_tmp) = parse_header_file filepath reportRange reportShouldFail 0 include_paths [] false data_model_32bit in
                   packages_tmp
                 with
                   Lexer.ParseException(_, msg) -> 
@@ -130,13 +120,13 @@ let _ =
                     []
               in
               match packages with
-                | [] -> get_decl_from_filepaths tail
+                | [] -> get_decl_from_filepaths tail include_paths
                 | pack_head :: pack_tail -> 
-                    match pack_head with | PackageDecl(_, _, _, declarations) -> declarations :: (get_decl_from_filepaths tail)
+                    match pack_head with | PackageDecl(_, _, _, declarations) -> declarations :: (get_decl_from_filepaths tail include_paths)
         else if (Filename.check_suffix filepath ".c") then
             let packages = 
                 try
-                  let (_, packages_tmp) = parse_c_file filepath reportRange reportShouldFail 0 !include_paths [] false data_model_32bit in
+                  let (_, packages_tmp) = parse_c_file filepath reportRange reportShouldFail 0 include_paths [] false data_model_32bit in
                   packages_tmp
                 with
                   Lexer.ParseException(_, msg) -> 
@@ -144,18 +134,37 @@ let _ =
                     []
             in
             match packages with
-              | [] -> []
+              | [] -> get_decl_from_filepaths tail include_paths
               | pack_head :: pack_tail -> 
-                  match pack_head with | PackageDecl(_, _, _, declarations) -> declarations :: (get_decl_from_filepaths tail)
+                  match pack_head with | PackageDecl(_, _, _, declarations) -> declarations :: (get_decl_from_filepaths tail include_paths)
         else (* Should never happen. If it does, simply ignore the file *)
-          get_decl_from_filepaths tail
+          get_decl_from_filepaths tail include_paths
   in
 
-  (* Also add the VeriFast library path to the include paths *)
-  let files_to_explore = get_files_from_explore_paths (verifast_explore_path :: !explore_paths) in
-  let decls_to_explore = get_decl_from_filepaths files_to_explore in
-  (* List.iter (fun str -> Printf.printf "%s\n" str) files_to_explore; *)
+  let pattern_str_to_expr (pattern_str: string) : expr =
+    let (_, package_list) = parse_c_file_custom "dummy.c" reportRange reportShouldFail 0 [] [] true data_model_32bit pattern_str in
+    match package_list with
+      | pack_head :: _ -> 
+        begin
+          match pack_head with 
+            | PackageDecl(_, _, _, declarations) -> 
+              begin
+                match declarations with
+                  | decl_head :: _ -> 
+                    begin
+                      match decl_head with
+                        | Func(_, _, _, _, _, _, _, _, contract_opt, _, _, _, _) -> 
+                          begin 
+                            match contract_opt with
+                              | Some contract -> 
+                                let (_, postcond) = contract in 
+                                postcond
+                          end
+                    end
+              end
 
+        end
+  in
 
   let rec check_expr_for_pattern (expr: expr) (pattern: expr) : bool = 
     match expr with
@@ -207,6 +216,7 @@ let _ =
                     in
                     let rec extract_expr (ziped_args: (pat * pat) list) : (expr * expr) list =
                       match ziped_args with
+                        | [] -> []
                         | (LitPat(x), LitPat(y)) :: tail -> (x, y) :: (extract_expr tail)
                         | _ :: tail -> (Null(DummyLoc), Null(DummyLoc)) :: (extract_expr tail) (* default case cannot happen because of previous filtering *)
                     in
@@ -222,54 +232,78 @@ let _ =
       | _ -> false;
   in
 
-  let rec check_declarations (declaration_list: decl list): unit = 
+  let rec check_declarations (pattern: expr) (declaration_list: decl list): explore_result list = 
     match declaration_list with
-      | [] -> ();
-      | decl_head :: decl_tail -> 
-        begin
-          let () = 
-            match decl_head with
-              | Func(_, _, type_parameters, return_type, name, parameters, _, _, contract_opt, _, _, _, _) -> 
-                begin 
-                  match contract_opt with
-                    | None -> Printf.printf "Function %s has no contract.\n" name;
-                    | Some contract -> 
-                      let (_, postcond) = contract in 
-                      let res = check_expr_for_pattern postcond (Null(DummyLoc)) in
-                      Printf.printf "Checking postcondition of function %s -> %B\n" name res;
-                end
-              | _ -> Printf.printf "\tNot a function\n";
-          in 
-          check_declarations decl_tail;
-        end
-  in
-
-  let extract_postcond (pattern_str: string) : expr =
-    let (_, package_list) = parse_c_file_custom "dummy.c" reportRange reportShouldFail 0 [] [] true data_model_32bit pattern_str in
-    match package_list with
-      | pack_head :: _ -> 
-        begin
-          match pack_head with 
-            | PackageDecl(_, _, _, declarations) -> 
+      | [] -> [];
+      | head :: tail -> 
+        let recursive_call = check_declarations pattern tail in
+        match head with
+          | Func(loc, _, _, _, name, _, _, _, contract_opt, _, _, _, _) -> 
               begin
-                match declarations with
-                  | decl_head :: _ -> 
-                    begin
-                      match decl_head with
-                        | Func(_, _, _, _, _, _, _, _, contract_opt, _, _, _, _) -> 
-                          begin 
-                            match contract_opt with
-                              | Some contract -> 
-                                let (_, postcond) = contract in 
-                                postcond
-                          end
-                    end
+                match contract_opt with
+                  | None -> recursive_call
+                  | Some contract -> 
+                    let (_, postcond) = contract in 
+                    if (check_expr_for_pattern postcond pattern) then
+                      (loc, name) :: recursive_call
+                    else
+                      recursive_call
               end
-
-        end
+          | _ -> recursive_call
   in
 
-  (* let (_, package_list) = parse_c_file_custom filepath reportRange reportShouldFail 0 [] [] true data_model_32bit "" in
-    let () = check_packages package_list in *)
+  let filename_from_loc (loc: loc): string =
+    match loc with
+      | Lexed(loc0) -> let ((p1, _, _), _) = loc0 in " in file " ^ p1
+      | _ -> ""
+  in
 
-  Printf.printf "-- Stop\n";
+  let startline_from_loc (loc: loc): string =
+    match loc with
+      | Lexed(loc0) -> let ((_, l1, _), _) = loc0 in "At line " ^ string_of_int l1 ^ ": "
+      | _ -> ""
+  in
+
+  let print_explore_result ((loc, name): explore_result): unit =
+    Printf.printf("\t%sPost-condition of lemma %s()\n") (startline_from_loc loc) name
+  in
+
+  let search_for_pattern (decls_to_explore: (decl list) list) (pattern: expr): unit =
+    let rec search_for_pattern_inner (decls_to_explore: (decl list) list) (nb_results: int) : int =
+      match decls_to_explore with
+        | [] -> nb_results
+        | file_declarations :: tail -> 
+          let matches = check_declarations pattern file_declarations in
+          let nb_matches = List.length matches in
+          let _ = 
+            if (nb_matches > 0) then
+              let (loc, _) = List.hd matches in
+              Printf.printf("The explorer found %d matches%s:\n") nb_matches (filename_from_loc loc);
+              List.iter print_explore_result matches;
+          in
+          search_for_pattern_inner tail (nb_results + nb_matches)
+    in
+    let total_nb_results = search_for_pattern_inner decls_to_explore 0 in
+    Printf.printf "The explorer found a total of %d matches.\n" total_nb_results;
+  in
+
+  let include_paths: string list ref = ref [] in
+  let explore_paths: string list ref = ref [] in
+
+  (* CLA syntax definition *)
+  let cla = [ "-I", String (fun str -> include_paths := str :: !include_paths), "Add a directory to the list of directories to be searched for header files." ] in
+
+  (* Parse command-line arguments *)
+  parse cla (fun str -> explore_paths := str :: !explore_paths) "Failed to parse command-line arguments.";
+
+  (* Also add the VeriFast library path to the include paths *)
+  let files_to_explore = get_files_from_explore_paths (verifast_explore_path :: !explore_paths) in
+  let decls_to_explore = get_decl_from_filepaths files_to_explore !include_paths in
+
+  (* Execution loop *)
+  while true do
+    Printf.printf "Enter a pattern > ";
+    let pattern_str = read_line () in
+    let pattern_expr = pattern_str_to_expr pattern_str in
+    search_for_pattern decls_to_explore pattern_expr;
+  done
