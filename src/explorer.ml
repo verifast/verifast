@@ -180,7 +180,7 @@ let _ =
             else
               List.fold_left (fun acc op -> acc || (check_expr_for_pattern op pattern false)) false operands in
           match pattern with
-            | Operation(_, operator, pattern_operands) -> 
+            | Operation(_, pattern_operator, pattern_operands) when operator = pattern_operator -> 
               begin
                 let each_operand_same = 
                   if (List.length operands = List.length pattern_operands) then
@@ -202,7 +202,6 @@ let _ =
               | VarPat(_) -> false
               | DummyPat -> false
               | CtorPat(_, _, pat_list) -> fold_check_pat pat_list
-              | WCtorPat(_, _, _, _, _, _, pat_list) -> fold_check_pat pat_list
           in
 
           let pattern_in_args = 
@@ -219,28 +218,30 @@ let _ =
                   if (List.length args = List.length pattern_args) then
                     
                     let rec check_pat_equal (pat: pat) (pattern_pat: pat): bool =
+                      
                       let fold_check_pat_equal (pat_list: pat list) (pattern_pat_list: pat list): bool = 
-                        List.fold_left (fun acc (pat_in, pattern_pat_in) -> acc && (check_pat_equal pat_in pattern_pat_in)) true (zip2 pat_list pattern_pat_list) 
+                        if (List.length pat_list = List.length pattern_pat_list) then
+                          List.fold_left (fun acc (pat_in, pattern_pat_in) -> acc && (check_pat_equal pat_in pattern_pat_in)) true (zip2 pat_list pattern_pat_list)
+                        else
+                          false
                       in
+
                       match (pat, pattern_pat) with 
-                        | LitPat(expr), LitPat(pattern_expr) -> check_expr_for_pattern expr pattern_expr true
-                        | VarPat(_), VarPat(_) -> true
-                        | DummyPat, DummyPat -> true
-                        | CtorPat(_, name, pat_list), CtorPat(_, pattern_name, pattern_pat_list) when name = pattern_name ->
-                          if (List.length pat_list = List.length pattern_pat_list) then
-                            fold_check_pat_equal pat_list pattern_pat_list
-                          else
-                            false
-                        | WCtorPat(_, name1, _, name2, _, _, pat_list), WCtorPat(_, pattern_name1, _, pattern_name2, _, _, pattern_pat_list) 
-                            when name1 = pattern_name1 && name2 = pattern_name2 ->
-                          if (List.length pat_list = List.length pattern_pat_list) then
-                            fold_check_pat_equal pat_list pattern_pat_list
-                          else
-                            false
                         | _, DummyPat -> true (* if the pattern is a dummy, we don't care about the type of this expression*)
-                        | _ -> false
+                        | LitPat(expr), LitPat(pattern_expr) -> 
+                          let _ = Printf.printf "1\n" in
+                          check_expr_for_pattern expr pattern_expr true
+                        | VarPat(_), VarPat(_) -> true
+                        | CtorPat(_, name, pat_list), CtorPat(_, pattern_name, pattern_pat_list) when name = pattern_name -> fold_check_pat_equal pat_list pattern_pat_list
+                        | LitPat(expr), CtorPat(_, pattern_name, pattern_pat_list) -> 
+                          begin
+                            match expr with
+                              | CallExpr(_, name, _, _, args, _) when name = pattern_name -> fold_check_pat_equal args pattern_pat_list
+                              | _ -> false (* TODO: Add support for predicates *)
+                          end
                     in
 
+                    (* let _ = Printf.printf "Attempting exact matching on arguments of function %s\n" name in *)
                     List.fold_left (fun acc (arg, pattern_arg) -> acc && (check_pat_equal arg pattern_arg)) true (zip2 args pattern_args)
                   else
                     false
