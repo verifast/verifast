@@ -4,10 +4,6 @@ open Parser
 open Util
 open Arg
 
-(* TODOs:
-  - make the data_model a command line argument
-*)
-
 let files_blacklist = ["threading.c"]
 let verifast_explore_path = "/home/lucas/VeriFast/verifast/bin"
 
@@ -104,41 +100,37 @@ let _ =
         List.append absolute_files (get_files_from_explore_paths tail)
   in
 
-  let rec get_decl_from_filepaths (filepaths: string list) (include_paths: string list): (decl list) list =
+  let rec get_decl_from_filepaths (filepaths: string list) (include_paths: string list) (define_macros: string list): (decl list) list =
     match filepaths with
       | [] -> []
       | filepath :: tail ->
-        (* let _ = Printf.printf "%s\n" filepath in *)
+        let fail_msg (path: string) (msg: string) : unit = Printf.printf("[FILE IGNORED] Parsing of file %s failed with message: %s.\n") path msg in
         if (Filename.check_suffix filepath ".gh" || Filename.check_suffix filepath ".h") then
               let packages = 
                 try
-                  let (_, packages_tmp) = parse_header_file filepath reportRange reportShouldFail 0 include_paths [] false data_model_32bit in
+                  let (_, packages_tmp) = parse_header_file filepath reportRange reportShouldFail 0 include_paths define_macros false data_model_32bit in
                   packages_tmp
                 with
-                  Lexer.ParseException(_, msg) -> 
-                    let _ = Printf.printf("Parsing of file %s failed with message: %s. The file will be ignored.\n") filepath msg in
-                    []
+                  Lexer.ParseException(_, msg) -> let _ = fail_msg filepath msg in []
               in
               match packages with
-                | [] -> get_decl_from_filepaths tail include_paths
+                | [] -> get_decl_from_filepaths tail include_paths define_macros
                 | pack_head :: pack_tail -> 
-                    match pack_head with | PackageDecl(_, _, _, declarations) -> declarations :: (get_decl_from_filepaths tail include_paths)
+                    match pack_head with | PackageDecl(_, _, _, declarations) -> declarations :: (get_decl_from_filepaths tail include_paths define_macros)
         else if (Filename.check_suffix filepath ".c") then
             let packages = 
                 try
-                  let (_, packages_tmp) = parse_c_file filepath reportRange reportShouldFail 0 include_paths [] false data_model_32bit in
+                  let (_, packages_tmp) = parse_c_file filepath reportRange reportShouldFail 0 include_paths define_macros false data_model_32bit in
                   packages_tmp
                 with
-                  Lexer.ParseException(_, msg) -> 
-                    let _ = Printf.printf("Parsing of file %s failed with message: %s. The file will be ignored.\n") filepath msg in
-                    []
+                  Lexer.ParseException(_, msg) -> let _ = fail_msg filepath msg in []
             in
             match packages with
-              | [] -> get_decl_from_filepaths tail include_paths
+              | [] -> get_decl_from_filepaths tail include_paths define_macros
               | pack_head :: pack_tail -> 
-                  match pack_head with | PackageDecl(_, _, _, declarations) -> declarations :: (get_decl_from_filepaths tail include_paths)
+                  match pack_head with | PackageDecl(_, _, _, declarations) -> declarations :: (get_decl_from_filepaths tail include_paths define_macros)
         else (* Should never happen. If it does, simply ignore the file *)
-          get_decl_from_filepaths tail include_paths
+          get_decl_from_filepaths tail include_paths define_macros
   in
 
   let pattern_str_to_expr (pattern_str: string) : expr =
@@ -228,9 +220,7 @@ let _ =
 
                       match (pat, pattern_pat) with 
                         | _, DummyPat -> true (* if the pattern is a dummy, we don't care about the type of this expression*)
-                        | LitPat(expr), LitPat(pattern_expr) -> 
-                          let _ = Printf.printf "1\n" in
-                          check_expr_for_pattern expr pattern_expr true
+                        | LitPat(expr), LitPat(pattern_expr) -> check_expr_for_pattern expr pattern_expr true
                         | VarPat(_), VarPat(_) -> true
                         | CtorPat(_, name, pat_list), CtorPat(_, pattern_name, pattern_pat_list) when name = pattern_name -> fold_check_pat_equal pat_list pattern_pat_list
                         | LitPat(expr), CtorPat(_, pattern_name, pattern_pat_list) -> 
@@ -311,17 +301,21 @@ let _ =
   in
 
   let include_paths: string list ref = ref [] in
+  let define_macros: string list ref = ref [] in
   let explore_paths: string list ref = ref [] in
 
   (* CLA syntax definition *)
-  let cla = [ "-I", String (fun str -> include_paths := str :: !include_paths), "Add a directory to the list of directories to be searched for header files." ] in
+  let cla = [ "-I", String (fun str -> include_paths := str :: !include_paths), "Add a directory to the list of directories to be searched for header files." 
+            ; "-D", String (fun str -> define_macros := str :: !define_macros), "Predefine name as a macro, with definition 1."
+            ]
+  in
 
   (* Parse command-line arguments *)
   parse cla (fun str -> explore_paths := str :: !explore_paths) "Failed to parse command-line arguments.";
 
   (* Also add the VeriFast library path to the include paths *)
-  let files_to_explore = get_files_from_explore_paths ((*verifast_explore_path ::*)!explore_paths) in
-  let decls_to_explore = get_decl_from_filepaths files_to_explore !include_paths in
+  let files_to_explore = get_files_from_explore_paths (verifast_explore_path ::!explore_paths) in
+  let decls_to_explore = get_decl_from_filepaths files_to_explore !include_paths !define_macros in
 
   (* Execution loop *)
   while true do
