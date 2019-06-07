@@ -1,8 +1,8 @@
 //@ #include <list.gh>
 
 /*@ 
-    lemma void dummy_function(int n, list<int> xs) 
+    lemma void dummy_function(list<int> xs) 
         requires true; 
-        ensures take(n, xs) == nil; 
+        ensures take(0, xs) == nil; 
     {} 
 @*/

@@ -166,7 +166,7 @@ let _ =
         end
   in
 
-  let rec check_expr_for_pattern (expr: expr) (pattern: expr) : bool = 
+  let rec check_expr_for_pattern (expr: expr) (pattern: expr) (exactMacthOnly: bool) : bool = 
     match expr with
       | True(_) -> (match pattern with True(_) -> true | _ -> false)
       | False(_) -> (match pattern with False(_) -> true | _ -> false)
@@ -174,13 +174,17 @@ let _ =
       | Var(_) -> (match pattern with Var(_) -> true | _ -> false)
       | Operation(_, operator, operands) ->
         begin
-          let pattern_in_operands = List.fold_left (fun acc op -> acc || (check_expr_for_pattern op pattern)) false operands in
+          let pattern_in_operands = 
+            if (exactMacthOnly) then
+              false
+            else
+              List.fold_left (fun acc op -> acc || (check_expr_for_pattern op pattern false)) false operands in
           match pattern with
-            | Operation(_, pattern_operator, pattern_operands) -> 
+            | Operation(_, operator, pattern_operands) -> 
               begin
-                let each_operand_same : bool = 
-                  if (operator = pattern_operator && List.length operands = List.length pattern_operands) then
-                    List.fold_left (fun acc (expr_op, pattern_op) -> acc && (check_expr_for_pattern expr_op pattern_op)) true (zip2 operands pattern_operands)
+                let each_operand_same = 
+                  if (List.length operands = List.length pattern_operands) then
+                    List.fold_left (fun acc (expr_op, pattern_op) -> acc && (check_expr_for_pattern expr_op pattern_op true)) true (zip2 operands pattern_operands)
                   else
                     false
                 in
@@ -188,47 +192,65 @@ let _ =
               end
             | _ -> pattern_in_operands
         end
-      | CallExpr(_, name, types, _, args, _) -> (* supports only LitPat and DummyPat as arguments in expr and pattern*)
+      | CallExpr(_, name, _, _, args, _) ->
         begin
-          let filter_func x = match x with | LitPat(_) -> true | _ -> false in
-          let map_func x = match x with | LitPat(ex) -> ex | _ -> Null(DummyLoc) in (* default case cannot happen because of filter *)
-          let filter_args = List.filter filter_func args in
-          let map_filter_args = List.map map_func filter_args in
-          let pattern_in_args = List.fold_left (fun acc arg -> acc || (check_expr_for_pattern arg pattern)) false map_filter_args in
+
+          let rec check_pat_for_pattern (pat: pat): bool =
+            let fold_check_pat (pat_list: pat list): bool = List.fold_left (fun acc pat_in -> acc || (check_pat_for_pattern pat_in)) false pat_list in
+            match pat with 
+              | LitPat(expr) -> check_expr_for_pattern expr pattern false
+              | VarPat(_) -> false
+              | DummyPat -> false
+              | CtorPat(_, _, pat_list) -> fold_check_pat pat_list
+              | WCtorPat(_, _, _, _, _, _, pat_list) -> fold_check_pat pat_list
+          in
+
+          let pattern_in_args = 
+            if (exactMacthOnly) then
+              false
+            else
+              List.fold_left (fun acc arg -> acc || (check_pat_for_pattern arg)) false args
+          in
+          
           match pattern with
-            | CallExpr(_, pattern_name, pattern_types, _, pattern_args, _) ->
+            | CallExpr(_, pattern_name, _, _, pattern_args, _) when name = pattern_name ->
               begin
-                let each_arg_same : bool =
-                  let ziped_args = zip2 args pattern_args in
-                  let rec dummy_in_expr_not_in_pattern (ziped_args: (pat * pat) list) : bool = 
-                    (* returns false if at least one argument of expr is a dummy and the corresponding one in the pattern is not *)
-                    match ziped_args with
-                      | [] -> true
-                      | (DummyPat, pattern_arg) :: _ when pattern_arg <> DummyPat -> false
-                      | head :: tail -> dummy_in_expr_not_in_pattern tail
-                  in
-                  if (dummy_in_expr_not_in_pattern ziped_args && name = pattern_name && List.length args = List.length pattern_args) then (* check that types are the same ?*)
-                    let rec eliminate_dummy_in_pattern (ziped_args: (pat * pat) list) : (pat * pat) list =
-                      match ziped_args with
-                        | [] -> []
-                        | (_, DummyPat) :: tail -> eliminate_dummy_in_pattern tail
-                        | head :: tail -> head :: (eliminate_dummy_in_pattern tail)
+                let each_arg_same =
+                  if (List.length args = List.length pattern_args) then
+                    
+                    let rec check_pat_equal (pat: pat) (pattern_pat: pat): bool =
+                      let fold_check_pat_equal (pat_list: pat list) (pattern_pat_list: pat list): bool = 
+                        List.fold_left (fun acc (pat_in, pattern_pat_in) -> acc && (check_pat_equal pat_in pattern_pat_in)) true (zip2 pat_list pattern_pat_list) 
+                      in
+                      match (pat, pattern_pat) with 
+                        | LitPat(expr), LitPat(pattern_expr) -> check_expr_for_pattern expr pattern_expr true
+                        | VarPat(_), VarPat(_) -> true
+                        | DummyPat, DummyPat -> true
+                        | CtorPat(_, name, pat_list), CtorPat(_, pattern_name, pattern_pat_list) when name = pattern_name ->
+                          if (List.length pat_list = List.length pattern_pat_list) then
+                            fold_check_pat_equal pat_list pattern_pat_list
+                          else
+                            false
+                        | WCtorPat(_, name1, _, name2, _, _, pat_list), WCtorPat(_, pattern_name1, _, pattern_name2, _, _, pattern_pat_list) 
+                            when name1 = pattern_name1 && name2 = pattern_name2 ->
+                          if (List.length pat_list = List.length pattern_pat_list) then
+                            fold_check_pat_equal pat_list pattern_pat_list
+                          else
+                            false
+                        | _, DummyPat -> true (* if the pattern is a dummy, we don't care about the type of this expression*)
+                        | _ -> false
                     in
-                    let rec extract_expr (ziped_args: (pat * pat) list) : (expr * expr) list =
-                      match ziped_args with
-                        | [] -> []
-                        | (LitPat(x), LitPat(y)) :: tail -> (x, y) :: (extract_expr tail)
-                        | _ :: tail -> (Null(DummyLoc), Null(DummyLoc)) :: (extract_expr tail) (* default case cannot happen because of previous filtering *)
-                    in
-                    List.fold_left (fun acc (expr_arg, pattern_arg) -> acc && (check_expr_for_pattern expr_arg pattern_arg)) false (extract_expr (eliminate_dummy_in_pattern ziped_args))
+
+                    List.fold_left (fun acc (arg, pattern_arg) -> acc && (check_pat_equal arg pattern_arg)) true (zip2 args pattern_args)
                   else
                     false
                 in
                 each_arg_same || pattern_in_args
               end
             | _ -> pattern_in_args
+        
         end
-      | Sep(_, lhs, rhs) -> (check_expr_for_pattern lhs pattern) || (check_expr_for_pattern rhs pattern)
+      | Sep(_, lhs, rhs) -> (check_expr_for_pattern lhs pattern exactMacthOnly) || (check_expr_for_pattern rhs pattern exactMacthOnly)
       | _ -> false;
   in
 
@@ -244,7 +266,7 @@ let _ =
                   | None -> recursive_call
                   | Some contract -> 
                     let (_, postcond) = contract in 
-                    if (check_expr_for_pattern postcond pattern) then
+                    if (check_expr_for_pattern postcond pattern false) then
                       (loc, name) :: recursive_call
                     else
                       recursive_call
@@ -252,23 +274,23 @@ let _ =
           | _ -> recursive_call
   in
 
-  let filename_from_loc (loc: loc): string =
-    match loc with
-      | Lexed(loc0) -> let ((p1, _, _), _) = loc0 in " in file " ^ p1
-      | _ -> ""
-  in
-
-  let startline_from_loc (loc: loc): string =
-    match loc with
-      | Lexed(loc0) -> let ((_, l1, _), _) = loc0 in "At line " ^ string_of_int l1 ^ ": "
-      | _ -> ""
-  in
-
-  let print_explore_result ((loc, name): explore_result): unit =
-    Printf.printf("\t%sPost-condition of lemma %s()\n") (startline_from_loc loc) name
-  in
-
   let search_for_pattern (decls_to_explore: (decl list) list) (pattern: expr): unit =
+
+    let filename_from_loc (loc: loc): string =
+      match loc with
+        | Lexed(loc0) -> let ((p1, _, _), _) = loc0 in " in file " ^ p1
+        | _ -> ""
+    in
+
+    let print_explore_result ((loc, name): explore_result): unit =
+      let startline_from_loc (loc: loc): string =
+        match loc with
+          | Lexed(loc0) -> let ((_, l1, _), _) = loc0 in "At line " ^ string_of_int l1 ^ ": "
+          | _ -> ""
+      in  
+      Printf.printf("\t%sPost-condition of lemma %s()\n") (startline_from_loc loc) name
+    in
+
     let rec search_for_pattern_inner (decls_to_explore: (decl list) list) (nb_results: int) : int =
       match decls_to_explore with
         | [] -> nb_results
@@ -278,13 +300,13 @@ let _ =
           let _ = 
             if (nb_matches > 0) then
               let (loc, _) = List.hd matches in
-              Printf.printf("The explorer found %d matches%s:\n") nb_matches (filename_from_loc loc);
+              Printf.printf("The explorer found %d match(es)%s:\n") nb_matches (filename_from_loc loc);
               List.iter print_explore_result matches;
           in
           search_for_pattern_inner tail (nb_results + nb_matches)
     in
     let total_nb_results = search_for_pattern_inner decls_to_explore 0 in
-    Printf.printf "The explorer found a total of %d matches.\n" total_nb_results;
+    Printf.printf "The explorer found a total of %d match(es).\n" total_nb_results;
   in
 
   let include_paths: string list ref = ref [] in
@@ -297,7 +319,7 @@ let _ =
   parse cla (fun str -> explore_paths := str :: !explore_paths) "Failed to parse command-line arguments.";
 
   (* Also add the VeriFast library path to the include paths *)
-  let files_to_explore = get_files_from_explore_paths (verifast_explore_path :: !explore_paths) in
+  let files_to_explore = get_files_from_explore_paths ((*verifast_explore_path ::*)!explore_paths) in
   let decls_to_explore = get_decl_from_filepaths files_to_explore !include_paths in
 
   (* Execution loop *)
