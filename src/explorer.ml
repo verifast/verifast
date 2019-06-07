@@ -4,9 +4,6 @@ open Parser
 open Util
 open Arg
 
-let files_blacklist = ["threading.c"]
-let verifast_explore_path = "/home/lucas/VeriFast/verifast/bin"
-
 type explore_result = (loc * string) 
 
 let _ =
@@ -87,7 +84,7 @@ let _ =
   (* My code *)
 
   let file_filter (filename: string): bool =
-    (Filename.check_suffix filename ".c" || Filename.check_suffix filename ".h" || Filename.check_suffix filename ".gh") && not (List.mem filename files_blacklist)
+    Filename.check_suffix filename ".c" || Filename.check_suffix filename ".h" || Filename.check_suffix filename ".gh"
   in
 
   let rec get_files_from_explore_paths (explore_paths: string list): string list =
@@ -176,7 +173,8 @@ let _ =
               begin
                 let each_operand_same = 
                   if (List.length operands = List.length pattern_operands) then
-                    List.fold_left (fun acc (expr_op, pattern_op) -> acc && (check_expr_for_pattern expr_op pattern_op true)) true (zip2 operands pattern_operands)
+                    (List.fold_left (fun acc (expr_op, pattern_op) -> acc && (check_expr_for_pattern expr_op pattern_op true)) true (zip2 operands pattern_operands)) ||
+                    (List.fold_left (fun acc (expr_op, pattern_op) -> acc && (check_expr_for_pattern expr_op pattern_op true)) true (zip2 (List.rev operands) pattern_operands))
                   else
                     false
                 in
@@ -313,8 +311,7 @@ let _ =
   (* Parse command-line arguments *)
   parse cla (fun str -> explore_paths := str :: !explore_paths) "Failed to parse command-line arguments.";
 
-  (* Also add the VeriFast library path to the include paths *)
-  let files_to_explore = get_files_from_explore_paths (verifast_explore_path ::!explore_paths) in
+  let files_to_explore = get_files_from_explore_paths (!explore_paths) in
   let decls_to_explore = get_decl_from_filepaths files_to_explore !include_paths !define_macros in
 
   (* Execution loop *)
