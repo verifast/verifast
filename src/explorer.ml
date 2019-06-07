@@ -302,8 +302,17 @@ let _ =
 
   (* Execution loop *)
   while true do
-    Printf.printf "Enter a pattern > ";
+    Printf.printf "\nEnter a pattern > ";
     let pattern_str = read_line () in
-    let pattern_expr = pattern_str_to_expr pattern_str in
-    search_for_pattern decls_to_explore pattern_expr;
+    let pattern_expr = 
+      try 
+        Some (pattern_str_to_expr pattern_str)
+      with
+        Lexer.ParseException(_, msg) -> 
+          let _ = Printf.printf "Invalid pattern.\n" in
+          None
+    in
+    match pattern_expr with 
+      | Some(pat) -> search_for_pattern decls_to_explore pat
+      | None -> ()
   done
