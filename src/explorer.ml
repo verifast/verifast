@@ -155,6 +155,65 @@ let _ =
         end
   in
 
+  let rec string_of_expr (expr: expr) : string =
+
+    let string_of_operator (op: operator) : string =
+      match op with
+      | Add -> "+"
+      | Sub -> "-"
+      | PtrDiff -> "p-"
+      | Le -> "<="
+      | Ge -> ">="
+      | Lt -> "<"
+      | Gt -> ">"
+      | Eq -> "=="
+      | Neq -> "!="
+      | And -> "&&"
+      | Or -> "||"
+      | Xor -> "^^"
+      | Not -> "!"
+      | Mul -> "*"
+      | Div -> "/"
+      | Mod -> "%%"
+      | BitNot -> "~"
+      | BitAnd -> "&"
+      | BitXor -> "^"
+      | BitOr -> "|"
+      | ShiftLeft -> "<<"
+      | ShiftRight-> ">>"
+    in
+
+    let rec string_of_pat (pat: pat) : string =
+      match pat with
+        | LitPat(expr) -> string_of_expr expr
+        | VarPat(_, varname) ->"?Var_" ^ varname
+        | DummyPat -> "_"
+        | CtorPat(_, name, pat_list) -> "Ctor_( " ^ name ^ (string_of_pat_list pat_list) ^ " )"
+    and string_of_pat_list (pat_list: pat list) : string =
+      match pat_list with
+        | [] -> ""
+        | head :: [] -> string_of_pat head
+        | head :: tail -> (string_of_pat head) ^ " , " ^ (string_of_pat_list tail)
+    in
+
+    let rec string_of_expr_list (expr_list: expr list) : string =
+      match expr_list with
+        | [] -> ""
+        | head :: [] -> string_of_expr head
+        | head :: tail -> (string_of_expr head) ^ " , " ^ (string_of_expr_list tail)
+    in
+
+    match expr with 
+      | True(_) -> "True"
+      | False(_) -> "False"
+      | Null(_) -> "Null"
+      | Var(_, varname) -> "Var_" ^ varname
+      | Operation(_, operator, operands) -> (string_of_operator operator) ^ "( " ^ (string_of_expr_list operands) ^ " )"
+      | CallExpr(_, name, _, _, args, _) -> name ^ "( " ^ (string_of_pat_list args) ^ " )"
+      | Sep(_, lhs, rhs) -> (string_of_expr lhs) ^ " &*& " ^ (string_of_expr rhs)
+      | _ -> "unknown"
+  in
+
   let rec check_expr_for_pattern (expr: expr) (pattern: expr) (exactMacthOnly: bool) : bool = 
     match expr with
       | True(_) -> (match pattern with True(_) -> true | _ -> false)
@@ -294,6 +353,7 @@ let _ =
           in
           search_for_pattern_inner tail (nb_results + nb_matches)
     in
+    let _ = Printf.printf "%s\n" (string_of_expr pattern) in 
     let total_nb_results = search_for_pattern_inner decls_to_explore 0 in
     Printf.printf "The explorer found a total of %d match(es).\n" total_nb_results;
   in
