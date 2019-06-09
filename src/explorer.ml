@@ -5,6 +5,7 @@ open Util
 open Arg
 
 type explore_result = (loc * string) 
+type lemma = (loc * string * asn)
 
 let _ =
 
@@ -97,7 +98,7 @@ let _ =
         List.append absolute_files (get_files_from_explore_paths tail)
   in
 
-  let rec get_decl_from_filepaths (filepaths: string list) (include_paths: string list) (define_macros: string list): (decl list) list =
+  let rec get_decls_from_filepaths (filepaths: string list) (include_paths: string list) (define_macros: string list): (decl list) list =
     match filepaths with
       | [] -> []
       | filepath :: tail ->
@@ -111,9 +112,9 @@ let _ =
                   Lexer.ParseException(_, msg) -> let _ = fail_msg filepath msg in []
               in
               match packages with
-                | [] -> get_decl_from_filepaths tail include_paths define_macros
+                | [] -> get_decls_from_filepaths tail include_paths define_macros
                 | pack_head :: pack_tail -> 
-                    match pack_head with | PackageDecl(_, _, _, declarations) -> declarations :: (get_decl_from_filepaths tail include_paths define_macros)
+                    match pack_head with | PackageDecl(_, _, _, declarations) -> declarations :: (get_decls_from_filepaths tail include_paths define_macros)
         else if (Filename.check_suffix filepath ".c") then
             let packages = 
                 try
@@ -123,13 +124,35 @@ let _ =
                   Lexer.ParseException(_, msg) -> let _ = fail_msg filepath msg in []
             in
             match packages with
-              | [] -> get_decl_from_filepaths tail include_paths define_macros
+              | [] -> get_decls_from_filepaths tail include_paths define_macros
               | pack_head :: pack_tail -> 
-                  match pack_head with | PackageDecl(_, _, _, declarations) -> declarations :: (get_decl_from_filepaths tail include_paths define_macros)
+                  match pack_head with | PackageDecl(_, _, _, declarations) -> declarations :: (get_decls_from_filepaths tail include_paths define_macros)
         else (* Should never happen. If it does, simply ignore the file *)
-          get_decl_from_filepaths tail include_paths define_macros
+          get_decls_from_filepaths tail include_paths define_macros
   in
 
+  let rec get_lemmas_from_decls (decls_to_explore: (decl list) list) : lemma list =
+    
+    let rec parse_decl_list (declaration_list: decl list): lemma list = 
+    match declaration_list with
+      | [] -> []
+      | head :: tail -> 
+        match head with
+          | Func(loc, _, _, _, name, _, _, _, contract_opt, _, _, _, _) -> 
+            begin 
+              match contract_opt with
+                | None -> parse_decl_list tail
+                | Some contract -> let (_, postcond) = contract in (loc, name, postcond) :: parse_decl_list tail
+            end
+          | FuncTypeDecl(loc, _, _, name, _, _, _, (_, postcond, _)) -> (loc, name, postcond) :: parse_decl_list tail
+          | _ -> parse_decl_list tail
+    in
+
+    match decls_to_explore with
+      | [] -> []
+      | head :: tail -> List.append (parse_decl_list head) (get_lemmas_from_decls tail)
+  in
+    
   let pattern_str_to_expr (pattern_str: string) : expr =
     let (_, package_list) = parse_c_file_custom "dummy.c" reportRange reportShouldFail 0 [] [] true data_model_32bit pattern_str in
     match package_list with
@@ -203,14 +226,14 @@ let _ =
       match pat_list with
         | [] -> ""
         | head :: [] -> string_of_pat head
-        | head :: tail -> (string_of_pat head) ^ " ," ^ (string_of_pat_list tail)
+        | head :: tail -> (string_of_pat head) ^ ", " ^ (string_of_pat_list tail)
     in
 
     let rec string_of_expr_list (expr_list: expr list) : string =
       match expr_list with
         | [] -> ""
         | head :: [] -> string_of_expr head
-        | head :: tail -> (string_of_expr head) ^ " ," ^ (string_of_expr_list tail)
+        | head :: tail -> (string_of_expr head) ^ ", " ^ (string_of_expr_list tail)
     in
 
     let rec string_of_switch (switch: switch_asn_clause) : string =
@@ -220,7 +243,26 @@ let _ =
       match switch_list with
         | [] -> ""
         | head :: [] -> string_of_switch head
-        | head :: tail -> (string_of_switch head) ^ " ," ^ (string_of_switch_list tail)
+        | head :: tail -> (string_of_switch head) ^ ", " ^ (string_of_switch_list tail)
+    in
+
+    let rec string_of_type_expr (type_expr: type_expr) : string =
+      match type_expr with
+        | StructTypeExpr(_, name_opt, _) -> (match name_opt with Some name -> name | _ -> "")
+        | EnumTypeExpr(_, name_opt, _) -> (match name_opt with Some name -> name | _ -> "")
+        | PtrTypeExpr(_, type_expr_in) -> string_of_type_expr type_expr_in ^ "*"
+        | ArrayTypeExpr(_, type_expr_in) -> string_of_type_expr type_expr_in ^ "[]"
+        | StaticArrayTypeExpr(_, type_expr_in, nb_elems) -> string_of_type_expr type_expr_in ^ "[" ^ string_of_int nb_elems ^ "]"
+        | ManifestTypeExpr(_) -> "manifest"
+        | IdentTypeExpr(_, _, name) -> name
+        | ConstructedTypeExpr(_, name, type_expr_list) -> name ^ "<" ^ string_of_type_expr_list type_expr_list ^ ">"
+        | PredTypeExpr(_, type_expr_list, _) -> string_of_type_expr_list type_expr_list
+        | PureFuncTypeExpr(_, type_expr_list) -> string_of_type_expr_list type_expr_list
+    and string_of_type_expr_list (type_expr_list: type_expr list) : string =
+      match type_expr_list with
+        | [] -> ""
+        | head :: [] -> string_of_type_expr head
+        | head :: tail -> (string_of_type_expr head) ^ ", " ^ (string_of_type_expr_list tail)
     in
 
     match expr with 
@@ -245,6 +287,8 @@ let _ =
       | CallExpr(_, name, _, _, args, _) -> name ^ "(" ^ string_of_pat_list args ^ ")"
       | ExprCallExpr(_, callee_expr, args_expr) -> string_of_expr callee_expr ^ "(" ^ string_of_expr_list args_expr ^ ")"
       | IfExpr(_, cond_expr, then_expr, else_expr) -> "if (" ^ string_of_expr cond_expr ^ ") then {" ^ string_of_expr then_expr ^ "} else {" ^ string_of_expr else_expr ^ "}"
+      | CastExpr(_, type_cast, expr_in) -> "(" ^ string_of_type_expr type_cast ^ ")" ^ string_of_expr expr_in 
+      | SizeofExpr(_, type_sizeof) -> "sizeof(" ^ string_of_type_expr type_sizeof ^ ")"
       | AddressOf(_, expr_in) -> "&" ^ string_of_expr expr_in
       | AssignExpr(_, rec_expr, val_expr) -> "(" ^ string_of_expr rec_expr ^ " = " ^ string_of_expr val_expr ^ ")"
       | PointsTo(_, expr_in, pat) -> "PointsTo(" ^ string_of_expr expr_in ^ ", " ^ string_of_pat pat ^ ")"
@@ -252,6 +296,7 @@ let _ =
       | Sep(_, lhs, rhs) -> (string_of_expr lhs) ^ " &*& " ^ (string_of_expr rhs)
       | IfAsn(_, cond_expr, then_expr, else_expr) -> "if (" ^ string_of_expr cond_expr ^ ") then {" ^ string_of_expr then_expr ^ "} else {" ^ string_of_expr else_expr ^ "}"
       | SwitchAsn(_, switch_expr, clauses) -> "switch(" ^ string_of_expr switch_expr ^ ") {" ^ string_of_switch_list clauses ^ "}"
+      | EmpAsn(_) -> "emp" 
       | CoefAsn(_, perm, expr_in) -> "[" ^ string_of_pat perm ^ "]" ^ string_of_expr expr_in 
       | _ -> "unknown"
   in
@@ -553,7 +598,10 @@ let _ =
   parse cla (fun str -> explore_paths := str :: !explore_paths) "Failed to parse command-line arguments.";
 
   let files_to_explore = get_files_from_explore_paths (!explore_paths) in
-  let decls_to_explore = get_decl_from_filepaths files_to_explore !include_paths !define_macros in
+  let decls_to_explore = get_decls_from_filepaths files_to_explore !include_paths !define_macros in
+  let lemmas_to_explore = get_lemmas_from_decls decls_to_explore in
+  let _ = Printf.printf "\n== %d lemmas were parsed and will be searched for a pattern ==\n" (List.length lemmas_to_explore) in
+  let _ = List.iter (fun (_, name, postcond) -> Printf.printf "%s(): %s\n" name (string_of_expr postcond)) lemmas_to_explore in
 
   (* Execution loop *)
   while true do

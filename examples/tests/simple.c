@@ -4,6 +4,11 @@
     lemma void take_simple(list<int> xs) 
         requires true; 
         ensures take(0, xs) == nil; 
+    {}
+
+    lemma void take_stupid(list<int> xs) 
+        requires true; 
+        ensures take(0, xs) <= nil; 
     {} 
 
     lemma void take_drop(list<int> xs) 
