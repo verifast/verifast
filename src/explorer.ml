@@ -189,7 +189,7 @@ let _ =
         | LitPat(expr) -> string_of_expr expr
         | VarPat(_, varname) ->"?Var_" ^ varname
         | DummyPat -> "_"
-        | CtorPat(_, name, pat_list) -> "Ctor_( " ^ name ^ (string_of_pat_list pat_list) ^ " )"
+        | CtorPat(_, name, pat_list) -> "Ctor_" ^ name ^ "(" ^ string_of_pat_list pat_list ^ " )"
     and string_of_pat_list (pat_list: pat list) : string =
       match pat_list with
         | [] -> ""
@@ -236,6 +236,10 @@ let _ =
       | CallExpr(_, name, _, _, args, _) -> name ^ "(" ^ string_of_pat_list args ^ ")"
       | ExprCallExpr(_, callee_expr, args_expr) -> string_of_expr callee_expr ^ "(" ^ string_of_expr_list args_expr ^ ")"
       | IfExpr(_, cond_expr, then_expr, else_expr) -> "if (" ^ string_of_expr cond_expr ^ ") then {" ^ string_of_expr then_expr ^ "} else {" ^ string_of_expr else_expr ^ "}"
+      | AddressOf(_, expr_in) -> "&" ^ string_of_expr expr_in
+      | AssignExpr(_, rec_expr, val_expr) -> "(" ^ string_of_expr rec_expr ^ " = " ^ string_of_expr val_expr ^ ")"
+      | PointsTo(_, expr_in, pat) -> "PointsTo(" ^ string_of_expr expr_in ^ ", " ^ string_of_pat pat ^ ")"
+      | ExprAsn(_, expr_in) -> string_of_expr expr_in
       | Sep(_, lhs, rhs) -> (string_of_expr lhs) ^ " &*& " ^ (string_of_expr rhs)
       | IfAsn(_, cond_expr, then_expr, else_expr) -> "if (" ^ string_of_expr cond_expr ^ ") then {" ^ string_of_expr then_expr ^ "} else {" ^ string_of_expr else_expr ^ "}"
       | SwitchAsn(_, switch_expr, clauses) -> "switch(" ^ string_of_expr switch_expr ^ ") {" ^ string_of_switch_list clauses ^ "}"
@@ -291,7 +295,8 @@ let _ =
         | _ -> false
     in
 
-    (* SwitchExpr, AddressOf, ExprAsn, PredNameExpr, PointsTo*)
+    (* AssignOpExpr*)
+    (* operations ! *)
 
     match expr with
       | True(_) -> (match pattern with True(_) -> true | _ -> false)
@@ -395,7 +400,36 @@ let _ =
               pattern_inside || (check_expr_for_pattern callee_expr pattern_callee_expr true && check_expr_list_for_pattern_list args_expr pattern_args_expr)
             | _ -> pattern_inside
         end
-      | IfExpr(_, cond_expr, then_expr, else_expr) -> check_if_then_else [cond_expr; then_expr; else_expr]      
+      | IfExpr(_, cond_expr, then_expr, else_expr) -> check_if_then_else [cond_expr; then_expr; else_expr]
+      | AddressOf(_, expr_in) ->
+        begin
+          let pattern_inside = if (exactMacthOnly) then false else check_expr_for_pattern expr_in pattern false in
+          match pattern with
+            | AddressOf(_, pattern_expr_in) -> check_expr_for_pattern expr_in pattern_expr_in true || pattern_inside
+            | _ -> pattern_inside 
+        end
+      | AssignExpr(_, rec_expr, val_expr) -> 
+        begin
+          let pattern_inside = if (exactMacthOnly) then false else (check_expr_for_pattern rec_expr pattern false) || (check_expr_for_pattern val_expr pattern false) in
+          match pattern with
+              | AssignExpr(_, pattern_rec_expr, pattern_val_expr) -> 
+                pattern_inside || (check_expr_for_pattern rec_expr pattern_rec_expr true && check_expr_for_pattern val_expr pattern_val_expr true)
+              | _ -> pattern_inside
+        end
+      | PointsTo(_, expr_in, pat) ->
+        begin
+          let pattern_inside = if (exactMacthOnly) then false else check_expr_for_pattern expr_in pattern false || check_pat_for_pattern pat pattern in
+          match pattern with
+            | PointsTo(_, pattern_expr_in, pattern_pat) -> pattern_inside || (check_expr_for_pattern expr_in pattern_expr_in true && check_pat_equal pat pattern_pat) 
+            | _ -> pattern_inside 
+        end
+      | ExprAsn(_, expr_in) ->
+        begin
+          let pattern_inside = if (exactMacthOnly) then false else check_expr_for_pattern expr_in pattern false in
+          match pattern with
+            | ExprAsn(_, pattern_expr_in) -> check_expr_for_pattern expr_in pattern_expr_in true || pattern_inside
+            | _ -> pattern_inside 
+        end
       | Sep(_, lhs, rhs) -> (check_expr_for_pattern lhs pattern exactMacthOnly) || (check_expr_for_pattern rhs pattern exactMacthOnly)
       | IfAsn(_, cond_expr, then_expr, else_expr) -> check_if_then_else [cond_expr; then_expr; else_expr]
       | SwitchAsn(_, switch_expr, clauses) -> 
