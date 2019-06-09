@@ -155,33 +155,34 @@ let _ =
         end
   in
 
-  let rec string_of_expr (expr: expr) : string =
+  (* Second return value is true if this is a binary operation, false either. Third return value true when binary operation is symmetric *)
+  let operator_info (op: operator) : string * bool * bool =
+    match op with
+    | Add -> "+", true, true
+    | Sub -> "-", true, false
+    | PtrDiff -> "p-", true, false
+    | Le -> "<=", true, false
+    | Ge -> ">=", true, false
+    | Lt -> "<", true, false
+    | Gt -> ">", true, false
+    | Eq -> "==", true, true
+    | Neq -> "!=", true, true
+    | And -> "&&", true, true
+    | Or -> "||", true, true
+    | Xor -> "^^", true, true
+    | Not -> "!", false, false
+    | Mul -> "*", true, true
+    | Div -> "/", true, false
+    | Mod -> "%%", true, false
+    | BitNot -> "~", false, false
+    | BitAnd -> "&", false, false
+    | BitXor -> "^", false, false
+    | BitOr -> "|", false, false
+    | ShiftLeft -> "<<", true, false
+    | ShiftRight-> ">>", true, false
+  in
 
-    let string_of_operator (op: operator) : string =
-      match op with
-      | Add -> "+"
-      | Sub -> "-"
-      | PtrDiff -> "p-"
-      | Le -> "<="
-      | Ge -> ">="
-      | Lt -> "<"
-      | Gt -> ">"
-      | Eq -> "=="
-      | Neq -> "!="
-      | And -> "&&"
-      | Or -> "||"
-      | Xor -> "^^"
-      | Not -> "!"
-      | Mul -> "*"
-      | Div -> "/"
-      | Mod -> "%%"
-      | BitNot -> "~"
-      | BitAnd -> "&"
-      | BitXor -> "^"
-      | BitOr -> "|"
-      | ShiftLeft -> "<<"
-      | ShiftRight-> ">>"
-    in
+  let rec string_of_expr (expr: expr) : string =
 
     let rec string_of_pat (pat: pat) : string =
       match pat with
@@ -208,38 +209,115 @@ let _ =
       | False(_) -> "False"
       | Null(_) -> "Null"
       | Var(_, varname) -> "Var_" ^ varname
-      | Operation(_, operator, operands) -> (string_of_operator operator) ^ "( " ^ (string_of_expr_list operands) ^ " )"
-      | CallExpr(_, name, _, _, args, _) -> name ^ "( " ^ (string_of_pat_list args) ^ " )"
+      | TruncatingExpr(_, expr_in) -> "Truncating( " ^ string_of_expr expr_in ^ " )"
+      | Operation(_, operator, operands) -> 
+        let (op_str, isBinary, _) = operator_info operator in
+        if (isBinary) then
+          string_of_expr (List.nth operands 0) ^ " " ^ op_str ^ " " ^ string_of_expr (List.nth operands 1)
+        else
+          " " ^ op_str ^ string_of_expr (List.nth operands 0)
+      | IntLit(_, integer, _, _, _) -> Big_int.string_of_big_int integer
+      | RealLit(_, real) -> Num.string_of_num real
+      | StringLit(_, str) -> "\"" ^ str ^ "\""
+      | Read(_, expr_in, str) -> string_of_expr expr_in ^ "." ^ str
+      | ArrayLengthExpr(_, expr_in) -> "ArrayLength( " ^ string_of_expr expr_in ^ " )"
+      | ReadArray(_, array_expr, index_expr) -> string_of_expr array_expr ^ "[ " ^ string_of_expr index_expr ^ " ]" 
+      | Deref(_, expr_in) -> "*" ^ string_of_expr expr_in
+      | CallExpr(_, name, _, _, args, _) -> name ^ "( " ^ string_of_pat_list args ^ " )"
+      | ExprCallExpr(_, callee_expr, args_expr) -> string_of_expr callee_expr ^ "( " ^ string_of_expr_list args_expr ^ " )"
       | Sep(_, lhs, rhs) -> (string_of_expr lhs) ^ " &*& " ^ (string_of_expr rhs)
       | _ -> "unknown"
   in
 
   let rec check_expr_for_pattern (expr: expr) (pattern: expr) (exactMacthOnly: bool) : bool = 
+
+    let check_expr_list_for_pattern (expr_list: expr list) (pattern: expr) : bool =
+      List.fold_left (fun acc expr -> acc || check_expr_for_pattern expr pattern false) false expr_list
+    in
+
+    let check_expr_list_for_pattern_list (expr_list: expr list) (pattern_list: expr list) : bool =
+      List.fold_left (fun acc (expr, pattern) -> acc && check_expr_for_pattern expr pattern true) true (zip2 expr_list pattern_list)
+    in
+
     match expr with
       | True(_) -> (match pattern with True(_) -> true | _ -> false)
       | False(_) -> (match pattern with False(_) -> true | _ -> false)
       | Null(_) -> (match pattern with Null(_) -> true | _ -> false)
       | Var(_) -> (match pattern with Var(_) -> true | _ -> false)
+      | TruncatingExpr(_, expr_in) ->
+        let pattern_inside = if (exactMacthOnly) then false else check_expr_for_pattern expr_in pattern false in
+        begin
+          match pattern with
+            | TruncatingExpr(_, pattern_expr_in) -> check_expr_for_pattern expr_in pattern_expr_in true || pattern_inside 
+            | _ -> pattern_inside
+        end
       | Operation(_, operator, operands) ->
         begin
-          let pattern_in_operands = 
-            if (exactMacthOnly) then
-              false
-            else
-              List.fold_left (fun acc op -> acc || (check_expr_for_pattern op pattern false)) false operands in
+          let pattern_in_operands = if (exactMacthOnly) then false else check_expr_list_for_pattern operands pattern in
           match pattern with
-            | Operation(_, pattern_operator, pattern_operands) when operator = pattern_operator -> 
+            | Operation(_, pattern_operator, pattern_operands) when operator = pattern_operator && List.length operands = List.length pattern_operands -> 
               begin
                 let each_operand_same = 
-                  if (List.length operands = List.length pattern_operands) then
-                    (List.fold_left (fun acc (expr_op, pattern_op) -> acc && (check_expr_for_pattern expr_op pattern_op true)) true (zip2 operands pattern_operands)) ||
-                    (List.fold_left (fun acc (expr_op, pattern_op) -> acc && (check_expr_for_pattern expr_op pattern_op true)) true (zip2 (List.rev operands) pattern_operands))
+                  let (_, isBinary, isSymmetric) = operator_info operator in
+                  if (isBinary) then
+                    let reverse_operands = 
+                      if (isSymmetric) then check_expr_for_pattern (List.nth operands 0) (List.nth pattern_operands 1) true || check_expr_for_pattern (List.nth operands 1) (List.nth pattern_operands 0) true
+                      else false 
+                    in
+                    reverse_operands || check_expr_list_for_pattern_list operands pattern_operands
                   else
-                    false
+                    check_expr_for_pattern (List.nth operands 0) (List.nth pattern_operands 0) true
                 in
                 each_operand_same || pattern_in_operands
               end
             | _ -> pattern_in_operands
+        end
+      | IntLit(_, integer, _, _, _) -> 
+        begin
+          match pattern with 
+            | IntLit(_, pattern_integer, _, _, _) when (Big_int.compare_big_int integer pattern_integer) = 0 -> true
+            | _ -> false
+        end
+      | RealLit(_, real) ->
+        begin
+          match pattern with
+            | RealLit(_, pattern_real) when Num.eq_num real pattern_real -> true
+            | _ -> false
+        end
+      | StringLit(_, str) ->
+        begin
+          match pattern with
+            | StringLit(_, pattern_str) when str = pattern_str -> true
+            | _ -> false
+        end
+      | Read(_, expr_in, str) ->
+        begin
+          let pattern_inside = if (exactMacthOnly) then false else check_expr_for_pattern expr_in pattern false in
+          match pattern with
+            | Read(_, pattern_expr_in, pattern_str) when str = pattern_str -> check_expr_for_pattern expr_in pattern_expr_in true || pattern_inside 
+            | _ -> pattern_inside
+        end
+      | ArrayLengthExpr(_, expr_in) -> 
+        begin
+          let pattern_inside = if (exactMacthOnly) then false else check_expr_for_pattern expr_in pattern false in
+          match pattern with
+            | ArrayLengthExpr(_, pattern_expr_in) -> check_expr_for_pattern expr_in pattern_expr_in true || pattern_inside
+            | _ -> pattern_inside
+        end
+      | ReadArray(_, array_expr, index_expr) ->
+        begin
+          let pattern_inside = if (exactMacthOnly) then false else (check_expr_for_pattern array_expr pattern false) || (check_expr_for_pattern index_expr pattern false) in
+          match pattern with
+              | ReadArray(_, pattern_array_expr, pattern_index_expr) -> 
+                pattern_inside || (check_expr_for_pattern array_expr pattern_array_expr true && check_expr_for_pattern index_expr pattern_index_expr true)
+              | _ -> pattern_inside
+        end
+      | Deref(_, expr_in) -> 
+        begin
+          let pattern_inside = if (exactMacthOnly) then false else check_expr_for_pattern expr_in pattern false in
+          match pattern with
+            | Deref(_, pattern_expr_in) -> check_expr_for_pattern expr_in pattern_expr_in true || pattern_inside 
+            | _ -> pattern_inside
         end
       | CallExpr(_, name, _, _, args, _) ->
         begin
@@ -267,14 +345,12 @@ let _ =
                   if (List.length args = List.length pattern_args) then
                     
                     let rec check_pat_equal (pat: pat) (pattern_pat: pat): bool =
-                      
                       let fold_check_pat_equal (pat_list: pat list) (pattern_pat_list: pat list): bool = 
                         if (List.length pat_list = List.length pattern_pat_list) then
                           List.fold_left (fun acc (pat_in, pattern_pat_in) -> acc && (check_pat_equal pat_in pattern_pat_in)) true (zip2 pat_list pattern_pat_list)
                         else
                           false
                       in
-
                       match (pat, pattern_pat) with 
                         | _, DummyPat -> true (* if the pattern is a dummy, we don't care about the type of this expression*)
                         | LitPat(expr), LitPat(pattern_expr) -> check_expr_for_pattern expr pattern_expr true
@@ -287,8 +363,6 @@ let _ =
                               | _ -> false (* TODO: Add support for predicates *)
                           end
                     in
-
-                    (* let _ = Printf.printf "Attempting exact matching on arguments of function %s\n" name in *)
                     List.fold_left (fun acc (arg, pattern_arg) -> acc && (check_pat_equal arg pattern_arg)) true (zip2 args pattern_args)
                   else
                     false
@@ -297,6 +371,16 @@ let _ =
               end
             | _ -> pattern_in_args
         
+        end
+      | ExprCallExpr(_, callee_expr, args_expr) ->
+        begin
+          let pattern_inside = if (exactMacthOnly) then false 
+            else check_expr_for_pattern callee_expr pattern false || check_expr_list_for_pattern args_expr pattern
+          in
+          match pattern with
+            | ExprCallExpr(_, pattern_callee_expr, pattern_args_expr) -> 
+              (check_expr_for_pattern callee_expr pattern_callee_expr true && check_expr_list_for_pattern_list args_expr pattern_args_expr) || pattern_inside
+            | _ -> pattern_inside
         end
       | Sep(_, lhs, rhs) -> (check_expr_for_pattern lhs pattern exactMacthOnly) || (check_expr_for_pattern rhs pattern exactMacthOnly)
       | _ -> false;
@@ -314,6 +398,7 @@ let _ =
                   | None -> recursive_call
                   | Some contract -> 
                     let (_, postcond) = contract in 
+                    let _ = Printf.printf "Checking %s\n" (string_of_expr postcond) in
                     if (check_expr_for_pattern postcond pattern false) then
                       (loc, name) :: recursive_call
                     else
@@ -379,12 +464,16 @@ let _ =
     Printf.printf "\nEnter a pattern > ";
     let pattern_str = read_line () in
     let pattern_expr = 
-      try 
-        Some (pattern_str_to_expr pattern_str)
-      with
-        Lexer.ParseException(_, msg) -> 
-          let _ = Printf.printf "Invalid pattern.\n" in
-          None
+      if (pattern_str = "") then
+        let _ = Printf.printf "Empty pattern.\n" in
+        None
+      else
+        try
+          Some (pattern_str_to_expr pattern_str)
+        with
+          Lexer.ParseException(_, msg) -> 
+            let _ = Printf.printf "Invalid pattern.\n" in
+            None
     in
     match pattern_expr with 
       | Some(pat) -> search_for_pattern decls_to_explore pat
