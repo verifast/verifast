@@ -188,6 +188,7 @@ let _ =
       | Ge -> (match other_op with Le -> true | _ -> false)
       | Lt -> (match other_op with Gt -> true | _ -> false)
       | Gt -> (match other_op with Lt -> true | _ -> false)
+      | _ -> false
   in
 
   let rec string_of_expr (expr: expr) : string =
@@ -494,7 +495,6 @@ let _ =
                   | None -> recursive_call
                   | Some contract -> 
                     let (_, postcond) = contract in 
-                    let _ = Printf.printf "Checking %s\n" (string_of_expr postcond) in
                     if (check_expr_for_pattern postcond pattern false) then
                       (loc, name) :: recursive_call
                     else
@@ -529,7 +529,7 @@ let _ =
           let _ = 
             if (nb_matches > 0) then
               let (loc, _) = List.hd matches in
-              Printf.printf("The explorer found %d match(es)%s:\n") nb_matches (filename_from_loc loc);
+              Printf.printf("%d match(es)%s:\n") nb_matches (filename_from_loc loc);
               List.iter print_explore_result matches;
           in
           search_for_pattern_inner tail (nb_results + nb_matches)
