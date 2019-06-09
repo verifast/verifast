@@ -182,6 +182,14 @@ let _ =
     | ShiftRight-> ">>", true, false
   in
 
+  let are_operators_opposite (op: operator) (other_op: operator) : bool =
+    match op with
+      | Le -> (match other_op with Ge -> true | _ -> false)
+      | Ge -> (match other_op with Le -> true | _ -> false)
+      | Lt -> (match other_op with Gt -> true | _ -> false)
+      | Gt -> (match other_op with Lt -> true | _ -> false)
+  in
+
   let rec string_of_expr (expr: expr) : string =
 
     let rec string_of_pat (pat: pat) : string =
@@ -314,20 +322,26 @@ let _ =
         begin
           let pattern_in_operands = if (exactMacthOnly) then false else check_expr_list_for_pattern operands pattern in
           match pattern with
-            | Operation(_, pattern_operator, pattern_operands) when operator = pattern_operator && List.length operands = List.length pattern_operands -> 
+            | Operation(_, pattern_operator, pattern_operands) when List.length operands = List.length pattern_operands -> 
               begin
-                let each_operand_same = 
-                  let (_, isBinary, isSymmetric) = operator_info operator in
-                  if (isBinary) then
-                    let reverse_operands = 
-                      if (isSymmetric) then check_expr_for_pattern (List.nth operands 0) (List.nth pattern_operands 1) true || check_expr_for_pattern (List.nth operands 1) (List.nth pattern_operands 0) true
-                      else false 
-                    in
-                    reverse_operands || check_expr_list_for_pattern_list operands pattern_operands
-                  else
-                    check_expr_for_pattern (List.nth operands 0) (List.nth pattern_operands 0) true
+                let switch_operands_same = if (List.length operands < 2) then false
+                  else check_expr_for_pattern (List.nth operands 0) (List.nth pattern_operands 1) true || check_expr_for_pattern (List.nth operands 1) (List.nth pattern_operands 0) true 
                 in
-                each_operand_same || pattern_in_operands
+                let operands_same = check_expr_list_for_pattern_list operands pattern_operands in
+
+                let all_operands_match = 
+                  if (operator = pattern_operator) then 
+                    let (_, isBinary, isSymmetric) = operator_info operator in
+                    if (isBinary && isSymmetric) then
+                      switch_operands_same || operands_same
+                    else
+                      operands_same
+                  else if (are_operators_opposite operator pattern_operator) then
+                    switch_operands_same
+                  else
+                    false
+                in
+                pattern_in_operands || all_operands_match
               end
             | _ -> pattern_in_operands
         end
