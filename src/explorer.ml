@@ -194,14 +194,24 @@ let _ =
       match pat_list with
         | [] -> ""
         | head :: [] -> string_of_pat head
-        | head :: tail -> (string_of_pat head) ^ " , " ^ (string_of_pat_list tail)
+        | head :: tail -> (string_of_pat head) ^ " ," ^ (string_of_pat_list tail)
     in
 
     let rec string_of_expr_list (expr_list: expr list) : string =
       match expr_list with
         | [] -> ""
         | head :: [] -> string_of_expr head
-        | head :: tail -> (string_of_expr head) ^ " , " ^ (string_of_expr_list tail)
+        | head :: tail -> (string_of_expr head) ^ " ," ^ (string_of_expr_list tail)
+    in
+
+    let rec string_of_switch (switch: switch_asn_clause) : string =
+      match switch with
+        | SwitchAsnClause(_, name, _, expr_in) -> "case " ^ name ^ ": " ^ string_of_expr expr_in
+    and string_of_switch_list (switch_list: switch_asn_clause list) : string =
+      match switch_list with
+        | [] -> ""
+        | head :: [] -> string_of_switch head
+        | head :: tail -> (string_of_switch head) ^ " ," ^ (string_of_switch_list tail)
     in
 
     match expr with 
@@ -209,7 +219,7 @@ let _ =
       | False(_) -> "False"
       | Null(_) -> "Null"
       | Var(_, varname) -> "Var_" ^ varname
-      | TruncatingExpr(_, expr_in) -> "Truncating( " ^ string_of_expr expr_in ^ " )"
+      | TruncatingExpr(_, expr_in) -> "Truncating(" ^ string_of_expr expr_in ^ ")"
       | Operation(_, operator, operands) -> 
         let (op_str, isBinary, _) = operator_info operator in
         if (isBinary) then
@@ -220,12 +230,16 @@ let _ =
       | RealLit(_, real) -> Num.string_of_num real
       | StringLit(_, str) -> "\"" ^ str ^ "\""
       | Read(_, expr_in, str) -> string_of_expr expr_in ^ "." ^ str
-      | ArrayLengthExpr(_, expr_in) -> "ArrayLength( " ^ string_of_expr expr_in ^ " )"
-      | ReadArray(_, array_expr, index_expr) -> string_of_expr array_expr ^ "[ " ^ string_of_expr index_expr ^ " ]" 
+      | ArrayLengthExpr(_, expr_in) -> "ArrayLength " ^ string_of_expr expr_in ^ ")"
+      | ReadArray(_, array_expr, index_expr) -> string_of_expr array_expr ^ "[" ^ string_of_expr index_expr ^ "]" 
       | Deref(_, expr_in) -> "*" ^ string_of_expr expr_in
-      | CallExpr(_, name, _, _, args, _) -> name ^ "( " ^ string_of_pat_list args ^ " )"
-      | ExprCallExpr(_, callee_expr, args_expr) -> string_of_expr callee_expr ^ "( " ^ string_of_expr_list args_expr ^ " )"
+      | CallExpr(_, name, _, _, args, _) -> name ^ "(" ^ string_of_pat_list args ^ ")"
+      | ExprCallExpr(_, callee_expr, args_expr) -> string_of_expr callee_expr ^ "(" ^ string_of_expr_list args_expr ^ ")"
+      | IfExpr(_, cond_expr, then_expr, else_expr) -> "if (" ^ string_of_expr cond_expr ^ ") then {" ^ string_of_expr then_expr ^ "} else {" ^ string_of_expr else_expr ^ "}"
       | Sep(_, lhs, rhs) -> (string_of_expr lhs) ^ " &*& " ^ (string_of_expr rhs)
+      | IfAsn(_, cond_expr, then_expr, else_expr) -> "if (" ^ string_of_expr cond_expr ^ ") then {" ^ string_of_expr then_expr ^ "} else {" ^ string_of_expr else_expr ^ "}"
+      | SwitchAsn(_, switch_expr, clauses) -> "switch(" ^ string_of_expr switch_expr ^ ") {" ^ string_of_switch_list clauses ^ "}"
+      | CoefAsn(_, perm, expr_in) -> "[" ^ string_of_pat perm ^ "]" ^ string_of_expr expr_in 
       | _ -> "unknown"
   in
 
@@ -238,6 +252,46 @@ let _ =
     let check_expr_list_for_pattern_list (expr_list: expr list) (pattern_list: expr list) : bool =
       List.fold_left (fun acc (expr, pattern) -> acc && check_expr_for_pattern expr pattern true) true (zip2 expr_list pattern_list)
     in
+
+    let rec check_pat_list_for_pattern (pat_list: pat list) (pattern: expr): bool = List.fold_left (fun acc pat_in -> acc || (check_pat_for_pattern pat_in pattern)) false pat_list
+    and check_pat_for_pattern (pat: pat) (pattern: expr) : bool =
+      match pat with 
+        | LitPat(expr) -> check_expr_for_pattern expr pattern false
+        | VarPat(_) -> false
+        | DummyPat -> false
+        | CtorPat(_, _, pat_list) -> check_pat_list_for_pattern pat_list pattern
+    in
+
+    let rec check_pat_equal (pat: pat) (pattern_pat: pat): bool =
+      let fold_check_pat_equal (pat_list: pat list) (pattern_pat_list: pat list): bool = 
+        if (List.length pat_list = List.length pattern_pat_list) then
+          List.fold_left (fun acc (pat_in, pattern_pat_in) -> acc && (check_pat_equal pat_in pattern_pat_in)) true (zip2 pat_list pattern_pat_list)
+        else false
+      in
+      match (pat, pattern_pat) with 
+        | _, DummyPat -> true (* if the pattern is a dummy, we don't care about the type of this expression*)
+        | LitPat(expr), LitPat(pattern_expr) -> check_expr_for_pattern expr pattern_expr true
+        | VarPat(_), VarPat(_) -> true
+        | CtorPat(_, name, pat_list), CtorPat(_, pattern_name, pattern_pat_list) when name = pattern_name -> fold_check_pat_equal pat_list pattern_pat_list
+        | LitPat(expr), CtorPat(_, pattern_name, pattern_pat_list) -> 
+          begin
+            match expr with
+              | CallExpr(_, name, _, _, args, _) when name = pattern_name -> fold_check_pat_equal args pattern_pat_list
+              | _ -> false (* TODO: Add support for predicates ?*)
+          end
+    in
+
+    let check_if_then_else (if_terms: expr list) : bool =
+      let pattern_inside = if (exactMacthOnly) then false else check_expr_list_for_pattern if_terms pattern in
+      match pattern with
+        | IfAsn(_, pattern_cond_expr, pattern_then_expr, pattern_else_expr) ->
+          let pattern_if_terms = [pattern_cond_expr; pattern_then_expr; pattern_else_expr] in pattern_inside || check_expr_list_for_pattern_list if_terms pattern_if_terms
+        | IfExpr(_, pattern_cond_expr, pattern_then_expr, pattern_else_expr) ->
+          let pattern_if_terms = [pattern_cond_expr; pattern_then_expr; pattern_else_expr] in pattern_inside || check_expr_list_for_pattern_list if_terms pattern_if_terms
+        | _ -> false
+    in
+
+    (* SwitchExpr, AddressOf, ExprAsn, PredNameExpr, PointsTo*)
 
     match expr with
       | True(_) -> (match pattern with True(_) -> true | _ -> false)
@@ -321,52 +375,11 @@ let _ =
         end
       | CallExpr(_, name, _, _, args, _) ->
         begin
-
-          let rec check_pat_for_pattern (pat: pat): bool =
-            let fold_check_pat (pat_list: pat list): bool = List.fold_left (fun acc pat_in -> acc || (check_pat_for_pattern pat_in)) false pat_list in
-            match pat with 
-              | LitPat(expr) -> check_expr_for_pattern expr pattern false
-              | VarPat(_) -> false
-              | DummyPat -> false
-              | CtorPat(_, _, pat_list) -> fold_check_pat pat_list
-          in
-
-          let pattern_in_args = 
-            if (exactMacthOnly) then
-              false
-            else
-              List.fold_left (fun acc arg -> acc || (check_pat_for_pattern arg)) false args
-          in
-          
+          let pattern_in_args = if (exactMacthOnly) then false else check_pat_list_for_pattern args pattern in
           match pattern with
-            | CallExpr(_, pattern_name, _, _, pattern_args, _) when name = pattern_name ->
+            | CallExpr(_, pattern_name, _, _, pattern_args, _) when name = pattern_name && List.length args = List.length pattern_args ->
               begin
-                let each_arg_same =
-                  if (List.length args = List.length pattern_args) then
-                    
-                    let rec check_pat_equal (pat: pat) (pattern_pat: pat): bool =
-                      let fold_check_pat_equal (pat_list: pat list) (pattern_pat_list: pat list): bool = 
-                        if (List.length pat_list = List.length pattern_pat_list) then
-                          List.fold_left (fun acc (pat_in, pattern_pat_in) -> acc && (check_pat_equal pat_in pattern_pat_in)) true (zip2 pat_list pattern_pat_list)
-                        else
-                          false
-                      in
-                      match (pat, pattern_pat) with 
-                        | _, DummyPat -> true (* if the pattern is a dummy, we don't care about the type of this expression*)
-                        | LitPat(expr), LitPat(pattern_expr) -> check_expr_for_pattern expr pattern_expr true
-                        | VarPat(_), VarPat(_) -> true
-                        | CtorPat(_, name, pat_list), CtorPat(_, pattern_name, pattern_pat_list) when name = pattern_name -> fold_check_pat_equal pat_list pattern_pat_list
-                        | LitPat(expr), CtorPat(_, pattern_name, pattern_pat_list) -> 
-                          begin
-                            match expr with
-                              | CallExpr(_, name, _, _, args, _) when name = pattern_name -> fold_check_pat_equal args pattern_pat_list
-                              | _ -> false (* TODO: Add support for predicates *)
-                          end
-                    in
-                    List.fold_left (fun acc (arg, pattern_arg) -> acc && (check_pat_equal arg pattern_arg)) true (zip2 args pattern_args)
-                  else
-                    false
-                in
+                let each_arg_same = List.fold_left (fun acc (arg, pattern_arg) -> acc && check_pat_equal arg pattern_arg) true (zip2 args pattern_args) in
                 each_arg_same || pattern_in_args
               end
             | _ -> pattern_in_args
@@ -379,10 +392,45 @@ let _ =
           in
           match pattern with
             | ExprCallExpr(_, pattern_callee_expr, pattern_args_expr) -> 
-              (check_expr_for_pattern callee_expr pattern_callee_expr true && check_expr_list_for_pattern_list args_expr pattern_args_expr) || pattern_inside
+              pattern_inside || (check_expr_for_pattern callee_expr pattern_callee_expr true && check_expr_list_for_pattern_list args_expr pattern_args_expr)
             | _ -> pattern_inside
         end
+      | IfExpr(_, cond_expr, then_expr, else_expr) -> check_if_then_else [cond_expr; then_expr; else_expr]      
       | Sep(_, lhs, rhs) -> (check_expr_for_pattern lhs pattern exactMacthOnly) || (check_expr_for_pattern rhs pattern exactMacthOnly)
+      | IfAsn(_, cond_expr, then_expr, else_expr) -> check_if_then_else [cond_expr; then_expr; else_expr]
+      | SwitchAsn(_, switch_expr, clauses) -> 
+        begin
+          let rec extract_expr_from_clauses (clauses: switch_asn_clause list) : expr list =
+            match clauses with
+              | [] -> []
+              | clause :: tail -> (match clause with SwitchAsnClause(_, _, _, expr_in) -> expr_in :: extract_expr_from_clauses tail)
+          in
+          let pattern_inside = if (exactMacthOnly) then false 
+            else check_expr_for_pattern switch_expr pattern false || check_expr_list_for_pattern (extract_expr_from_clauses clauses) pattern 
+          in
+          match pattern with
+            | SwitchAsn(_, pattern_switch_expr, pattern_clauses) when List.length clauses = List.length pattern_clauses -> 
+              let clause_same_str (clause: switch_asn_clause)  (pattern_clause: switch_asn_clause) : bool =
+                match clause with 
+                  | SwitchAsnClause(_, name, strs, _) ->
+                    begin
+                      match pattern_clause with 
+                        | SwitchAsnClause(_, pattern_name, pattern_strs, _) when name = pattern_name && List.length strs = List.length pattern_strs -> 
+                            List.fold_left (fun acc (str, pattern_str) -> acc && str = pattern_str) true (zip2 strs pattern_strs)
+                        | _ -> false
+                    end
+              in
+              pattern_inside || (List.fold_left (fun acc (clause, pattern_clause) -> acc && clause_same_str clause pattern_clause) true (zip2 clauses pattern_clauses) && 
+                check_expr_list_for_pattern_list (extract_expr_from_clauses clauses) (extract_expr_from_clauses pattern_clauses))
+            | _ -> pattern_inside
+        end
+      | CoefAsn(_, perm, expr_in) ->
+        begin
+          let pattern_inside = if (exactMacthOnly) then false else check_pat_for_pattern perm pattern || check_expr_for_pattern expr_in pattern false in
+          match pattern with
+            | CoefAsn(_, pattern_perm, pattern_expr_in) -> pattern_inside || (check_pat_equal perm pattern_perm && check_expr_for_pattern expr_in pattern_expr_in true)
+            | _ -> pattern_inside
+        end
       | _ -> false;
   in
 
