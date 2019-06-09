@@ -131,7 +131,7 @@ let _ =
           get_decls_from_filepaths tail include_paths define_macros
   in
 
-  let rec get_lemmas_from_decls (decls_to_explore: (decl list) list) : lemma list =
+  let rec get_lemmas_from_decls (decls_to_explore: (decl list) list): lemma list =
     
     let rec parse_decl_list (declaration_list: decl list): lemma list = 
     match declaration_list with
@@ -678,6 +678,27 @@ let _ =
         search_for_pattern tail pattern
   in
 
+  let remove_duplicate_lemmas (lemmas: lemma list) ((loc, name, postcond): lemma): bool =
+    let filename_from_loc (loc: loc): string =
+      match loc with
+        | Lexed(((p1, _, _), _)) -> p1
+        | _ -> ""
+    in
+    if (Filename.check_suffix (filename_from_loc loc) ".c") then
+      let rec check_for_duplicate (lemmas_in: lemma list) : bool =
+        match lemmas_in with
+          | [] -> true
+          | (loc_in, name_in, postcond_in) :: tail -> 
+            if (Filename.check_suffix (filename_from_loc loc_in) ".gh" && name = name_in && check_expr_for_pattern postcond postcond_in true) then
+              false
+            else 
+              check_for_duplicate tail
+      in
+      check_for_duplicate lemmas
+    else
+      true
+  in
+
   let include_paths: string list ref = ref [] in
   let define_macros: string list ref = ref [] in
   let explore_paths: string list ref = ref [] in
@@ -694,8 +715,9 @@ let _ =
   let files_to_explore = get_files_from_explore_paths (!explore_paths) in
   let decls_to_explore = get_decls_from_filepaths files_to_explore !include_paths !define_macros in
   let lemmas_to_explore = get_lemmas_from_decls decls_to_explore in
-  let _ = Printf.printf "\n== %d lemmas were parsed and will be searched for a pattern ==\n" (List.length lemmas_to_explore) in
-  let _ = List.iter (fun (_, name, postcond) -> Printf.printf "%s(): %s\n" name (string_of_expr postcond)) lemmas_to_explore in
+  let lemmas_filtered = List.filter (remove_duplicate_lemmas lemmas_to_explore) lemmas_to_explore in
+  let _ = Printf.printf "\n== %d lemmas were parsed and will be searched for a pattern ==\n" (List.length lemmas_filtered) in
+  let _ = List.iter (fun (_, name, postcond) -> Printf.printf "%s(): %s\n" name (string_of_expr postcond)) lemmas_filtered in
 
   (* Execution loop *)
   while true do
@@ -714,6 +736,6 @@ let _ =
             None
     in
     match pattern_expr_opt with 
-      | Some(pattern_expr) -> let _ = Printf.printf "%s\n" (string_of_expr pattern_expr) in search_for_pattern lemmas_to_explore pattern_expr
+      | Some(pattern_expr) -> let _ = Printf.printf "%s\n" (string_of_expr pattern_expr) in search_for_pattern lemmas_filtered pattern_expr
       | None -> ()
   done
