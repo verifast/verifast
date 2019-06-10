@@ -291,362 +291,370 @@ let _ =
       | _ -> "unknown"
   in
 
-  let rec check_expr_for_pattern (expr: expr) (pattern: expr) (exactMacthOnly: bool) : bool * mapping list list = 
+  let are_expr_equal (expr: expr) (pattern: expr) (exactMacthOnly: bool) (enableMappings: bool) : bool * mapping list list =
 
-    let combine_or ((res1, mappings1): bool * mapping list list) ((res2, mappings2): bool * mapping list list) : bool * mapping list list =
-      let m1 = if (res1) then mappings1 else [] in
-      let m2 = if (res2) then mappings2 else [] in
-      res1 || res2, List.append m1 m2
-    in
+    let rec check_expr_for_pattern (expr: expr) (pattern: expr) (exactMacthOnly: bool) : bool * mapping list list = 
 
-    let combine_and ((res1, mappings1): bool * mapping list list) ((res2, mappings2): bool * mapping list list) : bool * mapping list list =
-      let m1 = if (res1 && List.length mappings1 > 0) then List.hd mappings1 else [] in
-      let m2 = if (res2 && List.length mappings2 > 0) then List.hd mappings2 else [] in
-      res1 && res2, [List.append m1 m2]
-    in
+      let combine_or ((res1, mappings1): bool * mapping list list) ((res2, mappings2): bool * mapping list list) : bool * mapping list list =
+        let m1 = if (res1) then mappings1 else [] in
+        let m2 = if (res2) then mappings2 else [] in
+        res1 || res2, List.append m1 m2
+      in
 
-    let check_expr_list_for_pattern (expr_list: expr list) (pattern: expr) : bool * mapping list list =
-      List.fold_left (fun acc expr -> combine_or acc (check_expr_for_pattern expr pattern false)) (false, []) expr_list
-    in
+      let combine_and ((res1, mappings1): bool * mapping list list) ((res2, mappings2): bool * mapping list list) : bool * mapping list list =
+        let m1 = if (res1 && List.length mappings1 > 0) then List.hd mappings1 else [] in
+        let m2 = if (res2 && List.length mappings2 > 0) then List.hd mappings2 else [] in
+        res1 && res2, [List.append m1 m2]
+      in
 
-    let check_expr_list_for_pattern_list (expr_list: expr list) (pattern_list: expr list) : bool * mapping list list =
-      List.fold_left (fun acc (expr, pattern) -> combine_and acc (check_expr_for_pattern expr pattern false)) (true, []) (zip2 expr_list pattern_list)
-    in
+      let check_expr_list_for_pattern (expr_list: expr list) (pattern: expr) : bool * mapping list list =
+        List.fold_left (fun acc expr -> combine_or acc (check_expr_for_pattern expr pattern false)) (false, []) expr_list
+      in
 
-    let rec check_pat_for_pattern (pat: pat) (pattern: expr) : bool * mapping list list =
-      match pat with 
-        | LitPat(expr) -> check_expr_for_pattern expr pattern false
-        | VarPat(_) -> false, []
-        | DummyPat -> false, []
-        | CtorPat(_, _, pat_list) -> check_pat_list_for_pattern pat_list pattern
-    and check_pat_list_for_pattern (pat_list: pat list) (pattern: expr): bool * mapping list list = 
-      List.fold_left (fun acc pat -> combine_or acc (check_pat_for_pattern pat pattern)) (false, []) pat_list
-    in
+      let check_expr_list_for_pattern_list (expr_list: expr list) (pattern_list: expr list) : bool * mapping list list =
+        List.fold_left (fun acc (expr, pattern) -> combine_and acc (check_expr_for_pattern expr pattern false)) (true, []) (zip2 expr_list pattern_list)
+      in
 
-    (* TODO: change handling of dummys when checking for mappings equality *)
-    let rec check_pat_equal (pat: pat) (pattern_pat: pat): bool * mapping list list =
-      match (pat, pattern_pat) with 
-        | _, DummyPat -> true, []
-        | LitPat(expr), LitPat(pattern_expr) -> check_expr_for_pattern expr pattern_expr true
-        | VarPat(_), VarPat(_) -> true, []
-        | CtorPat(_, name, pat_list), CtorPat(_, pattern_name, pattern_pat_list) 
-            when name = pattern_name && List.length pat_list = List.length pattern_pat_list -> check_pat_list_equal_list pat_list pattern_pat_list
-        | LitPat(expr), CtorPat(_, pattern_name, pattern_pat_list) -> 
+      let rec check_pat_for_pattern (pat: pat) (pattern: expr) : bool * mapping list list =
+        match pat with 
+          | LitPat(expr) -> check_expr_for_pattern expr pattern false
+          | VarPat(_) -> false, []
+          | DummyPat -> false, []
+          | CtorPat(_, _, pat_list) -> check_pat_list_for_pattern pat_list pattern
+      and check_pat_list_for_pattern (pat_list: pat list) (pattern: expr): bool * mapping list list = 
+        List.fold_left (fun acc pat -> combine_or acc (check_pat_for_pattern pat pattern)) (false, []) pat_list
+      in
+
+      (* TODO: change handling of dummys when checking for mappings equality *)
+      let rec check_pat_equal (pat: pat) (pattern_pat: pat): bool * mapping list list =
+        match (pat, pattern_pat) with 
+          | DummyPat, DummyPat -> true, []
+          | _, DummyPat when enableMappings -> true, []
+          | LitPat(expr), LitPat(pattern_expr) -> check_expr_for_pattern expr pattern_expr true
+          | VarPat(_), VarPat(_) -> true, []
+          | CtorPat(_, name, pat_list), CtorPat(_, pattern_name, pattern_pat_list) 
+              when name = pattern_name && List.length pat_list = List.length pattern_pat_list -> check_pat_list_equal_list pat_list pattern_pat_list
+          | LitPat(expr), CtorPat(_, pattern_name, pattern_pat_list) -> 
+            begin
+              match expr with
+                | CallExpr(_, name, _, _, args, _) when name = pattern_name && List.length args = List.length pattern_pat_list -> check_pat_list_equal_list args pattern_pat_list
+                | _ -> false, []
+            end
+          | _ -> false, []
+      and check_pat_list_equal_list (pat_list: pat list) (pattern_pat_list: pat list): bool * mapping list list = 
+        List.fold_left (fun acc (pat_in, pattern_pat_in) -> combine_and acc (check_pat_equal pat_in pattern_pat_in)) (true, []) (zip2 pat_list pattern_pat_list)
+      in
+
+      let rec check_type_equal (type_: type_) (pattern_type_: type_): bool =
+        match type_ with
+          | Bool -> (match pattern_type_ with Bool -> true | _ -> false)
+          | Void -> (match pattern_type_ with Void -> true | _ -> false)
+          | Int(signed, rank) -> (match pattern_type_ with Int(pattern_signed, pattern_rank) when signed = pattern_signed && rank = pattern_rank -> true | _ -> false)
+          | RealType -> (match pattern_type_ with RealType -> true | _ -> false)
+          | Float -> (match pattern_type_ with Float -> true | _ -> false)
+          | Double -> (match pattern_type_ with Double -> true | _ -> false)
+          | LongDouble -> (match pattern_type_ with LongDouble -> true | _ -> false)
+          | StructType(name) -> (match pattern_type_ with StructType(pattern_name) when name = pattern_name -> true | _ -> false)
+          | PtrType(type_in) -> (match pattern_type_ with PtrType(pattern_type_in) -> check_type_equal type_in pattern_type_in | _ -> false)
+          | FuncType(name) -> (match pattern_type_ with FuncType(pattern_name) when name = pattern_name -> true | _ -> false)
+          | InductiveType(name, type_list)  -> (match pattern_type_ with InductiveType(pattern_name, pattern_type_list) when name = pattern_name -> check_type_equal_list type_list pattern_type_list | _ -> false)
+          | PredType(names, type_list, _, inductive) ->
+            begin
+              match pattern_type_ with
+                | PredType(pattern_names, pattern_type_list, _, pattern_inductive) when inductive = pattern_inductive ->
+                  check_type_equal_list type_list pattern_type_list && check_name_equal_list names pattern_names
+                | _ -> false
+            end
+          | PureFuncType(type_in1, type_in2) -> (match pattern_type_ with PureFuncType(pattern_type_in1, pattern_type_in2) -> check_type_equal type_in1 pattern_type_in1 && check_type_equal type_in2 pattern_type_in2 | _ -> false)
+          | ObjType(name) -> (match pattern_type_ with ObjType(pattern_name) when name = pattern_name -> true | _ -> false) 
+          | ArrayType(type_in) -> (match pattern_type_ with ArrayType(pattern_type_in) -> check_type_equal type_in pattern_type_in | _ -> false)
+          | StaticArrayType(type_in, size) -> (match pattern_type_ with StaticArrayType(pattern_type_in, pattern_size) when size = pattern_size -> check_type_equal type_in pattern_type_in | _ -> false)
+          | BoxIdType -> (match pattern_type_ with BoxIdType -> true | _ -> false)
+          | HandleIdType -> (match pattern_type_ with HandleIdType -> true | _ -> false)
+          | AnyType -> (match pattern_type_ with AnyType -> true | _ -> false)
+          | TypeParam(name) -> (match pattern_type_ with TypeParam(pattern_name) when name = pattern_name -> true | _ -> false) 
+          | ClassOrInterfaceName(name) -> (match pattern_type_ with ClassOrInterfaceName(pattern_name) when name = pattern_name -> true | _ -> false) 
+          | PackageName(name) -> (match pattern_type_ with PackageName(pattern_name) when name = pattern_name -> true | _ -> false) 
+          | RefType(type_in) -> (match pattern_type_ with RefType(pattern_type_in) -> check_type_equal type_in pattern_type_in | _ -> false)
+          | AbstractType(name) -> (match pattern_type_ with AbstractType(pattern_name) when name = pattern_name -> true | _ -> false) 
+      and check_type_equal_list (type_list: type_ list) (pattern_type_list: type_ list) : bool =
+        List.fold_left (fun acc (type_, pattern_type_) -> acc && check_type_equal type_ pattern_type_) true (zip2 type_list pattern_type_list) 
+      and check_name_equal_list (names: string list) (pattern_names: string list) : bool =
+        List.fold_left (fun acc (name, pattern_name) -> acc && name = pattern_name) true (zip2 names pattern_names) 
+      in
+
+      let rec check_type_expr_equal (type_expr: type_expr) (pattern_type_expr: type_expr): bool =
+        match type_expr with
+          | StructTypeExpr(_, name_opt, _) -> 
+            begin
+              match pattern_type_expr with
+                | StructTypeExpr(_, pattern_name_opt, _) ->
+                  begin
+                    match name_opt with
+                      | Some name -> (match pattern_name_opt with Some(pattern_name) when name = pattern_name -> true | None -> false) 
+                      | None -> true
+                  end
+                | _ -> false
+            end
+          | EnumTypeExpr(_, name_opt, _) ->
+            begin
+              match pattern_type_expr with
+                | EnumTypeExpr(_, pattern_name_opt, _) ->
+                  begin
+                    match name_opt with
+                      | Some name -> (match pattern_name_opt with Some(pattern_name) when name = pattern_name -> true | None -> false) 
+                      | None -> true
+                  end
+                | _ -> false
+            end
+          | PtrTypeExpr(_, type_expr_in) ->
+            begin
+              match pattern_type_expr with
+                | PtrTypeExpr(_, pattern_type_expr_in) -> check_type_expr_equal type_expr_in pattern_type_expr_in
+                | _ -> false
+            end
+          | ArrayTypeExpr(_, type_expr_in) ->
+            begin
+              match pattern_type_expr with
+                | ArrayTypeExpr(_, pattern_type_expr_in) -> check_type_expr_equal type_expr_in pattern_type_expr_in
+                | _ -> false
+            end
+          | StaticArrayTypeExpr(_, type_expr_in, nb_elems) ->
+            begin
+              match pattern_type_expr with
+                | StaticArrayTypeExpr(_, pattern_type_expr_in, pattern_nb_elems) when nb_elems = pattern_nb_elems -> check_type_expr_equal type_expr_in pattern_type_expr_in
+                | _ -> false
+            end
+          | ManifestTypeExpr(_, type_) ->
+            begin
+              match pattern_type_expr with
+                | ManifestTypeExpr(_, pattern_type_) -> check_type_equal type_ pattern_type_
+                | _ -> false
+            end
+          | IdentTypeExpr(_, _, name) ->
+            begin
+              match pattern_type_expr with
+                | IdentTypeExpr(_, _, pattern_name) when name = pattern_name -> true
+                | _ -> false
+            end
+          | ConstructedTypeExpr(_, name, type_expr_list) ->
+            begin
+              match pattern_type_expr with
+                | ConstructedTypeExpr(_, pattern_name, pattern_type_expr_list) when name = pattern_name -> check_type_expr_equal_list type_expr_list pattern_type_expr_list
+                | _ -> false
+            end
+          | PredTypeExpr(_, type_expr_list, _) ->
+            begin
+              match pattern_type_expr with
+                | PredTypeExpr(_, pattern_type_expr_list, _) -> check_type_expr_equal_list type_expr_list pattern_type_expr_list
+                | _ -> false
+            end
+          | PureFuncTypeExpr(_, type_expr_list) ->
+            begin
+              match pattern_type_expr with
+                | PureFuncTypeExpr(_, pattern_type_expr_list) -> check_type_expr_equal_list type_expr_list pattern_type_expr_list
+                | _ -> false
+            end
+      and check_type_expr_equal_list (type_expr_list: type_expr list) (pattern_type_expr_list: type_expr list) : bool =
+        List.fold_left (fun acc (type_expr, pattern_type_expr) -> acc && check_type_expr_equal type_expr pattern_type_expr) true (zip2 type_expr_list pattern_type_expr_list) 
+      in
+
+      let check_if_then_else (if_terms: expr list) : bool * mapping list list =
+        let pattern_inside = if (exactMacthOnly) then false, [] else check_expr_list_for_pattern if_terms pattern in
+        match pattern with
+          | IfAsn(_, pattern_cond_expr, pattern_then_expr, pattern_else_expr) ->
+            let pattern_if_terms = [pattern_cond_expr; pattern_then_expr; pattern_else_expr] in combine_or pattern_inside (check_expr_list_for_pattern_list if_terms pattern_if_terms)
+          | IfExpr(_, pattern_cond_expr, pattern_then_expr, pattern_else_expr) ->
+            let pattern_if_terms = [pattern_cond_expr; pattern_then_expr; pattern_else_expr] in combine_or pattern_inside (check_expr_list_for_pattern_list if_terms pattern_if_terms)
+          | _ -> false, []
+      in
+
+      match pattern with
+        | Var(_, varname) when enableMappings -> 
+          (* let _ = Printf.printf "Establishing mapping %s -> %s\n" varname (string_of_expr expr) in *)
+          true, [ [(varname, expr)] ]
+        | _ ->
           begin
             match expr with
-              | CallExpr(_, name, _, _, args, _) when name = pattern_name && List.length args = List.length pattern_pat_list -> check_pat_list_equal_list args pattern_pat_list
-              | _ -> false, []
-          end
-        | _ -> false, []
-    and check_pat_list_equal_list (pat_list: pat list) (pattern_pat_list: pat list): bool * mapping list list = 
-      List.fold_left (fun acc (pat_in, pattern_pat_in) -> combine_and acc (check_pat_equal pat_in pattern_pat_in)) (true, []) (zip2 pat_list pattern_pat_list)
-    in
-
-    let rec check_type_equal (type_: type_) (pattern_type_: type_): bool =
-      match type_ with
-        | Bool -> (match pattern_type_ with Bool -> true | _ -> false)
-        | Void -> (match pattern_type_ with Void -> true | _ -> false)
-        | Int(signed, rank) -> (match pattern_type_ with Int(pattern_signed, pattern_rank) when signed = pattern_signed && rank = pattern_rank -> true | _ -> false)
-        | RealType -> (match pattern_type_ with RealType -> true | _ -> false)
-        | Float -> (match pattern_type_ with Float -> true | _ -> false)
-        | Double -> (match pattern_type_ with Double -> true | _ -> false)
-        | LongDouble -> (match pattern_type_ with LongDouble -> true | _ -> false)
-        | StructType(name) -> (match pattern_type_ with StructType(pattern_name) when name = pattern_name -> true | _ -> false)
-        | PtrType(type_in) -> (match pattern_type_ with PtrType(pattern_type_in) -> check_type_equal type_in pattern_type_in | _ -> false)
-        | FuncType(name) -> (match pattern_type_ with FuncType(pattern_name) when name = pattern_name -> true | _ -> false)
-        | InductiveType(name, type_list)  -> (match pattern_type_ with InductiveType(pattern_name, pattern_type_list) when name = pattern_name -> check_type_equal_list type_list pattern_type_list | _ -> false)
-        | PredType(names, type_list, _, inductive) ->
-          begin
-            match pattern_type_ with
-              | PredType(pattern_names, pattern_type_list, _, pattern_inductive) when inductive = pattern_inductive ->
-                check_type_equal_list type_list pattern_type_list && check_name_equal_list names pattern_names
-              | _ -> false
-          end
-        | PureFuncType(type_in1, type_in2) -> (match pattern_type_ with PureFuncType(pattern_type_in1, pattern_type_in2) -> check_type_equal type_in1 pattern_type_in1 && check_type_equal type_in2 pattern_type_in2 | _ -> false)
-        | ObjType(name) -> (match pattern_type_ with ObjType(pattern_name) when name = pattern_name -> true | _ -> false) 
-        | ArrayType(type_in) -> (match pattern_type_ with ArrayType(pattern_type_in) -> check_type_equal type_in pattern_type_in | _ -> false)
-        | StaticArrayType(type_in, size) -> (match pattern_type_ with StaticArrayType(pattern_type_in, pattern_size) when size = pattern_size -> check_type_equal type_in pattern_type_in | _ -> false)
-        | BoxIdType -> (match pattern_type_ with BoxIdType -> true | _ -> false)
-        | HandleIdType -> (match pattern_type_ with HandleIdType -> true | _ -> false)
-        | AnyType -> (match pattern_type_ with AnyType -> true | _ -> false)
-        | TypeParam(name) -> (match pattern_type_ with TypeParam(pattern_name) when name = pattern_name -> true | _ -> false) 
-        | ClassOrInterfaceName(name) -> (match pattern_type_ with ClassOrInterfaceName(pattern_name) when name = pattern_name -> true | _ -> false) 
-        | PackageName(name) -> (match pattern_type_ with PackageName(pattern_name) when name = pattern_name -> true | _ -> false) 
-        | RefType(type_in) -> (match pattern_type_ with RefType(pattern_type_in) -> check_type_equal type_in pattern_type_in | _ -> false)
-        | AbstractType(name) -> (match pattern_type_ with AbstractType(pattern_name) when name = pattern_name -> true | _ -> false) 
-    and check_type_equal_list (type_list: type_ list) (pattern_type_list: type_ list) : bool =
-      List.fold_left (fun acc (type_, pattern_type_) -> acc && check_type_equal type_ pattern_type_) true (zip2 type_list pattern_type_list) 
-    and check_name_equal_list (names: string list) (pattern_names: string list) : bool =
-      List.fold_left (fun acc (name, pattern_name) -> acc && name = pattern_name) true (zip2 names pattern_names) 
-    in
-
-    let rec check_type_expr_equal (type_expr: type_expr) (pattern_type_expr: type_expr): bool =
-      match type_expr with
-        | StructTypeExpr(_, name_opt, _) -> 
-          begin
-            match pattern_type_expr with
-              | StructTypeExpr(_, pattern_name_opt, _) ->
+              | True(_) -> (match pattern with True(_) -> true, [] | _ -> false, [])
+              | False(_) -> (match pattern with False(_) -> true, [] | _ -> false, [])
+              | Null(_) -> (match pattern with Null(_) -> true, [] | _ -> false, [])
+              | Var(_, name1) -> (match pattern with Var(_, name2) when name1 = name2 -> true, [] | _ -> false, [])
+              | TruncatingExpr(_, expr_in) ->
+                let pattern_inside = if (exactMacthOnly) then false, [] else check_expr_for_pattern expr_in pattern false in
                 begin
-                  match name_opt with
-                    | Some name -> (match pattern_name_opt with Some(pattern_name) when name = pattern_name -> true | None -> false) 
-                    | None -> true
+                  match pattern with
+                    | TruncatingExpr(_, pattern_expr_in) -> combine_or pattern_inside (check_expr_for_pattern expr_in pattern_expr_in true)
+                    | _ -> pattern_inside
                 end
-              | _ -> false
-          end
-        | EnumTypeExpr(_, name_opt, _) ->
-           begin
-            match pattern_type_expr with
-              | EnumTypeExpr(_, pattern_name_opt, _) ->
+              | Operation(_, operator, operands) ->
                 begin
-                  match name_opt with
-                    | Some name -> (match pattern_name_opt with Some(pattern_name) when name = pattern_name -> true | None -> false) 
-                    | None -> true
-                end
-              | _ -> false
-          end
-        | PtrTypeExpr(_, type_expr_in) ->
-          begin
-            match pattern_type_expr with
-              | PtrTypeExpr(_, pattern_type_expr_in) -> check_type_expr_equal type_expr_in pattern_type_expr_in
-              | _ -> false
-          end
-        | ArrayTypeExpr(_, type_expr_in) ->
-          begin
-            match pattern_type_expr with
-              | ArrayTypeExpr(_, pattern_type_expr_in) -> check_type_expr_equal type_expr_in pattern_type_expr_in
-              | _ -> false
-          end
-        | StaticArrayTypeExpr(_, type_expr_in, nb_elems) ->
-          begin
-            match pattern_type_expr with
-              | StaticArrayTypeExpr(_, pattern_type_expr_in, pattern_nb_elems) when nb_elems = pattern_nb_elems -> check_type_expr_equal type_expr_in pattern_type_expr_in
-              | _ -> false
-          end
-        | ManifestTypeExpr(_, type_) ->
-          begin
-            match pattern_type_expr with
-              | ManifestTypeExpr(_, pattern_type_) -> check_type_equal type_ pattern_type_
-              | _ -> false
-          end
-        | IdentTypeExpr(_, _, name) ->
-          begin
-            match pattern_type_expr with
-              | IdentTypeExpr(_, _, pattern_name) when name = pattern_name -> true
-              | _ -> false
-          end
-        | ConstructedTypeExpr(_, name, type_expr_list) ->
-          begin
-             match pattern_type_expr with
-              | ConstructedTypeExpr(_, pattern_name, pattern_type_expr_list) when name = pattern_name -> check_type_expr_equal_list type_expr_list pattern_type_expr_list
-              | _ -> false
-          end
-        | PredTypeExpr(_, type_expr_list, _) ->
-          begin
-             match pattern_type_expr with
-              | PredTypeExpr(_, pattern_type_expr_list, _) -> check_type_expr_equal_list type_expr_list pattern_type_expr_list
-              | _ -> false
-          end
-        | PureFuncTypeExpr(_, type_expr_list) ->
-          begin
-             match pattern_type_expr with
-              | PureFuncTypeExpr(_, pattern_type_expr_list) -> check_type_expr_equal_list type_expr_list pattern_type_expr_list
-              | _ -> false
-          end
-    and check_type_expr_equal_list (type_expr_list: type_expr list) (pattern_type_expr_list: type_expr list) : bool =
-      List.fold_left (fun acc (type_expr, pattern_type_expr) -> acc && check_type_expr_equal type_expr pattern_type_expr) true (zip2 type_expr_list pattern_type_expr_list) 
-    in
+                  let pattern_in_operands = if (exactMacthOnly) then false, [] else check_expr_list_for_pattern operands pattern in
+                  match pattern with
+                    | Operation(_, pattern_operator, pattern_operands) when List.length operands = List.length pattern_operands -> 
+                      begin
+                        let switch_operands_same = if (List.length operands < 2) then false, []
+                          else combine_and (check_expr_for_pattern (List.nth operands 0) (List.nth pattern_operands 1) true) (check_expr_for_pattern (List.nth operands 1) (List.nth pattern_operands 0) true) 
+                        in
+                        let operands_same = check_expr_list_for_pattern_list operands pattern_operands in
 
-    let check_if_then_else (if_terms: expr list) : bool * mapping list list =
-      let pattern_inside = if (exactMacthOnly) then false, [] else check_expr_list_for_pattern if_terms pattern in
-      match pattern with
-        | IfAsn(_, pattern_cond_expr, pattern_then_expr, pattern_else_expr) ->
-          let pattern_if_terms = [pattern_cond_expr; pattern_then_expr; pattern_else_expr] in combine_or pattern_inside (check_expr_list_for_pattern_list if_terms pattern_if_terms)
-        | IfExpr(_, pattern_cond_expr, pattern_then_expr, pattern_else_expr) ->
-          let pattern_if_terms = [pattern_cond_expr; pattern_then_expr; pattern_else_expr] in combine_or pattern_inside (check_expr_list_for_pattern_list if_terms pattern_if_terms)
-        | _ -> false, []
-    in
-
-    match pattern with
-      | Var(_, varname) -> true, [ [(varname, expr)] ]
-      | _ ->
-        begin
-          match expr with
-            | True(_) -> (match pattern with True(_) -> true, [] | _ -> false, [])
-            | False(_) -> (match pattern with False(_) -> true, [] | _ -> false, [])
-            | Null(_) -> (match pattern with Null(_) -> true, [] | _ -> false, [])
-            | Var(_, name1) -> (match pattern with Var(_, name2) when name1 = name2 -> true, [] | _ -> false, [])
-            | TruncatingExpr(_, expr_in) ->
-              let pattern_inside = if (exactMacthOnly) then false, [] else check_expr_for_pattern expr_in pattern false in
-              begin
-                match pattern with
-                  | TruncatingExpr(_, pattern_expr_in) -> combine_or pattern_inside (check_expr_for_pattern expr_in pattern_expr_in true)
-                  | _ -> pattern_inside
-              end
-            | Operation(_, operator, operands) ->
-              begin
-                let pattern_in_operands = if (exactMacthOnly) then false, [] else check_expr_list_for_pattern operands pattern in
-                match pattern with
-                  | Operation(_, pattern_operator, pattern_operands) when List.length operands = List.length pattern_operands -> 
-                    begin
-                      let switch_operands_same = if (List.length operands < 2) then false, []
-                        else combine_or (check_expr_for_pattern (List.nth operands 0) (List.nth pattern_operands 1) true) (check_expr_for_pattern (List.nth operands 1) (List.nth pattern_operands 0) true) 
-                      in
-                      let operands_same = check_expr_list_for_pattern_list operands pattern_operands in
-
-                      let all_operands_match = 
-                        if (operator = pattern_operator) then 
-                          let (_, isBinary, isSymmetric) = operator_info operator in
-                          if (isBinary && isSymmetric) then
-                            combine_or switch_operands_same operands_same
+                        let all_operands_match = 
+                          if (operator = pattern_operator) then 
+                            let (_, isBinary, isSymmetric) = operator_info operator in
+                            if (isBinary && isSymmetric) then
+                              combine_or switch_operands_same operands_same
+                            else
+                              operands_same
+                          else if (are_operators_opposite operator pattern_operator) then
+                            switch_operands_same
                           else
-                            operands_same
-                        else if (are_operators_opposite operator pattern_operator) then
-                          switch_operands_same
-                        else
-                          false, []
-                      in
-                      combine_or pattern_in_operands all_operands_match
-                    end
-                  | _ -> pattern_in_operands
-              end
-            | IntLit(_, integer, _, _, _) -> 
-              begin
-                match pattern with 
-                  | IntLit(_, pattern_integer, _, _, _) when (Big_int.compare_big_int integer pattern_integer) = 0 -> true, []
-                  | _ -> false, []
-              end
-            | RealLit(_, real) ->
-              begin
-                match pattern with
-                  | RealLit(_, pattern_real) when Num.eq_num real pattern_real -> true, []
-                  | _ -> false, []
-              end
-            | StringLit(_, str) ->
-              begin
-                match pattern with
-                  | StringLit(_, pattern_str) when str = pattern_str -> true, []
-                  | _ -> false, []
-              end
-            | Read(_, expr_in, str) ->
-              begin
-                let pattern_inside = if (exactMacthOnly) then false, [] else check_expr_for_pattern expr_in pattern false in
-                match pattern with
-                  | Read(_, pattern_expr_in, pattern_str) when str = pattern_str -> combine_or pattern_inside (check_expr_for_pattern expr_in pattern_expr_in true)
-                  | _ -> pattern_inside
-              end
-            | ArrayLengthExpr(_, expr_in) -> 
-              begin
-                let pattern_inside = if (exactMacthOnly) then false, [] else check_expr_for_pattern expr_in pattern false in
-                match pattern with
-                  | ArrayLengthExpr(_, pattern_expr_in) -> combine_or pattern_inside (check_expr_for_pattern expr_in pattern_expr_in true)
-                  | _ -> pattern_inside
-              end
-            | ReadArray(_, array_expr, index_expr) ->
-              begin
-                let pattern_inside = if (exactMacthOnly) then false, [] else combine_or (check_expr_for_pattern array_expr pattern false) (check_expr_for_pattern index_expr pattern false) in
-                match pattern with
-                    | ReadArray(_, pattern_array_expr, pattern_index_expr) -> 
-                      let res_exact_match = combine_and (check_expr_for_pattern array_expr pattern_array_expr true) (check_expr_for_pattern index_expr pattern_index_expr true) in
+                            false, []
+                        in
+                        combine_or pattern_in_operands all_operands_match
+                      end
+                    | _ -> pattern_in_operands
+                end
+              | IntLit(_, integer, _, _, _) -> 
+                begin
+                  match pattern with 
+                    | IntLit(_, pattern_integer, _, _, _) when (Big_int.compare_big_int integer pattern_integer) = 0 -> true, []
+                    | _ -> false, []
+                end
+              | RealLit(_, real) ->
+                begin
+                  match pattern with
+                    | RealLit(_, pattern_real) when Num.eq_num real pattern_real -> true, []
+                    | _ -> false, []
+                end
+              | StringLit(_, str) ->
+                begin
+                  match pattern with
+                    | StringLit(_, pattern_str) when str = pattern_str -> true, []
+                    | _ -> false, []
+                end
+              | Read(_, expr_in, str) ->
+                begin
+                  let pattern_inside = if (exactMacthOnly) then false, [] else check_expr_for_pattern expr_in pattern false in
+                  match pattern with
+                    | Read(_, pattern_expr_in, pattern_str) when str = pattern_str -> combine_or pattern_inside (check_expr_for_pattern expr_in pattern_expr_in true)
+                    | _ -> pattern_inside
+                end
+              | ArrayLengthExpr(_, expr_in) -> 
+                begin
+                  let pattern_inside = if (exactMacthOnly) then false, [] else check_expr_for_pattern expr_in pattern false in
+                  match pattern with
+                    | ArrayLengthExpr(_, pattern_expr_in) -> combine_or pattern_inside (check_expr_for_pattern expr_in pattern_expr_in true)
+                    | _ -> pattern_inside
+                end
+              | ReadArray(_, array_expr, index_expr) ->
+                begin
+                  let pattern_inside = if (exactMacthOnly) then false, [] else combine_or (check_expr_for_pattern array_expr pattern false) (check_expr_for_pattern index_expr pattern false) in
+                  match pattern with
+                      | ReadArray(_, pattern_array_expr, pattern_index_expr) -> 
+                        let res_exact_match = combine_and (check_expr_for_pattern array_expr pattern_array_expr true) (check_expr_for_pattern index_expr pattern_index_expr true) in
+                        combine_or pattern_inside res_exact_match
+                      | _ -> pattern_inside
+                end
+              | Deref(_, expr_in) -> 
+                begin
+                  let pattern_inside = if (exactMacthOnly) then false, [] else check_expr_for_pattern expr_in pattern false in
+                  match pattern with
+                    | Deref(_, pattern_expr_in) -> combine_or pattern_inside (check_expr_for_pattern expr_in pattern_expr_in true) 
+                    | _ -> pattern_inside
+                end
+              | CallExpr(_, name, _, _, args, _) ->
+                begin
+                  let pattern_in_args = if (exactMacthOnly) then false, [] else check_pat_list_for_pattern args pattern in
+                  match pattern with
+                    | CallExpr(_, pattern_name, _, _, pattern_args, _) when name = pattern_name && List.length args = List.length pattern_args ->
+                      begin
+                        let each_arg_same = check_pat_list_equal_list args pattern_args in
+                        combine_or each_arg_same pattern_in_args
+                      end
+                    | _ -> pattern_in_args
+                
+                end
+              | ExprCallExpr(_, callee_expr, args_expr) ->
+                begin
+                  let pattern_inside = if (exactMacthOnly) then false, []
+                    else combine_or (check_expr_for_pattern callee_expr pattern false) (check_expr_list_for_pattern args_expr pattern)
+                  in
+                  match pattern with
+                    | ExprCallExpr(_, pattern_callee_expr, pattern_args_expr) -> 
+                      let res_exact_match = combine_and (check_expr_for_pattern callee_expr pattern_callee_expr true) (check_expr_list_for_pattern_list args_expr pattern_args_expr) in
                       combine_or pattern_inside res_exact_match
                     | _ -> pattern_inside
-              end
-            | Deref(_, expr_in) -> 
-              begin
-                let pattern_inside = if (exactMacthOnly) then false, [] else check_expr_for_pattern expr_in pattern false in
-                match pattern with
-                  | Deref(_, pattern_expr_in) -> combine_or pattern_inside (check_expr_for_pattern expr_in pattern_expr_in true) 
-                  | _ -> pattern_inside
-              end
-            | CallExpr(_, name, _, _, args, _) ->
-              begin
-                let pattern_in_args = if (exactMacthOnly) then false, [] else check_pat_list_for_pattern args pattern in
-                match pattern with
-                  | CallExpr(_, pattern_name, _, _, pattern_args, _) when name = pattern_name && List.length args = List.length pattern_args ->
-                    begin
-                      let each_arg_same = check_pat_list_equal_list args pattern_args in
-                      combine_or each_arg_same pattern_in_args
-                    end
-                  | _ -> pattern_in_args
-              
-              end
-            | ExprCallExpr(_, callee_expr, args_expr) ->
-              begin
-                let pattern_inside = if (exactMacthOnly) then false, []
-                  else combine_or (check_expr_for_pattern callee_expr pattern false) (check_expr_list_for_pattern args_expr pattern)
-                in
-                match pattern with
-                  | ExprCallExpr(_, pattern_callee_expr, pattern_args_expr) -> 
-                    let res_exact_match = combine_and (check_expr_for_pattern callee_expr pattern_callee_expr true) (check_expr_list_for_pattern_list args_expr pattern_args_expr) in
-                    combine_or pattern_inside res_exact_match
-                  | _ -> pattern_inside
-              end
-            | IfExpr(_, cond_expr, then_expr, else_expr) -> check_if_then_else [cond_expr; then_expr; else_expr]
-            | CastExpr(_, type_cast, expr_in) ->
-              begin
-                let pattern_inside = if (exactMacthOnly) then false, [] else check_expr_for_pattern expr_in pattern false in
-                match pattern with 
-                  | CastExpr(_, pattern_type_cast, pattern_expr_in) -> 
-                    if (check_type_expr_equal type_cast pattern_type_cast) then
-                      combine_or pattern_inside (check_expr_for_pattern expr_in pattern_expr_in true)
-                    else
-                      pattern_inside
-                  | _ -> pattern_inside
-              end
-            | SizeofExpr(_, type_sizeof) -> (match pattern with SizeofExpr(_, pattern_type_sizeof) -> (check_type_expr_equal type_sizeof pattern_type_sizeof), [] | _ -> false, [])
-            | AddressOf(_, expr_in) ->
-              begin
-                let pattern_inside = if (exactMacthOnly) then false, [] else check_expr_for_pattern expr_in pattern false in
-                match pattern with
-                  | AddressOf(_, pattern_expr_in) -> combine_or pattern_inside (check_expr_for_pattern expr_in pattern_expr_in true)
-                  | _ -> pattern_inside 
-              end
-            | AssignExpr(_, rec_expr, val_expr) -> 
-              begin
-                let pattern_inside = if (exactMacthOnly) then false, [] else combine_or (check_expr_for_pattern rec_expr pattern false) (check_expr_for_pattern val_expr pattern false) in
-                match pattern with
-                    | AssignExpr(_, pattern_rec_expr, pattern_val_expr) -> 
-                    let res_exact_match = combine_and (check_expr_for_pattern rec_expr pattern_rec_expr true) (check_expr_for_pattern val_expr pattern_val_expr true) in
+                end
+              | IfExpr(_, cond_expr, then_expr, else_expr) -> check_if_then_else [cond_expr; then_expr; else_expr]
+              | CastExpr(_, type_cast, expr_in) ->
+                begin
+                  let pattern_inside = if (exactMacthOnly) then false, [] else check_expr_for_pattern expr_in pattern false in
+                  match pattern with 
+                    | CastExpr(_, pattern_type_cast, pattern_expr_in) -> 
+                      if (check_type_expr_equal type_cast pattern_type_cast) then
+                        combine_or pattern_inside (check_expr_for_pattern expr_in pattern_expr_in true)
+                      else
+                        pattern_inside
+                    | _ -> pattern_inside
+                end
+              | SizeofExpr(_, type_sizeof) -> (match pattern with SizeofExpr(_, pattern_type_sizeof) -> (check_type_expr_equal type_sizeof pattern_type_sizeof), [] | _ -> false, [])
+              | AddressOf(_, expr_in) ->
+                begin
+                  let pattern_inside = if (exactMacthOnly) then false, [] else check_expr_for_pattern expr_in pattern false in
+                  match pattern with
+                    | AddressOf(_, pattern_expr_in) -> combine_or pattern_inside (check_expr_for_pattern expr_in pattern_expr_in true)
+                    | _ -> pattern_inside 
+                end
+              | AssignExpr(_, rec_expr, val_expr) -> 
+                begin
+                  let pattern_inside = if (exactMacthOnly) then false, [] else combine_or (check_expr_for_pattern rec_expr pattern false) (check_expr_for_pattern val_expr pattern false) in
+                  match pattern with
+                      | AssignExpr(_, pattern_rec_expr, pattern_val_expr) -> 
+                      let res_exact_match = combine_and (check_expr_for_pattern rec_expr pattern_rec_expr true) (check_expr_for_pattern val_expr pattern_val_expr true) in
+                        combine_or pattern_inside res_exact_match 
+                      | _ -> pattern_inside
+                end
+              | PointsTo(_, expr_in, pat) ->
+                begin
+                  let pattern_inside = if (exactMacthOnly) then false, [] else combine_or (check_expr_for_pattern expr_in pattern false) (check_pat_for_pattern pat pattern) in
+                  match pattern with
+                    | PointsTo(_, pattern_expr_in, pattern_pat) -> 
+                      let res_exact_match = combine_and (check_expr_for_pattern expr_in pattern_expr_in true) (check_pat_equal pat pattern_pat) in
+                      combine_or pattern_inside res_exact_match 
+                    | _ -> pattern_inside 
+                end
+              | ExprAsn(_, expr_in) ->
+                begin
+                  let pattern_inside = if (exactMacthOnly) then false, [] else check_expr_for_pattern expr_in pattern false in
+                  match pattern with
+                    | ExprAsn(_, pattern_expr_in) -> combine_or pattern_inside (check_expr_for_pattern expr_in pattern_expr_in true)
+                    | _ -> pattern_inside 
+                end
+              | Sep(_, lhs, rhs) -> 
+                begin
+                  let pattern_inside = if (exactMacthOnly) then false, [] else combine_or (check_expr_for_pattern lhs pattern false) (check_expr_for_pattern rhs pattern false) in
+                  match pattern with
+                    | Sep(_, pattern_lhs, pattern_rhs) ->
+                      let res_exact_match = combine_and (check_expr_for_pattern lhs pattern_lhs true) (check_expr_for_pattern rhs pattern_rhs true) in
                       combine_or pattern_inside res_exact_match 
                     | _ -> pattern_inside
-              end
-            | PointsTo(_, expr_in, pat) ->
-              begin
-                let pattern_inside = if (exactMacthOnly) then false, [] else combine_or (check_expr_for_pattern expr_in pattern false) (check_pat_for_pattern pat pattern) in
-                match pattern with
-                  | PointsTo(_, pattern_expr_in, pattern_pat) -> 
-                    let res_exact_match = combine_and (check_expr_for_pattern expr_in pattern_expr_in true) (check_pat_equal pat pattern_pat) in
-                    combine_or pattern_inside res_exact_match 
-                  | _ -> pattern_inside 
-              end
-            | ExprAsn(_, expr_in) ->
-              begin
-                let pattern_inside = if (exactMacthOnly) then false, [] else check_expr_for_pattern expr_in pattern false in
-                match pattern with
-                  | ExprAsn(_, pattern_expr_in) -> combine_or pattern_inside (check_expr_for_pattern expr_in pattern_expr_in true)
-                  | _ -> pattern_inside 
-              end
-            | Sep(_, lhs, rhs) -> 
-              begin
-                let pattern_inside = if (exactMacthOnly) then false, [] else combine_or (check_expr_for_pattern lhs pattern false) (check_expr_for_pattern rhs pattern false) in
-                match pattern with
-                  | Sep(_, pattern_lhs, pattern_rhs) ->
-                    let res_exact_match = combine_and (check_expr_for_pattern lhs pattern_lhs true) (check_expr_for_pattern rhs pattern_rhs true) in
-                    combine_or pattern_inside res_exact_match 
-                  | _ -> pattern_inside
-              end
-            | IfAsn(_, cond_expr, then_expr, else_expr) -> check_if_then_else [cond_expr; then_expr; else_expr]
-            | EmpAsn(_) -> (match pattern with EmpAsn(_) -> true, [] | _ -> false, [])
-            | CoefAsn(_, perm, expr_in) ->
-              begin
-                let pattern_inside = if (exactMacthOnly) then false, [] else combine_or (check_pat_for_pattern perm pattern) (check_expr_for_pattern expr_in pattern false) in
-                match pattern with
-                  | CoefAsn(_, pattern_perm, pattern_expr_in) -> 
-                    let res_exact_match = combine_and (check_pat_equal perm pattern_perm) (check_expr_for_pattern expr_in pattern_expr_in true) in
-                    combine_or pattern_inside res_exact_match
-                  | _ -> pattern_inside
-              end
-            | _ -> false, []
-        end
+                end
+              | IfAsn(_, cond_expr, then_expr, else_expr) -> check_if_then_else [cond_expr; then_expr; else_expr]
+              | EmpAsn(_) -> (match pattern with EmpAsn(_) -> true, [] | _ -> false, [])
+              | CoefAsn(_, perm, expr_in) ->
+                begin
+                  let pattern_inside = if (exactMacthOnly) then false, [] else combine_or (check_pat_for_pattern perm pattern) (check_expr_for_pattern expr_in pattern false) in
+                  match pattern with
+                    | CoefAsn(_, pattern_perm, pattern_expr_in) -> 
+                      let res_exact_match = combine_and (check_pat_equal perm pattern_perm) (check_expr_for_pattern expr_in pattern_expr_in true) in
+                      combine_or pattern_inside res_exact_match
+                    | _ -> pattern_inside
+                end
+              | _ -> false, []
+          end
+    in
+
+    check_expr_for_pattern expr pattern exactMacthOnly
   in
 
   let rec check_mappings_valid (mappings_list: mapping list list): bool =
@@ -660,18 +668,19 @@ let _ =
             match expr_list with
               | [] -> true
               | expr :: tail -> 
-                let same_expr_filter other_expr = let (res, _) = check_expr_for_pattern expr other_expr true in res in
+                let same_expr_filter other_expr = let (res, _) = are_expr_equal expr other_expr true false in res in
                 let same_expr_list = List.filter same_expr_filter tail in
                 List.length tail = List.length same_expr_list
           in
 
           let conflicts = List.filter (fun (other_varname, _) -> varname = other_varname) mappings in
           let expr_list = List.map (fun (_, expr) -> expr) conflicts in
+          (* let _ = (Printf.printf "  Checking conflicts in ("; List.iter (fun expr -> Printf.printf "%s | " (string_of_expr expr)) expr_list ;Printf.printf ")\n") in *)
           solve_conflicts expr_list && check_mappings_valid_inner (List.filter (fun (other_varname, _) -> varname <> other_varname) mappings)
     in
 
     match mappings_list with
-      | [] -> true
+      | [] -> false
       | mappings :: tail -> check_mappings_valid_inner mappings || check_mappings_valid tail
   in
 
@@ -697,7 +706,9 @@ let _ =
         | [] -> ()
         | (loc, name, postcond) :: tail ->
           begin
-            let (res, mappings) = check_expr_for_pattern postcond pattern false in
+            let (res, mappings) = are_expr_equal postcond pattern false true in
+            (* let _ = Printf.printf "%d versions of mappings\n" (List.length mappings) in *)
+            (* let _ = List.iter (fun maps -> (Printf.printf "\t"; (List.iter (fun (varname, expr) -> Printf.printf "%s->%s | " varname (string_of_expr expr)) maps); Printf.printf "\n";) ) mappings in *)
             let _ = if (res && check_mappings_valid mappings) then Printf.printf "Match %s\n" name else () in
             search_for_pattern_inner tail
           end
@@ -717,7 +728,7 @@ let _ =
         match lemmas_in with
           | [] -> true
           | (loc_in, name_in, postcond_in) :: tail -> 
-            let (res, _) = check_expr_for_pattern postcond postcond_in true in
+            let (res, _) = are_expr_equal postcond postcond_in true false in
             if (Filename.check_suffix (filename_from_loc loc_in) ".gh" && name = name_in && res) then
               false
             else 
