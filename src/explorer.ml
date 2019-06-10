@@ -220,7 +220,7 @@ let _ =
     let rec string_of_pat (pat: pat) : string =
       match pat with
         | LitPat(expr) -> string_of_expr expr
-        | VarPat(_, varname) ->"?Var_" ^ varname
+        | VarPat(_, varname) ->"?" ^ varname
         | DummyPat -> "_"
         | CtorPat(_, name, pat_list) -> "Ctor_" ^ name ^ "(" ^ string_of_pat_list pat_list ^ " )"
     and string_of_pat_list (pat_list: pat list) : string =
@@ -260,7 +260,7 @@ let _ =
       | True(_) -> "True"
       | False(_) -> "False"
       | Null(_) -> "Null"
-      | Var(_, varname) -> "Var_" ^ varname
+      | Var(_, varname) -> varname
       | TruncatingExpr(_, expr_in) -> "Truncating(" ^ string_of_expr expr_in ^ ")"
       | Operation(_, operator, operands) -> 
         let (op_str, isBinary, _) = operator_info operator in
@@ -688,20 +688,22 @@ let _ =
 
     let filename_from_loc (loc: loc): string =
       match loc with
-        | Lexed(loc0) -> let ((p1, _, _), _) = loc0 in " in file " ^ p1
+        | Lexed(loc0) -> let ((p1, _, _), _) = loc0 in p1
         | _ -> ""
     in
 
-    let print_explore_result ((loc, name): explore_result): unit =
-      let startline_from_loc (loc: loc): string =
-        match loc with
-          | Lexed(loc0) -> let ((_, l1, _), _) = loc0 in "At line " ^ string_of_int l1 ^ ": "
-          | _ -> ""
-      in  
-      Printf.printf("\t%sPost-condition of lemma %s()\n") (startline_from_loc loc) name
-    in
+    let lines_from_loc (loc: loc): string =
+      match loc with
+        | Lexed(loc0) -> 
+          let ((_, l1, _), _) = loc0 in 
+          let l1_str = string_of_int l1 in
+          let str = ref l1_str in
+          let _ = for i = 0 to 3 - String.length l1_str do str := " " ^ !str done in
+          !str
+        | _ -> ""
+    in  
 
-    let rec search_for_pattern_inner (lemmas_inner: lemma list) : unit =
+    let rec search_for_pattern_inner (lemmas_inner: lemma list) (last_filename: string) : unit =
       match lemmas_inner with
         | [] -> ()
         | (loc, name, postcond) :: tail ->
@@ -709,12 +711,22 @@ let _ =
             let (res, mappings) = are_expr_equal postcond pattern false true in
             (* let _ = Printf.printf "%d versions of mappings\n" (List.length mappings) in *)
             (* let _ = List.iter (fun maps -> (Printf.printf "\t"; (List.iter (fun (varname, expr) -> Printf.printf "%s->%s | " varname (string_of_expr expr)) maps); Printf.printf "\n";) ) mappings in *)
-            let _ = if (res && check_mappings_valid mappings) then Printf.printf "Match %s\n" name else () in
-            search_for_pattern_inner tail
+            if (res && check_mappings_valid mappings) then 
+              let filename = filename_from_loc loc in
+              let _ = 
+                if (filename <> last_filename) then 
+                  Printf.printf "In file %s:\n" filename 
+                else 
+                  ()
+              in
+              let _ = Printf.printf "\tAt line %s: %s\n" (lines_from_loc loc) name in
+              search_for_pattern_inner tail filename
+            else 
+              search_for_pattern_inner tail last_filename
           end
     in
       
-    search_for_pattern_inner lemmas
+    search_for_pattern_inner lemmas ""
   in
 
   let remove_duplicate_lemmas (lemmas: lemma list) ((loc, name, postcond): lemma): bool =
@@ -757,7 +769,7 @@ let _ =
   let lemmas_to_explore = get_lemmas_from_decls decls_to_explore in
   let lemmas_filtered = List.filter (remove_duplicate_lemmas lemmas_to_explore) lemmas_to_explore in
   let _ = Printf.printf "\n== %d lemmas were parsed and will be searched for a pattern ==\n" (List.length lemmas_filtered) in
-  let _ = List.iter (fun (_, name, postcond) -> Printf.printf "%s(): %s\n" name (string_of_expr postcond)) lemmas_filtered in
+  (* let _ = List.iter (fun (_, name, postcond) -> Printf.printf "%s(): %s\n" name (string_of_expr postcond)) lemmas_filtered in *)
 
   (* Execution loop *)
   while true do
