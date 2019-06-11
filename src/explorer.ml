@@ -4,6 +4,7 @@ open Parser
 open Util
 open Arg
 
+(* Custom types *)
 type explore_result = (loc * string) 
 type lemma = (loc * string * asn)
 type mapping = (string * expr)
@@ -469,14 +470,14 @@ let _ =
       in
 
       match pattern with
-        | Var(_, varname) when enableMappings -> true, [ [(varname, expr)] ]
+        | Var(_, varname) when enableMappings && compare "_" (String.make 1 varname.[0]) == 0 -> true, [ [(varname, expr)] ]
         | _ ->
           begin
             match expr with
               | True(_) -> (match pattern with True(_) -> true, [] | _ -> false, [])
               | False(_) -> (match pattern with False(_) -> true, [] | _ -> false, [])
               | Null(_) -> (match pattern with Null(_) -> true, [] | _ -> false, [])
-              | Var(_, name1) -> (match pattern with Var(_, name2) when name1 = name2 -> true, [] | _ -> false, [])
+              | Var(_, varname) -> (match pattern with Var(_, pattern_varname) when varname = pattern_varname -> true, [] | _ -> false, [])
               | TruncatingExpr(_, expr_in) ->
                 let pattern_inside = if (exactMacthOnly) then false, [] else check_expr_for_pattern expr_in pattern false in
                 begin
@@ -719,7 +720,7 @@ let _ =
               search_for_pattern_inner tail last_filename
           end
     in
-      
+    let _ = Printf.printf "%s\n" (string_of_expr pattern) in
     search_for_pattern_inner lemmas ""
   in
 
