@@ -200,14 +200,14 @@ let _ =
     | Div -> "/", true, false
     | Mod -> "%%", true, false
     | BitNot -> "~", false, false
-    | BitAnd -> "&", false, false
-    | BitXor -> "^", false, false
-    | BitOr -> "|", false, false
+    | BitAnd -> "&", true, true
+    | BitXor -> "^", true, true
+    | BitOr -> "|", true, true
     | ShiftLeft -> "<<", true, false
     | ShiftRight-> ">>", true, false
   in
 
-  let are_operators_opposite (op: operator) (other_op: operator) : bool =
+  let are_operators_opposite (op: operator) (other_op: operator): bool =
     match op with
       | Le -> (match other_op with Ge -> true | _ -> false)
       | Ge -> (match other_op with Le -> true | _ -> false)
@@ -216,39 +216,52 @@ let _ =
       | _ -> false
   in
 
-  let rec string_of_expr (expr: expr) : string =
+  let rec string_of_expr (expr: expr): string =
 
-    let rec string_of_expr_list (expr_list: expr list) : string =
+    let rec string_of_expr_list (expr_list: expr list): string =
       match expr_list with
         | [] -> ""
         | head :: [] -> string_of_expr head
         | head :: tail -> (string_of_expr head) ^ ", " ^ (string_of_expr_list tail)
     in
 
-    let rec string_of_pat (pat: pat) : string =
+    let rec string_of_pat (pat: pat): string =
       match pat with
         | LitPat(expr) -> string_of_expr expr
         | VarPat(_, varname) ->"?" ^ varname
         | DummyPat -> "_"
         | CtorPat(_, name, pat_list) -> name ^ "(" ^ string_of_pat_list pat_list ^ " )"
-    and string_of_pat_list (pat_list: pat list) : string =
+    and string_of_pat_list (pat_list: pat list): string =
       match pat_list with
         | [] -> ""
         | head :: [] -> string_of_pat head
         | head :: tail -> (string_of_pat head) ^ ", " ^ (string_of_pat_list tail)
     in
 
-    let rec string_of_type_ (type_: type_) : string =
+
+    let rec string_of_type_ (type_: type_): string =
+
+      let rec string_of_integer_rank (rank: int): string =
+        if (rank = 0) then
+          "char"
+        else if (rank = 1) then
+          "short"
+        else if (rank = 2) then
+          "int"
+        else
+          "long"
+      in
+
       match type_ with
         | Bool -> "bool"
         | Void -> "void"
-        | Int(_, integer) -> string_of_int integer
+        | Int(sign, rank) -> (match sign with Unsigned -> "unsigned " | _ -> "") ^ string_of_integer_rank rank
         | RealType -> "real"
         | Float -> "float"
         | Double -> "double"
         | LongDouble -> "long double"
         | StructType(name) -> "struct " ^ name
-        | PtrType(type_in) -> string_of_type_ type_in ^ "*"
+        | PtrType(type_in) -> string_of_type_ type_in ^ " *"
         | FuncType(name) -> name
         | InductiveType(name, type_list) -> name ^ "(" ^ string_of_type_list type_list ^ ")" 
         | PureFuncType(type_1, type_2) -> "(" ^ string_of_type_ type_1 ^ ", " ^ string_of_type_ type_2 ^ ")"
@@ -260,18 +273,18 @@ let _ =
         | RefType(type_in) -> string_of_type_ type_in
         | AbstractType(name) -> name
         | _ -> "unknown_type"
-     and string_of_type_list (type_list: type_ list) : string =
+     and string_of_type_list (type_list: type_ list): string =
       match type_list with
         | [] -> ""
         | head :: [] -> string_of_type_ head
         | head :: tail -> (string_of_type_ head) ^ ", " ^ (string_of_type_list tail)
     in
 
-    let rec string_of_type_expr (type_expr: type_expr) : string =
+    let rec string_of_type_expr (type_expr: type_expr): string =
       match type_expr with
         | StructTypeExpr(_, name_opt, _) -> (match name_opt with Some name -> name | _ -> "")
         | EnumTypeExpr(_, name_opt, _) -> (match name_opt with Some name -> name | _ -> "")
-        | PtrTypeExpr(_, type_expr_in) -> string_of_type_expr type_expr_in ^ "*"
+        | PtrTypeExpr(_, type_expr_in) -> string_of_type_expr type_expr_in ^ " *"
         | ArrayTypeExpr(_, type_expr_in) -> string_of_type_expr type_expr_in ^ "[]"
         | StaticArrayTypeExpr(_, type_expr_in, nb_elems) -> string_of_type_expr type_expr_in ^ "[" ^ string_of_int nb_elems ^ "]"
         | ManifestTypeExpr(_, type_) -> string_of_type_ type_
@@ -297,7 +310,7 @@ let _ =
         if (isBinary) then
           string_of_expr (List.nth operands 0) ^ " " ^ op_str ^ " " ^ string_of_expr (List.nth operands 1)
         else
-          " " ^ op_str ^ string_of_expr (List.nth operands 0)
+          op_str ^ string_of_expr (List.nth operands 0)
       | IntLit(_, integer, _, _, _) -> Big_int.string_of_big_int integer
       | RealLit(_, real) -> Num.string_of_num real
       | StringLit(_, str) -> "\"" ^ str ^ "\""
@@ -739,7 +752,7 @@ let _ =
               let filename = filename_from_loc loc in
               let _ = 
                 if (filename <> last_filename) then 
-                  Printf.printf "In file %s:\n" filename 
+                  Printf.printf "\nIn file %s:\n" filename 
                 else 
                   ()
               in
@@ -749,7 +762,6 @@ let _ =
               search_for_pattern_inner tail last_filename
           end
     in
-    let _ = Printf.printf "%s\n" (string_of_expr pattern) in
     search_for_pattern_inner lemmas ""
   in
 
