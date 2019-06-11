@@ -745,29 +745,7 @@ let _ =
       true
   in
 
-  let include_paths: string list ref = ref [] in
-  let define_macros: string list ref = ref [] in
-  let explore_paths: string list ref = ref [] in
-
-  (* CLA syntax definition *)
-  let cla = [ "-I", String (fun str -> include_paths := str :: !include_paths), "Add a directory to the list of directories to be searched for header files." 
-            ; "-D", String (fun str -> define_macros := str :: !define_macros), "Predefine name as a macro, with definition 1."
-            ]
-  in
-
-  (* Parse command-line arguments *)
-  parse cla (fun str -> explore_paths := str :: !explore_paths) "Failed to parse command-line arguments.";
-
-  let files_to_explore = get_files_from_explore_paths (!explore_paths) in
-  let decls_to_explore = get_decls_from_filepaths files_to_explore !include_paths !define_macros in
-  let lemmas_to_explore = get_lemmas_from_decls decls_to_explore in
-  let lemmas_filtered = List.filter (remove_duplicate_lemmas lemmas_to_explore) lemmas_to_explore in
-  let _ = Printf.printf "\n== %d lemmas were parsed and will be searched for a pattern ==\n" (List.length lemmas_filtered) in
-
-  (* Execution loop *)
-  while true do
-    Printf.printf "\nEnter a pattern > ";
-    let pattern_str = read_line () in
+  let submit_pattern (lemmas: lemma list) (pattern_str: string): unit =
     let pattern_expr_opt = 
       if (pattern_str = "") then
         let _ = Printf.printf "Empty pattern.\n" in
@@ -781,6 +759,42 @@ let _ =
             None
     in
     match pattern_expr_opt with 
-      | Some(pattern_expr) -> search_for_pattern lemmas_filtered pattern_expr
+      | Some(pattern_expr) -> search_for_pattern lemmas pattern_expr
       | None -> ()
-  done
+  in
+
+  let include_paths: string list ref = ref [] in
+  let define_macros: string list ref = ref [] in
+  let explore_paths: string list ref = ref [] in
+  let cla_patterns: string list ref = ref [] in
+
+  (* CLA syntax definition *)
+  let cla = [ "-I", String (fun str -> include_paths := str :: !include_paths), "Add a directory to the list of directories to be searched for header files." 
+            ; "-D", String (fun str -> define_macros := str :: !define_macros), "Predefine name as a macro, with definition 1."
+            ; "-P", String (fun str -> cla_patterns := List.append !cla_patterns [str]), "Add a pattern to search for (disables interactive mode)."
+            ]
+  in
+
+  (* Parse command-line arguments *)
+  parse cla (fun str -> explore_paths := str :: !explore_paths) "Failed to parse command-line arguments.";
+
+  let files_to_explore = get_files_from_explore_paths (!explore_paths) in
+  let decls_to_explore = get_decls_from_filepaths files_to_explore !include_paths !define_macros in
+  let lemmas_to_explore = get_lemmas_from_decls decls_to_explore in
+  let lemmas_filtered = List.filter (remove_duplicate_lemmas lemmas_to_explore) lemmas_to_explore in
+  let _ = Printf.printf "\n== %d lemmas were parsed and will be searched for a pattern ==\n\n" (List.length lemmas_filtered) in
+
+  if (List.length !cla_patterns <> 0) then
+    let rec submit_patterns (patterns: string list): unit =
+      match patterns with
+        | [] -> ()
+        | pattern_str:: tail -> (Printf.printf "\n-> %s\n" pattern_str; submit_pattern lemmas_filtered pattern_str; submit_patterns tail)
+    in
+    submit_patterns !cla_patterns
+  else
+    (* Execution loop *)
+    while true do
+      Printf.printf "\nEnter a pattern > ";
+      let pattern_str = read_line () in
+      submit_pattern lemmas_filtered pattern_str
+    done
