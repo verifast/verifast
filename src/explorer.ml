@@ -312,7 +312,7 @@ let _ =
       in
 
       let check_expr_list_for_pattern_list (expr_list: expr list) (pattern_list: expr list) : bool * mapping list list =
-        List.fold_left (fun acc (expr, pattern) -> combine_and acc (check_expr_for_pattern expr pattern false)) (true, []) (zip2 expr_list pattern_list)
+        List.fold_left (fun acc (expr, pattern) -> combine_and acc (check_expr_for_pattern expr pattern true)) (true, []) (zip2 expr_list pattern_list)
       in
 
       let rec check_pat_for_pattern (pat: pat) (pattern: expr) : bool * mapping list list =
@@ -325,7 +325,6 @@ let _ =
         List.fold_left (fun acc pat -> combine_or acc (check_pat_for_pattern pat pattern)) (false, []) pat_list
       in
 
-      (* TODO: change handling of dummys when checking for mappings equality *)
       let rec check_pat_equal (pat: pat) (pattern_pat: pat): bool * mapping list list =
         match (pat, pattern_pat) with 
           | DummyPat, DummyPat -> true, []
@@ -470,9 +469,7 @@ let _ =
       in
 
       match pattern with
-        | Var(_, varname) when enableMappings -> 
-          (* let _ = Printf.printf "Establishing mapping %s -> %s\n" varname (string_of_expr expr) in *)
-          true, [ [(varname, expr)] ]
+        | Var(_, varname) when enableMappings -> true, [ [(varname, expr)] ]
         | _ ->
           begin
             match expr with
@@ -675,7 +672,6 @@ let _ =
 
           let conflicts = List.filter (fun (other_varname, _) -> varname = other_varname) mappings in
           let expr_list = List.map (fun (_, expr) -> expr) conflicts in
-          (* let _ = (Printf.printf "  Checking conflicts in ("; List.iter (fun expr -> Printf.printf "%s | " (string_of_expr expr)) expr_list ;Printf.printf ")\n") in *)
           solve_conflicts expr_list && check_mappings_valid_inner (List.filter (fun (other_varname, _) -> varname <> other_varname) mappings)
     in
 
@@ -709,8 +705,6 @@ let _ =
         | (loc, name, postcond) :: tail ->
           begin
             let (res, mappings) = are_expr_equal postcond pattern false true in
-            (* let _ = Printf.printf "%d versions of mappings\n" (List.length mappings) in *)
-            (* let _ = List.iter (fun maps -> (Printf.printf "\t"; (List.iter (fun (varname, expr) -> Printf.printf "%s->%s | " varname (string_of_expr expr)) maps); Printf.printf "\n";) ) mappings in *)
             if (res && check_mappings_valid mappings) then 
               let filename = filename_from_loc loc in
               let _ = 
@@ -769,7 +763,6 @@ let _ =
   let lemmas_to_explore = get_lemmas_from_decls decls_to_explore in
   let lemmas_filtered = List.filter (remove_duplicate_lemmas lemmas_to_explore) lemmas_to_explore in
   let _ = Printf.printf "\n== %d lemmas were parsed and will be searched for a pattern ==\n" (List.length lemmas_filtered) in
-  (* let _ = List.iter (fun (_, name, postcond) -> Printf.printf "%s(): %s\n" name (string_of_expr postcond)) lemmas_filtered in *)
 
   (* Execution loop *)
   while true do
@@ -788,6 +781,6 @@ let _ =
             None
     in
     match pattern_expr_opt with 
-      | Some(pattern_expr) -> let _ = Printf.printf "%s\n" (string_of_expr pattern_expr) in search_for_pattern lemmas_filtered pattern_expr
+      | Some(pattern_expr) -> search_for_pattern lemmas_filtered pattern_expr
       | None -> ()
   done
