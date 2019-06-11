@@ -218,12 +218,19 @@ let _ =
 
   let rec string_of_expr (expr: expr) : string =
 
+    let rec string_of_expr_list (expr_list: expr list) : string =
+      match expr_list with
+        | [] -> ""
+        | head :: [] -> string_of_expr head
+        | head :: tail -> (string_of_expr head) ^ ", " ^ (string_of_expr_list tail)
+    in
+
     let rec string_of_pat (pat: pat) : string =
       match pat with
         | LitPat(expr) -> string_of_expr expr
         | VarPat(_, varname) ->"?" ^ varname
         | DummyPat -> "_"
-        | CtorPat(_, name, pat_list) -> "Ctor_" ^ name ^ "(" ^ string_of_pat_list pat_list ^ " )"
+        | CtorPat(_, name, pat_list) -> name ^ "(" ^ string_of_pat_list pat_list ^ " )"
     and string_of_pat_list (pat_list: pat list) : string =
       match pat_list with
         | [] -> ""
@@ -231,11 +238,33 @@ let _ =
         | head :: tail -> (string_of_pat head) ^ ", " ^ (string_of_pat_list tail)
     in
 
-    let rec string_of_expr_list (expr_list: expr list) : string =
-      match expr_list with
+    let rec string_of_type_ (type_: type_) : string =
+      match type_ with
+        | Bool -> "bool"
+        | Void -> "void"
+        | Int(_, integer) -> string_of_int integer
+        | RealType -> "real"
+        | Float -> "float"
+        | Double -> "double"
+        | LongDouble -> "long double"
+        | StructType(name) -> "struct " ^ name
+        | PtrType(type_in) -> string_of_type_ type_in ^ "*"
+        | FuncType(name) -> name
+        | InductiveType(name, type_list) -> name ^ "(" ^ string_of_type_list type_list ^ ")" 
+        | PureFuncType(type_1, type_2) -> "(" ^ string_of_type_ type_1 ^ ", " ^ string_of_type_ type_2 ^ ")"
+        | ObjType(name) -> name
+        | ArrayType(type_in) -> string_of_type_ type_in ^ "[]"
+        | StaticArrayType(type_in, nb_elems) -> string_of_type_ type_in ^ "[" ^ string_of_int nb_elems ^ "]"
+        | TypeParam(name) -> name
+        | PackageName(name) -> name
+        | RefType(type_in) -> string_of_type_ type_in
+        | AbstractType(name) -> name
+        | _ -> "unknown_type"
+     and string_of_type_list (type_list: type_ list) : string =
+      match type_list with
         | [] -> ""
-        | head :: [] -> string_of_expr head
-        | head :: tail -> (string_of_expr head) ^ ", " ^ (string_of_expr_list tail)
+        | head :: [] -> string_of_type_ head
+        | head :: tail -> (string_of_type_ head) ^ ", " ^ (string_of_type_list tail)
     in
 
     let rec string_of_type_expr (type_expr: type_expr) : string =
@@ -245,7 +274,7 @@ let _ =
         | PtrTypeExpr(_, type_expr_in) -> string_of_type_expr type_expr_in ^ "*"
         | ArrayTypeExpr(_, type_expr_in) -> string_of_type_expr type_expr_in ^ "[]"
         | StaticArrayTypeExpr(_, type_expr_in, nb_elems) -> string_of_type_expr type_expr_in ^ "[" ^ string_of_int nb_elems ^ "]"
-        | ManifestTypeExpr(_) -> "manifest"
+        | ManifestTypeExpr(_, type_) -> string_of_type_ type_
         | IdentTypeExpr(_, _, name) -> name
         | ConstructedTypeExpr(_, name, type_expr_list) -> name ^ "<" ^ string_of_type_expr_list type_expr_list ^ ">"
         | PredTypeExpr(_, type_expr_list, _) -> string_of_type_expr_list type_expr_list
@@ -278,7 +307,7 @@ let _ =
       | Deref(_, expr_in) -> "*" ^ string_of_expr expr_in
       | CallExpr(_, name, _, _, args, _) -> name ^ "(" ^ string_of_pat_list args ^ ")"
       | ExprCallExpr(_, callee_expr, args_expr) -> string_of_expr callee_expr ^ "(" ^ string_of_expr_list args_expr ^ ")"
-      | IfExpr(_, cond_expr, then_expr, else_expr) -> "if (" ^ string_of_expr cond_expr ^ ") then {" ^ string_of_expr then_expr ^ "} else {" ^ string_of_expr else_expr ^ "}"
+      | IfExpr(_, cond_expr, then_expr, else_expr) -> "(" ^ string_of_expr cond_expr ^") ? (" ^ string_of_expr then_expr ^ ") : (" ^ string_of_expr else_expr ^ ")"
       | CastExpr(_, type_cast, expr_in) -> "(" ^ string_of_type_expr type_cast ^ ")" ^ string_of_expr expr_in 
       | SizeofExpr(_, type_sizeof) -> "sizeof(" ^ string_of_type_expr type_sizeof ^ ")"
       | AddressOf(_, expr_in) -> "&" ^ string_of_expr expr_in
@@ -286,7 +315,7 @@ let _ =
       | PointsTo(_, expr_in, pat) -> "PointsTo(" ^ string_of_expr expr_in ^ ", " ^ string_of_pat pat ^ ")"
       | ExprAsn(_, expr_in) -> string_of_expr expr_in
       | Sep(_, lhs, rhs) -> (string_of_expr lhs) ^ " &*& " ^ (string_of_expr rhs)
-      | IfAsn(_, cond_expr, then_expr, else_expr) -> "if (" ^ string_of_expr cond_expr ^ ") then {" ^ string_of_expr then_expr ^ "} else {" ^ string_of_expr else_expr ^ "}"
+      | IfAsn(_, cond_expr, then_expr, else_expr) -> "(" ^ string_of_expr cond_expr ^") ? (" ^ string_of_expr then_expr ^ ") : (" ^ string_of_expr else_expr ^ ")"
       | EmpAsn(_) -> "emp" 
       | CoefAsn(_, perm, expr_in) -> "[" ^ string_of_pat perm ^ "]" ^ string_of_expr expr_in 
       | _ -> "unknown"
@@ -714,7 +743,7 @@ let _ =
                 else 
                   ()
               in
-              let _ = Printf.printf "\tAt line %s: %s\n" (lines_from_loc loc) name in
+              let _ = Printf.printf "\tAt line %s: %s -- ensures %s\n" (lines_from_loc loc) name (string_of_expr postcond) in
               search_for_pattern_inner tail filename
             else 
               search_for_pattern_inner tail last_filename
