@@ -32,7 +32,7 @@ let _ =
   let shouldFailLocs: loc0 list ref = ref [] in
   let reportShouldFail l = shouldFailLocs := l::!shouldFailLocs in
 
-  (* Parsers *)
+  (* Custom parser *)
   let parse_c_file_custom (path: string) (reportRange: range_kind -> loc0 -> unit) (reportShouldFail: loc0 -> unit) (verbose: int) 
         (include_paths: string list) (define_macros: string list) (enforceAnnotations: bool) (dataModel: data_model) (pattern_str: string): ((loc * (include_kind * string * string) * string list * package list) list * package list) = (* ?parse_c_file_custom *)
     let result =
@@ -60,37 +60,14 @@ let _ =
     result
   in
 
-  (* let parse_header_file_custom (path: string) (reportRange: range_kind -> loc0 -> unit) (reportShouldFail: loc0 -> unit) (verbose: int) 
-          (include_paths: string list) (define_macros: string list) (enforceAnnotations: bool) (dataModel: data_model): ((loc * (include_kind * string * string) * string list * package list) list * package list) =
-    let isGhostHeader = Filename.check_suffix path ".gh" in
-    let result =
-      let make_lexer path include_paths ~inGhostRange =
-        let text = readFile path in
-        make_lexer (common_keywords @ c_keywords) ghost_keywords path text reportRange ~inGhostRange:inGhostRange reportShouldFail
-      in
-      let (loc, token_stream) = make_preprocessor make_lexer path verbose include_paths dataModel define_macros in
-      let p = parser
-        [< (headers, _) = parse_include_directives verbose enforceAnnotations dataModel; 
-          ds = parse_decls CLang dataModel enforceAnnotations ~inGhostHeader:isGhostHeader; 
-          '(_, Eof)
-        >] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])
-      in
-      try
-        p token_stream
-      with
-        Stream.Error msg -> raise (ParseException (loc(), msg))
-      | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
-    in
-    result
-  in *)
-
-  (* My code *)
-
-  let file_filter (filename: string): bool =
-    Filename.check_suffix filename ".c" || Filename.check_suffix filename ".h" || Filename.check_suffix filename ".gh"
-  in
-
+  (* 
+    Returns the list of files with extensions .h, .c, or .gh from a list of directories. 
+    Raises Sys_error if one of the explore_paths isn't a valid directory. 
+  *)
   let rec get_files_from_explore_paths (explore_paths: string list): string list =
+    let file_filter (filename: string): bool =
+      Filename.check_suffix filename ".c" || Filename.check_suffix filename ".h" || Filename.check_suffix filename ".gh"
+    in
     match explore_paths with
       | [] -> []
       | explore_path :: tail -> 
@@ -100,6 +77,7 @@ let _ =
         List.append absolute_files (get_files_from_explore_paths tail)
   in
 
+  (* Extract a list of decl list from a list of filepaths. *)
   let rec get_decls_from_filepaths (filepaths: string list) (include_paths: string list) (define_macros: string list): (decl list) list =
     match filepaths with
       | [] -> []
@@ -133,6 +111,7 @@ let _ =
           get_decls_from_filepaths tail include_paths define_macros
   in
 
+  (* Extract a list of lemmas from a list of decl list. *)
   let rec get_lemmas_from_decls (decls_to_explore: (decl list) list): lemma list =
     
     let rec parse_decl_list (declaration_list: decl list): lemma list = 
@@ -154,7 +133,8 @@ let _ =
       | [] -> []
       | head :: tail -> List.append (parse_decl_list head) (get_lemmas_from_decls tail)
   in
-    
+  
+  (* Attempts to convert a textual pattern into an AST expression. Returns an empty string on failure. *)
   let pattern_str_to_expr (pattern_str: string) : expr =
     let (_, package_list) = parse_c_file_custom "dummy.c" reportRange reportShouldFail 0 [] [] true data_model_32bit pattern_str in
     match package_list with
@@ -180,7 +160,11 @@ let _ =
         end
   in
 
-  (* Second return value is true if this is a binary operation, false either. Third return value true when binary operation is symmetric *)
+  (* 
+    First return value is the textual representation of op.
+    Second return value indicates whether op is a binary operator.
+    Third return value indicates whether op is a symmetric operator. A symmetric operator must be binary.
+  *)
   let operator_info (op: operator) : string * bool * bool =
     match op with
     | Add -> "+", true, true
@@ -207,6 +191,7 @@ let _ =
     | ShiftRight-> ">>", true, false
   in
 
+  (* Returns true when a binary operator is not symmetric but has a "reverse" operator (e.g. < and >, <= and >=). *)
   let are_operators_opposite (op: operator) (other_op: operator): bool =
     match op with
       | Le -> (match other_op with Ge -> true | _ -> false)
@@ -216,6 +201,7 @@ let _ =
       | _ -> false
   in
 
+  (* Returns a textual representation of expr. *)
   let rec string_of_expr (expr: expr): string =
 
     let rec string_of_expr_list (expr_list: expr list): string =
@@ -334,6 +320,17 @@ let _ =
       | _ -> "unknown"
   in
 
+  (*
+    If exactMatchOnly is true, the function checks that expr and pattern are the same AST expressions.
+    If exactMatchOnly is false, the function checks that the given pattern exists somewhere in expr.
+
+    If enableMappings is true, then the function may return a non-empty mapping list list. In that case, if the first
+    return value is true, one must check that at least one of the list in mapping list list doesn't contain conflicting
+    variable assignments in order to establish that expr and pattern are "equal" (in the sense determined by exactMatchOnly).
+
+    The first return value indicates whether the expr and pattern are "equal", in the sense determined by the boolean arguments.
+    The second return value contains established mappings between variable names starting with "_" in pattern and sub-expressions of expr.
+  *)
   let are_expr_equal (expr: expr) (pattern: expr) (exactMacthOnly: bool) (enableMappings: bool) : bool * mapping list list =
 
     let rec check_expr_for_pattern (expr: expr) (pattern: expr) (exactMacthOnly: bool) : bool * mapping list list = 
@@ -697,6 +694,10 @@ let _ =
     check_expr_for_pattern expr pattern exactMacthOnly
   in
 
+  (* 
+    Checks that at least one list of mappings in mappings_list is valid, in the sense that it doesn't contain conflicting variable mappings. 
+    Meant to be used on the second return value of are_expr_equal, when the first return value is true.
+  *)
   let rec check_mappings_valid (mappings_list: mapping list list): bool =
 
     let rec check_mappings_valid_inner (mappings: mapping list): bool =
@@ -723,6 +724,7 @@ let _ =
       | mappings :: tail -> check_mappings_valid_inner mappings || check_mappings_valid tail
   in
 
+  (* Searches for a pattern in a list of lemma post-conditions. Displays matches on stdout. *)
   let search_for_pattern (lemmas: lemma list) (pattern: expr): unit =
 
     let filename_from_loc (loc: loc): string =
@@ -765,6 +767,33 @@ let _ =
     search_for_pattern_inner lemmas ""
   in
 
+  (* 
+    Submits a pattern for matching against all parsed lemmas. 
+    If pattern_str can't be parsed to a valid AST expression, prints an error message and returns. 
+    Displays matches on stdout. 
+  *)
+  let submit_pattern (lemmas: lemma list) (pattern_str: string): unit =
+    let pattern_expr_opt = 
+      if (pattern_str = "") then
+        let _ = Printf.printf "Empty pattern.\n" in
+        None
+      else
+        try
+          Some (pattern_str_to_expr pattern_str)
+        with
+          Lexer.ParseException(_, msg) -> 
+            let _ = Printf.printf "Invalid pattern.\n" in
+            None
+    in
+    match pattern_expr_opt with 
+      | Some(pattern_expr) -> search_for_pattern lemmas pattern_expr
+      | None -> ()
+  in
+
+  (* 
+    Returns true iff lemma comes from a .c file and has a matching declaration in a .gh file. 
+    Meant to be used as List.filter (remove_duplicate_lemmas lemma_list) lemma_list.
+  *)
   let remove_duplicate_lemmas (lemmas: lemma list) ((loc, name, postcond): lemma): bool =
     let filename_from_loc (loc: loc): string =
       match loc with
@@ -787,24 +816,7 @@ let _ =
       true
   in
 
-  let submit_pattern (lemmas: lemma list) (pattern_str: string): unit =
-    let pattern_expr_opt = 
-      if (pattern_str = "") then
-        let _ = Printf.printf "Empty pattern.\n" in
-        None
-      else
-        try
-          Some (pattern_str_to_expr pattern_str)
-        with
-          Lexer.ParseException(_, msg) -> 
-            let _ = Printf.printf "Invalid pattern.\n" in
-            None
-    in
-    match pattern_expr_opt with 
-      | Some(pattern_expr) -> search_for_pattern lemmas pattern_expr
-      | None -> ()
-  in
-
+  (* Command line variables go here *)
   let include_paths: string list ref = ref [] in
   let define_macros: string list ref = ref [] in
   let explore_paths: string list ref = ref [] in
@@ -820,20 +832,27 @@ let _ =
   (* Parse command-line arguments *)
   parse cla (fun str -> explore_paths := str :: !explore_paths) "\nUsage: explorer [options] {source directories}\n";
 
-  let files_to_explore = get_files_from_explore_paths (!explore_paths) in
+  (* Extract lemmas from lemma-defining directories *)
+  let files_to_explore = 
+    try
+      get_files_from_explore_paths (!explore_paths)
+    with
+      Sys_error(msg) -> let _ = Printf.printf "%s\nAborting\n" msg in exit 1
+  in
   let decls_to_explore = get_decls_from_filepaths files_to_explore !include_paths !define_macros in
   let lemmas_to_explore = get_lemmas_from_decls decls_to_explore in
   let lemmas_filtered = List.filter (remove_duplicate_lemmas lemmas_to_explore) lemmas_to_explore in
   let _ = Printf.printf "\n== %d lemmas were parsed and will be searched for a pattern ==\n\n" (List.length lemmas_filtered) in
 
-  if (List.length !cla_patterns <> 0) then
+  if (List.length !cla_patterns <> 0) then (* Non-interactive mode *)
+    (* Submit all provided patterns for matching *)
     let rec submit_patterns (patterns: string list): unit =
       match patterns with
         | [] -> ()
         | pattern_str:: tail -> (Printf.printf "\n-> %s\n" pattern_str; submit_pattern lemmas_filtered pattern_str; submit_patterns tail)
     in
     submit_patterns !cla_patterns
-  else
+  else (* Interactive mode *)
     (* Execution loop *)
     while true do
       Printf.printf "\nEnter a pattern > ";
