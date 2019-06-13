@@ -300,9 +300,9 @@ let _ =
     in
 
     match expr with 
-      | True(_) -> "True"
-      | False(_) -> "False"
-      | Null(_) -> "Null"
+      | True(_) -> "true"
+      | False(_) -> "false"
+      | Null(_) -> "null"
       | Var(_, varname) -> varname
       | TruncatingExpr(_, expr_in) -> "Truncating(" ^ string_of_expr expr_in ^ ")"
       | Operation(_, operator, operands) -> 
@@ -811,14 +811,14 @@ let _ =
   let cla_patterns: string list ref = ref [] in
 
   (* CLA syntax definition *)
-  let cla = [ "-I", String (fun str -> include_paths := str :: !include_paths), "Add a directory to the list of directories to be searched for header files." 
-            ; "-D", String (fun str -> define_macros := str :: !define_macros), "Predefine name as a macro, with definition 1."
-            ; "-P", String (fun str -> cla_patterns := List.append !cla_patterns [str]), "Add a pattern to search for (disables interactive mode)."
+  let cla = [ "-I", String (fun str -> include_paths := str :: !include_paths), "Add a directory to the list of directories to be searched for header files (positional argument)." 
+            ; "-D", String (fun str -> define_macros := str :: !define_macros), "Predefine name as a macro, with definition 1 (positional argument)."
+            ; "-P", String (fun str -> cla_patterns := List.append !cla_patterns [str]), "Add a pattern to search for and disables interactive mode (positional argument)."
             ]
   in
 
   (* Parse command-line arguments *)
-  parse cla (fun str -> explore_paths := str :: !explore_paths) "Failed to parse command-line arguments.";
+  parse cla (fun str -> explore_paths := str :: !explore_paths) "\nUsage: explorer [options] {source directories}\n";
 
   let files_to_explore = get_files_from_explore_paths (!explore_paths) in
   let decls_to_explore = get_decls_from_filepaths files_to_explore !include_paths !define_macros in
