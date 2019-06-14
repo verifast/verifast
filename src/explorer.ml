@@ -74,7 +74,7 @@ let _ =
       | explore_path :: tail -> 
         let list_files = Array.to_list (Sys.readdir explore_path) in
         let filter_files = List.filter file_filter list_files in
-        let absolute_files = List.map (fun str -> explore_path ^ "/" ^ str) filter_files in
+        let absolute_files = List.map (Filename.concat explore_path) filter_files in
         List.append absolute_files (get_files_from_explore_paths tail)
   in
 
@@ -817,6 +817,22 @@ let _ =
       true
   in
 
+  (* Converts a relative path to an absolute path. If the given path is already absolute, it is returned as is. *)
+  let rel_to_abs_path (path: string): string =
+    if (Filename.is_relative path) then
+      let length = String.length path in
+      let length_current_dir = String.length Filename.current_dir_name in
+      let length_parent_dir = String.length Filename.parent_dir_name in
+      if (length_parent_dir <= length && String.sub path 0 length_parent_dir = Filename.parent_dir_name) then
+        Sys.getcwd () ^ Filename.dir_sep ^ path
+      else if (length_current_dir <= length && String.sub path 0 length_current_dir = Filename.current_dir_name) then
+        Sys.getcwd () ^ (String.sub path 1 (length - length_current_dir))
+      else 
+        path
+    else
+      path
+  in
+
   (* Command line variables go here *)
   let include_paths: string list ref = ref [] in
   let define_macros: string list ref = ref [] in
@@ -824,14 +840,14 @@ let _ =
   let cla_patterns: string list ref = ref [] in
 
   (* CLA syntax definition *)
-  let cla = [ "-I", String (fun str -> include_paths := str :: !include_paths), "<absolute path> Add a directory to the list of directories to be searched for header files." 
+  let cla = [ "-I", String (fun str -> include_paths := rel_to_abs_path str :: !include_paths), "<path> Add a directory to the list of directories to be searched for header files." 
             ; "-D", String (fun str -> define_macros := str :: !define_macros), "<string> Predefine name as a macro, with definition 1."
             ; "-P", String (fun str -> cla_patterns := List.append !cla_patterns [str]), "<VeriFast expression> Add a pattern to search for and disables interactive mode."
             ]
   in
 
   (* Parse command-line arguments *)
-  parse cla (fun str -> explore_paths := str :: !explore_paths) usage_msg;
+  parse cla (fun str -> explore_paths := rel_to_abs_path str :: !explore_paths) usage_msg;
 
   (* Displays help and stop if no directories to explore were provided *)
   let _ = 
@@ -845,7 +861,7 @@ let _ =
   (* Extract lemmas from lemma-defining directories *)
   let files_to_explore = 
     try
-      get_files_from_explore_paths (!explore_paths)
+      get_files_from_explore_paths !explore_paths
     with
       Sys_error(msg) -> let _ = Printf.printf "%s\nAborting\n" msg in exit 1
   in
