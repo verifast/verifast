@@ -8,6 +8,7 @@ open Arg
 type explore_result = (loc * string) 
 type lemma = (loc * string * asn)
 type mapping = (string * expr)
+let usage_msg = "\nUsage: explorer [options] {source directories}\n"
 
 let _ =
 
@@ -823,14 +824,23 @@ let _ =
   let cla_patterns: string list ref = ref [] in
 
   (* CLA syntax definition *)
-  let cla = [ "-I", String (fun str -> include_paths := str :: !include_paths), "Add a directory to the list of directories to be searched for header files (positional argument)." 
-            ; "-D", String (fun str -> define_macros := str :: !define_macros), "Predefine name as a macro, with definition 1 (positional argument)."
-            ; "-P", String (fun str -> cla_patterns := List.append !cla_patterns [str]), "Add a pattern to search for and disables interactive mode (positional argument)."
+  let cla = [ "-I", String (fun str -> include_paths := str :: !include_paths), "<absolute path> Add a directory to the list of directories to be searched for header files." 
+            ; "-D", String (fun str -> define_macros := str :: !define_macros), "<string> Predefine name as a macro, with definition 1."
+            ; "-P", String (fun str -> cla_patterns := List.append !cla_patterns [str]), "<VeriFast expression> Add a pattern to search for and disables interactive mode."
             ]
   in
 
   (* Parse command-line arguments *)
-  parse cla (fun str -> explore_paths := str :: !explore_paths) "\nUsage: explorer [options] {source directories}\n";
+  parse cla (fun str -> explore_paths := str :: !explore_paths) usage_msg;
+
+  (* Displays help and stop if no directories to explore were provided *)
+  let _ = 
+    if (List.length !explore_paths = 0) then
+      let _ = Printf.printf "%s" (usage_string cla usage_msg) in
+      exit 0
+    else
+      ()
+  in
 
   (* Extract lemmas from lemma-defining directories *)
   let files_to_explore = 
@@ -849,7 +859,7 @@ let _ =
     let rec submit_patterns (patterns: string list): unit =
       match patterns with
         | [] -> ()
-        | pattern_str:: tail -> (Printf.printf "\n-> %s\n" pattern_str; submit_pattern lemmas_filtered pattern_str; submit_patterns tail)
+        | pattern_str :: tail -> (Printf.printf "\n-> %s\n" pattern_str; submit_pattern lemmas_filtered pattern_str; submit_patterns tail)
     in
     submit_patterns !cla_patterns
   else (* Interactive mode *)
