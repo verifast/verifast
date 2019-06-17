@@ -276,15 +276,15 @@ STDLIB_FILES = \
 
 TOOLS_EXCEPT_VFIDE = ../bin/mysh$(DOTEXE) ../bin/verifast$(DOTEXE) \
         ../bin/main_class$(DOTEXE) ../bin/java_card_applet$(DOTEXE) \
-        ../bin/dlsymtool$(DOTEXE) ../bin/vfstrip$(DOTEXE)
+        ../bin/dlsymtool$(DOTEXE) ../bin/vfstrip$(DOTEXE) ../bin/explorer$(DOTEXE)
 
 TOOLS = $(TOOLS_EXCEPT_VFIDE) ../bin/vfide$(DOTEXE)
 
 
 ifndef WITHOUT_LABLGTK
-build: $(TOOLS) $(STDLIB) ../bin/explorer$(DOTEXE) tabhunt vfversion_autogen vfconfig_autogen
+build: $(TOOLS) $(STDLIB) tabhunt vfversion_autogen vfconfig_autogen
 else
-build: $(TOOLS_EXCEPT_VFIDE) $(STDLIB) ../bin/explorer$(DOTEXE) tabhunt vfversion_autogen
+build: $(TOOLS_EXCEPT_VFIDE) $(STDLIB) tabhunt vfversion_autogen
 endif
 .PHONY: build
 
