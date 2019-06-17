@@ -474,7 +474,7 @@ endif
 ../bin/explorer$(DOTEXE): explorer.cmx $(VERIFAST_PLUGINS:%=verifastPlugin%.cmx) $(Z3DEPS)
 	@echo "  OCAMLOPT " $@
 	${OCAMLOPT} $(OCAMLOPT_LINKFLAGS) $(OCAMLCFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/explorer$(DOTEXE) unix.cmxa \
-	  nums.cmxa str.cmxa $(INCLUDES) Perf.cmxa proverapi.cmx \
+	  $(NUM_FLAGS) str.cmxa $(INCLUDES) Perf.cmxa proverapi.cmx \
 	  vfversion.cmx \
 	  util.cmx ast.cmx stats.cmx lexer.cmx parser.cmx \
 	  ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx \
