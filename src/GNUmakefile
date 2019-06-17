@@ -55,6 +55,10 @@ else ifeq ($(OS), Windows_NT)
   PLATFORM = Windows
 endif
 
+# ocaml-num configuration
+NUM_PATH ?= $(shell ocamlfind query num)
+NUM_FLAGS += -I ${NUM_PATH} nums.cmxa
+
 # Lablgtk configuration
 ifndef WITHOUT_LABLGTK
   LABLGTK_PATH ?= $(shell ocamlfind query lablgtk2)
@@ -305,13 +309,13 @@ clean::
 
 %.cmi: %.mli
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} $(OCAMLCFLAGS) $(INCLUDES) -c $*.mli
+	${OCAMLOPT} $(OCAMLCFLAGS) $(INCLUDES) $(NUM_FLAGS) -c $*.mli
 clean::
 	rm -f *.cmi
 
 %.cmx: %.ml $(INCLUDE_OS_DIR)/Perf.cmxa
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} $(OCAMLCFLAGS) -thread -c -w p -warn-error FSU -c $(INCLUDES) -pp ${CAMLP4O} nums.cmxa  $*.ml
+	${OCAMLOPT} $(OCAMLCFLAGS) -thread -c -w p -warn-error FSU -c $(INCLUDES) -pp ${CAMLP4O} $(NUM_FLAGS) $*.ml
 clean::
 	rm -f *.cmx
 	rm -f *.o
@@ -417,7 +421,7 @@ ifndef WITHOUT_GTKSOURCEVIEW
 	make -C linemarks OCAMLOPT=${OCAMLOPT} OCAMLCFLAGS="${OCAMLCFLAGS}" LABLGTK_FLAGS="$(LABLGTK_FLAGS_)" linemarks.cmxa
 endif
 	$(SET_LDD); $(OCAMLOPT) $(OCAMLCFLAGS) -thread -c -w p -warn-error FSU -c $(INCLUDES) \
-	-pp ${CAMLP4O} nums.cmxa $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) vfide.ml
+	-pp ${CAMLP4O} $(NUM_FLAGS) $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) vfide.ml
 
 VERIFAST_PLUGINS=Redux Cvc4 ExternalZ3 ReduxSmtlib
 
@@ -434,7 +438,7 @@ ifndef WITHOUT_GTKSOURCEVIEW
 endif
 	$(SET_LDD); ${OCAMLOPT} $(OCAMLOPT_LINKFLAGS) $(OCAMLCFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/vfide$(DOTEXE)	\
 	  $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) unix.cmxa \
-	  nums.cmxa str.cmxa $(INCLUDES) Perf.cmxa proverapi.cmx \
+	  $(NUM_FLAGS) str.cmxa $(INCLUDES) Perf.cmxa proverapi.cmx \
 	  Printexc_proxy.cmx vfversion.cmx dynlink.cmxa \
 	  util.cmx ast.cmx stats.cmx lexer.cmx \
 	  parser.cmx ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx \
@@ -455,7 +459,7 @@ vfide: ../bin/vfide$(DOTEXE) $(STDLIB)
 ../bin/verifast$(DOTEXE): vfconsole.cmx $(VERIFAST_PLUGINS:%=verifastPlugin%.cmx) $(Z3DEPS)
 	@echo "  OCAMLOPT " $@
 	${OCAMLOPT} $(OCAMLOPT_LINKFLAGS) $(OCAMLCFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/verifast$(DOTEXE) unix.cmxa \
-	  nums.cmxa str.cmxa $(INCLUDES) Perf.cmxa proverapi.cmx \
+	  $(NUM_FLAGS) str.cmxa $(INCLUDES) Perf.cmxa proverapi.cmx \
 	  vfversion.cmx \
 	  util.cmx ast.cmx stats.cmx lexer.cmx parser.cmx \
 	  ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx \
@@ -470,7 +474,7 @@ endif
 ../bin/explorer$(DOTEXE): explorer.cmx $(VERIFAST_PLUGINS:%=verifastPlugin%.cmx) $(Z3DEPS)
 	@echo "  OCAMLOPT " $@
 	${OCAMLOPT} $(OCAMLOPT_LINKFLAGS) $(OCAMLCFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/explorer$(DOTEXE) unix.cmxa \
-	  nums.cmxa str.cmxa $(INCLUDES) Perf.cmxa proverapi.cmx \
+	  $(NUM_FLAGS) str.cmxa $(INCLUDES) Perf.cmxa proverapi.cmx \
 	  vfversion.cmx \
 	  util.cmx ast.cmx stats.cmx lexer.cmx parser.cmx \
 	  ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx \
@@ -489,19 +493,19 @@ verifast: ../bin/verifast$(DOTEXE) $(STDLIB)
 
 z3prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmxa proverapi.cmx z3prover.ml
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -c -I $(Z3_OCAML) z3.cmxa -I ./$(INCLUDE_OS_DIR) Perf.cmxa proverapi.cmx z3prover.ml
+	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -c -I $(Z3_OCAML) z3.cmxa -I ./$(INCLUDE_OS_DIR) $(NUM_FLAGS) Perf.cmxa proverapi.cmx z3prover.ml
 
 z3v2prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmxa proverapi.cmx z3v2prover.ml
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -c -I $(Z3_OCAML) z3.cmxa -I ./$(INCLUDE_OS_DIR) Perf.cmxa proverapi.cmx z3v2prover.ml
+	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -c -I $(Z3_OCAML) z3.cmxa -I ./$(INCLUDE_OS_DIR) $(NUM_FLAGS) Perf.cmxa proverapi.cmx z3v2prover.ml
 
 z3v4prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmxa proverapi.cmx z3v4prover.ml
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -c -I $(Z3_OCAML) z3.cmxa -I ./$(INCLUDE_OS_DIR) Perf.cmxa proverapi.cmx z3v4prover.ml
+	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -c -I $(Z3_OCAML) z3.cmxa -I ./$(INCLUDE_OS_DIR) $(NUM_FLAGS) Perf.cmxa proverapi.cmx z3v4prover.ml
 
 z3v4dot5prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmxa proverapi.cmx z3v4dot5prover.ml
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -c -I $(Z3_OCAML) -I ./$(INCLUDE_OS_DIR) Perf.cmxa proverapi.cmx z3v4dot5prover.ml
+	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -c -I $(Z3_OCAML) -I ./$(INCLUDE_OS_DIR) $(NUM_FLAGS) Perf.cmxa proverapi.cmx z3v4dot5prover.ml
 
 clean::
 	rm -f shape_analysis/*.cm[ix] shape_analysis/*.cmo
