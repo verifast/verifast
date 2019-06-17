@@ -23,6 +23,7 @@ l1:
 int abs(int x)
     //@ requires true;
     //@ ensures 0 <= x ? result == x : 0 - result == x;
+    //@ terminates;
 {
     if (0 <= x) goto end;
     if (x < -2147483647) abort();

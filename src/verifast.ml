@@ -1443,23 +1443,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin fun cont ->
       match (t_dec, dec) with
         (None, None) ->
-        let consume_func_call_perm g =
-          let gterm = List.assoc g funcnameterms in
-          let (_, _, _, _, call_perm__symb, _, _) = List.assoc "call_perm_" predfammap in
-          consume_chunk rules h''' [] [] [] l (call_perm__symb, true) [] real_unit dummypat (Some 1) [TermPat gterm] $. fun _ h _ _ _ _ _ _ ->
-          cont h
-        in
-        let consume_class_call_perm () =
-          let ClassOrInterfaceName cn = List.assoc current_class tenv in
-          let classterm = List.assoc cn classterms in
-          consume_class_call_perm l classterm h''' cont
-        in
-        begin match leminfo with
-          RealFuncInfo (gs, g, terminates) -> if terminates then consume_func_call_perm g else cont h'''
-        | LemInfo (gs, g, indinfo, nonghost_callers_only) ->
-          if language = CLang then consume_func_call_perm g else static_error l "Decreases clause required" None
-        | RealMethodInfo rank -> if rank = None then cont h''' else consume_class_call_perm ()
-        end
+        check_backedge_termination leminfo l tenv h''' cont
       | (Some t_dec, Some dec) ->
         eval_h_pure h' env''' dec $. fun _ _ t_dec2 ->
         let dec_check1 = ctxt#mk_lt t_dec2 t_dec in
@@ -2046,9 +2030,28 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         ) return_cont econt
       )
   and
+    check_backedge_termination leminfo l tenv h cont =
+      let consume_func_call_perm g =
+        let gterm = List.assoc g funcnameterms in
+        let (_, _, _, _, call_perm__symb, _, _) = List.assoc "call_perm_" predfammap in
+        consume_chunk rules h [] [] [] l (call_perm__symb, true) [] real_unit dummypat (Some 1) [TermPat gterm] $. fun _ h _ _ _ _ _ _ ->
+        cont h
+      in
+      let consume_class_call_perm () =
+        let ClassOrInterfaceName cn = List.assoc current_class tenv in
+        let classterm = List.assoc cn classterms in
+        consume_class_call_perm l classterm h cont
+      in
+      begin match leminfo with
+        RealFuncInfo (gs, g, terminates) -> if terminates then consume_func_call_perm g else cont h
+      | LemInfo (gs, g, indinfo, nonghost_callers_only) ->
+        if language = CLang then consume_func_call_perm g else static_error l "Decreases clause required" None
+      | RealMethodInfo rank -> if rank = None then cont h else consume_class_call_perm ()
+      end
   
   (* Region: verification of blocks *)
   
+  and
     goto_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env return_cont econt block =
     let `Block (inv, ss, cont) = block in
     let l() =
@@ -2063,6 +2066,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | (true, None) -> assert_false h env (l()) "Loop invariant required." None
       | (_, Some (l, inv, tenv)) ->
         consume_asn rules [] h ghostenv env inv true real_unit (fun _ h _ _ _ ->
+          check_backedge_termination leminfo l tenv h $. fun h ->
           check_leaks h env l "Loop leaks heap chunks."
         )
       | (false, None) ->

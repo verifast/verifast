@@ -330,7 +330,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | LongDouble -> ProverInductive
     | RealType -> ProverReal
     | InductiveType _ -> ProverInductive
-    | StructType sn -> failwith "Using a struct as a value is not yet supported."
+    | StructType sn -> ProverInductive
     | ObjType n -> ProverInt
     | ArrayType t -> ProverInt
     | StaticArrayType (t, s) -> ProverInt

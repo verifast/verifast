@@ -68,6 +68,17 @@ let print_list_space print =
 let print_list_newline print =
   print_list print ("@\n" : (unit, Format.formatter, unit) format) Format.fprintf
 
+(* Render a Ratio as (/ a b) instead of a/b *)
+let string_of_ratio r = 
+  let n = Big_int.string_of_big_int (Ratio.numerator_ratio r) in
+  let d = Big_int.string_of_big_int (Ratio.denominator_ratio r) in
+  Printf.sprintf "(/ %s %s)" n d
+
+(* Render a Num while taking care to render it correctly if it is a Ratio *)
+let string_of_num = function
+  | Num.Ratio r -> string_of_ratio r
+  | n -> Num.string_of_num n
+
 module type PRINTABLE = sig
   type t
   val print : Format.formatter -> t -> unit
@@ -147,7 +158,8 @@ module Symbol (S : SORT) : SYMBOL with type sort = S.t = struct
      to which all names occurring in Verifast standard lib (especially
      the list libraries) conflicting with CVC4 theory of sets have
      been added. It is highly probable that some other CVC4 builtins
-     are missing. *)
+     are missing. 
+     Some names that are reserved by Z3 have also been added. *)
   let all_names =
     ref
       [
@@ -161,13 +173,19 @@ module Symbol (S : SORT) : SYMBOL with type sort = S.t = struct
         "distinct"; "map"; "abs"; "Set"; "union"; "intersection"; "setminus";
         "member"; "subset"; "emptyset"; "singleton"; "card"; "insert"; "complement";
         "univset"; "extract";
+        "store"; "select"; "NaN"; "fp"; "div"; "repeat"; "xor"; "concat";  
       ]
 
   (* We escape "@" using "_" as escape symbol. In SMTLib, names
      starting with "@" are reserved and should not appear in the input
-     problems. *)
+     problems.
+     The characters ' and # are not valid in SMTLib symbols.
+     Symbols may not start with a numeral. *)
   let escape_char = function
     | '@' -> "_@"
+    | ''' -> "_q"
+    | '#' -> "_h"
+    | '0'..'9' as c -> Printf.sprintf "_%c" c
     | c -> String.make 1 c
 
   let escape_string s =
@@ -326,8 +344,7 @@ module Term (S : SORT)
        else
          Format.fprintf o "@[<3>(-@ %s)@]"
           (Big_int.string_of_big_int (Big_int.abs_big_int i))
-    | Real r ->
-       Format.fprintf o "%s" (Num.string_of_num r)
+    | Real r -> Format.fprintf o "%s" (string_of_num r)
     | Var v -> V.print o v
     | App (head, []) -> Sy.print o head
     | App (head, l) ->
@@ -351,7 +368,7 @@ module Term (S : SORT)
        else
          Printf.sprintf "(- %s)"
           (Big_int.string_of_big_int (Big_int.abs_big_int i))
-    | Real r -> Num.string_of_num r
+    | Real r -> string_of_num r 
     | Var v -> V.to_string v
     | App (head, []) -> Sy.to_string head
     | App (head, l) ->
@@ -413,11 +430,11 @@ let div = bapp (Sym.fresh "/" [Sort.int; Sort.int] Sort.int)
 let tmod = bapp (Sym.fresh "mod" [Sort.int; Sort.int] Sort.int)
 let lt = bapp (Sym.fresh "<" [Sort.int; Sort.int] Sort.bool)
 let le = bapp (Sym.fresh "<=" [Sort.int; Sort.int] Sort.bool)
-let radd = bapp (Sym.fresh "+." [Sort.int; Sort.int] Sort.int)
-let rsub = bapp (Sym.fresh "-." [Sort.int; Sort.int] Sort.int)
-let rmul = bapp (Sym.fresh "*." [Sort.int; Sort.int] Sort.int)
-let rlt = bapp (Sym.fresh "<." [Sort.int; Sort.int] Sort.bool)
-let rle = bapp (Sym.fresh "<=." [Sort.int; Sort.int] Sort.bool)
+let radd = add
+let rsub = sub
+let rmul = mul
+let rlt = lt
+let rle = le
 
 let get_type = T.get_type
 let print_term = T.print

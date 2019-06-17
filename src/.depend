@@ -8,12 +8,13 @@ SExpressionEmitter.cmi : SExpressions.cmi ast.cmx
 SExpressions.cmx : SExpressions.cmi
 SExpressions.cmi :
 assertions.cmx : verifast1.cmx verifast0.cmx util.cmx stats.cmx \
-    proverapi.cmx linux/Perf.cmx parser.cmx ast.cmx
+    proverapi.cmx win/Perf.cmx parser.cmx ast.cmx
 ast.cmx : util.cmx
 branchleft_png.cmx :
 branchright_png.cmx :
 combineprovers.cmx : proverapi.cmx
 dlsymtool.cmx :
+explorer.cmx : util.cmx parser.cmx lexer.cmx ast.cmx
 java_card_applet.cmx :
 java_frontend/annotation_type_checker.cmx : java_frontend/misc.cmx \
     java_frontend/general_ast.cmx java_frontend/communication.cmx \
@@ -41,39 +42,38 @@ java_frontend/java_frontend_bridge.cmx : util.cmx parser.cmx \
     java_frontend/ast_translator.cmx ast.cmx \
     java_frontend/annotation_type_checker.cmx
 java_frontend/misc.cmx :
-lexer.cmx : util.cmx stats.cmx linux/Perf.cmx ast.cmx
+lexer.cmx : util.cmx stats.cmx win/Perf.cmx ast.cmx
 linux/Perf.cmx :
 linux/Stopwatch.cmx : linux/Stopwatch.cmi
 linux/Stopwatch.cmi :
 main_class.cmx :
 mynum.cmx :
 mysh.cmx : vfconfig.cmx
-parser.cmx : util.cmx linux/Stopwatch.cmx stats.cmx linux/Perf.cmx lexer.cmx \
+parser.cmx : util.cmx win/Stopwatch.cmx stats.cmx win/Perf.cmx lexer.cmx \
     ast.cmx
 proverapi.cmx :
 record_backtrace.cmx :
-redux.cmx : linux/Stopwatch.cmx simplex.cmx proverapi.cmx linux/Perf.cmx
+redux.cmx : win/Stopwatch.cmx simplex.cmx proverapi.cmx win/Perf.cmx
 shape_analysis/changelog.cmx : util.cmx ast.cmx
 shape_analysis/shape_analysis_backend.cmx : shape_analysis/changelog.cmx
 shape_analysis/shape_analysis_frontend.cmx : \
     shape_analysis/shape_analysis_backend.cmx parser.cmx \
     shape_analysis/changelog.cmx ast.cmx
-simplex.cmx : util.cmx linux/Stopwatch.cmx simplex.cmi
+simplex.cmx : util.cmx win/Stopwatch.cmx simplex.cmi
 simplex.cmi :
 smtlib.cmx : util.cmx
 smtlibprover.cmx : util.cmx smtlib.cmx proverapi.cmx
-stats.cmx : util.cmx linux/Stopwatch.cmx linux/Perf.cmx ast.cmx
-stopwatch_test.cmx : linux/Stopwatch.cmx
+stats.cmx : util.cmx win/Stopwatch.cmx win/Perf.cmx ast.cmx
+stopwatch_test.cmx : win/Stopwatch.cmx
 tabhunter.cmx :
 util.cmx : proverapi.cmx
 verifast.cmx : vfversion.cmx verify_expr.cmx verifast1.cmx verifast0.cmx \
-    util.cmx linux/Stopwatch.cmx stats.cmx proverapi.cmx linux/Perf.cmx \
+    util.cmx win/Stopwatch.cmx stats.cmx proverapi.cmx win/Perf.cmx \
     parser.cmx lexer.cmx java_frontend/java_frontend_bridge.cmx ast.cmx \
     assertions.cmx
 verifast0.cmx : util.cmx ast.cmx
-verifast1.cmx : verifast0.cmx util.cmx stats.cmx proverapi.cmx \
-    linux/Perf.cmx parser.cmx lexer.cmx \
-    java_frontend/java_frontend_bridge.cmx ast.cmx
+verifast1.cmx : verifast0.cmx util.cmx stats.cmx proverapi.cmx win/Perf.cmx \
+    parser.cmx lexer.cmx java_frontend/java_frontend_bridge.cmx ast.cmx
 verifastPluginCvc4.cmx : verifast.cmx smtlibprover.cmx smtlib.cmx \
     proverapi.cmx
 verifastPluginExternalZ3.cmx : verifast.cmx smtlibprover.cmx smtlib.cmx \
@@ -91,16 +91,18 @@ verifastPluginZ3v4dot5Smtlib.cmx : z3v4dot5prover.cmx verifast.cmx \
     smtlibprover.cmx smtlib.cmx proverapi.cmx combineprovers.cmx
 verify_expr.cmx : verifast1.cmx verifast0.cmx util.cmx stats.cmx \
     proverapi.cmx parser.cmx ast.cmx assertions.cmx
+vfconfig.cmx :
 vfconsole.cmx : verifast1.cmx verifast0.cmx verifast.cmx util.cmx \
-    SExpressionEmitter.cmx linux/Perf.cmx parser.cmx lexer.cmx \
+    SExpressionEmitter.cmx win/Perf.cmx parser.cmx lexer.cmx \
     java_frontend/java_frontend_bridge.cmx ast.cmx
 vfide.cmx : vfversion.cmx vfconfig.cmx verifast0.cmx verifast.cmx util.cmx \
     shape_analysis/shape_analysis_frontend.cmx Printexc_proxy.cmx parser.cmx \
     lexer.cmx java_frontend/java_frontend_bridge.cmx branchright_png.cmx \
     branchleft_png.cmx ast.cmx
 vfstrip.cmx :
+vfversion.cmx : vfversion.cmi
 vfversion.cmi :
-z3prover.cmx : proverapi.cmx linux/Perf.cmx
-z3v2prover.cmx : proverapi.cmx linux/Perf.cmx
-z3v4dot5prover.cmx : proverapi.cmx linux/Perf.cmx
-z3v4prover.cmx : proverapi.cmx linux/Perf.cmx
+z3prover.cmx : proverapi.cmx win/Perf.cmx
+z3v2prover.cmx : proverapi.cmx win/Perf.cmx
+z3v4dot5prover.cmx : proverapi.cmx win/Perf.cmx
+z3v4prover.cmx : proverapi.cmx win/Perf.cmx
