@@ -14,8 +14,8 @@ struct member {
 };
 
 /*@
-predicate member(struct member* member)
-    requires member->nick |-> ?nick &*& [1/2]member->writer |-> ?writer &*& string_buffer(nick, _) &*& writer(writer) &*& malloc_block_member(member);
+predicate member(struct member* member) =
+    member->nick |-> ?nick &*& [1/2]member->writer |-> ?writer &*& string_buffer(nick, _) &*& writer(writer) &*& malloc_block_member(member);
 @*/
 
 struct room {
@@ -107,11 +107,11 @@ struct session {
 
 /*@
 
-predicate_ctor room_ctor(struct room *room)()
-    requires room(room);
+predicate_ctor room_ctor(struct room *room)() =
+    room(room);
 
-predicate session(struct session *session)
-    requires session->room |-> ?room &*& session->room_lock |-> ?roomLock &*& session->socket |-> ?socket &*& malloc_block_session(session)
+predicate session(struct session *session) =
+    session->room |-> ?room &*& session->room_lock |-> ?roomLock &*& session->socket |-> ?socket &*& malloc_block_session(session)
         &*& [_]lock(roomLock, _, room_ctor(room)) &*& socket(socket, ?reader, ?writer) &*& reader(reader) &*& writer(writer);
 
 @*/

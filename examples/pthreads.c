@@ -10,8 +10,7 @@ pthread_spinlock_t g_lock;
 
 /*@
 
-predicate g_pred()
- requires
+predicate g_pred() =
  integer(&g, ?vf_g)
  &*& vf_g >= 0 &*& vf_g <= 1024;
 

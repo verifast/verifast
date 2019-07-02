@@ -5,8 +5,8 @@ struct Counter {
 };
 
 /*@
-predicate Counter(struct Counter* c; int v)
-  requires c->value |-> v &*& malloc_block_Counter(c);
+predicate Counter(struct Counter* c; int v) =
+  c->value |-> v &*& malloc_block_Counter(c);
 @*/
 
 struct Counter* init(int v)
@@ -22,7 +22,7 @@ struct Counter* init(int v)
 }
 
 void increment(struct Counter* c)
-  //@ requires Counter(c, ?v);
+  //@ requires Counter(c, ?v) &*& v < INT_MAX;
   //@ ensures Counter(c, v+1);
 {
   int tmp = c->value;

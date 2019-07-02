@@ -540,7 +540,6 @@ and
   | [< >] -> []
 and
   parse_pred_body = parser
-    [< '(_, Kwd "requires"); p = parse_asn >] -> p
   | [< '(_, Kwd "="); p = parse_asn >] -> p
 and
   parse_pred_paramlist = parser

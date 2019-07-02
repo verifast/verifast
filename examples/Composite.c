@@ -234,21 +234,21 @@ int internalGetNbOfNodes(struct Node* n)
 }
 
 /*@
-predicate tree(struct Node* node, tree value)
-  requires switch(value) { 
+predicate tree(struct Node* node, tree value) =
+  switch(value) { 
     case Nil: return false;
     case tree(node2, lhs, rhs): return node!=0 &*& node==node2 &*& node->count |-> ?c &*& c == size(value) &*&
                                        node->left |-> ?l &*& node->right |-> ?r &*& (l==0 ? lhs==Nil : tree(l, lhs) &*& l->parent |-> node) &*&
                                        (r==0 ? rhs==Nil : tree(r, rhs) &*& r->parent |-> node) &*& malloc_block_Node(node); 
   };
 
-predicate isTree(struct Node* n, tree value) 
-  requires tree(?root, value) &*& root!=0 &*& root->parent |-> 0 &*& contains(value, n) == true;
+predicate isTree(struct Node* n, tree value) =
+  tree(?root, value) &*& root!=0 &*& root->parent |-> 0 &*& contains(value, n) == true;
 
 inductive context = | lcontext(struct Node*, context, tree) | rcontext(struct Node*, tree, context) | Root; 
 
-predicate context(struct Node* node, context value, int holeCount)
-  requires switch(value) {
+predicate context(struct Node* node, context value, int holeCount) =
+  switch(value) {
     case Root: return node->parent |-> 0;
     case lcontext(n, cont, t): return n!=0 &*& n->left |-> node &*& node != 0 &*& n->right |-> ?r &*& n->count |-> ?c &*&
                                       (r==0 ? t==Nil : tree(r, t) &*& r->parent |-> n) &*& context(n, cont, c) &*& c== holeCount + 1 + size(t) &*& node->parent |-> n &*&

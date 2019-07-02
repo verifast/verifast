@@ -11,16 +11,16 @@ struct llist {
 };
 
 /*@
-predicate node(struct node *node; struct node *next, int value)
-  requires node->next |-> next &*& node->value |-> value &*& malloc_block_node(node);
+predicate node(struct node *node; struct node *next, int value) =
+  node->next |-> next &*& node->value |-> value &*& malloc_block_node(node);
 @*/
 
 /*@
-predicate lseg(struct node *n1, struct node *n2; list<int> v)
-  requires n1 == n2 ? emp &*& v == nil : node(n1, ?_n, ?h) &*& lseg(_n, n2, ?t) &*& v == cons(h, t);
+predicate lseg(struct node *n1, struct node *n2; list<int> v) =
+  n1 == n2 ? emp &*& v == nil : node(n1, ?_n, ?h) &*& lseg(_n, n2, ?t) &*& v == cons(h, t);
 
-predicate llist(struct llist *list; list<int> v)
-  requires list->first |-> ?_f &*& list->last |-> ?_l &*& lseg(_f, _l, v) &*& node(_l, _, _) &*& malloc_block_llist(list);
+predicate llist(struct llist *list; list<int> v) =
+  list->first |-> ?_f &*& list->last |-> ?_l &*& lseg(_f, _l, v) &*& node(_l, _, _) &*& malloc_block_llist(list);
 @*/
 
 struct llist *create_llist()
@@ -147,13 +147,12 @@ void llist_dispose(struct llist *list)
 
 /*@
 
-predicate lseg2(struct node *first, struct node *last, struct node *final, list<int> v)
-  requires
-    switch (v) {
-      case nil: return first == last;
-      case cons(head, tail):
-        return first != final &*& node(first, ?next, head) &*& lseg2(next, last, final, tail);
-    };
+predicate lseg2(struct node *first, struct node *last, struct node *final, list<int> v) =
+  switch (v) {
+    case nil: return first == last;
+    case cons(head, tail):
+      return first != final &*& node(first, ?next, head) &*& lseg2(next, last, final, tail);
+  };
 
 lemma void lseg2_add(struct node *first)
   requires [?f]lseg2(first, ?last, ?final, ?v) &*& [f]node(last, ?next, ?value) &*& last != final;
@@ -322,11 +321,11 @@ struct iter {
 
 /*@
 
-predicate llist_with_node(struct llist *list, list<int> v0, struct node *n, list<int> vn)
-  requires list->first |-> ?f &*& list->last |-> ?l &*& malloc_block_llist(list) &*& lseg2(f, n, l, ?v1) &*& lseg(n, l, vn) &*& node(l, _, _) &*& v0 == append(v1, vn);
+predicate llist_with_node(struct llist *list, list<int> v0, struct node *n, list<int> vn) =
+  list->first |-> ?f &*& list->last |-> ?l &*& malloc_block_llist(list) &*& lseg2(f, n, l, ?v1) &*& lseg(n, l, vn) &*& node(l, _, _) &*& v0 == append(v1, vn);
 
-predicate iter(struct iter *i, real frac, struct llist *l, list<int> v0, list<int> v)
-  requires i->current |-> ?n &*& [frac]llist_with_node(l, v0, n, v) &*& malloc_block_iter(i);
+predicate iter(struct iter *i, real frac, struct llist *l, list<int> v0, list<int> v) =
+  i->current |-> ?n &*& [frac]llist_with_node(l, v0, n, v) &*& malloc_block_iter(i);
 
 @*/
 

@@ -23,18 +23,18 @@ box_class counter_box(struct counter *counter, int count) {
     }
 }
 
-predicate_ctor counter(struct counter *counter, box boxId)()
-    requires counter_box(boxId, counter, _);
+predicate_ctor counter(struct counter *counter, box boxId)() =
+    counter_box(boxId, counter, _);
 
 lemma real counter_lock_split_fractions(struct counter *counter);
     requires [?f]counter->lock |-> ?lock;
     ensures [result]counter->lock |-> lock &*& [f - result]counter->lock |-> lock;
 
-predicate incrementor_session(struct counter *counter, box boxId)
-    requires [_]counter->lock |-> ?lock &*& [_]lock(lock, counter(counter, boxId));
+predicate incrementor_session(struct counter *counter, box boxId) =
+    [_]counter->lock |-> ?lock &*& [_]lock(lock, counter(counter, boxId));
 
-predicate_family_instance thread_run_data(incrementor)(void *data)
-    requires incrementor_session(data, _);
+predicate_family_instance thread_run_data(incrementor)(void *data) =
+    incrementor_session(data, _);
 @*/
 
 

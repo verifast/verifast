@@ -39,8 +39,8 @@ box_class mylock_box(struct mylock *mylock, bool is_locked, real myf, handle own
     }
 }
 
-predicate_ctor mylock_ctor(struct mylock *mylock, box boxId, predicate() p)()
-    requires mylock_box(boxId, mylock, ?islocked, ?f, ?h, p);
+predicate_ctor mylock_ctor(struct mylock *mylock, box boxId, predicate() p)() =
+  mylock_box(boxId, mylock, ?islocked, ?f, ?h, p);
 
 predicate mylock(struct mylock *mylock, predicate() p;) = 
   mylock_mutex (mylock, ?mutex) &*&
@@ -184,7 +184,7 @@ struct session {
 };
 
 /*@
-predicate_ctor datainv(int* p)() requires integer(p, ?v);
+predicate_ctor datainv(int* p)() = integer(p, ?v);
 
 inductive myinfo = myinfo (struct mylock *lock, int *data);
 

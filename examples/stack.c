@@ -38,29 +38,29 @@ inductive Stack =
   | Nil
   | Cons(void* data, any info, Stack);
 
-predicate Node(struct node* node, void* data, destructor* destructor, struct node* next, any info)
-  requires malloc_block_node( node ) &*&
-           node->data |-> data &*&
-           node->next |-> next &*&
-           Ownership(destructor)(data, info) &*&
-           is_destructor(destructor) == true &*&
-           node != 0;
+predicate Node(struct node* node, void* data, destructor* destructor, struct node* next, any info) =
+  malloc_block_node( node ) &*&
+  node->data |-> data &*&
+  node->next |-> next &*&
+  Ownership(destructor)(data, info) &*&
+  is_destructor(destructor) == true &*&
+  node != 0;
 
-predicate StackItems(struct node* head, destructor* destructor, Stack S)
-  requires is_destructor(destructor) == true &*&
-           (head == 0 ? S == Nil
-                      : Node(head, ?data, destructor, ?next, ?info) &*&
-                        StackItems(next, destructor, ?T) &*&
-                        S == Cons(data, info, T));
+predicate StackItems(struct node* head, destructor* destructor, Stack S) =
+  is_destructor(destructor) == true &*&
+  head == 0 ? S == Nil :
+  Node(head, ?data, destructor, ?next, ?info) &*&
+  StackItems(next, destructor, ?T) &*&
+  S == Cons(data, info, T);
 
-predicate Stack(struct stack* stack, destructor* destructor, Stack S)
-  requires malloc_block_stack(stack) &*&
-           is_destructor(destructor) == true &*&
-           stack->destructor |-> destructor &*&
-           stack->first |-> ?first &*&
-           stack->size |-> ?size &*&
-           size == Size(S) &*&
-           StackItems(first, destructor, S);
+predicate Stack(struct stack* stack, destructor* destructor, Stack S) =
+  malloc_block_stack(stack) &*&
+  is_destructor(destructor) == true &*&
+  stack->destructor |-> destructor &*&
+  stack->first |-> ?first &*&
+  stack->size |-> ?size &*&
+  size == Size(S) &*&
+  StackItems(first, destructor, S);
 
 fixpoint Stack Push(void* item, any info, Stack Stack)
 {
@@ -320,10 +320,10 @@ struct data
 
 /*@
 
-predicate Data(struct data* data, int foo, int bar)
-  requires malloc_block_data(data) &*&
-           data->foo |-> foo &*&
-           data->bar |-> bar;
+predicate Data(struct data* data, int foo, int bar) =
+  malloc_block_data(data) &*&
+  data->foo |-> foo &*&
+  data->bar |-> bar;
 
 @*/
 

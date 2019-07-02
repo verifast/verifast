@@ -314,7 +314,7 @@ let rec exec_cmds macros cwd parallel cmds =
     run_child (fun () -> exec_cmds macros cwd parallel cmds)
   in
   let rec exec_cmds0 cmds =
-  if !failed_processes_log = [] then
+  if parallel || !failed_processes_log = [] then
   let cd l s =
     decompose_path s |> List.iter begin fun s ->
       if s = "." then
@@ -333,7 +333,7 @@ let rec exec_cmds macros cwd parallel cmds =
     [] -> ()
   | cmd::cmds ->
     let rec exec_cmd cmd =
-      if !failed_processes_log = [] then begin
+      if parallel || !failed_processes_log = [] then begin
       match cmd with
         LetCmd (l, macroName, lines) ->
         macros := (macroName, lines)::!macros
