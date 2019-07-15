@@ -12,26 +12,18 @@ lemma void create_atomic_space(predicate() inv);
 lemma void dispose_atomic_space(predicate() inv);
     requires atomic_space(inv);
     ensures inv();
+    
+@*/
 
-predicate atomic_load_pointer_operation_pre(void *pp);
-predicate atomic_load_pointer_operation_post(void *p);
+/*@
 
-typedef lemma void atomic_load_pointer_operation();
-    requires atomic_load_pointer_operation_pre(?pp) &*& pointer(pp, ?p);
-    ensures atomic_load_pointer_operation_post(p) &*& pointer(pp, p);
+typedef lemma void atomic_load_pointer_operation(void **pp, predicate() P, predicate(void *) Q)();
+    requires pointer(pp, ?p) &*& P();
+    ensures pointer(pp, p) &*& Q(p);
 
-predicate_family atomic_load_pointer_context_pre(void *ctxt)(any info, predicate() inv, void **pp);
-predicate_family atomic_load_pointer_context_post(void *ctxt)(any info, void *p);
-
-typedef lemma void atomic_load_pointer_context(atomic_load_pointer_operation *op);
-    requires
-        atomic_load_pointer_context_pre(this)(?info, ?inv, ?pp) &*& inv() &*&
-        is_atomic_load_pointer_operation(op) &*& atomic_load_pointer_operation_pre(pp);
-    ensures
-        atomic_load_pointer_context_post(this)(info, ?p) &*& inv() &*&
-        is_atomic_load_pointer_operation(op) &*& atomic_load_pointer_operation_post(p);
-
-predicate atomic_load_pointer_ghost_arg(atomic_load_pointer_context *ctxt) = true;
+typedef lemma void atomic_load_pointer_context(predicate() inv, void **pp, predicate() pre, predicate(void *) post)();
+    requires inv() &*& is_atomic_load_pointer_operation(?op, pp, ?P, ?Q) &*& P() &*& pre();
+    ensures inv() &*& is_atomic_load_pointer_operation(op, pp, P, Q) &*& Q(?p) &*& post(p);
 
 @*/
 
@@ -39,40 +31,27 @@ void *atomic_load_pointer(void **pp);
     /*@
     requires
         [?f]atomic_space(?inv) &*&
-        atomic_load_pointer_ghost_arg(?ctxt) &*&
-        is_atomic_load_pointer_context(ctxt) &*&
-        atomic_load_pointer_context_pre(ctxt)(?info, inv, pp);
+        is_atomic_load_pointer_context(?ctxt, inv, pp, ?pre, ?post) &*& pre();
     @*/
     /*@
     ensures
         [f]atomic_space(inv) &*&
-        is_atomic_load_pointer_context(ctxt) &*&
-        atomic_load_pointer_context_post(ctxt)(info, result);
+        is_atomic_load_pointer_context(ctxt, inv, pp, pre, post) &*& post(result);
     @*/
 
 /*@
 
-predicate atomic_compare_and_store_pointer_operation_pre(void **pp, void *old, void *new);
-predicate atomic_compare_and_store_pointer_operation_post(bool result);
+typedef lemma bool atomic_compare_and_store_pointer_operation(void **pp, void *old, void *new, predicate() P, predicate(bool) Q)();
+    requires pointer(pp, ?p0) &*& P();
+    ensures pointer(pp, ?p1) &*& Q(result) &*& result ? p0 == old && p1 == new : p1 == p0;
 
-typedef lemma bool atomic_compare_and_store_pointer_operation();
-    requires atomic_compare_and_store_pointer_operation_pre(?pp, ?old, ?new) &*& pointer(pp, ?p0);
-    ensures atomic_compare_and_store_pointer_operation_post(result) &*& pointer(pp, ?p1) &*& result ? p0 == old && p1 == new : p1 == p0;
-
-predicate_family atomic_compare_and_store_pointer_context_pre(void *ctxt)(any info, predicate() inv, void **pp, void *old, void *new);
-predicate_family atomic_compare_and_store_pointer_context_post(void *ctxt)(any info, bool result);
-
-typedef lemma void atomic_compare_and_store_pointer_context(atomic_compare_and_store_pointer_operation *op);
+typedef lemma void atomic_compare_and_store_pointer_context(predicate() inv, void **pp, void *old, void *new, predicate() pre, predicate(bool) post)();
     requires
-        atomic_compare_and_store_pointer_context_pre(this)(?info, ?inv, ?pp, ?old, ?new) &*& inv() &*&
-        is_atomic_compare_and_store_pointer_operation(op) &*&
-        atomic_compare_and_store_pointer_operation_pre(pp, old, new);
+        inv() &*&
+        is_atomic_compare_and_store_pointer_operation(?op, pp, old, new, ?P, ?Q) &*& P() &*& pre();
     ensures
-        atomic_compare_and_store_pointer_context_post(this)(info, ?result) &*& inv() &*&
-        is_atomic_compare_and_store_pointer_operation(op) &*&
-        atomic_compare_and_store_pointer_operation_post(result);
-
-predicate atomic_compare_and_store_pointer_ghost_arg(atomic_compare_and_store_pointer_context *ctxt) = true;
+        inv() &*&
+        is_atomic_compare_and_store_pointer_operation(op, pp, old, new, P, Q) &*& Q(?result) &*& post(result);
 
 @*/
 
@@ -80,27 +59,19 @@ bool atomic_compare_and_store_pointer(void **pp, void *old, void *new);
     /*@
     requires
         [?f]atomic_space(?inv) &*&
-        atomic_compare_and_store_pointer_ghost_arg(?ctxt) &*&
-        is_atomic_compare_and_store_pointer_context(ctxt) &*&
-        atomic_compare_and_store_pointer_context_pre(ctxt)(?info, inv, pp, old, new);
+        is_atomic_compare_and_store_pointer_context(?ctxt, inv, pp, old, new, ?pre, ?post) &*& pre();
     @*/
     /*@
     ensures
         [f]atomic_space(inv) &*&
-        is_atomic_compare_and_store_pointer_context(ctxt) &*&
-        atomic_compare_and_store_pointer_context_post(ctxt)(info, result);
+        is_atomic_compare_and_store_pointer_context(ctxt, inv, pp, old, new, pre, post) &*& post(result);
     @*/
 
 /*@
 
-predicate_family atomic_noop_context_pre(void *ctxt)(any info, predicate() inv);
-predicate_family atomic_noop_context_post(void *ctxt)(any info);
-
-typedef lemma void atomic_noop_context();
-    requires atomic_noop_context_pre(this)(?info, ?inv) &*& inv();
-    ensures atomic_noop_context_post(this)(info) &*& inv();
-
-predicate atomic_noop_ghost_arg(atomic_noop_context *ctxt) = true;
+typedef lemma void atomic_noop_context(predicate() inv, predicate() pre, predicate() post)();
+    requires inv() &*& pre();
+    ensures inv() &*& post();
 
 @*/
 
@@ -108,15 +79,12 @@ void atomic_noop();
     /*@
     requires
         [?f]atomic_space(?inv) &*&
-        atomic_noop_ghost_arg(?ctxt) &*&
-        is_atomic_noop_context(ctxt) &*&
-        atomic_noop_context_pre(ctxt)(?info, inv);
+        is_atomic_noop_context(?ctxt, inv, ?pre, ?post) &*& pre();
     @*/
     /*@
     ensures
         [f]atomic_space(inv) &*&
-        is_atomic_noop_context(ctxt) &*&
-        atomic_noop_context_post(ctxt)(info);
+        is_atomic_noop_context(ctxt, inv, pre, post) &*& post();
     @*/
 
 #endif

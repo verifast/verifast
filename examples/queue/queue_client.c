@@ -83,54 +83,7 @@ predicate cell_ids(int minIdCell, int maxIdCell) = true;
 predicate_family_instance thread_run_pre(consumer)(struct queue *queue, any info) =
     queue_consumer(queue) &*& cell_ids(?minIdCell, ?maxIdCell) &*& [1/2]ghost_cell<int>(minIdCell, 0) &*& [1/2]atomic_space(message_queue(queue, minIdCell, maxIdCell));
 
-inductive consumer_context_info = consumer_context_info(struct queue *queue, int minIdCell, int maxIdCell, int minId);
-
-predicate_family_instance queue_try_dequeue_context_pre(consumer_context)(consumer_context_info info, predicate() inv, struct queue *queue) =
-    switch (info) {
-        case consumer_context_info(queue_, minIdCell, maxIdCell, minId):
-            return queue_ == queue &*& inv == message_queue(queue, minIdCell, maxIdCell) &*& [1/2]ghost_cell<int>(minIdCell, minId);
-    };
-
-predicate_family_instance queue_try_dequeue_context_post(consumer_context)(consumer_context_info info, bool result, void *value) =
-    switch (info) {
-        case consumer_context_info(queue, minIdCell, maxIdCell, minId):
-            return
-                result ?
-                    message_id(value, ?id) &*& malloc_block_message(value) &*& minId <= id &*& [1/2]ghost_cell<int>(minIdCell, ?minId1) &*& id < minId1
-                :
-                    [1/2]ghost_cell<int>(minIdCell, minId);
-    };
-
-lemma bool consumer_context(queue_try_dequeue_operation *op) : queue_try_dequeue_context
-    requires
-        queue_try_dequeue_context_pre(consumer_context)(?info, ?inv, ?queue) &*& inv() &*& queue_try_dequeue_operation_pre(op)(?opInfo, queue) &*&
-        is_queue_try_dequeue_operation(op);
-    ensures
-        queue_try_dequeue_context_post(consumer_context)(info, result, ?value) &*& inv() &*& queue_try_dequeue_operation_post(op)(opInfo, result, value) &*&
-        is_queue_try_dequeue_operation(op);
-{
-    open queue_try_dequeue_context_pre(consumer_context)(?info_, inv, queue);
-    switch (info_) {
-        case consumer_context_info(queue_, minIdCell, maxIdCell, minId):
-            open message_queue(queue, minIdCell, maxIdCell)();
-            op();
-            assert queue_try_dequeue_operation_post(op)(_, ?success, ?value) &*& queue_state(queue, ?newValues);
-            if (success) {
-                open messages(_, _);
-                assert message_id(value, ?id);
-                ghost_cell_mutate(minIdCell, id + 1);
-            }
-            close queue_try_dequeue_context_post(consumer_context)(info_, success, value);
-            close message_queue(queue, minIdCell, maxIdCell)();
-            return success;
-    }
-}
-
 @*/
-
-struct dequeue_result {
-    struct message *message;
-};
 
 void consumer(struct queue *queue) //@ : thread_run
     //@ requires thread_run_pre(consumer)(queue, ?info);
@@ -138,90 +91,51 @@ void consumer(struct queue *queue) //@ : thread_run
 {
     //@ open thread_run_pre(consumer)(queue, _);
     //@ open cell_ids(?minIdCell, ?maxIdCell);
-    struct dequeue_result *result = malloc(sizeof(struct dequeue_result));
-    if (result == 0) abort();
     
     int lastId = -1;
     while (true)
-        //@ invariant dequeue_result_message(result, _) &*& queue_consumer(queue) &*& [1/2]ghost_cell<int>(minIdCell, ?minId) &*& lastId < minId &*& [1/2]atomic_space(message_queue(queue, minIdCell, maxIdCell));
+        //@ invariant queue_consumer(queue) &*& [1/2]ghost_cell<int>(minIdCell, ?minId) &*& lastId < minId &*& [1/2]atomic_space(message_queue(queue, minIdCell, maxIdCell));
     {
-        /*@
-        close queue_try_dequeue_context_pre(consumer_context)(consumer_context_info(queue, minIdCell, maxIdCell, minId), message_queue(queue, minIdCell, maxIdCell), queue);
-        @*/
-        //@ open dequeue_result_message(result, _);
-        //@ produce_lemma_function_pointer_chunk(consumer_context);
-        bool success = queue_try_dequeue(queue, &result->message);
-        //@ leak is_queue_try_dequeue_context(_);
-        //@ assert pointer(&result->message, ?value);
-        //@ close dequeue_result_message(result, value);
-        //@ open queue_try_dequeue_context_post(consumer_context)(_, _, _);
+        bool success;
+        struct message *message;
+        {
+            /*@
+            predicate pre() = [1/2]ghost_cell<int>(minIdCell, minId);
+            predicate post(bool result, void *value) =
+                result ?
+                    message_id(value, ?id) &*& malloc_block_message(value) &*& [1/2]ghost_cell<int>(minIdCell, id + 1) &*& minId <= id
+                :
+                    [1/2]ghost_cell<int>(minIdCell, minId);
+            @*/
+            /*@
+            produce_lemma_function_pointer_chunk queue_try_dequeue_context(message_queue(queue, minIdCell, maxIdCell), queue, pre, post)() {
+                open pre();
+                open message_queue(queue, minIdCell, maxIdCell)();
+                assert is_queue_try_dequeue_operation(?op, queue, ?P, ?Q);
+                op();
+                assert Q(?result, ?value);
+                if (result) {
+                    open messages(_, _);
+                    struct message *m = value;
+                    ghost_cell_mutate(minIdCell, m->id + 1);
+                }
+                close message_queue(queue, minIdCell, maxIdCell)();
+                close post(result, value);
+            };
+            @*/
+            //@ close pre();
+            success = queue_try_dequeue(queue, &message);
+            //@ leak is_queue_try_dequeue_context(_, _, _, _, _);
+            //@ open post(_, _);
+        }
         if (success) {
-            int id = result->message->id;
+            int id = message->id;
             assert(lastId < id);
             lastId = id;
-            free(result->message);
+            free(message);
         }
     }
 }
-
-/*@
-
-inductive main_context_info = main_context_info(struct queue *queue, int minIdCell, int maxIdCell, int id);
-
-predicate_family_instance queue_enqueue_context_pre(main_context)(main_context_info info, predicate() inv, struct queue *queue, void *value) =
-    switch (info) {
-        case main_context_info(queue_, minIdCell, maxIdCell, id): return
-            queue_ == queue &*&
-            inv == message_queue(queue, minIdCell, maxIdCell) &*&
-            message_id(value, id) &*& malloc_block_message(value) &*&
-            [1/2]ghost_cell<int>(maxIdCell, id - 1);
-    };
-
-predicate_family_instance queue_enqueue_context_post(main_context)(main_context_info info) =
-    switch (info) {
-        case main_context_info(queue, minIdCell, maxIdCell, id):
-            return [1/2]ghost_cell<int>(maxIdCell, id);
-    };
-
-lemma bool main_context(queue_enqueue_operation *op) : queue_enqueue_context
-    requires
-        queue_enqueue_context_pre(main_context)(?info, ?inv, ?queue, ?value) &*& inv() &*& queue_enqueue_operation_pre(op)(?opInfo, queue, value) &*&
-        is_queue_enqueue_operation(op);
-    ensures
-        queue_enqueue_operation_post(op)(opInfo, result) &*& inv() &*&
-        is_queue_enqueue_operation(op) &*&
-        result ?
-            queue_enqueue_context_post(main_context)(info)
-        :
-            queue_enqueue_context_pre(main_context)(info, inv, queue, value);
-{
-    open queue_enqueue_context_pre(main_context)(?info_, inv, queue, value);
-    switch (info_) {
-        case main_context_info(queue_, minIdCell, maxIdCell, id):
-            open message_queue(queue, minIdCell, maxIdCell)();
-            assert ghost_cell<int>(maxIdCell, ?maxId);
-            bool success = op();
-            if (success) {
-                assert messages(?ms1, ?ids1);
-                close messages(nil, nil);
-                close messages(cons(value, nil), cons(id, nil));
-                messages_append_lemma(ms1);
-                assert [1/2]ghost_cell<int>(minIdCell, ?minId);
-                ids_ok_append_lemma(minId, maxId, ids1, id, id, cons(id, nil));
-                ghost_cell_mutate(maxIdCell, id);
-                split_fraction ghost_cell(maxIdCell, _);
-                close message_queue(queue, minIdCell, maxIdCell)();
-                close queue_enqueue_context_post(main_context)(info_);
-            } else {
-                split_fraction ghost_cell(maxIdCell, _);
-                close message_queue(queue, minIdCell, maxIdCell)();
-                close queue_enqueue_context_pre(main_context)(info_, inv, queue, value);
-            }
-            return success;
-    }
-}
-
-@*/
 
 int main() //@ : main
     //@ requires true;
@@ -243,15 +157,35 @@ int main() //@ : main
         //@ invariant [1/2]atomic_space(message_queue(queue, minIdCell, maxIdCell)) &*& [1/2]ghost_cell<int>(maxIdCell, id - 1);
     {
         struct message *message = create_message(id);
-        /*@
-        close
-            queue_enqueue_context_pre(main_context)
-                (main_context_info(queue, minIdCell, maxIdCell, id), message_queue(queue, minIdCell, maxIdCell), queue, message);
-        @*/
-        //@ produce_lemma_function_pointer_chunk(main_context);
-        queue_enqueue(queue, message);
-        //@ leak is_queue_enqueue_context(_);
-        //@ open queue_enqueue_context_post(main_context)(_);
+        {
+            /*@
+            predicate pre() = [1/2]ghost_cell<int>(maxIdCell, id - 1) &*& message_id(message, id) &*& malloc_block_message(message);
+            predicate post() = [1/2]ghost_cell<int>(maxIdCell, id);
+            @*/
+            /*@
+            produce_lemma_function_pointer_chunk queue_enqueue_context(message_queue(queue, minIdCell, maxIdCell), queue, message, pre, post)() {
+                open message_queue(queue, minIdCell, maxIdCell)();
+                assert is_queue_enqueue_operation(?op, queue, message, ?P, ?Q);
+                op();
+                assert Q(?result);
+                if (result) {
+                    open pre();
+                    assert [1/2]ghost_cell<int>(minIdCell, ?minId) &*& messages(?ms1, ?ids1);
+                    close messages(nil, nil);
+                    close messages({message}, {id});
+                    messages_append_lemma(ms1);
+                    ids_ok_append_lemma(minId, id - 1, ids1, id, id, {id});
+                    ghost_cell_mutate(maxIdCell, id);
+                    close post();
+                }
+                close message_queue(queue, minIdCell, maxIdCell)();
+            };
+            @*/
+            //@ close pre();
+            queue_enqueue(queue, message);
+            //@ leak is_queue_enqueue_context(_, _, _, _, _, _);
+            //@ open post();
+        }
         if (id == 2147483647) abort();
         id++;
     }
