@@ -45,6 +45,8 @@ predicate u_short_integer(unsigned short *p; unsigned short v) = integer_(p, siz
 
 predicate pointer(void **pp; void *p);
 
+predicate boolean(bool* p; bool v);
+
 predicate float_(float *p; float v);
 predicate double_(double *p; double v);
 predicate long_double(long double *p; long double v);
@@ -96,6 +98,14 @@ lemma_auto void pointer_nonzero();
 lemma void pointer_limits(void *pp);
     requires [?f]pointer(pp, ?p);
     ensures [f]pointer(pp, p) &*& pp > (void *)0 &*& pp + sizeof(void *) <= (void *)UINTPTR_MAX &*& p >= (void *)0 &*& p <= (void *)UINTPTR_MAX;
+
+lemma void boolean_distinct(bool* i, bool* j);
+    requires boolean(i, ?v1) &*& boolean(j, ?v2);
+    ensures boolean(i, v1) &*& boolean(j, v2) &*& i != j;
+
+lemma void boolean_unique(bool *p);
+    requires [?f]boolean(p, ?v);
+    ensures [f]boolean(p, v) &*& f <= 1;
 
 fixpoint void *pointer_of_chars(list<char> cs);
 fixpoint list<char> chars_of_pointer(void * p);
@@ -313,6 +323,12 @@ lemma_auto void ushorts_inv();
     requires [?f]ushorts(?p, ?count, ?vs);
     ensures [f]ushorts(p, count, vs) &*& count == length(vs);
 
+predicate bools(bool *p, int count; list<bool> vs) =
+    count == 0 ?
+        vs == nil
+    :
+        boolean(p, ?v) &*& bools(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0);
+
 predicate pointers(void **pp, int count; list<void *> ps) =
     count == 0 ?
         ps == nil
@@ -445,6 +461,7 @@ predicate malloc_block_ushorts(unsigned short *p; int count) = malloc_block(p, ?
 predicate malloc_block_pointers(void **p; int count) = malloc_block(p, ?size) &*& divrem(size, sizeof(void *), count, 0);
 predicate malloc_block_llongs(long long *p; int count) = malloc_block(p, ?size) &*& divrem(size, sizeof(long long), count, 0);
 predicate malloc_block_ullongs(unsigned long long *p; int count) = malloc_block(p, ?size) &*& divrem(size, sizeof(unsigned long long), count, 0);
+predicate malloc_block_bools(bool *p; int count) =  malloc_block(p, ?size) &*& divrem(size, sizeof(bool), count, 0);
 predicate malloc_block_floats(float *p; int count) = malloc_block(p, ?size) &*& divrem(size, sizeof(float), count, 0);
 predicate malloc_block_doubles(double *p; int count) = malloc_block(p, ?size) &*& divrem(size, sizeof(double), count, 0);
 predicate malloc_block_long_doubles(long double *p; int count) = malloc_block(p, ?size) &*& divrem(size, sizeof(long double), count, 0);

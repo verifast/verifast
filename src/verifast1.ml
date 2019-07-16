@@ -3973,6 +3973,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let _, ushort_pred_symb, _, ushorts_pred_symb, _, malloc_block_ushorts_pred_symb as ushort_pointee_tuple = pointee_tuple "u_short_integer" "ushorts"
   let _, char_pred_symb, _, chars_pred_symb, _, malloc_block_chars_pred_symb as char_pointee_tuple = pointee_tuple "character" "chars"
   let _, uchar_pred_symb, _, uchars_pred_symb, _, malloc_block_uchars_pred_symb as uchar_pointee_tuple = pointee_tuple "u_character" "uchars"
+  let _, bool_pred_symb, _, bools_pred_symb, _, malloc_block_bools_pred_symb as bool_pointee_tuple = pointee_tuple "boolean" "bools"
   let _, float__pred_symb, _, floats_pred_symb, _, malloc_block_floats_pred_symb as float_pointee_tuple = pointee_tuple "float_" "floats"
   let _, double__pred_symb, _, doubles_pred_symb, _, malloc_block_doubles_pred_symb as double_pointee_tuple = pointee_tuple "double_" "doubles"
   let _, long_double_pred_symb, _, long_doubles_pred_symb, _, malloc_block_long_doubles_pred_symb as long_double_pointee_tuple = pointee_tuple "long_double" "long_doubles"
@@ -3996,6 +3997,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Int (Unsigned, 1) -> Some ushort_pointee_tuple
     | Int (Signed, 0) -> Some char_pointee_tuple
     | Int (Unsigned, 0) -> Some uchar_pointee_tuple
+    | Bool -> Some bool_pointee_tuple
     | Float -> Some float_pointee_tuple
     | Double -> Some double_pointee_tuple
     | LongDouble -> Some long_double_pointee_tuple
@@ -4481,6 +4483,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   [predinst "character" [PtrType (Int (Signed, 1)); Int (Signed, 1)]]
                 | Int (Unsigned, 0) ->
                   [predinst "u_character" [PtrType (Int (Unsigned, 1)); Int (Unsigned, 1)]]
+                | Bool ->
+                  [predinst "boolean" [PtrType Bool; Bool]]
                 | _ -> []
                 end
               | _ -> []
