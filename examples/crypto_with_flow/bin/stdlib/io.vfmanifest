@@ -1,9 +1,0 @@
-.predicate ./io.gh@./io.gh#token
-.predicate ./io.gh@./io.gh#split
-.provides ./io.gh#split
-.provides ./io.gh#split_specific
-.predicate ./io.gh@./io.gh#join
-.provides ./io.gh#join
-.provides ./io.gh#join_specific
-.predicate ./io.gh@./io.gh#no_op
-.provides ./io.gh#no_op

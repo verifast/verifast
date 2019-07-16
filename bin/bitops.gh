@@ -1,0 +1,230 @@
+#ifndef BITOPS_GH
+#define BITOPS_GH
+
+#include <nat.gh>
+
+// Definitions
+
+inductive Z = Zsign(bool) | Zdigit(Z, bool);
+
+fixpoint int int_of_Z(Z z) {
+    switch (z) {
+        case Zsign(b): return b ? -1 : 0;
+        case Zdigit(z0, b0): return 2 * int_of_Z(z0) + (b0 ? 1 : 0);
+    }
+}
+
+fixpoint Z Z_and(Z z1, Z z2) {
+    switch (z1) {
+        case Zsign(b1): return b1 ? z2 : z1;
+        case Zdigit(z10, b10): return switch (z2) {
+            case Zsign(b2): return b2 ? z1 : z2;
+            case Zdigit(z20, b20): return Zdigit(Z_and(z10, z20), b10 && b20);
+        };
+    }
+}
+
+lemma void bitand_def(int x1, Z z1, int x2, Z z2);
+    requires x1 == int_of_Z(z1) &*& x2 == int_of_Z(z2);
+    ensures (x1 & x2) == int_of_Z(Z_and(z1, z2));
+
+fixpoint Z Z_not(Z z) {
+    switch (z) {
+        case Zsign(b): return Zsign(!b);
+        case Zdigit(z0, b0): return Zdigit(Z_not(z0), !b0);
+    }
+}
+
+lemma void bitnot_def(int x, Z z);
+    requires x == int_of_Z(z);
+    ensures ~x == int_of_Z(Z_not(z));
+
+fixpoint Z Z_xor(Z z1, Z z2) {
+    switch (z1) {
+        case Zsign(b1): return b1 ? Z_not(z2) : z2;
+        case Zdigit(z10, b10): return switch (z2) {
+            case Zsign(b2): return b2 ? Z_not(z1) : z1;
+            case Zdigit(z20, b20): return Zdigit(Z_xor(z10, z20), b10 != b20);
+        };
+    }
+}
+
+lemma void bitxor_def(int x1, Z z1, int x2, Z z2);
+    requires x1 == int_of_Z(z1) &*& x2 == int_of_Z(z2);
+    ensures (x1 ^ x2) == int_of_Z(Z_xor(z1, z2));
+
+fixpoint Z Z_or(Z z1, Z z2) {
+    switch (z1) {
+        case Zsign(b1): return b1 ? z1 : z2;
+        case Zdigit(z10, b10): return switch (z2) {
+            case Zsign(b2): return b2 ? z2 : z1;
+            case Zdigit(z20, b20): return Zdigit(Z_or(z10, z20), b10 || b20);
+        };
+    }
+}
+
+lemma void bitor_def(int x1, Z z1, int x2, Z z2);
+    requires x1 == int_of_Z(z1) &*& x2 == int_of_Z(z2);
+    ensures (x1 | x2) == int_of_Z(Z_or(z1, z2));
+
+lemma void shiftleft_def(int x, nat n);
+    requires true;
+    ensures x << int_of_nat(n) == x * pow_nat(2, n);
+
+fixpoint Z Z_shiftright(Z z, nat n) {
+    switch (n) {
+        case zero: return z;
+        case succ(n0): return switch (z) {
+            case Zsign(b): return z;
+            case Zdigit(z0, b0): return Z_shiftright(z0, n0);
+        };
+    }
+}
+
+lemma void shiftright_def(int x, Z z, nat n);
+    requires x == int_of_Z(z);
+    ensures x >> int_of_nat(n) == int_of_Z(Z_shiftright(z, n));
+
+lemma void truncate_unsigned_def(int x, nat n);
+    requires true;
+    ensures truncate_unsigned(x, int_of_nat(n)) == x % pow_nat(2, n);
+
+fixpoint Z Z_truncate_signed(Z z, nat n) { // n = number of bits, not including the sign bit!
+    switch (n) {
+        case zero: return switch (z) {
+            case Zsign(b): return z;
+            case Zdigit(z0, b0): return Zsign(b0);
+        };
+        case succ(n0): return switch (z) {
+            case Zsign(b): return Zdigit(Z_truncate_signed(z, n0), b);
+            case Zdigit(z0, b0): return Zdigit(Z_truncate_signed(z0, n0), b0);
+        };
+    }
+}
+
+lemma void truncate_signed_def(int x, Z z, nat n);
+    requires x == int_of_Z(z);
+    ensures truncate_signed(x, int_of_nat(n)) == int_of_Z(Z_truncate_signed(z, n));
+
+// Limits
+
+lemma void bitand_limits(int x, int y, nat n);
+    requires 0 <= x && x < pow_nat(2, n) || 0 <= y && y < pow_nat(2, n);
+    ensures 0 <= (x & y) &*& (x & y) < pow_nat(2, n);
+
+lemma void bitand_signed_limits(int x, int y, nat n);
+    requires -pow_nat(2, n) <= x && x < pow_nat(2, n) || -pow_nat(2, n) <= y && y < pow_nat(2, n);
+    ensures -pow_nat(2, n) <= (x & y) &*& (x & y) < pow_nat(2, n);
+
+lemma void bitxor_limits(int x, int y, nat n);
+    requires 0 <= x &*& x < pow_nat(2, n) &*& 0 <= y &*& y < pow_nat(2, n);
+    ensures 0 <= (x ^ y) &*& (x ^ y) < pow_nat(2, n);
+
+lemma void bitxor_signed_limits(int x, int y, nat n);
+    requires -pow_nat(2, n) <= x &*& x < pow_nat(2, n) &*& -pow_nat(2, n) <= y &*& y < pow_nat(2, n);
+    ensures -pow_nat(2, n) <= (x | y) &*& (x | y) < pow_nat(2, n);
+
+lemma void bitor_limits(int x, int y, nat n);
+    requires 0 <= x &*& x < pow_nat(2, n) &*& 0 <= y &*& y < pow_nat(2, n);
+    ensures 0 <= (x | y) &*& (x | y) < pow_nat(2, n);
+
+lemma void bitor_signed_limits(int x, int y, nat n);
+    requires -pow_nat(2, n) <= x &*& x < pow_nat(2, n) &*& -pow_nat(2, n) <= y &*& y < pow_nat(2, n);
+    ensures -pow_nat(2, n) <= (x | y) &*& (x | y) < pow_nat(2, n);
+
+lemma void shiftleft_limits(int x, nat m, nat n);
+    requires 0 <= x &*& x < pow_nat(2, m);
+    ensures 0 <= x << int_of_nat(n) &*& x << int_of_nat(n) < pow_nat(2, nat_plus(m, n));
+
+lemma void shiftleft_signed_limits(int x, nat m, nat n);
+    requires -pow_nat(2, m) <= x &*& x < pow_nat(2, m);
+    ensures -pow_nat(2, nat_plus(m, n)) <= x << int_of_nat(n) &*& x << int_of_nat(n) < pow_nat(2, nat_plus(m, n));
+
+lemma void shiftright_limits(int x, nat m, nat n);
+    requires 0 <= x &*& x < pow_nat(2, m);
+    ensures 0 <= x >> int_of_nat(n) &*& x >> int_of_nat(n) < pow_nat(2, nat_minus(m, n));
+
+lemma void shiftright_signed_limits(int x, nat m, nat n);
+    requires -pow_nat(2, m) <= x &*& x < pow_nat(2, m);
+    ensures -pow_nat(2, nat_minus(m, n)) <= x >> int_of_nat(n) &*& x >> int_of_nat(n) < pow_nat(2, nat_minus(m, n));
+
+lemma void truncate_limits(int x, nat n);
+    requires true;
+    ensures 0 <= truncate_unsigned(x, int_of_nat(n)) &*& truncate_unsigned(x, int_of_nat(n)) < pow_nat(2, n);
+
+lemma void truncate_signed_limits(int x, nat n);
+    requires true;
+    ensures -pow_nat(2, n) <= truncate_signed(x, int_of_nat(n)) &*& truncate_signed(x, int_of_nat(n)) < pow_nat(2, n);
+
+// Bit blasting
+
+fixpoint pair<int, list<bool> > bits_of_int(int x, nat n) {
+    switch (n) {
+        case zero: return pair(x, nil);
+        case succ(n0): return pair(fst(bits_of_int(x / 2, n0)), cons(x % 2 == 1, snd(bits_of_int(x / 2, n0))));
+    }
+}
+
+fixpoint int int_of_bits(int xh, list<bool> bits) {
+    switch (bits) {
+        case nil: return xh;
+        case cons(b, bs0): return 2 * int_of_bits(xh, bs0) + (b ? 1 : 0);
+    }
+}
+
+lemma void int_of_bits_of_int(int x, nat n)
+    requires 0 <= x;
+    ensures x == int_of_bits(fst(bits_of_int(x, n)), snd(bits_of_int(x, n)));
+{
+    switch (n) {
+        case zero:
+        case succ(n0):
+            div_rem(x, 2);
+            int_of_bits_of_int(x / 2, n0);
+    }
+}
+
+fixpoint Z Z_of_bits(Z zh, list<bool> bits) {
+    switch (bits) {
+        case nil: return zh;
+        case cons(b, bs0): return Zdigit(Z_of_bits(zh, bs0), b);
+    }
+}
+
+lemma Z Z_of_uintN(int x, nat N)
+    requires 0 <= x &*& x < pow_nat(2, N);
+    ensures result == Z_of_bits(Zsign(false), snd(bits_of_int(x, N))) &*& x == int_of_Z(result);
+{
+    switch (N) {
+        case zero:
+            return Zsign(false);
+        case succ(N0):
+            div_rem(x, 2);
+            Z_of_uintN(x / 2, N0);
+            int_of_bits_of_int(x, N);
+            return Z_of_bits(Zsign(false), snd(bits_of_int(x, N)));
+    }
+}
+
+lemma Z Z_of_uint8(int x)
+    requires 0 <= x &*& x <= 255;
+    ensures result == Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zsign(false), _), _), _), _), _), _), _), _) &*& x == int_of_Z(result);
+{
+    return Z_of_uintN(x, N8);
+}
+
+lemma Z Z_of_uint16(int x)
+    requires 0 <= x &*& x <= 65535;
+    ensures result == Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zsign(false), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _) &*& x == int_of_Z(result);
+{
+    return Z_of_uintN(x, N16);
+}
+
+lemma Z Z_of_uint32(int x)
+    requires 0 <= x &*& x <= 0xffffffff;
+    ensures result == Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zsign(false), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _) &*& x == int_of_Z(result);
+{
+    return Z_of_uintN(x, N32);
+}
+
+#endif

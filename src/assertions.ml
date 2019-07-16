@@ -205,14 +205,30 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       iter [] h
 
+  let produce_points_to_chunk l h type_ coef addr value cont =
+    begin fun cont ->
+      if coef != real_unit && coef != real_half then
+        assume (ctxt#mk_real_lt real_zero coef) cont
+      else
+        cont()
+    end $. fun () ->
+    match try_pointee_pred_symb type_ with
+      Some symb ->
+      produce_chunk h (symb, true) [] coef (Some 1) [addr; value] None cont
+    | None ->
+    match int_rank_and_signedness type_ with
+      Some (k, signedness) ->
+      produce_chunk h (integer__symb (), true) [] coef (Some 3) [addr; rank_size_term k; mk_bool (signedness = Signed); value] None cont
+    | None ->
+      static_error l (Printf.sprintf "Cannot produce points-to chunk for variable of type '%s'" (string_of_type type_)) None
+
   let rec produce_asn_core_with_post tpenv h ghostenv env p coef size_first size_all (assuming: bool) cont_with_post: symexec_result =
     let cont h env ghostenv = cont_with_post h env ghostenv None in
     let with_context_helper cont =
       match p with
         Sep (_, _, _) -> cont()
       | _ ->
-        if !verbosity >= 2 then Printf.printf "%10.6fs: %s: Producing assertion\n" (Perf.time()) (string_of_loc (asn_loc p));
-        with_context (Executing (h, env, asn_loc p, "Producing assertion")) cont
+        with_context ~verbosity_level:2 (Executing (h, env, asn_loc p, "Producing assertion")) cont
     in
     with_context_helper (fun _ ->
     let ev = eval None env in
@@ -237,22 +253,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | WPointsTo (l, WVar (lv, x, GlobalName), tp, rhs) -> 
       let (_, type_, symbn, _) = List.assoc x globalmap in    
       evalpat false ghostenv env rhs tp tp $. fun ghostenv env t ->
-      let symb = 
-        match try_pointee_pred_symb type_ with
-          Some s -> s
-        | _ -> static_error l "A global variable in the left-hand side of a points-to assertion must be of a primitive type" None 
-      in
-      produce_chunk h (symb, true) [] coef (Some 1) [symbn; t] None $. fun h ->
+      produce_points_to_chunk l h type_ coef symbn t $. fun h ->
       cont h ghostenv env
     | WPointsTo (l, WDeref(ld, e, td), tp, rhs) ->  
       let symbn = eval None env e in
       evalpat false ghostenv env rhs tp tp $. fun ghostenv env t ->
-      let symb = 
-        match try_pointee_pred_symb tp with
-          Some s -> s
-        | _ -> static_error l "The left-hand side of this points-to assertion must be of a primitive type" None 
-      in
-      produce_chunk h (symb, true) [] coef (Some 1) [symbn; t] None $. fun h ->
+      produce_points_to_chunk l h tp coef symbn t $. fun h ->
       cont h ghostenv env
     | WPredAsn (l, g, is_global_predref, targs, pats0, pats) ->
       let (g_symb, pats0, pats, types, auto_info) =
@@ -419,17 +425,17 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   (* Region: consumption of assertions *)
   
-  let rec match_pat h l ghostenv env env' isInputParam pat tp0 tp t cont =
+  let rec match_pat h l ghostenv env env' isInputParam pat tp0 tp t cont_nomatch cont =
     let match_terms v t =
       if
         if tp = Bool then
-          ctxt#query (ctxt#mk_iff v t)
+          v == t || ctxt#query (ctxt#mk_iff v t)
         else
           definitely_equal v t
       then
         cont ghostenv env env'
       else if isInputParam then
-        None
+        cont_nomatch ()
       else
         assert_false h env l (Printf.sprintf "Cannot prove %s == %s" (ctxt#pprint t) (ctxt#pprint v)) None
     in
@@ -449,21 +455,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (_, inductive_tparams, ctormap, _) = List.assoc i inductivemap in
       let cont () =
         let (_, (_, _, _, _, (symb, _))) = List.assoc g ctormap in
-        ctxt#push;
         let vs = List.map2 (fun tp0 tp -> let v = get_unique_var_symb "value" tp in (v, prover_convert_term v tp tp0)) ts0 ts in
         let formula = ctxt#mk_eq t (ctxt#mk_app symb (List.map snd vs)) in
-        push_context (Assuming formula);
-        ctxt#assert_term formula;
+        assume formula $. fun () ->
         let inputParamCount = if isInputParam then max_int else 0 in
         let pats = List.map (fun pat -> SrcPat pat) pats in
-        match match_pats h l ghostenv env env' inputParamCount 0 pats ts ts (List.map fst vs) cont with
-          None ->
-          pop_context ();
-          ctxt#pop;
-          None
-        | result ->
-          push_undo_item (fun () -> pop_context (); ctxt#pop);
-          result
+        match_pats h l ghostenv env env' inputParamCount 0 pats ts ts (List.map fst vs) cont_nomatch cont
       in
       let rec check_not_other_ctors (cs : (string * (inductive_ctor_info)) list) =
         match cs with
@@ -480,17 +477,17 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             check_not_other_ctors cs
           else
             if isInputParam then
-              None
+              cont_nomatch ()
             else
               assert_false h env l (Printf.sprintf "Cannot prove that '%s' is not an instance of constructor '%s'" (ctxt#pprint t) g') None
       in
       check_not_other_ctors ctormap
-  and match_pats h l ghostenv env env' inputParamCount index pats tps0 tps ts cont =
+  and match_pats h l ghostenv env env' inputParamCount index pats tps0 tps ts cont_nomatch cont =
     match (pats, tps0, tps, ts) with
       (pat::pats, tp0::tps0, tp::tps, t::ts) ->
       let isInputParam = index < inputParamCount in
-      match_pat h l ghostenv env env' isInputParam pat tp0 tp t $. fun ghostenv env env' ->
-      match_pats h l ghostenv env env' inputParamCount (index + 1) pats tps0 tps ts cont
+      match_pat h l ghostenv env env' isInputParam pat tp0 tp t cont_nomatch $. fun ghostenv env env' ->
+      match_pats h l ghostenv env env' inputParamCount (index + 1) pats tps0 tps ts cont_nomatch cont
     | ([], [], [], []) -> cont ghostenv env env'
   
   (** Checks if the specified predicate assertion matches the specified chunk. If not, returns None. Otherwise, returns the environment updated with new bindings and other stuff.
@@ -530,7 +527,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           env' -- Updated list of bindings of unbound variables
           newChunks -- Any new chunks generated by this match; in particular, auto-splitting of fractional permissions.
    *)
-  let match_chunk ghostenv h env env' l g targs coef coefpat inputParamCount pats tps0 tps (Chunk (g', targs0, coef0, ts0, size0) as chunk) =
+  let match_chunk ghostenv h env env' l g targs coef coefpat inputParamCount pats tps0 tps (Chunk (g', targs0, coef0, ts0, size0) as chunk) cont =
     let match_coef ghostenv env cont =
       if coef == real_unit && coefpat == real_unit_pat && coef0 == real_unit then cont chunk ghostenv env coef0 [] else
       let match_term_coefpat t =
@@ -562,11 +559,10 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         else
           cont chunk ghostenv env coef0 []
     in
-    if not (predname_eq g g' && List.for_all2 unify targs targs0) then None else
+    if not (predname_eq g g' && List.for_all2 unify targs targs0) then cont None else
     let inputParamCount = match inputParamCount with None -> max_int | Some n -> n in
-    match_pats h l ghostenv env env' inputParamCount 0 pats tps0 tps ts0 $. fun ghostenv env env' ->
-    match_coef ghostenv env $. fun chunk ghostenv env coef0 newChunks ->
-    Some (chunk, coef0, ts0, size0, ghostenv, env, env', newChunks)
+    match_pats h l ghostenv env env' inputParamCount 0 pats tps0 tps ts0 (fun () -> cont None) $. fun ghostenv env env' ->
+    cont (match_coef ghostenv env $. fun chunk ghostenv env coef0 newChunks -> Some (chunk, coef0, ts0, size0, ghostenv, env, env', newChunks))
   
   let lookup_points_to_chunk_core h0 f_symb t =
     let rec iter h =
@@ -578,9 +574,22 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     iter h0
 
+  let lookup_integer__chunk_core h0 addr k signedness =
+    let integer__symb = integer__symb () in
+    let size = rank_size_term k in
+    let signed = mk_bool (signedness = Signed) in
+    let rec iter h =
+      match h with
+        [] -> None
+      | Chunk ((g, true), targs, coef, [addr0; size0; signed0; v], _)::_ when g == integer__symb && definitely_equal addr0 addr && definitely_equal size0 size && definitely_equal signed0 signed -> Some v
+      | Chunk ((g, false), targs, coef, [addr0; size0; signed0; v], _):: _ when definitely_equal g integer__symb && definitely_equal addr0 addr && definitely_equal size0 size && definitely_equal signed0 signed -> Some v
+      | _::h -> iter h
+    in
+    iter h0
+
   let lookup_points_to_chunk h0 env l f_symb t =
     match lookup_points_to_chunk_core h0 f_symb t with
-      None -> assert_false h0 env l ("No matching pointsto chunk: " ^ (ctxt#pprint f_symb) ^ "(" ^ (ctxt#pprint t) ^ ", _)") None
+      None -> assert_false h0 env l ("No matching points-to chunk: " ^ (ctxt#pprint f_symb) ^ "(" ^ (ctxt#pprint t) ^ ", _)") None
     | Some v -> v
 
   let read_field h env l t fparent fname =
@@ -639,12 +648,49 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       Some symb -> symb
     | None -> static_error l ("Dereferencing pointers of type " ^ string_of_type pointeeType ^ " is not yet supported.") None
   
-  let read_c_array h env l a i tp =
-    let (predsym, array_predsym) =
-      match try_pointee_pred_symb0 tp with
-        Some (_, psym, _, asym, _, _) -> psym, asym
+  let read_integer__array h env l a i tp =
+    let (k, signedness) =
+      match int_rank_and_signedness tp with
+        Some (k, signedness) -> k, signedness
       | None -> static_error l ("Dereferencing array elements of type " ^ string_of_type tp ^ " is not yet supported.") None
     in
+    let integers__symb = integers__symb () in
+    let size = rank_size_term k in
+    let signed = mk_bool (signedness = Signed) in
+    let slices =
+      head_flatmap
+        begin function
+          Chunk (g, [], coef, [a'; size'; signed'; n'; vs'], _)
+            when
+              predname_eq g (integers__symb, true) &&
+              definitely_equal a' a &&
+              definitely_equal size' size &&
+              definitely_equal signed' signed &&
+              ctxt#query (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) i) (ctxt#mk_lt i n')) ->
+            [mk_nth tp i vs']
+        | _ -> []
+        end
+        h
+    in
+    match slices with
+      None ->
+        begin match lookup_integer__chunk_core h (ctxt#mk_add a (ctxt#mk_mul i (sizeof l tp))) k signedness with
+          None ->
+          assert_false h env l
+            (sprintf "No matching array chunk: integers_(%s, %s, %s, 0<=%s<n, _)"
+               (ctxt#pprint a)
+               (ctxt#pprint size)
+               (ctxt#pprint signed)
+               (ctxt#pprint i))
+            None
+        | Some v -> v
+        end
+    | Some v -> v
+
+  let read_c_array h env l a i tp =
+    match try_pointee_pred_symb0 tp with
+      None -> read_integer__array h env l a i tp
+    | Some (_, predsym, _, array_predsym, _, _) ->
     let slices =
       head_flatmap
         begin function
@@ -723,15 +769,19 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let consume_chunk_core rules h ghostenv env env' l g targs coef coefpat inputParamCount pats tps0 tps cont =
     let old_depth = !consume_chunk_recursion_depth in
     let rec consume_chunk_core_core h =
+      begin fun cont ->
       let rec iter hprefix h =
         match h with
-          [] -> []
+          [] -> cont []
         | chunk::h ->
-            match match_chunk ghostenv h env env' l g targs coef coefpat inputParamCount pats tps0 tps chunk with
-              None -> iter (chunk::hprefix) h
-            | Some (chunk, coef, ts, size, ghostenv, env, env', newChunks) -> [(chunk, newChunks @ hprefix @ h, coef, ts, size, ghostenv, env, env')]
+          match_chunk ghostenv h env env' l g targs coef coefpat inputParamCount pats tps0 tps chunk $. fun result ->
+          match result with
+            None -> iter (chunk::hprefix) h
+          | Some (chunk, coef, ts, size, ghostenv, env, env', newChunks) -> cont [(chunk, newChunks @ hprefix @ h, coef, ts, size, ghostenv, env, env')]
       in
-      match iter [] h with
+      iter [] h
+      end $. fun matching_chunks ->
+      match matching_chunks with
         [] ->
         begin fun cont ->
           if !consume_chunk_recursion_depth > 20 then begin
@@ -822,7 +872,19 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               TermPat t -> ctxt#pprint t
             | SrcPat pat -> string_of_pat pat
           in
-          Printf.sprintf "No matching heap chunks: %s%s(%s)" predname targs (String.concat ", " (List.map string_of_pat0 pats))
+          let coef =
+            if coef == real_unit then
+              if coefpat == real_unit_pat then
+                ""
+              else
+                "[" ^ string_of_pat0 coefpat ^ "]"
+            else
+              if coefpat == real_unit_pat then
+                "[" ^ ctxt#pprint coef ^ "]"
+              else
+                "[" ^ ctxt#pprint coef ^ " * " ^ string_of_pat0 coefpat ^ "]"
+          in
+          Printf.sprintf "No matching heap chunks: %s%s%s(%s)" coef predname targs (String.concat ", " (List.map string_of_pat0 pats))
         in
         assert_false h env l message (Some "nomatchingheapchunks")
   (*      
@@ -842,6 +904,20 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let srcpat pat = SrcPat pat
   let srcpats pats = List.map srcpat pats
+
+  let consume_points_to_chunk rules h ghostenv env env' l type_ coef coefpat addr rhs cont =
+    match try_pointee_pred_symb type_ with
+      Some symb ->
+      consume_chunk rules h ghostenv env env' l (symb, true) [] coef coefpat (Some 1) [TermPat addr; rhs]
+        (fun chunk h coef [_; value] size ghostenv env env' -> cont chunk h coef value ghostenv env env')
+    | None ->
+    match int_rank_and_signedness type_ with
+      Some (k, signedness) ->
+      consume_chunk rules h ghostenv env env' l (integer__symb (), true) [] coef coefpat (Some 3)
+        [TermPat addr; TermPat (rank_size_term k); TermPat (mk_bool (signedness = Signed)); rhs]
+        (fun chunk h coef [_; _; _; value] size ghostenv env env' -> cont chunk h coef value ghostenv env env')
+    | None ->
+      static_error l (Printf.sprintf "Cannot consume points-to chunk for variable of type '%s'" (string_of_type type_)) None
   
   let rec consume_asn_core_with_post rules tpenv h ghostenv env env' p checkDummyFracs coef cont_with_post =
     let cont chunks h ghostenv env env' size_first = cont_with_post chunks h ghostenv env env' size_first None in
@@ -849,8 +925,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match p with
         Sep (_, _, _) -> cont()
       | _ ->
-        if !verbosity >= 2 then Printf.printf "%10.6fs: %s: Consuming assertion\n" (Perf.time()) (string_of_loc (asn_loc p));
-        with_context (Executing (h, env, asn_loc p, "Consuming assertion")) cont
+        with_context ~verbosity_level:2 (Executing (h, env, asn_loc p, "Consuming assertion")) cont
     in
     with_context_helper (fun _ ->
     let ev = eval None env in
@@ -880,22 +955,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         cont [chunk] h ghostenv env env' size
       | WVar (lv, x, GlobalName) -> 
         let (_, type_, symbn, _) = List.assoc x globalmap in  
-        let symb = 
-          match try_pointee_pred_symb type_ with
-            Some s -> s
-          | _ -> static_error l "A global variable in the left-hand side of a points-to assertion must be of a primitive type" None
-        in
-        consume_chunk rules h ghostenv env env' l (symb, true) [] coef coefpat (Some 1) [TermPat symbn; rhs]
-          (fun chunk h coef ts size ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' size)
+        consume_points_to_chunk rules h ghostenv env env' l type_ coef coefpat symbn rhs
+          (fun chunk h coef value ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' None)
       | WDeref(ld, e, td) ->  
         let symbn = eval None env e in
-        let symb = 
-          match try_pointee_pred_symb td with
-            Some s -> s
-          | _ -> static_error l "The left-hand side of this points-to assertion must be of a primitive type" None
-        in
-        consume_chunk rules h ghostenv env env' l (symb, true) [] coef coefpat (Some 1) [TermPat symbn; rhs]
-          (fun chunk h coef ts size ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' size)
+        consume_points_to_chunk rules h ghostenv env env' l td coef coefpat symbn rhs
+          (fun chunk h coef value ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' None)
     in
     let pred_asn l coefpat g is_global_predref targs pats0 pats =
       let (g_symb, pats0, pats, types) =
@@ -959,7 +1024,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       assert_expr env e h env l "Cannot prove condition." None; cont [] h ghostenv env env' None
     | WMatchAsn (l, e, pat, tp) ->
       let v = ev e in
-      let Some (ghostenv, env, env') = match_pat h l ghostenv env env' false (SrcPat pat) tp tp v (fun ghostenv env env' -> Some (ghostenv, env, env')) in
+      match_pat h l ghostenv env env' false (SrcPat pat) tp tp v (fun () -> assert false) $. fun ghostenv env env' ->
       cont [] h ghostenv env env' None
     | Sep (l, p1, p2) ->
       consume_asn_core_with_post rules tpenv h ghostenv env env' p1 checkDummyFracs coef (fun chunks h ghostenv env env' size post ->
@@ -1344,7 +1409,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (fun (from_symb, indices, to_symb, path) ->
         let transitive_auto_close_rule l h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
           (*let _ = print_endline ("trying to auto-close:" ^ (ctxt#pprint from_symb)) in*)
-          let rec can_apply_rule current_this_opt current_targs current_indices current_input_args path =
+          let rec can_apply_rule wanted_coef current_this_opt current_targs current_indices current_input_args path =
             match path with
               [] -> 
                 begin match try_find
@@ -1378,7 +1443,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                              let Some tpenv = zip predinst_tparams current_targs in
                              let env = List.map2 (fun (x, tp0) actual -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term actual tp tp0)) (take inputParamCount xs) current_input_args in 
                              let env = match current_this_opt with None -> env | Some t -> ("this", t) :: env in
-                             List.exists (fun conds -> (List.for_all (fun cond -> ctxt#query (eval None env cond)) conds)) conds
+                             List.exists (fun conds -> (for_all_rev (fun cond -> ctxt#query (eval None env cond)) conds)) conds
                            )
                          )
                         empty_preds 
@@ -1396,11 +1461,21 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 None -> env
               | Some t ->  ("this", t) :: env
               in
-              if (List.for_all (fun cond -> ctxt#query (eval None env cond)) conds) then
+              if (for_all_rev (fun cond -> ctxt#query (eval None env cond)) conds) then
                 let env = List.map2 (fun (x, tp0) actual -> (x, actual)) outer_formal_input_args current_input_args in
                 let env = match current_this_opt with
                   None -> env
                 | Some t -> ("this", t) :: env
+                in
+                let new_wanted_coef =
+                  match wanted_coef with None -> None | Some wanted_coef ->
+                  match inner_frac_expr_opt with
+                    None -> Some wanted_coef
+                  | Some DummyPat -> None
+                  | Some (LitPat f) ->
+                    let fterm = eval None env f in
+                    Some (ctxt#mk_real_mul fterm wanted_coef)
+                  | Some _ -> None
                 in
                 let new_this_opt = match inner_target_opt with
                   None -> None
@@ -1409,7 +1484,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let new_actual_targs = List.map (fun tp0 -> (instantiate_type tpenv tp0)) inner_formal_targs in
                 let new_actual_indices = List.map (fun index -> (eval None env index)) inner_formal_indices in
                 let new_actual_input_args = List.map (fun input_e -> (eval None env input_e)) inner_input_exprs in
-                match can_apply_rule new_this_opt new_actual_targs new_actual_indices new_actual_input_args path with
+                match can_apply_rule new_wanted_coef new_this_opt new_actual_targs new_actual_indices new_actual_input_args path with
                   None -> None
                 | Some exec_rule -> Some (fun h cont ->
                     exec_rule h (fun h coef ->
@@ -1422,7 +1497,6 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                       | Some t -> ("this", t) :: env
                       in
                       with_context PushSubcontext $. fun () ->
-                      with_context (Executing (h, env, outer_l, "Auto-closing predicate")) $. fun () ->
                         let new_coef = 
                           match inner_frac_expr_opt with
                             None -> coef
@@ -1436,6 +1510,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                                 coef 
                           | Some _ -> coef (* todo *)
                         in
+                        let new_coef = match wanted_coef with Some coef -> coef | None -> new_coef in
+                        with_context (Executing (h, env, outer_l, ("Auto-closing predicate with coefficient " ^ ctxt#pprint new_coef))) $. fun () ->
                         consume_asn rules tpenv h ghostenv env outer_wbody checkDummyFracs new_coef $. fun _ h ghostenv env2 size_first ->
                           let outputParams = drop (List.length outer_formal_input_args) outer_formal_args in
                           let outputArgs = List.map (fun (x, tp0) -> let tp = instantiate_type tpenv tp0 in (prover_convert_term (List.assoc x env2) tp0 tp)) outputParams in
@@ -1475,7 +1551,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | (_, _, _, _, false, _, _, _, _, _, _, _, _, _, _, _) -> 
                   (None, (take (List.length indices) wanted_indices_and_input_ts), (drop (List.length indices) wanted_indices_and_input_ts))
             in
-            match can_apply_rule wanted_target_opt wanted_targs wanted_indices wanted_inputs path with
+            let wanted_coef =
+              match wanted_coefpat with
+                TermPat coef -> if wanted_coef == real_unit then Some coef else Some (ctxt#mk_real_mul wanted_coef coef)
+              | _ -> None
+            in
+            match can_apply_rule wanted_coef wanted_target_opt wanted_targs wanted_indices wanted_inputs path with
               None -> cont None
             | Some exec_rule -> exec_rule h (fun h _ -> cont (Some h))
           else
@@ -1504,7 +1585,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   None -> env
                 | Some t -> ("this", t) :: env
               in
-              if (List.for_all (fun cond -> ctxt#query (eval None env cond)) conds) then
+              if (for_all_rev (fun cond -> ctxt#query (eval None env cond)) conds) then
                 let env = List.map2 (fun (x, tp0) actual -> (x, actual)) outer_formal_input_args actual_input_args in
                 let env = match actual_this_opt with
                   None -> env
@@ -1638,7 +1719,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             List.for_all2 definitely_equal indices fsymbs &&
             let Some tpenv = zip predinst_tparams targs in
             let env = List.map2 (fun (x, tp0) t -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term t tp tp0)) inputParams inputArgs in
-            List.exists (fun conds -> List.for_all (fun cond -> ctxt#query (eval None env cond)) conds) conds
+            List.exists (fun conds -> for_all_rev (fun cond -> ctxt#query (eval None env cond)) conds) conds
           in
           let exec_func h targs coef coefpat ts cont =
             let rules = rules_cell in

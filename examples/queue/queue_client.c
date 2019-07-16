@@ -73,7 +73,7 @@ lemma void ids_ok_append_lemma(int minId1, int maxId1, list<int> ids1, int minId
     }
 }
 
-predicate_ctor message_queue(struct queue *queue, int minIdCell, int maxIdCell)() requires
+predicate_ctor message_queue(struct queue *queue, int minIdCell, int maxIdCell)() =
     queue_state(queue, ?values) &*& messages(values, ?ids) &*&
     [1/2]ghost_cell<int>(minIdCell, ?minId) &*& [1/2]ghost_cell<int>(maxIdCell, ?maxId) &*&
     ids_ok(minId, maxId, ids) == true &*& minId <= maxId + 1;

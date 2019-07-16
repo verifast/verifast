@@ -1,3 +1,4 @@
+begin_parallel
 let verifast_both
 ifz3 verifast
 verifast -prover redux
@@ -8,6 +9,9 @@ cd bin
   cd ..
 cd ..
 cd examples
+  cd jayanti
+    verifast threading.o atomics.o jayanti.c client.c
+  cd ..
   cd abstract_io
     mysh < io2.mysh
   cd ..
@@ -27,14 +31,8 @@ cd examples
   cd splitcounter
     verifast -prover redux -c -disable_overflow_check splitcounter.c
   cd ..
-  cd crypto
-    mysh -cpus 1 < crypto.mysh
-  cd ..
-  cd crypto_with_flow
-    mysh -cpus 1 < crypto_with_flow.mysh
-  cd ..
   cd crypto_ccs
-    mysh -cpus 1 < crypto_ccs.mysh
+    call crypto_ccs.mysh
   cd ..
   cd floating_point
     cd sqrt_exact
@@ -51,14 +49,14 @@ cd examples
   verifast_both -c -disable_overflow_check -allow_should_fail address_of_local.c
   verifast_both -c -disable_overflow_check alt_threading.c
   verifast_both -c args.c
-  verifast_both -disable_overflow_check array_of_struct.c
-  verifast_both -disable_overflow_check -c arraylist.c
+  verifast_both array_of_struct.c
+  verifast_both -c arraylist.c
   verifast_both -disable_overflow_check threading.o barrier.c
   ifz3v4.5 verifast -prover z3v4.5 -c bitops.c
   verifast_both -c static_array.c
   verifast -c -disable_overflow_check typedef_cast.c
   verifast_both -c automation.c
-  ifz3 verifast -disable_overflow_check priorityqueue-forall_nth.c
+  verifast -prover z3v4.5 -disable_overflow_check priorityqueue-forall_nth.c
   verifast_both set.c
   cd BeepDriver
     mysh < BeepKernel.mysh
@@ -67,26 +65,26 @@ cd examples
     mysh < relaxed.mysh
   cd ..
   cd shared_boxes
-    ifz3 verifast -c sblock.c
+    verifast -c sblock.c
     verifast_both -c sglock.c
     verifast_both -c tblock.c
     verifast_both -c strong_ghost_lists.c
     verifast_both -c permutations.o ghost_lists.c
     verifast_both -c ticketlock_cap.c
-    ifz3 verifast -c ticket_lock.c
+    verifast -c ticket_lock.c
     verifast_both -c gotsmanlock.c
     verifast_both -c spinlock.c
-    ifz3 verifast -c concurrentqueue.c
-    ifz3 verifast -c concurrentstack.c
-    ifz3 verifast -c concurrentstackclient.c
-    ifz3 verifast -allow_assume threading.o atomics.o concurrentqueue.c concurrentqueue_client.c
+    verifast -prover z3v4.5 -c concurrentqueue.c
+    verifast -c -prover z3v4.5 concurrentstack.c
+    verifast -c concurrentstackclient.c
+    verifast -prover z3v4.5 -allow_assume threading.o atomics.o concurrentqueue.c concurrentqueue_client.c
     verifast_both -c atomic_integer.c
     verifast_both -c spinlock_with_atomic_integer.c
     verifast_both -c ticketlock_with_atomic_integer.c
     verifast -prover redux -c interval.c
     verifast_both -c lcl_set.c
     verifast_both -c cell_refcounted.c
-    ifz3 verifast -c cowl.c
+    verifast -c cowl.c
     verifast_both -c shared_boxes.c
     verifast_both -c incrbox.c
   cd ..
@@ -101,10 +99,11 @@ cd examples
     verifast_both -c lock.c
     verifast_both -c -disable_overflow_check prodcons.c
   cd ..
-  ifz3 verifast stringBuffers.c sockets.o bot.c
+  verifast stringBuffers.c sockets.o bot.c
   verifast_both -disable_overflow_check cat.c
   verifast_both char.c
   mysh < chat.mysh
+  verifast -c close_struct_zero.c
   verifast_both -c closetest.c
   verifast_both Composite.c
   verifast_both composite4.c
@@ -120,7 +119,7 @@ cd examples
     mysh < custom_bindir.mysh
   cd ..
   verifast_both -disable_overflow_check cp.c
-  ifz3 verifast -c decreases.c
+  verifast -c decreases.c
   verifast_both -c default_clause_test.c
   cd nested_induction
     mysh < nested_induction.mysh
@@ -288,8 +287,8 @@ cd examples
     verifast_both -c -disable_overflow_check ArraysAuto.java
     verifast_both -c -disable_overflow_check ArraysManual.java
     verifast_both -c -disable_overflow_check Automation.java
-    ifz3 verifast -c Bag.java
-    ifz3 verifast -c -disable_overflow_check Comprehensions.java
+    verifast -c Bag.java
+    verifast -c -disable_overflow_check Comprehensions.java
     verifast_both -c Constants.java
     verifast_both -c FieldInitializers.java
     verifast_both -c -allow_should_fail CompoundAssignments.java
@@ -352,10 +351,10 @@ cd examples
     cd ..
   cd ..
   cd vstte2010
-    ifz3 verifast -c -disable_overflow_check problem1.c
-    ifz3 verifast -c -disable_overflow_check problem2.c
+    verifast -c -disable_overflow_check problem1.c
+    verifast -c -disable_overflow_check problem2.c
     verifast_both -c -disable_overflow_check problem3.java
-    ifz3 verifast -c -disable_overflow_check problem4.java
+    verifast -prover z3v4.5 -c -disable_overflow_check problem4.java
     verifast_both -c -disable_overflow_check problem5.java
   cd ..
   cd vstte2012
@@ -408,6 +407,14 @@ cd tutorial_solutions
   verifast_both students.c
 cd ..
 cd tests
+  verifast -c -allow_should_fail any_russell.c
+  verifast -c typedef_enum_with_body.c
+  verifast -c -allow_should_fail noreturn.c
+  verifast_both -c redux_nonlinear_mult.c
+  verifast_both -c simplex_secondary_closes.c
+  verifast_both -c simplex_secondary_closes2.c
+  verifast_both -c match_ctor_pat.c
+  verifast_both -shared -target IP16 -allow_should_fail integer__pointee_pred.c
   verifast_both -c llong_fields.c
   verifast_both -c -allow_should_fail -allow_undeclared_struct_types undeclared_structs.c
   verifast_both stresstest-one-plus-one.c
@@ -436,6 +443,9 @@ cd tests
     cd ..
   cd ..
   cd errors
+    verifast -c -allow_should_fail div_mod_by_zero.c
+    verifast_both -c -allow_should_fail macro_in_macro_arg.c
+    verifast -c -prover z3v4.5 int_lit_overflow.c
     verifast_both -c -allow_should_fail basics.c
     verifast_both -c -allow_should_fail typecheck1.c
     verifast_both -c -allow_should_fail ghost_assignment.c
@@ -467,5 +477,9 @@ cd tests
     verifast_both -c -allow_should_fail fraction-of-fraction.c
     verifast_both -c -allow_should_fail test-precise-predicate-pointsto-errorcase.c
     verifast_both -c -allow_should_fail test-ghost-break-from-real-loop.c
+    cd context_free_pp
+      verifast -c -allow_should_fail lib.c prog.c
+    cd ..
   cd ..
 cd ..
+end_parallel

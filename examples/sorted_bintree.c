@@ -8,8 +8,8 @@ struct tree{
 };
 
 /*@
-predicate tree(struct tree *t,bintree b)
-  requires switch(b){
+predicate tree(struct tree *t,bintree b) =
+  switch(b){
     case empty: return t==0;
     case tree(a,bl,br): return t->value |-> ?v &*& t->left |-> ?l &*& t->right |-> ?r 
 			&*& malloc_block_tree(t) &*& tree(l,bl) &*& tree(r,br) &*& t!=0 &*& a==v ;

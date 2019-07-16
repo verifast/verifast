@@ -121,8 +121,8 @@ box_class tlock_box(struct tlock *lock, int next, int owner, bool locked, list<h
 }
 
  
-predicate_ctor tlock_ctor(struct tlock *lock, box boxId, predicate() p)()
-    requires tlock_box(boxId, lock, ?next, ?owner, ?locked, ?thandles, p);
+predicate_ctor tlock_ctor(struct tlock *lock, box boxId, predicate() p)() =
+  tlock_box(boxId, lock, ?next, ?owner, ?locked, ?thandles, p);
 
 predicate tlock(struct tlock *lock, predicate() p;) = 
   tlock_mutex (lock, ?mutex) &*& 
@@ -281,7 +281,7 @@ struct session {
 };
 
 /*@
-predicate_ctor datainv(int* p)() requires integer(p, ?v);
+predicate_ctor datainv(int* p)() = integer(p, ?v);
 
 inductive myinfo = myinfo (struct tlock *lock, int *data);
 

@@ -199,8 +199,9 @@ int main()
         equalsFuncType(foo_equals)(cons(foo1, cons(foo2, cons(foo3, nil))), fooX, cons(foo2, nil), foos_ctor(fvs, fooX, 200))
             (f1, f2) {
         open foos_ctor(fvs, fooX, 200)();
-        call();
+        bool result = call();
         close foos_ctor(fvs, fooX, 200)();
+        if (result) {} else {}
     }
     @*/
     //@ close foreach(nil, foo);

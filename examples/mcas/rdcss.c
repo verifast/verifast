@@ -30,7 +30,7 @@ struct rdcss_descriptor {
 
 predicate rdcss_cell_frac(void **a, real frac) = true;
 
-predicate_ctor rdcss_cell(int dsList)(void **a, void *v) requires
+predicate_ctor rdcss_cell(int dsList)(void **a, void *v) =
     rdcss_cell_frac(a, ?f) &*&
     [f]pointer(a, ?w) &*&
     true == (((uintptr_t)w & 1) == 0) ?
@@ -52,7 +52,7 @@ predicate descr(struct rdcss_descriptor *d; void **a1, void *o1, void **a2, void
 predicate done_copy(struct rdcss_descriptor *d, bool done) = true;
 predicate detached_copy(struct rdcss_descriptor *d, bool detached) = true;
 
-predicate_ctor rdcss_descriptor(int asList, int bsList, rdcss_unseparate_lemma *unsep, any info)(struct rdcss_descriptor *d) requires
+predicate_ctor rdcss_descriptor(int asList, int bsList, rdcss_unseparate_lemma *unsep, any info)(struct rdcss_descriptor *d) =
     true == (((uintptr_t)d & 1) == 0) &*&
     [_]descr(d, ?a1, ?o1, ?a2, ?o2, ?n2, ?tracker, ?op) &*&
     true == (((uintptr_t)o2 & 1) == 0) &*&

@@ -15,34 +15,9 @@ int a;
 int b;
 int c = 0;
 
-//@ predicate Q(int value) = value == 0 ? true : a |-> 7 &*& b |-> 8;
+//@ fixpoint predicate(int) Q() { return sep1(Qa, Qb); }
 //@ predicate Qa(int value) = value == 0 ? true : a |-> 7;
 //@ predicate Qb(int value) = value == 0 ? true : b |-> 8;
-
-/*@
-
-lemma void qsplit()
-    requires true;
-    ensures Q == sep1(Qa, Qb);
-{
-    produce_lemma_function_pointer_chunk implies1(Q, sep1(Qa,Qb))(value) {
-        open Q(value);
-        close Qa(value);
-        close Qb(value);
-        close sep1(Qa, Qb)(value);
-    } {
-        produce_lemma_function_pointer_chunk implies1(sep1(Qa,Qb), Q)(value) {
-            open sep1(Qa, Qb)(value);
-            open Qa(value);
-            open Qb(value);
-            close Q(value);
-        } {
-            pred_ext1(Q, sep1(Qa, Qb));
-        }
-    }
-}
-
-@*/
 
 void sender()
     //@ requires a |-> _ &*& b |-> _ &*& Write(&c, Q);
@@ -50,7 +25,9 @@ void sender()
 {
     a = 7;
     b = 8;
-    //@ close Q(1);
+    //@ close Qa(1);
+    //@ close Qb(1);
+    //@ close sep1(Qa, Qb)(1);
     //@ close apply(Q,1)();
     //@ close exists(apply(Q,1));
     atomic_thread_fence(memory_order_release);
@@ -103,9 +80,10 @@ int main() //@ : main_full(message_passing)
     //@ ensures true;
 {
     //@ open_module();
-    //@ close Q(0);
+    //@ close Qa(0);
+    //@ close Qb(0);
+    //@ close sep1(Qa, Qb)(0);
     //@ convert_to_atomic(&c, Q);
-    //@ qsplit();
     //@ split_Read(&c, Qa, Qb);
     sender();
     receiver_a();

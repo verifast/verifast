@@ -1,8 +1,8 @@
 package tree;
 
 /*@
-predicate tree(Tree t,bintree b)
-  requires switch(b){
+predicate tree(Tree t,bintree b) =
+  switch(b){
     case tnil: return t==null;
     case tcons(a,bl,br): return t.value |-> ?v &*& t.left |-> ?l &*& t.right |-> ?r
 			&*& tree(l,bl) &*& tree(r,br) &*& t!=null &*& a==v ;

@@ -10,7 +10,7 @@ int main(int argc, char** argv) //@ : main
   //@ ensures true;
 {
   struct file* fp = 0; char* buffer = 0; char* res = 0;
-  if(argc < 2) { puts("Enter a file name."); return -1; }
+  if(argc < 2) { fputs("Enter a file name.", stderr); return -1; }
   //@ open [_]argv(argv, argc, _);
   //@ open [_]argv(argv + 1, argc - 1, _);
   fp = fopen(* (argv + 1), "r");

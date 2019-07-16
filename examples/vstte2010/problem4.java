@@ -273,7 +273,7 @@ lemma void inconsistent_preserved(list<int> vs, int pos, list<int> vs2)
   ensures ! consistent(vs2, nat_of_int(pos), pos);
 {
   take_consistent(vs, nat_of_int(pos), pos);
-  append_consistent(take(pos + 1, vs), nat_of_int(pos), pos, drop(pos + 1, vs2));
+  take_consistent(vs2, nat_of_int(pos), pos);
 }
 
 lemma void inconsistent_take_core(list<int> vs, nat i, int pos, list<int> vs2)

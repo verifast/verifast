@@ -15,9 +15,9 @@ install:
   - ./setup-build.sh
 
 script:
-  - cd src && PATH=/tmp/vfdeps/bin:/usr/local/vfdeps-17.12/bin:$PATH DYLD_LIBRARY_PATH=/usr/local/vfdeps-17.12/lib:$DYLD_LIBRARY_PATH make nightly VERBOSE=yes -j 2
+  - ./build.sh
 
-before_deploy: "cd ../upload"
+before_deploy: "cd upload"
 deploy:
   provider: cloudfiles
   username: bartjacobs

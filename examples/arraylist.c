@@ -1,6 +1,6 @@
-#include "stdlib.h"
-#include "malloc.h"
-#include "string.h"
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 #include "arraylist.h"
 
 struct arraylist {
@@ -54,13 +54,14 @@ void list_add(struct arraylist *a, void *v)
     data = a->data;
     size = a->size;
     int capacity = a->capacity;
-    void** newData = malloc((capacity + 100) * sizeof(void*));
+    if (SIZE_MAX / sizeof(void *) / 2 - 1 < (size_t)capacity) abort();
+    void** newData = malloc((capacity * 2 + 1) * sizeof(void*));
     if(newData == 0) abort();
     //@ pointers_split(newData, size);
     memcpy(newData, data, (unsigned int) size * sizeof(void*));
     //@ chars_to_pointers(newData, size);
     a->data = newData;
-    a->capacity = capacity + 100;
+    a->capacity = capacity * 2 + 1;
     free(data);
   }
   size = a->size;
@@ -76,6 +77,7 @@ void list_remove_nth(struct arraylist *a, int n)
 {
   void** data = a->data;
   int size = a->size;
+  //@ pointers_limits(data);
   //@ pointers_split(data, n);
   //@ open pointers(data + n, _, _);
   memmove(data + n, data + n + 1, (unsigned int) (size - n - 1) * sizeof(void *));

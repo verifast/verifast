@@ -97,6 +97,6 @@ int main2()
 }
 
 /*@
-predicate tickets(struct C* c, int x, int id, int howMany)
-  requires howMany <= 0 ? emp : ticket(c, id, ?f) &*& [f]c->x |-> x &*& tickets(c, x, id, howMany - 1);
+predicate tickets(struct C* c, int x, int id, int howMany) =
+  howMany <= 0 ? emp : ticket(c, id, ?f) &*& [f]c->x |-> x &*& tickets(c, x, id, howMany - 1);
 @*/

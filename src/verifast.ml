@@ -45,12 +45,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let rec verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont econt =
     let l = stmt_loc s in
-    let _ =
-      match s with
-      (* Make sure that nested statements are not counted *)
-      | PureStmt _ | NonpureStmt _ | IfStmt _  | SwitchStmt _ | WhileStmt _ | BlockStmt _ -> ()
-      | _ -> !stats#stmtExec l;
-    in
+    if not (is_transparent_stmt s) then begin !stats#stmtExec l; reportStmtExec l end;
     let break_label () = if pure then "#ghostBreak" else "#break" in
     let free_locals closeBraceLoc h tenv env locals cont =
       let rec free_locals_core h locals =
@@ -78,7 +73,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match ss with
           [] -> ()
         | DeclStmt(l, ds) :: rest -> 
-          ds |> List.iter begin fun (_, _, _, _, addresstaken) ->
+          ds |> List.iter begin fun (_, _, _, _, (addresstaken, _)) ->
               if !addresstaken then
                 static_error l "A local variable whose address is taken must be declared at the start of a block." None
             end;
@@ -91,7 +86,6 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | DeclStmt _ :: rest -> check_block_declarations rest
       | _ :: rest -> check_after_initial_declarations rest
     in
-    if !verbosity >= 1 then printff "%10.6fs: %s: Executing statement\n" (Perf.time ()) (string_of_loc l);
     check_breakpoint h env l;
     let check_expr (pn,ilist) tparams tenv e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some pure) e in
     let check_condition (pn,ilist) tparams tenv e = check_condition_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some pure) e in
@@ -348,6 +342,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont econt
     in
+    let require_pure () =
+      if not pure then static_error l "This statement may appear only in a pure context." None
+    in
     match s with
       NonpureStmt (l, allowed, s) ->
       if allowed then
@@ -395,18 +392,28 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           produce_chunk h (p_symb, true) targs real_unit (Some (List.length ftxmap + 1)) ts size $. fun h ->
           cont h env
       end
-    | ExprStmt (CallExpr (l, "close_struct", targs, [], args, Static)) when language = CLang ->
+    | ExprStmt (CallExpr (l, ("close_struct" | "close_struct_zero" as name), targs, [], args, Static)) when language = CLang ->
+      require_pure ();
       let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "close_struct expects no type arguments and one argument." None in
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       let sn = match tp with PtrType (StructType sn) -> sn | _ -> static_error l "The argument of close_struct must be of type pointer-to-struct." None in
       eval_h h env w $. fun h env pointerTerm ->
       with_context (Executing (h, env, l, "Consuming character array")) $. fun () ->
       let (_, _, _, _, chars_symb, _, _) = List.assoc ("chars") predfammap in
-      consume_chunk rules h ghostenv [] [] l (chars_symb, true) [] real_unit dummypat None [TermPat pointerTerm; TermPat (struct_size l sn); SrcPat DummyPat] $. fun _ h coef _ _ _ _ _ ->
+      consume_chunk rules h ghostenv [] [] l (chars_symb, true) [] real_unit dummypat None [TermPat pointerTerm; TermPat (struct_size l sn); SrcPat DummyPat] $. fun _ h coef [_; _; elems] _ _ _ _ ->
       if not (definitely_equal coef real_unit) then assert_false h env l "Closing a struct requires full permission to the character array." None;
-      produce_c_object l real_unit pointerTerm (StructType sn) None false true h $. fun h ->
+      let init =
+        match name with
+          "close_struct" -> None
+        | "close_struct_zero" ->
+          let cond = mk_all_eq (Int (Signed, 0)) elems (ctxt#mk_intlit 0) in
+          if not (ctxt#query cond) then assert_false h env l ("Could not prove condition " ^ ctxt#pprint cond) None;
+          Some None
+      in
+      produce_c_object l real_unit pointerTerm (StructType sn) init false true h $. fun h ->
       cont h env
     | ExprStmt (CallExpr (l, "open_struct", targs, [], args, Static)) when language = CLang ->
+      require_pure ();
       let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "open_struct expects no type arguments and one argument." None in
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       let sn = match tp with PtrType (StructType sn) -> sn | _ -> static_error l "The argument of open_struct must be of type pointer-to-struct." None in
@@ -568,12 +575,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let rec iter h tenv ghostenv env xs =
         match xs with
           [] -> tcont sizemap tenv ghostenv h env
-        | (l, te, x, e, address_taken)::xs ->
+        | (l, te, x, e, (address_taken, blockPtr))::xs ->
           let t = check_pure_type (pn,ilist) tparams te in
           if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.") None;
           let ghostenv = if pure then x::ghostenv else List.filter (fun y -> y <> x) ghostenv in
           let produce_object envTp =
             if pure then static_error l "Cannot declare a variable of this type in a ghost context." None;
+            begin let Some block = !blockPtr in if not (List.mem x !block) then block := x::!block end;
             let init =
               match e with
                 None -> None
@@ -1435,23 +1443,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin fun cont ->
       match (t_dec, dec) with
         (None, None) ->
-        let consume_func_call_perm g =
-          let gterm = List.assoc g funcnameterms in
-          let (_, _, _, _, call_perm__symb, _, _) = List.assoc "call_perm_" predfammap in
-          consume_chunk rules h''' [] [] [] l (call_perm__symb, true) [] real_unit dummypat (Some 1) [TermPat gterm] $. fun _ h _ _ _ _ _ _ ->
-          cont h
-        in
-        let consume_class_call_perm () =
-          let ClassOrInterfaceName cn = List.assoc current_class tenv in
-          let classterm = List.assoc cn classterms in
-          consume_class_call_perm l classterm h''' cont
-        in
-        begin match leminfo with
-          RealFuncInfo (gs, g, terminates) -> if terminates then consume_func_call_perm g else cont h'''
-        | LemInfo (gs, g, indinfo, nonghost_callers_only) ->
-          if language = CLang then consume_func_call_perm g else static_error l "Decreases clause required" None
-        | RealMethodInfo rank -> if rank = None then cont h''' else consume_class_call_perm ()
-        end
+        check_backedge_termination leminfo l tenv h''' cont
       | (Some t_dec, Some dec) ->
         eval_h_pure h' env''' dec $. fun _ _ t_dec2 ->
         let dec_check1 = ctxt#mk_lt t_dec2 t_dec in
@@ -2038,9 +2030,28 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         ) return_cont econt
       )
   and
+    check_backedge_termination leminfo l tenv h cont =
+      let consume_func_call_perm g =
+        let gterm = List.assoc g funcnameterms in
+        let (_, _, _, _, call_perm__symb, _, _) = List.assoc "call_perm_" predfammap in
+        consume_chunk rules h [] [] [] l (call_perm__symb, true) [] real_unit dummypat (Some 1) [TermPat gterm] $. fun _ h _ _ _ _ _ _ ->
+        cont h
+      in
+      let consume_class_call_perm () =
+        let ClassOrInterfaceName cn = List.assoc current_class tenv in
+        let classterm = List.assoc cn classterms in
+        consume_class_call_perm l classterm h cont
+      in
+      begin match leminfo with
+        RealFuncInfo (gs, g, terminates) -> if terminates then consume_func_call_perm g else cont h
+      | LemInfo (gs, g, indinfo, nonghost_callers_only) ->
+        if language = CLang then consume_func_call_perm g else static_error l "Decreases clause required" None
+      | RealMethodInfo rank -> if rank = None then cont h else consume_class_call_perm ()
+      end
   
   (* Region: verification of blocks *)
   
+  and
     goto_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env return_cont econt block =
     let `Block (inv, ss, cont) = block in
     let l() =
@@ -2055,6 +2066,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | (true, None) -> assert_false h env (l()) "Loop invariant required." None
       | (_, Some (l, inv, tenv)) ->
         consume_asn rules [] h ghostenv env inv true real_unit (fun _ h _ _ _ ->
+          check_backedge_termination leminfo l tenv h $. fun h ->
           check_leaks h env l "Loop leaks heap chunks."
         )
       | (false, None) ->
@@ -2219,6 +2231,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         let tcont sizemap tenv ghostenv h env =
           let epilog = List.map (function (PureStmt (l, s)) -> s | s -> static_error (stmt_loc s) "An epilog statement must be a pure statement." None) epilog in
+          reportStmtExec lr;
           verify_return_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env true lr eo epilog return_cont econt
         in
         (ss, tcont)
@@ -2502,7 +2515,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let (h,tenv,env) = heapify_params h tenv env heapy_ps in
           let outerlocals = ref [] in
           stmts_mark_addr_taken ss [(outerlocals, [])] (fun _ -> ());
-          let body = if List.length !outerlocals = 0 then ss else [BlockStmt(l, [], ss, closeBraceLoc, outerlocals)] in
+          let body = [BlockStmt(l, [], ss, closeBraceLoc, outerlocals)] in
           verify_block (pn,ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont (fun _ _ _ -> assert false)
         end $. fun sizemap tenv ghostenv h env ->
         verify_return_stmt (pn,ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env false closeBraceLoc None [] return_cont (fun _ _ _ -> assert false)
@@ -2564,7 +2577,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (sign, CtorInfo (lm, xmap, pre, pre_tenv, post, epost, terminates, ss, v))::rest ->
       match ss with
         None ->
-        let ((p, _, _), (_, _, _)) = lm in 
+        let ((p, _, _), (_, _, _)) = root_caller_token lm in 
         if Filename.check_suffix p ".javaspec" then
           verify_cons (pn,ilist) cfin cn supercn superctors boxes lems rest
         else
@@ -2657,7 +2670,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ((g,sign), MethodInfo (l,gh, rt, ps,pre,pre_tenv,post,epost,pre_dyn,post_dyn,epost_dyn,terminates,sts,fb,v, _,abstract))::meths ->
       if abstract && not cabstract then static_error l "Abstract method can only appear in abstract class." None;
       match sts with
-        None -> let ((p,_,_),(_,_,_))=l in 
+        None -> let ((p,_,_),(_,_,_))= root_caller_token l in 
           if (Filename.check_suffix p ".javaspec") || abstract then verify_meths (pn,ilist) cfin cabstract boxes lems meths
           else static_error l "Method specification is only allowed in javaspec files!" None
       | Some (Some ((ss, closeBraceLoc), rank)) ->
@@ -2728,7 +2741,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
      [] -> (boxes, gs, lems)
     | Func (l, Lemma(auto, trigger), _, rt, g, ps, _, _, _, _, None, _, _)::ds -> 
       let g = full_name pn g in
-      let ((g_file_name, _, _), _) = l in
+      let ((g_file_name, _, _), _) = root_caller_token l in
       if language = Java && not (Filename.check_suffix g_file_name ".javaspec") then
         static_error l "A lemma function outside a .javaspec file must have a body. To assume a lemma, use the body '{ assume(false); }'." None;
       let FuncInfo ([], fterm, _, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, fb,v) = List.assoc g funcmap in
@@ -2757,7 +2770,6 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let g = full_name pn g in
       let gs', lems' =
       record_fun_timing l g begin fun () ->
-      if !verbosity >= 1 then Printf.printf "%10.6fs: %s: Verifying function %s\n" (Perf.time()) (string_of_loc l) g;
       let FuncInfo ([], fterm, l, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, _, Some (Some (ss, closeBraceLoc)),fb,v) = (List.assoc g funcmap)in
       let tparams = [] in
       let env = [] in
@@ -2923,7 +2935,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let (headers, ds)=
       match file_type path with
         | Java ->
-          let l = file_loc path in
+          let l = Lexed (file_loc path) in
           let (headers, javas, provides) =
             if Filename.check_suffix path ".jarsrc" then
               let (jars, javas, provides) = parse_jarsrc_file_core path in
@@ -2956,7 +2968,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           provide_files := provide_javas;
           let javas = javas @ provide_javas in
-          let context = List.map (fun (((b, _, _), _), (_, p, _), _, _) -> Util.concat (Filename.dirname b) ((Filename.chop_extension p) ^ ".jar")) headers in
+          let context = List.map (fun (Lexed ((b, _, _), _), (_, p, _), _, _) -> Util.concat (Filename.dirname b) ((Filename.chop_extension p) ^ ".jar")) headers in
           let ds = Java_frontend_bridge.parse_java_files javas context reportRange reportShouldFail options.option_verbose options.option_enforce_annotations options.option_use_java_frontend in
           (headers, ds)
         | CLang ->
@@ -2973,7 +2985,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     begin
       match !shouldFailLocs with
         [] -> ()
-      | l::_ -> static_error l "No error found on line." None
+      | l::_ -> static_error (Lexed l) "No error found on line." None
     end;
     result
   
@@ -3048,7 +3060,8 @@ There are 7 kinds of entries possible in a vfmanifest/dll_vfmanifest file
     in
     let sorted_lines symbol protos =
       let lines =
-        protos |> List.map begin fun (g, ((path, _, _), _)) ->
+        protos |> List.map begin fun (g, l) ->
+          let ((path, _, _), _) = root_caller_token l in
           qualified_path path ^ (Char.escaped symbol) ^ g
         end
       in
@@ -3063,7 +3076,9 @@ There are 7 kinds of entries possible in a vfmanifest/dll_vfmanifest file
     in
     let sorted_delayed_definition_lines defs =
       let lines =
-        defs |> List.map begin fun (x, ((declpath, _, _), _), ((defpath, _, _), _)) ->
+        defs |> List.map begin fun (x, ldecl, ldef) ->
+          let ((declpath, _, _), _) = root_caller_token ldecl in
+          let ((defpath, _, _), _) = root_caller_token ldef in
           Printf.sprintf "%s@%s#%s" (qualified_path defpath) (qualified_path declpath) x
         end
       in
@@ -3081,7 +3096,8 @@ There are 7 kinds of entries possible in a vfmanifest/dll_vfmanifest file
       List.sort compare
         begin
           List.map
-            begin fun (fn, ((header, _, _), _), ftn, ftargs, unloadable) ->
+            begin fun (fn, lf, ftn, ftargs, unloadable) ->
+              let ((header, _, _), _) = root_caller_token lf in
               Printf.sprintf
                 ".provides %s#%s : %s(%s)%s" (qualified_path header) fn ftn (String.concat "," ftargs) (if unloadable then " unloadable" else "")
             end
@@ -3111,7 +3127,7 @@ end
 
 (** Verifies the .c/.jarsrc/.scala file at path [path].
     Uses the SMT solver [ctxt].
-    Reports syntax highlighting regions using the callback [reportRange].
+    Reports syntax highlighting regions using the callback [reportRange] in [callbacks].
     Stops at source line [breakpoint], if not None.
     This function is generic in the types of SMT solver types, symbols, and terms.
     *)
@@ -3121,9 +3137,7 @@ let verify_program_core (* ?verify_program_core *)
     (ctxt: (typenode', symbol', termnode') Proverapi.context)
     (options : options)
     (program_path : string)
-    (reportRange : range_kind -> loc -> unit)
-    (reportUseSite : decl_kind -> loc -> loc -> unit)
-    (reportExecutionForest : node list ref -> unit)
+    (callbacks : callbacks)
     (breakpoint : (string * int) option)
     (targetPath : int list option) : unit =
 
@@ -3135,9 +3149,7 @@ let verify_program_core (* ?verify_program_core *)
     let ctxt = ctxt
     let options = options
     let program_path = program_path
-    let reportRange = reportRange
-    let reportUseSite = reportUseSite
-    let reportExecutionForest = reportExecutionForest
+    let callbacks = callbacks
     let breakpoint = breakpoint
     let targetPath = targetPath
   end) in
@@ -3188,16 +3200,14 @@ let verify_program (* ?verify_program *)
     (prover : string)
     (options : options)
     (path : string)
-    (reportRange : range_kind -> loc -> unit)
-    (reportUseSite : decl_kind -> loc -> loc -> unit)
-    (reportExecutionForest : node list ref -> unit)
+    (callbacks : callbacks)
     (breakpoint : (string * int) option)
     (targetPath : int list option) : Stats.stats =
   lookup_prover prover
     (object
        method run: 'typenode 'symbol 'termnode. ('typenode, 'symbol, 'termnode) Proverapi.context -> Stats.stats =
          fun ctxt -> clear_stats ();
-                     verify_program_core ~emitter_callback:emitter_callback ctxt options path reportRange reportUseSite reportExecutionForest breakpoint targetPath;
+                     verify_program_core ~emitter_callback:emitter_callback ctxt options path callbacks breakpoint targetPath;
                      !stats
      end)
 

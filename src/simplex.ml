@@ -1,7 +1,8 @@
-(* #load "nums.cma" *)
+(* Based on Detlefs, Nelson, Saxe. Simplify: A Theorem Prover for Program Checking. 2003. *)
 
 open Big_int
 open Num
+open Util
 
 let stopwatch = Stopwatch.create ()
 
@@ -29,6 +30,7 @@ class ['tag] unknown (context: 'tag simplex) (name: string) (restricted: bool) (
       context#register_popaction (fun () -> pos <- oldpos);
       pos <- Some p
     method pos = match pos with None -> assert false | Some pos -> pos
+    method dead = match pos with None -> false | Some (Row row) -> row#closed | Some (Column col) -> col#dead
     method print =
       if restricted then "[" ^ name ^ "]" else name
   end
@@ -37,6 +39,7 @@ and ['tag] coeff (context: 'tag simplex) v =
     val mutable value: num = v
     
     method value = value
+    method set_value_no_undo v = value <- v
     method set_value v =
       let oldvalue = value in
       context#register_popaction (fun () -> value <- oldvalue);
@@ -49,16 +52,35 @@ and ['tag] row context own c =
     val mutable owner: 'tag unknown = own
     val mutable constant: num = c
     val mutable terms: ('tag column * 'tag coeff) list = []
+    val mutable closed: bool = false
 
     method print =
-      owner#print ^ " = " ^ string_of_num constant ^ " + " ^ String.concat " + " (List.map (fun (col, coef) -> string_of_num coef#value ^ "*" ^ col#owner#print) terms)
+      let print_term (coef, col) =
+        match col with
+          None -> string_of_num coef
+        | Some col ->
+          if eq_num coef (num_of_int 1) then col else
+          if eq_num coef (num_of_int (-1)) then "-" ^ col else
+          string_of_num coef ^ "*" ^ col
+      in
+      let print_sum terms =
+        let terms = List.filter (fun (coef, col) -> sign_num coef <> 0) terms in
+        match terms with
+          [] -> "0"
+        | term::terms ->
+          print_term term ^
+          String.concat "" (List.map (fun (coef, col) -> if sign_num coef < 0 then " - " ^ print_term (minus_num coef, col) else " + " ^ print_term (coef, col)) terms)
+      in
+      owner#print ^ " = " ^ print_sum ((constant, None)::flatmap (fun (col, coef) -> if col#dead then [] else [coef#value, Some col#owner#print]) terms)
     method constant = constant
     method owner = owner
+    method closed = closed
     method set_owner u =
       let oldowner = owner in
       context#register_popaction (fun () -> owner <- oldowner);
       owner <- u
     method terms = terms
+    method set_constant_no_undo v = constant <- v
     method set_constant v =
       let oldconstant = constant in
       context#register_popaction (fun () -> constant <- oldconstant);
@@ -87,8 +109,11 @@ and ['tag] row context own c =
         )
         terms
     
-    method close =
-      List.iter (fun (col, coef) -> if not col#dead && sign_num coef#value < 0 then col#die) terms
+    method close enqueue =
+      assert (not closed);
+      context#register_popaction (fun () -> closed <- false);
+      closed <- true;
+      List.iter (fun (col, coef) -> if not col#dead && sign_num coef#value < 0 then col#die enqueue) terms
     
     method live_terms =
       List.filter (fun (col, coef) -> not col#dead && sign_num coef#value <> 0) terms
@@ -152,7 +177,7 @@ and ['tag] column context own =
       terms <- (row, coef)::terms
     method dead = dead
     
-    method die =
+    method die enqueue =
       assert (not dead);
       context#register_popaction (fun () -> dead <- false);
       dead <- true;
@@ -160,7 +185,8 @@ and ['tag] column context own =
       begin
       if owner#tag <> None then
         context#propagate_eq_constant owner (num_of_int 0);
-      List.iter (fun (row, coef) -> if (row#owner#tag <> None || row#owner#nonzero) && sign_num coef#value <> 0 then row#propagate_eq) terms
+      List.iter (fun (row, coef) -> if (row#owner#tag <> None || row#owner#nonzero) && sign_num coef#value <> 0 then row#propagate_eq) terms;
+      List.iter (fun (row, coef) -> if row#owner#restricted && sign_num coef#value > 0 then enqueue row#owner) terms
       end
   end
 and ['tag] simplex () =
@@ -203,9 +229,10 @@ and ['tag] simplex () =
       u
     
     method print =
-      "Rows:\n" ^ String.concat "" (List.map (fun row -> row#print ^ "\n") rows)
+      "Rows:\n" ^ String.concat "" (List.map (fun row -> row#print ^ "\n") (List.filter (fun row -> not row#closed) rows))
 
-    method pivot (row: 'tag row) (col: 'tag column) =
+    method pivot pivotListener (row: 'tag row) (col: 'tag column) =
+      pivotListener row col;
       let rowOwner = row#owner in
       let colOwner = col#owner in
       row#set_owner colOwner;
@@ -250,20 +277,20 @@ and ['tag] simplex () =
       in
       iter None col#terms
 
-    method sign_of_max_of_unknown (u: 'tag unknown): int =
+    method sign_of_max_of_unknown pivotListener (u: 'tag unknown): int =
       match u#pos with
-        Row r -> self#sign_of_max_of_row r
+        Row r -> self#sign_of_max_of_row pivotListener r
       | Column col ->
         begin
           match self#find_pivot_row 1 col with
             None -> (* column is manifestly unbounded. *)
             1
           | Some (row, _) ->
-            self#pivot row col;
-            self#sign_of_max_of_row row
+            self#pivot pivotListener row col;
+            self#sign_of_max_of_row pivotListener row
         end
 
-    method sign_of_max_of_row row =
+    method sign_of_max_of_row pivotListener row =
       let rec maximize_row () =
         if sign_num row#constant > 0 then
           1
@@ -289,10 +316,10 @@ and ['tag] simplex () =
             match self#find_pivot_row sign col with
               None ->
               (* col is manifestly unbounded *)
-              self#pivot row col;
+              self#pivot pivotListener row col;
               1
             | Some (r, _) ->
-              self#pivot r col;
+              self#pivot pivotListener r col;
               maximize_row()
         end
       in
@@ -304,8 +331,27 @@ and ['tag] simplex () =
     method propagate_eq_constant u n =
       const_listener u n
       
-    method assert_ge (c: num) (ts: (num * 'tag unknown) list) =
-      Stopwatch.start stopwatch;
+    method close_row row =
+      let queue: 'tag unknown list ref = ref [] in
+      let enqueue u = queue := u::!queue in
+      row#close enqueue;
+      (* TODO: Prove that we catch all unknowns that need to be re-maximized. The Simplify paper says that *all restricted unknowns in the system* should be re-maximized. *)
+      let rec iter () =
+        match !queue with
+          [] -> ()
+        | u::us ->
+          queue := us;
+          let pivotListener row column = () in
+          if not u#dead && self#sign_of_max_of_unknown pivotListener u = 0 then begin
+            let Row row = u#pos in
+            row#close enqueue
+          end;
+          iter ()
+      in
+      iter ()
+
+    (* fac: formal affine combination *)
+    method row_for_fac (c: num) (ts: (num * 'tag unknown) list) =
       let y = new unknown (self :> 'tag simplex) ("r" ^ string_of_int (self#get_unique_index())) true None false in
       let row = new row (self :> 'tag simplex) y c in
       rows <- row::rows;
@@ -319,10 +365,16 @@ and ['tag] simplex () =
              row#add a col
         )
         ts;
+      row
+
+    method assert_ge (c: num) (ts: (num * 'tag unknown) list) =
+      Stopwatch.start stopwatch;
+      let row = self#row_for_fac c ts in
       let result =
-        match self#sign_of_max_of_row row with
+        let pivotListener row column = () in
+        match self#sign_of_max_of_row pivotListener row with
           -1 -> Unsat
-        | 0 -> row#close; if unsat then Unsat else Sat
+        | 0 -> self#close_row row; if unsat then Unsat else Sat
         | 1 -> Sat
         | _ -> assert false
       in
@@ -332,9 +384,42 @@ and ['tag] simplex () =
     method get_ticks: int64 = Stopwatch.ticks stopwatch
     
     method assert_eq (c: num) (ts: (num * 'tag unknown) list) =
-      match self#assert_ge c ts with
-        Unsat -> Unsat
-      | Sat -> self#assert_ge (minus_num c) (List.map (fun (a, u) -> (minus_num a, u)) ts)
+      Stopwatch.start stopwatch;
+      let result =
+        let row = self#row_for_fac c ts in
+        let u = row#owner in
+        let pivotListener row column = () in
+        match self#sign_of_max_of_row pivotListener row with
+          -1 -> Unsat
+        | 0 -> self#close_row row; if unsat then Unsat else Sat
+        | 1 ->
+        begin match u#pos with
+          Column col ->
+          List.iter (fun (row, coef) -> coef#set_value_no_undo (minus_num coef#value)) col#terms
+        | Row row ->
+          row#set_constant_no_undo (minus_num row#constant);
+          List.iter (fun (col, coef) -> coef#set_value_no_undo (minus_num coef#value)) row#terms
+        end;
+        let pivotCol = ref None in
+        let pivotListener row column = pivotCol := Some column in
+        match self#sign_of_max_of_unknown pivotListener u with
+          -1 -> Unsat
+        | 0 -> let Row row = u#pos in self#close_row row; if unsat then Unsat else Sat
+        | 1 ->
+        let col =  match u#pos with
+            Column col -> col
+          | Row row ->
+            let Some col = !pivotCol in
+            let pivotListener row column = () in
+            self#pivot pivotListener row col;
+            col
+        in
+        let enqueue _ = () in
+        col#die enqueue;
+        if unsat then Unsat else Sat
+      in
+      Stopwatch.stop stopwatch;
+      result
     
     method assert_neq (c: num) (ts: (num * 'tag unknown) list) =
       let u = new unknown (self :> 'tag simplex) ("nz" ^ string_of_int (self#get_unique_index())) false None true in
@@ -355,7 +440,8 @@ type 'tag simplex0 = <
   assert_ge: Num.num -> (Num.num * 'tag unknown) list -> result;
   assert_eq: Num.num -> (Num.num * 'tag unknown) list -> result;
   assert_neq: Num.num -> (Num.num * 'tag unknown) list -> result;
-  get_ticks: int64
+  get_ticks: int64;
+  print: string
 >
 
 let print_unknown u = u#print

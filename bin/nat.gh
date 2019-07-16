@@ -3,6 +3,90 @@
 
 inductive nat = zero | succ(nat);
 
+fixpoint nat nat_plus(nat m, nat n) {
+    switch (m) {
+        case zero: return n;
+        case succ(m0): return nat_plus(m0, succ(n));
+    }
+}
+
+fixpoint nat nat_minus(nat m, nat n) {
+    switch (m) {
+        case zero: return zero;
+        case succ(m0): return switch (n) {
+            case zero: return m;
+            case succ(n0): return nat_minus(m0, n0);
+        };
+    }
+}
+
+fixpoint nat nat_predecessor(nat n) {
+    switch (n) {
+        case zero: return zero;
+        case succ(n0): return n0;
+    }
+}
+
+fixpoint nat nat_double(nat n) {
+    return nat_plus(n, n);
+}
+
+fixpoint nat nat_times(nat m, nat n) {
+    switch (m) {
+        case zero: return zero;
+        case succ(m0): return nat_plus(n, nat_times(m0, n));
+    }
+}
+
+fixpoint nat N0() { return zero; }
+fixpoint nat N1() { return succ(N0); }
+fixpoint nat N2() { return succ(N1); }
+fixpoint nat N3() { return succ(N2); }
+fixpoint nat N4() { return succ(N3); }
+fixpoint nat N5() { return succ(N4); }
+fixpoint nat N6() { return succ(N5); }
+fixpoint nat N7() { return succ(N6); }
+fixpoint nat N8() { return succ(N7); }
+fixpoint nat N9() { return succ(N8); }
+fixpoint nat N10() { return succ(N9); }
+fixpoint nat N11() { return succ(N10); }
+fixpoint nat N12() { return succ(N11); }
+fixpoint nat N13() { return succ(N12); }
+fixpoint nat N14() { return succ(N13); }
+fixpoint nat N15() { return succ(N14); }
+
+fixpoint nat NxA() { return N10; }
+fixpoint nat NxB() { return N11; }
+fixpoint nat NxC() { return N12; }
+fixpoint nat NxD() { return N13; }
+fixpoint nat NxE() { return N14; }
+fixpoint nat NxF() { return N15; }
+
+// For use with bitops.gh
+
+fixpoint nat N16() { return succ(N15); }
+fixpoint nat N32() { return nat_double(N16); }
+fixpoint nat N31() { return nat_predecessor(N32); }
+fixpoint nat N64() { return nat_double(N32); }
+fixpoint nat N63() { return nat_predecessor(N64); }
+fixpoint nat N128() { return nat_double(N64); }
+fixpoint nat N127() { return nat_predecessor(N128); }
+
+fixpoint nat nat_of_digits_little_endian(nat radix, list<nat> digits) {
+    switch (digits) {
+        case nil: return zero;
+        case cons(d, ds): return nat_plus(d, nat_times(radix, nat_of_digits_little_endian(radix, ds)));
+    }
+}
+
+fixpoint nat nat_of_digits(nat radix, list<nat> digits) {
+    return nat_of_digits_little_endian(radix, reverse(digits));
+}
+
+fixpoint nat Nbin(list<nat> digits) { return nat_of_digits(N2, digits); }
+fixpoint nat Ndec(list<nat> digits) { return nat_of_digits(N10, digits); }
+fixpoint nat Nhex(list<nat> digits) { return nat_of_digits(N16, digits); }
+
 fixpoint int int_of_nat(nat n) {
     switch (n) {
         case zero: return 0;
@@ -22,7 +106,95 @@ lemma_auto(nat_of_int(int_of_nat(n))) void nat_of_int_of_nat(nat n);
     
 lemma_auto void nat_of_zero();
     requires true;
-    ensures nat_of_int(0) == zero;
+    ensures nat_of_int(0) == N0;
+
+lemma_auto void nat_of_1();
+    requires true;
+    ensures nat_of_int(1) == N1;
+
+lemma_auto void nat_of_2();
+    requires true;
+    ensures nat_of_int(2) == N2;
+
+lemma_auto void nat_of_3();
+    requires true;
+    ensures nat_of_int(3) == N3;
+
+lemma_auto void nat_of_4();
+    requires true;
+    ensures nat_of_int(4) == N4;
+
+lemma_auto void nat_of_5();
+    requires true;
+    ensures nat_of_int(5) == N5;
+
+lemma_auto void nat_of_6();
+    requires true;
+    ensures nat_of_int(6) == N6;
+
+lemma_auto void nat_of_7();
+    requires true;
+    ensures nat_of_int(7) == N7;
+
+lemma_auto void nat_of_8();
+    requires true;
+    ensures nat_of_int(8) == N8;
+
+lemma_auto void nat_of_9();
+    requires true;
+    ensures nat_of_int(9) == N9;
+
+lemma_auto void nat_of_10();
+    requires true;
+    ensures nat_of_int(10) == N10;
+
+lemma_auto void nat_of_11();
+    requires true;
+    ensures nat_of_int(11) == N11;
+
+lemma_auto void nat_of_12();
+    requires true;
+    ensures nat_of_int(12) == N12;
+
+lemma_auto void nat_of_13();
+    requires true;
+    ensures nat_of_int(13) == N13;
+
+lemma_auto void nat_of_14();
+    requires true;
+    ensures nat_of_int(14) == N14;
+
+lemma_auto void nat_of_15();
+    requires true;
+    ensures nat_of_int(15) == N15;
+
+lemma_auto void nat_of_16();
+    requires true;
+    ensures nat_of_int(16) == N16;
+
+lemma_auto void nat_of_31();
+    requires true;
+    ensures nat_of_int(31) == N31;
+
+lemma_auto void nat_of_32();
+    requires true;
+    ensures nat_of_int(32) == N32;
+
+lemma_auto void nat_of_63();
+    requires true;
+    ensures nat_of_int(63) == N63;
+
+lemma_auto void nat_of_64();
+    requires true;
+    ensures nat_of_int(64) == N64;
+
+lemma_auto void nat_of_127();
+    requires true;
+    ensures nat_of_int(127) == N127;
+
+lemma_auto void nat_of_128();
+    requires true;
+    ensures nat_of_int(128) == N128;
 
 lemma_auto void int_of_nat_nonnegative(nat n);
     requires true;
@@ -31,5 +203,20 @@ lemma_auto void int_of_nat_nonnegative(nat n);
 lemma_auto(succ(nat_of_int(x))) void succ_int(int x);
   requires 0 <= x;
   ensures nat_of_int(x + 1) == succ(nat_of_int(x));
+
+fixpoint int pow_nat(int x, nat n) {
+    switch (n) {
+        case zero: return 1;
+        case succ(n0): return x * pow_nat(x, n0);
+    }
+}
+
+lemma_auto void pow_nat_nonnegative(int x, nat n);
+    requires 0 <= x;
+    ensures 0 <= pow_nat(x, n);
+
+lemma void pow_nat_nat_minus(int x, nat m, nat n);
+    requires 1 <= x;
+    ensures pow_nat(x, nat_minus(m, n)) <= pow_nat(x, m);
 
 #endif

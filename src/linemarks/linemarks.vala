@@ -226,3 +226,44 @@ class LineMarksRenderer : CellRenderer {
 
 }
 
+public class SourceGutterTextColumn : GLib.Object {
+
+    private string sizeText;
+    private string[] lines = {};
+    private CellRendererText renderer;
+    private SourceGutter[] gutters;
+    
+    public SourceGutterTextColumn(string sizeText, float xalign) {
+        this.sizeText = sizeText;
+        renderer = new CellRendererText();
+        renderer.xalign = xalign;
+    }
+    
+    public void clear() {
+        lines = {};
+        foreach (var gutter in gutters) gutter.queue_draw();
+    }
+    
+    public void add_line(string line) {
+        lines += line;
+        foreach (var gutter in gutters) gutter.queue_draw();
+    }
+    
+    private void size_func(SourceGutter gutter, CellRenderer renderer_) {
+        renderer.text = sizeText;
+    }
+    
+    private void data_func(SourceGutter gutter, CellRenderer renderer_, int lineNumber, bool currentLine) {
+        renderer.text = lineNumber < lines.length ? lines[lineNumber] : "";
+    }
+    
+    public void show_in_source_view(Gtk.SourceView sourceView) {
+        SourceGutter gutter = sourceView.get_gutter(TextWindowType.LEFT);
+        gutters += gutter;
+        gutter.insert(renderer, -5);
+        gutter.set_cell_size_func(renderer, size_func);
+        gutter.set_cell_data_func(renderer, data_func);
+    }
+    
+}
+

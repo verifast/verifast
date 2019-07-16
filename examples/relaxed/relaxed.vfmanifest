@@ -24,7 +24,3 @@
 .provides ./relaxed.h#RelFenced_True_intro
 .provides ./relaxed.h#RelFenced_elim
 .provides ./relaxed.h#AcqFenced_elim
-.provides ./relaxed.h#implies0
-.provides ./relaxed.h#pred_ext0
-.provides ./relaxed.h#implies1
-.provides ./relaxed.h#pred_ext1

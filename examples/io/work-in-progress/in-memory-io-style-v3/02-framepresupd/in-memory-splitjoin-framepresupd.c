@@ -19,7 +19,7 @@
  */
 
 //@ #include "listex.gh"
-//@ #include "in-memory-splitjoin-framepresupd-place.h"
+#include "in-memory-splitjoin-framepresupd-place.h"
 
 /*@
 // -- Place

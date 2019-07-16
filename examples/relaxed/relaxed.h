@@ -72,7 +72,7 @@ void atomic_store_relaxed(int *loc, int value);
 
 /* The contract below would work, but would make the invariant in receiver()
 below harder to state and/or prove, esp.  considering that in VeriFast
-predicate extensionality is a bit cumbersome to axiomatize and apply.
+predicate extensionality is unsound.
 
 int atomic_read_acquire(int *loc);
     //@ requires Read(loc, ?Q);
@@ -163,25 +163,6 @@ lemma void RelFenced_elim();
 lemma void AcqFenced_elim();
     requires RelFenced(?P);
     ensures P();
-
-
-// --- Predicate extensionality -------------------------
-
-typedef lemma void implies0(predicate() P1, predicate() P2)();
-    requires P1();
-    ensures P2();
-
-lemma void pred_ext0(predicate() P1, predicate() P2);
-    requires is_implies0(_, P1, P2) &*& is_implies0(_, P2, P1);
-    ensures is_implies0(_, P1, P2) &*& is_implies0(_, P2, P1) &*& P1 == P2;
-
-typedef lemma void implies1(predicate(int) Q1, predicate(int) Q2)(int value);
-    requires Q1(value);
-    ensures Q2(value);
-
-lemma void pred_ext1(predicate(int) Q1, predicate(int) Q2);
-    requires is_implies1(?l1, Q1, Q2) &*& is_implies1(?l2, Q2, Q1);
-    ensures is_implies1(l1, Q1, Q2) &*& is_implies1(l2, Q2, Q1) &*& Q1 == Q2;
 
 @*/
 

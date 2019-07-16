@@ -118,6 +118,10 @@ lemma void real_sqrt_lemma2(real x, real sqrt);
 lemma void sqrt_pos_lemma(real x);
     requires x > 0;
     ensures real_sqrt(x) > 0;
+
+lemma void sqrt_nonneg_lemma(real x);
+    requires 0 <= x;
+    ensures 0 <= real_sqrt(x);
     
 lemma void sqrt_congruence_lemma(real x, real y);
     requires x <= y &*& x>=0;

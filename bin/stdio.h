@@ -18,7 +18,25 @@ typedef struct file FILE;
 
 struct file;
 
-//@ predicate file(struct file* fp);
+//@ predicate file(struct file* fp;);
+
+FILE* __get_stdin();
+    //@ requires true;
+    //@ ensures [_]file(result);
+
+#define stdin __get_stdin()
+
+FILE* __get_stdout();
+    //@ requires true;
+    //@ ensures [_]file(result);
+
+#define stdout __get_stdout()
+
+FILE* __get_stderr();
+    //@ requires true;
+    //@ ensures [_]file(result);
+
+#define stderr __get_stderr()
 
 FILE* fopen(char* filename, char* mode); // todo: check that mode is a valid mode string
     /*@ requires [?f]string(filename, ?fcs) &*& [?g]string(mode, ?mcs) &*&
@@ -29,36 +47,44 @@ FILE* fopen(char* filename, char* mode); // todo: check that mode is a valid mod
     //@ ensures [f]string(filename, fcs) &*& [g]string(mode, mcs) &*& result == 0 ? true : file(result);
 
 int fread(void* buffer, int size, int n, FILE* fp);
-    //@ requires chars(buffer, ?m, ?cs) &*& 0<=size &*& 0<=n &*& size * n <= m &*& file(fp);
-    //@ ensures chars(buffer, m, ?cs2) &*& file(fp) &*& 0 <= result &*& result <= n;
+    //@ requires chars(buffer, ?m, ?cs) &*& 0<=size &*& 0<=n &*& size * n <= m &*& [?f]file(fp);
+    //@ ensures chars(buffer, m, ?cs2) &*& [f]file(fp) &*& 0 <= result &*& result <= n;
   
 int fwrite(void* buffer, int size, int n, FILE* fp);
-    //@ requires chars(buffer, ?m, ?cs) &*& 0<=size &*& 0<=n &*& size * n <= m &*& file(fp);
-    //@ ensures chars(buffer, m, cs) &*& file(fp) &*& 0 <= result &*& result <= n;
+    //@ requires [?fb]chars(buffer, ?m, ?cs) &*& 0<=size &*& 0<=n &*& size * n <= m &*& [?ff]file(fp);
+    //@ ensures [fb]chars(buffer, m, cs) &*& [ff]file(fp) &*& 0 <= result &*& result <= n;
   
 char* fgets(char* buffer, int n, FILE* fp);
-    //@ requires chars(buffer, n, ?cs) &*& file(fp);
-    //@ ensures chars(buffer, n, ?cs2) &*& file(fp) &*& result == 0 ? true : mem('\0', cs2) == true;
+    //@ requires chars(buffer, n, ?cs) &*& [?f]file(fp);
+    //@ ensures chars(buffer, n, ?cs2) &*& [f]file(fp) &*& result == 0 ? true : mem('\0', cs2) == true;
+
+int fputs(char* s, FILE* fp);
+    //@ requires [?fs]string(s, ?cs) &*& [?ff]file(fp);
+    //@ ensures [fs]string(s, cs) &*& [ff]file(fp);
 
 int fseek (FILE* fp, /*long*/ int offset, int origin);
-    //@ requires file(fp) &*& origin == 0 || origin == 1 || origin == 2;
-    //@ ensures file(fp);
+    //@ requires [?f]file(fp) &*& origin == 0 || origin == 1 || origin == 2;
+    //@ ensures [f]file(fp);
   
 /* long */ int ftell(FILE* fp);
-    //@ requires file(fp);
-    //@ ensures file(fp);
+    //@ requires [?f]file(fp);
+    //@ ensures [f]file(fp);
   
 void rewind(FILE* fp);
-    //@ requires file(fp);
-    //@ ensures file(fp);
+    //@ requires [?f]file(fp);
+    //@ ensures [f]file(fp);
 
 int puts(char* text);
     //@ requires [?f]string(text, ?cs);
     //@ ensures [f]string(text, cs);
   
 int feof(FILE* fp);
-    //@ requires file(fp);
-    //@ ensures file(fp);
+    //@ requires [?f]file(fp);
+    //@ ensures [f]file(fp);
+
+int fflush(FILE* fp);
+    //@ requires [?f]file(fp);
+    //@ ensures [f]file(fp);
 
 int fclose(FILE* fp); 
     //@ requires file(fp);
@@ -71,6 +97,10 @@ int getchar();
 int putchar(char c);
     //@ requires true;
     //@ ensures c == result || EOF == result;
+
+void setbuf(FILE* fp, char* buffer);
+    //@ requires [?f]file(fp) &*& buffer == 0;
+    //@ ensures [f]file(fp);
 
 /*@
 
@@ -164,13 +194,67 @@ int printf(char* format, ...);
     @*/
     //@ ensures emp;
 
+int snprintf(char *buffer, size_t count, char* format, ...);
+    /*@
+    requires
+        buffer[..count] |-> _ &*& 0 < count &*& [?f]string(format, ?fcs) &*& printf_parse_format(fcs, varargs) == some(?ps) &*&
+        switch (ps) {
+            case nil: return ensures buffer[..count] |-> ?cs &*& mem('\0', cs) == true &*& [f]string(format, fcs);
+            case cons(p0, ps0): return [?f0]string(p0, ?cs0) &*&
+                switch (ps0) {
+                    case nil: return ensures buffer[..count] |-> ?cs &*& mem('\0', cs) == true &*& [f]string(format, fcs) &*& [f0]string(p0, cs0);
+                    case cons(p1, ps1): return [?f1]string(p1, ?cs1) &*&
+                        switch (ps1) {
+                            case nil: return ensures buffer[..count] |-> ?cs &*& mem('\0', cs) == true &*& [f]string(format, fcs) &*& [f0]string(p0, cs0) &*& [f1]string(p1, cs1);
+                            case cons(p2, ps2): return [?f2]string(p2, ?cs2) &*&
+                                switch (ps2) {
+                                    case nil: return ensures buffer[..count] |-> ?cs &*& mem('\0', cs) == true &*& [f]string(format, fcs) &*& [f0]string(p0, cs0) &*& [f1]string(p1, cs1) &*& [f2]string(p2, cs2);
+                                    case cons(p3, ps3): return [?f3]string(p3, ?cs3) &*&
+                                        switch (ps3) {
+                                            case nil: return ensures buffer[..count] |-> ?cs &*& mem('\0', cs) == true &*& [f]string(format, fcs) &*& [f0]string(p0, cs0) &*& [f1]string(p1, cs1) &*& [f2]string(p2, cs2) &*& [f3]string(p3, cs3);
+                                            case cons(p4, ps4): return false; // TODO: Support more string arguments...
+                                        };
+                                };
+                        };
+                };
+        };
+    @*/
+    //@ ensures emp;
+
+int fprintf(FILE *file, char* format, ...);
+    /*@
+    requires
+        [?ff]file(file) &*& [?f]string(format, ?fcs) &*& printf_parse_format(fcs, varargs) == some(?ps) &*&
+        switch (ps) {
+            case nil: return ensures [ff]file(file) &*& [f]string(format, fcs);
+            case cons(p0, ps0): return [?f0]string(p0, ?cs0) &*&
+                switch (ps0) {
+                    case nil: return ensures [ff]file(file) &*& [f]string(format, fcs) &*& [f0]string(p0, cs0);
+                    case cons(p1, ps1): return [?f1]string(p1, ?cs1) &*&
+                        switch (ps1) {
+                            case nil: return ensures [ff]file(file) &*& [f]string(format, fcs) &*& [f0]string(p0, cs0) &*& [f1]string(p1, cs1);
+                            case cons(p2, ps2): return [?f2]string(p2, ?cs2) &*&
+                                switch (ps2) {
+                                    case nil: return ensures [ff]file(file) &*& [f]string(format, fcs) &*& [f0]string(p0, cs0) &*& [f1]string(p1, cs1) &*& [f2]string(p2, cs2);
+                                    case cons(p3, ps3): return [?f3]string(p3, ?cs3) &*&
+                                        switch (ps3) {
+                                            case nil: return ensures [ff]file(file) &*& [f]string(format, fcs) &*& [f0]string(p0, cs0) &*& [f1]string(p1, cs1) &*& [f2]string(p2, cs2) &*& [f3]string(p3, cs3);
+                                            case cons(p4, ps4): return false; // TODO: Support more string arguments...
+                                        };
+                                };
+                        };
+                };
+        };
+    @*/
+    //@ ensures emp;
+
 /*@
 
-inductive formatted_part =
-  formatted_part_char(char) |
-  formatted_part_int_specifier(int) |
-  formatted_part_uint_specifier(unsigned int) |
-  formatted_part_string_specifier(char*);
+inductive format_part =
+  format_part_char(char) |
+  format_part_int_specifier(int) |
+  format_part_uint_specifier(unsigned int) |
+  format_part_string_specifier(char*);
 
 fixpoint int option_length<t>(option<list<t> > xs) {
     switch (xs) {
@@ -201,27 +285,26 @@ fixpoint option<list<t> > option_option_append<t>(option<list<t> > xs0, option<l
     }
 }
 
-fixpoint option<list<formatted_part> > sprintf_parse_format(list<char> fcs, list<vararg> args) {
+fixpoint option<list<format_part> > sprintf_parse_format(list<char> fcs, list<vararg> args) {
     switch (fcs) {
         case nil: return some(nil);
         case cons(fc, fcs0): return
             fc != '%' ?
-                option_cons(formatted_part_char(fc), sprintf_parse_format(fcs0, args))
+                option_cons(format_part_char(fc), sprintf_parse_format(fcs0, args))
             :
                 switch (fcs0) {
                     case nil: return none;
                     case cons(fc1, fcs1): return
                         fc1 == '%' ?
-                            option_cons(formatted_part_char('%'),
-                              option_cons(formatted_part_char('%'), 
-                                sprintf_parse_format(fcs1, args)))
+                            option_cons(format_part_char('%'),
+                              sprintf_parse_format(fcs1, args))
                         : fc1 == 'd' || fc1 == 'i' || fc1 == 'c' ?
                             switch (args) {
                                 case nil: return none;
                                 case cons(arg, args1): return
                                     switch (arg) {
                                         case vararg_int(v): return
-                                           option_cons(formatted_part_int_specifier(v), sprintf_parse_format(fcs1, args1));
+                                           option_cons(format_part_int_specifier(v), sprintf_parse_format(fcs1, args1));
                                         default: return none;
                                     };
                             }
@@ -231,7 +314,7 @@ fixpoint option<list<formatted_part> > sprintf_parse_format(list<char> fcs, list
                                 case cons(arg, args1): return
                                     switch (arg) {
                                         case vararg_uint(v): return
-                                          option_cons(formatted_part_uint_specifier(v), sprintf_parse_format(fcs1, args1));
+                                          option_cons(format_part_uint_specifier(v), sprintf_parse_format(fcs1, args1));
                                         default: return none;
                                     };
                             }
@@ -241,7 +324,7 @@ fixpoint option<list<formatted_part> > sprintf_parse_format(list<char> fcs, list
                                 case cons(arg, args1): return
                                     switch (arg) {
                                         case vararg_pointer(v): return 
-                                          option_cons(formatted_part_string_specifier(v), sprintf_parse_format(fcs1, args1));
+                                          option_cons(format_part_string_specifier(v), sprintf_parse_format(fcs1, args1));
                                         default: return none;
                                     };
                             }
@@ -260,18 +343,18 @@ fixpoint option<list<char> > chars_for_int(int i) {
                i < 0 ? option_cons('-', chars_for_uint(-i)) : chars_for_uint(i);
 }
 
-fixpoint option<list<char> > sprintf_filled_in_args(list<formatted_part> parts, list<list<char> > string_args) {
+fixpoint option<list<char> > sprintf_filled_in_args(list<format_part> parts, list<list<char> > string_args) {
     switch (parts) {
         case nil: return some(cons(0, nil));
         case cons(arg0, args0): return
             switch (arg0) {
-                case formatted_part_char(c):
+                case format_part_char(c):
                     return option_cons(c, sprintf_filled_in_args(args0, string_args));
-                case formatted_part_int_specifier(i): 
+                case format_part_int_specifier(i): 
                     return option_option_append(chars_for_int(i), sprintf_filled_in_args(args0, string_args));
-                case formatted_part_uint_specifier(i):
+                case format_part_uint_specifier(i):
                     return option_option_append(chars_for_uint(i), sprintf_filled_in_args(args0, string_args));
-                case formatted_part_string_specifier(s): return
+                case format_part_string_specifier(s): return
                     switch(string_args) {
                         case cons(cs, string_args0):
                             return option_append(cs, sprintf_filled_in_args(args0, string_args0));
@@ -383,8 +466,8 @@ fixpoint option<list<pair<char, pair<void *, int> > > > scanf_parse_format(list<
                             };
                     }
             :
-                '0' <= fc0 && fc0 <= '9' ?
-                    scanf_parse_format(fcs0, scanf_format_spec, width * 10 + fc0 - '0', args)
+                fc0 == '0' || fc0 == '1' || fc0 == '2' || fc0 == '3' || fc0 == '4' || fc0 == '5' || fc0 == '6' || fc0 == '7' || fc0 == '8' || fc0 == '9' ?
+                    width == 0 && fc0 == '0' ? none : scanf_parse_format(fcs0, scanf_format_spec, width * 10 + fc0 - '0', args)
                 : fc0 == 'i' || fc0 == 'd' ?
                     switch (args) {
                         case nil: return none;
@@ -419,6 +502,15 @@ fixpoint option<list<pair<char, pair<void *, int> > > > scanf_parse_format(list<
                             :
                                 scanf_parse_format(fcs1, scanf_scanset, width, args);
                     }
+                : fc0 == 'c' ?
+                    switch (args) {
+                        case nil: return none;
+                        case cons(arg0, args0): return
+                            switch (arg0) {
+                                case vararg_pointer(p): return option_cons(pair('c', pair(p, width == 0 ? 1 : width)), scanf_parse_format(fcs0, scanf_format, 0, args0));
+                                default: return none;
+                            };
+                    }
                 : none;
     }
 }
@@ -430,6 +522,8 @@ predicate scanf_targets(list<pair<char, pair<void *, int> > > targets, int fillC
         scanf_targets(tail(targets), fillCount - 1) &*&
         fst(head(targets)) == 'i' ?
             integer(fst(snd(head(targets))), _)
+        : fst(head(targets)) == 'c' ?
+            chars(fst(snd(head(targets))), snd(snd(head(targets))), _)
         :
             chars(fst(snd(head(targets))), snd(snd(head(targets))) + 1, ?cs) &*& fillCount <= 0 || mem('\0', cs) == true;
 
@@ -446,6 +540,23 @@ int scanf(char *format, ...);
                     integer(fst(snd(t0)), _) &*& ensures [f]string(format, fcs) &*& integer(fst(snd(t0)), _) &*& scanf_targets(ts0, result - 1)
                 :
                     chars(fst(snd(t0)), snd(snd(t0)) + 1, _) &*& ensures[f]string(format, fcs) &*& chars(fst(snd(t0)), snd(snd(t0)) + 1, ?cs) &*& result < 1 || mem('\0', cs) &*& scanf_targets(ts0, result - 1);
+        };
+    @*/
+    //@ ensures emp;
+
+int sscanf(char *s, char *format, ...);
+    /*@
+    requires // scanf_targets unrolled once to reduce reliance on auto-open/close
+        [?fs]string(s, ?scs) &*& [?f]string(format, ?fcs) &*& scanf_parse_format(fcs, scanf_format, 0, varargs) == some(?targets) &*&
+        switch (targets) {
+            case nil: return ensures [fs]string(s, scs) &*& [f]string(format, fcs);
+            case cons(t0, ts0): return scanf_targets(ts0, 0) &*&
+                fst(t0) == 'i' ?
+                    integer(fst(snd(t0)), _) &*& ensures [fs]string(s, scs) &*& [f]string(format, fcs) &*& integer(fst(snd(t0)), _) &*& scanf_targets(ts0, result - 1)
+                : fst(t0) == 'c' ?
+                    chars(fst(snd(t0)), snd(snd(t0)), _) &*& ensures [fs]string(s, scs) &*& [f]string(format, fcs) &*& chars(fst(snd(t0)), snd(snd(t0)), _) &*& scanf_targets(ts0, result - 1)
+                :
+                    chars(fst(snd(t0)), snd(snd(t0)) + 1, _) &*& ensures [fs]string(s, scs) &*& [f]string(format, fcs) &*& chars(fst(snd(t0)), snd(snd(t0)) + 1, ?cs) &*& result < 1 || mem('\0', cs) &*& scanf_targets(ts0, result - 1);
         };
     @*/
     //@ ensures emp;

@@ -11,8 +11,8 @@ struct mylock {
 };
 
 /*@
-predicate_ctor mylock_ctor(struct mylock *lock, predicate() p)()
-    requires lock->ghost_locked |-> ?isLocked &*& 
+predicate_ctor mylock_ctor(struct mylock *lock, predicate() p)() =
+    lock->ghost_locked |-> ?isLocked &*& 
         (isLocked 
             ? 
             [1/2]lock->is_locked |-> isLocked &*& [1/2]lock->frac |-> ?frac &*& [frac]lock->help |-> ?v
@@ -123,7 +123,7 @@ struct session {
 };
 
 /*@
-predicate_ctor datainv(int* p)() requires integer(p, ?v);
+predicate_ctor datainv(int* p)() = integer(p, ?v);
 
 inductive myinfo = myinfo (struct mylock *lock, int *data);
 

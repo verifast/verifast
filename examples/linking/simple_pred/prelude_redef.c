@@ -1,8 +1,9 @@
-//@ predicate integer(int *p; int v) = false &*& v == 0;
+//@ predicate module(int moduleId, bool initialized) = false;
 
-int main() //@ : main
-    //@ requires true;
-    //@ ensures true;
+int main() //@ : main_full(prelude_redef)
+    //@ requires module(prelude_redef, true);
+    //@ ensures false;
 {
+    //@ open module(_, _);
     return 0;
 }

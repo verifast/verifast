@@ -14,6 +14,26 @@ type assume_result3 = Unsat3 | Unknown3 | Valid3
 
 let printff format = kfprintf (fun _ -> flush stdout) stdout format
 
+let indentation = ref ""
+let indentStack = ref []
+
+let indent () = indentStack := !indentation::!indentStack; indentation := "  " ^ !indentation
+let unindent () = let h::t = !indentStack in indentation := h; indentStack := t
+
+let trace format = printf "%10.6fs: %s" (Perf.time ()) !indentation; kfprintf (fun _ -> print_newline ()) stdout format
+
+let trace_entering format =
+  ksprintf begin fun msg ->
+    trace "Entering %s" msg;
+    indent ()
+  end format
+
+let trace_exiting format =
+  ksprintf begin fun msg ->
+    unindent ();
+    trace "Exiting %s" msg
+  end format
+
 let ($.) f x = f x
 
 let with_timing msg f =
@@ -22,7 +42,7 @@ let with_timing msg f =
   let result = f() in
   printff "%s: end. Time: %f seconds\n" msg (Sys.time() -. time0);
   result
-
+  
 let rec try_assoc key al =
   match al with
     [] -> None
@@ -256,6 +276,18 @@ and termnode (ctxt: context) s initial_children =
         | ("||", [v1; v2], 1) ->
           let newNode = if v2#ctorchild = Some ctxt#true_node then ctxt#true_node else v1#initial_child in
           ctxt#add_redex (fun () -> ctxt#assert_eq value newNode#value)
+        | ("*", [v1; v2], 0) ->
+          let Some n1 = v1#as_number in
+          if n1 =/ zero_num then
+            ctxt#add_redex (fun () -> ctxt#assert_eq value (ctxt#get_numnode zero_num)#value)
+          else
+          begin match v2#as_number with
+            None ->
+            let t2 = v2#initial_child in
+            ctxt#add_redex (fun () -> ctxt#simplex_assert_eq zero_num [neg_unit_num, value#mk_unknown; n1, t2#value#mk_unknown])
+          | Some n2 ->
+            ctxt#add_redex (fun () -> ctxt#assert_eq value (ctxt#get_numnode (n1 */ n2))#value)
+          end
         | _ -> ()
     method parent_ctorchild_added =
       match (symbol#name, children) with
@@ -478,12 +510,12 @@ and valuenode (ctxt: context) =
       in
       iter parents
       in
-      if ctxt#verbosity > 10 then printff "%d.lookup_parent %s returns %s\n" (Oo.id self) (String.concat ", " (List.map (fun s -> sprintf "%s(%d)" s#name (Oo.id s)) s)) (match result with None -> "None" | Some v -> v#pprint);
+      if ctxt#verbosity > 20 then trace "%d.lookup_parent %s returns %s" (Oo.id self) (String.concat ", " (List.map (fun s -> sprintf "%s(%d)" s#name (Oo.id s)) s)) (match result with None -> "None" | Some v -> v#pprint);
       result
     method parents = parents
     method children = children
     method merge_into fromSimplex v =
-      if ctxt#verbosity > 8 then printff "%d.merge_into %d\n" (Oo.id self) (Oo.id v);
+      if ctxt#verbosity > 8 then trace "%d.merge_into %d" (Oo.id self) (Oo.id v);
       if (self :> valuenode) = ctxt#true_node#value || (self :> valuenode) = ctxt#false_node#value then v#merge_into fromSimplex (self :> valuenode) else
       let ctorchild_added parents children =
         List.iter (fun (n, k) -> n#child_ctorchild_added k) parents;
@@ -511,9 +543,7 @@ and valuenode (ctxt: context) =
             let Ctor (NumberCtor n) = t#symbol#kind in
             context#add_redex (fun () ->
               ctxt#reportExportingConstant;
-              match context#simplex#assert_eq n [(neg_unit_num, u)] with
-                Simplex.Unsat -> Unsat3
-              | Simplex.Sat -> Unknown3
+              context#simplex_assert_eq n [(neg_unit_num, u)]
             )
         in
         match (ctorchild, v#ctorchild) with
@@ -582,9 +612,9 @@ and valuenode (ctxt: context) =
           begin
             (* print_endline ("Exporting equality to Simplex: " ^ u1#name ^ " = " ^ u2#name); *)
             ctxt#reportExportingEquality;
-            match ctxt#simplex#assert_eq zero_num [unit_num, u1; neg_unit_num, u2] with
-              Simplex.Unsat -> Unsat
-            | Simplex.Sat -> process_ctorchildren()
+            match ctxt#simplex_assert_eq zero_num [unit_num, u1; neg_unit_num, u2] with
+              Unsat3 -> Unsat
+            | _ -> process_ctorchildren()
           end
         | _ -> process_ctorchildren()
       end
@@ -732,7 +762,15 @@ and context () =
         (text, ["Time spent in query, assume, push, pop", Stopwatch.ticks stopwatch; "Time spent in Simplex", simplex#get_ticks])
     
     initializer
-      simplex#register_listeners (fun u1 u2 -> simplex_eqs <- (u1, u2)::simplex_eqs) (fun u n -> simplex_consts <- (u, n)::simplex_consts);
+      let eq_listener u1 u2 =
+        if verbosity > 10 then trace "Receiving equality from Simplex: %s(%s) = %s(%s)" (the (unknown_tag u1))#pprint (Simplex.print_unknown u1) (the (unknown_tag u2))#pprint (Simplex.print_unknown u2);
+        simplex_eqs <- (u1, u2)::simplex_eqs
+      in
+      let const_listener u n =
+        if verbosity > 10 then trace "Receiving constant from Simplex: %s(%s) = %s" (the (unknown_tag u))#pprint (Simplex.print_unknown u) (string_of_num n);
+        simplex_consts <- (u, n)::simplex_consts
+      in
+      simplex#register_listeners eq_listener const_listener;
       ttrue <- Some (self#get_node (self#mk_symbol "true" [] () (Ctor (CtorByOrdinal 0))) []);
       tfalse <- Some (self#get_node (self#mk_symbol "false" [] () (Ctor (CtorByOrdinal 1))) [])
     
@@ -794,8 +832,34 @@ and context () =
     method mk_add (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Add (t1, t2)
     method mk_sub (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Sub (t1, t2)
     method mk_mul (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Mul (t1, t2)
-    method mk_div (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = self#mk_app int_div_symbol [t1;t2]
-    method mk_mod(t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = self#mk_app int_mod_symbol [t1;t2]
+    method eval_term t =
+      match t with
+        NumLit n -> Some n
+      | TermNode t -> t#value#as_number
+      | Add (t1, t2) ->
+        begin match self#eval_term t1, self#eval_term t2 with
+          Some n1, Some n2 -> Some (n1 +/ n2)
+        | _ -> None
+        end
+      | Sub (t1, t2) ->
+        begin match self#eval_term t1, self#eval_term t2 with
+          Some n1, Some n2 -> Some (n1 -/ n2)
+        | _ -> None
+        end
+      | Mul (t1, t2) ->
+        begin match self#eval_term t1, self#eval_term t2 with
+          Some n1, Some n2 -> Some (n1 */ n2)
+        | _ -> None
+        end
+      | _ -> None
+    method mk_div (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term =
+      match self#eval_term t1, self#eval_term t2 with
+        Some n1, Some n2 -> NumLit (quo_num n1 n2)
+      | _ -> self#mk_app int_div_symbol [t1;t2]
+    method mk_mod(t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term =
+      match self#eval_term t1, self#eval_term t2 with
+        Some n1, Some n2 -> NumLit (mod_num n1 n2)
+      | _ -> self#mk_app int_mod_symbol [t1;t2]
     method mk_lt (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Lt (t1, t2)
     method mk_le (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Le (t1, t2)
     method mk_reallit (n: int): (symbol, termnode) term = NumLit (num_of_int n)
@@ -806,9 +870,18 @@ and context () =
     method mk_real_lt (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = RealLt (t1, t2)
     method mk_real_le (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = RealLe (t1, t2)
     
+    method string_of_simplex_poly n ts =
+      Printf.sprintf "%s [%s]" (Num.string_of_num n) (String.concat "; " (List.map (fun (scale, u) -> Num.string_of_num scale ^ ", " ^ (the (Simplex.unknown_tag u))#pprint) ts))
+
     method simplex_assert_eq n ts =
-      if verbosity > 10 then printff "Redux.simplex_assert_eq %s [%s]\n" (Num.string_of_num n) (String.concat "; " (List.map (fun (scale, u) -> Num.string_of_num scale ^ ", " ^ (the (Simplex.unknown_tag u))#pprint) ts));
-      simplex#assert_eq n ts
+      if verbosity > 10 then trace "Redux.simplex_assert_eq %s" (self#string_of_simplex_poly n ts);
+      match simplex#assert_eq n ts with
+        Simplex.Unsat -> Unsat3
+      | Simplex.Sat -> Unknown3
+    
+    method simplex_assert_neq n ts =
+      if verbosity > 10 then trace "Redux.simplex_assert_neq %s" (self#string_of_simplex_poly n ts);
+      simplex#assert_neq n ts
     
     method assume_core (t: (symbol, termnode) term): assume_result3 =
       assume_core_count <- assume_core_count + 1;
@@ -824,9 +897,7 @@ and context () =
           | _ ->
             self#do_and_reduce (fun () ->
               simplex_assert_eq_count <- simplex_assert_eq_count + 1;
-              match self#simplex_assert_eq n (List.map (fun (t, scale) -> (scale, t#value#mk_unknown)) ts) with
-                Simplex.Unsat -> Unsat3
-              | Simplex.Sat -> Unknown3
+              self#simplex_assert_eq n (List.map (fun (t, scale) -> (scale, t#value#mk_unknown)) ts)
             )
           end
         | Eq (t1, t2) -> self#assume_eq (self#termnode_of_term t1) (self#termnode_of_term t2)
@@ -868,7 +939,7 @@ and context () =
           | terms ->
             self#do_and_reduce $. fun () ->
             simplex_assert_neq_count <- simplex_assert_neq_count + 1;
-            match simplex#assert_neq offset (List.map (fun (t, scale) -> (scale, t#value#mk_unknown)) terms) with
+            match self#simplex_assert_neq offset (List.map (fun (t, scale) -> (scale, t#value#mk_unknown)) terms) with
               Simplex.Unsat -> Unsat3
             | Simplex.Sat -> Unknown3
           end
@@ -880,13 +951,13 @@ and context () =
         | Not t -> assume_true t
         | t -> self#assume_eq (self#termnode_of_term t) self#false_node
       in
-      if verbosity > 3 then printff "Entering Redux.assume_core(%s)\n" (self#pprint t);
+      if verbosity > 3 then trace_entering "Redux.assume_core(%s)" (self#pprint t);
       let result = assume_true t in
-      if verbosity > 3 then printff "Exiting Redux.assume_core\n";
+      if verbosity > 3 then trace_exiting "Redux.assume_core";
       result
     
     method assume_with_implications t =
-      if verbosity > 2 then begin printff "Entering Redux.assume_with_implications(%s)\n" (self#pprint t) end;
+      if verbosity > 2 then begin trace_entering "Redux.assume_with_implications(%s)" (self#pprint t) end;
       let result =
       let result = self#assume_core t in
       match result with
@@ -895,20 +966,20 @@ and context () =
       | Unknown3 ->
         if self#perform_implications then Unsat3 else Unknown3
       in
-      if verbosity > 2 then begin printff "Exiting Redux.assume_with_implications\n" end;
+      if verbosity > 2 then begin trace_exiting "Redux.assume_with_implications" end;
       result
     
     method assume_internal t =
-      let time0 = if verbosity > 1 then begin printff "%10.6fs: Entering Redux.assume_internal(%s)\n" (Perf.time()) (self#pprint t); Perf.time() end else 0.0 in
+      (* let time0 = if verbosity > 1 then begin trace_entering "Redux.assume_internal(%s)" (self#pprint t); Perf.time() end else 0.0 in *)
       let result =
-      let result = (* with_timing "assume: assume_core" $. fun () -> *) if unsat then Unsat3 else self#assume_with_implications t in
+      let result = if unsat then Unsat3 else self#assume_with_implications t in
       match result with
         Unsat3 -> Unsat
       | Valid3 -> Unknown
       | Unknown3 ->
-        if (* with_timing "assume: perform_pending_splits" $. fun () -> *) self#perform_pending_splits (fun _ -> false) then Unsat else Unknown
+        if self#perform_pending_splits (fun _ -> false) then Unsat else Unknown
       in
-      if verbosity > 1 then begin let time1 = Perf.time() in printff "%10.6fs: Exiting Redux.assume_internal: %.6f seconds\n" time1 (time1 -. time0) end;
+      (* if verbosity > 1 then begin let time1 = Perf.time() in trace_exiting "Redux.assume_internal: %.6f seconds" (time1 -. time0) end; *)
       result
     
     method register_pending_splits_count =
@@ -919,24 +990,25 @@ and context () =
         assumes_with_more_pending_splits <- assumes_with_more_pending_splits + 1;
     
     method assert_term t =
-      let time0 = if verbosity > 0 then begin printff "%10.6fs: Entering       Redux.assert_term(%s)\n" (Perf.time()) (self#pprint t); Perf.time() end else 0.0 in
-      Stopwatch.start stopwatch;
-      self#register_pending_splits_count;
-      ignore (self#assume_internal t);
-      Stopwatch.stop stopwatch;
-      if verbosity > 0 then begin let time1 = Perf.time() in printff "%10.6fs: Exiting Redux.assert_term: %.6f seconds\n" time1 (time1 -. time0) end
-    
-    method assume t =
-      let time0 = if verbosity > 0 then begin printff "%10.6fs: Entering Redux.assume(%s)\n" (Perf.time()) (self#pprint t); Perf.time() end else 0.0 in
+      let time0 = if verbosity > 0 then begin trace_entering "Redux.assert_term(%s)" (self#pprint t); Perf.time() end else 0.0 in
       Stopwatch.start stopwatch;
       self#register_pending_splits_count;
       let result = self#assume_internal t in
       Stopwatch.stop stopwatch;
-      if verbosity > 0 then begin let time1 = Perf.time() in printff "%10.6fs: Exiting Redux.assume: %.6f seconds\n" time1 (time1 -. time0) end;
+      if verbosity > 0 && result = Unsat then trace "Redux.assert_term: dropping Unsat result!";
+      if verbosity > 0 then begin let time1 = Perf.time() in trace_exiting "Redux.assert_term: %.6f seconds" (time1 -. time0) end
+    
+    method assume t =
+      let time0 = if verbosity > 0 then begin trace_entering "Redux.assume(%s)" (self#pprint t); Perf.time() end else 0.0 in
+      Stopwatch.start stopwatch;
+      self#register_pending_splits_count;
+      let result = self#assume_internal t in
+      Stopwatch.stop stopwatch;
+      if verbosity > 0 then begin let time1 = Perf.time() in trace_exiting "Redux.assume: %.6f seconds" (time1 -. time0) end;
       result
 
     method query (t: (symbol, termnode) term): bool =
-      if verbosity > 0 then printff "%10.6fs: Entering Redux.query(%s)\n" (Perf.time()) (self#pprint t);
+      if verbosity > 0 then trace_entering "Redux.query(%s)" (self#pprint t);
       Stopwatch.start stopwatch;
       assert (not self#prune_pending_splits);
       self#register_pending_splits_count;
@@ -944,32 +1016,34 @@ and context () =
       let result = self#assume_internal (Not t) in
       self#pop_internal;
       Stopwatch.stop stopwatch;
-      if verbosity > 0 then printff "%10.6fs: Exiting Redux.query\n" (Perf.time());
+      if verbosity > 0 then trace_exiting "Redux.query";
       result = Unsat
     
     method get_type (term: (symbol, termnode) term) = ()
+
+    method termnode_of_poly n ts =
+      match ts with
+        [] -> self#get_numnode n
+      | [(t, scale)] when sign_num n = 0 && scale =/ num_of_int 1 -> t
+      | _ ->
+        let s = "{" ^ self#pprint_poly (n, ts) ^ "}" in
+        let tnode = self#get_node (new symbol Uninterp s) [] in
+        let u = tnode#value#mk_unknown in
+        ignore (self#simplex_assert_eq n ((neg_unit_num, u)::List.map (fun (t, scale) -> (scale, t#value#mk_unknown)) ts));
+        assert (self#pump_simplex_eqs <> Unsat3);
+        tnode
     
     method termnode_of_term t =
       let get_node s ts = self#get_node s (List.map (fun t -> (self#termnode_of_term t)#value) ts) in
       match t with
         t when self#is_poly t ->
         let (n, ts) = self#to_poly t in
-        begin match ts with
-          [] -> self#get_numnode n
-        | [(t, scale)] when sign_num n = 0 && scale =/ num_of_int 1 -> t
-        | _ ->
-          let s = "{" ^ self#pprint_poly (n, ts) ^ "}" in
-          let tnode = self#get_node (new symbol Uninterp s) [] in
-          let u = tnode#value#mk_unknown in
-          ignore (self#simplex_assert_eq n ((neg_unit_num, u)::List.map (fun (t, scale) -> (scale, t#value#mk_unknown)) ts));
-          assert (self#pump_simplex_eqs <> Unsat3);
-          tnode
-        end
+        self#termnode_of_poly n ts
       | TermNode t -> t
       | True -> self#true_node
       | False -> self#false_node
       | App (s, ts, None) -> get_node s ts
-      | App (s, ts, Some t) -> if verbosity > 10 then printff "termnode_of_term: using cached App termnode %s\n" t#pprint; t
+      | App (s, ts, Some t) -> if verbosity > 20 then trace "termnode_of_term: using cached App termnode %s" t#pprint; t
       | IfThenElse (t1, t2, t3) -> self#get_ifthenelsenode t1 t2 t3
       | Iff (t1, t2) -> get_node iff_symbol [t1; t2]
       | Eq (t1, t2) -> get_node eq_symbol [t1; t2]
@@ -1106,30 +1180,30 @@ and context () =
           None -> cont assumptions
         | Some (`SplitNode (branch1, branch2, nextNode)) as currentNodeValue->
           split_count <- split_count + 1;
-          if verbosity >= 2 then printff "Splitting on (%s, %s) (depth: %d)\n" (self#pprint branch1) (self#pprint branch2) (List.length assumptions);
+          if verbosity >= 2 then trace_entering "splitting on (%s, %s) (depth: %d)" (self#pprint branch1) (self#pprint branch2) (List.length assumptions);
           self#push_internal;
-          if verbosity >= 2 then printff "  First branch: %s\n" (self#pprint branch1);
+          if verbosity >= 2 then begin trace "First branch: %s" (self#pprint branch1); indent () end;
           let result = self#assume_with_implications branch1 in
-          if verbosity >= 2 then printff "    %s\n" (match result with Unsat3 -> "Unsat" | Unknown3 -> "Unknown" | Valid3 -> "Valid");
+          if verbosity >= 2 then begin unindent (); trace "Branch yields %s" (match result with Unsat3 -> "Unsat" | Unknown3 -> "Unknown" | Valid3 -> "Valid") end;
           let continue = result = Unsat3 || result = Valid3 && assumptions = [] || iter (branch1::assumptions) nextNode in
           self#pop_internal;
           if assumptions = [] && result <> Unknown3 then
           begin
-            if verbosity >= 2 then printff "Pruning split\n";
+            if verbosity >= 2 then trace "Pruning split";
             self#register_popaction (fun () -> pending_splits_front <- currentNode);
             pending_splits_front <- nextNode;
             let result = if result = Unsat3 then self#assume_with_implications branch2 else Valid3 in
             let continue = result = Unsat3 || iter [] nextNode in
-            if verbosity >= 2 then printff "Done splitting\n";
+            if verbosity >= 2 then trace_exiting "splitting";
             continue
           end
           else
           let continue = continue && (result = Valid3 ||
             begin
               self#push_internal;
-              if verbosity >= 2 then printff "  Second branch %s\n" (self#pprint branch2);
+              if verbosity >= 2 then begin trace "Second branch %s" (self#pprint branch2); indent () end;
               let result = self#assume_with_implications branch2 in
-              if verbosity >= 2 then printff "    %s\n" (match result with Unsat3 -> "Unsat" | Unknown3 -> "Unknown" | Valid3 -> "Valid");
+              if verbosity >= 2 then begin unindent (); trace "Branch yields %s" (match result with Unsat3 -> "Unsat" | Unknown3 -> "Unknown" | Valid3 -> "Valid") end;
               let continue = result = Unsat3 || iter (branch2::assumptions) nextNode in
               self#pop_internal;
               if assumptions = [] && not continue then
@@ -1148,7 +1222,7 @@ and context () =
             end
             )
           in
-          if verbosity >= 2 then printff "Done splitting\n";
+          if verbosity >= 2 then trace_exiting "splitting";
           continue
       in
       iter [] pending_splits_front
@@ -1177,7 +1251,7 @@ and context () =
           let ts = List.map self#termnode_of_term ts in
           let vs = List.map (fun t -> t#value) ts in
           let t = self#get_node s vs in
-          if verbosity > 10 then printff "mk_app: caching termnode %s\n" t#pprint;
+          if verbosity > 20 then trace "mk_app: caching termnode %s" t#pprint;
           Some t
         else
           None
@@ -1232,7 +1306,7 @@ and context () =
         end
     
     method assert_neq (v1: valuenode) (v2: valuenode) =
-      if verbosity > 7 then printff "assert_neq %s %s\n" (v1#pprint) (v2#pprint);
+      if verbosity > 7 then trace "assert_neq %s %s" (v1#pprint) (v2#pprint);
       if v1 = v2 then
         Unsat3
       else if v1#neq v2 then
@@ -1258,8 +1332,7 @@ and context () =
     method assume_eq (t1: termnode) (t2: termnode) = self#reduce; self#assert_eq_and_reduce t1#value t2#value
     
     method assert_ge c ts =
-      (* let the x = match x with Some x -> x in *)
-      (* printff "assert_ge %s [%s]\n" (string_of_num c) (String.concat " " (List.map (fun (c, u) -> Printf.sprintf "%s*%s(%s)" (string_of_num c) (the (unknown_tag u))#pprint u#name) ts)); *)
+      if verbosity > 10 then trace "simplex#assert_ge %s [%s]" (string_of_num c) (String.concat "; " (List.map (fun (c, u) -> Printf.sprintf "%s*%s(%s)" (string_of_num c) (the (unknown_tag u))#pprint (print_unknown u)) ts));
       simplex#assert_ge c ts
     
     method assert_le t1 offset t2 =
@@ -1303,6 +1376,16 @@ and context () =
           [] -> ts2
         | (t, scale)::ts1 -> merge_terms ts1 (merge_term t scale ts2)
       in
+      let scale_poly scale n ts =
+        if sign_num scale = 0 then (zero_num, []) else
+        (mult_num scale n, List.map (fun (v, scale') -> (v, mult_num scale scale')) ts)
+      in
+      let mult_values v v' =
+        let mul1 = self#get_node mul_symbol [v; v'] in
+        let mul2 = self#get_node mul_symbol [v'; v] in
+        self#add_redex (fun () -> self#assert_eq mul1#value mul2#value);
+        mul1
+      in
       let rec iter scale t =
         match t with
           NumLit n -> (mult_num scale n, [])
@@ -1315,26 +1398,29 @@ and context () =
           let (n2, ts2) = iter (minus_num scale) t2 in
           (add_num n1 n2, merge_terms ts1 ts2)
         | Mul (t1, t2) ->
-          let (n1, ts1) = iter scale t1 in
+          let (n1, ts1) = iter unit_num t1 in
           let (n2, ts2) = iter unit_num t2 in
+          if ts1 = [] then
+            scale_poly (mult_num scale n1) n2 ts2
+          else if ts2 = [] then
+            scale_poly (mult_num scale n2) n1 ts1
+          else
+          let tn1 = self#termnode_of_poly n1 ts1 in
+          let tn2 = self#termnode_of_poly n2 ts2 in
+          let tn = mult_values tn1#value tn2#value in
           let (n3, ts3) = (mult_num n1 n2, if sign_num n2 = 0 then [] else List.map (fun (v, scale) -> (v, mult_num n2 scale)) ts1) in
           let rec iter ts3 ts2 =
             match ts2 with
               [] -> ts3
             | (t, scale)::ts2 ->
-              let mult_values v v' =
-                let mul1 = self#get_node mul_symbol [v; v'] in
-                let mul2 = self#get_node mul_symbol [v'; v] in
-                self#add_redex (fun () -> self#assert_eq mul1#value mul2#value);
-                mul1
-              in
               let ts4 = if sign_num n1 = 0 then [] else [(t, mult_num scale n1)] in
               let ts4 = ts4 @ List.map (fun (t', scale') -> (mult_values t#value t'#value, mult_num scale scale')) ts1 in
               iter (ts4 @ ts3) ts2
           in
           let ts3 = iter ts3 ts2 in
-          (* Printf.printf "Mul %s %s %s = %s\n" (string_of_num scale) (self#pprint t1) (self#pprint t2) (self#pprint_poly (n3, ts3)); *)
-          (n3, ts3)
+          let tn' = self#termnode_of_poly n3 ts3 in
+          self#add_redex (fun () -> self#assert_eq tn#value tn'#value);
+          (zero_num, [(tn, scale)])
         | _ ->
           let t = self#termnode_of_term t in
           begin match t#value#as_number with
@@ -1363,7 +1449,7 @@ and context () =
     method assume_neq (t1: termnode) (t2: termnode) = self#reduce; self#assert_neq_and_reduce t1#value t2#value
 
     method assert_eq v1 v2 =
-      if verbosity > 7 then printff "assert_eq %s %s\n" (v1#pprint) (v2#pprint);
+      if verbosity > 7 then trace "assert_eq %s %s" (v1#pprint) (v2#pprint);
       self#assert_eq_core false v1 v2
     
     method assert_eq_core fromSimplex v1 v2 =
@@ -1395,7 +1481,7 @@ and context () =
             | (u, c)::consts ->
               simplex_consts <- consts;
               let Some tn = unknown_tag u in
-              if verbosity > 7 then printff "Importing constant from Simplex: %s(%s) = %s\n" tn#pprint (Simplex.print_unknown u) (string_of_num c);
+              if verbosity > 7 then trace "Importing constant from Simplex: %s(%s) = %s" tn#pprint (Simplex.print_unknown u) (string_of_num c);
               match (self#assert_eq_core true tn#value (self#get_numnode c)#value, result) with
                 (Unsat3, _) -> Unsat3
               | (r, Valid3) -> iter r
@@ -1405,7 +1491,7 @@ and context () =
           simplex_eqs <- eqs;
           let Some tn1 = unknown_tag u1 in
           let Some tn2 = unknown_tag u2 in
-          if verbosity > 7 then printff "Importing equality from Simplex: %s(%s) = %s(%s)\n" tn1#pprint (Simplex.print_unknown u1) tn2#pprint (Simplex.print_unknown u2);
+          if verbosity > 7 then trace "Importing equality from Simplex: %s(%s) = %s(%s)" tn1#pprint (Simplex.print_unknown u1) tn2#pprint (Simplex.print_unknown u2);
           match (self#assert_eq_core true tn1#value tn2#value, result) with
             (Unsat3, _) -> Unsat3
           | (r, Valid3) -> iter r
@@ -1435,7 +1521,8 @@ and context () =
       result
     
     method reduce =
-      if verbosity > 4 then printff "Entering Redux.reduce\n";
+      let do_trace = verbosity > 4 && redexes <> [] || verbosity > 20 in
+      if do_trace then trace_entering "Redux.reduce";
       let result =
       if not reducing then
         unsat <-
@@ -1455,7 +1542,7 @@ and context () =
                 true
               end
       in
-      if verbosity > 4 then printff "Exiting Redux.reduce\n";
+      if do_trace then trace_exiting "Redux.reduce";
       result
     
     method do_and_reduce action =
@@ -1567,10 +1654,10 @@ and context () =
             in
             match_pats [] term#children args (fun bound_env ->
               incr triggeredCounter;
-              if verbosity >= 3 then printff "%10.6fs: Redux: Axiom %s triggered\n" (Perf.time()) description;
-              if verbosity >= 4 then printff "%10.6fs: Redux: Axiom %s triggered with\n" (Perf.time()) (self#pprint body);
+              if verbosity >= 3 then trace "Redux: Axiom %s triggered" description;
+              if verbosity >= 4 then trace "Redux: Axiom %s triggered with" (self#pprint body);
               let body = term_subst bound_env body in
-              if verbosity >= 4 then List.iter (fun (i, t) -> printff "            bound.%d = %s\n" i t#pprint) bound_env;
+              if verbosity >= 4 then List.iter (fun (i, t) -> trace "            bound.%d = %s" i t#pprint) bound_env;
               self#add_redex (fun () ->
                 (* printff "Asserting axiom body %s\n" (self#pprint body); *)
                 self#assume_core body

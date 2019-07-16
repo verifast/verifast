@@ -8,10 +8,10 @@ open Util
 type srcpos = (string * int * int) (* ?srcpos *)
 
 (** A range of source code: start position, end position *)
-type loc = (srcpos * srcpos) (* ?loc *)
+type loc0 = (srcpos * srcpos) (* ?loc *)
 
 let dummy_srcpos = ("<nowhere>", 0, 0)
-let dummy_loc = (dummy_srcpos, dummy_srcpos)
+let dummy_loc0 = (dummy_srcpos, dummy_srcpos)
 
 (*
 Visual Studio format:
@@ -32,7 +32,7 @@ http://www.gnu.org/prep/standards/standards.html#Errors
 
 let string_of_srcpos (p,l,c) = p ^ "(" ^ string_of_int l ^ "," ^ string_of_int c ^ ")"
 
-let string_of_loc ((p1, l1, c1), (p2, l2, c2)) =
+let string_of_loc0 ((p1, l1, c1), (p2, l2, c2)) =
   p1 ^ "(" ^ string_of_int l1 ^ "," ^ string_of_int c1 ^
   if p1 = p2 then
     if l1 = l2 then
@@ -44,6 +44,33 @@ let string_of_loc ((p1, l1, c1), (p2, l2, c2)) =
       "-" ^ string_of_int l2 ^ "," ^ string_of_int c2 ^ ")"
   else
     ")-" ^ p2 ^ "(" ^ string_of_int l2 ^ "," ^ string_of_int c2 ^ ")"
+
+(* A token provenance. Complex because of the C preprocessor. *)
+
+type loc =
+  Lexed of loc0
+| DummyLoc
+| MacroExpansion of
+    loc (* Call site *)
+    * loc (* Body token *)
+| MacroParamExpansion of
+    loc (* Parameter occurrence being expanded *)
+    * loc (* Argument token *)
+ 
+let dummy_loc = DummyLoc
+
+let rec root_caller_token l =
+  match l with
+    Lexed l -> l
+  | MacroExpansion (lcall, _) -> root_caller_token lcall
+  | MacroParamExpansion (lparam, _) -> root_caller_token lparam
+
+let rec string_of_loc l =
+  match l with
+    Lexed l0 -> string_of_loc0 l0
+  | DummyLoc -> "<dummy location>"
+  | MacroExpansion (lcall, lbody) -> Printf.sprintf "%s (body token %s)" (string_of_loc lcall) (string_of_loc lbody)
+  | MacroParamExpansion (lparam, larg) -> Printf.sprintf "%s (argument token %s)" (string_of_loc lparam) (string_of_loc larg)
 
 (* Some types for dealing with constants *)
 
@@ -143,19 +170,12 @@ let is_arithmetic_type t =
 
 type prover_type = ProverInt | ProverBool | ProverReal | ProverInductive (* ?prover_type *)
 
-(** An object used in predicate assertion ASTs. Created by the parser and filled in by the type checker.
-    TODO: Since the type checker now generates a new AST anyway, we can eliminate this hack. *)
-class predref (name: string) = (* ?predref *)
+class predref (name: string) (domain: type_ list) (inputParamCount: int option) = (* ?predref *)
   object
-    val mutable tparamcount: int option = None  (* Number of type parameters. *)
-    val mutable domain: type_ list option = None  (* Parameter types. *)
-    val mutable inputParamCount: int option option = None  (* Number of input parameters, or None if the predicate is not precise. *)
     method name = name
-    method domain = match domain with None -> assert false | Some d -> d
-    method inputParamCount = match inputParamCount with None -> assert false | Some c -> c
-    method set_domain d = domain <- Some d
-    method set_inputParamCount c = inputParamCount <- Some c
-    method is_precise = match inputParamCount with None -> assert false; | Some None -> false | Some (Some _) -> true 
+    method domain = domain
+    method inputParamCount = inputParamCount
+    method is_precise = match inputParamCount with None -> false | Some _ -> true 
   end
 
 type
@@ -176,6 +196,7 @@ type int_literal_lsuffix = NoLSuffix | LSuffix | LLSuffix
 (** Types as they appear in source code, before validity checking and resolution. *)
 type type_expr = (* ?type_expr *)
     StructTypeExpr of loc * string option * field list option
+  | EnumTypeExpr of loc * string option * (string * expr option) list option
   | PtrTypeExpr of loc * type_expr
   | ArrayTypeExpr of loc * type_expr
   | StaticArrayTypeExpr of loc * type_expr (* type *) * int (* number of elements*)
@@ -321,7 +342,7 @@ and
       pat
   | PredAsn of (* Predicate assertion, before type checking *)
       loc *
-      predref *
+      string *
       type_expr list *
       pat list (* indices of predicate family instance *) *
       pat list
@@ -455,7 +476,7 @@ and
       stmt
   | DeclStmt of (* enkel declaratie *)
       loc *
-      (loc * type_expr * string * expr option * bool ref (* indicates whether address is taken *)) list
+      (loc * type_expr * string * expr option * (bool ref (* indicates whether address is taken *) * string list ref option ref (* pointer to enclosing block's list of variables whose address is taken *))) list
   | ExprStmt of expr
   | IfStmt of (* if  regel-conditie-branch1-branch2  *)
       loc *
@@ -870,6 +891,51 @@ let stmt_loc s =
   | ProduceFunctionPointerChunkStmt (l, ftn, fpe, targs, args, params, openBraceLoc, ss, closeBraceLoc) -> l
   | Break (l) -> l
   | SuperConstructorCall(l, _) -> l
+
+let stmt_fold_open f state s =
+  match s with
+    PureStmt (l, s) -> f state s
+  | NonpureStmt (l, _, s) -> f state s
+  | IfStmt (l, _, sst, ssf) -> let state = List.fold_left f state sst in List.fold_left f state ssf
+  | SwitchStmt (l, _, cs) ->
+    let rec iter state c =
+      match c with
+        SwitchStmtClause (l, e, ss) -> List.fold_left f state ss
+      | SwitchStmtDefaultClause (l, ss) -> List.fold_left f state ss
+    in
+    List.fold_left iter state cs
+  | WhileStmt (l, _, _, _, ss) -> List.fold_left f state ss
+  | TryCatch (l, ss, ccs) ->
+    let state = List.fold_left f state ss in
+    List.fold_left (fun state (_, _, _, ss) -> List.fold_left f state ss) state ccs
+  | TryFinally (l, ssb, _, ssf) ->
+    let state = List.fold_left f state ssb in
+    List.fold_left f state ssf
+  | BlockStmt (l, ds, ss, _, _) -> List.fold_left f state ss
+  | PerformActionStmt (l, _, _, _, _, _, _, _, ss, _, _, _) -> List.fold_left f state ss
+  | ProduceLemmaFunctionPointerChunkStmt (l, _, proofo, ssbo) ->
+    let state =
+      match proofo with
+        None -> state
+      | Some (_, _, _, _, _, ss, _) -> List.fold_left f state ss
+    in
+    begin match ssbo with
+      None -> state
+    | Some ss -> f state ss
+    end
+  | ProduceFunctionPointerChunkStmt (l, ftn, fpe, targs, args, params, openBraceLoc, ss, closeBraceLoc) -> List.fold_left f state ss
+  | _ -> state
+
+(* Postfix fold *)
+let stmt_fold f state s =
+  let rec iter state s =
+    let state = stmt_fold_open iter state s in
+    f state s
+  in
+  iter state s
+
+(* Postfix iter *)
+let stmt_iter f s = stmt_fold (fun _ s -> f s) () s
 
 let type_expr_loc t =
   match t with

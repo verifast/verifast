@@ -9,7 +9,7 @@
  */
  
 
-//@ #include <stdio_simple.h>
+#include <stdio_simple.h>
 //@ #include <bigstar.gh>
 
 /*@

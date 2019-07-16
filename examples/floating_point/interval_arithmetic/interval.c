@@ -1,15 +1,13 @@
-#ifndef INTERVAL_H
-#define INTERVAL_H
 #include "stdlib.h"
 #include "interval_math.h"
-
-
 
 struct interval {
     double a;
     double b;
 };
+
 /*@
+
 fixpoint bool leq_double_real(fp_double a, real x){
     switch (a) {
     	case real_double(ra): return ra <= x;
@@ -57,16 +55,15 @@ lemma void between_lemma(fp_double a, real x, fp_double b)
     requires leq_double_real(a,x) == true &*& leq_real_double(x,b) == true;
     ensures between(a,b,x) == true;
 {}
+
 @*/
 
-
-struct interval *double_add(struct interval *first, struct interval *second)
+double double_add_lower_bound(struct interval *first, struct interval *second)
     /*@ requires interval_pred(first,?x1) &*&
     	interval_pred(second,?x2);@*/
     /*@ ensures interval_pred(first,x1) &*&
         interval_pred(second,x2) &*&
-        interval_pred(result,x1 + x2) &*&
-    	malloc_block_interval(result); @*/
+        leq_double_real(fp_of_double(result), x1 + x2) == true; @*/
 {
     //@ open interval_pred(first, x1);
     //@ open interval_pred(second, x2);
@@ -74,11 +71,8 @@ struct interval *double_add(struct interval *first, struct interval *second)
     //@ assert second->a |-> ?sa;
     //@ assert first->b |-> ?fb;
     //@ assert second->b |-> ?sb;
-    struct interval *result = malloc(sizeof(struct interval));
-    if (result == 0) { abort(); }
     double l = first->a + second->a;
-    result->a = nextafter(l,-INFINITY);
-    //@ assert result->a |-> ?ra;
+    double ra = nextafter(l,-INFINITY);
     /*@
     if (is_real_double(fa) == true) {
         assert fp_of_double(fa) == real_double(?rfa);
@@ -119,9 +113,26 @@ struct interval *double_add(struct interval *first, struct interval *second)
     } else {}
     @*/
     //@ assert leq_double_real(fp_of_double(ra), x1 + x2) == true;
+    return ra;
+    //@ close(interval_pred(first,x1));
+    //@ close(interval_pred(second,x2));
+}
+
+double double_add_upper_bound(struct interval *first, struct interval *second)
+    /*@ requires interval_pred(first,?x1) &*&
+    	interval_pred(second,?x2);@*/
+    /*@ ensures interval_pred(first,x1) &*&
+        interval_pred(second,x2) &*&
+        leq_real_double(x1 + x2, fp_of_double(result)) == true; @*/
+{
+    //@ open interval_pred(first, x1);
+    //@ open interval_pred(second, x2);
+    //@ assert first->a |-> ?fa;
+    //@ assert second->a |-> ?sa;
+    //@ assert first->b |-> ?fb;
+    //@ assert second->b |-> ?sb;
     double u = first->b + second->b;
-    result->b = nextafter(u,INFINITY);
-    //@ assert result->b |-> ?rb;
+    double rb = nextafter(u,INFINITY);
     /*@
     if (is_real_double(fb) == true) {
         assert fp_of_double(fb) == real_double(?rfb);
@@ -149,7 +160,6 @@ struct interval *double_add(struct interval *first, struct interval *second)
     	    	        assert leq_real_double(x1 + x2, fp_of_double(rb)) == true;
     	    	    } else { 
     	    	        assert rfb + rsb < min_dbl;
-    	    	        assert rfb + rsb >= min_dbl / md_eps;
     	    	        assert fp_of_double(rb) == real_double(?rrb);
     	    	        assert ru <= round_up_double(rfb + rsb);
     	    	        round_up_min_dbl_lemma(rfb + rsb);
@@ -176,19 +186,33 @@ struct interval *double_add(struct interval *first, struct interval *second)
     } else {}
     @*/
     //@ assert leq_real_double(x1 + x2, fp_of_double(rb)) == true;
-    return result;
-    //@ close(interval_pred(result,x1 + x2));
+    return rb;
     //@ close(interval_pred(first,x1));
     //@ close(interval_pred(second,x2));
 }
 
-struct interval *double_sub(struct interval *first, struct interval *second)
+struct interval *double_add(struct interval *first, struct interval *second)
+    /*@ requires interval_pred(first,?x1) &*&
+    	interval_pred(second,?x2);@*/
+    /*@ ensures interval_pred(first,x1) &*&
+        interval_pred(second,x2) &*&
+        interval_pred(result,x1 + x2) &*&
+    	malloc_block_interval(result); @*/
+{
+    struct interval *result = malloc(sizeof(struct interval));
+    if (result == 0) { abort(); }
+    result->a = double_add_lower_bound(first, second);
+    result->b = double_add_upper_bound(first, second);
+    return result;
+    //@ close(interval_pred(result,x1 + x2));
+}
+
+double double_sub_lower_bound(struct interval *first, struct interval *second)
     /*@ requires interval_pred(first,?x1) &*&
     	interval_pred(second,?x2); @*/
     /*@ ensures interval_pred(first,x1) &*&
     	interval_pred(second,x2) &*&
-    	interval_pred(result,x1 - x2) &*&
-    	malloc_block_interval(result); @*/
+    	leq_double_real(fp_of_double(result), x1 - x2) == true; @*/
 {
     //@ open interval_pred(first, x1);
     //@ open interval_pred(second, x2);
@@ -196,11 +220,8 @@ struct interval *double_sub(struct interval *first, struct interval *second)
     //@ assert second->a |-> ?sa;
     //@ assert first->b |-> ?fb;
     //@ assert second->b |-> ?sb;
-    struct interval *result = malloc(sizeof(struct interval));
-    if (result == 0) { abort(); }
     double l = first->a - second->b;
-    result->a = nextafter(l,-INFINITY);
-    //@ assert result->a |-> ?ra;
+    double ra = nextafter(l,-INFINITY);
     /*@
     if (is_real_double(fa) == true) {
         assert fp_of_double(fa) == real_double(?rfa);
@@ -239,9 +260,26 @@ struct interval *double_sub(struct interval *first, struct interval *second)
     } else {}
     @*/
     //@ assert leq_double_real(fp_of_double(ra), x1 - x2) == true;
+    //@ close(interval_pred(first,x1));
+    //@ close(interval_pred(second,x2));
+    return ra;
+}
+
+double double_sub_upper_bound(struct interval *first, struct interval *second)
+    /*@ requires interval_pred(first,?x1) &*&
+    	interval_pred(second,?x2); @*/
+    /*@ ensures interval_pred(first,x1) &*&
+    	interval_pred(second,x2) &*&
+    	leq_real_double(x1 - x2, fp_of_double(result)) == true; @*/
+{
+    //@ open interval_pred(first, x1);
+    //@ open interval_pred(second, x2);
+    //@ assert first->a |-> ?fa;
+    //@ assert second->a |-> ?sa;
+    //@ assert first->b |-> ?fb;
+    //@ assert second->b |-> ?sb;
     double u = first->b - second->a;
-    result->b = nextafter(u,INFINITY);
-    //@ assert result->b |-> ?rb;
+    double rb = nextafter(u,INFINITY);
     /*@
     if (is_real_double(fb) == true) {
         assert fp_of_double(fb) == real_double(?rfb);
@@ -265,7 +303,6 @@ struct interval *double_sub(struct interval *first, struct interval *second)
     	    	        assert leq_real_double(x1 - x2, fp_of_double(rb)) == true;
     	    	    } else { 
     	    	        assert rfb - rsa < min_dbl;
-    	    	        assert rfb - rsa >= min_dbl / md_eps;
     	    	        assert fp_of_double(rb) == real_double(?rrb);
     	    	        assert ru <= round_up_double(rfb  - rsa);
     	    	        round_up_min_dbl_lemma(rfb - rsa);
@@ -289,48 +326,56 @@ struct interval *double_sub(struct interval *first, struct interval *second)
     } else {}
     @*/
     //@ assert leq_real_double(x1 - x2, fp_of_double(rb)) == true;
-    //@ close(interval_pred(result,x1 - x2));
     //@ close(interval_pred(first,x1));
     //@ close(interval_pred(second,x2));
-    return result;
+    return rb;
 }
 
+struct interval *double_sub(struct interval *first, struct interval *second)
+    /*@ requires interval_pred(first,?x1) &*&
+    	interval_pred(second,?x2); @*/
+    /*@ ensures interval_pred(first,x1) &*&
+    	interval_pred(second,x2) &*&
+    	interval_pred(result,x1 - x2) &*&
+    	malloc_block_interval(result); @*/
+{
+    struct interval *result = malloc(sizeof(struct interval));
+    if (result == 0) { abort(); }
+    result->a = double_sub_lower_bound(first, second);
+    result->b = double_sub_upper_bound(first, second);
+    return result;
+    //@ close(interval_pred(result,x1 - x2));
+}
 
-struct interval *double_mult(struct interval *first, struct interval *second)
+double double_mult_lower_bound(struct interval *first, struct interval *second)
     /*@ requires pos_interval_pred(first,?x1) &*&
     	pos_interval_pred(second,?x2);@*/
     /*@ ensures pos_interval_pred(first,x1) &*&
     	pos_interval_pred(second,x2) &*&
-    	pos_interval_pred(result, x1 * x2) &*&
-    	malloc_block_interval(result); @*/
-    {
+    	is_pos_double(fp_of_double(result)) == true &*&
+    	leq_double_real(fp_of_double(result), x1 * x2) == true; @*/
+{
     //@ open pos_interval_pred(first,x1);
     //@ open pos_interval_pred(second,x2);
-    struct interval *result = malloc(sizeof(struct interval));
-    if (result == 0) { abort(); }
     //@ real_of_int_lemma_UNSAFE(0,0);
-    //@ assert first->a |-> ?fa;
+    //@ assert first->a |-> ?fa &*& fp_of_double(fa) == real_double(?rfa);
     //@ assert first->b |-> ?fb;
-    //@ assert second->a |-> ?sa;
+    //@ assert second->a |-> ?sa &*& fp_of_double(sa) == real_double(?rsa);
     //@ assert second->b |-> ?sb;
-    
-    
+    //@ mult_leq_substitution(0, 0, rfa, rsa);
+    //@ mult_leq_substitution(rfa,rsa,x1,x2);
     
     double l = first->a * second->a;
+    double ra;
     if (isnan(l)){l = 0;}
     if (l == 0) {
-        result->a = 0;
+        ra = 0;
     } else {
-        result->a = nextafter(l,-INFINITY);
+        ra = nextafter(l,-INFINITY);
     }
-    //@ assert result->a |-> ?ra;
     //@ assert is_real_double(fa) || fp_of_double(fa) == pos_inf;
     /*@
 
-    switch (fp_of_double(fa)){
-        case real_double(rfa):
-            switch (fp_of_double(sa)){
-                case real_double(rsa):
                     if (fp_of_double(l) == pos_inf){
                         assert real_mult_gt(rfa,rsa,max_dbl) == true;
                         real_mult_gt_lemma(rfa,rsa,max_dbl);
@@ -339,7 +384,6 @@ struct interval *double_mult(struct interval *first, struct interval *second)
                         assert x2 >= rsa;
                         assert rfa >= 0;
                         assert rsa >= 0;
-                        mult_leq_substitution(rfa,rsa,x1,x2);
                         assert x1 * x2 >= rfa * rsa;
                         leq_transitivity_lemma(max_dbl,rfa * rsa, x1 * x2);
                         assert x1 * x2 >= max_dbl;
@@ -369,6 +413,7 @@ struct interval *double_mult(struct interval *first, struct interval *second)
                                 assert rra == prev_double(rl);
                                 prev_double_lemma(rl,rra);
                                 assert rra < max_dbl;
+                                mult_leq_substitution(rfa, rsa, x1, x2);
                                 assert x1 * x2 >= rfa * rsa;
                                 leq_transitivity_lemma(max_dbl, rfa * rsa, x1* x2);
                                 assert x1 * x2 >= max_dbl;
@@ -389,31 +434,47 @@ struct interval *double_mult(struct interval *first, struct interval *second)
                         }
                         
                     }
-                case pos_inf: assert false;
-                case neg_inf: assert false;
-                case NaN: assert false;
-            }
-        case pos_inf: assert false;
-        case neg_inf: assert false;
-        case NaN: assert false;
-    
-    }
     @*/
     //@ assert is_pos_double(fp_of_double(ra)) == true;
     //@ assert leq_double_real(fp_of_double(ra), x1 * x2) == true;
+    
+    //@ close(pos_interval_pred(first,x1));
+    //@ close(pos_interval_pred(second,x2));
+    return ra;
+}
+
+double double_mult_upper_bound(struct interval *first, struct interval *second)
+    /*@ requires pos_interval_pred(first,?x1) &*&
+    	pos_interval_pred(second,?x2);@*/
+    /*@ ensures pos_interval_pred(first,x1) &*&
+    	pos_interval_pred(second,x2) &*&
+    	leq_real_double(x1 * x2, fp_of_double(result)) == true; @*/
+{
+    //@ open pos_interval_pred(first,x1);
+    //@ open pos_interval_pred(second,x2);
+    //@ real_of_int_lemma_UNSAFE(0,0);
+    //@ assert first->a |-> ?fa &*& fp_of_double(fa) == real_double(?rfa) &*& 0 <= rfa;
+    //@ assert first->b |-> ?fb;
+    //@ assert second->a |-> ?sa &*& fp_of_double(sa) == real_double(?rsa) &*& 0 <= rsa;
+    //@ assert second->b |-> ?sb;
+    //@ mult_leq_substitution(0, 0, rfa, rsa);
+    //@ mult_leq_substitution(rfa, rsa, x1, x2);
+
     double u = first->b * second->b;
+    double rb;
     if (isnan(u)){
-        result->b = 0;
+        rb = 0;
     } else {
-        result->b = nextafter(u,INFINITY);
+        rb = nextafter(u,INFINITY);
     }
-    //@ assert result->b |-> ?rb;
     /*@
 
     switch (fp_of_double(fb)){
         case real_double(rfb):
             switch (fp_of_double(sb)){
                 case real_double(rsb):
+                    mult_leq_substitution(x1, x2, rfb, rsb);
+                    assert 0 <= rfb * rsb;
                     if (fp_of_double(u) == pos_inf){
                         assert real_mult_gt(rfb,rsb,max_dbl) == true;
                         real_mult_gt_lemma(rfb,rsb,max_dbl);
@@ -466,7 +527,6 @@ struct interval *double_mult(struct interval *first, struct interval *second)
                     } else {}
                     assert leq_real_double(x1 * x2, fp_of_double(rb)) == true;
                 case pos_inf:
-                    assert leq_double_real(fp_of_double(ra), x1 * x2) == true;
                 case neg_inf: assert false;
                 case NaN: assert false;
             }
@@ -475,114 +535,39 @@ struct interval *double_mult(struct interval *first, struct interval *second)
     
     }
     @*/
-    /*@
 
-    switch (fp_of_double(fa)){
-        case real_double(rfa):
-            switch (fp_of_double(sa)){
-                case real_double(rsa):
-                    if (fp_of_double(l) == pos_inf){
-                        assert real_mult_gt(rfa,rsa,max_dbl) == true;
-                        real_mult_gt_lemma(rfa,rsa,max_dbl);
-                        assert rfa * rsa > max_dbl;
-                        assert x1 >= rfa;
-                        assert x2 >= rsa;
-                        assert rfa >= 0;
-                        assert rsa >= 0;
-                        mult_leq_substitution(rfa,rsa,x1,x2);
-                        assert x1 * x2 >= rfa * rsa;
-                        leq_transitivity_lemma(max_dbl,rfa * rsa, x1 * x2);
-                        assert x1 * x2 >= max_dbl;
-                        assert fp_of_double(ra) == real_double(?rra);
-                        assert fp_of_double(ra) == double_nextafter(fp_of_double(l),neg_inf);
-                        assert rra == max_dbl;
-                    } else {
-                        assert fp_of_double(l) == real_double(?rl);
-                        assert fp_of_double(ra) == real_double(?rra);
-                        if (rra == 0){
-                            assert x1 >= 0;
-                            assert x2 >= 0;
-                            product_sign_lemma(x1,x2);
-                            assert x1 * x2 >= 0;
-                            assert leq_double_real(fp_of_double(ra), x1 * x2) == true;
-                        } else {
-                            assert rra == prev_double(rl);
-                            assert real_mult_round_up(rfa,rsa,rl) == true;
-                            real_mult_round_up_lemma(rfa,rsa,rl);
-                            assert rl <= round_up_double(rfa * rsa) || rfa * rsa > max_dbl;
-                            if (rfa * rsa > max_dbl){
-                                real_mult_round_down_lemma(rfa,rsa,rl);
-                                assert rl >= round_down_double(rfa * rsa);
-                                round_down_max_dbl_lemma(rfa * rsa);
-                                real_double_lemma(l);
-                                assert rl == max_dbl;
-                                assert rra == prev_double(rl);
-                                prev_double_lemma(rl,rra);
-                                assert rra < max_dbl;
-                                mult_leq_substitution(rfa,rsa,x1,x2);
-                                assert x1 * x2 >= rfa * rsa;
-                                leq_transitivity_lemma(max_dbl, rfa * rsa, x1* x2);
-                                assert x1 * x2 >= max_dbl;
-                                
-                            } else {
-                                prev_double_transitivity_lemma(rl,round_up_double(rfa * rsa));
-                                prev_round_up_lemma(rfa * rsa, prev_double(round_up_double(rfa * rsa)));
-                                assert rra <= rfa * rsa;
-                                assert rfa * rsa > 0;
-                                mult_leq_substitution(rfa,rsa,x1,x2);
-                                assert x1 * x2 >= rfa * rsa;
-                                leq_transitivity_lemma(rra,rfa*rsa,x1*x2);
-                                assert x1 * x2 >= rra;
-                                assert rra <= x1 * x2;
-				assert leq_double_real(fp_of_double(ra), x1 * x2) == true;
-                                if (rl == 0){
-                                    assert rra == 0;
-                                } else {
-                                    assert rl > 0;
-                                    prev_double_zero_lemma(rl);
-                                    assert rra >= 0;
-                                    assert x1 * x2 >= rfa * rsa;
-                                    assert x1 * x2 >= rra;
-                                    assert rra <= x1 * x2;
-                                    assert leq_double_real(fp_of_double(ra), x1 * x2) == true;
-                                }
-                            }
-                        }
-                        
-                    }
-                case pos_inf: assert false;
-                case neg_inf: assert false;
-                case NaN: assert false;
-            }
-        case pos_inf: assert false;
-        case neg_inf: assert false;
-        case NaN: assert false;
-    
-    }
-    @*/
-
-    //@ assert leq_double_real(fp_of_double(ra), x1 * x2) == true;
     //@ assert leq_real_double(x1 * x2, fp_of_double(rb)) == true;
-    //@ assert leq_double_real(fp_of_double(ra), x1 * x2) == true;
-    //@ between_lemma(fp_of_double(ra),x1 * x2, fp_of_double(rb));
-    //@ assert is_pos_double(fp_of_double(ra)) == true;
 
-    //@ close(pos_interval_pred(result,x1 * x2));
     //@ close(pos_interval_pred(first,x1));
     //@ close(pos_interval_pred(second,x2));
-    return result;
+    return rb;
 }
 
+struct interval *double_mult(struct interval *first, struct interval *second)
+    /*@ requires pos_interval_pred(first,?x1) &*&
+    	pos_interval_pred(second,?x2);@*/
+    /*@ ensures pos_interval_pred(first,x1) &*&
+    	pos_interval_pred(second,x2) &*&
+    	pos_interval_pred(result, x1 * x2) &*&
+    	malloc_block_interval(result); @*/
+{
+    struct interval *result = malloc(sizeof(struct interval));
+    if (result == 0) { abort(); }
+    result->a = double_mult_lower_bound(first, second);
+    result->b = double_mult_upper_bound(first, second);
+    return result;
+    //@ close(pos_interval_pred(result,x1 * x2));
+}
 
-struct interval *double_div(struct interval *first, struct interval *second)
+double double_div_lower_bound(struct interval *first, struct interval *second)
     /*@ requires pos_interval_pred(first,?x1) &*&
         pos_interval_pred(second,?x2) &*&
         x2 != 0;
     @*/
     /*@ ensures pos_interval_pred(first,x1) &*&
     	pos_interval_pred(second,x2) &*&
-    	pos_interval_pred(result, real_div(x1, x2)) &*&
-    	malloc_block_interval(result);
+    	is_pos_double(fp_of_double(result)) == true &*&
+    	leq_double_real(fp_of_double(result), real_div(x1, x2)) == true;
     @*/
 {
     //@ open pos_interval_pred(first,x1);
@@ -592,12 +577,10 @@ struct interval *double_div(struct interval *first, struct interval *second)
     //@ assert second->a |-> ?sa;
     //@ assert second->b |-> ?sb;
     //@ real_of_int_lemma_UNSAFE(0,0);
-    struct interval *result = malloc(sizeof(struct interval));
-    if (result == 0) { abort(); }
     double l = first->a / second->b;
+    double ra;
     if (l == 0){
-        result->a = 0;
-        //@ assert result->a |-> ?ra;
+        ra = 0;
         //@ assert fp_of_double(sa) == real_double(?rsa);
         //@ assert fp_of_double(fa) == real_double(?rfa);
         //@ assert x1 >= 0;
@@ -606,8 +589,7 @@ struct interval *double_div(struct interval *first, struct interval *second)
         //@ assert real_div(x1,x2) >= 0;
         
      } else {
-        result->a = nextafter(l, -INFINITY);
-        //@ assert result->a |-> ?ra;	    
+        ra = nextafter(l, -INFINITY);
         //@ assert fp_of_double(fa) == real_double(?rfa);
         //@ assert fp_of_double(sa) == real_double(?rsa);
         /*@
@@ -624,9 +606,6 @@ struct interval *double_div(struct interval *first, struct interval *second)
                }
                assert rfa > rsb * max_dbl;
                if (rsb == 0){
-                   assert fp_of_double(sa) == real_double(?rsa);
-                   assert rsa == 0;
-                   assert x2 == 0;
                    assert false;
                }
                assert rsb > 0;
@@ -687,15 +666,34 @@ struct interval *double_div(struct interval *first, struct interval *second)
         }
         @*/
     }
-    //@ assert result->a |-> ?ra;
     //@ assert leq_double_real(fp_of_double(ra), real_div(x1, x2)) == true;
     //@ assert is_pos_double(fp_of_double(ra)) == true;
+    //@ close(pos_interval_pred(first,x1));
+    //@ close(pos_interval_pred(second,x2));
+    return ra;
+}
+
+double double_div_upper_bound(struct interval *first, struct interval *second)
+    /*@ requires pos_interval_pred(first,?x1) &*&
+        pos_interval_pred(second,?x2) &*&
+        x2 != 0;
+    @*/
+    /*@ ensures pos_interval_pred(first,x1) &*&
+    	pos_interval_pred(second,x2) &*&
+    	leq_real_double(real_div(x1, x2), fp_of_double(result)) == true;
+    @*/
+{
+    //@ open pos_interval_pred(first,x1);
+    //@ open pos_interval_pred(second,x2);
+    //@ assert first->a |-> ?fa &*& fp_of_double(fa) == real_double(?rfa);
+    //@ assert first->b |-> ?fb;
+    //@ assert second->a |-> ?sa &*& fp_of_double(sa) == real_double(?rsa);
+    //@ assert second->b |-> ?sb;
+    //@ real_of_int_lemma_UNSAFE(0,0);
     double u = first->b / second->a;
+    double rb;
     if (isnan(u)){
-        result->b = 0;
-        //@ assert result->b |-> ?rb;
-        //@ assert fp_of_double(fa) == real_double(?rfa);
-        //@ assert fp_of_double(sa) == real_double(?rsa);
+        rb = 0;
         //@ assert fp_of_double(fb) == real_double(?rfb);
         //@ assert rfb == 0;
         //@ assert rsa == 0;
@@ -703,21 +701,31 @@ struct interval *double_div(struct interval *first, struct interval *second)
         //@ assert x1 == 0;
         //@ assert x2 > 0;
         //@ real_div_lemma(x1,x2,real_div(x1,x2));
+        //@ assert 0 == x2 * real_div(x1, x2);
+        /*@
+        if (real_div(x1, x2) > 0) {
+            cancellation_lemma2(x2, 0, real_div(x1, x2));
+        } else if (real_div(x1, x2) < 0) {
+            cancellation_lemma2(x2, real_div(x1, x2), 0);
+        } else {
+        }
+        @*/
         //@ assert real_div(x1,x2) == 0;
         //@ assert leq_real_double(real_div(x1, x2), fp_of_double(rb)) == true;
     } else {
-        result->b = nextafter(u, INFINITY);
-        //@ assert result->b |-> ?rb;
-        //@ assert fp_of_double(sa) == real_double(?rsa);
+        rb = nextafter(u, INFINITY);
         /*@
         if (fp_of_double(fb) == pos_inf){
         
         } else {
             assert fp_of_double(fb) == real_double(?rfb);
+            assert 0 <= rfb;
             if (fp_of_double(u) == pos_inf){
             } else if (fp_of_double(u) == neg_inf){
-                assert real_div(rfb,rsa) <= min_dbl;
+                assert rsa > 0;
                 real_div_lemma(rfb,rsa,real_div(rfb,rsa));
+                assert rfb == rsa * real_div(rfb, rsa);
+                cancellation_lemma2(rsa, real_div(rfb, rsa), 0);
                 assert false;
             } else {
                 assert fp_of_double(u) == real_double(?ru);
@@ -726,6 +734,10 @@ struct interval *double_div(struct interval *first, struct interval *second)
                 } else {
                     assert fp_of_double(rb) == real_double(?rrb);
                     real_div_lemma(rfb,rsa,real_div(rfb,rsa));
+                    if (real_div(rfb, rsa) < min_dbl) {
+                        cancellation_lemma2(rsa, real_div(rfb, rsa), 0);
+                        assert false;
+                    }
                     assert ru >= round_down_double(real_div(rfb,rsa));
                     assert rrb == next_double(ru);
                     next_double_transitivity_lemma(round_down_double(real_div(rfb,rsa)),ru);
@@ -733,6 +745,9 @@ struct interval *double_div(struct interval *first, struct interval *second)
                     next_round_down_lemma(real_div(rfb,rsa),next_double(round_down_double(real_div(rfb,rsa))));
                     assert rrb >= real_div(rfb,rsa);
                     division_lemma(rfb,rsa,x2);
+                    assert real_div(rfb, rsa) >= real_div(rfb, x2);
+                    assert rrb >= real_div(rfb,rsa);
+                    leq_transitivity_lemma(real_div(rfb, x2), real_div(rfb, rsa), rrb);
                     assert rrb >= real_div(rfb,x2);
                     division_lemma2(x2,x1,rfb);
                     assert rrb >= real_div(x1,x2);   
@@ -742,14 +757,26 @@ struct interval *double_div(struct interval *first, struct interval *second)
         @*/  
         //@ assert leq_real_double(real_div(x1, x2), fp_of_double(rb)) == true;
     }
-    //@ assert result->b |-> ?rb;
-    //@ assert leq_double_real(fp_of_double(ra), real_div(x1, x2)) == true;
-    //@ assert leq_real_double(real_div(x1, x2), fp_of_double(rb)) == true;
-    //@ assert is_pos_double(fp_of_double(ra)) == true;
-    //@ close(pos_interval_pred(result,real_div(x1, x2)));
     //@ close(pos_interval_pred(first,x1));
     //@ close(pos_interval_pred(second,x2));
-    return result;
+    return rb;
 }
 
-#endif
+struct interval *double_div(struct interval *first, struct interval *second)
+    /*@ requires pos_interval_pred(first,?x1) &*&
+        pos_interval_pred(second,?x2) &*&
+        x2 != 0;
+    @*/
+    /*@ ensures pos_interval_pred(first,x1) &*&
+    	pos_interval_pred(second,x2) &*&
+    	pos_interval_pred(result, real_div(x1, x2)) &*&
+    	malloc_block_interval(result);
+    @*/
+{
+    struct interval *result = malloc(sizeof(struct interval));
+    if (result == 0) { abort(); }
+    result->a = double_div_lower_bound(first, second);
+    result->b = double_div_upper_bound(first, second);
+    return result;
+    //@ close(pos_interval_pred(result,real_div(x1, x2)));
+}

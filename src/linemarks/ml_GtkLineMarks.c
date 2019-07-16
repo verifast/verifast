@@ -47,3 +47,24 @@ CAMLprim value ml_gtk_line_marks_table_show_in_source_view(value table, value vi
         GTK_SOURCE_VIEW(*(GObject **)Data_custom_val(view)));
     return Val_unit;
 }
+
+CAMLprim value ml_source_gutter_text_column_new(value sizeText, value xalign) {
+    return Val_GObject(&(source_gutter_text_column_new(String_val(sizeText), (float)Double_val(xalign))->parent_instance));
+}
+
+CAMLprim value ml_source_gutter_text_column_clear(value column) {
+    source_gutter_text_column_clear(*(SourceGutterTextColumn **)Data_custom_val(column));
+    return Val_unit;
+}
+
+CAMLprim value ml_source_gutter_text_column_add_line(value column, value line) {
+    source_gutter_text_column_add_line(*(SourceGutterTextColumn **)Data_custom_val(column), String_val(line));
+    return Val_unit;
+}
+
+CAMLprim value ml_source_gutter_text_column_show_in_source_view(value column, value view) {
+    source_gutter_text_column_show_in_source_view(
+        *(SourceGutterTextColumn **)Data_custom_val(column),
+        GTK_SOURCE_VIEW(*(GObject **)Data_custom_val(view)));
+    return Val_unit;
+}

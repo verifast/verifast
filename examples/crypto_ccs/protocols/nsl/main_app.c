@@ -85,7 +85,7 @@ predicate_family_instance pthread_run_post(sender_t)(void *data, any info) =
                         cons(int_value(r_id),
                           cons(pointer_value(s_nonce),
                             cons(pointer_value(r_nonce),
-                                 nil))))))))))));
+                                 nil))))))))));
 @*/
 
 void *sender_t(void* data) //@ : pthread_run_joinable
@@ -128,7 +128,7 @@ predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) =
                         cons(int_value(r_id),
                           cons(pointer_value(s_nonce),
                             cons(pointer_value(r_nonce),
-                                 nil))))))))))));
+                                 nil))))))))));
                          
 predicate_family_instance pthread_run_post(receiver_t)(void *data, any info) =
   nsl_args_sender(data, ?sender) &*&
@@ -161,7 +161,7 @@ predicate_family_instance pthread_run_post(receiver_t)(void *data, any info) =
                         cons(int_value(r_id),
                           cons(pointer_value(s_nonce),
                             cons(pointer_value(r_nonce),
-                                 nil))))))))))));
+                                 nil))))))))));
 @*/
 
 void *receiver_t(void* data) //@ : pthread_run_joinable
