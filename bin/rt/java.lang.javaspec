@@ -487,3 +487,11 @@ public interface Iterable<T> {
     
     @*/
 }
+
+public class Math {
+
+    public static double random();
+        //@ requires true;
+        //@ ensures true;
+
+}

@@ -300,6 +300,7 @@ cd examples
     verifast_both -c Downcast.java
     verifast_both -c DowncastInfo.java
     verifast_both -c -allow_assume FailboxedQueueExample.java
+    verifast_both -c FloatingPoint.java
     cd ghost_imports
       mysh < ghost_imports.mysh
     cd ..

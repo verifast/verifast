@@ -2619,6 +2619,18 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let floating_point_fun_call_expr funcmap l t fun_name args =
     let prefix = identifier_string_of_type t in
+    if language = Java then
+      let className = "verifast.internal.FloatingPoint" in
+      let methodName = prefix ^ "_" ^ fun_name in
+      let signature = List.map (function (TypedExpr (e, t)) -> t) args in
+      begin match try_assoc className classmap0 with
+        None -> static_error l ("Internal error: class '" ^ className ^ "' not found") None
+      | Some {cmeths} ->
+        if not (List.mem_assoc (methodName, signature) cmeths) then
+          static_error l (Printf.sprintf "Internal error: no method '%s(%s)' found in class '%s'" methodName (String.concat ", " (List.map string_of_type signature)) className) None
+      end;
+      WMethodCall (l, className, methodName, signature, args, Static)
+    else
     let g = "vf__" ^ prefix ^ "_" ^ fun_name in
     if not (List.mem_assoc g funcmap) then static_error l "Must include header <math.h> when using floating-point operations." None;
     WFunCall (l, g, [], args)
