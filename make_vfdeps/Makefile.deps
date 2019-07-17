@@ -142,12 +142,12 @@ clean::
 
 # ---- Z3 ----
 
-Z3_VERSION=4.5.0
+Z3_VERSION=4.8.5
 Z3_BINARY=$(PREFIX)/bin/z3
-Z3_DIR=z3-z3-$(Z3_VERSION)
+Z3_DIR=z3-Z3-$(Z3_VERSION)
 
 z3-$(Z3_VERSION).tar.gz:
-	curl -Lfo z3-$(Z3_VERSION).tar.gz https://github.com/Z3Prover/z3/archive/z3-$(Z3_VERSION).tar.gz
+	curl -Lfo z3-$(Z3_VERSION).tar.gz https://github.com/Z3Prover/z3/archive/Z3-$(Z3_VERSION).tar.gz
 
 $(Z3_DIR): z3-$(Z3_VERSION).tar.gz
 	tar xzf z3-$(Z3_VERSION).tar.gz

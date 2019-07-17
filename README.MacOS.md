@@ -18,9 +18,9 @@ To install the software needed to build VeriFast, first install Xcode (at least 
   - Ocamlbuild (to build Camlp4)
   - Camlp4 (an OCaml preprocessor, for the streams notation used in VeriFast's parser)
   - Lablgtk (OCaml bindings to the GTK+ GUI toolkit)
-  - Z3 4.5.0 (a powerful theorem prover, including OCaml bindings)
+  - Z3 4.8.5 (a powerful theorem prover, including OCaml bindings)
   
-  It does so by downloading a [VFDeps](http://people.cs.kuleuven.be/~bart.jacobs/verifast/vfdeps-17.12-el-capitan.txz) package from my (Bart Jacobs') homepage with pre-compiled versions of these dependencies. I created this package by running the [make_vfdeps/Makefile.deps](https://github.com/verifast/verifast/blob/master/make_vfdeps/Makefile.deps) Makefile using GNU make. Note: these binaries are location-dependent. They need to be below `/usr/local/vfdeps-17.12`; that is, extract the archive into `/usr/local`. You may need to run `sudo chown -R $(whoami):admin /usr/local` to get write access to that directory.
+  It does so by downloading a [VFDeps](http://people.cs.kuleuven.be/~bart.jacobs/verifast/vfdeps-19.07-macos.txz) package from my (Bart Jacobs') homepage with pre-compiled versions of these dependencies. I created this package by running the [make_vfdeps/Makefile.deps](https://github.com/verifast/verifast/blob/master/make_vfdeps/Makefile.deps) Makefile using GNU make. Note: these binaries are location-dependent. They need to be below `/usr/local/vfdeps-19.07`; that is, extract the archive into `/usr/local`. You may need to run `sudo chown -R $(whoami):admin /usr/local` to get write access to that directory. See [make_vfdeps/README.md](make_vfdeps/README.md) for more details on how to build the VFDeps package.
 
 Building VeriFast
 -----------------
