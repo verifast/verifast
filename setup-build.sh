@@ -35,11 +35,10 @@ elif [ $(uname -s) = "Darwin" ]; then
   brewinstall gtksourceview
   brewinstall vala
   export PKG_CONFIG_PATH=/opt/X11/lib/pkgconfig
-  sudo mkdir /usr/local/vfdeps-19.07
+  VFDEPS_NAME=vfdeps-104ff52
+  sudo mkdir /usr/local/$VFDEPS_NAME
   sudo chown -R $(whoami):admin /usr/local/*
-  cd /usr/local && curl -Lf http://people.cs.kuleuven.be/~bart.jacobs/verifast/vfdeps-19.07-macos.txz | tar xj
-  export PATH=/usr/local/vfdeps-19.07/bin:$PATH
-  export DYLD_LIBRARY_PATH=/usr/local/vfdeps-19.07/lib:$DYLD_LIBRARY_PATH
+  cd /usr/local && curl -Lf https://dl.bintray.com/verifast/verifast/$VFDEPS_NAME-macos.txz | tar xj
   
 else
   echo "Your OS is not supported by this script."
