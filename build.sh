@@ -9,9 +9,10 @@ if [ $(uname -s) = "Linux" ]; then
 
 elif [ $(uname -s) = "Darwin" ]; then
 
+    . ./config.sh
     export PKG_CONFIG_PATH=/usr/local/opt/libffi/lib/pkgconfig
-    export PATH=/usr/local/vfdeps-19.07/bin:$PATH
-    export DYLD_LIBRARY_PATH=/usr/local/vfdeps-19.07/lib:$DYLD_LIBRARY_PATH
+    export PATH=/usr/local/$VFDEPS_NAME/bin:$PATH
+    export DYLD_LIBRARY_PATH=/usr/local/$VFDEPS_NAME/lib:$DYLD_LIBRARY_PATH
   
 else
 

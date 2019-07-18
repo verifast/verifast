@@ -17,6 +17,7 @@ if [ $(uname -s) = "Linux" ]; then
   cd /tmp && curl -Lf http://people.cs.kuleuven.be/~bart.jacobs/verifast/vfdeps-ocaml-4.06.0-trusty.tar.xz | tar xj
 
 elif [ $(uname -s) = "Darwin" ]; then
+  . ./config.sh
   brew update
 
   if [ $TRAVIS = "true" ]; then
@@ -35,7 +36,6 @@ elif [ $(uname -s) = "Darwin" ]; then
   brewinstall gtksourceview
   brewinstall vala
   export PKG_CONFIG_PATH=/opt/X11/lib/pkgconfig
-  VFDEPS_NAME=vfdeps-104ff52
   sudo mkdir /usr/local/$VFDEPS_NAME
   sudo chown -R $(whoami):admin /usr/local/*
   cd /usr/local && curl -Lf https://dl.bintray.com/verifast/verifast/$VFDEPS_NAME-macos.txz | tar xj
