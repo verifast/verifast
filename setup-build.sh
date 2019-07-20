@@ -8,16 +8,17 @@
 set -e # Stop as soon as a command fails.
 set -x # Print what is being executed.
 
+. ./config.sh
+
 if [ $(uname -s) = "Linux" ]; then
   sudo apt-get update
   sudo apt-get install -y --no-install-recommends \
        git wget ca-certificates make m4 \
        gcc patch unzip libgtk2.0-dev \
        valac libgtksourceview2.0-dev
-  cd /tmp && curl -Lf http://people.cs.kuleuven.be/~bart.jacobs/verifast/vfdeps-ocaml-4.06.0-trusty.tar.xz | tar xj
+  cd /tmp && curl -Lf https://dl.bintray.com/verifast/verifast/$VFDEPS_NAME-linux.txz | tar xj
 
 elif [ $(uname -s) = "Darwin" ]; then
-  . ./config.sh
   brew update
 
   if [ $TRAVIS = "true" ]; then
