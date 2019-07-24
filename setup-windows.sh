@@ -8,7 +8,7 @@ dl_and_unzip(){
   hash="$2"
   wget --progress=dot:mega -c "$url"
   echo "$hash *$filename" | sha1sum -c || exit 1
-  7z -y x "$filename"
+  tar xjf "$filename"
 }
 
 
