@@ -18,7 +18,7 @@ set -x # Print what is being executed.
 
 cd /cygdrive/c
 
-dl_and_unzip http://www.cs.kuleuven.be/~bartj/verifast/vfdeps-17.12-win32.zip 416bb30e96d5f54543fe53ef83a9b44f28cc1eb6
+dl_and_unzip https://dl.bintray.com/verifast/verifast/vfdeps-649a3d5-win.txz 067fdf4e6fc69458bd651c0ea87a97bd96058262
 
-echo 'export PATH="/cygdrive/c/vfdeps-17.12/bin:$PATH"' >> ~/.bash_profile
-      export PATH="/cygdrive/c/vfdeps-17.12/bin:$PATH"
+echo 'export PATH="/cygdrive/c/vfdeps/bin:$PATH"' >> ~/.bash_profile
+      export PATH="/cygdrive/c/vfdeps/bin:$PATH"
