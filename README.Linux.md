@@ -24,14 +24,14 @@ To install the software needed to build VeriFast, run [setup-build.sh](https://g
   - Ocamlbuild (to build Camlp4)
   - Camlp4 (an OCaml preprocessor, for the streams notation used in VeriFast's parser)
   - Lablgtk (OCaml bindings to the GTK+ GUI toolkit)
-  - Z3 4.5.0 (a powerful theorem prover, including OCaml bindings)
+  - Z3 4.8.5 (a powerful theorem prover, including OCaml bindings)
   
-  It does so by downloading a [VFDeps](http://people.cs.kuleuven.be/~bart.jacobs/verifast/vfdeps-ocaml-4.06.0-trusty.tar.xz) package from my (Bart Jacobs') homepage with pre-compiled versions of these dependencies. I created this package by running the [make_vfdeps/Makefile.deps](https://github.com/verifast/verifast/blob/master/make_vfdeps/Makefile.deps) Makefile using GNU make. Note: these binaries are location-dependent. They need to be below `/tmp/vfdeps`; that is, extract the archive into `/tmp`. (You can also extract it elsewhere and then create a symlink called `/tmp/vfdeps` that points there.)
+  It does so by downloading a [VFDeps](https://github.com/verifast/vfdeps) package with pre-compiled versions of these dependencies. Note: these binaries are location-dependent. They need to be below `/tmp/vfdeps-$VERSION`, where `$VERSION` is the version (Git hash) of the VFDeps package; that is, extract the archive into `/tmp`. (You can also extract it elsewhere and then create a symlink called `/tmp/vfdeps-$VERSION` that points there.) To see which version is currently being used, see [config.sh](https://github.com/verifast/verifast/blob/master/config.sh).
 
 Building VeriFast
 -----------------
 
 To build VeriFast:
 1. `cd src`
-2. Make sure all dependencies are in your `PATH`. For example: `export PATH=/tmp/vfdeps/bin:$PATH`.
+2. Make sure all dependencies are in your `PATH`. For example: `export PATH=/tmp/vfdeps-$VERSION/bin:$PATH`.
 3. `make`
