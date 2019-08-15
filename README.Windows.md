@@ -23,9 +23,9 @@ To install the software needed to build VeriFast, run [setup-windows.bat](https:
   - Camlp4 (an OCaml preprocessor, for the streams notation used in VeriFast's parser)
   - GTK+ (a cross-platform GUI toolkit)
   - Lablgtk (OCaml bindings to GTK+)
-  - Z3 4.5.0 (a powerful theorem prover, including OCaml bindings)
+  - Z3 4.8.5 (a powerful theorem prover, including OCaml bindings)
   
-  It does so by downloading a [VFDeps](http://www.cs.kuleuven.be/~bartj/verifast/vfdeps-17.12-win32.zip) package from my (Bart Jacobs') homepage with pre-compiled versions of these dependencies. I created this package by running the [make_vfdeps_win32/Makefile](https://github.com/verifast/verifast/blob/master/make_vfdeps_win32/Makefile) Makefile using GNU make. Note: these binaries are location-dependent. They need to be below `C:\vfdeps-17.12`; that is, extract the archive into `C:\`.
+  It does so by downloading a [VFDeps](https://github.com/verifast/vfdeps-win) package with pre-compiled versions of these dependencies. To see which version is currently being used, see [setup-windows.sh](https://github.com/verifast/verifast/blob/master/setup-windows.sh). Note: these binaries are location-dependent. They need to be below `C:\vfdeps`; that is, extract the archive into `C:\`.
 
 Building VeriFast
 -----------------
@@ -33,6 +33,6 @@ Building VeriFast
 To build VeriFast:
 1. Open a Cygwin terminal.
 1. `cd /cygdrive/c/my-path-to-verifast/src`
-2. Make sure all dependencies are in your `PATH`. For example: `export PATH="/cygdrive/c/vfdeps-17.12/bin:$PATH"`.
-3. Tell the VeriFast build script where the GTK+ binaries are: `export GTK=/cygdrive/c/vfdeps-17.12`.
+2. Make sure all dependencies are in your `PATH`. For example: `export PATH="/cygdrive/c/vfdeps/bin:$PATH"`.
+3. Tell the VeriFast build script where the GTK+ binaries are: `export GTK=/cygdrive/c/vfdeps`.
 4. `make`
