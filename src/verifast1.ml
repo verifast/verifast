@@ -1840,8 +1840,18 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     iter' ([],isfuncs,[]) ps
   
   let () =
+    (* Ranks:
+       -1 = finished checking; the inductive type is well-defined
+        0 = not yet being checked
+        n when n > 0 = being checked; n = depth of recursive check
+            the inductive at rank n + 1 appears in the definition of the inductive at rank n at a positive or negative position
+     *)
     let welldefined_map = List.map (fun (i, info) -> let ec = ref (`EqClass (0, [])) in let ptr = ref ec in ec := `EqClass (0, [ptr]); (i, (info, ptr))) inductivemap1 in
-    let merge_ecs ec0 ec1 =
+    let get_rank ptr = let `EqClass (rank, mems) = !(!ptr) in rank in
+    let set_rank ptr rank = let `EqClass (_, mems) = !(!ptr) in !ptr := `EqClass (rank, mems) in
+    let merge_ecs ptr0 ptr1 =
+      let ec0 = !ptr0 in
+      let ec1 = !ptr1 in
       let `EqClass (ecrank0, ecmems0) = !ec0 in
       let `EqClass (ecrank1, ecmems1) = !ec1 in
       if ecrank0 <> ecrank1 then begin
@@ -1860,15 +1870,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
          - For any two nodes in the subgraph that is to the left of the current path, they are mutually reachable iff they are in the same equivalence class (and consequently have the same rank)
          - The ranks of the nodes on the current path are always (non-strictly) increasing
        *)
-      let pred_ptrs = ptr::pred_ptrs in
-      let ec = !ptr in
-      let `EqClass (ecrank, ecmems) = !ec in
-      if ecrank = -1 then
+      if get_rank ptr = -1 then
         ()
       else
       begin
-        assert (ecrank = 0 && match ecmems with [ptr'] when ptr' == ptr -> true | _ -> false);
-        ec := `EqClass (rank, ecmems);
+        assert (get_rank ptr = 0);
+        set_rank ptr rank;
+        let pred_ptrs = ptr::pred_ptrs in
         let rec check_ctor (ctorname, (_, (_, _, _, parameter_names_and_types, _))) =
           let rec check_type negative pt =
             match pt with
@@ -1880,8 +1888,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               begin match try_assoc i0 welldefined_map with
                 None -> ()
               | Some (info0, ptr0) ->
-                let ec0 = !ptr0 in
-                let `EqClass (ecrank0, ecmems0) = !ec0 in
+                let ecrank0 = get_rank ptr0 in
                 let negative_rank = if negative then rank else negative_rank in
                 if ecrank0 > 0 then begin
                   if ecrank0 <= negative_rank then static_error l "This inductive datatype is not well-defined; it occurs recursively in a negative position." None;
@@ -1889,10 +1896,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     match pred_ptrs with
                       [] -> ()
                     | ptr1::pred_ptrs ->
-                      let ec1 = !ptr1 in
-                      let `EqClass (ecrank1, ecmems1) = !ec1 in
-                      if ecrank0 < ecrank1 then begin
-                        merge_ecs ec0 ec1;
+                      if ecrank0 < get_rank ptr1 then begin
+                        merge_ecs ptr0 ptr1;
                         merge_preds pred_ptrs
                       end
                   in
@@ -1912,10 +1917,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         List.iter check_ctor ctors;
         (* If this node is the leader of an equivalence class, then this equivalence class has now been proven to be well-defined. *)
-        let ec = !ptr in
-        let `EqClass (ecrank, ecmems) = !ec in
-        if ecrank = rank then
-          ec := `EqClass (-1, ecmems)
+        if get_rank ptr = rank then set_rank ptr (-1)
       end
     in
     List.iter (check_welldefined 1 0 []) welldefined_map
