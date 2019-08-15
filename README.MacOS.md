@@ -20,13 +20,13 @@ To install the software needed to build VeriFast, first install Xcode (at least 
   - Lablgtk (OCaml bindings to the GTK+ GUI toolkit)
   - Z3 4.8.5 (a powerful theorem prover, including OCaml bindings)
   
-  It does so by downloading a [VFDeps](http://people.cs.kuleuven.be/~bart.jacobs/verifast/vfdeps-19.07-macos.txz) package from my (Bart Jacobs') homepage with pre-compiled versions of these dependencies. I created this package by running the [make_vfdeps/Makefile.deps](https://github.com/verifast/verifast/blob/master/make_vfdeps/Makefile.deps) Makefile using GNU make. Note: these binaries are location-dependent. They need to be below `/usr/local/vfdeps-19.07`; that is, extract the archive into `/usr/local`. You may need to run `sudo chown -R $(whoami):admin /usr/local` to get write access to that directory. See [make_vfdeps/README.md](make_vfdeps/README.md) for more details on how to build the VFDeps package.
+  It does so by downloading a [VFDeps](https://github.com/verifast/vfdeps) package with pre-compiled versions of these dependencies. Note: these binaries are location-dependent. They need to be below `/usr/local/vfdeps-$VERSION`, where `$VERSION` is the version (Git hash) of the VFDeps package; that is, extract the archive into `/usr/local`. To see which version is currently being used, see [config.sh](https://github.com/verifast/verifast/blob/master/config.sh).
 
 Building VeriFast
 -----------------
 
 To build VeriFast:
 1. `cd src`
-2. Make sure all dependencies are in your `PATH`. For example: `export PATH=/usr/local/vfdeps-17.12/bin:$PATH`.
-3. Make sure the dependencies' DLLs can be found by the macOS DLL loader. For example: `export DYLD_LIBRARY_PATH=/usr/local/vfdeps-17.12/lib:$DYLD_LIBRARY_PATH`.
+2. Make sure all dependencies are in your `PATH`. For example: `export PATH=/usr/local/vfdeps-$VERSION/bin:$PATH`.
+3. Make sure the dependencies' DLLs can be found by the macOS DLL loader. For example: `export DYLD_LIBRARY_PATH=/usr/local/vfdeps-$VERSION/lib:$DYLD_LIBRARY_PATH`.
 4. `make`
