@@ -117,11 +117,26 @@ type type_ = (* ?type_ *)
   | HandleIdType (* handle type, for shared boxes *)
   | AnyType (* supertype of all inductive datatypes; useful in combination with predicate families *)
   | TypeParam of string (* a reference to a type parameter declared in the enclosing datatype/function/predicate *)
-  | InferredType of < > * type_ option ref (* inferred type, is unified during type checking. '< >' is the type of objects with no methods. This hack is used to prevent types from incorrectly comparing equal, as in InferredType (ref None) = InferredType (ref None). Yes, ref None = ref None. But object end <> object end. *)
+  | InferredType of < > * inferred_type_state ref (* inferred type, is unified during type checking. '< >' is the type of objects with no methods. This hack is used to prevent types from incorrectly comparing equal, as in InferredType (ref Unconstrained) = InferredType (ref Unconstrained). Yes, ref Unconstrained = ref Unconstrained. But object end <> object end. *)
   | ClassOrInterfaceName of string (* not a real type; used only during type checking *)
   | PackageName of string (* not a real type; used only during type checking *)
   | RefType of type_ (* not a real type; used only for locals whose address is taken *)
   | AbstractType of string
+and inferred_type_state =
+    Unconstrained
+  | ContainsAnyConstraint of bool (* allow the type to contain 'any' in positive positions *)
+  | EqConstraint of type_
+
+let inferred_type_constraint_le c1 c2 =
+  match c1, c2 with
+    _, Unconstrained -> true
+  | Unconstrained, _ -> false
+  | _, ContainsAnyConstraint true -> true
+  | ContainsAnyConstraint true, _ -> false
+  | ContainsAnyConstraint false, ContainsAnyConstraint false -> true
+
+let inferred_type_constraint_meet c1 c2 =
+  if inferred_type_constraint_le c1 c2 then c1 else c2
 
 type integer_limits = {max_unsigned_big_int: big_int; min_signed_big_int: big_int; max_signed_big_int: big_int}
 

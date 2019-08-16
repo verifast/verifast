@@ -2,7 +2,7 @@
 
 /*@
 
-inductive set = set(fixpoint(any, bool) f);
+inductive set<t> = set(t f);
 
 fixpoint bool Raux(any s, fixpoint(any, bool) f) {
     return

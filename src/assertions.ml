@@ -92,7 +92,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | VarPat(_, x) -> cont (x :: ghostenv) env (List.assoc x env)
     | DummyPat -> let t = get_unique_var_symb_ "dummy" tp ghost in cont ghostenv env t
     | WCtorPat (l, i, targs, g, ts0, ts, pats) ->
-      let (_, inductive_tparams, ctormap, _) = List.assoc i inductivemap in
+      let (_, inductive_tparams, ctormap, _, _) = List.assoc i inductivemap in
       let (_, (_, _, _, _, (symb, _))) = List.assoc g ctormap in
       evalpats ghostenv env pats ts ts0 $. fun ghostenv env vs ->
       cont ghostenv env (prover_convert_term (ctxt#mk_app symb vs) tp0 tp)
@@ -366,7 +366,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         cont_with_post h ghostenv env post
       in
       let t = ev e in
-      let (_, tparams, ctormap, _) = List.assoc i inductivemap in
+      let (_, tparams, ctormap, _, _) = List.assoc i inductivemap in
       let rec iter cs =
         match cs with
           WSwitchAsnClause (lc, cn, pats, patsInfo, p)::cs ->
@@ -452,7 +452,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | SrcPat DummyPat -> cont ghostenv env env'
     | SrcPat (WCtorPat (l, i, targs, g, ts0, ts, pats)) ->
       let t = prover_convert_term t tp tp0 in
-      let (_, inductive_tparams, ctormap, _) = List.assoc i inductivemap in
+      let (_, inductive_tparams, ctormap, _, _) = List.assoc i inductivemap in
       let cont () =
         let (_, (_, _, _, _, (symb, _))) = List.assoc g ctormap in
         let vs = List.map2 (fun tp0 tp -> let v = get_unique_var_symb "value" tp in (v, prover_convert_term v tp tp0)) ts0 ts in
@@ -1057,7 +1057,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       let env' = [] in
       let t = ev e in
-      let (_, tparams, ctormap, _) = List.assoc i inductivemap in
+      let (_, tparams, ctormap, _, _) = List.assoc i inductivemap in
       let rec iter cs =
         match cs with
           WSwitchAsnClause (lc, cn, pats, patsInfo, p)::cs ->

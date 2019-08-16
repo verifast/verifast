@@ -87,3 +87,9 @@ Language-independent
   Indeed, we first prove `P()`, by case analysis on `P == False`. If `P == False`, then we simply close `P()`. Otherwise, we have that `P()` is equivalent to `False()` so, by extensionality,
   `P == False`. Now that we have `P()`, we obtain `False()` by substitution. Then, opening `False()` finishes the proof.
   Indeed, in VeriFast we can prove `P != False`, by contradiction.
+
+## Meaning of logical types
+
+- The values of a predicate type `predicate(T1, ..., TN)` are the predicate names with matching parameter types, and the applications of predicate constructors with matching parameter lists to appropriate predicate constructor argument lists. For this set to be well-defined, we do not allow predicate types to appear in negative positions in predicate constructor parameter types.
+- The values of type 'any' are the values of the inductive types that themselves contain type 'any' only in positive positions.
+- We allow predicate constructor parameter types to contain type 'any', but only in positive positions, and we consider an inductive type to be a subtype of 'any' only if it does not contain predicate types in negative positions.

@@ -98,7 +98,7 @@ let rec sexpr_of_type_ (t : type_) : sexpression =
     | TypeParam (s)           -> List [ Symbol "type-param";
                                         Symbol s ]
     | InferredType (_, i)     -> List [ Symbol "type-inferred";
-                                        sexpr_of_option sexpr_of_type_ !i]
+                                        sexpr_of_inferred_type_state !i]
     | ClassOrInterfaceName (s)-> List [ Symbol "type-class-or-interface-name";
                                         Symbol s ]
     | PackageName (s)         -> List [ Symbol "type-package-name";
@@ -107,6 +107,10 @@ let rec sexpr_of_type_ (t : type_) : sexpression =
                                         sexpr_of_type_ t ]
     | AbstractType (s)         -> List [ Symbol "type-abstract";
                                         Symbol s ]
+and sexpr_of_inferred_type_state = function
+    Unconstrained -> List [ Symbol "inferred-type-state-unconstrained" ]
+  | ContainsAnyConstraint allowContainsAnyPositive -> List [ Symbol "inferred-type-state-contains-any-constraint"; sexpr_of_bool allowContainsAnyPositive ]
+  | EqConstraint t -> List [ Symbol "inferred-type-state-eq-constraint"; sexpr_of_type_ t ]
 
 let rec sexpr_of_type_expr : type_expr -> sexpression = function
   | StructTypeExpr (_, name, _)  -> 

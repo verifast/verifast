@@ -2015,14 +2015,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | Real ->
           let [(_, (_, _, _, _, predsymb, inputParamCount, _))] = ft_predfammaps in
           let pats = TermPat fterm::List.map (fun _ -> SrcPat DummyPat) ftxmap in
-          let targs = List.map (fun _ -> InferredType (object end, ref None)) fttparams in
+          let targs = List.map (fun _ -> InferredType (object end, ref Unconstrained)) fttparams in
           consume_chunk rules h [] [] [] l (predsymb, true) targs real_unit dummypat inputParamCount pats $. fun (Chunk (_, targs, _, _, _) as c) h coef (_::args) _ _ _ _ ->
           consume_call_perm h $. fun h ->
           check_call targs h args $. fun h env retval ->
           cont (c::h) env retval
         | Ghost ->
           let [(_, (_, _, _, _, predsymb, inputParamCount, _))] = ft_predfammaps in
-          let targs = List.map (fun _ -> InferredType (object end, ref None)) fttparams in
+          let targs = List.map (fun _ -> InferredType (object end, ref Unconstrained)) fttparams in
           let pats = TermPat fterm::List.map (fun _ -> SrcPat DummyPat) ftxmap in
           consume_chunk rules h [] [] [] l (predsymb, true) targs real_unit dummypat inputParamCount pats $. fun chunk h coef (_::args) _ _ _ _ ->
           if leminfo_is_lemma leminfo && not (definitely_equal coef real_unit) then assert_false h env l "Full lemma function pointer chunk required." None;
