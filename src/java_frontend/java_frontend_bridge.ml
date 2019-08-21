@@ -12,7 +12,7 @@ let load _ =
         let error_message =
           "\nYou specified the option -javac to use the STANCE Java frontend. " ^
           Printf.sprintf "However, to use the STANCE Java frontend, you need to retrieve the file %s from: \n" ast_server_filename ^
-              "\t https://bitbucket.org/gijsv/stance-java-frontend \n" ^
+              "\t https://doi.org/10.5281/zenodo.3373250 \n" ^
           "Then you must set the environment variable VERIFAST_JAVA_AST_SERVER as follows: \n" ^
               Printf.sprintf "\t export VERIFAST_JAVA_AST_SERVER=\"java -jar path/to/%s\" \n" ast_server_filename
         in

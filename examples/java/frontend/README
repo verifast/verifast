@@ -4,7 +4,7 @@ Use the Java frontend:
 To execute the tests in this folder,
 you need to retrieve the file ast_server.jar from:
 
-  https://bitbucket.org/gijsv/stance-java-frontend
+  https://doi.org/10.5281/zenodo.3373250
 
 Then you must set the environment variable 
 VERIFAST_JAVA_AST_SERVER as follows:
