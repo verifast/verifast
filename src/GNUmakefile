@@ -152,6 +152,7 @@ endif
 
 clean::
 	rm -Rf ../lib
+	-rm ../bin/libz3.dll
 
 ../lib/libgtksourceview-2.0.0.dylib:
 	mkdir -p ../lib
