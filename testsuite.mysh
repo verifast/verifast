@@ -409,6 +409,7 @@ cd tutorial_solutions
   verifast_both students.c
 cd ..
 cd tests
+  verifast -c -prover z3v4.5 prod_func_ptr_chunk_ftargs_convert_provertype.c
   verifast -c -allow_should_fail russell_predctors.c
   verifast -c -allow_should_fail any_russell.c
   verifast -c -allow_should_fail any_russell2.c

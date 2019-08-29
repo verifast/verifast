@@ -167,14 +167,16 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               | Some bs -> bs
             in
             let xmap = List.map (fun (x, tp0) -> let tp = instantiate_type tpenv tp0 in (x, tp, tp0)) xmap in
-            let ftargenv =
+            let args =
               match zip ftxmap args with
                 None -> static_error l "Incorrect number of function pointer chunk arguments" None
               | Some bs ->
                 List.map
-                  begin fun ((x, tp), e) ->
-                    let w = check_expr_t (pn,ilist) tparams tenv e (instantiate_type tpenv tp) in
-                    (x, ev w)
+                  begin fun ((x, tp0), e) ->
+                    let tp = instantiate_type tpenv tp0 in
+                    let w = check_expr_t (pn,ilist) tparams tenv e tp in
+                    let v = ev w in
+                    (x, v, prover_convert_term v tp tp0)
                   end
                   bs
             in
@@ -218,6 +220,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               let h = [] in
               with_context (Executing (h, [], openBraceLoc, "Producing function type precondition")) $. fun () ->
               with_context PushSubcontext $. fun () ->
+              let ftargenv = List.map (fun (x, v, v0) -> (x, v0)) args in
               let pre_env = [("this", fterm)] @ currentThreadEnv @ ftargenv @ List.map (fun (x, x0, tp, t, t0) -> (x0, t0)) fparams in
               produce_asn tpenv h [] pre_env pre real_unit None None $. fun h _ ft_env ->
               with_context PopSubcontext $. fun () ->
@@ -305,7 +308,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               with_context PopSubcontext $. fun () ->
               check_leaks h [] closeBraceLoc "produce_function_pointer_chunk body leaks heap chunks"
             end;
-            (ftn, ft_predfammaps, fttargs, List.map snd ftargenv)
+            (ftn, ft_predfammaps, fttargs, List.map (fun (x, v, v0) -> v) args)
           end
       in
       let [(_, (_, _, _, _, symb, _, _))] = ft_predfammaps in
