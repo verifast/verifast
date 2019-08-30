@@ -7,8 +7,45 @@ let string_of_assume_result = function
   | Unknown -> "unknown"
   | Unsat   -> "unsat"
 
-type ctor_symbol = CtorByOrdinal of int | NumberCtor of num
-type symbol_kind = Ctor of ctor_symbol | Fixpoint of int | Uninterp
+(*
+
+The ProverAPI logic has four sorts: bool, int, real, and inductive. 
+
+Within sort 'inductive', so-called inductive subtypes with N constructors can
+be defined by creating symbols with kind Ctor (CtorByOrdinal (subtype, k)) for
+k = 0, ..., N-1. Also, primitive recursive functions ("fixpoints") can be
+defined over these subtypes by creating symbols with kind Fixpoint (subtype, k)
+where the function's k'th argument is the one on which structural recursion is
+performed.
+
+In the interpretation of the logic, different constructors of the same subtype
+are disjoint, but nothing is assumed about constructors from different subtypes.
+Indeed, it is consistent to imagine that the subtypes all overlap, and it is
+sound to create a symbol and use it as a value of all subtypes. VeriFast exploits
+this to support fixpoint default_value<t>(), declared as follows:
+
+  fixpoint t default_value<t>();
+
+Given that VeriFast erases type arguments, a single symbol default_value is
+potentially used as a value of all subtypes.
+
+*)
+
+module InductiveSubtype : sig
+  type t
+  val alloc: unit -> t
+  val lt: t -> t -> bool
+  val to_int: t -> int
+end = struct
+  type t = int
+  let next = ref 0
+  let alloc () = let result = !next in incr next; result
+  let lt x y = x < y
+  let to_int x = x
+end
+
+type ctor_symbol = CtorByOrdinal of InductiveSubtype.t * int | NumberCtor of num
+type symbol_kind = Ctor of ctor_symbol | Fixpoint of InductiveSubtype.t * int | Uninterp
 
 class virtual ['typenode, 'symbol, 'termnode] context =
   object

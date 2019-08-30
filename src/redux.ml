@@ -4,6 +4,14 @@ open Simplex
 open Proverapi
 open Printf
 
+let bool_subtype = InductiveSubtype.alloc ()
+let number_subtype = InductiveSubtype.alloc ()
+let boxed_bool_subtype = InductiveSubtype.alloc ()
+
+let ctor_kind_subtype = function
+  CtorByOrdinal (subtype, k) -> subtype
+| NumberCtor _ -> number_subtype
+
 let stopwatch = Stopwatch.create ()
 
 let (|>) x f = f x
@@ -120,7 +128,7 @@ class symbol (kind: symbol_kind) (name: string) =
       let a = Array.make (List.length cs) (fun _ _ -> assert false) in
       List.iter
         (fun (c, f) ->
-           let k = match c#kind with Ctor (CtorByOrdinal k) -> k | _ -> assert false in
+           let k = match c#kind with Ctor (CtorByOrdinal (_, k)) -> k | _ -> assert false in
            a.(k) <- f
         )
         cs;
@@ -165,7 +173,7 @@ and termnode (ctxt: context) s initial_children =
       match value#as_number with
         None -> (zero_num, [((self :> termnode), unit_num)])
       | Some n -> (n, [])
-    method is_ctor = match symbol#kind with Ctor _ -> true | _ -> false
+    method is_ctor subtype = match symbol#kind with Ctor ck -> subtype = ctor_kind_subtype ck | _ -> false
     initializer begin
       let rec iter k (vs: valuenode list) =
         match vs with
@@ -178,11 +186,11 @@ and termnode (ctxt: context) s initial_children =
       value#set_initial_child (self :> termnode);
       symbol#applied (self :> termnode);
       match symbol#kind with
-        Ctor j -> ()
-      | Fixpoint k ->
+        Ctor _ -> ()
+      | Fixpoint (subtype, k) ->
         let v = List.nth children k in
         begin
-        match v#ctorchild with
+        match v#ctorchild subtype with
           None -> ()
         | Some n -> ctxt#add_redex (fun () -> self#reduce)
         end
@@ -253,30 +261,30 @@ and termnode (ctxt: context) s initial_children =
       children <- replace 0 children;
       if symbol#kind = Uninterp && (symbol#name = "==" || symbol#name = "<==>") then
         match children with [v1; v2] when v1 = v2 -> ctxt#add_redex (fun () -> ctxt#assert_eq value ctxt#true_node#value) | _ -> ()
-    method child_ctorchild_added k =
-      if symbol#kind = Fixpoint k then
+    method child_ctorchild_added subtype k =
+      if symbol#kind = Fixpoint (subtype, k) then
         ctxt#add_redex (fun () -> self#reduce)
       else if symbol#kind = Uninterp then
         match (symbol#name, children, k) with
           (("=="|"<==>"), [v1; v2], _) ->
           begin
-          match (v1#ctorchild, v2#ctorchild) with
+          match (v1#ctorchild subtype, v2#ctorchild subtype) with
             (Some t1, Some t2) when t1#symbol <> t2#symbol -> ctxt#add_redex (fun () -> ctxt#assert_eq value ctxt#false_node#value)
           | _ -> ()
           end
-        | ("&&", [v1; v2], 0) ->
-          let newNode = if v1#ctorchild = Some ctxt#true_node then v2#initial_child else ctxt#false_node in
+        | ("&&", [v1; v2], 0) when subtype = bool_subtype ->
+          let newNode = if v1#ctorchild bool_subtype = Some ctxt#true_node then v2#initial_child else ctxt#false_node in
           ctxt#add_redex (fun () -> ctxt#assert_eq value newNode#value)
-        | ("&&", [v1; v2], 1) ->
-          let newNode = if v2#ctorchild = Some ctxt#true_node then v1#initial_child else ctxt#false_node in
+        | ("&&", [v1; v2], 1) when subtype = bool_subtype ->
+          let newNode = if v2#ctorchild bool_subtype = Some ctxt#true_node then v1#initial_child else ctxt#false_node in
           ctxt#add_redex (fun () -> ctxt#assert_eq value newNode#value)
-        | ("||", [v1; v2], 0) ->
-          let newNode = if v1#ctorchild = Some ctxt#true_node then ctxt#true_node else v2#initial_child in
+        | ("||", [v1; v2], 0) when subtype = bool_subtype ->
+          let newNode = if v1#ctorchild bool_subtype = Some ctxt#true_node then ctxt#true_node else v2#initial_child in
           ctxt#add_redex (fun () -> ctxt#assert_eq value newNode#value)
-        | ("||", [v1; v2], 1) ->
-          let newNode = if v2#ctorchild = Some ctxt#true_node then ctxt#true_node else v1#initial_child in
+        | ("||", [v1; v2], 1) when subtype = bool_subtype ->
+          let newNode = if v2#ctorchild bool_subtype = Some ctxt#true_node then ctxt#true_node else v1#initial_child in
           ctxt#add_redex (fun () -> ctxt#assert_eq value newNode#value)
-        | ("*", [v1; v2], 0) ->
+        | ("*", [v1; v2], 0) when subtype = number_subtype ->
           let Some n1 = v1#as_number in
           if n1 =/ zero_num then
             ctxt#add_redex (fun () -> ctxt#assert_eq value (ctxt#get_numnode zero_num)#value)
@@ -289,9 +297,9 @@ and termnode (ctxt: context) s initial_children =
             ctxt#add_redex (fun () -> ctxt#assert_eq value (ctxt#get_numnode (n1 */ n2))#value)
           end
         | _ -> ()
-    method parent_ctorchild_added =
+    method parent_ctorchild_added subtype =
       match (symbol#name, children) with
-        (("=="|"<==>"), [v1; v2]) ->
+        (("=="|"<==>"), [v1; v2]) when subtype = bool_subtype ->
           begin
             if value = ctxt#true_node#value then
               ctxt#add_redex (fun () -> ctxt#assert_eq v1#initial_child#value v2#initial_child#value)
@@ -303,21 +311,21 @@ and termnode (ctxt: context) s initial_children =
               else
                 ctxt#add_pending_split (And (TermNode (v1#initial_child), Not (TermNode (v2#initial_child)))) (And (TermNode (v2#initial_child), Not (TermNode (v1#initial_child))))
           end
-      | ("<=", [v1; v2]) ->
+      | ("<=", [v1; v2]) when subtype = bool_subtype ->
         begin
           if value = ctxt#true_node#value then
             ctxt#add_redex (fun () -> ctxt#assert_le v1#initial_child zero_num v2#initial_child)
           else
             ctxt#add_redex (fun () -> ctxt#assert_le v2#initial_child unit_num v1#initial_child)
         end
-      | ("<", [v1; v2]) ->
+      | ("<", [v1; v2]) when subtype = bool_subtype ->
         begin
           if value = ctxt#true_node#value then
             ctxt#add_redex (fun () -> ctxt#assert_le v1#initial_child unit_num v2#initial_child)
           else
             ctxt#add_redex (fun () -> ctxt#assert_le v2#initial_child zero_num v1#initial_child)
         end
-      | ("<=/", [v1; v2]) ->
+      | ("<=/", [v1; v2]) when subtype = bool_subtype ->
         begin
           if value = ctxt#true_node#value then
             ctxt#add_redex (fun () -> ctxt#assert_le v1#initial_child zero_num v2#initial_child)
@@ -326,7 +334,7 @@ and termnode (ctxt: context) s initial_children =
             ctxt#add_redex (fun () -> ctxt#assert_neq v1#initial_child#value v2#initial_child#value)
           end
         end
-      | ("</", [v1; v2]) ->
+      | ("</", [v1; v2]) when subtype = bool_subtype ->
         begin
           if value = ctxt#true_node#value then begin
             ctxt#add_redex (fun () -> ctxt#assert_le v1#initial_child zero_num v2#initial_child);
@@ -334,7 +342,7 @@ and termnode (ctxt: context) s initial_children =
           end else
             ctxt#add_redex (fun () -> ctxt#assert_le v2#initial_child zero_num v1#initial_child)
         end
-      | ("&&", [v1; v2]) ->
+      | ("&&", [v1; v2]) when subtype = bool_subtype ->
         if value = ctxt#true_node#value then
         begin
           ctxt#add_redex (fun () -> ctxt#assert_eq v1#initial_child#value ctxt#true_node#value);
@@ -345,7 +353,7 @@ and termnode (ctxt: context) s initial_children =
           (* printff "Adding split for negative conjunction...\n"; *)
           ctxt#add_pending_split (Not (TermNode (v1#initial_child))) (Not (TermNode (v2#initial_child)))
         end
-      | ("||", [v1; v2]) ->
+      | ("||", [v1; v2]) when subtype = bool_subtype ->
         if value = ctxt#false_node#value then
         begin
           ctxt#add_redex (fun () -> ctxt#assert_eq v1#initial_child#value ctxt#false_node#value);
@@ -367,14 +375,14 @@ and termnode (ctxt: context) s initial_children =
         self#push;
         reduced <- true;
         match symbol#kind with
-          Fixpoint k ->
+          Fixpoint (subtype, k) ->
           let clauses = match symbol#fpclauses with Some clauses -> clauses | None -> assert false in
           let v = List.nth children k in
           begin
-          match v#ctorchild with
+          match v#ctorchild subtype with
             Some n ->
             let s = n#symbol in
-            let j = match s#kind with Ctor (CtorByOrdinal j) -> j | _ -> assert false in
+            let j = match s#kind with Ctor (CtorByOrdinal (_, j)) -> j | _ -> assert false in
             let clause = clauses.(j) in
             let vs = n#children in
             let t = clause (List.map (fun v -> TermNode v#initial_child) children) (List.map (fun v -> TermNode v#initial_child) vs) in
@@ -409,7 +417,7 @@ and valuenode (ctxt: context) =
     val mutable pushdepth = 0
     val mutable children: termnode list = []
     val mutable parents: (termnode * int) list = []
-    val mutable ctorchild: termnode option = None
+    val mutable ctorchildren: (InductiveSubtype.t * termnode) list = []
     val mutable unknown: termnode Simplex.unknown option = None
     val mutable neqs: valuenode list = []
     (* For diagnostics only *)
@@ -426,7 +434,7 @@ and valuenode (ctxt: context) =
       initial_child <- Some t;
       begin
         match t#kind with
-          Ctor _ -> ctorchild <- Some t
+          Ctor ck -> ctorchildren <- [ctor_kind_subtype ck, t]
         | _ -> ()
       end;
       children <- [t]
@@ -434,27 +442,37 @@ and valuenode (ctxt: context) =
     method push =
       if ctxt#pushdepth <> pushdepth then
       begin
-        popstack <- (pushdepth, children, parents, ctorchild, unknown, neqs, child_listeners, merge_listeners)::popstack;
+        popstack <- (pushdepth, children, parents, ctorchildren, unknown, neqs, child_listeners, merge_listeners)::popstack;
         ctxt#register_popaction (fun () -> self#pop);
         pushdepth <- ctxt#pushdepth
       end
     method pop =
       match popstack with
-        (pushdepth0, children0, parents0, ctorchild0, unknown0, neqs0, child_listeners0, merge_listeners0)::popstack0 ->
+        (pushdepth0, children0, parents0, ctorchildren0, unknown0, neqs0, child_listeners0, merge_listeners0)::popstack0 ->
         pushdepth <- pushdepth0;
         children <- children0;
         parents <- parents0;
-        ctorchild <- ctorchild0;
+        ctorchildren <- ctorchildren0;
         neqs <- neqs0;
         child_listeners <- child_listeners0;
         merge_listeners <- merge_listeners0;
         unknown <- unknown0;
         popstack <- popstack0
       | [] -> assert(false)
-    method ctorchild = ctorchild
+    method ctorchildren = ctorchildren
+    method ctorchild subtype =
+      let rec iter ctorchildren =
+        match ctorchildren with
+          [] -> None
+        | (subtype', n)::ctorchildren ->
+          if subtype = subtype' then Some n else
+          if subtype < subtype' then None else
+          iter ctorchildren
+      in
+      iter ctorchildren
     method unknown = unknown
     method as_number =
-      match ctorchild with
+      match self#ctorchild number_subtype with
         None -> None
       | Some n ->
         match n#symbol#kind with
@@ -477,9 +495,18 @@ and valuenode (ctxt: context) =
     method add_parent p =
       self#push;
       parents <- p::parents
-    method set_ctorchild c =
+    method set_ctorchild subtype c =
       self#push;
-      ctorchild <- Some c
+      let rec insert ctorchildren =
+        match ctorchildren with
+          [] -> [subtype, c]
+        | ((subtype', c') as entry)::ctorchildren' ->
+          if InductiveSubtype.lt subtype' subtype then
+            entry::insert ctorchildren'
+          else
+            (subtype, c)::ctorchildren
+      in
+      ctorchildren <- insert ctorchildren
     method set_unknown u =
       self#push;
       unknown <- Some u
@@ -488,9 +515,19 @@ and valuenode (ctxt: context) =
       List.iter (fun listener -> listener c) child_listeners;
       children <- c::children
     method neq v =
-      match (ctorchild, v#ctorchild) with
-        (Some n1, Some n2) when n1#symbol <> n2#symbol -> true
-      | _ -> List.mem v neqs
+      let rec iter cn1 cn2 =
+        match cn1, cn2 with
+          [], _ -> false
+        | _, [] -> false
+        | (subtype1, n1)::cn1', (subtype2, n2)::cn2' ->
+          if subtype1 < subtype2 then
+            iter cn1' cn2
+          else if subtype1 = subtype2 then
+            n1#symbol <> n2#symbol || iter cn1' cn2'
+          else
+            iter cn1 cn2'
+      in
+      iter ctorchildren v#ctorchildren || List.mem v neqs
     method add_neq v =
       self#push;
       neqs <- v::neqs;
@@ -517,9 +554,9 @@ and valuenode (ctxt: context) =
     method merge_into fromSimplex v =
       if ctxt#verbosity > 8 then trace "%d.merge_into %d" (Oo.id self) (Oo.id v);
       if (self :> valuenode) = ctxt#true_node#value || (self :> valuenode) = ctxt#false_node#value then v#merge_into fromSimplex (self :> valuenode) else
-      let ctorchild_added parents children =
-        List.iter (fun (n, k) -> n#child_ctorchild_added k) parents;
-        List.iter (fun n -> n#parent_ctorchild_added) children
+      let ctorchild_added subtype parents children =
+        List.iter (fun (n, k) -> n#child_ctorchild_added subtype k) parents;
+        List.iter (fun n -> n#parent_ctorchild_added subtype) children
       in
       let vParents = v#parents in
       let vChildren = v#children in
@@ -534,27 +571,39 @@ and valuenode (ctxt: context) =
       (* It is possible that some of the nodes in 'parents' are now equivalent with nodes in v.parents. *)
       if v == ctxt#true_node#value then ctxt#report_truenode_childcount (List.length v#children);
       if v == ctxt#false_node#value then ctxt#report_falsenode_childcount (List.length v#children);
-      begin
-        let check_export_constant u t =
-          if not fromSimplex then
-          match u with
-            None -> ()
-          | Some u ->
-            let Ctor (NumberCtor n) = t#symbol#kind in
-            context#add_redex (fun () ->
-              ctxt#reportExportingConstant;
-              context#simplex_assert_eq n [(neg_unit_num, u)]
-            )
-        in
-        match (ctorchild, v#ctorchild) with
-          (None, Some t) ->
-          check_export_constant unknown t;
-          ctorchild_added parents children
-        | (Some n, None) ->
-          check_export_constant v#unknown n;
-          v#set_ctorchild n; assert (n#value = v); ctorchild_added vParents vChildren
+      let check_export_constant v1 v2 =
+        match v1#unknown, v2#ctorchild number_subtype with
+          Some u, Some child ->
+          let Ctor (NumberCtor n) = child#symbol#kind in
+          context#add_redex begin fun () ->
+            ctxt#reportExportingConstant;
+            context#simplex_assert_eq n [(neg_unit_num, u)]
+          end
         | _ -> ()
+      in
+      if not fromSimplex then begin
+        check_export_constant (self :> valuenode) v;
+        check_export_constant v (self :> valuenode)
       end;
+      let lt_ccs subtype = function
+        [] -> true
+      | (subtype', _)::_ -> InductiveSubtype.lt subtype subtype'
+      in
+      let rec match_ctorchildren ccs vccs =
+        match ccs, vccs with
+          [], [] -> []
+        | (subtype, n)::ccs, vccs when lt_ccs subtype vccs ->
+          v#set_ctorchild subtype n; assert (n#value = v);
+          ctorchild_added subtype vParents vChildren;
+          match_ctorchildren ccs vccs
+        | ccs, (vsubtype, vn)::vccs when lt_ccs vsubtype ccs ->
+          ctorchild_added vsubtype parents children;
+          match_ctorchildren ccs vccs
+        | (subtype, n)::ccs, (vsubtype, vn)::vccs ->
+          assert (subtype = vsubtype);
+          (n, vn)::match_ctorchildren ccs vccs
+      in
+      let matching_ctorchildren = match_ctorchildren ctorchildren v#ctorchildren in
       let redundant_parents =
         flatmap
           (fun (n, k) ->
@@ -586,15 +635,14 @@ and valuenode (ctxt: context) =
         in
         iter redundant_parents
       in
-      let process_ctorchildren () =
-        match (ctorchild, v#ctorchild) with
-          (None, _) -> process_redundant_parents()
-        | (Some n, None) -> process_redundant_parents()
-        | (Some n, Some n') ->
+      let rec process_matching_ctorchildren mccs =
+        match mccs with
+          [] -> process_redundant_parents()
+        | (n, n')::mccs ->
           (* print_endline "Adding injectiveness edges..."; *)
           let rec iter vs =
             match vs with
-              [] -> process_redundant_parents()
+              [] -> process_matching_ctorchildren mccs
             | (v, v')::vs ->
               begin
               (* print_endline ("Adding injectiveness edge: " ^ v#pprint ^ " = " ^ v'#pprint); *)
@@ -605,6 +653,7 @@ and valuenode (ctxt: context) =
           in
           iter (List.combine n#children n'#children)
       in
+      let process_ctorchildren () = process_matching_ctorchildren matching_ctorchildren in
       begin
         match (unknown, v#unknown) with
           (Some u, None) -> v#set_unknown u; process_ctorchildren()
@@ -627,8 +676,8 @@ and valuenode (ctxt: context) =
         Some (n, s) -> (n, s)
       | None ->
         let newrep =
-          match ctorchild with
-            Some n when n#children = [] -> n
+          match ctorchildren with
+            (_, n)::_ when n#children = [] -> n
           | _ ->
             begin
             match List.filter (fun n -> n#children = []) children with
@@ -657,6 +706,12 @@ and valuenode (ctxt: context) =
   end
 and context () =
   let initialPendingSplitsFrontNode = ref None in
+  let boxed_bool_symbol = new symbol (Ctor (CtorByOrdinal (boxed_bool_subtype, 0))) "boxed_bool" in
+  let unboxed_bool_symbol =
+    let s = new symbol (Fixpoint (boxed_bool_subtype, 0)) "unboxed_bool" in
+    s#set_fpclauses [boxed_bool_symbol, fun _ [b] -> b];
+    s
+  in
   object (self)
     val eq_symbol = new symbol Uninterp "=="
     val iff_symbol = new symbol Uninterp "<==>"
@@ -672,7 +727,7 @@ and context () =
     val real_lt_symbol = new symbol Uninterp "</"
     val int_div_symbol = new symbol Uninterp "/"
     val int_mod_symbol = new symbol Uninterp "%"
-    
+
     val mutable numnodes: termnode NumMap.t = NumMap.empty (* Sorted *)
     val mutable ttrue = None
     val mutable tfalse = None
@@ -771,8 +826,8 @@ and context () =
         simplex_consts <- (u, n)::simplex_consts
       in
       simplex#register_listeners eq_listener const_listener;
-      ttrue <- Some (self#get_node (self#mk_symbol "true" [] () (Ctor (CtorByOrdinal 0))) []);
-      tfalse <- Some (self#get_node (self#mk_symbol "false" [] () (Ctor (CtorByOrdinal 1))) [])
+      ttrue <- Some (self#get_node (self#mk_symbol "true" [] () (Ctor (CtorByOrdinal (bool_subtype, 0)))) []);
+      tfalse <- Some (self#get_node (self#mk_symbol "false" [] () (Ctor (CtorByOrdinal (bool_subtype, 1)))) [])
     
     method simplex = simplex
     method eq_symbol = eq_symbol
@@ -794,7 +849,7 @@ and context () =
     method get_ifthenelsenode t1 t2 t3 =
       (* print_endline ("Producing ifthenelse termnode"); *)
       let symname = "ifthenelse(" ^ self#pprint t2 ^ ", " ^ self#pprint t3 ^ ")" in
-      let s = new symbol (Fixpoint 0) symname in
+      let s = new symbol (Fixpoint (bool_subtype, 0)) symname in
       s#set_fpclauses [
         (self#true_node#symbol, (fun _ _ -> t2));
         (self#false_node#symbol, (fun _ _ -> t3))
@@ -815,8 +870,8 @@ and context () =
     method mk_unboxed_int (t: (symbol, termnode) term) = t
     method mk_boxed_real (t: (symbol, termnode) term) = t
     method mk_unboxed_real (t: (symbol, termnode) term) = t
-    method mk_boxed_bool (t: (symbol, termnode) term) = t
-    method mk_unboxed_bool (t: (symbol, termnode) term) = t
+    method mk_boxed_bool (t: (symbol, termnode) term) = self#mk_app boxed_bool_symbol [t]
+    method mk_unboxed_bool (t: (symbol, termnode) term) = self#mk_app unboxed_bool_symbol [t]
     method mk_true: (symbol, termnode) term = True
     method mk_false: (symbol, termnode) term = False
     method mk_and (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = And (t1, t2)

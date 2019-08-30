@@ -55,7 +55,9 @@ class smtlib_context input_fun output (features : string list) =
     maybe_add_statement (Smtlib.declare_fun f);
     f
   in
-  let tag_func = declare_fun "ctortag" [ inductive_type ] int_type in
+  let tag_func k = declare_fun ("ctortag" ^ string_of_int k) [ inductive_type ] int_type in
+  let tag_func = Util.memoize tag_func in
+  let tag_func subtype = tag_func (InductiveSubtype.to_int subtype) in
   let ctor_counter = ref Big_int.zero_big_int in
   let get_ctor_tag () =
     let k = !ctor_counter in
@@ -128,7 +130,8 @@ class smtlib_context input_fun output (features : string list) =
       let c = declare_fun name domain range in
       begin
         match kind with
-          Ctor k ->
+          Ctor (CtorByOrdinal (subtype, _)) ->
+          let tag_func = tag_func subtype in
           let tag = Smtlib.T.int (get_ctor_tag()) in
           let xs = List.mapi Smtlib.mk_var domain in
           let app = Smtlib.app c (List.map Smtlib.var xs) in
@@ -154,7 +157,7 @@ class smtlib_context input_fun output (features : string list) =
               add_assert (Smtlib.forall xs [ app ] (Smtlib.eq (Smtlib.uapp finv app) (Smtlib.var var)))
             end
             xs
-        | Fixpoint j -> ()
+        | Fixpoint (_, j) -> ()
         | Uninterp -> ()
       end;
       c

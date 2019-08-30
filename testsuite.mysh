@@ -377,7 +377,7 @@ cd examples
     verifast -c -disable_overflow_check problem1.c
     verifast -c -disable_overflow_check problem2.c
     verifast_both -c -disable_overflow_check problem3.java
-    verifast -prover z3v4.5 -c -disable_overflow_check problem4.java
+    verifast -c -disable_overflow_check problem4.java
     verifast_both -c -disable_overflow_check problem5.java
   cd ..
   cd vstte2012
@@ -430,6 +430,8 @@ cd tutorial_solutions
   verifast_both students.c
 cd ..
 cd tests
+  verifast -c issue68.c
+  verifast -c issue110.c
   verifast -c -allow_should_fail issue206.c
   verifast -c -allow_should_fail two_should_fails.c
   verifast -c -allow_should_fail div_mod_negative_dividend.c
@@ -476,6 +478,7 @@ cd tests
     cd ..
   cd ..
   cd errors
+    verifast -c -allow_should_fail inductive_confusion.c
     verifast -c -allow_should_fail array_slice_autosplit.java
     verifast -c -allow_should_fail array_update.java
     verifast -c -allow_should_fail shift_errors.c

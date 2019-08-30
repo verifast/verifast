@@ -447,9 +447,24 @@ class NQueens {
       //@ inconsistent_take(vs2, nat_of_int(board.length), 0, myvs);
       //@ assert inconsistent(myvs, nat_of_int(myboard.length), 0);
     } else {
-      //@ switch(vs2) { case nil: assert false; case cons(h, t): switch(t) { case nil: assert false; case cons(h0, t0):  }}
+      //@ assert vs2 == cons(?p0, cons(?p1, nil));
       //@ succ_int(1);
       //@ succ_int(0);
+      //@ assert nat_of_int(length(vs2)) == succ(succ(zero));
+      /*@
+      if (p0 < 1) {
+          assert p0 == 0;
+      } else {
+          assert p0 == 1;
+      }
+      @*/
+      /*@
+      if (p1 < 1) {
+          assert p1 == 0;
+      } else {
+          assert p1 == 1;
+      }
+      @*/
       assert false; // not reachable
     }
   }

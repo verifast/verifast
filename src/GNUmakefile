@@ -87,15 +87,7 @@ Z3V4DOT5=yes
 # Z3 configuration
 # TODO: refactor variable names: "Z3" could be anything (path? version? boolean?)
 ifndef NOZ3
-  ifdef Z3
-    Z3VERSION = 
-  else ifdef Z3V2 # Note that using Z3 v2 is experimental and not supported
-    Z3VERSION = v2
-    Z3 = $(Z3V2)
-  else ifdef Z3V4 # Note that using Z3 v4 is experimental and not supported
-    Z3VERSION = v4
-    Z3 = $(Z3V4)
-  else ifdef Z3V4DOT5
+  ifdef Z3V4DOT5
     Z3VERSION = v4dot5
     Z3 = $(Z3V4DOT5)
   else
@@ -505,18 +497,6 @@ else
 endif
 verifast: ../bin/verifast$(DOTEXE) $(STDLIB)
 .PHONY: verifast
-
-z3prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmxa proverapi.cmx z3prover.ml
-	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -c -I $(Z3_OCAML) z3.cmxa -I ./$(INCLUDE_OS_DIR) $(NUM_FLAGS) Perf.cmxa proverapi.cmx z3prover.ml
-
-z3v2prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmxa proverapi.cmx z3v2prover.ml
-	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -c -I $(Z3_OCAML) z3.cmxa -I ./$(INCLUDE_OS_DIR) $(NUM_FLAGS) Perf.cmxa proverapi.cmx z3v2prover.ml
-
-z3v4prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmxa proverapi.cmx z3v4prover.ml
-	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -c -I $(Z3_OCAML) z3.cmxa -I ./$(INCLUDE_OS_DIR) $(NUM_FLAGS) Perf.cmxa proverapi.cmx z3v4prover.ml
 
 z3v4dot5prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmxa proverapi.cmx z3v4dot5prover.ml
 	@echo "  OCAMLOPT " $@

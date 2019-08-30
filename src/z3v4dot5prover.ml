@@ -93,7 +93,9 @@ class z3_context () =
   let tfalse = Z3native.mk_false ctxt in
   (* HACK: for now, all inductive values have the same Z3 type. *)
   let inductive_type = Z3native.mk_uninterpreted_sort ctxt (Z3native.mk_string_symbol ctxt "inductive") in
-  let tag_func = Z3.mk_func_decl ctxt (Z3native.mk_string_symbol ctxt "ctortag") [| inductive_type |] int_type in
+  let tag_func k = Z3.mk_func_decl ctxt (Z3native.mk_string_symbol ctxt ("ctortag" ^ string_of_int k)) [| inductive_type |] int_type in
+  let tag_func = Util.memoize tag_func in
+  let tag_func subtype = tag_func (InductiveSubtype.to_int subtype) in
   let ctor_counter = ref 0 in
   let get_ctor_tag () = let k = !ctor_counter in ctor_counter := k + 1; k in
   let mk_unary_app f t = Z3.mk_app ctxt f [| t |] in
@@ -151,8 +153,9 @@ class z3_context () =
       let c = Z3.mk_func_decl ctxt (Z3native.mk_string_symbol ctxt name) tps range in
       begin
         match kind with
-          Ctor k ->
+          Ctor (CtorByOrdinal (subtype, _)) ->
           begin
+            let tag_func = tag_func subtype in
             let tag = Z3native.mk_int ctxt (get_ctor_tag()) int_type in
             let xs = Array.init (Array.length tps) (fun j -> Z3native.mk_bound ctxt j tps.(j)) in
             let app = Z3.mk_app ctxt c xs in
@@ -177,7 +180,7 @@ class z3_context () =
             (* (forall (x1 ... x2) (PAT (C x1 ... xn)) (EQ (finv (C x1 ... xn)) xi)) *)
             Z3native.solver_assert ctxt solver (Z3.mk_forall ctxt 0 [| pat |] tps names (Z3native.mk_eq ctxt (mk_unary_app finv app) (xs.(i))))
           done
-        | Fixpoint j -> ()
+        | Fixpoint (_, j) -> ()
         | Uninterp -> ()
       end;
       c

@@ -326,7 +326,7 @@ predicate tracked_cas_prediction(struct cas_tracker *tracker, int count; void *v
             length(marker) < 2 ?
                 value == 0
             :
-                switch (nth(2, marker)) {
+                switch (nth(1, marker)) {
                 case vararg_int(i): return value == 0;
                 case vararg_uint(i): return value == 0;
                 case vararg_pointer(p): return value == p;

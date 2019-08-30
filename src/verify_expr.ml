@@ -1885,7 +1885,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         lhs_to_lvalue h env w $. fun h env w ->
         cont h env (LValues.ValueField (l, w, getter, setter))
       | WReadInductiveField (l, w, data_type_name, constructor_name, field_name, targs) ->
-        let (_, _, _, getters, setters, _, _) = List.assoc data_type_name inductivemap in
+        let (_, _, _, getters, setters, _, _, _) = List.assoc data_type_name inductivemap in
         let getter = List.assoc field_name getters in
         let setter = List.assoc field_name setters in
         lhs_to_lvalue h env w $. fun h env w ->
