@@ -1,7 +1,7 @@
 #ifndef ASSOC_LIST_H
 #define ASSOC_LIST_H
 
-#include "listex.gh"
+#include "listex_ex.gh"
 
 fixpoint list<pair<a, b> > zip<a, b>(list<a> xs, list<b> ys) {
     switch (xs) {
@@ -48,10 +48,40 @@ fixpoint list<pair<a, b> > before_assoc<a, b>(a x, list<pair<a, b> > xys) {
     }
 }
 
-fixpoint list<b> before2<a, b>(a x, list<a> xs, list<b> ys);
-fixpoint list<b> after2<a, b>(a x, list<a> xs, list<b> ys);
-fixpoint list<b> update2<a, b>(list<a> xs, list<b> ys, a x, b y);
-fixpoint int index_of_assoc<a, b>(a x, list<pair<a, b> > xys);
+fixpoint list<b> before2<a, b>(a x, list<a> xs, list<b> ys) {
+    switch (xs) {
+    case nil: return nil;
+    case cons(x0, xs0): return
+        x0 == x ?
+            ys == nil ? cons(head(ys), nil) : nil
+        :
+            ys == nil ? nil : cons(head(ys), before2(x, xs0, tail(ys)));
+    }
+}
+
+fixpoint list<b> after2<a, b>(a x, list<a> xs, list<b> ys) {
+    switch (xs) {
+    case nil: return nil;
+    case cons(x0, xs0): return
+        x0 == x ? tail(ys) : after2(x, xs0, tail(ys));
+    }
+}
+
+fixpoint list<b> update2<a, b>(list<a> xs, list<b> ys, a x, b y) {
+    switch (xs) {
+    case nil: return nil;
+    case cons(x0, xs0): return
+        x0 == x ? cons(y, tail(ys)) : cons(head(ys), update2(xs0, tail(ys), x, y));
+    }
+}
+
+fixpoint int index_of_assoc<a, b>(a x, list<pair<a, b> > xys) {
+    switch (xys) {
+    case nil: return 0;
+    case cons(xy0, xys0): return
+       fst(xy0) == x ? 0 : 1 + index_of_assoc(x, xys0);
+    }
+}
 
 fixpoint list<pair<a, b> > after_assoc<a, b>(a x, list<pair<a, b> > xys) {
     switch (xys) {
@@ -110,10 +140,7 @@ predicate foreach_assoc2(list<pair<void *, void *> > xys, list<pair<void *, void
     };
 
 fixpoint list<a> mapfst<a, b>(list<pair<a, b> > xys) {
-    switch (xys) {
-        case nil: return nil;
-        case cons(xy, xys0): return cons(fst(xy), mapfst(xys0));
-    }
+    return map(fst, xys);
 }
 
 lemma void foreach_assoc2_separate(void *x);
@@ -152,11 +179,10 @@ lemma void foreach_assoc2_unseparate_1changed(list<pair<void *, void *> > xys, l
         foreach_assoc2(after_assoc(x, xys), after_assoc(x, xzs), p);
     ensures foreach_assoc2(update_assoc(xys, x, y), xzs, p);
 
+fixpoint pair<a, b> map_assoc_func<a, b>(list<pair<a, b> > xys, a x) { return pair(x, assoc(x, xys)); }
+
 fixpoint list<pair<a, b> > map_assoc<a, b>(list<pair<a, b> > xys, list<a> xs) {
-    switch (xs) {
-        case nil: return nil;
-        case cons(x, xs0): return cons(pair(x, assoc(x, xys)), map_assoc(xys, xs0));
-    }
+    return map((map_assoc_func)(xys), xs);
 }
 
 lemma void lt_drop_take<a>(int k, int i, list<a> xs);

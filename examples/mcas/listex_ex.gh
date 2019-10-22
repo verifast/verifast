@@ -1,5 +1,5 @@
-#ifndef LISTEX_H
-#define LISTEX_H
+#ifndef LISTEX_EX_H
+#define LISTEX_EX_H
 
 fixpoint t reverseHead<t>(t head, list<t> tail) {
     switch (tail) {

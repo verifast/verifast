@@ -1,3 +1,3 @@
 ifz3v4.5 verifast -prover z3v4.5 -c -check_vfmanifest bitops_ex.c
-verifast -shared atomics.o bitops_ex.o ghost_cells_ex.c listex.c assoc_list.c ghost_lists.c -allow_assume rdcss.c
+verifast -shared atomics.o bitops_ex.o ghost_cells_ex.c listex_ex.c assoc_list.c ghost_lists.c -allow_assume rdcss.c
 verifast -c mcas.c mcas_client.c
