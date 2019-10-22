@@ -1422,6 +1422,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
                 option_data_model = dataModel;
                 option_allow_should_fail = true;
                 option_emit_manifest = false;
+                option_check_manifest = false;
                 option_vroots = [crt_vroot default_bindir];
                 option_allow_assume = true;
                 option_simplify_terms = !simplifyTerms;

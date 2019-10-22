@@ -187,6 +187,7 @@ let _ =
   let simplifyTerms = ref false in
   let allowShouldFail = ref false in
   let emitManifest = ref false in
+  let checkManifest = ref false in
   let emitDllManifest = ref false in
   let allModules: string list ref = ref [] in
   let dllManifestName = ref None in
@@ -235,6 +236,7 @@ let _ =
             ; "-runtime", String (fun path -> runtime := Some path), " "
             ; "-allow_should_fail", Set allowShouldFail, "Allow '//~' annotations that specify the line should fail."
             ; "-emit_vfmanifest", Set emitManifest, " "
+            ; "-check_vfmanifest", Set checkManifest, " "
             ; "-emit_dll_vfmanifest", Set emitDllManifest, " "
             ; "-emit_dll_vfmanifest_as", String (fun str -> dllManifestName := Some str), " "
             ; "-bindir", String (fun str -> let p = Util.abs_path str in Util.set_bindir p; add_vroot ("CRT=" ^ p)), "Set custom bindir with standard library"
@@ -277,6 +279,7 @@ let _ =
           option_disable_overflow_check = !disable_overflow_check;
           option_allow_should_fail = !allowShouldFail;
           option_emit_manifest = !emitManifest;
+          option_check_manifest = !checkManifest;
           option_vroots = !vroots;
           option_allow_assume = !allowAssume;
           option_simplify_terms = !simplifyTerms;

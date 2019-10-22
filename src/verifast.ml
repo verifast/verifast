@@ -12,6 +12,25 @@ open Verifast1
 open Assertions
 open Verify_expr
 
+exception FileNotFound of string
+
+let read_file_lines path =
+  if Sys.file_exists path then
+    let file = open_in path in
+    do_finally (fun () ->
+      let rec iter () =
+        try
+          let line = input_line file in
+          let n = String.length line in
+          let line = if n > 0 && line.[n - 1] = '\r' then String.sub line 0 (n - 1) else line in
+          line::iter()
+        with
+          End_of_file -> []
+      in
+      iter()
+    ) (fun () -> close_in file)
+  else raise (FileNotFound path)
+
 module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   include VerifyExpr(VerifyProgramArgs)
@@ -3006,8 +3025,11 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       do_finally (fun () ->
         List.iter (fun line -> output_string file (line ^ "\n")) !jardeps
       ) (fun () -> close_out file)
-    else
+    else begin
+      if check_manifest then
+        if read_file_lines jardeps_filename <> !jardeps then raise (CompilationError ("The manifest generated for " ^ path ^ " does not match the contents of " ^ jardeps_filename));
       jardeps_map := (jardeps_filename, !jardeps)::!jardeps_map
+    end
 
 (*
 There are 7 kinds of entries possible in a vfmanifest/dll_vfmanifest file
@@ -3116,8 +3138,11 @@ There are 7 kinds of entries possible in a vfmanifest/dll_vfmanifest file
       do_finally (fun () ->
         List.iter (fun line -> output_string file (line ^ "\n")) lines
       ) (fun () -> close_out file)
-    else
+    else begin
+      if check_manifest then
+        if read_file_lines manifest_filename <> lines then raise (CompilationError ("The manifest generated for " ^ path ^ " does not match the contents of " ^ manifest_filename));
       manifest_map := (manifest_filename, lines)::!manifest_map
+    end
   
   let () =
     if file_type path <> Java then
@@ -3227,25 +3252,6 @@ let remove_dups bs =
 
 exception LinkError of string
 
-exception FileNotFound
-
-let read_file_lines path =
-  if Sys.file_exists path then
-    let file = open_in path in
-    do_finally (fun () ->
-      let rec iter () =
-        try
-          let line = input_line file in
-          let n = String.length line in
-          let line = if n > 0 && line.[n - 1] = '\r' then String.sub line 0 (n - 1) else line in
-          line::iter()
-        with
-          End_of_file -> []
-      in
-      iter()
-    ) (fun () -> close_in file)
-  else raise FileNotFound
-
 let parse_line line =
   let space = String.index line ' ' in
   let command = String.sub line 0 space in
@@ -3294,11 +3300,11 @@ let link_program vroots library_paths isLibrary allModulepaths dllManifest expor
     in
     try
       get_lines file
-    with FileNotFound ->
+    with FileNotFound _ ->
       try 
         let file = replace_vroot vroots file in
         get_lines file
-      with FileNotFound ->
+      with FileNotFound _ ->
         try
           let rec search_library_paths library_paths file =
             match library_paths with 
@@ -3308,10 +3314,10 @@ let link_program vroots library_paths isLibrary allModulepaths dllManifest expor
                 get_lines search_path
               else
                search_library_paths rest file
-            | [] -> raise FileNotFound
+            | [] -> raise (FileNotFound file)
           in
           search_library_paths library_paths file
-        with FileNotFound ->
+        with FileNotFound _ ->
           failwith ("VeriFast link phase error: could not find .vfmanifest file '" ^ file ^ 
                     "'. Re-verify the module using the -emit_vfmanifest or -emit_dll_vfmanifest option.")
   in
@@ -3471,7 +3477,7 @@ let link_program vroots library_paths isLibrary allModulepaths dllManifest expor
       match exports with
         [] -> (impls, mods)
       | exportPath::exports ->
-        let lines = try read_file_lines exportPath with FileNotFound -> failwith ("Could not find export manifest file '" ^ exportPath ^ "'") in
+        let lines = try read_file_lines exportPath with FileNotFound _ -> failwith ("Could not find export manifest file '" ^ exportPath ^ "'") in
         let rec iter' (impls, mods) lines =
           match lines with
             [] -> (impls, mods)
