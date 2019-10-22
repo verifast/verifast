@@ -1,5 +1,5 @@
-#include "stdlib.h"
-#include "malloc.h"
+#include <stdint.h>
+#include <stdlib.h>
 #include "mcas.h"
 
 typedef void thread_run(void *data);
@@ -197,6 +197,7 @@ void shift_interval(struct interval *interval) //@ : thread_run
             //@ open mcas_read_post(rop)(_);
         }
         
+        if (SIZE_MAX / 2 < sizeof(struct mcas_entry)) abort();
         struct mcas_entry *entries = malloc(2 * sizeof(struct mcas_entry));
         if (entries == 0) abort();
         //@ leak malloc_block(entries, _); // We assume the presence of a garbage collector.
@@ -204,11 +205,13 @@ void shift_interval(struct interval *interval) //@ : thread_run
         //@ close_struct(entries + 0);
         (entries + 0)->a = &interval->a;
         (entries + 0)->o = a0;
+        if (UINTPTR_MAX - 4 < (uintptr_t)a0) abort();
         (entries + 0)->n = a0 + 4;
         //@ bitand_plus_4(a0);
         //@ close_struct(entries + 1);
         (entries + 1)->a = &interval->b;
         (entries + 1)->o = b0;
+        if (UINTPTR_MAX - 4 < (uintptr_t)b0) abort();
         (entries + 1)->n = b0 + 4;
         //@ bitand_plus_4(b0);
         //@ close entries(0, entries + 2, nil);

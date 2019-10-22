@@ -976,6 +976,7 @@ start:
                 //@ produce_lemma_function_pointer_chunk(rop);
                 //@ entries_separate_ith(i);
                 //@ bitand_bitor_1_2_lemma(cd);
+                //@ if ((uintptr_t)(cd->es + i) < 0 || UINTPTR_MAX < (uintptr_t)(cd->es + i)) pointer_limits(&(cd->es + i)->a);
                 r = rdcss(&cd->status, 0, (cd->es + i)->a, (cd->es + i)->o, (void *)((uintptr_t)cd | 2));
                 //@ leak is_rdcss_operation_lemma(_);
                 //@ leak is_rdcss_as_membership_lemma(_);
@@ -1350,6 +1351,7 @@ start:
                 //@ produce_lemma_function_pointer_chunk(mcas_rdcss_unsep);
                 //@ produce_lemma_function_pointer_chunk(bsMem);
                 //@ bitand_bitor_1_2_lemma(cd);
+                //@ if ((uintptr_t)(cd->es + i) < 0 || UINTPTR_MAX < (uintptr_t)(cd->es + i)) pointer_limits(cd->es + i);
                 rdcss_compare_and_store((cd->es + i)->a, (void *)((uintptr_t)cd | 2), success ? (cd->es + i)->n : (cd->es + i)->o);
                 //@ leak is_rdcss_cas_lemma(casOp);
                 //@ leak is_rdcss_separate_lemma(mcas_rdcss_sep);
