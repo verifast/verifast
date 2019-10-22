@@ -67,13 +67,13 @@ lemma void count_eq_mem<t>(t x, list<t> xs)
 }
 
 lemma void strong_ghost_list_member_handle_lemma<t>()
-    requires strong_ghost_list<t>(?id, ?xs) &*& strong_ghost_list_member_handle<t>(id, ?x);
-    ensures strong_ghost_list<t>(id, xs) &*& strong_ghost_list_member_handle<t>(id, x) &*& mem(x, xs) == true;
+    requires [?fl]strong_ghost_list<t>(?id, ?xs) &*& [?fh]strong_ghost_list_member_handle<t>(id, ?x);
+    ensures [fl]strong_ghost_list<t>(id, xs) &*& [fh]strong_ghost_list_member_handle<t>(id, x) &*& mem(x, xs) == true;
 {
     open strong_ghost_list(id, xs);
-    assert raw_ghost_list(id, _, ?es);
+    assert [fl]raw_ghost_list(id, _, ?es);
     open strong_ghost_list_member_handle(id, x);
-    assert raw_ghost_list_member_handle(id, ?k, x);
+    assert [fh]raw_ghost_list_member_handle(id, ?k, x);
     raw_ghost_list_match(id, k);
     mem_map(pair(k, x), es, snd);
     forall_mem(x, map(snd, es), (count_le)(unit, map(snd, es), xs));
@@ -84,8 +84,8 @@ lemma void strong_ghost_list_member_handle_lemma<t>()
     assert 0 < count_eq(x, xs);
     count_eq_mem(x, xs);
     assert mem(x, xs) == true;
-    close strong_ghost_list<t>(id, xs);
-    close strong_ghost_list_member_handle<t>(id, x);
+    close [fl]strong_ghost_list<t>(id, xs);
+    close [fh]strong_ghost_list_member_handle<t>(id, x);
 }
 
 lemma void forall_count_le<t>(list<pair<int, t> > es, list<pair<int, t> > es0, list<t> xs0, t x, list<t> xs1)

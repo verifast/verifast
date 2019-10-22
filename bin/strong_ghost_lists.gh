@@ -9,8 +9,8 @@ lemma int create_strong_ghost_list<t>();
     ensures strong_ghost_list<t>(result, nil);
 
 lemma void strong_ghost_list_member_handle_lemma<t>();
-    requires strong_ghost_list<t>(?id, ?xs) &*& strong_ghost_list_member_handle<t>(id, ?x);
-    ensures strong_ghost_list<t>(id, xs) &*& strong_ghost_list_member_handle<t>(id, x) &*& mem(x, xs) == true;
+    requires [?fl]strong_ghost_list<t>(?id, ?xs) &*& [?fh]strong_ghost_list_member_handle<t>(id, ?x);
+    ensures [fl]strong_ghost_list<t>(id, xs) &*& [fh]strong_ghost_list_member_handle<t>(id, x) &*& mem(x, xs) == true;
 
 lemma void strong_ghost_list_insert<t>(int id, list<t> xs0, list<t> xs1, t x);
     requires strong_ghost_list<t>(id, append(xs0, xs1));
