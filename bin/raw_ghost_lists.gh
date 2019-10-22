@@ -13,8 +13,8 @@ lemma void raw_ghost_list_add<t>(int id, t x);
     ensures raw_ghost_list<t>(id, n + 1, append(xs, cons(pair(n, x), nil))) &*& raw_ghost_list_member_handle<t>(id, n, x);
 
 lemma void raw_ghost_list_match<t>(int id, int k);
-    requires raw_ghost_list<t>(id, ?n, ?xs) &*& [?f]raw_ghost_list_member_handle<t>(id, k, ?x);
-    ensures raw_ghost_list<t>(id, n, xs) &*& [f]raw_ghost_list_member_handle<t>(id, k, x) &*& mem(pair(k, x), xs) == true;
+    requires [?fl]raw_ghost_list<t>(id, ?n, ?xs) &*& [?f]raw_ghost_list_member_handle<t>(id, k, ?x);
+    ensures [fl]raw_ghost_list<t>(id, n, xs) &*& [f]raw_ghost_list_member_handle<t>(id, k, x) &*& mem(pair(k, x), xs) == true;
 
 lemma void raw_ghost_list_remove<t>(int id, int k);
     requires raw_ghost_list<t>(id, ?n, ?xs) &*& raw_ghost_list_member_handle<t>(id, k, ?x);

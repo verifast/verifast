@@ -26,6 +26,15 @@ predicate ghost_list_core<t>(int id, int offset; int n, list<pair<int, t> > elem
             n == n0 + 1 &*&
             elements == (dead ? elements0 : cons(pair(offset, value), elements0));
     };
+
+lemma void ghost_list_core_fraction_info<t>()
+    requires [?f]ghost_list_core<t>(?id, ?offset, ?n, ?elems);
+    ensures [f]ghost_list_core<t>(id, offset, n, elems);
+{
+    open ghost_list_core(id, offset, n, elems);
+    ghost_cell_fraction_info<node_type<t> >(id);
+}
+
 predicate raw_ghost_list<t>(int id; int n, list<pair<int, t> > elements) =
     ghost_list_core(id, 0, n, elements);
 
@@ -112,10 +121,11 @@ lemma void handle_core_fraction_info<t>(int id, int offset, int k)
 }
 
 lemma void ghost_list_match_core<t>(int id, int offset, int k)
-    requires ghost_list_core<t>(id, offset, ?n, ?xs) &*& [?f]handle_core<t>(id, offset, k, ?x);
-    ensures ghost_list_core<t>(id, offset, n, xs) &*& [f]handle_core<t>(id, offset, k, x) &*& mem(pair(k, x), xs) == true;
+    requires [?fl]ghost_list_core<t>(id, offset, ?n, ?xs) &*& [?f]handle_core<t>(id, offset, k, ?x);
+    ensures [fl]ghost_list_core<t>(id, offset, n, xs) &*& [f]handle_core<t>(id, offset, k, x) &*& mem(pair(k, x), xs) == true;
 {
     open ghost_list_core<t>(id, offset, n, xs);
+    ghost_cell_fraction_info<node_type<t> >(id);
     handle_core_fraction_info(id, offset, k);
     open handle_core<t>(id, offset, k, x);
     assert [_]ghost_cell<node_type<t> >(id, ?t);
@@ -127,19 +137,19 @@ lemma void ghost_list_match_core<t>(int id, int offset, int k)
             } else {
                 ghost_list_match_core(next, offset + 1, k);
             }
-            close ghost_list_core<t>(id, offset, n, xs);
+            close [fl]ghost_list_core<t>(id, offset, n, xs);
             close [f]handle_core<t>(id, offset, k, x);
     }
 }
 
 lemma void raw_ghost_list_match<t>(int id, int k)
-    requires raw_ghost_list<t>(id, ?n, ?xs) &*& [?f]raw_ghost_list_member_handle<t>(id, k, ?x);
-    ensures raw_ghost_list<t>(id, n, xs) &*& [f]raw_ghost_list_member_handle<t>(id, k, x) &*& mem(pair(k, x), xs) == true;
+    requires [?fl]raw_ghost_list<t>(id, ?n, ?xs) &*& [?f]raw_ghost_list_member_handle<t>(id, k, ?x);
+    ensures [fl]raw_ghost_list<t>(id, n, xs) &*& [f]raw_ghost_list_member_handle<t>(id, k, x) &*& mem(pair(k, x), xs) == true;
 {
     open raw_ghost_list(id, n, xs);
     open raw_ghost_list_member_handle(id, k, x);
     ghost_list_match_core(id, 0, k);
-    close raw_ghost_list(id, n, xs);
+    close [fl]raw_ghost_list(id, n, xs);
     close [f]raw_ghost_list_member_handle(id, k, x);
 }
 
