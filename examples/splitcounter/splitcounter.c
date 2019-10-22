@@ -28,12 +28,13 @@ predicate_ctor counter_inv(struct counter *counter, predicate(int) inv)() =
     counter->left |-> ?left &*&
     counter->right |-> ?right &*&
     inv(left + right) &*&
-    [_]counter->ghostListId |-> ?ghostListId &*&
+    [1/2]counter->ghostListId |-> ?ghostListId &*&
     ghost_list(ghostListId, ?readers) &*&
     foreach(readers, reader(inv, left, right));
 
 predicate counter(struct counter *counter, predicate(int) inv) =
     atomic_space(counter_inv(counter, inv)) &*&
+    [1/2]counter->ghostListId |-> _ &*&
     malloc_block_counter(counter);
 
 @*/
@@ -49,12 +50,22 @@ struct counter *create_counter()
     counter->right = 0;
     //@ int ghostListId = create_ghost_list<reader_info>();
     //@ counter->ghostListId = ghostListId;
-    //@ leak counter->ghostListId |-> _;
     //@ close foreach(nil, reader(inv, 0, 0));
     //@ close counter_inv(counter, inv)();
     //@ create_atomic_space(counter_inv(counter, inv));
     //@ close counter(counter, inv);
     return counter;
+}
+
+void dispose_counter(struct counter *c)
+    //@ requires counter(c, ?inv);
+    //@ ensures inv(_);
+{
+    //@ open counter(c, inv);
+    //@ dispose_atomic_space();
+    //@ open counter_inv(c, inv)();
+    free(c);
+    //@ leak ghost_list(_, ?readers) &*& foreach(readers, _);
 }
 
 void incr_left(struct counter *counter)
@@ -163,11 +174,12 @@ void incr_right(struct counter *counter)
     //@ close [f]counter(counter, inv);
 }
 
-int read(struct counter *counter)
+long long read(struct counter *counter)
     //@ requires [?f]counter(counter, ?inv) &*& is_read_ghop(?ghop, inv, ?pre, ?post) &*& pre();
     //@ ensures [f]counter(counter, inv) &*& post(result);
 {
     //@ open counter(counter, inv);
+    //@ int ghostListId = counter->ghostListId;
     prophecy_id leftId = create_prophecy();
     //@ assert prophecy(leftId, ?readerLeft);
     prophecy_id rightId = create_prophecy();
@@ -175,8 +187,8 @@ int read(struct counter *counter)
     int l;
     {
         /*@
-        predicate pre_() = is_read_ghop(ghop, inv, pre, post) &*& pre();
-        predicate post_() = [_]counter->ghostListId |-> ?ghostListId &*& ghost_list_member_handle(ghostListId, reader_info(pre, post, readerLeft, _, readerRight));
+        predicate pre_() = [f/2]counter->ghostListId |-> ghostListId &*& is_read_ghop(ghop, inv, pre, post) &*& pre();
+        predicate post_() = [f/2]counter->ghostListId |-> ghostListId &*& ghost_list_member_handle(ghostListId, reader_info(pre, post, readerLeft, _, readerRight));
         lemma void ghop_()
             requires counter_inv(counter, inv)() &*& is_atomic_load_int_op(?op, &counter->left, readerLeft, ?P, ?Q) &*& P() &*& pre_();
             ensures counter_inv(counter, inv)() &*& is_atomic_load_int_op(op, &counter->left, readerLeft, P, Q) &*& Q() &*& post_();
@@ -204,12 +216,11 @@ int read(struct counter *counter)
         //@ leak is_atomic_load_int_ghop(_, _, _, _, _, _);
         //@ open post_();
     }
-    //@ int ghostListId = counter->ghostListId;
     int r;
     {
         /*@
-        predicate pre_() = [_]counter->ghostListId |-> ghostListId &*& ghost_list_member_handle(ghostListId, reader_info(pre, post, readerLeft, _, readerRight));
-        predicate post_() = post(readerLeft + readerRight);
+        predicate pre_() = [f/2]counter->ghostListId |-> ghostListId &*& ghost_list_member_handle(ghostListId, reader_info(pre, post, readerLeft, _, readerRight));
+        predicate post_() = [f/2]counter->ghostListId |-> ghostListId &*& post(readerLeft + readerRight);
         lemma void ghop_()
             requires counter_inv(counter, inv)() &*& is_atomic_load_int_op(?op, &counter->right, readerRight, ?P, ?Q) &*& P() &*& pre_();
             ensures counter_inv(counter, inv)() &*& is_atomic_load_int_op(op, &counter->right, readerRight, P, Q) &*& Q() &*& post_();
@@ -259,6 +270,6 @@ int read(struct counter *counter)
         //@ leak is_atomic_load_int_ghop(_, _, _, _, _, _);
         //@ open post_();
     }
-    return l + r;
+    return (long long)l + r;
     //@ close [f]counter(counter, inv);
 }

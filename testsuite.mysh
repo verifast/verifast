@@ -29,7 +29,7 @@ cd examples
     verifast -prover z3v4.5 -disable_overflow_check -shared ghost_counters.c monitors.o readers_writers.c 
   cd ..
   cd splitcounter
-    verifast -prover redux -c -disable_overflow_check splitcounter.c
+    verifast atomics.o ghost_lists.c splitcounter.c client.c
   cd ..
   cd crypto_ccs
     call crypto_ccs.mysh

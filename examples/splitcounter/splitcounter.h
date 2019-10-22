@@ -9,6 +9,10 @@ struct counter *create_counter();
     //@ requires exists<predicate(int)>(?inv) &*& inv(0);
     //@ ensures counter(result, inv);
 
+void dispose_counter(struct counter *c);
+    //@ requires counter(c, ?inv);
+    //@ ensures inv(_);
+
 /*@
 
 typedef lemma void incr_ghop(predicate(int) inv, predicate() pre, predicate() post)();
@@ -33,7 +37,7 @@ typedef lemma void read_ghop(predicate(int) inv, predicate() pre, predicate(int)
 
 @*/
 
-int read(struct counter *counter);
+long long read(struct counter *counter);
     //@ requires [?f]counter(counter, ?inv) &*& is_read_ghop(?ghop, inv, ?pre, ?post) &*& pre();
     //@ ensures [f]counter(counter, inv) &*& post(result);
 

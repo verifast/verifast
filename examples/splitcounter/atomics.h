@@ -9,6 +9,10 @@ lemma void create_atomic_space(predicate() inv);
     requires inv();
     ensures atomic_space(inv);
 
+lemma void dispose_atomic_space();
+    requires atomic_space(?inv);
+    ensures inv();
+
 @*/
 
 typedef long long prophecy_id;

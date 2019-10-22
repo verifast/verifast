@@ -1,0 +1,5 @@
+.provides ./atomics.h#atomic_load_int
+.provides ./atomics.h#atomic_increment_int
+.provides ./atomics.h#create_atomic_space
+.provides ./atomics.h#dispose_atomic_space
+.provides ./atomics.h#create_prophecy
