@@ -69,4 +69,25 @@ lemma void bitand_bitor_lemma(uintptr_t x, uintptr_t y)
     bitand_def(x | y, Z_or(zx, zy), ~y, Z_not(zy));
 }
 
+lemma void bitand_bitor_1_2_lemma(void *x)
+    requires true == (((uintptr_t)x & 1) == 0);
+    ensures  true == ((((uintptr_t)x | 2) & 1) == 0);
+{
+    uintptr_t ux = (uintptr_t)x;
+    Z zx = Z_of_int(ux);
+    switch (zx) {
+    case Zsign(zxs):
+    case Zdigit(zx1, zd0):
+        switch (zx1) {
+        case Zsign(zxs):
+        case Zdigit(zx2, zd1):
+        }
+    }
+    Z z1 = Zdigit(Zsign(false), true);
+    Z z2 = Zdigit(Zdigit(Zsign(false), true), false);
+    bitand_def(ux, zx, 1, z1);
+    bitor_def(ux, zx, 2, z2);
+    bitand_def(ux | 2, Z_or(zx, z2), 1, z1);
+}
+
 @*/

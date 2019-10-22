@@ -109,5 +109,6 @@
 .requires CRT/prelude.h#ullongs_inv
 .requires CRT/prelude.h#ushorts_inv
 .requires CRT/prelude_core.gh#default_value_eq_zero
+.provides ./bitops_ex.gh#bitand_bitor_1_2_lemma
 .provides ./bitops_ex.gh#bitand_bitor_lemma
 .produces module bitops_ex
