@@ -1,5 +1,5 @@
-#ifndef GHOST_CELLS_H
-#define GHOST_CELLS_H
+#ifndef GHOST_CELLS_EX_H
+#define GHOST_CELLS_EX_H
 
 predicate ghost_cell3(int id; int v1, int v2, int v3);
 

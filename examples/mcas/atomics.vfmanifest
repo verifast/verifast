@@ -1,0 +1,9 @@
+.provides .\atomics.h#create_atomic_space
+.provides .\atomics.h#dispose_atomic_space
+.provides .\atomics.h#create_prophecy_pointer
+.provides .\atomics.h#atomic_noop
+.provides .\atomics.h#atomic_load_pointer
+.provides .\atomics.h#atomic_compare_and_store_pointer
+.provides .\atomics.h#create_cas_tracker
+.provides .\atomics.h#create_tracked_cas_prediction
+.provides .\atomics.h#tracked_cas

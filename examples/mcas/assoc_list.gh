@@ -15,13 +15,7 @@ fixpoint list<pair<a, b> > zip<a, b>(list<a> xs, list<b> ys) {
 }
 
 fixpoint bool mem_assoc<a, b>(a x, list<pair<a, b> > xys) {
-    switch (xys) {
-        case nil: return false;
-        case cons(xy, xys0): return
-            switch (xy) {
-                case pair(x0, y0): return x0 == x || mem_assoc(x, xys0);
-            };
-    }
+    return mem(x, map(fst, xys));
 }
 
 fixpoint b assoc<a, b>(a x, list<pair<a, b> > xys) {

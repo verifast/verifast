@@ -1,5 +1,5 @@
-#ifndef BITOPS_H
-#define BITOPS_H
+#ifndef BITOPS_EX_H
+#define BITOPS_EX_H
 
 lemma void bitand_bitor_lemma(uintptr_t x, uintptr_t y);
     requires true == ((x & y) == 0);

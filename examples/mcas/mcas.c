@@ -5,7 +5,7 @@
 //@ #include "ghost_lists.gh"
 //@ #include "assoc_list.gh"
 //@ #include "ghost_counters.gh"
-//@ #include "bitops.gh"
+//@ #include "bitops_ex.gh"
 #include "mcas.h"
 
 struct cd {

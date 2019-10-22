@@ -1,7 +1,7 @@
 #include "stdlib.h"
 #include "atomics.h"
 #include "rdcss.h"
-//@ #include "bitops.gh"
+//@ #include "bitops_ex.gh"
 //@ #include "ghost_cells_ex.gh"
 //@ #include "ghost_lists.gh"
 

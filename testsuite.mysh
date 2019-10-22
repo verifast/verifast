@@ -177,7 +177,7 @@ cd examples
   verifast_both -c limits.c
   verifast_both map.c
   cd mcas
-    verifast_both -c rdcss.c mcas.c mcas_client.c
+    call mcas.mysh
   cd ..
   verifast_both -c mergesort_and_binarysearch.c
   cd MockKernel
