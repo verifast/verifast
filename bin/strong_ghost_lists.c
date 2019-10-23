@@ -1,4 +1,5 @@
 //@ #include "strong_ghost_lists.gh"
+//@ #include "ghost_cells.gh"
 //@ #include "raw_ghost_lists.gh"
 //@ #include "listex.gh"
 
@@ -28,17 +29,20 @@ fixpoint bool count_le<t>(unit u, list<t> xs, list<t> ys, t x) {
     }
 }
 
-predicate strong_ghost_list<t>(int id, list<t> xs) =
-    raw_ghost_list<t>(id, _, ?es) &*& forall(map(snd, es), (count_le)(unit, map(snd, es), xs)) == true;
+predicate strong_ghost_list<t>(int id; list<t> xs) =
+    [_]ghost_cell(id, pair(?rawId, ?xsId)) &*& ghost_cell(xsId, xs) &*& raw_ghost_list<t>(rawId, _, ?es) &*& forall(map(snd, es), (count_le)(unit, map(snd, es), xs)) == true;
 
 predicate strong_ghost_list_member_handle<t>(int id, t x) =
-    raw_ghost_list_member_handle<t>(id, _, x);
+    [_]ghost_cell<pair<int, int> >(id, pair(?rawId, ?xsId)) &*& raw_ghost_list_member_handle<t>(rawId, _, x);
 
 lemma int create_strong_ghost_list<t>()
     requires true;
     ensures strong_ghost_list<t>(result, nil);
 {
-    int id = create_raw_ghost_list();
+    int rawId = create_raw_ghost_list();
+    int xsId = create_ghost_cell(nil);
+    int id = create_ghost_cell(pair(rawId, xsId));
+    leak ghost_cell(id, _);
     close strong_ghost_list(id, nil);
     return id;
 }
@@ -71,10 +75,11 @@ lemma void strong_ghost_list_member_handle_lemma<t>()
     ensures [fl]strong_ghost_list<t>(id, xs) &*& [fh]strong_ghost_list_member_handle<t>(id, x) &*& mem(x, xs) == true;
 {
     open strong_ghost_list(id, xs);
-    assert [fl]raw_ghost_list(id, _, ?es);
     open strong_ghost_list_member_handle(id, x);
-    assert [fh]raw_ghost_list_member_handle(id, ?k, x);
-    raw_ghost_list_match(id, k);
+    assert [_]ghost_cell(id, pair(?rawId, ?xsId));
+    assert [fl]raw_ghost_list(rawId, _, ?es);
+    assert [fh]raw_ghost_list_member_handle(rawId, ?k, x);
+    raw_ghost_list_match(rawId, k);
     mem_map(pair(k, x), es, snd);
     forall_mem(x, map(snd, es), (count_le)(unit, map(snd, es), xs));
     assert count_eq(x, map(snd, es)) <= count_eq(x, xs);
@@ -108,11 +113,12 @@ lemma void strong_ghost_list_insert<t>(int id, list<t> xs0, list<t> xs1, t x)
     ensures strong_ghost_list<t>(id, append(xs0, cons(x, xs1))) &*& strong_ghost_list_member_handle<t>(id, x);
 {
     open strong_ghost_list<t>(id, _);
+    assert [_]ghost_cell(id, pair(?rawId, ?xsId));
     list<t> xs = append(xs0, xs1);
     list<t> xs2 = append(xs0, cons(x, xs1));
-    assert raw_ghost_list(id, ?n, ?es);
-    raw_ghost_list_add(id, x);
-    assert raw_ghost_list(id, n + 1, ?es1);
+    assert raw_ghost_list(rawId, ?n, ?es);
+    raw_ghost_list_add(rawId, x);
+    assert raw_ghost_list(rawId, n + 1, ?es1);
     forall_append(map(snd, es), cons(x, nil), (count_le)(unit, map(snd, es1), xs2));
     map_append(snd, es, cons(pair(n, x), nil));
     assert map(snd, es1) == append(map(snd, es), cons(x, nil));
@@ -135,6 +141,7 @@ lemma void strong_ghost_list_insert<t>(int id, list<t> xs0, list<t> xs1, t x)
         count_eq_nonnegative(x, xs1);
         assert count_eq(x, map(snd, es1)) <= count_eq(x, xs2);
     }
+    ghost_cell_mutate(xsId, append(xs0, cons(x, xs1)));
     close strong_ghost_list<t>(id, append(xs0, cons(x, xs1)));
     close strong_ghost_list_member_handle<t>(id, x);
 }
@@ -183,11 +190,12 @@ lemma void strong_ghost_list_remove<t>(int id, list<t> xs0, list<t> xs1, t x)
     ensures strong_ghost_list<t>(id, append(xs0, xs1));
 {
     open strong_ghost_list<t>(id, append(xs0, cons(x, xs1)));
-    assert raw_ghost_list(id, ?n, ?es);
+    assert [_]ghost_cell(id, pair(?rawId, ?xsId));
+    assert raw_ghost_list(rawId, ?n, ?es);
     open strong_ghost_list_member_handle<t>(id, x);
-    assert raw_ghost_list_member_handle(id, ?k, x);
-    raw_ghost_list_match(id, k);
-    raw_ghost_list_remove(id, k);
+    assert raw_ghost_list_member_handle(rawId, ?k, x);
+    raw_ghost_list_match(rawId, k);
+    raw_ghost_list_remove(rawId, k);
     remove_elim(pair(k, x), es);
     open before_after(?es0, ?es1);
     list<pair<int, t> > esn = append(es0, es1);
@@ -199,6 +207,7 @@ lemma void strong_ghost_list_remove<t>(int id, list<t> xs0, list<t> xs1, t x)
     remove_iter(es0, es0, k, x, es1, xs0, xs1);
     remove_iter(es1, es0, k, x, es1, xs0, xs1);
     forall_append(map(snd, es0), map(snd, es1), (count_le)(unit, map(snd, esn), xsn));
+    ghost_cell_mutate(xsId, append(xs0, xs1));
     close strong_ghost_list<t>(id, append(xs0, xs1));
 }
 

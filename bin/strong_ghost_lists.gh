@@ -1,7 +1,7 @@
 #ifndef STRONG_GHOST_LISTS_H
 #define STRONG_GHOST_LISTS_H
 
-predicate strong_ghost_list<t>(int id, list<t> xs);
+predicate strong_ghost_list<t>(int id; list<t> xs);
 predicate strong_ghost_list_member_handle<t>(int id, t x);
 
 lemma int create_strong_ghost_list<t>();
