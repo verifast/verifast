@@ -19,4 +19,36 @@ lemma void ghost_cell_leak<t>(int id); // For people who prefer to avoid "leak" 
     requires [?f]ghost_cell<t>(id, ?value);
     ensures [_]ghost_cell<t>(id, value);
 
+
+predicate ghost_cell_family<k>(int id; list<k> keysUsed);
+predicate ghost_cell_family_member<k, v>(int id, k key; v value);
+
+lemma int create_ghost_cell_family<k>();
+    requires true;
+    ensures ghost_cell_family<k>(result, nil);
+
+lemma void ghost_cell_family_add_member<k, v>(int id, k key, v value);
+    requires ghost_cell_family<k>(id, ?keysUsed) &*& !mem(key, keysUsed);
+    ensures ghost_cell_family<k>(id, cons(key, keysUsed)) &*& ghost_cell_family_member<k, v>(id, key, value);
+
+lemma void ghost_cell_family_match_member<k, v>(int id, k key);
+    requires [?ff]ghost_cell_family<k>(id, ?keysUsed) &*& [?fm]ghost_cell_family_member<k, v>(id, key, ?value);
+    ensures [ff]ghost_cell_family<k>(id, keysUsed) &*& [fm]ghost_cell_family_member<k, v>(id, key, value) &*& mem(key, keysUsed) == true;
+
+lemma void ghost_cell_family_remove_member<k, v>(int id, k key);
+    requires ghost_cell_family<k>(id, ?keysUsed) &*& ghost_cell_family_member<k, v>(id, key, _);
+    ensures ghost_cell_family<k>(id, remove(key, keysUsed)) &*& mem(key, keysUsed) == true;
+
+lemma void ghost_cell_family_mutate_member<k, v>(int id, k key, v newValue);
+    requires ghost_cell_family_member<k, v>(id, key, _);
+    ensures ghost_cell_family_member<k, v>(id, key, newValue);
+
+lemma void ghost_cell_family_member_fraction_info<k, v>(int id, k key);
+    requires [?f]ghost_cell_family_member<k, v>(id, key, ?value);
+    ensures [f]ghost_cell_family_member<k, v>(id, key, value) &*& 0 < f &*& f <= 1;
+
+lemma void ghost_cell_family_leak_member<k, v>(int id, k key); // For people who prefer to avoid "leak" statements.
+    requires [?f]ghost_cell_family_member<k, v>(id, key, ?value);
+    ensures [_]ghost_cell_family_member<k, v>(id, key, value);
+
 #endif
