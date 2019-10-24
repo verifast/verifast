@@ -672,13 +672,13 @@ and translate_statement stmt =
       let expr' = translate_expression expr in
       let stmt' = translate_statements_as_block l' stmts in
       let (inv, dec) = check_loop_invariant l' anns in
-      VF.WhileStmt(l', expr', inv, dec, [stmt'])
+      VF.WhileStmt(l', expr', inv, dec, [stmt'], [])
   | GEN.DoWhile(l, anns, expr, stmts) ->
       let l' = translate_location l in
       let expr' = translate_expression expr in
       let (inv, dec) = check_loop_invariant l' anns in
       let body = translate_statements_as_block l' stmts in
-      let while_ = VF.WhileStmt(l', expr', inv, dec, [body]) in
+      let while_ = VF.WhileStmt(l', expr', inv, dec, [body], []) in
       VF.BlockStmt(l', [], [body; while_], dummy_loc, ref [])
   | GEN.For(l, anns, init, expr, update, stmts) ->
       let l' = translate_location l in
@@ -687,7 +687,7 @@ and translate_statement stmt =
       let expr' = translate_expression expr in
       let update' = List.map translate_statement update in
       let stmt' = translate_statements_as_block l' stmts in
-      VF.BlockStmt (l', [], init' @ [WhileStmt (l', expr', inv, dec, [stmt'] @ update')], l', ref [])
+      VF.BlockStmt (l', [], init' @ [WhileStmt (l', expr', inv, dec, [stmt'], update')], l', ref [])
   | GEN.If(l, expr, stmts_true, stmts_false) ->
       let l' = translate_location l in
       let expr' = translate_expression expr in

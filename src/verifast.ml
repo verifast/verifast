@@ -1407,9 +1407,10 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       tcont sizemap ((x, HandleIdType)::tenv) (x::ghostenv) (Chunk ((hpn_symb, true), [], real_unit, [handleTerm; boxIdTerm], None)::is_handle_chunks@h) ((x, handleTerm)::env)
     | ReturnStmt (l, eo) ->
       verify_return_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env true l eo [] return_cont econt
-    | WhileStmt (l, e, None, dec, ss) ->
+    | WhileStmt (l, e, None, dec, ss, final_ss) ->
       static_error l "Loop invariant required." None
-    | WhileStmt (l, e, Some (LoopInv p), dec, ss) ->
+    | WhileStmt (l, e, Some (LoopInv p), dec, ss, final_ss) ->
+      let ss = ss @ final_ss in (* CAVEAT: if we add support for 'continue', this needs to change. *)
       if not pure then begin
         match ss with PureStmt (lp, _)::_ -> static_error lp "Pure statement not allowed here." None | _ -> ()
       end;
@@ -1475,7 +1476,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         cont h'''
       end $. fun h''' ->
       check_leaks h''' env endBodyLoc "Loop leaks heap chunks."
-    | WhileStmt (l, e, Some (LoopSpec (pre, post)), dec, ss) ->
+    | WhileStmt (l, e, Some (LoopSpec (pre, post)), dec, ss, final_ss) ->
       if not pure then begin
         match ss with PureStmt (lp, _)::_ -> static_error lp "Pure statement not allowed here." None | _ -> ()
       end;
@@ -1491,7 +1492,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           BlockStmt(_, _, ss, _, locals_to_free) :: rest -> check_block_declarations ss; (ss @ rest, locals_to_free)
         | _ -> (ss, ref [])
       in
-      let xs = (expr_assigned_variables e) @ (block_assigned_variables ss) in
+      let xs = (expr_assigned_variables e) @ (block_assigned_variables ss)  @ block_assigned_variables final_ss in
       let xs = List.filter (fun x -> match try_assoc x tenv with None -> false | Some (RefType _) -> false | _ -> true) xs in
       let (pre, tenv') = check_asn (pn,ilist) tparams tenv pre in
       let old_xs_tenv = List.map (fun x -> ("old_" ^ x, List.assoc x tenv)) xs in
@@ -1527,6 +1528,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         iter [] ss
       in
+      let ss_before = ss_before @ final_ss in
       let xs_ss_after = block_assigned_variables ss_after in
       let exit_loop h' env' cont =
         execute_branch (fun () -> check_post h' env');

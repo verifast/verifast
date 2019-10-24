@@ -42,3 +42,20 @@ int list_length(struct node *node, int *foo)
     }
     return i;
 }
+
+int list_length_alt(struct node *node, int *foo)
+    //@ requires nodes(node, ?values) &*& integer(foo, ?x);
+    //@ ensures nodes(node, values) &*& integer(foo, x) &*& result == length(values);
+{
+    int i;
+    for (i = 0; node != 0; node = node->next, i++)
+        //@ requires nodes(node, ?values1);
+        //@ ensures nodes(old_node, values1) &*& i == old_i + length(values1);
+        //@ decreases length(values1);
+    {
+        //@ open nodes(node, values1);
+        //@ recursive_call();
+        //@ close nodes(old_node, values1);
+    }
+    return i;
+}

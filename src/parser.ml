@@ -1026,11 +1026,10 @@ and
 | [< '(l, Kwd "return"); eo = parser [< '(_, Kwd ";") >] -> None | [< e = parse_expr; '(_, Kwd ";") >] -> Some e >] -> ReturnStmt (l, eo)
 | [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")");
      (inv, dec, body) = parse_loop_core l
-  >] -> WhileStmt (l, e, inv, dec, body)
+  >] -> WhileStmt (l, e, inv, dec, body, [])
 | [< '(l, Kwd "do"); (inv, dec, body) = parse_loop_core l; '(lwhile, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd ";") >] ->
   (* "do S while (E);" is translated to "while (true) { S if (E) {} else break; }" *)
-  (* CAVEAT: If we ever add support for 'continue' statements, then this translation is not sound. *)
-  WhileStmt (l, True l, inv, dec, body @ [IfStmt (lwhile, e, [], [Break lwhile])])
+  WhileStmt (l, True l, inv, dec, body,  [IfStmt (lwhile, e, [], [Break lwhile])])
 | [< '(l, Kwd "for");
      '(_, Kwd "(");
      init_stmts = begin parser
@@ -1049,7 +1048,7 @@ and
      (inv, dec, b) = parse_loop_core l
   >] ->
   let cond = match cond with None -> True l | Some e -> e in
-  BlockStmt (l, [], init_stmts @ [WhileStmt (l, cond, inv, dec, b @ List.map (fun e -> ExprStmt e) update_exprs)], l, ref [])
+  BlockStmt (l, [], init_stmts @ [WhileStmt (l, cond, inv, dec, b, List.map (fun e -> ExprStmt e) update_exprs)], l, ref [])
 | [< '(l, Kwd "throw"); e = parse_expr; '(_, Kwd ";") >] -> Throw (l, e)
 | [< '(l, Kwd "break"); '(_, Kwd ";") >] -> Break(l)
 | [< '(l, Kwd "try");

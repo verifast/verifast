@@ -514,12 +514,13 @@ let rec sexpr_of_stmt (stmt : stmt) : sexpression =
     | ExprStmt expr ->
       List [ Symbol "stmt-expression"
            ; sexpr_of_expr expr ]
-    | WhileStmt (loc, cond, invariant, expr, body) ->
+    | WhileStmt (loc, cond, invariant, expr, body, final_ss) ->
       build_list [ Symbol "stmt-while" ]
                  [ "condition", sexpr_of_expr cond
                  ; "invariant", sexpr_of_option sexpr_of_loop_spec invariant
                  ; "unknown", sexpr_of_option sexpr_of_expr expr
-                 ; "body", sexpr_of_list sexpr_of_stmt body ]
+                 ; "body", sexpr_of_list sexpr_of_stmt body
+                 ; "final-ss", sexpr_of_list sexpr_of_stmt final_ss ]
     | DeclStmt (loc, xs) ->
       let sexpr_of_local (lx, tx, str, expr, _) =
         let initialization =

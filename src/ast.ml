@@ -526,7 +526,8 @@ and
       expr *
       loop_spec option *
       expr option * (* decreases clause *)
-      stmt list
+      stmt list * (* body *)
+      stmt list (* statements to be executed after the body: for increment or do-while condition check. 'continue' jumps here. *)
   | BlockStmt of
       loc *
       decl list *
@@ -886,7 +887,7 @@ let stmt_loc s =
   | Open (l, _, _, _, _, _, coef) -> l
   | Close (l, _, _, _, _, _, coef) -> l
   | ReturnStmt (l, _) -> l
-  | WhileStmt (l, _, _, _, _) -> l
+  | WhileStmt (l, _, _, _, _, _) -> l
   | Throw (l, _) -> l
   | TryCatch (l, _, _) -> l
   | TryFinally (l, _, _, _) -> l
@@ -919,7 +920,7 @@ let stmt_fold_open f state s =
       | SwitchStmtDefaultClause (l, ss) -> List.fold_left f state ss
     in
     List.fold_left iter state cs
-  | WhileStmt (l, _, _, _, ss) -> List.fold_left f state ss
+  | WhileStmt (l, _, _, _, ss, final_ss) -> let state = List.fold_left f state ss in List.fold_left f state final_ss
   | TryCatch (l, ss, ccs) ->
     let state = List.fold_left f state ss in
     List.fold_left (fun state (_, _, _, ss) -> List.fold_left f state ss) state ccs
