@@ -1,3 +1,4 @@
+//@ #include <ghost_cells.gh>
 //@ #include <strong_ghost_lists.gh>
 //@ #include "ghost_lists.gh"
 
@@ -135,6 +136,82 @@ lemma void ghost_assoc_list_member_handle_lemma(int id, void **x)
     ghost_list_member_handle_lemma(id);
     close [f1]ghost_assoc_list(id, xys);
     close [f2]ghost_assoc_list_member_handle(id, x);
+}
+
+
+
+inductive int_pair = int_pair(int v1, int v2);
+
+predicate strong_ghost_assoc_list(int id, list<pair<void *, void *> > xys) =
+    [_]ghost_cell(id, int_pair(?listId, ?famId)) &*&
+    ghost_list(listId, map(fst, xys)) &*&
+    ghost_cell_family(famId, map(fst, xys));
+predicate strong_ghost_assoc_list_key_handle(int id, void *x) =
+    [_]ghost_cell(id, int_pair(?listId, ?famId)) &*&
+    ghost_list_member_handle(listId, x);
+predicate strong_ghost_assoc_list_member_handle(int id, void *x; void *y) =
+    [_]ghost_cell(id, int_pair(?listId, ?famId)) &*&
+    ghost_cell_family_member(famId, x, y);
+
+lemma int create_strong_ghost_assoc_list()
+    requires true;
+    ensures strong_ghost_assoc_list(result, nil);
+{
+    int listId = create_ghost_list<void *>();
+    int famId = create_ghost_cell_family<void *>();
+    int id = create_ghost_cell(int_pair(listId, famId));
+    ghost_cell_leak(id);
+    close strong_ghost_assoc_list(id, nil);
+    return id;
+}
+
+lemma void strong_ghost_assoc_list_add(int id, void *x, void *y)
+    requires strong_ghost_assoc_list(id, ?xys) &*& !mem_assoc(x, xys);
+    ensures strong_ghost_assoc_list(id, cons(pair(x, y), xys)) &*& strong_ghost_assoc_list_member_handle(id, x, y);
+{
+    open strong_ghost_assoc_list(id, xys);
+    assert [_]ghost_cell(id, int_pair(?listId, ?famId));
+    ghost_list_add(listId, x);
+    ghost_cell_family_add_member(famId, x, y);
+    close strong_ghost_assoc_list(id, cons(pair(x, y), xys));
+    close strong_ghost_assoc_list_member_handle(id, x, y);
+}
+
+lemma void strong_ghost_assoc_list_update(int id, void *x, void *y1)
+    requires strong_ghost_assoc_list(id, ?xys) &*& strong_ghost_assoc_list_member_handle(id, x, _);
+    ensures strong_ghost_assoc_list(id, update_assoc(xys, x, y1)) &*& strong_ghost_assoc_list_member_handle(id, x, y1);
+{
+    open strong_ghost_assoc_list(id, xys);
+    open strong_ghost_assoc_list_member_handle(id, x, _);
+    assert [_]ghost_cell(id, int_pair(?listId, ?famId));
+    ghost_cell_family_mutate_member(famId, x, y1);
+    map_fst_update_assoc(xys, x, y1);
+    close strong_ghost_assoc_list(id, update_assoc(xys, x, y1));
+    close strong_ghost_assoc_list_member_handle(id, x, y1);
+}
+
+lemma void strong_ghost_assoc_list_key_handle_lemma()
+    requires strong_ghost_assoc_list(?id, ?xys) &*& [?f]strong_ghost_assoc_list_key_handle(id, ?x);
+    ensures strong_ghost_assoc_list(id, xys) &*& [f]strong_ghost_assoc_list_key_handle(id, x) &*& mem_assoc(x, xys) == true;
+{
+    open strong_ghost_assoc_list(id, xys);
+    open [f]strong_ghost_assoc_list_key_handle(id, x);
+    assert [_]ghost_cell(id, int_pair(?listId, ?famId));
+    ghost_list_member_handle_lemma(listId);
+    close strong_ghost_assoc_list(id, xys);
+    close [f]strong_ghost_assoc_list_key_handle(id, x);
+}
+
+lemma void create_strong_ghost_assoc_list_key_handle(void *x)
+    requires strong_ghost_assoc_list(?id, ?xys) &*& mem_assoc(x, xys) == true;
+    ensures strong_ghost_assoc_list(id, xys) &*& [_]strong_ghost_assoc_list_key_handle(id, x);
+{
+    open strong_ghost_assoc_list(id, xys);
+    assert [_]ghost_cell(id, int_pair(?listId, ?famId));
+    ghost_list_create_member_handle(listId, x);
+    close strong_ghost_assoc_list(id, xys);
+    assert [?f]ghost_list_member_handle(listId, x);
+    close [f]strong_ghost_assoc_list_key_handle(id, x);
 }
 
 @*/

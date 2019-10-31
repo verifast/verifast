@@ -111,4 +111,5 @@
 .requires CRT/prelude_core.gh#default_value_eq_zero
 .provides ./bitops_ex.gh#bitand_bitor_1_2_lemma
 .provides ./bitops_ex.gh#bitand_bitor_lemma
+.provides ./bitops_ex.gh#bitand_plus_4
 .produces module bitops_ex

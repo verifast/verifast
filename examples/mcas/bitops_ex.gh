@@ -9,4 +9,8 @@ lemma void bitand_bitor_1_2_lemma(void *x);
     requires true == (((uintptr_t)x & 1) == 0);
     ensures  true == ((((uintptr_t)x | 2) & 1) == 0);
 
+lemma void bitand_plus_4(void *x);
+    requires true == (((uintptr_t)x & 1) == 0) &*& true == (((uintptr_t)x & 2) == 0);
+    ensures true == (((uintptr_t)(x + 4) & 1) == 0) &*& true == (((uintptr_t)(x + 4) & 2) == 0);
+
 #endif

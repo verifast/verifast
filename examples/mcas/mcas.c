@@ -1,6 +1,8 @@
 #include <stdbool.h>
 #include "stdlib.h"
 #include "rdcss.h"
+//@ #include <listex.gh>
+//@ #include <quantifiers.gh>
 //@ #include "ghost_cells_ex.gh"
 //@ #include "ghost_lists.gh"
 //@ #include "assoc_list.gh"
@@ -24,32 +26,59 @@ struct cd {
 
 /*@
 
-lemma void entries_separate_ith(int i);
+lemma void entries_separate_ith(int i)
     requires [?f]entries(?n, ?aes, ?es) &*& 0 <= i &*& i < n;
     ensures
         [f]entries(i, aes, take(i, es)) &*&
         [f]mcas_entry_a(aes + i, fst(nth(i, es))) &*&
         [f]mcas_entry_o(aes + i, fst(snd(nth(i, es)))) &*&
         [f]mcas_entry_n(aes + i, snd(snd(nth(i, es)))) &*&
+        [f]struct_mcas_entry_padding(aes + i) &*&
         true == (((uintptr_t)fst<void *, void *>(snd(nth(i, es))) & 1) == 0) &*&
         true == (((uintptr_t)fst<void *, void *>(snd(nth(i, es))) & 2) == 0) &*&
         true == (((uintptr_t)snd<void *, void *>(snd(nth(i, es))) & 1) == 0) &*&
         true == (((uintptr_t)snd<void *, void *>(snd(nth(i, es))) & 2) == 0) &*&
         [f]entries(n - i - 1, aes + i + 1, drop(i + 1, es));
+{
+    open [f]entries(n, aes, es);
+    if (i == 0) {
+    } else {
+        entries_separate_ith(i - 1);
+    }
+    close [f]entries(i, aes, take(i, es));
+}
 
-lemma void entries_unseparate_ith(int i, list<pair<void *, pair<void *, void *> > > es);
+lemma void length_cons_lemma<t>(list<t> xs)
+    requires 0 < length(xs);
+    ensures xs == cons(?x0, ?xs0);
+{
+    assert xs == cons(_, _);
+}
+
+lemma void entries_unseparate_ith(int i, list<pair<void *, pair<void *, void *> > > es)
     requires
-        0 <= i &*& i < length(es) &*&
         [?f]entries(i, ?aes, take(i, es)) &*&
+        0 <= i &*& i < length(es) &*&
         [f]mcas_entry_a(aes + i, fst(nth(i, es))) &*&
         [f]mcas_entry_o(aes + i, fst(snd(nth(i, es)))) &*&
         [f]mcas_entry_n(aes + i, snd(snd(nth(i, es)))) &*&
+        [f]struct_mcas_entry_padding(aes + i) &*&
         true == (((uintptr_t)fst<void *, void *>(snd(nth(i, es))) & 1) == 0) &*&
         true == (((uintptr_t)fst<void *, void *>(snd(nth(i, es))) & 2) == 0) &*&
         true == (((uintptr_t)snd<void *, void *>(snd(nth(i, es))) & 1) == 0) &*&
         true == (((uintptr_t)snd<void *, void *>(snd(nth(i, es))) & 2) == 0) &*&
         [f]entries(length(es) - i - 1, aes + i + 1, drop(i + 1, es));
     ensures [f]entries(length(es), aes, es);
+{
+    length_cons_lemma(es);
+    assert nth(i, es) == pair(_, pair(_, _));
+    open [f]entries(i, aes, take(i, es));
+    if (i == 0) {
+    } else {
+        entries_unseparate_ith(i - 1, tail(es));
+    }
+    close [f]entries(length(es), aes, es);
+}
 
 lemma void entries_length_lemma()
     requires [?f]entries(?n, ?entries, ?es);
@@ -151,15 +180,235 @@ predicate mcas(int id, mcas_sep *sep, mcas_unsep *unsep, any mcasInfo, list<pair
     foreach_assoc(zip(sas, svs), pointer) &*&
     foreach_assoc2(rcs, cs, mcas_cell(rcsList, dsList));
 
-lemma void mem_es_lemma(int k, list<pair<void *, pair<void *, void *> > > es, list<pair<void *, void *> > cs);
+lemma void mem_es_lemma(int k, list<pair<void *, pair<void *, void *> > > es, list<pair<void *, void *> > cs)
     requires
         foreach_assoc2(?rcs, cs, ?p) &*& mem_es(es, cs) == true &*& 0 <= k &*& k < length(es);
     ensures 
         foreach_assoc2(rcs, cs, p) &*& mem_assoc(fst(nth(k, es)), rcs) == true;
+{
+    mem_nth(k, es);
+    forall_elim(es, (mem_es_func)(mapfst(cs)), nth(k, es));
+    assert mem_assoc(fst(nth(k, es)), cs) == true;
+    foreach_assoc2_mapfst();
+}
 
-fixpoint list<pair<a, b> > fold_remove_assoc<a, b>(list<a> xs, list<pair<a, b> > xys);
+fixpoint list<pair<a, b> > remove_assoc<a, b>(a x, list<pair<a, b> > xys) {
+    switch (xys) {
+    case nil: return xys;
+    case cons(xy0, xys0): return fst(xy0) == x ? xys0 : cons(xy0, remove_assoc(x, xys0));
+    }
+}
 
-lemma void foreach_assoc2_subset_separate(int n);
+lemma void mem_assoc_remove_assoc<a, b>(a x1, a x2, list<pair<a, b> > xys)
+    requires mem_assoc(x1, xys) && x1 != x2;
+    ensures mem_assoc(x1, remove_assoc(x2, xys)) && assoc(x1, remove_assoc(x2, xys)) == assoc(x1, xys);
+{
+    switch (xys) {
+    case nil:
+    case cons(xy0, xys0):
+        assert xy0 == pair(?x0, ?y0);
+        if (x0 == x1) {
+        } else if (x0 == x2) {
+        } else {
+            mem_assoc_remove_assoc(x1, x2, xys0);
+        }
+    }
+}
+
+fixpoint list<pair<a, b> > fold_remove_assoc<a, b>(list<a> xs, list<pair<a, b> > xys) {
+    switch (xs) {
+    case nil: return xys;
+    case cons(x0, xs0): return remove_assoc(x0, fold_remove_assoc(xs0, xys));
+    }
+}
+
+lemma void mapfst_remove_assoc<a, b>(a x, list<pair<a, b> > xys)
+    requires true;
+    ensures mapfst(remove_assoc(x, xys)) == remove(x, mapfst(xys));
+{
+    switch (xys) {
+    case nil:
+    case cons(xy0, xys0):
+        assert xy0 == pair(?x0, ?y0);
+        if (x0 == x) {
+        } else {
+            mapfst_remove_assoc(x, xys0);
+        }
+    }
+}
+
+lemma void mapfst_fold_remove_assoc<a, b>(list<a> xs, list<pair<a, b> > xys)
+    requires true;
+    ensures mapfst(fold_remove_assoc(xs, xys)) == remove_all(xs, mapfst(xys));
+{
+    switch (xs) {
+    case nil:
+    case cons(x0, xs0):
+        mapfst_remove_assoc(x0, fold_remove_assoc(xs0, xys));
+        mapfst_fold_remove_assoc(xs0, xys);
+    }
+}
+
+lemma void mem_assoc_fold_remove_assoc<a, b>(a x, list<a> xs, list<pair<a, b> > xys)
+    requires mem_assoc(x, xys) && !mem(x, xs);
+    ensures mem_assoc(x, fold_remove_assoc(xs, xys)) == true && assoc(x, fold_remove_assoc(xs, xys)) == assoc(x, xys);
+{
+    switch (xs) {
+    case nil:
+    case cons(x0, xs0):
+        if (x0 != x) {
+            mem_assoc_fold_remove_assoc(x, xs0, xys);
+            mem_assoc_remove_assoc(x, x0, fold_remove_assoc(xs0, xys));
+        }
+    }
+}
+
+lemma void mem_take<t>(t x, int n, list<t> xs)
+    requires mem(x, take(n, xs)) == true;
+    ensures mem(x, xs) == true;
+{
+    switch (xs) {
+    case nil:
+    case cons(x0, xs0):
+        if (x0 != x && n != 0)
+            mem_take(x, n - 1, xs0);
+    }
+}
+
+lemma void distinct_take<t>(int n, list<t> xs)
+    requires distinct(xs) == true;
+    ensures distinct(take(n, xs)) == true;
+{
+    switch (xs) {
+    case nil:
+    case cons(x0, xs0):
+        if (n != 0) {
+            distinct_take(n - 1, xs0);
+            if (mem(x0, take(n - 1, xs0)))
+                mem_take(x0, n - 1, xs0);
+        }
+    }
+}
+
+lemma void entry_mem_mem_es(int rcsList, list<pair<void *, void *> > cs)
+    requires
+        foreach(?es, entry_mem(rcsList)) &*&
+        strong_ghost_assoc_list(rcsList, ?rcs) &*&
+        mapfst(cs) == mapfst(rcs);
+    ensures
+        mem_es(es, cs) == true &*&
+        strong_ghost_assoc_list(rcsList, rcs) &*&
+        foreach(es, entry_mem(rcsList));
+{
+    open foreach(es, entry_mem(rcsList));
+    switch (es) {
+    case nil:
+    case cons(e0, es0):
+        open entry_mem(rcsList)(e0);
+        strong_ghost_assoc_list_key_handle_lemma();
+        entry_mem_mem_es(rcsList, cs);
+        close entry_mem(rcsList)(e0);
+    }
+    close foreach(es, entry_mem(rcsList));
+}
+
+lemma void foreach_assoc2_remove_assoc(void *x, list<pair<void *, void *> > rcs)
+    requires foreach_assoc2(rcs, ?cs, ?p) &*& mem(x, mapfst(rcs)) == true;
+    ensures foreach_assoc2(remove_assoc(x, rcs), remove_assoc(x, cs), p) &*& p(x, assoc(x, rcs), assoc(x, cs));
+{
+    open foreach_assoc2(rcs, cs, p);
+    assert rcs == cons(pair(?x0, ?y0), ?rcs0) &*& cs == cons(pair(x0, ?z0), ?cs0);
+    if (x0 == x) {
+    } else {
+        foreach_assoc2_remove_assoc(x, rcs0);
+        close_foreach_assoc2_cons(remove_assoc(x, rcs), remove_assoc(x, cs), p);
+    }
+}
+
+lemma void foreach_assoc2_unremove_assoc(void *x, list<pair<void *, void *> > rcs, list<pair<void *, void *> > cs)
+    requires mem_assoc(x, rcs) == true &*& mapfst(rcs) == mapfst(cs) &*& foreach_assoc2(remove_assoc(x, rcs), remove_assoc(x, cs), ?p) &*& p(x, assoc(x, rcs), assoc(x, cs));
+    ensures foreach_assoc2(rcs, cs, p);
+{
+    switch (rcs) {
+    case nil:
+    case cons(rc0, rcs0):
+        assert cs == cons(?c0, ?cs0);
+        if (fst(rc0) == x) {
+            close_foreach_assoc2_cons(rcs, cs, p);
+        } else {
+            open foreach_assoc2(_, _, _);
+            foreach_assoc2_unremove_assoc(x, rcs0, cs0);
+            close_foreach_assoc2_cons(rcs, cs, p);
+        }
+    }
+}
+
+lemma void foreach_assoc2_subset_separate_iter(int n, list<pair<void *, pair<void *, void *> > > es)
+    requires
+        foreach_assoc2(?rcs, ?cs, ?p) &*&
+        0 <= n &*& n <= length(es) &*&
+        mem_es(es, cs) == true &*&
+        distinct(mapfst(es)) == true;
+    ensures
+        foreach_assoc2(fold_remove_assoc(take(n, mapfst(es)), rcs), fold_remove_assoc(take(n, mapfst(es)), cs), p) &*&
+        foreach_assoc2(
+            drop(0, take(n, map_assoc(rcs, mapfst(es)))),
+            drop(0, take(n, map_assoc(cs, mapfst(es)))),
+            p);
+{
+    switch (es) {
+    case nil:
+        close foreach_assoc2(nil, nil, p);
+    case cons(e0, es0):
+        if (n == 0) {
+            close foreach_assoc2(nil, nil, p);
+        } else {
+            foreach_assoc2_mapfst();
+            distinct_take(n, mapfst(es));
+            foreach_assoc2_subset_separate_iter(n - 1, es0);
+            foreach_assoc2_mapfst();
+            mem_assoc_fold_remove_assoc(fst(e0), take(n - 1, mapfst(es0)), rcs);
+            mem_assoc_fold_remove_assoc(fst(e0), take(n - 1, mapfst(es0)), cs);
+            foreach_assoc2_remove_assoc(fst(e0), fold_remove_assoc(take(n - 1, mapfst(es0)), rcs));
+            close_foreach_assoc2_cons(drop(0, take(n, map_assoc(rcs, mapfst(es)))), drop(0, take(n, map_assoc(cs, mapfst(es)))), p);
+        }
+    }
+}
+
+lemma void foreach_assoc2_subset_unseparate_iter(int n, list<pair<void *, pair<void *, void *> > > es, list<pair<void *, void *> > rcs, list<pair<void *, void *> > cs)
+    requires
+        0 <= n &*& n <= length(es) &*&
+        foreach_assoc2(fold_remove_assoc(take(n, mapfst(es)), rcs), fold_remove_assoc(take(n, mapfst(es)), cs), ?p) &*&
+        foreach_assoc2(
+            drop(0, take(n, map_assoc(rcs, mapfst(es)))),
+            drop(0, take(n, map_assoc(cs, mapfst(es)))),
+            p) &*&
+        mapfst(rcs) == mapfst(cs) &*&
+        mem_es(es, cs) == true &*&
+        distinct(mapfst(es)) == true;
+    ensures
+        foreach_assoc2(rcs, cs, p);
+{
+    switch (es) {
+    case nil:
+        open foreach_assoc2(nil, nil, p);
+    case cons(e0, es0):
+        if (n == 0) {
+            open foreach_assoc2(nil, nil, p);
+        } else {
+            open foreach_assoc2(drop(0, take(n, map_assoc(rcs, mapfst(es)))), drop(0, take(n, map_assoc(cs, mapfst(es)))), p);
+            distinct_take(n, mapfst(es));
+            mem_assoc_fold_remove_assoc(fst(e0), take(n - 1, mapfst(es0)), rcs);
+            mem_assoc_fold_remove_assoc(fst(e0), take(n - 1, mapfst(es0)), cs);
+            mapfst_fold_remove_assoc(take(n - 1, mapfst(es0)), rcs);
+            mapfst_fold_remove_assoc(take(n - 1, mapfst(es0)), cs);
+            foreach_assoc2_unremove_assoc(fst(e0), fold_remove_assoc(take(n - 1, mapfst(es0)), rcs), fold_remove_assoc(take(n - 1, mapfst(es0)), cs));
+            foreach_assoc2_subset_unseparate_iter(n - 1, es0, rcs, cs);
+        }
+    }
+}
+
+lemma void foreach_assoc2_subset_separate(int n)
     requires
         strong_ghost_assoc_list(?rcsList, ?rcs) &*&
         foreach_assoc2(rcs, ?cs, ?p) &*&
@@ -176,8 +425,13 @@ lemma void foreach_assoc2_subset_separate(int n);
             drop(0, take(n, map_assoc(cs, mapfst(es)))),
             p) &*&
         foreach(es, entry_mem(rcsList));
+{
+    foreach_assoc2_mapfst();
+    entry_mem_mem_es(rcsList, cs);
+    foreach_assoc2_subset_separate_iter(n, es);
+}
 
-lemma void foreach_assoc2_subset_unseparate(list<pair<void *, void *> > cs, int n);
+lemma void foreach_assoc2_subset_unseparate(list<pair<void *, void *> > cs, int n)
     requires
         strong_ghost_assoc_list(?rcsList, ?rcs) &*&
         foreach(?es, entry_mem(rcsList)) &*&
@@ -194,22 +448,202 @@ lemma void foreach_assoc2_subset_unseparate(list<pair<void *, void *> > cs, int 
         strong_ghost_assoc_list(rcsList, rcs) &*&
         foreach_assoc2(rcs, cs, p) &*&
         foreach(es, entry_mem(rcsList));
+{
+    entry_mem_mem_es(rcsList, cs);
+    foreach_assoc2_subset_unseparate_iter(n, es, rcs, cs);
+}
 
-lemma void ith_neq_es_success(int i, list<pair<void *, pair<void *, void *> > > es, list<pair<void *, void *> > cs);
+lemma void ith_neq_es_success(int i, list<pair<void *, pair<void *, void *> > > es, list<pair<void *, void *> > cs)
     requires 0 <= i &*& i < length(es) &*& assoc(fst(nth(i, es)), cs) != fst(snd(nth(i, es)));
     ensures !es_success(es, cs);
+{
+    if (es_success(es, cs)) {
+        mem_nth(i, es);
+        forall_elim(es, (entry_success)(cs), nth(i, es));
+    }
+}
 
-lemma void es_apply_lemma(int k, list<pair<void *, pair<void *, void *> > > es, list<pair<void *, void *> > cs);
+lemma void assoc_update_assoc<a, b>(a x1, list<pair<a, b> > xys, a x2, b y2)
+    requires mem_assoc(x1, xys) == true;
+    ensures assoc(x1, update_assoc(xys, x2, y2)) == (x1 == x2 ? y2 : assoc(x1, xys));
+{
+    switch (xys) {
+    case nil:
+    case cons(xy0, xys0):
+        assert xy0 == pair(?x0, ?y0);
+        if (fst(xy0) == x2) {
+        } else if (fst(xy0) == x1) {
+        } else {
+            assoc_update_assoc(x1, xys0, x2, y2);
+        }
+    }
+}
+
+lemma void remove_assoc_update_assoc<a, b>(a x, list<pair<a, b> > xys, b y)
+    requires true;
+    ensures remove_assoc(x, update_assoc(xys, x, y)) == remove_assoc(x, xys);
+{
+    switch (xys) {
+    case nil:
+    case cons(xy0, xys0):
+        assert xy0 == pair(?x0, ?y0);
+        if (x0 != x)
+            remove_assoc_update_assoc(x, xys0, y);
+    }
+}
+
+lemma void remove_assoc_remove_assoc<a, b>(a x1, a x2, list<pair<a, b> > xys)
+    requires true;
+    ensures remove_assoc(x1, remove_assoc(x2, xys)) == remove_assoc(x2, remove_assoc(x1, xys));
+{
+    switch (xys) {
+    case nil:
+    case cons(xy0, xys0):
+        if (x1 != x2) {
+            assert xy0 == pair(?x0, ?y0);
+            if (x0 == x2) {
+            } else if (x0 == x1) {
+            } else {
+                remove_assoc_remove_assoc(x1, x2, xys0);
+            }
+        }
+    }
+}
+
+lemma void remove_assoc_fold_remove_assoc<a, b>(a x, list<a> xs, list<pair<a, b> > xys)
+    requires true;
+    ensures remove_assoc(x, fold_remove_assoc(xs, xys)) == fold_remove_assoc(xs, remove_assoc(x, xys));
+{
+    switch (xs) {
+    case nil:
+    case cons(x0, xs0):
+        remove_assoc_remove_assoc(x, x0, fold_remove_assoc(xs0, xys));
+        remove_assoc_fold_remove_assoc(x, xs0, xys);
+    }
+}
+
+//lemma void remove_assoc_es_apply(void *x, list<pair<void *, pair<void *, void *> > > es, list<pair<void *, void *> > cs)
+//    requires true;
+//    ensures remove_assoc(x, es_apply(es, cs)) == 
+
+lemma void fold_remove_assoc_es_apply(list<pair<void *, pair<void *, void *> > > es, list<pair<void *, void *> > cs)
+    requires true;
+    ensures fold_remove_assoc(mapfst(es), es_apply(es, cs)) == fold_remove_assoc(mapfst(es), cs);
+{
+    switch (es) {
+    case nil:
+    case cons(e0, es0):
+        fold_remove_assoc_es_apply(es0, update_assoc(cs, fst(e0), snd(snd(e0))));
+        remove_assoc_fold_remove_assoc(fst(e0), mapfst(es0), cs);
+        remove_assoc_fold_remove_assoc(fst(e0), mapfst(es0), update_assoc(cs, fst(e0), snd(snd(e0))));
+        remove_assoc_update_assoc(fst(e0), cs, snd(snd(e0)));
+    }
+        
+}
+
+lemma void mapfst_update_assoc<a, b>(list<pair<a, b> > xys, a x1, b y1)
+    requires true;
+    ensures mapfst(update_assoc(xys, x1, y1)) == mapfst(xys);
+{
+    switch (xys) {
+    case nil:
+    case cons(xy0, xys0):
+        assert xy0 == pair(?x0, ?y0);
+        if (x0 == x1) {
+        } else {
+            mapfst_update_assoc(xys0, x1, y1);
+        }
+    }
+}
+
+lemma void mapfst_es_apply(list<pair<void *, pair<void *, void *> > > es, list<pair<void *, void *> > cs)
+    requires true;
+    ensures mapfst(es_apply(es, cs)) == mapfst(cs);
+{
+    switch (es) {
+    case nil:
+    case cons(e0, es0):
+        mapfst_update_assoc(cs, fst(e0), snd(snd(e0)));
+        mapfst_es_apply(es0, update_assoc(cs, fst(e0), snd(snd(e0))));
+    }
+}
+
+lemma void assoc_es_apply(void *x, list<pair<void *, pair<void *, void *> > > es, list<pair<void *, void *> > cs)
+    requires mem_assoc(x, cs) && mem_es(es, cs) && !mem_assoc(x, es);
+    ensures assoc(x, es_apply(es, cs)) == assoc(x, cs);
+{
+    switch (es) {
+    case nil:
+    case cons(e0, es0):
+        mapfst_update_assoc(cs, fst(e0), snd(snd(e0)));
+        assoc_es_apply(x, es0, update_assoc(cs, fst(e0), snd(snd(e0))));
+        assoc_update_assoc(x, cs, fst(e0), snd(snd(e0)));
+    }
+}
+
+lemma void es_apply_lemma0(pair<void *, pair<void *, void *> > e, list<pair<void *, pair<void *, void *> > > es, list<pair<void *, void *> > cs)
+    requires distinct(mapfst(es)) == true &*& mem_es(es, cs) == true &*& mem(e, es) == true;
+    ensures
+        assoc(fst(e), es_apply(es, cs)) == snd(snd(e));
+{
+    switch (es) {
+    case nil:
+    case cons(e0, es0):
+        if (e0 == e) {
+            mapfst_update_assoc(cs, fst(e), snd(snd(e)));
+            assoc_es_apply(fst(e), es0, update_assoc(cs, fst(e), snd(snd(e))));
+            assoc_update_assoc(fst(e), cs, fst(e), snd(snd(e)));
+        } else {
+            mapfst_update_assoc(cs, fst(e0), snd(snd(e0)));
+            es_apply_lemma0(e, es0, update_assoc(cs, fst(e0), snd(snd(e0))));
+        }
+    }
+}
+
+lemma void nth_map<a, b>(int n, fixpoint(a, b) f, list<a> xs)
+    requires 0 <= n &*& n < length(xs);
+    ensures nth(n, map(f, xs)) == f(nth(n, xs));
+{
+    switch (xs) {
+    case nil:
+    case cons(x0, xs0):
+        if (n != 0)
+            nth_map(n - 1, f, xs0);
+    }
+}
+
+lemma void length_map<a, b>(fixpoint(a, b) f, list<a> xs)
+    requires true;
+    ensures length(map(f, xs)) == length(xs);
+{
+    switch (xs) {
+    case nil:
+    case cons(x0, xs0):
+        length_map(f, xs0);
+    }
+}
+
+lemma void es_apply_lemma(int k, list<pair<void *, pair<void *, void *> > > es, list<pair<void *, void *> > cs)
     requires distinct(mapfst(es)) == true &*& 0 <= k &*& k < length(es) &*& mem_es(es, cs) == true;
     ensures
         nth(k, map_assoc(es_apply(es, cs), mapfst(es))) == pair(fst(nth(k, es)), snd(snd(nth(k, es)))) &*&
         assoc(fst(nth(k, es)), es_apply(es, cs)) == snd(snd(nth(k, es)));
+{
+    length_map(fst, es);
+    nth_map(k, (map_assoc_func)(es_apply(es, cs)), mapfst(es));
+    es_apply_lemma0(nth(k, es), es, cs);
+    nth_map(k, fst, es);
+}
 
-lemma void es_apply_lemma2(list<pair<void *, pair<void *, void *> > > es, list<pair<void *, void *> > cs);
+lemma void es_apply_lemma2(list<pair<void *, pair<void *, void *> > > es, list<pair<void *, void *> > cs)
     requires true;
     ensures
         mapfst(es_apply(es, cs)) == mapfst(cs) &*&
         fold_remove_assoc(mapfst(es), es_apply(es, cs)) == fold_remove_assoc(mapfst(es), cs);
+{
+    mapfst_es_apply(es, cs);
+    fold_remove_assoc_es_apply(es, cs);
+}
 
 predicate_family_instance rdcss_separate_lemma(mcas_rdcss_sep)(boxed_int info, int rdcssId, predicate() inv, rdcss_unseparate_lemma *rdcssUnsep) =
     rdcssUnsep == mcas_rdcss_unsep &*& is_mcas_unsep(?unsep) &*& is_mcas_sep(?sep) &*&

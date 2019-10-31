@@ -139,9 +139,18 @@ predicate foreach_assoc2(list<pair<void *, void *> > xys, list<pair<void *, void
             };
     };
 
+lemma void close_foreach_assoc2_cons(list<pair<void *, void *> > xys, list<pair<void *, void *> > xzs, predicate(void *, void *, void *) p);
+    requires xys == cons(pair(?x0, ?y0), ?xys0) &*& xzs == cons(pair(x0, ?z0), ?xzs0) &*&
+        p(x0, y0, z0) &*& foreach_assoc2(xys0, xzs0, p);
+    ensures foreach_assoc2(xys, xzs, p);
+
 fixpoint list<a> mapfst<a, b>(list<pair<a, b> > xys) {
     return map(fst, xys);
 }
+
+lemma void foreach_assoc2_mapfst();
+    requires foreach_assoc2(?xys, ?xzs, ?p);
+    ensures foreach_assoc2(xys, xzs, p) &*& mapfst(xys) == mapfst(xzs);
 
 lemma void foreach_assoc2_separate(void *x);
     requires foreach_assoc2(?xs, ?ys, ?p) &*& mem_assoc(x, xs) || mem_assoc(x, ys);

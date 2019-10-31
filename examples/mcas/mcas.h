@@ -41,11 +41,12 @@ typedef lemma void mcas_unsep();
 
 predicate_family mcas_mem(void *mem)(mcas_unsep *unsep, any mcasInfo, list<pair<void *, pair<void *, void *> > > a);
 
+fixpoint bool mem_es_func(list<void *> mapfst_cs, pair<void *, pair<void *, void *> > e) {
+    return mem(fst(e), mapfst_cs);
+}
+
 fixpoint bool mem_es(list<pair<void *, pair<void *, void *> > > es, list<pair<void *, void *> > cs) {
-    switch (es) {
-        case nil: return true;
-        case cons(e, es0): return mem_assoc(fst(e), cs) && mem_es(es0, cs);
-    }
+    return forall(es, (mem_es_func)(mapfst(cs)));
 }
 
 typedef lemma void mcas_mem();
@@ -55,11 +56,12 @@ typedef lemma void mcas_mem();
 predicate_family mcas_pre(void *op)(mcas_unsep *unsep, any mcasInfo, list<pair<void *, pair<void *, void *> > > es);
 predicate_family mcas_post(void *op)(bool success);
 
+fixpoint bool entry_success(list<pair<void *, void *> > cs, pair<void *, pair<void *, void *> > e) {
+    return assoc(fst(e), cs) == fst(snd(e));
+}
+
 fixpoint bool es_success(list<pair<void *, pair<void *, void *> > > es, list<pair<void *, void *> > cs) {
-    switch (es) {
-        case nil: return true;
-        case cons(e, es0): return assoc(fst(e), cs) == fst(snd(e)) && es_success(es0, cs);
-    }
+    return forall(es, (entry_success)(cs));
 }
 
 fixpoint list<pair<void *, void *> > es_apply(list<pair<void *, pair<void *, void *> > > es, list<pair<void *, void *> > cs) {
