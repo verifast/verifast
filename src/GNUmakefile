@@ -275,6 +275,7 @@ STDLIB_FILES_GEN = \
        ../bin/arrays.vfmanifest \
        ../bin/quantifiers.vfmanifest \
        ../bin/assoclist.vfmanifest \
+       ../bin/bitops.vfmanifest \
        ../bin/permutations.vfmanifest
 STDLIB_FILES = \
 	../bin/crt.vfmanifest \
@@ -339,6 +340,8 @@ $(STDLIB): $(STDLIB_FILES)
 
 ../bin/%.vfmanifest: ../bin/%.c ../bin/%.gh ../bin/verifast$(DOTEXE)
 	$(SET_ENV); ../bin/verifast -c -emit_vfmanifest ../bin/$*.c
+../bin/bitops.vfmanifest: ../bin/bitops.c ../bin/bitops.gh ../bin/verifast$(DOTEXE)
+	$(SET_ENV); ../bin/verifast -c -prover z3v4.5 -emit_vfmanifest ../bin/bitops.c
 clean::
 	rm -f $(STDLIB)
 	rm -f $(STDLIB_FILES_GEN)
