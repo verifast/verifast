@@ -904,8 +904,8 @@ bool mcas(int n, struct mcas_entry *aes)
     struct cas_tracker *tracker = create_cas_tracker();
     struct cd *cd = malloc(sizeof(struct cd));
     if (cd == 0) abort();
-    //@ assume(((uintptr_t)cd & 1) == 0);
-    //@ assume(((uintptr_t)cd & 2) == 0);
+    if (((uintptr_t)cd & 1) != 0) abort();
+    if (((uintptr_t)cd & 2) != 0) abort();
     cd->status = 0;
     cd->n = n;
     cd->es = aes;

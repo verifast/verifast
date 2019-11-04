@@ -283,6 +283,17 @@ void shift_interval(struct interval *interval) //@ : thread_run
     }
 }
 
+/*@
+
+lemma void interval_fields_disjoint(struct interval *i)
+    requires i->a |-> ?a &*& i->b |-> ?b;
+    ensures i->a |-> a &*& i->b |-> b &*& &i->a != &i->b;
+{
+    pointer_distinct(&i->a, &i->b);
+}
+
+@*/
+
 int main() //@ : main
     //@ requires true;
     //@ ensures true;
@@ -294,9 +305,11 @@ int main() //@ : main
     interval->b = 0;
     //@ int id = create_mcas(interval_sep, interval_unsep, interval_info(interval));
     //@ interval->id = id;
-    //@ assume(&interval->a != &interval->b);
-    //@ assume((0 & 1) == 0);
-    //@ assume((0 & 2) == 0);
+    //@ interval_fields_disjoint(interval);
+    //@ bitand_def(0, Zsign(false), 1, Zdigit(Zsign(false), true));
+    //@ assert ((0 & 1) == 0);
+    //@ bitand_def(0, Zsign(false), 2, Zdigit(Zdigit(Zsign(false), true), false));
+    //@ assert ((0 & 2) == 0);
     //@ close interval_values(0, 0);
     //@ open interval_a(_, _);
     //@ open interval_b(_, _);

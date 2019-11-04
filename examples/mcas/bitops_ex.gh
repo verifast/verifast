@@ -1,6 +1,8 @@
 #ifndef BITOPS_EX_H
 #define BITOPS_EX_H
 
+#include <bitops.gh>
+
 lemma void bitand_bitor_lemma(uintptr_t x, uintptr_t y);
     requires true == ((x & y) == 0);
     ensures y == ((x | y) & y) &*& x == ((x | y) & ~y);

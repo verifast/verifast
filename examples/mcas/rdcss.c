@@ -354,8 +354,8 @@ void *rdcss(void **a1, void *o1, void **a2, void *o2, void *n2)
 {
     struct cas_tracker *tracker = create_cas_tracker();
     struct rdcss_descriptor *d = malloc(sizeof(struct rdcss_descriptor));
-    //@ assume(((uintptr_t)d & 1) == 0);
     if (d == 0) abort();
+    if (((uintptr_t)d & 1) != 0) abort();
     d->a1 = a1;
     d->o1 = o1;
     d->a2 = a2;
