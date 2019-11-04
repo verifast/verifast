@@ -1942,7 +1942,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let arraySize = ctxt#mk_mul n (sizeof ls elemTp) in
       check_overflow lmul int_zero_term arraySize (max_unsigned_term ptr_rank) (fun l t -> assert_term t h env l);
       let resultType = PtrType elemTp in
-      let result = get_unique_var_symb (match xo with None -> "array" | Some x -> x) resultType in
+      let result = get_unique_var_symb_non_ghost (match xo with None -> "array" | Some x -> x) resultType in
       let cont h = cont h env result in
       branch
         begin fun () ->
@@ -1967,7 +1967,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if pure then static_error l "Cannot call a non-pure function from a pure context." None;
       let t = check_pure_type (pn,ilist) tparams te in
       let resultType = PtrType t in
-      let result = get_unique_var_symb (match xo with None -> (match t with StructType tn -> tn | _ -> "address") | Some x -> x) resultType in
+      let result = get_unique_var_symb_non_ghost (match xo with None -> (match t with StructType tn -> tn | _ -> "address") | Some x -> x) resultType in
       let cont h = cont h env result in
       branch
         begin fun () ->
