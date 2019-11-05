@@ -1,2 +1,2 @@
 ifz3v4.5 verifast -prover z3v4.5 -c -check_vfmanifest bitops_ex.c
-verifast threading.o atomics.o bitops_ex.o ghost_cells_ex.c listex_ex.c assoc_list.c ghost_lists.c ghost_counters.c rdcss.c mcas.c mcas_client.c
+verifast threading.o bitops_ex.o popl20_prophecies.vfmanifest atomics.c ghost_cells_ex.c listex_ex.c assoc_list.c ghost_lists.c ghost_counters.c rdcss.c mcas.c mcas_client.c

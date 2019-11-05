@@ -97,7 +97,7 @@ predicate cd(struct cd *cd; list<pair<void *, pair<void *, void *> > > es, struc
     true == (((uintptr_t)cd & 1) == 0) &*&
     true == (((uintptr_t)cd & 2) == 0) &*&
     cd->n |-> ?count &*& cd->es |-> ?entries &*& entries(count, entries, es) &*& cd->tracker |-> tracker &*& cd->counter |-> counter &*& cd->statusCell |-> statusCell &*&
-    cd->op |-> op;
+    cd->op |-> op &*& [_]is_cas_tracker(tracker);
 
 predicate_ctor mcas_cell(int rcsList, int dsList)(void **a, void *vr, void *va) =
     [?f]strong_ghost_assoc_list_member_handle(rcsList, a, vr) &*&
@@ -1324,6 +1324,7 @@ start:
                         assert realCellValue == abstractCellValue;
                         if (result != fst(snd(nth(i, es)))) {
                             ith_neq_es_success(i, es, cs);
+                            cas_tracker_is_cas_tracker(tracker);
                             void *prediction = create_tracked_cas_prediction(tracker, 0);
                             if (prediction == (void *)2) {
                                 assert [_]cd->done |-> ?done;
@@ -1487,6 +1488,7 @@ start:
                         aop(0, 0);
                     } else {
                         if (casProphecy == 0) {
+                            cas_tracker_is_cas_tracker(tracker);
                             void *prediction = create_tracked_cas_prediction(tracker, 0);
                             assert [_]cd->done |-> ?done;
                             aop(0, prediction);

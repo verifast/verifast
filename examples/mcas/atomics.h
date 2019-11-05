@@ -13,6 +13,7 @@ lemma void create_atomic_space(predicate() inv);
     ensures atomic_space(inv);
 
 lemma void dispose_atomic_space(predicate() inv);
+    nonghost_callers_only
     requires atomic_space(inv);
     ensures inv();
 
@@ -138,17 +139,22 @@ lemma void atomic_noop();
 struct cas_tracker;
 
 //@ predicate cas_tracker(struct cas_tracker *tracker, int count);
+//@ predicate is_cas_tracker(struct cas_tracker *tracker;);
 
 struct cas_tracker *create_cas_tracker();
     //@ requires true;
-    //@ ensures cas_tracker(result, 0);
+    //@ ensures cas_tracker(result, 0) &*& [_]is_cas_tracker(result);
 
 /*@
+
+lemma void cas_tracker_is_cas_tracker(struct cas_tracker *tracker);
+    requires cas_tracker(tracker, ?n);
+    ensures cas_tracker(tracker, n) &*& [_]is_cas_tracker(tracker);
 
 predicate tracked_cas_prediction(struct cas_tracker *tracker, int count; void *value);
 
 lemma void *create_tracked_cas_prediction(struct cas_tracker *tracker, int count);
-    requires true;
+    requires [_]is_cas_tracker(tracker);
     ensures [_]tracked_cas_prediction(tracker, count, result);
 
 predicate_family tracked_cas_pre(void *op)(struct cas_tracker *tracker, void **pp, void *old, void *new, void *prophecy);
@@ -190,6 +196,7 @@ typedef lemma void tracked_cas_ctxt(tracked_cas_operation *op);
 void *tracked_cas(prophecy_id prophecyId, struct cas_tracker *tracker, void **pp, void *old, void *new);
     /*@
     requires
+        [_]is_cas_tracker(tracker) &*&
         [?f]atomic_space(?inv) &*& prophecy_pointer(prophecyId, ?prophecy) &*&
         is_tracked_cas_ctxt(?ctxt) &*&
         tracked_cas_ctxt_pre(ctxt)(tracker, inv, pp, old, new, prophecy);

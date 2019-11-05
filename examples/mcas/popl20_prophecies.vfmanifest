@@ -1,0 +1,11 @@
+.provides ./popl20_prophecies.h#create_popl20_atomic_space
+.provides ./popl20_prophecies.h#create_popl20_prophecy
+.provides ./popl20_prophecies.h#create_resolve_list
+.provides ./popl20_prophecies.h#dispose_popl20_atomic_space
+.provides ./popl20_prophecies.h#popl20_atomic_compare_and_swap_pointer
+.provides ./popl20_prophecies.h#popl20_atomic_load_pointer
+.provides ./popl20_prophecies.h#popl20_atomic_noop
+.provides ./popl20_prophecies.h#popl20_close_atomic_space
+.provides ./popl20_prophecies.h#popl20_open_atomic_space
+.provides ./popl20_prophecies.h#popl20_prophecy_inv
+.provides ./popl20_prophecies.h#resolve_list_push

@@ -47,14 +47,14 @@ predicate rdcss_cell_attached(int dsList, struct rdcss_descriptor *d, void **a, 
     v == (success ? n2 : o2);
 
 predicate descr(struct rdcss_descriptor *d; void **a1, void *o1, void **a2, void *o2, void *n2, struct cas_tracker *tracker, rdcss_operation_lemma *op) =
-    d->a1 |-> a1 &*& d->o1 |-> o1 &*& d->a2 |-> a2 &*& d->o2 |-> o2 &*& d->n2 |-> n2 &*& d->tracker |-> tracker &*& d->op |-> op;
+    d->a1 |-> a1 &*& d->o1 |-> o1 &*& d->a2 |-> a2 &*& d->o2 |-> o2 &*& d->n2 |-> n2 &*& d->tracker |-> tracker &*& d->op |-> op &*& [_]is_cas_tracker(tracker);
 
 predicate done_copy(struct rdcss_descriptor *d, bool done) = true;
 predicate detached_copy(struct rdcss_descriptor *d, bool detached) = true;
 
 predicate_ctor rdcss_descriptor(int asList, int bsList, rdcss_unseparate_lemma *unsep, any info)(struct rdcss_descriptor *d) =
     true == (((uintptr_t)d & 1) == 0) &*&
-    [_]descr(d, ?a1, ?o1, ?a2, ?o2, ?n2, ?tracker, ?op) &*&
+    [_]descr(d, ?a1, ?o1, ?a2, ?o2, ?n2, ?tracker, ?op) &*& [_]is_cas_tracker(tracker) &*&
     true == (((uintptr_t)o2 & 1) == 0) &*&
     true == (((uintptr_t)n2 & 1) == 0) &*&
     done_copy(d, ?done) &*&
@@ -374,7 +374,7 @@ loop:
     invariant
         true == (((uintptr_t)d & 1) == 0) &*&
         [_]descr(d, a1, o1, a2, o2, n2, tracker, op) &*& d->done |-> false &*& d->success |-> false &*& d->detached |-> false &*& d->disposed |-> false &*&
-        cas_tracker(tracker, 0) &*&
+        cas_tracker(tracker, 0) &*& [_]is_cas_tracker(tracker) &*&
         malloc_block_rdcss_descriptor(d) &*&
         [f]atomic_space(inv) &*&
         is_rdcss_separate_lemma(sep) &*& is_rdcss_unseparate_lemma(unsep) &*& rdcss_separate_lemma(sep)(info, id, inv, unsep) &*&
@@ -393,7 +393,7 @@ loop:
             is_rdcss_as_membership_lemma(asMem) &*& rdcss_as_membership_lemma(asMem)(unsep, info, a1) &*&
             is_rdcss_bs_membership_lemma(bsMem) &*& rdcss_bs_membership_lemma(bsMem)(unsep, info, a2) &*&
             is_rdcss_operation_lemma(op) &*& rdcss_operation_pre(op)(unsep, info, a1, o1, a2, o2, n2) &*&
-            [_]descr(d, a1, o1, a2, o2, n2, tracker, op) &*&
+            [_]descr(d, a1, o1, a2, o2, n2, tracker, op) &*& [_]is_cas_tracker(tracker) &*&
             cas_tracker(tracker, 0) &*&
             d->done |-> false &*& d->success |-> false &*& d->detached |-> false &*& d->disposed |-> false;
         
