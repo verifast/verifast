@@ -7,15 +7,15 @@
 
 struct array {
     int S;
-    //@ int Sid;
+    int_tracker Sid;
     int x;
-    //@ int xid;
+    int_tracker xid;
     int fx;
-    //@ int fxid;
+    int_tracker fxid;
     int y;
-    //@ int yid;
+    int_tracker yid;
     int fy;
-    //@ int fyid;
+    int_tracker fyid;
     
     //@ predicate(int, int) inv;
     
@@ -29,18 +29,18 @@ struct array {
     //@ int write_x_state; // 1 = between writing x and reading S; 2 = between reading S and writing fx; 0 = elsewhere
     //@ int write_x_scan_cycle; // = S_nbWrites at time of 'p := x'
     //@ int write_x_read_S_nbWrites;
-    //@ int write_x_read_S_prophecy_id;
+    //@ prophecy_id write_x_read_S_prophecy_id;
     //@ int write_x_write_fx_nbReads;
-    //@ int write_x_write_fx_prophecy_id;
+    //@ prophecy_id write_x_write_fx_prophecy_id;
     //@ int write_x_delayed_state; // 0 = not delayed; 1 = misses S; 2 = misses fx
     //@ predicate() write_x_post;
     
     //@ int write_y_state;
     //@ int write_y_scan_cycle;
     //@ int write_y_read_S_nbWrites;
-    //@ int write_y_read_S_prophecy_id;
+    //@ prophecy_id write_y_read_S_prophecy_id;
     //@ int write_y_write_fy_nbReads;
-    //@ int write_y_write_fy_prophecy_id;
+    //@ prophecy_id write_y_write_fy_prophecy_id;
     //@ int write_y_delayed_state;
     //@ predicate() write_y_post;
 };
@@ -163,12 +163,12 @@ predicate_ctor atomic_space_inv(struct array *array)() =
     );
 
 predicate array_scanner(array_t array; predicate(int, int) inv) =
-    [_]atomic_space(atomic_space_inv(array)) &*&
-    [_]array->Sid |-> ?Sid &*&
-    [_]array->xid |-> ?xid &*&
-    [_]array->fxid |-> ?fxid &*&
-    [_]array->yid |-> ?yid &*&
-    [_]array->fyid |-> ?fyid &*&
+    [_]popl20_atomic_space(create_array, atomic_space_inv(array)) &*&
+    [_]array->Sid |-> ?Sid &*& [_]is_tracked_int(Sid) &*&
+    [_]array->xid |-> ?xid &*& [_]is_tracked_int(xid) &*&
+    [_]array->fxid |-> ?fxid &*& [_]is_tracked_int(fxid) &*&
+    [_]array->yid |-> ?yid &*& [_]is_tracked_int(yid) &*&
+    [_]array->fyid |-> ?fyid &*& [_]is_tracked_int(fyid) &*&
     [1/2]tracked_int(Sid, &array->S, 0, ?S_nbWrites) &*&
     [1/2]tracked_int_reads_tracker(xid, ?x_nbReads) &*&
     [1/2]tracked_int_reads_tracker(fxid, ?fx_nbReads) &*&
@@ -183,12 +183,12 @@ predicate array_scanner(array_t array; predicate(int, int) inv) =
     [_]array->inv |-> inv;
 
 predicate array_x_writer(array_t array; predicate(int, int) inv) =
-    [_]atomic_space(atomic_space_inv(array)) &*&
-    [_]array->Sid |-> ?Sid &*&
-    [_]array->xid |-> ?xid &*&
-    [_]array->fxid |-> ?fxid &*&
-    [_]array->yid |-> ?yid &*&
-    [_]array->fyid |-> ?fyid &*&
+    [_]popl20_atomic_space(create_array, atomic_space_inv(array)) &*&
+    [_]array->Sid |-> ?Sid &*& [_]is_tracked_int(Sid) &*&
+    [_]array->xid |-> ?xid &*& [_]is_tracked_int(xid) &*&
+    [_]array->fxid |-> ?fxid &*& [_]is_tracked_int(fxid) &*&
+    [_]array->yid |-> ?yid &*& [_]is_tracked_int(yid) &*&
+    [_]array->fyid |-> ?fyid &*& [_]is_tracked_int(fyid) &*&
     [1/2]tracked_int(xid, &array->x, _, ?x_nbWrites) &*&
     [1/2]array->write_x_state |-> 0 &*&
     [1/2]array->write_x_scan_cycle |-> _ &*&
@@ -201,12 +201,12 @@ predicate array_x_writer(array_t array; predicate(int, int) inv) =
     [_]array->inv |-> inv;
 
 predicate array_y_writer(array_t array; predicate(int, int) inv) =
-    [_]atomic_space(atomic_space_inv(array)) &*&
-    [_]array->Sid |-> ?Sid &*&
-    [_]array->xid |-> ?xid &*&
-    [_]array->fxid |-> ?fxid &*&
-    [_]array->yid |-> ?yid &*&
-    [_]array->fyid |-> ?fyid &*&
+    [_]popl20_atomic_space(create_array, atomic_space_inv(array)) &*&
+    [_]array->Sid |-> ?Sid &*& [_]is_tracked_int(Sid) &*&
+    [_]array->xid |-> ?xid &*& [_]is_tracked_int(xid) &*&
+    [_]array->fxid |-> ?fxid &*& [_]is_tracked_int(fxid) &*&
+    [_]array->yid |-> ?yid &*& [_]is_tracked_int(yid) &*&
+    [_]array->fyid |-> ?fyid &*& [_]is_tracked_int(fyid) &*&
     [1/2]tracked_int(yid, &array->y, _, ?y_nbWrites) &*&
     [1/2]array->write_y_state |-> 0 &*&
     [1/2]array->write_y_scan_cycle |-> _ &*&
@@ -234,11 +234,11 @@ array_t create_array()
     array->y = 0;
     array->fy = INT_MIN;
     //@ array->inv = inv;
-    //@ array->Sid = start_tracking_int(&array->S);
-    //@ array->xid = start_tracking_int(&array->x);
-    //@ array->fxid = start_tracking_int(&array->fx);
-    //@ array->yid = start_tracking_int(&array->y);
-    //@ array->fyid = start_tracking_int(&array->fy);
+    array->Sid = start_tracking_int(&array->S);
+    array->xid = start_tracking_int(&array->x);
+    array->fxid = start_tracking_int(&array->fx);
+    array->yid = start_tracking_int(&array->y);
+    array->fyid = start_tracking_int(&array->fy);
     //@ leak array->inv |-> _ &*& array->Sid |-> _ &*& array->xid |-> _ &*& array->fxid |-> _ &*& array->yid |-> _ &*& array->fyid |-> _;
     //@ array->scan_x_state = 0;
     //@ array->scan_y_state = 0;
@@ -247,8 +247,8 @@ array_t create_array()
     //@ array->write_y_state = 0;
     //@ array->write_y_delayed_state = 0;
     //@ close atomic_space_inv(array)();
-    //@ create_atomic_space(atomic_space_inv(array));
-    //@ leak atomic_space(atomic_space_inv(array));
+    //@ create_popl20_atomic_space(create_array, atomic_space_inv(array));
+    //@ leak popl20_atomic_space(create_array, atomic_space_inv(array));
     return array;
 }
 
@@ -261,25 +261,26 @@ void array_write_x(array_t array, int value)
     //@ ensures array_x_writer(array, inv) &*& post();
 {
     //@ open array_x_writer(array, inv);
-    //@ int Sid = array->Sid;
-    //@ int xid = array->xid;
-    //@ int fxid = array->fxid;
+    //@ int_tracker Sid = array->Sid;
+    //@ int_tracker xid = array->xid;
+    //@ int_tracker fxid = array->fxid;
     
     //@ close exists(array->xid);
-    prophecy_id pidX = create_prophecy();
+    prophecy_id pidX = create_prophecy(array->xid);
     //@ assert prophecy(pidX, xid, ?prophecyX, ?prophecyXNbWrites, ?prophecyXNbReads);
     
     //@ close exists(array->Sid);
-    prophecy_id pidS = create_prophecy();
+    prophecy_id pidS = create_prophecy(array->Sid);
     //@ assert prophecy(pidS, Sid, ?prophecyS, ?prophecySNbWrites, ?prophecySNbReads);
     
     //@ close exists(array->fxid);
-    prophecy_id pidFX = create_prophecy();
+    prophecy_id pidFX = create_prophecy(array->fxid);
     //@ assert prophecy(pidFX, fxid, ?prophecyFX, ?prophecyFXNbWrites, ?prophecyFXNbReads);
 
     {
         /*@
         predicate pre_() =
+            [_]popl20_atomic_space(create_array, atomic_space_inv(array)) &*&
             [_]array->inv |-> inv &*&
             [_]array->Sid |-> Sid &*&
             [_]array->xid |-> xid &*&
@@ -309,9 +310,10 @@ void array_write_x(array_t array, int value)
             (delayedState != 0 ? true : post());
         @*/
         /*@
-        produce_lemma_function_pointer_chunk atomic_store_int_ghop(atomic_space_inv(array), pidX, &array->x, value, pre_, post_)() {
+        produce_lemma_function_pointer_chunk atomic_store_int_ghop(pidX, &array->x, value, pre_, post_)() {
             assert is_atomic_store_int_op(?op, _, _, _, ?P, ?Q);
             open pre_();
+            popl20_open_atomic_space();
             open atomic_space_inv(array)();
             assert [_]tracked_int(Sid, &array->S, ?S, ?S_nbWrites);
             assert tracked_int(xid, &array->x, ?x, ?x_nbWrites);
@@ -332,9 +334,12 @@ void array_write_x(array_t array, int value)
                 ghop();
                 leak is_array_write_x_ghop(_, _, _, _, _);
             }
+            produce_func_lt(atomic_store_int);
+            assert func_lt(atomic_store_int, create_array) == true;
             op();
             close post_();
             close atomic_space_inv(array)();
+            popl20_close_atomic_space();
         };
         @*/
         //@ close pre_();
@@ -347,6 +352,7 @@ void array_write_x(array_t array, int value)
     {
         /*@
         predicate pre_() =
+            [_]popl20_atomic_space(create_array, atomic_space_inv(array)) &*&
             [_]array->inv |-> inv &*&
             [_]array->Sid |-> Sid &*&
             [_]array->xid |-> xid &*&
@@ -378,9 +384,10 @@ void array_write_x(array_t array, int value)
                 [1/2]array->write_x_delayed_state |-> delayedState &*& delayedState == 0 || prophecyS != 0;
         @*/
         /*@
-        produce_lemma_function_pointer_chunk atomic_load_int_ghop(atomic_space_inv(array), pidS, &array->S, pre_, post_)() {
+        produce_lemma_function_pointer_chunk atomic_load_int_ghop(pidS, &array->S, pre_, post_)() {
             assert is_atomic_load_int_op(?op, _, _, ?P, ?Q);
             open pre_();
+            popl20_open_atomic_space();
             open atomic_space_inv(array)();
             assert [_]tracked_int(Sid, &array->S, ?S, ?S_nbWrites);
             array->write_x_state = prophecyS == 0 ? 0 : 2;
@@ -389,6 +396,7 @@ void array_write_x(array_t array, int value)
                 array->write_x_delayed_state = 0;
             close post_(prophecyS);
             close atomic_space_inv(array)();
+            popl20_close_atomic_space();
         };
         @*/
         //@ close pre_();
@@ -400,6 +408,7 @@ void array_write_x(array_t array, int value)
     if (write_x_S) {
         /*@
         predicate pre_() =
+            [_]popl20_atomic_space(create_array, atomic_space_inv(array)) &*&
             [_]array->inv |-> inv &*&
             [_]array->Sid |-> Sid &*&
             [_]array->xid |-> xid &*&
@@ -425,9 +434,10 @@ void array_write_x(array_t array, int value)
             (newDelayedState != 0 ? post() : true);
         @*/
         /*@
-        produce_lemma_function_pointer_chunk atomic_store_int_ghop(atomic_space_inv(array), pidFX, &array->fx, value, pre_, post_)() {
+        produce_lemma_function_pointer_chunk atomic_store_int_ghop(pidFX, &array->fx, value, pre_, post_)() {
             assert is_atomic_store_int_op(?op, _, _, _, ?P, ?Q);
             open pre_();
+            popl20_open_atomic_space();
             open atomic_space_inv(array)();
             array->write_x_state = 0;
             op();
@@ -442,6 +452,7 @@ void array_write_x(array_t array, int value)
             }
             close post_();
             close atomic_space_inv(array)();
+            popl20_close_atomic_space();
         };
         @*/
         //@ close pre_();
@@ -460,47 +471,41 @@ void array_scan(array_t array, int *px, int *py)
     //@ ensures array_scanner(array, inv) &*& *px |-> ?vx &*& *py |-> ?vy &*& post(vx, vy);
 {
     //@ open array_scanner(array, inv);
-    //@ int Sid = array->Sid;
-    //@ int xid = array->xid;
-    //@ int fxid = array->fxid;
-    //@ int yid = array->yid;
-    //@ int fyid = array->fyid;
+    //@ int_tracker Sid = array->Sid;
+    //@ int_tracker xid = array->xid;
+    //@ int_tracker fxid = array->fxid;
+    //@ int_tracker yid = array->yid;
+    //@ int_tracker fyid = array->fyid;
 
     //@ close exists(Sid);
-    prophecy_id pidS1 = create_prophecy();
+    prophecy_id pidS1 = create_prophecy(array->Sid);
     //@ assert prophecy(pidS1, Sid, ?prophecyS1, ?prophecyS1NbWrites, ?prophecyS1NbReads);
     
-    //@ close exists(fxid);
-    prophecy_id pidFXbot = create_prophecy();
+    prophecy_id pidFXbot = create_prophecy(array->fxid);
     //@ assert prophecy(pidFXbot, fxid, ?prophecyFXbot, ?prophecyFXbotNbWrites, ?prophecyFXbotNbReads);
     
-    //@ close exists(fyid);
-    prophecy_id pidFYbot = create_prophecy();
+    prophecy_id pidFYbot = create_prophecy(array->fyid);
     //@ assert prophecy(pidFYbot, fyid, ?prophecyFYbot, ?prophecyFYbotNbWrites, ?prophecyFYbotNbReads);
     
-    //@ close exists(xid);
-    prophecy_id pidX = create_prophecy();
+    prophecy_id pidX = create_prophecy(array->xid);
     //@ assert prophecy(pidX, xid, ?prophecyX, ?prophecyXNbWrites, ?prophecyXNbReads);
     
-    //@ close exists(yid);
-    prophecy_id pidY = create_prophecy();
+    prophecy_id pidY = create_prophecy(array->yid);
     //@ assert prophecy(pidY, yid, ?prophecyY, ?prophecyYNbWrites, ?prophecyYNbReads);
     
-    //@ close exists(Sid);
-    prophecy_id pidS0 = create_prophecy();
+    prophecy_id pidS0 = create_prophecy(array->Sid);
     //@ assert prophecy(pidS0, Sid, ?prophecyS0, ?prophecyS0NbWrites, ?prophecyS0NbReads);
     
-    //@ close exists(fxid);
-    prophecy_id pidFX = create_prophecy();
+    prophecy_id pidFX = create_prophecy(array->fxid);
     //@ assert prophecy(pidFX, fxid, ?prophecyFX, ?prophecyFXNbWrites, ?prophecyFXNbReads);
     
-    //@ close exists(fyid);
-    prophecy_id pidFY = create_prophecy();
+    prophecy_id pidFY = create_prophecy(array->fyid);
     //@ assert prophecy(pidFY, fyid, ?prophecyFY, ?prophecyFYNbWrites, ?prophecyFYNbReads);
 
     {
         /*@
         predicate pre_() =
+            [_]popl20_atomic_space(create_array, atomic_space_inv(array)) &*&
             [_]array->inv |-> inv &*&
             [_]array->Sid |-> Sid &*&
             [_]array->xid |-> xid &*&
@@ -529,15 +534,18 @@ void array_scan(array_t array, int *px, int *py)
             [1/2]array->scanner_y |-> prophecyY;
         @*/
         /*@
-        produce_lemma_function_pointer_chunk atomic_store_int_ghop(atomic_space_inv(array), pidS1, &array->S, 1, pre_, post_)() {
+        produce_lemma_function_pointer_chunk atomic_store_int_ghop(pidS1, &array->S, 1, pre_, post_)() {
             assert is_atomic_store_int_op(?op, _, _, _, ?P, ?Q);
             open pre_();
+            popl20_open_atomic_space();
             open atomic_space_inv(array)();
+            produce_func_lt(atomic_store_int);
             op();
             array->scanner_x = prophecyX;
             array->scanner_y = prophecyY;
             close post_();
             close atomic_space_inv(array)();
+            popl20_close_atomic_space();
         };
         @*/
         //@ close pre_();
@@ -547,6 +555,7 @@ void array_scan(array_t array, int *px, int *py)
     {
         /*@
         predicate pre_() =
+            [_]popl20_atomic_space(create_array, atomic_space_inv(array)) &*&
             [_]array->inv |-> inv &*&
             [_]array->Sid |-> Sid &*&
             [_]array->xid |-> xid &*&
@@ -575,14 +584,16 @@ void array_scan(array_t array, int *px, int *py)
             [1/2]array->scanner_y |-> prophecyY;
         @*/
         /*@
-        produce_lemma_function_pointer_chunk atomic_store_int_ghop(atomic_space_inv(array), pidFXbot, &array->fx, INT_MIN, pre_, post_)() {
+        produce_lemma_function_pointer_chunk atomic_store_int_ghop(pidFXbot, &array->fx, INT_MIN, pre_, post_)() {
             assert is_atomic_store_int_op(?op, _, _, _, ?P, ?Q);
             open pre_();
+            popl20_open_atomic_space();
             open atomic_space_inv(array)();
             op();
             array->scan_x_state = 1;
             close post_();
             close atomic_space_inv(array)();
+            popl20_close_atomic_space();
         };
         @*/
         //@ close pre_();
@@ -592,6 +603,7 @@ void array_scan(array_t array, int *px, int *py)
     {
         /*@
         predicate pre_() =
+            [_]popl20_atomic_space(create_array, atomic_space_inv(array)) &*&
             [_]array->inv |-> inv &*&
             [_]array->Sid |-> Sid &*&
             [_]array->xid |-> xid &*&
@@ -620,14 +632,16 @@ void array_scan(array_t array, int *px, int *py)
             [1/2]array->scanner_y |-> prophecyY;
         @*/
         /*@
-        produce_lemma_function_pointer_chunk atomic_store_int_ghop(atomic_space_inv(array), pidFYbot, &array->fy, INT_MIN, pre_, post_)() {
+        produce_lemma_function_pointer_chunk atomic_store_int_ghop(pidFYbot, &array->fy, INT_MIN, pre_, post_)() {
             assert is_atomic_store_int_op(?op, _, _, _, ?P, ?Q);
             open pre_();
+            popl20_open_atomic_space();
             open atomic_space_inv(array)();
             op();
             array->scan_y_state = 1;
             close post_();
             close atomic_space_inv(array)();
+            popl20_close_atomic_space();
         };
         @*/
         //@ close pre_();
@@ -638,6 +652,7 @@ void array_scan(array_t array, int *px, int *py)
     {
         /*@
         predicate pre_() =
+            [_]popl20_atomic_space(create_array, atomic_space_inv(array)) &*&
             [_]array->inv |-> inv &*&
             [_]array->Sid |-> Sid &*&
             [_]array->xid |-> xid &*&
@@ -667,14 +682,16 @@ void array_scan(array_t array, int *px, int *py)
             [1/2]array->scanner_y |-> prophecyY;
         @*/
         /*@
-        produce_lemma_function_pointer_chunk atomic_load_int_ghop(atomic_space_inv(array), pidX, &array->x, pre_, post_)() {
+        produce_lemma_function_pointer_chunk atomic_load_int_ghop(pidX, &array->x, pre_, post_)() {
             assert is_atomic_load_int_op(?op, _, _, ?P, ?Q);
             open pre_();
+            popl20_open_atomic_space();
             open atomic_space_inv(array)();
             op();
             array->scan_x_state = 2;
             close post_(prophecyX);
             close atomic_space_inv(array)();
+            popl20_close_atomic_space();
         };
         @*/
         //@ close pre_();
@@ -685,6 +702,7 @@ void array_scan(array_t array, int *px, int *py)
     {
         /*@
         predicate pre_() =
+            [_]popl20_atomic_space(create_array, atomic_space_inv(array)) &*&
             [_]array->inv |-> inv &*&
             [_]array->Sid |-> Sid &*&
             [_]array->xid |-> xid &*&
@@ -714,14 +732,16 @@ void array_scan(array_t array, int *px, int *py)
             [1/2]array->scanner_y |-> prophecyY;
         @*/
         /*@
-        produce_lemma_function_pointer_chunk atomic_load_int_ghop(atomic_space_inv(array), pidY, &array->y, pre_, post_)() {
+        produce_lemma_function_pointer_chunk atomic_load_int_ghop(pidY, &array->y, pre_, post_)() {
             assert is_atomic_load_int_op(?op, _, _, ?P, ?Q);
             open pre_();
+            popl20_open_atomic_space();
             open atomic_space_inv(array)();
             op();
             array->scan_y_state = 2;
             close post_(prophecyY);
             close atomic_space_inv(array)();
+            popl20_close_atomic_space();
         };
         @*/
         //@ close pre_();
@@ -731,6 +751,7 @@ void array_scan(array_t array, int *px, int *py)
     {
         /*@
         predicate pre_() =
+            [_]popl20_atomic_space(create_array, atomic_space_inv(array)) &*&
             [_]array->inv |-> inv &*&
             [_]array->Sid |-> Sid &*&
             [_]array->xid |-> xid &*&
@@ -765,9 +786,10 @@ void array_scan(array_t array, int *px, int *py)
             post(rx, ry);
         @*/
         /*@
-        produce_lemma_function_pointer_chunk atomic_store_int_ghop(atomic_space_inv(array), pidS0, &array->S, 0, pre_, post_)() {
+        produce_lemma_function_pointer_chunk atomic_store_int_ghop(pidS0, &array->S, 0, pre_, post_)() {
             assert is_atomic_store_int_op(?op, _, _, _, ?P, ?Q);
             open pre_();
+            popl20_open_atomic_space();
             open atomic_space_inv(array)();
             assert inv(?rx, ?ry);
             op();
@@ -795,6 +817,7 @@ void array_scan(array_t array, int *px, int *py)
             }
             close post_();
             close atomic_space_inv(array)();
+            popl20_close_atomic_space();
         };
         @*/
         //@ close pre_();
@@ -806,6 +829,7 @@ void array_scan(array_t array, int *px, int *py)
     {
         /*@
         predicate pre_() =
+            [_]popl20_atomic_space(create_array, atomic_space_inv(array)) &*&
             [_]array->inv |-> inv &*&
             [_]array->Sid |-> Sid &*&
             [_]array->xid |-> xid &*&
@@ -843,9 +867,10 @@ void array_scan(array_t array, int *px, int *py)
                 rx == prophecyFX;
         @*/
         /*@
-        produce_lemma_function_pointer_chunk atomic_load_int_ghop(atomic_space_inv(array), pidFX, &array->fx, pre_, post_)() {
+        produce_lemma_function_pointer_chunk atomic_load_int_ghop(pidFX, &array->fx, pre_, post_)() {
             assert is_atomic_load_int_op(?op, _, _, ?P, ?Q);
             open pre_();
+            popl20_open_atomic_space();
             open atomic_space_inv(array)();
             op();
             array->scan_x_state = 0;
@@ -857,6 +882,7 @@ void array_scan(array_t array, int *px, int *py)
             }
             close post_(prophecyFX);
             close atomic_space_inv(array)();
+            popl20_close_atomic_space();
         };
         @*/
         //@ close pre_();
@@ -867,6 +893,7 @@ void array_scan(array_t array, int *px, int *py)
     {
         /*@
         predicate pre_() =
+            [_]popl20_atomic_space(create_array, atomic_space_inv(array)) &*&
             [_]array->inv |-> inv &*&
             [_]array->Sid |-> Sid &*&
             [_]array->xid |-> xid &*&
@@ -904,9 +931,10 @@ void array_scan(array_t array, int *px, int *py)
                 ry == prophecyFY;
         @*/
         /*@
-        produce_lemma_function_pointer_chunk atomic_load_int_ghop(atomic_space_inv(array), pidFY, &array->fy, pre_, post_)() {
+        produce_lemma_function_pointer_chunk atomic_load_int_ghop(pidFY, &array->fy, pre_, post_)() {
             assert is_atomic_load_int_op(?op, _, _, ?P, ?Q);
             open pre_();
+            popl20_open_atomic_space();
             open atomic_space_inv(array)();
             op();
             array->scan_y_state = 0;
@@ -918,6 +946,7 @@ void array_scan(array_t array, int *px, int *py)
             }
             close post_(prophecyFY);
             close atomic_space_inv(array)();
+            popl20_close_atomic_space();
         };
         @*/
         //@ close pre_();
@@ -937,25 +966,23 @@ void array_write_y(array_t array, int value)
     //@ ensures array_y_writer(array, inv) &*& post();
 {
     //@ open array_y_writer(array, inv);
-    //@ int Sid = array->Sid;
-    //@ int yid = array->yid;
-    //@ int fyid = array->fyid;
+    //@ int_tracker Sid = array->Sid;
+    //@ int_tracker yid = array->yid;
+    //@ int_tracker fyid = array->fyid;
     
-    //@ close exists(array->yid);
-    prophecy_id pidX = create_prophecy();
+    prophecy_id pidX = create_prophecy(array->yid);
     //@ assert prophecy(pidX, yid, ?prophecyX, ?prophecyXNbWrites, ?prophecyXNbReads);
     
-    //@ close exists(array->Sid);
-    prophecy_id pidS = create_prophecy();
+    prophecy_id pidS = create_prophecy(array->Sid);
     //@ assert prophecy(pidS, Sid, ?prophecyS, ?prophecySNbWrites, ?prophecySNbReads);
     
-    //@ close exists(array->fyid);
-    prophecy_id pidFX = create_prophecy();
+    prophecy_id pidFX = create_prophecy(array->fyid);
     //@ assert prophecy(pidFX, fyid, ?prophecyFX, ?prophecyFXNbWrites, ?prophecyFXNbReads);
 
     {
         /*@
         predicate pre_() =
+            [_]popl20_atomic_space(create_array, atomic_space_inv(array)) &*&
             [_]array->inv |-> inv &*&
             [_]array->Sid |-> Sid &*&
             [_]array->yid |-> yid &*&
@@ -985,9 +1012,10 @@ void array_write_y(array_t array, int value)
             (delayedState != 0 ? true : post());
         @*/
         /*@
-        produce_lemma_function_pointer_chunk atomic_store_int_ghop(atomic_space_inv(array), pidX, &array->y, value, pre_, post_)() {
+        produce_lemma_function_pointer_chunk atomic_store_int_ghop(pidX, &array->y, value, pre_, post_)() {
             assert is_atomic_store_int_op(?op, _, _, _, ?P, ?Q);
             open pre_();
+            popl20_open_atomic_space();
             open atomic_space_inv(array)();
             assert [_]tracked_int(Sid, &array->S, ?S, ?S_nbWrites);
             assert tracked_int(yid, &array->y, ?y, ?y_nbWrites);
@@ -1008,9 +1036,11 @@ void array_write_y(array_t array, int value)
                 ghop();
                 leak is_array_write_y_ghop(_, _, _, _, _);
             }
+            produce_func_lt(atomic_store_int);
             op();
             close post_();
             close atomic_space_inv(array)();
+            popl20_close_atomic_space();
         };
         @*/
         //@ close pre_();
@@ -1023,6 +1053,7 @@ void array_write_y(array_t array, int value)
     {
         /*@
         predicate pre_() =
+            [_]popl20_atomic_space(create_array, atomic_space_inv(array)) &*&
             [_]array->inv |-> inv &*&
             [_]array->Sid |-> Sid &*&
             [_]array->yid |-> yid &*&
@@ -1054,9 +1085,10 @@ void array_write_y(array_t array, int value)
                 [1/2]array->write_y_delayed_state |-> delayedState &*& delayedState == 0 || prophecyS != 0;
         @*/
         /*@
-        produce_lemma_function_pointer_chunk atomic_load_int_ghop(atomic_space_inv(array), pidS, &array->S, pre_, post_)() {
+        produce_lemma_function_pointer_chunk atomic_load_int_ghop(pidS, &array->S, pre_, post_)() {
             assert is_atomic_load_int_op(?op, _, _, ?P, ?Q);
             open pre_();
+            popl20_open_atomic_space();
             open atomic_space_inv(array)();
             assert [_]tracked_int(Sid, &array->S, ?S, ?S_nbWrites);
             array->write_y_state = prophecyS == 0 ? 0 : 2;
@@ -1065,6 +1097,7 @@ void array_write_y(array_t array, int value)
                 array->write_y_delayed_state = 0;
             close post_(prophecyS);
             close atomic_space_inv(array)();
+            popl20_close_atomic_space();
         };
         @*/
         //@ close pre_();
@@ -1076,6 +1109,7 @@ void array_write_y(array_t array, int value)
     if (write_y_S) {
         /*@
         predicate pre_() =
+            [_]popl20_atomic_space(create_array, atomic_space_inv(array)) &*&
             [_]array->inv |-> inv &*&
             [_]array->Sid |-> Sid &*&
             [_]array->yid |-> yid &*&
@@ -1101,9 +1135,10 @@ void array_write_y(array_t array, int value)
             (newDelayedState != 0 ? post() : true);
         @*/
         /*@
-        produce_lemma_function_pointer_chunk atomic_store_int_ghop(atomic_space_inv(array), pidFX, &array->fy, value, pre_, post_)() {
+        produce_lemma_function_pointer_chunk atomic_store_int_ghop(pidFX, &array->fy, value, pre_, post_)() {
             assert is_atomic_store_int_op(?op, _, _, _, ?P, ?Q);
             open pre_();
+            popl20_open_atomic_space();
             open atomic_space_inv(array)();
             array->write_y_state = 0;
             op();
@@ -1118,6 +1153,7 @@ void array_write_y(array_t array, int value)
             }
             close post_();
             close atomic_space_inv(array)();
+            popl20_close_atomic_space();
         };
         @*/
         //@ close pre_();

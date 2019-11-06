@@ -10,7 +10,7 @@ cd bin
 cd ..
 cd examples
   cd jayanti
-    verifast threading.o atomics.o jayanti.c client.c
+    verifast threading.o popl20_prophecies.o atomics.c jayanti.c client.c
   cd ..
   cd abstract_io
     mysh < io2.mysh

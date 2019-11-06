@@ -382,6 +382,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if not pure then static_error l "This function may be called only from a pure context." None;
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       assume_instanceof l (ev w) tp (fun () -> cont h env)
+    | ExprStmt (CallExpr (l, "produce_func_lt", [], [], [LitPat (Var (lv, fn))], Static)) when language = CLang ->
+      begin match resolve Ghost (pn,ilist) l fn funcmap with
+        None -> static_error l "No such function." None
+      | Some (fn, FuncInfo (funenv, fterm, lf, k, f_tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body',fb,v)) ->
+        if body' = None then register_prototype_used lf fn fterm
+      end;
+      cont h env
     | ProduceLemmaFunctionPointerChunkStmt (l, e, ftclause_opt, body) ->
       verify_produce_function_pointer_chunk_stmt Ghost l e ftclause_opt body
     | ProduceFunctionPointerChunkStmt (l, ftn, fpe, targs, args, params, openBraceLoc, ss, closeBraceLoc) ->

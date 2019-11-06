@@ -1,7 +1,0 @@
-.provides ./atomics.h#atomic_load_int
-.provides ./atomics.h#atomic_store_int
-.provides ./atomics.h#create_atomic_space
-.provides ./atomics.h#create_prophecy
-.provides ./atomics.h#start_tracking_int
-.provides ./atomics.h#tracked_int_match_prophecy
-.provides ./atomics.h#tracked_int_reads_tracker_match_prophecy
