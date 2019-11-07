@@ -144,7 +144,7 @@ void thread3(void *data) //@ : thread_run_joinable
     //@ close thread_run_post(thread3)(data, info_);
 }
 
-int main() //@ : main_full(client)
+int main()
     //@ requires module(client, true);
     //@ ensures true;
 {

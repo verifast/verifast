@@ -34,7 +34,7 @@ int get_any_unsigned_char()
   return c;
 }
 
-void main()
+int main() //@ : custom_main_spec
 //@ requires token(?t1) &*& output_anything(t1, ?t2);
 //@ ensures token(t2);
 {
@@ -48,4 +48,6 @@ void main()
   putchar(i);
   
   //@ leak bigstar(_, _);
+
+  return 0;
 }

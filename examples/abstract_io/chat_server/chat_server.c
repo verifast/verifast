@@ -76,7 +76,7 @@ channel create_channel_two_senders()
     //@ channel_receiver_to_receive_();
 }
 
-int main()
+int main() //@ : custom_main_spec
     /*@
     requires
         token(?R1) &*& receiveFromNick_(R1, NICK1, ?msgs1) &*&

@@ -10,11 +10,12 @@ void arraylist_destroy(arraylist a);
     //@ requires arraylist(a);
     //@ ensures true;
 
-unsigned main()
+int main()
     //@ requires true;
     //@ ensures true;
 {
     arraylist a = create_arraylist();
     arraylist_destroy(a);
-    return sizeof(struct arraylist); //~ should_fail
+    unsigned x = sizeof(struct arraylist); //~ should_fail
+    return 0;
 }

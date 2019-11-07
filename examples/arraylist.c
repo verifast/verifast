@@ -96,7 +96,7 @@ void list_dispose(struct arraylist* a)
   free(a);
 }
 
-void main() 
+int main()
   //@ requires true;
   //@ ensures true;
 {
@@ -108,4 +108,6 @@ void main()
   tmp = list_get(a, 1);
   assert tmp == (void*) 20;
   list_dispose(a);
+
+  return 0;
 }

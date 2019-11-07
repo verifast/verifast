@@ -107,7 +107,7 @@ predicate read_file_of_files_io(place t1, list<char> filename,
 
 // We choose the simplest implementation (alternatives would be buffering, threading, ...)
 
-void main()
+int main() //@ : custom_main_spec
 //@ requires read_file_of_files_io(?t1, {'f'}, stdout, ?t_end) &*& token(t1);
 //@ ensures token(t_end);
 {
@@ -117,7 +117,7 @@ void main()
   FILE *meta = fopen("f", "rb");
   
   if (meta == 0){
-    return;
+    return 1;
   }
   
   int c = 0;
@@ -192,4 +192,6 @@ void main()
   
   //@ join_specific(t_read2);
   //@ join();
+
+  return 0;
 }

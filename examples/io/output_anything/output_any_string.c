@@ -86,7 +86,7 @@ char* get_any_string()
   return "Any finite string can be printed!\n";
 }
 
-void main()
+int main() //@ : custom_main_spec
 //@ requires token(?t1) &*& output_anything(t1, ?t2);
 //@ ensures token(t2);
 {
@@ -100,4 +100,6 @@ void main()
   write_string(string);
   
   //@ leak bigstar(_, _);
+
+  return 0;
 }

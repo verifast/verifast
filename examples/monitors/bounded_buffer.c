@@ -220,7 +220,7 @@ void producer_thread(struct buffer *b)  //@ : thread_run
   producer(b);
 }
 
-void main()
+int main() //@ : custom_main_spec
     //@ requires obs(nil);
     //@ ensures obs(nil);
 {
@@ -268,4 +268,6 @@ void main()
     thread_start(producer_thread, b);
     //@ close thread_run_data(consumer_thread)(cons(vf,nil),b);
     thread_start(consumer_thread, b);   
+
+    return 0;
 }

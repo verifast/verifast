@@ -122,7 +122,17 @@ void stdlib_flush_stdout(struct stdlib *stdlib)
 
 /*--------------------- USER -----------------------*/
 
-void main(struct stdlib *stdlib)
+typedef int my_main_spec(struct stdlib *stdlib);
+/*@ requires token(?t1)
+  &*& stdlib(stdlib, t1, t1)
+  &*& stdlib_putchar_io(t1, 'h', ?t2)
+  &*& stdlib_putchar_io(t2, 'i', ?t3);
+@*/
+/*@
+  ensures token(t3) &*& stdlib(stdlib, t3, t3);
+@*/
+
+int main(struct stdlib *stdlib) //@ : my_main_spec
 /*@ requires token(?t1)
   &*& stdlib(stdlib, t1, t1)
   &*& stdlib_putchar_io(t1, 'h', ?t2)
@@ -135,5 +145,7 @@ void main(struct stdlib *stdlib)
   stdlib_putchar(stdlib, 'h');
   stdlib_putchar(stdlib, 'i');
   stdlib_flush_stdout(stdlib);
+
+  return 0;
 }
 

@@ -119,7 +119,7 @@ void run_instance(void)
  }
 
 
-int main (int argc, char** argv)
+int main (int argc, char** argv) //@ : custom_main_spec
 /*@ requires
         module(pthreads, true) &*& lockset(currentThread, nil);
   @*/

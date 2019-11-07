@@ -85,7 +85,7 @@ bool brackets()
   }
 }
 
-void main()
+int main() //@ : custom_main_spec
 /*@ requires token(?t1)
   &*& read_char_io(t1, stdin, ?read_ahead, _, ?t_read_ahead)
   &*& brackets_io(t_read_ahead, read_ahead, ?read_last, ?valid, ?t_brackets_end)
@@ -117,4 +117,6 @@ void main()
   //@ open buffer(_, _);
   free(c);
   //@ close_module();
+
+  return 0;
 }

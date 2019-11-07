@@ -31,7 +31,7 @@ copredicate infinite_counter_io(place t1, int number, place t_end) =
   &*& infinite_counter_io(t3, number + 1, t_end);
 @*/
 
-void main()
+int main() //@ : custom_main_spec
 //@ requires token(?t1) &*& infinite_counter_io(t1, 0, ?t_end);
 //@ ensures false; // program must not terminate.
 {

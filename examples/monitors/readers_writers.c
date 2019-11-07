@@ -263,7 +263,7 @@ void writer_thread(struct read_write *b)  //@ : thread_run
   writer(b);
 }
 
-void main()
+int main() //@ : custom_main_spec
     //@ requires obs(nil); 
     //@ ensures obs(nil);
 {
@@ -311,6 +311,6 @@ void main()
       thread_start(writer_thread, b);
       //@ close thread_run_data(writer_thread)(nil,b);    
     }
+
+    return 0;
 }
-
-

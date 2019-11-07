@@ -96,7 +96,7 @@ void wait_barrier_thread(struct barrier *b)  //@ : thread_run
   wait_barrier(b);
 }
 
-void main()
+int main() //@ : custom_main_spec
   //@ requires obs(nil);
   //@ ensures obs(nil);
 {
@@ -127,4 +127,6 @@ void main()
   thread_start(wait_barrier_thread, b);
   //@ close thread_run_data(wait_barrier_thread)(cons(b->v,nil),b);
   thread_start(wait_barrier_thread, b);
+
+  return 0;
 }

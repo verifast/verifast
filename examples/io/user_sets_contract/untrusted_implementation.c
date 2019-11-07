@@ -15,7 +15,7 @@
 #include "specification.h"
 //#include <stdio.h>
 
-void main()
+void main() //@ : main_spec
 //@ requires token(?t1) &*& example_io(t1, ?t2);
 //@ ensures token(t2);
 {

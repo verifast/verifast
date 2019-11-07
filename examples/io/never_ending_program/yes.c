@@ -17,7 +17,7 @@ copredicate yes_io(place t1) =
   &*& yes_io(t3);
 @*/
 
-void main()
+int main() //@ : custom_main_spec
 //@ requires token(?t1) &*& yes_io(t1);
 //@ ensures false; // does not terminate.
 {

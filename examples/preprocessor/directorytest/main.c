@@ -1,7 +1,8 @@
 #include "header1.h"
 
-void main()
+int main()
 //@ requires true;
 //@ ensures true;
 {
+    return 0;
 }

@@ -308,6 +308,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     end;
     let functype_opt =
       match functype_opt with
+        None when body <> None && fn = "main" -> Some ("main_full", [], [(l, current_module_name)])
+      | _ -> functype_opt
+    in
+    let functype_opt =
+      match functype_opt with
         None -> None
       | Some (ftn, fttargs, ftargs) ->
         if body = None then static_error l "A function prototype cannot implement a function type." None;

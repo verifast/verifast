@@ -4,7 +4,7 @@
 #include "beep.h"
 #include "stdio.h"
 
-void main();
+int main();
     //@ requires token(?P0) &*& beep_(P0, ?P1) &*& putchar_(P1, 'h', ?P2) &*& putchar_(P2, 'i', ?P3) &*& flush_(P3, ?P4);
     //@ ensures token(P4);
 

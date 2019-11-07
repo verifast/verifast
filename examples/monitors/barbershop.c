@@ -335,7 +335,7 @@ void get_next_customer_thread(struct barbershop *b)  //@ : thread_run
   //@ open unprotected_permissions(_,_,_,_,_,_,_,_,_,_);  
 }
 
-void main()
+int main() //@ : custom_main_spec
     //@ requires obs(nil);
     //@ ensures obs(nil);
 {
@@ -410,4 +410,6 @@ void main()
     //@ close unprotected_permissions(b,_,_,_,_,_,_,_,_,_);
     //@ close thread_run_data(finished_cut_customer_thread)(cons(cdoor,nil),b);
     thread_start(finished_cut_customer_thread, b);
+
+    return 0;
 }

@@ -6,7 +6,7 @@
 #include <stdio_simple.h>
 //#include <stdio.h>
 
-void main()
+int main() //@ : custom_main_spec
 /*@ requires token(?t1)
   &*& write_char_io(t1, stdout, 'h', _, ?t2)
   &*& write_char_io(t2, stdout, 'i', _, ?t3);
@@ -15,4 +15,6 @@ void main()
 {
   putchar('h');
   putchar('i');
+
+  return 0;
 }

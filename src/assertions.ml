@@ -963,6 +963,9 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           (fun chunk h coef value ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' None)
     in
     let pred_asn l coefpat g is_global_predref targs pats0 pats =
+      if g#name = "junk" && is_global_predref then
+        cont h [] ghostenv env env' None
+      else
       let (g_symb, pats0, pats, types) =
         if is_global_predref then
            match try_assoc g#name predfammap with

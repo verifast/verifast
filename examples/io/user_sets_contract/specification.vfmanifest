@@ -1,2 +1,2 @@
 .produces module untrusted_implementation
-.provides ./specification.h#main
+.provides ./specification.h#main : main_spec()

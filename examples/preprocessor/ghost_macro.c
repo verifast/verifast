@@ -2,7 +2,7 @@
 #define SOME_MACRO
 @*/
 
-void main()
+int main()
 //@ requires true;
 //@ ensures true;
 {
@@ -10,4 +10,5 @@ void main()
         #ifndef SOME_MACRO
                 *ptr = 0; //~
         #endif
+        return 0;
 }

@@ -27,7 +27,7 @@ copredicate matching_brackets(place t1, place t2) =
   &*& matching_brackets_helper(t1, t2);
 @*/
 
-void main()
+int main() //@ : custom_main_spec
 //@ requires token(?t1) &*& matching_brackets(t1, ?t2);
 //@ ensures token(t2);
 {
@@ -43,4 +43,6 @@ void main()
   //@ open matching_brackets(?t_close, t2);
   //@ no_op();
   //@ leak matching_brackets_helper(t_close, t2);
+  
+  return 0;
 }

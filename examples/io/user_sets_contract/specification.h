@@ -5,7 +5,7 @@
   &*& write_char_io(t2, stdout, 'i', _, t3);
 @*/
 
-void main();
+typedef void main_spec();
 //@ requires token(?t1) &*& example_io(t1, ?t2);
 //@ ensures token(t2);
 

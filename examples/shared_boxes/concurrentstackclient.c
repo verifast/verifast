@@ -118,8 +118,9 @@ void consumer(struct stack* s, struct stack_client* client)
   }
 } 
 
-void main() 
+int main() 
   //@ requires true;
   //@ ensures true;
 {
+  return 0;
 }

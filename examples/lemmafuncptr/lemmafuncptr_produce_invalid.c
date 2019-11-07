@@ -17,7 +17,7 @@ lemma void lemma1()
 @*/
 
 
-void main()
+int main()
   //@ requires true;
   //@ ensures false;
 {

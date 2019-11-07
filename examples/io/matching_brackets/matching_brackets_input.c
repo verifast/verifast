@@ -23,7 +23,7 @@ predicate matching_brackets_helper(place t1, place t2) =
 @*/
 
 
-void main()
+int main() //@ : custom_main_spec
 /*@ requires token(?t1) &*& matching_brackets_helper(t1, ?t_help)
   &*& read_char_io(t_help, stdin, _, false, ?t2); // end of file
 @*/
@@ -61,6 +61,8 @@ void main()
     // allowed to crash (the verifier proves this never happens if function's precondition satisfied)
     *nullptr = 0;
   }
+
+  return 0;
 }
 
 

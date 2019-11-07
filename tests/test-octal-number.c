@@ -1,5 +1,5 @@
 #include <stdio.h>
-void main()
+int main()
 //@ requires true;
 //@ ensures true;
 {
@@ -13,4 +13,6 @@ void main()
 	//@ assert 001 == 1;
 	//@ assert 010 == 8;
 	//@ assert 012345670 == 2739128;
+
+        return 0;
 }
