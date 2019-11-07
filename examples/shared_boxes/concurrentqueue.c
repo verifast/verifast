@@ -84,7 +84,7 @@ lemma void distinct_mem<t>(list<t> xs, list<t> ys, t x)
 
 lemma void drop_one_more<t>(list<t> xs, int i)
   requires 0 <= i &*& i <= length(xs) - 1;
-  ensures tail(drop(i, xs)) == drop(i + 1, xs);
+  ensures drop(i, xs) == cons(nth(i, xs), drop(i + 1, xs));
 {
   switch(xs) {
     case nil:
@@ -169,7 +169,10 @@ box_class msqueue_box(struct queue* q, predicate(list<int>) I) {
   handle_predicate was_head_with_succ(struct node* h, struct node* n) extends was_head {
     invariant n != 0 && index_of(h, nodes) < length(nodes) - 1 && n == nth(index_of(h, nodes) + 1, nodes) && index_of(h, nodes) + 1 == index_of(n, nodes);
               
-    preserved_by enqueue(new_node, x) { }
+    preserved_by enqueue(new_node, x) {
+        index_of_append(old_nodes, {new_node}, h);
+        index_of_append(old_nodes, {new_node}, n);
+    }
     preserved_by dequeue() { }
     preserved_by move_tail() { }
     preserved_by noop() { }
@@ -188,7 +191,10 @@ box_class msqueue_box(struct queue* q, predicate(list<int>) I) {
     invariant mem(n, nodes) == true && nth(index_of(n, nodes), vs) == v;
 
               
-    preserved_by enqueue(new_node, x) { }
+    preserved_by enqueue(new_node, x) {
+        index_of_append(old_nodes, {new_node}, n);
+        nth_append_auto(vs, {x}, index_of(n, old_nodes));
+    }
     preserved_by dequeue() { }
     preserved_by move_tail() { }
     preserved_by noop() { }
@@ -214,7 +220,13 @@ box_class msqueue_box(struct queue* q, predicate(list<int>) I) {
                 true
               );
               
-    preserved_by enqueue(new_node, x) { }
+    preserved_by enqueue(new_node, x) {
+        if (n != 0) {
+            index_of_append(old_nodes, {new_node}, t);
+            mem_nth(index_of(t, old_nodes) + 1, old_nodes);
+            index_of_append(old_nodes, {new_node}, n);
+        }
+    }
     preserved_by dequeue() { }
     preserved_by move_tail() { }
     preserved_by noop() { }
