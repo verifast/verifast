@@ -1489,7 +1489,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some pure) e tp in
     let eval_h h env pat cont =
       match pat with
-        SrcPat (LitPat e) -> if not pure then check_ghost ghostenv l e; eval_h h env e cont
+        SrcPat (LitPat e) -> eval_h h env e cont
       | TermPat t -> cont h env t
     in
     let tpenv =
@@ -1745,14 +1745,15 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let has_env_effects () = if language = CLang && envReadonly then static_error l "This potentially side-effecting expression is not supported in this position, because of C's unspecified evaluation order" (Some "illegalsideeffectingexpression") in
     let has_heap_effects () = if language = CLang && heapReadonly then static_error l "This potentially side-effecting expression is not supported in this position, because of C's unspecified evaluation order" (Some "illegalsideeffectingexpression") in
     let eval_h h env e cont = verify_expr (true, true) h env None e cont in
-    let eval_h_core ro h env e cont = if not pure then check_ghost ghostenv l e; verify_expr ro h env None e cont in
+    let eval_h_core ro h env e cont = verify_expr ro h env None e cont in
     let rec evhs h env es cont =
       match es with
         [] -> cont h env []
       | e::es -> eval_h h env e (fun h env v -> evhs h env es (fun h env vs -> cont h env (v::vs))) 
     in 
     let check_assign l x =
-      if pure && not (List.mem x ghostenv) then static_error l "Cannot assign to non-ghost variable in pure context." None
+      if pure && not (List.mem x ghostenv) then static_error l "Cannot assign to non-ghost variable in pure context." None;
+      if not pure && List.mem x ghostenv then static_error l "Cannot assign to ghost variable in non-pure context." None
     in
     let vartp l x = 
       match try_assoc x tenv with
@@ -2201,15 +2202,15 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let e2_safe = is_safe_expr e2 in
       eval_h_core (true, heapReadonly || not e2_safe) h env e1 (fun h env v1 -> eval_h_core (true, heapReadonly || not e1_safe) h env e2 (fun h env v2 -> cont h env (create_term v1 v2)))
     | WOperation (l, And, [e1; e2], t) ->
-      eval_h h env e1 $. fun h env v1 ->
+      eval_h_core readonly h env e1 $. fun h env v1 ->
       branch
-        (fun () -> assume v1 (fun () -> eval_h h env e2 cont))
+        (fun () -> assume v1 (fun () -> eval_h_core readonly h env e2 cont))
         (fun () -> assume (ctxt#mk_not v1) (fun () -> cont h env ctxt#mk_false))
     | WOperation (l, Or, [e1; e2], t) -> 
-      eval_h h env e1 $. fun h env v1 ->
+      eval_h_core readonly h env e1 $. fun h env v1 ->
       branch
         (fun () -> assume v1 (fun () -> cont h env ctxt#mk_true))
-        (fun () -> assume (ctxt#mk_not v1) (fun () -> eval_h h env e2 cont))
+        (fun () -> assume (ctxt#mk_not v1) (fun () -> eval_h_core readonly h env e2 cont))
     | IfExpr (l, con, e1, e2) ->
       eval_h_core readonly h env con $. fun h env v ->
       branch
@@ -2241,6 +2242,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       write_lvalue h env lvalue vrhs $. fun h env ->
       cont h env vrhs
     | e ->
+      if not pure then check_ghost_nonrec ghostenv e;
       eval_non_pure_cps (fun (h, env) e cont -> eval_h h env e (fun h env t -> cont (h, env) t)) pure (h, env) env e (fun (h, env) v -> cont h env v)
   
   end

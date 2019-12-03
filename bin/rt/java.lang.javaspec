@@ -159,6 +159,7 @@ public class Throwable {
     public Throwable();
         //@ requires emp;
         //@ ensures emp;
+        //@ terminates;
     
 }
 
@@ -167,6 +168,7 @@ public class Exception extends Throwable {
     public Exception();
         //@ requires emp;
         //@ ensures emp;
+        //@ terminates;
     
 }
 
@@ -175,6 +177,7 @@ public class Error extends Throwable {
     public Error();
         //@ requires emp;
         //@ ensures emp;
+        //@ terminates;
     
 }
 
@@ -183,6 +186,7 @@ public class InterruptedException {
     public InterruptedException();
         //@ requires emp;
         //@ ensures emp;
+        //@ terminates;
     
 }
 
@@ -191,10 +195,12 @@ public class RuntimeException extends Exception {
     public RuntimeException();
         //@ requires true;
         //@ ensures true;
+        //@ terminates;
     
     public RuntimeException(Object innerException);
         //@ requires true;
         //@ ensures true;
+        //@ terminates;
     
 }
 
@@ -205,6 +211,11 @@ public class IllegalArgumentException extends RuntimeException {
 }
 
 public class NullPointerException extends RuntimeException {
+
+    public NullPointerException();
+        //@ requires true;
+        //@ ensures true;
+        
 }
 
 public class UnsupportedOperationException extends RuntimeException {

@@ -4698,13 +4698,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   (* Region: evaluation helpers; pushing and popping assumptions and execution trace elements *)
   
-  let check_ghost ghostenv l e =
-    expr_iter
-      begin function
-        Var (l, x) -> if List.mem x ghostenv then static_error l "Cannot read a ghost variable in a non-pure context." None
-      | _ -> ()
-      end
-      e
+  let check_ghost_nonrec ghostenv e =
+    match e with
+      Var (l, x) | WVar (l, x, LocalVar) -> if List.mem x ghostenv then static_error l "Cannot read a ghost variable in a non-pure context." None
+    | _ -> ()
+
+  let check_ghost ghostenv e =
+    expr_iter (check_ghost_nonrec ghostenv) e
 
   let rec sizeof l t =
     match t with

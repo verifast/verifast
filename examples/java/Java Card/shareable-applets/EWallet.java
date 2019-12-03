@@ -114,7 +114,7 @@ public final class EWallet extends Applet implements EWalletInterface {
             return;
 
         if(abuffer[ISO7816.OFFSET_CLA] != EWallet_CLA)
-            throw new ISOException(ISO7816.SW_CLA_NOT_SUPPORTED);
+            ISOException.throwIt(ISO7816.SW_CLA_NOT_SUPPORTED);
 
         switch (abuffer[ISO7816.OFFSET_INS]) {
         case GET_BALANCE:

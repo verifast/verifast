@@ -110,9 +110,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let check_condition (pn,ilist) tparams tenv e = check_condition_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some pure) e in
     let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some pure) e tp in
     let check_expr_t_pure tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some true) e tp in
-    let eval env e = if not pure then check_ghost ghostenv l e; eval_non_pure pure h env e in
+    let eval env e = if not pure then check_ghost ghostenv e; eval_non_pure pure h env e in
     let eval_h_core sideeffectfree pure h env e cont =
-      if not pure then check_ghost ghostenv l e;
       verify_expr sideeffectfree (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env None e cont econt
     in
     let eval_h h env e cont =
@@ -127,7 +126,6 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let ev e = eval env e in
     let cont = tcont sizemap tenv ghostenv in
     let verify_expr readonly h env xo e cont =
-      if not pure then check_ghost ghostenv l e;
       verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont
     in
     let verify_produce_function_pointer_chunk_stmt stmt_ghostness l fpe_opt ftclause_opt scope_opt =
@@ -1431,7 +1429,6 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let break h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       let lblenv = (break_label (), fun blocks_done sizemap tenv ghostenv h env -> break h env)::lblenv in
       let e = check_condition (pn,ilist) tparams tenv e in
-      if not pure then check_ghost ghostenv l e;
       let xs = (expr_assigned_variables e) @ (block_assigned_variables ss) in
       let xs = List.filter (fun x -> match try_assoc x tenv with None -> false | Some (RefType _) -> false | _ -> true) xs in
       let (p, tenv') = check_asn (pn,ilist) tparams tenv p in
@@ -1498,7 +1495,6 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let break h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       let lblenv = (break_label (), fun blocks_done sizemap tenv ghostenv h env -> break h env)::lblenv in
       let e = check_condition (pn,ilist) tparams tenv e in
-      if not pure then check_ghost ghostenv l e;
       let (ss, locals_to_free) = (* do we really need to do this? Aren't locals freed automatically at the end of the loop if the body is a block? *)
         match ss with
           BlockStmt(_, _, ss, _, locals_to_free) :: rest -> check_block_declarations ss; (ss @ rest, locals_to_free)
@@ -1611,13 +1607,14 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       verify_cont (pn,ilist) blocks_done [] tparams boxes pure leminfo funcmap predinstmap sizemap tenv''' ghostenv' h' env' ss_after (fun _ tenv _ h' env' ->  check_post h' env') (fun _ _ -> assert false) (fun _ _ _ -> assert false)
     | Throw (l, e) ->
       if pure then static_error l "Throw statements are not allowed in a pure context." None;
-      let e' = check_expr_t (pn,ilist) tparams tenv e (ObjType "java.lang.Throwable") in
-      check_ghost ghostenv l e';
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
-      if (is_unchecked_exception_type tp) then
-        success()
-      else
-        verify_expr false h env None w (fun h env v -> (econt l h env tp v)) econt
+      let cont h env v =
+        if is_unchecked_exception_type tp then
+          success ()
+        else
+          econt l h env tp v
+      in
+      verify_expr false h env None w cont econt
     | TryCatch (l, body, catches) ->
       if pure then static_error l "Try-catch statements are not allowed in a pure context." None;
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
@@ -2117,7 +2114,6 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match eo with
         None -> cont h None
       | Some e ->
-        if not pure then check_ghost ghostenv l e;
         let tp = match try_assoc "#result" tenv with None -> static_error l "Void function cannot return a value: " None | Some tp -> tp in
         let w = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some pure) e tp in
         verify_expr false (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env None w (fun h env v ->
