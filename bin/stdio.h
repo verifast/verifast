@@ -77,6 +77,10 @@ void rewind(FILE* fp);
 int puts(char* text);
     //@ requires [?f]string(text, ?cs);
     //@ ensures [f]string(text, cs);
+
+int fgetc(FILE* fp);
+    //@ requires [?f]file(fp);
+    //@ ensures [f]file(fp) &*& result == EOF || 0 <= result && result <= 255;
   
 int feof(FILE* fp);
     //@ requires [?f]file(fp);

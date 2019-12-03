@@ -542,7 +542,7 @@ typedef int main(int argc, char **argv);
     //@ ensures junk();
 
 typedef int main_full/*@(int mainModule)@*/(int argc, char **argv);
-    //@ requires module(mainModule, true) &*& [_]argv(argv, argc, ?arguments);
+    //@ requires module(mainModule, true) &*& 0 <= argc &*& [_]argv(argv, argc, ?arguments);
     //@ ensures junk();
 
 // Specify custom_main_spec on your main function to override the main_full default

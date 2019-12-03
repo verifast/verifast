@@ -33,4 +33,15 @@ void free(void *array);
     //@ ensures emp;
     //@ terminates;
 
+void *realloc(void *array, size_t newSize);
+    //@ requires malloc_block(array, ?size) &*& chars(array, size, ?cs);
+    /*@
+    ensures
+        result == 0 ?
+            malloc_block(array, size) &*& chars(array, size, cs)
+        :
+            malloc_block(result, newSize) &*& chars(result, newSize, ?newCs) &*&
+            take(size <= newSize ? size : newSize, cs) == take(size <= newSize ? size : newSize, newCs);
+    @*/
+
 #endif
