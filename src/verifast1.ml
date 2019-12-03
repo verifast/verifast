@@ -3490,7 +3490,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         begin
           match try_assoc f fds with
             None -> static_error l ("No such field in struct '" ^ sn ^ "'.") None
-          | Some (_, gh, t, offset) -> (WRead (l, w, sn, f, t, false, ref (Some None), gh), t, None)
+          | Some (_, gh, t, offset) ->
+            let w = WRead (l, w, sn, f, t, false, ref (Some None), gh) in
+            let w =
+              match t with
+                StructType _ -> WDeref (l, AddressOf (l, w), t)
+              | _ -> w
+            in
+            (w, t, None)
         end
       | _ -> static_error l ("Invalid dereference; struct type '" ^ sn ^ "' has not been defined.") None
       end
@@ -5538,6 +5545,8 @@ let check_if_list_is_defined () =
            same way as (function), which is what most compilers do: *)
         | WVar (l, x, FuncName) ->
             cont state (List.assoc x all_funcnameterms)
+        | WDeref (l, w, tp) ->
+          ev state w cont
         | _ -> static_error l "Taking the address of this expression is not supported." None
       end
     | WSwitchExpr (l, e, i, targs, cs, cdef_opt, tenv, tp) ->

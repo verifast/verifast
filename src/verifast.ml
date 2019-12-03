@@ -433,11 +433,11 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if not (definitely_equal coef real_unit) then assert_false h env l "Closing a struct requires full permission to the character array." None;
       let init =
         match name with
-          "close_struct" -> None
+          "close_struct" -> Unspecified
         | "close_struct_zero" ->
           let cond = mk_all_eq (Int (Signed, 0)) elems (ctxt#mk_intlit 0) in
           if not (ctxt#query cond) then assert_false h env l ("Could not prove condition " ^ ctxt#pprint cond) None;
-          Some None
+          Default
       in
       produce_c_object l real_unit pointerTerm (StructType sn) init false true h $. fun h ->
       cont h env
@@ -551,7 +551,12 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match globals with
             [] -> cont h
           | (x, (_, tp, addr, init))::globals ->
-            produce_c_object l coef addr tp (Some !init) true true h $. fun h ->
+            let init =
+              match !init with
+                None -> Default
+              | Some e -> Expr e
+            in
+            produce_c_object l coef addr tp init true true h $. fun h ->
             iter h globals
         in
         iter h globalmap
@@ -613,8 +618,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             begin let Some block = !blockPtr in if not (List.mem x !block) then block := x::!block end;
             let init =
               match e with
-                None -> None
-              | Some e -> Some (Some (check_c_initializer e t))
+                None -> Unspecified
+              | Some e -> Expr (check_c_initializer e t)
             in
             let addr = get_unique_var_symb_non_ghost (x ^ "_addr") (PtrType Void) in
             produce_c_object l real_unit addr t init true true h $. fun h ->

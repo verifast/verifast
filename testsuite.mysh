@@ -217,6 +217,7 @@ cd examples
   verifast_both -c spouse-user.c
   verifast_both -disable_overflow_check -shared stack.c
   verifast_both -disable_overflow_check -shared stack_typeparam.c
+  verifast_both -c struct_assignment.c
   verifast_both struct_fields.c
   verifast_both swap.c
   verifast_both -c switch.c
