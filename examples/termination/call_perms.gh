@@ -16,10 +16,30 @@ lemma void func_lt_trans(void *f, void *g, void *h);
     requires func_lt(f, g) && func_lt(g, h);
     ensures func_lt(f, h) == true;
 
+// Call permission scopes
+
+fixpoint int call_perm_scope_of(int thread);
+
+lemma void call_perm__transfer(int targetThread);
+    requires call_perm_(?sourceThread, ?f) &*& call_perm_scope_of(targetThread) == call_perm_scope_of(sourceThread);
+    ensures call_perm_(targetThread, f);
+
+lemma void call_below_perm__transfer(int targetThread);
+    requires call_below_perm_(?sourceThread, ?f) &*& call_perm_scope_of(targetThread) == call_perm_scope_of(sourceThread);
+    ensures call_below_perm_(targetThread, f);
+
 // Call permissions qualified by a bag of function pointers
 
-predicate call_perm_below(list<void *> fs;);
-predicate call_perm(list<void *> fs;);
+predicate call_perm_below(int thread, list<void *> fs;);
+predicate call_perm(int thread, list<void *> fs;);
+
+lemma void call_perm_transfer(int targetThread);
+    requires call_perm(?sourceThread, ?fs) &*& call_perm_scope_of(targetThread) == call_perm_scope_of(sourceThread);
+    ensures call_perm(targetThread, fs);
+
+lemma void call_perm_below_transfer(int targetThread);
+    requires call_perm_below(?sourceThread, ?fs) &*& call_perm_scope_of(targetThread) == call_perm_scope_of(sourceThread);
+    ensures call_perm_below(targetThread, fs);
 
 fixpoint bool lt_some<t>(fixpoint(t, t, bool) lt, list<t> ys, t x) {
     return exists(ys, (lt)(x));
@@ -42,28 +62,32 @@ fixpoint bool bag_lt<t>(fixpoint(t, t, bool) lt, list<t> xs, list<t> ys) {
 fixpoint bool func_bag_lt(list<void *> fs1, list<void *> fs2) { return bag_lt(func_lt, fs1, fs2); }
 
 lemma void consume_call_perm_for(void *f);
-    requires call_perm_below(?fs) &*& func_bag_lt({f}, fs) == true;
-    ensures call_perm_(f);
+    requires call_perm_below(?thread, ?fs) &*& func_bag_lt({f}, fs) == true;
+    ensures call_perm_(thread, f);
 
 lemma void call_perm(list<void *> fs);
-    requires call_perm_below(?fs0) &*& func_bag_lt(fs, fs0) == true;
-    ensures call_perm(fs);
+    requires call_perm_below(?thread, ?fs0) &*& func_bag_lt(fs, fs0) == true;
+    ensures call_perm(thread, fs);
 
 lemma void call_perm_weaken(list<void *> fs);
-    requires call_perm(?fs0) &*& func_bag_le(fs, fs0) == true;
-    ensures call_perm(fs);
+    requires call_perm(?thread, ?fs0) &*& func_bag_le(fs, fs0) == true;
+    ensures call_perm(thread, fs);
 
 lemma void call_below_perm__elim(void *f);
-    requires call_below_perm_(f);
-    ensures call_perm_below({f});
+    requires call_below_perm_(?thread, f);
+    ensures call_perm_below(thread, {f});
 
 lemma void call_perm_below(real frac);
-    requires call_perm(?fs) &*& 1 <= frac;
-    ensures [frac]call_perm_below(fs);
+    requires call_perm(?thread, ?fs) &*& 1 <= frac;
+    ensures [frac]call_perm_below(thread, fs);
 
 // Call permissions qualified by an element of an arbitrary well-founded order
 
-predicate call_perm_level<t>(pair<fixpoint(t, t, bool), t> level, list<void *> fs;);
+predicate call_perm_level<t>(int thread, pair<fixpoint(t, t, bool), t> level, list<void *> fs;);
+
+lemma void call_perm_level_transfer<t>(int targetThread);
+    requires call_perm_level<t>(?sourceThread, ?level, ?fs) &*& call_perm_scope_of(targetThread) == call_perm_scope_of(sourceThread);
+    ensures call_perm_level<t>(targetThread, level, fs);
 
 fixpoint bool is_lesser_element<t>(fixpoint(t, bool) set, fixpoint(t, t, bool) lt, t x, t y) {
     return set(y) && lt(y, x);
@@ -89,23 +113,23 @@ lemma void call_perm_level_weaken<t>(
     list<void *> fs0,
     real frac1,
     t level1);
-    requires 1 <= frac0 &*& [frac0]call_perm_level<t>(pair(lt, level0), fs0) &*& 1 <= frac1 &*& [_]is_wf(lt) &*& lt(level1, level0) == true;
-    ensures [frac1]call_perm_level<t>(pair(lt, level1), fs0);
+    requires 1 <= frac0 &*& [frac0]call_perm_level<t>(?thread, pair(lt, level0), fs0) &*& 1 <= frac1 &*& [_]is_wf(lt) &*& lt(level1, level0) == true;
+    ensures [frac1]call_perm_level<t>(thread, pair(lt, level1), fs0);
 
 lemma void call_perm_level_below<t>(
     real frac0,
     pair<fixpoint(t, t, bool), t> level,
     list<void *> fs,
     real frac1);
-    requires 1 <= frac0 &*& [frac0]call_perm_level<t>(level, fs) &*& 1 <= frac1;
-    ensures [frac1]call_perm_below(fs);
+    requires 1 <= frac0 &*& [frac0]call_perm_level<t>(?thread, level, fs) &*& 1 <= frac1;
+    ensures [frac1]call_perm_below(thread, fs);
 
 lemma void consume_call_perm_level_for<t>(void *f);
-    requires call_perm_level<t>(?level, ?fs) &*& mem(f, fs) == true;
-    ensures call_perm_(f);
+    requires call_perm_level<t>(?thread, ?level, ?fs) &*& mem(f, fs) == true;
+    ensures call_perm_(thread, f);
 
 lemma void call_perm_level<t>(real frac, pair<fixpoint(t, t, bool), t> level, list<void *> fs);
-    requires call_perm_below(?fs0) &*& func_bag_lt(fs, fs0) == true &*& 0 < frac;
-    ensures [frac]call_perm_level(level, fs);
+    requires call_perm_below(?thread, ?fs0) &*& func_bag_lt(fs, fs0) == true &*& 0 < frac;
+    ensures [frac]call_perm_level(thread, level, fs);
 
 #endif

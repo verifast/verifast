@@ -1,16 +1,17 @@
 //@ predicate True(Object element) = true;
 
 class Consumer implements Forkee {
+    //@ int callPermScope;
     Channel c;
     
-    //@ predicate pre(list<Object> O) = c |-> ?c &*& [_]c.channel(True) &*& credits(c, 10) &*& O == nil;
+    //@ predicate pre(int callPermScope, list<Object> O) = this.callPermScope |-> callPermScope &*& c |-> ?c &*& [_]c.channel(True) &*& credits(c, 10) &*& O == nil;
     
     void run()
-        //@ requires obs(?O) &*& pre(O);
+        //@ requires obs(?O) &*& pre(call_perm_scope_of(currentThread), O);
         //@ ensures obs(nil);
         //@ terminates;
     {
-        //@ open pre(O);
+        //@ open pre(_, O);
         Channel c = c;
         for (int i = 0; i < 10; i++)
             //@ invariant obs(nil) &*& [_]c.channel(True) &*& credits(c, 10 - i);
@@ -36,8 +37,9 @@ class ProdCons {
         //@ c.create_obs(10);
         //@ assert obs(?O0);
         Consumer cons = new Consumer();
+        //@ cons.callPermScope = call_perm_scope_of(currentThread);
         cons.c = c;
-        //@ close cons.pre(nil);
+        //@ close cons.pre(_, nil);
         //@ close exists(O0);
         ThreadUtil.fork(cons);
 

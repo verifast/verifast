@@ -16,12 +16,12 @@ predicate list_object(list_object object; void *contains, void *intersects, pred
 @*/
 
 typedef bool contains/*@(predicate(list_object; list<void *>) p)@*/(list_object object, int element);
-    //@ requires [?f]list_object(object, this, ?intersects, p, ?d) &*& call_perm(d);
+    //@ requires [?f]list_object(object, this, ?intersects, p, ?d) &*& call_perm(currentThread, d);
     //@ ensures [f]list_object(object, this, intersects, p, d);
     //@ terminates;
 
 typedef bool intersects/*@(predicate(list_object; list<void *>) p)@*/(list_object object, list_object other);
-    //@ requires [?f]list_object(object, ?contains, this, p, ?d) &*& [?f_other]list_object(other, _, _, ?p_other, ?d_other) &*& call_perm(append(d, d_other));
+    //@ requires [?f]list_object(object, ?contains, this, p, ?d) &*& [?f_other]list_object(other, _, _, ?p_other, ?d_other) &*& call_perm(currentThread, append(d, d_other));
     //@ ensures [f]list_object(object, contains, this, p, d) &*& [f_other]list_object(other, _, _, p_other, d_other);
     //@ terminates;
 
@@ -34,7 +34,7 @@ struct list_object {
 typedef struct list_object *list_object;
 
 bool list_object_contains(list_object object, int element)
-    //@ requires [?f]list_object(object, _, _, ?p, ?d) &*& call_perm_below(?d1) &*& func_bag_lt(cons(list_object_contains, d), d1) == true;
+    //@ requires [?f]list_object(object, _, _, ?p, ?d) &*& call_perm_below(currentThread, ?d1) &*& func_bag_lt(cons(list_object_contains, d), d1) == true;
     //@ ensures [f]list_object(object, _, _, p, d);
     //@ terminates;
 {
@@ -55,7 +55,7 @@ bool list_object_contains(list_object object, int element)
 }
 
 bool list_object_intersects(list_object object, list_object other)
-    //@ requires [?f]list_object(object, _, _, ?p, ?d) &*& [?f_other]list_object(other, _, _, ?p_other, ?d_other) &*& call_perm_below(?d1) &*& func_bag_lt(cons(list_object_intersects, append(d, d_other)), d1) == true;
+    //@ requires [?f]list_object(object, _, _, ?p, ?d) &*& [?f_other]list_object(other, _, _, ?p_other, ?d_other) &*& call_perm_below(currentThread, ?d1) &*& func_bag_lt(cons(list_object_intersects, append(d, d_other)), d1) == true;
     //@ ensures [f]list_object(object, _, _, p, d) &*& [f_other]list_object(other, _, _, p_other, d_other);
     //@ terminates;
 {
@@ -87,25 +87,25 @@ predicate nil(list_object object; list<void *> d) =
 @*/
 
 bool nil_contains(list_object object, int element)
-    //@ requires [?f]list_object(object, nil_contains, ?intersects, @nil, ?d) &*& call_perm(d);
+    //@ requires [?f]list_object(object, nil_contains, ?intersects, @nil, ?d) &*& call_perm(currentThread, d);
     //@ ensures [f]list_object(object, nil_contains, intersects, @nil, d);
     //@ terminates;
 {
     return false;
-    //@ leak call_perm(d);
+    //@ leak call_perm(currentThread, d);
 }
 
 bool nil_intersects(list_object object, list_object other)
-    //@ requires [?f]list_object(object, ?contains, nil_intersects, @nil, ?d) &*& [?f_other]list_object(other, _, _, ?p_other, ?d_other) &*& call_perm(append(d, d_other));
+    //@ requires [?f]list_object(object, ?contains, nil_intersects, @nil, ?d) &*& [?f_other]list_object(other, _, _, ?p_other, ?d_other) &*& call_perm(currentThread, append(d, d_other));
     //@ ensures [f]list_object(object, contains, nil_intersects, @nil, d) &*& [f_other]list_object(other, _, _, p_other, d_other);
     //@ terminates;
 {
     return false;
-    //@ leak call_perm(append(d, d_other));
+    //@ leak call_perm(currentThread, append(d, d_other));
 }
 
 list_object create_nil()
-    //@ requires call_perm_below(?d1) &*& func_bag_lt({create_nil}, d1) == true;
+    //@ requires call_perm_below(currentThread, ?d1) &*& func_bag_lt({create_nil}, d1) == true;
     //@ ensures list_object(result, _, _, _, {create_nil});
     //@ terminates;
 {
@@ -120,7 +120,7 @@ list_object create_nil()
     //@ produce_function_pointer_chunk intersects(nil_intersects)(@nil)(object_, other) { call(); }
     //@ close nil(object, nil);
     //@ close list_object(object, nil_contains, nil_intersects, @nil, {create_nil});
-    //@ leak call_perm_below(_);
+    //@ leak call_perm_below(currentThread, _);
 }
 
 struct cons {
@@ -140,7 +140,7 @@ predicate cons(list_object object; list<void *> d) =
 @*/
 
 bool cons_contains(list_object object, int element)
-    //@ requires [?f]list_object(object, cons_contains, ?intersects, @cons, ?d) &*& call_perm(d);
+    //@ requires [?f]list_object(object, cons_contains, ?intersects, @cons, ?d) &*& call_perm(currentThread, d);
     //@ ensures [f]list_object(object, cons_contains, intersects, @cons, d);
     //@ terminates;
 {
@@ -152,7 +152,7 @@ bool cons_contains(list_object object, int element)
     bool result;
     if (c->head == element) {
         result = true;
-        //@ leak call_perm_below(_);
+        //@ leak call_perm_below(currentThread, _);
     } else {
         list_object tail = c->tail;
         //@ bag_lt_xs_cons_xs(func_lt, cons_contains, cons(intersects, dc));
@@ -169,7 +169,7 @@ bool cons_contains(list_object object, int element)
 }
 
 bool cons_intersects(list_object object, list_object other)
-    //@ requires [?f]list_object(object, ?contains, cons_intersects, @cons, ?d) &*& [?f_other]list_object(other, _, _, ?p_other, ?d_other) &*& call_perm(append(d, d_other));
+    //@ requires [?f]list_object(object, ?contains, cons_intersects, @cons, ?d) &*& [?f_other]list_object(other, _, _, ?p_other, ?d_other) &*& call_perm(currentThread, append(d, d_other));
     //@ ensures [f]list_object(object, contains, cons_intersects, @cons, d) &*& [f_other]list_object(other, _, _, p_other, d_other);
     //@ terminates;
 {
@@ -190,7 +190,7 @@ bool cons_intersects(list_object object, list_object other)
     //@ bag_le_bag_lt(func_lt, cons(list_object_contains, d_other), append(cons(cons_intersects, dc), d_other), append(cons(contains, cons(cons_intersects, dc)), d_other));
     if (list_object_contains(other, c->head)) {
         result = true;
-        //@ leak call_perm_below(_);
+        //@ leak call_perm_below(currentThread, _);
     } else {
         //@ bag_lt_xs_cons_xs(func_lt, contains, append(cons(cons_intersects, dc), d_other));
         //@ bag_lt_cons_lt(func_lt, list_object_intersects, cons_intersects, append(dc, d_other));
@@ -203,7 +203,7 @@ bool cons_intersects(list_object object, list_object other)
 }
 
 cons create_cons(int head, list_object tail)
-    //@ requires list_object(tail, _, _, _, ?d_tail) &*& call_perm_below(?d1) &*& func_bag_lt(cons(create_cons, d_tail), d1) == true;
+    //@ requires list_object(tail, _, _, _, ?d_tail) &*& call_perm_below(currentThread, ?d1) &*& func_bag_lt(cons(create_cons, d_tail), d1) == true;
     //@ ensures list_object((void *)result, _, _, _, cons(create_cons, d_tail));
     //@ terminates;
 {
@@ -221,7 +221,7 @@ cons create_cons(int head, list_object tail)
     //@ close cons((void *)c, d_tail);
     //@ bag_le_bag_le_append_l(func_lt, {cons_contains, cons_intersects}, {create_cons}, d_tail);
     //@ close list_object((void *)c, cons_contains, cons_intersects, @cons, cons(create_cons, d_tail));
-    //@ leak call_perm_below(d1);
+    //@ leak call_perm_below(currentThread, d1);
 }
 
 int main() //@ : main

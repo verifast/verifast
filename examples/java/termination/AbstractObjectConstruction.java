@@ -6,7 +6,7 @@ interface Func {
         ensures level_le({this.getClass()}, level) == true;
     @*/
     int apply(int x);
-        //@ requires [_]valid(?level) &*& call_perm(level);
+        //@ requires [_]valid(?level) &*& call_perm(currentThread, level);
         //@ ensures true;
         //@ terminates;
 }
@@ -15,7 +15,7 @@ interface Func {
 
 class Util {
     static int apply(Func f, int x)
-        //@ requires [_]Func(f, ?level) &*& [2]call_perm(level);
+        //@ requires [_]Func(f, ?level) &*& [2]call_perm(currentThread, level);
         //@ ensures true;
         //@ terminates;
     {
@@ -28,7 +28,7 @@ class Util {
     }
     
     static int deriv(Func f, int x)
-        //@ requires [_]Func(f, ?level) &*& call_perm(cons(Util.class, level));
+        //@ requires [_]Func(f, ?level) &*& call_perm(currentThread, cons(Util.class, level));
         //@ ensures true;
         //@ terminates;
     {
@@ -55,7 +55,7 @@ final class ZeroFunc implements Func {
         //@ close valid({ZeroFunc.class});
     }
     public int apply(int x)
-        //@ requires [_]valid(?level) &*& call_perm(level);
+        //@ requires [_]valid(?level) &*& call_perm(currentThread, level);
         //@ ensures true;
         //@ terminates;
     {
@@ -93,7 +93,7 @@ final class PlusOneFunc implements Func {
         //@ this.fLevel = fLevel;
     }
     public int apply(int x)
-        //@ requires [_]valid(?level) &*& call_perm(level);
+        //@ requires [_]valid(?level) &*& call_perm(currentThread, level);
         //@ ensures true;
         //@ terminates;
     {
@@ -102,7 +102,7 @@ final class PlusOneFunc implements Func {
         return Util.apply(f, x) + 1;
     }
     public static Func create(Func f)
-        //@ requires [_]Func(f, ?fLevel) &*& call_perm(cons(PlusOneFunc.class, fLevel));
+        //@ requires [_]Func(f, ?fLevel) &*& call_perm(currentThread, cons(PlusOneFunc.class, fLevel));
         //@ ensures Func(result, cons(PlusOneFunc.class, fLevel));
         //@ terminates;
     {

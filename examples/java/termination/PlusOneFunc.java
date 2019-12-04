@@ -6,14 +6,14 @@ interface Func {
         ensures level_le({this.getClass()}, level) == true;
     @*/
     int apply(int x);
-        //@ requires [_]valid(?level) &*& call_perm(level);
+        //@ requires [_]valid(?level) &*& call_perm(currentThread, level);
         //@ ensures true;
         //@ terminates;
 }
 
 class Util {
     static int deriv(Func f, int x)
-        //@ requires [_]f.valid(?level) &*& call_perm(cons(Util.class, level));
+        //@ requires [_]f.valid(?level) &*& call_perm(currentThread, cons(Util.class, level));
         //@ ensures true;
         //@ terminates;
     {
@@ -43,7 +43,7 @@ final class ZeroFunc implements Func {
         //@ close valid({ZeroFunc.class});
     }
     public int apply(int x)
-        //@ requires [_]valid(?level) &*& call_perm(level);
+        //@ requires [_]valid(?level) &*& call_perm(currentThread, level);
         //@ ensures true;
         //@ terminates;
     {
@@ -70,7 +70,7 @@ final class PlusOneFunc implements Func {
         this.f = f;
     }
     public int apply(int x)
-        //@ requires [_]valid(?level) &*& call_perm(level);
+        //@ requires [_]valid(?level) &*& call_perm(currentThread, level);
         //@ ensures true;
         //@ terminates;
     {

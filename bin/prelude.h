@@ -515,8 +515,8 @@ inductive vararg = vararg_int(int) | vararg_uint(unsigned int) | vararg_pointer(
 
 fixpoint bool func_lt(void *f, void *g);
 
-predicate call_perm_(void *f;);
-predicate call_below_perm_(void *f;);
+predicate call_perm_(int threadId, void *f;);
+predicate call_below_perm_(int threadId, void *f;);
 
 @*/
 

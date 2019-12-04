@@ -22,18 +22,18 @@ lemma void wait_level_lt_below_obs(pair<list<Class>, real> w1, pair<list<Class>,
 @*/
 
 interface Forkee {
-    //@ predicate pre(list<Object> O);
+    //@ predicate pre(int callPermScope, list<Object> O);
     void run();
-        //@ requires obs(?O) &*& pre(O);
+        //@ requires obs(?O) &*& pre(call_perm_scope_of(currentThread), O);
         //@ ensures obs(nil);
         //@ terminates;
 }
 
 interface JoinableForkee {
-    //@ predicate pre(pair<list<Class>, real> waitLevel, list<Object> O);
+    //@ predicate pre(int callPermScope, pair<list<Class>, real> waitLevel, list<Object> O);
     //@ predicate post();
     void run();
-        //@ requires obs(cons(?thisThread, ?O)) &*& pre(wait_level_of(thisThread), O);
+        //@ requires obs(cons(?thisThread, ?O)) &*& pre(call_perm_scope_of(currentThread), wait_level_of(thisThread), O);
         //@ ensures obs({thisThread}) &*& post();
         //@ terminates;
 }
@@ -89,12 +89,12 @@ See also
 
 class ThreadUtil {
     static void fork(Forkee forkee);
-        //@ requires obs(?O) &*& forkee.pre(?Of) &*& exists(?Or) &*& O == append(Of, Or) &*& call_perm({forkee.getClass()});
+        //@ requires obs(?O) &*& forkee.pre(call_perm_scope_of(currentThread), ?Of) &*& exists(?Or) &*& O == append(Of, Or) &*& call_perm(currentThread, {forkee.getClass()});
         //@ ensures obs(Or);
         //@ terminates;
     
     static Thread forkJoinable(JoinableForkee forkee);
-        //@ requires obs(?O) &*& forkee.pre(?waitLevel, ?Of) &*& exists(?Or) &*& O == append(Of, Or) &*& call_perm({forkee.getClass()});
+        //@ requires obs(?O) &*& forkee.pre(call_perm_scope_of(currentThread), ?waitLevel, ?Of) &*& exists(?Or) &*& O == append(Of, Or) &*& call_perm(currentThread, {forkee.getClass()});
         //@ ensures obs(Or) &*& result.thread(forkee) &*& wait_level_of(result) == waitLevel;
         //@ terminates;
 }

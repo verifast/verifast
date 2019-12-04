@@ -6,11 +6,11 @@ interface Set {
         ensures level_le({this.getClass()}, level) == true;
     @*/
     boolean contains(int x);
-        //@ requires [_]valid(?level) &*& call_perm(level);
+        //@ requires [_]valid(?level) &*& call_perm(currentThread, level);
         //@ ensures true;
         //@ terminates;
     boolean intersects(Set other);
-        //@ requires [_]valid(?level) &*& [_]Set(other, ?otherLevel) &*& call_perm(append(level, otherLevel));
+        //@ requires [_]valid(?level) &*& [_]Set(other, ?otherLevel) &*& call_perm(currentThread, append(level, otherLevel));
         //@ ensures true;
         //@ terminates;
 }
@@ -21,7 +21,7 @@ predicate Set(Set set, list<Class> level;) = set.valid(?level0) &*& level_le(lev
 
 class SetHelper {
     static boolean contains(Set set, int x)
-        //@ requires [_]Set(set, ?level) &*& [2]call_perm(level);
+        //@ requires [_]Set(set, ?level) &*& [2]call_perm(currentThread, level);
         //@ ensures true;
         //@ terminates;
     {
@@ -34,7 +34,7 @@ class SetHelper {
     }
 
     static boolean intersects(Set set, Set other)
-        //@ requires [_]Set(set, ?level) &*& [_]Set(other, ?otherLevel) &*& [2]call_perm(append(level, otherLevel));
+        //@ requires [_]Set(set, ?level) &*& [_]Set(other, ?otherLevel) &*& [2]call_perm(currentThread, append(level, otherLevel));
         //@ ensures true;
         //@ terminates;
     {
@@ -68,14 +68,14 @@ final class Empty implements Set {
         //@ close valid({Empty.class});
     }
     public boolean contains(int x)
-        //@ requires [_]valid(?level) &*& call_perm(level);
+        //@ requires [_]valid(?level) &*& call_perm(currentThread, level);
         //@ ensures true;
         //@ terminates;
     {
         return false;
     }
     public boolean intersects(Set other)
-        //@ requires [_]valid(?level) &*& [_]Set(other, ?otherLevel) &*& call_perm(append(level, otherLevel));
+        //@ requires [_]valid(?level) &*& [_]Set(other, ?otherLevel) &*& call_perm(currentThread, append(level, otherLevel));
         //@ ensures true;
         //@ terminates;
     {
@@ -113,7 +113,7 @@ final class Insert implements Set {
         //@ this.setLevel = setLevel;
     }
     public boolean contains(int x)
-        //@ requires [_]valid(?level) &*& call_perm(level);
+        //@ requires [_]valid(?level) &*& call_perm(currentThread, level);
         //@ ensures true;
         //@ terminates;
     {
@@ -122,7 +122,7 @@ final class Insert implements Set {
         return x == elem || SetHelper.contains(set, x);
     }
     public boolean intersects(Set other)
-        //@ requires [_]valid(?level) &*& [_]Set(other, ?otherLevel) &*& call_perm(append(level, otherLevel));
+        //@ requires [_]valid(?level) &*& [_]Set(other, ?otherLevel) &*& call_perm(currentThread, append(level, otherLevel));
         //@ ensures true;
         //@ terminates;
     {
@@ -135,7 +135,7 @@ final class Insert implements Set {
         return SetHelper.contains(other, elem) || SetHelper.intersects(set, other);
     }
     public static Set create(int elem, Set set)
-        //@ requires [_]Set(set, ?setLevel) &*& call_perm(cons(Insert.class, setLevel));
+        //@ requires [_]Set(set, ?setLevel) &*& call_perm(currentThread, cons(Insert.class, setLevel));
         //@ ensures [_]Set(result, cons(Insert.class, setLevel));
         //@ terminates;
     {
@@ -145,7 +145,7 @@ final class Insert implements Set {
 
 class Util {
     public static boolean intersects(Set s1, Set s2)
-        //@ requires [_]Set(s1, ?s1Level) &*& [_]Set(s2, ?s2Level) &*& call_perm(cons(Util.class, append(s1Level, s2Level)));
+        //@ requires [_]Set(s1, ?s1Level) &*& [_]Set(s2, ?s2Level) &*& call_perm(currentThread, cons(Util.class, append(s1Level, s2Level)));
         //@ ensures true;
         //@ terminates;
     {

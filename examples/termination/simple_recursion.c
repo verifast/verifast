@@ -1,15 +1,15 @@
 /*@
 
-predicate call_perms_(int n, void *f;) =
+predicate call_perms_(int thread, int n, void *f;) =
     n == 0 ?
         emp
     :
         1 <= n &*&
-        call_perm_(f) &*& call_perms_(n - 1, f);
+        call_perm_(thread, f) &*& call_perms_(thread, n - 1, f);
 
 lemma_auto void call_perm_weaken(int n, void *f)
-    requires call_below_perm_(?f0) &*& func_lt(f, f0) == true;
-    ensures call_perms_(n, f);
+    requires call_below_perm_(?thread, ?f0) &*& func_lt(f, f0) == true;
+    ensures call_perms_(thread, n, f);
 {
     assume(false);
 }
@@ -17,17 +17,17 @@ lemma_auto void call_perm_weaken(int n, void *f)
 @*/
 
 typedef bool is_even_(int x);
-    //@ requires exists<int>(?n) &*& 0 <= x &*& x == 2 * n || x == 2 * n + 1 &*& call_perms_(n, is_even);
+    //@ requires exists<int>(?n) &*& 0 <= x &*& x == 2 * n || x == 2 * n + 1 &*& call_perms_(currentThread, n, is_even);
     //@ ensures true;
     //@ terminates;
 
 bool is_odd(int x)
-    //@ requires exists<int>(?n) &*& 0 <= x &*& x == 2 * n || x == 2 * n - 1 &*& call_perms_(n, is_even);
+    //@ requires exists<int>(?n) &*& 0 <= x &*& x == 2 * n || x == 2 * n - 1 &*& call_perms_(currentThread, n, is_even);
     //@ ensures true;
     //@ terminates;
 {
     //@ open exists(n);
-    //@ open call_perms_(n, is_even);
+    //@ open call_perms_(currentThread, n, is_even);
     if (x == 0) {
         return false;
     } else {
@@ -38,12 +38,12 @@ bool is_odd(int x)
 }
 
 bool is_even(int x) //@ : is_even_
-    //@ requires exists<int>(?n) &*& 0 <= x &*& x == 2 * n || x == 2 * n + 1 &*& call_perms_(n, is_even);
+    //@ requires exists<int>(?n) &*& 0 <= x &*& x == 2 * n || x == 2 * n + 1 &*& call_perms_(currentThread, n, is_even);
     //@ ensures true;
     //@ terminates;
 {
     //@ open exists(n);
-    //@ open call_perms_(n, is_even);
+    //@ open call_perms_(currentThread, n, is_even);
     if (x == 0) {
         return true;
     } else {

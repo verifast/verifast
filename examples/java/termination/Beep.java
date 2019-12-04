@@ -15,7 +15,7 @@ class OS {
 class Beeper {
 
     static void beepForever()
-        //@ requires IO(?n) &*& call_perm_rec({Beeper.class}, int_lt, n);
+        //@ requires IO(?n) &*& call_perm_rec(currentThread, {Beeper.class}, int_lt, n);
         //@ ensures false;
         //@ terminates;
     {

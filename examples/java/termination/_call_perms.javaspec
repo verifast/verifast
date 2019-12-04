@@ -93,25 +93,41 @@ lemma void level_le_append_flip(list<Class> level1, list<Class> level2);
     requires true;
     ensures level_le(append(level1, level2), append(level2, level1)) == true;
 
+/**** Call permission scopes ****/
+
+fixpoint int call_perm_scope_of(int thread);
+
+lemma void call_perm__transfer(int targetThread);
+    requires call_perm_(?sourceThread, ?c) &*& call_perm_scope_of(targetThread) == call_perm_scope_of(sourceThread);
+    ensures call_perm_(targetThread, c);
+
+lemma void call_below_perm__transfer(int targetThread);
+    requires call_below_perm_(?sourceThread, ?c) &*& call_perm_scope_of(targetThread) == call_perm_scope_of(sourceThread);
+    ensures call_below_perm_(targetThread, c);
+
 /**** Call permissions ****/
 
-predicate call_perm(list<Class> level;);
+predicate call_perm(int thread, list<Class> level;);
+
+lemma void call_perm_transfer(int targetThread);
+    requires call_perm(?sourceThread, ?level) &*& call_perm_scope_of(targetThread) == call_perm_scope_of(sourceThread);
+    ensures call_perm(targetThread, level);
 
 lemma void call_perm_weaken_and_dup(real frac);
-    requires call_perm(cons(_, ?level)) &*& 0 < frac;
-    ensures [frac]call_perm(level);
+    requires call_perm(?thread, cons(_, ?level)) &*& 0 < frac;
+    ensures [frac]call_perm(thread, level);
 
 lemma void call_perm_weaken(real frac, list<Class> level);
-    requires [frac]call_perm(?level0) &*& level_le(level, level0) == true;
-    ensures [frac]call_perm(level);
+    requires [frac]call_perm(?thread, ?level0) &*& level_le(level, level0) == true;
+    ensures [frac]call_perm(thread, level);
 
 lemma void consume_call_perm_for(Class c);
-    requires call_perm(?level) &*& level_le({c}, level) == true;
-    ensures call_perm_(c);
+    requires call_perm(?thread, ?level) &*& level_le({c}, level) == true;
+    ensures call_perm_(thread, c);
 
 lemma void call_below_perm__elim(real frac, list<Class> level);
-    requires call_below_perm_(?c) &*& level_lt(level, {c}) == true &*& 0 < frac;
-    ensures [frac]call_perm(level);
+    requires call_below_perm_(?thread, ?c) &*& level_lt(level, {c}) == true &*& 0 < frac;
+    ensures [frac]call_perm(thread, level);
 
 /**** Well-founded relations ****/
 
@@ -134,23 +150,27 @@ predicate is_wf<t>(fixpoint(t, t, boolean) lt) =
 
 /**** Call permissions for recursion (with local level) ****/
 
-predicate call_perm_rec<t>(list<Class> globalLevel, fixpoint(t, t, boolean) lt, t localLevel;);
+predicate call_perm_rec<t>(int thread, list<Class> globalLevel, fixpoint(t, t, boolean) lt, t localLevel;);
+
+lemma void call_perm_rec_transfer<t>(int targetThread);
+    requires call_perm_rec<t>(?sourceThread, ?globalLevel, ?lt, ?localLevel) &*& call_perm_scope_of(targetThread) == call_perm_scope_of(sourceThread);
+    ensures call_perm_rec<t>(targetThread, globalLevel, lt, localLevel);
 
 lemma void call_below_perm__elim_rec<t>(real frac, list<Class> globalLevel, fixpoint(t, t, boolean) lt, t localLevel);
-    requires call_below_perm_(?c) &*& level_lt(globalLevel, {c}) == true &*& [_]is_wf(lt);
-    ensures [frac]call_perm_rec(globalLevel, lt, localLevel);
+    requires call_below_perm_(?thread, ?c) &*& level_lt(globalLevel, {c}) == true &*& [_]is_wf(lt);
+    ensures [frac]call_perm_rec(thread, globalLevel, lt, localLevel);
 
 lemma void create_call_perm_rec<t>(real frac, list<Class> globalLevel, fixpoint(t, t, boolean) lt, t localLevel);
-    requires call_perm(?level) &*& level_lt(globalLevel, level) == true &*& [_]is_wf(lt);
-    ensures [frac]call_perm_rec(globalLevel, lt, localLevel);
+    requires call_perm(?thread, ?level) &*& level_lt(globalLevel, level) == true &*& [_]is_wf(lt);
+    ensures [frac]call_perm_rec(thread, globalLevel, lt, localLevel);
 
 lemma void call_perm_rec_weaken<t>(real frac, t newLocalLevel);
-    requires call_perm_rec<t>(?globalLevel, ?lt, ?localLevel) &*& 0 < frac &*& lt(newLocalLevel, localLevel) == true;
-    ensures [frac]call_perm_rec<t>(globalLevel, lt, newLocalLevel);
+    requires call_perm_rec<t>(?thread, ?globalLevel, ?lt, ?localLevel) &*& 0 < frac &*& lt(newLocalLevel, localLevel) == true;
+    ensures [frac]call_perm_rec<t>(thread, globalLevel, lt, newLocalLevel);
 
 lemma void call_perm_rec_elim<t>(real frac);
-    requires call_perm_rec<t>(?globalLevel, _, _) &*& 0 < frac;
-    ensures [frac]call_perm(globalLevel);
+    requires call_perm_rec<t>(?thread, ?globalLevel, _, _) &*& 0 < frac;
+    ensures [frac]call_perm(thread, globalLevel);
 
 /**** Well-founded order on integers ****/
 

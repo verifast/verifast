@@ -43,22 +43,22 @@ lemma void List_opt_weaken(List l, list<Class> level)
 interface List {
     //@ predicate valid(list<int> elems, list<Class> level);
     int getHead();
-        //@ requires [?f]valid(cons(?h, ?t), ?level) &*& call_perm(level);
+        //@ requires [?f]valid(cons(?h, ?t), ?level) &*& call_perm(currentThread, level);
         //@ ensures [f]valid(cons(h, t), level) &*& result == h;
         //@ terminates;
     List getTail();
-        //@ requires [?f]valid(cons(?h, ?t), ?level) &*& call_perm(level);
+        //@ requires [?f]valid(cons(?h, ?t), ?level) &*& call_perm(currentThread, level);
         //@ ensures [f]List_opt(result, t, level);
         //@ terminates;
     List reverseAppend(List other);
-        //@ requires valid(?elems, ?level) &*& List_opt(other, ?otherElems, ?otherLevel) &*& call_perm(level);
+        //@ requires valid(?elems, ?level) &*& List_opt(other, ?otherElems, ?otherLevel) &*& call_perm(currentThread, level);
         //@ ensures List(result, append(reverse(elems), otherElems), append(level, otherLevel));
         //@ terminates;
 }
 
 class ListUtil {
     static List reverseAppend(List l, List other)
-        //@ requires List(l, ?elems, ?level) &*& List_opt(other, ?otherElems, ?otherLevel) &*& [2]call_perm(level);
+        //@ requires List(l, ?elems, ?level) &*& List_opt(other, ?otherElems, ?otherLevel) &*& [2]call_perm(currentThread, level);
         //@ ensures List(result, append(reverse(elems), otherElems), append(level, otherLevel));
         //@ terminates;
     {
@@ -72,7 +72,7 @@ class ListUtil {
         return result;
     }
     static List reverseAppend_opt(List l, List other)
-        //@ requires List_opt(l, ?elems, ?level) &*& List_opt(other, ?otherElems, ?otherLevel) &*& call_perm(cons(ListUtil.class, level));
+        //@ requires List_opt(l, ?elems, ?level) &*& List_opt(other, ?otherElems, ?otherLevel) &*& call_perm(currentThread, cons(ListUtil.class, level));
         //@ ensures List_opt(result, append(reverse(elems), otherElems), append(level, otherLevel));
         //@ terminates;
     {
@@ -89,7 +89,7 @@ class ListUtil {
         }
     }
     static List reverse_(List l)
-        //@ requires List_opt(l, ?elems, ?level) &*& call_perm(cons(ListUtil.class, level));
+        //@ requires List_opt(l, ?elems, ?level) &*& call_perm(currentThread, cons(ListUtil.class, level));
         //@ ensures List_opt(result, reverse(elems), level);
         //@ terminates;
     {
@@ -119,7 +119,7 @@ final class Cons implements List {
         //@ this.tailLevel = tailLevel;
     }
     List reverseAppend(List other)
-        //@ requires valid(?elems, ?level) &*& List_opt(other, ?otherElems, ?otherLevel) &*& call_perm(level);
+        //@ requires valid(?elems, ?level) &*& List_opt(other, ?otherElems, ?otherLevel) &*& call_perm(currentThread, level);
         //@ ensures List(result, append(reverse(elems), otherElems), append(level, otherLevel));
         //@ terminates;
     {
@@ -144,14 +144,14 @@ final class Cons implements List {
         return result;
     }
     int getHead()
-        //@ requires [?f]valid(cons(?h, ?t), ?level) &*& call_perm(level);
+        //@ requires [?f]valid(cons(?h, ?t), ?level) &*& call_perm(currentThread, level);
         //@ ensures [f]valid(cons(h, t), level) &*& result == h;
         //@ terminates;
     {
         return value;
     }
     List getTail()
-        //@ requires [?f]valid(cons(?h, ?t), ?level) &*& call_perm(level);
+        //@ requires [?f]valid(cons(?h, ?t), ?level) &*& call_perm(currentThread, level);
         //@ ensures [f]List_opt(result, t, level);
         //@ terminates;
     {

@@ -5,20 +5,20 @@ interface Task {
     //@ predicate valid(list<Class> level);
     
     void run();
-        //@ requires obs(?O) &*& valid(?level) &*& call_perm(level) &*& wait_level_below_obs(pair(level, 0r), O) == true;
+        //@ requires obs(?O) &*& valid(?level) &*& call_perm(currentThread, level) &*& wait_level_below_obs(pair(level, 0r), O) == true;
         //@ ensures obs(O);
         //@ terminates;
     
 }
 
-//@ predicate Item(Item item) = item.validItem() &*& level_le({item.getClass()}, {ShutdownItem.class}) == true;
+//@ predicate Item(Item item, int scope) = item.validItem(scope) &*& level_le({item.getClass()}, {ShutdownItem.class}) == true;
 
 interface Item {
 
-    //@ predicate validItem();
+    //@ predicate validItem(int scope);
     
     void run();
-        //@ requires obs(nil) &*& validItem();
+        //@ requires obs(nil) &*& validItem(call_perm_scope_of(currentThread));
         //@ ensures obs(nil);
         //@ terminates;
     
@@ -27,14 +27,14 @@ interface Item {
 class ThreadPoolHelper {
 
     static void work(ThreadPool pool)
-        //@ requires obs(nil) &*& [_]pool.valid(_) &*& [_]pool.channel |-> ?channel &*& channel.credit() &*& call_perm({ShutdownItem.class});
+        //@ requires obs(nil) &*& [_]pool.valid(call_perm_scope_of(currentThread), _) &*& [_]pool.channel |-> ?channel &*& channel.credit() &*& call_perm(currentThread, {ShutdownItem.class});
         //@ ensures obs(nil);
         //@ terminates;
     {
-        //@ open [_]pool.valid(?O);
+        //@ open [_]pool.valid(_, ?O);
         Item item = (Item)pool.channel.receive();
-        //@ open ThreadPool_inv(item);
-        //@ open Item(item);
+        //@ open ThreadPool_inv(call_perm_scope_of(currentThread))(item);
+        //@ open Item(item, call_perm_scope_of(currentThread));
         //@ consume_call_perm_for(item.getClass());
         item.run();
     }
@@ -43,15 +43,16 @@ class ThreadPoolHelper {
 
 final class TaskItem implements Item {
 
+    //@ int thread;
     ThreadPool pool;
     Task task;
     //@ list<Class> taskLevel;
     
-    //@ predicate validItem() = pool |-> ?pool &*& [_]pool.valid(_) &*& [_]pool.channel |-> ?channel &*& channel.credit() &*& task |-> ?task &*& taskLevel |-> ?taskLevel &*& Task(task, taskLevel) &*& call_perm(append({TaskItem.class, ShutdownItem.class}, taskLevel));
+    //@ predicate validItem(int scope) = this.thread |-> ?thread &*& pool |-> ?pool &*& [_]pool.valid(scope, _) &*& [_]pool.channel |-> ?channel &*& channel.credit() &*& task |-> ?task &*& taskLevel |-> ?taskLevel &*& Task(task, taskLevel) &*& call_perm(thread, append({TaskItem.class, ShutdownItem.class}, taskLevel)) &*& call_perm_scope_of(thread) == scope;
 
     TaskItem(ThreadPool pool, Task task)
         //@ requires true;
-        //@ ensures this.pool |-> pool &*& this.task |-> task &*& this.taskLevel |-> _;
+        //@ ensures this.thread |-> _ &*& this.pool |-> pool &*& this.task |-> task &*& this.taskLevel |-> _;
         //@ terminates;
     {
         this.pool = pool;
@@ -59,11 +60,12 @@ final class TaskItem implements Item {
     }
     
     void run()
-        //@ requires obs(nil) &*& validItem();
+        //@ requires obs(nil) &*& validItem(call_perm_scope_of(currentThread));
         //@ ensures obs(nil);
         //@ terminates;
     {
-        //@ open validItem();
+        //@ open validItem(_);
+        //@ call_perm_transfer(currentThread);
         //@ call_perm_weaken_and_dup(3);
         //@ open Task(_, _);
         Task task = task;
@@ -83,10 +85,11 @@ final class TaskItem implements Item {
 
 final class ShutdownItem implements Item {
 
-    //@ predicate validItem() = true;
+    //@ int scope;
+    //@ predicate validItem(int scope) = this.scope |-> scope;
     
     void run()
-        //@ requires obs(nil) &*& validItem();
+        //@ requires obs(nil) &*& validItem(_);
         //@ ensures obs(nil);
         //@ terminates;
     {
@@ -98,7 +101,7 @@ final class ThreadPoolWorker implements Forkee {
 
     ThreadPool pool;
 
-    //@ predicate pre(list<Object> O) = O == nil &*& pool |-> ?pool &*& [_]pool.valid(_) &*& [_]pool.channel |-> ?channel &*& channel.credit();
+    //@ predicate pre(int scope, list<Object> O) = O == nil &*& pool |-> ?pool &*& [_]pool.valid(scope, _) &*& [_]pool.channel |-> ?channel &*& channel.credit();
     
     ThreadPoolWorker(ThreadPool pool)
         //@ requires true;
@@ -109,7 +112,7 @@ final class ThreadPoolWorker implements Forkee {
     }
     
     void run()
-        //@ requires pre(?O) &*& obs(O);
+        //@ requires pre(call_perm_scope_of(currentThread), ?O) &*& obs(O);
         //@ ensures obs(nil);
         //@ terminates;
     {
@@ -122,7 +125,7 @@ final class ThreadPoolWorker implements Forkee {
 
 //@ predicate wait_level_range(list<Class> termLevel, real a, real b) = a < b;
 
-//@ predicate ThreadPool_inv(Object object) = Item(^object);
+//@ predicate_ctor ThreadPool_inv(int scope)(Object object) = Item(^object, scope);
 
 //@ fixpoint boolean object_wait_level_within_range(list<Class> termLevel, real a, real b, Object object) { return fst(wait_level_of(object)) == termLevel && a < snd(wait_level_of(object)) && snd(wait_level_of(object)) < b; }
 
@@ -145,23 +148,25 @@ lemma void wait_level_below_object_wait_levels_within_range(list<Class> termLeve
 
 final class ThreadPool {
 
+    //@ int callPermScope;
     Channel channel;
 
-    //@ predicate valid(list<Object> O) = channel |-> ?channel &*& [_]channel.channel(ThreadPool_inv) &*& O == {channel};
+    //@ predicate valid(int callPermScope, list<Object> O) = [_]this.callPermScope |-> callPermScope &*& channel |-> ?channel &*& [_]channel.channel(ThreadPool_inv(callPermScope)) &*& O == {channel};
     
     public ThreadPool()
         //@ requires obs(?O) &*& wait_level_below_obs(pair({ThreadPool.class}, 0r), O) == true &*& wait_level_range(?termLevel, ?a, ?b) &*& level_lt({ThreadPool.class}, termLevel) == true;
-        //@ ensures [_]valid(?Or) &*& obs(append(Or, O)) &*& object_wait_levels_within_range(termLevel, a, b, Or) == true;
+        //@ ensures [_]valid(call_perm_scope_of(currentThread), ?Or) &*& obs(append(Or, O)) &*& object_wait_levels_within_range(termLevel, a, b, Or) == true;
         //@ terminates;
     {
         //@ open wait_level_range(_, _, _);
-        //@ close exists(pair(ThreadPool_inv, pair(termLevel, (a + b) / 2)));
+        //@ close exists(pair(ThreadPool_inv(call_perm_scope_of(currentThread)), pair(termLevel, (a + b) / 2)));
         channel = new Channel();
         //@ leak channel |-> _;
         //@ channel.create_obs(1);
         //@ produce_call_below_perm_();
         ThreadPoolWorker worker = new ThreadPoolWorker(this);
-        //@ close worker.pre(nil);
+        //@ callPermScope = call_perm_scope_of(currentThread);
+        //@ close worker.pre(call_perm_scope_of(currentThread), nil);
         //@ open repeat(_, _, _);
         //@ open repeat(_, _, _);
         //@ close exists(cons<Object>(channel, O));
@@ -171,18 +176,20 @@ final class ThreadPool {
     }
 
     public void addTask(Task task)
-        //@ requires obs(?O) &*& [_]valid(?Op) &*& Task(task, ?taskLevel) &*& call_perm(cons(ThreadPool.class, taskLevel)) &*& wait_level_below_obs(pair({ThreadPool.class}, 0r), O) == true;
+        //@ requires obs(?O) &*& [_]valid(?scope, ?Op) &*& Task(task, ?taskLevel) &*& call_perm(?thread, cons(ThreadPool.class, taskLevel)) &*& wait_level_below_obs(pair({ThreadPool.class}, 0r), O) == true &*& call_perm_scope_of(thread) == scope;
         //@ ensures obs(O);
         //@ terminates;
     {
         TaskItem item = new TaskItem(this, task);
+        //@ item.thread = thread;
         //@ item.taskLevel = taskLevel;
         //@ channel.create_obs(1);
         //@ level_append_mono_l({TaskItem.class, ShutdownItem.class}, {ThreadPool.class}, taskLevel);
         //@ call_perm_weaken(1, append({TaskItem.class, ShutdownItem.class}, taskLevel));
-        //@ close item.validItem();
-        //@ close Item(item);
-        //@ close ThreadPool_inv(item);
+        //@ call_perm_transfer(thread);
+        //@ close item.validItem(scope);
+        //@ close Item(item, scope);
+        //@ close ThreadPool_inv(scope)(item);
         channel.send(item);
         //@ open repeat(_, _, _);
         //@ open repeat(_, _, _);
@@ -190,14 +197,15 @@ final class ThreadPool {
     }
 
     public void shutDown()
-        //@ requires [_]valid(?Op) &*& exists<list<Object> >(?O) &*& obs(append(Op, O)) &*& wait_level_below_obs(pair({ThreadPool.class}, 0r), append(Op, O)) == true;
+        //@ requires [_]valid(?scope, ?Op) &*& exists<list<Object> >(?O) &*& obs(append(Op, O)) &*& wait_level_below_obs(pair({ThreadPool.class}, 0r), append(Op, O)) == true;
         //@ ensures obs(O);
         //@ terminates;
     {
         ShutdownItem item = new ShutdownItem();
-        //@ close item.validItem();
-        //@ close Item(item);
-        //@ close ThreadPool_inv(item);
+        //@ item.scope = scope;
+        //@ close item.validItem(scope);
+        //@ close Item(item, scope);
+        //@ close ThreadPool_inv(scope)(item);
         channel.send(item);
         //@ channel.destroy_ob();
     }
@@ -218,7 +226,7 @@ final class MyTask implements Task {
     }
     
     void run()
-        //@ requires obs(?O) &*& valid(?level) &*& call_perm(level) &*& wait_level_below_obs(pair(level, 0r), O) == true;
+        //@ requires obs(?O) &*& valid(?level) &*& call_perm(currentThread, level) &*& wait_level_below_obs(pair(level, 0r), O) == true;
         //@ ensures obs(O);
         //@ terminates;
     {
@@ -229,7 +237,7 @@ final class MyTask implements Task {
 class MyModule {
 
     static void doWork(ThreadPool pool)
-        //@ requires obs(?O) &*& [_]pool.valid(_) &*& wait_level_below_obs(pair({MyModule.class}, 0r), O) == true;
+        //@ requires obs(?O) &*& [_]pool.valid(call_perm_scope_of(currentThread), _) &*& wait_level_below_obs(pair({MyModule.class}, 0r), O) == true;
         //@ ensures obs(O);
         //@ terminates;
     {
@@ -252,7 +260,7 @@ class Main {
         //@ wait_level_lt_below_obs(pair({ThreadPool.class}, 0r), pair({Main.class}, 0r), O);
         //@ close wait_level_range({Main.class}, -1, 0);
         ThreadPool pool = new ThreadPool();
-        //@ assert [_]pool.valid(?Op);
+        //@ assert [_]pool.valid(call_perm_scope_of(currentThread), ?Op);
         //@ wait_level_lt_below_obs(pair({MyModule.class}, 0r), pair({Main.class}, 0r), O);
         //@ wait_level_below_object_wait_levels_within_range({Main.class}, -1, 0, Op);
         //@ wait_level_lt_below_obs(pair({MyModule.class}, 0r), pair({Main.class}, -1r), Op);

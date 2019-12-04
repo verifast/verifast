@@ -1480,9 +1480,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | RealMethodInfo rank -> rank <> None
     | LemInfo (lems, g, indinfo, nonghost_callers_only) -> true
   
-  let consume_class_call_perm l t h cont =
+  let consume_class_call_perm l currentThread t h cont =
     let (_, _, _, _, call_perm__symb, _, _) = List.assoc "java.lang.call_perm_" predfammap in
-    consume_chunk rules h [] [] [] l (call_perm__symb, true) [] real_unit dummypat (Some 1) [TermPat t] $. fun _ h _ _ _ _ _ _ ->
+    consume_chunk rules h [] [] [] l (call_perm__symb, true) [] real_unit dummypat (Some 2) [TermPat currentThread; TermPat t] $. fun _ h _ _ _ _ _ _ ->
     cont h
 
   let verify_call funcmap eval_h l (pn, ilist) xo g targs pats (callee_tparams, tr, ps, funenv, pre, post, epost, terminates, v) pure is_upcall target_class leminfo sizemap h tparams tenv ghostenv env cont econt =
@@ -1542,7 +1542,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if not (ctxt#query (ctxt#mk_not (ctxt#mk_eq this_term (ctxt#mk_intlit 0)))) then
         assert_false h env l "Target of method call might be null." None
     in
-    let cenv = [(current_thread_name, List.assoc current_thread_name env)] @ env' @ funenv in
+    let currentThread = List.assoc current_thread_name env in
+    let cenv = [(current_thread_name, currentThread)] @ env' @ funenv in
     with_context (Executing (h, env, l, "Verifying call")) $. fun () ->
     with_context PushSubcontext (fun () ->
       begin fun cont ->
@@ -1553,7 +1554,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               Some cn -> List.assoc cn classterms
             | None -> ctxt#mk_app get_class_symbol [List.assoc "this" env']
           in
-          consume_class_call_perm l target_class_term h cont
+          consume_class_call_perm l currentThread target_class_term h cont
         | _ -> cont h
       end $. fun h ->
       begin match pre with
@@ -2012,7 +2013,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let consume_call_perm h cont =
         if should_terminate leminfo then begin
           let (_, _, _, _, call_perm__symb, _, _) = List.assoc "call_perm_" predfammap in
-          consume_chunk rules h [] [] [] l (call_perm__symb, true) [] real_unit dummypat (Some 1) [TermPat fterm] $. fun _ h _ _ _ _ _ _ ->
+          consume_chunk rules h [] [] [] l (call_perm__symb, true) [] real_unit dummypat (Some 2) [TermPat (List.assoc current_thread_name env); TermPat fterm] $. fun _ h _ _ _ _ _ _ ->
           cont h
         end else
           cont h

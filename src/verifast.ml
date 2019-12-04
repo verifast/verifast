@@ -243,7 +243,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               with_context PopSubcontext $. fun () ->
               let tenv = List.map (fun (x, x0, tp, t, t0) -> (x, tp)) fparams @ tenv in
               let ghostenv = List.map (fun (x, x0, tp, t, t0) -> x) fparams @ ghostenv in
-              let env = List.map (fun (x, x0, tp, t, t0) -> (x, t)) fparams @ env in
+              let env = currentThreadEnv @ List.map (fun (x, x0, tp, t, t0) -> (x, t)) fparams @ env in
               let lblenv = [] in
               let pure = true in
               let return_cont h tenv env t = assert_false h [] l "You cannot return out of a produce_function_pointer_chunk statement" None in
@@ -519,6 +519,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       iter [] cfds
     | ExprStmt (CallExpr (l, "produce_call_below_perm_", [], [], args, Static)) when pure ->
       if args <> [] then static_error l "produce_call_below_perm_ requires no arguments." None;
+      let currentThread = List.assoc current_thread_name env in
       if language = Java then begin
         let (_, _, _, _, call_below_perm__symb, _, _) = List.assoc "java.lang.call_below_perm_" predfammap in
         let cn =
@@ -527,7 +528,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | _, _ -> static_error l "This ghost statement must appear inside a class." None
         in
         let classterm = List.assoc cn classterms in
-        let callPermChunk = Chunk ((call_below_perm__symb, true), [], real_unit, [classterm], None) in
+        let callPermChunk = Chunk ((call_below_perm__symb, true), [], real_unit, [currentThread; classterm], None) in
         cont (callPermChunk::h) env
       end else
       let (_, _, _, _, call_below_perm__symb, _, _) = List.assoc "call_below_perm_" predfammap in
@@ -537,7 +538,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | LemInfo (lems, g, indinfo, nonghost_callers_only) -> g
       in
       let gterm = List.assoc g funcnameterms in
-      let callPermChunk = Chunk ((call_below_perm__symb, true), [], real_unit, [gterm], None) in
+      let callPermChunk = Chunk ((call_below_perm__symb, true), [], real_unit, [currentThread; gterm], None) in
       cont (callPermChunk::h) env
     | ExprStmt (CallExpr (l, "open_module", [], [], args, Static)) when pure ->
       if args <> [] then static_error l "open_module requires no arguments." None;
@@ -1475,7 +1476,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin fun cont ->
       match (t_dec, dec) with
         (None, None) ->
-        check_backedge_termination leminfo l tenv h''' cont
+        check_backedge_termination (List.assoc current_thread_name env) leminfo l tenv h''' cont
       | (Some t_dec, Some dec) ->
         eval_h_pure h' env''' dec $. fun _ _ t_dec2 ->
         let dec_check1 = ctxt#mk_lt t_dec2 t_dec in
@@ -2063,17 +2064,17 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         ) return_cont econt
       )
   and
-    check_backedge_termination leminfo l tenv h cont =
+    check_backedge_termination currentThread leminfo l tenv h cont =
       let consume_func_call_perm g =
         let gterm = List.assoc g funcnameterms in
         let (_, _, _, _, call_perm__symb, _, _) = List.assoc "call_perm_" predfammap in
-        consume_chunk rules h [] [] [] l (call_perm__symb, true) [] real_unit dummypat (Some 1) [TermPat gterm] $. fun _ h _ _ _ _ _ _ ->
+        consume_chunk rules h [] [] [] l (call_perm__symb, true) [] real_unit dummypat (Some 2) [TermPat currentThread; TermPat gterm] $. fun _ h _ _ _ _ _ _ ->
         cont h
       in
       let consume_class_call_perm () =
         let ClassOrInterfaceName cn = List.assoc current_class tenv in
         let classterm = List.assoc cn classterms in
-        consume_class_call_perm l classterm h cont
+        consume_class_call_perm l currentThread classterm h cont
       in
       begin match leminfo with
         RealFuncInfo (gs, g, terminates) -> if terminates then consume_func_call_perm g else cont h
@@ -2099,7 +2100,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | (true, None) -> assert_false h env (l()) "Loop invariant required." None
       | (_, Some (l, inv, tenv)) ->
         consume_asn rules [] h ghostenv env inv true real_unit (fun _ h _ _ _ ->
-          check_backedge_termination leminfo l tenv h $. fun h ->
+          check_backedge_termination (List.assoc current_thread_name env) leminfo l tenv h $. fun h ->
           check_leaks h env l "Loop leaks heap chunks."
         )
       | (false, None) ->

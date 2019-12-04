@@ -1,6 +1,7 @@
 #ifndef THREADING_LIVE_H
 #define THREADING_LIVE_H
 
+//@ #include "../call_perms.gh"
 //@ #include "atomics.gh"
 //@ #include "stop_perms.gh"
 
@@ -10,20 +11,20 @@ typedef void term_scope/*@(predicate(void *) pre, predicate(void *) post)@*/(voi
     //@ terminates;
 
 void call_term_scope(term_scope *scope, void *data);
-    //@ requires [_]is_term_scope(scope, ?pre, ?post) &*& call_perm_(scope) &*& pre(data);
+    //@ requires [_]is_term_scope(scope, ?pre, ?post) &*& call_perm_(currentThread, scope) &*& pre(data);
     //@ ensures post(data);
     //@ terminates;
 
 /*@
 
-typedef lemma void thread_start_ghost_op(int termScope, predicate() inv, void *data, predicate(void *) pre, predicate(void *) forkerPost, predicate(void *) forkeePost)();
-    requires inv() &*& pre(data) &*& stop_perm(termScope);
-    ensures inv() &*& forkerPost(data) &*& forkeePost(data);
+typedef lemma void thread_start_ghost_op(int termScope, predicate() inv, void *data, predicate(int, void *) pre, predicate(void *) forkerPost, predicate(int, void *) forkeePost)();
+    requires inv() &*& pre(?callPermScope, data) &*& stop_perm(termScope);
+    ensures inv() &*& forkerPost(data) &*& forkeePost(callPermScope, data);
 
 @*/
 
-typedef void thread_run/*@(int termScope, predicate(void *data) pre)@*/(void *data);
-    //@ requires pre(data);
+typedef void thread_run/*@(int termScope, predicate(int callPermScope, void *data) pre)@*/(void *data);
+    //@ requires pre(call_perm_scope_of(currentThread), data);
     //@ ensures stop_perm(termScope);
     //@ terminates;
 
@@ -34,8 +35,8 @@ void thread_start(thread_run *run, void *data);
         [?f]atomic_space(?level, ?inv) &*&
         is_thread_start_ghost_op(_, termScope, inv, data, ?pre, ?forkerPost, ?forkeePost) &*&
         [_]is_thread_run(run, termScope, forkeePost) &*&
-        call_perm_(run) &*&
-        pre(data);
+        call_perm_(currentThread, run) &*&
+        pre(call_perm_scope_of(currentThread), data);
     @*/
     //@ ensures [fts]term_perm(termScope, false) &*& [f]atomic_space(level, inv) &*& forkerPost(data);
     //@ terminates;

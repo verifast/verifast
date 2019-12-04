@@ -24,10 +24,12 @@ predicate Counter(Counter c; pair<list<Class>, real> waitLevel) =
 @*/
 
 class Philosopher implements JoinableForkee {
+    //@ int callPermScope;
     final Counter first, second;
 
     /*@
-    predicate pre(pair<list<Class>, real> waitLevel, list<Object> O) =
+    predicate pre(int callPermScope, pair<list<Class>, real> waitLevel, list<Object> O) =
+        [_]this.callPermScope |-> callPermScope &*&
         waitLevel == pair(nil, 4r) &*&
         [_]first |-> ?first &*& [1/2]Counter(first, ?wFirst) &*&
         [_]second |-> ?second &*& [1/2]Counter(second, ?wSecond) &*&
@@ -41,15 +43,16 @@ class Philosopher implements JoinableForkee {
     
     Philosopher(Counter first, Counter second)
         //@ requires true;
-        //@ ensures [_]this.first |-> first &*& [_]this.second |-> second;
+        //@ ensures [_]this.callPermScope |-> call_perm_scope_of(currentThread) &*& [_]this.first |-> first &*& [_]this.second |-> second;
         //@ terminates;
     {
+        //@ this.callPermScope = call_perm_scope_of(currentThread);
         this.first = first;
         this.second = second;
     }
     
     void run()
-        //@ requires obs(cons(?thisThread, ?O)) &*& pre(wait_level_of(thisThread), O);
+        //@ requires obs(cons(?thisThread, ?O)) &*& pre(call_perm_scope_of(currentThread), wait_level_of(thisThread), O);
         //@ ensures obs({thisThread}) &*& post();
         //@ terminates;
     {

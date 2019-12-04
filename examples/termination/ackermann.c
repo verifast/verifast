@@ -23,18 +23,18 @@ fixpoint nat A(nat m, nat n) {
 // Workaround: Perform the recursive calls as function pointer calls.
 
 typedef int ackermann_iter_(int m, int n);
-    //@ requires 0 <= m &*& 0 <= n &*& [2]call_perm_level(pair((pair_lt)(lt, lt), pair(m, n)), {ackermann_iter});
+    //@ requires 0 <= m &*& 0 <= n &*& [2]call_perm_level(currentThread, pair((pair_lt)(lt, lt), pair(m, n)), {ackermann_iter});
     //@ ensures result == int_of_nat((A)(nat_of_int(m))(nat_of_int(n)));
     //@ terminates;
 
 int ackermann_iter(int m, int n) //@ : ackermann_iter_
-    //@ requires 0 <= m &*& 0 <= n &*& [2]call_perm_level(pair((pair_lt)(lt, lt), pair(m, n)), {ackermann_iter});
+    //@ requires 0 <= m &*& 0 <= n &*& [2]call_perm_level(currentThread, pair((pair_lt)(lt, lt), pair(m, n)), {ackermann_iter});
     //@ ensures result == int_of_nat((A)(nat_of_int(m))(nat_of_int(n)));
     //@ terminates;
 {
     ackermann_iter_ *ackermann_iter_ = ackermann_iter;
     if (m == 0) {
-        //@ leak [2]call_perm_level(pair((pair_lt)(lt, lt), pair(m, n)), {ackermann_iter});
+        //@ leak [2]call_perm_level(currentThread, pair((pair_lt)(lt, lt), pair(m, n)), {ackermann_iter});
         return n + 1;
     } else {
         //@ succ_int(m - 1);

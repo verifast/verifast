@@ -1,6 +1,6 @@
 class MathImpl {
     static int ackermannIter(int m, int n)
-        //@ requires 0 <= m &*& 0 <= n &*& call_perm_rec({MathImpl.class}, (pair_lt)(int_lt, int_lt), pair(m, n));
+        //@ requires 0 <= m &*& 0 <= n &*& call_perm_rec(currentThread, {MathImpl.class}, (pair_lt)(int_lt, int_lt), pair(m, n));
         //@ ensures 0 <= result;
         //@ terminates;
     {

@@ -6,7 +6,7 @@ interface IsEvenFunc {
         ensures level_le({this.getClass()}, level) == true;
     @*/
     boolean isEven(IsOddFunc f, int n);
-        //@ requires [_]valid(?level) &*& [_]f.valid(?fLevel) &*& 0 <= n &*& call_perm_rec(level_max(level, fLevel), int_lt, n);
+        //@ requires [_]valid(?level) &*& [_]f.valid(?fLevel) &*& 0 <= n &*& call_perm_rec(currentThread, level_max(level, fLevel), int_lt, n);
         //@ ensures true;
         //@ terminates;
 }
@@ -19,14 +19,14 @@ interface IsOddFunc {
         ensures level_le({this.getClass()}, level) == true;
     @*/
     boolean isOdd(IsEvenFunc f, int n);
-        //@ requires [_]valid(?level) &*& [_]f.valid(?fLevel) &*& 0 <= n &*& call_perm_rec(level_max(fLevel, level), int_lt, n);
+        //@ requires [_]valid(?level) &*& [_]f.valid(?fLevel) &*& 0 <= n &*& call_perm_rec(currentThread, level_max(fLevel, level), int_lt, n);
         //@ ensures true;
         //@ terminates;
 }
 
 class Util {
     static boolean isEven(IsEvenFunc e, IsOddFunc o, int n)
-        //@ requires [_]e.valid(?eLevel) &*& [_]o.valid(?oLevel) &*& 0 <= n &*& call_perm(cons(Util.class, level_max(eLevel, oLevel)));
+        //@ requires [_]e.valid(?eLevel) &*& [_]o.valid(?oLevel) &*& 0 <= n &*& call_perm(currentThread, cons(Util.class, level_max(eLevel, oLevel)));
         //@ ensures true;
         //@ terminates;
     {
@@ -59,7 +59,7 @@ final class MyIsEvenFunc implements IsEvenFunc {
         //@ close valid({MyIsEvenFunc.class});
     }
     boolean isEven(IsOddFunc f, int n)
-        //@ requires [_]valid(?level) &*& [_]f.valid(?fLevel) &*& 0 <= n &*& call_perm_rec(level_max(level, fLevel), int_lt, n);
+        //@ requires [_]valid(?level) &*& [_]f.valid(?fLevel) &*& 0 <= n &*& call_perm_rec(currentThread, level_max(level, fLevel), int_lt, n);
         //@ ensures true;
         //@ terminates;
     {
@@ -95,7 +95,7 @@ final class MyIsOddFunc implements IsOddFunc {
         //@ close valid({MyIsOddFunc.class});
     }
     boolean isOdd(IsEvenFunc f, int n)
-        //@ requires [_]valid(?level) &*& [_]f.valid(?fLevel) &*& 0 <= n &*& call_perm_rec(level_max(fLevel, level), int_lt, n);
+        //@ requires [_]valid(?level) &*& [_]f.valid(?fLevel) &*& 0 <= n &*& call_perm_rec(currentThread, level_max(fLevel, level), int_lt, n);
         //@ ensures true;
         //@ terminates;
     {

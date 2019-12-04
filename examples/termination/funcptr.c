@@ -8,7 +8,7 @@ struct int_func_object {
 typedef struct int_func_object *int_func_object;
 
 typedef int int_func/*@(predicate(int_func_object, list<void *>) p)@*/(int_func_object object, int x);
-    //@ requires [?f]int_func_object(object, this, p, ?d) &*& call_perm(d);
+    //@ requires [?f]int_func_object(object, this, p, ?d) &*& call_perm(currentThread, d);
     //@ ensures [f]int_func_object(object, this, p, d);
     //@ terminates;
 
@@ -24,7 +24,7 @@ predicate int_func_object(int_func_object object, void *invoke, predicate(int_fu
 @*/
 
 int int_func_object_invoke(int_func_object object, int x)
-    //@ requires [?f]int_func_object(object, _, _, ?d) &*& call_perm_below(?d1) &*& bag_lt(func_lt, cons(int_func_object_invoke, d), d1) == true;
+    //@ requires [?f]int_func_object(object, _, _, ?d) &*& call_perm_below(currentThread, ?d1) &*& bag_lt(func_lt, cons(int_func_object_invoke, d), d1) == true;
     //@ ensures [f]int_func_object(object, _, _, d);
     //@ terminates;
 {
@@ -52,16 +52,16 @@ predicate plus_one(int_func_object object, list<void *> d) =
 @*/
 
 int plus_one(int_func_object object, int x)
-    //@ requires [?f]int_func_object(object, plus_one, @plus_one, ?d) &*& call_perm(d);
+    //@ requires [?f]int_func_object(object, plus_one, @plus_one, ?d) &*& call_perm(currentThread, d);
     //@ ensures [f]int_func_object(object, plus_one, @plus_one, d);
     //@ terminates;
 {
-    //@ leak call_perm(d);
+    //@ leak call_perm(currentThread, d);
     return x + 1;
 }
 
 int_func_object create_plus_one()
-    //@ requires call_perm_below(?d) &*& bag_lt(func_lt, {create_plus_one}, d) == true;
+    //@ requires call_perm_below(currentThread, ?d) &*& bag_lt(func_lt, {create_plus_one}, d) == true;
     //@ ensures int_func_object(result, _, _, {create_plus_one});
     //@ terminates;
 {
@@ -73,7 +73,7 @@ int_func_object create_plus_one()
     //@ close plus_one(fObj, nil);
     return fObj;
     //@ close int_func_object(fObj, plus_one, @plus_one, {create_plus_one});
-    //@ leak call_perm_below(_);
+    //@ leak call_perm_below(currentThread, _);
 }
 
 struct twice_data {
@@ -89,7 +89,7 @@ predicate twice(int_func_object object, list<void *> d) =
 @*/
 
 int twice(int_func_object object, int x)
-    //@ requires [?frac]int_func_object(object, twice, @twice, ?d) &*& call_perm(d);
+    //@ requires [?frac]int_func_object(object, twice, @twice, ?d) &*& call_perm(currentThread, d);
     //@ ensures [frac]int_func_object(object, twice, @twice, d);
     //@ terminates;
 {
@@ -108,7 +108,7 @@ int twice(int_func_object object, int x)
 }
 
 int_func_object create_twice(int_func_object fObj)
-    //@ requires int_func_object(fObj, _, _, ?d_fObj) &*& call_perm_below(?d) &*& bag_lt(func_lt, cons(create_twice, d_fObj), d) == true;
+    //@ requires int_func_object(fObj, _, _, ?d_fObj) &*& call_perm_below(currentThread, ?d) &*& bag_lt(func_lt, cons(create_twice, d_fObj), d) == true;
     //@ ensures int_func_object(result, _, _, cons(create_twice, d_fObj));
     //@ terminates;
 {
@@ -125,7 +125,7 @@ int_func_object create_twice(int_func_object fObj)
     //@ produce_function_pointer_chunk int_func(twice)(@twice)(object_, x) { call(); }
     //@ close twice(object, d_fObj);
     //@ close int_func_object((void *)obj, twice, @twice, cons(create_twice, d_fObj));
-    //@ leak call_perm(_);
+    //@ leak call_perm(currentThread, _);
     //@ leak malloc_block_twice_data(obj);
 }
 
@@ -146,7 +146,7 @@ int main() //@ : main
     int_func_object plusOne = create_plus_one();
     int_func_object twicePlusOne = create_twice(plusOne);
     int_func_object twiceTwicePlusOne = create_twice(twicePlusOne);
-    //@ merge_fractions call_perm_below({main});
+    //@ merge_fractions call_perm_below(currentThread, {main});
     int_func_object_invoke(twiceTwicePlusOne, 10);
     //@ leak int_func_object(twiceTwicePlusOne, _, _, _);
     return 0;

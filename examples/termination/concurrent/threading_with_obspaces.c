@@ -66,7 +66,7 @@ void run_closure(void *data)
         closure_data(data, ?runData_) &*&
         malloc_block_closure(data) &*&
         [_]is_thread_run_with_obligations(run_, ?termScope, ?space, ?forkeeObs, ?pre) &*&
-        call_perm_(run_) &*&
+        call_perm_(currentThread, run_) &*&
         [_]ghost_cell<pair<int, real> >(space, pair(?scope, ?olevel))
         &*& obspace_obligation_set(space, forkeeObs) &*&
         pre(runData_)
@@ -89,7 +89,7 @@ void thread_start_with_obligations(void *run, void *data)
         [?fs]obligation_space(?space, ?termScope) &*&
         obspace_obligation_set(space, ?obs) &*&
         [_]is_thread_run_with_obligations(run, termScope, space, ?forkeeObs, ?pre) &*&
-        call_perm_(run) &*&
+        call_perm_(currentThread, run) &*&
         length(remove_all(forkeeObs, obs)) + length(forkeeObs) == length(obs) &*&
         pre(data);
     @*/
@@ -104,31 +104,31 @@ void thread_start_with_obligations(void *run, void *data)
     //@ assert [_]ghost_cell<pair<int, real> >(space, pair(?scope, ?olevel));
     {
         /*@
-        predicate op_pre(void *data_) =
+        predicate op_pre(int callPermScope, void *data_) =
             closure_run(data_, run) &*&
             closure_data(data_, data) &*&
             malloc_block_closure(data_) &*&
             [_]is_thread_run_with_obligations(run, termScope, space, forkeeObs, pre) &*&
-            call_perm_(run) &*&
+            call_perm_(?thread, run) &*& call_perm_scope_of(thread) == callPermScope &*&
             [_]ghost_cell<pair<int, real> >(space, pair(scope, olevel))
             &*& obspace_obligation_set(space, obs) &*& pre(data);
         predicate forkerPost(void *data_) = obspace_obligation_set(space, remove_all(forkeeObs, obs));
-        predicate forkeePost(void *data_) =
+        predicate forkeePost(int callPermScope, void *data_) =
             closure_run(data_, run) &*&
             closure_data(data_, data) &*&
             malloc_block_closure(data_) &*&
             [_]is_thread_run_with_obligations(run, termScope, space, forkeeObs, pre) &*&
-            call_perm_(run) &*&
+            call_perm_(?thread, run) &*& call_perm_scope_of(thread) == callPermScope &*&
             [_]ghost_cell<pair<int, real> >(space, pair(scope, olevel))
             &*& obspace_obligation_set(space, forkeeObs) &*&
             pre(data)
             &*& obligation_scope_joinee(scope);
         lemma void op()
-            requires obligation_space_inv(scope, termScope)() &*& op_pre(closure) &*& stop_perm(termScope);
-            ensures obligation_space_inv(scope, termScope)() &*& forkerPost(closure) &*& forkeePost(closure);
+            requires obligation_space_inv(scope, termScope)() &*& op_pre(?callPermScope, closure) &*& stop_perm(termScope);
+            ensures obligation_space_inv(scope, termScope)() &*& forkerPost(closure) &*& forkeePost(callPermScope, closure);
         {
             open obligation_space_inv(scope, termScope)();
-            open op_pre(closure);
+            open op_pre(callPermScope, closure);
             open obspace_obligation_set(space, obs);
             
             join_obligation_scope(scope);
@@ -138,14 +138,15 @@ void thread_start_with_obligations(void *run, void *data)
             close obspace_obligation_set(space, forkeeObs);
             close obligation_space_inv(scope, termScope)();
             close forkerPost(closure);
-            close forkeePost(closure);
+            close forkeePost(callPermScope, closure);
         }
         @*/
         //@ produce_lemma_function_pointer_chunk(op) : thread_start_ghost_op(termScope, obligation_space_inv(scope, termScope), closure, op_pre, forkerPost, forkeePost)() { call(); };
-        //@ close op_pre(closure);
+        //@ close op_pre(call_perm_scope_of(currentThread), closure);
         /*@
         produce_function_pointer_chunk thread_run(run_closure)(termScope, forkeePost)(data_) {
-            open forkeePost(data_);
+            open forkeePost(_, data_);
+            call_perm__transfer(currentThread);
             call();
         }
         @*/

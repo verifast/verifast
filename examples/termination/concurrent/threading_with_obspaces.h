@@ -16,7 +16,7 @@ void thread_start_with_obligations(void *run, void *data);
         [?fs]obligation_space(?space, ?termScope) &*&
         obspace_obligation_set(space, ?obs) &*&
         [_]is_thread_run_with_obligations(run, termScope, space, ?forkeeObs, ?pre) &*&
-        call_perm_(run) &*&
+        call_perm_(currentThread, run) &*&
         length(remove_all(forkeeObs, obs)) + length(forkeeObs) == length(obs) &*&
         pre(data);
     @*/
