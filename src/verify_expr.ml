@@ -1291,13 +1291,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           Some (_, Some fds, padding_predsymb_opt, _) -> fds, padding_predsymb_opt
         | _ -> static_error l (Printf.sprintf "Cannot produce an object of type 'struct %s' since this struct type has not been defined" sn) None
       in
-      let inits =
+      begin fun cont ->
         match init with
-          Expr (InitializerList (_, es)) -> Some (Some es)
-        | Expr _ -> static_error l "Struct assignment is not yet supported." None
-        | Default -> Some None (* Initialize to default value (= zero) *)
-        | Unspecified | Term _ -> None (* Do not initialize; i.e. arbitrary initial value *)
-      in
+          Expr (InitializerList (_, es)) -> cont h env (Some (Some es))
+        | Expr e -> eval_h h env e $. fun h env v -> cont h env None (* TODO: Do not ignore the value *)
+        | Term t -> cont h env None (* TODO: Do not ignore the value *)
+        | Default -> cont h env (Some None) (* Initialize to default value (= zero) *)
+        | Unspecified -> cont h env None (* Do not initialize; i.e. arbitrary initial value *)
+      end $. fun h env inits ->
       begin fun cont ->
         match producePaddingChunk, padding_predsymb_opt with
         | true, Some padding_predsymb ->

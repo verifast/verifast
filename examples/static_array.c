@@ -26,6 +26,7 @@ void check_local_inits(int x, int y)
   //@ ensures true;
 {
   struct_with_array foo = {123, {2, x, 5, 7, 11, 13, y}, 456};
+  struct_with_array bar = foo;
   char buf[3] = {1, 2, 3};
   
   check((&foo)->x == 123);
