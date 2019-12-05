@@ -1215,14 +1215,13 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     * If [tp] is a struct type, [producePaddingChunk] says whether the padding chunk for the outermost struct should be produced.
     * (A padding chunk is always produced for nested structs.)
     *)
-  let rec produce_c_object l coef addr tp init allowGhostFields producePaddingChunk h cont =
-    let eval e = eval_non_pure false [] [] e in
+  let rec produce_c_object l coef addr tp eval_h init allowGhostFields producePaddingChunk h env cont =
     match tp with
       StaticArrayType (elemTp, elemCount) ->
       let elemSize = sizeof l elemTp in
       let arraySize = ctxt#mk_mul (ctxt#mk_intlit elemCount) elemSize in
       ctxt#assert_term (ctxt#mk_and (ctxt#mk_le int_zero_term addr) (ctxt#mk_le (ctxt#mk_add addr arraySize) (max_unsigned_term ptr_rank)));
-      let produce_char_array_chunk h addr elemCount =
+      let produce_char_array_chunk h env addr elemCount =
         let elems = get_unique_var_symb "elems" (InductiveType ("list", [Int (Signed, 0)])) in
         let length = ctxt#mk_mul (ctxt#mk_intlit elemCount) elemSize in
         begin fun cont ->
@@ -1232,46 +1231,49 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             cont ()
         end $. fun () ->
         assume_eq (mk_length elems) length $. fun () ->
-        cont (Chunk ((chars_pred_symb(), true), [], coef, [addr; length; elems], None)::h)
+        cont (Chunk ((chars_pred_symb(), true), [], coef, [addr; length; elems], None)::h) env
       in
-      let produce_array_chunk addr elems elemCount =
+      let produce_array_chunk h env addr elems elemCount =
         match try_pointee_pred_symb0 elemTp with
           Some (_, _, _, arrayPredSymb, _, _) ->
           let length = ctxt#mk_intlit elemCount in
           assume_eq (mk_length elems) length $. fun () ->
-          cont (Chunk ((arrayPredSymb, true), [], coef, [addr; length; elems], None)::h)
+          cont (Chunk ((arrayPredSymb, true), [], coef, [addr; length; elems], None)::h) env
         | None ->
         match int_rank_and_signedness elemTp with
           Some (k, signedness) ->
           let length = ctxt#mk_intlit elemCount in
           assume_eq (mk_length elems) length $. fun () ->
-          cont (Chunk ((integers__symb (), true), [], coef, [addr; rank_size_term k; mk_bool (signedness = Signed); length; elems], None)::h)
+          cont (Chunk ((integers__symb (), true), [], coef, [addr; rank_size_term k; mk_bool (signedness = Signed); length; elems], None)::h) env
         | None ->
           (* Produce a character array of the correct size *)
-          produce_char_array_chunk h addr elemCount
+          produce_char_array_chunk h env addr elemCount
       in
       begin match elemTp, init with
         Int (Signed, 0), Expr (StringLit (_, s)) ->
-        produce_array_chunk addr (mk_char_list_of_c_string elemCount s) elemCount
+        produce_array_chunk h env addr (mk_char_list_of_c_string elemCount s) elemCount
       | (StructType _ | StaticArrayType (_, _)), Expr (InitializerList (ll, es)) ->
-        let rec iter h i es =
+        let rec iter h env i es =
           let addr = ctxt#mk_add addr (ctxt#mk_mul (ctxt#mk_intlit i) elemSize) in
           match es with
             [] ->
-            produce_char_array_chunk h addr (elemCount - i)
+            produce_char_array_chunk h env addr (elemCount - i)
           | e::es ->
-            produce_c_object l coef addr elemTp (Expr e) false true h $. fun h ->
-            iter h (i + 1) es
+            produce_c_object l coef addr elemTp eval_h (Expr e) false true h env $. fun h env ->
+            iter h env (i + 1) es
         in
-        iter h 0 es
+        iter h env 0 es
       | _, Expr (InitializerList (ll, es)) ->
-        let rec iter n es =
+        let rec iter h env n es cont =
           match es with
-            [] -> mk_zero_list n
+            [] -> cont h env (mk_zero_list n)
           | e::es ->
-            mk_cons elemTp (eval e) (iter (n - 1) es)
+            eval_h h env e $. fun h env elem ->
+            iter h env (n - 1) es $. fun h env elems ->
+            cont h env (mk_cons elemTp elem elems)
         in
-        produce_array_chunk addr (iter elemCount es) elemCount
+        iter h env elemCount es $. fun h env elems ->
+        produce_array_chunk h env addr elems elemCount
       | _ ->
         let elems = get_unique_var_symb "elems" (InductiveType ("list", [elemTp])) in
         begin fun cont ->
@@ -1281,7 +1283,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | _ ->
             cont ()
         end $. fun () ->
-        produce_array_chunk addr elems elemCount
+        produce_array_chunk h env addr elems elemCount
       end
     | StructType sn ->
       let (fields, padding_predsymb_opt) =
@@ -1303,9 +1305,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | _ ->
           cont h
       end $. fun h ->
-      let rec iter h fields inits =
+      let rec iter h env fields inits =
         match fields with
-          [] -> cont h
+          [] -> cont h env
         | (f, (lf, gh, t, offset))::fields ->
           if gh = Ghost && not allowGhostFields then static_error l "Cannot produce a struct instance with ghost fields in this context." None;
           let init, inits =
@@ -1317,34 +1319,36 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           match t with
             StaticArrayType (_, _) | StructType _ ->
-            produce_c_object l coef (field_address l addr sn f) t init allowGhostFields true h $. fun h ->
-            iter h fields inits
+            produce_c_object l coef (field_address l addr sn f) t eval_h init allowGhostFields true h env $. fun h env ->
+            iter h env fields inits
           | _ ->
-            let value =
+            begin fun cont ->
               match init with
                 Default ->
+                cont h env
                 begin match provertype_of_type t with
                   ProverBool -> ctxt#mk_false
                 | ProverInt -> ctxt#mk_intlit 0
                 | ProverReal -> real_zero
                 | ProverInductive -> get_unique_var_symb_ "value" t (gh = Ghost)
                 end
-              | Expr e -> eval e
-              | Unspecified -> get_unique_var_symb_ "value" t (gh = Ghost)
-            in
+              | Expr e -> eval_h h env e cont
+              | Unspecified -> cont h env (get_unique_var_symb_ "value" t (gh = Ghost))
+            end $. fun h env value ->
             assume_field h sn f t gh addr value coef $. fun h ->
-            iter h fields inits
+            iter h env fields inits
       in
-      iter h fields inits
+      iter h env fields inits
     | _ ->
-      let value =
+      begin fun cont ->
         match init with
-          Default -> ctxt#mk_intlit 0
-        | Expr e -> eval e
-        | Unspecified -> get_unique_var_symb "value" tp
-        | Term t -> t
-      in
-      produce_points_to_chunk l h tp coef addr value cont
+          Default -> cont h env (ctxt#mk_intlit 0)
+        | Expr e -> eval_h h env e cont
+        | Unspecified -> cont h env (get_unique_var_symb "value" tp)
+        | Term t -> cont h env t
+      end $. fun h env value ->
+      produce_points_to_chunk l h tp coef addr value $. fun h ->
+      cont h env
   
   let rec consume_c_object_core l coefpat addr tp h consumePaddingChunk cont =
     match tp with
@@ -1927,7 +1931,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         has_heap_effects();
         if pure then static_error l "Cannot write in a pure context." None;
         consume_c_object_core l real_unit_pat target pointeeType h true $. fun _ h _ ->
-        produce_c_object l real_unit target pointeeType (Term value) false true h $. fun h ->
+        produce_c_object l real_unit target pointeeType eval_h (Term value) false true h env $. fun h env ->
         cont h env
     in
     let rec execute_assign_op_expr h env lhs get_values cont =
@@ -1989,7 +1993,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
         begin fun () ->
           assume_neq result (ctxt#mk_intlit 0) $. fun () ->
-          produce_c_object l real_unit result t Unspecified true false h $. fun h ->
+          produce_c_object l real_unit result t eval_h Unspecified true false h env $. fun h env ->
           match t with
             StructType sn ->
             let (_, (_, _, _, _, malloc_block_symb, _, _)) = List.assoc sn malloc_block_pred_map in

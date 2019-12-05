@@ -437,7 +437,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           if not (ctxt#query cond) then assert_false h env l ("Could not prove condition " ^ ctxt#pprint cond) None;
           Default
       in
-      produce_c_object l real_unit pointerTerm (StructType sn) init false true h $. fun h ->
+      produce_c_object l real_unit pointerTerm (StructType sn) eval_h init false true h env $. fun h env ->
       cont h env
     | ExprStmt (CallExpr (l, "open_struct", targs, [], args, Static)) when language = CLang ->
       require_pure ();
@@ -555,7 +555,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 None -> Default
               | Some e -> Expr e
             in
-            produce_c_object l coef addr tp init true true h $. fun h ->
+            produce_c_object l coef addr tp eval_h init true true h env $. fun h env ->
             iter h globals
         in
         iter h globalmap
@@ -618,10 +618,10 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let init =
               match e with
                 None -> Unspecified
-              | Some e -> Expr (check_c_initializer e t)
+              | Some e -> Expr (check_c_initializer (pn,ilist) tparams tenv e t)
             in
             let addr = get_unique_var_symb_non_ghost (x ^ "_addr") (PtrType Void) in
-            produce_c_object l real_unit addr t init true true h $. fun h ->
+            produce_c_object l real_unit addr t eval_h init true true h env $. fun h env ->
             iter h ((x, envTp)::tenv) ghostenv ((x, addr)::env) xs
           in
           match t with

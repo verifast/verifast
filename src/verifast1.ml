@@ -3744,7 +3744,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (itf, (l, fds, meths, preds, interfs, pn, ilist))
     end
 
-  let rec check_c_initializer e tp =
+  let check_c_initializer (pn,ilist) tparams tenv e tp =
+    let rec check e tp =
     match tp, e with
     | StaticArrayType (Int (Signed, 0), n), StringLit (ls, s) ->
       if String.length s + 1 > n then static_error ls "String literal does not fit inside character array." None;
@@ -3755,7 +3756,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           [] -> []
         | e::es ->
           if n = 0 then static_error ll "Initializer list too long." None;
-          let e = check_c_initializer e elemTp in
+          let e = check e elemTp in
           let es = iter (n - 1) es in
           e::es
       in
@@ -3771,18 +3772,20 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           _, [] -> []
         | (_, (_, Ghost, _, _))::fds, es -> iter fds es
         | (_, (_, _, tp, _))::fds, e::es ->
-          let e = check_c_initializer e tp in
+          let e = check e tp in
           let es = iter fds es in
           e::es
         | _ -> static_error ll "Initializer list too long." None
       in
       InitializerList (ll, iter fds es)
     | tp, e ->
-      check_expr_t ("", []) [] [] None e tp
+      check_expr_t (pn,ilist) tparams tenv None e tp
+    in
+    check e tp
   
   let () =
     globalmap1 |> List.iter begin fun (x, (lg, tp, symb, ref_init)) ->
-      ref_init := option_map (fun e -> check_c_initializer e tp) !ref_init
+      ref_init := option_map (fun e -> check_c_initializer ("", []) [] [] e tp) !ref_init
     end
   
   (* Region: Computing constant field values *)
