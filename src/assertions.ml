@@ -1205,9 +1205,6 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         else
           []
       | WPredAsn(_, q, true, qtargs, qfns, qpats) ->
-        begin match try_assoc q#name xs with
-          Some _ -> []
-        | None ->
           begin match try_assoc q#name predfammap with
             Some (_, qtparams, _, qtps, qsymb, _, _) ->
             begin match q#inputParamCount with
@@ -1236,7 +1233,6 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               end
             end
           end
-        end
       | WInstPredAsn(l2, target_opt, static_type_name, static_type_finality, family_type_string, instance_pred_name, index, args) ->
         let (pmap, qsymb) =
           match try_assoc static_type_name classmap1 with
