@@ -44,6 +44,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | IfAsn(_, _, a1, a2) -> (is_pure_spatial_assertion a1) && (is_pure_spatial_assertion a2)
     | EmpAsn _ -> true
     | ForallAsn _ -> true
+    | WMatchAsn _ -> true
     | _ -> false
   
   let rec assert_expr env e h env l msg url = 
