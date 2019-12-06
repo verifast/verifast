@@ -134,6 +134,8 @@
 .provides ./stdio.h#setbuf
 .provides ./stdio.h#snprintf
 .provides ./stdio.h#sscanf
+.provides ./stdio.h#fgetc
+.provides ./stdio.h#fprintf
 .structure @./stdio.h#file
 .predicate @./stdio.h#file
 .predicate @./stdio.h#scanf_targets
