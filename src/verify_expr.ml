@@ -956,7 +956,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             []-> ()
           | (n,lm0)::_ -> static_error lm0 ("Method not in specs: "^n) None
           )
-      | Class(l,abstract,fin,cn,meths,fds,cons,super,inames,preds)::rest ->
+      | Class(l,abstract,fin,cn,meths,fds,cons,super,tparams, inames,preds)::rest ->
           inheritance_check cn l;
           let check_meths meths meths_impl=
             let rec iter mlist meths_impl=

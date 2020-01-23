@@ -493,7 +493,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter (pn,ilist) classes lemmas ds=
       match ds with
       [] -> (classes,lemmas)
-    | Class (l, abstract, fin, cn, meths, fds, cons, super, inames, preds)::rest ->
+    | Class (l, abstract, fin, cn, meths, fds, cons, super, tparams, inames, preds)::rest ->
       let cn = full_name pn cn in
       let meths' = meths |> List.filter begin
         fun x ->
@@ -511,7 +511,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | None -> true
                 | Some _ -> false
       end in
-      iter (pn,ilist) (Class(l,abstract,fin,cn,meths',fds,cons',super,inames,[])::classes) lemmas rest
+      iter (pn,ilist) (Class(l,abstract,fin,cn,meths',fds,cons',super, tparams,inames,[])::classes) lemmas rest
     | Func(l,Lemma(_),tparams,rt,fn,arglist,nonghost_callers_only,ftype,contract,terminates,None,fb,vis) as elem ::rest->
       iter (pn, ilist) classes (elem::lemmas) rest
     | _::rest -> 
@@ -1276,7 +1276,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             with Not_found ->
               iter (ifdm, classlist) rest ((List.hd ds)::todo)
           end
-      | (pn, ilist, Class (l, abstract, fin, i, meths,fields,constr,super,interfs,preds))::rest ->
+      | (pn, ilist, Class (l, abstract, fin, i, meths,fields,constr,super, tparams,interfs,preds))::rest ->
         let i= full_name pn i in
         if List.mem_assoc i ifdm then
           static_error l ("There exists already an interface with this name: "^i) None
@@ -1303,7 +1303,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   None-> raise Not_found
                 | Some super -> super
               in
-              iter (ifdm, (i, (l,abstract,fin,meths,fields,constr,super,interfs,preds,pn,ilist))::classlist) rest todo
+              iter (ifdm, (i, (l,abstract,fin,meths,fields,constr,super,tparams,interfs,preds,pn,ilist))::classlist) rest todo
             with Not_found ->
               iter (ifdm, classlist) rest ((List.hd ds)::todo)
           end
@@ -1325,7 +1325,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               match ds_rest with
               | (pn, ilist, (Interface (l, i, interfs, fields, meths, pred_specs)))::_ ->
                   (l, check_interfs "Interface" i interfs (pn,ilist))
-              | (pn, ilist, (Class (l, abstract, fin, i, meths,fields,constr,super,interfs,preds)))::_ ->
+              | (pn, ilist, (Class (l, abstract, fin, i, meths,fields,constr,super, tparams,interfs,preds)))::_ ->
                   match search2' Real super (pn,ilist) classlist classmap0 with
                     None-> 
                       if i = "java.lang.Object" || super = "java.lang.Object" then 
@@ -1404,13 +1404,19 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   | None -> static_error l ("No such type parameter, inductive datatype, class, interface, or function type: " ^ full_name) None
       end
     | ConstructedTypeExpr (l, id, targs) ->
-      begin
-      match resolve Ghost (pn,ilist) l id inductive_arities with
-        Some (id, (ld, n)) ->
-        if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
-        reportUseSite DeclKind_InductiveType ld l;
-        InductiveType (id, List.map check targs)
-      | None -> static_error l "No such inductive datatype." None
+      begin match (search2' Real id (pn,ilist) classmap1 classmap0) with
+          Some s -> ObjType s
+        | None -> match (search2' Real id (pn,ilist) interfmap1 interfmap0) with
+          Some s-> ObjType s
+          | None ->
+            begin
+              match resolve Ghost (pn,ilist) l id inductive_arities with
+                Some (id, (ld, n)) ->
+                if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
+                reportUseSite DeclKind_InductiveType ld l;
+                InductiveType (id, List.map check targs)
+                | None -> static_error l "No such inductive datatype." None
+            end
       end
     | StructTypeExpr (l, sn, Some _) ->
       static_error l "A struct type with a body is not supported in this position." None
@@ -1454,13 +1460,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let classmap1 =
     List.map
-      begin fun (sn, (l,abstract,fin,meths,fds,constr,super,interfs,preds,pn,ilist)) ->
+      begin fun (sn, (l,abstract,fin,meths,fds,constr,super,tparams, interfs,preds,pn,ilist)) ->
         let rec iter fmap fds =
           match fds with
-            [] -> (sn, (l,abstract,fin,meths, List.rev fmap,constr,super,interfs,preds,pn,ilist))
+            [] -> (sn, (l,abstract,fin,meths, List.rev fmap,constr,super,tparams, interfs,preds,pn,ilist))
           | Field (fl, fgh, t, f, fbinding, fvis, ffinal, finit)::fds ->
             if List.mem_assoc f fmap then static_error fl "Duplicate field name." None;
-            iter ((f, {fl; fgh; ft=check_pure_type (pn,ilist) [] t; fvis; fbinding; ffinal; finit; fvalue=ref None})::fmap) fds
+            iter ((f, {fl; fgh; ft=check_pure_type (pn,ilist) tparams t; fvis; fbinding; ffinal; finit; fvalue=ref None})::fmap) fds
         in
         iter [] fds
       end
@@ -1572,7 +1578,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     x = y ||
     y = "java.lang.Object" ||
     match try_assoc x classmap1 with
-      Some (_, _, _, _, _, _, super, interfaces, _, _, _) ->
+      Some (_, _, _, _, _, _, super,_, interfaces, _, _, _) ->
       is_subtype_of super y || List.exists (fun itf -> is_subtype_of itf y) interfaces
     | None ->
       match try_assoc x classmap0 with
@@ -2182,7 +2188,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let field_pred_map1 = (* dient om dingen te controleren bij read/write controle v velden*)
     match file_type path with
       Java ->
-      classmap1 |> flatmap begin fun (cn, (_,_,_,_, fds,_,_,_,_,_,_)) ->
+      classmap1 |> flatmap begin fun (cn, (_,_,_,_, fds,_,_,_,_,_,_,_)) ->
         fds |> List.map begin fun (fn, {fl; ft; fbinding}) ->
           let predfam =
             match fbinding with
@@ -2424,7 +2430,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter classmap1_done classmap1_todo =
       match classmap1_todo with
         [] -> List.rev classmap1_done
-      | (cn, (lc, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist))::classmap1_todo ->
+      | (cn, (lc, abstract, fin, methods, fds_opt, ctors, super, tparams, interfs, preds, pn, ilist))::classmap1_todo ->
         let cont predmap = iter ((cn, (lc, abstract, fin, methods, fds_opt, ctors, super, interfs, List.rev predmap, pn, ilist))::classmap1_done) classmap1_todo in
         let rec iter predmap preds =
           match preds with
@@ -2437,7 +2443,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   [] -> List.rev pmap
                 | (tp, x)::ps ->
                   if List.mem_assoc x pmap then static_error l "Duplicate parameter name." None;
-                  let tp = check_pure_type (pn,ilist) [] tp in
+                  let tp = check_pure_type (pn,ilist) tparams tp in
                   iter ((x, tp)::pmap) ps
               in
               iter [] ps

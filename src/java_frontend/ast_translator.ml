@@ -300,6 +300,7 @@ and translate_class_decl decl =
         let l'= translate_location l in
         let abs' = translate_abstractness abs in
         let fin' = translate_class_finality fin in
+        let tparams' = translate_class_tparams tparams in
         let id' = GEN.string_of_identifier id in
         debug_print ("class declaration " ^ id');
         let (decls', meths') = translate_methods id' decls in
@@ -315,7 +316,7 @@ and translate_class_decl decl =
         let (decls', ghost_members') = translate_ghost_members l' id' decls' in
         let (ghost_fields', ghost_meths', ghost_preds') = split_ghost_members l ghost_members' in
         if (decls' <> []) then error l' "Not all declarations in class could be processed";
-        (VF.Class(l', abs', fin', id', static_blocks' @ meths' @ ghost_meths', fields' @ ghost_fields', cons', extnds', impls', ghost_preds'), id')
+        (VF.Class(l', abs', fin', id', static_blocks' @ meths' @ ghost_meths', fields' @ ghost_fields', cons', extnds', impls', tparams', ghost_preds'), id')
     | GEN.Interface(l, anns, id, tparams, access, impls, decls) ->
         let l'= translate_location l in
         let id' = GEN.string_of_identifier id in
@@ -353,6 +354,14 @@ and translate_class_finality fin =
   match fin with
   | GEN.Final -> VF.FinalClass
   | GEN.NonFinal -> VF.ExtensibleClass
+
+and translate_class_tparams tparams =
+  debug_print "translate_class_tparams";
+  match tparams with
+  | GEN.TypeParam(l, Identifier(sl,name), bounds) :: tail ->
+    let res = translate_class_tparams tail
+      in name::res;
+  | _ -> []
 
 and translate_field_finality fin =
   debug_print "translate_field_finality";

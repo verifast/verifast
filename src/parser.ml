@@ -119,7 +119,7 @@ module Scala = struct
   let rec
     parse_decl = parser
       [< '(l, Kwd "object"); '(_, Ident cn); '(_, Kwd "{"); ms = rep parse_method; '(_, Kwd "}") >] ->
-      Class (l, false, FinalClass, cn, ms, [], [], "Object", [], [])
+      Class (l, false, FinalClass, cn, ms, [], [], "Object", [], [], [])
   and
     parse_method = parser
       [< '(l, Kwd "def"); '(_, Ident mn); ps = parse_paramlist; t = parse_type_ann; co = parse_contract; '(_, Kwd "=");'(_, Kwd "{"); ss = rep parse_stmt; '(closeBraceLoc, Kwd "}")>] ->
@@ -230,10 +230,10 @@ and
      abstract = (parser [< '(_, Kwd "abstract") >] -> true | [< >] -> false); 
      final = (parser [< '(_, Kwd "final") >] -> FinalClass | [< >] -> ExtensibleClass);
      ds = begin parser
-       [< '(l, Kwd "class"); '(_, Ident s); _ = type_params_parse_and_push();
+       [< '(l, Kwd "class"); '(_, Ident s); tparams = type_params_parse_and_push();
           super = parse_super_class; il = parse_interfaces; mem = parse_java_members s; ds = parse_decls_core >]
        -> type_params_pop();
-          Class (l, abstract, final, s, methods s mem, fields mem, constr mem, super, il, instance_preds mem)::ds
+          Class (l, abstract, final, s, methods s mem, fields mem, constr mem, super, tparams, il, instance_preds mem)::ds
      | [< '(l, Kwd "interface"); '(_, Ident cn); _ = type_params_parse_and_push();
           il = parse_extended_interfaces;  mem = parse_java_members cn; ds = parse_decls_core >]
        -> type_params_pop();
@@ -633,7 +633,11 @@ and
   type_params_parse_and_push _ =
     parser
       [< xs = opt parse_type_params_general >] ->
-        type_params_in_scope := xs::!type_params_in_scope
+        type_params_in_scope := xs::!type_params_in_scope;
+        match xs with
+         | Some(params) -> params
+         | None -> []
+
 and
   type_param_is_in_scope arg =
     let rec is_in_scope_core arg params =

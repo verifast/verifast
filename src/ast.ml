@@ -673,6 +673,7 @@ and
       field list *
       cons list *
       string (* superclass *) *
+      string list (* type parameters *) *
       string list (* itfs *) *
       instance_pred_decl list
   | Interface of 
