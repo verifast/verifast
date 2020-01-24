@@ -580,7 +580,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if cn = "" then [] else
         let (super, interfs, mmap) =
           match try_assoc cn classmap1_done with
-            Some (l, abstract, fin, mmap, fds, constr, super, interfs, preds, pn, ilist) -> (super, interfs, mmap)
+            Some (l, abstract, fin, mmap, fds, constr, super, tpenv, interfs, preds, pn, ilist) -> (super, interfs, mmap)
           | None ->
             match try_assoc cn classmap0 with
               Some {csuper; cinterfs; cmeths} -> (csuper, cinterfs, cmeths)
@@ -595,18 +595,18 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       match classmap1_todo with
         [] -> List.rev classmap1_done
-      | (cn, (l, abstract, fin, meths, fds, constr, super, interfs, preds, pn, ilist))::classmap1_todo ->
+      | (cn, (l, abstract, fin, meths, fds, constr, super, tpenv, interfs, preds, pn, ilist))::classmap1_todo ->
         let cont cl = iter (cl::classmap1_done) classmap1_todo in
         let rec iter mmap meths =
           match meths with
-            [] -> cont (cn, (l, abstract, fin, List.rev mmap, fds, constr, super, interfs, preds, pn, ilist))
+            [] -> cont (cn, (l, abstract, fin, List.rev mmap, fds, constr, super, tpenv, interfs, preds, pn, ilist))
           | Meth (lm, gh, rt, n, ps, co, ss, fb, v,abstract)::meths ->
             let xmap =
                 let rec iter xm xs =
                   match xs with
                    [] -> List.rev xm
                  | (te, x)::xs -> if List.mem_assoc x xm then static_error l "Duplicate parameter name." None;
-                     let t = check_pure_type (pn,ilist) [] te in
+                     let t = check_pure_type (pn,ilist) tpenv te in
                      iter ((x, t)::xm) xs
                 in
                 iter [] ps
@@ -624,7 +624,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let (wpost, _) = check_asn (pn,ilist) [] postmap post in
                 let wepost = List.map (fun (tp, epost) -> 
                   let (wepost, _) = check_asn (pn,ilist) [] ((current_class, ClassOrInterfaceName cn)::(current_thread_name, current_thread_type)::xmap) epost in
-                  let tp = check_pure_type (pn,ilist) [] tp in
+                  let tp = check_pure_type (pn,ilist) tpenv tp in
                   (tp, wepost)
                 ) epost in
                 let (wpre_dyn, wpost_dyn, wepost_dyn) = if fb = Static then (wpre, wpost, wepost) else (dynamic_of wpre, dynamic_of wpost, List.map (fun (tp, wepost) -> (tp, dynamic_of wepost)) wepost) in
@@ -675,10 +675,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let classmap1 =
     List.map
-      begin fun (cn, (l, abstract, fin, meths, fds, ctors, super, interfs, preds, pn, ilist)) ->
+      begin fun (cn, (l, abstract, fin, meths, fds, ctors, super, tpenv, interfs, preds, pn, ilist)) ->
         let rec iter cmap ctors =
           match ctors with
-            [] -> (cn, {cl=l; cabstract=abstract; cfinal=fin; cmeths=meths; cfds=fds; cctors=List.rev cmap; csuper=super; cinterfs=interfs; cpreds=preds; cpn=pn; cilist=ilist})
+            [] -> (cn, {cl=l; cabstract=abstract; cfinal=fin; cmeths=meths; cfds=fds; cctors=List.rev cmap; csuper=super; ctpenv=tpenv; cinterfs=interfs; cpreds=preds; cpn=pn; cilist=ilist})
             | Cons (lm, ps, co, ss, v)::ctors ->
               let xmap =
                 let rec iter xm xs =
@@ -686,7 +686,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                    [] -> List.rev xm
                  | (te, x)::xs ->
                    if List.mem_assoc x xm then static_error l "Duplicate parameter name." None;
-                   let t = check_pure_type (pn,ilist) [] te in
+                   let t = check_pure_type (pn,ilist) tpenv te in
                    iter ((x, t)::xm) xs
                 in
                 iter [] ps
@@ -702,7 +702,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let (wpost, _) = check_asn (pn,ilist) [] postmap post in
                   let wepost = List.map (fun (tp, epost) -> 
                     let (wepost, _) = check_asn (pn,ilist) [] tenv epost in
-                    let tp = check_pure_type (pn,ilist) [] tp in
+                    let tp = check_pure_type (pn,ilist) tpenv tp in
                     (tp, wepost)
                   ) epost in
                   (wpre, tenv, wpost, wepost, terminates)
@@ -763,7 +763,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let xmap = [] in
             let ss = Some (Some (([], l), rank)) in
             let vis = Public in
-            (sign, CtorInfo (l, xmap, super_pre, (current_class, ClassOrInterfaceName cn)::super_pre_tenv, post, [], super_terminates, ss, vis))
+            (sign, CtorInfo (l, xmap, super_pre, (current_class, ClassOrInterfaceName cn)::super_pre_tenv, post, [] , super_terminates, ss, vis))
           in
           (cn, {cls with cctors=[default_ctor]})
         in

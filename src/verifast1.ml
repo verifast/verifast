@@ -711,7 +711,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       cinterfs: string list;
       cpreds: inst_pred_info map;
       cpn: string; (* package *)
-      cilist: import list
+      cilist: import list;
+      ctpenv: string list
     }
     type box_action_permission_info =
         termnode (* term representing action permission predicate *)
@@ -1393,6 +1394,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         Some (n, l) ->
         AbstractType n
       | None ->
+      failwith "need to figure out why this goes wrong"; 
       static_error l ("No such type parameter, inductive datatype, class, interface, or function type: " ^pn^" "^id) None
       end
     | IdentTypeExpr (l, Some(pac), id) ->
@@ -2430,8 +2432,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter classmap1_done classmap1_todo =
       match classmap1_todo with
         [] -> List.rev classmap1_done
-      | (cn, (lc, abstract, fin, methods, fds_opt, ctors, super, tparams, interfs, preds, pn, ilist))::classmap1_todo ->
-        let cont predmap = iter ((cn, (lc, abstract, fin, methods, fds_opt, ctors, super, interfs, List.rev predmap, pn, ilist))::classmap1_done) classmap1_todo in
+      | (cn, (lc, abstract, fin, methods, fds_opt, ctors, super, tpenv, interfs, preds, pn, ilist))::classmap1_todo ->
+        let cont predmap = iter ((cn, (lc, abstract, fin, methods, fds_opt, ctors, super, tpenv, interfs, List.rev predmap, pn, ilist))::classmap1_done) classmap1_todo in
         let rec iter predmap preds =
           match preds with
             [] -> cont predmap
@@ -2443,7 +2445,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   [] -> List.rev pmap
                 | (tp, x)::ps ->
                   if List.mem_assoc x pmap then static_error l "Duplicate parameter name." None;
-                  let tp = check_pure_type (pn,ilist) tparams tp in
+                  let tp = check_pure_type (pn,ilist) tpenv tp in
                   iter ((x, tp)::pmap) ps
               in
               iter [] ps
@@ -2479,7 +2481,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   end
                 in
                 check_classmap classmap1_done
-                  (function (lc, abstract, fin, methods, fds_opt, ctors, super, interfs, predmap, pn, ilist) -> (super, interfs, predmap))
+                  (function (lc, abstract, fin, methods, fds_opt, ctors, super, tpenv, interfs, predmap, pn, ilist) -> (super, interfs, predmap))
                   $. fun () ->
                 check_classmap classmap0
                   (function {csuper; cinterfs; cpreds} -> (csuper, cinterfs, cpreds))
@@ -2606,7 +2608,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let rec lookup_class_field cn fn =
     match try_assoc cn classmap1 with
-      Some (_, _, _, _, fds, _, super, itfs, _, _, _) ->
+      Some (_, _, _, _, fds, _, super, _, itfs, _, _, _) ->
       begin match try_assoc fn fds with
         None when cn = "java.lang.Object" -> None
       | Some f -> Some (f, cn)
@@ -3721,7 +3723,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let classmap1 =
     List.map
-      begin fun (cn, (l, abstract, fin, meths, fds, constr, super, interfs, preds, pn, ilist)) ->
+      begin fun (cn, (l, abstract, fin, meths, fds, constr, super, tpenv, interfs, preds, pn, ilist)) ->
         let fds =
           List.map
             begin function
@@ -3733,7 +3735,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             end
             fds
         in
-        (cn, (l, abstract, fin, meths, fds, constr, super, interfs, preds, pn, ilist))
+        (cn, (l, abstract, fin, meths, fds, constr, super, tpenv, interfs, preds, pn, ilist))
       end
       classmap1
   
@@ -3862,7 +3864,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     and eval_field callers ((cn, fn) as f) =
       if List.mem f callers then raise NotAConstant;
       match try_assoc cn classmap1 with
-        Some (l, abstract, fin, meths, fds, const, super, interfs, preds, pn, ilist) -> eval_field_body (f::callers) (List.assoc fn fds)
+        Some (l, abstract, fin, meths, fds, const, super, tpenv, interfs, preds, pn, ilist) -> eval_field_body (f::callers) (List.assoc fn fds)
       | None ->
       match try_assoc cn classmap0 with
         Some {cfds} -> eval_field_body (f::callers) (List.assoc fn cfds)
@@ -3892,7 +3894,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let compute_fields fds is_itf_fields =
       fds |> List.iter (fun (f, fbody) -> try ignore $. eval_field_body [] fbody with NotAConstant -> if is_itf_fields then let {fl} = fbody in static_error fl "Interface field initializer must be constant expression" None)
     in
-    classmap1 |> List.iter (fun (cn, (l, abstract, fin, meths, fds, constr, super, interfs, preds, pn, ilist)) -> compute_fields fds false);
+    classmap1 |> List.iter (fun (cn, (l, abstract, fin, meths, fds, constr, super, tpenv, interfs, preds, pn, ilist)) -> compute_fields fds false);
     interfmap1 |> List.iter (fun (ifn, (li, fds, meths, preds, interfs, pn, ilist)) -> compute_fields fds true)
   
   (* Region: type checking of assertions *)
@@ -3968,7 +3970,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let get_class_finality tn = (* Returns ExtensibleClass if tn is an interface *)
     match try_assoc tn classmap1 with
-      Some (lc, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+      Some (lc, abstract, fin, methods, fds_opt, ctors, super, tpenv, interfs, preds, pn, ilist) ->
       fin
     | None ->
       match try_assoc tn classmap0 with
@@ -4004,7 +4006,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | None -> fallback ()
       in
       search_classmap classmap1
-        (function (_, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) -> (super, interfs, preds))
+        (function (_, abstract, fin, methods, fds_opt, ctors, super, tpenv, interfs, preds, pn, ilist) -> (super, interfs, preds))
         $. fun () ->
       search_classmap classmap0
         (function {csuper; cinterfs; cpreds} -> (csuper, cinterfs, cpreds))
@@ -4685,7 +4687,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let classmap1 =
     classmap1 |> List.map
-      begin fun (cn, (lc, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist)) ->
+      begin fun (cn, (lc, abstract, fin, methods, fds_opt, ctors, super, tpenv, interfs, preds, pn, ilist)) ->
         let preds =
           preds |> List.map
             begin function
@@ -4702,7 +4704,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | pred -> pred
             end
         in
-        (cn, (lc, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist))
+        (cn, (lc, abstract, fin, methods, fds_opt, ctors, super, tpenv, interfs, preds, pn, ilist))
       end
   
   (* Region: evaluation helpers; pushing and popping assumptions and execution trace elements *)
@@ -4902,7 +4904,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let calculate_ancestry_classmap1 already_calculated_ancestries (clinfname, info) =
       let super_clintf =
         match info with
-          (_, _, fin, _, _, _, spr, intfs, _, _, _) ->
+          (_, _, fin, _, _, _, spr, _, intfs, _, _, _) ->
             let iafc =
               if fin = FinalClass then true else false
             in

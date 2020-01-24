@@ -315,7 +315,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let (pmap, pred_symb) =
           try
           match try_assoc tn classmap1 with
-            Some (lcn, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+            Some (lcn, abstract, fin, methods, fds_opt, ctors, super,tpenv, interfs, preds, pn, ilist) ->
             let (_, pmap, _, symb, _) = List.assoc g preds in (pmap, symb)
           | None ->
             match try_assoc tn classmap0 with
@@ -992,7 +992,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let inst_call_pred l coefpat e_opt tn g index pats =
       let (pmap, pred_symb) =
         match try_assoc tn classmap1 with
-          Some (lcn, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+          Some (lcn, abstract, fin, methods, fds_opt, ctors, super, tpenv, interfs, preds, pn, ilist) ->
           let (_, pmap, _, symb, _) = List.assoc g preds in (pmap, symb)
         | None ->
           match try_assoc tn classmap0 with
@@ -1236,7 +1236,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | WInstPredAsn(l2, target_opt, static_type_name, static_type_finality, family_type_string, instance_pred_name, index, args) ->
         let (pmap, qsymb) =
           match try_assoc static_type_name classmap1 with
-            Some (lcn, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+            Some (lcn, abstract, fin, methods, fds_opt, ctors, super, tpenv, interfs, preds, pn, ilist) ->
             let (_, pmap, _, symb, _) = List.assoc instance_pred_name preds in (pmap, symb)
           | None ->
             match try_assoc static_type_name classmap0 with
@@ -1317,7 +1317,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
    
   let instance_predicate_contains_edges = 
     classmap1 |> flatmap 
-      (fun (cn, (l, abstract, fin, meths, fds, cmap, super, interfs, preds, pn, ilist)) ->
+      (fun (cn, (l, abstract, fin, meths, fds, cmap, super, tpenv, interfs, preds, pn, ilist)) ->
         preds |> flatmap
           (fun (g, (l, pmap, family, psymb, wbody_opt)) ->
             match wbody_opt with None -> [] | Some wbody0 ->
