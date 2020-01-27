@@ -1355,8 +1355,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let abstract_types_map = abstract_types_map1 @ abstract_types_map0
   
+  let classmap_arities =
+    List.map (fun (cn, (l, _, _, _, _, _, _, tparams, _, _, _, _)) -> (cn, (l, List.length tparams))) classmap1
+
   (* Region: check_pure_type: checks validity of type expressions *)
-  
   let check_pure_type_core typedefmap1 (pn,ilist) tpenv te =
     let rec check te =
     match te with
@@ -1394,7 +1396,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         Some (n, l) ->
         AbstractType n
       | None ->
-      failwith "need to figure out why this goes wrong"; 
       static_error l ("No such type parameter, inductive datatype, class, interface, or function type: " ^pn^" "^id) None
       end
     | IdentTypeExpr (l, Some(pac), id) ->
@@ -1407,9 +1408,19 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | ConstructedTypeExpr (l, id, targs) ->
       begin match (search2' Real id (pn,ilist) classmap1 classmap0) with
-          Some s -> ObjType s
+          Some s -> 
+            (*Class exists in the classmap, now check if the amount of type arguments match, then typecheck the type arguments *)
+            begin
+              match resolve Ghost (pn,ilist) l id classmap_arities with
+                Some (id, (ld, n)) ->
+                if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
+                reportUseSite DeclKind_InductiveType ld l;
+                InductiveType (id, List.map check targs)
+                | None -> static_error l "No such inductive datatype." None
+            end
         | None -> match (search2' Real id (pn,ilist) interfmap1 interfmap0) with
-          Some s-> ObjType s
+          Some s-> (*Type is an interface, we don't support generics here yet *)
+            static_error l "No such inductive datatype. Interfaces aren't supported for generic datatypes yet" None
           | None ->
             begin
               match resolve Ghost (pn,ilist) l id inductive_arities with
