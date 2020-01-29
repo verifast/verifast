@@ -682,6 +682,7 @@ and
       string list *
       field list *
       meth list *
+      string list * (* type parameters *) 
       instance_pred_decl list
   | PredFamilyDecl of
       loc *

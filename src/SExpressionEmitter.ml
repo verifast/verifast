@@ -671,7 +671,7 @@ and sexpr_of_decl (decl : decl) : sexpression =
                  ; Symbol name]
                  [ "tparams", List (List.map symbol tparams)
                  ; "constructors", sexpr_of_list sexpr_of_inductive_constructor cons ]
-    | Interface (_, id, inters, fields, meths, preds) ->
+    | Interface (_, id, inters, fields, meths, tparams, preds) ->
       build_list [ Symbol "declare-interface"
                  ; Symbol id ]
                  [ "super-interfaces", List (List.map symbol inters)

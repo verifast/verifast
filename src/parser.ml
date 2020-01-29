@@ -234,10 +234,10 @@ and
           super = parse_super_class; il = parse_interfaces; mem = parse_java_members s; ds = parse_decls_core >]
        -> type_params_pop();
           Class (l, abstract, final, s, methods s mem, fields mem, constr mem, super, tparams, il, instance_preds mem)::ds
-     | [< '(l, Kwd "interface"); '(_, Ident cn); _ = type_params_parse_and_push();
+     | [< '(l, Kwd "interface"); '(_, Ident cn); tparams = type_params_parse_and_push();
           il = parse_extended_interfaces;  mem = parse_java_members cn; ds = parse_decls_core >]
        -> type_params_pop();
-          Interface (l, cn, il, fields mem, methods cn mem, instance_preds mem)::ds
+          Interface (l, cn, il, fields mem, methods cn mem, tparams, instance_preds mem)::ds
      | [< d = parse_decl; ds = parse_decls_core >] -> d@ds
      | [< '(_, Kwd ";"); ds = parse_decls_core >] -> ds
      | [< >] -> []
@@ -346,10 +346,9 @@ and parse_java_member cn = parser
        [< '(l, Ident x);
           member = parser
             [< (ps, co, ss) = parse_method_rest l >] ->
-            let t' = option_map type_param_erasure_in_scope t in
             let ps = List.map (fun (texpr, s) -> (type_param_erasure_in_scope texpr, s))
                 (if binding = Instance then (IdentTypeExpr (l, None, cn), "this")::ps else ps) in
-            MethMember (Meth (l, Real, t', x, ps, co, ss, binding, vis, abstract))
+            MethMember (Meth (l, Real, t, x, ps, co, ss, binding, vis, abstract))
           | [< t = id (match t with None -> raise (ParseException (l, "A field cannot be void.")) | Some(t) -> t);
                tx = parse_array_braces t;
                init = opt (parser [< '(_, Kwd "="); e = parse_declaration_rhs tx >] -> e);
@@ -609,7 +608,6 @@ and type_params_parse_and_push _ =
         match xs with
          | Some(params) -> params
          | None -> []
-and type_arguments
 and type_param_is_in_scope arg =
     let rec is_in_scope_core arg params =
       match params with

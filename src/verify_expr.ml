@@ -420,7 +420,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let interfmap1 =
     List.map
-      begin fun (ifn, (l, fieldmap, specs, preds, interfs, pn, ilist)) ->
+      begin fun (ifn, (l, fieldmap, specs, preds, interfs, pn, ilist, tparams)) ->
         let mmap =
         let rec iter mmap meth_specs =
           match meth_specs with
@@ -460,7 +460,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         iter [] specs
         in
-        (ifn, InterfaceInfo (l, fieldmap, mmap, preds, interfs))
+        (ifn, InterfaceInfo (l, fieldmap, mmap, preds, interfs, tparams))
       end
       interfmap1
   
@@ -468,10 +468,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     Printf.sprintf "%s(%s)" mn (String.concat ", " (List.map string_of_type ts))
   
   let () = (* Check interfaces in .java files against their specifications in .javaspec files. *)
-    interfmap1 |> List.iter begin function (i, InterfaceInfo (l1,fields1,meths1,preds1,interfs1)) ->
+    interfmap1 |> List.iter begin function (i, InterfaceInfo (l1,fields1,meths1,preds1,interfs1,tparams1)) ->
       match try_assoc i interfmap0 with
       | None -> ()
-      | Some (InterfaceInfo (l0,fields0,meths0,preds0,interfs0)) ->
+      | Some (InterfaceInfo (l0,fields0,meths0,preds0,interfs0, tparams0)) ->
         let rec match_fields fields0 fields1 =
           match fields0 with
             [] -> if fields1 <> [] then static_error l1 ".java file does not correct implement .javaspec file: interface declares more fields" None
@@ -501,14 +501,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let interfmap = (* checks overriding methods in interfaces *)
     let rec iter map0 map1 =
       let interf_specs_for_sign sign itf =
-                    let InterfaceInfo (_, fields, meths, _,  _) = List.assoc itf map1 in
+                    let InterfaceInfo (_, fields, meths, _, _, _) = List.assoc itf map1 in
                     match try_assoc sign meths with
                       None -> []
                     | Some spec -> [(itf, spec)]
       in
       match map0 with
         [] -> map1
-      | (i, InterfaceInfo (l,fields,meths,preds,interfs)) as elem::rest ->
+      | (i, InterfaceInfo (l,fields,meths,preds,interfs, tparams)) as elem::rest ->
         List.iter (fun (sign, ItfMethodInfo (lm,gh,rt,xmap,pre,pre_tenv,post,epost,terminates,v,abstract)) ->
           let superspecs = List.flatten (List.map (fun i -> (interf_specs_for_sign sign i)) interfs) in
           List.iter (fun (tn, ItfMethodInfo (lsuper, gh', rt', xmap', pre', pre_tenv', post', epost', terminates', vis', abstract')) ->
@@ -569,7 +569,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let classmap1 =
     let rec iter classmap1_done classmap1_todo =
       let interf_specs_for_sign sign itf =
-        let InterfaceInfo (_, _, meths, _,  _) = List.assoc itf interfmap in
+        let InterfaceInfo (_, _, meths, _,  _, _) = List.assoc itf interfmap in
         match try_assoc sign meths with
           None -> []
         | Some spec -> [(itf, spec)]
@@ -911,7 +911,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     end
 
   let rec interface_methods itf =
-    let InterfaceInfo (l, fds, meths, preds, supers) = List.assoc itf interfmap in
+    let InterfaceInfo (l, fds, meths, preds, supers, tparams) = List.assoc itf interfmap in
     List.map (fun (sign, _) -> (sign, ("interface", itf))) meths @ flatmap interface_methods supers
   
   let rec unimplemented_class_methods cn trust_cabstract =
@@ -2086,7 +2086,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let target_class = if can_be_overridden then None else Some tn in
           (lm, gh, rt, xmap, pre_dyn, post_dyn, epost_dyn, terminates, is_upcall, target_class, fb, v)
         | _ ->
-          let InterfaceInfo (_, _, methods, _, _) = List.assoc tn interfmap in
+          let InterfaceInfo (_, _, methods, _, _, _) = List.assoc tn interfmap in
           let ItfMethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, terminates, v, abstract) = List.assoc (m, pts) methods in
           (lm, gh, rt, xmap, pre, post, epost, terminates, false, None, Instance, v)
       in

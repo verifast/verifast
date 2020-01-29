@@ -700,6 +700,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * (signature * interface_method_info) list
       * interface_inst_pred_info map
       * string list (* superinterfaces *)
+      * string list (* type parameters *)
     type class_info = {
       cl: loc;
       cabstract: bool;
@@ -1253,7 +1254,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
    let rec iter (ifdm, classlist) ds todo =
      match ds with 
       | [] -> (ifdm, classlist, todo)
-      | (pn, ilist, Interface (l, i, interfs, fields, meths, pred_specs))::rest ->
+      | (pn, ilist, Interface (l, i, interfs, fields, meths, tparams, pred_specs))::rest ->
         let i= full_name pn i in 
         if List.mem_assoc i ifdm then
           static_error l ("There exists already an interface with this name: "^i) None
@@ -1273,7 +1274,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 in
                 check_interfs interfs
               in
-              iter (((i, (l, fields, meths, pred_specs, interfs, pn, ilist))::ifdm), classlist) rest todo
+              iter (((i, (l, fields, meths, pred_specs, interfs, pn, ilist, tparams))::ifdm), classlist) rest todo
             with Not_found ->
               iter (ifdm, classlist) rest ((List.hd ds)::todo)
           end
@@ -1324,7 +1325,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             in
             let (l, message) =
               match ds_rest with
-              | (pn, ilist, (Interface (l, i, interfs, fields, meths, pred_specs)))::_ ->
+              | (pn, ilist, (Interface (l, i, interfs, fields, meths, pred_specs, tparams)))::_ ->
                   (l, check_interfs "Interface" i interfs (pn,ilist))
               | (pn, ilist, (Class (l, abstract, fin, i, meths,fields,constr,super, tparams,interfs,preds)))::_ ->
                   match search2' Real super (pn,ilist) classlist classmap0 with
@@ -1357,6 +1358,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let classmap_arities =
     List.map (fun (cn, (l, _, _, _, _, _, _, tparams, _, _, _, _)) -> (cn, (l, List.length tparams))) classmap1
+
+  let interfmap_arities =
+    List.map (fun (cn, (l, _, _, _, _, _, _, tparams)) -> (cn, (l, List.length tparams))) interfmap1
 
   (* Region: check_pure_type: checks validity of type expressions *)
   let check_pure_type_core typedefmap1 (pn,ilist) tpenv te =
@@ -1416,11 +1420,18 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
                 reportUseSite DeclKind_InductiveType ld l;
                 InductiveType (id, List.map check targs)
-                | None -> static_error l "No such inductive datatype." None
+                | None -> static_error l "No such inductive datatype in classmap." None
             end
-        | None -> match (search2' Real id (pn,ilist) interfmap1 interfmap0) with
-          Some s-> (*Type is an interface, we don't support generics here yet *)
-            static_error l "No such inductive datatype. Interfaces aren't supported for generic datatypes yet" None
+        | None -> match (search' Real id (pn,ilist) interfmap1) with
+          Some s-> (*Type is an interface*)
+            begin
+              match resolve Ghost (pn,ilist) l id interfmap_arities with
+                Some (id, (ld, n)) ->
+                if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
+                reportUseSite DeclKind_InductiveType ld l;
+                InductiveType (id, List.map check targs)
+                | None -> static_error l "No such inductive datatype in interfmap." None
+            end
           | None ->
             begin
               match resolve Ghost (pn,ilist) l id inductive_arities with
@@ -1598,9 +1609,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         Some {csuper=super; cinterfs=interfaces} ->
         is_subtype_of super y || List.exists (fun itf -> is_subtype_of itf y) interfaces
       | None -> begin match try_assoc x interfmap1 with
-          Some (_, _, _, _, interfaces, _, _) -> List.exists (fun itf -> is_subtype_of itf y) interfaces
+          Some (_, _, _, _, interfaces, _, _, _) -> List.exists (fun itf -> is_subtype_of itf y) interfaces
         | None -> begin match try_assoc x interfmap0 with
-            Some (InterfaceInfo (_, _, _, _, interfaces)) -> List.exists (fun itf -> is_subtype_of itf y) interfaces
+            Some (InterfaceInfo (_, _, _, _, interfaces, tparams)) -> List.exists (fun itf -> is_subtype_of itf y) interfaces
           | None -> false 
           end
         end
@@ -2391,10 +2402,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter_interfs interfmap1_done interfmap1_todo =
       match interfmap1_todo with
         [] -> List.rev interfmap1_done
-      | (tn, (li, fields, methods, preds, interfs, pn, ilist))::interfmap1_todo ->
+      | (tn, (li, fields, methods, preds, interfs, pn, ilist, tpenv))::interfmap1_todo ->
         let rec iter_preds predmap preds =
           match preds with
-            [] -> iter_interfs ((tn, (li, fields, methods, List.rev predmap, interfs, pn, ilist))::interfmap1_done) interfmap1_todo
+            [] -> iter_interfs ((tn, (li, fields, methods, List.rev predmap, interfs, pn, ilist, tpenv))::interfmap1_done) interfmap1_todo
           | InstancePredDecl (l, g, ps, body)::preds ->
             if List.mem_assoc g predmap then static_error l "Duplicate predicate name." None;
             let pmap =
@@ -2421,8 +2432,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   | None -> fallback ()
                   end
                 in
-                check_itfmap (function (li, fields, methods, preds, interfs, pn, ilist) -> (preds, interfs)) interfmap1_done $. fun () ->
-                check_itfmap (function InterfaceInfo (li, fields, methods, preds, interfs) -> (preds, interfs)) interfmap0 $. fun () ->
+                check_itfmap (function (li, fields, methods, preds, interfs, pn, ilist, tparams) -> (preds, interfs)) interfmap1_done $. fun () ->
+                check_itfmap (function InterfaceInfo (li, fields, methods, preds, interfs, tparams) -> (preds, interfs)) interfmap0 $. fun () ->
                 []
               in
               match flatmap preds_in_itf interfs with
@@ -2474,8 +2485,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   | None -> fallback ()
                   end
                 in
-                check_itfmap (function (li, fields, methods, preds, interfs, pn, ilist) -> (preds, interfs)) interfmap1 $. fun () ->
-                check_itfmap (function InterfaceInfo (li, fields, methods, preds, interfs) -> (preds, interfs)) interfmap0 $. fun () ->
+                check_itfmap (function (li, fields, methods, preds, interfs, pn, ilist, tparams) -> (preds, interfs)) interfmap1 $. fun () ->
+                check_itfmap (function InterfaceInfo (li, fields, methods, preds, interfs, tparams) -> (preds, interfs)) interfmap0 $. fun () ->
                 []
               in
               let rec preds_in_class cn =
@@ -2607,14 +2618,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     List.map (fun (l, i) -> if not (List.mem i funcnames) then static_error l "No such function name." None; i) is 
   
   let interfmap1 =
-    interfmap1 |> List.map begin function (i, (l, fields, meths, preds, supers, pn, ilist)) ->
+    interfmap1 |> List.map begin function (i, (l, fields, meths, preds, supers, pn, ilist, tparams)) ->
       let fieldmap =
         fields |> List.map begin function Field (fl, fgh, ft, f, _, _, _, finit) ->
           let ft = check_pure_type (pn,ilist) [] ft in
           (f, {fl; fgh; ft; fvis=Public; fbinding=Static; ffinal=true; finit; fvalue=ref None})
         end
       in
-      (i, (l, fieldmap, meths, preds, supers, pn, ilist))
+      (i, (l, fieldmap, meths, preds, supers, pn, ilist, tparams))
     end
   
   let rec lookup_class_field cn fn =
@@ -2643,7 +2654,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | None ->
     match try_assoc cn interfmap1 with
-      Some (_, fds, _, _, supers, _, _) ->
+      Some (_, fds, _, _, supers, _, _, _) ->
       begin match try_assoc fn fds with
         Some f -> Some (f, cn)
       | None ->
@@ -2651,7 +2662,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | None ->
     match try_assoc cn interfmap0 with
-      Some (InterfaceInfo (_, fds, _, _, supers)) ->
+      Some (InterfaceInfo (_, fds, _, _, supers, _)) ->
       begin match try_assoc fn fds with
         Some f -> Some (f, cn)
       | None ->
@@ -2776,7 +2787,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         declared_methods @ List.filter (fun (sign, info) -> not (List.mem_assoc sign declared_methods)) inherited_methods
       | None ->
-      let InterfaceInfo (_, fields, meths, _, interfs) = List.assoc tn interfmap in
+      let InterfaceInfo (_, fields, meths, _, interfs, _) = List.assoc tn interfmap in
       let declared_methods = flatmap
         begin fun ((mn', sign), ItfMethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, terminates, v, abstract)) ->
           if mn' = mn then [(sign, (tn, lm, gh, rt, xmap, pre, post, epost, terminates, Instance, v, abstract))] else []
@@ -3751,7 +3762,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       classmap1
   
   let interfmap1 =
-    interfmap1 |> List.map begin fun (itf, (l, fds, meths, preds, interfs, pn, ilist)) ->
+    interfmap1 |> List.map begin fun (itf, (l, fds, meths, preds, interfs, pn, ilist, tparams)) ->
       let fds = fds |> List.map begin function
           (f, ({ft; fbinding=Static; finit=Some e} as fd)) ->
           let e = check_expr_t (pn,ilist) [] [current_class, ClassOrInterfaceName itf] (Some true) e ft in
@@ -3760,7 +3771,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | fd -> fd
         end
       in
-      (itf, (l, fds, meths, preds, interfs, pn, ilist))
+      (itf, (l, fds, meths, preds, interfs, pn, ilist, tparams))
     end
 
   let check_c_initializer (pn,ilist) tparams tenv e tp =
@@ -3881,10 +3892,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         Some {cfds} -> eval_field_body (f::callers) (List.assoc fn cfds)
       | None ->
       match try_assoc cn interfmap1 with
-        Some (li, fds, meths, preds, interfs, pn, ilist) -> eval_field_body (f::callers) (List.assoc fn fds)
+        Some (li, fds, meths, preds, interfs, pn, ilist, tparams) -> eval_field_body (f::callers) (List.assoc fn fds)
       | None ->
       match try_assoc cn interfmap0 with
-        Some (InterfaceInfo (li, fields, meths, preds, interfs)) -> eval_field_body (f::callers) (List.assoc fn fields)
+        Some (InterfaceInfo (li, fields, meths, preds, interfs, tparams)) -> eval_field_body (f::callers) (List.assoc fn fields)
       | None ->
       assert false
     and eval_field_body callers {fbinding; ffinal; finit; fvalue} =
@@ -3906,7 +3917,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       fds |> List.iter (fun (f, fbody) -> try ignore $. eval_field_body [] fbody with NotAConstant -> if is_itf_fields then let {fl} = fbody in static_error fl "Interface field initializer must be constant expression" None)
     in
     classmap1 |> List.iter (fun (cn, (l, abstract, fin, meths, fds, constr, super, tpenv, interfs, preds, pn, ilist)) -> compute_fields fds false);
-    interfmap1 |> List.iter (fun (ifn, (li, fds, meths, preds, interfs, pn, ilist)) -> compute_fields fds true)
+    interfmap1 |> List.iter (fun (ifn, (li, fds, meths, preds, interfs, pn, ilist, tparams)) -> compute_fields fds true)
   
   (* Region: type checking of assertions *)
   
@@ -4001,8 +4012,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           end
         | None -> fallback ()
       in
-      search_interfmap (function (li, fields, meths, preds, interfs, pn, ilist) -> (interfs, preds)) interfmap1 $. fun () ->
-      search_interfmap (function InterfaceInfo (li, fields, meths, preds, interfs) -> (interfs, preds)) interfmap0 $. fun () ->
+      search_interfmap (function (li, fields, meths, preds, interfs, pn, ilist, tparams) -> (interfs, preds)) interfmap1 $. fun () ->
+      search_interfmap (function InterfaceInfo (li, fields, meths, preds, interfs, tparams) -> (interfs, preds)) interfmap0 $. fun () ->
       []
     in
     let rec find_in_class cn =
@@ -4890,7 +4901,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let calculate_ancestry_intfmap0 already_calculated_ancestries (clinfname, info) =
       let super_clintf =
         match info with
-          InterfaceInfo (_, _, _, _, intfs) ->
+          InterfaceInfo (_, _, _, _, intfs,_) ->
             (intfs, false, false)
       in
       calculate_ancestry_from_direct_ancesters_info already_calculated_ancestries clinfname super_clintf
@@ -4898,7 +4909,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let calculate_ancestry_intfmap1 already_calculated_ancestries (clinfname, info) =
       let super_clintf =
         match info with
-          (_, _, _, _, intfs, _, _) ->
+          (_, _, _, _, intfs, _, _,_) ->
             (intfs, false, false)
       in
       calculate_ancestry_from_direct_ancesters_info already_calculated_ancestries clinfname super_clintf

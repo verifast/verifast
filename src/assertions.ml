@@ -323,9 +323,9 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               let (_, pmap, _, symb, _) = List.assoc g cpreds in (pmap, symb)
             | None ->
               match try_assoc tn interfmap1 with
-                Some (li, fields, methods, preds, interfs, pn, ilist) -> let (_, pmap, family, symb) = List.assoc g preds in (pmap, symb)
+                Some (li, fields, methods, preds, interfs, pn, ilist, tparams) -> let (_, pmap, family, symb) = List.assoc g preds in (pmap, symb)
               | None ->
-                let InterfaceInfo (li, fields, methods, preds, interfs) = List.assoc tn interfmap0 in
+                let InterfaceInfo (li, fields, methods, preds, interfs, tparams) = List.assoc tn interfmap0 in
                 let (_, pmap, family, symb) = List.assoc g preds in
                 (pmap, symb)
           with Not_found -> assert_false h env l ("Definition of predicate " ^ g ^ " is missing from implementing class") None
@@ -1000,9 +1000,9 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let (_, pmap, _, symb, _) = List.assoc g cpreds in (pmap, symb)
           | None ->
             match try_assoc tn interfmap1 with
-              Some (li, fields, methods, preds, interfs, pn, ilist) -> let (_, pmap, family, symb) = List.assoc g preds in (pmap, symb)
+              Some (li, fields, methods, preds, interfs, pn, ilist, tparams) -> let (_, pmap, family, symb) = List.assoc g preds in (pmap, symb)
             | None ->
-              let InterfaceInfo (li, fields, methods, preds, interfs) = List.assoc tn interfmap0 in
+              let InterfaceInfo (li, fields, methods, preds, interfs, tparams) = List.assoc tn interfmap0 in
               let (_, pmap, family, symb) = List.assoc g preds in
               (pmap, symb)
       in
@@ -1244,9 +1244,9 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               let (_, pmap, _, symb, _) = List.assoc instance_pred_name cpreds in (pmap, symb)
             | None ->
               match try_assoc static_type_name interfmap1 with
-                Some (li, fields, methods, preds, interfs, pn, ilist) -> let (_, pmap, family, symb) = List.assoc instance_pred_name preds in (pmap, symb)
+                Some (li, fields, methods, preds, interfs, pn, ilist, tparams) -> let (_, pmap, family, symb) = List.assoc instance_pred_name preds in (pmap, symb)
               | None ->
-                let InterfaceInfo (li, fields, methods, preds, interfs) = List.assoc static_type_name interfmap0 in
+                let InterfaceInfo (li, fields, methods, preds, interfs, tparams) = List.assoc static_type_name interfmap0 in
                 let (_, pmap, family, symb) = List.assoc instance_pred_name preds in
                 (pmap, symb)
         in

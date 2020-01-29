@@ -325,9 +325,10 @@ and translate_class_decl decl =
         let (decls', fields') = translate_fields decls in
         let (decls', meths') = translate_methods id' decls' in
         let (decls', ghost_members') = translate_ghost_members l' id' decls' in
+        let tparams' = translate_class_tparams tparams in
         let (ghost_fields', ghost_meths', ghost_preds') = split_ghost_members l ghost_members' in
         if (decls' <> []) then error l' "Not all declarations in class could be processed";
-        (VF.Interface(l', id', impls', fields' @ ghost_fields', meths' @ ghost_meths', ghost_preds'), id')
+        (VF.Interface(l', id', impls', fields' @ ghost_fields', meths' @ ghost_meths', tparams', ghost_preds'), id')
   in 
   debug_print_end ("translate_class_decl " ^ name');
   res
