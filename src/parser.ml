@@ -230,39 +230,37 @@ and
      abstract = (parser [< '(_, Kwd "abstract") >] -> true | [< >] -> false); 
      final = (parser [< '(_, Kwd "final") >] -> FinalClass | [< >] -> ExtensibleClass);
      ds = begin parser
-       [< '(l, Kwd "class"); '(_, Ident s); tparams = type_params_parse_and_push();
-          super = parse_super_class; il = parse_interfaces; mem = parse_java_members s; ds = parse_decls_core >]
-       -> type_params_pop();
-          Class (l, abstract, final, s, methods s mem, fields mem, constr mem, super, tparams, il, instance_preds mem)::ds
-     | [< '(l, Kwd "interface"); '(_, Ident cn); tparams = type_params_parse_and_push();
-          il = parse_extended_interfaces;  mem = parse_java_members cn; ds = parse_decls_core >]
-       -> type_params_pop();
-          Interface (l, cn, il, fields mem, methods cn mem, tparams, instance_preds mem)::ds
+       [< '(l, Kwd "class"); '(startLoc, Ident s); tparams = parse_type_params startLoc;
+          super = parse_super_class tparams; il = parse_interfaces tparams; mem = parse_java_members s tparams; ds = parse_decls_core >]
+       -> Class (l, abstract, final, s, methods s mem, fields mem, constr mem, super, tparams, il, instance_preds mem)::ds
+     | [< '(l, Kwd "interface"); '(startLoc, Ident cn); tparams = parse_type_params startLoc;
+          il = parse_extended_interfaces tparams;  mem = parse_java_members cn tparams; ds = parse_decls_core >]
+       -> Interface (l, cn, il, fields mem, methods cn mem, tparams, instance_preds mem)::ds
      | [< d = parse_decl; ds = parse_decls_core >] -> d@ds
      | [< '(_, Kwd ";"); ds = parse_decls_core >] -> ds
      | [< >] -> []
      end
   >] -> ds
-and parse_qualified_type_rest = parser
-  [< '(_, Kwd "."); '(_, Ident s); rest = parse_qualified_type_rest >] -> "." ^ s ^ rest
-| [< xs = parse_type_params_with_loc >] -> List.iter (fun (l,p) -> type_param_check_in_scope l p) xs; ""
+and parse_qualified_type_rest tpenv = parser
+  [< '(_, Kwd "."); '(_, Ident s); rest = parse_qualified_type_rest tpenv >] -> "." ^ s ^ rest
+| [< xs = parse_type_params_with_loc >] -> List.iter (fun (l,p) -> if (List.mem p tpenv) then () else raise (ParseException (l, "Type parameter is not in scope"))) xs; ""
 | [<>] -> ""
-and parse_qualified_type = parser
-  [<'(_, Ident s); rest = parse_qualified_type_rest >] -> s ^ rest
+and parse_qualified_type tpenv = parser
+  [<'(l, Ident s); rest = parse_qualified_type_rest tpenv >] -> s ^ rest
 and
-  parse_super_class= parser
-    [<'(_, Kwd "extends"); s = parse_qualified_type >] -> s 
+  parse_super_class tpenv = parser
+    [<'(l, Kwd "extends"); s = parse_qualified_type tpenv>] -> s
   | [<>] -> "java.lang.Object"
 and
-  parse_interfaces= parser
+  parse_interfaces tpenv = parser
   [< '(_, Kwd "implements"); is = rep_comma (parser 
-    [< i = parse_qualified_type; e=parser
+    [< i = parse_qualified_type tpenv; e=parser
       [<>]->(i)>] -> e); '(_, Kwd "{") >] -> is
 | [<'(_, Kwd "{")>]-> []
 and
-  parse_extended_interfaces= parser
+  parse_extended_interfaces tpenv = parser
   [< '(_, Kwd "extends"); is = rep_comma (parser 
-    [< i = parse_qualified_type; e=parser
+    [< i = parse_qualified_type tpenv; e=parser
       [<>]->(i)>] -> e); '(_, Kwd "{") >] -> is
 | [<'(_, Kwd "{")>]-> []
 and
@@ -292,10 +290,10 @@ and
 | [<'(_, Kwd "protected")>] -> Protected
 | [<>] -> Package
 and
-  parse_java_members cn= parser
+  parse_java_members cn tpenv = parser
   [<'(_, Kwd "}")>] -> []
-| [< '(_, Kwd "/*@"); mems1 = parse_ghost_java_members cn; mems2 = parse_java_members cn >] -> mems1 @ mems2
-| [< m=parse_java_member cn;mr=parse_java_members cn>] -> m::mr
+| [< '(_, Kwd "/*@"); mems1 = parse_ghost_java_members cn; mems2 = parse_java_members cn tpenv >] -> mems1 @ mems2
+| [< m=parse_java_member cn tpenv;mr=parse_java_members cn tpenv>] -> m::mr
 and
   parse_ghost_java_members cn = parser
   [< '(_, Kwd "@*/") >] -> []
@@ -333,8 +331,13 @@ and parse_array_dims t = parser
   [< '(l, Kwd "["); '(_, Kwd "]"); t = parse_array_dims (ArrayTypeExpr (l, t)) >] -> t
 | [< >] -> t
 and id x = parser [< >] -> x
-and parse_java_modifier = parser [< '(_, Kwd "public") >] -> VisibilityModifier(Public) | [< '(_, Kwd "protected") >] -> VisibilityModifier(Protected) | [< '(_, Kwd "private") >] -> VisibilityModifier(Private) | [< '(_, Kwd "static") >] -> StaticModifier | [< '(_, Kwd "final") >] -> FinalModifier | [< '(_, Kwd "abstract") >] -> AbstractModifier
-and parse_java_member cn = parser
+and parse_java_modifier = parser [< '(l, Kwd "public") >] -> VisibilityModifier(Public)
+  | [< '(l, Kwd "protected") >] -> VisibilityModifier(Protected)
+  | [< '(l, Kwd "private") >] -> VisibilityModifier(Private) 
+  | [< '(l, Kwd "static") >] -> StaticModifier
+  | [< '(l, Kwd "final") >] -> FinalModifier
+  | [< '(l, Kwd "abstract") >] -> AbstractModifier
+and parse_java_member cn tpenv = parser
   [< modifiers = rep parse_java_modifier;
      binding = (fun _ -> if List.mem StaticModifier modifiers then Static else Instance);
      final = (fun _ -> List.mem FinalModifier modifiers);
@@ -346,9 +349,13 @@ and parse_java_member cn = parser
        [< '(l, Ident x);
           member = parser
             [< (ps, co, ss) = parse_method_rest l >] ->
-            let ps = List.map (fun (texpr, s) -> (type_param_erasure_in_scope texpr, s))
-                (if binding = Instance then (IdentTypeExpr (l, None, cn), "this")::ps else ps) in
-            MethMember (Meth (l, Real, t, x, ps, co, ss, binding, vis, abstract))
+            let t' = match t with 
+              Some(rt) -> Some(type_argument_erasure_in_scope rt tpenv) 
+              | None -> None in
+            let ps = List.map (fun (texpr, s) -> (type_argument_erasure_in_scope texpr tpenv, s))
+                (if binding = Instance then (IdentTypeExpr (l, None, cn),"this")::ps 
+                else ps) in
+            MethMember (Meth (l, Real, t', x, ps, co, ss, binding, vis, abstract))
           | [< t = id (match t with None -> raise (ParseException (l, "A field cannot be void.")) | Some(t) -> t);
                tx = parse_array_braces t;
                init = opt (parser [< '(_, Kwd "="); e = parse_declaration_rhs tx >] -> e);
@@ -584,7 +591,9 @@ and parse_preserved_by_clauses = parser
 and parse_preserved_by_clause = parser
   [< '(l, Kwd "preserved_by"); '(_, Ident an); '(_, Kwd "("); xs = rep_comma (parser [< '(_, Ident x) >] -> x); '(_, Kwd ")");
      ss = parse_block >] -> PreservedByClause (l, an, xs, ss)
-and parse_type_params_free = parser [< '(_, Kwd "<"); xs = rep_comma (parser [< '(_, Ident x) >] -> x); '(_, Kwd ">") >] -> xs
+and parse_type_params_free = parser 
+  [< '(_, Kwd "<"); xs = rep_comma (parser [< '(_, Ident x) >] -> x); '(_, Kwd ">") >] -> xs
+  |[< >] -> []
 and parse_type_params_general = parser
   [< xs = parse_type_params_free >] -> xs
 | [<
@@ -608,44 +617,34 @@ and type_params_parse_and_push _ =
         match xs with
          | Some(params) -> params
          | None -> []
-and type_param_is_in_scope arg =
-    let rec is_in_scope_core arg params =
-      match params with
-      | Some(ps)::rest ->
-          if List.mem arg ps then
-            true
-          else
-            is_in_scope_core arg rest
-      | None::rest -> is_in_scope_core arg rest
-      | []-> false
-    in is_in_scope_core arg !type_params_in_scope
-and type_param_check_in_scope l arg =
-    if not (type_param_is_in_scope arg) then
+and type_arg_check_in_scope l arg tpenv =
+    if not (List.mem arg tpenv) then
       raise (ParseException (l, "Type parameter is not in scope"));
-and type_param_check_texpr_in_scope texpr =
+and type_argument_check_texpr_in_scope texpr tpenv =
     match texpr with
-    | PtrTypeExpr (l, targ) -> type_param_check_texpr_in_scope targ
-    | ArrayTypeExpr (l, targ) -> type_param_check_texpr_in_scope targ
-    | StaticArrayTypeExpr (l, targ, i) -> type_param_check_texpr_in_scope targ
-    | IdentTypeExpr (l, pkgn, n) -> type_param_check_in_scope l n
-    | ConstructedTypeExpr (l, n, targs) -> type_param_check_in_scope l n;
-                                           List.iter type_param_check_texpr_in_scope targs;
+    | PtrTypeExpr (l, targ) -> type_argument_check_texpr_in_scope targ tpenv
+    | ArrayTypeExpr (l, targ) -> type_argument_check_texpr_in_scope targ tpenv
+    | StaticArrayTypeExpr (l, targ, i) -> type_argument_check_texpr_in_scope targ tpenv
+    | IdentTypeExpr (l, pkgn, n) -> type_arg_check_in_scope l n tpenv
+    | ConstructedTypeExpr (l, n, targs) -> 
+        List.iter (fun (targ) -> type_argument_check_texpr_in_scope targ tpenv) targs;
+        type_arg_check_in_scope l n tpenv                               
     | _ -> ()
-and type_param_translate_in_scope p =
-    if type_param_is_in_scope p then
+and type_argument_translate_in_scope p tpenv =
+    if (List.mem p tpenv) then
       "java.lang.Object"
     else
       p
-and type_param_erasure_in_scope texpr =
-    match texpr with
-    | PtrTypeExpr (l, targ) -> PtrTypeExpr (l, type_param_erasure_in_scope targ)
-    | ArrayTypeExpr (l, targ) -> ArrayTypeExpr (l, type_param_erasure_in_scope targ)
-    | StaticArrayTypeExpr (l, targ, i) -> StaticArrayTypeExpr (l, type_param_erasure_in_scope targ, i)
-    | IdentTypeExpr (l, pkgn, n) -> IdentTypeExpr (l, pkgn, type_param_translate_in_scope n)
-    | ConstructedTypeExpr (l, n, targs) ->
-        List.iter type_param_check_texpr_in_scope targs;
-        IdentTypeExpr (l, None, type_param_translate_in_scope n)
-    | _ -> texpr
+and type_argument_erasure_in_scope t tpenv =
+    match t with
+    | PtrTypeExpr (l, targ) -> PtrTypeExpr (l, type_argument_erasure_in_scope targ tpenv)
+    | ArrayTypeExpr (l, targ) -> ArrayTypeExpr (l, type_argument_erasure_in_scope targ tpenv)
+    | StaticArrayTypeExpr (l, targ, i) -> StaticArrayTypeExpr (l, type_argument_erasure_in_scope targ tpenv, i)
+    | IdentTypeExpr (l, pkgn, n) -> IdentTypeExpr (l, pkgn, type_argument_translate_in_scope n tpenv)
+    | ConstructedTypeExpr (l, n, targs) -> 
+      List.iter (fun targ -> type_argument_check_texpr_in_scope targ tpenv) targs;
+      IdentTypeExpr (l, None, type_argument_translate_in_scope n tpenv)
+    | _ -> t
 and parse_func_rest k t v = parser
   [<
     '(l, Ident g);

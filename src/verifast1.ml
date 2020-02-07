@@ -1135,9 +1135,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match ds with
         [] -> idm
       | (Inductive (l, i, tparams, ctors))::ds -> let n=full_name pn i in
+        Printf.printf "inductivedeclmap added: %s \n" n;
         if n = "bool" || n = "boolean" || n = "int" || List.mem_assoc n idm || List.mem_assoc n inductivemap0 then
           static_error l "Duplicate datatype name." None
-        else
+        else 
           iter pn ((n, (l, tparams, ctors))::idm) ds
       | _::ds -> iter pn idm ds
     in
@@ -1279,6 +1280,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 in
                 check_interfs interfs
               in
+              Printf.printf "Adding %s to interfacemap \n" i;
               iter (((i, (l, fields, meths, pred_specs, interfs, pn, ilist, tparams))::ifdm), classlist) rest todo
             with Not_found ->
               iter (ifdm, classlist) rest ((List.hd ds)::todo)
@@ -1419,22 +1421,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   | None -> static_error l ("No such type parameter, inductive datatype, class, interface, or function type: " ^ full_name) None
       end
     | ConstructedTypeExpr (l, id, targs) ->
-      (* Inductive class or interface*)
       begin
-      match resolve Ghost (pn,ilist) l id (classmap_arities @ interfmap_arities) with
-        Some (id, (ld, n)) ->
-          if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
-          reportUseSite DeclKind_InductiveType ld l;
-          InductiveType (id, List.map check targs)
-        | None -> (* Inductive datatype *)
-          begin
           match resolve Ghost (pn,ilist) l id inductive_arities with
           Some (id, (ld, n)) ->
             if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
             reportUseSite DeclKind_InductiveType ld l;
             InductiveType (id, List.map check targs)
           | None -> static_error l ("No such inductive datatype. " ^ pn ^ "." ^ id) None
-          end
       end
     | StructTypeExpr (l, sn, Some _) ->
       static_error l "A struct type with a body is not supported in this position." None
