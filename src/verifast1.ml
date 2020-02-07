@@ -1243,6 +1243,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Some f -> Some f 
     | None -> resolve Ghost (pn, imports) l name map
 
+  let resolve2' ghost (pn, imports) l name map0 map1 =
+    match resolve ghost (pn, imports) l name map0 with 
+    | Some f -> Some f 
+    | None -> resolve ghost (pn, imports) l name map1 
+
   let search2' ghost x (pn,imports) xys1 xys2 =
     match search' ghost x (pn,imports) xys1 with
       None -> search' ghost x (pn,imports) xys2
@@ -1358,9 +1363,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let classmap_arities =
     List.map (fun (cn, (l, _, _, _, _, _, _, tparams, _, _, _, _)) -> (cn, (l, List.length tparams))) classmap1
+    @ List.map (fun (cn, {cl=l; ctpenv=tparams}) -> (cn, (l, List.length tparams))) classmap0
 
   let interfmap_arities =
     List.map (fun (cn, (l, _, _, _, _, _, _, tparams)) -> (cn, (l, List.length tparams))) interfmap1
+    @ List.map (fun (cn, InterfaceInfo (l, _, _, _, _, tparams)) -> (cn, (l, List.length tparams))) interfmap0
+    
 
   (* Region: check_pure_type: checks validity of type expressions *)
   let check_pure_type_core typedefmap1 (pn,ilist) tpenv te =
@@ -1411,36 +1419,22 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   | None -> static_error l ("No such type parameter, inductive datatype, class, interface, or function type: " ^ full_name) None
       end
     | ConstructedTypeExpr (l, id, targs) ->
-      begin match (search2' Real id (pn,ilist) classmap1 classmap0) with
-          Some s -> 
-            (*Class exists in the classmap, now check if the amount of type arguments match, then typecheck the type arguments *)
-            begin
-              match resolve Ghost (pn,ilist) l id classmap_arities with
-                Some (id, (ld, n)) ->
-                if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
-                reportUseSite DeclKind_InductiveType ld l;
-                InductiveType (id, List.map check targs)
-                | None -> static_error l "No such inductive datatype in classmap." None
-            end
-        | None -> match (search' Real id (pn,ilist) interfmap1) with
-          Some s-> (*Type is an interface*)
-            begin
-              match resolve Ghost (pn,ilist) l id interfmap_arities with
-                Some (id, (ld, n)) ->
-                if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
-                reportUseSite DeclKind_InductiveType ld l;
-                InductiveType (id, List.map check targs)
-                | None -> static_error l "No such inductive datatype in interfmap." None
-            end
-          | None ->
-            begin
-              match resolve Ghost (pn,ilist) l id inductive_arities with
-                Some (id, (ld, n)) ->
-                if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
-                reportUseSite DeclKind_InductiveType ld l;
-                InductiveType (id, List.map check targs)
-                | None -> static_error l "No such inductive datatype." None
-            end
+      (* Inductive class or interface*)
+      begin
+      match resolve Ghost (pn,ilist) l id (classmap_arities @ interfmap_arities) with
+        Some (id, (ld, n)) ->
+          if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
+          reportUseSite DeclKind_InductiveType ld l;
+          InductiveType (id, List.map check targs)
+        | None -> (* Inductive datatype *)
+          begin
+          match resolve Ghost (pn,ilist) l id inductive_arities with
+          Some (id, (ld, n)) ->
+            if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
+            reportUseSite DeclKind_InductiveType ld l;
+            InductiveType (id, List.map check targs)
+          | None -> static_error l ("No such inductive datatype. " ^ pn ^ "." ^ id) None
+          end
       end
     | StructTypeExpr (l, sn, Some _) ->
       static_error l "A struct type with a body is not supported in this position." None
