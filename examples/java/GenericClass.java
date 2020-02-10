@@ -9,7 +9,10 @@ public class Foo {}
 
 public class HelloWorld 
 {
-  public static GenericClass<GenericClass<Foo> genericInstance;
+  public <T> void genericFunction(T argument){}
+  public static GenericClass<Foo> genericInstance;
+  
+  
   
   public static void main(String[] args) 
     //@ requires System_out(?o) &*& o != null;

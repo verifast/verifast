@@ -1427,7 +1427,15 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
             reportUseSite DeclKind_InductiveType ld l;
             InductiveType (id, List.map check targs)
-          | None -> static_error l ("No such inductive datatype. " ^ pn ^ "." ^ id) None
+          | None -> 
+            begin
+            match resolve Ghost (pn,ilist) l id classmap_arities with
+              Some (id, (ld, n)) ->
+              if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
+              reportUseSite DeclKind_InductiveType ld l;
+              InductiveType (id, List.map check targs)
+            | None -> static_error l ("No such inductive datatype. " ^ pn ^ "." ^ id) None
+            end
       end
     | StructTypeExpr (l, sn, Some _) ->
       static_error l "A struct type with a body is not supported in this position." None
