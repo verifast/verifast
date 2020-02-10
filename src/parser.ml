@@ -243,7 +243,7 @@ and
   >] -> ds
 and parse_qualified_type_rest tpenv = parser
   [< '(_, Kwd "."); '(_, Ident s); rest = parse_qualified_type_rest tpenv >] -> "." ^ s ^ rest
-| [< xs = type_params_parse >] -> List.iter (fun tparam -> if (List.mem tparam tpenv) then () else raise (ParseException (l, "Type parameter is not in scope"))) xs; ""
+| [< xs = parse_type_params_with_loc >] -> List.iter (fun (l,p) -> if (List.mem p tpenv) then () else raise (ParseException (l, "Type parameter is not in scope"))) xs; ""
 | [<>] -> ""
 and parse_qualified_type tpenv = parser
   [<'(l, Ident s); rest = parse_qualified_type_rest tpenv >] -> s ^ rest
