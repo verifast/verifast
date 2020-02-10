@@ -593,7 +593,6 @@ and parse_preserved_by_clause = parser
      ss = parse_block >] -> PreservedByClause (l, an, xs, ss)
 and parse_type_params_free = parser 
   [< '(_, Kwd "<"); xs = rep_comma (parser [< '(_, Ident x) >] -> x); '(_, Kwd ">") >] -> xs
-  |[< >] -> []
 and parse_type_params_general = parser
   [< xs = parse_type_params_free >] -> xs
 | [<
@@ -1243,6 +1242,7 @@ and
                     [< args0 = parse_patlist >] -> 
                     begin match tp with
                       IdentTypeExpr(_, pac, cn) -> NewObject (l, (match pac with None -> "" | Some(pac) -> pac ^ ".") ^ cn, List.map (function LitPat e -> e | _ -> raise (Stream.Error "Patterns are not allowed in this position")) args0)
+                    | ConstructedTypeExpr(loc, name, targs) -> raise (ParseException (loc, "Cant initialise constructed types yet: " ^ name))
                     | _ -> raise (ParseException (type_expr_loc tp, "Class name expected"))
                     end
                   | [< e = parse_new_array_expr_rest l tp >] -> e)
