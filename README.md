@@ -29,6 +29,10 @@ Simply extract the files from the archive to any location in your filesystem. Al
     bin/vfide examples/java/termination/Stack.jarsrc  # Launch the VeriFast IDE with the specified example
     ./test.sh  # Run the test suite (verifies all examples)
 
+**Note (macOS):** To avoid GateKeeper issues, before opening the downloaded archive, remove the `com.apple.quarantine` attribute by running
+
+    sudo xattr -d com.apple.quarantine ~/Downloads/verifast-nightly-osx.tar.gz
+
 Compiling
 ---------
 
