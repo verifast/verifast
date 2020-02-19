@@ -1427,15 +1427,20 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
             reportUseSite DeclKind_InductiveType ld l;
             InductiveType (id, List.map check targs)
-          | None -> 
-            begin
-            match resolve Ghost (pn,ilist) l id classmap_arities with
-              Some (id, (ld, n)) ->
+          | None -> match resolve Ghost (pn,ilist) l id interfmap_arities with
+            Some (id, (ld, n)) ->
               if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
               reportUseSite DeclKind_InductiveType ld l;
               InductiveType (id, List.map check targs)
-            | None -> static_error l ("No such inductive datatype. " ^ pn ^ "." ^ id) None
-            end
+            | None -> 
+              begin
+              match resolve Ghost (pn,ilist) l id classmap_arities with
+                Some (id, (ld, n)) ->
+                if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
+                reportUseSite DeclKind_InductiveType ld l;
+                InductiveType (id, List.map check targs)
+              | None -> static_error l ("No such inductive datatype. " ^ pn ^ "." ^ id) None
+              end
       end
     | StructTypeExpr (l, sn, Some _) ->
       static_error l "A struct type with a body is not supported in this position." None
@@ -2088,7 +2093,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (InductiveType (_, _) as tp, AnyType) -> if not (type_satisfies_contains_any_constraint true tp) then static_error l (msg ^ "Cannot cast type " ^ string_of_type tp ^ " to 'any' because it contains 'any' in a negative position.") None
     | (InductiveType (i1, args1), InductiveType (i2, args2)) when i1 = i2 ->
       List.iter2 (expect_type_core l msg inAnnotation) args1 args2
-    | _ -> if unify t t0 then () else static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".") None
+    | _ -> if unify t t0 then () else static_error l (msg ^ "Type mismatch for inductive type. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".") None
   
   let expect_type l (inAnnotation: bool option) t t0 = expect_type_core l "" inAnnotation t t0
   

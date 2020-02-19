@@ -1,4 +1,5 @@
 import java.util.ArrayList;
+import java.util.List;
 
 public class GenericClass<T>{
 	public T field;
@@ -19,7 +20,7 @@ public class HelloWorld
     //@ ensures true; 
   {
     System.out.println("Hello, World");
-    List<String> list = new ArrayList<String>();
+    GenericClass<String> list = new GenericClass<String>();
     list.add("hello");
     String s = list.get(0);   // no cast
   }
