@@ -1391,7 +1391,7 @@ and
 and
   parse_expr_suffix_rest e0 = parser
   [< '(l, Kwd "->"); '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, f)) >] -> e
-| [< '(l, Kwd ".") when language = CLang; '(_, Ident f); e = parse_expr_suffix_rest (Read (l, AddressOf(l, e0), f)) >] -> e
+| [< '(l, Kwd ".") when language = CLang; '(_, Ident f); e = parse_expr_suffix_rest (Select (l, e0, f)) >] -> e
 | [< '(l, Kwd ".");
      e = begin parser
        [< '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, f)) >] -> e

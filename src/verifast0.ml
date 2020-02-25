@@ -124,6 +124,8 @@ let string_of_context c =
   | Executing (h, env, l, s) -> "Heap: " ^ string_of_heap h ^ "\nEnv: " ^ string_of_env env ^ "\n" ^ string_of_loc l ^ ": " ^ s
   | PushSubcontext -> "Entering subcontext"
   | PopSubcontext -> "Leaving subcontext"
+  | Branching LeftBranch -> "Executing first branch"
+  | Branching RightBranch -> "Executing second branch"
 
 exception SymbolicExecutionError of string context list * loc * string * string option
 

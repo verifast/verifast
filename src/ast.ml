@@ -187,6 +187,12 @@ let is_arithmetic_type t =
     Int (_, _)|RealType|Float|Double|LongDouble -> true
   | _ -> false
 
+let is_inductive_type t =
+  (match t with
+  | InductiveType _ -> true
+  | _ -> false
+  )
+
 type prover_type = ProverInt | ProverBool | ProverReal | ProverInductive (* ?prover_type *)
 
 class predref (name: string) (domain: type_ list) (inputParamCount: int option) = (* ?predref *)
@@ -258,7 +264,9 @@ and
   | StringLit of loc * string (* string literal *)
   | ClassLit of loc * string (* class literal in java *)
   | Read of loc * expr * string (* lezen van een veld; hergebruiken voor java field access *)
+  | Select of loc * expr * string (* reading a field in C; Java uses Read *)
   | ArrayLengthExpr of loc * expr
+  (* Expression which returns the value of a field of an object *)
   | WRead of
       loc *
       expr *
@@ -268,6 +276,14 @@ and
       bool (* static *) *
       constant_value option option ref *
       ghostness
+  (* Expression which returns the value of a field of
+   * a struct that is not an object - only for C *)
+  | WSelect of
+      loc *
+      expr *
+      string (* parent *) *
+      string (* field name *) *
+      type_ (* range *)
   (* Expression which returns the value of a field of an instance of an
    * inductive data type. *)
   | WReadInductiveField of
@@ -829,8 +845,10 @@ let rec expr_loc e =
   | Operation (l, op, es) -> l
   | WOperation (l, op, es, t) -> l
   | SliceExpr (l, p1, p2) -> l
-  | Read (l, e, f) -> l
+  | Read (l, e, f)
+  | Select (l, e, f) -> l
   | ArrayLengthExpr (l, e) -> l
+  | WSelect (l, _, _, _, _) -> l
   | WRead (l, _, _, _, _, _, _, _) -> l
   | WReadInductiveField(l, _, _, _, _, _) -> l
   | ReadArray (l, _, _) -> l
@@ -1012,9 +1030,11 @@ let expr_fold_open iter state e =
   | RealLit(l, n) -> state
   | StringLit (l, s) -> state
   | ClassLit (l, cn) -> state
-  | Read (l, e0, f) -> iter state e0
+  | Read (l, e0, f)
+  | Select (l, e0, f) -> iter state e0
   | ArrayLengthExpr (l, e0) -> iter state e0
   | WRead (l, e0, fparent, fname, frange, fstatic, fvalue, fghost) -> if fstatic then state else iter state e0
+  | WSelect (l, e0, fparent, fname, frange) -> iter state e0
   | WReadInductiveField (l, e0, ind_name, constr_name, field_name, targs) -> iter state e0
   | ReadArray (l, a, i) -> let state = iter state a in let state = iter state i in state
   | WReadArray (l, a, tp, i) -> let state = iter state a in let state = iter state i in state

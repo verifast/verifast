@@ -303,6 +303,7 @@ let _ =
       | RealLit(_, real) -> Num.string_of_num real
       | StringLit(_, str) -> "\"" ^ str ^ "\""
       | Read(_, expr_in, str) -> string_of_expr expr_in ^ "." ^ str
+      | Select(_, expr_in, str) -> string_of_expr expr_in ^ "." ^ str
       | ArrayLengthExpr(_, expr_in) -> "ArrayLength " ^ string_of_expr expr_in ^ ")"
       | ReadArray(_, array_expr, index_expr) -> string_of_expr array_expr ^ "[" ^ string_of_expr index_expr ^ "]" 
       | Deref(_, expr_in) -> "*" ^ string_of_expr expr_in
@@ -572,11 +573,14 @@ let _ =
                     | StringLit(_, pattern_str) when str = pattern_str -> true, []
                     | _ -> false, []
                 end
-              | Read(_, expr_in, str) ->
+              | Read(_, expr_in, str)
+              | Select(_, expr_in, str) ->
                 begin
                   let pattern_inside = if (exactMacthOnly) then false, [] else check_expr_for_pattern expr_in pattern false in
                   match pattern with
-                    | Read(_, pattern_expr_in, pattern_str) when str = pattern_str -> combine_or pattern_inside (check_expr_for_pattern expr_in pattern_expr_in true)
+                    | Read(_, pattern_expr_in, pattern_str)
+                    | Select(_, pattern_expr_in, pattern_str)
+                      when str = pattern_str -> combine_or pattern_inside (check_expr_for_pattern expr_in pattern_expr_in true)
                     | _ -> pattern_inside
                 end
               | ArrayLengthExpr(_, expr_in) -> 

@@ -1047,8 +1047,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | TruncatingExpr (_, e) -> expr_mark_addr_taken e locals
     | AddressOf(_, (Var (_, x) | WVar (_, x, _))) -> mark_if_local locals x
     | Read(_, e, _) -> expr_mark_addr_taken e locals
+    | Select(_, e, f) -> expr_mark_addr_taken e locals
     | ArrayLengthExpr(_, e) -> expr_mark_addr_taken e locals
     | WRead(_, e, _, _, _, _, _, _) -> expr_mark_addr_taken e locals
+    | WSelect(_, e, _, _, _) -> expr_mark_addr_taken e locals
     | ReadArray(_, e1, e2) -> (expr_mark_addr_taken e1 locals); (expr_mark_addr_taken e2 locals)
     | WReadArray(_, e1, _, e2) -> (expr_mark_addr_taken e1 locals); (expr_mark_addr_taken e2 locals)
     | Deref(_, e) -> expr_mark_addr_taken e locals
@@ -1179,6 +1181,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Read(_, e, _) -> expr_address_taken e
     | ArrayLengthExpr(_, e) -> expr_address_taken e
     | WRead(_, e, _, _, _, _, _, _) -> expr_address_taken e
+    | WSelect(_, e, _, _, _) -> expr_address_taken e
     | ReadArray(_, e1, e2) -> (expr_address_taken e1) @ (expr_address_taken e2)
     | WReadArray(_, e1, _, e2) -> (expr_address_taken e1) @ (expr_address_taken e2)
     | Deref(_, e) -> (expr_address_taken e)
@@ -1763,6 +1766,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * constant_value option option ref
       * ghostness
       * termnode (* field symbol *)
+    | ValueField of
+        loc
+      * lvalue
+      * symbol (* getter function *)
+      * symbol (* setter function *)
     | ArrayElement of
         loc
       * termnode (* array *)
@@ -1858,7 +1866,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       assume (ctxt#mk_eq (ctxt#mk_app arraylength_symbol [at]) length) $. fun () ->
       cont (Chunk ((array_slice_symb, true), [elem_tp], real_unit, [at; ctxt#mk_intlit 0; length; elems], None)::h) env at
     in
-    let lhs_to_lvalue h env lhs cont =
+    let rec lhs_to_lvalue h env lhs cont =
       match lhs with
         WVar (l, x, scope) -> cont h env (LValues.Var (l, x, scope))
       | WRead (l, w, fparent, fname, tp, fstatic, fvalue, fghost) ->
@@ -1870,6 +1878,18 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             eval_h h env w (fun h env target -> cont h env (Some target))
         end $. fun h env target ->
         cont h env (LValues.Field (l, target, fparent, fname, tp, fvalue, fghost, f_symb))
+      | WSelect (l, w, fparent, fname, tp) ->
+        let (_, _, getters, setters) = List.assoc fparent struct_accessor_map in
+        let getter = List.assoc fname getters in
+        let setter = List.assoc fname setters in
+        lhs_to_lvalue h env w $. fun h env w ->
+        cont h env (LValues.ValueField (l, w, getter, setter))
+      | WReadInductiveField (l, w, data_type_name, constructor_name, field_name, targs) ->
+        let (_, _, _, getters, setters, _, _) = List.assoc data_type_name inductivemap in
+        let getter = List.assoc field_name getters in
+        let setter = List.assoc field_name setters in
+        lhs_to_lvalue h env w $. fun h env w ->
+        cont h env (LValues.ValueField (l, w, getter, setter))
       | WReadArray (l, arr, elem_tp, i) ->
         eval_h h env arr $. fun h env arr ->
         eval_h h env i $. fun h env i ->
@@ -1879,7 +1899,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         cont h env (LValues.Deref (l, target, pointeeType))
       | _ -> static_error (expr_loc lhs) "Cannot assign to this expression." None
     in
-    let read_lvalue h env lvalue cont =
+    let rec read_lvalue h env lvalue cont =
       match lvalue with
         LValues.Var (l, x, scope) ->
         eval_h h env (WVar (l, x, scope)) cont
@@ -1892,6 +1912,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           consume_chunk rules h [] [] [] l (f_symb, true) [] real_unit dummypat (Some 0) [dummypat] $. fun chunk h _ [value] _ _ _ _ ->
           cont (chunk::h) env value
         end
+      | LValues.ValueField (l, w, getter, setter) ->
+        read_lvalue h env w $. fun h env x ->
+        cont h env (ctxt#mk_app getter [x])
       | LValues.ArrayElement (l, arr, elem_tp, i) when language = Java ->
         let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
         consume_chunk rules h [] [] [] l (array_element_symb(), true) [elem_tp] real_unit dummypat (Some 2) pats $. fun chunk h _ [_; _; value] _ _ _ _ ->
@@ -1919,6 +1942,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let pats = List.map (fun t -> TermPat t) targets @ [dummypat] in
         consume_chunk rules h [] [] [] l (f_symb, true) [] real_unit real_unit_pat (Some 1) pats $. fun _ h _ _ _ _ _ _ ->
         cont (Chunk ((f_symb, true), [], real_unit, targets @ [value], None)::h) env
+      | LValues.ValueField (l, w, getter, setter) ->
+        read_lvalue h env w $. fun h env x ->
+        let x = ctxt#mk_app setter [x; value] in
+        write_lvalue h env w x cont
       | LValues.ArrayElement (l, arr, elem_tp, i) when language = Java ->
         has_heap_effects();
         if pure then static_error l "Cannot write in a pure context." None;

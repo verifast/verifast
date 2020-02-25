@@ -352,28 +352,10 @@ int get_foo(struct data* data)
 /*@
 
 inductive DataCarrier =
-  | DataCarrier(int, int);
-
-fixpoint int GetFoo(DataCarrier dc)
-{
-  switch ( dc )
-  {
-    case DataCarrier(x, y):
-      return x;
-  }
-}
-
-fixpoint int GetBar(DataCarrier dc)
-{
-  switch ( dc )
-  {
-    case DataCarrier(x, y):
-      return y;
-  }
-}
+  | DataCarrier(int Foo, int Bar);
 
 predicate_family_instance Ownership(destroy_data)(struct data* data, DataCarrier dc) =
-  Data(data, GetFoo(dc), GetBar(dc));
+  Data(data, dc.Foo, dc.Bar);
 
 @*/
 
@@ -401,7 +383,10 @@ void check()
   
   s = size(stack);
   //@ assert Stack(stack, _, ?S1);
-  //@ SizePush(data, DataCarrier(1, 2), S0);
+  //@ DataCarrier dc;
+  //@ dc.Foo = 1;
+  //@ dc.Bar = 2;
+  //@ SizePush(data, dc, S0);
   //@ assert s == 1;
   
   data = create_data(2, 3);
