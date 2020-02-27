@@ -8,6 +8,8 @@ open Lexer
 open Parser
 open Verifast0
 open Ast
+open SExpressions
+open SExpressionEmitter
 
 type callbacks = {
   reportRange: range_kind -> loc0 -> unit;
@@ -1398,7 +1400,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         InductiveType (s, [])
       | None ->
       match (search2' Real id (pn,ilist) classmap1 classmap0) with
-        Some s -> ObjType s
+        Some s -> Printf.printf "%s\n" s; ObjType s
       | None ->
       match (search2' Real id (pn,ilist) interfmap1 interfmap0) with
         Some s -> ObjType s
@@ -1424,19 +1426,19 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin
           match resolve Ghost (pn,ilist) l id inductive_arities with
           Some (id, (ld, n)) ->
-            if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
+            if n <> List.length targs then static_error l "Incorrect number of type arguments (inductive arities)." None;
             reportUseSite DeclKind_InductiveType ld l;
             InductiveType (id, List.map check targs)
           | None -> match resolve Ghost (pn,ilist) l id interfmap_arities with
             Some (id, (ld, n)) ->
-              if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
+              if n <> List.length targs then static_error l "Incorrect number of type arguments (interface)." None;
               reportUseSite DeclKind_InductiveType ld l;
               InductiveType (id, List.map check targs)
             | None -> 
               begin
               match resolve Ghost (pn,ilist) l id classmap_arities with
                 Some (id, (ld, n)) ->
-                if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
+                if n <> List.length targs then static_error l "Incorrect number of type arguments (classmap)." None;
                 reportUseSite DeclKind_InductiveType ld l;
                 InductiveType (id, List.map check targs)
               | None -> static_error l ("No such inductive datatype. " ^ pn ^ "." ^ id) None
@@ -2092,15 +2094,23 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (PureFuncType (t1, t2), PureFuncType (t10, t20)) -> expect_type_core l msg inAnnotation t10 t1; expect_type_core l msg inAnnotation t2 t20
     | (InductiveType (_, _) as tp, AnyType) -> if not (type_satisfies_contains_any_constraint true tp) then static_error l (msg ^ "Cannot cast type " ^ string_of_type tp ^ " to 'any' because it contains 'any' in a negative position.") None
     | (InductiveType (i1, args1), InductiveType (i2, args2)) when i1 = i2 ->
+      Printf.printf "Inductive type comparison: %s ---> %s \n" 
+        (string_of_sexpression (sexpr_of_type_ (InductiveType(i1,args1))))
+        (string_of_sexpression (sexpr_of_type_ (InductiveType(i2,args2))));
       List.iter2 (expect_type_core l msg inAnnotation) args1 args2
-    | _ -> if unify t t0 then () else static_error l (msg ^ "Type mismatch for inductive type. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".") None
+    | _ -> if unify t t0 then () else if 
+      (String.compare (string_of_type t) "class java.lang.String") == 0 &&
+      (String.compare (string_of_type t0) "T") == 0 
+        then failwith "we have stacktrace bois" 
+        else static_error l (msg ^ "Type mismatch for inductive type. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".") None
   
   let expect_type l (inAnnotation: bool option) t t0 = expect_type_core l "" inAnnotation t t0
   
   let is_assignable_to (inAnnotation: bool option) t t0 =
     try expect_type dummy_loc inAnnotation t t0; true with StaticError (l, msg, url) -> false (* TODO: Consider eliminating this hack *)
   
-  let is_assignable_to_sign (inAnnotation: bool option) sign sign0 = for_all2 (is_assignable_to inAnnotation) sign sign0
+  let is_assignable_to_sign (inAnnotation: bool option) sign sign0 = 
+    for_all2 (is_assignable_to inAnnotation) sign sign0
   
   let convert_provertype_expr e proverType proverType0 =
     if proverType = proverType0 then e else ProverTypeConversion (proverType, proverType0, e)
@@ -3268,13 +3278,30 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         try_qualified_call tn es args fb (fun () -> static_error l "No such method" None)
       end
-    | NewObject (l, cn, args) ->
+    | NewObject (l, cn, args, targs) ->
+      Printf.printf "resolving NewObject %s \n" cn;
       begin match resolve Real (pn,ilist) l cn classmap with
         Some (cn, {cabstract}) ->
         if cabstract then
           static_error l "Cannot create instance of abstract class." None
-        else 
-          (NewObject (l, cn, args), ObjType cn, None)
+        else
+          List.iter (fun targ -> 
+            match targ with
+              IdentTypeExpr(l,p,n) -> 
+                begin match resolve Real (pn,ilist) l n classmap with
+                  Some c -> ()
+                  | None -> static_error l ("Type argument: " ^ n ^ " is not a valid type.") None
+                end
+              | t -> static_error l ("No support for type arguments of type expression: " ^ (type_expr_type_str t)) None
+          ) targs;
+          begin
+            match targs with
+              [] -> (NewObject (l, cn, args, targs), ObjType cn, None)
+              | _ -> (NewObject (l, cn, args, targs), 
+                InductiveType(cn, 
+                  (List.map (fun targ -> check_pure_type (pn,ilist) [] targ) targs)), 
+                None)
+          end
       | None -> static_error l "No such class" None
       end
     | ReadArray(l, arr, index) ->
@@ -3423,6 +3450,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let x = next_temp_var_name () in
       let (w2, t2, _) = check_with_extra_bindings [(x, t1)] (Operation (l, op, [Var (l, x); e2])) in
       let w2', _, _ = check (CastExpr (l, ManifestTypeExpr (l, t1), TypedExpr (w2, t2))) in
+      Printf.printf ("check_expr assign operator expr for e1: %s\n and e2: %s.\n")
+        (string_of_sexpression (sexpr_of_expr e1))
+        (string_of_sexpression (sexpr_of_expr e2));
       (WAssignOpExpr (l, w1, x, w2', postOp), t1, None)
     | InitializerList (l, es) ->
       let rec to_list_expr es =
@@ -3465,8 +3495,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
        * checker changes the value").
        *)
       let (w, t, value) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
-      let check () = begin match (t, t0) with
-        | _ when t = t0 -> w
+      let check () = Printf.printf "check_expr_t_core check: t = %s and t0= %s \n" 
+        (string_of_sexpression (sexpr_of_type_ t))
+        (string_of_sexpression (sexpr_of_type_ t0));
+        begin match (t, t0) with
+        | _ when t = t0 -> Printf.printf "objects are equal, applying returned expression\n"; w
         | (ObjType _, ObjType _) when isCast -> w
         | (PtrType _, Int (_, _)) when isCast -> w
         | (Int (_, _), PtrType _) when isCast -> w

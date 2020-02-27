@@ -11,6 +11,8 @@ open Verifast0
 open Verifast1
 open Assertions
 open Verify_expr
+open SExpressions
+open SExpressionEmitter
 
 exception FileNotFound of string
 
@@ -624,6 +626,10 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             produce_c_object l real_unit addr t eval_h init true true h env $. fun h env ->
             iter h ((x, envTp)::tenv) ghostenv ((x, addr)::env) xs
           in
+          (* Printf.printf "Decl Statement for Type expression: %s, and expression: %s.\n and type %s" 
+            (type_expr_type_str te) 
+            (match e with None -> "None" | Some (e) -> string_of_sexpression (sexpr_of_expr e))
+            (string_of_sexpression (sexpr_of_type_ t));*)
           match t with
             StaticArrayType (elemTp, elemCount) ->
             produce_object t
