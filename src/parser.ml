@@ -1242,18 +1242,10 @@ and
                     [< args0 = parse_patlist >] -> 
                     begin match tp with
                       IdentTypeExpr(_, pac, cn) -> 
-                        NewObject (l, 
-                          (match pac with None -> "" | Some(pac) -> pac ^ ".") ^ cn, 
-                          List.map (function LitPat e -> e | _ -> raise (Stream.Error "Patterns are not allowed in this position")) args0,
-                          []
-                        )
+                        NewObject (l, (match pac with None -> "" | Some(pac) -> pac ^ ".") ^ cn, List.map (function LitPat e -> e | _ -> raise (Stream.Error "Patterns are not allowed in this position")) args0)
                     | ConstructedTypeExpr(loc, name, targs) -> 
-                        NewObject (loc, 
-                          name, 
-                          List.map (function LitPat e -> e | _ -> raise (Stream.Error "Patterns are not allowed in this position")) args0,
-                          targs
-                        )
-                    | _ -> raise (ParseException (type_expr_loc tp, "Class name expected: " ^ (type_expr_type_str tp)))
+                        NewObject (loc, name, List.map (function LitPat e -> e | _ -> raise (Stream.Error "Patterns are not allowed in this position")) args0)
+                    | _ -> raise (ParseException (type_expr_loc tp, "Class name expected"))
                     end
                   | [< e = parse_new_array_expr_rest l tp >] -> e)
   >] -> res

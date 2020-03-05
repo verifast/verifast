@@ -9,8 +9,6 @@ open Parser
 open Verifast0
 open Verifast1
 open Assertions
-open SExpressions
-open SExpressionEmitter
 
 module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
@@ -1535,10 +1533,6 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           mk_varargs h env [] pats
         | SrcPat (LitPat e)::pats, (x, tp0)::ps ->
           let tp = instantiate_type tpenv tp0 in
-          Printf.printf "srcpat with tp %s and tp0 %s\n and expression %s.\n" 
-            (string_of_sexpression (sexpr_of_type_ tp)) 
-            (string_of_sexpression (sexpr_of_type_ tp0))
-            (string_of_sexpression (sexpr_of_expr e));
           eval_h h env (SrcPat (LitPat (box (check_expr_t (pn,ilist) tparams tenv e tp) tp tp0))) $. fun h env t ->
           iter h env (t::ts) pats ps
         | TermPat t::pats, _::ps ->
@@ -2055,46 +2049,17 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           check_call targs h args $. fun h env retval ->
           cont (chunk::h) env retval
       end
-    | NewObject (l, cn, args, targs) ->
+    | NewObject (l, cn, args) ->
       inheritance_check cn l;
       if pure then static_error l "Object creation is not allowed in a pure context" None;
-      let {cctors; ctpenv} = List.assoc cn classmap in
+      let {cctors} = List.assoc cn classmap in
       let args' = List.map (fun e -> check_expr (pn,ilist) tparams tenv e) args in
       let argtps = List.map snd args' in
-      let targtps = List.map (fun targexpr -> check_pure_type (pn,ilist) [] targexpr) targs in
-      let consmapTArgsReplaced =  
-        List.map (fun (sign,cinfo) -> (*Iterate ovr constructors*)
-          (List.map (fun tp -> match tp with (*Iterate over arguments*)
-            TypeParam(s) -> 
-              let index =  
-                match (index_of s ctpenv 0) with
-                  Some(i) -> i
-                  | None -> static_error l ("Type param" ^ s ^ " not found in type paramter environment") None 
-                in 
-                List.nth targtps index (* replace type parameters with the given type arguments *)
-            | other -> other) sign
-          , cinfo)
-        ) cctors in
-      let consmap' = 
-        let argstps_str = (String.concat ", " (List.map (fun tp -> string_of_sexpression (sexpr_of_type_ tp)) argtps)) in
-        let targstps_str = (String.concat ", " (List.map (fun tp -> string_of_sexpression (sexpr_of_type_ tp)) targtps)) in
-        Printf.printf "arguments: %s and type arguments: %s and constructors: %s \n" argstps_str targstps_str (
-          String.concat 
-            " --- " 
-            (List.map (fun (sign,_) -> String.concat "," (List.map (fun t -> string_of_sexpression (sexpr_of_type_ t)) sign)) 
-              consmapTArgsReplaced
-            )
-        );
-        List.filter (fun (sign, _) -> 
-        is_assignable_to_sign (Some pure) argtps sign) consmapTArgsReplaced in
-      Printf.printf "Creating object of type: %s \n" cn;
+      let consmap' = List.filter (fun (sign, _) -> is_assignable_to_sign (Some pure) argtps sign) cctors in
       begin match consmap' with
-        [] -> static_error l "No matching constructor (verify_expr)" None
+        [] -> static_error l "No matching constructor" None
       | [(sign, CtorInfo (lm, xmap, pre, pre_tenv, post, epost, terminates, ss, v))] ->
-        let obj = get_unique_var_symb (match xo with None -> "object" | Some x -> x) 
-          (match targtps with 
-            [] -> ObjType cn
-            | _ -> InductiveType(cn, targtps)) in
+        let obj = get_unique_var_symb (match xo with None -> "object" | Some x -> x) (ObjType cn) in
         assume_neq obj (ctxt#mk_intlit 0) $. fun () ->
         assume_eq (ctxt#mk_app get_class_symbol [obj]) (List.assoc cn classterms) $. fun () ->
         let is_upcall =
@@ -2102,7 +2067,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             Some (Some (_, rank)), RealMethodInfo (Some rank') -> rank < rank'
           | _ -> true
         in
-        check_correct h None None targtps args (lm, ctpenv, None, xmap, ["this", obj], pre, post, Some(epost), terminates, Static) is_upcall (Some cn) (fun h env _ -> cont h env obj)
+        check_correct h None None [] args (lm, [], None, xmap, ["this", obj], pre, post, Some(epost), terminates, Static) is_upcall (Some cn) (fun h env _ -> cont h env obj)
       | _ -> static_error l "Multiple matching overloads" None
       end
     | WMethodCall (l, tn, m, pts, args, fb) when m <> "getClass" ->

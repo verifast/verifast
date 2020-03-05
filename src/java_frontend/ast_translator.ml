@@ -364,18 +364,6 @@ and translate_class_tparams tparams =
       in name::res;
   | _ -> []
 
-  and translate_object_tparams tparams =
-  debug_print "translate_object_tparams";
-  match tparams with
-  | GEN.TypeParam(l, Identifier(sl,name), bounds) :: tail ->
-    let l'= translate_location l in
-    let res = translate_object_tparams tail
-      in IdentTypeExpr(
-        l',
-        None,
-        name)::res;
-  | _ -> []
-
 and translate_field_finality fin =
   debug_print "translate_field_finality";
   match fin with
@@ -822,10 +810,11 @@ and translate_expression expr =
       end
   | GEN.NewClass(l, tparams, typ, exprs) ->
       let l' = translate_location l in
+      if (List.length tparams <> 0) then
+        error l' "Generics should be erased before using this translator";
       let typ' = GEN.string_of_ref_type typ in
       let exprs' = List.map translate_expression exprs in
-      let tparams' = translate_object_tparams tparams in
-      VF.NewObject(l', typ', exprs', tparams')
+      VF.NewObject(l', typ', exprs')
   | GEN.NewArray(l, typ, dims, exprs) ->
       let l' = translate_location l in
       let typ' = translate_type typ in
