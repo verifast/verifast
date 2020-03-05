@@ -5,23 +5,16 @@ public class GenericClass<T>{
 	public T field;
 	public GenericClass(T f)
 	//@ requires true;
-    	//@ ensures this.field |-> f ; 
+    	//@ ensures true; 
 	{
 		field = f;
 	}
 	
-	public void add(T value) 
+	public void add(String value) 
 	//@ requires true;
     	//@ ensures true; 
-    	{
-    		field = value;
-    	}
-	
-	public T get()
-	//@ requires this.field |-> ?field;
-	//@ ensures result == field;
 	{
-		return field;
+	
 	}
 }
 
@@ -58,6 +51,6 @@ public class HelloWorld
     b.add("woowee");
     GenericClass<String> gc = new GenericClass<String>("foo");
     gc.add("hello");
-    String s = gc.get();   // no cast
+    //String s = list.get(0);   // no cast
   }
 }

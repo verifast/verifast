@@ -1008,7 +1008,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       let target = match e_opt with None -> List.assoc "this" env | Some e -> ev e in
       let index = ev index in
-      let types = ObjType (tn,[])::ObjType ("java.lang.Class",[])::List.map snd pmap in
+      let types = ObjType tn::ObjType "java.lang.Class"::List.map snd pmap in
       let pats = TermPat target::TermPat index::srcpats pats in
       consume_chunk_core rules h ghostenv env env' l (pred_symb, true) [] coef coefpat (Some 2) pats types types $. fun chunk h coef ts size ghostenv env env' ->
       check_dummy_coefpat l coefpat coef;
@@ -1347,7 +1347,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 [(outer_l, outer_symb, outer_nb_curried, outer_fun_sym, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds)] ->
                 let extra_conditions: expr list = List.map2 (fun cn e2 -> 
                     if language = Java then 
-                      WOperation(dummy_loc, Eq, [ClassLit(dummy_loc, cn); e2], ObjType ("java.lang.Class",[]))
+                      WOperation(dummy_loc, Eq, [ClassLit(dummy_loc, cn); e2], ObjType "java.lang.Class")
                     else 
                       WOperation(dummy_loc, Eq, [WVar(dummy_loc, cn, FuncName); e2], PtrType Void)
                 ) outer_actual_indices0 inner_formal_indices in

@@ -4,7 +4,7 @@ package java.util;
 
 fixpoint pair<t1, t2> update_fst<t1, t2>(t1 v, pair<t1, t2> s) {
     switch(s) {
-        case pair<t1,t2>(a, b): return pair<t1,t2>(v, b);
+        case pair(a, b): return pair(v, b);
     }
 }
 

@@ -110,7 +110,7 @@ type type_ = (* ?type_ *)
   | InductiveType of string * type_ list
   | PredType of string list * type_ list * int option * inductiveness (* if None, not necessarily precise; if Some n, precise with n input parameters *)
   | PureFuncType of type_ * type_  (* Curried *)
-  | ObjType of string * type_ list (*type arguments *)
+  | ObjType of string
   | ArrayType of type_
   | StaticArrayType of type_ * int (* for array declarations in C *)
   | BoxIdType (* box type, for shared boxes *)
@@ -303,8 +303,7 @@ and
       string (* method name *) *
       type_ list (* parameter types (not including receiver) *) *
       expr list (* args, including receiver if instance method *) *
-      method_binding *
-      type_ list (* type arguments *)
+      method_binding
   | NewArray of loc * type_expr * expr
   | NewObject of loc * string * expr list * type_expr list
   | NewArrayWithInitializer of loc * type_expr * expr list
@@ -640,8 +639,7 @@ and
       ((stmt list * loc (* Close brace *)) * int (*rank*)) option * 
       method_binding * 
       visibility *
-      bool (* is declared abstract? *) *
-      string list (*Type parameters *)
+      bool (* is declared abstract? *)
 and
   cons = (* ?cons *)
   | Cons of
@@ -836,7 +834,7 @@ let rec expr_loc e =
   | WPureFunValueCall (l, e, es) -> l
   | WFunPtrCall (l, g, args) -> l
   | WFunCall (l, g, targs, args) -> l
-  | WMethodCall (l, tn, m, pts, args, fb, targs) -> l
+  | WMethodCall (l, tn, m, pts, args, fb) -> l
   | NewObject (l, cn, args, targs) -> l
   | NewArray(l, _, _) -> l
   | NewArrayWithInitializer (l, _, _) -> l
@@ -1045,7 +1043,7 @@ let expr_fold_open iter state e =
   | WPureFunValueCall (l, e, args) -> iters state (e::args)
   | WFunCall (l, g, targs, args) -> iters state args
   | WFunPtrCall (l, g, args) -> iters state args
-  | WMethodCall (l, cn, m, pts, args, mb, targs) -> iters state args
+  | WMethodCall (l, cn, m, pts, args, mb) -> iters state args
   | NewObject (l, cn, args, targs) -> iters state args
   | NewArray (l, te, e0) -> iter state e0
   | NewArrayWithInitializer (l, te, es) -> iters state es
