@@ -67,7 +67,9 @@ let rec string_of_type t =
   | RealType -> "real"
   | InductiveType (i, []) -> i
   | InductiveType (i, targs) -> i ^ "<" ^ String.concat ", " (List.map string_of_type targs) ^ ">"
-  | ObjType l -> "class " ^ l
+  | ObjType (name, targs) -> "class " ^ name ^ begin match targs with 
+    [] -> "" 
+    | _ -> "<" ^ (String.concat ", " (List.map string_of_type targs)) ^ ">" end
   | StructType sn -> "struct " ^ sn
   | PtrType t -> string_of_type t ^ " *"
   | FuncType ft -> ft
