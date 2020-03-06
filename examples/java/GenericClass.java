@@ -20,7 +20,7 @@ public class HelloWorld
     //@ ensures true; 
   {
     System.out.println("Hello, World");
-    GenericClass<String> list = new GenericClass<String>();
+    GenericClass<String> list = new GenericClass<String>("fo");
     list.add("hello");
     String s = list.get(0);   // no cast
   }

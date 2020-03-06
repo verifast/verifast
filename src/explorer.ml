@@ -252,7 +252,7 @@ let _ =
         | FuncType(name) -> name
         | InductiveType(name, type_list) -> name ^ "(" ^ string_of_type_list type_list ^ ")" 
         | PureFuncType(type_1, type_2) -> "(" ^ string_of_type_ type_1 ^ ", " ^ string_of_type_ type_2 ^ ")"
-        | ObjType(name) -> name
+        | ObjType(name, _) -> name
         | ArrayType(type_in) -> string_of_type_ type_in ^ "[]"
         | StaticArrayType(type_in, nb_elems) -> string_of_type_ type_in ^ "[" ^ string_of_int nb_elems ^ "]"
         | TypeParam(name) -> name
@@ -406,7 +406,7 @@ let _ =
                 | _ -> false
             end
           | PureFuncType(type_in1, type_in2) -> (match pattern_type_ with PureFuncType(pattern_type_in1, pattern_type_in2) -> check_type_equal type_in1 pattern_type_in1 && check_type_equal type_in2 pattern_type_in2 | _ -> false)
-          | ObjType(name) -> (match pattern_type_ with ObjType(pattern_name) when name = pattern_name -> true | _ -> false) 
+          | ObjType(name, targs) -> (match pattern_type_ with ObjType(pattern_name, ptargs) when name = pattern_name -> check_type_equal_list targs ptargs | _ -> false) 
           | ArrayType(type_in) -> (match pattern_type_ with ArrayType(pattern_type_in) -> check_type_equal type_in pattern_type_in | _ -> false)
           | StaticArrayType(type_in, size) -> (match pattern_type_ with StaticArrayType(pattern_type_in, pattern_size) when size = pattern_size -> check_type_equal type_in pattern_type_in | _ -> false)
           | BoxIdType -> (match pattern_type_ with BoxIdType -> true | _ -> false)

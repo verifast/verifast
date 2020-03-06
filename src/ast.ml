@@ -110,7 +110,7 @@ type type_ = (* ?type_ *)
   | InductiveType of string * type_ list
   | PredType of string list * type_ list * int option * inductiveness (* if None, not necessarily precise; if Some n, precise with n input parameters *)
   | PureFuncType of type_ * type_  (* Curried *)
-  | ObjType of string
+  | ObjType of string * type_ list (* type arguments *)
   | ArrayType of type_
   | StaticArrayType of type_ * int (* for array declarations in C *)
   | BoxIdType (* box type, for shared boxes *)
@@ -303,9 +303,10 @@ and
       string (* method name *) *
       type_ list (* parameter types (not including receiver) *) *
       expr list (* args, including receiver if instance method *) *
-      method_binding
+      method_binding *
+      type_ list (* type arguments *)
   | NewArray of loc * type_expr * expr
-  | NewObject of loc * string * expr list
+  | NewObject of loc * string * expr list * type_expr list (*type arguments *)
   | NewArrayWithInitializer of loc * type_expr * expr list
   | IfExpr of loc * expr * expr * expr
   | SwitchExpr of
@@ -639,7 +640,8 @@ and
       ((stmt list * loc (* Close brace *)) * int (*rank*)) option * 
       method_binding * 
       visibility *
-      bool (* is declared abstract? *)
+      bool * (* is declared abstract? *)
+      string list (*type parameters*)
 and
   cons = (* ?cons *)
   | Cons of
@@ -834,8 +836,8 @@ let rec expr_loc e =
   | WPureFunValueCall (l, e, es) -> l
   | WFunPtrCall (l, g, args) -> l
   | WFunCall (l, g, targs, args) -> l
-  | WMethodCall (l, tn, m, pts, args, fb) -> l
-  | NewObject (l, cn, args) -> l
+  | WMethodCall (l, tn, m, pts, args, fb, targs) -> l
+  | NewObject (l, cn, args, targs) -> l
   | NewArray(l, _, _) -> l
   | NewArrayWithInitializer (l, _, _) -> l
   | IfExpr (l, e1, e2, e3) -> l
@@ -966,6 +968,30 @@ let type_expr_loc t =
   | PredTypeExpr(l, te, _) -> l
   | PureFuncTypeExpr (l, tes) -> l
 
+let rec string_of_type_expr_name t =
+match t with
+  ManifestTypeExpr (l, t) -> "???"
+  | StructTypeExpr (l, sn, _) -> "???"
+  | IdentTypeExpr (l, _, x) -> x
+  | ConstructedTypeExpr (l, x, targs) ->  x ^ "<" ^ (
+    String.concat " --- " (
+      List.map (fun targ -> string_of_type_expr_name targ) targs)) ^ ">"
+  | PtrTypeExpr (l, te) -> string_of_type_expr_name te
+  | ArrayTypeExpr(l, te) -> string_of_type_expr_name te
+  | PredTypeExpr(l, te, _) -> String.concat ", " (List.map (fun texpr -> string_of_type_expr_name texpr) te)
+  | PureFuncTypeExpr (l, tes) -> String.concat ", " (List.map (fun texpr -> string_of_type_expr_name texpr) tes)
+
+let string_of_type_expr t = 
+  match t with 
+    ManifestTypeExpr (l, t) -> "ManifestTypeExpr"
+  | StructTypeExpr (l, sn, _) -> "StructtypeExpr"
+  | IdentTypeExpr (l, _, x) -> "IdentTypeExpr " ^ x 
+  | ConstructedTypeExpr (l, x, targs) -> "ConstructedTypeExpr " ^ (string_of_type_expr_name t)
+  | PtrTypeExpr (l, te) -> "PtrTypeExpr"
+  | ArrayTypeExpr(l, te) -> "ArrayTypeExpr"
+  | PredTypeExpr(l, te, _) -> "PredTypeExpr"
+  | PureFuncTypeExpr (l, tes) -> "PureFuncTypeExpr"
+
 let expr_fold_open iter state e =
   let rec iters state es =
     match es with
@@ -1016,8 +1042,8 @@ let expr_fold_open iter state e =
   | WPureFunValueCall (l, e, args) -> iters state (e::args)
   | WFunCall (l, g, targs, args) -> iters state args
   | WFunPtrCall (l, g, args) -> iters state args
-  | WMethodCall (l, cn, m, pts, args, mb) -> iters state args
-  | NewObject (l, cn, args) -> iters state args
+  | WMethodCall (l, cn, m, pts, args, mb, targs) -> iters state args
+  | NewObject (l, cn, args, targs) -> iters state args
   | NewArray (l, te, e0) -> iter state e0
   | NewArrayWithInitializer (l, te, es) -> iters state es
   | IfExpr (l, e1, e2, e3) -> iters state [e1; e2; e3]
