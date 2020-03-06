@@ -177,7 +177,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               Real -> if gh <> Real || (ftxmap = [] && fttparams = []) then static_error l "A produce_function_pointer_chunk statement may be used only for parameterized and type-parameterized function types." None
             | Ghost -> if gh <> Ghost then static_error l "Lemma function pointer type expected." None
             end;
-            let fttargs = List.map (fun ftarg -> check_pure_type (pn,ilist) tparams ftarg gh) fttargs in
+            let fttargs = List.map (check_pure_type (pn,ilist) tparams) fttargs in
             let tpenv =
               match zip fttparams fttargs with
                 None -> static_error l "Incorrect number of function type type arguments." None
@@ -220,7 +220,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | ExprStmt (CallExpr (lc, "call", [], [], [], Static))::ss_after -> (List.rev ss_before, Some (lc, None, ss_after))
                 | DeclStmt (ld, [lx, tx, x, Some(CallExpr (lc, "call", [], [], [], Static)), _])::ss_after ->
                   if List.mem_assoc x tenv then static_error ld "Variable hides existing variable" None;
-                  let t = check_pure_type (pn,ilist) tparams tx gh in
+                  let t = check_pure_type (pn,ilist) tparams tx in
                   let Some (funenv1, rt1, xmap1, pre1, post1, terminates1) = funcinfo_opt in
                   begin match rt1 with
                     None -> static_error ld "Function does not return a value" None
@@ -609,7 +609,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match xs with
           [] -> tcont sizemap tenv ghostenv h env
         | (l, te, x, e, (address_taken, blockPtr))::xs ->
-          let t = check_pure_type (pn,ilist) tparams te Real in
+          let t = check_pure_type (pn,ilist) tparams te in
           if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.") None;
           let ghostenv = if pure then x::ghostenv else List.filter (fun y -> y <> x) ghostenv in
           let produce_object envTp =
@@ -810,7 +810,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         tcont sizemap tenv ghostenv (chunks @ h) env
       )
     | Open (l, target, g, targs, pats0, pats, coefpat) ->
-      let targs = List.map (fun targ -> check_pure_type (pn, ilist) tparams targ Ghost) targs in
+      let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
       let open_instance_predicate target target_cn =
         let cn =
           match pats0 with
@@ -979,7 +979,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         )
       )
     | SplitFractionStmt (l, p, targs, pats, coefopt) ->
-      let targs = List.map (fun targ -> check_pure_type (pn, ilist) tparams targ Ghost) targs in
+      let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
       let (targs, g_symb, pts, inputParamCount) =
         match try_assoc' Ghost (pn,ilist) p predfammap with
           None -> static_error l "No such predicate." None
@@ -1138,7 +1138,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             with_context PopSubcontext $. fun () ->
               tcont sizemap tenv ghostenv h env
     | Close (l, target, g, targs, pats0, pats, coef) ->
-      let targs = List.map (fun targ -> check_pure_type (pn, ilist) tparams targ Ghost) targs in
+      let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
       let close_instance_predicate target target_cn =
         let cn =
           match pats0 with
@@ -1627,7 +1627,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               match catches with
                 [] -> econt throwl h env texcep excep
               | (l, te, x, body)::catches ->
-                let t = check_pure_type (pn,ilist) tparams te Real in
+                let t = check_pure_type (pn,ilist) tparams te in
                 branch
                   begin fun () ->
                     if((is_subtype_of_ texcep t) || (is_subtype_of_ t texcep)) then begin
@@ -1662,7 +1662,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               branch
                 begin fun () ->
                   if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.") None;
-                  let t = check_pure_type (pn,ilist) tparams te Real in
+                  let t = check_pure_type (pn,ilist) tparams te in
                   if (is_unchecked_exception_type t) || t = (ObjType ("java.lang.Exception", [])) || t = (ObjType ("java.lang.Throwable", [])) then begin
                     let xterm = get_unique_var_symb_non_ghost x t in
                     let tenv = (x, t)::tenv in
@@ -1937,7 +1937,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               if arity <> 0 then static_error l "Local predicate families are not yet supported." None;
               if List.mem_assoc p predfammap then static_error l "Duplicate predicate family name." None;
               if List.mem_assoc p tenv then static_error l "Predicate name conflicts with local variable name." None;
-              let ts = List.map (fun ts -> check_pure_type (pn,ilist) tparams ts Ghost) tes in
+              let ts = List.map (check_pure_type (pn,ilist) tparams) tes in
               let ptype = PredType ([], ts, inputParamCount, inductiveness) in
               let psymb = get_unique_var_symb p ptype in
               (lems, predinsts, (p, (l, ts, inputParamCount, ptype, psymb))::localpreds, localpredinsts)
