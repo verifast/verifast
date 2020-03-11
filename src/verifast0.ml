@@ -96,7 +96,8 @@ let rec string_of_type t =
   | BoxIdType -> "box"
   | HandleIdType -> "handle"
   | AnyType -> "any"
-  | TypeParam x -> x
+  | RealTypeParam x -> "real-"^ x
+  | GhostTypeParam x -> "ghost-"^ x
   | InferredType (_, t) -> begin match !t with EqConstraint t -> string_of_type t | _ -> "?" end
   | ArrayType(t) -> (string_of_type t) ^ "[]"
   | StaticArrayType(t, s) -> (string_of_type t) ^ "[" ^ (string_of_int s) ^ "]" 

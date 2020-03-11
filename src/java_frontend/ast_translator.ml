@@ -316,7 +316,7 @@ and translate_class_decl decl =
         let (decls', ghost_members') = translate_ghost_members l' id' decls' in
         let (ghost_fields', ghost_meths', ghost_preds') = split_ghost_members l ghost_members' in
         if (decls' <> []) then error l' "Not all declarations in class could be processed";
-        (VF.Class(l', abs', fin', id', static_blocks' @ meths' @ ghost_meths', fields' @ ghost_fields', cons', extnds', impls', tparams', ghost_preds'), id')
+        (VF.Class(l', abs', fin', id', static_blocks' @ meths' @ ghost_meths', fields' @ ghost_fields', cons', extnds',tparams', impls', ghost_preds'), id')
     | GEN.Interface(l, anns, id, tparams, access, impls, decls) ->
         let l'= translate_location l in
         let id' = GEN.string_of_identifier id in
@@ -361,7 +361,7 @@ and translate_tparams_as_string tparams =
   match tparams with
   | GEN.TypeParam(l, Identifier(sl,name), bounds) :: tail ->
     let res = translate_tparams_as_string tail
-      in name::res;
+      in (name,Real)::res;
   | _ -> []
 
 and translate_tparams_as_type_expr tparams =
@@ -818,12 +818,12 @@ and translate_expression expr =
             end
         | _ -> error l' "Internal error of ast_translator";
       end
-  | GEN.NewClass(l, tparams, typ, exprs) ->
+  | GEN.NewClass(l, targs, typ, exprs) ->
       let l' = translate_location l in
-      let tparams' = translate_tparams_as_type_expr tparams in
+      let targs' = translate_tparams_as_type_expr targs in
       let typ' = GEN.string_of_ref_type typ in
       let exprs' = List.map translate_expression exprs in
-      VF.NewObject(l', typ', exprs', tparams')
+      VF.NewObject(l', typ', exprs', targs')
   | GEN.NewArray(l, typ, dims, exprs) ->
       let l' = translate_location l in
       let typ' = translate_type typ in

@@ -3,8 +3,25 @@ import java.util.List;
 
 public class GenericClass<T>{
 	public T field;
-	public GenericClass(T f){
+	public GenericClass(T f)
+	//@ requires true;
+	//@ ensures this.field |-> f;
+	{
 		field = f;
+	}
+	
+	public void add(T arg)
+	//@ requires this.field |-> ?f;
+	//@ ensures this.field |-> arg;
+	{
+		field = arg;
+	}
+	
+	public T get()
+	//@ requires this.field |-> ?f;
+	//@ ensures this.field |-> f;
+	{
+		return field;
 	}
 }
 
@@ -22,6 +39,6 @@ public class HelloWorld
     System.out.println("Hello, World");
     GenericClass<String> list = new GenericClass<String>("fo");
     list.add("hello");
-    String s = list.get(0);   // no cast
+    String s = list.get();   // no cast
   }
 }

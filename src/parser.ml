@@ -232,10 +232,10 @@ and
      ds = begin parser
        [< '(l, Kwd "class"); '(startLoc, Ident s); tparams = type_params_parse;
           super = parse_super_class tparams; il = parse_interfaces tparams; mem = parse_java_members s tparams; ds = parse_decls_core >]
-       -> Class (l, abstract, final, s, methods s mem, fields mem, constr mem, super, tparams, il, instance_preds mem)::ds
+       -> Class (l, abstract, final, s, methods s mem, fields mem, constr mem, super, (List.map (fun tparam -> (tparam,Real)) tparams), il, instance_preds mem)::ds
      | [< '(l, Kwd "interface"); '(startLoc, Ident cn); tparams = type_params_parse;
           il = parse_extended_interfaces tparams;  mem = parse_java_members cn tparams; ds = parse_decls_core >]
-       -> Interface (l, cn, il, fields mem, methods cn mem, tparams, instance_preds mem)::ds
+       -> Interface (l, cn, il, fields mem, methods cn mem, (List.map (fun tparam -> (tparam,Real)) tparams), instance_preds mem)::ds
      | [< d = parse_decl; ds = parse_decls_core >] -> d@ds
      | [< '(_, Kwd ";"); ds = parse_decls_core >] -> ds
      | [< >] -> []
@@ -349,12 +349,9 @@ and parse_java_member cn tpenv = parser
        [< '(l, Ident x);
           member = parser
             [< (ps, co, ss) = parse_method_rest l >] ->
-            let t' = match t with 
-              Some(rt) -> Some(type_argument_erasure_in_scope rt (tpenv@tparams)) 
-              | None -> None in
             let ps = if binding = Instance then (IdentTypeExpr (l, None, cn),"this")::ps 
                 else ps in
-            MethMember (Meth (l, Real, t', x, ps, co, ss, binding, vis, abstract, (tpenv@tparams)))
+            MethMember (Meth (l, Real, t, x, ps, co, ss, binding, vis, abstract, (List.map (fun tparam -> (tparam,Real)) (tpenv@tparams))))
           | [< t = id (match t with None -> raise (ParseException (l, "A field cannot be void.")) | Some(t) -> t);
                tx = parse_array_braces t;
                init = opt (parser [< '(_, Kwd "="); e = parse_declaration_rhs tx >] -> e);
@@ -440,7 +437,7 @@ and
         None -> []
         | Some x -> x
     in
-    (noneToEmptyList functiontypetypeparams, noneToEmptyList functiontypeparams, params)
+    (List.map (fun tparam -> (tparam,Ghost)) (noneToEmptyList functiontypetypeparams), noneToEmptyList functiontypeparams, params)
   | [< params = parse_paramlist >] -> ([], [], params)
 and
   parse_ignore_inline = parser
@@ -459,7 +456,7 @@ and parse_decl = parser
   [< '(l, Kwd "struct"); '(_, Ident s); d = parser
     [< fs = parse_fields; '(_, Kwd ";") >] -> Struct (l, s, Some fs)
   | [< '(_, Kwd ";") >] -> Struct (l, s, None)
-  | [< t = parse_type_suffix (StructTypeExpr (l, Some s, None)); d = parse_func_rest Regular (Some t) Public >] -> d
+  | [< t = parse_type_suffix (StructTypeExpr (l, Some s, None)); d = parse_func_rest Regular (Some t) Public Real >] -> d
   >] -> check_function_for_contract d
 | [< '(l, Kwd "typedef");
      rt = parse_return_type; '(_, Ident g);
@@ -491,9 +488,9 @@ and parse_decl = parser
   >] -> register_typedef g; ds
 | [< '(_, Kwd "enum"); '(l, Ident n); elems = parse_enum_body; '(_, Kwd ";"); >] ->
   [EnumDecl(l, n, elems)]
-| [< '(_, Kwd "static"); _ = parse_ignore_inline; t = parse_return_type; d = parse_func_rest Regular t Private >] -> check_function_for_contract d
-| [< '(_, Kwd "extern"); t = parse_return_type; d = parse_func_rest Regular t Public >] -> check_function_for_contract d
-| [< '(_, Kwd "_Noreturn"); _ = parse_ignore_inline; t = parse_return_type; d = parse_func_rest Regular t Public >] ->
+| [< '(_, Kwd "static"); _ = parse_ignore_inline; t = parse_return_type; d = parse_func_rest Regular t Private Real >] -> check_function_for_contract d
+| [< '(_, Kwd "extern"); t = parse_return_type; d = parse_func_rest Regular t Public Real >] -> check_function_for_contract d
+| [< '(_, Kwd "_Noreturn"); _ = parse_ignore_inline; t = parse_return_type; d = parse_func_rest Regular t Public Real >] ->
   let ds = check_function_for_contract d in
   begin match ds with
     [Func (l, k, tparams, t, g, ps, gc, ft, Some (pre, post), terminates, ss, static, v)] ->
@@ -504,7 +501,7 @@ and parse_decl = parser
   | _ -> ()
   end;
   ds
-| [< t = parse_return_type; d = parse_func_rest Regular t Public >] -> check_function_for_contract d
+| [< t = parse_return_type; d = parse_func_rest Regular t Public Real >] -> check_function_for_contract d
 and check_for_contract: 'a. 'a option -> loc -> string -> (asn * asn -> 'a) -> 'a = fun contract l m f ->
   match contract with
     | Some spec -> spec 
@@ -544,11 +541,11 @@ and parse_predicate_decl l (inductiveness: inductiveness) = parser
      body = opt parse_pred_body;
      '(_, Kwd ";");
     >] ->
-    [PredFamilyDecl (l, g, tparams, 0, List.map (fun (t, p) -> t) ps, inputParamCount, inductiveness)] @
-    (match body with None -> [] | Some body -> [PredFamilyInstanceDecl (l, g, tparams, [], ps, body)])
+    [PredFamilyDecl (l, g, (List.map (fun tparam -> (tparam,Ghost)) tparams), 0, List.map (fun (t, p) -> t) ps, inputParamCount, inductiveness)] @
+    (match body with None -> [] | Some body -> [PredFamilyInstanceDecl (l, g, (List.map (fun tparam -> (tparam,Ghost)) tparams), [], ps, body)])
 and parse_pure_decl = parser
-    [< '(l, Kwd "inductive"); '(li, Ident i); tparams = parse_type_params li; '(_, Kwd "="); cs = (parser [< cs = parse_ctors >] -> cs | [< cs = parse_ctors_suffix >] -> cs); '(_, Kwd ";") >] -> [Inductive (l, i, tparams, cs)]
-  | [< '(l, Kwd "fixpoint"); t = parse_return_type; d = parse_func_rest Fixpoint t Public>] -> [d]
+    [< '(l, Kwd "inductive"); '(li, Ident i); tparams = parse_type_params li; '(_, Kwd "="); cs = (parser [< cs = parse_ctors >] -> cs | [< cs = parse_ctors_suffix >] -> cs); '(_, Kwd ";") >] -> [Inductive (l, i, (List.map (fun tparam -> (tparam,Ghost)) tparams), cs)]
+  | [< '(l, Kwd "fixpoint"); t = parse_return_type; d = parse_func_rest Fixpoint t Public Ghost>] -> [d]
   | [< '(l, Kwd "predicate"); result = parse_predicate_decl l Inductiveness_Inductive >] -> result
   | [< '(l, Kwd "copredicate"); result = parse_predicate_decl l Inductiveness_CoInductive >] -> result
   | [< '(l, Kwd "predicate_family"); '(_, Ident g); is = parse_paramlist; (ps, inputParamCount) = parse_pred_paramlist; '(_, Kwd ";") >]
@@ -557,14 +554,14 @@ and parse_pure_decl = parser
      p = parse_pred_body; '(_, Kwd ";"); >] -> [PredFamilyInstanceDecl (l, g, [], is, ps, p)]
   | [< '(l, Kwd "predicate_ctor"); '(_, Ident g); ps1 = parse_paramlist; (ps2, inputParamCount) = parse_pred_paramlist;
      p = parse_pred_body; '(_, Kwd ";"); >] -> [PredCtorDecl (l, g, ps1, ps2, inputParamCount, p)]
-  | [< '(l, Kwd "lemma"); t = parse_return_type; d = parse_func_rest (Lemma(false, None)) t Public >] -> [d]
-  | [< '(l, Kwd "lemma_auto"); trigger = opt (parser [< '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); >] -> e); t = parse_return_type; d = parse_func_rest (Lemma(true, trigger)) t Public >] -> [d]
+  | [< '(l, Kwd "lemma"); t = parse_return_type; d = parse_func_rest (Lemma(false, None)) t Public Ghost >] -> [d]
+  | [< '(l, Kwd "lemma_auto"); trigger = opt (parser [< '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); >] -> e); t = parse_return_type; d = parse_func_rest (Lemma(true, trigger)) t Public Ghost>] -> [d]
   | [< '(l, Kwd "box_class"); '(_, Ident bcn); ps = parse_paramlist;
        '(_, Kwd "{"); '(_, Kwd "invariant"); inv = parse_asn; '(_, Kwd ";");
        ads = parse_action_decls; hpds = parse_handle_pred_decls; '(_, Kwd "}") >] -> [BoxClassDecl (l, bcn, ps, inv, ads, hpds)]
   | [< '(l, Kwd "typedef"); '(_, Kwd "lemma"); rt = parse_return_type; '(li, Ident g); tps = parse_type_params li;
        (ftps, ps) = parse_functype_paramlists; '(_, Kwd ";"); (pre, post, terminates) = parse_spec >] ->
-    [FuncTypeDecl (l, Ghost, rt, g, tps, ftps, ps, (pre, post, terminates))]
+    [FuncTypeDecl (l, Ghost, rt, g, (List.map (fun tparam -> (tparam,Ghost)) tps), ftps, ps, (pre, post, terminates))]
   | [< '(l, Kwd "unloadable_module"); '(_, Kwd ";") >] -> [UnloadableModuleDecl l]
   | [< '(l, Kwd "import_module"); '(_, Ident g); '(lx, Kwd ";") >] -> [ImportModuleDecl (l, g)]
   | [< '(l, Kwd "require_module"); '(_, Ident g); '(lx, Kwd ";") >] -> [RequireModuleDecl (l, g)]
@@ -639,7 +636,7 @@ and type_argument_erasure_in_scope t tpenv =
       List.iter (fun targ -> type_argument_check_texpr_in_scope targ tpenv) targs;
       IdentTypeExpr (l, None, type_argument_translate_in_scope n tpenv)
     | _ -> t
-and parse_func_rest k t v = parser
+and parse_func_rest k t v gh = parser
   [<
     '(l, Ident g);
     tparams = parse_type_params_general;
@@ -648,9 +645,9 @@ and parse_func_rest k t v = parser
         ps = parse_paramlist;
         f = parser
           [< '(_, Kwd ";"); (nonghost_callers_only, ft, co, terminates) = parse_spec_clauses >] ->
-          Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, terminates, None, Static, v)
+          Func (l, k, (List.map (fun tparam -> (tparam, gh)) tparams), t, g, ps, nonghost_callers_only, ft, co, terminates, None, Static, v)
         | [< (nonghost_callers_only, ft, co, terminates) = parse_spec_clauses; '(_, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}") >] ->
-          Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, terminates, Some (ss, closeBraceLoc), Static, v)
+          Func (l, k, (List.map (fun tparam -> (tparam, gh)) tparams), t, g, ps, nonghost_callers_only, ft, co, terminates, Some (ss, closeBraceLoc), Static, v)
       >] -> f
     | [<
         () = (fun s -> if k = Regular && tparams = [] && t <> None then () else raise Stream.Failure);

@@ -255,7 +255,8 @@ let _ =
         | ObjType(name, _) -> name
         | ArrayType(type_in) -> string_of_type_ type_in ^ "[]"
         | StaticArrayType(type_in, nb_elems) -> string_of_type_ type_in ^ "[" ^ string_of_int nb_elems ^ "]"
-        | TypeParam(name) -> name
+        | GhostTypeParam(name) -> name
+        | RealTypeParam(name) -> name
         | PackageName(name) -> name
         | RefType(type_in) -> string_of_type_ type_in
         | AbstractType(name) -> name
@@ -412,7 +413,8 @@ let _ =
           | BoxIdType -> (match pattern_type_ with BoxIdType -> true | _ -> false)
           | HandleIdType -> (match pattern_type_ with HandleIdType -> true | _ -> false)
           | AnyType -> (match pattern_type_ with AnyType -> true | _ -> false)
-          | TypeParam(name) -> (match pattern_type_ with TypeParam(pattern_name) when name = pattern_name -> true | _ -> false) 
+          | GhostTypeParam(name) -> (match pattern_type_ with GhostTypeParam(pattern_name) when name = pattern_name -> true | _ -> false) 
+          | RealTypeParam(name) -> (match pattern_type_ with RealTypeParam(pattern_name) when name = pattern_name -> true | _ -> false) 
           | ClassOrInterfaceName(name) -> (match pattern_type_ with ClassOrInterfaceName(pattern_name) when name = pattern_name -> true | _ -> false) 
           | PackageName(name) -> (match pattern_type_ with PackageName(pattern_name) when name = pattern_name -> true | _ -> false) 
           | RefType(type_in) -> (match pattern_type_ with RefType(pattern_type_in) -> check_type_equal type_in pattern_type_in | _ -> false)

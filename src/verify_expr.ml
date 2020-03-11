@@ -9,8 +9,8 @@ open Parser
 open Verifast0
 open Verifast1
 open Assertions
-open SExpressions
-open SExpressionEmitter
+(*open SExpressions
+open SExpressionEmitter*)
 
 module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
@@ -40,7 +40,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ExprCallExpr (l, e, es) -> flatmap expr_assigned_variables (e::es)
     | WPureFunCall (l, g, targs, args) -> flatmap expr_assigned_variables args
     | WPureFunValueCall (l, e, es) -> flatmap expr_assigned_variables (e::es)
-    | WMethodCall (l, cn, m, pts, args, mb, _) -> flatmap expr_assigned_variables args
+    | WMethodCall (l, cn, m, pts, args, mb, sign) -> flatmap expr_assigned_variables args
     | NewArray (l, te, e) -> expr_assigned_variables e
     | NewArrayWithInitializer (l, te, es) -> flatmap expr_assigned_variables es
     | IfExpr (l, e1, e2, e3) -> expr_assigned_variables e1 @ expr_assigned_variables e2 @ expr_assigned_variables e3
@@ -182,7 +182,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let tpenv =
       match zip tparams tparams0 with
         None -> static_error l (msg ^ "Type parameter counts do not match.") None
-      | Some bs -> List.map (fun (x, x0) -> (x, TypeParam x0)) bs
+      | Some bs -> List.map (fun ((x, gh), (x0, gh0)) -> if gh = gh0 then
+          ((x,gh), if gh0 = Ghost then GhostTypeParam x0 else RealTypeParam x0)
+          else static_error l (msg ^ "Type parameter 1 is: " ^ (if gh0 = Ghost then "Ghost" else "Real") ^ ", the other is not") None
+        ) bs
     in
     begin
       match (rt, rt0) with
@@ -428,43 +431,37 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match meth_specs with
             [] -> List.rev mmap
           | Meth (lm, gh, rt, n, ps, co, body, binding, _, _, tparams)::meths ->
-          Printf.printf "Adding %s method: %s <%s> (%s);\n"
-            (if gh = Ghost then "ghost" else "real")
-            n
-            (String.concat "," tparams)
-            (String.concat ", " (List.map (fun (texpr, pname) -> (string_of_type_expr texpr) ^ " " ^ pname) ps));
-            if body <> None then static_error lm "Interface method cannot have body" None;
-            if binding = Static then static_error lm "Interface method cannot be static" None;
-            let xmap inAnnotation =
+            let xmap =
               let rec iter xm xs =
                 match xs with
                  [] -> List.rev xm
                | (te, x)::xs ->
                 Printf.printf "checking param %s %s\n" x (string_of_type_expr te);
                  if List.mem_assoc x xm then static_error l "Duplicate parameter name." None;
-                 let t = check_pure_type (pn,ilist) (if inAnnotation then [] else tparams) te in
+                 let t = check_pure_type (pn,ilist) tparams te in
                  iter ((x, t)::xm) xs
               in
               iter [] ps
             in
-            let sign = (n, List.map snd (List.tl (xmap (gh = Ghost)))) in
+            let sign = (n, List.map snd (List.tl xmap)) in
             if List.mem_assoc sign mmap then static_error lm "Duplicate method" None;
-            let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) [] rt) in
+            let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) tparams rt) in
             let (pre, pre_tenv, post, epost, terminates) =
               match co with
                 None -> static_error lm ("Non-fixpoint function must have contract: "^n) None
               | Some (pre, post, epost, terminates) ->
-                let (pre, tenv) = check_asn (pn,ilist) [] ((current_thread_name, current_thread_type)::(xmap true)) pre in
+                let (pre, tenv) = check_asn (pn,ilist) [] ((current_thread_name, current_thread_type)::(xmap)) pre in
                 let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
-                let (post, _) = check_asn (pn,ilist) [] postmap post in
+                let (post, _) = check_asn (pn,ilist) tparams postmap post in
                 let epost = List.map (fun (tp, epost) -> 
-                  let (epost, _) = check_asn (pn,ilist) [] tenv epost in
-                  let tp = check_pure_type (pn,ilist) [] tp in
+                  let (epost, _) = check_asn (pn,ilist) tparams tenv epost in
+                  let tp = Printf.printf "caling check_pure_type with %s\n" (string_of_type_expr_name tp);
+                    check_pure_type (pn,ilist) tparams tp in
                   (tp, epost)
                 ) epost in
                 (pre, tenv, post, epost, terminates)
             in
-            iter ((sign, ItfMethodInfo (lm, gh, rt, xmap (gh = Ghost), pre, pre_tenv, post, epost, terminates, Public, true, tparams))::mmap) meths
+            iter ((sign, ItfMethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, terminates, Public, true, tparams))::mmap) meths
         in
         iter [] specs
         in
@@ -614,7 +611,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   match xs with
                    [] -> List.rev xm
                  | (te, x)::xs -> if List.mem_assoc x xm then static_error l "Duplicate parameter name." None;
-                     let t = check_pure_type (pn,ilist) tpenv te in
+                     let t = check_pure_type (pn,ilist) tparams te in
                      iter ((x, t)::xm) xs
                 in
                 iter [] ps
@@ -622,16 +619,16 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let xmap1 = match fb with Static -> xmap | Instance -> let _::xmap1 = xmap in xmap1 in
             let sign = (n, List.map snd xmap1) in
             if List.mem_assoc sign mmap then static_error lm "Duplicate method." None;
-            let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) [] rt) in
+            let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) tparams rt) in
             let co =
               match co with
                 None -> None
               | Some (pre, post, epost, terminates) ->
-                let (wpre, tenv) = check_asn (pn,ilist) [] ((current_class, ClassOrInterfaceName cn)::(current_thread_name, current_thread_type)::xmap) pre in
+                let (wpre, tenv) = check_asn (pn,ilist) tparams ((current_class, ClassOrInterfaceName cn)::(current_thread_name, current_thread_type)::xmap) pre in
                 let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
-                let (wpost, _) = check_asn (pn,ilist) [] postmap post in
+                let (wpost, _) = check_asn (pn,ilist) tparams postmap post in
                 let wepost = List.map (fun (tp, epost) -> 
-                  let (wepost, _) = check_asn (pn,ilist) [] ((current_class, ClassOrInterfaceName cn)::(current_thread_name, current_thread_type)::xmap) epost in
+                  let (wepost, _) = check_asn (pn,ilist) tparams ((current_class, ClassOrInterfaceName cn)::(current_thread_name, current_thread_type)::xmap) epost in
                   let tp = check_pure_type (pn,ilist) tpenv tp in
                   (tp, wepost)
                 ) epost in
@@ -1507,7 +1504,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let tpenv =
       match zip callee_tparams targs with
-        None -> static_error l "Incorrect number of type arguments." None
+        None -> static_error l ("Incorrect number of type arguments. tparams: " ^
+          (String.concat ", " (List.map (fun (tparam,gh) -> tparam ^ (if gh = Ghost then "(Ghost)" else "(Real)")) callee_tparams))
+          ^ " and targs: " 
+          ^ (String.concat ", " (List.map string_of_type targs))
+         ) None
       | Some tpenv -> tpenv
     in
     let ys: string list = List.map (function (p, t) -> p) ps in
@@ -2057,38 +2058,44 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           check_call targs h args $. fun h env retval ->
           cont (chunk::h) env retval
       end
-    | NewObject (l, cn, args, targs) -> (* DRIES *)
+    | NewObject (l, cn, args, targs) ->
       inheritance_check cn l;
       if pure then static_error l "Object creation is not allowed in a pure context" None;
       let {cctors; ctpenv} = List.assoc cn classmap in
       let args' = List.map (fun e -> check_expr (pn,ilist) tparams tenv e) args in
       let argtps = List.map snd args' in
-      let targtps = List.map (fun targexpr -> check_pure_type (pn,ilist) [] targexpr) targs in
+      let targtps = List.map (fun targexpr -> check_pure_type (pn,ilist) tparams targexpr) targs in
       let consmapTArgsReplaced =  
         List.map (fun (sign,cinfo) -> (*Iterate ovr constructors*)
           (List.map (fun tp -> match tp with (*Iterate over arguments*)
-            TypeParam(s) -> 
+            RealTypeParam(s) -> 
               let index =  
-                match (index_of s ctpenv 0) with
+                match (index_of (s,Real) ctpenv 0) with
                   Some(i) -> i
-                  | None -> static_error l ("Type param" ^ s ^ " not found in type paramter environment") None 
+                  | None -> static_error l ("Real Type param" ^ s ^ " not found in type paramter environment") None 
+                in 
+                List.nth targtps index (* replace type parameters with the given type arguments *)
+            | GhostTypeParam(s) -> 
+              let index =  
+                match (index_of (s,Ghost) ctpenv 0) with
+                  Some(i) -> i
+                  | None -> static_error l ("Ghost Type param" ^ s ^ " not found in type paramter environment") None 
                 in 
                 List.nth targtps index (* replace type parameters with the given type arguments *)
             | other -> other) sign
           , cinfo)
         ) cctors in
       let consmap' = 
-        let argstps_str = (String.concat ", " (List.map (fun tp -> string_of_sexpression (sexpr_of_type_ tp)) argtps)) in
-        let targstps_str = (String.concat ", " (List.map (fun tp -> string_of_sexpression (sexpr_of_type_ tp)) targtps)) in
-        Printf.printf "arguments: %s and type arguments: %s and constructors: %s \n" argstps_str targstps_str (
+        (*let argstps_str = (String.concat ", " (List.map (fun tp -> string_of_sexpression (sexpr_of_type_ tp)) argtps)) in
+        let targstps_str = (String.concat ", " (List.map (fun tp -> string_of_sexpression (sexpr_of_type_ tp)) targtps)) in*)
+        (*Printf.printf "arguments: %s and type arguments: %s and constructors: %s \n" argstps_str targstps_str (
           String.concat 
             " --- " 
             (List.map (fun (sign,_) -> String.concat "," (List.map (fun t -> string_of_sexpression (sexpr_of_type_ t)) sign)) 
               consmapTArgsReplaced
             )
-        );
-        List.filter (fun (sign, _) -> 
-        is_assignable_to_sign (Some pure) argtps sign) consmapTArgsReplaced in
+        );*)
+        List.filter (fun (sign, _) -> is_assignable_to_sign (Some pure) argtps sign) consmapTArgsReplaced in
       Printf.printf "Creating object of type: %s \n" cn;
       begin match consmap' with
         [] -> static_error l "No matching constructor" None
@@ -2101,14 +2108,15 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             Some (Some (_, rank)), RealMethodInfo (Some rank') -> rank < rank'
           | _ -> true
         in
-        check_correct h None None [] args (lm, [], None, xmap, ["this", obj], pre, post, Some(epost), terminates, Static) is_upcall (Some cn) (fun h env _ -> cont h env obj)
+        check_correct h None None targtps args (lm, ctpenv, None, xmap, ["this", obj], pre, post, Some(epost), terminates, Static) is_upcall (Some cn) (fun h env _ -> cont h env obj)
       | _ -> static_error l "Multiple matching overloads" None
       end
-    | WMethodCall (l, tn, m, pts, args, fb, targs) when m <> "getClass" ->
+    | WMethodCall (l, tn, m, pts, args, fb, sign) when m <> "getClass" ->
       let (lm, gh, rt, xmap, pre, post, epost, terminates, is_upcall, target_class, fb', v) =
         match try_assoc tn classmap with
           Some {cfinal; cmeths} ->
-          let MethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, terminates, ss, fb, v, is_override, abstract, tparams) = List.assoc (m, pts) cmeths in
+          let MethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, terminates, ss, fb, v, is_override, abstract, tparams) = 
+            List.assoc (m, match sign with Some(s) -> s | None -> pts) cmeths in
           let can_be_overridden = fb = Instance && cfinal = ExtensibleClass && v <> Private in 
           let is_upcall =
             not can_be_overridden &&
@@ -2118,18 +2126,42 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | _ -> false
           in
           let target_class = if can_be_overridden then None else Some tn in
-          (lm, gh, rt, xmap, pre_dyn, post_dyn, epost_dyn, terminates, is_upcall, target_class, fb, v)
+          let static = (List.length xmap) = (List.length pts) in
+          let xmap' =  
+            (* cut off the target type for instanced methods, xmap length will be pts length + 1 *)
+            if static then
+              (if (List.length xmap) = 0 then [] else List.map2 (fun (name,t) pt -> (name, pt)) xmap pts)
+            else match xmap with (* if the method is instanced, and has parameters, 
+              replace the types of the arguments with the types of the parameters to remove Type parameters*)
+              [] -> [] 
+              | xmap -> List.map2 (fun (name,t) pt -> (name, pt)) (List.tl xmap) pts
+            in
+          Printf.printf "xmap: %s and args: %s\n"
+            (String.concat ", " (List.map (fun (str,t) -> str ^ "->" ^ (string_of_type t)) xmap))
+            (String.concat ", " (List.map string_of_type pts));
+          (lm, gh, rt, (if static then xmap' else (List.hd xmap)::xmap'), pre_dyn, post_dyn, epost_dyn, terminates, is_upcall, target_class, fb, v)
         | _ ->
           let InterfaceInfo (_, _, methods, _, _, _) = List.assoc tn interfmap in
-          let ItfMethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, terminates, v, abstract, tparams) = List.assoc (m, pts) methods in
-          (lm, gh, rt, xmap, pre, post, epost, terminates, false, None, Instance, v)
+          let ItfMethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, terminates, v, abstract, tparams) = 
+            List.assoc (m, match sign with Some(s) -> s | None -> pts) methods in
+            let static = (List.length xmap) = (List.length pts) in
+            let xmap' = 
+             (* cut off the target type for instanced methods, xmap length will be pts length + 1 *)
+              if static then
+                (if (List.length xmap) = 0 then [] else List.map2 (fun (name,t) pt -> (name, pt)) xmap pts)
+              else match xmap with (* if the method is instanced, and has parameters, 
+                replace the types of the arguments with the types of the parameters to remove Type parameters*)
+                [] -> [] 
+                | xmap -> List.map2 (fun (name,t) pt -> (name, pt)) (List.tl xmap) pts
+            in
+          (lm, gh, rt, (if static then xmap' else (List.hd xmap)::xmap'), pre, post, epost, terminates, false, None, Instance, v)
       in
       if gh = Real && pure then static_error l "Method call is not allowed in a pure context" None;
       if gh = Ghost then begin
         if not pure then static_error l "A lemma method call is not allowed in a non-pure context." None;
         if leminfo_is_lemma leminfo then static_error l "Lemma method calls in lemmas are currently not supported (for termination reasons)." None
       end;
-      check_correct h xo None targs args (lm, [], rt, xmap, [], pre, post, Some epost, terminates, v) is_upcall target_class cont
+      check_correct h xo None [] args (lm, [], rt, xmap, [], pre, post, Some epost, terminates, v) is_upcall target_class cont
     | WSuperMethodCall(l, supercn, m, args, (lm, gh, rt, xmap, pre, post, epost, terminates, rank, v)) ->
       if gh = Real && pure then static_error l "Method call is not allowed in a pure context" None;
       if gh = Ghost then begin

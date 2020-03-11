@@ -116,7 +116,8 @@ type type_ = (* ?type_ *)
   | BoxIdType (* box type, for shared boxes *)
   | HandleIdType (* handle type, for shared boxes *)
   | AnyType (* supertype of all inductive datatypes; useful in combination with predicate families *)
-  | TypeParam of string (* a reference to a type parameter declared in the enclosing datatype/function/predicate *)
+  | RealTypeParam of string (* a reference to a type parameter declared in the enclosing Real code *)
+  | GhostTypeParam of string (* a reference to a type parameter declared in the ghost code *)
   | InferredType of < > * inferred_type_state ref (* inferred type, is unified during type checking. '< >' is the type of objects with no methods. This hack is used to prevent types from incorrectly comparing equal, as in InferredType (ref Unconstrained) = InferredType (ref Unconstrained). Yes, ref Unconstrained = ref Unconstrained. But object end <> object end. *)
   | ClassOrInterfaceName of string (* not a real type; used only during type checking *)
   | PackageName of string (* not a real type; used only during type checking *)
@@ -304,7 +305,7 @@ and
       type_ list (* parameter types (not including receiver) *) *
       expr list (* args, including receiver if instance method *) *
       method_binding *
-      type_ list (* type arguments *)
+      type_ list option (*Signature if any type parameters are present in the signature *)
   | NewArray of loc * type_expr * expr
   | NewObject of loc * string * expr list * type_expr list (*type arguments *)
   | NewArrayWithInitializer of loc * type_expr * expr list
@@ -641,7 +642,7 @@ and
       method_binding * 
       visibility *
       bool * (* is declared abstract? *)
-      string list (*type parameters*)
+      (string * ghostness) list (*type parameters*)
 and
   cons = (* ?cons *)
   | Cons of
@@ -663,7 +664,7 @@ and
   | Inductive of  (* inductief data type regel-naam-type parameters-lijst van constructors*)
       loc *
       string *
-      string list *
+      (string * ghostness) list * (*tparams*)
       ctor list
   | AbstractTypeDecl of loc * string
   | Class of
@@ -675,7 +676,7 @@ and
       field list *
       cons list *
       string (* superclass *) *
-      string list (* type parameters *) *
+      (string * ghostness) list (* type parameters *) *
       string list (* itfs *) *
       instance_pred_decl list
   | Interface of 
@@ -684,12 +685,12 @@ and
       string list *
       field list *
       meth list *
-      string list * (* type parameters *) 
+      (string * ghostness) list * (* type parameters *) 
       instance_pred_decl list
   | PredFamilyDecl of
       loc *
       string *
-      string list (* type parameters *) *
+      (string * ghostness) list (* type parameters *) *
       int (* number of indices *) *
       type_expr list *
       int option (* (Some n) means the predicate is precise and the first n parameters are input parameters *) *
@@ -697,7 +698,7 @@ and
   | PredFamilyInstanceDecl of
       loc *
       string *
-      string list (* type parameters *) *
+      (string * ghostness) list (* type parameters *) *
       (loc * string) list *
       (type_expr * string) list *
       asn
@@ -711,7 +712,7 @@ and
   | Func of
       loc *
       func_kind *
-      string list *  (* type parameters *)
+      (string * ghostness) list *  (* type parameters *)
       type_expr option *  (* return type *)
       string *  (* name *)
       (type_expr * string) list *  (* parameters *)
@@ -737,7 +738,7 @@ and
       ghostness * (* e.g. a "typedef lemma" is ghost. *)
       type_expr option * (* return type *)
       string *
-      string list * (* type parameters *)
+      (string * ghostness) list * (* type parameters *)
       (type_expr * string) list *
       (type_expr * string) list *
       (asn * asn * bool) (* precondition, postcondition, terminates *)
@@ -798,6 +799,11 @@ let func_kind_of_ghostness gh =
   
 (* Region: some AST inspector functions *)
 
+let string_of_ghostness gh =
+  match gh with
+    Real -> "Real"
+    | Ghost -> "Ghost"
+
 let string_of_func_kind f=
   match f with
     Lemma(_) -> "lemma"
@@ -836,7 +842,7 @@ let rec expr_loc e =
   | WPureFunValueCall (l, e, es) -> l
   | WFunPtrCall (l, g, args) -> l
   | WFunCall (l, g, targs, args) -> l
-  | WMethodCall (l, tn, m, pts, args, fb, targs) -> l
+  | WMethodCall (l, tn, m, pts, args, fb, sign) -> l
   | NewObject (l, cn, args, targs) -> l
   | NewArray(l, _, _) -> l
   | NewArrayWithInitializer (l, _, _) -> l
@@ -1042,7 +1048,7 @@ let expr_fold_open iter state e =
   | WPureFunValueCall (l, e, args) -> iters state (e::args)
   | WFunCall (l, g, targs, args) -> iters state args
   | WFunPtrCall (l, g, args) -> iters state args
-  | WMethodCall (l, cn, m, pts, args, mb, targs) -> iters state args
+  | WMethodCall (l, cn, m, pts, args, mb, sign) -> iters state args
   | NewObject (l, cn, args, targs) -> iters state args
   | NewArray (l, te, e0) -> iter state e0
   | NewArrayWithInitializer (l, te, es) -> iters state es

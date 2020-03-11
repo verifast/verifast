@@ -298,7 +298,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let env'' = env' @ zip2 (xs1@xs2) ts in
             with_context PushSubcontext $. fun () ->
             with_context (Executing (h, env'', l, "Applying autolemma")) $. fun () ->
-            produce_asn_core_with_post (zip2 tparams targs) h [] env'' post real_unit size_first size_all true $. fun h_ _ _ _ ->
+            produce_asn_core_with_post (zip2 (List.map (fun tparam -> (tparam,Ghost)) tparams) targs) h [] env'' post real_unit size_first size_all true $. fun h_ _ _ _ ->
             with_context PopSubcontext $. fun () ->
             cont h_ ghostenv env
           in

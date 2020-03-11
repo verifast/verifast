@@ -714,7 +714,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let term = get_unique_var_symb pat tp' in
                   let term' =
                     match unfold_inferred_type tp with
-                      TypeParam x -> convert_provertype term (provertype_of_type tp') ProverInductive
+                      GhostTypeParam x -> convert_provertype term (provertype_of_type tp') ProverInductive
                     | _ -> term
                   in
                   iter ((pat, tp')::ptenv) (term'::xterms) ((pat, term)::xenv) pats pts
@@ -2053,8 +2053,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | Some cont -> cont blocks_done sizemap tenv ghostenv h env
       end
     | SuperConstructorCall(l, es) -> static_error l "super must be first statement of constructor." None
-  and
-    verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt =
+  and verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt =
     match ss with
       [] -> cont sizemap tenv ghostenv h env
     | s::ss ->
@@ -2063,8 +2062,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt
         ) return_cont econt
       )
-  and
-    check_backedge_termination currentThread leminfo l tenv h cont =
+  and check_backedge_termination currentThread leminfo l tenv h cont =
       let consume_func_call_perm g =
         let gterm = List.assoc g funcnameterms in
         let (_, _, _, _, call_perm__symb, _, _) = List.assoc "call_perm_" predfammap in
@@ -2085,8 +2083,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   (* Region: verification of blocks *)
   
-  and
-    goto_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env return_cont econt block =
+  and goto_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env return_cont econt block =
     let `Block (inv, ss, cont) = block in
     let l() =
       match (inv, ss) with
@@ -2132,8 +2129,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       verify_cont (pn,ilist) blocks_done lblenv tparams boxes true leminfo funcmap predinstmap sizemap tenv ghostenv h env epilog cont (fun _ _ -> assert false) econt
     end $. fun sizemap tenv ghostenv h env ->
     return_cont h tenv env retval
-  and
-    verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt =
+  and verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt =
     let (decls, ss) =
       let rec iter decls ss =
         match ss with
@@ -2379,16 +2375,26 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       ctxt#assume_forall g trigger tps body
   | (WPredAsn(p_loc, p_ref, true, p_targs, p_args1, p_args2), Sep(_, WPredAsn(_, q_ref, true, q_targs, q_args1, q_args2), conditions))
     when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_,_) -> true | _ -> false) (p_args1 @ p_args2) && 
-         List.length p_targs = List.length tparams' && (List.for_all (fun (tp, t) -> match (tp, t) with (x, TypeParam(y)) when x = y -> true | _ -> false) (zip2 tparams' p_targs)) &&
+         List.length p_targs = List.length tparams' && (List.for_all (fun ((x,gh), t) -> 
+          match ((x,gh), t) with 
+              ((x,Ast.Real), RealTypeParam(y)) when x = y -> true 
+            | ((x,Ast.Ghost), GhostTypeParam(y)) when x = y -> true
+            | _ -> false) (zip2 tparams' p_targs)) &&
          p_ref#name = q_ref#name && List.for_all2 (fun (VarPat(_, x)) arg2 -> match arg2 with LitPat(WVar(_, y, _)) -> x = y | _ -> false) (p_args1 @ p_args2) (q_args1 @ q_args2) &&
          List.for_all2 (fun ta1 ta2 -> ta1 = ta2) p_targs q_targs && is_pure_spatial_assertion conditions -> 
-      (Hashtbl.add auto_lemmas (p_ref#name) (None, tparams', List.map (fun (VarPat(_,x)) -> x) p_args1, List.map (fun (VarPat(_,x)) -> x) p_args2, pre, post))
+      (Hashtbl.add auto_lemmas (p_ref#name) (None, 
+        (List.map (fun (tparam,_) -> tparam) tparams'), 
+        List.map (fun (VarPat(_,x)) -> x) p_args1, List.map (fun (VarPat(_,x)) -> x) p_args2, pre, post))
   | (CoefAsn(loc, VarPat(_,f), WPredAsn(p_loc, p_ref, _, p_targs, p_args1, p_args2)), Sep(_, CoefAsn(_, LitPat(WVar(_, g, _)), WPredAsn(_, q_ref, true, q_targs, q_args1, q_args2)), conditions)) 
     when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_,_) -> true | _ -> false) (p_args1 @ p_args2) && 
-         List.length p_targs = List.length tparams' && (List.for_all (fun (tp, t) -> match (tp, t) with (x, TypeParam(y)) when x = y -> true | _ -> false) (zip2 tparams' p_targs)) &&
+         List.length p_targs = List.length tparams' && (List.for_all (fun ((tp,gh), t) -> 
+          match ((tp,gh), t) with 
+              ((x,Ast.Real), RealTypeParam(y)) when x = y -> true
+            | ((x,Ast.Ghost), GhostTypeParam(y)) when x = y -> true 
+            | _ -> false) (zip2 tparams' p_targs)) &&
          p_ref#name = q_ref#name && List.for_all2 (fun (VarPat(_, x)) arg2 -> match arg2 with LitPat(WVar(_, y, _)) -> x = y | _ -> false) (p_args1 @ p_args2) (q_args1 @ q_args2) &&
          List.for_all2 (fun ta1 ta2 -> ta1 = ta2) p_targs q_targs && f = g && is_pure_spatial_assertion conditions->
-      (Hashtbl.add auto_lemmas (p_ref#name) (Some(f), tparams', List.map (fun (VarPat(_,x)) -> x) p_args1, List.map (fun (VarPat(_,x)) -> x) p_args2, pre, post))
+      (Hashtbl.add auto_lemmas (p_ref#name) (Some(f), (List.map (fun (tparam,_) -> tparam) tparams'), List.map (fun (VarPat(_,x)) -> x) p_args1, List.map (fun (VarPat(_,x)) -> x) p_args2, pre, post))
   | _ ->
     (* todo: determine values of parameters based on postcondition (instead of precondition) to avoid backtracking search *)
     let bound_param_vars_pred p_args vars must = 

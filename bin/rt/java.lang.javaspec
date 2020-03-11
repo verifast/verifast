@@ -476,7 +476,7 @@ predicate_family Iterable_iterating(Class c)(Iterable i, list<Object> elements, 
 
 public interface Iterable<T> {
     
-    //@ predicate Iterable(list<Object> elements);
+    //@ predicate Iterable(list<T> elements);
     
     Iterator<T> iterator();
         //@ requires [?f]Iterable(?es1);
