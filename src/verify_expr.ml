@@ -504,19 +504,48 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let interfmap = (* checks overriding methods in interfaces *)
     let rec iter map0 map1 =
-      let interf_specs_for_sign sign itf =
-                    let InterfaceInfo (_, fields, meths, _, _, _) = List.assoc itf map1 in
-                    match try_assoc sign meths with
-                      None -> []
-                    | Some spec -> [(itf, spec)]
+      let interf_specs_for_sign sign (itf, passedTparams) =
+        let InterfaceInfo (_, fields, meths, _, _, tparams) = List.assoc itf map1 in
+        let tparamEnv = List.map2 (fun a b -> (a,b)) passedTparams tparams in 
+        let revTparamEnv = List.map2 (fun a b -> (a,b)) tparams passedTparams in
+        let updatedSign = (fun (n,args) -> (n, List.map (fun arg -> match arg with
+          RealTypeParam(t) -> Printf.printf "Looking for type param: %s\n" t; 
+            let (nt,_) = List.assoc (t,Real) tparamEnv in RealTypeParam (nt)
+          | t -> t) args)) sign 
+        in
+          match try_assoc updatedSign meths with
+            None -> []
+            (* Update specs to properly apply the childs tparams *)
+            | Some ItfMethodInfo (lsuper, gh', rt', xmap', pre', pre_tenv', post', epost', terminates', vis', abstract', tparams') ->
+              let rt' = match rt' with 
+                Some(RealTypeParam t) -> let (rt,gh) = List.assoc (t,Real) revTparamEnv in Some(RealTypeParam (rt))
+                | t -> t in
+              let xmap' = List.map (
+                fun (name,t) -> match t with
+                  RealTypeParam(t) -> (name, let (rt,gh) = List.assoc (t,Real) revTparamEnv in RealTypeParam(rt))
+                  | t -> (name,t)
+                ) xmap' in
+              let spec = ItfMethodInfo (lsuper, gh', rt', xmap', pre', pre_tenv', post', epost', terminates', vis', abstract', tparams') in
+              [(itf, spec)]
       in
       match map0 with
         [] -> map1
       | (i, InterfaceInfo (l,fields,meths,preds,interfs, tparams)) as elem::rest ->
         List.iter (fun (sign, ItfMethodInfo (lm,gh,rt,xmap,pre,pre_tenv,post,epost,terminates,v,abstract, tparams)) ->
-          let superspecs = List.flatten (List.map (fun i -> (interf_specs_for_sign sign i)) interfs) in
+          let superspecs = List.flatten (List.map (fun i -> interf_specs_for_sign sign i) interfs) in
           List.iter (fun (tn, ItfMethodInfo (lsuper, gh', rt', xmap', pre', pre_tenv', post', epost', terminates', vis', abstract', tparams')) ->
-            if rt <> rt' then static_error lm ("Return type (" 
+            Printf.printf "Comparing interface method to super: \n\t Method: %s %s <%s>(%s) \n\tSuper Method: %s %s<%s>(%s)\n"
+                (match rt with None -> "void" | Some(rt) -> string_of_type rt)
+                ((fun (name,_) -> name) sign)
+                (String.concat ", " (List.map (fun (f,vis) -> f ^ (if vis = Ghost then "(Ghost)" else ("Real"))) tparams))
+                (String.concat ", " (List.map (fun (name,t) -> name ^ " " ^ string_of_type t) (List.tl xmap)))
+
+                (match rt' with None -> "void" | Some(rt) -> string_of_type rt)
+                tn
+                (String.concat ", " (List.map (fun (f,vis) -> f ^ (if vis = Ghost then "(Ghost)" else ("Real"))) tparams'))
+                (String.concat ", " (List.map (fun (name,t) -> name ^ " " ^ string_of_type t) (List.tl xmap')));
+            if rt <> rt' then 
+              static_error lm ("Return type (" 
               ^ (match rt with None-> "void" | Some(rt) -> string_of_type rt) 
               ^ ") does not match overridden method(" 
               ^ (match rt' with None -> "void" | Some(rt') -> string_of_type rt') 
@@ -648,7 +677,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     Ghost -> static_error lm "A lemma method cannot implement or override a non-lemma method." None
                   | Real -> static_error lm "A non-lemma method cannot implement or override a lemma method." None
                   end;
-                if rt <> rt' then static_error lm "Return type does not match overridden method" None;
+                if rt <> rt' then static_error lm ("Return type does not match overridden method for class " ^cn) None;
                 match co with
                   None -> ()
                 | Some (pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, terminates) ->
@@ -921,7 +950,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let rec interface_methods itf =
     let InterfaceInfo (l, fds, meths, preds, supers, tparams) = List.assoc itf interfmap in
-    List.map (fun (sign, _) -> (sign, ("interface", itf))) meths @ flatmap interface_methods supers
+    List.map (fun (sign, _) -> (sign, ("interface", itf))) meths @ flatmap interface_methods (List.map (fun (f,_) -> f) supers)
   
   let rec unimplemented_class_methods cn trust_cabstract =
     if cn = "" then [] else

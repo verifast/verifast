@@ -249,7 +249,7 @@ and parse_qualified_type_rest tpenv = parser
     else 
       let (l,p) = List.hd xs in
         if (List.mem p tpenv) 
-          then p::(tparams xs)
+          then (p,Real)::(tparams (List.tl xs))
           else raise (ParseException (l, "Type parameter is not in scope")) 
     in
     ("", tparams xs)

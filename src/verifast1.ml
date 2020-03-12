@@ -704,7 +704,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * field_info map
       * (signature * interface_method_info) list
       * interface_inst_pred_info map
-      * string list (* superinterfaces *)
+      * (string * (string * ghostness) list) list (* superinterfaces with passed tparams *)
       * (string * ghostness) list (* type parameters *)
     type class_info = {
       cl: loc;
@@ -1279,7 +1279,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   match ls with
                     [] -> []
                   | (i,tparams)::ls -> match search2' Real i (pn,ilist) ifdm interfmap0 with 
-                              Some i -> i::check_interfs ls
+                              Some i -> (i,tparams)::check_interfs ls
                             | None -> raise Not_found
                 in
                 check_interfs interfs
@@ -1621,9 +1621,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         Some {csuper=super; cinterfs=interfaces} ->
         is_subtype_of super y || List.exists (fun itf -> is_subtype_of itf y) interfaces
       | None -> begin match try_assoc x interfmap1 with
-          Some (_, _, _, _, interfaces, _, _, _) -> List.exists (fun itf -> is_subtype_of itf y) interfaces
+          Some (_, _, _, _, interfaces, _, _, _) -> List.exists (fun (itf,_)   -> is_subtype_of itf y) interfaces
         | None -> begin match try_assoc x interfmap0 with
-            Some (InterfaceInfo (_, _, _, _, interfaces, tparams)) -> List.exists (fun itf -> is_subtype_of itf y) interfaces
+            Some (InterfaceInfo (_, _, _, _, interfaces, tparams)) -> List.exists (fun (itf,_) -> is_subtype_of itf y) interfaces
           | None -> false 
           end
         end
@@ -2453,9 +2453,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   begin match try_assoc tn itfmap with
                     Some info ->
                     let (preds, itfs) = get_preds_and_itfs info in
+                    let itfnames = List.map (fun (f,_) -> f) itfs in
                     begin match try_assoc g preds with
                       Some (l, pmap, family, symb) -> [(family, pmap, symb)]
-                    | None -> flatmap preds_in_itf itfs
+                    | None -> flatmap preds_in_itf itfnames
                     end
                   | None -> fallback ()
                   end
@@ -2464,7 +2465,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 check_itfmap (function InterfaceInfo (li, fields, methods, preds, interfs, tparams) -> (preds, interfs)) interfmap0 $. fun () ->
                 []
               in
-              match flatmap preds_in_itf interfs with
+              match flatmap preds_in_itf (List.map (fun (f,_) -> f ) interfs) with
                 [] -> (tn, get_unique_var_symb (tn ^ "#" ^ g) (PredType ([], [], None, Inductiveness_Inductive)))
               | [(family, pmap0, symb)] ->
                 if not (for_all2 (fun (x, t) (x0, t0) -> expect_type_core l "Predicate parameter covariance check" (Some true) t t0; true) pmap pmap0) then
@@ -2506,9 +2507,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   begin match try_assoc tn itfmap with
                     Some info ->
                     let (preds, itfs) = get_preds_and_itfs info in
+                    let itfnames = List.map (fun (f,_) -> f) itfs in
                     begin match try_assoc g preds with
                       Some (l, pmap, family, symb) -> [(family, pmap, symb)]
-                    | None -> flatmap preds_in_itf itfs
+                    | None -> flatmap preds_in_itf itfnames
                     end
                   | None -> fallback ()
                   end
@@ -2686,7 +2688,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin match try_assoc fn fds with
         Some f -> Some (f, cn)
       | None ->
-      head_flatmap_option (fun cn -> lookup_class_field cn fn) supers
+      head_flatmap_option (fun cn -> lookup_class_field cn fn) (List.map (fun (f,_) -> f) supers)
       end
     | None ->
     match try_assoc cn interfmap0 with
@@ -2694,7 +2696,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin match try_assoc fn fds with
         Some f -> Some (f, cn)
       | None ->
-      head_flatmap_option (fun cn -> lookup_class_field cn fn) supers
+      head_flatmap_option (fun cn -> lookup_class_field cn fn) (List.map (fun (f,_) -> f) supers)
       end
     | None ->
     None
@@ -2822,7 +2824,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
         meths
       in
-      let inherited_methods = flatmap (fun ifn -> get_methods ifn mn) interfs in
+      let inherited_methods = flatmap (fun ifn -> get_methods ifn mn) (List.map (fun (f,_) -> f) interfs) in
       declared_methods @ List.filter (fun (sign, info) -> not (List.mem_assoc sign declared_methods)) inherited_methods
     in
     (*
@@ -4071,7 +4073,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let (interfs, preds) = get_interfs_and_preds info in
           begin match try_assoc g preds with
             Some (_, pmap, family, symb) -> [(family, pmap)]
-          | None -> List.flatten (List.map (fun i -> find_in_interf i) interfs)
+          | None -> List.flatten (List.map (fun i -> find_in_interf i) (List.map (fun (f,_) -> f) interfs))
           end
         | None -> fallback ()
       in
@@ -4966,7 +4968,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let super_clintf =
         match info with
           InterfaceInfo (_, _, _, _, intfs,_) ->
-            (intfs, false, false)
+            ((List.map (fun (f,_) -> f) intfs), false, false)
       in
       calculate_ancestry_from_direct_ancesters_info already_calculated_ancestries clinfname super_clintf
     in
@@ -4974,7 +4976,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let super_clintf =
         match info with
           (_, _, _, _, intfs, _, _,_) ->
-            (intfs, false, false)
+            ((List.map (fun (f,_) -> f) intfs), false, false)
       in
       calculate_ancestry_from_direct_ancesters_info already_calculated_ancestries clinfname super_clintf
     in

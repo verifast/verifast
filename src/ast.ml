@@ -677,12 +677,12 @@ and
       cons list *
       string (* superclass *) *
       (string * ghostness) list (* type parameters *) *
-      (string * string list) list (* itfs  with tparams*) *
+      (string * (string * ghostness) list) list (* itfs  with passed tparams*) *
       instance_pred_decl list
   | Interface of 
       loc *
       string *
-      (string * string list) list * (* extended interfaces with tparams *)
+      (string * (string * ghostness) list) list * (* extended interfaces with passed tparams *)
       field list *
       meth list *
       (string * ghostness) list * (* type parameters *) 

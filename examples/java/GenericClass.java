@@ -27,6 +27,23 @@ public class GenericClass<T>{
 
 public class Foo {}
 
+/*
+	Proper method overrides
+*/
+// Case A: Interface implements interface
+public interface Parent<A,B>{
+	public A get1(A arg1);
+	public B get2(A arg1);
+}
+
+public interface Child<C,D> extends Parent<D,C>{
+	public D get1(D arg1);
+	public C get2(D arg1);
+}
+// Case B: Class implements interface
+
+// Case C: Class extends class
+
 public class HelloWorld 
 {
   public <T> void genericFunction(T argument){}
