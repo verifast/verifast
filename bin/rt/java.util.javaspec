@@ -122,7 +122,7 @@ public interface Iterator<E>{
         //@ requires Iterator(?es, ?c, ?n);
         //@ ensures Iterator(es, c, n) &*& result ? es(n) != none : es(n) == none; // Force case split.
     
-    E next();
+    public E next();
         //@ requires Iterator(?es, ?c, ?n) &*& es(n) != none;
         //@ ensures Iterator(es, some(n), n + 1) &*& result == the(es(n));
     

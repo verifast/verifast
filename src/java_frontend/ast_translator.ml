@@ -312,7 +312,8 @@ and translate_class_decl decl =
             Some x -> GEN.string_of_ref_type x
           | None -> "java.lang.Object"
         in
-        let impls' = List.map GEN.string_of_ref_type impls in
+        (* No support yet for generic implements *)
+        let impls' = List.map (fun f -> ((GEN.string_of_ref_type f),[])) impls in
         let (decls', ghost_members') = translate_ghost_members l' id' decls' in
         let (ghost_fields', ghost_meths', ghost_preds') = split_ghost_members l ghost_members' in
         if (decls' <> []) then error l' "Not all declarations in class could be processed";
@@ -321,7 +322,8 @@ and translate_class_decl decl =
         let l'= translate_location l in
         let id' = GEN.string_of_identifier id in
         debug_print ("interface declaration " ^ id');
-        let impls' = List.map GEN.string_of_ref_type impls in
+        (* No support yet for generic implements *)
+        let impls' = List.map (fun f -> ((GEN.string_of_ref_type f),[])) impls in
         let (decls', fields') = translate_fields decls in
         let (decls', meths') = translate_methods id' decls' in
         let (decls', ghost_members') = translate_ghost_members l' id' decls' in

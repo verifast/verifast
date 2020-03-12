@@ -680,7 +680,7 @@ and sexpr_of_decl (decl : decl) : sexpression =
     | Interface (_, id, inters, fields, meths, tparams, preds) ->
       build_list [ Symbol "declare-interface"
                  ; Symbol id ]
-                 [ "super-interfaces", List (List.map symbol inters)
+                 [ "super-interfaces", List (List.map (fun (i,tparams) -> symbol (i ^ "<" ^ (String.concat ", " tparams) ^ ">")) inters)
                  ; "fields", sexpr_of_list sexpr_of_field fields
                  ; "methods", sexpr_of_list sexpr_of_meths meths 
                  ; "instance-preds", sexpr_of_list sexpr_of_instance_pred preds ]
@@ -688,7 +688,7 @@ and sexpr_of_decl (decl : decl) : sexpression =
       build_list [ Symbol "declare-class"
                  ; Symbol id ]
                  [ "super-class", symbol super
-                 ; "super-interfaces", List (List.map symbol inters)
+                 ; "super-interfaces", List (List.map (fun (i,tparams) -> symbol (i ^ "<" ^ (String.concat ", " tparams) ^ ">")) inters)
                  ; "methods", sexpr_of_list sexpr_of_meths meths 
                  ; "fields", sexpr_of_list sexpr_of_field fields
                  ; "construcors", sexpr_of_list (sexpr_of_constructor id) cons 

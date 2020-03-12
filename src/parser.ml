@@ -242,14 +242,23 @@ and
      end
   >] -> ds
 and parse_qualified_type_rest tpenv = parser
-  [< '(_, Kwd "."); '(_, Ident s); rest = parse_qualified_type_rest tpenv >] -> "." ^ s ^ rest
-| [< xs = parse_type_params_with_loc >] -> List.iter (fun (l,p) -> if (List.mem p tpenv) then () else raise (ParseException (l, "Type parameter is not in scope"))) xs; ""
-| [<>] -> ""
+  [< '(_, Kwd "."); '(_, Ident s); (rest, tparams) = parse_qualified_type_rest tpenv >] -> ("." ^ s ^ rest, tparams)
+| [< xs = parse_type_params_with_loc >] -> 
+  let rec tparams xs =
+    if xs = [] then []
+    else 
+      let (l,p) = List.hd xs in
+        if (List.mem p tpenv) 
+          then p::(tparams xs)
+          else raise (ParseException (l, "Type parameter is not in scope")) 
+    in
+    ("", tparams xs)
+| [<>] -> ("",[])
 and parse_qualified_type tpenv = parser
-  [<'(l, Ident s); rest = parse_qualified_type_rest tpenv >] -> s ^ rest
+  [<'(l, Ident s); (rest, tparams) = parse_qualified_type_rest tpenv >] -> (s ^ rest,tparams)
 and
   parse_super_class tpenv = parser
-    [<'(l, Kwd "extends"); s = parse_qualified_type tpenv>] -> s
+    [<'(l, Kwd "extends"); (s, tparams) = parse_qualified_type tpenv>] -> s
   | [<>] -> "java.lang.Object"
 and
   parse_interfaces tpenv = parser

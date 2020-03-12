@@ -1278,7 +1278,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let rec check_interfs ls=
                   match ls with
                     [] -> []
-                  | i::ls -> match search2' Real i (pn,ilist) ifdm interfmap0 with 
+                  | (i,tparams)::ls -> match search2' Real i (pn,ilist) ifdm interfmap0 with 
                               Some i -> i::check_interfs ls
                             | None -> raise Not_found
                 in
@@ -1302,7 +1302,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let rec check_interfs ls=
                     match ls with
                       [] -> []
-                    | i::ls -> match search2' Real i (pn,ilist) ifdm interfmap0 with 
+                    | (i,tparams)::ls -> match search2' Real i (pn,ilist) ifdm interfmap0 with 
                                 Some i -> i::check_interfs ls
                               | None -> raise Not_found
                 in
@@ -1329,7 +1329,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let rec check_interfs kind i ls (pn,ilist) =
               match ls with
                 [] -> kind ^ " " ^ i ^ " is part of an inheritance cycle"
-              | i::ls -> match search2' Real i (pn,ilist) ifdm interfmap0 with 
+              | (i,tparams)::ls -> match search2' Real i (pn,ilist) ifdm interfmap0 with 
                           Some i -> check_interfs kind i ls (pn,ilist)
                         | None -> "Interface " ^ i ^ " not found"
             in

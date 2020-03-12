@@ -436,7 +436,6 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 match xs with
                  [] -> List.rev xm
                | (te, x)::xs ->
-                Printf.printf "checking param %s %s\n" x (string_of_type_expr te);
                  if List.mem_assoc x xm then static_error l "Duplicate parameter name." None;
                  let t = check_pure_type (pn,ilist) tparams te in
                  iter ((x, t)::xm) xs
@@ -517,7 +516,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         List.iter (fun (sign, ItfMethodInfo (lm,gh,rt,xmap,pre,pre_tenv,post,epost,terminates,v,abstract, tparams)) ->
           let superspecs = List.flatten (List.map (fun i -> (interf_specs_for_sign sign i)) interfs) in
           List.iter (fun (tn, ItfMethodInfo (lsuper, gh', rt', xmap', pre', pre_tenv', post', epost', terminates', vis', abstract', tparams')) ->
-            if rt <> rt' then static_error lm "Return type does not match overridden method" None;
+            if rt <> rt' then static_error lm ("Return type (" 
+              ^ (match rt with None-> "void" | Some(rt) -> string_of_type rt) 
+              ^ ") does not match overridden method(" 
+              ^ (match rt' with None -> "void" | Some(rt') -> string_of_type rt') 
+              ^ ")"
+              ) None;
             if gh <> gh' then
                   begin match gh with
                     Ghost -> static_error lm "A lemma method cannot implement or override a non-lemma method." None
