@@ -89,7 +89,7 @@ fixpoint boolean subset<t>(list<t> l1, list<t> l2) {
     }
 }
 
-fixpoint boolean not_null<t>(list<t> xs) {
+fixpoint boolean not_null(list<Object> xs) {
     switch (xs) {
         case nil: return true;
         case cons(x, xs0): return x != null && not_null(xs0);
