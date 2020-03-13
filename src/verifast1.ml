@@ -344,7 +344,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | BoxIdType -> ProverInt
     | HandleIdType -> ProverInt
     | AnyType -> ProverInductive
-    | RealTypeParam _ -> ProverInductive
+    | RealTypeParam _ -> ProverInt
     | GhostTypeParam _ -> ProverInductive
     | Void -> ProverInductive
     | InferredType (_, t) -> begin match !t with EqConstraint t -> provertype_of_type t | _ -> t := EqConstraint (InductiveType ("unit", [])); ProverInductive end
@@ -2088,15 +2088,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let rec expect_type_core l msg (inAnnotation: bool option) t t0 =
     match (unfold_inferred_type t, unfold_inferred_type t0) with
       (ObjType ("null",[]), ObjType _) -> ()
-    | (ObjType ("null",[]), RealTypeParam _) -> () 
-    | (ObjType ("null",[]), GhostTypeParam _) -> () 
+    | (ObjType ("null",[]), RealTypeParam _) -> ()
     | (RealTypeParam t, ObjType("java.lang.Object", [])) -> ()
     | (GhostTypeParam t, ObjType("java.lang.Object", [])) -> ()
-    (* I don't like this solution, assume if we don't know the tparams yet they are equal (both Object), doesn't seem right*)
-    | (RealTypeParam t, RealTypeParam t0) when inAnnotation = Some(true) -> () 
-    (* Not actually correct. Temporary solution. *)
-    | (ObjType("java.lang.Object", []), RealTypeParam t) when inAnnotation = Some(true) -> ()
-    | (ObjType("java.lang.Object", []), GhostTypeParam t) when inAnnotation = Some(true) -> ()
+    | (RealTypeParam t, RealTypeParam t0) -> ()
+    | (ObjType("java.lang.Object", []), RealTypeParam t) -> ()
     | (ObjType ("null",[]), ArrayType _) -> ()
     | (ArrayType _, ObjType ("java.lang.Object",[])) -> ()
     (* Note that in Java short[] is not assignable to int[] *)
