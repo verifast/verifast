@@ -713,8 +713,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       cmeths: (signature * method_info) list;
       cfds: field_info map;
       cctors: (type_ list * ctor_info) list;
-      csuper: string;
-      cinterfs: string list;
+      csuper: (string  * (string * ghostness) list);
+      cinterfs: (string * (string * ghostness) list) list;
       cpreds: inst_pred_info map;
       cpn: string; (* package *)
       cilist: import list;
@@ -1288,7 +1288,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             with Not_found ->
               iter (ifdm, classlist) rest ((List.hd ds)::todo)
           end
-      | (pn, ilist, Class (l, abstract, fin, i, meths,fields,constr,super, tparams,interfs,preds))::rest ->
+      | (pn, ilist, Class (l, abstract, fin, i, meths,fields,constr,(super,passedTparams), tparams,interfs,preds))::rest ->
         let i= full_name pn i in
         if List.mem_assoc i ifdm then
           static_error l ("There exists already an interface with this name: "^i) None
@@ -1303,17 +1303,17 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     match ls with
                       [] -> []
                     | (i,tparams)::ls -> match search2' Real i (pn,ilist) ifdm interfmap0 with 
-                                Some i -> i::check_interfs ls
+                                Some i -> (i,tparams)::check_interfs ls
                               | None -> raise Not_found
                 in
                 check_interfs interfs
               in
               let super =
-                if i = "java.lang.Object" then "" else
-                if super = "java.lang.Object" then super else
+                if i = "java.lang.Object" then ("", []) else
+                if super = "java.lang.Object" then (super, passedTparams) else
                 match search2' Real super (pn,ilist) classlist classmap0 with
                   None-> raise Not_found
-                | Some super -> super
+                | Some super -> (super, passedTparams)
               in
               iter (ifdm, (i, (l,abstract,fin,meths,fields,constr,super,tparams,interfs,preds,pn,ilist))::classlist) rest todo
             with Not_found ->
@@ -1337,7 +1337,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               match ds_rest with
               | (pn, ilist, (Interface (l, i, interfs, fields, meths, pred_specs, tparams)))::_ ->
                   (l, check_interfs "Interface" i interfs (pn,ilist))
-              | (pn, ilist, (Class (l, abstract, fin, i, meths,fields,constr,super, tparams,interfs,preds)))::_ ->
+              | (pn, ilist, (Class (l, abstract, fin, i, meths,fields,constr,(super,passedTparams), tparams,interfs,preds)))::_ ->
                   match search2' Real super (pn,ilist) classlist classmap0 with
                     None-> 
                       if i = "java.lang.Object" || super = "java.lang.Object" then 
@@ -1416,7 +1416,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         Some (n, l) ->
         AbstractType n
       | None ->
-      failwith ("No such type parameter, inductive datatype, class, interface, or function type: " ^pn^" "^id)
+      static_error l ("No such type parameter, inductive datatype, class, interface, or function type: " ^pn^" "^id) None
       end
     | IdentTypeExpr (l, Some(pac), id) ->
       let full_name = pac ^ "." ^ id in
@@ -1614,12 +1614,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     x = y ||
     y = "java.lang.Object" ||
     match try_assoc x classmap1 with
-      Some (_, _, _, _, _, _, super,_, interfaces, _, _, _) ->
-      is_subtype_of super y || List.exists (fun itf -> is_subtype_of itf y) interfaces
+      Some (_, _, _, _, _, _, (super, _),_, interfaces, _, _, _) ->
+      is_subtype_of super y || List.exists (fun (itf,_) -> is_subtype_of itf y) interfaces
     | None ->
       match try_assoc x classmap0 with
-        Some {csuper=super; cinterfs=interfaces} ->
-        is_subtype_of super y || List.exists (fun itf -> is_subtype_of itf y) interfaces
+        Some {csuper=(super, passedTparams); cinterfs=interfaces} ->
+        is_subtype_of super y || List.exists (fun (itf,_) -> is_subtype_of itf y) interfaces
       | None -> begin match try_assoc x interfmap1 with
           Some (_, _, _, _, interfaces, _, _, _) -> List.exists (fun (itf,_)   -> is_subtype_of itf y) interfaces
         | None -> begin match try_assoc x interfmap0 with
@@ -2520,10 +2520,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let check_classmap classmap proj fallback =
                   begin match try_assoc cn classmap with
                     Some info ->
-                    let (super, interfs, predmap) = proj info in
+                    let ((super,passedTparams), interfs, predmap) = proj info in
                     begin match try_assoc g predmap with
                       Some (l, pmap, family, symb, body) -> [(family, pmap, symb)]
-                    | None -> preds_in_class super @ flatmap preds_in_itf interfs
+                    | None -> preds_in_class super @ flatmap preds_in_itf (List.map (fun (itf,_) -> itf) interfs)
                     end
                   | None -> fallback ()
                   end
@@ -2536,7 +2536,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   $. fun () ->
                 []
               in
-              match preds_in_class super @ flatmap preds_in_itf interfs with
+              match preds_in_class ((fun (spr,_) -> spr) super) @ flatmap preds_in_itf (List.map (fun (itf,_) -> itf) interfs) with
                 (* InstancePredDecl currently does not support coinductive declarations. *)
                 [] -> (cn, get_unique_var_symb (cn ^ "#" ^ g) (PredType ([], [], None, Inductiveness_Inductive)))
               | [(family, pmap0, symb)] ->
@@ -2656,7 +2656,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let rec lookup_class_field cn fn =
     match try_assoc cn classmap1 with
-      Some (_, _, _, _, fds, _, super, _, itfs, _, _, _) ->
+      Some (_, _, _, _, fds, _, (super, passedTparams), _, itfs, _, _, _) ->
       begin match try_assoc fn fds with
         None when cn = "java.lang.Object" -> None
       | Some f -> Some (f, cn)
@@ -2664,11 +2664,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match lookup_class_field super fn with
         Some _ as result -> result
       | None ->
-      head_flatmap_option (fun cn -> lookup_class_field cn fn) itfs
+      head_flatmap_option (fun cn -> lookup_class_field cn fn) (List.map (fun (itf,_) -> itf) itfs)
       end
     | None -> 
     match try_assoc cn classmap0 with
-      Some {cfds; csuper; cinterfs} ->
+      Some {cfds; csuper=(csuper,_); cinterfs} ->
       begin match try_assoc fn cfds with
         None when cn = "java.lang.Object" -> None
       | Some f -> Some (f, cn)
@@ -2676,7 +2676,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match lookup_class_field csuper fn with
         Some _ as result -> result
       | None ->
-      head_flatmap_option (fun cn -> lookup_class_field cn fn) cinterfs
+      head_flatmap_option (fun cn -> lookup_class_field cn fn) (List.map (fun (itf,_) -> itf) cinterfs)
       end
     | None ->
     match try_assoc cn interfmap1 with
@@ -2800,9 +2800,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec get_methods tn mn =
       if tn = "" then [] else
       match try_assoc tn classmap with
-        Some {cmeths; csuper; cinterfs} ->
+        Some {cmeths; csuper=(csuper,_); cinterfs} ->
         let inherited_methods =
-          get_methods csuper mn @ flatmap (fun ifn -> get_methods ifn mn) cinterfs
+          get_methods csuper mn @ flatmap (fun ifn -> get_methods ifn mn) (List.map (fun (itf,_) -> itf) cinterfs)
         in
         let declared_methods =
           flatmap
@@ -3425,7 +3425,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let rec get_implemented_instance_method cn mn argtps =
         if cn = "java.lang.Object" then None else
         match try_assoc cn classmap with 
-        | Some {cmeths; csuper} ->
+        | Some {cmeths; csuper=(csuper,_)} ->
           begin try
             let m =
               List.find
@@ -3449,7 +3449,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | Some(ObjType(cn, targs)) -> 
         begin match try_assoc cn classmap with
           None -> static_error l "No matching method." None
-        | Some {csuper} ->
+        | Some {csuper=(csuper,_)} ->
             begin match get_implemented_instance_method csuper mn argtps with
               None -> static_error l "No matching method." None
             | Some(((mn', sign), MethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, terminates, ss, fb, v, is_override, abstract, tparams))) ->
@@ -4081,10 +4081,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let search_classmap classmap proj fallback =
         match try_assoc cn classmap with
           Some info ->
-          let (super, interfs, preds) = proj info in
+          let ((super,_), interfs, preds) = proj info in
           begin match try_assoc g preds with
             Some (_, pmap, family, symb, body) -> [(family, pmap)]
-          | None -> find_in_class super @ flatmap find_in_interf interfs
+          | None -> find_in_class super @ flatmap find_in_interf (List.map (fun (itf,_) -> itf) interfs)
           end
         | None -> fallback ()
       in
@@ -4981,14 +4981,16 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let iafc =
           if info.cfinal = FinalClass then true else false
         in
-        if info.csuper = "" then (info.cinterfs, true, iafc) else ((info.csuper :: info.cinterfs), true, iafc) (* super class of Java.lang.Object is registered as "" *)
+        let (csuper,passedTparams) = info.csuper in
+        if csuper = "" then ((List.map (fun (itf,_) -> itf) info.cinterfs), true, iafc) else ((csuper :: (List.map (fun (itf,_) -> itf) info.cinterfs)), true, iafc) (* super class of Java.lang.Object is registered as "" *)
       in
       calculate_ancestry_from_direct_ancesters_info already_calculated_ancestries clinfname super_clintf
     in
     let calculate_ancestry_classmap1 already_calculated_ancestries (clinfname, info) =
       let super_clintf =
         match info with
-          (_, _, fin, _, _, _, spr, _, intfs, _, _, _) ->
+          (_, _, fin, _, _, _, (spr,passedTparams), _, intfs, _, _, _) ->
+            let intfs = (List.map (fun (itf,_) -> itf) intfs) in
             let iafc =
               if fin = FinalClass then true else false
             in
@@ -5041,7 +5043,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         calculate_all_ancestries anc_intfmap0_intfmap1 classmap0 calculate_ancestry_classmap0
       in
       let anc_intfmap0_intfmap1_classmap0_classmap1 =
-        calculate_all_ancestries anc_intfmap0_intfmap1_classmap0 classmap1 calculate_ancestry_classmap1
+        calculate_all_ancestries 
+          anc_intfmap0_intfmap1_classmap0 
+          classmap1 
+          calculate_ancestry_classmap1
       in
       anc_intfmap0_intfmap1_classmap0_classmap1
     in

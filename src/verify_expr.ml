@@ -606,13 +606,31 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let classmap1 =
     let rec iter classmap1_done classmap1_todo =
-      let interf_specs_for_sign sign itf =
-        let InterfaceInfo (_, _, meths, _,  _, _) = List.assoc itf interfmap in
-        match try_assoc sign meths with
-          None -> []
-        | Some spec -> [(itf, spec)]
+      let interf_specs_for_sign sign (itf, passedTparams) =
+        let InterfaceInfo (_, fields, meths, _, _, tparams) = List.assoc itf interfmap in
+        let tparamEnv = List.map2 (fun a b -> (a,b)) passedTparams tparams in 
+        let revTparamEnv = List.map2 (fun a b -> (a,b)) tparams passedTparams in
+        let updatedSign = (fun (n,args) -> (n, List.map (fun arg -> match arg with
+          RealTypeParam(t) -> Printf.printf "Looking for type param: %s\n" t; 
+            let (nt,_) = List.assoc (t,Real) tparamEnv in RealTypeParam (nt)
+          | t -> t) args)) sign 
+        in
+          match try_assoc updatedSign meths with
+            None -> []
+            (* Update specs to properly apply the childs tparams *)
+            | Some ItfMethodInfo (lsuper, gh', rt', xmap', pre', pre_tenv', post', epost', terminates', vis', abstract', tparams') ->
+              let rt' = match rt' with 
+                Some(RealTypeParam t) -> let (rt,gh) = List.assoc (t,Real) revTparamEnv in Some(RealTypeParam (rt))
+                | t -> t in
+              let xmap' = List.map (
+                fun (name,t) -> match t with
+                  RealTypeParam(t) -> (name, let (rt,gh) = List.assoc (t,Real) revTparamEnv in RealTypeParam(rt))
+                  | t -> (name,t)
+                ) xmap' in
+              let spec = ItfMethodInfo (lsuper, gh', rt', xmap', pre', pre_tenv', post', epost', terminates', vis', abstract', tparams') in
+              [(itf, spec)]
       in
-      let rec super_specs_for_sign sign cn itfs =
+      let rec super_specs_for_sign sign (cn,_) itfs =
         class_specs_for_sign sign cn @ flatmap (interf_specs_for_sign sign) itfs
       and class_specs_for_sign sign cn =
         if cn = "" then [] else
@@ -650,8 +668,18 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 iter [] ps
             in
             let xmap1 = match fb with Static -> xmap | Instance -> let _::xmap1 = xmap in xmap1 in
-            let sign = (n, List.map snd xmap1) in
+            let sign = (n,List.map snd xmap1) in
             if List.mem_assoc sign mmap then static_error lm "Duplicate method." None;
+            (* Apply type erasure to sign that is used to check for duplicate methods after erasure*)
+            let erasedSign = (n, List.map (fun t -> match t with 
+              RealTypeParam _ | GhostTypeParam _ -> ObjType ("java.lang.Object",[])
+              | t -> t) (List.map snd xmap1)) in
+            let erasedMmap = List.map (fun ((n,ts),minfo) -> 
+              let erasedTypes = List.map (fun t -> match t with 
+                GhostTypeParam _ | RealTypeParam _ -> ObjType ("java.lang.Object", []) 
+                | t -> t) ts in
+              ((n,erasedTypes),minfo)) mmap in
+            if List.mem_assoc erasedSign erasedMmap then static_error lm "Duplicate method after erasure." None;
             let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) tparams rt) in
             let co =
               match co with
@@ -760,7 +788,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter classmap1_done classmap1_todo =
       match classmap1_todo with
         [] -> List.rev classmap1_done
-      | (cn, ({cl=l; cfds=fds; cctors=cmap; csuper=super} as cls)) as c::classmap1_todo ->
+      | (cn, ({cl=l; cfds=fds; cctors=cmap; csuper=(super,passedTparams)} as cls)) as c::classmap1_todo ->
         let c =
           if cmap <> [] then c else
           (* Check if superclass has zero-arg ctor *)
@@ -927,7 +955,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in  
       let rec get_overrides cn =
         if cn = "java.lang.Object" then [] else
-        let {cmeths; csuper} = List.assoc cn classmap in
+        let {cmeths; csuper=(csuper,passedTparams)} = List.assoc cn classmap in
         let overrides =
           flatmap
             begin fun (sign, MethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, terminates, ss, fb, v, is_override, abstract, tparams)) ->
@@ -948,24 +976,33 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     end
 
-  let rec interface_methods itf =
+  let rec interface_methods (itf, passedTparams) =
     let InterfaceInfo (l, fds, meths, preds, supers, tparams) = List.assoc itf interfmap in
-    List.map (fun (sign, _) -> (sign, ("interface", itf))) meths @ flatmap interface_methods (List.map (fun (f,_) -> f) supers)
+    List.map (fun (sign, _) -> 
+      (sign, ("interface", itf))) meths @ flatmap interface_methods supers
   
-  let rec unimplemented_class_methods cn trust_cabstract =
+  let rec unimplemented_class_methods (cn,passedTparams) trust_cabstract =
     if cn = "" then [] else
     let {cmeths; csuper; cinterfs; cabstract} = List.assoc cn classmap in
     if trust_cabstract && not cabstract then [] else
+    let erase_types ts = List.map (fun t -> match t with
+        RealTypeParam _ | GhostTypeParam _ -> ObjType("java.lang.object", [])
+        | t -> t) ts in
     let inherited_unimplemented_methods = unimplemented_class_methods csuper true @ flatmap interface_methods cinterfs in
+    let erased_inherited_unimplemented_methods = List.map (fun ((mn,ts),info) -> ((mn, erase_types ts), info)) inherited_unimplemented_methods in
     let abstract_methods = flatmap (function (sign, MethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, terminates, ss, Instance, v, is_override, true, tparams)) -> [sign, ("class", cn)] | _ -> []) cmeths in
     let implemented_methods = flatmap (function (sign, MethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, terminates, ss, Instance, v, is_override, false, tparams)) -> [sign] | _ -> []) cmeths in
-    List.filter (fun (sign, _) -> not (List.mem sign implemented_methods)) inherited_unimplemented_methods @ abstract_methods
+    let erased_implemented_methods = List.map (fun (mn,ts) -> (mn,erase_types ts)) implemented_methods in
+    List.filter (fun ((mn,ts), _) -> 
+      let erasedSign = (mn, erase_types ts) in
+      not (List.mem erasedSign erased_implemented_methods)) erased_inherited_unimplemented_methods @ abstract_methods
   
   let () =
     if not is_jarspec then
-    classmap1 |> List.iter begin function (cn, {cl; cabstract}) ->
+    classmap1 |> List.iter begin 
+    function (cn, {cl; cabstract}) ->
       if not cabstract then begin
-        match unimplemented_class_methods cn false with
+        match unimplemented_class_methods (cn, []) false with
           [] -> ()
         | (sign, (k, tn))::_ -> static_error cl (Printf.sprintf "This class must implement method %s declared in %s %s or must be declared abstract." (string_of_sign sign) k tn) None
       end

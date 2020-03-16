@@ -307,10 +307,11 @@ and translate_class_decl decl =
         let (decls', static_blocks') = translate_static_blocks id' decls' in
         let (decls', fields') = translate_fields decls' in
         let (decls', cons') = translate_constructors decls' in
+        (* Extending through ast_translator doesn't support generics yet *)
         let extnds' =
           match extnds with
-            Some x -> GEN.string_of_ref_type x
-          | None -> "java.lang.Object"
+            Some x -> (GEN.string_of_ref_type x, [])
+          | None -> ("java.lang.Object", [])
         in
         (* No support yet for generic implements *)
         let impls' = List.map (fun f -> ((GEN.string_of_ref_type f),[])) impls in

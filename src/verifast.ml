@@ -2764,7 +2764,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let rec verify_classes boxes lems classm=
     match classm with
       [] -> ()
-    | (cn, {cl; cabstract; cfinal; cmeths; cctors; csuper; cpn; cilist})::classm ->
+    | (cn, {cl; cabstract; cfinal; cmeths; cctors; csuper=(csuper,_); cpn; cilist})::classm ->
       let (superctors, superfinal) =
         if csuper = "" then ([], ExtensibleClass) else
           let {cctors; cfinal} = List.assoc csuper classmap in

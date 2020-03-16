@@ -119,7 +119,7 @@ module Scala = struct
   let rec
     parse_decl = parser
       [< '(l, Kwd "object"); '(_, Ident cn); '(_, Kwd "{"); ms = rep parse_method; '(_, Kwd "}") >] ->
-      Class (l, false, FinalClass, cn, ms, [], [], "Object", [], [], [])
+      Class (l, false, FinalClass, cn, ms, [], [], ("Object", []), [], [], [])
   and
     parse_method = parser
       [< '(l, Kwd "def"); '(_, Ident mn); ps = parse_paramlist; t = parse_type_ann; co = parse_contract; '(_, Kwd "=");'(_, Kwd "{"); ss = rep parse_stmt; '(closeBraceLoc, Kwd "}")>] ->
@@ -258,8 +258,8 @@ and parse_qualified_type tpenv = parser
   [<'(l, Ident s); (rest, tparams) = parse_qualified_type_rest tpenv >] -> (s ^ rest,tparams)
 and
   parse_super_class tpenv = parser
-    [<'(l, Kwd "extends"); (s, tparams) = parse_qualified_type tpenv>] -> s
-  | [<>] -> "java.lang.Object"
+    [<'(l, Kwd "extends"); (s, tparams) = parse_qualified_type tpenv>] -> (s, tparams)
+  | [<>] -> ("java.lang.Object", [])
 and
   parse_interfaces tpenv = parser
   [< '(_, Kwd "implements"); is = rep_comma (parser 

@@ -692,7 +692,7 @@ and sexpr_of_decl (decl : decl) : sexpression =
     | Class (_, abs, final, id, meths, fields, cons, super, tparams, inters, preds) ->
       build_list [ Symbol "declare-class"
                  ; Symbol id ]
-                 [ "super-class", symbol super
+                 [ "super-class", sexpr_of_extends [super]
                  ; "super-interfaces", sexpr_of_extends inters
                  ; "methods", sexpr_of_list sexpr_of_meths meths 
                  ; "fields", sexpr_of_list sexpr_of_field fields

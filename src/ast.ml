@@ -671,11 +671,11 @@ and
       loc *
       bool (* abstract *) *
       class_finality *
-      string *
+      string * (* class name *)
       meth list *
       field list *
       cons list *
-      string (* superclass *) *
+      (string * (string * ghostness) list) (* superclass *) *
       (string * ghostness) list (* type parameters *) *
       (string * (string * ghostness) list) list (* itfs  with passed tparams*) *
       instance_pred_decl list
