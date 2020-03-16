@@ -444,6 +444,15 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             in
             let sign = (n, List.map snd (List.tl xmap)) in
             if List.mem_assoc sign mmap then static_error lm "Duplicate method" None;
+            let erasedSign = (n, List.map (fun t -> match t with 
+              RealTypeParam _ | GhostTypeParam _ -> ObjType ("java.lang.Object",[])
+              | t -> t) (List.map snd xmap)) in
+            let erasedMmap = List.map (fun ((n,ts),minfo) -> 
+              let erasedTypes = List.map (fun t -> match t with 
+                GhostTypeParam _ | RealTypeParam _ -> ObjType ("java.lang.Object", []) 
+                | t -> t) ts in
+              ((n,erasedTypes),minfo)) mmap in
+            if List.mem_assoc erasedSign erasedMmap then static_error lm "Duplicate method after erasure." None;
             let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) tparams rt) in
             let (pre, pre_tenv, post, epost, terminates) =
               match co with
@@ -509,8 +518,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let tparamEnv = List.map2 (fun a b -> (a,b)) passedTparams tparams in 
         let revTparamEnv = List.map2 (fun a b -> (a,b)) tparams passedTparams in
         let updatedSign = (fun (n,args) -> (n, List.map (fun arg -> match arg with
-          RealTypeParam(t) -> Printf.printf "Looking for type param: %s\n" t; 
-            let (nt,_) = List.assoc (t,Real) tparamEnv in RealTypeParam (nt)
+          RealTypeParam(t) -> let (nt,_) = List.assoc (t,Real) tparamEnv in RealTypeParam (nt)
           | t -> t) args)) sign 
         in
           match try_assoc updatedSign meths with
@@ -534,16 +542,6 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         List.iter (fun (sign, ItfMethodInfo (lm,gh,rt,xmap,pre,pre_tenv,post,epost,terminates,v,abstract, tparams)) ->
           let superspecs = List.flatten (List.map (fun i -> interf_specs_for_sign sign i) interfs) in
           List.iter (fun (tn, ItfMethodInfo (lsuper, gh', rt', xmap', pre', pre_tenv', post', epost', terminates', vis', abstract', tparams')) ->
-            Printf.printf "Comparing interface method to super: \n\t Method: %s %s <%s>(%s) \n\tSuper Method: %s %s<%s>(%s)\n"
-                (match rt with None -> "void" | Some(rt) -> string_of_type rt)
-                ((fun (name,_) -> name) sign)
-                (String.concat ", " (List.map (fun (f,vis) -> f ^ (if vis = Ghost then "(Ghost)" else ("Real"))) tparams))
-                (String.concat ", " (List.map (fun (name,t) -> name ^ " " ^ string_of_type t) (List.tl xmap)))
-
-                (match rt' with None -> "void" | Some(rt) -> string_of_type rt)
-                tn
-                (String.concat ", " (List.map (fun (f,vis) -> f ^ (if vis = Ghost then "(Ghost)" else ("Real"))) tparams'))
-                (String.concat ", " (List.map (fun (name,t) -> name ^ " " ^ string_of_type t) (List.tl xmap')));
             if rt <> rt' then 
               static_error lm ("Return type (" 
               ^ (match rt with None-> "void" | Some(rt) -> string_of_type rt) 
@@ -611,8 +609,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let tparamEnv = List.map2 (fun a b -> (a,b)) passedTparams tparams in 
         let revTparamEnv = List.map2 (fun a b -> (a,b)) tparams passedTparams in
         let updatedSign = (fun (n,args) -> (n, List.map (fun arg -> match arg with
-          RealTypeParam(t) -> Printf.printf "Looking for type param: %s\n" t; 
-            let (nt,_) = List.assoc (t,Real) tparamEnv in RealTypeParam (nt)
+          RealTypeParam(t) -> let (nt,_) = List.assoc (t,Real) tparamEnv in RealTypeParam (nt)
           | t -> t) args)) sign 
         in
           match try_assoc updatedSign meths with
@@ -2206,9 +2203,6 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               [] -> [] 
               | xmap -> List.map2 (fun (name,t) pt -> (name, pt)) (List.tl xmap) pts
             in
-          Printf.printf "xmap: %s and args: %s\n"
-            (String.concat ", " (List.map (fun (str,t) -> str ^ "->" ^ (string_of_type t)) xmap))
-            (String.concat ", " (List.map string_of_type pts));
           (lm, gh, rt, (if static then xmap' else (List.hd xmap)::xmap'), pre_dyn, post_dyn, epost_dyn, terminates, is_upcall, target_class, fb, v)
         | _ ->
           let InterfaceInfo (_, _, methods, _, _, _) = List.assoc tn interfmap in
