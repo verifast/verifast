@@ -2133,25 +2133,29 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let argtps = List.map snd args' in
       let targtps = List.map (fun targexpr -> check_pure_type (pn,ilist) tparams targexpr) targs in
       let consmapTArgsReplaced =  
-        List.map (fun (sign,cinfo) -> (*Iterate ovr constructors*)
-          (List.map (fun tp -> match tp with (*Iterate over arguments*)
-            RealTypeParam(s) -> 
-              let index =  
-                match (index_of (s,Real) ctpenv 0) with
-                  Some(i) -> i
-                  | None -> static_error l ("Real Type param" ^ s ^ " not found in type paramter environment") None 
-                in 
-                List.nth targtps index (* replace type parameters with the given type arguments *)
-            | GhostTypeParam(s) -> 
-              let index =  
-                match (index_of (s,Ghost) ctpenv 0) with
-                  Some(i) -> i
-                  | None -> static_error l ("Ghost Type param" ^ s ^ " not found in type paramter environment") None 
-                in 
-                List.nth targtps index (* replace type parameters with the given type arguments *)
-            | other -> other) sign
-          , cinfo)
-        ) cctors in
+        if (List.length targtps) <> (List.length ctpenv)
+          then static_error l "Invalid amount of type arguments provided" None
+          else
+          List.map (fun (sign,cinfo) -> (*Iterate ovr constructors*)
+            (List.map (fun tp -> match tp with (*Iterate over arguments*)
+              RealTypeParam(s) -> 
+                let index =  
+                  match (index_of (s,Real) ctpenv 0) with
+                    Some(i) -> i
+                    | None -> static_error l ("Real Type param" ^ s ^ " not found in type paramter environment") None 
+                  in 
+                  List.nth targtps index (* replace type parameters with the given type arguments *)
+              | GhostTypeParam(s) -> 
+                let index =  
+                  match (index_of (s,Ghost) ctpenv 0) with
+                    Some(i) -> i
+                    | None -> static_error l ("Ghost Type param" ^ s ^ " not found in type paramter environment") None 
+                  in 
+                  List.nth targtps index (* replace type parameters with the given type arguments *)
+              | other -> other) sign
+            , cinfo)
+          ) cctors 
+      in
       let consmap' = 
         (*let argstps_str = (String.concat ", " (List.map (fun tp -> string_of_sexpression (sexpr_of_type_ tp)) argtps)) in
         let targstps_str = (String.concat ", " (List.map (fun tp -> string_of_sexpression (sexpr_of_type_ tp)) targtps)) in*)

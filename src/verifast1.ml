@@ -3250,13 +3250,34 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if ms = [] then on_fail () else
         let argtps = List.map (fun e -> let (_, tp, _) = (check e) in tp) args in
         let ms = List.map (fun (sign, (tn', lm, gh, rt, xmap, pre, post, epost, terminates, fb', v, abstract, tparams)) ->
+            (* Build a list of type arguments, either from the ones that got passed, or the ones you have to assume *)
+            let targenv = 
+              (if (List.length type_arguments) > 0 
+                then begin
+                let type_arguments_count = List.length type_arguments in
+                let tparams_count = List.length tparams in
+                if type_arguments_count <> tparams_count
+                  then static_error l 
+                    (Printf.sprintf "Wrong amount of type arguments provided. Expected: %s Actual: %s" 
+                      (string_of_int tparams_count) 
+                      (string_of_int type_arguments_count)
+                     ) None
+                  else List.map2 (fun a b -> (a,b)) tparams type_arguments end
+                else (*Build a list of type arguments, inferred from the signature *)
+                  let mappedSign = List.map2 (fun sarg arg -> match sarg with
+                      | RealTypeParam t -> Some(((t,Real),arg))
+                      | _ -> None) sign argtps in
+                  let filtered_mapped_sign = List.filter (fun entry -> match entry with | Some(s) -> true | None -> false) mappedSign in
+                    List.map (fun entry -> match entry with Some(s) -> s) filtered_mapped_sign)
+                    (* TODO: we are making assumptions, check the common parent if one type parameter maps on multiple argument types, otherwise something is wrong*)
+            in
            (* Replace the argument types parameters with their concrete type if they are a type parameter *)
-            let sign' = List.map (fun arg -> match arg with
-              RealTypeParam t -> begin match index_of (t, Real) tparams 0 with
-                None -> static_error l ("Unkown type parameter "^ t) None
-                | Some(pos) -> List.nth type_arguments pos
-                end
-              | t -> t) sign in (sign',(tn', lm, gh, rt, xmap, pre, post, epost, terminates, fb', v, abstract,tparams, sign))) ms in
+            let sign' = List.map (fun tp -> match tp with
+              RealTypeParam t -> begin try List.assoc (t,Real) targenv with _ -> static_error l ("Unknown type parameter: " ^t) None end
+              | t -> t) sign 
+            in (sign',
+            (tn', lm, gh, rt, xmap, pre, post, epost, terminates, fb', v, abstract,tparams, 
+            sign))) ms in
         let ms = List.filter (fun (sign, _) -> is_assignable_to_sign inAnnotation argtps sign) ms in
         let make_well_typed_method m =
           match m with
@@ -3277,7 +3298,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             (WMethodCall (l, tn', g, sign, es, fb, Some(originalsign)), rt, None)
         in
         begin match ms with
-          [] -> failwith "No matching method"
+          [] -> static_error l "No matching method" None
         | [m] -> make_well_typed_method m
         | ms -> 
           begin
@@ -3296,7 +3317,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | _ ->
           match try_assoc current_class tenv with
             Some (ClassOrInterfaceName tn) ->
-            try_qualified_call tn es es Static [] on_fail
+            try_qualified_call tn es es Static (List.map (check_pure_type (pn,ilist) tparams) targes) on_fail
           | _ ->
           on_fail ()
         end $. fun () ->

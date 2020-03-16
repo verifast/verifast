@@ -1264,7 +1264,7 @@ and
       [<
         args0 = parse_patlist;
         e = parser
-          [< args = parse_patlist >] -> CallExpr (lx, x, [], args0, args,Static)
+          [< args = parse_patlist >] -> CallExpr (lx, x,[], args0, args,Static)
         | [< >] -> CallExpr (lx, x, [], [], args0,Static)
       >] -> e
     | [<

@@ -489,5 +489,11 @@ cd tests
       verifast -c -allow_should_fail lib.c prog.c
     cd ..
   cd ..
+  cd java
+    cd generics
+    verifast -c BasicGenericClass.java
+    verifast -c GenericInheritance.java
+    cd ..
+  cd ..
 cd ..
 end_parallel

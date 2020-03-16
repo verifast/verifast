@@ -56,7 +56,10 @@ public class ChildClassInheritance<C,D> extends AbstractParentClass<C,D>{
 
 public class HelloWorld 
 {
-  public <T> void genericFunction(T argument){}
+  public static <T,V> void genericFunction(T argument, V other)
+  //@ requires true;
+  //@ ensures true;
+  {}
   public static GenericClass<GenericClass<Foo> > genericInstance;
   
   public static void main(String[] args) 
@@ -64,8 +67,10 @@ public class HelloWorld
     //@ ensures true; 
   {
     System.out.println("Hello, World");
-    GenericClass<String> list = new GenericClass<String>("fo");
-    list.add("hello");
-    String s = list.get();   // no cast
+    GenericClass<GenericClass<String> > list = new GenericClass<GenericClass<String> >(new GenericClass<String>("foo"));
+    list.add(new GenericClass<String>("hello"));
+    GenericClass<String> s = list.get();   // no cast
+    genericFunction<GenericClass<String>,String >(list, "Foo");
+    genericFunction<String>(list, "Foo");
   }
 }
