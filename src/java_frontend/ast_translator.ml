@@ -172,10 +172,10 @@ let parse_contract loc anns lookup =
   in
   parse_pure_decls_core loc parse_contract_eof anns lookup
   
-let parse_ghost_members loc classname ann =
+let parse_ghost_members loc classname ann tparams =
   let rec parse_ghost_members_eof = parser
   | [< _ = Lexer.Stream.empty >] -> []
-  | [< m = JavaParser.parse_ghost_java_member classname; mems = parse_ghost_members_eof >] -> m::mems
+  | [< m = JavaParser.parse_ghost_java_member classname (List.map (fun (n,_) -> n) tparams); mems = parse_ghost_members_eof >] -> m::mems
   in
   parse_pure_decls_core loc parse_ghost_members_eof [ann] false
 
@@ -315,7 +315,7 @@ and translate_class_decl decl =
         in
         (* No support yet for generic implements *)
         let impls' = List.map (fun f -> ((GEN.string_of_ref_type f),[])) impls in
-        let (decls', ghost_members') = translate_ghost_members l' id' decls' in
+        let (decls', ghost_members') = translate_ghost_members l' id' decls' tparams' in
         let (ghost_fields', ghost_meths', ghost_preds') = split_ghost_members l ghost_members' in
         if (decls' <> []) then error l' "Not all declarations in class could be processed";
         (VF.Class(l', abs', fin', id', static_blocks' @ meths' @ ghost_meths', fields' @ ghost_fields', cons', extnds',tparams', impls', ghost_preds'), id')
@@ -327,8 +327,8 @@ and translate_class_decl decl =
         let impls' = List.map (fun f -> ((GEN.string_of_ref_type f),[])) impls in
         let (decls', fields') = translate_fields decls in
         let (decls', meths') = translate_methods id' decls' in
-        let (decls', ghost_members') = translate_ghost_members l' id' decls' in
         let tparams' = translate_tparams_as_string tparams in
+        let (decls', ghost_members') = translate_ghost_members l' id' decls' tparams' in
         let (ghost_fields', ghost_meths', ghost_preds') = split_ghost_members l ghost_members' in
         if (decls' <> []) then error l' "Not all declarations in class could be processed";
         (VF.Interface(l', id', impls', fields' @ ghost_fields', meths' @ ghost_meths', tparams', ghost_preds'), id')
@@ -537,10 +537,11 @@ and translate_constructors decls =
       | GEN.Constructor(l, anns, tparams, access, params, throws, stmts, autogen) ->
           let l' = translate_location l in
           let params' = List.map translate_param params in
+          let tparams' = translate_tparams_as_string tparams in
           let contr' = check_contract l anns throws autogen in
           let stmts' = translate_block l stmts in
           let access' = translate_accessibility access in
-          Some([VF.Cons(l', params', contr', stmts', access')])
+          Some([VF.Cons(l', params', contr', stmts', access', tparams')])
       | _ -> None
   in 
   translate_class_decls_helper translator decls
@@ -586,12 +587,12 @@ and translate_fields decls =
   in 
   translate_class_decls_helper translator decls
 
-and translate_ghost_members loc classname decls = 
+and translate_ghost_members loc classname decls tparams = 
   debug_print "translate_ghost_members";
   let translator decl =
     match decl with
     | GEN.C_Annotation a ->
-        Some(parse_ghost_members loc classname a)
+        Some(parse_ghost_members loc classname a tparams)
     | _ -> None
   in 
   translate_class_decls_helper translator decls

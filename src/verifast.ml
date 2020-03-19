@@ -715,6 +715,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let term' =
                     match unfold_inferred_type tp with
                       GhostTypeParam x -> convert_provertype term (provertype_of_type tp') ProverInductive
+                    | RealTypeParam x -> convert_provertype term (provertype_of_type tp') ProverInductive
                     | _ -> term
                   in
                   iter ((pat, tp')::ptenv) (term'::xterms) ((pat, term)::xenv) pats pts
@@ -2613,7 +2614,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let rec verify_cons (pn,ilist) cfin cn supercn superctors boxes lems cons =
     match cons with
       [] -> ()
-    | (sign, CtorInfo (lm, xmap, pre, pre_tenv, post, epost, terminates, ss, v))::rest ->
+    | (sign, CtorInfo (lm, xmap, pre, pre_tenv, post, epost, terminates, ss, v, tparams))::rest ->
       match ss with
         None ->
         let ((p, _, _), (_, _, _)) = root_caller_token lm in 
@@ -2657,12 +2658,12 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   None -> ([], [])
                 | Some(SuperConstructorCall(l, es)) -> 
                   inheritance_check cn l;
-                  ((List.map (fun e -> let (w, tp) = check_expr (pn,ilist) [] tenv (Some true) e in tp) es), es)
+                  ((List.map (fun e -> let (w, tp) = check_expr (pn,ilist) tparams tenv (Some true) e in tp) es), es)
                 in
                 match try_assoc argtypes superctors with
                   None ->
                   static_error lm "There is no superclass constructor that matches the superclass constructor call" None
-                | Some (CtorInfo (lc0, xmap0, pre0, pre_tenv0, post0, epost0, terminates0, ss0, v0)) ->
+                | Some (CtorInfo (lc0, xmap0, pre0, pre_tenv0, post0, epost0, terminates0, ss0, v0, tparams0)) ->
                   with_context (Executing (h, env, lm, "Implicit superclass constructor call")) $. fun () ->
                   if terminates && not terminates0 then static_error lm "Superclass constructor is not declared as 'terminates'" None;
                   let is_upcall =
@@ -2670,7 +2671,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                       Some (Some (_, rank0)) -> rank0 < rank
                     | _ -> true
                   in
-                  let eval_h h env e cont = verify_expr false (pn,ilist) [] false leminfo funcmap sizemap tenv ghostenv h env None e cont econt in
+                  let eval_h h env e cont = verify_expr false (pn,ilist) tparams false leminfo funcmap sizemap tenv ghostenv h env None e cont econt in
                   let pats = (List.map (fun e -> SrcPat (LitPat e)) args) in
                   verify_call funcmap eval_h lm (pn, ilist) None None [] pats ([], None, xmap0, ["this", this], pre0, post0, Some(epost0), terminates0, v0) false is_upcall (Some supercn) leminfo sizemap h [] tenv ghostenv env (fun h env _ ->
                   cont h) econt
@@ -2678,7 +2679,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let fds = get_fields (pn,ilist) cn lm in
             let rec iter h fds =
               match fds with
-                [] -> verify_cont (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss
+                [] -> verify_cont (pn,ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss
                      (fun sizemap tenv ghostenv h env -> return_cont h tenv env None) return_cont econt
               | (f, {ft=t; fbinding=binding; finit=init})::fds ->
                 if binding = Instance then begin
@@ -2688,7 +2689,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     iter h fds
                   | Some(e) -> 
                     with_context (Executing (h, [], expr_loc e, "Executing field initializer")) $. fun () ->
-                    verify_expr false (pn,ilist) [] false leminfo funcmap sizemap [(current_class, ClassOrInterfaceName cn); ("this", ObjType (cn, [])); (current_thread_name, current_thread_type)] ghostenv h [("this", this); (current_thread_name, List.assoc current_thread_name env)] None e (fun h _ initial_value ->
+                    verify_expr false (pn,ilist) tparams false leminfo funcmap sizemap [(current_class, ClassOrInterfaceName cn); ("this", ObjType (cn, [])); (current_thread_name, current_thread_type)] ghostenv h [("this", this); (current_thread_name, List.assoc current_thread_name env)] None e (fun h _ initial_value ->
                       assume_field h cn f t Real this initial_value real_unit $. fun h ->
                       iter h fds
                     ) (fun throwl h env2 exceptp excep -> assert_false h env2 throwl ("Field initializers throws exception.") None)

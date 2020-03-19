@@ -249,7 +249,7 @@ predicate_family_instance Iterable_iterating(ArrayList.class)(ArrayList list, li
 
 final class ArrayList<T> implements List<T> {
 
-    T[] elements;
+    Object[] elements;
     int size;
     
     /*@
@@ -281,7 +281,7 @@ final class ArrayList<T> implements List<T> {
         //@ requires true;
         //@ ensures List(nil);
     {
-        elements = new T[10];
+        elements = new Object[10];
         //@ close Iterable(nil);
         //@ iterableToList();
     }
@@ -312,7 +312,7 @@ final class ArrayList<T> implements List<T> {
         @*/
     {
         //@ this.iterableToList();
-        ArrayListIterator<T> i = new ArrayListIterator(this);
+        ArrayListIterator<T> i = new ArrayListIterator<T>(this);
         //@ close Iterable_iterating(ArrayList.class)(this, es, f, i);
         return i;
     }
@@ -344,7 +344,7 @@ final class ArrayList<T> implements List<T> {
         //@ ensures List(append(es, cons(e, nil))) &*& result;
     {
         if (size == elements.length) {
-            T[] newArray = new T[2 * size + 1];
+            Object[] newArray = new Object[2 * size + 1];
             //@ close array_slice_dynamic(array_slice_Object, elements, 0, size, _);
             //@ close array_slice_dynamic(array_slice_Object, newArray, 0, size, _);
             //@ close arraycopy_pre(array_slice_Object, false, 1, elements, 0, size, _, newArray, 0);

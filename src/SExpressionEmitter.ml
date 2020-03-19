@@ -319,14 +319,14 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
                  [ "name", Symbol name
                  ; "typs", sexpr_of_list sexpr_of_type_ typs
                  ; "exprs", sexpr_of_list sexpr_of_expr exprs ]
-    | WMethodCall (_, clss, name, typs, exprs, bind, sign) ->
+    | WMethodCall (_, clss, name, typs, exprs, bind, targs) ->
       build_list [ Symbol "expr-w-method-call" ]
                  [ "class", Symbol clss
                  ; "name", Symbol name
                  ; "typs", sexpr_of_list sexpr_of_type_ typs
                  ; "exprs", sexpr_of_list sexpr_of_expr exprs 
                  ; "stat", sexpr_of_method_binding bind 
-                 ; "sign ", sexpr_of_option (fun sign -> sexpr_of_list sexpr_of_type_ sign) sign ]
+                 ; "targs ", sexpr_of_list sexpr_of_type_ targs ]
     | NewArray (_, texpr, expr) ->
       build_list [ Symbol "expr-new-array" ]
                  [ "texpr", sexpr_of_type_expr texpr
@@ -753,8 +753,10 @@ and sexpr_of_meths (meth : meth) : sexpression =
       build_list [ Symbol "declare-method"; Symbol name ] kw
 
 and sexpr_of_constructor (name : string) (cons : cons) : sexpression =
+  let symbol s = Symbol s in
+  let sexpr_of_tparam (tparam,gh) = symbol (tparam ^ (if gh = Ghost then "(Ghost)" else "(Real")) in
   match cons with
-  | Cons (loc, params, contract, body, vis) ->
+  | Cons (loc, params, contract, body, vis, tparams) ->
     let sexpr_of_arg (t, id) =
       List [ Symbol id; sexpr_of_type_expr t ]
     in
@@ -769,7 +771,8 @@ and sexpr_of_constructor (name : string) (cons : cons) : sexpression =
         | Some (pre, post, _, _) -> [ "precondition", sexpr_of_pred pre
                                     ; "postcondition", sexpr_of_pred post ] 
     in        
-    let kw = List.concat [ [ "parameters", List (List.map sexpr_of_arg params) ]
+    let kw = List.concat [ [ "parameters", List (List.map sexpr_of_arg params)
+                            ; "type-parameters", List (List.map sexpr_of_tparam tparams) ]
                           ; body
                           ; contract ]
     in

@@ -194,7 +194,7 @@ public interface List<E> extends Collection<E> {
         //@ requires List(?es);
         //@ ensures List(append(es, cons(e, nil))) &*& result;
 
-    boolean addAll(Collection other);
+    boolean addAll(Collection<E> other);
         //@ requires List(?es) &*& listIsCollection(?l, other) &*& l.List(?other_es);
         //@ ensures List(append(es, other_es)) &*& l.List(other_es);
     

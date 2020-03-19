@@ -305,7 +305,7 @@ and
       type_ list (* parameter types (not including receiver) *) *
       expr list (* args, including receiver if instance method *) *
       method_binding *
-      type_ list option (*Signature if any type parameters are present in the signature *)
+      type_ list (*Type arguments*)
   | NewArray of loc * type_expr * expr
   | NewObject of loc * string * expr list * type_expr list (*type arguments *)
   | NewArrayWithInitializer of loc * type_expr * expr list
@@ -650,7 +650,8 @@ and
       (type_expr * string) list * 
       (asn * asn * ((type_expr * asn) list) * bool (*terminates*) ) option * 
       ((stmt list * loc (* Close brace *)) * int (*rank*)) option * 
-      visibility
+      visibility *
+      (string * ghostness) list (* type parameters *)
 and
   instance_pred_decl = (* ?instance_pred_decl *)
   | InstancePredDecl of loc * string * (type_expr * string) list * asn option

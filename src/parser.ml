@@ -287,7 +287,7 @@ and
 and
   constr m=
   match m with
-    ConsMember(Cons(l,ps,co,ss,v))::ms -> Cons(l,ps,co,ss,v)::(constr ms)
+    ConsMember(Cons(l,ps,co,ss,v, tparams))::ms -> Cons(l,ps,co,ss,v, tparams)::(constr ms)
     |_::ms -> constr ms
     | []->[]
 and
@@ -301,14 +301,14 @@ and
 and
   parse_java_members cn tpenv = parser
   [<'(_, Kwd "}")>] -> []
-| [< '(_, Kwd "/*@"); mems1 = parse_ghost_java_members cn; mems2 = parse_java_members cn tpenv >] -> mems1 @ mems2
+| [< '(_, Kwd "/*@"); mems1 = parse_ghost_java_members cn tpenv; mems2 = parse_java_members cn tpenv >] -> mems1 @ mems2
 | [< m=parse_java_member cn tpenv;mr=parse_java_members cn tpenv>] -> m::mr
 and
-  parse_ghost_java_members cn = parser
+  parse_ghost_java_members cn realTypeParams = parser
   [< '(_, Kwd "@*/") >] -> []
-| [< m = parse_ghost_java_member cn; mems = parse_ghost_java_members cn >] -> m::mems
+| [< m = parse_ghost_java_member cn realTypeParams; mems = parse_ghost_java_members cn realTypeParams >] -> m::mems
 and
-  parse_ghost_java_member cn = parser
+  parse_ghost_java_member cn realTypeParams = parser
   | [< vis = parse_visibility; m = begin parser
        [< '(l, Kwd "predicate"); '(_, Ident g); ps = parse_paramlist;
           body = begin parser
@@ -319,7 +319,7 @@ and
      | [< '(l, Kwd "lemma"); t = parse_return_type; 
           '(l, Ident x); (ps, co, ss) = parse_method_rest l >] -> 
         let ps = (IdentTypeExpr (l, None, cn), "this")::ps in
-        MethMember(Meth (l, Ghost, t, x, ps, co, ss, Instance, vis, false, []))
+        MethMember(Meth (l, Ghost, t, x, ps, co, ss, Instance, vis, false, List.map (fun t -> (t,Real)) realTypeParams))
      | [< binding = (parser [< '(_, Kwd "static") >] -> Static | [< >] -> Instance); t = parse_type; '(l, Ident x); '(_, Kwd ";") >] ->
        FieldMember [Field (l, Ghost, t, x, binding, vis, false, None)]
     end
@@ -382,7 +382,7 @@ and parse_java_member cn tpenv = parser
        in
        if binding = Static then raise (ParseException (l, "A constructor cannot be static."));
        if final then raise (ParseException (l, "A constructor cannot be final."));
-       ConsMember (Cons (l, ps, co, ss, vis))
+       ConsMember (Cons (l, ps, co, ss, vis, (List.map (fun tparam -> (tparam,Real)) (tpenv@tparams))))
   >] -> member
 and parse_array_init_rest = parser
   [< '(_, Kwd ","); es = opt(parser [< e = parse_expr; es = parse_array_init_rest >] -> e :: es) >] -> (match es with None -> [] | Some(es) -> es)
@@ -617,34 +617,6 @@ and type_params_parse =
         match xs with
          | Some(params) -> params
          | None -> []
-and type_arg_check_in_scope l arg tpenv =
-    if not (List.mem arg tpenv) then
-      raise (ParseException (l, "Type parameter("^ arg ^") is not in scope: "^(String.concat "," tpenv)));
-and type_argument_check_texpr_in_scope texpr tpenv =
-    match texpr with
-    | PtrTypeExpr (l, targ) -> type_argument_check_texpr_in_scope targ tpenv
-    | ArrayTypeExpr (l, targ) -> type_argument_check_texpr_in_scope targ tpenv
-    | StaticArrayTypeExpr (l, targ, i) -> type_argument_check_texpr_in_scope targ tpenv
-    | IdentTypeExpr (l, pkgn, n) -> type_arg_check_in_scope l n tpenv
-    | ConstructedTypeExpr (l, n, targs) -> 
-        List.iter (fun (targ) -> type_argument_check_texpr_in_scope targ tpenv) targs;
-        type_arg_check_in_scope l n tpenv                               
-    | _ -> ()
-and type_argument_translate_in_scope p tpenv =
-    if (List.mem p tpenv) then
-      "java.lang.Object"
-    else
-      p
-and type_argument_erasure_in_scope t tpenv =
-    match t with
-    | PtrTypeExpr (l, targ) -> PtrTypeExpr (l, type_argument_erasure_in_scope targ tpenv)
-    | ArrayTypeExpr (l, targ) -> ArrayTypeExpr (l, type_argument_erasure_in_scope targ tpenv)
-    | StaticArrayTypeExpr (l, targ, i) -> StaticArrayTypeExpr (l, type_argument_erasure_in_scope targ tpenv, i)
-    | IdentTypeExpr (l, pkgn, n) -> IdentTypeExpr (l, pkgn, type_argument_translate_in_scope n tpenv)
-    | ConstructedTypeExpr (l, n, targs) -> 
-      List.iter (fun targ -> type_argument_check_texpr_in_scope targ tpenv) targs;
-      IdentTypeExpr (l, None, type_argument_translate_in_scope n tpenv)
-    | _ -> t
 and parse_func_rest k t v gh = parser
   [<
     '(l, Ident g);
@@ -1223,7 +1195,7 @@ and
   [< e0 = parse_expr_primary; e = parse_expr_suffix_rest e0 >] -> e
 and
   parse_type_args l = parser
-    [< targs = parse_angle_brackets l (rep_comma parse_type) >] -> targs
+   [< targs = parse_angle_brackets l (rep_comma parse_type) >] -> targs
   | [< >] -> []
 and
   parse_new_array_expr_rest l elem_typ = parser
@@ -1243,13 +1215,13 @@ and
 | [< '(l, Kwd "null") >] -> Null l
 | [< '(l, Kwd "currentThread") >] -> Var (l, "currentThread")
 | [< '(l, Kwd "varargs") >] -> Var (l, "varargs")
-| [< '(l, Kwd "new"); tp = parse_primary_type; targs = parse_type_args l; res = (parser 
+| [< '(l, Kwd "new"); tp = parse_primary_type; res = (parser 
                     [< args0 = parse_patlist >] -> 
                     begin match tp with
                       IdentTypeExpr(_, pac, cn) -> 
                         NewObject (l, 
                           (match pac with None -> "" | Some(pac) -> pac ^ ".") ^ cn, List.map (function LitPat e -> e | _ -> raise (Stream.Error "Patterns are not allowed in this position")) args0,
-                          targs)
+                          [])
                     | ConstructedTypeExpr(loc, name, targs) -> 
                         NewObject (loc
                         , name, List.map (function LitPat e -> e | _ -> raise (Stream.Error "Patterns are not allowed in this position")) args0
