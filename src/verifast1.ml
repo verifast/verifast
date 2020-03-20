@@ -3251,11 +3251,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       if language = CLang || classmap = [] then func_call () else
       let try_qualified_call tn es args fb type_arguments on_fail =
-        (*Printf.printf "trying qualified call on %s with type_arguments: %s \n"
-          tn
-          (String.concat ", " (List.map (string_of_type) type_arguments));*)
         let ms = get_methods tn g in
-        (*Printf.printf "found %s methods" (string_of_int (List.length ms));*)
         if ms = [] then on_fail () else
         let argtps = List.map (fun e -> let (_, tp, _) = (check e) in tp) args in
         let ms = List.map (fun (sign, (tn', lm, gh, rt, xmap, pre, post, epost, terminates, fb', v, abstract, tparams)) ->
@@ -3285,17 +3281,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                         then static_error l (Printf.sprintf "Passed type is incompatible. Expected %s. Real %s."
                           (string_of_type (ObjType (n,ts)))
                           (string_of_type (ObjType (n0, ts0)))) None
-                        else begin
-                        (*Printf.printf "mapping two objects: %s<%s> %s<%s> \n"
-                        n
-                        (String.concat ", " (List.map string_of_type ts))
-                        n0
-                        (String.concat ", " (List.map string_of_type ts0));*) List.concat (List.map2 findMapping ts ts0) end
+                        else List.concat (List.map2 findMapping ts ts0)
                       | (_,_) -> [None] in
-                      (*Printf.printf "mapping <%s> to <%s>"
-                        (String.concat ", " (List.map string_of_type sign))
-                        (String.concat ", " (List.map string_of_type argtps));*)
-                    List.concat (List.map2 findMapping sign argtps) in
+                        List.concat (List.map2 findMapping sign argtps) in
                   let filtered_mapped_sign = List.filter (fun entry -> match entry with | Some(s) -> true | None -> false) mappedSign in
                     List.map (fun entry -> match entry with Some(s) -> s) filtered_mapped_sign)
                     (* TODO: we are making assumptions, check the common parent if one type parameter maps on multiple argument types, otherwise something is wrong*)
@@ -3530,9 +3518,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   and check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e t0 =
     check_expr_t_core_core functypemap funcmap classmap interfmap (pn, ilist) tparams tenv inAnnotation e t0 false
   and check_expr_t_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e t0 isCast =
-    (*Printf.printf "check_expr_t called with type %s and exspression %s\n"
-      (string_of_type t0)
-      (try string_of_sexpression (sexpr_of_expr e) with _ -> "###");*)
     match (e, unfold_inferred_type t0) with
       (Operation(l, Div, [IntLit(_, i1, _, _, _); IntLit(_, i2, _, _, _)]), RealType) -> RealLit(l, (num_of_big_int i1) // (num_of_big_int i2))
     | (IntLit (l, n, _, _, _), PtrType _) when isCast || eq_big_int n zero_big_int -> wintlit l n
@@ -3562,20 +3547,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
        * eval_core_cps0 (search for "No other cast allowed by the type
        * checker changes the value").
        *)
-      let (w, t, value) = (*Printf.printf "recursion with tparams %s and expr: %s \n" (String.concat ", " (List.map (fun (x,t) -> x ^ string_of_ghostness t) tparams))
-        (try (string_of_sexpression (sexpr_of_expr e)) with _ -> "###"
-        ;*) let (w,t,value) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
-        (*Printf.printf "do we get here w: %s t: %s\n"
-          (try string_of_sexpression (sexpr_of_expr w) with _ -> "###")
-          (string_of_type t);*)
+      let let (w,t,value) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
         (w,t,value) in
-      let check () = 
-        (*Printf.printf "check_expr_t_core check: t = %s and t0= %s with type params: %s and tenv: and inAnnotation: %s and expression: %s\n" 
-          (string_of_sexpression (sexpr_of_type_ t))
-          (string_of_sexpression (sexpr_of_type_ t0))
-          (String.concat ", " (List.map (fun (x,t) -> x ^ string_of_ghostness t) tparams))
-          (match inAnnotation with Some(i) -> if i then "yes" else "no" | None -> "none")
-          (try (string_of_sexpression (sexpr_of_expr e)) with _ -> "###");*)
+      let check () =
         begin match (t, t0) with
         | _ when t = t0 -> w
         | (ObjType _, ObjType _) when isCast -> w
@@ -3586,11 +3560,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | ((Float|Double|LongDouble), (Int (_, _))) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
         | (ObjType ("java.lang.Object", []), ArrayType _) when isCast -> w
         | _ ->
-          (*Printf.printf "check_expr_core with expr %s \n\tresulted in w: %s \n\t t: %s \n and t0: %s \n"
-            (try string_of_sexpression (sexpr_of_expr e) with _ -> "###")
-            (try string_of_sexpression (sexpr_of_expr w) with _ -> "###")
-            (string_of_type t)
-            (string_of_type t0);*)
           expect_type (expr_loc e) inAnnotation t t0;
           if try expect_type dummy_loc inAnnotation t0 t; false with StaticError _ -> true then
             Upcast (w, t, t0)
@@ -4092,10 +4061,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (_, []) -> static_error l "Too few patterns" None
   
   let check_pat (pn,ilist) tparams tenv t p = 
-    (*Printf.printf "checking pattern %s \n\twith tparams %s \n\tand tenv %s\n"
-      (string_of_type t)
-      (String.concat ", " (List.map (fun (n,gh) -> n ^ (if gh = Ghost then "'" else "")) tparams))
-      (String.concat ", " (List.map (fun (n,t) -> n ^ "->" ^ (string_of_type t)) tenv));*)
   let (w, tenv') = check_pat_core (pn,ilist) tparams tenv t p in (w, tenv' @ tenv)
   
   let rec check_pats (pn,ilist) l tparams tenv ts ps =
@@ -4389,18 +4354,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (w, t) = check_expr (pn,ilist) tparams tenv (Some true) e in
       begin match unfold_inferred_type t with
         ObjType (cn, targs) ->
-        (*Printf.printf "instpred %s with \n\t rt: %s \n\t and %s \n\ttenv %s \n\t targs %s and \n\ttparams %s and g %s \n\n"
-          (string_of_sexpression (sexpr_of_expr e)) 
-          (string_of_sexpression (sexpr_of_expr w))
-          (string_of_type t)
-          (String.concat ", " (List.map (fun (n,t) -> n ^ "->" ^ (string_of_type t)) tenv))
-          (String.concat ", " (List.map string_of_type targs))
-          (String.concat ", " (List.map (fun (t,gh) -> t ^ (if gh = Ghost then "'" else ""))tparams))
-          (g);*)
         let check_call family pmap tparams =
           let ptps = List.map snd pmap in
           let tpenv = 
-           (*) Printf.printf "check call with tparams: %s\n" (String.concat ", " (List.map (fun (t,v) -> t ^ (if v = Ghost then "'" else "")) tparams));*)
             if (List.length targs > 0) then (if (List.length tparams) <> (List.length targs) 
             then static_error l (Printf.sprintf "Wrong amount of type arguments provided. Expected: %s Actual %s." (string_of_int (List.length tparams)) (string_of_int (List.length targs))) None
             else List.map2 (fun a b -> (a,b)) tparams targs) else [] in
@@ -4412,7 +4368,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | InductiveType (s,ts) -> InductiveType (s, List.map replaceTypeParams ts)
             | PredType (s,ts,o,i) -> PredType (s, List.map replaceTypeParams ts, o, i)
             | PureFuncType (a,b) -> PureFuncType (replaceTypeParams a, replaceTypeParams b)
-            | t -> (*Printf.printf "not replacing: %s\n" (string_of_sexpression (sexpr_of_type_ t));*) t  in
+            | t -> t  in
           let (wpats, tenv) = check_pats (pn,ilist) l tparams tenv (List.map replaceTypeParams ptps) pats in
           let index = check_expr_t (pn,ilist) tparams tenv (Some true) index (ObjType ("java.lang.Class", [])) in
           (WInstPredAsn (l, Some w, cn, get_class_finality cn, family, g, index, wpats), tenv, [])
@@ -4428,9 +4384,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (wpat, tenv) = check_pat (pn,ilist) tparams tenv t pat in
       (WMatchAsn (l, w1, wpat, t), tenv, [])
     | Sep (l, p1, p2) ->
-     (*) Printf.printf "sep with p1 %s\n\t and p2 %s \n"
-        (try string_of_sexpression (sexpr_of_expr p1) with _ -> "###")
-        (try string_of_sexpression (sexpr_of_expr p2) with _ -> "###");*)
       let (p1, tenv, infTps1) = check_asn (pn,ilist) tparams tenv p1 in
       let (p2, tenv, infTps2) = check_asn (pn,ilist) tparams tenv p2 in
       (Sep (l, p1, p2), tenv, infTps1 @ infTps2)
