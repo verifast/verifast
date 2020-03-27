@@ -463,8 +463,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let (post, _) = check_asn (pn,ilist) tparams postmap post in
                 let epost = List.map (fun (tp, epost) -> 
                   let (epost, _) = check_asn (pn,ilist) tparams tenv epost in
-                  let tp = (string_of_type_expr_name tp);
-                    check_pure_type (pn,ilist) tparams tp in
+                  let tp = check_pure_type (pn,ilist) tparams tp in
                   (tp, epost)
                 ) epost in
                 (pre, tenv, post, epost, terminates)
