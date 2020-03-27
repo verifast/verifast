@@ -3548,7 +3548,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
        * checker changes the value").
        *)
       let let (w,t,value) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
-        (w,t,value) in
       let check () =
         begin match (t, t0) with
         | _ when t = t0 -> w
