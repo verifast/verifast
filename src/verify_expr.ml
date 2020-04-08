@@ -384,6 +384,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match ds with
         [] -> (funcmap, List.rev prototypes_implemented)
       | Func (l, k, tparams, rt, fn, xs, nonghost_callers_only, functype_opt, contract_opt, terminates, body,Static,_)::ds when k <> Fixpoint ->
+        let tparams = List.map (fun tparam -> (tparam,Ghost)) tparams in
         let fn = full_name pn fn in
         let fterm = List.assoc fn funcnameterms in
         if body <> None then
@@ -431,6 +432,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match meth_specs with
             [] -> List.rev mmap
           | Meth (lm, gh, rt, n, ps, co, body, binding, _, _, tparams)::meths ->
+            let tparams = List.map (fun tparam -> (tparam,Real)) tparams in
             let xmap =
               let rec iter xm xs =
                 match xs with
@@ -659,6 +661,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match meths with
             [] -> cont (cn, (l, abstract, fin, List.rev mmap, fds, constr, super, tpenv, interfs, preds, pn, ilist))
           | Meth (lm, gh, rt, n, ps, co, ss, fb, v,abstract, tparams)::meths ->
+            let tparams = List.map (fun tparam -> (tparam,Real)) tparams in
             let xmap =
                 let rec iter xm xs =
                   match xs with
@@ -747,6 +750,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match ctors with
             [] -> (cn, {cl=l; cabstract=abstract; cfinal=fin; cmeths=meths; cfds=fds; cctors=List.rev cmap; csuper=super; ctpenv=tpenv; cinterfs=interfs; cpreds=preds; cpn=pn; cilist=ilist})
             | Cons (lm, ps, co, ss, v, tparams)::ctors ->
+              let tparams = List.map (fun tparam -> (tparam,Real)) tparams in
               let xmap =
                 let rec iter xm xs =
                   match xs with

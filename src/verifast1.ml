@@ -1266,6 +1266,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
      match ds with 
       | [] -> (ifdm, classlist, todo)
       | (pn, ilist, Interface (l, i, interfs, fields, meths, tparams, pred_specs))::rest ->
+        let tparams = List.map (fun tparam -> (tparam,Real)) tparams in
         let i= full_name pn i in 
         if List.mem_assoc i ifdm then
           static_error l ("There exists already an interface with this name: "^i) None
@@ -1290,6 +1291,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               iter (ifdm, classlist) rest ((List.hd ds)::todo)
           end
       | (pn, ilist, Class (l, abstract, fin, i, meths,fields,constr,(super,passedTparams), tparams,interfs,preds))::rest ->
+        let tparams = List.map (fun tparam -> (tparam,Real)) tparams in
         let i= full_name pn i in
         if List.mem_assoc i ifdm then
           static_error l ("There exists already an interface with this name: "^i) None
@@ -1758,6 +1760,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         citer 0 [] pfm ctors
       | Func (l, Fixpoint, tparams, rto, g, ps, nonghost_callers_only, functype, contract, terminates, body_opt,Static,Public)::ds ->
+        let tparams = List.map (fun tparam -> (tparam, Ghost)) tparams in
         let g = full_name pn g in
         if List.mem_assoc g pfm || List.mem_assoc g purefuncmap0 then static_error l ("Duplicate pure function name: "^g) None;
         check_tparams l [] tparams;
@@ -2154,6 +2157,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match ds with
         [] -> functypedeclmap1
       | FuncTypeDecl (l, gh, rt, ftn, tparams, ftxs, xs, (pre, post, terminates))::ds ->
+        let tparams = List.map (fun tparam -> (tparam,Ghost)) tparams in 
         if gh = Ghost && terminates then static_error l "A 'terminates' clause on a lemma function type is superfluous." None;
         let ftn0 = ftn in
         let ftn = full_name pn ftn in
@@ -2271,6 +2275,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter (pn,ilist) pm ds =
       match ds with
         PredFamilyDecl (l, p, tparams, arity, tes, inputParamCount, inductiveness)::ds -> let p=full_name pn p in
+        let tparams = List.map (fun tparam -> (tparam,Ghost)) tparams in
         let ts = List.map (check_pure_type (pn,ilist) tparams) tes in
         begin
           match try_assoc2' Ghost (pn,ilist) p pm predfammap0 with
@@ -4766,6 +4771,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter (pn,ilist) pm ds =
       match ds with
         PredFamilyInstanceDecl (l, p, tparams, is, xs, body)::ds ->
+        let tparams = List.map (fun tparam -> (tparam,Ghost)) tparams in
         let fns = match file_type path with
           Java-> check_classnamelist (pn,ilist) is
         | _ -> check_funcnamelist is 

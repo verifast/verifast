@@ -642,7 +642,7 @@ and
       method_binding * 
       visibility *
       bool * (* is declared abstract? *)
-      (string * ghostness) list (*type parameters*)
+      string list (*type parameters*)
 and
   cons = (* ?cons *)
   | Cons of
@@ -651,7 +651,7 @@ and
       (asn * asn * ((type_expr * asn) list) * bool (*terminates*) ) option * 
       ((stmt list * loc (* Close brace *)) * int (*rank*)) option * 
       visibility *
-      (string * ghostness) list (* type parameters *)
+      string list (* type parameters *)
 and
   instance_pred_decl = (* ?instance_pred_decl *)
   | InstancePredDecl of loc * string * (type_expr * string) list * asn option
@@ -677,7 +677,7 @@ and
       field list *
       cons list *
       (string * (string * ghostness) list) (* superclass *) *
-      (string * ghostness) list (* type parameters *) *
+      string list (* type parameters *) *
       (string * (string * ghostness) list) list (* itfs  with passed tparams*) *
       instance_pred_decl list
   | Interface of 
@@ -686,12 +686,12 @@ and
       (string * (string * ghostness) list) list * (* extended interfaces with passed tparams *)
       field list *
       meth list *
-      (string * ghostness) list * (* type parameters *) 
+      string list * (* type parameters *) 
       instance_pred_decl list
   | PredFamilyDecl of
       loc *
       string *
-      (string * ghostness) list (* type parameters *) *
+      string list (* type parameters *) *
       int (* number of indices *) *
       type_expr list *
       int option (* (Some n) means the predicate is precise and the first n parameters are input parameters *) *
@@ -699,7 +699,7 @@ and
   | PredFamilyInstanceDecl of
       loc *
       string *
-      (string * ghostness) list (* type parameters *) *
+      string list (* type parameters *) *
       (loc * string) list *
       (type_expr * string) list *
       asn
@@ -713,7 +713,7 @@ and
   | Func of
       loc *
       func_kind *
-      (string * ghostness) list *  (* type parameters *)
+      string list *  (* type parameters *)
       type_expr option *  (* return type *)
       string *  (* name *)
       (type_expr * string) list *  (* parameters *)
@@ -739,7 +739,7 @@ and
       ghostness * (* e.g. a "typedef lemma" is ghost. *)
       type_expr option * (* return type *)
       string *
-      (string * ghostness) list * (* type parameters *)
+      string list * (* type parameters *)
       (type_expr * string) list *
       (type_expr * string) list *
       (asn * asn * bool) (* precondition, postcondition, terminates *)

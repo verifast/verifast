@@ -1934,6 +1934,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           begin fun (lems, predinsts, localpreds, localpredinsts) decl ->
             match decl with
             | PredFamilyDecl (l, p, tparams, arity, tes, inputParamCount, inductiveness) ->
+              let tparams = List.map (fun tparam -> (tparam,Ast.Ghost)) tparams in
               if tparams <> [] then static_error l "Local predicates with type parameters are not yet supported." None;
               if arity <> 0 then static_error l "Local predicate families are not yet supported." None;
               if List.mem_assoc p predfammap then static_error l "Duplicate predicate family name." None;
@@ -1979,6 +1980,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let predinstmap' =
         List.map
           begin fun ((p, (li, i)), (l, predinst_tparams, xs, body)) ->
+            let predinst_tparams = List.map (fun tparam -> (tparam,Ast.Ghost)) predinst_tparams in
             if not (List.mem_assoc i lems) then static_error li "Index of local predicate family instance must be lemma declared in same block." None;
             check_predinst (pn, ilist) tparams tenv env l p predinst_tparams [i] xs body
           end
@@ -1993,6 +1995,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let funcmap' =
         List.map
           begin fun (fn, (auto, trigger, fterm, l, tparams', rt, xs, nonghost_callers_only, functype_opt, contract_opt, terminates, body)) ->
+            let tparams' = List.map (fun tparam -> (tparam,Ast.Ghost)) tparams' in 
             let (rt, xmap, functype_opt, pre, pre_tenv, post) =
               check_func_header pn ilist tparams tenv env l (Lemma(auto, trigger)) tparams' rt fn (Some fterm) xs nonghost_callers_only functype_opt contract_opt terminates (Some body)
             in

@@ -175,7 +175,7 @@ let parse_contract loc anns lookup =
 let parse_ghost_members loc classname ann tparams =
   let rec parse_ghost_members_eof = parser
   | [< _ = Lexer.Stream.empty >] -> []
-  | [< m = JavaParser.parse_ghost_java_member classname (List.map (fun (n,_) -> n) tparams); mems = parse_ghost_members_eof >] -> m::mems
+  | [< m = JavaParser.parse_ghost_java_member classname tparams; mems = parse_ghost_members_eof >] -> m::mems
   in
   parse_pure_decls_core loc parse_ghost_members_eof [ann] false
 
@@ -364,7 +364,7 @@ and translate_tparams_as_string tparams =
   match tparams with
   | GEN.TypeParam(l, Identifier(sl,name), bounds) :: tail ->
     let res = translate_tparams_as_string tail
-      in (name,Real)::res;
+      in name::res;
   | _ -> []
 
 and translate_tparams_as_type_expr tparams =

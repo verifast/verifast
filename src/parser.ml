@@ -232,10 +232,10 @@ and
      ds = begin parser
        [< '(l, Kwd "class"); '(startLoc, Ident s); tparams = type_params_parse;
           super = parse_super_class tparams; il = parse_interfaces tparams; mem = parse_java_members s tparams; ds = parse_decls_core >]
-       -> Class (l, abstract, final, s, methods s mem, fields mem, constr mem, super, (List.map (fun tparam -> (tparam,Real)) tparams), il, instance_preds mem)::ds
+       -> Class (l, abstract, final, s, methods s mem, fields mem, constr mem, super, tparams, il, instance_preds mem)::ds
      | [< '(l, Kwd "interface"); '(startLoc, Ident cn); tparams = type_params_parse;
           il = parse_extended_interfaces tparams;  mem = parse_java_members cn tparams; ds = parse_decls_core >]
-       -> Interface (l, cn, il, fields mem, methods cn mem, (List.map (fun tparam -> (tparam,Real)) tparams), instance_preds mem)::ds
+       -> Interface (l, cn, il, fields mem, methods cn mem, tparams, instance_preds mem)::ds
      | [< d = parse_decl; ds = parse_decls_core >] -> d@ds
      | [< '(_, Kwd ";"); ds = parse_decls_core >] -> ds
      | [< >] -> []
@@ -319,7 +319,7 @@ and
      | [< '(l, Kwd "lemma"); t = parse_return_type; 
           '(l, Ident x); (ps, co, ss) = parse_method_rest l >] -> 
         let ps = (IdentTypeExpr (l, None, cn), "this")::ps in
-        MethMember(Meth (l, Ghost, t, x, ps, co, ss, Instance, vis, false, List.map (fun t -> (t,Real)) realTypeParams))
+        MethMember(Meth (l, Ghost, t, x, ps, co, ss, Instance, vis, false, realTypeParams))
      | [< binding = (parser [< '(_, Kwd "static") >] -> Static | [< >] -> Instance); t = parse_type; '(l, Ident x); '(_, Kwd ";") >] ->
        FieldMember [Field (l, Ghost, t, x, binding, vis, false, None)]
     end
@@ -360,7 +360,7 @@ and parse_java_member cn tpenv = parser
             [< (ps, co, ss) = parse_method_rest l >] ->
             let ps = if binding = Instance then (IdentTypeExpr (l, None, cn),"this")::ps 
                 else ps in
-            MethMember (Meth (l, Real, t, x, ps, co, ss, binding, vis, abstract, (List.map (fun tparam -> (tparam,Real)) (tpenv@tparams))))
+            MethMember (Meth (l, Real, t, x, ps, co, ss, binding, vis, abstract, (tpenv@tparams)))
           | [< t = id (match t with None -> raise (ParseException (l, "A field cannot be void.")) | Some(t) -> t);
                tx = parse_array_braces t;
                init = opt (parser [< '(_, Kwd "="); e = parse_declaration_rhs tx >] -> e);
@@ -382,7 +382,7 @@ and parse_java_member cn tpenv = parser
        in
        if binding = Static then raise (ParseException (l, "A constructor cannot be static."));
        if final then raise (ParseException (l, "A constructor cannot be final."));
-       ConsMember (Cons (l, ps, co, ss, vis, (List.map (fun tparam -> (tparam,Real)) (tpenv@tparams))))
+       ConsMember (Cons (l, ps, co, ss, vis, (tpenv@tparams)))
   >] -> member
 and parse_array_init_rest = parser
   [< '(_, Kwd ","); es = opt(parser [< e = parse_expr; es = parse_array_init_rest >] -> e :: es) >] -> (match es with None -> [] | Some(es) -> es)
@@ -446,7 +446,7 @@ and
         None -> []
         | Some x -> x
     in
-    (List.map (fun tparam -> (tparam,Ghost)) (noneToEmptyList functiontypetypeparams), noneToEmptyList functiontypeparams, params)
+    (noneToEmptyList functiontypetypeparams, noneToEmptyList functiontypeparams, params)
   | [< params = parse_paramlist >] -> ([], [], params)
 and
   parse_ignore_inline = parser
@@ -550,8 +550,8 @@ and parse_predicate_decl l (inductiveness: inductiveness) = parser
      body = opt parse_pred_body;
      '(_, Kwd ";");
     >] ->
-    [PredFamilyDecl (l, g, (List.map (fun tparam -> (tparam,Ghost)) tparams), 0, List.map (fun (t, p) -> t) ps, inputParamCount, inductiveness)] @
-    (match body with None -> [] | Some body -> [PredFamilyInstanceDecl (l, g, (List.map (fun tparam -> (tparam,Ghost)) tparams), [], ps, body)])
+    [PredFamilyDecl (l, g, tparams, 0, List.map (fun (t, p) -> t) ps, inputParamCount, inductiveness)] @
+    (match body with None -> [] | Some body -> [PredFamilyInstanceDecl (l, g, tparams, [], ps, body)])
 and parse_pure_decl = parser
     [< '(l, Kwd "inductive"); '(li, Ident i); tparams = parse_type_params li; '(_, Kwd "="); cs = (parser [< cs = parse_ctors >] -> cs | [< cs = parse_ctors_suffix >] -> cs); '(_, Kwd ";") >] -> [Inductive (l, i, tparams, cs)]
   | [< '(l, Kwd "fixpoint"); t = parse_return_type; d = parse_func_rest Fixpoint t Public Ghost>] -> [d]
@@ -570,7 +570,7 @@ and parse_pure_decl = parser
        ads = parse_action_decls; hpds = parse_handle_pred_decls; '(_, Kwd "}") >] -> [BoxClassDecl (l, bcn, ps, inv, ads, hpds)]
   | [< '(l, Kwd "typedef"); '(_, Kwd "lemma"); rt = parse_return_type; '(li, Ident g); tps = parse_type_params li;
        (ftps, ps) = parse_functype_paramlists; '(_, Kwd ";"); (pre, post, terminates) = parse_spec >] ->
-    [FuncTypeDecl (l, Ghost, rt, g, (List.map (fun tparam -> (tparam,Ghost)) tps), ftps, ps, (pre, post, terminates))]
+    [FuncTypeDecl (l, Ghost, rt, g, tps, ftps, ps, (pre, post, terminates))]
   | [< '(l, Kwd "unloadable_module"); '(_, Kwd ";") >] -> [UnloadableModuleDecl l]
   | [< '(l, Kwd "import_module"); '(_, Ident g); '(lx, Kwd ";") >] -> [ImportModuleDecl (l, g)]
   | [< '(l, Kwd "require_module"); '(_, Ident g); '(lx, Kwd ";") >] -> [RequireModuleDecl (l, g)]
@@ -626,9 +626,9 @@ and parse_func_rest k t v gh = parser
         ps = parse_paramlist;
         f = parser
           [< '(_, Kwd ";"); (nonghost_callers_only, ft, co, terminates) = parse_spec_clauses >] ->
-          Func (l, k, (List.map (fun tparam -> (tparam, gh)) tparams), t, g, ps, nonghost_callers_only, ft, co, terminates, None, Static, v)
+          Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, terminates, None, Static, v)
         | [< (nonghost_callers_only, ft, co, terminates) = parse_spec_clauses; '(_, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}") >] ->
-          Func (l, k, (List.map (fun tparam -> (tparam, gh)) tparams), t, g, ps, nonghost_callers_only, ft, co, terminates, Some (ss, closeBraceLoc), Static, v)
+          Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, terminates, Some (ss, closeBraceLoc), Static, v)
       >] -> f
     | [<
         () = (fun s -> if k = Regular && tparams = [] && t <> None then () else raise Stream.Failure);

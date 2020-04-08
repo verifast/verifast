@@ -639,7 +639,7 @@ and sexpr_of_decl (decl : decl) : sexpression =
                                 ; "postcondition", sexpr_of_pred post ]
       in
       let kw = List.concat [ [ "kind", sexpr_of_func_kind kind
-                             ; "type-parameters", List (List.map sexpr_of_tparam tparams)
+                             ; "type-parameters", Symbol (String.concat ", " tparams)
                              ; "return-type", sexpr_of_type_expr_option rtype
                              ; "parameters", List (List.map sexpr_of_arg params) ]
                            ; body
@@ -655,7 +655,7 @@ and sexpr_of_decl (decl : decl) : sexpression =
                       inductiveness) ->
       build_list [ Symbol "declare-predicate-family"
                  ; Symbol name ]
-                 [ "type-parameters", List (List.map sexpr_of_tparam tparams)
+                 [ "type-parameters", Symbol (String.concat ", " tparams)
                  ; "parameters", List (List.map sexpr_of_type_expr params)
                  ; "index-count", sexpr_of_int index_count
                  ; "coinductive", sexpr_of_bool (inductiveness = Inductiveness_CoInductive)]
@@ -671,7 +671,7 @@ and sexpr_of_decl (decl : decl) : sexpression =
       in
       build_list [ Symbol "declare-predicate-family-instance"
                  ; Symbol name ]
-                 [ "type-parameters", List (List.map sexpr_of_tparam tparams)
+                 [ "type-parameters", Symbol (String.concat ", " tparams) 
                  ; "parameters", List (List.map arg_pair params)
                  ; "predicate", sexpr_of_pred predicate ]
     | ImportModuleDecl (loc, name) ->
@@ -725,8 +725,6 @@ and sexpr_of_inductive_constructor (c : ctor) : sexpression =
                [ "arguments", List (List.map aux args)]
 
 and sexpr_of_meths (meth : meth) : sexpression =
-  let symbol s = Symbol s in
-  let sexpr_of_tparam (tparam,gh) = symbol (tparam ^ (if gh = Ghost then "(Ghost)" else "(Real")) in
   match meth with
   | Meth (loc, ghost, rtype, name, params, contract, body, bind, vis, abs, tparams) ->
     let sexpr_of_arg (t, id) =
@@ -746,15 +744,13 @@ and sexpr_of_meths (meth : meth) : sexpression =
     let kw = List.concat [ [ "ghos", sexpr_of_ghostness ghost
                             ; "return-type", sexpr_of_type_expr_option rtype
                             ; "parameters", List (List.map sexpr_of_arg params)
-                            ; "type-parameters", List (List.map sexpr_of_tparam tparams) ]
+                            ; "type-parameters", Symbol (String.concat ", " tparams) ]
                           ; body
                           ; contract ]
     in
       build_list [ Symbol "declare-method"; Symbol name ] kw
 
 and sexpr_of_constructor (name : string) (cons : cons) : sexpression =
-  let symbol s = Symbol s in
-  let sexpr_of_tparam (tparam,gh) = symbol (tparam ^ (if gh = Ghost then "(Ghost)" else "(Real")) in
   match cons with
   | Cons (loc, params, contract, body, vis, tparams) ->
     let sexpr_of_arg (t, id) =
@@ -772,7 +768,7 @@ and sexpr_of_constructor (name : string) (cons : cons) : sexpression =
                                     ; "postcondition", sexpr_of_pred post ] 
     in        
     let kw = List.concat [ [ "parameters", List (List.map sexpr_of_arg params)
-                            ; "type-parameters", List (List.map sexpr_of_tparam tparams) ]
+                            ; "type-parameters", Symbol (String.concat ", " tparams) ]
                           ; body
                           ; contract ]
     in
