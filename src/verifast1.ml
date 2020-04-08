@@ -1737,6 +1737,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match ds with
         [] -> (imap, pfm, fpm)
       | Inductive (l, i, tparams, ctors)::ds -> let i=full_name pn i in
+        let tparams = List.map (fun tparam -> (tparam, Ghost)) tparams in
         check_tparams l [] tparams;
         let rec citer j ctormap pfm ctors =
           match ctors with

@@ -553,7 +553,7 @@ and parse_predicate_decl l (inductiveness: inductiveness) = parser
     [PredFamilyDecl (l, g, (List.map (fun tparam -> (tparam,Ghost)) tparams), 0, List.map (fun (t, p) -> t) ps, inputParamCount, inductiveness)] @
     (match body with None -> [] | Some body -> [PredFamilyInstanceDecl (l, g, (List.map (fun tparam -> (tparam,Ghost)) tparams), [], ps, body)])
 and parse_pure_decl = parser
-    [< '(l, Kwd "inductive"); '(li, Ident i); tparams = parse_type_params li; '(_, Kwd "="); cs = (parser [< cs = parse_ctors >] -> cs | [< cs = parse_ctors_suffix >] -> cs); '(_, Kwd ";") >] -> [Inductive (l, i, (List.map (fun tparam -> (tparam,Ghost)) tparams), cs)]
+    [< '(l, Kwd "inductive"); '(li, Ident i); tparams = parse_type_params li; '(_, Kwd "="); cs = (parser [< cs = parse_ctors >] -> cs | [< cs = parse_ctors_suffix >] -> cs); '(_, Kwd ";") >] -> [Inductive (l, i, tparams, cs)]
   | [< '(l, Kwd "fixpoint"); t = parse_return_type; d = parse_func_rest Fixpoint t Public Ghost>] -> [d]
   | [< '(l, Kwd "predicate"); result = parse_predicate_decl l Inductiveness_Inductive >] -> result
   | [< '(l, Kwd "copredicate"); result = parse_predicate_decl l Inductiveness_CoInductive >] -> result

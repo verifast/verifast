@@ -665,7 +665,7 @@ and
   | Inductive of  (* inductief data type regel-naam-type parameters-lijst van constructors*)
       loc *
       string *
-      (string * ghostness) list * (*tparams*)
+      string list * (*tparams*)
       ctor list
   | AbstractTypeDecl of loc * string
   | Class of

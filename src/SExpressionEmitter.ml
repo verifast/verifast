@@ -680,7 +680,7 @@ and sexpr_of_decl (decl : decl) : sexpression =
     | Inductive (_, name, tparams, cons) ->
       build_list [ Symbol "declare-inductive"
                  ; Symbol name]
-                 [ "tparams", List (List.map sexpr_of_tparam tparams)
+                 [ "tparams", Symbol (String.concat ", "  tparams)
                  ; "constructors", sexpr_of_list sexpr_of_inductive_constructor cons ]
     | Interface (_, id, inters, fields, meths, tparams, preds) ->
       build_list [ Symbol "declare-interface"
