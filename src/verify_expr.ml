@@ -432,14 +432,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match meth_specs with
             [] -> List.rev mmap
           | Meth (lm, gh, rt, n, ps, co, body, binding, _, _, tparams)::meths ->
-            let tparams = List.map (fun tparam -> (tparam,Real)) tparams in
+            let tparams_m = List.map (fun tparam -> (tparam,Real)) tparams in
             let xmap =
               let rec iter xm xs =
                 match xs with
                  [] -> List.rev xm
                | (te, x)::xs ->
                  if List.mem_assoc x xm then static_error l "Duplicate parameter name." None;
-                 let t = check_pure_type (pn,ilist) tparams te in
+                 let t = check_pure_type (pn,ilist) tparams_m te in
                  iter ((x, t)::xm) xs
               in
               iter [] ps
@@ -455,17 +455,17 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | t -> t) ts in
               ((n,erasedTypes),minfo)) mmap in
             if List.mem_assoc erasedSign erasedMmap then static_error lm "Duplicate method after erasure." None;
-            let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) tparams rt) in
+            let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) tparams_m rt) in
             let (pre, pre_tenv, post, epost, terminates) =
               match co with
                 None -> static_error lm ("Non-fixpoint function must have contract: "^n) None
               | Some (pre, post, epost, terminates) ->
                 let (pre, tenv) = check_asn (pn,ilist) [] ((current_thread_name, current_thread_type)::(xmap)) pre in
                 let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
-                let (post, _) = check_asn (pn,ilist) tparams postmap post in
+                let (post, _) = check_asn (pn,ilist) tparams_m postmap post in
                 let epost = List.map (fun (tp, epost) -> 
-                  let (epost, _) = check_asn (pn,ilist) tparams tenv epost in
-                  let tp = check_pure_type (pn,ilist) tparams tp in
+                  let (epost, _) = check_asn (pn,ilist) tparams_m tenv epost in
+                  let tp = check_pure_type (pn,ilist) tparams_m tp in
                   (tp, epost)
                 ) epost in
                 (pre, tenv, post, epost, terminates)
@@ -514,24 +514,25 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let interfmap = (* checks overriding methods in interfaces *)
     let rec iter map0 map1 =
-      let interf_specs_for_sign sign (itf, passedTparams) =
+      let interf_specs_for_sign sign (itf, passedTypes) =
         let InterfaceInfo (_, fields, meths, _, _, tparams) = List.assoc itf map1 in
-        let tparamEnv = List.map2 (fun a b -> (a,b)) passedTparams tparams in 
-        let revTparamEnv = List.map2 (fun a b -> (a,b)) tparams passedTparams in
-        let updatedSign = (fun (n,args) -> (n, List.map (fun arg -> match arg with
-          RealTypeParam(t) -> let (nt,_) = List.assoc (t,Real) tparamEnv in RealTypeParam (nt)
-          | t -> t) args)) sign 
+        let innterTparamEnv = List.map2 (fun a b -> (a,b)) tparams passedTypes in
+        let eraseSign = (fun (n,args) -> (n, List.map (fun arg -> match arg with
+          RealTypeParam(t) -> ObjType("java.lang.Object", [])
+          | t -> t) args)) in
+        let erasedMeths = List.map (fun (sign,info) -> (eraseSign sign,info)) meths (*Erase the signs of the super methods *)
         in
-          match try_assoc updatedSign meths with
+          match try_assoc (eraseSign sign) erasedMeths with
             None -> []
             (* Update specs to properly apply the childs tparams *)
             | Some ItfMethodInfo (lsuper, gh', rt', xmap', pre', pre_tenv', post', epost', terminates', vis', abstract', tparams') ->
+              (*Map type params to the scope of the child class *)
               let rt' = match rt' with 
-                Some(RealTypeParam t) -> let (rt,gh) = List.assoc (t,Real) revTparamEnv in Some(RealTypeParam (rt))
+                Some(RealTypeParam t) -> let outerType = List.assoc t innterTparamEnv in Some(outerType)
                 | t -> t in
               let xmap' = List.map (
                 fun (name,t) -> match t with
-                  RealTypeParam(t) -> (name, let (rt,gh) = List.assoc (t,Real) revTparamEnv in RealTypeParam(rt))
+                  RealTypeParam(t) -> (name, let outerType = List.assoc t innterTparamEnv in outerType)
                   | t -> (name,t)
                 ) xmap' in
               let spec = ItfMethodInfo (lsuper, gh', rt', xmap', pre', pre_tenv', post', epost', terminates', vis', abstract', tparams') in
@@ -611,24 +612,25 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let classmap1 =
     let rec iter classmap1_done classmap1_todo =
-      let interf_specs_for_sign sign (itf, passedTparams) =
+      let interf_specs_for_sign sign (itf, passedTypes) =
         let InterfaceInfo (_, fields, meths, _, _, tparams) = List.assoc itf interfmap in
-        let tparamEnv = List.map2 (fun a b -> (a,b)) passedTparams tparams in 
-        let revTparamEnv = List.map2 (fun a b -> (a,b)) tparams passedTparams in
-        let updatedSign = (fun (n,args) -> (n, List.map (fun arg -> match arg with
-          RealTypeParam(t) -> let (nt,_) = List.assoc (t,Real) tparamEnv in RealTypeParam (nt)
-          | t -> t) args)) sign 
+        let innterTparamEnv = List.map2 (fun a b -> (a,b)) tparams passedTypes in
+        let eraseSign = (fun (n,args) -> (n, List.map (fun arg -> match arg with
+          RealTypeParam(t) -> ObjType("java.lang.Object", [])
+          | t -> t) args)) in
+        let erasedMeths = List.map (fun (sign,info) -> (eraseSign sign,info)) meths (*Erase the signs of the super methods *)
         in
-          match try_assoc updatedSign meths with
+          match try_assoc (eraseSign sign) erasedMeths with
             None -> []
             (* Update specs to properly apply the childs tparams *)
             | Some ItfMethodInfo (lsuper, gh', rt', xmap', pre', pre_tenv', post', epost', terminates', vis', abstract', tparams') ->
+              (*Map type params to the scope of the child class *)
               let rt' = match rt' with 
-                Some(RealTypeParam t) -> let (rt,gh) = List.assoc (t,Real) revTparamEnv in Some(RealTypeParam (rt))
+                Some(RealTypeParam t) -> let outerType = List.assoc t innterTparamEnv in Some(outerType)
                 | t -> t in
               let xmap' = List.map (
                 fun (name,t) -> match t with
-                  RealTypeParam(t) -> (name, let (rt,gh) = List.assoc (t,Real) revTparamEnv in RealTypeParam(rt))
+                  RealTypeParam(t) -> (name, let outerType = List.assoc t innterTparamEnv in outerType)
                   | t -> (name,t)
                 ) xmap' in
               let spec = ItfMethodInfo (lsuper, gh', rt', xmap', pre', pre_tenv', post', epost', terminates', vis', abstract', tparams') in
@@ -651,7 +653,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | Some (MethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, terminates, ss, Instance, v, _, abstract, tparams)) -> [(cn, ItfMethodInfo (lm, gh, rt, xmap, pre_dyn, pre_tenv, post_dyn, epost_dyn, terminates, v, abstract, tparams))]
           | _ -> []
         in
-        specs @ super_specs_for_sign sign super interfs
+        specs @ super_specs_for_sign sign 
+        super 
+        interfs
       in
       match classmap1_todo with
         [] -> List.rev classmap1_done
@@ -661,13 +665,13 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match meths with
             [] -> cont (cn, (l, abstract, fin, List.rev mmap, fds, constr, super, tpenv, interfs, preds, pn, ilist))
           | Meth (lm, gh, rt, n, ps, co, ss, fb, v,abstract, tparams)::meths ->
-            let tparams = List.map (fun tparam -> (tparam,Real)) tparams in
+            let tparams_m = List.map (fun tparam -> (tparam,Real)) tparams in
             let xmap =
                 let rec iter xm xs =
                   match xs with
                    [] -> List.rev xm
                  | (te, x)::xs -> if List.mem_assoc x xm then static_error l "Duplicate parameter name." None;
-                     let t = check_pure_type (pn,ilist) tparams te in
+                     let t = check_pure_type (pn,ilist) tparams_m te in
                      iter ((x, t)::xm) xs
                 in
                 iter [] ps
@@ -681,17 +685,17 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               let erasedTypes = List.map erased_type ts in
               ((n,erasedTypes),minfo)) mmap in
             if List.mem_assoc erasedSign erasedMmap then static_error lm "Duplicate method after erasure." None;
-            let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) tparams rt) in
+            let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) tparams_m rt) in
             let co =
               match co with
                 None -> None
               | Some (pre, post, epost, terminates) ->
-                let (wpre, tenv) = check_asn (pn,ilist) tparams ((current_class, ClassOrInterfaceName cn)::(current_thread_name, current_thread_type)::xmap) pre in
+                let (wpre, tenv) = check_asn (pn,ilist) tparams_m ((current_class, ClassOrInterfaceName cn)::(current_thread_name, current_thread_type)::xmap) pre in
                 let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
-                let (wpost, _) = check_asn (pn,ilist) tparams postmap post in
+                let (wpost, _) = check_asn (pn,ilist) tparams_m postmap post in
                 let wepost = List.map (fun (tp, epost) -> 
-                  let (wepost, _) = check_asn (pn,ilist) tparams ((current_class, ClassOrInterfaceName cn)::(current_thread_name, current_thread_type)::xmap) epost in
-                  let tp = check_pure_type (pn,ilist) tpenv tp in
+                  let (wepost, _) = check_asn (pn,ilist) tparams_m ((current_class, ClassOrInterfaceName cn)::(current_thread_name, current_thread_type)::xmap) epost in
+                  let tp = check_pure_type (pn,ilist) (List.map (fun tp -> (tp,Real)) tpenv) tp in
                   (tp, wepost)
                 ) epost in
                 let (wpre_dyn, wpost_dyn, wepost_dyn) = if fb = Static then (wpre, wpost, wepost) else (dynamic_of wpre, dynamic_of wpost, List.map (fun (tp, wepost) -> (tp, dynamic_of wepost)) wepost) in
@@ -2150,16 +2154,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             (List.map (fun tp -> match tp with (*Iterate over arguments*)
               RealTypeParam(s) -> 
                 let index =  
-                  match (index_of (s,Real) ctpenv 0) with
+                  match (index_of s ctpenv 0) with
                     Some(i) -> i
                     | None -> static_error l ("Real Type param" ^ s ^ " not found in type paramter environment") None 
-                  in 
-                  List.nth targtps index (* replace type parameters with the given type arguments *)
-              | GhostTypeParam(s) -> 
-                let index =  
-                  match (index_of (s,Ghost) ctpenv 0) with
-                    Some(i) -> i
-                    | None -> static_error l ("Ghost Type param" ^ s ^ " not found in type paramter environment") None 
                   in 
                   List.nth targtps index (* replace type parameters with the given type arguments *)
               | other -> other) sign
@@ -2209,7 +2206,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if not pure then static_error l "A lemma method call is not allowed in a non-pure context." None;
         if leminfo_is_lemma leminfo then static_error l "Lemma method calls in lemmas are currently not supported (for termination reasons)." None
       end;
-      check_correct h xo None targs args (lm, tparams, rt, xmap, [], pre, post, Some epost, terminates, v) is_upcall target_class cont
+      check_correct h xo None targs args (lm, (List.map (fun tp -> (tp,Real)) tparams), rt, xmap, [], pre, post, Some epost, terminates, v) is_upcall target_class cont
     | WSuperMethodCall(l, supercn, m, args, (lm, gh, rt, xmap, pre, post, epost, terminates, rank, v)) ->
       if gh = Real && pure then static_error l "Method call is not allowed in a pure context" None;
       if gh = Ghost then begin

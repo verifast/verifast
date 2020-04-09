@@ -676,14 +676,14 @@ and
       meth list *
       field list *
       cons list *
-      (string * (string * ghostness) list) (* superclass *) *
+      (string * type_expr list) (* superclass with targs *) *
       string list (* type parameters *) *
-      (string * (string * ghostness) list) list (* itfs  with passed tparams*) *
+      (string * type_expr list) list (* itfs with targs *) *
       instance_pred_decl list
   | Interface of 
       loc *
       string *
-      (string * (string * ghostness) list) list * (* extended interfaces with passed tparams *)
+      (string * type_expr list) list * (* interfaces *)
       field list *
       meth list *
       string list * (* type parameters *) 

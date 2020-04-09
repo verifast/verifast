@@ -231,47 +231,40 @@ and
      final = (parser [< '(_, Kwd "final") >] -> FinalClass | [< >] -> ExtensibleClass);
      ds = begin parser
        [< '(l, Kwd "class"); '(startLoc, Ident s); tparams = type_params_parse;
-          super = parse_super_class tparams; il = parse_interfaces tparams; mem = parse_java_members s tparams; ds = parse_decls_core >]
+          super = parse_super_class l; il = parse_interfaces; mem = parse_java_members s tparams; ds = parse_decls_core >]
        -> Class (l, abstract, final, s, methods s mem, fields mem, constr mem, super, tparams, il, instance_preds mem)::ds
      | [< '(l, Kwd "interface"); '(startLoc, Ident cn); tparams = type_params_parse;
-          il = parse_extended_interfaces tparams;  mem = parse_java_members cn tparams; ds = parse_decls_core >]
+          il = parse_extended_interfaces;  mem = parse_java_members cn tparams; ds = parse_decls_core >]
        -> Interface (l, cn, il, fields mem, methods cn mem, tparams, instance_preds mem)::ds
      | [< d = parse_decl; ds = parse_decls_core >] -> d@ds
      | [< '(_, Kwd ";"); ds = parse_decls_core >] -> ds
      | [< >] -> []
      end
   >] -> ds
-and parse_qualified_type_rest tpenv = parser
-  [< '(_, Kwd "."); '(_, Ident s); (rest, tparams) = parse_qualified_type_rest tpenv >] -> ("." ^ s ^ rest, tparams)
-| [< xs = parse_type_params_with_loc >] -> 
-  let rec tparams xs =
-    if xs = [] then []
-    else 
-      let (l,p) = List.hd xs in
-        if (List.mem p tpenv) 
-          then (p,Real)::(tparams (List.tl xs))
-          else raise (ParseException (l, "Type parameter is not in scope")) 
-    in
-    ("", tparams xs)
-| [<>] -> ("",[])
-and parse_qualified_type tpenv = parser
-  [<'(l, Ident s); (rest, tparams) = parse_qualified_type_rest tpenv >] -> (s ^ rest,tparams)
+and parse_qualified_type loc = parser
+  [< t = parse_type >] -> 
+    match t with 
+      IdentTypeExpr(l,p,n) -> Printf.printf "qualified type: ident type %s.%s \n" (match p with Some(s) -> s | None -> "") n; 
+        ((match p with Some(s) -> s ^ n | None -> n), []) 
+      | ConstructedTypeExpr(l,n,targs) -> (n,targs)
+      | _ -> raise (ParseException (loc, "Invalid type"))
+  
 and
-  parse_super_class tpenv = parser
-    [<'(l, Kwd "extends"); (s, tparams) = parse_qualified_type tpenv>] -> (s, tparams)
-  | [<>] -> ("java.lang.Object", [])
+  parse_super_class loc = parser
+    [<'(l, Kwd "extends"); (s,targs) = parse_qualified_type l>] -> (s,targs)
+  | [<>] -> ("java.lang.Object",[])
 and
-  parse_interfaces tpenv = parser
-  [< '(_, Kwd "implements"); is = rep_comma (parser 
-    [< i = parse_qualified_type tpenv; e=parser
+  parse_interfaces = parser
+  [< '(l, Kwd "implements"); is = rep_comma (parser 
+    [< i = parse_qualified_type l; e=parser
       [<>]->(i)>] -> e); '(_, Kwd "{") >] -> is
-| [<'(_, Kwd "{")>]-> []
+  | [<'(_, Kwd "{")>]-> []
 and
-  parse_extended_interfaces tpenv = parser
-  [< '(_, Kwd "extends"); is = rep_comma (parser 
-    [< i = parse_qualified_type tpenv; e=parser
+  parse_extended_interfaces = parser
+  [< '(l, Kwd "extends"); is = rep_comma (parser 
+    [< i = parse_qualified_type l; e=parser
       [<>]->(i)>] -> e); '(_, Kwd "{") >] -> is
-| [<'(_, Kwd "{")>]-> []
+  | [<'(_, Kwd "{")>]-> []
 and
   methods cn m=
   match m with
@@ -609,8 +602,6 @@ and parse_type_params_general = parser
     )
   >] -> xs
 | [< >] -> []
-and parse_type_params_with_loc = parser
-  [< '(_, Kwd "<"); xs = rep_comma (parser [< '(l, Ident x) >] -> (l,x)); '(_, Kwd ">") >] -> xs
 and type_params_parse =
     parser
       [< xs = opt parse_type_params_general >] ->

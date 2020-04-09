@@ -592,13 +592,6 @@ let rec sexpr_of_stmt (stmt : stmt) : sexpression =
                  [ "arguments", List (List.map sexpr_of_expr args) ]
 
 and sexpr_of_decl (decl : decl) : sexpression =
-  let symbol s = Symbol s in
-  let sexpr_of_tparam (tparam,gh) = symbol (tparam ^ (if gh = Ghost then "(Ghost)" else "(Real")) in
-  let sexpr_of_extends es = List (List.map (fun (i,tparams) -> List [ 
-                    symbol i; 
-                    symbol "<";
-                    List (List.map sexpr_of_tparam tparams);
-                    symbol ">"]) es) in
   match decl with
     | Struct (loc,
               name,
@@ -685,15 +678,15 @@ and sexpr_of_decl (decl : decl) : sexpression =
     | Interface (_, id, inters, fields, meths, tparams, preds) ->
       build_list [ Symbol "declare-interface"
                  ; Symbol id ]
-                 [ "super-interfaces", sexpr_of_extends inters
+                 [ "super-interfaces", sexpr_of_list sexpr_of_super inters
                  ; "fields", sexpr_of_list sexpr_of_field fields
                  ; "methods", sexpr_of_list sexpr_of_meths meths 
                  ; "instance-preds", sexpr_of_list sexpr_of_instance_pred preds ]
     | Class (_, abs, final, id, meths, fields, cons, super, tparams, inters, preds) ->
       build_list [ Symbol "declare-class"
                  ; Symbol id ]
-                 [ "super-class", sexpr_of_extends [super]
-                 ; "super-interfaces", sexpr_of_extends inters
+                 [ "super-class", sexpr_of_super super
+                 ; "super-interfaces", sexpr_of_list sexpr_of_super inters
                  ; "methods", sexpr_of_list sexpr_of_meths meths 
                  ; "fields", sexpr_of_list sexpr_of_field fields
                  ; "construcors", sexpr_of_list (sexpr_of_constructor id) cons 
@@ -723,6 +716,9 @@ and sexpr_of_inductive_constructor (c : ctor) : sexpression =
     build_list [ Symbol "inductive-constructor"
                ; Symbol name ]
                [ "arguments", List (List.map aux args)]
+
+and sexpr_of_super (name, targs) : sexpression =
+  List [ Symbol name; sexpr_of_list sexpr_of_type_expr targs ]
 
 and sexpr_of_meths (meth : meth) : sexpression =
   match meth with
