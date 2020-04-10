@@ -114,6 +114,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let current_thread_name = "currentThread"
   let current_thread_type = intType
   
+  let createTParamTuples tparams ghostness = List.map (fun tparam -> (tparam,ghostness)) tparams 
+
   (* Region: function contracts *)
   
   let functypemap1 =
@@ -121,10 +123,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match ds with
         [] -> List.rev functypemap
       | (ftn, (l, gh, tparams, rt, ftxmap, xmap, pn, ilist, pre, post, terminates, predfammaps))::ds ->
+        let tparams_m = createTParamTuples tparams Ghost in
         let (pre, post) =
-          let (wpre, tenv) = check_asn (pn,ilist) tparams (ftxmap @ xmap @ [("this", PtrType Void); (current_thread_name, current_thread_type)]) pre in
+          let (wpre, tenv) = check_asn (pn,ilist) tparams_m (ftxmap @ xmap @ [("this", PtrType Void); (current_thread_name, current_thread_type)]) pre in
           let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
-          let (wpost, tenv) = check_asn (pn,ilist) tparams postmap post in
+          let (wpost, tenv) = check_asn (pn,ilist) tparams_m postmap post in
           (wpre, wpost)
         in
         iter ((ftn, (l, gh, tparams, rt, ftxmap, xmap, pre, post, terminates, predfammaps))::functypemap) ds
@@ -148,7 +151,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let indexCount = List.length fns in
       let Some n = inputParamCount in
       let (inputParams, outputParams) = take_drop n xs in
-      let Some tpenv = zip predinst_tparams targs in
+      let Some tpenv = zip (createTParamTuples predinst_tparams Ghost) targs in
       let (indices, real_args) = take_drop indexCount args in
       let (inputArgs, outputArgs) = take_drop n real_args in
       List.for_all2 definitely_equal indices fsymbs &&
@@ -327,7 +330,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | Some (ftn, (lft, gh, fttparams, rt0, ftxmap0, xmap0, pre0, post0, terminates0, ft_predfammaps)) ->
             let fttargs = List.map (check_pure_type (pn,ilist) []) fttargs in
             let fttpenv =
-              match zip fttparams fttargs with
+              match zip (createTParamTuples fttparams Ghost) fttargs with
                 None -> static_error l "Incorrect number of function type type arguments" None
               | Some bs -> bs
             in
@@ -384,7 +387,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match ds with
         [] -> (funcmap, List.rev prototypes_implemented)
       | Func (l, k, tparams, rt, fn, xs, nonghost_callers_only, functype_opt, contract_opt, terminates, body,Static,_)::ds when k <> Fixpoint ->
-        let tparams = List.map (fun tparam -> (tparam,Ghost)) tparams in
+        let tparams_m = createTParamTuples tparams Ghost in
         let fn = full_name pn fn in
         let fterm = List.assoc fn funcnameterms in
         if body <> None then
@@ -392,7 +395,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         begin match body with None -> () | Some (ss, _) -> List.iter (stmt_iter (fun s -> if not (is_transparent_stmt s) then reportStmt (stmt_loc s))) ss end;
         incr func_counter;
         let (rt, xmap, functype_opt, pre, pre_tenv, post) =
-          check_func_header pn ilist [] [] [] l k tparams rt fn (Some fterm) xs nonghost_callers_only functype_opt contract_opt terminates body
+          check_func_header pn ilist [] [] [] l k tparams_m rt fn (Some fterm) xs nonghost_callers_only functype_opt contract_opt terminates body
         in
         begin
           let body' = match body with None -> None | Some body -> Some (Some body) in
@@ -405,7 +408,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               static_error l "Duplicate function implementation." None
           | Some (FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, nonghost_callers_only0, pre0, pre_tenv0, post0, terminates0, functype_opt0, None,Static,Public)) ->
             if body = None then static_error l "Duplicate function prototype." None;
-            check_func_header_compat l ("Function '" ^ fn ^ "'") "Function prototype implementation check" [] (k, tparams, rt, xmap, nonghost_callers_only, pre, post, [], terminates) (k0, tparams0, rt0, xmap0, nonghost_callers_only0, [], [], pre0, post0, [], terminates0);
+            check_func_header_compat l ("Function '" ^ fn ^ "'") "Function prototype implementation check" [] (k, tparams_m, rt, xmap, nonghost_callers_only, pre, post, [], terminates) (k0, (createTParamTuples tparams0 Ghost), rt0, xmap0, nonghost_callers_only0, [], [], pre0, post0, [], terminates0);
             iter pn ilist ((fn, FuncInfo ([], fterm, l, k, tparams, rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body',Static,Public))::funcmap) ((fn, l0)::prototypes_implemented) ds
         end
       | _::ds -> iter pn ilist funcmap prototypes_implemented ds
@@ -754,14 +757,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match ctors with
             [] -> (cn, {cl=l; cabstract=abstract; cfinal=fin; cmeths=meths; cfds=fds; cctors=List.rev cmap; csuper=super; ctpenv=tpenv; cinterfs=interfs; cpreds=preds; cpn=pn; cilist=ilist})
             | Cons (lm, ps, co, ss, v, tparams)::ctors ->
-              let tparams = List.map (fun tparam -> (tparam,Real)) tparams in
+              let tparams_m = createTParamTuples tparams Real in
               let xmap =
                 let rec iter xm xs =
                   match xs with
                    [] -> List.rev xm
                  | (te, x)::xs ->
                    if List.mem_assoc x xm then static_error l "Duplicate parameter name." None;
-                   let t = check_pure_type (pn,ilist) tparams te in
+                   let t = check_pure_type (pn,ilist) tparams_m te in
                    iter ((x, t)::xm) xs
                 in
                 iter [] ps
@@ -772,12 +775,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 match co with
                   None -> static_error lm "Constructor must have contract" None
                 | Some (pre, post, epost, terminates) ->
-                  let (wpre, tenv) = check_asn (pn,ilist) tparams ((current_class, ClassOrInterfaceName cn)::(current_thread_name, current_thread_type)::xmap) pre in
+                  let (wpre, tenv) = check_asn (pn,ilist) tparams_m ((current_class, ClassOrInterfaceName cn)::(current_thread_name, current_thread_type)::xmap) pre in
                   let postmap = ("this", ObjType(cn, []))::tenv in
-                  let (wpost, _) = check_asn (pn,ilist) tparams postmap post in
+                  let (wpost, _) = check_asn (pn,ilist) tparams_m postmap post in
                   let wepost = List.map (fun (tp, epost) -> 
-                    let (wepost, _) = check_asn (pn,ilist) tparams tenv epost in
-                    let tp = check_pure_type (pn,ilist) tparams tp in
+                    let (wepost, _) = check_asn (pn,ilist) tparams_m tenv epost in
+                    let tp = check_pure_type (pn,ilist) tparams_m tp in
                     (tp, wepost)
                   ) epost in
                   (wpre, tenv, wpost, wepost, terminates)
@@ -2103,7 +2106,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (_, gh, fttparams, rt, ftxmap, xmap, pre, post, terminates, ft_predfammaps) = List.assoc ftn functypemap in
       if pure && gh = Real then static_error l "Cannot call regular function pointer in a pure context." None;
       let check_call targs h args0 cont =
-        verify_call funcmap eval_h l (pn, ilist) xo None targs (TermPat fterm::List.map (fun arg -> TermPat arg) args0 @ List.map (fun e -> SrcPat (LitPat e)) args) (fttparams, rt, (("this", PtrType Void)::ftxmap @ xmap), [], pre, post, None, terminates, Public) pure true None leminfo sizemap h tparams tenv ghostenv env cont (fun _ _ _ _ -> assert false)
+        verify_call funcmap eval_h l (pn, ilist) xo None targs (TermPat fterm::List.map (fun arg -> TermPat arg) args0 @ List.map (fun e -> SrcPat (LitPat e)) args) (createTParamTuples fttparams Ghost, rt, (("this", PtrType Void)::ftxmap @ xmap), [], pre, post, None, terminates, Public) pure true None leminfo sizemap h tparams tenv ghostenv env cont (fun _ _ _ _ -> assert false)
       in
       let consume_call_perm h cont =
         if should_terminate leminfo then begin
@@ -2176,7 +2179,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             Some (Some (_, rank)), RealMethodInfo (Some rank') -> rank < rank'
           | _ -> true
         in
-        check_correct h None None targtps args (lm, tparams, None, xmap, ["this", obj], pre, post, Some(epost), terminates, Static) is_upcall (Some cn) (fun h env _ -> cont h env obj)
+        check_correct h None None targtps args (lm, createTParamTuples tparams Real, None, xmap, ["this", obj], pre, post, Some(epost), terminates, Static) is_upcall (Some cn) (fun h env _ -> cont h env obj)
       | _ -> static_error l "Multiple matching overloads" None
       end
     | WMethodCall (l, tn, m, pts, args, fb, targs) when m <> "getClass" ->
@@ -2230,7 +2233,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           RealFuncInfo (_, _, _) | LemInfo (_, _, _, true) | RealMethodInfo _ -> ()
         | _ -> static_error l "A lemma function marked nonghost_callers_only cannot be called from a non-nonghost_callers_only lemma function." None
       end;
-      check_correct h xo (Some g) targs es (lg, tparams, tr, ps, funenv, pre, post, None, terminates, v) true None cont
+      check_correct h xo (Some g) targs es (lg, createTParamTuples tparams Ghost, tr, ps, funenv, pre, post, None, terminates, v) true None cont
     | NewArray(l, tp, e) ->
       let elem_tp = check_pure_type (pn,ilist) tparams tp in
       let w = check_expr_t (pn,ilist) tparams tenv e intType in

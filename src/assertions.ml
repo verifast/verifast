@@ -1290,7 +1290,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let inputParameters = List.map fst (take nbInputParameters xs) in
           let inputFormals = (take nbInputParameters xs) in
           let construct_edge qsymb coef target qtargs qIndices qInputActuals conds =
-            [(psymb, pindices, qsymb, [(l, (psymb, true), 0, None, false, predinst_tparams, fns, xs, inputFormals, wbody0, coef, target, qtargs, qIndices, qInputActuals, conds)])]
+            [(psymb, pindices, qsymb, [(l, (psymb, true), 0, None, false, (createTParamTuples predinst_tparams Ghost), fns, xs, inputFormals, wbody0, coef, target, qtargs, qIndices, qInputActuals, conds)])]
           in
           find_edges construct_edge inputParameters xs wbody0
       )
@@ -1440,7 +1440,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                            (for_all2 definitely_equal fsymbs current_indices) &&
                            (
                              let Some inputParamCount = inputParamCount in
-                             let Some tpenv = zip predinst_tparams current_targs in
+                             let Some tpenv = zip (createTParamTuples predinst_tparams Ghost) current_targs in
                              let env = List.map2 (fun (x, tp0) actual -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term actual tp tp0)) (take inputParamCount xs) current_input_args in 
                              let env = match current_this_opt with None -> env | Some t -> ("this", t) :: env in
                              List.exists (fun conds -> (for_all_rev (fun cond -> ctxt#query (eval None env cond)) conds)) conds
@@ -1709,6 +1709,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     (* rules for closing empty chunks *)
     List.iter
       begin fun (symb, fsymbs, conds, ((p, fns), (env, l, predinst_tparams, xs, _, inputParamCount, wbody))) ->
+        let predinst_tparams = createTParamTuples predinst_tparams Ghost in
         let g = (symb, true) in
         let indexCount = List.length fns in
         let Some n = inputParamCount in
