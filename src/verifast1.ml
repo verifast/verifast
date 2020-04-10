@@ -1618,8 +1618,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | _ -> []
     ) functypenames
   
-  let rec is_subtype_of x y =
-    Printf.printf "subtyping %s child of %s\n" x y; 
+  let rec is_subtype_of x y = 
     x = y ||
     y = "java.lang.Object" ||
     match try_assoc x classmap1 with
