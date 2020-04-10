@@ -119,12 +119,12 @@ module Scala = struct
   let rec
     parse_decl = parser
       [< '(l, Kwd "object"); '(_, Ident cn); '(_, Kwd "{"); ms = rep parse_method; '(_, Kwd "}") >] ->
-      Class (l, false, FinalClass, cn, ms, [], [], "Object", [], [])
+      Class (l, false, FinalClass, cn, ms, [], [], ("Object", []), [], [], [])
   and
     parse_method = parser
       [< '(l, Kwd "def"); '(_, Ident mn); ps = parse_paramlist; t = parse_type_ann; co = parse_contract; '(_, Kwd "=");'(_, Kwd "{"); ss = rep parse_stmt; '(closeBraceLoc, Kwd "}")>] ->
       let rt = match t with ManifestTypeExpr (_, Void) -> None | _ -> Some t in
-      Meth (l, Real, rt, mn, ps, Some co, Some ((ss, closeBraceLoc), next_body_rank ()), Static, Public, false)
+      Meth (l, Real, rt, mn, ps, Some co, Some ((ss, closeBraceLoc), next_body_rank ()), Static, Public, false,[])
   and
     parse_paramlist = parser
       [< '(_, Kwd "("); ps = rep_comma parse_param; '(_, Kwd ")") >] -> ps
@@ -230,45 +230,45 @@ and
      abstract = (parser [< '(_, Kwd "abstract") >] -> true | [< >] -> false); 
      final = (parser [< '(_, Kwd "final") >] -> FinalClass | [< >] -> ExtensibleClass);
      ds = begin parser
-       [< '(l, Kwd "class"); '(_, Ident s); _ = type_params_parse_and_push();
-          super = parse_super_class; il = parse_interfaces; mem = parse_java_members s; ds = parse_decls_core >]
-       -> type_params_pop();
-          Class (l, abstract, final, s, methods s mem, fields mem, constr mem, super, il, instance_preds mem)::ds
-     | [< '(l, Kwd "interface"); '(_, Ident cn); _ = type_params_parse_and_push();
-          il = parse_extended_interfaces;  mem = parse_java_members cn; ds = parse_decls_core >]
-       -> type_params_pop();
-          Interface (l, cn, il, fields mem, methods cn mem, instance_preds mem)::ds
+       [< '(l, Kwd "class"); '(startLoc, Ident s); tparams = type_params_parse;
+          super = parse_super_class l; il = parse_interfaces; mem = parse_java_members s tparams; ds = parse_decls_core >]
+       -> Class (l, abstract, final, s, methods s mem, fields mem, constr mem, super, tparams, il, instance_preds mem)::ds
+     | [< '(l, Kwd "interface"); '(startLoc, Ident cn); tparams = type_params_parse;
+          il = parse_extended_interfaces;  mem = parse_java_members cn tparams; ds = parse_decls_core >]
+       -> Interface (l, cn, il, fields mem, methods cn mem, tparams, instance_preds mem)::ds
      | [< d = parse_decl; ds = parse_decls_core >] -> d@ds
      | [< '(_, Kwd ";"); ds = parse_decls_core >] -> ds
      | [< >] -> []
      end
   >] -> ds
-and parse_qualified_type_rest = parser
-  [< '(_, Kwd "."); '(_, Ident s); rest = parse_qualified_type_rest >] -> "." ^ s ^ rest
-| [< xs = parse_type_params_with_loc >] -> List.iter (fun (l,p) -> type_param_check_in_scope l p) xs; ""
-| [<>] -> ""
-and parse_qualified_type = parser
-  [<'(_, Ident s); rest = parse_qualified_type_rest >] -> s ^ rest
+and parse_qualified_type loc = parser
+  [< t = parse_type >] -> 
+    match t with 
+      IdentTypeExpr(l,p,n) -> Printf.printf "qualified type: ident type %s.%s \n" (match p with Some(s) -> s | None -> "") n; 
+        ((match p with Some(s) -> s ^ n | None -> n), []) 
+      | ConstructedTypeExpr(l,n,targs) -> (n,targs)
+      | _ -> raise (ParseException (loc, "Invalid type"))
+  
 and
-  parse_super_class= parser
-    [<'(_, Kwd "extends"); s = parse_qualified_type >] -> s 
-  | [<>] -> "java.lang.Object"
+  parse_super_class loc = parser
+    [<'(l, Kwd "extends"); (s,targs) = parse_qualified_type l>] -> (s,targs)
+  | [<>] -> ("java.lang.Object",[])
 and
-  parse_interfaces= parser
-  [< '(_, Kwd "implements"); is = rep_comma (parser 
-    [< i = parse_qualified_type; e=parser
+  parse_interfaces = parser
+  [< '(l, Kwd "implements"); is = rep_comma (parser 
+    [< i = parse_qualified_type l; e=parser
       [<>]->(i)>] -> e); '(_, Kwd "{") >] -> is
-| [<'(_, Kwd "{")>]-> []
+  | [<'(_, Kwd "{")>]-> []
 and
-  parse_extended_interfaces= parser
-  [< '(_, Kwd "extends"); is = rep_comma (parser 
-    [< i = parse_qualified_type; e=parser
+  parse_extended_interfaces = parser
+  [< '(l, Kwd "extends"); is = rep_comma (parser 
+    [< i = parse_qualified_type l; e=parser
       [<>]->(i)>] -> e); '(_, Kwd "{") >] -> is
-| [<'(_, Kwd "{")>]-> []
+  | [<'(_, Kwd "{")>]-> []
 and
   methods cn m=
   match m with
-    MethMember (Meth (l, gh, t, n, ps, co, ss,s,v,abstract))::ms -> Meth (l, gh, t, n, ps, co, ss,s,v,abstract)::(methods cn ms)
+    MethMember (Meth (l, gh, t, n, ps, co, ss,s,v,abstract, tparams))::ms -> Meth (l, gh, t, n, ps, co, ss,s,v,abstract, tparams)::(methods cn ms)
     |_::ms -> methods cn ms
     | []->[]
 and
@@ -280,7 +280,7 @@ and
 and
   constr m=
   match m with
-    ConsMember(Cons(l,ps,co,ss,v))::ms -> Cons(l,ps,co,ss,v)::(constr ms)
+    ConsMember(Cons(l,ps,co,ss,v, tparams))::ms -> Cons(l,ps,co,ss,v, tparams)::(constr ms)
     |_::ms -> constr ms
     | []->[]
 and
@@ -292,16 +292,16 @@ and
 | [<'(_, Kwd "protected")>] -> Protected
 | [<>] -> Package
 and
-  parse_java_members cn= parser
+  parse_java_members cn tpenv = parser
   [<'(_, Kwd "}")>] -> []
-| [< '(_, Kwd "/*@"); mems1 = parse_ghost_java_members cn; mems2 = parse_java_members cn >] -> mems1 @ mems2
-| [< m=parse_java_member cn;mr=parse_java_members cn>] -> m::mr
+| [< '(_, Kwd "/*@"); mems1 = parse_ghost_java_members cn tpenv; mems2 = parse_java_members cn tpenv >] -> mems1 @ mems2
+| [< m=parse_java_member cn tpenv;mr=parse_java_members cn tpenv>] -> m::mr
 and
-  parse_ghost_java_members cn = parser
+  parse_ghost_java_members cn realTypeParams = parser
   [< '(_, Kwd "@*/") >] -> []
-| [< m = parse_ghost_java_member cn; mems = parse_ghost_java_members cn >] -> m::mems
+| [< m = parse_ghost_java_member cn realTypeParams; mems = parse_ghost_java_members cn realTypeParams >] -> m::mems
 and
-  parse_ghost_java_member cn = parser
+  parse_ghost_java_member cn realTypeParams = parser
   | [< vis = parse_visibility; m = begin parser
        [< '(l, Kwd "predicate"); '(_, Ident g); ps = parse_paramlist;
           body = begin parser
@@ -312,7 +312,7 @@ and
      | [< '(l, Kwd "lemma"); t = parse_return_type; 
           '(l, Ident x); (ps, co, ss) = parse_method_rest l >] -> 
         let ps = (IdentTypeExpr (l, None, cn), "this")::ps in
-        MethMember(Meth (l, Ghost, t, x, ps, co, ss, Instance, vis, false))
+        MethMember(Meth (l, Ghost, t, x, ps, co, ss, Instance, vis, false, realTypeParams))
      | [< binding = (parser [< '(_, Kwd "static") >] -> Static | [< >] -> Instance); t = parse_type; '(l, Ident x); '(_, Kwd ";") >] ->
        FieldMember [Field (l, Ghost, t, x, binding, vis, false, None)]
     end
@@ -329,31 +329,31 @@ and
 and
   parse_throws_clause = parser
   [< '(l, Kwd "throws"); epost = rep_comma (parse_thrown l) >] -> epost
-and
-  parse_array_dims t = parser
+and parse_array_dims t = parser
   [< '(l, Kwd "["); '(_, Kwd "]"); t = parse_array_dims (ArrayTypeExpr (l, t)) >] -> t
 | [< >] -> t
-and 
-  id x = parser [< >] -> x
-and 
-  parse_java_modifier = parser [< '(_, Kwd "public") >] -> VisibilityModifier(Public) | [< '(_, Kwd "protected") >] -> VisibilityModifier(Protected) | [< '(_, Kwd "private") >] -> VisibilityModifier(Private) | [< '(_, Kwd "static") >] -> StaticModifier | [< '(_, Kwd "final") >] -> FinalModifier | [< '(_, Kwd "abstract") >] -> AbstractModifier
-and
-  parse_java_member cn = parser
+and id x = parser [< >] -> x
+and parse_java_modifier = parser [< '(l, Kwd "public") >] -> VisibilityModifier(Public)
+  | [< '(l, Kwd "protected") >] -> VisibilityModifier(Protected)
+  | [< '(l, Kwd "private") >] -> VisibilityModifier(Private) 
+  | [< '(l, Kwd "static") >] -> StaticModifier
+  | [< '(l, Kwd "final") >] -> FinalModifier
+  | [< '(l, Kwd "abstract") >] -> AbstractModifier
+and parse_java_member cn tpenv = parser
   [< modifiers = rep parse_java_modifier;
      binding = (fun _ -> if List.mem StaticModifier modifiers then Static else Instance);
      final = (fun _ -> List.mem FinalModifier modifiers);
      abstract = (fun _ -> List.mem AbstractModifier modifiers);
      vis = (fun _ -> (match (try_find (function VisibilityModifier(_) -> true | _ -> false) modifiers) with None -> Package | Some(VisibilityModifier(vis)) -> vis));
-     _ = type_params_parse_and_push ();
+     tparams = type_params_parse;
      t = parse_return_type;
      member = parser
        [< '(l, Ident x);
           member = parser
             [< (ps, co, ss) = parse_method_rest l >] ->
-            let t' = option_map type_param_erasure_in_scope t in
-            let ps = List.map (fun (texpr, s) -> (type_param_erasure_in_scope texpr, s))
-                (if binding = Instance then (IdentTypeExpr (l, None, cn), "this")::ps else ps) in
-            MethMember (Meth (l, Real, t', x, ps, co, ss, binding, vis, abstract))
+            let ps = if binding = Instance then (IdentTypeExpr (l, None, cn),"this")::ps 
+                else ps in
+            MethMember (Meth (l, Real, t, x, ps, co, ss, binding, vis, abstract, (tpenv@tparams)))
           | [< t = id (match t with None -> raise (ParseException (l, "A field cannot be void.")) | Some(t) -> t);
                tx = parse_array_braces t;
                init = opt (parser [< '(_, Kwd "="); e = parse_declaration_rhs tx >] -> e);
@@ -375,8 +375,8 @@ and
        in
        if binding = Static then raise (ParseException (l, "A constructor cannot be static."));
        if final then raise (ParseException (l, "A constructor cannot be final."));
-       ConsMember (Cons (l, ps, co, ss, vis))
-  >] -> type_params_pop (); member
+       ConsMember (Cons (l, ps, co, ss, vis, (tpenv@tparams)))
+  >] -> member
 and parse_array_init_rest = parser
   [< '(_, Kwd ","); es = opt(parser [< e = parse_expr; es = parse_array_init_rest >] -> e :: es) >] -> (match es with None -> [] | Some(es) -> es)
 | [< >] -> []
@@ -388,14 +388,12 @@ and parse_declaration_rhs te = parser
   [< '(linit, Kwd "{"); es = parse_array_init >] ->
   (match te with ArrayTypeExpr (_, elem_te) -> NewArrayWithInitializer (linit, elem_te, es) | _ -> InitializerList (linit, es))
 | [< e = parse_expr >] -> e
-and
-  parse_declarator t = parser
+and parse_declarator t = parser
   [< '(l, Ident x);
      tx = parse_array_braces t;
      init = opt (parser [< '(_, Kwd "="); e = parse_declaration_rhs tx >] -> e);
   >] -> (l, tx, x, init, (ref false, ref None))
-and
-  parse_method_rest l = parser
+and parse_method_rest l = parser
   [< ps = parse_paramlist;
     epost = opt parse_throws_clause;
     (ss, co) = parser
@@ -422,8 +420,7 @@ and
         end
     in
     (ps, contract, ss)
-and
-  parse_functype_paramlists = parser
+and parse_functype_paramlists = parser
   [< ps1 = parse_paramlist; ps2 = opt parse_paramlist >] -> (match ps2 with None -> ([], ps1) | Some ps2 -> (ps1, ps2))
 and
   (** Parses
@@ -452,18 +449,16 @@ and
 | [< '(l, Kwd "__forceinline") >] -> ()
 | [< '(l, Kwd "__always_inline") >] -> ()
 | [< >] -> ()
-and
-  parse_enum_body = parser
+and parse_enum_body = parser
   [< '(_, Kwd "{");
      elems = rep_comma (parser [< '(_, Ident e); init = opt (parser [< '(_, Kwd "="); e = parse_expr >] -> e) >] -> (e, init));
      '(_, Kwd "}")
    >] -> elems
-and
-  parse_decl = parser
+and parse_decl = parser
   [< '(l, Kwd "struct"); '(_, Ident s); d = parser
     [< fs = parse_fields; '(_, Kwd ";") >] -> Struct (l, s, Some fs)
   | [< '(_, Kwd ";") >] -> Struct (l, s, None)
-  | [< t = parse_type_suffix (StructTypeExpr (l, Some s, None)); d = parse_func_rest Regular (Some t) Public >] -> d
+  | [< t = parse_type_suffix (StructTypeExpr (l, Some s, None)); d = parse_func_rest Regular (Some t) Public Real >] -> d
   >] -> check_function_for_contract d
 | [< '(l, Kwd "typedef");
      rt = parse_return_type; '(_, Ident g);
@@ -495,9 +490,9 @@ and
   >] -> register_typedef g; ds
 | [< '(_, Kwd "enum"); '(l, Ident n); elems = parse_enum_body; '(_, Kwd ";"); >] ->
   [EnumDecl(l, n, elems)]
-| [< '(_, Kwd "static"); _ = parse_ignore_inline; t = parse_return_type; d = parse_func_rest Regular t Private >] -> check_function_for_contract d
-| [< '(_, Kwd "extern"); t = parse_return_type; d = parse_func_rest Regular t Public >] -> check_function_for_contract d
-| [< '(_, Kwd "_Noreturn"); _ = parse_ignore_inline; t = parse_return_type; d = parse_func_rest Regular t Public >] ->
+| [< '(_, Kwd "static"); _ = parse_ignore_inline; t = parse_return_type; d = parse_func_rest Regular t Private Real >] -> check_function_for_contract d
+| [< '(_, Kwd "extern"); t = parse_return_type; d = parse_func_rest Regular t Public Real >] -> check_function_for_contract d
+| [< '(_, Kwd "_Noreturn"); _ = parse_ignore_inline; t = parse_return_type; d = parse_func_rest Regular t Public Real >] ->
   let ds = check_function_for_contract d in
   begin match ds with
     [Func (l, k, tparams, t, g, ps, gc, ft, Some (pre, post), terminates, ss, static, v)] ->
@@ -508,7 +503,7 @@ and
   | _ -> ()
   end;
   ds
-| [< t = parse_return_type; d = parse_func_rest Regular t Public >] -> check_function_for_contract d
+| [< t = parse_return_type; d = parse_func_rest Regular t Public Real >] -> check_function_for_contract d
 and check_for_contract: 'a. 'a option -> loc -> string -> (asn * asn -> 'a) -> 'a = fun contract l m f ->
   match contract with
     | Some spec -> spec 
@@ -524,31 +519,25 @@ and check_function_for_contract d =
     let contract = check_for_contract contract l "Function declaration should have a contract." (fun co -> co) in
     [Func(l, k, tparams, t, g, ps, gc, ft, Some contract, terminates, ss, static, v)]
   | _ -> [d]
-and
-  parse_pure_decls = parser
+and parse_pure_decls = parser
   [< ds0 = parse_pure_decl; ds = parse_pure_decls >] -> ds0 @ ds
-| [< >] -> []
-and
-  parse_index_list = parser
+  | [< >] -> []
+and parse_index_list = parser
   [< '(_, Kwd "("); is = rep_comma (parser 
     [< '(l, Ident i); e=parser
       [<'(_, Kwd ".");'(_, Kwd "class")>]-> (l,i)
       |[<>]->(l,i)>] -> e); '(_, Kwd ")") >] -> is
-and
-  parse_type_params l = parser
+and parse_type_params l = parser
     [< xs = parse_angle_brackets l (rep_comma (parser [< '(_, Ident x) >] -> x)) >] -> xs
   | [< >] -> []
-and
-  parse_pred_body = parser
+and parse_pred_body = parser
   | [< '(_, Kwd "="); p = parse_asn >] -> p
-and
-  parse_pred_paramlist = parser
+and parse_pred_paramlist = parser
     [< 
       '(_, Kwd "("); ps = rep_comma parse_param;
       (ps, inputParamCount) = (parser [< '(_, Kwd ";"); ps' = rep_comma parse_param >] -> (ps @ ps', Some (List.length ps)) | [< >] -> (ps, None)); '(_, Kwd ")")
     >] -> (ps, inputParamCount)
-and
-  parse_predicate_decl l (inductiveness: inductiveness) = parser 
+and parse_predicate_decl l (inductiveness: inductiveness) = parser 
     [< '(li, Ident g); tparams = parse_type_params li; 
      (ps, inputParamCount) = parse_pred_paramlist;
      body = opt parse_pred_body;
@@ -556,10 +545,9 @@ and
     >] ->
     [PredFamilyDecl (l, g, tparams, 0, List.map (fun (t, p) -> t) ps, inputParamCount, inductiveness)] @
     (match body with None -> [] | Some body -> [PredFamilyInstanceDecl (l, g, tparams, [], ps, body)])
-and
-  parse_pure_decl = parser
+and parse_pure_decl = parser
     [< '(l, Kwd "inductive"); '(li, Ident i); tparams = parse_type_params li; '(_, Kwd "="); cs = (parser [< cs = parse_ctors >] -> cs | [< cs = parse_ctors_suffix >] -> cs); '(_, Kwd ";") >] -> [Inductive (l, i, tparams, cs)]
-  | [< '(l, Kwd "fixpoint"); t = parse_return_type; d = parse_func_rest Fixpoint t Public>] -> [d]
+  | [< '(l, Kwd "fixpoint"); t = parse_return_type; d = parse_func_rest Fixpoint t Public Ghost>] -> [d]
   | [< '(l, Kwd "predicate"); result = parse_predicate_decl l Inductiveness_Inductive >] -> result
   | [< '(l, Kwd "copredicate"); result = parse_predicate_decl l Inductiveness_CoInductive >] -> result
   | [< '(l, Kwd "predicate_family"); '(_, Ident g); is = parse_paramlist; (ps, inputParamCount) = parse_pred_paramlist; '(_, Kwd ";") >]
@@ -568,8 +556,8 @@ and
      p = parse_pred_body; '(_, Kwd ";"); >] -> [PredFamilyInstanceDecl (l, g, [], is, ps, p)]
   | [< '(l, Kwd "predicate_ctor"); '(_, Ident g); ps1 = parse_paramlist; (ps2, inputParamCount) = parse_pred_paramlist;
      p = parse_pred_body; '(_, Kwd ";"); >] -> [PredCtorDecl (l, g, ps1, ps2, inputParamCount, p)]
-  | [< '(l, Kwd "lemma"); t = parse_return_type; d = parse_func_rest (Lemma(false, None)) t Public >] -> [d]
-  | [< '(l, Kwd "lemma_auto"); trigger = opt (parser [< '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); >] -> e); t = parse_return_type; d = parse_func_rest (Lemma(true, trigger)) t Public >] -> [d]
+  | [< '(l, Kwd "lemma"); t = parse_return_type; d = parse_func_rest (Lemma(false, None)) t Public Ghost >] -> [d]
+  | [< '(l, Kwd "lemma_auto"); trigger = opt (parser [< '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); >] -> e); t = parse_return_type; d = parse_func_rest (Lemma(true, trigger)) t Public Ghost>] -> [d]
   | [< '(l, Kwd "box_class"); '(_, Ident bcn); ps = parse_paramlist;
        '(_, Kwd "{"); '(_, Kwd "invariant"); inv = parse_asn; '(_, Kwd ";");
        ads = parse_action_decls; hpds = parse_handle_pred_decls; '(_, Kwd "}") >] -> [BoxClassDecl (l, bcn, ps, inv, ads, hpds)]
@@ -580,37 +568,30 @@ and
   | [< '(l, Kwd "import_module"); '(_, Ident g); '(lx, Kwd ";") >] -> [ImportModuleDecl (l, g)]
   | [< '(l, Kwd "require_module"); '(_, Ident g); '(lx, Kwd ";") >] -> [RequireModuleDecl (l, g)]
   | [< '(l, Kwd "abstract_type"); '(_, Ident t); '(_, Kwd ";") >] -> [AbstractTypeDecl (l, t)]
-and
-  parse_action_decls = parser
+and parse_action_decls = parser
   [< ad = parse_action_decl; ads = parse_action_decls >] -> ad::ads
 | [< >] -> []
-and
-  parse_action_decl = parser
+and parse_action_decl = parser
   [< '(l, Kwd "action"); permbased = opt (parser [< '(_, Kwd "permbased") >] -> 0); '(_, Ident an); ps = parse_paramlist; '(_, Kwd ";");
      '(_, Kwd "requires"); pre = parse_expr; '(_, Kwd ";");
      '(_, Kwd "ensures"); post = parse_expr; '(_, Kwd ";") >] -> ActionDecl (l, an, (match permbased with None -> false | Some _ -> true), ps, pre, post)
-and
-  parse_handle_pred_decls = parser
+and parse_handle_pred_decls = parser
   [< hpd = parse_handle_pred_decl; hpds = parse_handle_pred_decls >] -> hpd::hpds
 | [< >] -> []
-and
-  parse_handle_pred_decl = parser
+and parse_handle_pred_decl = parser
   [< '(l, Kwd "handle_predicate"); '(_, Ident hpn); ps = parse_paramlist;
      extends = opt (parser [< '(l, Kwd "extends"); '(_, Ident ehn) >] -> ehn);
      '(_, Kwd "{"); '(_, Kwd "invariant"); inv = parse_asn; '(_, Kwd ";"); pbcs = parse_preserved_by_clauses; '(_, Kwd "}") >]
      -> HandlePredDecl (l, hpn, ps, extends, inv, pbcs)
-and
-  parse_preserved_by_clauses = parser
+and parse_preserved_by_clauses = parser
   [< pbc = parse_preserved_by_clause; pbcs = parse_preserved_by_clauses >] -> pbc::pbcs
 | [< >] -> []
-and
-  parse_preserved_by_clause = parser
+and parse_preserved_by_clause = parser
   [< '(l, Kwd "preserved_by"); '(_, Ident an); '(_, Kwd "("); xs = rep_comma (parser [< '(_, Ident x) >] -> x); '(_, Kwd ")");
      ss = parse_block >] -> PreservedByClause (l, an, xs, ss)
-and
-  parse_type_params_free = parser [< '(_, Kwd "<"); xs = rep_comma (parser [< '(_, Ident x) >] -> x); '(_, Kwd ">") >] -> xs
-and
-  parse_type_params_general = parser
+and parse_type_params_free = parser 
+  [< '(_, Kwd "<"); xs = rep_comma (parser [< '(_, Ident x) >] -> x); '(_, Kwd ">") >] -> xs
+and parse_type_params_general = parser
   [< xs = parse_type_params_free >] -> xs
 | [<
     xs = peek_in_ghost_range (
@@ -621,64 +602,13 @@ and
     )
   >] -> xs
 | [< >] -> []
-and
-  parse_type_params_with_loc = parser
-  [< '(_, Kwd "<"); xs = rep_comma (parser [< '(l, Ident x) >] -> (l,x)); '(_, Kwd ">") >] -> xs
-and
-  type_params_in_scope = ref []
-and
-  type_params_pop _ =
-    type_params_in_scope := List.tl !type_params_in_scope
-and
-  type_params_parse_and_push _ =
+and type_params_parse =
     parser
       [< xs = opt parse_type_params_general >] ->
-        type_params_in_scope := xs::!type_params_in_scope
-and
-  type_param_is_in_scope arg =
-    let rec is_in_scope_core arg params =
-      match params with
-      | Some(ps)::rest ->
-          if List.mem arg ps then
-            true
-          else
-            is_in_scope_core arg rest
-      | None::rest -> is_in_scope_core arg rest
-      | []-> false
-    in is_in_scope_core arg !type_params_in_scope
-and
-  type_param_check_in_scope l arg =
-    if not (type_param_is_in_scope arg) then
-      raise (ParseException (l, "Type parameter is not in scope"));
-and
-  type_param_check_texpr_in_scope texpr =
-    match texpr with
-    | PtrTypeExpr (l, targ) -> type_param_check_texpr_in_scope targ
-    | ArrayTypeExpr (l, targ) -> type_param_check_texpr_in_scope targ
-    | StaticArrayTypeExpr (l, targ, i) -> type_param_check_texpr_in_scope targ
-    | IdentTypeExpr (l, pkgn, n) -> type_param_check_in_scope l n
-    | ConstructedTypeExpr (l, n, targs) -> type_param_check_in_scope l n;
-                                           List.iter type_param_check_texpr_in_scope targs;
-    | _ -> ()
-and
-   type_param_translate_in_scope p =
-    if type_param_is_in_scope p then
-      "java.lang.Object"
-    else
-      p
-and
-  type_param_erasure_in_scope texpr =
-    match texpr with
-    | PtrTypeExpr (l, targ) -> PtrTypeExpr (l, type_param_erasure_in_scope targ)
-    | ArrayTypeExpr (l, targ) -> ArrayTypeExpr (l, type_param_erasure_in_scope targ)
-    | StaticArrayTypeExpr (l, targ, i) -> StaticArrayTypeExpr (l, type_param_erasure_in_scope targ, i)
-    | IdentTypeExpr (l, pkgn, n) -> IdentTypeExpr (l, pkgn, type_param_translate_in_scope n)
-    | ConstructedTypeExpr (l, n, targs) ->
-        List.iter type_param_check_texpr_in_scope targs;
-        IdentTypeExpr (l, None, type_param_translate_in_scope n)
-    | _ -> texpr
-and
-  parse_func_rest k t v = parser
+        match xs with
+         | Some(params) -> params
+         | None -> []
+and parse_func_rest k t v gh = parser
   [<
     '(l, Ident g);
     tparams = parse_type_params_general;
@@ -698,12 +628,10 @@ and
         '(_, Kwd ";")
       >] -> Global (l, t, g, init)
   >] -> decl
-and
-  parse_ctors_suffix = parser
+and parse_ctors_suffix = parser
   [< '(_, Kwd "|"); cs = parse_ctors >] -> cs
 | [< >] -> []
-and
-  parse_ctors = parser
+and parse_ctors = parser
   [< '(l, Ident cn);
      ts = begin
        parser
@@ -715,8 +643,7 @@ and
      end;
      cs = parse_ctors_suffix
   >] -> Ctor (l, cn, ts)::cs
-and
-  parse_paramtype_and_name = parser
+and parse_paramtype_and_name = parser
   [< t = parse_type;
      paramname_opt = opt (parser
        [< '(_, Ident paramname) >] -> paramname
@@ -724,21 +651,16 @@ and
   >] ->
     let paramname = match paramname_opt with None -> "" | Some(x) -> x in
     (paramname, t)
-and
-  parse_paramtype = parser [< t = parse_type; _ = opt (parser [< '(_, Ident _) >] -> ()) >] -> t
-and
-  parse_fields = parser
+and parse_paramtype = parser [< t = parse_type; _ = opt (parser [< '(_, Ident _) >] -> ()) >] -> t
+and parse_fields = parser
   [< '(_, Kwd "{"); fs = parse_fields_rest >] -> fs
-and
-  parse_fields_rest = parser
+and parse_fields_rest = parser
   [< '(_, Kwd "}") >] -> []
 | [< f = parse_field; fs = parse_fields_rest >] -> f::fs
-and
-  parse_field = parser
+and parse_field = parser
   [< '(_, Kwd "/*@"); f = parse_field_core Ghost; '(_, Kwd "@*/") >] -> f
 | [< f = parse_field_core Real >] -> f
-and
-  parse_field_core gh = parser
+and  parse_field_core gh = parser
   [< te0 = parse_type; '(l, Ident f);
      te = parser
         [< '(_, Kwd ";") >] -> te0
@@ -747,18 +669,14 @@ and
               raise (ParseException (ls, "Array must have size > 0."));
             StaticArrayTypeExpr (l, te0, int_of_big_int size)
    >] -> Field (l, gh, te, f, Instance, Public, false, None)
-and
-  parse_return_type = parser
+and  parse_return_type = parser
   [< t = parse_type >] -> match t with ManifestTypeExpr (_, Void) -> None | _ -> Some t
-and
-  parse_type = parser
+and parse_type = parser
   [< t0 = parse_primary_type; t = parse_type_suffix t0 >] -> t
-and
-  parse_int_opt = parser
+and parse_int_opt = parser
   [< '(_, Kwd "int") >] -> ()
 | [< >] -> ()
-and
-  parse_integer_type_keyword = parser
+and parse_integer_type_keyword = parser
   [< '(l, Kwd "int") >] -> (l, int_rank)
 | [< '(l, Kwd "__int8") >] -> (l, 0)
 | [< '(l, Kwd "__int16") >] -> (l, 1)
@@ -1268,7 +1186,7 @@ and
   [< e0 = parse_expr_primary; e = parse_expr_suffix_rest e0 >] -> e
 and
   parse_type_args l = parser
-    [< targs = parse_angle_brackets l (rep_comma parse_type) >] -> targs
+   [< targs = parse_angle_brackets l (rep_comma parse_type) >] -> targs
   | [< >] -> []
 and
   parse_new_array_expr_rest l elem_typ = parser
@@ -1291,7 +1209,14 @@ and
 | [< '(l, Kwd "new"); tp = parse_primary_type; res = (parser 
                     [< args0 = parse_patlist >] -> 
                     begin match tp with
-                      IdentTypeExpr(_, pac, cn) -> NewObject (l, (match pac with None -> "" | Some(pac) -> pac ^ ".") ^ cn, List.map (function LitPat e -> e | _ -> raise (Stream.Error "Patterns are not allowed in this position")) args0)
+                      IdentTypeExpr(_, pac, cn) -> 
+                        NewObject (l, 
+                          (match pac with None -> "" | Some(pac) -> pac ^ ".") ^ cn, List.map (function LitPat e -> e | _ -> raise (Stream.Error "Patterns are not allowed in this position")) args0,
+                          [])
+                    | ConstructedTypeExpr(loc, name, targs) -> 
+                        NewObject (loc
+                        , name, List.map (function LitPat e -> e | _ -> raise (Stream.Error "Patterns are not allowed in this position")) args0
+                        , targs)
                     | _ -> raise (ParseException (type_expr_loc tp, "Class name expected"))
                     end
                   | [< e = parse_new_array_expr_rest l tp >] -> e)
@@ -1302,7 +1227,7 @@ and
       [<
         args0 = parse_patlist;
         e = parser
-          [< args = parse_patlist >] -> CallExpr (lx, x, [], args0, args,Static)
+          [< args = parse_patlist >] -> CallExpr (lx, x,[], args0, args,Static)
         | [< >] -> CallExpr (lx, x, [], [], args0,Static)
       >] -> e
     | [<

@@ -67,7 +67,7 @@ let rec string_of_type t =
   | RealType -> "real"
   | InductiveType (i, []) -> i
   | InductiveType (i, targs) -> i ^ "<" ^ String.concat ", " (List.map string_of_type targs) ^ ">"
-  | ObjType l -> "class " ^ l
+  | ObjType (l, targs) -> "class " ^ l ^ "<" ^ String.concat ", " (List.map string_of_type targs) ^ ">"
   | StructType sn -> "struct " ^ sn
   | PtrType t -> string_of_type t ^ " *"
   | FuncType ft -> ft
@@ -96,7 +96,8 @@ let rec string_of_type t =
   | BoxIdType -> "box"
   | HandleIdType -> "handle"
   | AnyType -> "any"
-  | TypeParam x -> x
+  | RealTypeParam x -> x
+  | GhostTypeParam x -> x ^ "'"
   | InferredType (_, t) -> begin match !t with EqConstraint t -> string_of_type t | _ -> "?" end
   | ArrayType(t) -> (string_of_type t) ^ "[]"
   | StaticArrayType(t, s) -> (string_of_type t) ^ "[" ^ (string_of_int s) ^ "]" 

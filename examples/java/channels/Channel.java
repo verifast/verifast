@@ -8,7 +8,8 @@ import java.util.*;
 /*@
 
 predicate_ctor channel_sema_inv(Channel channel)() =
-    channel.itemList |-> ?itemList &*& itemList.List(?items) &*& [1/2]channel.items_ |-> items &*&
+    channel.itemList |-> ?itemList &*& itemList.List(?items) 
+    &*& [1/2]channel.items_ |-> items &*&
     [1/2]channel.queueMaxSize |-> ?qms &*& length(items) <= qms;
 
 @*/
@@ -16,7 +17,7 @@ predicate_ctor channel_sema_inv(Channel channel)() =
 public final class Channel {
 
     //@ list<Object> items_;
-    List itemList;
+    List<String> itemList;
     Semaphore sema;
     int queueMaxSize;
     
@@ -27,7 +28,7 @@ public final class Channel {
         //@ requires 0 <= queueMaxSize;
         //@ ensures Channel() &*& ChannelState(nil, queueMaxSize);
     {
-        itemList = new ArrayList();
+        itemList = new ArrayList<String>();
         this.queueMaxSize = queueMaxSize;
         //@ items_ = nil;
         //@ close channel_sema_inv(this)();
@@ -80,7 +81,7 @@ public final class Channel {
                 sepPred() &*& pre() &*&
                 [1/2]items_ |-> items;
             predicate Q() =
-                [1/2]items_ |-> (length(items) < qms ? append(items, cons(msg, nil)) : items) &*&
+                [1/2]items_ |-> (length(items) < qms ? append<Object>(items, cons(msg, nil)) : items) &*&
                 sepPred() &*&
                 post(length(items) < qms);
             
@@ -93,8 +94,8 @@ public final class Channel {
                 open ChannelState(_, _);
                 if (length(items) < qms)
                 {
-                  items_ = append(items, cons(msg, nil));
-                  close ChannelState(append(items, cons(msg, nil)), _);
+                  items_ = append<Object>(items, cons(msg, nil));
+                  close ChannelState(append<Object>(items, cons(msg, nil)), _);
                   send_(true);
                 }
                 else
@@ -113,7 +114,7 @@ public final class Channel {
             //@ perform_atomic_space_ghost_operation();
             //@ open Q();
         }
-        //@ length_append(items, cons(msg, nil));
+        //@ length_append<Object>(items, cons(msg, nil));
         //@ close channel_sema_inv(this)();
         sema.release();
         //@ close [fc]Channel();
