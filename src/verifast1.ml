@@ -3305,7 +3305,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             in
            (* Replace the argument types parameters with their concrete type if they are a type parameter *)
             let rec replace_type t = match t with
-                RealTypeParam t -> begin try List.assoc t targenv with _ -> static_error l ("Unknown type parameter: " ^t) None end
+                RealTypeParam t -> begin try List.assoc t targenv with _ ->(* Type argument not provided, erase to object *)
+                    ObjType ("java.lang.Object", []) end
                 | ArrayType t -> ArrayType (replace_type t)
                 | ObjType (n,ts) -> ObjType (n, List.map replace_type ts)
                 | t -> t in
@@ -3359,14 +3360,23 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         try_qualified_call tn es args fb type_arguments (fun () -> static_error l "No such method" None)
       end
-    | NewObject (l, cn, args, targs) ->
+    | NewObject (l, cn, args) ->
+      begin match resolve Real (pn,ilist) l cn classmap with
+        Some (cn, {cabstract}) ->
+        if cabstract then
+          static_error l "Cannot create instance of abstract class." None
+        else
+          (NewObject (l, cn, args), ObjType (cn,[]), None)
+      | None -> static_error l "No such class" None
+      end
+    | NewGenericObject (l, cn, args, targs) ->
       begin match resolve Real (pn,ilist) l cn classmap with
         Some (cn, {cabstract}) ->
         if cabstract then
           static_error l "Cannot create instance of abstract class." None
         else 
            let targestps = List.map (fun targ -> check_pure_type (pn,ilist) tparams targ) targs in
-          (NewObject (l, cn, args, targs), ObjType (cn,targestps), None)
+          (NewGenericObject (l, cn, args, targs), ObjType (cn,targestps), None)
       | None -> static_error l "No such class" None
       end
     | ReadArray(l, arr, index) ->

@@ -307,8 +307,9 @@ and
       method_binding *
       type_ list (*Type arguments*)
   | NewArray of loc * type_expr * expr
-  | NewObject of loc * string * expr list * type_expr list (*type arguments *)
-  | NewArrayWithInitializer of loc * type_expr * expr list
+  | NewObject of loc * string * expr list (* Used for object creation of a raw type, or regular object creation of a type that has no type parameters *)
+  | NewGenericObject of loc * string * expr list * type_expr list (*type arguments *) (*Used  to create an object instance of a parameterised type *) 
+  | NewArrayWithInitializer of loc * type_expr * expr list 
   | IfExpr of loc * expr * expr * expr
   | SwitchExpr of
       loc *
@@ -844,7 +845,8 @@ let rec expr_loc e =
   | WFunPtrCall (l, g, args) -> l
   | WFunCall (l, g, targs, args) -> l
   | WMethodCall (l, tn, m, pts, args, fb, sign) -> l
-  | NewObject (l, cn, args, targs) -> l
+  | NewObject (l, cn, args) -> l
+  | NewGenericObject (l, cn, args, targs) -> l
   | NewArray(l, _, _) -> l
   | NewArrayWithInitializer (l, _, _) -> l
   | IfExpr (l, e1, e2, e3) -> l
@@ -1050,7 +1052,8 @@ let expr_fold_open iter state e =
   | WFunCall (l, g, targs, args) -> iters state args
   | WFunPtrCall (l, g, args) -> iters state args
   | WMethodCall (l, cn, m, pts, args, mb, sign) -> iters state args
-  | NewObject (l, cn, args, targs) -> iters state args
+  | NewObject (l, cn, args) -> iters state args
+  | NewGenericObject (l, cn, args, targs) -> iters state args
   | NewArray (l, te, e0) -> iter state e0
   | NewArrayWithInitializer (l, te, es) -> iters state es
   | IfExpr (l, e1, e2, e3) -> iters state [e1; e2; e3]
