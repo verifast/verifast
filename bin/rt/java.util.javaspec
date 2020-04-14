@@ -115,14 +115,14 @@ lemma_auto void seq_of_list_nth<t>(list<t> xs, int i);
 
 public interface Iterator<E>{
     
-    //@ predicate Iterator(fixpoint(int, option<Object>) elements, option<int> currentIndex, int nextIndex);
+    //@ predicate Iterator(fixpoint(int, option<E>) elements, option<int> currentIndex, int nextIndex);
     //@ predicate Iterator_removals(list<int> indices);
     
     boolean hasNext();
         //@ requires Iterator(?es, ?c, ?n);
         //@ ensures Iterator(es, c, n) &*& result ? es(n) != none : es(n) == none; // Force case split.
     
-    E next();
+    public E next();
         //@ requires Iterator(?es, ?c, ?n) &*& es(n) != none;
         //@ ensures Iterator(es, some(n), n + 1) &*& result == the(es(n));
     
@@ -151,8 +151,8 @@ fixpoint list<t> remove_nths<t>(list<int> ns, list<t> xs) {
 
 public interface List<E> extends Collection<E> {
     
-    //@ predicate List(list<Object> elements);
-    
+    //@ predicate List(list<E> elements);
+    		
     /*@
     
     lemma void listToIterable();
@@ -173,7 +173,7 @@ public interface List<E> extends Collection<E> {
         //@ requires [?f]List(?es) &*& 0 <= index &*& index < length(es); 
         //@ ensures [f]List(es) &*& result == nth(index, es);
     
-    Iterator iterator();
+    Iterator<E> iterator();
         //@ requires [?f]Iterable(?es);
         /*@
         ensures
@@ -194,7 +194,7 @@ public interface List<E> extends Collection<E> {
         //@ requires List(?es);
         //@ ensures List(append(es, cons(e, nil))) &*& result;
 
-    boolean addAll(Collection other);
+    boolean addAll(Collection<E> other);
         //@ requires List(?es) &*& listIsCollection(?l, other) &*& l.List(?other_es);
         //@ ensures List(append(es, other_es)) &*& l.List(other_es);
     
@@ -231,7 +231,7 @@ public class Arrays {
 
 public interface Set<E> extends Collection<E> {
     
-    //@ predicate Set(list<Object> elements);
+    //@ predicate Set(list<E> elements);
     
     /*@
     
@@ -245,11 +245,11 @@ public interface Set<E> extends Collection<E> {
         
     @*/
     
-    Iterator iterator();
+    Iterator<E> iterator();
         //@ requires [?f]Iterable(?es);
         /*@
         ensures
-            exists<list<Object> >(?es1) &*& result.Iterator((seq_of_list)(es1), none, 0) &*& Iterable_iterating(this.getClass())(this, es, f, result)
+            exists<list<E> >(?es1) &*& result.Iterator((seq_of_list)(es1), none, 0) &*& Iterable_iterating(this.getClass())(this, es, f, result)
             &*& subset(es1, es) == true &*& subset(es, es1) == true &*& distinct(es1) == true;
         @*/
     
@@ -265,7 +265,7 @@ public class HashSet<E> implements Set<E> {
 
 public interface Map<K,V> {
     
-    //@ predicate Map(list<pair<Object, Object> > elements);
+    //@ predicate Map(list<pair<K, V> > elements);
     
 }
 
