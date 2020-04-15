@@ -244,8 +244,7 @@ and
 and parse_qualified_type loc = parser
   [< t = parse_type >] -> 
     match t with 
-      IdentTypeExpr(l,p,n) -> Printf.printf "qualified type: ident type %s.%s \n" (match p with Some(s) -> s | None -> "") n; 
-        ((match p with Some(s) -> s ^ n | None -> n), []) 
+      IdentTypeExpr(l,p,n) -> ((match p with Some(s) -> s ^ n | None -> n), []) 
       | ConstructedTypeExpr(l,n,targs) -> (n,targs)
       | _ -> raise (ParseException (loc, "Invalid type"))
   
@@ -294,14 +293,14 @@ and
 and
   parse_java_members cn tpenv = parser
   [<'(_, Kwd "}")>] -> []
-| [< '(_, Kwd "/*@"); mems1 = parse_ghost_java_members cn tpenv; mems2 = parse_java_members cn tpenv >] -> mems1 @ mems2
+| [< '(_, Kwd "/*@"); mems1 = parse_ghost_java_members cn; mems2 = parse_java_members cn tpenv >] -> mems1 @ mems2
 | [< m=parse_java_member cn tpenv;mr=parse_java_members cn tpenv>] -> m::mr
 and
-  parse_ghost_java_members cn realTypeParams = parser
+  parse_ghost_java_members cn = parser
   [< '(_, Kwd "@*/") >] -> []
-| [< m = parse_ghost_java_member cn realTypeParams; mems = parse_ghost_java_members cn realTypeParams >] -> m::mems
+| [< m = parse_ghost_java_member cn; mems = parse_ghost_java_members cn >] -> m::mems
 and
-  parse_ghost_java_member cn realTypeParams = parser
+  parse_ghost_java_member cn = parser
   | [< vis = parse_visibility; m = begin parser
        [< '(l, Kwd "predicate"); '(_, Ident g); ps = parse_paramlist;
           body = begin parser
@@ -312,7 +311,7 @@ and
      | [< '(l, Kwd "lemma"); t = parse_return_type; 
           '(l, Ident x); (ps, co, ss) = parse_method_rest l >] -> 
         let ps = (IdentTypeExpr (l, None, cn), "this")::ps in
-        MethMember(Meth (l, Ghost, t, x, ps, co, ss, Instance, vis, false, realTypeParams))
+        MethMember(Meth (l, Ghost, t, x, ps, co, ss, Instance, vis, false, []))
      | [< binding = (parser [< '(_, Kwd "static") >] -> Static | [< >] -> Instance); t = parse_type; '(l, Ident x); '(_, Kwd ";") >] ->
        FieldMember [Field (l, Ghost, t, x, binding, vis, false, None)]
     end

@@ -61,8 +61,6 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match extended with
         None -> consume_asn rules [] h [] hpInvEnv inv true real_unit (fun _ h _ _ _ -> cont h)
       | Some(ehname) -> assert_handle_invs bcn hpmap ehname hpInvEnv h (fun h ->  consume_asn rules [] h [] hpInvEnv inv true real_unit (fun _ h _ _ _ -> cont h))
-  
-  let createTParamTuples tparams ghostness = List.map (fun tparam -> (tparam, ghostness)) tparams 
 
   let rec verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont econt =
     let l = stmt_loc s in
@@ -179,9 +177,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               Real -> if gh <> Real || (ftxmap = [] && fttparams = []) then static_error l "A produce_function_pointer_chunk statement may be used only for parameterized and type-parameterized function types." None
             | Ghost -> if gh <> Ghost then static_error l "Lemma function pointer type expected." None
             end;
-            let fttargs = List.map (check_pure_type (pn,ilist) tparams) fttargs in
+            let fttargs = List.map (fun te -> check_pure_type (pn,ilist) tparams te gh) fttargs in
             let tpenv =
-              match zip (createTParamTuples fttparams Ast.Ghost) fttargs with
+              match zip fttparams fttargs with
                 None -> static_error l "Incorrect number of function type type arguments." None
               | Some bs -> bs
             in
@@ -222,7 +220,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | ExprStmt (CallExpr (lc, "call", [], [], [], Static))::ss_after -> (List.rev ss_before, Some (lc, None, ss_after))
                 | DeclStmt (ld, [lx, tx, x, Some(CallExpr (lc, "call", [], [], [], Static)), _])::ss_after ->
                   if List.mem_assoc x tenv then static_error ld "Variable hides existing variable" None;
-                  let t = check_pure_type (pn,ilist) tparams tx in
+                  let t = check_pure_type (pn,ilist) tparams tx gh in
                   let Some (funenv1, rt1, xmap1, pre1, post1, terminates1) = funcinfo_opt in
                   begin match rt1 with
                     None -> static_error ld "Function does not return a value" None
@@ -611,7 +609,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match xs with
           [] -> tcont sizemap tenv ghostenv h env
         | (l, te, x, e, (address_taken, blockPtr))::xs ->
-          let t = check_pure_type (pn,ilist) tparams te in
+          let t = check_pure_type (pn,ilist) tparams te (if pure then Ghost else Real) in
           if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.") None;
           let ghostenv = if pure then x::ghostenv else List.filter (fun y -> y <> x) ghostenv in
           let produce_object envTp =
@@ -680,7 +678,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin match unfold_inferred_type tp with
         InductiveType (i, targs) ->
         let (tn, targs, Some (_, itparams, ctormap, _, _)) = (i, targs, try_assoc' Ghost (pn,ilist) i inductivemap) in
-        let (Some tpenv) = zip (createTParamTuples itparams Ast.Ghost) targs in
+        let (Some tpenv) = zip itparams targs in
         let rec iter ctors cs =
           match cs with
             [] ->
@@ -813,7 +811,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         tcont sizemap tenv ghostenv (chunks @ h) env
       )
     | Open (l, target, g, targs, pats0, pats, coefpat) ->
-      let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
+      let targs = List.map (fun te -> check_pure_type (pn, ilist) tparams te Ghost) targs in
       let open_instance_predicate target target_cn =
         let cn =
           match pats0 with
@@ -872,7 +870,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               Some (predenv, _, predinst_tparams, ps, g_symb, inputParamCount, p) ->
               let (targs, tpenv) =
                 let targs = if targs = [] then List.map (fun _ -> InferredType (object end, ref Unconstrained)) predinst_tparams else targs in
-                match zip (createTParamTuples predinst_tparams Ast.Ghost) targs with
+                match zip predinst_tparams targs with
                   None -> static_error l (Printf.sprintf "Predicate expects %d type arguments." (List.length predinst_tparams)) None
                 | Some bs -> (targs, bs)
               in
@@ -982,14 +980,14 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         )
       )
     | SplitFractionStmt (l, p, targs, pats, coefopt) ->
-      let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
+      let targs = List.map (fun te -> check_pure_type (pn, ilist) tparams te Ghost) targs in
       let (targs, g_symb, pts, inputParamCount) =
         match try_assoc' Ghost (pn,ilist) p predfammap with
           None -> static_error l "No such predicate." None
         | Some (_, predfam_tparams, arity, pts, g_symb, inputParamCount, _) ->
           let targs = if targs = [] then List.map (fun _ -> InferredType (object end, ref Unconstrained)) predfam_tparams else targs in
           let tpenv =
-            match zip (createTParamTuples predfam_tparams Ast.Ghost) targs with
+            match zip predfam_tparams targs with
               None -> static_error l "Incorrect number of type arguments." None
             | Some bs -> bs
           in
@@ -1141,7 +1139,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             with_context PopSubcontext $. fun () ->
               tcont sizemap tenv ghostenv h env
     | Close (l, target, g, targs, pats0, pats, coef) ->
-      let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
+      let targs = List.map (fun te -> check_pure_type (pn, ilist) tparams te Ghost) targs in
       let close_instance_predicate target target_cn =
         let cn =
           match pats0 with
@@ -1194,7 +1192,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             Some (predenv, lpred, predinst_tparams, ps, g_symb, inputParamCount, body) ->
             let targs = if targs = [] then List.map (fun _ -> InferredType (object end, ref Unconstrained)) predinst_tparams else targs in
             let tpenv =
-              match zip (createTParamTuples predinst_tparams Ast.Ghost) targs with
+              match zip predinst_tparams targs with
                 None -> static_error l "Incorrect number of type arguments." None
               | Some bs -> bs
             in
@@ -1630,7 +1628,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               match catches with
                 [] -> econt throwl h env texcep excep
               | (l, te, x, body)::catches ->
-                let t = check_pure_type (pn,ilist) tparams te in
+                let t = check_pure_type (pn,ilist) tparams te Real in
                 branch
                   begin fun () ->
                     if((is_subtype_of_ texcep t) || (is_subtype_of_ t texcep)) then begin
@@ -1665,7 +1663,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               branch
                 begin fun () ->
                   if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.") None;
-                  let t = check_pure_type (pn,ilist) tparams te in
+                  let t = check_pure_type (pn,ilist) tparams te Real in
                   if (is_unchecked_exception_type t) || t = (ObjType ("java.lang.Exception", [])) || t = (ObjType ("java.lang.Throwable", [])) then begin
                     let xterm = get_unique_var_symb_non_ghost x t in
                     let tenv = (x, t)::tenv in
@@ -1936,12 +1934,11 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           begin fun (lems, predinsts, localpreds, localpredinsts) decl ->
             match decl with
             | PredFamilyDecl (l, p, tparams, arity, tes, inputParamCount, inductiveness) ->
-              let tparams_m = List.map (fun tparam -> (tparam,Ast.Ghost)) tparams in
               if tparams <> [] then static_error l "Local predicates with type parameters are not yet supported." None;
               if arity <> 0 then static_error l "Local predicate families are not yet supported." None;
               if List.mem_assoc p predfammap then static_error l "Duplicate predicate family name." None;
               if List.mem_assoc p tenv then static_error l "Predicate name conflicts with local variable name." None;
-              let ts = List.map (check_pure_type (pn,ilist) tparams_m) tes in
+              let ts = List.map (fun te -> check_pure_type (pn,ilist) tparams te Ghost) tes in
               let ptype = PredType ([], ts, inputParamCount, inductiveness) in
               let psymb = get_unique_var_symb p ptype in
               (lems, predinsts, (p, (l, ts, inputParamCount, ptype, psymb))::localpreds, localpredinsts)
@@ -1996,9 +1993,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let funcmap' =
         List.map
           begin fun (fn, (auto, trigger, fterm, l, tparams', rt, xs, nonghost_callers_only, functype_opt, contract_opt, terminates, body)) ->
-            let tparams_m = List.map (fun tparam -> (tparam,Ast.Ghost)) tparams' in 
             let (rt, xmap, functype_opt, pre, pre_tenv, post) =
-              check_func_header pn ilist tparams tenv env l (Lemma(auto, trigger)) tparams_m rt fn (Some fterm) xs nonghost_callers_only functype_opt contract_opt terminates (Some body)
+              check_func_header pn ilist tparams tenv env l (Lemma(auto, trigger)) tparams' rt fn (Some fterm) xs nonghost_callers_only functype_opt contract_opt terminates (Some body)
             in
             (fn, FuncInfo (env, fterm, l, Lemma(auto, trigger), tparams', rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, Some (Some body), Static, Public))
           end
@@ -2376,7 +2372,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match trigger with
         None -> []
       | Some(trigger) -> 
-          let (trigger, tp) = check_expr (pn,ilist) (createTParamTuples tparams' Ast.Ghost) pre_tenv (Some true) trigger in
+          let (trigger, tp) = check_expr (pn,ilist) tparams' pre_tenv (Some true) trigger in
           [eval None env trigger]
       ) in
       let body = ctxt#mk_implies t_pre t_post in
@@ -2474,7 +2470,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | _ -> with_context (Executing (h, env, l, "Freeing parameters.")) (fun _ -> cleanup_heapy_locals_core (pn, ilist) l h env ps cont)
   and verify_func pn ilist gs lems boxes predinstmap funcmap tparams env l k tparams' rt g ps nonghost_callers_only pre pre_tenv post terminates ss closeBraceLoc =
     if startswith g "vf__" then static_error l "The name of a user-defined function must not start with 'vf__'." None;
-    let tparams = (createTParamTuples tparams' Ast.Ghost) @ tparams in
+    let tparams = tparams' @ tparams in
     let _ = push() in
     let penv = get_unique_var_symbs_ ps (match k with Regular -> false | _ -> true) in (* actual params invullen *)
     let heapy_vars = list_remove_dups (List.flatten (List.map (fun s -> stmt_address_taken s) ss)) in
@@ -2620,7 +2616,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match cons with
       [] -> ()
     | (sign, CtorInfo (lm, xmap, pre, pre_tenv, post, epost, terminates, ss, v, tparams))::rest ->
-      let tparams = createTParamTuples tparams Ast.Real in
+      let tparams = tparams in
       match ss with
         None ->
         let ((p, _, _), (_, _, _)) = root_caller_token lm in 
@@ -2763,7 +2759,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             verify_exceptional_return (pn,ilist) throwl h ghostenv env exceptp excep epost
           in
           let cont sizemap tenv ghostenv h env = return_cont h tenv env None in
-          verify_block (pn,ilist) [] [] (createTParamTuples mtparams Ast.Real) boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt
+          verify_block (pn,ilist) [] [] mtparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt
         end
         end;
         verify_meths (pn,ilist) cfin cabstract boxes lems meths

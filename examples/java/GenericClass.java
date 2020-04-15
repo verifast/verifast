@@ -71,6 +71,6 @@ public class HelloWorld
     list.add(new GenericClass<String>("hello"));
     GenericClass<String> s = list.get();   // no cast
     genericFunction<GenericClass<String>,String >(list, "Foo");
-    genericFunction<String>(list, "Foo");
+    genericFunction< >(list, "Foo");
   }
 }

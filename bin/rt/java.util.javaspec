@@ -115,7 +115,7 @@ lemma_auto void seq_of_list_nth<t>(list<t> xs, int i);
 
 public interface Iterator<E>{
     
-    //@ predicate Iterator(fixpoint(int, option<E>) elements, option<int> currentIndex, int nextIndex);
+    //@ predicate Iterator(fixpoint(int, option<Object>) elements, option<int> currentIndex, int nextIndex);
     //@ predicate Iterator_removals(list<int> indices);
     
     boolean hasNext();
@@ -151,7 +151,7 @@ fixpoint list<t> remove_nths<t>(list<int> ns, list<t> xs) {
 
 public interface List<E> extends Collection<E> {
     
-    //@ predicate List(list<E> elements);
+    //@ predicate List(list<Object> elements);
     		
     /*@
     
@@ -231,7 +231,7 @@ public class Arrays {
 
 public interface Set<E> extends Collection<E> {
     
-    //@ predicate Set(list<E> elements);
+    //@ predicate Set(list<Object> elements);
     
     /*@
     
@@ -249,7 +249,7 @@ public interface Set<E> extends Collection<E> {
         //@ requires [?f]Iterable(?es);
         /*@
         ensures
-            exists<list<E> >(?es1) &*& result.Iterator((seq_of_list)(es1), none, 0) &*& Iterable_iterating(this.getClass())(this, es, f, result)
+            exists<list<Object> >(?es1) &*& result.Iterator((seq_of_list)(es1), none, 0) &*& Iterable_iterating(this.getClass())(this, es, f, result)
             &*& subset(es1, es) == true &*& subset(es, es1) == true &*& distinct(es1) == true;
         @*/
     
@@ -265,7 +265,7 @@ public class HashSet<E> implements Set<E> {
 
 public interface Map<K,V> {
     
-    //@ predicate Map(list<pair<K, V> > elements);
+    //@ predicate Map(list<pair<Object, Object> > elements);
     
 }
 

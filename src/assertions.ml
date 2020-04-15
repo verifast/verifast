@@ -298,7 +298,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let env'' = env' @ zip2 (xs1@xs2) ts in
             with_context PushSubcontext $. fun () ->
             with_context (Executing (h, env'', l, "Applying autolemma")) $. fun () ->
-            produce_asn_core_with_post (zip2 (List.map (fun tparam -> (tparam,Ghost)) tparams) targs) h [] env'' post real_unit size_first size_all true $. fun h_ _ _ _ ->
+            produce_asn_core_with_post (zip2 tparams targs) h [] env'' post real_unit size_first size_all true $. fun h_ _ _ _ ->
             with_context PopSubcontext $. fun () ->
             cont h_ ghostenv env
           in
@@ -315,7 +315,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let (pmap, pred_symb) =
           try
           match try_assoc tn classmap1 with
-            Some (lcn, abstract, fin, methods, fds_opt, ctors, super,tpenv, interfs, preds, pn, ilist) ->
+            Some (lcn, abstract, fin, methods, fds_opt, ctors, super, tparams, interfs, preds, pn, ilist) ->
             let (_, pmap, _, symb, _) = List.assoc g preds in (pmap, symb)
           | None ->
             match try_assoc tn classmap0 with
@@ -992,7 +992,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let inst_call_pred l coefpat e_opt tn g index pats =
       let (pmap, pred_symb) =
         match try_assoc tn classmap1 with
-          Some (lcn, abstract, fin, methods, fds_opt, ctors, super, tpenv, interfs, preds, pn, ilist) ->
+          Some (lcn, abstract, fin, methods, fds_opt, ctors, super, tparams, interfs, preds, pn, ilist) ->
           let (_, pmap, _, symb, _) = List.assoc g preds in (pmap, symb)
         | None ->
           match try_assoc tn classmap0 with
@@ -1008,7 +1008,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       let target = match e_opt with None -> List.assoc "this" env | Some e -> ev e in
       let index = ev index in
-      let types = ObjType (tn,[])::ObjType ("java.lang.Class",[])::List.map snd pmap in
+      let types = ObjType (tn,[])::ObjType ("java.lang.Class", [])::List.map snd pmap in
       let pats = TermPat target::TermPat index::srcpats pats in
       consume_chunk_core rules h ghostenv env env' l (pred_symb, true) [] coef coefpat (Some 2) pats types types $. fun chunk h coef ts size ghostenv env env' ->
       check_dummy_coefpat l coefpat coef;
@@ -1236,7 +1236,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | WInstPredAsn(l2, target_opt, static_type_name, static_type_finality, family_type_string, instance_pred_name, index, args) ->
         let (pmap, qsymb) =
           match try_assoc static_type_name classmap1 with
-            Some (lcn, abstract, fin, methods, fds_opt, ctors, super, tpenv, interfs, preds, pn, ilist) ->
+            Some (lcn, abstract, fin, methods, fds_opt, ctors, super, tparams, interfs, preds, pn, ilist) ->
             let (_, pmap, _, symb, _) = List.assoc instance_pred_name preds in (pmap, symb)
           | None ->
             match try_assoc static_type_name classmap0 with
@@ -1290,7 +1290,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let inputParameters = List.map fst (take nbInputParameters xs) in
           let inputFormals = (take nbInputParameters xs) in
           let construct_edge qsymb coef target qtargs qIndices qInputActuals conds =
-            [(psymb, pindices, qsymb, [(l, (psymb, true), 0, None, false, (createTParamTuples predinst_tparams Ghost), fns, xs, inputFormals, wbody0, coef, target, qtargs, qIndices, qInputActuals, conds)])]
+            [(psymb, pindices, qsymb, [(l, (psymb, true), 0, None, false, predinst_tparams, fns, xs, inputFormals, wbody0, coef, target, qtargs, qIndices, qInputActuals, conds)])]
           in
           find_edges construct_edge inputParameters xs wbody0
       )
@@ -1317,7 +1317,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
    
   let instance_predicate_contains_edges = 
     classmap1 |> flatmap 
-      (fun (cn, (l, abstract, fin, meths, fds, cmap, super, tpenv, interfs, preds, pn, ilist)) ->
+      (fun (cn, (l, abstract, fin, meths, fds, cmap, super, tparams, interfs, preds, pn, ilist)) ->
         preds |> flatmap
           (fun (g, (l, pmap, family, psymb, wbody_opt)) ->
             match wbody_opt with None -> [] | Some wbody0 ->
@@ -1347,7 +1347,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 [(outer_l, outer_symb, outer_nb_curried, outer_fun_sym, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds)] ->
                 let extra_conditions: expr list = List.map2 (fun cn e2 -> 
                     if language = Java then 
-                      WOperation(dummy_loc, Eq, [ClassLit(dummy_loc, cn); e2], ObjType ("java.lang.Class",[]))
+                      WOperation(dummy_loc, Eq, [ClassLit(dummy_loc, cn); e2], ObjType ("java.lang.Class", []))
                     else 
                       WOperation(dummy_loc, Eq, [WVar(dummy_loc, cn, FuncName); e2], PtrType Void)
                 ) outer_actual_indices0 inner_formal_indices in
@@ -1440,7 +1440,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                            (for_all2 definitely_equal fsymbs current_indices) &&
                            (
                              let Some inputParamCount = inputParamCount in
-                             let Some tpenv = zip (createTParamTuples predinst_tparams Ghost) current_targs in
+                             let Some tpenv = zip predinst_tparams current_targs in
                              let env = List.map2 (fun (x, tp0) actual -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term actual tp tp0)) (take inputParamCount xs) current_input_args in 
                              let env = match current_this_opt with None -> env | Some t -> ("this", t) :: env in
                              List.exists (fun conds -> (for_all_rev (fun cond -> ctxt#query (eval None env cond)) conds)) conds
@@ -1709,7 +1709,6 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     (* rules for closing empty chunks *)
     List.iter
       begin fun (symb, fsymbs, conds, ((p, fns), (env, l, predinst_tparams, xs, _, inputParamCount, wbody))) ->
-        let predinst_tparams = createTParamTuples predinst_tparams Ghost in
         let g = (symb, true) in
         let indexCount = List.length fns in
         let Some n = inputParamCount in

@@ -142,7 +142,7 @@ final class ArrayListIterator<T> implements Iterator<T> {
     
     /*@
     
-    predicate Iterator(fixpoint(int, option<T>) elements, option<int> currentIndex, int nextIndex) =
+    predicate Iterator(fixpoint(int, option<Object>) elements, option<int> currentIndex, int nextIndex) =
         [_]list |-> ?l &*& [_]frac |-> ?f &*& [f]l.List(?es) &*&
         [_]oldElements |-> ?oes &*& [1/2]removals |-> ?rs &*&
         elements == (seq_of_list)(oes) &*&
@@ -253,10 +253,10 @@ final class ArrayList<T> implements List<T> {
     int size;
     
     /*@
-    predicate Iterable(list<T> elements) =
+    predicate Iterable(list<Object> elements) =
         List(elements);
 
-    predicate List(list<T> elements) =
+    predicate List(list<Object> elements) =
         this.elements |-> ?e &*& this.size |-> ?s &*&
         array_slice(e, 0, s, elements) &*&
         array_slice(e, s, e.length, _);
