@@ -1572,14 +1572,16 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | TermPat t -> cont h env t
     in
     let tpenv =
-      match zip callee_tparams targs with
+      (* If no type arguments are provided, we are dealing with a raw type *)
+      if targs = [] then List.map (fun tparam -> (tparam, ObjType("java.lang.Object",[]))) callee_tparams
+      else match zip callee_tparams targs with
         None ->
             begin
             match zip callee_tparams targs with
-              None -> failwith ("Incorrect number of type arguments. tparams: " ^
+              None -> static_error l ("Incorrect number of type arguments. tparams: " ^
               (String.concat ", " callee_tparams)
               ^ " and targs: " 
-              ^ (String.concat ", " (List.map string_of_type targs))) 
+              ^ (String.concat ", " (List.map string_of_type targs))) None
               | Some tpenv -> tpenv 
             end
       | Some tpenv -> tpenv
@@ -2151,7 +2153,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin match consmap' with
         [] -> static_error l "No matching constructor" None
       | [(sign, CtorInfo (lm, xmap, pre, pre_tenv, post, epost, terminates, ss, v, tparams))] ->
-        let obj = get_unique_var_symb (match xo with None -> "object" | Some x -> x) (ObjType (cn, [])) in
+        let obj = get_unique_var_symb (match xo with None -> "object" | Some x -> x) (ObjType (cn, targtps)) in
         assume_neq obj (ctxt#mk_intlit 0) $. fun () ->
         assume_eq (ctxt#mk_app get_class_symbol [obj]) (List.assoc cn classterms) $. fun () ->
         let is_upcall =
@@ -2177,11 +2179,13 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin match consmap' with
         [] -> static_error l "No matching constructor" None
       | [(sign, CtorInfo (lm, xmap, pre, pre_tenv, post, epost, terminates, ss, v, tparams))] ->
+        (* Since any parameterised type that ends up here is raw, we can simulate this by making all type arguments java.lang.Object *)
+        let targs = List.map (fun _ -> ObjType("java.lang.Object",[])) tparams in
         let xmap = (* Apply type erasure to parameters and return type *)
           List.map (fun (name,t) -> match t with
             RealTypeParam t -> (name, ObjType("java.lang.Object", []))
             | t -> (name,t)) xmap in
-        let obj = get_unique_var_symb (match xo with None -> "object" | Some x -> x) (ObjType (cn, [])) in
+        let obj = get_unique_var_symb (match xo with None -> "object" | Some x -> x) (ObjType (cn, targs)) in
         assume_neq obj (ctxt#mk_intlit 0) $. fun () ->
         assume_eq (ctxt#mk_app get_class_symbol [obj]) (List.assoc cn classterms) $. fun () ->
         let is_upcall =
@@ -2189,7 +2193,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             Some (Some (_, rank)), RealMethodInfo (Some rank') -> rank < rank'
           | _ -> true
         in
-        check_correct h None None [] args (lm, tparams, None, xmap, ["this", obj], pre, post, Some(epost), terminates, Static) is_upcall (Some cn) (fun h env _ -> cont h env obj)
+        check_correct h None None targs args (lm, tparams, None, xmap, ["this", obj], pre, post, Some(epost), terminates, Static) is_upcall (Some cn) (fun h env _ -> cont h env obj)
       | _ -> static_error l "Multiple matching overloads" None
       end
     | WMethodCall (l, tn, m, pts, args, fb, targs) when m <> "getClass" ->

@@ -251,7 +251,13 @@ cd examples
     cd channels
       verifast -prover redux -disable_overflow_check -c channels.jarsrc client.jarsrc
     cd ..
+    cd channels_raw
+      verifast -prover redux -disable_overflow_check -c channels.jarsrc client.jarsrc
+    cd ..
     cd chat
+      verifast_both -c -allow_assume chat.jarsrc
+    cd ..
+    cd chat_raw
       verifast_both -c -allow_assume chat.jarsrc
     cd ..
     cd chatbot

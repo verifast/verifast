@@ -8,8 +8,8 @@ open Lexer
 open Parser
 open Verifast0
 open Ast
-(*open SExpressions
-open SExpressionEmitter*)
+open SExpressions
+open SExpressionEmitter
 
 type callbacks = {
   reportRange: range_kind -> loc0 -> unit;
