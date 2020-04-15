@@ -331,10 +331,9 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
       build_list [ Symbol "expr-new-array" ]
                  [ "texpr", sexpr_of_type_expr texpr
                  ; "expr", sexpr_of_expr expr]
-    | NewObject (l, cn, args, targs) ->
+    | NewObject (l, cn, args) ->
       build_list [ Symbol "expr-new-obj"; Symbol cn ]
-                 [ "args", sexpr_of_list sexpr_of_expr args 
-                  ; "targs", sexpr_of_list sexpr_of_type_expr targs]
+                 [ "args", sexpr_of_list sexpr_of_expr args]
     | NewArrayWithInitializer (l, texpr, args) -> 
       build_list [ Symbol "expr-array-init" ]
                  [ "type", sexpr_of_type_expr texpr

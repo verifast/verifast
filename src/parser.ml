@@ -740,10 +740,11 @@ and
 | [< '(l, Kwd "box") >] -> ManifestTypeExpr (l, BoxIdType)
 | [< '(l, Kwd "handle") >] -> ManifestTypeExpr (l, HandleIdType)
 | [< '(l, Kwd "any") >] -> ManifestTypeExpr (l, AnyType)
-| [< '(l, Ident n); rest = rep(parser [< '(l, Kwd "."); '(l, Ident n) >] -> n); targs = parse_type_args l;  >] -> 
+| [< '(l, Ident n); rest = rep(parser [< '(l, Kwd "."); '(l, Ident n) >] -> n); (targs, diamond) = parse_type_args_with_diamond l >] -> 
+    if diamond then raise (ParseException (l, "Diamond not supported yet")) else
     if targs <> [] then 
       match rest with
-      | [] ->  ConstructedTypeExpr (l, n, targs) 
+      | [] -> ConstructedTypeExpr (l, n, targs) 
       | _ -> raise (ParseException (l, "Package name not supported for generic types."))
     else
       match rest with
@@ -1188,6 +1189,19 @@ and
    [< targs = parse_angle_brackets l (rep_comma parse_type) >] -> targs
   | [< >] -> []
 and
+parse_type_args_with_diamond l0 = parser
+    [< 
+    (targs,diamond) = match language with
+      CLang -> (parser [< targs = parse_type_args l0 >] -> (targs, false))
+      | Java -> (parser
+        [< '(l1, Kwd "<"); 
+          (targs, diamond) = parser
+            [< '(_, Kwd ">") >] -> ([], true)
+            | [< targs = rep_comma parse_type; '(_, Kwd ">") >] -> (targs,false) 
+        >] -> (targs,diamond)
+        | [< >] -> ([], false))
+    >] -> (targs,diamond)
+and
   parse_new_array_expr_rest l elem_typ = parser
   [< '(_, Kwd "[");
      e = parser
@@ -1205,20 +1219,21 @@ and
 | [< '(l, Kwd "null") >] -> Null l
 | [< '(l, Kwd "currentThread") >] -> Var (l, "currentThread")
 | [< '(l, Kwd "varargs") >] -> Var (l, "varargs")
-| [< '(l, Kwd "new"); tp = parse_primary_type; res = (parser 
-                    [< args0 = parse_patlist >] -> 
-                    begin match tp with
-                      IdentTypeExpr(_, pac, cn) -> 
-                        NewObject (l, 
-                          (match pac with None -> "" | Some(pac) -> pac ^ ".") ^ cn, List.map (function LitPat e -> e | _ -> raise (Stream.Error "Patterns are not allowed in this position")) args0,
-                          [])
-                    | ConstructedTypeExpr(loc, name, targs) -> 
-                        NewObject (loc
-                        , name, List.map (function LitPat e -> e | _ -> raise (Stream.Error "Patterns are not allowed in this position")) args0
-                        , targs)
-                    | _ -> raise (ParseException (type_expr_loc tp, "Class name expected"))
-                    end
-                  | [< e = parse_new_array_expr_rest l tp >] -> e)
+| [< '(l, Kwd "new"); 
+  tp = parse_primary_type; 
+  res = (parser 
+    [< args0 = parse_patlist >] -> 
+      begin match tp with
+        IdentTypeExpr(_, pac, cn) -> 
+          NewObject (l, 
+            (match pac with None -> "" | Some(pac) -> pac ^ ".") ^ cn, List.map (function LitPat e -> e | _ -> raise (Stream.Error "Patterns are not allowed in this position")) args0)
+        | ConstructedTypeExpr(loc, name, targs) -> 
+          NewGenericObject (loc,
+              name, List.map (function LitPat e -> e | _ -> raise (Stream.Error "Patterns are not allowed in this position")) args0,
+              targs)
+        | _ -> raise (ParseException (type_expr_loc tp, "Class name expected"))
+      end
+    | [< e = parse_new_array_expr_rest l tp >] -> e)
   >] -> res
 | [<
     '(lx, Ident x);
