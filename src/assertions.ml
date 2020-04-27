@@ -979,7 +979,9 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             register_pred_ctor_application g_symb symbol symbol_term ctorargs inputParamCount;
             ((g_symb, false), [], pats, List.map snd ps2)
         else
-          let Some term = try_assoc (g#name) env in ((term, false), pats0, pats, g#domain)
+          match try_assoc g#name env with
+            None -> assert_false [] env l (Printf.sprintf "Unbound variable '%s'" g#name) None
+          | Some term -> ((term, false), pats0, pats, g#domain)
       in
       let targs = instantiate_types tpenv targs in
       let domain = instantiate_types tpenv types in
