@@ -130,9 +130,9 @@ lemma void remove_nth_remove_nths(int i, list<int> rs, list<Object> es)
 
 @*/
     
-final class ArrayListIterator implements Iterator {
+final class ArrayListIterator<T> implements Iterator<T> {
     
-    ArrayList list;
+    ArrayList<T> list;
     //@ real frac;
     //@ list<Object> oldElements;
     //@ list<int> removals;
@@ -161,7 +161,7 @@ final class ArrayListIterator implements Iterator {
     
     @*/
     
-    ArrayListIterator(ArrayList list)
+    ArrayListIterator(ArrayList<T> list)
         //@ requires [?f]list.List(?es);
         /*@ ensures Iterator((seq_of_list)(es), none, 0) &*& (f == 1 ? Iterator_removals(nil) : true) &*& 
                     [_]this.list |-> list &*& [_]oldElements |-> es &*& [_]frac |-> f &*&
@@ -186,7 +186,7 @@ final class ArrayListIterator implements Iterator {
         
     }
     
-    public Object next()
+    public T next()
         //@ requires Iterator(?es, ?c, ?n) &*& es(n) != none;
         //@ ensures Iterator(es, some(n), n + 1) &*& result == the(es(n));
     {
@@ -247,7 +247,7 @@ predicate_family_instance Iterable_iterating(ArrayList.class)(ArrayList list, li
 
 @*/
 
-final class ArrayList implements List {
+final class ArrayList<T> implements List<T> {
 
     Object[] elements;
     int size;
@@ -295,14 +295,14 @@ final class ArrayList implements List {
         //@ iterableToList();
     }
     
-    public Object get(int index)
+    public T get(int index)
         //@ requires [?f]List(?es) &*& 0 <= index &*& index < length(es);
         //@ ensures [f]List(es) &*& result == nth(index, es);
     {
         return elements[index];
     }
     
-    public Iterator iterator()
+    public Iterator<T> iterator()
         //@ requires [?f]Iterable(?es);
         /*@
         ensures
@@ -312,7 +312,7 @@ final class ArrayList implements List {
         @*/
     {
         //@ this.iterableToList();
-        ArrayListIterator i = new ArrayListIterator(this);
+        ArrayListIterator<T> i = new ArrayListIterator<T>(this);
         //@ close Iterable_iterating(ArrayList.class)(this, es, f, i);
         return i;
     }
@@ -339,7 +339,7 @@ final class ArrayList implements List {
     
     @*/
 
-    boolean add(Object e)
+    boolean add(T e)
         //@ requires List(?es);
         //@ ensures List(append(es, cons(e, nil))) &*& result;
     {
@@ -357,12 +357,12 @@ final class ArrayList implements List {
         return true;
     }
     
-    boolean addAll(Collection other)
+    boolean addAll(Collection<T> other)
         //@ requires List(?es) &*& listIsCollection(?li, other) &*& li.List(?other_es);
         //@ ensures List(append(es, other_es)) &*& li.List(other_es);
     {
         //@ open listIsCollection(li, other);
-        List l = (List) other;
+        List<T> l = (List) other;
         int n = l.size();
         //@ list<Object> ys = nil;
         //@ list<Object> zs = other_es;
@@ -380,11 +380,11 @@ final class ArrayList implements List {
         return true;
     }
     
-    Object remove(int index)
+    T remove(int index)
         //@ requires List(?es) &*& 0 <= index &*& index < length(es);
         //@ ensures List(remove_nth(index, es)) &*& result == nth(index, es);
     {
-        Object result = elements[index];
+        T result = elements[index];
         //@ close array_slice_dynamic(array_slice_Object, elements, index, index + 1, _);
         //@ assert elements |-> ?e &*& size |-> ?s &*& array_slice(e, index + 1, s, ?elems);
         //@ close array_slice_dynamic(array_slice_Object, elements, index + 1, size - 1, _);

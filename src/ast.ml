@@ -110,13 +110,14 @@ type type_ = (* ?type_ *)
   | InductiveType of string * type_ list
   | PredType of string list * type_ list * int option * inductiveness (* if None, not necessarily precise; if Some n, precise with n input parameters *)
   | PureFuncType of type_ * type_  (* Curried *)
-  | ObjType of string
+  | ObjType of string * type_ list (* type arguments *)
   | ArrayType of type_
   | StaticArrayType of type_ * int (* for array declarations in C *)
   | BoxIdType (* box type, for shared boxes *)
   | HandleIdType (* handle type, for shared boxes *)
   | AnyType (* supertype of all inductive datatypes; useful in combination with predicate families *)
-  | TypeParam of string (* a reference to a type parameter declared in the enclosing datatype/function/predicate *)
+  | RealTypeParam of string (* a reference to a type parameter declared in the enclosing Real code *)
+  | GhostTypeParam of string (* a reference to a type parameter declared in the ghost code *)
   | InferredType of < > * inferred_type_state ref (* inferred type, is unified during type checking. '< >' is the type of objects with no methods. This hack is used to prevent types from incorrectly comparing equal, as in InferredType (ref Unconstrained) = InferredType (ref Unconstrained). Yes, ref Unconstrained = ref Unconstrained. But object end <> object end. *)
   | ClassOrInterfaceName of string (* not a real type; used only during type checking *)
   | PackageName of string (* not a real type; used only during type checking *)
@@ -303,10 +304,12 @@ and
       string (* method name *) *
       type_ list (* parameter types (not including receiver) *) *
       expr list (* args, including receiver if instance method *) *
-      method_binding
+      method_binding *
+      type_ list (*Type arguments*)
   | NewArray of loc * type_expr * expr
-  | NewObject of loc * string * expr list
-  | NewArrayWithInitializer of loc * type_expr * expr list
+  | NewObject of loc * string * expr list (* Used for object creation of a raw type, or regular object creation of a type that has no type parameters *)
+  | NewGenericObject of loc * string * expr list * type_expr list (*type arguments *) (*Used  to create an object instance of a parameterised type *) 
+  | NewArrayWithInitializer of loc * type_expr * expr list 
   | IfExpr of loc * expr * expr * expr
   | SwitchExpr of
       loc *
@@ -639,7 +642,8 @@ and
       ((stmt list * loc (* Close brace *)) * int (*rank*)) option * 
       method_binding * 
       visibility *
-      bool (* is declared abstract? *)
+      bool * (* is declared abstract? *)
+      string list (*type parameters*)
 and
   cons = (* ?cons *)
   | Cons of
@@ -647,7 +651,8 @@ and
       (type_expr * string) list * 
       (asn * asn * ((type_expr * asn) list) * bool (*terminates*) ) option * 
       ((stmt list * loc (* Close brace *)) * int (*rank*)) option * 
-      visibility
+      visibility *
+      string list (* type parameters *)
 and
   instance_pred_decl = (* ?instance_pred_decl *)
   | InstancePredDecl of loc * string * (type_expr * string) list * asn option
@@ -661,26 +666,28 @@ and
   | Inductive of  (* inductief data type regel-naam-type parameters-lijst van constructors*)
       loc *
       string *
-      string list *
+      string list * (*tparams*)
       ctor list
   | AbstractTypeDecl of loc * string
   | Class of
       loc *
       bool (* abstract *) *
       class_finality *
-      string *
+      string * (* class name *)
       meth list *
       field list *
       cons list *
-      string (* superclass *) *
-      string list (* itfs *) *
+      (string * type_expr list) (* superclass with targs *) *
+      string list (* type parameters *) *
+      (string * type_expr list) list (* itfs with targs *) *
       instance_pred_decl list
   | Interface of 
       loc *
       string *
-      string list *
+      (string * type_expr list) list * (* interfaces *)
       field list *
       meth list *
+      string list * (* type parameters *) 
       instance_pred_decl list
   | PredFamilyDecl of
       loc *
@@ -794,6 +801,11 @@ let func_kind_of_ghostness gh =
   
 (* Region: some AST inspector functions *)
 
+let string_of_ghostness gh =
+  match gh with
+    Real -> "Real"
+    | Ghost -> "Ghost"
+
 let string_of_func_kind f=
   match f with
     Lemma(_) -> "lemma"
@@ -832,8 +844,9 @@ let rec expr_loc e =
   | WPureFunValueCall (l, e, es) -> l
   | WFunPtrCall (l, g, args) -> l
   | WFunCall (l, g, targs, args) -> l
-  | WMethodCall (l, tn, m, pts, args, fb) -> l
+  | WMethodCall (l, tn, m, pts, args, fb, sign) -> l
   | NewObject (l, cn, args) -> l
+  | NewGenericObject (l, cn, args, targs) -> l
   | NewArray(l, _, _) -> l
   | NewArrayWithInitializer (l, _, _) -> l
   | IfExpr (l, e1, e2, e3) -> l
@@ -964,6 +977,30 @@ let type_expr_loc t =
   | PredTypeExpr(l, te, _) -> l
   | PureFuncTypeExpr (l, tes) -> l
 
+let rec string_of_type_expr_name t =
+match t with
+  ManifestTypeExpr (l, t) -> "???"
+  | StructTypeExpr (l, sn, _) -> "???"
+  | IdentTypeExpr (l, _, x) -> x
+  | ConstructedTypeExpr (l, x, targs) ->  x ^ "<" ^ (
+    String.concat " --- " (
+      List.map (fun targ -> string_of_type_expr_name targ) targs)) ^ ">"
+  | PtrTypeExpr (l, te) -> string_of_type_expr_name te
+  | ArrayTypeExpr(l, te) -> string_of_type_expr_name te
+  | PredTypeExpr(l, te, _) -> String.concat ", " (List.map (fun texpr -> string_of_type_expr_name texpr) te)
+  | PureFuncTypeExpr (l, tes) -> String.concat ", " (List.map (fun texpr -> string_of_type_expr_name texpr) tes)
+
+let string_of_type_expr t = 
+  match t with 
+    ManifestTypeExpr (l, t) -> "ManifestTypeExpr"
+  | StructTypeExpr (l, sn, _) -> "StructtypeExpr"
+  | IdentTypeExpr (l, _, x) -> "IdentTypeExpr " ^ x 
+  | ConstructedTypeExpr (l, x, targs) -> "ConstructedTypeExpr " ^ (string_of_type_expr_name t)
+  | PtrTypeExpr (l, te) -> "PtrTypeExpr"
+  | ArrayTypeExpr(l, te) -> "ArrayTypeExpr"
+  | PredTypeExpr(l, te, _) -> "PredTypeExpr"
+  | PureFuncTypeExpr (l, tes) -> "PureFuncTypeExpr"
+
 let expr_fold_open iter state e =
   let rec iters state es =
     match es with
@@ -1014,8 +1051,9 @@ let expr_fold_open iter state e =
   | WPureFunValueCall (l, e, args) -> iters state (e::args)
   | WFunCall (l, g, targs, args) -> iters state args
   | WFunPtrCall (l, g, args) -> iters state args
-  | WMethodCall (l, cn, m, pts, args, mb) -> iters state args
+  | WMethodCall (l, cn, m, pts, args, mb, sign) -> iters state args
   | NewObject (l, cn, args) -> iters state args
+  | NewGenericObject (l, cn, args, targs) -> iters state args
   | NewArray (l, te, e0) -> iter state e0
   | NewArrayWithInitializer (l, te, es) -> iters state es
   | IfExpr (l, e1, e2, e3) -> iters state [e1; e2; e3]

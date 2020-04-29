@@ -61,7 +61,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match extended with
         None -> consume_asn rules [] h [] hpInvEnv inv true real_unit (fun _ h _ _ _ -> cont h)
       | Some(ehname) -> assert_handle_invs bcn hpmap ehname hpInvEnv h (fun h ->  consume_asn rules [] h [] hpInvEnv inv true real_unit (fun _ h _ _ _ -> cont h))
-  
+
   let rec verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont econt =
     let l = stmt_loc s in
     if not (is_transparent_stmt s) then begin !stats#stmtExec l; reportStmtExec l end;
@@ -177,7 +177,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               Real -> if gh <> Real || (ftxmap = [] && fttparams = []) then static_error l "A produce_function_pointer_chunk statement may be used only for parameterized and type-parameterized function types." None
             | Ghost -> if gh <> Ghost then static_error l "Lemma function pointer type expected." None
             end;
-            let fttargs = List.map (check_pure_type (pn,ilist) tparams) fttargs in
+            let fttargs = List.map (fun te -> check_pure_type (pn,ilist) tparams te gh) fttargs in
             let tpenv =
               match zip fttparams fttargs with
                 None -> static_error l "Incorrect number of function type type arguments." None
@@ -220,7 +220,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | ExprStmt (CallExpr (lc, "call", [], [], [], Static))::ss_after -> (List.rev ss_before, Some (lc, None, ss_after))
                 | DeclStmt (ld, [lx, tx, x, Some(CallExpr (lc, "call", [], [], [], Static)), _])::ss_after ->
                   if List.mem_assoc x tenv then static_error ld "Variable hides existing variable" None;
-                  let t = check_pure_type (pn,ilist) tparams tx in
+                  let t = check_pure_type (pn,ilist) tparams tx gh in
                   let Some (funenv1, rt1, xmap1, pre1, post1, terminates1) = funcinfo_opt in
                   begin match rt1 with
                     None -> static_error ld "Function does not return a value" None
@@ -609,7 +609,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match xs with
           [] -> tcont sizemap tenv ghostenv h env
         | (l, te, x, e, (address_taken, blockPtr))::xs ->
-          let t = check_pure_type (pn,ilist) tparams te in
+          let t = check_pure_type (pn,ilist) tparams te (if pure then Ghost else Real) in
           if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.") None;
           let ghostenv = if pure then x::ghostenv else List.filter (fun y -> y <> x) ghostenv in
           let produce_object envTp =
@@ -714,7 +714,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let term = get_unique_var_symb pat tp' in
                   let term' =
                     match unfold_inferred_type tp with
-                      TypeParam x -> convert_provertype term (provertype_of_type tp') ProverInductive
+                      GhostTypeParam x -> convert_provertype term (provertype_of_type tp') ProverInductive
+                    | RealTypeParam x -> convert_provertype term (provertype_of_type tp') ProverInductive
                     | _ -> term
                   in
                   iter ((pat, tp')::ptenv) (term'::xterms) ((pat, term)::xenv) pats pts
@@ -810,7 +811,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         tcont sizemap tenv ghostenv (chunks @ h) env
       )
     | Open (l, target, g, targs, pats0, pats, coefpat) ->
-      let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
+      let targs = List.map (fun te -> check_pure_type (pn, ilist) tparams te Ghost) targs in
       let open_instance_predicate target target_cn =
         let cn =
           match pats0 with
@@ -848,7 +849,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let (target, targetType) = check_expr (pn,ilist) tparams tenv target in
           let target_cn =
             match targetType with
-              ObjType cn -> cn
+              ObjType (cn,targs) -> cn
             | _ -> static_error l "Target of predicate instance call must be of class type" None
           in
           let target = ev target in
@@ -896,7 +897,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             None ->
             begin match try_assoc "this" tenv with
               None -> static_error l "No such predicate instance." None
-            | Some (ObjType target_cn) ->
+            | Some (ObjType (target_cn, targs)) ->
               let this = List.assoc "this" env in
               open_instance_predicate this target_cn
             end
@@ -979,7 +980,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         )
       )
     | SplitFractionStmt (l, p, targs, pats, coefopt) ->
-      let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
+      let targs = List.map (fun te -> check_pure_type (pn, ilist) tparams te Ghost) targs in
       let (targs, g_symb, pts, inputParamCount) =
         match try_assoc' Ghost (pn,ilist) p predfammap with
           None -> static_error l "No such predicate." None
@@ -1138,7 +1139,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             with_context PopSubcontext $. fun () ->
               tcont sizemap tenv ghostenv h env
     | Close (l, target, g, targs, pats0, pats, coef) ->
-      let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
+      let targs = List.map (fun te -> check_pure_type (pn, ilist) tparams te Ghost) targs in
       let close_instance_predicate target target_cn =
         let cn =
           match pats0 with
@@ -1175,7 +1176,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let (target, targetType) = check_expr (pn,ilist) tparams tenv target in
           let target_cn =
             match targetType with
-              ObjType cn -> cn
+              ObjType (cn,_) -> cn
             | _ -> static_error l "Target of predicate instance call must be of class type" None
           in
           let target = ev target in
@@ -1218,7 +1219,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             match try_assoc' Ghost (pn,ilist) g predctormap with
               None ->
               begin match try_assoc "this" tenv with
-                Some (ObjType cn) ->
+                Some (ObjType (cn, _)) ->
                 let this = List.assoc "this" env in
                 close_instance_predicate this cn
               | _ -> static_error l "No such predicate instance." None
@@ -1627,7 +1628,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               match catches with
                 [] -> econt throwl h env texcep excep
               | (l, te, x, body)::catches ->
-                let t = check_pure_type (pn,ilist) tparams te in
+                let t = check_pure_type (pn,ilist) tparams te Real in
                 branch
                   begin fun () ->
                     if((is_subtype_of_ texcep t) || (is_subtype_of_ t texcep)) then begin
@@ -1662,8 +1663,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               branch
                 begin fun () ->
                   if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.") None;
-                  let t = check_pure_type (pn,ilist) tparams te in
-                  if (is_unchecked_exception_type t) || t = (ObjType "java.lang.Exception") || t = (ObjType "java.lang.Throwable") then begin
+                  let t = check_pure_type (pn,ilist) tparams te Real in
+                  if (is_unchecked_exception_type t) || t = (ObjType ("java.lang.Exception", [])) || t = (ObjType ("java.lang.Throwable", [])) then begin
                     let xterm = get_unique_var_symb_non_ghost x t in
                     let tenv = (x, t)::tenv in
                     let env = (x, xterm)::env in
@@ -1937,7 +1938,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               if arity <> 0 then static_error l "Local predicate families are not yet supported." None;
               if List.mem_assoc p predfammap then static_error l "Duplicate predicate family name." None;
               if List.mem_assoc p tenv then static_error l "Predicate name conflicts with local variable name." None;
-              let ts = List.map (check_pure_type (pn,ilist) tparams) tes in
+              let ts = List.map (fun te -> check_pure_type (pn,ilist) tparams te Ghost) tes in
               let ptype = PredType ([], ts, inputParamCount, inductiveness) in
               let psymb = get_unique_var_symb p ptype in
               (lems, predinsts, (p, (l, ts, inputParamCount, ptype, psymb))::localpreds, localpredinsts)
@@ -1999,7 +2000,11 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           end
           lems
       in
-      let predinstmap = localpredinsts @ predinstmap' @ predinstmap in
+      let predinstmap = 
+      predinstmap @
+      localpredinsts @ 
+      predinstmap' 
+       in
       let funcmap = funcmap' @ funcmap in
       let verify_lems lems0 =
         List.fold_left
@@ -2053,8 +2058,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | Some cont -> cont blocks_done sizemap tenv ghostenv h env
       end
     | SuperConstructorCall(l, es) -> static_error l "super must be first statement of constructor." None
-  and
-    verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt =
+  and verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt =
     match ss with
       [] -> cont sizemap tenv ghostenv h env
     | s::ss ->
@@ -2063,8 +2067,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt
         ) return_cont econt
       )
-  and
-    check_backedge_termination currentThread leminfo l tenv h cont =
+  and check_backedge_termination currentThread leminfo l tenv h cont =
       let consume_func_call_perm g =
         let gterm = List.assoc g funcnameterms in
         let (_, _, _, _, call_perm__symb, _, _) = List.assoc "call_perm_" predfammap in
@@ -2085,8 +2088,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   (* Region: verification of blocks *)
   
-  and
-    goto_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env return_cont econt block =
+  and goto_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env return_cont econt block =
     let `Block (inv, ss, cont) = block in
     let l() =
       match (inv, ss) with
@@ -2132,8 +2134,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       verify_cont (pn,ilist) blocks_done lblenv tparams boxes true leminfo funcmap predinstmap sizemap tenv ghostenv h env epilog cont (fun _ _ -> assert false) econt
     end $. fun sizemap tenv ghostenv h env ->
     return_cont h tenv env retval
-  and
-    verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt =
+  and verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt =
     let (decls, ss) =
       let rec iter decls ss =
         match ss with
@@ -2379,13 +2380,20 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       ctxt#assume_forall g trigger tps body
   | (WPredAsn(p_loc, p_ref, true, p_targs, p_args1, p_args2), Sep(_, WPredAsn(_, q_ref, true, q_targs, q_args1, q_args2), conditions))
     when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_,_) -> true | _ -> false) (p_args1 @ p_args2) && 
-         List.length p_targs = List.length tparams' && (List.for_all (fun (tp, t) -> match (tp, t) with (x, TypeParam(y)) when x = y -> true | _ -> false) (zip2 tparams' p_targs)) &&
+         List.length p_targs = List.length tparams' && (List.for_all (fun (x, t) -> 
+          match (x, t) with 
+            | (x, GhostTypeParam(y)) when x = y -> true
+            | _ -> false) (zip2 tparams' p_targs)) &&
          p_ref#name = q_ref#name && List.for_all2 (fun (VarPat(_, x)) arg2 -> match arg2 with LitPat(WVar(_, y, _)) -> x = y | _ -> false) (p_args1 @ p_args2) (q_args1 @ q_args2) &&
          List.for_all2 (fun ta1 ta2 -> ta1 = ta2) p_targs q_targs && is_pure_spatial_assertion conditions -> 
-      (Hashtbl.add auto_lemmas (p_ref#name) (None, tparams', List.map (fun (VarPat(_,x)) -> x) p_args1, List.map (fun (VarPat(_,x)) -> x) p_args2, pre, post))
+      (Hashtbl.add auto_lemmas (p_ref#name) (None, tparams', 
+        List.map (fun (VarPat(_,x)) -> x) p_args1, List.map (fun (VarPat(_,x)) -> x) p_args2, pre, post))
   | (CoefAsn(loc, VarPat(_,f), WPredAsn(p_loc, p_ref, _, p_targs, p_args1, p_args2)), Sep(_, CoefAsn(_, LitPat(WVar(_, g, _)), WPredAsn(_, q_ref, true, q_targs, q_args1, q_args2)), conditions)) 
     when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_,_) -> true | _ -> false) (p_args1 @ p_args2) && 
-         List.length p_targs = List.length tparams' && (List.for_all (fun (tp, t) -> match (tp, t) with (x, TypeParam(y)) when x = y -> true | _ -> false) (zip2 tparams' p_targs)) &&
+         List.length p_targs = List.length tparams' && (List.for_all (fun (tp, t) -> 
+          match (tp, t) with 
+            | (x, GhostTypeParam(y)) when x = y -> true 
+            | _ -> false) (zip2 tparams' p_targs)) &&
          p_ref#name = q_ref#name && List.for_all2 (fun (VarPat(_, x)) arg2 -> match arg2 with LitPat(WVar(_, y, _)) -> x = y | _ -> false) (p_args1 @ p_args2) (q_args1 @ q_args2) &&
          List.for_all2 (fun ta1 ta2 -> ta1 = ta2) p_targs q_targs && f = g && is_pure_spatial_assertion conditions->
       (Hashtbl.add auto_lemmas (p_ref#name) (Some(f), tparams', List.map (fun (VarPat(_,x)) -> x) p_args1, List.map (fun (VarPat(_,x)) -> x) p_args2, pre, post))
@@ -2607,7 +2615,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let rec verify_cons (pn,ilist) cfin cn supercn superctors boxes lems cons =
     match cons with
       [] -> ()
-    | (sign, CtorInfo (lm, xmap, pre, pre_tenv, post, epost, terminates, ss, v))::rest ->
+    | (sign, CtorInfo (lm, xmap, pre, pre_tenv, post, epost, terminates, ss, v, tparams))::rest ->
+      let tparams = tparams in
       match ss with
         None ->
         let ((p, _, _), (_, _, _)) = root_caller_token lm in 
@@ -2626,7 +2635,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let (in_pure_context, leminfo, ghostenv) = (false, RealMethodInfo (if terminates then Some rank else None), []) in
         begin
           produce_asn [] [] ghostenv env pre real_unit None None $. fun h ghostenv env ->
-          let this = get_unique_var_symb "this" (ObjType cn) in
+          let this = get_unique_var_symb "this" (ObjType (cn, [])) in
           begin fun cont ->
             if cfin = FinalClass then assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [this]) (List.assoc cn classterms)) cont else cont ()
           end $. fun () ->
@@ -2642,7 +2651,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let econt throwl h env2 exceptp excep =
               verify_exceptional_return (pn,ilist) throwl h ghostenv env exceptp excep epost
             in
-            let tenv = ("this", ObjType cn):: (current_thread_name, current_thread_type) ::pre_tenv in
+            let tenv = ("this", ObjType (cn, [])):: (current_thread_name, current_thread_type) ::pre_tenv in
             begin fun cont ->
               if cn = "java.lang.Object" then
                 cont h
@@ -2651,12 +2660,12 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   None -> ([], [])
                 | Some(SuperConstructorCall(l, es)) -> 
                   inheritance_check cn l;
-                  ((List.map (fun e -> let (w, tp) = check_expr (pn,ilist) [] tenv (Some true) e in tp) es), es)
+                  ((List.map (fun e -> let (w, tp) = check_expr (pn,ilist) tparams tenv (Some true) e in tp) es), es)
                 in
                 match try_assoc argtypes superctors with
                   None ->
                   static_error lm "There is no superclass constructor that matches the superclass constructor call" None
-                | Some (CtorInfo (lc0, xmap0, pre0, pre_tenv0, post0, epost0, terminates0, ss0, v0)) ->
+                | Some (CtorInfo (lc0, xmap0, pre0, pre_tenv0, post0, epost0, terminates0, ss0, v0, tparams0)) ->
                   with_context (Executing (h, env, lm, "Implicit superclass constructor call")) $. fun () ->
                   if terminates && not terminates0 then static_error lm "Superclass constructor is not declared as 'terminates'" None;
                   let is_upcall =
@@ -2664,7 +2673,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                       Some (Some (_, rank0)) -> rank0 < rank
                     | _ -> true
                   in
-                  let eval_h h env e cont = verify_expr false (pn,ilist) [] false leminfo funcmap sizemap tenv ghostenv h env None e cont econt in
+                  let eval_h h env e cont = verify_expr false (pn,ilist) tparams false leminfo funcmap sizemap tenv ghostenv h env None e cont econt in
                   let pats = (List.map (fun e -> SrcPat (LitPat e)) args) in
                   verify_call funcmap eval_h lm (pn, ilist) None None [] pats ([], None, xmap0, ["this", this], pre0, post0, Some(epost0), terminates0, v0) false is_upcall (Some supercn) leminfo sizemap h [] tenv ghostenv env (fun h env _ ->
                   cont h) econt
@@ -2672,7 +2681,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let fds = get_fields (pn,ilist) cn lm in
             let rec iter h fds =
               match fds with
-                [] -> verify_cont (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss
+                [] -> verify_cont (pn,ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss
                      (fun sizemap tenv ghostenv h env -> return_cont h tenv env None) return_cont econt
               | (f, {ft=t; fbinding=binding; finit=init})::fds ->
                 if binding = Instance then begin
@@ -2682,7 +2691,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     iter h fds
                   | Some(e) -> 
                     with_context (Executing (h, [], expr_loc e, "Executing field initializer")) $. fun () ->
-                    verify_expr false (pn,ilist) [] false leminfo funcmap sizemap [(current_class, ClassOrInterfaceName cn); ("this", ObjType cn); (current_thread_name, current_thread_type)] ghostenv h [("this", this); (current_thread_name, List.assoc current_thread_name env)] None e (fun h _ initial_value ->
+                    verify_expr false (pn,ilist) tparams false leminfo funcmap sizemap [(current_class, ClassOrInterfaceName cn); ("this", ObjType (cn, [])); (current_thread_name, current_thread_type)] ghostenv h [("this", this); (current_thread_name, List.assoc current_thread_name env)] None e (fun h _ initial_value ->
                       assume_field h cn f t Real this initial_value real_unit $. fun h ->
                       iter h fds
                     ) (fun throwl h env2 exceptp excep -> assert_false h env2 throwl ("Field initializers throws exception.") None)
@@ -2700,7 +2709,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let rec verify_meths (pn,ilist) cfin cabstract boxes lems meths=
     match meths with
       [] -> ()
-    | ((g,sign), MethodInfo (l,gh, rt, ps,pre,pre_tenv,post,epost,pre_dyn,post_dyn,epost_dyn,terminates,sts,fb,v, _,abstract))::meths ->
+    | ((g,sign), MethodInfo (l,gh, rt, ps,pre,pre_tenv,post,epost,pre_dyn,post_dyn,epost_dyn,terminates,sts,fb,v, _,abstract, mtparams))::meths ->
       if abstract && not cabstract then static_error l "Abstract method can only appear in abstract class." None;
       match sts with
         None -> let ((p,_,_),(_,_,_))= root_caller_token l in 
@@ -2723,13 +2732,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             if fb = Instance then
             begin
               let ("this", thisTerm)::_ = env in
-              let ("this", ObjType cn)::_ = ps in
+              let ("this", ObjType (cn,_))::_ = ps in
               (* CAVEAT: Remove this assumption once we allow subclassing. *)
               (* assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [thisTerm]) (List.assoc cn classterms)) $. fun () -> *)
               begin fun cont ->
                 if cfin = FinalClass then assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [thisTerm]) (List.assoc cn classterms)) cont else cont ()
               end $. fun () ->
-              assume_neq thisTerm (ctxt#mk_intlit 0) (fun _ -> cont (("this", ObjType cn)::pre_tenv))
+              assume_neq thisTerm (ctxt#mk_intlit 0) (fun _ -> cont (("this", ObjType (cn, []))::pre_tenv))
             end else cont pre_tenv
           end $. fun tenv ->
           let (sizemap, indinfo) = switch_stmt ss env in
@@ -2750,7 +2759,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             verify_exceptional_return (pn,ilist) throwl h ghostenv env exceptp excep epost
           in
           let cont sizemap tenv ghostenv h env = return_cont h tenv env None in
-          verify_block (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt
+          verify_block (pn,ilist) [] [] mtparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt
         end
         end;
         verify_meths (pn,ilist) cfin cabstract boxes lems meths
@@ -2758,7 +2767,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let rec verify_classes boxes lems classm=
     match classm with
       [] -> ()
-    | (cn, {cl; cabstract; cfinal; cmeths; cctors; csuper; cpn; cilist})::classm ->
+    | (cn, {cl; cabstract; cfinal; cmeths; cctors; csuper=(csuper,_); cpn; cilist})::classm ->
       let (superctors, superfinal) =
         if csuper = "" then ([], ExtensibleClass) else
           let {cctors; cfinal} = List.assoc csuper classmap in

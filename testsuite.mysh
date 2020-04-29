@@ -251,7 +251,13 @@ cd examples
     cd channels
       verifast -prover redux -disable_overflow_check -c channels.jarsrc client.jarsrc
     cd ..
+    cd channels_raw
+      verifast -prover redux -disable_overflow_check -c channels.jarsrc client.jarsrc
+    cd ..
     cd chat
+      verifast_both -c -allow_assume chat.jarsrc
+    cd ..
+    cd chat_raw
       verifast_both -c -allow_assume chat.jarsrc
     cd ..
     cd chatbot
@@ -487,6 +493,12 @@ cd tests
     verifast_both -c -allow_should_fail test-ghost-break-from-real-loop.c
     cd context_free_pp
       verifast -c -allow_should_fail lib.c prog.c
+    cd ..
+  cd ..
+  cd java
+    cd generics
+    verifast -c BasicGenericClass.java
+    verifast -c GenericInheritance.java
     cd ..
   cd ..
 cd ..
