@@ -976,25 +976,12 @@ let type_expr_loc t =
   | PredTypeExpr(l, te, _) -> l
   | PureFuncTypeExpr (l, tes) -> l
 
-let rec string_of_type_expr_name t =
-match t with
-  ManifestTypeExpr (l, t) -> "???"
-  | StructTypeExpr (l, sn, _) -> "???"
-  | IdentTypeExpr (l, _, x) -> x
-  | ConstructedTypeExpr (l, x, targs) ->  x ^ "<" ^ (
-    String.concat " --- " (
-      List.map (fun targ -> string_of_type_expr_name targ) targs)) ^ ">"
-  | PtrTypeExpr (l, te) -> string_of_type_expr_name te
-  | ArrayTypeExpr(l, te) -> string_of_type_expr_name te
-  | PredTypeExpr(l, te, _) -> String.concat ", " (List.map (fun texpr -> string_of_type_expr_name texpr) te)
-  | PureFuncTypeExpr (l, tes) -> String.concat ", " (List.map (fun texpr -> string_of_type_expr_name texpr) tes)
-
-let string_of_type_expr t = 
+let rec string_of_type_expr t = 
   match t with 
     ManifestTypeExpr (l, t) -> "ManifestTypeExpr"
   | StructTypeExpr (l, sn, _) -> "StructtypeExpr"
   | IdentTypeExpr (l, _, x) -> "IdentTypeExpr " ^ x 
-  | ConstructedTypeExpr (l, x, targs) -> "ConstructedTypeExpr " ^ (string_of_type_expr_name t)
+  | ConstructedTypeExpr (l, x, targs) -> "ConstructedTypeExpr <" ^ (String.concat ", " (List.map string_of_type_expr targs)) ^ ">"
   | PtrTypeExpr (l, te) -> "PtrTypeExpr"
   | ArrayTypeExpr(l, te) -> "ArrayTypeExpr"
   | PredTypeExpr(l, te, _) -> "PredTypeExpr"
