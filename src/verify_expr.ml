@@ -2133,26 +2133,42 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           check_call targs h args $. fun h env retval ->
           cont (chunk::h) env retval
       end
-    | NewGenericObject (l, cn, args, targs) ->
+    | NewObject (l, cn, args, targsOpt) ->
       inheritance_check cn l;
       if pure then static_error l "Object creation is not allowed in a pure context" None;
       let {cctors; ctpenv} = List.assoc cn classmap in
       let args' = List.map (fun e -> check_expr (pn,ilist) tparams tenv e) args in
       let argtps = List.map snd args' in
-      if targs <> [] && (List.length targs) <> (List.length ctpenv) 
-        then static_error l "Invalid amount of type arguments provided" None;
-      (* No support for the diamond notation yet, so we always have the types explicitly provided *)
-      let targtps = List.map (fun targexpr -> check_pure_type (pn,ilist) tparams targexpr Real) targs in
-      let consmap' =
-        let consWithErasedSigns = List.map (fun (sign,cinfo) -> (*Iterate ovr constructors*)
-          (List.map (fun tp -> match tp with (*Iterate over arguments*)
-            RealTypeParam t -> ObjType("java.lang.Object",[])
-              | t -> t) sign, cinfo)) cctors in
-        List.filter (fun (sign, _) -> is_assignable_to_sign (Some pure) argtps sign) consWithErasedSigns
+      let consmap' = 
+        match targsOpt with 
+          (* The new object is a parameterised type *)
+          Some(targs) -> 
+            if targs <> [] && (List.length targs) <> (List.length ctpenv) 
+            then static_error l "Invalid amount of type arguments provided" None;
+            (* No support for the diamond notation yet, so we always have the types explicitly provided *)
+            let consWithErasedSigns = List.map (fun (sign,cinfo) -> (*Iterate ovr constructors*)
+            (List.map (fun tp -> match tp with (*Iterate over arguments*)
+              RealTypeParam t -> ObjType("java.lang.Object",[])
+                | t -> t) sign, cinfo)) cctors 
+            in
+            List.filter (fun (sign, _) -> is_assignable_to_sign (Some pure) argtps sign) consWithErasedSigns
+          (* Raw type or regular object creation *)
+          | None ->  
+            let cctors = (* Possible raw type, apply type erasure to constructors signs. *)
+              List.map (fun (sign,info) -> (List.map (fun t -> match t with 
+                RealTypeParam t -> ObjType("java.lang.Object",[])
+                | t -> t) sign, info)) cctors in
+            List.filter (fun (sign, _) -> is_assignable_to_sign (Some pure) argtps sign) cctors 
       in
       begin match consmap' with
         [] -> static_error l "No matching constructor" None
       | [(sign, CtorInfo (lm, xmap, pre, pre_tenv, post, epost, terminates, ss, v, tparams))] ->
+        (* Typecheck the type arguments *)
+        let targtps = match targsOpt with 
+          (* Type check passed type arguments *)
+          Some(targs) -> List.map (fun targexpr -> check_pure_type (pn,ilist) tparams targexpr Real) targs 
+          (* Raw type, make all targs Object *)
+          | None -> List.map (fun _ -> ObjType("java.lang.Object",[])) tparams in
         let obj = get_unique_var_symb (match xo with None -> "object" | Some x -> x) (ObjType (cn, targtps)) in
         assume_neq obj (ctxt#mk_intlit 0) $. fun () ->
         assume_eq (ctxt#mk_app get_class_symbol [obj]) (List.assoc cn classterms) $. fun () ->
@@ -2162,38 +2178,6 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | _ -> true
         in
         check_correct h None None targtps args (lm, tparams, None, xmap, ["this", obj], pre, post, Some(epost), terminates, Static) is_upcall (Some cn) (fun h env _ -> cont h env obj)
-      | _ -> static_error l "Multiple matching overloads" None
-      end
-    | NewObject (l, cn, args) ->
-      inheritance_check cn l;
-      if pure then static_error l "Object creation is not allowed in a pure context" None;
-      let {cctors; ctpenv} = List.assoc cn classmap in
-      let args' = List.map (fun e -> check_expr (pn,ilist) tparams tenv e) args in
-      let argtps = List.map snd args' in
-      let cctors = (* Possible raw type, apply type erasure to constructors signs. *)
-        List.map (fun (sign,info) -> (List.map (fun t -> match t with 
-          RealTypeParam t -> ObjType("java.lang.Object",[])
-          | t -> t) sign, info)) cctors in
-      let consmap' =  
-        List.filter (fun (sign, _) -> is_assignable_to_sign (Some pure) argtps sign) cctors in
-      begin match consmap' with
-        [] -> static_error l "No matching constructor" None
-      | [(sign, CtorInfo (lm, xmap, pre, pre_tenv, post, epost, terminates, ss, v, tparams))] ->
-        (* Since any parameterised type that ends up here is raw, we can simulate this by making all type arguments java.lang.Object *)
-        let targs = List.map (fun _ -> ObjType("java.lang.Object",[])) tparams in
-        let xmap = (* Apply type erasure to parameters and return type *)
-          List.map (fun (name,t) -> match t with
-            RealTypeParam t -> (name, ObjType("java.lang.Object", []))
-            | t -> (name,t)) xmap in
-        let obj = get_unique_var_symb (match xo with None -> "object" | Some x -> x) (ObjType (cn, targs)) in
-        assume_neq obj (ctxt#mk_intlit 0) $. fun () ->
-        assume_eq (ctxt#mk_app get_class_symbol [obj]) (List.assoc cn classterms) $. fun () ->
-        let is_upcall =
-          match ss, leminfo with
-            Some (Some (_, rank)), RealMethodInfo (Some rank') -> rank < rank'
-          | _ -> true
-        in
-        check_correct h None None targs args (lm, tparams, None, xmap, ["this", obj], pre, post, Some(epost), terminates, Static) is_upcall (Some cn) (fun h env _ -> cont h env obj)
       | _ -> static_error l "Multiple matching overloads" None
       end
     | WMethodCall (l, tn, m, pts, args, fb, targs) when m <> "getClass" ->

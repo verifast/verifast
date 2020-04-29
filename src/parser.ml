@@ -1226,11 +1226,11 @@ and
       begin match tp with
         IdentTypeExpr(_, pac, cn) -> 
           NewObject (l, 
-            (match pac with None -> "" | Some(pac) -> pac ^ ".") ^ cn, List.map (function LitPat e -> e | _ -> raise (Stream.Error "Patterns are not allowed in this position")) args0)
+            (match pac with None -> "" | Some(pac) -> pac ^ ".") ^ cn, List.map (function LitPat e -> e | _ -> raise (Stream.Error "Patterns are not allowed in this position")) args0, None)
         | ConstructedTypeExpr(loc, name, targs) -> 
-          NewGenericObject (loc,
+          NewObject (loc,
               name, List.map (function LitPat e -> e | _ -> raise (Stream.Error "Patterns are not allowed in this position")) args0,
-              targs)
+              Some (targs))
         | _ -> raise (ParseException (type_expr_loc tp, "Class name expected"))
       end
     | [< e = parse_new_array_expr_rest l tp >] -> e)

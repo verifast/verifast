@@ -87,7 +87,7 @@ let rec sexpr_of_type_ (t : type_) : sexpression =
                                         sexpr_of_type_ t2]
     | ObjType (s, targs)             -> List [ Symbol "type-obj-type";
                                         Symbol s ;
-                                        Symbol "type-arguments: " ;
+                                        Symbol "type-arguments:" ;
                                         sexpr_of_list sexpr_of_type_ targs]
     | ArrayType (t)           -> List [ Symbol "type-array-type";
                                         sexpr_of_type_ t ]
@@ -331,9 +331,11 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
       build_list [ Symbol "expr-new-array" ]
                  [ "texpr", sexpr_of_type_expr texpr
                  ; "expr", sexpr_of_expr expr]
-    | NewObject (l, cn, args) ->
+    | NewObject (l, cn, args, targs) ->
       build_list [ Symbol "expr-new-obj"; Symbol cn ]
-                 [ "args", sexpr_of_list sexpr_of_expr args]
+                 [ "args", sexpr_of_list sexpr_of_expr args ;
+                  "targs", sexpr_of_option (fun targs -> sexpr_of_list sexpr_of_type_expr targs) targs ]
+
     | NewArrayWithInitializer (l, texpr, args) -> 
       build_list [ Symbol "expr-array-init" ]
                  [ "type", sexpr_of_type_expr texpr
@@ -619,6 +621,9 @@ and sexpr_of_decl (decl : decl) : sexpression =
       let sexpr_of_arg (t, id) =
         List [ Symbol id; sexpr_of_type_expr t ]
       in
+      let sexpr_of_tparam tparam =
+        Symbol tparam
+      in
       let body =
         match body with
           | None           -> [ ]
@@ -631,7 +636,7 @@ and sexpr_of_decl (decl : decl) : sexpression =
                                 ; "postcondition", sexpr_of_pred post ]
       in
       let kw = List.concat [ [ "kind", sexpr_of_func_kind kind
-                             ; "type-parameters", Symbol (String.concat ", " tparams)
+                             ; "type-parameters", List (List.map sexpr_of_tparam tparams )
                              ; "return-type", sexpr_of_type_expr_option rtype
                              ; "parameters", List (List.map sexpr_of_arg params) ]
                            ; body

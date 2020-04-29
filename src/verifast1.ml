@@ -3358,23 +3358,17 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         try_qualified_call tn es args fb obj_type_arguments (fun () -> static_error l "No such method" None)
       end
-    | NewObject (l, cn, args) ->
+    | NewObject (l, cn, args, targs) ->
       begin match resolve Real (pn,ilist) l cn classmap with
         Some (cn, {cabstract}) ->
         if cabstract then
           static_error l "Cannot create instance of abstract class." None
         else
-          (NewObject (l, cn, args), ObjType (cn,[]), None)
-      | None -> static_error l "No such class" None
-      end
-    | NewGenericObject (l, cn, args, targs) ->
-      begin match resolve Real (pn,ilist) l cn classmap with
-        Some (cn, {cabstract}) ->
-        if cabstract then
-          static_error l "Cannot create instance of abstract class." None
-        else 
-           let targestps = List.map (fun targ -> check_pure_type (pn,ilist) tparams targ Real) targs in
-          (NewGenericObject (l, cn, args, targs), ObjType (cn,targestps), None)
+          let targestps = match targs with
+            Some(targs) -> List.map (fun targ -> check_pure_type (pn,ilist) tparams targ Real) targs
+            | None -> []
+          in
+          (NewObject (l, cn, args, targs), ObjType (cn,targestps), None)
       | None -> static_error l "No such class" None
       end
     | ReadArray(l, arr, index) ->

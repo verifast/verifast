@@ -826,7 +826,8 @@ and translate_expression expr =
       let l' = translate_location l in
       let typ' = GEN.string_of_ref_type typ in
       let exprs' = List.map translate_expression exprs in
-      VF.NewObject(l', typ', exprs')
+      (* No support for type arguments yet when using the native compiler *)
+      VF.NewObject(l', typ', exprs', None)
   | GEN.NewArray(l, typ, dims, exprs) ->
       let l' = translate_location l in
       let typ' = translate_type typ in
