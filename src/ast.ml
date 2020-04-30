@@ -230,7 +230,6 @@ and
   | False of loc
   | Null of loc
   | Var of loc * string
-  | VarWithTargs of loc * string * type_expr list
   | WVar of loc * string * ident_scope
   | TruncatingExpr of loc * expr
   | Operation of (* voor operaties met bovenstaande operators*)
@@ -822,7 +821,7 @@ let rec expr_loc e =
     True l -> l
   | False l -> l
   | Null l -> l
-  | Var (l, x) | VarWithTargs (l, x, _) | WVar (l, x, _) -> l
+  | Var (l, x) | WVar (l, x, _) -> l
   | IntLit (l, n, _, _, _) -> l
   | WIntLit (l, n) -> l
   | RealLit (l, n) -> l
@@ -1015,7 +1014,7 @@ let expr_fold_open iter state e =
     True l -> state
   | False l -> state
   | Null l -> state
-  | Var (l, x) | VarWithTargs (l,x,_) | WVar (l, x, _) -> state
+  | Var (l, x) | WVar (l, x, _) -> state
   | TruncatingExpr (l, e) -> iter state e
   | Operation (l, op, es) -> iters state es
   | WOperation (l, op, es, t) -> iters state es

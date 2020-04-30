@@ -1046,14 +1046,12 @@ and
   packagename_of_read l e =
   match e with
   | Var(_, x) when x <> "this" -> x
-  | VarWithTargs(_, x, targs) when x <> "this" -> x
   | Read(_, e, f) -> (packagename_of_read l e) ^ "." ^ f
   | e -> raise (ParseException (l, "Type expected."))
 and
   type_expr_of_expr e =
   match e with
     Var (l, x) -> IdentTypeExpr (l, None, x)
-  | VarWithTargs(l,x,targs) -> ConstructedTypeExpr(l,x,targs)
   | CallExpr (l, x, targs, [], [], Static) -> ConstructedTypeExpr (l, x, targs)
   | ArrayTypeExpr' (l, e) -> ArrayTypeExpr (l, type_expr_of_expr e)
   | Read(l, e, name) -> IdentTypeExpr(l, Some(packagename_of_read l e), name)
@@ -1343,7 +1341,6 @@ and
   expr_to_class_name e =
     match e with
       Var (_, x) -> x
-    | VarWithTargs(_,x,_) -> x
     | Read (_, e, f) -> expr_to_class_name e ^ "." ^ f
     | _ -> raise (ParseException (expr_loc e, "Class name expected"))
 and
