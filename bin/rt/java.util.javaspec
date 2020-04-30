@@ -216,7 +216,8 @@ public class ArrayList<E> implements List<E> {
 
 public class Arrays {
     
-    public static <E> List<E> asList(E[] a);
+    // No support for generic methods yet.
+    public static List asList(Object[] a);
         //@ requires [?f]a[..] |-> ?es;
         //@ ensures [f]a[..] |-> es &*& result.List(es);
    

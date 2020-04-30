@@ -2616,7 +2616,6 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match cons with
       [] -> ()
     | (sign, CtorInfo (lm, xmap, pre, pre_tenv, post, epost, terminates, ss, v, tparams))::rest ->
-      let tparams = tparams in
       match ss with
         None ->
         let ((p, _, _), (_, _, _)) = root_caller_token lm in 
@@ -2706,14 +2705,14 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end;
         verify_cons (pn,ilist) cfin cn supercn superctors boxes lems rest
   
-  let rec verify_meths (pn,ilist) cfin cabstract boxes lems meths=
+  let rec verify_meths (pn,ilist) cfin cabstract boxes lems meths ctparams=
     match meths with
       [] -> ()
     | ((g,sign), MethodInfo (l,gh, rt, ps,pre,pre_tenv,post,epost,pre_dyn,post_dyn,epost_dyn,terminates,sts,fb,v, _,abstract, mtparams))::meths ->
       if abstract && not cabstract then static_error l "Abstract method can only appear in abstract class." None;
       match sts with
         None -> let ((p,_,_),(_,_,_))= root_caller_token l in 
-          if (Filename.check_suffix p ".javaspec") || abstract then verify_meths (pn,ilist) cfin cabstract boxes lems meths
+          if (Filename.check_suffix p ".javaspec") || abstract then verify_meths (pn,ilist) cfin cabstract boxes lems meths ctparams
           else static_error l "Method specification is only allowed in javaspec files!" None
       | Some (Some ((ss, closeBraceLoc), rank)) ->
         record_fun_timing l g begin fun () ->
@@ -2738,7 +2737,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               begin fun cont ->
                 if cfin = FinalClass then assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [thisTerm]) (List.assoc cn classterms)) cont else cont ()
               end $. fun () ->
-              assume_neq thisTerm (ctxt#mk_intlit 0) (fun _ -> cont (("this", ObjType (cn, []))::pre_tenv))
+              assume_neq thisTerm (ctxt#mk_intlit 0) (fun _ -> cont (("this", ObjType (cn, (List.map (fun tparam -> RealTypeParam tparam) ctparams)))::pre_tenv))
             end else cont pre_tenv
           end $. fun tenv ->
           let (sizemap, indinfo) = switch_stmt ss env in
@@ -2759,15 +2758,18 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             verify_exceptional_return (pn,ilist) throwl h ghostenv env exceptp excep epost
           in
           let cont sizemap tenv ghostenv h env = return_cont h tenv env None in
-          verify_block (pn,ilist) [] [] mtparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt
+          Printf.printf "Verifying statements of method: %s with tparams: %s \n" 
+          g 
+          (String.concat ", " (ctparams@mtparams));
+          verify_block (pn,ilist) [] [] (ctparams@mtparams) boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt
         end
         end;
-        verify_meths (pn,ilist) cfin cabstract boxes lems meths
+        verify_meths (pn,ilist) cfin cabstract boxes lems meths ctparams
   
   let rec verify_classes boxes lems classm=
     match classm with
       [] -> ()
-    | (cn, {cl; cabstract; cfinal; cmeths; cctors; csuper=(csuper,_); cpn; cilist})::classm ->
+    | (cn, {cl; cabstract; cfinal; cmeths; cctors; csuper=(csuper,_); cpn; cilist; ctpenv})::classm ->
       let (superctors, superfinal) =
         if csuper = "" then ([], ExtensibleClass) else
           let {cctors; cfinal} = List.assoc csuper classmap in
@@ -2775,7 +2777,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       if superfinal = FinalClass then static_error cl "Cannot extend final class." None;
       verify_cons (cpn, cilist) cfinal cn csuper superctors boxes lems cctors;
-      verify_meths (cpn, cilist) cfinal cabstract boxes lems cmeths;
+      verify_meths (cpn, cilist) cfinal cabstract boxes lems cmeths ctpenv;
       verify_classes boxes lems classm
   
   let rec verify_funcs (pn,ilist)  boxes gs lems ds =

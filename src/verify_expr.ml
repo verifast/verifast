@@ -40,7 +40,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ExprCallExpr (l, e, es) -> flatmap expr_assigned_variables (e::es)
     | WPureFunCall (l, g, targs, args) -> flatmap expr_assigned_variables args
     | WPureFunValueCall (l, e, es) -> flatmap expr_assigned_variables (e::es)
-    | WMethodCall (l, cn, m, pts, args, mb, sign) -> flatmap expr_assigned_variables args
+    | WMethodCall (l, cn, m, pts, args, mb, targs, ctargs) -> flatmap expr_assigned_variables args
     | NewArray (l, te, e) -> expr_assigned_variables e
     | NewArrayWithInitializer (l, te, es) -> flatmap expr_assigned_variables es
     | IfExpr (l, e1, e2, e3) -> expr_assigned_variables e1 @ expr_assigned_variables e2 @ expr_assigned_variables e3
@@ -427,14 +427,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let rec iter mmap meth_specs =
           match meth_specs with
             [] -> List.rev mmap
-          | Meth (lm, gh, rt, n, ps, co, body, binding, _, _, tparams)::meths ->
+          | Meth (lm, gh, rt, n, ps, co, body, binding, _, _, meth_tparams)::meths ->
             let xmap =
               let rec iter xm xs =
                 match xs with
                  [] -> List.rev xm
                | (te, x)::xs ->
                  if List.mem_assoc x xm then static_error l "Duplicate parameter name." None;
-                 let t = check_pure_type (pn,ilist) tparams te Real in
+                 let t = check_pure_type (pn,ilist) (tparams@meth_tparams) te Real in
                  iter ((x, t)::xm) xs
               in
               iter [] ps
@@ -450,7 +450,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | t -> t) ts in
               ((n,erasedTypes),minfo)) mmap in
             if List.mem_assoc erasedSign erasedMmap then static_error lm "Duplicate method after erasure." None;
-            let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) tparams rt Real) in
+            let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) (tparams@meth_tparams) rt Real) in
             let (pre, pre_tenv, post, epost, terminates) =
               match co with
                 None -> static_error lm ("Non-fixpoint function must have contract: "^n) None
@@ -465,7 +465,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 ) epost in
                 (pre, tenv, post, epost, terminates)
             in
-            iter ((sign, ItfMethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, terminates, Public, true, tparams))::mmap) meths
+            iter ((sign, ItfMethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, terminates, Public, true, meth_tparams))::mmap) meths
         in
         iter [] specs
         in
@@ -654,18 +654,18 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       match classmap1_todo with
         [] -> List.rev classmap1_done
-      | (cn, (l, abstract, fin, meths, fds, constr, super, tpenv, interfs, preds, pn, ilist))::classmap1_todo ->
+      | (cn, (l, abstract, fin, meths, fds, constr, super, tparams, interfs, preds, pn, ilist))::classmap1_todo ->
         let cont cl = iter (cl::classmap1_done) classmap1_todo in
         let rec iter mmap meths =
           match meths with
-            [] -> cont (cn, (l, abstract, fin, List.rev mmap, fds, constr, super, tpenv, interfs, preds, pn, ilist))
-          | Meth (lm, gh, rt, n, ps, co, ss, fb, v,abstract, tparams)::meths ->
+            [] -> cont (cn, (l, abstract, fin, List.rev mmap, fds, constr, super, tparams, interfs, preds, pn, ilist))
+          | Meth (lm, gh, rt, n, ps, co, ss, fb, v,abstract, meth_tparams)::meths ->
             let xmap =
                 let rec iter xm xs =
                   match xs with
                    [] -> List.rev xm
                  | (te, x)::xs -> if List.mem_assoc x xm then static_error l "Duplicate parameter name." None;
-                     let t = check_pure_type (pn,ilist) tparams te Real in
+                     let t = check_pure_type (pn,ilist) (tparams@meth_tparams) te Real in
                      iter ((x, t)::xm) xs
                 in
                 iter [] ps
@@ -679,7 +679,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               let erasedTypes = List.map erased_type ts in
               ((n,erasedTypes),minfo)) mmap in
             if List.mem_assoc erasedSign erasedMmap then static_error lm "Duplicate method after erasure." None;
-            let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) tparams rt Real) in
+            let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) (tparams@meth_tparams) rt Real) in
             let co =
               match co with
                 None -> None
@@ -689,7 +689,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let (wpost, _) = check_asn (pn,ilist) [] postmap post in
                 let wepost = List.map (fun (tp, epost) -> 
                   let (wepost, _) = check_asn (pn,ilist) [] ((current_class, ClassOrInterfaceName cn)::(current_thread_name, current_thread_type)::xmap) epost in
-                  let tp = check_pure_type (pn,ilist) tpenv tp Real in
+                  let tp = check_pure_type (pn,ilist) [] tp Real in
                   (tp, wepost)
                 ) epost in
                 let (wpre_dyn, wpost_dyn, wepost_dyn) = if fb = Static then (wpre, wpost, wepost) else (dynamic_of wpre, dynamic_of wpost, List.map (fun (tp, wepost) -> (tp, dynamic_of wepost)) wepost) in
@@ -735,7 +735,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | [] -> static_error lm "Method must have contract" None
             in
             let ss = match ss with None -> None | Some ss -> Some (Some ss) in
-            iter ((sign, MethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, terminates, ss, fb, v, super_specs <> [], abstract, tparams))::mmap) meths
+            iter ((sign, MethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, terminates, ss, fb, v, super_specs <> [], abstract, meth_tparams))::mmap) meths
         in
         iter [] meths
     in
@@ -743,18 +743,18 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let classmap1 =
     List.map
-      begin fun (cn, (l, abstract, fin, meths, fds, ctors, super, tpenv, interfs, preds, pn, ilist)) ->
+      begin fun (cn, (l, abstract, fin, meths, fds, ctors, super, tparams, interfs, preds, pn, ilist)) ->
         let rec iter cmap ctors =
           match ctors with
-            [] -> (cn, {cl=l; cabstract=abstract; cfinal=fin; cmeths=meths; cfds=fds; cctors=List.rev cmap; csuper=super; ctpenv=tpenv; cinterfs=interfs; cpreds=preds; cpn=pn; cilist=ilist})
-            | Cons (lm, ps, co, ss, v, tparams)::ctors ->
+            [] -> (cn, {cl=l; cabstract=abstract; cfinal=fin; cmeths=meths; cfds=fds; cctors=List.rev cmap; csuper=super; ctpenv=tparams; cinterfs=interfs; cpreds=preds; cpn=pn; cilist=ilist})
+            | Cons (lm, ps, co, ss, v, meth_tparams)::ctors ->
               let xmap =
                 let rec iter xm xs =
                   match xs with
                    [] -> List.rev xm
                  | (te, x)::xs ->
                    if List.mem_assoc x xm then static_error l "Duplicate parameter name." None;
-                   let t = check_pure_type (pn,ilist) tparams te Real in
+                   let t = check_pure_type (pn,ilist) (tparams@meth_tparams) te Real in
                    iter ((x, t)::xm) xs
                 in
                 iter [] ps
@@ -777,7 +777,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               in
               let ss' = match ss with None -> None | Some ss -> Some (Some ss) in
                let epost: (type_ * asn) list = epost in
-              iter ((sign, CtorInfo (lm, xmap, pre, pre_tenv, post, epost, terminates, ss', v, tparams))::cmap) ctors
+              iter ((sign, CtorInfo (lm, xmap, pre, pre_tenv, post, epost, terminates, ss', v, []))::cmap) ctors
         in
         iter [] ctors
       end
@@ -1514,7 +1514,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | Some (_, _, _, _, (func_lt, _)) ->
         (* forall f, g. func_lt(f, g) = (func_rank(f) < func_rank(g)) *)
         ctxt#begin_formal;
-        let f = ctxt#mk_bound 0 ctxt#type_int in
+          let f = ctxt#mk_bound 0 ctxt#type_int in
         let g = ctxt#mk_bound 1 ctxt#type_int in
         let app = ctxt#mk_app func_lt [f; g] in
         let body = ctxt#mk_eq app (ctxt#mk_lt (ctxt#mk_app func_rank [f]) (ctxt#mk_app func_rank [g])) in
@@ -1573,18 +1573,13 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let tpenv =
       (* If no type arguments are provided, we are dealing with a raw type *)
-      if targs = [] then List.map (fun tparam -> (tparam, ObjType("java.lang.Object",[]))) callee_tparams
-      else match zip callee_tparams targs with
-        None ->
-            begin
-            match zip callee_tparams targs with
-              None -> static_error l ("Incorrect number of type arguments. tparams: " ^
-              (String.concat ", " callee_tparams)
-              ^ " and targs: " 
-              ^ (String.concat ", " (List.map string_of_type targs))) None
-              | Some tpenv -> tpenv 
-            end
-      | Some tpenv -> tpenv
+      if targs = [] then List.map (fun tparam -> (tparam, ObjType("java.lang.Object",[]))) (tparams@callee_tparams)
+      else match zip (tparams@callee_tparams) targs with
+        None -> static_error l ("Incorrect number of type arguments. tparams: " ^
+          (String.concat ", " (tparams@callee_tparams))
+          ^ " and targs: " 
+          ^ (String.concat ", " (List.map string_of_type targs))) None
+        | Some tpenv -> tpenv 
     in
     let ys: string list = List.map (function (p, t) -> p) ps in
     begin fun cont ->
@@ -1865,7 +1860,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           produce_points_to_chunk l h tpx real_unit symb w $. fun h ->
           cont h env
     in
-    let check_correct h xo g targs args (lg, callee_tparams, tr, ps, funenv, pre, post, epost, terminates, v) is_upcall target_class cont =
+    let check_correct h xo g targs args (lg, callee_tparams, tr, ps, funenv, pre, post, epost, terminates, v) is_upcall target_class cont tparams =
       (* check_expr is needed here because args are not typechecked yet. Why does check_expr_t not check the arguments of a WFunCall? *)
       let at_most_one_unsafe args = (List.length (List.filter (fun a -> let (w, t) = check_expr (pn,ilist) tparams tenv a in not (is_safe_expr w)) args)) <= 1 in
       let eval_h = if language == CLang && not heapReadonly &&  (List.length args = 1 || at_most_one_unsafe args) then (fun h env e cont -> eval_h_core (true, false) h env e cont) else eval_h in
@@ -2097,7 +2092,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (_, gh, fttparams, rt, ftxmap, xmap, pre, post, terminates, ft_predfammaps) = List.assoc ftn functypemap in
       if pure && gh = Real then static_error l "Cannot call regular function pointer in a pure context." None;
       let check_call targs h args0 cont =
-        verify_call funcmap eval_h l (pn, ilist) xo None targs (TermPat fterm::List.map (fun arg -> TermPat arg) args0 @ List.map (fun e -> SrcPat (LitPat e)) args) (fttparams, rt, (("this", PtrType Void)::ftxmap @ xmap), [], pre, post, None, terminates, Public) pure true None leminfo sizemap h tparams tenv ghostenv env cont (fun _ _ _ _ -> assert false)
+        verify_call funcmap eval_h l (pn, ilist) xo None targs (TermPat fterm::List.map (fun arg -> TermPat arg) args0 @ List.map (fun e -> SrcPat (LitPat e)) args) (fttparams, rt, (("this", PtrType Void)::ftxmap @ xmap), [], pre, post, None, terminates, Public) pure true None leminfo sizemap h [] tenv ghostenv env cont (fun _ _ _ _ -> assert false)
       in
       let consume_call_perm h cont =
         if should_terminate leminfo then begin
@@ -2162,13 +2157,13 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       begin match consmap' with
         [] -> static_error l "No matching constructor" None
-      | [(sign, CtorInfo (lm, xmap, pre, pre_tenv, post, epost, terminates, ss, v, tparams))] ->
+      | [(sign, CtorInfo (lm, xmap, pre, pre_tenv, post, epost, terminates, ss, v, mtparams))] ->
         (* Typecheck the type arguments *)
         let targtps = match targsOpt with 
           (* Type check passed type arguments *)
-          Some(targs) -> List.map (fun targexpr -> check_pure_type (pn,ilist) tparams targexpr Real) targs 
+          Some(targs) -> List.map (fun targexpr -> check_pure_type (pn,ilist) ctpenv targexpr Real) targs 
           (* Raw type, make all targs Object *)
-          | None -> List.map (fun _ -> ObjType("java.lang.Object",[])) tparams in
+          | None -> List.map (fun _ -> ObjType("java.lang.Object",[])) ctpenv in
         let obj = get_unique_var_symb (match xo with None -> "object" | Some x -> x) (ObjType (cn, targtps)) in
         assume_neq obj (ctxt#mk_intlit 0) $. fun () ->
         assume_eq (ctxt#mk_app get_class_symbol [obj]) (List.assoc cn classterms) $. fun () ->
@@ -2177,13 +2172,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             Some (Some (_, rank)), RealMethodInfo (Some rank') -> rank < rank'
           | _ -> true
         in
-        check_correct h None None targtps args (lm, tparams, None, xmap, ["this", obj], pre, post, Some(epost), terminates, Static) is_upcall (Some cn) (fun h env _ -> cont h env obj)
+        (* We need the type parameters of the type we are creating a new instance of *)
+        check_correct h None None targtps args (lm, [], None, xmap, ["this", obj], pre, post, Some(epost), terminates, Static) is_upcall (Some cn) (fun h env _ -> cont h env obj) ctpenv
       | _ -> static_error l "Multiple matching overloads" None
       end
-    | WMethodCall (l, tn, m, pts, args, fb, targs) when m <> "getClass" ->
-      let (lm, gh, rt, xmap, pre, post, epost, terminates, is_upcall, target_class, fb', v, tparams) =
+    | WMethodCall (l, tn, m, pts, args, fb, targs, ctargs) when m <> "getClass" ->
+      let (lm, gh, rt, xmap, pre, post, epost, terminates, is_upcall, target_class, fb', v, mtparams, tparams) =
         match try_assoc tn classmap with
-        Some {cfinal; cmeths} ->
+        Some {cfinal; cmeths; ctpenv} ->
           let MethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, terminates, ss, fb, v, is_override, abstract, tparams) = 
             List.assoc (m, pts) cmeths in
           let can_be_overridden = fb = Instance && cfinal = ExtensibleClass && v <> Private in 
@@ -2195,19 +2191,20 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | _ -> false
           in
           let target_class = if can_be_overridden then None else Some tn in
-          (lm, gh, rt, xmap, pre_dyn, post_dyn, epost_dyn, terminates, is_upcall, target_class, fb, v, tparams)
+          (lm, gh, rt, xmap, pre_dyn, post_dyn, epost_dyn, terminates, is_upcall, target_class, fb, v, tparams, ctpenv)
         | _ ->
-          let InterfaceInfo (_, _, methods, _, _, _) = List.assoc tn interfmap in
-          let ItfMethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, terminates, v, abstract, tparams) = 
+          let InterfaceInfo (_, _, methods, _, _, tparams) = List.assoc tn interfmap in
+          let ItfMethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, terminates, v, abstract, mtparams) = 
             List.assoc (m, pts) methods in
-          (lm, gh, rt, xmap, pre, post, epost, terminates, false, None, Instance, v, tparams)
+          (lm, gh, rt, xmap, pre, post, epost, terminates, false, None, Instance, v, mtparams, tparams)
       in
       if gh = Real && pure then static_error l "Method call is not allowed in a pure context" None;
       if gh = Ghost then begin
         if not pure then static_error l "A lemma method call is not allowed in a non-pure context." None;
         if leminfo_is_lemma leminfo then static_error l "Lemma method calls in lemmas are currently not supported (for termination reasons)." None
       end;
-      check_correct h xo None targs args (lm, tparams, rt, xmap, [], pre, post, Some epost, terminates, v) is_upcall target_class cont
+      (* We need the type parameters of the class that the method is being called on *)
+      check_correct h xo None (ctargs@targs) args (lm, mtparams, rt, xmap, [], pre, post, Some epost, terminates, v) is_upcall target_class cont tparams
     | WSuperMethodCall(l, supercn, m, args, (lm, gh, rt, xmap, pre, post, epost, terminates, rank, v)) ->
       if gh = Real && pure then static_error l "Method call is not allowed in a pure context" None;
       if gh = Ghost then begin
@@ -2219,7 +2216,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           Some rank, RealMethodInfo (Some rank0) -> rank < rank0
         | _ -> true
       in
-      check_correct h None None [] args (lm, [], rt, xmap, [], pre, post, Some epost, terminates, v) is_upcall (Some supercn) cont
+      check_correct h None None [] args (lm, [], rt, xmap, [], pre, post, Some epost, terminates, v) is_upcall (Some supercn) cont tparams
     | WFunCall (l, g, targs, es) ->
       let FuncInfo (funenv, fterm, lg, k, tparams, tr, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, fbf, v) = List.assoc g funcmap in
       if heapReadonly && language = CLang && not (startswith g "vf__") && asserts_exclusive_ownership pre then has_heap_effects ();
@@ -2231,7 +2228,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           RealFuncInfo (_, _, _) | LemInfo (_, _, _, true) | RealMethodInfo _ -> ()
         | _ -> static_error l "A lemma function marked nonghost_callers_only cannot be called from a non-nonghost_callers_only lemma function." None
       end;
-      check_correct h xo (Some g) targs es (lg, tparams, tr, ps, funenv, pre, post, None, terminates, v) true None cont
+      check_correct h xo (Some g) targs es (lg, tparams, tr, ps, funenv, pre, post, None, terminates, v) true None cont []
     | NewArray(l, tp, e) ->
       let elem_tp = check_pure_type (pn,ilist) tparams tp Real in
       let w = check_expr_t (pn,ilist) tparams tenv e intType in

@@ -230,6 +230,7 @@ and
   | False of loc
   | Null of loc
   | Var of loc * string
+  | VarWithTargs of loc * string * type_expr list
   | WVar of loc * string * ident_scope
   | TruncatingExpr of loc * expr
   | Operation of (* voor operaties met bovenstaande operators*)
@@ -305,7 +306,8 @@ and
       type_ list (* parameter types (not including receiver) *) *
       expr list (* args, including receiver if instance method *) *
       method_binding *
-      type_ list (*Type arguments*)
+      type_ list * (* method Type arguments *)
+      type_ list (* class type arguments *)
   | NewArray of loc * type_expr * expr
   (* If type arguments are None -> regular object creation or raw objects. [] -> type inference required and if the list is populated: parameterised type creation *)
   | NewObject of loc * string * expr list * type_expr list option
@@ -643,7 +645,7 @@ and
       method_binding * 
       visibility *
       bool * (* is declared abstract? *)
-      string list (*type parameters*)
+      string list (*method specific type parameters*)
 and
   cons = (* ?cons *)
   | Cons of
@@ -820,7 +822,7 @@ let rec expr_loc e =
     True l -> l
   | False l -> l
   | Null l -> l
-  | Var (l, x) | WVar (l, x, _) -> l
+  | Var (l, x) | VarWithTargs (l, x, _) | WVar (l, x, _) -> l
   | IntLit (l, n, _, _, _) -> l
   | WIntLit (l, n) -> l
   | RealLit (l, n) -> l
@@ -844,7 +846,7 @@ let rec expr_loc e =
   | WPureFunValueCall (l, e, es) -> l
   | WFunPtrCall (l, g, args) -> l
   | WFunCall (l, g, targs, args) -> l
-  | WMethodCall (l, tn, m, pts, args, fb, sign) -> l
+  | WMethodCall (l, tn, m, pts, args, fb, targs, ctargs) -> l
   | NewObject (l, cn, args, targs) -> l
   | NewArray(l, _, _) -> l
   | NewArrayWithInitializer (l, _, _) -> l
@@ -1013,7 +1015,7 @@ let expr_fold_open iter state e =
     True l -> state
   | False l -> state
   | Null l -> state
-  | Var (l, x) | WVar (l, x, _) -> state
+  | Var (l, x) | VarWithTargs (l,x,_) | WVar (l, x, _) -> state
   | TruncatingExpr (l, e) -> iter state e
   | Operation (l, op, es) -> iters state es
   | WOperation (l, op, es, t) -> iters state es
@@ -1037,7 +1039,7 @@ let expr_fold_open iter state e =
   | WPureFunValueCall (l, e, args) -> iters state (e::args)
   | WFunCall (l, g, targs, args) -> iters state args
   | WFunPtrCall (l, g, args) -> iters state args
-  | WMethodCall (l, cn, m, pts, args, mb, sign) -> iters state args
+  | WMethodCall (l, cn, m, pts, args, mb, targs, ctargs) -> iters state args
   | NewObject (l, cn, args, targs) -> iters state args
   | NewArray (l, te, e0) -> iter state e0
   | NewArrayWithInitializer (l, te, es) -> iters state es

@@ -231,10 +231,10 @@ and
      final = (parser [< '(_, Kwd "final") >] -> FinalClass | [< >] -> ExtensibleClass);
      ds = begin parser
        [< '(l, Kwd "class"); '(startLoc, Ident s); tparams = type_params_parse;
-          super = parse_super_class l; il = parse_interfaces; mem = parse_java_members s tparams; ds = parse_decls_core >]
+          super = parse_super_class l; il = parse_interfaces; mem = parse_java_members s; ds = parse_decls_core >]
        -> Class (l, abstract, final, s, methods s mem, fields mem, constr mem, super, tparams, il, instance_preds mem)::ds
      | [< '(l, Kwd "interface"); '(startLoc, Ident cn); tparams = type_params_parse;
-          il = parse_extended_interfaces;  mem = parse_java_members cn tparams; ds = parse_decls_core >]
+          il = parse_extended_interfaces;  mem = parse_java_members cn; ds = parse_decls_core >]
        -> Interface (l, cn, il, fields mem, methods cn mem, tparams, instance_preds mem)::ds
      | [< d = parse_decl; ds = parse_decls_core >] -> d@ds
      | [< '(_, Kwd ";"); ds = parse_decls_core >] -> ds
@@ -291,10 +291,10 @@ and
 | [<'(_, Kwd "protected")>] -> Protected
 | [<>] -> Package
 and
-  parse_java_members cn tpenv = parser
+  parse_java_members cn = parser
   [<'(_, Kwd "}")>] -> []
-| [< '(_, Kwd "/*@"); mems1 = parse_ghost_java_members cn; mems2 = parse_java_members cn tpenv >] -> mems1 @ mems2
-| [< m=parse_java_member cn tpenv;mr=parse_java_members cn tpenv>] -> m::mr
+| [< '(_, Kwd "/*@"); mems1 = parse_ghost_java_members cn; mems2 = parse_java_members cn >] -> mems1 @ mems2
+| [< m=parse_java_member cn;mr=parse_java_members cn>] -> m::mr
 and
   parse_ghost_java_members cn = parser
   [< '(_, Kwd "@*/") >] -> []
@@ -338,7 +338,7 @@ and parse_java_modifier = parser [< '(l, Kwd "public") >] -> VisibilityModifier(
   | [< '(l, Kwd "static") >] -> StaticModifier
   | [< '(l, Kwd "final") >] -> FinalModifier
   | [< '(l, Kwd "abstract") >] -> AbstractModifier
-and parse_java_member cn tpenv = parser
+and parse_java_member cn = parser
   [< modifiers = rep parse_java_modifier;
      binding = (fun _ -> if List.mem StaticModifier modifiers then Static else Instance);
      final = (fun _ -> List.mem FinalModifier modifiers);
@@ -352,7 +352,7 @@ and parse_java_member cn tpenv = parser
             [< (ps, co, ss) = parse_method_rest l >] ->
             let ps = if binding = Instance then (IdentTypeExpr (l, None, cn),"this")::ps 
                 else ps in
-            MethMember (Meth (l, Real, t, x, ps, co, ss, binding, vis, abstract, (tpenv@tparams)))
+            MethMember (Meth (l, Real, t, x, ps, co, ss, binding, vis, abstract, tparams))
           | [< t = id (match t with None -> raise (ParseException (l, "A field cannot be void.")) | Some(t) -> t);
                tx = parse_array_braces t;
                init = opt (parser [< '(_, Kwd "="); e = parse_declaration_rhs tx >] -> e);
@@ -374,7 +374,7 @@ and parse_java_member cn tpenv = parser
        in
        if binding = Static then raise (ParseException (l, "A constructor cannot be static."));
        if final then raise (ParseException (l, "A constructor cannot be final."));
-       ConsMember (Cons (l, ps, co, ss, vis, (tpenv@tparams)))
+       ConsMember (Cons (l, ps, co, ss, vis, (tparams)))
   >] -> member
 and parse_array_init_rest = parser
   [< '(_, Kwd ","); es = opt(parser [< e = parse_expr; es = parse_array_init_rest >] -> e :: es) >] -> (match es with None -> [] | Some(es) -> es)
@@ -1046,12 +1046,14 @@ and
   packagename_of_read l e =
   match e with
   | Var(_, x) when x <> "this" -> x
+  | VarWithTargs(_, x, targs) when x <> "this" -> x
   | Read(_, e, f) -> (packagename_of_read l e) ^ "." ^ f
   | e -> raise (ParseException (l, "Type expected."))
 and
   type_expr_of_expr e =
   match e with
     Var (l, x) -> IdentTypeExpr (l, None, x)
+  | VarWithTargs(l,x,targs) -> ConstructedTypeExpr(l,x,targs)
   | CallExpr (l, x, targs, [], [], Static) -> ConstructedTypeExpr (l, x, targs)
   | ArrayTypeExpr' (l, e) -> ArrayTypeExpr (l, type_expr_of_expr e)
   | Read(l, e, name) -> IdentTypeExpr(l, Some(packagename_of_read l e), name)
@@ -1236,6 +1238,7 @@ and
     | [< e = parse_new_array_expr_rest l tp >] -> e)
   >] -> res
 | [<
+    (* TODO: parse type arguments for java generic methods *)
     '(lx, Ident x);
     ex = parser
       [<
@@ -1285,7 +1288,9 @@ and
          parser
            [< '(l', Ident y); e = parse_expr_suffix_rest (Var (l', y)) >] ->
            begin match e0 with
-             Var (lt, x) -> CastExpr (l, IdentTypeExpr (lt, None, x), e)
+           (* This isn't quite right I think, but I really can't figure out another way to allow casts of paramterised types *)
+           | CallExpr (lt, x, targs, [], [], Static) -> CastExpr (l, ConstructedTypeExpr(lt,x,targs), e)
+           | Var (lt, x) -> CastExpr (l, IdentTypeExpr (lt, None, x), e)
            | _ -> raise (ParseException (l, "Type expression of cast expression must be identifier: "))
            end
          | [<>] -> e0
@@ -1338,6 +1343,7 @@ and
   expr_to_class_name e =
     match e with
       Var (_, x) -> x
+    | VarWithTargs(_,x,_) -> x
     | Read (_, e, f) -> expr_to_class_name e ^ "." ^ f
     | _ -> raise (ParseException (expr_loc e, "Class name expected"))
 and
@@ -1407,7 +1413,8 @@ and
        [< e1 = parse_truncating_expr; e1 = parse_expr_lt_rest e1 (let rec iter e0 = parse_expr_lt_rest e0 iter in iter);
           e = parser
             [< '(_, Kwd ">"); (* Type argument *)
-               args = (parser [< args = parse_patlist >] -> args | [< >] -> []);
+               args = (parser [< args = parse_patlist >] -> args | 
+                [< >] -> []);
                e = cont (apply_type_args e0 [type_expr_of_expr e1] args)
             >] -> e
           | [< '(_, Kwd ","); ts = rep_comma parse_type; '(_, Kwd ">");
