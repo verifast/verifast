@@ -2508,7 +2508,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   [] -> List.rev pmap
                 | (tp, x)::ps ->
                   if List.mem_assoc x pmap then static_error l "Duplicate parameter name." None;
-                  let tp = check_pure_type (pn,ilist) tparams tp Real in
+                  let tp = check_pure_type (pn,ilist) [] tp Ghost in
                   iter ((x, tp)::pmap) ps
               in
               iter [] ps
