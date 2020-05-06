@@ -3313,14 +3313,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           (* Replace the type parameters with their concrete type*)
           let rec replace_type t = match t with
             RealTypeParam t -> begin try List.assoc t targenv with Not_found -> static_error l 
-            (Printf.sprintf "Type arguments for %s.%s with type param %s not provided. Class_targs: %s and class_tparams: %s. function binding: %s \n"
-              tn
-              g
-              t
-              (String.concat ", " (List.map string_of_type class_targs))
-              (String.concat ", " class_tparams)
-              (if fb = Instance then "Instance" else "static")
-            ) None end
+            (Printf.sprintf "Type arguments for %s.%s with type param %s not provided." tn g t) None end
             | ArrayType t -> ArrayType (replace_type t)
             | ObjType (n,ts) -> ObjType (n, List.map replace_type ts)
             | t -> t in
