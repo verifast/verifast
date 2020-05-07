@@ -310,11 +310,11 @@ and translate_class_decl decl =
         (* Extending through ast_translator doesn't support generics yet *)
         let extnds' =
           match extnds with
-            Some x -> (GEN.string_of_ref_type x,[])
-          | None -> ("java.lang.Object",[])
+            Some x -> (GEN.string_of_ref_type x, [])
+          | None -> ("java.lang.Object", [])
         in
         (* No support yet for generic implements *)
-        let impls' = List.map (fun f -> (GEN.string_of_ref_type f,[])) impls in
+        let impls' = List.map (fun f -> (GEN.string_of_ref_type f, [])) impls in
         let (decls', ghost_members') = translate_ghost_members l' id' decls' in
         let (ghost_fields', ghost_meths', ghost_preds') = split_ghost_members l ghost_members' in
         if (decls' <> []) then error l' "Not all declarations in class could be processed";
@@ -324,7 +324,7 @@ and translate_class_decl decl =
         let id' = GEN.string_of_identifier id in
         debug_print ("interface declaration " ^ id');
         (* No support yet for generic implements *)
-        let impls' = List.map (fun f -> (GEN.string_of_ref_type f,[])) impls in
+        let impls' = List.map (fun f -> (GEN.string_of_ref_type f, [])) impls in
         let (decls', fields') = translate_fields decls in
         let (decls', meths') = translate_methods id' decls' in
         let tparams' = translate_tparams_as_string tparams in
@@ -362,19 +362,17 @@ and translate_class_finality fin =
 and translate_tparams_as_string tparams = 
   debug_print "translate_tparams_as_string";
   match tparams with
-  | GEN.TypeParam(l, Identifier(sl,name), bounds) :: tail ->
+  | GEN.TypeParam(l, Identifier(sl, name), bounds) :: tail ->
     let res = translate_tparams_as_string tail
       in name::res;
-  | _ -> []
 
 and translate_tparams_as_type_expr tparams =
   debug_print "translate_tparams_as_type_expr";
   match tparams with
-  | GEN.TypeParam(l, Identifier(sl,name), bounds) :: tail ->
+  | GEN.TypeParam(l, Identifier(sl, name), bounds) :: tail ->
     let l'= translate_location l in
     let res = translate_tparams_as_type_expr tail
-      in IdentTypeExpr(l',None,name)::res;
-  | _ -> []
+      in IdentTypeExpr(l', None, name)::res;
 
 and translate_field_finality fin =
   debug_print "translate_field_finality";

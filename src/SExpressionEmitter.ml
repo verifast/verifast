@@ -86,8 +86,8 @@ let rec sexpr_of_type_ (t : type_) : sexpression =
                                         sexpr_of_type_ t1; 
                                         sexpr_of_type_ t2]
     | ObjType (s, targs)             -> List [ Symbol "type-obj-type";
-                                        Symbol s ;
-                                        Symbol "type-arguments" ;
+                                        Symbol s;
+                                        Symbol "type-arguments";
                                         sexpr_of_list sexpr_of_type_ targs]
     | ArrayType (t)           -> List [ Symbol "type-array-type";
                                         sexpr_of_type_ t ]

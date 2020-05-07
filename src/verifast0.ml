@@ -96,8 +96,8 @@ let rec string_of_type t =
   | BoxIdType -> "box"
   | HandleIdType -> "handle"
   | AnyType -> "any"
-  | RealTypeParam x -> x
-  | GhostTypeParam x -> x ^ "'"
+  | RealTypeParam x -> if (String.capitalize_ascii x) = x then x else "<" ^ x ^ ">"
+  | GhostTypeParam x -> if (String.capitalize_ascii x) = x then "<" ^ x ^ ">" else x
   | InferredType (_, t) -> begin match !t with EqConstraint t -> string_of_type t | _ -> "?" end
   | ArrayType(t) -> (string_of_type t) ^ "[]"
   | StaticArrayType(t, s) -> (string_of_type t) ^ "[" ^ (string_of_int s) ^ "]" 

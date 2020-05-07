@@ -1010,7 +1010,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       let target = match e_opt with None -> List.assoc "this" env | Some e -> ev e in
       let index = ev index in
-      let types = ObjType (tn,[])::ObjType ("java.lang.Class", [])::List.map snd pmap in
+      let types = ObjType (tn, [])::ObjType ("java.lang.Class", [])::List.map snd pmap in
       let pats = TermPat target::TermPat index::srcpats pats in
       consume_chunk_core rules h ghostenv env env' l (pred_symb, true) [] coef coefpat (Some 2) pats types types $. fun chunk h coef ts size ghostenv env env' ->
       check_dummy_coefpat l coefpat coef;
