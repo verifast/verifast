@@ -1400,13 +1400,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         InductiveType (s, [])
       | None ->
       match (search2' Real id (pn, ilist) classmap1 classmap0) with
-        Some s -> begin match List.assoc s class_arities with
-          Some (_, (_,n)) -> ObjType(s, create_objects n)
+        Some s -> begin try (match List.assoc s class_arities with (_,n) -> ObjType(s, create_objects n)) with
         | Not_found -> failwith (id ^ "is present in the classmap, but has no arity?")
         end
       | None ->  match (search2' Real id (pn, ilist) interfmap1 interfmap0) with
-        Some s -> begin List.assoc s class_arities with
-          Some (_, (_,n)) -> ObjType(s, create_objects n)
+        Some s -> begin try (match List.assoc s class_arities with (_,n) -> ObjType(s, create_objects n)) with
           | Not_found -> failwith (id ^ "is present in the interfmap, but has no arity?")
         end
       | None ->
