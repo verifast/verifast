@@ -977,17 +977,6 @@ let type_expr_loc t =
   | PredTypeExpr(l, te, _) -> l
   | PureFuncTypeExpr (l, tes) -> l
 
-let rec string_of_type_expr t = 
-  match t with 
-    ManifestTypeExpr (l, t) -> "ManifestTypeExpr"
-  | StructTypeExpr (l, sn, _) -> "StructtypeExpr"
-  | IdentTypeExpr (l, _, x) -> "IdentTypeExpr " ^ x 
-  | ConstructedTypeExpr (l, x, targs) -> "ConstructedTypeExpr <" ^ (String.concat ", " (List.map string_of_type_expr targs)) ^ ">"
-  | PtrTypeExpr (l, te) -> "PtrTypeExpr"
-  | ArrayTypeExpr(l, te) -> "ArrayTypeExpr"
-  | PredTypeExpr(l, te, _) -> "PredTypeExpr"
-  | PureFuncTypeExpr (l, tes) -> "PureFuncTypeExpr"
-
 let expr_fold_open iter state e =
   let rec iters state es =
     match es with
