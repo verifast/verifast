@@ -4322,20 +4322,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin match unfold_inferred_type t with
         ObjType (cn, targs) ->
         let check_call family pmap tparams =
-          let ptps = List.map snd pmap in
-          let tpenv = 
-            if (List.length targs > 0) then (if (List.length tparams) <> (List.length targs) 
-            then static_error l (Printf.sprintf "Wrong amount of type arguments provided. Expected: %s Actual %s." (string_of_int (List.length tparams)) (string_of_int (List.length targs))) None
-            else List.map2 (fun a b -> (a, b)) tparams targs) else [] in
-          (* We know both type params and type arguments here, if possible fill them in *)
-          let rec replaceTypeParams t = match t with 
-            GhostTypeParam t -> (try List.assoc t tpenv with _ -> GhostTypeParam t)
-            | ObjType (s,ts) -> ObjType (s, List.map replaceTypeParams ts)
-            | InductiveType (s,ts) -> InductiveType (s, List.map replaceTypeParams ts)
-            | PredType (s,ts,o,i) -> PredType (s, List.map replaceTypeParams ts, o, i)
-            | PureFuncType (a,b) -> PureFuncType (replaceTypeParams a, replaceTypeParams b)
-            | t -> t  in
-          let (wpats, tenv) = check_pats (pn,ilist) l tparams tenv (List.map replaceTypeParams ptps) pats in
+          let (wpats, tenv) = check_pats (pn,ilist) l tparams tenv (List.map snd pmap) pats in
           let index = check_expr_t (pn,ilist) tparams tenv (Some true) index (ObjType ("java.lang.Class", [])) in
           (WInstPredAsn (l, Some w, cn, get_class_finality cn, family, g, index, wpats), tenv, [])
         in
