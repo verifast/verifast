@@ -447,7 +447,7 @@ and translate_static_blocks cn decls =
         counter := !counter + 1;
         let contr' = check_contract l [] [] Generated in
         let stmts' = translate_block l (Some stmts) in
-        Some([VF.Meth(l', VF.Real, None, id', [], contr', stmts', VF.Static, VF.Private, false, [])])
+        Some([VF.Meth(l', VF.Real, None, id', [], contr', stmts', VF.Static, VF.Private, false)])
       end
     | _ -> None
   in 
@@ -505,7 +505,6 @@ and translate_methods cn decls =
         debug_print ("method declaration " ^ id');
         let abs' = translate_abstractness abs in
         let access' = translate_accessibility access in
-        let tparams' = translate_tparams_as_string tparams in
         let stat' = translate_staticness stat in
         let params' = 
           let params' = List.map translate_param params in
@@ -518,7 +517,7 @@ and translate_methods cn decls =
         in
         let contr' = check_contract l anns throws autogen in
         let stmts' = translate_block l stmts in
-        Some([VF.Meth(l', ghost', ret', id', params', contr', stmts', stat', access', abs', tparams')])
+        Some([VF.Meth(l', ghost', ret', id', params', contr', stmts', stat', access', abs')])
     | _ -> None
   in 
   translate_class_decls_helper translator decls

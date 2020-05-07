@@ -498,7 +498,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let meths' = meths |> List.filter begin
         fun x ->
           match x with
-            | Meth(lm, gh, t, n, ps, co, ss,fb,v,abstract, tparams) ->
+            | Meth(lm, gh, t, n, ps, co, ss,fb,v,abstract) ->
               match ss with
                 | None -> true
                 | Some _ -> false
@@ -648,7 +648,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * visibility
       * bool (* is override *)
       * bool (* is abstract *)
-      * string list (* type parameters *)
     type interface_method_info =
       ItfMethodInfo of
         loc
@@ -662,7 +661,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * bool (* terminates *)
       * visibility
       * bool (* is abstract *)
-      * string list (*type parameters*)
     type field_info = {
         fl: loc;
         fgh: ghostness;
@@ -684,7 +682,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * bool (* terminates *)
       * ((stmt list * loc) * int (*rank for termination check*)) option option
       * visibility
-      * string list (*type parameters*)
     type inst_pred_info =
         loc
       * type_ map
@@ -2731,7 +2728,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if not (List.mem_assoc (methodName, signature) cmeths) then
           static_error l (Printf.sprintf "Internal error: no method '%s(%s)' found in class '%s'" methodName (String.concat ", " (List.map string_of_type signature)) className) None
       end;
-      WMethodCall (l, className, methodName, signature, args, Static, [], [])
+      WMethodCall (l, className, methodName, signature, args, Static, [])
     else
     let g = "vf__" ^ prefix ^ "_" ^ fun_name in
     if not (List.mem_assoc g funcmap) then static_error l "Must include header <math.h> when using floating-point operations." None;
@@ -2799,8 +2796,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         let declared_methods =
           flatmap
-            begin fun ((mn', sign), MethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, terminates, ss, fb, v, is_override, abstract, tparams)) ->
-              if mn' = mn then [(sign, (tn, lm, gh, rt, xmap, pre_dyn, post_dyn, epost_dyn, terminates, fb, v, abstract, tparams))] else []
+            begin fun ((mn', sign), MethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, terminates, ss, fb, v, is_override, abstract)) ->
+              if mn' = mn then [(sign, (tn, lm, gh, rt, xmap, pre_dyn, post_dyn, epost_dyn, terminates, fb, v, abstract))] else []
             end
             cmeths
         in
@@ -2808,8 +2805,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | None ->
       let InterfaceInfo (_, fields, meths, _, interfs, _) = List.assoc tn interfmap in
       let declared_methods = flatmap
-        begin fun ((mn', sign), ItfMethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, terminates, v, abstract, tparams)) ->
-          if mn' = mn then [(sign, (tn, lm, gh, rt, xmap, pre, post, epost, terminates, Instance, v, abstract, tparams))] else []
+        begin fun ((mn', sign), ItfMethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, terminates, v, abstract)) ->
+          if mn' = mn then [(sign, (tn, lm, gh, rt, xmap, pre, post, epost, terminates, Instance, v, abstract))] else []
         end
         meths
       in
@@ -3171,7 +3168,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | AddressOf (l, e) -> let (w, t, _) = check e in (AddressOf (l, w), PtrType t, None)
     | CallExpr (l, "getClass", [], [], [LitPat target], Instance) when language = Java ->
       let w = checkt target (ObjType ("java.lang.Object", [])) in
-      (WMethodCall (l, "java.lang.Object", "getClass", [], [w], Instance, [], []), ObjType ("java.lang.Class", []), None)
+      (WMethodCall (l, "java.lang.Object", "getClass", [], [w], Instance, []), ObjType ("java.lang.Class", []), None)
     | ExprCallExpr (l, e, es) ->
       let (w, t, _) = check e in
       let t = unfold_inferred_type t in
@@ -3257,29 +3254,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if ms = [] then on_fail () else
         let argtps = List.map (fun e -> let (_, tp, _) = (check e) in tp) args in
         (* Select the real methods with the correct number of type parameters *)
-        let ms = List.map (fun (sign, (tn', lm, gh, rt, xmap, pre, post, epost, terminates, fb', v, abstract, meth_tparams)) ->
-          let wtargs = if (List.length meth_tparams = List.length targes || gh = Ghost) then List.map (check_pure_type (pn,ilist) meth_tparams gh) targes else
-            (* Should do type inference here, for now just use Object. Because of this some casts may be required because the return type may be wrong *)
-            List.map (fun tparam -> ObjType("java.lang.Object", [])) meth_tparams in
-          let targenv = 
-            (* First make the targenv on the class level, then append the one for the method level *)
-            (
-              if inAnnotation <> Some(true) then List.map2 (fun a b -> (a, b)) class_tparams class_targs else []
-            )@
-            (
-              let targs_c = List.length wtargs in
-              let tparams_c = List.length meth_tparams in
-                if targs_c <> tparams_c
-                  then static_error l 
-                    (Printf.sprintf "Wrong amount of type arguments provided for method: %s. Expected: %s Actual: %s" 
-                      g
-                      (string_of_int tparams_c) 
-                      (string_of_int targs_c)
-                     ) None
-                  else List.map2 (fun a b -> (a, b)) 
-                    meth_tparams 
-                    wtargs
-            )
+        let ms = List.map (fun (sign, (tn', lm, gh, rt, xmap, pre, post, epost, terminates, fb', v, abstract)) ->
+          let targenv = if inAnnotation <> Some(true) then List.map2 (fun a b -> (a, b)) class_tparams class_targs else []
           in
           (* Replace the type parameters with their concrete type*)
           let rec replace_type t = match t with
@@ -3294,14 +3270,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             Some(rt) -> replace_type rt
             | None -> Void
           in 
-          (sign', (tn', lm, gh, rt', xmap, pre, post, epost, terminates, fb', v, abstract,tparams, wtargs, class_targs, sign))) ms in
+          (sign', (tn', lm, gh, rt', xmap, pre, post, epost, terminates, fb', v, abstract, class_targs, sign))) ms in
         let ms = List.filter (fun (sign, _) -> is_assignable_to_sign inAnnotation argtps sign) ms in
         let make_well_typed_method m =
           match m with
-          (sign', (tn', lm, gh, rt, xmap, pre, post, epost, terminates, fb', v, abstract, _, wtargs, wctargs, sign)) ->
+          (sign', (tn', lm, gh, rt, xmap, pre, post, epost, terminates, fb', v, abstract, wctargs, sign)) ->
             let (fb, es) = if fb = Instance && fb' = Static then (Static, List.tl es) else (fb, es) in
             if fb <> fb' then static_error l "Instance method requires target object" None
-            else (WMethodCall (l, tn', g, sign, es, fb, wtargs, wctargs), rt, None)
+            else (WMethodCall (l, tn', g, sign, es, fb, wctargs), rt, None)
         in
         begin match ms with
           [] -> static_error l "No matching method" None
@@ -3459,7 +3435,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           begin try
             let m =
               List.find
-                begin fun ((mn', sign), MethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, terminates, ss, fb, v, is_override, abstract, tparams)) ->
+                begin fun ((mn', sign), MethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, terminates, ss, fb, v, is_override, abstract)) ->
                   mn = mn' &&  is_assignable_to_sign inAnnotation argtps sign && not abstract
                 end
                 cmeths
@@ -3482,7 +3458,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | Some {csuper=(csuper, _)} ->
             begin match get_implemented_instance_method csuper mn argtps with
               None -> static_error l "No matching method." None
-            | Some(((mn', sign), MethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, terminates, ss, fb, v, is_override, abstract, tparams))) ->
+            | Some(((mn', sign), MethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, terminates, ss, fb, v, is_override, abstract))) ->
               let tp = match rt with Some(tp) -> tp | _ -> Void in
               let rank = match ss with Some (Some (_, rank)) -> Some rank | None -> None in
               (WSuperMethodCall (l, csuper, mn, Var (l, "this") :: wargs, (lm, gh, rt, xmap, pre, post, epost, terminates, rank, v)), tp, None)
@@ -4065,7 +4041,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (_, []) -> static_error l "Too few patterns" None
   
   let get_class_of_this =
-    WMethodCall (dummy_loc, "java.lang.Object", "getClass", [], [WVar (dummy_loc, "this", LocalVar)], Instance, [], [])
+    WMethodCall (dummy_loc, "java.lang.Object", "getClass", [], [WVar (dummy_loc, "this", LocalVar)], Instance, [])
   
   let get_class_finality tn = (* Returns ExtensibleClass if tn is an interface *)
     match try_assoc tn classmap1 with
@@ -5496,7 +5472,7 @@ let check_if_list_is_defined () =
           Java -> get_unique_var_symb "stringLiteral" (ObjType ("java.lang.String", []))
         | _ -> get_unique_var_symb "stringLiteral" (PtrType (Int (Signed, 0)))
         end
-    | WMethodCall (l, "java.lang.Object", "getClass", [], [target], Instance, [], []) ->
+    | WMethodCall (l, "java.lang.Object", "getClass", [], [target], Instance, []) ->
       ev state target $. fun state t ->
       cont state (ctxt#mk_app get_class_symbol [t])
     | WPureFunCall (l, g, targs, args) ->

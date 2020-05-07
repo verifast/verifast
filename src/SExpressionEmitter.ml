@@ -319,14 +319,13 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
                  [ "name", Symbol name
                  ; "typs", sexpr_of_list sexpr_of_type_ typs
                  ; "exprs", sexpr_of_list sexpr_of_expr exprs ]
-    | WMethodCall (_, clss, name, typs, exprs, bind, targs, ctargs) ->
+    | WMethodCall (_, clss, name, typs, exprs, bind, ctargs) ->
       build_list [ Symbol "expr-w-method-call" ]
                  [ "class", Symbol clss
                  ; "name", Symbol name
                  ; "typs", sexpr_of_list sexpr_of_type_ typs
                  ; "exprs", sexpr_of_list sexpr_of_expr exprs 
                  ; "stat", sexpr_of_method_binding bind 
-                 ; "targs", sexpr_of_list sexpr_of_type_ targs
                  ; "classTargs", sexpr_of_list sexpr_of_type_ ctargs ]
     | NewArray (_, texpr, expr) ->
       build_list [ Symbol "expr-new-array" ]
@@ -725,10 +724,8 @@ and sexpr_of_super (name, targs) : sexpression =
   List [ Symbol name; sexpr_of_list sexpr_of_type_expr targs ]
 
 and sexpr_of_meths (meth : meth) : sexpression =
-  let sexpr_of_tparam tparam =
-        Symbol tparam in
   match meth with
-  | Meth (loc, ghost, rtype, name, params, contract, body, bind, vis, abs, tparams) ->
+  | Meth (loc, ghost, rtype, name, params, contract, body, bind, vis, abs) ->
     let sexpr_of_arg (t, id) =
       List [ Symbol id; sexpr_of_type_expr t ]
     in
@@ -745,8 +742,7 @@ and sexpr_of_meths (meth : meth) : sexpression =
     in        
     let kw = List.concat [ [ "ghos", sexpr_of_ghostness ghost
                             ; "return-type", sexpr_of_type_expr_option rtype
-                            ; "parameters", List (List.map sexpr_of_arg params)
-                            ; "type-parameters", List (List.map sexpr_of_tparam tparams) ]
+                            ; "parameters", List (List.map sexpr_of_arg params) ]
                           ; body
                           ; contract ]
     in
