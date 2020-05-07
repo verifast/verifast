@@ -1576,8 +1576,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if targs = [] then List.map (fun tparam -> (tparam, ObjType("java.lang.Object",[]))) (tparams@callee_tparams)
       else match zip (tparams@callee_tparams) targs with
         None -> static_error l (Printf.sprintf "Incorrect number of type arguments. Actual: %s Expected: %s \n"
-          (List.length (tparams@callee_tparams))
-          (List.length targs)) None
+          (string_of_int (List.length (tparams@callee_tparams)))
+          (string_of_int (List.length targs))) None
         | Some tpenv -> tpenv 
     in
     let ys: string list = List.map (function (p, t) -> p) ps in
