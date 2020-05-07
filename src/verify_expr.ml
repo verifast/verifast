@@ -1575,10 +1575,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (* If no type arguments are provided, we are dealing with a raw type *)
       if targs = [] then List.map (fun tparam -> (tparam, ObjType("java.lang.Object",[]))) (tparams@callee_tparams)
       else match zip (tparams@callee_tparams) targs with
-        None -> static_error l ("Incorrect number of type arguments. tparams: " ^
-          (String.concat ", " (tparams@callee_tparams))
-          ^ " and targs: " 
-          ^ (String.concat ", " (List.map string_of_type targs))) None
+        None -> static_error l (Printf.sprintf "Incorrect number of type arguments. Actual: %s Expected: %s \n"
+          (List.length (tparams@callee_tparams))
+          (List.length targs)) None
         | Some tpenv -> tpenv 
     in
     let ys: string list = List.map (function (p, t) -> p) ps in
