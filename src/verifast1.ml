@@ -513,7 +513,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | Some _ -> false
       end in
       iter (pn,ilist) (Class(l, abstract, fin, cn, meths', fds, cons', super, tparams, inames, [])::classes) lemmas rest
-    | Func(l, Lemma(_), tparams, rt, fn, arglist, nonghost_callers_only, ftype, contract, terminates, None, fb, vis) as elem ::rest->
+    | Func(l,Lemma(_),tparams,rt,fn,arglist,nonghost_callers_only,ftype,contract,terminates,None,fb,vis) as elem ::rest->
       iter (pn, ilist) classes (elem::lemmas) rest
     | _::rest -> 
       iter (pn, ilist) classes lemmas rest

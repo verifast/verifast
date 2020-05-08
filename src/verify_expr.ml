@@ -979,9 +979,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       not (List.mem erasedSign erased_implemented_methods)) erased_inherited_unimplemented_methods @ abstract_methods
   
   let () =
-    if not is_jarspec then
-    classmap1 |> List.iter begin 
-    function (cn, {cl; cabstract}) ->
+    if not is_jarspec then classmap1 |> List.iter begin function (cn, {cl; cabstract}) ->
       if not cabstract then begin
         match unimplemented_class_methods (cn, []) false with
           [] -> ()

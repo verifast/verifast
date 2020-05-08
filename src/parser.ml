@@ -291,7 +291,7 @@ and
 | [<'(_, Kwd "protected")>] -> Protected
 | [<>] -> Package
 and
-  parse_java_members cn = parser
+  parse_java_members cn= parser
   [<'(_, Kwd "}")>] -> []
 | [< '(_, Kwd "/*@"); mems1 = parse_ghost_java_members cn; mems2 = parse_java_members cn >] -> mems1 @ mems2
 | [< m=parse_java_member cn;mr=parse_java_members cn>] -> m::mr
@@ -553,7 +553,7 @@ and
     >] ->
     [PredFamilyDecl (l, g, tparams, 0, List.map (fun (t, p) -> t) ps, inputParamCount, inductiveness)] @
     (match body with None -> [] | Some body -> [PredFamilyInstanceDecl (l, g, tparams, [], ps, body)])
-and 
+and
   parse_pure_decl = parser
     [< '(l, Kwd "inductive"); '(li, Ident i); tparams = parse_type_params li; '(_, Kwd "="); cs = (parser [< cs = parse_ctors >] -> cs | [< cs = parse_ctors_suffix >] -> cs); '(_, Kwd ";") >] -> [Inductive (l, i, tparams, cs)]
   | [< '(l, Kwd "fixpoint"); t = parse_return_type; d = parse_func_rest Fixpoint t Public Ghost>] -> [d]

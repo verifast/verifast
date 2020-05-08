@@ -591,8 +591,8 @@ let rec sexpr_of_stmt (stmt : stmt) : sexpression =
                  [ "arguments", List (List.map sexpr_of_expr args) ]
 
 and sexpr_of_decl (decl : decl) : sexpression =
-  let sexpr_of_tparam tparam =
-        Symbol tparam in
+  let symbol s = Symbol s
+  in
   match decl with
     | Struct (loc,
               name,
