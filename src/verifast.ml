@@ -714,7 +714,6 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let term' =
                     match unfold_inferred_type tp with
                       GhostTypeParam x -> convert_provertype term (provertype_of_type tp') ProverInductive
-                    | RealTypeParam x -> convert_provertype term (provertype_of_type tp') ProverInductive
                     | _ -> term
                   in
                   iter ((pat, tp')::ptenv) (term'::xterms) ((pat, term)::xenv) pats pts
@@ -1999,7 +1998,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           end
           lems
       in
-      let predinstmap = predinstmap @ localpredinsts @ predinstmap' in
+      let predinstmap = localpredinsts @ predinstmap' @ predinstmap in
       let funcmap = funcmap' @ funcmap in
       let verify_lems lems0 =
         List.fold_left
@@ -2610,7 +2609,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     else
       success()
   
-  let rec verify_cons (pn,ilist) cfin cn supercn superctors boxes lems cons =
+  let rec verify_cons (pn,ilist) cfin cn supercn superctors boxes lems cons tparams =
     match cons with
       [] -> ()
     | (sign, CtorInfo (lm, xmap, pre, pre_tenv, post, epost, terminates, ss, v))::rest ->
@@ -2618,7 +2617,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         None ->
         let ((p, _, _), (_, _, _)) = root_caller_token lm in 
         if Filename.check_suffix p ".javaspec" then
-          verify_cons (pn,ilist) cfin cn supercn superctors boxes lems rest
+          verify_cons (pn,ilist) cfin cn supercn superctors boxes lems rest tparams
         else
           static_error lm "Constructor specification is only allowed in javaspec files!" None
       | Some (Some ((ss, closeBraceLoc), rank)) ->
@@ -2670,7 +2669,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                       Some (Some (_, rank0)) -> rank0 < rank
                     | _ -> true
                   in
-                  let eval_h h env e cont = verify_expr false (pn,ilist) [] false leminfo funcmap sizemap tenv ghostenv h env None e cont econt in
+                  let eval_h h env e cont = verify_expr false (pn,ilist) tparams false leminfo funcmap sizemap tenv ghostenv h env None e cont econt in
                   let pats = (List.map (fun e -> SrcPat (LitPat e)) args) in
                   verify_call funcmap eval_h lm (pn, ilist) None None [] pats ([], None, xmap0, ["this", this], pre0, post0, Some(epost0), terminates0, v0) false is_upcall (Some supercn) leminfo sizemap h [] tenv ghostenv env (fun h env _ ->
                   cont h) econt
@@ -2678,7 +2677,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let fds = get_fields (pn,ilist) cn lm in
             let rec iter h fds =
               match fds with
-                [] -> verify_cont (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss
+                [] -> verify_cont (pn,ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss
                      (fun sizemap tenv ghostenv h env -> return_cont h tenv env None) return_cont econt
               | (f, {ft=t; fbinding=binding; finit=init})::fds ->
                 if binding = Instance then begin
@@ -2688,7 +2687,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     iter h fds
                   | Some(e) -> 
                     with_context (Executing (h, [], expr_loc e, "Executing field initializer")) $. fun () ->
-                    verify_expr false (pn,ilist) [] false leminfo funcmap sizemap [(current_class, ClassOrInterfaceName cn); ("this", ObjType (cn, [])); (current_thread_name, current_thread_type)] ghostenv h [("this", this); (current_thread_name, List.assoc current_thread_name env)] None e (fun h _ initial_value ->
+                    verify_expr false (pn,ilist) tparams false leminfo funcmap sizemap [(current_class, ClassOrInterfaceName cn); ("this", ObjType (cn, [])); (current_thread_name, current_thread_type)] ghostenv h [("this", this); (current_thread_name, List.assoc current_thread_name env)] None e (fun h _ initial_value ->
                       assume_field h cn f t Real this initial_value real_unit $. fun h ->
                       iter h fds
                     ) (fun throwl h env2 exceptp excep -> assert_false h env2 throwl ("Field initializers throws exception.") None)
@@ -2701,7 +2700,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
         end
         end;
-        verify_cons (pn,ilist) cfin cn supercn superctors boxes lems rest
+        verify_cons (pn,ilist) cfin cn supercn superctors boxes lems rest tparams
   
   let rec verify_meths (pn,ilist) cfin cabstract boxes lems meths ctparams=
     match meths with
@@ -2771,7 +2770,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           (cctors, cfinal)
       in
       if superfinal = FinalClass then static_error cl "Cannot extend final class." None;
-      verify_cons (cpn, cilist) cfinal cn csuper superctors boxes lems cctors;
+      verify_cons (cpn, cilist) cfinal cn csuper superctors boxes lems cctors ctpenv;
       verify_meths (cpn, cilist) cfinal cabstract boxes lems cmeths ctpenv;
       verify_classes boxes lems classm
   

@@ -786,6 +786,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * module_info map
   end
   
+  let javaLangObject = ObjType ("java.lang.Object", [])
+
   include CheckFileTypes
   
   (* Maps a header file name to the list of header file names that it includes, and the various maps of VeriFast elements that it declares directly. *)
@@ -1253,6 +1255,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       None -> search' ghost x (pn,imports) xys2
     | result -> result
   
+  let rec erase_type t =
+    match t with 
+    RealTypeParam t -> javaLangObject
+    | ObjType (s, ts) -> ObjType (s, List.map erase_type ts)
+    | ArrayType t -> ArrayType (erase_type t)
+    | InductiveType (name, ts) -> InductiveType (name, List.map erase_type ts)
+    | t -> t
+
   (* Region: interfdeclmap, classmap1 *)
   
   let (interfmap1,classmap1) =
@@ -1369,7 +1379,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   (* Region: check_pure_type: checks validity of type expressions *)
   let check_pure_type_core typedefmap1 (pn,ilist) tpenv te envType =
-    let rec create_objects n = if n > 0 then (ObjType ("java.lang.Object", []))::(create_objects (n-1)) else [] in
+    let rec create_objects n = if n > 0 then (javaLangObject)::(create_objects (n-1)) else [] in
     let rec check te =
     match te with
       ManifestTypeExpr (l, t) -> t
@@ -2079,7 +2089,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (ObjType ("null", []), RealTypeParam _) -> ()
     | (ObjType(_, []), RealTypeParam t) -> ()
     | (ObjType ("null", []), ArrayType _) -> ()
+    (* e.g. T obj is set in array Object[]. expected type is Object, real type is T. When bounds are introduced this statement will not longer be true and will require a change *)
+    | (RealTypeParam t, ObjType("java.lang.Object", [])) -> ()
     | (ArrayType _, ObjType ("java.lang.Object", [])) -> ()
+    (* It is possible that type inference finds a type to be a real type parameter, 
+    this way the type has not been erased (because type inference retrieves the type information from real code). In Ghost code any real type parameter equals it's erased type. *)
+    | (RealTypeParam t0, t1) when inAnnotation = Some(true) -> expect_type_core l msg inAnnotation (erase_type (RealTypeParam t0)) t1
     (* Note that in Java short[] is not assignable to int[] *)
     | (ArrayType et, ArrayType et0) when et = et0 -> ()
     | (ArrayType (ObjType(t0, ts0)), ArrayType (ObjType(t1, ts1))) -> expect_type_core l msg None (ObjType (t0, ts0)) (ObjType(t1, ts1))
@@ -2728,7 +2743,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if not (List.mem_assoc (methodName, signature) cmeths) then
           static_error l (Printf.sprintf "Internal error: no method '%s(%s)' found in class '%s'" methodName (String.concat ", " (List.map string_of_type signature)) className) None
       end;
-      WMethodCall (l, className, methodName, signature, args, Static, [])
+      WMethodCall (l, className, methodName, signature, args, Static)
     else
     let g = "vf__" ^ prefix ^ "_" ^ fun_name in
     if not (List.mem_assoc g funcmap) then static_error l "Must include header <math.h> when using floating-point operations." None;
@@ -2782,7 +2797,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       else *)
         check_expr_t_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e t0 true in
     let rec get_methods tn mn =
-      let erase_sign sign = List.map (fun tp -> match tp with RealTypeParam t -> ObjType("java.lang.Object", []) | t -> t) sign in
+      let erase_sign sign = List.map (fun tp -> match tp with RealTypeParam t -> javaLangObject | t -> t) sign in
       let remove_overrides declared_methods inherited_methods =
         let inherited_method_erased = List.map (fun (sign, info) -> (sign, erase_sign sign, info)) inherited_methods in
         let declared_methods_erased = List.map (fun (sign, info) -> (erase_sign sign, info)) declared_methods in
@@ -3167,8 +3182,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (WVar (l2, x, LocalVar), PtrType pointeeType, None)
     | AddressOf (l, e) -> let (w, t, _) = check e in (AddressOf (l, w), PtrType t, None)
     | CallExpr (l, "getClass", [], [], [LitPat target], Instance) when language = Java ->
-      let w = checkt target (ObjType ("java.lang.Object", [])) in
-      (WMethodCall (l, "java.lang.Object", "getClass", [], [w], Instance, []), ObjType ("java.lang.Class", []), None)
+      let w = checkt target (javaLangObject) in
+      (WMethodCall (l, "java.lang.Object", "getClass", [], [w], Instance), ObjType ("java.lang.Class", []), None)
     | ExprCallExpr (l, e, es) ->
       let (w, t, _) = check e in
       let t = unfold_inferred_type t in
@@ -3270,14 +3285,16 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             Some(rt) -> replace_type rt
             | None -> Void
           in 
-          (sign', (tn', lm, gh, rt', xmap, pre, post, epost, terminates, fb', v, abstract, class_targs, sign))) ms in
+          (* Replace all class level type parameters with their respective type arguments *)
+          let xmap' = List.map (fun (name,tp) -> (name, replace_type tp)) xmap in
+          (sign', (tn', lm, gh, rt', xmap', pre, post, epost, terminates, fb', v, abstract, sign))) ms in
         let ms = List.filter (fun (sign, _) -> is_assignable_to_sign inAnnotation argtps sign) ms in
         let make_well_typed_method m =
           match m with
-          (sign', (tn', lm, gh, rt, xmap, pre, post, epost, terminates, fb', v, abstract, wctargs, sign)) ->
+          (sign', (tn', lm, gh, rt, xmap, pre, post, epost, terminates, fb', v, abstract, sign)) ->
             let (fb, es) = if fb = Instance && fb' = Static then (Static, List.tl es) else (fb, es) in
             if fb <> fb' then static_error l "Instance method requires target object" None
-            else (WMethodCall (l, tn', g, sign, es, fb, wctargs), rt, None)
+            else (WMethodCall (l, tn', g, sign, es, fb), rt, None)
         in
         begin match ms with
           [] -> static_error l "No matching method" None
@@ -3425,7 +3442,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (SizeofExpr (l, ManifestTypeExpr (type_expr_loc te, t)), sizeType, None)
     | InstanceOfExpr(l, e, te) ->
       let t = check_pure_type (pn,ilist) tparams Real te in
-      let w = checkt e (ObjType ("java.lang.Object", [])) in
+      let w = checkt e (javaLangObject) in
       (InstanceOfExpr (l, w, ManifestTypeExpr (type_expr_loc te, t)), boolt, None)
     | SuperMethodCall(l, mn, args) ->
       let rec get_implemented_instance_method cn mn argtps =
@@ -3525,7 +3542,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | (Int (_, _), Int (_, _)) when isCast -> w
         | ((Int (_, _)|Float|Double|LongDouble), (Float|Double|LongDouble)) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
         | ((Float|Double|LongDouble), (Int (_, _))) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
-        | (ObjType ("java.lang.Object", []), ArrayType _) when isCast -> w
+        | (javaLangObject, ArrayType _) when isCast -> w
         | _ ->
           expect_type (expr_loc e) inAnnotation t t0;
           if try expect_type dummy_loc inAnnotation t0 t; false with StaticError _ -> true then
@@ -4041,7 +4058,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (_, []) -> static_error l "Too few patterns" None
   
   let get_class_of_this =
-    WMethodCall (dummy_loc, "java.lang.Object", "getClass", [], [WVar (dummy_loc, "this", LocalVar)], Instance, [])
+    WMethodCall (dummy_loc, "java.lang.Object", "getClass", [], [WVar (dummy_loc, "this", LocalVar)], Instance)
   
   let get_class_finality tn = (* Returns ExtensibleClass if tn is an interface *)
     match try_assoc tn classmap1 with
@@ -4238,6 +4255,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | PointsTo (l, lhs, v) ->
       let (wlhs, t) = check_expr (pn,ilist) tparams tenv (Some true) lhs in
+      Printf.printf "pointsTo resulted in type %s and tparams %s and tenv: %s \n" (string_of_type t) (String.concat "," tparams)
+        (String.concat "," (List.map (fun (name, tp) -> name ^ "->" ^ (string_of_type tp)) tenv));
       begin match wlhs with
         WRead (_, _, _, _, _, _, _, _) | WReadArray (_, _, _, _) -> ()
       | WVar (_, _, GlobalName) -> ()
@@ -5459,7 +5478,7 @@ let check_if_list_is_defined () =
           Java -> get_unique_var_symb "stringLiteral" (ObjType ("java.lang.String", []))
         | _ -> get_unique_var_symb "stringLiteral" (PtrType (Int (Signed, 0)))
         end
-    | WMethodCall (l, "java.lang.Object", "getClass", [], [target], Instance, []) ->
+    | WMethodCall (l, "java.lang.Object", "getClass", [], [target], Instance) ->
       ev state target $. fun state t ->
       cont state (ctxt#mk_app get_class_symbol [t])
     | WPureFunCall (l, g, targs, args) ->

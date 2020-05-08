@@ -25,7 +25,15 @@ public class GenericClass<T>{
 	}
 }
 
-public class Foo {}
+public class Foo<T> {
+	public Foo(T arg)
+	//@ requires true;
+	//@ ensures true;
+	{
+		GenericClass<T> b = new GenericClass<T>(arg);
+	}
+}
+
 
 /*
 	Proper method overrides
@@ -56,10 +64,6 @@ public class ChildClassInheritance<C,D> extends AbstractParentClass<C,D>{
 
 public class HelloWorld 
 {
-  public static <T,V> void genericFunction(T argument, V other)
-  //@ requires true;
-  //@ ensures true;
-  {}
   public static GenericClass<GenericClass<Foo> > genericInstance;
   
   public static void main(String[] args) 
@@ -67,6 +71,7 @@ public class HelloWorld
     //@ ensures true; 
   {
     System.out.println("Hello, World");
+    Foo<String> foo = new Foo<String>("test");
     GenericClass<GenericClass<String> > list = new GenericClass<GenericClass<String> >(new GenericClass<String>("foo"));
     list.add(new GenericClass<String>("hello"));
     GenericClass<String> s = list.get();   // no cast
