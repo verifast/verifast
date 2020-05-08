@@ -633,7 +633,7 @@ and sexpr_of_decl (decl : decl) : sexpression =
                                 ; "postcondition", sexpr_of_pred post ]
       in
       let kw = List.concat [ [ "kind", sexpr_of_func_kind kind
-                             ; "type-parameters", List (List.map sexpr_of_tparam tparams )
+                             ; "type-parameters", List (List.map symbol tparams )
                              ; "return-type", sexpr_of_type_expr_option rtype
                              ; "parameters", List (List.map sexpr_of_arg params) ]
                            ; body
@@ -649,7 +649,7 @@ and sexpr_of_decl (decl : decl) : sexpression =
                       inductiveness) ->
       build_list [ Symbol "declare-predicate-family"
                  ; Symbol name ]
-                 [ "type-parameters", List (List.map sexpr_of_tparam tparams)
+                 [ "type-parameters", List (List.map symbol tparams)
                  ; "parameters", List (List.map sexpr_of_type_expr params)
                  ; "index-count", sexpr_of_int index_count
                  ; "coinductive", sexpr_of_bool (inductiveness = Inductiveness_CoInductive)]
@@ -665,7 +665,7 @@ and sexpr_of_decl (decl : decl) : sexpression =
       in
       build_list [ Symbol "declare-predicate-family-instance"
                  ; Symbol name ]
-                 [ "type-parameters", List (List.map sexpr_of_tparam tparams) 
+                 [ "type-parameters", List (List.map symbol tparams) 
                  ; "parameters", List (List.map arg_pair params)
                  ; "predicate", sexpr_of_pred predicate ]
     | ImportModuleDecl (loc, name) ->
@@ -674,7 +674,7 @@ and sexpr_of_decl (decl : decl) : sexpression =
     | Inductive (_, name, tparams, cons) ->
       build_list [ Symbol "declare-inductive"
                  ; Symbol name]
-                 [ "tparams", List (List.map sexpr_of_tparam tparams)
+                 [ "tparams", List (List.map symbol tparams)
                  ; "constructors", sexpr_of_list sexpr_of_inductive_constructor cons ]
     | Interface (_, id, inters, fields, meths, tparams, preds) ->
       build_list [ Symbol "declare-interface"
