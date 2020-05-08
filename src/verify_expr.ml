@@ -111,7 +111,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let current_thread_name = "currentThread"
   let current_thread_type = intType
-
+  
   (* Region: function contracts *)
   
   let functypemap1 =
@@ -591,8 +591,6 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let rank_counter = ref 0
 
-  
-
   let classmap1 =
     let rec iter classmap1_done classmap1_todo =
       let interf_specs_for_sign sign (itf, passedTypes) =
@@ -636,9 +634,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | Some (MethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, terminates, ss, Instance, v, _, abstract)) -> [(cn, ItfMethodInfo (lm, gh, rt, xmap, pre_dyn, pre_tenv, post_dyn, epost_dyn, terminates, v, abstract))]
           | _ -> []
         in
-        specs @ super_specs_for_sign sign 
-        super 
-        interfs
+        specs @ super_specs_for_sign sign super interfs
       in
       let string_of_rt rt = match rt with Some(t) -> string_of_type t | _ -> "void" in
       let erase_rt rt = match rt with Some(t) -> Some(erase_type t) | None -> None in
@@ -733,14 +729,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let rec iter cmap ctors =
           match ctors with
             [] -> (cn, {cl=l; cabstract=abstract; cfinal=fin; cmeths=meths; cfds=fds; cctors=List.rev cmap; csuper=super; ctpenv=tparams; cinterfs=interfs; cpreds=preds; cpn=pn; cilist=ilist})
-            | Cons (lm, ps, co, ss, v, meth_tparams)::ctors ->
+            | Cons (lm, ps, co, ss, v)::ctors ->
               let xmap =
                 let rec iter xm xs =
                   match xs with
                    [] -> List.rev xm
                  | (te, x)::xs ->
                    if List.mem_assoc x xm then static_error l "Duplicate parameter name." None;
-                   let t = check_pure_type (pn, ilist) (tparams@meth_tparams) Real te in
+                   let t = check_pure_type (pn, ilist) tparams Real te in
                    iter ((x, t)::xm) xs
                 in
                 iter [] ps
@@ -1035,7 +1031,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let rec iter clist cons_impl=
               match clist with
                 [] -> cons_impl
-              | Cons (lm,ps, co,None,v, tparams)::rest ->
+              | Cons (lm,ps, co,None,v)::rest ->
                 if List.mem (cn,lm) cons_impl then
                   let cons_impl'= remove (fun (x,l0) -> x=cn && lm=l0) cons_impl in
                   iter rest cons_impl'
@@ -2177,7 +2173,6 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           (lm, gh, rt, xmap, pre_dyn, post_dyn, epost_dyn, terminates, is_upcall, target_class, fb, v)
         | _ ->
           let InterfaceInfo (_, _, methods, _, _, _) = List.assoc tn interfmap in
-          
           let ItfMethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, terminates, v, abstract) = 
             try List.assoc (m, pts) methods with 
             Not_found -> (* Method contains type parameters *)

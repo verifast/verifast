@@ -252,7 +252,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let cell = ref 0 in
       Hashtbl.add used_ids s cell;
       cell
-
+  
   (** Generate a fresh ID based on string [s]. *)
   let mk_ident s =
     let count_cell = get_ident_use_count_cell s in
@@ -507,7 +507,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let cons' = cons |> List.filter begin
         fun x ->
           match x with
-            | Cons (lm, ps, co, ss, v, _) ->
+            | Cons (lm, ps, co, ss, v) ->
               match ss with
                 | None -> true
                 | Some _ -> false
@@ -4046,8 +4046,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ([], _) -> static_error l "Too many patterns" None
     | (_, []) -> static_error l "Too few patterns" None
   
-  let check_pat (pn,ilist) tparams tenv t p = 
-  let (w, tenv') = check_pat_core (pn,ilist) tparams tenv t p in (w, tenv' @ tenv)
+  let check_pat (pn,ilist) tparams tenv t p = let (w, tenv') = check_pat_core (pn,ilist) tparams tenv t p in (w, tenv' @ tenv)
   
   let rec check_pats (pn,ilist) l tparams tenv ts ps =
     match (ts, ps) with

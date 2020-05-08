@@ -526,11 +526,10 @@ and translate_constructors decls =
       | GEN.Constructor(l, anns, tparams, access, params, throws, stmts, autogen) ->
           let l' = translate_location l in
           let params' = List.map translate_param params in
-          let tparams' = translate_tparams_as_string tparams in
           let contr' = check_contract l anns throws autogen in
           let stmts' = translate_block l stmts in
           let access' = translate_accessibility access in
-          Some([VF.Cons(l', params', contr', stmts', access', tparams')])
+          Some([VF.Cons(l', params', contr', stmts', access')])
       | _ -> None
   in 
   translate_class_decls_helper translator decls

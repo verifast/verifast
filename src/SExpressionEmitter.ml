@@ -747,10 +747,8 @@ and sexpr_of_meths (meth : meth) : sexpression =
       build_list [ Symbol "declare-method"; Symbol name ] kw
 
 and sexpr_of_constructor (name : string) (cons : cons) : sexpression =
-  let sexpr_of_tparam tparam =
-    Symbol tparam in
   match cons with
-  | Cons (loc, params, contract, body, vis, tparams) ->
+  | Cons (loc, params, contract, body, vis) ->
     let sexpr_of_arg (t, id) =
       List [ Symbol id; sexpr_of_type_expr t ]
     in
@@ -765,8 +763,7 @@ and sexpr_of_constructor (name : string) (cons : cons) : sexpression =
         | Some (pre, post, _, _) -> [ "precondition", sexpr_of_pred pre
                                     ; "postcondition", sexpr_of_pred post ] 
     in        
-    let kw = List.concat [ [ "parameters", List (List.map sexpr_of_arg params)
-                            ; "type-parameters", List (List.map sexpr_of_tparam tparams) ]
+    let kw = List.concat [ [ "parameters", List (List.map sexpr_of_arg params) ]
                           ; body
                           ; contract ]
     in

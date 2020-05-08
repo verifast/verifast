@@ -649,8 +649,7 @@ and
       (type_expr * string) list * 
       (asn * asn * ((type_expr * asn) list) * bool (*terminates*) ) option * 
       ((stmt list * loc (* Close brace *)) * int (*rank*)) option * 
-      visibility *
-      string list (* type parameters *)
+      visibility
 and
   instance_pred_decl = (* ?instance_pred_decl *)
   | InstancePredDecl of loc * string * (type_expr * string) list * asn option

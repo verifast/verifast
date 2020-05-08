@@ -279,7 +279,7 @@ and
 and
   constr m=
   match m with
-    ConsMember(Cons(l, ps, co, ss, v, tparams))::ms -> Cons(l, ps, co, ss, v, tparams)::(constr ms)
+    ConsMember(Cons(l, ps, co, ss, v))::ms -> Cons(l, ps, co, ss, v)::(constr ms)
     |_::ms -> constr ms
     | []->[]
 and
@@ -328,7 +328,7 @@ and
 and
   parse_throws_clause = parser
   [< '(l, Kwd "throws"); epost = rep_comma (parse_thrown l) >] -> epost
-and 
+and
   parse_array_dims t = parser
   [< '(l, Kwd "["); '(_, Kwd "]"); t = parse_array_dims (ArrayTypeExpr (l, t)) >] -> t
 | [< >] -> t
@@ -336,14 +336,13 @@ and
   id x = parser [< >] -> x
 and 
   parse_java_modifier = parser [< '(l, Kwd "public") >] -> VisibilityModifier(Public) | [< '(l, Kwd "protected") >] -> VisibilityModifier(Protected) | [< '(l, Kwd "private") >] -> VisibilityModifier(Private) | [< '(l, Kwd "static") >] -> StaticModifier | [< '(l, Kwd "final") >] -> FinalModifier | [< '(l, Kwd "abstract") >] -> AbstractModifier
-and 
+and
   parse_java_member cn = parser
   [< modifiers = rep parse_java_modifier;
      binding = (fun _ -> if List.mem StaticModifier modifiers then Static else Instance);
      final = (fun _ -> List.mem FinalModifier modifiers);
      abstract = (fun _ -> List.mem AbstractModifier modifiers);
      vis = (fun _ -> (match (try_find (function VisibilityModifier(_) -> true | _ -> false) modifiers) with None -> Package | Some(VisibilityModifier(vis)) -> vis));
-     tparams = type_params_parse;
      t = parse_return_type;
      member = parser
        [< '(l, Ident x);
@@ -373,7 +372,7 @@ and
        in
        if binding = Static then raise (ParseException (l, "A constructor cannot be static."));
        if final then raise (ParseException (l, "A constructor cannot be final."));
-       ConsMember (Cons (l, ps, co, ss, vis, tparams))
+       ConsMember (Cons (l, ps, co, ss, vis))
   >] -> member
 and parse_array_init_rest = parser
   [< '(_, Kwd ","); es = opt(parser [< e = parse_expr; es = parse_array_init_rest >] -> e :: es) >] -> (match es with None -> [] | Some(es) -> es)
@@ -386,13 +385,13 @@ and parse_declaration_rhs te = parser
   [< '(linit, Kwd "{"); es = parse_array_init >] ->
   (match te with ArrayTypeExpr (_, elem_te) -> NewArrayWithInitializer (linit, elem_te, es) | _ -> InitializerList (linit, es))
 | [< e = parse_expr >] -> e
-and 
+and
   parse_declarator t = parser
   [< '(l, Ident x);
      tx = parse_array_braces t;
      init = opt (parser [< '(_, Kwd "="); e = parse_declaration_rhs tx >] -> e);
   >] -> (l, tx, x, init, (ref false, ref None))
-and 
+and
   parse_method_rest l = parser
   [< ps = parse_paramlist;
     epost = opt parse_throws_clause;
@@ -420,7 +419,7 @@ and
         end
     in
     (ps, contract, ss)
-and 
+and
   parse_functype_paramlists = parser
   [< ps1 = parse_paramlist; ps2 = opt parse_paramlist >] -> (match ps2 with None -> ([], ps1) | Some ps2 -> (ps1, ps2))
 and
@@ -450,13 +449,13 @@ and
 | [< '(l, Kwd "__forceinline") >] -> ()
 | [< '(l, Kwd "__always_inline") >] -> ()
 | [< >] -> ()
-and 
+and
   parse_enum_body = parser
   [< '(_, Kwd "{");
      elems = rep_comma (parser [< '(_, Ident e); init = opt (parser [< '(_, Kwd "="); e = parse_expr >] -> e) >] -> (e, init));
      '(_, Kwd "}")
    >] -> elems
-and 
+and
   parse_decl = parser
   [< '(l, Kwd "struct"); '(_, Ident s); d = parser
     [< fs = parse_fields; '(_, Kwd ";") >] -> Struct (l, s, Some fs)
