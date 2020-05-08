@@ -334,7 +334,6 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
       build_list [ Symbol "expr-new-obj"; Symbol cn ]
                  [ "args", sexpr_of_list sexpr_of_expr args ;
                   "targs", sexpr_of_option (fun targs -> sexpr_of_list sexpr_of_type_expr targs) targs ]
-
     | NewArrayWithInitializer (l, texpr, args) -> 
       build_list [ Symbol "expr-array-init" ]
                  [ "type", sexpr_of_type_expr texpr
@@ -748,6 +747,8 @@ and sexpr_of_meths (meth : meth) : sexpression =
       build_list [ Symbol "declare-method"; Symbol name ] kw
 
 and sexpr_of_constructor (name : string) (cons : cons) : sexpression =
+  let sexpr_of_tparam tparam =
+    Symbol tparam in
   match cons with
   | Cons (loc, params, contract, body, vis, tparams) ->
     let sexpr_of_arg (t, id) =
@@ -765,7 +766,7 @@ and sexpr_of_constructor (name : string) (cons : cons) : sexpression =
                                     ; "postcondition", sexpr_of_pred post ] 
     in        
     let kw = List.concat [ [ "parameters", List (List.map sexpr_of_arg params)
-                            ; "type-parameters", Symbol (String.concat ", " tparams) ]
+                            ; "type-parameters", List (List.map sexpr_of_tparam tparams) ]
                           ; body
                           ; contract ]
     in

@@ -61,6 +61,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match extended with
         None -> consume_asn rules [] h [] hpInvEnv inv true real_unit (fun _ h _ _ _ -> cont h)
       | Some(ehname) -> assert_handle_invs bcn hpmap ehname hpInvEnv h (fun h ->  consume_asn rules [] h [] hpInvEnv inv true real_unit (fun _ h _ _ _ -> cont h))
+  
   let rec verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont econt =
     let l = stmt_loc s in
     if not (is_transparent_stmt s) then begin !stats#stmtExec l; reportStmtExec l end;
@@ -2052,7 +2053,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | Some cont -> cont blocks_done sizemap tenv ghostenv h env
       end
     | SuperConstructorCall(l, es) -> static_error l "super must be first statement of constructor." None
-  and 
+  and
     verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt =
     match ss with
       [] -> cont sizemap tenv ghostenv h env
@@ -2062,7 +2063,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt
         ) return_cont econt
       )
-  and 
+  and
     check_backedge_termination currentThread leminfo l tenv h cont =
       let consume_func_call_perm g =
         let gterm = List.assoc g funcnameterms in
@@ -2084,7 +2085,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   (* Region: verification of blocks *)
   
-  and 
+  and
     goto_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env return_cont econt block =
     let `Block (inv, ss, cont) = block in
     let l() =
@@ -2378,8 +2379,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       ctxt#assume_forall g trigger tps body
   | (WPredAsn(p_loc, p_ref, true, p_targs, p_args1, p_args2), Sep(_, WPredAsn(_, q_ref, true, q_targs, q_args1, q_args2), conditions))
     when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_,_) -> true | _ -> false) (p_args1 @ p_args2) && 
-         List.length p_targs = List.length tparams' && (List.for_all (fun (x, t) -> 
-          match (x, t) with 
+         List.length p_targs = List.length tparams' && (List.for_all (fun (x, t) -> match (x, t) with 
             | (x, GhostTypeParam(y)) when x = y -> true
             | _ -> false) (zip2 tparams' p_targs)) &&
          p_ref#name = q_ref#name && List.for_all2 (fun (VarPat(_, x)) arg2 -> match arg2 with LitPat(WVar(_, y, _)) -> x = y | _ -> false) (p_args1 @ p_args2) (q_args1 @ q_args2) &&
@@ -2387,8 +2387,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (Hashtbl.add auto_lemmas (p_ref#name) (None, tparams', List.map (fun (VarPat(_,x)) -> x) p_args1, List.map (fun (VarPat(_,x)) -> x) p_args2, pre, post))
   | (CoefAsn(loc, VarPat(_,f), WPredAsn(p_loc, p_ref, _, p_targs, p_args1, p_args2)), Sep(_, CoefAsn(_, LitPat(WVar(_, g, _)), WPredAsn(_, q_ref, true, q_targs, q_args1, q_args2)), conditions)) 
     when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_,_) -> true | _ -> false) (p_args1 @ p_args2) && 
-         List.length p_targs = List.length tparams' && (List.for_all (fun (tp, t) -> 
-          match (tp, t) with 
+         List.length p_targs = List.length tparams' && (List.for_all (fun (tp, t) -> match (tp, t) with 
             | (x, GhostTypeParam(y)) when x = y -> true 
             | _ -> false) (zip2 tparams' p_targs)) &&
          p_ref#name = q_ref#name && List.for_all2 (fun (VarPat(_, x)) arg2 -> match arg2 with LitPat(WVar(_, y, _)) -> x = y | _ -> false) (p_args1 @ p_args2) (q_args1 @ q_args2) &&
@@ -2728,7 +2727,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             if fb = Instance then
             begin
               let ("this", thisTerm)::_ = env in
-              let ("this", ObjType (cn,_))::_ = ps in
+              let ("this", ObjType (cn, _))::_ = ps in
               (* CAVEAT: Remove this assumption once we allow subclassing. *)
               (* assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [thisTerm]) (List.assoc cn classterms)) $. fun () -> *)
               begin fun cont ->

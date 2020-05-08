@@ -8,8 +8,7 @@ import java.util.*;
 /*@
 
 predicate_ctor channel_sema_inv(Channel channel)() =
-    channel.itemList |-> ?itemList &*& itemList.List(?items) 
-    &*& [1/2]channel.items_ |-> items &*&
+    channel.itemList |-> ?itemList &*& itemList.List(?items) &*& [1/2]channel.items_ |-> items &*&
     [1/2]channel.queueMaxSize |-> ?qms &*& length(items) <= qms;
 
 @*/

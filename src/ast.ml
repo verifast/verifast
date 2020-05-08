@@ -799,11 +799,6 @@ let func_kind_of_ghostness gh =
   
 (* Region: some AST inspector functions *)
 
-let string_of_ghostness gh =
-  match gh with
-    Real -> "Real"
-    | Ghost -> "Ghost"
-
 let string_of_func_kind f=
   match f with
     Lemma(_) -> "lemma"

@@ -366,14 +366,6 @@ and translate_tparams_as_string tparams =
     let res = translate_tparams_as_string tail
       in name::res;
 
-and translate_tparams_as_type_expr tparams =
-  debug_print "translate_tparams_as_type_expr";
-  match tparams with
-  | GEN.TypeParam(l, Identifier(sl, name), bounds) :: tail ->
-    let l'= translate_location l in
-    let res = translate_tparams_as_type_expr tail
-      in IdentTypeExpr(l', None, name)::res;
-
 and translate_field_finality fin =
   debug_print "translate_field_finality";
   match fin with

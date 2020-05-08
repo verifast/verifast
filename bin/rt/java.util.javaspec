@@ -151,8 +151,7 @@ fixpoint list<t> remove_nths<t>(list<int> ns, list<t> xs) {
 
 public interface List<E> extends Collection<E> {
     
-    //@ predicate List(list<Object> elements);
-    		
+    //@ predicate List(list<Object> elements);   		
     /*@
     
     lemma void listToIterable();

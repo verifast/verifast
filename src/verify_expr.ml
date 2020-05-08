@@ -111,6 +111,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let current_thread_name = "currentThread"
   let current_thread_type = intType
+
   (* Region: function contracts *)
   
   let functypemap1 =
@@ -441,12 +442,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let erasedSign = (n, List.map erase_type (List.map snd xmap)) in
             if List.mem_assoc erasedSign erased_mmap then static_error lm "Duplicate method after erasure." None;
             let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn, ilist) (tparams) Real rt) in
-            let erased_xmap = List.map (fun (name, tp) -> (name, erase_type tp)) xmap in
             let (pre, pre_tenv, post, epost, terminates) =
               match co with
                 None -> static_error lm ("Non-fixpoint function must have contract: "^n) None
               | Some (pre, post, epost, terminates) ->
-                let (pre, tenv) = check_asn (pn,ilist) [] ((current_thread_name, current_thread_type)::erased_xmap) pre in
+                let (pre, tenv) = check_asn (pn,ilist) [] ((current_thread_name, current_thread_type)::xmap) pre in
                 let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
                 let (post, _) = check_asn (pn,ilist) [] postmap post in
                 let epost = List.map (fun (tp, epost) -> 
@@ -487,10 +487,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let rec match_meths meths0 meths1=
           match meths0 with
             [] -> if meths1 <> [] then static_error l1 ".java file does not correctly implement .javaspec file: interface declares more methods" None
-          | (sign, ItfMethodInfo (lm0, gh0, rt0, xmap0, pre0, pre_tenv0, post0, epost0, terminates0, v0, abstract0))::meths0 ->
+          | (sign, ItfMethodInfo (lm0,gh0,rt0,xmap0,pre0,pre_tenv0,post0,epost0,terminates0,v0,abstract0))::meths0 ->
             match try_assoc sign meths1 with
               None-> static_error l1 (".java file does not correctly implement .javaspec file: interface does not declare method " ^ string_of_sign sign) None
-            | Some (ItfMethodInfo (lm1, gh1, rt1, xmap1, pre1, pre_tenv1, post1, epost1, terminates1, v1, abstract1)) ->
+            | Some (ItfMethodInfo (lm1,gh1,rt1,xmap1,pre1,pre_tenv1,post1,epost1,terminates1,v1,abstract1)) ->
               let (mn, _) = sign in
               check_func_header_compat lm1 ("Method '" ^ mn ^ "'") "Method specification check" [] (func_kind_of_ghostness gh1,[],rt1, xmap1,false, pre1, post1, epost1, terminates1) (func_kind_of_ghostness gh0, [], rt0, xmap0, false, [], [], pre0, post0, epost0, terminates1);
               match_meths meths0 (List.remove_assoc sign meths1)
@@ -667,17 +667,16 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let erasedSign = (n, List.map erase_type (List.map snd xmap1)) in
             if List.mem_assoc erasedSign erased_mmap then static_error lm "Duplicate method after erasure." None;
             let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn, ilist) tparams Real rt) in
-            let erased_xmap = List.map (fun (name, tp) -> (name, erase_type tp)) xmap in
             let co =
               match co with
                 None -> None
               | Some (pre, post, epost, terminates) ->
-                let (wpre, tenv) = check_asn (pn,ilist) tparams ((current_class, ClassOrInterfaceName cn)::(current_thread_name, current_thread_type)::xmap) pre in
+                let (wpre, tenv) = check_asn (pn,ilist) [] ((current_class, ClassOrInterfaceName cn)::(current_thread_name, current_thread_type)::xmap) pre in
                 let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
-                let (wpost, _) = check_asn (pn,ilist) tparams postmap post in
+                let (wpost, _) = check_asn (pn,ilist) [] postmap post in
                 let wepost = List.map (fun (tp, epost) -> 
-                  let (wepost, _) = check_asn (pn,ilist) tparams ((current_class, ClassOrInterfaceName cn)::(current_thread_name, current_thread_type)::xmap) epost in
-                  let tp = check_pure_type (pn,ilist) tparams Real tp in
+                  let (wepost, _) = check_asn (pn,ilist) [] ((current_class, ClassOrInterfaceName cn)::(current_thread_name, current_thread_type)::xmap) epost in
+                  let tp = check_pure_type (pn,ilist) [] Real tp in
                   (tp, wepost)
                 ) epost in
                 let (wpre_dyn, wpost_dyn, wepost_dyn) = if fb = Static then (wpre, wpost, wepost) else (dynamic_of wpre, dynamic_of wpost, List.map (fun (tp, wepost) -> (tp, dynamic_of wepost)) wepost) in
@@ -875,7 +874,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let epost1: (type_ * asn) list = epost1 in
                   let (mn, _) = sign0 in
                   check_func_header_compat lm1 ("Method '" ^ mn ^ "'") "Method implementation check" []
-                    (func_kind_of_ghostness gh1, [], rt1, xmap1,false, pre1, post1, epost1, terminates1)
+                    (func_kind_of_ghostness gh1,[], rt1, xmap1,false, pre1, post1, epost1, terminates1)
                     (func_kind_of_ghostness gh0, [], rt0, xmap0, false, [], [], pre0, post0, epost0, terminates0);
                   if ss0=None then meths_impl:=(fst sign0,lm0)::!meths_impl;
                   iter rest meths1
@@ -944,7 +943,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in  
       let rec get_overrides cn =
         if cn = "java.lang.Object" then [] else
-        let {cmeths; csuper=(csuper,targs)} = List.assoc cn classmap in
+        let {cmeths; csuper=(csuper, targs)} = List.assoc cn classmap in
         let overrides =
           flatmap
             begin fun (sign, MethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, terminates, ss, fb, v, is_override, abstract)) ->
@@ -1560,9 +1559,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let tpenv =
       match zip callee_tparams targs with
-        None -> static_error l (Printf.sprintf "Incorrect number of type arguments. callee_tparams: %s. type arguments: %s"
-          (String.concat "," callee_tparams)
-          (String.concat "," (List.map string_of_type targs))) None;
+        None -> static_error l "Incorrect number of type arguments." None;
       | Some tpenv -> tpenv
     in
     let ys: string list = List.map (function (p, t) -> p) ps in

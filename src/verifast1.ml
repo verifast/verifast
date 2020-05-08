@@ -252,6 +252,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let cell = ref 0 in
       Hashtbl.add used_ids s cell;
       cell
+
   (** Generate a fresh ID based on string [s]. *)
   let mk_ident s =
     let count_cell = get_ident_use_count_cell s in
@@ -708,7 +709,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       cmeths: (signature * method_info) list;
       cfds: field_info map;
       cctors: (type_ list * ctor_info) list;
-      csuper: (string  * type_ list);
+      csuper: (string * type_ list);
       cinterfs: (string * type_ list) list;
       cpreds: inst_pred_info map;
       cpn: string; (* package *)
@@ -1400,7 +1401,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match try_assoc2 id typedefmap0 typedefmap1 with
         Some t -> t
       | None ->
-      match resolve Ghost (pn, ilist) l id inductive_arities with
+      match resolve Ghost (pn,ilist) l id inductive_arities with
         Some (s, (ld, n)) ->
         if n > 0 then static_error l "Missing type arguments." None;
         reportUseSite DeclKind_InductiveType ld l;
@@ -1418,7 +1419,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if List.mem_assoc id functypenames || List.mem_assoc id functypemap0 then
         FuncType id
       else
-      match resolve Ghost (pn, ilist) l id abstract_types_map with
+      match resolve Ghost (pn,ilist) l id abstract_types_map with
         Some (n, l) ->
         AbstractType n
       | None ->
@@ -1427,9 +1428,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | IdentTypeExpr (l, Some(pac), id) ->
       let full_name = pac ^ "." ^ id in
       begin
-      match resolve Real (pac,ilist) l id class_arities with
+      match resolve Real (pac, ilist) l id class_arities with
         Some (_, (_, n)) -> ObjType(full_name, create_objects n)
-      | None -> match resolve Real (pac,ilist) l id class_arities with
+      | None -> match resolve Real (pac, ilist) l id class_arities with
         Some (_, (_, n)) -> ObjType(full_name, create_objects n)
       | None -> static_error l ("No such type parameter, inductive datatype, class, interface, or function type: " ^ full_name) None
       end
@@ -1446,7 +1447,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           ObjType (id, List.map check targs)
         | None -> 
           begin
-          match resolve Real (pn,ilist) l id class_arities with
+          match resolve Real (pn, ilist) l id class_arities with
             Some (id, (ld, n)) ->
             if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
             ObjType (id, List.map check targs)
@@ -1726,8 +1727,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match tparams with
         [] -> ()
       | x::xs ->
-        if List.mem x tparams0 then static_error l (Printf.sprintf "Type parameter '%s' hides existing type parameter '%s'." x x) None; iter xs;
-        if List.mem x xs then static_error l (Printf.sprintf "Duplicate type parameter '%s'." x) None
+        if List.mem x tparams0 then static_error l (Printf.sprintf "Type parameter '%s' hides existing type parameter '%s'." x x) None;
+        if List.mem x xs then static_error l (Printf.sprintf "Duplicate type parameter '%s'." x) None;
+        iter xs
     in
     iter tparams
   
@@ -2239,7 +2241,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let predfam =
             match fbinding with
               Static -> mk_predfam (cn ^ "_" ^ fn) fl [] 0 [ft] (Some 0) Inductiveness_Inductive
-            | Instance -> mk_predfam (cn ^ "_" ^ fn) fl [] 0 [ObjType (cn,[]); ft] (Some 1) Inductiveness_Inductive
+            | Instance -> mk_predfam (cn ^ "_" ^ fn) fl [] 0 [ObjType (cn, []); ft] (Some 1) Inductiveness_Inductive
           in
           ((cn, fn), predfam)
         end
@@ -2522,7 +2524,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     let ((super, superTargs), interfs, predmap) = proj info in
                     begin match try_assoc g predmap with
                       Some (l, pmap, family, symb, body) -> [(family, pmap, symb)]
-                    | None -> preds_in_class super @ flatmap preds_in_itf (List.map (fun (itf, _) -> itf) interfs)
+                    | None -> preds_in_class super @ flatmap preds_in_itf (List.map fst interfs)
                     end
                   | None -> fallback ()
                   end
@@ -2535,7 +2537,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   $. fun () ->
                 []
               in
-              match preds_in_class ((fun (spr,_) -> spr) super) @ flatmap preds_in_itf (List.map (fun (itf, _) -> itf) interfs) with
+              match preds_in_class (fst super) @ flatmap preds_in_itf (List.map fst interfs) with
                 (* InstancePredDecl currently does not support coinductive declarations. *)
                 [] -> (cn, get_unique_var_symb (cn ^ "#" ^ g) (PredType ([], [], None, Inductiveness_Inductive)))
               | [(family, pmap0, symb)] ->
@@ -3198,7 +3200,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if callee_tparams <> [] && targes = [] then
           let targs = List.map (fun _ -> InferredType (object end, ref Unconstrained)) callee_tparams in
           let Some tpenv = zip callee_tparams targs in
-           (targs, tpenv)
+          (targs, tpenv)
         else
           let targs = List.map (check_pure_type (pn,ilist) tparams Ghost) targes in
           let tpenv =
@@ -4090,7 +4092,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let search_classmap classmap proj fallback =
         match try_assoc cn classmap with
           Some info ->
-          let ((super,_), interfs, preds, tparams) = proj info in
+          let ((super, _), interfs, preds, tparams) = proj info in
           begin match try_assoc g preds with
             Some (_, pmap, family, symb, body) -> [(family, pmap, tparams)]
           | None -> find_in_class super @ flatmap find_in_interf (List.map fst interfs)
@@ -4255,8 +4257,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | PointsTo (l, lhs, v) ->
       let (wlhs, t) = check_expr (pn,ilist) tparams tenv (Some true) lhs in
-      Printf.printf "pointsTo resulted in type %s and tparams %s and tenv: %s \n" (string_of_type t) (String.concat "," tparams)
-        (String.concat "," (List.map (fun (name, tp) -> name ^ "->" ^ (string_of_type tp)) tenv));
       begin match wlhs with
         WRead (_, _, _, _, _, _, _, _) | WReadArray (_, _, _, _) -> ()
       | WVar (_, _, GlobalName) -> ()
@@ -4397,8 +4397,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     | (t::ts, x::xs) ->
                       if List.mem_assoc x tenv then static_error lc ("Pattern variable '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.") None;
                       let _ = if List.mem_assoc x xmap then static_error lc "Duplicate pattern variable." None in
-                      let xInfo = match unfold_inferred_type t with 
-                        GhostTypeParam x -> Some (provertype_of_type (List.assoc x tpenv)) | _ -> None in
+                      let xInfo = match unfold_inferred_type t with GhostTypeParam x -> Some (provertype_of_type (List.assoc x tpenv)) | _ -> None in
                       iter ((x, instantiate_type tpenv t)::xmap) (xInfo::xsInfo) ts xs
                     | ([], _) -> static_error lc "Too many pattern variables." None
                     | _ -> static_error lc "Too few pattern variables." None
@@ -4975,7 +4974,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let super_clintf =
         match info with
           InterfaceInfo (_, _, _, _, intfs, _) ->
-            ((List.map fst intfs), false, false)
+            (List.map fst intfs, false, false)
       in
       calculate_ancestry_from_direct_ancesters_info already_calculated_ancestries clinfname super_clintf
     in
@@ -4983,7 +4982,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let super_clintf =
         match info with
           (_, _, _, _, intfs, _, _, _) ->
-            ((List.map fst intfs), false, false)
+            (List.map fst intfs, false, false)
       in
       calculate_ancestry_from_direct_ancesters_info already_calculated_ancestries clinfname super_clintf
     in
@@ -4993,7 +4992,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           if info.cfinal = FinalClass then true else false
         in
         let (csuper, superTargs) = info.csuper in
-        if csuper = "" then ((List.map fst info.cinterfs), true, iafc) else ((csuper :: (List.map fst info.cinterfs)), true, iafc) (* super class of Java.lang.Object is registered as "" *)
+        if csuper = "" then (List.map fst info.cinterfs, true, iafc) else ((csuper :: (List.map fst info.cinterfs)), true, iafc) (* super class of Java.lang.Object is registered as "" *)
       in
       calculate_ancestry_from_direct_ancesters_info already_calculated_ancestries clinfname super_clintf
     in
@@ -5001,7 +5000,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let super_clintf =
         match info with
           (_, _, fin, _, _, _, (spr, superTargs), _, intfs, _, _, _) ->
-            let intfs = (List.map fst intfs) in
+            let intfs = List.map fst intfs in
             let iafc =
               if fin = FinalClass then true else false
             in
@@ -5766,7 +5765,7 @@ let check_if_list_is_defined () =
            cs
        in
        ctxt#set_fpclauses fsym i clauses
-       | (g, (l, t, pmap, None, w, pn, ilist, fsym)) ->
+     | (g, (l, t, pmap, None, w, pn, ilist, fsym)) ->
        ctxt#begin_formal;
        let env = imap (fun i (x, tp) -> let pt = typenode_of_type tp in (pt, (x, ctxt#mk_bound i pt))) pmap in
        let tps = List.map fst env in
