@@ -10,8 +10,6 @@ open Verifast0
 open Verifast1
 open Assertions
 
-
-
 module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   include Assertions(VerifyProgramArgs)

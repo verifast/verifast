@@ -3277,11 +3277,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let ms = get_methods tn g in
         if ms = [] then on_fail () else
         let argtps = List.map (fun e -> let (_, tp, _) = (check e) in tp) args in
-        Printf.printf "Trying qualified call: <%s> %s.%s (%s);\n"
-          (String.concat ", " (List.map string_of_type class_targs))
-          tn
-          g
-          (String.concat ", " (List.map string_of_type argtps));
         (* Select the real methods with the correct number of type parameters *)
         let ms = List.map (fun (sign, (tn', lm, gh, rt, xmap, pre, post, epost, terminates, fb', v, abstract)) ->
           let targenv = if inAnnotation <> Some(true) then List.map2 (fun a b -> (a, b)) class_tparams class_targs else []
