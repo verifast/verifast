@@ -335,7 +335,7 @@ and
 and 
   id x = parser [< >] -> x
 and 
-  parse_java_modifier = parser [< '(_, Kwd "public") >] -> VisibilityModifier(Public) | [< '(l, Kwd "protected") >] -> VisibilityModifier(Protected) | [< '(l, Kwd "private") >] -> VisibilityModifier(Private) | [< '(l, Kwd "static") >] -> StaticModifier | [< '(l, Kwd "final") >] -> FinalModifier | [< '(l, Kwd "abstract") >] -> AbstractModifier
+  parse_java_modifier = parser [< '(_, Kwd "public") >] -> VisibilityModifier(Public) | [< '(_, Kwd "protected") >] -> VisibilityModifier(Protected) | [< '(_, Kwd "private") >] -> VisibilityModifier(Private) | [< '(_, Kwd "static") >] -> StaticModifier | [< '(_, Kwd "final") >] -> FinalModifier | [< '(_, Kwd "abstract") >] -> AbstractModifier
 and
   parse_java_member cn = parser
   [< modifiers = rep parse_java_modifier;
