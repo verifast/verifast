@@ -208,6 +208,7 @@ let sexpr_of_method_binding (binding : method_binding) : sexpression =
     | Instance -> Symbol "instance-method"
 
 let rec sexpr_of_expr (expr : expr) : sexpression =
+  let sexpr_of_tparam t = Symbol t in
   match expr with
     | Operation (loc, op, exprs) -> 
       build_list [ Symbol "expr-op"
@@ -325,7 +326,9 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
                  ; "name", Symbol name
                  ; "typs", sexpr_of_list sexpr_of_type_ typs
                  ; "exprs", sexpr_of_list sexpr_of_expr exprs 
-                 ; "stat", sexpr_of_method_binding bind ]
+                 ; "stat", sexpr_of_method_binding bind 
+                 ; "tparams", sexpr_of_list sexpr_of_tparam (List.map (fun (tparam,targ) -> tparam) tparamEnv)
+                 ; "targs", sexpr_of_list sexpr_of_type_ (List.map (fun (_,targ) -> targ) tparamEnv) ]
     | NewArray (_, texpr, expr) ->
       build_list [ Symbol "expr-new-array" ]
                  [ "texpr", sexpr_of_type_expr texpr
