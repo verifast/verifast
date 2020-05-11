@@ -1,6 +1,8 @@
 import java.util.ArrayList;
 import java.util.List;
 
+// Contains examples on how to work with generics in VeriFast.
+
 public class GenericClass<T>{
 	public T field;
 	public GenericClass(T f)
@@ -10,11 +12,12 @@ public class GenericClass<T>{
 		field = f;
 	}
 	
-	public void add(T arg)
+	public T add(T arg)
 	//@ requires this.field |-> ?f;
 	//@ ensures this.field |-> arg;
 	{
 		field = arg;
+		return field;
 	}
 	
 	public T get()
@@ -72,10 +75,9 @@ public class HelloWorld
   {
     System.out.println("Hello, World");
     Foo<String> foo = new Foo<String>("test");
-    GenericClass<GenericClass<String> > list = new GenericClass<GenericClass<String> >(new GenericClass<String>("foo"));
-    list.add(new GenericClass<String>("hello"));
-    GenericClass<String> s = list.get();   // no cast
-    genericFunction<GenericClass<String>,String >(list, "Foo");
-    genericFunction< >(list, "Foo");
+    GenericClass<String> simple = new GenericClass<String>("Example");
+    GenericClass<GenericClass<String> > nested = new GenericClass<GenericClass<String> >(new GenericClass<String>("foo"));
+    nested.add(new GenericClass<String>("hello"));
+    GenericClass<String> s = nested.get();   // no cast
   }
 }

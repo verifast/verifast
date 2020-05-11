@@ -279,7 +279,7 @@ and
 and
   constr m=
   match m with
-    ConsMember(Cons(l, ps, co, ss, v))::ms -> Cons(l, ps, co, ss, v)::(constr ms)
+    ConsMember(Cons(l,ps,co,ss,v))::ms -> Cons(l,ps,co,ss,v)::(constr ms)
     |_::ms -> constr ms
     | []->[]
 and
@@ -335,7 +335,7 @@ and
 and 
   id x = parser [< >] -> x
 and 
-  parse_java_modifier = parser [< '(l, Kwd "public") >] -> VisibilityModifier(Public) | [< '(l, Kwd "protected") >] -> VisibilityModifier(Protected) | [< '(l, Kwd "private") >] -> VisibilityModifier(Private) | [< '(l, Kwd "static") >] -> StaticModifier | [< '(l, Kwd "final") >] -> FinalModifier | [< '(l, Kwd "abstract") >] -> AbstractModifier
+  parse_java_modifier = parser [< '(_, Kwd "public") >] -> VisibilityModifier(Public) | [< '(l, Kwd "protected") >] -> VisibilityModifier(Protected) | [< '(l, Kwd "private") >] -> VisibilityModifier(Private) | [< '(l, Kwd "static") >] -> StaticModifier | [< '(l, Kwd "final") >] -> FinalModifier | [< '(l, Kwd "abstract") >] -> AbstractModifier
 and
   parse_java_member cn = parser
   [< modifiers = rep parse_java_modifier;
@@ -460,7 +460,7 @@ and
   [< '(l, Kwd "struct"); '(_, Ident s); d = parser
     [< fs = parse_fields; '(_, Kwd ";") >] -> Struct (l, s, Some fs)
   | [< '(_, Kwd ";") >] -> Struct (l, s, None)
-  | [< t = parse_type_suffix (StructTypeExpr (l, Some s, None)); d = parse_func_rest Regular (Some t) Public Real >] -> d
+  | [< t = parse_type_suffix (StructTypeExpr (l, Some s, None)); d = parse_func_rest Regular (Some t) Public >] -> d
   >] -> check_function_for_contract d
 | [< '(l, Kwd "typedef");
      rt = parse_return_type; '(_, Ident g);
@@ -492,9 +492,9 @@ and
   >] -> register_typedef g; ds
 | [< '(_, Kwd "enum"); '(l, Ident n); elems = parse_enum_body; '(_, Kwd ";"); >] ->
   [EnumDecl(l, n, elems)]
-| [< '(_, Kwd "static"); _ = parse_ignore_inline; t = parse_return_type; d = parse_func_rest Regular t Private Real >] -> check_function_for_contract d
-| [< '(_, Kwd "extern"); t = parse_return_type; d = parse_func_rest Regular t Public Real >] -> check_function_for_contract d
-| [< '(_, Kwd "_Noreturn"); _ = parse_ignore_inline; t = parse_return_type; d = parse_func_rest Regular t Public Real >] ->
+| [< '(_, Kwd "static"); _ = parse_ignore_inline; t = parse_return_type; d = parse_func_rest Regular t Private >] -> check_function_for_contract d
+| [< '(_, Kwd "extern"); t = parse_return_type; d = parse_func_rest Regular t Public >] -> check_function_for_contract d
+| [< '(_, Kwd "_Noreturn"); _ = parse_ignore_inline; t = parse_return_type; d = parse_func_rest Regular t Public >] ->
   let ds = check_function_for_contract d in
   begin match ds with
     [Func (l, k, tparams, t, g, ps, gc, ft, Some (pre, post), terminates, ss, static, v)] ->
@@ -505,7 +505,7 @@ and
   | _ -> ()
   end;
   ds
-| [< t = parse_return_type; d = parse_func_rest Regular t Public Real >] -> check_function_for_contract d
+| [< t = parse_return_type; d = parse_func_rest Regular t Public >] -> check_function_for_contract d
 and check_for_contract: 'a. 'a option -> loc -> string -> (asn * asn -> 'a) -> 'a = fun contract l m f ->
   match contract with
     | Some spec -> spec 
@@ -556,7 +556,7 @@ and
 and
   parse_pure_decl = parser
     [< '(l, Kwd "inductive"); '(li, Ident i); tparams = parse_type_params li; '(_, Kwd "="); cs = (parser [< cs = parse_ctors >] -> cs | [< cs = parse_ctors_suffix >] -> cs); '(_, Kwd ";") >] -> [Inductive (l, i, tparams, cs)]
-  | [< '(l, Kwd "fixpoint"); t = parse_return_type; d = parse_func_rest Fixpoint t Public Ghost>] -> [d]
+  | [< '(l, Kwd "fixpoint"); t = parse_return_type; d = parse_func_rest Fixpoint t Public>] -> [d]
   | [< '(l, Kwd "predicate"); result = parse_predicate_decl l Inductiveness_Inductive >] -> result
   | [< '(l, Kwd "copredicate"); result = parse_predicate_decl l Inductiveness_CoInductive >] -> result
   | [< '(l, Kwd "predicate_family"); '(_, Ident g); is = parse_paramlist; (ps, inputParamCount) = parse_pred_paramlist; '(_, Kwd ";") >]
@@ -565,8 +565,8 @@ and
      p = parse_pred_body; '(_, Kwd ";"); >] -> [PredFamilyInstanceDecl (l, g, [], is, ps, p)]
   | [< '(l, Kwd "predicate_ctor"); '(_, Ident g); ps1 = parse_paramlist; (ps2, inputParamCount) = parse_pred_paramlist;
      p = parse_pred_body; '(_, Kwd ";"); >] -> [PredCtorDecl (l, g, ps1, ps2, inputParamCount, p)]
-  | [< '(l, Kwd "lemma"); t = parse_return_type; d = parse_func_rest (Lemma(false, None)) t Public Ghost >] -> [d]
-  | [< '(l, Kwd "lemma_auto"); trigger = opt (parser [< '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); >] -> e); t = parse_return_type; d = parse_func_rest (Lemma(true, trigger)) t Public Ghost>] -> [d]
+  | [< '(l, Kwd "lemma"); t = parse_return_type; d = parse_func_rest (Lemma(false, None)) t Public >] -> [d]
+  | [< '(l, Kwd "lemma_auto"); trigger = opt (parser [< '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); >] -> e); t = parse_return_type; d = parse_func_rest (Lemma(true, trigger)) t Public>] -> [d]
   | [< '(l, Kwd "box_class"); '(_, Ident bcn); ps = parse_paramlist;
        '(_, Kwd "{"); '(_, Kwd "invariant"); inv = parse_asn; '(_, Kwd ";");
        ads = parse_action_decls; hpds = parse_handle_pred_decls; '(_, Kwd "}") >] -> [BoxClassDecl (l, bcn, ps, inv, ads, hpds)]
@@ -626,7 +626,7 @@ and
          | Some(params) -> params
          | None -> []
 and
-  parse_func_rest k t v gh = parser
+  parse_func_rest k t v = parser
   [<
     '(l, Ident g);
     tparams = parse_type_params_general;

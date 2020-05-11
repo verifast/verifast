@@ -122,7 +122,7 @@ public interface Iterator<E>{
         //@ requires Iterator(?es, ?c, ?n);
         //@ ensures Iterator(es, c, n) &*& result ? es(n) != none : es(n) == none; // Force case split.
     
-    public E next();
+    E next();
         //@ requires Iterator(?es, ?c, ?n) &*& es(n) != none;
         //@ ensures Iterator(es, some(n), n + 1) &*& result == the(es(n));
     
@@ -151,7 +151,8 @@ fixpoint list<t> remove_nths<t>(list<int> ns, list<t> xs) {
 
 public interface List<E> extends Collection<E> {
     
-    //@ predicate List(list<Object> elements);   		
+    //@ predicate List(list<Object> elements);
+
     /*@
     
     lemma void listToIterable();

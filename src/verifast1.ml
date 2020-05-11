@@ -1264,6 +1264,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | InductiveType (name, ts) -> InductiveType (name, List.map erase_type ts)
     | t -> t
 
+  let rec replace_type loc targenv t = match t with
+    RealTypeParam t -> begin try List.assoc t targenv with 
+      Not_found -> static_error loc (Printf.sprintf "Type argument for type param %s not provided." t) None end
+    | ArrayType t -> ArrayType (replace_type loc targenv t)
+    | ObjType (n,ts) -> ObjType (n, List.map (replace_type loc targenv) ts)
+    | t -> t
+
   (* Region: interfdeclmap, classmap1 *)
   
   let (interfmap1,classmap1) =
@@ -2745,7 +2752,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if not (List.mem_assoc (methodName, signature) cmeths) then
           static_error l (Printf.sprintf "Internal error: no method '%s(%s)' found in class '%s'" methodName (String.concat ", " (List.map string_of_type signature)) className) None
       end;
-      WMethodCall (l, className, methodName, signature, args, Static)
+      WMethodCall (l, className, methodName, signature, args, Static, [])
     else
     let g = "vf__" ^ prefix ^ "_" ^ fun_name in
     if not (List.mem_assoc g funcmap) then static_error l "Must include header <math.h> when using floating-point operations." None;
@@ -2799,7 +2806,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       else *)
         check_expr_t_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e t0 true in
     let rec get_methods tn mn =
-      let erase_sign sign = List.map (fun tp -> match tp with RealTypeParam t -> javaLangObject | t -> t) sign in
+      let erase_sign sign = List.map erase_type sign in
       let remove_overrides declared_methods inherited_methods =
         let inherited_method_erased = List.map (fun (sign, info) -> (sign, erase_sign sign, info)) inherited_methods in
         let declared_methods_erased = List.map (fun (sign, info) -> (erase_sign sign, info)) declared_methods in
@@ -3185,7 +3192,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | AddressOf (l, e) -> let (w, t, _) = check e in (AddressOf (l, w), PtrType t, None)
     | CallExpr (l, "getClass", [], [], [LitPat target], Instance) when language = Java ->
       let w = checkt target (javaLangObject) in
-      (WMethodCall (l, "java.lang.Object", "getClass", [], [w], Instance), ObjType ("java.lang.Class", []), None)
+      (WMethodCall (l, "java.lang.Object", "getClass", [], [w], Instance, []), ObjType ("java.lang.Class", []), None)
     | ExprCallExpr (l, e, es) ->
       let (w, t, _) = check e in
       let t = unfold_inferred_type t in
@@ -3270,33 +3277,32 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let ms = get_methods tn g in
         if ms = [] then on_fail () else
         let argtps = List.map (fun e -> let (_, tp, _) = (check e) in tp) args in
+        Printf.printf "Trying qualified call: <%s> %s.%s (%s);\n"
+          (String.concat ", " (List.map string_of_type class_targs))
+          tn
+          g
+          (String.concat ", " (List.map string_of_type argtps));
         (* Select the real methods with the correct number of type parameters *)
         let ms = List.map (fun (sign, (tn', lm, gh, rt, xmap, pre, post, epost, terminates, fb', v, abstract)) ->
           let targenv = if inAnnotation <> Some(true) then List.map2 (fun a b -> (a, b)) class_tparams class_targs else []
           in
           (* Replace the type parameters with their concrete type*)
-          let rec replace_type t = match t with
-            RealTypeParam t -> begin try List.assoc t targenv with Not_found -> static_error l 
-            (Printf.sprintf "Type arguments for %s.%s with type param %s not provided." tn g t) None end
-            | ArrayType t -> ArrayType (replace_type t)
-            | ObjType (n,ts) -> ObjType (n, List.map replace_type ts)
-            | t -> t in
           let sign' = 
-              List.map replace_type sign in
+              List.map (replace_type l targenv) sign in
           let rt' = match rt with
-            Some(rt) -> replace_type rt
+            Some(rt) -> replace_type l targenv rt
             | None -> Void
           in 
           (* Replace all class level type parameters with their respective type arguments *)
-          let xmap' = List.map (fun (name,tp) -> (name, replace_type tp)) xmap in
-          (sign', (tn', lm, gh, rt', xmap', pre, post, epost, terminates, fb', v, abstract, sign))) ms in
+          let xmap' = List.map (fun (name,tp) -> (name, replace_type l targenv tp)) xmap in
+          (sign', (tn', lm, gh, rt', xmap', pre, post, epost, terminates, fb', v, abstract, sign, targenv))) ms in
         let ms = List.filter (fun (sign, _) -> is_assignable_to_sign inAnnotation argtps sign) ms in
         let make_well_typed_method m =
           match m with
-          (sign', (tn', lm, gh, rt, xmap, pre, post, epost, terminates, fb', v, abstract, sign)) ->
+          (sign', (tn', lm, gh, rt, xmap, pre, post, epost, terminates, fb', v, abstract, sign, targenv)) ->
             let (fb, es) = if fb = Instance && fb' = Static then (Static, List.tl es) else (fb, es) in
             if fb <> fb' then static_error l "Instance method requires target object" None
-            else (WMethodCall (l, tn', g, sign, es, fb), rt, None)
+            else (WMethodCall (l, tn', g, sign, es, fb, targenv), rt, None)
         in
         begin match ms with
           [] -> static_error l "No matching method" None
@@ -4059,7 +4065,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (_, []) -> static_error l "Too few patterns" None
   
   let get_class_of_this =
-    WMethodCall (dummy_loc, "java.lang.Object", "getClass", [], [WVar (dummy_loc, "this", LocalVar)], Instance)
+    WMethodCall (dummy_loc, "java.lang.Object", "getClass", [], [WVar (dummy_loc, "this", LocalVar)], Instance, [])
   
   let get_class_finality tn = (* Returns ExtensibleClass if tn is an interface *)
     match try_assoc tn classmap1 with
@@ -5476,7 +5482,7 @@ let check_if_list_is_defined () =
           Java -> get_unique_var_symb "stringLiteral" (ObjType ("java.lang.String", []))
         | _ -> get_unique_var_symb "stringLiteral" (PtrType (Int (Signed, 0)))
         end
-    | WMethodCall (l, "java.lang.Object", "getClass", [], [target], Instance) ->
+    | WMethodCall (l, "java.lang.Object", "getClass", [], [target], Instance, _) ->
       ev state target $. fun state t ->
       cont state (ctxt#mk_app get_class_symbol [t])
     | WPureFunCall (l, g, targs, args) ->

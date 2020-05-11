@@ -10,6 +10,8 @@ open Verifast0
 open Verifast1
 open Assertions
 
+
+
 module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   include Assertions(VerifyProgramArgs)
@@ -38,7 +40,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ExprCallExpr (l, e, es) -> flatmap expr_assigned_variables (e::es)
     | WPureFunCall (l, g, targs, args) -> flatmap expr_assigned_variables args
     | WPureFunValueCall (l, e, es) -> flatmap expr_assigned_variables (e::es)
-    | WMethodCall (l, cn, m, pts, args, mb) -> flatmap expr_assigned_variables args
+    | WMethodCall (l, cn, m, pts, args, mb, tpenv) -> flatmap expr_assigned_variables args
     | NewArray (l, te, e) -> expr_assigned_variables e
     | NewArrayWithInitializer (l, te, es) -> flatmap expr_assigned_variables es
     | IfExpr (l, e1, e2, e3) -> expr_assigned_variables e1 @ expr_assigned_variables e2 @ expr_assigned_variables e3
@@ -2146,14 +2148,15 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         check_correct h None None [] args (lm, [], None, xmap, ["this", obj], pre, post, Some(epost), terminates, Static) is_upcall (Some cn) (fun h env _ -> cont h env obj)
       | _ -> static_error l "Multiple matching overloads" None
       end
-    | WMethodCall (l, tn, m, pts, args, fb) when m <> "getClass" ->
+    | WMethodCall (l, tn, m, pts, args, fb, tpenv) when m <> "getClass" ->
       let get_assignable_methods meths = List.filter (fun ((name,params), info) -> name = m && is_assignable_to_sign (if pure then Some(true) else None) pts params) meths in
       let (lm, gh, rt, xmap, pre, post, epost, terminates, is_upcall, target_class, fb', v) =
         match try_assoc tn classmap with
         Some {cfinal; cmeths} ->
           let MethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, terminates, ss, fb, v, is_override, abstract) = 
             try List.assoc (m, pts) cmeths with 
-            Not_found -> (* Method contains type parameters *)
+            Not_found -> (* Method contains type parameters, so apply erasure *)
+              let cmeths = List.map (fun ((name,params), info) -> ((name, List.map erase_type params), info)) cmeths in
               match get_assignable_methods cmeths with
                 [] -> static_error l "No matching method for call." None
                 | [m] -> snd m
@@ -2168,6 +2171,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | _ -> false
           in
           let target_class = if can_be_overridden then None else Some tn in
+          (* xmap still have type parameters, build it fromm the  arguments of the method call, idem for the return type *)
+          Printf.printf "WMethodCall with tpenv: %s \n"
+            (String.concat "," (List.map (fun (tparam,targ) -> tparam ^ "->" ^ string_of_type targ) tpenv));
+          let rt = match rt with Some (rt) -> Some(replace_type l tpenv rt) | None -> None in
+          let xmap = List.map (fun (name,tp) -> (name, replace_type l tpenv tp)) xmap in
           (lm, gh, rt, xmap, pre_dyn, post_dyn, epost_dyn, terminates, is_upcall, target_class, fb, v)
         | _ ->
           let InterfaceInfo (_, _, methods, _, _, _) = List.assoc tn interfmap in

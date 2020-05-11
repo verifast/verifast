@@ -6,12 +6,9 @@ public class Box<T> {
     public T get() { return t; }
 
     public static void main(String[] args){
-        Pair<String, Integer> p1 = new OrderedPair<String, Integer>("Even", 8);
+        Pair<String, Integer> p1 = new OrderedPair<String, Integer>("Even", new Integer(8));
 	Pair<String, String>  p2 = new OrderedPair<String, String>("hello", "world");
     }
-    
-    OrderedPair<String, Integer> p1 = new OrderedPair<>("Even", 8);
-    OrderedPair<String, String>  p2 = new OrderedPair<>("hello", "world");
 }
 
 public interface Pair<K, V> {

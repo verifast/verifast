@@ -289,6 +289,7 @@ cd examples
       verifast -c -allow_assume -prover redux -provides "java_card_applet newmypackage.NewMyApplet 5,1,2,3,4,5,0,3,2,10,10" NewMyApplet/NewMyApplet.jarsrc
       verifast -c -allow_assume -prover redux -provides "java_card_applet mypackage.MyApplet 5,1,2,3,4,5,0,3,2,10,10" MyApplet-with-auto.java
     cd ..
+    verifast -c -disable_overflow_check GenericClass.java
     verifast_both -c -disable_overflow_check Account.java
     verifast_both -c -disable_overflow_check AbstractClasses.java
     verifast_both -c -disable_overflow_check ArrayList.java
@@ -499,6 +500,7 @@ cd tests
     cd generics
     verifast -c BasicGenericClass.java
     verifast -c GenericInheritance.java
+    verifast -c GenericType.java
     cd ..
   cd ..
 cd ..

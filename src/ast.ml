@@ -304,7 +304,8 @@ and
       string (* method name *) *
       type_ list (* parameter types (not including receiver) *) *
       expr list (* args, including receiver if instance method *) *
-      method_binding
+      method_binding *
+      (string * type_ ) list (* type param environment *)
   | NewArray of loc * type_expr * expr
   (* If type arguments are None -> regular object creation or raw objects. [] -> type inference required and if the list is populated: parameterised type creation *)
   | NewObject of loc * string * expr list * type_expr list option
@@ -836,7 +837,7 @@ let rec expr_loc e =
   | WPureFunValueCall (l, e, es) -> l
   | WFunPtrCall (l, g, args) -> l
   | WFunCall (l, g, targs, args) -> l
-  | WMethodCall (l, tn, m, pts, args, fb) -> l
+  | WMethodCall (l, tn, m, pts, args, fb, tparamEnv) -> l
   | NewObject (l, cn, args, targs) -> l
   | NewArray(l, _, _) -> l
   | NewArrayWithInitializer (l, _, _) -> l
@@ -1018,7 +1019,7 @@ let expr_fold_open iter state e =
   | WPureFunValueCall (l, e, args) -> iters state (e::args)
   | WFunCall (l, g, targs, args) -> iters state args
   | WFunPtrCall (l, g, args) -> iters state args
-  | WMethodCall (l, cn, m, pts, args, mb) -> iters state args
+  | WMethodCall (l, cn, m, pts, args, mb, tparamEnv) -> iters state args
   | NewObject (l, cn, args, targs) -> iters state args
   | NewArray (l, te, e0) -> iter state e0
   | NewArrayWithInitializer (l, te, es) -> iters state es
