@@ -2121,9 +2121,6 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | _ -> false
           in
           let target_class = if can_be_overridden then None else Some tn in
-          (* xmap still have type parameters, build it fromm the  arguments of the method call, idem for the return type *)
-          Printf.printf "WMethodCall with tpenv: %s \n"
-            (String.concat "," (List.map (fun (tparam,targ) -> tparam ^ "->" ^ string_of_type targ) tpenv));
           let rt = match rt with Some (rt) -> Some(replace_type l tpenv rt) | None -> None in
           let xmap = List.map (fun (name,tp) -> (name, replace_type l tpenv tp)) xmap in
           (lm, gh, rt, xmap, pre_dyn, post_dyn, epost_dyn, terminates, is_upcall, target_class, fb, v)
