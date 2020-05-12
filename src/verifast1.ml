@@ -1258,15 +1258,16 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let rec erase_type t =
     match t with 
-    RealTypeParam t -> javaLangObject
+      RealTypeParam t -> javaLangObject
     | ObjType (s, ts) -> ObjType (s, List.map erase_type ts)
     | ArrayType t -> ArrayType (erase_type t)
     | InductiveType (name, ts) -> InductiveType (name, List.map erase_type ts)
     | t -> t
 
   let rec replace_type loc targenv t = match t with
-    RealTypeParam t -> begin try List.assoc t targenv with 
-      Not_found -> static_error loc (Printf.sprintf "Type argument for type param %s not provided." t) None end
+      RealTypeParam t -> 
+        begin try List.assoc t targenv with 
+        | Not_found -> static_error loc (Printf.sprintf "Type argument for type param %s not provided." t) None end
     | ArrayType t -> ArrayType (replace_type loc targenv t)
     | ObjType (n,ts) -> ObjType (n, List.map (replace_type loc targenv) ts)
     | t -> t
@@ -1387,7 +1388,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   (* Region: check_pure_type: checks validity of type expressions *)
   let check_pure_type_core typedefmap1 (pn,ilist) tpenv te envType =
-    let rec create_objects n = if n > 0 then (javaLangObject)::(create_objects (n-1)) else [] in
+    let rec create_objects n = if n > 0 then javaLangObject::(create_objects (n-1)) else [] in
     let rec check te =
     match te with
       ManifestTypeExpr (l, t) -> t
@@ -1399,11 +1400,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         StaticArrayType(tp, s)
     | IdentTypeExpr (l, None, id) ->
       begin
-      if List.mem id tpenv 
-        then begin match envType with
-          Ghost -> GhostTypeParam (id)
-          | Real -> RealTypeParam (id)
-        end
+      if List.mem id tpenv then begin match envType with
+        Ghost -> GhostTypeParam (id)
+      | Real -> RealTypeParam (id)
+      end
       else
       match try_assoc2 id typedefmap0 typedefmap1 with
         Some t -> t
@@ -1448,18 +1448,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
           reportUseSite DeclKind_InductiveType ld l;
           InductiveType (id, List.map check targs)
-        | None -> match resolve Real (pn,ilist) l id class_arities with
+      | None -> match resolve Real (pn,ilist) l id class_arities with
           Some (id, (ld, n)) ->
           if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
           ObjType (id, List.map check targs)
-        | None -> 
-          begin
-          match resolve Real (pn, ilist) l id class_arities with
-            Some (id, (ld, n)) ->
-            if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
-            ObjType (id, List.map check targs)
-          | None -> static_error l ("No such inductive type, class, or interface.") None
-          end
+      | None -> static_error l ("No such inductive type, class, or interface.") None
       end
     | StructTypeExpr (l, sn, Some _) ->
       static_error l "A struct type with a body is not supported in this position." None
@@ -2094,11 +2087,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let rec expect_type_core l msg (inAnnotation: bool option) t t0 =
     match (unfold_inferred_type t, unfold_inferred_type t0) with
-      (ObjType ("null", []), ObjType _) -> ()
-    | (ObjType ("null", []), RealTypeParam _) -> ()
-    | (ObjType(_, []), RealTypeParam t) -> ()
+      (ObjType ("null", _), ObjType _) -> ()
+    | (ObjType ("null", _), RealTypeParam _) -> ()
+    | (ObjType(_, _), RealTypeParam t) -> ()
     | (ObjType ("null", []), ArrayType _) -> ()
-    (* e.g. T obj is set in array Object[]. expected type is Object, real type is T. When bounds are introduced this statement will not longer be true and will require a change *)
     | (RealTypeParam t, ObjType("java.lang.Object", [])) -> ()
     | (ArrayType _, ObjType ("java.lang.Object", [])) -> ()
     (* It is possible that type inference finds a type to be a real type parameter, 
@@ -2123,8 +2115,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (InductiveType (_, _) as tp, AnyType) -> if not (type_satisfies_contains_any_constraint true tp) then static_error l (msg ^ "Cannot cast type " ^ string_of_type tp ^ " to 'any' because it contains 'any' in a negative position.") None
     | (InductiveType (i1, args1), InductiveType (i2, args2)) when i1 = i2 ->
       List.iter2 (expect_type_core l msg inAnnotation) args1 args2
-    | _ -> if unify t t0 then ()
-        else static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".") None
+    | _ -> if unify t t0 then () else static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".") None
   
   let expect_type l (inAnnotation: bool option) t t0 = expect_type_core l "" inAnnotation t t0
   
@@ -3191,7 +3182,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (WVar (l2, x, LocalVar), PtrType pointeeType, None)
     | AddressOf (l, e) -> let (w, t, _) = check e in (AddressOf (l, w), PtrType t, None)
     | CallExpr (l, "getClass", [], [], [LitPat target], Instance) when language = Java ->
-      let w = checkt target (javaLangObject) in
+      let w = checkt target javaLangObject in
       (WMethodCall (l, "java.lang.Object", "getClass", [], [w], Instance, []), ObjType ("java.lang.Class", []), None)
     | ExprCallExpr (l, e, es) ->
       let (w, t, _) = check e in
@@ -3545,7 +3536,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | (Int (_, _), Int (_, _)) when isCast -> w
         | ((Int (_, _)|Float|Double|LongDouble), (Float|Double|LongDouble)) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
         | ((Float|Double|LongDouble), (Int (_, _))) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
-        | (javaLangObject, ArrayType _) when isCast -> w
+        | (ObjType ("java.lang.Object", []), ArrayType _) when isCast -> w
         | _ ->
           expect_type (expr_loc e) inAnnotation t t0;
           if try expect_type dummy_loc inAnnotation t0 t; false with StaticError _ -> true then
@@ -3576,8 +3567,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match params_with_correct_name with
           | [(name, type_)] -> 
             let (_, _, ctormap, _, _) = List.assoc inductive_name inductivemap in
-            let [(cn, (_, (_, cons_tparams, _, parameter_names_and_types, (_, _))) : (string * inductive_ctor_info) )] = ctormap in
-            let Some tpenv = zip cons_tparams targs in
+            let [(cn, (_, (_, tparams, _, parameter_names_and_types, (_, _))) : (string * inductive_ctor_info) )] = ctormap in
+            let Some tpenv = zip tparams targs in
             let type_instantiated = instantiate_type tpenv type_ in
             (WReadInductiveField(l, w, inductive_name, constructor_name, f, targs), type_instantiated, None)
           | [] -> static_error l ("The constructor of the inductive data type '" ^ inductive_name ^ "' does not have any field with name '" ^ f ^ "'.") None
@@ -4077,39 +4068,39 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let search_interfmap get_interfs_and_preds interfmap fallback =
         match try_assoc itf interfmap with
           Some info ->
-          let (interfs, preds, tparams) = get_interfs_and_preds info in
+          let (interfs, preds) = get_interfs_and_preds info in
           begin match try_assoc g preds with
-            Some (_, pmap, family, symb) -> [(family, pmap, tparams)]
+            Some (_, pmap, family, symb) -> [(family, pmap)]
           | None -> List.flatten (List.map (fun i -> find_in_interf i) (List.map fst interfs))
           end
         | None -> fallback ()
       in
-      search_interfmap (function (li, fields, meths, preds, interfs, pn, ilist, tparams) -> (interfs, preds, tparams)) interfmap1 $. fun () ->
-      search_interfmap (function InterfaceInfo (li, fields, meths, preds, interfs, tparams) -> (interfs, preds, tparams)) interfmap0 $. fun () ->
+      search_interfmap (function (li, fields, meths, preds, interfs, pn, ilist, tparams) -> (interfs, preds)) interfmap1 $. fun () ->
+      search_interfmap (function InterfaceInfo (li, fields, meths, preds, interfs, tparams) -> (interfs, preds)) interfmap0 $. fun () ->
       []
     in
     let rec find_in_class cn =
       let search_classmap classmap proj fallback =
         match try_assoc cn classmap with
           Some info ->
-          let ((super, _), interfs, preds, tparams) = proj info in
+          let ((super, _), interfs, preds) = proj info in
           begin match try_assoc g preds with
-            Some (_, pmap, family, symb, body) -> [(family, pmap, tparams)]
+            Some (_, pmap, family, symb, body) -> [(family, pmap)]
           | None -> find_in_class super @ flatmap find_in_interf (List.map fst interfs)
           end
         | None -> fallback ()
       in
       search_classmap classmap1
-        (function (_, abstract, fin, methods, fds_opt, ctors, super, tpenv, interfs, preds, pn, ilist) -> (super, interfs, preds, tpenv))
+        (function (_, abstract, fin, methods, fds_opt, ctors, super, tpenv, interfs, preds, pn, ilist) -> (super, interfs, preds))
         $. fun () ->
       search_classmap classmap0
-        (function {csuper; cinterfs; cpreds; ctpenv} -> (csuper, cinterfs, cpreds, ctpenv))
+        (function {csuper; cinterfs; cpreds} -> (csuper, cinterfs, cpreds))
         $. fun () ->
       []
     in
     begin match find_in_class cn @ find_in_interf cn with
       [] -> error ()
-    | [(family, pmap, tparams)] -> check_call family pmap tparams
+    | [(family, pmap)] -> check_call family pmap
     | _ -> static_error l (Printf.sprintf "Ambiguous instance predicate assertion: multiple predicates named '%s' in scope" g) None
     end
   
@@ -4299,10 +4290,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               begin match try_assoc "this" tenv with
                 None -> error ()
               | Some (ObjType (cn, _)) ->
-                let check_call family pmap tparams =
+                let check_call family pmap =
                   if targs <> [] then static_error l "Incorrect number of type arguments." None;
                   if ps0 <> [] then static_error l "Incorrect number of indices." None;
-                  let (wps, tenv) = check_pats (pn,ilist) l tparams tenv (List.map snd pmap) ps in
+                  let (wps, tenv) = check_pats (pn,ilist) l [] tenv (List.map snd pmap) ps in
                   let index =
                     if List.mem_assoc cn classmap1 || List.mem_assoc cn classmap0 then
                       ClassLit (l, cn)
@@ -4340,9 +4331,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (w, t) = check_expr (pn,ilist) tparams tenv (Some true) e in
       begin match unfold_inferred_type t with
         ObjType (cn, targs) ->
-        let check_call family pmap tparams =
-          let (wpats, tenv) = check_pats (pn,ilist) l tparams tenv (List.map snd pmap) pats in
-          let index = check_expr_t (pn,ilist) tparams tenv (Some true) index (ObjType ("java.lang.Class", [])) in
+        let check_call family pmap =
+          let (wpats, tenv) = check_pats (pn,ilist) l [] tenv (List.map snd pmap) pats in
+          let index = check_expr_t (pn,ilist) [] tenv (Some true) index (ObjType ("java.lang.Class", [])) in
           (WInstPredAsn (l, Some w, cn, get_class_finality cn, family, g, index, wpats), tenv, [])
         in
         let error () = static_error l (Printf.sprintf "Type '%s' does not declare such a predicate" cn) None in
@@ -4678,7 +4669,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       structmap1
   
   let check_predinst0 predfam_tparams arity ps psymb inputParamCount (pn, ilist) tparams tenv env l p predinst_tparams fns xs body =
-    let tparams' = predinst_tparams @ tparams in
     check_tparams l tparams predinst_tparams;
     let tpenv =
       match zip predfam_tparams (List.map (fun x -> GhostTypeParam x) predinst_tparams) with
@@ -4691,6 +4681,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         None -> static_error l "Incorrect number of parameters." None
       | Some pxs -> pxs
     in
+    let tparams' = predinst_tparams @ tparams in
     let xs =
       let rec iter2 xm pxs =
         match pxs with
