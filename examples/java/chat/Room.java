@@ -11,13 +11,13 @@ predicate room(Room room) =
 @*/
 
 public class Room {
-    List members;
+    List<Member> members;
 
     public Room()
         //@ requires emp;
         //@ ensures room(this);
     {
-        List a = new ArrayList();
+        List<Member> a = new ArrayList<Member>();
         this.members = a;
         //@ close foreach<Member>(nil, member);
         //@ close room(this);
@@ -29,9 +29,9 @@ public class Room {
     {
         //@ open room(this);
         //@ assert foreach(?members, _);
-        List membersList = this.members;
+        List<Member> membersList = this.members;
         //@ membersList.listToIterable();
-        Iterator iter = membersList.iterator();
+        Iterator<Member> iter = membersList.iterator();
         boolean hasMember = false;
         boolean hasNext = iter.hasNext();
         while (hasNext && !hasMember)
@@ -41,8 +41,7 @@ public class Room {
                 &*& hasNext == (i < length(members)) &*& 0 <= i &*& i <= length(members);
             @*/
         {
-            Object o = iter.next();
-            Member member = (Member)o;
+            Member member = iter.next();
             //@ foreach_remove<Member>(member, members);
             //@ open member(member);
             hasMember = nick.equals(member.nick);
@@ -62,9 +61,9 @@ public class Room {
     {
         //@ open room(this);
         //@ assert foreach(?members0, _);
-        List membersList = this.members;
+        List<Member> membersList = this.members;
         //@ membersList.listToIterable();
-        Iterator iter = membersList.iterator();
+        Iterator<Member> iter = membersList.iterator();
         boolean hasNext = iter.hasNext();
         //@ length_nonnegative(members0);
         while (hasNext)
@@ -74,8 +73,7 @@ public class Room {
                 &*& hasNext == (i < length(members)) &*& 0 <= i &*& i <= length(members);
             @*/
         {
-            Object o = iter.next();
-            Member member = (Member)o;
+            Member member = iter.next();
             //@ mem_nth(i, members);
             //@ foreach_remove<Member>(member, members);
             //@ open member(member);

@@ -85,8 +85,10 @@ let rec sexpr_of_type_ (t : type_) : sexpression =
     | PureFuncType (t1, t2)   -> List [ Symbol "type-pred-func-type";
                                         sexpr_of_type_ t1; 
                                         sexpr_of_type_ t2]
-    | ObjType (s)             -> List [ Symbol "type-obj-type";
-                                        Symbol s ]
+    | ObjType (s, targs)             -> List [ Symbol "type-obj-type";
+                                        Symbol s;
+                                        Symbol "type-arguments";
+                                        sexpr_of_list sexpr_of_type_ targs]
     | ArrayType (t)           -> List [ Symbol "type-array-type";
                                         sexpr_of_type_ t ]
     | StaticArrayType (t, n)  -> List [ Symbol "type-static-array-type";
@@ -95,8 +97,10 @@ let rec sexpr_of_type_ (t : type_) : sexpression =
     | BoxIdType               -> aux2 "type-box-id"
     | HandleIdType            -> aux2 "type-handle-id-type"
     | AnyType                 -> aux2 "AnyType"
-    | TypeParam (s)           -> List [ Symbol "type-param";
-                                        Symbol s ]
+    | RealTypeParam s           -> List [ Symbol "real-type-param";
+                                      Symbol s ]
+    | GhostTypeParam s           -> List [ Symbol "ghost-type-param";
+                                      Symbol s ]
     | InferredType (_, i)     -> List [ Symbol "type-inferred";
                                         sexpr_of_inferred_type_state !i]
     | ClassOrInterfaceName (s)-> List [ Symbol "type-class-or-interface-name";
@@ -204,6 +208,7 @@ let sexpr_of_method_binding (binding : method_binding) : sexpression =
     | Instance -> Symbol "instance-method"
 
 let rec sexpr_of_expr (expr : expr) : sexpression =
+  let sexpr_of_tparam t = Symbol t in
   match expr with
     | Operation (loc, op, exprs) -> 
       build_list [ Symbol "expr-op"
@@ -315,20 +320,23 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
                  [ "name", Symbol name
                  ; "typs", sexpr_of_list sexpr_of_type_ typs
                  ; "exprs", sexpr_of_list sexpr_of_expr exprs ]
-    | WMethodCall (_, clss, name, typs, exprs, bind) ->
+    | WMethodCall (_, clss, name, typs, exprs, bind, tparamEnv) ->
       build_list [ Symbol "expr-w-method-call" ]
                  [ "class", Symbol clss
                  ; "name", Symbol name
                  ; "typs", sexpr_of_list sexpr_of_type_ typs
                  ; "exprs", sexpr_of_list sexpr_of_expr exprs 
-                 ; "stat", sexpr_of_method_binding bind ]
+                 ; "stat", sexpr_of_method_binding bind 
+                 ; "tparams", sexpr_of_list sexpr_of_tparam (List.map (fun (tparam,targ) -> tparam) tparamEnv)
+                 ; "targs", sexpr_of_list sexpr_of_type_ (List.map (fun (_,targ) -> targ) tparamEnv) ]
     | NewArray (_, texpr, expr) ->
       build_list [ Symbol "expr-new-array" ]
                  [ "texpr", sexpr_of_type_expr texpr
                  ; "expr", sexpr_of_expr expr]
-    | NewObject (l, cn, args) ->
+    | NewObject (l, cn, args, targs) ->
       build_list [ Symbol "expr-new-obj"; Symbol cn ]
-                 [ "args", sexpr_of_list sexpr_of_expr args ]
+                 [ "args", sexpr_of_list sexpr_of_expr args ;
+                  "targs", sexpr_of_option (fun targs -> sexpr_of_list sexpr_of_type_expr targs) targs ]
     | NewArrayWithInitializer (l, texpr, args) -> 
       build_list [ Symbol "expr-array-init" ]
                  [ "type", sexpr_of_type_expr texpr
@@ -628,7 +636,7 @@ and sexpr_of_decl (decl : decl) : sexpression =
                                 ; "postcondition", sexpr_of_pred post ]
       in
       let kw = List.concat [ [ "kind", sexpr_of_func_kind kind
-                             ; "type-parameters", List (List.map symbol tparams)
+                             ; "type-parameters", List (List.map symbol tparams )
                              ; "return-type", sexpr_of_type_expr_option rtype
                              ; "parameters", List (List.map sexpr_of_arg params) ]
                            ; body
@@ -660,7 +668,7 @@ and sexpr_of_decl (decl : decl) : sexpression =
       in
       build_list [ Symbol "declare-predicate-family-instance"
                  ; Symbol name ]
-                 [ "type-parameters", List (List.map symbol tparams)
+                 [ "type-parameters", List (List.map symbol tparams) 
                  ; "parameters", List (List.map arg_pair params)
                  ; "predicate", sexpr_of_pred predicate ]
     | ImportModuleDecl (loc, name) ->
@@ -671,18 +679,18 @@ and sexpr_of_decl (decl : decl) : sexpression =
                  ; Symbol name]
                  [ "tparams", List (List.map symbol tparams)
                  ; "constructors", sexpr_of_list sexpr_of_inductive_constructor cons ]
-    | Interface (_, id, inters, fields, meths, preds) ->
+    | Interface (_, id, inters, fields, meths, tparams, preds) ->
       build_list [ Symbol "declare-interface"
                  ; Symbol id ]
-                 [ "super-interfaces", List (List.map symbol inters)
+                 [ "super-interfaces", sexpr_of_list sexpr_of_super inters
                  ; "fields", sexpr_of_list sexpr_of_field fields
                  ; "methods", sexpr_of_list sexpr_of_meths meths 
                  ; "instance-preds", sexpr_of_list sexpr_of_instance_pred preds ]
-    | Class (_, abs, final, id, meths, fields, cons, super, inters, preds) ->
+    | Class (_, abs, final, id, meths, fields, cons, super, tparams, inters, preds) ->
       build_list [ Symbol "declare-class"
                  ; Symbol id ]
-                 [ "super-class", symbol super
-                 ; "super-interfaces", List (List.map symbol inters)
+                 [ "super-class", sexpr_of_super super
+                 ; "super-interfaces", sexpr_of_list sexpr_of_super inters
                  ; "methods", sexpr_of_list sexpr_of_meths meths 
                  ; "fields", sexpr_of_list sexpr_of_field fields
                  ; "construcors", sexpr_of_list (sexpr_of_constructor id) cons 
@@ -712,6 +720,9 @@ and sexpr_of_inductive_constructor (c : ctor) : sexpression =
     build_list [ Symbol "inductive-constructor"
                ; Symbol name ]
                [ "arguments", List (List.map aux args)]
+
+and sexpr_of_super (name, targs) : sexpression =
+  List [ Symbol name; sexpr_of_list sexpr_of_type_expr targs ]
 
 and sexpr_of_meths (meth : meth) : sexpression =
   match meth with

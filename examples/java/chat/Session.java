@@ -74,7 +74,7 @@ public final class Session implements Runnable {
         {
             //@ open room(room);
             member = new Member(nick, writer);
-            List list = room.members;
+            List<Member> list = room.members;
             list.add(member);
             //@ open foreach<Member>(?members, @member);
             //@ close foreach(members, @member);
@@ -107,7 +107,7 @@ public final class Session implements Runnable {
         //@ open room_ctor(room)();
         //@ open room(room);
         {
-            List membersList = room.members;
+            List<Member> membersList = room.members;
             //@ assert foreach<Member>(?members, @member);
             //@ assume(mem<Member>(member, members)); // TODO: Eliminate using a ghost list.
             ListUtil.remove(membersList, member);
@@ -161,10 +161,10 @@ public final class Session implements Runnable {
         //@ open room_ctor(room)();
         //@ open room(room);
         {
-            List membersList = room.members;
+            List<Member> membersList = room.members;
             //@ assert foreach<Member>(?members, @member);
             //@ membersList.listToIterable();
-            Iterator iter = membersList.iterator();
+            Iterator<Member> iter = membersList.iterator();
             boolean hasNext = iter.hasNext();
             while (hasNext)
                 /*@
@@ -174,8 +174,7 @@ public final class Session implements Runnable {
                     &*& foreach(members, @member) &*& hasNext == (i < length(members)) &*& 0 <= i &*& i <= length(members);
                 @*/
             {
-                Object o = iter.next();
-                Member member = (Member)o;
+                Member member = iter.next();
                 //@ foreach_remove<Member>(member, members);
                 //@ open member(member);
                 writer.write(member.nick);

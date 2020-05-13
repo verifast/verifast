@@ -110,13 +110,14 @@ type type_ = (* ?type_ *)
   | InductiveType of string * type_ list
   | PredType of string list * type_ list * int option * inductiveness (* if None, not necessarily precise; if Some n, precise with n input parameters *)
   | PureFuncType of type_ * type_  (* Curried *)
-  | ObjType of string
+  | ObjType of string * type_ list (* type arguments *)
   | ArrayType of type_
   | StaticArrayType of type_ * int (* for array declarations in C *)
   | BoxIdType (* box type, for shared boxes *)
   | HandleIdType (* handle type, for shared boxes *)
   | AnyType (* supertype of all inductive datatypes; useful in combination with predicate families *)
-  | TypeParam of string (* a reference to a type parameter declared in the enclosing datatype/function/predicate *)
+  | RealTypeParam of string (* a reference to a type parameter declared in the enclosing Real code *)
+  | GhostTypeParam of string (* a reference to a type parameter declared in the ghost code *)
   | InferredType of < > * inferred_type_state ref (* inferred type, is unified during type checking. '< >' is the type of objects with no methods. This hack is used to prevent types from incorrectly comparing equal, as in InferredType (ref Unconstrained) = InferredType (ref Unconstrained). Yes, ref Unconstrained = ref Unconstrained. But object end <> object end. *)
   | ClassOrInterfaceName of string (* not a real type; used only during type checking *)
   | PackageName of string (* not a real type; used only during type checking *)
@@ -303,10 +304,12 @@ and
       string (* method name *) *
       type_ list (* parameter types (not including receiver) *) *
       expr list (* args, including receiver if instance method *) *
-      method_binding
+      method_binding *
+      (string * type_ ) list (* type param environment *)
   | NewArray of loc * type_expr * expr
-  | NewObject of loc * string * expr list
-  | NewArrayWithInitializer of loc * type_expr * expr list
+  (* If type arguments are None -> regular object creation or raw objects. [] -> type inference required and if the list is populated: parameterised type creation *)
+  | NewObject of loc * string * expr list * type_expr list option
+  | NewArrayWithInitializer of loc * type_expr * expr list 
   | IfExpr of loc * expr * expr * expr
   | SwitchExpr of
       loc *
@@ -661,26 +664,28 @@ and
   | Inductive of  (* inductief data type regel-naam-type parameters-lijst van constructors*)
       loc *
       string *
-      string list *
+      string list * (*tparams*)
       ctor list
   | AbstractTypeDecl of loc * string
   | Class of
       loc *
       bool (* abstract *) *
       class_finality *
-      string *
+      string * (* class name *)
       meth list *
       field list *
       cons list *
-      string (* superclass *) *
-      string list (* itfs *) *
+      (string * type_expr list) (* superclass with targs *) *
+      string list (* type parameters *) *
+      (string * type_expr list) list (* itfs with targs *) *
       instance_pred_decl list
   | Interface of 
       loc *
       string *
-      string list *
+      (string * type_expr list) list * (* interfaces *)
       field list *
       meth list *
+      string list * (* type parameters *) 
       instance_pred_decl list
   | PredFamilyDecl of
       loc *
@@ -832,8 +837,8 @@ let rec expr_loc e =
   | WPureFunValueCall (l, e, es) -> l
   | WFunPtrCall (l, g, args) -> l
   | WFunCall (l, g, targs, args) -> l
-  | WMethodCall (l, tn, m, pts, args, fb) -> l
-  | NewObject (l, cn, args) -> l
+  | WMethodCall (l, tn, m, pts, args, fb, tparamEnv) -> l
+  | NewObject (l, cn, args, targs) -> l
   | NewArray(l, _, _) -> l
   | NewArrayWithInitializer (l, _, _) -> l
   | IfExpr (l, e1, e2, e3) -> l
@@ -1014,8 +1019,8 @@ let expr_fold_open iter state e =
   | WPureFunValueCall (l, e, args) -> iters state (e::args)
   | WFunCall (l, g, targs, args) -> iters state args
   | WFunPtrCall (l, g, args) -> iters state args
-  | WMethodCall (l, cn, m, pts, args, mb) -> iters state args
-  | NewObject (l, cn, args) -> iters state args
+  | WMethodCall (l, cn, m, pts, args, mb, tparamEnv) -> iters state args
+  | NewObject (l, cn, args, targs) -> iters state args
   | NewArray (l, te, e0) -> iter state e0
   | NewArrayWithInitializer (l, te, es) -> iters state es
   | IfExpr (l, e1, e2, e3) -> iters state [e1; e2; e3]

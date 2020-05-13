@@ -119,7 +119,7 @@ module Scala = struct
   let rec
     parse_decl = parser
       [< '(l, Kwd "object"); '(_, Ident cn); '(_, Kwd "{"); ms = rep parse_method; '(_, Kwd "}") >] ->
-      Class (l, false, FinalClass, cn, ms, [], [], "Object", [], [])
+      Class (l, false, FinalClass, cn, ms, [], [], ("Object", []), [], [], [])
   and
     parse_method = parser
       [< '(l, Kwd "def"); '(_, Ident mn); ps = parse_paramlist; t = parse_type_ann; co = parse_contract; '(_, Kwd "=");'(_, Kwd "{"); ss = rep parse_stmt; '(closeBraceLoc, Kwd "}")>] ->
@@ -230,41 +230,40 @@ and
      abstract = (parser [< '(_, Kwd "abstract") >] -> true | [< >] -> false); 
      final = (parser [< '(_, Kwd "final") >] -> FinalClass | [< >] -> ExtensibleClass);
      ds = begin parser
-       [< '(l, Kwd "class"); '(_, Ident s); _ = type_params_parse_and_push();
-          super = parse_super_class; il = parse_interfaces; mem = parse_java_members s; ds = parse_decls_core >]
-       -> type_params_pop();
-          Class (l, abstract, final, s, methods s mem, fields mem, constr mem, super, il, instance_preds mem)::ds
-     | [< '(l, Kwd "interface"); '(_, Ident cn); _ = type_params_parse_and_push();
-          il = parse_extended_interfaces;  mem = parse_java_members cn; ds = parse_decls_core >]
-       -> type_params_pop();
-          Interface (l, cn, il, fields mem, methods cn mem, instance_preds mem)::ds
+       [< '(l, Kwd "class"); '(_, Ident s); tparams = type_params_parse;
+          super = parse_super_class l; il = parse_interfaces; mem = parse_java_members s; ds = parse_decls_core >]
+       -> Class (l, abstract, final, s, methods s mem, fields mem, constr mem, super, tparams, il, instance_preds mem)::ds
+     | [< '(l, Kwd "interface"); '(_, Ident cn); tparams = type_params_parse;
+          il = parse_extended_interfaces; mem = parse_java_members cn; ds = parse_decls_core >]
+       -> Interface (l, cn, il, fields mem, methods cn mem, tparams, instance_preds mem)::ds
      | [< d = parse_decl; ds = parse_decls_core >] -> d@ds
      | [< '(_, Kwd ";"); ds = parse_decls_core >] -> ds
      | [< >] -> []
      end
   >] -> ds
-and parse_qualified_type_rest = parser
-  [< '(_, Kwd "."); '(_, Ident s); rest = parse_qualified_type_rest >] -> "." ^ s ^ rest
-| [< xs = parse_type_params_with_loc >] -> List.iter (fun (l,p) -> type_param_check_in_scope l p) xs; ""
-| [<>] -> ""
-and parse_qualified_type = parser
-  [<'(_, Ident s); rest = parse_qualified_type_rest >] -> s ^ rest
+and parse_qualified_type loc = parser
+  [< t = parse_type >] -> 
+    match t with 
+      IdentTypeExpr(l, p, n) -> ((match p with Some(s) -> s ^ "." ^ n | None -> n), []) 
+      | ConstructedTypeExpr(l, n, targs) -> (n, targs)
+      | _ -> raise (ParseException (loc, "Invalid type"))
+  
 and
-  parse_super_class= parser
-    [<'(_, Kwd "extends"); s = parse_qualified_type >] -> s 
-  | [<>] -> "java.lang.Object"
+  parse_super_class loc = parser
+    [<'(l, Kwd "extends"); (s, targs) = parse_qualified_type l>] -> (s, targs)
+  | [<>] -> ("java.lang.Object", [])
 and
-  parse_interfaces= parser
-  [< '(_, Kwd "implements"); is = rep_comma (parser 
-    [< i = parse_qualified_type; e=parser
+  parse_interfaces = parser
+  [< '(l, Kwd "implements"); is = rep_comma (parser 
+    [< i = parse_qualified_type l; e=parser
       [<>]->(i)>] -> e); '(_, Kwd "{") >] -> is
-| [<'(_, Kwd "{")>]-> []
+  | [<'(_, Kwd "{")>]-> []
 and
-  parse_extended_interfaces= parser
-  [< '(_, Kwd "extends"); is = rep_comma (parser 
-    [< i = parse_qualified_type; e=parser
-      [<>]->(i)>] -> e); '(_, Kwd "{") >] -> is
-| [<'(_, Kwd "{")>]-> []
+  parse_extended_interfaces = parser
+  [< '(l, Kwd "extends"); is = rep_comma (parser 
+    [< i = parse_qualified_type l; e=parser
+      [<>] -> (i)>] -> e); '(_, Kwd "{") >] -> is
+  | [<'(_, Kwd "{")>] -> []
 and
   methods cn m=
   match m with
@@ -344,16 +343,14 @@ and
      final = (fun _ -> List.mem FinalModifier modifiers);
      abstract = (fun _ -> List.mem AbstractModifier modifiers);
      vis = (fun _ -> (match (try_find (function VisibilityModifier(_) -> true | _ -> false) modifiers) with None -> Package | Some(VisibilityModifier(vis)) -> vis));
-     _ = type_params_parse_and_push ();
      t = parse_return_type;
      member = parser
        [< '(l, Ident x);
           member = parser
             [< (ps, co, ss) = parse_method_rest l >] ->
-            let t' = option_map type_param_erasure_in_scope t in
-            let ps = List.map (fun (texpr, s) -> (type_param_erasure_in_scope texpr, s))
-                (if binding = Instance then (IdentTypeExpr (l, None, cn), "this")::ps else ps) in
-            MethMember (Meth (l, Real, t', x, ps, co, ss, binding, vis, abstract))
+            let ps = if binding = Instance then (IdentTypeExpr (l, None, cn), "this")::ps 
+                else ps in
+            MethMember (Meth (l, Real, t, x, ps, co, ss, binding, vis, abstract))
           | [< t = id (match t with None -> raise (ParseException (l, "A field cannot be void.")) | Some(t) -> t);
                tx = parse_array_braces t;
                init = opt (parser [< '(_, Kwd "="); e = parse_declaration_rhs tx >] -> e);
@@ -376,7 +373,7 @@ and
        if binding = Static then raise (ParseException (l, "A constructor cannot be static."));
        if final then raise (ParseException (l, "A constructor cannot be final."));
        ConsMember (Cons (l, ps, co, ss, vis))
-  >] -> type_params_pop (); member
+  >] -> member
 and parse_array_init_rest = parser
   [< '(_, Kwd ","); es = opt(parser [< e = parse_expr; es = parse_array_init_rest >] -> e :: es) >] -> (match es with None -> [] | Some(es) -> es)
 | [< >] -> []
@@ -621,62 +618,13 @@ and
     )
   >] -> xs
 | [< >] -> []
-and
-  parse_type_params_with_loc = parser
-  [< '(_, Kwd "<"); xs = rep_comma (parser [< '(l, Ident x) >] -> (l,x)); '(_, Kwd ">") >] -> xs
-and
-  type_params_in_scope = ref []
-and
-  type_params_pop _ =
-    type_params_in_scope := List.tl !type_params_in_scope
-and
-  type_params_parse_and_push _ =
+and 
+  type_params_parse =
     parser
       [< xs = opt parse_type_params_general >] ->
-        type_params_in_scope := xs::!type_params_in_scope
-and
-  type_param_is_in_scope arg =
-    let rec is_in_scope_core arg params =
-      match params with
-      | Some(ps)::rest ->
-          if List.mem arg ps then
-            true
-          else
-            is_in_scope_core arg rest
-      | None::rest -> is_in_scope_core arg rest
-      | []-> false
-    in is_in_scope_core arg !type_params_in_scope
-and
-  type_param_check_in_scope l arg =
-    if not (type_param_is_in_scope arg) then
-      raise (ParseException (l, "Type parameter is not in scope"));
-and
-  type_param_check_texpr_in_scope texpr =
-    match texpr with
-    | PtrTypeExpr (l, targ) -> type_param_check_texpr_in_scope targ
-    | ArrayTypeExpr (l, targ) -> type_param_check_texpr_in_scope targ
-    | StaticArrayTypeExpr (l, targ, i) -> type_param_check_texpr_in_scope targ
-    | IdentTypeExpr (l, pkgn, n) -> type_param_check_in_scope l n
-    | ConstructedTypeExpr (l, n, targs) -> type_param_check_in_scope l n;
-                                           List.iter type_param_check_texpr_in_scope targs;
-    | _ -> ()
-and
-   type_param_translate_in_scope p =
-    if type_param_is_in_scope p then
-      "java.lang.Object"
-    else
-      p
-and
-  type_param_erasure_in_scope texpr =
-    match texpr with
-    | PtrTypeExpr (l, targ) -> PtrTypeExpr (l, type_param_erasure_in_scope targ)
-    | ArrayTypeExpr (l, targ) -> ArrayTypeExpr (l, type_param_erasure_in_scope targ)
-    | StaticArrayTypeExpr (l, targ, i) -> StaticArrayTypeExpr (l, type_param_erasure_in_scope targ, i)
-    | IdentTypeExpr (l, pkgn, n) -> IdentTypeExpr (l, pkgn, type_param_translate_in_scope n)
-    | ConstructedTypeExpr (l, n, targs) ->
-        List.iter type_param_check_texpr_in_scope targs;
-        IdentTypeExpr (l, None, type_param_translate_in_scope n)
-    | _ -> texpr
+        match xs with
+         | Some(params) -> params
+         | None -> []
 and
   parse_func_rest k t v = parser
   [<
@@ -823,10 +771,11 @@ and
 | [< '(l, Kwd "box") >] -> ManifestTypeExpr (l, BoxIdType)
 | [< '(l, Kwd "handle") >] -> ManifestTypeExpr (l, HandleIdType)
 | [< '(l, Kwd "any") >] -> ManifestTypeExpr (l, AnyType)
-| [< '(l, Ident n); rest = rep(parser [< '(l, Kwd "."); '(l, Ident n) >] -> n); targs = parse_type_args l;  >] -> 
+| [< '(l, Ident n); rest = rep(parser [< '(l, Kwd "."); '(l, Ident n) >] -> n); (targs, diamond) = parse_type_args_with_diamond l >] -> 
+    if diamond then raise (ParseException (l, "Diamond not supported yet")) else
     if targs <> [] then 
       match rest with
-      | [] ->  ConstructedTypeExpr (l, n, targs) 
+      | [] -> ConstructedTypeExpr (l, n, targs) 
       | _ -> raise (ParseException (l, "Package name not supported for generic types."))
     else
       match rest with
@@ -1271,6 +1220,19 @@ and
     [< targs = parse_angle_brackets l (rep_comma parse_type) >] -> targs
   | [< >] -> []
 and
+  parse_type_args_with_diamond l0 = parser
+    [< 
+    (targs, diamond) = match language with
+      CLang -> (parser [< targs = parse_type_args l0 >] -> (targs, false))
+      | Java -> (parser
+        [< '(l1, Kwd "<"); 
+          (targs, diamond) = parser
+            [< '(_, Kwd ">") >] -> ([], true)
+            | [< targs = rep_comma parse_type; '(_, Kwd ">") >] -> (targs, false) 
+        >] -> (targs,diamond)
+        | [< >] -> ([], false))
+    >] -> (targs, diamond)
+and
   parse_new_array_expr_rest l elem_typ = parser
   [< '(_, Kwd "[");
      e = parser
@@ -1288,22 +1250,31 @@ and
 | [< '(l, Kwd "null") >] -> Null l
 | [< '(l, Kwd "currentThread") >] -> Var (l, "currentThread")
 | [< '(l, Kwd "varargs") >] -> Var (l, "varargs")
-| [< '(l, Kwd "new"); tp = parse_primary_type; res = (parser 
-                    [< args0 = parse_patlist >] -> 
-                    begin match tp with
-                      IdentTypeExpr(_, pac, cn) -> NewObject (l, (match pac with None -> "" | Some(pac) -> pac ^ ".") ^ cn, List.map (function LitPat e -> e | _ -> raise (Stream.Error "Patterns are not allowed in this position")) args0)
-                    | _ -> raise (ParseException (type_expr_loc tp, "Class name expected"))
-                    end
-                  | [< e = parse_new_array_expr_rest l tp >] -> e)
+| [< '(l, Kwd "new"); 
+  tp = parse_primary_type; 
+  res = (parser 
+    [< args0 = parse_patlist >] -> 
+      begin match tp with
+        IdentTypeExpr(_, pac, cn) -> 
+          NewObject (l, 
+            (match pac with None -> "" | Some(pac) -> pac ^ ".") ^ cn, List.map (function LitPat e -> e | _ -> raise (Stream.Error "Patterns are not allowed in this position")) args0, None)
+        | ConstructedTypeExpr(loc, name, targs) -> 
+          NewObject (loc,
+              name, List.map (function LitPat e -> e | _ -> raise (Stream.Error "Patterns are not allowed in this position")) args0,
+              Some (targs))
+        | _ -> raise (ParseException (type_expr_loc tp, "Class name expected"))
+      end
+    | [< e = parse_new_array_expr_rest l tp >] -> e)
   >] -> res
 | [<
+    (* TODO: parse type arguments for java generic methods *)
     '(lx, Ident x);
     ex = parser
       [<
         args0 = parse_patlist;
         e = parser
-          [< args = parse_patlist >] -> CallExpr (lx, x, [], args0, args,Static)
-        | [< >] -> CallExpr (lx, x, [], [], args0,Static)
+          [< args = parse_patlist >] -> CallExpr (lx, x, [], args0, args, Static)
+        | [< >] -> CallExpr (lx, x, [], [], args0, Static)
       >] -> e
     | [<
         '(ldot, Kwd ".") when language = Java;
@@ -1346,7 +1317,9 @@ and
          parser
            [< '(l', Ident y); e = parse_expr_suffix_rest (Var (l', y)) >] ->
            begin match e0 with
-             Var (lt, x) -> CastExpr (l, IdentTypeExpr (lt, None, x), e)
+           (* This isn't quite right I think, but I really can't figure out another way to allow casts of paramterised types *)
+           | CallExpr (lt, x, targs, [], [], Static) -> CastExpr (l, ConstructedTypeExpr(lt, x, targs), e)
+           | Var (lt, x) -> CastExpr (l, IdentTypeExpr (lt, None, x), e)
            | _ -> raise (ParseException (l, "Type expression of cast expression must be identifier: "))
            end
          | [<>] -> e0

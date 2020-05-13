@@ -173,7 +173,7 @@ public interface List<E> extends Collection<E> {
         //@ requires [?f]List(?es) &*& 0 <= index &*& index < length(es); 
         //@ ensures [f]List(es) &*& result == nth(index, es);
     
-    Iterator iterator();
+    Iterator<E> iterator();
         //@ requires [?f]Iterable(?es);
         /*@
         ensures
@@ -194,7 +194,7 @@ public interface List<E> extends Collection<E> {
         //@ requires List(?es);
         //@ ensures List(append(es, cons(e, nil))) &*& result;
 
-    boolean addAll(Collection other);
+    boolean addAll(Collection<E> other);
         //@ requires List(?es) &*& listIsCollection(?l, other) &*& l.List(?other_es);
         //@ ensures List(append(es, other_es)) &*& l.List(other_es);
     
@@ -216,7 +216,8 @@ public class ArrayList<E> implements List<E> {
 
 public class Arrays {
     
-    public static <E> List<E> asList(E[] a);
+    // No support for generic methods yet.
+    public static List asList(Object[] a);
         //@ requires [?f]a[..] |-> ?es;
         //@ ensures [f]a[..] |-> es &*& result.List(es);
    
@@ -245,7 +246,7 @@ public interface Set<E> extends Collection<E> {
         
     @*/
     
-    Iterator iterator();
+    Iterator<E> iterator();
         //@ requires [?f]Iterable(?es);
         /*@
         ensures

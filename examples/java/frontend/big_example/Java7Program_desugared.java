@@ -72,7 +72,7 @@ public class Java7Program_desugared
         //@ requires iSSS.Iterator((seq_of_list)(es), _, ?n) &*& FoldFunc(f.getClass())(f, drop(n, es), acc, info) &*& f != null &*& n >= 0 &*& n <= length(es);
         //@ ensures FoldFunc(f.getClass())(f, nil, acc, info) &*& iSSS.Iterator((seq_of_list)(es), _, length(es));
       {
-        Object x = (Object) iSSS.next();
+        Object x = iSSS.next();
         {
           //@ drop_n_plus_one(n, es);
           acc = f.fold(acc, x);

@@ -251,7 +251,13 @@ cd examples
     cd channels
       verifast -prover redux -disable_overflow_check -c channels.jarsrc client.jarsrc
     cd ..
+    cd channels_raw
+      verifast -prover redux -disable_overflow_check -c channels.jarsrc client.jarsrc
+    cd ..
     cd chat
+      verifast_both -c -allow_assume chat.jarsrc
+    cd ..
+    cd chat_raw
       verifast_both -c -allow_assume chat.jarsrc
     cd ..
     cd chatbot
@@ -283,6 +289,7 @@ cd examples
       verifast -c -allow_assume -prover redux -provides "java_card_applet newmypackage.NewMyApplet 5,1,2,3,4,5,0,3,2,10,10" NewMyApplet/NewMyApplet.jarsrc
       verifast -c -allow_assume -prover redux -provides "java_card_applet mypackage.MyApplet 5,1,2,3,4,5,0,3,2,10,10" MyApplet-with-auto.java
     cd ..
+    verifast -c -disable_overflow_check GenericClass.java
     verifast_both -c -disable_overflow_check Account.java
     verifast_both -c -disable_overflow_check AbstractClasses.java
     verifast_both -c -disable_overflow_check ArrayList.java
@@ -487,6 +494,13 @@ cd tests
     verifast_both -c -allow_should_fail test-ghost-break-from-real-loop.c
     cd context_free_pp
       verifast -c -allow_should_fail lib.c prog.c
+    cd ..
+  cd ..
+  cd java
+    cd generics
+    verifast -c BasicGenericClass.java
+    verifast -c GenericInheritance.java
+    verifast -c GenericType.java
     cd ..
   cd ..
 cd ..
