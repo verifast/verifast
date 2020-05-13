@@ -2385,9 +2385,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (Hashtbl.add auto_lemmas (p_ref#name) (None, tparams', List.map (fun (VarPat(_,x)) -> x) p_args1, List.map (fun (VarPat(_,x)) -> x) p_args2, pre, post))
   | (CoefAsn(loc, VarPat(_,f), WPredAsn(p_loc, p_ref, _, p_targs, p_args1, p_args2)), Sep(_, CoefAsn(_, LitPat(WVar(_, g, _)), WPredAsn(_, q_ref, true, q_targs, q_args1, q_args2)), conditions)) 
     when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_,_) -> true | _ -> false) (p_args1 @ p_args2) && 
-         List.length p_targs = List.length tparams' && (List.for_all (fun (tp, t) -> match (tp, t) with 
-            | (x, GhostTypeParam(y)) when x = y -> true 
-            | _ -> false) (zip2 tparams' p_targs)) &&
+         List.length p_targs = List.length tparams' && (List.for_all (fun (tp, t) -> match (tp, t) with | (x, GhostTypeParam(y)) when x = y -> true | _ -> false) (zip2 tparams' p_targs)) &&
          p_ref#name = q_ref#name && List.for_all2 (fun (VarPat(_, x)) arg2 -> match arg2 with LitPat(WVar(_, y, _)) -> x = y | _ -> false) (p_args1 @ p_args2) (q_args1 @ q_args2) &&
          List.for_all2 (fun ta1 ta2 -> ta1 = ta2) p_targs q_targs && f = g && is_pure_spatial_assertion conditions->
       (Hashtbl.add auto_lemmas (p_ref#name) (Some(f), tparams', List.map (fun (VarPat(_,x)) -> x) p_args1, List.map (fun (VarPat(_,x)) -> x) p_args2, pre, post))

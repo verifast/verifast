@@ -1437,8 +1437,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin
       match resolve Real (pac, ilist) l id class_arities with
         Some (_, (_, n)) -> ObjType(full_name, create_objects n)
-      | None -> match resolve Real (pac, ilist) l id class_arities with
-        Some (_, (_, n)) -> ObjType(full_name, create_objects n)
       | None -> static_error l ("No such type parameter, inductive datatype, class, interface, or function type: " ^ full_name) None
       end
     | ConstructedTypeExpr (l, id, targs) ->
@@ -3436,7 +3434,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (SizeofExpr (l, ManifestTypeExpr (type_expr_loc te, t)), sizeType, None)
     | InstanceOfExpr(l, e, te) ->
       let t = check_pure_type (pn,ilist) tparams Real te in
-      let w = checkt e (javaLangObject) in
+      let w = checkt e javaLangObject in
       (InstanceOfExpr (l, w, ManifestTypeExpr (type_expr_loc te, t)), boolt, None)
     | SuperMethodCall(l, mn, args) ->
       let rec get_implemented_instance_method cn mn argtps =
