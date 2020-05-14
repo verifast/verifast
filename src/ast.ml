@@ -642,7 +642,8 @@ and
       ((stmt list * loc (* Close brace *)) * int (*rank*)) option * 
       method_binding * 
       visibility *
-      bool (* is declared abstract? *)
+      bool * (* is declared abstract? *)
+      string list (* tparams *)
 and
   cons = (* ?cons *)
   | Cons of

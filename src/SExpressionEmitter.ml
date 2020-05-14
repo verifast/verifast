@@ -726,7 +726,10 @@ and sexpr_of_super (name, targs) : sexpression =
 
 and sexpr_of_meths (meth : meth) : sexpression =
   match meth with
-  | Meth (loc, ghost, rtype, name, params, contract, body, bind, vis, abs) ->
+  | Meth (loc, ghost, rtype, name, params, contract, body, bind, vis, abs, tparams) ->
+    let sexpr_of_tparam t = 
+      Symbol t
+    in
     let sexpr_of_arg (t, id) =
       List [ Symbol id; sexpr_of_type_expr t ]
     in
@@ -743,7 +746,8 @@ and sexpr_of_meths (meth : meth) : sexpression =
     in        
     let kw = List.concat [ [ "ghos", sexpr_of_ghostness ghost
                             ; "return-type", sexpr_of_type_expr_option rtype
-                            ; "parameters", List (List.map sexpr_of_arg params) ]
+                            ; "parameters", List (List.map sexpr_of_arg params)
+                            ; "type-parameters", List (List.map sexpr_of_tparam tparams) ]
                           ; body
                           ; contract ]
     in

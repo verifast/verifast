@@ -124,7 +124,7 @@ module Scala = struct
     parse_method = parser
       [< '(l, Kwd "def"); '(_, Ident mn); ps = parse_paramlist; t = parse_type_ann; co = parse_contract; '(_, Kwd "=");'(_, Kwd "{"); ss = rep parse_stmt; '(closeBraceLoc, Kwd "}")>] ->
       let rt = match t with ManifestTypeExpr (_, Void) -> None | _ -> Some t in
-      Meth (l, Real, rt, mn, ps, Some co, Some ((ss, closeBraceLoc), next_body_rank ()), Static, Public, false)
+      Meth (l, Real, rt, mn, ps, Some co, Some ((ss, closeBraceLoc), next_body_rank ()), Static, Public, false, [])
   and
     parse_paramlist = parser
       [< '(_, Kwd "("); ps = rep_comma parse_param; '(_, Kwd ")") >] -> ps
@@ -267,7 +267,7 @@ and
 and
   methods cn m=
   match m with
-    MethMember (Meth (l, gh, t, n, ps, co, ss,s,v,abstract))::ms -> Meth (l, gh, t, n, ps, co, ss,s,v,abstract)::(methods cn ms)
+    MethMember (Meth (l, gh, t, n, ps, co, ss, s, v, abstract, tparams))::ms -> Meth (l, gh, t, n, ps, co, ss, s, v, abstract, tparams)::(methods cn ms)
     |_::ms -> methods cn ms
     | []->[]
 and
@@ -311,7 +311,7 @@ and
      | [< '(l, Kwd "lemma"); t = parse_return_type; 
           '(l, Ident x); (ps, co, ss) = parse_method_rest l >] -> 
         let ps = (IdentTypeExpr (l, None, cn), "this")::ps in
-        MethMember(Meth (l, Ghost, t, x, ps, co, ss, Instance, vis, false))
+        MethMember(Meth (l, Ghost, t, x, ps, co, ss, Instance, vis, false, []))
      | [< binding = (parser [< '(_, Kwd "static") >] -> Static | [< >] -> Instance); t = parse_type; '(l, Ident x); '(_, Kwd ";") >] ->
        FieldMember [Field (l, Ghost, t, x, binding, vis, false, None)]
     end
@@ -343,6 +343,7 @@ and
      final = (fun _ -> List.mem FinalModifier modifiers);
      abstract = (fun _ -> List.mem AbstractModifier modifiers);
      vis = (fun _ -> (match (try_find (function VisibilityModifier(_) -> true | _ -> false) modifiers) with None -> Package | Some(VisibilityModifier(vis)) -> vis));
+     tparams = parse_type_params_general;
      t = parse_return_type;
      member = parser
        [< '(l, Ident x);
@@ -350,7 +351,7 @@ and
             [< (ps, co, ss) = parse_method_rest l >] ->
             let ps = if binding = Instance then (IdentTypeExpr (l, None, cn), "this")::ps 
                 else ps in
-            MethMember (Meth (l, Real, t, x, ps, co, ss, binding, vis, abstract))
+            MethMember (Meth (l, Real, t, x, ps, co, ss, binding, vis, abstract, tparams))
           | [< t = id (match t with None -> raise (ParseException (l, "A field cannot be void.")) | Some(t) -> t);
                tx = parse_array_braces t;
                init = opt (parser [< '(_, Kwd "="); e = parse_declaration_rhs tx >] -> e);
@@ -1278,13 +1279,14 @@ and
       >] -> e
     | [<
         '(ldot, Kwd ".") when language = Java;
+        targs = parse_type_args ldot;
         r = parser
           [<'(lc, Kwd "class")>] -> ClassLit(ldot,x)
         | [<
             '(lf, Ident f);
             e = parser
               [<args0 = parse_patlist; (args0, args) = (parser [< args = parse_patlist >] -> (args0, args) | [< >] -> ([], args0)) >] ->
-              CallExpr (lf, f, [], args0, LitPat(Var(lx,x))::args,Instance)
+              CallExpr (lf, f, targs, args0, LitPat(Var(lx,x))::args,Instance)
             | [<>] -> Read (ldot, Var(lx,x), f)
           >]->e 
       >]-> r

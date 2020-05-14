@@ -43,13 +43,13 @@ predicate_family_instance FoldFunc(Java7Program_desugared$1.class)(FoldFunc f, l
 
 public class Java7Program_desugared 
 {
-  public static void addAll(List l, Object[] xs) throws EmptyException /*@ ensures xs.length == 0; @*/
+  public static <T> void addAll(List<T> l, T[] xs) throws EmptyException /*@ ensures xs.length == 0; @*/
     //@ requires l.List(?l_es) &*& [?f]xs[..] |-> ?xs_es;
     //@ ensures l.List(append(l_es, xs_es)) &*& [f]xs[..] |-> xs_es &*& xs.length > 0;
   {
     if (xs.length > 0)
     {
-      List temp = Arrays.asList(xs);
+      List<T> temp = Arrays.<T>asList(xs);
       //@ close listIsCollection(temp, temp);
       l.addAll(temp);
     }
@@ -59,20 +59,20 @@ public class Java7Program_desugared
     }
   }
 
-  public static Object fold(FoldFunc f, List xs, Object acc0)
+  public static <T> T fold(FoldFunc f, List<T> xs, T acc0)
     //@ requires xs.List(?es) &*& FoldFunc(f.getClass())(f, es, acc0, ?info) &*& f != null;
     //@ ensures xs.List(es) &*& FoldFunc(f.getClass())(f, nil, result, info);
   {
-    Object acc = acc0;
+    T acc = acc0;
     
     //@ xs.listToIterable();
     {
-      Iterator iSSS = xs.iterator();
+      Iterator<T> iSSS = xs.iterator();
       while (iSSS.hasNext())
         //@ requires iSSS.Iterator((seq_of_list)(es), _, ?n) &*& FoldFunc(f.getClass())(f, drop(n, es), acc, info) &*& f != null &*& n >= 0 &*& n <= length(es);
         //@ ensures FoldFunc(f.getClass())(f, nil, acc, info) &*& iSSS.Iterator((seq_of_list)(es), _, length(es));
       {
-        Object x = iSSS.next();
+        T x = iSSS.next();
         {
           //@ drop_n_plus_one(n, es);
           acc = f.fold(acc, x);
@@ -89,14 +89,14 @@ public class Java7Program_desugared
     //@ requires true;
     //@ ensures true;
   {
-    List xs = new ArrayList(); 
+    List<Integer> xs = new ArrayList<Integer>(); 
     Integer i1 = Integer.valueOf(3);
     Integer i2 = Integer.valueOf(5);
     Integer i3 = Integer.valueOf(7);
     
     try
     {
-      addAll(xs, new Integer[]{i1, i2, i3});
+      Java7Program_desugared.<Integer>addAll(xs, new Integer[]{i1, i2, i3});
     }
     catch (EmptyException e)
     {
@@ -107,8 +107,7 @@ public class Java7Program_desugared
     FoldFunc func = new Java7Program_desugared$1();
     Integer acc = Integer.valueOf(2);
     //@ close FoldFunc(Java7Program_desugared$1.class)(func, exs, acc, cons(acc, exs));
-    Object vo = fold(func, xs, acc);
-    Integer vi = (Integer) vo;
+    Integer vi = Java7Program_desugared.<Integer>fold(func, xs, acc);
     //@ open FoldFunc(Java7Program_desugared$1.class)(_, _, _, _);
     int v = vi.intValue();
     
@@ -117,7 +116,7 @@ public class Java7Program_desugared
     //@ boolean is_thrown = false;
     try
     {
-      addAll(xs, new Integer[]{});
+      Java7Program_desugared.<Integer>addAll(xs, new Integer[]{});
     }
     catch (EmptyException e)
     {

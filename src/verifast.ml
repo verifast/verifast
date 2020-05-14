@@ -2700,7 +2700,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let rec verify_meths (pn,ilist) cfin cabstract boxes lems meths ctparams=
     match meths with
       [] -> ()
-    | ((g,sign), MethodInfo (l,gh, rt, ps,pre,pre_tenv,post,epost,pre_dyn,post_dyn,epost_dyn,terminates,sts,fb,v, _,abstract))::meths ->
+    | ((g, sign), MethodInfo (l, gh, rt, ps, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, terminates, sts, fb, v, _, abstract, mtparams))::meths ->
+      let allTparams = ctparams @ mtparams in
       if abstract && not cabstract then static_error l "Abstract method can only appear in abstract class." None;
       match sts with
         None -> let ((p,_,_),(_,_,_))= root_caller_token l in 
@@ -2729,7 +2730,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               begin fun cont ->
                 if cfin = FinalClass then assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [thisTerm]) (List.assoc cn classterms)) cont else cont ()
               end $. fun () ->
-              assume_neq thisTerm (ctxt#mk_intlit 0) (fun _ -> cont (("this", ObjType (cn, (List.map (fun tparam -> RealTypeParam tparam) ctparams)))::pre_tenv))
+              assume_neq thisTerm (ctxt#mk_intlit 0) (fun _ -> cont (("this", ObjType (cn, (List.map (fun tparam -> RealTypeParam tparam) allTparams)))::pre_tenv))
             end else cont pre_tenv
           end $. fun tenv ->
           let (sizemap, indinfo) = switch_stmt ss env in
@@ -2750,7 +2751,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             verify_exceptional_return (pn,ilist) throwl h ghostenv env exceptp excep epost
           in
           let cont sizemap tenv ghostenv h env = return_cont h tenv env None in
-          verify_block (pn, ilist) [] [] ctparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt
+          verify_block (pn, ilist) [] [] allTparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt
         end
         end;
         verify_meths (pn, ilist) cfin cabstract boxes lems meths ctparams
