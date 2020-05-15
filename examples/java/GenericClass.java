@@ -71,7 +71,7 @@ public class HelloWorld
   public static GenericClass<GenericClass<Foo> > genericInstance;
   
   public static void main(String[] args) 
-    //@ requires System_out(?o) &*& o != null;
+    //@ requires true;
     //@ ensures true; 
   {
     String[] sentence = {"Hello", "World"};
