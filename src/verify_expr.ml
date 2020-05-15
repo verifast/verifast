@@ -510,10 +510,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let interf_specs_for_sign map1 sign (itf, passedTypes) =
     let InterfaceInfo (_, fields, meths, _, _, tparams) = List.assoc itf map1 in
-    (* If we have tparams, but no passed types: raw type *)
     let interTparamEnv = match tparams with 
       [] -> [] 
-    | tparams when passedTypes = [] -> List.map (fun tparam -> (tparam, javaLangObject)) tparams
     | tparams -> List.map2 (fun a b -> (a, b)) tparams passedTypes
     in
     let eraseSign = (fun (n, args) -> (n, List.map erase_type args)) in
@@ -537,7 +535,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         [] -> map1
       | (i, InterfaceInfo (l, fields, meths, preds, interfs, tparams)) as elem::rest ->
         List.iter (fun (sign, ItfMethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, terminates, v, abstract, mtparams)) ->
-          let superspecs = List.flatten (List.map (fun i -> interf_specs_for_sign map1 sign i) interfs) in
+          let superspecs = List.flatten (List.map (interf_specs_for_sign map1 sign) interfs) in
           List.iter (fun (tn, ItfMethodInfo (lsuper, gh', rt', xmap', pre', pre_tenv', post', epost', terminates', vis', abstract', mtparams')) ->
             if rt <> rt' then 
               static_error lm ("Return type (" 
