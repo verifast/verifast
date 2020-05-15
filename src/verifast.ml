@@ -2700,7 +2700,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let rec verify_meths (pn,ilist) cfin cabstract boxes lems meths ctparams=
     match meths with
       [] -> ()
-    | ((g,sign), MethodInfo (l,gh, rt, ps,pre,pre_tenv,post,epost,pre_dyn,post_dyn,epost_dyn,terminates,sts,fb,v, _,abstract))::meths ->
+    | ((g, sign), MethodInfo (l, gh, rt, ps, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, terminates, sts, fb, v, _, abstract, mtparams))::meths ->
+      let allTparams = 
+        if fb = Instance then 
+          ctparams@mtparams
+        else
+          mtparams 
+      in
       if abstract && not cabstract then static_error l "Abstract method can only appear in abstract class." None;
       match sts with
         None -> let ((p,_,_),(_,_,_))= root_caller_token l in 
@@ -2750,7 +2756,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             verify_exceptional_return (pn,ilist) throwl h ghostenv env exceptp excep epost
           in
           let cont sizemap tenv ghostenv h env = return_cont h tenv env None in
-          verify_block (pn, ilist) [] [] ctparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt
+          verify_block (pn, ilist) [] [] allTparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt
         end
         end;
         verify_meths (pn, ilist) cfin cabstract boxes lems meths ctparams
