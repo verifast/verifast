@@ -1266,13 +1266,18 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | InductiveType (name, ts) -> InductiveType (name, List.map erase_type ts)
     | t -> t
 
-  let rec replace_type loc targenv t = match t with
+  let rec replace_type loc targenv t = 
+    match t with
       RealTypeParam t -> 
         begin try List.assoc t targenv with 
         | Not_found -> static_error loc (Printf.sprintf "Type argument for type param %s not provided." t) None end
     | ArrayType t -> ArrayType (replace_type loc targenv t)
     | ObjType (n,ts) -> ObjType (n, List.map (replace_type loc targenv) ts)
     | t -> t
+
+  let is_primitive_type t = match t with
+    Void | Bool | Int _ | Float | Double -> true
+  | _ -> false
 
   (* Region: interfdeclmap, classmap1 *)
   
@@ -3267,32 +3272,38 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         else 
         let ms = get_methods tn g in
         if ms = [] then on_fail () else
-        let argtps = List.map (fun e -> let (_, tp, _) = (check e) in tp) args in
-        (* Select the real methods with the correct number of type parameters *)
+        let argtps = List.map (fun e -> let (_, tp, _) = check e in tp) args in
+        let targs = List.map (fun targ -> let tp = check_pure_type (pn,ilist) tparams Real targ in 
+          if is_primitive_type tp then
+            static_error l "Type arguments can not be primitive types" None
+          else
+            tp
+          ) targes in
+        let targenv = 
+          if inAnnotation <> Some(true) && fb == Instance then 
+            match zip class_tparams class_targs with Some(tenv) -> tenv | None -> static_error l "The amount of type arguments for the class and the expected number of type parameters does not match." None
+          else 
+            []
+        in
         let ms = List.map (fun (sign, (tn', lm, gh, rt, xmap, pre, post, epost, terminates, fb', v, abstract, mtparams)) ->
-          let targenv = if inAnnotation <> Some(true) then 
-            let targs = List.map (check_pure_type (pn,ilist) mtparams Real) targes in
-            let classTargEnv = match zip class_tparams class_targs with Some(tenv) -> tenv | None -> static_error l "The amount of type arguments for the class and the expected number of type parameters does not match." None in
-            let methodTargEnv = match zip mtparams targs with Some(tenv) -> tenv | None -> static_error l "Type arguments not correctly specified" None in
-            classTargEnv@methodTargEnv else []
-          in
           (* Replace the type parameters with their concrete type*)
+          let methodTargEnv = match zip mtparams targs with Some(tenv) -> tenv | None -> List.map (fun t -> (t,javaLangObject)) mtparams in
+          let mtenv = targenv@methodTargEnv in
           let sign' = 
-              List.map (replace_type l targenv) sign in
+              List.map (replace_type l mtenv) sign in
           let rt' = match rt with
-            Some(rt) -> replace_type l targenv rt
-            | None -> Void
+            Some(rt) -> replace_type l mtenv rt
+          | None -> Void
           in 
-          (* Replace all class level type parameters with their respective type arguments *)
-          let xmap' = List.map (fun (name,tp) -> (name, replace_type l targenv tp)) xmap in
-          (sign', (tn', lm, gh, rt', xmap', pre, post, epost, terminates, fb', v, abstract, sign, targenv))) ms in
+          let xmap' = List.map (fun (name,tp) -> (name, replace_type l mtenv tp)) xmap in
+          (sign', (tn', lm, gh, rt', xmap', pre, post, epost, terminates, fb', v, abstract, sign, mtenv))) ms in
         let ms = List.filter (fun (sign, _) -> is_assignable_to_sign inAnnotation argtps sign) ms in
         let make_well_typed_method m =
           match m with
-          (sign', (tn', lm, gh, rt, xmap, pre, post, epost, terminates, fb', v, abstract, sign, targenv)) ->
+          (sign', (tn', lm, gh, rt, xmap, pre, post, epost, terminates, fb', v, abstract, sign, mtenv)) ->
             let (fb, es) = if fb = Instance && fb' = Static then (Static, List.tl es) else (fb, es) in
             if fb <> fb' then static_error l "Instance method requires target object" None
-            else (WMethodCall (l, tn', g, sign, es, fb, targenv), rt, None)
+            else (WMethodCall (l, tn', g, sign, es, fb, mtenv), rt, None)
         in
         begin match ms with
           [] -> static_error l "No matching method" None
@@ -3337,7 +3348,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           static_error l "Cannot create instance of abstract class." None
         else
           let targestps = match targs with
-            Some(targs) -> List.map (check_pure_type (pn,ilist) tparams Real) targs
+            Some(targs) -> List.map (fun targ -> let tp = check_pure_type (pn,ilist) tparams Real targ in
+              if is_primitive_type tp then 
+                static_error l "Type arguments can not be primitive types." None
+              else
+                tp) targs
             | None -> []
           in
           (NewObject (l, cn, args, targs), ObjType (cn,targestps), None)

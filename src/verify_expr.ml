@@ -426,6 +426,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match meth_specs with
             [] -> List.rev mmap
           | Meth (lm, gh, rt, n, ps, co, body, binding, _, _, mtparams)::meths ->
+            let allTparams =
+              if binding = Instance then
+                tparams@mtparams
+              else
+                mtparams
+            in
             if body <> None then static_error lm "Interface method cannot have body" None;
             if binding = Static then static_error lm "Interface method cannot be static" None;
             let xmap =
@@ -434,7 +440,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                  [] -> List.rev xm
                | (te, x)::xs ->
                  if List.mem_assoc x xm then static_error l "Duplicate parameter name." None;
-                 let t = check_pure_type (pn, ilist) tparams Real te in
+                 let t = check_pure_type (pn, ilist) allTparams Real te in
                  iter ((x, t)::xm) xs
               in
               iter [] ps
@@ -444,7 +450,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let erasedXmap = List.map (fun (n,tp) -> (n,erase_type tp)) xmap in
             let erasedSign = (n, List.map snd xmap) in
             if List.mem_assoc erasedSign erased_mmap then static_error lm "Duplicate method after erasure." None;
-            let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn, ilist) (tparams) Real rt) in
+            let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn, ilist) allTparams Real rt) in
             let (pre, pre_tenv, post, epost, terminates) =
               match co with
                 None -> static_error lm ("Non-fixpoint function must have contract: "^n) None
@@ -625,7 +631,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             [] -> cont (cn, (l, abstract, fin, List.rev mmap, fds, constr, super, tparams, interfs, preds, pn, ilist))
           | Meth (lm, gh, rt, n, ps, co, ss, fb, v,abstract, mtparams)::meths ->
             (* Only combine them for typechecking, names will never overlap and both are in scope here *)
-            let allTparams = tparams @ mtparams in
+            let allTparams = 
+              if fb = Instance then
+                tparams @ mtparams 
+              else mtparams
+            in
             let xmap =
                 let rec iter xm xs =
                   match xs with
