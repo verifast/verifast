@@ -1388,10 +1388,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let abstract_types_map = abstract_types_map1 @ abstract_types_map0
   
   let class_arities =
-    List.map (fun (cn, (l, _, _, _, _, _, _, tparams, _, _, _, _)) -> (cn, (l, List.length tparams))) classmap1
-    @ List.map (fun (cn, {cl=l; ctpenv=tparams}) -> (cn, (l, List.length tparams))) classmap0
-    @ List.map (fun (cn, (l, _, _, _, _, _, _, tparams)) -> (cn, (l, List.length tparams))) interfmap1
-    @ List.map (fun (cn, InterfaceInfo (l, _, _, _, _, tparams)) -> (cn, (l, List.length tparams))) interfmap0
+    List.map (fun (cn, (l, _, _, _, _, _, _, tparams, _, _, _, _)) -> (cn, (l, List.length tparams, tparams))) classmap1
+    @ List.map (fun (cn, {cl=l; ctpenv=tparams}) -> (cn, (l, List.length tparams, tparams))) classmap0
+    @ List.map (fun (cn, (l, _, _, _, _, _, _, tparams)) -> (cn, (l, List.length tparams, tparams))) interfmap1
+    @ List.map (fun (cn, InterfaceInfo (l, _, _, _, _, tparams)) -> (cn, (l, List.length tparams, tparams))) interfmap0
 
   (* Region: check_pure_type: checks validity of type expressions *)
   let check_pure_type_core typedefmap1 (pn,ilist) tpenv te envType =
@@ -1422,11 +1422,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         InductiveType (s, [])
       | None ->
       match (search2' Real id (pn, ilist) classmap1 classmap0) with
-        Some s -> begin try (match List.assoc s class_arities with (_,n) -> ObjType(s, create_objects n)) with
+        Some s -> begin try (match List.assoc s class_arities with (_, n, _) -> ObjType(s, create_objects n)) with
         | Not_found -> failwith (id ^ "is present in the classmap, but has no arity?")
         end
       | None ->  match (search2' Real id (pn, ilist) interfmap1 interfmap0) with
-        Some s -> begin try (match List.assoc s class_arities with (_,n) -> ObjType(s, create_objects n)) with
+        Some s -> begin try (match List.assoc s class_arities with (_, n, _) -> ObjType(s, create_objects n)) with
           | Not_found -> failwith (id ^ "is present in the interfmap, but has no arity?")
         end
       | None ->
@@ -1443,7 +1443,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let full_name = pac ^ "." ^ id in
       begin
       match resolve Real (pac, ilist) l id class_arities with
-        Some (_, (_, n)) -> ObjType(full_name, create_objects n)
+        Some (_, (_, n, _)) -> ObjType(full_name, create_objects n)
       | None -> static_error l ("No such type parameter, inductive datatype, class, interface, or function type: " ^ full_name) None
       end
     | ConstructedTypeExpr (l, id, targs) ->
@@ -1454,9 +1454,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           reportUseSite DeclKind_InductiveType ld l;
           InductiveType (id, List.map check targs)
       | None -> match resolve Real (pn,ilist) l id class_arities with
-          Some (id, (ld, n)) ->
-          if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
-          ObjType (id, List.map check targs)
+        Some (id, (ld, n, tparams)) ->
+        if targs = [] then
+          ObjType(id, flatmap (fun tparam -> [RealTypeParam tparam]) tparams)
+        else
+          if n <> List.length targs then 
+            static_error l "Incorrect number of type arguments." None
+          else  
+            ObjType (id, List.map check targs)
       | None -> static_error l ("No such inductive type, class, or interface.") None
       end
     | StructTypeExpr (l, sn, Some _) ->
@@ -2109,7 +2114,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (Int (Unsigned, m), Int (Unsigned, n)) when m <= n -> ()
     | (Int (Unsigned, m), Int (Signed, n)) when m < n -> ()
     | (Int (_, _), Int (_, _)) when inAnnotation = Some true -> ()
-    | (ObjType (x, _), ObjType (y, _)) when is_subtype_of x y -> ()
+    | (ObjType (x, xtargs), ObjType (y, ytargs)) when is_subtype_of x y -> 
+      if inAnnotation <> None || xtargs = ytargs then 
+        ()
+      else
+        (* Comparing two java objects, apply type inference *)
+        infer_type ObjType (x, xtargs), ObjType (y, ytargs)
     | (PredType ([], ts, inputParamCount, inductiveness), PredType ([], ts0, inputParamCount0, inductiveness0)) ->
       begin
         match zip ts ts0 with
@@ -2121,7 +2131,18 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (InductiveType (i1, args1), InductiveType (i2, args2)) when i1 = i2 ->
       List.iter2 (expect_type_core l msg inAnnotation) args1 args2
     | _ -> if unify t t0 then () else static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".") None
-  
+
+  let infer_type actual expected =
+    let rec inference_sets ObjType (t, targs) ObjType (t0, targs0) = 
+        if(t = t0) then 
+          List.map2 (fun t t0 -> match t with InferredGenericType -> ([],[])
+        else
+          ([],[])
+      | [] -> false
+    in
+    let (bounds,constraints) = inference_sets actual expected in
+    failwith "Type inference not implemented yet"
+
   let expect_type l (inAnnotation: bool option) t t0 = expect_type_core l "" inAnnotation t t0
   
   let is_assignable_to (inAnnotation: bool option) t t0 =
@@ -3332,24 +3353,32 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | ClassOrInterfaceName tn -> (tn, List.tl es, Static, [])
           | _ -> static_error l "Target of method call must be object or class" None
         in
+        Printf.printf "calling method %s.%s with return type: %s \n"
+          tn g (string_of_type arg0tp);
         try_qualified_call tn es args fb obj_type_arguments (fun () -> static_error l "No such method" None)
       end
     | NewObject (l, cn, args, targs) ->
       begin match resolve Real (pn,ilist) l cn classmap with
-        Some (cn, {cabstract}) ->
+        Some (cn, {cabstract; ctpenv}) ->
         if cabstract then
           static_error l "Cannot create instance of abstract class." None
         else
-          let targestps = match targs with
-            Some(targs) -> targs |> List.map begin fun targ -> 
+          let targestps = match targs with 
+            Some(targs) -> if targs = [] && ctpenv != [] then
+              (* Diamond was used, infer the type arguments later *)
+              List.map (fun tparam -> InferredGenericType) ctpenv
+            else
+              targs |> List.map begin fun targ -> 
                 let tp = check_pure_type (pn,ilist) tparams Real targ in
                 if is_primitive_type tp then 
                   static_error l "Type arguments can not be primitive types." None
                 else
                   tp
               end
-            | None -> []
+              (* Raw, make all type args object *)
+          | None -> List.map (fun _ -> javaLangObject) ctpenv
           in
+          Printf.printf "Creating new object of %s with targs %s \n" cn (String.concat "," (List.map string_of_type targestps));
           (NewObject (l, cn, args, targs), ObjType (cn,targestps), None)
       | None -> static_error l "No such class" None
       end
@@ -3492,6 +3521,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end 
     | AssignExpr (l, e1, e2) ->
       let (w1, t1, _) = check e1 in
+      Printf.printf "Assign expression: e1: %s. \n"
+        (string_of_type t1);
       let w2 = checkt e2 t1 in
       (AssignExpr (l, w1, w2), t1, None)
     | AssignOpExpr (l, e1, op, e2, postOp) ->
@@ -3552,6 +3583,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | ((Float|Double|LongDouble), (Int (_, _))) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
         | (ObjType ("java.lang.Object", []), ArrayType _) when isCast -> w
         | _ ->
+          Printf.printf "check_expr_type_core with t: %s and t0: %s \n" (string_of_type t) (string_of_type t0);
           expect_type (expr_loc e) inAnnotation t t0;
           if try expect_type dummy_loc inAnnotation t0 t; false with StaticError _ -> true then
             Upcast (w, t, t0)
@@ -3562,6 +3594,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match (value, t, t0) with
         (Some(value), Int (Signed, k1), Int (Signed, k2)) when k2 < k1 && le_big_int (min_signed_big_int k2) value && le_big_int value (max_signed_big_int k2) -> w
       | _ -> check ()
+  and infer_type bounds constraints =
+    failwith "not implemented yet"
   and check_condition_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e =
     let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
     match t with

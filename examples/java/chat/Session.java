@@ -7,7 +7,7 @@ import java.util.concurrent.*;
 
 class ListUtil {
     
-    static void remove(List l, Object o) // Like l.remove(o), except uses identity comparison instead of .equals().
+    static <T> void remove(List<T> l, T o) // Like l.remove(o), except uses identity comparison instead of .equals().
         //@ requires l.List(?es);
         //@ ensures l.List(remove(o, es));
     {
@@ -110,7 +110,7 @@ public final class Session implements Runnable {
             List<Member> membersList = room.members;
             //@ assert foreach<Member>(?members, @member);
             //@ assume(mem<Member>(member, members)); // TODO: Eliminate using a ghost list.
-            ListUtil.remove(membersList, member);
+            ListUtil.<Member>remove(membersList, member);
             //@ foreach_remove<Member>(member, members);
         }
         //@ close room(room);

@@ -17,7 +17,7 @@ public class Room {
         //@ requires emp;
         //@ ensures room(this);
     {
-        List<Member> a = new ArrayList<Member>();
+        List<Member> a = new ArrayList< >();
         this.members = a;
         //@ close foreach<Member>(nil, member);
         //@ close room(this);

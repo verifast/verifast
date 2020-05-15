@@ -1575,6 +1575,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           mk_varargs h env [] pats
         | SrcPat (LitPat e)::pats, (x, tp0)::ps ->
           let tp = instantiate_type tpenv tp0 in
+          Printf.printf "instantiated type %s to %s \n" (string_of_type tp0) (string_of_type tp);
           eval_h h env (SrcPat (LitPat (box (check_expr_t (pn,ilist) tparams tenv e tp) tp tp0))) $. fun h env t ->
           iter h env (t::ts) pats ps
         | TermPat t::pats, _::ps ->
@@ -2108,9 +2109,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         (* Typecheck the type arguments *)
         let targtps = match targs with 
           (* Type check passed type arguments *)
-          Some(targs) -> List.map (check_pure_type (pn,ilist) tparams Real) targs 
+          Some(targs) -> 
+            if ctpenv != [] && targs = [] then
+              List.map (fun _ -> InferredGenericType) ctpenv
+            else
+              List.map (check_pure_type (pn,ilist) tparams Real) targs 
           (* Raw type, make all targs Object *)
-          | None -> List.map (fun _ -> javaLangObject) tparams in
+          | None -> List.map (fun _ -> javaLangObject) ctpenv in
+        let Some targEnv = zip ctpenv targtps in
         let obj = get_unique_var_symb (match xo with None -> "object" | Some x -> x) (ObjType (cn, targtps)) in
         assume_neq obj (ctxt#mk_intlit 0) $. fun () ->
         assume_eq (ctxt#mk_app get_class_symbol [obj]) (List.assoc cn classterms) $. fun () ->
@@ -2119,7 +2125,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             Some (Some (_, rank)), RealMethodInfo (Some rank') -> rank < rank'
           | _ -> true
         in
-        let xmap = List.map (fun (name,tp) -> (name, erase_type tp)) xmap in
+        let xmap = List.map (fun (name,tp) -> (name, replace_type l targEnv tp)) xmap in
+        Printf.printf "Verifying new object of %s with targs %s and other object: %s \n" cn (String.concat "," (List.map string_of_type targtps)) (match xo with Some(s) -> s | None -> "none");
         check_correct h None None [] args (lm, [], None, xmap, ["this", obj], pre, post, Some(epost), terminates, Static) is_upcall (Some cn) (fun h env _ -> cont h env obj)
       | _ -> static_error l "Multiple matching overloads" None
       end
@@ -2128,6 +2135,13 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match try_assoc tn classmap with
         Some {cfinal; cmeths} ->
           let MethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, terminates, ss, fb, v, is_override, abstract, mtparams) = List.assoc (m, pts) cmeths in
+          Printf.printf "Calling %s %s %s.%s (%s) with tpenv: %s \n"
+            (if fb = Static then "Static" else "")
+            (match rt with None -> "void" | Some(rt) -> string_of_type rt)
+            tn
+            m
+            (String.concat ", " (List.map (fun (name,arg) -> name ^ " " ^ string_of_type arg) xmap))
+            (String.concat ", " (List.map (fun (tparam,targ) -> tparam ^ "->" ^ string_of_type targ) tpenv));
           let can_be_overridden = fb = Instance && cfinal = ExtensibleClass && v <> Private in 
           let is_upcall =
             not can_be_overridden &&
