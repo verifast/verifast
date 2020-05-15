@@ -3260,13 +3260,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             Some {ctpenv} -> ctpenv
             | None -> let InterfaceInfo (_, _, _, _, _, tparams) = List.assoc tn interfmap in tparams
         in
-        let class_targs_c = List.length class_targs in
-        let class_tparams_c = List.length class_tparams in 
-        let class_tenv = if (class_targs_c <> class_tparams_c && inAnnotation = None ) then 
-            static_error l (Printf.sprintf "The amount of type arguments for the class and the expected number of type parameters does not match.") None
+        let class_tenv = if inAnnotation <> Some(true) && fb == Instance then
+            match zip class_tparams class_targs with
+              Some(env) -> env
+            | None -> static_error l (Printf.sprintf "The amount of type arguments for the class and the expected number of type parameters does not match.") None
           else
-            let Some(ctenv) = zip class_tparams class_targs in
-            ctenv
+            []
         in
         let ms = get_methods tn g in
         if ms = [] then on_fail () else
@@ -3279,16 +3278,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               tp
           end
         in
-        let ctargenv = 
-          if inAnnotation <> Some(true) && fb == Instance then 
-            class_tenv
-          else 
-            []
-        in
         let ms = List.map (fun (sign, (tn', lm, gh, rt, xmap, pre, post, epost, terminates, fb', v, abstract, mtparams)) ->
           (* Replace the type parameters with their concrete type*)
           let methodTargEnv = match zip mtparams targs with Some(tenv) -> tenv | None -> flatmap (fun t -> [(t,javaLangObject)]) mtparams in
-          let targenv = methodTargEnv@ctargenv in
+          let targenv = methodTargEnv@class_tenv in
           let sign' = 
               List.map (replace_type l targenv) sign in
           let rt' = match rt with
@@ -3353,7 +3346,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 if is_primitive_type tp then 
                   static_error l "Type arguments can not be primitive types." None
                 else
-                  tp1
+                  tp
               end
             | None -> []
           in
