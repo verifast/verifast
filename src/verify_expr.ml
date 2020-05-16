@@ -2111,7 +2111,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           (* Type check passed type arguments *)
           Some(targs) -> 
             if ctpenv != [] && targs = [] then
-              List.map (fun _ -> InferredGenericType) ctpenv
+              List.map (fun tparam -> InferredGenericType tparam) ctpenv
             else
               List.map (check_pure_type (pn,ilist) tparams Real) targs 
           (* Raw type, make all targs Object *)

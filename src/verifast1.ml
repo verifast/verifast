@@ -1643,6 +1643,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
   
   let is_subtype_of_ x y =
+    (* TODO: take into account type arguments *)
     match (x, y) with
       (ObjType (x, _), ObjType (y, _)) -> is_subtype_of x y
     | _ -> false
@@ -2117,9 +2118,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (ObjType (x, xtargs), ObjType (y, ytargs)) when is_subtype_of x y -> 
       if inAnnotation <> None || xtargs = ytargs then 
         ()
-      else
-        (* Comparing two java objects, apply type inference *)
-        infer_type ObjType (x, xtargs), ObjType (y, ytargs)
     | (PredType ([], ts, inputParamCount, inductiveness), PredType ([], ts0, inputParamCount0, inductiveness0)) ->
       begin
         match zip ts ts0 with
@@ -2130,18 +2128,107 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (InductiveType (_, _) as tp, AnyType) -> if not (type_satisfies_contains_any_constraint true tp) then static_error l (msg ^ "Cannot cast type " ^ string_of_type tp ^ " to 'any' because it contains 'any' in a negative position.") None
     | (InductiveType (i1, args1), InductiveType (i2, args2)) when i1 = i2 ->
       List.iter2 (expect_type_core l msg inAnnotation) args1 args2
-    | _ -> if unify t t0 then () else static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".") None
+    | _ -> if inAnnotation <> None then 
+        if unify t t0 then () else static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".") None
+      else infer_type l t t0
 
-  let infer_type actual expected =
-    let rec inference_sets ObjType (t, targs) ObjType (t0, targs0) = 
-        if(t = t0) then 
-          List.map2 (fun t t0 -> match t with InferredGenericType -> ([],[])
-        else
-          ([],[])
-      | [] -> false
+  let infer_type l actual expected =
+    let error = static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type actual ^ ". Expected: " ^ string_of_type expected ^ ".") None in
+    let not_supported msgcase = static_error l ("type inference for " ^ msgcase ^ " not supported yet" None in
+    let rec inference_sets bounds constraints t t0 =
+      match (t,t0) with
+        (hd::tl, hd0::tl0) -> begin match (hd,hd0) with
+            ObjType (t, targs) ObjType (t0, targs0) ->
+              if t = t0 then
+                List.map2 (fun t t0 -> inference_sets bounds constraints) targs targs0
+              else if is_subtype_of t t0 then
+                not_supported "subclassing"
+              else
+                error
+            | (InferredGenericType t, t0) ->
+              (* When type param bounds are introduced, look up the bound for the type param you are creating an inference bound for *)
+              let bound = try List.assoc t bounds with Not_found _ -> (Upper_bound t javaLangObject) in
+              let constrt = (LooseInvocation (InferredGenericType t), t0) in
+              (bound,constrt)
+            | _ -> not_supported ("case: Actual:" ^ string_of_type hd ^ ". Expected:" ^ string_of_type hd0 ^ ".")
+          end
+      | (_,_) -> (bounds,constraints)
     in
-    let (bounds,constraints) = inference_sets actual expected in
+    let (bounds,constraints) = inference_sets [] [] actual expected in
+    let bounds = bounds@reduce l constraints in
+    (* TODO: Resolve bounds *)
     failwith "Type inference not implemented yet"
+
+  (* Reduces constraint formula's to a bounds set *)
+  (* Always stop on an invalid choice, so the last element in the return set is either a bound, or an invalid choice *)
+  let reduce l constraints =
+    let proper_type t = match t with
+      ObjType (t, targs) -> List.filter (fun t -> proper_type t = false) = []
+    | InferredGenericType t -> false
+    | _ -> failwith ("no support yet to see if " ^ string_of_type t ^ " is a proper type")
+    in
+    match constraints with
+      (constraint::tl) -> begin match constraint with
+      (* Loose invocations *)
+      | (LooseInvocation t t0) when proper_type t && proper_type t0 -> begin 
+          (try expect_type_core l "" None t t0 with static_error _ -> [InvalidChoice]);
+          reduce l tl
+          end
+      | (LooseInvocation t t0) when is_primitive t -> (* Should apply box conversion here *) static_error l "inference for primitive types not supported yet" None
+      | (LooseInvocation t t0) when is_primitive t0 -> (* Should apply box conversion here *) static_error l "inference for primitive types not supported yet" None
+      | (LooseInvocation s (ObjType (g, targs))) when targs != [] -> (* Not supported yet *) static_error l "Inference for nested parameterised types not supported yet" None
+      | (LooseInvocation s (ArrayType t)) -> static_error l "Inference for array types not supported yet" None
+      | (LooseInvocation s t) -> reduce l (SubType s t)::tl
+      (* SubType *)
+      | (SubType s t) when proper_type s && proper_type t -> if is_subtype_of s t then reduce l tl else [InvalidChoice]
+      | (SubType (ObjType "null", _) _) -> reduce l tl
+      | (SubType _ (ObjType "null", _)) -> reduce l [InvalidChoice]::tl
+      | (SubType (InferredGenericType s) t) -> [Upper_bound s t]::reduce l tl
+      | (SubType s (InferredGenericType t)) -> [Lower_bound t s]::reduce l tl
+      | (SubType s t) -> begin match t with
+          (* !!!TODO: Case where t is an inner class type of a parameterised class or interface type is not supported yet!!! *)
+        | ObjType (t, targs) when targs != [] -> (* Look for a super type of t with the same amount of type arguments as t *)
+          static_error l "No support yet for inferring nested parameterised types." None
+        | ObjType (t, targs) -> if is_subtype_of s (ObjType t targs) then reduce l tl else [InvalidChoice]
+        | ArrayType t -> static_error "No support yet for inferring array types through subtyping." None
+        (* S is an intersection type: no support yet for intersection types *)
+        (* T has a lower bound: no support yet for lower bounded type params *)
+        | _ -> [InvalidChoice]
+        end
+      (* Contain *)
+      (* If T can be a wildcard, more cases are added here *)
+      | (Contain s t) (* when t is not a wildcard *) -> (* if s is a wildcard -> [InvalidChoice] *) reduce l [Equal s t]::tl 
+      (* Equality *)
+      | (Equal s t) when is_proper_type s && is_proper_type t -> if s = t then reduce l tl else [InvalidChoice]
+      | (Equal (ObjType ("null", _)) _) -> [InvalidChoice]
+      | (Equal _ (ObjType ("null", _))) -> [InvalidChoice]
+      | (Equal (InferredGenericType s) t) when is_primitive t = false -> [Equal_bound s t]::reduce l tl
+      | (Equal s (InferredGenericType t)) when is_primitive s = false -> [Equal_bound t s]::reduce l tl
+      | (Equal (ObjType s stargs) (ObjType t ttargs)) when (*Same erasure*) List.map erase_type stargs = List.map erase_type ttargs ->
+        let addedConstraints = List.map2 (fun starg ttarg -> Equal starg ttarg) in
+        reduce l addedConstraints@tl
+      | (Equal (ArrayType s) (ArrayType t)) -> reduce l (Equal s t)::tl
+        (* Intersection types have their own case: not implemented yet *)
+        (* Cases for when s or t are wildcards need to be added *)
+      | (Equal s t) -> [InvalidChoice]
+      (* Checked exception constraints, not implemented yet *)
+    | [] -> []
+
+  let resolve l bounds =
+    let inference_variables ivars bounds = match bounds with
+      (hd::tl) -> begin match hd with
+         
+    let calculate_dependencies inference_variables = 
+      (* Cases for capture *)
+      (* An inference variable α depends on the resolution of an inference variable β 
+      if there exists an inference variable γ such that α depends on the resolution of γ and γ depends on the resolution of β *)
+      (* depend on itself *)
+      []
+
+  Equal_bound of string * type_
+  | Upper_bound of string * type_
+  | Lower_bound of string * type_
+  | InvalidChoice (* No correct inference exists *)
 
   let expect_type l (inAnnotation: bool option) t t0 = expect_type_core l "" inAnnotation t t0
   
@@ -3366,7 +3453,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let targestps = match targs with 
             Some(targs) -> if targs = [] && ctpenv != [] then
               (* Diamond was used, infer the type arguments later *)
-              List.map (fun tparam -> InferredGenericType) ctpenv
+              List.map (fun tparam -> InferredGenericType tparam) ctpenv
             else
               targs |> List.map begin fun targ -> 
                 let tp = check_pure_type (pn,ilist) tparams Real targ in
