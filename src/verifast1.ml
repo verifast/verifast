@@ -3826,8 +3826,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let fds =
           List.map
             begin function
-              (f, ({ft; fbinding=Static; finit=Some e} as fd)) ->
-                let e = check_expr_t (pn,ilist) [] [current_class, ClassOrInterfaceName cn] (Some true) e ft in
+              (f, ({fgh; ft; fbinding=Static; finit=Some e} as fd)) ->
+                let e = check_expr_t (pn,ilist) [] [current_class, ClassOrInterfaceName cn] (Some (fgh = Ghost)) e ft in
                 check_static_field_initializer e;
                 (f, {fd with finit=Some e})
             | fd -> fd
@@ -3841,8 +3841,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let interfmap1 =
     interfmap1 |> List.map begin fun (itf, (l, fds, meths, preds, interfs, pn, ilist, tparams)) ->
       let fds = fds |> List.map begin function
-          (f, ({ft; fbinding=Static; finit=Some e} as fd)) ->
-          let e = check_expr_t (pn,ilist) [] [current_class, ClassOrInterfaceName itf] (Some true) e ft in
+          (f, ({fgh; ft; fbinding=Static; finit=Some e} as fd)) ->
+          let e = check_expr_t (pn,ilist) [] [current_class, ClassOrInterfaceName itf] (Some (fgh = Ghost)) e ft in
           check_static_field_initializer e;
           (f, {fd with finit=Some e})
         | fd -> fd
