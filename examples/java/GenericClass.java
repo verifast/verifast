@@ -75,12 +75,13 @@ public class HelloWorld
     //@ ensures true; 
   {
     String[] sentence = {"Hello", "World"};
-	List<String> sentenceList = Arrays.<String>asList(sentence);
-	
+    List<String> sentenceList = Arrays.<String>asList(sentence);
     Foo<String> foo = new Foo<String>("test");
     GenericClass<String> simple = new GenericClass<String>("Example");
     GenericClass<GenericClass<String> > nested = new GenericClass<GenericClass<String> >(new GenericClass<String>("foo"));
     nested.add(new GenericClass<String>("hello"));
     GenericClass<String> s = nested.get();   // no cast
+    
+    List<String> l = new ArrayList< >();
   }
 }
