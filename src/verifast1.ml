@@ -2793,16 +2793,20 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | Int (s, n1), Int (_, n2) -> Int (s, max n1 n2)
 
   let rec super_types (ObjType (cn, targs)) =
-    let (is_class, super, interfs) = 
-      match try_assoc cn classmap1 with
-        Some (_, _, _, _, _, _, super, _, interfs, _, _, _) -> (true, Some super, interfs)
-      | None -> begin match try_assoc cn classmap0 with
-        Some {csuper; cinterfs} -> (true, Some csuper, cinterfs)
-      | None -> (false, None, [])
-      end
+    Printf.printf "Calling super types with: %s\n" cn;
+    let (is_class, super, interfs) =
+      if cn = "java.lang.Object" then
+        (true, None, [])
+      else
+        match try_assoc cn classmap1 with
+          Some (_, _, _, _, _, _, s, _, interfs, _, _, _) -> (true, Some s, interfs)
+        | None -> begin match try_assoc cn classmap0 with
+          Some {csuper; cinterfs} -> (true, Some csuper, cinterfs)
+        | None -> (false, None, [])
+        end
     in
     let supers = if is_class then
-        (match super with Some(s) -> [s] | None -> [])@interfs
+        match super with Some(s) -> s::interfs | None -> interfs
       else
         match try_assoc cn interfmap1 with
           Some (_, _, _, _, interfaces, _, _, _) -> interfaces
@@ -2811,10 +2815,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | None -> failwith ("Type does not exist: " ^ cn)
         end 
     in
-    flatmap (fun (s,stargs) ->
-      match s with 
-        "java.lang.Object" -> [ObjType (s,stargs)]
-      | _ -> (ObjType (s, stargs))::super_types (ObjType (s, stargs))) supers
+    if cn = "java.lang.Object" then 
+      []
+    else
+      flatmap (fun (s,stargs) -> (ObjType (s, stargs))::super_types (ObjType (s, stargs))) supers
 
   (* With the introduction of wildards: expand this algorithm : section 4.10.4 https://docs.oracle.com/javase/specs/jls/se14/html/jls-4.html#jls-4.10.4 *)
   let lcta u v =
@@ -2879,9 +2883,24 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let glb set =
     match set with
       [] -> failwith "can't find glb of empty set"
-    | [s] -> [s]
+    | [s] -> s
     | hd::tl -> (* It is a compile-time error if, for any two classes (not interfaces) Vi and Vj, Vi is not a subclass of Vj or vice versa. *)
-      failwith "No support yet for glb of multiple types. Implement this!"
+      (* Might be unsound for parameterised types *)
+      let rec iter tps curType curSupers =
+        match tps with
+          hd::tl ->
+            if List.mem hd curSupers then
+              iter tl curType curSupers
+            else begin
+              let tpSupers = super_types hd in
+              if List.mem curType tpSupers then 
+                iter tl hd tpSupers
+              else
+                failwith ("Can't find glb for: " ^ (String.concat ", " (List.map string_of_type set)))
+            end
+        | [] -> curType
+      in 
+      iter tl hd (super_types hd)
 
   let incorporate bounds addedBounds =
     let rec iter addedBounds newBounds =
@@ -2972,13 +2991,22 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
 
   let rec resolve_inference l bounds =
-    if bounds != [] && List.mem InvalidChoice bounds = false then
+    let string_of_bound b = match b with
+      Equal_bound (n, t) -> (Printf.sprintf "(%s = %s)" n (string_of_type t))
+    | Upper_bound (n, t) -> (Printf.sprintf "(%s extends %s)" n (string_of_type t))
+    | Lower_bound (n, t) -> (Printf.sprintf "(%s is super of %s)" n (string_of_type t))
+    | InvalidChoice -> "false"
+    in
+    Printf.printf "calling resolve_inference with bounds : [%s]. \n"
+      (String.concat "," (List.map string_of_bound bounds));
+    if bounds != [] && List.mem InvalidChoice bounds then
       static_error l "Can't resolve type through type inference." None
     else
+      Printf.printf "Bounds don't contain false \n";
       let inference_variables = 
         let rec iter ivars bounds =
           match bounds with
-            (Equal_bound (ivar, _)::tl) ->
+            (Equal_bound (ivar, _)::tl) | (Upper_bound (ivar, _)::tl) | (Lower_bound (ivar, _)::tl) ->
               if List.mem ivar ivars then 
                 iter ivars tl
               else 
@@ -2986,6 +3014,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | (hd::tl) -> iter ivars tl
           | [] -> ivars
         in
+        Printf.printf "calculating inference_variables \n";
         iter [] bounds
       in    
       (* No dependencies on inference variables yet *)
@@ -3008,7 +3037,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               let upper_bounds = List.filter (fun bound -> match bound with Upper_bound (i, t) when i = hd -> true | _ -> false) bounds in
               let upper_bound_tps = List.map (fun (Upper_bound (i, t)) -> t) upper_bounds in
               if upper_bounds != [] then 
-                (hd, List.hd (glb upper_bound_tps))::iter tl bounds
+                (hd, glb upper_bound_tps)::iter tl bounds
               else
                 failwith "inference variable has no bounds?"
         | [] -> []
@@ -3841,7 +3870,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
        *)
       let (w, t, value) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
       let call_expect_type = 
-        Printf.printf "check_expr_type_core with t: %s and t0: %s. In annotation: %s \n" (string_of_type t) (string_of_type t0) (if inAnnotation = Some(true) then "Yes" else "No");
         expect_type (expr_loc e) inAnnotation t t0;
         if try expect_type dummy_loc inAnnotation t0 t; false with StaticError _ -> true then
           Upcast (w, t, t0)

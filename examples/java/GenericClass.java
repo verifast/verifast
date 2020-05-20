@@ -83,5 +83,7 @@ public class HelloWorld
     GenericClass<String> s = nested.get();   // no cast
     
     List<String> l = new ArrayList< >();
+    l.add("foo");
+    String abba = l.get(0);
   }
 }
