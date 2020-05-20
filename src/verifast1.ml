@@ -1625,7 +1625,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     ) functypenames
   
   let rec is_subtype_of x y =
-  Printf.printf "Is subtype of: %s %s \n" x y;
     x = y ||
     y = "java.lang.Object" ||
     match try_assoc x classmap1 with
@@ -2128,7 +2127,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (InductiveType (i1, args1), InductiveType (i2, args2)) when i1 = i2 ->
       List.iter2 (expect_type_core l msg inAnnotation) args1 args2
     | _ -> if unify t t0 then () else static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".") None
-
   let expect_type l (inAnnotation: bool option) t t0 = expect_type_core l "" inAnnotation t t0
   
   let is_assignable_to (inAnnotation: bool option) t t0 =
@@ -2886,21 +2884,24 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | [s] -> s
     | hd::tl -> (* It is a compile-time error if, for any two classes (not interfaces) Vi and Vj, Vi is not a subclass of Vj or vice versa. *)
       (* Might be unsound for parameterised types *)
-      let rec iter tps curType curSupers =
-        match tps with
-          hd::tl ->
-            if List.mem hd curSupers then
-              iter tl curType curSupers
-            else begin
-              let tpSupers = super_types hd in
-              if List.mem curType tpSupers then 
-                iter tl hd tpSupers
-              else
-                failwith ("Can't find glb for: " ^ (String.concat ", " (List.map string_of_type set)))
-            end
-        | [] -> curType
-      in 
-      iter tl hd (super_types hd)
+      if is_primitive_type hd then 
+        failwith "No support for boxing primitive types yet." 
+      else
+        let rec iter tps curType curSupers =
+          match tps with
+            hd::tl ->
+              if List.mem hd curSupers then
+                iter tl curType curSupers
+              else begin
+                let tpSupers = super_types hd in
+                if List.mem curType tpSupers then 
+                  iter tl hd tpSupers
+                else
+                  failwith ("Can't find glb for: " ^ (String.concat ", " (List.map string_of_type set)))
+              end
+          | [] -> curType
+        in 
+        iter tl hd (hd::super_types hd)
 
   let incorporate bounds addedBounds =
     let rec iter addedBounds newBounds =
@@ -3597,6 +3598,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               tp
           end
         in
+        Printf.printf "trying qualified call %s.%s (%s)" tn g (String.concat ", " (List.map string_of_type argtps));
         let ms = List.map (fun (sign, (tn', lm, gh, rt, xmap, pre, post, epost, terminates, fb', v, abstract, mtparams)) ->
           (* Replace the type parameters with their concrete type*)
           let methodTargEnv = match zip mtparams targs with Some(tenv) -> tenv | None -> flatmap (fun t -> [(t,javaLangObject)]) mtparams in
@@ -3869,7 +3871,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
        * checker changes the value").
        *)
       let (w, t, value) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
-      let call_expect_type = 
+      let call_expect_type t t0 = 
         expect_type (expr_loc e) inAnnotation t t0;
         if try expect_type dummy_loc inAnnotation t0 t; false with StaticError _ -> true then
           Upcast (w, t, t0)
@@ -3900,10 +3902,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 w
               else 
                 failwith "Type inference resulted in a different type than what we are creating?"
-          | _ -> call_expect_type
+          | _ -> call_expect_type t t0
           end
-        | _ -> call_expect_type
-          
+        | _ -> call_expect_type t t0
         end
       in
       match (value, t, t0) with

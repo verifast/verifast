@@ -723,7 +723,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   match xs with
                    [] -> List.rev xm
                  | (te, x)::xs ->
-                   if List.mem_assoc x xm then static_error l "Duplicate parameter name." None;
+                   if List.mem_assoc x xm then static_error lm "Duplicate parameter name." None;
                    let t = check_pure_type (pn, ilist) tparams Real te in
                    iter ((x, t)::xm) xs
                 in
@@ -1575,7 +1575,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           mk_varargs h env [] pats
         | SrcPat (LitPat e)::pats, (x, tp0)::ps ->
           let tp = instantiate_type tpenv tp0 in
-          Printf.printf "instantiated type %s to %s \n" (string_of_type tp0) (string_of_type tp);
+          Printf.printf "instantiated type %s to %s through tpenv: %s\n" (string_of_type tp0) (string_of_type tp)
+            (String.concat ", " (List.map (fun (tparam, targ) -> tparam ^ "->" ^ string_of_type targ) tpenv));
           eval_h h env (SrcPat (LitPat (box (check_expr_t (pn,ilist) tparams tenv e tp) tp tp0))) $. fun h env t ->
           iter h env (t::ts) pats ps
         | TermPat t::pats, _::ps ->
@@ -2110,12 +2111,27 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let targtps = match targs with 
           (* Type check passed type arguments *)
           Some(targs) -> 
-            if ctpenv != [] && targs = [] then
-              List.map (fun tparam -> InferredGenericType tparam) ctpenv
+            if ctpenv != [] && targs = [] then begin
+              let xmapargs = List.map2 (fun (n, tp) argtp -> (tp, argtp)) xmap argtps in 
+              (* We may be able to infer some type arguments based on the types of the arguments *)
+              (* Probably will need this code again, should probably move it *)
+              ctpenv |> List.map begin fun curtparam ->
+                let occurencesInXmap = xmapargs |> List.filter (fun (tp, argtp) -> 
+                  match tp with
+                  | RealTypeParam tparam when tparam = curtparam -> true
+                  | _ -> false)
+                in
+                if occurencesInXmap = [] then
+                  InferredGenericType curtparam (* Infer at a later time *)
+                else
+                  glb (List.map snd occurencesInXmap)
+              end
+            end 
             else
               List.map (check_pure_type (pn,ilist) tparams Real) targs 
           (* Raw type, make all targs Object *)
-          | None -> List.map (fun _ -> javaLangObject) ctpenv in
+          | None -> List.map (fun _ -> javaLangObject) ctpenv 
+        in
         let Some targEnv = zip ctpenv targtps in
         let obj = get_unique_var_symb (match xo with None -> "object" | Some x -> x) (ObjType (cn, targtps)) in
         assume_neq obj (ctxt#mk_intlit 0) $. fun () ->
@@ -2126,7 +2142,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | _ -> true
         in
         let xmap = List.map (fun (name,tp) -> (name, replace_type l targEnv tp)) xmap in
-        Printf.printf "Verifying new object of %s with targs %s and other object: %s \n" cn (String.concat "," (List.map string_of_type targtps)) (match xo with Some(s) -> s | None -> "none");
+        Printf.printf "Verifying new object of %s with targs %s and other object: %s and tenv %s\n" cn
+         (String.concat "," (List.map string_of_type targtps)) 
+         (match xo with Some(s) -> s | None -> "none")
+         (String.concat ", " (List.map (fun (n,t) -> n ^ "->" ^ string_of_type t) tenv));
         check_correct h None None [] args (lm, [], None, xmap, ["this", obj], pre, post, Some(epost), terminates, Static) is_upcall (Some cn) (fun h env _ -> cont h env obj)
       | _ -> static_error l "Multiple matching overloads" None
       end

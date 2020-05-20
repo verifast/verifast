@@ -22,6 +22,8 @@ public class DiamondOperator{
 		f2 = invert.get1();
 		f1 = invert.get2();
 		
+		Other<Boolean,Integer> abba = new Other< >(b,b,a);
+		
 		assert f1 == a && f2 == b;
 	}
 }
@@ -44,6 +46,14 @@ public class Other<T,V>{
 	{
 		f1 = arg1;
 		f2 = arg2;
+	}
+	
+	public Other(T arg1, T arg2, V arg3)
+	//@requires true;
+	//@ensures this.f1 |-> arg1 &*& this.f2 |-> arg3;
+	{
+		f1 = arg1;
+		f2 = arg3;
 	}
 	
 	public T get1()

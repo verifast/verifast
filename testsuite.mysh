@@ -502,6 +502,7 @@ cd tests
     verifast -c GenericInheritance.java
     verifast -c GenericType.java
     verifast -c QualifiedGenericMethodCall.java
+    verifast -c DiamondOperator.java
     cd ..
   cd ..
 cd ..
