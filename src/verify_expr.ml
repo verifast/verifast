@@ -2111,22 +2111,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let targtps = match targs with 
           (* Type check passed type arguments *)
           Some(targs) -> 
-            if ctpenv != [] && targs = [] then begin
-              let xmapargs = List.map2 (fun (n, tp) argtp -> (tp, argtp)) xmap argtps in 
-              (* We may be able to infer some type arguments based on the types of the arguments *)
-              (* Probably will need this code again, should probably move it *)
-              ctpenv |> List.map begin fun curtparam ->
-                let occurencesInXmap = xmapargs |> List.filter (fun (tp, argtp) -> 
-                  match tp with
-                  | RealTypeParam tparam when tparam = curtparam -> true
-                  | _ -> false)
-                in
-                if occurencesInXmap = [] then
-                  InferredGenericType curtparam (* Infer at a later time *)
-                else
-                  glb (List.map snd occurencesInXmap)
-              end
-            end 
+            if ctpenv != [] && targs = [] then
+              let inferredTparams = infer_type l (List.map snd xmap) argtps in
+              (* It is possible we have to infer this based on what the object is assigned to *)
+              List.map (fun tparam -> try List.assoc tparam inferredTparams with Not_found -> InferredGenericType tparam) ctpenv
             else
               List.map (check_pure_type (pn,ilist) tparams Real) targs 
           (* Raw type, make all targs Object *)

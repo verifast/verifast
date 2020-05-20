@@ -2851,7 +2851,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | [last] -> intersection iset last
         | hd::tl -> iter tl (intersection iset hd)
         in
-        iter (List.map snd est_map) []
+        iter (List.map snd est_map) (snd (List.hd est_map))
       in
       (* MEC = { V | V in EC, and for all W ≠ V in EC, it is NOT the case that W <: V } *)
       let mec = erased_candidate_set |> List.filter (fun v -> (* V in EC *)
@@ -2859,7 +2859,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           if (w = v) then   
             false
           else
-            List.mem v (List.assoc w st_map) = false) (* it is not the case that W <: V  *)
+            is_subtype_of_ w v = false) (* it is not the case that W <: V  *)
         in
         parents = []
         ) 
@@ -2883,25 +2883,24 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       [] -> failwith "can't find glb of empty set"
     | [s] -> s
     | hd::tl -> (* It is a compile-time error if, for any two classes (not interfaces) Vi and Vj, Vi is not a subclass of Vj or vice versa. *)
-      (* Might be unsound for parameterised types *)
+      (* simply said glb(a,b,c) = a & b & c *)
       if is_primitive_type hd then 
         failwith "No support for boxing primitive types yet." 
       else
-        let rec iter tps curType curSupers =
+        let rec iter tps curType =
           match tps with
             hd::tl ->
-              if List.mem hd curSupers then
-                iter tl curType curSupers
+              if is_subtype_of_ curType hd then
+                iter tl curType
               else begin
-                let tpSupers = super_types hd in
-                if List.mem curType tpSupers then 
-                  iter tl hd tpSupers
+                if is_subtype_of_ hd curType then 
+                  iter tl hd
                 else
-                  failwith ("Can't find glb for: " ^ (String.concat ", " (List.map string_of_type set)))
+                  failwith ("Can't find glb for: " ^ (String.concat ", " (List.map string_of_type set)) ^ " with cur: " ^ string_of_type curType)
               end
           | [] -> curType
         in 
-        iter tl hd (hd::super_types hd)
+        iter tl hd
 
   let incorporate bounds addedBounds =
     let rec iter addedBounds newBounds =
@@ -3075,34 +3074,29 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         resolve_inference l bounds
 
   let infer_type l actual expected =
-    Printf.printf "calling infer_type \n";
     let not_supported msgcase = static_error l ("type inference for " ^ msgcase ^ " not supported yet") None in
-    let rec inference_sets bounds constraints t t0 =
-      Printf.printf "making inference sets \n";
-      match (t,t0) with
+    let rec inference_sets bounds constraints actual expected =
+      match (actual, expected) with
         (hd::tl, hd0::tl0) -> begin match (hd,hd0) with
             (ObjType (t, targs), ObjType (t0, targs0)) ->
               Printf.printf "%s is %s a subtype of %s\n" t (if is_subtype_of t t0 then "" else "NOT") t0;
               if is_subtype_of t t0 then
                 inference_sets bounds constraints targs targs0
               else
-                static_error l ("Type mismatch during inference. Actual: " ^ string_of_type actual ^ ". Expected: " ^ string_of_type expected ^ ".") None
-            | (InferredGenericType t, t0) ->
+                static_error l ("Type mismatch during inference. Actual: " ^ string_of_type hd ^ ". Expected: " ^ string_of_type hd0 ^ ".") None
+            | (InferredGenericType t, t0) | (RealTypeParam t, t0) ->
               (* When type param bounds are introduced, look up the bound for the type param you are creating an inference bound for *)
               let bound = if List.mem (Upper_bound (t, javaLangObject)) bounds then [] else [Upper_bound (t, javaLangObject)] in
-              let constrt = LooseInvocation (InferredGenericType t, t0) in
+              let constrt = LooseInvocation (t0, InferredGenericType t) in
               inference_sets (bound@bounds) (constrt::constraints) tl tl0
             | _ -> not_supported ("case: Actual:" ^ string_of_type hd ^ ". Expected:" ^ string_of_type hd0 ^ ".")
           end
       | (_,_) -> (bounds,constraints)
     in
-    let (bounds,constraints) = inference_sets [] [] [actual] [expected] in
+    let (bounds,constraints) = inference_sets [] [] actual expected in
     let bounds = bounds@List.filter (fun b -> if List.mem b bounds then false else true) (reduce l constraints) in
     (* TODO: Resolve bounds *)
-    let inference_map = resolve_inference l bounds in
-    match actual with 
-      ObjType (t, targs) -> ObjType (t, (List.map (fun targ -> match targ with InferredGenericType t -> List.assoc t inference_map | t -> t) targs))
-    | _ -> failwith ("no support for inferring this type yet: " ^ string_of_type actual)
+    resolve_inference l bounds
 
 
   let rec check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e: (expr (* typechecked expression *) * type_ (* expression type *) * big_int option (* constant integer expression => value*)) =
@@ -3601,7 +3595,17 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         Printf.printf "trying qualified call %s.%s (%s)" tn g (String.concat ", " (List.map string_of_type argtps));
         let ms = List.map (fun (sign, (tn', lm, gh, rt, xmap, pre, post, epost, terminates, fb', v, abstract, mtparams)) ->
           (* Replace the type parameters with their concrete type*)
-          let methodTargEnv = match zip mtparams targs with Some(tenv) -> tenv | None -> flatmap (fun t -> [(t,javaLangObject)]) mtparams in
+          let methodTargEnv = match zip mtparams targs with
+            Some(tenv) -> tenv
+          | None ->
+            if targs != [] then 
+              static_error l "Wrong amount of type arguments provided" None
+            else
+              let inferredTypes = infer_type l (List.map snd xmap) argtps in
+              List.map (fun tparam ->
+                let targt = try List.assoc tparam inferredTypes with Not_found -> static_error l ("couldn't infer type for type parameter: " ^ tparam) None in
+                (tparam, targt)) mtparams
+          in
           let targenv = methodTargEnv@class_tenv in
           let sign' = 
               List.map (replace_type l targenv) sign in
@@ -3609,7 +3613,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             Some(rt) -> replace_type l targenv rt
           | None -> Void
           in 
-          let xmap' = List.map (fun (name,tp) -> (name, replace_type l targenv tp)) xmap in
+          let xmap' = List.map (fun (name,tp) -> (name, 
+          replace_type l 
+          targenv tp)) 
+          xmap 
+          in
           (sign', (tn', lm, gh, rt', xmap', pre, post, epost, terminates, fb', v, abstract, sign, targenv))) ms in
         let ms = List.filter (fun (sign, _) -> is_assignable_to_sign inAnnotation argtps sign) ms in
         let make_well_typed_method m =
@@ -3871,13 +3879,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
        * checker changes the value").
        *)
       let (w, t, value) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
-      let call_expect_type t t0 = 
-        expect_type (expr_loc e) inAnnotation t t0;
-        if try expect_type dummy_loc inAnnotation t0 t; false with StaticError _ -> true then
-          Upcast (w, t, t0)
-        else
-          w
-      in
       let check () =
         begin match (t, t0) with
         | _ when t = t0 -> w
@@ -3889,22 +3890,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | ((Float|Double|LongDouble), (Int (_, _))) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
         | (ObjType ("java.lang.Object", []), ArrayType _) when isCast -> w
         | (ObjType (x, xtargs), ObjType (y, ytargs)) when inAnnotation <> Some(true) && is_subtype_of x y && xtargs != ytargs ->
-          Printf.printf "\t Applying type inference: %s<%s> -> %s<%s>\n"
-            x
-            (String.concat "," (List.map string_of_type xtargs))
-            y
-            (String.concat "," (List.map string_of_type ytargs));
-          (* Type inference required, for now the only case we support is the newObject *)
-          begin match w with 
-            NewObject (l, cn, args, targs) ->
-              let ObjType(i, itargs) = infer_type (expr_loc e) (ObjType (x,xtargs)) (ObjType (y, ytargs)) in
-              if i = cn then 
-                w
-              else 
-                failwith "Type inference resulted in a different type than what we are creating?"
-          | _ -> call_expect_type t t0
-          end
-        | _ -> call_expect_type t t0
+            ignore (infer_type (expr_loc e) xtargs ytargs); 
+            w
+        | _ -> 
+          expect_type (expr_loc e) inAnnotation t t0;
+          if try expect_type dummy_loc inAnnotation t0 t; false with StaticError _ -> true then
+            Upcast (w, t, t0)
+          else
+            w
         end
       in
       match (value, t, t0) with
