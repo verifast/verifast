@@ -40,7 +40,9 @@ class virtual ['typenode, 'symbol, 'termnode] context =
     method virtual mk_add: 'termnode -> 'termnode -> 'termnode
     method virtual mk_sub: 'termnode -> 'termnode -> 'termnode
     method virtual mk_mul: 'termnode -> 'termnode -> 'termnode
+    (** C-style quotient: D == D / d * d + D % d and abs(D / d * d) <= abs(D) *)
     method virtual mk_div: 'termnode -> 'termnode -> 'termnode
+    (** C-style modulo: D == D / d * d + D % d and abs(D / d * d) <= abs(D) *)
     method virtual mk_mod: 'termnode -> 'termnode -> 'termnode
     method virtual mk_lt: 'termnode -> 'termnode -> 'termnode
     method virtual mk_le: 'termnode -> 'termnode -> 'termnode
