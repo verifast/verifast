@@ -100,7 +100,6 @@ let rec string_of_type t =
   | RealTypeParam x -> if (String.capitalize_ascii x) = x then x else "<" ^ x ^ ">"
   | GhostTypeParam x -> if (String.capitalize_ascii x) = x then "<" ^ x ^ ">" else x
   | InferredType (_, t) -> begin match !t with EqConstraint t -> string_of_type t | _ -> "?" end
-  | InferredGenericType t -> t ^ "?"
   | ArrayType(t) -> (string_of_type t) ^ "[]"
   | StaticArrayType(t, s) -> (string_of_type t) ^ "[" ^ (string_of_int s) ^ "]" 
   | ClassOrInterfaceName(n) -> n (* not a real type; used only during type checking *)

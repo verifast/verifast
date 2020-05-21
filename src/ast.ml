@@ -118,7 +118,6 @@ type type_ = (* ?type_ *)
   | AnyType (* supertype of all inductive datatypes; useful in combination with predicate families *)
   | RealTypeParam of string (* a reference to a type parameter declared in the enclosing Real code *)
   | GhostTypeParam of string (* a reference to a type parameter declared in the ghost code *)
-  | InferredGenericType of string (* inferred type, string is the type param that has to be inferred *)
   | InferredType of < > * inferred_type_state ref (* inferred type, is unified during type checking. '< >' is the type of objects with no methods. This hack is used to prevent types from incorrectly comparing equal, as in InferredType (ref Unconstrained) = InferredType (ref Unconstrained). Yes, ref Unconstrained = ref Unconstrained. But object end <> object end. *)
   | ClassOrInterfaceName of string (* not a real type; used only during type checking *)
   | PackageName of string (* not a real type; used only during type checking *)
@@ -141,7 +140,6 @@ type infBound =
     Equal_bound of string * type_
   | Upper_bound of string * type_
   | Lower_bound of string * type_
-  | InvalidChoice (* No correct inference exists *)
   (* Capture not implemented yet *)
   (* Throws not implemented yet *)
     

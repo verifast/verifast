@@ -8,6 +8,21 @@ public class MethodInference{
 		Integer c = new Integer(5);
 		Object o = infer(a,b,c);
 		Integer o1 = infer(b,b,c);
+		
+		Integer[] arr = {new Integer(1), new Integer(2), new Integer(3)};
+		Integer[] infarr = infer (arr, arr, arr);
+		
+		Foo<Integer> fi = new Foo< >();
+		Foo<Boolean> fb = new Foo< >();
+		Foo<Foo<Boolean> > fnested = new Foo< >();
+		Object res = infer(fi,fb,fi);
+		Foo<Integer> resi = infer(fi,fi,fi);
+		
+		Foo<Foo<Boolean> > nestedRes = infer (fnested, fnested, fnested);
+		Object resnested = infer (fnested, fi, fi);
+		
+		Bar<Boolean> bar = new Bar< >();
+		Foo<Integer> shoul = infer (bar, fi, fi);
 	}
 	
 	public static <T> T infer(T arg1, T arg2, T arg3)
@@ -18,37 +33,10 @@ public class MethodInference{
 	}
 }
 
-public class Other<T,V>{
-	T f1;
-	V f2;
+public class Foo<T>{
 	
-	public Other()
-	//@requires true;
-	//@ensures this.f1 |-> null &*& this.f2 |-> null;
-	{ 
-		f1 = null;
-		f2 = null;
-	}
-	
-	public Other(T arg1, V arg2)
-	//@requires true;
-	//@ensures this.f1 |-> arg1 &*& this.f2 |-> arg2;
-	{
-		f1 = arg1;
-		f2 = arg2;
-	}
-	
-	public T get1()
-	//@ requires this.f1 |-> ?f;
-	//@ ensures result == f;
-	{
-		return f1;
-	}
-	
-	public V get2()
-	//@ requires this.f2 |-> ?f;
-	//@ ensures result == f;
-	{
-		return f2;
-	}
+}
+
+public class Bar<T> extends Foo<Integer>{
+
 }

@@ -443,3 +443,13 @@ let qualified_path vroots modpath (basedir, relpath) =
     | _ -> "./" ^ String.concat "/" (list_make (List.length mcs) ".." @ pcs)
   in
   iter mcs pcs
+
+let add_unique list a = if List.mem a list then
+    list
+  else
+    a::list
+
+let rec add_uniques list addedItems =
+  match addedItems with 
+    hd::tl -> add_uniques (add_unique list hd) tl
+  | [] -> list

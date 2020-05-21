@@ -1575,8 +1575,6 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           mk_varargs h env [] pats
         | SrcPat (LitPat e)::pats, (x, tp0)::ps ->
           let tp = instantiate_type tpenv tp0 in
-          Printf.printf "instantiated type %s to %s through tpenv: %s\n" (string_of_type tp0) (string_of_type tp)
-            (String.concat ", " (List.map (fun (tparam, targ) -> tparam ^ "->" ^ string_of_type targ) tpenv));
           eval_h h env (SrcPat (LitPat (box (check_expr_t (pn,ilist) tparams tenv e tp) tp tp0))) $. fun h env t ->
           iter h env (t::ts) pats ps
         | TermPat t::pats, _::ps ->
@@ -2110,11 +2108,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         (* Typecheck the type arguments *)
         let targtps = match targs with 
           (* Type check passed type arguments *)
-          Some(targs) -> 
-            if ctpenv != [] && targs = [] then
-              let inferredTparams = infer_type l (List.map snd xmap) argtps in
-              (* It is possible we have to infer this based on what the object is assigned to *)
-              List.map (fun tparam -> try List.assoc tparam inferredTparams with Not_found -> InferredGenericType tparam) ctpenv
+          Some(targs) -> if targs = [] && ctpenv != [] then
+              (* Diamond was used, infer the type arguments later *)
+              List.map (fun tparam -> RealTypeParam tparam) ctpenv
             else
               List.map (check_pure_type (pn,ilist) tparams Real) targs 
           (* Raw type, make all targs Object *)
