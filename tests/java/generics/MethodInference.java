@@ -23,6 +23,8 @@ public class MethodInference{
 		
 		Bar<Boolean> bar = new Bar< >();
 		Foo<Integer> shoul = infer (bar, fi, fi);
+		
+		o = a;
 	}
 	
 	public static <T> T infer(T arg1, T arg2, T arg3)

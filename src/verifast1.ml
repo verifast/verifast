@@ -2137,20 +2137,27 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (ObjType ("null", []), ArrayType _) -> ()
     | (RealTypeParam t, ObjType("java.lang.Object", [])) -> ()
     | (ArrayType _, ObjType ("java.lang.Object", [])) -> ()
+    | (ObjType _, ObjType ("java.lang.Object", [])) -> ()
     (* It is possible that type inference finds a type to be a real type parameter, 
     this way the type has not been erased (because type inference retrieves the type information from real code). In Ghost code any real type parameter equals it's erased type. *)
     | (RealTypeParam t0, t1) when inAnnotation = Some(true) -> expect_type_core l msg inAnnotation (erase_type (RealTypeParam t0)) t1
     (* Note that in Java short[] is not assignable to int[] *)
     | (ArrayType et, ArrayType et0) when et = et0 -> ()
-    | (ArrayType (ObjType(t0, ts0)), ArrayType (ObjType(t1, ts1))) -> 
-      begin try expect_type_core l msg None (ObjType (t0, ts0)) (ObjType(t1, ts1)) with 
-      StaticError _ -> static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type (ArrayType (ObjType(t0, ts0))) ^ ". Expected: " ^ string_of_type (ArrayType (ObjType(t1, ts1))) ^ ".") None
-      end
+    | (ArrayType (ObjType(t0, ts0)), ArrayType (ObjType(t1, ts1))) -> expect_type_core l msg None (ObjType (t0, ts0)) (ObjType(t1, ts1))
     | (StaticArrayType _, PtrType _) -> ()
     | (Int (Signed, m), Int (Signed, n)) when m <= n -> ()
     | (Int (Unsigned, m), Int (Unsigned, n)) when m <= n -> ()
     | (Int (Unsigned, m), Int (Signed, n)) when m < n -> ()
     | (Int (_, _), Int (_, _)) when inAnnotation = Some true -> ()
+    (* e.g. List<Object> = List<A> *)
+    | (ObjType (x, xtargs), ObjType (y, ytargs)) when x = y ->
+      if xtargs = ytargs then
+        ()
+      else
+        begin try ignore (List.map2 (fun xtarg ytarg -> expect_type_core l msg None xtarg ytarg) xtargs ytargs) with
+          Invalid_argument _ -> static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ". inannotation: " ^ (match inAnnotation with None -> "None" | Some(true) -> "true" | _ -> "false")) None
+        end
+    (* e.g. class A<T>, class B<T> extends A<C>. A<C> first, B<Object> second, first = second is valid *)
     | (ObjType (x, xtargs), ObjType (y, ytargs)) when is_subtype_of_ (ObjType (x, xtargs)) (ObjType (y, ytargs)) -> ()
     | (PredType ([], ts, inputParamCount, inductiveness), PredType ([], ts0, inputParamCount0, inductiveness0)) ->
       begin
@@ -2166,6 +2173,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let expect_type l (inAnnotation: bool option) t t0 = expect_type_core l "" inAnnotation t t0
   
   let is_assignable_to (inAnnotation: bool option) t t0 =
+    Printf.printf "%s is %s assignable to %s" (string_of_type t) (try expect_type dummy_loc inAnnotation t t0; "" with StaticError (l, msg, url) -> "Not") (string_of_type t0);
     try expect_type dummy_loc inAnnotation t t0; true with StaticError (l, msg, url) -> false (* TODO: Consider eliminating this hack *)
   
   let is_assignable_to_sign (inAnnotation: bool option) sign sign0 = for_all2 (is_assignable_to inAnnotation) sign sign0
@@ -2983,7 +2991,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       ObjType (t, targs) -> (List.filter (fun t -> proper_type t = false) targs) = []
     | RealTypeParam t -> false
     | ArrayType t -> true
-    | _ -> failwith ("no support yet to see if " ^ string_of_type t ^ " is a proper type")
+    | _ -> inference_error l ("no support yet to see if " ^ string_of_type t ^ " is a proper type")
     in
     match constraints with
     | [] -> []
@@ -3073,13 +3081,17 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       iter [] bounds
     in    
     let resolvedInfVars =
+      Printf.printf "calculating resolved inference vars with total inf vars: %s \n" (String.concat ", " inference_variables);
       let rec iter bounds infvars =
         match infvars with 
-          hd::tl -> let eqBounds = bounds |> List.filter begin fun bound -> match bound with 
-            |  Equal_bound (infvar, t) -> true
+          hd::tl -> 
+            Printf.printf "checking bounds for %s \n" hd;
+            let eqBounds = bounds |> List.filter begin fun bound -> match bound with 
+            |  Equal_bound (infvar, t) when infvar = hd -> true
             |  _ -> false
             end
             in
+            Printf.printf "Found eqbounds: %s for %s \n" (String.concat ", " (List.map string_of_bound eqBounds)) hd;
             if eqBounds = [] then
               iter bounds tl
             else
@@ -3090,6 +3102,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       iter bounds inference_variables
     in
     let isResolved resolvedInfVars infvars =
+      Printf.printf "checking if inference is done with resolved Inf vars: %s and vars: %s\n"
+        (String.concat ", " (List.map (fun (infvar,tp) -> infvar ^ "->" ^ string_of_type tp) resolvedInfVars))
+        (String.concat ", " infvars);
       let resolved = List.map fst resolvedInfVars in
       let unresolvedInfVars = List.filter (fun infvar -> List.mem infvar resolved = false) infvars in
       unresolvedInfVars = []
@@ -3200,7 +3215,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let constrt = LooseInvocation (t0, RealTypeParam t) in
           let constraints = if List.mem constrt constraints then constraints else constrt::constraints in
           inference_sets bounds constraints tl tl0
-        | _ -> let constrt = LooseInvocation (hd0, hd) in
+        | _ -> let constrt = LooseInvocation (hd, hd0) in
           Printf.printf "Adding loose invocation from %s to %s \n" (string_of_type hd0) (string_of_type hd);
           let constraints = if List.mem constrt constraints then constraints else constrt::constraints in
           if is_primitive_type hd || is_primitive_type hd0 then inference_error l "Can't infer primitive types yet because boxing isn't supported yet" else
@@ -3209,6 +3224,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | (_,_) -> (bounds,constraints)
     in
     let (bounds,constraints) = inference_sets [] [] actual expected in
+    Printf.printf "inference sets calculated without issue \n";
     let bounds = bounds@List.filter (fun b -> if List.mem b bounds then false else true) (reduce l constraints) in
     (* TODO: Resolve bounds *)
     resolve_inference l bounds
@@ -4008,8 +4024,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | _ when inAnnotation <> Some(true) && language = Java ->
             let inferredTypes = begin try infer_type (expr_loc e) [t] [t0] with InferenceError _ -> [] end in
             Printf.printf "inferred types: %s \n" (String.concat ", " (List.map (fun (tparam, tp) -> tparam ^ "->" ^ string_of_type tp) inferredTypes));
-            expect_type (expr_loc e) inAnnotation (replace_type (expr_loc e) inferredTypes t) t0;
-            w
+            let t = replace_type (expr_loc e) inferredTypes t in
+            if try expect_type dummy_loc inAnnotation t0 t; false with StaticError _ -> true then
+              Upcast (w, t, t0)
+            else
+              w
         | _ -> 
           expect_type (expr_loc e) inAnnotation t t0;
           if try expect_type dummy_loc inAnnotation t0 t; false with StaticError _ -> true then
