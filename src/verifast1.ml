@@ -3788,7 +3788,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               end
           | None -> List.map (fun _ -> javaLangObject) ctpenv
           in
-          Printf.printf "Creating new object of %s with targs %s \n" cn (String.concat "," (List.map string_of_type targestps));
           (NewObject (l, cn, args, targs), ObjType (cn,targestps), None)
       | None -> static_error l "No such class" None
       end
