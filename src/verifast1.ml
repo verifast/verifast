@@ -3182,10 +3182,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match (actual, expected) with
         (hd::tl, hd0::tl0) -> begin match (hd,hd0) with
         | (ObjType (t, targs), ObjType (t0, targs0)) when t != "null" && t0 != "null" ->
-          if is_subtype_of t t0 then
-            inference_sets bounds constraints targs targs0
-          else
-            inference_error l ("Type mismatch during inference. Actual: " ^ string_of_type hd ^ ". Expected: " ^ string_of_type hd0 ^ ".")
+          if proper_type hd && proper_type hd0 then
+            inference_sets bounds constraints tl tl0
+          else begin
+            if List.length targs != List.length targs0 then
+              inference_error l ("Type mismatch during inference. Actual: " ^ string_of_type hd ^ ". Expected: " ^ string_of_type hd0 ^ ".")
+            else
+              inference_sets bounds constraints (targs@tl) (targs0@tl0)
+          end
         | (RealTypeParam t, RealTypeParam t0) when t = t0 -> inference_sets bounds constraints tl tl0
         | (RealTypeParam t, t0) ->
           (* When type param bounds are introduced, look up the bound for the type param you are creating an inference bound for *)
@@ -3193,11 +3197,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let constrt = LooseInvocation (t0, RealTypeParam t) in
           let constraints = if List.mem constrt constraints then constraints else constrt::constraints in
           inference_sets bounds constraints tl tl0
-        | _ -> let constrt = LooseInvocation (hd, hd0) in
-          Printf.printf "Adding loose invocation from %s to %s \n" (string_of_type hd0) (string_of_type hd);
-          let constraints = if List.mem constrt constraints then constraints else constrt::constraints in
-          if is_primitive_type hd || is_primitive_type hd0 then inference_error l "Can't infer primitive types yet because boxing isn't supported yet" else
-          inference_sets bounds constraints tl tl0
+        | _ -> inference_sets bounds constraints tl tl0
         end
       | (_,_) -> (bounds,constraints)
     in

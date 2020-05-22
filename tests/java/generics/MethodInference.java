@@ -25,9 +25,18 @@ public class MethodInference{
 		Foo<Integer> shoul = infer (bar, fi, fi);
 		
 		o = a;
+		
+		Integer infer2Int = infer2(b,c,a);
 	}
 	
 	public static <T> T infer(T arg1, T arg2, T arg3)
+	//@requires true;
+	//@ensures true;
+	{
+        	return arg1;
+	}
+	
+	public static <T> T infer2(T arg1, T arg2, Object arg3)
 	//@requires true;
 	//@ensures true;
 	{
