@@ -1457,7 +1457,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | None -> match resolve Real (pn,ilist) l id class_arities with
         Some (id, (ld, n, tparams)) ->
         if targs = [] then
-          ObjType(id, flatmap (fun tparam -> [RealTypeParam tparam]) tparams)
+          ObjType(id, List.map (fun tparam -> RealTypeParam tparam) tparams)
         else
           if n <> List.length targs then 
             static_error l "Incorrect number of type arguments." None
@@ -1521,7 +1521,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         iter [] fds
       end
       classmap1
-  
+      
+  (* Type check type arguments of super types *)
   let interfmap1 = 
     List.map
        begin fun (tn, (li, fields, methods, preds, interfs, pn, ilist, tparams)) ->
@@ -1681,6 +1682,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (ArrayType x, ArrayType y) -> is_subtype_of_ x y
     | _ -> false
 
+  (* A proper type is a type that contains no RealTypeParam *)
   let rec proper_type t = match t with
       ObjType (t, targs) -> (List.filter (fun t -> proper_type t = false) targs) = []
     | ArrayType t -> proper_type t
@@ -2144,7 +2146,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (ObjType ("null", []), ArrayType _) -> ()
     | (RealTypeParam t, ObjType("java.lang.Object", [])) -> ()
     | (ArrayType _, ObjType ("java.lang.Object", [])) -> ()
-    | (ObjType _, ObjType ("java.lang.Object", [])) -> ()
     (* It is possible that type inference finds a type to be a real type parameter, 
     this way the type has not been erased (because type inference retrieves the type information from real code). In Ghost code any real type parameter equals it's erased type. *)
     | (RealTypeParam t0, t1) when inAnnotation = Some(true) -> expect_type_core l msg inAnnotation (erase_type (RealTypeParam t0)) t1
