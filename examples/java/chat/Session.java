@@ -110,7 +110,7 @@ public final class Session implements Runnable {
             List<Member> membersList = room.members;
             //@ assert foreach<Member>(?members, @member);
             //@ assume(mem<Member>(member, members)); // TODO: Eliminate using a ghost list.
-            ListUtil.<Member>remove(membersList, member);
+            ListUtil.remove(membersList, member);
             //@ foreach_remove<Member>(member, members);
         }
         //@ close room(room);
