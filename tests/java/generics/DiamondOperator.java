@@ -25,6 +25,8 @@ public class DiamondOperator{
 		Other<Boolean,Integer> abba = new Other< >(b,b,a);
 		
 		assert f1 == a && f2 == b;
+		
+		f1 = o1.get2();  //~
 	}
 }
 
@@ -58,14 +60,14 @@ public class Other<T,V>{
 	
 	public T get1()
 	//@ requires this.f1 |-> ?f;
-	//@ ensures result == f;
+	//@ ensures result == f &*& this.f1 |-> f;
 	{
 		return f1;
 	}
 	
 	public V get2()
 	//@ requires this.f2 |-> ?f;
-	//@ ensures result == f;
+	//@ ensures result == f &*& this.f2 |-> f;
 	{
 		return f2;
 	}

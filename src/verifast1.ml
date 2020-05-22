@@ -1680,7 +1680,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         List.exists (fun st -> st = y || is_subtype_of_ st y) directSupers
     | (ArrayType x, ArrayType y) -> is_subtype_of_ x y
     | _ -> false
-  
+
+  let rec proper_type t = match t with
+      ObjType (t, targs) -> (List.filter (fun t -> proper_type t = false) targs) = []
+    | ArrayType t -> proper_type t
+    | Bool | Int _ | Double | Float -> true
+    | GhostTypeParam _ -> true
+    | _ -> false
+
   let is_unchecked_exception_type tp = 
     match tp with
      ObjType (cn, _) -> (is_subtype_of cn "java.lang.RuntimeException") || (is_subtype_of cn "java.lang.Error")
@@ -2987,12 +2994,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   (* Reduces constraint formula's to a bounds set *)
   (* Always stop on an invalid choice, so the last element in the return set is either a bound, or an invalid choice *)
   let rec reduce l constraints =
-    let rec proper_type t = match t with
-      ObjType (t, targs) -> (List.filter (fun t -> proper_type t = false) targs) = []
-    | RealTypeParam t -> false
-    | ArrayType t -> true
-    | _ -> inference_error l ("no support yet to see if " ^ string_of_type t ^ " is a proper type")
-    in
     match constraints with
     | [] -> []
     | cs::tl ->
@@ -3133,7 +3134,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       (* a depends on b if there exists a c so that a depends on c and c depends on b *)
       (* an inference variable a depends on the resolution of itself *)
-      let dependant_infvars = 
+      let dependancies = 
         let rec iter dependancies_todo dependancies =
           match dependancies_todo with
             (a, b)::tl ->
@@ -3180,13 +3181,18 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         there is some j such that β = αj; and 
       (ii) there exists no non-empty proper subset of { α1, ..., αn } with this property.*)
       let infVarsToResolve = inference_variables |> List.filter begin fun infvar -> 
-        let unresolvedDependencies = dependant_infvars |> List.filter begin fun (a, b) -> 
-          true
+        let unresolvedDependencies = dependancies |> List.filter begin fun (a, b) -> 
+          if a = infvar then
+            begin try ignore (List.assoc b resolvedInfVars); false with Not_found -> true end
+          else
+            false
         end
         in
         unresolvedDependencies = []
       end
       in
+      Printf.printf "resolving inference variables: %s and all Inf_vars: %s and dependencies: %s\n" (String.concat "," infVarsToResolve) (String.concat ", " inference_variables)
+      (String.concat ", " (List.map (fun (a,b) -> a ^ "->" ^ b) dependancies));
       let resolvedBounds = iter infVarsToResolve bounds in
       let addedConstraints = incorporate bounds resolvedBounds in
       let addedBounds = reduce l addedConstraints in
@@ -3209,6 +3215,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             inference_sets bounds constraints targs targs0
           else
             inference_error l ("Type mismatch during inference. Actual: " ^ string_of_type hd ^ ". Expected: " ^ string_of_type hd0 ^ ".")
+        | (RealTypeParam t, RealTypeParam t0) when t = t0 -> inference_sets bounds constraints tl tl0
         | (RealTypeParam t, t0) ->
           (* When type param bounds are introduced, look up the bound for the type param you are creating an inference bound for *)
           let bounds = if List.mem (Upper_bound (t, javaLangObject)) bounds then bounds else (Upper_bound (t, javaLangObject))::bounds in
@@ -3793,7 +3800,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | ClassOrInterfaceName tn -> (tn, List.tl es, Static, [])
           | _ -> static_error l "Target of method call must be object or class" None
         in
-        Printf.printf "calling method %s.%s with return type: %s \n"
+        Printf.printf "calling method %s.%s with return callee type: %s \n"
           tn g (string_of_type arg0tp);
         try_qualified_call tn es args fb obj_type_arguments (fun () -> static_error l "No such method" None)
       end
@@ -3960,8 +3967,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end 
     | AssignExpr (l, e1, e2) ->
       let (w1, t1, _) = check e1 in
-      Printf.printf "Assign expression: e1: %s. \n"
-        (string_of_type t1);
+      Printf.printf "Assign expression: e1: %s. and tenv: %s \n"
+        (string_of_type t1)
+        (String.concat ", " (List.map (fun (n,tp) -> n ^ "->" ^ string_of_type tp) tenv))
+        ;
       let w2 = checkt e2 t1 in
       (AssignExpr (l, w1, w2), t1, None)
     | AssignOpExpr (l, e1, op, e2, postOp) ->
@@ -4022,13 +4031,17 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | ((Float|Double|LongDouble), (Int (_, _))) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
         | (ObjType ("java.lang.Object", []), ArrayType _) when isCast -> w
         | _ when inAnnotation <> Some(true) && language = Java ->
-            let inferredTypes = begin try infer_type (expr_loc e) [t] [t0] with InferenceError _ -> [] end in
-            Printf.printf "inferred types: %s \n" (String.concat ", " (List.map (fun (tparam, tp) -> tparam ^ "->" ^ string_of_type tp) inferredTypes));
-            let t = replace_type (expr_loc e) inferredTypes t in
-            if try expect_type dummy_loc inAnnotation t0 t; false with StaticError _ -> true then
-              Upcast (w, t, t0)
-            else
-              w
+          let inferredTypes = 
+            if proper_type t then
+              []
+            else begin try infer_type (expr_loc e) [t] [t0] 
+                with InferenceError (l, msg) -> static_error l msg None 
+              end 
+          in
+          Printf.printf "inferred types: %s \n" (String.concat ", " (List.map (fun (tparam, tp) -> tparam ^ "->" ^ string_of_type tp) inferredTypes));
+          let t = replace_type (expr_loc e) inferredTypes t in
+          expect_type (expr_loc e) inAnnotation t t0; 
+          w
         | _ -> 
           expect_type (expr_loc e) inAnnotation t t0;
           if try expect_type dummy_loc inAnnotation t0 t; false with StaticError _ -> true then

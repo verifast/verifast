@@ -283,9 +283,9 @@ cd examples
       verifast -c -prover redux NewEPurse/IEPurseServices.jarsrc
       verifast -c -prover redux -allow_assume -provides "java_card_applet newepurse.NewEPurseApplet" NewEPurse/NewEPurseApplet.jarsrc
       verifast -c -prover redux -provides "java_card_applet newjticket.NewJTicketApplet" NewJTicket/NewJTicketApplet.jarsrc
-      verifast -c -prover redux NewEidCard/EidCardServices.jarsrc
-      verifast -c -prover redux -provides "java_card_applet be.fedict.neweidapplet.NewEidCard" NewEidCard/EidCard.jarsrc
-      verifast -c -prover redux -provides "java_card_applet be.fedict.eidapplet.EidCard" NewEidCard/EidCard-with-auto.java
+      verifast -c -prover redux -disable_overflow_check NewEidCard/EidCardServices.jarsrc
+      verifast -c -prover redux -disable_overflow_check -provides "java_card_applet be.fedict.neweidapplet.NewEidCard" NewEidCard/EidCard.jarsrc
+      verifast -c -prover redux -disable_overflow_check -provides "java_card_applet be.fedict.eidapplet.EidCard" NewEidCard/EidCard-with-auto.java
       verifast -c -allow_assume -prover redux -provides "java_card_applet newmypackage.NewMyApplet 5,1,2,3,4,5,0,3,2,10,10" NewMyApplet/NewMyApplet.jarsrc
       verifast -c -allow_assume -prover redux -provides "java_card_applet mypackage.MyApplet 5,1,2,3,4,5,0,3,2,10,10" MyApplet-with-auto.java
     cd ..
@@ -502,7 +502,7 @@ cd tests
     verifast -c GenericInheritance.java
     verifast -c GenericType.java
     verifast -c QualifiedGenericMethodCall.java
-    verifast -c DiamondOperator.java
+    verifast -c -allow_should_fail DiamondOperator.java
     verifast -c MethodInference.java
     cd ..
   cd ..
