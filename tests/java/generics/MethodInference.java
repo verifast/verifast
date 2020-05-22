@@ -26,7 +26,8 @@ public class MethodInference{
 		
 		o = a;
 		
-		Integer infer2Int = infer2(b,c,a);
+		Integer infer2Int = infer2(b, c, a, b);
+		Integer infer2IntShouldFail = infer2(b, c, a, a); //~
 	}
 	
 	public static <T> T infer(T arg1, T arg2, T arg3)
@@ -36,7 +37,7 @@ public class MethodInference{
         	return arg1;
 	}
 	
-	public static <T> T infer2(T arg1, T arg2, Object arg3)
+	public static <T> T infer2(T arg1, T arg2, Object arg3, Integer arg4)
 	//@requires true;
 	//@ensures true;
 	{
