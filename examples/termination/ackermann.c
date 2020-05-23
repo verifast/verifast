@@ -19,20 +19,11 @@ fixpoint nat A(nat m, nat n) {
 
 @*/
 
-// TODO: Support recursive calls directly.
-// Workaround: Perform the recursive calls as function pointer calls.
-
-typedef int ackermann_iter_(int m, int n);
-    //@ requires 0 <= m &*& 0 <= n &*& [2]call_perm_level(currentThread, pair((pair_lt)(lt, lt), pair(m, n)), {ackermann_iter});
-    //@ ensures result == int_of_nat((A)(nat_of_int(m))(nat_of_int(n)));
-    //@ terminates;
-
-int ackermann_iter(int m, int n) //@ : ackermann_iter_
+int ackermann_iter(int m, int n)
     //@ requires 0 <= m &*& 0 <= n &*& [2]call_perm_level(currentThread, pair((pair_lt)(lt, lt), pair(m, n)), {ackermann_iter});
     //@ ensures result == int_of_nat((A)(nat_of_int(m))(nat_of_int(n)));
     //@ terminates;
 {
-    ackermann_iter_ *ackermann_iter_ = ackermann_iter;
     if (m == 0) {
         //@ leak [2]call_perm_level(currentThread, pair((pair_lt)(lt, lt), pair(m, n)), {ackermann_iter});
         return n + 1;
@@ -43,7 +34,7 @@ int ackermann_iter(int m, int n) //@ : ackermann_iter_
             //@ is_wf_pair_lt(lt, lt);
             //@ call_perm_level_weaken(2, (pair_lt)(lt, lt), pair(m, n), {ackermann_iter}, 3, pair(m - 1, 1));
             //@ consume_call_perm_level_for(ackermann_iter);
-            int r = ackermann_iter_(m - 1, 1);
+            int r = ackermann_iter(m - 1, 1);
             return r;
         } else {
             //@ is_wf_lt();
@@ -51,10 +42,10 @@ int ackermann_iter(int m, int n) //@ : ackermann_iter_
             //@ call_perm_level_weaken(1, (pair_lt)(lt, lt), pair(m, n), {ackermann_iter}, 3, pair(m, n - 1));
             //@ succ_int(n - 1);
             //@ consume_call_perm_level_for(ackermann_iter);
-            int r1 = ackermann_iter_(m, n - 1);
+            int r1 = ackermann_iter(m, n - 1);
             //@ call_perm_level_weaken(1, (pair_lt)(lt, lt), pair(m, n), {ackermann_iter}, 3, pair(m - 1, r1));
             //@ consume_call_perm_level_for(ackermann_iter);
-            int r2 = ackermann_iter_(m - 1, r1);
+            int r2 = ackermann_iter(m - 1, r1);
             return r2;
         }
     }
@@ -70,3 +61,4 @@ int ackermann(int m, int n)
     //@ call_perm_level(2, pair((pair_lt)(lt, lt), pair(m, n)), {ackermann_iter});
     return ackermann_iter(m, n);
 }
+

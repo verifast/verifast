@@ -1612,6 +1612,28 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
       | _ -> ()
       end;
+      let pre = (* Add call-permission precondition for recursive calls *)
+        match leminfo with
+          RealFuncInfo (gs, g0, caller_terminates) ->
+          if caller_terminates && not pure then begin
+            if not terminates then static_error l "Callee should be declared as 'terminates'." None;
+            begin match g with
+              None -> pre
+            | Some g ->
+              if g == g0 then begin
+                let (_,_,_,p_types,p_termnode,inpParamCount,_) = List.assoc "call_perm_" predfammap in
+                let p = new predref "call_perm_" p_types inpParamCount in
+                Sep (l,
+                  WPredAsn(l, p, true, [], [], [LitPat(WVar(l,current_thread_name,LocalVar));
+                                                LitPat(WVar(l,g,FuncName))]),
+                  pre)
+              end else if not (List.mem g gs)
+              then static_error l "A function declared as 'terminates' can call only preceding functions or itself." None
+              else pre
+            end
+          end else pre
+        | _ -> pre
+      in
       consume_asn_with_post rules tpenv h ghostenv cenv pre true real_unit (fun _ h ghostenv' env' chunk_size post' ->
         let post =
           match post' with
@@ -1620,15 +1642,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         let _ =
           match leminfo with
-            RealFuncInfo (gs, g0, caller_terminates) ->
-            if caller_terminates && not pure then begin
-              if not terminates then static_error l "Callee should be declared as 'terminates'." None;
-              begin match g with
-                None -> ()
-              | Some g ->
-                if not (List.mem g gs) then static_error l "A function declared as 'terminates' can call only preceding functions." None
-              end
-            end
+            RealFuncInfo (gs, g0, caller_terminates) -> ()
           | RealMethodInfo (Some rank) ->
             if not pure && not terminates then static_error l "Callee should be declared as 'terminates'." None
           | RealMethodInfo None -> ()
