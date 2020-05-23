@@ -2068,7 +2068,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let consume_func_call_perm g =
         let gterm = List.assoc g funcnameterms in
         let (_, _, _, _, call_perm__symb, _, _) = List.assoc "call_perm_" predfammap in
-        consume_chunk rules h [] [] [] l (call_perm__symb, true) [] real_unit dummypat (Some 2) [TermPat currentThread; TermPat gterm] $. fun _ h _ _ _ _ _ _ ->
+        consume_chunk rules h [] [] [] l (call_perm__symb, true) [] real_unit real_unit_pat (Some 2) [TermPat currentThread; TermPat gterm] $. fun _ h _ _ _ _ _ _ ->
         cont h
       in
       let consume_class_call_perm () =

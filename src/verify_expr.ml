@@ -1529,7 +1529,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let consume_class_call_perm l currentThread t h cont =
     let (_, _, _, _, call_perm__symb, _, _) = List.assoc "java.lang.call_perm_" predfammap in
-    consume_chunk rules h [] [] [] l (call_perm__symb, true) [] real_unit dummypat (Some 2) [TermPat currentThread; TermPat t] $. fun _ h _ _ _ _ _ _ ->
+    consume_chunk rules h [] [] [] l (call_perm__symb, true) [] real_unit real_unit_pat (Some 2) [TermPat currentThread; TermPat t] $. fun _ h _ _ _ _ _ _ ->
     cont h
 
   let verify_call funcmap eval_h l (pn, ilist) xo g targs pats (callee_tparams, tr, ps, funenv, pre, post, epost, terminates, v) pure is_upcall target_class leminfo sizemap h tparams tenv ghostenv env cont econt =
@@ -1612,28 +1612,24 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
       | _ -> ()
       end;
-      let pre = (* Add call-permission precondition for recursive calls *)
+      begin fun cont ->
         match leminfo with
           RealFuncInfo (gs, g0, caller_terminates) ->
           if caller_terminates && not pure then begin
             if not terminates then static_error l "Callee should be declared as 'terminates'." None;
             begin match g with
-              None -> pre
-            | Some g ->
-              if g == g0 then begin
-                let (_,_,_,p_types,p_termnode,inpParamCount,_) = List.assoc "call_perm_" predfammap in
-                let p = new predref "call_perm_" p_types inpParamCount in
-                Sep (l,
-                  WPredAsn(l, p, true, [], [], [LitPat(WVar(l,current_thread_name,LocalVar));
-                                                LitPat(WVar(l,g,FuncName))]),
-                  pre)
-              end else if not (List.mem g gs)
-              then static_error l "A function declared as 'terminates' can call only preceding functions or itself." None
-              else pre
+              Some g when not (List.mem g gs) ->
+              let (_, _, _, _, call_perm__symb, _, _) = List.assoc "call_perm_" predfammap in
+              let fterm = List.assoc g funcnameterms in
+              consume_chunk rules h [] [] [] l (call_perm__symb, true) [] real_unit real_unit_pat (Some 2) [TermPat (List.assoc current_thread_name env); TermPat fterm] $. fun _ h _ _ _ _ _ _ ->
+              cont h
+            | _ -> cont h
             end
-          end else pre
-        | _ -> pre
-      in
+          end else
+            cont h
+        | _ ->
+          cont h
+      end $. fun h ->
       consume_asn_with_post rules tpenv h ghostenv cenv pre true real_unit (fun _ h ghostenv' env' chunk_size post' ->
         let post =
           match post' with
@@ -2074,7 +2070,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let consume_call_perm h cont =
         if should_terminate leminfo then begin
           let (_, _, _, _, call_perm__symb, _, _) = List.assoc "call_perm_" predfammap in
-          consume_chunk rules h [] [] [] l (call_perm__symb, true) [] real_unit dummypat (Some 2) [TermPat (List.assoc current_thread_name env); TermPat fterm] $. fun _ h _ _ _ _ _ _ ->
+          consume_chunk rules h [] [] [] l (call_perm__symb, true) [] real_unit real_unit_pat (Some 2) [TermPat (List.assoc current_thread_name env); TermPat fterm] $. fun _ h _ _ _ _ _ _ ->
           cont h
         end else
           cont h
