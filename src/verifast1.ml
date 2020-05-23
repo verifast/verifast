@@ -207,14 +207,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     !stats#execStep;
     push_contextStack ();
     push_context ~verbosity_level msg;
-    let result =
-      if !targetPath <> Some [] then
-        cont()
-      else
-        SymExecSuccess
-    in
-    pop_contextStack ();
-    result
+    do_finally
+      begin fun () ->
+        if !targetPath <> Some [] then
+          cont()
+        else
+          SymExecSuccess
+      end
+      pop_contextStack
   
   (** Remember the current path condition, set of used IDs, and set of dummy fraction terms. *)  
   let push() =
