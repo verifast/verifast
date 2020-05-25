@@ -3194,7 +3194,15 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | (_,_) -> (bounds,constraints)
     in
     let (bounds,constraints) = inference_sets [] [] actual expected in
-    let bounds = bounds@List.filter (fun b -> if List.mem b bounds then false else true) (reduce l constraints) in
+    let rec iter bounds constraints =
+      let newBounds = reduce l constraints in
+      let newConstraints = incorporate bounds newBounds in
+      if newConstraints = [] then
+        bounds@newBounds
+      else
+        iter (bounds@newBounds) newConstraints
+    in
+    let bounds = iter bounds constraints in
     resolve_inference l bounds
 
 
