@@ -117,6 +117,7 @@ type type_ = (* ?type_ *)
   | HandleIdType (* handle type, for shared boxes *)
   | AnyType (* supertype of all inductive datatypes; useful in combination with predicate families *)
   | RealTypeParam of string (* a reference to a type parameter declared in the enclosing Real code *)
+  | InferredRealType of string
   | GhostTypeParam of string (* a reference to a type parameter declared in the ghost code *)
   | InferredType of < > * inferred_type_state ref (* inferred type, is unified during type checking. '< >' is the type of objects with no methods. This hack is used to prevent types from incorrectly comparing equal, as in InferredType (ref Unconstrained) = InferredType (ref Unconstrained). Yes, ref Unconstrained = ref Unconstrained. But object end <> object end. *)
   | ClassOrInterfaceName of string (* not a real type; used only during type checking *)
@@ -127,22 +128,6 @@ and inferred_type_state =
     Unconstrained
   | ContainsAnyConstraint of bool (* allow the type to contain 'any' in positive positions *)
   | EqConstraint of type_
-
-type infConstraint =
-    LooseInvocation of type_ * type_
-  | SubType of type_ * type_
-  | Contain of type_ * type_
-  | Equal of type_ * type_
-  (* lambda and method reference not supported yet *)
-  (* LooseExpressionInvocation not supported yet *)
-
-type infBound = 
-    Equal_bound of string * type_
-  | Upper_bound of string * type_
-  | Lower_bound of string * type_
-  (* Capture not implemented yet *)
-  (* Throws not implemented yet *)
-    
 
 let inferred_type_constraint_le c1 c2 =
   match c1, c2 with

@@ -351,7 +351,7 @@ and
        [< '(l, Ident x);
           member = parser
             [< (ps, co, ss) = parse_method_rest l >] ->
-            let this = if classTparams <> [] then ConstructedTypeExpr(l,cn,[]) else IdentTypeExpr (l, None, cn) in
+            let this = if classTparams <> [] then ConstructedTypeExpr(l,cn,List.map (fun tparam -> IdentTypeExpr(l, None, tparam) ) classTparams) else IdentTypeExpr (l, None, cn) in
             let ps = if binding = Instance then (this, "this")::ps 
                 else ps in
             MethMember (Meth (l, Real, t, x, ps, co, ss, binding, vis, abstract, tparams))

@@ -357,7 +357,7 @@ final class ArrayList<T> implements List<T> {
         return true;
     }
     
-    boolean addAll(Collection other)
+    boolean addAll(Collection<T> other)
         //@ requires List(?es) &*& listIsCollection(?li, other) &*& li.List(?other_es);
         //@ ensures List(append(es, other_es)) &*& li.List(other_es);
     {

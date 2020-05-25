@@ -233,14 +233,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | (handler_tp, epost0) :: handlers ->
                   branch
                     begin fun () ->
-                      if (is_subtype_of_ exceptp handler_tp) || (is_subtype_of_ handler_tp exceptp) then
+                      if (is_subtype_of_ l exceptp handler_tp) || (is_subtype_of_ l handler_tp exceptp) then
                         consume_asn rules tpenv0 h [] env0 epost0 true real_unit $. fun _ h ghostenv env size_first ->
                         success()
                       else
                         success()
                     end
                     begin fun () ->
-                      if not (is_subtype_of_ exceptp handler_tp) then
+                      if not (is_subtype_of_ l exceptp handler_tp) then
                         handle_exception handlers
                       else
                         success()
@@ -2109,14 +2109,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let targtps = match targs with 
           (* Type check passed type arguments *)
           Some(targs) -> if targs = [] && ctpenv != [] then
-              (* Diamond was used, infer the type arguments later *)
-              List.map (fun tparam -> RealTypeParam tparam) ctpenv
+              []
             else
               List.map (check_pure_type (pn,ilist) tparams Real) targs 
           (* Raw type, make all targs Object *)
           | None -> List.map (fun _ -> javaLangObject) ctpenv 
         in
-        let Some targEnv = zip ctpenv targtps in
         let obj = get_unique_var_symb (match xo with None -> "object" | Some x -> x) (ObjType (cn, targtps)) in
         assume_neq obj (ctxt#mk_intlit 0) $. fun () ->
         assume_eq (ctxt#mk_app get_class_symbol [obj]) (List.assoc cn classterms) $. fun () ->
@@ -2125,7 +2123,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             Some (Some (_, rank)), RealMethodInfo (Some rank') -> rank < rank'
           | _ -> true
         in
-        let xmap = List.map (fun (name,tp) -> (name, replace_type l targEnv tp)) xmap in
+        let xmap = if targtps = [] then 
+            xmap 
+          else 
+          let Some targEnv = zip ctpenv targtps in
+          List.map (fun (name,tp) -> (name, replace_type l targEnv tp)) xmap 
+        in
         check_correct h None None [] args (lm, [], None, xmap, ["this", obj], pre, post, Some(epost), terminates, Static) is_upcall (Some cn) (fun h env _ -> cont h env obj)
       | _ -> static_error l "Multiple matching overloads" None
       end

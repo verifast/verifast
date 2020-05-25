@@ -1630,7 +1630,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let t = check_pure_type (pn,ilist) tparams Real te in
                 branch
                   begin fun () ->
-                    if((is_subtype_of_ texcep t) || (is_subtype_of_ t texcep)) then begin
+                    if((is_subtype_of_ l texcep t) || (is_subtype_of_ l t texcep)) then begin
                       if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.") None;
                       let tenv = (x, t)::tenv in
                       let env = (x, excep)::env in
@@ -1639,7 +1639,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                       success()
                   end
                   begin fun () ->
-                    if not (is_subtype_of_ texcep t) then
+                    if not (is_subtype_of_ l texcep t) then
                       iter catches
                     else
                       success()
@@ -2589,14 +2589,14 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | (handler_tp, epost) :: handlers ->
         branch
           begin fun () ->
-            if (is_subtype_of_ exceptp handler_tp) || (is_subtype_of_ handler_tp exceptp) then
+            if (is_subtype_of_ l exceptp handler_tp) || (is_subtype_of_ l handler_tp exceptp) then
               consume_asn rules [] h ghostenv env epost true real_unit $. fun _ h ghostenv env size_first ->
               success()
             else
               success()
           end
           begin fun () ->
-            if not (is_subtype_of_ exceptp handler_tp) then
+            if not (is_subtype_of_ l exceptp handler_tp) then
               verify_exceptional_return (pn,ilist) l h ghostenv env exceptp excep handlers
             else
               success()
@@ -2605,7 +2605,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       success()
   
   let rec verify_cons (pn,ilist) cfin cn supercn superctors boxes lems cons tparams =
-    let thisObj = ObjType (cn, (List.map (fun tparam -> RealTypeParam tparam) tparams)) in
+    let thisType = ObjType (cn, (List.map (fun tparam -> RealTypeParam tparam) tparams)) in
     match cons with
       [] -> ()
     | (sign, CtorInfo (lm, xmap, pre, pre_tenv, post, epost, terminates, ss, v))::rest ->
@@ -2627,7 +2627,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let (in_pure_context, leminfo, ghostenv) = (false, RealMethodInfo (if terminates then Some rank else None), []) in
         begin
           produce_asn [] [] ghostenv env pre real_unit None None $. fun h ghostenv env ->
-          let this = get_unique_var_symb "this" thisObj in
+          let this = get_unique_var_symb "this" thisType in
           begin fun cont ->
             if cfin = FinalClass then assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [this]) (List.assoc cn classterms)) cont else cont ()
           end $. fun () ->
@@ -2643,7 +2643,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let econt throwl h env2 exceptp excep =
               verify_exceptional_return (pn,ilist) throwl h ghostenv env exceptp excep epost
             in
-            let tenv = ("this", thisObj):: (current_thread_name, current_thread_type) ::pre_tenv in
+            let tenv = ("this", thisType):: (current_thread_name, current_thread_type) ::pre_tenv in
             begin fun cont ->
               if cn = "java.lang.Object" then
                 cont h
@@ -2683,7 +2683,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     iter h fds
                   | Some(e) -> 
                     with_context (Executing (h, [], expr_loc e, "Executing field initializer")) $. fun () ->
-                    verify_expr false (pn,ilist) tparams false leminfo funcmap sizemap [(current_class, ClassOrInterfaceName cn); ("this", thisObj); (current_thread_name, current_thread_type)] ghostenv h [("this", this); (current_thread_name, List.assoc current_thread_name env)] None e (fun h _ initial_value ->
+                    verify_expr false (pn,ilist) tparams false leminfo funcmap sizemap [(current_class, ClassOrInterfaceName cn); ("this", thisType); (current_thread_name, current_thread_type)] ghostenv h [("this", this); (current_thread_name, List.assoc current_thread_name env)] None e (fun h _ initial_value ->
                       assume_field h cn f t Real this initial_value real_unit $. fun h ->
                       iter h fds
                     ) (fun throwl h env2 exceptp excep -> assert_false h env2 throwl ("Field initializers throws exception.") None)
