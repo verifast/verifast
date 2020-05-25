@@ -502,9 +502,12 @@ cd tests
     verifast -c GenericInheritance.java
     verifast -c GenericType.java
     verifast -c QualifiedGenericMethodCall.java
-    verifast -c -allow_should_fail DiamondOperator.java
+    verifast -c DiamondOperator.java
     verifast -c MethodInference.java
-    verifast -c -allow_should_fail GenericAssign.java
+    cd errors
+      verifast -c -allow_should_fail test1.java
+      verifast -c -allow_should_fail test2.java
+      verifast -c -allow_should_fail test3.java
     cd ..
   cd ..
 cd ..

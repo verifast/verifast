@@ -2157,15 +2157,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (Int (Unsigned, m), Int (Unsigned, n)) when m <= n -> ()
     | (Int (Unsigned, m), Int (Signed, n)) when m < n -> ()
     | (Int (_, _), Int (_, _)) when inAnnotation = Some true -> ()
-    (* e.g. List<Object> = List<A> *)
-    | (ObjType (x, xtargs), ObjType (y, ytargs)) when x = y ->
-      if xtargs = ytargs then
-        ()
-      else
-        begin try ignore (List.map2 (fun xtarg ytarg -> expect_type_core l msg None xtarg ytarg) xtargs ytargs) with
-          Invalid_argument _ -> static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ". inannotation: " ^ (match inAnnotation with None -> "None" | Some(true) -> "true" | _ -> "false")) None
-        end
-    (* e.g. class A<T>, class B<T> extends A<C>. A<C> first, B<Object> second, first = second is valid *)
+    | (ObjType (x, xtargs), ObjType (y, ytargs)) when inAnnotation = Some(true) && is_subtype_of x y -> ()
     | (ObjType (x, xtargs), ObjType (y, ytargs)) when is_subtype_of_ (ObjType (x, xtargs)) (ObjType (y, ytargs)) -> ()
     | (PredType ([], ts, inputParamCount, inductiveness), PredType ([], ts0, inputParamCount0, inductiveness0)) ->
       begin
@@ -2868,7 +2860,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     else
       flatmap (fun (s,stargs) -> (ObjType (s, stargs))::super_types (ObjType (s, stargs))) supers
 
-  (* With the introduction of wildards: expand this algorithm : section 4.10.4 https://docs.oracle.com/javase/specs/jls/se14/html/jls-4.html#jls-4.10.4 *)
+  (* With the introduction of wildcards: extend this algorithm : section 4.10.4 https://docs.oracle.com/javase/specs/jls/se14/html/jls-4.html#jls-4.10.4 *)
   let lcta u v =
     if u = v then u else failwith "no support for wildcards yet"
 
@@ -3716,13 +3708,23 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 (tparam, targt)) mtparams
           in
           let targenv = methodTargEnv@class_tenv in
-          let sign' = 
-              List.map (replace_type l targenv) sign in
+          let sign' = if inAnnotation <> Some(true) then
+              List.map (replace_type l targenv) sign 
+            else
+              List.map erase_type sign
+          in
           let rt' = match rt with
-            Some(rt) -> replace_type l targenv rt
+            Some(rt) -> if inAnnotation <> Some(true) then 
+                replace_type l targenv rt
+              else
+                erase_type rt
           | None -> Void
           in 
-          let xmap' = List.map (fun (name,tp) -> (name, replace_type l targenv tp)) xmap in
+          let xmap' = if inAnnotation <> Some(true) then
+              List.map (fun (name,tp) -> (name, replace_type l targenv tp)) xmap 
+            else
+              List.map (fun (name, tp) -> (name, erase_type tp)) xmap    
+          in
           (sign', (tn', lm, gh, rt', xmap', pre, post, epost, terminates, fb', v, abstract, sign, targenv))) ms in
         let ms = List.filter (fun (sign, _) -> is_assignable_to_sign inAnnotation argtps sign) ms in
         let make_well_typed_method m =

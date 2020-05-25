@@ -2143,14 +2143,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | _ -> false
           in
           let target_class = if can_be_overridden then None else Some tn in
-          let rt = match rt with Some (rt) -> Some(replace_type l tpenv rt) | None -> None in
-          let xmap = List.map (fun (name,tp) -> (name, replace_type l tpenv tp)) xmap in
           (lm, gh, rt, xmap, pre_dyn, post_dyn, epost_dyn, terminates, is_upcall, target_class, fb, v, mtparams)
         | _ ->
           let InterfaceInfo (_, _, methods, _, _, _) = List.assoc tn interfmap in
           let ItfMethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, terminates, v, abstract, mtparams) = List.assoc (m, pts) methods in
           (lm, gh, rt, xmap, pre, post, epost, terminates, false, None, Instance, v, mtparams)
       in
+      let rt = match rt with Some (rt) -> Some(replace_type l tpenv rt) | None -> None in
+      let xmap = List.map (fun (name,tp) -> (name, replace_type l tpenv tp)) xmap in
       let mtargs = List.map (fun tparam -> List.assoc tparam tpenv) mtparams in
       if gh = Real && pure then static_error l "Method call is not allowed in a pure context" None;
       if gh = Ghost then begin

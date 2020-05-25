@@ -25,8 +25,6 @@ public class DiamondOperator{
 		Other<Boolean,Integer> abba = new Other< >(b,b,a);
 		
 		assert f1 == a && f2 == b;
-		
-		f1 = o1.get2();  //~
 	}
 }
 
