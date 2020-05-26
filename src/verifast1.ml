@@ -1653,46 +1653,35 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           end
         end
   
-  let rec is_subtype_of_ l x y =
-    let toObj (name, targs) = ObjType (name, targs) in
+  let direct_supers (ObjType (cn, targs)) = 
+    let toObj (name,targs) = ObjType (name, targs) in
+    let (tparams, directSupers_with_tparams) = match try_assoc cn classmap1 with 
+      Some (_, _, _, _, _, _, super, tparams, interfaces, _, _, _) -> (tparams, (toObj super)::List.map toObj interfaces)
+    | None -> begin match try_assoc cn classmap0 with
+        Some {ctpenv; csuper; cinterfs} -> (ctpenv, (toObj csuper)::List.map toObj cinterfs)
+      | None -> begin match try_assoc cn interfmap1 with
+          Some (_, _, _, _, interfaces, _, _, tparams) -> (tparams, List.map toObj interfaces)
+        | None -> begin match try_assoc cn interfmap0 with
+            Some (InterfaceInfo (_, _, _, _, interfaces, tparams)) -> (tparams, List.map toObj interfaces)
+          | None -> ([],[])
+          end
+        end
+      end
+    in
+    let Some tpenv = zip tparams targs in
+    List.map (replace_type dummy_loc tpenv) directSupers_with_tparams
+
+  let rec is_subtype_of_ x y =
+    x = y ||
+    y = ObjType("java.lang.Object", []) ||
     match (x, y) with
-    | (_, ObjType("java.lang.Object", [])) -> true
-    | (ObjType (a, atargs), ObjType (b, btargs)) when atargs = btargs -> is_subtype_of a b
     | (ObjType (a, atargs), ObjType (b, btargs)) ->
       if language != Java then
         is_subtype_of a b
       else
-        let tparams = match try_assoc a classmap1 with 
-            Some (_, _, _, _, _, _, _, tparams, _, _, _, _) -> tparams
-          | None -> begin match try_assoc a classmap0 with
-              Some {ctpenv} -> ctpenv
-            | None -> begin match try_assoc a interfmap1 with
-                Some (_, _, _, _, _, _, _, tparams) -> tparams
-              | None -> begin match try_assoc a interfmap0 with
-                  Some (InterfaceInfo (_, _, _, _, _, tparams)) -> tparams
-                | None -> []
-                end
-              end
-            end
-        in
-        let Some tpenv = zip tparams atargs in
-        let directSupers_with_tparams = 
-          match try_assoc a classmap1 with 
-            Some (_, _, _, _, _, _, super, _, interfaces, _, _, _) -> (toObj super)::List.map toObj interfaces
-          | None -> begin match try_assoc a classmap0 with
-              Some {csuper; cinterfs} -> (toObj csuper)::List.map toObj cinterfs
-            | None -> begin match try_assoc a interfmap1 with
-                Some (_, _, _, _, interfaces, _, _, _) -> List.map toObj interfaces
-              | None -> begin match try_assoc a interfmap0 with
-                  Some (InterfaceInfo (_, _, _, _, interfaces, _)) -> List.map toObj interfaces
-                | None -> []
-                end
-              end
-            end
-        in
-        let directSupers = List.map (replace_type l tpenv) directSupers_with_tparams in
-        List.exists (fun st -> st = y || is_subtype_of_ l st y) directSupers
-    | (ArrayType x, ArrayType y) -> is_subtype_of_ l x y
+        let directSupers = direct_supers x in
+        List.exists (fun st -> st = y || is_subtype_of_ st y) directSupers
+    | (ArrayType x, ArrayType y) -> is_subtype_of_ x y
     | _ -> false
 
   (* A proper type is a type that contains no InferredRealTypeParam *)
@@ -2172,8 +2161,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (Int (Unsigned, m), Int (Unsigned, n)) when m <= n -> ()
     | (Int (Unsigned, m), Int (Signed, n)) when m < n -> ()
     | (Int (_, _), Int (_, _)) when inAnnotation = Some true -> ()
-    | (ObjType (x, xtargs), ObjType (y, ytargs)) when inAnnotation = Some(true) && is_subtype_of x y -> ()
-    | (ObjType (x, xtargs), ObjType (y, ytargs)) when is_subtype_of_ l (ObjType (x, xtargs)) (ObjType (y, ytargs)) -> ()
+    | (ObjType (x, _), ObjType (y, _)) when is_subtype_of x y -> ()
     | (PredType ([], ts, inputParamCount, inductiveness), PredType ([], ts0, inputParamCount0, inductiveness0)) ->
       begin
         match zip ts ts0 with
@@ -2848,31 +2836,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | Int (s, n1), Int (_, n2) -> Int (s, max n1 n2)
 
   let rec super_types (ObjType (cn, targs)) =
-    let (is_class, super, interfs) =
+    let supers =
       if cn = "java.lang.Object" then
-        (true, None, [])
+        []
       else
-        match try_assoc cn classmap1 with
-          Some (_, _, _, _, _, _, s, _, interfs, _, _, _) -> (true, Some s, interfs)
-        | None -> begin match try_assoc cn classmap0 with
-          Some {csuper; cinterfs} -> (true, Some csuper, cinterfs)
-        | None -> (false, None, [])
-        end
+        direct_supers (ObjType (cn, targs))
     in
-    let supers = if is_class then
-        match super with Some(s) -> s::interfs | None -> interfs
-      else
-        match try_assoc cn interfmap1 with
-          Some (_, _, _, _, interfaces, _, _, _) -> interfaces
-        | None -> begin match try_assoc cn interfmap0 with
-          Some (InterfaceInfo (_, _, _, _, interfaces, _)) -> interfaces
-        | None -> failwith ("Type does not exist: " ^ cn)
-        end 
-    in
-    if cn = "java.lang.Object" then 
-      []
-    else
-      flatmap (fun (s,stargs) -> (ObjType (s, stargs))::super_types (ObjType (s, stargs))) supers
+    flatmap (fun s -> s::super_types s) supers
 
   (* With the introduction of wildcards: extend this algorithm : section 4.10.4 https://docs.oracle.com/javase/specs/jls/se14/html/jls-4.html#jls-4.10.4 *)
   (* least containing type argument *)
@@ -2916,7 +2886,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           if (w = v) then   
             false
           else
-            let issub = is_subtype_of_ l w v in
+            let issub = is_subtype_of_ w v in
             issub
         end
         in (* it is not the case that W <: V  if W has no parents in mec*)
@@ -2949,10 +2919,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let rec iter tps curType =
           match tps with
             hd::tl ->
-              if is_subtype_of_ l curType hd then
+              if is_subtype_of_ curType hd then
                 iter tl curType
               else begin
-                if is_subtype_of_ l hd curType then 
+                if is_subtype_of_ hd curType then 
                   iter tl hd
                 else
                   failwith ("Can't find glb for: " ^ (String.concat ", " (List.map string_of_type set)) ^ " with cur: " ^ string_of_type curType)
@@ -3027,7 +2997,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | LooseInvocation (s, ArrayType t) -> inference_error l "Inference for array types not supported yet" 
         | LooseInvocation (s, t) -> iter ((SubType (s, t))::tl) currentBoundSet
         (* SubType *)
-        | SubType (s, t) when proper_type s && proper_type t -> if is_subtype_of_ l s t then 
+        | SubType (s, t) when proper_type s && proper_type t -> if is_subtype_of_ s t then 
             iter tl currentBoundSet 
           else 
             inference_error l (Printf.sprintf "Invalid inference: %s is not a subtype of %s." (string_of_type s) (string_of_type t))
@@ -3048,7 +3018,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             (* TODO: Case where t is an inner class type of a parameterised class or interface type is not supported yet *)
           | ObjType (t, targs) when targs != [] -> (* Look for a super type of t with the same amount of type arguments as t *)
             inference_error l "No support yet for inferring nested parameterised types."
-          | ObjType (t, targs) -> if is_subtype_of_ l s (ObjType (t, targs)) then 
+          | ObjType (t, targs) -> if is_subtype_of_ s (ObjType (t, targs)) then 
               iter tl currentBoundSet 
             else 
               inference_error l (Printf.sprintf "Invalid inference: %s is not a subtype of %s." (string_of_type s) (string_of_type (ObjType (t, targs))))
@@ -3219,8 +3189,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           (* When type param bounds are introduced, look up the bound for the type param you are creating an inference bound for *)
           let bounds = if List.mem (Upper_bound (t, javaLangObject)) bounds then bounds else (Upper_bound (t, javaLangObject))::bounds in
           let constrt = LooseInvocation (t0, InferredRealType t) in
-          let constraints = if List.mem constrt constraints then constraints else constrt::constraints in
+          let constraints = add_unique constraints constrt in
           inference_sets bounds constraints tl tl0
+        | (ArrayType t, ArrayType t0) ->
+          inference_sets bounds constraints (t::tl) (t0::tl0)
         | _ -> inference_sets bounds constraints tl tl0
         end
       | (_,_) -> (bounds,constraints)
@@ -3720,14 +3692,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let tp = check_pure_type (pn,ilist) tparams Real targ in 
             if is_primitive_type tp then
               static_error l "Type arguments can not be primitive types" None
-            else
-              match tp with 
-                (* if a type paramter is passed as a type argument, erase it *)
-                (* This is possible in the following scenario: 
-                  public <T> void foo(int x, T y){<Integer, T>foo(x,y);} T has to be erased to it's upper bound to see if there is a matching method.
-                  public <T, U> void foo(T x, U y) *)
-                RealTypeParam t -> javaLangObject
-              | t -> t
+              (* if a type paramter is passed as a type argument, erase it *)
+              (* This is possible in the following scenario: 
+                public <T> void foo(int x, T y){<Integer, T>foo(x,y);} T has to be erased to it's upper bound to see if there is a matching method.
+                public <T, U> void foo(T x, U y) *)
+            else erase_type tp
           end
         in
         let ms = ms |> List.filter begin fun (_, (_, _, _, _, _, _, _, _, _, _, _, _, mtparams)) ->
@@ -3743,8 +3712,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             Some(tenv) -> tenv
           | None ->
             (* Any type parameters still present have to be inferred at this point *)
-            let xmap = List.map (fun (name,tp) -> match tp with RealTypeParam t -> (name,InferredRealType t) | _ -> (name,tp)) xmap in
-            let inferredTypes = begin try infer_type l (List.map snd xmap) argtps with 
+            let inferTypeParamsEnv = List.map (fun tparam -> (tparam, InferredRealType tparam)) mtparams in
+            let xmapTypesToInfer = List.map (fun (name, tp) -> replace_type l inferTypeParamsEnv tp) xmap in
+            let inferredTypes = begin try infer_type l xmapTypesToInfer argtps with 
             | InferenceError (l, msg) -> static_error l msg None 
               end 
             in
@@ -3765,12 +3735,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 erase_type rt
           | None -> Void
           in 
-          let xmap' = if inAnnotation <> Some(true) then
-              List.map (fun (name,tp) -> (name, replace_type l targenv tp)) xmap 
-            else
-              List.map (fun (name, tp) -> (name, erase_type tp)) xmap    
-          in
-          (sign', (tn', lm, gh, rt', xmap', pre, post, epost, terminates, fb', v, abstract, sign, targenv))) ms in
+          (sign', (tn', lm, gh, rt', xmap, pre, post, epost, terminates, fb', v, abstract, sign, targenv))) ms in
         let ms = List.filter (fun (sign, _) -> is_assignable_to_sign inAnnotation argtps sign) ms in
         let make_well_typed_method m =
           match m with
@@ -4046,8 +4011,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           let tparamsInScope = List.map (fun tparam -> (tparam, RealTypeParam tparam)) tparams in
           let t = replace_type (expr_loc e) (tparamsInScope@inferredTypes) t in
-          expect_type (expr_loc e) inAnnotation t t0; 
-          w
+          expect_type (expr_loc e) inAnnotation t t0;
+          if try expect_type dummy_loc inAnnotation t0 t; false with StaticError _ -> true then
+            Upcast (w, t, t0)
+          else
+            w
         | _ -> 
           expect_type (expr_loc e) inAnnotation t t0;
           if try expect_type dummy_loc inAnnotation t0 t; false with StaticError _ -> true then

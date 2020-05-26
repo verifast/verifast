@@ -505,8 +505,6 @@ cd tests
     verifast -c DiamondOperator.java
     verifast -c MethodInference.java
     cd errors
-      verifast -c -allow_should_fail Test1.java
-      verifast -c -allow_should_fail Test2.java
       verifast -c -allow_should_fail Test3.java
     cd ..
   cd ..

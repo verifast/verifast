@@ -233,14 +233,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | (handler_tp, epost0) :: handlers ->
                   branch
                     begin fun () ->
-                      if (is_subtype_of_ l exceptp handler_tp) || (is_subtype_of_ l handler_tp exceptp) then
+                      if (is_subtype_of_ exceptp handler_tp) || (is_subtype_of_ handler_tp exceptp) then
                         consume_asn rules tpenv0 h [] env0 epost0 true real_unit $. fun _ h ghostenv env size_first ->
                         success()
                       else
                         success()
                     end
                     begin fun () ->
-                      if not (is_subtype_of_ l exceptp handler_tp) then
+                      if not (is_subtype_of_ exceptp handler_tp) then
                         handle_exception handlers
                       else
                         success()
@@ -1575,6 +1575,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           mk_varargs h env [] pats
         | SrcPat (LitPat e)::pats, (x, tp0)::ps ->
           let tp = instantiate_type tpenv tp0 in
+          Printf.printf "instantiated type %s to %s \n" (string_of_type tp0) (string_of_type tp);
           eval_h h env (SrcPat (LitPat (box (check_expr_t (pn,ilist) tparams tenv e tp) tp tp0))) $. fun h env t ->
           iter h env (t::ts) pats ps
         | TermPat t::pats, _::ps ->
