@@ -1575,7 +1575,6 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           mk_varargs h env [] pats
         | SrcPat (LitPat e)::pats, (x, tp0)::ps ->
           let tp = instantiate_type tpenv tp0 in
-          Printf.printf "instantiated type %s to %s \n" (string_of_type tp0) (string_of_type tp);
           eval_h h env (SrcPat (LitPat (box (check_expr_t (pn,ilist) tparams tenv e tp) tp tp0))) $. fun h env t ->
           iter h env (t::ts) pats ps
         | TermPat t::pats, _::ps ->
@@ -2109,10 +2108,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         (* Typecheck the type arguments *)
         let targtps = match targs with 
           (* Type check passed type arguments *)
-          Some(targs) -> if targs = [] && ctpenv != [] then
-              []
-            else
-              List.map (check_pure_type (pn,ilist) tparams Real) targs 
+          Some(targs) -> List.map (check_pure_type (pn,ilist) tparams Real) targs
           (* Raw type, make all targs Object *)
           | None -> List.map (fun _ -> javaLangObject) ctpenv 
         in
@@ -2153,8 +2149,6 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let ItfMethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, terminates, v, abstract, mtparams) = List.assoc (m, pts) methods in
           (lm, gh, rt, xmap, pre, post, epost, terminates, false, None, Instance, v, mtparams)
       in
-      let rt = match rt with Some (rt) -> Some(replace_type l tpenv rt) | None -> None in
-      let xmap = List.map (fun (name,tp) -> (name, replace_type l tpenv tp)) xmap in
       let mtargs = List.map (fun tparam -> List.assoc tparam tpenv) mtparams in
       if gh = Real && pure then static_error l "Method call is not allowed in a pure context" None;
       if gh = Ghost then begin

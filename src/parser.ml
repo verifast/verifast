@@ -50,10 +50,8 @@ let java_keywords = [
 ]
 
 exception StaticError of loc * string * string option
-exception InferenceError of loc * string
 
 let static_error l msg url = raise (StaticError (l, msg, url))
-let inference_error l msg = raise (InferenceError (l, msg))
 
 exception CompilationError of string
 
