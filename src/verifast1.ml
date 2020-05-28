@@ -2888,7 +2888,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match (actual, expected) with 
         (hd::tl, hd0::tl0) -> begin match (hd,hd0) with
         | (ObjType (t, targs), ObjType (t0, targs0)) when t != "null" && t0 != "null" ->
-          if List.length targs != List.length targs0 || hd != hd0 then
+          if proper_type hd && proper_type hd0 then
+            inference_set set tl tl0
+          else if List.length targs != List.length targs0 then
+            inference_error l ("Type mismatch during inference, amount of type arguments does not match. Unknown type: " ^ string_of_type hd ^ ". Matching type: " ^ string_of_type hd0 ^ ".")
+          else if t != t0 then
             inference_error l ("Type mismatch during inference. Unknown type: " ^ string_of_type hd ^ ". Matching type: " ^ string_of_type hd0 ^ ".")
           else
             inference_set set (targs@tl) (targs0@tl0)
