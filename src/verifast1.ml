@@ -1275,7 +1275,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match t with
       RealTypeParam t -> 
         begin try List.assoc t targenv with 
-        | Not_found -> failwith (Printf.sprintf "Type argument for type param %s not provided." t) end
+        | Not_found -> static_error loc (Printf.sprintf "Type argument for type param %s not provided." t) None end
     | ArrayType t -> ArrayType (replace_type loc targenv t)
     | ObjType (n,ts) -> ObjType (n, List.map (replace_type loc targenv) ts)
     | t -> t
@@ -1283,7 +1283,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let rec replace_inferred_type loc targenv t = 
     match t with
     | InferredRealType t -> begin try List.assoc t targenv with 
-        | Not_found -> failwith (Printf.sprintf "Type argument for type param %s was not inferred." t) end
+        | Not_found -> static_error loc (Printf.sprintf "Type argument for type param %s was not inferred." t) None end
     | ArrayType t -> ArrayType (replace_inferred_type loc targenv t)
     | ObjType (n,ts) -> ObjType (n, List.map (replace_inferred_type loc targenv) ts)
     | t -> t
@@ -3417,13 +3417,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let tp = check_pure_type (pn,ilist) tparams Real targ in 
             if is_primitive_type tp then
               static_error l "Type arguments can not be primitive types" None
-            else tp
+            else 
+              tp
           end
         in
         let ms = ms |> List.filter begin fun (_, (_, _, _, _, _, _, _, _, _, _, _, _, mtparams)) ->
           if targs = [] then 
             true
-          else (* If type arguments are provided, the amount shoul match the amoount of type parameters in the matching method *)
+          else (* If type arguments are provided, the amount should match the amount of type parameters in the matching method *)
            match zip mtparams targs with None -> false | Some(_) -> true
         end
         in
@@ -3722,7 +3723,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | ((Int (_, _)|Float|Double|LongDouble), (Float|Double|LongDouble)) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
         | ((Float|Double|LongDouble), (Int (_, _))) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
         | (ObjType ("java.lang.Object", []), ArrayType _) when isCast -> w
-        | _ -> 
+        | _ ->
           expect_type (expr_loc e) inAnnotation t t0;
           if try expect_type dummy_loc inAnnotation t0 t; false with StaticError _ -> true then
             Upcast (w, t, t0)

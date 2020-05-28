@@ -2123,8 +2123,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let xmap = if targtps = [] then 
             xmap 
           else 
-          let Some targEnv = zip ctpenv targtps in
-          List.map (fun (name,tp) -> (name, replace_type l targEnv tp)) xmap 
+            let Some targEnv = zip ctpenv targtps in
+            List.map (fun (name,tp) -> (name, replace_type l targEnv tp)) xmap 
         in
         check_correct h None None [] args (lm, [], None, xmap, ["this", obj], pre, post, Some(epost), terminates, Static) is_upcall (Some cn) (fun h env _ -> cont h env obj)
       | _ -> static_error l "Multiple matching overloads" None
