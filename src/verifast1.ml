@@ -834,21 +834,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   module Java_Inference = struct
     exception InferenceError of loc * string
     let inference_error l msg = raise (InferenceError (l, msg))
-    
-    type infConstraint =
-      LooseInvocation of type_ * type_
-    | SubType of type_ * type_
-    | Contain of type_ * type_
-    | Equal of type_ * type_
-    (* lambda and method reference not supported yet *)
-    (* LooseExpressionInvocation not supported yet *)
-
-    type infBound = 
-      Equal_bound of string * type_
-    | Upper_bound of string * type_
-    | Lower_bound of string * type_
-    (* Capture not implemented yet *)
-    (* Throws not implemented yet *)
   end
 
   let is_jarspec = Filename.check_suffix filepath ".jarspec"
