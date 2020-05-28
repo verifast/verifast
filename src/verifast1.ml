@@ -2867,24 +2867,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     flatmap (fun s -> s::super_types s) supers
 
-  (* With the introduction of wildcards: extend this algorithm : section 4.10.4 https://docs.oracle.com/javase/specs/jls/se14/html/jls-4.html#jls-4.10.4 *)
-  (* least containing type argument *)
-  let lcta u v =
-    if u = v then u else failwith "no support for wildcards yet"
-
-  (* least_containing_parameterisation *)
-  (* lcp [a;b;b] = lcp [lcp [a;b]; c] *)
-  let rec lcp set =
-    match set with
-      [obj] -> obj (* calculate lcta when wildcards are added. lcta(U) = ? if U's upper bound is Object, otherwise ? extends lub(U,Object) *)
-    | [] -> failwith "calculating least containing parameterisation of an empty set"
-    | ObjType (hd, hdTargs)::tl -> begin match tl with
-    (* only two elements in set -> find lcp of the two *)
-    | [ObjType (hd0, hdTargs0)] when hd0 = hd -> ObjType (hd, List.map2 (fun targ targ0 -> lcta targ targ0) hdTargs hdTargs0) 
-    (* set = [a,b,c...] => lcp(set) = lcp(lcp([a,b]),c...) *)
-    | hd0::tl0 -> lcp ((lcp [(ObjType (hd, hdTargs)); hd0])::tl0)
-    end
-
   (* calculates the shared supertype that is more specific than any other shared supertype *)
   let least_upper_bound l tps =
     match tps with
@@ -2893,8 +2875,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | tps -> 
       let st_map = List.map (fun tp -> (tp, tp::super_types tp)) tps in
       let est_map = List.map (fun (tp,sts) -> (tp, List.map erase_type sts)) st_map in
-      let st_set = flatmap snd st_map in
-      let erased_candidate_set = (*intersection of all est sets *)
+      let filtered_candidate_set = (*intersection of all est sets *)
         let intersection setA setB = List.filter (fun memA -> List.mem memA setB) setA in
         let rec iter sets iset = match sets with
           [] -> []
@@ -2904,288 +2885,62 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         iter (List.map snd est_map) (snd (List.hd est_map))
       in
       (* MEC = { V | V in EC, and for all W ≠ V in EC, it is NOT the case that W <: V } *)
-      let mec = erased_candidate_set |> List.filter begin fun v -> (* V in EC *)
-        let parents = erased_candidate_set |> List.filter begin fun w ->  (* for all W ≠ V in EC, select all the parents of V> *)
+      let mec = filtered_candidate_set |> List.filter begin fun v -> (* V in EC *)
+        let children = filtered_candidate_set |> List.filter begin fun w ->  (* for every V, select all it's children in EC that are not V *)
           if (w = v) then   
             false
           else
-            let issub = is_subtype_of_ w v in
-            issub
+            (is_subtype_of_ w v)
         end
-        in (* it is not the case that W <: V  if W has no parents in mec*)
-        parents = []
+        in (* if V has no children, it is the most specific candidate*)
+        children = []
       end
       in
-      (* For any element G of MEC that is a generic type: 
-      Let the "relevant" parameterizations of G, Relevant(G), be: *)
-      let relevant (ObjType (g, gtargs)) = List.filter (fun (ObjType (v, vtargs)) -> v = g) st_set in
-      (* Let the "candidate" parameterization of G, Candidate(G), be the most specific parameterization of 
-      the generic type G that contains all the relevant parameterizations of G: Candidate(G) = lcp(Relevant(G)) *)
-      let candidate g = lcp (relevant g) in
-      (* Best(W1) & ... & Best(Wr) : Wi (1 ≤ i ≤ r) are the elements of MEC*)
-      let best (ObjType (x, targs)) = if targs = [] then
-          ObjType (x, targs)
-        else
-          candidate (ObjType (x, targs))
-      in
-      List.map best mec 
+      mec 
 
-  let glb l set =
-    match set with
-      [] -> failwith "Can't find glb of empty set."
-    | [s] -> s
-    | hd::tl -> (* It is a compile-time error if, for any two classes (not interfaces) Vi and Vj, Vi is not a subclass of Vj or vice versa. *)
-      (* simply said glb(a,b,c) = a & b & c *)
-      if is_primitive_type hd then 
-        failwith "No support for boxing primitive types yet." 
-      else
-        let rec iter tps curType =
-          match tps with
-            hd::tl ->
-              if is_subtype_of_ curType hd then
-                iter tl curType
-              else begin
-                if is_subtype_of_ hd curType then 
-                  iter tl hd
-                else
-                  failwith ("Can't find glb for: " ^ (String.concat ", " (List.map string_of_type set)) ^ " with cur: " ^ string_of_type curType)
-              end
-          | [] -> curType
-        in 
-        iter tl hd
-
-  let rec incorporate l bounds addedBounds =
-    match addedBounds with
-    | [] -> bounds
-    | hd::tl -> 
-      let addedConstraints = begin match hd with
-        | Equal_bound (infvar, t) -> bounds |> flatmap begin fun existingBound ->
-            match existingBound with
-            | Equal_bound (infvar0, t0) when infvar = infvar0 -> [Equal (t, t0)]
-            | Upper_bound (infvar0, t0) when infvar = infvar0 -> [SubType (t, t0)]
-            | Lower_bound (infvar0, t0) when infvar = infvar0 -> [SubType (t0, t)]
-            | _ -> []
-          end 
-        | Lower_bound (infvar, t) -> flatmap (fun existingBound ->
-            match existingBound with
-            | Equal_bound (infvar0, t0) when infvar = infvar0 -> [SubType (t0, t)]
-            | Upper_bound (infvar0, t0) when infvar = infvar0 -> [SubType (t, t0)]
-            (* When a bound set contains a pair of bounds α <: S and α <: T, 
-            and there exists a supertype of S of the form G<S1, ..., Sn> and a supertype of T of the form G<T1, ..., Tn> 
-            (for some generic class or interface, G), then for all i (1 ≤ i ≤ n), 
-            if Si and Ti are types (not wildcards), the constraint formula ‹Si = Ti› is implied. *)
-            | _ -> []) bounds
-        | Upper_bound (infvar, t) -> flatmap (fun existingBound ->
-            match existingBound with
-            | Equal_bound (infvar0, t0) when infvar = infvar0 -> [SubType (t, t0)]
-            | Lower_bound (infvar0, t0) when infvar0 = infvar -> [SubType (t0, t)]
-            | _ -> []) bounds 
-      end
-      in
-      if List.mem hd bounds then
-        incorporate l bounds tl
-      else
-        incorporate l (hd::bounds) (tl@reduce l addedConstraints)
-
-  (* Reduces constraint formula's to a bounds set *)
-  (* Throw Inference_exception when an invalid choice is encountered *)
-  and reduce l constraints =
-    let rec iter constraints currentBoundSet =
-      match constraints with
-      | [] -> currentBoundSet
-      | cs::tl ->
-        begin match cs with
-        (* Loose invocations *)
-        | LooseInvocation (t, t0) when proper_type t && proper_type t0 -> 
-            expect_type_core l "" None t t0; 
-            iter tl currentBoundSet
-        | LooseInvocation (t, t0) when is_primitive_type t -> (* Should apply box conversion here *) inference_error l "inference for primitive types not supported yet" 
-        | LooseInvocation (t, t0) when is_primitive_type t0 -> (* Should apply box conversion here *) inference_error l "inference for primitive types not supported yet" 
-        | LooseInvocation (s, ObjType (g, targs)) when targs != [] -> (* Not supported yet *) inference_error l "Inference for nested parameterised types not supported yet" 
-        | LooseInvocation (s, ArrayType t) -> inference_error l "Inference for array types not supported yet" 
-        | LooseInvocation (s, t) -> iter ((SubType (s, t))::tl) currentBoundSet
-        (* SubType *)
-        | SubType (s, t) when proper_type s && proper_type t -> if is_subtype_of_ s t then 
-            iter tl currentBoundSet 
-          else 
-            inference_error l (Printf.sprintf "Invalid inference: %s is not a subtype of %s." (string_of_type s) (string_of_type t))
-        | SubType (ObjType ("null", _), _) -> iter tl currentBoundSet
-        | SubType (t, ObjType ("null", _)) -> inference_error l (Printf.sprintf "Invalid inference: %s is not a subtype of null." (string_of_type t))
-        | SubType (InferredRealType s, t) -> iter tl (incorporate l currentBoundSet [Upper_bound (s, t)])
-        | SubType (s, InferredRealType t) -> iter tl (incorporate l currentBoundSet [Lower_bound (t, s)])
-        | SubType (ArrayType s, ArrayType t) -> iter (SubType (s,t):: tl) currentBoundSet
-        | SubType (s, t) -> begin match t with
-            (* TODO: Case where t is an inner class type of a parameterised class or interface type is not supported yet *)
-          | ObjType (t, targs) when targs != [] -> (* Look for a super type of t with the same amount of type arguments as t *)
-            inference_error l "No support yet for inferring nested parameterised types."
-          | ObjType (t, targs) -> if is_subtype_of_ s (ObjType (t, targs)) then 
-              iter tl currentBoundSet 
-            else 
-              inference_error l (Printf.sprintf "Invalid inference: %s is not a subtype of %s." (string_of_type s) (string_of_type (ObjType (t, targs))))
-          (* S is an intersection type: no support yet for intersection types *)
-          (* T has a lower bound: no support yet for lower bounded type params *)
-          | _ -> inference_error l (Printf.sprintf "Invalid inference: invalid subtyping: %s is not a subtype of %s, or an intersection occured (no support yet)." (string_of_type s) (string_of_type t))
-          end
-        (* Contain *)
-        (* If T can be a wildcard, more cases are added here *)
-        | Contain (s, t) (* when t is not a wildcard *) -> (* if s is a wildcard -> [InvalidChoice] *) iter (Equal (s, t)::tl) currentBoundSet 
-        (* Equality *)
-        | Equal (s, t) when proper_type s && proper_type t -> if s = t then 
-            reduce l tl 
-          else 
-            inference_error l (Printf.sprintf "Invalid inference: %s is not equal to %s." (string_of_type s) (string_of_type t))
-        | Equal ((ObjType ("null", _)), t0) -> inference_error l (Printf.sprintf "Invalid inference: null is not equal to %s." (string_of_type t0))
-        | Equal (t, (ObjType ("null", _))) -> inference_error l (Printf.sprintf "Invalid inference: %s is not equal to null." (string_of_type t))
-        | Equal (InferredRealType s, t) when is_primitive_type t = false -> iter tl (incorporate l currentBoundSet [Equal_bound (s, t)])
-        | Equal (s, InferredRealType t) when is_primitive_type s = false -> iter tl (incorporate l currentBoundSet [Equal_bound (t, s)])
-        | Equal (ObjType (s, stargs), ObjType (t, ttargs)) when (*Same erasure*) List.map erase_type stargs = List.map erase_type ttargs ->
-          let addedConstraints = List.map2 (fun starg ttarg -> Equal (starg, ttarg)) stargs ttargs in
-          iter (addedConstraints@tl) currentBoundSet
-        | Equal (ArrayType s, ArrayType t) -> iter (Equal (s, t)::tl) currentBoundSet
-          (* Intersection types have their own case: not implemented yet *)
-          (* Cases for when s or t are wildcards need to be added *)
-        | Equal (s, t) -> inference_error l (Printf.sprintf "Invalid inference: %s is not equal to %s." (string_of_type s) (string_of_type t))
-        (* Checked exception constraints, not implemented yet *)
-        end
-    in
-    iter constraints []
-
-  let rec resolve_inference l bounds =
-    let inference_variables = 
-      bounds |> flatmap begin fun bound ->
-        match bound with
-          Equal_bound (ivar, _) | Upper_bound (ivar, _) | Lower_bound (ivar, _) -> [ivar]
-      end
-    in    
-    let resolvedInfVars =
-      inference_variables |> flatmap begin fun infvar ->
-        let eqBounds = bounds |> List.filter begin fun bound -> match bound with 
-          |  Equal_bound (i, t) when infvar = i -> true
-          |  _ -> false
-        end
-        in
-        if eqBounds = [] then
-          []
-        else
-          let Equal_bound (infvar, tp) = List.hd eqBounds in
-          [(infvar, tp)]
-      end
-    in
-    (* if every infvar has an instantiation -> resolved *)
-    if (List.filter (fun infvar -> List.mem infvar (List.map fst resolvedInfVars) = false) inference_variables) = [] then 
-      resolvedInfVars (* resolution complete *)
-    else
-      let direct_dependent_infvars =
-        inference_variables |> flatmap begin fun infvar -> 
-          (* If T is an infvar in one of: a = T, a is subclass of T, T = V, T is subclass of V, then
-            If a appears left for G<...,a,...> = capture(G<...>) then b depends on a, else a depends on b.
-            Since we don't support capture yet, if any of the above cases occurs, a depends on b *)
-          let rec depInfVars bounds dependancies = 
-            match bounds with
-              hd::tl ->
-                begin match hd with 
-                  Equal_bound (infvar, InferredRealType b) | Upper_bound (infvar, InferredRealType b) | Lower_bound (infvar, InferredRealType b) -> 
-                    depInfVars tl (add_unique dependancies (infvar,b)) 
-                | _ -> depInfVars tl dependancies
-                end
-            | [] -> dependancies
-          in
-          depInfVars bounds []
-        end
-      in
-      (* a depends on b if there exists a c so that a depends on c and c depends on b *)
-      (* an inference variable a depends on the resolution of itself *)
-      let dependancies = 
-        let rec iter dependancies_todo dependancies =
-          match dependancies_todo with
-            (a, b)::tl ->
-              let addedDependances = dependancies |> flatmap begin fun dep ->
-                match dep with
-                | (left, right) when right = a -> [(left, b)]
-                | _ -> []
-              end
-              in
-              iter tl (add_uniques dependancies addedDependances) (* Don't add duplicates *)
-          | [] -> dependancies
-        in
-        iter direct_dependent_infvars direct_dependent_infvars
-      in
-      let rec resolve_subset infvars bounds =
-        (* if the bound set does not contain a bound of the form G<..., αi, ...> = capture(G<...>) 
-          for all i (1 ≤ i ≤ n), then a candidate instantiation Ti is defined for each αi: *)
-        (* No capture yet *)
-        match infvars with
-          hd::tl -> 
-            (* if αi depends on the resolution of a variable β, then either β has an instantiation or there is some j such that β = αj; 
-            and (ii) there exists no non-empty proper subset of { α1, ..., αn } with this property.*)
-            (* hd has one or more proper lower bounds -> select the least upper bound *)
-            let lower_bounds = List.filter (fun bound -> match bound with | Lower_bound (i, t) when i = hd -> true | _ -> false) bounds in
-            let lower_bound_tps = List.map (fun (Lower_bound (i, t)) -> t) lower_bounds in
-            if lower_bounds != [] then 
-              let lub = List.hd (least_upper_bound l lower_bound_tps) in
-              (Equal_bound (hd, lub))::resolve_subset tl bounds
-            else 
-              (* bounds set contains throws hd and each proper upper bound of hd is a supertype of RuntimeException => RunTimeException *)
-              let upper_bounds = List.filter (fun bound -> match bound with Upper_bound (i, t) when i = hd -> true | _ -> false) bounds in
-              let upper_bound_tps = List.map (fun (Upper_bound (i, t)) -> t) upper_bounds in
-              if upper_bounds != [] then 
-                (Equal_bound (hd, glb l upper_bound_tps))::resolve_subset tl bounds
-              else
-                (* Should never reach this point, if we do something went horribly wrong *)
-                failwith "inference variable has no bounds?"
-        | [] -> []
-      in
-      (*   let { α1, ..., αn } be a non-empty subset of uninstantiated variables in V such that 
-      (i) for all i (1 ≤ i ≤ n), if αi depends on the resolution of a variable β, then either β has an instantiation or 
-        there is some j such that β = αj; and 
-      (ii) there exists no non-empty proper subset of { α1, ..., αn } with this property.*)
-      let infVarsToResolve = inference_variables |> List.filter begin fun infvar -> 
-        let unresolvedDependencies = dependancies |> List.filter begin fun (a, b) -> 
-          if a = infvar then
-            begin try ignore (List.assoc b resolvedInfVars); false with Not_found -> true end
-          else
-            false
-        end
-        in
-        unresolvedDependencies = []
-      end
-      in
-      let resolvedBounds = resolve_subset infVarsToResolve bounds in
-      let bounds = incorporate l bounds resolvedBounds in
-      if infVarsToResolve = [] then
-        inference_error l "Inference got stuck on dependent inference variables."
-      else
-        resolve_inference l bounds
-
-  let infer_type l actual expected =
-    let rec inference_sets bounds constraints actual expected =
-      match (actual, expected) with
+  let infer_type l unknownTypes knownTypes =
+    let rec inference_set set actual expected = 
+      match (actual, expected) with 
         (hd::tl, hd0::tl0) -> begin match (hd,hd0) with
         | (ObjType (t, targs), ObjType (t0, targs0)) when t != "null" && t0 != "null" ->
-          if proper_type hd && proper_type hd0 then
-            inference_sets bounds constraints tl tl0
-          else begin
-            if List.length targs != List.length targs0 then
-              inference_error l ("Type mismatch during inference. Actual: " ^ string_of_type hd ^ ". Expected: " ^ string_of_type hd0 ^ ".")
-            else
-              inference_sets bounds constraints (targs@tl) (targs0@tl0)
-          end
+          if List.length targs != List.length targs0 then
+            inference_error l ("Type mismatch during inference. Unknown type: " ^ string_of_type hd ^ ". Matching type: " ^ string_of_type hd0 ^ ".")
+          else
+            inference_set set (targs@tl) (targs0@tl0)
+        | (InferredRealType t, ArrayType _) ->
+          inference_error l ("No inference for arrays yet.")
         | (InferredRealType t, t0) ->
-          (* When type param bounds are introduced, look up the bound for the type param you are creating an inference bound for *)
-          let bounds = if List.mem (Upper_bound (t, javaLangObject)) bounds then bounds else (Upper_bound (t, javaLangObject))::bounds in
-          let constrt = LooseInvocation (t0, InferredRealType t) in
-          let constraints = add_unique constraints constrt in
-          inference_sets bounds constraints tl tl0
+          if is_primitive_type t0 then
+            inference_error l ("Can't infer primitive types yet, no boxing supported.")
+          else
+            inference_set ((t,t0)::set) tl tl0
         | (ArrayType t, ArrayType t0) ->
-          inference_sets bounds constraints (t::tl) (t0::tl0)
-        | _ -> inference_sets bounds constraints tl tl0
+          inference_set set (t::tl) (t0::tl0)
+        | _ -> inference_set set tl tl0
         end
-      | (_,_) -> (bounds,constraints)
+      | _ -> set
     in
-    let (bounds,constraints) = inference_sets [] [] actual expected in
-    let newBounds = reduce l constraints in
-    let startingBounds = incorporate l bounds newBounds in
-    resolve_inference l startingBounds
+    let binds = inference_set [] unknownTypes knownTypes in
+    let rec infvars binds vs =
+      match binds with
+        (infvar,tp)::tl ->
+          if List.mem infvar vs then
+            infvars tl vs
+          else
+            infvars tl (infvar::vs)
+      | [] -> vs
+    in
+    let setPerInfVar = (infvars binds []) |> List.map begin fun infvar -> 
+      (infvar, List.map snd (List.filter (fun (n,tp) -> n = infvar) binds))
+    end  
+    in
+    List.map (fun (infvar, tps) ->
+      let inferred = match least_upper_bound l tps with
+          [] -> inference_error l "Inference not resolved."
+        | [f] -> f
+        | s -> inference_error l "Inference would resolve to multiple types. Not supported yet!"
+      in
+      (infvar, inferred)) setPerInfVar
 
 
   let rec check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e: (expr (* typechecked expression *) * type_ (* expression type *) * big_int option (* constant integer expression => value*)) =

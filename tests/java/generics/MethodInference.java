@@ -9,9 +9,6 @@ public class MethodInference{
 		Object o = infer(a,b,c);
 		Integer o1 = infer(b,b,c);
 		
-		Integer[] arr = {new Integer(1), new Integer(2), new Integer(3)};
-		Integer[] infarr = infer (arr, arr, arr);
-		
 		Foo<Integer> fi = new Foo< >();
 		Foo<Boolean> fb = new Foo< >();
 		Foo<Foo<Boolean> > fnested = new Foo< >();
