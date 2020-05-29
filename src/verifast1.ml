@@ -2859,7 +2859,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | [] -> failwith "calculating least upper bound of no type"
     | tps -> 
       let st_map = List.map (fun tp -> (tp, tp::super_types tp)) tps in
-      let est_map = List.map (fun (tp,sts) -> (tp, List.map erase_type sts)) st_map in
       let filtered_candidate_set = (*intersection of all est sets *)
         let intersection setA setB = List.filter (fun memA -> List.mem memA setB) setA in
         let rec iter sets iset = match sets with
@@ -2867,7 +2866,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | [last] -> intersection iset last
         | hd::tl -> iter tl (intersection iset hd)
         in
-        iter (List.map snd est_map) (snd (List.hd est_map))
+        iter (List.map snd st_map) (snd (List.hd st_map))
       in
       (* MEC = { V | V in EC, and for all W ≠ V in EC, it is NOT the case that W <: V } *)
       let mec = filtered_candidate_set |> List.filter begin fun v -> (* V in EC *)
