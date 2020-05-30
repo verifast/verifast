@@ -24,6 +24,9 @@ public class MethodInference{
 		o = a;
 		
 		Integer infer2Int = infer2(b, c, a, b);
+		
+		Tar<Integer> ti = new Tar< >();
+		Foo<Integer> fti = infer(fi, fi, ti);
 	}
 	
 	public static <T> T infer(T arg1, T arg2, T arg3)
@@ -44,6 +47,8 @@ public class MethodInference{
 public class Foo<T>{
 	
 }
+
+public class Tar<T> extends Foo<T> { }
 
 public class Bar<T> extends Foo<Integer>{
 

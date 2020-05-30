@@ -830,11 +830,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   module CheckFile1(CheckFileArgs: CHECK_FILE_ARGS) = struct
   
   include CheckFileArgs
-  
-  module Java_Inference = struct
-    exception InferenceError of loc * string
-    let inference_error l msg = raise (InferenceError (l, msg))
-  end
 
   let is_jarspec = Filename.check_suffix filepath ".jarspec"
 
@@ -1693,7 +1688,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   (* A proper type is a type that contains no InferredRealTypeParam *)
   let rec proper_type t = match t with
-      ObjType (t, targs) -> List.for_all (fun t -> proper_type t) targs
+      ObjType (t, targs) -> List.for_all proper_type targs
     | ArrayType t -> proper_type t
     | Bool | Int _ | Double | Float -> true
     | GhostTypeParam _ -> true
@@ -2841,8 +2836,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | Int (Unsigned, n1), Int (Signed, n2) -> if n2 <= n1 then t1 else t2
       | Int (s, n1), Int (_, n2) -> Int (s, max n1 n2)
 
-  open Java_Inference
-
   let rec super_types (ObjType (cn, targs)) =
     let supers =
       if cn = "java.lang.Object" then
@@ -2861,38 +2854,39 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let st_map = List.map (fun tp -> (tp, tp::super_types tp)) tps in
       let filtered_candidate_set = (*intersection of all est sets *)
         let intersection setA setB = List.filter (fun memA -> List.mem memA setB) setA in
-        let rec iter sets iset = match sets with
-          [] -> []
-        | [last] -> intersection iset last
-        | hd::tl -> iter tl (intersection iset hd)
-        in
-        iter (List.map snd st_map) (snd (List.hd st_map))
+        List.fold_left intersection (snd (List.hd st_map)) (List.map snd st_map)
       in
       (* MEC = { V | V in EC, and for all W ≠ V in EC, it is NOT the case that W <: V } *)
       let mec = filtered_candidate_set |> List.filter begin fun v -> (* V in EC *)
-        let children = filtered_candidate_set |> List.filter begin fun w ->  (* for every V, select all it's children in EC that are not V *)
-          if (w = v) then   
-            false
-          else
-            (is_subtype_of_ w v)
+        not begin filtered_candidate_set |> List.exists begin fun w ->  (* for every V, select all it's children in EC that are not V *)
+            if (w = v) then   
+              false
+            else
+              is_subtype_of_ w v
+          end
         end
-        in (* if V has no children, it is the most specific candidate*)
-        children = []
       end
       in
       mec 
 
-  let infer_type l unknownTypes knownTypes =
+  exception InferenceError of loc * string
+  let inference_error l msg = raise (InferenceError (l, msg))
+
+  (* Assigning the assigned types to the inferred types *)
+  let infer_type l inferredTypes assignedTypes =
     let rec inference_set set actual expected = 
       match (actual, expected) with 
         (hd::tl, hd0::tl0) -> begin match (hd,hd0) with
         | (ObjType (t, targs), ObjType (t0, targs0)) when t != "null" && t0 != "null" ->
           if proper_type hd && proper_type hd0 then
             inference_set set tl tl0
+          else if t != t0 then
+            let matchingSuper = (super_types hd0) |> List.filter (fun (ObjType (st, _)) -> st = t) in
+            match matchingSuper with
+              [] -> inference_error l ("Type mismatch during inference, " ^ t0 ^ " is not a sub type of: " ^ t ^ ".")
+            | [(ObjType (st, stargs))] -> inference_set set (targs@tl) (stargs@tl0)
           else if List.length targs != List.length targs0 then
             inference_error l ("Type mismatch during inference, amount of type arguments does not match. Unknown type: " ^ string_of_type hd ^ ". Matching type: " ^ string_of_type hd0 ^ ".")
-          else if t != t0 then
-            inference_error l ("Type mismatch during inference. Unknown type: " ^ string_of_type hd ^ ". Matching type: " ^ string_of_type hd0 ^ ".")
           else
             inference_set set (targs@tl) (targs0@tl0)
         | (InferredRealType t, ArrayType _) ->
@@ -2908,7 +2902,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
       | _ -> set
     in
-    let binds = inference_set [] unknownTypes knownTypes in
+    let binds = inference_set [] inferredTypes assignedTypes in
     let rec infvars binds vs =
       match binds with
         (infvar,tp)::tl ->
@@ -2920,15 +2914,16 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let setPerInfVar = (infvars binds []) |> List.map begin fun infvar -> 
       (infvar, List.map snd (List.filter (fun (n,tp) -> n = infvar) binds))
-    end  
+    end
     in
-    List.map (fun (infvar, tps) ->
+    setPerInfVar |> List.map begin fun (infvar, tps) ->
       let inferred = match least_upper_bound l tps with
           [] -> inference_error l "Inference not resolved."
         | [f] -> f
         | s -> inference_error l "Inference would resolve to multiple types. Not supported yet!"
       in
-      (infvar, inferred)) setPerInfVar
+      (infvar, inferred)
+    end
 
 
   let rec check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e: (expr (* typechecked expression *) * type_ (* expression type *) * big_int option (* constant integer expression => value*)) =
@@ -3420,7 +3415,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let tp = check_pure_type (pn,ilist) tparams Real targ in 
             if is_primitive_type tp then
               static_error l "Type arguments can not be primitive types" None
-            else 
+            else
               tp
           end
         in
@@ -3437,7 +3432,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             Some(tenv) -> tenv
           | None ->
             (* Any type parameters still present have to be inferred at this point *)
-            let inferTypeParamsEnv = List.map (fun tparam -> (tparam, InferredRealType tparam)) (tparams@mtparams) in
+            let inferTypeParamsEnv = List.map (fun tparam -> (tparam, InferredRealType tparam)) mtparams in
             let xmapTypesToInfer = List.map (fun (name, tp) -> replace_type l inferTypeParamsEnv tp) xmap in
             let inferredTypes = begin try infer_type l xmapTypesToInfer argtps with 
             | InferenceError (l, msg) -> static_error l msg None 
