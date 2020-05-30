@@ -830,7 +830,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   module CheckFile1(CheckFileArgs: CHECK_FILE_ARGS) = struct
   
   include CheckFileArgs
-
   let is_jarspec = Filename.check_suffix filepath ".jarspec"
 
   let _ = if options.option_verbose = -1 then Printf.printf "%10.6fs: >> type checking of %s \n" (Perf.time()) filepath
