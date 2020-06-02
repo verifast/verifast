@@ -1395,10 +1395,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let abstract_types_map = abstract_types_map1 @ abstract_types_map0
   
   let class_arities =
-    List.map (fun (cn, (l, _, _, _, _, _, _, tparams, _, _, _, _)) -> (cn, (l, List.length tparams, tparams))) classmap1
-    @ List.map (fun (cn, {cl=l; ctpenv=tparams}) -> (cn, (l, List.length tparams, tparams))) classmap0
-    @ List.map (fun (cn, (l, _, _, _, _, _, _, tparams)) -> (cn, (l, List.length tparams, tparams))) interfmap1
-    @ List.map (fun (cn, InterfaceInfo (l, _, _, _, _, tparams)) -> (cn, (l, List.length tparams, tparams))) interfmap0
+    List.map (fun (cn, (l, _, _, _, _, _, _, tparams, _, _, _, _)) -> (cn, (l, List.length tparams))) classmap1
+    @ List.map (fun (cn, {cl=l; ctpenv=tparams}) -> (cn, (l, List.length tparams))) classmap0
+    @ List.map (fun (cn, (l, _, _, _, _, _, _, tparams)) -> (cn, (l, List.length tparams))) interfmap1
+    @ List.map (fun (cn, InterfaceInfo (l, _, _, _, _, tparams)) -> (cn, (l, List.length tparams))) interfmap0
 
   (* Region: check_pure_type: checks validity of type expressions *)
   let check_pure_type_core typedefmap1 (pn,ilist) tpenv te envType =
@@ -1429,11 +1429,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         InductiveType (s, [])
       | None ->
       match (search2' Real id (pn, ilist) classmap1 classmap0) with
-        Some s -> begin try (match List.assoc s class_arities with (_, n, _) -> ObjType(s, create_objects n)) with
+        Some s -> begin try (match List.assoc s class_arities with (_, n) -> ObjType(s, create_objects n)) with
         | Not_found -> failwith (id ^ "is present in the classmap, but has no arity?")
         end
       | None ->  match (search2' Real id (pn, ilist) interfmap1 interfmap0) with
-        Some s -> begin try (match List.assoc s class_arities with (_, n, _) -> ObjType(s, create_objects n)) with
+        Some s -> begin try (match List.assoc s class_arities with (_, n) -> ObjType(s, create_objects n)) with
           | Not_found -> failwith (id ^ "is present in the interfmap, but has no arity?")
         end
       | None ->
@@ -1450,7 +1450,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let full_name = pac ^ "." ^ id in
       begin
       match resolve Real (pac, ilist) l id class_arities with
-        Some (_, (_, n, _)) -> ObjType(full_name, create_objects n)
+        Some (_, (_, n)) -> ObjType(full_name, create_objects n)
       | None -> static_error l ("No such type parameter, inductive datatype, class, interface, or function type: " ^ full_name) None
       end
     | ConstructedTypeExpr (l, id, targs) ->
@@ -1461,7 +1461,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           reportUseSite DeclKind_InductiveType ld l;
           InductiveType (id, List.map check targs)
       | None -> match resolve Real (pn,ilist) l id class_arities with
-        Some (id, (ld, n, tparams)) ->
+        Some (id, (ld, n)) ->
         if n <> List.length targs then 
           static_error l "Incorrect number of type arguments." None
         else  
