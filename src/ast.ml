@@ -117,6 +117,7 @@ type type_ = (* ?type_ *)
   | HandleIdType (* handle type, for shared boxes *)
   | AnyType (* supertype of all inductive datatypes; useful in combination with predicate families *)
   | RealTypeParam of string (* a reference to a type parameter declared in the enclosing Real code *)
+  | InferredRealType of string
   | GhostTypeParam of string (* a reference to a type parameter declared in the ghost code *)
   | InferredType of < > * inferred_type_state ref (* inferred type, is unified during type checking. '< >' is the type of objects with no methods. This hack is used to prevent types from incorrectly comparing equal, as in InferredType (ref Unconstrained) = InferredType (ref Unconstrained). Yes, ref Unconstrained = ref Unconstrained. But object end <> object end. *)
   | ClassOrInterfaceName of string (* not a real type; used only during type checking *)

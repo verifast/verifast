@@ -992,25 +992,25 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       )
     in
     let inst_call_pred l coefpat e_opt tn g index pats =
-      let (pmap, pred_symb) =
+      let (pmap, pred_symb, ctparams) =
         match try_assoc tn classmap1 with
           Some (lcn, abstract, fin, methods, fds_opt, ctors, super, tparams, interfs, preds, pn, ilist) ->
-          let (_, pmap, _, symb, _) = List.assoc g preds in (pmap, symb)
+          let (_, pmap, _, symb, _) = List.assoc g preds in (pmap, symb, tparams)
         | None ->
           match try_assoc tn classmap0 with
-            Some {cpreds} ->
-            let (_, pmap, _, symb, _) = List.assoc g cpreds in (pmap, symb)
+            Some {cpreds; ctpenv} ->
+            let (_, pmap, _, symb, _) = List.assoc g cpreds in (pmap, symb, ctpenv)
           | None ->
             match try_assoc tn interfmap1 with
-              Some (li, fields, methods, preds, interfs, pn, ilist, tparams) -> let (_, pmap, family, symb) = List.assoc g preds in (pmap, symb)
+              Some (li, fields, methods, preds, interfs, pn, ilist, tparams) -> let (_, pmap, family, symb) = List.assoc g preds in (pmap, symb, tparams)
             | None ->
               let InterfaceInfo (li, fields, methods, preds, interfs, tparams) = List.assoc tn interfmap0 in
               let (_, pmap, family, symb) = List.assoc g preds in
-              (pmap, symb)
+              (pmap, symb, tparams)
       in
       let target = match e_opt with None -> List.assoc "this" env | Some e -> ev e in
       let index = ev index in
-      let types = ObjType (tn, [])::ObjType ("java.lang.Class", [])::List.map snd pmap in
+      let types = ObjType (tn, (List.map (fun tparam -> RealTypeParam tparam) ctparams))::ObjType ("java.lang.Class", [])::List.map snd pmap in
       let pats = TermPat target::TermPat index::srcpats pats in
       consume_chunk_core rules h ghostenv env env' l (pred_symb, true) [] coef coefpat (Some 2) pats types types $. fun chunk h coef ts size ghostenv env env' ->
       check_dummy_coefpat l coefpat coef;

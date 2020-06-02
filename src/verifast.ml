@@ -2605,6 +2605,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       success()
   
   let rec verify_cons (pn,ilist) cfin cn supercn superctors boxes lems cons tparams =
+    let thisType = ObjType (cn, (List.map (fun tparam -> RealTypeParam tparam) tparams)) in
     match cons with
       [] -> ()
     | (sign, CtorInfo (lm, xmap, pre, pre_tenv, post, epost, terminates, ss, v))::rest ->
@@ -2626,7 +2627,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let (in_pure_context, leminfo, ghostenv) = (false, RealMethodInfo (if terminates then Some rank else None), []) in
         begin
           produce_asn [] [] ghostenv env pre real_unit None None $. fun h ghostenv env ->
-          let this = get_unique_var_symb "this" (ObjType (cn, [])) in
+          let this = get_unique_var_symb "this" thisType in
           begin fun cont ->
             if cfin = FinalClass then assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [this]) (List.assoc cn classterms)) cont else cont ()
           end $. fun () ->
@@ -2642,7 +2643,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let econt throwl h env2 exceptp excep =
               verify_exceptional_return (pn,ilist) throwl h ghostenv env exceptp excep epost
             in
-            let tenv = ("this", ObjType (cn, [])):: (current_thread_name, current_thread_type) ::pre_tenv in
+            let tenv = ("this", thisType):: (current_thread_name, current_thread_type) ::pre_tenv in
             begin fun cont ->
               if cn = "java.lang.Object" then
                 cont h
@@ -2682,7 +2683,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     iter h fds
                   | Some(e) -> 
                     with_context (Executing (h, [], expr_loc e, "Executing field initializer")) $. fun () ->
-                    verify_expr false (pn,ilist) tparams false leminfo funcmap sizemap [(current_class, ClassOrInterfaceName cn); ("this", ObjType (cn, [])); (current_thread_name, current_thread_type)] ghostenv h [("this", this); (current_thread_name, List.assoc current_thread_name env)] None e (fun h _ initial_value ->
+                    verify_expr false (pn,ilist) tparams false leminfo funcmap sizemap [(current_class, ClassOrInterfaceName cn); ("this", thisType); (current_thread_name, current_thread_type)] ghostenv h [("this", this); (current_thread_name, List.assoc current_thread_name env)] None e (fun h _ initial_value ->
                       assume_field h cn f t Real this initial_value real_unit $. fun h ->
                       iter h fds
                     ) (fun throwl h env2 exceptp excep -> assert_false h env2 throwl ("Field initializers throws exception.") None)
@@ -2729,13 +2730,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             if fb = Instance then
             begin
               let ("this", thisTerm)::_ = env in
-              let ("this", ObjType (cn, _))::_ = ps in
+              let ("this", ObjType (cn, ctargs))::_ = ps in
               (* CAVEAT: Remove this assumption once we allow subclassing. *)
               (* assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [thisTerm]) (List.assoc cn classterms)) $. fun () -> *)
               begin fun cont ->
                 if cfin = FinalClass then assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [thisTerm]) (List.assoc cn classterms)) cont else cont ()
               end $. fun () ->
-              assume_neq thisTerm (ctxt#mk_intlit 0) (fun _ -> cont (("this", ObjType (cn, (List.map (fun tparam -> RealTypeParam tparam) ctparams)))::pre_tenv))
+              assume_neq thisTerm (ctxt#mk_intlit 0) (fun _ -> cont (("this", ObjType (cn, ctargs) )::pre_tenv))
             end else cont pre_tenv
           end $. fun tenv ->
           let (sizemap, indinfo) = switch_stmt ss env in

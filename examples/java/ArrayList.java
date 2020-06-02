@@ -362,7 +362,7 @@ final class ArrayList<T> implements List<T> {
         //@ ensures List(append(es, other_es)) &*& li.List(other_es);
     {
         //@ open listIsCollection(li, other);
-        List<T> l = (List) other;
+        List l = (List) other;
         int n = l.size();
         //@ list<Object> ys = nil;
         //@ list<Object> zs = other_es;

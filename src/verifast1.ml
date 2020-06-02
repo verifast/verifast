@@ -1275,6 +1275,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ObjType (n,ts) -> ObjType (n, List.map (replace_type loc targenv) ts)
     | t -> t
 
+  let rec replace_inferred_type loc targenv t = 
+    match t with
+    | InferredRealType t -> begin try List.assoc t targenv with 
+        | Not_found -> static_error loc (Printf.sprintf "Type argument for type param %s was not inferred." t) None end
+    | ArrayType t -> ArrayType (replace_inferred_type loc targenv t)
+    | ObjType (n,ts) -> ObjType (n, List.map (replace_inferred_type loc targenv) ts)
+    | t -> t
+
   let is_primitive_type t = match t with
     Void | Bool | Int _ | Float | Double -> true
   | _ -> false
@@ -1422,11 +1430,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         InductiveType (s, [])
       | None ->
       match (search2' Real id (pn, ilist) classmap1 classmap0) with
-        Some s -> begin try (match List.assoc s class_arities with (_,n) -> ObjType(s, create_objects n)) with
+        Some s -> begin try (match List.assoc s class_arities with (_, n) -> ObjType(s, create_objects n)) with
         | Not_found -> failwith (id ^ "is present in the classmap, but has no arity?")
         end
       | None ->  match (search2' Real id (pn, ilist) interfmap1 interfmap0) with
-        Some s -> begin try (match List.assoc s class_arities with (_,n) -> ObjType(s, create_objects n)) with
+        Some s -> begin try (match List.assoc s class_arities with (_, n) -> ObjType(s, create_objects n)) with
           | Not_found -> failwith (id ^ "is present in the interfmap, but has no arity?")
         end
       | None ->
@@ -1454,8 +1462,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           reportUseSite DeclKind_InductiveType ld l;
           InductiveType (id, List.map check targs)
       | None -> match resolve Real (pn,ilist) l id class_arities with
-          Some (id, (ld, n)) ->
-          if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
+        Some (id, (ld, n)) ->
+        if n <> List.length targs then 
+          static_error l "Incorrect number of type arguments." None
+        else  
           ObjType (id, List.map check targs)
       | None -> static_error l ("No such inductive type, class, or interface.") None
       end
@@ -1515,7 +1525,16 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         iter [] fds
       end
       classmap1
-  
+      
+  (* Type check type arguments of super types *)
+  let interfmap1 = 
+    List.map
+       begin fun (tn, (li, fields, methods, preds, interfs, pn, ilist, tparams)) ->
+        let interfs = List.map (fun (i,tes) -> (i,List.map (check_pure_type (pn,ilist) tparams Real) tes)) interfs in
+        (tn, (li, fields, methods, preds, interfs, pn, ilist, tparams))
+      end
+      interfmap1
+
   let rec instantiate_type tpenv t =
     if tpenv = [] then t else
     match t with
@@ -1637,11 +1656,46 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           end
         end
   
-  let is_subtype_of_ x y =
+  let direct_supers (ObjType (cn, targs)) =     
+    let toObj (name,targs) = ObjType (name, targs) in
+    let (tparams, directSupers_with_tparams) = match try_assoc cn classmap1 with 
+      Some (_, _, _, _, _, _, super, tparams, interfaces, _, _, _) -> (tparams, (toObj super)::List.map toObj interfaces)
+    | None -> begin match try_assoc cn classmap0 with
+        Some {ctpenv; csuper; cinterfs} -> (ctpenv, (toObj csuper)::List.map toObj cinterfs)
+      | None -> begin match try_assoc cn interfmap1 with
+          Some (_, _, _, _, interfaces, _, _, tparams) -> (tparams, List.map toObj interfaces)
+        | None -> begin match try_assoc cn interfmap0 with
+            Some (InterfaceInfo (_, _, _, _, interfaces, tparams)) -> (tparams, List.map toObj interfaces)
+          end
+        end
+      end
+    in
+    let Some tpenv = zip tparams targs in
+    if cn = "java.lang.Object" then 
+      []
+    else
+      List.map (replace_type dummy_loc tpenv) directSupers_with_tparams
+
+  let rec is_subtype_of_ x y =
+    x = y ||
+    y = ObjType("java.lang.Object", []) ||
     match (x, y) with
-      (ObjType (x, _), ObjType (y, _)) -> is_subtype_of x y
+    | (ObjType (a, atargs), ObjType (b, btargs)) ->
+        let directSupers = direct_supers x in
+        List.exists (fun st -> st = y || is_subtype_of_ st y) directSupers
+    | (ArrayType x, ArrayType y) -> is_subtype_of_ x y
     | _ -> false
-  
+
+  (* A proper type is a type that contains no InferredRealTypeParam *)
+  let rec proper_type t = match t with
+      ObjType (t, targs) -> List.for_all proper_type targs
+    | ArrayType t -> proper_type t
+    | Bool | Int _ | Double | Float -> true
+    | GhostTypeParam _ -> true
+    | InferredRealType _ -> false
+    | RealTypeParam _ -> true
+    | _ -> failwith (Printf.sprintf "no support yet to see if %s is a proper type" (string_of_type t))
+
   let is_unchecked_exception_type tp = 
     match tp with
      ObjType (cn, _) -> (is_subtype_of cn "java.lang.RuntimeException") || (is_subtype_of cn "java.lang.Error")
@@ -2098,9 +2152,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (ObjType ("null", []), ArrayType _) -> ()
     | (RealTypeParam t, ObjType("java.lang.Object", [])) -> ()
     | (ArrayType _, ObjType ("java.lang.Object", [])) -> ()
-    (* It is possible that type inference finds a type to be a real type parameter, 
-    this way the type has not been erased (because type inference retrieves the type information from real code). In Ghost code any real type parameter equals it's erased type. *)
-    | (RealTypeParam t0, t1) when inAnnotation = Some(true) -> expect_type_core l msg inAnnotation (erase_type (RealTypeParam t0)) t1
+    | (RealTypeParam t, t0) -> (* erase t to it's upper bound *) expect_type_core l msg inAnnotation (erase_type (RealTypeParam t)) t0
     (* Note that in Java short[] is not assignable to int[] *)
     | (ArrayType et, ArrayType et0) when et = et0 -> ()
     | (ArrayType (ObjType(t0, ts0)), ArrayType (ObjType(t1, ts1))) -> expect_type_core l msg None (ObjType (t0, ts0)) (ObjType(t1, ts1))
@@ -2430,7 +2482,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match interfmap1_todo with
         [] -> List.rev interfmap1_done
       | (tn, (li, fields, methods, preds, interfs, pn, ilist, tparams))::interfmap1_todo ->
-        let interfs = List.map (fun (i, tes) -> (i, List.map (check_pure_type (pn,ilist) tparams Real) tes)) interfs in
         let rec iter_preds predmap preds =
           match preds with
             [] -> iter_interfs ((tn, (li, fields, methods, List.rev predmap, interfs, pn, ilist, tparams))::interfmap1_done) interfmap1_todo
@@ -2784,6 +2835,96 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         Int (Signed, n1), Int (Unsigned, n2) -> if n1 <= n2 then t2 else t1
       | Int (Unsigned, n1), Int (Signed, n2) -> if n2 <= n1 then t1 else t2
       | Int (s, n1), Int (_, n2) -> Int (s, max n1 n2)
+
+  let rec super_types (ObjType (cn, targs)) =
+    let supers =
+      if cn = "java.lang.Object" then
+        []
+      else
+        direct_supers (ObjType (cn, targs))
+    in
+    flatmap (fun s -> s::super_types s) supers
+
+  (* calculates the shared supertype that is more specific than any other shared supertype *)
+  let least_upper_bound l tps =
+    match tps with
+      [t] -> [t]
+    | [] -> failwith "calculating least upper bound of no type"
+    | tps -> 
+      let st_map = List.map (fun tp -> (tp, tp::super_types tp)) tps in
+      let filtered_candidate_set = (*intersection of all est sets *)
+        let intersection setA setB = List.filter (fun memA -> List.mem memA setB) setA in
+        List.fold_left intersection (snd (List.hd st_map)) (List.map snd st_map)
+      in
+      (* MEC = { V | V in EC, and for all W ≠ V in EC, it is NOT the case that W <: V } *)
+      let mec = filtered_candidate_set |> List.filter begin fun v -> (* V in EC *)
+        not begin filtered_candidate_set |> List.exists begin fun w ->  (* for every V, select all it's children in EC that are not V *)
+            if (w = v) then   
+              false
+            else
+              is_subtype_of_ w v
+          end
+        end
+      end
+      in
+      mec 
+
+  exception InferenceError of loc * string
+  let inference_error l msg = raise (InferenceError (l, msg))
+
+  (* Assigning the assigned types to the inferred types *)
+  let infer_type l inferredTypes assignedTypes =
+    let rec inference_set set actual expected = 
+      match (actual, expected) with 
+        (hd::tl, hd0::tl0) -> begin match (hd,hd0) with
+        | (ObjType (t, targs), ObjType (t0, targs0)) when t != "null" && t0 != "null" ->
+          if proper_type hd && proper_type hd0 then
+            inference_set set tl tl0
+          else if t != t0 then
+            let matchingSuper = (super_types hd0) |> List.filter (fun (ObjType (st, _)) -> st = t) in
+            match matchingSuper with
+              [] -> inference_error l ("Type mismatch during inference, " ^ t0 ^ " is not a sub type of: " ^ t ^ ".")
+            | [(ObjType (st, stargs))] -> inference_set set (targs@tl) (stargs@tl0)
+          else if List.length targs != List.length targs0 then
+            inference_error l ("Type mismatch during inference, amount of type arguments does not match. Unknown type: " ^ string_of_type hd ^ ". Matching type: " ^ string_of_type hd0 ^ ".")
+          else
+            inference_set set (targs@tl) (targs0@tl0)
+        | (InferredRealType t, ArrayType _) ->
+          inference_error l ("No inference for arrays yet.")
+        | (InferredRealType t, t0) ->
+          if is_primitive_type t0 then
+            inference_error l ("Can't infer primitive types yet, no boxing supported.")
+          else
+            inference_set ((t,t0)::set) tl tl0
+        | (ArrayType t, ArrayType t0) ->
+          inference_set set (t::tl) (t0::tl0)
+        | _ -> inference_set set tl tl0
+        end
+      | _ -> set
+    in
+    let binds = inference_set [] inferredTypes assignedTypes in
+    let rec infvars binds vs =
+      match binds with
+        (infvar,tp)::tl ->
+          if List.mem infvar vs then
+            infvars tl vs
+          else
+            infvars tl (infvar::vs)
+      | [] -> vs
+    in
+    let setPerInfVar = (infvars binds []) |> List.map begin fun infvar -> 
+      (infvar, List.map snd (List.filter (fun (n,tp) -> n = infvar) binds))
+    end
+    in
+    setPerInfVar |> List.map begin fun (infvar, tps) ->
+      let inferred = match least_upper_bound l tps with
+          [] -> inference_error l "Inference not resolved."
+        | [f] -> f
+        | s -> inference_error l "Inference would resolve to multiple types. Not supported yet!"
+      in
+      (infvar, inferred)
+    end
+
 
   let rec check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e: (expr (* typechecked expression *) * type_ (* expression type *) * big_int option (* constant integer expression => value*)) =
     let check e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
@@ -3278,18 +3419,43 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               tp
           end
         in
+        let ms = ms |> List.filter begin fun (_, (_, _, _, _, _, _, _, _, _, _, _, _, mtparams)) ->
+          if targs = [] then 
+            true
+          else (* If type arguments are provided, the amount should match the amount of type parameters in the matching method *)
+           match zip mtparams targs with None -> false | Some(_) -> true
+        end
+        in
         let ms = List.map (fun (sign, (tn', lm, gh, rt, xmap, pre, post, epost, terminates, fb', v, abstract, mtparams)) ->
           (* Replace the type parameters with their concrete type*)
-          let methodTargEnv = match zip mtparams targs with Some(tenv) -> tenv | None -> flatmap (fun t -> [(t,javaLangObject)]) mtparams in
+          let methodTargEnv = match zip mtparams targs with
+            Some(tenv) -> tenv
+          | None ->
+            (* Any type parameters still present have to be inferred at this point *)
+            let inferTypeParamsEnv = List.map (fun tparam -> (tparam, InferredRealType tparam)) mtparams in
+            let xmapTypesToInfer = List.map (fun (name, tp) -> replace_type l inferTypeParamsEnv tp) xmap in
+            let inferredTypes = begin try infer_type l xmapTypesToInfer argtps with 
+            | InferenceError (l, msg) -> static_error l msg None 
+              end 
+            in
+            List.map (fun tparam ->
+              let targt = try List.assoc tparam inferredTypes with Not_found -> static_error l ("couldn't infer type for type parameter: " ^ tparam) None in
+              (tparam, targt)) mtparams
+          in
           let targenv = methodTargEnv@class_tenv in
-          let sign' = 
-              List.map (replace_type l targenv) sign in
+          let sign' = if inAnnotation <> Some(true) then
+              List.map (replace_type l targenv) sign 
+            else
+              List.map erase_type sign
+          in
           let rt' = match rt with
-            Some(rt) -> replace_type l targenv rt
+            Some(rt) -> if inAnnotation <> Some(true) then 
+                replace_type l targenv rt
+              else
+                erase_type rt
           | None -> Void
           in 
-          let xmap' = List.map (fun (name,tp) -> (name, replace_type l targenv tp)) xmap in
-          (sign', (tn', lm, gh, rt', xmap', pre, post, epost, terminates, fb', v, abstract, sign, targenv))) ms in
+          (sign', (tn', lm, gh, rt', xmap, pre, post, epost, terminates, fb', v, abstract, sign, targenv))) ms in
         let ms = List.filter (fun (sign, _) -> is_assignable_to_sign inAnnotation argtps sign) ms in
         let make_well_typed_method m =
           match m with
@@ -3336,19 +3502,23 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | NewObject (l, cn, args, targs) ->
       begin match resolve Real (pn,ilist) l cn classmap with
-        Some (cn, {cabstract}) ->
+        Some (cn, {cabstract; ctpenv}) ->
         if cabstract then
           static_error l "Cannot create instance of abstract class." None
         else
-          let targestps = match targs with
-            Some(targs) -> targs |> List.map begin fun targ -> 
+          let targestps = match targs with 
+            Some(targs) -> if targs = [] && ctpenv != [] then
+              (* Diamond was used, infer the type arguments later *)
+              List.map (fun tparam -> InferredRealType tparam) ctpenv
+            else
+              targs |> List.map begin fun targ -> 
                 let tp = check_pure_type (pn,ilist) tparams Real targ in
                 if is_primitive_type tp then 
                   static_error l "Type arguments can not be primitive types." None
                 else
                   tp
               end
-            | None -> []
+          | None -> List.map (fun _ -> javaLangObject) ctpenv
           in
           (NewObject (l, cn, args, targs), ObjType (cn,targestps), None)
       | None -> static_error l "No such class" None

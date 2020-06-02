@@ -27,11 +27,11 @@ public class QualifiedGenericMethodCall {
 }
 
 public class Bar {
-    public <T> void foo(int x, T y) 
+    public <T> void foo(Integer x, T y) 
     //@ requires true;
     //@ ensures true;
     {  
-    	this.<Integer,T>foo(x,y);
+    	this.<Integer, T>foo(x,y);
     }
     public <T, U> void foo(T x, U y)
     //@ requires true;

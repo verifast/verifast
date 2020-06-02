@@ -99,6 +99,7 @@ let rec string_of_type t =
   | AnyType -> "any"
   | RealTypeParam x -> if (String.capitalize_ascii x) = x then x else "<" ^ x ^ ">"
   | GhostTypeParam x -> if (String.capitalize_ascii x) = x then "<" ^ x ^ ">" else x
+  | InferredRealType x -> x ^ "?"
   | InferredType (_, t) -> begin match !t with EqConstraint t -> string_of_type t | _ -> "?" end
   | ArrayType(t) -> (string_of_type t) ^ "[]"
   | StaticArrayType(t, s) -> (string_of_type t) ^ "[" ^ (string_of_int s) ^ "]" 

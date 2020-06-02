@@ -723,7 +723,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   match xs with
                    [] -> List.rev xm
                  | (te, x)::xs ->
-                   if List.mem_assoc x xm then static_error l "Duplicate parameter name." None;
+                   if List.mem_assoc x xm then static_error lm "Duplicate parameter name." None;
                    let t = check_pure_type (pn, ilist) tparams Real te in
                    iter ((x, t)::xm) xs
                 in
@@ -2118,9 +2118,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         (* Typecheck the type arguments *)
         let targtps = match targs with 
           (* Type check passed type arguments *)
-          Some(targs) -> List.map (check_pure_type (pn,ilist) tparams Real) targs 
+          Some(targs) -> List.map (check_pure_type (pn,ilist) tparams Real) targs
           (* Raw type, make all targs Object *)
-          | None -> List.map (fun _ -> javaLangObject) tparams in
+          | None -> List.map (fun _ -> javaLangObject) ctpenv 
+        in
         let obj = get_unique_var_symb (match xo with None -> "object" | Some x -> x) (ObjType (cn, targtps)) in
         assume_neq obj (ctxt#mk_intlit 0) $. fun () ->
         assume_eq (ctxt#mk_app get_class_symbol [obj]) (List.assoc cn classterms) $. fun () ->
@@ -2129,7 +2130,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             Some (Some (_, rank)), RealMethodInfo (Some rank') -> rank < rank'
           | _ -> true
         in
-        let xmap = List.map (fun (name,tp) -> (name, erase_type tp)) xmap in
+        let xmap = if targtps = [] then 
+            xmap 
+          else 
+            let Some targEnv = zip ctpenv targtps in
+            List.map (fun (name,tp) -> (name, replace_type l targEnv tp)) xmap 
+        in
         check_correct h None None [] args (lm, [], None, xmap, ["this", obj], pre, post, Some(epost), terminates, Static) is_upcall (Some cn) (fun h env _ -> cont h env obj)
       | _ -> static_error l "Multiple matching overloads" None
       end
@@ -2147,8 +2153,6 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | _ -> false
           in
           let target_class = if can_be_overridden then None else Some tn in
-          let rt = match rt with Some (rt) -> Some(replace_type l tpenv rt) | None -> None in
-          let xmap = List.map (fun (name,tp) -> (name, replace_type l tpenv tp)) xmap in
           (lm, gh, rt, xmap, pre_dyn, post_dyn, epost_dyn, terminates, is_upcall, target_class, fb, v, mtparams)
         | _ ->
           let InterfaceInfo (_, _, methods, _, _, _) = List.assoc tn interfmap in

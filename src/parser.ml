@@ -231,10 +231,10 @@ and
      final = (parser [< '(_, Kwd "final") >] -> FinalClass | [< >] -> ExtensibleClass);
      ds = begin parser
        [< '(l, Kwd "class"); '(_, Ident s); tparams = type_params_parse;
-          super = parse_super_class l; il = parse_interfaces; mem = parse_java_members s; ds = parse_decls_core >]
+          super = parse_super_class l; il = parse_interfaces; mem = parse_java_members s tparams; ds = parse_decls_core >]
        -> Class (l, abstract, final, s, methods s mem, fields mem, constr mem, super, tparams, il, instance_preds mem)::ds
      | [< '(l, Kwd "interface"); '(_, Ident cn); tparams = type_params_parse;
-          il = parse_extended_interfaces; mem = parse_java_members cn; ds = parse_decls_core >]
+          il = parse_extended_interfaces; mem = parse_java_members cn tparams; ds = parse_decls_core >]
        -> Interface (l, cn, il, fields mem, methods cn mem, tparams, instance_preds mem)::ds
      | [< d = parse_decl; ds = parse_decls_core >] -> d@ds
      | [< '(_, Kwd ";"); ds = parse_decls_core >] -> ds
@@ -291,10 +291,10 @@ and
 | [<'(_, Kwd "protected")>] -> Protected
 | [<>] -> Package
 and
-  parse_java_members cn= parser
+  parse_java_members cn ctparams= parser
   [<'(_, Kwd "}")>] -> []
-| [< '(_, Kwd "/*@"); mems1 = parse_ghost_java_members cn; mems2 = parse_java_members cn >] -> mems1 @ mems2
-| [< m=parse_java_member cn;mr=parse_java_members cn>] -> m::mr
+| [< '(_, Kwd "/*@"); mems1 = parse_ghost_java_members cn; mems2 = parse_java_members cn ctparams >] -> mems1 @ mems2
+| [< m=parse_java_member cn ctparams;mr=parse_java_members cn ctparams>] -> m::mr
 and
   parse_ghost_java_members cn = parser
   [< '(_, Kwd "@*/") >] -> []
@@ -337,7 +337,7 @@ and
 and 
   parse_java_modifier = parser [< '(_, Kwd "public") >] -> VisibilityModifier(Public) | [< '(_, Kwd "protected") >] -> VisibilityModifier(Protected) | [< '(_, Kwd "private") >] -> VisibilityModifier(Private) | [< '(_, Kwd "static") >] -> StaticModifier | [< '(_, Kwd "final") >] -> FinalModifier | [< '(_, Kwd "abstract") >] -> AbstractModifier
 and
-  parse_java_member cn = parser
+  parse_java_member cn classTparams = parser
   [< modifiers = rep parse_java_modifier;
      binding = (fun _ -> if List.mem StaticModifier modifiers then Static else Instance);
      final = (fun _ -> List.mem FinalModifier modifiers);
@@ -349,7 +349,8 @@ and
        [< '(l, Ident x);
           member = parser
             [< (ps, co, ss) = parse_method_rest l >] ->
-            let ps = if binding = Instance then (IdentTypeExpr (l, None, cn), "this")::ps 
+            let this = if classTparams <> [] then ConstructedTypeExpr(l,cn,List.map (fun tparam -> IdentTypeExpr(l, None, tparam) ) classTparams) else IdentTypeExpr (l, None, cn) in
+            let ps = if binding = Instance then (this, "this")::ps 
                 else ps in
             MethMember (Meth (l, Real, t, x, ps, co, ss, binding, vis, abstract, tparams))
           | [< t = id (match t with None -> raise (ParseException (l, "A field cannot be void.")) | Some(t) -> t);
@@ -773,7 +774,7 @@ and
 | [< '(l, Kwd "handle") >] -> ManifestTypeExpr (l, HandleIdType)
 | [< '(l, Kwd "any") >] -> ManifestTypeExpr (l, AnyType)
 | [< '(l, Ident n); rest = rep(parser [< '(l, Kwd "."); '(l, Ident n) >] -> n); (targs, diamond) = parse_type_args_with_diamond l >] -> 
-    if diamond then raise (ParseException (l, "Diamond not supported yet")) else
+    if diamond then ConstructedTypeExpr(l,n, []) else
     if targs <> [] then 
       match rest with
       | [] -> ConstructedTypeExpr (l, n, targs) 
