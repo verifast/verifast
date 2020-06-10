@@ -2709,45 +2709,51 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (i, (l, fieldmap, meths, preds, supers, pn, ilist, tparams))
     end
   
-  let rec lookup_class_field cn fn =
+  let rec lookup_class_field (cn, targs) fn =
+    let replace_type_param {fl; fgh; ft; fvis; fbinding; ffinal; finit; fvalue} tparams = 
+      let targenv = zip tparams targs in 
+      match targenv with
+        None -> {fl; fgh; ft; fvis; fbinding; ffinal; finit; fvalue} (* Can happen in a static context *)
+      | Some(targenv) -> {fl; fgh; ft = replace_type dummy_loc targenv ft; fvis; fbinding; ffinal; finit; fvalue}
+    in
     match try_assoc cn classmap1 with
-      Some (_, _, _, _, fds, _, (super, superTargs), _, itfs, _, _, _) ->
+      Some (_, _, _, _, fds, _, super, tparams, itfs, _, _, _) ->
       begin match try_assoc fn fds with
         None when cn = "java.lang.Object" -> None
-      | Some f -> Some (f, cn)
+      | Some f -> Some (replace_type_param f tparams, cn)
       | None ->
       match lookup_class_field super fn with
         Some _ as result -> result
       | None ->
-      head_flatmap_option (fun cn -> lookup_class_field cn fn) (List.map fst itfs)
+      head_flatmap_option (fun itf -> lookup_class_field itf fn) itfs
       end
     | None -> 
     match try_assoc cn classmap0 with
-      Some {cfds; csuper=(csuper, _); cinterfs} ->
+      Some {cfds; csuper; cinterfs; ctpenv} ->
       begin match try_assoc fn cfds with
         None when cn = "java.lang.Object" -> None
-      | Some f -> Some (f, cn)
+      | Some f -> Some (replace_type_param f ctpenv, cn)
       | None ->
       match lookup_class_field csuper fn with
         Some _ as result -> result
       | None ->
-      head_flatmap_option (fun cn -> lookup_class_field cn fn) (List.map fst cinterfs)
+      head_flatmap_option (fun itf -> lookup_class_field itf fn) cinterfs
       end
     | None ->
     match try_assoc cn interfmap1 with
-      Some (_, fds, _, _, supers, _, _, _) ->
+      Some (_, fds, _, _, supers, _, _, tparams) ->
       begin match try_assoc fn fds with
-        Some f -> Some (f, cn)
+        Some f -> Some (replace_type_param f tparams, cn)
       | None ->
-      head_flatmap_option (fun cn -> lookup_class_field cn fn) (List.map fst supers)
+      head_flatmap_option (fun itf -> lookup_class_field itf fn) supers
       end
     | None ->
     match try_assoc cn interfmap0 with
-      Some (InterfaceInfo (_, fds, _, _, supers, _)) ->
+      Some (InterfaceInfo (_, fds, _, _, supers, tparams)) ->
       begin match try_assoc fn fds with
-        Some f -> Some (f, cn)
+        Some f -> Some (replace_type_param f tparams, cn)
       | None ->
-      head_flatmap_option (fun cn -> lookup_class_field cn fn) (List.map fst supers)
+      head_flatmap_option (fun itf -> lookup_class_field itf fn) supers
       end
     | None ->
     None
@@ -3049,8 +3055,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if language <> Java then cont () else
       let field_of_this =
         match try_assoc "this" tenv with
-        | Some ObjType (cn, _) ->
-          begin match lookup_class_field cn x with
+        | Some ObjType (cn, targs) ->
+          begin match lookup_class_field (cn, targs) x with
             None -> None
           | Some ({fgh; ft; fbinding; ffinal; fvalue}, fclass) ->
             let constant_value =
@@ -3072,7 +3078,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match try_assoc current_class tenv with
           None -> None
         | Some (ClassOrInterfaceName cn) ->
-          match lookup_class_field cn x with
+          match lookup_class_field (cn, []) x with
             None -> None
           | Some ({fgh; ft; fbinding; ffinal; fvalue}, fclass) ->
             if fbinding <> Static then static_error l "Instance field access without target object" None;
@@ -3740,6 +3746,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       WOperation (expr_loc e, Neq, [w; wintlit (expr_loc e) (big_int_of_int 0)], t)
     | _ -> expect_type (expr_loc e) inAnnotation t Bool; w
   and check_deref_core functypemap funcmap classmap interfmap (pn,ilist) l tparams tenv e f =
+    Printf.printf "checking deref for %s with tparams %s and tenv %s"
+      (string_of_sexpression (sexpr_of_expr e))
+      (String.concat ", " tparams)
+      (String.concat ", " (List.map (fun (a,b) -> a ^ "->" ^ string_of_type b) tenv));
     let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv None e in
     begin
     match unfold_inferred_type t with
@@ -3780,7 +3790,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | ObjType (cn, targs) ->
       begin
-      match lookup_class_field cn f with
+      match lookup_class_field (cn, targs) f with
         None -> static_error l ("No such field in class '" ^ cn ^ "'.") None
       | Some ({fgh; ft; fbinding; ffinal; fvalue}, fclass) ->
         if fbinding = Static then static_error l "Accessing a static field via an instance is not supported." None;
@@ -3797,7 +3807,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ArrayType _ when f = "length" ->
       (ArrayLengthExpr (l, w), intType, None)
     | ClassOrInterfaceName cn ->
-      begin match lookup_class_field cn f with
+      begin match lookup_class_field (cn, []) f with
         None -> static_error l "No such field" None
       | Some ({fgh; ft; fbinding; ffinal; fvalue}, fclass) ->
         if fbinding = Instance then static_error l "You cannot access an instance field without specifying a target object." None;
