@@ -3746,10 +3746,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       WOperation (expr_loc e, Neq, [w; wintlit (expr_loc e) (big_int_of_int 0)], t)
     | _ -> expect_type (expr_loc e) inAnnotation t Bool; w
   and check_deref_core functypemap funcmap classmap interfmap (pn,ilist) l tparams tenv e f =
-    Printf.printf "checking deref for %s with tparams %s and tenv %s"
-      (string_of_sexpression (sexpr_of_expr e))
-      (String.concat ", " tparams)
-      (String.concat ", " (List.map (fun (a,b) -> a ^ "->" ^ string_of_type b) tenv));
     let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv None e in
     begin
     match unfold_inferred_type t with
