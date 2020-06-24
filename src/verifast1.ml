@@ -2716,16 +2716,25 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         None -> {fl; fgh; ft; fvis; fbinding; ffinal; finit; fvalue} (* Can happen in a static context *)
       | Some(targenv) -> {fl; fgh; ft = replace_type dummy_loc targenv ft; fvis; fbinding; ffinal; finit; fvalue}
     in
+    let replace_super_targs tparams (super, superTargs) =
+      let tpenv = match zip tparams targs with
+        None -> [] (* Static field, or no targs. *)
+      | Some (tpenv) -> tpenv 
+      in
+      match tpenv with
+        [] -> (super, superTargs)
+      | tpenv -> (super, List.map (replace_type dummy_loc tpenv) superTargs) 
+    in
     match try_assoc cn classmap1 with
       Some (_, _, _, _, fds, _, super, tparams, itfs, _, _, _) ->
       begin match try_assoc fn fds with
         None when cn = "java.lang.Object" -> None
       | Some f -> Some (replace_type_param f tparams, cn)
       | None ->
-      match lookup_class_field super fn with
+      match lookup_class_field (replace_super_targs tparams super) fn with
         Some _ as result -> result
       | None ->
-      head_flatmap_option (fun itf -> lookup_class_field itf fn) itfs
+      head_flatmap_option (fun itf -> lookup_class_field (replace_super_targs tparams itf) fn) itfs
       end
     | None -> 
     match try_assoc cn classmap0 with
@@ -2734,10 +2743,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         None when cn = "java.lang.Object" -> None
       | Some f -> Some (replace_type_param f ctpenv, cn)
       | None ->
-      match lookup_class_field csuper fn with
+      match lookup_class_field (replace_super_targs ctpenv csuper) fn with
         Some _ as result -> result
       | None ->
-      head_flatmap_option (fun itf -> lookup_class_field itf fn) cinterfs
+      head_flatmap_option (fun itf -> lookup_class_field (replace_super_targs ctpenv itf) fn) cinterfs
       end
     | None ->
     match try_assoc cn interfmap1 with
@@ -2745,7 +2754,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin match try_assoc fn fds with
         Some f -> Some (replace_type_param f tparams, cn)
       | None ->
-      head_flatmap_option (fun itf -> lookup_class_field itf fn) supers
+      head_flatmap_option (fun itf -> lookup_class_field (replace_super_targs tparams itf) fn) supers
       end
     | None ->
     match try_assoc cn interfmap0 with
@@ -2753,7 +2762,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin match try_assoc fn fds with
         Some f -> Some (replace_type_param f tparams, cn)
       | None ->
-      head_flatmap_option (fun itf -> lookup_class_field itf fn) supers
+      head_flatmap_option (fun itf -> lookup_class_field (replace_super_targs tparams itf) fn) supers
       end
     | None ->
     None
