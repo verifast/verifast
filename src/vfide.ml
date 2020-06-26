@@ -719,6 +719,14 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     buffers := !buffers @ [tab];
     tab
   in
+  let setTabWidth tabSize =
+    List.iter
+      begin fun tab ->
+        tab#mainView#view#set_tab_width tabSize;
+        tab#subView#view#set_tab_width tabSize;
+      end
+      !buffers
+  in
   let setCodeFont fontName =
     codeFont := fontName;
     let scaledFont = getScaledFont fontName in
@@ -1641,13 +1649,19 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   let showPreferencesDialog () =
     let dialog = GWindow.dialog ~title:"Preferences" ~parent:root () in
     let vbox = dialog#vbox in
-    let itemsTable = GPack.table ~rows:2 ~columns:2 ~border_width:4 ~row_spacings:4 ~col_spacings:4 ~packing:(vbox#pack ~from:`START ~expand:true) () in
+    let itemsTable = GPack.table ~rows:3 ~columns:2 ~border_width:4 ~row_spacings:4 ~col_spacings:4 ~packing:(vbox#pack ~from:`START ~expand:true) () in
     ignore $. GMisc.label ~text:"Code font:" ~packing:(itemsTable#attach ~left:0 ~top:0 ~expand:`X) ();
     let codeFontButton = GButton.font_button ~font_name:!codeFont ~show:true ~packing:(itemsTable#attach ~left:1 ~top:0 ~expand:`X) () in
     ignore $. GMisc.label ~text:"Trace font:" ~packing:(itemsTable#attach ~left:0 ~top:1 ~expand:`X) ();
     let traceFontButton = GButton.font_button ~font_name:!traceFont ~show:true ~packing:(itemsTable#attach ~left:1 ~top:1 ~expand:`X) () in
+    ignore $. GMisc.label ~text:"Tab width:" ~packing:(itemsTable#attach ~left:0 ~top:2 ~expand:`X) ();
+    let currentTabWidth = string_of_int (List.hd !buffers)#mainView#view#tab_width in
+    let newTabSize = GEdit.entry ~text:currentTabWidth ~max_length:500 ~packing:(itemsTable#attach ~left:1 ~top:2 ~expand:`X) () in
     let okButton = GButton.button ~stock:`OK ~packing:dialog#action_area#add () in
     ignore $. okButton#connect#clicked (fun () ->
+      match int_of_string_opt newTabSize#text with
+        None -> ()
+      | Some n -> setTabWidth n;
       setCodeFont codeFontButton#font_name;
       setTraceFont traceFontButton#font_name;
       dialog#response `DELETE_EVENT
