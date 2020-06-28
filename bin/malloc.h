@@ -35,13 +35,13 @@ void free(void *array);
 
 void *realloc(void *array, size_t newSize);
     //@ requires malloc_block(array, ?size) &*& chars(array, size, ?cs);
-    /*@
-    ensures
-        result == 0 ?
-            malloc_block(array, size) &*& chars(array, size, cs)
-        :
-            malloc_block(result, newSize) &*& chars(result, newSize, ?newCs) &*&
-            take(size <= newSize ? size : newSize, cs) == take(size <= newSize ? size : newSize, newCs);
+    /*@ ensures
+        result == 0 ? malloc_block(array, size) &*& chars(array, size, cs)
+        : malloc_block(result, newSize)
+        &*& chars(result, _, take(newSize,cs))
+        &*& newSize <= size ? emp
+            : chars(result + size, newSize-size, _);
     @*/
+    /*@ terminates; @*/
 
 #endif
