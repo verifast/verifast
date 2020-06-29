@@ -506,6 +506,7 @@ cd tests
     verifast -c QualifiedGenericMethodCall.java
     verifast -c DiamondOperator.java
     verifast -c MethodInference.java
+    verifast -c CorrectFieldTypes.java
     cd errors
       verifast -c -allow_should_fail Test3.java
     cd ..
