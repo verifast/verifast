@@ -2710,7 +2710,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     end
   
   let rec lookup_class_field (cn, targs) fn =
-    let replace_type_param {fl; fgh; ft; fvis; fbinding; ffinal; finit; fvalue} tparams = 
+    let instantiate_type_params {fl; fgh; ft; fvis; fbinding; ffinal; finit; fvalue} tparams = 
       let targenv = zip tparams targs in 
       match targenv with
         None -> {fl; fgh; ft; fvis; fbinding; ffinal; finit; fvalue} (* Can happen in a static context *)
@@ -2725,44 +2725,45 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         [] -> (super, superTargs)
       | tpenv -> (super, List.map (replace_type dummy_loc tpenv) superTargs) 
     in
+    let field_in_super tparams supers = head_flatmap_option (fun super -> lookup_class_field (replace_super_targs tparams super) fn) supers in
     match try_assoc cn classmap1 with
       Some (_, _, _, _, fds, _, super, tparams, itfs, _, _, _) ->
       begin match try_assoc fn fds with
         None when cn = "java.lang.Object" -> None
-      | Some f -> Some (replace_type_param f tparams, cn)
+      | Some f -> Some (instantiate_type_params f tparams, cn)
       | None ->
       match lookup_class_field (replace_super_targs tparams super) fn with
         Some _ as result -> result
       | None ->
-      head_flatmap_option (fun itf -> lookup_class_field (replace_super_targs tparams itf) fn) itfs
+      field_in_super tparams itfs
       end
     | None -> 
     match try_assoc cn classmap0 with
       Some {cfds; csuper; cinterfs; ctpenv} ->
       begin match try_assoc fn cfds with
         None when cn = "java.lang.Object" -> None
-      | Some f -> Some (replace_type_param f ctpenv, cn)
+      | Some f -> Some (instantiate_type_params f ctpenv, cn)
       | None ->
       match lookup_class_field (replace_super_targs ctpenv csuper) fn with
         Some _ as result -> result
       | None ->
-      head_flatmap_option (fun itf -> lookup_class_field (replace_super_targs ctpenv itf) fn) cinterfs
+      field_in_super ctpenv cinterfs
       end
     | None ->
     match try_assoc cn interfmap1 with
       Some (_, fds, _, _, supers, _, _, tparams) ->
       begin match try_assoc fn fds with
-        Some f -> Some (replace_type_param f tparams, cn)
+        Some f -> Some (instantiate_type_params f tparams, cn)
       | None ->
-      head_flatmap_option (fun itf -> lookup_class_field (replace_super_targs tparams itf) fn) supers
+      field_in_super tparams supers
       end
     | None ->
     match try_assoc cn interfmap0 with
       Some (InterfaceInfo (_, fds, _, _, supers, tparams)) ->
       begin match try_assoc fn fds with
-        Some f -> Some (replace_type_param f tparams, cn)
+        Some f -> Some (instantiate_type_params f tparams, cn)
       | None ->
-      head_flatmap_option (fun itf -> lookup_class_field (replace_super_targs tparams itf) fn) supers
+      field_in_super tparams supers
       end
     | None ->
     None
