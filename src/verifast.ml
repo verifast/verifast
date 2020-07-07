@@ -1591,14 +1591,23 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end;
       let bs' = List.map (fun x -> (x, get_unique_var_symb_ x (List.assoc x tenv) (List.mem x ghostenv))) xs in
       let env'' =
-        flatmap
+        (flatmap
           begin fun (x, t) ->
             if List.mem x xs then
-              [("old_" ^ x, t); (x, List.assoc x bs')]
+                [("old_" ^ x, t)]
             else
-              [(x, t)]
+                []
           end
-          env''
+          env'')
+        @
+        (List.map
+          begin fun (x, t) ->
+            if List.mem x xs then
+                (x, List.assoc x bs')
+            else
+              (x, t)
+          end
+          env'')
       in
       produce_asn [] h' ghostenv'' env'' post real_unit None None $. fun h' _ _ ->
       let env' = bs' @ env' in
