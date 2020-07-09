@@ -53,11 +53,11 @@ predicate long_double(long double *p; long double v);
 
 lemma void character_limits(char *pc);
     requires [?f]character(pc, ?c);
-    ensures [f]character(pc, c) &*& pc > (char *)0 &*& pc < (char *)UINTPTR_MAX &*& -128 <= c &*& c <= 127;
+    ensures [f]character(pc, c) &*& pc > (char *)0 &*& pc < (char *)UINTPTR_MAX &*& CHAR_MIN <= c &*& c <= CHAR_MAX;
 
 lemma void u_character_limits(unsigned char *pc);
     requires [?f]u_character(pc, ?c);
-    ensures [f]u_character(pc, c) &*& pc > (unsigned char *)0 &*& pc < (unsigned char *)UINTPTR_MAX &*& 0 <= c &*& c <= 255;
+    ensures [f]u_character(pc, c) &*& pc > (unsigned char *)0 &*& pc < (unsigned char *)UINTPTR_MAX &*& 0 <= c &*& c <= UCHAR_MAX;
 
 lemma void integer_distinct(int* i, int* j);
     requires integer(i, ?v1) &*& integer(j, ?v2);
