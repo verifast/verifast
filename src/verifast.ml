@@ -2626,6 +2626,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         else
           static_error lm "Constructor specification is only allowed in javaspec files!" None
       | Some (Some ((ss, closeBraceLoc), rank)) ->
+        reportStmts ss;
         record_fun_timing lm (cn ^ ".<ctor>") begin fun () ->
         if !verbosity >= 1 then Printf.printf "%10.6fs: %s: Verifying constructor %s\n" (Perf.time()) (string_of_loc lm) (string_of_sign (cn, sign));
         execute_branch begin fun () ->
@@ -2723,6 +2724,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           if (Filename.check_suffix p ".javaspec") || abstract then verify_meths (pn,ilist) cfin cabstract boxes lems meths ctparams
           else static_error l "Method specification is only allowed in javaspec files!" None
       | Some (Some ((ss, closeBraceLoc), rank)) ->
+        reportStmts ss;
         record_fun_timing l g begin fun () ->
         if !verbosity >= 1 then Printf.printf "%10.6fs: %s: Verifying method %s\n" (Perf.time()) (string_of_loc l) g;
         if abstract then static_error l "Abstract method cannot have implementation." None;
