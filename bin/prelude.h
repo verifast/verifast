@@ -329,6 +329,10 @@ predicate bools(bool *p, int count; list<bool> vs) =
     :
         boolean(p, ?v) &*& bools(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0);
 
+lemma_auto void bools_inv();
+    requires [?f]bools(?p, ?count, ?vs);
+    ensures [f]bools(p, count, vs) &*& count == length(vs);
+
 predicate pointers(void **pp, int count; list<void *> ps) =
     count == 0 ?
         ps == nil

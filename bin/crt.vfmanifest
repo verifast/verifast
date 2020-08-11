@@ -71,6 +71,7 @@
 .provides ./prelude.h#ullongs_inv
 .provides ./prelude.h#shorts_inv
 .provides ./prelude.h#ushorts_inv
+.provides ./prelude.h#bools_inv
 .provides ./prelude.h#pointers_inv
 .provides ./prelude.h#pointers_limits
 .provides ./prelude.h#pointers_split
