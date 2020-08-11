@@ -50,6 +50,7 @@
 .requires CRT/nat.gh#pow_nat_nonnegative
 .requires CRT/nat.gh#succ_int
 .requires CRT/prelude.h#body_chars_to_string
+.requires CRT/prelude.h#bools_inv
 .requires CRT/prelude.h#character_to_u_character
 .requires CRT/prelude.h#chars_inv
 .requires CRT/prelude.h#chars_join
