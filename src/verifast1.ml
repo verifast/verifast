@@ -5005,7 +5005,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let rec sizeof l t =
     match t with
       Void -> ctxt#mk_intlit 1
-    | Bool -> rank_size_term 1
+    | Bool -> rank_size_term 0
     | Int (_, k) -> rank_size_term k
     | PtrType _ -> ctxt#mk_intlit (1 lsl ptr_rank)
     | StructType sn -> struct_size l sn
