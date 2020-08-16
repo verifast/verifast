@@ -179,6 +179,7 @@ let data_model_of_string s =
   match head_flatmap_option (fun (k, v) -> if String.uppercase_ascii k = s then Some v else None) data_models with
     None -> failwith "No such data model"
   | Some v -> v
+let intmax_rank = 3 (* Assume that sizeof(intmax_t) is always 8 *)
 
 let is_arithmetic_type t =
   match t with

@@ -988,51 +988,93 @@ and
 in
 parse_operators
 
+let intmax_width = 8 * (1 lsl intmax_rank)
+
 (* Evaluator for operators *)
 let rec eval_operators e =
-  match e with
-    IntLit (_, n, dec, usuffix, lsuffix) -> int64_of_big_int n (* TODO: use dec/usuffix/lsuffix *)
-  | Operation (_, Mul, [e0; e1]) -> Int64.mul (eval_operators e0) (eval_operators e1)
-  | Operation (_, Div, [e0; e1]) -> Int64.div (eval_operators e0) (eval_operators e1)
-  | Operation (_, Mod, [e0; e1]) -> Int64.rem (eval_operators e0) (eval_operators e1)
-  | Operation (_, Add, [e0; e1]) -> Int64.add (eval_operators e0) (eval_operators e1)
-  | Operation (_, Sub, [e0; e1]) -> Int64.sub (eval_operators e0) (eval_operators e1)
-  | Operation (_, ShiftLeft, [e0; e1]) -> Int64.shift_left (eval_operators e0) (Int64.to_int (eval_operators e1))
-  | Operation (_, ShiftRight, [e0; e1]) -> Int64.shift_right (eval_operators e0) (Int64.to_int (eval_operators e1))
-  | Operation (_, Eq, [e0; e1]) ->
-     if Int64.compare (eval_operators e0) (eval_operators e1) = 0
-     then Int64.one else Int64.zero
-  | Operation (_, Neq, [e0; e1]) ->
-     if Int64.compare (eval_operators e0) (eval_operators e1) != 0
-     then Int64.one else Int64.zero
-  | Operation (_, Lt, [e0; e1]) ->
-     if Int64.compare (eval_operators e0) (eval_operators e1) < 0
-     then Int64.one else Int64.zero
-  | Operation (_, Le, [e0; e1]) ->
-     if Int64.compare (eval_operators e0) (eval_operators e1) <= 0
-     then Int64.one else Int64.zero
-  | Operation (_, Gt, [e0; e1]) ->
-     if Int64.compare (eval_operators e0) (eval_operators e1) > 0
-     then Int64.one else Int64.zero
-  | Operation (_, Ge, [e0; e1]) ->
-     if Int64.compare (eval_operators e0) (eval_operators e1) >= 0
-     then Int64.one else Int64.zero
-  | Operation (_, BitAnd, [e0; e1]) -> Int64.logand (eval_operators e0) (eval_operators e1)
-  | Operation (_, BitXor, [e0; e1]) -> Int64.logxor (eval_operators e0) (eval_operators e1)
-  | Operation (_, BitOr, [e0; e1]) -> Int64.logor (eval_operators e0) (eval_operators e1)
-  | Operation (_, And, [e0; e1]) ->
-     if Int64.compare (eval_operators e0) Int64.zero = 0
-     then Int64.zero else
-       if Int64.compare (eval_operators e1) Int64.zero = 0
-       then Int64.zero else Int64.one
-  | Operation (_, Or, [e0; e1]) ->
-     if Int64.compare (eval_operators e0) Int64.zero != 0
-     then Int64.one else
-       if Int64.compare (eval_operators e1) Int64.zero != 0
-       then Int64.one else Int64.zero
-  | Operation (_, Not, [e0]) ->
-     if Int64.compare (eval_operators e0) Int64.zero = 0
-     then Int64.one else Int64.zero
+  let u, n =
+    match e with
+      IntLit (_, n, dec, usuffix, lsuffix) -> usuffix, n (* TODO: use dec/usuffix/lsuffix *)
+    | Operation (_, (Mul|Div|Mod|Add|Sub as op), [e0; e1]) ->
+      let u, n1, n2 = eval_and_convert_operands e0 e1 in
+      let n =
+        match op with
+          Mul -> mult_big_int n1 n2
+        | Div -> if sign_big_int n1 < 0 then minus_big_int (div_big_int (minus_big_int n1) n2) else div_big_int n1 n2
+        | Mod -> if sign_big_int n1 < 0 then minus_big_int (mod_big_int (minus_big_int n1) n2) else mod_big_int n1 n2
+        | Add -> add_big_int n1 n2
+        | Sub -> sub_big_int n1 n2
+      in
+      u, n
+    | Operation (l, (ShiftLeft|ShiftRight as op), [e0; e1]) ->
+      let u1, n1 = eval_operators e0 in
+      let _, n2 = eval_operators e1 in
+      if sign_big_int n2 < 0 then error l "Right operand of bitwise shift operator is negative";
+      if le_big_int (big_int_of_int intmax_width) n2 then error l "Right operand of bitwise shift operator is greater than or equal to the width of the left operand";
+      let n =
+        match op with
+          ShiftLeft ->
+          if sign_big_int n1 < 0 then error l "Left operand of bitwise shift left operator is negative";
+          shift_left_big_int n1 (int_of_big_int n2)
+        | ShiftRight ->
+          (* The behavior of shift right on negative numbers is implementation-defined; however, assume sign extension since this seems to be the common behavior *)
+          shift_right_big_int n1 (int_of_big_int n2)
+      in
+      u1, n
+    | Operation (_, (Eq|Neq|Lt|Le|Gt|Ge as op), [e0; e1]) ->
+      let u, n1, n2 = eval_and_convert_operands e0 e1 in
+      let result =
+        match op with
+          Eq -> eq_big_int n1 n2
+        | Neq -> not (eq_big_int n1 n2)
+        | Lt -> lt_big_int n1 n2
+        | Le -> le_big_int n1 n2
+        | Gt -> gt_big_int n1 n2
+        | Ge -> ge_big_int n1 n2
+      in
+      false, if result then unit_big_int else zero_big_int
+    | Operation (_, (BitAnd|BitXor|BitOr as op), [e0; e1]) ->
+      let u, n1, n2 = eval_and_convert_operands e0 e1 in
+      let n1', n2' =
+        extract_big_int n1 0 intmax_width,
+        extract_big_int n2 0 intmax_width
+      in
+      let n =
+        match op with
+          BitAnd -> and_big_int n1' n2'
+        | BitOr -> or_big_int n1' n2'
+        | BitXor -> xor_big_int n1' n2'
+      in
+      let n =
+        if u then n else if lt_big_int (max_signed_big_int intmax_rank) n then sub_big_int n (succ_big_int (max_unsigned_big_int intmax_rank)) else n
+      in
+      u, n
+    | Operation (_, And, [e0; e1]) ->
+      false, if sign_big_int (snd (eval_operators e0)) <> 0 && sign_big_int (snd (eval_operators e1)) <> 0 then unit_big_int else zero_big_int
+    | Operation (_, Or, [e0; e1]) ->
+      false, if sign_big_int (snd (eval_operators e0)) <> 0 || sign_big_int (snd (eval_operators e1)) <> 0 then unit_big_int else zero_big_int
+    | Operation (_, Not, [e0]) ->
+      false, if sign_big_int (snd (eval_operators e0)) <> 0 then zero_big_int else unit_big_int
+  in
+  let n =
+    if u then
+      extract_big_int n 0 intmax_width
+    else
+      if lt_big_int n (min_signed_big_int intmax_rank) then
+        error (expr_loc e) "Arithmetic underflow: the value of this expression is less than INTMAX_MIN"
+      else if lt_big_int (max_signed_big_int intmax_rank) n then
+        error (expr_loc e) "Arithmetic overflow: the value of this expression is greater than INTMAX_MAX"
+      else
+        n
+  in
+  u, n
+and eval_and_convert_operands e1 e2 =
+  let (u1, n1), (u2, n2) = eval_operators e1, eval_operators e2 in
+  (* Apply usual arithmetic conversions *)
+  let u = u1 || u2 in
+  let n1 = if u1 = u then n1 else extract_big_int n1 0 intmax_width in
+  let n2 = if u2 = u then n2 else extract_big_int n2 0 intmax_width in
+  u, n1, n2
 
 let make_file_preprocessor0 get_macro set_macro peek junk in_ghost_range dataModel =
   let peek () =
@@ -1153,8 +1195,8 @@ let make_file_preprocessor0 get_macro set_macro peek junk in_ghost_range dataMod
       let condition = condition () in
       let condition = macro_expand [] condition in
       let condition = parse_operators dataModel (Stream.of_list condition) in
-      let condition = eval_operators condition in
-      let isTrue = Int64.compare condition Int64.zero <> 0 in
+      let _, condition = eval_operators condition in
+      let isTrue = sign_big_int condition <> 0 in
       if isTrue then () else skip_branch ()
     and next_token () =
       let at_start_of_line = !next_at_start_of_line in
