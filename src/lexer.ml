@@ -1076,7 +1076,7 @@ and eval_and_convert_operands e1 e2 =
   let n2 = if u2 = u then n2 else extract_big_int n2 0 intmax_width in
   u, n1, n2
 
-let make_file_preprocessor0 get_macro set_macro peek junk in_ghost_range dataModel =
+let make_file_preprocessor0 path get_macro set_macro peek junk in_ghost_range dataModel =
   let peek () =
     match peek () with
       None -> None
@@ -1093,6 +1093,7 @@ let make_file_preprocessor0 get_macro set_macro peek junk in_ghost_range dataMod
     end
   in
   let defining_macro = ref false in
+  let next_at_start_of_file = ref true in
   let next_at_start_of_line = ref true in
   let ghost_range_delimiter_allowed = ref false in
   let rec make_subpreprocessor callers peek junk =
@@ -1199,6 +1200,8 @@ let make_file_preprocessor0 get_macro set_macro peek junk in_ghost_range dataMod
       let isTrue = sign_big_int condition <> 0 in
       if isTrue then () else skip_branch ()
     and next_token () =
+      let at_start_of_file = !next_at_start_of_file in
+      next_at_start_of_file := false;
       let at_start_of_line = !next_at_start_of_line in
       next_at_start_of_line := false;
       match
@@ -1343,6 +1346,21 @@ let make_file_preprocessor0 get_macro set_macro peek junk in_ghost_range dataMod
           skip_branches ();
           next_token ()
         | Some (l, Kwd "endif") -> junk (); next_token ()
+        | Some (l, Kwd "pragma") ->
+          junk ();
+          begin match peek() with
+            Some (lx, Ident "once") ->
+              if not at_start_of_file then
+                error lx "Pragma once is only supported at the start of a file";
+              junk ();
+              (* Use the absolute file name as a fake macro name *)
+              if is_defined lx path then
+                skip_block ()
+              else
+                set_macro path (Some (lx, None, []));
+              next_token ()
+          | Some (l, _) -> syntax_error l
+          end
         | Some (l, _) -> syntax_error l
         end
       | (l, Ident x) as t when is_defined l x && not (List.mem x (List.hd !callers)) ->
@@ -1464,7 +1482,7 @@ let make_file_preprocessor0 get_macro set_macro peek junk in_ghost_range dataMod
   in
   (make_subpreprocessor [] peek junk, fun _ -> !last_macro_used)
 
-let make_file_preprocessor macros ghost_macros peek junk in_ghost_range dataModel =
+let make_file_preprocessor path macros ghost_macros peek junk in_ghost_range dataModel =
   let get_macros () = if !in_ghost_range then ghost_macros else macros in
   let set_macro x v =
     match v with
@@ -1479,7 +1497,7 @@ let make_file_preprocessor macros ghost_macros peek junk in_ghost_range dataMode
     else
       Hashtbl.find_opt macros x
   in
-  make_file_preprocessor0 get_macro set_macro peek junk in_ghost_range dataModel
+  make_file_preprocessor0 path get_macro set_macro peek junk in_ghost_range dataModel
 
 type ghostness = Real | Ghost
 
@@ -1559,7 +1577,7 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
   in
   let current_loc () = !curr_tlexer#loc() in
   let () =
-    let pp0, last_macro_used0 = make_file_preprocessor p_macros p_ghost_macros (fun () -> !curr_tlexer#peek ()) (fun () -> !curr_tlexer#junk ()) p_in_ghost_range dataModel in
+    let pp0, last_macro_used0 = make_file_preprocessor path p_macros p_ghost_macros (fun () -> !curr_tlexer#peek ()) (fun () -> !curr_tlexer#junk ()) p_in_ghost_range dataModel in
     pps := [pp0];
     p_last_macro_used := [last_macro_used0]
   in
@@ -1571,7 +1589,7 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
     let ghost_macros0 = Hashtbl.create 10 in
     cfp_macros := [macros0];
     cfp_ghost_macros := [ghost_macros0];
-    let cfpp0, _ = make_file_preprocessor macros0 ghost_macros0 (fun () -> !curr_tlexer#peek ()) (fun () -> !curr_tlexer#junk ()) cfp_in_ghost_range dataModel in
+    let cfpp0, _ = make_file_preprocessor path macros0 ghost_macros0 (fun () -> !curr_tlexer#peek ()) (fun () -> !curr_tlexer#junk ()) cfp_in_ghost_range dataModel in
     cfpps := [cfpp0]
   in
   let pop_pps () =
@@ -1661,7 +1679,7 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
           in
           let path = find_include_file includepaths in push_tlexer l path;
           let () =
-            let pp1, last_macro_used1 = make_file_preprocessor p_macros p_ghost_macros (fun () -> !curr_tlexer#peek ()) (fun () -> !curr_tlexer#junk ()) p_in_ghost_range dataModel in
+            let pp1, last_macro_used1 = make_file_preprocessor path p_macros p_ghost_macros (fun () -> !curr_tlexer#peek ()) (fun () -> !curr_tlexer#junk ()) p_in_ghost_range dataModel in
             pps := pp1::!pps;
             p_last_macro_used := last_macro_used1::!p_last_macro_used
           in
@@ -1670,7 +1688,7 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
             let ghost_macros = Hashtbl.create 10 in
             cfp_macros := macros::!cfp_macros;
             cfp_ghost_macros := ghost_macros::!cfp_ghost_macros;
-            let cfpp1, _ = make_file_preprocessor macros ghost_macros (fun () -> !curr_tlexer#peek ()) (fun () -> !curr_tlexer#junk ()) cfp_in_ghost_range dataModel in
+            let cfpp1, _ = make_file_preprocessor path macros ghost_macros (fun () -> !curr_tlexer#peek ()) (fun () -> !curr_tlexer#junk ()) cfp_in_ghost_range dataModel in
             cfpps := cfpp1::!cfpps
           in
           if List.mem path !included_files then begin

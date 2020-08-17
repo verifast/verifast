@@ -35,7 +35,7 @@ let c_keywords = [
   "struct"; "bool"; "char"; "sizeof"; "#"; "##"; "include"; "ifndef";
   "define"; "endif"; "&"; "goto"; "uintptr_t"; "intptr_t"; "INT_MIN"; "INT_MAX";
   "UINTPTR_MAX"; "enum"; "static"; "signed"; "unsigned"; "long";
-  "const"; "volatile"; "register"; "ifdef"; "elif"; "undef";
+  "const"; "volatile"; "register"; "ifdef"; "elif"; "undef"; "pragma";
   "SHRT_MIN"; "SHRT_MAX"; "USHRT_MAX"; "UINT_MAX";
   "CHAR_MIN"; "CHAR_MAX"; "UCHAR_MAX";
   "LLONG_MIN"; "LLONG_MAX"; "ULLONG_MAX";
