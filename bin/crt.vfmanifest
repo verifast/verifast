@@ -44,6 +44,7 @@
 .provides ./prelude.h#chars_to_short_integer
 .provides ./prelude.h#chars_to_u_short_integer
 .provides ./prelude.h#chars_to_pointer
+.provides ./prelude.h#chars_to_boolean
 .provides ./prelude.h#integer_to_chars
 .provides ./prelude.h#integer__to_chars
 .provides ./prelude.h#u_integer_to_chars
@@ -52,6 +53,7 @@
 .provides ./prelude.h#u_character_to_character
 .provides ./prelude.h#character_to_u_character
 .provides ./prelude.h#pointer_to_chars
+.provides ./prelude.h#boolean_to_chars
 .provides ./prelude.h#chars_to_intarray
 .provides ./prelude.h#string_to_body_chars
 .provides ./prelude.h#body_chars_to_string
@@ -84,6 +86,8 @@
 .provides ./prelude.h#ints_to_chars
 .provides ./prelude.h#chars_to_uints
 .provides ./prelude.h#uints_to_chars
+.provides ./prelude.h#chars_to_bools
+.provides ./prelude.h#bools_to_chars
 .provides ./prelude.h#chars_to_integers_
 .provides ./prelude.h#integers__to_chars
 .provides ./prelude.h#uchars_to_integers_

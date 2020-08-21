@@ -202,6 +202,10 @@ lemma_auto void chars_to_pointer(void *p);
     requires [?f]chars(p, sizeof(void *), ?cs);
     ensures [f]pointer(p, pointer_of_chars(cs));
 
+lemma_auto void chars_to_boolean(void *p);
+    requires [?f]chars(p, sizeof(bool), ?cs);
+    ensures [f]boolean(p, _);
+
 lemma_auto void chars_to_integer_(void *p, int size, bool signed_);
     requires [?f]chars(p, size, ?cs);
     ensures [f]integer_(p, size, signed_, _);
@@ -226,6 +230,10 @@ lemma_auto void u_short_integer_to_chars(void *p);
 lemma_auto void pointer_to_chars(void *p);
     requires [?f]pointer(p, ?v);
     ensures [f]chars(p, sizeof(void *), chars_of_pointer(v));
+
+lemma_auto void boolean_to_chars(void *p);
+    requires [?f]boolean(p, _);
+    ensures [f]chars(p, sizeof(bool), ?cs);
 
 lemma_auto void integer__to_chars(void *p, int size, bool signed_);
     requires [?f]integer_(p, size, signed_, ?v);
@@ -389,6 +397,14 @@ lemma_auto void chars_to_uints(void *p, int n);
 lemma_auto void uints_to_chars(void *p);
     requires [?f]uints(p, ?n, _);
     ensures [f]chars(p, n * sizeof(unsigned int), _);
+
+lemma_auto void chars_to_bools(void *p, int n);
+    requires [?f]chars(p, n * sizeof(bool), _);
+    ensures [f]bools(p, n, _);
+
+lemma_auto void bools_to_chars(void *p);
+    requires [?f]bools(p, ?n, _);
+    ensures [f]chars(p, n * sizeof(bool), _);
 
 lemma_auto void chars_to_integers_(void *p, int size, bool signed_, int n);
     requires [?f]chars(p, n * size, _);

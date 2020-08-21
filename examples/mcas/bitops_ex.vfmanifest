@@ -50,7 +50,9 @@
 .requires CRT/nat.gh#pow_nat_nonnegative
 .requires CRT/nat.gh#succ_int
 .requires CRT/prelude.h#body_chars_to_string
+.requires CRT/prelude.h#boolean_to_chars
 .requires CRT/prelude.h#bools_inv
+.requires CRT/prelude.h#bools_to_chars
 .requires CRT/prelude.h#character_to_u_character
 .requires CRT/prelude.h#chars_inv
 .requires CRT/prelude.h#chars_join
@@ -59,6 +61,8 @@
 .requires CRT/prelude.h#chars_of_pointer_of_chars
 .requires CRT/prelude.h#chars_separate_string
 .requires CRT/prelude.h#chars_split
+.requires CRT/prelude.h#chars_to_boolean
+.requires CRT/prelude.h#chars_to_bools
 .requires CRT/prelude.h#chars_to_integer
 .requires CRT/prelude.h#chars_to_integer_
 .requires CRT/prelude.h#chars_to_integers_
