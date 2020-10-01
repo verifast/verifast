@@ -9,6 +9,9 @@ cd bin
   cd ..
 cd ..
 cd examples
+  cd busywaiting
+    verifast -c bounded_fifo.c
+  cd ..
   cd jayanti
     verifast threading.o popl20_prophecies.o atomics.c jayanti.c client.c
   cd ..
