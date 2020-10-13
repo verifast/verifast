@@ -107,11 +107,17 @@ void fork(thread_run *run);
 
 /*@
 
+predicate signal_uninit(void *id;);
+
+lemma void *create_signal();
+  requires true;
+  ensures signal_uninit(result);
+
 predicate signal(void *id; list<int> level, bool status);
 
-lemma void *create_signal(list<int> level);
-  requires obs(?p, ?obs);
-  ensures obs(p, cons(pair(result, level), obs)) &*& signal(result, level, false);
+lemma void init_signal(void *signal, list<int> level);
+  requires obs(?p, ?obs) &*& signal_uninit(signal);
+  ensures obs(p, cons(pair(signal, level), obs)) &*& signal(signal, level, false);
 
 lemma void set_signal(void *signal);
   requires obs(?p, ?obs) &*& signal(signal, ?level, false);

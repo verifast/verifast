@@ -125,3 +125,5 @@ doc/*/*.pdf
 # Java frontend stuff
 src/java_frontend/ast_server.jar
 examples/crypto/lib/polarssl
+
+.DS_Store
