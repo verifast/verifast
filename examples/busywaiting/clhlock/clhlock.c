@@ -318,7 +318,8 @@ void acquire(struct lock_thread *thread, struct lock *lock)
             close queue(lock, lockLevel, inv, ghostListId, oldSignal, oldLevel, old, ns);
             ghost_list_insert(ghostListId, nil, ns, node);
             node->pred = old;
-            node->signal = create_signal(append(lockLevel, {oldLevel + 1}));
+            node->signal = create_signal();
+            init_signal(node->signal, append(lockLevel, {oldLevel + 1}));
             node->level = oldLevel + 1;
             node->predSignal = oldSignal;
             close queue(lock, lockLevel, inv, ghostListId, node->signal, oldLevel + 1, node, cons(node, ns));

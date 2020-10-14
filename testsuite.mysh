@@ -11,6 +11,9 @@ cd ..
 cd examples
   cd busywaiting
     verifast -c bounded_fifo.c
+    cd clhlock
+      verifast -c clhlock.c
+    cd ..
   cd ..
   cd jayanti
     verifast threading.o popl20_prophecies.o atomics.c jayanti.c client.c
