@@ -139,6 +139,20 @@ lemma void is_ancestor_of_refl(list<pathcomp> p)
     switch (p) { case nil: case cons(h, t): }
 }
 
+lemma void is_ancestor_of_trans(list<pathcomp> p1, list<pathcomp> p2, list<pathcomp> p3)
+    requires is_ancestor_of(p1, p2) && is_ancestor_of(p2, p3);
+    ensures is_ancestor_of(p1, p3) == true;
+{
+    switch (p3) {
+        case nil:
+        case cons(p3h, p3t):
+            if (p2 == p3) {
+            } else {
+                is_ancestor_of_trans(p1, p2, p3t);
+            }
+    }
+}
+
 @*/
 
 void acquire_helper(struct lock_thread *thread, struct lock *lock, struct node *pred)
@@ -339,17 +353,18 @@ void acquire(struct lock_thread *thread, struct lock *lock)
     acquire_helper(thread, lock, pred);
 }
 
-void release(struct lock_thread *thread)
-    //@ requires locked(thread, ?lock, ?lockLevel, ?inv, ?frac, ?ob) &*& inv() &*& obs(?p, ?obs);
-    //@ ensures obs(?p1, remove(ob, obs)) &*& lock_thread(thread) &*& [frac]lock(lock, lockLevel, inv) &*& is_ancestor_of(p, p1) == true;
+void release_with_ghost_op(struct lock_thread *thread)
+    //@ requires locked(thread, ?lock, ?lockLevel, ?inv, ?frac, ?ob) &*& obs(?p, ?obs) &*& is_release_ghost_op(?rgo, currentThread, inv, p, remove(ob, obs), ?pre, ?post) &*& pre();
+    //@ ensures post(?p1) &*& obs(?p2, remove(ob, obs)) &*& lock_thread(thread) &*& [frac]lock(lock, lockLevel, inv) &*& is_ancestor_of(p1, p2) == true;
     //@ terminates;
 {
+    //@ int releaseThread = currentThread;
     //@ open locked(thread, lock, lockLevel, inv, frac, ob);
     struct node *node = thread->node;
     //@ int ghostListId = lock->ghostListId;
     {
         /*@
-        predicate pre() =
+        predicate ghop_pre() =
             [frac/4]lock->ghostListId |-> ghostListId &*& [frac/2]lock->level |-> lockLevel &*&
             ghost_list_member_handle(ghostListId, node) &*&
             [1/2]node->lock |-> 1 &*&
@@ -360,16 +375,17 @@ void release(struct lock_thread *thread)
             [1/2]node->predSignal |-> _ &*&
             obs(p, obs) &*&
             malloc_block_node(node) &*&
-            inv();
-        predicate post() =
-            obs(p, remove(ob, obs)) &*&
+            is_release_ghost_op(rgo, currentThread, inv, p, remove(ob, obs), pre, post) &*&
+            pre();
+        predicate ghop_post() =
+            obs(p, remove(ob, obs)) &*& post(p) &*&
             [frac/2]lock->ghostListId |-> ghostListId &*& [frac/2]lock->level |-> lockLevel;
         lemma void ghop()
-            requires lock_inv(lock, inv)() &*& is_atomic_store_int_op(?op, &node->lock, 0, ?P, ?Q) &*& P() &*& pre();
-            ensures lock_inv(lock, inv)() &*& is_atomic_store_int_op(op, &node->lock, 0, P, Q) &*& Q() &*& post();
+            requires lock_inv(lock, inv)() &*& is_atomic_store_int_op(?op, &node->lock, 0, ?P, ?Q) &*& P() &*& ghop_pre() &*& currentThread == releaseThread;
+            ensures lock_inv(lock, inv)() &*& is_atomic_store_int_op(op, &node->lock, 0, P, Q) &*& Q() &*& ghop_post();
         {
             open lock_inv(lock, inv)();
-            open pre();
+            open ghop_pre();
             ghost_list_member_handle_lemma();
             {
                 lemma void iter()
@@ -384,10 +400,10 @@ void release(struct lock_thread *thread)
                         [1/2]node->level |-> ?level &*& ob == pair(signal, append(lockLevel, {level})) &*&
                         obs(p, obs) &*&
                         malloc_block_node(node) &*&
-                        inv() &*&
+                        is_release_ghost_op(rgo, currentThread, inv, p, remove(ob, obs), pre, post) &*& pre() &*&
                         is_atomic_store_int_op(op, &node->lock, 0, P, Q) &*& P();
                     ensures
-                        obs(p, remove(ob, obs)) &*&
+                        obs(p, remove(ob, obs)) &*& post(p) &*&
                         queue(lock, lockLevel, inv, ghostListId, nsig, nl, n, ns) &*&
                         is_atomic_store_int_op(op, &node->lock, 0, P, Q) &*& Q() &*&
                         [frac/4]lock->ghostListId |-> _;
@@ -404,6 +420,9 @@ void release(struct lock_thread *thread)
                         op();
                         set_signal(node->signal);
                         leak signal(_, _, true);
+                        is_ancestor_of_refl(p);
+                        rgo();
+                        leak is_release_ghost_op(rgo, currentThread, inv, p, remove(ob, obs), pre, post);
                     } else {
                         iter();
                     }
@@ -412,19 +431,40 @@ void release(struct lock_thread *thread)
                 iter();
             }
             close lock_inv(lock, inv)();
-            close post();
+            close ghop_post();
         }
         @*/
-        //@ close pre();
-        //@ produce_lemma_function_pointer_chunk(ghop) : atomic_store_int_ghost_op(lock_inv(lock, inv), &node->lock, 0, pre, post)() { call(); };
+        //@ close ghop_pre();
+        //@ produce_lemma_function_pointer_chunk(ghop) : atomic_store_int_ghost_op(lock_inv(lock, inv), &node->lock, 0, ghop_pre, ghop_post, currentThread)() { call(); };
         atomic_store_int(&node->lock, 0);
-        //@ leak is_atomic_store_int_ghost_op(ghop, _, _, _, _, _);
-        //@ open post();
+        //@ leak is_atomic_store_int_ghost_op(ghop, _, _, _, _, _, _);
+        //@ open ghop_post();
     }
     thread->node = thread->pred;
     //@ close [frac]lock(lock, lockLevel, inv);
     //@ close lock_thread(thread);
     //@ is_ancestor_of_refl(p);
+}
+
+void release(struct lock_thread *thread)
+    //@ requires locked(thread, ?lock, ?lockLevel, ?inv, ?frac, ?ob) &*& inv() &*& obs(?p, ?obs);
+    //@ ensures obs(?p1, remove(ob, obs)) &*& lock_thread(thread) &*& [frac]lock(lock, lockLevel, inv) &*& is_ancestor_of(p, p1) == true;
+    //@ terminates;
+{
+    {
+        /*@
+        predicate pre() = inv();
+        predicate post(list<pathcomp> p1) = is_ancestor_of(p, p1) == true;
+        @*/
+        /*@
+        produce_lemma_function_pointer_chunk release_ghost_op(currentThread, inv, p, remove(ob, obs), pre, post)() { assert obs(?p1, _); open pre(); close post(p1); };
+        @*/
+        //@ close pre();
+        release_with_ghost_op(thread);
+        //@ open post(?p1);
+        //@ assert obs(?p2, _);
+        //@ is_ancestor_of_trans(p, p1, p2);
+    }
 }
 
 void dispose_lock_thead(struct lock_thread *thread)

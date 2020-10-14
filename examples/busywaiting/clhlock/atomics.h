@@ -46,8 +46,8 @@ typedef lemma void atomic_store_int_op(int *object, int desired, predicate() P, 
     requires *object |-> _ &*& P();
     ensures *object |-> desired &*& Q();
 
-typedef lemma void atomic_store_int_ghost_op(predicate() inv, int *object, int desired, predicate() pre, predicate() post)();
-    requires inv() &*& is_atomic_store_int_op(?op, object, desired, ?P, ?Q) &*& P() &*& pre();
+typedef lemma void atomic_store_int_ghost_op(predicate() inv, int *object, int desired, predicate() pre, predicate() post, int callerThread)();
+    requires inv() &*& is_atomic_store_int_op(?op, object, desired, ?P, ?Q) &*& P() &*& pre() &*& currentThread == callerThread;
     ensures inv() &*& is_atomic_store_int_op(op, object, desired, P, Q) &*& Q() &*& post();
 
 @*/
@@ -56,12 +56,12 @@ void atomic_store_int(int *object, int desired);
     /*@
     requires
         [?frac]atomic_space(?inv) &*&
-        is_atomic_store_int_ghost_op(?ghop, inv, object, desired, ?pre, ?post) &*& pre();
+        is_atomic_store_int_ghost_op(?ghop, inv, object, desired, ?pre, ?post, currentThread) &*& pre();
     @*/
     /*@
     ensures
         [frac]atomic_space(inv) &*&
-        is_atomic_store_int_ghost_op(ghop, inv, object, desired, pre, post) &*& post();
+        is_atomic_store_int_ghost_op(ghop, inv, object, desired, pre, post, currentThread) &*& post();
     @*/
     //@ terminates;
 
