@@ -18,7 +18,6 @@ struct lock {
     struct node *tail;
     //@ int ghostListId;
     //@ list<int> level;
-    //@ predicate() inv_;
 };
 
 struct lock_thread {
@@ -63,8 +62,7 @@ predicate_ctor lock_inv(struct lock *lock, predicate() inv)() =
     queue(lock, lockLevel, inv, listId, _, _, tail, cons(tail, ?ns)) &*&
     ghost_list(listId, cons(tail, ns));
 
-predicate lock(struct lock *lock; list<int> level, predicate() inv) =
-    lock->inv_ |-> inv &*&
+predicate lock(struct lock *lock, list<int> level, predicate() inv;) =
     [1/2]lock->level |-> level &*&
     atomic_space(lock_inv(lock, inv)) &*&
     [1/2]lock->ghostListId |-> _ &*&
@@ -82,7 +80,7 @@ predicate locked(struct lock_thread *thread, struct lock *lock, list<int> level,
     thread->pred |-> ?pred &*&
     malloc_block_lock_thread(thread) &*&
     pred->lock |-> _ &*& pred->pred |-> _ &*& pred->frac |-> _ &*& pred->predSignal |-> _ &*& pred->signal |-> _ &*& pred->level |-> _ &*& malloc_block_node(pred) &*& pred != 0 &*&
-    [frac]lock->inv_ |-> inv &*& [frac/2]lock->level |-> level &*&
+    [frac/2]lock->level |-> level &*&
     [frac]atomic_space(lock_inv(lock, inv)) &*&
     [frac]malloc_block_lock(lock) &*&
     [frac/4]lock->ghostListId |-> ?listId &*&
@@ -107,7 +105,6 @@ struct lock *create_lock()
     return lock;
     //@ int ghostListId = create_ghost_list();
     //@ lock->ghostListId = ghostListId;
-    //@ lock->inv_ = inv;
     //@ lock->level = lockLevel;
     //@ ghost_list_insert(ghostListId, nil, nil, sentinel);
     //@ close queue(lock, lockLevel, inv, ghostListId, sentinel->signal, 0, sentinel, {sentinel});
@@ -165,8 +162,8 @@ void acquire_helper(struct lock_thread *thread, struct lock *lock, struct node *
         obs(?p, cons(pair(signal, append(lockLevel, {level})), ?obs)) &*& forall(map(snd, obs), (all_sublevels_lt)(lockLevel)) == true &*&
         wait_perm(p, predSignal, append(lockLevel, {level - 1}), acquire_helper) &*&
         malloc_block_lock_thread(thread) &*&
-        [frac]lock->inv_ |-> ?inv &*&
         [frac]malloc_block_lock(lock) &*&
+        exists<predicate()>(?inv) &*&
         [frac]atomic_space(lock_inv(lock, inv)) &*&
         [frac/4]lock->ghostListId |-> ?ghostListId &*&
         ghost_list_member_handle(ghostListId, node) &*&
@@ -350,6 +347,7 @@ void acquire(struct lock_thread *thread, struct lock *lock)
     //@ produce_call_below_perm_();
     //@ pathize_call_below_perm_();
     //@ create_wait_perm(node->predSignal, append(lockLevel, {node->level - 1}), acquire_helper);
+    //@ close exists(inv);
     acquire_helper(thread, lock, pred);
 }
 

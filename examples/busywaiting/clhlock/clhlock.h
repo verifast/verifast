@@ -8,7 +8,7 @@ struct lock_thread;
 
 /*@
 
-predicate lock(struct lock *lock; list<int> level, predicate() inv);
+predicate lock(struct lock *lock, list<int> level, predicate() inv;);
 predicate lock_thread(struct lock_thread *thread);
 predicate locked(struct lock_thread *thread, struct lock *lock, list<int> level, predicate() inv, real frac, pair<void *, list<int> > ob);
 
