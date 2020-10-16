@@ -14,6 +14,11 @@ cd examples
     cd clhlock
       verifast -c clhlock.c
     cd ..
+    cd ioliveness
+      verifast -c echo.c
+      verifast -c echo_live.c
+      verifast -c echo_live_mt.c
+    cd ..
   cd ..
   cd jayanti
     verifast threading.o popl20_prophecies.o atomics.c jayanti.c client.c
