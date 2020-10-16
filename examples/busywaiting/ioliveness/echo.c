@@ -1,3 +1,5 @@
+// Willem Penninckx, Amin Timany, and Bart Jacobs. Specifying I/O using Abstract Nested Hoare Triples in Separation Logic. At FTfJP 2019.
+
 struct message;
 typedef struct message *message;
 

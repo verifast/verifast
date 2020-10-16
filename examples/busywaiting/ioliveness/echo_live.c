@@ -1,3 +1,5 @@
+// Bart Jacobs. Modular Verification of Liveness Properties of the I/O Behavior of Imperative Programs. At ISoLA 2020.
+
 struct message;
 typedef struct message *message;
 

@@ -1,3 +1,5 @@
+// Tobias Reinhard and Bart Jacobs. Ghost signals: verifying termination of busy-waiting. 2020.
+
 #include "../mutex.h"
 
 struct message;
