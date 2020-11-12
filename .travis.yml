@@ -7,7 +7,7 @@ os:
   - linux
   - osx
 
-dist: trusty
+dist: bionic
   
 sudo: required
 
