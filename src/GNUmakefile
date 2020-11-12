@@ -679,7 +679,7 @@ ifeq ($(OS), Windows_NT)
 	cp $(GTK)/lib/gtk-2.0/2.10.0/engines/libwimp.dll lib/gtk-2.0/2.10.0/engines
 endif
 ifeq ($(OS), Linux)
-	cp /usr/lib/libgtksourceview-2.0.so.0.0.0 verifast-$(VFVERSION)/bin/libgtksourceview-2.0.so.0
+	cp /usr/lib/x86_64-linux-gnu/libgtksourceview-2.0.so.0.0.0 verifast-$(VFVERSION)/bin/libgtksourceview-2.0.so.0
 endif
 ifeq ($(OS), Darwin)
 	cd verifast-$(VFVERSION)/bin; mv vfide vfide-core
