@@ -3,8 +3,21 @@ name: CI
 on: [push, pull_request]
 
 jobs:
-  build:
+  build_ubuntu:
     runs-on: ubuntu-latest
+
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v2
+
+      - name: Build setup
+        run: ./setup-build.sh
+
+      - name: Build
+        run: ./build.sh
+
+  build_macos:
+    runs-on: macos-10.15
 
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
