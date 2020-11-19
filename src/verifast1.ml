@@ -5566,6 +5566,11 @@ let check_if_list_is_defined () =
       end;
       ctxt#mk_mod v1 v2
     | ShiftLeft ->
+      begin match language, t, ass_term with
+        CLang, Int (Signed, _), Some assert_term ->
+        assert_term l (ctxt#mk_le (ctxt#mk_intlit 0) v1) "Left-shifting a negative value has undefined behavior." None
+      | _ -> ()
+      end;
       let v = ctxt#mk_app shiftleft_symbol [v1;v2] in
       begin match e2 with
         WIntLit (_, n) when le_big_int zero_big_int n && le_big_int n (big_int_of_int 64) ->
@@ -5576,6 +5581,18 @@ let check_if_list_is_defined () =
     | _ -> static_error l "This operator is not supported in this position." None
     end
   
+  let check_shift_amount ass_term l t v =
+    match language, ass_term with
+      CLang, Some assert_term ->
+      let width =
+        match t with
+          Int (Signed, k) -> (1 lsl k) * 8 - 1
+        | Int (Unsigned, k) -> (1 lsl k) * 8
+      in
+      assert_term l (ctxt#mk_le (ctxt#mk_intlit 0) v) "Shifting by a negative amount has undefined behavior." None;
+      assert_term l (ctxt#mk_lt v (ctxt#mk_intlit width)) "Shifting by an amount greater than or equal to the width of the operand has undefined behavior." None
+    | _ -> ()
+
   let rec eval_core_cps0 eval_core ev state ass_term read_field env e cont =
      let evs state es cont =
       let rec iter state vs es =
@@ -5763,6 +5780,16 @@ let check_if_list_is_defined () =
       cont state v
     | WOperation (l, ShiftRight, [e1; e2], t) ->
       evs state [e1; e2] $. fun state [v1; v2] ->
+      check_shift_amount ass_term l t v2;
+      begin match language, t, ass_term with
+        CLang, Int (Signed, _), Some assert_term ->
+        begin match e1 with
+          Upcast (_, Int (Unsigned, _), _) -> ()
+        | _ ->
+          assert_term l (ctxt#mk_le (ctxt#mk_intlit 0) v1) "Right-shifting a negative number has implementation-defined behavior." None
+        end
+      | _ -> ()
+      end;
       let v = ctxt#mk_app shiftright_symbol [v1; v2] in
       begin match e1 with
         Upcast (_, tfrom, _) when ass_term <> None -> assume_bounds v tfrom
