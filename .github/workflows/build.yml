@@ -23,6 +23,13 @@ jobs:
           name: binary_package
           path: upload
 
+      - uses: google-github-actions/upload-cloud-storage@main
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+        with:
+          credentials: ${{ secrets.google_cloud_platform_credentials }}
+          path: upload
+          destination: verifast-nightlies
+
   build_macos:
     runs-on: macos-10.15
 
@@ -42,3 +49,10 @@ jobs:
         with:
           name: binary_package
           path: upload
+
+      - uses: google-github-actions/upload-cloud-storage@main
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+        with:
+          credentials: ${{ secrets.google_cloud_platform_credentials }}
+          path: upload
+          destination: verifast-nightlies
