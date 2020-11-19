@@ -87,7 +87,7 @@ lemma void shiftright_def(int x, Z z, nat n);
 
 lemma void truncate_unsigned_def(int x, nat n);
     requires true;
-    ensures truncate_unsigned(x, int_of_nat(n)) == x % pow_nat(2, n);
+    ensures [_]divrem(x, pow_nat(2, n), _, truncate_unsigned(x, int_of_nat(n)));
 
 fixpoint Z Z_truncate_signed(Z z, nat n) { // n = number of bits, not including the sign bit!
     switch (n) {

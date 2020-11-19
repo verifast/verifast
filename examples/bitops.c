@@ -53,7 +53,14 @@ lemma unsigned char truncate_unsigned_test(int x)
     ensures result == 0x23;
 {
     truncate_unsigned_def(0x123, N8);
-    div_rem(0x123, 0x100);
+    return truncating (unsigned char) x;
+}
+
+lemma unsigned char truncate_unsigned_negative_operand_test(int x)
+    requires x == -1;
+    ensures result == 0xff;
+{
+    truncate_unsigned_def(-1, N8);
     return truncating (unsigned char) x;
 }
 
