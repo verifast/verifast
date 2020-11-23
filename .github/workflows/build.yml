@@ -50,6 +50,12 @@ jobs:
           name: binary_package
           path: upload
 
+      - uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: vfide_libraries
+          path: src/vfide-libraries.log
+
       - uses: google-github-actions/upload-cloud-storage@main
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         with:
