@@ -23,4 +23,4 @@ else
 fi
 
 cd src
-make nightly VERBOSE=yes -j 2
+make nightly VERBOSE=yes
