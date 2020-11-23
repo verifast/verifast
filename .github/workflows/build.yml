@@ -70,6 +70,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Do not convert LF to CRLF on checkout
+        run: |
+          git config core.autocrlf false
+          git checkout .
+
       - name: Build setup
         run: ./setup-windows.bat
 
