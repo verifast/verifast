@@ -14,4 +14,7 @@ echo none /cygdrive cygdrive binary,posix=0,user,noacl 0 0 > c:\cygwin\etc\fstab
 
 for /f "TOKENS=* USEBACKQ" %%f in (`cd`) do set VFWORKDIR=%%f
 
+git config core.autocrlf false
+git checkout .
+
 c:\cygwin\bin\bash -lc "cd ""$VFWORKDIR"" && bash setup-windows.sh" || exit /b
