@@ -137,7 +137,7 @@ module TreeMetrics = struct
   let cw = dotWidth + 2 * padding
 end
 
-let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend enforceAnnotations allowUndeclaredStructTypes dataModel overflowCheck =
+let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend enforceAnnotations allowUndeclaredStructTypes dataModel overflowCheck verifyAndQuit =
   let leftBranchPixbuf = Branchleft_png.pixbuf () in
   let rightBranchPixbuf = Branchright_png.pixbuf () in
   let ctxts_lifo = ref None in
@@ -1817,6 +1817,13 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   end;
   root#show();
   ignore $. Glib.Idle.add (fun () -> textPaned#set_position 0; false);
+  if verifyAndQuit then begin
+    ignore $. Glib.Idle.add begin fun () ->
+      verifyProgram false None ();
+      ignore $. Glib.Idle.add (fun () -> exit 0);
+      false
+    end
+  end;
   GMain.main()
 
 let (code_font, trace_font) =
@@ -1836,6 +1843,7 @@ let () =
   let allowUndeclaredStructTypes = ref false in
   let overflow_check = ref true in
   let data_model = ref data_model_32bit in
+  let verify_and_quit = ref false in
   let rec iter args =
     match args with
       "-prover"::arg::args -> prover := arg; iter args
@@ -1856,8 +1864,9 @@ let () =
     | "-allow_undeclared_struct_types"::args -> allowUndeclaredStructTypes := true; iter args
     | "-target"::target::args -> data_model := data_model_of_string target; iter args
     | "-disable_overflow_check"::args -> overflow_check := false; iter args
+    | "-verify_and_quit"::args -> verify_and_quit := true; iter args
     | arg::args when not (startswith arg "-") -> path := Some arg; iter args
-    | [] -> show_ide !path !prover !codeFont !traceFont !runtime !layout !javaFrontend !enforceAnnotations !allowUndeclaredStructTypes !data_model !overflow_check
+    | [] -> show_ide !path !prover !codeFont !traceFont !runtime !layout !javaFrontend !enforceAnnotations !allowUndeclaredStructTypes !data_model !overflow_check !verify_and_quit
     | _ ->
       let options = [
         "-prover prover    (" ^ list_provers () ^ ")";

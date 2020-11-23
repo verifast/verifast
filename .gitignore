@@ -22,6 +22,7 @@
 /src/DynType.mli
 /src/plugins.mli
 /src/plugins2.mli
+/src/vfide-libraries.log
 
 /lib/*
 
