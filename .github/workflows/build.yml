@@ -60,3 +60,33 @@ jobs:
         run: pip3 install google-cloud-storage && python3 upload.py
         env:
           GOOGLE_CLOUD_PLATFORM_CREDENTIALS: ${{ secrets.google_cloud_platform_credentials }}
+
+  build_windows:
+    runs-on: windows-2019
+
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Build setup
+        run: ./setup-windows.bat
+
+      - name: Build
+        run: /cygwin/bin/bash -lc "cd $(/cygwin/bin/cygpath -u ${env:GITHUB_WORKSPACE})/src && make nightly VERBOSE=yes GTK=/cygdrive/c/vfdeps"
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: binary_package
+          path: verifast-nightly.zip
+
+      - name: Prepare for upload to Cloud Storage
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+        run: pip3 install google-cloud-storage
+
+      - name: Upload to Cloud Storage
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+        run: python3 upload.py
+        env:
+          GOOGLE_CLOUD_PLATFORM_CREDENTIALS: ${{ secrets.google_cloud_platform_credentials }}
