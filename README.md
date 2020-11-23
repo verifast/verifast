@@ -1,3 +1,4 @@
+![CI](https://github.com/verifast/verifast/workflows/CI/badge.svg)
 [![Build Status](https://travis-ci.org/verifast/verifast.svg?branch=master)](https://travis-ci.org/verifast/verifast) [![Build status](https://ci.appveyor.com/api/projects/status/1w7vchky3k6erltw?svg=true)](https://ci.appveyor.com/project/verifast/verifast) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.1182724.svg)](https://doi.org/10.5281/zenodo.1182724)
 
 VeriFast
