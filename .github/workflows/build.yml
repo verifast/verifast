@@ -23,12 +23,11 @@ jobs:
           name: binary_package
           path: upload
 
-      - uses: google-github-actions/upload-cloud-storage@main
+      - name: Upload to Cloud Storage
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-        with:
-          credentials: ${{ secrets.google_cloud_platform_credentials }}
-          path: upload
-          destination: verifast-nightlies
+        run: pip3 install google-cloud-storage && python3 upload.py
+        env:
+          GOOGLE_CLOUD_PLATFORM_CREDENTIALS: ${{ secrets.google_cloud_platform_credentials }}
 
   build_macos:
     runs-on: macos-10.15
@@ -56,9 +55,8 @@ jobs:
           name: vfide_libraries
           path: src/vfide-libraries.log
 
-      - uses: google-github-actions/upload-cloud-storage@main
+      - name: Upload to Cloud Storage
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-        with:
-          credentials: ${{ secrets.google_cloud_platform_credentials }}
-          path: upload
-          destination: verifast-nightlies
+        run: pip3 install google-cloud-storage && python3 upload.py
+        env:
+          GOOGLE_CLOUD_PLATFORM_CREDENTIALS: ${{ secrets.google_cloud_platform_credentials }}

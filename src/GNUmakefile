@@ -719,3 +719,7 @@ else
 	mkdir ../upload || true
 	tar czf ../upload/verifast-nightly$(RELEASE_SUFFIX).tar.gz verifast-$(VFVERSION)
 endif
+ifdef GITHUB_ENV
+	echo "VFVERSION=$(VFVERSION)" >> $(GITHUB_ENV)
+	echo "VERIFAST_OS=$(OS)" >> $(GITHUB_ENV)
+endif
