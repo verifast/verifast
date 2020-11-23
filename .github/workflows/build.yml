@@ -84,7 +84,7 @@ jobs:
       - uses: actions/upload-artifact@v2
         with:
           name: binary_package
-          path: verifast-nightly.zip
+          path: src/verifast-nightly.zip
 
       - name: Prepare for upload to Cloud Storage
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
@@ -92,6 +92,6 @@ jobs:
 
       - name: Upload to Cloud Storage
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-        run: python3 upload.py
+        run: python upload.py
         env:
           GOOGLE_CLOUD_PLATFORM_CREDENTIALS: ${{ secrets.google_cloud_platform_credentials }}

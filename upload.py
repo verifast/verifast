@@ -15,7 +15,7 @@ vfversion = os.environ['VFVERSION']
 OS = os.environ['VERIFAST_OS']
 if OS == 'Windows_NT':
   os_tag = 'windows'
-  local_prefix = ''
+  local_prefix = 'src/'
   suffix = '.zip'
 elif OS == 'Darwin':
   os_tag = 'macos'
