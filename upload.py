@@ -15,14 +15,14 @@ vfversion = os.environ['VFVERSION']
 OS = os.environ['VERIFAST_OS']
 if OS == 'Windows_NT':
   os_tag = 'windows'
-  local_prefix = 'src/'
+  local_prefix = ''
   suffix = '.zip'
 elif OS == 'Darwin':
   os_tag = 'macos'
-  local_prefix = 'src/upload/'
+  local_prefix = 'upload/'
   suffix = '-osx.tar.gz'
 else:
-  local_prefix = 'src/upload/'
+  local_prefix = 'upload/'
   os_tag = 'linux'
   suffix = '.tar.gz'
 
