@@ -12,6 +12,13 @@ long long shift_left_excessive_amount()
   return 1LL << 63; //~ should_fail
 }
 
+unsigned long long unsigned_shift_left_excessive_amount()
+//@ requires true;
+//@ ensures true;
+{
+  return /*@ truncating @*/ (1ULL << 64); //~ should_fail
+}
+
 long long shift_left_negative_value()
 //@ requires true;
 //@ ensures true;
