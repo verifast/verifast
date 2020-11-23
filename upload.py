@@ -47,7 +47,9 @@ html = """\
 
 html_object_filename = 'verifast-nightly-{}-latest.html'.format(os_tag)
 print('Updating {}...'.format(html_object_filename))
-bucket.blob(html_object_filename).upload_from_string(html, content_type='text/html')
+html_blob = bucket.blob(html_object_filename)
+html_blob.cache_control = 'no-cache, max-age=0'
+html_blob.upload_from_string(html, content_type='text/html')
 print('Updated {}'.format(html_object_filename))
 
 if old_nightlies:
