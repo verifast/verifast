@@ -70,6 +70,7 @@ let rec string_of_type t =
   | ObjType (l, []) -> "class " ^ l
   | ObjType (l, targs) -> "class " ^ l ^ "<" ^ String.concat ", " (List.map string_of_type targs) ^ ">"
   | StructType sn -> "struct " ^ sn
+  | UnionType un -> "union " ^ un
   | PtrType t -> string_of_type t ^ " *"
   | FuncType ft -> ft
   | PredType (tparams, ts, inputParamCount, inductiveness) ->

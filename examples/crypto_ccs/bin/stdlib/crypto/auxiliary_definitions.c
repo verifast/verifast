@@ -4,7 +4,7 @@
 
 lemma void union_nil<t>(list<t> xs)
   requires true;
-  ensures  union(xs, nil) == xs && union(nil, xs) == xs;
+  ensures  union_(xs, nil) == xs && union_(nil, xs) == xs;
 {
   switch (xs)
   {
@@ -16,7 +16,7 @@ lemma void union_nil<t>(list<t> xs)
 
 lemma void union_subset<t>(list<t> xs, list<t> ys)
   requires subset(xs, ys) == true;
-  ensures  union(xs, ys) == ys;
+  ensures  union_(xs, ys) == ys;
 {
   switch (xs)
   {
@@ -29,7 +29,7 @@ lemma void union_subset<t>(list<t> xs, list<t> ys)
 
 lemma void union_refl<t>(list<t> xs)
   requires true;
-  ensures  union(xs, xs) == xs;
+  ensures  union_(xs, xs) == xs;
 {
   subset_refl(xs);
   union_subset(xs, xs);
@@ -37,7 +37,7 @@ lemma void union_refl<t>(list<t> xs)
 
 lemma void forall_union<t>(list<t> xs, list<t> ys, fixpoint(t, bool) p)
   requires forall(xs, p) && forall(ys, p);
-  ensures  true == forall(union(xs,ys), p);
+  ensures  true == forall(union_(xs,ys), p);
 {
   switch (xs)
   {
@@ -92,7 +92,7 @@ lemma void dummy_foreach_singleton<t>(predicate(t) p, t x)
 
 lemma void dummy_foreach_union<t>(list<t> xs, list<t> ys)
   requires [_]dummy_foreach(xs, ?p) &*& [_]dummy_foreach(ys, p);
-  ensures  [_]dummy_foreach(union(xs, ys), p);
+  ensures  [_]dummy_foreach(union_(xs, ys), p);
 {
   switch (xs)
   {
@@ -101,8 +101,8 @@ lemma void dummy_foreach_union<t>(list<t> xs, list<t> ys)
       dummy_foreach_union(xs0, ys);
       if (!mem(x0, ys))
       {
-        close dummy_foreach(union(xs, ys), p);
-        leak dummy_foreach(union(xs, ys), p);
+        close dummy_foreach(union_(xs, ys), p);
+        leak dummy_foreach(union_(xs, ys), p);
       }
     case nil:
       union_nil(ys);

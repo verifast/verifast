@@ -71,15 +71,15 @@ fixpoint int minimum(list<int> ints)
 }
 
 //Union of two set lists
-fixpoint list<T> union<T>(list<T> xs, list<T> ys)
+fixpoint list<T> union_<T>(list<T> xs, list<T> ys)
 {
   switch(xs)
   {
     case cons(x0, xs0):
       return mem(x0, ys) ?
-        union(xs0, ys)
+        union_(xs0, ys)
       :
-        cons(x0, union(xs0, ys));
+        cons(x0, union_(xs0, ys));
     case nil:
       return ys;
   }
@@ -98,19 +98,19 @@ predicate dummy_foreach<T>(list<T> xs, predicate(T) p) =
 
 lemma void union_nil<T>(list<T> xs);
   requires true;
-  ensures  union(xs, nil) == xs && union(nil, xs) == xs;
+  ensures  union_(xs, nil) == xs && union_(nil, xs) == xs;
 
 lemma void union_subset<T>(list<T> xs, list<T> ys);
   requires subset(xs, ys) == true;
-  ensures  union(xs, ys) == ys;
+  ensures  union_(xs, ys) == ys;
 
 lemma void union_refl<T>(list<T> xs);
   requires true;
-  ensures  union(xs, xs) == xs;
+  ensures  union_(xs, xs) == xs;
 
 lemma void forall_union<T>(list<T> xs, list<T> ys, fixpoint(T, bool) p);
   requires forall(xs, p) && forall(ys, p);
-  ensures  true == forall(union(xs,ys), p);
+  ensures  true == forall(union_(xs,ys), p);
 
 lemma void forall_subset<T>(list<T> xs, list<T> ys, fixpoint(T, bool) p);
   requires forall(ys, p) && subset(xs, ys);
@@ -126,7 +126,7 @@ lemma void dummy_foreach_singleton<T>(predicate(T) p, T x);
 
 lemma void dummy_foreach_union<T>(list<T> xs, list<T> ys);
   requires [_]dummy_foreach(xs, ?p) &*& [_]dummy_foreach(ys, p);
-  ensures  [_]dummy_foreach(union(xs, ys), p);
+  ensures  [_]dummy_foreach(union_(xs, ys), p);
 
 lemma void dummy_foreach_subset<T>(list<T> xs, list<T> ys);
   requires [_]dummy_foreach(ys, ?p) &*& true == subset(xs, ys);

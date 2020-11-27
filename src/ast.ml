@@ -105,6 +105,7 @@ type type_ = (* ?type_ *)
   | Double
   | LongDouble
   | StructType of string
+  | UnionType of string
   | PtrType of type_
   | FuncType of string   (* The name of a typedef whose body is a C function type. *)
   | InductiveType of string * type_ list
@@ -214,6 +215,7 @@ type int_literal_lsuffix = NoLSuffix | LSuffix | LLSuffix
 (** Types as they appear in source code, before validity checking and resolution. *)
 type type_expr = (* ?type_expr *)
     StructTypeExpr of loc * string option * field list option
+  | UnionTypeExpr of loc * string option * field list option
   | EnumTypeExpr of loc * string option * (string * expr option) list option
   | PtrTypeExpr of loc * type_expr
   | ArrayTypeExpr of loc * type_expr
@@ -664,6 +666,7 @@ and
 and
   decl = (* ?decl *)
     Struct of loc * string * field list option
+  | Union of loc * string * field list option
   | Inductive of  (* inductief data type regel-naam-type parameters-lijst van constructors*)
       loc *
       string *
@@ -965,6 +968,7 @@ let type_expr_loc t =
   match t with
     ManifestTypeExpr (l, t) -> l
   | StructTypeExpr (l, sn, _) -> l
+  | UnionTypeExpr (l, un, _) -> l
   | IdentTypeExpr (l, _, x) -> l
   | ConstructedTypeExpr (l, x, targs) -> l
   | PtrTypeExpr (l, te) -> l

@@ -32,7 +32,7 @@ let ghost_keywords = [
 ]
 
 let c_keywords = [
-  "struct"; "bool"; "char"; "sizeof"; "#"; "##"; "include"; "ifndef";
+  "struct"; "bool"; "char"; "sizeof"; "#"; "##"; "include"; "ifndef"; "union";
   "define"; "endif"; "&"; "goto"; "uintptr_t"; "intptr_t"; "INT_MIN"; "INT_MAX";
   "UINTPTR_MAX"; "enum"; "static"; "signed"; "unsigned"; "long";
   "const"; "volatile"; "register"; "ifdef"; "elif"; "undef"; "pragma";
@@ -465,6 +465,11 @@ and
   | [< '(_, Kwd ";") >] -> Struct (l, s, None)
   | [< t = parse_type_suffix (StructTypeExpr (l, Some s, None)); d = parse_func_rest Regular (Some t) Public >] -> d
   >] -> check_function_for_contract d
+| [< '(l, Kwd "union"); '(_, Ident u); d = parser
+    [< fs = parse_fields; '(_, Kwd ";") >] -> Union (l, u, Some fs)
+  | [< '(_, Kwd ";") >] -> Union (l, u, None)
+  | [< t = parse_type_suffix (UnionTypeExpr (l, Some u, None)); d = parse_func_rest Regular (Some t) Public >] -> d
+  >] -> check_function_for_contract d
 | [< '(l, Kwd "typedef");
      rt = parse_return_type; '(_, Ident g);
      ds = begin parser
@@ -738,6 +743,9 @@ and
 | [< '(l, Kwd "struct"); sn = opt (parser [< '(_, Ident s) >] -> s); fs = opt parse_fields >] ->
   if sn = None && fs = None then raise (ParseException (l, "Struct name or body expected"));
   StructTypeExpr (l, sn, fs)
+| [< '(l, Kwd "union"); un = opt (parser [< '(_, Ident u) >] -> u); fs = opt parse_fields >] ->
+  if un = None && fs = None then raise (ParseException (l, "Union name or body expected"));
+  UnionTypeExpr (l, un, fs)
 | [< '(l, Kwd "enum"); en = opt (parser [< '(_, Ident en) >] -> en); body = opt parse_enum_body >] ->
   if en = None && body = None then raise (ParseException (l, "Enum name or body expected"));
   EnumTypeExpr (l, en, body)

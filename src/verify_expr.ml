@@ -1260,22 +1260,24 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     * (A padding chunk is always produced for nested structs.)
     *)
   let rec produce_c_object l coef addr tp eval_h init allowGhostFields producePaddingChunk h env cont =
+    let produce_char_array_chunk h env addr length =
+      let elems = get_unique_var_symb "elems" (InductiveType ("list", [Int (Signed, 0)])) in
+      begin fun cont ->
+        if init = Default then
+          assume (mk_all_eq (Int (Signed, 0)) elems (ctxt#mk_intlit 0)) cont
+        else
+          cont ()
+      end $. fun () ->
+      assume_eq (mk_length elems) length $. fun () ->
+      cont (Chunk ((chars_pred_symb(), true), [], coef, [addr; length; elems], None)::h) env
+    in
     match tp with
       StaticArrayType (elemTp, elemCount) ->
       let elemSize = sizeof l elemTp in
       let arraySize = ctxt#mk_mul (ctxt#mk_intlit elemCount) elemSize in
       ctxt#assert_term (ctxt#mk_and (ctxt#mk_le int_zero_term addr) (ctxt#mk_le (ctxt#mk_add addr arraySize) (max_unsigned_term ptr_rank)));
       let produce_char_array_chunk h env addr elemCount =
-        let elems = get_unique_var_symb "elems" (InductiveType ("list", [Int (Signed, 0)])) in
-        let length = ctxt#mk_mul (ctxt#mk_intlit elemCount) elemSize in
-        begin fun cont ->
-          if init = Default then
-            assume (mk_all_eq (Int (Signed, 0)) elems (ctxt#mk_intlit 0)) cont
-          else
-            cont ()
-        end $. fun () ->
-        assume_eq (mk_length elems) length $. fun () ->
-        cont (Chunk ((chars_pred_symb(), true), [], coef, [addr; length; elems], None)::h) env
+        produce_char_array_chunk h env addr (ctxt#mk_mul (ctxt#mk_intlit elemCount) elemSize)
       in
       let produce_array_chunk h env addr elems elemCount =
         match try_pointee_pred_symb0 elemTp with
@@ -1296,7 +1298,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin match elemTp, init with
         Int (Signed, 0), Expr (StringLit (_, s)) ->
         produce_array_chunk h env addr (mk_char_list_of_c_string elemCount s) elemCount
-      | (StructType _ | StaticArrayType (_, _)), Expr (InitializerList (ll, es)) ->
+      | (UnionType _ | StructType _ | StaticArrayType (_, _)), Expr (InitializerList (ll, es)) ->
         let rec iter h env i es =
           let addr = ctxt#mk_add addr (ctxt#mk_mul (ctxt#mk_intlit i) elemSize) in
           match es with
@@ -1329,6 +1331,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end $. fun () ->
         produce_array_chunk h env addr elems elemCount
       end
+    | UnionType un ->
+      produce_char_array_chunk h env addr (sizeof l tp)
     | StructType sn ->
       let (fields, padding_predsymb_opt) =
         match try_assoc sn structmap with
@@ -1363,7 +1367,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | _ -> Unspecified, None
           in
           match t with
-            StaticArrayType (_, _) | StructType _ ->
+            StaticArrayType (_, _) | StructType _ | UnionType _ ->
             produce_c_object l coef (field_address l addr sn f) t eval_h init allowGhostFields true h env $. fun h env ->
             iter h env fields inits
           | _ ->
@@ -1396,6 +1400,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       cont h env
   
   let rec consume_c_object_core l coefpat addr tp h consumePaddingChunk cont =
+    let consume_char_array_chunk () =
+      let pats = [TermPat addr; TermPat (sizeof l tp); dummypat] in
+      consume_chunk rules h [] [] [] l (chars_pred_symb(), true) [] real_unit coefpat (Some 2) pats $. fun chunk h _ [_; _; cs] _ _ _ _ ->
+      cont [chunk] h cs
+    in
     match tp with
       StaticArrayType (elemTp, elemCount) ->
       begin match try_pointee_pred_symb0 elemTp with
@@ -1410,10 +1419,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         consume_chunk rules h [] [] [] l (integers__symb (), true) [] real_unit coefpat (Some 4) pats $. fun chunk h _ [_; _; _; _; elems] _ _ _ _ ->
         cont [chunk] h elems
       | None ->
-        let pats = [TermPat addr; TermPat (sizeof l tp); dummypat] in
-        consume_chunk rules h [] [] [] l (chars_pred_symb(), true) [] real_unit coefpat (Some 2) pats $. fun chunk h _ [_; _; cs] _ _ _ _ ->
-        cont [chunk] h cs
+        consume_char_array_chunk ()
       end
+    | UnionType un ->
+      consume_char_array_chunk ()
     | StructType sn ->
       let fields, padding_predsymb_opt =
         match try_assoc sn structmap with
@@ -1433,7 +1442,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           [] -> cont chunks h (get_unique_var_symb "struct_value" tp)
         | (f, (lf, gh, t, offset))::fields ->
           match t with
-            StaticArrayType (_, _) | StructType _ ->
+            StaticArrayType (_, _) | StructType _ | UnionType _ ->
             consume_c_object_core l coefpat (field_address l addr sn f) t h true $. fun chunks' h _ ->
             iter (chunks' @ chunks) h fields
           | _ ->

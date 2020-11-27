@@ -332,6 +332,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | RealType -> ProverReal
     | InductiveType _ -> ProverInductive
     | StructType sn -> ProverInductive
+    | UnionType un -> ProverInductive
     | ObjType (n, _) -> ProverInt
     | ArrayType t -> ProverInt
     | StaticArrayType (t, s) -> ProverInt
@@ -526,6 +527,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     iter' ([],[]) ps
 
   let structures_defined     : (string * loc * loc) list ref = ref [] (* (name, declLoc, bodyLoc) *)
+  let unions_defined         : (string * loc * loc) list ref = ref [] (* (name, declLoc, bodyLoc) *)
   let nonabstract_predicates : (string * loc * loc) list ref = ref [] (* (name, familyLoc, instanceLoc) *)
   
   (* Region: check_file *)
@@ -542,6 +544,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * (string * struct_field_info) list option (* None if struct without body *)
       * termnode option (* predicate symbol for struct_padding predicate *)
       * termnode (* size *)
+    type union_field_info =
+        loc
+      * type_
+    type union_info =
+        loc
+      * ((string * union_field_info) list * termnode (* size *)) option (* None if union without body *)
     type enum_info =
         big_int
     type global_info =
@@ -743,6 +751,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     type abstract_type_info = loc
     type maps =
         struct_info map
+      * union_info map
       * enum_info map
       * global_info map
       * module_info map
@@ -777,6 +786,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         string     (* structure name *)
       * loc        (* structure forward declaration location *)
       * loc        (* structure body location *)
+    type defined_union_info =
+        string     (* union name *)
+      * loc        (* union forward declaration location *)
+      * loc        (* union body location *)
     type nonabstract_predicate_info =
         string     (* predicate name *)
       * loc        (* predicate forward declaration (= family) location *)
@@ -785,6 +798,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         implemented_prototype_info list
       * implemented_function_type_info list
       * defined_structure_info list
+      * defined_union_info list
       * nonabstract_predicate_info list
       * module_info map
   end
@@ -838,6 +852,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let
     (
       (structmap0: struct_info map),
+      (unionmap0: union_info map),
       (enummap0: enum_info map),
       (globalmap0: global_info map),
       (modulemap0: module_info map),
@@ -873,12 +888,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let id x = x in
     let merge_maps l
-      (structmap, enummap, globalmap, modulemap, importmodulemap, inductivemap, purefuncmap, predctormap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, abstract_types_map)
-      (structmap0, enummap0, globalmap0, modulemap0, importmodulemap0, inductivemap0, purefuncmap0, predctormap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, abstract_types_map0)
+      (structmap, unionmap, enummap, globalmap, modulemap, importmodulemap, inductivemap, purefuncmap, predctormap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, abstract_types_map)
+      (structmap0, unionmap0, enummap0, globalmap0, modulemap0, importmodulemap0, inductivemap0, purefuncmap0, predctormap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, abstract_types_map0)
       =
       (
 (*     append_nodups structmap structmap0 id l "struct", *)
        structmap @ structmap0,
+       append_nodups unionmap unionmap0 id l "union",
        append_nodups enummap enummap0 id l "enum",
        append_nodups globalmap globalmap0 id l "global variable",
        modulemap @ modulemap0,
@@ -979,7 +995,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
     in
 
-    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
+    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
     
     let (maps0, headers_included) =
       if include_prelude then
@@ -1046,7 +1062,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let delayed_struct_def sn ldecl ldef =
     structures_defined := (sn, ldecl, ldef)::!structures_defined
-  
+
   let structdeclmap =
     let rec iter sdm ds =
       match ds with
@@ -1071,6 +1087,31 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       [PackageDecl(_,"",[],ds)] -> iter [] ds
     | _ when file_type path=Java -> []
   
+  let delayed_union_def un ldecl ldef =
+    unions_defined := (un, ldecl, ldef)::!unions_defined
+
+  let uniondeclmap =
+    let rec iter udm ds =
+      match ds with
+        [] -> udm
+      | Union (l, un, fds_opt)::ds ->
+        begin match try_assoc un unionmap0 with
+          Some (_, Some _) -> static_error l "Duplicate union name." None
+        | Some (ldecl, None) -> if fds_opt = None then static_error l "Duplicate union declaration." None else delayed_union_def un ldecl l
+        | None -> ()
+        end;
+        begin match try_assoc un udm with
+          Some (_, Some _) -> static_error l "Duplicate union name." None
+        | Some (ldecl, None) -> if fds_opt = None then static_error l "Duplicate union declaration." None else delayed_union_def un ldecl l
+        | None -> ()
+        end;
+        iter ((un, (l, fds_opt))::udm) ds
+      | _::ds -> iter udm ds
+    in
+    match ps with
+      [PackageDecl(_,"",[],ds)] -> iter [] ds
+    | _ when language = Java -> []
+
   let enumdeclmap = 
     let rec iter edm ds = 
       match ds with
@@ -1476,6 +1517,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         static_error l ("No such struct: \"" ^ sn ^ "\".") None
       else
         StructType sn
+    | UnionTypeExpr (l, un, Some _) ->
+      static_error l "A union type with a body is not supported in this position." None
+    | UnionTypeExpr (l, Some un, None) ->
+      if not (option_allow_undeclared_struct_types || List.mem_assoc un unionmap0 || List.mem_assoc un uniondeclmap) then
+        static_error l ("No such union: \"" ^ un ^ "\".") None
+      else
+        UnionType un
     | EnumTypeExpr (l, en, Some _) ->
       static_error l "An enum type with a body is not supported in this position." None
     | EnumTypeExpr (l, Some en, None) ->
@@ -1625,6 +1673,34 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       Some (_, _, _, s) -> s
     | _ -> static_error l (sprintf "Cannot take size of undeclared struct '%s'" sn) None
   
+  let unionmap1 =
+    uniondeclmap |> List.map begin fun (un, (l, fds_opt)) ->
+      match fds_opt with
+        None -> (un, (l, None))
+      | Some fds ->
+        let s = get_unique_var_symb ("union_" ^ un ^ "_size") intType in
+        let fmap =
+          let rec iter fmap fds =
+            match fds with
+              [] -> List.rev fmap
+            | Field (lf, gh, t, f, Instance, Public, final, init)::fds ->
+              if List.mem_assoc f fmap then static_error lf "Duplicate field name." None;
+              if gh = Ghost then static_error lf "Unions cannot have ghost fields." None;
+              let t = check_pure_type ("", []) [] gh t in
+              iter ((f, (lf, t))::fmap) fds
+          in
+          iter [] fds
+        in
+        (un, (l, Some (fmap, s)))
+    end
+
+  let unionmap = unionmap1 @ unionmap0
+
+  let union_size l un =
+    match try_assoc un unionmap with
+      Some (_, Some (_, s)) -> s
+    | _ -> static_error l (sprintf "Cannot take size of undefined union '%s'" un) None
+
   let enummap = enummap1 @ enummap0
   
   let isfuncs = if file_type path=Java then [] else
@@ -3794,6 +3870,16 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
       | _ -> static_error l ("Invalid dereference; struct type '" ^ sn ^ "' has not been defined.") None
       end
+    | PtrType (UnionType un) ->
+      begin match try_assoc un unionmap with
+        Some (_, Some (fds, _)) ->
+        begin match try_assoc f fds with
+          None -> static_error l ("No such field in union '" ^ un ^ "'.") None
+        | Some (_, tp) ->
+          (WDeref (l, w, tp), tp, None)
+        end
+      | _ -> static_error l ("Invalid dereference; union type '" ^ un ^ "' has not been defined.") None
+      end
     | ObjType (cn, targs) ->
       begin
       match lookup_class_field (cn, targs) f with
@@ -5009,9 +5095,20 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Int (_, k) -> rank_size_term k
     | PtrType _ -> ctxt#mk_intlit (1 lsl ptr_rank)
     | StructType sn -> struct_size l sn
+    | UnionType un -> union_size l un
     | StaticArrayType (elemTp, elemCount) -> ctxt#mk_mul (sizeof l elemTp) (ctxt#mk_intlit elemCount)
     | _ -> static_error l ("Taking the size of type " ^ string_of_type t ^ " is not yet supported.") None
   
+  let () =
+    unionmap1 |> List.iter begin fun (un, (l, body_opt)) ->
+      match body_opt with
+        None -> ()
+      | Some (fds, s) ->
+        fds |> List.iter begin fun (f, (lf, tp)) ->
+          ctxt#assert_term (ctxt#mk_le (sizeof l tp) s)
+        end
+    end
+
   let field_address l t fparent fname = ctxt#mk_add t (field_offset l fparent fname)
   
   let convert_provertype term proverType proverType0 =

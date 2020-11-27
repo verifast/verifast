@@ -9,6 +9,7 @@ cd bin
   cd ..
 cd ..
 cd examples
+  verifast unions.c
   cd busywaiting
     verifast -c bounded_fifo.c
     cd clhlock

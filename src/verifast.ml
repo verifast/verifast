@@ -427,7 +427,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       eval_h h env w $. fun h env pointerTerm ->
       with_context (Executing (h, env, l, "Consuming character array")) $. fun () ->
       let (_, _, _, _, chars_symb, _, _) = List.assoc ("chars") predfammap in
-      consume_chunk rules h ghostenv [] [] l (chars_symb, true) [] real_unit dummypat None [TermPat pointerTerm; TermPat (struct_size l sn); SrcPat DummyPat] $. fun _ h coef [_; _; elems] _ _ _ _ ->
+      consume_chunk rules h ghostenv [] [] l (chars_symb, true) [] real_unit dummypat (Some 2) [TermPat pointerTerm; TermPat (struct_size l sn); SrcPat DummyPat] $. fun _ h coef [_; _; elems] _ _ _ _ ->
       if not (definitely_equal coef real_unit) then assert_false h env l "Closing a struct requires full permission to the character array." None;
       let init =
         match name with
@@ -738,6 +738,21 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let n = List.length (List.filter (function SwitchStmtDefaultClause (l, _) -> true | _ -> false) cs) in
         if n > 1 then static_error l "switch statement can have at most one default clause" None;
         let cs0 = cs in
+        let execute_default_branch cont =
+          execute_branch $. fun () ->
+          let restr =
+            List.fold_left
+              begin fun state clause -> 
+                match clause with
+                  SwitchStmtClause (l, i, ss) -> 
+                    let w2 = check_expr_t (pn,ilist) tparams tenv i intType in
+                    ctxt#mk_and state (ctxt#mk_not (ctxt#mk_eq v (ev w2))) 
+                | _ -> state
+              end
+              ctxt#mk_true cs0
+          in
+          assume restr cont
+        in
         let rec fall_through h env cs =
           match cs with
             [] -> cont h env
@@ -754,7 +769,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match cs with
             [] ->
             if n = 0 then (* implicit default *)
-              execute_branch (fun () -> cont h env)
+              execute_default_branch (fun () -> cont h env)
           | c::cs' ->
             begin match c with
               SwitchStmtClause (l, i, ss) ->
@@ -764,19 +779,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               assume_eq t v $. fun () ->
               fall_through h env cs
             | SwitchStmtDefaultClause (l, ss) ->
-              execute_branch $. fun () ->
-              let restr =
-                List.fold_left
-                  begin fun state clause -> 
-                    match clause with
-                      SwitchStmtClause (l, i, ss) -> 
-                        let w2 = check_expr_t (pn,ilist) tparams tenv i intType in
-                        ctxt#mk_and state (ctxt#mk_not (ctxt#mk_eq v (ev w2))) 
-                    | _ -> state
-                  end
-                  ctxt#mk_true cs0
-              in
-              assume restr $. fun () ->
+              execute_default_branch $. fun () ->
               fall_through h env cs
             end;
             verify_cases cs'
@@ -2950,11 +2953,11 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let result = 
     (
       (
-        prototypes_implemented, !functypes_implemented, !structures_defined, 
+        prototypes_implemented, !functypes_implemented, !structures_defined, !unions_defined,
         !nonabstract_predicates, importmodulemap1
       ), 
       (
-        structmap1, enummap1, globalmap1, modulemap1, importmodulemap1, 
+        structmap1, unionmap1, enummap1, globalmap1, modulemap1, importmodulemap1, 
         inductivemap1, purefuncmap1,predctormap1, malloc_block_pred_map1, 
         field_pred_map1, predfammap1, predinstmap1, typedefmap1, functypemap1, 
         funcmap1, boxmap,classmap1,interfmap1,classterms1,interfaceterms1, 
@@ -2980,9 +2983,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let jardeps = ref []
   let provide_files = ref []
-  let (prototypes_implemented, functypes_implemented, structures_defined, 
+  let (prototypes_implemented, functypes_implemented, structures_defined, unions_defined,
        nonabstract_predicates, modules_imported) =
-    let result = check_should_fail ([], [], [], [], []) $. fun () ->
+    let result = check_should_fail ([], [], [], [], [], []) $. fun () ->
     let (headers, ds)=
       match file_type path with
         | Java ->
@@ -3029,7 +3032,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             parse_c_file path reportRange reportShouldFail options.option_verbose options.option_include_paths options.option_define_macros options.option_enforce_annotations data_model
     in
     emitter_callback ds;
-    check_should_fail ([], [], [], [], []) $. fun () ->
+    check_should_fail ([], [], [], [], [], []) $. fun () ->
     let (linker_info, _) = check_file path false true programDir headers ds in
     linker_info
     in
