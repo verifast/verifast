@@ -129,4 +129,7 @@ doc/*/*.pdf
 src/java_frontend/ast_server.jar
 examples/crypto/lib/polarssl
 
+_opam
+.vscode
+
 .DS_Store
