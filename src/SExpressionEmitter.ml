@@ -201,7 +201,7 @@ let sexpr_of_operator (op : operator) : sexpression =
     | ShiftRight  -> Symbol ">>"
 
 let sexpr_of_constant_value (c : constant_value) : sexpression =
-    match c with
+  match c with
     | IntConst i    -> Symbol ("Int constant " ^ (Big_int.string_of_big_int i))
     | BoolConst b   -> Symbol ("Bool constant " ^ (string_of_bool b))
     | StringConst s -> Symbol ("String constant " ^ s)
@@ -212,78 +212,75 @@ let sexpr_of_method_binding (binding : method_binding) : sexpression =
     | Static   -> Symbol "class-method"
     | Instance -> Symbol "instance-method"
 
+let sexpr_of_predref (p: predref) : sexpression =
+  build_list
+    [ Symbol "pred-ref" ]
+    [
+      "name", Symbol p#name;
+      "domain", sexpr_of_list sexpr_of_type_ p#domain;
+      "inputParamCount", sexpr_of_option sexpr_of_int p#inputParamCount
+    ]
+
+
 let rec sexpr_of_expr (expr : expr) : sexpression =
   let sexpr_of_tparam t = Symbol t in
   match expr with
-    | Operation (loc, op, exprs) ->
-      build_list [ Symbol "expr-op"
-                 ; sexpr_of_operator op ]
-                 [ "operands", List (List.map sexpr_of_expr exprs) ]
-    | WOperation (loc, op, exprs, type_) ->
-      build_list [ Symbol "expr-wop"
-                 ; sexpr_of_operator op ]
-                 [ "operands", List (List.map sexpr_of_expr exprs)
-                 ; "type", sexpr_of_type_ type_ ]
-    | CallExpr (loc, name, targs, indices, args, binding) ->
-      build_list [ Symbol "expr-call"
-                 ; Symbol name ]
-                 [ "type-arguments", List (List.map sexpr_of_type_expr targs)
-                 ; "indices", List (List.map sexpr_of_pat indices)
-                 ; "arguments", List (List.map sexpr_of_pat args)
-                 ; "binding", sexpr_of_method_binding binding ]
-    | True loc   -> Symbol "expr-true"
-    | False loc  -> Symbol "expr-false"
-    | Null loc   -> Symbol "expr-null"
-    | Var (loc, name) ->
-      build_list [ Symbol "expr-var"
-                 ; Symbol name ]
-                 []
+    | True loc  -> Symbol "expr-true"
+    | False loc -> Symbol "expr-false"
+    | Null loc  -> Symbol "expr-null"
+    | Var (loc, name) -> build_list [ Symbol "expr-var"; Symbol name ] []
     | WVar (loc, name, scope) ->
-      let scope_kw = [ "scope", sexpr_of_ident_scope scope ] in
-      build_list [ Symbol "expr-wvar"
-                 ; Symbol name ]
-                 scope_kw
-    | Read (loc, expr, str) ->
-      List [ Symbol "expr-read"
-           ; sexpr_of_expr expr
-           ; Symbol str ]
+        let scope_kw = [ "scope", sexpr_of_ident_scope scope ] in
+        build_list [ Symbol "expr-wvar"; Symbol name ] scope_kw
     | Select (loc, expr, str) ->
       List [ Symbol "expr-select"
            ; sexpr_of_expr expr
            ; Symbol str ]
     | IntLit (loc, n, is_decimal, usuffix, lsuffix) ->
-      build_list [ Symbol "expr-int"
-                  ; Number n ]
-                 []
+        build_list [ Symbol "expr-int"; Number n ] []
     | WIntLit (loc, n) ->
-      build_list [ Symbol "expr-wintlit"
-                  ; Number n ]
-                 []
-    | AssignExpr (loc, lhs, rhs) ->
-      List [ Symbol "expr-assign"
-           ; sexpr_of_expr lhs
-           ; sexpr_of_expr rhs ]
-    | SizeofExpr (loc, texpr) ->
-      List [ Symbol "expr-sizeof"
-           ; sexpr_of_type_expr texpr ]
-    | AssignOpExpr (loc, lhs, op, rhs, post) ->
-      build_list [ Symbol "expr-assign-op" ]
-                 [ "lhs", sexpr_of_expr lhs
-                 ; "rhs", sexpr_of_expr rhs
-                 ; "op", sexpr_of_operator op
-                 ; "post", sexpr_of_bool post ]
-    | StringLit (_, s)          -> List [ Symbol "expr-string-literal"; Symbol s ]
-    | ClassLit (_, cn)          -> List [ Symbol "expr-class-lit"; Symbol cn ]
-    | ArrayLengthExpr (_, e)    -> List [ Symbol "expr-array-length"; sexpr_of_expr e ]
+        build_list [ Symbol "expr-wintlit"; Number n ] []
+    | RealLit (_, num) ->
+        build_list
+          [ Symbol "expr-real-lit" ]
+          [ "num", Symbol (Num.string_of_num num) ]
+    | StringLit (_, s) ->
+        List [ Symbol "expr-string-literal"; Symbol s ]
+    | ClassLit (_, cn) ->
+        List [ Symbol "expr-class-lit"; Symbol cn ]
+    | TruncatingExpr (loc, e) ->
+        build_list [ Symbol "expr-truncating"; sexpr_of_expr expr ] []
+    | Operation (loc, op, exprs) ->
+        build_list
+          [ Symbol "expr-op"; sexpr_of_operator op ]
+          [ "operands", List (List.map sexpr_of_expr exprs) ]
+    | WOperation (loc, op, exprs, type_) ->
+        build_list
+          [ Symbol "expr-wop"; sexpr_of_operator op ]
+          [ "operands", List (List.map sexpr_of_expr exprs); "type", sexpr_of_type_ type_ ]
+    | SliceExpr (_, ps1, ps2) ->
+        build_list
+          [ Symbol "expr-slice-expr" ]
+          [
+            "ps1", sexpr_of_option sexpr_of_pat ps1;
+            "ps2", sexpr_of_option sexpr_of_pat ps2
+          ]
+    | Read (loc, expr, str) ->
+        List [ Symbol "expr-read"; sexpr_of_expr expr; Symbol str ]
+    | ArrayLengthExpr (_, e) ->
+        List [ Symbol "expr-array-length"; sexpr_of_expr e ]
     | WRead (_, e, par, name, range, stat, cons, ghost) ->
-      build_list [ Symbol "expr-w-read" ]
-                 [ "e", sexpr_of_expr e
-                 ; "par", Symbol par
-                 ; "name", Symbol name
-                 ; "range", sexpr_of_type_ range
-                 ; "stat", sexpr_of_bool stat
-                 ; "cons", sexpr_of_option (sexpr_of_option sexpr_of_constant_value) !cons
-                 ; "ghost", sexpr_of_ghostness ghost ]
+        build_list
+          [ Symbol "expr-w-read" ]
+          [
+            "e", sexpr_of_expr e;
+            "par", Symbol par;
+            "name", Symbol name;
+            "range", sexpr_of_type_ range;
+            "stat", sexpr_of_bool stat;
+            "cons", sexpr_of_option (sexpr_of_option sexpr_of_constant_value) !cons;
+            "ghost", sexpr_of_ghostness ghost
+          ]
     | WSelect (_, e, par, name, range) ->
       build_list [ Symbol "expr-w-select" ]
                  [ "e", sexpr_of_expr e
@@ -291,148 +288,388 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
                  ; "name", Symbol name
                  ; "range", sexpr_of_type_ range ]
     | WReadInductiveField (loc, e, i, c, f, targs) ->
-      build_list [ Symbol "expr-wreadinductivefield" ]
-                 [ "e", sexpr_of_expr e
-                 ; "ind", Symbol i
-                 ; "ctor", Symbol c
-                 ; "field", Symbol f
-                 ; "targs", sexpr_of_list sexpr_of_type_ targs ]
+      build_list
+        [ Symbol "expr-wreadinductivefield" ]
+        [
+          "e", sexpr_of_expr e;
+          "ind", Symbol i;
+          "ctor", Symbol c;
+          "field", Symbol f;
+          "targs", sexpr_of_list sexpr_of_type_ targs
+        ]
     | ReadArray (_, rhs, lhs) ->
-      build_list [ Symbol "expr-read-array" ]
-                 [ "lhs", sexpr_of_expr lhs
-                 ; "rhs", sexpr_of_expr rhs]
+      build_list
+        [ Symbol "expr-read-array" ]
+        [
+          "lhs", sexpr_of_expr lhs;
+          "rhs", sexpr_of_expr rhs
+        ]
     | WReadArray (_, rhs, t, lhs) ->
-      build_list [ Symbol "expr-w-read-array" ]
-                 [ "lhs", sexpr_of_expr lhs
-                 ; "t", sexpr_of_type_ t
-                 ; "rhs", sexpr_of_expr rhs]
+      build_list
+        [ Symbol "expr-w-read-array" ]
+        [
+          "lhs", sexpr_of_expr lhs;
+          "t", sexpr_of_type_ t;
+          "rhs", sexpr_of_expr rhs
+        ]
     | Deref (_, e) ->
-      build_list [ Symbol "expr-deref" ]
-                 [ "e", sexpr_of_expr e]
+        build_list [ Symbol "expr-deref" ] [ "e", sexpr_of_expr e]
     | WDeref (_, e, t) ->
-      build_list [ Symbol "expr-w-deref" ]
-                 [ "e", sexpr_of_expr e
-                 ; "t", sexpr_of_type_ t]
+        build_list
+          [ Symbol "expr-w-deref" ]
+          [ "e", sexpr_of_expr e; "t", sexpr_of_type_ t ]
+    | CallExpr (loc, name, targs, indices, args, binding) ->
+        build_list
+          [ Symbol "expr-call"; Symbol name ]
+          [
+            "type-arguments", List (List.map sexpr_of_type_expr targs);
+            "indices", List (List.map sexpr_of_pat indices);
+            "arguments", List (List.map sexpr_of_pat args);
+            "binding", sexpr_of_method_binding binding
+          ]
     | ExprCallExpr (_, expr, args) ->
-      build_list [ Symbol "expr-call-expr" ]
-                 [ "expr", sexpr_of_expr expr
-                 ; "args", sexpr_of_list sexpr_of_expr args ]
+      build_list
+        [ Symbol "expr-call-expr" ]
+        [
+          "expr", sexpr_of_expr expr;
+          "args", sexpr_of_list sexpr_of_expr args
+        ]
     | WFunPtrCall (_, name, exprs) ->
-      build_list [ Symbol "expr-w-func-ptr-call" ]
-                 [ "name", Symbol name
-                 ; "exprs", sexpr_of_list sexpr_of_expr exprs ]
+      build_list
+        [ Symbol "expr-w-func-ptr-call" ]
+        [
+          "name", Symbol name;
+          "exprs", sexpr_of_list sexpr_of_expr exprs
+        ]
     | WPureFunCall (_, name, typs, exprs) ->
-      build_list [ Symbol "expr-w-pure-func-call" ]
-                 [ "name", Symbol name
-                 ; "typs", sexpr_of_list sexpr_of_type_ typs
-                 ; "exprs", sexpr_of_list sexpr_of_expr exprs ]
+      build_list
+        [ Symbol "expr-w-pure-func-call" ]
+        [
+          "name", Symbol name;
+          "typs", sexpr_of_list sexpr_of_type_ typs;
+          "exprs", sexpr_of_list sexpr_of_expr exprs
+        ]
     | WPureFunValueCall (_, expr, exprs) ->
-      build_list [ Symbol "expr-w-pure-func-value-call" ]
-                 [ "expr", sexpr_of_expr expr
-                 ; "exprs", sexpr_of_list sexpr_of_expr exprs ]
+      build_list
+        [ Symbol "expr-w-pure-func-value-call" ]
+        [
+          "expr", sexpr_of_expr expr;
+          "exprs", sexpr_of_list sexpr_of_expr exprs
+        ]
     | WFunCall  (_, name, typs, exprs) ->
-      build_list [ Symbol "expr-w-func-call" ]
-                 [ "name", Symbol name
-                 ; "typs", sexpr_of_list sexpr_of_type_ typs
-                 ; "exprs", sexpr_of_list sexpr_of_expr exprs ]
+      build_list
+        [ Symbol "expr-w-func-call" ]
+        [
+          "name", Symbol name;
+          "typs", sexpr_of_list sexpr_of_type_ typs;
+          "exprs", sexpr_of_list sexpr_of_expr exprs
+        ]
     | WMethodCall (_, clss, name, typs, exprs, bind, tparamEnv) ->
-      build_list [ Symbol "expr-w-method-call" ]
-                 [ "class", Symbol clss
-                 ; "name", Symbol name
-                 ; "typs", sexpr_of_list sexpr_of_type_ typs
-                 ; "exprs", sexpr_of_list sexpr_of_expr exprs
-                 ; "stat", sexpr_of_method_binding bind
-                 ; "tparams", sexpr_of_list sexpr_of_tparam (List.map (fun (tparam,targ) -> tparam) tparamEnv)
-                 ; "targs", sexpr_of_list sexpr_of_type_ (List.map (fun (_,targ) -> targ) tparamEnv) ]
+        build_list
+          [ Symbol "expr-w-method-call" ]
+          [
+            "class", Symbol clss;
+            "name", Symbol name;
+            "typs", sexpr_of_list sexpr_of_type_ typs;
+            "exprs", sexpr_of_list sexpr_of_expr exprs;
+            "stat", sexpr_of_method_binding bind;
+            "tparams", sexpr_of_list sexpr_of_tparam (List.map (fun (tparam,targ) -> tparam) tparamEnv);
+            "targs", sexpr_of_list sexpr_of_type_ (List.map (fun (_,targ) -> targ) tparamEnv)
+          ]
     | NewArray (_, texpr, expr) ->
-      build_list [ Symbol "expr-new-array" ]
-                 [ "texpr", sexpr_of_type_expr texpr
-                 ; "expr", sexpr_of_expr expr]
+        build_list
+          [ Symbol "expr-new-array" ]
+          [ "texpr", sexpr_of_type_expr texpr; "expr", sexpr_of_expr expr ]
     | NewObject (l, cn, args, targs) ->
-      build_list [ Symbol "expr-new-obj"; Symbol cn ]
-                 [ "args", sexpr_of_list sexpr_of_expr args ;
-                  "targs", sexpr_of_option (fun targs -> sexpr_of_list sexpr_of_type_expr targs) targs ]
+        build_list
+          [ Symbol "expr-new-obj"; Symbol cn ]
+          [
+            "args", sexpr_of_list sexpr_of_expr args;
+            "targs", sexpr_of_option (fun targs -> sexpr_of_list sexpr_of_type_expr targs) targs
+          ]
     | NewArrayWithInitializer (l, texpr, args) ->
-      build_list [ Symbol "expr-array-init" ]
-                 [ "type", sexpr_of_type_expr texpr
-                 ; "init", sexpr_of_list sexpr_of_expr args ]
+        build_list
+          [ Symbol "expr-array-init" ]
+          [
+            "type", sexpr_of_type_expr texpr;
+            "init", sexpr_of_list sexpr_of_expr args
+          ]
     | IfExpr (_, c, e1, e2) ->
-      build_list [ Symbol "expr-if" ]
-                 [ "cond", sexpr_of_expr c
-                 ; "e1", sexpr_of_expr e1
-                 ; "e2", sexpr_of_expr e2 ]
+        build_list
+          [ Symbol "expr-if" ]
+          [
+            "cond", sexpr_of_expr c;
+            "e1", sexpr_of_expr e1;
+            "e2", sexpr_of_expr e2
+          ]
     | SwitchExpr (_, cond, clauses, default) ->
-      build_list [ Symbol "expr-switch" ]
-                 [ "cond", sexpr_of_expr cond
-                 ; "clauses", sexpr_of_list sexpr_of_switch_clause clauses
-                 ; "default", sexpr_of_option (fun (_, e) -> sexpr_of_expr e) default ]
+        build_list
+          [ Symbol "expr-switch" ]
+          [
+            "cond", sexpr_of_expr cond;
+            "clauses", sexpr_of_list sexpr_of_switch_clause clauses;
+            "default", sexpr_of_option (fun (_, e) -> sexpr_of_expr e) default
+          ]
+    | WSwitchExpr (_, cond, ind_type, typs, clauses, default, tparamEnv, result_type) ->
+        build_list
+          [ Symbol "expr-switch" ]
+          [
+            "cond", sexpr_of_expr cond;
+            "ind-type", Symbol ind_type;
+            "typs", sexpr_of_list sexpr_of_type_ typs;
+            "clauses", sexpr_of_list sexpr_of_switch_clause clauses;
+            "default", sexpr_of_option (fun (_, e) -> sexpr_of_expr e) default;
+            "tparams", sexpr_of_list sexpr_of_tparam (List.map (fun (tparam,targ) -> tparam) tparamEnv);
+            "targs", sexpr_of_list sexpr_of_type_ (List.map (fun (_,targ) -> targ) tparamEnv);
+            "result-type", sexpr_of_type_ result_type
+          ]
     | PredNameExpr (_, name) ->
-       List [ Symbol "expr-pred-name"
-            ; Symbol name ]
-    | TruncatingExpr (_, expr) ->
-      build_list [ Symbol "expr-truncating" ]
-                 [ "expr", sexpr_of_expr expr ]
+        List [ Symbol "expr-pred-name"; Symbol name ]
     | CastExpr (_, texpr, expr) ->
-      build_list [ Symbol "expr-cast" ]
-                 [ "typ", sexpr_of_type_expr texpr
-                 ; "expr", sexpr_of_expr expr ]
-    | AddressOf (_, e) ->
-      List [ Symbol "expr-address-of"
-           ; sexpr_of_expr e ]
-    | InitializerList (_, exprs) ->
-      build_list [ Symbol "expr-init-list" ]
-                 [ "exprs", sexpr_of_list sexpr_of_expr exprs ]
-    | SliceExpr (_, ps1, ps2) ->
-      build_list [ Symbol "expr-slice-expr" ]
-                 [ "ps1", sexpr_of_option sexpr_of_pat ps1
-                 ; "ps2", sexpr_of_option sexpr_of_pat ps2 ]
-    | ProverTypeConversion (t1, t2, e) ->
-      build_list [ Symbol "expr-prover-type-conversion" ]
-                 [ "t1", sexpr_of_prover_type t1
-                 ; "t2", sexpr_of_prover_type t2
-                 ; "e", sexpr_of_expr e]
-    | ArrayTypeExpr' (_, e) ->
-      build_list [ Symbol "expr-array-type" ]
-                 [ "e", sexpr_of_expr e]
-    | InstanceOfExpr (_, expr, texpr) ->
-      build_list [ Symbol "expr-instance-of" ]
-                 [ "expr", sexpr_of_expr expr
-                 ; "texpr", sexpr_of_type_expr texpr ]
-    | RealLit (_, num) ->
-      build_list [ Symbol "expr-real-lit" ]
-                 [ "num", Symbol (Num.string_of_num num) ]
+        build_list
+          [ Symbol "expr-cast" ]
+          [ "typ", sexpr_of_type_expr texpr; "expr", sexpr_of_expr expr ]
     | Upcast (e, t1, t2) ->
-      build_list [ Symbol "expr-upcast" ]
-                 [ "e", sexpr_of_expr e
-                 ; "t1", sexpr_of_type_ t1
-                 ; "t2", sexpr_of_type_ t2 ]
+        build_list
+          [ Symbol "expr-upcast" ]
+          [
+            "e", sexpr_of_expr e;
+            "t1", sexpr_of_type_ t1;
+            "t2", sexpr_of_type_ t2
+          ]
+    | TypedExpr (e, t) ->
+        build_list
+          [ Symbol "expr-typed" ]
+          [
+            "e", sexpr_of_expr e;
+            "t", sexpr_of_type_ t
+          ]
     | WidenedParameterArgument (e) ->
-      build_list [ Symbol "expr-widened-param-arg" ]
-                 [ "e", sexpr_of_expr e ]
+        build_list
+          [ Symbol "expr-widened-param-arg" ]
+          [ "e", sexpr_of_expr e ]
+    | SizeofExpr (loc, texpr) ->
+        List [ Symbol "expr-sizeof"; sexpr_of_type_expr texpr ]
+    | AddressOf (_, e) ->
+        List [ Symbol "expr-address-of"; sexpr_of_expr e ]
+    | ProverTypeConversion (t1, t2, e) ->
+        build_list
+          [ Symbol "expr-prover-type-conversion" ]
+          [
+            "t1", sexpr_of_prover_type t1;
+            "t2", sexpr_of_prover_type t2;
+            "e", sexpr_of_expr e
+          ]
+    | ArrayTypeExpr' (_, e) ->
+        build_list
+          [ Symbol "expr-array-type" ]
+          [ "e", sexpr_of_expr e ]
+    | AssignExpr (loc, lhs, rhs) ->
+        List [ Symbol "expr-assign"; sexpr_of_expr lhs; sexpr_of_expr rhs ]
+    | AssignOpExpr (loc, lhs, op, rhs, post) ->
+        build_list
+          [ Symbol "expr-assign-op" ]
+          [
+            "lhs", sexpr_of_expr lhs;
+            "rhs", sexpr_of_expr rhs;
+            "op", sexpr_of_operator op;
+            "post", sexpr_of_bool post
+          ]
+    | WAssignOpExpr (loc, lhs, op, rhs, post) ->
+        build_list
+          [ Symbol "expr-wassign-op" ]
+          [
+            "lhs", sexpr_of_expr lhs;
+            "rhs", sexpr_of_expr rhs;
+            "op", Symbol op;
+            "post", sexpr_of_bool post
+          ]
+    | InstanceOfExpr (_, expr, texpr) ->
+        build_list
+          [ Symbol "expr-instance-of" ]
+          [ "expr", sexpr_of_expr expr; "texpr", sexpr_of_type_expr texpr ]
     | SuperMethodCall (_, name, params) ->
-      build_list [ Symbol "expr-super-call" ]
-                 [ "name", Symbol name
-                 ; "params", sexpr_of_list sexpr_of_expr params ]
+        build_list
+          [ Symbol "expr-super-call" ]
+          [ "name", Symbol name; "params", sexpr_of_list sexpr_of_expr params ]
     | WSuperMethodCall (_, _, name, params, _) ->
-      build_list [ Symbol "expr-w-super-call" ]
-                 [ "name", Symbol name
-                 ; "params", sexpr_of_list sexpr_of_expr params ]
+        build_list
+          [ Symbol "expr-w-super-call" ]
+          [ "name", Symbol name; "params", sexpr_of_list sexpr_of_expr params ]
+    | InitializerList (_, exprs) ->
+        build_list
+          [ Symbol "expr-init-list" ]
+          [ "exprs", sexpr_of_list sexpr_of_expr exprs ]
+    | PointsTo (loc, expr, pat) ->
+        build_list
+          [ Symbol "expr-points-to" ]
+          [
+            "expr", sexpr_of_expr expr;
+            "pat", sexpr_of_pat pat
+          ]
+    | WPointsTo (loc, expr, t, pat) ->
+        build_list
+          [ Symbol "expr-w-points-to" ]
+          [
+            "expr", sexpr_of_expr expr;
+            "type", sexpr_of_type_ t;
+            "pat", sexpr_of_pat pat
+          ]
+    | PredAsn (loc, name, typs, pats1, pats2) ->
+        build_list
+          [ Symbol "expr-pred-asn" ]
+          [
+            "name", Symbol name;
+            "typs", sexpr_of_list sexpr_of_type_expr typs;
+            "pats1", sexpr_of_list sexpr_of_pat pats1;
+            "pats2", sexpr_of_list sexpr_of_pat pats2;
+          ]
+    | WPredAsn (loc, pred_ref, global, typs, pats1, pats2) ->
+        build_list
+          [ Symbol "expr-w-pred-asn" ]
+          [
+            "pred_ref", sexpr_of_predref pred_ref;
+            "global", sexpr_of_bool global;
+            "typs", sexpr_of_list sexpr_of_type_ typs;
+            "pats1", sexpr_of_list sexpr_of_pat pats1;
+            "pats2", sexpr_of_list sexpr_of_pat pats2;
+          ]
+    | InstPredAsn (loc, expr1, name, expr2, pats) ->
+        build_list
+          [ Symbol "expr-inst-pred-asn" ]
+          [
+            "expr1", sexpr_of_expr expr1;
+            "name", Symbol name;
+            "expr2", sexpr_of_expr expr2;
+            "pats", sexpr_of_list sexpr_of_pat pats;
+          ]
+    | WInstPredAsn (loc, expr1, static_type, static_type_fin, family, instance_pred_name, expr2, pats) ->
+        build_list
+          [ Symbol "expr-w-inst-pred-asn" ]
+          [
+            "expr1", sexpr_of_option sexpr_of_expr expr1;
+            "static-type", Symbol static_type;
+            "static-type-finality", sexpr_of_class_finality static_type_fin;
+            "family", Symbol family;
+            "instance-pred-name", Symbol instance_pred_name;
+            "expr2", sexpr_of_expr expr2;
+            "pats", sexpr_of_list sexpr_of_pat pats;
+          ]
+    | ExprAsn (loc, expr) ->
+        build_list [ Symbol "expr-asn" ] [ "expr", sexpr_of_expr expr ]
+    | Sep (loc, asn1, asn2) ->
+        build_list [ Symbol "expr-sep" ] [ "asn1", sexpr_of_expr asn1; "asn2", sexpr_of_expr asn2 ]
+    | IfAsn (loc, expr, asn1, asn2) ->
+        build_list
+          [ Symbol "expr-if-asn" ]
+          [
+            "expr", sexpr_of_expr expr;
+            "asn1", sexpr_of_expr asn1;
+            "asn2", sexpr_of_expr asn2
+          ]
+    | SwitchAsn (loc, expr, clauses) ->
+        build_list
+          [ Symbol "expr-switch-asn" ]
+          [
+            "expr", sexpr_of_expr expr;
+            "clauses", sexpr_of_list sexpr_of_switch_asn_clause clauses
+          ]
+    | WSwitchAsn (loc, expr, inductive_type, clauses) ->
+        build_list
+          [ Symbol "expr-w-switch-asn" ]
+          [
+            "expr", sexpr_of_expr expr;
+            "inductive-type", Symbol inductive_type;
+            "clauses", sexpr_of_list sexpr_of_wswitch_asn_clause clauses
+          ]
+    | EmpAsn (loc) -> List [ Symbol "expr-emp-asn" ]
+    | ForallAsn (loc, typ, i, expr) ->
+        build_list
+          [ Symbol "expr-forall-asn" ]
+          [
+            "typ", sexpr_of_type_expr typ;
+            "i", Symbol i;
+            "expr", sexpr_of_expr expr
+          ]
+    | CoefAsn (loc, pat, asn) ->
+        build_list
+          [ Symbol "expr-coef-asn" ]
+          [
+            "pat", sexpr_of_pat pat;
+            "asn", sexpr_of_expr asn
+          ]
+    | EnsuresAsn (loc, asn) ->
+        build_list
+          [ Symbol "expr-ensures-asn" ]
+          [ "asn", sexpr_of_expr asn ]
+    | MatchAsn (loc, asn, pat) ->
+        build_list
+          [ Symbol "expr-match-asn" ]
+          [ "asn", sexpr_of_expr asn; "pat", sexpr_of_pat pat ]
+    | WMatchAsn (loc, asn, pat, typ) ->
+        build_list
+          [ Symbol "expr-w-match-asn" ]
+          [
+            "asn", sexpr_of_expr asn;
+            "pat", sexpr_of_pat pat;
+            "typ", sexpr_of_type_ typ
+          ]
+
 
 and sexpr_of_pat (pat : pat) : sexpression =
   match pat with
-    | LitPat expr            -> List [ Symbol "pat-literal"; sexpr_of_expr expr ]
-    | VarPat (l, str)        -> List [ Symbol "pat-variable"; Symbol str ]
-    | DummyPat               -> List [ Symbol "pat-dummy" ]
-    | CtorPat (l, str, pats) -> build_list [ Symbol "pat-constructor"; Symbol str ]
-                                           [ "pats", sexpr_of_list sexpr_of_pat pats ]
+    | LitPat expr -> List [ Symbol "pat-lit"; sexpr_of_expr expr ]
+    | VarPat (l, str) -> List [ Symbol "pat-var"; Symbol str ]
+    | DummyPat -> List [ Symbol "pat-dummy" ]
+    | CtorPat (l, str, pats) ->
+        build_list
+          [ Symbol "pat-ctor"; Symbol str ]
+          [ "pats", sexpr_of_list sexpr_of_pat pats ]
+    | WCtorPat (l, i, targs, name, ts0, ts, pats) ->
+        build_list
+          [ Symbol "pat-w-ctor"; Symbol name ]
+          [
+            "i", Symbol i;
+            "targs", sexpr_of_list sexpr_of_type_ targs;
+            "ts0", sexpr_of_list sexpr_of_type_ ts0;
+            "ts", sexpr_of_list sexpr_of_type_ ts;
+            "pats", sexpr_of_list sexpr_of_pat pats
+          ]
 
 and sexpr_of_switch_clause (c : switch_expr_clause) : sexpression =
   match c with
-  | SwitchExprClause (_, name, args, e) ->
-    build_list [ Symbol "switch-clause"
-               ; Symbol name ]
-               [ "args", sexpr_of_list (fun x -> Symbol x) args
-               ; "body", sexpr_of_expr e ]
+    | SwitchExprClause (_, name, args, e) ->
+        build_list
+          [ Symbol "switch-clause"; Symbol name ]
+          [ "args", sexpr_of_list (fun x -> Symbol x) args; "body", sexpr_of_expr e ]
+
+and sexpr_of_switch_asn_clause (c: switch_asn_clause) : sexpression =
+  match c with
+    | SwitchAsnClause (loc, name, l, expr) ->
+        build_list
+          [ Symbol "switch-asn-clause" ]
+          [
+            "name", Symbol name;
+            "l", sexpr_of_list (fun x -> Symbol x) l;
+            "expr", sexpr_of_expr expr
+          ]
+
+and sexpr_of_wswitch_asn_clause (c: wswitch_asn_clause) : sexpression =
+  match c with
+    | WSwitchAsnClause (loc, name, l, ptypes, expr) ->
+        build_list
+          [ Symbol "w-switch-asn-clause" ]
+          [
+            "name", Symbol name;
+            "l", sexpr_of_list (fun x -> Symbol x) l;
+            "ptypes", sexpr_of_list (sexpr_of_option sexpr_of_prover_type) ptypes;
+            "expr", sexpr_of_expr expr
+          ]
+
+and sexpr_of_class_finality (f: class_finality) : sexpression =
+  match f with
+      | FinalClass -> Symbol "final-class"
+      | ExtensibleClass -> Symbol "extensible-class"
 
 and sexpr_of_prover_type (t : prover_type) : sexpression =
   match t with
