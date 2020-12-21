@@ -20,6 +20,7 @@ cd examples
       verifast -c echo_live.c
       verifast -c echo_live_mt.c
     cd ..
+    verifast -c await.c
   cd ..
   cd jayanti
     verifast threading.o popl20_prophecies.o atomics.c jayanti.c client.c
