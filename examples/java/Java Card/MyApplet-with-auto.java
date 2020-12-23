@@ -455,8 +455,8 @@ public final class MyApplet extends Applet {
 
       ////@ close [1/2]MyApplet_(this, _, _); // auto
       JCSystem.beginTransaction();
-      ////@ open valid(); // auto
-      ////@ open MyApplet_(this, _, _); // auto
+      //@ open valid();
+      //@ open MyApplet_(this, _, _);
       if (by_NbRecords >= by_MaxNbRecord)
         ISOException.throwIt( ISO7816.SW_FILE_FULL );
       o_Records[by_NbRecords] = new byte[by_MaxSizeRecord + LEN_RECORD_LEN_BYTE];

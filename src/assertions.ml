@@ -625,10 +625,10 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match todo with
         [] -> None
       | Chunk ((g, true), [tp], coef, [a'; i'; v], b) :: rest
-          when g == array_element_symb() && definitely_equal a' a && definitely_equal i' i ->
+          when g == array_element_symb() && definitely_equal a' a && definitely_equal i' i && definitely_equal coef real_unit ->
         Some(seen @ ((Chunk ((g, true), [tp], coef, [a'; i'; new_value], b)) :: rest))
       | Chunk ((g, true), [tp], coef, [a'; istart; iend; vs], b) :: rest
-          when g == array_slice_symb() && definitely_equal a' a && ctxt#query (ctxt#mk_and (ctxt#mk_le istart i) (ctxt#mk_lt i iend)) ->
+          when g == array_slice_symb() && definitely_equal a' a && ctxt#query (ctxt#mk_and (ctxt#mk_le istart i) (ctxt#mk_lt i iend)) && definitely_equal coef real_unit ->
         let (_, _, _, _, update_symb) = List.assoc "update" purefuncmap in
         let converted_new_value = apply_conversion (provertype_of_type tp) ProverInductive new_value in
         let updated_vs = (mk_app update_symb [ctxt#mk_sub i istart; converted_new_value; vs]) in
