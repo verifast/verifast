@@ -60,13 +60,13 @@ public final class Store extends Applet {
         byte[] abuffer = apdu.getBuffer();
         
         //Data received > 5 bytes (length value array) -> exception
-        if(abuffer[ISO7816.OFFSET_LC] > 5)
+        if((abuffer[ISO7816.OFFSET_LC] & 0xff) > 5)
             ISOException.throwIt(ISO7816.SW_DATA_INVALID);
-        
+
         JCSystem.beginTransaction();
         //@ open valid();
         //Copy received data into value array
-        Util.arrayCopy(abuffer, (short)ISO7816.OFFSET_CDATA, value, (short)0, (short)abuffer[ISO7816.OFFSET_LC]);
+        Util.arrayCopy(abuffer, (short)ISO7816.OFFSET_CDATA, value, (short)0, (short)(abuffer[ISO7816.OFFSET_LC] & 0xff));
         //@ close valid();
         JCSystem.commitTransaction();
     }

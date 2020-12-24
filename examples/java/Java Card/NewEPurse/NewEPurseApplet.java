@@ -109,7 +109,7 @@ public final class NewEPurseApplet extends Applet {
      */    
 
     public static void install(byte[] bArray, short sOffset, byte bLength)
-        //@ requires system() &*& array_slice(bArray, sOffset, bLength, _);
+        //@ requires system() &*& array_slice(bArray, sOffset, sOffset + bLength, _);
         //@ ensures true;
     {
         new NewEPurseApplet().register(bArray, sOffset, bLength);

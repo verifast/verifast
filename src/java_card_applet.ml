@@ -44,7 +44,7 @@ let () =
   printf "\n";
   printf "class JavaCardAppletTest {\n";
   printf "    static void test(byte[] buffer, short offset, byte length)\n";
-  printf "        //@ requires array_slice(buffer, offset, length, %s) &*& offset + length <= 32768 &*& system() &*& class_init_token(%s.class);\n" arrayValue appletClass;
+  printf "        //@ requires array_slice(buffer, offset, offset + length, %s) &*& offset + length <= 32767 &*& system() &*& class_init_token(%s.class);\n" arrayValue appletClass;
   printf "        //@ ensures true;\n";
   printf "    {\n";
   printf "        %s.install(buffer, offset, length);\n" appletClass;

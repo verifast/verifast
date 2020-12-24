@@ -1871,6 +1871,9 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if definitely_equal istart iend then (* create empty array by default *)
           cont (Some (Chunk ((array_slice_symb, true), [elem_tp], real_unit, [arr; istart; iend; mk_nil()], None)::h))
         else
+          if not (ctxt#query (ctxt#mk_le istart iend)) then
+            cont None
+          else
           extract_slice h
             begin fun coef' istart' iend' ->
               match iend' with
@@ -1993,6 +1996,9 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if definitely_equal istart iend then (* create empty array by default *)
           cont (Some (Chunk ((array_slice_deep_symb, true), [elem_tp; a_tp; v_tp], real_unit, [arr; istart; iend; p; info; mk_nil(); mk_nil()], None)::h))
         else
+          if not (ctxt#query (ctxt#mk_le istart iend)) then
+            cont None
+          else
           extract_slice_deep h
             begin fun coef' istart' iend' ->
               match iend' with

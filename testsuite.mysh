@@ -476,6 +476,7 @@ cd tests
     cd ..
   cd ..
   cd errors
+    verifast -c -allow_should_fail array_slice_autosplit.java
     verifast -c -allow_should_fail array_update.java
     verifast -c -allow_should_fail shift_errors.c
     verifast -c -allow_should_fail ghost_hiding_real.c

@@ -33,7 +33,7 @@ public final class MyApplet extends Applet {
         /*@
         requires
             class_init_token(MyApplet.class) &*&
-            array_slice(array, offset, length, ?values) &*&
+            array_slice(array, offset, offset + length, ?values) &*&
             length_value_record(values, 0, ?oInfo) &*&
             length_value_record(values, oInfo, ?oAppData) &*&
             element(values, oAppData, _) &*&

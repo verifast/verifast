@@ -222,7 +222,7 @@ class Applet {
         //@ ensures true;
     
     public void register(byte[] bArray, short bOffset, byte bLength);
-        //@ requires this.valid() &*& system() &*& array_slice(bArray, bOffset, bLength, _);
+        //@ requires this.valid() &*& system() &*& array_slice(bArray, bOffset, bOffset + bLength, _);
         //@ ensures true;
     
     public boolean select();
@@ -412,8 +412,8 @@ class OwnerPIN {
         //@ ensures [f]OwnerPIN(this, _, _);
     
     public boolean check(byte[] pin, short offset, byte length);
-        //@ requires [?f]OwnerPIN(this, _, _) &*& [?g]array_slice(pin, offset, length, _);
-        //@ ensures [f]OwnerPIN(this, _, _) &*& [g]array_slice(pin, offset, length, _);
+        //@ requires [?f]OwnerPIN(this, _, _) &*& [?g]array_slice(pin, offset, offset + length, _);
+        //@ ensures [f]OwnerPIN(this, _, _) &*& [g]array_slice(pin, offset, offset + length, _);
     
     public byte getTriesRemaining();
         //@ requires [?f]OwnerPIN(this, _, _);

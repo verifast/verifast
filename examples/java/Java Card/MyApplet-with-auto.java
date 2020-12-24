@@ -133,7 +133,7 @@ public final class MyApplet extends Applet {
     //@ predicate valid() = MyApplet_(this, _, _);
 
   private MyApplet(byte[] byaBuffer, short shOffset, byte byLength, byte byMaxNbRecord, byte byMaxSizeRecord)
-    //@ requires system() &*& 0 <= byMaxNbRecord &*& 6 <= byMaxSizeRecord &*& bya_FCI |-> ?fci &*& array_slice(fci, 0, 23, _) &*& fci.length == 23 &*& array_slice(byaBuffer, shOffset, byLength, _);
+    //@ requires system() &*& 0 <= byMaxNbRecord &*& 6 <= byMaxSizeRecord &*& bya_FCI |-> ?fci &*& array_slice(fci, 0, 23, _) &*& fci.length == 23 &*& array_slice(byaBuffer, shOffset, shOffset + byLength, _);
     //@ ensures true;
   {
     by_MaxNbRecord   = byMaxNbRecord;
@@ -164,7 +164,7 @@ public final class MyApplet extends Applet {
       system() &*& class_init_token(MyApplet.class) &*&
       byaBuffer != null &*&
       shOffset >= 0 &*&
-      array_slice(byaBuffer, shOffset, byLength, ?values) &*&
+      array_slice(byaBuffer, shOffset, shOffset + byLength, ?values) &*&
       length_value_record(values, 0, ?privilegesStart) &*&
       length_value_record(values, privilegesStart, ?paramsStart) &*&
       element(values, paramsStart + 1, ?paramsLength) &*&

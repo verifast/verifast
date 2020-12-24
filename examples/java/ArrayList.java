@@ -385,11 +385,19 @@ final class ArrayList<T> implements List<T> {
         //@ ensures List(remove_nth(index, es)) &*& result == nth(index, es);
     {
         T result = elements[index];
-        //@ close array_slice_dynamic(array_slice_Object, elements, index, index + 1, _);
-        //@ assert elements |-> ?e &*& size |-> ?s &*& array_slice(e, index + 1, s, ?elems);
-        //@ close array_slice_dynamic(array_slice_Object, elements, index + 1, size - 1, _);
-        //@ close array_slice_dynamic(array_slice_Object, elements, size - 1, size, _);
-        //@ close arraycopy_pre(array_slice_Object, true, 1, elements, index + 1, size - index - 1, array_slice_Objects(elems), elements, index);
+        /*@
+        if (index + 1 == size) {
+            close array_slice_dynamic(array_slice_Object, elements, index + 1, index + 1, array_slice_Objects(nil));
+            close array_slice_dynamic(array_slice_Object, elements, index, index, array_slice_Objects(nil));
+            close arraycopy_pre(array_slice_Object, false, 1, elements, index + 1, 0, array_slice_Objects(nil), elements, index);
+        } else {
+            close array_slice_dynamic(array_slice_Object, elements, index, index + 1, _);
+            assert elements |-> ?e &*& size |-> ?s &*& array_slice(e, index + 1, s, ?elems);
+            close array_slice_dynamic(array_slice_Object, elements, index + 1, size - 1, _);
+            close array_slice_dynamic(array_slice_Object, elements, size - 1, size, _);
+            close arraycopy_pre(array_slice_Object, true, 1, elements, index + 1, size - index - 1, array_slice_Objects(elems), elements, index);
+        }
+        @*/
         System.arraycopy(elements, index + 1, elements, index, size - index - 1);
         //@ open arraycopy_post(_, _, _, _, _, _, _, _, _);
         //@ open array_slice_dynamic(_, _, _, _, _);

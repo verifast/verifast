@@ -592,7 +592,7 @@ public final class Addressbook extends Applet {
     {
         byte[] abuffer = apdu.getBuffer();
 
-        short filterlength = (short)abuffer[ISO7816.OFFSET_LC];
+        short filterlength = (short)(abuffer[ISO7816.OFFSET_LC] & 0xff);
         if(filterlength > NAME_LENGTH)
             ISOException.throwIt(ISO7816.SW_DATA_INVALID);
 

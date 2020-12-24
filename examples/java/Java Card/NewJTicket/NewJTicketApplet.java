@@ -60,7 +60,7 @@ public final class NewJTicketApplet extends Applet {
      */    
 
     public static void install(byte[] bArray, short sOffset, byte bLength)
-        //@ requires array_slice(bArray, sOffset, bLength, _) &*& system();
+        //@ requires array_slice(bArray, sOffset, sOffset + bLength, _) &*& system();
         //@ ensures true;
     {
         new NewJTicketApplet().register(bArray, sOffset, bLength);
