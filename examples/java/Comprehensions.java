@@ -31,10 +31,20 @@ lemma void take_one_more2<t>(list<t> vs, int i)
   }
 }
 
+fixpoint boolean le(int x, int y) { return x <= y; }
+
 fixpoint boolean forall_le(list<int> vs, int v) {
-  switch(vs) {
-    case nil: return true;
-    case cons(h, t): return v <= h && forall_le(t, v);
+    return forall(vs, (le)(v));
+}
+
+lemma void forall_le_mono(list<int> vs, int v1, int v2)
+  requires forall_le(vs, v1) && v2 <= v1;
+  ensures forall_le(vs, v2) == true;
+{
+  switch (vs) {
+    case nil:
+    case cons(v0, vs0):
+      forall_le_mono(vs0, v1, v2);
   }
 }
 
@@ -344,21 +354,27 @@ class Comprehensions {
   
   public static int indexOfMin(int[] a, int start) 
     //@ requires array_slice(a, start, a.length, ?vs) &*& vs != nil &*& length(vs) != 0;
-    //@ ensures array_slice(a, start, a.length, vs) &*& start <= result &*& result < a.length &*& forall_le(vs, nth(result, vs))== true;
+    //@ ensures array_slice(a, start, a.length, vs) &*& start <= result &*& result < a.length &*& forall_le(vs, nth(result - start, vs)) == true;
   {
     int min = start;
     int j = start;
-    while(j < a.length) 
-      //@ invariant start <= min &*& min < a.length && min <= j &*& j <= a.length &*& array_slice(a, start, a.length, vs) &*& forall_le(take(j - start, vs), nth(min, vs)) == true;
+    while(j < a.length)
+      //@ invariant start <= min &*& min < a.length && min <= j &*& j <= a.length &*& array_slice(a, start, a.length, vs) &*& forall_le(take(j - start, vs), nth(min - start, vs)) == true;
     {
       int tmp = a[j];
       int abc = 0;
       //@ length_drop(j - start, vs);
       int tmp2 = a[min];
       //@ length_drop(min - start, vs);
+      //@ int old_min = min;
       if(tmp < tmp2) {
         min = j;
       }
+      //@ take_one_more(j - start, vs);
+      //@ drop_one_more(vs, j - start);
+      //@ forall_append(take(j - start, vs), {nth(j - start, vs)}, (le)(nth(min - start, vs)));
+      //@ forall_le_mono(take(j - start, vs), nth(old_min - start, vs), nth(min - start, vs));
+      j++;
     }
     return min;
   }

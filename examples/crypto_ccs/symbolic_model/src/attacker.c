@@ -627,5 +627,4 @@ void symbolic_attacker(int attacker_id, struct keypair* keypair)
     }
     network_disconnect(net_stat);
   }
-  //@ leak proof_obligations(pub);
 }

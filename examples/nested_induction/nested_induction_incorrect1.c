@@ -12,7 +12,7 @@ lemma void induction(nat n)
     case succ(n0):
       induction(n0); //~
     case zero:
-  };
+  }
 }
 
 @*/

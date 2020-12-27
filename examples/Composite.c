@@ -18,7 +18,6 @@ int main() //@ : main
   int c = getNbOfNodes(child2);
   assert(c==1);
   abort();
-  return 0;
 }
 
 // client visible definitions - lemma's
@@ -56,12 +55,12 @@ struct Node* addLeft(struct Node* node)
   //@ struct Node* myr = node->right;
   /*@ if(myr != 0){
         open tree(myr, ?rval);
-        close tree(myr, rval);
+        assert false;
       } else {} @*/
   //@ struct Node* myl = node->left;
   /*@ if(myl != 0){
         open tree(myl, ?rval);
-        close tree(myl, rval);
+        assert false;
       } else {} @*/
   struct Node* newChild = internalAddLeft(node);
   //@ open tree(newChild, ?childVal);
@@ -361,7 +360,6 @@ lemma void treeUniqueNodes(struct Node *root)
   open tree(root, t);
   switch (t) {
     case Nil:
-      return;
     case tree(r, lhs, rhs):
       struct Node *left = root->left;
       struct Node *right = root->right;
@@ -416,7 +414,6 @@ lemma void treeContextDisjoint(struct Node* n, struct Node* c)
   open tree(n, t);
   switch(t) {
     case Nil: 
-      return;
     case tree(r, lhs, rhs):
       struct Node* left = r->left;
       struct Node* right = r->right;
@@ -474,7 +471,7 @@ lemma void tree2context(struct Node* root, struct Node* n, tree value, struct No
           getroot(upsideDownMinus(value, n, cvalue), n) == oroot;
 {
   switch(value) {
-    case Nil: return;
+    case Nil:
     case tree(root2, lhs, rhs): 
       if(root == n) {
         open tree(root, value);
@@ -732,14 +729,11 @@ lemma void upsideDownMinusRContext(tree t0, struct Node * tr, tree t, struct Nod
         switch (tlhs) {
           case Nil:
           case tree(rtlhs, tlhslhs, tlhsrhs):
-            if (rtlhs == n) {
-              valueOfValueOf(t0, tr, t, rtlhs);
-            } else {
-              containsValueOf(t0, tr, tree(tr, tlhs, trhs), rtlhs);
-              valueOfValueOf(t0, tr, tree(tr, tlhs, trhs), rtlhs);
-              uniqueNodesValueOf(t0, tr);
-              upsideDownMinusRContext(t0, rtlhs, tlhs, n, nlhs, nrhs, lcontext(tr, con, trhs), r, rcon, lhs);
-            }
+            assert rtlhs != n;
+            containsValueOf(t0, tr, tree(tr, tlhs, trhs), rtlhs);
+            valueOfValueOf(t0, tr, tree(tr, tlhs, trhs), rtlhs);
+            uniqueNodesValueOf(t0, tr);
+            upsideDownMinusRContext(t0, rtlhs, tlhs, n, nlhs, nrhs, lcontext(tr, con, trhs), r, rcon, lhs);
         }
       } else {
         switch (trhs) {
@@ -833,7 +827,7 @@ lemma void context2tree(struct Node* theroot, struct Node* node, context context
   switch(contextval) {
     case Root: 
       switch(oldval){
-        case Nil: return;
+        case Nil:
         case tree(r, lhs, rhs): 
           upsideDownMinusIsRoot(r, lhs, rhs, node, Root);
       }
@@ -848,7 +842,7 @@ lemma void context2tree(struct Node* theroot, struct Node* node, context context
           valueOfRoot(oldval, node, node0, nodeLhs, nodeRhs);
           close tree(nodeParent, tree(nodeParent, v, rhs));
           switch(oldval){
-            case Nil: return;
+            case Nil:
             case tree(oldvalroot, oldvallhs, oldvalrhs):
               upsideDownMinusLContext(oldval, oldvalroot, oldval, node, nodeLhs, nodeRhs, Root, nodeParent, lcon, rhs);
               uniqueNodesValueOf(oldval, nodeParent);
@@ -867,7 +861,7 @@ lemma void context2tree(struct Node* theroot, struct Node* node, context context
           valueOfRoot(oldval, node, node0, nodeLhs, nodeRhs);
           close tree(nodeParent, tree(nodeParent, lhs, v));
           switch(oldval){
-            case Nil: return;
+            case Nil:
             case tree(oldvalroot, oldvallhs, oldvalrhs):
               upsideDownMinusRContext(oldval, oldvalroot, oldval, node, nodeLhs, nodeRhs, Root, nodeParent, rcon, lhs);
               uniqueNodesValueOf(oldval, nodeParent);
@@ -884,7 +878,7 @@ lemma void containsReplace(tree t, struct Node* node, tree plug)
   ensures contains(replace(t, node, plug), node)==true;
 {
   switch(t) {
-    case Nil: return;
+    case Nil:
     case tree(r, lhs, rhs):
       if(r==node){     
       } else {

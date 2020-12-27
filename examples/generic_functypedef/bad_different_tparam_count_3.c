@@ -25,6 +25,10 @@ void call_function_that_accepts_fun_t()
 //@ requires pred<int>(nil);
 //@ ensures pred<int>(nil);
 {
-	//@ produce_function_pointer_chunk fun_t<int, int>(fun)()() { call(); } //~ should-fail
-	accept_fun_t_int(fun);
+	/*@
+	produce_function_pointer_chunk fun_t<int, int>(fun)()() { //~ should-fail
+		//call();
+	}
+	@*/
+	//accept_fun_t_int(fun);
 }

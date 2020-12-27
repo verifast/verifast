@@ -13,7 +13,7 @@ ensures something();
   open mypredicate();
   open mypredicate2();
   open mycopredicate(); //~ should fail
-  wrong_coinduction(); 
+  //wrong_coinduction(); 
 }
 
 @*/

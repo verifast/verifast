@@ -10,5 +10,5 @@ int main()
         #ifndef SOME_MACRO
                 *ptr = 0; //~
         #endif
-        return 0;
+        return 0; //~allow_dead_code
 }

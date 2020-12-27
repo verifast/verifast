@@ -248,11 +248,8 @@ void thread1(struct data *d) //@ : thread_run_joinable
             open my_barrier_inv(d)(k, true);
             d->inside1 = false;
             d->phase1 = writing_y;
-            if (k == 1) {
-                close my_barrier_inv(d)(0, false);
-            } else {
-                close my_barrier_inv(d)(k - 1, true);
-            }
+            assert k == 1;
+            close my_barrier_inv(d)(0, false);
             close barrier_exiting(bexit)(n, inv);
         }
         @*/
@@ -315,11 +312,8 @@ void thread1(struct data *d) //@ : thread_run_joinable
                 open my_barrier_inv(d)(k, true);
                 d->inside1 = false;
                 d->phase1 = writing_x;
-                if (k == 1) {
-                    close my_barrier_inv(d)(0, false);
-                } else {
-                    close my_barrier_inv(d)(k - 1, true);
-                }
+                assert k == 1;
+                close my_barrier_inv(d)(0, false);
                 close barrier_exiting(bexit)(n, inv);
             }
             @*/
@@ -376,11 +370,8 @@ void thread1(struct data *d) //@ : thread_run_joinable
                 open my_barrier_inv(d)(k, true);
                 d->inside1 = false;
                 d->phase1 = writing_y;
-                if (k == 1) {
-                    close my_barrier_inv(d)(0, false);
-                } else {
-                    close my_barrier_inv(d)(k - 1, true);
-                }
+                assert k == 1;
+                close my_barrier_inv(d)(0, false);
                 close barrier_exiting(bexit)(n, inv);
             }
             @*/
@@ -433,11 +424,8 @@ void thread1(struct data *d) //@ : thread_run_joinable
             open my_barrier_inv(d)(k, true);
             d->inside1 = false;
             d->phase1 = writing_x;
-            if (k == 1) {
-                close my_barrier_inv(d)(0, false);
-            } else {
-                close my_barrier_inv(d)(k - 1, true);
-            }
+            assert k == 1;
+            close my_barrier_inv(d)(0, false);
             close barrier_exiting(bexit)(n, inv);
         }
         @*/
@@ -511,11 +499,8 @@ void thread2(struct data *d) //@ : thread_run_joinable
             open my_barrier_inv(d)(k, true);
             d->inside2 = false;
             d->phase2 = writing_y;
-            if (k == 1) {
-                close my_barrier_inv(d)(0, false);
-            } else {
-                close my_barrier_inv(d)(k - 1, true);
-            }
+            assert k == 1;
+            close my_barrier_inv(d)(0, false);
             close barrier_exiting(bexit)(n, inv);
         }
         @*/
@@ -578,11 +563,8 @@ void thread2(struct data *d) //@ : thread_run_joinable
                 open my_barrier_inv(d)(k, true);
                 d->inside2 = false;
                 d->phase2 = writing_x;
-                if (k == 1) {
-                    close my_barrier_inv(d)(0, false);
-                } else {
-                    close my_barrier_inv(d)(k - 1, true);
-                }
+                assert k == 1;
+                close my_barrier_inv(d)(0, false);
                 close barrier_exiting(bexit)(n, inv);
             }
             @*/
@@ -637,11 +619,8 @@ void thread2(struct data *d) //@ : thread_run_joinable
                 open my_barrier_inv(d)(k, true);
                 d->inside2 = false;
                 d->phase2 = writing_y;
-                if (k == 1) {
-                    close my_barrier_inv(d)(0, false);
-                } else {
-                    close my_barrier_inv(d)(k - 1, true);
-                }
+                assert k == 1;
+                close my_barrier_inv(d)(0, false);
                 close barrier_exiting(bexit)(n, inv);
             }
             @*/
@@ -695,11 +674,8 @@ void thread2(struct data *d) //@ : thread_run_joinable
             open my_barrier_inv(d)(k, true);
             d->inside2 = false;
             d->phase2 = writing_x;
-            if (k == 1) {
-                close my_barrier_inv(d)(0, false);
-            } else {
-                close my_barrier_inv(d)(k - 1, true);
-            }
+            assert k == 1;
+            close my_barrier_inv(d)(0, false);
             close barrier_exiting(bexit)(n, inv);
         }
         @*/

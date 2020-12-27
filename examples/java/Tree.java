@@ -300,40 +300,34 @@ public class Tree{
 	//@ requires tree(this,?b);
 	//@ ensures tree(this,b) &*& result==t_contains(b,x);
 	{
-		if(this==null){
-			//@ open tree(this,b);
-			//@ close tree(this,tnil);
-			return false;
+		//@ open tree(this,b);
+		int v=this.value;
+		Tree l=this.left;
+		Tree r=this.right;
+		if(v==x){
+			//@close tree(this,b);
+			return true;
 		}else{
-			//@ open tree(this,b);
-			int v=this.value;
-			Tree l=this.left;
-			Tree r=this.right;
-			if(v==x){
-				//@close tree(this,b);
-				return true;
-			}else{
-				if(x < v){
-					boolean temp1=false;
-					if(l != null) {
-					  temp1 = l.contains(x);
-					} else {
-					  //@ open tree(l, ?lv);
-					  //@ close tree(l, lv);
-					}
-					//@close tree(this,b);
-					return temp1;
-				}else{
-					boolean temp2=false;
-					if(r != null) {
-					  temp2 = r.contains(x);
-					} else {
-					  //@ open tree(r, ?rv);
-					  //@ close tree(r, rv);
-					}
-					//@close tree(this,b);
-					return temp2;
+			if(x < v){
+				boolean temp1=false;
+				if(l != null) {
+				  temp1 = l.contains(x);
+				} else {
+				  //@ open tree(l, ?lv);
+				  //@ close tree(l, lv);
 				}
+				//@close tree(this,b);
+				return temp1;
+			}else{
+				boolean temp2=false;
+				if(r != null) {
+				  temp2 = r.contains(x);
+				} else {
+				  //@ open tree(r, ?rv);
+				  //@ close tree(r, rv);
+				}
+				//@close tree(this,b);
+				return temp2;
 			}
 		}
 	}
@@ -448,8 +442,9 @@ public class Tree{
 				return this;
 			}
 		}
+		//@ assert false;
 		//this return statement is necessary because javac can't tell that this code will never be reached
-		return null;
+		return null; //~allow_dead_code
 	}
 	public static void main(String[]  args)
 	//@ requires true;

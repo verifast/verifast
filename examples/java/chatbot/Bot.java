@@ -24,11 +24,12 @@ public class Bot {
         w.write("BoT\r\n");
         w.flush();
         
-        boolean stop = false;
-        while (!stop)
+        while (true)
             //@ invariant r.Reader() &*& w.Writer();
         {
             String line = r.readLine();
+            if (line == null)
+                break;
             int index = line.indexOf(" says: ");
             if (index > -1) {
                 String nick = line.substring(0, index);
@@ -47,7 +48,7 @@ public class Bot {
                         if (isQuit) {
                             w.write("Byebye!\r\n");
                             w.flush();
-                            stop = true;
+                            break;
                         }
                     }
                 }
@@ -55,12 +56,12 @@ public class Bot {
         }
         
         s.shutdownOutput();
-        stop = false;
-        while (!stop)
+        while (true)
             //@ invariant r.Reader();
         {
             String line = r.readLine();
-            if (line == null) stop = true;
+            if (line == null)
+                break;
         }
         
         //@ r.destroy();

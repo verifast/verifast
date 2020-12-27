@@ -8,7 +8,6 @@ lemma void length_zero_eq_nil<t>(list<t> xs)
      switch (xs) {
          case nil:
          case cons(x0, xs0):
-             length_nonnegative(xs0);
              assert false;
      }
 }

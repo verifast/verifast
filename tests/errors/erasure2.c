@@ -18,6 +18,10 @@ lemma_auto void unit_eq(unit x, unit y) //~ should_fail
     }
 }
 
+@*/
+
+/*
+
 inductive foo = foo1 | foo2;
 
 lemma void eq_trans(bool b1, bool b2)
@@ -26,8 +30,6 @@ lemma void eq_trans(bool b1, bool b2)
 {
 }
 
-@*/
-
 int main()
     //@ requires true;
     //@ ensures false;
@@ -35,3 +37,5 @@ int main()
     //@ eq_trans(eq(unit, foo1, foo2), foo1 == foo2);
     assert(false);
 }
+
+*/

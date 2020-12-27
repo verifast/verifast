@@ -326,11 +326,8 @@ lemma void strong_ghost_list_nonmember_split(box id, list<int> l1, list<int> l2)
       int ex = not_forall(l1, (ok)(xs, update_owners(owners, l1, new_owner), new_owner));
       forall_elim(nonmembers, (ok)(xs, owners, old_owner), ex);
       mem_distinct_append(l1, l2, ex);
-      if(mem(ex, l2)) {
-        update_owners_preserves_other_values(owners, l1, new_owner, ex);
-      } else {
-        update_owners_sets_values(owners, l1, new_owner, ex);
-      }
+      assert !mem(ex, l2);
+      update_owners_sets_values(owners, l1, new_owner, ex);
     }
     if(! forall(l2, (ok)(xs, update_owners(owners, l1, new_owner), old_owner))) {
       int ex = not_forall(l2, (ok)(xs, update_owners(owners, l1, new_owner), old_owner));

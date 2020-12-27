@@ -760,16 +760,29 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
           ghost_range_start := Some !token_srcpos;
           reportRange GhostRangeDelimiter (current_loc());
           Some (Kwd "/*@")
-        | '~' -> text_junk (); reportShouldFail (current_loc()); multiline_comment ()
+        | '~' -> text_junk (); directive (); multiline_comment ()
         | _ -> multiline_comment ()
       )
     | '=' ->
       text_junk();
       Some (keyword_or_error "/=")
     | _ -> Some (keyword_or_error "/")
+  and directive () =
+    let directive = Buffer.create 20 in
+    let loc = current_loc () in
+    let rec iter () =
+      match text_peek () with
+        'a'..'z'|'_' as c ->
+        text_junk ();
+        Buffer.add_char directive c;
+        iter ()
+      | _ ->
+        reportShouldFail (Buffer.contents directive) loc
+    in
+    iter ()
   and single_line_comment () =
     match text_peek () with
-      '~' -> text_junk (); reportShouldFail (current_loc()); single_line_comment_rest ()
+      '~' -> text_junk (); directive (); single_line_comment_rest ()
     | _ -> single_line_comment_rest ()
   and single_line_comment_rest () =
     match text_peek () with

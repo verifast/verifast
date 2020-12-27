@@ -136,6 +136,7 @@ int main() //@ : main
 //@ ensures true;
 {
 	int x = sizeof(struct two_and_a_half_gb); //~ should-fail
+	/*
 	if (x < 0){
 		// When ignoring signedness or typing sizeof wrongly,
 		// VeriFast would allow this program while the program crashes.
@@ -143,4 +144,5 @@ int main() //@ : main
 		*evil = 0;
 	}
 	return 0;
+	*/
 }

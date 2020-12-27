@@ -317,7 +317,6 @@ double double_sub_upper_bound(struct interval first, struct interval second)
         if (is_real_double(sa) == true) {
             real_double_lemma(sa);
     	} else {}
-    } else if (fp_of_double(fb) == neg_inf){
     } else {}
     @*/
     //@ assert leq_real_double(x1 - x2, fp_of_double(rb)) == true;
@@ -363,7 +362,6 @@ double double_mult_lower_bound(struct interval first, struct interval second)
     
     double l = first.a * second.a;
     double ra;
-    if (isnan(l)){l = 0;}
     if (l == 0) {
         ra = 0;
     } else {
@@ -419,13 +417,10 @@ double double_mult_lower_bound(struct interval first, struct interval second)
                                 prev_round_up_lemma(rfa * rsa, prev_double(round_up_double(rfa * rsa)));
                                 assert rra <= rfa * rsa;
                                 assert rfa * rsa > 0;
-                                if (rl == 0){
-                                    assert rra == 0;
-                                } else {
-                                    assert rl > 0;
-                                    prev_double_zero_lemma(rl);
-                                    assert rra >= 0;
-                                }
+                                assert rl != 0;
+                                assert rl > 0;
+                                prev_double_zero_lemma(rl);
+                                assert rra >= 0;
                             }
                         }
                         
@@ -608,7 +603,6 @@ double double_div_lower_bound(struct interval first, struct interval second)
                assert rsb > 0;
                assert x2 != 0;
                if (x2 < 0){
-                   assert fp_of_double(sa) == real_double(?rsa);
                    assert false;
                } //neccesary to prove next line
                assert x2 > 0;
@@ -701,14 +695,15 @@ double double_div_upper_bound(struct interval first, struct interval second)
         //@ assert x2 > 0;
         //@ real_div_lemma(x1,x2,real_div(x1,x2));
         //@ assert 0 == x2 * real_div(x1, x2);
-        /*@
+        //@ assert 0 == real_div(x1, x2);
+        /*
         if (real_div(x1, x2) > 0) {
             cancellation_lemma2(x2, 0, real_div(x1, x2));
         } else if (real_div(x1, x2) < 0) {
             cancellation_lemma2(x2, real_div(x1, x2), 0);
         } else {
         }
-        @*/
+        */
         //@ assert real_div(x1,x2) == 0;
         //@ assert leq_real_double(real_div(x1, x2), fp_of_double(rb)) == true;
     } else {
@@ -723,8 +718,8 @@ double double_div_upper_bound(struct interval first, struct interval second)
             } else if (fp_of_double(u) == neg_inf){
                 assert rsa > 0;
                 real_div_lemma(rfb,rsa,real_div(rfb,rsa));
-                assert rfb == rsa * real_div(rfb, rsa);
-                cancellation_lemma2(rsa, real_div(rfb, rsa), 0);
+                //assert rfb == rsa * real_div(rfb, rsa);
+                //cancellation_lemma2(rsa, real_div(rfb, rsa), 0);
                 assert false;
             } else {
                 assert fp_of_double(u) == real_double(?ru);
@@ -734,7 +729,7 @@ double double_div_upper_bound(struct interval first, struct interval second)
                     assert fp_of_double(rb) == real_double(?rrb);
                     real_div_lemma(rfb,rsa,real_div(rfb,rsa));
                     if (real_div(rfb, rsa) < min_dbl) {
-                        cancellation_lemma2(rsa, real_div(rfb, rsa), 0);
+                        //cancellation_lemma2(rsa, real_div(rfb, rsa), 0);
                         assert false;
                     }
                     assert ru >= round_down_double(real_div(rfb,rsa));

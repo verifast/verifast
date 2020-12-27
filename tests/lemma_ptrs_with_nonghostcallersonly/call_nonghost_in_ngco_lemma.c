@@ -38,11 +38,11 @@ lemma void test()
                 {
                     normal_lemma(); // can call preceding lemmas.
                     nonghost_only_lemma();  //~  <-- must fail
-                    call();
-                    normal_lemma();
+                    //call();
+                    //normal_lemma();
                 }
                 {
-                    nonghost_only_lemma();
+                    //nonghost_only_lemma();
                 }
     
   }

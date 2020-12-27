@@ -164,10 +164,6 @@ lemma void item_constraints_deterministic(list<crypto_char> ccs1,
             append_take_drop_n(cont1, GCM_IV_SIZE);
             append_take_drop_n(cont2, GCM_IV_SIZE);
             item_constraints_deterministic(ccs_pay1, ccs_pay2, pay);
-            assert ccs_pay1 == ccs_pay2;
-            assert cg_ccs1 == ccs_for_cg(cg1);
-            assert cg_ccs2 == ccs_for_cg(cg2);
-            ccs_for_cg_inj(cg1, cg2);
             assert false;
           }
         case none:
@@ -647,7 +643,7 @@ void ic_check_equal(char* cont1, int size1, char* cont2, int size2)
              tag1 != TAG_HMAC &&         tag1 != TAG_ASYMMETRIC_ENC &&
              tag1 != TAG_ASYMMETRIC_SIG)
     {
-      abort_crypto_lib("Found illegal tag while checking item equality");
+      abort_crypto_lib("Found illegal tag while checking item equality"); //~allow_dead_code
     }
     //@ if (tag1 == TAG_HASH)           cg_tag = tag_hash;
     //@ if (tag1 == TAG_SYMMETRIC_KEY)  cg_tag = tag_symmetric_key;

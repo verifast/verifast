@@ -39,12 +39,14 @@ lemma void lemma2()
 {
   produce_lemma_function_pointer_chunk(lemma1) : evil_lemma()(){
     duplicate_lemma_function_pointer_chunk(evil_lemma); //~  <-- should fail
-    call();
+    //call();
   }{
+    /*
     assert is_evil_lemma(?proof);
     duplicate_lemma_function_pointer_chunk(evil_lemma);
     proof();
-  };
+    */
+  }
 }
 
 

@@ -18,5 +18,5 @@ void accept_fun_t_int(fun_t *fun_t_arg)
 //@ requires [_]is_fun_t<int>(fun_t_arg) &*& pred<int>(nil); //~ should-fail
 //@ ensures pred<int>(nil);
 {
-	fun_t_arg();
+	//fun_t_arg();
 }

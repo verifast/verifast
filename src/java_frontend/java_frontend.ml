@@ -101,7 +101,7 @@ let asts_from_java_files_core files cfiles opts report_should_fail annotaton_cha
             frontend_error NoSource  
               ("Received an incomprehensible error message from the ASTServer: \n" ^ (String.concat "\n" !response));
           let l = Ast_reader.parse_line_with Ast_reader.parse_loc (List.hd !response) in
-          report_should_fail l
+          report_should_fail "" l
         end
       else
         begin

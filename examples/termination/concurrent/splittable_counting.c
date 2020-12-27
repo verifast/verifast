@@ -300,8 +300,6 @@ lemma void destroy_counting_handle_helper(list<pair<real, int> > handles)
         case nil:
         case cons(h, hs):
             destroy_counting_handle_helper(hs);
-            assert real_sum(map(fst, handles)) < 0;
-            real_lt_trans(0, real_sum(map(fst, handles)), 0);
             assert false;
     }
 }

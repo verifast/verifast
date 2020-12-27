@@ -14,10 +14,11 @@ type callbacks = {
   reportUseSite: decl_kind -> loc0 -> loc0 -> unit;
   reportExecutionForest: node list ref -> unit;
   reportStmt: loc0 -> unit;
-  reportStmtExec: loc0 -> unit
+  reportStmtExec: loc0 -> unit;
+  reportDirective: string -> loc0 -> bool;
 }
 
-let noop_callbacks = {reportRange = (fun _ _ -> ()); reportUseSite = (fun _ _ _ -> ()); reportExecutionForest = (fun _ -> ()); reportStmt = (fun _ -> ()); reportStmtExec = (fun _ -> ())}
+let noop_callbacks = {reportRange = (fun _ _ -> ()); reportUseSite = (fun _ _ _ -> ()); reportExecutionForest = (fun _ -> ()); reportStmt = (fun _ -> ()); reportStmtExec = (fun _ -> ()); reportDirective = (fun _ _ -> false)}
 
 module type VERIFY_PROGRAM_ARGS = sig
   val emitter_callback: package list -> unit
@@ -52,10 +53,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     option_use_java_frontend=use_java_frontend;
     option_enforce_annotations=enforce_annotations;
     option_allow_undeclared_struct_types;
-    option_data_model=data_model
+    option_data_model=data_model;
+    option_report_skipped_stmts=report_skipped_stmts;
   } = options
 
-  let {reportRange; reportUseSite; reportExecutionForest; reportStmt; reportStmtExec} = callbacks
+  let {reportRange; reportUseSite; reportExecutionForest; reportStmt; reportStmtExec; reportDirective} = callbacks
 
   let reportUseSite dk ld lu =
     if ld <> DummyLoc && lu <> DummyLoc then
@@ -483,11 +485,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let shouldFailLocs: loc0 list ref = ref []
   
   (* Callback function called from the lexer. *)
-  let reportShouldFail l =
-    if allow_should_fail then
-      shouldFailLocs := l::!shouldFailLocs
-    else
-      static_error (Lexed l) "Should fail directives are not allowed; use the -allow_should_fail command-line option to allow them." None
+  let reportShouldFail directive l =
+    if not (reportDirective directive l) then
+      if allow_should_fail then
+        shouldFailLocs := l::!shouldFailLocs
+      else
+        static_error (Lexed l) "Should fail directives are not allowed; use the -allow_should_fail command-line option to allow them." None
 
   let check_should_fail default body =
     let locs_match ((path0, line0, _), _) ((path1, line1, _), _) = path0 = path1 && line0 = line1 in

@@ -19,8 +19,6 @@ void *attacker_t(void* data) //@ : pthread_run_joinable
     //@ open sign_proof_pred();
     //@ close pthread_run_pre(attacker_t)(data, info);
   }
-   
-  return 0;
 }
 
 struct sign_args
@@ -255,8 +253,9 @@ int main(int argc, char **argv) //@ : main_full(main_app)
     //@ assert chars(pub_key, 8 * KEY_SIZE, _);
     free((void*) pub_key);
   }
-  
+#ifdef EXECUTE
   printf("\n\n\t\tDone\n");
   return 0;
+#endif
 }
 

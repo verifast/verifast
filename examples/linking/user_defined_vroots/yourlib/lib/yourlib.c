@@ -7,7 +7,6 @@ lemma void length_not_zero_not_nil<t>(list<t> xs)
 {
      switch (xs) {
          case nil:
-           length_nonnegative(xs0);
            assert false;
          case cons(x0, xs0):
      }

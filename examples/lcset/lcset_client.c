@@ -133,8 +133,6 @@ lemma void forall_ge_add_sorted(list<int> xs, int u1, int u2)
         case cons(h, t):
             if (h < u2) {
                 forall_ge_add_sorted(t, u1, u2);
-            } else if (h == u2) {
-            } else if (h > u2) {
             }
     }
 }

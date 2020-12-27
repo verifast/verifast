@@ -229,14 +229,6 @@ int ring_buffer_pop(struct ring_buffer *ring_buffer)
 		close ints(fields + take_at, 1, cons(elem, nil)); // array size one
 		if (is_split_up_fp(size, first, len)){
 			ints_join(ring_buffer->fields + bigtail_size(size, first, len));
-			if ( ! is_split_up_fp(size, newfirst, len-1)){
-				// convert to non-split up data structure
-			
-				// zero-size leading emptyness
-				close array<int>(fields, 0, sizeof(int), integer, nil);
-				assert bighead_size(size, first, len) == 1;
-				//assert false;
-			}
 		}else{
 			// Make trailing emptyness a bit larger
 			assert ints(fields + first + len, size - first - len, ?trailing_emptyness_data);

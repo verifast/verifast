@@ -44,7 +44,7 @@ struct item *create_hash(struct item *payload)
   write_tag(hash->content, TAG_HASH);
 
   if (payload->size < MINIMAL_STRING_SIZE)
-    {abort_crypto_lib("Payload of hash was to small");}
+    {abort_crypto_lib("Payload of hash was to small");} //~allow_dead_code
   sha512(payload->content, (unsigned int) payload->size, hash->content + TAG_LENGTH, 0);
 
   //@ open [f0]world(pub, key_clsfy);

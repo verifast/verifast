@@ -41,9 +41,9 @@ void test_goto()
 {
   goto end;
   {
-    int x = 5;
-    int *p = &x;
-    abort();
+    int x = 5; //~allow_dead_code
+    int *p = &x; //~allow_dead_code
+    abort(); //~allow_dead_code
   }
   end:
 }

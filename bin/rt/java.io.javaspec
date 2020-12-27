@@ -60,7 +60,7 @@ public class BufferedReader implements Reader {
     
     public String readLine();
         //@ requires Reader();
-        //@ ensures Reader() &*& result != null;
+        //@ ensures Reader();
     
     /*@
     

@@ -15,6 +15,4 @@ int main(int argc, char **argv) //@ : main
     gui_widget_show(window);
        
     gui_main();
-    
-    return 0;
 }

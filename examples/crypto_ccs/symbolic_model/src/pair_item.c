@@ -163,7 +163,7 @@ void pair_get_components(struct item* pair,
   //@ assert crypto_chars(secret, temp + TAG_LENGTH, size - TAG_LENGTH, ccs_cont);
   temp = temp + TAG_LENGTH;
   if (pair->size <= TAG_LENGTH + (int) sizeof(int))
-    abort_crypto_lib("Found corrupted pair item 1");
+    abort_crypto_lib("Found corrupted pair item 1"); //~allow_dead_code
 
   //@ open [f]world(pub, key_clsfy);
   //@ crypto_chars_split(temp, sizeof(int));
@@ -193,7 +193,7 @@ void pair_get_components(struct item* pair,
   //@ assert ccs_p == append(ccs_f, ccs_s);
   first->content = malloc_wrapper(first->size);
   if (first->size <= MINIMAL_STRING_SIZE)
-    abort_crypto_lib("Found corrupted pair item 3");
+    abort_crypto_lib("Found corrupted pair item 3"); //~allow_dead_code
   //@ chars_to_crypto_chars(first->content, first->size);
   memcpy(first->content, temp, (unsigned int) first->size);
   temp = temp + first->size;

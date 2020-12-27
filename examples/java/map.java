@@ -78,8 +78,7 @@ class Nil implements List {
         //@ ensures List(Nil.class)(this, xs) &*& result == head(xs);
     {
         //@ open List(Nil.class)(this, xs);
-        //@ close List(Nil.class)(this, xs);
-        return 0;
+        return 0; //~allow_dead_code
     }
     
     List tail()
@@ -87,8 +86,7 @@ class Nil implements List {
         //@ ensures List(Nil.class)(this, xs) &*& result != null &*& List(result.getClass())(result, tail(xs));
     {
         //@ open List(Nil.class)(this, xs);
-        //@ close List(Nil.class)(this, xs);
-        return null;
+        return null; //~allow_dead_code
     }
     
     List map(MapFunc f)

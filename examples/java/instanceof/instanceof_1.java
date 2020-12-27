@@ -31,35 +31,35 @@ class main{
     if (x instanceof C){
       if(x instanceof B){
         //@ assert false;
-        tst.StringRep();
+        //tst.StringRep();
       }
     }
     if (x instanceof E){
       if (!(x instanceof C)){
         //@ assert false;
-        tst.StringRep();
+        //tst.StringRep();
       }
       if (!(x instanceof iA)){
         //@ assert false;
-        tst.StringRep();
+        //tst.StringRep();
       }
     }
     B u = new B();
     if (!(u instanceof iX)){
        //@ assert false;
-       u.intRep();
+       //u.intRep();
     }
     //@produce_instanceof(x);
     if(!(x instanceof iA)){
       //@ assert false;
-      x.intRep();
+      //x.intRep();
     }
     //@ A w = y;
     //@produce_instanceof(w);
     /*@
     if(!(w instanceof iA)){
       assert false;
-      y.intRep();
+      //y.intRep();
     } @*/
   }
 }

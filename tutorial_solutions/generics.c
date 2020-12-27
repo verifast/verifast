@@ -111,5 +111,4 @@ int main()
     stack_push(s, p2);
     stack_reverse(s);
     abort();
-    return 0;
 }

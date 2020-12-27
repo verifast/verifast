@@ -4,7 +4,7 @@ void should_terminate() //~ should_fail
     //@ requires true;
     //@ ensures true;
 {
-    for (;;)
+    for (;;) //~allow_dead_code
         //@ invariant true;
     {
     }

@@ -19,6 +19,5 @@ int main()
     //@ ensures true;
 {
     int x = int_add(2000000000, 2000000000);
-    assert(0 <= x);
-    return 0;
+    assert false;
 }

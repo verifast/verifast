@@ -114,5 +114,5 @@ int main() //@: main
   //@ open thread_run_post(consumer)(q, _);
   // TODO: dispose queue (not possible yet because sequence from initial to head is not reachable anymore)
   //@ assume(false);
-  return 0;
+  return 0; //~allow_dead_code
 }

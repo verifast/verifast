@@ -5,28 +5,65 @@ open Verifast0
 open Verifast
 open Arg
 
+module HashedLoc = struct
+  type t = loc0
+  let equal l1 l2 = l1 == l2
+  let hash ((path, line, col), _) = line
+end
+module LocHashtbl = Hashtbl.Make(HashedLoc)
+
+module HashedLine = struct
+  type t = string * int
+  let equal (p1, l1) (p2, l2) = p1 == p2 && l1 = l2
+  let hash (path, line) = line
+end
+module LineHashtbl = Hashtbl.Make(HashedLine)
+
 let _ =
   let print_msg l msg =
     print_endline (string_of_loc l ^ ": " ^ msg)
   in
-  let verify ?(emitter_callback = fun _ -> ()) (print_stats : bool) (options : options) (prover : string) (path : string) (emitHighlightedSourceFiles : bool) (dumpPerLineStmtExecCounts : bool) =
+  let verify ?(emitter_callback = fun _ -> ()) (print_stats : bool) (options : options) (prover : string) (path : string) (emitHighlightedSourceFiles : bool) (dumpPerLineStmtExecCounts : bool) allowDeadCode =
     let verify range_callback =
     let exit l =
       Java_frontend_bridge.unload();
       exit l
     in
     try
+      let allowDeadCodeLines = LineHashtbl.create 10 in
+      let reportStmt, reportStmtExec, reportDeadCode =
+        if allowDeadCode then
+          (fun _ -> ()), (fun _ -> ()), (fun _ -> ())
+        else
+          let stmtLocs = LocHashtbl.create 10000 in
+          let reportStmt l = LocHashtbl.replace stmtLocs l () in
+          let reportStmtExec l = LocHashtbl.remove stmtLocs l in
+          let reportDeadCode () =
+            stmtLocs |> LocHashtbl.filter_map_inplace begin fun ((path, line, _), _) () ->
+              if LineHashtbl.mem allowDeadCodeLines (path, line) then None else Some ()
+            end;
+            if LocHashtbl.length stmtLocs > 0 then begin
+              stmtLocs |> LocHashtbl.iter begin fun l () ->
+                Printf.printf "%s: dead code\n" (string_of_loc0 l)
+              end;
+              exit 1
+            end
+          in
+          reportStmt, reportStmtExec, reportDeadCode
+      in
       let reportStmt, reportStmtExec, dumpPerLineStmtExecCounts =
         if dumpPerLineStmtExecCounts then
           let hasStmts = Array.make 10000 false in
           let counts = Array.make 10000 0 in
           let reportStmt l =
+            reportStmt l;
             let ((lpath, line, col), _) = l in
             let line = line - 1 in
             if lpath == path then
               hasStmts.(line) <- true
           in
           let reportStmtExec l =
+            reportStmtExec l;
             let ((lpath, line, col), _) = l in
             let line = line - 1 in
             if lpath == path then
@@ -49,10 +86,20 @@ let _ =
           in
           reportStmt, reportStmtExec, dumpPerLineStmtExecCounts
         else
-          (fun _ -> ()), (fun _ -> ()), (fun _ -> ())
+          reportStmt, reportStmtExec, (fun _ -> ())
       in
-      let callbacks = {Verifast1.noop_callbacks with reportRange=range_callback; reportStmt; reportStmtExec} in
+      let reportDirective directive l =
+        match directive with
+          "allow_dead_code" ->
+          let ((path, line, _), _) = l in
+          LineHashtbl.add allowDeadCodeLines (path, line) ();
+          true
+        | _ ->
+          false
+      in
+      let callbacks = {Verifast1.noop_callbacks with reportRange=range_callback; reportStmt; reportStmtExec; reportDirective} in
       let stats = verify_program ~emitter_callback:emitter_callback prover options path callbacks None None in
+      reportDeadCode ();
       dumpPerLineStmtExecCounts ();
       if print_stats then stats#printStats;
       print_endline ("0 errors found (" ^ (string_of_int (stats#getStmtExec)) ^ " statements verified)");
@@ -193,6 +240,7 @@ let _ =
   let dllManifestName = ref None in
   let emitHighlightedSourceFiles = ref false in
   let dumpPerLineStmtExecCounts = ref false in
+  let allowDeadCode = ref false in
   let exports: string list ref = ref [] in
   let outputSExpressions : string option ref = ref None in
   let runtime: string option ref = ref None in
@@ -243,6 +291,7 @@ let _ =
             ; "-vroot", String (fun str -> add_vroot str), "Add a virtual root for include paths and, creating or linking vfmanifest files (e.g. MYLIB=../../lib). Ill-formed roots are ignored."
             ; "-emit_highlighted_source_files", Set emitHighlightedSourceFiles, " "
             ; "-dump_per_line_stmt_exec_counts", Set dumpPerLineStmtExecCounts, " "
+            ; "-allow_dead_code", Set allowDeadCode, " "
             ; "-provides", String (fun path -> provides := !provides @ [path]), " "
             ; "-keep_provide_files", Set keepProvideFiles, " "
             ; "-emit_sexpr",
@@ -293,7 +342,8 @@ let _ =
           option_use_java_frontend = !useJavaFrontend;
           option_enforce_annotations = !enforceAnnotations;
           option_allow_undeclared_struct_types = !allowUndeclaredStructTypes;
-          option_data_model = !dataModel
+          option_data_model = !dataModel;
+          option_report_skipped_stmts = false;
         } in
         print_endline filename;
         let emitter_callback (packages : package list) =
@@ -303,7 +353,7 @@ let _ =
               SExpressionEmitter.emit target_file packages          
             | None             -> ()
         in
-        verify ~emitter_callback:emitter_callback !stats options !prover filename !emitHighlightedSourceFiles !dumpPerLineStmtExecCounts;
+        verify ~emitter_callback:emitter_callback !stats options !prover filename !emitHighlightedSourceFiles !dumpPerLineStmtExecCounts !allowDeadCode;
         allModules := ((Filename.chop_extension filename) ^ ".vfmanifest")::!allModules
       end
     else if Filename.check_suffix filename ".o" then

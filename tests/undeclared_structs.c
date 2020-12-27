@@ -17,5 +17,4 @@ int main()
     arraylist a = create_arraylist();
     arraylist_destroy(a);
     unsigned x = sizeof(struct arraylist); //~ should_fail
-    return 0;
 }

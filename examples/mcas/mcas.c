@@ -1364,7 +1364,6 @@ start:
                                     foreach_separate_ith(i, take(count, es));
                                     nth_take(i, count, es);
                                     open entry_attached(rcsList, cd)(_);
-                                    merge_fractions strong_ghost_assoc_list_member_handle(rcsList, a2, _);
                                 }
                                 strong_ghost_assoc_list_update(rcsList, a2, n2);
                                 split_fraction strong_ghost_assoc_list_member_handle(rcsList, a2, _);

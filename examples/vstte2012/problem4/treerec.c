@@ -132,7 +132,6 @@ lemma void build_rec_complete(nat n, int d, tree t, list<int> s0)
         case zero:
             depths_head(d, t);
             le_max(max_func(d, head(depths(d, t))), tail(depths(d, t)));
-            assert d + int_of_nat(n) == d;
         case succ(n0):
             switch (t) {
                 case leaf:

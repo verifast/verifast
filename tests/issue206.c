@@ -38,7 +38,7 @@ int foo_bad()
     int x = 0;
     int i,j,k;
 
-    for(i = 0; i < 6; ++i)
+    for(i = 0; i < 6; )
         /*@ requires i >= 0 &*& i <= 6 &*& x + 3*7*(6-i) < 100000; @*/
         /*@ ensures  old_x == x; @*/
         /*@ decreases 6-i; @*/
@@ -57,5 +57,4 @@ int foo_bad()
             }
         }
     }
-    return x;
 }

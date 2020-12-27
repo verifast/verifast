@@ -17,8 +17,6 @@ void *attacker_t(void* data) //@ : pthread_run_joinable
     //@ open dummy_proof_pred();
     //@ close pthread_run_pre(attacker_t)(data, info);
   }
-   
-  return 0;
 }
 
 /*@
@@ -140,8 +138,9 @@ int main(int argc, char **argv) //@ : main_full(main_app)
       //@ crypto_chars_to_chars(msg2, PACKAGE_SIZE);
     }
   }
-  
+#ifdef EXECUTE
   printf("\n\n\t\tDone\n");
   return 0;
+#endif
 }
 

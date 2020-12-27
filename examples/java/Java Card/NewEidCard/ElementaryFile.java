@@ -47,8 +47,7 @@ public /*VF*ADDED*/final class ElementaryFile extends File {
 			return data;
 		} else {
 			ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
-			//@ close [f]ElementaryFile(fid, pf, d, a, size);
-			return null;
+			return null; //~allow_dead_code
 		}
 	}
 	public short getCurrentSize() 
@@ -64,7 +63,7 @@ public /*VF*ADDED*/final class ElementaryFile extends File {
 		} else {
 			ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
 		}
-		return 0;
+		return 0; //~allow_dead_code
 	}
 	public short getMaxSize() 
   	    //@ requires [?f]ElementaryFile(?fid, ?parent, ?data, ?state, ?thesize, ?info);

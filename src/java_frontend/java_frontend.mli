@@ -98,7 +98,7 @@ val detach : unit -> unit
 *)
 val ast_from_java_file : string -> 
                          ast_option list ->
-                         (General_ast.source_location -> unit) ->
+                         (string -> General_ast.source_location -> unit) ->
                          string ->
                          Annotation_type_checker.ann_type_checker -> 
                            General_ast.package
@@ -120,7 +120,7 @@ val ast_from_java_file : string ->
 val asts_from_java_files : string list -> 
                            context: string list ->
                            ast_option list -> 
-                           (General_ast.source_location -> unit) ->
+                           (string -> General_ast.source_location -> unit) ->
                            string ->
                            Annotation_type_checker.ann_type_checker -> 
                              General_ast.package list

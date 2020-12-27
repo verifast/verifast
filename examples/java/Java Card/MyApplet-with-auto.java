@@ -242,6 +242,7 @@ public final class MyApplet extends Applet {
       case 0xcb:
         if (B_MODE_DEBUG)
         {
+          /*
           if(Util.getShort(byaApdu, (short)2) == (short)0x9f01)
           {
             byaApdu[4] = by_MaxNbRecord ;
@@ -249,6 +250,7 @@ public final class MyApplet extends Applet {
             oApdu.setOutgoingAndSend((short)2, (short)4) ;
             return;
           }
+          */
         }
       default:
         ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);

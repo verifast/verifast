@@ -459,11 +459,7 @@ class NQueens {
       }
       @*/
       /*@
-      if (p1 < 1) {
-          assert p1 == 0;
-      } else {
-          assert p1 == 1;
-      }
+      if (p1 < 1) {} else {}
       @*/
       assert false; // not reachable
     }

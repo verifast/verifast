@@ -95,5 +95,4 @@ int main() //@ : custom_main_spec
     
     //@ bigsep_extract(msgs);
     pumpRoom(roomChan);
-    return 0;
 }

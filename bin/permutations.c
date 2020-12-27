@@ -110,7 +110,7 @@ lemma void is_perm_symmetric_core<t>(nat n, list<t> xs, list<t> ys)
       switch(ys) { case nil: case cons(hy, ty): }
     case succ(n0):
      switch(xs) {
-       case nil: switch(ys) { case nil: case cons(hy, ty): }
+       case nil:
        case cons(hx, tx):
          switch(ys) {
            case nil:

@@ -188,17 +188,10 @@ void insertion_sort_core(struct list_node** pfirst)
       
       if (pn != &(last_sorted->next)) {
         /*@
-        if (old_pn == &(last_sorted->next)) {
-          open list_pred(last_sorted->next);
-        } else {
-          open lseg_pred(n, _);
-        }
+        open lseg_pred(n, _);
         @*/
         comparison = compare(*pn, last_sorted->next);
         /*@
-        if (old_pn == &(last_sorted->next)) {
-          close list_pred(last_sorted->next);
-        } else {
           if (old_pn == pfirst) {
             close lseg_pred(first, first);
           } else {
@@ -210,21 +203,15 @@ void insertion_sort_core(struct list_node** pfirst)
             open lseg_pred(first, old_n);
             close lseg_pred(first, old_n);
           }
-        }
         @*/
       } else {
         /*@
         if (old_pn != pfirst) {
-          if (old_pn == &(last_sorted->next)) {
-            close list_node_next(old_n, n);
-            close list_pred(old_n);
-          } else {
             // Need to get to an lseg_pred(first, last_sorted)
             close list_node_next(old_n, n);
             assert lseg_pred(first, ?prev_n);
             close list_node_next(prev_n, old_n);
             lseg_append_node(first, prev_n);
-          }
         }
         @*/
       }

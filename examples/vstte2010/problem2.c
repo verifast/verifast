@@ -118,8 +118,6 @@ lemma void forall_between_distinct_mem(nat n, list<int> xs, int i)
                         } else {
                             distinct_remove(max(x0, xs0), xs);
                             forall_between_distinct(nat_of_int(max(x0, xs0)), remove(max(x0, xs0), xs));
-                            mem_max(x0, xs0);
-                            length_remove(max(x0, xs0), xs);
                         }
                     } else {
                         forall_between_weaken(0, max(x0, xs0) - 1, int_of_nat(n0) - 1, remove(max(x0, xs0), xs));

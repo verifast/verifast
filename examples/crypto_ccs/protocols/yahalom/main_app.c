@@ -17,8 +17,6 @@ void *attacker_t(void* data) //@ : pthread_run_joinable
     //@ open yahalom_proof_pred();
     //@ close pthread_run_pre(attacker_t)(data, info);
   }
-
-  return 0;
 }
 
 struct yahalom_args
@@ -278,8 +276,9 @@ int main(int argc, char **argv) //@ : main_full(main_app)
     zeroize(r_key, KEY_SIZE);
     printf(" |%i| ", i);
   }
-
+#ifdef EXECUTE
   printf("\n\n\t\tDone\n");
   return 0;
+#endif
 }
 

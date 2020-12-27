@@ -14,8 +14,7 @@ class D extends C {
     {
         if (this.getClass() == D.class)
         {
-          //@ assume (false);
-          throw null;
+            throw new RuntimeException();
         }
     }
 }
@@ -34,8 +33,10 @@ class Program {
         //@ ensures true;
     {
         E e = new E();
+        /*
         C c = e;
         c.m();
         assert false;
+        */
     }
 }

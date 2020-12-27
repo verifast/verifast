@@ -31,10 +31,10 @@ let _ =
   in
 
   let shouldFailLocs: loc0 list ref = ref [] in
-  let reportShouldFail l = shouldFailLocs := l::!shouldFailLocs in
+  let reportShouldFail directive l = shouldFailLocs := l::!shouldFailLocs in
 
   (* Custom parser *)
-  let parse_c_file_custom (path: string) (reportRange: range_kind -> loc0 -> unit) (reportShouldFail: loc0 -> unit) (verbose: int) 
+  let parse_c_file_custom (path: string) (reportRange: range_kind -> loc0 -> unit) (reportShouldFail: string -> loc0 -> unit) (verbose: int) 
         (include_paths: string list) (define_macros: string list) (enforceAnnotations: bool) (dataModel: data_model) (pattern_str: string): ((loc * (include_kind * string * string) * string list * package list) list * package list) = (* ?parse_c_file_custom *)
     let result =
       let make_lexer path include_paths ~inGhostRange =

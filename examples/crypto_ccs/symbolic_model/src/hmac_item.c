@@ -64,7 +64,7 @@ struct item *create_hmac(struct item *key, struct item *payload)
   write_tag(hmac->content, TAG_HMAC);
 
   if (payload->size < MINIMAL_STRING_SIZE)
-    {abort_crypto_lib("Payload of hmac was to small");}
+    {abort_crypto_lib("Payload of hmac was to small");} //~allow_dead_code
   //@ close [f0]world(pub, key_clsfy);
   //@ item_constraints_memcmp(pay);
   sha512_hmac(key->content + TAG_LENGTH, (unsigned int) GCM_KEY_SIZE,

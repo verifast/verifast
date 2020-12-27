@@ -5,5 +5,5 @@ int main() //@ : main_full(prelude_redef)
     //@ ensures false;
 {
     //@ open module(_, _);
-    return 0;
+    return 0; //~allow_dead_code
 }

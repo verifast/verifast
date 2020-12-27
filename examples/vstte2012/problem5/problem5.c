@@ -497,17 +497,12 @@ int bfs(struct vertex* source, struct vertex* dest)
         /*@
             if(! lset_equals(visitedv, lset_union(visitedv, nil)) ) {
                 lset_equals_contains_conv(visitedv, lset_union(visitedv, nil));
-                open exwitness(?x);
-                lset_union_contains(visitedv, nil, x);
                 assert false;
             }
         @*/
         /*@    
             if(! lset_equals(newv, lset_union(newv, lset_diff(nil, visitedv))) ) {
                 lset_equals_contains_conv(newv, lset_union(newv, lset_diff(nil, visitedv)));
-                open exwitness(?x);
-                lset_union_contains(newv, lset_diff(nil, visitedv), x);
-                lset_diff_contains(nil, visitedv, x);
                 assert false;
             }
         @*/
@@ -551,10 +546,6 @@ int bfs(struct vertex* source, struct vertex* dest)
                     lset_equals_contains_conv(visitedv3, lset_union(visitedv, snoc(succsvl, w)));
                     open exwitness(?x);
                     lset_equals_contains(visitedv2, lset_union(visitedv, succsvl), x);
-                    lset_union_contains(visitedv, succsvl, x);
-                    lset_union_contains(visitedv, snoc(succsvl, w), x);
-                    lset_union_contains(succsvl, lset_singleton(w), x);
-                    lset_add_contains(visitedv2, w, x);
                     assert false;
                 }
             @*/

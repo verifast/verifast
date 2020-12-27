@@ -66,12 +66,10 @@ struct heap* heap_create(int capacity)
   struct heap* q;
   q = malloc(sizeof ( struct heap));
   if (q == 0) abort();
-  if (sizeof(ElementType) == 0) abort();
   int acapacity = capacity + 1;
   int *array = malloc(acapacity * sizeof(int));
   if (array == 0) abort();
   q->elems = array;
-  if (q->elems == 0) abort();
   q->capacity = capacity + 1;
   q->size = 0;
   //@ open ints(array, capacity + 1, _);

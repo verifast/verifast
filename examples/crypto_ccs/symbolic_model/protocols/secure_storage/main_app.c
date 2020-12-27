@@ -32,7 +32,6 @@ void *attacker_t(void* data) //@ : pthread_run_joinable
   //@ open pthread_run_pre(attacker_t)(data, info);
   struct ss_args *args = (void*) data;
   symbolic_attacker(args->attacker, args->keypair);
-  return 0;
 }
 
 /*@
@@ -196,8 +195,9 @@ int main() //@ : main_full(main_app)
     free(args_s);
     free(args_r);
   }
-
+#ifdef EXECUTE
   //@ close_module();
   //@ leak module(main_app, _);
   printf("Done\n");
+#endif
 }

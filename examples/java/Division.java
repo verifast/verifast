@@ -35,6 +35,6 @@ class Division {
     //@ ensures result == nom / denom;
   {
     int tmp = nom / denom; //~ should_fail
-    return tmp;
+    return tmp; //~allow_dead_code
   }
 }

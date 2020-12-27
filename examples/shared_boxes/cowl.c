@@ -265,7 +265,7 @@ void cow_list_node_set_copy(struct node* n, int index, int x, struct node* new_n
       //@ close node_set_copy_ghost_args(nxt, nxt_handle, nxt_id, nxt_f); 
       cow_list_node_set_copy(nxt, index - 1, x, new_node2);
     } else {
-      new_node->next = 0;
+      assert(false);
     }
     //@ close I(new_node, new_id)();
     //@ close is_client_wrapper(new_node, new_ha, new_id, 1r/2); 

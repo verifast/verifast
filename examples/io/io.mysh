@@ -10,32 +10,6 @@ cd tee
   verifast_both -shared io.o stdio_simple.o tee_out.c tee_buffered_while.c
   verifast_both -shared io.o stdio_simple.o tee_out.c tee_buffered_recursive.c
 cd ..
-cd work-in-progress
-  cd in-memory-io-style
-    verifast_both -shared -I . buffer.c syscall_memory.c
-    verifast_both -shared -I . io_lemma_impl.c
-  cd ..
-  cd in-memory-io-style-v1.1
-    mysh < run.mysh
-  cd ..
-  cd in-memory-io-style-v2
-    verifast_both -allow_assume foralls.o prophecy.o ../../../vstte2012/problem3/problem3.c writehi_readhi.c
-  cd ..
-  cd in-memory-io-style-v3
-    cd 01-producer-consumer-no-iostyle
-      verifast_both -c -allow_assume producer-consumer.c
-    cd ..
-    cd 02-framepresupd
-      verifast_both -c -disable_overflow_check in-memory-splitjoin-framepresupd.c
-    cd ..
-    cd 03-weak
-      verifast_both -c -allow_assume producer-consumer-weak-iostyle.c
-    cd ..
-    cd 04-split-invar
-      ifz3 verifast -prover z3 -c buffer.c
-    cd ..
-  cd ..
-cd ..
 cd in-memory
   cd writer_cat_reader
     verifast -prover redux -c main.c cat.c getchar.c putchar.c writer.c

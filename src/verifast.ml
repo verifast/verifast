@@ -212,12 +212,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let (ss_before, call_opt) =
               let rec iter ss_before ss_after =
                 match ss_after with
-                  [] ->
-                  if fpe_opt = None then
-                    (List.rev ss_before, None)
-                  else
-                    static_error l "'call();' statement expected" None
-                | ExprStmt (CallExpr (lc, "call", [], [], [], Static))::ss_after -> (List.rev ss_before, Some (lc, None, ss_after))
+                  [] -> (List.rev ss_before, None)
+                | ExprStmt (CallExpr (lc, "call", [], [], [], Static))::ss_after ->(List.rev ss_before, Some (lc, None, ss_after))
                 | DeclStmt (ld, [lx, tx, x, Some(CallExpr (lc, "call", [], [], [], Static)), _])::ss_after ->
                   if List.mem_assoc x tenv then static_error ld "Variable hides existing variable" None;
                   let t = check_pure_type (pn,ilist) tparams gh tx in
@@ -226,7 +222,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     None -> static_error ld "Function does not return a value" None
                   | Some rt1 ->
                     expect_type ld (Some true) rt1 t;
-                    (List.rev ss_before, Some (lc, Some (x, t), ss_after))
+                    (List.rev ss_before, Some (ld, Some (x, t), ss_after))
                   end
                 | s::ss_after -> iter (s::ss_before) ss_after
               in
@@ -270,6 +266,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               begin fun ftcheck_cont ->
               match call_opt with
                 None ->
+                if fpe_opt <> None then static_error l "'call();' statement expected" None;
                 if rt <> None then static_error l "To produce a lemma function pointer chunk for a lemma function type with a non-void return type, you must specify a lemma." None;
                 ftcheck_cont h ft_env
               | Some (callLoc, resultvar, ss_after) ->
@@ -291,6 +288,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                       end
                     bs
                 in
+                reportStmtExec callLoc;
                 with_context (Executing (h, env, callLoc, "Verifying function call")) $. fun () ->
                 with_context PushSubcontext $. fun () ->
                 let pre1_env = currentThreadEnv @ List.map (fun (x, x0, tp, t, t0, x1, tp1) -> (x1, t)) fparams @ funenv1 in
@@ -1558,11 +1556,11 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         consume_asn rules [] h' ghostenv' env' post true real_unit $. fun _ h' _ _ _ ->
         check_leaks h' env' endBodyLoc "Loop leaks heap chunks"
       in
-      let (ss_before, ss_after) =
+      let (ss_before, recursiveCallLoc, ss_after) =
         let rec iter ss_before ss =
           match ss with
-            [] -> (List.rev ss_before, [])
-          | PureStmt (_, ExprStmt (CallExpr (lc, "recursive_call", [], [], [], Static)))::ss_after -> (List.rev ss_before, ss_after)
+            [] -> (List.rev ss_before, None, [])
+          | PureStmt (_, ExprStmt (CallExpr (lc, "recursive_call", [], [], [], Static)))::ss_after -> (List.rev ss_before, Some lc, ss_after)
           | s::ss_after -> iter (s::ss_before) ss_after
         in
         iter [] ss
@@ -1607,6 +1605,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           return_cont
           econt
       end $. fun h' tenv''' env' ->
+      begin match recursiveCallLoc with Some l -> reportStmtExec l | None -> () end;
       let env'' = List.filter (fun (x, _) -> List.mem_assoc x tenv) env' in
       consume_asn rules [] h' ghostenv env'' pre true real_unit $. fun _ h' ghostenv'' env'' _ ->
       execute_branch begin fun () -> match (t_dec, dec) with
@@ -2138,6 +2137,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         (true, _) when pure -> assert_false h env (l()) "Loops are not allowed in a pure context." None
       | (true, None) -> assert_false h env (l()) "Loop invariant required." None
       | (_, Some (l, inv, tenv)) ->
+        reportStmtExec l;
         consume_asn rules [] h ghostenv env inv true real_unit (fun _ h _ _ _ ->
           check_backedge_termination (List.assoc current_thread_name env) leminfo l tenv h $. fun h ->
           check_leaks h env l "Loop leaks heap chunks."
@@ -2656,7 +2656,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         else
           static_error lm "Constructor specification is only allowed in javaspec files!" None
       | Some (Some ((ss, closeBraceLoc), rank)) ->
-        reportStmts ss;
+        if report_skipped_stmts || match pre with ExprAsn (_, False _) -> false | _ -> true then reportStmts ss;
         record_fun_timing lm (cn ^ ".<ctor>") begin fun () ->
         if !verbosity >= 1 then Printf.printf "%10.6fs: %s: Verifying constructor %s\n" (Perf.time()) (string_of_loc lm) (string_of_sign (cn, sign));
         execute_branch begin fun () ->
@@ -2691,6 +2691,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let (argtypes, args) = match explicitsupercall with
                   None -> ([], [])
                 | Some(SuperConstructorCall(l, es)) -> 
+                  reportStmtExec l;
                   inheritance_check cn l;
                   ((List.map (fun e -> let (w, tp) = check_expr (pn,ilist) [] tenv (Some true) e in tp) es), es)
                 in
@@ -2754,7 +2755,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           if (Filename.check_suffix p ".javaspec") || abstract then verify_meths (pn,ilist) cfin cabstract boxes lems meths ctparams
           else static_error l "Method specification is only allowed in javaspec files!" None
       | Some (Some ((ss, closeBraceLoc), rank)) ->
-        reportStmts ss;
+        if report_skipped_stmts || match pre with ExprAsn (_, False _) -> false | _ -> true then reportStmts ss;
         record_fun_timing l g begin fun () ->
         if !verbosity >= 1 then Printf.printf "%10.6fs: %s: Verifying method %s\n" (Perf.time()) (string_of_loc l) g;
         if abstract then static_error l "Abstract method cannot have implementation." None;

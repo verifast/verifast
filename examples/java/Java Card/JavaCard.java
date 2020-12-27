@@ -62,13 +62,14 @@ public final class MyApplet extends Applet {
         //@ open element(values, oAppData + 1, _);
         // read first applet data byte
         byte bLen = array[(short)(offset + 1)];
+        //@ assert 20 <= bLen;
         if (bLen != 0) {
             someByteArray = new byte[bLen];
             //@ close theApplet.valid();
             theApplet.register();
             return;
         } else
-            ISOException.throwIt(ISO7816.SW_FUNC_NOT_SUPPORTED);
+            ISOException.throwIt(ISO7816.SW_FUNC_NOT_SUPPORTED); //~allow_dead_code
     }
     
     public boolean select()
@@ -92,7 +93,7 @@ public final class MyApplet extends Applet {
         // .. process the incoming data and reply
         if (buffer[ISO7816.OFFSET_CLA] == (byte)0) {
             switch (buffer[ISO7816.OFFSET_INS]) {
-                case 0xA4: // ISO7816.INS_SELECT
+                case ISO7816.INS_SELECT:
                     // ...
                     // send response data to select command
                     short length = apdu.setOutgoing();

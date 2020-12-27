@@ -956,7 +956,14 @@ let stmt_fold_open f state s =
   | TryFinally (l, ssb, _, ssf) ->
     let state = List.fold_left f state ssb in
     List.fold_left f state ssf
-  | BlockStmt (l, ds, ss, _, _) -> List.fold_left f state ss
+  | BlockStmt (l, ds, ss, _, _) ->
+    let process_decl state = function
+      Func (_, _, _, _, _, _, _, _, _, _, Some (ss, _), _, _) ->
+      List.fold_left f state ss
+    | _ -> state
+    in
+    let state = List.fold_left process_decl state ds in
+    List.fold_left f state ss
   | PerformActionStmt (l, _, _, _, _, _, _, _, ss, _, _, _) -> List.fold_left f state ss
   | ProduceLemmaFunctionPointerChunkStmt (l, _, proofo, ssbo) ->
     let state =

@@ -5,6 +5,6 @@ int main() //@ : main
     //@ ensures true;
 {
     //@ create_raw_ghost_list();
-    *((int *)0) = 5;
-    return 0;
+    *((int *)0) = 5; //~allow_dead_code
+    return 0; //~allow_dead_code
 }

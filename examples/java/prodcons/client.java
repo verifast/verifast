@@ -333,8 +333,6 @@ class ConsumerThread implements Runnable {
                 
                 switch (items) {
                 case nil:
-                    close my_unsep_pred(queue)(items, qms);
-                    close Q(null);
                 case cons(head, tail):
                     close my_unsep_pred(queue)(tail, qms);
                     close Q(head);

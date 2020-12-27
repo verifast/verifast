@@ -72,7 +72,7 @@ let translate_location l =
 
 let annotations : (string, string list) Hashtbl.t ref = ref (Hashtbl.create 1)
 let report_range : (Lexer.range_kind -> Ast.loc0 -> unit) ref = ref (fun _ _ -> ())
-let report_should_fail : (Ast.loc0 -> unit) ref = ref (fun _ -> ())
+let report_should_fail : (string -> Ast.loc0 -> unit) ref = ref (fun _ _ -> ())
 let enforce_annotations : bool ref = ref false
 
 module JavaParser = Parser.Parser (struct let language = Java let enforce_annotations = true let data_model = data_model_java end)

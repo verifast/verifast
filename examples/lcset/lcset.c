@@ -232,23 +232,7 @@ void dispose_set(struct set *set)
         //@ open node_frac(x, _);
         x = y;
     }
-    {
-        /*@
-        lemma void iter()
-            requires lseg(nodesList, ?z, _, last, INT_MAX, _, _, 0) &*& [1/2]z->value |-> ?zValue &*& zValue >= INT_MAX &*& [1/2]last->value |-> INT_MAX;
-            ensures z == last &*& zValue == INT_MAX &*& last->value |-> INT_MAX;
-        {
-            open lseg(_, _, _, _, _, _, ?values_, _);
-            if (values_ == nil) {
-                merge_fractions node_value(z, _);
-            } else {
-                assert [1/2]node_lock(z, ?lockValue);
-                iter();
-            }
-        }
-        @*/
-        //@ iter();
-    }
+    //@ open lseg(_, _, _, _, _, _, _, _);
     free(x);
     free(set);
     //@ leak ghost_list(nodesList, _);

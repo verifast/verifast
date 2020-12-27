@@ -50,16 +50,11 @@ int main() //@ : custom_main_spec
     }
     if (counter < 0){
       //@ open matching_brackets_iterative(?arg1, ?arg2, ?arg3, ?arg4);
-      //@ close matching_brackets_iterative(arg1, arg2, arg3, arg4);
-      int *nullptr = 0;
-      // allowed to crash (the verifier proves this never happens if function's precondition satisfied)
-      *nullptr = 0;
+      assert(false);
     }
   } while (c >= 0);
   if (counter > 0){
-    int *nullptr = 0;
-    // allowed to crash (the verifier proves this never happens if function's precondition satisfied)
-    *nullptr = 0;
+    assert(false);
   }
 
   return 0;

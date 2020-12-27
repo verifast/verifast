@@ -19,8 +19,6 @@ void *attacker_t(void* data) //@ : pthread_run_joinable
     //@ open hmac_then_enc_proof_pred();
     //@ close pthread_run_pre(attacker_t)(data, info);
   }
-   
-  return 0;
 }
 
 struct hmac_then_enc_args
@@ -272,8 +270,9 @@ int main(int argc, char **argv) //@ : main_full(main_app)
     
     printf(" |%i| ", i);
   }
-  
+#ifdef EXECUTE
   printf("\n\n\t\tDone\n");
   return 0;
+#endif
 }
 

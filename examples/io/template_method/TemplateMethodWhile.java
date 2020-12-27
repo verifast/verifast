@@ -126,7 +126,6 @@ public class Adder extends ComplexCalculation {
     }else{
       return false;
     }
-    //@ close token(t2);
   }
   
   public void m2()
@@ -201,7 +200,6 @@ public class Multiplier extends ComplexCalculation {
     }else{
       return false;
     }
-    //@ close token(t2);
   } 
   
   public void m2()

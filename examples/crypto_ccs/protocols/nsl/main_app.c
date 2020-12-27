@@ -19,8 +19,6 @@ void *attacker_t(void* data) //@ : pthread_run_joinable
     //@ open nsl_proof_pred();
     //@ close pthread_run_pre(attacker_t)(data, info);
   }
-   
-  return 0;
 }
 
 struct nsl_args
@@ -360,8 +358,9 @@ int main(int argc, char **argv) //@ : main_full(main_app)
     //@ public_cryptogram(r_pub_key, cg_r_pub_key);
     //@ assert chars(r_pub_key, 8 * KEY_SIZE, _);
   }
-  
+#ifdef EXECUTE
   printf("\n\n\t\tDone\n");
   return 0;
+#endif
 }
 

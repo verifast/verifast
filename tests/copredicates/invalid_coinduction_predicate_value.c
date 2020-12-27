@@ -8,6 +8,6 @@ requires p() &*& p == mycopredicate;
 ensures something();
 {
   open p(); //~ should-fail
-  some_induction(p);
+  //some_induction(p);
 }
 @*/

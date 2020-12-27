@@ -257,6 +257,9 @@ endif
 
 include java_frontend/GNUmakefile
 
+clean::
+	cd java_frontend; make clean; cd ..
+
 #------------------------------- Shorthands ---------------------------------#
 
 SET_LDD = export CAML_LD_LIBRARY_PATH="$$CAML_LD_LIBRARY_PATH:$$GTKSOURCEVIEW_LIBS"

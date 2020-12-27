@@ -4,6 +4,7 @@ int main() //@ : main
 {
     int z = -1;
     unsigned int z2 = (unsigned int) z; //~ should-fail
+    /*
     z2 = z2 + 1;
     if ((unsigned int)z > z2){
         int *evil = 0;
@@ -13,4 +14,5 @@ int main() //@ : main
         // never gets executed.
     }
     return 0;
+    */
 }

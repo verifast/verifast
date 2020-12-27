@@ -21,7 +21,11 @@ int main()
   //@ requires true;
   //@ ensures false;
 {
-  //@ produce_lemma_function_pointer_chunk(lemma1) : evil_lemma()(){ call(); }; //~
-  //@ lemma1();
+  /*@
+  produce_lemma_function_pointer_chunk(lemma1) : evil_lemma()(){ //~
+    // call();
+  };
+  @*/
+  // lemma1();
 }
 

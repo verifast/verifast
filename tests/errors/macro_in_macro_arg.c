@@ -9,5 +9,5 @@ int test(void)
 //@ensures true;
 {
   int x = ID(ONE * f()); //~ should_fail
-  return x;
+  //return x;
 }

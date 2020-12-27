@@ -12,6 +12,10 @@ lemma_auto void map_unit_lemma(fixpoint(int, unit) f, int x, fixpoint(int, unit)
     }
 }
 
+@*/
+
+/*
+
 fixpoint int id(unit u, int x) {
     switch (u) {
         case unit: return x;
@@ -23,8 +27,6 @@ lemma void eq_trans(int x, int y, int z)
     ensures x == z;
 {
 }
-
-@*/
 
 int main()
     //@ requires true;
@@ -43,3 +45,5 @@ int main()
     //@ eq_trans(1, Y, 2);
     assert(false);
 }
+
+*/

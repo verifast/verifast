@@ -6,9 +6,9 @@ int main() //@ : main
 {
   func();
   //@ open unsound();
-  *((int*) 0) = 5;
+  *((int*) 0) = 5; //~allow_dead_code
   
-  return 0;
+  return 0; //~allow_dead_code
 }
 
 

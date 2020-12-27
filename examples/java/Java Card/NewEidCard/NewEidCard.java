@@ -475,7 +475,7 @@ public final class NewEidCard extends Applet {
         JCSystem.beginTransaction();
         //@ open valid();
         if (selectedFile == masterFile)
-            ISOException.throwIt(ISO7816.SW_FILE_INVALID);
+            ISOException.throwIt(ISO7816.SW_FILE_INVALID); //~allow_dead_code
         // impossible to start erasing from offset large than size of file
         //@ open selected_file_types(_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _);
         short size = ((ElementaryFile)selectedFile).getCurrentSize();
@@ -502,7 +502,7 @@ public final class NewEidCard extends Applet {
         JCSystem.beginTransaction();
         //@ open valid();
         if (selectedFile == masterFile)
-            ISOException.throwIt(ISO7816.SW_FILE_INVALID);
+            ISOException.throwIt(ISO7816.SW_FILE_INVALID); //~allow_dead_code
         //@ open selected_file_types(_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _);
         short size = ((ElementaryFile) selectedFile).getMaxSize();
         if (offset > size)
@@ -655,7 +655,7 @@ public final class NewEidCard extends Applet {
         short le = apdu.setOutgoing();
         // impossible to start reading from offset large than size of file                
         if (selectedFile == masterFile)
-            ISOException.throwIt(ISO7816.SW_FILE_INVALID);
+            ISOException.throwIt(ISO7816.SW_FILE_INVALID); //~allow_dead_code
         //@ open selected_file_types(_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _);
         short size = ((ElementaryFile) selectedFile).getCurrentSize();
         if (offset > size)
@@ -715,7 +715,7 @@ public final class NewEidCard extends Applet {
             break;
         default:
             ISOException.throwIt(ISO7816.SW_INCORRECT_P1P2);
-            break;
+            break; //~allow_dead_code
         }
         // check if activating this file is allowed
         if (!fileAccessAllowed(UPDATE_BINARY))
@@ -723,27 +723,9 @@ public final class NewEidCard extends Applet {
         JCSystem.beginTransaction();
         //@ open valid();
         //@ open selected_file_types(_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, ?sf2);
-        /*@ if(selectedFile == masterFile) {
-              masterFile.castMasterToFile();
-              } else if(selectedFile == belpicDirectory) {
-                belpicDirectory.castDedicatedToFile();
-              } else if(selectedFile == idDirectory) {
-                idDirectory.castDedicatedToFile();
-              } else {
-            sf2.castElementaryToFile();
-            }
-        @*/
+        //@ sf2.castElementaryToFile();
         selectedFile.setActive(true);
-        /*@ if(selectedFile == masterFile) {
-              masterFile.castFileToMaster();
-            } else if(selectedFile == belpicDirectory) {
-                belpicDirectory.castFileToDedicated();
-              } else if(selectedFile == idDirectory) {
-                idDirectory.castFileToDedicated();
-              } else {
-            sf2.castFileToElementary();
-            }
-        @*/
+        //@ sf2.castFileToElementary();
         //@ close valid();
         JCSystem.commitTransaction();
     }    
@@ -1288,7 +1270,7 @@ public final class NewEidCard extends Applet {
                 break;
             default:
                 ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
-                break;
+                break; //~allow_dead_code
             }
         else if (buffer[ISO7816.OFFSET_CLA] == EIDCARD_CLA_2)
             switch (buffer[ISO7816.OFFSET_INS]) {
@@ -1439,7 +1421,7 @@ public final class NewEidCard extends Applet {
             //@ close valid();
             JCSystem.commitTransaction();
             ISOException.throwIt(ISO7816.SW_INCORRECT_P1P2);
-            break;
+            break; //~allow_dead_code
         }
         
     }
@@ -1665,7 +1647,7 @@ public final class NewEidCard extends Applet {
             break;
         default: // algorithm not supported (SW=9484)
             ISOException.throwIt(SW_ALGORITHM_NOT_SUPPORTED);
-            break;
+            break; //~allow_dead_code
         }
         // signature type is determined by the the last byte
         switch (buffer[ISO7816.OFFSET_CDATA + 4]) {
@@ -1681,11 +1663,11 @@ public final class NewEidCard extends Applet {
         case CA_ROLE:
             setSignatureType(NO_SIGNATURE);
             ISOException.throwIt(ISO7816.SW_WRONG_DATA);
-            break;
+            break; //~allow_dead_code
         default:
             setSignatureType(NO_SIGNATURE);
             ISOException.throwIt(SW_REFERENCE_DATA_NOT_FOUND);
-            break;
+            break; //~allow_dead_code
         }
         //@ close valid();
         JCSystem.commitTransaction();
@@ -2037,7 +2019,7 @@ public final class NewEidCard extends Applet {
         default:
             
             ISOException.throwIt(SW_REFERENCE_DATA_NOT_FOUND);
-            break;
+            break; //~allow_dead_code
         }
         //@ close valid();
         JCSystem.commitTransaction();
@@ -2150,7 +2132,7 @@ public final class NewEidCard extends Applet {
             break;
         default:
             ISOException.throwIt(SW_REFERENCE_DATA_NOT_FOUND);
-            break;
+            break; //~allow_dead_code
         }
     }
     /**
@@ -2173,7 +2155,7 @@ public final class NewEidCard extends Applet {
             break;
         default:
             ISOException.throwIt(SW_REFERENCE_DATA_NOT_FOUND);
-            break;
+            break; //~allow_dead_code
         }
     }
     /**
@@ -2323,7 +2305,7 @@ public final class NewEidCard extends Applet {
             break;
         default:
             ISOException.throwIt(ISO7816.SW_INCORRECT_P1P2);
-            break;
+            break; //~allow_dead_code
         }
     }
     /**
@@ -2405,7 +2387,7 @@ public final class NewEidCard extends Applet {
             break;
         default:
             ISOException.throwIt(ISO7816.SW_INCORRECT_P1P2);
-            break;
+            break; //~allow_dead_code
         }
         // check if deactivating this file is allowed
         if (!fileAccessAllowed(UPDATE_BINARY))
@@ -2413,27 +2395,9 @@ public final class NewEidCard extends Applet {
         JCSystem.beginTransaction();
         //@ open valid();
           //@ open selected_file_types(_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, ?sf2);
-        /*@ if(selectedFile == masterFile) {
-            masterFile.castMasterToFile();
-            } else if(selectedFile == belpicDirectory) {
-              belpicDirectory.castDedicatedToFile();
-            } else if(selectedFile == idDirectory) {
-              idDirectory.castDedicatedToFile();
-            } else {
-            sf2.castElementaryToFile();
-            }
-        @*/
+        //@ sf2.castElementaryToFile();
         selectedFile.setActive(false);
-        /*@ if(selectedFile == masterFile) {
-              masterFile.castFileToMaster();
-            } else if(selectedFile == belpicDirectory) {
-              belpicDirectory.castFileToDedicated();
-            } else if(selectedFile == idDirectory) {
-              idDirectory.castFileToDedicated();
-            } else {
-            sf2.castFileToElementary();
-            }
-        @*/
+        //@ sf2.castFileToElementary();
         //@ close valid();
         JCSystem.commitTransaction();
     }
@@ -2453,7 +2417,7 @@ public final class NewEidCard extends Applet {
             else 
                 ISOException.throwIt(ISO7816.SW_WRONG_DATA);
         
-        return null;
+        return null; //~allow_dead_code
     }    
     
     private void askForCharge()

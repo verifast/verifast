@@ -12,6 +12,10 @@ lemma_auto void list_unit_eq(list<unit> xs, list<unit> ys) //~ should_fail
     }
 }
 
+@*/
+
+/*
+
 inductive foo = foo1 | foo2;
 
 lemma void eq_trans(foo f1, foo f2, foo f3)
@@ -20,12 +24,12 @@ lemma void eq_trans(foo f1, foo f2, foo f3)
 {
 }
 
-@*/
-
 int main()
     //@ requires true;
     //@ ensures false;
 {
-    //@ assert head(cons(foo1, nil)) == head(cons(foo2, nil));
+    // assert head(cons(foo1, nil)) == head(cons(foo2, nil));
     assert(false);
 }
+
+*/

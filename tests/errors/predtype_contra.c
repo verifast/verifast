@@ -12,6 +12,7 @@ lemma void ouch()
     close foo(myfalse);
     int x = 0;
     predicate(unit) p = foo;  //~ should_fail
+    /*
     assert p(?u1) &*& p(?u2);
     switch (u1) {
         case unit:
@@ -19,6 +20,7 @@ lemma void ouch()
                 case unit:
             }
     }
+    */
 }
 
 @*/

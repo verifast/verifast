@@ -110,7 +110,6 @@ struct network_status *network_connect(const char *name, int port)
   }
   
   abort_crypto_lib("Failed to connect to server");
-  return 0;
 }
 
 struct network_status *network_bind_and_accept(int port)
@@ -158,7 +157,6 @@ struct network_status *network_bind(int port)
   }
   
   abort_crypto_lib("Failed to bind to port");
-  return 0;
 }
 
 void network_accept(struct network_status *stat)

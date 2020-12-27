@@ -1,4 +1,0 @@
-.provides ./prophecy.h#prophecy_int_assign
-.provides ./prophecy.h#prophecy_invar
-.provides ./prophecy.h#prophecy_create
-.predicate @./prophecy.h#prophecy

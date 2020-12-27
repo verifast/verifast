@@ -16,11 +16,6 @@ lemma void induction(nat n1, nat n2)
         case zero:
       }
     case zero:
-      switch(n2)
-      {
-        case succ(n20):
-        case zero:
-      }
   }
 }
 

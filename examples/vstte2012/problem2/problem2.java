@@ -371,13 +371,7 @@ lemma void step_with_noS_decreases_size(term t)
                 };
                 case some(reduced): step_with_noS_decreases_size(leftright);
               };
-            case S: switch(step(leftright)) {
-                case none: switch(step(right)) { 
-                  case none:  
-                  case some(reduced): step_with_noS_decreases_size(right);
-                };
-                case some(reduced): step_with_noS_decreases_size(leftright);
-              };
+            case S:
             case apply(leftleftleft, leftleftright):
               switch(leftleftleft) {
                 case K: switch(step(leftleftright)) {

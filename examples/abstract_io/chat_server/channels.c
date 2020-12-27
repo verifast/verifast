@@ -38,7 +38,6 @@ lemma void contains_interleavings_left_lemma<t>(fixpoint(fixpoint(nat, t), bool)
             tail_cons_eq(value, seq2);
             tail_cons_eq(value, witness);
             forall_t_elim(forall_triples, (contains_interleavings_)(p, p1, p2), triple((cons_)(value, witness), seq2, (cons_)(value, seq3)));
-            assert p((cons_)(value, seq2)) == true;
         } else {
             is_interleaving_def((cons_)(value, seq1), seq2, (cons_)(value, seq3));
             tail_cons_eq(value, seq1);

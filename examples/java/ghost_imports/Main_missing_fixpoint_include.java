@@ -10,8 +10,5 @@ class Main
   {
     Subpackage o = new Subpackage();
     /*~*/ //@ int i = fixpoint1(0);
-    //@ close predicate1();
-    //@ open predicate1();
-    //@ lemma1();
   }
 }

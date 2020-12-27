@@ -371,6 +371,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let is_transparent_stmt s =
     match s with
+    | Assert (_, False _) -> true
+    | LabelStmt _ -> true
     | PureStmt _ | NonpureStmt _ | BlockStmt _ -> true
     | _ -> false
 
@@ -385,7 +387,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let fterm = List.assoc fn funcnameterms in
         if body <> None then
           ctxt#assert_term (ctxt#mk_eq (ctxt#mk_app func_rank [fterm]) (ctxt#mk_reallit !func_counter));
-        begin match body with None -> () | Some (ss, _) -> reportStmts ss end;
+        if report_skipped_stmts || match contract_opt with Some ((False _ | ExprAsn (_, False _)), _) -> false | _ -> true then begin match body with None -> () | Some (ss, _) -> reportStmts ss end;
         incr func_counter;
         let (rt, xmap, functype_opt, pre, pre_tenv, post) =
           check_func_header pn ilist [] [] [] l k tparams rt fn (Some fterm) xs nonghost_callers_only functype_opt contract_opt terminates body

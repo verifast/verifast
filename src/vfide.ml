@@ -564,7 +564,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     let text = start#get_text ~stop:stop in
     let highlight keywords =
       let (loc, ignore_eol, tokenStream, in_comment, in_ghost_range) =
-        make_lexer_helper keywords ghost_keywords "<buffer>" text reportRange startIsInComment startIsInGhostRange false (fun _ -> ()) annotChar in
+        make_lexer_helper keywords ghost_keywords "<buffer>" text reportRange startIsInComment startIsInGhostRange false (fun _ _ -> ()) annotChar in
       Stream.iter (fun _ -> ()) tokenStream;
       (* Printf.printf "!in_comment: %B; !in_ghost_range: %B\n" !in_comment !in_ghost_range; flush stdout; *)
       if not (stop#is_end) && (!in_comment, !in_ghost_range) <> (stopIsInComment, stopIsInGhostRange) then
@@ -1451,6 +1451,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
                 option_define_macros = !define_macros;
                 option_safe_mode = false;
                 option_header_whitelist = [];
+                option_report_skipped_stmts = false;
               }
               in
               let reportExecutionForest =
@@ -1477,7 +1478,12 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
                 if path' == path then
                   stmtExecCounts.(line - 1) <- stmtExecCounts.(line - 1) + 1
               in
-              let stats = verify_program prover options path {reportRange; reportUseSite; reportStmt; reportStmtExec; reportExecutionForest} breakpoint targetPath in
+              let reportDirective directive loc =
+                match directive with
+                  "allow_dead_code" -> true
+                | _ -> false
+              in
+              let stats = verify_program prover options path {reportRange; reportUseSite; reportStmt; reportStmtExec; reportExecutionForest; reportDirective} breakpoint targetPath in
               begin
                 let _, tab = get_tab_for_path path in
                 let column = tab#stmtExecCountsColumn in

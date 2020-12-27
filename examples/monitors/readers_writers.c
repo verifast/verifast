@@ -311,6 +311,4 @@ int main() //@ : custom_main_spec
       thread_start(writer_thread, b);
       //@ close thread_run_data(writer_thread)(nil,b);    
     }
-
-    return 0;
 }

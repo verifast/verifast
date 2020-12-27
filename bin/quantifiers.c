@@ -6,7 +6,7 @@ lemma t not_forall<t>(list<t> vs, fixpoint(t, bool) p)
   ensures mem(result, vs) == true &*& ! p(result);
 {
   switch(vs) {
-    case nil: return default_value<t>;
+    case nil:
     case cons(h, t):
       if(! p(h)) {
         return h;
@@ -50,7 +50,7 @@ lemma int not_forall_nth<t>(list<t> vs, fixpoint (list<t>, int, bool) p)
   ensures 0 <= result &*& result < length(vs) &*& ! p(vs, result);
 {
   switch(vs) {
-    case nil: return 0;
+    case nil:
     case cons(h, t):
       int i = not_forall_nth_nat(vs, p, nat_of_int(length(vs) - 1));
       assert i <= int_of_nat(nat_of_int(length(vs) - 1));

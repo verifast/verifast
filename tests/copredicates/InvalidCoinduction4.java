@@ -8,7 +8,7 @@ requires mycopredicate();
 ensures something();
 {
   open mycopredicate(); //~ should fail
-  wrong_coinduction(); 
+  //wrong_coinduction(); 
 }
 
 @*/

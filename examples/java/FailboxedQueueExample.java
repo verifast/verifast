@@ -39,13 +39,13 @@ class LinkedBlockingQueue {
     {
         //@ assume(false);
     }
-    public void put(Object element)
+    public void put(Object element) throws InterruptedException /*@ ensures true; @*/
         //@ requires [_]LinkedBlockingQueue(?failbox, ?level, ?inv) &*& inv(element);
         //@ ensures credit();
     {
         //@ assume(false);
     }
-    public Object take()
+    public Object take() throws InterruptedException /*@ ensures true; @*/
         //@ requires obligations(currentThread, ?outerObs, ?failbox, ?obs) &*& [_]LinkedBlockingQueue(failbox, ?level, ?inv) &*& credit() &*& level_below_all(level, append(outerObs, obs)) == true;
         //@ ensures obligations(currentThread, outerObs, failbox, obs) &*& inv(result);
     {

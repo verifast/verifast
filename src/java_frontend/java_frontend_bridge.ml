@@ -65,9 +65,9 @@ let rec parse_java_files_with_frontend (paths: string list) (jars: string list) 
         Java_frontend.bodyless_methods_own_trailing_annotations;
         Java_frontend.accept_spec_files]
       in
-      let reportShouldFail' l =
+      let reportShouldFail' directive l =
         let Lexed l = Ast_translator.translate_location l in
-        reportShouldFail l
+        reportShouldFail directive l
       in
       let packages = 
         Java_frontend.asts_from_java_files paths ~context:context_for_paths fe_options reportShouldFail' "verifast_annotation_char" ann_checker

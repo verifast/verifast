@@ -214,13 +214,10 @@ lemma void is_order_func_lt()
     assert [_]is_forall_t(?forall_f);
     if (!forall_triples((is_lt_trans_at)(func_lt))) {
         pair<void *, pair<void *, void *> > fgh = not_forall_t(forall_triples, (is_lt_trans_at)(func_lt));
-        assert fgh == pair(?f, pair(?g, ?h));
-        func_lt_trans(f, g, h);
         assert false;
     }
     if (!forall_f((is_lt_antirefl_at)(func_lt))) {
         void *f = not_forall_t(forall_f, (is_lt_antirefl_at)(func_lt));
-        func_lt_antirefl(f);
         assert false;
     }
     close is_order(func_lt);
@@ -386,7 +383,6 @@ lemma void bag_le_append_r<t>(fixpoint(t, t, bool) lt, list<t> xs, list<t> ys)
             count_append(xs, ys, (eq)(x));
             assert count_eq(x, xs) + count_eq(x, ys) < count_eq(x, ys);
             count_nonnegative(xs, (eq)(x));
-            count_nonnegative(ys, (eq)(x));
             assert false;
     }
 }
