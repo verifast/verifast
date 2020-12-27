@@ -460,7 +460,6 @@ cd tests
     mysh < run.mysh
   cd ..
   verifast -c nodecl_and_semicolon.c
-  verifast_both -c test-pattern-match-constructor-subtyping.c
   verifast_both -c test-octal-number.c
   verifast_both -c integral-ghost-types.c
   verifast_both -c -allow_should_fail longlong.c
@@ -478,6 +477,7 @@ cd tests
     cd ..
   cd ..
   cd errors
+    verifast -c -allow_should_fail ctor_pattern_upcast.c
     verifast -c -allow_should_fail inductive_confusion.c
     verifast -c -allow_should_fail array_slice_autosplit.java
     verifast -c -allow_should_fail array_update.java

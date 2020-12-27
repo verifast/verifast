@@ -103,10 +103,12 @@ void putchar(struct buffer *b, int c)
 
 /*@
 predicate_family_instance thread_run_pre(print_h)(struct buffer *b, any p) =
-  p == pair(?t1, ?t2)
+  exists<pair<place, place> >(pair(?t1, ?t2)) &*&
+  p == pair(t1, t2)
   &*& token(b, t1) &*& putchar_io(t1, 'h', t2);
 predicate_family_instance thread_run_post(print_h)(struct buffer *b, any p) =
-  p == pair(?t1, ?t2)
+  exists<pair<place, place> >(pair(?t1, ?t2)) &*&
+  p == pair(t1, t2)
   &*& token(b, t2);
 @*/
 
@@ -171,6 +173,7 @@ void print_hi(struct buffer *b)
 //@ ensures token(b, t2);
 {
   //@ split();
+  //@ close exists(pair(th1, th2));
   //@ close thread_run_pre(print_h)(b, pair(th1, th2));
   struct thread *thread = thread_start_joinable(print_h, b);
   print_i(b);

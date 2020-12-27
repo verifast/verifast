@@ -86,6 +86,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
   //@ int receiver = principal_create();
   
   //@ assume (bad(attacker));
+  //@ close exists(attacker);
   //@ close pthread_run_pre(attacker_t)(NULL, some(attacker));
   pthread_create(&a_thread, NULL, &attacker_t, NULL);
   

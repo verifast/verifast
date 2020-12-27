@@ -135,7 +135,7 @@ public class Adder extends ComplexCalculation {
   }
   
   public int getValue()
-    //@ requires token(?t) &*& t == adder_place(?v);
+    //@ requires token(?t) &*& exists<int>(?v) &*& t == adder_place(v);
     //@ ensures token(t) &*& result == v;
   {
     return x;
@@ -206,9 +206,10 @@ public class Multiplier extends ComplexCalculation {
   
   public int getValue()
     //@ requires token(?t);
-    //@ ensures token(t) &*& t == multiplier_place(?x) &*& result == x;
+    //@ ensures token(t) &*& exists<int>(?x) &*& t == multiplier_place(x) &*& result == x;
   {
     return value;
+    //@ close exists(value);
   }
 }
 
@@ -222,6 +223,7 @@ public class Test {
     //@ close m1_io(Adder.class)(t2, ?t3);
     //@ close m2_io(Adder.class)(t3, ?t4);
     calc1.template();
+    //@ close exists(22);
     int should_be_22 = calc1.getValue();
      assert should_be_22 == 22;
     // Or a ghost assert: (both are statically checked by VeriFast)

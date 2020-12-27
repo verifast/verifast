@@ -141,7 +141,7 @@ public class Adder extends ComplexCalculation {
   }
   
   public int getValue()
-    //@ requires token(?t) &*& t == adder_place(?v);
+    //@ requires token(?t) &*& exists<int>(?v) &*& t == adder_place(v);
     //@ ensures token(t) &*& result == v;
   {
     return x;
@@ -216,9 +216,10 @@ public class Multiplier extends ComplexCalculation {
   
   public int getValue()
     //@ requires token(?t);
-    //@ ensures token(t) &*& t == multiplier_place(?x) &*& result == x;
+    //@ ensures token(t) &*& exists<int>(?x) &*& t == multiplier_place(x) &*& result == x;
   {
     return value;
+    //@ close exists(value);
   }
 }
 

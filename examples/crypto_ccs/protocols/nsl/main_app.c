@@ -13,10 +13,11 @@ void *attacker_t(void* data) //@ : pthread_run_joinable
   {
     //@ open pthread_run_pre(attacker_t)(data, info);
     //@ assert principal(?attacker, _);
-    //@ close exists(attacker);
     //@ close nsl_proof_pred();
     attacker();
     //@ open nsl_proof_pred();
+    //@ open exists(_);
+    //@ close exists(attacker);
     //@ close pthread_run_pre(attacker_t)(data, info);
   }
 }

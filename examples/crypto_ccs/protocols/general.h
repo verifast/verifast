@@ -19,7 +19,7 @@
   is_public_key_classifier(_, PREFIX##_pub, \
                               PREFIX##_public_key, \
                               PREFIX##_proof_pred) &*& \
-  info == some(?bad_one) &*& true == bad(bad_one) &*& \
+  exists<int>(?bad_one) &*& info == some(bad_one) &*& true == bad(bad_one) &*& \
   principal(bad_one, _);
   
 inductive info =

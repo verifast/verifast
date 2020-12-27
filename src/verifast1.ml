@@ -4534,7 +4534,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let Some tpenv = zip inductive_tparams targs in
             let ts = List.map (instantiate_type tpenv) ts0 in
             let t0 = InductiveType (i, targs) in
-            expect_type l (Some true) t0 t;
+            expect_type l (Some true) t t0;
             let (pats, tenv') = check_pats_core (pn,ilist) l tparams tenv ts pats in
             (WCtorPat (l, i, targs, g, ts0, ts, pats), tenv')
           | None ->
