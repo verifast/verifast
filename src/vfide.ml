@@ -264,6 +264,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       (fun group -> group#add_action showLineNumbersAction);
       (fun group -> group#add_action showWhitespaceAction);
       (fun group -> group#add_action showRightMarginAction);
+      a "ShowExecutionTree" ~label:"Show _execution tree" ~accel:"<Ctrl>T";
       a "Verify" ~label:"_Verify";
       GAction.add_toggle_action "CheckOverflow" ~label:"Check arithmetic overflow" ~active:true ~callback:(fun toggleAction -> disableOverflowCheck := not toggleAction#get_active);
       GAction.add_toggle_action "UseJavaFrontend" ~label:"Use the Java frontend" ~active:(toggle_java_frontend javaFrontend; javaFrontend) ~callback:(fun toggleAction -> toggle_java_frontend toggleAction#get_active);
@@ -315,6 +316,8 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
           <menuitem action='ShowRightMargin' />
           <menuitem action='Find file (top window)' />
           <menuitem action='Find file (bottom window)' />
+          <separator />
+          <menuitem action='ShowExecutionTree' />
         </menu>
         <menu action='Verify'>
           <menuitem action='VerifyProgram' />
@@ -916,6 +919,13 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   ignore $. (actionGroup#get_action "TextLarger")#connect#activate (fun () -> setFontScalePower (!fontScalePower + 1));
   ignore $. (actionGroup#get_action "TextSmaller")#connect#activate (fun () -> setFontScalePower (!fontScalePower - 1));
   ignore $. (actionGroup#get_action "TextSizeDefault")#connect#activate (fun () -> setFontScalePower 0);
+  let showExecutionTree () =
+    if treeSeparator#max_position - treeSeparator#position < 10 then
+      treeSeparator#set_position (treeSeparator#max_position * 85 / 100)
+    else
+      treeSeparator#set_position treeSeparator#max_position
+  in
+  ignore $. (actionGroup#get_action "ShowExecutionTree")#connect#activate showExecutionTree;
   let get_tab_for_path path0 =
     (* This function is called only at a time when no buffers are modified. *)
     let rec iter k tabs =
