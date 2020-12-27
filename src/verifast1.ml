@@ -58,6 +58,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let {reportRange; reportUseSite; reportExecutionForest; reportStmt; reportStmtExec} = callbacks
 
   let reportUseSite dk ld lu =
+    if ld <> DummyLoc && lu <> DummyLoc then
     reportUseSite dk (root_caller_token ld) (root_caller_token lu)
 
   let reportStmt l = reportStmt (root_caller_token l)
@@ -771,7 +772,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * ((string * string) * field_pred_info) list
       * pred_fam_info map
       * pred_inst_map
-      * type_ map (* typedefmap *)
+      * (loc * type_) map (* typedefmap *)
       * func_type_info map
       * func_info map
       * box_info map
@@ -873,7 +874,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (field_pred_map0: ((string * string) * field_pred_info) list),
       (predfammap0: pred_fam_info map),
       (predinstmap0: pred_inst_map),
-      (typedefmap0: type_ map),
+      (typedefmap0: (loc * type_) map),
       (functypemap0: func_type_info map),
       (funcmap0: func_info map),
       (boxmap0: box_info map),
@@ -1472,7 +1473,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
       else
       match try_assoc2 id typedefmap0 typedefmap1 with
-        Some t -> t
+        Some (ld, t) ->
+        reportUseSite DeclKind_Typedef ld l;
+        t
       | None ->
       match resolve Ghost (pn,ilist) l id inductive_arities with
         Some (s, (ld, n)) ->
@@ -1481,19 +1484,29 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         InductiveType (s, [])
       | None ->
       match (search2' Real id (pn, ilist) classmap1 classmap0) with
-        Some s -> begin try (match List.assoc s class_arities with (_, n) -> ObjType(s, create_objects n)) with
-        | Not_found -> failwith (id ^ "is present in the classmap, but has no arity?")
-        end
+        Some s ->
+        let (ld, n) = List.assoc s class_arities in
+        reportUseSite DeclKind_Class ld l;
+        ObjType (s, create_objects n)
       | None ->  match (search2' Real id (pn, ilist) interfmap1 interfmap0) with
-        Some s -> begin try (match List.assoc s class_arities with (_, n) -> ObjType(s, create_objects n)) with
-          | Not_found -> failwith (id ^ "is present in the interfmap, but has no arity?")
-        end
+        Some s -> 
+        let (ld, n) = List.assoc s class_arities in
+        reportUseSite DeclKind_Interface ld l;
+        ObjType(s, create_objects n)
       | None ->
-      if List.mem_assoc id functypenames || List.mem_assoc id functypemap0 then
+      match try_assoc id functypenames with
+        Some (ld, _, _, _) ->
+        reportUseSite DeclKind_FuncType ld l;
         FuncType id
-      else
+      | None ->
+      match try_assoc id functypemap0 with
+        Some (ld, _, _, _, _, _, _, _, _, _) ->
+        reportUseSite DeclKind_FuncType ld l;
+        FuncType id
+      | None ->
       match resolve Ghost (pn,ilist) l id abstract_types_map with
-        Some (n, l) ->
+        Some (n, ld) ->
+        reportUseSite DeclKind_AbstractType ld l;
         AbstractType n
       | None ->
       static_error l ("No such type parameter, inductive datatype, class, interface, or function type: " ^pn^" "^id) None
@@ -1502,7 +1515,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let full_name = pac ^ "." ^ id in
       begin
       match resolve Real (pac, ilist) l id class_arities with
-        Some (_, (_, n)) -> ObjType(full_name, create_objects n)
+        Some (_, (ld, n)) ->
+        reportUseSite DeclKind_Class ld l;
+        ObjType(full_name, create_objects n)
       | None -> static_error l ("No such type parameter, inductive datatype, class, interface, or function type: " ^ full_name) None
       end
     | ConstructedTypeExpr (l, id, targs) ->
@@ -1514,6 +1529,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           InductiveType (id, List.map check targs)
       | None -> match resolve Real (pn,ilist) l id class_arities with
         Some (id, (ld, n)) ->
+        reportUseSite DeclKind_Class ld l;
         if n <> List.length targs then 
           static_error l "Incorrect number of type arguments." None
         else  
@@ -1523,17 +1539,39 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | StructTypeExpr (l, sn, Some _) ->
       static_error l "A struct type with a body is not supported in this position." None
     | StructTypeExpr (l, Some sn, None) ->
-      if not (option_allow_undeclared_struct_types || List.mem_assoc sn structmap0 || List.mem_assoc sn structdeclmap) then
-        static_error l ("No such struct: \"" ^ sn ^ "\".") None
-      else
+      begin match try_assoc sn structmap0 with
+        Some (ld, _, _, _) ->
+        reportUseSite DeclKind_Struct ld l;
         StructType sn
+      | None ->
+      match try_assoc sn structdeclmap with
+        Some (ld, _) ->
+        reportUseSite DeclKind_Struct ld l;
+        StructType sn
+      | None ->
+      if option_allow_undeclared_struct_types then
+        StructType sn
+      else
+        static_error l ("No such struct: \"" ^ sn ^ "\".") None
+      end
     | UnionTypeExpr (l, un, Some _) ->
       static_error l "A union type with a body is not supported in this position." None
     | UnionTypeExpr (l, Some un, None) ->
-      if not (option_allow_undeclared_struct_types || List.mem_assoc un unionmap0 || List.mem_assoc un uniondeclmap) then
-        static_error l ("No such union: \"" ^ un ^ "\".") None
-      else
+      begin match try_assoc un unionmap0 with
+        Some (ld, _) ->
+        reportUseSite DeclKind_Union ld l;
         UnionType un
+      | None ->
+      match try_assoc un uniondeclmap with
+        Some (ld, _) ->
+        reportUseSite DeclKind_Union ld l;
+        UnionType un
+      | None ->
+      if option_allow_undeclared_struct_types then
+        UnionType un
+      else
+        static_error l ("No such union: \"" ^ un ^ "\".") None
+      end
     | EnumTypeExpr (l, en, Some _) ->
       static_error l "An enum type with a body is not supported in this position." None
     | EnumTypeExpr (l, Some en, None) ->
@@ -1559,7 +1597,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         [] -> tdm1
       | (d, (l, te))::tdds ->
         let t = check_pure_type_core tdm1 ("",[]) [] te Real in
-        iter ((d,t)::tdm1) tdds
+        iter ((d,(l, t))::tdm1) tdds
     in
     iter [] typedefdeclmap
   
@@ -3284,16 +3322,24 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         Some result -> result
       | None ->
       match resolve Real (pn,ilist) l x classmap1 with
-        Some (cn, _) -> (WVar (l, x, ClassOrInterfaceNameScope), ClassOrInterfaceName cn, None)
+        Some (cn, (ld, _, _, _, _, _, _, _, _, _, _, _)) ->
+        reportUseSite DeclKind_Class ld l;
+        (WVar (l, x, ClassOrInterfaceNameScope), ClassOrInterfaceName cn, None)
       | None ->
       match resolve Real (pn,ilist) l x interfmap1 with
-        Some (cn, _) -> (WVar (l, x, ClassOrInterfaceNameScope), ClassOrInterfaceName cn, None)
+        Some (cn, (ld, _, _, _, _, _, _, _)) ->
+        reportUseSite DeclKind_Interface ld l;
+        (WVar (l, x, ClassOrInterfaceNameScope), ClassOrInterfaceName cn, None)
       | None ->
       match resolve Real (pn,ilist) l x classmap0 with
-        Some (cn, _) -> (WVar (l, x, ClassOrInterfaceNameScope), ClassOrInterfaceName cn, None)
+        Some (cn, {cl}) ->
+        reportUseSite DeclKind_Class cl l;
+        (WVar (l, x, ClassOrInterfaceNameScope), ClassOrInterfaceName cn, None)
       | None ->
       match resolve Real (pn,ilist) l x interfmap0 with
-        Some (cn, _) -> (WVar (l, x, ClassOrInterfaceNameScope), ClassOrInterfaceName cn, None)
+        Some (cn, InterfaceInfo (ld, _, _, _, _, _)) ->
+        reportUseSite DeclKind_Interface ld l;
+        (WVar (l, x, ClassOrInterfaceNameScope), ClassOrInterfaceName cn, None)
       | None ->
       if is_package x then begin
         (WVar (l, x, PackageNameScope), PackageName x, None)
@@ -3301,7 +3347,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         cont ()
       end $. fun () ->
       match resolve Ghost (pn,ilist) l x purefuncmap with
-      | Some (x, (_, tparams, t, [], _)) ->
+      | Some (x, (ld, tparams, t, [], _)) ->
+        reportUseSite DeclKind_PureFunction ld l;
         if tparams <> [] then
         begin
           let targs = List.map (fun _ -> InferredType (object end, ref Unconstrained)) tparams in
@@ -3318,7 +3365,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         (WVar (l, x, FuncName), PtrType Void, None)
       | None ->
       match resolve Ghost (pn,ilist) l x predfammap with
-      | Some (x, (_, tparams, arity, ts, _, inputParamCount, inductiveness)) ->
+      | Some (x, (ld, tparams, arity, ts, _, inputParamCount, inductiveness)) ->
+        reportUseSite DeclKind_Predicate ld l;
         if arity <> 0 then static_error l "Using a predicate family as a value is not supported." None;
         if tparams <> [] then static_error l "Using a predicate with type parameters as a value is not supported." None;
         (WVar (l, x, PredFamName), PredType (tparams, ts, inputParamCount, inductiveness), None)
@@ -3328,13 +3376,16 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         (WVar (l, x, EnumElemName i), intType, None)
       | None ->
       match try_assoc' Real (pn, ilist) x globalmap with
-      | Some ((_, tp, symbol, init)) -> (WVar (l, x, GlobalName), tp, None)
+      | Some ((ld, tp, symbol, init)) ->
+        reportUseSite DeclKind_GlobalVar ld l;
+        (WVar (l, x, GlobalName), tp, None)
       | None -> 
       match try_assoc x modulemap with
       | Some _ when language <> Java -> (WVar (l, x, ModuleName), intType, None)
       | _ ->
       match resolve Ghost (pn,ilist) l x purefuncmap with
-        Some (x, (_, tparams, t, param_names_types, _)) ->
+        Some (x, (ld, tparams, t, param_names_types, _)) ->
+        reportUseSite DeclKind_PureFunction ld l;
         let (_, pts) = List.split param_names_types in
         let (pts, t) =
           if tparams = [] then
@@ -3353,7 +3404,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | PredNameExpr (l, g) ->
       begin
         match resolve Ghost (pn,ilist) l g predfammap with
-          Some (g, (_, tparams, arity, ts, _, inputParamCount, inductiveness)) ->
+          Some (g, (ld, tparams, arity, ts, _, inputParamCount, inductiveness)) ->
+          reportUseSite DeclKind_Predicate ld l;
           if arity <> 0 then static_error l "Using a predicate family as a value is not supported." None;
           if tparams <> [] then static_error l "Using a predicate with type parameters as a value is not supported." None;
           (PredNameExpr (l, g), PredType (tparams, ts, inputParamCount, inductiveness), None)
@@ -3609,13 +3661,21 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | _ ->
         match resolve2 (pn,ilist) l g funcmap with
           Some (g, FuncInfo (funenv, fterm, lg, k, callee_tparams, tr, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, fbf, v)) ->
+          let declKind =
+            match k with
+              Regular -> DeclKind_RegularFunction
+            | Fixpoint -> DeclKind_FixpointFunction
+            | Lemma _ -> DeclKind_LemmaFunction
+          in
+          reportUseSite declKind lg l;
           let (targs, tpenv) = process_targes callee_tparams in
           let rt0 = match tr with None -> Void | Some rt -> rt in
           let rt = instantiate_type tpenv rt0 in
           (WFunCall (l, g, targs, es), rt, None)
         | None ->
         match resolve Ghost (pn,ilist) l g purefuncmap with
-          Some (g, (_, callee_tparams, t0, param_names_types, _)) ->
+          Some (g, (lg, callee_tparams, t0, param_names_types, _)) ->
+          reportUseSite DeclKind_PureFunction lg l;
           let (_, ts) = List.split param_names_types in
           let (targs, tpenv) = process_targes callee_tparams in
           let pts =
@@ -3694,6 +3754,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let make_well_typed_method m =
           match m with
           (sign', (tn', lm, gh, rt, xmap, pre, post, epost, terminates, fb', v, abstract, sign, targenv)) ->
+            reportUseSite DeclKind_Method lm l;
             let (fb, es) = if fb = Instance && fb' = Static then (Static, List.tl es) else (fb, es) in
             if fb <> fb' then static_error l "Instance method requires target object" None
             else (WMethodCall (l, tn', g, sign, es, fb, targenv), rt, None)
@@ -3736,7 +3797,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | NewObject (l, cn, args, targs) ->
       begin match resolve Real (pn,ilist) l cn classmap with
-        Some (cn, {cabstract; ctpenv}) ->
+        Some (cn, {cl; cabstract; ctpenv}) ->
+        reportUseSite DeclKind_Class cl l;
         if cabstract then
           static_error l "Cannot create instance of abstract class." None
         else
@@ -3888,6 +3950,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             begin match get_implemented_instance_method csuper mn argtps with
               None -> static_error l "No matching method." None
             | Some(((mn', sign), MethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, terminates, ss, fb, v, is_override, abstract, mtparams))) ->
+              reportUseSite DeclKind_Method lm l;
               let tp = match rt with Some(tp) -> tp | _ -> Void in
               let rank = match ss with Some (Some (_, rank)) -> Some rank | None -> None in
               (WSuperMethodCall (l, csuper, mn, Var (l, "this") :: wargs, (lm, gh, rt, xmap, pre, post, epost, terminates, rank, v)), tp, None)
@@ -4675,7 +4738,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
            Some (PredType (callee_tparams, ts, inputParamCount, inductiveness)) -> cont (p, false, callee_tparams, [], ts, inputParamCount)
          | None | Some _ ->
           begin match resolve Ghost (pn,ilist) l p predfammap with
-            Some (pname, (_, callee_tparams, arity, xs, _, inputParamCount, inductiveness)) ->
+            Some (pname, (lp, callee_tparams, arity, xs, _, inputParamCount, inductiveness)) ->
+            reportUseSite DeclKind_Predicate lp l;
             let ts0 = match file_type path with
               Java-> list_make arity (ObjType ("java.lang.Class", []))
             | _   -> list_make arity (PtrType Void)
@@ -4684,10 +4748,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | None ->
             begin match
               match try_assoc p predctormap1 with
-                Some (l, ps1, ps2, inputParamCount, body, funcsym, pn, ilist) -> Some (ps1, ps2, inputParamCount)
+                Some (lp, ps1, ps2, inputParamCount, body, funcsym, pn, ilist) ->
+                reportUseSite DeclKind_Predicate lp l;
+                Some (ps1, ps2, inputParamCount)
               | None ->
               match try_assoc p predctormap0 with
-                Some (PredCtorInfo (l, ps1, ps2, inputParamCount, body, funcsym)) -> Some (ps1, ps2, inputParamCount)
+                Some (PredCtorInfo (lp, ps1, ps2, inputParamCount, body, funcsym)) ->
+                reportUseSite DeclKind_Predicate lp l;
+                Some (ps1, ps2, inputParamCount)
               | None -> None
             with
               Some (ps1, ps2, inputParamCount) ->

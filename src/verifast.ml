@@ -856,6 +856,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             begin match try_assoc g cpreds with
               None -> static_error l "No such predicate instance" None
             | Some (lp, pmap, family, symb, body_opt) ->
+              reportUseSite DeclKind_Predicate lp l;
               match body_opt with
                 None -> static_error l "Predicate does not have a body" None
               | Some body -> (pmap, symb, body)
@@ -890,7 +891,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               | _ -> funcnameterm_of funcmap fn
             in
             match try_assoc (g, fns) predinstmap with
-              Some (predenv, _, predinst_tparams, ps, g_symb, inputParamCount, p) ->
+              Some (predenv, lp, predinst_tparams, ps, g_symb, inputParamCount, p) ->
+              reportUseSite DeclKind_Predicate lp l;
               let (targs, tpenv) =
                 let targs = if targs = [] then List.map (fun _ -> InferredType (object end, ref Unconstrained)) predinst_tparams else targs in
                 match zip predinst_tparams targs with
@@ -924,7 +926,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               let this = List.assoc "this" env in
               open_instance_predicate this target_cn
             end
-          | Some (PredCtorInfo (_, ps1, ps2, inputParamCount, body, funcsym)) ->
+          | Some (PredCtorInfo (lp, ps1, ps2, inputParamCount, body, funcsym)) ->
+            reportUseSite DeclKind_Predicate lp l;
             if targs <> [] then static_error l "Predicate constructor expects 0 type arguments." None;
             let bs0 =
               match zip pats0 ps1 with
@@ -1184,6 +1187,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             begin match try_assoc g cpreds with
               None -> static_error l "No such predicate instance" None
             | Some (lp, pmap, family, symb, body_opt) ->
+              reportUseSite DeclKind_Predicate lp l;
               match body_opt with
                 None -> static_error l "Predicate does not have a body" None
               | Some body -> (lp, pmap, symb, body)
@@ -1213,6 +1217,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           begin
           match try_assoc (g, fns) predinstmap with
             Some (predenv, lpred, predinst_tparams, ps, g_symb, inputParamCount, body) ->
+            reportUseSite DeclKind_Predicate lpred l;
             let targs = if targs = [] then List.map (fun _ -> InferredType (object end, ref Unconstrained)) predinst_tparams else targs in
             let tpenv =
               match zip predinst_tparams targs with
@@ -1248,6 +1253,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               | _ -> static_error l "No such predicate instance." None
               end
             | Some (PredCtorInfo (lpred, ps1, ps2, inputParamCount, body, funcsym)) ->
+              reportUseSite DeclKind_Predicate lpred l;
               let bs0 =
                 match zip pats0 ps1 with
                   None -> static_error l "Incorrect number of predicate constructor arguments." None

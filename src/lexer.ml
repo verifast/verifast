@@ -311,6 +311,21 @@ let big_int_of_octal_string s =
 
 type decl_kind =
   | DeclKind_InductiveType
+  | DeclKind_Struct
+  | DeclKind_Union
+  | DeclKind_FuncType
+  | DeclKind_Class
+  | DeclKind_Interface
+  | DeclKind_AbstractType
+  | DeclKind_Typedef
+  | DeclKind_InductiveCtor
+  | DeclKind_Predicate
+  | DeclKind_RegularFunction
+  | DeclKind_LemmaFunction
+  | DeclKind_FixpointFunction
+  | DeclKind_PureFunction
+  | DeclKind_GlobalVar
+  | DeclKind_Method
 
 type range_kind = (* ?range_kind *)
     KeywordRange
