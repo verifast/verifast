@@ -19,7 +19,11 @@ if [ $(uname -s) = "Linux" ]; then
   cd /tmp && curl -Lf https://dl.bintray.com/verifast/verifast/$VFDEPS_NAME-linux.txz | tar xj
 
 elif [ $(uname -s) = "Darwin" ]; then
-  brew update
+
+  if [ -z "$GITHUB_ACTIONS" ]; then
+      # No need to update when running in GitHub Actions; their brew is updated weekly.
+      brew update
+  fi
 
   if [ $TRAVIS = "true" ]; then
       brew unlink python@2 # See https://github.com/verifast/verifast/issues/191
