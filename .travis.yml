@@ -6,9 +6,9 @@ language: C
 os:
   - linux
   - osx
-
 dist: bionic
-  
+osx_image: xcode12.2
+
 sudo: required
 
 install:
