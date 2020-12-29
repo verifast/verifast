@@ -445,7 +445,7 @@ endif
 	$(SET_LDD); ${OCAMLOPT} $(OCAMLOPT_LINKFLAGS) $(OCAMLCFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/vfide$(DOTEXE)	\
 	  $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) unix.cmxa \
 	  $(NUM_FLAGS) str.cmxa $(INCLUDES) Perf.cmxa proverapi.cmx \
-	  Printexc_proxy.cmx vfversion.cmx dynlink.cmxa \
+	  vfversion.cmx dynlink.cmxa \
 	  util.cmx ast.cmx stats.cmx lexer.cmx \
 	  parser.cmx ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx \
 	  verify_expr.cmx verifast.cmx combineprovers.cmx \
@@ -597,7 +597,7 @@ cleantest::
 # containing the dependency graph every time you e.g. write new .ml files.
 # Thus typing dependencies by hand is replaced by typing "make depend",
 # which is less error-prone.
-META_DEPS = $(filter-out pa_verifast.ml generate_vfversion.ml, \
+META_DEPS = $(filter-out generate_vfversion.ml, \
   $(wildcard *.ml)) $(wildcard *.mli linux/*.ml linux/*.mli \
   java_frontend/*.ml java_frontend/*.mli \
   shape_analysis/*.ml shape_analysis/*.mli)

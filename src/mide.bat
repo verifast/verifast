@@ -1,1 +1,0 @@
-nmake ..\bin\vfide.exe

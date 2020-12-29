@@ -1558,7 +1558,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
               end
             | e ->
               prerr_endline ("VeriFast internal error: \n" ^ Printexc.to_string e ^ "\n");
-              Printexc_proxy.print_backtrace stderr;
+              Printexc.print_backtrace stderr;
               flush stderr;
               GToolbox.message_box "VeriFast IDE" "Verification failed due to an internal error. See the console window for details."
             end;
