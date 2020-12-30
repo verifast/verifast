@@ -503,8 +503,10 @@ and
          end
     end
   >] -> register_typedef g; ds
-| [< '(_, Kwd "enum"); '(l, Ident n); elems = parse_enum_body; '(_, Kwd ";"); >] ->
-  [EnumDecl(l, n, elems)]
+| [< '(_, Kwd "enum"); '(l, Ident n); d = parser
+    [< elems = parse_enum_body; '(_, Kwd ";"); >] -> EnumDecl(l, n, elems)
+  | [< t = parse_type_suffix (EnumTypeExpr (l, Some n, None)); d = parse_func_rest Regular (Some t) Public >] -> d
+  >] -> check_function_for_contract d
 | [< '(_, Kwd "static"); _ = parse_ignore_inline; t = parse_return_type; d = parse_func_rest Regular t Private >] -> check_function_for_contract d
 | [< '(_, Kwd "extern"); t = parse_return_type; d = parse_func_rest Regular t Public >] -> check_function_for_contract d
 | [< '(_, Kwd "_Noreturn"); _ = parse_ignore_inline; t = parse_return_type; d = parse_func_rest Regular t Public >] ->
