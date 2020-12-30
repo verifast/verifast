@@ -3262,8 +3262,21 @@ let prover_descriptions indent =
     |> List.map (fun (name, (description, f)) -> indent ^ name ^ ": " ^ description ^ "\n")
     |> String.concat ""
 
+let (version, version_long) =
+  let version_file_name = Filename.concat (Filename.dirname Sys.executable_name) "VERSION" in
+  if Sys.file_exists version_file_name then
+    let ch = open_in version_file_name in
+    let version = input_line ch in
+    let version_long = input_line ch in
+    close_in ch;
+    (Some version, Some version_long)
+  else
+    (None, None)
+
+let string_of_string_opt = function None -> "" | Some s -> " " ^ s
+
 let banner () =
-  "VeriFast " ^ Vfversion.version ^ " for C and Java (released " ^ Vfversion.release_date ^ ") <https://github.com/verifast/verifast/>\n" ^
+  "VeriFast" ^ string_of_string_opt version_long ^ " for C and Java <https://github.com/verifast/verifast/>\n" ^
   "By Bart Jacobs, Jan Smans, and Frank Piessens, with contributions by Pieter Agten, Cedric Cuypers, Lieven Desmet, Jan Tobias Muehlberg, Willem Penninckx, Pieter Philippaerts, Amin Timany, Thomas Van Eyck, Gijs Vanspauwen, Frederic Vogels, and external contributors <https://github.com/verifast/verifast/graphs/contributors>" ^
   "\n\nProvers:\n" ^ prover_descriptions "  "
 
