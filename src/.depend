@@ -67,7 +67,7 @@ stats.cmx : util.cmx win/Stopwatch.cmx win/Perf.cmx ast.cmx
 stopwatch_test.cmx : win/Stopwatch.cmx
 tabhunter.cmx :
 util.cmx : proverapi.cmx
-verifast.cmx : vfversion.cmx verify_expr.cmx verifast1.cmx verifast0.cmx \
+verifast.cmx : verify_expr.cmx verifast1.cmx verifast0.cmx \
     util.cmx win/Stopwatch.cmx stats.cmx proverapi.cmx win/Perf.cmx \
     parser.cmx lexer.cmx java_frontend/java_frontend_bridge.cmx ast.cmx \
     assertions.cmx
@@ -95,14 +95,13 @@ vfconfig.cmx :
 vfconsole.cmx : verifast1.cmx verifast0.cmx verifast.cmx util.cmx \
     SExpressionEmitter.cmx win/Perf.cmx parser.cmx lexer.cmx \
     java_frontend/java_frontend_bridge.cmx ast.cmx
-vfide.cmx : vfversion.cmx vfconfig.cmx verifast0.cmx verifast.cmx util.cmx \
+vfide.cmx : vfconfig.cmx verifast0.cmx verifast.cmx util.cmx \
     shape_analysis/shape_analysis_frontend.cmx Printexc_proxy.cmx parser.cmx \
     lexer.cmx java_frontend/java_frontend_bridge.cmx branchright_png.cmx \
     branchleft_png.cmx ast.cmx
 vfstrip.cmx :
-vfversion.cmx : vfversion.cmi
-vfversion.cmi :
 z3prover.cmx : proverapi.cmx win/Perf.cmx
 z3v2prover.cmx : proverapi.cmx win/Perf.cmx
 z3v4dot5prover.cmx : proverapi.cmx win/Perf.cmx
 z3v4prover.cmx : proverapi.cmx win/Perf.cmx
+vfconsole.cmx : json.cmx
