@@ -452,7 +452,7 @@ vfide: ../bin/vfide$(DOTEXE) $(STDLIB)
 	  verify_expr.cmx verifast.cmx simplex.cmx redux.cmx combineprovers.cmx \
           smtlib.cmx smtlibprover.cmx verifastPluginCvc4.cmx verifastPluginExternalZ3.cmx verifastPluginReduxSmtlib.cmx \
           $(Z3ARGS_EARLY) \
-	  verifastPluginRedux.cmx $(Z3ARGS) vfconsole.cmx
+	  verifastPluginRedux.cmx $(Z3ARGS) json.cmx vfconsole.cmx
 ifeq ($(OS), Darwin)
 	install_name_tool -change libz3.dylib @executable_path/../lib/libz3.dylib ../bin/verifast
 endif

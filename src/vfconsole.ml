@@ -4,6 +4,35 @@ open Parser
 open Verifast0
 open Verifast
 open Arg
+open Json
+
+let json_of_srcpos (path, line, col) = A [S path; I line; I col]
+
+let json_of_loc0 (ls, le) = A [json_of_srcpos ls; json_of_srcpos le]
+
+let rec json_of_loc l =
+  match l with
+    Lexed l -> A [S "Lexed"; json_of_loc0 l]
+  | DummyLoc -> A [S "DummyLoc"]
+  | MacroExpansion (l1, l2) -> A [S "MacroExpansion"; json_of_loc l1; json_of_loc l2]
+  | MacroParamExpansion (l1, l2) -> A [S "MacroParamExpansion"; json_of_loc l1; json_of_loc l2]
+
+let json_of_chunk (Chunk ((p, _), typeArgs, coef, args, _)) =
+  let s =
+    p ^
+    (if typeArgs = [] then "" else "<" ^ String.concat ", " (List.map string_of_type typeArgs) ^ ">") ^
+    "(" ^ String.concat ", " args ^ ")"
+  in
+  A [S coef; S s]
+let json_of_heap heap = A (List.map json_of_chunk heap)
+let json_of_env env = O (List.map (fun (k, v) -> (k, S v)) env)
+let json_of_ctxt ctxt =
+  match ctxt with
+    Assuming cond -> A [S "Assuming"; S cond]
+  | Executing (h, env, l, msg) -> A [S "Executing"; json_of_heap h; json_of_env env; json_of_loc l; S msg]
+  | PushSubcontext -> A [S "PushSubcontext"]
+  | PopSubcontext -> A [S "PopSubcontext"]
+  | Branching b -> A [S "Branching"; S (match b with LeftBranch -> "LeftBranch" | RightBranch -> "RightBranch")]
 
 module HashedLoc = struct
   type t = loc0
@@ -20,10 +49,13 @@ end
 module LineHashtbl = Hashtbl.Make(HashedLine)
 
 let _ =
-  let print_msg l msg =
-    print_endline (string_of_loc l ^ ": " ^ msg)
-  in
-  let verify ?(emitter_callback = fun _ -> ()) (print_stats : bool) (options : options) (prover : string) (path : string) (emitHighlightedSourceFiles : bool) (dumpPerLineStmtExecCounts : bool) allowDeadCode =
+  let verify ?(emitter_callback = fun _ -> ()) (print_stats : bool) (options : options) (prover : string) (path : string) (emitHighlightedSourceFiles : bool) (dumpPerLineStmtExecCounts : bool) allowDeadCode json =
+    let print_msg l msg =
+      if json then
+        print_json_endline (A [S "StaticError"; json_of_loc l; S msg])
+      else
+        print_endline (string_of_loc l ^ ": " ^ msg)
+    in
     let verify range_callback =
     let exit l =
       Java_frontend_bridge.unload();
@@ -102,22 +134,34 @@ let _ =
       reportDeadCode ();
       dumpPerLineStmtExecCounts ();
       if print_stats then stats#printStats;
-      print_endline ("0 errors found (" ^ (string_of_int (stats#getStmtExec)) ^ " statements verified)");
+      let msg = "0 errors found (" ^ (string_of_int (stats#getStmtExec)) ^ " statements verified)" in
+      if json then
+        print_json_endline (A [S "success"; S msg])
+      else
+        print_endline msg;
       Java_frontend_bridge.unload();
     with
-      PreprocessorDivergence (l, msg) -> print_msg (Lexed l) msg; exit 1
-    | ParseException (l, msg) -> print_msg l ("Parse error" ^ (if msg = "" then "." else ": " ^ msg)); exit 1
-    | CompilationError(msg) -> print_endline (msg); exit 1
-    | StaticError (l, msg, url) -> print_msg l msg; exit 1
+      PreprocessorDivergence (l, msg) ->
+      print_msg (Lexed l) msg;
+      exit 1
+    | ParseException (l, msg) ->
+      print_msg l ("Parse error" ^ (if msg = "" then "." else ": " ^ msg));
+      exit 1
+    | CompilationError(msg) ->
+      if json then
+        print_json_endline (A [S "CompilationError"; S msg])
+      else
+        print_endline msg;
+      exit 1
+    | StaticError (l, msg, url) ->
+      print_msg l msg;
+      exit 1
     | SymbolicExecutionError (ctxts, l, msg, url) ->
-        (*
-        let _ = print_endline "Trace:" in
-        let _ = List.iter (fun c -> print_endline (string_of_context c)) (List.rev ctxts) in
-        let _ = print_endline ("Heap: " ^ string_of_heap h) in
-        let _ = print_endline ("Env: " ^ string_of_env env) in
-        *)
-        let _ = print_msg l msg in
-        exit 1
+      if json then
+        print_json_endline (A [S "SymbolicExecutionError"; A (List.map json_of_ctxt ctxts); json_of_loc l; S msg; match url with None -> Null | Some s -> S s])
+      else
+        print_msg l msg;
+      exit 1
     in
     if emitHighlightedSourceFiles then
     begin
@@ -225,6 +269,7 @@ let _ =
       verify (fun _ _ -> ())
   in
   let stats = ref false in
+  let json = ref false in
   let verbose = ref 0 in
   let disable_overflow_check = ref false in
   let prover: string ref = ref default_prover in
@@ -275,6 +320,7 @@ let _ =
    * new option should be hidden.
    *)
   let cla = [ "-stats", Set stats, " "
+            ; "-json", Set json, "Report result as JSON"
             ; "-verbose", Set_int verbose, "-1 = file processing; 1 = statement executions; 2 = produce/consume steps; 4 = prover queries."
             ; "-disable_overflow_check", Set disable_overflow_check, " "
             ; "-prover", String (fun str -> prover := str), "Set SMT prover (" ^ list_provers() ^ ")."
@@ -345,7 +391,7 @@ let _ =
           option_data_model = !dataModel;
           option_report_skipped_stmts = false;
         } in
-        print_endline filename;
+        if not !json then print_endline filename;
         let emitter_callback (packages : package list) =
           match !outputSExpressions with
             | Some target_file ->
@@ -353,7 +399,7 @@ let _ =
               SExpressionEmitter.emit target_file packages          
             | None             -> ()
         in
-        verify ~emitter_callback:emitter_callback !stats options !prover filename !emitHighlightedSourceFiles !dumpPerLineStmtExecCounts !allowDeadCode;
+        verify ~emitter_callback:emitter_callback !stats options !prover filename !emitHighlightedSourceFiles !dumpPerLineStmtExecCounts !allowDeadCode !json;
         allModules := ((Filename.chop_extension filename) ^ ".vfmanifest")::!allModules
       end
     else if Filename.check_suffix filename ".o" then
