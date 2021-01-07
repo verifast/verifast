@@ -456,7 +456,16 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (_, inductive_tparams, ctormap, _, _, _, _, _) = List.assoc i inductivemap in
       let cont () =
         let (_, (_, _, _, _, (symb, _))) = List.assoc g ctormap in
-        let vs = List.map2 (fun tp0 tp -> let v = get_unique_var_symb "value" tp in (v, prover_convert_term v tp tp0)) ts0 ts in
+        let vs = map3 begin fun tp0 tp pat ->
+            let x =
+              match pat with
+                VarPat (_, x) -> x
+              | _ -> "value"
+            in
+            let v = get_unique_var_symb x tp in
+            (v, prover_convert_term v tp tp0)
+          end ts0 ts pats
+        in
         let formula = ctxt#mk_eq t (ctxt#mk_app symb (List.map snd vs)) in
         assume formula $. fun () ->
         let inputParamCount = if isInputParam then max_int else 0 in

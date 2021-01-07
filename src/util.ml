@@ -290,6 +290,12 @@ let imap (f: int -> 'a -> 'b) (xs: 'a list): 'b list =
   in
   imapi 0 xs
 
+let rec map3 f xs ys zs =
+  match xs, ys, zs with
+    [], [], [] -> []
+  | x::xs, y::ys, z::zs ->
+    f x y z::map3 f xs ys zs
+
 let list_remove_dups xs =
   let rec iter ys xs =
     match xs with
