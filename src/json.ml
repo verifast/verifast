@@ -75,3 +75,205 @@ let print_json_endline json =
   buffer_add_json buf json;
   Buffer.output_buffer stdout buf;
   print_newline ()
+
+type json_token_type = LBracket | RBracket | LBrace | RBrace | Comma | Colon | NullToken | True | False | Integer | String | Eof
+
+let string_of_token_type = function
+  LBracket -> "'['"
+| RBracket -> "']'"
+| LBrace -> "'{'"
+| RBrace -> "'}'"
+| Comma -> "','"
+| Colon -> "':'"
+| NullToken -> "'null'"
+| True -> "'true'"
+| False -> "'false'"
+| Integer -> "integer"
+| String -> "string"
+| Eof -> "end of input"
+
+type json_lexer = {
+  text: string;
+  mutable pos: int;
+  mutable tokenStart: int;
+  mutable tokenType: json_token_type;
+  tokenValue: Buffer.t;
+}
+
+let peek {text; pos} =
+  if pos < String.length text then
+    text.[pos]
+  else
+    '\x00'
+
+let junk lexer =
+  lexer.pos <- lexer.pos + 1
+
+exception JsonException of int * string
+
+let lexer_error lexer msg =
+  raise (JsonException (lexer.pos, msg))
+
+let expect lexer c =
+  if peek lexer <> c then lexer_error lexer (Printf.sprintf "%c expected" c);
+  junk lexer
+  
+let next_json_token lexer =
+  let rec iter () =
+    lexer.tokenStart <- lexer.pos;
+    match peek lexer with
+      '\x00' -> Eof
+    | ' '|'\n'|'\r'|'\t' -> junk lexer; iter ()
+    | '"' ->
+      junk lexer;
+      Buffer.clear lexer.tokenValue;
+      let rec parse_string () =
+        match peek lexer with
+          '\x00' -> lexer_error lexer "Unexpected EOF inside string literal"
+        | '"' -> junk lexer; String
+        | '\\' ->
+          junk lexer;
+          begin match peek lexer with
+            '\\' -> junk lexer; Buffer.add_char lexer.tokenValue '\\'; parse_string ()
+          | 'n' -> junk lexer; Buffer.add_char lexer.tokenValue '\n'; parse_string ()
+          | 'r' -> junk lexer; Buffer.add_char lexer.tokenValue '\r'; parse_string ()
+          | 't' -> junk lexer; Buffer.add_char lexer.tokenValue '\t'; parse_string ()
+          | 'u' ->
+            junk lexer;
+            let parse_hex_digit () =
+              match peek lexer with
+                '0'..'9' as c -> junk lexer; Char.code c - Char.code '0'
+              | 'A'..'F' as c -> junk lexer; Char.code c - Char.code 'A' + 10
+              | 'a'..'f' as c -> junk lexer; Char.code c - Char.code 'a' + 10
+              | _ -> lexer_error lexer "Bad Unicode escape in string literal"
+            in
+            let d1 = parse_hex_digit () in
+            let d2 = parse_hex_digit () in
+            let d3 = parse_hex_digit () in
+            let d4 = parse_hex_digit () in
+            let utf16 = d1 lsl 12 + d2 lsl 8 + d3 lsl 4 + d4 in
+            if utf16 > 127 then lexer_error lexer "This JSON lexer does not yet support Unicode escapes representing non-ASCII characters";
+            Buffer.add_char lexer.tokenValue (Char.chr utf16);
+            parse_string ()
+          | '"' -> junk lexer; Buffer.add_char lexer.tokenValue '"'; parse_string ()
+          | _ -> lexer_error lexer "Unsupported escape sequence inside string literal"
+          end
+        | c -> junk lexer; Buffer.add_char lexer.tokenValue c; parse_string ()
+      in
+      parse_string ()
+    | '-'|'0'..'9' as c ->
+      junk lexer;
+      Buffer.clear lexer.tokenValue;
+      Buffer.add_char lexer.tokenValue c;
+      let rec parse_number () =
+        match peek lexer with
+          '0'..'9' as c -> junk lexer; Buffer.add_char lexer.tokenValue c; parse_number ()
+        | _ -> Integer
+      in
+      parse_number ()
+    | 'n' ->
+      junk lexer;
+      expect lexer 'u';
+      expect lexer 'l';
+      expect lexer 'l';
+      NullToken
+    | 't' ->
+      junk lexer;
+      expect lexer 'r';
+      expect lexer 'u';
+      expect lexer 'e';
+      True
+    | 'f' ->
+      junk lexer;
+      expect lexer 'a';
+      expect lexer 'l';
+      expect lexer 's';
+      expect lexer 'e';
+      False
+    | '{' -> junk lexer; LBrace
+    | '}' -> junk lexer; RBrace
+    | '[' -> junk lexer; LBracket
+    | ']' -> junk lexer; RBracket
+    | ':' -> junk lexer; Colon
+    | ',' -> junk lexer; Comma
+    | _ -> lexer_error lexer "Illegal character"
+  in
+  let tokenType = iter () in
+  lexer.tokenType <- tokenType
+
+let mk_json_lexer text =
+  let lexer = {text; pos=0; tokenStart=0; tokenType=Eof; tokenValue=Buffer.create 64} in
+  next_json_token lexer;
+  lexer
+
+let lexer_get_value lexer =
+  Buffer.contents lexer.tokenValue
+
+let parse_error lexer msg =
+  raise (JsonException (lexer.tokenStart, msg))
+
+let expect_token lexer tokenType =
+  if lexer.tokenType <> tokenType then parse_error lexer (string_of_token_type tokenType ^ " expected");
+  next_json_token lexer
+
+let parse_json text =
+  let lexer = mk_json_lexer text in
+  let rec iter () =
+    match lexer.tokenType with
+      NullToken -> next_json_token lexer; Null
+    | True -> next_json_token lexer; B true
+    | False -> next_json_token lexer; B false
+    | String -> let value = lexer_get_value lexer in next_json_token lexer; S value
+    | Integer ->
+      let value = lexer_get_value lexer in
+      begin match int_of_string_opt value with
+        Some i -> next_json_token lexer; I i
+      | None -> parse_error lexer "The integer is outside of the range supported by this JSON parser"
+      end
+    | LBrace ->
+      next_json_token lexer;
+      begin match lexer.tokenType with
+        RBrace -> next_json_token lexer; O []
+      | _ ->
+        let rec parse_object props =
+          if lexer.tokenType <> String then parse_error lexer "String expected";
+          let key = lexer_get_value lexer in
+          next_json_token lexer;
+          expect_token lexer Colon;
+          let value = iter () in
+          let props = (key, value)::props in
+          match lexer.tokenType with
+            RBrace -> next_json_token lexer; O (List.rev props)
+          | _ ->
+            expect_token lexer Comma;
+            parse_object props
+        in
+        parse_object []
+      end
+    | LBracket ->
+      next_json_token lexer;
+      begin match lexer.tokenType with
+        RBracket -> next_json_token lexer; A []
+      | _ ->
+        let rec parse_array elems =
+          let elem = iter () in
+          let elems = elem::elems in
+          match lexer.tokenType with
+            RBracket -> next_json_token lexer; A (List.rev elems)
+          | _ ->
+            expect_token lexer Comma;
+            parse_array elems
+        in
+        parse_array []
+      end
+    | _ -> parse_error lexer ("Unexpected JSON token: " ^ string_of_token_type lexer.tokenType)
+  in
+  let json = iter () in
+  expect_token lexer Eof;
+  json
+
+(*
+let () =
+  assert(parse_json "[null, true, false, 10, -5, \"Hello\", \"Bye\", \"This \\\\is a \\\"NUL\\\": \\u0000\\r\\n\", {\"This\": [\"is an\"], \"object\": \"!\"}]" =
+    A [Null; B true; B false; I 10; I (-5); S "Hello"; S "Bye"; S "This \\is a \"NUL\": \x00\r\n"; O ["This", A [S "is an"]; "object", S "!"]])
+*)
