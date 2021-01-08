@@ -615,4 +615,22 @@ fixpoint real box_level(box id);
 predicate current_box_level(real level);
 @*/
 
+/*@
+
+// Fixpoint operator, for defining functions by well-founded recursion over the nonnegative integers
+
+fixpoint b fix<a, b>(fixpoint(fixpoint(a, b), a, b) def, fixpoint(a, int) measure, a x);
+
+// A proof of this lemma is in examples/wf_func_proof.c
+
+lemma void fix_unfold<a, b>(fixpoint(fixpoint(a, b), a, b) def, fixpoint(a, int) measure, a x0);
+    requires 0 <= measure(x0) && fix(def, measure, x0) != def((fix)(def, measure), x0);
+    ensures
+        exists<pair<pair<fixpoint(a, b), fixpoint(a, b)>, a> >(pair(pair(?f1, ?f2), ?a)) &*&
+        forall_(a x; measure(x) < 0 || measure(a) <= measure(x) || f1(x) == f2(x)) &*&
+        0 <= measure(a) &*&
+        def(f1, a) != def(f2, a);
+
+@*/
+
 #endif

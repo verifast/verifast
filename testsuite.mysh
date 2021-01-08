@@ -240,6 +240,11 @@ cd examples
   verifast_both -c umemcpy.c
   verifast_both -disable_overflow_check wc.c
   verifast_both -c -allow_should_fail carrays.c
+  verifast -c wf_func_proof.c
+  verifast -c wf_func1_manual.c
+  verifast -c wf_func2_manual.c
+  verifast -c -disable_overflow_check wf_func1.c
+  verifast -c wf_func2.c
   cd helloproc
     # Helloproc.mysh is not parallelizable.  mysh does not guarantee that 1 will be
     # the default number of cpus forever, so we explicitly specify it to be 1.

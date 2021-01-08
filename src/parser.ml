@@ -28,7 +28,7 @@ let ghost_keywords = [
   "produce_lemma_function_pointer_chunk"; "duplicate_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
   "producing_box_predicate"; "producing_handle_predicate"; "producing_fresh_handle_predicate"; "box"; "handle"; "any"; "split_fraction"; "by"; "merge_fractions";
   "unloadable_module"; "decreases"; "forall_"; "import_module"; "require_module"; ".."; "extends"; "permbased";
-  "terminates"; "abstract_type"
+  "terminates"; "abstract_type"; "fixpoint_auto"
 ]
 
 let c_keywords = [
@@ -571,7 +571,6 @@ and
 and
   parse_pure_decl = parser
     [< '(l, Kwd "inductive"); '(li, Ident i); tparams = parse_type_params li; '(_, Kwd "="); cs = (parser [< cs = parse_ctors >] -> cs | [< cs = parse_ctors_suffix >] -> cs); '(_, Kwd ";") >] -> [Inductive (l, i, tparams, cs)]
-  | [< '(l, Kwd "fixpoint"); t = parse_return_type; d = parse_func_rest Fixpoint t Public>] -> [d]
   | [< '(l, Kwd "predicate"); result = parse_predicate_decl l Inductiveness_Inductive >] -> result
   | [< '(l, Kwd "copredicate"); result = parse_predicate_decl l Inductiveness_CoInductive >] -> result
   | [< '(l, Kwd "predicate_family"); '(_, Ident g); is = parse_paramlist; (ps, inputParamCount) = parse_pred_paramlist; '(_, Kwd ";") >]
@@ -592,6 +591,74 @@ and
   | [< '(l, Kwd "import_module"); '(_, Ident g); '(lx, Kwd ";") >] -> [ImportModuleDecl (l, g)]
   | [< '(l, Kwd "require_module"); '(_, Ident g); '(lx, Kwd ";") >] -> [RequireModuleDecl (l, g)]
   | [< '(l, Kwd "abstract_type"); '(_, Ident t); '(_, Kwd ";") >] -> [AbstractTypeDecl (l, t)]
+  | [< '(l, Kwd ("fixpoint"|"fixpoint_auto" as kwd)); rt = parse_return_type; '(lg, Ident g); tparams = parse_type_params_general;
+       ps = parse_paramlist;
+       decreases = begin parser
+         [< '(_, Kwd "decreases"); e = parse_expr; '(_, Kwd ";") >] -> Some e
+       | [< >] -> None
+       end;
+       body = begin parser
+         [< '(_, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}") >] -> Some (ss, closeBraceLoc)
+       | [< '(_, Kwd ";") >] -> None
+       end
+    >] ->
+    let rec refers_to_g state e =
+      match e with
+        CallExpr (_, g', _, _, _, _) when g' = g -> true
+      | Var (_, g') when g' = g -> true
+      | _ -> expr_fold_open refers_to_g state e
+    in
+    begin match body with
+      Some ([ReturnStmt (_, Some bodyExpr)], _) when refers_to_g false bodyExpr ->
+      let rt =
+        match rt with
+          None -> raise (ParseException (l, "The return type of a fixpoint function must not be 'void'."))
+        | Some rt -> rt
+      in
+      let gdef = g ^ "__def" in
+      let iargs = g ^ "__args" in
+      let iargsType = ConstructedTypeExpr (l, iargs, List.map (fun x -> IdentTypeExpr (l, None, x)) tparams) in
+      let g_uncurry = g ^ "__uncurry" in
+      let gdef_curried = g ^ "__def_curried" in
+      let measure =
+        match decreases, bodyExpr with
+          Some e, _ -> e
+        | None, IfExpr (_, Operation (_, Eq, [Var (_, x); _]), _, _) when List.exists (fun (t, y) -> y = x) ps -> Var (l, x)
+        | _, _ -> raise (ParseException (l, "If the body of a fixpoint function is not of the form '{ switch (_) {_} }' or '{ return x == _ ? _ : _; }', a decreases clause must be specified"))
+      in
+      let gmeasure = g ^ "__measure" in
+      let call g args = CallExpr (l, g, [], [], List.map (fun e -> LitPat e) args, Static) in
+      [
+        Func (l, Fixpoint, tparams, Some rt, gdef, (PureFuncTypeExpr (l, List.map fst ps @ [rt]), g) :: ps, false, None, None, false, body, Static, Public);
+        Inductive (l, iargs, tparams, [Ctor (l, iargs, List.map (fun (t, x) -> (x, t)) ps)]);
+        Func (l, Fixpoint, tparams, Some rt, g_uncurry, (PureFuncTypeExpr (l, [iargsType; rt]), g) :: ps, false, None, None, false,
+          Some ([ReturnStmt (l, Some (call g [call iargs (List.map (fun (t, x) -> Var (l, x)) ps)]))], l), Static, Public);
+        Func (l, Fixpoint, tparams, Some rt, gdef_curried, [PureFuncTypeExpr (l, [iargsType; rt]), g; iargsType, "__args"], false, None, None, false,
+          Some ([SwitchStmt (l, Var (l, "__args"), [SwitchStmtClause (l, call iargs (List.map (fun (t, x) -> Var (l, x)) ps),
+            [ReturnStmt (l, Some (call gdef ([ExprCallExpr (l, Var (l, g_uncurry), [Var (l, g)])] @ List.map (fun (t, x) -> Var (l, x)) ps)))])])], l), Static, Public);
+        Func (l, Fixpoint, tparams, Some (ManifestTypeExpr (l, intType)), gmeasure, [iargsType, "__args"], false, None, None, false,
+          Some ([SwitchStmt (l, Var (l, "__args"), [SwitchStmtClause (l, call iargs (List.map (fun (t, x) -> Var (l, x)) ps),
+            [ReturnStmt (l, Some measure)])])], l), Static, Public);
+        Func (l, Fixpoint, tparams, Some rt, g, ps, false, None, None, false, Some ([ReturnStmt (l, Some (call "fix" [Var (l, gdef_curried); Var (l, gmeasure); call iargs (List.map (fun (t, x) -> Var (l, x)) ps)]))], l), Static, Public);
+        Func (l, Lemma (kwd = "fixpoint_auto", None), tparams, None, g ^ "_def", ps, false, None,
+          Some (Operation (l, Le, [IntLit (l, zero_big_int, true, false, NoLSuffix); measure]), Operation (l, Eq, [call g (List.map (fun (t, x) -> Var (l, x)) ps); bodyExpr])),
+          false,
+          Some ([
+            IfStmt (l, Operation (l, Neq, [call g (List.map (fun (t, x) -> Var (l, x)) ps); bodyExpr]), [
+              ExprStmt (call "fix_unfold" [Var (l, gdef_curried); Var (l, gmeasure); call iargs (List.map (fun (t, x) -> Var (l, x)) ps)]);
+              Open (l, None, "exists", [], [], [CtorPat (l, "pair", [CtorPat (l, "pair", [VarPat (l, "f1__"); VarPat (l, "f2__")]); CtorPat (l, iargs, List.map (fun (t, x) -> VarPat (l, x ^ "0")) ps)])], None);
+              Assert (l, (MatchAsn (l, call "pair" [ExprCallExpr (l, Var (l, g_uncurry), [Var (l, "f1_")]); ExprCallExpr (l, Var (l, g_uncurry), [Var (l, "f2_")])],
+                CtorPat (l, "pair", [VarPat (l, g ^ "__1"); VarPat (l, g ^ "__2")]))));
+              Assert (l, Operation (l, Eq, [
+                call gdef ([Var (l, g ^ "__1")] @ List.map (fun (t, x) -> Var (l, x ^ "0")) ps);
+                call gdef ([Var (l, g ^ "__2")] @ List.map (fun (t, x) -> Var (l, x ^ "0")) ps)]))
+            ], [])
+          ], l), Static, Public)
+      ]
+    | _ ->
+      if kwd = "fixpoint_auto" then raise (ParseException (l, "Keyword 'fixpoint_auto' does not make sense here because this type of fixpoint definition is always unfolded automatically"));
+      [Func (l, Fixpoint, tparams, rt, g, ps, false, None, None, false, body, Static, Public)]
+    end
 and
   parse_action_decls = parser
   [< ad = parse_action_decl; ads = parse_action_decls >] -> ad::ads
