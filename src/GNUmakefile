@@ -490,10 +490,15 @@ vfide.cmx: SExpressionEmitter.cmx
 
 #------------------------------- Tests --------------------------------------#
 testsuite: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
+	@echo "  OCAML    " json_tests.ml
+	$(OCAMLC) json.ml && $(OCAML) json.cmo json_tests.ml
 	@echo "  MYSH     " testsuite
 	$(SET_ENV); \
         cd ..; bin/mysh -cpus $(NUMCPU) < testsuite.mysh
 .PHONY: testsuite
+
+clean::
+	rm json.cmo
 
 # Verify model solution of student assignments to prevent regression.
 assignment_tests: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)

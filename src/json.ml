@@ -147,13 +147,39 @@ let next_json_token lexer =
               | 'a'..'f' as c -> junk lexer; Char.code c - Char.code 'a' + 10
               | _ -> lexer_error lexer "Bad Unicode escape in string literal"
             in
-            let d1 = parse_hex_digit () in
-            let d2 = parse_hex_digit () in
-            let d3 = parse_hex_digit () in
-            let d4 = parse_hex_digit () in
-            let utf16 = d1 lsl 12 + d2 lsl 8 + d3 lsl 4 + d4 in
-            if utf16 > 127 then lexer_error lexer "This JSON lexer does not yet support Unicode escapes representing non-ASCII characters";
-            Buffer.add_char lexer.tokenValue (Char.chr utf16);
+            let parse_hex_16bit_number () =
+              let d1 = parse_hex_digit () in
+              let d2 = parse_hex_digit () in
+              let d3 = parse_hex_digit () in
+              let d4 = parse_hex_digit () in
+              d1 lsl 12 + d2 lsl 8 + d3 lsl 4 + d4
+            in
+            let utf16 = parse_hex_16bit_number () in
+            (* Convert UTF-16-encoded character into UTF-8-encoded character *)
+            if utf16 <= 0x7f then
+              Buffer.add_char lexer.tokenValue (Char.chr utf16)
+            else if utf16 <= 0x7ff then begin
+              Buffer.add_char lexer.tokenValue (Char.chr ((utf16 lsr 6) lor 0b11000000));
+              Buffer.add_char lexer.tokenValue (Char.chr ((utf16 land 0b00111111) lor 0b10000000))
+            end else if utf16 <= 0xD7FF || 0xE000 <= utf16 then begin
+              Buffer.add_char lexer.tokenValue (Char.chr ((utf16 lsr 12) lor 0b11100000));
+              Buffer.add_char lexer.tokenValue (Char.chr (((utf16 lsr 6) land 0b00111111) lor 0b10000000));
+              Buffer.add_char lexer.tokenValue (Char.chr ((utf16 land 0b00111111) lor 0b10000000))
+            end else if utf16 <= 0xDBFF then begin
+              (* High surrogate. Must be followed by low surrogate. *)
+              expect lexer '\\';
+              expect lexer 'u';
+              let utf16' = parse_hex_16bit_number () in
+              if 0xDC00 <= utf16' && utf16' <= 0xDFFF then begin
+                let scalarValue = 0x10000 + ((utf16 land 0b1111111111) lsl 10) + (utf16' land 0b1111111111) in
+                Buffer.add_char lexer.tokenValue (Char.chr ((scalarValue lsr 18) lor 0b11110000));
+                Buffer.add_char lexer.tokenValue (Char.chr (((scalarValue lsr 12) land 0b00111111) lor 0b10000000));
+                Buffer.add_char lexer.tokenValue (Char.chr (((scalarValue lsr 6) land 0b00111111) lor 0b10000000));
+                Buffer.add_char lexer.tokenValue (Char.chr ((scalarValue land 0b00111111) lor 0b10000000))
+              end else
+                raise (JsonException (lexer.pos - 12, "Unpaired high surrogate"))
+            end else
+              raise (JsonException (lexer.pos - 6, "Unpaired low surrogate"));
             parse_string ()
           | '"' -> junk lexer; Buffer.add_char lexer.tokenValue '"'; parse_string ()
           | _ -> lexer_error lexer "Unsupported escape sequence inside string literal"
@@ -271,9 +297,3 @@ let parse_json text =
   let json = iter () in
   expect_token lexer Eof;
   json
-
-(*
-let () =
-  assert(parse_json "[null, true, false, 10, -5, \"Hello\", \"Bye\", \"This \\\\is a \\\"NUL\\\": \\u0000\\r\\n\", {\"This\": [\"is an\"], \"object\": \"!\"}]" =
-    A [Null; B true; B false; I 10; I (-5); S "Hello"; S "Bye"; S "This \\is a \"NUL\": \x00\r\n"; O ["This", A [S "is an"]; "object", S "!"]])
-*)
