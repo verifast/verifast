@@ -47,7 +47,7 @@ linux/Stopwatch.cmx : linux/Stopwatch.cmi
 linux/Stopwatch.cmi :
 main_class.cmx :
 mynum.cmx :
-mysh.cmx :
+mysh.cmx : vfconfig.cmx
 parser.cmx : util.cmx win/Stopwatch.cmx stats.cmx win/Perf.cmx lexer.cmx \
     ast.cmx
 proverapi.cmx :
@@ -93,7 +93,7 @@ verify_expr.cmx : verifast1.cmx verifast0.cmx util.cmx stats.cmx \
 vfconsole.cmx : verifast1.cmx verifast0.cmx verifast.cmx util.cmx \
     SExpressionEmitter.cmx win/Perf.cmx parser.cmx lexer.cmx \
     java_frontend/java_frontend_bridge.cmx ast.cmx
-vfide.cmx : verifast0.cmx verifast.cmx util.cmx \
+vfide.cmx : vfconfig.cmx verifast0.cmx verifast.cmx util.cmx \
     shape_analysis/shape_analysis_frontend.cmx parser.cmx \
     lexer.cmx java_frontend/java_frontend_bridge.cmx branchright_png.cmx \
     branchleft_png.cmx ast.cmx
