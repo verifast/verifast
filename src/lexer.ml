@@ -310,6 +310,7 @@ let big_int_of_octal_string s =
 (** For syntax highlighting. *)
 
 type decl_kind =
+  | DeclKind_HeaderFile
   | DeclKind_InductiveType
   | DeclKind_Struct
   | DeclKind_Union

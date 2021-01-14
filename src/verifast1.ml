@@ -1089,6 +1089,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     let jarspecs = List.map spec_include_for_jar jars in 
                     (jarspecs, ds)
                 in
+                reportUseSite DeclKind_HeaderFile (Lexed ((path, 1, 1), (path, 1, 1))) l;
                 let (_, maps) = check_file header_path header_is_import_spec include_prelude (Filename.dirname path) headers' ds in
                 headermap := (path, (headers', maps))::!headermap;
                 (headers', maps)
