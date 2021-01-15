@@ -1,3 +1,5 @@
+// verifast_options{disable_overflow_check prover:z3v4.5}
+
 #include "stdlib.h"
 #include "assert.h"
 #include <stdbool.h>

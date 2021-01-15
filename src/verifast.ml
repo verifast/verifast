@@ -14,6 +14,36 @@ open Verify_expr
 
 exception FileNotFound of string
 
+let merge_file_options prover0 options {disable_overflow_check; prover; target} =
+  (match prover with None -> prover0 | Some prover -> prover),
+  {
+    options with
+      option_disable_overflow_check=
+        begin match disable_overflow_check with
+          None -> options.option_disable_overflow_check
+        | Some b -> b
+        end;
+      option_data_model=
+        match target with
+          None -> options.option_data_model
+        | Some target ->
+          let dataModel =
+            try
+              data_model_of_string target
+            with Failure msg ->
+              failwith ("Error while parsing file option 'target:" ^ target ^ "': " ^ msg)
+          in
+          Some dataModel
+  }
+
+let merge_options_from_source_file prover options path =
+  try
+    let fileOptions = readFileOptions path in
+    merge_file_options prover options fileOptions
+  with
+    FileOptionsError msg -> raise (StaticError (Lexed ((path, 1, 1), (path, 1, 1)), msg, None))
+  | Failure msg -> raise (StaticError (Lexed ((path, 1, 1), (path, 1, 1)), msg, None))
+
 let read_file_lines path =
   if Sys.file_exists path then
     let file = open_in path in

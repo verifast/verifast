@@ -193,7 +193,7 @@ let data_models = [
 let data_model_of_string s =
   let s = String.uppercase_ascii s in
   match head_flatmap_option (fun (k, v) -> if String.uppercase_ascii k = s then Some v else None) data_models with
-    None -> failwith "No such data model"
+    None -> failwith ("Data model must be one of " ^ String.concat ", " (List.map fst data_models))
   | Some v -> v
 let intmax_rank = 3 (* Assume that sizeof(intmax_t) is always 8 *)
 

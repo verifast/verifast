@@ -49,7 +49,7 @@ end
 module LineHashtbl = Hashtbl.Make(HashedLine)
 
 let _ =
-  let verify ?(emitter_callback = fun _ -> ()) (print_stats : bool) (options : options) (prover : string) (path : string) (emitHighlightedSourceFiles : bool) (dumpPerLineStmtExecCounts : bool) allowDeadCode json =
+  let verify ?(emitter_callback = fun _ -> ()) (print_stats : bool) (options : options) (prover : string) (path : string) (emitHighlightedSourceFiles : bool) (dumpPerLineStmtExecCounts : bool) allowDeadCode json mergeOptionsFromSourceFile =
     let exit_with_msg l msg =
       if json then begin
         print_json_endline (A [S "StaticError"; json_of_loc l; S msg]);
@@ -133,6 +133,12 @@ let _ =
           false
       in
       let callbacks = {Verifast1.noop_callbacks with reportRange=range_callback; reportStmt; reportStmtExec; reportDirective} in
+      let prover, options = 
+        if mergeOptionsFromSourceFile then
+          merge_options_from_source_file prover options path
+        else
+          prover, options
+      in
       let stats = verify_program ~emitter_callback:emitter_callback prover options path callbacks None None in
       reportDeadCode ();
       dumpPerLineStmtExecCounts ();
@@ -285,6 +291,7 @@ let _ =
   let emitHighlightedSourceFiles = ref false in
   let dumpPerLineStmtExecCounts = ref false in
   let allowDeadCode = ref false in
+  let readOptionsFromSourceFile = ref false in
   let exports: string list ref = ref [] in
   let outputSExpressions : string option ref = ref None in
   let runtime: string option ref = ref None in
@@ -319,6 +326,7 @@ let _ =
    * new option should be hidden.
    *)
   let cla = [ "-stats", Set stats, " "
+            ; "-read_options_from_source_file", Set readOptionsFromSourceFile, "Retrieve disable_overflow_check, prover, target settings from first line of .c/.java file; syntax: //verifast_options{disable_overflow_check prover:z3v4.5 target:32bit}"
             ; "-json", Set json, "Report result as JSON"
             ; "-verbose", Set_int verbose, "-1 = file processing; 1 = statement executions; 2 = produce/consume steps; 4 = prover queries."
             ; "-disable_overflow_check", Set disable_overflow_check, " "
@@ -398,7 +406,7 @@ let _ =
               SExpressionEmitter.emit target_file packages          
             | None             -> ()
         in
-        verify ~emitter_callback:emitter_callback !stats options !prover filename !emitHighlightedSourceFiles !dumpPerLineStmtExecCounts !allowDeadCode !json;
+        verify ~emitter_callback:emitter_callback !stats options !prover filename !emitHighlightedSourceFiles !dumpPerLineStmtExecCounts !allowDeadCode !json !readOptionsFromSourceFile;
         allModules := ((Filename.chop_extension filename) ^ ".vfmanifest")::!allModules
       end
     else if Filename.check_suffix filename ".o" then

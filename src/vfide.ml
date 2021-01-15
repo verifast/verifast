@@ -566,7 +566,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     (* Printf.printf "perform_syntax_highlighting (start: (%d, %d); stop: (%d, %d))\n" start#line start#line_index stop#line stop#line_index; flush stdout; *)
     let buffer = tab#buffer in
     let firstLine = buffer#start_iter#get_text ~stop:buffer#start_iter#forward_to_line_end in
-    let {file_opt_annot_char=annotChar} = get_file_options firstLine in
+    let {annot_char=annotChar} = try get_file_options firstLine with FileOptionsError _ -> default_file_options in
     let commentTag = get $. GtkText.TagTable.lookup buffer#tag_table "comment" in
     let commentTag = new GText.tag commentTag in
     let ghostRangeTag = get $. GtkText.TagTable.lookup buffer#tag_table "ghostRange" in
@@ -797,7 +797,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       let gIter = buffer#start_iter in
       tab#eol := eol;
       (buffer: GSourceView2.source_buffer)#insert ~iter:gIter text;
-      let {file_opt_tab_size=tabSize} = get_file_options text in
+      let {tab_size=tabSize} = try get_file_options text with FileOptionsError _ -> default_file_options in
       tab#mainView#view#set_tab_width tabSize;
       tab#subView#view#set_tab_width tabSize;
       ignore_text_changes := false;
@@ -1507,6 +1507,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
                   "allow_dead_code" -> true
                 | _ -> false
               in
+              let prover, options = merge_options_from_source_file prover options path in
               let stats = verify_program prover options path {reportRange; reportUseSite; reportStmt; reportStmtExec; reportExecutionForest; reportDirective} breakpoint targetPath in
               begin
                 let _, tab = get_tab_for_path path in
