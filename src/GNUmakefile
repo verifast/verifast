@@ -491,7 +491,7 @@ vfide.cmx: SExpressionEmitter.cmx
 #------------------------------- Tests --------------------------------------#
 testsuite: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
 	@echo "  OCAMLOPT " json_tests
-	$(OCAMLOPT) -o json_tests$(DOTEXE) json.cmx json_tests.ml && ./json_tests$(DOTEXE)
+	$(OCAMLOPT) $(OCAMLCFLAGS) -o json_tests$(DOTEXE) json.cmx json_tests.ml && ./json_tests$(DOTEXE)
 	@echo "  MYSH     " testsuite
 	$(SET_ENV); \
         cd ..; bin/mysh -cpus $(NUMCPU) < testsuite.mysh
