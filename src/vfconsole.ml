@@ -50,11 +50,14 @@ module LineHashtbl = Hashtbl.Make(HashedLine)
 
 let _ =
   let verify ?(emitter_callback = fun _ -> ()) (print_stats : bool) (options : options) (prover : string) (path : string) (emitHighlightedSourceFiles : bool) (dumpPerLineStmtExecCounts : bool) allowDeadCode json =
-    let print_msg l msg =
-      if json then
-        print_json_endline (A [S "StaticError"; json_of_loc l; S msg])
-      else
-        print_endline (string_of_loc l ^ ": " ^ msg)
+    let exit_with_msg l msg =
+      if json then begin
+        print_json_endline (A [S "StaticError"; json_of_loc l; S msg]);
+        exit 0
+      end else begin
+        print_endline (string_of_loc l ^ ": " ^ msg);
+        exit 1
+      end
     in
     let verify range_callback =
     let exit l =
@@ -142,26 +145,22 @@ let _ =
       Java_frontend_bridge.unload();
     with
       PreprocessorDivergence (l, msg) ->
-      print_msg (Lexed l) msg;
-      exit 1
+      exit_with_msg (Lexed l) msg
     | ParseException (l, msg) ->
-      print_msg l ("Parse error" ^ (if msg = "" then "." else ": " ^ msg));
-      exit 1
+      exit_with_msg l ("Parse error" ^ (if msg = "" then "." else ": " ^ msg))
     | CompilationError(msg) ->
-      if json then
-        print_json_endline (A [S "CompilationError"; S msg])
-      else
-        print_endline msg;
-      exit 1
+      if json then begin
+        print_json_endline (A [S "CompilationError"; S msg]); exit 0
+      end else begin
+        print_endline msg; exit 1
+      end
     | StaticError (l, msg, url) ->
-      print_msg l msg;
-      exit 1
+      exit_with_msg l msg
     | SymbolicExecutionError (ctxts, l, msg, url) ->
-      if json then
-        print_json_endline (A [S "SymbolicExecutionError"; A (List.map json_of_ctxt ctxts); json_of_loc l; S msg; match url with None -> Null | Some s -> S s])
-      else
-        print_msg l msg;
-      exit 1
+      if json then begin
+        print_json_endline (A [S "SymbolicExecutionError"; A (List.map json_of_ctxt ctxts); json_of_loc l; S msg; match url with None -> Null | Some s -> S s]); exit 0
+      end else
+        exit_with_msg l msg
     in
     if emitHighlightedSourceFiles then
     begin
