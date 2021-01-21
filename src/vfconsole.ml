@@ -1,3 +1,4 @@
+open Util
 open Ast
 open Lexer
 open Parser
@@ -50,20 +51,77 @@ module LineHashtbl = Hashtbl.Make(HashedLine)
 
 let _ =
   let verify ?(emitter_callback = fun _ -> ()) (print_stats : bool) (options : options) (prover : string) (path : string) (emitHighlightedSourceFiles : bool) (dumpPerLineStmtExecCounts : bool) allowDeadCode json mergeOptionsFromSourceFile =
+    let exit l =
+      Java_frontend_bridge.unload();
+      exit l
+    in
+    let reportUseSite, get_use_sites_json =
+      if not json then
+        (fun _ _ _ -> ()), (fun _ -> Null)
+      else
+        let paths = Hashtbl.create 50 in
+        let pathInfos = ref [] in
+        let reportUseSite declarationKind locDecl locUse =
+          let get_path_info path =
+            match Hashtbl.find_opt paths path with
+              Some info -> info
+            | None ->
+              let id = Hashtbl.length paths in
+              let info = (id, path, ref []) in
+              Hashtbl.add paths path info;
+              push info pathInfos;
+              info
+          in
+          let ((usePath, useLine, useCol), (usePath', useLine', useCol')) = locUse in
+          assert (usePath' = usePath);
+          let ((declPath, declLine, declCol), (declPath', declLine', declCol')) = locDecl in
+          assert (declPath' = declPath);
+          let (usePathId, _, useSites) = get_path_info usePath in
+          let (declPathId, _, _) = get_path_info declPath in
+          push ((useLine, useCol, useLine', useCol'), declPathId, (declLine, declCol, declLine', declCol')) useSites
+        in
+        let get_use_sites_json () =
+          let pathInfos = List.rev (!pathInfos) |> List.map begin fun (_, path, useSites) ->
+              let useSites = Array.of_list !useSites in
+              useSites |> Array.sort begin fun ((line1, col1, _, _), _, _) ((line2, col2, _, _), _, _) ->
+                if line1 < line2 then
+                  -1
+                else if line1 = line2 then
+                  if col1 < col2 then -1 else if col1 = col2 then 0 else 1
+                else
+                  1
+              end;
+              let useSites = useSites |> Array.map begin fun (useRange, declPathId, declRange) ->
+                  let json_of_range (line1, col1, line2, col2) =
+                    if line1 = line2 then
+                      A [I line1; I col1; I col2]
+                    else
+                      A [I line1; I col1; I line2; I col2]
+                  in
+                  A [json_of_range useRange; I declPathId; json_of_range declRange]
+                end
+              in
+              A [S path; A (Array.to_list useSites)]
+            end
+          in
+          A pathInfos
+        in
+        reportUseSite, get_use_sites_json
+    in
+    let exit_with_json_result resultJson =
+      let majorVersion = 2 in
+      let minorVersion = 0 in
+      print_json_endline (A [S "VeriFast-Json"; I majorVersion; I minorVersion; O ["result", resultJson; "useSites", get_use_sites_json ()]])
+    in
     let exit_with_msg l msg =
       if json then begin
-        print_json_endline (A [S "StaticError"; json_of_loc l; S msg]);
-        exit 0
+        exit_with_json_result (A [S "StaticError"; json_of_loc l; S msg])
       end else begin
         print_endline (string_of_loc l ^ ": " ^ msg);
         exit 1
       end
     in
     let verify range_callback =
-    let exit l =
-      Java_frontend_bridge.unload();
-      exit l
-    in
     try
       let allowDeadCodeLines = LineHashtbl.create 10 in
       let reportStmt, reportStmtExec, reportDeadCode =
@@ -132,7 +190,7 @@ let _ =
         | _ ->
           false
       in
-      let callbacks = {Verifast1.noop_callbacks with reportRange=range_callback; reportStmt; reportStmtExec; reportDirective} in
+      let callbacks = {Verifast1.noop_callbacks with reportRange=range_callback; reportStmt; reportStmtExec; reportDirective; reportUseSite} in
       let prover, options = 
         if mergeOptionsFromSourceFile then
           merge_options_from_source_file prover options path
@@ -145,7 +203,7 @@ let _ =
       if print_stats then stats#printStats;
       let msg = "0 errors found (" ^ (string_of_int (stats#getStmtExec)) ^ " statements verified)" in
       if json then
-        print_json_endline (A [S "success"; S msg])
+        exit_with_json_result (A [S "success"; S msg])
       else
         print_endline msg;
       Java_frontend_bridge.unload();
@@ -156,7 +214,7 @@ let _ =
       exit_with_msg l ("Parse error" ^ (if msg = "" then "." else ": " ^ msg))
     | CompilationError(msg) ->
       if json then begin
-        print_json_endline (A [S "CompilationError"; S msg]); exit 0
+        exit_with_json_result (A [S "CompilationError"; S msg])
       end else begin
         print_endline msg; exit 1
       end
@@ -164,7 +222,7 @@ let _ =
       exit_with_msg l msg
     | SymbolicExecutionError (ctxts, l, msg, url) ->
       if json then begin
-        print_json_endline (A [S "SymbolicExecutionError"; A (List.map json_of_ctxt ctxts); json_of_loc l; S msg; match url with None -> Null | Some s -> S s]); exit 0
+        exit_with_json_result (A [S "SymbolicExecutionError"; A (List.map json_of_ctxt ctxts); json_of_loc l; S msg; match url with None -> Null | Some s -> S s])
       end else
         exit_with_msg l msg
     in
