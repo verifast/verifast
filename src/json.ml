@@ -1,4 +1,5 @@
 let (|>) x f = f x
+let ($.) f x = f x
 
 type json =
   S of string
@@ -70,9 +71,49 @@ let buffer_add_json buf json =
   in
   iter json
 
+let buffer_add_json_pp buf indent json =
+  let add_spaces level = 
+    Buffer.add_string buf $. String.make (level * indent) ' ' in
+  let join_loop level (c1, c2) vs pp = begin
+    Buffer.add_char buf c1;
+    begin match vs with
+      | x::xs -> begin
+        Buffer.add_char buf '\n';
+        add_spaces $. level + 1;
+        pp x;
+        xs |> List.iter begin fun x ->
+          Buffer.add_string buf ",\n";
+          add_spaces $. level + 1;
+          pp x
+        end;
+        Buffer.add_char buf '\n';
+        add_spaces level;
+      end
+      | _ -> ()
+    end;
+    Buffer.add_char buf c2
+    end in
+  let rec iter level json = match json with
+    | A a -> 
+      join_loop level ('[', ']') a $. iter (level + 1);
+    | O o ->
+      join_loop level ('{', '}') o $. fun (k, v) -> begin
+        buffer_add_json_string buf k;
+        Buffer.add_string buf ": ";
+        iter (level + 1) v 
+        end
+    | v -> buffer_add_json buf v in
+  iter 0 json
+
 let print_json_endline json =
   let buf = Buffer.create 1024 in
   buffer_add_json buf json;
+  Buffer.output_buffer stdout buf;
+  print_newline ()
+
+let pprint_json_endline indent json =
+  let buf = Buffer.create 1024 in
+  buffer_add_json_pp buf indent json;
   Buffer.output_buffer stdout buf;
   print_newline ()
 
