@@ -434,7 +434,7 @@ endif
 	  $(Z3ARGS) branchleft_png.cmx branchright_png.cmx vfconfig.cmx vfide.cmx
 ifeq ($(OS), Darwin)
 	DYLD_LIBRARY_PATH=../lib DYLD_PRINT_LIBRARIES=1 ../bin/vfide -verify_and_quit ../examples/busywaiting/ioliveness/echo_live_mt.c > vfide-libraries.log 2>&1
-	[[ -z "$$(grep /usr/local vfide-libraries.log)" ]]
+	! grep /usr/local vfide-libraries.log
 endif
 endif
 ifneq ($(OS), Windows_NT)
