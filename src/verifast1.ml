@@ -5301,15 +5301,16 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 (f, (l, Real, t, offset)) ->
                 begin
                 let (g, (_, _, _, _, symb, _, inductiveness)) = List.assoc (sn, f) field_pred_map in (* TODO WILLEM: we moeten die inductiveness ergens gebruiken *)
-                let predinst__ p domain =
-                  let p = new predref p domain (Some 1) in
+                let predinst___ p domain args =
+                  let p = new predref p domain (Some (1 + List.length args)) in
                   ((g, []),
                    ([], l, [], [sn, PtrType (StructType sn); "value", t], symb, Some 1,
                     let r = WRead (l, WVar (l, sn, LocalVar), sn, f, t, false, ref (Some None), Real) in
-                    WPredAsn (l, p, true, [], [], [LitPat (AddressOf (l, r)); LitPat (WVar (l, "value", LocalVar))])
+                    WPredAsn (l, p, true, [], [], ([LitPat (AddressOf (l, r))] @ List.map (fun e -> LitPat e) args @ [LitPat (WVar (l, "value", LocalVar))]))
                    )
                   )
                 in
+                let predinst__ p domain = predinst___ p domain [] in
                 let predinst_ p t = [predinst__ p [PtrType t; t]] in
                 let predinst p = predinst_ p t in
                 match t with
@@ -5324,6 +5325,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | Int (Unsigned, LitRank 1) -> predinst "u_short_integer"
                 | Int (Signed, LitRank 0) -> predinst "character"
                 | Int (Unsigned, LitRank 0) -> predinst "u_character"
+                | Int (s, _) -> [predinst___ "integer_" [PtrType Void; intType; Bool; intType] [SizeofExpr (l, ManifestTypeExpr (l, t)); if s = Signed then True l else False l]]
                 | Bool -> predinst_ "boolean" Bool
                 | _ -> []
                 end
