@@ -2,6 +2,7 @@
 .provides ./malloc.h#malloc
 .provides ./malloc.h#malloc_block_null
 .provides ./malloc.h#malloc_block_limits
+.provides ./malloc.h#realloc
 .provides ./stdlib.h#abort
 .provides ./stdlib.h#exit
 .provides ./string.h#memcmp
@@ -68,6 +69,8 @@
 .provides ./prelude.h#uchars_join
 .provides ./prelude.h#ints_inv
 .provides ./prelude.h#integers__inv
+.provides ./prelude.h#integers__split
+.provides ./prelude.h#integers__join
 .provides ./prelude.h#uints_inv
 .provides ./prelude.h#llongs_inv
 .provides ./prelude.h#ullongs_inv
@@ -213,3 +216,12 @@
 .provides ./bitops.gh#shiftright_signed_limits
 .provides ./bitops.gh#truncate_limits
 .provides ./bitops.gh#truncate_signed_limits
+.provides ./bitops.gh#bitand_pow_nat
+.provides ./bitops.gh#bitand_bitnot_eq
+.provides ./bitops.gh#bitor_zero
+.provides ./bitops.gh#bitand_bitor
+.provides ./target.gh#case_split_sizeof_ptr
+.provides ./target.gh#int_size_int_max
+.provides ./target.gh#long_size_long_max
+.provides ./target.gh#ptr_size_ptr_max
+.provides ./target.gh#target_sizes

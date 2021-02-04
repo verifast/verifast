@@ -90,7 +90,7 @@ cd examples
     verifast -c -target 32bit concurrentqueue.c
     verifast -c -prover z3v4.5 -target 32bit concurrentstack.c
     verifast -c concurrentstackclient.c
-    verifast -prover z3v4.5 -target 32bit -allow_assume threading.o atomics.o concurrentqueue.c concurrentqueue_client.c
+    verifast -target 32bit -allow_assume threading.o atomics.o concurrentqueue.c concurrentqueue_client.c
     verifast_both -c atomic_integer.c
     verifast_both -c spinlock_with_atomic_integer.c
     verifast_both -c ticketlock_with_atomic_integer.c
