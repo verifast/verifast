@@ -406,13 +406,18 @@ lemma_auto void bools_to_chars(void *p);
     requires [?f]bools(p, ?n, _);
     ensures [f]chars(p, n * sizeof(bool), _);
 
+fixpoint list<int> integers_of_chars(int size, bool signed_, list<char> cs);
+fixpoint list<char> chars_of_integers(int size, bool signed_, list<int> cs);
+
 lemma_auto void chars_to_integers_(void *p, int size, bool signed_, int n);
-    requires [?f]chars(p, n * size, _);
-    ensures [f]integers_(p, size, signed_, n, _);
+    requires [?f]chars(p, n * size, ?cs);
+    ensures [f]integers_(p, size, signed_, n, integers_of_chars(size, signed_, cs));
 
 lemma_auto void integers__to_chars(void *p);
-    requires [?f]integers_(p, ?size, ?signed_, ?n, _);
-    ensures [f]chars(p, n * size, _);
+    requires [?f]integers_(p, ?size, ?signed_, ?n, ?vs);
+    ensures
+        [f]chars(p, n * size, chars_of_integers(size, signed_, vs)) &*&
+        integers_of_chars(size, signed_, chars_of_integers(size, signed_, vs)) == vs;
 
 lemma_auto void uchars_to_integers_(void *p, int size, bool signed_, int n);
     requires [?f]uchars(p, n * size, _);
@@ -442,6 +447,19 @@ predicate integers_(void *p, int size, bool signed_, int count; list<int> vs) =
 lemma_auto void integers__inv();
     requires [?f]integers_(?p, ?size, ?signed_, ?count, ?vs);
     ensures [f]integers_(p, size, signed_, count, vs) &*& length(vs) == count &*& 0 <= (uintptr_t)p &*& (uintptr_t)p <= UINTPTR_MAX;
+
+lemma void integers__split(void *p, int offset);
+    requires [?f]integers_(p, ?size, ?signed_, ?count, ?vs) &*& 0 <= offset &*& offset <= count;
+    ensures
+        [f]integers_(p, size, signed_, offset, take(offset, vs)) &*&
+        [f]integers_(p + size * offset, size, signed_, count - offset, drop(offset, vs)) &*&
+        vs == append(take(offset, vs), drop(offset, vs));
+
+lemma void integers__join(void *p);
+    requires
+        [?f]integers_(p, ?size, ?signed_, ?count1, ?vs1) &*&
+        [f]integers_(p + size * count1, size, signed_, ?count2, ?vs2);
+    ensures [f]integers_(p, size, signed_, count1 + count2, append(vs1, vs2));
 
 predicate floats(float *p, int count; list<float> values) =
     count == 0 ?

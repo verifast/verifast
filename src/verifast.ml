@@ -687,8 +687,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             if !address_taken then begin
               if is_inductive_type(t) then static_error l "Taking the address of an inductive variable is not allowed." None;
               let addr = get_unique_var_symb_non_ghost (x ^ "_addr") (PtrType t) in
-              let h = ((Chunk ((pointee_pred_symb l t, true), [], real_unit, [addr; v], None)) :: h) in
               if pure then static_error l "Taking the address of a ghost variable is not allowed." None;
+              produce_points_to_chunk l h t real_unit addr v $. fun h ->
               iter h ((x, RefType(t)) :: tenv) ghostenv ((x, addr)::env) xs
             end else begin
               iter h ((x, t) :: tenv) ghostenv ((x, v)::env) xs

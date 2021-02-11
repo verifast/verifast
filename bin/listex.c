@@ -615,4 +615,28 @@ lemma void foreachp_unremove_nth<t>(list<t> xs, int n)
     }
 }
 
+lemma void foreachp_split<t>(list<t> xs, list<t> ys)
+    requires foreachp<t>(append(xs, ys), ?p);
+    ensures foreachp<t>(xs, p) &*& foreachp<t>(ys, p);
+{
+    open foreachp(_, _);
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            foreachp_split(xs0, ys);
+    }
+}
+
+lemma void foreachp_join<t>(list<t> xs, list<t> ys)
+    requires foreachp<t>(xs, ?p) &*& foreachp<t>(ys, p);
+    ensures foreachp<t>(append(xs, ys), p);
+{
+    open foreachp(xs, p);
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            foreachp_join(xs0, ys);
+    }
+}
+
 @*/

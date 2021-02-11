@@ -1212,11 +1212,11 @@ let make_file_preprocessor0 path get_macro set_macro peek junk in_ghost_range da
       skip_block ();
       begin match peek () with
         Some (_, Kwd "endif") -> junk (); ()
-      | Some (_, Kwd "elif") -> junk (); conditional ()
+      | Some (l, Kwd "elif") -> junk (); conditional l
       | Some (_, Kwd "else") -> junk (); ()
       | Some (_, Eof) -> ()
       end
-    and conditional () =
+    and conditional l =
       let rec condition () =
         match peek () with
           Some (_, Eof) | Some (_, Eol) -> []
@@ -1255,7 +1255,19 @@ let make_file_preprocessor0 path get_macro set_macro peek junk in_ghost_range da
       in
       let condition = condition () in
       let condition = macro_expand [] condition in
-      let condition = parse_operators dataModel (Stream.of_list condition) in
+      let condition =
+        let stream = Stream.of_list condition in
+        let error msg =
+          match Stream.peek stream with
+            Some (l, _) -> error l msg
+          | None -> error l msg
+        in
+        try
+          parse_operators dataModel stream
+        with
+          Stream.Error msg -> error msg
+        | Stream.Failure -> error "Parse error during preprocessing"
+      in
       let _, condition = eval_operators condition in
       let isTrue = sign_big_int condition <> 0 in
       if isTrue then () else skip_branch ()
@@ -1399,7 +1411,7 @@ let make_file_preprocessor0 path get_macro set_macro peek junk in_ghost_range da
           end
         | Some (l, Kwd "if") ->
           junk ();
-          conditional ();
+          conditional l;
           next_token ()
         | Some (l, Kwd ("elif"|"else")) ->
           junk ();

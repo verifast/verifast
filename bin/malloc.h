@@ -40,11 +40,11 @@ void *realloc(void *array, size_t newSize);
         result == 0 ?
             malloc_block(array, size) &*& chars(array, size, cs)
         :
-            malloc_block(result, newSize) &*& chars(result, _, take(newSize, cs)) &*&
+            malloc_block(result, newSize) &*&
             newSize <= size ?
-                emp
+                chars(result, _, take(newSize, cs))
             :
-                chars(result + size, newSize - size, _);
+                chars(result, _, cs) &*& chars(result + size, newSize - size, _);
     @*/
     //@ terminates;
 

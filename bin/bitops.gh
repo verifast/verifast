@@ -156,6 +156,26 @@ lemma void truncate_signed_limits(int x, nat n);
     requires true;
     ensures -pow_nat(2, n) <= truncate_signed(x, int_of_nat(n)) &*& truncate_signed(x, int_of_nat(n)) < pow_nat(2, n);
 
+// Various useful laws
+
+lemma void bitand_pow_nat(int x, nat n);
+    requires 0 <= x;
+    ensures (x & (pow_nat(2, n) - 1)) == x % pow_nat(2, n);
+
+lemma void bitand_bitnot_eq(int x, int y);
+    requires true;
+    ensures x == (x & y | x & ~y) && x == ((x & y) + (x & ~y));
+
+lemma void bitor_zero(int x);
+    requires true;
+    ensures (x | 0) == x && (0 | x) == x;
+
+lemma void bitand_bitor(int x, int y, int z);
+    requires true;
+    ensures ((x | y) & z) == (x & z | y & z);
+
+
+
 // Bit blasting
 
 fixpoint pair<int, list<bool> > bits_of_int(int x, nat n) {
