@@ -391,6 +391,7 @@ cd examples
   cd vacid-0
     ifz3 verifast -c -disable_overflow_check Problem3.c
   cd ..
+  verifast_both -c noreturn.c
   verifast_both -c void_ignore.c
 cd ..
 cd tutorial_solutions
