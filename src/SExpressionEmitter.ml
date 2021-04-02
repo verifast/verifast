@@ -118,7 +118,7 @@ and sexpr_of_inferred_type_state = function
   | EqConstraint t -> List [ Symbol "inferred-type-state-eq-constraint"; sexpr_of_type_ t ]
 
 let rec sexpr_of_type_expr : type_expr -> sexpression = function
-  | StructTypeExpr (_, name, _) ->
+  | StructTypeExpr (_, name, _, _) ->
       List [ Symbol "type-expr-struct"; sexpr_of_option (fun s -> Symbol s) name ]
   | UnionTypeExpr (_, name, _) ->
       List [ Symbol "type-expr-union"; sexpr_of_option (fun s -> Symbol s) name ]
@@ -152,6 +152,9 @@ let rec sexpr_of_type_expr : type_expr -> sexpression = function
 let sexpr_of_type_expr_option : type_expr option -> sexpression = function
   | Some t -> sexpr_of_type_expr t
   | None   -> Symbol "nil"
+
+let sexpr_of_attr : struct_attr -> sexpression = function
+  | Packed -> Symbol "packed"
 
 let sexpr_of_field (Field (loc, ghostness, type_expr, name, binding, visibility, final, expr)) : sexpression =
   build_list
@@ -860,15 +863,19 @@ and sexpr_of_decl (decl : decl) : sexpression =
   match decl with
     | Struct (loc,
               name,
-              None) ->
-        List [ Symbol "declare-struct"
-             ; Symbol name ]
+              None,
+              attrs) ->
+        build_list [ Symbol "declare-struct"
+                   ; Symbol name ]
+                   [ "attrs", sexpr_of_list ~head:(Some (Symbol "attrs")) sexpr_of_attr attrs ]
     | Struct (loc,
               name,
-              Some fields) ->
+              Some fields,
+              attrs) ->
         build_list [ Symbol "define-struct"
                    ; Symbol name ]
-                   [ "fields", sexpr_of_list ~head:(Some (Symbol "fields")) sexpr_of_field fields ]
+                   [ "fields", sexpr_of_list ~head:(Some (Symbol "fields")) sexpr_of_field fields
+                   ; "attrs", sexpr_of_list ~head:(Some (Symbol "attrs")) sexpr_of_attr attrs ]
     | Func (loc,
             kind,
             tparams,

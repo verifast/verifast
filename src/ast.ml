@@ -235,7 +235,7 @@ type int_literal_lsuffix = NoLSuffix | LSuffix | LLSuffix
 
 (** Types as they appear in source code, before validity checking and resolution. *)
 type type_expr = (* ?type_expr *)
-    StructTypeExpr of loc * string option * field list option
+    StructTypeExpr of loc * string option * field list option * struct_attr list
   | UnionTypeExpr of loc * string option * field list option
   | EnumTypeExpr of loc * string option * (string * expr option) list option
   | PtrTypeExpr of loc * type_expr
@@ -697,7 +697,7 @@ and
   | ExtensibleClass
 and
   decl = (* ?decl *)
-    Struct of loc * string * field list option
+    Struct of loc * string * field list option * struct_attr list
   | Union of loc * string * field list option
   | Inductive of  (* inductief data type regel-naam-type parameters-lijst van constructors*)
       loc *
@@ -829,6 +829,9 @@ and
   | MethMember of meth
   | ConsMember of cons
   | PredMember of instance_pred_decl
+and
+  struct_attr =
+  | Packed
 
 let func_kind_of_ghostness gh =
   match gh with
@@ -1008,7 +1011,7 @@ let stmt_iter f s = stmt_fold (fun _ s -> f s) () s
 let type_expr_loc t =
   match t with
     ManifestTypeExpr (l, t) -> l
-  | StructTypeExpr (l, sn, _) -> l
+  | StructTypeExpr (l, sn, _, _) -> l
   | UnionTypeExpr (l, un, _) -> l
   | IdentTypeExpr (l, _, x) -> l
   | ConstructedTypeExpr (l, x, targs) -> l

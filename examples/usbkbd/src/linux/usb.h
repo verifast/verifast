@@ -203,6 +203,18 @@ void usb_deregister(struct usb_driver *driver);
 	&*& probe_disconnect_userdata(probe, disconnect)();
 @*/
 
+struct usb_host_endpoint {
+	struct usb_endpoint_descriptor          desc;
+	//struct usb_ss_ep_comp_descriptor        ss_ep_comp;
+	//struct list_head                urb_list;
+	//void                            *hcpriv;
+	//struct ep_device                *ep_dev;        /* For sysfs info */
+	//
+	//unsigned char *extra;   /* Extra descriptors */
+	//int extralen;
+	//int enabled;
+};
+
 
 struct usb_device {
 	struct usb_host_endpoint ep0;
@@ -1147,19 +1159,6 @@ struct usb_interface {
 //	atomic_t pm_usage_cnt;		/* usage counter for autosuspend */
 //	struct work_struct reset_ws;	/* for resets in atomic context */
 	struct device dev;
-};
-
-
-struct usb_host_endpoint {
-	struct usb_endpoint_descriptor          desc;
-	//struct usb_ss_ep_comp_descriptor        ss_ep_comp;
-	//struct list_head                urb_list;
-	//void                            *hcpriv;
-	//struct ep_device                *ep_dev;        /* For sysfs info */
-	//
-	//unsigned char *extra;   /* Extra descriptors */
-	//int extralen;
-	//int enabled;
 };
 
 
