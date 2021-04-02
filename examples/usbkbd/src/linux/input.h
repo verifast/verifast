@@ -81,6 +81,13 @@ typedef input_event_t_no_pointer* input_event_t;
 //@ predicate input_event_t_ghost_param(input_event_t_no_pointer *cb1, input_event_t cb2) = is_input_event_t_no_pointer(cb1) == true &*& cb1 == cb2;
 
 
+struct input_id {
+	__u16 bustype;
+	__u16 vendor;
+	__u16 product;
+	__u16 version;
+};
+
 struct input_dev {
 	char *name; //"The dev->name should be set before registering the input device by the input device driver" -- input-programming.txt
 	char* phys; // Should this be initialized by the driver or can it remain equal to 0? We currently assume the latter.
@@ -347,13 +354,6 @@ static inline void input_report_rel(struct input_dev *dev, unsigned int code, in
 void input_sync(struct input_dev *dev);
 	//@ requires [?f]input_dev_reportable(dev, ?userdata); // XXX hm I thought they synchronize but I should recheck this.
 	//@ ensures [f]input_dev_reportable(dev, userdata);
-
-struct input_id {
-	__u16 bustype;
-	__u16 vendor;
-	__u16 product;
-	__u16 version;
-};
 
 
 // Event types:

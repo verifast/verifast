@@ -1175,7 +1175,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter sdm ds =
       match ds with
         [] -> sdm
-      | Struct (l, sn, fds_opt)::ds ->
+      | Struct (l, sn, fds_opt, attrs)::ds ->
         begin
           match try_assoc sn structmap0 with
             Some (_, Some _, _, _) -> static_error l "Duplicate struct name." None
@@ -1184,11 +1184,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end;
         begin
           match try_assoc sn sdm with
-            Some (_, Some _) -> static_error l "Duplicate struct name." None
-          | Some (ldecl, None) -> if fds_opt = None then static_error l "Duplicate struct declaration." None else delayed_struct_def sn ldecl l
+            Some (_, Some _, _) -> static_error l "Duplicate struct name." None
+          | Some (ldecl, None, _) -> if fds_opt = None then static_error l "Duplicate struct declaration." None else delayed_struct_def sn ldecl l
           | None -> ()
         end;
-        iter ((sn, (l, fds_opt))::sdm) ds
+        iter ((sn, (l, fds_opt, attrs))::sdm) ds
       | _::ds -> iter sdm ds
     in
     match ps with
@@ -1634,16 +1634,16 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           ObjType (id, List.map check targs)
       | None -> static_error l ("No such inductive type, class, or interface.") None
       end
-    | StructTypeExpr (l, sn, Some _) ->
+    | StructTypeExpr (l, sn, Some _, _) ->
       static_error l "A struct type with a body is not supported in this position." None
-    | StructTypeExpr (l, Some sn, None) ->
+    | StructTypeExpr (l, Some sn, None, _) ->
       begin match try_assoc sn structmap0 with
         Some (ld, _, _, _) ->
         reportUseSite DeclKind_Struct ld l;
         StructType sn
       | None ->
       match try_assoc sn structdeclmap with
-        Some (ld, _) ->
+        Some (ld, _, _) ->
         reportUseSite DeclKind_Struct ld l;
         StructType sn
       | None ->
@@ -1766,59 +1766,36 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let classterms = classterms1 @ classterms0
   let interfaceterms = interfaceterms1 @ interfaceterms0
-  
-  (* Region: structmap1 *)
-  
-  let structmap1 =
-    List.map
-      (fun (sn, (l, fds_opt)) ->
-         let s = get_unique_var_symb ("struct_" ^ sn ^ "_size") intType in
-         ctxt#assert_term (ctxt#mk_lt (ctxt#mk_intlit 0) s);
-         let rec iter fmap fds has_ghost_fields =
-           match fds with
-             [] ->
-             let padding_predsym_opt =
-               if has_ghost_fields then
-                 None
-               else
-                 Some (get_unique_var_symb ("struct_" ^ sn ^ "_padding") (PredType ([], [PtrType (StructType sn)], Some 1, Inductiveness_Inductive)))
-             in
-             let fmap = List.rev fmap in
-             begin try
-               let (f, (lf, gh, t, Some offset0)) = List.find (fun (f, (lf, gh, t, offset)) -> gh = Real) fmap in 
-               ctxt#assert_term (ctxt#mk_eq offset0 (ctxt#mk_intlit 0))
-             with Not_found -> ()
-             end;
-             (sn, (l, Some fmap, padding_predsym_opt, s))
-           | Field (lf, gh, t, f, Instance, Public, final, init)::fds ->
-             if List.mem_assoc f fmap then static_error lf "Duplicate field name." None;
-             let t = check_pure_type ("", []) [] gh t in
-             let offset = if gh = Ghost then None else Some (get_unique_var_symb (sn ^ "_" ^ f ^ "_offset") intType) in
-             let entry = (f, (lf, gh, t, offset)) in
-             iter (entry::fmap) fds (has_ghost_fields || gh = Ghost)
-         in
-         begin
-           match fds_opt with
-             Some fds -> iter [] fds false
-           | None -> (sn, (l, None, None, s))
-         end
-      )
-      structdeclmap
 
-  let structmap = structmap1 @ structmap0
-
-  let field_offset l fparent fname =
-    let (_, Some fmap, _, _) = List.assoc fparent structmap in
-    let (_, gh, y, offset_opt) = List.assoc fname fmap in
-    match offset_opt with
-      Some term -> term
-    | None -> static_error l "Cannot take the address of a ghost field" None
-
-  let struct_size l sn =
-    match try_assoc sn structmap with
+  let struct_size_partial smap l sn =
+    match try_assoc sn smap with
       Some (_, _, _, s) -> s
     | _ -> static_error l (sprintf "Cannot take size of undeclared struct '%s'" sn) None
+
+  let union_size_partial umap l un =
+    match try_assoc un umap with
+      Some (_, Some (_, s)) -> s
+    | _ -> static_error l (sprintf "Cannot take size of undefined union '%s'" un) None
   
+  let rec sizeof_partial smap umap l t =
+    match t with
+      Void -> ctxt#mk_intlit 1
+    | Bool -> rank_size_term (LitRank 0)
+    | Int (_, k) -> rank_size_term k
+    (* Assume IEEE-754 *)
+    | Float -> rank_size_term (LitRank 2)
+    | Double -> rank_size_term (LitRank 3)
+    | PtrType _ -> rank_size_term ptr_rank
+    | StructType sn -> struct_size_partial smap l sn
+    | UnionType un -> union_size_partial umap l un
+    | StaticArrayType (elemTp, elemCount) -> ctxt#mk_mul (sizeof_partial smap umap l elemTp) (ctxt#mk_intlit elemCount)
+    | _ -> static_error l ("Taking the size of type " ^ string_of_type t ^ " is not yet supported.") None
+
+  let field_size_partial smap umap = function
+    | Field (l, _, t, _, _, _, _, _) -> sizeof_partial smap umap l (check_pure_type ("", []) [] Real t)
+
+  (* Region: unionmap1 *)
+
   let unionmap1 =
     uniondeclmap |> List.map begin fun (un, (l, fds_opt)) ->
       match fds_opt with
@@ -1842,10 +1819,76 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let unionmap = unionmap1 @ unionmap0
 
-  let union_size l un =
-    match try_assoc un unionmap with
-      Some (_, Some (_, s)) -> s
-    | _ -> static_error l (sprintf "Cannot take size of undefined union '%s'" un) None
+  (* Region: structmap1 *)
+
+  let structmap1 =
+    let rec iter smap smapwith0 remaining =
+      match remaining with
+      | [] -> smap
+      | (sn, (l, fds_opt, attrs)) :: remaining ->
+        let s = get_unique_var_symb ("struct_" ^ sn ^ "_size") intType in
+        let packed = ref false in
+        List.iter (function
+                   | Packed ->
+                     packed := true;
+                     begin match fds_opt with
+                     | Some fds ->
+                       ctxt#assert_term (ctxt#mk_eq s (fds |> List.map (field_size_partial smapwith0 unionmap) |> List.fold_left ctxt#mk_add (ctxt#mk_intlit 0)))
+                     | None -> static_error l "A struct declaration cannot be packed." None
+                     end
+        ) attrs;
+        ctxt#assert_term (ctxt#mk_le s max_uintptr_term);
+        ctxt#assert_term (ctxt#mk_lt (ctxt#mk_intlit 0) s);
+        let rec iter1 fmap fds has_ghost_fields =
+          match fds with
+            [] ->
+            let padding_predsym_opt =
+              if !packed || has_ghost_fields then
+                None
+              else
+                Some (get_unique_var_symb ("struct_" ^ sn ^ "_padding") (PredType ([], [PtrType (StructType sn)], Some 1, Inductiveness_Inductive)))
+            in
+            let fmap = List.rev fmap in
+            let rec offset_iter fields current is_first =
+              begin match fields with
+              | [] -> ()
+              | (f, (lf, Real, t, Some offset))::fs ->
+                if is_first || !packed then ctxt#assert_term (ctxt#mk_eq offset current);
+                offset_iter fs (ctxt#mk_add current (sizeof_partial smapwith0 unionmap lf t)) false
+              | _::fs -> offset_iter fs current is_first
+              end
+            in
+            offset_iter fmap (ctxt#mk_intlit 0) true;
+            (sn, (l, Some fmap, padding_predsym_opt, s))
+          | Field (lf, gh, t, f, Instance, Public, final, init)::fds ->
+            if List.mem_assoc f fmap then static_error lf "Duplicate field name." None;
+            let t = check_pure_type ("", []) [] gh t in
+            let offset = if gh = Ghost then None else Some (get_unique_var_symb (sn ^ "_" ^ f ^ "_offset") intType) in
+            let entry = (f, (lf, gh, t, offset)) in
+            iter1 (entry::fmap) fds (has_ghost_fields || gh = Ghost)
+        in
+        let new_item = begin
+          match fds_opt with
+            Some fds -> iter1 [] fds false
+          | None -> (sn, (l, None, None, s))
+        end
+        in
+        iter (new_item::smap) (new_item::smapwith0) remaining
+    in
+    iter [] structmap0 (List.rev structdeclmap)
+
+  let structmap = structmap1 @ structmap0
+
+  let sizeof = sizeof_partial structmap unionmap
+  let struct_size = struct_size_partial structmap
+  let union_size = union_size_partial unionmap
+
+  let field_offset l fparent fname =
+    let (_, Some fmap, _, _) = List.assoc fparent structmap in
+    let (_, gh, y, offset_opt) = List.assoc fname fmap in
+    match offset_opt with
+      Some term -> term
+    | None -> static_error l "Cannot take the address of a ghost field" None
 
   let enummap = enummap1 @ enummap0
   
@@ -5470,17 +5513,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let check_ghost ghostenv e =
     expr_iter (check_ghost_nonrec ghostenv) e
-
-  let rec sizeof l t =
-    match t with
-      Void -> ctxt#mk_intlit 1
-    | Bool -> rank_size_term (LitRank 0)
-    | Int (_, k) -> rank_size_term k
-    | PtrType _ -> rank_size_term ptr_rank
-    | StructType sn -> struct_size l sn
-    | UnionType un -> union_size l un
-    | StaticArrayType (elemTp, elemCount) -> ctxt#mk_mul (sizeof l elemTp) (ctxt#mk_intlit elemCount)
-    | _ -> static_error l ("Taking the size of type " ^ string_of_type t ^ " is not yet supported.") None
   
   let () =
     unionmap1 |> List.iter begin fun (un, (l, body_opt)) ->

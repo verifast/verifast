@@ -43,7 +43,8 @@ let c_keywords = [
   "__minvalue"; "__maxvalue";
   "__int8"; "__int16"; "__int32"; "__int64"; "__int128";
   "inline"; "__inline"; "__inline__"; "__forceinline"; "_Noreturn";
-  "__signed__"; "__always_inline"; "extern"
+  "__signed__"; "__always_inline"; "extern";
+  "__attribute__"
 ]
 
 let java_keywords = [
@@ -470,9 +471,12 @@ and
 and
   parse_decl = parser
   [< '(l, Kwd "struct"); '(_, Ident s); d = parser
-    [< fs = parse_fields; '(_, Kwd ";") >] -> Struct (l, s, Some fs)
-  | [< '(_, Kwd ";") >] -> Struct (l, s, None)
-  | [< t = parse_type_suffix (StructTypeExpr (l, Some s, None)); d = parse_func_rest Regular (Some t) Public >] -> d
+    [< fs = parse_fields; attrs = begin parser
+      [< '(_, Kwd "__attribute__"); res = parse_struct_attrs; >] -> res
+    | [< >] -> [] end;
+    '(_, Kwd ";") >] -> Struct (l, s, Some fs, attrs)
+  | [< '(_, Kwd ";") >] -> Struct (l, s, None, [])
+  | [< t = parse_type_suffix (StructTypeExpr (l, Some s, None, [])); d = parse_func_rest Regular (Some t) Public >] -> d
   >] -> check_function_for_contract d
 | [< '(l, Kwd "union"); '(_, Ident u); d = parser
     [< fs = parse_fields; '(_, Kwd ";") >] -> Union (l, u, Some fs)
@@ -496,12 +500,12 @@ and
              | Some (EnumTypeExpr (le, en_opt, Some body)) ->
                let en = match en_opt with None -> g | Some en -> en in
                [EnumDecl (l, en, body); TypedefDecl (l, EnumTypeExpr (le, Some en, None), g)]
-             | Some (StructTypeExpr (ls, s_opt, Some fs)) ->
+             | Some (StructTypeExpr (ls, s_opt, Some fs, attrs)) ->
                let s = match s_opt with None -> g | Some s -> s in
-               [Struct (l, s, Some fs); TypedefDecl (l, StructTypeExpr (ls, Some s, None), g)]
-             | Some PtrTypeExpr (lp, (StructTypeExpr (ls, s_opt, Some fs))) ->
+               [Struct (l, s, Some fs, attrs); TypedefDecl (l, StructTypeExpr (ls, Some s, None, attrs), g)]
+             | Some PtrTypeExpr (lp, (StructTypeExpr (ls, s_opt, Some fs, attrs))) ->
                let s = match s_opt with None -> g | Some s -> s in
-               [Struct (l, s, Some fs); TypedefDecl (l, PtrTypeExpr (lp, StructTypeExpr (ls, Some s, None)), g)]
+               [Struct (l, s, Some fs, attrs); TypedefDecl (l, PtrTypeExpr (lp, StructTypeExpr (ls, Some s, None, attrs)), g)]
              | Some te ->
                [TypedefDecl (l, te, g)]
          end
@@ -782,6 +786,12 @@ and
             StaticArrayTypeExpr (l, te0, int_of_big_int size)
    >] -> Field (l, gh, te, f, Instance, Public, false, None)
 and
+  parse_struct_attrs = parser (* GCC-style attributes are always in double parentheses, see https://gcc.gnu.org/onlinedocs/gcc/Variable-Attributes.html *)
+  [< '(_, Kwd "("); '(_, Kwd "("); attrs = rep_comma parse_struct_attr; '(_, Kwd ")"); '(_, Kwd ")"); >] -> attrs
+and
+  parse_struct_attr = parser
+  [< '(_, Ident "packed") >] -> Packed
+and
   parse_return_type = parser
   [< t = parse_type >] -> match t with ManifestTypeExpr (_, Void) -> None | _ -> Some t
 and
@@ -818,9 +828,11 @@ and
   [< '(l, Kwd "volatile"); t0 = parse_primary_type >] -> t0
 | [< '(l, Kwd "const"); t0 = parse_primary_type >] -> t0
 | [< '(l, Kwd "register"); t0 = parse_primary_type >] -> t0
-| [< '(l, Kwd "struct"); sn = opt (parser [< '(_, Ident s) >] -> s); fs = opt parse_fields >] ->
+| [< '(l, Kwd "struct"); sn = opt (parser [< '(_, Ident s) >] -> s); fs = opt parse_fields; attrs = begin parser
+    [< '(_, Kwd "__attribute__"); res = parse_struct_attrs >] -> res
+  | [< >] -> [] end >] ->
   if sn = None && fs = None then raise (ParseException (l, "Struct name or body expected"));
-  StructTypeExpr (l, sn, fs)
+  StructTypeExpr (l, sn, fs, attrs)
 | [< '(l, Kwd "union"); un = opt (parser [< '(_, Ident u) >] -> u); fs = opt parse_fields >] ->
   if un = None && fs = None then raise (ParseException (l, "Union name or body expected"));
   UnionTypeExpr (l, un, fs)

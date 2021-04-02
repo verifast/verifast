@@ -282,7 +282,7 @@ let _ =
 
     let rec string_of_type_expr (type_expr: type_expr): string =
       match type_expr with
-        | StructTypeExpr(_, name_opt, _) -> (match name_opt with Some name -> name | _ -> "")
+        | StructTypeExpr(_, name_opt, _, _) -> (match name_opt with Some name -> name | _ -> "")
         | EnumTypeExpr(_, name_opt, _) -> (match name_opt with Some name -> name | _ -> "")
         | PtrTypeExpr(_, type_expr_in) -> string_of_type_expr type_expr_in ^ " *"
         | ArrayTypeExpr(_, type_expr_in) -> string_of_type_expr type_expr_in ^ "[]"
@@ -440,10 +440,10 @@ let _ =
 
       let rec check_type_expr_equal (type_expr: type_expr) (pattern_type_expr: type_expr): bool =
         match type_expr with
-          | StructTypeExpr(_, name_opt, _) -> 
+          | StructTypeExpr(_, name_opt, _, _) -> 
             begin
               match pattern_type_expr with
-                | StructTypeExpr(_, pattern_name_opt, _) ->
+                | StructTypeExpr(_, pattern_name_opt, _, _) ->
                   begin
                     match name_opt with
                       | Some name -> (match pattern_name_opt with Some(pattern_name) when name = pattern_name -> true | None -> false) 
