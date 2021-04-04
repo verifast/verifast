@@ -25,7 +25,7 @@ elif [ $(uname -s) = "Darwin" ]; then
       brew update
   fi
 
-  if [ $TRAVIS = "true" ]; then
+  if [ ${TRAVIS}x = "truex" ]; then
       brew unlink python@2 # See https://github.com/verifast/verifast/issues/191
   fi
 
