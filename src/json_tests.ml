@@ -15,19 +15,5 @@ let () =
   let buf = Buffer.create 1024 in
   begin
     buffer_add_json_pp buf 2 j;
-    assert(Buffer.contents buf = {|{
-  "key": "value",
-  "arr": {
-    "nested_arr": [
-      [
-        null,
-        10,
-        []
-      ],
-      "string",
-      true
-    ],
-    "empty object": {}
-  }
-}|})
+    assert(Buffer.contents buf = "{\n  \"key\": \"value\",\n  \"arr\": {\n    \"nested_arr\": [\n      [\n        null,\n        10,\n        []\n      ],\n      \"string\",\n      true\n    ],\n    \"empty object\": {}\n  }\n}")
   end
