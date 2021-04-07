@@ -458,6 +458,10 @@ and
 | [< '(l, Kwd "__always_inline") >] -> ()
 | [< >] -> ()
 and
+  parse_static_visibility = parser
+  [< '(l, Kwd "static") >] -> Private
+| [< >] -> Public
+and
   parse_enum_body = parser
   [< '(_, Kwd "{");
      elems = rep_comma (parser [< '(_, Ident e); init = opt (parser [< '(_, Kwd "="); e = parse_expr >] -> e) >] -> (e, init));
@@ -509,7 +513,7 @@ and
   >] -> check_function_for_contract d
 | [< '(_, Kwd "static"); _ = parse_ignore_inline; t = parse_return_type; d = parse_func_rest Regular t Private >] -> check_function_for_contract d
 | [< '(_, Kwd "extern"); t = parse_return_type; d = parse_func_rest Regular t Public >] -> check_function_for_contract d
-| [< '(_, Kwd "_Noreturn"); _ = parse_ignore_inline; t = parse_return_type; d = parse_func_rest Regular t Public >] ->
+| [< '(_, Kwd "_Noreturn"); v = parse_static_visibility; _ = parse_ignore_inline; t = parse_return_type; d = parse_func_rest Regular t v >] ->
   let ds = check_function_for_contract d in
   begin match ds with
     [Func (l, k, tparams, t, g, ps, gc, ft, Some (pre, post), terminates, ss, static, v)] ->
