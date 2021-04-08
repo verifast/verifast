@@ -25,10 +25,6 @@ elif [ $(uname -s) = "Darwin" ]; then
       brew update
   fi
 
-  if [ $TRAVIS = "true" ]; then
-      brew unlink python@2 # See https://github.com/verifast/verifast/issues/191
-  fi
-
   function brewinstall {
       if brew list $1 1>/dev/null 2>/dev/null; then
 	  true;
