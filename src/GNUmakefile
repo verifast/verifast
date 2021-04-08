@@ -55,10 +55,6 @@ else ifeq ($(OS), Windows_NT)
   PLATFORM = Windows
 endif
 
-# ocaml-num configuration
-NUM_PATH ?= $(shell ocamlfind query num)
-NUM_FLAGS += -I ${NUM_PATH} nums.cmxa
-
 # Lablgtk configuration
 ifndef WITHOUT_LABLGTK
   LABLGTK_PATH ?= $(shell ocamlfind query lablgtk2)
@@ -265,6 +261,7 @@ clean::
 SET_LDD = export CAML_LD_LIBRARY_PATH="$$CAML_LD_LIBRARY_PATH:$$GTKSOURCEVIEW_LIBS"
 SET_ENV = export PATH="$(CWD)/../bin/:$(OCAMLBIN):$$PATH"; \
           export $(LDLPATHVAR)="$(LDLPATH):$$$(LDLPATHVAR)"
+COMPILE = ocamlfind ocamlopt $(OCAMLCFLAGS)
 
 STDLIB = ../bin/crt.dll.vfmanifest
 #sequence is important, it presents dependencies in command line of VeriFast
@@ -307,19 +304,19 @@ clean::
 
 ../bin/%$(DOTEXE): %.ml
 	@echo "  OCAMLOPT " $*.cmi
-	${OCAMLOPT} $(OCAMLCFLAGS) -o ../bin/$*$(DOTEXE) $*.ml
+	$(COMPILE) -o ../bin/$*$(DOTEXE) $*.ml
 clean::
 	rm -f $(TOOLS)
 
 %.cmi: %.mli
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} $(OCAMLCFLAGS) $(INCLUDES) $(NUM_FLAGS) -c $*.mli
+	$(COMPILE) $(INCLUDES) -c -package num $*.mli
 clean::
 	rm -f *.cmi
 
 %.cmx: %.ml $(INCLUDE_OS_DIR)/Perf.cmxa
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} $(OCAMLCFLAGS) -thread -c -w p -warn-error FSU -c $(INCLUDES) -pp ${CAMLP4O} $(NUM_FLAGS) $*.ml
+	$(COMPILE) -thread -c -w p -warn-error FSU -c $(INCLUDES) -pp ${CAMLP4O} -package num $*.ml
 clean::
 	rm -f *.cmx
 	rm -f *.o
@@ -364,18 +361,18 @@ tabhunt:
 
 ../bin/mysh$(DOTEXE): vfconfig.cmx mysh.ml
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} $(OCAMLCFLAGS) -thread -o ../bin/mysh$(DOTEXE) unix.cmxa threads.cmxa vfconfig.cmx mysh.ml
+	$(COMPILE) -thread -o ../bin/mysh$(DOTEXE) -linkpkg -package unix,threads vfconfig.cmx mysh.ml
 mysh: ../bin/mysh$(DOTEXE)
 .PHONY: mysh
 
 ifdef WITHOUT_GTKSOURCEVIEW
 macos/GSourceView2.cmx: macos/GSourceView2.ml
 	@echo "  OCAMLOPT " $@
-	cd macos; ${OCAMLOPT} $(OCAMLCFLAGS) -c -I +lablgtk2 GSourceView2.ml
+	cd macos; $(COMPILE) -c -I +lablgtk2 GSourceView2.ml
 
 macos/GLineMarks.cmx: macos/GLineMarks.ml
 	@echo "  OCAMLOPT " $@
-	cd macos; ${OCAMLOPT} $(OCAMLCFLAGS) -c -I +lablgtk2 GLineMarks.ml
+	cd macos; $(COMPILE) -c -I +lablgtk2 GLineMarks.ml
 endif
 clean::
 	rm -f macos/*.cm* macos/*.o
@@ -389,13 +386,13 @@ branchleft_png.ml: branch-left.png
 	gdk_pixbuf_mlsource branch-left.png > branchleft_png.ml
 
 branchleft_png.cmx: branchleft_png.ml
-	$(OCAMLOPT) $(OCAMLCFLAGS) -c $(LABLGTK_FLAGS) branchleft_png.ml
+	$(COMPILE) -c $(LABLGTK_FLAGS) branchleft_png.ml
 
 branchright_png.ml: branch-right.png
 	gdk_pixbuf_mlsource branch-right.png > branchright_png.ml
 
 branchright_png.cmx: branchright_png.ml
-	$(OCAMLOPT) $(OCAMLCFLAGS) -c $(LABLGTK_FLAGS) branchright_png.ml
+	$(COMPILE) -c $(LABLGTK_FLAGS) branchright_png.ml
 
 # Also depend on "vfide.ml": Make ignores our dependency "%.cmx: %.ml".
 vfide.cmx: branchleft_png.cmx branchright_png.cmx vfide.ml $(GTKSOURCEVIEW_DEPS)
@@ -403,15 +400,16 @@ vfide.cmx: branchleft_png.cmx branchright_png.cmx vfide.ml $(GTKSOURCEVIEW_DEPS)
 ifndef WITHOUT_GTKSOURCEVIEW
 	make -C linemarks OCAMLOPT=${OCAMLOPT} OCAMLCFLAGS="${OCAMLCFLAGS}" LABLGTK_FLAGS="$(LABLGTK_FLAGS_)" linemarks.cmxa
 endif
-	$(SET_LDD); $(OCAMLOPT) $(OCAMLCFLAGS) -thread -c -w p -warn-error FSU -c $(INCLUDES) \
-	-pp ${CAMLP4O} $(NUM_FLAGS) $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) vfide.ml
+	$(SET_LDD); $(COMPILE) -thread -c -w p -warn-error FSU -c $(INCLUDES) \
+	-pp ${CAMLP4O} -package num,threads $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) vfide.ml
 
 VERIFAST_PLUGINS=Redux Cvc4 ExternalZ3 ReduxSmtlib
 
+OCAMLOPT_LINKFLAGS = -package num,unix,str -linkpkg
 ifeq ($(OS), Darwin)
-  OCAMLOPT_LINKFLAGS = -cclib "-Xlinker -headerpad_max_install_names"
+  OCAMLOPT_LINKFLAGS += -cclib "-Xlinker -headerpad_max_install_names"
 else ifeq ($(OS), Linux)
-  OCAMLOPT_LINKFLAGS = -cclib -Wl,-rpath='$$ORIGIN'
+  OCAMLOPT_LINKFLAGS += -cclib -Wl,-rpath='$$ORIGIN'
 endif
 
 ../bin/vfide$(DOTEXE): vfide.cmx $(VERIFAST_PLUGINS:%=verifastPlugin%.cmx) $(Z3DEPS) $(GTKSOURCEVIEW_DEPS) 
@@ -419,10 +417,9 @@ endif
 ifndef WITHOUT_GTKSOURCEVIEW
 	cd linemarks; make linemarks.cmxa
 endif
-	$(SET_LDD); ${OCAMLOPT} $(OCAMLOPT_LINKFLAGS) $(OCAMLCFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/vfide$(DOTEXE)	\
-	  $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) unix.cmxa \
-	  $(NUM_FLAGS) str.cmxa $(INCLUDES) Perf.cmxa proverapi.cmx \
-	  dynlink.cmxa \
+	$(SET_LDD); $(COMPILE) $(OCAMLOPT_LINKFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/vfide$(DOTEXE)	\
+	  $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) \
+	  $(INCLUDES) Perf.cmxa proverapi.cmx dynlink.cmxa \
 	  util.cmx ast.cmx stats.cmx lexer.cmx \
 	  parser.cmx ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx \
 	  verify_expr.cmx verifast.cmx combineprovers.cmx \
@@ -445,8 +442,8 @@ vfide: ../bin/vfide$(DOTEXE) $(STDLIB)
 
 ../bin/verifast$(DOTEXE): vfconsole.cmx $(VERIFAST_PLUGINS:%=verifastPlugin%.cmx) $(Z3DEPS)
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} $(OCAMLOPT_LINKFLAGS) $(OCAMLCFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/verifast$(DOTEXE) unix.cmxa \
-	  $(NUM_FLAGS) str.cmxa $(INCLUDES) Perf.cmxa proverapi.cmx \
+	$(COMPILE) $(OCAMLOPT_LINKFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/verifast$(DOTEXE) \
+	$(INCLUDES) Perf.cmxa proverapi.cmx \
 	  util.cmx ast.cmx stats.cmx lexer.cmx parser.cmx \
 	  ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx \
 	  verify_expr.cmx verifast.cmx simplex.cmx redux.cmx combineprovers.cmx \
@@ -459,8 +456,8 @@ endif
 
 ../bin/explorer$(DOTEXE): explorer.cmx $(VERIFAST_PLUGINS:%=verifastPlugin%.cmx) $(Z3DEPS)
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} $(OCAMLOPT_LINKFLAGS) $(OCAMLCFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/explorer$(DOTEXE) unix.cmxa \
-	  $(NUM_FLAGS) str.cmxa $(INCLUDES) Perf.cmxa proverapi.cmx \
+	$(COMPILE) $(OCAMLOPT_LINKFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/explorer$(DOTEXE) \
+	$(INCLUDES) Perf.cmxa proverapi.cmx \
 	  util.cmx ast.cmx stats.cmx lexer.cmx parser.cmx \
 	  ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx \
 	  verify_expr.cmx verifast.cmx simplex.cmx redux.cmx combineprovers.cmx \
@@ -478,7 +475,7 @@ verifast: ../bin/verifast$(DOTEXE) $(STDLIB)
 
 z3v4dot5prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmxa proverapi.cmx z3v4dot5prover.ml
 	@echo "  OCAMLOPT " $@
-	${OCAMLOPT} $(OCAMLCFLAGS) -warn-error F -c -I $(Z3_OCAML) -I ./$(INCLUDE_OS_DIR) $(NUM_FLAGS) Perf.cmxa proverapi.cmx z3v4dot5prover.ml
+	$(COMPILE) -warn-error F -c -I $(Z3_OCAML) -I ./$(INCLUDE_OS_DIR) -package num Perf.cmxa proverapi.cmx z3v4dot5prover.ml
 
 clean::
 	rm -f shape_analysis/*.cm[ix] shape_analysis/*.cmo
@@ -491,7 +488,7 @@ vfide.cmx: SExpressionEmitter.cmx
 #------------------------------- Tests --------------------------------------#
 testsuite: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
 	@echo "  OCAMLOPT " json_tests
-	$(OCAMLOPT) $(OCAMLCFLAGS) -o json_tests$(DOTEXE) json.cmx json_tests.ml && ./json_tests$(DOTEXE)
+	$(COMPILE) -o json_tests$(DOTEXE) json.cmx json_tests.ml && ./json_tests$(DOTEXE)
 	@echo "  MYSH     " testsuite
 	$(SET_ENV); \
         cd ..; bin/mysh -cpus $(NUMCPU) < testsuite.mysh

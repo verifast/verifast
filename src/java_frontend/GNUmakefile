@@ -31,7 +31,7 @@ JAVA_FE_DEPS = java_frontend/misc.cmx java_frontend/general_ast.cmx \
   java_frontend/communication.cmx java_frontend/annotation_type_checker.cmx \
   java_frontend/java_frontend.cmx java_frontend/ast_translator.cmx \
   java_frontend/java_frontend_bridge.cmx SExpressions.cmx SExpressionEmitter.cmx
-JAVA_FE_INCLS = -thread threads.cmxa $(JAVA_FE_DEPS)
+JAVA_FE_INCLS = -thread -package threads $(JAVA_FE_DEPS)
 
 clean::
 	rm -f java_frontend/*.cm*
