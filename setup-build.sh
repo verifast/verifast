@@ -16,7 +16,7 @@ if [ $(uname -s) = "Linux" ]; then
        git wget ca-certificates make m4 \
        gcc patch unzip libgtk2.0-dev \
        valac libgtksourceview2.0-dev
-  cd /tmp && curl -Lf https://dl.bintray.com/verifast/verifast/$VFDEPS_NAME-linux.txz | tar xj
+  cd /tmp && curl -Lf https://people.cs.kuleuven.be/~bart.jacobs/verifast/$VFDEPS_NAME-linux.txz | tar xj
 
 elif [ $(uname -s) = "Darwin" ]; then
 
@@ -39,7 +39,7 @@ elif [ $(uname -s) = "Darwin" ]; then
   export PKG_CONFIG_PATH=/opt/X11/lib/pkgconfig
   sudo mkdir /usr/local/$VFDEPS_NAME
   sudo chown -R $(whoami):admin /usr/local/*
-  cd /usr/local && curl -Lf https://dl.bintray.com/verifast/verifast/$VFDEPS_NAME-macos.txz | tar xj
+  cd /usr/local && curl -Lf https://people.cs.kuleuven.be/~bart.jacobs/verifast/$VFDEPS_NAME-macos.txz | tar xj
   
 else
   echo "Your OS is not supported by this script."
