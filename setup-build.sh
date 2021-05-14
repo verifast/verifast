@@ -5,6 +5,15 @@
 # Suitable for home use and for continuous integration.
 #
 
+dl_and_unzip() {
+  url="$1"
+  filename=$(basename "$url")
+  hash="$2"
+  curl -Lf -o "/tmp/$filename" "$url"
+  echo "$hash  /tmp/$filename" | shasum -a 224 -c || exit 1
+  tar xjf "/tmp/$filename"
+}
+
 set -e # Stop as soon as a command fails.
 set -x # Print what is being executed.
 
@@ -16,7 +25,8 @@ if [ $(uname -s) = "Linux" ]; then
        git wget ca-certificates make m4 \
        gcc patch unzip libgtk2.0-dev \
        valac libgtksourceview2.0-dev
-  cd /tmp && curl -Lf https://people.cs.kuleuven.be/~bart.jacobs/verifast/$VFDEPS_NAME-linux.txz | tar xj
+  cd /tmp
+  dl_and_unzip https://people.cs.kuleuven.be/~bart.jacobs/verifast/$VFDEPS_NAME-linux.txz 9f502036a859e163d4ad06b4b01ac21ac91564fda913b0dc88819eb3
 
 elif [ $(uname -s) = "Darwin" ]; then
 
@@ -39,7 +49,8 @@ elif [ $(uname -s) = "Darwin" ]; then
   export PKG_CONFIG_PATH=/opt/X11/lib/pkgconfig
   sudo mkdir /usr/local/$VFDEPS_NAME
   sudo chown -R $(whoami):admin /usr/local/*
-  cd /usr/local && curl -Lf https://people.cs.kuleuven.be/~bart.jacobs/verifast/$VFDEPS_NAME-macos.txz | tar xj
+  cd /usr/local
+  dl_and_unzip https://people.cs.kuleuven.be/~bart.jacobs/verifast/$VFDEPS_NAME-macos.txz ba2f1567e7ed74d1cec47b0fed60522df6a8f4f0155f4347fda78f2d
   
 else
   echo "Your OS is not supported by this script."
