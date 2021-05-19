@@ -5,6 +5,8 @@
 # Suitable for home use and for continuous integration.
 #
 
+llvm_version=13
+
 dl_and_unzip() {
   url="$1"
   filename=$(basename "$url")
@@ -19,21 +21,30 @@ set -x # Print what is being executed.
 
 . ./config.sh
 
+script_dir=$(pwd)
+
 if [ $(uname -s) = "Linux" ]; then
+  wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key|sudo apt-key add -
+  sudo apt-add-repository "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-$llvm_version main"
   sudo apt-get update
   sudo apt-get install -y --no-install-recommends \
        git wget ca-certificates make m4 \
        gcc patch unzip libgtk2.0-dev \
-       valac libgtksourceview2.0-dev
+       valac libgtksourceview2.0-dev \
+       make cmake llvm-$llvm_version-dev clang-$llvm_version libclang-$llvm_version-dev
   cd /tmp
-  dl_and_unzip https://people.cs.kuleuven.be/~bart.jacobs/verifast/$VFDEPS_NAME-linux.txz 9f502036a859e163d4ad06b4b01ac21ac91564fda913b0dc88819eb3
+  dl_and_unzip https://vfdeps-cxx-linux.herokuapp.com/$VFDEPS_NAME-linux.txz c69e9bb1f058d827727d28922f3ebb6353f2fcbc8bd7dfe3ece54f94
+  cd ..
+  cd $script_dir/src/cxx_frontend/ast_exporter/build
+  CC=/usr/bin/clang-$llvm_version CXX=/usr/bin/clang++-$llvm_version cmake -DLLVM_INSTALL_DIR=/usr/lib/llvm-$llvm_version -DVFDEPS=/tmp/$VFDEPS_NAME -DCMAKE_BUILD_TYPE=Debug ..
+
 
 elif [ $(uname -s) = "Darwin" ]; then
 
-  if [ -z "$GITHUB_ACTIONS" ]; then
+  # if [ -z "$GITHUB_ACTIONS" ]; then
       # No need to update when running in GitHub Actions; their brew is updated weekly.
       brew update
-  fi
+  # fi
 
   function brewinstall {
       if brew list $1 1>/dev/null 2>/dev/null; then
@@ -46,11 +57,15 @@ elif [ $(uname -s) = "Darwin" ]; then
   brewinstall gtk+
   brewinstall gtksourceview
   brewinstall vala
+  brewinstall cmake
+  brewinstall llvm@$llvm_version
   export PKG_CONFIG_PATH=/opt/X11/lib/pkgconfig
   sudo mkdir /usr/local/$VFDEPS_NAME
   sudo chown -R $(whoami):admin /usr/local/*
   cd /usr/local
-  dl_and_unzip https://people.cs.kuleuven.be/~bart.jacobs/verifast/$VFDEPS_NAME-macos.txz ba2f1567e7ed74d1cec47b0fed60522df6a8f4f0155f4347fda78f2d
+  dl_and_unzip https://vfdeps-cxx-macos.herokuapp.com/$VFDEPS_NAME-macos.txz 301bf548e6bdbaac79ef49f3c2eb787a37b8487c4c25de1aec92b6c5
+  cd $script_dir/src/cxx_frontend/ast_exporter/build
+  cmake -DLLVM_INSTALL_DIR=$(brew --prefix llvm@$llvm_version) -DVFDEPS=/usr/local/$VFDEPS_NAME -DCMAKE_BUILD_TYPE=Debug ..
   
 else
   echo "Your OS is not supported by this script."

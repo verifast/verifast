@@ -58,17 +58,24 @@ let static_error l msg url = raise (StaticError (l, msg, url))
 
 exception CompilationError of string
 
-let file_type path=
+let file_specs path =
   begin
-  if Filename.check_suffix (Filename.basename path) ".c" then CLang
-  else if Filename.check_suffix (Filename.basename path) ".jarsrc" then Java
-  else if Filename.check_suffix (Filename.basename path) ".jarspec" then Java
-  else if Filename.check_suffix (Filename.basename path) ".java" then Java
-  else if Filename.check_suffix (Filename.basename path) ".javaspec" then Java
-  else if Filename.check_suffix (Filename.basename path) ".scala" then Java
-  else if Filename.check_suffix (Filename.basename path) ".h" then CLang
-  else raise (CompilationError ("unknown extension: " ^ (Filename.basename path)))
+    if Filename.check_suffix (Filename.basename path) ".c" then CLang, None
+    else if Filename.check_suffix (Filename.basename path) ".cpp" then CLang, Some (Cxx)
+    else if Filename.check_suffix (Filename.basename path) ".jarsrc" then Java, None
+    else if Filename.check_suffix (Filename.basename path) ".jarspec" then Java, None
+    else if Filename.check_suffix (Filename.basename path) ".java" then Java, None
+    else if Filename.check_suffix (Filename.basename path) ".javaspec" then Java, None
+    else if Filename.check_suffix (Filename.basename path) ".scala" then Java, None
+    else if Filename.check_suffix (Filename.basename path) ".h" then CLang, None
+    else raise (CompilationError ("unknown extension: " ^ (Filename.basename path)))
   end
+let file_type path =
+  let f, _ = file_specs path in
+  f
+let lang_dialect path =
+  let _, d = file_specs path in
+  d
 let opt p = parser [< v = p >] -> Some v | [< >] -> None
 let rec comma_rep p = parser [< '(_, Kwd ","); v = p; vs = comma_rep p >] -> v::vs | [< >] -> []
 let rep_comma p = parser [< v = p; vs = comma_rep p >] -> v::vs | [< >] -> []
@@ -213,14 +220,16 @@ module type PARSER_ARGS = sig
   val data_model: data_model option
 end
 
+let decompose_data_model data_model_opt =
+  match data_model_opt with
+    Some {int_rank; long_rank; ptr_rank} -> LitRank int_rank, LitRank long_rank, LitRank ptr_rank
+  | None -> IntRank, LongRank, PtrRank
+
 module Parser(ParserArgs: PARSER_ARGS) = struct
 
 open ParserArgs
 
-let int_rank, long_rank, ptr_rank =
-  match data_model with
-    Some {int_rank; long_rank; ptr_rank} -> LitRank int_rank, LitRank long_rank, LitRank ptr_rank
-  | None -> IntRank, LongRank, PtrRank
+let int_rank, long_rank, ptr_rank = decompose_data_model data_model
 
 let intType = Int (Signed, int_rank)
 let longType = Int (Signed, long_rank)
