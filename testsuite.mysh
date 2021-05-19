@@ -441,6 +441,7 @@ cd tutorial_solutions
   verifast_both -target 32bit students.c
 cd ..
 cd tests
+  verifast -c deref_integer_.c
   verifast -c issue68.c
   verifast -c issue110.c
   verifast -c -allow_should_fail issue206.c

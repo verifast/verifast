@@ -602,6 +602,16 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       None -> assert_false h0 env l ("No matching points-to chunk: " ^ (ctxt#pprint f_symb) ^ "(" ^ (ctxt#pprint t) ^ ", _)") None
     | Some v -> v
 
+  let lookup_integer__chunk h0 env l tp t =
+    let (k, signedness) =
+      match int_rank_and_signedness tp with
+        Some (k, signedness) -> k, signedness
+      | None -> static_error l ("Dereferencing a pointer of type " ^ string_of_type tp ^ " is not yet supported.") None
+    in
+    match lookup_integer__chunk_core h0 t k signedness with
+      None -> assert_false h0 env l ("No matching points-to chunk: integer_(" ^ ctxt#pprint t ^ ", " ^ ctxt#pprint (rank_size_term k) ^ ", " ^ (if signedness = Signed then "true" else "false") ^ ", _)") None
+    | Some v -> v
+
   let read_field h env l t fparent fname =
     let (_, (_, _, _, _, f_symb, _, _)) = List.assoc (fparent, fname) field_pred_map in
     lookup_points_to_chunk h env l f_symb t
@@ -734,7 +744,9 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | CLang -> read_c_array h env l a i tp
   
   let deref_pointer h env l pointerTerm pointeeType =
-    lookup_points_to_chunk h env l (pointee_pred_symb l pointeeType) pointerTerm
+    match try_pointee_pred_symb pointeeType with
+      None -> lookup_integer__chunk h env l pointeeType pointerTerm
+    | Some predsym -> lookup_points_to_chunk h env l predsym pointerTerm
   
   let lists_disjoint xs ys =
     List.for_all (fun x -> not (List.mem x ys)) xs
