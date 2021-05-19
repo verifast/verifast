@@ -14,6 +14,9 @@
 .provides ./string.h#strcmp
 .provides ./string.h#strlen
 .provides ./string.h#strdup
+.provides ./prelude.h#integer__distinct
+.provides ./prelude.h#integer__unique
+.provides ./prelude.h#integer__limits
 .provides ./prelude.h#array_inv
 .provides ./prelude.h#chars_to_pointers
 .provides ./prelude.h#integer_distinct

@@ -51,6 +51,18 @@ predicate float_(float *p; float v);
 predicate double_(double *p; double v);
 predicate long_double(long double *p; long double v);
 
+lemma void integer__distinct(void *i, void *j);
+    requires integer_(i, ?size1, ?signed1, ?v1) &*& integer_(j, ?size2, ?signed2, ?v2);
+    ensures integer_(i, size1, signed1, v1) &*& integer_(j, size2, signed2, v2) &*& i != j;
+
+lemma void integer__unique(void *p);
+    requires [?f]integer_(p, ?size, ?signed_, ?v);
+    ensures [f]integer_(p, size, signed_, v) &*& f <= 1;
+
+lemma void integer__limits(void *p);
+    requires [?f]integer_(p, ?size, ?signed_, ?v);
+    ensures [f]integer_(p, size, signed_, v) &*& p > (void *)0 &*& p + size <= (void *)UINTPTR_MAX &*& signed_ ? -(1<<(8*size-1)) <= v &*& v < (1<<(8*size-1)) : 0 <= v &*& v < (1<<(8*size));
+
 lemma void character_limits(char *pc);
     requires [?f]character(pc, ?c);
     ensures [f]character(pc, c) &*& pc > (char *)0 &*& pc < (char *)UINTPTR_MAX &*& CHAR_MIN <= c &*& c <= CHAR_MAX;
