@@ -416,7 +416,35 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     iter' ([],[]) ps
   
   let funcmap = funcmap1 @ funcmap0
-  
+
+  let cxx_records_map1, cxx_records_declared =
+    let check_expr pn tenv init expr_type =
+      check_expr_t_core functypemap funcmap [] [] (pn, []) [] tenv None init expr_type in
+    let rec iter (pn: string) (records_defined: cxx_record_info map) (records_declared: loc map) (ds: decl list) =
+      match ds with
+        | [] -> records_defined, records_declared
+        | CxxRecord (loc, name, _, None) :: ds ->
+          iter pn records_defined ((name, loc) :: records_declared) ds
+        | CxxRecord (loc, name, kind, Some fields) :: ds ->
+          let this_type = match kind with
+            | CxxClass
+            | CxxStruct -> StructType name
+            | CxxUnion -> UnionType name in
+          let tenv = ["this", PtrType this_type; current_thread_name, current_thread_type] in
+          let map_field (Field (_, _, field_type, field_name, _, _, _, init_opt)) =
+            let field_type = check_pure_type (pn, []) [] Real field_type in
+            let check_init init = check_expr pn tenv init field_type in
+            field_name, (field_type, init_opt |> option_map check_init) in
+          let field_inits = fields |> List.map map_field in
+          let record_inf = {loc; inst_fields = field_inits} in
+          iter pn ((name, record_inf) :: records_defined) records_declared ds
+        | _ :: ds -> iter pn records_defined records_declared ds in
+    match ps, language with
+      | [PackageDecl (_, "", _, ds)], Cxx -> iter "" [] [] ds
+      | _ -> [], []
+      
+  let cxx_records_map = cxx_records_map1 @ cxx_records_map0    
+
   let register_prototype_used l g gterm =
     if not (List.mem (g, l) !prototypes_used) then
       prototypes_used := (g, l)::!prototypes_used;
@@ -1083,6 +1111,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | AssignExpr(_, e1, e2) ->  expr_mark_addr_taken e1 locals;  expr_mark_addr_taken e2 locals
     | AssignOpExpr(_, e1, _, e2, _) -> expr_mark_addr_taken e1 locals;  expr_mark_addr_taken e2 locals
     | InitializerList(_, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
+    | CxxNew (_, _, Some e) -> expr_mark_addr_taken e locals
+    | CxxNew (_, _, None) -> ()
+    | CxxConstruct (_, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
   and pat_expr_mark_addr_taken pat locals = 
     match pat with
       LitPat(e) -> expr_mark_addr_taken e locals
@@ -2141,6 +2172,51 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           check_call targs h args $. fun h env retval ->
           cont (chunk::h) env retval
       end
+    | CxxNew (l, te, None) (* new without construct, e.g. new int *)
+    | CxxNew (l, te, Some (CxxConstruct (_, []))) -> (* new with empty construct, e.g. new Foo or new Foo() *)
+      (* TODO: constructor calls, placement args, builtin init *)
+      (* will later be replaced with a call to 'check_correct' to check against the constructor spec *)
+      if pure then static_error l "Cannot call 'new' from a pure context." None;
+      let ty = check_pure_type (pn, ilist) [] Real te in
+      let symb_name = match xo with
+        | None -> (match ty with StructType n -> n | _ -> "address")
+        | Some x -> x in
+      let result_type = PtrType ty in
+      let result = get_unique_var_symb_non_ghost symb_name result_type in
+      assume_neq result (ctxt#mk_intlit 0) @@ fun () ->
+        begin match ty with
+          | StructType name ->
+            let (_, (_, _, _, _, new_block_symb, _, _)) = List.assoc name new_block_pred_map in
+            let h = Chunk ((new_block_symb, true), [], real_unit, [result], None)::h in
+            let {inst_fields} = List.assoc name cxx_records_map in
+            (* initialize f:=x if 'f = x' *)
+            let rec init_fields h fields =
+              match fields with
+                | [] -> cont h env result
+                | (field_name, (field_type, init_expr_opt))::fields -> 
+                  let init_field h initial_value =
+                    assume_field h name field_name field_type Real result initial_value real_unit @@ fun h ->
+                      init_fields h fields in
+                  match init_expr_opt with
+                    | None -> 
+                      init_field h $. get_unique_var_symb_ "value" field_type false
+                    | Some init_expr ->
+                      with_context (Executing (h, [], expr_loc init_expr, "Executing field initializer")) @@ fun () ->
+                        begin fun tcont ->
+                          verify_expr readonly h env None init_expr tcont
+                        end @@ fun h _ initial_value -> init_field h initial_value in
+            init_fields h inst_fields
+          | _ -> 
+            let value = get_unique_var_symb "value" ty in
+            produce_points_to_chunk l h ty real_unit result value $. fun h ->
+              let cont h = cont h env result in
+              begin match try_pointee_pred_symb0 ty with
+                | Some (_, _, _, _, _, array_new_block_symb) ->
+                  cont (Chunk ((array_new_block_symb, true), [], real_unit, [result; ctxt#mk_intlit 1], None)::h)
+                | _ ->
+                  cont (Chunk ((get_pred_symb "new_block", true), [], real_unit, [result; sizeof l ty], None)::h)
+              end
+        end
     | NewObject (l, cn, args, targs) ->
       inheritance_check cn l;
       if pure then static_error l "Object creation is not allowed in a pure context" None;

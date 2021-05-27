@@ -148,6 +148,9 @@ let rec sexpr_of_type_expr : type_expr -> sexpression = function
       build_list
         [ Symbol "type-expr-pure-func" ]
         [ "type-exprs", sexpr_of_list sexpr_of_type_expr exprs ]
+  | CxxRecordTypeExpr (_, name, kind) ->
+      let kind_str = str_of_cxx_record_kind kind in
+      List [ Symbol ("type-expr-" ^ kind_str); Symbol name ]
 
 let sexpr_of_type_expr_option : type_expr option -> sexpression = function
   | Some t -> sexpr_of_type_expr t
@@ -395,6 +398,19 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
           [
             "args", sexpr_of_list sexpr_of_expr args;
             "targs", sexpr_of_option (fun targs -> sexpr_of_list sexpr_of_type_expr targs) targs
+          ]
+    | CxxNew (_, ty, Some e) ->
+        build_list
+          [ Symbol "expr-new" ]
+          [
+            "type", sexpr_of_type_expr ty;
+            "expr", sexpr_of_expr e;
+          ]
+    | CxxConstruct (_, args) ->
+        build_list
+          [ Symbol "construct-expr" ]
+          [
+            "args", sexpr_of_list sexpr_of_expr args;
           ]
     | NewArrayWithInitializer (l, texpr, args) ->
         build_list
@@ -743,6 +759,7 @@ let rec sexpr_of_pred (asn : asn) : sexpression =
     | CoefAsn (_, pat, _) ->
       build_list [ Symbol "pred-coef-asn" ]
                  [ "expr", sexpr_of_pat pat]
+    | _ -> List [ Symbol "pred"; sexpr_of_expr asn ]
 
 let rec sexpr_of_stmt (stmt : stmt) : sexpression =
   match stmt with
@@ -876,6 +893,14 @@ and sexpr_of_decl (decl : decl) : sexpression =
                    ; Symbol name ]
                    [ "fields", sexpr_of_list ~head:(Some (Symbol "fields")) sexpr_of_field fields
                    ; "attrs", sexpr_of_list ~head:(Some (Symbol "attrs")) sexpr_of_attr attrs ]
+    | CxxRecord (_, name, kind, None) ->
+        let kind_str = str_of_cxx_record_kind kind in
+        List [ Symbol ("declare-" ^ kind_str); Symbol name ]
+    | CxxRecord (_, name, kind, Some fields) ->
+        let kind_str = str_of_cxx_record_kind kind in
+        build_list
+          [ Symbol ("define-" ^ kind_str); Symbol name ]
+          [ "fields", sexpr_of_list ~head:(Some (Symbol "fields")) sexpr_of_field fields ]
     | Func (loc,
             kind,
             tparams,

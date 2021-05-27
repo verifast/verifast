@@ -61,6 +61,7 @@ exception CompilationError of string
 let file_type path=
   begin
   if Filename.check_suffix (Filename.basename path) ".c" then CLang
+  else if Filename.check_suffix (Filename.basename path) ".cpp" then Cxx
   else if Filename.check_suffix (Filename.basename path) ".jarsrc" then Java
   else if Filename.check_suffix (Filename.basename path) ".jarspec" then Java
   else if Filename.check_suffix (Filename.basename path) ".java" then Java
@@ -213,14 +214,16 @@ module type PARSER_ARGS = sig
   val data_model: data_model option
 end
 
+let decompose_data_model data_model_opt =
+  match data_model_opt with
+    | Some {int_rank; long_rank; ptr_rank} -> LitRank int_rank, LitRank long_rank, LitRank ptr_rank
+    | None -> IntRank, LongRank, PtrRank
+
 module Parser(ParserArgs: PARSER_ARGS) = struct
 
 open ParserArgs
 
-let int_rank, long_rank, ptr_rank =
-  match data_model with
-    Some {int_rank; long_rank; ptr_rank} -> LitRank int_rank, LitRank long_rank, LitRank ptr_rank
-  | None -> IntRank, LongRank, PtrRank
+let int_rank, long_rank, ptr_rank = decompose_data_model data_model
 
 let intType = Int (Signed, int_rank)
 let longType = Int (Signed, long_rank)
@@ -860,7 +863,7 @@ and
 | [< '(l, Kwd "bool") >] -> ManifestTypeExpr (l, Bool)
 | [< '(l, Kwd "boolean") >] -> ManifestTypeExpr (l, Bool)
 | [< '(l, Kwd "void") >] -> ManifestTypeExpr (l, Void)
-| [< '(l, Kwd "char") >] -> ManifestTypeExpr (l, match language with CLang -> Int (Signed, LitRank 0) | Java -> Int (Unsigned, LitRank 1))
+| [< '(l, Kwd "char") >] -> ManifestTypeExpr (l, match language with CLang | Cxx -> Int (Signed, LitRank 0) | Java -> Int (Unsigned, LitRank 1))
 | [< '(l, Kwd "byte") >] -> ManifestTypeExpr (l, Int (Signed, LitRank 0))
 | [< '(l, Kwd "predicate");
      '(_, Kwd "(");
@@ -1270,7 +1273,7 @@ and
     [< '(l, Kwd "|->"); rhs = parse_pattern >] -> 
     begin match e with
        ReadArray (_, _, SliceExpr (_, _, _)) -> PointsTo (l, e, rhs)
-     | ReadArray (lr, e0, e1) when language = CLang -> PointsTo (l, Deref(lr, Operation(lr, Add, [e0; e1])), rhs) 
+     | ReadArray (lr, e0, e1) when language = CLang || language = Cxx -> PointsTo (l, Deref(lr, Operation(lr, Add, [e0; e1])), rhs) 
      | _ -> PointsTo (l, e, rhs)
     end
   | [< >] -> e
@@ -1324,7 +1327,7 @@ and
   parse_type_args_with_diamond l0 = parser
     [< 
     (targs, diamond) = match language with
-      CLang -> (parser [< targs = parse_type_args l0 >] -> (targs, false))
+      CLang | Cxx -> (parser [< targs = parse_type_args l0 >] -> (targs, false))
       | Java -> (parser
         [< '(l1, Kwd "<"); 
           (targs, diamond) = parser
@@ -1346,7 +1349,7 @@ and
 | [< '(l, Kwd "false") >] -> False l
 | [< '(l, CharToken c) >] ->
   if Char.code c > 127 then raise (ParseException (l, "Non-ASCII character literals are not yet supported"));
-  let tp = match language with CLang -> Int (Signed, LitRank 0) | Java -> Int (Unsigned, LitRank 1) in
+  let tp = match language with CLang | Cxx -> Int (Signed, LitRank 0) | Java -> Int (Unsigned, LitRank 1) in
   CastExpr (l, ManifestTypeExpr (l, tp), IntLit (l, big_int_of_int (Char.code c), true, false, NoLSuffix))
 | [< '(l, Kwd "null") >] -> Null l
 | [< '(l, Kwd "currentThread") >] -> Var (l, "currentThread")
@@ -1483,7 +1486,7 @@ and
 and
   parse_expr_suffix_rest e0 = parser
   [< '(l, Kwd "->"); '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, f)) >] -> e
-| [< '(l, Kwd ".") when language = CLang; '(_, Ident f); e = parse_expr_suffix_rest (Select (l, e0, f)) >] -> e
+| [< '(l, Kwd ".") when language = CLang || language = Cxx; '(_, Ident f); e = parse_expr_suffix_rest (Select (l, e0, f)) >] -> e
 | [< '(l, Kwd ".");
      e = begin parser
        [< '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, f)) >] -> e
