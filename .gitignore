@@ -102,6 +102,10 @@ src/*/*.cmo
 src/*/*.cma
 src/*/*.cmt
 src/*/*.cmti
+src/*/*/*.cmx
+src/*/*/*.cmi
+src/*/*/*.o
+src/*/*/*.a
 src/*/*/*.cmxa
 src/*/*/*.cmxs
 src/*/*/*.annot
