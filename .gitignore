@@ -141,8 +141,10 @@ src/java_frontend/ast_server.jar
 examples/crypto/lib/polarssl
 
 # Cxx frontend
-src/cxx_frontend/libtooling/build/**
+src/cxx_frontend/libtooling/build/*
 !src/cxx_frontend/libtooling/build/.keep
+
+src/cxx_frontend/stubs/*.ml*
 
 _opam
 .vscode
