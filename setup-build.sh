@@ -24,9 +24,10 @@ if [ $(uname -s) = "Linux" ]; then
   sudo apt-get install -y --no-install-recommends \
        git wget ca-certificates make m4 \
        gcc patch unzip libgtk2.0-dev \
-       valac libgtksourceview2.0-dev
+       valac libgtksourceview2.0-dev \
+       make cmake
   cd /tmp
-  dl_and_unzip https://people.cs.kuleuven.be/~bart.jacobs/verifast/$VFDEPS_NAME-linux.txz 9f502036a859e163d4ad06b4b01ac21ac91564fda913b0dc88819eb3
+  dl_and_unzip https://vfdeps-cxx.herokuapp.com/vfdeps-1af91db-linux.txz 983f27958ad297b859b552c74f4bb3849cfb4b96a6e6ae358844461b
 
 elif [ $(uname -s) = "Darwin" ]; then
 
@@ -46,14 +47,19 @@ elif [ $(uname -s) = "Darwin" ]; then
   brewinstall gtk+
   brewinstall gtksourceview
   brewinstall vala
+  brewinstall cmake
   export PKG_CONFIG_PATH=/opt/X11/lib/pkgconfig
   sudo mkdir /usr/local/$VFDEPS_NAME
   sudo chown -R $(whoami):admin /usr/local/*
   cd /usr/local
-  dl_and_unzip https://people.cs.kuleuven.be/~bart.jacobs/verifast/$VFDEPS_NAME-macos.txz ba2f1567e7ed74d1cec47b0fed60522df6a8f4f0155f4347fda78f2d
+  dl_and_unzip https://vfdeps-cxx.herokuapp.com/vfdeps-1af91db-macos.txz ecc7899e6dc557ed431b4494088e793246b0f40f6820d5ebbd5a3179
   
 else
   echo "Your OS is not supported by this script."
   exit 1
   
+fi
+
+if [ ! -z ${GITHUB_ENV+x} ]; then
+  echo "VFDEPS_NAME=${VFDEPS_NAME}" >> ${GITHUB_ENV}
 fi
