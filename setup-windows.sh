@@ -16,8 +16,6 @@ dl_and_unzip(){
 set -e # Stop as soon as a command fails.
 set -x # Print what is being executed.
 
-CUR_DIR=$(pwd)
-
 cd /cygdrive/c
 
 dl_and_unzip https://people.cs.kuleuven.be/~bart.jacobs/verifast/vfdeps-649a3d5-win.txz 067fdf4e6fc69458bd651c0ea87a97bd96058262

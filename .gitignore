@@ -147,6 +147,8 @@ examples/crypto/lib/polarssl
 # Cxx frontend
 src/cxx_frontend/libtooling/build/*
 !src/cxx_frontend/libtooling/build/.keep
+src/cxx_frontend/stubs/stubs_ast.capnp.c++
+src/cxx_frontend/stubs/stubs_ast.capnp.h
 
 src/cxx_frontend/stubs/*.ml*
 
