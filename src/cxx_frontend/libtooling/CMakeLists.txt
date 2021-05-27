@@ -46,7 +46,6 @@ add_executable(vf-cxx-ast-exporter
   Annotation.cpp
   CommentProcessor.cpp
   ContextFreePPCallbacks.cpp
-  "../stubs/stubs_ast.capnp.c++"
 )
 
 target_include_directories(vf-cxx-ast-exporter
