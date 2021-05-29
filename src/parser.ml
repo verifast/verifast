@@ -503,6 +503,9 @@ and
              | Some (StructTypeExpr (ls, s_opt, Some fs, attrs)) ->
                let s = match s_opt with None -> g | Some s -> s in
                [Struct (l, s, Some fs, attrs); TypedefDecl (l, StructTypeExpr (ls, Some s, None, attrs), g)]
+             | Some (UnionTypeExpr (ls, u_opt, Some fs)) ->
+               let u = match u_opt with None -> g | Some u -> u in
+               [Union (l, u, Some fs); TypedefDecl (l, UnionTypeExpr (ls, Some u, None), g)]
              | Some PtrTypeExpr (lp, (StructTypeExpr (ls, s_opt, Some fs, attrs))) ->
                let s = match s_opt with None -> g | Some s -> s in
                [Struct (l, s, Some fs, attrs); TypedefDecl (l, PtrTypeExpr (lp, StructTypeExpr (ls, Some s, None, attrs)), g)]

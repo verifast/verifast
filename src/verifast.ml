@@ -658,6 +658,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | StructType sn when !address_taken || (let (_, fds, _, _) = List.assoc sn structmap in match fds with Some fds -> List.exists (fun (_, (_, gh, _, _)) -> gh = Ast.Ghost) fds | _ -> true) ->
             (* If the variable's address is taken or the struct type has no body or it has a ghost field, treat it like a resource. *)
             produce_object (RefType t)
+          | UnionType _ -> produce_object (RefType t)
           | _ ->
             let rec get_initial_value h env x t e cont =
               match t, e with
