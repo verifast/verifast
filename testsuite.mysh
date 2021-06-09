@@ -442,6 +442,7 @@ cd tutorial_solutions
   verifast_both -target 32bit students.c
 cd ..
 cd tests
+  verifast -c -D ABC cmdline_defined_macros_in_header.c
   verifast -c issue238.c
   verifast -c deref_integer_.c
   verifast -c issue68.c

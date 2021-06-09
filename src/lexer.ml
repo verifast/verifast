@@ -1756,7 +1756,7 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
             p_last_macro_used := last_macro_used1::!p_last_macro_used
           in
           let () =
-            let macros = Hashtbl.create 10 in
+            let macros = mk_macros0 () in
             let ghost_macros = Hashtbl.create 10 in
             cfp_macros := macros::!cfp_macros;
             cfp_ghost_macros := ghost_macros::!cfp_ghost_macros;
