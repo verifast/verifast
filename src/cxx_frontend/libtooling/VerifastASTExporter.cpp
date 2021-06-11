@@ -9,6 +9,7 @@
 #include "clang/Frontend/FrontendActions.h"
 #include "clang/Tooling/CommonOptionsParser.h"
 #include "clang/Tooling/Tooling.h"
+#include "Context.h"
 
 static llvm::cl::OptionCategory category("Verifast AST exporter options");
 
@@ -28,15 +29,16 @@ using Builder = stubs::TU::Builder;
 class VerifastASTConsumer : public clang::ASTConsumer {
   Builder &_builder;
   AnnotationStore &_store;
+  const Context &_context;
 
 public:
   void HandleTranslationUnit(clang::ASTContext &context) override {
-    AstSerializer serializer(context, _store);
+    AstSerializer serializer(context, _store, _context);
     serializer.serializeTU(_builder, context.getTranslationUnitDecl());
   }
 
-  explicit VerifastASTConsumer(Builder &builder, AnnotationStore &store)
-      : _builder(builder), _store(store) {}
+  explicit VerifastASTConsumer(Builder &builder, AnnotationStore &store, const Context &context)
+      : _builder(builder), _store(store), _context(context) {}
   VerifastASTConsumer(Builder &&builder, AnnotationStore &&store) = delete;
 };
 
@@ -44,6 +46,7 @@ class VerifastFrontendAction : public clang::ASTFrontendAction {
   Builder _builder;
   AnnotationStore _store;
   CommentProcessor _commentProcessor;
+  Context _context;
 
 public:
   std::unique_ptr<clang::ASTConsumer>
@@ -51,9 +54,9 @@ public:
                     llvm::StringRef inFile) override {
     auto &PP = compiler.getPreprocessor();
     PP.addPPCallbacks(
-        std::make_unique<ContextFreePPCallbacks>(PP, allowExpansions));
+        std::make_unique<ContextFreePPCallbacks>(_context, PP, allowExpansions));
     PP.addCommentHandler(&_commentProcessor);
-    return std::make_unique<VerifastASTConsumer>(_builder, _store);
+    return std::make_unique<VerifastASTConsumer>(_builder, _store, _context);
   }
 
   explicit VerifastFrontendAction(Builder &&builder)

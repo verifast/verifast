@@ -31,11 +31,11 @@ bool DeclSerializer::visitFunc(stubs::Decl::Function::Builder &builder,
   std::list<Annotation> anns;
   if (decl->isThisDeclarationADefinition()) {
     ser->getAnnStore().getContract(decl->getBeginLoc(), anns,
-                                      getSourceManager(),
-                                      decl->getBody()->getBeginLoc());
+                                   getSourceManager(),
+                                   decl->getBody()->getBeginLoc());
   } else {
     ser->getAnnStore().getContract(decl->getBeginLoc(), anns,
-                                      getSourceManager());
+                                   getSourceManager());
   }
 
   auto contractBuilder = builder.initContract(anns.size());
@@ -67,8 +67,9 @@ bool DeclSerializer::VisitVarDecl(const clang::VarDecl *decl) {
   var.setName(decl->getQualifiedNameAsString());
 
   auto ty = var.initType();
-  getSerializer()->serializeTypeLoc(ty,
-                                    decl->getTypeSourceInfo()->getTypeLoc());
+  getSerializer()->serializeTypeWithRange(
+      ty, decl->getType().getTypePtr(),
+      {decl->getTypeSpecStartLoc(), decl->getTypeSpecEndLoc()});
 
   if (decl->hasInit()) {
     auto init = var.initInit();
@@ -135,7 +136,7 @@ bool DeclSerializer::VisitCXXRecordDecl(const clang::CXXRecordDecl *decl) {
   rec.setHasDef(hasDef);
 
   if (hasDef) {
-    using DeclNodeOrphan = AstSerializer::NodeOrphan<stubs::Decl>;
+    using DeclNodeOrphan = NodeOrphan<stubs::Decl>;
     auto orphanage = capnp::Orphanage::getForMessageContaining(_builder);
     llvm::SmallVector<DeclNodeOrphan, 4> fieldOrphans;
     llvm::SmallVector<DeclNodeOrphan, 4> methOrphans;
@@ -171,11 +172,15 @@ bool DeclSerializer::VisitCXXRecordDecl(const clang::CXXRecordDecl *decl) {
 
 bool DeclSerializer::VisitCXXMethodDecl(const clang::CXXMethodDecl *decl) {
   auto meth = _builder.initMethod();
-  meth.setStatic(decl->isStatic());
+  auto isStatic = decl->isStatic();
 
-  auto thisType = meth.initThis();
-  getSerializer()->serializeType(thisType,
-                                 decl->getThisObjectType().getTypePtr());
+  meth.setStatic(isStatic);
+
+  if (!isStatic) {
+    auto thisType = meth.initThis();
+    getSerializer()->serializeType(thisType,
+                                   decl->getThisObjectType().getTypePtr());
+  }
 
   auto func = meth.initFunc();
   return visitFunc(func, decl);

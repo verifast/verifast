@@ -1,7 +1,9 @@
 module VF = Ast
 
+type header_type = VF.loc * (Lexer.include_kind * string * string) * string list * VF.package list
+
 module type Cxx_Ast_Translator = sig
-  val parse_cxx_file : string -> VF.package
+  val parse_cxx_file : string -> header_type list * VF.package list
   (**
     [parse_cxx_file path] parses the given C++ file and produces a VeriFast package.
   *)

@@ -55,6 +55,19 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
    *)
   let files_table: (int, string) Hashtbl.t = Hashtbl.create 8
 
+  let get_fd_path = Hashtbl.find files_table
+
+  let decls_table: (int, VF.decl list) Hashtbl.t = Hashtbl.create 4
+
+  let pop_fd_decls_opt fd = 
+    let result = Hashtbl.find_opt decls_table fd in
+    Hashtbl.remove decls_table fd;
+    result
+
+  let pop_fd_decls fd =
+    let Some res = pop_fd_decls_opt fd in
+    res
+
   (*
     Parser which is used to translate VeriFast annotations.
   *)
@@ -108,7 +121,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
       let l = SrcPos.l_get srcpos in
       let c = SrcPos.c_get srcpos in
       let fd = SrcPos.fd_get srcpos in
-      let file_name = Hashtbl.find files_table fd in
+      let file_name = get_fd_path fd in
       file_name, l, c in
     VF.Lexed (transl_srcpos @@ start_get loc, transl_srcpos @@ end_get loc)
 
@@ -641,17 +654,52 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     let reason = reason_get err in
     error loc reason
 
-  let transl_tu (tu: R.TU.t): VF.decl list =
-    Hashtbl.clear files_table;
-    let open R.TU in
-    let add_file file =
-      let fd = FileEntry.fd_get file in
-      let name = FileEntry.name_get file in
-      Hashtbl.replace files_table fd name in
-    files_get tu |> capnp_arr_iter add_file;
-    decls_get tu |> capnp_arr_map transl_decl |> List.flatten
+  let transl_includes (includes: R.Include.t list): Cxx_fe_sig.header_type list =
+    let rec transl_includes_rec incls header_names =
+      match incls with
+        | [] -> [], header_names
+        | h :: tl -> 
+          let headers, header_name = transl_include_rec h in
+          let other_headers, other_header_names = transl_includes_rec tl (header_name :: header_names) in
+          List.append headers other_headers, other_header_names
+    and transl_include_rec incl =
+      let open R.Include in
+      let fd = fd_get incl in
+      let path = get_fd_path fd in
+      match pop_fd_decls_opt fd with
+        | None -> [], path (* ignore secondary include *)
+        | Some decls ->
+          let loc = loc_get incl |> transl_loc in
+          let file_name = file_name_get incl in
+          let incl_kind = if is_angled_get incl then Lexer.AngleBracketInclude else Lexer.DoubleQuoteInclude in
+          let includes = includes_get_list incl in
+          let headers, header_names = transl_includes_rec includes [] in
+          let ps = [VF.PackageDecl (VF.dummy_loc, "", [], decls)] in
+          List.append headers [loc, (incl_kind, file_name, path), header_names, ps], path in
+    let headers, _ = transl_includes_rec includes [] in
+    headers
 
-  let parse_cxx_file path =
+  let transl_files (files: (Stubs_ast.ro, R.File.t, R.array_t) Capnp.Array.t): unit =
+    Hashtbl.clear files_table;
+    Hashtbl.clear decls_table;
+    let transl_file file =
+      let open R.File in
+      let fd = fd_get file in
+      let name = path_get file in
+      Hashtbl.replace files_table fd name;
+      let decls = decls_get file |> capnp_arr_map transl_decl |> List.flatten in
+      Hashtbl.replace decls_table fd decls in
+    files |> capnp_arr_iter transl_file
+
+  let transl_tu (tu: R.TU.t): Cxx_fe_sig.header_type list * VF.decl list =
+    let open R.TU in
+    files_get tu |> transl_files;
+    let main_fd = main_fd_get tu in
+    let main_decls = pop_fd_decls main_fd in
+    let includes = includes_get_list tu |> transl_includes in
+  includes, main_decls
+
+  let parse_cxx_file (path: string): Cxx_fe_sig.header_type list * VF.package list =
     (* TODO: pass macros that are whitelisted *)
     let inchan, outchan, errchan = invoke_exporter path [] in
     let close_channels () =
@@ -672,8 +720,8 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
           | R.SerResult.Undefined _ -> on_error ()
           | R.SerResult.Err -> try_deser @@ fun err -> err |> R.Err.of_message |> transl_err
           | R.SerResult.Ok ->  try_deser @@ fun msg -> 
-            let decls = msg |> R.TU.of_message |> transl_tu in
-            VF.PackageDecl (VF.dummy_loc, "", [], decls)
+            let headers, decls = msg |> R.TU.of_message |> transl_tu in
+            headers, [VF.PackageDecl (VF.dummy_loc, "", [], decls)]
       end
       begin fun () ->
         close_channels ()

@@ -21,8 +21,9 @@ void ContextFreePPCallbacks::PPDiags::reportCtxSensitiveMacroExp(
   createDiag(range.getBegin(), clang::DiagnosticsEngine::Level::Error,
              "Macro expansion of '%0' is context sensitive. Last definition is "
              "here: %1")
-      << _PP.getSpelling(macroNameTok) << range
-      << MD.getMacroInfo()->getDefinitionLoc();
+      << _PP.getSpelling(macroNameTok)
+      << MD.getMacroInfo()->getDefinitionLoc().printToString(
+             _PP.getSourceManager());
 }
 
 void ContextFreePPCallbacks::PPDiags::reportUndefIsolatedMacro(
@@ -30,7 +31,9 @@ void ContextFreePPCallbacks::PPDiags::reportUndefIsolatedMacro(
   createDiag(macroNameTok.getLocation(), clang::DiagnosticsEngine::Level::Error,
              "'Undefining '%0', which has no definition in the current "
              "context. Last definition is here: %1")
-      << _PP.getSpelling(macroNameTok) << MD.getMacroInfo()->getDefinitionLoc();
+      << _PP.getSpelling(macroNameTok)
+      << MD.getMacroInfo()->getDefinitionLoc().printToString(
+             _PP.getSourceManager());
 }
 
 void ContextFreePPCallbacks::FileChanged(
@@ -97,6 +100,15 @@ void ContextFreePPCallbacks::FileSkipped(
   auto &fileEntry = skippedFile.getFileEntry();
   _context.startInclusion(fileEntry);
   _context.endInclusion();
+}
+
+void ContextFreePPCallbacks::InclusionDirective(
+    clang::SourceLocation hashLoc, const clang::Token &includeTok,
+    clang::StringRef fileName, bool isAngled,
+    clang::CharSourceRange filenameRange, const clang::FileEntry *file,
+    clang::StringRef searchPath, clang::StringRef relativePath,
+    const clang::Module *imported, clang::SrcMgr::CharacteristicKind fileType) {
+  _context.addInclDirective(filenameRange.getAsRange(), fileName, *file, isAngled);
 }
 
 void ContextFreePPCallbacks::checkDivergence(const clang::Token &macroNameTok,

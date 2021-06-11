@@ -2,12 +2,28 @@
 
 #include "clang/Basic/FileManager.h"
 #include "clang/Lex/Preprocessor.h"
-#include "llvm/ADT/iterator_range.h"
-#include <unordered_set>
+#include "llvm/ADT/SmallVector.h"
 
 namespace vf {
+
+struct InclDirective {
+  // #include "file"
+  clang::SourceRange _range;
+  // file name as written in the source code
+  clang::StringRef _fileName;
+  // actual file the include directive referes to
+  unsigned _fileUID;
+  // angled or quoted
+  bool _isAngled;
+
+  explicit InclDirective(clang::SourceRange range, clang::StringRef fileName,
+                unsigned fileUID, bool isAngled)
+      : _range(range), _fileName(fileName), _fileUID(fileUID), _isAngled(isAngled) {}
+};
+
 class Inclusion {
-  std::unordered_set<Inclusion *> _inclusions;
+  llvm::SmallVector<Inclusion *, 4> _inclusions;
+  llvm::SmallVector<InclDirective, 4> _inclDirectives;
 
   bool containsInclusionFile(const clang::FileEntry &fileEntry) const {
     if (fileUID == fileEntry.getUID()) {
@@ -27,6 +43,10 @@ public:
   explicit Inclusion(const clang::FileEntry &fileEntry)
       : fileUID(fileEntry.getUID()), fileName(fileEntry.getName()){};
 
+  const llvm::SmallVectorImpl<InclDirective> &getInclDirectives() const {
+    return _inclDirectives;
+  }
+
   bool ownsMacroDef(const clang::MacroDefinition &macroDef,
                     const clang::SourceManager &SM) const {
     // macro info is null when no definition exists
@@ -43,7 +63,12 @@ public:
   void addInclusion(Inclusion *inclusion) {
     // No cycles
     assert(this != inclusion);
-    _inclusions.emplace(inclusion);
+    _inclusions.emplace_back(inclusion);
+  }
+
+  void addInclDirective(clang::SourceRange range, clang::StringRef fileName,
+                        unsigned fileUID, bool isAngled) {
+    _inclDirectives.emplace_back(range, fileName, fileUID, isAngled);
   }
 };
 } // namespace vf

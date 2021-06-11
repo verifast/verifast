@@ -26,7 +26,7 @@ Now use CMake te create an automated build process:
     ```
     cd /path/to/verifast/source/src/cxx_frontend/libtooling/build
     ```
-2. Tell CMake where it can find your LLVM installation and your vfdeps package:
+2. Instruct CMake where it can find your LLVM installation and your vfdeps package:
     ```
     cmake -DLLVM_INSTALL_DIR=path/to/llvm -DVFDEPS=/path/to/vfdeps -DCMAKE_BUILD_TYPE=Release ..
     ```

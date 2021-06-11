@@ -998,7 +998,9 @@ and sexpr_of_decl (decl : decl) : sexpression =
     | FuncTypeDecl _              -> unsupported "FuncTypeDecl"
     | BoxClassDecl _              -> unsupported "BoxClassDecl"
     | EnumDecl _                  -> unsupported "EnumDecl"
-    | Global _                    -> unsupported "Global"
+    | Global  (_, ty, name, init_opt) ->
+      build_list [ Symbol "declare-global-var" ; Symbol name ]
+                 (("type", sexpr_of_type_expr ty) :: (match init_opt with None -> [] | Some e -> ["init", sexpr_of_expr e]))
     | UnloadableModuleDecl _      -> unsupported "UnloadableModuleDecl"
 
 and sexpr_of_argument (type_, name) =

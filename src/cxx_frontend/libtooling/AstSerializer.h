@@ -4,8 +4,27 @@
 #include "capnp/orphan.h"
 #include "llvm/ADT/SmallVector.h"
 #include <kj/common.h>
+#include <unordered_map>
+#include "Context.h"
 
 namespace vf {
+
+/**
+ * Wrapper for data related to orphans. Useful when first serializing to
+ * orphans instead of serializing to an actual message. Holds two orphans: one
+ * for the location of the node and another for the properties of the node.
+ */
+template <class StubsNode> struct NodeOrphan {
+  using loc_orphan = capnp::Orphan<stubs::Loc>;
+  using node_orphan = capnp::Orphan<StubsNode>;
+  loc_orphan locOrphan;
+  node_orphan nodeOrphan;
+
+  explicit NodeOrphan(loc_orphan &&lOrphan, node_orphan &&dOrphan)
+      : locOrphan(std::move(lOrphan)), nodeOrphan(std::move(dOrphan)) {}
+};
+
+using DeclNodeOrphan = NodeOrphan<stubs::Decl>;
 
 /**
  * Wrapper for all serializers: serializes declarations, statements,
@@ -15,16 +34,20 @@ namespace vf {
 class AstSerializer {
   clang::ASTContext &_context;
   clang::SourceManager &_SM;
+  const Context &_inclContext;
 
   AnnotationSerializer _AS;
   AnnotationStore &_store;
+  std::unordered_map<unsigned, llvm::SmallVector<DeclNodeOrphan, 8>> _fileDeclsMap;
+  std::unordered_map<unsigned, clang::SourceLocation> _firstDeclLocMap;
+
+  void serializeDeclToDeclMap(const clang::Decl *decl, capnp::Orphanage &orphanage);
 
 public:
-  explicit AstSerializer(clang::ASTContext &context, AnnotationStore &store)
-      : _context(context), _SM(context.getSourceManager()),
-        _AS(context.getSourceManager()), _store(store) {}
 
-  AstSerializer(clang::SourceManager &&SM, AnnotationStore &&store) = delete;
+  explicit AstSerializer(clang::ASTContext &context, AnnotationStore &store, const Context &inclContext)
+      : _context(context), _SM(context.getSourceManager()), _inclContext(inclContext),
+        _AS(context.getSourceManager()), _store(store) {}
 
   KJ_DISALLOW_COPY(AstSerializer);
 
@@ -173,21 +196,6 @@ public:
                                      const Annotation &ann) {
     _AS.serializeNode<StubsNode>(locBuilder, descBuilder, ann);
   }
-
-  /**
-   * Wrapper for data related to orphans. Useful when first serializing to
-   * orphans instead of serializing to an actual message. Holds two orphans: one
-   * for the location of the node and another for the properties of the node.
-   */
-  template <class StubsNode> struct NodeOrphan {
-    using loc_orphan = capnp::Orphan<stubs::Loc>;
-    using node_orphan = capnp::Orphan<StubsNode>;
-    loc_orphan locOrphan;
-    node_orphan nodeOrphan;
-
-    explicit NodeOrphan(loc_orphan &&lOrphan, node_orphan &&dOrphan)
-        : locOrphan(std::move(lOrphan)), nodeOrphan(std::move(dOrphan)) {}
-  };
 
   /**
    * Serializes to an orphan. An orphan is not part (yet) of an actual

@@ -1,9 +1,3 @@
-/*@
-    // TODO: add to a c++ prelude
-    predicate new_block(void *p; int size);
-    predicate new_block_chars(char *p; int count) = new_block(p, count);
-@*/
-
 char getchar();
     //@ requires true;
     //@ ensures true;

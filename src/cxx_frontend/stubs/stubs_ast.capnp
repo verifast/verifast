@@ -178,7 +178,7 @@ struct Decl {
   struct Method {
     static @0 :Bool;
     func @1 :Function;
-    this @2 :Type;
+    this @2 :Type; # optional, not present if it is a static method
   }
 
   struct Typedef {
@@ -322,15 +322,26 @@ struct Expr {
   }
 }
 
+struct Include {
+  loc @0 :Loc;
+  fileName @1 :Text; # as written in the include directive
+  fd @2 :UInt16;
+  includes @3 :List(Include);
+  isAngled @4 :Bool;
+}
+
+struct File {
+  fd @0 :UInt16;
+  path @1 :Text;
+  decls @2 :List(DeclNode);
+}
+
 # A translation unit does not have a valid source location in Clang.
 # That's why we don't use it as a DeclNode.
 struct TU {
-  struct FileEntry {
-    fd @0 :UInt16;
-    name @1 :Text;
-  }
-  decls @0 :List(DeclNode);
-  files @1 :List(FileEntry);
+  mainFd @0 :UInt16;
+  includes @1 :List(Include);
+  files @2 :List(File);
 }
 
 struct Err {

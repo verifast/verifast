@@ -202,7 +202,7 @@ type token = (* ?token *)
   | SecondaryInclude of
       (** Same as first string of BeginInclude *)
       string
-      (** Same as first second string of BeginInclude *)
+      (** Same as second string of BeginInclude *)
       * string
   | EndInclude
   | Eol

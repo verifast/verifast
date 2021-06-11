@@ -33,7 +33,7 @@ class ContextFreePPCallbacks : public clang::PPCallbacks {
                                   const clang::MacroDefinition &MD);
   };
 
-  Context _context;
+  Context &_context;
   clang::Preprocessor &_PP;
   const std::unordered_set<std::string> _whiteList;
   PPDiags _diags;
@@ -44,9 +44,9 @@ class ContextFreePPCallbacks : public clang::PPCallbacks {
                        const clang::MacroDefinition &MD);
 
 public:
-  explicit ContextFreePPCallbacks(clang::Preprocessor &PP,
+  explicit ContextFreePPCallbacks(Context &context, clang::Preprocessor &PP,
                                   const std::vector<std::string> &whiteList)
-      : _PP(PP), _whiteList(whiteList.begin(), whiteList.end()), _diags(PP) {
+      : _context(context), _PP(PP), _whiteList(whiteList.begin(), whiteList.end()), _diags(PP) {
     auto mainEntry = SM().getFileEntryForID(SM().getMainFileID());
     _context.startInclusion(*mainEntry);
   }
@@ -81,5 +81,15 @@ public:
   void FileSkipped(const clang::FileEntryRef &skippedFile,
                    const clang::Token &filenameTok,
                    clang::SrcMgr::CharacteristicKind fileType) override;
+
+  void InclusionDirective(clang::SourceLocation HashLoc,
+                          const clang::Token &IncludeTok,
+                          clang::StringRef FileName, bool IsAngled,
+                          clang::CharSourceRange FilenameRange,
+                          const clang::FileEntry *File,
+                          clang::StringRef SearchPath,
+                          clang::StringRef RelativePath,
+                          const clang::Module *Imported,
+                          clang::SrcMgr::CharacteristicKind FileType) override;
 };
 } // namespace vf

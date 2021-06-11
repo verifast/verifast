@@ -3106,7 +3106,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             end
           ) in
           try
-            [], [Translator.parse_cxx_file path]
+            Translator.parse_cxx_file path
           with
             | Cxx_annotation_parser.CxxAnnParseException (l, msg)
             | Cxx_ast_translator.CxxAstTranslException (l, msg) -> static_error l msg None

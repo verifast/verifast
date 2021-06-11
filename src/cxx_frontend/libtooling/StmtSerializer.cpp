@@ -1,9 +1,10 @@
 #include "AstSerializer.h"
 #include "clang/AST/Stmt.h"
+#include <iostream>
 
 namespace vf {
 
-using StmtNodeOrphan = AstSerializer::NodeOrphan<stubs::Stmt>;
+using StmtNodeOrphan = NodeOrphan<stubs::Stmt>;
 bool StmtSerializer::VisitCompoundStmt(const clang::CompoundStmt *stmt) {
   auto orphanage = capnp::Orphanage::getForMessageContaining(_builder);
 

@@ -82,7 +82,7 @@ class AnnotationStore {
    * @param SM source manager.
    */
   AnnCont &getCont(clang::SourceLocation loc, const clang::SourceManager &SM) {
-    auto id = SM.getFileID(loc);
+    auto id = SM.getFileID(SM.getExpansionLoc(loc));
     auto entry = SM.getFileEntryForID(id);
     assert(entry);
     return _annContainers[entry->getUID()];
@@ -114,10 +114,11 @@ public:
   template <class Container>
   void getUntilLoc(Container &con, clang::SourceLocation loc,
                    const clang::SourceManager &SM) {
-    auto pred = [loc](const Annotation &ann) {
-      return ann.getRange().getEnd() < loc;
+    auto expLoc = SM.getFileLoc(loc);
+    auto pred = [expLoc](const Annotation &ann) {
+      return ann.getRange().getEnd() < expLoc;
     };
-    getCont(loc, SM).getWhile(con, pred);
+    getCont(expLoc, SM).getWhile(con, pred);
   }
 
   /**
@@ -134,7 +135,12 @@ public:
   template <class Container>
   void getAll(const clang::SourceLocation currentLoc, Container &con,
               const clang::SourceManager &SM) {
-    getCont(currentLoc, SM).getAll(con);
+    getCont(SM.getFileLoc(currentLoc), SM).getAll(con);
+  }
+
+  template <class Container>
+  void getAll(unsigned fileUID, Container &con) {
+    _annContainers[fileUID].getAll(con);
   }
 
   /**
@@ -165,7 +171,7 @@ public:
       first = false;
       return result;
     };
-    getCont(currentLoc, SM).getWhile(con, pred);
+    getCont(SM.getFileLoc(currentLoc), SM).getWhile(con, pred);
   }
 };
 } // namespace vf
