@@ -1042,9 +1042,9 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | WPredAsn (l, g, is_global_predref, targs, pats0, pats) -> pred_asn l real_unit_pat g is_global_predref targs (srcpats pats0) (srcpats pats)
     | WInstPredAsn (l, e_opt, st, cfin, tn, g, index, pats) ->
       inst_call_pred l real_unit_pat e_opt tn g index pats
-    | ExprAsn (l, WOperation (lo, Eq, [WVar (lx, x, LocalVar); e], t)) ->
+    | ExprAsn (l, WOperation (lo, Eq, [WVar (lx, x, LocalVar); e], tp)) ->
       begin match try_assoc x env with
-        Some t -> assert_term (ctxt#mk_eq t (ev e)) h env l "Cannot prove condition." None; cont [] h ghostenv env env' None
+        Some t -> assert_term (if tp = Bool then ctxt#mk_iff t (ev e) else ctxt#mk_eq t (ev e)) h env l "Cannot prove condition." None; cont [] h ghostenv env env' None
       | None -> let binding = (x, ev e) in cont [] h ghostenv (binding::env) (binding::env') None
       end
     | ExprAsn (l, e) ->
