@@ -7,7 +7,7 @@
 namespace vf {
 
 struct InclDirective {
-  // #include "file"
+  // #include "file" -> source range of "file"
   clang::SourceRange _range;
   // file name as written in the source code
   clang::StringRef _fileName;
@@ -43,7 +43,7 @@ public:
   explicit Inclusion(const clang::FileEntry &fileEntry)
       : fileUID(fileEntry.getUID()), fileName(fileEntry.getName()){};
 
-  const llvm::SmallVectorImpl<InclDirective> &getInclDirectives() const {
+  const llvm::ArrayRef<InclDirective> getInclDirectives() const {
     return _inclDirectives;
   }
 

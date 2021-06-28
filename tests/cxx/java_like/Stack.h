@@ -40,7 +40,6 @@ class Stack {
     //@ requires StackPred(this, ?count);
     //@ ensures StackPred(this, count) &*& result == (count == 0);
 
-    // TODO: implement this method once we support 'delete' expressions
     int pop();
     //@ requires StackPred(this, ?count) &*& count > 0;
     //@ ensures StackPred(this, count - 1);

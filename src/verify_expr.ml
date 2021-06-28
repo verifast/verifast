@@ -1113,6 +1113,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | InitializerList(_, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
     | CxxNew (_, _, Some e) -> expr_mark_addr_taken e locals
     | CxxNew (_, _, None) -> ()
+    | CxxDelete (_, e) -> expr_mark_addr_taken e locals
     | CxxConstruct (_, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
   and pat_expr_mark_addr_taken pat locals = 
     match pat with
@@ -2190,16 +2191,17 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let h = Chunk ((new_block_symb, true), [], real_unit, [result], None)::h in
             let {inst_fields} = List.assoc name cxx_records_map in
             (* initialize f:=x if 'f = x' *)
+            (* TODO: constructor inits *)
             let rec init_fields h fields =
               match fields with
                 | [] -> cont h env result
-                | (field_name, (field_type, init_expr_opt))::fields -> 
+                | (field_name, (field_type, init_expr_opt)) :: fields -> 
                   let init_field h initial_value =
                     assume_field h name field_name field_type Real result initial_value real_unit @@ fun h ->
                       init_fields h fields in
                   match init_expr_opt with
                     | None -> 
-                      init_field h $. get_unique_var_symb_ "value" field_type false
+                      init_field h @@ get_unique_var_symb_ "value" field_type false
                     | Some init_expr ->
                       with_context (Executing (h, [], expr_loc init_expr, "Executing field initializer")) @@ fun () ->
                         begin fun tcont ->

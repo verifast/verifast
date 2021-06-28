@@ -63,6 +63,20 @@ void Stack::push(int value)
     //@ close StackPred(this, count + 1);
 }
 
+int Stack::pop()
+//@ requires StackPred(this, ?count) &*& 0 < count;
+//@ ensures StackPred(this, count - 1);
+{
+    //@ open StackPred(this, count);
+    struct Stack::Node *head = this->head;
+    //@ open nodes(head, count);
+    int result = head->value;
+    this->head = head->next;
+    delete head;
+    //@ close StackPred(this, count - 1);
+    return result;
+}
+
 int main()
 //@ requires true;
 //@ ensures true;
@@ -72,5 +86,9 @@ int main()
     //@ close StackPred(s, 0);
     s->push(10);
     s->push(20);
-    //@ leak StackPred(s, 2);   
+    s->pop();
+    s->pop();
+    //@ open StackPred(s, _);
+    //@ open nodes(s->head, _);
+    delete s;
 }

@@ -176,7 +176,12 @@ bool ExprSerializer::VisitCallExpr(const clang::CallExpr *expr) {
 }
 
 bool ExprSerializer::VisitDeclRefExpr(const clang::DeclRefExpr *expr) {
-  _builder.setDeclRef(expr->getDecl()->getQualifiedNameAsString());
+  auto declRef = _builder.initDeclRef();
+  auto *decl = expr->getDecl();
+  declRef.setName(decl->getQualifiedNameAsString());
+  if (auto *func = llvm::dyn_cast<clang::FunctionDecl>(decl)) {
+    declRef.setId(func->getFirstDecl()->getID());
+  }
   return true;
 }
 
@@ -186,7 +191,11 @@ bool ExprSerializer::VisitMemberExpr(const clang::MemberExpr *expr) {
   auto base = mem.initBase();
   getSerializer()->serializeExpr(base, expr->getBase());
 
-  mem.setName(expr->getMemberDecl()->getQualifiedNameAsString());
+  auto *decl = expr->getMemberDecl();
+  mem.setName(decl->getQualifiedNameAsString());
+  if (auto *meth = llvm::dyn_cast<clang::CXXMethodDecl>(decl)) {
+    mem.setId(meth->getFirstDecl()->getID());
+  }
   mem.setArrow(expr->isArrow());
   return true;
 }
@@ -203,14 +212,6 @@ bool ExprSerializer::VisitCXXThisExpr(const clang::CXXThisExpr *expr) {
 }
 
 bool ExprSerializer::VisitCXXNewExpr(const clang::CXXNewExpr *expr) {
-  // switch (expr->getInitializationStyle()) {
-  //   case clang::CXXNewExpr::InitializationStyle::CallInit: std::cout << "call
-  //   init" << std::endl; break; case
-  //   clang::CXXNewExpr::InitializationStyle::ListInit: std::cout << "list
-  //   init" << std::endl; break; case
-  //   clang::CXXNewExpr::InitializationStyle::NoInit: std::cout << "no init" <<
-  //   std::endl; break;
-  // }
   auto n = _builder.initNew();
   auto type = n.initType();
   auto ser = getSerializer();
@@ -219,6 +220,12 @@ bool ExprSerializer::VisitCXXNewExpr(const clang::CXXNewExpr *expr) {
     auto e = n.initExpr();
     ser->serializeExpr(e, expr->getInitializer());
   }
+  return true;
+}
+
+bool ExprSerializer::VisitCXXDeleteExpr(const clang::CXXDeleteExpr *expr) {
+  auto d = _builder.initDelete();
+  getSerializer()->serializeExpr(d, expr->getArgument());
   return true;
 }
 

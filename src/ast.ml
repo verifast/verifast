@@ -948,6 +948,7 @@ let rec expr_loc e =
   | EnsuresAsn (l, body) -> l
   | CxxNew (l, _, _) -> l
   | CxxConstruct (l, _) -> l
+  | CxxDelete (l, _) -> l
 let asn_loc a = expr_loc a
   
 let stmt_loc s =

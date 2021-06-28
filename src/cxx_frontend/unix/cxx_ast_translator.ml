@@ -38,6 +38,10 @@ let remove_name_qual ?(depth: int = -1) (name: string): string =
       rm_name_qual depth col_count buf (String.sub name 1 (name_length - 1)) (name_length - 1) in
   rm_name_qual depth 0 "" name (String.length name)
 
+let get_func_name (name: string) (id: Int64.t) =
+  (* name *)
+  name ^ ":" ^ Int64.to_string id
+
 let union_no_init_err kind =
   failwith @@ "Node of kind '" ^ kind ^ "' has no initialized union body (default case has been implicitly selected). Make sure that you serialize a description for all nodes in the C++ clang tool."
 
@@ -57,6 +61,10 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
 
   let get_fd_path = Hashtbl.find files_table
 
+  (*
+    Maps unique identifiers - integers - to the declarations that are part of the file with that identifier.
+    Allows to process declarations of a file in isolation from other files.
+  *)
   let decls_table: (int, VF.decl list) Hashtbl.t = Hashtbl.create 4
 
   let pop_fd_decls_opt fd = 
@@ -196,7 +204,8 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
       | Member m            -> transl_member_expr loc m
       | Construct c         -> transl_construct_expr loc c
       | MemberCall c        -> transl_call_expr loc c
-      | NullPtrLit          -> transl_null_ptr_lit loc
+      | NullPtrLit          -> transl_null_ptr_lit_expr loc
+      | Delete d            -> transl_delete_expr loc d
       | Undefined _         -> failwith "Undefined expression"
       | _                   -> error loc "Unsupported expression."
 
@@ -263,7 +272,10 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
 
   and transl_func_like (f: R.Decl.Function.t) = 
     let open R.Decl.Function in
-    let name = name_get f in
+    let name =
+      let n = name_get f in
+      if n = "main" then n
+      else let id = id_get f in get_func_name n id in
     let body_opt = 
       if has_body f then Some (transl_stmt_as_list @@ body_get f)
       else None in
@@ -484,19 +496,20 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
       let _, desc = decompose_node callee in
       let e = R.Expr.get desc in
       match e with
-        | R.Expr.DeclRef r -> r, args (* c-like function call *)
+        | R.Expr.DeclRef r -> (* c-like function call *)
+          get_func_name (R.Expr.DeclRef.name_get r) (R.Expr.DeclRef.id_get r), args
         | R.Expr.Member m ->  (* C++ method call on explicit or implicit (this) object *)
           let base = transl_expr @@ R.Expr.Member.base_get m in
-          let member = R.Expr.Member.name_get m in
+          let member = get_func_name (R.Expr.Member.name_get m) (R.Expr.Member.id_get m) in
           member, VF.LitPat base :: args 
         | _ -> error loc "Unsupported callee in function or method call." in
     VF.CallExpr (loc, name, [], [], args, VF.Static)
 
-  and transl_decl_ref_expr (loc: VF.loc) (ref: string): VF.expr =
-    VF.Var (loc, ref)
+  and transl_decl_ref_expr (loc: VF.loc) (ref: R.Expr.DeclRef.t): VF.expr =
+    VF.Var (loc, R.Expr.DeclRef.name_get ref)
 
   and transl_this_expr (loc: VF.loc): VF.expr =
-    transl_decl_ref_expr loc "this"
+    VF.Var (loc, "this")
 
   and transl_new_expr (loc: VF.loc) (n: R.Expr.New.t): VF.expr =
     let open R.Expr.New in
@@ -505,6 +518,10 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
       if has_expr n then Some (transl_expr @@ expr_get n)
       else None in
     VF.CxxNew (loc, te, expr_opt)
+
+  and transl_delete_expr (loc: VF.loc) (d: R.Node.t): VF.expr = 
+    let e = transl_expr d in
+    VF.CxxDelete (loc, e)
 
   and transl_member_expr (loc: VF.loc) (m: R.Expr.Member.t): VF.expr =
     let open R.Expr.Member in
@@ -517,13 +534,14 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     let args = capnp_arr_map transl_expr c in
     VF.CxxConstruct (loc, args)
 
-  and transl_null_ptr_lit (loc: VF.loc) =
+  and transl_null_ptr_lit_expr (loc: VF.loc) =
     make_int_lit loc 0
 
   (**************)
   (* statements *)
   (**************)
 
+  (* TODO: redeclaration of function! *)
   and transl_decl_stmt (loc: VF.loc) (decls: (Stubs_ast.ro, R.Node.t, R.array_t) Capnp.Array.t): VF.stmt =
     let expect_var loc desc = match R.Decl.get desc with R.Decl.Var v -> Some (transl_var_decl_local loc v) | _ -> None in
     VF.DeclStmt (loc, decls |> capnp_arr_map (transl_expect expect_var))

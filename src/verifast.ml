@@ -508,6 +508,53 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let (w, _) = check_expr (pn,ilist) tparams tenv e in
           verify_expr false h env None w (fun h env _ -> cont h env) econt
       end
+      | ExprStmt (CxxDelete (l, arg)) ->
+        let consume_obj l addr t h cont =
+          match t with
+            | UnionType un ->
+              let pats = [TermPat addr; TermPat (sizeof l t); dummypat] in
+              consume_chunk rules h [] [] [] l (chars_pred_symb (), true) [] real_unit real_unit_pat (Some 2) pats @@ fun _ h _ [_; _; cs] _ _ _ _ ->
+                cont h
+            | StructType sn -> 
+              let fields, padding_pred_symb_opt = match try_assoc sn structmap with
+                | Some (_, Some fields, padding_pred_symb_opt, _) -> fields, padding_pred_symb_opt
+                | _ -> static_error l (Printf.sprintf "Cannot consume an object of type 'struct %s' since this struct type has not been defined" sn) None in
+              let rec consume_fields chunks h fields =
+                match fields with
+                  | [] -> cont h
+                  | (f, (lf, gh, t, offset)) :: fields ->
+                    match t with
+                      | StaticArrayType (_, _) | StructType _ | UnionType _ ->
+                        failwith "Fields other than pointers or primitives are not supported yet." (* TODO *)
+                      | _ ->
+                        let _, (_, _, _, _, f_symb, _, _) = List.assoc (sn, f) field_pred_map in
+                        consume_chunk rules h [] [] [] l (f_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat addr; dummypat] @@ fun chunk h _ _ _ _ _ _ ->
+                          consume_fields (chunk :: chunks) h fields in
+              consume_fields [] h fields in 
+        begin match check_expr (pn, ilist) tparams tenv arg with
+          | _, PtrType Void -> static_error l "Deleting an object through a void pointer is undefined." None;
+          | arg, PtrType t ->
+            if pure then static_error l "Cannot call a non-pure function from a pure context." None;
+            let arg = ev arg in
+            begin match try_pointee_pred_symb0 t with
+              | Some (_, _, _, array_pred_symb, _, array_new_block_pred_symb) ->
+                consume_chunk rules h [] [] [] l (array_new_block_pred_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat arg; dummypat] @@ fun _ h _ [_; n] _ _ _ _ ->
+                  consume_chunk rules h [] [] [] l (array_pred_symb, true) [] real_unit real_unit_pat (Some 2) [TermPat arg; TermPat n; dummypat] @@ fun _ h _ _ _ _ _ _ ->
+                    cont h env
+              | None -> 
+                consume_obj l arg t h @@ fun h ->
+                  begin match t with 
+                    | StructType name ->
+                      let _, (_, _, _, _, new_block_symb, _, _) = List.assoc name new_block_pred_map in
+                      consume_chunk rules h [] [] [] l (new_block_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat arg] @@ fun _ h _ _ _ _ _ _ -> 
+                        cont h env
+                    | _ -> 
+                      consume_chunk rules h [] [] [] l (get_pred_symb "new_block", true) [] real_unit real_unit_pat (Some 1) [TermPat arg; TermPat (sizeof l t)] @@ fun _ h _ _ _ _ _ _ -> 
+                        cont h env
+                  end
+            end
+          | _ -> static_error l "'delete' should receive a pointer." None   
+        end
     | ExprStmt (CallExpr (l, "set_verifast_verbosity", [], [], [LitPat (IntLit (_, n, _, _, _))], Static)) when pure ->
       let oldv = !verbosity in
       set_verbosity (int_of_big_int n);

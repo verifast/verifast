@@ -227,6 +227,8 @@ struct ExprSerializer : public NodeSerializer<stubs::Expr, clang::Expr>,
 
   bool VisitParenExpr(const clang::ParenExpr *expr);
 
+  bool VisitCXXDeleteExpr(const clang::CXXDeleteExpr *expr);
+
 private:
   bool serializeUnaryOperator(stubs::Expr::UnaryOp::Builder &builder,
                               const clang::UnaryOperator *uo);

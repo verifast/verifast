@@ -20,7 +20,7 @@ class Context {
   void serializeInclDirectivesCore(
       capnp::List<stubs::Include, capnp::Kind::STRUCT>::Builder &builder,
       const clang::SourceManager &SM,
-      const llvm::SmallVectorImpl<InclDirective> &inclDirectives,
+      const llvm::ArrayRef<InclDirective> inclDirectives,
       get_first_decl_loc_fn &getFirstDeclLocOpt,
       unsigned fd) const;
 

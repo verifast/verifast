@@ -1,6 +1,5 @@
 #include "AstSerializer.h"
 #include "clang/AST/Decl.h"
-#include <list>
 
 namespace vf {
 
@@ -8,6 +7,7 @@ namespace vf {
 bool DeclSerializer::visitFunc(stubs::Decl::Function::Builder &builder,
                                const clang::FunctionDecl *decl) {
   builder.setName(decl->getQualifiedNameAsString());
+  builder.setId(decl->getFirstDecl()->getID());
   auto ser = getSerializer();
   auto result = builder.initResult();
   ser->serializeTypeWithRange(result, decl->getReturnType().getTypePtr(),

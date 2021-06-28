@@ -150,6 +150,7 @@ struct Decl {
     result @2 :TypeNode;
     params @3 :List(Param);
     contract @4 :List(Clause); # optional
+    id @5 :Int64;
   }
 
   struct Field {
@@ -297,11 +298,17 @@ struct Expr {
     base @0 :ExprNode;
     name @1 :Text;
     arrow @2 :Bool;
+    id @3 :Int64; #optional, present if it refers to a function/method
   }
 
   struct New {
     type @0 :Type;
     expr @1 :ExprNode; #optional
+  }
+
+  struct DeclRef {
+    name @0 :Text;
+    id @1 :Int64; # optional, present if it refers to a function/method
   }
 
   union {
@@ -312,13 +319,14 @@ struct Expr {
     intLit @4 :IntLit;
     stringLit @5 :Text;
     call @6 :Call;
-    declRef @7 :Text;
+    declRef @7 :DeclRef;
     member @8 :Member;
     this @9 :Void;
     memberCall @10 :Call;
     new @11 :New;
     construct @12 :List(ExprNode);
     nullPtrLit @13 :Void;
+    delete @14 :ExprNode;
   }
 }
 

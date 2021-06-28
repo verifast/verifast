@@ -4,7 +4,7 @@ namespace vf {
 void Context::serializeInclDirectivesCore(
     capnp::List<stubs::Include, capnp::Kind::STRUCT>::Builder &builder,
     const clang::SourceManager &SM,
-    const llvm::SmallVectorImpl<InclDirective> &inclDirectives,
+    const llvm::ArrayRef<InclDirective> inclDirectives,
     get_first_decl_loc_fn &getFirstDeclLocOpt, unsigned fd) const {
   if (inclDirectives.size() > 0) {
     auto &lastInclDir = inclDirectives.back();
@@ -13,7 +13,7 @@ void Context::serializeInclDirectivesCore(
         lastInclDir._range.getEnd() > firstDeclLocOpt.getValue()) {
       auto diagID = SM.getDiagnostics().getCustomDiagID(
           clang::DiagnosticsEngine::Level::Error,
-          "An include directive cannot appear after a declaration.");
+          "An include directive can only appear at the start of a file.");
       SM.getDiagnostics().Report(lastInclDir._range.getBegin(), diagID);
     }
   }
