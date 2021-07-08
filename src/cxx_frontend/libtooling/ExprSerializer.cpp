@@ -178,6 +178,7 @@ bool ExprSerializer::VisitCallExpr(const clang::CallExpr *expr) {
 bool ExprSerializer::VisitDeclRefExpr(const clang::DeclRefExpr *expr) {
   auto declRef = _builder.initDeclRef();
   auto *decl = expr->getDecl();
+  declRef.setIsClassMember(decl->isCXXClassMember());
   declRef.setName(decl->getQualifiedNameAsString());
   if (auto *func = llvm::dyn_cast<clang::FunctionDecl>(decl)) {
     declRef.setId(func->getFirstDecl()->getID());
@@ -189,7 +190,10 @@ bool ExprSerializer::VisitMemberExpr(const clang::MemberExpr *expr) {
   auto mem = _builder.initMember();
 
   auto base = mem.initBase();
-  getSerializer()->serializeExpr(base, expr->getBase());
+  auto baseExpr = expr->getBase();
+  getSerializer()->serializeExpr(base, baseExpr);
+
+  mem.setBaseIsPointer(baseExpr->getType().getTypePtr()->isPointerType());
 
   auto *decl = expr->getMemberDecl();
   mem.setName(decl->getQualifiedNameAsString());

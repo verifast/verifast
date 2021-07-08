@@ -412,6 +412,12 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
           [
             "args", sexpr_of_list sexpr_of_expr args;
           ]
+    | CxxDelete (_, e) ->
+        build_list
+          [ Symbol "expr-delete" ]
+          [
+            "expr", sexpr_of_expr e
+          ]
     | NewArrayWithInitializer (l, texpr, args) ->
         build_list
           [ Symbol "expr-array-init" ]

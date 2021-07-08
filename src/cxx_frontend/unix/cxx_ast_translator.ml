@@ -493,13 +493,22 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     let callee = callee_get call in
     let args = args_get call |> map_args in
     let name, args =
-      let _, desc = decompose_node callee in
+      let callee_loc, desc = decompose_node callee in
       let e = R.Expr.get desc in
       match e with
-        | R.Expr.DeclRef r -> (* c-like function call *)
+        | R.Expr.DeclRef r -> (* c-like function call, operator calls (even tho they can be class methods) *)
+          let args = 
+            if R.Expr.DeclRef.is_class_member_get r then 
+              let VF.LitPat this_arg :: args = args in
+              VF.LitPat (VF.AddressOf (callee_loc, this_arg)) :: args
+            else args in
           get_func_name (R.Expr.DeclRef.name_get r) (R.Expr.DeclRef.id_get r), args
         | R.Expr.Member m ->  (* C++ method call on explicit or implicit (this) object *)
-          let base = transl_expr @@ R.Expr.Member.base_get m in
+          let base = 
+            let base_expr = transl_expr @@ R.Expr.Member.base_get m in
+            (* methods/operators/conversions expect a pointer to the object as first argument *)
+            if R.Expr.Member.base_is_pointer_get m then base_expr
+            else VF.AddressOf (callee_loc, base_expr) in
           let member = get_func_name (R.Expr.Member.name_get m) (R.Expr.Member.id_get m) in
           member, VF.LitPat base :: args 
         | _ -> error loc "Unsupported callee in function or method call." in
@@ -527,8 +536,10 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     let open R.Expr.Member in
     let base = transl_expr @@ base_get m in
     let field = name_get m in
+    let arrow = arrow_get m in
     (* TODO: remove_name_qual -> might be needed in more cases, or could be resolved in another way *)
-    VF.Read (loc, base, remove_name_qual field)
+    if arrow then VF.Read (loc, base, remove_name_qual field)
+    else VF.Select (loc, base, remove_name_qual field)
 
   and transl_construct_expr (loc: VF.loc) (c: (Stubs_ast.ro, R.Node.t, R.array_t) Capnp.Array.t): VF.expr =
     let args = capnp_arr_map transl_expr c in

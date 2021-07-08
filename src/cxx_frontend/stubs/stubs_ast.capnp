@@ -299,6 +299,7 @@ struct Expr {
     name @1 :Text;
     arrow @2 :Bool;
     id @3 :Int64; #optional, present if it refers to a function/method
+    baseIsPointer @4 :Bool;
   }
 
   struct New {
@@ -309,6 +310,7 @@ struct Expr {
   struct DeclRef {
     name @0 :Text;
     id @1 :Int64; # optional, present if it refers to a function/method
+    isClassMember @2 :Bool;
   }
 
   union {

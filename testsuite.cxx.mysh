@@ -19,6 +19,7 @@ cd tests
     verifast -c new_class.cpp
     verifast -c new_primitives.cpp
     verifast Overloads.cpp
+    verifast -disable_overflow_check operators.cpp
     cd ..
 cd ..
 end_parallel

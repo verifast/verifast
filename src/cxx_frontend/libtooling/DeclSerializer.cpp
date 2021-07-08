@@ -10,9 +10,15 @@ bool DeclSerializer::visitFunc(stubs::Decl::Function::Builder &builder,
   builder.setId(decl->getFirstDecl()->getID());
   auto ser = getSerializer();
   auto result = builder.initResult();
+  auto returnRange = decl->getReturnTypeSourceRange();
+  if (returnRange.isInvalid()) {
+    // Try to recover from using an invalid range which will result in a
+    // seg-fault. E.g. when handling a conversion function which does not have a
+    // return type range.
+    returnRange = decl->getSourceRange();
+  }
   ser->serializeTypeWithRange(result, decl->getReturnType().getTypePtr(),
-                              decl->getReturnTypeSourceRange());
-
+                              returnRange);
   auto params = builder.initParams(decl->param_size());
   size_t i(0);
   for (auto p : decl->parameters()) {
@@ -183,6 +189,7 @@ bool DeclSerializer::VisitCXXMethodDecl(const clang::CXXMethodDecl *decl) {
   }
 
   auto func = meth.initFunc();
+
   return visitFunc(func, decl);
 }
 

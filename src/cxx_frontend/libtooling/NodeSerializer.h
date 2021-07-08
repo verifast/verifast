@@ -161,6 +161,7 @@ struct DeclSerializer : public NodeSerializer<stubs::Decl, clang::Decl>,
 
   bool VisitCXXRecordDecl(const clang::CXXRecordDecl *decl);
 
+  // Note that this also handles conversion functions!
   bool VisitCXXMethodDecl(const clang::CXXMethodDecl *decl);
 
   bool VisitCXXConstructorDecl(const clang::CXXConstructorDecl *decl);

@@ -7,6 +7,7 @@
 inline void serializeSrcPos(stubs::Loc::SrcPos::Builder &builder,
                             const clang::SourceLocation &loc,
                             const clang::SourceManager &SM) {
+  if (loc.isInvalid()) llvm::report_fatal_error("Cannot serialize an invalid location.");
   auto decLoc = SM.getDecomposedLoc(SM.getSpellingLoc(loc));
   auto line = SM.getLineNumber(decLoc.first, decLoc.second);
   auto col = SM.getColumnNumber(decLoc.first, decLoc.second);
