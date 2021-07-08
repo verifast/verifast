@@ -41,11 +41,11 @@ int main()
 {
   IntWrapper *iw = new IntWrapper;
   iw->setInt(5);
-  int ten = 5 + *iw;
+  int ten = 5 + *iw; // implicit conversion to int
   //@ assert ten == 10;
-  bool lt = (*iw) < 6;
+  bool lt = (*iw) < 6; // operator overload <
   //@ assert lt;
-  bool gt = (*iw) > 4;
+  bool gt = (*iw) > 4; // operator overload >
   //@ assert gt;
   delete iw;
 }
