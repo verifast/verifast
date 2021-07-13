@@ -223,6 +223,10 @@
 .provides ./bitops.gh#bitand_bitnot_eq
 .provides ./bitops.gh#bitor_zero
 .provides ./bitops.gh#bitand_bitor
+.provides ./bitops.gh#Z_of_uintN_def
+.provides ./bitops.gh#bitand_uintN_def
+.provides ./bitops.gh#bitor_uintN_def
+.provides ./bitops.gh#bitxor_uintN_def
 .provides ./target.gh#case_split_sizeof_ptr
 .provides ./target.gh#int_size_int_max
 .provides ./target.gh#long_size_long_max

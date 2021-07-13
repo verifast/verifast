@@ -208,6 +208,8 @@ let sexpr_of_operator (op : operator) : sexpression =
     | BitOr       -> Symbol "bt-or"
     | ShiftLeft   -> Symbol "<<"
     | ShiftRight  -> Symbol ">>"
+    | MinValue t  -> List [Symbol "MinValue"; sexpr_of_type_ t]
+    | MaxValue t  -> List [Symbol "MaxValue"; sexpr_of_type_ t]
 
 let sexpr_of_constant_value (c : constant_value) : sexpression =
   match c with

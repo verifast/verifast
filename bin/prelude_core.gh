@@ -34,4 +34,11 @@ fixpoint bool unboxed_bool(boxed_bool b) { switch (b) { case boxed_bool(value): 
 inductive boxed_real = boxed_real(real);
 fixpoint real unboxed_real(boxed_real r) { switch (r) { case boxed_real(value): return value; } }
 
+fixpoint int bitand_uintN(int x, int y, int N);
+fixpoint int bitor_uintN(int x, int y, int N);
+fixpoint int bitxor_uintN(int x, int y, int N);
+fixpoint int bitand_intN(int x, int y, int N);
+fixpoint int bitor_intN(int x, int y, int N);
+fixpoint int bitxor_intN(int x, int y, int N);
+
 #endif

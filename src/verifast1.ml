@@ -522,6 +522,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Int (Unsigned, LongRank) -> (int_zero_term, max_ulong_term)
     | Int (Signed, PtrRank) -> (min_intptr_term, max_intptr_term)
   
+  let is_within_limits n t =
+    match t with
+      Int (Signed, LitRank k) -> le_big_int (min_signed_big_int k) n && le_big_int n (max_signed_big_int k)
+    | Int (Unsigned, LitRank k) -> le_big_int zero_big_int n && le_big_int n (max_unsigned_big_int k)
+    | _ -> false
+
   let assume_bounds term (tp: type_) = 
     match tp with
       Int (_, _)|PtrType _ ->
@@ -4816,9 +4822,16 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let lazy_predfamsymb name = lazy_value (fun () -> get_pred_symb name)
   let lazy_purefuncsymb name = lazy_value (fun () -> get_pure_func_symb name)
   
+  let bitand_uintN_symb = lazy_purefuncsymb "bitand_uintN"
+  let bitand_intN_symb = lazy_purefuncsymb "bitand_intN"
+  let bitor_uintN_symb = lazy_purefuncsymb "bitor_uintN"
+  let bitor_intN_symb = lazy_purefuncsymb "bitor_intN"
+  let bitxor_uintN_symb = lazy_purefuncsymb "bitxor_uintN"
+  let bitxor_intN_symb = lazy_purefuncsymb "bitxor_intN"
+
   let truncate_unsigned_symb = lazy_purefuncsymb "truncate_unsigned"
   let truncate_signed_symb = lazy_purefuncsymb "truncate_signed"
-  
+
   let mk_truncate_term tp t =
     match tp with
       Int (Unsigned, rank) ->
@@ -6254,15 +6267,6 @@ let check_if_list_is_defined () =
         in
         ev state e1 $. fun state v1 -> cont state (ctxt#mk_real_mul v1 (ctxt#mk_reallit_of_num (div_num (num_of_int 1) (eval_reallit e2)))) 
       end
-    | WOperation (l, BitAnd, [e1; WIntLit(_, i)], _) when le_big_int zero_big_int i && ass_term <> None -> (* optimization *)
-      ev state e1 $. fun state v1 ->
-        let iterm = ctxt#mk_intlit (int_of_big_int i) in
-        let app = ctxt#mk_app bitwise_and_symbol [v1;iterm] in
-        ctxt#assert_term (ctxt#mk_and (ctxt#mk_le int_zero_term app) (ctxt#mk_le app iterm));
-        begin if eq_big_int i unit_big_int then
-          ctxt#assert_term (ctxt#mk_eq (ctxt#mk_mod v1 (ctxt#mk_intlit 2)) app);
-        end;
-        cont state app
     | WOperation (l, (BitAnd|BitOr|BitXor as op), [e1; e2], t) ->
       let operands_bounds =
         if ass_term = None then (* in ghost code, where integer types do not imply limits *) None else
@@ -6275,20 +6279,40 @@ let check_if_list_is_defined () =
           | Int (Unsigned, LitRank n1), Int (Signed, LitRank n2) when n1 < n2 -> Some (Int (Signed, LitRank n2))
           | _ -> None
           end
+        | Upcast (_, t1, _), WIntLit (_, n) when is_within_limits n t1 -> Some t1
+        | WIntLit (_, n), Upcast (_, t2, _) when is_within_limits n t2 -> Some t2
         | _ -> None
       in
       evs state [e1; e2] $. fun state [v1; v2] ->
-      let symb = match op with
-          BitAnd -> bitwise_and_symbol
-        | BitXor -> bitwise_xor_symbol
-        | BitOr -> bitwise_or_symbol
+      let symb, uintN_symb, intN_symb = match op with
+          BitAnd -> bitwise_and_symbol, !!bitand_uintN_symb, !!bitand_intN_symb
+        | BitXor -> bitwise_xor_symbol, !!bitxor_uintN_symb, !!bitxor_intN_symb
+        | BitOr -> bitwise_or_symbol, !!bitor_uintN_symb, !!bitor_intN_symb
       in
       let v = ctxt#mk_app symb [v1; v2] in
-      begin match operands_bounds with
-        None -> ()
-      | Some t ->
-        (* BitAnd, BitOr, and BitXor are bitwise nonexpansive (the bitwidth of the result equals the bitwidth of the operands). *)
-        assume_bounds v t
+      let assume_eq_bounded_op t =
+        match t with
+          Int (Unsigned, LitRank k) -> ctxt#assert_term (ctxt#mk_eq v (mk_app uintN_symb [v1; v2; ctxt#mk_intlit ((1 lsl k) * 8)]))
+        | Int (Signed, LitRank k) -> ctxt#assert_term (ctxt#mk_eq v (mk_app intN_symb [v1; v2; ctxt#mk_intlit ((1 lsl k) * 8 - 1)]))
+        | _ -> ()
+      in
+      let t =
+        match operands_bounds with
+          None -> t
+        | Some t ->
+          (* BitAnd, BitOr, and BitXor are bitwise nonexpansive (the bitwidth of the result equals the bitwidth of the operands). *)
+          assume_bounds v t;
+          t
+      in
+      if ass_term <> None then begin
+        assume_eq_bounded_op t;
+        begin match e2 with
+          WIntLit (_, i) when le_big_int zero_big_int i ->
+          ctxt#assert_term (ctxt#mk_and (ctxt#mk_le int_zero_term v) (ctxt#mk_le v v2));
+          if eq_big_int i unit_big_int then
+            ctxt#assert_term (ctxt#mk_eq (ctxt#mk_mod v1 (ctxt#mk_intlit 2)) v)
+        | _ -> ()
+        end
       end;
       cont state v
     | WOperation (l, ShiftRight, [e1; e2], t) ->

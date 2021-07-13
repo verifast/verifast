@@ -1,6 +1,10 @@
 .requires CRT/bitops.gh#bitand_def
+.requires CRT/bitops.gh#bitand_uintN_def
 .requires CRT/bitops.gh#bitnot_def
 .requires CRT/bitops.gh#bitor_def
+.requires CRT/bitops.gh#bitor_uintN_def
+.requires CRT/bitops.gh#bitxor_uintN_def
+.requires CRT/bitops.gh#shiftleft_def
 .requires CRT/list.gh#append_nil
 .requires CRT/list.gh#append_take_drop_n
 .requires CRT/list.gh#drop_0

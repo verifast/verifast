@@ -1,5 +1,7 @@
 //@ #include <bitops.gh>
 //@ #include <target.gh>
+#include <stdint.h>
+#include <assert.h>
 
 /*@
 
@@ -76,3 +78,14 @@ lemma signed char truncate_signed_test(int x)
 }
 
 @*/
+
+void bitand_uint8_symm_test(uint8_t x, uint8_t y)
+//@ requires true;
+//@ ensures true;
+{
+    //@ Z_of_uint8(x);
+    //@ Z_of_uint8(y);
+    assert((x & y) == (y & x));
+    //@ Z_of_uint8(123);
+    assert((x & 123) == (123 & x));
+}

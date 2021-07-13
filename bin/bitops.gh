@@ -67,7 +67,7 @@ lemma void bitor_def(int x1, Z z1, int x2, Z z2);
     requires x1 == int_of_Z(z1) &*& x2 == int_of_Z(z2);
     ensures (x1 | x2) == int_of_Z(Z_or(z1, z2));
 
-lemma void shiftleft_def(int x, nat n);
+lemma_auto void shiftleft_def(int x, nat n);
     requires true;
     ensures x << int_of_nat(n) == x * pow_nat(2, n);
 
@@ -203,20 +203,38 @@ fixpoint Z Z_of_bits(Z zh, list<bool> bits) {
     }
 }
 
-lemma Z Z_of_uintN(int x, nat N);
+fixpoint Z Z_of_uintN(int x, nat N);
+
+lemma void Z_of_uintN_def(int x, nat N);
+    requires true;
+    ensures Z_of_uintN(x, N) == Z_of_bits(Zsign(false), snd(bits_of_int(x, N)));
+
+lemma Z int_of_Z_of_uintN(int x, nat N);
     requires 0 <= x &*& x < pow_nat(2, N);
-    ensures result == Z_of_bits(Zsign(false), snd(bits_of_int(x, N))) &*& x == int_of_Z(result);
+    ensures result == Z_of_uintN(x, N) &*& x == int_of_Z(result);
 
 lemma Z Z_of_uint8(int x);
     requires 0 <= x &*& x <= 255;
-    ensures result == Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zsign(false), _), _), _), _), _), _), _), _) &*& x == int_of_Z(result);
+    ensures result == Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zsign(false), _), _), _), _), _), _), _), _) &*& result == Z_of_uintN(x, N8) &*& x == int_of_Z(result);
 
 lemma Z Z_of_uint16(int x);
     requires 0 <= x &*& x <= 65535;
-    ensures result == Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zsign(false), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _) &*& x == int_of_Z(result);
+    ensures result == Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zsign(false), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _) &*& result == Z_of_uintN(x, N16) &*& x == int_of_Z(result);
 
 lemma Z Z_of_uint32(int x);
     requires 0 <= x &*& x <= 0xffffffff;
-    ensures result == Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zsign(false), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _) &*& x == int_of_Z(result);
+    ensures result == Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zdigit(Zsign(false), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _) &*& result == Z_of_uintN(x, N32) &*& x == int_of_Z(result);
+
+lemma_auto void bitand_uintN_def(int x1, int x2, int N);
+    requires true;
+    ensures bitand_uintN(x1, x2, N) == int_of_Z(Z_and(Z_of_uintN(x1, nat_of_int(N)), Z_of_uintN(x2, nat_of_int(N))));
+
+lemma_auto void bitor_uintN_def(int x1, int x2, int N);
+    requires true;
+    ensures bitor_uintN(x1, x2, N) == int_of_Z(Z_or(Z_of_uintN(x1, nat_of_int(N)), Z_of_uintN(x2, nat_of_int(N))));
+
+lemma_auto void bitxor_uintN_def(int x1, int x2, int N);
+    requires true;
+    ensures bitxor_uintN(x1, x2, N) == int_of_Z(Z_xor(Z_of_uintN(x1, nat_of_int(N)), Z_of_uintN(x2, nat_of_int(N))));
 
 #endif
