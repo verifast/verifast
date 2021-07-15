@@ -669,11 +669,13 @@ endif
 
 nightly: release
 ifeq ($(OS), Windows_NT)
+	printf "SHA-224 of release contents: "; cd verifast-$(VFVERSION); find . -type f ! -path ./bin/VERSION -print0 | sort -z | xargs -0 sha224sum | sha224sum
 	rm verifast-nightly.zip || true
 	7z a verifast-nightly.zip verifast-$(VFVERSION)
 	ls -l verifast-nightly.zip
 	sha224sum verifast-nightly.zip
 else
+	printf "SHA-224 of release contents: "; cd verifast-$(VFVERSION); find . -type f ! -path ./bin/VERSION -print0 | sort -z | xargs -0 shasum -a 224 | shasum -a 224
 	rm -Rf ../upload || true
 	mkdir ../upload || true
 	tar czf ../upload/verifast-nightly$(RELEASE_SUFFIX).tar.gz verifast-$(VFVERSION)
