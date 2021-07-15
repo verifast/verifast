@@ -671,10 +671,14 @@ nightly: release
 ifeq ($(OS), Windows_NT)
 	rm verifast-nightly.zip || true
 	7z a verifast-nightly.zip verifast-$(VFVERSION)
+	ls -l verifast-nightly.zip
+	sha224sum verifast-nightly.zip
 else
 	rm -Rf ../upload || true
 	mkdir ../upload || true
 	tar czf ../upload/verifast-nightly$(RELEASE_SUFFIX).tar.gz verifast-$(VFVERSION)
+	ls -l ../upload/verifast-nightly$(RELEASE_SUFFIX).tar.gz
+	shasum -a 224 ../upload/verifast-nightly$(RELEASE_SUFFIX).tar.gz
 endif
 ifdef GITHUB_ENV
 	echo "VFVERSION=$(VFVERSION)" >> $$GITHUB_ENV
