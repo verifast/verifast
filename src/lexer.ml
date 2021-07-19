@@ -202,7 +202,7 @@ type token = (* ?token *)
   | SecondaryInclude of
       (** Same as first string of BeginInclude *)
       string
-      (** Same as first second string of BeginInclude *)
+      (** Same as second string of BeginInclude *)
       * string
   | EndInclude
   | Eol
@@ -409,6 +409,12 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
   in
   
   let text_peek () = if !textpos = textlength then '\000' else text.[!textpos] in
+  let text_peekn_opt n = 
+    let p = !textpos + n in
+    if p = textlength then Some '\000'
+    else if p > textlength then None
+    else Some text.[p] in
+
   let text_junk () = incr textpos; skip_backslashed_newlines () in
   
   let annotEnd = Printf.sprintf "%c*/" annotChar in
@@ -592,6 +598,9 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
     match text_peek () with
       ('A'..'Z' | 'a'..'z' | '\128'..'\255' | '0'..'9' | '_' | '\'' | '$') as c ->
       text_junk (); store c; ident ()
+    (* for C++ nested names, e.g. foo::bar *)
+    | ':' when (text_peekn_opt 1) = (Some ':') ->
+      text_junk (); text_junk (); store ':'; store ':'; ident ()
     | _ -> Some (ident_or_keyword (get_string ()) true)
   and ident2 () =
     match text_peek () with

@@ -447,7 +447,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           produce_chunk h (p_symb, true) targs real_unit (Some (List.length ftxmap + 1)) ts size $. fun h ->
           cont h env
       end
-    | ExprStmt (CallExpr (l, ("close_struct" | "close_struct_zero" as name), targs, [], args, Static)) when language = CLang ->
+    | ExprStmt (CallExpr (l, ("close_struct" | "close_struct_zero" as name), targs, [], args, Static)) when is_clike_lang language ->
       require_pure ();
       let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "close_struct expects no type arguments and one argument." None in
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
@@ -467,7 +467,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       produce_c_object l real_unit pointerTerm (StructType sn) eval_h init false true h env $. fun h env ->
       cont h env
-    | ExprStmt (CallExpr (l, "open_struct", targs, [], args, Static)) when language = CLang ->
+    | ExprStmt (CallExpr (l, "open_struct", targs, [], args, Static)) when is_clike_lang language ->
       require_pure ();
       let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "open_struct expects no type arguments and one argument." None in
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
@@ -508,6 +508,53 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let (w, _) = check_expr (pn,ilist) tparams tenv e in
           verify_expr false h env None w (fun h env _ -> cont h env) econt
       end
+      | ExprStmt (CxxDelete (l, arg)) ->
+        let consume_obj l addr t h cont =
+          match t with
+            | UnionType un ->
+              let pats = [TermPat addr; TermPat (sizeof l t); dummypat] in
+              consume_chunk rules h [] [] [] l (chars_pred_symb (), true) [] real_unit real_unit_pat (Some 2) pats @@ fun _ h _ [_; _; cs] _ _ _ _ ->
+                cont h
+            | StructType sn -> 
+              let fields, padding_pred_symb_opt = match try_assoc sn structmap with
+                | Some (_, Some fields, padding_pred_symb_opt, _) -> fields, padding_pred_symb_opt
+                | _ -> static_error l (Printf.sprintf "Cannot consume an object of type 'struct %s' since this struct type has not been defined" sn) None in
+              let rec consume_fields chunks h fields =
+                match fields with
+                  | [] -> cont h
+                  | (f, (lf, gh, t, offset)) :: fields ->
+                    match t with
+                      | StaticArrayType (_, _) | StructType _ | UnionType _ ->
+                        failwith "Fields other than pointers or primitives are not supported yet." (* TODO *)
+                      | _ ->
+                        let _, (_, _, _, _, f_symb, _, _) = List.assoc (sn, f) field_pred_map in
+                        consume_chunk rules h [] [] [] l (f_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat addr; dummypat] @@ fun chunk h _ _ _ _ _ _ ->
+                          consume_fields (chunk :: chunks) h fields in
+              consume_fields [] h fields in 
+        begin match check_expr (pn, ilist) tparams tenv arg with
+          | _, PtrType Void -> static_error l "Deleting an object through a void pointer is undefined." None;
+          | arg, PtrType t ->
+            if pure then static_error l "Cannot call a non-pure function from a pure context." None;
+            let arg = ev arg in
+            begin match try_pointee_pred_symb0 t with
+              | Some (_, _, _, array_pred_symb, _, array_new_block_pred_symb) ->
+                consume_chunk rules h [] [] [] l (array_new_block_pred_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat arg; dummypat] @@ fun _ h _ [_; n] _ _ _ _ ->
+                  consume_chunk rules h [] [] [] l (array_pred_symb, true) [] real_unit real_unit_pat (Some 2) [TermPat arg; TermPat n; dummypat] @@ fun _ h _ _ _ _ _ _ ->
+                    cont h env
+              | None -> 
+                consume_obj l arg t h @@ fun h ->
+                  begin match t with 
+                    | StructType name ->
+                      let _, (_, _, _, _, new_block_symb, _, _) = List.assoc name new_block_pred_map in
+                      consume_chunk rules h [] [] [] l (new_block_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat arg] @@ fun _ h _ _ _ _ _ _ -> 
+                        cont h env
+                    | _ -> 
+                      consume_chunk rules h [] [] [] l (get_pred_symb "new_block", true) [] real_unit real_unit_pat (Some 1) [TermPat arg; TermPat (sizeof l t)] @@ fun _ h _ _ _ _ _ _ -> 
+                        cont h env
+                  end
+            end
+          | _ -> static_error l "'delete' should receive a pointer." None   
+        end
     | ExprStmt (CallExpr (l, "set_verifast_verbosity", [], [], [LitPat (IntLit (_, n, _, _, _))], Static)) when pure ->
       let oldv = !verbosity in
       set_verbosity (int_of_big_int n);
@@ -2569,6 +2616,14 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       check_should_fail () $. fun () ->
       execute_branch $. fun () ->
       with_context (Executing ([], env, l, sprintf "Verifying function '%s'" g)) $. fun () ->
+      (* Assume 'this != 0' if the language is C++ and it is a method (for methods the frontend inserts 'this' as first parameter) *)
+      (* TODO: remove this when we verify C++ methods in its own way, instead of here *)
+      begin fun cont ->
+        match language, ps, penv with
+          | Cxx, ("this", _)::_, ("this", this_symb)::_ ->
+            assume_neq this_symb (ctxt#mk_intlit 0) $. fun () -> cont ()
+          | _ -> cont ()
+      end $. fun () ->
       produce_asn_with_post [] [] ghostenv env pre real_unit (Some (PredicateChunkSize 0)) None (fun h ghostenv env post' ->
         let post =
           match post' with
@@ -2858,7 +2913,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if language = Java && not (Filename.check_suffix g_file_name ".javaspec") then
         static_error l "A lemma function outside a .javaspec file must have a body. To assume a lemma, use the body '{ assume(false); }'." None;
       let FuncInfo ([], fterm, _, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, fb,v) = List.assoc g funcmap in
-      if auto && (Filename.check_suffix g_file_name ".c" || is_import_spec || language = CLang && Filename.chop_extension (Filename.basename g_file_name) <> Filename.chop_extension (Filename.basename program_path)) then begin
+      if auto && (Filename.check_suffix g_file_name ".c" || is_import_spec || is_clike_lang language && Filename.chop_extension (Filename.basename g_file_name) <> Filename.chop_extension (Filename.basename program_path)) then begin
         register_prototype_used l g fterm;
         create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams'
       end;
@@ -3017,10 +3072,10 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       ), 
       (
         structmap1, unionmap1, enummap1, globalmap1, modulemap1, importmodulemap1, 
-        inductivemap1, purefuncmap1,predctormap1, struct_accessor_map1, malloc_block_pred_map1, 
+        inductivemap1, purefuncmap1,predctormap1, struct_accessor_map1, malloc_block_pred_map1, new_block_pred_map1, 
         field_pred_map1, predfammap1, predinstmap1, typedefmap1, functypemap1, 
         funcmap1, boxmap,classmap1,interfmap1,classterms1,interfaceterms1, 
-        abstract_types_map1
+        abstract_types_map1, cxx_records_map1
       )
     )
   
@@ -3089,6 +3144,21 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             parse_header_file path reportRange reportShouldFail options.option_verbose [] options.option_define_macros options.option_enforce_annotations data_model
           else
             parse_c_file path reportRange reportShouldFail options.option_verbose options.option_include_paths options.option_define_macros options.option_enforce_annotations data_model
+        | Cxx ->
+          let module Translator = Cxx_ast_translator.Make(
+            struct
+              let enforce_annotations = options.option_enforce_annotations
+              let data_model_opt = data_model
+              let report_should_fail = reportShouldFail
+              let report_range = reportRange
+            end
+          ) in
+          try
+            Translator.parse_cxx_file path
+          with
+            | Cxx_annotation_parser.CxxAnnParseException (l, msg)
+            | Cxx_ast_translator.CxxAstTranslException (l, msg) -> static_error l msg None
+          
     in
     emitter_callback ds;
     check_should_fail ([], [], [], [], [], []) $. fun () ->

@@ -82,11 +82,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let reportStmt l = reportStmt (root_caller_token l)
   let reportStmtExec l = reportStmtExec (root_caller_token l)
 
-  let data_model = match language with Java -> Some data_model_java | CLang -> data_model
-  let int_rank, long_rank, ptr_rank =
-    match data_model with
-      Some {int_rank; long_rank; ptr_rank} -> LitRank int_rank, LitRank long_rank, LitRank ptr_rank
-    | None -> IntRank, LongRank, PtrRank
+  let data_model = match language with Java -> Some data_model_java | CLang | Cxx -> data_model
+  let int_rank, long_rank, ptr_rank = decompose_data_model data_model
   let llong_rank = LitRank 3
   let intType = Int (Signed, int_rank)
   let sizeType = Int (Unsigned, ptr_rank)
@@ -561,7 +558,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let current_module_name =
     match language with
       | Java -> "current_module"
-      | CLang -> Filename.chop_extension (Filename.basename path)
+      | CLang | Cxx -> Filename.chop_extension (Filename.basename path)
   
   let current_module_term = get_unique_var_symb current_module_name intType
   
@@ -706,6 +703,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     type malloc_block_pred_info =
         string (* predicate name *)
       * pred_fam_info
+    type new_block_pred_info =
+        string (* predicate name *)
+      * pred_fam_info
     type field_pred_info =
         string (* predicate name *)
       * pred_fam_info
@@ -803,6 +803,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * bool (* terminates *)
       * ((stmt list * loc) * int (*rank for termination check*)) option option
       * visibility
+    type cxx_record_info = {
+      loc: loc;
+      inst_fields: (type_ * expr option) map;
+    }
     type inst_pred_info =
         loc
       * type_ map
@@ -871,6 +875,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * pred_ctor_info map
       * struct_accessor_info map
       * malloc_block_pred_info map
+      * new_block_pred_info map
       * ((string * string) * field_pred_info) list
       * pred_fam_info map
       * pred_inst_map
@@ -883,6 +888,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * termnode map (* classterms *)
       * termnode map (* interfaceterms *)
       * abstract_type_info map
+      * cxx_record_info map
     
     type implemented_prototype_info =
         string
@@ -973,6 +979,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (predctormap0: pred_ctor_info map),
       (struct_accessor_map0: struct_accessor_info map),
       (malloc_block_pred_map0: malloc_block_pred_info map),
+      (new_block_pred_map0: new_block_pred_info map),
       (field_pred_map0: ((string * string) * field_pred_info) list),
       (predfammap0: pred_fam_info map),
       (predinstmap0: pred_inst_map),
@@ -984,7 +991,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (interfmap0: interface_info map),
       (classterms0: termnode map),
       (interfaceterms0: termnode map),
-      (abstract_types_map0: abstract_type_info map)
+      (abstract_types_map0: abstract_type_info map),
+      (cxx_records_map0: cxx_record_info map)
       : maps
     ) =
 
@@ -1000,8 +1008,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let id x = x in
     let merge_maps l
-      (structmap, unionmap, enummap, globalmap, modulemap, importmodulemap, inductivemap, purefuncmap, predctormap, struct_accessor_map, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, abstract_types_map)
-      (structmap0, unionmap0, enummap0, globalmap0, modulemap0, importmodulemap0, inductivemap0, purefuncmap0, predctormap0, struct_accessor_map0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, abstract_types_map0)
+      (structmap, unionmap, enummap, globalmap, modulemap, importmodulemap, inductivemap, purefuncmap, predctormap, struct_accessor_map, malloc_block_pred_map, new_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, abstract_types_map, cxx_records_map)
+      (structmap0, unionmap0, enummap0, globalmap0, modulemap0, importmodulemap0, inductivemap0, purefuncmap0, predctormap0, struct_accessor_map0, malloc_block_pred_map0, new_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, abstract_types_map0, cxx_records_map0)
       =
       (
 (*     append_nodups structmap structmap0 id l "struct", *)
@@ -1018,6 +1026,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
        append_nodups predctormap predctormap0 id l "predicate constructor",
        struct_accessor_map @ struct_accessor_map0,
        malloc_block_pred_map @ malloc_block_pred_map0,
+       new_block_pred_map @ new_block_pred_map0,
        field_pred_map @ field_pred_map0,
        append_nodups predfammap predfammap0 id l "predicate",
 (*     append_nodups predinstmap predinstmap0 (fun (p, is) -> p ^ "(" ^ String.concat ", " is ^ ")") l "predicate instance", *)
@@ -1030,7 +1039,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
        append_nodups interfmap interfmap0 id l "interface",
        classterms @ classterms0, 
        interfaceterms @ interfaceterms0,
-       append_nodups abstract_types_map abstract_types_map0 id l "abstract type")
+       append_nodups abstract_types_map abstract_types_map0 id l "abstract type",
+       cxx_records_map @ cxx_records_map0)
     in
 
     (** [merge_header_maps maps0 headers] returns [maps0] plus all elements transitively declared in [headers]. *)
@@ -1046,7 +1056,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let includepaths = (match include_kind with DoubleQuoteInclude -> [dir] | AngleBracketInclude -> []) @ include_paths @ [!bindir] in
           let rec find_include_file includepaths =
             match language with
-              CLang ->
+              CLang | Cxx ->
                 total_path
             | Java ->
                 match includepaths with
@@ -1068,7 +1078,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let header_is_import_spec = Filename.chop_extension (Filename.basename header_path) <> Filename.chop_extension (Filename.basename program_path) in
                 let (headers', ds) =
                   match language with
-                    CLang ->
+                    CLang | Cxx ->
                       let rec look_up h =
                         try 
                           List.find (fun (l', (_,h',tp'), hs', ps') -> h = tp') global_headers
@@ -1109,7 +1119,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
     in
 
-    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
+    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
     
     let (maps0, headers_included) =
       if include_prelude then
@@ -1131,14 +1141,15 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               | Some ([], maps0) ->
                 (maps0, [])
           end
-          | CLang ->
+          | CLang | Cxx ->
             begin match !prelude_maps with
               None ->
               let maps =
-                let prelude_path = concat !bindir "prelude.h" in
+                let prelude_name = match language with Cxx -> "prelude_cxx.h" | _ -> "prelude.h" in
+                let prelude_path = concat !bindir prelude_name in
                 let (prelude_headers, prelude_decls) = parse_header_file prelude_path reportRange reportShouldFail initial_verbosity [] [] enforce_annotations data_model in
                 let prelude_header_names = List.map (fun (_, (_, _, h), _, _) -> h) prelude_headers in
-                let prelude_headers = (dummy_loc, (AngleBracketInclude, "prelude.h", prelude_path), prelude_header_names, prelude_decls)::prelude_headers in
+                let prelude_headers = (dummy_loc, (AngleBracketInclude, prelude_name, prelude_path), prelude_header_names, prelude_decls)::prelude_headers in
                 merge_header_maps false maps0 [] !bindir prelude_headers prelude_headers
               in
               prelude_maps := Some maps;
@@ -1156,7 +1167,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let unloadable =
     match language with
-      | CLang ->
+      | CLang | Cxx ->
         let [PackageDecl (_, _, _, ds)] = ps in
         List.exists (function (UnloadableModuleDecl l) -> true | _ -> false) ds
       | Java -> false
@@ -1181,6 +1192,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter sdm ds =
       match ds with
         [] -> sdm
+      | CxxRecord (l, sn, CxxClass, fds_opt) :: ds
+      | CxxRecord (l, sn, CxxStruct, fds_opt) :: ds ->
+        iter sdm (Struct (l, sn, fds_opt, []) :: ds)
       | Struct (l, sn, fds_opt, attrs)::ds ->
         begin
           match try_assoc sn structmap0 with
@@ -1208,7 +1222,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter udm ds =
       match ds with
         [] -> udm
-      | Union (l, un, fds_opt)::ds ->
+      | Union (l, un, fds_opt)::ds
+      | CxxRecord (l, un, CxxUnion, fds_opt) :: ds ->
         begin match try_assoc un unionmap0 with
           Some (_, Some _) -> static_error l "Duplicate union name." None
         | Some (ldecl, None) -> if fds_opt = None then static_error l "Duplicate union declaration." None else delayed_union_def un ldecl l
@@ -1613,6 +1628,17 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         reportUseSite DeclKind_AbstractType ld l;
         AbstractType n
       | None ->
+      (* So we can use class/struct/union names as types in ghost code *)
+      match try_assoc id structdeclmap with
+        Some (ld, _, _)  when language = Cxx -> 
+        reportUseSite DeclKind_Struct ld l;
+        StructType id
+      | None ->
+      match try_assoc id uniondeclmap with
+        Some (ld, _) when language = Cxx ->
+        reportUseSite DeclKind_Union ld l;
+        UnionType id
+      | None ->
       static_error l ("No such type parameter, inductive datatype, class, interface, or function type: " ^pn^" "^id) None
       end
     | IdentTypeExpr (l, Some(pac), id) ->
@@ -1692,6 +1718,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | _ -> static_error l "A fixpoint function type requires at least two types: a domain type and a range type" None
       in
       iter ts
+    | CxxRecordTypeExpr (l, name, kind) ->
+      begin match kind with
+        | CxxClass | CxxStruct -> StructType name
+        | CxxUnion -> UnionType name
+      end
     in
     check te
   
@@ -2689,13 +2720,16 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let struct_accessor_map = struct_accessor_map1 @ struct_accessor_map0
 
-  let malloc_block_pred_map1: malloc_block_pred_info map = 
-    structmap1 |> flatmap begin function
-      (sn, (l, Some _, _, _)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) l [] 0 [PtrType (StructType sn)] (Some 1) Inductiveness_Inductive)]
-    | _ -> []
-    end
+  let (malloc_block_pred_map1: malloc_block_pred_info map), (new_block_pred_map1: new_block_pred_info map) = 
+    let mk_block_pred_map name =
+      structmap1 |> flatmap begin function
+        (sn, (l, Some _, _, _)) -> [(sn, mk_predfam (name ^ "_" ^ sn) l [] 0 [PtrType (StructType sn)] (Some 1) Inductiveness_Inductive)]
+      | _ -> []
+      end in
+    mk_block_pred_map "malloc_block", mk_block_pred_map "new_block"
   
   let malloc_block_pred_map: malloc_block_pred_info map = malloc_block_pred_map1 @ malloc_block_pred_map0
+  let new_block_pred_map: new_block_pred_info map = new_block_pred_map1 @ new_block_pred_map0
 
   let field_pred_map1 = (* dient om dingen te controleren bij read/write controle v velden*)
     match file_type path with
@@ -2726,7 +2760,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let field_pred_map = field_pred_map1 @ field_pred_map0
   
-  let structpreds1: pred_fam_info map = List.map (fun (_, p) -> p) malloc_block_pred_map1 @ List.map (fun (_, p) -> p) field_pred_map1 @ struct_padding_predfams1
+  let structpreds1: pred_fam_info map = 
+    let result = List.map (fun (_, p) -> p) malloc_block_pred_map1 @ List.map (fun (_, p) -> p) field_pred_map1 @ struct_padding_predfams1 in
+    match language with
+      | Cxx -> List.map (fun (_, p) -> p) new_block_pred_map1 @ result
+      | _ -> result
   
   let predfammap1 =
     let rec iter (pn,ilist) pm ds =
@@ -4180,6 +4218,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | e::es -> CallExpr (l, "cons", [], [], [LitPat e; LitPat (to_list_expr es)], Static)
       in
       check (to_list_expr es)
+    | CxxNew (l, te, e) ->
+      let t = check_pure_type (pn,ilist) [] Real te in
+      CxxNew (l, te, e), PtrType t, None
     | e -> static_error (expr_loc e) "Expression form not allowed here." None
   and check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e t0 =
     check_expr_t_core_core functypemap funcmap classmap interfmap (pn, ilist) tparams tenv inAnnotation e t0 false
@@ -4857,8 +4898,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let integers__symb = lazy_predfamsymb "integers_"
 
   let pointee_tuple chunk_pred_name array_pred_name =
-    let array_malloc_block_pred_name = "malloc_block_" ^ array_pred_name in
-    chunk_pred_name, lazy_predfamsymb chunk_pred_name, array_pred_name, lazy_predfamsymb array_pred_name, array_malloc_block_pred_name, lazy_predfamsymb array_malloc_block_pred_name
+    let array_block_pred_name = match language with 
+      | Cxx -> "new_block_" ^ array_pred_name
+      | _ -> "malloc_block_" ^ array_pred_name in
+    chunk_pred_name, lazy_predfamsymb chunk_pred_name, array_pred_name, lazy_predfamsymb array_pred_name, array_block_pred_name, lazy_predfamsymb array_block_pred_name
   
   let _, pointer_pred_symb, _, pointers_pred_symb, _, malloc_block_pointers_pred_symb as pointer_pointee_tuple = pointee_tuple "pointer" "pointers"
   let _, llong_pred_symb, _, llongs_pred_symb, _, malloc_block_llongs_pred_symb as llong_pointee_tuple = pointee_tuple "llong_integer" "llongs"
@@ -5943,7 +5986,7 @@ let check_if_list_is_defined () =
             end
           else
             output_string stderr "Definition of the inductive data type list was not found. Support for instanceof is not enabled!\n"
-      | CLang -> ()
+      | CLang | Cxx -> ()
   
   (* TODO: To improve performance, push only when branching, i.e. not at every assume. *)
   

@@ -15,6 +15,16 @@ jobs:
       - name: Build setup
         run: ./setup-build.sh
 
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v1.3.0
+        with:
+          version: "10.0"
+          directory: ${{ runner.temp }}/llvm
+
+      - name: Setup CMake
+        run: cd $GITHUB_WORKSPACE/src/cxx_frontend/libtooling/build && cmake -DLLVM_INSTALL_DIR=${{ runner.temp }}/llvm -DVFDEPS=/tmp/$VFDEPS_NAME -DCMAKE_BUILD_TYPE=Release ..
+
+
       - name: Build
         run: ./build.sh
 
@@ -43,6 +53,15 @@ jobs:
 
       - name: Build setup
         run: ./setup-build.sh
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v1.3.0
+        with:
+          version: "10.0"
+          directory: ${{ runner.temp }}/llvm
+
+      - name: Setup CMake
+        run: cd $GITHUB_WORKSPACE/src/cxx_frontend/libtooling/build && cmake -DLLVM_INSTALL_DIR=${{ runner.temp }}/llvm -DVFDEPS=/usr/local/$VFDEPS_NAME -DCMAKE_BUILD_TYPE=Release ..
 
       - name: Build
         run: ./build.sh
@@ -82,7 +101,7 @@ jobs:
         run: ./setup-windows.bat
 
       - name: Build
-        run: c:/cygwin/bin/bash -lc 'cd $GITHUB_WORKSPACE/src && make nightly VERBOSE=yes GTK=/cygdrive/c/vfdeps'
+        run: c:/cygwin/bin/bash -lc 'cd $GITHUB_WORKSPACE/src && make depend && make nightly VERBOSE=yes GTK=/cygdrive/c/vfdeps'
 
       - uses: actions/upload-artifact@v2
         with:

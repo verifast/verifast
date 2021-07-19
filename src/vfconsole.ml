@@ -431,7 +431,7 @@ let _ =
             ]
   in
   let process_file filename =
-    if List.exists (Filename.check_suffix filename) [ ".c"; ".java"; ".scala"; ".jarsrc"; ".javaspec" ]
+    if List.exists (Filename.check_suffix filename) [ ".c"; ".cpp"; ".java"; ".scala"; ".jarsrc"; ".javaspec" ]
     then
       begin
         let options = {

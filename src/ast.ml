@@ -246,6 +246,7 @@ type type_expr = (* ?type_expr *)
   | ConstructedTypeExpr of loc * string * type_expr list  (* A type of the form x<T1, T2, ...> *)
   | PredTypeExpr of loc * type_expr list * int option (* if None, not necessarily precise; if Some n, precise with n input parameters *)
   | PureFuncTypeExpr of loc * type_expr list   (* Potentially uncurried *)
+  | CxxRecordTypeExpr of loc * string * cxx_record_kind
 and
   operator =  (* ?operator *)
   | Add | Sub | PtrDiff | Le | Ge | Lt | Gt | Eq | Neq | And | Or | Xor | Not | Mul | Div | Mod | BitNot | BitAnd | BitXor | BitOr | ShiftLeft | ShiftRight
@@ -345,6 +346,16 @@ and
   | NewArray of loc * type_expr * expr
   (* If type arguments are None -> regular object creation or raw objects. [] -> type inference required and if the list is populated: parameterised type creation *)
   | NewObject of loc * string * expr list * type_expr list option
+  | CxxConstruct of
+      loc *
+      expr list
+  | CxxNew of
+      loc *
+      type_expr *
+      expr option
+  | CxxDelete of
+      loc *
+      expr
   | NewArrayWithInitializer of loc * type_expr * expr list 
   | IfExpr of loc * expr * expr * expr
   | SwitchExpr of
@@ -492,6 +503,7 @@ and
   language = (* ?language *)
     Java
   | CLang
+  | Cxx
 and
   method_binding = (* ?method_binding *)
     Static
@@ -761,6 +773,11 @@ and
       (stmt list * loc (* Close brace *)) option *  (* body *)
       method_binding *  (* static or instance *)
       visibility
+  | CxxRecord of
+    loc *
+    string *
+    cxx_record_kind *
+    field list option
       
   (** Do not confuse with FuncTypeDecl *)
   | TypedefDecl of
@@ -807,6 +824,8 @@ and
   | Ghost
   | Real
 and
+  cxx_record_kind = CxxStruct | CxxClass | CxxUnion
+and
   field =
   | Field of (* ?field *)
       loc *
@@ -823,6 +842,7 @@ and
     loc *
     string * (* name of the constructor *)
     (string * type_expr) list (* name and type-expression of the arguments *)
+    
 and
   member = (* ?member *)
   | FieldMember of field list
@@ -832,6 +852,12 @@ and
 and
   struct_attr =
   | Packed
+
+let str_of_cxx_record_kind kind =
+  match kind with
+    | CxxClass -> "class"
+    | CxxStruct -> "struct"
+    | CxxUnion -> "union"
 
 let func_kind_of_ghostness gh =
   match gh with
@@ -920,6 +946,9 @@ let rec expr_loc e =
   | ForallAsn (l, tp, i, e) -> l
   | CoefAsn (l, coef, body) -> l
   | EnsuresAsn (l, body) -> l
+  | CxxNew (l, _, _) -> l
+  | CxxConstruct (l, _) -> l
+  | CxxDelete (l, _) -> l
 let asn_loc a = expr_loc a
   
 let stmt_loc s =
@@ -997,6 +1026,12 @@ let stmt_fold_open f state s =
   | ProduceFunctionPointerChunkStmt (l, ftn, fpe, targs, args, params, openBraceLoc, ss, closeBraceLoc) -> List.fold_left f state ss
   | _ -> state
 
+let is_clike_lang lang =
+  match lang with
+    | CLang 
+    | Cxx -> true
+    | _ -> false
+
 (* Postfix fold *)
 let stmt_fold f state s =
   let rec iter state s =
@@ -1019,6 +1054,7 @@ let type_expr_loc t =
   | ArrayTypeExpr(l, te) -> l
   | PredTypeExpr(l, te, _) -> l
   | PureFuncTypeExpr (l, tes) -> l
+  | CxxRecordTypeExpr (l, _, _) -> l
 
 let expr_fold_open iter state e =
   let rec iters state es =
@@ -1094,6 +1130,10 @@ let expr_fold_open iter state e =
   | SuperMethodCall(_, _, args) -> iters state args
   | WSuperMethodCall(_, _, _, args, _) -> iters state args
   | InitializerList (l, es) -> iters state es
+  | CxxNew (_, _, Some e) -> iter state e
+  | CxxNew (_, _, _) -> state
+  | CxxConstruct (_, args) -> iters state args
+  | CxxDelete (_, arg) -> iter state arg
 
 (* Postfix fold *)
 let expr_fold f state e = let rec iter state e = f (expr_fold_open iter state e) e in iter state e
