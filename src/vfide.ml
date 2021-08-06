@@ -1489,18 +1489,18 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
                   perform_syntax_highlighting tab tab#buffer#start_iter tab#buffer#end_iter
                 end
               end;
-              let hasStmts = Array.make 10000 false in
+              let hasStmts = InfiniteArray.make false in
               let lineCount = ref 0 in
               let reportStmt ((path', line, _), _) =
                 if path' == path then begin
-                  hasStmts.(line - 1) <- true;
+                  InfiniteArray.set hasStmts (line - 1) true;
                   lineCount := max !lineCount line
                 end
               in
-              let stmtExecCounts = Array.make 10000 0 in
+              let stmtExecCounts = InfiniteArray.make 0 in
               let reportStmtExec ((path', line, _), _) =
                 if path' == path then
-                  stmtExecCounts.(line - 1) <- stmtExecCounts.(line - 1) + 1
+                  InfiniteArray.set stmtExecCounts (line - 1) (InfiniteArray.get stmtExecCounts (line - 1) + 1)
               in
               let reportDirective directive loc =
                 match directive with
@@ -1513,7 +1513,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
                 let _, tab = get_tab_for_path path in
                 let column = tab#stmtExecCountsColumn in
                 for i = 0 to !lineCount - 1 do
-                  column#add_line (if hasStmts.(i) then Printf.sprintf "%dx" stmtExecCounts.(i) else "")
+                  column#add_line (if InfiniteArray.get hasStmts i then Printf.sprintf "%dx" (InfiniteArray.get stmtExecCounts i) else "")
                 done
               end;
               let success =
