@@ -6,7 +6,7 @@ fixpoint int div(int x, int y) {
 
 class Division {
   int division_test(int nom, int denom) 
-    //@ requires denom != 0;
+    //@ requires denom != 0 && !((nom == -2147483648) && (denom == -1));
     //@ ensures result == nom / denom;
   {
     int tmp = nom / denom;
@@ -14,7 +14,7 @@ class Division {
   }
   
   void division_test2(int nom, int denom) 
-    //@ requires denom != 0;
+    //@ requires denom != 0 && !((nom == -2147483648) && (denom == -1));
     //@ ensures true;
   {
     int tmp = nom / denom;

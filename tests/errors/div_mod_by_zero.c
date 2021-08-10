@@ -1,5 +1,5 @@
 int div_by_zero(int x, int y)
-    //@ requires true;
+    //@ requires !((x == INT_MIN) && (y == -1));
     //@ ensures true;
 {
     return x / y; //~ should_fail
