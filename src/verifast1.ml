@@ -6091,7 +6091,15 @@ let check_if_list_is_defined () =
         RealType -> static_error l "Realdiv not supported yet in /=." None
       | Int (_, _) ->
         begin match ass_term with
-          Some assert_term -> assert_term l (ctxt#mk_not (ctxt#mk_eq v2 (ctxt#mk_intlit 0))) "Denominator might be 0." None (* TODO: Check overflow for signed integer: -128 / -1 == 128 *)
+          Some assert_term -> begin
+            let min, _ = limits_of_type (woperation_type_result_type op t) in
+            assert_term l (ctxt#mk_not (ctxt#mk_eq v2 (ctxt#mk_intlit 0))) "Denominator might be 0." None;
+            if not disable_overflow_check then begin
+              assert_term l
+                (ctxt#mk_not (ctxt#mk_and (ctxt#mk_eq v1 min) (ctxt#mk_eq v2 (ctxt#mk_intlit (-1)))))
+                "Division may overflow." None;
+            end
+          end
         | None -> ()
         end;
         (ctxt#mk_div v1 v2)

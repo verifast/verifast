@@ -321,6 +321,7 @@ cd examples
     verifast_both -c FieldInitializers.java
     verifast_both -c -allow_should_fail CompoundAssignments.java
     verifast_both -c -allow_should_fail Division.java
+    verifast_both -c -allow_should_fail DivisionOverflow.java
     verifast_both -c ConstantExpressions.java
     verifast_both -disable_overflow_check -c Contrib.jarsrc
     verifast_both -c DefaultCtor.java
@@ -450,6 +451,7 @@ cd tests
   verifast -c -allow_should_fail issue206.c
   verifast -c -allow_should_fail two_should_fails.c
   verifast -c -allow_should_fail div_mod_negative_dividend.c
+  verifast -c -allow_should_fail div.c
   verifast -c -prover z3v4.5 prod_func_ptr_chunk_ftargs_convert_provertype.c
   verifast -c -allow_should_fail russell_predctors.c
   verifast -c -allow_should_fail any_russell.c
@@ -500,6 +502,7 @@ cd tests
     verifast -c -allow_should_fail shift_errors.c
     verifast -c -allow_should_fail ghost_hiding_real.c
     verifast -c -allow_should_fail div_mod_by_zero.c
+    verifast -c -allow_should_fail div_overflow.c
     verifast_both -c -allow_should_fail macro_in_macro_arg.c
     verifast -c -prover z3v4.5 int_lit_overflow.c
     verifast_both -c -allow_should_fail basics.c
