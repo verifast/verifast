@@ -146,7 +146,7 @@ endif
 
 clean::
 	rm -Rf ../lib
-	-rm ../bin/libz3.dll
+	-rm -f ../bin/libz3.dll
 
 ../lib/libgtksourceview-2.0.0.dylib:
 	mkdir -p ../lib
@@ -204,9 +204,13 @@ else
   NUMCPU ?= $(shell cat /proc/cpuinfo | grep 'processor' | wc -l)
 endif
 
-# Always include debug information. This seems necessary to prevent vfide crashes on OS X (see https://dnetcode.cs.kuleuven.be/issues/1975).
-# Also, this is necessary to get stack traces.
-OCAMLCFLAGS += -g -w p
+# Variable $OCAMLCFLAGS specifies options for the optimizing native code
+# compiler `ocamlopt`.
+#
+# Always include debug information. This seems necessary to prevent vfide
+# crashes on OS X (see https://dnetcode.cs.kuleuven.be/issues/1975). Also, this
+# is necessary to get stack traces.
+OCAMLCFLAGS += -g -w p -warn-error FSU
 ifeq ($(OS), Linux)
   # See https://github.com/verifast/verifast/issues/145
   OCAMLCFLAGS += -runtime-variant _pic
@@ -258,10 +262,11 @@ clean::
 
 #------------------------------- Shorthands ---------------------------------#
 
-SET_LDD = export CAML_LD_LIBRARY_PATH="$$CAML_LD_LIBRARY_PATH:$$GTKSOURCEVIEW_LIBS"
-SET_ENV = export PATH="$(CWD)/../bin/:$(OCAMLBIN):$$PATH"; \
-          export $(LDLPATHVAR)="$(LDLPATH):$$$(LDLPATHVAR)"
-COMPILE = ocamlfind ocamlopt $(OCAMLCFLAGS)
+SET_LDD    = export CAML_LD_LIBRARY_PATH="$$CAML_LD_LIBRARY_PATH:$$GTKSOURCEVIEW_LIBS"
+SET_ENV    = export PATH="$(CWD)/../bin/:$(OCAMLBIN):$$PATH"; \
+             export $(LDLPATHVAR)="$(LDLPATH):$$$(LDLPATHVAR)"
+COMPILE    = ocamlfind ocamlopt $(OCAMLCFLAGS)
+COMPILE_BC = ocamlfind ocamlc $(OCAMLCFLAGS)
 
 STDLIB = ../bin/crt.dll.vfmanifest
 #sequence is important, it presents dependencies in command line of VeriFast
@@ -320,6 +325,14 @@ clean::
 clean::
 	rm -f *.cmx
 	rm -f *.o
+
+%.cmo: %.ml
+	@echo "    OCAMLC " $@
+	$(COMPILE_BC) -thread $(INCLUDES) -I $(Z3_OCAML) -pp $(CAMLP4O) -o $@ -c $*.ml
+clean::
+	rm -f *.cmo
+	cd java_frontend && rm -f *.cmo
+	cd linux && rm -f *.cmo
 
 clean::
 	rm -f *.annot
@@ -454,6 +467,52 @@ ifeq ($(OS), Darwin)
 	install_name_tool -change libz3.dylib @executable_path/../lib/libz3.dylib ../bin/verifast
 endif
 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+# This section is specifically related to bytecode compilation. Currently, it is
+# a bit self-contained to avoid potentially breaking changes to the rest of the
+# Makefile. It has only been tested on macOS with a local OPAM switch.
+
+# Explicit specification of objects in order; ocamldep appears to skip certain
+# cmo dependencies. 
+#
+# It would be better to share usage of this list with the optimized Verifast
+# target `../bin/verifast$(DOTEXE)`.
+VERIFAST_BC_OBJECTS = \
+	proverapi.cmo util.cmo ast.cmo stats.cmo lexer.cmo parser.cmo \
+	$(JAVA_FE_DEPS:.cmx=.cmo) \
+	verifast0.cmo verifast1.cmo assertions.cmo \
+	verify_expr.cmo verifast.cmo simplex.cmo redux.cmo combineprovers.cmo \
+	smtlib.cmo smtlibprover.cmo \
+	$(VERIFAST_PLUGINS:%=verifastPlugin%.cmo) \
+	z3v4dot5prover.cmo \
+	verifastPluginZ3v4dot5.cmo verifastPluginReduxZ3v4dot5.cmo  verifastPluginZ3v4dot5Smtlib.cmo  \
+	json.cmo vfconsole.cmo
+
+# Looking for dependency directories in the local OPAM installation.
+INCLUDE_DIR_NUM = $(shell ocamlfind query num)
+INCLUDE_DIR_THREADS = $(shell ocamlfind query threads)/threads
+INCLUDE_DIR_Z3 = $(shell ocamlfind query z3)
+INCLUDE_DIR_ZARITH = $(shell ocamlfind query zarith)
+VERIFAST_BC_INCLUDES = -I $(INCLUDE_DIR_NUM) -I $(INCLUDE_DIR_THREADS) -I $(INCLUDE_DIR_Z3) -I $(INCLUDE_DIR_ZARITH)
+# Included for the optimized target(s), but not necessary?
+# -I src \
+# -I src/java_frontend \
+# -I src/shape_analysis \
+# -I $(INCLUDE_DIR_OS) 
+
+# As I said: only tested on macOS.
+../bin/verifast.bc: linux/Perf.cma $(VERIFAST_BC_OBJECTS)
+	@echo "    OCAMLC " $@
+	$(COMPILE_BC) $(OCAMLOPT_LINKFLAGS) -warn-error F -pp ${CAMLP4O} -o $@ \
+		$(VERIFAST_BC_INCLUDES) \
+		threads.cma z3ml.cma linux/Perf.cma \
+		$(VERIFAST_BC_OBJECTS)
+clean::
+	rm -f ../bin/verifast.bc
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
 ../bin/explorer$(DOTEXE): explorer.cmx $(VERIFAST_PLUGINS:%=verifastPlugin%.cmx) $(Z3DEPS)
 	@echo "  OCAMLOPT " $@
 	$(COMPILE) $(OCAMLOPT_LINKFLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/explorer$(DOTEXE) \
@@ -572,7 +631,7 @@ cleantest::
 # Thus typing dependencies by hand is replaced by typing "make depend",
 # which is less error-prone.
 META_DEPS = \
-  $(wildcard *.ml) $(wildcard *.mli linux/*.ml linux/*.mli \
+  $(wildcard *.ml *.mli linux/*.ml linux/*.mli \
   java_frontend/*.ml java_frontend/*.mli \
   shape_analysis/*.ml shape_analysis/*.mli)
 
@@ -580,8 +639,7 @@ depend: $(META_DEPS)
 	@echo "  OCAMLDEP "
 	echo "# These dependencies are automatically generated." > .depend
 	echo "# Do not edit by hand. To generate, run 'make depend'." >> .depend
-	$(OCAMLDEP) -slash -pp ${CAMLP4O} -native $(INCLUDES) \
-	  $(META_DEPS) >> .depend
+	$(OCAMLDEP) -slash -pp ${CAMLP4O} $(INCLUDES) $(META_DEPS) >> .depend
 .PHONY: depend
 
 # Load dependency graph (made with "make depend") into GNU make.
