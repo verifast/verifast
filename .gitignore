@@ -34,6 +34,7 @@
 /bin/*.exe
 /bin/*.dll
 /bin/*.so
+/bin/*.bc
 /bin/assoclist.vfmanifest
 /bin/java_card_applet
 /bin/main_class
@@ -134,5 +135,6 @@ examples/crypto/lib/polarssl
 
 _opam
 .vscode
+.merlin
 
 .DS_Store

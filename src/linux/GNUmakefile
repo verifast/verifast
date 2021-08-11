@@ -2,13 +2,6 @@
 # /src/GNUmakefile
 # /src/GNUmakefile includes this one.
 
-
-ifdef BYTECODE
-  PERF_OUT=Perf.cma
-else
-  PERF_OUT=Perf.cmxa
-endif
-
 ifdef DEBUG
   OCAML_DEBUG_FLAG = -g
 endif
@@ -36,12 +29,13 @@ linux/Perf.cmx: linux/Perf.ml
 	@echo "  OCAMLOPT " $@
 	cd linux ; ${OCAMLOPT} -c Perf.ml
 
-linux/Perf.cmxa: linux/Perf.cmx linux/Stopwatch.cmi linux/Stopwatch.cmx
+linux/Perf.cmxa: linux/Perf.cmx linux/Stopwatch.cmi linux/Stopwatch.cmx linux/libPerf_cobjs.a
 	@echo "  OCAMLOPT " $@
-	cd linux ; ${OCAMLOPT} $(OCAML_DEBUG_FLAG) -a -o $(PERF_OUT) Stopwatch.cmx Perf.cmx -cclib -lPerf_cobjs
+	cd linux ; ${OCAMLOPT} $(OCAML_DEBUG_FLAG) -a -o Perf.cmxa Stopwatch.cmx Perf.cmx -cclib -lPerf_cobjs
 
-# These targets are actually also built when building linux/Perf.cmxa.
-linux/Perf.a: linux/Perf.cmxa
+linux/Perf.cma: linux/Perf.cmo linux/Stopwatch.cmi linux/Stopwatch.cmo linux/caml_stopwatch.o 
+	@echo "    OCAMLC " $@
+	cd linux ; ${OCAMLC} $(OCAML_DEBUG_FLAG) -a -o Perf.cma -custom linux/caml_stopwatch.o Stopwatch.cmo Perf.cmo
 
 clean::
 	rm -f linux/*.a linux/*.o linux/*.cm*
