@@ -1348,26 +1348,22 @@ let make_file_preprocessor0 path get_macro set_macro peek junk in_ghost_range da
                  *)
                 Some (l, Kwd "(") when has_no_whitespace_between lx l->
                 junk ();
-                let params =
+                let rec params first =
                   match peek () with
                     Some (_, Kwd ")") -> junk (); []
-                  | Some (_, Ident x) ->
-                    junk ();
-                    let rec params () =
+                  | _ ->
+                    if not first then begin
                       match peek () with
-                        Some (_, Kwd ")") -> junk (); []
-                      | Some (_, Kwd ",") ->
-                        junk ();
-                        begin match peek () with
-                          Some (_, Ident x) -> junk (); x::params ()
-                        | Some (l, _) -> error l "Macro parameter expected"
-                        end
+                        Some (_, Kwd ",") -> junk ()
                       | Some (l, _) -> error l "Expected ',' for separating macro parameters or ')' for ending macro parameter list"
-                    in
-                    x::params ()
-                  | Some (l, _) -> error l "Macro definition syntax error"
+                    end;
+                    begin match peek () with
+                      Some (_, Ident x) -> junk (); x::params false
+                    | Some (_, Kwd "...") -> junk (); "..."::params false
+                    | Some (l, _) -> error l "Macro parameter expected"
+                    end
                 in
-                Some params
+                Some (params true)
               | _ -> None
             in
             let rec body () =
@@ -1440,26 +1436,17 @@ let make_file_preprocessor0 path get_macro set_macro peek junk in_ghost_range da
         update_last_macro_used l x;
         junk ();
         let (_,params, body) = get_macro l x in
-        let concatenate tokens params args =
+        let concatenate tokens args =
           let concat_tokens l first second =
             let check_identifier x =
-              if List.mem x params then
-                let rec find_arg params args =
-                  match (params,args) with
-                  | (p::params, a::args) ->
-                    begin
-                      if p = x then
-                        match a with
-                        | [(l1, Ident id1)] -> id1;
-                        | [(l1, Int (i1, _, _, _))] -> string_of_big_int i1;
-                        | _ -> error l "Unsupported use of concatenation operator in macro";
-                      else
-                        find_arg params args
-                    end
-                  | _ -> error lmacro_call "Incorrect number of macro arguments"
-                in
-                find_arg params args
-              else
+              match try_assoc x args with
+                Some a ->
+                begin match a with
+                | [(l1, Ident id1)] -> id1;
+                | [(l1, Int (i1, _, _, _))] -> string_of_big_int i1;
+                | _ -> error l "Unsupported use of concatenation operator in macro";
+                end
+              | None ->
                 x
             in
             match first with
@@ -1486,7 +1473,7 @@ let make_file_preprocessor0 path get_macro set_macro peek junk in_ghost_range da
           result
         in
         begin match params with
-          None -> push_list [x] (concatenate body [] []); next_token ()
+          None -> push_list [x] (concatenate body []); next_token ()
         | Some params ->
           match peek () with
             Some (_, Kwd "(") ->
@@ -1505,29 +1492,44 @@ let make_file_preprocessor0 path get_macro set_macro peek junk in_ghost_range da
                 | Some (l, Eof) -> syntax_error l
                 | Some t -> junk (); t::arg ()
               in
-              let rec args () =
-                match peek () with
-                  Some (_, Kwd ")") -> junk (); []
-                | Some (_, Kwd ",") -> junk (); let arg = arg () in arg::args ()
+              let binding param =
+                match param with
+                  "..." -> 
+                  let rec varargs () =
+                    match peek () with
+                      Some (_, Kwd ")") -> []
+                    | Some ((_, Kwd ",") as t) -> junk (); let arg0 = arg () in [t]::arg0::varargs ()
+                  in
+                  "__VA_ARGS__", let arg0 = arg () in List.concat (arg0::varargs ())
+                | param ->
+                  param, arg ()
               in
-              let arg = arg () in arg::args ()
+              let rec args params first =
+                match params with
+                  [] ->
+                  begin match peek () with
+                    Some (_, Kwd ")") -> junk (); []
+                  | Some (l, _) -> error l "Too many macro arguments; end of argument list expected"
+                  end
+                | param::params ->
+                  if not first then begin
+                    match peek () with
+                      Some (_, Kwd ",") -> junk ()
+                    | Some (l, _) -> error l "Too few macro arguments; comma expected"
+                  end;
+                  let arg0 = binding param in
+                  arg0::args params false
+              in
+              args params true
             in
             let body =
-              concatenate body params args
+              concatenate body args
             in
-            let args = List.map (macro_expand []) args in
-            let bindings =
-              match params, args with
-                [], ([]|[[]]) -> []
-              | _ ->
-                match zip params args with
-                  None -> error l "Incorrect number of macro arguments"
-                | Some bs -> bs
-            in
+            let args = List.map (fun (param, arg) -> (param, macro_expand [] arg)) args in
             let body =
               body |> flatmap begin function
                 (lparam, Ident x) as t ->
-                begin match try_assoc x bindings with
+                begin match try_assoc x args with
                   None -> [t]
                 | Some value -> List.map (fun (l, t) -> (MacroParamExpansion (lparam, l), t)) value
                 end
