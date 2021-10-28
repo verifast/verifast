@@ -211,7 +211,7 @@ endif
 # Always include debug information. This seems necessary to prevent vfide
 # crashes on OS X (see https://dnetcode.cs.kuleuven.be/issues/1975). Also, this
 # is necessary to get stack traces.
-OCAMLCFLAGS += -g -w p -warn-error FSU
+OCAMLCFLAGS += -g -w p -warn-error +F+S+U
 ifeq ($(OS), Linux)
   # See https://github.com/verifast/verifast/issues/145
   OCAMLCFLAGS += -runtime-variant _pic
