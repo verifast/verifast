@@ -1,6 +1,6 @@
 # Builds VeriFast itself. Does *not* build dependencies like lablgtk,ocaml,...
 
-all: build build-cxx-libtool test
+all: build test
 .PHONY: all
 
 #------------------------------- Help ---------------------------------------#
