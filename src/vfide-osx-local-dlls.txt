@@ -17,7 +17,7 @@
 /usr/local/opt/harfbuzz/lib/libharfbuzz.0.dylib
 /usr/local/opt/fontconfig/lib/libfontconfig.1.dylib
 /usr/local/opt/freetype/lib/libfreetype.6.dylib
-/usr/local/opt/libffi/lib/libffi.7.dylib
+/usr/local/opt/libffi/lib/libffi.8.dylib
 /usr/local/opt/pcre/lib/libpcre.1.dylib
 /usr/local/opt/pixman/lib/libpixman-1.0.dylib
 /usr/local/opt/libpng/lib/libpng16.16.dylib

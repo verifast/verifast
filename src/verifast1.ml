@@ -57,7 +57,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let path = program_path
   
-  let language = file_type path
+  let language, dialect = file_specs path
   
   let {
     option_verbose=initial_verbosity;
@@ -83,10 +83,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let reportStmtExec l = reportStmtExec (root_caller_token l)
 
   let data_model = match language with Java -> Some data_model_java | CLang -> data_model
-  let int_rank, long_rank, ptr_rank =
-    match data_model with
-      Some {int_rank; long_rank; ptr_rank} -> LitRank int_rank, LitRank long_rank, LitRank ptr_rank
-    | None -> IntRank, LongRank, PtrRank
+  let int_rank, long_rank, ptr_rank = decompose_data_model data_model
   let llong_rank = LitRank 3
   let intType = Int (Signed, int_rank)
   let sizeType = Int (Unsigned, ptr_rank)
@@ -641,6 +638,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * ghostness
       * type_
       * termnode option (* offset *)
+      * expr option (* init *)
     type struct_info =
         loc
       * (string * struct_field_info) list option (* None if struct without body *)
@@ -704,6 +702,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * (string * symbol) list (* getter function for each field *)
       * (string * symbol) list (* setter function for each field *)
     type malloc_block_pred_info =
+        string (* predicate name *)
+      * pred_fam_info
+    type new_block_pred_info =
         string (* predicate name *)
       * pred_fam_info
     type field_pred_info =
@@ -871,6 +872,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * pred_ctor_info map
       * struct_accessor_info map
       * malloc_block_pred_info map
+      * new_block_pred_info map
       * ((string * string) * field_pred_info) list
       * pred_fam_info map
       * pred_inst_map
@@ -973,6 +975,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (predctormap0: pred_ctor_info map),
       (struct_accessor_map0: struct_accessor_info map),
       (malloc_block_pred_map0: malloc_block_pred_info map),
+      (new_block_pred_map0: new_block_pred_info map),
       (field_pred_map0: ((string * string) * field_pred_info) list),
       (predfammap0: pred_fam_info map),
       (predinstmap0: pred_inst_map),
@@ -1000,8 +1003,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let id x = x in
     let merge_maps l
-      (structmap, unionmap, enummap, globalmap, modulemap, importmodulemap, inductivemap, purefuncmap, predctormap, struct_accessor_map, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, abstract_types_map)
-      (structmap0, unionmap0, enummap0, globalmap0, modulemap0, importmodulemap0, inductivemap0, purefuncmap0, predctormap0, struct_accessor_map0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, abstract_types_map0)
+      (structmap, unionmap, enummap, globalmap, modulemap, importmodulemap, inductivemap, purefuncmap, predctormap, struct_accessor_map, malloc_block_pred_map, new_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, abstract_types_map)
+      (structmap0, unionmap0, enummap0, globalmap0, modulemap0, importmodulemap0, inductivemap0, purefuncmap0, predctormap0, struct_accessor_map0, malloc_block_pred_map0, new_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, abstract_types_map0)
       =
       (
 (*     append_nodups structmap structmap0 id l "struct", *)
@@ -1018,6 +1021,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
        append_nodups predctormap predctormap0 id l "predicate constructor",
        struct_accessor_map @ struct_accessor_map0,
        malloc_block_pred_map @ malloc_block_pred_map0,
+       new_block_pred_map @ new_block_pred_map0,
        field_pred_map @ field_pred_map0,
        append_nodups predfammap predfammap0 id l "predicate",
 (*     append_nodups predinstmap predinstmap0 (fun (p, is) -> p ^ "(" ^ String.concat ", " is ^ ")") l "predicate instance", *)
@@ -1109,7 +1113,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
     in
 
-    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
+    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
     
     let (maps0, headers_included) =
       if include_prelude then
@@ -1135,10 +1139,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             begin match !prelude_maps with
               None ->
               let maps =
-                let prelude_path = concat !bindir "prelude.h" in
+                let prelude_name = match dialect with Some (Cxx) -> "prelude_cxx.h" | _ -> "prelude.h" in
+                let prelude_path = concat !bindir prelude_name in
                 let (prelude_headers, prelude_decls) = parse_header_file prelude_path reportRange reportShouldFail initial_verbosity [] [] enforce_annotations data_model in
                 let prelude_header_names = List.map (fun (_, (_, _, h), _, _) -> h) prelude_headers in
-                let prelude_headers = (dummy_loc, (AngleBracketInclude, "prelude.h", prelude_path), prelude_header_names, prelude_decls)::prelude_headers in
+                let prelude_headers = (dummy_loc, (AngleBracketInclude, prelude_name, prelude_path), prelude_header_names, prelude_decls)::prelude_headers in
                 merge_header_maps false maps0 [] !bindir prelude_headers prelude_headers
               in
               prelude_maps := Some maps;
@@ -1613,6 +1618,17 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         reportUseSite DeclKind_AbstractType ld l;
         AbstractType n
       | None ->
+      (* So we can use class/struct/union names as types in ghost code *)
+      match try_assoc id structdeclmap with
+        Some (ld, _, _)  when dialect = Some Cxx -> 
+        reportUseSite DeclKind_Struct ld l;
+        StructType id
+      | None ->
+      match try_assoc id uniondeclmap with
+        Some (ld, _) when dialect = Some Cxx ->
+        reportUseSite DeclKind_Union ld l;
+        UnionType id
+      | None ->
       static_error l ("No such type parameter, inductive datatype, class, interface, or function type: " ^pn^" "^id) None
       end
     | IdentTypeExpr (l, Some(pac), id) ->
@@ -1858,7 +1874,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let rec offset_iter fields current is_first =
               begin match fields with
               | [] -> ()
-              | (f, (lf, Real, t, Some offset))::fs ->
+              | (f, (lf, Real, t, Some offset, init))::fs ->
                 if is_first || !packed then ctxt#assert_term (ctxt#mk_eq offset current);
                 offset_iter fs (ctxt#mk_add current (sizeof_partial smapwith0 unionmap lf t)) false
               | _::fs -> offset_iter fs current is_first
@@ -1870,7 +1886,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             if List.mem_assoc f fmap then static_error lf "Duplicate field name." None;
             let t = check_pure_type ("", []) [] gh t in
             let offset = if gh = Ghost then None else Some (get_unique_var_symb (sn ^ "_" ^ f ^ "_offset") intType) in
-            let entry = (f, (lf, gh, t, offset)) in
+            let entry = (f, (lf, gh, t, offset, init)) in
             iter1 (entry::fmap) fds (has_ghost_fields || gh = Ghost)
         in
         let new_item = begin
@@ -1891,7 +1907,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let field_offset l fparent fname =
     let (_, Some fmap, _, _) = List.assoc fparent structmap in
-    let (_, gh, y, offset_opt) = List.assoc fname fmap in
+    let (_, gh, y, offset_opt, _) = List.assoc fname fmap in
     match offset_opt with
       Some term -> term
     | None -> static_error l "Cannot take the address of a ghost field" None
@@ -2676,7 +2692,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | None -> []
         | Some fds ->
           let cname = "mk_" ^ sn in
-          let field_types = fds |> List.map (fun (f, (_, _, t, _)) -> (f, t)) in
+          let field_types = fds |> List.map (fun (f, (_, _, t, _, _)) -> (f, t)) in
           let fieldnames = List.map fst field_types in
           let tt = StructType sn in
           let subtype = InductiveSubtype.alloc () in
@@ -2689,13 +2705,17 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let struct_accessor_map = struct_accessor_map1 @ struct_accessor_map0
 
-  let malloc_block_pred_map1: malloc_block_pred_info map = 
-    structmap1 |> flatmap begin function
-      (sn, (l, Some _, _, _)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) l [] 0 [PtrType (StructType sn)] (Some 1) Inductiveness_Inductive)]
-    | _ -> []
-    end
+  let (malloc_block_pred_map1: malloc_block_pred_info map), (new_block_pred_map1: new_block_pred_info map) = 
+    let mk_block_pred_map name =
+      structmap1 |> flatmap begin function
+        (sn, (l, Some _, _, _)) -> [(sn, mk_predfam (name ^ "_" ^ sn) l [] 0 [PtrType (StructType sn)] (Some 1) Inductiveness_Inductive)]
+      | _ -> []
+      end 
+    in
+    mk_block_pred_map "malloc_block", mk_block_pred_map "new_block"
   
   let malloc_block_pred_map: malloc_block_pred_info map = malloc_block_pred_map1 @ malloc_block_pred_map0
+  let new_block_pred_map: new_block_pred_info map = new_block_pred_map1 @ new_block_pred_map0
 
   let field_pred_map1 = (* dient om dingen te controleren bij read/write controle v velden*)
     match file_type path with
@@ -2717,7 +2737,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
            None -> []
          | Some fds ->
            List.map
-             (fun (fn, (l, gh, t, offset)) ->
+             (fun (fn, (l, gh, t, offset, _)) ->
               ((sn, fn), mk_predfam (sn ^ "_" ^ fn) l [] 0 [PtrType (StructType sn); t] (Some 1) Inductiveness_Inductive)
              )
              fds
@@ -2726,7 +2746,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let field_pred_map = field_pred_map1 @ field_pred_map0
   
-  let structpreds1: pred_fam_info map = List.map (fun (_, p) -> p) malloc_block_pred_map1 @ List.map (fun (_, p) -> p) field_pred_map1 @ struct_padding_predfams1
+  let structpreds1: pred_fam_info map = 
+    let result = List.map (fun (_, p) -> p) malloc_block_pred_map1 @ List.map (fun (_, p) -> p) field_pred_map1 @ struct_padding_predfams1 in
+    match dialect with
+      Some Cxx -> List.map (fun (_, p) -> p) new_block_pred_map1 @ result
+    | _ -> result
   
   let predfammap1 =
     let rec iter (pn,ilist) pm ds =
@@ -3776,7 +3800,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | Some (_, Some fds, _, _) ->
             begin match try_assoc f fds with
             | None -> static_error l ("No such field in struct '" ^ sn ^ "'.") None
-            | Some (_, gh, t, offset) ->
+            | Some (_, gh, t, offset, _) ->
               let w = WSelect (l, w, sn, f, t) in
               (w, t, None)
             end
@@ -4180,6 +4204,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | e::es -> CallExpr (l, "cons", [], [], [LitPat e; LitPat (to_list_expr es)], Static)
       in
       check (to_list_expr es)
+    | CxxNew (l, te, e) ->
+      let t = check_pure_type (pn,ilist) [] Real te in
+      CxxNew (l, te, e), PtrType t, None
     | e -> static_error (expr_loc e) "Expression form not allowed here." None
   and check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e t0 =
     check_expr_t_core_core functypemap funcmap classmap interfmap (pn, ilist) tparams tenv inAnnotation e t0 false
@@ -4275,7 +4302,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         begin
           match try_assoc f fds with
             None -> static_error l ("No such field in struct '" ^ sn ^ "'.") None
-          | Some (_, gh, t, offset) ->
+          | Some (_, gh, t, offset, _) ->
             let w = WRead (l, w, sn, f, t, false, ref (Some None), gh) in
             let w =
               match t with
@@ -4566,8 +4593,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let rec iter fds es =
         match fds, es with
           _, [] -> []
-        | (_, (_, Ghost, _, _))::fds, es -> iter fds es
-        | (_, (_, _, tp, _))::fds, e::es ->
+        | (_, (_, Ghost, _, _, _))::fds, es -> iter fds es
+        | (_, (_, _, tp, _, _))::fds, e::es ->
           let e = check e tp in
           let es = iter fds es in
           e::es
@@ -4857,24 +4884,28 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let integers__symb = lazy_predfamsymb "integers_"
 
   let pointee_tuple chunk_pred_name array_pred_name =
-    let array_malloc_block_pred_name = "malloc_block_" ^ array_pred_name in
-    chunk_pred_name, lazy_predfamsymb chunk_pred_name, array_pred_name, lazy_predfamsymb array_pred_name, array_malloc_block_pred_name, lazy_predfamsymb array_malloc_block_pred_name
+    let ambpn = "malloc_block_" ^ array_pred_name in
+    let ambsymb = lazy_predfamsymb ambpn in
+    (* no new_block_ in c, but we have to generate a dummy symb so try_pointee_pred_symb0 keeps working (c does not include the prelude of cxx) *)
+    let anbpn = match dialect with Some Cxx -> "new_block_" ^ array_pred_name | _ -> "new_block_x unsupported" in
+    let anbsymb = match dialect with Some Cxx -> lazy_predfamsymb anbpn | _ -> ambsymb in
+    chunk_pred_name, lazy_predfamsymb chunk_pred_name, array_pred_name, lazy_predfamsymb array_pred_name, ambpn, ambsymb, anbpn, anbsymb
   
-  let _, pointer_pred_symb, _, pointers_pred_symb, _, malloc_block_pointers_pred_symb as pointer_pointee_tuple = pointee_tuple "pointer" "pointers"
-  let _, llong_pred_symb, _, llongs_pred_symb, _, malloc_block_llongs_pred_symb as llong_pointee_tuple = pointee_tuple "llong_integer" "llongs"
-  let _, ullong_pred_symb, _, ullongs_pred_symb, _, malloc_block_ullongs_pred_symb as ullong_pointee_tuple = pointee_tuple "u_llong_integer" "ullongs"
-  let _, int_pred_symb, _, ints_pred_symb, _, malloc_block_ints_pred_symb as int_pointee_tuple = pointee_tuple "integer" "ints"
-  let _, uint_pred_symb, _, uints_pred_symb, _, malloc_block_uints_pred_symb as uint_pointee_tuple = pointee_tuple "u_integer" "uints"
-  let _, short_pred_symb, _, shorts_pred_symb, _, malloc_block_shorts_pred_symb as short_pointee_tuple = pointee_tuple "short_integer" "shorts"
-  let _, ushort_pred_symb, _, ushorts_pred_symb, _, malloc_block_ushorts_pred_symb as ushort_pointee_tuple = pointee_tuple "u_short_integer" "ushorts"
-  let _, char_pred_symb, _, chars_pred_symb, _, malloc_block_chars_pred_symb as char_pointee_tuple = pointee_tuple "character" "chars"
-  let _, uchar_pred_symb, _, uchars_pred_symb, _, malloc_block_uchars_pred_symb as uchar_pointee_tuple = pointee_tuple "u_character" "uchars"
-  let _, bool_pred_symb, _, bools_pred_symb, _, malloc_block_bools_pred_symb as bool_pointee_tuple = pointee_tuple "boolean" "bools"
-  let _, float__pred_symb, _, floats_pred_symb, _, malloc_block_floats_pred_symb as float_pointee_tuple = pointee_tuple "float_" "floats"
-  let _, double__pred_symb, _, doubles_pred_symb, _, malloc_block_doubles_pred_symb as double_pointee_tuple = pointee_tuple "double_" "doubles"
-  let _, long_double_pred_symb, _, long_doubles_pred_symb, _, malloc_block_long_doubles_pred_symb as long_double_pointee_tuple = pointee_tuple "long_double" "long_doubles"
+  let _, pointer_pred_symb, _, pointers_pred_symb, _, malloc_block_pointers_pred_symb, _, new_block_pointers_pred_symb as pointer_pointee_tuple = pointee_tuple "pointer" "pointers"
+  let _, llong_pred_symb, _, llongs_pred_symb, _, malloc_block_llongs_pred_symb, _, new_block_llongs_pred_symb as llong_pointee_tuple = pointee_tuple "llong_integer" "llongs"
+  let _, ullong_pred_symb, _, ullongs_pred_symb, _, malloc_block_ullongs_pred_symb, _, new_block_ullongs_pred_symb as ullong_pointee_tuple = pointee_tuple "u_llong_integer" "ullongs"
+  let _, int_pred_symb, _, ints_pred_symb, _, malloc_block_ints_pred_symb, _, new_block_ints_pred_symb as int_pointee_tuple = pointee_tuple "integer" "ints"
+  let _, uint_pred_symb, _, uints_pred_symb, _, malloc_block_uints_pred_symb, _, new_block_uints_pred_symb as uint_pointee_tuple = pointee_tuple "u_integer" "uints"
+  let _, short_pred_symb, _, shorts_pred_symb, _, malloc_block_shorts_pred_symb, _, new_block_shorts_pred_symb as short_pointee_tuple = pointee_tuple "short_integer" "shorts"
+  let _, ushort_pred_symb, _, ushorts_pred_symb, _, malloc_block_ushorts_pred_symb, _, new_block_ushorts_pred_symb as ushort_pointee_tuple = pointee_tuple "u_short_integer" "ushorts"
+  let _, char_pred_symb, _, chars_pred_symb, _, malloc_block_chars_pred_symb, _, new_block_chars_pred_symb as char_pointee_tuple = pointee_tuple "character" "chars"
+  let _, uchar_pred_symb, _, uchars_pred_symb, _, malloc_block_uchars_pred_symb, _, new_block_uchars_pred_symb as uchar_pointee_tuple = pointee_tuple "u_character" "uchars"
+  let _, bool_pred_symb, _, bools_pred_symb, _, malloc_block_bools_pred_symb, _, new_block_bools_pred_symb as bool_pointee_tuple = pointee_tuple "boolean" "bools"
+  let _, float__pred_symb, _, floats_pred_symb, _, malloc_block_floats_pred_symb, _, new_block_floats_pred_symb as float_pointee_tuple = pointee_tuple "float_" "floats"
+  let _, double__pred_symb, _, doubles_pred_symb, _, malloc_block_doubles_pred_symb, _, new_block_doubles_pred_symb as double_pointee_tuple = pointee_tuple "double_" "doubles"
+  let _, long_double_pred_symb, _, long_doubles_pred_symb, _, malloc_block_long_doubles_pred_symb, _, new_block_long_doubles_pred_symb as long_double_pointee_tuple = pointee_tuple "long_double" "long_doubles"
   
-  let deref_pointee_tuple (cn, csym, an, asym, mban, mbasym) = (cn, csym(), an, asym(), mban, mbasym())
+  let deref_pointee_tuple (cn, csym, an, asym, mban, mbasym, nban, nbasym) = (cn, csym(), an, asym(), mban, mbasym(), nban, nbasym())
   
   let int32_pointee_tuple =
     if int_rank = LitRank 2 then Some int_pointee_tuple else None
@@ -4904,7 +4935,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let supported_types_text = "int, unsigned int, char, unsigned char, or a pointer type"
   
-  let try_pointee_pred_symb pointeeType = option_map (fun (_, x, _, _, _, _) -> x) (try_pointee_pred_symb0 pointeeType)
+  let try_pointee_pred_symb pointeeType = option_map (fun (_, x, _, _, _, _, _, _) -> x) (try_pointee_pred_symb0 pointeeType)
   
   let list_type elemType = InductiveType ("list", [elemType])
   
@@ -4946,7 +4977,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | _ -> static_error l "Malformed array assertion." None
         in
         begin match try_pointee_pred_symb0 elemtype with
-          Some (pointee_pred_name, pointee_pred_symb, array_pred_name, array_pred_symb, _, _) ->
+          Some (pointee_pred_name, pointee_pred_symb, array_pred_name, array_pred_symb, _, _, _, _) ->
           let p = new predref array_pred_name [PtrType elemtype; intType; list_type elemtype] (Some 2) in
           (WPredAsn (l, p, true, [], [], [LitPat wfirst; wlength; wrhs]), tenv, [])
         | None ->
@@ -5355,7 +5386,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           flatmap
             begin
               function
-                (f, (l, Real, t, offset)) ->
+                (f, (l, Real, t, offset, _)) ->
                 begin
                 let (g, (_, _, _, _, symb, _, inductiveness)) = List.assoc (sn, f) field_pred_map in (* TODO WILLEM: we moeten die inductiveness ergens gebruiken *)
                 let predinst___ p domain args =

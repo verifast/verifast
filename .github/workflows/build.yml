@@ -73,10 +73,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Do not convert LF to CRLF on checkout
-        run: |
-          git config core.autocrlf false
-          git checkout .
+      - name: Add vcvarsall to PATH
+        run: echo "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Build setup
         run: ./setup-windows.bat

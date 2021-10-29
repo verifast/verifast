@@ -710,7 +710,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let read_c_array h env l a i tp =
     match try_pointee_pred_symb0 tp with
       None -> read_integer__array h env l a i tp
-    | Some (_, predsym, _, array_predsym, _, _) ->
+    | Some (_, predsym, _, array_predsym, _, _, _, _) ->
     let slices =
       head_flatmap
         begin function

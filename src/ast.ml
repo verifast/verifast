@@ -345,6 +345,13 @@ and
   | NewArray of loc * type_expr * expr
   (* If type arguments are None -> regular object creation or raw objects. [] -> type inference required and if the list is populated: parameterised type creation *)
   | NewObject of loc * string * expr list * type_expr list option
+  | CxxNew of
+      loc *
+      type_expr *
+      expr list option
+  | CxxDelete of
+      loc *
+      expr
   | NewArrayWithInitializer of loc * type_expr * expr list 
   | IfExpr of loc * expr * expr * expr
   | SwitchExpr of
@@ -492,6 +499,9 @@ and
   language = (* ?language *)
     Java
   | CLang
+and
+  dialect = (* ?dialect *)
+    | Cxx
 and
   method_binding = (* ?method_binding *)
     Static
@@ -823,6 +833,7 @@ and
     loc *
     string * (* name of the constructor *)
     (string * type_expr) list (* name and type-expression of the arguments *)
+    
 and
   member = (* ?member *)
   | FieldMember of field list
@@ -920,6 +931,8 @@ let rec expr_loc e =
   | ForallAsn (l, tp, i, e) -> l
   | CoefAsn (l, coef, body) -> l
   | EnsuresAsn (l, body) -> l
+  | CxxNew (l, _, _) -> l
+  | CxxDelete (l, _) -> l
 let asn_loc a = expr_loc a
   
 let stmt_loc s =
@@ -1094,6 +1107,9 @@ let expr_fold_open iter state e =
   | SuperMethodCall(_, _, args) -> iters state args
   | WSuperMethodCall(_, _, _, args, _) -> iters state args
   | InitializerList (l, es) -> iters state es
+  | CxxNew (_, _, Some es) -> iters state es
+  | CxxNew (_, _, _) -> state
+  | CxxDelete (_, arg) -> iter state arg
 
 (* Postfix fold *)
 let expr_fold f state e = let rec iter state e = f (expr_fold_open iter state e) e in iter state e

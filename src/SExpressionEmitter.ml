@@ -398,6 +398,19 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
             "args", sexpr_of_list sexpr_of_expr args;
             "targs", sexpr_of_option (fun targs -> sexpr_of_list sexpr_of_type_expr targs) targs
           ]
+    | CxxNew (_, ty, Some es) ->
+        build_list
+          [ Symbol "expr-new" ]
+          [
+            "type", sexpr_of_type_expr ty;
+            "args", sexpr_of_list sexpr_of_expr es;
+          ]
+    | CxxDelete (_, e) ->
+        build_list
+          [ Symbol "expr-delete" ]
+          [
+            "expr", sexpr_of_expr e
+          ]
     | NewArrayWithInitializer (l, texpr, args) ->
         build_list
           [ Symbol "expr-array-init" ]
@@ -745,6 +758,7 @@ let rec sexpr_of_pred (asn : asn) : sexpression =
     | CoefAsn (_, pat, _) ->
       build_list [ Symbol "pred-coef-asn" ]
                  [ "expr", sexpr_of_pat pat]
+    | _ -> List [ Symbol "pred"; sexpr_of_expr asn ]
 
 let rec sexpr_of_stmt (stmt : stmt) : sexpression =
   match stmt with
@@ -975,7 +989,9 @@ and sexpr_of_decl (decl : decl) : sexpression =
     | FuncTypeDecl _              -> unsupported "FuncTypeDecl"
     | BoxClassDecl _              -> unsupported "BoxClassDecl"
     | EnumDecl _                  -> unsupported "EnumDecl"
-    | Global _                    -> unsupported "Global"
+    | Global  (_, ty, name, init_opt) ->
+      build_list [ Symbol "declare-global-var" ; Symbol name ]
+                 (("type", sexpr_of_type_expr ty) :: (match init_opt with None -> [] | Some e -> ["init", sexpr_of_expr e]))
     | UnloadableModuleDecl _      -> unsupported "UnloadableModuleDecl"
 
 and sexpr_of_argument (type_, name) =

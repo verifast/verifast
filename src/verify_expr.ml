@@ -416,7 +416,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     iter' ([],[]) ps
   
   let funcmap = funcmap1 @ funcmap0
-  
+
   let register_prototype_used l g gterm =
     if not (List.mem (g, l) !prototypes_used) then
       prototypes_used := (g, l)::!prototypes_used;
@@ -917,6 +917,20 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         (cn, {cls with cfds=fds})
       end
       classmap
+
+    let structmap = 
+      structmap |> List.map @@ fun (sn, (sloc, sbody, spad_sym, ssize)) ->
+        let body = sbody |> option_map @@ fun fields ->
+          fields |> List.map @@ fun field ->
+            match field with 
+              fname, (floc, fgh, ft, foffset, Some finit) ->
+                let check_expr_t tenv e tp = check_expr_t_core functypemap funcmap [] [] ("", []) [] tenv None e tp in (* TODO: package name? *)
+                let tenv = ["this", PtrType (StructType sn); current_thread_name, current_thread_type] in 
+                let init = check_expr_t tenv finit ft in
+                fname, (floc, fgh, ft, foffset, Some init)
+            | fd -> fd 
+        in
+        sn, (sloc, body, spad_sym, ssize)
   
   (* Inheritance check *)
   let inheritance_check_processed = ref []
@@ -1083,6 +1097,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | AssignExpr(_, e1, e2) ->  expr_mark_addr_taken e1 locals;  expr_mark_addr_taken e2 locals
     | AssignOpExpr(_, e1, _, e2, _) -> expr_mark_addr_taken e1 locals;  expr_mark_addr_taken e2 locals
     | InitializerList(_, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
+    | CxxNew (_, _, Some es) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
+    | CxxNew (_, _, None) -> ()
+    | CxxDelete (_, e) -> expr_mark_addr_taken e locals
   and pat_expr_mark_addr_taken pat locals = 
     match pat with
       LitPat(e) -> expr_mark_addr_taken e locals
@@ -1286,7 +1303,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       let produce_array_chunk h env addr elems elemCount =
         match try_pointee_pred_symb0 elemTp with
-          Some (_, _, _, arrayPredSymb, _, _) ->
+          Some (_, _, _, arrayPredSymb, _, _, _, _) ->
           let length = ctxt#mk_intlit elemCount in
           assume_eq (mk_length elems) length $. fun () ->
           cont (Chunk ((arrayPredSymb, true), [], coef, [addr; length; elems], None)::h) env
@@ -1362,7 +1379,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let rec iter h env fields inits =
         match fields with
           [] -> cont h env
-        | (f, (lf, gh, t, offset))::fields ->
+        | (f, (lf, gh, t, offset, finit))::fields ->
           if gh = Ghost && not allowGhostFields then static_error l "Cannot produce a struct instance with ghost fields in this context." None;
           let init, inits =
             if gh = Ghost then Unspecified, inits else
@@ -1413,7 +1430,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match tp with
       StaticArrayType (elemTp, elemCount) ->
       begin match try_pointee_pred_symb0 elemTp with
-        Some (_, _, _, arrayPredSymb, _, _) ->
+        Some (_, _, _, arrayPredSymb, _, _, _, _) ->
         let pats = [TermPat addr; TermPat (ctxt#mk_intlit elemCount); dummypat] in
         consume_chunk rules h [] [] [] l (arrayPredSymb, true) [] real_unit coefpat (Some 2) pats $. fun chunk h _ [_; _; elems] _ _ _ _ ->
         cont [chunk] h elems
@@ -1445,7 +1462,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let rec iter chunks h fields =
         match fields with
           [] -> cont chunks h (get_unique_var_symb "struct_value" tp)
-        | (f, (lf, gh, t, offset))::fields ->
+        | (f, (lf, gh, t, offset, finit))::fields ->
           match t with
             StaticArrayType (_, _) | StructType _ | UnionType _ ->
             consume_c_object_core l coefpat (field_address l addr sn f) t h true $. fun chunks' h _ ->
@@ -1999,7 +2016,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         begin match try_pointee_pred_symb0 elem_tp with
         | None -> write_integer__array_element ()
-        | Some (_, _, _, arrayPredSymb, _, _) ->
+        | Some (_, _, _, arrayPredSymb, _, _, _, _) ->
         let arrayPredSymb1 = (arrayPredSymb, true) in
         let h0 = h in
         match h |> extract begin function
@@ -2063,7 +2080,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           assume_neq result int_zero_term $. fun () ->
           let n, elemTp, arrayPredSymb, mallocBlockSymb =
             match try_pointee_pred_symb0 elemTp with
-              Some (_, _, _, asym, _, mbsym) -> n, elemTp, asym, mbsym
+              Some (_, _, _, asym, _, mbsym, _, _) -> n, elemTp, asym, mbsym
             | None -> arraySize, charType, chars_pred_symb(), malloc_block_chars_pred_symb()
           in
           assume (ctxt#mk_and (ctxt#mk_le int_zero_term result) (ctxt#mk_le (ctxt#mk_add result arraySize) max_uintptr_term)) $. fun () ->
@@ -2093,7 +2110,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             cont (Chunk ((malloc_block_symb, true), [], real_unit, [result], None)::h)
           | _ ->
             match try_pointee_pred_symb0 t with
-              Some (_, _, _, _, _, arrayMallocBlockSymb) ->
+              Some (_, _, _, _, _, arrayMallocBlockSymb, _, _) ->
               cont (Chunk ((arrayMallocBlockSymb, true), [], real_unit, [result; ctxt#mk_intlit 1], None)::h)
             | _ ->
               cont (Chunk ((get_pred_symb "malloc_block", true), [], real_unit, [result; sizeof l t], None)::h)
@@ -2140,6 +2157,55 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let targs = List.map unfold_inferred_type targs in
           check_call targs h args $. fun h env retval ->
           cont (chunk::h) env retval
+      end
+    | CxxNew (l, te, None) (* new without construct, e.g. new int *)
+    | CxxNew (l, te, Some []) -> (* new with empty construct, e.g. new Foo or new Foo() *)
+      (* TODO: constructor calls, placement args, builtin init *)
+      (* will later be replaced with a call to 'check_correct' to check against the constructor spec *)
+      if pure then static_error l "Cannot call 'new' from a pure context." None;
+      let ty = check_pure_type (pn, ilist) [] Real te in
+      let symb_name = match xo with
+        None -> (match ty with StructType n -> n | _ -> "address")
+      | Some x -> x 
+      in
+      let result_type = PtrType ty in
+      let result = get_unique_var_symb_non_ghost symb_name result_type in
+      assume_neq result (ctxt#mk_intlit 0) @@ fun () ->
+      begin match ty with
+        StructType name ->
+          let (_, (_, _, _, _, new_block_symb, _, _)) = List.assoc name new_block_pred_map in
+          let h = Chunk ((new_block_symb, true), [], real_unit, [result], None)::h in
+          let _, Some fields, _, _ = List.assoc name structmap in
+          (* initialize f:=x if 'f = x' *)
+          (* TODO: constructor inits *)
+          let rec init_fields h fields =
+            match fields with
+              [] -> cont h env result
+            | (field_name, (_, _, field_type, _, init_expr_opt)) :: fields -> 
+              let init_field h initial_value =
+                assume_field h name field_name field_type Real result initial_value real_unit @@ fun h ->
+                init_fields h fields 
+              in
+              match init_expr_opt with
+                None -> 
+                  init_field h @@ get_unique_var_symb_ "value" field_type false
+              | Some init_expr ->
+                with_context (Executing (h, [], expr_loc init_expr, "Executing field initializer")) @@ fun () ->
+                begin fun tcont ->
+                  verify_expr readonly h env None init_expr tcont
+                end @@ fun h _ initial_value -> init_field h initial_value 
+          in
+          init_fields h fields
+        | _ -> 
+          let value = get_unique_var_symb "value" ty in
+          produce_points_to_chunk l h ty real_unit result value $. fun h ->
+            let cont h = cont h env result in
+            begin match try_pointee_pred_symb0 ty with
+              Some (_, _, _, _, _, _, _, array_new_block_symb) ->
+                cont (Chunk ((array_new_block_symb, true), [], real_unit, [result; ctxt#mk_intlit 1], None)::h)
+            | _ ->
+              cont (Chunk ((get_pred_symb "new_block", true), [], real_unit, [result; sizeof l ty], None)::h)
+            end
       end
     | NewObject (l, cn, args, targs) ->
       inheritance_check cn l;
