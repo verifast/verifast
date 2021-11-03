@@ -187,7 +187,7 @@ type include_kind =
 type token = (* ?token *)
   | Kwd of string
   | Ident of string
-  | Int of big_int * bool (* true = decimal, false = hex or octal *) * bool (* true = suffix u or U *) * int_literal_lsuffix
+  | Int of big_int * bool (* true = decimal, false = hex or octal *) * bool (* true = suffix u or U *) * int_literal_lsuffix * string
   | RealToken of big_int  (* Tokens of the form 123r. Used to distinguish 1r/2, denoting one half, from 1/2, which evaluates to zero, in a context that does not require an expression of type 'real'. *)
   | RationalToken of num       (* Rational number literals. E.g. 0.5, 3.14, 3e8, 6.62607004E-34. Used for floating-point literals in real code, and for real number literals in annotations. Using the arbitrary-precision 'num' type instead of the OCaml 'float' type to avoid rounding errors. *)
   | String of string
@@ -217,11 +217,12 @@ let string_of_token t =
   begin match t with
     Kwd(s) -> "Keyword:" ^ s
   | Ident(s) -> "Identifier:" ^ s
-  | Int(bi, dec, usuffix, lsuffix) ->
+  | Int(bi, dec, usuffix, lsuffix, text) ->
     "Int:" ^ Big_int.string_of_big_int bi ^
       (if usuffix then "U" else "") ^
       (match lsuffix with NoLSuffix -> "" | LSuffix -> "L" | LLSuffix -> "LL") ^
-      (if dec then "(decimal)" else "(originally hex or octal)")
+      (if dec then "(decimal)" else "(originally hex or octal)") ^
+      ("'" ^ text ^ "'")
   | RealToken(bi) -> "RealToken:" ^ (Big_int.string_of_big_int bi)
   | RationalToken(n) -> "RationalToken:" ^ (Num.string_of_num n)
   | String(s) -> "String: " ^ s
@@ -238,7 +239,7 @@ let string_of_token t =
 let compare_tokens t1 t2 =
   begin match (t1,t2) with
     (None,None) -> true
-  | (Some(_,Int(bi1,dec1,u1,l1)),Some(_,Int(bi2,dec2,u2,l2))) -> compare_big_int bi1 bi2 = 0 && (dec1,u1,l1) = (dec2,u2,l2)
+  | (Some(_,Int(bi1,dec1,u1,l1,text1)),Some(_,Int(bi2,dec2,u2,l2,text2))) -> text1 = text2
   | (Some(_,RealToken(bi1)),Some(_,RealToken(bi2))) -> compare_big_int bi1 bi2 = 0
   | (Some(_,RationalToken(n1)),Some(_,RationalToken(n2))) -> Num.eq_num n1 n2
   | (Some(_,t1),Some(_,t2)) -> t1 = t2
@@ -432,6 +433,10 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
 
   let get_string () =
     let s = Buffer.contents buffer in Buffer.reset buffer; s
+  in
+
+  let peek_string () =
+    Buffer.contents buffer
   in
 
   let tokenpos = ref 0 in
@@ -630,23 +635,26 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
         text_junk (); Some (RealToken (big_int_of_string (get_string ())))
     | _ ->
         begin
-          let str = get_string () in
+          let str = peek_string () in
           if (str.[0] = '0') then
             int_suffix (big_int_of_octal_string str) false
           else
             int_suffix (big_int_of_string str) true
         end
   and int_suffix value is_decimal =
-    let cont usuffix lsuffix = Some (Int (value, is_decimal, usuffix, lsuffix)) in
+    let cont usuffix lsuffix = Some (Int (value, is_decimal, usuffix, lsuffix, get_string ())) in
     match text_peek () with
-      'u'|'U' ->
+      'u'|'U' as c ->
       text_junk ();
+      store c;
       begin match text_peek () with
-        'l'|'L' ->
+        'l'|'L' as c ->
         text_junk ();
+        store c;
         begin match text_peek () with
-          'l'|'L' ->
+          'l'|'L'  as c ->
           text_junk ();
+          store c;
           cont true LLSuffix
         | _ ->
           cont true LSuffix
@@ -654,20 +662,24 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
       | _ ->
         cont true NoLSuffix
       end
-    | 'l'|'L' ->
+    | 'l'|'L' as c ->
       text_junk ();
+      store c;
       begin match text_peek () with
-        'l'|'L' ->
+        'l'|'L' as c ->
         text_junk ();
+        store c;
         begin match text_peek () with
-          'u'|'U' ->
+          'u'|'U' as c ->
           text_junk ();
+          store c;
           cont true LLSuffix
         | _ ->
           cont false LLSuffix
         end
-      | 'u'|'U' ->
+      | 'u'|'U' as c ->
         text_junk ();
+        store c;
         cont true LSuffix
       | _ ->
         cont false LSuffix
@@ -677,7 +689,7 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
   and hex_number () =
     match text_peek () with
       ('0'..'9' | 'A'..'F' | 'a'..'f') as c -> text_junk (); store c; hex_number ()
-    | _ -> int_suffix (big_int_of_hex_string (get_string ())) false
+    | _ -> int_suffix (big_int_of_hex_string (peek_string ())) false
   and decimal_part () =
     match text_peek () with
       ('0'..'9' as c) ->
@@ -989,8 +1001,8 @@ and
 and
   parse_expr_primary = parser
   [< '(l, Ident _) >] -> IntLit (l, zero_big_int, false, false, NoLSuffix)
-| [< '(l, Int (n, dec, usuffix, lsuffix)) >] -> IntLit (l, n, dec, usuffix, lsuffix)
-| [< '(l, Kwd "-"); '(l, Int (n, dec, usuffix, lsuffix)) >] -> IntLit (l, minus_big_int n, dec, usuffix, lsuffix)
+| [< '(l, Int (n, dec, usuffix, lsuffix, _)) >] -> IntLit (l, n, dec, usuffix, lsuffix)
+| [< '(l, Kwd "-"); '(l, Int (n, dec, usuffix, lsuffix, _)) >] -> IntLit (l, minus_big_int n, dec, usuffix, lsuffix)
 | [< '(l, Kwd "("); e0 = parse_operators; '(_, Kwd ")"); e = parse_operators_rest e0 >] -> e
 | [< '(l, Kwd "!"); e = parse_expr_suffix >] -> Operation(l, Not, [e])
 | [< '(l, Kwd "INT_MIN") >] -> (match dataModel with Some {int_rank} -> IntLit (l, min_signed_big_int int_rank, true, false, NoLSuffix) | _ -> construct_not_supported ())
@@ -1234,9 +1246,9 @@ let make_file_preprocessor0 path get_macro set_macro peek junk in_ghost_range da
             let cond = 
               if is_defined lx x then begin
                 update_last_macro_used lx x;
-                (l, Int (unit_big_int, true, false, NoLSuffix))
+                (l, Int (unit_big_int, true, false, NoLSuffix, "1"))
               end
-              else (l, Int (zero_big_int, true, false, NoLSuffix))
+              else (l, Int (zero_big_int, true, false, NoLSuffix, "0"))
             in
             cond::condition ()
           in
@@ -1451,8 +1463,8 @@ let make_file_preprocessor0 path get_macro set_macro peek junk in_ghost_range da
               match try_assoc x args with
                 Some a ->
                 begin match a with
-                | [(l1, Ident id1)] -> id1;
-                | [(l1, Int (i1, _, _, _))] -> string_of_big_int i1;
+                | [(l1, Ident id1)] -> id1
+                | [(l1, Int (_, _, _, _, text))] -> text
                 | _ -> error l "Unsupported use of concatenation operator in macro";
                 end
               | None ->
@@ -1463,7 +1475,7 @@ let make_file_preprocessor0 path get_macro set_macro peek junk in_ghost_range da
                 begin
                   match second with
                   | (l2, Ident id2) -> (l2, Ident ((check_identifier id1) ^ (check_identifier id2)));
-                  | (l2, Int (i, _, _, _)) -> (l2, Ident ((check_identifier id1) ^ (string_of_big_int i)))
+                  | (l2, Int (_, _, _, _, text)) -> (l2, Ident (check_identifier id1 ^ text))
                   | _ -> error l "Unsupported use of concatenation operator in macro";
                 end
             | _ -> error l "Unsupported use of concatenation operator in macro";
@@ -1591,7 +1603,7 @@ let make_sound_preprocessor make_lexer path verbose include_paths dataModel defi
   let mk_macros0 () =
     let macros0 = Hashtbl.create 10 in
     List.iter
-      (fun x -> Hashtbl.replace macros0 x (dummy_loc, None, [(dummy_loc, Int (unit_big_int, false, false, NoLSuffix))]))
+      (fun x -> Hashtbl.replace macros0 x (dummy_loc, None, [(dummy_loc, Int (unit_big_int, false, false, NoLSuffix, "1"))]))
       define_macros;
     macros0
   in

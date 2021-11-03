@@ -171,7 +171,7 @@ module Scala = struct
     parse_primary_expr = parser
       [< '(l, Kwd "true") >] -> True l
     | [< '(l, Kwd "false") >] -> False l
-    | [< '(l, Int (n, dec, usuffix, lsuffix)) >] -> IntLit (l, n, dec, usuffix, lsuffix)
+    | [< '(l, Int (n, dec, usuffix, lsuffix, _)) >] -> IntLit (l, n, dec, usuffix, lsuffix)
     | [< '(l, Ident x) >] -> Var (l, x)
   and
     parse_add_expr = parser
@@ -792,7 +792,7 @@ and
   [< te0 = parse_type; '(l, Ident f);
      te = parser
         [< '(_, Kwd ";") >] -> te0
-      | [< '(_, Kwd "["); '(ls, Int (size, _, _, _)); '(_, Kwd "]"); '(_, Kwd ";") >] ->
+      | [< '(_, Kwd "["); '(ls, Int (size, _, _, _, _)); '(_, Kwd "]"); '(_, Kwd ";") >] ->
             if int_of_big_int size <= 0 then
               raise (ParseException (ls, "Array must have size > 0."));
             StaticArrayTypeExpr (l, te0, int_of_big_int size)
@@ -1203,7 +1203,7 @@ and
 and parse_array_braces te = parser
   [< '(l, Kwd "[");
      te = begin parser
-       [< '(lsize, Int (size, _, _, _)) >] ->
+       [< '(lsize, Int (size, _, _, _, _)) >] ->
        if sign_big_int size <= 0 then raise (ParseException (lsize, "Array must have size > 0."));
        StaticArrayTypeExpr (l, te, int_of_big_int size)
      | [< >] ->
@@ -1404,7 +1404,7 @@ and
       >]-> r
     | [< >] -> Var (lx, x)
   >] -> ex
-| [< '(l, Int (i, dec, usuffix, lsuffix)) >] -> IntLit (l, i, dec, usuffix, lsuffix)
+| [< '(l, Int (i, dec, usuffix, lsuffix, _)) >] -> IntLit (l, i, dec, usuffix, lsuffix)
 | [< '(l, RealToken i) >] -> RealLit (l, num_of_big_int i)
 | [< '(l, RationalToken n) >] -> RealLit (l, n)
 | [< '(l, Kwd "INT_MIN") >] -> (match int_rank with LitRank k -> IntLit (l, min_signed_big_int k, true, false, NoLSuffix) | IntRank -> Operation (l, MinValue (Int (Signed, IntRank)), []))
