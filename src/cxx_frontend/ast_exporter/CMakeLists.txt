@@ -1,5 +1,4 @@
 cmake_minimum_required(VERSION 3.15)
-cmake_policy(SET CMP0109 NEW)
 project(VF_AST_Exporter)
 
 set(LLVM_INSTALL_DIR "" CACHE PATH "LLVM installation directory")
