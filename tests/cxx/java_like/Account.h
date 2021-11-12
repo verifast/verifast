@@ -2,7 +2,7 @@
 
 /*@
 predicate AccountPred(Account *acc, int balance) =
-    new_block_Account(acc) &*& acc->balance |-> balance;
+    acc != 0 &*& new_block_Account(acc) &*& acc->balance |-> balance;
 @*/
 
 class Account {

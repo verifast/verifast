@@ -1617,10 +1617,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       iter h env [] pats ps
     end $. fun h env ts ->
     let Some env' = zip ys ts in
-    let _ = if file_type path = Java && match try_assoc "this" ps with Some ObjType _ -> true | _ -> false then 
-      let this_term = List.assoc "this" env' in
-      if not (ctxt#query (ctxt#mk_not (ctxt#mk_eq this_term (ctxt#mk_intlit 0)))) then
-        assert_false h env l "Target of method call might be null." None
+    let _ = 
+      match language, dialect, try_assoc "this" ps with
+      | Java, _, Some ObjType _
+      | CLang, Some Cxx, Some _ ->
+        let this_term = List.assoc "this" env' in
+        if not (ctxt#query (ctxt#mk_not (ctxt#mk_eq this_term (ctxt#mk_intlit 0)))) then
+          assert_false h env l "Target of method call might be null." None
+      | _ -> () 
     in
     let currentThread = List.assoc current_thread_name env in
     let cenv = [(current_thread_name, currentThread)] @ env' @ funenv in
