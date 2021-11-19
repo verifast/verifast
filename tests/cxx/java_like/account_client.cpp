@@ -18,8 +18,6 @@ int main()
     int bb = b->getBalance();
     //@ assert (ba == 500 && bb == 2500);
     
-    //@ open AccountPred(a, _);
-    //@ open AccountPred(b, _);
     delete a;
     delete b;
 }

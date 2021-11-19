@@ -5,26 +5,33 @@
 # Suitable for home use and for continuous integration.
 #
 
-dl_and_unzip() {
-  url="$1"
-  filename=$(basename "$url")
-  hash="$2"
-  curl -Lf -o "/tmp/$filename" "$url"
-  echo "$hash  /tmp/$filename" | shasum -a 224 -c || exit 1
-  tar xjf "/tmp/$filename"
-}
-
-dl_and_unzip_llvm-clang() {
-  platform="$1"
-  filename="llvm-clang_$platform-latest.tar.gz"
-  curl -Lf -o "/tmp/$filename" "https://github.com/NielsMommen/vf-llvm-clang-build/releases/download/v1.0.0/$filename"
-  tar xzf "/tmp/$filename"
-}
-
 set -e # Stop as soon as a command fails.
 set -x # Print what is being executed.
 
 . ./config.sh
+
+dl_and_unzip() {
+  url="$1"
+  filename=$(basename "$url")
+  hash="$2"
+  sha="$3"
+  filter="$4"
+  curl -Lf -o "/tmp/$filename" "$url"
+  echo "$hash  /tmp/$filename" | shasum -a "$sha" -c || exit 1
+  tar "x"$filter"f" "/tmp/$filename"
+}
+
+dl_and_unzip_vfdeps() {
+  url="$1"
+  hash="$2"
+  dl_and_unzip $url $hash 224 j
+}
+
+dl_and_unzip_llvm-clang() {
+  platform="$1"
+  hash="$2"
+  dl_and_unzip "https://github.com/NielsMommen/vf-llvm-clang-build/releases/download/v1.0.0/vf-llvm-clang-build$VF_LLVM_CLANG_BUILD_VERSION-$platform.tar.gz" $hash 256 z
+}
 
 script_dir=$(pwd)
 
@@ -37,11 +44,11 @@ if [ $(uname -s) = "Linux" ]; then
        cmake build-essential
   
   cd /tmp
-  dl_and_unzip_llvm-clang ubuntu
+  dl_and_unzip_llvm-clang Linux 1a48b859127a3574732b6fba735f410065f51a547d6ba8fe582e21f81b01ae31
+  dl_and_unzip_vfdeps https://vfdeps-cxx-linux.herokuapp.com/$VFDEPS_NAME-linux.txz c69e9bb1f058d827727d28922f3ebb6353f2fcbc8bd7dfe3ece54f94
 
-  dl_and_unzip https://vfdeps-cxx-linux.herokuapp.com/$VFDEPS_NAME-linux.txz c69e9bb1f058d827727d28922f3ebb6353f2fcbc8bd7dfe3ece54f94
   cd $script_dir/src/cxx_frontend/ast_exporter/build
-  cmake -DLLVM_INSTALL_DIR=/tmp/llvm-clang_ubuntu-latest -DVFDEPS=/tmp/$VFDEPS_NAME -DCMAKE_BUILD_TYPE=Release ..
+  cmake -DLLVM_INSTALL_DIR=/tmp/vf-llvm-clang-build$VF_LLVM_CLANG_BUILD_VERSION -DVFDEPS=/tmp/$VFDEPS_NAME -DCMAKE_BUILD_TYPE=Release ..
 
 
 elif [ $(uname -s) = "Darwin" ]; then
@@ -65,15 +72,15 @@ elif [ $(uname -s) = "Darwin" ]; then
   brewinstall cmake
   export PKG_CONFIG_PATH=/opt/X11/lib/pkgconfig
   sudo mkdir /usr/local/$VFDEPS_NAME
-  sudo mkdir /usr/local/llvm-clang_macos-latest
+  sudo mkdir /usr/local/vf-llvm-clang-build$VF_LLVM_CLANG_BUILD_VERSION
   sudo chown -R $(whoami):admin /usr/local/*
 
   cd /usr/local
-  dl_and_unzip_llvm-clang macos
+  dl_and_unzip_llvm-clang MacOS 5e1583e736450d490bfc31e62ba84a5138ac742275d3eb013c7f40f68c6317d2
+  dl_and_unzip_vfdeps https://vfdeps-cxx-macos.herokuapp.com/$VFDEPS_NAME-macos.txz 301bf548e6bdbaac79ef49f3c2eb787a37b8487c4c25de1aec92b6c5
 
-  dl_and_unzip https://vfdeps-cxx-macos.herokuapp.com/$VFDEPS_NAME-macos.txz 301bf548e6bdbaac79ef49f3c2eb787a37b8487c4c25de1aec92b6c5
   cd $script_dir/src/cxx_frontend/ast_exporter/build
-  cmake -DLLVM_INSTALL_DIR=/usr/local/llvm-clang_macos-latest -DVFDEPS=/usr/local/$VFDEPS_NAME -DCMAKE_BUILD_TYPE=Release ..
+  cmake -DLLVM_INSTALL_DIR=/usr/local/vf-llvm-clang-build$VF_LLVM_CLANG_BUILD_VERSION -DVFDEPS=/usr/local/$VFDEPS_NAME -DCMAKE_BUILD_TYPE=Release ..
   
 else
   echo "Your OS is not supported by this script."

@@ -12,7 +12,7 @@ cd tests
             verifast -c -disable_overflow_check tuerk.cpp
         cd ..
         cd java_like
-            verifast -disable_overflow_check Account.cpp account_client.cpp
+            verifast -c -disable_overflow_check Account.cpp account_client.cpp
             verifast -disable_overflow_check Stack.cpp stack_client.cpp
         cd ..
         verifast -c main_implicit_return.cpp

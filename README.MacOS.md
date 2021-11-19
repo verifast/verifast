@@ -35,7 +35,7 @@ To install the software needed to build VeriFast, first install Xcode (at least 
     - Stdint 0.7.0
     - Result 1.5
   
-It does so by downloading a [llvm-clang_ubuntu-latest](https://github.com/NielsMommen/vf-llvm-clang-build/releases/tag/v1.0.0) and [VFDeps](https://github.com/verifast/vfdeps) package with pre-compiled versions of these dependencies. Note: these binaries are location-dependent. They need to be below `/usr/local/llvm-clang_macos-latest` and `/usr/local/vfdeps-$VERSION`, where `$VERSION` is the version (Git hash) of the VFDeps package; that is, extract the archives into `/usr/local`. To see which version is currently being used, see [config.sh](https://github.com/verifast/verifast/blob/master/config.sh).
+It does so by downloading a [vf-llvm-clang-build](https://github.com/NielsMommen/vf-llvm-clang-build/releases/tag/v1.0.0) and [VFDeps](https://github.com/verifast/vfdeps) package with pre-compiled versions of these dependencies. Note: these binaries are location-dependent. They need to be below `/usr/local/vf-llvm-clang-build$VERSION` and `/usr/local/vfdeps-$VERSION`, where `$VERSION` is the version (Git hash) of the VFDeps package; that is, extract the archives into `/usr/local`. To see which version is currently being used, see [config.sh](https://github.com/verifast/verifast/blob/master/config.sh).
 
 Building VeriFast
 -----------------

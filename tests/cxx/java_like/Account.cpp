@@ -22,11 +22,9 @@ void Account::transferTo(Account *target, int amount)
 //@ requires AccountPred(this, ?b) &*& AccountPred(target, ?t);
 //@ ensures AccountPred(this, b-amount) &*& AccountPred(target, t+amount);
 {
-    //@ open AccountPred(this, _);
-    //@ close AccountPred(this, _);
+    //@ AccountNotNull(this);
+    //@ AccountNotNull(target);
     deposit(-amount);
-    //@ open AccountPred(target, _);
-    //@ close AccountPred(target, _);
     target->deposit(amount);
     
 }

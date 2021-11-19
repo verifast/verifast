@@ -1,8 +1,16 @@
 #pragma once
 
 /*@
-predicate AccountPred(Account *acc, int balance) =
-    acc != 0 &*& new_block_Account(acc) &*& acc->balance |-> balance;
+predicate AccountPred(Account *acc, int balance;) =
+    new_block_Account(acc) &*& acc->balance |-> balance;
+    
+lemma void AccountNotNull(Account* acc);
+    requires AccountPred(acc, ?balance);
+    ensures AccountPred(acc, balance) &*& acc != 0;
+
+lemma_auto void AccountPred_inv();
+    requires AccountPred(?account, ?balance);
+    ensures AccountPred(account, balance) &*& account != 0;
 @*/
 
 class Account {

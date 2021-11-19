@@ -57,7 +57,7 @@ To install the software needed to build VeriFast, run [setup-windows.bat](https:
     - Stdint 0.7.0
     - Result 1.5
   
-  It does so by downloading a [llvm-clang_windows-latest](https://github.com/NielsMommen/vf-llvm-clang-build/releases/tag/v1.0.0) and [VFDeps](https://github.com/verifast/vfdeps-win) package with pre-compiled versions of these dependencies. To see which version is currently being used, see [setup-windows.sh](https://github.com/verifast/verifast/blob/master/setup-windows.sh). Note: these binaries are location-dependent. They need to be below `C:\llvm-clang_windows-latest` and `C:\vfdeps`; that is, extract the archives into `C:\`.
+  It does so by downloading a [vf-llvm-clang-build](https://github.com/NielsMommen/vf-llvm-clang-build/releases/tag/v1.0.0) and [VFDeps](https://github.com/verifast/vfdeps-win) package with pre-compiled versions of these dependencies. To see which version is currently being used, see [setup-windows.sh](https://github.com/verifast/verifast/blob/master/setup-windows.sh). Note: these binaries are location-dependent. They need to be below `C:\vf-llvm-clang-build$VERSION` and `C:\vfdeps`; that is, extract the archives into `C:\`.
 
 Building VeriFast
 -----------------
