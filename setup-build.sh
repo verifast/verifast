@@ -30,7 +30,7 @@ dl_and_unzip_vfdeps() {
 dl_and_unzip_llvm-clang() {
   platform="$1"
   hash="$2"
-  dl_and_unzip "https://github.com/NielsMommen/vf-llvm-clang-build/releases/download/v1.0.0/vf-llvm-clang-build$VF_LLVM_CLANG_BUILD_VERSION-$platform.tar.gz" $hash 256 z
+  dl_and_unzip "https://github.com/NielsMommen/vf-llvm-clang-build/releases/download/v1.0.0/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION-$platform.tar.gz" $hash 256 z
 }
 
 script_dir=$(pwd)
@@ -44,11 +44,11 @@ if [ $(uname -s) = "Linux" ]; then
        cmake build-essential
   
   cd /tmp
-  dl_and_unzip_llvm-clang Linux 1a48b859127a3574732b6fba735f410065f51a547d6ba8fe582e21f81b01ae31
+  dl_and_unzip_llvm-clang Linux ab42b50fd7fbd59254d3a8aef5473a5c6ceb9ca3508f31c76d95ee5d31268291
   dl_and_unzip_vfdeps https://vfdeps-cxx-linux.herokuapp.com/$VFDEPS_NAME-linux.txz c69e9bb1f058d827727d28922f3ebb6353f2fcbc8bd7dfe3ece54f94
 
   cd $script_dir/src/cxx_frontend/ast_exporter/build
-  cmake -DLLVM_INSTALL_DIR=/tmp/vf-llvm-clang-build$VF_LLVM_CLANG_BUILD_VERSION -DVFDEPS=/tmp/$VFDEPS_NAME -DCMAKE_BUILD_TYPE=Release ..
+  cmake -DLLVM_INSTALL_DIR=/tmp/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION -DVFDEPS=/tmp/$VFDEPS_NAME -DCMAKE_BUILD_TYPE=Release ..
 
 
 elif [ $(uname -s) = "Darwin" ]; then
@@ -72,15 +72,15 @@ elif [ $(uname -s) = "Darwin" ]; then
   brewinstall cmake
   export PKG_CONFIG_PATH=/opt/X11/lib/pkgconfig
   sudo mkdir /usr/local/$VFDEPS_NAME
-  sudo mkdir /usr/local/vf-llvm-clang-build$VF_LLVM_CLANG_BUILD_VERSION
+  sudo mkdir /usr/local/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION
   sudo chown -R $(whoami):admin /usr/local/*
 
   cd /usr/local
-  dl_and_unzip_llvm-clang MacOS 5e1583e736450d490bfc31e62ba84a5138ac742275d3eb013c7f40f68c6317d2
+  dl_and_unzip_llvm-clang MacOS 365648cc3fea920b49dc262b13a19d64896d873c1ceaa40d3da37c71c8201168
   dl_and_unzip_vfdeps https://vfdeps-cxx-macos.herokuapp.com/$VFDEPS_NAME-macos.txz 301bf548e6bdbaac79ef49f3c2eb787a37b8487c4c25de1aec92b6c5
 
   cd $script_dir/src/cxx_frontend/ast_exporter/build
-  cmake -DLLVM_INSTALL_DIR=/usr/local/vf-llvm-clang-build$VF_LLVM_CLANG_BUILD_VERSION -DVFDEPS=/usr/local/$VFDEPS_NAME -DCMAKE_BUILD_TYPE=Release ..
+  cmake -DLLVM_INSTALL_DIR=/usr/local/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION -DVFDEPS=/usr/local/$VFDEPS_NAME -DCMAKE_BUILD_TYPE=Release ..
   
 else
   echo "Your OS is not supported by this script."
