@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.4.3)
+cmake_minimum_required(VERSION 3.15)
 project(VF_AST_Exporter)
 
 set(LLVM_INSTALL_DIR "" CACHE PATH "LLVM installation directory")
@@ -19,47 +19,38 @@ add_executable(vf-cxx-ast-exporter
   ContextFreePPCallbacks.cpp
 )
 
-if(NOT MSVC)
-  find_package(LLVM REQUIRED CONFIG)
-  find_package(Clang REQUIRED CONFIG)
+find_package(LLVM REQUIRED CONFIG)
+find_package(Clang REQUIRED CONFIG)
 
-  add_definitions(${LLVM_DEFINITIONS})
+add_definitions(${LLVM_DEFINITIONS})
 
-  message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-  message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
-  include_directories(${LLVM_INCLUDE_DIRS})
-  include_directories(${CLANG_INCLUDE_DIRS})
+target_include_directories(vf-cxx-ast-exporter
+  PRIVATE
+  ${LLVM_INCLUDE_DIRS}
+  ${CLANG_INCLUDE_DIRS}
+)
 
-  set(LLVM_LINK_LLVM_DYLIB OFF)
-
-  if(NOT LLVM_ENABLE_RTTI)
-    target_compile_options(vf-cxx-ast-exporter PRIVATE -fno-rtti)
-  endif()
-
-  set(LLVM_LINK_COMPONENTS
-    support
-  )
+if(NOT LLVM_ENABLE_RTTI)
+  target_compile_options(vf-cxx-ast-exporter PRIVATE $<IF:$<CXX_COMPILER_ID:MSVC>,/GR-,-fno-rtti>)
 endif()
 
-if(MSVC)
-  set(CLANG_LIBS clangAST clangBasic clangFrontend clangTooling clangParse clangDriver clangSerialization clangSema clangEdit clangAnalysis clangASTMatchers clangFormat clangToolingInclusions clangToolingCore clangRewrite clangLex)
-  set(LLVM_LIBS LLVMOption LLVMFrontendOpenMP LLVMTransformUtils LLVMAnalysis LLVMProfileData LLVMObject LLVMBitReader LLVMMCParser LLVMTextAPI LLVMCore LLVMRemarks LLVMBitstreamReader LLVMMC LLVMBinaryFormat LLVMDebugInfoCodeView LLVMDebugInfoMSF LLVMSupport LLVMDemangle)
-else()
-  set(CLANG_LIBS_NOMSVC clangAST clangBasic clangFrontend clangTooling)
-endif()
+llvm_map_components_to_libnames(LLVM_LIBS support)
+set(CLANG_LIBS clangAST clangBasic clangFrontend clangTooling)
 set(CAPNP_LIBS capnp)
 set(KJ_LIBS kj)
 
 set(LIBS_PATHS "")
-foreach(LIB IN LISTS CLANG_LIBS LLVM_LIBS CAPNP_LIBS KJ_LIBS)
+foreach(LIB IN LISTS CAPNP_LIBS KJ_LIBS)
   set(_LIB_VAR "LIB_${LIB}")
-  find_library(${_LIB_VAR} NAMES lib${LIB}.a ${LIB}.lib PATHS "${VFDEPS}/lib" REQUIRED NO_CACHE)
+  find_library(${_LIB_VAR} NAMES lib${LIB}.a ${LIB}.lib PATHS "${VFDEPS}/lib" REQUIRED NO_CACHE NO_DEFAULT_PATH)
   message(STATUS "Found lib file: ${${_LIB_VAR}}")
   list(APPEND LIBS_PATHS ${${_LIB_VAR}})
 endforeach()
 
-target_compile_options(vf-cxx-ast-exporter PRIVATE -std=c++14)
+set_property(TARGET vf-cxx-ast-exporter PROPERTY CXX_STANDARD 14)
 
 target_include_directories(vf-cxx-ast-exporter
   PRIVATE
@@ -70,8 +61,8 @@ target_include_directories(vf-cxx-ast-exporter
 target_link_libraries(vf-cxx-ast-exporter
   PRIVATE
   ${LIBS_PATHS}
-  ${CLANG_LIBS_NOMSVC}
-  $<$<CXX_COMPILER_ID:MSVC>:version.lib>  
+  ${LLVM_LIBS}
+  ${CLANG_LIBS}
 )
 
 include(CheckCXXCompilerFlag)
