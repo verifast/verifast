@@ -45,7 +45,7 @@ if [ $(uname -s) = "Linux" ]; then
   
   cd /tmp
   dl_and_unzip_llvm-clang Linux ab42b50fd7fbd59254d3a8aef5473a5c6ceb9ca3508f31c76d95ee5d31268291
-  dl_and_unzip_vfdeps https://vfdeps-cxx-linux.herokuapp.com/$VFDEPS_NAME-linux.txz c69e9bb1f058d827727d28922f3ebb6353f2fcbc8bd7dfe3ece54f94
+  dl_and_unzip_vfdeps https://github.com/verifast/vfdeps/releases/download/lablgtk-issue-141-1/$VFDEPS_NAME-linux.txz 405892bb15e07824395afa936d7cfed35218748b587ddd309fd6cdd4
 
   cd $script_dir/src/cxx_frontend/ast_exporter/build
   cmake -DLLVM_INSTALL_DIR=/tmp/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION -DVFDEPS=/tmp/$VFDEPS_NAME -DCMAKE_BUILD_TYPE=Release ..
@@ -77,7 +77,7 @@ elif [ $(uname -s) = "Darwin" ]; then
 
   cd /usr/local
   dl_and_unzip_llvm-clang MacOS 365648cc3fea920b49dc262b13a19d64896d873c1ceaa40d3da37c71c8201168
-  dl_and_unzip_vfdeps https://vfdeps-cxx-macos.herokuapp.com/$VFDEPS_NAME-macos.txz 301bf548e6bdbaac79ef49f3c2eb787a37b8487c4c25de1aec92b6c5
+  dl_and_unzip_vfdeps https://github.com/verifast/vfdeps/releases/download/lablgtk-issue-141-1/$VFDEPS_NAME-macos.txz a4e2e8eef294001b7e242171a2e1ff18eb5d4c476864ab10df9f46f4
 
   cd $script_dir/src/cxx_frontend/ast_exporter/build
   cmake -DLLVM_INSTALL_DIR=/usr/local/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION -DVFDEPS=/usr/local/$VFDEPS_NAME -DCMAKE_BUILD_TYPE=Release ..
