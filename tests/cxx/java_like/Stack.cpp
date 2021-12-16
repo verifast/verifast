@@ -1,8 +1,8 @@
 #include "Stack.h"
 
 int Stack::Node::getSum() const
-//@ requires this != 0 &*& nodes(this, ?count);
-//@ ensures this != 0 &*&nodes(this, count);
+//@ requires nodes(this, ?count);
+//@ ensures nodes(this, count);
 {
     int result = 0;
     //@ open nodes(this, count);
@@ -55,9 +55,8 @@ void Stack::push(int value)
 //@ ensures StackPred(this, count + 1);
 {
     //@ open StackPred(this, count);
-    Node *n = new Node;
+    Node *n = new Node(value);
     n->next = head;
-    n->value = value;
     head = n;
     //@ close nodes(n, count + 1);
     //@ close StackPred(this, count + 1);

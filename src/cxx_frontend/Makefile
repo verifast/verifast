@@ -62,6 +62,9 @@ else
 	cd $(CXX_FE_AST_EXPORTER_DIR)/build && mv vf-cxx-ast-exporter$(DOTEXE) ../../../$@
 endif
 
+stubs: $(CXX_FE_STUBS_DIR)/stubs_ast.mli $(CXX_FE_STUBS_DIR)/stubs_ast.ml $(CXX_FE_STUBS_DIR)/stubs_ast.capnp.h $(CXX_FE_STUBS_DIR)/stubs_ast.capnp.c++
+.PHONY: stubs
+
 clean::
 	rm -f $(CXX_FE_STUBS_DIR)/stubs_ast.capnp.*
 	rm -f ../bin/vf-cxx-ast-exporter$(DOTEXE)

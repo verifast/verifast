@@ -9,6 +9,11 @@ bool isTrue(int i);
 //@ ensures true &*& result == (i == 0 ? false : true);
 
 struct Overloads {
+  Overloads()
+  //@ requires true;
+  //@ ensures true;
+  {}
+
   bool isTrue(bool b);
   //@ requires true;
   //@ ensures true &*& result == b;

@@ -1,6 +1,6 @@
 #pragma once
-#include "loc_serializer.h"
 #include "Annotation.h"
+#include "loc_serializer.h"
 #include "clang/AST/DeclVisitor.h"
 #include "clang/AST/StmtVisitor.h"
 #include "clang/AST/TypeLocVisitor.h"
@@ -175,8 +175,20 @@ struct DeclSerializer : public NodeSerializer<stubs::Decl, clang::Decl>,
   bool VisitEnumDecl(const clang::EnumDecl *decl);
 
 private:
-  bool visitFunc(stubs::Decl::Function::Builder &builder,
-                 const clang::FunctionDecl *decl);
+  void serializeFuncDecl(stubs::Decl::Function::Builder &builder,
+                         const clang::FunctionDecl *decl,
+                         llvm::StringRef mangledName);
+
+  void serializeParams(
+      capnp::List<stubs::Decl::Param, capnp::Kind::STRUCT>::Builder &builder,
+      llvm::ArrayRef<clang::ParmVarDecl *> params);
+
+  void serializeFieldDecl(stubs::Decl::Field::Builder &builder,
+                          const clang::FieldDecl *decl);
+
+  void serializeMethodDecl(stubs::Decl::Method::Builder &builder,
+                           const clang::CXXMethodDecl *decl,
+                           llvm::StringRef mangledName);
 };
 
 struct ExprSerializer : public NodeSerializer<stubs::Expr, clang::Expr>,
@@ -230,6 +242,8 @@ struct ExprSerializer : public NodeSerializer<stubs::Expr, clang::Expr>,
 
   bool VisitCXXDeleteExpr(const clang::CXXDeleteExpr *expr);
 
+  bool VisitCXXDefaultInitExpr(const clang::CXXDefaultInitExpr *expr);
+
 private:
   bool serializeUnaryOperator(stubs::Expr::UnaryOp::Builder &builder,
                               const clang::UnaryOperator *uo);
@@ -270,6 +284,14 @@ struct TypeSerializer : private DescSerializer<stubs::Type, clang::Type>,
   bool VisitTypedefType(const clang::TypedefType *type);
 
   bool VisitElaboratedType(const clang::ElaboratedType *type);
+
+  bool VisitLValueReferenceType(const clang::LValueReferenceType *type);
+
+  bool VisitRValueReferenceType(const clang::RValueReferenceType *type);
+
+private:
+  void serializeReferenceType(stubs::Type::Builder &builder,
+                              const clang::ReferenceType *type);
 };
 
 struct TypeLocSerializer : private NodeSerializer<stubs::Type, clang::TypeLoc>,

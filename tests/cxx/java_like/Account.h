@@ -2,7 +2,7 @@
 
 /*@
 predicate AccountPred(Account *account, int balance) =
-    account != 0 &*& new_block_Account(account) &*& account->balance |-> balance;
+    account != 0 &*& account->balance |-> balance;
     
 lemma_auto void AccountPred_inv()
     requires [?f]AccountPred(?account, ?balance);
@@ -14,9 +14,16 @@ lemma_auto void AccountPred_inv()
 @*/
 
 class Account {
-    int balance = 0;
+    int balance;
 
 public:
+    Account() : balance(0)
+    //@ requires true;
+    //@ ensures AccountPred(this, 0);
+    {
+    	//@ close AccountPred(this, 0);
+    }
+
     int getBalance() const;
     //@ requires AccountPred(this, ?b);
     //@ ensures AccountPred(this, b) &*& result == b;

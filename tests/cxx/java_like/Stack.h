@@ -12,7 +12,7 @@ predicate nodes(Stack::Node *node, int count) =
 
 /*@
 predicate StackPred(Stack *stack, int count) =
-    new_block_Stack(stack) &*& stack->head |-> ?head &*& 
+    stack->head |-> ?head &*&
     count >= 0 &*& nodes(head, count);
 @*/
 
@@ -20,16 +20,29 @@ class Stack {
 
     struct Node {
         int value;
-        Node *next = nullptr;
+        Node *next;
+        
+        Node(int value) : value(value), next(nullptr)
+        //@ requires true;
+        //@ ensures this->value |-> value &*& this->next |-> 0;
+        {}
 
         int getSum() const;
-        //@ requires this != 0 &*& nodes(this, ?count);
-        //@ ensures this != 0 &*& nodes(this, count);
+        //@ requires nodes(this, ?count);
+        //@ ensures nodes(this, count);
     };
 
-    Node *head = nullptr;
+    Node *head;
 
     public:
+    Stack() : head(nullptr)
+    //@ requires true;
+    //@ ensures StackPred(this, 0);
+    {
+    	//@ close nodes(this->head, 0);
+    	//@ close StackPred(this, 0);
+    }
+    
     void push(int value);
     //@ requires StackPred(this, ?count);
     //@ ensures StackPred(this, count + 1);

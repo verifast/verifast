@@ -639,6 +639,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * type_
       * termnode option (* offset *)
       * expr option (* init *)
+    type cxx_ctor_info =
+        loc 
+      * type_ map (* params *)
+      * asn (* pre *)
+      * type_ map (* tenv after pre *)
+      * asn (* post *)
+      * bool (* terminates *)
+      * ((string * (expr * bool (* is written *)) option) list (* init list *) * (stmt list * loc)) option option
     type struct_info =
         loc
       * (string * struct_field_info) list option (* None if struct without body *)
@@ -885,6 +893,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * termnode map (* classterms *)
       * termnode map (* interfaceterms *)
       * abstract_type_info map
+      * cxx_ctor_info map
     
     type implemented_prototype_info =
         string
@@ -987,7 +996,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (interfmap0: interface_info map),
       (classterms0: termnode map),
       (interfaceterms0: termnode map),
-      (abstract_types_map0: abstract_type_info map)
+      (abstract_types_map0: abstract_type_info map),
+      (cxx_ctor_map0: cxx_ctor_info map)
       : maps
     ) =
 
@@ -1003,8 +1013,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let id x = x in
     let merge_maps l
-      (structmap, unionmap, enummap, globalmap, modulemap, importmodulemap, inductivemap, purefuncmap, predctormap, struct_accessor_map, malloc_block_pred_map, new_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, abstract_types_map)
-      (structmap0, unionmap0, enummap0, globalmap0, modulemap0, importmodulemap0, inductivemap0, purefuncmap0, predctormap0, struct_accessor_map0, malloc_block_pred_map0, new_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, abstract_types_map0)
+      (structmap, unionmap, enummap, globalmap, modulemap, importmodulemap, inductivemap, purefuncmap, predctormap, struct_accessor_map, malloc_block_pred_map, new_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, abstract_types_map, cxx_ctor_map)
+      (structmap0, unionmap0, enummap0, globalmap0, modulemap0, importmodulemap0, inductivemap0, purefuncmap0, predctormap0, struct_accessor_map0, malloc_block_pred_map0, new_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, abstract_types_map0, cxx_ctor_map0)
       =
       (
 (*     append_nodups structmap structmap0 id l "struct", *)
@@ -1034,7 +1044,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
        append_nodups interfmap interfmap0 id l "interface",
        classterms @ classterms0, 
        interfaceterms @ interfaceterms0,
-       append_nodups abstract_types_map abstract_types_map0 id l "abstract type")
+       append_nodups abstract_types_map abstract_types_map0 id l "abstract type",
+       append_nodups cxx_ctor_map cxx_ctor_map0 id l "constructor")
     in
 
     (** [merge_header_maps maps0 headers] returns [maps0] plus all elements transitively declared in [headers]. *)
@@ -1113,7 +1124,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
     in
 
-    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
+    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
     
     let (maps0, headers_included) =
       if include_prelude then
@@ -1139,7 +1150,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             begin match !prelude_maps with
               None ->
               let maps =
-                let prelude_name = match dialect with Some (Cxx) -> "prelude_cxx.h" | _ -> "prelude.h" in
+                let prelude_name = match dialect with Some Cxx -> "prelude_cxx.h" | _ -> "prelude.h" in
                 let prelude_path = concat !bindir prelude_name in
                 let (prelude_headers, prelude_decls) = parse_header_file prelude_path reportRange reportShouldFail initial_verbosity [] [] enforce_annotations data_model in
                 let prelude_header_names = List.map (fun (_, (_, _, h), _, _) -> h) prelude_headers in
@@ -1620,7 +1631,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | None ->
       (* So we can use class/struct/union names as types in ghost code *)
       match try_assoc id structdeclmap with
-        Some (ld, _, _)  when dialect = Some Cxx -> 
+        Some (ld, _, _) when dialect = Some Cxx -> 
         reportUseSite DeclKind_Struct ld l;
         StructType id
       | None ->
@@ -4204,9 +4215,18 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | e::es -> CallExpr (l, "cons", [], [], [LitPat e; LitPat (to_list_expr es)], Static)
       in
       check (to_list_expr es)
-    | CxxNew (l, te, e) ->
-      let t = check_pure_type (pn,ilist) [] Real te in
-      CxxNew (l, te, e), PtrType t, None
+    | CxxNew (l, te, expr_opt) ->
+      let t = check_pure_type (pn, ilist) [] Real te in 
+      let expr_opt = 
+        expr_opt |> option_map @@ fun e ->
+          let w, et, _ = check e in
+          assert (t = et);
+          w
+      in
+      CxxNew (l, te, expr_opt), PtrType t, None
+    | CxxConstruct (l, _, te, _) ->
+      let t = check_pure_type (pn, ilist) [] Real te in 
+      e, t, None
     | e -> static_error (expr_loc e) "Expression form not allowed here." None
   and check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e t0 =
     check_expr_t_core_core functypemap funcmap classmap interfmap (pn, ilist) tparams tenv inAnnotation e t0 false
