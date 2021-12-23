@@ -66,7 +66,7 @@ int fseek (FILE* fp, /*long*/ int offset, int origin);
     //@ requires [?f]file(fp) &*& origin == 0 || origin == 1 || origin == 2;
     //@ ensures [f]file(fp);
   
-/* long */ int ftell(FILE* fp);
+long ftell(FILE* fp);
     //@ requires [?f]file(fp);
     //@ ensures [f]file(fp);
   
