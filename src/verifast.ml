@@ -2730,7 +2730,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               let field_addr_name = Some (field_name ^ "_addr") in 
               begin 
                 match init with 
-                | CxxConstruct (l, mangled_name, te, args) ->
+                | WCxxConstruct (l, mangled_name, te, args) ->
                   let eval_h h env e cont = verify_expr false (pn,ilist) [] false leminfo funcmap sizemap tenv ghostenv h env None e cont @@ fun _ _ _ _ _ -> assert false in
                   let field_addr = field_address l struct_addr struct_name field_name in
                   (* remove 'this' from env and tenv *)
@@ -3126,7 +3126,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
            List.iter (fun (an, _) -> if not (List.mem an pbcans) then static_error l ("No preserved_by clause for action '" ^ an ^ "'.") None) amap)
         hpmap;
       verify_funcs (pn,ilist) (bcn::boxes) gs lems ds
-    | CxxCtor (loc, name, mangled_name, _, _, _, Some _, _, StructType sn) :: ds ->
+    | CxxCtor (loc, mangled_name, _, _, _, Some _, _, StructType sn) :: ds ->
       let gs', lems' =
         record_fun_timing loc (sn ^ ".<ctor>") @@ fun () ->
         let _, Some fields, _, _ = List.assoc sn structmap in

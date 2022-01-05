@@ -350,10 +350,19 @@ and
       string * (* constructor mangled name *)
       type_expr * (* type of object that will be constructed *)
       expr list (* args passed to constructor *)
+  | WCxxConstruct of 
+      loc *
+      string *
+      type_ *
+      expr list
   | CxxNew of
       loc *
       type_expr *
       expr option (* construct expression *)
+  | WCxxNew of
+      loc * 
+      type_ * 
+      expr option
   | CxxDelete of
       loc *
       expr
@@ -778,7 +787,6 @@ and
       visibility
   | CxxCtor of 
       loc *
-      string * (* name *)
       string * (* mangled name *)
       (type_expr * string) list * (* params *)
       (asn * asn) option * (* pre post *)
@@ -788,8 +796,6 @@ and
       type_ (* parent type *)
   | CxxDtor of 
       loc *
-      string * (* name *)
-      (type_expr * string) list * (* params *)
       (asn * asn) option * (* pre post *)
       bool * (* terminates *)
       (stmt list * loc (* close brace *)) option *
@@ -954,9 +960,11 @@ let rec expr_loc e =
   | ForallAsn (l, tp, i, e) -> l
   | CoefAsn (l, coef, body) -> l
   | EnsuresAsn (l, body) -> l
-  | CxxNew (l, _, _) -> l
+  | CxxNew (l, _, _)
+  | WCxxNew (l, _, _) -> l
   | CxxDelete (l, _) -> l
-  | CxxConstruct (l, _, _, _) -> l
+  | CxxConstruct (l, _, _, _)
+  | WCxxConstruct (l, _, _, _) -> l
 let asn_loc a = expr_loc a
   
 let stmt_loc s =
@@ -1131,8 +1139,10 @@ let expr_fold_open iter state e =
   | SuperMethodCall(_, _, args) -> iters state args
   | WSuperMethodCall(_, _, _, args, _) -> iters state args
   | InitializerList (l, es) -> iters state es
-  | CxxNew (_, _, Some e) -> iter state e
-  | CxxNew (_, _, _) -> state
+  | CxxNew (_, _, Some e)
+  | WCxxNew (_, _, Some e) -> iter state e
+  | CxxNew (_, _, _)
+  | WCxxNew (_, _, _) -> state
   | CxxDelete (_, arg) -> iter state arg
 
 (* Postfix fold *)

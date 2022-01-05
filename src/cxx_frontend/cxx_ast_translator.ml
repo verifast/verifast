@@ -371,7 +371,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
 
   and transl_ctor_decl (loc: VF.loc) (ctor: R.Decl.Ctor.t): VF.decl =
     let open R.Decl.Ctor in
-    let name, mangled_name, this_param :: params, body_opt, (_, _, pre_post_opt, terminates), _ = method_get ctor |> transl_meth in
+    let _, mangled_name, this_param :: params, body_opt, (_, _, pre_post_opt, terminates), _ = method_get ctor |> transl_meth in
     (* the init list also contains member names that are default initialized and don't appear in the init list *)
     (* in that case, no init expr is present (we can always retrieve it from the field default initializer) *)
     let transl_init init =
@@ -382,7 +382,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
       init_list, body in
     let implicit = implicit_get ctor in
     let parent = ctor |> parent_get |> transl_record_ref loc in
-    VF.CxxCtor (loc, name, mangled_name, params, pre_post_opt, terminates, body_opt, implicit, parent)
+    VF.CxxCtor (loc, mangled_name, params, pre_post_opt, terminates, body_opt, implicit, parent)
 
   and transl_field_decl (loc: VF.loc) (field: R.Decl.Field.t): VF.field =
     let open R.Decl.Field in

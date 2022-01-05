@@ -436,12 +436,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter pn ilist ctor_map ctors_implemented ds =
       match ds with 
       | [] -> ctor_map, List.rev ctors_implemented
-      | CxxCtor (loc, _, _, _, _, _, _, _, UnionType _) :: _ -> static_error loc "Union constructors are not supported yet." None 
-      | CxxCtor (loc, name, mangled_name, params, contract_opt, terminates, body_opt, implicit, StructType struct_name) :: rest ->
+      | CxxCtor (loc, _, _, _, _, _, _, UnionType _) :: _ -> static_error loc "Union constructors are not supported yet." None 
+      | CxxCtor (loc, mangled_name, params, contract_opt, terminates, body_opt, implicit, StructType struct_name) :: rest ->
         if report_skipped_stmts || match contract_opt with Some ((False _ | ExprAsn (_, False _)), _) -> false | _ -> true then begin match body_opt with None -> () | Some (_, (ss, _)) -> reportStmts ss end;
         let this_type = PtrType (StructType struct_name) in
         let None, xmap, None, pre, pre_tenv, post =
-          check_func_header pn ilist [] ["this", this_type] [] loc Regular [] None name None params false None contract_opt terminates body_opt
+          check_func_header pn ilist [] ["this", this_type] [] loc Regular [] None struct_name None params false None contract_opt terminates body_opt
         in
         begin
           match try_assoc2 mangled_name ctor_map cxx_ctor_map0 with 
@@ -458,7 +458,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               static_error loc "Duplicate constructor implementation." None 
           | Some (loc0, xmap0, pre0, pre_tenv0, post0, terminates0, None) ->
             if body_opt = None then static_error loc "Duplicate constructor prototype." None;
-            check_func_header_compat loc ("Constructor '" ^ name ^ "'") "Constructor prototype implementation check" ["this", get_unique_var_symb_non_ghost "this" this_type] 
+            check_func_header_compat loc ("Constructor '" ^ struct_name ^ "'") "Constructor prototype implementation check" ["this", get_unique_var_symb_non_ghost "this" this_type] 
               (Regular, [], None, xmap, false, pre, post, [], terminates) 
               (Regular, [], None, xmap0, false, [], [], pre0, post0, [], terminates0);
             iter pn ilist 
@@ -981,7 +981,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
       classmap
 
-  (* CXX: check defualt initializers *)
+  (* CXX: check default initializers *)
   let structmap1 = 
     let pn, ilist = "", [] in
     let check_expr_t tenv e tp = check_expr_t_core functypemap funcmap [] [] (pn, ilist) [] tenv None e tp in
@@ -994,7 +994,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             fname, (floc, fgh, ft, foffset, Some init)
           | fd -> fd 
       in
-    sn, (sloc, body, spad_sym, ssize)
+      sn, (sloc, body, spad_sym, ssize)
 
   let structmap = structmap1 @ structmap0 
     
@@ -1163,9 +1163,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | AssignExpr(_, e1, e2) ->  expr_mark_addr_taken e1 locals;  expr_mark_addr_taken e2 locals
     | AssignOpExpr(_, e1, _, e2, _) -> expr_mark_addr_taken e1 locals;  expr_mark_addr_taken e2 locals
     | InitializerList(_, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
-    | CxxNew (_, _, Some e) -> expr_mark_addr_taken e locals
-    | CxxNew (_, _, _) -> ()
-    | CxxConstruct (_, _, _, es) -> es |> List.iter @@ fun e -> expr_mark_addr_taken e locals
+    | CxxNew (_, _, Some e)
+    | WCxxNew (_, _, Some e) -> expr_mark_addr_taken e locals
+    | CxxNew (_, _, _)
+    | WCxxNew (_, _, _) -> ()
+    | CxxConstruct (_, _, _, es)
+    | WCxxConstruct (_, _, _, es) -> es |> List.iter @@ fun e -> expr_mark_addr_taken e locals
     | CxxDelete (_, e) -> expr_mark_addr_taken e locals
   and pat_expr_mark_addr_taken pat locals = 
     match pat with
@@ -1550,7 +1553,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let produce_cxx_object l coef addr ty eval_h check_ctor_call init_opt produce_padding_chunk h env cont =
     match ty, init_opt with 
     | UnionType _, _ -> static_error l "Union construction is not supported yet." None 
-    | StructType struct_name, Some (CxxConstruct (lc, mangled_name, _, args)) ->
+    | StructType struct_name, Some (WCxxConstruct (lc, mangled_name, _, args)) ->
       let ctor_info = try_assoc mangled_name cxx_ctor_map in
       if ctor_info = None then static_error l "Default constructors have to be defined explicitly." None;
       let Some (lc, params, pre, pre_tenv, post, terminates, body_opt) = ctor_info in 
@@ -2254,9 +2257,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           check_call targs h args $. fun h env retval ->
           cont (chunk::h) env retval
       end
-    | CxxNew (l, te, expr_opt) ->
+    | WCxxNew (l, ty, expr_opt) ->
       if pure then static_error l "Cannot call 'new' from a pure context." None ;
-      let ty = check_pure_type (pn, ilist) [] Real te in
       let symb_name = 
         match xo with 
         | None -> (match ty with StructType n -> n | _ -> "address")
@@ -2282,7 +2284,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               produce_chunk h (get_pred_symb "new_block", true) [] real_unit None [result; sizeof l ty] None cont
           end
         end
-    | CxxConstruct (l, _, _, _) ->
+    | WCxxConstruct (l, _, _, _) ->
       static_error l "Stack allocation of objects is not supported yet." None
     | NewObject (l, cn, args, targs) ->
       inheritance_check cn l;

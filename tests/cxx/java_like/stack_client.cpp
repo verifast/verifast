@@ -7,8 +7,8 @@ int main()
     Stack *s = new Stack;
     s->push(10);
     s->push(20);
-    s->pop();
-    s->pop();
-    //@ leak StackPred(s, _);
+    int twenty = s->pop();
+    int ten = s->pop();
+    //@ leak StackPred(s, _, _);
     //@ leak new_block_Stack(s);
 }

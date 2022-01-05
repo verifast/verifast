@@ -65,7 +65,7 @@ void DeclSerializer::serializeFuncDecl(stubs::Decl::Function::Builder &builder,
     }
   }
 
-  // Implicit functions have a definiton, but only have a body when
+  // Implicit functions have a definition, but only have a body when
   // they are referenced. The body is always a compound empty statement.
   // Therefore, we always serialize them as a declaration without body.
   if (!isImplicit && isDef) {

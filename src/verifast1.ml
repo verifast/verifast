@@ -4223,10 +4223,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           assert (t = et);
           w
       in
-      CxxNew (l, te, expr_opt), PtrType t, None
-    | CxxConstruct (l, _, te, _) ->
+      WCxxNew (l, t, expr_opt), PtrType t, None
+    | CxxConstruct (l, name, te, es) ->
       let t = check_pure_type (pn, ilist) [] Real te in 
-      e, t, None
+      WCxxConstruct (l, name, t, es), t, None
     | e -> static_error (expr_loc e) "Expression form not allowed here." None
   and check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e t0 =
     check_expr_t_core_core functypemap funcmap classmap interfmap (pn, ilist) tparams tenv inAnnotation e t0 false
