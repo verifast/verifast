@@ -23,11 +23,24 @@ jobs:
           name: binary_package
           path: upload
 
-      - name: Upload to Cloud Storage
+      - name: Set and push nightly tag
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-        run: pip3 install google-cloud-storage && python3 upload.py
-        env:
-          GOOGLE_CLOUD_PLATFORM_CREDENTIALS: ${{ secrets.google_cloud_platform_credentials }}
+        run: git tag -f nightly && git push --tags -f
+
+      - name: Upload nightly release assets
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+        uses: actions/github-script@v5
+        with:
+          script: |
+            await require('./upload-release-asset.js')({
+              github,
+              context,
+              core,
+              assetName: 'verifast-' + process.env.VFVERSION + '-linux.tar.gz',
+              assetPath: 'upload/verifast-nightly.tar.gz',
+              assetsToDeleteRegex: /-linux\.tar\.gz$/,
+              tag: 'nightly'
+            });
 
   build_macos:
     runs-on: macos-10.15
@@ -58,11 +71,24 @@ jobs:
           name: vfide_libraries
           path: src/vfide-libraries.log
 
-      - name: Upload to Cloud Storage
+      - name: Set and push nightly tag
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-        run: pip3 install google-cloud-storage && python3 upload.py
-        env:
-          GOOGLE_CLOUD_PLATFORM_CREDENTIALS: ${{ secrets.google_cloud_platform_credentials }}
+        run: git tag -f nightly && git push --tags -f
+
+      - name: Upload nightly release assets
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+        uses: actions/github-script@v5
+        with:
+          script: |
+            await require('./upload-release-asset.js')({
+              github,
+              context,
+              core,
+              assetName: 'verifast-' + process.env.VFVERSION + '-macos.tar.gz',
+              assetPath: 'upload/verifast-nightly-osx.tar.gz',
+              assetsToDeleteRegex: /-macos\.tar\.gz$/,
+              tag: 'nightly'
+            });
 
   build_windows:
     runs-on: windows-2019
@@ -87,12 +113,22 @@ jobs:
           name: binary_package
           path: src/verifast-nightly.zip
 
-      - name: Prepare for upload to Cloud Storage
+      - name: Set and push nightly tag
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-        run: pip3 install google-cloud-storage
+        shell: bash
+        run: git tag -f nightly && git push --tags -f
 
-      - name: Upload to Cloud Storage
+      - name: Upload nightly release assets
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-        run: python upload.py
-        env:
-          GOOGLE_CLOUD_PLATFORM_CREDENTIALS: ${{ secrets.google_cloud_platform_credentials }}
+        uses: actions/github-script@v5
+        with:
+          script: |
+            await require('./upload-release-asset.js')({
+              github,
+              context,
+              core,
+              assetName: 'verifast-' + process.env.VFVERSION + '-windows.zip',
+              assetPath: 'upload/verifast-nightly.zip',
+              assetsToDeleteRegex: /-windows\.zip$/,
+              tag: 'nightly'
+            });
