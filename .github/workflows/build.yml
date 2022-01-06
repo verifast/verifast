@@ -31,7 +31,7 @@ jobs:
 
       - name: Set and push nightly tag
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-        run: git tag -f nightly && git push --tags -f
+        run: git tag -f nightly && git push -f nightly:refs/tags/nightly
 
       - name: Upload nightly release assets
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
@@ -79,7 +79,7 @@ jobs:
 
       - name: Set and push nightly tag
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-        run: git tag -f nightly && git push --tags -f
+        run: git tag -f nightly && git push -f nightly:refs/tags/nightly
 
       - name: Upload nightly release assets
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
@@ -122,7 +122,7 @@ jobs:
       - name: Set and push nightly tag
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         shell: bash
-        run: git tag -f nightly && git push --tags -f
+        run: git tag -f nightly && git push -f nightly:refs/tags/nightly
 
       - name: Upload nightly release assets
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
