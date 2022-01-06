@@ -15,11 +15,7 @@ The VeriFast source code and binaries are released under the [MIT license](LICEN
 Binaries
 --------
 
-Within an hour after each push to the master branch, binary packages become available at the following URLs:
-
-- [Windows](https://storage.googleapis.com/verifast-nightlies/verifast-nightly-windows-latest.html)
-- [Linux/x64](https://storage.googleapis.com/verifast-nightlies/verifast-nightly-linux-latest.html)
-- [macOS](https://storage.googleapis.com/verifast-nightlies/verifast-nightly-macos-latest.html)
+Within an hour after each push to the master branch, binary packages become available [here](https://github.com/verifast/verifast/releases/tag/nightly).
 
 These "nightly" builds are very stable and are recommended. Still, named releases are available [here](https://github.com/verifast/verifast/releases). (An archive of older named releases is [here](https://people.cs.kuleuven.be/~bart.jacobs/verifast/releases/).)
 
