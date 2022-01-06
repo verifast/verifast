@@ -178,7 +178,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             if stmt_ghostness = Ghost && not (is_lemma k) then static_error l "Not a lemma function." None;
             if stmt_ghostness = Real && k <> Regular then static_error l "Regular function expected." None;
             if f_tparams <> [] then static_error l "Taking the address of a function with type parameters is not yet supported." None;
-            if body' = None then register_prototype_used lf fn fterm;
+            if body' = None then register_prototype_used lf fn (Some fterm);
             if stmt_ghostness = Ghost then begin
               if nonghost_callers_only then static_error l "Function pointer chunks cannot be produced for nonghost_callers_only lemmas." None;
               match leminfo with
@@ -412,7 +412,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin match resolve Ghost (pn,ilist) l fn funcmap with
         None -> static_error l "No such function." None
       | Some (fn, FuncInfo (funenv, fterm, lf, k, f_tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body',fb,v)) ->
-        if body' = None then register_prototype_used lf fn fterm
+        if body' = None then register_prototype_used lf fn (Some fterm)
       end;
       cont h env
     | ProduceLemmaFunctionPointerChunkStmt (l, e, ftclause_opt, body) ->
@@ -2580,29 +2580,58 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match ps with
       [] -> cont h
     | _ -> with_context (Executing (h, env, l, "Freeing parameters.")) (fun _ -> cleanup_heapy_locals_core (pn, ilist) l h env ps cont)
+
+  and compute_heapy_params loc func_kind params pre_tenv ss =
+    let penv = get_unique_var_symbs_ params (match func_kind with Regular -> false | _ -> true) in
+    let heapy_vars = ss |> List.map stmt_address_taken |> List.flatten |> list_remove_dups in
+    let heapy_ps = pre_tenv |> List.fold_left (fun acc (x, tp) ->
+      if List.mem_assoc x params && List.mem x heapy_vars then 
+        let addr = get_unique_var_symb_non_ghost (x ^ "_addr") (PtrType tp) in
+        (loc, x, tp, addr) :: acc
+      else
+        acc   
+      ) [] |> List.rev
+    in
+    penv, heapy_ps
+
+  and compute_size_info penv ss =
+    match ss with 
+    | [SwitchStmt (_, Var (_, x), _)] -> 
+      begin 
+        match try_assoc_i x penv with 
+        | None -> [], None 
+        | Some (i, t) -> [t, (t, 0)], Some (x, i, penv |> List.map (fun (_, t) -> t))
+      end
+    | _ -> [], None 
+
+  and partition_ss func_kind ss =
+    if is_lemma func_kind then
+      [], ss
+    else
+      let rec iter prolog ss =
+        match ss with
+        | PureStmt (l, s) :: ss -> iter (s :: prolog) ss
+        | _ -> List.rev prolog, ss
+      in
+      iter [] ss
+
+  and verify_c_func_body loc (pn, ilist) tparams boxes in_pure_context leminfo funcmap predinstmap sizemap heapy_ps h tenv env ghostenv post ss close_brace_loc return_cont =
+    begin fun tcont ->
+      let h, tenv, env = heapify_params h tenv env heapy_ps in 
+      let outer_locals = ref [] in 
+      stmts_mark_addr_taken ss [(outer_locals, [])] (fun _ -> ());
+      let body = [BlockStmt(loc, [], ss, close_brace_loc, outer_locals)] in
+      verify_block (pn, ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont (fun _ _ _ -> assert false)
+    end @@ fun sizemap tenv ghostenv h env ->
+    verify_return_stmt (pn, ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env false close_brace_loc None [] return_cont (fun _ _ _ -> assert false)
+
   and verify_func pn ilist gs lems boxes predinstmap funcmap tparams env l k tparams' rt g ps nonghost_callers_only pre pre_tenv post terminates ss closeBraceLoc =
     if startswith g "vf__" then static_error l "The name of a user-defined function must not start with 'vf__'." None;
     let tparams = tparams' @ tparams in
     let _ = push() in
-    let penv = get_unique_var_symbs_ ps (match k with Regular -> false | _ -> true) in (* actual params invullen *)
-    let heapy_vars = list_remove_dups (List.flatten (List.map (fun s -> stmt_address_taken s) ss)) in
-    let heapy_ps = List.flatten (List.map (fun (x,tp) -> 
-      if List.mem x heapy_vars then
-        let addr = get_unique_var_symb_non_ghost (x ^ "_addr") (PtrType tp) in
-        [(l, x, tp, addr)] 
-      else 
-       []
-      ) (List.filter (fun (x, tp) -> List.mem_assoc x ps) pre_tenv))
-    in
-    let (sizemap, indinfo) =
-      match ss with
-        [SwitchStmt (_, Var (_, x), _)] -> (
-        match try_assoc_i x penv with
-          None -> ([], None)
-        | Some(i, t) -> ([(t, (t, 0))], Some (x, i, List.map (fun (_, t) -> t) penv))
-        )
-      | _ -> ([], None)
-    in
+    let penv, heapy_ps = compute_heapy_params l k ps pre_tenv ss in
+    let sizemap, indinfo = compute_size_info penv ss in
+    let prolog, ss = partition_ss k ss in
     let tenv =
       match rt with
         None -> pre_tenv
@@ -2619,6 +2648,12 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       check_should_fail () $. fun () ->
       execute_branch $. fun () ->
       with_context (Executing ([], env, l, sprintf "Verifying function '%s'" g)) $. fun () ->
+      begin fun cont ->
+        match penv, dialect, in_pure_context with
+        | ("this", this_term) :: _, Some Cxx, false ->
+          assume_neq this_term real_zero cont
+        | _ -> cont ()
+      end @@ fun () -> 
       produce_asn_with_post [] [] ghostenv env pre real_unit (Some (PredicateChunkSize 0)) None (fun h ghostenv env post' ->
         let post =
           match post' with
@@ -2640,17 +2675,6 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | (None, Some _) -> assert_false h env l "Void function returns a value." None
           | (Some _, None) -> assert_false h env l "Non-void function does not return a value." None
         in
-        let (prolog, ss) =
-          if in_pure_context then
-            ([], ss)
-          else
-            let rec iter prolog ss =
-              match ss with
-                PureStmt (l, s)::ss -> iter (s::prolog) ss
-              | _ -> (List.rev prolog, ss)
-            in
-            iter [] ss
-        in
         begin fun tcont ->
           verify_cont (pn,ilist) [] [] tparams boxes true leminfo funcmap predinstmap sizemap tenv ghostenv h env prolog tcont (fun _ _ -> assert false) (fun _ _ _ -> assert false)
         end $. fun sizemap tenv ghostenv h env ->
@@ -2664,14 +2688,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           else
             cont h tenv ghostenv env
         end $. fun h tenv ghostenv env ->
-        begin fun tcont ->
-          let (h,tenv,env) = heapify_params h tenv env heapy_ps in
-          let outerlocals = ref [] in
-          stmts_mark_addr_taken ss [(outerlocals, [])] (fun _ -> ());
-          let body = [BlockStmt(l, [], ss, closeBraceLoc, outerlocals)] in
-          verify_block (pn,ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont (fun _ _ _ -> assert false)
-        end $. fun sizemap tenv ghostenv h env ->
-        verify_return_stmt (pn,ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env false closeBraceLoc None [] return_cont (fun _ _ _ -> assert false)
+        verify_c_func_body l (pn, ilist) tparams boxes in_pure_context leminfo funcmap predinstmap sizemap heapy_ps h tenv env ghostenv post ss closeBraceLoc return_cont
       )
     in
     let _ = pop() in
@@ -2681,7 +2698,86 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | _ -> ()
     ) in
     gs', lems'
-  
+
+  and verify_cxx_ctor pn ilist gs lems boxes predinstmap funcmap env (struct_name, fields, g, loc, params, init_list, pre, pre_tenv, post, terminates, ss, close_brace_loc) =
+    let init_field h field_name field_type value struct_addr cont =
+      assume_field h struct_name field_name field_type Real struct_addr value real_unit cont
+    in
+    let init_fields h struct_addr this_type env ghostenv leminfo sizemap cont =
+      let current_thread = List.assoc current_thread_name env in
+      let rec iter h fields =
+        match fields with 
+        | [] -> cont h
+        | (field_name, (field_loc, _, field_type, _, init_expr_opt)) :: rest -> 
+          (* member init takes precedence over default field init *)
+          let mem_init, init_expr_opt =
+            match try_assoc field_name init_list with 
+            | Some ((Some _) as init) -> true, init 
+            | _ -> false, init_expr_opt |> option_map (fun i -> i, false)
+          in
+          begin 
+            match init_expr_opt with 
+            | None -> 
+              with_context (Executing (h, [], field_loc, "Producing field chunk")) @@ fun () ->
+              init_field h field_name field_type (get_unique_var_symb_ "value" field_type false) struct_addr @@ fun h ->
+              iter h rest
+            | Some (init, is_written) ->
+              let init_kind, env, tenv =
+                if mem_init && is_written then "member", env, pre_tenv
+                else "default field", [("this", struct_addr); (current_thread_name, current_thread)], [("this", this_type); (current_thread_name, current_thread_type)]
+              in
+              with_context (Executing (h, [], expr_loc init, "Executing " ^ init_kind ^ " initializer")) @@ fun () ->
+              let field_addr_name = Some (field_name ^ "_addr") in 
+              begin 
+                match init with 
+                | WCxxConstruct (l, mangled_name, te, args) ->
+                  let eval_h h env e cont = verify_expr false (pn,ilist) [] false leminfo funcmap sizemap tenv ghostenv h env None e cont @@ fun _ _ _ _ _ -> assert false in
+                  let field_addr = field_address l struct_addr struct_name field_name in
+                  (* remove 'this' from env and tenv *)
+                  let ("this", _) :: env = env in
+                  let ("this", _) :: tenv = tenv in
+                  let verify_call loc args params pre post terminates h env cont = verify_call funcmap eval_h loc (pn, ilist) field_addr_name None [] args ([], None, params, ["this", field_addr], pre, post, None, terminates, Static) false false None leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in
+                  produce_cxx_object l real_unit field_addr field_type eval_h verify_call (Some init) true h env @@ fun h env ->
+                  iter h rest
+                | _ ->
+                  begin fun cont ->
+                    verify_expr false (pn, ilist) [] false leminfo funcmap sizemap tenv ghostenv h env (Some field_name) init cont @@ fun _ _ _ _ _ -> assert false
+                  end @@ fun h _ initial_value ->
+                  init_field h field_name field_type initial_value struct_addr @@ fun h ->
+                  iter h rest
+              end
+          end
+      in
+      iter h fields
+    in 
+    let _ = push () in 
+    let penv, heapy_ps = compute_heapy_params loc Regular params pre_tenv ss in
+    let sizemap, indinfo = compute_size_info penv ss in
+    let prolog, ss = partition_ss Regular ss in
+    let leminfo, gs', lems', ghostenv = RealFuncInfo (gs, g, terminates), g :: gs, lems, [] in 
+    let this_type = List.assoc "this" pre_tenv in
+    let this_term = get_unique_var_symb_non_ghost "this" this_type in
+    let env = [(current_thread_name, get_unique_var_symb current_thread_name current_thread_type); "this", this_term] @ penv @ env in
+    let _ = 
+      check_should_fail () @@ fun () ->
+      execute_branch @@ fun () ->
+      with_context (Executing ([], env, loc, sprintf "Verifying constructor '%s'" struct_name)) @@ fun () ->
+      assume_neq this_term int_zero_term @@ fun () ->
+      produce_asn [] [] ghostenv env pre real_unit None None @@ fun h ghostenv env ->
+      init_fields h this_term this_type env ghostenv leminfo sizemap @@ fun h ->
+      let return_cont h tenv2 env2 retval =
+        consume_asn rules [] h ghostenv env post true real_unit @@ fun _ h ghostenv env size_first -> 
+        cleanup_heapy_locals (pn, ilist) close_brace_loc h env heapy_ps @@ fun h ->
+        check_leaks h env close_brace_loc "Constructor leaks heap chunks."
+      in 
+      begin fun tcont ->
+        verify_cont (pn, ilist) [] [] [] boxes true leminfo funcmap predinstmap sizemap pre_tenv ghostenv h env prolog tcont (fun _ _ -> assert false) (fun _ _ _ -> assert false)
+      end @@ fun sizemap tenv ghostenv h env ->
+      verify_c_func_body loc (pn, ilist) [] boxes false leminfo funcmap predinstmap sizemap heapy_ps h tenv env ghostenv post ss close_brace_loc return_cont
+    in
+    let _ = pop () in 
+    gs', lems'
+      
   let switch_stmt ss env=
     match ss with
       [SwitchStmt (_, Var (_, x), _)] ->
@@ -2819,7 +2915,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
         end;
         verify_cons (pn,ilist) cfin cn supercn superctors boxes lems rest tparams
-  
+
   let rec verify_meths (pn,ilist) cfin cabstract boxes lems meths ctparams=
     match meths with
       [] -> ()
@@ -2909,7 +3005,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         static_error l "A lemma function outside a .javaspec file must have a body. To assume a lemma, use the body '{ assume(false); }'." None;
       let FuncInfo ([], fterm, _, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, fb,v) = List.assoc g funcmap in
       if auto && (Filename.check_suffix g_file_name ".c" || is_import_spec || language = CLang && Filename.chop_extension (Filename.basename g_file_name) <> Filename.chop_extension (Filename.basename program_path)) then begin
-        register_prototype_used l g fterm;
+        register_prototype_used l g (Some fterm);
         create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams'
       end;
       let lems =
@@ -3030,6 +3126,14 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
            List.iter (fun (an, _) -> if not (List.mem an pbcans) then static_error l ("No preserved_by clause for action '" ^ an ^ "'.") None) amap)
         hpmap;
       verify_funcs (pn,ilist) (bcn::boxes) gs lems ds
+    | CxxCtor (loc, mangled_name, _, _, _, Some _, _, StructType sn) :: ds ->
+      let gs', lems' =
+        record_fun_timing loc (sn ^ ".<ctor>") @@ fun () ->
+        let _, Some fields, _, _ = List.assoc sn structmap in
+        let loc, params, pre, pre_tenv, post, terminates, Some (Some (init_list, (body, close_brace_loc))) = List.assoc mangled_name cxx_ctor_map1 in
+        verify_cxx_ctor pn ilist [] lems boxes predinstmap funcmap [] (sn, fields, mangled_name, loc, params, init_list, pre, pre_tenv, post, terminates, body, close_brace_loc)
+      in
+      verify_funcs (pn, ilist) boxes gs' lems' ds
     | _::ds -> verify_funcs (pn,ilist)  boxes gs lems ds
   
   let lems1 =
@@ -3054,7 +3158,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let rec verify_funcs' boxes gs lems ps=
     match ps with
-      PackageDecl(l,pn,il,ds)::rest-> let (boxes, gs, lems) = verify_funcs (pn,il) boxes gs lems ds in verify_funcs' boxes gs lems rest
+      PackageDecl(l,pn,il,ds)::rest -> 
+        let (boxes, gs, lems) = verify_funcs (pn,il) boxes gs lems ds in 
+        verify_funcs' boxes gs lems rest
     | [] -> verify_classes boxes lems classmap
   
   let () = verify_funcs' [] gs0 lems0 ps
@@ -3067,10 +3173,10 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       ), 
       (
         structmap1, unionmap1, enummap1, globalmap1, modulemap1, importmodulemap1, 
-        inductivemap1, purefuncmap1,predctormap1, struct_accessor_map1, malloc_block_pred_map1, new_block_pred_map1, 
+        inductivemap1, purefuncmap1, predctormap1, struct_accessor_map1, malloc_block_pred_map1, new_block_pred_map1, 
         field_pred_map1, predfammap1, predinstmap1, typedefmap1, functypemap1, 
-        funcmap1, boxmap,classmap1,interfmap1,classterms1,interfaceterms1, 
-        abstract_types_map1
+        funcmap1, boxmap, classmap1, interfmap1, classterms1, interfaceterms1, 
+        abstract_types_map1, cxx_ctor_map1
       )
     )
   
@@ -3152,7 +3258,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         try
           Translator.parse_cxx_file path
         with
-          Cxx_annotation_parser.CxxAnnParseException (l, msg)
+        | Cxx_annotation_parser.CxxAnnParseException (l, msg)
         | Cxx_ast_translator.CxxAstTranslException (l, msg) -> static_error l msg None
           
     in

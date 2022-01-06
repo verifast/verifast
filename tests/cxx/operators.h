@@ -4,6 +4,11 @@ class IntWrapper {
   int i = 0;
 
   public:
+  IntWrapper()
+  //@ requires true;
+  //@ ensures this->i |-> 0;
+  {}
+
   void setInt(int i);
   //@ requires this->i |-> _;
   //@ ensures this->i |-> i;

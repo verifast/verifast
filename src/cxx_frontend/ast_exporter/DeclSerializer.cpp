@@ -3,64 +3,81 @@
 
 namespace vf {
 
-// TODO: check how to retrieve the name of a decl in a proper way
-bool DeclSerializer::visitFunc(stubs::Decl::Function::Builder &builder,
-                               const clang::FunctionDecl *decl) {
+void DeclSerializer::serializeParams(
+    capnp::List<stubs::Decl::Param, capnp::Kind::STRUCT>::Builder &builder,
+    llvm::ArrayRef<clang::ParmVarDecl *> params) {
   auto ser = getSerializer();
-  builder.setName(decl->getQualifiedNameAsString());
-  builder.setMangledName(ser->getMangledFunc(decl).str());
-  auto result = builder.initResult();
-  auto returnRange = decl->getReturnTypeSourceRange();
-  if (returnRange.isInvalid()) {
-    // Try to recover from using an invalid range which will result in a
-    // seg-fault. E.g. when handling a conversion function which does not have a
-    // return type range.
-    returnRange = decl->getSourceRange();
-  }
-  ser->serializeTypeWithRange(result, decl->getReturnType().getTypePtr(),
-                              returnRange);
-  auto params = builder.initParams(decl->param_size());
   size_t i(0);
-  for (auto p : decl->parameters()) {
-    auto param = params[i++];
+  for (auto p : params) {
+    auto param = builder[i++];
 
-    param.setName(p->getDeclName().getAsString());
+    auto declName = p->getDeclName();
+    param.setName(declName.getAsString());
     auto type = param.initType();
-    ser->serializeTypeLoc(type, p->getTypeSourceInfo()->getTypeLoc());
-
+    auto typeInfo = p->getTypeSourceInfo();
+    if (typeInfo) {
+      ser->serializeTypeLoc(type, typeInfo->getTypeLoc());
+    } else {
+      ser->serializeTypeWithRange(type, p->getType().getTypePtr(), {});
+    }
     if (p->hasDefaultArg()) {
       auto def = param.initDefault();
       ser->serializeExpr(def, p->getDefaultArg());
     }
   }
+}
 
+// TODO: check how to retrieve the name of a decl in a proper way
+void DeclSerializer::serializeFuncDecl(stubs::Decl::Function::Builder &builder,
+                                       const clang::FunctionDecl *decl,
+                                       llvm::StringRef mangledName) {
+  auto ser = getSerializer();
+  builder.setName(decl->getQualifiedNameAsString());
+  builder.setMangledName(mangledName.str());
+  auto result = builder.initResult();
+  auto returnRange = decl->getReturnTypeSourceRange();
+
+  ser->serializeTypeWithRange(result, decl->getReturnType().getTypePtr(),
+                              returnRange);
+
+  auto paramsBuilder = builder.initParams(decl->param_size());
+  serializeParams(paramsBuilder, decl->parameters());
   std::list<Annotation> anns;
-  if (decl->isThisDeclarationADefinition()) {
-    ser->getAnnStore().getContract(decl->getBeginLoc(), anns,
-                                   getSourceManager(),
-                                   decl->getBody()->getBeginLoc());
-  } else {
-    ser->getAnnStore().getContract(decl->getBeginLoc(), anns,
-                                   getSourceManager());
+
+  auto isImplicit = decl->isImplicit();
+  auto isDef = decl->isThisDeclarationADefinition();
+
+  // Implicit functions cannot have annotations provided by the programmer.
+  if (!isImplicit) {
+    if (isDef) {
+      ser->getAnnStore().getContract(decl->getBeginLoc(), anns,
+                                     getSourceManager(),
+                                     decl->getBody()->getBeginLoc());
+    } else {
+      ser->getAnnStore().getContract(decl->getBeginLoc(), anns,
+                                     getSourceManager());
+    }
+    auto contractBuilder = builder.initContract(anns.size());
+    size_t i(0);
+    for (auto &ann : anns) {
+      auto annBuilder = contractBuilder[i++];
+      ser->serializeAnnotationClause(annBuilder, ann);
+    }
   }
 
-  auto contractBuilder = builder.initContract(anns.size());
-  i = 0;
-  for (auto &ann : anns) {
-    auto annBuilder = contractBuilder[i++];
-    ser->serializeAnnotationClause(annBuilder, ann);
-  }
-
-  if (decl->isThisDeclarationADefinition()) {
+  // Implicit functions have a definition, but only have a body when
+  // they are referenced. The body is always a compound empty statement.
+  // Therefore, we always serialize them as a declaration without body.
+  if (!isImplicit && isDef) {
     auto body = builder.initBody();
     ser->serializeStmt(body, decl->getBody());
   }
-  return true;
 }
 
 bool DeclSerializer::VisitFunctionDecl(const clang::FunctionDecl *decl) {
   auto function = _builder.initFunction();
-  return visitFunc(function, decl);
+  serializeFuncDecl(function, decl, getSerializer()->getMangledFunc(decl));
+  return true;
 }
 
 bool DeclSerializer::VisitEmptyDecl(const clang::EmptyDecl *decl) {
@@ -98,16 +115,16 @@ bool DeclSerializer::VisitVarDecl(const clang::VarDecl *decl) {
   return true;
 }
 
-bool DeclSerializer::VisitFieldDecl(const clang::FieldDecl *decl) {
-  auto field = _builder.initField();
-  field.setName(decl->getDeclName().getAsString());
+void DeclSerializer::serializeFieldDecl(stubs::Decl::Field::Builder &builder,
+                                        const clang::FieldDecl *decl) {
+  builder.setName(decl->getDeclName().getAsString());
 
   auto ser = getSerializer();
-  auto ty = field.initType();
+  auto ty = builder.initType();
   ser->serializeTypeLoc(ty, decl->getTypeSourceInfo()->getTypeLoc());
 
   if (decl->hasInClassInitializer()) {
-    auto init = field.initInit();
+    auto init = builder.initInit();
     auto initExpr = init.initInit();
     ser->serializeExpr(initExpr, decl->getInClassInitializer());
 
@@ -124,7 +141,11 @@ bool DeclSerializer::VisitFieldDecl(const clang::FieldDecl *decl) {
           "A field with an in-class-initializer should have an init style.");
     }
   }
+}
 
+bool DeclSerializer::VisitFieldDecl(const clang::FieldDecl *decl) {
+  auto field = _builder.initField();
+  serializeFieldDecl(field, decl);
   return true;
 }
 
@@ -139,68 +160,108 @@ bool DeclSerializer::VisitCXXRecordDecl(const clang::CXXRecordDecl *decl) {
   rec.setKind(kind);
 
   bool hasDef(decl->hasDefinition());
-  rec.setHasDef(hasDef);
-
   if (hasDef) {
-    using DeclNodeOrphan = NodeOrphan<stubs::Decl>;
-    auto orphanage = capnp::Orphanage::getForMessageContaining(_builder);
-    llvm::SmallVector<DeclNodeOrphan, 4> fieldOrphans;
-    llvm::SmallVector<DeclNodeOrphan, 4> methOrphans;
-    llvm::SmallVector<DeclNodeOrphan, 4> declOrphans;
+    size_t nbFields(0);
+    size_t nbDecls(0);
 
-    auto ser = getSerializer();
     for (auto d : decl->decls()) {
-      switch (d->getKind()) {
-      case clang::Decl::Kind::CXXMethod:
-        ser->serializeToOrphan(d, orphanage, methOrphans);
-        break;
-      case clang::Decl::Kind::Field:
-        ser->serializeToOrphan(d, orphanage, fieldOrphans);
-        break;
-      default:
-        if (!d->isImplicit()) {
-          ser->serializeToOrphan(d, orphanage, declOrphans);
-        }
+      if (llvm::isa<clang::FieldDecl>(d)) {
+        ++nbFields;
+      } else {
+        ++nbDecls;
       }
     }
 
-    auto fields = rec.initFields(fieldOrphans.size());
-    auto meths = rec.initMethods(methOrphans.size());
-    auto decls = rec.initDecls(declOrphans.size());
+    auto body = rec.initBody();
+    auto fieldsBuilder = body.initFields(nbFields);
+    auto declsBuilder = body.initDecls(nbDecls);
+    nbFields = 0;
+    nbDecls = 0;
 
-    AstSerializer::adoptOrphansToListBuilder(fieldOrphans, fields);
-    AstSerializer::adoptOrphansToListBuilder(methOrphans, meths);
-    AstSerializer::adoptOrphansToListBuilder(declOrphans, decls);
+    auto ser = getSerializer();
+
+    for (auto d : decl->decls()) {
+      if (auto *field = llvm::dyn_cast<clang::FieldDecl>(d)) {
+        auto builder = fieldsBuilder[nbFields++];
+        auto locBuilder = builder.initLoc();
+        auto descBuilder = builder.initDesc();
+        serializeSrcRange(locBuilder, d->getSourceRange(), getSourceManager());
+        serializeFieldDecl(descBuilder, field);
+      } else {
+        auto builder = declsBuilder[nbDecls++];
+        ser->serializeDecl(builder, d);
+      }
+    }
   }
 
   return true;
 }
 
-bool DeclSerializer::VisitCXXMethodDecl(const clang::CXXMethodDecl *decl) {
-  auto meth = _builder.initMethod();
+void DeclSerializer::serializeMethodDecl(stubs::Decl::Method::Builder &builder,
+                                         const clang::CXXMethodDecl *decl,
+                                         llvm::StringRef mangledName) {
   auto isStatic = decl->isStatic();
-
-  meth.setStatic(isStatic);
-
+  builder.setStatic(isStatic);
+  auto ser = getSerializer();
   if (!isStatic) {
-    auto thisType = meth.initThis();
+    auto thisType = builder.initThis();
     getSerializer()->serializeType(thisType,
                                    decl->getThisObjectType().getTypePtr());
   }
 
-  auto func = meth.initFunc();
+  auto func = builder.initFunc();
+  serializeFuncDecl(func, decl, mangledName);
+}
 
-  return visitFunc(func, decl);
+bool DeclSerializer::VisitCXXMethodDecl(const clang::CXXMethodDecl *decl) {
+  auto meth = _builder.initMethod();
+  serializeMethodDecl(meth, decl, getSerializer()->getMangledFunc(decl));
+  return true;
+}
+
+void serializeRecordRef(stubs::RecordRef::Builder &builder,
+                        const clang::CXXRecordDecl *record) {
+  builder.setName(record->getQualifiedNameAsString());
+  builder.setKind(record->isStruct()  ? stubs::RecordKind::STRUC
+                  : record->isClass() ? stubs::RecordKind::CLASS
+                                      : stubs::RecordKind::UNIO);
 }
 
 bool DeclSerializer::VisitCXXConstructorDecl(
     const clang::CXXConstructorDecl *decl) {
-  _builder.setDefConstructor();
-  return decl->isImplicit();
+  auto ctor = _builder.initCtor();
+  auto ser = getSerializer();
+  ctor.setImplicit(decl->isImplicit());
+  auto initBuilders = ctor.initInitList(decl->getNumCtorInitializers());
+
+  size_t i(0);
+  for (auto init : decl->inits()) {
+    auto initBuilder = initBuilders[i++];
+    initBuilder.setName(init->getMember()->getNameAsString());
+    initBuilder.setIsWritten(init->isWritten());
+    
+    auto *initExpr = init->getInit();
+    if (! llvm::isa<clang::CXXDefaultInitExpr>(initExpr)) {
+      auto exprBuilder = initBuilder.initInit();
+      ser->serializeExpr(exprBuilder, init->getInit());
+    }
+  }
+
+  auto meth = ctor.initMethod();
+  serializeMethodDecl(meth, decl, ser->getMangledCtorName(decl));
+
+  auto parent = ctor.initParent();
+  serializeRecordRef(parent, decl->getParent());
+
+  return true;
 }
 
 bool DeclSerializer::VisitCXXDestructorDecl(
     const clang::CXXDestructorDecl *decl) {
+  // builder.setImplicit(decl->isImplicit());
+  // auto methodBuilder = builder.initMethod();
+  // serializeMethodDecl(methodBuilder, decl,
+  // getSerializer()->getMangledDtorName(decl));
   _builder.setDefDestructor();
   return decl->isImplicit();
 }

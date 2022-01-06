@@ -1,17 +1,32 @@
 /*@
-predicate EmptyPred(struct Empty *e) =
-    new_block_Empty(e);
+predicate EmptyPred(struct Empty *e) = 
+    e != 0;
 @*/
-class Empty {};
+class Empty {
+public:
+    Empty()
+    //@ requires true;
+    //@ ensures EmptyPred(this);
+    {
+        //@ close EmptyPred(this);
+    }
+};
 
 /*@
 predicate FieldsPred(struct Fields *f, int i, bool b, struct Empty *e) =
-    new_block_Fields(f) &*& f->i |-> i &*& f->b |-> b &*& f->e |-> e &*& EmptyPred(e);
+    f->i |-> i &*& f->b |-> b &*& f->e |-> e &*& (e == 0 ? true : (new_block_Empty(e) &*& EmptyPred(e)));
 @*/
 struct Fields {
     int i = 0;
     bool b = false;
     Empty *e = nullptr;
+
+    Fields()
+    //@ requires true;
+    //@ ensures FieldsPred(this, 0, false, 0);
+    {
+        //@ close FieldsPred(this, _, _, _);
+    }
 };
 
 int main() 
@@ -19,8 +34,8 @@ int main()
 //@ ensures true;
 {
     Empty *e = new Empty;
-    //@ close EmptyPred(e);
     Fields *f = new Fields;
+    //@ open FieldsPred(f, _, _, _);
     f->e = e;
     //@ close FieldsPred(f, 0, false, e);
     //@ open FieldsPred(f, ?i, ?b, e);
@@ -28,5 +43,6 @@ int main()
     //@ assert(f->i == i + 1);
     //@ close FieldsPred(f, i+1, b, e);
     
-    //@ leak FieldsPred(_, _, _, _);
+    //@ leak FieldsPred(f, _, _, _);
+    //@ leak new_block_Fields(f);
 }

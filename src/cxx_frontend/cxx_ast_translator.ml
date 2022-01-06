@@ -106,11 +106,13 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
       let file_name = get_fd_path fd in
       file_name, l, c 
     in
-    VF.Lexed (transl_srcpos @@ start_get loc, transl_srcpos @@ end_get loc)
+    let l_start = if has_start loc then start_get loc |> transl_srcpos else VF.dummy_srcpos in
+    let l_end = if has_end loc then end_get loc |> transl_srcpos else VF.dummy_srcpos in
+    VF.Lexed (l_start, l_end)
 
   let map_ann_clause ann =
     let open R.Clause in
-    let VF.Lexed a_loc = transl_loc @@ loc_get ann in
+    let VF.Lexed a_loc = loc_get ann |> transl_loc in
     let a_text = text_get ann in
     a_loc, a_text
 
@@ -137,6 +139,10 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     | None -> failwith "Actual did not match expected."
     | Some result -> result
 
+  let transl_node (f: VF.loc -> 'a Stubs.reader_t -> 'b) (node: R.Node.t): 'b =
+    let loc, ptr = decompose_node node in
+    f loc ptr
+
   (**
     [transl_decl decl] translates [decl] and returns a VeriFast declaration list, representing [decl].
   *)
@@ -153,8 +159,9 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     | Var v               -> [transl_var_decl_global loc v]
     | EnumDecl d          -> [transl_enum_decl loc d]
     | Typedef d           -> [transl_typedef_decl loc d]
-    | AccessSpec
-    | DefConstructor
+    | Ctor c              -> if (R.Decl.Ctor.implicit_get c) then [] else [transl_ctor_decl loc c]
+                              (* TODO: we currently skip implicit constructors because they can contain lValueRefs/rValueRefs *)
+    | AccessSpec          
     | DefDestructor       -> [] (* we currently don't care about these *)
     | Undefined _         -> failwith "Undefined declaration."
     | _                   -> error loc "Unsupported declaration."
@@ -176,6 +183,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     | DeclRef ref         -> transl_decl_ref_expr loc ref
     | This                -> transl_this_expr loc
     | New n               -> transl_new_expr loc n
+    | Construct c         -> transl_construct_expr loc c
     | Member m            -> transl_member_expr loc m
     | MemberCall c        -> transl_call_expr loc c
     | NullPtrLit          -> transl_null_ptr_lit_expr loc
@@ -244,9 +252,9 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
   (* declarations *)
   (****************)
 
-  and transl_func_like (f: R.Decl.Function.t) = 
+  and transl_func (f: R.Decl.Function.t) = 
     let open R.Decl.Function in
-    (* let name = name_get f in *)
+    let name = name_get f in
     let mangled_name = mangled_name_get f in 
     let body_opt = 
       if has_body f then Some (transl_stmt_as_list @@ body_get f)
@@ -266,10 +274,10 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
       else transl_type_loc @@ type_get param, name_get param 
     in
     let params = params_get f |> capnp_arr_map transl_param in
-    mangled_name, params, body_opt, (ng_callers_only, ft, pre_post, terminates), return_type
+    name, mangled_name, params, body_opt, (ng_callers_only, ft, pre_post, terminates), return_type
 
   and transl_func_decl (loc: VF.loc) (f: R.Decl.Function.t): VF.decl =
-    let name, params, body_opt, (ng_callers_only, ft, pre_post, terminates), return_type = transl_func_like f in
+    let _, name, params, body_opt, (ng_callers_only, ft, pre_post, terminates), return_type = transl_func f in
     let make_return loc = VF.ReturnStmt (loc, Some (make_int_lit loc 0)) in
     let body_stmts = 
       match name, body_opt with
@@ -286,17 +294,18 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     let VF.Lexed l = loc in
     AP.parse_decls (l, text)
 
+  and transl_var_init (i: R.Decl.Var.VarInit.t): VF.expr =
+    let open R.Decl.Var.VarInit in
+    let init_expr = init_get i |> transl_expr in 
+    match style_get i with
+    | R.Decl.Var.InitStyle.CInit -> init_expr
+    | _ -> error (VF.expr_loc init_expr) "Only c-style initialization is supported at the moment."
+
   and transl_var (var: R.Decl.Var.t): VF.type_expr * string * VF.expr option =
     let open R.Decl.Var in
     let name = name_get var in
     let init_opt = 
-      if has_init var then 
-        let init = init_get var in
-        let open VarInit in
-        let init_expr = transl_expr @@ init_get init in
-        match style_get init with
-        | InitStyle.CInit -> Some init_expr
-        | _ -> error (VF.expr_loc init_expr) "Only c-style initialization is supported at the moment."
+      if has_init var then Some (init_get var |> transl_var_init)
       else None 
     in
     let ty = transl_type_loc @@ type_get var in
@@ -307,7 +316,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     let ty, name, init_opt = transl_var var in
     loc, ty, name, init_opt, (ref false, ref None)
 
-  (* used at global leven, i.e., outside functions, methods... *)
+  (* used at global level, i.e., outside functions, methods... *)
   and transl_var_decl_global (loc: VF.loc) (var: R.Decl.Var.t): VF.decl =
     let ty, name, init_opt = transl_var var in
     VF.Global (loc, ty, name, init_opt)
@@ -316,44 +325,74 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
   and transl_record_decl (loc: VF.loc) (record: R.Decl.Record.t): VF.decl list =
     let open R.Decl.Record in
     let name = name_get record in
-    let body, meths, decls = 
-      if has_def_get record then
-        let expect_field loc desc = match R.Decl.get desc with R.Decl.Field f -> Some (transl_field_decl loc f) | _ -> None in
-        let expect_meth loc desc = match R.Decl.get desc with R.Decl.Method m -> Some (transl_meth_decl loc m) | _ -> None in
-        let fields = fields_get record |> capnp_arr_map (transl_expect expect_field) in
-        let meths = methods_get record |> capnp_arr_map (transl_expect expect_meth) in
-        let decls = decls_get record |> capnp_arr_map transl_decl |> List.flatten in
-        Some fields, meths, decls
-      else None, [], [] 
+    let body, decls = 
+      if has_body record then
+        let open Body in
+        let body = body_get record in
+        let fields = fields_get body |> capnp_arr_map (transl_node transl_field_decl) in
+        let decls = decls_get body |> capnp_arr_map transl_decl |> List.flatten in
+        Some fields, decls
+      else None, [] 
     in
-    let vf_record = match kind_get record with
-    | R.RecordKind.Struc | R.RecordKind.Class -> VF.Struct (loc, name, body, []) 
-    | R.RecordKind.Unio -> VF.Union (loc, name, body) 
+    let vf_record = 
+      match kind_get record with
+      | R.RecordKind.Struc | R.RecordKind.Class -> VF.Struct (loc, name, body, []) 
+      | R.RecordKind.Unio -> VF.Union (loc, name, body) 
     in
-    vf_record :: (meths @ decls)
+    vf_record :: decls
+
+  and transl_meth (meth: R.Decl.Method.t) =
+    let open R.Decl.Method in
+    let name, mangled_name, params, body_opt, anns, return_type = func_get meth |> transl_func in
+    let binding = if static_get meth then VF.Static else VF.Instance in
+    let params = 
+      match binding with
+      | VF.Static -> params
+      | VF.Instance -> 
+        let this_type = transl_type @@ this_get meth in
+        (VF.PtrTypeExpr (VF.dummy_loc, this_type), "this") :: params 
+    in
+    name, mangled_name, params, body_opt, anns, return_type
 
   (* translates a method to a function and prepends 'this' to the parameters in case it is not a static method *)
   and transl_meth_decl (loc: VF.loc) (meth: R.Decl.Method.t): VF.decl =
     let open R.Decl.Method in
-    let name, params, body_opt, (ng_callers_only, ft, pre_post, terminates), return_type = transl_func_like @@ func_get meth in
-    let binding = if static_get meth then VF.Static else VF.Instance in
-    let params = match binding with
-    | VF.Static -> params
-    | VF.Instance -> 
-      let this_type = transl_type @@ this_get meth in
-      (VF.PtrTypeExpr (loc, this_type), "this") :: params 
-    in
-    VF.Func (loc, VF.Regular, [], return_type, name, params, ng_callers_only, ft, pre_post, terminates, body_opt, VF.Static, VF.Public)
+    let _, mangled_name, params, body_opt, (ng_callers_only, ft, pre_post, terminates), return_type = transl_meth meth in
+    VF.Func (loc, VF.Regular, [], return_type, mangled_name, params, ng_callers_only, ft, pre_post, terminates, body_opt, VF.Static, VF.Public)
+
+  and transl_record_ref (loc: VF.loc) (record_ref: R.RecordRef.t): VF.type_ =
+    let open R.RecordRef in
+    let name = name_get record_ref in
+    match kind_get record_ref with
+    | R.RecordKind.Struc
+    | R.RecordKind.Class -> VF.StructType name
+    | R.RecordKind.Unio -> VF.UnionType name
+    | _ -> error loc "Invalid record reference"
+
+  and transl_ctor_decl (loc: VF.loc) (ctor: R.Decl.Ctor.t): VF.decl =
+    let open R.Decl.Ctor in
+    let _, mangled_name, this_param :: params, body_opt, (_, _, pre_post_opt, terminates), _ = method_get ctor |> transl_meth in
+    (* the init list also contains member names that are default initialized and don't appear in the init list *)
+    (* in that case, no init expr is present (we can always retrieve it from the field default initializer) *)
+    let transl_init init =
+      let open CtorInit in
+      name_get init, if has_init init then Some (init_get init |> transl_expr, is_written_get init) else None in
+    let body_opt = body_opt |> option_map @@ fun body ->
+      let init_list = init_list_get ctor |> capnp_arr_map transl_init in
+      init_list, body in
+    let implicit = implicit_get ctor in
+    let parent = ctor |> parent_get |> transl_record_ref loc in
+    VF.CxxCtor (loc, mangled_name, params, pre_post_opt, terminates, body_opt, implicit, parent)
 
   and transl_field_decl (loc: VF.loc) (field: R.Decl.Field.t): VF.field =
     let open R.Decl.Field in
     let name = name_get field in
-    let ty = transl_type_loc @@ type_get field in
+    let ty = type_get field |> transl_type_loc in
     let init_opt =
       if has_init field then
         let init = init_get field in
         let open FieldInit in
-        let init_expr = transl_expr @@ init_get init in
+        let init_expr = init_get init |> transl_expr in
         match style_get init with
         | InitStyle.CopyInit -> Some init_expr
         | _ -> error loc "Only copy initialization is supported at the moment."
@@ -378,7 +417,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
   and transl_typedef_decl (loc: VF.loc) (decl: R.Decl.Typedef.t): VF.decl =
     let open R.Decl.Typedef in
     let name = name_get decl in
-    let ty = transl_type_loc @@ type_get decl in
+    let ty = type_get decl |> transl_type_loc in
     VF.TypedefDecl (loc, ty, name)
 
   (***************)
@@ -510,19 +549,21 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
   and transl_this_expr (loc: VF.loc): VF.expr =
     VF.Var (loc, "this")
 
+  and transl_construct_expr (loc: VF.loc) (c: R.Expr.Construct.t): VF.expr =
+    let open R.Expr.Construct in 
+    let mangled_name = mangled_name_get c in
+    let ty = type_get c |> transl_type in
+    let args = args_get c |> capnp_arr_map transl_expr in
+    VF.CxxConstruct (loc, mangled_name, ty, args)
+
   and transl_new_expr (loc: VF.loc) (n: R.Expr.New.t): VF.expr =
     let open R.Expr.New in
-    let te = transl_type @@ type_get n in
-    let expr_opt =
-      if has_expr n then 
-        let expect_construct loc desc = match R.Expr.get desc with
-        | R.Expr.Construct es -> Some (capnp_arr_map transl_expr es)
-        | _ -> None 
-        in 
-        Some (expr_get n |> transl_expect expect_construct)
-      else None 
+    let expr_opt = 
+      if has_expr n then Some (expr_get n |> transl_expr)
+      else None
     in
-    VF.CxxNew (loc, te, expr_opt)
+    let ty = type_get n |> transl_type in
+    VF.CxxNew (loc, ty, expr_opt)
 
   and transl_delete_expr (loc: VF.loc) (d: R.Node.t): VF.expr = 
     let e = transl_expr d in
@@ -572,9 +613,13 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
   and transl_if_stmt (loc: VF.loc) (i: R.Stmt.If.t): VF.stmt =
     let open R.Stmt.If in
     let cond = transl_expr @@ cond_get i in
-    let th = let stmts, _ = transl_stmt_as_list @@ then_get i in stmts in
-    let el = if has_else i 
-      then let stmts, _ = transl_stmt_as_list @@ else_get i in stmts
+    let th = 
+      let stmts, _ = transl_stmt_as_list @@ then_get i in 
+      stmts 
+    in
+    let el = 
+      if has_else i 
+        then let stmts, _ = transl_stmt_as_list @@ else_get i in stmts
       else [] 
     in
     VF.IfStmt (loc, cond, th, el)
@@ -734,7 +779,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     in
     let on_error () =
       match input_fully errchan with
-      | "" -> failwith "the Cxx frontend received a serialized result which was undefined."
+      | "" -> failwith "the Cxx frontend was unable to deserialize the received message."
       | s -> failwith @@ "Cxx AST exporter error:\n" ^ s 
     in
     let in_channel = stubs_ast_in_channel inchan in

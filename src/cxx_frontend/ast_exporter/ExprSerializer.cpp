@@ -142,7 +142,7 @@ bool ExprSerializer::VisitIntegerLiteral(const clang::IntegerLiteral *lit) {
 
   auto base = spelling.startswith_insensitive("0x")  ? stubs::NbBase::HEX
               : spelling.startswith_insensitive("0") ? stubs::NbBase::OCTAL
-                                               : stubs::NbBase::DECIMAL;
+                                                     : stubs::NbBase::DECIMAL;
   intLit.setBase(base);
 
   auto valStr = spelling.substr(0, spelling.size() - lCount - uSuf);
@@ -219,13 +219,16 @@ bool ExprSerializer::VisitCXXThisExpr(const clang::CXXThisExpr *expr) {
 
 bool ExprSerializer::VisitCXXNewExpr(const clang::CXXNewExpr *expr) {
   auto n = _builder.initNew();
-  auto type = n.initType();
   auto ser = getSerializer();
-  ser->serializeType(type, expr->getAllocatedType().getTypePtr());
+
   if (expr->hasInitializer()) {
     auto e = n.initExpr();
     ser->serializeExpr(e, expr->getInitializer());
   }
+
+  auto type = n.initType();
+  ser->serializeType(type, expr->getAllocatedType().getTypePtr());
+
   return true;
 }
 
@@ -237,13 +240,22 @@ bool ExprSerializer::VisitCXXDeleteExpr(const clang::CXXDeleteExpr *expr) {
 
 bool ExprSerializer::VisitCXXConstructExpr(
     const clang::CXXConstructExpr *expr) {
-  auto construct = _builder.initConstruct(expr->getNumArgs());
   auto ser = getSerializer();
+  auto construct = _builder.initConstruct();
+  auto ctor = expr->getConstructor();
+  construct.setName(ctor->getNameAsString());
+  construct.setMangledName(ser->getMangledCtorName(ctor).str());
+  auto args = construct.initArgs(expr->getNumArgs());
+
   size_t i(0);
   for (auto arg : expr->arguments()) {
-    auto a = construct[i++];
+    auto a = args[i++];
     ser->serializeExpr(a, arg);
   }
+
+  auto type = construct.initType();
+  ser->serializeType(type, expr->getType().getTypePtr());
+
   return true;
 }
 
@@ -259,6 +271,11 @@ bool ExprSerializer::VisitCXXNullPtrLiteralExpr(
 
 bool ExprSerializer::VisitParenExpr(const clang::ParenExpr *expr) {
   return Visit(expr->getSubExpr());
+}
+
+bool ExprSerializer::VisitCXXDefaultInitExpr(
+    const clang::CXXDefaultInitExpr *expr) {
+  return Visit(expr->getExpr());
 }
 
 } // namespace vf

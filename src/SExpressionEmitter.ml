@@ -398,13 +398,6 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
             "args", sexpr_of_list sexpr_of_expr args;
             "targs", sexpr_of_option (fun targs -> sexpr_of_list sexpr_of_type_expr targs) targs
           ]
-    | CxxNew (_, ty, Some es) ->
-        build_list
-          [ Symbol "expr-new" ]
-          [
-            "type", sexpr_of_type_expr ty;
-            "args", sexpr_of_list sexpr_of_expr es;
-          ]
     | CxxDelete (_, e) ->
         build_list
           [ Symbol "expr-delete" ]

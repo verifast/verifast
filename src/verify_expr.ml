@@ -417,10 +417,73 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let funcmap = funcmap1 @ funcmap0
 
-  let register_prototype_used l g gterm =
+  let cxx_ctor_map1, ctors_implemented =
+    let check_init_list pn ilist tenv struct_name body_opt =
+      body_opt |> option_map @@ fun (init_list, b) ->
+        let _, Some fields, _, _ = List.assoc struct_name structmap in 
+        let init_list_checked =
+          init_list |> List.map @@ fun (field_name, init_expr_opt) ->
+            (* init_expr_opt is None when the member has a default initializer and no implicit constructor call, otherwise {i Some (init, is_written)} is present *)
+            let init_opt =
+              init_expr_opt |> option_map @@ fun (init, is_written) ->
+              let _, _, field_type, _, _ = List.assoc field_name fields in
+              check_expr_t_core functypemap funcmap [] [] (pn, ilist) [] tenv None init field_type, is_written
+            in 
+            field_name, init_opt
+        in
+        Some (init_list_checked, b)
+    in
+    let rec iter pn ilist ctor_map ctors_implemented ds =
+      match ds with 
+      | [] -> ctor_map, List.rev ctors_implemented
+      | CxxCtor (loc, _, _, _, _, _, _, UnionType _) :: _ -> static_error loc "Union constructors are not supported yet." None 
+      | CxxCtor (loc, mangled_name, params, contract_opt, terminates, body_opt, implicit, StructType struct_name) :: rest ->
+        if report_skipped_stmts || match contract_opt with Some ((False _ | ExprAsn (_, False _)), _) -> false | _ -> true then begin match body_opt with None -> () | Some (_, (ss, _)) -> reportStmts ss end;
+        let this_type = PtrType (StructType struct_name) in
+        let None, xmap, None, pre, pre_tenv, post =
+          check_func_header pn ilist [] ["this", this_type] [] loc Regular [] None struct_name None params false None contract_opt terminates body_opt
+        in
+        begin
+          match try_assoc2 mangled_name ctor_map cxx_ctor_map0 with 
+          | None -> 
+            iter pn ilist
+              ((mangled_name, (loc, xmap, pre, pre_tenv, post, terminates, check_init_list pn ilist pre_tenv struct_name body_opt)) :: ctor_map)
+              ctors_implemented
+              rest
+          | Some (_, _, _, _, _, _, Some _) ->
+            (* We should never reach this because Clang would not allow it, but let's check it to be sure *)
+            if body_opt = None then 
+              static_error loc "Constructor prototype must precede constructor implementation." None
+            else 
+              static_error loc "Duplicate constructor implementation." None 
+          | Some (loc0, xmap0, pre0, pre_tenv0, post0, terminates0, None) ->
+            if body_opt = None then static_error loc "Duplicate constructor prototype." None;
+            check_func_header_compat loc ("Constructor '" ^ struct_name ^ "'") "Constructor prototype implementation check" ["this", get_unique_var_symb_non_ghost "this" this_type] 
+              (Regular, [], None, xmap, false, pre, post, [], terminates) 
+              (Regular, [], None, xmap0, false, [], [], pre0, post0, [], terminates0);
+            iter pn ilist 
+              ((mangled_name, (loc, xmap, pre, pre_tenv, post, terminates, check_init_list pn ilist pre_tenv struct_name body_opt)) :: ctor_map) 
+              ((mangled_name, loc0) :: ctors_implemented)
+              rest
+        end
+      | _ :: rest -> iter pn ilist ctor_map ctors_implemented rest
+    in
+    let rec iter_ps (ctor_map, ctors_implemented) ps =
+      match ps with 
+      | PackageDecl(loc, pn, ilist, ds) :: rest -> rest |> iter_ps @@ iter pn ilist ctor_map ctors_implemented ds
+      | [] -> ctor_map, ctors_implemented
+    in
+    iter_ps ([], []) ps
+
+  let cxx_ctor_map = cxx_ctor_map1 @ cxx_ctor_map0
+  let prototypes_implemented = prototypes_implemented @ ctors_implemented
+
+  let register_prototype_used l g gterm_opt =
     if not (List.mem (g, l) !prototypes_used) then
       prototypes_used := (g, l)::!prototypes_used;
-    ctxt#assert_term (ctxt#mk_lt (ctxt#mk_app func_rank [gterm]) int_zero_term)
+    match gterm_opt with
+    | Some gterm -> ctxt#assert_term (ctxt#mk_lt (ctxt#mk_app func_rank [gterm]) int_zero_term)
+    | _ -> ()
   
   let interfmap1 =
     List.map
@@ -918,20 +981,23 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
       classmap
 
-    let structmap = 
-      structmap |> List.map @@ fun (sn, (sloc, sbody, spad_sym, ssize)) ->
-        let body = sbody |> option_map @@ fun fields ->
-          fields |> List.map @@ fun field ->
-            match field with 
-              fname, (floc, fgh, ft, foffset, Some finit) ->
-                let check_expr_t tenv e tp = check_expr_t_core functypemap funcmap [] [] ("", []) [] tenv None e tp in (* TODO: package name? *)
-                let tenv = ["this", PtrType (StructType sn); current_thread_name, current_thread_type] in 
-                let init = check_expr_t tenv finit ft in
-                fname, (floc, fgh, ft, foffset, Some init)
-            | fd -> fd 
-        in
-        sn, (sloc, body, spad_sym, ssize)
-  
+  (* CXX: check default initializers *)
+  let structmap1 = 
+    let pn, ilist = "", [] in
+    let check_expr_t tenv e tp = check_expr_t_core functypemap funcmap [] [] (pn, ilist) [] tenv None e tp in
+    structmap1 |> List.map @@ fun (sn, (sloc, sbody, spad_sym, ssize)) ->
+      let tenv = ["this", PtrType (StructType sn); current_thread_name, current_thread_type] in 
+      let body = sbody |> option_map @@ fun fields ->
+        fields |> List.map @@ function
+          | fname, (floc, fgh, ft, foffset, Some finit) ->
+            let init = check_expr_t tenv finit ft in
+            fname, (floc, fgh, ft, foffset, Some init)
+          | fd -> fd 
+      in
+      sn, (sloc, body, spad_sym, ssize)
+
+  let structmap = structmap1 @ structmap0 
+    
   (* Inheritance check *)
   let inheritance_check_processed = ref []
   let inheritance_check cn l =
@@ -1097,8 +1163,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | AssignExpr(_, e1, e2) ->  expr_mark_addr_taken e1 locals;  expr_mark_addr_taken e2 locals
     | AssignOpExpr(_, e1, _, e2, _) -> expr_mark_addr_taken e1 locals;  expr_mark_addr_taken e2 locals
     | InitializerList(_, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
-    | CxxNew (_, _, Some es) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
-    | CxxNew (_, _, None) -> ()
+    | CxxNew (_, _, Some e)
+    | WCxxNew (_, _, Some e) -> expr_mark_addr_taken e locals
+    | CxxNew (_, _, _)
+    | WCxxNew (_, _, _) -> ()
+    | CxxConstruct (_, _, _, es)
+    | WCxxConstruct (_, _, _, es) -> es |> List.iter @@ fun e -> expr_mark_addr_taken e locals
     | CxxDelete (_, e) -> expr_mark_addr_taken e locals
   and pat_expr_mark_addr_taken pat locals = 
     match pat with
@@ -1479,6 +1549,31 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let consume_c_object l addr tp h consumePaddingChunk cont =
     consume_c_object_core l real_unit_pat addr tp h consumePaddingChunk $. fun chunks h value -> cont h
+
+  let produce_cxx_object l coef addr ty eval_h check_ctor_call init_opt produce_padding_chunk h env cont =
+    match ty, init_opt with 
+    | UnionType _, _ -> static_error l "Union construction is not supported yet." None 
+    | StructType struct_name, Some (WCxxConstruct (lc, mangled_name, _, args)) ->
+      let ctor_info = try_assoc mangled_name cxx_ctor_map in
+      if ctor_info = None then static_error l "Default constructors have to be defined explicitly." None;
+      let Some (lc, params, pre, pre_tenv, post, terminates, body_opt) = ctor_info in 
+      if body_opt = None then register_prototype_used lc mangled_name None;
+      let args = args |> List.map @@ fun e -> SrcPat (LitPat e) in
+      check_ctor_call l args params pre post terminates h env @@ fun h env _ ->
+      if produce_padding_chunk then
+        let _, _, Some padding_pred_symb, _ = List.assoc struct_name structmap in
+        produce_chunk h (padding_pred_symb, true) [] coef None [addr] None @@ fun h ->
+        cont h env
+      else
+        cont h env
+    | _, _ ->
+      begin fun cont ->
+        match init_opt with 
+        | Some e -> eval_h h env e cont
+        | None -> cont h env @@ get_unique_var_symb "value" ty
+      end @@ fun h env value ->
+      produce_points_to_chunk l h ty coef addr value @@ fun h ->
+      cont h env
 
   let assume_is_of_type l t tp cont =
     match tp with
@@ -2162,55 +2257,35 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           check_call targs h args $. fun h env retval ->
           cont (chunk::h) env retval
       end
-    | CxxNew (l, te, None) (* new without construct, e.g. new int *)
-    | CxxNew (l, te, Some []) -> (* new with empty construct, e.g. new Foo or new Foo() *)
-      (* TODO: constructor calls, placement args, builtin init *)
-      (* will later be replaced with a call to 'check_correct' to check against the constructor spec *)
-      if pure then static_error l "Cannot call 'new' from a pure context." None;
-      let ty = check_pure_type (pn, ilist) [] Real te in
-      let symb_name = match xo with
-        None -> (match ty with StructType n -> n | _ -> "address")
-      | Some x -> x 
-      in
-      let result_type = PtrType ty in
+    | WCxxNew (l, ty, expr_opt) ->
+      if pure then static_error l "Cannot call 'new' from a pure context." None ;
+      let symb_name = 
+        match xo with 
+        | None -> (match ty with StructType n -> n | _ -> "address")
+        | Some x -> x 
+      in 
+      let result_type = PtrType ty in 
       let result = get_unique_var_symb_non_ghost symb_name result_type in
-      assume_neq result (ctxt#mk_intlit 0) @@ fun () ->
-      begin match ty with
-        StructType name ->
-          let (_, (_, _, _, _, new_block_symb, _, _)) = List.assoc name new_block_pred_map in
-          let h = Chunk ((new_block_symb, true), [], real_unit, [result], None)::h in
-          let _, Some fields, _, _ = List.assoc name structmap in
-          (* initialize f:=x if 'f = x' *)
-          (* TODO: constructor inits *)
-          let rec init_fields h fields =
-            match fields with
-              [] -> cont h env result
-            | (field_name, (_, _, field_type, _, init_expr_opt)) :: fields -> 
-              let init_field h initial_value =
-                assume_field h name field_name field_type Real result initial_value real_unit @@ fun h ->
-                init_fields h fields 
-              in
-              match init_expr_opt with
-                None -> 
-                  init_field h @@ get_unique_var_symb_ "value" field_type false
-              | Some init_expr ->
-                with_context (Executing (h, [], expr_loc init_expr, "Executing field initializer")) @@ fun () ->
-                begin fun tcont ->
-                  verify_expr readonly h env None init_expr tcont
-                end @@ fun h _ initial_value -> init_field h initial_value 
-          in
-          init_fields h fields
-        | _ -> 
-          let value = get_unique_var_symb "value" ty in
-          produce_points_to_chunk l h ty real_unit result value $. fun h ->
-            let cont h = cont h env result in
-            begin match try_pointee_pred_symb0 ty with
-              Some (_, _, _, _, _, _, _, array_new_block_symb) ->
-                cont (Chunk ((array_new_block_symb, true), [], real_unit, [result; ctxt#mk_intlit 1], None)::h)
+      let cont h = cont h env result in
+      let verify_call loc args params pre post terminates h env cont = verify_call funcmap eval_h loc (pn, ilist) xo None [] args ([], None, params, ["this", result], pre, post, None, terminates, Static) false false None leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in
+      assume_neq result real_zero @@ fun () ->
+      produce_cxx_object l real_unit result ty eval_h verify_call expr_opt false h env @@ fun h env ->
+      begin
+        match ty with 
+        | StructType struct_name ->
+          let _, (_, _, _, _, new_block_symb, _, _) = List.assoc struct_name new_block_pred_map in
+          produce_chunk h (new_block_symb, true) [] real_unit None [result] None cont
+        | _ ->
+          begin 
+            match try_pointee_pred_symb0 ty with
+            | Some (_, _, _, _, _, _, _, array_new_block_symb) ->
+              produce_chunk h (array_new_block_symb, true) [] real_unit None [result; int_unit_term] None cont
             | _ ->
-              cont (Chunk ((get_pred_symb "new_block", true), [], real_unit, [result; sizeof l ty], None)::h)
-            end
-      end
+              produce_chunk h (get_pred_symb "new_block", true) [] real_unit None [result; sizeof l ty] None cont
+          end
+        end
+    | WCxxConstruct (l, _, _, _) ->
+      static_error l "Stack allocation of objects is not supported yet." None
     | NewObject (l, cn, args, targs) ->
       inheritance_check cn l;
       if pure then static_error l "Object creation is not allowed in a pure context" None;
@@ -2291,7 +2366,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | WFunCall (l, g, targs, es) ->
       let FuncInfo (funenv, fterm, lg, k, tparams, tr, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, fbf, v) = List.assoc g funcmap in
       if heapReadonly && language = CLang && not (startswith g "vf__") && asserts_exclusive_ownership pre then has_heap_effects ();
-      if body = None then register_prototype_used lg g fterm;
+      if body = None then register_prototype_used lg g (Some fterm);
       if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." None;
       if not pure && is_lemma k then static_error l "Cannot call lemma functions in a non-pure context." None;
       if nonghost_callers_only then begin

@@ -1,5 +1,6 @@
 #include "AstSerializer.h"
 #include "clang/AST/Type.h"
+#include <iostream>
 
 namespace vf {
 
@@ -72,6 +73,22 @@ bool TypeSerializer::VisitTypedefType(const clang::TypedefType *type) {
 bool TypeLocSerializer::VisitPointerTypeLoc(const clang::PointerTypeLoc type) {
   auto pointer = _builder.initPointerLoc();
   getSerializer()->serializeTypeLoc(pointer, type.getNextTypeLoc());
+  return true;
+}
+
+void TypeSerializer::serializeReferenceType(stubs::Type::Builder &builder, const clang::ReferenceType *type) {
+  getSerializer()->serializeType(builder, type->getPointeeType().getTypePtr());
+}
+
+bool TypeSerializer::VisitLValueReferenceType(const clang::LValueReferenceType *type) {
+  auto ref = _builder.initLValueRef();
+  serializeReferenceType(ref, type);
+  return true;
+}
+
+bool TypeSerializer::VisitRValueReferenceType(const clang::RValueReferenceType *type) {
+  auto ref = _builder.initRValueRef();
+  serializeReferenceType(ref, type);
   return true;
 }
 
