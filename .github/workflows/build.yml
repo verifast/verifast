@@ -128,7 +128,7 @@ jobs:
               context,
               core,
               assetName: 'verifast-' + process.env.VFVERSION + '-windows.zip',
-              assetPath: 'upload/verifast-nightly.zip',
+              assetPath: 'src/verifast-nightly.zip',
               assetsToDeleteRegex: /-windows\.zip$/,
               tag: 'nightly'
             });

@@ -676,7 +676,7 @@ include .depend
 
 #------------------------------- Release ------------------------------------#
 
-VFVERSION ?= $(shell git describe --tags --always --dirty)
+VFVERSION ?= $(shell git describe --always --dirty)
 export VFVERSION
 
 release: release_core
