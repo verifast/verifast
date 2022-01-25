@@ -2706,9 +2706,6 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               begin 
                 match init with 
                 | WCxxConstruct (l, mangled_name, te, args) ->
-                  (* remove 'this' from env and tenv *)
-                  let ("this", _) :: env = env in
-                  let ("this", _) :: tenv = tenv in
                   let eval_h h env e cont = verify_expr false (pn, ilist) [] false leminfo funcmap sizemap tenv ghostenv h env None e cont @@ fun _ _ _ _ _ -> assert false in
                   let field_addr = field_address l struct_addr struct_name field_name in
                   let verify_call loc args params pre post terminates h env cont = verify_call funcmap eval_h loc (pn, ilist) field_addr_name None [] args ([], None, params, ["this", field_addr], pre, post, None, terminates, Static) false false None leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in
