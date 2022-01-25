@@ -573,8 +573,6 @@ testsuite: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
 	@echo "  MYSH     " testsuite
 	$(SET_ENV); \
         cd ..; bin/mysh -cpus $(NUMCPU) < testsuite.mysh
-	$(SET_ENV); \
-		cd ..; bin/mysh -cpus $(NUMCPU) < testsuite.cxx.mysh
 .PHONY: testsuite
 
 clean::

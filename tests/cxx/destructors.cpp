@@ -27,12 +27,7 @@ struct IntContainer {
 
 /*@
 predicate IntPtrPred(IntPtr *iptr, int i) =
-    iptr->i |-> ?ptr &*& 
-    (
-        ptr == 0
-            ? true
-            : new_block_ints(ptr, 1) &*& integer(ptr, i)
-    );
+    iptr->i |-> ?ptr &*& new_block_ints(ptr, 1) &*& integer(ptr, i);
 @*/
 
 struct IntPtr {
