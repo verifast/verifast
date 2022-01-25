@@ -1,5 +1,4 @@
 #include "AstSerializer.h"
-#include <iostream>
 #include <list>
 
 namespace vf {
@@ -34,7 +33,7 @@ void AstSerializer::serializeTU(stubs::TU::Builder &builder,
   clang::SourceLocation currentLoc;
   for (auto decl : tu->decls()) {
     auto range = decl->getSourceRange();
-    if (range.isValid() /* TODO: needed once we pass headers separately to verifast -> && _SM.isInMainFile(decl->getLocation()) */) {
+    if (range.isValid()) {
       serializeDeclToDeclMap(decl, orphanage);
       currentLoc = range.getEnd();
     }

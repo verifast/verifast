@@ -1,6 +1,5 @@
 #include "AstSerializer.h"
 #include "clang/AST/Stmt.h"
-#include <iostream>
 
 namespace vf {
 
@@ -10,8 +9,7 @@ bool StmtSerializer::VisitCompoundStmt(const clang::CompoundStmt *stmt) {
 
   llvm::SmallVector<StmtNodeOrphan, 32> stmtNodeOrphans;
 
-  auto ser = getSerializer();
-  auto &store = ser->getAnnStore();
+  auto &store = _serializer.getAnnStore();
 
   auto &SM = getSourceManager();
 
@@ -19,14 +17,14 @@ bool StmtSerializer::VisitCompoundStmt(const clang::CompoundStmt *stmt) {
   for (auto s : stmt->body()) {
     std::list<Annotation> anns;
     store.getUntilLoc(anns, s->getBeginLoc(), SM);
-    ser->serializeAnnsToOrphans(anns, orphanage, stmtNodeOrphans);
-    ser->serializeToOrphan(s, orphanage, stmtNodeOrphans);
+    _serializer.serializeAnnsToOrphans(anns, orphanage, stmtNodeOrphans);
+    _serializer.serializeToOrphan(s, orphanage, stmtNodeOrphans);
     currentLoc = s->getEndLoc();
   }
 
   std::list<Annotation> anns;
   store.getUntilLoc(anns, stmt->getRBracLoc(), SM);
-  ser->serializeAnnsToOrphans(anns, orphanage, stmtNodeOrphans);
+  _serializer.serializeAnnsToOrphans(anns, orphanage, stmtNodeOrphans);
 
   auto comp = _builder.initCompound();
   auto children = comp.initStmts(stmtNodeOrphans.size());
@@ -45,7 +43,7 @@ bool StmtSerializer::VisitReturnStmt(const clang::ReturnStmt *stmt) {
 
   if (retVal) {
     auto retExpr = ret.initExpr();
-    getSerializer()->serializeExpr(retExpr, retVal);
+    _serializer.serializeExpr(retExpr, retVal);
   }
   return true;
 }
@@ -57,7 +55,7 @@ bool StmtSerializer::VisitDeclStmt(const clang::DeclStmt *stmt) {
   size_t i(0);
   for (auto it = stmt->decl_begin(); it != stmt->decl_end(); ++it, ++i) {
     auto child = children[i];
-    getSerializer()->serializeDecl(child, *it);
+    _serializer.serializeDecl(child, *it);
   }
   return true;
 }
@@ -65,23 +63,22 @@ bool StmtSerializer::VisitDeclStmt(const clang::DeclStmt *stmt) {
 bool StmtSerializer::VisitExpr(const clang::Expr *stmt) {
   auto expr = _builder.initExpr();
 
-  getSerializer()->serializeExpr(expr, stmt);
+  _serializer.serializeExpr(expr, stmt);
   return true;
 }
 
 bool StmtSerializer::VisitIfStmt(const clang::IfStmt *stmt) {
   auto ifStmt = _builder.initIf();
-  auto ser = getSerializer();
 
   auto cond = ifStmt.initCond();
-  ser->serializeExpr(cond, stmt->getCond());
+  _serializer.serializeExpr(cond, stmt->getCond());
 
   auto then = ifStmt.initThen();
-  ser->serializeStmt(then, stmt->getThen());
+  _serializer.serializeStmt(then, stmt->getThen());
 
   if (stmt->hasElseStorage()) {
     auto el = ifStmt.initElse();
-    ser->serializeStmt(el, stmt->getElse());
+    _serializer.serializeStmt(el, stmt->getElse());
   }
   return true;
 }
@@ -94,19 +91,18 @@ bool StmtSerializer::VisitNullStmt(const clang::NullStmt *stmt) {
 template <class While>
 bool StmtSerializer::visitWhi(stubs::Stmt::While::Builder &builder,
                               const While *stmt) {
-  auto ser = getSerializer();
 
   auto cond = builder.initCond();
-  ser->serializeExpr(cond, stmt->getCond());
+  _serializer.serializeExpr(cond, stmt->getCond());
 
   std::list<Annotation> anns;
-  ser->getAnnStore().getUntilLoc(anns, stmt->getBody()->getBeginLoc(),
+  _serializer.getAnnStore().getUntilLoc(anns, stmt->getBody()->getBeginLoc(),
                                     getSourceManager());
   auto specBuilder = builder.initSpec(anns.size());
   size_t i(0);
   for (auto &ann : anns) {
     auto annBuilder = specBuilder[i++];
-    ser->serializeAnnotationClause(annBuilder, ann);
+    _serializer.serializeAnnotationClause(annBuilder, ann);
   }
 
   auto whileLoc = builder.initWhileLoc();
@@ -114,7 +110,7 @@ bool StmtSerializer::visitWhi(stubs::Stmt::While::Builder &builder,
   serializeSrcRange(whileLoc, {whileBegin, whileBegin}, getSourceManager());
 
   auto body = builder.initBody();
-  ser->serializeStmt(body, stmt->getBody());
+  _serializer.serializeStmt(body, stmt->getBody());
   return true;
 }
 
@@ -140,10 +136,9 @@ bool StmtSerializer::VisitContinueStmt(const clang::ContinueStmt *stmt) {
 
 bool StmtSerializer::VisitSwitchStmt(const clang::SwitchStmt *stmt) {
   auto sw = _builder.initSwitch();
-  auto ser = getSerializer();
 
   auto cond = sw.initCond();
-  ser->serializeExpr(cond, stmt->getCond());
+  _serializer.serializeExpr(cond, stmt->getCond());
 
   llvm::SmallVector<const clang::Stmt *, 4> casesPtrs;
   for (auto swCase = stmt->getSwitchCaseList(); swCase;
@@ -156,17 +151,16 @@ bool StmtSerializer::VisitSwitchStmt(const clang::SwitchStmt *stmt) {
   // clang traverses them in reverse order, so we reverse it again
   for (auto swCase : casesPtrs) {
     auto cas = cases[--i];
-    ser->serializeStmt(cas, swCase);
+    _serializer.serializeStmt(cas, swCase);
   }
   return true;
 }
 
 bool StmtSerializer::VisitCaseStmt(const clang::CaseStmt *stmt) {
   auto swCase = _builder.initCase();
-  auto ser = getSerializer();
 
   auto lhs = swCase.initLhs();
-  ser->serializeExpr(lhs, stmt->getLHS());
+  _serializer.serializeExpr(lhs, stmt->getLHS());
 
   auto rhs = stmt->getRHS();
   // check if it has a rhs. Otherwise 'getSubsStmt' would point to the next case
@@ -174,7 +168,7 @@ bool StmtSerializer::VisitCaseStmt(const clang::CaseStmt *stmt) {
   // in the current case statement.
   if (rhs) {
     auto subStmt = swCase.initStmt();
-    ser->serializeStmt(subStmt, stmt->getSubStmt());
+    _serializer.serializeStmt(subStmt, stmt->getSubStmt());
   }
   return true;
 }
@@ -184,7 +178,7 @@ bool StmtSerializer::VisitDefaultStmt(const clang::DefaultStmt *stmt) {
   auto subStmt = stmt->getSubStmt();
   if (subStmt) {
     auto sub = defStmt.initStmt();
-    getSerializer()->serializeStmt(sub, subStmt);
+    _serializer.serializeStmt(sub, subStmt);
   }
   return true;
 }

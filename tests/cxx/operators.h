@@ -9,6 +9,11 @@ class IntWrapper {
   //@ ensures this->i |-> 0;
   {}
 
+  ~IntWrapper()
+  //@ requires this->i |-> _;
+  //@ ensures true;
+  {}
+
   void setInt(int i);
   //@ requires this->i |-> _;
   //@ ensures this->i |-> i;

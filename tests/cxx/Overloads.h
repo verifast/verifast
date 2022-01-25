@@ -13,6 +13,11 @@ struct Overloads {
   //@ requires true;
   //@ ensures true;
   {}
+  
+  ~Overloads()
+  //@ requires true;
+  //@ ensures true;
+  {}
 
   bool isTrue(bool b);
   //@ requires true;

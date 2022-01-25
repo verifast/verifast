@@ -143,6 +143,9 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     let loc, ptr = decompose_node node in
     f loc ptr
 
+  let method_is_implicit (meth: R.Decl.Method.t): bool =
+    R.Decl.Method.implicit_get meth
+
   (**
     [transl_decl decl] translates [decl] and returns a VeriFast declaration list, representing [decl].
   *)
@@ -155,14 +158,15 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     | Function f          -> [transl_func_decl loc f]
     | Ann a               -> transl_ann_decls loc a
     | Record r            -> transl_record_decl loc r
-    | Method m            -> [transl_meth_decl loc m]
+    | Method m            -> if method_is_implicit m then [] else [transl_meth_decl loc m]
     | Var v               -> [transl_var_decl_global loc v]
     | EnumDecl d          -> [transl_enum_decl loc d]
     | Typedef d           -> [transl_typedef_decl loc d]
-    | Ctor c              -> if (R.Decl.Ctor.implicit_get c) then [] else [transl_ctor_decl loc c]
+    | Ctor c              -> if R.Decl.Ctor.method_get c |> method_is_implicit then [] else [transl_ctor_decl loc c]
                               (* TODO: we currently skip implicit constructors because they can contain lValueRefs/rValueRefs *)
-    | AccessSpec          
-    | DefDestructor       -> [] (* we currently don't care about these *)
+    | Dtor d              -> if R.Decl.Dtor.method_get d |> method_is_implicit then [] else [transl_dtor_decl loc d]
+                              (* TODO: skipping implicit dtors (see ctor) *)
+    | AccessSpec          -> []     
     | Undefined _         -> failwith "Undefined declaration."
     | _                   -> error loc "Unsupported declaration."
 
@@ -231,6 +235,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
   *)
   and transl_type ?(loc: VF.loc = VF.dummy_loc) (ty: R.Type.t): VF.type_expr =
     match R.Type.get ty with
+    | UnionNotInitialized -> union_no_init_err "type"
     | Builtin b     -> transl_builtin_type loc b
     | Pointer p     -> transl_pointer_type loc p
     | PointerLoc p  -> transl_pointer_loc_type loc p
@@ -352,12 +357,13 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
         let this_type = transl_type @@ this_get meth in
         (VF.PtrTypeExpr (VF.dummy_loc, this_type), "this") :: params 
     in
-    name, mangled_name, params, body_opt, anns, return_type
+    let implicit = implicit_get meth in
+    name, mangled_name, params, body_opt, anns, return_type, implicit
 
   (* translates a method to a function and prepends 'this' to the parameters in case it is not a static method *)
   and transl_meth_decl (loc: VF.loc) (meth: R.Decl.Method.t): VF.decl =
     let open R.Decl.Method in
-    let _, mangled_name, params, body_opt, (ng_callers_only, ft, pre_post, terminates), return_type = transl_meth meth in
+    let _, mangled_name, params, body_opt, (ng_callers_only, ft, pre_post, terminates), return_type, _ = transl_meth meth in
     VF.Func (loc, VF.Regular, [], return_type, mangled_name, params, ng_callers_only, ft, pre_post, terminates, body_opt, VF.Static, VF.Public)
 
   and transl_record_ref (loc: VF.loc) (record_ref: R.RecordRef.t): VF.type_ =
@@ -371,7 +377,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
 
   and transl_ctor_decl (loc: VF.loc) (ctor: R.Decl.Ctor.t): VF.decl =
     let open R.Decl.Ctor in
-    let _, mangled_name, this_param :: params, body_opt, (_, _, pre_post_opt, terminates), _ = method_get ctor |> transl_meth in
+    let _, mangled_name, this_param :: params, body_opt, (_, _, pre_post_opt, terminates), _, implicit = method_get ctor |> transl_meth in
     (* the init list also contains member names that are default initialized and don't appear in the init list *)
     (* in that case, no init expr is present (we can always retrieve it from the field default initializer) *)
     let transl_init init =
@@ -380,9 +386,14 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     let body_opt = body_opt |> option_map @@ fun body ->
       let init_list = init_list_get ctor |> capnp_arr_map transl_init in
       init_list, body in
-    let implicit = implicit_get ctor in
     let parent = ctor |> parent_get |> transl_record_ref loc in
     VF.CxxCtor (loc, mangled_name, params, pre_post_opt, terminates, body_opt, implicit, parent)
+
+  and transl_dtor_decl (loc: VF.loc) (dtor: R.Decl.Dtor.t): VF.decl =
+    let open R.Decl.Dtor in 
+    let _, _, [this_param], body_opt, (_, _, pre_post_opt, terminates), _, implicit = method_get dtor |> transl_meth in
+    let parent = dtor |> parent_get |> transl_record_ref loc in
+    VF.CxxDtor (loc, pre_post_opt, terminates, body_opt, implicit, parent)
 
   and transl_field_decl (loc: VF.loc) (field: R.Decl.Field.t): VF.field =
     let open R.Decl.Field in
@@ -704,8 +715,8 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     let ty = transl_type_loc ptr in
     VF.PtrTypeExpr (loc, ty)
 
-  and transl_record_type (loc: VF.loc) (r: R.Type.Record.t): VF.type_expr =
-    let open R.Type.Record in
+  and transl_record_type (loc: VF.loc) (r: R.RecordRef.t): VF.type_expr =
+    let open R.RecordRef in
     let name = name_get r in
     match kind_get r with
     | R.RecordKind.Struc | R.RecordKind.Class -> VF.StructTypeExpr (loc, Some name, None, [])

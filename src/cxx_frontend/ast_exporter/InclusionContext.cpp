@@ -1,7 +1,7 @@
-#include "Context.h"
+#include "InclusionContext.h"
 
 namespace vf {
-void Context::serializeInclDirectivesCore(
+void InclusionContext::serializeInclDirectivesCore(
     capnp::List<stubs::Include, capnp::Kind::STRUCT>::Builder &builder,
     const clang::SourceManager &SM,
     const llvm::ArrayRef<InclDirective> inclDirectives,
@@ -38,7 +38,7 @@ void Context::serializeInclDirectivesCore(
   }
 }
 
-void Context::serializeTUInclDirectives(
+void InclusionContext::serializeTUInclDirectives(
     stubs::TU::Builder &builder, const clang::SourceManager &SM,
     get_first_decl_loc_fn &getFirstDeclLocOpt) const {
   auto mainUID = SM.getFileEntryForID(SM.getMainFileID())->getUID();

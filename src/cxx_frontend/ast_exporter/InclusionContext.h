@@ -5,7 +5,7 @@
 #include <unordered_map>
 
 namespace vf {
-class Context {
+class InclusionContext {
   using get_first_decl_loc_fn = std::function<llvm::Optional<clang::SourceLocation>(unsigned)>;
 
   std::unordered_map<unsigned, Inclusion> _includesMap;
@@ -25,9 +25,9 @@ class Context {
       unsigned fd) const;
 
 public:
-  explicit Context() {}
+  explicit InclusionContext() {}
 
-  KJ_DISALLOW_COPY(Context);
+  KJ_DISALLOW_COPY(InclusionContext);
 
   bool hasInclusions() { return !_includesStack.empty(); }
 

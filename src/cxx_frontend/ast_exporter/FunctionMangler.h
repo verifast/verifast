@@ -11,7 +11,7 @@ class FunctionMangler {
   std::unordered_map<int64_t, std::string> _mangledNames;
 
   llvm::StringRef getMangledName(const clang::NamedDecl *nd, const clang::GlobalDecl &gd) {
-    auto id = nd->getID();
+    auto id = nd->getMostRecentDecl()->getID();
     auto search = _mangledNames.find(id);
     if (search != _mangledNames.end()) {
       return search->second;

@@ -509,50 +509,26 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           verify_expr false h env None w (fun h env _ -> cont h env) econt
       end
       | ExprStmt (CxxDelete (l, arg)) ->
-        let consume_obj l addr t h cont =
-          match t with
-            UnionType un ->
-              let pats = [TermPat addr; TermPat (sizeof l t); dummypat] in
-              consume_chunk rules h [] [] [] l (chars_pred_symb (), true) [] real_unit real_unit_pat (Some 2) pats @@ fun _ h _ [_; _; cs] _ _ _ _ ->
-              cont h
-          | StructType sn -> 
-            let fields, padding_pred_symb_opt = match try_assoc sn structmap with
-              Some (_, Some fields, padding_pred_symb_opt, _) -> fields, padding_pred_symb_opt
-            | _ -> static_error l (Printf.sprintf "Cannot consume an object of type 'struct %s' since this struct type has not been defined" sn) None 
-            in
-            let rec consume_fields chunks h fields =
-              match fields with
-                [] -> cont h
-              | (f, (lf, gh, t, offset, finit)) :: fields ->
-                match t with
-                  StaticArrayType (_, _) | StructType _ | UnionType _ ->
-                    failwith "Fields other than pointers or primitives are not supported yet." (* TODO *)
-                | _ ->
-                  let _, (_, _, _, _, f_symb, _, _) = List.assoc (sn, f) field_pred_map in
-                  consume_chunk rules h [] [] [] l (f_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat addr; dummypat] @@ fun chunk h _ _ _ _ _ _ ->
-                  consume_fields (chunk :: chunks) h fields 
-            in
-            consume_fields [] h fields 
-        in 
         begin match check_expr (pn, ilist) tparams tenv arg with
           _, PtrType Void -> static_error l "Deleting an object through a void pointer is undefined." None;
         | arg, PtrType t ->
           if pure then static_error l "Cannot call a non-pure function from a pure context." None;
-          let arg = ev arg in
+          let addr = ev arg in
           begin match try_pointee_pred_symb0 t with
-            Some (_, _, _, array_pred_symb, _, _, _, array_new_block_pred_symb) ->
-              consume_chunk rules h [] [] [] l (array_new_block_pred_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat arg; TermPat int_unit_term] @@ fun _ h _ [_; n] _ _ _ _ ->
-              consume_chunk rules h [] [] [] l (array_pred_symb, true) [] real_unit real_unit_pat (Some 2) [TermPat arg; TermPat n; dummypat] @@ fun _ h _ _ _ _ _ _ ->
+          | Some (_, _, _, array_pred_symb, _, _, _, array_new_block_pred_symb) ->
+              consume_chunk rules h [] [] [] l (array_new_block_pred_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat addr; TermPat int_unit_term] @@ fun _ h _ [_; n] _ _ _ _ ->
+              consume_chunk rules h [] [] [] l (array_pred_symb, true) [] real_unit real_unit_pat (Some 2) [TermPat addr; TermPat n; dummypat] @@ fun _ h _ _ _ _ _ _ ->
               cont h env
           | None -> 
-            consume_obj l arg t h @@ fun h ->
+            let verify_call loc pre post terminates h env cont = verify_call funcmap eval_h loc (pn, ilist) None None [] [] ([], None, [], ["this", addr], pre, post, None, terminates, Static) false false None leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in 
+            consume_cxx_object l real_unit_pat addr t verify_call false h env @@ fun h env ->
               begin match t with 
-                StructType name ->
+              | StructType name ->
                   let _, (_, _, _, _, new_block_symb, _, _) = List.assoc name new_block_pred_map in
-                  consume_chunk rules h [] [] [] l (new_block_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat arg] @@ fun _ h _ _ _ _ _ _ -> 
+                  consume_chunk rules h [] [] [] l (new_block_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat addr] @@ fun _ h _ _ _ _ _ _ -> 
                   cont h env
               | _ -> 
-                consume_chunk rules h [] [] [] l (get_pred_symb "new_block", true) [] real_unit real_unit_pat (Some 1) [TermPat arg; TermPat (sizeof l t)] @@ fun _ h _ _ _ _ _ _ -> 
+                consume_chunk rules h [] [] [] l (get_pred_symb "new_block", true) [] real_unit real_unit_pat (Some 1) [TermPat addr; TermPat (sizeof l t)] @@ fun _ h _ _ _ _ _ _ -> 
                 cont h env
               end
           end
@@ -2699,12 +2675,11 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     ) in
     gs', lems'
 
-  and verify_cxx_ctor pn ilist gs lems boxes predinstmap funcmap env (struct_name, fields, g, loc, params, init_list, pre, pre_tenv, post, terminates, ss, close_brace_loc) =
+  let verify_cxx_ctor pn ilist gs lems boxes predinstmap funcmap (struct_name, fields, g, loc, params, init_list, pre, pre_tenv, post, terminates, ss, close_brace_loc) =
     let init_field h field_name field_type value struct_addr cont =
       assume_field h struct_name field_name field_type Real struct_addr value real_unit cont
     in
-    let init_fields h struct_addr this_type env ghostenv leminfo sizemap cont =
-      let current_thread = List.assoc current_thread_name env in
+    let init_fields h struct_addr this_type env ghostenv leminfo sizemap current_thread cont  =
       let rec iter h fields =
         match fields with 
         | [] -> cont h
@@ -2724,18 +2699,15 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | Some (init, is_written) ->
               let init_kind, env, tenv =
                 if mem_init && is_written then "member", env, pre_tenv
-                else "default field", [("this", struct_addr); (current_thread_name, current_thread)], [("this", this_type); (current_thread_name, current_thread_type)]
+                else "default field", [("this", struct_addr); current_thread], [("this", this_type); (current_thread_name, current_thread_type)]
               in
               with_context (Executing (h, [], expr_loc init, "Executing " ^ init_kind ^ " initializer")) @@ fun () ->
               let field_addr_name = Some (field_name ^ "_addr") in 
               begin 
                 match init with 
                 | WCxxConstruct (l, mangled_name, te, args) ->
-                  let eval_h h env e cont = verify_expr false (pn,ilist) [] false leminfo funcmap sizemap tenv ghostenv h env None e cont @@ fun _ _ _ _ _ -> assert false in
+                  let eval_h h env e cont = verify_expr false (pn, ilist) [] false leminfo funcmap sizemap tenv ghostenv h env None e cont @@ fun _ _ _ _ _ -> assert false in
                   let field_addr = field_address l struct_addr struct_name field_name in
-                  (* remove 'this' from env and tenv *)
-                  let ("this", _) :: env = env in
-                  let ("this", _) :: tenv = tenv in
                   let verify_call loc args params pre post terminates h env cont = verify_call funcmap eval_h loc (pn, ilist) field_addr_name None [] args ([], None, params, ["this", field_addr], pre, post, None, terminates, Static) false false None leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in
                   produce_cxx_object l real_unit field_addr field_type eval_h verify_call (Some init) true h env @@ fun h env ->
                   iter h rest
@@ -2757,14 +2729,15 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let leminfo, gs', lems', ghostenv = RealFuncInfo (gs, g, terminates), g :: gs, lems, [] in 
     let this_type = List.assoc "this" pre_tenv in
     let this_term = get_unique_var_symb_non_ghost "this" this_type in
-    let env = [(current_thread_name, get_unique_var_symb current_thread_name current_thread_type); "this", this_term] @ penv @ env in
+    let current_thread = (current_thread_name, get_unique_var_symb current_thread_name current_thread_type) in
+    let env = [current_thread; "this", this_term] @ penv in
     let _ = 
       check_should_fail () @@ fun () ->
       execute_branch @@ fun () ->
       with_context (Executing ([], env, loc, sprintf "Verifying constructor '%s'" struct_name)) @@ fun () ->
       assume_neq this_term int_zero_term @@ fun () ->
       produce_asn [] [] ghostenv env pre real_unit None None @@ fun h ghostenv env ->
-      init_fields h this_term this_type env ghostenv leminfo sizemap @@ fun h ->
+      init_fields h this_term this_type env ghostenv leminfo sizemap current_thread @@ fun h ->
       let return_cont h tenv2 env2 retval =
         consume_asn rules [] h ghostenv env post true real_unit @@ fun _ h ghostenv env size_first -> 
         cleanup_heapy_locals (pn, ilist) close_brace_loc h env heapy_ps @@ fun h ->
@@ -2777,6 +2750,57 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let _ = pop () in 
     gs', lems'
+
+  let verify_cxx_dtor pn ilist gs lems boxes predinstmap funcmap (struct_name, fields, g, loc, pre, pre_tenv, post, terminates, ss, close_brace_loc) =
+    let consume_fields struct_addr h env tenv struct_addr ghostenv leminfo sizemap cont =
+      let rec iter h fields =
+        match fields with 
+        | [] -> cont h
+        | (field_name, (field_loc, _, field_type, _, _)) :: rest ->
+          let field_addr_name = Some (field_name ^ "_addr") in 
+          let field_addr = field_address field_loc struct_addr struct_name field_name in
+          begin match field_type with
+          | UnionType struct_name | StructType struct_name ->
+            with_context (Executing (h, [], field_loc, "Executing field destructor")) @@ fun () ->
+            let eval_h h env e cont = verify_expr false (pn, ilist) [] false leminfo funcmap sizemap tenv ghostenv h env None e cont @@ fun _ _ _ _ _ -> assert false in 
+            let verify_call loc pre post terminates h env cont = verify_call funcmap eval_h loc (pn, ilist) field_addr_name None [] [] ([], None, [], ["this", field_addr], pre, post, None, terminates, Static) false false None leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in
+            consume_cxx_object field_loc real_unit_pat field_addr field_type verify_call true h env @@ fun h env ->
+            iter h rest
+          | _ ->
+            with_context (Executing (h, [], field_loc, "Consuming field chunk")) @@ fun () ->
+            let _, (_, _, _, _, field_symb, _, _) = List.assoc (struct_name, field_name) field_pred_map in
+            consume_chunk rules h [] [] [] field_loc (field_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat struct_addr; dummypat] @@ fun _ h _ _ _ _ env _ ->
+            iter h rest
+          end
+      in
+      iter h (List.rev fields)
+    in
+    let _ = push () in 
+    let sizemap, indinfo = [], None in
+    let prolog, ss = partition_ss Regular ss in
+    let leminfo, gs', lems', ghostenv = RealFuncInfo (gs, g, terminates), g :: gs, lems, [] in
+    let this_type = List.assoc "this" pre_tenv in
+    let this_term = get_unique_var_symb_non_ghost "this" this_type in
+    let env = ["this", this_term; current_thread_name, get_unique_var_symb current_thread_name current_thread_type] in
+    let tenv = [("this", this_type); (current_thread_name, current_thread_type)] in
+    let _ = 
+      check_should_fail () @@ fun () ->
+      execute_branch @@ fun () ->
+      with_context (Executing ([], env, loc, sprintf "Verifying destructor '%s'" @@ cxx_dtor_name struct_name)) @@ fun () ->
+      assume_neq this_term int_zero_term @@ fun () ->
+      produce_asn [] [] ghostenv env pre real_unit None None @@ fun h ghostenv env ->
+      let return_cont h tenv2 env2 retval =
+        consume_fields this_term h env tenv this_term ghostenv leminfo sizemap @@ fun h ->
+        consume_asn rules [] h ghostenv env post true real_unit @@ fun _ h ghostenv env size_first ->
+        check_leaks h env close_brace_loc "Destructor leaks heap chunks."
+      in 
+      begin fun tcont ->
+        verify_cont (pn, ilist) [] [] [] boxes true leminfo funcmap predinstmap sizemap pre_tenv ghostenv h env prolog tcont (fun _ _ -> assert false) (fun _ _ _ -> assert false)
+      end @@ fun sizemap tenv ghostenv h env ->
+        verify_c_func_body loc (pn, ilist) [] boxes false leminfo funcmap predinstmap sizemap [] h tenv env ghostenv post ss close_brace_loc return_cont
+    in
+  let _ = pop () in 
+  gs', lems'
       
   let switch_stmt ss env=
     match ss with
@@ -3131,7 +3155,15 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         record_fun_timing loc (sn ^ ".<ctor>") @@ fun () ->
         let _, Some fields, _, _ = List.assoc sn structmap in
         let loc, params, pre, pre_tenv, post, terminates, Some (Some (init_list, (body, close_brace_loc))) = List.assoc mangled_name cxx_ctor_map1 in
-        verify_cxx_ctor pn ilist [] lems boxes predinstmap funcmap [] (sn, fields, mangled_name, loc, params, init_list, pre, pre_tenv, post, terminates, body, close_brace_loc)
+        verify_cxx_ctor pn ilist [] lems boxes predinstmap funcmap (sn, fields, mangled_name, loc, params, init_list, pre, pre_tenv, post, terminates, body, close_brace_loc)
+      in
+      verify_funcs (pn, ilist) boxes gs' lems' ds
+    | CxxDtor (loc, _, _, Some _, _, StructType sn) :: ds ->
+      let gs', lems' =
+        record_fun_timing loc (sn ^ ".<dtor>") @@ fun () ->
+        let _, Some fields, _, _ = List.assoc sn structmap in
+        let loc, pre, pre_tenv, post, terminates, Some (Some (body, close_brace_loc)) = List.assoc sn cxx_dtor_map1 in 
+        verify_cxx_dtor pn ilist [] lems boxes predinstmap funcmap (sn, fields, cxx_dtor_name sn, loc, pre, pre_tenv, post, terminates, body, close_brace_loc)
       in
       verify_funcs (pn, ilist) boxes gs' lems' ds
     | _::ds -> verify_funcs (pn,ilist)  boxes gs lems ds
@@ -3176,7 +3208,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         inductivemap1, purefuncmap1, predctormap1, struct_accessor_map1, malloc_block_pred_map1, new_block_pred_map1, 
         field_pred_map1, predfammap1, predinstmap1, typedefmap1, functypemap1, 
         funcmap1, boxmap, classmap1, interfmap1, classterms1, interfaceterms1, 
-        abstract_types_map1, cxx_ctor_map1
+        abstract_types_map1, cxx_ctor_map1, cxx_dtor_map1
       )
     )
   
