@@ -137,6 +137,9 @@ exception SymbolicExecutionError of string context list * loc * string * string 
 
 let full_name pn n = if pn = "" then n else pn ^ "." ^ n
 
+(* prepends '~' to the given record name *)
+let cxx_dtor_name struct_name = "~" ^ struct_name
+
 type options = {
   option_verbose: int;
   option_disable_overflow_check: bool;

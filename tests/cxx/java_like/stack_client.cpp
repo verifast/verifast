@@ -9,6 +9,5 @@ int main()
     s->push(20);
     int twenty = s->pop();
     int ten = s->pop();
-    //@ leak StackPred(s, _, _);
-    //@ leak new_block_Stack(s);
+    delete s;
 }

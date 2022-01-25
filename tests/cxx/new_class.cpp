@@ -10,6 +10,13 @@ public:
     {
         //@ close EmptyPred(this);
     }
+    
+    ~Empty()
+    //@ requires EmptyPred(this);
+    //@ ensures true;
+    {
+        //@ open EmptyPred(this);
+    }
 };
 
 /*@
@@ -26,6 +33,16 @@ struct Fields {
     //@ ensures FieldsPred(this, 0, false, 0);
     {
         //@ close FieldsPred(this, _, _, _);
+    }
+    
+    ~Fields()
+    //@ requires FieldsPred(this, _, _, _);
+    //@ ensures true;
+    {
+        //@ open FieldsPred(this, _, _, _);
+        if (e) {
+            delete e;
+        }
     }
 };
 

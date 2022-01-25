@@ -1,19 +1,28 @@
 #pragma once
 
 /*@
-predicate nodes(Stack::Node *node, int count, int sum) =
-    node == 0 ?
-        count == 0 && sum == 0
-    :
-        count > 0 &*& new_block_Stack::Node(node) &*&
-        node->value |-> ?value &*& node->next |-> ?next &*&
-        nodes(next, ?ncount, ?nsum) &*& count == ncount + 1 &*& sum == nsum + value;
+predicate nodes(Stack::Node *node; int value, Stack::Node *next, int count, int sum) =
+    node->value |-> value &*& 
+    node->next |-> next &*&
+    (
+        next == 0
+            ? count == 1 &*& sum == value
+            : new_block_Stack::Node(next) &*& 
+              nodes(next, _, _, ?ncount, ?nsum) &*& 
+              count == ncount + 1 &*& 
+              count > 1 &*&
+              sum == nsum + value
+    );
 @*/
 
 /*@
 predicate StackPred(Stack *stack, int count, int sum) =
     stack->head |-> ?head &*&
-    count >= 0 &*& nodes(head, count, sum);
+    (
+        head == 0
+            ? count == 0 &*& sum == 0
+            : new_block_Stack::Node(head) &*& nodes(head, _, _, count, sum) &*& count > 0
+    );
 @*/
 
 class Stack {
@@ -24,12 +33,22 @@ class Stack {
         
         Node(int value) : value(value), next(nullptr)
         //@ requires true;
-        //@ ensures this->value |-> value &*& this->next |-> 0;
-        {}
+        //@ ensures nodes(this, value, 0, 1, value);
+        {
+        }
+
+        ~Node()
+        //@ requires nodes(this, _, _, _, _);
+        //@ ensures true;
+        {
+            if (next) {
+                delete next;
+            }
+        }
 
         int getSum() const;
-        //@ requires nodes(this, ?count, ?sum);
-        //@ ensures nodes(this, count, sum) &*& result == sum;
+        //@ requires nodes(this, ?v, ?n, ?count, ?sum);
+        //@ ensures nodes(this, v, n, count, sum) &*& result == sum;
     };
 
     Node *head;
@@ -39,8 +58,17 @@ class Stack {
     //@ requires true;
     //@ ensures StackPred(this, 0, 0);
     {
-    	//@ close nodes(this->head, 0, 0);
     	//@ close StackPred(this, 0, 0);
+    }
+
+    ~Stack()
+    //@ requires StackPred(this, _, _);
+    //@ ensures true;
+    {
+        //@ open StackPred(this, _, _);
+        if (head) {
+            delete head;
+        }
     }
     
     void push(int value);

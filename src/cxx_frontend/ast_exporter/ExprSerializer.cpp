@@ -30,7 +30,7 @@ bool ExprSerializer::VisitUnaryOperator(const clang::UnaryOperator *uo) {
 #undef CASE_OP
 
   auto operand = builder.initOperand();
-  getSerializer()->serializeExpr(operand, uo->getSubExpr());
+  _serializer.serializeExpr(operand, uo->getSubExpr());
   return true;
 }
 
@@ -81,9 +81,8 @@ bool ExprSerializer::VisitBinaryOperator(const clang::BinaryOperator *bo) {
   auto lhs = builder.initLhs();
   auto rhs = builder.initRhs();
 
-  auto ser = getSerializer();
-  ser->serializeExpr(lhs, bo->getLHS());
-  ser->serializeExpr(rhs, bo->getRHS());
+  _serializer.serializeExpr(lhs, bo->getLHS());
+  _serializer.serializeExpr(rhs, bo->getRHS());
   return true;
 }
 
@@ -158,14 +157,13 @@ bool ExprSerializer::VisitImplicitCastExpr(
 bool ExprSerializer::visitCall(stubs::Expr::Call::Builder &builder,
                                const clang::CallExpr *expr) {
   auto callee = builder.initCallee();
-  auto ser = getSerializer();
-  ser->serializeExpr(callee, expr->getCallee());
+  _serializer.serializeExpr(callee, expr->getCallee());
 
   auto args = builder.initArgs(expr->getNumArgs());
   size_t i(0);
   for (auto *arg : expr->arguments()) {
     auto a = args[i++];
-    ser->serializeExpr(a, arg);
+    _serializer.serializeExpr(a, arg);
   }
   return true;
 }
@@ -181,7 +179,7 @@ bool ExprSerializer::VisitDeclRefExpr(const clang::DeclRefExpr *expr) {
   declRef.setIsClassMember(decl->isCXXClassMember());
   declRef.setName(decl->getQualifiedNameAsString());
   if (auto *func = llvm::dyn_cast<clang::FunctionDecl>(decl)) {
-    declRef.setMangledName(getSerializer()->getMangledFunc(func).str());
+    declRef.setMangledName(_serializer.getMangledFunc(func).str());
   }
   return true;
 }
@@ -191,8 +189,7 @@ bool ExprSerializer::VisitMemberExpr(const clang::MemberExpr *expr) {
 
   auto base = mem.initBase();
   auto baseExpr = expr->getBase();
-  auto ser = getSerializer();
-  ser->serializeExpr(base, baseExpr);
+  _serializer.serializeExpr(base, baseExpr);
 
   mem.setBaseIsPointer(baseExpr->getType().getTypePtr()->isPointerType());
 
@@ -200,7 +197,7 @@ bool ExprSerializer::VisitMemberExpr(const clang::MemberExpr *expr) {
   mem.setName(decl->getNameAsString());
   mem.setQualName(decl->getQualifiedNameAsString());
   if (auto *meth = llvm::dyn_cast<clang::CXXMethodDecl>(decl)) {
-    mem.setMangledName(ser->getMangledFunc(meth).str());
+    mem.setMangledName(_serializer.getMangledFunc(meth).str());
   }
   mem.setArrow(expr->isArrow());
   return true;
@@ -219,42 +216,40 @@ bool ExprSerializer::VisitCXXThisExpr(const clang::CXXThisExpr *expr) {
 
 bool ExprSerializer::VisitCXXNewExpr(const clang::CXXNewExpr *expr) {
   auto n = _builder.initNew();
-  auto ser = getSerializer();
 
   if (expr->hasInitializer()) {
     auto e = n.initExpr();
-    ser->serializeExpr(e, expr->getInitializer());
+    _serializer.serializeExpr(e, expr->getInitializer());
   }
 
   auto type = n.initType();
-  ser->serializeType(type, expr->getAllocatedType().getTypePtr());
+  _serializer.serializeType(type, expr->getAllocatedType().getTypePtr());
 
   return true;
 }
 
 bool ExprSerializer::VisitCXXDeleteExpr(const clang::CXXDeleteExpr *expr) {
   auto d = _builder.initDelete();
-  getSerializer()->serializeExpr(d, expr->getArgument());
+  _serializer.serializeExpr(d, expr->getArgument());
   return true;
 }
 
 bool ExprSerializer::VisitCXXConstructExpr(
     const clang::CXXConstructExpr *expr) {
-  auto ser = getSerializer();
   auto construct = _builder.initConstruct();
   auto ctor = expr->getConstructor();
   construct.setName(ctor->getNameAsString());
-  construct.setMangledName(ser->getMangledCtorName(ctor).str());
+  construct.setMangledName(_serializer.getMangledCtorName(ctor).str());
   auto args = construct.initArgs(expr->getNumArgs());
 
   size_t i(0);
   for (auto arg : expr->arguments()) {
     auto a = args[i++];
-    ser->serializeExpr(a, arg);
+    _serializer.serializeExpr(a, arg);
   }
 
   auto type = construct.initType();
-  ser->serializeType(type, expr->getType().getTypePtr());
+  _serializer.serializeType(type, expr->getType().getTypePtr());
 
   return true;
 }

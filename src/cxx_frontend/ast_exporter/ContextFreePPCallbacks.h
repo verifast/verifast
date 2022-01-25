@@ -1,5 +1,5 @@
 #pragma once
-#include "Context.h"
+#include "InclusionContext.h"
 #include "kj/common.h"
 #include "clang/Lex/PPCallbacks.h"
 #include <unordered_set>
@@ -33,7 +33,7 @@ class ContextFreePPCallbacks : public clang::PPCallbacks {
                                   const clang::MacroDefinition &MD);
   };
 
-  Context &_context;
+  InclusionContext &_context;
   clang::Preprocessor &_PP;
   const std::unordered_set<std::string> _whiteList;
   PPDiags _diags;
@@ -44,7 +44,7 @@ class ContextFreePPCallbacks : public clang::PPCallbacks {
                        const clang::MacroDefinition &MD);
 
 public:
-  explicit ContextFreePPCallbacks(Context &context, clang::Preprocessor &PP,
+  explicit ContextFreePPCallbacks(InclusionContext &context, clang::Preprocessor &PP,
                                   const std::vector<std::string> &whiteList)
       : _context(context), _PP(PP), _whiteList(whiteList.begin(), whiteList.end()), _diags(PP) {
     auto mainEntry = SM().getFileEntryForID(SM().getMainFileID());

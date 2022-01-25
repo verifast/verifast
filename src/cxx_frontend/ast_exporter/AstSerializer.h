@@ -1,6 +1,6 @@
 #pragma once
 #include "AnnotationStore.h"
-#include "Context.h"
+#include "InclusionContext.h"
 #include "NodeSerializer.h"
 #include "capnp/orphan.h"
 #include "llvm/ADT/SmallVector.h"
@@ -35,7 +35,7 @@ using DeclNodeOrphan = NodeOrphan<stubs::Decl>;
 class AstSerializer {
   clang::ASTContext &_context;
   clang::SourceManager &_SM;
-  const Context &_inclContext;
+  const InclusionContext &_inclContext;
 
   FunctionMangler _funcMangler;
 
@@ -50,7 +50,7 @@ class AstSerializer {
 
 public:
   explicit AstSerializer(clang::ASTContext &context, AnnotationStore &store,
-                         const Context &inclContext)
+                         const InclusionContext &inclContext)
       : _context(context), _SM(context.getSourceManager()),
         _inclContext(inclContext), _AS(context.getSourceManager()),
         _funcMangler(context),
@@ -67,7 +67,7 @@ public:
    */
   void serializeDecl(DeclSerializer::NodeBuilder &builder,
                      const clang::Decl *decl) {
-    DeclSerializer ser(_context, this, builder);
+    DeclSerializer ser(_context, *this, builder);
     ser.serializeNode(decl, decl->getSourceRange(), decl->getDeclKindName());
   }
 
@@ -78,7 +78,7 @@ public:
    */
   void serializeStmt(StmtSerializer::NodeBuilder &builder,
                      const clang::Stmt *stmt) {
-    StmtSerializer ser(_context, this, builder);
+    StmtSerializer ser(_context, *this, builder);
     ser.serializeNode(stmt, stmt->getSourceRange(), stmt->getStmtClassName());
   }
 
@@ -89,7 +89,7 @@ public:
    */
   void serializeExpr(ExprSerializer::NodeBuilder &builder,
                      const clang::Expr *expr) {
-    ExprSerializer ser(_context, this, builder);
+    ExprSerializer ser(_context, *this, builder);
     ser.serializeNode(expr, expr->getSourceRange(), expr->getStmtClassName());
   }
 
@@ -101,7 +101,7 @@ public:
    */
   void serializeTypeLoc(TypeLocSerializer::NodeBuilder &builder,
                         const clang::TypeLoc typeLoc) {
-    TypeLocSerializer ser(_context, this, builder);
+    TypeLocSerializer ser(_context, *this, builder);
     ser.serializeNode(typeLoc);
   }
 
@@ -122,7 +122,7 @@ public:
    */
   void serializeType(TypeSerializer::DescBuilder &builder,
                      const clang::Type *type) {
-    TypeSerializer ser(_context, this, builder);
+    TypeSerializer ser(_context, *this, builder);
     ser.serialize(type);
   }
 
@@ -138,7 +138,7 @@ public:
   void serializeNodeDecomposed(stubs::Loc::Builder &locBuilder,
                                stubs::Decl::Builder &builder,
                                const clang::Decl *decl) {
-    DeclSerializer ser(_context, this, locBuilder, builder);
+    DeclSerializer ser(_context, *this, locBuilder, builder);
     ser.serializeNode(decl, decl->getSourceRange(), decl->getDeclKindName());
   }
 
@@ -154,7 +154,7 @@ public:
   void serializeNodeDecomposed(stubs::Loc::Builder &locBuilder,
                                stubs::Stmt::Builder &builder,
                                const clang::Stmt *stmt) {
-    StmtSerializer ser(_context, this, locBuilder, builder);
+    StmtSerializer ser(_context, *this, locBuilder, builder);
     ser.serializeNode(stmt, stmt->getSourceRange(), stmt->getStmtClassName());
   }
 

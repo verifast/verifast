@@ -470,13 +470,60 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let rec iter_ps (ctor_map, ctors_implemented) ps =
       match ps with 
-      | PackageDecl(loc, pn, ilist, ds) :: rest -> rest |> iter_ps @@ iter pn ilist ctor_map ctors_implemented ds
+      | PackageDecl (loc, pn, ilist, ds) :: rest -> rest |> iter_ps @@ iter pn ilist ctor_map ctors_implemented ds
       | [] -> ctor_map, ctors_implemented
     in
     iter_ps ([], []) ps
 
   let cxx_ctor_map = cxx_ctor_map1 @ cxx_ctor_map0
   let prototypes_implemented = prototypes_implemented @ ctors_implemented
+
+  let cxx_dtor_map1, dtors_implemented =
+    let rec iter pn ilist dtor_map dtors_implemented ds =
+      match ds with
+      | [] -> dtor_map, List.rev dtors_implemented
+      | CxxDtor (loc, _, _, _, _, UnionType _) :: _ -> static_error loc "Union destructors are not supported yet." None 
+      | CxxDtor (loc, contract_opt, terminates, body_opt, implicit, StructType struct_name) :: rest ->
+        let dtor_name = cxx_dtor_name struct_name in
+        if report_skipped_stmts || match contract_opt with Some ((False _ | ExprAsn (_, False _)), _) -> false | _ -> true then begin match body_opt with None -> () | Some (ss, _) -> reportStmts ss end;
+        let this_type = PtrType (StructType struct_name) in
+        let None, [], None, pre, pre_tenv, post =
+          check_func_header pn ilist [] ["this", this_type] [] loc Regular [] None struct_name None [] false None contract_opt terminates body_opt
+        in
+        begin 
+          match try_assoc2 struct_name dtor_map cxx_dtor_map0 with 
+          | None ->
+            iter pn ilist 
+              ((struct_name, (loc, pre, pre_tenv, post, terminates, body_opt |> option_map @@ fun b -> Some b)) :: dtor_map)
+              dtors_implemented
+              rest
+          | Some (_, _, _, _, _, Some _) ->
+            (* We should never reach this because Clang would not allow it, but let's check it to be sure *)
+            if body_opt = None then 
+              static_error loc "Destructor prototype must precede constructor implementation." None
+            else 
+              static_error loc "Duplicate destructor implementation." None 
+          | Some (loc0, pre0, pre_tenv0, post0, terminates0, None) ->
+            if body_opt = None then static_error loc "Duplicate destructor prototype." None;
+            check_func_header_compat loc ("Destructor '" ^ struct_name ^ "'") "Destructor prototype implementation check" ["this", get_unique_var_symb_non_ghost "this" this_type] 
+              (Regular, [], None, [], false, pre, post, [], terminates) 
+              (Regular, [], None, [], false, [], [], pre0, post0, [], terminates0);
+            iter pn ilist 
+              ((struct_name, (loc, pre, pre_tenv, post, terminates, body_opt |> option_map @@ fun b -> Some b)) :: dtor_map) 
+              ((dtor_name, loc0) :: dtors_implemented)
+              rest
+        end
+      | _ :: rest -> iter pn ilist dtor_map dtors_implemented rest 
+    in 
+    let rec iter_ps (dtor_map, dtors_implemented) ps =
+      match ps with 
+      | PackageDecl (loc, pn, ilist, ds) :: rest -> rest |> iter_ps @@ iter pn ilist dtor_map dtors_implemented ds 
+      | [] -> dtor_map, dtors_implemented
+    in 
+    iter_ps ([], []) ps
+
+  let cxx_dtor_map = cxx_dtor_map1 @ cxx_dtor_map0
+  let prototypes_implemented = prototypes_implemented @ dtors_implemented
 
   let register_prototype_used l g gterm_opt =
     if not (List.mem (g, l) !prototypes_used) then
@@ -1573,6 +1620,25 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | None -> cont h env @@ get_unique_var_symb "value" ty
       end @@ fun h env value ->
       produce_points_to_chunk l h ty coef addr value @@ fun h ->
+      cont h env
+
+  let consume_cxx_object l coefpat addr ty check_dtor_call consume_padding_chunk h env cont =
+    match ty with 
+    | UnionType _ -> static_error l "Union destruction is not supported yet." None 
+    | StructType struct_name ->
+      let dtor_info = try_assoc struct_name cxx_dtor_map in 
+      if dtor_info = None then static_error l "Default destructors have to be defined explicitely." None;
+      let Some (ld, pre, pre_tenv, post, terminates, body_opt) = dtor_info in 
+      if body_opt = None then register_prototype_used ld (cxx_dtor_name struct_name) None;
+      check_dtor_call l pre post terminates h env @@ fun h env _ ->
+      if consume_padding_chunk then 
+        let _, _, Some padding_pred_symb, _ = List.assoc struct_name structmap in 
+        consume_chunk rules h [] [] [] l (padding_pred_symb, true) [] real_unit coefpat (Some 1) [TermPat addr] @@ fun _ h _ _ _ _ env _ ->
+        cont h env
+      else 
+        cont h env
+    | _ ->
+      consume_points_to_chunk rules h [] [] [] l ty real_unit coefpat addr dummypat @@ fun _ h _ _ _ env _ ->
       cont h env
 
   let assume_is_of_type l t tp cont =

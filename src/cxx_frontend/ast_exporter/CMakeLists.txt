@@ -13,7 +13,7 @@ add_executable(vf-cxx-ast-exporter
   ExprSerializer.cpp
   TypeSerializer.cpp
   AstSerializer.cpp
-  Context.cpp
+  InclusionContext.cpp
   Annotation.cpp
   CommentProcessor.cpp
   ContextFreePPCallbacks.cpp

@@ -14,6 +14,13 @@ struct MyInt {
   {
     //@ close MyIntPred(this, this->_i);
   }
+  
+  ~MyInt()
+  //@ requires MyIntPred(this, _);
+  //@ ensures true;
+  {
+    //@ open MyIntPred(this, _);
+  }
 };
 
 /*@
@@ -43,4 +50,11 @@ struct Test {
   Test(int i);
   //@ requires true;
   //@ ensures TestPred(this, i, _);
+  
+  ~Test()
+  //@ requires TestPred(this, _, _);
+  //@ ensures true;
+  {
+    //@ open TestPred(this, _, _);
+  }
 };

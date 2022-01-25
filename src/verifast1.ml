@@ -647,6 +647,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * asn (* post *)
       * bool (* terminates *)
       * ((string * (expr * bool (* is written *)) option) list (* init list *) * (stmt list * loc)) option option
+    type cxx_dtor_info =
+        loc 
+      * asn (* pre *)
+      * type_ map (* tenv after pre *)
+      * asn (* post *)
+      * bool (* terminates *)
+      * (stmt list * loc) option option
     type struct_info =
         loc
       * (string * struct_field_info) list option (* None if struct without body *)
@@ -894,6 +901,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * termnode map (* interfaceterms *)
       * abstract_type_info map
       * cxx_ctor_info map
+      * cxx_dtor_info map
     
     type implemented_prototype_info =
         string
@@ -997,7 +1005,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (classterms0: termnode map),
       (interfaceterms0: termnode map),
       (abstract_types_map0: abstract_type_info map),
-      (cxx_ctor_map0: cxx_ctor_info map)
+      (cxx_ctor_map0: cxx_ctor_info map),
+      (cxx_dtor_map0: cxx_dtor_info map)
       : maps
     ) =
 
@@ -1013,8 +1022,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let id x = x in
     let merge_maps l
-      (structmap, unionmap, enummap, globalmap, modulemap, importmodulemap, inductivemap, purefuncmap, predctormap, struct_accessor_map, malloc_block_pred_map, new_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, abstract_types_map, cxx_ctor_map)
-      (structmap0, unionmap0, enummap0, globalmap0, modulemap0, importmodulemap0, inductivemap0, purefuncmap0, predctormap0, struct_accessor_map0, malloc_block_pred_map0, new_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, abstract_types_map0, cxx_ctor_map0)
+      (structmap, unionmap, enummap, globalmap, modulemap, importmodulemap, inductivemap, purefuncmap, predctormap, struct_accessor_map, malloc_block_pred_map, new_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, abstract_types_map, cxx_ctor_map, cxx_dtor_map)
+      (structmap0, unionmap0, enummap0, globalmap0, modulemap0, importmodulemap0, inductivemap0, purefuncmap0, predctormap0, struct_accessor_map0, malloc_block_pred_map0, new_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, abstract_types_map0, cxx_ctor_map0, cxx_dtor_map0)
       =
       (
 (*     append_nodups structmap structmap0 id l "struct", *)
@@ -1045,7 +1054,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
        classterms @ classterms0, 
        interfaceterms @ interfaceterms0,
        append_nodups abstract_types_map abstract_types_map0 id l "abstract type",
-       append_nodups cxx_ctor_map cxx_ctor_map0 id l "constructor")
+       append_nodups cxx_ctor_map cxx_ctor_map0 id l "constructor",
+       append_nodups cxx_dtor_map cxx_dtor_map0 id l "destructor")
     in
 
     (** [merge_header_maps maps0 headers] returns [maps0] plus all elements transitively declared in [headers]. *)
@@ -1124,7 +1134,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
     in
 
-    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
+    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
     
     let (maps0, headers_included) =
       if include_prelude then

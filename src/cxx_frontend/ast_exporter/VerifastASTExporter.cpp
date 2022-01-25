@@ -9,7 +9,7 @@
 #include "clang/Frontend/FrontendActions.h"
 #include "clang/Tooling/CommonOptionsParser.h"
 #include "clang/Tooling/Tooling.h"
-#include "Context.h"
+#include "InclusionContext.h"
 #ifdef _WIN32
 #include <io.h>
 #include <fcntl.h>
@@ -33,7 +33,7 @@ using Builder = stubs::TU::Builder;
 class VerifastASTConsumer : public clang::ASTConsumer {
   Builder &_builder;
   AnnotationStore &_store;
-  const Context &_context;
+  const InclusionContext &_context;
 
 public:
   void HandleTranslationUnit(clang::ASTContext &context) override {
@@ -41,7 +41,7 @@ public:
     serializer.serializeTU(_builder, context.getTranslationUnitDecl());
   }
 
-  explicit VerifastASTConsumer(Builder &builder, AnnotationStore &store, const Context &context)
+  explicit VerifastASTConsumer(Builder &builder, AnnotationStore &store, const InclusionContext &context)
       : _builder(builder), _store(store), _context(context) {}
   VerifastASTConsumer(Builder &&builder, AnnotationStore &&store) = delete;
 };
@@ -50,7 +50,7 @@ class VerifastFrontendAction : public clang::ASTFrontendAction {
   Builder _builder;
   AnnotationStore _store;
   CommentProcessor _commentProcessor;
-  Context _context;
+  InclusionContext _context;
 
 public:
   std::unique_ptr<clang::ASTConsumer>
