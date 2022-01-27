@@ -17,12 +17,23 @@ predicate nodes(Stack::Node *node; int value, Stack::Node *next, int count, int 
 
 /*@
 predicate StackPred(Stack *stack, int count, int sum) =
+    stack != 0 &*&
     stack->head |-> ?head &*&
     (
         head == 0
             ? count == 0 &*& sum == 0
             : new_block_Stack::Node(head) &*& nodes(head, _, _, count, sum) &*& count > 0
     );
+@*/
+
+/*@
+lemma_auto void StackPred_inv()
+    requires [?f]StackPred(?stack, ?count, ?sum);
+    ensures [f]StackPred(stack, count, sum) &*& stack != 0;
+{
+    open [f]StackPred(stack, count, sum);
+    close [f]StackPred(stack, count, sum);
+}
 @*/
 
 class Stack {

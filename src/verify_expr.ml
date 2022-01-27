@@ -1602,7 +1602,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | UnionType _, _ -> static_error l "Union construction is not supported yet." None 
     | StructType struct_name, Some (WCxxConstruct (lc, mangled_name, _, args)) ->
       let ctor_info = try_assoc mangled_name cxx_ctor_map in
-      if ctor_info = None then static_error l "Default constructors have to be defined explicitly." None;
+      if ctor_info = None then static_error l "No matching constructor is defined explicitly." None;
       let Some (lc, params, pre, pre_tenv, post, terminates, body_opt) = ctor_info in 
       if body_opt = None then register_prototype_used lc mangled_name None;
       let args = args |> List.map @@ fun e -> SrcPat (LitPat e) in
@@ -1627,7 +1627,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | UnionType _ -> static_error l "Union destruction is not supported yet." None 
     | StructType struct_name ->
       let dtor_info = try_assoc struct_name cxx_dtor_map in 
-      if dtor_info = None then static_error l "Default destructors have to be defined explicitely." None;
+      if dtor_info = None then static_error l "No matching destructor is defined explicitely." None;
       let Some (ld, pre, pre_tenv, post, terminates, body_opt) = dtor_info in 
       if body_opt = None then register_prototype_used ld (cxx_dtor_name struct_name) None;
       check_dtor_call l pre post terminates h env @@ fun h env _ ->
