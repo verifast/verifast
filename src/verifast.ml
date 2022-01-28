@@ -164,15 +164,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               consume_c_object closeBraceLoc addr t h true $. fun h ->
               free_locals_core h locals
             | RefType t -> (* free locals of which the address is taken *)
-              begin fun cont ->
-                match language, dialect with 
-                | CLang, Some Cxx ->
-                  let verify_dtor_call = verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env addr (Some x) in
-                  consume_cxx_object l real_unit_pat addr t verify_dtor_call true h env @@ fun h env -> 
-                  cont h
-                | _ -> 
-                  consume_c_object closeBraceLoc addr t h true cont
-              end @@ fun h ->
+              let verify_dtor_call = verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env addr (Some x) in
+              consume_cxx_object closeBraceLoc real_unit_pat addr t verify_dtor_call true h env @@ fun h env -> 
               free_locals_core h locals
       in
       match locals with
@@ -671,15 +664,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 None -> Default
               | Some e -> Expr e
             in
-            begin match language, dialect with 
-            | CLang, Some Cxx ->
-              let verify_ctor_call = verify_ctor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env addr (Some x) in 
-              produce_cxx_object l coef addr tp eval_h verify_ctor_call init true h env @@ fun h _ ->
-              iter h globals
-            | _ ->
-              produce_c_object l coef addr tp eval_h init true true h env $. fun h env ->
-              iter h globals
-            end
+            let verify_ctor_call = verify_ctor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env addr (Some x) in 
+            produce_cxx_object l coef addr tp eval_h verify_ctor_call init true true h env @@ fun h _ ->
+            iter h globals
         in
         iter h globalmap
       end $. fun h ->
@@ -714,15 +701,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match globals with
             [] -> cont h
           | (x, (lg, tp, addr, init))::globals ->
-            begin match language, dialect with 
-            | CLang, Some Cxx ->
-              let verify_dtor_call = verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env addr (Some x) in
-              consume_cxx_object l real_unit_pat addr tp verify_dtor_call true h env @@ fun h _ -> 
-              iter h globals
-            | _ ->
-              consume_c_object l addr tp h true $. fun h ->
-              iter h globals
-            end
+            let verify_dtor_call = verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env addr (Some x) in
+            consume_cxx_object l real_unit_pat addr tp verify_dtor_call true h env @@ fun h _ -> 
+            iter h globals
         in
         iter h globalmap
       end $. fun h ->
@@ -747,19 +728,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             begin let Some block = !blockPtr in if not (List.mem x !block) then block := x::!block end;
             let addr_name = x ^ "_addr" in 
             let addr = get_unique_var_symb_non_ghost addr_name (PtrType Void) in
-            begin fun cont ->
-              let init =
-                match e with
-                | None -> Unspecified
-                | Some e -> Expr (check_c_initializer (pn,ilist) tparams tenv e t)
-              in
-              match language, dialect with 
-              | CLang, Some Cxx ->
-                let verify_ctor_call = verify_ctor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env addr (Some addr_name) in
-                produce_cxx_object l real_unit addr t eval_h verify_ctor_call init true h env cont
-              | _ ->
-                produce_c_object l real_unit addr t eval_h init true true h env cont
-            end @@ fun h env ->
+            let init =
+              match e with
+              | None -> Unspecified
+              | Some e -> Expr (check_c_initializer (pn,ilist) tparams tenv e t)
+            in
+            let verify_ctor_call = verify_ctor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env addr (Some addr_name) in
+            produce_cxx_object l real_unit addr t eval_h verify_ctor_call init true true h env @@ fun h env ->
             iter h ((x, envTp)::tenv) ghostenv ((x, addr)::env) xs
           in
           match t with
@@ -2793,7 +2768,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let eval_h h env e cont = verify_expr false (pn, ilist) [] false leminfo funcmap sizemap tenv ghostenv h env None e cont @@ fun _ _ _ _ _ -> assert false in
                   let field_addr = field_address l struct_addr struct_name field_name in
                   let verify_ctor_call = verify_ctor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env field_addr field_addr_name in
-                  produce_cxx_object l real_unit field_addr field_type eval_h verify_ctor_call (Expr init) true h env @@ fun h env ->
+                  produce_cxx_object l real_unit field_addr field_type eval_h verify_ctor_call (Expr init) false true h env @@ fun h env ->
                   iter h rest
                 | _ ->
                   begin fun cont ->
