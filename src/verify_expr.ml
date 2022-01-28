@@ -1597,10 +1597,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let consume_c_object l addr tp h consumePaddingChunk cont =
     consume_c_object_core l real_unit_pat addr tp h consumePaddingChunk $. fun chunks h value -> cont h
 
-  let produce_cxx_object l coef addr ty eval_h check_ctor_call init_opt produce_padding_chunk h env cont =
-    match ty, init_opt with 
+  let produce_cxx_object l coef addr ty eval_h check_ctor_call init produce_padding_chunk h env cont =
+    match ty, init with 
     | UnionType _, _ -> static_error l "Union construction is not supported yet." None 
-    | StructType struct_name, Some (WCxxConstruct (lc, mangled_name, _, args)) ->
+    | StructType struct_name, Expr (WCxxConstruct (lc, mangled_name, _, args)) ->
       let ctor_info = try_assoc mangled_name cxx_ctor_map in
       if ctor_info = None then static_error l "No matching constructor is defined explicitly." None;
       let Some (lc, params, pre, pre_tenv, post, terminates, body_opt) = ctor_info in 
@@ -1613,14 +1613,17 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         cont h env
       else
         cont h env
-    | _, _ ->
+    | _ ->
+      produce_c_object l coef addr ty eval_h init false produce_padding_chunk h env cont
+    (* | _ ->
       begin fun cont ->
-        match init_opt with 
-        | Some e -> eval_h h env e cont
-        | None -> cont h env @@ get_unique_var_symb "value" ty
+        match init with 
+        | Default -> cont h env int_zero_term
+        | Expr e -> eval_h h env e cont
+        | Unspecified -> cont h env @@ get_unique_var_symb "value" ty
       end @@ fun h env value ->
       produce_points_to_chunk l h ty coef addr value @@ fun h ->
-      cont h env
+      cont h env *)
 
   let consume_cxx_object l coefpat addr ty check_dtor_call consume_padding_chunk h env cont =
     match ty with 
@@ -2333,9 +2336,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let result_type = PtrType ty in 
       let result = get_unique_var_symb_non_ghost symb_name result_type in
       let cont h = cont h env result in
+      let init = 
+        match expr_opt with 
+        | None -> Unspecified
+        | Some e -> Expr e 
+      in 
       let verify_call loc args params pre post terminates h env cont = verify_call funcmap eval_h loc (pn, ilist) xo None [] args ([], None, params, ["this", result], pre, post, None, terminates, Static) false false None leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in
       assume_neq result real_zero @@ fun () ->
-      produce_cxx_object l real_unit result ty eval_h verify_call expr_opt false h env @@ fun h env ->
+      produce_cxx_object l real_unit result ty eval_h verify_call init false h env @@ fun h env ->
       begin
         match ty with 
         | StructType struct_name ->
