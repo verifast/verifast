@@ -251,6 +251,10 @@ lemma_auto(nth(i, update(j, y, xs))) void nth_update<t>(int i, int j, t y, list<
   requires 0 <= i && i < length(xs) && 0 <= j && j < length(xs);
   ensures nth(i, update(j, y, xs)) == (i == j ? y : nth(i, xs));
     
+lemma_auto(index_of(x, update(j, y, xs))) void index_of_update<t>(t x, int j, t y, list<t> xs);
+  requires 0 <= j && j < length(xs);
+  ensures index_of(x, update(j, y, xs)) == (x == y ? j : index_of(x, xs));
+  
 lemma_auto(length(update(i, y, xs))) void length_update<t>(int i, t y, list<t> xs);
   requires true;
   ensures length(update(i, y, xs)) == length(xs);
