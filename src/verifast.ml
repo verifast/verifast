@@ -73,6 +73,60 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont econt =
     verify_expr (readonly, readonly) (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont econt
+
+  (*
+    [eval_h] has type (eval_h_type):
+      h ->                  heap
+      env ->                environment
+      e ->                  expression
+      (h -> env -> value)   continuation
+
+    [verify_call] should have type:
+      eval_h ->             eval_h_type
+      rest...
+      
+    returns a function with type:
+      rest...
+
+    E.g.:
+      - [verify_call] has type:
+        (h -> env -> e -> (h -> env -> value)) -> 'a -> 'b
+      - return a function with type:
+        'a -> 'b
+  *)
+  let verify_xtor_call_core (pn, ilist) verify_call leminfo funcmap sizemap tenv ghostenv =
+    let eval_h h env e cont = verify_expr false (pn, ilist) [] false leminfo funcmap sizemap tenv ghostenv h env None e cont @@ fun _ _ _ _ _ -> assert false in 
+    verify_call eval_h
+
+  (*
+    returns a function with type:
+      loc ->                location
+      pre ->                asn
+      post ->               asn
+      terminates ->         bool
+      h ->                  heap
+      env ->                environment
+      (h -> env -> result)  continuation
+  *)
+  let verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env this_addr xo =
+    let verify_call eval_h loc pre post terminates h env cont = verify_call funcmap eval_h loc (pn, ilist) xo None [] [] ([], None, [], ["this", this_addr], pre, post, None, terminates, Static) false false None leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in
+    verify_xtor_call_core (pn, ilist) verify_call leminfo funcmap sizemap tenv ghostenv
+
+  (*
+    returns a function with type:
+      loc ->                location
+      args ->               ctor arguments
+      params ->             ctor parameters
+      pre ->                asn
+      post ->               asn
+      terminates ->         bool
+      h ->                  heap
+      env ->                environment
+      (h -> env -> result)  continuation
+  *)
+  let verify_ctor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env this_addr xo =
+    let verify_call eval_h loc args params pre post terminates h env cont = verify_call funcmap eval_h loc (pn, ilist) xo None [] args ([], None, params, ["this", this_addr], pre, post, None, terminates, Static) false false None leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in
+    verify_xtor_call_core (pn, ilist) verify_call leminfo funcmap sizemap tenv ghostenv
   
   let rec assume_handle_invs bcn hpmap hname hpInvEnv h cont = 
       if hname = bcn ^ "_handle" then
@@ -110,7 +164,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               consume_c_object closeBraceLoc addr t h true $. fun h ->
               free_locals_core h locals
             | RefType t -> (* free locals of which the address is taken *)
-              consume_c_object closeBraceLoc addr t h true $. fun h ->
+              let verify_dtor_call = verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env addr (Some x) in
+              consume_cxx_object closeBraceLoc real_unit_pat addr t verify_dtor_call true h env @@ fun h env -> 
               free_locals_core h locals
       in
       match locals with
@@ -520,8 +575,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               consume_chunk rules h [] [] [] l (array_pred_symb, true) [] real_unit real_unit_pat (Some 2) [TermPat addr; TermPat n; dummypat] @@ fun _ h _ _ _ _ _ _ ->
               cont h env
           | None -> 
-            let verify_call loc pre post terminates h env cont = verify_call funcmap eval_h loc (pn, ilist) None None [] [] ([], None, [], ["this", addr], pre, post, None, terminates, Static) false false None leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in 
-            consume_cxx_object l real_unit_pat addr t verify_call false h env @@ fun h env ->
+            let verify_dtor_call = verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env addr None in
+            consume_cxx_object l real_unit_pat addr t verify_dtor_call false h env @@ fun h env ->
               begin match t with 
               | StructType name ->
                   let _, (_, _, _, _, new_block_symb, _, _) = List.assoc name new_block_pred_map in
@@ -609,7 +664,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 None -> Default
               | Some e -> Expr e
             in
-            produce_c_object l coef addr tp eval_h init true true h env $. fun h env ->
+            let verify_ctor_call = verify_ctor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env addr (Some x) in 
+            produce_cxx_object l coef addr tp eval_h verify_ctor_call init true true h env @@ fun h _ ->
             iter h globals
         in
         iter h globalmap
@@ -645,7 +701,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match globals with
             [] -> cont h
           | (x, (lg, tp, addr, init))::globals ->
-            consume_c_object l addr tp h true $. fun h ->
+            let verify_dtor_call = verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env addr (Some x) in
+            consume_cxx_object l real_unit_pat addr tp verify_dtor_call true h env @@ fun h _ -> 
             iter h globals
         in
         iter h globalmap
@@ -669,19 +726,21 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let produce_object envTp =
             if pure then static_error l "Cannot declare a variable of this type in a ghost context." None;
             begin let Some block = !blockPtr in if not (List.mem x !block) then block := x::!block end;
+            let addr_name = x ^ "_addr" in 
+            let addr = get_unique_var_symb_non_ghost addr_name (PtrType Void) in
             let init =
               match e with
-                None -> Unspecified
+              | None -> Unspecified
               | Some e -> Expr (check_c_initializer (pn,ilist) tparams tenv e t)
             in
-            let addr = get_unique_var_symb_non_ghost (x ^ "_addr") (PtrType Void) in
-            produce_c_object l real_unit addr t eval_h init true true h env $. fun h env ->
+            let verify_ctor_call = verify_ctor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env addr (Some addr_name) in
+            produce_cxx_object l real_unit addr t eval_h verify_ctor_call init true true h env @@ fun h env ->
             iter h ((x, envTp)::tenv) ghostenv ((x, addr)::env) xs
           in
           match t with
             StaticArrayType (elemTp, elemCount) ->
             produce_object t
-          | StructType sn when !address_taken || (let (_, fds, _, _) = List.assoc sn structmap in match fds with Some fds -> List.exists (fun (_, (_, gh, _, _, _)) -> gh = Ast.Ghost) fds | _ -> true) ->
+          | StructType sn when !address_taken || (language = CLang && dialect = Some Cxx) || (let (_, fds, _, _) = List.assoc sn structmap in match fds with Some fds -> List.exists (fun (_, (_, gh, _, _, _)) -> gh = Ast.Ghost) fds | _ -> true) ->
             (* If the variable's address is taken or the struct type has no body or it has a ghost field, treat it like a resource. *)
             produce_object (RefType t)
           | UnionType _ -> produce_object (RefType t)
@@ -2708,8 +2767,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | WCxxConstruct (l, mangled_name, te, args) ->
                   let eval_h h env e cont = verify_expr false (pn, ilist) [] false leminfo funcmap sizemap tenv ghostenv h env None e cont @@ fun _ _ _ _ _ -> assert false in
                   let field_addr = field_address l struct_addr struct_name field_name in
-                  let verify_call loc args params pre post terminates h env cont = verify_call funcmap eval_h loc (pn, ilist) field_addr_name None [] args ([], None, params, ["this", field_addr], pre, post, None, terminates, Static) false false None leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in
-                  produce_cxx_object l real_unit field_addr field_type eval_h verify_call (Some init) true h env @@ fun h env ->
+                  let verify_ctor_call = verify_ctor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env field_addr field_addr_name in
+                  produce_cxx_object l real_unit field_addr field_type eval_h verify_ctor_call (Expr init) false true h env @@ fun h env ->
                   iter h rest
                 | _ ->
                   begin fun cont ->
@@ -2762,9 +2821,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           begin match field_type with
           | UnionType struct_name | StructType struct_name ->
             with_context (Executing (h, [], field_loc, "Executing field destructor")) @@ fun () ->
-            let eval_h h env e cont = verify_expr false (pn, ilist) [] false leminfo funcmap sizemap tenv ghostenv h env None e cont @@ fun _ _ _ _ _ -> assert false in 
-            let verify_call loc pre post terminates h env cont = verify_call funcmap eval_h loc (pn, ilist) field_addr_name None [] [] ([], None, [], ["this", field_addr], pre, post, None, terminates, Static) false false None leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in
-            consume_cxx_object field_loc real_unit_pat field_addr field_type verify_call true h env @@ fun h env ->
+            let verify_dtor_call = verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env field_addr field_addr_name in
+            consume_cxx_object field_loc real_unit_pat field_addr field_type verify_dtor_call true h env @@ fun h env ->
             iter h rest
           | _ ->
             with_context (Executing (h, [], field_loc, "Consuming field chunk")) @@ fun () ->
@@ -3155,7 +3213,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         record_fun_timing loc (sn ^ ".<ctor>") @@ fun () ->
         let _, Some fields, _, _ = List.assoc sn structmap in
         let loc, params, pre, pre_tenv, post, terminates, Some (Some (init_list, (body, close_brace_loc))) = List.assoc mangled_name cxx_ctor_map1 in
-        verify_cxx_ctor pn ilist [] lems boxes predinstmap funcmap (sn, fields, mangled_name, loc, params, init_list, pre, pre_tenv, post, terminates, body, close_brace_loc)
+        verify_cxx_ctor pn ilist gs lems boxes predinstmap funcmap (sn, fields, mangled_name, loc, params, init_list, pre, pre_tenv, post, terminates, body, close_brace_loc)
       in
       verify_funcs (pn, ilist) boxes gs' lems' ds
     | CxxDtor (loc, _, _, Some _, _, StructType sn) :: ds ->
@@ -3163,7 +3221,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         record_fun_timing loc (sn ^ ".<dtor>") @@ fun () ->
         let _, Some fields, _, _ = List.assoc sn structmap in
         let loc, pre, pre_tenv, post, terminates, Some (Some (body, close_brace_loc)) = List.assoc sn cxx_dtor_map1 in 
-        verify_cxx_dtor pn ilist [] lems boxes predinstmap funcmap (sn, fields, cxx_dtor_name sn, loc, pre, pre_tenv, post, terminates, body, close_brace_loc)
+        verify_cxx_dtor pn ilist gs lems boxes predinstmap funcmap (sn, fields, cxx_dtor_name sn, loc, pre, pre_tenv, post, terminates, body, close_brace_loc)
       in
       verify_funcs (pn, ilist) boxes gs' lems' ds
     | _::ds -> verify_funcs (pn,ilist)  boxes gs lems ds

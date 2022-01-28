@@ -23,6 +23,13 @@ public:
     {
     	//@ close AccountPred(this, 0);
     }
+    
+    ~Account()
+    //@ requires AccountPred(this, _);
+    //@ ensures true;
+    {
+        //@ open AccountPred(this, _);
+    }
 
     int getBalance() const;
     //@ requires AccountPred(this, ?b);

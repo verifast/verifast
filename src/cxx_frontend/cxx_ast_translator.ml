@@ -302,9 +302,9 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
   and transl_var_init (i: R.Decl.Var.VarInit.t): VF.expr =
     let open R.Decl.Var.VarInit in
     let init_expr = init_get i |> transl_expr in 
-    match style_get i with
-    | R.Decl.Var.InitStyle.CInit -> init_expr
-    | _ -> error (VF.expr_loc init_expr) "Only c-style initialization is supported at the moment."
+    match style_get i with 
+    | R.Decl.Var.InitStyle.ListInit -> error (VF.expr_loc init_expr) "List initialization is not supported yet."
+    | _ -> init_expr
 
   and transl_var (var: R.Decl.Var.t): VF.type_expr * string * VF.expr option =
     let open R.Decl.Var in

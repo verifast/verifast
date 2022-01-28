@@ -558,6 +558,7 @@ cd tests
 cd ..
   cd cxx
     cd c_copy
+        verifast_both -disable_overflow_check globals.cpp
         verifast -c typedef_enum_with_body.cpp
         verifast -c nodecl_and_semicolon.cpp
         verifast -c -allow_should_fail div_mod_negative_dividend.cpp
