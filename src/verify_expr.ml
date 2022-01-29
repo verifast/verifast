@@ -418,18 +418,23 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let funcmap = funcmap1 @ funcmap0
 
   let cxx_ctor_map1, ctors_implemented =
-    let check_init_list pn ilist tenv struct_name body_opt =
+    let check_init_list pn ilist this_type tenv struct_name body_opt =
       body_opt |> option_map @@ fun (init_list, b) ->
-        let _, Some fields, _, _ = List.assoc struct_name structmap in 
         let init_list_checked =
-          init_list |> List.map @@ fun (field_name, init_expr_opt) ->
-            (* init_expr_opt is None when the member has a default initializer and no implicit constructor call, otherwise {i Some (init, is_written)} is present *)
-            let init_opt =
-              init_expr_opt |> option_map @@ fun (init, is_written) ->
-              let _, _, field_type, _, _ = List.assoc field_name fields in
-              check_expr_t_core functypemap funcmap [] [] (pn, ilist) [] tenv None init field_type, is_written
-            in 
-            field_name, init_opt
+          match init_list with 
+          | ["this", Some (init, is_written)] -> (* delegating ctor *)
+            let winit = check_expr_t_core functypemap funcmap [] [] (pn, ilist) [] tenv None init this_type in
+            ["this", Some (winit, is_written)]
+          | _ ->
+            let _, Some fields, _, _ = List.assoc struct_name structmap in 
+            init_list |> List.map @@ fun (field_name, init_expr_opt) ->
+              (* init_expr_opt is None when the member has a default initializer and no implicit constructor call, otherwise {i Some (init, is_written)} is present *)
+              let init_opt =
+                init_expr_opt |> option_map @@ fun (init, is_written) ->
+                let _, _, field_type, _, _ = List.assoc field_name fields in
+                check_expr_t_core functypemap funcmap [] [] (pn, ilist) [] tenv None init field_type, is_written
+              in 
+              field_name, init_opt
         in
         Some (init_list_checked, b)
     in
@@ -447,7 +452,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match try_assoc2 mangled_name ctor_map cxx_ctor_map0 with 
           | None -> 
             iter pn ilist
-              ((mangled_name, (loc, xmap, pre, pre_tenv, post, terminates, check_init_list pn ilist pre_tenv struct_name body_opt)) :: ctor_map)
+              ((mangled_name, (loc, xmap, pre, pre_tenv, post, terminates, check_init_list pn ilist (StructType struct_name) pre_tenv struct_name body_opt)) :: ctor_map)
               ctors_implemented
               rest
           | Some (_, _, _, _, _, _, Some _) ->
@@ -462,7 +467,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               (Regular, [], None, xmap, false, pre, post, [], terminates) 
               (Regular, [], None, xmap0, false, [], [], pre0, post0, [], terminates0);
             iter pn ilist 
-              ((mangled_name, (loc, xmap, pre, pre_tenv, post, terminates, check_init_list pn ilist pre_tenv struct_name body_opt)) :: ctor_map) 
+              ((mangled_name, (loc, xmap, pre, pre_tenv, post, terminates, check_init_list pn ilist (StructType struct_name) pre_tenv struct_name body_opt)) :: ctor_map) 
               ((mangled_name, loc0) :: ctors_implemented)
               rest
         end
@@ -2349,8 +2354,6 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               produce_chunk h (get_pred_symb "new_block", true) [] real_unit None [result; sizeof l ty] None cont
           end
         end
-    | WCxxConstruct (l, _, _, _) ->
-      static_error l "Stack allocation of objects is not supported yet." None
     | NewObject (l, cn, args, targs) ->
       inheritance_check cn l;
       if pure then static_error l "Object creation is not allowed in a pure context" None;

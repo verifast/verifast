@@ -57,6 +57,25 @@ struct Test {
   }
 };
 
+struct Delegating {
+  int i;
+
+  Delegating(int i) : i(i)
+  //@ requires true;
+  //@ ensures this->i |-> i;
+  {}
+
+  Delegating() : Delegating(0)
+  //@ requires true;
+  //@ ensures this->i |-> 0;
+  {}
+
+  ~Delegating()
+  //@ requires this->i |-> _;
+  //@ ensures true;
+  {}
+};
+
 Test::Test(int i) : _i(i)
 //@ requires true;
 //@ ensures TestPred(this, i, _);
@@ -70,6 +89,10 @@ int main()
 {
   Test *mi = new Test(2);
   Test *mii = new Test;
+
+  Delegating d;
+  //@ assert (d.i == 0);
+
   delete mi;
   delete mii;
 }
