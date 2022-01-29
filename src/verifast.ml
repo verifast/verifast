@@ -2796,7 +2796,17 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       with_context (Executing ([], env, loc, sprintf "Verifying constructor '%s'" struct_name)) @@ fun () ->
       assume_neq this_term int_zero_term @@ fun () ->
       produce_asn [] [] ghostenv env pre real_unit None None @@ fun h ghostenv env ->
-      init_fields h this_term this_type env ghostenv leminfo sizemap current_thread @@ fun h ->
+      begin fun cont ->
+        match init_list with
+        | ["this", Some ((WCxxConstruct (l, _, this_type, _)) as delegating_init, true)] -> (* delegating constructor *)
+          let tenv = pre_tenv in
+          let eval_h h env e cont = verify_expr false (pn, ilist) [] false leminfo funcmap sizemap tenv ghostenv h env None e cont @@ fun _ _ _ _ _ -> assert false in
+          let verify_ctor_call = verify_ctor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env this_term (Some "this") in
+          produce_cxx_object l real_unit this_term this_type eval_h verify_ctor_call (Expr delegating_init) false false h env @@ fun h env ->
+          cont h
+        | _ -> 
+          init_fields h this_term this_type env ghostenv leminfo sizemap current_thread cont
+      end @@ fun h ->
       let return_cont h tenv2 env2 retval =
         consume_asn rules [] h ghostenv env post true real_unit @@ fun _ h ghostenv env size_first -> 
         cleanup_heapy_locals (pn, ilist) close_brace_loc h env heapy_ps @@ fun h ->

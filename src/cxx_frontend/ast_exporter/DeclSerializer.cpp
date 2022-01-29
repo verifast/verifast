@@ -35,7 +35,7 @@ void DeclSerializer::serializeFuncDecl(stubs::Decl::Function::Builder &builder,
   auto result = builder.initResult();
   auto returnRange = decl->getReturnTypeSourceRange();
   _serializer.serializeTypeWithRange(result, decl->getReturnType().getTypePtr(),
-                              returnRange);
+                                     returnRange);
 
   auto paramsBuilder = builder.initParams(decl->param_size());
   serializeParams(paramsBuilder, decl->parameters());
@@ -48,11 +48,11 @@ void DeclSerializer::serializeFuncDecl(stubs::Decl::Function::Builder &builder,
   if (!isImplicit) {
     if (isDef) {
       _serializer.getAnnStore().getContract(decl->getBeginLoc(), anns,
-                                     getSourceManager(),
-                                     decl->getBody()->getBeginLoc());
+                                            getSourceManager(),
+                                            decl->getBody()->getBeginLoc());
     } else {
       _serializer.getAnnStore().getContract(decl->getBeginLoc(), anns,
-                                     getSourceManager());
+                                            getSourceManager());
     }
     auto contractBuilder = builder.initContract(anns.size());
     size_t i(0);
@@ -199,8 +199,7 @@ void DeclSerializer::serializeMethodDecl(stubs::Decl::Method::Builder &builder,
   builder.setImplicit(decl->isImplicit());
   if (!isStatic) {
     auto thisType = builder.initThis();
-    _serializer.serializeType(thisType,
-                                   decl->getThisObjectType().getTypePtr());
+    _serializer.serializeType(thisType, decl->getThisObjectType().getTypePtr());
   }
 
   auto func = builder.initFunc();
@@ -224,16 +223,19 @@ void serializeRecordRef(stubs::RecordRef::Builder &builder,
 bool DeclSerializer::VisitCXXConstructorDecl(
     const clang::CXXConstructorDecl *decl) {
   auto ctor = _builder.initCtor();
+  // nb inits will be 1 if it delegates to another ctor
   auto initBuilders = ctor.initInitList(decl->getNumCtorInitializers());
 
   size_t i(0);
   for (auto init : decl->inits()) {
     auto initBuilder = initBuilders[i++];
-    initBuilder.setName(init->getMember()->getNameAsString());
+    initBuilder.setName(init->isDelegatingInitializer()
+                            ? "this"
+                            : init->getMember()->getNameAsString());
     initBuilder.setIsWritten(init->isWritten());
-    
+
     auto *initExpr = init->getInit();
-    if (! llvm::isa<clang::CXXDefaultInitExpr>(initExpr)) {
+    if (!llvm::isa<clang::CXXDefaultInitExpr>(initExpr)) {
       auto exprBuilder = initBuilder.initInit();
       _serializer.serializeExpr(exprBuilder, init->getInit());
     }
@@ -251,7 +253,7 @@ bool DeclSerializer::VisitCXXConstructorDecl(
 bool DeclSerializer::VisitCXXDestructorDecl(
     const clang::CXXDestructorDecl *decl) {
   auto dtor = _builder.initDtor();
-  
+
   auto meth = dtor.initMethod();
   serializeMethodDecl(meth, decl, _serializer.getMangledDtorName(decl));
 
@@ -272,7 +274,7 @@ bool DeclSerializer::VisitTypedefNameDecl(const clang::TypedefNameDecl *decl) {
 
   auto defType = def.initType();
   _serializer.serializeTypeLoc(defType,
-                                    decl->getTypeSourceInfo()->getTypeLoc());
+                               decl->getTypeSourceInfo()->getTypeLoc());
 
   return true;
 }
