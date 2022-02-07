@@ -81,7 +81,6 @@ public:
 
 protected:
   void serializeNode(const AstNode *node, const llvm::StringRef kind) {
-    node->getSourceRange().dump(this->getSourceManager());
     if (!this->serializeDesc(node))
       this->unsupported(node->getSourceRange(), kind);
     serializeSrcRange(_locBuilder, node->getSourceRange(),
