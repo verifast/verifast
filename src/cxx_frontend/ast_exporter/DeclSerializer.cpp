@@ -15,12 +15,10 @@ void DeclSerializer::serializeParams(
     param.setName(declName.getAsString());
     auto type = param.initType();
     auto typeInfo = p->getTypeSourceInfo();
-    if (typeInfo) {
-      _serializer.serializeTypeLoc(type, typeInfo->getTypeLoc());
-    } else {
-      //   _serializer.serializeTypeWithRange(type, p->getType().getTypePtr(),
-      // {});
-    }
+
+    assert(typeInfo && "Explicit parameter source info.")
+
+    _serializer.serializeTypeLoc(type, typeInfo->getTypeLoc());
     if (p->hasDefaultArg()) {
       auto def = param.initDefault();
       _serializer.serializeExpr(def, p->getDefaultArg());
