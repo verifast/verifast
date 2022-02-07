@@ -16,7 +16,7 @@ void DeclSerializer::serializeParams(
     auto type = param.initType();
     auto typeInfo = p->getTypeSourceInfo();
 
-    assert(typeInfo && "Explicit parameter source info.")
+    assert(typeInfo && "Explicit parameter source info.");
 
     _serializer.serializeTypeLoc(type, typeInfo->getTypeLoc());
     if (p->hasDefaultArg()) {
