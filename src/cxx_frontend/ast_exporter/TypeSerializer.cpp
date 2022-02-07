@@ -1,13 +1,24 @@
 #include "AstSerializer.h"
 #include "clang/AST/Type.h"
+#include "clang/AST/TypeLoc.h"
 
 namespace vf {
+
+// TypeSerializer
 
 bool TypeSerializer::VisitBuiltinType(const clang::BuiltinType *type) {
 #define CASE_TYPE(CLANG_TYPE, STUBS_TYPE)                                      \
   case clang::BuiltinType::Kind::CLANG_TYPE:                                   \
     _builder.setBuiltin(stubs::Type::BuiltinKind::STUBS_TYPE);                 \
     return true;
+
+#define CASE_TYPE_FW(CLANG_TYPE, STUBS_TYPE, BITS)                             \
+  case clang::BuiltinType::Kind::CLANG_TYPE: {                                 \
+    auto fw = _builder.initFixedWidth();                                        \
+    fw.setKind(stubs::Type::FixedWidth::FixedWidthKind::STUBS_TYPE);           \
+    fw.setBits(BITS);                                                          \
+    return true;                                                               \
+  }
 
   switch (type->getKind()) {
     CASE_TYPE(Char_U, CHAR)
@@ -24,22 +35,20 @@ bool TypeSerializer::VisitBuiltinType(const clang::BuiltinType *type) {
     CASE_TYPE(ULong, U_LONG)
     CASE_TYPE(ULongLong, U_LONG_LONG)
     CASE_TYPE(Bool, BOOL)
+    CASE_TYPE_FW(Int128, INT, 128)
+    CASE_TYPE_FW(UInt128, U_INT, 128)
   default:
     return false;
   }
 #undef CASE_TYPE
+#undef CASE_TYPE_FW
 }
 
 bool TypeSerializer::VisitPointerType(const clang::PointerType *type) {
-  auto pointer = _builder.initPointer();
-  _serializer.serializeType(pointer, type->getPointeeType().getTypePtr());
+  auto pointer = _builder.initWPointer();
+  _serializer.serializeQualType(pointer, type->getPointeeType());
   return true;
 }
-
-// bool TypeSerializer::VisitFunctionProtoType(
-//     const clang::FunctionProtoType *type) {
-//   return Visit(type->getReturnType().getTypePtr());
-// }
 
 bool TypeSerializer::VisitRecordType(const clang::RecordType *type) {
   auto rec = _builder.initRecord();
@@ -61,34 +70,75 @@ bool TypeSerializer::VisitEnumType(const clang::EnumType *type) {
   return true;
 }
 
-bool TypeSerializer::VisitElaboratedType(const clang::ElaboratedType *type) {
-  return Visit(type->desugar().getTypePtr());
+bool TypeSerializer::VisitElaboratedType(
+    const clang::ElaboratedType *type) {
+  auto elaborated = _builder.initWElaborated();
+  _serializer.serializeQualType(elaborated, type->getNamedType());
+  return true;
 }
 
 bool TypeSerializer::VisitTypedefType(const clang::TypedefType *type) {
-  return Visit(type->desugar().getTypePtr());
-}
-
-bool TypeLocSerializer::VisitPointerTypeLoc(const clang::PointerTypeLoc type) {
-  auto pointer = _builder.initPointerLoc();
-  _serializer.serializeTypeLoc(pointer, type.getNextTypeLoc());
+  _builder.setTypedef(type->getDecl()->getQualifiedNameAsString());
   return true;
 }
 
-void TypeSerializer::serializeReferenceType(stubs::Type::Builder &builder, const clang::ReferenceType *type) {
-  _serializer.serializeType(builder, type->getPointeeType().getTypePtr());
+bool TypeSerializer::VisitLValueReferenceType(
+    const clang::LValueReferenceType *type) {
+  auto ref = _builder.initWLValueRef();
+  _serializer.serializeQualType(ref, type->getPointeeType());
+  return true;
 }
 
-bool TypeSerializer::VisitLValueReferenceType(const clang::LValueReferenceType *type) {
+bool TypeSerializer::VisitRValueReferenceType(
+    const clang::RValueReferenceType *type) {
+  auto ref = _builder.initWRValueRef();
+  _serializer.serializeQualType(ref, type->getPointeeType());
+  return true;
+}
+
+// TypeLocSerializer
+
+bool TypeLocSerializer::VisitBuiltinTypeLoc(const clang::BuiltinTypeLoc typeLoc) {
+  return _typeSerializer.VisitBuiltinType(typeLoc.getTypePtr());
+}
+
+bool TypeLocSerializer::VisitPointerTypeLoc(const clang::PointerTypeLoc typeLoc) {
+  auto pointer = _builder.initPointer();
+  _serializer.serializeTypeLoc(pointer, typeLoc.getPointeeLoc());
+  return true;
+}
+
+bool TypeLocSerializer::VisitRecordTypeLoc(const clang::RecordTypeLoc typeLoc) {
+  return _typeSerializer.VisitRecordType(typeLoc.getTypePtr());
+}
+
+bool TypeLocSerializer::VisitEnumTypeLoc(const clang::EnumTypeLoc typeLoc) {
+  return _typeSerializer.VisitEnumType(typeLoc.getTypePtr());
+}
+
+bool TypeLocSerializer::VisitElaboratedTypeLoc(
+    const clang::ElaboratedTypeLoc typeLoc) {
+  auto elaborated = _builder.initElaborated();
+  _serializer.serializeTypeLoc(elaborated, typeLoc.getNamedTypeLoc());
+  return true;
+}
+
+bool TypeLocSerializer::VisitTypedefTypeLoc(const clang::TypedefTypeLoc typeLoc) {
+  return _typeSerializer.VisitTypedefType(typeLoc.getTypePtr());
+}
+
+bool TypeLocSerializer::VisitLValueReferenceTypeLoc(
+    const clang::LValueReferenceTypeLoc typeLoc) {
   auto ref = _builder.initLValueRef();
-  serializeReferenceType(ref, type);
+  _serializer.serializeTypeLoc(ref, typeLoc.getPointeeLoc());
   return true;
 }
 
-bool TypeSerializer::VisitRValueReferenceType(const clang::RValueReferenceType *type) {
+bool TypeLocSerializer::VisitRValueReferenceTypeLoc(
+    const clang::RValueReferenceTypeLoc typeLoc) {
   auto ref = _builder.initRValueRef();
-  serializeReferenceType(ref, type);
+  _serializer.serializeTypeLoc(ref, typeLoc.getPointeeLoc());
   return true;
 }
 
-} // namespace vf
+}; // namespace vf

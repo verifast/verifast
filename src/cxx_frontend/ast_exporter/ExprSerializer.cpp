@@ -223,7 +223,7 @@ bool ExprSerializer::VisitCXXNewExpr(const clang::CXXNewExpr *expr) {
   }
 
   auto type = n.initType();
-  _serializer.serializeType(type, expr->getAllocatedType().getTypePtr());
+  _serializer.serializeQualType(type, expr->getAllocatedType());
 
   return true;
 }
@@ -249,7 +249,7 @@ bool ExprSerializer::VisitCXXConstructExpr(
   }
 
   auto type = construct.initType();
-  _serializer.serializeType(type, expr->getType().getTypePtr());
+  _serializer.serializeQualType(type, expr->getType());
 
   return true;
 }

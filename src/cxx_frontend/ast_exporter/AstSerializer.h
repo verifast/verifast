@@ -1,10 +1,10 @@
 #pragma once
 #include "AnnotationStore.h"
+#include "FunctionMangler.h"
 #include "InclusionContext.h"
 #include "NodeSerializer.h"
 #include "capnp/orphan.h"
 #include "llvm/ADT/SmallVector.h"
-#include "FunctionMangler.h"
 #include <kj/common.h>
 #include <unordered_map>
 
@@ -45,6 +45,8 @@ class AstSerializer {
       _fileDeclsMap;
   std::unordered_map<unsigned, clang::SourceLocation> _firstDeclLocMap;
 
+  void updateFirstDeclLoc(unsigned fileUID, clang::SourceLocation newLoc);
+
   void serializeDeclToDeclMap(const clang::Decl *decl,
                               capnp::Orphanage &orphanage);
 
@@ -53,8 +55,7 @@ public:
                          const InclusionContext &inclContext)
       : _context(context), _SM(context.getSourceManager()),
         _inclContext(inclContext), _AS(context.getSourceManager()),
-        _funcMangler(context),
-        _store(store) {}
+        _funcMangler(context), _store(store) {}
 
   KJ_DISALLOW_COPY(AstSerializer);
 
@@ -68,7 +69,7 @@ public:
   void serializeDecl(DeclSerializer::NodeBuilder &builder,
                      const clang::Decl *decl) {
     DeclSerializer ser(_context, *this, builder);
-    ser.serializeNode(decl, decl->getSourceRange(), decl->getDeclKindName());
+    ser.serialize(decl);
   }
 
   /**
@@ -79,7 +80,7 @@ public:
   void serializeStmt(StmtSerializer::NodeBuilder &builder,
                      const clang::Stmt *stmt) {
     StmtSerializer ser(_context, *this, builder);
-    ser.serializeNode(stmt, stmt->getSourceRange(), stmt->getStmtClassName());
+    ser.serialize(stmt);
   }
 
   /**
@@ -89,8 +90,22 @@ public:
    */
   void serializeExpr(ExprSerializer::NodeBuilder &builder,
                      const clang::Expr *expr) {
+    auto truncatingOptional =
+        _store.queryTruncatingAnnotation(expr->getBeginLoc(), _SM);
+    if (truncatingOptional) {
+      auto loc = builder.initLoc();
+      auto desc = builder.initDesc();
+
+      serializeSrcRange(
+          loc, {truncatingOptional->getBegin(), expr->getEndLoc()}, _SM);
+      auto truncating = desc.initTruncating();
+
+      ExprSerializer ser(_context, *this, truncating);
+      ser.serialize(expr);
+      return;
+    }
     ExprSerializer ser(_context, *this, builder);
-    ser.serializeNode(expr, expr->getSourceRange(), expr->getStmtClassName());
+    ser.serialize(expr);
   }
 
   /**
@@ -102,16 +117,7 @@ public:
   void serializeTypeLoc(TypeLocSerializer::NodeBuilder &builder,
                         const clang::TypeLoc typeLoc) {
     TypeLocSerializer ser(_context, *this, builder);
-    ser.serializeNode(typeLoc);
-  }
-
-  void serializeTypeWithRange(TypeLocSerializer::NodeBuilder &builder,
-                              const clang::Type *type,
-                              const clang::SourceRange range) {
-    auto locBuilder = builder.initLoc();
-    serializeSrcRange(locBuilder, range, _SM);
-    auto descBuilder = builder.initDesc();
-    serializeType(descBuilder, type);
+    ser.serialize(typeLoc);
   }
 
   /**
@@ -120,10 +126,10 @@ public:
    * @param type type to serialize.
    * that type.
    */
-  void serializeType(TypeSerializer::DescBuilder &builder,
-                     const clang::Type *type) {
+  void serializeQualType(TypeSerializer::DescBuilder &builder,
+                     const clang::QualType type) {
     TypeSerializer ser(_context, *this, builder);
-    ser.serialize(type);
+    ser.serialize(type.getTypePtr());
   }
 
   /**
@@ -139,7 +145,7 @@ public:
                                stubs::Decl::Builder &builder,
                                const clang::Decl *decl) {
     DeclSerializer ser(_context, *this, locBuilder, builder);
-    ser.serializeNode(decl, decl->getSourceRange(), decl->getDeclKindName());
+    ser.serialize(decl);
   }
 
   /**
@@ -155,7 +161,7 @@ public:
                                stubs::Stmt::Builder &builder,
                                const clang::Stmt *stmt) {
     StmtSerializer ser(_context, *this, locBuilder, builder);
-    ser.serializeNode(stmt, stmt->getSourceRange(), stmt->getStmtClassName());
+    ser.serialize(stmt);
   }
 
   /**

@@ -2,6 +2,7 @@
 #include "AstSerializer.h"
 #include "CommentProcessor.h"
 #include "ContextFreePPCallbacks.h"
+#include "InclusionContext.h"
 #include "capnp/message.h"
 #include "capnp/serialize.h"
 #include "clang/AST/ASTConsumer.h"
@@ -9,10 +10,9 @@
 #include "clang/Frontend/FrontendActions.h"
 #include "clang/Tooling/CommonOptionsParser.h"
 #include "clang/Tooling/Tooling.h"
-#include "InclusionContext.h"
 #ifdef _WIN32
-#include <io.h>
 #include <fcntl.h>
+#include <io.h>
 #endif
 
 static llvm::cl::OptionCategory category("Verifast AST exporter options");
@@ -21,7 +21,7 @@ static llvm::cl::list<std::string> allowExpansions(
     "allow_macro_expansion",
     llvm::cl::desc("is a list of macros that are always allowed to expand."),
     llvm::cl::value_desc("macros"), llvm::cl::ZeroOrMore,
-    llvm::cl::cat(category));
+    llvm::cl::CommaSeparated, llvm::cl::cat(category));
 
 static llvm::cl::extrahelp
     commonHelp(clang::tooling::CommonOptionsParser::HelpMessage);
@@ -41,7 +41,8 @@ public:
     serializer.serializeTU(_builder, context.getTranslationUnitDecl());
   }
 
-  explicit VerifastASTConsumer(Builder &builder, AnnotationStore &store, const InclusionContext &context)
+  explicit VerifastASTConsumer(Builder &builder, AnnotationStore &store,
+                               const InclusionContext &context)
       : _builder(builder), _store(store), _context(context) {}
   VerifastASTConsumer(Builder &&builder, AnnotationStore &&store) = delete;
 };
@@ -57,8 +58,8 @@ public:
   CreateASTConsumer(clang::CompilerInstance &compiler,
                     llvm::StringRef inFile) override {
     auto &PP = compiler.getPreprocessor();
-    PP.addPPCallbacks(
-        std::make_unique<ContextFreePPCallbacks>(_context, PP, allowExpansions));
+    PP.addPPCallbacks(std::make_unique<ContextFreePPCallbacks>(
+        _context, PP, allowExpansions));
     PP.addCommentHandler(&_commentProcessor);
     return std::make_unique<VerifastASTConsumer>(_builder, _store, _context);
   }
@@ -87,16 +88,17 @@ public:
 } // namespace vf
 
 int main(int argc, const char **argv) {
-  auto expectedParser = clang::tooling::CommonOptionsParser::create(argc, argv, category);
-  if (! expectedParser) {
+  auto expectedParser =
+      clang::tooling::CommonOptionsParser::create(argc, argv, category);
+  if (!expectedParser) {
     llvm::errs() << expectedParser.takeError();
   }
   clang::tooling::CommonOptionsParser &optionsParser = expectedParser.get();
   clang::tooling::ClangTool tool(optionsParser.getCompilations(),
                                  optionsParser.getSourcePathList());
-#ifdef _WIN32                 
+#ifdef _WIN32
   _setmode(1, _O_BINARY);
-#endif        
+#endif
   vf::msg_builders msgBuilders;
   vf::VerifastActionFactory factory(msgBuilders);
 

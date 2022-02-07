@@ -52,15 +52,31 @@ struct Type {
     uLongLong @11;
   }
 
+  struct FixedWidth {
+    enum FixedWidthKind {
+      int @0;
+      uInt @1;
+    }
+
+    kind @0 :FixedWidthKind;
+    bits @1 :UInt8;
+  }
+
   union {
     unionNotInitialized @0 :Void;
     builtin @1 :BuiltinKind;
-    pointer @2 :Type;
-    pointerLoc @3 :TypeNode;
+    pointer @2 :TypeNode;
+    wPointer @3 :Type;
     record @4 :RecordRef;
     enumType @5 :Text;
-    lValueRef @6 :Type;
-    rValueRef @7 :Type;
+    lValueRef @6 :TypeNode;
+    wLValueRef @7 :Type;
+    rValueRef @8 :TypeNode;
+    wRValueRef @9 :Type;
+    fixedWidth @10 :FixedWidth;
+    elaborated @11 :TypeNode;
+    wElaborated @12 :Type;
+    typedef @13 :Text;
   }
 }
 
@@ -358,6 +374,7 @@ struct Expr {
     construct @12 :Construct;
     nullPtrLit @13 :Void;
     delete @14 :ExprNode;
+    truncating @15 :ExprNode;
   }
 }
 

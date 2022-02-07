@@ -39,11 +39,15 @@ protected:
     return getContext().getSourceManager();
   }
 
-  LLVM_ATTRIBUTE_NORETURN void unsupported(const AstNode *node,
-                                           const clang::SourceRange range,
+  LLVM_ATTRIBUTE_NORETURN void unsupported(const clang::SourceRange range,
                                            const llvm::StringRef className) {
     llvm::report_fatal_error("Node of type '" + className + "' at '" +
                              range.printToString(getSourceManager()) +
+                             "' is not supported.");
+  }
+
+  LLVM_ATTRIBUTE_NORETURN void unsupported(const llvm::StringRef className) {
+    llvm::report_fatal_error("Node of type '" + className +
                              "' is not supported.");
   }
 };
@@ -75,14 +79,16 @@ public:
       : NodeSerializer(context, serializer, nodeBuilder.initLoc(),
                        nodeBuilder.initDesc()) {}
 
-  void serializeNode(const AstNode *node, const clang::SourceRange range,
-                     const llvm::StringRef kind) {
+protected:
+  void serializeNode(const AstNode *node, const llvm::StringRef kind) {
+    node->getSourceRange().dump(this->getSourceManager());
     if (!this->serializeDesc(node))
-      this->unsupported(node, range, kind);
-    serializeSrcRange(_locBuilder, range, this->getSourceManager());
+      this->unsupported(node->getSourceRange(), kind);
+    serializeSrcRange(_locBuilder, node->getSourceRange(),
+                      this->getSourceManager());
   }
 
-protected:
+private:
   stubs::Loc::Builder _locBuilder;
 };
 
@@ -101,6 +107,10 @@ struct StmtSerializer : public NodeSerializer<stubs::Stmt, clang::Stmt>,
   bool serializeDesc(const clang::Stmt *stmt) override {
     assert(stmt && "Statement should not be null");
     return Visit(stmt);
+  }
+
+  void serialize(const clang::Stmt *stmt) {
+    serializeNode(stmt, stmt->getStmtClassName());
   }
 
   bool VisitCompoundStmt(const clang::CompoundStmt *stmt);
@@ -149,6 +159,13 @@ struct DeclSerializer : public NodeSerializer<stubs::Decl, clang::Decl>,
   bool serializeDesc(const clang::Decl *decl) override {
     assert(decl && "Declaration should not be null");
     return Visit(decl);
+  }
+
+  void serialize(const clang::Decl *decl) {
+    if (decl->isImplicit())
+      llvm::report_fatal_error(
+          "Serialization of implicit declarations is not supported.");
+    serializeNode(decl, decl->getDeclKindName());
   }
 
   bool VisitFunctionDecl(const clang::FunctionDecl *decl);
@@ -208,6 +225,10 @@ struct ExprSerializer : public NodeSerializer<stubs::Expr, clang::Expr>,
     return Visit(expr);
   }
 
+  void serialize(const clang::Expr *expr) {
+    serializeNode(expr, expr->getStmtClassName());
+  }
+
   bool VisitUnaryOperator(const clang::UnaryOperator *uo);
 
   bool VisitBinaryOperator(const clang::BinaryOperator *bo);
@@ -255,13 +276,12 @@ private:
                  const clang::CallExpr *expr);
 };
 
-struct TypeSerializer : private DescSerializer<stubs::Type, clang::Type>,
+struct TypeSerializer : public DescSerializer<stubs::Type, clang::Type>,
                         public clang::TypeVisitor<TypeSerializer, bool> {
+
   explicit TypeSerializer(clang::ASTContext &context, AstSerializer &serializer,
                           stubs::Type::Builder &builder)
       : DescSerializer(context, serializer, builder) {}
-
-  using DescSerializer<stubs::Type, clang::Type>::DescBuilder;
 
   bool serializeDesc(const clang::Type *type) override {
     assert(type && "Type should not be null");
@@ -269,8 +289,8 @@ struct TypeSerializer : private DescSerializer<stubs::Type, clang::Type>,
   }
 
   void serialize(const clang::Type *type) {
-    if (!this->serializeDesc(type))
-      this->unsupported(type, {}, type->getTypeClassName());
+    if (!serializeDesc(type))
+      unsupported(type->getTypeClassName());
   }
 
   bool VisitBuiltinType(const clang::BuiltinType *type);
@@ -288,47 +308,53 @@ struct TypeSerializer : private DescSerializer<stubs::Type, clang::Type>,
   bool VisitLValueReferenceType(const clang::LValueReferenceType *type);
 
   bool VisitRValueReferenceType(const clang::RValueReferenceType *type);
-
-private:
-  void serializeReferenceType(stubs::Type::Builder &builder,
-                              const clang::ReferenceType *type);
 };
 
-struct TypeLocSerializer : private NodeSerializer<stubs::Type, clang::TypeLoc>,
-                           clang::TypeLocVisitor<TypeLocSerializer, bool> {
+class TypeLocSerializer
+    : public NodeSerializer<stubs::Type, clang::TypeLoc>,
+      public clang::TypeLocVisitor<TypeLocSerializer, bool> {
+
+private:
+  TypeSerializer _typeSerializer;
+
+public:
   explicit TypeLocSerializer(clang::ASTContext &context,
                              AstSerializer &serializer,
                              stubs::Loc::Builder &locBuilder,
                              stubs::Type::Builder &descBuilder)
-      : NodeSerializer(context, serializer, locBuilder, descBuilder) {}
+      : NodeSerializer(context, serializer, locBuilder, descBuilder),
+        _typeSerializer(context, serializer, _builder) {}
 
   explicit TypeLocSerializer(clang::ASTContext &context,
                              AstSerializer &serializer,
                              NodeBuilder &nodeBuilder)
-      : NodeSerializer(context, serializer, nodeBuilder) {}
+      : NodeSerializer(context, serializer, nodeBuilder),
+        _typeSerializer(context, serializer, _builder) {}
 
-  using NodeSerializer<stubs::Type, clang::TypeLoc>::NodeBuilder;
-
-  bool serializeDesc(const clang::TypeLoc *type) override {
-    assert(type && "TypeLoc should not be null");
-    return Visit(*type);
+  void serialize(const clang::TypeLoc typeLoc) {
+    serializeNode(&typeLoc, typeLoc.getType().getTypePtr()->getTypeClassName());
   }
 
-  void serializeNode(const clang::TypeLoc typeLoc) {
-    auto range = typeLoc.getSourceRange();
-    auto end = clang::Lexer::getLocForEndOfToken(
-        range.getEnd(), 1, getSourceManager(), getContext().getLangOpts());
-    clang::SourceRange spellingRange(range.getBegin(), end);
-    serializeSrcRange(_locBuilder, spellingRange, this->getSourceManager());
-    if (!this->serializeDesc(&typeLoc)) {
-      // Try to delegate it to the type serializer
-      TypeSerializer ser(_context, _serializer, _builder);
-      auto type = typeLoc.getTypePtr();
-      ser.serialize(type);
-    }
+  bool serializeDesc(const clang::TypeLoc *typeLoc) override {
+    assert(typeLoc && "Type should not be null");
+    return Visit(*typeLoc);
   }
 
   bool VisitPointerTypeLoc(const clang::PointerTypeLoc type);
+
+  bool VisitBuiltinTypeLoc(const clang::BuiltinTypeLoc type);
+
+  bool VisitRecordTypeLoc(const clang::RecordTypeLoc type);
+
+  bool VisitEnumTypeLoc(const clang::EnumTypeLoc type);
+
+  bool VisitTypedefTypeLoc(const clang::TypedefTypeLoc type);
+
+  bool VisitElaboratedTypeLoc(const clang::ElaboratedTypeLoc type);
+
+  bool VisitLValueReferenceTypeLoc(const clang::LValueReferenceTypeLoc type);
+
+  bool VisitRValueReferenceTypeLoc(const clang::RValueReferenceTypeLoc type);
 };
 
 class AnnotationSerializer {

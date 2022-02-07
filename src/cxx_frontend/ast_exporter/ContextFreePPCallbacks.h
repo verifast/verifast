@@ -23,13 +23,16 @@ class ContextFreePPCallbacks : public clang::PPCallbacks {
     explicit PPDiags(clang::Preprocessor &PP) : _PP(PP) {}
 
     void reportMacroDivergence(const clang::Token &macroNameTok,
+                               const std::string &macroName,
                                const clang::MacroDefinition &MD);
 
     void reportCtxSensitiveMacroExp(const clang::Token &macroNameTok,
+                                    const std::string &macroName,
                                     const clang::MacroDefinition &MD,
                                     const clang::SourceRange &range);
 
     void reportUndefIsolatedMacro(const clang::Token &macroNameTok,
+                                  const std::string &macroName,
                                   const clang::MacroDefinition &MD);
   };
 
@@ -43,10 +46,16 @@ class ContextFreePPCallbacks : public clang::PPCallbacks {
   void checkDivergence(const clang::Token &macroNameToken,
                        const clang::MacroDefinition &MD);
 
+  std::string getMacroName(const clang::Token &macroNameToken) const;
+
+  bool macroAllowed(const std::string &macroName) const;
+
 public:
-  explicit ContextFreePPCallbacks(InclusionContext &context, clang::Preprocessor &PP,
+  explicit ContextFreePPCallbacks(InclusionContext &context,
+                                  clang::Preprocessor &PP,
                                   const std::vector<std::string> &whiteList)
-      : _context(context), _PP(PP), _whiteList(whiteList.begin(), whiteList.end()), _diags(PP) {
+      : _context(context), _PP(PP),
+        _whiteList(whiteList.begin(), whiteList.end()), _diags(PP) {
     auto mainEntry = SM().getFileEntryForID(SM().getMainFileID());
     _context.startInclusion(*mainEntry);
   }
