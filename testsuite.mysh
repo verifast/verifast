@@ -563,6 +563,7 @@ cd ..
         verifast -c nodecl_and_semicolon.cpp
         verifast -c -allow_should_fail div_mod_negative_dividend.cpp
         verifast -c -disable_overflow_check tuerk.cpp
+        verifast_both -c truncating.cpp
     cd ..
     cd java_like
         verifast -disable_overflow_check Account.cpp account_client.cpp
