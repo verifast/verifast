@@ -80,7 +80,16 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
   *)
   let invoke_exporter (file: string) (allow_expansions: string list) =
     let bin_dir = Filename.dirname Sys.executable_name in
-    let cmd = Printf.sprintf "%s/vf-cxx-ast-exporter %s -allow_macro_expansion=%s -- -I %s" bin_dir file (String.concat "," allow_expansions) bin_dir in
+    let frontend_macro = "__VF_CXX_CLANG_FRONTEND__" in
+    let allow_expansions = frontend_macro :: allow_expansions in
+    let cmd = 
+      Printf.sprintf "%s/vf-cxx-ast-exporter %s -allow_macro_expansion=%s -- -I %s -D%s" 
+      bin_dir 
+      file 
+      (String.concat "," allow_expansions) 
+      bin_dir 
+      frontend_macro
+    in
     let inchan, outchan, errchan = Unix.open_process_full cmd [||] in
     inchan, outchan, errchan
 
@@ -192,6 +201,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     | MemberCall c        -> transl_call_expr loc c
     | NullPtrLit          -> transl_null_ptr_lit_expr loc
     | Delete d            -> transl_delete_expr loc d
+    | Truncating t        -> transl_trunc_expr loc t
     | Undefined _         -> failwith "Undefined expression"
     | _                   -> error loc "Unsupported expression."
 
@@ -229,29 +239,37 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     | Compound c -> R.Stmt.Compound.stmts_get c |> capnp_arr_map transl_stmt, transl_loc @@ R.Stmt.Compound.r_brace_get c
     | _ -> [transl_stmt stmt_node], loc
 
-  (**
-    [transl_type ?loc ty] translates [ty] and returns a VeriFast type expression, representing [ty].
-    [loc] should be passed if the location of the type expression in its source code is known.
-  *)
-  and transl_type ?(loc: VF.loc = VF.dummy_loc) (ty: R.Type.t): VF.type_expr =
-    match R.Type.get ty with
-    | UnionNotInitialized -> union_no_init_err "type"
-    | Builtin b     -> transl_builtin_type loc b
-    | Pointer p     -> transl_pointer_type loc p
-    | PointerLoc p  -> transl_pointer_loc_type loc p
-    | Record r      -> transl_record_type loc r
-    | EnumType t    -> transl_enum_type loc t
-    | Undefined _   -> failwith "Undefined type."
-    | _             -> error loc "Unsupported type."
-
+  and transl_type (loc: VF.loc) (ty: R.Type.t): VF.type_expr = 
+    let open R.Type in
+    match get ty with 
+      | UnionNotInitialized -> union_no_init_err "type"
+      | Builtin b           -> transl_builtin_type loc b 
+      | Pointer p           -> transl_pointer_type loc p
+      | Record r            -> transl_record_type loc r 
+      | EnumType e          -> transl_enum_type loc e 
+      | Elaborated e        -> transl_elaborated_type e
+      | Typedef t           -> transl_typedef_type loc t
+      | FixedWidth f        -> transl_fixed_width_type loc f
+      | Undefined _         -> failwith "Undefined type."
+      | _                   -> error loc "Unsupported type."
+      
   (**
     [transl_type_loc ty] translates [ty] and returns a VeriFast type expression, representing [ty].
-    The difference with [transl_type] is that [ty] represents a node which also contains the location of the type.
   *)
   and transl_type_loc (type_node: R.Node.t): VF.type_expr =
-    let open R.Type in
     let loc, desc = decompose_node type_node in
-    transl_type desc ~loc
+    transl_type loc desc
+
+  (**
+    [transl_wtype ty] translates [ty] and return a VeriFast type expression, representing [ty].
+    Used when the given type is not provided by the user and hence has no source information.
+  *)
+  and transl_wtype (ty: R.Type.t): VF.type_expr =
+    let open R.Type in
+    match get ty with
+    | WPointer p          -> transl_pointer_wtype p 
+    | WElaborated e       -> transl_elaborated_wtype e 
+    | _                   -> transl_type VF.dummy_loc ty
 
   (****************)
   (* declarations *)
@@ -354,7 +372,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
       match binding with
       | VF.Static -> params
       | VF.Instance -> 
-        let this_type = transl_type @@ this_get meth in
+        let this_type = transl_wtype @@ this_get meth in
         (VF.PtrTypeExpr (VF.dummy_loc, this_type), "this") :: params 
     in
     let implicit = implicit_get meth in
@@ -563,7 +581,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
   and transl_construct_expr (loc: VF.loc) (c: R.Expr.Construct.t): VF.expr =
     let open R.Expr.Construct in 
     let mangled_name = mangled_name_get c in
-    let ty = type_get c |> transl_type in
+    let ty = type_get c |> transl_wtype in
     let args = args_get c |> capnp_arr_map transl_expr in
     VF.CxxConstruct (loc, mangled_name, ty, args)
 
@@ -573,7 +591,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
       if has_expr n then Some (expr_get n |> transl_expr)
       else None
     in
-    let ty = type_get n |> transl_type in
+    let ty = type_get n |> transl_wtype in
     VF.CxxNew (loc, ty, expr_opt)
 
   and transl_delete_expr (loc: VF.loc) (d: R.Node.t): VF.expr = 
@@ -591,6 +609,10 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
 
   and transl_null_ptr_lit_expr (loc: VF.loc) =
     make_int_lit loc 0
+
+  and transl_trunc_expr (loc: VF.loc) (t: R.Node.t): VF.expr =
+    let e = transl_expr t in
+    VF.TruncatingExpr (loc, e)
 
   (**************)
   (* statements *)
@@ -707,13 +729,22 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     | ULongLong -> make_int VF.Unsigned @@ VF.LitRank 3
     | _         -> error loc "Unsupported builtin type."
 
-  and transl_pointer_type (loc: VF.loc) (ptr: R.Type.t): VF.type_expr =
-    let ty = transl_type ptr in
-    VF.PtrTypeExpr (loc, ty)
+  and transl_pointer_type (loc:VF.loc) (ptr: R.Node.t): VF.type_expr = 
+    let pointee_type = transl_type_loc ptr in
+    VF.PtrTypeExpr (loc, pointee_type)
 
-  and transl_pointer_loc_type (loc :VF.loc) (ptr: R.Node.t): VF.type_expr =
-    let ty = transl_type_loc ptr in
-    VF.PtrTypeExpr (loc, ty)
+  and transl_pointer_wtype (ptr: R.Type.t): VF.type_expr =
+    let pointee_type = transl_wtype ptr in
+    VF.PtrTypeExpr (VF.dummy_loc, pointee_type)
+
+  and transl_elaborated_type (e: R.Node.t): VF.type_expr =
+    transl_type_loc e
+
+  and transl_elaborated_wtype (e: R.Type.t): VF.type_expr =
+    transl_wtype e
+
+  and transl_typedef_type (loc: VF.loc) (id: string): VF.type_expr =
+    VF.IdentTypeExpr (loc, None, id)
 
   and transl_record_type (loc: VF.loc) (r: R.RecordRef.t): VF.type_expr =
     let open R.RecordRef in
@@ -724,6 +755,36 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
 
   and transl_enum_type (loc: VF.loc) (name: string): VF.type_expr =
     VF.EnumTypeExpr (loc, Some name, None)
+
+  and transl_fixed_width_type (loc: VF.loc) (fw: R.Type.FixedWidth.t): VF.type_expr =
+    let open R.Type.FixedWidth in
+    let rank = 
+      match bits_get fw with
+      | 8 ->  VF.LitRank 0
+      | 16 -> VF.LitRank 1
+      | 32 -> VF.LitRank 2
+      | 64 -> VF.LitRank 3
+      | 128 -> VF.LitRank 4
+      | n -> error loc @@ "Invalid fixed width specified in type: " ^ (string_of_int n)
+    in
+    let signed = 
+      match kind_get fw with
+      | FixedWidthKind.Int -> VF.Signed
+      | FixedWidthKind.UInt -> VF.Unsigned 
+    in
+    ManifestTypeExpr (loc, VF.Int (signed, rank))
+    (* let open R.Type.FixedWidth in
+    let b_str = 
+      match bits_get fw with
+      | 8 | 16 | 32 | 64 | 128 as b -> string_of_int b 
+      | _ -> error loc @@ "Invalid width specified in fixed width integer"
+    in
+    let pref = 
+      match kind_get fw with
+      | FixedWidthKind.Int -> ""
+      | FixedWidthKind.UInt -> "u"
+    in
+    VF.IdentTypeExpr (loc, None, pref ^ "int" ^ b_str ^ "_t") *)
 
   (********************)
   (* translation unit *)
@@ -784,7 +845,14 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
 
   let parse_cxx_file (path: string): Cxx_fe_sig.header_type list * VF.package list =
     (* TODO: pass macros that are whitelisted *)
-    let inchan, outchan, errchan = invoke_exporter path [] in
+    let type_macros pref =
+      [8; 16; 32; 64] |> List.map @@ fun n ->
+        Printf.sprintf "__%s%u_TYPE__" pref n
+    in
+    let enable_types = 
+      type_macros "INT" @ type_macros "UINT"
+    in
+    let inchan, outchan, errchan = invoke_exporter path enable_types in
     let close_channels () =
       let _ = Unix.close_process_full (inchan, outchan, errchan) in () 
     in

@@ -1,12 +1,20 @@
 #include "AstSerializer.h"
+#include "FixedWidthInt.h"
 #include <list>
 
 namespace vf {
 
+void AstSerializer::updateFirstDeclLoc(unsigned fileUID,
+                                       clang::SourceLocation newLoc) {
+  if (_firstDeclLocMap.find(fileUID) != _firstDeclLocMap.end())
+    return;
+
+  _firstDeclLocMap.emplace(fileUID, newLoc);
+}
+
 void AstSerializer::serializeDeclToDeclMap(const clang::Decl *decl,
                                            capnp::Orphanage &orphanage) {
   auto range = decl->getSourceRange();
-
   auto fileID = _SM.getFileID(range.getBegin());
   auto fileUID = _SM.getFileEntryForID(fileID)->getUID();
   auto &declNodeOrphans = _fileDeclsMap[fileUID];
@@ -16,11 +24,9 @@ void AstSerializer::serializeDeclToDeclMap(const clang::Decl *decl,
   serializeAnnsToOrphans(anns, orphanage, declNodeOrphans);
   serializeToOrphan(decl, orphanage, declNodeOrphans);
 
-  if (_firstDeclLocMap.find(fileUID) == _firstDeclLocMap.end()) {
-    auto firstDeclLoc =
-        !anns.empty() ? anns.front().getRange().getBegin() : range.getBegin();
-    _firstDeclLocMap.emplace(fileUID, firstDeclLoc);
-  }
+  auto firstDeclLoc =
+      !anns.empty() ? anns.front().getRange().getBegin() : range.getBegin();
+  updateFirstDeclLoc(fileUID, firstDeclLoc);
 }
 
 void AstSerializer::serializeTU(stubs::TU::Builder &builder,
@@ -33,7 +39,7 @@ void AstSerializer::serializeTU(stubs::TU::Builder &builder,
   clang::SourceLocation currentLoc;
   for (auto decl : tu->decls()) {
     auto range = decl->getSourceRange();
-    if (range.isValid()) {
+    if (range.isValid() && !decl->isImplicit()) {
       serializeDeclToDeclMap(decl, orphanage);
       currentLoc = range.getEnd();
     }

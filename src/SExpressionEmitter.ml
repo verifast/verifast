@@ -260,7 +260,7 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
     | ClassLit (_, cn) ->
         List [ Symbol "expr-class-lit"; Symbol cn ]
     | TruncatingExpr (loc, e) ->
-        build_list [ Symbol "expr-truncating"; sexpr_of_expr expr ] []
+        build_list [ Symbol "expr-truncating"; sexpr_of_expr e ] []
     | Operation (loc, op, exprs) ->
         build_list
           [ Symbol "expr-op"; sexpr_of_operator op ]

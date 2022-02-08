@@ -1,5 +1,6 @@
 #include "AstSerializer.h"
 #include "clang/AST/Decl.h"
+#include "FixedWidthInt.h"
 
 namespace vf {
 
@@ -14,11 +15,10 @@ void DeclSerializer::serializeParams(
     param.setName(declName.getAsString());
     auto type = param.initType();
     auto typeInfo = p->getTypeSourceInfo();
-    if (typeInfo) {
-      _serializer.serializeTypeLoc(type, typeInfo->getTypeLoc());
-    } else {
-      _serializer.serializeTypeWithRange(type, p->getType().getTypePtr(), {});
-    }
+
+    assert(typeInfo && "Explicit parameter source info.");
+
+    _serializer.serializeTypeLoc(type, typeInfo->getTypeLoc());
     if (p->hasDefaultArg()) {
       auto def = param.initDefault();
       _serializer.serializeExpr(def, p->getDefaultArg());
@@ -33,9 +33,8 @@ void DeclSerializer::serializeFuncDecl(stubs::Decl::Function::Builder &builder,
   builder.setName(decl->getQualifiedNameAsString());
   builder.setMangledName(mangledName.str());
   auto result = builder.initResult();
-  auto returnRange = decl->getReturnTypeSourceRange();
-  _serializer.serializeTypeWithRange(result, decl->getReturnType().getTypePtr(),
-                                     returnRange);
+  _serializer.serializeTypeLoc(result,
+                               decl->getFunctionTypeLoc().getReturnLoc());
 
   auto paramsBuilder = builder.initParams(decl->param_size());
   serializeParams(paramsBuilder, decl->parameters());
@@ -87,9 +86,7 @@ bool DeclSerializer::VisitVarDecl(const clang::VarDecl *decl) {
   var.setName(decl->getQualifiedNameAsString());
 
   auto ty = var.initType();
-  _serializer.serializeTypeWithRange(
-      ty, decl->getType().getTypePtr(),
-      {decl->getTypeSpecStartLoc(), decl->getTypeSpecEndLoc()});
+  _serializer.serializeTypeLoc(ty, decl->getTypeSourceInfo()->getTypeLoc());
 
   if (decl->hasInit()) {
     auto init = var.initInit();
@@ -161,6 +158,8 @@ bool DeclSerializer::VisitCXXRecordDecl(const clang::CXXRecordDecl *decl) {
     size_t nbDecls(0);
 
     for (auto d : decl->decls()) {
+      if (d->isImplicit())
+        continue;
       if (llvm::isa<clang::FieldDecl>(d)) {
         ++nbFields;
       } else {
@@ -175,6 +174,8 @@ bool DeclSerializer::VisitCXXRecordDecl(const clang::CXXRecordDecl *decl) {
     nbDecls = 0;
 
     for (auto d : decl->decls()) {
+      if (d->isImplicit())
+        continue;
       if (auto *field = llvm::dyn_cast<clang::FieldDecl>(d)) {
         auto builder = fieldsBuilder[nbFields++];
         auto locBuilder = builder.initLoc();
@@ -199,7 +200,7 @@ void DeclSerializer::serializeMethodDecl(stubs::Decl::Method::Builder &builder,
   builder.setImplicit(decl->isImplicit());
   if (!isStatic) {
     auto thisType = builder.initThis();
-    _serializer.serializeType(thisType, decl->getThisObjectType().getTypePtr());
+    _serializer.serializeQualType(thisType, decl->getThisObjectType());
   }
 
   auto func = builder.initFunc();
@@ -259,7 +260,6 @@ bool DeclSerializer::VisitCXXDestructorDecl(
 
   auto parent = dtor.initParent();
   serializeRecordRef(parent, decl->getParent());
-
   return true;
 }
 
@@ -273,9 +273,30 @@ bool DeclSerializer::VisitTypedefNameDecl(const clang::TypedefNameDecl *decl) {
   def.setName(decl->getQualifiedNameAsString());
 
   auto defType = def.initType();
-  _serializer.serializeTypeLoc(defType,
-                               decl->getTypeSourceInfo()->getTypeLoc());
+  auto typeLoc = decl->getTypeSourceInfo()->getTypeLoc();
 
+  auto typeExpandsFromSystemMacro =
+      getSourceManager().isInSystemMacro(typeLoc.getBeginLoc());
+
+  if (!typeExpandsFromSystemMacro) {
+    _serializer.serializeTypeLoc(defType, typeLoc);
+    return true;
+  }
+
+  if (auto fwi = getFixedWidthFromString(decl->getName())) {
+    auto locBuilder = defType.initLoc();
+    auto descBuilder = defType.initDesc();
+
+    serializeSrcRange(locBuilder, typeLoc.getSourceRange(), getSourceManager());
+
+    auto fw = descBuilder.initFixedWidth();
+    fw.setKind(fwi->isSigned ? stubs::Type::FixedWidth::FixedWidthKind::INT
+                             : stubs::Type::FixedWidth::FixedWidthKind::U_INT);
+    fw.setBits(fwi->bits);
+    return true;
+  }
+
+  _serializer.serializeTypeLoc(defType, typeLoc);
   return true;
 }
 

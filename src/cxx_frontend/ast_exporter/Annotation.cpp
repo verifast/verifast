@@ -8,6 +8,8 @@ class GhostCodeAnalyzer {
   bool _isAnnotationLike;
   bool _isContractClauseLike = false;
   bool _checkedForContractClause = false;
+  bool _isTruncating = false;
+  bool _checkedForTruncating = false;
 
   // Check for ghost symbols. `/*@*/` is allowed so we don't silently ignore it
   // and VeriFast can throw a parse error.
@@ -50,18 +52,45 @@ public:
     _checkedForContractClause = true;
     return _isContractClauseLike;
   }
+
+  bool isTruncating() {
+    if (_checkedForTruncating)
+      return _isTruncating;
+    
+    _checkedForTruncating = true;
+    _pos = _text.begin() + 3;
+
+    skipWhitespace();
+    if (! startsWith("truncating")) {
+      _isTruncating = false;
+      return false;
+    }
+
+    skipWhitespace();
+    if (_pos == _text.end()) {
+      _isTruncating = true;
+      return true;
+    }
+
+    if (startsWith("@*/")) {
+      _isTruncating = true;
+      return true;
+    }
+
+    return false;
+  }
 };
 
 // Assumes that the given text is a valid C++ comment.
 llvm::Optional<Annotation> annotationOf(clang::SourceRange range,
                                         llvm::StringRef text, bool isNewSeq) {
+  llvm::Optional<Annotation> result;
   GhostCodeAnalyzer gca(text);
   if (gca.isAnnotationLike()) {
     bool isContractClauseLike = gca.isContractClauseLike();
-    llvm::Optional<Annotation> result;
-    result.emplace(range, text, isContractClauseLike, isNewSeq);
-    return result;
+    bool isTruncating = isContractClauseLike ? false : gca.isTruncating();
+    result.emplace(range, text, isContractClauseLike, isTruncating, isNewSeq);
   }                                        
-  return {};
+  return result;
 }
 } // namespace vf

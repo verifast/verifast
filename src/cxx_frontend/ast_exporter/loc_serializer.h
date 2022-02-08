@@ -12,6 +12,19 @@ struct LCF {
   unsigned int f;
 };
 
+/**
+ * Decompose the line, column and file unique identifier from a sourcelocation.
+ * The result will be placed in the given \p lcf if the given location \p loc is
+ * valid and not comming from a 'real' file (not a system file).
+ *
+ * @param loc source location to decompose.
+ * @param SM source manager.
+ * @param[out] lcf struct to place the line, column and file uniques identifier
+ * in.
+ * @return true if the given location \p loc was valid and could be decomposed.
+ * @return false if the given location \p was incalid and it was not possible to
+ * decompose it.
+ */
 inline bool getLCF(const clang::SourceLocation &loc,
                    const clang::SourceManager &SM, LCF &lcf) {
   auto decLoc = SM.getDecomposedLoc(SM.getSpellingLoc(loc));

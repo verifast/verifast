@@ -14,12 +14,13 @@ class Annotation {
   std::string _text;
   bool _isContractClauseLike;
   bool _isNewSeq;
+  bool _isTruncating;
 
 public:
   Annotation(clang::SourceRange &range, llvm::StringRef text,
-             bool isContractClause, bool isNewSeq)
+             bool isContractClause, bool isTruncating, bool isNewSeq)
       : _range(range), _text(text), _isContractClauseLike(isContractClause),
-        _isNewSeq(isNewSeq) {}
+        _isTruncating(isTruncating), _isNewSeq(isNewSeq) {}
 
 public:
   clang::SourceRange getRange() const { return _range; }
@@ -34,11 +35,16 @@ public:
   bool isContractClauseLike() const { return _isContractClauseLike; }
 
   /**
-   * wether or not this annotation starts a new sequence of annotations. I.e.,
-   * the lines between this annotation and the previous one do not only contain
-   * comments and/or white space.
+   * @return wether or not this annotation starts a new sequence of annotations.
+   * I.e., the lines between this annotation and the previous one do not only
+   * contain comments and/or white space.
    */
   bool isNewSeq() const { return _isNewSeq; }
+
+  /**
+   * @return wether or not this annotation is a truncating expression.
+   */
+  bool isTruncating() const { return _isTruncating; }
 };
 
 /**

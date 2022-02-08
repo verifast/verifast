@@ -4,36 +4,47 @@
 namespace vf {
 
 void ContextFreePPCallbacks::PPDiags::reportMacroDivergence(
-    const clang::Token &macroNameTok, const clang::MacroDefinition &MD) {
-  auto tokenSpelling = _PP.getSpelling(macroNameTok);
+    const clang::Token &macroNameTok, const std::string &macroName,
+    const clang::MacroDefinition &MD) {
   auto loc = macroNameTok.getLocation();
   auto globalDef = MD.getMacroInfo();
   createDiag(loc, clang::DiagnosticsEngine::Level::Error,
              "Definition of '%0' has diverged. Its definition is%1 defined in "
              "the current context, while%2 defined in the parent context.")
-      << tokenSpelling << (globalDef ? " not" : "")
-      << (globalDef ? "" : " not");
+      << macroName << (globalDef ? " not" : "") << (globalDef ? "" : " not");
 }
 
 void ContextFreePPCallbacks::PPDiags::reportCtxSensitiveMacroExp(
-    const clang::Token &macroNameTok, const clang::MacroDefinition &MD,
-    const clang::SourceRange &range) {
+    const clang::Token &macroNameTok, const std::string &macroName,
+    const clang::MacroDefinition &MD, const clang::SourceRange &range) {
   createDiag(range.getBegin(), clang::DiagnosticsEngine::Level::Error,
              "Macro expansion of '%0' is context sensitive. Last definition is "
              "here: %1")
-      << _PP.getSpelling(macroNameTok)
+      << macroName
       << MD.getMacroInfo()->getDefinitionLoc().printToString(
              _PP.getSourceManager());
 }
 
 void ContextFreePPCallbacks::PPDiags::reportUndefIsolatedMacro(
-    const clang::Token &macroNameTok, const clang::MacroDefinition &MD) {
+    const clang::Token &macroNameTok, const std::string &macroName,
+    const clang::MacroDefinition &MD) {
   createDiag(macroNameTok.getLocation(), clang::DiagnosticsEngine::Level::Error,
              "'Undefining '%0', which has no definition in the current "
              "context. Last definition is here: %1")
-      << _PP.getSpelling(macroNameTok)
+      << macroName
       << MD.getMacroInfo()->getDefinitionLoc().printToString(
              _PP.getSourceManager());
+}
+
+std::string
+ContextFreePPCallbacks::getMacroName(const clang::Token &macroNameToken) const {
+  return _PP.getSpelling(macroNameToken);
+}
+
+bool ContextFreePPCallbacks::macroAllowed(const std::string &macroName) const {
+  clang::StringRef n(macroName);
+  return n.startswith("__VF_CXX_CLANG_FRONTEND__") ||
+         _whiteList.find(macroName) != _whiteList.end();
 }
 
 void ContextFreePPCallbacks::FileChanged(
@@ -77,8 +88,11 @@ void ContextFreePPCallbacks::MacroUndefined(
   // It is not allowed to undef a macro that is globally defined, but not in the
   // current context. We still allow to undef macro's that haven't been defined
   // at all.
+  auto name = getMacroName(macroNameTok);
+  if (macroAllowed(name))
+    return;
   if (undef && !_context.currentInclusion()->ownsMacroDef(MD, SM())) {
-    _diags.reportUndefIsolatedMacro(macroNameTok, MD);
+    _diags.reportUndefIsolatedMacro(macroNameTok, name, MD);
   }
 }
 
@@ -86,11 +100,12 @@ void ContextFreePPCallbacks::MacroExpands(const clang::Token &macroNameTok,
                                           const clang::MacroDefinition &MD,
                                           clang::SourceRange range,
                                           const clang::MacroArgs *args) {
-  if (_whiteList.find(_PP.getSpelling(macroNameTok)) == _whiteList.end()) {
-    bool macroDefined = _context.currentInclusion()->ownsMacroDef(MD, SM());
-    if (!macroDefined) {
-      _diags.reportCtxSensitiveMacroExp(macroNameTok, MD, range);
-    }
+  auto name = getMacroName(macroNameTok);
+  if (macroAllowed(name))
+    return;
+  bool macroDefined = _context.currentInclusion()->ownsMacroDef(MD, SM());
+  if (!macroDefined) {
+    _diags.reportCtxSensitiveMacroExp(macroNameTok, name, MD, range);
   }
 }
 
@@ -108,15 +123,19 @@ void ContextFreePPCallbacks::InclusionDirective(
     clang::CharSourceRange filenameRange, const clang::FileEntry *file,
     clang::StringRef searchPath, clang::StringRef relativePath,
     const clang::Module *imported, clang::SrcMgr::CharacteristicKind fileType) {
-  _context.addInclDirective(filenameRange.getAsRange(), fileName, *file, isAngled);
+  _context.addInclDirective(filenameRange.getAsRange(), fileName, *file,
+                            isAngled);
 }
 
 void ContextFreePPCallbacks::checkDivergence(const clang::Token &macroNameTok,
                                              const clang::MacroDefinition &MD) {
+  auto name = getMacroName(macroNameTok);
+  if (macroAllowed(name))
+    return;
   bool hasLocalDef = _context.currentInclusion()->ownsMacroDef(MD, SM());
   bool hasGlobalDef = MD.getMacroInfo();
   if (hasLocalDef ^ hasGlobalDef) {
-    _diags.reportMacroDivergence(macroNameTok, MD);
+    _diags.reportMacroDivergence(macroNameTok, name, MD);
   }
 }
 

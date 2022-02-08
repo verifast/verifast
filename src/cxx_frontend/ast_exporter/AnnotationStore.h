@@ -2,6 +2,7 @@
 #include "Annotation.h"
 #include "clang/Basic/FileManager.h"
 #include "clang/Basic/SourceManager.h"
+#include "llvm/ADT/SmallVector.h"
 #include <kj/common.h>
 #include <unordered_map>
 #include <vector>
@@ -48,7 +49,7 @@ class AnnotationStore {
     template <class Pred, class Cont> void getWhile(Cont &con, Pred pred) {
       while (_pos < _anns.size()) {
         auto ann = _anns.at(_pos);
-        if (pred (ann)) {
+        if (pred(ann)) {
           con.push_back(ann);
           ++_pos;
           continue;
@@ -104,8 +105,8 @@ public:
 
   /**
    * Retrieve every annotation before the given location.
-   * @tparam Container type of the container where the retrieved annotations will
-   * be added to.
+   * @tparam Container type of the container where the retrieved annotations
+   * will be added to.
    * @param con the container to add the annotations to.
    * @param loc location that comes from a specific file. Only the annotations
    * in that file that appear before this location are retrieved.
@@ -116,7 +117,8 @@ public:
                    const clang::SourceManager &SM) {
     auto expLoc = SM.getFileLoc(loc);
     auto pred = [expLoc](const Annotation &ann) {
-      return ann.getRange().getEnd() < expLoc;
+      // compare to 'begin' of range in case the end overlaps with the given loc
+      return ann.getRange().getBegin() < expLoc;
     };
     getCont(expLoc, SM).getWhile(con, pred);
   }
@@ -138,8 +140,7 @@ public:
     getCont(SM.getFileLoc(currentLoc), SM).getAll(con);
   }
 
-  template <class Container>
-  void getAll(unsigned fileUID, Container &con) {
+  template <class Container> void getAll(unsigned fileUID, Container &con) {
     _annContainers[fileUID].getAll(con);
   }
 
@@ -172,6 +173,23 @@ public:
       return result;
     };
     getCont(SM.getFileLoc(currentLoc), SM).getWhile(con, pred);
+  }
+
+  llvm::Optional<clang::SourceRange>
+  queryTruncatingAnnotation(const clang::SourceLocation currentLoc,
+                            const clang::SourceManager &SM) {
+    auto pred = [&currentLoc](const Annotation &ann) {
+      // compare to 'begin' of range in case the end overlaps with the given currentLoc
+      return ann.getRange().getBegin() < currentLoc && ann.isTruncating();
+    };
+    llvm::SmallVector<Annotation, 1> query;
+    getCont(SM.getFileLoc(currentLoc), SM).getWhile(query, pred);
+    llvm::Optional<clang::SourceRange> result;
+    if (query.empty()) {
+      return result;
+    }
+    result.emplace(query.front().getRange());
+    return result;
   }
 };
 } // namespace vf
