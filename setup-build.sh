@@ -5,6 +5,8 @@
 # Suitable for home use and for continuous integration.
 #
 
+# TODO @Nima: Add Rust toolchain installation to setup-build.sh
+
 set -e # Stop as soon as a command fails.
 set -x # Print what is being executed.
 
