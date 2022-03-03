@@ -40,6 +40,10 @@
 /src/pa_verifast.cmo
 /src/vfconfig.ml
 
+# release files
+/src/verifast-*
+/upload
+
 GNUmakefile.settings
 cidl
 camlidl-1.05.tar.gz
