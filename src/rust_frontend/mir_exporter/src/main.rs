@@ -2,9 +2,8 @@ mod vf_mir {
 
     mod vf_mir_capnp {
         #![allow(unused)]
-        include!(concat!(env!("OUT_DIR"), "/src/vf_mir_capnp.rs"));
+        include!(concat!(env!("OUT_DIR"), "/vf_mir_capnp.rs"));
     }
-    use capnp::serialize;
     use vf_mir_capnp::vf_mir;
     pub fn write_vf_mir() -> ::capnp::Result<()> {
         let mut message = ::capnp::message::Builder::new_default();
@@ -13,7 +12,7 @@ mod vf_mir {
             vf_mir.set_id(200);
         }
 
-        serialize::write_message(&mut ::std::io::stdout(), &message)
+        capnp::serialize::write_message(&mut ::std::io::stdout(), &message)
     }
 }
 
