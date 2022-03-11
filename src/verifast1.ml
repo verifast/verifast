@@ -1809,6 +1809,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         reportUseSite DeclKind_AbstractType ld l;
         AbstractType n
       | None ->
+      (*** TODO @Nima: Review two following dialect checks regarding Rust after Niels fixed them *)
       (* So we can use class/struct/union names as types in ghost code *)
       match try_assoc id structmap0 with
         Some (ld, _, _, _, _) when dialect = Some Cxx ->

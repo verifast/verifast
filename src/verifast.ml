@@ -3575,7 +3575,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           parse_header_file reportMacroCall path reportRange reportShouldFail options.option_verbose [] define_macros options.option_enforce_annotations data_model
         else
           parse_c_file reportMacroCall path reportRange reportShouldFail options.option_verbose include_paths define_macros options.option_enforce_annotations data_model
-      | CLang, Some Cxx ->
+      | CLang, Some Cxx -> begin
         let module Translator = Cxx_ast_translator.Make(
           struct
             let enforce_annotations = options.option_enforce_annotations
@@ -3596,7 +3596,10 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         with
         | Cxx_annotation_parser.CxxAnnParseException (l, msg)
         | Cxx_ast_translator.CxxAstTranslException (l, msg) -> static_error l msg None
-          
+      end
+      | CLang, Some(Rust) -> begin
+        failwith "Not implemented!"
+      end
     in
     emitter_callback ds;
     check_should_fail ([], [], [], [], [], []) $. fun () ->

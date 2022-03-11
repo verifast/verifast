@@ -1945,6 +1945,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let Some env' = zip ys ts in
     begin fun cont ->
       match dialect, try_assoc "this" ps with
+      (*** TODO @Nima: For now, we just ignore this check for Rust. It needs a review later *)
       | _, Some ObjType _ | Some Cxx, Some (PtrType (StructType _)) ->
         let this_term = List.assoc "this" env' in
         if not (ctxt#query (ctxt#mk_not (ctxt#mk_eq this_term (null_pointer_term ())))) then
