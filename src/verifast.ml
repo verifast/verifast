@@ -2626,7 +2626,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   and compute_heapy_params loc func_kind params pre_tenv ss =
     let is_ghost = func_kind |> function Regular -> false | _ -> true in
     let penv = params |> List.map @@ function 
-      | (x, RefType t) -> x, get_unique_var_symb_ (x ^ "_addr") t is_ghost
+      | (x, RefType t) -> x, get_unique_var_symb_ (x ^ "_addr") (PtrType t) is_ghost
       | (x, t) -> x, get_unique_var_symb_ x t is_ghost 
     in
     let heapy_vars = ss |> List.map stmt_address_taken |> List.flatten |> list_remove_dups in
