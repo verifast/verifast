@@ -1189,7 +1189,21 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | WReadArray(_, e1, _, e2) -> (expr_mark_addr_taken e1 locals); (expr_mark_addr_taken e2 locals)
     | Deref(_, e) -> expr_mark_addr_taken e locals
     | WDeref(_, e, _) -> expr_mark_addr_taken e locals
-    | CallExpr(_, _, _, ps1, ps2, _) -> List.iter (fun pat -> pat_expr_mark_addr_taken pat locals) (ps1 @ ps2)
+    | CallExpr(_, n, _, ps1, ps2, _) -> 
+      begin match dialect with 
+      | Some Cxx -> 
+        let () = ps1 |> List.iter @@ fun pat -> pat_expr_mark_addr_taken pat locals in
+        let mark_lvalue_var = function 
+        | LitPat (Var (_, x) | WVar (_, x, _)) -> mark_if_local locals x (* otherwise the variable reference would be inside a CxxLValueToRValue expression *)
+        | _ -> ()
+        in
+        if List.mem_assoc n funcmap then 
+          ps2 |> List.iter mark_lvalue_var
+        else 
+          ps2 |>List.iter @@ fun pat -> pat_expr_mark_addr_taken pat locals
+      | _ -> 
+        List.iter (fun pat -> pat_expr_mark_addr_taken pat locals) (ps1 @ ps2)
+      end
     | ExprCallExpr(_, e, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) (e :: es)
     | WFunPtrCall(_, _, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
     | WPureFunCall(_, _, _, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
@@ -1222,9 +1236,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | CxxConstruct (_, _, _, es)
     | WCxxConstruct (_, _, _, es) -> es |> List.iter @@ fun e -> expr_mark_addr_taken e locals
     | CxxDelete (_, e) -> expr_mark_addr_taken e locals
+    | CxxLValueToRValue (_, e) -> expr_mark_addr_taken e locals
   and pat_expr_mark_addr_taken pat locals = 
     match pat with
-      LitPat(e) -> expr_mark_addr_taken e locals
+    | LitPat(e) -> expr_mark_addr_taken e locals
     | _ -> ()
   
   let rec ass_mark_addr_taken a locals = 
@@ -1251,23 +1266,33 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | WMatchAsn (l, e, pat, tp) -> expr_mark_addr_taken e locals; pat_expr_mark_addr_taken pat locals
     | e -> expr_mark_addr_taken e locals
   
-  let rec stmt_mark_addr_taken s locals cont =
+  let rec stmt_mark_addr_taken s locals pure cont =
     match s with
       DeclStmt(_, ds) ->
       let (block, mylocals)::rest = locals in
       ds |> List.iter begin fun (_, tp, x, e, (_, blockPtr)) ->
-        begin match e with None -> () | Some(e) -> expr_mark_addr_taken e locals end;
+        begin match e, tp with 
+        | None, _ -> () 
+        | Some (Var (l, x) | WVar (l, x, _)), LValueRefTypeExpr _ -> mark_if_local locals x
+        | Some(e), _ -> expr_mark_addr_taken e locals 
+        end;
         blockPtr := Some block
       end;
-      cont ((block, List.map (fun (lx, tx, x, e, (addrtaken, _)) -> (x, addrtaken)) ds @ mylocals) :: rest)
-    | BlockStmt(_, _, ss, _, locals_to_free) -> stmts_mark_addr_taken ss ((locals_to_free, []) :: locals) (fun _ -> cont locals)
+      (* filter out lvalue ref decls: don't mark them as 'addr_taken' so we don't try to consume their chunks at the end of their scope/block *)
+      let locals_wo_lvalue_refs = ds 
+        |> List.filter (fun (_, tx, _, _, _) -> is_lvalue_ref_type_expr tx |> not) 
+        |> List.map @@ fun (_, _, x, _, (addr_taken, _)) -> x, addr_taken 
+      in
+      cont ((block, locals_wo_lvalue_refs @ mylocals) :: rest)
+    | BlockStmt(_, _, ss, _, locals_to_free) -> stmts_mark_addr_taken ss ((locals_to_free, []) :: locals) pure (fun _ -> cont locals)
     | ExprStmt(e) -> expr_mark_addr_taken e locals; cont locals
-    | PureStmt(_, s) ->  stmt_mark_addr_taken s locals cont
-    | NonpureStmt(_, _, s) -> stmt_mark_addr_taken s locals cont
+    | PureStmt(_, s) ->  stmt_mark_addr_taken s locals true cont
+    | NonpureStmt(_, _, s) -> stmt_mark_addr_taken s locals false cont
     | IfStmt(l, e, ss1, ss2) -> 
         expr_mark_addr_taken e locals; 
-        stmts_mark_addr_taken ss1 locals (fun locals -> stmts_mark_addr_taken ss2 locals (fun _ -> ())); cont locals
+        stmts_mark_addr_taken ss1 locals pure (fun locals -> stmts_mark_addr_taken ss2 locals pure (fun _ -> ())); cont locals
     | LabelStmt _ | GotoStmt _ | NoopStmt _ | Break _ | Throw _ | TryFinally _ | TryCatch _ -> cont locals
+    | ReturnStmt(_, Some (Var (_, x) | WVar (_, x, _))) when dialect = Some Cxx && not pure -> mark_if_local locals x
     | ReturnStmt(_, Some(e)) ->  expr_mark_addr_taken e locals; cont locals
     | ReturnStmt(_, None) -> cont locals
     | Assert(_, p) -> ass_mark_addr_taken p locals; cont locals
@@ -1277,7 +1302,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       List.iter (fun p -> pat_expr_mark_addr_taken p locals) (pats1 @ pats2);
       (match patopt with None -> () | Some(p) -> pat_expr_mark_addr_taken p locals); 
       cont locals
-    | SwitchStmt(_, e, cls) -> expr_mark_addr_taken e locals; List.iter (fun cl -> match cl with SwitchStmtClause(_, e, ss) -> (expr_mark_addr_taken e locals); stmts_mark_addr_taken ss locals (fun _ -> ()); | SwitchStmtDefaultClause(_, ss) -> stmts_mark_addr_taken ss locals (fun _ -> ())) cls; cont locals
+    | SwitchStmt(_, e, cls) -> expr_mark_addr_taken e locals; List.iter (fun cl -> match cl with SwitchStmtClause(_, e, ss) -> (expr_mark_addr_taken e locals); stmts_mark_addr_taken ss locals pure (fun _ -> ()); | SwitchStmtDefaultClause(_, ss) -> stmts_mark_addr_taken ss locals pure (fun _ -> ())) cls; cont locals
     | WhileStmt(_, e1, loopspecopt, e2, ss, final_ss) -> 
         expr_mark_addr_taken e1 locals; 
         (match e2 with None -> () | Some(e2) -> expr_mark_addr_taken e2 locals);
@@ -1286,8 +1311,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | Some(LoopSpec(a1, a2)) -> ass_mark_addr_taken a1 locals; ass_mark_addr_taken a2 locals;
         | None -> ()
         );
-        stmts_mark_addr_taken ss locals $. fun locals ->
-        stmts_mark_addr_taken final_ss locals cont
+        stmts_mark_addr_taken ss locals pure $. fun locals ->
+        stmts_mark_addr_taken final_ss locals pure cont
     | SplitFractionStmt(_, _, _, pats, eopt) -> 
         List.iter (fun p -> pat_expr_mark_addr_taken p locals) pats;
         (match eopt with None -> () | Some(e) -> expr_mark_addr_taken e locals); 
@@ -1301,10 +1326,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | InvariantStmt(_, a) -> ass_mark_addr_taken a locals; cont locals
     | _ -> cont locals
   and
-  stmts_mark_addr_taken ss locals cont =
+  stmts_mark_addr_taken ss locals pure cont =
     match ss with
       [] -> cont locals
-    | s :: ss -> stmt_mark_addr_taken s locals (fun locals -> stmts_mark_addr_taken ss locals cont)
+    | s :: ss -> stmt_mark_addr_taken s locals pure (fun locals -> stmts_mark_addr_taken ss locals pure cont)
   
   
   (* locals whose address is taken in e *)
@@ -1767,6 +1792,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           mk_varargs h env [] pats
         | SrcPat (LitPat e)::pats, (x, tp0)::ps ->
+          let e, tp0 = match tp0 with 
+          | RefType t -> AddressOf (expr_loc e, e), PtrType t
+          | _ -> e, tp0 
+          in
           let tp = instantiate_type tpenv tp0 in
           eval_h h env (SrcPat (LitPat (box (check_expr_t (pn,ilist) tparams tenv e tp) tp tp0))) $. fun h env t ->
           iter h env (t::ts) pats ps
@@ -2078,7 +2107,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         eval_h h env i $. fun h env i ->
         cont h env (LValues.ArrayElement (l, arr, elem_tp, i))
       | WDeref (l, w, pointeeType) ->
-        eval_h h env w $. fun h env target ->
+        eval_h_core readonly h env w $. fun h env target ->
         cont h env (LValues.Deref (l, target, pointeeType))
       | _ -> static_error (expr_loc lhs) "Cannot assign to this expression." None
     in
@@ -2570,6 +2599,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       verify_expr (true, rhsHeapReadOnly) h env varName rhs $. fun h env vrhs ->
       write_lvalue h env lvalue vrhs $. fun h env ->
       cont h env vrhs
+    | AddressOf (_, WDeref (_, w, _)) ->
+      eval_h_core readonly h env w cont
     | e ->
       if not pure then check_ghost_nonrec ghostenv e;
       eval_non_pure_cps (fun (h, env) e cont -> eval_h h env e (fun h env t -> cont (h, env) t)) pure (h, env) env e (fun (h, env) v -> cont h env v)

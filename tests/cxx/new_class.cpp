@@ -60,6 +60,5 @@ int main()
     //@ assert(f->i == i + 1);
     //@ close FieldsPred(f, i+1, b, e);
     
-    //@ leak FieldsPred(f, _, _, _);
-    //@ leak new_block_Fields(f);
+    delete f;
 }
