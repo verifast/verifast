@@ -1649,7 +1649,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         Some (ld, _) when dialect = Some Cxx ->
         reportUseSite DeclKind_Union ld l;
         UnionType id
-      | None ->
+      | _ ->
       static_error l ("No such type parameter, inductive datatype, class, interface, or function type: " ^pn^" "^id) None
       end
     | IdentTypeExpr (l, Some(pac), id) ->
