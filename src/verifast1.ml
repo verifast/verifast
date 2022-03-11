@@ -1644,7 +1644,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         Some (ld, _, _) when dialect = Some Cxx -> 
         reportUseSite DeclKind_Struct ld l;
         StructType id
-      | None ->
+      | _ ->
       match try_assoc id uniondeclmap with
         Some (ld, _) when dialect = Some Cxx ->
         reportUseSite DeclKind_Union ld l;
