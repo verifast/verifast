@@ -148,6 +148,8 @@ let rec sexpr_of_type_expr : type_expr -> sexpression = function
       build_list
         [ Symbol "type-expr-pure-func" ]
         [ "type-exprs", sexpr_of_list sexpr_of_type_expr exprs ]
+  | LValueRefTypeExpr (_, te) -> 
+      List [ Symbol "type-expr-lvalue-ref"; sexpr_of_type_expr te ]
 
 let sexpr_of_type_expr_option : type_expr option -> sexpression = function
   | Some t -> sexpr_of_type_expr t
@@ -631,6 +633,8 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
             "pat", sexpr_of_pat pat;
             "typ", sexpr_of_type_ typ
           ]
+    | CxxLValueToRValue (l, e) ->
+        List [ Symbol "lvalue-to-rvalue"; sexpr_of_expr e ]
 
 
 and sexpr_of_pat (pat : pat) : sexpression =

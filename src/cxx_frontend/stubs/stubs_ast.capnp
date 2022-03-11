@@ -375,6 +375,7 @@ struct Expr {
     nullPtrLit @13 :Void;
     delete @14 :ExprNode;
     truncating @15 :ExprNode;
+    lValueToRValue @16 :ExprNode;
   }
 }
 

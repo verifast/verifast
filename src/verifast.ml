@@ -765,8 +765,11 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     iter h env (v::vs) bs
                 in
                 iter h env [] bs
+              | RefType t, Some e ->
+                let w = check_expr_t (pn, ilist) tparams tenv (AddressOf (expr_loc e, e)) (PtrType t) in
+                verify_expr false h env (Some (x ^ "_addr")) w (fun h env v -> cont h env v) econt
               | _, Some e ->
-                let w = check_expr_t (pn,ilist) tparams tenv e t in
+                let w = check_expr_t (pn, ilist) tparams tenv e t in
                 verify_expr false h env (Some x) w (fun h env v -> cont h env v) econt
             in
             get_initial_value h env x t e $. fun h env v ->
@@ -2271,6 +2274,10 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         None -> cont h None
       | Some e ->
         let tp = match try_assoc "#result" tenv with None -> static_error l "Void function cannot return a value: " None | Some tp -> tp in
+        let e, tp = match tp with
+        | RefType t -> AddressOf (expr_loc e, e), PtrType t
+        | _ -> e, tp 
+        in
         let w = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some pure) e tp in
         verify_expr false (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env None w (fun h env v ->
         cont h (Some v)) econt
@@ -2617,9 +2624,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | _ -> with_context (Executing (h, env, l, "Freeing parameters.")) (fun _ -> cleanup_heapy_locals_core (pn, ilist) l h env ps cont)
 
   and compute_heapy_params loc func_kind params pre_tenv ss =
-    let penv = get_unique_var_symbs_ params (match func_kind with Regular -> false | _ -> true) in
+    let is_ghost = func_kind |> function Regular -> false | _ -> true in
+    let penv = params |> List.map @@ function 
+      | (x, RefType t) -> x, get_unique_var_symb_ (x ^ "_addr") t is_ghost
+      | (x, t) -> x, get_unique_var_symb_ x t is_ghost 
+    in
     let heapy_vars = ss |> List.map stmt_address_taken |> List.flatten |> list_remove_dups in
-    let heapy_ps = pre_tenv |> List.fold_left (fun acc (x, tp) ->
+    let heapy_ps = pre_tenv |> List.filter (function (x, RefType _) -> false | _ -> true) |> List.fold_left (fun acc (x, tp) ->
       if List.mem_assoc x params && List.mem x heapy_vars then 
         let addr = get_unique_var_symb_non_ghost (x ^ "_addr") (PtrType tp) in
         (loc, x, tp, addr) :: acc
@@ -2654,7 +2665,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     begin fun tcont ->
       let h, tenv, env = heapify_params h tenv env heapy_ps in 
       let outer_locals = ref [] in 
-      stmts_mark_addr_taken ss [(outer_locals, [])] (fun _ -> ());
+      stmts_mark_addr_taken ss [(outer_locals, [])] in_pure_context (fun _ -> ());
       let body = [BlockStmt(loc, [], ss, close_brace_loc, outer_locals)] in
       verify_block (pn, ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont (fun _ _ _ -> assert false)
     end @@ fun sizemap tenv ghostenv h env ->

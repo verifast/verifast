@@ -202,6 +202,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     | NullPtrLit          -> transl_null_ptr_lit_expr loc
     | Delete d            -> transl_delete_expr loc d
     | Truncating t        -> transl_trunc_expr loc t
+    | LValueToRValue l    -> transl_lvalue_to_rvalue_expr loc l
     | Undefined _         -> failwith "Undefined expression"
     | _                   -> error loc "Unsupported expression."
 
@@ -250,6 +251,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
       | Elaborated e        -> transl_elaborated_type e
       | Typedef t           -> transl_typedef_type loc t
       | FixedWidth f        -> transl_fixed_width_type loc f
+      | LValueRef l         -> transl_lvalue_ref_type loc l
       | Undefined _         -> failwith "Undefined type."
       | _                   -> error loc "Unsupported type."
       
@@ -269,6 +271,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     match get ty with
     | WPointer p          -> transl_pointer_wtype p 
     | WElaborated e       -> transl_elaborated_wtype e 
+    | WLValueRef l        -> transl_lvalue_ref_wtype l
     | _                   -> transl_type VF.dummy_loc ty
 
   (****************)
@@ -614,6 +617,10 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     let e = transl_expr t in
     VF.TruncatingExpr (loc, e)
 
+  and transl_lvalue_to_rvalue_expr (loc: VF.loc) (e: R.Node.t): VF.expr =
+    let e = transl_expr e in
+    VF.CxxLValueToRValue (loc, e)
+
   (**************)
   (* statements *)
   (**************)
@@ -729,13 +736,21 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     | ULongLong -> make_int VF.Unsigned @@ VF.LitRank 3
     | _         -> error loc "Unsupported builtin type."
 
-  and transl_pointer_type (loc:VF.loc) (ptr: R.Node.t): VF.type_expr = 
+  and transl_pointer_type (loc: VF.loc) (ptr: R.Node.t): VF.type_expr = 
     let pointee_type = transl_type_loc ptr in
     VF.PtrTypeExpr (loc, pointee_type)
 
   and transl_pointer_wtype (ptr: R.Type.t): VF.type_expr =
     let pointee_type = transl_wtype ptr in
     VF.PtrTypeExpr (VF.dummy_loc, pointee_type)
+
+  and transl_lvalue_ref_type (loc: VF.loc) (l: R.Node.t): VF.type_expr =
+    let ref_type = transl_type_loc l in
+    VF.LValueRefTypeExpr (loc, ref_type)
+
+  and transl_lvalue_ref_wtype (l: R.Type.t): VF.type_expr =
+    let ref_type = transl_wtype l in 
+    VF.LValueRefTypeExpr (VF.dummy_loc, ref_type)
 
   and transl_elaborated_type (e: R.Node.t): VF.type_expr =
     transl_type_loc e

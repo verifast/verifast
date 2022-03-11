@@ -151,6 +151,11 @@ bool ExprSerializer::VisitIntegerLiteral(const clang::IntegerLiteral *lit) {
 
 bool ExprSerializer::VisitImplicitCastExpr(
     const clang::ImplicitCastExpr *expr) {
+  if (expr->getCastKind() == clang::CastKind::CK_LValueToRValue) {
+    auto ce = _builder.initLValueToRValue();
+    _serializer.serializeExpr(ce, expr->getSubExpr());
+    return true;
+  }
   return Visit(expr->getSubExpr());
 }
 

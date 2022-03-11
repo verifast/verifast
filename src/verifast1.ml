@@ -380,6 +380,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Void -> ProverInductive
     | InferredType (_, t) -> begin match !t with EqConstraint t -> provertype_of_type t | _ -> t := EqConstraint (InductiveType ("unit", [])); ProverInductive end
     | AbstractType _ -> ProverInductive
+    | RefType t -> ProverInt
     (* Using expressions of the types below as values is wrong, but we must not crash here because this function is in some cases called by the type checker before it detects that there is a problem and produces a proper error message. *)
     | ClassOrInterfaceName n -> ProverInt
     | PackageName n -> ProverInt
@@ -1191,6 +1192,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter tddm ds =
       match ds with
         [] -> List.rev tddm
+      | TypedefDecl (l, LValueRefTypeExpr _, _) :: _ ->
+        static_error l "Typedefs for lvalue reference types are not supported." None
       | TypedefDecl (l, te, d)::ds ->
         (* C compiler detects duplicate typedefs *)
         iter ((d, (l, te))::tddm) ds
@@ -1729,6 +1732,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | _ -> static_error l "A fixpoint function type requires at least two types: a domain type and a range type" None
       in
       iter ts
+    | LValueRefTypeExpr (l, te) -> RefType (check te)
     in
     check te
   
@@ -3863,6 +3867,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | _ -> static_error l "Taking the address of this expression is not supported." None
       in
       (WVar (l2, x, LocalVar), PtrType pointeeType, None)
+    | CxxLValueToRValue (l, e) -> check e
     | AddressOf (l, e) -> let (w, t, _) = check e in (AddressOf (l, w), PtrType t, None)
     | CallExpr (l, "getClass", [], [], [LitPat target], Instance) when language = Java ->
       let w = checkt target javaLangObject in
@@ -3920,9 +3925,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           reportUseSite declKind lg l;
           let (targs, tpenv) = process_targes callee_tparams in
-          let rt0 = match tr with None -> Void | Some rt -> rt in
-          let rt = instantiate_type tpenv rt0 in
-          (WFunCall (l, g, targs, es), rt, None)
+          let wcall = WFunCall (l, g, targs, es) in
+          begin match tr with 
+          | None -> wcall, Void, None 
+          | Some (RefType t) -> WDeref (l, wcall, t), instantiate_type tpenv t, None
+          | Some rt -> wcall, instantiate_type tpenv rt, None
+          end
         | None ->
         match resolve Ghost (pn,ilist) l g purefuncmap with
           Some (g, (lg, callee_tparams, t0, param_names_types, _)) ->
