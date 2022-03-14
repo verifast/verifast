@@ -3598,7 +3598,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | Cxx_ast_translator.CxxAstTranslException (l, msg) -> static_error l msg None
       end
       | CLang, Some(Rust) -> begin
-        failwith "Not implemented!"
+        let module RustFe = Rust_fe in
+        RustFe.parse_rs_file path
       end
     in
     emitter_callback ds;

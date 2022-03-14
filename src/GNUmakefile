@@ -264,8 +264,10 @@ include cxx_frontend/Makefile
 clean::
 	cd java_frontend; make clean; cd ..
 
-# Rust Frontend component
-include rust_frontend/Makefile
+# Rust frontend component
+RUST_FE_DIR = rust_frontend
+export RUST_FE_DIR
+include $(RUST_FE_DIR)/Makefile
 
 #------------------------------- Shorthands ---------------------------------#
 
@@ -291,7 +293,7 @@ STDLIB_FILES = \
 	../bin/crt.vfmanifest \
 	$(STDLIB_FILES_GEN)
 
-TOOLS_EXCEPT_VFIDE = ../bin/mysh$(DOTEXE) ../bin/verifast$(DOTEXE) \
+TOOLS_EXCEPT_VFIDE = ../bin/mysh$(DOTEXE) build-rust-frontend ../bin/verifast$(DOTEXE) \
         ../bin/main_class$(DOTEXE) ../bin/java_card_applet$(DOTEXE) \
         ../bin/dlsymtool$(DOTEXE) ../bin/vfstrip$(DOTEXE) ../bin/explorer$(DOTEXE)
 
@@ -314,7 +316,7 @@ build-cxx-ast-exporter: ../bin/vf-cxx-ast-exporter$(DOTEXE)
 
 distclean:: clean
 
-INCLUDES = -I java_frontend -I shape_analysis -I cxx_frontend
+INCLUDES = -I java_frontend -I shape_analysis -I cxx_frontend -I $(RUST_FE_DIR)
 
 #------------------------------- Build normal case --------------------------#
 

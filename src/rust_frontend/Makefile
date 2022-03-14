@@ -3,34 +3,70 @@
 # with the target name
 
 BIN_DIR = ../bin
-RUST_FE_DIR = rust_frontend
 
-MIR_EXP_DIR = $(RUST_FE_DIR)/mir_exporter
+RUST_FE_DIR ?= rust_frontend
+RUST_FE_SRC = $(RUST_FE_DIR)/rust_fe.ml
+RUST_FE_OBJ = $(RUST_FE_DIR)/rust_fe.cmx
+
+VF_MIR_EXP_DIR = $(RUST_FE_DIR)/vf_mir_exporter
+VF_MIR_EXP_BIN = $(BIN_DIR)/vf-rust-mir-exporter$(DOTEXE)
+
 VF_MIR_DIR = $(RUST_FE_DIR)/vf_mir
 VF_MIR_SCHEMA = $(VF_MIR_DIR)/vf_mir.capnp
 
-VF_RUST_MIR_EXPORTER_BIN = $(BIN_DIR)/vf-rust-mir-exporter$(DOTEXE)
-VF_RUST_MIR_OCAML_STUBS = $(VF_MIR_DIR)/vf_mir.mli $(VF_MIR_DIR)/vf_mir.ml
+VF_MIR_OCAML_STUBS_DIR = $(VF_MIR_DIR)
+VF_MIR_OCAML_STUBS_SRC = $(VF_MIR_OCAML_STUBS_DIR)/vf_mir.mli $(VF_MIR_OCAML_STUBS_DIR)/vf_mir.ml
+VF_MIR_OCAML_STUBS_OBJ = $(VF_MIR_OCAML_STUBS_DIR)/vf_mir.cmx
 
-build-rust-frontend: $(VF_RUST_MIR_EXPORTER_BIN) $(VF_RUST_MIR_OCAML_STUBS)
+VF_MIR_TRANSLATOR_DIR = $(RUST_FE_DIR)/vf_mir_translator
+VF_MIR_TRANSLATOR_SRC = $(VF_MIR_TRANSLATOR_DIR)/vf_mir_translator.ml
+VF_MIR_TRANSLATOR_OBJ = $(VF_MIR_TRANSLATOR_DIR)/vf_mir_translator.cmx
 
 # The Rust side
 # TODO @Nima: Handle the rust build profile and the corresponding address
 # TODO @Nima: Send $(VF_MIR_SCHEMA) path from here to mir_exporter cargo project
-$(VF_RUST_MIR_EXPORTER_BIN):
-	cd $(MIR_EXP_DIR) && cargo build
-	cp $(MIR_EXP_DIR)/target/debug/mir_exporter $@
+$(VF_MIR_EXP_BIN):
+	cd $(VF_MIR_EXP_DIR) && cargo build
+	cp $(VF_MIR_EXP_DIR)/target/debug/vf_mir_exporter $@
 
-.PHONY: $(VF_RUST_MIR_EXPORTER_BIN)
+.PHONY: $(VF_MIR_EXP_BIN)
 # TODO @Nima: Is there a better way to trigger cargo builds when it is necessary?
 
 clean::
-	cd $(MIR_EXP_DIR) && cargo clean
-	rm -f $(VF_RUST_MIR_EXPORTER_BIN)
+	cd $(VF_MIR_EXP_DIR) && cargo clean
+	rm -f $(VF_MIR_EXP_BIN)
 
 # The OCaml side
-$(VF_RUST_MIR_OCAML_STUBS) &:: $(VF_MIR_SCHEMA)
+$(VF_MIR_OCAML_STUBS_SRC) &:: $(VF_MIR_SCHEMA)
+	@echo "  CAPNP " $<
 	DYLD_LIBRARY_PATH=$(CAPNP_LIBS) capnp compile -I $(CAPNP_INCLUDE) -o ocaml:$(VF_MIR_DIR) $<
 
 clean::
-	rm -f $(VF_RUST_MIR_OCAML_STUBS)
+	rm -f $(VF_MIR_OCAML_STUBS_SRC)
+
+$(VF_MIR_OCAML_STUBS_OBJ): $(VF_MIR_OCAML_STUBS_SRC)
+	@echo "  OCAMLOPT " $@
+	$(COMPILE) -c -w -11-55 -I $(VF_MIR_OCAML_STUBS_DIR) -package capnp $^
+
+clean::
+	rm -f $(VF_MIR_OCAML_STUBS_DIR)/*.cm* $(VF_MIR_OCAML_STUBS_DIR)/*.o
+
+$(VF_MIR_TRANSLATOR_OBJ): $(VF_MIR_TRANSLATOR_SRC) $(VF_MIR_OCAML_STUBS_OBJ) ast.cmx
+	@echo "  OCAMLOPT " $@
+	$(COMPILE) -c -w -11 $<
+
+clean::
+	rm -f $(VF_MIR_TRANSLATOR_DIR)/*.cm* $(VF_MIR_TRANSLATOR_DIR)/*.o
+
+# The whole frontend interface
+$(RUST_FE_OBJ): $(RUST_FE_SRC) $(VF_MIR_TRANSLATOR_OBJ)
+	@echo "  OCAMLOPT " $@
+	$(COMPILE) -c -w -11 $<
+
+clean::
+	rm -f $(RUST_FE_DIR)/*.cm* $(RUST_FE_DIR)/*.o
+
+# Use this variable in parent Makefile to link to Rust frontend
+RUST_FE_OBJS = $(RUST_FE_OBJ)
+# Rust frontend main rule
+build-rust-frontend: $(RUST_FE_OBJS) $(VF_MIR_EXP_BIN)
