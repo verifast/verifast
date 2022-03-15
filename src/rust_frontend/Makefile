@@ -68,5 +68,7 @@ clean::
 
 # Use this variable in parent Makefile to link to Rust frontend
 RUST_FE_OBJS = $(RUST_FE_OBJ)
-# Rust frontend main rule
-build-rust-frontend: $(RUST_FE_OBJS) $(VF_MIR_EXP_BIN)
+# VF MIR exporter tool
+build-vf-rust-mir-exporter: $(VF_MIR_EXP_BIN)
+# Rust frontend
+build-rust-frontend: build-vf-rust-mir-exporter $(RUST_FE_OBJS)

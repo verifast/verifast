@@ -293,11 +293,11 @@ STDLIB_FILES = \
 	../bin/crt.vfmanifest \
 	$(STDLIB_FILES_GEN)
 
-TOOLS_EXCEPT_VFIDE = ../bin/mysh$(DOTEXE) build-rust-frontend ../bin/verifast$(DOTEXE) \
+TOOLS_EXCEPT_VFIDE = ../bin/mysh$(DOTEXE) ../bin/verifast$(DOTEXE) \
         ../bin/main_class$(DOTEXE) ../bin/java_card_applet$(DOTEXE) \
         ../bin/dlsymtool$(DOTEXE) ../bin/vfstrip$(DOTEXE) ../bin/explorer$(DOTEXE)
 
-TOOLS_EXCEPT_VFIDE += ../bin/vf-cxx-ast-exporter$(DOTEXE)
+TOOLS_EXCEPT_VFIDE += ../bin/vf-cxx-ast-exporter$(DOTEXE) build-vf-rust-mir-exporter
 
 TOOLS = $(TOOLS_EXCEPT_VFIDE) ../bin/vfide$(DOTEXE)
 
@@ -645,6 +645,7 @@ META_DEPS = \
   $(wildcard *.ml *.mli \
   java_frontend/*.ml java_frontend/*.mli \
   cxx_frontend/*.ml cxx_frontend/*.mli \
+  $(RUST_FE_DIR)/*.ml $(RUST_FE_DIR)/*.mli \
   shape_analysis/*.ml shape_analysis/*.mli)
 
 depend: $(META_DEPS)
