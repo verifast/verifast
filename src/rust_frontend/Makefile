@@ -2,6 +2,15 @@
 # In case of interest in one of its targets use the parent makefile
 # with the target name
 
+CAPNP_BIN ?= $(shell dirname `which capnp`)
+CAPNP_INCLUDE ?= $(CAPNP_BIN)/../include
+CAPNP_LIBS ?= $(CAPNP_BIN)/../lib
+CAPNP_LINK_FLAGS = -package capnp,capnp.unix
+# Rename to comply with our naming convention
+CAPNP = capnp
+CAPNP_INC_DIR = $(CAPNP_INCLUDE)
+CAPNP_LIBS_DIR = $(CAPNP_LIBS)
+
 BIN_DIR = ../bin
 
 RUST_FE_DIR ?= rust_frontend
@@ -39,21 +48,21 @@ clean::
 # The OCaml side
 $(VF_MIR_OCAML_STUBS_SRC) &:: $(VF_MIR_SCHEMA)
 	@echo "  CAPNP " $<
-	DYLD_LIBRARY_PATH=$(CAPNP_LIBS) capnp compile -I $(CAPNP_INCLUDE) -o ocaml:$(VF_MIR_DIR) $<
+	DYLD_LIBRARY_PATH=$(CAPNP_LIBS_DIR) $(CAPNP) compile -I $(CAPNP_INC_DIR) -o ocaml:$(VF_MIR_DIR) $<
 
 clean::
 	rm -f $(VF_MIR_OCAML_STUBS_SRC)
 
 $(VF_MIR_OCAML_STUBS_OBJ): $(VF_MIR_OCAML_STUBS_SRC)
 	@echo "  OCAMLOPT " $@
-	$(COMPILE) -c -w -11-55 -I $(VF_MIR_OCAML_STUBS_DIR) -package capnp $^
+	$(COMPILE) -c -w -11-55 -I $(VF_MIR_OCAML_STUBS_DIR) $(CAPNP_LINK_FLAGS) $^
 
 clean::
 	rm -f $(VF_MIR_OCAML_STUBS_DIR)/*.cm* $(VF_MIR_OCAML_STUBS_DIR)/*.o
 
 $(VF_MIR_TRANSLATOR_OBJ): $(VF_MIR_TRANSLATOR_SRC) $(VF_MIR_OCAML_STUBS_OBJ) ast.cmx
 	@echo "  OCAMLOPT " $@
-	$(COMPILE) -c -w -11 $<
+	$(COMPILE) -c -w -11 -I $(VF_MIR_OCAML_STUBS_DIR) -package capnp $<
 
 clean::
 	rm -f $(VF_MIR_TRANSLATOR_DIR)/*.cm* $(VF_MIR_TRANSLATOR_DIR)/*.o
@@ -61,13 +70,13 @@ clean::
 # The whole frontend interface
 $(RUST_FE_OBJ): $(RUST_FE_SRC) $(VF_MIR_TRANSLATOR_OBJ)
 	@echo "  OCAMLOPT " $@
-	$(COMPILE) -c -w -11 $<
+	$(COMPILE) -c -w -11 -I $(VF_MIR_TRANSLATOR_DIR) -I $(VF_MIR_OCAML_STUBS_DIR) $(CAPNP_LINK_FLAGS) $<
 
 clean::
 	rm -f $(RUST_FE_DIR)/*.cm* $(RUST_FE_DIR)/*.o
 
 # Use this variable in parent Makefile to link to Rust frontend
-RUST_FE_OBJS = $(RUST_FE_OBJ)
+RUST_FE_OBJS = $(VF_MIR_OCAML_STUBS_OBJ) $(VF_MIR_TRANSLATOR_OBJ) $(RUST_FE_OBJ)
 # VF MIR exporter tool
 build-vf-rust-mir-exporter: $(VF_MIR_EXP_BIN)
 # Rust frontend
