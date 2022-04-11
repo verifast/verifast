@@ -36,14 +36,14 @@ VF_MIR_TRANSLATOR_OBJ = $(VF_MIR_TRANSLATOR_DIR)/vf_mir_translator.cmx
 # TODO @Nima: Send $(VF_MIR_SCHEMA) path from here to mir_exporter cargo project
 $(VF_MIR_EXP_BIN):
 	cd $(VF_MIR_EXP_DIR) && cargo build
-	cp $(VF_MIR_EXP_DIR)/target/debug/vf_mir_exporter $@
+	@cp $(VF_MIR_EXP_DIR)/target/debug/vf_mir_exporter $@
 
 .PHONY: $(VF_MIR_EXP_BIN)
 # TODO @Nima: Is there a better way to trigger cargo builds when it is necessary?
 
 clean::
 	cd $(VF_MIR_EXP_DIR) && cargo clean
-	rm -f $(VF_MIR_EXP_BIN)
+	@rm -f $(VF_MIR_EXP_BIN)
 
 # The OCaml side
 $(VF_MIR_OCAML_STUBS_SRC) &:: $(VF_MIR_SCHEMA)
