@@ -13,7 +13,7 @@ VeriFast is a research prototype of a tool for modular formal verification of co
 The VeriFast source code and binaries are released under the [MIT license](LICENSE.md).
 
 Binaries
---------
+---------
 
 Within an hour after each push to the master branch, binary packages become available [here](https://github.com/verifast/verifast/releases/tag/nightly).
 
