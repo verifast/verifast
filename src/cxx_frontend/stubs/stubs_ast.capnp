@@ -187,9 +187,14 @@ struct Decl {
   }
 
   struct Record {
+    struct BaseSpec {
+      name @0 :Text;
+      virtual @1 :Bool;
+    }
     struct Body {
       fields @0 :List(Node(Field));
       decls @1 :List(DeclNode);
+      bases @2 :List(Node(BaseSpec));
     }
     name @0 :Text;
     kind @1 :RecordKind;
@@ -358,6 +363,11 @@ struct Expr {
     type @3 :Type;
   }
 
+  struct DerivedToBase {
+    expr @0 :ExprNode;
+    type @1 :Type;
+  }
+
   union {
     unionNotInitialized @0 :Void;
     unaryOp @1 :UnaryOp;
@@ -376,6 +386,7 @@ struct Expr {
     delete @14 :ExprNode;
     truncating @15 :ExprNode;
     lValueToRValue @16 :ExprNode;
+    derivedToBase @17 :DerivedToBase;
   }
 }
 

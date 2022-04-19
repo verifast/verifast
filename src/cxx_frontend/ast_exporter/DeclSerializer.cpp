@@ -1,6 +1,6 @@
 #include "AstSerializer.h"
-#include "clang/AST/Decl.h"
 #include "FixedWidthInt.h"
+#include "clang/AST/Decl.h"
 
 namespace vf {
 
@@ -142,6 +142,25 @@ bool DeclSerializer::VisitFieldDecl(const clang::FieldDecl *decl) {
   return true;
 }
 
+void DeclSerializer::serializeBases(
+    capnp::List<stubs::Node<stubs::Decl::Record::BaseSpec>,
+                capnp::Kind::STRUCT>::Builder &builder,
+    clang::CXXRecordDecl::base_class_const_range bases) {
+  size_t i(0);
+  for (auto base : bases) {
+    auto baseTypePtr = base.getType().getTypePtr();
+    auto baseDecl = baseTypePtr->getAsRecordDecl();
+    auto locBuilder = builder[i].initLoc();
+    auto descBuilder = builder[i].initDesc();
+
+    serializeSrcRange(locBuilder, base.getBaseTypeLoc(), getSourceManager());
+    descBuilder.setName(baseDecl->getQualifiedNameAsString());
+    descBuilder.setVirtual(base.isVirtual());
+
+    ++i;
+  }
+}
+
 bool DeclSerializer::VisitCXXRecordDecl(const clang::CXXRecordDecl *decl) {
   auto rec = _builder.initRecord();
 
@@ -187,6 +206,9 @@ bool DeclSerializer::VisitCXXRecordDecl(const clang::CXXRecordDecl *decl) {
         _serializer.serializeDecl(builder, d);
       }
     }
+
+    auto basesBuilder = body.initBases(decl->getNumBases());
+    serializeBases(basesBuilder, decl->bases());
   }
 
   return true;
@@ -226,15 +248,16 @@ bool DeclSerializer::VisitCXXConstructorDecl(
   auto ctor = _builder.initCtor();
   // nb inits will be 1 if it delegates to another ctor
   auto initBuilders = ctor.initInitList(decl->getNumCtorInitializers());
+  llvm::errs() << decl->getNumCtorInitializers() << "\n";
 
   size_t i(0);
   for (auto init : decl->inits()) {
     auto initBuilder = initBuilders[i++];
-    initBuilder.setName(init->isDelegatingInitializer()
-                            ? "this"
-                            : init->getMember()->getNameAsString());
-    initBuilder.setIsWritten(init->isWritten());
+    initBuilder.setName(init->isMemberInitializer()
 
+                            ? init->getMember()->getNameAsString()
+                            : "this");
+    initBuilder.setIsWritten(init->isWritten());
     auto *initExpr = init->getInit();
     if (!llvm::isa<clang::CXXDefaultInitExpr>(initExpr)) {
       auto exprBuilder = initBuilder.initInit();

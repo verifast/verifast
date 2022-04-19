@@ -203,6 +203,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     | Delete d            -> transl_delete_expr loc d
     | Truncating t        -> transl_trunc_expr loc t
     | LValueToRValue l    -> transl_lvalue_to_rvalue_expr loc l
+    | DerivedToBase e     -> transl_derived_to_base_expr loc e
     | Undefined _         -> failwith "Undefined expression"
     | _                   -> error loc "Unsupported expression."
 
@@ -351,19 +352,26 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
   and transl_record_decl (loc: VF.loc) (record: R.Decl.Record.t): VF.decl list =
     let open R.Decl.Record in
     let name = name_get record in
-    let body, decls = 
+    let bases, body, decls = 
       if has_body record then
         let open Body in
+        let transl_base loc desc =
+          let open BaseSpec in
+          VF.CxxBaseSpec (loc, name_get desc, virtual_get desc)
+        in
         let body = body_get record in
         let fields = fields_get body |> capnp_arr_map (transl_node transl_field_decl) in
         let decls = decls_get body |> capnp_arr_map transl_decl |> List.flatten in
-        Some fields, decls
-      else None, [] 
+        let bases = bases_get body |> capnp_arr_map (transl_node transl_base) in
+        bases, Some fields, decls
+      else [], None, [] 
     in
     let vf_record = 
       match kind_get record with
-      | R.RecordKind.Struc | R.RecordKind.Class -> VF.Struct (loc, name, body, []) 
-      | R.RecordKind.Unio -> VF.Union (loc, name, body) 
+      | R.RecordKind.Struc | R.RecordKind.Class -> 
+        VF.Struct (loc, name, body, [], bases) 
+      | R.RecordKind.Unio -> 
+        VF.Union (loc, name, body) 
     in
     vf_record :: decls
 
@@ -621,6 +629,12 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     let e = transl_expr e in
     VF.CxxLValueToRValue (loc, e)
 
+  and transl_derived_to_base_expr (loc: VF.loc) (e: R.Expr.DerivedToBase.t): VF.expr =
+    let open R.Expr.DerivedToBase in 
+    let sub_expr = expr_get e |> transl_expr in
+    let ty = type_get e |> transl_wtype in
+    VF.CxxDerivedToBase (loc, sub_expr, ty)
+
   (**************)
   (* statements *)
   (**************)
@@ -788,18 +802,6 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
       | FixedWidthKind.UInt -> VF.Unsigned 
     in
     ManifestTypeExpr (loc, VF.Int (signed, rank))
-    (* let open R.Type.FixedWidth in
-    let b_str = 
-      match bits_get fw with
-      | 8 | 16 | 32 | 64 | 128 as b -> string_of_int b 
-      | _ -> error loc @@ "Invalid width specified in fixed width integer"
-    in
-    let pref = 
-      match kind_get fw with
-      | FixedWidthKind.Int -> ""
-      | FixedWidthKind.UInt -> "u"
-    in
-    VF.IdentTypeExpr (loc, None, pref ^ "int" ^ b_str ^ "_t") *)
 
   (********************)
   (* translation unit *)
