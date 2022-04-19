@@ -40,14 +40,16 @@ protected:
   }
 
   LLVM_ATTRIBUTE_NORETURN void unsupported(const clang::SourceRange range,
+                                           const llvm::StringRef nodeName,
                                            const llvm::StringRef className) {
-    llvm::report_fatal_error("Node of type '" + className + "' at '" +
+    llvm::report_fatal_error(nodeName + " of type '" + className + "' at '" +
                              range.printToString(getSourceManager()) +
                              "' is not supported.");
   }
 
-  LLVM_ATTRIBUTE_NORETURN void unsupported(const llvm::StringRef className) {
-    llvm::report_fatal_error("Node of type '" + className +
+  LLVM_ATTRIBUTE_NORETURN void unsupported(const llvm::StringRef nodeName,
+                                           const llvm::StringRef className) {
+    llvm::report_fatal_error(nodeName + " of type '" + className +
                              "' is not supported.");
   }
 };
@@ -80,9 +82,10 @@ public:
                        nodeBuilder.initDesc()) {}
 
 protected:
-  void serializeNode(const AstNode *node, const llvm::StringRef kind) {
+  void serializeNode(const AstNode *node, const llvm::StringRef nodeName,
+                     const llvm::StringRef kind) {
     if (!this->serializeDesc(node))
-      this->unsupported(node->getSourceRange(), kind);
+      this->unsupported(node->getSourceRange(), nodeName, kind);
     serializeSrcRange(_locBuilder, node->getSourceRange(),
                       this->getSourceManager());
   }
@@ -109,7 +112,7 @@ struct StmtSerializer : public NodeSerializer<stubs::Stmt, clang::Stmt>,
   }
 
   void serialize(const clang::Stmt *stmt) {
-    serializeNode(stmt, stmt->getStmtClassName());
+    serializeNode(stmt, "Statement", stmt->getStmtClassName());
   }
 
   bool VisitCompoundStmt(const clang::CompoundStmt *stmt);
@@ -164,7 +167,7 @@ struct DeclSerializer : public NodeSerializer<stubs::Decl, clang::Decl>,
     if (decl->isImplicit())
       llvm::report_fatal_error(
           "Serialization of implicit declarations is not supported.");
-    serializeNode(decl, decl->getDeclKindName());
+    serializeNode(decl, "Declaration", decl->getDeclKindName());
   }
 
   bool VisitFunctionDecl(const clang::FunctionDecl *decl);
@@ -207,8 +210,8 @@ private:
                            llvm::StringRef mangledName);
 
   void serializeBases(capnp::List<stubs::Node<stubs::Decl::Record::BaseSpec>,
-                                capnp::Kind::STRUCT>::Builder &builder,
-                    clang::CXXRecordDecl::base_class_const_range bases);
+                                  capnp::Kind::STRUCT>::Builder &builder,
+                      clang::CXXRecordDecl::base_class_const_range bases);
 };
 
 struct ExprSerializer : public NodeSerializer<stubs::Expr, clang::Expr>,
@@ -229,7 +232,7 @@ struct ExprSerializer : public NodeSerializer<stubs::Expr, clang::Expr>,
   }
 
   void serialize(const clang::Expr *expr) {
-    serializeNode(expr, expr->getStmtClassName());
+    serializeNode(expr, "Expression", expr->getStmtClassName());
   }
 
   bool VisitUnaryOperator(const clang::UnaryOperator *uo);
@@ -293,7 +296,7 @@ struct TypeSerializer : public DescSerializer<stubs::Type, clang::Type>,
 
   void serialize(const clang::Type *type) {
     if (!serializeDesc(type))
-      unsupported(type->getTypeClassName());
+      unsupported("Type", type->getTypeClassName());
   }
 
   bool VisitBuiltinType(const clang::BuiltinType *type);
@@ -335,23 +338,17 @@ public:
         _typeSerializer(context, serializer, _builder) {}
 
   void serialize(const clang::TypeLoc typeLoc) {
-    serializeNode(&typeLoc, typeLoc.getType().getTypePtr()->getTypeClassName());
+    serializeNode(&typeLoc, "Type location",
+                  typeLoc.getType().getTypePtr()->getTypeClassName());
   }
 
   bool serializeDesc(const clang::TypeLoc *typeLoc) override {
     assert(typeLoc && "Type should not be null");
-    return Visit(*typeLoc);
+    if (! Visit(*typeLoc)) return _typeSerializer.serializeDesc(typeLoc->getTypePtr());
+    return true;
   }
 
   bool VisitPointerTypeLoc(const clang::PointerTypeLoc type);
-
-  bool VisitBuiltinTypeLoc(const clang::BuiltinTypeLoc type);
-
-  bool VisitRecordTypeLoc(const clang::RecordTypeLoc type);
-
-  bool VisitEnumTypeLoc(const clang::EnumTypeLoc type);
-
-  bool VisitTypedefTypeLoc(const clang::TypedefTypeLoc type);
 
   bool VisitElaboratedTypeLoc(const clang::ElaboratedTypeLoc type);
 

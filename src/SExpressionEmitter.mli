@@ -8,6 +8,8 @@ val emit : ?margin:int -> string -> Ast.package list -> unit
 *)
 val sexpr_of_type_ : Ast.type_ -> SExpressions.sexpression
 
+val sexpr_of_type_expr : Ast.type_expr -> SExpressions.sexpression
+
 val sexpr_of_decl : Ast.decl -> SExpressions.sexpression
 
 val sexpr_of_package : Ast.package -> SExpressions.sexpression

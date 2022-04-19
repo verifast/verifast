@@ -27,10 +27,25 @@ int &incr(int &i)
   return i;
 }
 
+struct Object {
+  int i;
+  
+  Object() : i(0)
+  //@ requires true;
+  //@ ensures this->i |-> 0;
+  {}
+  
+  ~Object()
+  //@ requires this->i |-> _;
+  //@ ensures true;
+  {}
+};
+
 int main()
 //@ requires true;
 //@ ensures true;
 {
+  Object o;
   int i = 0;
   int &iRef = passRef(i);
   int iUnpacked = unpackRef(iRef);
@@ -52,4 +67,9 @@ int main()
   //@ assert (three == 3);
   //@ assert (i == three + 2);
   //@ assert (fourRef == three + 2);
+  
+  Object &oRef = o;
+  //@ assert oRef.i == 0;
+  o.i = 2;
+  //@ assert oRef.i == 2;
 }

@@ -658,6 +658,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     type base_spec_info = 
         loc 
       * bool (* virtual *)
+      * termnode (* offset *)
     type struct_info =
         loc
       * (base_spec_info map * struct_field_info map) option (* None if struct without body *)
@@ -1216,7 +1217,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | Struct (l, sn, body_opt, attrs)::ds ->
         begin match body_opt with
         | Some (bases, _) ->
-          if List.length bases > 1 then static_error l "Multiple inheritance is not supported." None;
           if List.exists (fun (CxxBaseSpec (l, _, is_virtual)) -> is_virtual) bases then static_error l "Virtual inheritance is not supported." None;
         | _ -> ()
         end;
@@ -1652,10 +1652,20 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         AbstractType n
       | None ->
       (* So we can use class/struct/union names as types in ghost code *)
+      match try_assoc id structmap0 with
+        Some (ld, _, _, _) when dialect = Some Cxx ->
+        reportUseSite DeclKind_Struct ld l;
+        StructType id
+      | _ ->
       match try_assoc id structdeclmap with
         Some (ld, _, _) when dialect = Some Cxx -> 
         reportUseSite DeclKind_Struct ld l;
         StructType id
+      | _ ->
+      match try_assoc id unionmap0 with
+        Some (ld, _) when dialect = Some Cxx ->
+        reportUseSite DeclKind_Union ld l;
+        UnionType id
       | _ ->
       match try_assoc id uniondeclmap with
         Some (ld, _) when dialect = Some Cxx ->
@@ -1915,7 +1925,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               end
             in
             offset_iter fmap (ctxt#mk_intlit 0) true;
-            let base_map = bases |> List.map @@ fun (CxxBaseSpec (l, base, is_virtual)) -> base, (l, is_virtual) in
+            let base_map = bases |> List.map @@ fun (CxxBaseSpec (l, base, is_virtual)) -> base, (l, is_virtual, get_unique_var_symb (sn ^ "_" ^ base ^ "_offset") intType) in
             (sn, (l, Some (base_map, fmap), padding_predsym_opt, s))
           | Field (lf, gh, t, f, Instance, Public, final, init)::fds ->
             if List.mem_assoc f fmap then static_error lf "Duplicate field name." None;
@@ -1958,15 +1968,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let symb = mk_func_symbol isfuncname domain ProverBool Uninterp in
         [(isfuncname, (dummy_loc, [], Bool, [("", PtrType Void)], symb))]
       | _ -> []
-    ) functypenames
-
-  let rec is_derived_struct_of x y = 
-    let check_bases bases = bases |> List.exists @@ fun (base, _) -> is_derived_struct_of base y in
-    x = y ||
-    match try_assoc x structmap with 
-    | Some (_, Some (bases, _), _, _) -> check_bases bases 
-    | _ -> false
-      
+    ) functypenames      
   
   let rec is_subtype_of x y =
     x = y ||
@@ -2520,13 +2522,43 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ContainsAnyConstraint allowContainsAnyPositive -> type_satisfies_contains_any_constraint allowContainsAnyPositive tp
 
   (* Region: type compatibility checker *)
+
+  let direct_base_addr (derived_name, derived_addr) base_name =
+    let _, Some (bases, _), _, _ = List.assoc derived_name structmap in
+    let _, _, base_offset = List.assoc base_name bases in
+    ctxt#mk_add derived_addr base_offset
+
+  let base_addr l (derived_name, derived_addr) base_name =
+    let rec iter derived_name offsets =
+      let _, Some (bases, _), _, _ = List.assoc derived_name structmap in 
+      let other_paths = bases |> List.fold_left begin fun acc (name, (_, _, offset)) -> 
+        match iter name (offset :: offsets) with
+        | Some p -> p :: acc
+        | None -> acc
+      end [] in
+      match try_assoc base_name bases, other_paths with 
+      | Some _,  _ :: _
+      | None, _ :: (_ :: _) -> static_error l (Printf.sprintf "Derived '%s' to base '%s' is ambiguous: multiple '%s' base candidates exist." derived_name base_name base_name) None
+      | Some (_, _, base_offset), [] -> Some (base_offset :: offsets)
+      | None, [p] -> Some p
+      | _ -> None
+    in 
+    let Some offsets = iter derived_name [] in 
+    List.rev offsets |> List.fold_left ctxt#mk_add derived_addr
+
+  let rec is_derived_of_base derived_name base_name =
+    let check_bases bases = bases |> List.exists @@ fun (name, _) -> is_derived_of_base name base_name in
+    derived_name = base_name ||
+    match try_assoc derived_name structmap with 
+    | Some (_, Some (bases, _), _, _) -> check_bases bases 
+    | None -> false
   
   let rec compatible_pointees t t0 =
     match (t, t0) with
       (_, Void) -> true
     | (Void, _) -> true
     | (PtrType t, PtrType t0) -> compatible_pointees t t0
-    | StructType x, StructType y when dialect = Some Cxx && is_derived_struct_of x y -> true
+    | StructType x, StructType y when dialect = Some Cxx && is_derived_of_base x y -> true
     | _ -> t = t0
   
   let rec unify t1 t2 =
@@ -2548,7 +2580,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       for_all2 unify ts1 ts2 && inputParamCount1 = inputParamCount2 && inductiveness1 = inductiveness2
     | (ArrayType t1, ArrayType t2) -> unify t1 t2
     | (PtrType t1, PtrType t2) -> compatible_pointees t1 t2
-    | StructType x, StructType y when dialect = Some Cxx && is_derived_struct_of x y -> true
+    | StructType x, StructType y when dialect = Some Cxx && is_derived_of_base x y -> true
     | (t1, t2) -> t1 = t2
   
   let rank_group r =
@@ -3833,6 +3865,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (w, t, None)
     | Read (l, e, f) ->
       check_deref_core functypemap funcmap classmap interfmap (pn,ilist) l tparams tenv e f
+    | Select (l, ((CxxDerivedToBase (le, _, StructTypeExpr _)) as e), f) ->
+      (*
+        Select a base object field.
+        Objects in C++ are threated as RefType objects, 
+        which is why we have to take the address of the expression because it gets dereferenced by default.
+      *)
+      let e = make_addr_of le e in
+      check_deref_core functypemap funcmap classmap interfmap (pn,ilist) l tparams tenv e f
     | Select (l, e, f) ->
       let (w, t, _) = check e in
       begin match w with
@@ -3888,11 +3928,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       (WVar (l2, x, LocalVar), PtrType pointeeType, None)
     | CxxLValueToRValue (l, e) -> check e
-    | CxxDerivedToBase (l, e, ty) ->
-      let w, t, _ = check e in
-      let t0 = check_pure_type (pn,ilist) [] Real ty in
-      let () = expect_type l inAnnotation t t0 in
-      w, t0, None
+    | CxxDerivedToBase (l, e, te) ->
+      let t = check_pure_type (pn, ilist) tparams Real te in
+      let w = checkt_cast e t in
+      w, t, None
     | AddressOf (l, e) -> let (w, t, _) = check e in (AddressOf (l, w), PtrType t, None)
     | CallExpr (l, "getClass", [], [], [LitPat target], Instance) when language = Java ->
       let w = checkt target javaLangObject in
@@ -6276,7 +6315,7 @@ let check_if_list_is_defined () =
         | _ ->
           static_error l "Unsupported truncating cast" None
       end
-    | CastExpr (l, ManifestTypeExpr (_, t0), Upcast (e, t, t0')) when t0 == t0' -> ev state e cont
+    | CastExpr (l, ManifestTypeExpr (_, t0), (Upcast (e, t, t0') as upcast)) when t0 == t0' -> ev state upcast cont
     | CastExpr (l, ManifestTypeExpr (_, t), e) ->
       begin
         match (e, t) with
@@ -6287,6 +6326,9 @@ let check_if_list_is_defined () =
         | (_, (ObjType _|ArrayType _)) when ass_term = None -> static_error l "Class casts are not allowed in annotations." None
         | _ -> ev state e cont (* No other cast allowed by the type checker changes the value *)
       end
+    | Upcast (e, PtrType (StructType derived), PtrType (StructType base)) when dialect = Some Cxx && is_derived_of_base derived base ->
+      ev state e @@ fun state v ->
+      base_addr (expr_loc e) (derived, v) base |> cont state
     | Upcast (e, fromType, toType) -> ev state e cont
     | TypedExpr (e, t) -> ev state e cont
     | WidenedParameterArgument e -> ev state e cont

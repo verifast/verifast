@@ -1638,6 +1638,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if body_opt = None then register_prototype_used lc mangled_name None;
       let args = args |> List.map @@ fun e -> SrcPat (LitPat e) in
       check_ctor_call l args params pre post terminates h env @@ fun h env _ ->
+      assume_neq addr int_zero_term @@ fun () ->
       if produce_padding_chunk then
         let _, _, Some padding_pred_symb, _ = List.assoc struct_name structmap in
         produce_chunk h (padding_pred_symb, true) [] coef None [addr] None @@ fun h ->
@@ -2084,6 +2085,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match lhs with
         WVar (l, x, scope) -> cont h env (LValues.Var (l, x, scope))
       | WRead (l, w, fparent, fname, tp, fstatic, fvalue, fghost) ->
+        (* let () = print_endline "read" in 
+        let () = print_endline @@ string_of_loc l in *)
         let (_, (_, _, _, _, f_symb, _, _)) = List.assoc (fparent, fname) field_pred_map in
         begin fun cont ->
           if fstatic then
@@ -2247,6 +2250,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       cont h env result_value
     in
     match e with
+    | Upcast (w, PtrType (StructType derived), PtrType (StructType base)) when dialect = Some Cxx && is_derived_of_base derived base ->
+      eval_h_core readonly h env w @@ fun h env v ->
+      base_addr l (derived, v) base |> cont h env
     | Upcast (w, _, _) -> eval_h_core readonly h env w cont
     | CastExpr (lc, ManifestTypeExpr (_, tp), (WFunCall (l, "malloc", [], [SizeofExpr (ls, te)]) as e)) ->
       let t = check_pure_type (pn,ilist) tparams Real te in
@@ -2369,7 +2375,6 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | Some e -> Expr e 
       in 
       let verify_call loc args params pre post terminates h env cont = verify_call funcmap eval_h loc (pn, ilist) xo None [] args ([], None, params, ["this", result], pre, post, None, terminates, Static) false false None leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in
-      assume_neq result real_zero @@ fun () ->
       produce_cxx_object l real_unit result ty eval_h verify_call init false false h env @@ fun h env ->
       begin
         match ty with 

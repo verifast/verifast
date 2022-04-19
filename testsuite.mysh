@@ -570,6 +570,11 @@ cd ..
         verifast -disable_overflow_check Account.cpp account_client.cpp
         verifast -disable_overflow_check Stack.cpp stack_client.cpp
     cd ..
+    cd inheritance
+        verifast -c -disable_overflow_check single_inheritance.cpp
+        verifast -c -disable_overflow_check diamond.cpp
+        verifast -c multiple_inheritance.cpp
+    cd ..
     verifast -c main_implicit_return.cpp
     verifast -c new_class.cpp
     verifast -c new_primitives.cpp
@@ -578,6 +583,5 @@ cd ..
     verifast -c constructors.cpp
     verifast -c destructors.cpp
     verifast -c -disable_overflow_check lvalue_refs.cpp
-    verifast -c -disable_overflow_check single_inheritance.cpp
   cd ..
 end_parallel

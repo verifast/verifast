@@ -1169,3 +1169,11 @@ let expr_fold f state e = let rec iter state e = f (expr_fold_open iter state e)
 let expr_iter f e = expr_fold (fun state e -> f e) () e
 
 let expr_flatmap f e = expr_fold (fun state e -> f e @ state) [] e
+
+let rec make_addr_of (loc: loc) (expr: expr): expr =
+  match expr with
+  | CxxDerivedToBase (d_l, d_e, d_t) ->
+    let addr_of_e = make_addr_of loc d_e in
+    CxxDerivedToBase (d_l, addr_of_e, PtrTypeExpr (d_l, d_t))
+  | _ ->
+    AddressOf (loc, expr)

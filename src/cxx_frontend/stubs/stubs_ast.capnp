@@ -66,17 +66,13 @@ struct Type {
     unionNotInitialized @0 :Void;
     builtin @1 :BuiltinKind;
     pointer @2 :TypeNode;
-    wPointer @3 :Type;
-    record @4 :RecordRef;
-    enumType @5 :Text;
-    lValueRef @6 :TypeNode;
-    wLValueRef @7 :Type;
-    rValueRef @8 :TypeNode;
-    wRValueRef @9 :Type;
-    fixedWidth @10 :FixedWidth;
-    elaborated @11 :TypeNode;
-    wElaborated @12 :Type;
-    typedef @13 :Text;
+    record @3 :RecordRef;
+    enumType @4 :Text;
+    lValueRef @5 :TypeNode;
+    rValueRef @6 :TypeNode;
+    fixedWidth @7 :FixedWidth;
+    elaborated @8 :TypeNode;
+    typedef @9 :Text;
   }
 }
 
