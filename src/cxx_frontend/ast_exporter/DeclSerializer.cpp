@@ -248,7 +248,6 @@ bool DeclSerializer::VisitCXXConstructorDecl(
   auto ctor = _builder.initCtor();
   // nb inits will be 1 if it delegates to another ctor
   auto initBuilders = ctor.initInitList(decl->getNumCtorInitializers());
-  llvm::errs() << decl->getNumCtorInitializers() << "\n";
 
   size_t i(0);
   for (auto init : decl->inits()) {
