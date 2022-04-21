@@ -1897,7 +1897,15 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                      end
         ) attrs;
         ctxt#assert_term (ctxt#mk_le s max_uintptr_term);
-        ctxt#assert_term (ctxt#mk_lt (ctxt#mk_intlit 0) s);
+        let lte, bases_size = 
+          match bases with
+          | [] -> (* no bases, a struct cannot have size 0 -> lt *)
+                  ctxt#mk_lt, int_zero_term
+          | _ ->  (* only match on non-virtual bases because virtual bases are not supported yet -> throws unmatched case otherwise *)
+                  (* compiler may introduce padding in bases and the derived struct's members may fit in this padding -> le *)
+                  ctxt#mk_le, bases |> List.fold_left (fun size (CxxBaseSpec (l, base, false)) -> struct_size_partial smapwith0 l base |> ctxt#mk_add size) int_zero_term
+        in
+        lte bases_size s |> ctxt#assert_term;
         let rec iter1 fmap fds has_ghost_fields bases =
           match fds with
             [] ->

@@ -94,4 +94,5 @@ int main()
     A &a = b;
     a.incr();
     //@ assert B_pred(&b, a_i + 2, b_i + 1);
+    //@ assert (sizeof(A) <= sizeof(B));
 }
