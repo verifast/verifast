@@ -164,6 +164,11 @@ let sexpr_of_field (Field (loc, ghostness, type_expr, name, binding, visibility,
     [ "ghostness", sexpr_of_ghostness ghostness
     ; "type", sexpr_of_type_expr type_expr ]
 
+let sexpr_of_base (CxxBaseSpec (loc, name, virt)) : sexpression =
+  build_list
+    [ Symbol name ]
+    [ "virtual", sexpr_of_bool virt ]
+
 let sexpr_of_func_kind kind =
   let aux s = Symbol s
   in
@@ -883,11 +888,12 @@ and sexpr_of_decl (decl : decl) : sexpression =
                    [ "attrs", sexpr_of_list ~head:(Some (Symbol "attrs")) sexpr_of_attr attrs ]
     | Struct (loc,
               name,
-              Some fields,
+              Some (bases, fields),
               attrs) ->
         build_list [ Symbol "define-struct"
                    ; Symbol name ]
-                   [ "fields", sexpr_of_list ~head:(Some (Symbol "fields")) sexpr_of_field fields
+                   [ "bases", sexpr_of_list ~head:(Some (Symbol "bases")) sexpr_of_base bases
+                   ; "fields", sexpr_of_list ~head:(Some (Symbol "fields")) sexpr_of_field fields
                    ; "attrs", sexpr_of_list ~head:(Some (Symbol "attrs")) sexpr_of_attr attrs ]
     | Func (loc,
             kind,

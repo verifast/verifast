@@ -740,7 +740,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match t with
             StaticArrayType (elemTp, elemCount) ->
             produce_object t
-          | StructType sn when !address_taken || (language = CLang && dialect = Some Cxx) || (let (_, fds, _, _) = List.assoc sn structmap in match fds with Some fds -> List.exists (fun (_, (_, gh, _, _, _)) -> gh = Ast.Ghost) fds | _ -> true) ->
+          | StructType sn when !address_taken || (language = CLang && dialect = Some Cxx) || (let (_, body_opt, _, _) = List.assoc sn structmap in match body_opt with Some (_, fds) -> List.exists (fun (_, (_, gh, _, _, _)) -> gh = Ast.Ghost) fds | _ -> true) ->
             (* If the variable's address is taken or the struct type has no body or it has a ghost field, treat it like a resource. *)
             produce_object (RefType t)
           | UnionType _ -> produce_object (RefType t)
@@ -749,7 +749,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               match t, e with
                 _, None -> cont h env (get_unique_var_symb_non_ghost x t)
               | StructType sn, Some (InitializerList (linit, es)) ->
-                let (_, Some fds, _, _) = List.assoc sn structmap in
+                let (_, Some (_, fds), _, _) = List.assoc sn structmap in
                 let bs =
                   match zip fds es with
                     Some bs -> bs
@@ -2746,10 +2746,29 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     gs', lems'
 
   let verify_cxx_ctor pn ilist gs lems boxes predinstmap funcmap (struct_name, fields, g, loc, params, init_list, pre, pre_tenv, post, terminates, ss, close_brace_loc) =
-    let init_field h field_name field_type value struct_addr cont =
-      assume_field h struct_name field_name field_type Real struct_addr value real_unit cont
+    let init_constructs this_term init_list leminfo sizemap h env ghostenv cont =
+      let rec iter first init_list h =
+        match init_list with 
+          | ("this", Some ((WCxxConstruct (l, _, this_type, _)) as construct, _)) :: init_list_rest -> (* delegating or base constructor *)
+            let tenv = pre_tenv in
+            let eval_h h env e cont = verify_expr false (pn, ilist) [] false leminfo funcmap sizemap tenv ghostenv h env None e cont @@ fun _ _ _ _ _ -> assert false in
+            let verify_ctor_call = verify_ctor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env this_term (Some "this") in
+            produce_cxx_object l real_unit this_term this_type eval_h verify_ctor_call (Expr construct) false false h env @@ fun h _ ->
+            begin match first, this_type, init_list_rest with
+            | true, StructType struct_name, [] -> cont true h [] (* delegating ctor called *)
+            | _ -> iter false init_list_rest h
+            end
+          | _ ->
+            cont false h init_list
+      in
+      iter true init_list h
     in
-    let init_fields h struct_addr this_type env ghostenv leminfo sizemap current_thread cont  =
+    let init_fields delegated h struct_addr this_type init_list env ghostenv leminfo sizemap current_thread cont =
+      (* when a delegated ctor was called, no initializeation is needed for the fields *)
+      if delegated then cont h else
+      let init_field h field_name field_type value struct_addr cont =
+        assume_field h struct_name field_name field_type Real struct_addr value real_unit cont
+      in
       let rec iter h fields =
         match fields with 
         | [] -> cont h
@@ -2807,17 +2826,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       with_context (Executing ([], env, loc, sprintf "Verifying constructor '%s'" struct_name)) @@ fun () ->
       assume_neq this_term int_zero_term @@ fun () ->
       produce_asn [] [] ghostenv env pre real_unit None None @@ fun h ghostenv env ->
-      begin fun cont ->
-        match init_list with
-        | ["this", Some ((WCxxConstruct (l, _, this_type, _)) as delegating_init, true)] -> (* delegating constructor *)
-          let tenv = pre_tenv in
-          let eval_h h env e cont = verify_expr false (pn, ilist) [] false leminfo funcmap sizemap tenv ghostenv h env None e cont @@ fun _ _ _ _ _ -> assert false in
-          let verify_ctor_call = verify_ctor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env this_term (Some "this") in
-          produce_cxx_object l real_unit this_term this_type eval_h verify_ctor_call (Expr delegating_init) false false h env @@ fun h env ->
-          cont h
-        | _ -> 
-          init_fields h this_term this_type env ghostenv leminfo sizemap current_thread cont
-      end @@ fun h ->
+      init_constructs this_term init_list leminfo sizemap h env ghostenv @@ fun delegated h init_list ->
+      if List.exists (function ("this", _) -> true | _ -> false) init_list then assert_false h env loc "Invalid order of initialization: the base or delegating constructor should already have been handled." None;
+      init_fields delegated h this_term this_type init_list env ghostenv leminfo sizemap current_thread @@ fun h ->
       let return_cont h tenv2 env2 retval =
         consume_asn rules [] h ghostenv env post true real_unit @@ fun _ h ghostenv env size_first -> 
         cleanup_heapy_locals (pn, ilist) close_brace_loc h env heapy_ps @@ fun h ->
@@ -2831,8 +2842,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let _ = pop () in 
     gs', lems'
 
-  let verify_cxx_dtor pn ilist gs lems boxes predinstmap funcmap (struct_name, fields, g, loc, pre, pre_tenv, post, terminates, ss, close_brace_loc) =
-    let consume_fields struct_addr h env tenv struct_addr ghostenv leminfo sizemap cont =
+  let verify_cxx_dtor pn ilist gs lems boxes predinstmap funcmap (struct_name, bases, fields, g, loc, pre, pre_tenv, post, terminates, ss, close_brace_loc) =
+    let consume_fields struct_addr h env tenv ghostenv leminfo sizemap cont =
       let rec iter h fields =
         match fields with 
         | [] -> cont h
@@ -2854,6 +2865,20 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       iter h (List.rev fields)
     in
+    let consume_bases bases h env tenv this_addr ghostenv leminfo sizemap cont =
+      let rec iter bases cont =
+        match bases with 
+        | [] ->
+          cont h env tenv
+        | (base_name, (base_spec_loc, is_virtual)) :: bases_rest ->
+          iter bases_rest @@ fun h env tenv ->
+          with_context (Executing (h, [], base_spec_loc, "Executing base destructor")) @@ fun () ->
+          let verify_dtor_call = verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env this_addr None in
+          consume_cxx_object base_spec_loc real_unit_pat this_addr (StructType base_name) verify_dtor_call false h env @@ fun h env ->
+          cont h env tenv
+      in
+      iter bases cont 
+    in
     let _ = push () in 
     let sizemap, indinfo = [], None in
     let prolog, ss = partition_ss Regular ss in
@@ -2869,7 +2894,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       assume_neq this_term int_zero_term @@ fun () ->
       produce_asn [] [] ghostenv env pre real_unit None None @@ fun h ghostenv env ->
       let return_cont h tenv2 env2 retval =
-        consume_fields this_term h env tenv this_term ghostenv leminfo sizemap @@ fun h ->
+        consume_fields this_term h env tenv ghostenv leminfo sizemap @@ fun h ->
+        consume_bases bases h env tenv this_term ghostenv leminfo sizemap @@ fun h env tenv ->
         consume_asn rules [] h ghostenv env post true real_unit @@ fun _ h ghostenv env size_first ->
         check_leaks h env close_brace_loc "Destructor leaks heap chunks."
       in 
@@ -3232,7 +3258,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | CxxCtor (loc, mangled_name, _, _, _, Some _, _, StructType sn) :: ds ->
       let gs', lems' =
         record_fun_timing loc (sn ^ ".<ctor>") @@ fun () ->
-        let _, Some fields, _, _ = List.assoc sn structmap in
+        let _, Some (_, fields), _, _ = List.assoc sn structmap in
         let loc, params, pre, pre_tenv, post, terminates, Some (Some (init_list, (body, close_brace_loc))) = List.assoc mangled_name cxx_ctor_map1 in
         verify_cxx_ctor pn ilist gs lems boxes predinstmap funcmap (sn, fields, mangled_name, loc, params, init_list, pre, pre_tenv, post, terminates, body, close_brace_loc)
       in
@@ -3240,9 +3266,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | CxxDtor (loc, _, _, Some _, _, StructType sn) :: ds ->
       let gs', lems' =
         record_fun_timing loc (sn ^ ".<dtor>") @@ fun () ->
-        let _, Some fields, _, _ = List.assoc sn structmap in
+        let _, Some (bases, fields), _, _ = List.assoc sn structmap in
         let loc, pre, pre_tenv, post, terminates, Some (Some (body, close_brace_loc)) = List.assoc sn cxx_dtor_map1 in 
-        verify_cxx_dtor pn ilist gs lems boxes predinstmap funcmap (sn, fields, cxx_dtor_name sn, loc, pre, pre_tenv, post, terminates, body, close_brace_loc)
+        verify_cxx_dtor pn ilist gs lems boxes predinstmap funcmap (sn, bases, fields, cxx_dtor_name sn, loc, pre, pre_tenv, post, terminates, body, close_brace_loc)
       in
       verify_funcs (pn, ilist) boxes gs' lems' ds
     | _::ds -> verify_funcs (pn,ilist)  boxes gs lems ds

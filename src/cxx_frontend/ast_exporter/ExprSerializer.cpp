@@ -156,6 +156,14 @@ bool ExprSerializer::VisitImplicitCastExpr(
     _serializer.serializeExpr(ce, expr->getSubExpr());
     return true;
   }
+  if (expr->getCastKind() == clang::CastKind::CK_UncheckedDerivedToBase) {
+    auto ce = _builder.initDerivedToBase();
+    auto e = ce.initExpr();
+    auto type = ce.initType();
+    _serializer.serializeExpr(e, expr->getSubExpr());
+    _serializer.serializeQualType(type, expr->getType());
+    return true;
+  }
   return Visit(expr->getSubExpr());
 }
 

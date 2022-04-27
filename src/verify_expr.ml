@@ -418,16 +418,16 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let funcmap = funcmap1 @ funcmap0
 
   let cxx_ctor_map1, ctors_implemented =
-    let check_init_list pn ilist this_type tenv struct_name body_opt =
+    let check_init_list pn ilist tenv struct_name body_opt struct_name =
       body_opt |> option_map @@ fun (init_list, b) ->
         let init_list_checked =
-          match init_list with 
-          | ["this", Some (init, is_written)] -> (* delegating ctor *)
-            let winit = check_expr_t_core functypemap funcmap [] [] (pn, ilist) [] tenv None init this_type in
-            ["this", Some (winit, is_written)]
-          | _ ->
-            let _, Some fields, _, _ = List.assoc struct_name structmap in 
-            init_list |> List.map @@ fun (field_name, init_expr_opt) ->
+          let _, Some (bases, fields), _, _ = List.assoc struct_name structmap in 
+          init_list |> List.map @@ function 
+            | ("this", Some (init, is_written)) ->
+              let w, tp = check_expr (pn,ilist) [] tenv None init in
+              let () = expect_type (expr_loc init) None (StructType struct_name) tp in
+              "this", Some (w, is_written)
+            | (field_name, init_expr_opt) ->
               (* init_expr_opt is None when the member has a default initializer and no implicit constructor call, otherwise {i Some (init, is_written)} is present *)
               let init_opt =
                 init_expr_opt |> option_map @@ fun (init, is_written) ->
@@ -452,7 +452,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match try_assoc2 mangled_name ctor_map cxx_ctor_map0 with 
           | None -> 
             iter pn ilist
-              ((mangled_name, (loc, xmap, pre, pre_tenv, post, terminates, check_init_list pn ilist (StructType struct_name) pre_tenv struct_name body_opt)) :: ctor_map)
+              ((mangled_name, (loc, xmap, pre, pre_tenv, post, terminates, check_init_list pn ilist pre_tenv struct_name body_opt struct_name)) :: ctor_map)
               ctors_implemented
               rest
           | Some (_, _, _, _, _, _, Some _) ->
@@ -467,7 +467,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               (Regular, [], None, xmap, false, pre, post, [], terminates) 
               (Regular, [], None, xmap0, false, [], [], pre0, post0, [], terminates0);
             iter pn ilist 
-              ((mangled_name, (loc, xmap, pre, pre_tenv, post, terminates, check_init_list pn ilist (StructType struct_name) pre_tenv struct_name body_opt)) :: ctor_map) 
+              ((mangled_name, (loc, xmap, pre, pre_tenv, post, terminates, check_init_list pn ilist pre_tenv struct_name body_opt struct_name)) :: ctor_map) 
               ((mangled_name, loc0) :: ctors_implemented)
               rest
         end
@@ -1039,8 +1039,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let check_expr_t tenv e tp = check_expr_t_core functypemap funcmap [] [] (pn, ilist) [] tenv None e tp in
     structmap1 |> List.map @@ fun (sn, (sloc, sbody, spad_sym, ssize)) ->
       let tenv = ["this", PtrType (StructType sn); current_thread_name, current_thread_type] in 
-      let body = sbody |> option_map @@ fun fields ->
-        fields |> List.map @@ function
+      let body = sbody |> option_map @@ fun (bases, fields) ->
+        bases, fields |> List.map @@ function
           | fname, (floc, fgh, ft, foffset, Some finit) ->
             let init = check_expr_t tenv finit ft in
             fname, (floc, fgh, ft, foffset, Some init)
@@ -1237,6 +1237,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | WCxxConstruct (_, _, _, es) -> es |> List.iter @@ fun e -> expr_mark_addr_taken e locals
     | CxxDelete (_, e) -> expr_mark_addr_taken e locals
     | CxxLValueToRValue (_, e) -> expr_mark_addr_taken e locals
+    | CxxDerivedToBase (_, e, _) -> expr_mark_addr_taken e locals
   and pat_expr_mark_addr_taken pat locals = 
     match pat with
     | LitPat(e) -> expr_mark_addr_taken e locals
@@ -1505,7 +1506,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | StructType sn ->
       let (fields, padding_predsymb_opt) =
         match try_assoc sn structmap with
-          Some (_, Some fds, padding_predsymb_opt, _) -> fds, padding_predsymb_opt
+          Some (_, Some (_, fds), padding_predsymb_opt, _) -> fds, padding_predsymb_opt
         | _ -> static_error l (Printf.sprintf "Cannot produce an object of type 'struct %s' since this struct type has not been defined" sn) None
       in
       begin fun cont ->
@@ -1595,7 +1596,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | StructType sn ->
       let fields, padding_predsymb_opt =
         match try_assoc sn structmap with
-          Some (_, Some fds, padding_predsymb_opt, _) -> fds, padding_predsymb_opt
+          Some (_, Some (_, fds), padding_predsymb_opt, _) -> fds, padding_predsymb_opt
         | _ -> static_error l (Printf.sprintf "Cannot consume an object of type 'struct %s' since this struct type has not been defined" sn) None
       in
       begin fun cont ->

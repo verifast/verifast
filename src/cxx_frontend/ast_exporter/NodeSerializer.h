@@ -205,6 +205,10 @@ private:
   void serializeMethodDecl(stubs::Decl::Method::Builder &builder,
                            const clang::CXXMethodDecl *decl,
                            llvm::StringRef mangledName);
+
+  void serializeBases(capnp::List<stubs::Node<stubs::Decl::Record::BaseSpec>,
+                                capnp::Kind::STRUCT>::Builder &builder,
+                    clang::CXXRecordDecl::base_class_const_range bases);
 };
 
 struct ExprSerializer : public NodeSerializer<stubs::Expr, clang::Expr>,
