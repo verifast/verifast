@@ -657,12 +657,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * (stmt list * loc) option option
     type base_spec_info = 
         loc 
-      * string
       * bool (* virtual *)
     type struct_info =
         loc
-      * base_spec list
-      * (string * struct_field_info) list option (* None if struct without body *)
+      * (base_spec_info map * struct_field_info map) option (* None if struct without body *)
       * termnode option (* predicate symbol for struct_padding predicate *)
       * termnode (* size *)
     type union_field_info =
@@ -1215,27 +1213,26 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter sdm ds =
       match ds with
         [] -> sdm
-      | Struct (l, sn, fds_opt, attrs, bases)::ds ->
-        if List.length bases > 1 then static_error l "Multiple inheritance is not supported." None;
-        if List.exists (fun (CxxBaseSpec (l, _, is_virtual)) -> is_virtual) bases then static_error l "Virtual inheritance is not supported." None;
+      | Struct (l, sn, body_opt, attrs)::ds ->
+        begin match body_opt with
+        | Some (bases, _) ->
+          if List.length bases > 1 then static_error l "Multiple inheritance is not supported." None;
+          if List.exists (fun (CxxBaseSpec (l, _, is_virtual)) -> is_virtual) bases then static_error l "Virtual inheritance is not supported." None;
+        | _ -> ()
+        end;
         begin
           match try_assoc sn structmap0 with
-            Some (_, _, Some _, _, _) -> static_error l "Duplicate struct name." None
-          | Some (ldecl, _, None, _, _) -> if fds_opt = None then static_error l "Duplicate struct declaration." None else delayed_struct_def sn ldecl l
+            Some (_, _, Some _, _) -> static_error l "Duplicate struct name." None
+          | Some (ldecl, _, None, _) -> if body_opt = None then static_error l "Duplicate struct declaration." None else delayed_struct_def sn ldecl l
           | None -> ()
         end;
         begin
           match try_assoc sn sdm with
-            Some (_, _, Some _, _) -> static_error l "Duplicate struct name." None
-          | Some (ldecl, _, None, _) -> if fds_opt = None then static_error l "Duplicate struct declaration." None else delayed_struct_def sn ldecl l
+            Some (_, Some _, _) -> static_error l "Duplicate struct name." None
+          | Some (ldecl, None, _) -> if body_opt = None then static_error l "Duplicate struct declaration." None else delayed_struct_def sn ldecl l
           | None -> ()
         end;
-        begin 
-          match fds_opt, bases with
-          | None, _ :: _ -> static_error l "A struct declaration cannot have a list of base specifiers." None
-          | _ -> ()
-        end;
-        iter ((sn, (l, bases, fds_opt, attrs))::sdm) ds
+        iter ((sn, (l, body_opt, attrs))::sdm) ds
       | _::ds -> iter sdm ds
     in
     match ps with
@@ -1656,7 +1653,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | None ->
       (* So we can use class/struct/union names as types in ghost code *)
       match try_assoc id structdeclmap with
-        Some (ld, _, _, _) when dialect = Some Cxx -> 
+        Some (ld, _, _) when dialect = Some Cxx -> 
         reportUseSite DeclKind_Struct ld l;
         StructType id
       | _ ->
@@ -1696,12 +1693,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       static_error l "A struct type with a body is not supported in this position." None
     | StructTypeExpr (l, Some sn, None, _) ->
       begin match try_assoc sn structmap0 with
-        Some (ld, _, _, _, _) ->
+        Some (ld, _, _, _) ->
         reportUseSite DeclKind_Struct ld l;
         StructType sn
       | None ->
       match try_assoc sn structdeclmap with
-        Some (ld, _, _, _) ->
+        Some (ld, _, _) ->
         reportUseSite DeclKind_Struct ld l;
         StructType sn
       | None ->
@@ -1828,7 +1825,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let struct_size_partial smap l sn =
     match try_assoc sn smap with
-      Some (_, _, _, _, s) -> s
+      Some (_, _, _, s) -> s
     | _ -> static_error l (sprintf "Cannot take size of undeclared struct '%s'" sn) None
 
   let union_size_partial umap l un =
@@ -1884,28 +1881,20 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter smap smapwith0 remaining =
       match remaining with
       | [] -> smap
-      | (sn, (l, bases, fds_opt, attrs)) :: remaining ->
+      | (sn, (l, body_opt, attrs)) :: remaining ->
         let s = get_unique_var_symb ("struct_" ^ sn ^ "_size") intType in
         let packed = ref false in
         List.iter (function
                    | Packed ->
                      packed := true;
-                     begin match fds_opt with
-                     | Some fds ->
+                     begin match body_opt with
+                     | Some (_, fds) ->
                        ctxt#assert_term (ctxt#mk_eq s (fds |> List.map (field_size_partial smapwith0 unionmap) |> List.fold_left ctxt#mk_add (ctxt#mk_intlit 0)))
                      | None -> static_error l "A struct declaration cannot be packed." None
                      end
         ) attrs;
         ctxt#assert_term (ctxt#mk_le s max_uintptr_term);
-        let lte, bases_size = 
-          match bases with
-          | [] -> (* no bases, a struct cannot have size 0 -> lt *)
-                  ctxt#mk_lt, int_zero_term
-          | _ ->  (* only match on non-virtual bases because virtual bases are not supported yet -> throws unmatched case otherwise *)
-                  (* compiler may introduce padding in bases and the derived struct's members may fit in this padding -> le *)
-                  ctxt#mk_le, bases |> List.fold_left (fun size (CxxBaseSpec (l, base, false)) -> struct_size_partial smapwith0 l base |> ctxt#mk_add size) int_zero_term
-        in
-        lte bases_size s |> ctxt#assert_term;
+        ctxt#assert_term (ctxt#mk_lt (ctxt#mk_intlit 0) s);
         let rec iter1 fmap fds has_ghost_fields bases =
           match fds with
             [] ->
@@ -1926,7 +1915,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               end
             in
             offset_iter fmap (ctxt#mk_intlit 0) true;
-            (sn, (l, bases, Some fmap, padding_predsym_opt, s))
+            let base_map = bases |> List.map @@ fun (CxxBaseSpec (l, base, is_virtual)) -> base, (l, is_virtual) in
+            (sn, (l, Some (base_map, fmap), padding_predsym_opt, s))
           | Field (lf, gh, t, f, Instance, Public, final, init)::fds ->
             if List.mem_assoc f fmap then static_error lf "Duplicate field name." None;
             let t = check_pure_type ("", []) [] gh t in
@@ -1935,9 +1925,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             iter1 (entry::fmap) fds (has_ghost_fields || gh = Ghost) bases
         in
         let new_item = begin
-          match fds_opt with
-            Some fds -> iter1 [] fds false bases
-          | None -> (sn, (l, [], None, None, s))
+          match body_opt with
+            Some (bases, fds) -> iter1 [] fds false bases
+          | None -> (sn, (l, None, None, s))
         end
         in
         iter (new_item::smap) (new_item::smapwith0) remaining
@@ -1951,7 +1941,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let union_size = union_size_partial unionmap
 
   let field_offset l fparent fname =
-    let (_, _, Some fmap, _, _) = List.assoc fparent structmap in
+    let (_, Some (_, fmap), _, _) = List.assoc fparent structmap in
     let (_, gh, y, offset_opt, _) = List.assoc fname fmap in
     match offset_opt with
       Some term -> term
@@ -1971,11 +1961,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     ) functypenames
 
   let rec is_derived_struct_of x y = 
-    let check_bases bases = bases |> List.exists @@ fun (CxxBaseSpec (_, base, _)) -> is_derived_struct_of base y in
+    let check_bases bases = bases |> List.exists @@ fun (base, _) -> is_derived_struct_of base y in
     x = y ||
-    match try_assoc2 x structmap1 structmap0 with 
-    | Some (_, bases, _, _, _) -> check_bases bases 
-    | None -> false
+    match try_assoc x structmap with 
+    | Some (_, Some (bases, _), _, _) -> check_bases bases 
+    | _ -> false
       
   
   let rec is_subtype_of x y =
@@ -2716,7 +2706,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let struct_padding_predfams1 =
     flatmap
       (function
-         (sn, (l, bases, fds, Some padding_predsymb, size)) -> [("struct_" ^ sn ^ "_padding", (l, [], 0, [PtrType (StructType sn)], padding_predsymb, Some 1, Inductiveness_Inductive))]
+         (sn, (l, body_opt, Some padding_predsymb, size)) -> [("struct_" ^ sn ^ "_padding", (l, [], 0, [PtrType (StructType sn)], padding_predsymb, Some 1, Inductiveness_Inductive))]
        | _ -> [])
       structmap1
   
@@ -2737,15 +2727,15 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let isparamizedfunctypepreds1 = flatmap (fun (g, (l, gh, tparams, rt, ftxmap, xmap, pn, ilist, pre, post, terminates, predfammaps)) -> predfammaps) functypedeclmap1
 
   let struct_accessor_map1: struct_accessor_info map =
-    structmap1 |> flatmap (fun (sn, (l, _, ofds, _, _)) ->
+    structmap1 |> flatmap (fun (sn, (l, body_opt, _, _)) ->
         (* For each struct "s", and each field fi, generate a tuple type and getter/setter functions
              mk_s : T1 * ... * Tn -> struct s
              get_s_fi : struct s -> Ti
              set_s_fi : struct s * Ti -> struct s
         *)
-        begin match ofds with
+        begin match body_opt with
         | None -> []
-        | Some fds ->
+        | Some (_, fds) ->
           let cname = "mk_" ^ sn in
           let field_types = fds |> List.map (fun (f, (_, _, t, _, _)) -> (f, t)) in
           let fieldnames = List.map fst field_types in
@@ -2763,7 +2753,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let (malloc_block_pred_map1: malloc_block_pred_info map), (new_block_pred_map1: new_block_pred_info map) = 
     let mk_block_pred_map name =
       structmap1 |> flatmap begin function
-        (sn, (l, _, Some _, _, _)) -> [(sn, mk_predfam (name ^ "_" ^ sn) l [] 0 [PtrType (StructType sn)] (Some 1) Inductiveness_Inductive)]
+        (sn, (l, Some _, _, _)) -> [(sn, mk_predfam (name ^ "_" ^ sn) l [] 0 [PtrType (StructType sn)] (Some 1) Inductiveness_Inductive)]
       | _ -> []
       end 
     in
@@ -2787,10 +2777,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | _ ->
     flatmap
-      (fun (sn, (_, _, fds_opt, _, _)) ->
-         match fds_opt with
+      (fun (sn, (_, body_opt, _, _)) ->
+         match body_opt with
            None -> []
-         | Some fds ->
+         | Some (_, fds) ->
            List.map
              (fun (fn, (l, gh, t, offset, _)) ->
               ((sn, fn), mk_predfam (sn ^ "_" ^ fn) l [] 0 [PtrType (StructType sn); t] (Some 1) Inductiveness_Inductive)
@@ -3852,7 +3842,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         begin match unfold_inferred_type t with
         | StructType sn ->
           begin match try_assoc sn structmap with
-          | Some (_, _, Some fds, _, _) ->
+          | Some (_, Some (_, fds), _, _) ->
             begin match try_assoc f fds with
             | None -> static_error l ("No such field in struct '" ^ sn ^ "'.") None
             | Some (_, gh, t, offset, _) ->
@@ -4371,7 +4361,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | PtrType (StructType sn) ->
       begin
       match try_assoc sn structmap with
-        Some (_, _, Some fds, _, _) ->
+        Some (_, Some (_, fds), _, _) ->
         begin
           match try_assoc f fds with
             None -> static_error l ("No such field in struct '" ^ sn ^ "'.") None
@@ -4660,7 +4650,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | StructType sn, InitializerList (ll, es) ->
       let fds =
         match try_assoc sn structmap with
-          Some (_, _, Some fds, _, _) -> fds
+          Some (_, Some (_, fds), _, _) -> fds
         | _ -> static_error ll (sprintf "Missing definition of struct '%s'" sn) None
       in
       let rec iter fds es =
@@ -5455,7 +5445,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     flatmap
       begin
         function
-          (sn, (_, _, Some fmap, _, _)) ->
+          (sn, (_, Some (_, fmap), _, _)) ->
           flatmap
             begin
               function

@@ -352,7 +352,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
   and transl_record_decl (loc: VF.loc) (record: R.Decl.Record.t): VF.decl list =
     let open R.Decl.Record in
     let name = name_get record in
-    let bases, body, decls = 
+    let body, decls = 
       if has_body record then
         let open Body in
         let transl_base loc desc =
@@ -363,15 +363,15 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
         let fields = fields_get body |> capnp_arr_map (transl_node transl_field_decl) in
         let decls = decls_get body |> capnp_arr_map transl_decl |> List.flatten in
         let bases = bases_get body |> capnp_arr_map (transl_node transl_base) in
-        bases, Some fields, decls
-      else [], None, [] 
+        Some (bases, fields), decls
+      else None, [] 
     in
     let vf_record = 
       match kind_get record with
       | R.RecordKind.Struc | R.RecordKind.Class -> 
-        VF.Struct (loc, name, body, [], bases) 
+        VF.Struct (loc, name, body, []) 
       | R.RecordKind.Unio -> 
-        VF.Union (loc, name, body) 
+        VF.Union (loc, name, body |> option_map snd) 
     in
     vf_record :: decls
 

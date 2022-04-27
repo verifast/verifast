@@ -882,16 +882,14 @@ and sexpr_of_decl (decl : decl) : sexpression =
     | Struct (loc,
               name,
               None,
-              attrs,
-              bases) ->
+              attrs) ->
         build_list [ Symbol "declare-struct"
                    ; Symbol name ]
                    [ "attrs", sexpr_of_list ~head:(Some (Symbol "attrs")) sexpr_of_attr attrs ]
     | Struct (loc,
               name,
-              Some fields,
-              attrs,
-              bases) ->
+              Some (bases, fields),
+              attrs) ->
         build_list [ Symbol "define-struct"
                    ; Symbol name ]
                    [ "bases", sexpr_of_list ~head:(Some (Symbol "bases")) sexpr_of_base bases

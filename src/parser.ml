@@ -483,8 +483,8 @@ and
     [< fs = parse_fields; attrs = begin parser
       [< '(_, Kwd "__attribute__"); res = parse_struct_attrs; >] -> res
     | [< >] -> [] end;
-    '(_, Kwd ";") >] -> Struct (l, s, Some fs, attrs, [])
-  | [< '(_, Kwd ";") >] -> Struct (l, s, None, [], [])
+    '(_, Kwd ";") >] -> Struct (l, s, Some ([], fs), attrs)
+  | [< '(_, Kwd ";") >] -> Struct (l, s, None, [])
   | [< t = parse_type_suffix (StructTypeExpr (l, Some s, None, [])); d = parse_func_rest Regular (Some t) Public >] -> d
   >] -> check_function_for_contract d
 | [< '(l, Kwd "union"); '(_, Ident u); d = parser
@@ -511,13 +511,13 @@ and
                [EnumDecl (l, en, body); TypedefDecl (l, EnumTypeExpr (le, Some en, None), g)]
              | Some (StructTypeExpr (ls, s_opt, Some fs, attrs)) ->
                let s = match s_opt with None -> g | Some s -> s in
-               [Struct (l, s, Some fs, attrs, []); TypedefDecl (l, StructTypeExpr (ls, Some s, None, attrs), g)]
+               [Struct (l, s, Some ([], fs), attrs); TypedefDecl (l, StructTypeExpr (ls, Some s, None, attrs), g)]
              | Some (UnionTypeExpr (ls, u_opt, Some fs)) ->
                let u = match u_opt with None -> g | Some u -> u in
                [Union (l, u, Some fs); TypedefDecl (l, UnionTypeExpr (ls, Some u, None), g)]
              | Some PtrTypeExpr (lp, (StructTypeExpr (ls, s_opt, Some fs, attrs))) ->
                let s = match s_opt with None -> g | Some s -> s in
-               [Struct (l, s, Some fs, attrs, []); TypedefDecl (l, PtrTypeExpr (lp, StructTypeExpr (ls, Some s, None, attrs)), g)]
+               [Struct (l, s, Some ([], fs), attrs); TypedefDecl (l, PtrTypeExpr (lp, StructTypeExpr (ls, Some s, None, attrs)), g)]
              | Some te ->
                [TypedefDecl (l, te, g)]
          end

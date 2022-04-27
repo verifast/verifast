@@ -5,20 +5,21 @@ predicate A_pred(A *a; int i) =
 
 struct A {
     int i;
-    
-    A()
+
+    A(int i) : i(i)
     //@ requires true;
-    //@ ensures A_pred(this, _);
-    {
-    	//@ close A_pred(this, _);
-    }
+    //@ ensures A_pred(this, i);
+    {}
+    
+    A() : A(0)
+    //@ requires true;
+    //@ ensures A_pred(this, 0);
+    {}
     
     ~A()
     //@ requires A_pred(this, _);
     //@ ensures true;
-    {
-    	//@ open A_pred(this, _);
-    }
+    {}
     
     void incr()
     //@ requires A_pred(this, ?i);
@@ -35,10 +36,20 @@ predicate B_pred(B *b; int a_i, int b_i) =
 
 struct B : A {
     int i;
-
-    B() : i(1) 
+    
+    B(int b_i, int a_i) : A(a_i), i(b_i)
     //@ requires true;
-    //@ ensures B_pred(this, _, 1);
+    //@ ensures B_pred(this, a_i, b_i);
+    {}
+    
+    B(int i) : i(i)
+    //@ requires true;
+    //@ ensures B_pred(this, 0, i);
+    {}
+
+    B() : B(1, 0)
+    //@ requires true;
+    //@ ensures B_pred(this, 0, 1);
     {
     }
     
@@ -86,6 +97,10 @@ int main()
 //@ ensures true;
 {
     B b;
+    B b_(3, 1);
+    //@ assert B_pred(&b_, 1, 3);
+    B b__(4);
+    //@ assert B_pred(&b__, 0, 4);
     //@ assert B_pred(&b, ?a_i, ?b_i);
     b.incr();
     //@ assert B_pred(&b, a_i, b_i + 1);
@@ -94,5 +109,5 @@ int main()
     A &a = b;
     a.incr();
     //@ assert B_pred(&b, a_i + 2, b_i + 1);
-    //@ assert (sizeof(A) <= sizeof(B));
+    
 }

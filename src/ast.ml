@@ -727,9 +727,8 @@ and
     Struct of 
       loc * 
       string * 
-      field list option * 
-      struct_attr list *
-      base_spec list
+      (base_spec list * field list) option *
+      struct_attr list
   | Union of loc * string * field list option
   | Inductive of  (* inductief data type regel-naam-type parameters-lijst van constructors*)
       loc *
