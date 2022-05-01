@@ -8,6 +8,8 @@ build = "build.rs"
 
 [dependencies]
 capnp = "0.14.5"
+tracing = {version = "0.1.33", features = ["max_level_trace", "release_max_level_warn"]}
+tracing-subscriber = "0.3.11"
 
 [build-dependencies]
 capnpc = "0.14.7"
