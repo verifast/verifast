@@ -1753,6 +1753,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let verify_call funcmap eval_h l (pn, ilist) xo g targs pats (callee_tparams, tr, ps, funenv, pre, post, epost, terminates, v) pure is_upcall target_class leminfo sizemap h tparams tenv ghostenv env cont econt =
     let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some pure) e tp in
+    let check_expr (pn,ilist) tparams tenv pure e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv pure e in
     let eval_h h env pat cont =
       match pat with
         SrcPat (LitPat e) -> eval_h h env e cont
