@@ -43,6 +43,7 @@ Documentation
 - [The VeriFast Tutorial](https://doi.org/10.5281/zenodo.887906)
 - [Featherweight VeriFast](http://arxiv.org/pdf/1507.07697) [(Slides, handouts, Coq proof)](https://people.cs.kuleuven.be/~bart.jacobs/fvf)
 - [Scientific papers](https://people.cs.kuleuven.be/~bart.jacobs/verifast/) on the various underlying ideas
+- [VeriFast Docs](https://verifast.github.io/verifast-docs/) (under construction) with a nascent FAQ and a grammar for annotated C source files
 
 Acknowledgements
 ----------------
