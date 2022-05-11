@@ -1869,7 +1869,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
 
 let (code_font, trace_font) =
   match platform with
-    MacOS -> ("Courier 12", "Sans 12")
+    MacOS -> ("Menlo 12", "Sans 12")
   | _ -> ("Monospace 10", "Sans 8")
 
 let () =
