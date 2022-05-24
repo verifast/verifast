@@ -1720,10 +1720,23 @@ let rec parse_include_directives (verbose: int) (enforceAnnotations: bool) (data
   let test_include_cycle l totalPath =
     if List.mem totalPath !active_headers then raise (ParseException (l, "Include cycles (even with header guards) are not supported"));
   in
-  let rec parse_include_directives_core header_names = parser
-  | [< (headers, header_name) = parse_include_directive; (headers', header_names') = parse_include_directives_core (header_name::header_names) >] 
-          -> (List.append headers headers', header_names')
-  | [< >] -> ([], header_names)
+  let rec parse_include_directives_core header_names = begin fun stream ->
+    let parse = parser
+      | [< (headers, header_name) = parse_include_directive; (headers', header_names') = parse_include_directives_core (header_name::header_names) >] 
+              -> (List.append headers headers', header_names')
+      | [< >] -> ([], header_names)
+    in
+    begin match Stream.npeek 2 stream with
+    (* allow empty ghost code or ghost code that only contains preprocessor tokens after lexing *)
+    | [(l, Kwd "/*@"); (_, Kwd "@*/")] -> begin
+        Stream.junk stream;
+        Stream.junk stream;
+        parse_include_directives_core header_names stream
+      end
+    | _ ->
+      parse stream
+    end
+  end
   and parse_include_directive = 
     let isGhostHeader header = Filename.check_suffix header ".gh" in
     parser
