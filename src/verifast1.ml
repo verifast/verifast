@@ -3868,7 +3868,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Select (l, ((CxxDerivedToBase (le, _, StructTypeExpr _)) as e), f) ->
       (*
         Select a base object field.
-        Objects in C++ are threated as RefType objects, 
+        Objects in C++ are treated as RefType objects, 
         which is why we have to take the address of the expression because it gets dereferenced by default.
       *)
       let e = make_addr_of le e in
