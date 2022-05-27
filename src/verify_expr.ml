@@ -2085,8 +2085,6 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match lhs with
         WVar (l, x, scope) -> cont h env (LValues.Var (l, x, scope))
       | WRead (l, w, fparent, fname, tp, fstatic, fvalue, fghost) ->
-        (* let () = print_endline "read" in 
-        let () = print_endline @@ string_of_loc l in *)
         let (_, (_, _, _, _, f_symb, _, _)) = List.assoc (fparent, fname) field_pred_map in
         begin fun cont ->
           if fstatic then
