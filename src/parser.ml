@@ -405,7 +405,8 @@ and parse_declaration_rhs te = parser
 | [< e = parse_expr >] -> e
 and
   parse_declarator t = parser
-  [< '(l, Ident x);
+  [< t = parse_type_suffix t;
+     '(l, Ident x);
      tx = parse_array_braces t;
      init = opt (parser [< '(_, Kwd "="); e = parse_declaration_rhs tx >] -> e);
   >] -> (l, tx, x, init, (ref false, ref None))
@@ -1215,6 +1216,10 @@ and parse_create_handle_keyword = parser
     [< '(l, Kwd "create_handle") >] -> (l, false)
   | [< '(l, Kwd "create_fresh_handle") >] -> (l, true)
 and
+  get_ultimate_pointee_type = function
+    PtrTypeExpr (l, te) -> get_ultimate_pointee_type te
+  | te -> te
+and
   parse_decl_stmt_rest te lx x = parser
     [< '(l, Kwd "=");
        s = parser
@@ -1223,7 +1228,7 @@ and
            match te with ManifestTypeExpr (_, HandleIdType) -> () | _ -> raise (ParseException (l, "Target variable of handle creation statement must have type 'handle'."))
          end;
          CreateHandleStmt (l, x, fresh, hpn, e)
-       | [< rhs = parse_declaration_rhs te; ds = comma_rep (parse_declarator te); '(_, Kwd ";") >] ->
+       | [< rhs = parse_declaration_rhs te; ds = comma_rep (parse_declarator (get_ultimate_pointee_type te)); '(_, Kwd ";") >] ->
          DeclStmt (l, (l, te, x, Some(rhs), (ref false, ref None))::ds)
     >] -> s
   | [< tx = parse_array_braces te;

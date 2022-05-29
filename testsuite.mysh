@@ -443,6 +443,7 @@ cd tutorial_solutions
   verifast_both -target 32bit students.c
 cd ..
 cd tests
+  verifast -c declarators.c
   verifast -c check_expr_varargs.c
   verifast -c issue247.c
   verifast -c variadic_macros.c
