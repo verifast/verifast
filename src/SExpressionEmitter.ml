@@ -472,8 +472,10 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
         build_list
           [ Symbol "expr-widened-param-arg" ]
           [ "e", sexpr_of_expr e ]
-    | SizeofExpr (loc, texpr) ->
+    | SizeofExpr (loc, TypeExpr texpr) ->
         List [ Symbol "expr-sizeof"; sexpr_of_type_expr texpr ]
+    | SizeofExpr (loc, e) ->
+        List [ Symbol "expr-sizeof-expr"; sexpr_of_expr e ]
     | AddressOf (_, e) ->
         List [ Symbol "expr-address-of"; sexpr_of_expr e ]
     | ProverTypeConversion (t1, t2, e) ->

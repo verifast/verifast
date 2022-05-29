@@ -3936,7 +3936,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           check_pure_fun_value_call l (WVar (l, g, LocalVar)) t es
         | _ ->
         match (g, es) with
-          ("malloc", [SizeofExpr (ls, te)]) ->
+          ("malloc", [SizeofExpr (ls, TypeExpr te)]) ->
           let t = check_pure_type (pn,ilist) tparams Ghost te in
           (WFunCall (l, g, [], es), PtrType t, None)
         | _ ->
@@ -4195,9 +4195,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           end
         | _ -> static_error l "Switch expression operand must be inductive value." None
       end
-    | SizeofExpr(l, te) ->
+    | SizeofExpr(l, TypeExpr te) ->
       let t = check_pure_type (pn,ilist) tparams Real te in
-      (SizeofExpr (l, ManifestTypeExpr (type_expr_loc te, t)), sizeType, None)
+      (SizeofExpr (l, TypeExpr (ManifestTypeExpr (type_expr_loc te, t))), sizeType, None)
+    | SizeofExpr(l, e) ->
+      let (w, t, _) = check e in
+      (SizeofExpr (l, TypeExpr (ManifestTypeExpr (expr_loc e, t))), sizeType, None)
     | InstanceOfExpr(l, e, te) ->
       let t = check_pure_type (pn,ilist) tparams Real te in
       let w = checkt e javaLangObject in
@@ -5047,7 +5050,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match int_rank_and_signedness elemtype with
           Some (k, signedness) ->
           let p = new predref "integers_" [PtrType Void; intType; Bool; intType; list_type elemtype] (Some 4) in
-          (WPredAsn (l, p, true, [], [], [LitPat wfirst; LitPat (SizeofExpr (l, ManifestTypeExpr (l, elemtype))); LitPat (if signedness = Signed then True l else False l); wlength; wrhs]), tenv, [])
+          (WPredAsn (l, p, true, [], [], [LitPat wfirst; LitPat (SizeofExpr (l, TypeExpr (ManifestTypeExpr (l, elemtype)))); LitPat (if signedness = Signed then True l else False l); wlength; wrhs]), tenv, [])
         | None ->
           static_error l (Printf.sprintf "Array points-to notation is not supported for element type '%s'" (string_of_type elemtype)) None
         end
@@ -5476,7 +5479,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | Int (Unsigned, LitRank 1) -> predinst "u_short_integer"
                 | Int (Signed, LitRank 0) -> predinst "character"
                 | Int (Unsigned, LitRank 0) -> predinst "u_character"
-                | Int (s, _) -> [predinst___ "integer_" [PtrType Void; intType; Bool; intType] [SizeofExpr (l, ManifestTypeExpr (l, t)); if s = Signed then True l else False l]]
+                | Int (s, _) -> [predinst___ "integer_" [PtrType Void; intType; Bool; intType] [SizeofExpr (l, TypeExpr (ManifestTypeExpr (l, t))); if s = Signed then True l else False l]]
                 | Bool -> predinst_ "boolean" Bool
                 | _ -> []
                 end
@@ -6577,7 +6580,7 @@ let check_if_list_is_defined () =
       ctxt#set_fpclauses symbol 0 fpclauses;
       cont state (ctxt#mk_app symbol (t::List.map (fun (x, t) -> t) env))
     | ProverTypeConversion (tfrom, tto, e) -> ev state e $. fun state v -> cont state (convert_provertype v tfrom tto)
-    | SizeofExpr (l, ManifestTypeExpr (_, t)) ->
+    | SizeofExpr (l, TypeExpr (ManifestTypeExpr (_, t))) ->
       cont state (sizeof l t)
     | InstanceOfExpr(l, e, ManifestTypeExpr (l2, tp)) ->
       ev state e $. fun state v -> cont state (ctxt#mk_app instanceof_symbol [v; prover_type_term l2 tp])

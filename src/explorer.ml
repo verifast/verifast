@@ -323,7 +323,7 @@ let _ =
       | ExprCallExpr(_, callee_expr, args_expr) -> string_of_expr callee_expr ^ "(" ^ string_of_expr_list args_expr ^ ")"
       | IfExpr(_, cond_expr, then_expr, else_expr) -> "(" ^ string_of_expr cond_expr ^") ? (" ^ string_of_expr then_expr ^ ") : (" ^ string_of_expr else_expr ^ ")"
       | CastExpr(_, type_cast, expr_in) -> "(" ^ string_of_type_expr type_cast ^ ")" ^ string_of_expr expr_in 
-      | SizeofExpr(_, type_sizeof) -> "sizeof(" ^ string_of_type_expr type_sizeof ^ ")"
+      | SizeofExpr(_, TypeExpr type_sizeof) -> "sizeof(" ^ string_of_type_expr type_sizeof ^ ")"
       | AddressOf(_, expr_in) -> "&" ^ string_of_expr expr_in
       | AssignExpr(_, rec_expr, val_expr) -> "(" ^ string_of_expr rec_expr ^ " = " ^ string_of_expr val_expr ^ ")"
       | PointsTo(_, expr_in, pat) -> "PointsTo(" ^ string_of_expr expr_in ^ ", " ^ string_of_pat pat ^ ")"
@@ -653,7 +653,7 @@ let _ =
                         pattern_inside
                     | _ -> pattern_inside
                 end
-              | SizeofExpr(_, type_sizeof) -> (match pattern with SizeofExpr(_, pattern_type_sizeof) -> (check_type_expr_equal type_sizeof pattern_type_sizeof), [] | _ -> false, [])
+              | SizeofExpr(_, TypeExpr type_sizeof) -> (match pattern with SizeofExpr(_, TypeExpr pattern_type_sizeof) -> (check_type_expr_equal type_sizeof pattern_type_sizeof), [] | _ -> false, [])
               | AddressOf(_, expr_in) ->
                 begin
                   let pattern_inside = if (exactMacthOnly) then false, [] else check_expr_for_pattern expr_in pattern false in

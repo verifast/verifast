@@ -2246,15 +2246,21 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       write_lvalue h env lvalue new_value $. fun h env ->
       cont h env result_value
     in
+    let type_of_expr = function
+      TypeExpr te -> check_pure_type (pn,ilist) tparams Real te
+    | e ->
+      let w, tp = check_expr (pn,ilist) tparams tenv e in
+      tp
+    in
     match e with
     | Upcast (w, _, _) -> eval_h_core readonly h env w cont
-    | CastExpr (lc, ManifestTypeExpr (_, tp), (WFunCall (l, "malloc", [], [SizeofExpr (ls, te)]) as e)) ->
-      let t = check_pure_type (pn,ilist) tparams Real te in
+    | CastExpr (lc, ManifestTypeExpr (_, tp), (WFunCall (l, "malloc", [], [SizeofExpr (ls, es)]) as e)) ->
+      let t = type_of_expr es in
       expect_type lc (Some pure) (PtrType t) tp;
       verify_expr readonly h env xo e cont
-    | WFunCall (l, "malloc", [], [Operation (lmul, Mul, ([e; SizeofExpr (ls, te)] | [SizeofExpr (ls, te); e]))]) ->
+    | WFunCall (l, "malloc", [], [Operation (lmul, Mul, ([e; SizeofExpr (ls, es)] | [SizeofExpr (ls, es); e]))]) ->
       if pure then static_error l "Cannot call a non-pure function from a pure context." None;
-      let elemTp = check_pure_type (pn,ilist) tparams Ghost te in
+      let elemTp = type_of_expr es in
       let w, tp = check_expr (pn,ilist) tparams tenv e in
       begin match tp with
         Int (_, _) -> ()
@@ -2285,9 +2291,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let arrayChunk = Chunk ((arrayPredSymb, true), [], real_unit, [result; n; values], None) in
           cont (mallocBlockChunk::arrayChunk::h)
         end
-    | WFunCall (l, "malloc", [], [SizeofExpr (ls, te)]) ->
+    | WFunCall (l, "malloc", [], [SizeofExpr (ls, es)]) ->
       if pure then static_error l "Cannot call a non-pure function from a pure context." None;
-      let t = check_pure_type (pn,ilist) tparams Ghost te in
+      let t = type_of_expr es in
       let resultType = PtrType t in
       let result = get_unique_var_symb_non_ghost (match xo with None -> (match t with StructType tn -> tn | _ -> "address") | Some x -> x) resultType in
       let cont h = cont h env result in

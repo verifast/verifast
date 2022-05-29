@@ -1331,8 +1331,10 @@ and
   parse_expr_mul = parser
   [< e0 = parse_expr_suffix; e = parse_expr_mul_rest e0 >] -> e
 and
-  parse_expr_suffix = parser
-  [< e0 = parse_expr_primary; e = parse_expr_suffix_rest e0 >] -> e
+  parse_expr_suffix0 allowCast = parser
+  [< e0 = parse_expr_primary0 allowCast; e = parse_expr_suffix_rest e0 >] -> e
+and
+  parse_expr_suffix s = parse_expr_suffix0 true s
 and
   parse_type_args l = parser
     [< targs = parse_angle_brackets l (rep_comma parse_type) >] -> targs
@@ -1358,7 +1360,9 @@ and
      | [< '(_, Kwd "]"); '(_, Kwd "{"); es = rep_comma parse_expr; '(_, Kwd "}") >] -> NewArrayWithInitializer (l, elem_typ, es)
   >] -> e
 and
-  parse_expr_primary = parser
+  parse_expr_primary s = parse_expr_primary0 true s
+and
+  parse_expr_primary0 allowCast = parser
   [< '(l, Kwd "true") >] -> True l
 | [< '(l, Kwd "false") >] -> False l
 | [< '(l, CharToken c) >] ->
@@ -1435,7 +1439,7 @@ and
      StringLit (l, s)
 | [< '(l, Kwd "(");
      e =
-       let parse_cast = parser [< te = parse_type; '(_, Kwd ")"); e = parse_expr_suffix >] -> CastExpr (l, te, e) in
+       let parse_cast = parser [< te = parse_type; '(_, Kwd ")"); e = if allowCast then (parser [< e = parse_expr_suffix >] -> CastExpr (l, te, e) | [< >] -> TypeExpr te) else (parser [< >] -> TypeExpr te) >] -> e in
        let parse_expr_rest e0 =
          parser
            [< '(l', Ident y); e = parse_expr_suffix_rest (Var (l', y)) >] ->
@@ -1468,7 +1472,7 @@ and
      cdef_opt = opt (parser [< '(l, Kwd "default"); '(_, Kwd ":"); '(_, Kwd "return"); e = parse_expr; '(_, Kwd ";") >] -> (l, e));
      '(_, Kwd "}")
   >] -> SwitchExpr (l, e, cs, cdef_opt)
-| [< '(l, Kwd "sizeof"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")") >] -> SizeofExpr (l, t)
+| [< '(l, Kwd "sizeof"); e = parse_expr_suffix0 false >] -> SizeofExpr (l, e)
 | [< '(l, Kwd "super"); '(_, Kwd "."); '(l2, Ident n); '(_, Kwd "("); es = rep_comma parse_expr; '(_, Kwd ")") >] -> SuperMethodCall (l, n, es)
 | [< '(l, Kwd "!"); e = parse_expr_suffix >] -> Operation(l, Not, [e])
 | [< '(l, Kwd "@"); '(_, Ident g) >] -> PredNameExpr (l, g)
