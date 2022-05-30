@@ -8,7 +8,7 @@ pred Cell_i32_nonatomic_borrow_content(l: *i32, t: thread_id)() =
   *l |-> _;
 
 interp Cell_i32 {
-  pred shared(k: lifetime, t: thread_id, l: *i32) = nonatomic_borrow(k, t, l, Cell_i32_nonatomic_borrow_content(l, t);
+  pred shared(k: lifetime, t: thread_id, l: *i32) = nonatomic_borrow(k, t, l, Cell_i32_nonatomic_borrow_content(l, t));
 }
 
 @*/
