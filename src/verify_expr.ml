@@ -1242,6 +1242,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | CxxDelete (_, e) -> expr_mark_addr_taken e locals
     | CxxLValueToRValue (_, e) -> expr_mark_addr_taken e locals
     | CxxDerivedToBase (_, e, _) -> expr_mark_addr_taken e locals
+    | Sep (_, e1, e2) -> expr_mark_addr_taken e1 locals; expr_mark_addr_taken e2 locals
   and pat_expr_mark_addr_taken pat locals = 
     match pat with
     | LitPat(e) -> expr_mark_addr_taken e locals
