@@ -17,6 +17,8 @@ void atomic_set_int(int *i, int v); // atomic
   //@ requires integer(i, _);
   //@ ensures integer(i, v);
 
+#define atomic_load(p) _Generic(p, void **: atomic_load_pointer(p), int *: atomic_load_int(p))
+
 int atomic_increment(int *i); // atomic
   //@ requires integer(i, ?v);
   //@ ensures integer(i, v + 1) &*& result == v;

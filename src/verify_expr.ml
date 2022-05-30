@@ -1223,6 +1223,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | InstanceOfExpr(_, e, _) ->  expr_mark_addr_taken e locals
     | SliceExpr (_, p1, p2) -> List.iter (function Some p -> pat_expr_mark_addr_taken p locals | _ -> ()) [p1; p2]
     | SizeofExpr _ -> ()
+    | GenericExpr (l, e, cases, default) ->
+      expr_mark_addr_taken e locals;
+      List.iter (function (te, e) -> expr_mark_addr_taken e locals) cases;
+      begin match default with None -> () | Some e -> expr_mark_addr_taken e locals end
     | AddressOf(_, e) ->  expr_mark_addr_taken e locals
     | ProverTypeConversion(_, _, e) ->  expr_mark_addr_taken e locals
     | ArrayTypeExpr'(_, e) ->  expr_mark_addr_taken e locals
@@ -1373,6 +1377,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | InstanceOfExpr(_, e, _) -> expr_address_taken e
     | SliceExpr (_, p1, p2) -> flatmap (function Some p -> pat_address_taken p | _ -> []) [p1; p2]
     | SizeofExpr _ -> []
+    | GenericExpr (l, e, cs, d) -> expr_address_taken e @ flatmap (fun (te, e) -> expr_address_taken e) cs @ (match d with None -> [] | Some e -> expr_address_taken e)
     | AddressOf(_, (Var (_, x) | WVar (_, x, _))) -> [x]
     | AddressOf(_, e) -> expr_address_taken e
     | ProverTypeConversion(_, _, e) -> expr_address_taken e

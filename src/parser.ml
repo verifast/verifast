@@ -36,6 +36,7 @@ let c_keywords = [
   "define"; "endif"; "&"; "goto"; "uintptr_t"; "intptr_t"; "INT_MIN"; "INT_MAX";
   "UINTPTR_MAX"; "enum"; "static"; "signed"; "unsigned"; "long";
   "const"; "volatile"; "register"; "ifdef"; "elif"; "undef"; "pragma";
+  "_Generic";
   "SHRT_MIN"; "SHRT_MAX"; "USHRT_MAX"; "UINT_MAX";
   "CHAR_MIN"; "CHAR_MAX"; "UCHAR_MAX";
   "LLONG_MIN"; "LLONG_MAX"; "ULLONG_MAX";
@@ -1487,7 +1488,19 @@ and
 | [< '(l, Kwd "++"); e = parse_expr_suffix >] -> AssignOpExpr (l, e, Add, IntLit (l, unit_big_int, true, false, NoLSuffix), false)
 | [< '(l, Kwd "--"); e = parse_expr_suffix >] -> AssignOpExpr (l, e, Sub, IntLit (l, unit_big_int, true, false, NoLSuffix), false)
 | [< '(l, Kwd "{"); es = rep_comma parse_expr; '(_, Kwd "}") >] -> InitializerList (l, es)
+| [< '(l, Kwd "_Generic"); '(_, Kwd "("); e = parse_expr; (cs, d) = parse_generic_cases l; '(_, Kwd ")") >] -> GenericExpr (l, e, cs, d)
 | [< a = parse_asn0 >] -> a
+and
+  parse_generic_cases l = parser
+  [< '(_, Kwd ","); (cs, d) = begin parser
+    [< '(_, Kwd "default"); '(_, Kwd ":"); e = parse_expr; (cs, d) = parse_generic_cases l >] ->
+    begin match d with
+      Some e -> raise (ParseException (l, "A _Generic expression must not have multiple default clauses"))
+    | None -> (cs, Some e)
+    end
+  | [< te = parse_type; '(_, Kwd ":"); e = parse_expr; (cs, d) = parse_generic_cases l >] -> ((te, e)::cs, d)
+  end >] -> (cs, d)
+| [< >] -> ([], None)
 and
   parse_switch_expr_clauses = parser
   [< c = parse_switch_expr_clause; cs = parse_switch_expr_clauses >] -> c::cs

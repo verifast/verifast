@@ -476,6 +476,11 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
         List [ Symbol "expr-sizeof"; sexpr_of_type_expr texpr ]
     | SizeofExpr (loc, e) ->
         List [ Symbol "expr-sizeof-expr"; sexpr_of_expr e ]
+    | GenericExpr (loc, e, cases, def) ->
+        List [ Symbol "expr-generic"; sexpr_of_expr e;
+          List (cases |> List.map (fun (te, e) -> List [ sexpr_of_type_expr te; sexpr_of_expr e ]));
+          sexpr_of_option sexpr_of_expr def
+        ]
     | AddressOf (_, e) ->
         List [ Symbol "expr-address-of"; sexpr_of_expr e ]
     | ProverTypeConversion (t1, t2, e) ->

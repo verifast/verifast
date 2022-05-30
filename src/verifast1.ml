@@ -4240,6 +4240,22 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | SizeofExpr(l, e) ->
       let (w, t, _) = check e in
       (SizeofExpr (l, TypeExpr (ManifestTypeExpr (expr_loc e, t))), sizeType, None)
+    | GenericExpr (l, e, cs, d) ->
+      let (_, t, _) = check e in
+      let matching_cases = cs |> flatmap begin fun (te, e) ->
+          let tc = check_pure_type (pn,ilist) tparams Real te in
+          if unify t tc then [tc, e] else []
+        end
+      in
+      begin match matching_cases with
+        [_, e] -> check e
+      | [] ->
+        begin match d with
+          None -> static_error l ("No matching case: " ^ string_of_type t) None
+        | Some e -> check e
+        end
+      | _ -> static_error l ("Multiple matching cases: " ^ string_of_type t ^ " matches cases " ^ String.concat ", " (List.map (fun (t, e) -> string_of_type t) matching_cases)) None
+      end
     | InstanceOfExpr(l, e, te) ->
       let t = check_pure_type (pn,ilist) tparams Real te in
       let w = checkt e javaLangObject in

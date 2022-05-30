@@ -392,6 +392,7 @@ and
   | WidenedParameterArgument of expr (* Appears only as part of LitPat (WidenedParameterArgument e). Indicates that the predicate parameter is considered to range over a larger set (e.g. Object instead of class C). *)
   | SizeofExpr of loc * expr
   | TypeExpr of type_expr (* Used to represent the E in 'sizeof E' when E is of the form '( T )' where T is a type *)
+  | GenericExpr of loc * expr * (type_expr * expr) list * expr option (* default clause *) (* C11 generic selection (keyword '_Generic') *)
   | AddressOf of loc * expr
   | ProverTypeConversion of prover_type * prover_type * expr  (* Generated during type checking in the presence of type parameters, to get the prover types right *)
   | ArrayTypeExpr' of loc * expr (* horrible hack --- for well-formed programs, this exists only during parsing *)
@@ -942,6 +943,7 @@ let rec expr_loc e =
   | SwitchExpr (l, e, secs, _) -> l
   | WSwitchExpr (l, e, i, targs, secs, cdef, tenv, t0) -> l
   | SizeofExpr (l, e) -> l
+  | GenericExpr (l, e, cs, d) -> l
   | PredNameExpr (l, g) -> l
   | CastExpr (l, te, e) -> l
   | Upcast (e, fromType, toType) -> expr_loc e
@@ -1148,6 +1150,19 @@ let expr_fold_open iter state e =
   | TypedExpr (e, t) -> iter state e
   | WidenedParameterArgument e -> iter state e
   | SizeofExpr (l, e) -> state
+  | GenericExpr (l, e, cs, d) ->
+    let state = iter state e in
+    let rec iter_cases state = function
+      [] -> state
+    | (te, e)::cs ->
+      let state = iter state e in
+      iter_cases state cs
+    in
+    let state = iter_cases state cs in
+    begin match d with
+      None -> state
+    | Some e -> iter state e
+    end
   | AddressOf (l, e0) -> iter state e0
   | ProverTypeConversion (pt, pt0, e0) -> iter state e0
   | ArrayTypeExpr' (l, e) -> iter state e

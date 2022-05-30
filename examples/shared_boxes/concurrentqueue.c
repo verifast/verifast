@@ -347,7 +347,7 @@ void enqueue(struct queue* q, int x)
     consuming_handle_predicate msqueue_box_handle(ha)
     perform_action noop()
     {
-      @*/ struct node *t = atomic_load_pointer(&q->tail); /*@
+      @*/ struct node *t = atomic_load(&q->tail); /*@
     }
     producing_handle_predicate was_tail(ha, t);
     @*/
@@ -510,7 +510,7 @@ bool try_dequeue(struct queue* q, int* res)
           lseg_split(initial__, 0, n);
            assert lseg(initial__, n, ?lnodes1, ?lvs1);
            assert lseg(n, 0, ?lnodes2, ?lvs2);
-          @*/ int value = atomic_load_int(&n->value); /*@
+          @*/ int value = atomic_load(&n->value); /*@
           lseg_merge(initial__, n, 0);
           
           assert ret == nth(index_of(n, lnodes), lvs);
