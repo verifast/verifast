@@ -27,11 +27,18 @@ struct A {
     {
     	++i;
     }
+    
+    void decr()
+    //@ requires A_pred(this, ?i);
+    //@ ensures A_pred(this, i - 1);
+    {
+    	--i;
+    }
 };
 
 /*@
 predicate B_pred(B *b; int a_i, int b_i) =
-	A_pred(b, a_i) &*& b->i |-> b_i;
+	A_pred(b, a_i) &*& b->i |-> b_i &*& b != 0;
 @*/
 
 struct B : A {
@@ -70,6 +77,7 @@ struct B : A {
     //@ requires B_pred(this, ?a_i, ?b_i);
     //@ ensures B_pred(this, a_i + 1, b_i);
     {
+      //@ open A_pred(this, _);
       A::incr();
     }
 };
@@ -107,7 +115,9 @@ int main()
     b.incr_a();
     //@ assert B_pred(&b, a_i + 1, b_i + 1);
     A &a = b;
+    //@ open A_pred(&a, _);
     a.incr();
     //@ assert B_pred(&b, a_i + 2, b_i + 1);
-    
+    b.decr();
+    //@ assert B_pred(&b, a_i + 1, b_i + 1);
 }

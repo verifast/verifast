@@ -766,7 +766,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 in
                 iter h env [] bs
               | RefType t, Some e ->
-                let w = check_expr_t (pn, ilist) tparams tenv (AddressOf (expr_loc e, e)) (PtrType t) in
+                let w = check_expr_t (pn, ilist) tparams tenv (make_addr_of (expr_loc e) e) (PtrType t) in
                 verify_expr false h env (Some (x ^ "_addr")) w (fun h env v -> cont h env v) econt
               | _, Some e ->
                 let w = check_expr_t (pn, ilist) tparams tenv e t in
@@ -2749,15 +2749,18 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let init_constructs this_term init_list leminfo sizemap h env ghostenv cont =
       let rec iter first init_list h =
         match init_list with 
-          | ("this", Some ((WCxxConstruct (l, _, this_type, _)) as construct, _)) :: init_list_rest -> (* delegating or base constructor *)
+          | ("this", Some ((WCxxConstruct (l, _, ((StructType sn) as this_type), _)) as construct, _)) :: init_list_rest -> (* delegating or base constructor *)
+            let this_term, delegating =
+              match first, init_list_rest with 
+              | true, [] when sn = struct_name -> this_term, true
+              | _ -> direct_base_addr (struct_name, this_term) sn, false
+            in
             let tenv = pre_tenv in
             let eval_h h env e cont = verify_expr false (pn, ilist) [] false leminfo funcmap sizemap tenv ghostenv h env None e cont @@ fun _ _ _ _ _ -> assert false in
             let verify_ctor_call = verify_ctor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env this_term (Some "this") in
             produce_cxx_object l real_unit this_term this_type eval_h verify_ctor_call (Expr construct) false false h env @@ fun h _ ->
-            begin match first, this_type, init_list_rest with
-            | true, StructType struct_name, [] -> cont true h [] (* delegating ctor called *)
-            | _ -> iter false init_list_rest h
-            end
+            if delegating then cont true h [] 
+            else iter false init_list_rest h
           | _ ->
             cont false h init_list
       in
@@ -2870,9 +2873,10 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match bases with 
         | [] ->
           cont h env tenv
-        | (base_name, (base_spec_loc, is_virtual)) :: bases_rest ->
+        | (base_name, (base_spec_loc, is_virtual, base_offset)) :: bases_rest ->
           iter bases_rest @@ fun h env tenv ->
           with_context (Executing (h, [], base_spec_loc, "Executing base destructor")) @@ fun () ->
+          let this_addr = ctxt#mk_add this_addr base_offset in
           let verify_dtor_call = verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env this_addr None in
           consume_cxx_object base_spec_loc real_unit_pat this_addr (StructType base_name) verify_dtor_call false h env @@ fun h env ->
           cont h env tenv

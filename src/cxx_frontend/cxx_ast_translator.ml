@@ -135,9 +135,9 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
   *)
   let decompose_node (node: R.Node.t): VF.loc * 'a Stubs.reader_t =
     let open R.Node in
-    let loc = loc_get node in
+    let loc = if has_loc node then loc_get node |> transl_loc else VF.dummy_loc in
     let desc = desc_get node in
-    transl_loc loc, R.of_pointer desc
+    loc, R.of_pointer desc
 
   (**
     [transl_expext f node] applies [f] to [node] and fails if the result of that application was {i None}.
@@ -263,18 +263,6 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     let loc, desc = decompose_node type_node in
     transl_type loc desc
 
-  (**
-    [transl_wtype ty] translates [ty] and return a VeriFast type expression, representing [ty].
-    Used when the given type is not provided by the user and hence has no source information.
-  *)
-  and transl_wtype (ty: R.Type.t): VF.type_expr =
-    let open R.Type in
-    match get ty with
-    | WPointer p          -> transl_pointer_wtype p 
-    | WElaborated e       -> transl_elaborated_wtype e 
-    | WLValueRef l        -> transl_lvalue_ref_wtype l
-    | _                   -> transl_type VF.dummy_loc ty
-
   (****************)
   (* declarations *)
   (****************)
@@ -375,7 +363,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     in
     vf_record :: decls
 
-  and transl_meth (meth: R.Decl.Method.t) =
+  and transl_meth (loc: VF.loc) (meth: R.Decl.Method.t) =
     let open R.Decl.Method in
     let name, mangled_name, params, body_opt, anns, return_type = func_get meth |> transl_func in
     let binding = if static_get meth then VF.Static else VF.Instance in
@@ -383,7 +371,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
       match binding with
       | VF.Static -> params
       | VF.Instance -> 
-        let this_type = transl_wtype @@ this_get meth in
+        let this_type = this_get meth |> transl_type loc in
         (VF.PtrTypeExpr (VF.dummy_loc, this_type), "this") :: params 
     in
     let implicit = implicit_get meth in
@@ -392,7 +380,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
   (* translates a method to a function and prepends 'this' to the parameters in case it is not a static method *)
   and transl_meth_decl (loc: VF.loc) (meth: R.Decl.Method.t): VF.decl =
     let open R.Decl.Method in
-    let _, mangled_name, params, body_opt, (ng_callers_only, ft, pre_post, terminates), return_type, _ = transl_meth meth in
+    let _, mangled_name, params, body_opt, (ng_callers_only, ft, pre_post, terminates), return_type, _ = transl_meth loc meth in
     VF.Func (loc, VF.Regular, [], return_type, mangled_name, params, ng_callers_only, ft, pre_post, terminates, body_opt, VF.Static, VF.Public)
 
   and transl_record_ref (loc: VF.loc) (record_ref: R.RecordRef.t): VF.type_ =
@@ -406,7 +394,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
 
   and transl_ctor_decl (loc: VF.loc) (ctor: R.Decl.Ctor.t): VF.decl =
     let open R.Decl.Ctor in
-    let _, mangled_name, this_param :: params, body_opt, (_, _, pre_post_opt, terminates), _, implicit = method_get ctor |> transl_meth in
+    let _, mangled_name, this_param :: params, body_opt, (_, _, pre_post_opt, terminates), _, implicit = method_get ctor |> transl_meth loc in
     (* the init list also contains member names that are default initialized and don't appear in the init list *)
     (* in that case, no init expr is present (we can always retrieve it from the field default initializer) *)
     let transl_init init =
@@ -420,7 +408,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
 
   and transl_dtor_decl (loc: VF.loc) (dtor: R.Decl.Dtor.t): VF.decl =
     let open R.Decl.Dtor in 
-    let _, _, [this_param], body_opt, (_, _, pre_post_opt, terminates), _, implicit = method_get dtor |> transl_meth in
+    let _, _, [this_param], body_opt, (_, _, pre_post_opt, terminates), _, implicit = method_get dtor |> transl_meth loc in
     let parent = dtor |> parent_get |> transl_record_ref loc in
     VF.CxxDtor (loc, pre_post_opt, terminates, body_opt, implicit, parent)
 
@@ -569,15 +557,17 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
         let args = 
           if R.Expr.DeclRef.is_class_member_get r then 
             let VF.LitPat this_arg :: args = args in
-            VF.LitPat (VF.AddressOf (callee_loc, this_arg)) :: args
-          else args in
+            VF.LitPat (VF.make_addr_of callee_loc this_arg) :: args
+          else args 
+        in
         R.Expr.DeclRef.mangled_name_get r, args
       | R.Expr.Member m ->  (* C++ method call on explicit or implicit (this) object *)
         let base = 
           let base_expr = transl_expr @@ R.Expr.Member.base_get m in
           (* methods/operators/conversions expect a pointer to the object as first argument *)
           if R.Expr.Member.base_is_pointer_get m then base_expr
-          else VF.AddressOf (callee_loc, base_expr) in
+          else VF.make_addr_of callee_loc base_expr 
+        in
         R.Expr.Member.mangled_name_get m, VF.LitPat base :: args 
       | _ -> error loc "Unsupported callee in function or method call." 
     in
@@ -592,7 +582,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
   and transl_construct_expr (loc: VF.loc) (c: R.Expr.Construct.t): VF.expr =
     let open R.Expr.Construct in 
     let mangled_name = mangled_name_get c in
-    let ty = type_get c |> transl_wtype in
+    let ty = type_get c |> transl_type loc in
     let args = args_get c |> capnp_arr_map transl_expr in
     VF.CxxConstruct (loc, mangled_name, ty, args)
 
@@ -602,7 +592,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
       if has_expr n then Some (expr_get n |> transl_expr)
       else None
     in
-    let ty = type_get n |> transl_wtype in
+    let ty = type_get n |> transl_type loc in
     VF.CxxNew (loc, ty, expr_opt)
 
   and transl_delete_expr (loc: VF.loc) (d: R.Node.t): VF.expr = 
@@ -632,7 +622,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
   and transl_derived_to_base_expr (loc: VF.loc) (e: R.Expr.DerivedToBase.t): VF.expr =
     let open R.Expr.DerivedToBase in 
     let sub_expr = expr_get e |> transl_expr in
-    let ty = type_get e |> transl_wtype in
+    let ty = type_get e |> transl_type loc in
     VF.CxxDerivedToBase (loc, sub_expr, ty)
 
   (**************)
@@ -754,23 +744,12 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     let pointee_type = transl_type_loc ptr in
     VF.PtrTypeExpr (loc, pointee_type)
 
-  and transl_pointer_wtype (ptr: R.Type.t): VF.type_expr =
-    let pointee_type = transl_wtype ptr in
-    VF.PtrTypeExpr (VF.dummy_loc, pointee_type)
-
   and transl_lvalue_ref_type (loc: VF.loc) (l: R.Node.t): VF.type_expr =
     let ref_type = transl_type_loc l in
     VF.LValueRefTypeExpr (loc, ref_type)
 
-  and transl_lvalue_ref_wtype (l: R.Type.t): VF.type_expr =
-    let ref_type = transl_wtype l in 
-    VF.LValueRefTypeExpr (VF.dummy_loc, ref_type)
-
   and transl_elaborated_type (e: R.Node.t): VF.type_expr =
     transl_type_loc e
-
-  and transl_elaborated_wtype (e: R.Type.t): VF.type_expr =
-    transl_wtype e
 
   and transl_typedef_type (loc: VF.loc) (id: string): VF.type_expr =
     VF.IdentTypeExpr (loc, None, id)

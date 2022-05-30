@@ -642,6 +642,13 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
           ]
     | CxxLValueToRValue (l, e) ->
         List [ Symbol "lvalue-to-rvalue"; sexpr_of_expr e ]
+    | CxxDerivedToBase (l, e, te) -> 
+        build_list
+          [ Symbol "expr-cxx-derived-to-base" ]
+          [
+            "expr", sexpr_of_expr e;
+            "to-base-type", sexpr_of_type_expr te
+          ]
 
 
 and sexpr_of_pat (pat : pat) : sexpression =

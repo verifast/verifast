@@ -156,7 +156,9 @@ bool ExprSerializer::VisitImplicitCastExpr(
     _serializer.serializeExpr(ce, expr->getSubExpr());
     return true;
   }
-  if (expr->getCastKind() == clang::CastKind::CK_UncheckedDerivedToBase) {
+  switch (expr->getCastKind()) {
+  case clang::CastKind::CK_UncheckedDerivedToBase:
+  case clang::CastKind::CK_DerivedToBase: {
     auto ce = _builder.initDerivedToBase();
     auto e = ce.initExpr();
     auto type = ce.initType();
@@ -164,7 +166,9 @@ bool ExprSerializer::VisitImplicitCastExpr(
     _serializer.serializeQualType(type, expr->getType());
     return true;
   }
-  return Visit(expr->getSubExpr());
+  default:
+    return Visit(expr->getSubExpr());
+  }
 }
 
 bool ExprSerializer::visitCall(stubs::Expr::Call::Builder &builder,

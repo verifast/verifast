@@ -45,7 +45,7 @@ bool TypeSerializer::VisitBuiltinType(const clang::BuiltinType *type) {
 }
 
 bool TypeSerializer::VisitPointerType(const clang::PointerType *type) {
-  auto pointer = _builder.initWPointer();
+  auto pointer = _builder.initPointer().initDesc();
   _serializer.serializeQualType(pointer, type->getPointeeType());
   return true;
 }
@@ -72,7 +72,7 @@ bool TypeSerializer::VisitEnumType(const clang::EnumType *type) {
 
 bool TypeSerializer::VisitElaboratedType(
     const clang::ElaboratedType *type) {
-  auto elaborated = _builder.initWElaborated();
+  auto elaborated = _builder.initElaborated().initDesc();
   _serializer.serializeQualType(elaborated, type->getNamedType());
   return true;
 }
@@ -84,22 +84,16 @@ bool TypeSerializer::VisitTypedefType(const clang::TypedefType *type) {
 
 bool TypeSerializer::VisitLValueReferenceType(
     const clang::LValueReferenceType *type) {
-  auto ref = _builder.initWLValueRef();
+  auto ref = _builder.initLValueRef().initDesc();
   _serializer.serializeQualType(ref, type->getPointeeType());
   return true;
 }
 
 bool TypeSerializer::VisitRValueReferenceType(
     const clang::RValueReferenceType *type) {
-  auto ref = _builder.initWRValueRef();
+  auto ref = _builder.initRValueRef().initDesc();
   _serializer.serializeQualType(ref, type->getPointeeType());
   return true;
-}
-
-// TypeLocSerializer
-
-bool TypeLocSerializer::VisitBuiltinTypeLoc(const clang::BuiltinTypeLoc typeLoc) {
-  return _typeSerializer.VisitBuiltinType(typeLoc.getTypePtr());
 }
 
 bool TypeLocSerializer::VisitPointerTypeLoc(const clang::PointerTypeLoc typeLoc) {
@@ -108,23 +102,11 @@ bool TypeLocSerializer::VisitPointerTypeLoc(const clang::PointerTypeLoc typeLoc)
   return true;
 }
 
-bool TypeLocSerializer::VisitRecordTypeLoc(const clang::RecordTypeLoc typeLoc) {
-  return _typeSerializer.VisitRecordType(typeLoc.getTypePtr());
-}
-
-bool TypeLocSerializer::VisitEnumTypeLoc(const clang::EnumTypeLoc typeLoc) {
-  return _typeSerializer.VisitEnumType(typeLoc.getTypePtr());
-}
-
 bool TypeLocSerializer::VisitElaboratedTypeLoc(
     const clang::ElaboratedTypeLoc typeLoc) {
   auto elaborated = _builder.initElaborated();
   _serializer.serializeTypeLoc(elaborated, typeLoc.getNamedTypeLoc());
   return true;
-}
-
-bool TypeLocSerializer::VisitTypedefTypeLoc(const clang::TypedefTypeLoc typeLoc) {
-  return _typeSerializer.VisitTypedefType(typeLoc.getTypePtr());
 }
 
 bool TypeLocSerializer::VisitLValueReferenceTypeLoc(
