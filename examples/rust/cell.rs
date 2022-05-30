@@ -14,7 +14,7 @@ interp Cell_i32 {
 @*/
 
 impl Cell_i32 {
-    fn replace(&self, val: T) -> T
+    fn replace(&self, val: i32) -> i32
     //@ req [?q]lifetime(?a) &*& Cell_i32_shared(a, ?t, self) &*& thread_token(t);
     //@ ens [q]lifetime(a) &*& thread_token(t);
     {
@@ -22,7 +22,7 @@ impl Cell_i32 {
         //@ open_nonatomic_borrow(a, t, self, q);
         //@ open Cell_i32_nonatomic_borrow_content(self, t)();
         let result: i32 = self.value;
-        self.value = val;
+        self.value = val; // using unsafe superpower
         //@ close Cell_i32_nonatomic_borrow_content(self, t)();
         //@ close_nonatomic_borrow();
         return result;
