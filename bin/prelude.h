@@ -557,6 +557,8 @@ lemma void string_limits(char *s);
 
 inductive vararg = vararg_int(int) | vararg_uint(unsigned int) | vararg_pointer(void *);
 
+predicate varargs_(void *lastParam; list<vararg> var_args);
+
 @*/
 
 /*@

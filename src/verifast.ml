@@ -146,6 +146,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         None -> consume_asn rules [] h [] hpInvEnv inv true real_unit (fun _ h _ _ _ -> cont h)
       | Some(ehname) -> assert_handle_invs bcn hpmap ehname hpInvEnv h (fun h ->  consume_asn rules [] h [] hpInvEnv inv true real_unit (fun _ h _ _ _ -> cont h))
   
+  let varargs__pred = lazy_predfamsymb "varargs_"
+
   let rec verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont econt =
     let l = stmt_loc s in
     if not (is_transparent_stmt s) then begin !stats#stmtExec l; reportStmtExec l end;
@@ -2612,16 +2614,24 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let env' = update env x addr in
       heapify_params h' tenv' env' ps
     end
-  and cleanup_heapy_locals (pn, ilist) l h env ps cont =
+  and cleanup_heapy_locals (pn, ilist) l h env ps varargsLastParam cont =
     let rec cleanup_heapy_locals_core (pn, ilist) l h env ps cont= 
     match ps with
       [] -> cont h
     | (_, x, t, addr) :: ps ->
       consume_chunk rules h [] [] [] l (pointee_pred_symb l t, true) [] real_unit (TermPat real_unit) (Some 1) [TermPat addr; dummypat] (fun chunk h coef [_; t] size ghostenv env env' -> cleanup_heapy_locals_core (pn, ilist) l h env ps cont)
     in
-    match ps with
-      [] -> cont h
-    | _ -> with_context (Executing (h, env, l, "Freeing parameters.")) (fun _ -> cleanup_heapy_locals_core (pn, ilist) l h env ps cont)
+    match ps, varargsLastParam with
+      [], None -> cont h
+    | _, _ ->
+      with_context (Executing (h, env, l, "Freeing parameters.")) $. fun () ->
+      cleanup_heapy_locals_core (pn, ilist) l h env ps $. fun h ->
+      match varargsLastParam with
+        None -> cont h
+      | Some x ->
+        let [_, _, _, addr] = List.filter (fun (_, y, _, _) -> y = x) ps in
+        consume_chunk rules h [] [] [] l (varargs__pred (), true) [] real_unit real_unit_pat (Some 1) [TermPat addr; dummypat] $. fun _ h _ _ _ _ _ _ ->
+        cont h
 
   and compute_heapy_params loc func_kind params pre_tenv ss =
     let is_ghost = func_kind |> function Regular -> false | _ -> true in
@@ -2629,7 +2639,15 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | (x, RefType t) -> x, get_unique_var_symb_ (x ^ "_addr") (PtrType t) is_ghost
       | (x, t) -> x, get_unique_var_symb_ x t is_ghost 
     in
-    let heapy_vars = ss |> List.map stmt_address_taken |> List.flatten |> list_remove_dups in
+    let rec check_varargs params =
+      match params with
+        [] -> [], None
+      | ["varargs", _] -> static_error loc "A varargs function must have at least one parameter" None
+      | [x, _; "varargs", _] -> [x], Some x
+      | _ :: params -> check_varargs params
+    in
+    let heapy_vars, varargsLastParam = check_varargs params in
+    let heapy_vars = (heapy_vars @ (ss |> List.map stmt_address_taken |> List.flatten)) |> list_remove_dups in
     let heapy_ps = pre_tenv |> List.filter (function (x, RefType _) -> false | _ -> true) |> List.fold_left (fun acc (x, tp) ->
       if List.mem_assoc x params && List.mem x heapy_vars then 
         let addr = get_unique_var_symb_non_ghost (x ^ "_addr") (PtrType tp) in
@@ -2638,7 +2656,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         acc   
       ) [] |> List.rev
     in
-    penv, heapy_ps
+    penv, heapy_ps, varargsLastParam
 
   and compute_size_info penv ss =
     match ss with 
@@ -2661,9 +2679,15 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       iter [] ss
 
-  and verify_c_func_body loc (pn, ilist) tparams boxes in_pure_context leminfo funcmap predinstmap sizemap heapy_ps h tenv env ghostenv post ss close_brace_loc return_cont =
+  and verify_c_func_body loc (pn, ilist) tparams boxes in_pure_context leminfo funcmap predinstmap sizemap heapy_ps varargsLastParam h tenv env ghostenv post ss close_brace_loc return_cont =
     begin fun tcont ->
       let h, tenv, env = heapify_params h tenv env heapy_ps in 
+      let h =
+        match varargsLastParam with
+          None -> h
+        | Some x ->
+          Chunk ((varargs__pred (), true), [], real_unit, [List.assoc x env; List.assoc "varargs" env], None) :: h
+      in
       let outer_locals = ref [] in 
       stmts_mark_addr_taken ss [(outer_locals, [])] in_pure_context (fun _ -> ());
       let body = [BlockStmt(loc, [], ss, close_brace_loc, outer_locals)] in
@@ -2675,7 +2699,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     if startswith g "vf__" then static_error l "The name of a user-defined function must not start with 'vf__'." None;
     let tparams = tparams' @ tparams in
     let _ = push() in
-    let penv, heapy_ps = compute_heapy_params l k ps pre_tenv ss in
+    let penv, heapy_ps, varargsLastParam = compute_heapy_params l k ps pre_tenv ss in
     let sizemap, indinfo = compute_size_info penv ss in
     let prolog, ss = partition_ss k ss in
     let tenv =
@@ -2709,7 +2733,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         let do_return h env_post =
           consume_asn rules [] h ghostenv env_post post true real_unit (fun _ h ghostenv env size_first ->
-            cleanup_heapy_locals (pn, ilist) closeBraceLoc h env heapy_ps (fun h ->
+            cleanup_heapy_locals (pn, ilist) closeBraceLoc h env heapy_ps varargsLastParam (fun h ->
               check_leaks h env closeBraceLoc "Function leaks heap chunks."
             )
           )
@@ -2734,7 +2758,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           else
             cont h tenv ghostenv env
         end $. fun h tenv ghostenv env ->
-        verify_c_func_body l (pn, ilist) tparams boxes in_pure_context leminfo funcmap predinstmap sizemap heapy_ps h tenv env ghostenv post ss closeBraceLoc return_cont
+        verify_c_func_body l (pn, ilist) tparams boxes in_pure_context leminfo funcmap predinstmap sizemap heapy_ps varargsLastParam h tenv env ghostenv post ss closeBraceLoc return_cont
       )
     in
     let _ = pop() in
@@ -2815,7 +2839,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       iter h fields
     in 
     let _ = push () in 
-    let penv, heapy_ps = compute_heapy_params loc Regular params pre_tenv ss in
+    let penv, heapy_ps, varargsLastParam = compute_heapy_params loc Regular params pre_tenv ss in
     let sizemap, indinfo = compute_size_info penv ss in
     let prolog, ss = partition_ss Regular ss in
     let leminfo, gs', lems', ghostenv = RealFuncInfo (gs, g, terminates), g :: gs, lems, [] in 
@@ -2834,13 +2858,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       init_fields delegated h this_term this_type init_list env ghostenv leminfo sizemap current_thread @@ fun h ->
       let return_cont h tenv2 env2 retval =
         consume_asn rules [] h ghostenv env post true real_unit @@ fun _ h ghostenv env size_first -> 
-        cleanup_heapy_locals (pn, ilist) close_brace_loc h env heapy_ps @@ fun h ->
+        cleanup_heapy_locals (pn, ilist) close_brace_loc h env heapy_ps varargsLastParam @@ fun h ->
         check_leaks h env close_brace_loc "Constructor leaks heap chunks."
       in 
       begin fun tcont ->
         verify_cont (pn, ilist) [] [] [] boxes true leminfo funcmap predinstmap sizemap pre_tenv ghostenv h env prolog tcont (fun _ _ -> assert false) (fun _ _ _ -> assert false)
       end @@ fun sizemap tenv ghostenv h env ->
-      verify_c_func_body loc (pn, ilist) [] boxes false leminfo funcmap predinstmap sizemap heapy_ps h tenv env ghostenv post ss close_brace_loc return_cont
+      verify_c_func_body loc (pn, ilist) [] boxes false leminfo funcmap predinstmap sizemap heapy_ps varargsLastParam h tenv env ghostenv post ss close_brace_loc return_cont
     in
     let _ = pop () in 
     gs', lems'
@@ -2906,7 +2930,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin fun tcont ->
         verify_cont (pn, ilist) [] [] [] boxes true leminfo funcmap predinstmap sizemap pre_tenv ghostenv h env prolog tcont (fun _ _ -> assert false) (fun _ _ _ -> assert false)
       end @@ fun sizemap tenv ghostenv h env ->
-        verify_c_func_body loc (pn, ilist) [] boxes false leminfo funcmap predinstmap sizemap [] h tenv env ghostenv post ss close_brace_loc return_cont
+        verify_c_func_body loc (pn, ilist) [] boxes false leminfo funcmap predinstmap sizemap [] None h tenv env ghostenv post ss close_brace_loc return_cont
     in
   let _ = pop () in 
   gs', lems'
