@@ -1729,34 +1729,47 @@ let rec parse_include_directives (verbose: int) (enforceAnnotations: bool) (data
   let test_include_cycle l totalPath =
     if List.mem totalPath !active_headers then raise (ParseException (l, "Include cycles (even with header guards) are not supported"));
   in
-  let rec parse_include_directives_core header_names = parser
-  | [< (headers, header_name) = parse_include_directive; (headers', header_names') = parse_include_directives_core (header_name::header_names) >] 
-          -> (List.append headers headers', header_names')
-  | [< >] -> ([], header_names)
-  and parse_include_directive = 
+  let rec parse_include_directives_core header_names in_ghost_range =
+    let parse = parser
+      | [< '(_, Kwd "/*@"); (headers, header_name) = parse_include_directive true; (headers', header_names') = parse_include_directives_core (header_name::header_names) true >] 
+              -> (List.append headers headers', header_names')
+      | [< (headers, header_name) = parse_include_directive in_ghost_range; (headers', header_names') = parse_include_directives_core (header_name::header_names) in_ghost_range >] 
+              -> (List.append headers headers', header_names')
+      | [< '(_, Kwd "@*/"); (headers', header_names') = parse_include_directives_core header_names false >]
+              -> headers', header_names'
+    in
+    begin fun stream ->
+      begin match Stream.npeek 2 stream with
+      | [(_, Kwd "/*@"); (_, BeginInclude (_, _, _)) | (_, SecondaryInclude (_, _))] when not in_ghost_range ->
+        parse stream
+      | [(_, BeginInclude (_, _, _)) | (_, SecondaryInclude (_, _)); _] ->
+        parse stream
+      | [(_, Kwd "@*/"); _] when in_ghost_range ->
+        parse stream
+      | [(_, Kwd "/*@"); (_, Kwd "@*/")] when not in_ghost_range ->
+        begin
+          Stream.junk stream;
+          Stream.junk stream;
+          parse_include_directives_core header_names false stream
+        end
+      | _ -> 
+        [], header_names
+      end
+    end
+  and parse_include_directive in_ghost_range = 
     let isGhostHeader header = Filename.check_suffix header ".gh" in
     parser
       [< '(l, SecondaryInclude(h, totalPath)) >] -> 
         if verbose = -1 then Printf.printf "%10.6fs: >>>> ignored secondary include: %s \n" (Perf.time()) totalPath;
         test_include_cycle l totalPath; ([], totalPath)
-    | [< (l,h,totalPath) = peek_in_ghost_range begin parser [< '(l, SecondaryInclude(h, p)) >] -> (l,h,p) end; '(_, Kwd "@*/") >] -> 
-        if verbose = -1 then Printf.printf "%10.6fs: >>>> ignored secondary include: %s \n" (Perf.time()) totalPath;
-        test_include_cycle l totalPath; ([], totalPath)
-    | [< '(l, BeginInclude(kind, h, totalPath)); (headers, header_names) = (active_headers := totalPath::!active_headers; parse_include_directives_core []); 
+    | [< '(l, BeginInclude(kind, h, totalPath)); (headers, header_names) = (active_headers := totalPath::!active_headers; parse_include_directives_core [] in_ghost_range); 
                                            ds = parse_decls CLang dataModel enforceAnnotations ~inGhostHeader:(isGhostHeader h); '(_, Eof); '(_, EndInclude) >] ->
                                                         if verbose = -1 then Printf.printf "%10.6fs: >>>> parsed include: %s \n" (Perf.time()) totalPath;
                                                         active_headers := List.filter (fun h -> h <> totalPath) !active_headers;
                                                         let ps = [PackageDecl(dummy_loc,"",[],ds)] in
                                                         (List.append headers [(l, (kind, h, totalPath), header_names, ps)], totalPath)
-    | [< (l,kind,h,totalPath) = peek_in_ghost_range begin parser [< '(l, BeginInclude(kind, h, p)) >] -> (l,kind,h,p) end; 
-                                                (headers, header_names) = (active_headers := totalPath::!active_headers; parse_include_directives_core []); 
-                                                ds = parse_decls CLang dataModel enforceAnnotations ~inGhostHeader:(isGhostHeader h); '(_, Eof); '(_, EndInclude); '(_, Kwd "@*/") >] ->
-                                                        if verbose = -1 then Printf.printf "%10.6fs: >>>> parsed include: %s \n" (Perf.time()) totalPath;
-                                                        active_headers := List.filter (fun h -> h <> totalPath) !active_headers;
-                                                        let ps = [PackageDecl(dummy_loc,"",[],ds)] in
-                                                        (List.append headers [(l, (kind, h, totalPath), header_names, ps)], totalPath)
   in
-  parse_include_directives_core []
+  parse_include_directives_core [] false
 
 let parse_c_file (path: string) (reportRange: range_kind -> loc0 -> unit) (reportShouldFail: string -> loc0 -> unit) (verbose: int) 
             (include_paths: string list) (define_macros: string list) (enforceAnnotations: bool) (dataModel: data_model option): ((loc * (include_kind * string * string) * string list * package list) list * package list) = (* ?parse_c_file *)
