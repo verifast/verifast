@@ -2558,7 +2558,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (_, Void) -> true
     | (Void, _) -> true
     | (PtrType t, PtrType t0) -> compatible_pointees t t0
-    | StructType x, StructType y when dialect = Some Cxx && is_derived_of_base x y -> true
     | _ -> t = t0
   
   let rec unify t1 t2 =
@@ -2580,7 +2579,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       for_all2 unify ts1 ts2 && inputParamCount1 = inputParamCount2 && inductiveness1 = inductiveness2
     | (ArrayType t1, ArrayType t2) -> unify t1 t2
     | (PtrType t1, PtrType t2) -> compatible_pointees t1 t2
-    | StructType x, StructType y when dialect = Some Cxx && is_derived_of_base x y -> true
     | (t1, t2) -> t1 = t2
   
   let rank_group r =
@@ -2639,6 +2637,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (Int (Unsigned, m), Int (Signed, n)) when rank_lt m n -> ()
     | (Int (_, _), Int (_, _)) when inAnnotation = Some true -> ()
     | (ObjType (x, _), ObjType (y, _)) when is_subtype_of x y -> ()
+    | PtrType (StructType derived), PtrType (StructType base) when dialect = Some Cxx && is_derived_of_base derived base -> ()
+    | StructType derived, StructType base when dialect = Some Cxx && is_derived_of_base derived base -> ()
     | (PredType ([], ts, inputParamCount, inductiveness), PredType ([], ts0, inputParamCount0, inductiveness0)) ->
       begin
         match zip ts ts0 with
