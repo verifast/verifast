@@ -34,7 +34,7 @@ jobs:
         run: git tag -f nightly && git push -f origin nightly:refs/tags/nightly
 
       - name: Upload nightly release assets
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+        if: ${{ github.repository == verifast/verifast && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         uses: actions/github-script@v5
         with:
           script: |
@@ -82,7 +82,7 @@ jobs:
         run: git tag -f nightly && git push -f origin nightly:refs/tags/nightly
 
       - name: Upload nightly release assets
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+        if: ${{ github.repository == verifast/verifast && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         uses: actions/github-script@v5
         with:
           script: |
@@ -125,7 +125,7 @@ jobs:
         run: git tag -f nightly && git push -f origin nightly:refs/tags/nightly
 
       - name: Upload nightly release assets
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+        if: ${{ github.repository == verifast/verifast && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         uses: actions/github-script@v5
         with:
           script: |
