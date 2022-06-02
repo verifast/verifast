@@ -68,3 +68,5 @@ To build VeriFast:
 3. Make sure all dependencies are in your `PATH`. For example: `export PATH="/cygdrive/c/vfdeps/bin:$PATH"`.
 5. Tell the VeriFast build script where the GTK+ binaries are: `export GTK=/cygdrive/c/vfdeps`.
 6. `make`
+
+If `make` fails (probably due to broken intermediate output files left by earlier failed attempts), try `make clean; make depend; make`.

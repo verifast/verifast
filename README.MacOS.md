@@ -45,3 +45,5 @@ To build VeriFast:
 2. Make sure all dependencies are in your `PATH`. For example: `export PATH=/usr/local/vfdeps-$VERSION/bin:$PATH`.
 3. Make sure the dependencies' DLLs can be found by the macOS DLL loader. For example: `export DYLD_LIBRARY_PATH=/usr/local/vfdeps-$VERSION/lib:$DYLD_LIBRARY_PATH`.
 4. `make`
+
+If `make` fails (probably due to broken intermediate output files left by earlier failed attempts), try `make clean; make depend; make`.

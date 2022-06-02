@@ -51,3 +51,5 @@ To build VeriFast:
 1. `cd src`
 2. Make sure all dependencies are in your `PATH`. For example: `export PATH=/tmp/vfdeps-$VERSION/bin:$PATH`.
 3. `make`
+
+If `make` fails (probably due to broken intermediate output files left by earlier failed attempts), try `make clean; make depend; make`.
