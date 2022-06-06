@@ -17,6 +17,18 @@ long double vf__long_double_of_real(real x);
     //@ requires true;
     //@ ensures true;
 
+float vf__float_of_int128(__int128 x);
+    //@ requires true;
+    //@ ensures true;
+
+double vf__double_of_int128(__int128 x);
+    //@ requires true;
+    //@ ensures true;
+
+long double vf__long_double_of_int128(__int128 x);
+    //@ requires true;
+    //@ ensures true;
+
 float vf__float_of_long_long(long long x);
     //@ requires true;
     //@ ensures true;

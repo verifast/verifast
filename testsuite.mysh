@@ -443,6 +443,7 @@ cd tutorial_solutions
   verifast_both -target 32bit students.c
 cd ..
 cd tests
+  verifast -c floating_point.c
   verifast -c varargs.c
   verifast -c -target lp64 sizeof_expr.c
   verifast -c declarators.c
