@@ -1,7 +1,11 @@
 #ifndef STDARG_H
 #define STDARG_H
 
-typedef void *va_list;
+//@ abstract_type __va_list;
+
+typedef __va_list va_list;
+
+//@ fixpoint int va_list_id(va_list ap);
 
 //@ predicate va_list(va_list ap, void *lastParam, real frac, list<vararg> args);
 
@@ -12,20 +16,20 @@ void __va_start(va_list *app, void *lastParam);
 #define va_start(ap, lastParam) __va_start(&ap, &lastParam);
 
 void va_end(va_list ap);
-//@ requires [?f1]varargs_(?lastParam, ?args) &*& va_list(ap, lastParam, ?f2, _);
+//@ requires [?f1]varargs_(?lastParam, ?args) &*& va_list(?ap1, lastParam, ?f2, _) &*& va_list_id(ap1) == va_list_id(ap);
 //@ ensures [f1 + f2]varargs_(lastParam, args);
 
 int __va_arg_int(va_list *app);
 //@ requires *app |-> ?ap0 &*& va_list(ap0, ?lastParam, ?f, cons(vararg_int(?k), ?args));
-//@ ensures *app |-> ?ap1 &*& va_list(ap1, lastParam, f, args) &*& result == k;
+//@ ensures *app |-> ?ap1 &*& va_list(ap1, lastParam, f, args) &*& result == k &*& va_list_id(ap1) == va_list_id(ap0);
 
 unsigned int __va_arg_uint(va_list *app);
 //@ requires *app |-> ?ap0 &*& va_list(ap0, ?lastParam, ?f, cons(vararg_uint(?k), ?args));
-//@ ensures *app |-> ?ap1 &*& va_list(ap1, lastParam, f, args) &*& result == k;
+//@ ensures *app |-> ?ap1 &*& va_list(ap1, lastParam, f, args) &*& result == k &*& va_list_id(ap1) == va_list_id(ap0);
 
 void *__va_arg_pointer(va_list *app);
 //@ requires *app |-> ?ap0 &*& va_list(ap0, ?lastParam, ?f, cons(vararg_pointer(?p), ?args));
-//@ ensures *app |-> ?ap1 &*& va_list(ap1, lastParam, f, args) &*& result == p;
+//@ ensures *app |-> ?ap1 &*& va_list(ap1, lastParam, f, args) &*& result == p &*& va_list_id(ap1) == va_list_id(ap0);
 
 #define va_arg(ap, type) _Generic((type)0, int: __va_arg_int(&ap), unsigned: __va_arg_uint(&ap), void *: __va_arg_pointer(&ap))
 

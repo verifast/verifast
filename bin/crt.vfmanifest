@@ -147,6 +147,7 @@
 .provides ./stdio.h#sscanf
 .provides ./stdio.h#fgetc
 .provides ./stdio.h#fprintf
+.provides ./stdio.h#vfprintf
 .structure @./stdio.h#file
 .predicate @./stdio.h#file
 .predicate @./stdio.h#scanf_targets
@@ -232,3 +233,10 @@
 .provides ./target.gh#long_size_long_max
 .provides ./target.gh#ptr_size_ptr_max
 .provides ./target.gh#target_sizes
+.predicate @./stdarg.h#va_list
+.provides ./stdarg.h#__va_start
+.provides ./stdarg.h#__va_arg_int
+.provides ./stdarg.h#__va_arg_uint
+.provides ./stdarg.h#__va_arg_pointer
+.provides ./stdarg.h#__va_copy
+.provides ./stdarg.h#va_end

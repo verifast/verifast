@@ -5004,6 +5004,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let integer__symb = lazy_predfamsymb "integer_"
   let integers__symb = lazy_predfamsymb "integers_"
 
+  let generic_points_to_symb = lazy_predfamsymb "generic_points_to"
+
   let pointee_tuple chunk_pred_name array_pred_name =
     let ambpn = "malloc_block_" ^ array_pred_name in
     let ambsymb = lazy_predfamsymb ambpn in

@@ -29,6 +29,8 @@ lemma void div_rem_nonneg(int D, int d);
     requires 0 <= D &*& 0 < d;
     ensures D == D / d * d + D % d &*& 0 <= D / d &*& D / d <= D &*& 0 <= D % d &*& D % d < d;
 
+predicate generic_points_to<t>(t *p; t v);
+
 predicate integer_(void *p, int size, bool signed_; int v);
 
 predicate character(char *p; char c) = integer_(p, 1, true, c);

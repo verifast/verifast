@@ -9,6 +9,7 @@
 #define STDIO_H
 
 #include "stddef.h"
+#include "stdarg.h"
 
 #ifndef EOF
 # define EOF (-1)
@@ -243,6 +244,33 @@ int fprintf(FILE *file, char* format, ...);
                                     case cons(p3, ps3): return [?f3]string(p3, ?cs3) &*&
                                         switch (ps3) {
                                             case nil: return ensures [ff]file(file) &*& [f]string(format, fcs) &*& [f0]string(p0, cs0) &*& [f1]string(p1, cs1) &*& [f2]string(p2, cs2) &*& [f3]string(p3, cs3);
+                                            case cons(p4, ps4): return false; // TODO: Support more string arguments...
+                                        };
+                                };
+                        };
+                };
+        };
+    @*/
+    //@ ensures emp;
+
+int vfprintf(FILE *file, char* format, va_list ap);
+    /*@
+    requires
+        [?ff]file(file) &*& [?f]string(format, ?fcs) &*& va_list(ap, ?lastParam, ?apFrac, ?args) &*& printf_parse_format(fcs, args) == some(?ps) &*&
+        switch (ps) {
+            case nil: return ensures [ff]file(file) &*& [f]string(format, fcs) &*& va_list(?ap1, lastParam, apFrac, _) &*& va_list_id(ap1) == va_list_id(ap);
+            case cons(p0, ps0): return [?f0]string(p0, ?cs0) &*&
+                switch (ps0) {
+                    case nil: return ensures [ff]file(file) &*& [f]string(format, fcs) &*& [f0]string(p0, cs0) &*& va_list(?ap1, lastParam, apFrac, _) &*& va_list_id(ap1) == va_list_id(ap);
+                    case cons(p1, ps1): return [?f1]string(p1, ?cs1) &*&
+                        switch (ps1) {
+                            case nil: return ensures [ff]file(file) &*& [f]string(format, fcs) &*& [f0]string(p0, cs0) &*& [f1]string(p1, cs1) &*& va_list(?ap1, lastParam, apFrac, _) &*& va_list_id(ap1) == va_list_id(ap);
+                            case cons(p2, ps2): return [?f2]string(p2, ?cs2) &*&
+                                switch (ps2) {
+                                    case nil: return ensures [ff]file(file) &*& [f]string(format, fcs) &*& [f0]string(p0, cs0) &*& [f1]string(p1, cs1) &*& [f2]string(p2, cs2) &*& va_list(?ap1, lastParam, apFrac, _) &*& va_list_id(ap1) == va_list_id(ap);
+                                    case cons(p3, ps3): return [?f3]string(p3, ?cs3) &*&
+                                        switch (ps3) {
+                                            case nil: return ensures [ff]file(file) &*& [f]string(format, fcs) &*& [f0]string(p0, cs0) &*& [f1]string(p1, cs1) &*& [f2]string(p2, cs2) &*& [f3]string(p3, cs3) &*& va_list(?ap1, lastParam, apFrac, _) &*& va_list_id(ap1) == va_list_id(ap);
                                             case cons(p4, ps4): return false; // TODO: Support more string arguments...
                                         };
                                 };

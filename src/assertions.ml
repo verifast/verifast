@@ -221,7 +221,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       Some (k, signedness) ->
       produce_chunk h (integer__symb (), true) [] coef (Some 3) [addr; rank_size_term k; mk_bool (signedness = Signed); value] None cont
     | None ->
-      static_error l (Printf.sprintf "Cannot produce points-to chunk for variable of type '%s'" (string_of_type type_)) None
+      produce_chunk h (generic_points_to_symb (), true) [type_] coef (Some 1) [addr; value] None cont
 
   let rec produce_asn_core_with_post tpenv h ghostenv env p coef size_first size_all (assuming: bool) cont_with_post: symexec_result =
     let cont h env ghostenv = cont_with_post h env ghostenv None in
@@ -939,7 +939,9 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         [TermPat addr; TermPat (rank_size_term k); TermPat (mk_bool (signedness = Signed)); rhs]
         (fun chunk h coef [_; _; _; value] size ghostenv env env' -> cont chunk h coef value ghostenv env env')
     | None ->
-      static_error l (Printf.sprintf "Cannot consume points-to chunk for variable of type '%s'" (string_of_type type_)) None
+      consume_chunk rules h ghostenv env env' l (generic_points_to_symb (), true) [type_] coef coefpat (Some 1)
+        [TermPat addr; rhs]
+        (fun chunk h coef [_; value] size ghostenv env env' -> cont chunk h coef value ghostenv env env')
   
   let rec consume_asn_core_with_post rules tpenv h ghostenv env env' p checkDummyFracs coef cont_with_post =
     let cont chunks h ghostenv env env' size_first = cont_with_post chunks h ghostenv env env' size_first None in
