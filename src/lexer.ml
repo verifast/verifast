@@ -796,7 +796,7 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
         | _ ->
           if !in_single_line_annotation then (
             in_single_line_annotation := false;
-            ghost_range_end_at (path, !line, !textpos - 2 - !linepos + 1);
+            ghost_range_end_at !token_srcpos;
             single_line_comment ();
             Some (Kwd "@*/")
           ) else (
