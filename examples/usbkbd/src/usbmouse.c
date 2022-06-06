@@ -546,11 +546,11 @@ static void usb_mouse_disconnect(struct usb_interface *intf) //@ : vf_usb_operat
 	}
 }
 
-static struct usb_device_id usb_mouse_id_table [] = {
-	{ USB_INTERFACE_INFO(USB_INTERFACE_CLASS_HID, USB_INTERFACE_SUBCLASS_BOOT,
-		USB_INTERFACE_PROTOCOL_MOUSE) },
-	{ }	/* Terminating entry */
-};
+//static struct usb_device_id usb_mouse_id_table [] = {
+//	{ USB_INTERFACE_INFO(USB_INTERFACE_CLASS_HID, USB_INTERFACE_SUBCLASS_BOOT,
+//		USB_INTERFACE_PROTOCOL_MOUSE) },
+//	{ }	/* Terminating entry */
+//};
 
 //MODULE_DEVICE_TABLE (usb, usb_mouse_id_table);
 

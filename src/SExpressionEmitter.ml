@@ -315,14 +315,14 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
           "field", Symbol f;
           "targs", sexpr_of_list sexpr_of_type_ targs
         ]
-    | ReadArray (_, rhs, lhs) ->
+    | ReadArray (_, lhs, rhs) ->
       build_list
         [ Symbol "expr-read-array" ]
         [
           "lhs", sexpr_of_expr lhs;
           "rhs", sexpr_of_expr rhs
         ]
-    | WReadArray (_, rhs, t, lhs) ->
+    | WReadArray (_, lhs, t, rhs) ->
       build_list
         [ Symbol "expr-w-read-array" ]
         [

@@ -402,7 +402,7 @@ and parse_array_init = parser
 | [< e = parse_expr; es = parse_array_init_rest; '(_, Kwd "}") >] -> e :: es
 and parse_declaration_rhs te = parser
   [< '(linit, Kwd "{"); es = parse_array_init >] ->
-  (match te with ArrayTypeExpr (_, elem_te) -> NewArrayWithInitializer (linit, elem_te, es) | _ -> InitializerList (linit, es))
+  (match te with ArrayTypeExpr (_, elem_te) when language = Java -> NewArrayWithInitializer (linit, elem_te, es) | _ -> InitializerList (linit, es))
 | [< e = parse_expr >] -> e
 and
   parse_declarator t = parser
@@ -410,7 +410,14 @@ and
      '(l, Ident x);
      tx = parse_array_braces t;
      init = opt (parser [< '(_, Kwd "="); e = parse_declaration_rhs tx >] -> e);
-  >] -> (l, tx, x, init, (ref false, ref None))
+  >] ->
+  let tx =
+    match tx, init with
+      ArrayTypeExpr (l, elemTp), Some (InitializerList (_, es)) when language = CLang ->
+      StaticArrayTypeExpr (l, elemTp, List.length es)
+    | _ -> tx
+  in
+  (l, tx, x, init, (ref false, ref None))
 and
   parse_method_rest l = parser
   [< ps = parse_paramlist;
@@ -748,7 +755,14 @@ and
         t = parse_array_braces (get t);
         init = opt (parser [< '(_, Kwd "="); e = parse_declaration_rhs t >] -> e);
         '(_, Kwd ";")
-      >] -> Global (l, t, g, init)
+      >] ->
+      let t =
+        match t, init with
+          ArrayTypeExpr (l, elemTp), Some (InitializerList (_, es)) ->
+          StaticArrayTypeExpr (l, elemTp, List.length es)
+        | _ -> t
+      in
+      Global (l, t, g, init)
   >] -> decl
 and
   parse_ctors_suffix = parser
@@ -1237,6 +1251,12 @@ and
        ds = comma_rep (parse_declarator te);
        '(_, Kwd ";")
     >] ->
+    let tx =
+      match tx, init with
+        ArrayTypeExpr (l, elemTp), Some (InitializerList (_, es)) when language = CLang ->
+        StaticArrayTypeExpr (l, elemTp, List.length es)
+      | _ -> tx
+    in
     DeclStmt(type_expr_loc te, (lx, tx, x, init, (ref false, ref None))::ds)
 and
   parse_switch_stmt_clauses = parser

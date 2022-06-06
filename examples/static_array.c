@@ -87,6 +87,10 @@ void mod_ar2 (void)
 
 static struct_with_array bigArray[10] = {{100, {1,2,3,4}, 200}, {300, {5,6,7}, 400}}; // Incomplete initializer lists; remaining elements get default value.
 
+struct point { int x; int y; };
+
+struct point points[] = { { 10, 20 }, { 30, 40 } };
+
 int main(int argc, char **argv) //@ : main_full(static_array)
 //@ requires module(static_array, true);
 //@ ensures result == 0;
@@ -160,6 +164,13 @@ int main(int argc, char **argv) //@ : main_full(static_array)
 
   assert (ar2[1] == 7);
 
+  assert (points[1].y == 40);
+  
+  //@ open_struct((struct point *)points + 1);
+  //@ chars_join((void *)((struct point *)points + 1));
+  //@ open_struct((struct point *)points);
+  //@ chars_join((void *)points);
+
   //@ open_struct(bigArrayPtr);
   //@ assert ((char *)(void *)bigArrayPtr)[..sizeof(struct_with_array)] |-> _;
   //@ open_struct(bigArrayPtr + 1);
@@ -169,6 +180,12 @@ int main(int argc, char **argv) //@ : main_full(static_array)
   //@ assert chars((void *)bigArrayPtr, sizeof(struct_with_array) * 10, _);
   //@ close_module();
   //@ leak module(static_array, _);
+  
+  int xs[] = {1, 2, 3}, ys[] = {4, 5, 6, 7};
+  xs[1] = xs[2];
+  assert (xs[1] == 3);
+  ys[2] = ys[3];
+  assert (ys[2] == 7);
 
   return (t);
  }
