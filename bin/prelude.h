@@ -543,7 +543,7 @@ lemma_auto void chars_to_string(char *s);
 
 lemma_auto void string_to_chars(char *s);
     requires [?f]string(s, ?cs);
-    ensures [f]chars(s, length(cs) + 1, append(cs, cons('\0', nil))) &*& !mem('\0', cs);
+    ensures [f]chars(s, length(cs) + 1, append(cs, cons('\0', nil))) &*& !mem('\0', cs) &*& index_of('\0', append(cs, cons(0, nil))) == length(cs);
 
 lemma_auto void chars_separate_string(char *s);
     requires [?f]chars(s, ?n, ?cs) &*& mem('\0', cs) == true;
