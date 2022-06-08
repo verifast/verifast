@@ -166,9 +166,9 @@ int main(int argc, char **argv) //@ : main_full(static_array)
 
   assert (points[1].y == 40);
   
-  //@ open_struct((struct point *)points + 1);
-  //@ chars_join((void *)((struct point *)points + 1));
-  //@ open_struct((struct point *)points);
+  //@ open_struct(points + 1);
+  //@ chars_join((void *)(points + 1));
+  //@ open_struct(points);
   //@ chars_join((void *)points);
 
   //@ open_struct(bigArrayPtr);

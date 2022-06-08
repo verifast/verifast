@@ -2631,7 +2631,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     (* Note that in Java short[] is not assignable to int[] *)
     | (ArrayType et, ArrayType et0) when et = et0 -> ()
     | (ArrayType (ObjType(t0, ts0)), ArrayType (ObjType(t1, ts1))) -> expect_type_core l msg None (ObjType (t0, ts0)) (ObjType(t1, ts1))
-    | (StaticArrayType _, PtrType _) -> ()
+    | (StaticArrayType (elemTp, _), PtrType elemTp0) when compatible_pointees elemTp elemTp0 -> ()
     | (Int (Signed, m), Int (Signed, n)) when rank_le l m n -> ()
     | (Int (Unsigned, m), Int (Unsigned, n)) when rank_le l m n -> ()
     | (Int (Unsigned, m), Int (Signed, n)) when rank_lt m n -> ()
@@ -3453,6 +3453,15 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
 
   let rec check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e: (expr (* typechecked expression *) * type_ (* expression type *) * big_int option (* constant integer expression => value*)) =
+    let (w, t, v) = check_expr_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
+    let t = unfold_inferred_type t in
+    let t =
+      match t with
+        StaticArrayType (elemTp, s) -> PtrType elemTp
+      | _ -> t
+    in
+    (w, t, v)
+  and check_expr_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e: (expr (* typechecked expression *) * type_ (* expression type *) * big_int option (* constant integer expression => value*)) =
     let check e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
     let check_with_extra_bindings tenv' e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams (tenv' @ tenv) inAnnotation e in
     let checkcon e = check_condition_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
@@ -3506,7 +3515,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let promote_numeric_checkdone l e1 e2 check_e1 check_e2 =
       let (w1, t1, _) = check_e1 in
       let (w2, t2, _) = check_e2 in
-      match (unfold_inferred_type t1, unfold_inferred_type t2) with
+      match (t1, t2) with
         (t1, t2) when is_arithmetic_type t1 && is_arithmetic_type t2 ->
         let t = usual_arithmetic_conversion inAnnotation l t1 t2 in
         let w1 = if t1 = t then w1 else checkt e1 t in
@@ -3540,7 +3549,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let perform_integral_promotion e =
       let (w, t, _) = check e in
-      let t = unfold_inferred_type t in
       match t with
         Int (Signed, k) -> if rank_le dummy_loc k int_rank then Upcast (w, t, intType), intType else w, t
       | Int (Unsigned, k) -> if rank_lt k int_rank then Upcast (w, t, intType), intType else if rank_le dummy_loc int_rank k then w, t else static_error (expr_loc e) "The promoted type of this expression depends on the target architecture. This is not supported by VeriFast. Insert a cast or specify the target (using the -target command-line option) to work around this problem." None
@@ -3740,8 +3748,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Operation (l, (Add | Sub as operator), [e1; e2]) ->
       let (w1, t1, value1) = check e1 in
       let (w2, t2, value2) = check e2 in
-      let t1 = unfold_inferred_type t1 in
-      let t2 = unfold_inferred_type t2 in
       begin match t1, t2 with
         PtrType pt1, PtrType pt2 when operator = Sub ->
         if pt1 <> pt2 then static_error l "Pointers must be of same type" None;
@@ -3749,7 +3755,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         (WOperation (l, PtrDiff, [w1; w2], t1), ptrdiff_t, None)
       | PtrType pt1, _ ->
         let (w2, t2, _) = check e2 in
-        let t2 = unfold_inferred_type t2 in
         begin match t2 with Int (_, _) -> () | _ -> static_error l "Second operand must be of integer type." None end;
         (WOperation (l, operator, [w1; w2], t1), t1, None)
       | t1, t2 when is_arithmetic_type t1 && is_arithmetic_type t2 ->
@@ -3768,7 +3773,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | (ObjType ("java.lang.String", []) as t, _) when operator = Add ->
         let w2 = checkt e2 t in
         (WOperation (l, operator, [w1; w2], t), t, None)
-      | _ -> static_error l ("Operand of addition or subtraction must be pointer, integer, char, short, or real number: t1 "^(string_of_type t1)^" t2 "^(string_of_type t2)) None
+      | _ -> static_error l ("Operand of addition or subtraction must be pointer, integer, char, short, or real number. Actual operand types: " ^ string_of_type t1 ^ ", " ^ string_of_type t2) None
       end
     | Operation (l, (Mul|Div as operator), [e1; e2]) ->
       let (w1, w2, t) = promote l e1 e2 in
@@ -3879,7 +3884,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | WVar (_, _, GlobalName) | WDeref (_, _, _) | WReadArray (_, _, _, _) ->
         check_deref_core functypemap funcmap classmap interfmap (pn,ilist) l tparams tenv (AddressOf (l, e)) f
       | _ ->
-        begin match unfold_inferred_type t with
+        begin match t with
         | StructType sn ->
           begin match try_assoc sn structmap with
           | Some (_, Some (_, fds), _, _) ->
@@ -3932,13 +3937,20 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let t = check_pure_type (pn, ilist) tparams Real te in
       let w = checkt_cast e t in
       w, t, None
-    | AddressOf (l, e) -> let (w, t, _) = check e in (AddressOf (l, w), PtrType t, None)
+    | AddressOf (l, e) ->
+      let (w, t, v) = check_expr_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
+      let t = unfold_inferred_type t in
+      begin match t with
+        StaticArrayType (elemTp, _) ->
+        (w, PtrType elemTp, None)
+      | _ ->
+        (AddressOf (l, w), PtrType t, None)
+      end
     | CallExpr (l, "getClass", [], [], [LitPat target], Instance) when language = Java ->
       let w = checkt target javaLangObject in
       (WMethodCall (l, "java.lang.Object", "getClass", [], [w], Instance, []), ObjType ("java.lang.Class", []), None)
     | ExprCallExpr (l, e, es) ->
       let (w, t, _) = check e in
-      let t = unfold_inferred_type t in
       begin match (t, es) with
         (PureFuncType (_, _), _) -> check_pure_fun_value_call l w t es
       | (ClassOrInterfaceName(cn), [e2]) -> check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation (CastExpr(l, IdentTypeExpr(expr_loc e, None, cn), e2))
@@ -4111,7 +4123,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let arg0e::args = es in
         let (_, arg0tp, _) = check arg0e in
         let (tn, es, fb, obj_type_arguments) =
-          match unfold_inferred_type arg0tp with
+          match arg0tp with
             ObjType (tn, targs) -> (tn, es, Instance, targs)
           | ClassOrInterfaceName tn -> (tn, List.tl es, Static, [])
           | _ -> static_error l "Target of method call must be object or class" None
@@ -4149,7 +4161,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         Int (_, _) -> ()
       | _ -> static_error l "Subscript must be of integer type" None
       end;
-      begin match unfold_inferred_type arr_t with
+      begin match arr_t with
         ArrayType tp -> (WReadArray (l, w1, tp, w2), tp, None)
       | StaticArrayType (tp, _) -> (WReadArray (l, w1, tp, w2), tp, None)
       | PtrType tp -> (WReadArray (l, w1, tp, w2), tp, None)
@@ -4238,7 +4250,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let t = check_pure_type (pn,ilist) tparams Real te in
       (SizeofExpr (l, TypeExpr (ManifestTypeExpr (type_expr_loc te, t))), sizeType, None)
     | SizeofExpr(l, e) ->
-      let (w, t, _) = check e in
+      let (w, t, v) = check_expr_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
+      let t = unfold_inferred_type t in
       (SizeofExpr (l, TypeExpr (ManifestTypeExpr (expr_loc e, t))), sizeType, None)
     | GenericExpr (l, e, cs, d) ->
       let (_, t, _) = check e in
@@ -4398,7 +4411,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   and check_deref_core functypemap funcmap classmap interfmap (pn,ilist) l tparams tenv e f =
     let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv None e in
     begin
-    match unfold_inferred_type t with
+    match t with
     | InductiveType(inductive_name, targs) -> begin
         let (_, _, constructors, _, _, _, _, _) = List.assoc inductive_name inductivemap in
         match constructors with
@@ -5212,7 +5225,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | InstPredAsn (l, e, g, index, pats) ->
       let (w, t) = check_expr (pn,ilist) tparams tenv (Some true) e in
-      begin match unfold_inferred_type t with
+      begin match t with
         ObjType (cn, targs) ->
         let check_call family pmap =
           let (wpats, tenv) = check_pats (pn,ilist) l [] tenv (List.map snd pmap) pats in
@@ -5242,7 +5255,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if cdef <> None then static_error l "A default clause is not yet supported in a switch assertion." None;
       let (w, t) = check_expr (pn,ilist) tparams tenv (Some true) e in
       begin
-      match unfold_inferred_type t with
+      match t with
       | InductiveType (i, targs) ->
         begin
         match try_assoc i inductivemap with

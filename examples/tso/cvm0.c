@@ -240,7 +240,7 @@ void *heap_alloc(size_t size)
     //@ produce_limits(fs);
     //@ chars_limits(fs);
     if (size > (unsigned int) INT_MAX) abort();
-    if ((char *)heap_ + HEAP_SIZE - fs < (int)size) abort();
+    if (heap_ + HEAP_SIZE - fs < (int)size) abort();
     heap_free_space += (int)size;
     return fs;
     //@ chars_split(fs, size);

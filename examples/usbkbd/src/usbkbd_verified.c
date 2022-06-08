@@ -461,7 +461,6 @@ static void usb_kbd_irq(struct urb *urb) //@ : usb_complete_t_no_pointer
 			}
 		}
 		//@ uchars_to_chars(kbd->old);
-		char *kbd_old = kbd->old;
 		memscan_ret = memscan((void*)kbd->old + 2, kbd->new[i], 6);
 		//@ chars_to_uchars(kbd->old);
 		
