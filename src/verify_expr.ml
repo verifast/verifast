@@ -1696,10 +1696,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let vararg_int_symb = lazy (get_purefuncsymb "vararg_int")
   let vararg_uint_symb = lazy (get_purefuncsymb "vararg_uint")
   let vararg_pointer_symb = lazy (get_purefuncsymb "vararg_pointer")
+  let vararg_double_symb = lazy (get_purefuncsymb "vararg_double")
   
   let mk_vararg_int t = mk_app (Lazy.force vararg_int_symb) [t]
   let mk_vararg_uint t = mk_app (Lazy.force vararg_uint_symb) [t]
   let mk_vararg_pointer t = mk_app (Lazy.force vararg_pointer_symb) [t]
+  let mk_vararg_double t = mk_app (Lazy.force vararg_double_symb) [t]
   
   let () =
     if language = CLang then begin
@@ -1792,6 +1794,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   Int (Signed, k) when k = int_rank -> mk_vararg_int t
                 | Int (Unsigned, k) when k = int_rank -> mk_vararg_uint t
                 | PtrType _ | StaticArrayType _ -> mk_vararg_pointer t
+                | Double -> mk_vararg_double t
                 | _ -> static_error (expr_loc e) ("Expressions of type '"^string_of_type tp^"' are not yet supported as arguments for a varargs function.") None
               in
               mk_varargs h env (arg::args) pats

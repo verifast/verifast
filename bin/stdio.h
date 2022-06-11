@@ -109,65 +109,147 @@ void setbuf(FILE* fp, char* buffer);
 
 /*@
 
-fixpoint option<list<t> > option_cons<t>(t x, option<list<t> > xs) {
-    switch (xs) {
-        case none: return none;
-        case some(xs0): return some(cons(x, xs0));
+fixpoint list<list<char> > printf_tokenize_format(bool inSpec, list<char> cs) {
+    switch (cs) {
+        case nil: return inSpec ? {nil} : nil;
+        case cons(c, cs0): return
+            inSpec ?
+                mem(c, {'-', '+', '#', ' ', '.', '*', 'h', 'l', 'j', 'z', 't', 'L'}) || '0' <= c && c <= '9' ?
+                    cons(cons(c, head(printf_tokenize_format(true, cs0))), tail(printf_tokenize_format(true, cs0)))
+                :
+                    cons({c}, printf_tokenize_format(false, cs0))
+            :
+                c == '%' ?
+                    printf_tokenize_format(true, cs0)
+                :
+                    printf_tokenize_format(false, cs0);
     }
 }
 
-fixpoint option<list<char *> > printf_parse_format(list<char> fcs, list<vararg> args) {
-    switch (fcs) {
-        case nil: return some(nil);
-        case cons(fc, fcs0): return
-            fc != '%' ?
-                printf_parse_format(fcs0, args)
+fixpoint option<pair<list<char *>, list<vararg> > > printf_parse_specifier(list<char> cs, list<vararg> args) {
+    switch (cs) {
+        case nil: return none;
+        case cons(c, cs0): return
+            switch (args) {
+                case nil: return none;
+                case cons(arg, args0): return
+                    c == 'd' || c == 'i' || c == 'c' ?
+                        switch (arg) {
+                            case vararg_int(v): return some(pair({}, args0));
+                            default: return none;
+                        }
+                    : c == 'u' || c == 'o' || c == 'x' || c == 'X' ?
+                        switch (arg) {
+                            case vararg_uint(v): return some(pair({}, args0));
+                            default: return none;
+                        }
+                    : c == 'p' ?
+                        switch (arg) {
+                            case vararg_pointer(v): return some(pair({}, args0));
+                            default: return none;
+                        }
+                    : mem(c, {'f', 'F', 'e', 'E', 'g', 'G', 'a', 'A'}) ?
+                        switch (arg) {
+                            case vararg_double(d): return some(pair({}, args0));
+                            default: return none;
+                        }
+                    : c == 's' ?
+                        switch (arg) {
+                            case vararg_pointer(v): return some(pair({v}, args0));
+                            default: return none;
+                        }
+                    : none;
+            };
+    }
+}
+
+fixpoint option<pair<list<char *>, list<vararg> > > printf_parse_precision_digits(list<char> cs, list<vararg> args) {
+    switch (cs) {
+        case nil: return none;
+        case cons(c, cs0): return
+            '0' <= c && c <= '9' ?
+                printf_parse_precision_digits(cs0, args)
             :
-                switch (fcs0) {
+                printf_parse_specifier(cs, args);
+    }
+}
+
+fixpoint option<pair<list<char *>, list<vararg> > > printf_parse_precision(list<char> cs, list<vararg> args) {
+    switch (cs) {
+        case nil: return none;
+        case cons(c, cs0): return
+            c == '.' ?
+                switch (cs0) {
                     case nil: return none;
-                    case cons(fc1, fcs1): return
-                        fc1 == '%' ?
-                            printf_parse_format(fcs1, args)
-                        : fc1 == 'd' || fc1 == 'i' || fc1 == 'c' ?
+                    case cons(c0, cs00): return
+                        c0 == '*' ?
                             switch (args) {
                                 case nil: return none;
-                                case cons(arg, args1): return
+                                case cons(arg, args0): return
                                     switch (arg) {
-                                        case vararg_int(v): return printf_parse_format(fcs1, args1);
-                                        default: return none;
-                                    };
-                            }
-                        : fc1 == 'u' || fc1 == 'o' || fc1 == 'x' || fc1 == 'X' ?
-                            switch (args) {
-                                case nil: return none;
-                                case cons(arg, args1): return
-                                    switch (arg) {
-                                        case vararg_uint(v): return printf_parse_format(fcs1, args1);
-                                        default: return none;
-                                    };
-                            }
-                        : fc1 == 'p' ?
-                            switch (args) {
-                                case nil: return none;
-                                case cons(arg, args1): return
-                                    switch (arg) {
-                                        case vararg_pointer(v): return printf_parse_format(fcs1, args1);
-                                        default: return none;
-                                    };
-                            }
-                        : fc1 == 's' ?
-                            switch (args) {
-                                case nil: return none;
-                                case cons(arg, args1): return
-                                    switch (arg) {
-                                        case vararg_pointer(v): return option_cons(v, printf_parse_format(fcs1, args1));
+                                        case vararg_int(v): return printf_parse_specifier(cs00, args0);
                                         default: return none;
                                     };
                             }
                         :
-                            none;
-                };
+                            printf_parse_precision_digits(cs0, args);
+                }
+            :
+                printf_parse_specifier(cs, args);
     }
+}
+
+fixpoint option<pair<list<char *>, list<vararg> > > printf_parse_width_digits(list<char> cs, list<vararg> args) {
+    switch (cs) {
+        case nil: return none;
+        case cons(c, cs0): return
+            '0' <= c && c <= '9' ?
+                printf_parse_width_digits(cs0, args)
+            :
+                printf_parse_precision(cs, args);
+    }
+}
+
+fixpoint option<pair<list<char *>, list<vararg> > > printf_parse_flags(list<char> cs, list<vararg> args) {
+    switch (cs) {
+        case nil: return none;
+        case cons(c, cs0): return
+            c == '-' || c == '+' || c == ' ' || c == '#' || c == '0' ?
+                printf_parse_flags(cs0, args)
+            : c == '*' ?
+                switch (args) {
+                    case nil: return none;
+                    case cons(arg, args0): return
+                        switch (arg) {
+                            case vararg_int(v): return printf_parse_precision(cs0, args0);
+                            default: return none;
+                        };
+                }
+            :
+                printf_parse_width_digits(cs, args);
+    }
+}
+
+fixpoint option<list<char *> > printf_parse_specs(list<list<char> > specs, list<vararg> args) {
+    switch (specs) {
+        case nil: return some(nil);
+        case cons(spec, specs0): return
+            switch (printf_parse_flags(spec, args)) {
+                case none: return none;
+                case some(result): return
+                    switch (result) {
+                        case pair(ss0, args_rest): return
+                            switch (printf_parse_specs(specs0, args_rest)) {
+                                case none: return none;
+                                case some(ss1): return some(append(ss0, ss1));
+                            };
+                    };
+            };
+    }
+}
+
+fixpoint option<list<char *> > printf_parse_format(list<char> cs, list<vararg> args) {
+    return printf_parse_specs(printf_tokenize_format(false, cs), args);
 }
 
 @*/
@@ -287,6 +369,13 @@ inductive format_part =
   format_part_int_specifier(int) |
   format_part_uint_specifier(unsigned int) |
   format_part_string_specifier(char*);
+
+fixpoint option<list<t> > option_cons<t>(t x, option<list<t> > xs) {
+    switch (xs) {
+        case none: return none;
+        case some(xs0): return some(cons(x, xs0));
+    }
+}
 
 fixpoint int option_length<t>(option<list<t> > xs) {
     switch (xs) {

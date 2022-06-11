@@ -1,3 +1,4 @@
+#include <math.h>
 #include "stdio.h"
 
 int main() //@ : main
@@ -10,5 +11,6 @@ int main() //@ : main
     printf("Hello, %s!\n", "world!");
     printf("%s\n", msg);
     printf("%d divided by %d is %d with remainder %d.\n", 10, 3, 10 / 3, 10 % 3);
+    printf("%-+#0*.*e % 3.4f %55.66g %s %s", 33, 44, 1.0, 2.0, 3.0, "Hi", "there");
     return 0;
 }
