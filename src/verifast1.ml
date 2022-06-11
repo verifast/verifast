@@ -3725,7 +3725,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (WOperation (l, operator, [], tp), tp, None)
     | Operation (l, (Eq | Neq as operator), [e1; e2]) -> 
       let (w1, w2, t) = promote_numeric l e1 e2 in
-      (operation_expr funcmap l t operator w1 w2, boolt, None)
+      if inAnnotation = Some true then
+        (WOperation (l, operator, [w1; w2], t), boolt, None)
+      else
+        (operation_expr funcmap l t operator w1 w2, boolt, None)
     | Operation (l, (Or | And as operator), [e1; e2]) -> 
       let w1 = checkcon e1 in
       let w2 = checkcon e2 in

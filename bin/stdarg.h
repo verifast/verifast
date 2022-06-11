@@ -36,7 +36,12 @@ void *__va_arg_pointer(va_list *app);
 //@ ensures *app |-> ?ap1 &*& va_list(ap1, lastParam, f, args) &*& result == p &*& va_list_id(ap1) == va_list_id(ap0);
 //@ terminates;
 
-#define va_arg(ap, type) _Generic((type)0, int: __va_arg_int(&ap), unsigned: __va_arg_uint(&ap), void *: __va_arg_pointer(&ap))
+double __va_arg_double(va_list *app);
+//@ requires *app |-> ?ap0 &*& va_list(ap0, ?lastParam, ?f, cons(vararg_double(?d), ?args));
+//@ ensures *app |-> ?ap1 &*& va_list(ap1, lastParam, f, args) &*& result == d &*& va_list_id(ap1) == va_list_id(ap0);
+//@ terminates;
+
+#define va_arg(ap, type) _Generic((type)0, int: __va_arg_int(&ap), unsigned: __va_arg_uint(&ap), void *: __va_arg_pointer(&ap), double: __va_arg_double(&ap))
 
 void __va_copy(va_list *dest, va_list src);
 //@ requires *dest |-> _ &*& va_list(src, ?lastParam, ?f, ?args);

@@ -58,6 +58,7 @@ fixpoint void *vararg_ptr_(vararg v) {
         case vararg_int(x): return (void *)0 + x;
         case vararg_uint(x): return (void *)x;
         case vararg_pointer(x): return x;
+        case vararg_double(d): return (void *)0;
     }
 }
 
@@ -66,6 +67,7 @@ fixpoint int vararg_int_(vararg v) {
         case vararg_int(x): return x;
         case vararg_uint(x): return 0;
         case vararg_pointer(x): return x - (void *)0;
+        case vararg_double(d): return 0;
     }
 }
 

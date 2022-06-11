@@ -25,7 +25,7 @@ lemma void max_varargs_ge_INT_MIN(list<vararg> args)
     switch (args) {
         case nil:
         case cons(arg, args0):
-            switch (arg) { case vararg_int(i): case vararg_uint(u): case vararg_pointer(p): }
+            switch (arg) { case vararg_int(i): case vararg_uint(u): case vararg_pointer(p): case vararg_double(d): }
             max_varargs_ge_INT_MIN(args0);
     }
 }

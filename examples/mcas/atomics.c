@@ -330,6 +330,7 @@ predicate tracked_cas_prediction(struct cas_tracker *tracker, int count; void *v
                 case vararg_int(i): return value == 0;
                 case vararg_uint(i): return value == 0;
                 case vararg_pointer(p): return value == p;
+                case vararg_double(d): return value == 0;
                 };
         };
 
