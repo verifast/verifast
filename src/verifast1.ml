@@ -3321,6 +3321,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       WMethodCall (l, className, methodName, signature, args, Static, [])
     else
     let g = "vf__" ^ prefix ^ "_" ^ fun_name in
+    if funcmap == [] then static_error l "Cannot perform this floating-point operation in an annotation" None;
     if not (List.mem_assoc g funcmap) then static_error l (Printf.sprintf "Must include header <math.h> when using floating-point operations. (Pseudo-function %s not found.)" g) None;
     WFunCall (l, g, [], args)
   
