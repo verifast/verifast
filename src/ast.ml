@@ -233,6 +233,8 @@ type
 
 type int_literal_lsuffix = NoLSuffix | LSuffix | LLSuffix
 
+type float_literal_suffix = FloatFSuffix | FloatLSuffix
+
 (** Types as they appear in source code, before validity checking and resolution. *)
 type type_expr = (* ?type_expr *)
     StructTypeExpr of loc * string option * field list option * struct_attr list
@@ -277,7 +279,7 @@ and
          If the operands have narrower types before promotion and conversion, they will be of the form Upcast (_, _, _). *)
   | IntLit of loc * big_int * bool (* decimal *) * bool (* U suffix *) * int_literal_lsuffix   (* int literal*)
   | WIntLit of loc * big_int
-  | RealLit of loc * num
+  | RealLit of loc * num * float_literal_suffix option
   | StringLit of loc * string (* string literal *)
   | ClassLit of loc * string (* class literal in java *)
   | Read of loc * expr * string (* lezen van een veld; hergebruiken voor java field access *)
@@ -912,7 +914,7 @@ let rec expr_loc e =
   | Var (l, x) | WVar (l, x, _) -> l
   | IntLit (l, n, _, _, _) -> l
   | WIntLit (l, n) -> l
-  | RealLit (l, n) -> l
+  | RealLit (l, n, _) -> l
   | StringLit (l, s) -> l
   | ClassLit (l, s) -> l
   | TruncatingExpr (l, e) -> l
@@ -1119,7 +1121,7 @@ let expr_fold_open iter state e =
   | SliceExpr (l, p1, p2) -> iterpatopt (iterpatopt state p1) p2
   | IntLit (l, n, _, _, _) -> state
   | WIntLit (l, n) -> state
-  | RealLit(l, n) -> state
+  | RealLit(l, n, _) -> state
   | StringLit (l, s) -> state
   | ClassLit (l, cn) -> state
   | Read (l, e0, f)

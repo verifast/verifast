@@ -258,10 +258,13 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
         build_list [ Symbol "expr-int"; Number n ] []
     | WIntLit (loc, n) ->
         build_list [ Symbol "expr-wintlit"; Number n ] []
-    | RealLit (_, num) ->
+    | RealLit (_, num, suffix) ->
         build_list
           [ Symbol "expr-real-lit" ]
-          [ "num", Symbol (Num.string_of_num num) ]
+          [
+            "num", Symbol (Num.string_of_num num);
+            "suffix", sexpr_of_option (function FloatFSuffix -> Symbol "f" | FloatLSuffix -> Symbol "l") suffix
+          ]
     | StringLit (_, s) ->
         List [ Symbol "expr-string-literal"; Symbol s ]
     | ClassLit (_, cn) ->

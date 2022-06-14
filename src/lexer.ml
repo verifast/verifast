@@ -189,7 +189,7 @@ type token = (* ?token *)
   | Ident of string
   | Int of big_int * bool (* true = decimal, false = hex or octal *) * bool (* true = suffix u or U *) * int_literal_lsuffix * string
   | RealToken of big_int  (* Tokens of the form 123r. Used to distinguish 1r/2, denoting one half, from 1/2, which evaluates to zero, in a context that does not require an expression of type 'real'. *)
-  | RationalToken of num       (* Rational number literals. E.g. 0.5, 3.14, 3e8, 6.62607004E-34. Used for floating-point literals in real code, and for real number literals in annotations. Using the arbitrary-precision 'num' type instead of the OCaml 'float' type to avoid rounding errors. *)
+  | RationalToken of num * float_literal_suffix option      (* Rational number literals. E.g. 0.5, 3.14, 3e8, 6.62607004E-34. Used for floating-point literals in real code, and for real number literals in annotations. Using the arbitrary-precision 'num' type instead of the OCaml 'float' type to avoid rounding errors. *)
   | String of string
   | AngleBracketString of string
   | CharToken of char
@@ -224,7 +224,7 @@ let string_of_token t =
       (if dec then "(decimal)" else "(originally hex or octal)") ^
       ("'" ^ text ^ "'")
   | RealToken(bi) -> "RealToken:" ^ (Big_int.string_of_big_int bi)
-  | RationalToken(n) -> "RationalToken:" ^ (Num.string_of_num n)
+  | RationalToken(n, suffix) -> "RationalToken:" ^ (Num.string_of_num n) ^ (match suffix with None -> "" | Some FloatFSuffix -> "f" | Some FloatLSuffix -> "l")
   | String(s) -> "String: " ^ s
   | CharToken(ch) -> "Char: " ^ (Char.escaped ch)
   | BeginInclude(kind, s, _) -> "BeginInclude(" ^ string_of_include_kind kind ^ "): " ^ s
@@ -241,7 +241,7 @@ let compare_tokens t1 t2 =
     (None,None) -> true
   | (Some(_,Int(bi1,dec1,u1,l1,text1)),Some(_,Int(bi2,dec2,u2,l2,text2))) -> text1 = text2
   | (Some(_,RealToken(bi1)),Some(_,RealToken(bi2))) -> compare_big_int bi1 bi2 = 0
-  | (Some(_,RationalToken(n1)),Some(_,RationalToken(n2))) -> Num.eq_num n1 n2
+  | (Some(_,RationalToken(n1,suffix1)),Some(_,RationalToken(n2,suffix2))) -> Num.eq_num n1 n2 && suffix1 = suffix2
   | (Some(_,t1),Some(_,t2)) -> t1 = t2
   | _ -> false
 end
@@ -698,7 +698,7 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
       ('0'..'9' | 'A'..'F' | 'a'..'f') as c -> text_junk (); store c; hex_fraction ()
     | '_' -> text_junk (); hex_fraction ()  (* Not valid in C but useful in annotations *)
     | ('p'|'P') as c -> text_junk (); store c; hex_fraction_exponent ()
-    | _ -> Some (RationalToken (num_of_hex_fraction (get_string ())))
+    | _ -> fraction_suffix (num_of_hex_fraction (get_string ()))
   and hex_fraction_exponent () =
     match text_peek () with
       '-' -> text_junk (); store '-'; hex_fraction_exponent_digits ()
@@ -706,14 +706,19 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
   and hex_fraction_exponent_digits () =
     match text_peek () with
       '0'..'9' as c -> text_junk (); store c; hex_fraction_exponent_digits ()
-    | _ -> Some (RationalToken (num_of_hex_fraction (get_string ())))
+    | _ -> fraction_suffix (num_of_hex_fraction (get_string ()))
+  and fraction_suffix v =
+    match text_peek () with
+      'f'|'F' -> text_junk (); Some (RationalToken (v, Some FloatFSuffix))
+    | 'l'|'L' -> text_junk (); Some (RationalToken (v, Some FloatLSuffix))
+    | _ -> Some (RationalToken (v, None))
   and decimal_part () =
     match text_peek () with
       ('0'..'9' as c) ->
         text_junk (); store c; decimal_part ()
     | ('e' | 'E') ->
         text_junk (); store 'E'; exponent_part ()
-    | _ -> Some (RationalToken (num_of_decimal_fraction (get_string ())))
+    | _ -> fraction_suffix (num_of_decimal_fraction (get_string ()))
   and exponent_part () =
     match text_peek () with
       ('+' | '-' as c) ->
@@ -723,7 +728,7 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
     match text_peek () with
       ('0'..'9' as c) ->
         text_junk (); store c; end_exponent_part ()
-    | _ -> Some (RationalToken (num_of_decimal_fraction (get_string ())))
+    | _ -> fraction_suffix (num_of_decimal_fraction (get_string ()))
   and string () =
     match text_peek () with
       '"' -> text_junk (); get_string ()

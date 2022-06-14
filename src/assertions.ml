@@ -1526,7 +1526,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                           match inner_frac_expr_opt with
                             None -> coef
                           | Some DummyPat -> real_unit
-                          | Some (LitPat (RealLit(_, n))) -> ctxt#mk_real_mul coef (ctxt#mk_reallit_of_num ((num_of_big_int unit_big_int) // n))
+                          | Some (LitPat (RealLit(_, n, _))) -> ctxt#mk_real_mul coef (ctxt#mk_reallit_of_num ((num_of_big_int unit_big_int) // n))
                           | Some (LitPat f) -> (* ideally: newcoef = coef / f, but real_div is not supported yet *)
                               let fterm = (eval None env f) in
                               if ctxt#query (ctxt#mk_real_le fterm coef) then

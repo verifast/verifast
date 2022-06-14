@@ -1,6 +1,8 @@
 #ifndef VF__FLOATING_POINT_H
 #define VF__FLOATING_POINT_H
 
+//@ fixpoint real real_abs(real x) { return x < 0 ? -x : x; }
+
 // =========== real_of_int ===========
 
 /*@
@@ -71,6 +73,18 @@ fixpoint fp fp_of_double(double d);
 
 fixpoint fp fp_of_long_double(long double ld);
 
+fixpoint real float_max_error(real x) {
+    return
+        0x1p-126 <= real_abs(x) ? real_abs(x) * 0x0.0000_02 :
+        0x0.0000_02p-126;
+}
+
+fixpoint real double_max_error(real x) {
+    return
+        0x1p-1022 <= real_abs(x) ? real_abs(x) * 0x0.0000_0000_0000_1 :
+        0x0.0000_0000_0000_1p-1022;
+}
+
 @*/
 
 // VeriFast interprets floating-point operations as calls of the functions declared below.
@@ -78,16 +92,16 @@ fixpoint fp fp_of_long_double(long double ld);
 // A floating-point constant of type T is interpreted as a call of the T_of_real function.
 
 float vf__float_of_real(real x);
-    //@ requires true;
-    //@ ensures true;
+    //@ requires x == 0 || 0x0.0000_02p-126 <= real_abs(x) &*& real_abs(x) <= 0x1.ffff_fep127;
+    //@ ensures fp_of_float(result) == fp_real(?r) &*& x == 0 ? r == 0 : real_abs(x - r) < float_max_error(x);
 
 double vf__double_of_real(real x);
-    //@ requires true;
-    //@ ensures true;
+    //@ requires x == 0 || 0x0.0000_0000_0000_1p-1022 <= real_abs(x) &*& real_abs(x) <= 0x1.ffff_ffff_ffff_fp1023;
+    //@ ensures fp_of_double(result) == fp_real(?r) &*& x == 0 ? r == 0 : real_abs(x - r) < double_max_error(x);
 
 long double vf__long_double_of_real(real x);
-    //@ requires true;
-    //@ ensures true;
+    //@ requires x == 0 || 0x0.0000_0000_0000_1p-1022 <= real_abs(x) &*& real_abs(x) <= 0x1.ffff_ffff_ffff_fp1023;
+    //@ ensures fp_of_long_double(result) == fp_real(?r) &*& x == 0 ? r == 0 : real_abs(x - r) < double_max_error(x);
 
 float vf__float_of_int128(__int128 x);
     //@ requires true;

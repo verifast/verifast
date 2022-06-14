@@ -3847,11 +3847,17 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               rank1
         in
           (wintlit l n, type_, Some n)
-    | RealLit(l, n) ->
+    | RealLit(l, n, suffix) ->
       if inAnnotation = Some true then
         (e, RealType, None)
       else
-        (floating_point_fun_call_expr funcmap l Double "of_real" [TypedExpr (e, RealType)], Double, None)
+        let tp =
+          match suffix with
+            None -> Double
+          | Some FloatFSuffix -> Float
+          | Some FloatLSuffix -> LongDouble
+        in
+        (floating_point_fun_call_expr funcmap l tp "of_real" [TypedExpr (e, RealType)], tp, None)
     | ClassLit (l, s) ->
       let s = check_classname (pn, ilist) (l, s) in
       (ClassLit (l, s), ObjType ("java.lang.Class", []), None)
@@ -4350,9 +4356,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     check_expr_t_core_core functypemap funcmap classmap interfmap (pn, ilist) tparams tenv inAnnotation e t0 false
   and check_expr_t_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e t0 isCast =
     match (e, unfold_inferred_type t0) with
-      (Operation(l, Div, [IntLit(_, i1, _, _, _); IntLit(_, i2, _, _, _)]), RealType) -> RealLit(l, (num_of_big_int i1) // (num_of_big_int i2))
+      (Operation(l, Div, [IntLit(_, i1, _, _, _); IntLit(_, i2, _, _, _)]), RealType) -> RealLit(l, (num_of_big_int i1) // (num_of_big_int i2), None)
     | (IntLit (l, n, _, _, _), PtrType _) when isCast || eq_big_int n zero_big_int -> wintlit l n
-    | (IntLit (l, n, _, _, _), RealType) -> RealLit (l, num_of_big_int n)
+    | (IntLit (l, n, _, _, _), RealType) -> RealLit (l, num_of_big_int n, None)
     | (IntLit (l, n, _, _, _), (Int (Unsigned, rank) as tp)) when isCast || inAnnotation <> Some true ->
       let k, isTight = get_glb_litrank rank in
       if not (le_big_int zero_big_int n && le_big_int n (max_unsigned_big_int k)) then
@@ -6370,7 +6376,7 @@ let check_if_list_is_defined () =
     | Upcast (e, fromType, toType) -> ev state e cont
     | TypedExpr (e, t) -> ev state e cont
     | WidenedParameterArgument e -> ev state e cont
-    | RealLit(l, n) ->
+    | RealLit(l, n, _) ->
       cont state begin 
         if eq_num n (num_of_big_int unit_big_int) then
         real_unit
@@ -6438,13 +6444,13 @@ let check_if_list_is_defined () =
         static_error l "VeriFast does not currently support taking the bitwise complement (~) of an unsigned integer except as part of a bitwise AND (x & ~y)." None
     | WOperation (l, Div, [e1; e2], RealType) ->
       begin match (e1, e2) with
-        (RealLit (_, n), WIntLit (_, d)) when eq_num n (num_of_big_int unit_big_int) && eq_big_int d two_big_int -> cont state real_half
+        (RealLit (_, n, _), WIntLit (_, d)) when eq_num n (num_of_big_int unit_big_int) && eq_big_int d two_big_int -> cont state real_half
       | (WIntLit (_, n), WIntLit (_, d)) when eq_big_int n unit_big_int && eq_big_int d two_big_int -> cont state real_half
       | _ -> 
         let rec eval_reallit e =
             match e with
             WIntLit (l, n) -> num_of_big_int n
-          | RealLit (l, n) -> n
+          | RealLit (l, n, _) -> n
           | _ -> static_error (expr_loc e) "The denominator of a division must be a literal." None
         in
         ev state e1 $. fun state v1 -> cont state (ctxt#mk_real_mul v1 (ctxt#mk_reallit_of_num (div_num (num_of_int 1) (eval_reallit e2)))) 

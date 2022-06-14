@@ -312,7 +312,7 @@ let _ =
         else
           op_str ^ string_of_expr (List.nth operands 0)
       | IntLit(_, integer, _, _, _) -> Big_int.string_of_big_int integer
-      | RealLit(_, real) -> Num.string_of_num real
+      | RealLit(_, real, _) -> Num.string_of_num real
       | StringLit(_, str) -> "\"" ^ str ^ "\""
       | Read(_, expr_in, str) -> string_of_expr expr_in ^ "." ^ str
       | Select(_, expr_in, str) -> string_of_expr expr_in ^ "." ^ str
@@ -573,10 +573,10 @@ let _ =
                     | IntLit(_, pattern_integer, _, _, _) when (Big_int.compare_big_int integer pattern_integer) = 0 -> true, []
                     | _ -> false, []
                 end
-              | RealLit(_, real) ->
+              | RealLit(_, real, _) ->
                 begin
                   match pattern with
-                    | RealLit(_, pattern_real) when Num.eq_num real pattern_real -> true, []
+                    | RealLit(_, pattern_real, _) when Num.eq_num real pattern_real -> true, []
                     | _ -> false, []
                 end
               | StringLit(_, str) ->

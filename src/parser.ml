@@ -1435,8 +1435,8 @@ and
     | [< >] -> Var (lx, x)
   >] -> ex
 | [< '(l, Int (i, dec, usuffix, lsuffix, _)) >] -> IntLit (l, i, dec, usuffix, lsuffix)
-| [< '(l, RealToken i) >] -> RealLit (l, num_of_big_int i)
-| [< '(l, RationalToken n) >] -> RealLit (l, n)
+| [< '(l, RealToken i) >] -> RealLit (l, num_of_big_int i, None)
+| [< '(l, RationalToken (n, suffix)) >] -> RealLit (l, n, suffix)
 | [< '(l, Kwd "INT_MIN") >] -> (match int_rank with LitRank k -> IntLit (l, min_signed_big_int k, true, false, NoLSuffix) | IntRank -> Operation (l, MinValue (Int (Signed, IntRank)), []))
 | [< '(l, Kwd "INT_MAX") >] -> (match int_rank with LitRank k -> IntLit (l, max_signed_big_int k, true, false, NoLSuffix) | IntRank -> Operation (l, MaxValue (Int (Signed, IntRank)), []))
 | [< '(l, Kwd "UINTPTR_MAX") >] -> (match ptr_rank with LitRank k -> IntLit (l, max_unsigned_big_int k, true, true, NoLSuffix) | PtrRank -> Operation (l, MaxValue (Int (Unsigned, PtrRank)), []))
