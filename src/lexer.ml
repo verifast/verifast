@@ -689,7 +689,24 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
   and hex_number () =
     match text_peek () with
       ('0'..'9' | 'A'..'F' | 'a'..'f') as c -> text_junk (); store c; hex_number ()
+    | '.' -> text_junk (); store '.'; hex_fraction ()
+    | ('p'|'P') as c -> text_junk (); store c; hex_fraction_exponent ()
+    | '_' -> text_junk (); hex_number ()  (* Not valid in C but useful in annotations *)
     | _ -> int_suffix (big_int_of_hex_string (peek_string ())) false
+  and hex_fraction () =
+    match text_peek () with
+      ('0'..'9' | 'A'..'F' | 'a'..'f') as c -> text_junk (); store c; hex_fraction ()
+    | '_' -> text_junk (); hex_fraction ()  (* Not valid in C but useful in annotations *)
+    | ('p'|'P') as c -> text_junk (); store c; hex_fraction_exponent ()
+    | _ -> Some (RationalToken (num_of_hex_fraction (get_string ())))
+  and hex_fraction_exponent () =
+    match text_peek () with
+      '-' -> text_junk (); store '-'; hex_fraction_exponent_digits ()
+    | _ -> hex_fraction_exponent_digits ()
+  and hex_fraction_exponent_digits () =
+    match text_peek () with
+      '0'..'9' as c -> text_junk (); store c; hex_fraction_exponent_digits ()
+    | _ -> Some (RationalToken (num_of_hex_fraction (get_string ())))
   and decimal_part () =
     match text_peek () with
       ('0'..'9' as c) ->

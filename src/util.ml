@@ -64,6 +64,40 @@ let num_of_decimal_fraction s =
   in
   parse ()
 
+let num_of_hex_fraction s =
+  let n = String.length s in
+  let mantissa = Buffer.create n in
+  Buffer.add_string mantissa "0x";
+  let fractional_places = ref 0 in
+  let exponent = ref 0 in
+  let offset = ref 2 in
+  let next () =
+    if !offset = n then '\000' else s.[!offset]
+  in
+  let eat () = incr offset in
+  let mk_num () =
+    num_of_string (Buffer.contents mantissa) */ (num_of_int 2 **/ (num_of_int !exponent -/ num_of_int (4 * !fractional_places)))
+  in
+  let parse_exponent () =
+    if next () = '+' then eat ();
+    exponent := int_of_string (String.sub s !offset (n - !offset));
+    mk_num ()
+  in
+  let rec parse_fractional_part () =
+    match next () with
+      ('0'..'9'|'A'..'F'|'a'..'f') as c -> eat (); Buffer.add_char mantissa c; incr fractional_places; parse_fractional_part ()
+    | 'p'|'P' -> eat (); parse_exponent ()
+    | '\000' -> mk_num ()
+  in
+  let rec parse () =
+    match next () with
+      ('0'..'9'|'A'..'F'|'a'..'f') as c -> eat (); Buffer.add_char mantissa c; parse ()
+    | '.' -> eat (); parse_fractional_part ()
+    | 'p'|'P' -> eat (); parse_exponent ()
+    | '\000' -> mk_num ()
+  in
+  parse ()
+
 (** Same as fprintf followed by a flush. *)
 let fprintff format = kfprintf (fun chan -> flush chan) format
 (** Same as printf followed by a flush. *)
