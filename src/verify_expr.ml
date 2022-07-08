@@ -463,9 +463,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               static_error loc "Duplicate constructor implementation." None 
           | Some (loc0, xmap0, pre0, pre_tenv0, post0, terminates0, None) ->
             if body_opt = None then static_error loc "Duplicate constructor prototype." None;
-            check_func_header_compat loc ("Constructor '" ^ struct_name ^ "'") "Constructor prototype implementation check" ["this", get_unique_var_symb_non_ghost "this" this_type] 
+            let this_term = get_unique_var_symb_non_ghost "this" this_type in
+            check_func_header_compat loc ("Constructor '" ^ struct_name ^ "'") "Constructor prototype implementation check" ["this", this_term] 
               (Regular, [], None, xmap, false, pre, post, [], terminates) 
-              (Regular, [], None, xmap0, false, [], [], pre0, post0, [], terminates0);
+              (Regular, [], None, xmap0, false, [], ["this", this_term], pre0, post0, [], terminates0);
             iter pn ilist 
               ((mangled_name, (loc, xmap, pre, pre_tenv, post, terminates, check_init_list pn ilist pre_tenv struct_name body_opt struct_name)) :: ctor_map) 
               ((mangled_name, loc0) :: ctors_implemented)
@@ -510,9 +511,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               static_error loc "Duplicate destructor implementation." None 
           | Some (loc0, pre0, pre_tenv0, post0, terminates0, None) ->
             if body_opt = None then static_error loc "Duplicate destructor prototype." None;
-            check_func_header_compat loc ("Destructor '" ^ struct_name ^ "'") "Destructor prototype implementation check" ["this", get_unique_var_symb_non_ghost "this" this_type] 
+            let this_term = get_unique_var_symb_non_ghost "this" this_type in
+            check_func_header_compat loc ("Destructor '" ^ struct_name ^ "'") "Destructor prototype implementation check" ["this", this_term] 
               (Regular, [], None, [], false, pre, post, [], terminates) 
-              (Regular, [], None, [], false, [], [], pre0, post0, [], terminates0);
+              (Regular, [], None, [], false, [], ["this", this_term], pre0, post0, [], terminates0);
             iter pn ilist 
               ((struct_name, (loc, pre, pre_tenv, post, terminates, body_opt |> option_map @@ fun b -> Some b)) :: dtor_map) 
               ((dtor_name, loc0) :: dtors_implemented)

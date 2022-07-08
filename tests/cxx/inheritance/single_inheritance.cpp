@@ -46,36 +46,36 @@ struct B : A {
     
     B(int b_i, int a_i) : A(a_i), i(b_i)
     //@ requires true;
-    //@ ensures B_pred(this, a_i, b_i);
+    //@ ensures B_bases_constructed(this) &*& B_pred(this, a_i, b_i);
     {}
     
     B(int i) : i(i)
     //@ requires true;
-    //@ ensures B_pred(this, 0, i);
+    //@ ensures B_bases_constructed(this) &*& B_pred(this, 0, i);
     {}
 
     B() : B(1, 0)
     //@ requires true;
-    //@ ensures B_pred(this, 0, 1);
+    //@ ensures B_bases_constructed(this) &*& B_pred(this, 0, 1);
     {
     }
     
     ~B()
-    //@ requires B_pred(this, ?a_i, ?b_i);
+    //@ requires B_bases_constructed(this) &*& B_pred(this, ?a_i, ?b_i);
     //@ ensures true;
     {
     }
     
     void incr()
-    //@ requires B_pred(this, ?a_i, ?b_i);
-    //@ ensures B_pred(this, a_i, b_i + 1);
+    //@ requires [?f]B_bases_constructed(this) &*& B_pred(this, ?a_i, ?b_i);
+    //@ ensures [f]B_bases_constructed(this) &*& B_pred(this, a_i, b_i + 1);
     {
     	++i;
     }
     
     void incr_a()
-    //@ requires B_pred(this, ?a_i, ?b_i);
-    //@ ensures B_pred(this, a_i + 1, b_i);
+    //@ requires [?f]B_bases_constructed(this) &*& B_pred(this, ?a_i, ?b_i);
+    //@ ensures [f]B_bases_constructed(this) &*& B_pred(this, a_i + 1, b_i);
     {
       //@ open A_pred(this, _);
       A::incr();

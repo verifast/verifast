@@ -65,17 +65,17 @@ public:
 
 	C(int c) : A(3), B(7), _c(c), _pc(c)
 	//@ requires true;
-	//@ ensures A__a(this, 3) &*& A__pa(this, 3) &*& B__b(this, 7) &*& B__pb(this, 7) &*& this->_c |-> c &*& this->_pc |-> c &*& (struct A *) this != 0 &*& (struct B *) this != 0;
+	//@ ensures C_bases_constructed(this) &*& A__a(this, 3) &*& A__pa(this, 3) &*& B__b(this, 7) &*& B__pb(this, 7) &*& this->_c |-> c &*& this->_pc |-> c &*& (struct A *) this != 0 &*& (struct B *) this != 0;
 	{}
 	
 	~C()
-	//@ requires A__a(this, _) &*& A__pa(this, _) &*& B__b(this, _) &*& B__pb(this, _) &*& this->_c |-> _ &*& this->_pc |-> _;
+	//@ requires C_bases_constructed(this) &*& A__a(this, _) &*& A__pa(this, _) &*& B__b(this, _) &*& B__pb(this, _) &*& this->_c |-> _ &*& this->_pc |-> _;
 	//@ ensures true;
 	{}
 	
 	int foo() const
-	//@ requires this->_c |-> ?c;
-	//@ ensures this->_c |-> c &*& result == c;
+	//@ requires C_bases_constructed(this) &*& this->_c |-> ?c;
+	//@ ensures C_bases_constructed(this) &*& this->_c |-> c &*& result == c;
 	{
 		return _c;
 	}

@@ -34,7 +34,7 @@ struct A {
 
 /*@
 predicate B_pred(B *b; int i, int a) =
-	b != 0 &*& b->b |-> i &*& A_pred(b, a);
+	b != 0 &*& B_bases_constructed(b) &*& b->b |-> i &*& A_pred(b, a);
 	
 lemma_auto void B_pred_inv()
 	requires [?f]B_pred(?b, ?i, ?a);
@@ -60,8 +60,8 @@ struct B : A {
 	}
 
 	void setB(int i)
-	//@ requires this->b |-> _;
-	//@ ensures this->b |-> i;
+	//@ requires B_bases_constructed(this) &*& this->b |-> _;
+	//@ ensures B_bases_constructed(this) &*& this->b |-> i;
 	{
 		b = i;
 	}
@@ -69,7 +69,7 @@ struct B : A {
 
 /*@
 predicate C_pred(C *c; int i, int a) =
-	c != 0 &*& c->c |-> i &*& A_pred(c, a);
+	c != 0 &*& C_bases_constructed(c) &*& c->c |-> i &*& A_pred(c, a);
 	
 lemma_auto void C_pred_inv()
 	requires [?f]C_pred(?c, ?i, ?a);
@@ -94,8 +94,8 @@ struct C : A {
 	{}
 
 	void setC(int i)
-	//@ requires this->c |-> _;
-	//@ ensures this->c |-> i;
+	//@ requires C_bases_constructed(this) &*& this->c |-> _;
+	//@ ensures C_bases_constructed(this) &*& this->c |-> i;
 	{
 		c = i;
 	}
@@ -103,7 +103,7 @@ struct C : A {
 
 /*@
 predicate D_pred(D *d; int i, int b, int c, int b_a, int c_a) =
-	d != 0 &*& d->d |-> i &*& B_pred(d, b, b_a) &*& C_pred(d, c, c_a);
+	d != 0 &*& D_bases_constructed(d) &*& d->d |-> i &*& B_pred(d, b, b_a) &*& C_pred(d, c, c_a);
 	
 lemma_auto void D_pred_inv()
 	requires [?f]D_pred(?d, ?i, ?b, ?c, ?b_a, ?c_a);
@@ -128,8 +128,8 @@ struct D : B, C {
 	{}
 
 	void setD(int i)
-	//@ requires this->d |-> _;
-	//@ ensures this->d |-> i;
+	//@ requires D_bases_constructed(this) &*& this->d |-> _;
+	//@ ensures D_bases_constructed(this) &*& this->d |-> i;
 	{
 		d = i;
 	}

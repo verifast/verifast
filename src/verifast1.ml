@@ -727,6 +727,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     type new_block_pred_info =
         string (* predicate name *)
       * pred_fam_info
+    type bases_constructed_pred_info =
+        string (* predicate name *)
+      * pred_fam_info
     type field_pred_info =
         string (* predicate name *)
       * pred_fam_info
@@ -907,6 +910,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * abstract_type_info map
       * cxx_ctor_info map
       * cxx_dtor_info map
+      * bases_constructed_pred_info map
     
     type implemented_prototype_info =
         string
@@ -1011,7 +1015,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (interfaceterms0: termnode map),
       (abstract_types_map0: abstract_type_info map),
       (cxx_ctor_map0: cxx_ctor_info map),
-      (cxx_dtor_map0: cxx_dtor_info map)
+      (cxx_dtor_map0: cxx_dtor_info map),
+      (bases_constructed_map0: bases_constructed_pred_info map)
       : maps
     ) =
 
@@ -1027,8 +1032,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let id x = x in
     let merge_maps l
-      (structmap, unionmap, enummap, globalmap, modulemap, importmodulemap, inductivemap, purefuncmap, predctormap, struct_accessor_map, malloc_block_pred_map, new_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, abstract_types_map, cxx_ctor_map, cxx_dtor_map)
-      (structmap0, unionmap0, enummap0, globalmap0, modulemap0, importmodulemap0, inductivemap0, purefuncmap0, predctormap0, struct_accessor_map0, malloc_block_pred_map0, new_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, abstract_types_map0, cxx_ctor_map0, cxx_dtor_map0)
+      (structmap, unionmap, enummap, globalmap, modulemap, importmodulemap, inductivemap, purefuncmap, predctormap, struct_accessor_map, malloc_block_pred_map, new_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, abstract_types_map, cxx_ctor_map, cxx_dtor_map, bases_constructed_map)
+      (structmap0, unionmap0, enummap0, globalmap0, modulemap0, importmodulemap0, inductivemap0, purefuncmap0, predctormap0, struct_accessor_map0, malloc_block_pred_map0, new_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, abstract_types_map0, cxx_ctor_map0, cxx_dtor_map0, bases_constructed_map0)
       =
       (
 (*     append_nodups structmap structmap0 id l "struct", *)
@@ -1060,7 +1065,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
        interfaceterms @ interfaceterms0,
        append_nodups abstract_types_map abstract_types_map0 id l "abstract type",
        append_nodups cxx_ctor_map cxx_ctor_map0 id l "constructor",
-       append_nodups cxx_dtor_map cxx_dtor_map0 id l "destructor")
+       append_nodups cxx_dtor_map cxx_dtor_map0 id l "destructor",
+       bases_constructed_map @ bases_constructed_map0)
     in
 
     (** [merge_header_maps maps0 headers] returns [maps0] plus all elements transitively declared in [headers]. *)
@@ -1139,7 +1145,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
     in
 
-    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
+    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
     
     let (maps0, headers_included) =
       if include_prelude then
@@ -2794,6 +2800,16 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let malloc_block_pred_map: malloc_block_pred_info map = malloc_block_pred_map1 @ malloc_block_pred_map0
   let new_block_pred_map: new_block_pred_info map = new_block_pred_map1 @ new_block_pred_map0
 
+  let bases_constructed_map1: bases_constructed_pred_info map =
+    let fold acc (sn, (l, body_opt, _, _)) =
+      match body_opt with
+      | Some (_ :: _, _) -> (sn, mk_predfam (bases_constructed_pred_name sn) l [] 0 [PtrType (StructType sn)] (Some 1) Inductiveness_Inductive) :: acc
+      | _ -> acc
+    in
+    structmap1 |> List.fold_left fold [] |> List.rev
+
+  let bases_constructed_map = bases_constructed_map1 @ bases_constructed_map0
+
   let field_pred_map1 = (* dient om dingen te controleren bij read/write controle v velden*)
     match file_type path with
       Java ->
@@ -2824,9 +2840,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let field_pred_map = field_pred_map1 @ field_pred_map0
   
   let structpreds1: pred_fam_info map = 
-    let result = List.map (fun (_, p) -> p) malloc_block_pred_map1 @ List.map (fun (_, p) -> p) field_pred_map1 @ struct_padding_predfams1 in
+    let map_pred map = map |> List.map @@ fun (_, p) -> p in
+    let result = map_pred malloc_block_pred_map1 @ map_pred field_pred_map1 @ struct_padding_predfams1 in
     match dialect with
-      Some Cxx -> List.map (fun (_, p) -> p) new_block_pred_map1 @ result
+      Some Cxx -> map_pred new_block_pred_map1 @ map_pred bases_constructed_map @ result
     | _ -> result
   
   let predfammap1 =

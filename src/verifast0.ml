@@ -140,6 +140,8 @@ let full_name pn n = if pn = "" then n else pn ^ "." ^ n
 (* prepends '~' to the given record name *)
 let cxx_dtor_name struct_name = "~" ^ struct_name
 
+let bases_constructed_pred_name sn = sn ^ "_bases_constructed"
+
 type options = {
   option_verbose: int;
   option_disable_overflow_check: bool;

@@ -2293,6 +2293,22 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         cont h
     end $. fun h ->
     begin fun cont ->
+      match try_assoc "this" tenv with
+      | Some (PtrType (StructType sn)) when not pure && dialect = Some Cxx ->
+        begin match try_assoc "current_bases_constructed_fraction" env with
+        | Some current_fraction ->
+          (* produce [current_bases_constructed_fraction]X_bases_constructed(this) *)
+          let this_term = List.assoc "this" env in
+          let _, (_, _, _, _, bases_constructed_symb, _, _) = List.assoc sn bases_constructed_map in
+          with_context (Executing ([], env, l, "Producing constructed bases fraction")) @@ fun () ->
+          produce_chunk h (bases_constructed_symb, true) [] current_fraction (Some 1) [this_term] None cont
+        | None ->
+          cont h
+        end
+      | _ ->
+        cont h
+    end @@ fun h ->
+    begin fun cont ->
       verify_cont (pn,ilist) blocks_done lblenv tparams boxes true leminfo funcmap predinstmap sizemap tenv ghostenv h env epilog cont (fun _ _ -> assert false) econt
     end $. fun sizemap tenv ghostenv h env ->
     return_cont h tenv env retval
@@ -2721,9 +2737,12 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin fun cont ->
         match penv, dialect, in_pure_context with
         | ("this", this_term) :: _, Some Cxx, false ->
-          assume_neq this_term real_zero cont
-        | _ -> cont ()
-      end @@ fun () -> 
+          let ("this", PtrType (StructType sn)) :: _ = ps in
+          assume_neq this_term real_zero @@ fun () ->
+          cont (Some (sn, this_term))
+        | _ -> 
+          cont None
+      end @@ fun this_term_opt -> 
       produce_asn_with_post [] [] ghostenv env pre real_unit (Some (PredicateChunkSize 0)) None (fun h ghostenv env post' ->
         let post =
           match post' with
@@ -2732,11 +2751,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             post'
         in
         let do_return h env_post =
-          consume_asn rules [] h ghostenv env_post post true real_unit (fun _ h ghostenv env size_first ->
-            cleanup_heapy_locals (pn, ilist) closeBraceLoc h env heapy_ps varargsLastParam (fun h ->
-              check_leaks h env closeBraceLoc "Function leaks heap chunks."
-            )
-          )
+          consume_asn rules [] h ghostenv env_post post true real_unit @@ fun _ h ghostenv env size_first ->
+          cleanup_heapy_locals (pn, ilist) closeBraceLoc h env heapy_ps varargsLastParam @@ fun h ->
+          check_leaks h env closeBraceLoc "Function leaks heap chunks."
         in
         let return_cont h tenv2 env2 retval =
           match (rt, retval) with
@@ -2748,6 +2765,26 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         begin fun tcont ->
           verify_cont (pn,ilist) [] [] tparams boxes true leminfo funcmap predinstmap sizemap tenv ghostenv h env prolog tcont (fun _ _ -> assert false) (fun _ _ _ -> assert false)
         end $. fun sizemap tenv ghostenv h env ->
+        begin fun cont ->
+          match this_term_opt with
+          | Some (sn, this_term) ->
+            begin match try_assoc sn bases_constructed_map with
+            | Some (_, (_, _, _, _, bases_constructed_symb, _, _)) ->
+              (* consume [?f * 1/2]X_bases_constructed(this) *)
+              with_context (Executing ([], env, l, "Consuming constructed bases fraction")) @@ fun () ->
+              consume_chunk rules h [] [] [] l (bases_constructed_symb, true) [] real_unit dummypat (Some 1) [TermPat this_term] @@ fun consumed_chunk h coef _ _ _ _ _ ->
+              let half = real_mul l real_half coef in
+              let half_chunk = Chunk ((bases_constructed_symb, true), [], half, [this_term], None) in
+              let tenv = ("current_bases_constructed_fraction", RealType) :: tenv in
+              let ghostenv = "current_bases_constructed_fraction" :: ghostenv in 
+              let env = ("current_bases_constructed_fraction", half) :: env in
+              cont (half_chunk :: h) tenv ghostenv env
+            | None ->
+              cont h tenv ghostenv env
+            end
+          | None ->
+            cont h tenv ghostenv env
+        end @@ fun h tenv ghostenv env ->
         begin fun cont ->
           if unloadable && not in_pure_context then
             let (_, _, _, _, module_code_symb, _, _) = List.assoc "module_code" predfammap in
@@ -2785,8 +2822,14 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             produce_cxx_object l real_unit this_term this_type eval_h verify_ctor_call (Expr construct) false false h env @@ fun h _ ->
             if delegating then cont true h [] 
             else iter false init_list_rest h
-          | _ ->
-            cont false h init_list
+          | _ -> 
+            begin match try_assoc struct_name bases_constructed_map with
+            | Some (_, (_, _, _, _, bases_constructed_symb, _, _)) ->
+              produce_chunk h (bases_constructed_symb, true) [] real_unit (Some 1) [this_term] None @@ fun h ->
+              cont false h init_list
+            | None ->
+              cont false h init_list
+            end
       in
       iter true init_list h
     in
@@ -2921,6 +2964,14 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       with_context (Executing ([], env, loc, sprintf "Verifying destructor '%s'" @@ cxx_dtor_name struct_name)) @@ fun () ->
       assume_neq this_term int_zero_term @@ fun () ->
       produce_asn [] [] ghostenv env pre real_unit None None @@ fun h ghostenv env ->
+      begin fun cont ->
+        match try_assoc struct_name bases_constructed_map with
+        | Some (_, (_, _, _, _, bases_constructed_symb, _, _)) ->
+          consume_chunk rules h [] env [] loc (bases_constructed_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat this_term] @@ fun _ h _ _ _ _ _ _ ->
+          cont h
+        | None ->
+          cont h
+      end @@ fun h ->
       let return_cont h tenv2 env2 retval =
         consume_fields this_term h env tenv ghostenv leminfo sizemap @@ fun h ->
         consume_bases bases h env tenv this_term ghostenv leminfo sizemap @@ fun h env tenv ->
@@ -3341,7 +3392,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         inductivemap1, purefuncmap1, predctormap1, struct_accessor_map1, malloc_block_pred_map1, new_block_pred_map1, 
         field_pred_map1, predfammap1, predinstmap1, typedefmap1, functypemap1, 
         funcmap1, boxmap, classmap1, interfmap1, classterms1, interfaceterms1, 
-        abstract_types_map1, cxx_ctor_map1, cxx_dtor_map1
+        abstract_types_map1, cxx_ctor_map1, cxx_dtor_map1, bases_constructed_map1
       )
     )
   
