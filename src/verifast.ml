@@ -3598,7 +3598,14 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | Cxx_ast_translator.CxxAstTranslException (l, msg) -> static_error l msg None
       end
       | CLang, Some(Rust) -> begin
-        let module RustFe = Rust_fe in
+        let module RustFe = Rust_fe.Make(
+          struct
+            let data_model_opt = data_model
+            let report_should_fail = reportShouldFail
+            let report_range = reportRange
+          end
+        )
+        in
         RustFe.parse_rs_file path
       end
     in

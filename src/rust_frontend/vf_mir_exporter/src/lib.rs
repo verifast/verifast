@@ -1,4 +1,5 @@
 #![feature(rustc_private)]
+#![feature(drain_filter)]
 
 /***
  * TODO @Nima:
@@ -24,6 +25,7 @@
  * from the thread local storage.
  */
 
+extern crate rustc_ast;
 extern crate rustc_borrowck;
 extern crate rustc_driver;
 extern crate rustc_hir;
@@ -31,6 +33,7 @@ extern crate rustc_index;
 extern crate rustc_interface;
 extern crate rustc_middle;
 extern crate rustc_session;
+extern crate rustc_span;
 
 use rustc_borrowck::consumers::BodyWithBorrowckFacts;
 use rustc_driver::Compilation;
@@ -83,6 +86,31 @@ impl rustc_driver::Callbacks for CompilerCalls {
     ) -> Compilation {
         compiler.session().abort_if_errors();
         queries.global_ctxt().unwrap().peek_mut().enter(|tcx| {
+            /*** Collecting Annotations */
+            trace!("Collecting Annotations");
+            let src_map = compiler.session().source_map();
+            let src_name = compiler.input().source_name();
+            let src_string = String::clone(
+                src_map
+                    .get_source_file(&src_name)
+                    .expect(&format!(
+                        "Failed to get the source file information for: {:?}",
+                        src_name
+                    ))
+                    .src
+                    .as_ref()
+                    .expect(&format!(
+                        "Failed to get the source string for: {:?}",
+                        src_name
+                    ))
+                    .as_ref(),
+            );
+            trace!("Gathering comments from: {:?}", src_name);
+            let comments =
+                rustc_ast::util::comments::gather_comments(src_map, src_name, src_string);
+
+            /*** Collecting MIR bodies */
+            trace!("Collecting MIR bodies");
             // Collect definition ids of bodies.
             let hir = tcx.hir();
             let mut visitor = HirVisitor { bodies: Vec::new() };
@@ -100,12 +128,13 @@ impl rustc_driver::Callbacks for CompilerCalls {
                 .iter()
                 .map(|(def_path, body)| {
                     assert!(body.input_facts.cfg_edge.len() > 0);
-                    trace!("We have body for {}", def_path);
+                    debug!("We have body for {}", def_path);
                     &body.body
                 })
                 .collect();
 
             let mut vf_mir_capnp_builder = vf_mir_builder::VfMirCapnpBuilder::new(tcx);
+            vf_mir_capnp_builder.add_comments(comments);
             vf_mir_capnp_builder.add_bodies(bodies.as_slice());
             let msg_cpn = vf_mir_capnp_builder.build();
             capnp::serialize::write_message(&mut ::std::io::stdout(), msg_cpn.borrow_inner());
@@ -199,15 +228,19 @@ fn get_bodies<'tcx>(tcx: TyCtxt<'tcx>) -> Vec<(String, BodyWithBorrowckFacts<'tc
 mod vf_mir_builder {
     use crate::vf_mir_capnp::body as body_cpn;
     use crate::vf_mir_capnp::vf_mir as vf_mir_cpn;
+    use body_cpn::annotation as annot_cpn;
     use body_cpn::local_decl as local_decl_cpn;
     use body_cpn::mutability as mutability_cpn;
+    use rustc_ast::util::comments::Comment;
     use rustc_hir::def::DefKind;
     use rustc_middle::{mir, ty::TyCtxt};
-    use tracing::trace;
+    use std::collections::LinkedList;
+    use tracing::{debug, trace};
 
     pub struct VfMirCapnpBuilder<'tcx, 'a> {
         tcx: TyCtxt<'tcx>,
         bodies: Vec<&'a mir::Body<'tcx>>,
+        annots: LinkedList<Comment>,
     }
 
     impl<'tcx: 'a, 'a> VfMirCapnpBuilder<'tcx, 'a> {
@@ -215,44 +248,67 @@ mod vf_mir_builder {
             VfMirCapnpBuilder {
                 tcx,
                 bodies: Vec::new(),
+                annots: LinkedList::new(),
             }
+        }
+
+        pub fn add_comments(&mut self, mut comments: Vec<Comment>) {
+            self.annots.extend(
+                comments
+                    .drain_filter(|cmt| crate::vf_annot_utils::is_vf_annot(cmt))
+                    .collect::<LinkedList<_>>(),
+            );
+            // TODO @Nima: Defensive checks for duplicates
         }
 
         pub fn add_bodies(&mut self, bodies: &[&'a mir::Body<'tcx>]) {
             self.bodies.extend_from_slice(bodies)
         }
 
-        pub fn build(&mut self) -> ::capnp::message::TypedBuilder<vf_mir_cpn::Owned> {
+        pub fn build(mut self) -> ::capnp::message::TypedBuilder<vf_mir_cpn::Owned> {
             let mut msg_cpn = ::capnp::message::TypedBuilder::<vf_mir_cpn::Owned>::new_default();
             let mut vf_mir_cpn = msg_cpn.init_root();
-            Self::encode_mir(&self.bodies, self.tcx, vf_mir_cpn);
+            self.encode_mir(vf_mir_cpn);
             msg_cpn
         }
 
-        fn encode_mir(
-            bodies: &[&mir::Body<'tcx>],
-            tcx: TyCtxt<'tcx>,
-            mut vf_mir_cpn: vf_mir_cpn::Builder<'_>,
-        ) {
-            let len = bodies
-                .len()
-                .try_into()
-                .expect("The number of bodies cannot be stored in a Capnp message");
+        fn encode_mir(&mut self, mut vf_mir_cpn: vf_mir_cpn::Builder<'_>) {
+            let bodies = &self.bodies;
+            let len = bodies.len();
+            let len = len.try_into().expect(&format!(
+                "{} MIR bodies cannot be stored in a Capnp message",
+                len
+            ));
             let mut bodies_cpn = vf_mir_cpn.reborrow().init_bodies(len);
             for (idx, body) in bodies.iter().enumerate() {
+                let body_span = body.span.data();
+                let annots = self
+                    .annots
+                    .drain_filter(|annot| {
+                        body_span.contains(crate::comments_utils::comment_span(&annot))
+                    })
+                    .collect::<LinkedList<_>>();
                 let mut body_cpn = bodies_cpn.reborrow().get(idx.try_into().unwrap());
-                Self::encode_body(body, tcx, body_cpn);
+                Self::encode_body(self.tcx, body, annots, body_cpn);
             }
         }
 
         fn encode_body(
-            body: &mir::Body<'tcx>,
             tcx: TyCtxt<'tcx>,
+            body: &mir::Body<'tcx>,
+            mut annots: LinkedList<Comment>,
             mut body_cpn: body_cpn::Builder<'_>,
         ) {
             use rustc_index::vec::Idx;
 
-            trace!("Encoding mir: {:?}", body.source.instance);
+            trace!("Encoding MIR: {:?}", body.source.instance);
+            debug!(
+                "Encoding MIR for {:?} with span {:?}\n{}",
+                body.source.instance,
+                body.span,
+                crate::mir_utils::mir_body_pretty_string(tcx, body)
+            );
+
             let def_id = body.source.def_id();
             let kind = tcx.def_kind(def_id);
             match kind {
@@ -265,6 +321,9 @@ mod vf_mir_builder {
 
             let def_path = tcx.def_path_str(def_id);
             body_cpn.set_def_path(&def_path);
+
+            /*** Encoding the Contract */
+            Self::encode_contract(body, &mut annots, body_cpn.reborrow());
 
             let arg_count = body.arg_count.try_into().expect(&format!(
                 "The number of args of {} cannot be stored in a Capnp message",
@@ -287,6 +346,36 @@ mod vf_mir_builder {
                 let mut local_decl_cpn = local_decls_cpn.reborrow().get(idx.try_into().unwrap());
                 Self::encode_local_decl(local_decl, tcx, local_decl_cpn);
             }
+        }
+
+        fn encode_contract(
+            body: &mir::Body<'tcx>,
+            annots: &mut LinkedList<Comment>,
+            body_cpn: body_cpn::Builder<'_>,
+        ) {
+            let body_contract_span = crate::vf_annot_utils::body_contract_span(&body);
+            let contract_annots = annots
+                .drain_filter(|annot| {
+                    body_contract_span.contains(crate::comments_utils::comment_span(&annot))
+                })
+                .collect::<LinkedList<_>>();
+
+            let contract_cpn = body_cpn.init_contract();
+
+            let len = contract_annots.len().try_into().expect(&format!(
+                "The number of contract annotations for {:?} cannot be stored in a Capnp message",
+                body.source.instance
+            ));
+            let mut annots_cpn = contract_cpn.init_annotations(len);
+            for (idx, annot) in contract_annots.into_iter().enumerate() {
+                let annot_cpn = annots_cpn.reborrow().get(idx.try_into().unwrap());
+                Self::encode_annotation(annot, annot_cpn);
+            }
+        }
+
+        fn encode_annotation(annot: Comment, mut annot_cpn: annot_cpn::Builder<'_>) {
+            let annot_string = annot.lines.join("\n");
+            annot_cpn.set_raw(&annot_string);
         }
 
         fn encode_local_decl(
@@ -320,6 +409,7 @@ mod vf_mir_capnp {
 
 mod mir_utils {
     use rustc_hir::def_id::DefId;
+    use rustc_middle::mir;
     use rustc_middle::ty::TyCtxt;
 
     pub fn mir_def_ids(tcx: TyCtxt<'_>) -> Vec<DefId> {
@@ -327,5 +417,86 @@ mod mir_utils {
             .iter()
             .map(|local_def_id| local_def_id.to_def_id())
             .collect()
+    }
+
+    pub fn mir_body_pretty_string<'tcx>(tcx: TyCtxt<'tcx>, body: &mir::Body<'tcx>) -> String {
+        use rustc_middle::mir::pretty::write_mir_fn;
+        let mut buf: Vec<u8> = Vec::new();
+        write_mir_fn(tcx, body, &mut |_, _| Ok(()), &mut buf).expect(&format!(
+            "Failed to generate pretty MIR for {:?}",
+            body.source.instance
+        ));
+        let pretty_mir = String::from_utf8(buf).expect(&format!(
+            "Failed to read pretty MIR string for {:?}",
+            body.source.instance,
+        ));
+        pretty_mir
+    }
+}
+
+mod vf_annot_utils {
+    use rustc_ast::util::comments::Comment;
+    use rustc_middle::mir;
+    use rustc_span::SpanData;
+    use tracing::debug;
+
+    pub fn is_vf_annot(cmt: &Comment) -> bool {
+        if let Some(first_line) = cmt.lines.first() {
+            if first_line.starts_with("//@") {
+                return true;
+            } else if first_line.starts_with("/*@") {
+                let last_line = cmt.lines.last().unwrap();
+                if last_line.ends_with("@*/") {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    pub fn body_contract_span<'tcx>(body: &mir::Body<'tcx>) -> SpanData {
+        let body_span = body.span.data();
+        // The following span is not exactly the contract span but serves our purpose
+        let body_contract_span = body_span.with_hi(
+            body.local_decls[mir::RETURN_PLACE]
+                .source_info
+                .span
+                .data()
+                .lo,
+        );
+        debug!(
+            "The contract span for {:?} at {:?} is: {:?}",
+            body.source.instance, body.span, body_contract_span
+        );
+        body_contract_span.data()
+    }
+}
+
+mod comments_utils {
+    use rustc_ast::util::comments::Comment;
+    use rustc_span::{BytePos, SpanData, SyntaxContext};
+
+    /** BUG @Nima: In the case of BlockComment this calculation is wrong. We cannot calculate the span rightly.
+     * The new line characters have been removed from the lines of the comment and we do not know if they are '\n' or "\r\n".
+     * Moreover, the function that gathers comments removes the common whitespaces before all the lines of a BlockComment.
+     * Thus, it is not possible to calculate the right span for a BlockComment using the rustc_ast::util::comments module.
+     * Possible solutions are either writing a comment utility module ourselves or using macros to annotate Rust code in the way that Prusti does.
+     * See rustc_ast::util::comments::split_block_comment_into_lines.
+     */
+
+    pub fn comment_span(cmt: &Comment) -> SpanData {
+        let len: usize = cmt.lines.iter().map(|line| line.as_bytes().len()).sum();
+        let hi = cmt.pos.0 as usize + len;
+        let hi = BytePos(
+            hi.try_into()
+                .expect("The length of comment cannot fit in a BytePos type"),
+        );
+        SpanData {
+            lo: cmt.pos,
+            hi,
+            //TODO @Nima: Check if the values we assign to below fields are sound
+            ctxt: SyntaxContext::root(),
+            parent: None,
+        }
     }
 }

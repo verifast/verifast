@@ -51,8 +51,7 @@ struct Body {
     }
 
     struct Contract {
-        req @0: Annotation;
-        ens @1: Annotation;
+        annotations @0: List(Annotation);
     }
 
     struct DefKind {
