@@ -499,10 +499,20 @@ public interface Iterable<T> {
     @*/
 }
 
+/*@
+
+fixpoint int max(int x, int y) { return x < y ? y : x; }
+
+@*/
+
 public class Math {
 
     public static double random();
         //@ requires true;
         //@ ensures true;
+    
+    public static int max(int x, int y);
+        //@ requires true;
+        //@ ensures result == max(x, y);
 
 }
