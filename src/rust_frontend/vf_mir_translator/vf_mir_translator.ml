@@ -30,6 +30,37 @@ module TestDataHardCoded = struct
         Ast.Package )
 end
 
+module Mir = struct
+  type mutability = Mut | Not
+
+  type ty_info = { vf_ty : Ast.type_expr }
+
+  type local_decl = { mutability : mutability; id : string; ty : ty_info }
+
+  type u_int_ty = USize | U8 | U16 | U32 | U64 | U128
+
+  let u_int_ty_bits_len (uit : u_int_ty) =
+    match uit with
+    | USize -> failwith "Todo: Usize type is not supported yet"
+    | U8 -> 8
+    | U16 -> 16
+    | U32 -> 32
+    | U64 -> 64
+    | U128 -> 128
+end
+
+module TrTyTuple = struct
+  let make_tuple_type_name tys =
+    if List.length tys != 0 then
+      failwith "Todo: Tuple Ty is not implemented yet"
+    else "std_tuple_0_"
+
+  let make_tuple_type_decl name tys loc =
+    if List.length tys != 0 then
+      failwith "Todo: Tuple Ty is not implemented yet"
+    else Ast.Struct (loc, name, Some (* field list *) [], (* attr list *) [])
+end
+
 module type VF_MIR_TRANSLATOR_ARGS = sig
   val data_model_opt : Ast.data_model option
 
@@ -39,19 +70,125 @@ module type VF_MIR_TRANSLATOR_ARGS = sig
 end
 
 module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
+  open Ocaml_aux
   module VfMirAnnotParser = Vf_mir_annot_parser.Make (Args)
   module VfMirStub = Vf_mir.Make (Capnp.BytesMessage)
   module VfMirRd = VfMirStub.Reader.VfMir
+
+  (* Bodies *)
   module BodyRd = VfMirStub.Reader.Body
   module ContractRd = BodyRd.Contract
   module AnnotationRd = BodyRd.Annotation
+  module LocalDeclRd = BodyRd.LocalDecl
+  module MutabilityRd = BodyRd.Mutability
+  module LocalDeclIdRd = BodyRd.LocalDeclId
+  module BasicBlockRd = BodyRd.BasicBlock
+
+  (* Types *)
+  module TyRd = VfMirStub.Reader.Ty
+  module UIntTyRd = TyRd.UIntTy
+
+  (* Ghost Type Declarations *)
+  module GhostTyDecls = Map.Make (String)
+
+  type gh_ty_decls = Ast.decl GhostTyDecls.t
 
   let translate_contract (contract_cpn : ContractRd.t) =
     let annots_cpn = ContractRd.annotations_get_list contract_cpn in
     let annots = List.map AnnotationRd.raw_get annots_cpn in
     VfMirAnnotParser.parse_func_contract annots
+  (* Todo: VeriFast parser throws exceptions. we should catch them and use our own error handling scheme *)
 
-  let translate_body (body_cpn : BodyRd.t) =
+  let translate_mutability (mutability_cpn : MutabilityRd.t) =
+    match MutabilityRd.get mutability_cpn with
+    | Mut -> Ok Mir.Mut
+    | Not -> Ok Mir.Not
+    | Undefined _ -> Error (`TrMut "Unknown mutability discriminator")
+
+  let translate_u_int_ty (u_int_ty_cpn : UIntTyRd.t) =
+    let dloc = Ast.Lexed Ast.dummy_loc0 in
+    let* l =
+      match UIntTyRd.get u_int_ty_cpn with
+      | USize -> Ok (Mir.u_int_ty_bits_len Mir.USize)
+      | U8 -> Ok (Mir.u_int_ty_bits_len Mir.U8)
+      | U16 -> Ok (Mir.u_int_ty_bits_len Mir.U16)
+      | U32 -> Ok (Mir.u_int_ty_bits_len Mir.U32)
+      | U64 -> Ok (Mir.u_int_ty_bits_len Mir.U64)
+      | U128 -> Ok (Mir.u_int_ty_bits_len Mir.U128)
+      | Undefined _ -> Error (`TrUIntTy "Unknown Rust unsigned int type")
+    in
+    let bytes = l / 8 in
+    let rank = int_of_float @@ Float.log2 @@ float_of_int bytes in
+    let ty_info : Mir.ty_info =
+      {
+        vf_ty =
+          Ast.ManifestTypeExpr (dloc, Ast.Int (Ast.Unsigned, Ast.LitRank rank));
+      }
+    in
+    Ok ty_info
+
+  let translate_ty (ty_cpn : TyRd.t) (gh_ty_decls : gh_ty_decls ref) =
+    let open TyRd in
+    let dloc = Ast.Lexed Ast.dummy_loc0 in
+    let kind_cpn = kind_get ty_cpn in
+    match TyRd.TyKind.get kind_cpn with
+    | Bool ->
+        let ty_info : Mir.ty_info =
+          { vf_ty = Ast.ManifestTypeExpr (dloc, Ast.Bool) }
+        in
+        Ok ty_info
+    | Int int_ty_cpn -> failwith "Todo: Int Ty is not implemented yet"
+    | UInt u_int_ty_cpn -> translate_u_int_ty u_int_ty_cpn
+    | Adt adt_ty_cpn -> failwith "Todo: Adt Ty is not implemented yet"
+    | RawPtr ty1_cpn -> failwith "Todo: Raw Ptr Ty is not implemented yet"
+    | Tuple substs_cpn ->
+        if Capnp.Array.length substs_cpn != 0 then
+          failwith "Todo: Tuple Ty is not implemented yet"
+        else
+          let name = TrTyTuple.make_tuple_type_name [] in
+          (if not @@ GhostTyDecls.exists (fun n _ -> n = name) !gh_ty_decls then
+           let decl = TrTyTuple.make_tuple_type_decl name [] Ast.DummyLoc in
+           gh_ty_decls := GhostTyDecls.add name decl !gh_ty_decls);
+          let ty_info : Mir.ty_info =
+            { vf_ty = Ast.ManifestTypeExpr (dloc, Ast.StructType name) }
+          in
+          Ok ty_info
+    | Undefined _ -> Error (`TrTy "Unknown Rust type kind")
+
+  let translate_local_decl (local_decl_cpn : LocalDeclRd.t)
+      (gh_ty_decls : gh_ty_decls ref) =
+    let open LocalDeclRd in
+    let mutability_cpn = mutability_get local_decl_cpn in
+    let* mutability = translate_mutability mutability_cpn in
+    let id_cpn = id_get local_decl_cpn in
+    let id = LocalDeclIdRd.name_get id_cpn in
+    let ty_cpn = ty_get local_decl_cpn in
+    let* ty_info = translate_ty ty_cpn gh_ty_decls in
+    let local_decl : Mir.local_decl = { mutability; id; ty = ty_info } in
+    Ok local_decl
+
+  let translate_to_vf_local_decl
+      ({ mutability = mut; id; ty = ty_info } : Mir.local_decl) =
+    let dloc = Ast.Lexed Ast.dummy_loc0 in
+    Ast.DeclStmt
+      ( dloc,
+        [
+          ( dloc,
+            ty_info.vf_ty,
+            id,
+            None,
+            ( (* indicates whether address is taken *) ref false,
+              (* pointer to enclosing block's list of variables whose address is taken *)
+              ref None ) );
+        ] )
+
+  let translate_basic_block (bblock_cpn : BasicBlockRd.t) =
+    let open BasicBlockRd in
+    let statements_cpn = statements_get bblock_cpn in
+    let terminator_cpn = terminator_get bblock_cpn in
+    ()
+
+  let translate_body (body_cpn : BodyRd.t) (gh_ty_decls : gh_ty_decls ref) =
     let open BodyRd in
     let def_kind_cpn = def_kind_get body_cpn in
     let def_kind = DefKind.get def_kind_cpn in
@@ -63,37 +200,75 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let nonghost_callers_only, fn_type_clause, pre_post, terminates =
           translate_contract contract_cpn
         in
-        Ast.Func
-          ( dloc,
-            Ast.Regular,
-            [],
-            Some
-              (Ast.ManifestTypeExpr (dloc, Ast.Int (Ast.Signed, Ast.IntRank))),
-            def_path,
-            [],
-            nonghost_callers_only,
-            fn_type_clause,
-            pre_post,
-            terminates,
-            Some
-              ( [
-                  Ast.ReturnStmt
-                    ( dloc,
-                      Some
-                        (Ast.IntLit
-                           ( dloc,
-                             Big_int.zero_big_int,
-                             true (* decimal *),
-                             false (* U suffix *),
-                             Ast.NoLSuffix (* int literal*) )) );
-                ],
-                dloc ),
-            Ast.Static,
-            Ast.Package )
-    | _ -> failwith "Unknown MIR Body kind"
+        let arg_count = arg_count_get body_cpn in
+        let local_decls_cpn = local_decls_get_list body_cpn in
+        let* local_decls =
+          ListAux.try_map
+            (fun ld_cpn -> translate_local_decl ld_cpn gh_ty_decls)
+            local_decls_cpn
+        in
+        (* There should be always a return place named "_0" for each function *)
+        let (ret_place_decl :: local_decls) = local_decls in
+        let { Mir.ty = ret_ty_info } = ret_place_decl in
+        let param_decls, local_decls =
+          ListAux.partitioni
+            (fun idx _ -> idx < Stdint.Uint32.to_int arg_count)
+            local_decls
+        in
+        let vf_param_decls =
+          List.map
+            (fun ({ mutability; id; ty = ty_info } : Mir.local_decl) ->
+              (ty_info.vf_ty, id))
+            param_decls
+        in
+        let vf_local_decls =
+          List.map translate_to_vf_local_decl (ret_place_decl :: local_decls)
+        in
+        let bblocks_cpn = basic_blocks_get_list body_cpn in
+        Ok
+          (Ast.Func
+             ( dloc,
+               Ast.Regular,
+               [],
+               Some ret_ty_info.Mir.vf_ty,
+               def_path,
+               vf_param_decls,
+               nonghost_callers_only,
+               fn_type_clause,
+               pre_post,
+               terminates,
+               Some
+                 ( vf_local_decls
+                   @ [
+                       Ast.ReturnStmt
+                         ( dloc,
+                           Some
+                             (Ast.IntLit
+                                ( dloc,
+                                  Big_int.zero_big_int,
+                                  true (* decimal *),
+                                  false (* U suffix *),
+                                  Ast.NoLSuffix (* int literal*) )) );
+                     ],
+                   dloc ),
+               Ast.Static,
+               Ast.Package ))
+    | _ -> Error (`TrBody "Unknown MIR Body kind")
 
   let translate_vf_mir (vf_mir_cpn : VfMirRd.t) =
-    let bodies_cpn = VfMirRd.bodies_get_list vf_mir_cpn in
-    let decls = List.map translate_body bodies_cpn in
-    ([ (*headers*) ], [ Ast.PackageDecl (Ast.dummy_loc, "", [], decls) ])
+    let job _ =
+      let bodies_cpn = VfMirRd.bodies_get_list vf_mir_cpn in
+      let gh_ty_decls = ref GhostTyDecls.empty in
+      let* body_decls =
+        ListAux.try_map
+          (fun body_cpn -> translate_body body_cpn gh_ty_decls)
+          bodies_cpn
+      in
+      let _, gh_ty_decls = GhostTyDecls.bindings !gh_ty_decls |> List.split in
+      let decls = gh_ty_decls @ body_decls in
+      Ok ([ (*headers*) ], [ Ast.PackageDecl (Ast.dummy_loc, "", [], decls) ])
+    in
+    match job () with
+    | Ok res -> res
+    | Error err -> failwith "Todo: translate_vf_mir Error handling"
 end

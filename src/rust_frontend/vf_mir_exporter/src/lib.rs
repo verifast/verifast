@@ -227,15 +227,20 @@ fn get_bodies<'tcx>(tcx: TyCtxt<'tcx>) -> Vec<(String, BodyWithBorrowckFacts<'tc
 
 mod vf_mir_builder {
     use crate::vf_mir_capnp::body as body_cpn;
+    use crate::vf_mir_capnp::ty as ty_cpn;
     use crate::vf_mir_capnp::vf_mir as vf_mir_cpn;
     use body_cpn::annotation as annot_cpn;
     use body_cpn::local_decl as local_decl_cpn;
+    use body_cpn::local_decl_id as local_decl_id_cpn;
     use body_cpn::mutability as mutability_cpn;
     use rustc_ast::util::comments::Comment;
     use rustc_hir::def::DefKind;
+    use rustc_middle::ty;
     use rustc_middle::{mir, ty::TyCtxt};
     use std::collections::LinkedList;
     use tracing::{debug, trace};
+    use ty_cpn::ty_kind as ty_kind_cpn;
+    use ty_cpn::u_int_ty as u_int_ty_cpn;
 
     pub struct VfMirCapnpBuilder<'tcx, 'a> {
         tcx: TyCtxt<'tcx>,
@@ -316,13 +321,12 @@ mod vf_mir_builder {
                     let mut def_kind_cpn = body_cpn.reborrow().init_def_kind();
                     def_kind_cpn.set_fn(());
                 }
-                _ => std::todo!(),
+                _ => std::todo!("Unsupported definition kind"),
             }
 
             let def_path = tcx.def_path_str(def_id);
             body_cpn.set_def_path(&def_path);
 
-            /*** Encoding the Contract */
             Self::encode_contract(body, &mut annots, body_cpn.reborrow());
 
             let arg_count = body.arg_count.try_into().expect(&format!(
@@ -344,7 +348,7 @@ mod vf_mir_builder {
             let mut local_decls_cpn = body_cpn.reborrow().init_local_decls(local_decls_count);
             for (idx, local_decl) in body.local_decls.iter().enumerate() {
                 let mut local_decl_cpn = local_decls_cpn.reborrow().get(idx.try_into().unwrap());
-                Self::encode_local_decl(local_decl, tcx, local_decl_cpn);
+                Self::encode_local_decl(idx, local_decl, tcx, local_decl_cpn);
             }
         }
 
@@ -379,14 +383,20 @@ mod vf_mir_builder {
         }
 
         fn encode_local_decl(
+            idx: usize,
             local_decl: &mir::LocalDecl<'tcx>,
             tcx: TyCtxt<'tcx>,
             mut local_decl_cpn: local_decl_cpn::Builder<'_>,
         ) {
+            debug!("Encoding local decl {:?}", local_decl);
             let mut mutability_cpn = local_decl_cpn.reborrow().init_mutability();
             Self::encode_mutability(local_decl.mutability, mutability_cpn);
 
-            let mut local_decl_id_cpn = local_decl_cpn.reborrow().init_id();
+            let id_cpn = local_decl_cpn.reborrow().init_id();
+            Self::encode_local_decl_id(idx, id_cpn);
+
+            let ty_cpn = local_decl_cpn.init_ty();
+            Self::encode_ty(local_decl.ty, ty_cpn);
         }
 
         #[inline]
@@ -397,7 +407,48 @@ mod vf_mir_builder {
             }
         }
 
-        fn encode_local_decl_id() {}
+        fn encode_local_decl_id(idx: usize, mut id_cpn: local_decl_id_cpn::Builder<'_>) {
+            use rustc_index::vec::Idx;
+            let local = mir::Local::new(idx);
+            id_cpn.set_name(&format!("{:?}", local));
+        }
+
+        fn encode_ty(ty: ty::Ty, mut ty_cpn: ty_cpn::Builder<'_>) {
+            let ty_kind_cpn = ty_cpn.init_kind();
+            match ty.kind() {
+                ty::TyKind::Uint(u_int_ty) => {
+                    let u_int_ty_cpn = ty_kind_cpn.init_u_int();
+                    Self::encode_ty_uint(u_int_ty, u_int_ty_cpn)
+                }
+                ty::Adt(_, _) => {
+                    todo!("Alg. data types");
+                }
+                ty::TyKind::Tuple(substs) => {
+                    let len = substs.len().try_into().expect(&format!(
+                        "The number of elements of the Tuple cannot be stored in a Capnp message"
+                    ));
+                    if len == 0
+                    // Unit type
+                    {
+                        let tuple_ty_cpn = ty_kind_cpn.init_tuple(len);
+                    } else {
+                        todo!("Tuple types");
+                    }
+                }
+                _ => todo!("Unsupported types"),
+            }
+        }
+
+        fn encode_ty_uint(u_int_ty: &ty::UintTy, mut u_int_ty_cpn: u_int_ty_cpn::Builder<'_>) {
+            match u_int_ty {
+                ty::UintTy::Usize => u_int_ty_cpn.set_u_size(()),
+                ty::UintTy::U8 => u_int_ty_cpn.set_u8(()),
+                ty::UintTy::U16 => u_int_ty_cpn.set_u16(()),
+                ty::UintTy::U32 => u_int_ty_cpn.set_u32(()),
+                ty::UintTy::U64 => u_int_ty_cpn.set_u64(()),
+                ty::UintTy::U128 => u_int_ty_cpn.set_u128(()),
+            }
+        }
     }
 }
 

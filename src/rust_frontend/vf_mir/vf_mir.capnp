@@ -7,10 +7,24 @@ struct Option(T) {
 }
 
 struct Ty {
+
+    struct Substs {}
+
     struct IntTy {
         union {
             iSize @0: Void;
             i32 @1: Void;
+        }
+    }
+
+    struct UIntTy {
+        union {
+            uSize @0: Void;
+            u8 @1: Void;
+            u16 @2: Void;
+            u32 @3: Void;
+            u64 @4: Void;
+            u128 @5: Void;
         }
     }
 
@@ -26,17 +40,18 @@ struct Ty {
             #TODO @Nima: We will need AdtFlags. For now it is just struct
         }
 
-        struct AdtSubs {}
-
         def @0: AdtDef;
-        subs @1: List(AdtSubs);
+        subs @1: List(Substs);
     }
 
     struct TyKind {
         union {
             bool @0: Void;
             int @1: IntTy;
-            adt @2: AdtData;
+            uInt @2: UIntTy;
+            adt @3: AdtData;
+            rawPtr @4: Ty;
+            tuple @5: List(Substs);
         }
     }
 

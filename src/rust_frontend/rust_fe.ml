@@ -7,13 +7,12 @@ module type RUST_FE_ARGS = sig
 end
 
 module Make (Args : RUST_FE_ARGS) = struct
+  open Ocaml_aux
   module VfMirTr = Vf_mir_translator.Make (Args)
   module VfMirStub = VfMirTr.VfMirStub
   module VfMirRd = VfMirTr.VfMirRd
 
   exception RustFrontend of string
-
-  let ( let* ) = Result.bind
 
   module SysUtil = struct
     let gen_unix_error_msg ecode fname param =

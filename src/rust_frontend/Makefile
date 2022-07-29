@@ -14,8 +14,11 @@ CAPNP_LIBS_DIR = $(CAPNP_LIBS)
 BIN_DIR = ../bin
 
 RUST_FE_DIR ?= rust_frontend
+RUST_FE_INC = $(RUST_FE_DIR)
 RUST_FE_SRC = $(RUST_FE_DIR)/rust_fe.ml
 RUST_FE_OBJ = $(RUST_FE_DIR)/rust_fe.cmx
+OCAML_AUX_SRC = $(RUST_FE_DIR)/ocaml_aux.ml
+OCAML_AUX_OBJ = $(RUST_FE_DIR)/ocaml_aux.cmx
 
 VF_MIR_EXP_DIR = $(RUST_FE_DIR)/vf_mir_exporter
 VF_MIR_EXP_BIN = $(BIN_DIR)/vf-rust-mir-exporter$(DOTEXE)
@@ -65,23 +68,27 @@ clean::
 $(VF_MIR_ANNOT_PARSER_OBJ): $(VF_MIR_ANNOT_PARSER_SRC)
 	@echo "  OCAMLOPT " $@
 	$(COMPILE) -c -w -11 $<
-$(VF_MIR_TRANSLATOR_OBJ): $(VF_MIR_TRANSLATOR_SRC) $(VF_MIR_OCAML_STUBS_OBJ) $(VF_MIR_ANNOT_PARSER_OBJ) ast.cmx
+$(VF_MIR_TRANSLATOR_OBJ): $(VF_MIR_TRANSLATOR_SRC) $(OCAML_AUX_OBJ) $(VF_MIR_OCAML_STUBS_OBJ) $(VF_MIR_ANNOT_PARSER_OBJ) ast.cmx
 	@echo "  OCAMLOPT " $@
-	$(COMPILE) -c -w -11 -I $(VF_MIR_OCAML_STUBS_DIR) -I $(VF_MIR_TRANSLATOR_DIR) -package capnp $<
+	$(COMPILE) -c -w -11 -I $(RUST_FE_INC) -I $(VF_MIR_OCAML_STUBS_DIR) -I $(VF_MIR_TRANSLATOR_DIR) -package capnp $<
 
 clean::
 	rm -f $(VF_MIR_TRANSLATOR_DIR)/*.cm* $(VF_MIR_TRANSLATOR_DIR)/*.o
 
-# The whole frontend interface
-$(RUST_FE_OBJ): $(RUST_FE_SRC) $(VF_MIR_TRANSLATOR_OBJ)
+$(OCAML_AUX_OBJ): $(OCAML_AUX_SRC)
 	@echo "  OCAMLOPT " $@
-	$(COMPILE) -c -w -11 -I $(VF_MIR_TRANSLATOR_DIR) -I $(VF_MIR_OCAML_STUBS_DIR) $(CAPNP_LINK_FLAGS) $<
+	$(COMPILE) -c -w -11 $<
+
+# The whole frontend interface
+$(RUST_FE_OBJ): $(RUST_FE_SRC) $(OCAML_AUX_OBJ) $(VF_MIR_TRANSLATOR_OBJ)
+	@echo "  OCAMLOPT " $@
+	$(COMPILE) -c -w -11 -I $(RUST_FE_INC) -I $(VF_MIR_TRANSLATOR_DIR) -I $(VF_MIR_OCAML_STUBS_DIR) $(CAPNP_LINK_FLAGS) $<
 
 clean::
 	rm -f $(RUST_FE_DIR)/*.cm* $(RUST_FE_DIR)/*.o
 
 # Use this variable in parent Makefile to link to Rust frontend
-RUST_FE_OBJS = $(VF_MIR_OCAML_STUBS_OBJ) $(VF_MIR_ANNOT_PARSER_OBJ) $(VF_MIR_TRANSLATOR_OBJ) $(RUST_FE_OBJ)
+RUST_FE_OBJS = $(OCAML_AUX_OBJ) $(VF_MIR_OCAML_STUBS_OBJ) $(VF_MIR_ANNOT_PARSER_OBJ) $(VF_MIR_TRANSLATOR_OBJ) $(RUST_FE_OBJ)
 # VF MIR exporter tool
 build-vf-rust-mir-exporter: $(VF_MIR_EXP_BIN)
 # Rust frontend
