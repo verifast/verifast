@@ -7,14 +7,14 @@ public class Test1 {
 	//@ requires true;
 	//@ ensures true;
 	{
-		Test1[] own1;
-		Test1[] own2;
-		Object[] obj1;
-		Object[] obj2;
-		int[] int1;
-		int[] int2;
-		short[] short1;
-		short[] short2;
+		Test1[] own1 = null;
+		Test1[] own2 = null;
+		Object[] obj1 = null;
+		Object[] obj2 = null;
+		int[] int1 = null;
+		int[] int2 = null;
+		short[] short1 = null;
+		short[] short2 = null;
 		
 		own1 = own2;
 		obj1 = obj2;

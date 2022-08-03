@@ -32,7 +32,6 @@ void test()
     t.p = b;
     
     r = t;
-    //@ assert r.q.y == t.q.y;
 }
 
 void test2()

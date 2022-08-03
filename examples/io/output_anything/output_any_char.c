@@ -27,11 +27,7 @@ int get_any_unsigned_char()
   result >= 0 && result <= 255;
 @*/
 {
-  // implementation can be anything including constants and random generators.
-  
-  unsigned char c; // uninitialized, can be anything
-  //@ produce_limits(c);  // ... but it's in bounds of the assumed architecture and compiler.
-  return c;
+  return 42;
 }
 
 int main() //@ : custom_main_spec

@@ -91,23 +91,22 @@ predicate spinlock_held(
 	spinlock_t *spinlock,
 	predicate () p,
 	int threadId,
-	real frac);
+	real frac,
+	unsigned long *pflags);
 @*/
 
 
-// XXX this is actually a macro, flags is actually not passed by value,
-// so the macro can take the address of it and stuff. But we can't.
-// So we can't (but should) enforce that the user does not overwrite flags while
-// holding the spinlock :(
-// It would be easyer if it was passed as a pointer and compiler-optimized-away,
-// but that's not the way it is done.
-void spin_lock_irqsave(spinlock_t *spinlock, unsigned long flags);
-//@ requires [?frac]spinlock(spinlock, ?p);
-//@ ensures p() &*& spinlock_held(spinlock, p, currentThread, frac);
+#define spin_lock_irqsave(spinlock, flags) (spin_lock_irqsave_(spinlock, &flags))
 
-void spin_unlock_irqrestore(spinlock_t *spinlock, unsigned long flags);
-//@ requires spinlock_held(spinlock, ?p, currentThread, ?frac) &*& p();
-//@ ensures [frac]spinlock(spinlock, p);
+void spin_lock_irqsave_(spinlock_t *spinlock, unsigned long *pflags);
+//@ requires [?frac]spinlock(spinlock, ?p) &*& *pflags |-> _;
+//@ ensures p() &*& spinlock_held(spinlock, p, currentThread, frac, pflags);
+
+#define spin_unlock_irqrestore(spinlock, flags) (spin_unlock_irqrestore_(spinlock, &flags))
+
+void spin_unlock_irqrestore_(spinlock_t *spinlock, unsigned long *pflags);
+//@ requires spinlock_held(spinlock, ?p, currentThread, ?frac, pflags) &*& p();
+//@ ensures [frac]spinlock(spinlock, p) &*& *pflags |-> _;
 
 
 #endif

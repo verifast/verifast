@@ -742,7 +742,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match t with
             StaticArrayType (elemTp, elemCount) ->
             produce_object t
-          | StructType sn when !address_taken || (language = CLang && dialect = Some Cxx) || (let (_, body_opt, _, _) = List.assoc sn structmap in match body_opt with Some (_, fds) -> List.exists (fun (_, (_, gh, _, _, _)) -> gh = Ast.Ghost) fds | _ -> true) ->
+          | StructType sn when !address_taken || e = None || (language = CLang && dialect = Some Cxx) || (let (_, body_opt, _, _) = List.assoc sn structmap in match body_opt with Some (_, fds) -> List.exists (fun (_, (_, gh, _, _, _)) -> gh = Ast.Ghost) fds | _ -> true) ->
             (* If the variable's address is taken or the struct type has no body or it has a ghost field, treat it like a resource. *)
             produce_object (RefType t)
           | UnionType _ -> produce_object (RefType t)
@@ -782,7 +782,10 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               produce_points_to_chunk l h t real_unit addr v $. fun h ->
               iter h ((x, RefType(t)) :: tenv) ghostenv ((x, addr)::env) xs
             end else begin
-              iter h ((x, t) :: tenv) ghostenv ((x, v)::env) xs
+              if e = None && not pure then
+                iter h ((x, t) :: tenv) ghostenv env xs
+              else
+                iter h ((x, t) :: tenv) ghostenv ((x, v)::env) xs
             end
       in
       iter h tenv ghostenv env xs
@@ -1592,7 +1595,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           lblenv
       in
       let return_cont h'' tenv env retval = return_cont (h'' @ h) tenv env retval in
-      let bs = List.map (fun x -> (x, get_unique_var_symb_ x (List.assoc x tenv) (List.mem x ghostenv))) xs in
+      let bs = List.map (fun x -> (x, get_unique_var_symb_ x (List.assoc x tenv) (List.mem x ghostenv))) (List.filter (fun x -> List.mem_assoc x env) xs) in
       let env = bs @ env in
       produce_asn [] [] ghostenv env p real_unit None None $. fun h' ghostenv' env' ->
       begin fun cont ->
@@ -1660,7 +1663,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let ghostenv' = ghostenv in
       let env' = env in
       consume_asn rules [] h ghostenv env pre true real_unit $. fun _ h ghostenv env _ ->
-      let bs = List.map (fun x -> (x, get_unique_var_symb_ x (List.assoc x tenv) (List.mem x ghostenv))) xs in
+      let bs = List.map (fun x -> (x, get_unique_var_symb_ x (List.assoc x tenv) (List.mem x ghostenv))) (List.filter (fun x -> List.mem_assoc x env') xs) in
       let old_xs_env = List.map (fun (x, t) -> ("old_" ^ x, t)) bs in
       let env' = bs @ env' in
       produce_asn [] [] ghostenv' env' pre real_unit None None $. fun h' ghostenv' env' ->
