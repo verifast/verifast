@@ -65,11 +65,11 @@ predicate_family mapfunc(void *mapfunc)(void *data, list<int> in, list<int> out,
 
 @*/
 
-typedef int mapfunc(void *data, int x);
+typedef int (* mapfunc)(void *data, int x);
     //@ requires mapfunc(this)(data, ?in, ?out, ?info) &*& in != nil &*& x == head(in);
     //@ ensures mapfunc(this)(data, tail(in), append(out, cons(result, nil)), info);
 
-struct node *fmap(struct node *list, mapfunc *f, void *data)
+struct node *fmap(struct node *list, mapfunc f, void *data)
     //@ requires list(list, ?xs) &*& is_mapfunc(f) == true &*& mapfunc(f)(data, xs, ?out, ?info);
     //@ ensures list(list, xs) &*& list(result, ?ys) &*& mapfunc(f)(data, nil, append(out, ys), info);
 {

@@ -502,7 +502,9 @@ and
   | [< t = parse_type_suffix (UnionTypeExpr (l, Some u, None)); d = parse_func_rest Regular (Some t) Public >] -> d
   >] -> check_function_for_contract d
 | [< '(l, Kwd "typedef");
-     rt = parse_return_type; '(_, Ident g);
+     rt = parse_return_type;
+     g, ds = begin parser
+       [< '(_, Ident g);
      ds = begin parser
        [<
          (tparams, ftps, ps) = parse_functypedecl_paramlist_in_real_context;
@@ -530,7 +532,16 @@ and
              | Some te ->
                [TypedefDecl (l, te, g)]
          end
-    end
+     end
+       >] -> g, ds
+     | [< '(_, Kwd "("); '(lp, Kwd "*"); '(lg, Ident g); '(_, Kwd ")");
+          (tparams, ftps, ps) = parse_functypedecl_paramlist_in_real_context;
+          '(_, Kwd ";");
+          spec = opt parse_spec
+       >] ->
+         let contract = check_for_contract spec l "Function type declaration should have contract." (fun (pre, post) -> (pre, post, false)) in
+         g, [FuncTypeDecl (l, Real, rt, g, tparams, ftps, ps, contract); TypedefDecl (l, ManifestTypeExpr (lp, PtrType (FuncType g)), g)]
+     end
   >] -> register_typedef g; ds
 | [< '(_, Kwd "enum"); '(l, Ident n); d = parser
     [< elems = parse_enum_body; '(_, Kwd ";"); >] -> EnumDecl(l, n, elems)
