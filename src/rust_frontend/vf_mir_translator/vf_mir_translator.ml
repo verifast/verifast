@@ -37,6 +37,12 @@ module Mir = struct
 
   type local_decl = { mutability : mutability; id : string; ty : ty_info }
 
+  type basic_block = {
+    id : string;
+    statements : Ast.stmt list;
+    terminator : Ast.stmt;
+  }
+
   type u_int_ty = USize | U8 | U16 | U32 | U64 | U128
 
   let u_int_ty_bits_len (uit : u_int_ty) =
@@ -83,6 +89,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   module MutabilityRd = BodyRd.Mutability
   module LocalDeclIdRd = BodyRd.LocalDeclId
   module BasicBlockRd = BodyRd.BasicBlock
+  module BasicBlockIdRd = BodyRd.BasicBlockId
+  module TerminatorRd = BasicBlockRd.Terminator
+  module TerminatorKindRd = TerminatorRd.TerminatorKind
 
   (* Types *)
   module TyRd = VfMirStub.Reader.Ty
@@ -103,7 +112,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     match MutabilityRd.get mutability_cpn with
     | Mut -> Ok Mir.Mut
     | Not -> Ok Mir.Not
-    | Undefined _ -> Error (`TrMut "Unknown mutability discriminator")
+    | Undefined _ -> Error (`TrMut "Unknown Mir mutability discriminator")
 
   let translate_u_int_ty (u_int_ty_cpn : UIntTyRd.t) =
     let dloc = Ast.Lexed Ast.dummy_loc0 in
@@ -146,9 +155,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           failwith "Todo: Tuple Ty is not implemented yet"
         else
           let name = TrTyTuple.make_tuple_type_name [] in
-          (if not @@ GhostTyDecls.exists (fun n _ -> n = name) !gh_ty_decls then
-           let decl = TrTyTuple.make_tuple_type_decl name [] Ast.DummyLoc in
-           gh_ty_decls := GhostTyDecls.add name decl !gh_ty_decls);
+
+          (* TODO @Nima: std_tuple_0_ type is declared in prelude_rust_.h.
+             We should come up with a better arrangement for these ghost types. *)
+          (* (if not @@ GhostTyDecls.exists (fun n _ -> n = name) !gh_ty_decls then
+             let decl = TrTyTuple.make_tuple_type_decl name [] Ast.DummyLoc in
+             gh_ty_decls := GhostTyDecls.add name decl !gh_ty_decls); *)
           let ty_info : Mir.ty_info =
             { vf_ty = Ast.ManifestTypeExpr (dloc, Ast.StructType name) }
           in
@@ -182,11 +194,43 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               ref None ) );
         ] )
 
-  let translate_basic_block (bblock_cpn : BasicBlockRd.t) =
+  let translate_terminator_kind (ret_place_id : string)
+      (tkind_cpn : TerminatorKindRd.t) =
+    let open TerminatorKindRd in
+    let dloc = Ast.Lexed Ast.dummy_loc0 in
+    match get tkind_cpn with
+    | Goto bblock_id_cpn -> failwith "Todo"
+    | SwitchInt switch_int_data_cpn ->
+        failwith "Todo: Mir SwitchInt terminator is not supported yet"
+    | Return -> Ok (Ast.ReturnStmt (dloc, Some (Ast.Var (dloc, ret_place_id))))
+    | Undefined _ -> Error (`TrTerminatorKind "Unknown Mir terminator kind")
+
+  let translate_terminator (ret_place_id : string)
+      (terminator_cpn : TerminatorRd.t) =
+    let open TerminatorRd in
+    let source_info_cpn = source_info_get terminator_cpn in
+    (* Todo @Nima: Translate source_info *)
+    let terminator_kind_cpn = kind_get terminator_cpn in
+    translate_terminator_kind ret_place_id terminator_kind_cpn
+
+  let translate_basic_block (ret_place_id : string)
+      (bblock_cpn : BasicBlockRd.t) =
     let open BasicBlockRd in
-    let statements_cpn = statements_get bblock_cpn in
+    let id_cpn = id_get bblock_cpn in
+    let id = BasicBlockIdRd.name_get id_cpn in
+    let statements_cpn = statements_get_list bblock_cpn in
+    if List.length statements_cpn != 0 then
+      failwith "Todo: Mir statements are not supported yet";
+    let statements = [] in
     let terminator_cpn = terminator_get bblock_cpn in
-    ()
+    let* terminator = translate_terminator ret_place_id terminator_cpn in
+    let bblock : Mir.basic_block = { id; statements; terminator } in
+    Ok bblock
+
+  let translate_to_vf_basic_block
+      ({ id; statements; terminator } : Mir.basic_block) =
+    let dloc = Ast.Lexed Ast.dummy_loc0 in
+    Ast.LabelStmt (dloc, id) :: (statements @ [ terminator ])
 
   let translate_body (body_cpn : BodyRd.t) (gh_ty_decls : gh_ty_decls ref) =
     let open BodyRd in
@@ -207,9 +251,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             (fun ld_cpn -> translate_local_decl ld_cpn gh_ty_decls)
             local_decls_cpn
         in
-        (* There should be always a return place named "_0" for each function *)
+        (* There should be always a return place for each function *)
         let (ret_place_decl :: local_decls) = local_decls in
-        let { Mir.ty = ret_ty_info } = ret_place_decl in
+        let { Mir.id = ret_place_id; Mir.ty = ret_ty_info } = ret_place_decl in
         let param_decls, local_decls =
           ListAux.partitioni
             (fun idx _ -> idx < Stdint.Uint32.to_int arg_count)
@@ -225,6 +269,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           List.map translate_to_vf_local_decl (ret_place_decl :: local_decls)
         in
         let bblocks_cpn = basic_blocks_get_list body_cpn in
+        let* bblocks =
+          ListAux.try_map (translate_basic_block ret_place_id) bblocks_cpn
+        in
+        let vf_bblocks = List.map translate_to_vf_basic_block bblocks in
+        let vf_bblocks = List.concat vf_bblocks in
         Ok
           (Ast.Func
              ( dloc,
@@ -237,20 +286,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                fn_type_clause,
                pre_post,
                terminates,
-               Some
-                 ( vf_local_decls
-                   @ [
-                       Ast.ReturnStmt
-                         ( dloc,
-                           Some
-                             (Ast.IntLit
-                                ( dloc,
-                                  Big_int.zero_big_int,
-                                  true (* decimal *),
-                                  false (* U suffix *),
-                                  Ast.NoLSuffix (* int literal*) )) );
-                     ],
-                   dloc ),
+               Some (vf_local_decls @ vf_bblocks, dloc),
                Ast.Static,
                Ast.Package ))
     | _ -> Error (`TrBody "Unknown MIR Body kind")

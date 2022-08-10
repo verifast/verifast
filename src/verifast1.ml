@@ -1313,6 +1313,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                       | Cxx_annotation_parser.CxxAnnParseException (l, msg)
                       | Cxx_ast_translator.CxxAstTranslException (l, msg) -> static_error l msg None
                       end
+                  | Some Rust -> "prelude_rust.h", parse_header_file
                   | _ -> "prelude.h", parse_header_file 
                 in
                 let prelude_path = concat !bindir prelude_name in

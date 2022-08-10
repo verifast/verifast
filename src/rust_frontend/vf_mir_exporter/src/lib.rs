@@ -229,7 +229,10 @@ mod vf_mir_builder {
     use crate::vf_mir_capnp::body as body_cpn;
     use crate::vf_mir_capnp::ty as ty_cpn;
     use crate::vf_mir_capnp::vf_mir as vf_mir_cpn;
+    use basic_block_cpn::terminator as terminator_cpn;
     use body_cpn::annotation as annot_cpn;
+    use body_cpn::basic_block as basic_block_cpn;
+    use body_cpn::basic_block_id as basic_block_id_cpn;
     use body_cpn::local_decl as local_decl_cpn;
     use body_cpn::local_decl_id as local_decl_id_cpn;
     use body_cpn::mutability as mutability_cpn;
@@ -238,6 +241,7 @@ mod vf_mir_builder {
     use rustc_middle::ty;
     use rustc_middle::{mir, ty::TyCtxt};
     use std::collections::LinkedList;
+    use terminator_cpn::terminator_kind as terminator_kind_cpn;
     use tracing::{debug, trace};
     use ty_cpn::ty_kind as ty_kind_cpn;
     use ty_cpn::u_int_ty as u_int_ty_cpn;
@@ -346,9 +350,23 @@ mod vf_mir_builder {
             );
 
             let mut local_decls_cpn = body_cpn.reborrow().init_local_decls(local_decls_count);
-            for (idx, local_decl) in body.local_decls.iter().enumerate() {
+            for (idx, (local_decl_idx, local_decl)) in
+                body.local_decls.iter_enumerated().enumerate()
+            {
                 let mut local_decl_cpn = local_decls_cpn.reborrow().get(idx.try_into().unwrap());
-                Self::encode_local_decl(idx, local_decl, tcx, local_decl_cpn);
+                Self::encode_local_decl(local_decl_idx, local_decl, tcx, local_decl_cpn);
+            }
+
+            let basic_blocks = body.basic_blocks();
+            let basic_block_count = basic_blocks.len().try_into().expect(&format!(
+                "The number of basic blocks of {} cannot be stored in a Capnp message",
+                def_path
+            ));
+            let mut basic_blocks_cpn = body_cpn.init_basic_blocks(basic_block_count);
+            for (idx, (basic_block_idx, basic_block)) in basic_blocks.iter_enumerated().enumerate()
+            {
+                let basic_block_cpn = basic_blocks_cpn.reborrow().get(idx.try_into().unwrap());
+                Self::encode_basic_block(basic_block_idx, basic_block, basic_block_cpn);
             }
         }
 
@@ -383,7 +401,7 @@ mod vf_mir_builder {
         }
 
         fn encode_local_decl(
-            idx: usize,
+            local_decl_idx: mir::Local,
             local_decl: &mir::LocalDecl<'tcx>,
             tcx: TyCtxt<'tcx>,
             mut local_decl_cpn: local_decl_cpn::Builder<'_>,
@@ -393,7 +411,7 @@ mod vf_mir_builder {
             Self::encode_mutability(local_decl.mutability, mutability_cpn);
 
             let id_cpn = local_decl_cpn.reborrow().init_id();
-            Self::encode_local_decl_id(idx, id_cpn);
+            Self::encode_local_decl_id(local_decl_idx, id_cpn);
 
             let ty_cpn = local_decl_cpn.init_ty();
             Self::encode_ty(local_decl.ty, ty_cpn);
@@ -407,10 +425,11 @@ mod vf_mir_builder {
             }
         }
 
-        fn encode_local_decl_id(idx: usize, mut id_cpn: local_decl_id_cpn::Builder<'_>) {
-            use rustc_index::vec::Idx;
-            let local = mir::Local::new(idx);
-            id_cpn.set_name(&format!("{:?}", local));
+        fn encode_local_decl_id(
+            local_decl_idx: mir::Local,
+            mut id_cpn: local_decl_id_cpn::Builder<'_>,
+        ) {
+            id_cpn.set_name(&format!("{:?}", local_decl_idx));
         }
 
         fn encode_ty(ty: ty::Ty, mut ty_cpn: ty_cpn::Builder<'_>) {
@@ -447,6 +466,54 @@ mod vf_mir_builder {
                 ty::UintTy::U32 => u_int_ty_cpn.set_u32(()),
                 ty::UintTy::U64 => u_int_ty_cpn.set_u64(()),
                 ty::UintTy::U128 => u_int_ty_cpn.set_u128(()),
+            }
+        }
+
+        fn encode_basic_block(
+            basic_block_idx: mir::BasicBlock,
+            basic_block_data: &mir::BasicBlockData<'tcx>,
+            mut basic_block_cpn: basic_block_cpn::Builder<'_>,
+        ) {
+            let basic_block_id_cpn = basic_block_cpn.reborrow().init_id();
+            Self::encode_basic_block_id(basic_block_idx, basic_block_id_cpn);
+            // TODO @Nima: statements
+            let terminator_cpn = basic_block_cpn.init_terminator();
+            Self::encode_terminator(basic_block_data.terminator(), terminator_cpn);
+        }
+
+        #[inline]
+        fn encode_basic_block_id(
+            basic_block_idx: mir::BasicBlock,
+            mut basic_block_id_cpn: basic_block_id_cpn::Builder<'_>,
+        ) {
+            basic_block_id_cpn.set_name(&format!("{:?}", basic_block_idx));
+        }
+
+        fn encode_terminator(
+            terminator: &mir::Terminator<'tcx>,
+            terminator_cpn: terminator_cpn::Builder<'_>,
+        ) {
+            //@ TODO @Nima: sourceInfo
+            let terminator_kind_cpn = terminator_cpn.init_kind();
+            Self::encode_terminator_kind(&terminator.kind, terminator_kind_cpn);
+        }
+
+        fn encode_terminator_kind(
+            terminator_kind: &mir::TerminatorKind<'tcx>,
+            mut terminator_kind_cpn: terminator_kind_cpn::Builder<'_>,
+        ) {
+            match terminator_kind {
+                mir::TerminatorKind::Goto { target } => {
+                    let target_cpn = terminator_kind_cpn.init_goto();
+                    Self::encode_basic_block_id(*target, target_cpn);
+                }
+                mir::TerminatorKind::SwitchInt {
+                    discr,
+                    switch_ty,
+                    targets,
+                } => todo!("Mir terminator SwitchInt is not supported"),
+                mir::TerminatorKind::Return => terminator_kind_cpn.set_return(()),
+                _ => todo!("Unsupported Mir terminator kind"),
             }
         }
     }
@@ -551,3 +618,4 @@ mod comments_utils {
         }
     }
 }
+// TODO @Nima: Some mut vars might not need to be mut.

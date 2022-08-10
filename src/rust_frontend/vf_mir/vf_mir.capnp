@@ -162,6 +162,7 @@ struct Body {
                 union {
                     goto @0: BasicBlockId;
                     switchInt @1: SwitchIntData;
+                    return @2: Void;
                 }
             }
 
@@ -169,8 +170,9 @@ struct Body {
             kind @1: TerminatorKind;
         }
 
-        statements @0: List(Statement);
-        terminator @1: Terminator;
+        id @0: BasicBlockId;
+        statements @1: List(Statement);
+        terminator @2: Terminator;
     }
 
     defKind @0: DefKind;
