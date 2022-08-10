@@ -1,5 +1,6 @@
 #![feature(rustc_private)]
 #![feature(drain_filter)]
+#![feature(box_patterns)]
 
 /***
  * TODO @Nima:
@@ -237,12 +238,17 @@ mod vf_mir_builder {
     use body_cpn::local_decl_id as local_decl_id_cpn;
     use body_cpn::mutability as mutability_cpn;
     use rustc_ast::util::comments::Comment;
-    use rustc_hir::def::DefKind;
+    use rustc_hir as hir;
+    use rustc_middle::bug;
     use rustc_middle::ty;
     use rustc_middle::{mir, ty::TyCtxt};
     use std::collections::LinkedList;
     use terminator_cpn::terminator_kind as terminator_kind_cpn;
+    use terminator_kind_cpn::fn_call_data as fn_call_data_cpn;
     use tracing::{debug, trace};
+    use ty_cpn::adt_ty as adt_ty_cpn;
+    use ty_cpn::fn_def_ty as fn_def_ty_cpn;
+    use ty_cpn::gen_arg as gen_arg_cpn;
     use ty_cpn::ty_kind as ty_kind_cpn;
     use ty_cpn::u_int_ty as u_int_ty_cpn;
 
@@ -321,7 +327,7 @@ mod vf_mir_builder {
             let def_id = body.source.def_id();
             let kind = tcx.def_kind(def_id);
             match kind {
-                DefKind::Fn => {
+                hir::def::DefKind::Fn => {
                     let mut def_kind_cpn = body_cpn.reborrow().init_def_kind();
                     def_kind_cpn.set_fn(());
                 }
@@ -366,7 +372,7 @@ mod vf_mir_builder {
             for (idx, (basic_block_idx, basic_block)) in basic_blocks.iter_enumerated().enumerate()
             {
                 let basic_block_cpn = basic_blocks_cpn.reborrow().get(idx.try_into().unwrap());
-                Self::encode_basic_block(basic_block_idx, basic_block, basic_block_cpn);
+                Self::encode_basic_block(tcx, basic_block_idx, basic_block, basic_block_cpn);
             }
         }
 
@@ -414,7 +420,7 @@ mod vf_mir_builder {
             Self::encode_local_decl_id(local_decl_idx, id_cpn);
 
             let ty_cpn = local_decl_cpn.init_ty();
-            Self::encode_ty(local_decl.ty, ty_cpn);
+            Self::encode_ty(tcx, local_decl.ty, ty_cpn);
         }
 
         #[inline]
@@ -432,16 +438,22 @@ mod vf_mir_builder {
             id_cpn.set_name(&format!("{:?}", local_decl_idx));
         }
 
-        fn encode_ty(ty: ty::Ty, mut ty_cpn: ty_cpn::Builder<'_>) {
+        fn encode_ty(tcx: TyCtxt<'tcx>, ty: ty::Ty<'tcx>, mut ty_cpn: ty_cpn::Builder<'_>) {
             let ty_kind_cpn = ty_cpn.init_kind();
             match ty.kind() {
                 ty::TyKind::Uint(u_int_ty) => {
                     let u_int_ty_cpn = ty_kind_cpn.init_u_int();
                     Self::encode_ty_uint(u_int_ty, u_int_ty_cpn)
                 }
-                ty::Adt(_, _) => {
-                    todo!("Alg. data types");
+                ty::Adt(adt_def, substs) => {
+                    let adt_ty_cpn = ty_kind_cpn.init_adt();
+                    Self::encode_ty_adt(tcx, adt_def, substs, adt_ty_cpn);
                 }
+                ty::TyKind::FnDef(def_id, substs) => {
+                    let fn_def_ty_cpn = ty_kind_cpn.init_fn_def();
+                    Self::encode_ty_fn_def(tcx, def_id, substs, fn_def_ty_cpn);
+                }
+                ty::TyKind::FnPtr(_) => todo!("Function pointer type kind"),
                 ty::TyKind::Tuple(substs) => {
                     let len = substs.len().try_into().expect(&format!(
                         "The number of elements of the Tuple cannot be stored in a Capnp message"
@@ -454,7 +466,7 @@ mod vf_mir_builder {
                         todo!("Tuple types");
                     }
                 }
-                _ => todo!("Unsupported types"),
+                _ => todo!("Unsupported type kind"),
             }
         }
 
@@ -469,7 +481,72 @@ mod vf_mir_builder {
             }
         }
 
+        fn encode_ty_adt(
+            tcx: TyCtxt<'tcx>,
+            adt_def: &'tcx ty::AdtDef,
+            substs: ty::subst::SubstsRef<'tcx>,
+            mut adt_ty_cpn: adt_ty_cpn::Builder<'_>,
+        ) {
+            debug!("Encoding algebraic data type {:?}", adt_def);
+            let mut adt_def_id_cpn = adt_ty_cpn.reborrow().init_id();
+            /* TODO @Nima: There is a huge code base behind printing a definition path.
+            We should verify it always makes sense to use this string */
+            adt_def_id_cpn.set_name(&format!("{:?}", adt_def));
+
+            let len = substs.len().try_into().expect(&format!(
+                "The number of generic args of {:?} cannot be stored in a Capnp message",
+                adt_def
+            ));
+            let mut substs_cpn = adt_ty_cpn.init_substs(len);
+            for (idx, subst) in substs.iter().enumerate() {
+                let subst_cpn = substs_cpn.reborrow().get(idx.try_into().unwrap());
+                Self::encode_gen_arg(tcx, &subst, subst_cpn);
+            }
+            // TODO @Nima: Definitions we use should be encoded later
+        }
+
+        fn encode_ty_fn_def(
+            tcx: TyCtxt<'tcx>,
+            def_id: &hir::def_id::DefId,
+            substs: ty::subst::SubstsRef<'tcx>,
+            mut fn_def_ty_cpn: fn_def_ty_cpn::Builder<'_>,
+        ) {
+            let def_path = tcx.def_path_str(*def_id);
+            debug!("Encoding FnDef for {}", def_path);
+            let mut fn_def_id_cpn = fn_def_ty_cpn.reborrow().init_id();
+            fn_def_id_cpn.set_name(&def_path);
+
+            let len = substs.len().try_into().expect(&format!(
+                "The number of generic args for {} cannot be stored in a Capnp message",
+                def_path
+            ));
+            let mut fn_def_substs_cpn = fn_def_ty_cpn.init_substs(len);
+            for (idx, fn_def_subst) in substs.iter().enumerate() {
+                let fn_def_subst_cpn = fn_def_substs_cpn.reborrow().get(idx.try_into().unwrap());
+                Self::encode_gen_arg(tcx, &fn_def_subst, fn_def_subst_cpn);
+            }
+        }
+
+        fn encode_gen_arg(
+            tcx: TyCtxt<'tcx>,
+            gen_arg: &ty::subst::GenericArg<'tcx>,
+            gen_arg_cpn: gen_arg_cpn::Builder<'_>,
+        ) {
+            debug!("Encoding generic arg {:?}", gen_arg);
+            let kind_cpn = gen_arg_cpn.init_kind();
+            let kind = gen_arg.unpack();
+            match kind {
+                ty::subst::GenericArgKind::Lifetime(_) => todo!("Lifetime generic arg"),
+                ty::subst::GenericArgKind::Type(ty) => {
+                    let ty_cpn = kind_cpn.init_type();
+                    Self::encode_ty(tcx, ty, ty_cpn);
+                }
+                ty::subst::GenericArgKind::Const(_) => todo!("Const generic arg"),
+            }
+        }
+
         fn encode_basic_block(
+            tcx: TyCtxt<'tcx>,
             basic_block_idx: mir::BasicBlock,
             basic_block_data: &mir::BasicBlockData<'tcx>,
             mut basic_block_cpn: basic_block_cpn::Builder<'_>,
@@ -478,7 +555,7 @@ mod vf_mir_builder {
             Self::encode_basic_block_id(basic_block_idx, basic_block_id_cpn);
             // TODO @Nima: statements
             let terminator_cpn = basic_block_cpn.init_terminator();
-            Self::encode_terminator(basic_block_data.terminator(), terminator_cpn);
+            Self::encode_terminator(tcx, basic_block_data.terminator(), terminator_cpn);
         }
 
         #[inline]
@@ -490,15 +567,17 @@ mod vf_mir_builder {
         }
 
         fn encode_terminator(
+            tcx: TyCtxt<'tcx>,
             terminator: &mir::Terminator<'tcx>,
             terminator_cpn: terminator_cpn::Builder<'_>,
         ) {
             //@ TODO @Nima: sourceInfo
             let terminator_kind_cpn = terminator_cpn.init_kind();
-            Self::encode_terminator_kind(&terminator.kind, terminator_kind_cpn);
+            Self::encode_terminator_kind(tcx, &terminator.kind, terminator_kind_cpn);
         }
 
         fn encode_terminator_kind(
+            tcx: TyCtxt<'tcx>,
             terminator_kind: &mir::TerminatorKind<'tcx>,
             mut terminator_kind_cpn: terminator_kind_cpn::Builder<'_>,
         ) {
@@ -512,8 +591,48 @@ mod vf_mir_builder {
                     switch_ty,
                     targets,
                 } => todo!("Mir terminator SwitchInt is not supported"),
+                mir::TerminatorKind::Resume => terminator_kind_cpn.set_resume(()),
                 mir::TerminatorKind::Return => terminator_kind_cpn.set_return(()),
+                mir::TerminatorKind::Call {
+                    func,
+                    args,
+                    destination,
+                    cleanup,
+                    from_hir_call,
+                    fn_span,
+                } => {
+                    if let mir::Operand::Constant(box mir::Constant { literal, .. }) = func {
+                        let fn_call_data_cpn = terminator_kind_cpn.init_call();
+                        let ty = literal.ty();
+                        Self::encode_fn_call_data(tcx, ty, fn_call_data_cpn);
+                    } else {
+                        bug!("Function call terminator with callee operand {:?}", func);
+                    }
+                }
                 _ => todo!("Unsupported Mir terminator kind"),
+            }
+        }
+
+        fn encode_fn_call_data(
+            tcx: TyCtxt<'tcx>,
+            ty: ty::Ty<'tcx>,
+            mut fn_call_data_cpn: fn_call_data_cpn::Builder<'_>,
+        ) {
+            let ty_kind = ty.kind();
+            match ty_kind {
+                ty::FnDef(..) | ty::FnPtr(_) => {
+                    let ty_cpn = fn_call_data_cpn
+                        .init_func() // Operand builder
+                        .init_constant() // Constant builder
+                        .init_literal() // ConstantKind builder
+                        .init_ty() // Ty.Cont builder
+                        .init_ty(); // Ty builder
+                    Self::encode_ty(tcx, ty, ty_cpn);
+                }
+                _ => bug!(
+                    "Function call terminator with unexpected type kind {:?}",
+                    ty_kind
+                ),
             }
         }
     }

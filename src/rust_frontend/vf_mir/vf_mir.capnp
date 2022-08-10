@@ -8,7 +8,20 @@ struct Option(T) {
 
 struct Ty {
 
-    struct Substs {}
+    struct Const {
+        ty @0: Ty;
+    }
+
+    struct GenArg {
+        struct GenArgKind {
+            union {
+                lifetime @0: Void;
+                type @1: Ty;
+                const @2: Void;
+            }
+        }
+        kind @0: GenArgKind;
+    }
 
     struct IntTy {
         union {
@@ -28,20 +41,33 @@ struct Ty {
         }
     }
 
-    struct AdtData {
-        struct AdtDef {
-            struct VariantDef {
-                name @0: Text;
-                discr @1: UInt64;
-                fields @2: List(Ty);
-            }
+    struct AdtDefId {
+        name @0: Text;
+    }
 
-            variants @0: List(VariantDef);
-            #TODO @Nima: We will need AdtFlags. For now it is just struct
+    struct AdtDef {
+        struct VariantDef {
+            name @0: Text;
+            discr @1: UInt64;
+            fields @2: List(Ty);
         }
+        id @0: AdtDefId;
+        variants @1: List(VariantDef);
+        #TODO @Nima: We will need AdtFlags. For now it is just struct
+    }
 
-        def @0: AdtDef;
-        subs @1: List(Substs);
+    struct AdtTy {
+        id @0: AdtDefId;
+        substs @1: List(GenArg);
+    }
+
+    struct FnDefId {
+        name @0: Text;
+    }
+
+    struct FnDefTy {
+        id @0: FnDefId;
+        substs @1: List(GenArg);
     }
 
     struct TyKind {
@@ -49,9 +75,10 @@ struct Ty {
             bool @0: Void;
             int @1: IntTy;
             uInt @2: UIntTy;
-            adt @3: AdtData;
+            adt @3: AdtTy;
             rawPtr @4: Ty;
-            tuple @5: List(Substs);
+            fnDef @5: FnDefTy;
+            tuple @6: List(GenArg);
         }
     }
 
@@ -110,10 +137,22 @@ struct Body {
             projection @1: List(PlaceElement);
         }
 
+        struct Constant {
+            struct ConstantKind {
+                union {
+                    ty @0: Ty.Const;
+                    val @1: Void;
+                }
+            }
+
+            literal @0: ConstantKind;
+        }
+
         struct Operand {
             union {
                 copy @0: Place;
                 move @1: Place;
+                constant @2: Constant;
             }
         }
 
@@ -159,10 +198,16 @@ struct Body {
                     targets @1: SwitchTargets;
                 }
 
+                struct FnCallData {
+                    func @0: Operand;
+                }
+
                 union {
                     goto @0: BasicBlockId;
                     switchInt @1: SwitchIntData;
-                    return @2: Void;
+                    resume @2: Void;
+                    return @3: Void;
+                    call @4: FnCallData;
                 }
             }
 

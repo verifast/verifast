@@ -47,12 +47,15 @@ module Mir = struct
 
   let u_int_ty_bits_len (uit : u_int_ty) =
     match uit with
-    | USize -> failwith "Todo: Usize type is not supported yet"
-    | U8 -> 8
-    | U16 -> 16
-    | U32 -> 32
-    | U64 -> 64
-    | U128 -> 128
+    | USize ->
+        Error
+          (`UIntTyBitsLen
+            "The number of bits of a usize value is not specified by Rust")
+    | U8 -> Ok 8
+    | U16 -> Ok 16
+    | U32 -> Ok 32
+    | U64 -> Ok 64
+    | U128 -> Ok 128
 end
 
 module TrTyTuple = struct
@@ -65,6 +68,21 @@ module TrTyTuple = struct
     if List.length tys != 0 then
       failwith "Todo: Tuple Ty is not implemented yet"
     else Ast.Struct (loc, name, Some (* field list *) [], (* attr list *) [])
+end
+
+module TrTyInt = struct
+  let calc_int_rank (bits : int) =
+    let n = Float.log2 @@ float_of_int @@ bits in
+    let n_is_int = FP_zero == Float.classify_float @@ fst @@ Float.modf @@ n in
+    if not (bits > 0 && n_is_int && int_of_float n >= 3) then
+      Error
+        (`CalcIntRank
+          "The number of bits of an integer should be non-negative and equal \
+           to 2^n such that n>=3")
+    else
+      let bytes = bits / 8 in
+      let rank = int_of_float @@ Float.log2 @@ float_of_int @@ bytes in
+      Ok rank
 end
 
 module type VF_MIR_TRANSLATOR_ARGS = sig
@@ -92,10 +110,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   module BasicBlockIdRd = BodyRd.BasicBlockId
   module TerminatorRd = BasicBlockRd.Terminator
   module TerminatorKindRd = TerminatorRd.TerminatorKind
+  module FnCallDataRd = TerminatorKindRd.FnCallData
+  module OperandRd = BasicBlockRd.Operand
+  module ConstantRd = BasicBlockRd.Constant
+  module ConstantKindRd = ConstantRd.ConstantKind
 
   (* Types *)
   module TyRd = VfMirStub.Reader.Ty
   module UIntTyRd = TyRd.UIntTy
+  module AdtTyRd = TyRd.AdtTy
+  module AdtDefIdRd = TyRd.AdtDefId
 
   (* Ghost Type Declarations *)
   module GhostTyDecls = Map.Make (String)
@@ -114,27 +138,52 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Not -> Ok Mir.Not
     | Undefined _ -> Error (`TrMut "Unknown Mir mutability discriminator")
 
+  let u_size_rank =
+    match Args.data_model_opt with
+    | None -> Ast.PtrRank
+    | Some data_model -> Ast.LitRank data_model.ptr_rank
+
   let translate_u_int_ty (u_int_ty_cpn : UIntTyRd.t) =
     let dloc = Ast.Lexed Ast.dummy_loc0 in
-    let* l =
+    let calc_rank ui =
+      let* bits = Mir.u_int_ty_bits_len ui in
+      let* rank = TrTyInt.calc_int_rank bits in
+      Ok (Ast.LitRank rank)
+    in
+    let* rank =
       match UIntTyRd.get u_int_ty_cpn with
-      | USize -> Ok (Mir.u_int_ty_bits_len Mir.USize)
-      | U8 -> Ok (Mir.u_int_ty_bits_len Mir.U8)
-      | U16 -> Ok (Mir.u_int_ty_bits_len Mir.U16)
-      | U32 -> Ok (Mir.u_int_ty_bits_len Mir.U32)
-      | U64 -> Ok (Mir.u_int_ty_bits_len Mir.U64)
-      | U128 -> Ok (Mir.u_int_ty_bits_len Mir.U128)
+      | USize -> Ok u_size_rank
+      | U8 -> calc_rank Mir.U8
+      | U16 -> calc_rank Mir.U16
+      | U32 -> calc_rank Mir.U32
+      | U64 -> calc_rank Mir.U64
+      | U128 -> calc_rank Mir.U128
       | Undefined _ -> Error (`TrUIntTy "Unknown Rust unsigned int type")
     in
-    let bytes = l / 8 in
-    let rank = int_of_float @@ Float.log2 @@ float_of_int bytes in
     let ty_info : Mir.ty_info =
-      {
-        vf_ty =
-          Ast.ManifestTypeExpr (dloc, Ast.Int (Ast.Unsigned, Ast.LitRank rank));
-      }
+      { vf_ty = Ast.ManifestTypeExpr (dloc, Ast.Int (Ast.Unsigned, rank)) }
     in
     Ok ty_info
+
+  let translate_adt_ty (adt_ty_cpn : AdtTyRd.t) =
+    let dloc = Ast.Lexed Ast.dummy_loc0 in
+    let open AdtTyRd in
+    let id_cpn = id_get adt_ty_cpn in
+    let def_path = AdtDefIdRd.name_get id_cpn in
+    match def_path with
+    | "std::alloc::Layout" ->
+        let substs_cpn = substs_get_list adt_ty_cpn in
+        if List.length substs_cpn > 0 then
+          failwith (def_path ^ " does not have any generic parameter")
+        else
+          let ty_info : Mir.ty_info =
+            {
+              vf_ty =
+                Ast.ManifestTypeExpr (dloc, Ast.Int (Ast.Unsigned, u_size_rank));
+            }
+          in
+          Ok ty_info
+    | _ -> failwith "Todo: Unsupported Adt"
 
   let translate_ty (ty_cpn : TyRd.t) (gh_ty_decls : gh_ty_decls ref) =
     let open TyRd in
@@ -148,7 +197,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         Ok ty_info
     | Int int_ty_cpn -> failwith "Todo: Int Ty is not implemented yet"
     | UInt u_int_ty_cpn -> translate_u_int_ty u_int_ty_cpn
-    | Adt adt_ty_cpn -> failwith "Todo: Adt Ty is not implemented yet"
+    | Adt adt_ty_cpn -> translate_adt_ty adt_ty_cpn
     | RawPtr ty1_cpn -> failwith "Todo: Raw Ptr Ty is not implemented yet"
     | Tuple substs_cpn ->
         if Capnp.Array.length substs_cpn != 0 then
@@ -194,6 +243,19 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               ref None ) );
         ] )
 
+  let translate_fn_call (fn_call_data_cpn : FnCallDataRd.t) =
+    let open FnCallDataRd in
+    let func_cpn = func_get fn_call_data_cpn in
+    let* constant_cpn =
+      match OperandRd.get func_cpn with
+      | OperandRd.Copy _ | OperandRd.Move _ ->
+          Error (`TrFnCall "Invalid Mir Operand kind for function call")
+      | OperandRd.Constant constant_cpn -> Ok constant_cpn
+      | OperandRd.Undefined _ -> Error (`TrFnCall "Unknown Mir Operand kind")
+    in
+    let literal_cpn = ConstantRd.literal_get constant_cpn in
+    Ok ()
+
   let translate_terminator_kind (ret_place_id : string)
       (tkind_cpn : TerminatorKindRd.t) =
     let open TerminatorKindRd in
@@ -203,6 +265,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | SwitchInt switch_int_data_cpn ->
         failwith "Todo: Mir SwitchInt terminator is not supported yet"
     | Return -> Ok (Ast.ReturnStmt (dloc, Some (Ast.Var (dloc, ret_place_id))))
+    | Call fn_call_data_cpn -> failwith "Todo"
     | Undefined _ -> Error (`TrTerminatorKind "Unknown Mir terminator kind")
 
   let translate_terminator (ret_place_id : string)
