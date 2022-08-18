@@ -97,9 +97,9 @@ end
 module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   open Ocaml_aux
   module VfMirAnnotParser = Vf_mir_annot_parser.Make (Args)
-  module VfMirCpnpAlias = Vf_mir_cpnp_alias
-  module VfMirRd = VfMirCpnpAlias.VfMirRd
-  open VfMirCpnpAlias
+  module VfMirCapnpAlias = Vf_mir_capnp_alias
+  module VfMirRd = VfMirCapnpAlias.VfMirRd
+  open VfMirCapnpAlias
 
   (* Ghost Type Declarations *)
   module GhostTyDecls = Map.Make (String)
