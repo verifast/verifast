@@ -601,6 +601,7 @@ mod vf_mir_builder {
                     from_hir_call,
                     fn_span,
                 } => {
+                    // Todo @Nima: We should encode these data structures step by step
                     if let mir::Operand::Constant(box mir::Constant { literal, .. }) = func {
                         let fn_call_data_cpn = terminator_kind_cpn.init_call();
                         let ty = literal.ty();
@@ -625,7 +626,7 @@ mod vf_mir_builder {
                         .init_func() // Operand builder
                         .init_constant() // Constant builder
                         .init_literal() // ConstantKind builder
-                        .init_ty() // Ty.Cont builder
+                        .init_ty() // Ty.Const builder
                         .init_ty(); // Ty builder
                     Self::encode_ty(tcx, ty, ty_cpn);
                 }
