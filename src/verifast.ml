@@ -2623,22 +2623,23 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let nb_rules_generated = generate_rules post in
     if nb_rules_generated = 0 then static_error l (sprintf "no suitable predicates found in postcondition to generate rules") None
-  and heapify_params h tenv env ps =
+  and heapify_params h tenv env ps cont =
     begin match ps with
-      [] -> (h, tenv, env)
+      [] -> cont h tenv env
     | (l, x, t, addr) :: ps -> 
       let xvalue = List.assoc x env in
       let tenv' = update tenv x (RefType (List.assoc x tenv)) in
-      let h' = Chunk ((pointee_pred_symb l t, true), [], real_unit, [addr; xvalue], None) :: h in
+      produce_points_to_chunk l h t real_unit addr xvalue $. fun h' ->
       let env' = update env x addr in
-      heapify_params h' tenv' env' ps
+      heapify_params h' tenv' env' ps cont
     end
   and cleanup_heapy_locals (pn, ilist) l h env ps varargsLastParam cont =
     let rec cleanup_heapy_locals_core (pn, ilist) l h env ps cont= 
     match ps with
       [] -> cont h
     | (_, x, t, addr) :: ps ->
-      consume_chunk rules h [] [] [] l (pointee_pred_symb l t, true) [] real_unit (TermPat real_unit) (Some 1) [TermPat addr; dummypat] (fun chunk h coef [_; t] size ghostenv env env' -> cleanup_heapy_locals_core (pn, ilist) l h env ps cont)
+      consume_points_to_chunk rules h [] [] [] l t real_unit real_unit_pat addr dummypat $. fun chunk h _ value _ _ _ ->
+      cleanup_heapy_locals_core (pn, ilist) l h env ps cont
     in
     match ps, varargsLastParam with
       [], None -> cont h
@@ -2700,7 +2701,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   and verify_c_func_body loc (pn, ilist) tparams boxes in_pure_context leminfo funcmap predinstmap sizemap heapy_ps varargsLastParam h tenv env ghostenv post ss close_brace_loc return_cont =
     begin fun tcont ->
-      let h, tenv, env = heapify_params h tenv env heapy_ps in 
+      heapify_params h tenv env heapy_ps $. fun h tenv env ->
       let h =
         match varargsLastParam with
           None -> h
