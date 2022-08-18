@@ -33,6 +33,8 @@ VF_MIR_OCAML_STUBS_OBJ = $(VF_MIR_OCAML_STUBS_DIR)/vf_mir.cmx
 VF_MIR_TRANSLATOR_DIR = $(RUST_FE_DIR)/vf_mir_translator
 VF_MIR_ANNOT_PARSER_SRC = $(VF_MIR_TRANSLATOR_DIR)/vf_mir_annot_parser.ml
 VF_MIR_ANNOT_PARSER_OBJ = $(VF_MIR_TRANSLATOR_DIR)/vf_mir_annot_parser.cmx
+VF_MIR_CPNP_ALIAS_SRC = $(VF_MIR_TRANSLATOR_DIR)/vf_mir_cpnp_alias.ml
+VF_MIR_CPNP_ALIAS_OBJ = $(VF_MIR_TRANSLATOR_DIR)/vf_mir_cpnp_alias.cmx
 VF_MIR_TRANSLATOR_SRC = $(VF_MIR_TRANSLATOR_DIR)/vf_mir_translator.ml
 VF_MIR_TRANSLATOR_OBJ = $(VF_MIR_TRANSLATOR_DIR)/vf_mir_translator.cmx
 
@@ -68,9 +70,12 @@ clean::
 $(VF_MIR_ANNOT_PARSER_OBJ): $(VF_MIR_ANNOT_PARSER_SRC)
 	@echo "  OCAMLOPT " $@
 	$(COMPILE) -c -w -11 $<
-$(VF_MIR_TRANSLATOR_OBJ): $(VF_MIR_TRANSLATOR_SRC) $(OCAML_AUX_OBJ) $(VF_MIR_OCAML_STUBS_OBJ) $(VF_MIR_ANNOT_PARSER_OBJ) ast.cmx
+$(VF_MIR_CPNP_ALIAS_OBJ): $(VF_MIR_CPNP_ALIAS_SRC) $(VF_MIR_OCAML_STUBS_OBJ)
 	@echo "  OCAMLOPT " $@
-	$(COMPILE) -c -w -11 -I $(RUST_FE_INC) -I $(VF_MIR_OCAML_STUBS_DIR) -I $(VF_MIR_TRANSLATOR_DIR) -package capnp $<
+	$(COMPILE) -c -w -11 -I $(VF_MIR_OCAML_STUBS_DIR) -package capnp $<
+$(VF_MIR_TRANSLATOR_OBJ): $(VF_MIR_TRANSLATOR_SRC) $(OCAML_AUX_OBJ) $(VF_MIR_ANNOT_PARSER_OBJ) $(VF_MIR_CPNP_ALIAS_OBJ) ast.cmx
+	@echo "  OCAMLOPT " $@
+	$(COMPILE) -c -w -11 -I $(RUST_FE_INC) -I $(VF_MIR_TRANSLATOR_DIR) -package capnp $<
 
 clean::
 	rm -f $(VF_MIR_TRANSLATOR_DIR)/*.cm* $(VF_MIR_TRANSLATOR_DIR)/*.o
@@ -88,7 +93,7 @@ clean::
 	rm -f $(RUST_FE_DIR)/*.cm* $(RUST_FE_DIR)/*.o
 
 # Use this variable in parent Makefile to link to Rust frontend
-RUST_FE_OBJS = $(OCAML_AUX_OBJ) $(VF_MIR_OCAML_STUBS_OBJ) $(VF_MIR_ANNOT_PARSER_OBJ) $(VF_MIR_TRANSLATOR_OBJ) $(RUST_FE_OBJ)
+RUST_FE_OBJS = $(OCAML_AUX_OBJ) $(VF_MIR_OCAML_STUBS_OBJ) $(VF_MIR_ANNOT_PARSER_OBJ) $(VF_MIR_CPNP_ALIAS_OBJ) $(VF_MIR_TRANSLATOR_OBJ) $(RUST_FE_OBJ)
 # VF MIR exporter tool
 build-vf-rust-mir-exporter: $(VF_MIR_EXP_BIN)
 # Rust frontend

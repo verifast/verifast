@@ -32,9 +32,7 @@ end
 
 module Mir = struct
   type mutability = Mut | Not
-
   type ty_info = { vf_ty : Ast.type_expr }
-
   type local_decl = { mutability : mutability; id : string; ty : ty_info }
 
   type basic_block = {
@@ -67,7 +65,12 @@ module TrTyTuple = struct
   let make_tuple_type_decl name tys loc =
     if List.length tys != 0 then
       failwith "Todo: Tuple Ty is not implemented yet"
-    else Ast.Struct (loc, name, Some (* field list *) [], (* attr list *) [])
+    else
+      Ast.Struct
+        ( loc,
+          name,
+          Some ((* base_spec list *) [], (* field list *) []),
+          (* attr list *) [] )
 end
 
 module TrTyInt = struct
@@ -87,39 +90,16 @@ end
 
 module type VF_MIR_TRANSLATOR_ARGS = sig
   val data_model_opt : Ast.data_model option
-
   val report_should_fail : string -> Ast.loc0 -> unit
-
   val report_range : Lexer.range_kind -> Ast.loc0 -> unit
 end
 
 module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   open Ocaml_aux
   module VfMirAnnotParser = Vf_mir_annot_parser.Make (Args)
-  module VfMirStub = Vf_mir.Make (Capnp.BytesMessage)
-  module VfMirRd = VfMirStub.Reader.VfMir
-
-  (* Bodies *)
-  module BodyRd = VfMirStub.Reader.Body
-  module ContractRd = BodyRd.Contract
-  module AnnotationRd = BodyRd.Annotation
-  module LocalDeclRd = BodyRd.LocalDecl
-  module MutabilityRd = BodyRd.Mutability
-  module LocalDeclIdRd = BodyRd.LocalDeclId
-  module BasicBlockRd = BodyRd.BasicBlock
-  module BasicBlockIdRd = BodyRd.BasicBlockId
-  module TerminatorRd = BasicBlockRd.Terminator
-  module TerminatorKindRd = TerminatorRd.TerminatorKind
-  module FnCallDataRd = TerminatorKindRd.FnCallData
-  module OperandRd = BasicBlockRd.Operand
-  module ConstantRd = BasicBlockRd.Constant
-  module ConstantKindRd = ConstantRd.ConstantKind
-
-  (* Types *)
-  module TyRd = VfMirStub.Reader.Ty
-  module UIntTyRd = TyRd.UIntTy
-  module AdtTyRd = TyRd.AdtTy
-  module AdtDefIdRd = TyRd.AdtDefId
+  module VfMirCpnpAlias = Vf_mir_cpnp_alias
+  module VfMirRd = VfMirCpnpAlias.VfMirRd
+  open VfMirCpnpAlias
 
   (* Ghost Type Declarations *)
   module GhostTyDecls = Map.Make (String)

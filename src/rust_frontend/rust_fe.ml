@@ -1,15 +1,12 @@
 module type RUST_FE_ARGS = sig
   val data_model_opt : Ast.data_model option
-
   val report_should_fail : string -> Ast.loc0 -> unit
-
   val report_range : Lexer.range_kind -> Ast.loc0 -> unit
 end
 
 module Make (Args : RUST_FE_ARGS) = struct
   open Ocaml_aux
   module VfMirTr = Vf_mir_translator.Make (Args)
-  module VfMirStub = VfMirTr.VfMirStub
   module VfMirRd = VfMirTr.VfMirRd
 
   exception RustFrontend of string
@@ -56,7 +53,6 @@ module Make (Args : RUST_FE_ARGS) = struct
         Error (`SysCallFailed emsg)
 
     let find_tchain_root tchain_name = find_tchain_path tchain_name Root
-
     let find_tchain_lib tchain_name = find_tchain_path tchain_name Lib
   end
 
