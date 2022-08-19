@@ -23,4 +23,6 @@ module ListAux = struct
     in
     let* mapped_l = helper l [] in
     Ok (List.rev mapped_l)
+
+  let is_empty l = match l with [] -> true | _ :: _ -> false
 end

@@ -22,3 +22,5 @@ module TyRd = VfMirStub.Reader.Ty
 module UIntTyRd = TyRd.UIntTy
 module AdtTyRd = TyRd.AdtTy
 module AdtDefIdRd = TyRd.AdtDefId
+module FnDefTyRd = TyRd.FnDefTy
+module FnDefIdRd = TyRd.FnDefId

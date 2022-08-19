@@ -165,6 +165,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           Ok ty_info
     | _ -> failwith "Todo: Unsupported Adt"
 
+  let translate_fn_def_ty (fn_def_ty_cpn : FnDefTyRd.t) =
+    let open FnDefTyRd in
+    let id_cpn = id_get fn_def_ty_cpn in
+    let id = FnDefIdRd.name_get id_cpn in
+    let substs_cpn = substs_get_list fn_def_ty_cpn in
+    if not @@ ListAux.is_empty @@ substs_cpn then
+      failwith "Todo: Generic functions are not supported yet";
+    Error (`Dummy "")
+
   let translate_ty (ty_cpn : TyRd.t) (gh_ty_decls : gh_ty_decls ref) =
     let open TyRd in
     let dloc = Ast.Lexed Ast.dummy_loc0 in
@@ -179,6 +188,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | UInt u_int_ty_cpn -> translate_u_int_ty u_int_ty_cpn
     | Adt adt_ty_cpn -> translate_adt_ty adt_ty_cpn
     | RawPtr ty1_cpn -> failwith "Todo: Raw Ptr Ty is not implemented yet"
+    | FnDef fn_def_ty_cpn -> translate_fn_def_ty fn_def_ty_cpn
     | Tuple substs_cpn ->
         if Capnp.Array.length substs_cpn != 0 then
           failwith "Todo: Tuple Ty is not implemented yet"
@@ -223,7 +233,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               ref None ) );
         ] )
 
-  let translate_fn_call (fn_call_data_cpn : FnCallDataRd.t) =
+  let translate_fn_call (fn_call_data_cpn : FnCallDataRd.t)
+      (gh_ty_decls : gh_ty_decls ref) =
     let open FnCallDataRd in
     let func_cpn = func_get fn_call_data_cpn in
     let* constant_cpn =
@@ -234,6 +245,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | OperandRd.Undefined _ -> Error (`TrFnCall "Unknown Mir Operand kind")
     in
     let literal_cpn = ConstantRd.literal_get constant_cpn in
+    let* ty_const_cpn =
+      match ConstantKindRd.get literal_cpn with
+      | Ty ty_const_cpn -> Ok ty_const_cpn
+      | Val -> Error (`TrFnCall "Invalid ConstantKind for function call")
+      | Undefined _ ->
+          Error (`TrFnCall "Unknown ConstantKind for function call")
+    in
+    let ty_cpn = TyRd.Const.ty_get ty_const_cpn in
+    let callee_ty_info = translate_ty ty_cpn gh_ty_decls in
     Ok ()
 
   let translate_terminator_kind (ret_place_id : string)
