@@ -333,7 +333,7 @@ and
       loc *
       expr *
       expr list
-  | WFunPtrCall of loc * string * expr list
+  | WFunPtrCall of loc * expr * string (* function type name *) * expr list
   | WPureFunCall of loc * string * type_ list * expr list
   | WPureFunValueCall of loc * expr * expr list
   | WFunCall of loc * string * type_ list * expr list
@@ -935,7 +935,7 @@ let rec expr_loc e =
   | ExprCallExpr (l, e, es) -> l
   | WPureFunCall (l, g, targs, args) -> l
   | WPureFunValueCall (l, e, es) -> l
-  | WFunPtrCall (l, g, args) -> l
+  | WFunPtrCall (l, g, ftn, args) -> l
   | WFunCall (l, g, targs, args) -> l
   | WMethodCall (l, tn, m, pts, args, fb, tparamEnv) -> l
   | NewObject (l, cn, args, targs) -> l
@@ -1139,7 +1139,7 @@ let expr_fold_open iter state e =
   | WPureFunCall (l, g, targs, args) -> iters state args
   | WPureFunValueCall (l, e, args) -> iters state (e::args)
   | WFunCall (l, g, targs, args) -> iters state args
-  | WFunPtrCall (l, g, args) -> iters state args
+  | WFunPtrCall (l, e, ftn, args) -> let state = iter state e in iters state args
   | WMethodCall (l, cn, m, pts, args, mb, tparamEnv) -> iters state args
   | NewObject (l, cn, args, targs) -> iters state args
   | NewArray (l, te, e0) -> iter state e0

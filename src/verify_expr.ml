@@ -1207,7 +1207,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         List.iter (fun pat -> pat_expr_mark_addr_taken pat locals) (ps1 @ ps2)
       end
     | ExprCallExpr(_, e, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) (e :: es)
-    | WFunPtrCall(_, _, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
+    | WFunPtrCall(_, e, ftn, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) (e :: es)
     | WPureFunCall(_, _, _, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
     | WPureFunValueCall(_, e, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) (e :: es)
     | WFunCall(_, _, _, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
@@ -1362,7 +1362,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | WDeref(_, e, _) -> (expr_address_taken e)
     | CallExpr(_, _, _, ps1, ps2, _) -> List.flatten (List.map (fun pat -> pat_address_taken pat) (ps1 @ ps2))
     | ExprCallExpr(_, e, es) -> List.flatten (List.map (fun e -> expr_address_taken e) (e :: es))
-    | WFunPtrCall(_, _, es) -> List.flatten (List.map (fun e -> expr_address_taken e) es)
+    | WFunPtrCall(_, e, ftn, es) -> List.flatten (List.map (fun e -> expr_address_taken e) (e :: es))
     | WPureFunCall(_, _, _, es) -> List.flatten (List.map (fun e -> expr_address_taken e) es)
     | WPureFunValueCall(_, e, es) -> List.flatten (List.map (fun e -> expr_address_taken e) (e :: es))
     | WFunCall(_, _, _, es) -> List.flatten (List.map (fun e -> expr_address_taken e) es)
@@ -2331,10 +2331,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | _ ->
               cont (Chunk ((get_pred_symb "malloc_block", true), [], real_unit, [result; sizeof l t], None)::h)
         end
-    | WFunPtrCall (l, g, args) ->
-      let (PtrType (FuncType ftn)) = List.assoc g tenv in
+    | WFunPtrCall (l, e, ftn, args) ->
       has_heap_effects ();
-      let fterm = List.assoc g env in
+      eval_h h env e $. fun h env fterm ->
       let (_, gh, fttparams, rt, ftxmap, xmap, pre, post, terminates, ft_predfammaps) = List.assoc ftn functypemap in
       if pure && gh = Real then static_error l "Cannot call regular function pointer in a pure context." None;
       let check_call targs h args0 cont =
@@ -2353,7 +2352,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           Real when ftxmap = [] && fttparams = [] ->
           let (lg, _, _, _, isfuncsymb) = List.assoc ("is_" ^ ftn) purefuncmap in
           let phi = mk_app isfuncsymb [fterm] in
-          assert_term phi h env l ("Could not prove is_" ^ ftn ^ "(" ^ g ^ ")") None;
+          assert_term phi h env l ("Could not prove is_" ^ ftn ^ "(" ^ ctxt#pprint fterm ^ ")") None;
           consume_call_perm h $. fun h ->
           check_call [] h [] cont
         | Real ->

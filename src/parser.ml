@@ -235,6 +235,13 @@ let int_rank, long_rank, ptr_rank = decompose_data_model data_model
 let intType = Int (Signed, int_rank)
 let longType = Int (Signed, long_rank)
 
+let get_unnamed_param_name =
+  let counter = ref 0 in
+  fun () ->
+    let n = !counter in
+    incr counter;
+    "__unnamed_param" ^ string_of_int n
+
 let rec parse_decls ?inGhostHeader =
   if match inGhostHeader with None -> false | Some b -> b then
     parse_pure_decls
@@ -955,7 +962,7 @@ and
       end
     | _ -> 
       begin match pn with
-        None -> raise (ParseException (type_expr_loc t, "Illegal parameter."));
+        None -> (t, get_unnamed_param_name ())
       | Some((l, pname)) -> 
         begin match is_array with
           None -> ( match fp_params with 

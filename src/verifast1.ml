@@ -3946,10 +3946,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
       end
     | Deref (l, e) ->
-      let (w, t, _) = check e in
+      let (w, t, v) = check e in
       begin
         match t with
-          PtrType t0 -> (WDeref (l, w, t0), t0, None)
+          PtrType Void -> static_error l "Cannot dereference a void pointer" None
+        | PtrType (FuncType _) -> (w, t, v)
+        | PtrType t0 -> (WDeref (l, w, t0), t0, None)
         | _ -> static_error l "Operand must be pointer." None
       end
     | AddressOf (l, Var(l2, x)) when List.mem_assoc x tenv ->
@@ -3967,10 +3969,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | AddressOf (l, e) ->
       let (w, t, v) = check_expr_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
       let t = unfold_inferred_type t in
-      begin match t with
-        StaticArrayType (elemTp, _) ->
+      begin match t, w with
+        StaticArrayType (elemTp, _), _ ->
         (w, PtrType elemTp, None)
-      | _ ->
+      | _, WVar (_, x, FuncName) ->
+        (w, t, None)
+      | _, _ ->
         (AddressOf (l, w), PtrType t, None)
       end
     | CallExpr (l, "getClass", [], [], [LitPat target], Instance) when language = Java ->
@@ -3981,6 +3985,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin match (t, es) with
         (PureFuncType (_, _), _) -> check_pure_fun_value_call l w t es
       | (ClassOrInterfaceName(cn), [e2]) -> check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation (CastExpr(l, IdentTypeExpr(expr_loc e, None, cn), e2))
+      | PtrType (FuncType ftn), _ ->
+        let (_, gh, tparams, rt, ftxmap, xmap, pre, post, terminates, ft_predfammap) =
+          match try_assoc ftn functypemap with
+            None -> static_error l "Function pointer calls are not allowed here." None
+          | Some info -> info
+        in
+        let rt = match rt with None -> Void | Some rt -> rt in (* This depends on the fact that the return type does not mention type parameters. *)
+        (WFunPtrCall (l, w, ftn, es), rt, None)
       | _ -> static_error l "The callee of a call of this form must be a pure function value." None
       end 
     | CallExpr (l, g, targes, [], pats, fb) ->
@@ -4008,7 +4020,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | Some info -> info
           in
           let rt = match rt with None -> Void | Some rt -> rt in (* This depends on the fact that the return type does not mention type parameters. *)
-          (WFunPtrCall (l, g, es), rt, None)
+          (WFunPtrCall (l, WVar (l, g, LocalVar), ftn, es), rt, None)
         | Some ((PureFuncType (t1, t2) as t)) ->
           if targes <> [] then static_error l "Pure function value does not have type parameters." None;
           check_pure_fun_value_call l (WVar (l, g, LocalVar)) t es
