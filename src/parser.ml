@@ -1185,8 +1185,22 @@ and
 | [< e = parse_expr; s = parser
     [< '(_, Kwd ";") >] ->
     begin match e with
-      AssignExpr (l, Operation (llhs, Mul, [Var (lt, t); Var (lx, x)]), rhs) -> DeclStmt (l, [l, PtrTypeExpr (llhs, IdentTypeExpr (lt, None, t)), x, Some(rhs), (ref false, ref None)])
-    | Operation (l, Mul, [Var (lt, t); Var (lx, x)]) -> DeclStmt (l, [l, PtrTypeExpr (l, IdentTypeExpr (lt, None, t)), x, None, (ref false, ref None)])
+      AssignExpr (l, Operation (llhs, Mul, [Var (lt, t); e1]), rhs) -> 
+      let rec iter te e1 =
+        match e1 with
+          Var (lx, x) -> DeclStmt (l, [l, te, x, Some(rhs), (ref false, ref None)])
+        | Deref (ld, e2) -> iter (PtrTypeExpr (ld, te)) e2
+        | _ -> ExprStmt e
+      in
+      iter (PtrTypeExpr (llhs, IdentTypeExpr (lt, None, t))) e1
+    | Operation (l, Mul, [Var (lt, t); e1]) ->
+      let rec iter te e1 =
+        match e1 with
+          Var (lx, x) -> DeclStmt (lx, [lx, te, x, None, (ref false, ref None)])
+        | Deref (ld, e2) -> iter (PtrTypeExpr (ld, te)) e2
+        | _ -> ExprStmt e
+      in
+      iter (PtrTypeExpr (l, IdentTypeExpr (lt, None, t))) e1
     | _ -> ExprStmt e
     end
   | [< '(l, Kwd ":") >] -> (match e with Var (_, lbl) -> LabelStmt (l, lbl) | _ -> raise (ParseException (l, "Label must be identifier.")))
