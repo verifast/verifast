@@ -6547,6 +6547,7 @@ let check_if_list_is_defined () =
       let v = ctxt#mk_app shiftright_symbol [v1; v2] in
       begin match e1 with
         Upcast (_, tfrom, _) when ass_term <> None -> assume_bounds v tfrom
+      | _ when ass_term <> None -> assume_bounds v t
       | _ -> ()
       end;
       cont state v
