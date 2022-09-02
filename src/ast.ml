@@ -65,6 +65,12 @@ let rec root_caller_token l =
   | MacroExpansion (lcall, _) -> root_caller_token lcall
   | MacroParamExpansion (lparam, _) -> root_caller_token lparam
 
+let rec lexed_loc l =
+  match l with
+    Lexed l -> l
+  | MacroExpansion (lcall, lbodyTok) -> lexed_loc lbodyTok
+  | MacroParamExpansion (lparam, largTok) -> lexed_loc largTok
+
 let rec string_of_loc l =
   match l with
     Lexed l0 -> string_of_loc0 l0

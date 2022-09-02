@@ -3462,9 +3462,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           (headers, ds)
       | CLang, None ->
         if Filename.check_suffix path ".h" then
-          parse_header_file path reportRange reportShouldFail options.option_verbose [] options.option_define_macros options.option_enforce_annotations data_model
+          parse_header_file reportMacroCall path reportRange reportShouldFail options.option_verbose [] options.option_define_macros options.option_enforce_annotations data_model
         else
-          parse_c_file path reportRange reportShouldFail options.option_verbose options.option_include_paths options.option_define_macros options.option_enforce_annotations data_model
+          parse_c_file reportMacroCall path reportRange reportShouldFail options.option_verbose options.option_include_paths options.option_define_macros options.option_enforce_annotations data_model
       | CLang, Some Cxx ->
         let module Translator = Cxx_ast_translator.Make(
           struct

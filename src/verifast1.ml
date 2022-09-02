@@ -75,9 +75,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let {reportRange; reportUseSite; reportExecutionForest; reportStmt; reportStmtExec; reportDirective} = callbacks
 
+  let reportMacroCall l0u l0d =
+    reportUseSite DeclKind_Macro l0d l0u
+
   let reportUseSite dk ld lu =
     if ld <> DummyLoc && lu <> DummyLoc then
-    reportUseSite dk (root_caller_token ld) (root_caller_token lu)
+    reportUseSite dk (root_caller_token ld) (lexed_loc lu)
 
   let reportStmt l = reportStmt (root_caller_token l)
   let reportStmtExec l = reportStmtExec (root_caller_token l)
@@ -1173,7 +1176,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               let maps =
                 let prelude_name = match dialect with Some Cxx -> "prelude_cxx.h" | _ -> "prelude.h" in
                 let prelude_path = concat !bindir prelude_name in
-                let (prelude_headers, prelude_decls) = parse_header_file prelude_path reportRange reportShouldFail initial_verbosity [] [] enforce_annotations data_model in
+                let (prelude_headers, prelude_decls) = parse_header_file reportMacroCall prelude_path reportRange reportShouldFail initial_verbosity [] [] enforce_annotations data_model in
                 let prelude_header_names = List.map (fun (_, (_, _, h), _, _) -> h) prelude_headers in
                 let prelude_headers = (dummy_loc, (AngleBracketInclude, prelude_name, prelude_path), prelude_header_names, prelude_decls)::prelude_headers in
                 merge_header_maps false maps0 [] !bindir prelude_headers prelude_headers

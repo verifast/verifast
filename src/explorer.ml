@@ -46,7 +46,7 @@ let _ =
         in
         make_lexer (common_keywords @ c_keywords) ghost_keywords path text reportRange ~inGhostRange reportShouldFail
       in
-      let (loc, token_stream) = make_preprocessor make_lexer path verbose include_paths dataModel define_macros in
+      let (loc, token_stream) = make_preprocessor (fun _ _ -> ()) make_lexer path verbose include_paths dataModel define_macros in
       let p =
         parser
           [< (headers, _) = parse_include_directives verbose enforceAnnotations dataModel; 
@@ -87,7 +87,7 @@ let _ =
         if (Filename.check_suffix filepath ".gh" || Filename.check_suffix filepath ".h") then
               let packages = 
                 try
-                  let (_, packages_tmp) = parse_header_file filepath reportRange reportShouldFail 0 include_paths define_macros false (Some data_model_32bit) in
+                  let (_, packages_tmp) = parse_header_file (fun _ _ -> ()) filepath reportRange reportShouldFail 0 include_paths define_macros false (Some data_model_32bit) in
                   packages_tmp
                 with
                   Lexer.ParseException(_, msg) -> let _ = fail_msg filepath msg in []
@@ -99,7 +99,7 @@ let _ =
         else if (Filename.check_suffix filepath ".c") then
             let packages = 
                 try
-                  let (_, packages_tmp) = parse_c_file filepath reportRange reportShouldFail 0 include_paths define_macros false (Some data_model_32bit) in
+                  let (_, packages_tmp) = parse_c_file (fun _ _ -> ()) filepath reportRange reportShouldFail 0 include_paths define_macros false (Some data_model_32bit) in
                   packages_tmp
                 with
                   Lexer.ParseException(_, msg) -> let _ = fail_msg filepath msg in []
