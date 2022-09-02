@@ -92,7 +92,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | VarPat (_, x) when not (List.mem_assoc x env) -> let t = get_unique_var_symb_ x tp ghost in cont (x::ghostenv) (update env x (prover_convert_term t tp tp0)) t
     | VarPat(_, x) -> cont (x :: ghostenv) env (List.assoc x env)
     | DummyPat -> let t = get_unique_var_symb_ "dummy" tp ghost in cont ghostenv env t
-    | WCtorPat (l, i, targs, g, ts0, ts, pats) ->
+    | WCtorPat (l, i, targs, g, ts0, ts, pats, _) ->
       let (_, inductive_tparams, ctormap, _, _, _, _, _) = List.assoc i inductivemap in
       let (_, (_, _, _, _, (symb, _))) = List.assoc g ctormap in
       evalpats ghostenv env pats ts ts0 $. fun ghostenv env vs ->
@@ -270,7 +270,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             Some (_, _, _, declared_paramtypes, symb, _, _) -> ((symb, true), pats0, pats, g#domain, Some (g#name, declared_paramtypes))
           | None ->
             let PredCtorInfo (_, ps1, ps2, inputParamCount, body, funcsym) = List.assoc g#name predctormap in
-            let ctorargs = List.map (function LitPat e -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
+            let ctorargs = List.map (function (LitPat e | WCtorPat (_, _, _, _, _, _, _, Some e)) -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
             let g_symb = mk_app funcsym ctorargs in
             let (symbol, symbol_term) = funcsym in
             register_pred_ctor_application g_symb symbol symbol_term ctorargs inputParamCount;
@@ -451,7 +451,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | TermPat t0 -> match_terms (prover_convert_term t0 tp0 tp) t
     | SrcPat (VarPat (_, x)) -> cont (x::ghostenv) ((x, prover_convert_term t tp tp0)::env) env'
     | SrcPat DummyPat -> cont ghostenv env env'
-    | SrcPat (WCtorPat (l, i, targs, g, ts0, ts, pats)) ->
+    | SrcPat (WCtorPat (l, i, targs, g, ts0, ts, pats, _)) ->
       let t = prover_convert_term t tp tp0 in
       let (_, inductive_tparams, ctormap, _, _, _, _, _) = List.assoc i inductivemap in
       let cont () =
@@ -833,7 +833,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               | (pat::pats, tp0::tps0, tp::tps) ->
                 let ok t = iter (n - 1) (prover_convert_term t tp0 tp::ts) pats tps0 tps in
                 match pat with
-                  SrcPat (LitPat e) -> ok (eval None env e)
+                  SrcPat (LitPat e | WCtorPat (_, _, _, _, _, _, _, Some e)) -> ok (eval None env e)
                 | TermPat t -> ok t
                 | _ -> cont ()
             in
@@ -887,7 +887,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | LitPat e -> if !patvars = [] || lists_disjoint !patvars (vars_used e) then ctxt#pprint (eval None env e) else "<expr>"
             | DummyPat -> "_"
             | VarPat (_, x) -> patvars := x::!patvars; "_"
-            | WCtorPat (_, i, targs, g, ts0, ts, pats) -> Printf.sprintf "%s(%s)" g (String.concat ", " (List.map string_of_pat pats))
+            | WCtorPat (_, i, targs, g, ts0, ts, pats, _) -> Printf.sprintf "%s(%s)" g (String.concat ", " (List.map string_of_pat pats))
           in
           let string_of_pat0 pat0 =
             match pat0 with
@@ -996,7 +996,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             Some (_, _, _, _, symb, _, _) -> ((symb, true), pats0, pats, g#domain)
           | None -> 
             let PredCtorInfo (_, ps1, ps2, inputParamCount, body, funcsym) = List.assoc g#name predctormap in
-            let ctorargs = List.map (function SrcPat (LitPat e) -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
+            let ctorargs = List.map (function SrcPat (LitPat e | WCtorPat (_, _, _, _, _, _, _, Some e)) -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
             let g_symb = mk_app funcsym ctorargs in
             let (symbol, symbol_term) = funcsym in
             register_pred_ctor_application g_symb symbol symbol_term ctorargs inputParamCount;
@@ -1218,6 +1218,11 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       empty_preds
     end
   in*)
+
+  let rec expr_of_fixed_pat pat =
+    match pat with
+      LitPat e -> e
+    | WCtorPat (l, i, targs, g, ts0, ts, pats, Some e) -> e
   
   (** Find nested predicates in wbody0 *)
   let find_edges construct_edge inputParameters xs wbody0 =
@@ -1236,7 +1241,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               None -> assert false;
             | Some qInputParamCount ->
               let qIndices = List.map (fun (LitPat e) -> e) qfns in
-              let qInputActuals = List.map (fun (LitPat e) -> e) (take qInputParamCount qpats) in
+              let qInputActuals = List.map expr_of_fixed_pat (take qInputParamCount qpats) in
               if List.for_all (fun e -> expr_is_fixed inputParameters e) (qIndices @ qInputActuals) then
                construct_edge qsymb coef None qtargs qIndices qInputActuals conds
               else
@@ -1250,7 +1255,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 None -> []
               | Some qInputParamCount ->
                 let qIndices = List.map (fun (LitPat e) -> e) qfns in
-                let qInputActuals = List.map (fun (LitPat e) -> e) (take qInputParamCount qpats) in
+                let qInputActuals = List.map expr_of_fixed_pat (take qInputParamCount qpats) in
                 if List.for_all (fun e -> expr_is_fixed inputParameters e) (qIndices @ qInputActuals) then
                 construct_edge vsymb coef None [] [] (qIndices @ qInputActuals) conds
                 else

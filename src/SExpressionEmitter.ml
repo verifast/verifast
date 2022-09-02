@@ -669,7 +669,7 @@ and sexpr_of_pat (pat : pat) : sexpression =
         build_list
           [ Symbol "pat-ctor"; Symbol str ]
           [ "pats", sexpr_of_list sexpr_of_pat pats ]
-    | WCtorPat (l, i, targs, name, ts0, ts, pats) ->
+    | WCtorPat (l, i, targs, name, ts0, ts, pats, e_opt) ->
         build_list
           [ Symbol "pat-w-ctor"; Symbol name ]
           [
@@ -677,7 +677,8 @@ and sexpr_of_pat (pat : pat) : sexpression =
             "targs", sexpr_of_list sexpr_of_type_ targs;
             "ts0", sexpr_of_list sexpr_of_type_ ts0;
             "ts", sexpr_of_list sexpr_of_type_ ts;
-            "pats", sexpr_of_list sexpr_of_pat pats
+            "pats", sexpr_of_list sexpr_of_pat pats;
+            "e_opt", sexpr_of_option sexpr_of_expr e_opt
           ]
 
 and sexpr_of_switch_clause (c : switch_expr_clause) : sexpression =

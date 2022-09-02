@@ -4903,7 +4903,43 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (w, tp) = check_expr (pn,ilist) tparams tenv (Some true) e in
       expect_type (expr_loc e) (Some true) t tp;
       (LitPat (WidenedParameterArgument w), [])
-    | LitPat e -> let w = check_expr_t (pn,ilist) tparams tenv (Some true) e t in (LitPat w, [])
+    | LitPat e ->
+      let fallback () =
+        let w = check_expr_t (pn,ilist) tparams tenv (Some true) e t in
+        (LitPat w, [])
+      in
+      begin match e with
+        CallExpr (l, g, [], [], pats, Static) ->
+        begin match resolve Ghost (pn,ilist) l g purefuncmap with
+          Some (_, (_, _, rt, _, _)) ->
+          begin match rt with
+            InductiveType (i, _) ->
+            let (_, inductive_tparams, ctormap, _, _, _, _, _) = List.assoc i inductivemap in
+            begin match try_assoc g ctormap with
+              Some (_, (_, _, _, param_names_types, symb)) ->
+              let (_, ts0) = List.split param_names_types in
+              let targs = List.map (fun _ -> InferredType (object end, ref Unconstrained)) inductive_tparams in
+              let Some tpenv = zip inductive_tparams targs in
+              let ts = List.map (instantiate_type tpenv) ts0 in
+              let t0 = InductiveType (i, targs) in
+              if not (unify t t0) then fallback () else
+              let (pats, tenv') = check_pats_core (pn,ilist) l tparams tenv ts pats in
+              let args = List.map (fun (LitPat arg | WCtorPat (_, _, _, _, _, _, _, Some arg)) -> arg) pats in
+              let args = List.map2 (fun arg (t, t0) -> box arg t t0) args (List.combine ts ts0) in
+              let e = WPureFunCall (l, g, targs, args) in
+              (WCtorPat (l, i, targs, g, ts0, ts, pats, Some e), tenv')
+            | None ->
+              fallback ()
+            end
+          | _ ->
+            fallback ()
+          end
+        | None ->
+          fallback ()
+        end
+      | _ ->
+        fallback()
+      end
     | VarPat (l, x) ->
       if List.mem_assoc x tenv then static_error l ("Pattern variable '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.") None;
       (p, [(x, t)])
@@ -4923,7 +4959,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let t0 = InductiveType (i, targs) in
             expect_type l (Some true) t t0;
             let (pats, tenv') = check_pats_core (pn,ilist) l tparams tenv ts pats in
-            (WCtorPat (l, i, targs, g, ts0, ts, pats), tenv')
+            (WCtorPat (l, i, targs, g, ts0, ts, pats, None), tenv')
           | None ->
             static_error l "Not a constructor" None
           end
@@ -5471,14 +5507,21 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | LitPat _ -> []
     | VarPat (_, x) -> [x]
     | DummyPat -> []
-    | WCtorPat (l, i, targs, g, ts0, ts, pats) ->
+    | WCtorPat (l, i, targs, g, ts0, ts, pats, _) ->
       List.concat (List.map fixed_pat_fixed_vars pats)
   
   let assume_pat_fixed fixed pat =
     fixed_pat_fixed_vars pat @ fixed
   
-  let assert_pats_fixed l fixed pats =
-    List.iter (function (LitPat e) -> assert_expr_fixed fixed e | _ -> static_error l "Non-fixed pattern used in input position." None) pats
+  let rec assert_pats_fixed l fixed pats =
+    List.iter (assert_pat_fixed l fixed) pats
+  and assert_pat_fixed l fixed = function
+    LitPat e ->
+    assert_expr_fixed fixed e
+  | WCtorPat (_, _, _, _, _, _, pats, _) ->
+    assert_pats_fixed l fixed pats
+  | _ ->
+    static_error l "Non-fixed pattern used in input position." None
   
   let assume_pats_fixed fixed pats =
     flatmap fixed_pat_fixed_vars pats @ fixed

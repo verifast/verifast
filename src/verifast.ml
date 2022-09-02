@@ -1068,7 +1068,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | Some coefpat -> check_pat (pn,ilist) tparams tenv RealType coefpat
       in
       let (wpats, tenv') = check_pats (pn,ilist) l tparams tenv (List.map (fun (x, t0, t) -> t) ps) pats in
-      let wpats = (List.map (function (LitPat e) -> (TermPat (eval_non_pure true h env e)) | wpat -> SrcPat wpat) wpats) in
+      let wpats = (List.map (function (LitPat e | WCtorPat (_, _, _, _, _, _, _, Some e)) -> TermPat (eval_non_pure true h env e) | wpat -> SrcPat wpat) wpats) in
       let pats = pats0 @ wpats in
       consume_chunk rules h ghostenv env [] l g_symb targs real_unit (SrcPat coefpat) inputParamCount pats (fun _ h coef ts chunk_size ghostenv env [] ->
         let ts = drop dropcount ts in
