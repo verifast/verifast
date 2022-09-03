@@ -137,6 +137,7 @@ struct item *compute_response(int server, struct item *request)
   //@ close rpc_pub(resp);
   //@ leak rpc_pub(resp);
   return response;
+  //@ chars_to_integer(&random);
 }
 
 void server(char server, struct item *key)

@@ -443,6 +443,7 @@ cd tutorial_solutions
   verifast_both -target 32bit students.c
 cd ..
 cd tests
+  verifast -c -allow_should_fail uninit.c
   verifast -c lit_ctor_pat.c
   verifast -c issue311.c
   verifast -c -disable_overflow_check issue112.c

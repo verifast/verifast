@@ -52,11 +52,11 @@ static void foo()
   struct mystruct my_local_nested_struct;
   //@ open_struct(&my_local_nested_struct);
   memset(&my_local_nested_struct, 0, sizeof(struct mystruct));
-  //@ close_struct(&my_local_nested_struct);
+  //@ close_struct_zero(&my_local_nested_struct);
   
   //@ open_struct(&(&my_local_nested_struct)->s1);
   memset(&(&my_local_nested_struct)->s1, 0, sizeof(struct_with_array));
-  //@ close_struct(&(&my_local_nested_struct)->s1);
+  //@ close_struct_zero(&(&my_local_nested_struct)->s1);
   
   //@ open mystruct(_);
   //@ open struct_with_array(_);
@@ -67,7 +67,10 @@ static void foo()
   assert(sh != &my_local_nested_struct);
   (&(&my_global_nested_struct)->s1)->ar[5] = 100;
   (&(&my_local_nested_struct)->s1)->ar[5] = 200;
+  //@ ints__split((&sh->s1)->ar, 5);
   (&sh->s1)->ar[5] = 300;
+  //@ close ints_((&sh->s1)->ar + 5, 2, _);
+  //@ ints__join((&sh->s1)->ar);
   free(sh);
 }
 
@@ -114,9 +117,13 @@ int main(int argc, char **argv) //@ : main_full(static_array)
   int    t;
 
   /* normal array */
+  //@ open ints_(ar1, _, _);
   ar1[ 0] = 1;
+  //@ open ints_(ar1 + 1, _, _);
   ar1[ 1] = 5;
+  //@ open ints_(ar1 + 2, _, _);
   ar1[ 2] = 0;
+  //@ ints__split(ar1 + 3, 23);
   ar1[26] = 2;
   ar1[ 1] = ar1[ 1] + ar1[26];
 
@@ -126,14 +133,24 @@ int main(int argc, char **argv) //@ : main_full(static_array)
    { assert false; }
 
   assert (ar1[26] == 2);
+  
+  //@ close ints_(ar1 + 26, 29, _);
+  //@ ints__join(ar1 + 3);
+  //@ close ints_(ar1 + 2, 53, _);
+  //@ close ints_(ar1 + 1, 54, _);
+  //@ close ints_(ar1, 55, _);
 
   /* array inside a struct */
   s = malloc (sizeof (struct_with_array));
   if (s == 0) { abort(); }
 
+  //@ open ints_(s->ar, _, _);
   s->ar[ 0] = 1;
+  //@ open ints_(s->ar + 1, _, _);
   s->ar[ 1] = 5;
+  //@ open ints_(s->ar + 2, _, _);
   s->ar[ 2] = 0;
+  //@ ints__split(s->ar + 3, 3);
   s->ar[ 6] = 2;
   s->ar[ 1] = s->ar[ 1] + s->ar[ 6];
 
@@ -144,6 +161,11 @@ int main(int argc, char **argv) //@ : main_full(static_array)
 
   assert (s->ar[0] == 1);
 
+  //@ close ints_(s->ar + 6, 1, _);
+  //@ ints__join(s->ar + 3);
+  //@ close ints_(s->ar + 2, 5, _);
+  //@ close ints_(s->ar + 1, 6, _);
+  //@ close ints_(s->ar, 7, _);
   free (s);
 
 
@@ -167,17 +189,17 @@ int main(int argc, char **argv) //@ : main_full(static_array)
   assert (points[1].y == 40);
   
   //@ open_struct(points + 1);
-  //@ chars_join((void *)(points + 1));
+  //@ chars__join((void *)(points + 1));
   //@ open_struct(points);
-  //@ chars_join((void *)points);
+  //@ chars__join((void *)points);
 
   //@ open_struct(bigArrayPtr);
   //@ assert ((char *)(void *)bigArrayPtr)[..sizeof(struct_with_array)] |-> _;
   //@ open_struct(bigArrayPtr + 1);
-  //@ assert chars((void *)(bigArrayPtr + 1), sizeof(struct_with_array), _);
-  //@ chars_join((void *)(bigArrayPtr + 1));
-  //@ chars_join((void *)bigArrayPtr);
-  //@ assert chars((void *)bigArrayPtr, sizeof(struct_with_array) * 10, _);
+  //@ assert chars_((void *)(bigArrayPtr + 1), sizeof(struct_with_array), _);
+  //@ chars__join((void *)(bigArrayPtr + 1));
+  //@ chars__join((void *)bigArrayPtr);
+  //@ assert chars_((void *)bigArrayPtr, sizeof(struct_with_array) * 10, _);
   //@ close_module();
   //@ leak module(static_array, _);
   

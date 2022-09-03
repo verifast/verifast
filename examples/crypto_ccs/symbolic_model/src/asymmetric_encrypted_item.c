@@ -34,7 +34,7 @@ int asym_enc_havege_random_stub(void *havege_state, char *output, size_t len)
   /*@ requires [?f]havege_state_initialized(havege_state) &*&
                random_request(?principal, ?info, ?key_request) &*&
                random_permission(principal, ?count) &*&
-               chars(output, len, _) &*& len >= MIN_RANDOM_SIZE;
+               chars_(output, len, _) &*& len >= MIN_RANDOM_SIZE;
   @*/
   /*@ ensures  [f]havege_state_initialized(havege_state) &*&
                random_permission(principal, count + 1) &*&
@@ -46,7 +46,7 @@ int asym_enc_havege_random_stub(void *havege_state, char *output, size_t len)
                  :
                    cg == cg_nonce(principal, count + 1)
                :
-                 chars(output, len, _);
+                 chars_(output, len, _);
   @*/
 {
   return havege_random(havege_state, output, len);
@@ -123,7 +123,6 @@ struct item *asymmetric_encryption(struct item *key, struct item *payload)
     write_tag(result->content, TAG_ASYMMETRIC_ENC);
     //@ assert result->content |-> ?cont &*& result->size |-> ?size;
     if (olen < MINIMAL_STRING_SIZE) {abort_crypto_lib("Asymmetric encryption failed: to small");}
-    //@ chars_to_crypto_chars(result->content + TAG_LENGTH, olen);
     crypto_memcpy(result->content + TAG_LENGTH, output, olen);
 
     //@ item enc = asymmetric_encrypted_item(principal, count, some(pay), ent);
@@ -227,7 +226,7 @@ struct item *asymmetric_decryption(struct item *key, struct item *item, char tag
     pk_free(&context);
     //@ open pk_context(&context);
     nonces_hide_state(random_state);
-    //@ assert chars((void*)output + size_out, MAX_PACKAGE_SIZE - size_out, ?ccs_rest);
+    //@ assert chars_((void*)output + size_out, MAX_PACKAGE_SIZE - size_out, ?ccs_rest);
     result = malloc(sizeof(struct item));
     if (result == 0) {abort_crypto_lib("Malloc failed");}
     result->size = (int) olen;
@@ -269,7 +268,6 @@ struct item *asymmetric_decryption(struct item *key, struct item *item, char tag
         }
     @*/
     //@ crypto_chars_join(output);
-    //@ chars_to_crypto_chars(result->content, olen);
     crypto_memcpy(result->content, output, olen);
     //@ assert result->content |-> ?cont;
     //@ assert crypto_chars(?kind, cont, olen_val, ccs_out);

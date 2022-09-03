@@ -42,7 +42,7 @@ struct ring_buffer *ring_buffer_create(int size)
 {	
 	struct ring_buffer *ring_buffer = malloc(sizeof (struct ring_buffer));
 	if (ring_buffer == 0) return 0;
-	int *fields = malloc(size * sizeof (int));
+	int *fields = calloc(size, sizeof(int));
 	if (fields == 0){
 		free(ring_buffer);
 		return 0;

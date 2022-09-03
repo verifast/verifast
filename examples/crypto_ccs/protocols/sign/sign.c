@@ -48,13 +48,11 @@ void sender(int recvr, char *key, int key_len, char *msg)
     //@ assert integer(&recvr, ?receiver);
     //@ integer_to_chars(&recvr);
     //@ chars_to_crypto_chars((void*) &recvr, 4);
-    //@ chars_to_crypto_chars(M, 4);
     crypto_memcpy(M, &recvr, 4);
     //@ cs_to_ccs_crypto_chars((void*) &recvr, chars_of_int(receiver));
     //@ chars_to_integer(&recvr);
     
     //@ chars_to_crypto_chars(msg, MSG_SIZE);
-    //@ chars_to_crypto_chars(M + 4, MSG_SIZE);
     crypto_memcpy(M + 4, msg, (unsigned int) MSG_SIZE);
     //@ crypto_chars_join(M);
     //@ list<char> pay = append(chars_of_int(receiver), msg_cs);
@@ -96,7 +94,6 @@ void sender(int recvr, char *key, int key_len, char *msg)
     //@ crypto_chars_to_chars(hash, 64);
     //@ open cryptogram(M + 4 + MSG_SIZE, sign_len_val, ?cs_sign, ?cg_sign);
     //@ close cryptogram(M + 4 + MSG_SIZE, sign_len_val, cs_sign, cg_sign);
-    //@ assert chars(M + 4 + MSG_SIZE + sign_len_val, key_len - sign_len_val, _);
     //@ assert cg_sign == cg_rsa_signature(sender, id, hash_cs, _);
     //@ if (!col && !bad(sender)) close sign_pub_1(msg_cs, recvr);
     
@@ -107,7 +104,6 @@ void sender(int recvr, char *key, int key_len, char *msg)
     //@ crypto_chars_to_chars(M, 4 + MSG_SIZE);
     //@ chars_join(M);
     net_send(&socket, M, (unsigned int) message_len);
-    //@ chars_join(M);
     free(M);
   }
   net_close(socket);
@@ -120,7 +116,7 @@ void receiver(int recvr, char *key, int key_len, char *msg)
                [?f1]cryptogram(key, key_len, ?key_ccs, ?key_cg) &*&
                  key_cg == cg_rsa_public_key(?sender, ?id) &*&
                  key_len <= MAX_KEY_SIZE &*&
-               chars(msg, MSG_SIZE, _); @*/
+               chars_(msg, MSG_SIZE, _); @*/
   /*@ ensures  principal(recvr, _) &*&
                [f1]cryptogram(key, key_len, key_ccs, key_cg) &*&
                chars(msg, MSG_SIZE, ?msg_cs) &*&
@@ -148,10 +144,6 @@ void receiver(int recvr, char *key, int key_len, char *msg)
     if (size <= 4 + MSG_SIZE) abort();
     if (64 * 8 > key_len) abort();
 
-    //@ chars_split(buffer, size);
-    //@ assert chars(buffer, size, ?all_cs);
-    //@ close hide_chars((void*) buffer + size, max_size - size, _);
-
     // Parse plain text
     //@ chars_split(buffer, 4);
     //@ chars_to_integer(buffer);
@@ -163,7 +155,6 @@ void receiver(int recvr, char *key, int key_len, char *msg)
     //@ chars_split(buffer + 4, MSG_SIZE);
     //@ assert chars(buffer + 4, MSG_SIZE, ?msg_cs);
     //@ chars_to_crypto_chars(buffer + 4, MSG_SIZE);
-    //@ chars_to_crypto_chars(msg, MSG_SIZE);
     crypto_memcpy(msg, buffer + 4, MSG_SIZE);
     //@ cs_to_ccs_crypto_chars(msg, msg_cs);
     //@ cs_to_ccs_crypto_chars(buffer + 4, msg_cs);
@@ -227,8 +218,6 @@ void receiver(int recvr, char *key, int key_len, char *msg)
     //@ append_assoc(chars_of_int(receiver), msg_cs, sign_cs);
     
     //@ assert chars(buffer, size, append(pay, sign_cs));
-    //@ open hide_chars((void*) buffer + size, max_size - size, _);
-    //@ chars_join(buffer);
     free(buffer);
   }
   net_close(socket2);

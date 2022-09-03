@@ -54,7 +54,7 @@ void sender(char* msg);
 
 void receiver(char* msg);
   /*@ requires principal(?receiver, _) &*&
-               chars(msg, PACKAGE_SIZE, _); @*/
+               chars_(msg, PACKAGE_SIZE, _); @*/
   /*@ ensures  principal(receiver, _) &*&
                chars(msg, PACKAGE_SIZE, ?cs); @*/
 

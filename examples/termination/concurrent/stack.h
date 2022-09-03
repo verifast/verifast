@@ -20,7 +20,7 @@ void stack_push(stack stack, void *value);
 
 bool stack_pop(stack stack, void **pvalue);
     //@ requires [_]stack(call_perm_scope_of(currentThread), stack, ?p) &*& *pvalue |-> _;
-    //@ ensures *pvalue |-> ?value &*& result ? p(value) : true;
+    //@ ensures pointer_(pvalue, ?value_opt) &*& result ? value_opt == some(?value) &*& p(value) : true;
     //@ terminates;
 
 #endif

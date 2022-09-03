@@ -99,8 +99,6 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Break _ -> []
     | SuperConstructorCall(_, es) -> flatmap (fun e -> expr_assigned_variables e) es
 
-  let dummypat = SrcPat DummyPat
-  
   let get_points_to h p predSymb l cont =
     consume_chunk rules h [] [] [] l (predSymb, true) [] real_unit dummypat (Some 1) [TermPat p; dummypat] (fun chunk h coef [_; t] size ghostenv env env' ->
       cont h coef t)
@@ -1439,7 +1437,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     *)
   let rec produce_c_object l coef addr tp eval_h init allowGhostFields producePaddingChunk h env cont =
     let produce_char_array_chunk h env addr length =
-      let elems = get_unique_var_symb "elems" (InductiveType ("list", [charType])) in
+      let pred_symb, elem_type = if init = Default then chars_pred_symb (), charType else chars__pred_symb (), option_type charType in
+      let elems = get_unique_var_symb "elems" (list_type elem_type) in
       begin fun cont ->
         if init = Default then
           assume (mk_all_eq charType elems (ctxt#mk_intlit 0)) cont
@@ -1447,7 +1446,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           cont ()
       end $. fun () ->
       assume_eq (mk_length elems) length $. fun () ->
-      cont (Chunk ((chars_pred_symb(), true), [], coef, [addr; length; elems], None)::h) env
+      cont (Chunk ((pred_symb, true), [], coef, [addr; length; elems], None)::h) env
     in
     match tp with
       StaticArrayType (elemTp, elemCount) ->
@@ -1457,25 +1456,25 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let produce_char_array_chunk h env addr elemCount =
         produce_char_array_chunk h env addr (ctxt#mk_mul (ctxt#mk_intlit elemCount) elemSize)
       in
-      let produce_array_chunk h env addr elems elemCount =
+      let produce_array_chunk h env produceUninitChunk addr elems elemCount =
         match try_pointee_pred_symb0 elemTp with
-          Some (_, _, _, arrayPredSymb, _, _, _, _) ->
+          Some (_, _, _, arrayPredSymb, _, _, _, _, _, _, _, uninitArrayPredSymb) ->
           let length = ctxt#mk_intlit elemCount in
           assume_eq (mk_length elems) length $. fun () ->
-          cont (Chunk ((arrayPredSymb, true), [], coef, [addr; length; elems], None)::h) env
+          cont (Chunk (((if produceUninitChunk then uninitArrayPredSymb else arrayPredSymb), true), [], coef, [addr; length; elems], None)::h) env
         | None ->
         match int_rank_and_signedness elemTp with
           Some (k, signedness) ->
           let length = ctxt#mk_intlit elemCount in
           assume_eq (mk_length elems) length $. fun () ->
-          cont (Chunk ((integers__symb (), true), [], coef, [addr; rank_size_term k; mk_bool (signedness = Signed); length; elems], None)::h) env
+          cont (Chunk (((if produceUninitChunk then integers___symb () else integers__symb ()), true), [], coef, [addr; rank_size_term k; mk_bool (signedness = Signed); length; elems], None)::h) env
         | None ->
           (* Produce a character array of the correct size *)
           produce_char_array_chunk h env addr elemCount
       in
       begin match elemTp, init with
         Int (Signed, LitRank 0), Expr (StringLit (_, s)) ->
-        produce_array_chunk h env addr (mk_char_list_of_c_string elemCount s) elemCount
+        produce_array_chunk h env false addr (mk_char_list_of_c_string elemCount s) elemCount
       | (UnionType _ | StructType _ | StaticArrayType (_, _)), Expr (InitializerList (ll, es)) ->
         let rec iter h env i es =
           let addr = ctxt#mk_add addr (ctxt#mk_mul (ctxt#mk_intlit i) elemSize) in
@@ -1497,9 +1496,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             cont h env (mk_cons elemTp elem elems)
         in
         iter h env elemCount es $. fun h env elems ->
-        produce_array_chunk h env addr elems elemCount
+        produce_array_chunk h env false addr elems elemCount
       | _ ->
-        let elems = get_unique_var_symb "elems" (InductiveType ("list", [elemTp])) in
+        let elems = get_unique_var_symb "elems" (list_type (if init = Unspecified then option_type elemTp else elemTp)) in
         begin fun cont ->
           match init, elemTp with
             Default, (Int (_, _)|PtrType _) ->
@@ -1507,7 +1506,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | _ ->
             cont ()
         end $. fun () ->
-        produce_array_chunk h env addr elems elemCount
+        produce_array_chunk h env (init = Unspecified) addr elems elemCount
       end
     | UnionType un ->
       produce_char_array_chunk h env addr (sizeof l tp)
@@ -1577,24 +1576,24 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       produce_points_to_chunk l h tp coef addr value $. fun h ->
       cont h env
   
-  let rec consume_c_object_core l coefpat addr tp h consumePaddingChunk cont =
+  let rec consume_c_object_core_core l coefpat addr tp h consumePaddingChunk consumeUninitChunk cont =
     let consume_char_array_chunk () =
       let pats = [TermPat addr; TermPat (sizeof l tp); dummypat] in
-      consume_chunk rules h [] [] [] l (chars_pred_symb(), true) [] real_unit coefpat (Some 2) pats $. fun chunk h _ [_; _; cs] _ _ _ _ ->
+      consume_chunk rules h [] [] [] l ((if consumeUninitChunk then chars__pred_symb() else chars_pred_symb()), true) [] real_unit coefpat (Some 2) pats $. fun chunk h _ [_; _; cs] _ _ _ _ ->
       cont [chunk] h cs
     in
     match tp with
       StaticArrayType (elemTp, elemCount) ->
       begin match try_pointee_pred_symb0 elemTp with
-        Some (_, _, _, arrayPredSymb, _, _, _, _) ->
+        Some (_, _, _, arrayPredSymb, _, _, _, _, _, _, _, uninitArrayPredSymb) ->
         let pats = [TermPat addr; TermPat (ctxt#mk_intlit elemCount); dummypat] in
-        consume_chunk rules h [] [] [] l (arrayPredSymb, true) [] real_unit coefpat (Some 2) pats $. fun chunk h _ [_; _; elems] _ _ _ _ ->
+        consume_chunk rules h [] [] [] l ((if consumeUninitChunk then uninitArrayPredSymb else arrayPredSymb), true) [] real_unit coefpat (Some 2) pats $. fun chunk h _ [_; _; elems] _ _ _ _ ->
         cont [chunk] h elems
       | None ->
       match int_rank_and_signedness elemTp with
         Some (k, signedness) ->
         let pats = [TermPat addr; TermPat (rank_size_term k); TermPat (mk_bool (signedness = Signed)); TermPat (ctxt#mk_intlit elemCount); dummypat] in
-        consume_chunk rules h [] [] [] l (integers__symb (), true) [] real_unit coefpat (Some 4) pats $. fun chunk h _ [_; _; _; _; elems] _ _ _ _ ->
+        consume_chunk rules h [] [] [] l ((if consumeUninitChunk then integers___symb () else integers__symb ()), true) [] real_unit coefpat (Some 4) pats $. fun chunk h _ [_; _; _; _; elems] _ _ _ _ ->
         cont [chunk] h elems
       | None ->
         consume_char_array_chunk ()
@@ -1621,7 +1620,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | (f, (lf, gh, t, offset, finit))::fields ->
           match t with
             StaticArrayType (_, _) | StructType _ | UnionType _ ->
-            consume_c_object_core l coefpat (field_address l addr sn f) t h true $. fun chunks' h _ ->
+            consume_c_object_core_core l coefpat (field_address l addr sn f) t h true consumeUninitChunk $. fun chunks' h _ ->
             iter (chunks' @ chunks) h fields
           | _ ->
              let (_, (_, _, _, _, f_symb, _, _)) = List.assoc (sn, f) field_pred_map in
@@ -1630,9 +1629,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       iter chunks h fields
     | _ ->
-      consume_points_to_chunk rules h [] [] [] l tp real_unit coefpat addr dummypat $. fun chunk h _ value _ _ _ ->
+      consume_points_to_chunk_ rules h [] [] [] l tp real_unit coefpat addr dummypat consumeUninitChunk $. fun chunk h _ value _ _ _ ->
       cont [chunk] h value
   
+  let consume_c_object_core l coefpat addr tp h consumePaddingChunk cont =
+    consume_c_object_core_core l coefpat addr tp h consumePaddingChunk false cont
+
   let consume_c_object l addr tp h consumePaddingChunk cont =
     consume_c_object_core l real_unit_pat addr tp h consumePaddingChunk $. fun chunks h value -> cont h
 
@@ -1672,7 +1674,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       else 
         cont h env
     | _ ->
-      consume_c_object_core l coefpat addr ty h consume_padding_chunk @@ fun _ h _ -> 
+      consume_c_object_core_core l coefpat addr ty h consume_padding_chunk true @@ fun _ h _ -> 
       cont h env
 
   let assume_is_of_type l t tp cont =
@@ -2188,7 +2190,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if pure then static_error l "Cannot write in a pure context." None;
         let consume_elem () =
           let target = ctxt#mk_add arr (ctxt#mk_mul i (sizeof l elem_tp)) in
-          consume_points_to_chunk rules h [] [] [] l elem_tp real_unit real_unit_pat target dummypat $. fun _ h _ _ _ _ _ ->
+          consume_points_to_chunk_ rules h [] [] [] l elem_tp real_unit real_unit_pat target dummypat true $. fun _ h _ _ _ _ _ ->
           produce_points_to_chunk l h elem_tp real_unit target value $. fun h ->
           cont h env
         in
@@ -2223,7 +2225,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         begin match try_pointee_pred_symb0 elem_tp with
         | None -> write_integer__array_element ()
-        | Some (_, _, _, arrayPredSymb, _, _, _, _) ->
+        | Some (_, _, _, arrayPredSymb, _, _, _, _, _, _, _, uninitArrayPredSymb) ->
         let arrayPredSymb1 = (arrayPredSymb, true) in
         let h0 = h in
         match h |> extract begin function
@@ -2242,12 +2244,29 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           assume (ctxt#mk_eq (mk_length updated) n) $. fun () ->
           cont (Chunk (arrayPredSymb1, [], real_unit, [a; n; updated], None) :: h) env
         | None ->
+        let uninitArrayPredSymb1 = (uninitArrayPredSymb, true) in
+        match h |> extract begin function
+          Chunk (g, [], coef, [arr'; size'; elems'], _) as c
+            when
+              predname_eq g uninitArrayPredSymb1 &&
+              definitely_equal arr' arr &&
+              ctxt#query (ctxt#mk_and (ctxt#mk_le int_zero_term i) (ctxt#mk_lt i size')) ->
+              Some c
+        | _ -> None
+        end with
+        | Some (Chunk (_, _, coef, [a; n; vs], _), h) ->
+          if not (definitely_equal coef real_unit) then assert_false h0 env l "Assignment requires full permission." None;
+          let (_, _, _, _, update_symb) = List.assoc "update" purefuncmap in
+          let updated = mk_app update_symb [i; mk_some elem_tp value; vs] in
+          assume (ctxt#mk_eq (mk_length updated) n) $. fun () ->
+          cont (Chunk (uninitArrayPredSymb1, [], real_unit, [a; n; updated], None) :: h) env
+        | None ->
           consume_elem ()
         end
       | LValues.Deref (l, target, pointeeType) ->
         has_heap_effects();
         if pure then static_error l "Cannot write in a pure context." None;
-        consume_c_object_core l real_unit_pat target pointeeType h true $. fun _ h _ ->
+        consume_c_object_core_core l real_unit_pat target pointeeType h true true $. fun _ h _ ->
         produce_c_object l real_unit target pointeeType eval_h (Term value) false true h env $. fun h env ->
         cont h env
     in
@@ -2273,7 +2292,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let t = type_of_expr es in
       expect_type lc (Some pure) (PtrType t) tp;
       verify_expr readonly h env xo e cont
-    | WFunCall (l, "malloc", [], [Operation (lmul, Mul, ([e; SizeofExpr (ls, es)] | [SizeofExpr (ls, es); e]))]) ->
+    | WFunCall (l, ("malloc" as g), [], [Operation (lmul, Mul, ([e; SizeofExpr (ls, es)] | [SizeofExpr (ls, es); e]))]) |
+      WFunCall (l as lmul, ("calloc" as g), [], [e; SizeofExpr (ls, es)]) ->
       if pure then static_error l "Cannot call a non-pure function from a pure context." None;
       let elemTp = type_of_expr es in
       let w, tp = check_expr (pn,ilist) tparams tenv e in
@@ -2296,12 +2316,18 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           assume_neq result int_zero_term $. fun () ->
           let n, elemTp, arrayPredSymb, mallocBlockSymb =
             match try_pointee_pred_symb0 elemTp with
-              Some (_, _, _, asym, _, mbsym, _, _) -> n, elemTp, asym, mbsym
-            | None -> arraySize, charType, chars_pred_symb(), malloc_block_chars_pred_symb()
+              Some (_, _, _, asym, _, mbsym, _, _, _, _, _, uasym) -> n, (if g = "calloc" then elemTp else option_type elemTp), (if g = "calloc" then asym else uasym), mbsym
+            | None -> arraySize, (if g = "calloc" then charType else option_type charType), (if g = "calloc" then chars_pred_symb () else chars__pred_symb ()), malloc_block_chars_pred_symb()
           in
           assume (ctxt#mk_and (ctxt#mk_le int_zero_term result) (ctxt#mk_le (ctxt#mk_add result arraySize) max_uintptr_term)) $. fun () ->
           let values = get_unique_var_symb "values" (list_type elemTp) in
           assume (ctxt#mk_eq (mk_length values) n) $. fun () ->
+          begin fun cont ->
+            if g = "calloc" then
+              assume (mk_all_eq elemTp values (ctxt#mk_intlit 0)) cont
+            else
+              cont ()
+          end $. fun () ->
           let mallocBlockChunk = Chunk ((mallocBlockSymb, true), [], real_unit, [result; n], None) in
           let arrayChunk = Chunk ((arrayPredSymb, true), [], real_unit, [result; n; values], None) in
           cont (mallocBlockChunk::arrayChunk::h)
@@ -2326,7 +2352,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             cont (Chunk ((malloc_block_symb, true), [], real_unit, [result], None)::h)
           | _ ->
             match try_pointee_pred_symb0 t with
-              Some (_, _, _, _, _, arrayMallocBlockSymb, _, _) ->
+              Some (_, _, _, _, _, arrayMallocBlockSymb, _, _, _, _, _, _) ->
               cont (Chunk ((arrayMallocBlockSymb, true), [], real_unit, [result; ctxt#mk_intlit 1], None)::h)
             | _ ->
               cont (Chunk ((get_pred_symb "malloc_block", true), [], real_unit, [result; sizeof l t], None)::h)
@@ -2398,7 +2424,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | _ ->
           begin 
             match try_pointee_pred_symb0 ty with
-            | Some (_, _, _, _, _, _, _, array_new_block_symb) ->
+            | Some (_, _, _, _, _, _, _, array_new_block_symb, _, _, _, _) ->
               produce_chunk h (array_new_block_symb, true) [] real_unit None [result; int_unit_term] None cont
             | _ ->
               produce_chunk h (get_pred_symb "new_block", true) [] real_unit None [result; sizeof l ty] None cont

@@ -12,7 +12,7 @@ int main ()
 {
   union_t x;
   
-  //@ chars_to_integer(&x.i);
+  //@ chars__to_int_(&x.i);
   x.i = -42;
   //@ integer_to_chars(&x.i);
   

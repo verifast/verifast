@@ -46,7 +46,7 @@ predicate_family_instance pthread_run_pre(client_t)(void *data, any info) =
     [1/2]chars(req, PACKAGE_SIZE, ?req_cs) &*&
     request(client, server, req_cs) == true &*&
   rpc_args_response(data, ?resp) &*&
-    chars(resp, PACKAGE_SIZE, _) &*&
+    chars_(resp, PACKAGE_SIZE, _) &*&
   info == IV(client, IV(server, PV(key, CCL(key_cs, 
              IV(id, PV(req, PV(resp, nil)))))));
 
@@ -91,9 +91,9 @@ predicate_family_instance pthread_run_pre(server_t)(void *data, any info) =
     key_cg == cg_symmetric_key(client, ?id) &*&
     shared_with(client, id) == server &*&
   rpc_args_request(data, ?req) &*&
-    chars(req, PACKAGE_SIZE, _) &*&
+    chars_(req, PACKAGE_SIZE, _) &*&
   rpc_args_response(data, ?resp) &*&
-    chars(resp, PACKAGE_SIZE, _) &*&
+    chars_(resp, PACKAGE_SIZE, _) &*&
   info == IV(client, IV(server, PV(key, CCL(key_cs, 
              IV(id, PV(req, PV(resp, nil)))))));
 

@@ -58,11 +58,10 @@ int main(int argc, char** argv) //@ : main
   if(buff == 0 || fp == 0) { abort(); }
   res = fgets(buff, 100, fp);
   while(res != 0)
-    //@ invariant file(fp) &*& chars(buff, 100, ?cs) &*& res != 0 ? mem('\0', cs) == true : true;
+    //@ invariant file(fp) &*& res != 0 ? string(buff, ?scs) &*& buff[length(scs) + 1..100] |-> _ : buff[..100] |-> _;
   {
-    //@ chars_separate_string(buff);
     int tmp = wc(buff, inword);
-    //@ chars_unseparate_string(buff);
+    //@ string_to_chars(buff);
     total = total + tmp;
     res = fgets(buff, 100, fp);
   }

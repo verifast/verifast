@@ -168,7 +168,7 @@ void create_havege_random(char *output, int len)
   /*@ requires [?f]world(?pub, ?key_clsfy) &*&
                nonce_request(?principal, ?info) &*&
                principal(principal, ?count) &*&
-               chars(output, len, _);  @*/
+               chars_(output, len, _);  @*/
   /*@ ensures  [f]world(pub, key_clsfy) &*&
                principal(principal, count + 1) &*&
                cryptogram(output, len, ?cs, ?cg) &*&
@@ -191,7 +191,7 @@ void create_havege_random(char *output, int len)
 
 void random_buffer(char* buffer, int size)
   /*@ requires [?f]world(?pub, ?key_clsfy) &*&
-               chars(buffer, size, _) &*&
+               chars_(buffer, size, _) &*&
                principal(?principal, ?count) &*&
                [_]pub(nonce_item(principal, count + 1, 0)); @*/
   /*@ ensures  [f]world(pub, key_clsfy) &*&
@@ -217,6 +217,7 @@ int random_int()
                principal(principal, count + 1); @*/
 {
   int i;
+  //@ int__to_chars_(&i);
   random_buffer((void*) &i, (int) sizeof(int));
   //@ chars_to_integer(&i);
   return i;
@@ -230,6 +231,7 @@ unsigned int random_u_int()
                principal(principal, count + 1); @*/
 {
   unsigned int i;
+  //@ uint__to_chars_(&i);
   random_buffer((void*) &i, (int) sizeof(unsigned int));
   //@ chars_to_u_integer(&i);
   return i;

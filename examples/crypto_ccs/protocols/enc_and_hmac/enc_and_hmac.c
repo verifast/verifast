@@ -54,7 +54,6 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
     //@ close random_request(sender, 0, false);
     if (havege_random(&havege_state, iv, 16) != 0) abort();
     //@ open cryptogram(iv, 16, ?iv_ccs, ?iv_cg);
-    //@ chars_to_crypto_chars(message, 16);
     crypto_memcpy(message, iv, 16);
     //@ close cryptogram(message, 16, iv_ccs, iv_cg);
     //@ close enc_and_hmac_pub(iv_cg);
@@ -123,11 +122,11 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
                hmac_key_cg == cg_symmetric_key(sender, ?hmac_id) &*&
                receiver == shared_with(sender, enc_id) &*&
                receiver == shared_with(sender, hmac_id) &*&
-             chars(msg, MAX_SIZE, _); @*/
+             chars_(msg, MAX_SIZE, _); @*/
 /*@ ensures  principal(receiver, _) &*&
              [f1]cryptogram(enc_key, KEY_SIZE, enc_key_ccs, enc_key_cg) &*&
              [f2]cryptogram(hmac_key, KEY_SIZE, hmac_key_ccs, hmac_key_cg) &*&
-             chars(msg + result, MAX_SIZE - result, _) &*&
+             chars_(msg + result, MAX_SIZE - result, _) &*&
              crypto_chars(secret, msg, result, ?msg_ccs) &*&
              [_]memcmp_region(_, msg_ccs) &*&
              col || bad(sender) || bad(receiver) ||
@@ -159,15 +158,11 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     if (size <= 16 + 64) abort();
     enc_size = size - 16 - 64;
     if (enc_size < MINIMAL_STRING_SIZE) abort();
-    //@ chars_split(buffer, size);
-    //@ assert chars(buffer, size, ?all_cs);
-    //@ close hide_chars((void*) buffer + size, max_size - size, _);
 
     // Interpret message
     //@ chars_split(buffer, 16);
     //@ assert chars(buffer, 16, ?iv_cs);
     //@ chars_to_crypto_chars(buffer, 16);
-    //@ chars_to_crypto_chars(iv, 16);
     crypto_memcpy(iv, buffer, 16);
     //@ cs_to_ccs_crypto_chars(iv, iv_cs);
     //@ interpret_nonce(iv, 16);
@@ -256,9 +251,6 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
           }
        }
     @*/
-    //@ assert all_cs == append(iv_cs, append(enc_cs, hmac_cs));
-    //@ open hide_chars((void*) buffer + size, max_size - size, _);
-    //@ chars_join(buffer);
     //@ chars_join(buffer);
     free(buffer);
   }

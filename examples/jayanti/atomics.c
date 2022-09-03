@@ -28,7 +28,7 @@ predicate past_prophecy(pair<int, list<vararg> > v) =
 predicate_ctor tracked_int_inv(int_tracker id)() =
     [_]id->pid |-> ?pid &*&
     [_]id->vs0 |-> ?vs0 &*&
-    [_]id->pv |-> ?pv &*& [1/2]*pv |-> _ &*&
+    [_]id->pv |-> ?pv &*& [1/2]*pv |-> ?pvv &*&
     [1/2]id->nbWrites |-> ?nbWrites &*& 0 <= nbWrites &*&
     [1/2]id->nbReads |-> ?nbReads &*& 0 <= nbReads &*&
     nbWrites + nbReads <= length(vs0) &*&

@@ -8,7 +8,7 @@ char *strcpy(char *d, char *s);
     //@ ensures [f]string(s, cs) &*& chars(d, length(cs) + 1, append(cs, {0})) &*& result == d;
 
 void memcpy(void *array, void *array0, size_t count);
-    //@ requires chars(array, count, ?cs) &*& [?f]chars(array0, count, ?cs0);
+    //@ requires chars_(array, count, _) &*& [?f]chars(array0, count, ?cs0);
     //@ ensures chars(array, count, cs0) &*& [f]chars(array0, count, cs0);
 
 void memmove(void *dest, void *src, size_t count);
@@ -59,7 +59,7 @@ char* strchr(char *str, char c);
     @*/
 
 void* memset(void *array, char value, size_t size);
-    //@ requires chars(array, size, ?cs);
+    //@ requires chars_(array, size, _);
     //@ ensures chars(array, size, ?cs1) &*& all_eq(cs1, value) == true &*& result == array;
 
 char *strdup(char *string);

@@ -42,7 +42,7 @@ int main() //@ : main
         //@ requires names[i..n] |-> _;
         //@ ensures names[old_i..n] |-> ?ps &*& foreachp(ps, student);
     {
-        //@ open pointers(_, _, _);
+        //@ open pointers_(_, _, _);
         if (i == n) {
             break;
         }

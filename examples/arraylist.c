@@ -61,7 +61,7 @@ void list_add(struct arraylist *a, void *v)
     //@ mul_mono_l(capacity * 2 + 1, SIZE_MAX / sizeof(void *), sizeof(void *));
     void** newData = malloc(((size_t)capacity * 2 + 1) * sizeof(void*));
     if(newData == 0) abort();
-    //@ pointers_split(newData, size);
+    //@ pointers__split(newData, size);
     //@ mul_mono_l(0, size, sizeof(void *));
     memcpy(newData, data, (size_t)size * sizeof(void*));
     //@ chars_to_pointers(newData, size);
@@ -69,6 +69,7 @@ void list_add(struct arraylist *a, void *v)
     //@ div_rem_nonneg(INT_MAX, 2);
     if (INT_MAX / 2 - 1 < capacity) abort();
     a->capacity = capacity * 2 + 1;
+    //@ chars_to_pointers(data, size);
     free(data);
   }
   size = a->size;
@@ -92,6 +93,7 @@ void list_remove_nth(struct arraylist *a, int n)
   memmove(data + n, data + n + 1, (unsigned int) (size - n - 1) * sizeof(void *));
   //@ chars_to_pointers(data + n, size - n - 1);
   a->size = a->size - 1;
+  //@ chars_to_pointers(data + size - 1, 1);
 }
 
 void list_dispose(struct arraylist* a)

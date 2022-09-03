@@ -48,7 +48,7 @@ predicate heap(struct heap *heap; list<int> values) =
   &*& elems[0..size + 1] |-> ?vs
   &*& values == tail(vs)
   &*& length(values) == size
-  &*& elems[size + 1..capacity] |-> ?rest
+  &*& elems[size + 1..capacity] |-> _
   &*& malloc_block_ints(elems, capacity)
   &*& forall_nth(vs, heap_index) == true
   &*& switch(values) { case nil: return true; case cons(h, t): return forall_nth(vs, (ge_nth)(1)) == true; };
@@ -74,8 +74,8 @@ struct heap* heap_create(int capacity)
   q->elems = array;
   q->capacity = capacity + 1;
   q->size = 0;
-  //@ open ints(array, capacity + 1, _);
-  //@ close ints(array, 1, _);
+  //@ open ints_(q->elems, _, _);
+  q->elems[0] = 0; // Superfluous but simplifies the proof.
   //@ close heap(q,nil);
   return q;
 }
@@ -111,44 +111,32 @@ void heap_insert(struct heap* heap, ElementType x)
     abort();
   }
   //@ assert arr[0..length(values) + 1] |-> ?vs;
-  //@ open ints(heap->elems + (heap->size + 1), heap->capacity - (heap->size + 1), ?rest);
-  //@ move_array_elem(heap->elems, heap->size + 1);
+  //@ open ints_(heap->elems + (heap->size + 1), heap->capacity - (heap->size + 1), ?rest);
+  int in = ++heap->size;
+  heap->elems[in] = x;
+  //@ move_array_elem(heap->elems, heap->size);
   /*@
-  if(! forall_nth(append(vs, cons(head(rest), nil)), (heap_index_e)(length(vs)))) {
-    int i = not_forall_nth(append(vs, cons(head(rest), nil)), (heap_index_e)(length(vs)));
-    nth_append(vs, cons(head(rest), nil), i);
+  if(! forall_nth(append(vs, cons(x, nil)), (heap_index_e)(length(vs)))) {
+    int i = not_forall_nth(append(vs, cons(x, nil)), (heap_index_e)(length(vs)));
+    nth_append(vs, cons(x, nil), i);
     forall_nth_elim(vs, heap_index, i);
-    nth_append(vs, cons(head(rest), nil), 2*i);
-    nth_append(vs, cons(head(rest), nil), 2*i + 1);
+    nth_append(vs, cons(x, nil), 2*i);
+    nth_append(vs, cons(x, nil), 2*i + 1);
   } 
   @*/
-  int in = ++heap->size;
-  //@ assert ints(arr, length(values) + 2, ?es);
-  heap->elems[in] = x;
   //@ assert ints(arr, length(values) + 2, ?us);
-  //@ assert 0 <= in && in < length(es);
-  /*@
-  if(! forall_nth(update(length(es) - 1, x, es), (heap_index_e)(length(es) - 1))) {
-    int i = not_forall_nth(update(length(es) - 1, x, es), (heap_index_e)(length(es) - 1));
-    forall_nth_elim(es, (heap_index_e)(length(es) - 1), i);
-  }
-  @*/
   /*@
   if(in != 1) {
-    if(! forall_nth(append(vs, cons(head(rest), nil)), (ge_nth_except)(1, length(vs)))) {
-      int i = not_forall_nth(append(vs, cons(head(rest), nil)),(ge_nth_except)(1, length(vs)));
-      nth_append(vs, cons(head(rest), nil), i);
-      nth_append(vs, cons(head(rest), nil), 1);
+    if(! forall_nth(append(vs, cons(x, nil)), (ge_nth_except)(1, length(vs)))) {
+      int i = not_forall_nth(append(vs, cons(x, nil)),(ge_nth_except)(1, length(vs)));
+      nth_append(vs, cons(x, nil), i);
+      nth_append(vs, cons(x, nil), 1);
       forall_nth_elim(vs, (ge_nth)(1), i);
     }
   }
   @*/
   /*@
     if(in != 1) {
-      if(! forall_nth(update(length(es) - 1, x, es), (ge_nth_except)(1, length(es)-1))) {
-        int i = not_forall_nth(update(length(es) - 1, x, es), (ge_nth_except)(1, length(es)-1));
-        forall_nth_elim(es, (ge_nth_except)(1, length(es)-1), i);
-      }
     } else {
       if(!forall_nth(us, (ge_nth_except)(1, 1))) {
         int i = not_forall_nth(us, (ge_nth_except)(1, 1));
@@ -265,7 +253,8 @@ void heap_dispose(struct heap* heap)
   //@ requires heap(heap, ?values) ;
   //@ ensures true;
 {
-  //@ ints_join(heap->elems);
+  //@ ints_to_ints_(heap->elems);
+  //@ ints__join(heap->elems);
   free(heap->elems);
   free(heap);
 }

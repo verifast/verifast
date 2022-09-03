@@ -48,16 +48,16 @@ FILE* fopen(char* filename, char* mode); // todo: check that mode is a valid mod
     //@ ensures [f]string(filename, fcs) &*& [g]string(mode, mcs) &*& result == 0 ? true : file(result);
 
 int fread(void* buffer, int size, int n, FILE* fp);
-    //@ requires chars(buffer, ?m, ?cs) &*& 0<=size &*& 0<=n &*& size * n <= m &*& [?f]file(fp);
-    //@ ensures chars(buffer, m, ?cs2) &*& [f]file(fp) &*& 0 <= result &*& result <= n;
+    //@ requires chars_(buffer, ?m, ?cs) &*& 0<=size &*& 0<=n &*& size * n <= m &*& [?f]file(fp);
+    //@ ensures chars(buffer, size * result, ?cs2) &*& chars_(buffer + size * result, m - size * result, _) &*& [f]file(fp) &*& 0 <= result &*& result <= n;
   
 int fwrite(void* buffer, int size, int n, FILE* fp);
     //@ requires [?fb]chars(buffer, ?m, ?cs) &*& 0<=size &*& 0<=n &*& size * n <= m &*& [?ff]file(fp);
     //@ ensures [fb]chars(buffer, m, cs) &*& [ff]file(fp) &*& 0 <= result &*& result <= n;
   
 char* fgets(char* buffer, int n, FILE* fp);
-    //@ requires chars(buffer, n, ?cs) &*& [?f]file(fp);
-    //@ ensures chars(buffer, n, ?cs2) &*& [f]file(fp) &*& result == 0 ? true : mem('\0', cs2) == true;
+    //@ requires chars_(buffer, n, ?cs) &*& [?f]file(fp);
+    //@ ensures [f]file(fp) &*& result == 0 ? chars_(buffer, n, _) : string(buffer, ?scs) &*& buffer[length(scs) + 1..n] |-> _;
 
 int fputs(char* s, FILE* fp);
     //@ requires [?fs]string(s, ?cs) &*& [?ff]file(fp);
@@ -490,7 +490,7 @@ fixpoint option<list<char> > sprintf_filled_in_args(list<format_part> parts, lis
 int sprintf(char* dest, char* format, ...);
     /*@ 
     requires [?f]string(format, ?f_cs) &*&
-             chars(dest, ?d_length, ?d_cs) &*&
+             chars_(dest, ?d_length, _) &*&
              sprintf_parse_format(f_cs, varargs) == some(?parsed_format) &*&
              // string chunck requirements
              printf_parse_format(f_cs, varargs) == some(?ps) &*&
@@ -502,7 +502,7 @@ int sprintf(char* dest, char* format, ...);
                     ensures
                         [f]string(format, f_cs) &*&
                         chars(dest, length(r_cs), r_cs) &*&
-                        chars(dest + length(r_cs), d_length - length(r_cs), ?rest_cs);
+                        chars_(dest + length(r_cs), d_length - length(r_cs), _);
                 case cons(p0, ps0): return [?f0]string(p0, ?cs0) &*&
                     switch (ps0) {
                         case nil: 
@@ -513,7 +513,7 @@ int sprintf(char* dest, char* format, ...);
                                 [f0]string(p0, cs0) &*&
                                 [f]string(format, f_cs) &*&  
                                 chars(dest, length(r_cs), r_cs) &*&
-                                chars(dest + length(r_cs), d_length - length(r_cs), ?rest_cs);
+                                chars_(dest + length(r_cs), d_length - length(r_cs), _);
                         case cons(p1, ps1): return [?f1]string(p1, ?cs1) &*&
                             switch (ps1) {
                                 case nil: 
@@ -525,7 +525,7 @@ int sprintf(char* dest, char* format, ...);
                                         [f0]string(p0, cs0) &*&
                                         [f]string(format, f_cs) &*&  
                                         chars(dest, length(r_cs), r_cs) &*&
-                                        chars(dest + length(r_cs), d_length - length(r_cs), ?rest_cs);
+                                        chars_(dest + length(r_cs), d_length - length(r_cs), _);
                                 case cons(p2, ps2): return [?f2]string(p2, ?cs2) &*&
                                     switch (ps2) {
                                         case nil: 
@@ -538,7 +538,7 @@ int sprintf(char* dest, char* format, ...);
                                                 [f0]string(p0, cs0) &*&
                                                 [f]string(format, f_cs) &*&  
                                                 chars(dest, length(r_cs), r_cs) &*&
-                                                chars(dest + length(r_cs), d_length - length(r_cs), ?rest_cs);
+                                                chars_(dest + length(r_cs), d_length - length(r_cs), _);
                                         case cons(p3, ps3): return [?f3]string(p3, ?cs3) &*&
                                             switch (ps3) {
                                                 case nil: 
@@ -552,7 +552,7 @@ int sprintf(char* dest, char* format, ...);
                                                         [f0]string(p0, cs0) &*&
                                                         [f]string(format, f_cs) &*&  
                                                         chars(dest, length(r_cs), r_cs) &*&
-                                                        chars(dest + length(r_cs), d_length - length(r_cs), ?rest_cs);
+                                                        chars_(dest + length(r_cs), d_length - length(r_cs), _);
                                                 case cons(p4, ps4): return false; // TODO: Support more string arguments...
                                             };
                                     };
@@ -658,9 +658,9 @@ int scanf(char *format, ...);
             case nil: return ensures [f]string(format, fcs);
             case cons(t0, ts0): return scanf_targets(ts0, 0) &*&
                 fst(t0) == 'i' ?
-                    integer(fst(snd(t0)), _) &*& ensures [f]string(format, fcs) &*& integer(fst(snd(t0)), _) &*& scanf_targets(ts0, result - 1)
+                    int_(fst(snd(t0)), _) &*& ensures [f]string(format, fcs) &*& integer(fst(snd(t0)), _) &*& scanf_targets(ts0, result - 1)
                 :
-                    chars(fst(snd(t0)), snd(snd(t0)) + 1, _) &*& ensures[f]string(format, fcs) &*& chars(fst(snd(t0)), snd(snd(t0)) + 1, ?cs) &*& result < 1 || mem('\0', cs) &*& scanf_targets(ts0, result - 1);
+                    chars_(fst(snd(t0)), snd(snd(t0)) + 1, _) &*& ensures[f]string(format, fcs) &*& chars(fst(snd(t0)), snd(snd(t0)) + 1, ?cs) &*& result < 1 || mem('\0', cs) &*& scanf_targets(ts0, result - 1);
         };
     @*/
     //@ ensures emp;

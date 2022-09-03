@@ -34,13 +34,13 @@ predicate expr(expr e;) =
   tag == EXPR_TAG_LITERAL ?
     e->info.literal.value |-> _ &*&
     struct_literal_expr_info_padding(&e->info.literal) &*&
-    chars((void *)&e->info + sizeof(struct literal_expr_info), sizeof(union expr_info) - sizeof(struct literal_expr_info), _)
+    chars_((void *)&e->info + sizeof(struct literal_expr_info), sizeof(union expr_info) - sizeof(struct literal_expr_info), _)
   : tag == EXPR_TAG_BINOP ?
     e->info.binop.operator |-> _ &*&
     e->info.binop.leftOperand |-> ?e1 &*& expr(e1) &*&
     e->info.binop.rightOperand |-> ?e2 &*& expr(e2) &*&
     struct_binop_expr_info_padding(&e->info.binop) &*&
-    chars((void *)&e->info + sizeof(struct binop_expr_info), sizeof(union expr_info) - sizeof(struct binop_expr_info), _)
+    chars_((void *)&e->info + sizeof(struct binop_expr_info), sizeof(union expr_info) - sizeof(struct binop_expr_info), _)
   : false;
 
 @*/

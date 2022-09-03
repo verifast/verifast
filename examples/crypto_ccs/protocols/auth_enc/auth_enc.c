@@ -47,7 +47,6 @@ void sender(char *key, char *msg, unsigned int msg_len)
     //@ close random_request(sender, 0, false);
     if (havege_random(&havege_state, iv, 16) != 0) abort();
     //@ open cryptogram(iv, 16, ?iv_ccs, ?iv_cg);
-    //@ chars_to_crypto_chars(message, 16);
     crypto_memcpy(message, iv, 16);
     //@ close auth_enc_pub(iv_cg);
     //@ leak auth_enc_pub(iv_cg);
@@ -58,7 +57,7 @@ void sender(char *key, char *msg, unsigned int msg_len)
     //@ open havege_state(&havege_state);
 
     // auth encrypt
-    //@ chars_split(message + 16, 16);
+    //@ chars__split(message + 16, 16);
     //@ close gcm_context(&gcm_context);
     if (gcm_init(&gcm_context, MBEDTLS_CIPHER_ID_AES, key, 
                 (unsigned int) KEY_SIZE * 8) != 0) abort();
@@ -97,10 +96,10 @@ int receiver(char *key, char *msg)
              [?f1]cryptogram(key, KEY_SIZE, ?key_ccs, ?key_cg) &*&
                key_cg == cg_symmetric_key(?sender, ?id) &*&
                receiver == shared_with(sender, id) &*&
-             chars(msg, MAX_SIZE, _); @*/
+             chars_(msg, MAX_SIZE, _); @*/
 /*@ ensures  principal(receiver, _) &*&
              [f1]cryptogram(key, KEY_SIZE, key_ccs, key_cg) &*&
-             chars(msg + result, MAX_SIZE - result, _) &*&
+             chars_(msg + result, MAX_SIZE - result, _) &*&
              crypto_chars(secret, msg, result, ?msg_ccs) &*&
              col || bad(sender) || bad(receiver) ||
                send(sender, receiver, msg_ccs); @*/
@@ -126,9 +125,6 @@ int receiver(char *key, char *msg)
     if (size <= 16 + 16) abort();
     enc_size = size - 16 - 16;
     if (enc_size < MINIMAL_STRING_SIZE) abort();
-    //@ chars_split(buffer, size);
-    //@ assert chars(buffer, size, ?all_cs);
-    //@ close hide_chars((void*) buffer + size, max_size - size, _);
     //@ chars_split(buffer, 16);
     //@ chars_split(buffer + 16, 16);
     //@ assert chars(buffer, 16, ?iv_cs);
@@ -161,8 +157,6 @@ int receiver(char *key, char *msg)
           open [_]auth_enc_pub(enc_cg);
         }
     @*/
-    //@ open hide_chars((void*) buffer + size, max_size - size, _);
-    //@ chars_join(buffer + 16);
     zeroize(buffer, 16);
     //@ chars_join(buffer);
     free(buffer);

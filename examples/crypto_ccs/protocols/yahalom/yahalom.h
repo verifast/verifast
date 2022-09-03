@@ -231,7 +231,7 @@ void sender(int server, int sender, int receiver,
              [?f]cryptogram(key, KEY_SIZE, ?key_ccs, ?key_cg) &*&
                key_cg == cg_symmetric_key(sender, _) &*&
                cg_info(key_cg) == IP(3, server) &*&
-             chars(generated_key, KEY_SIZE, _); @*/
+             chars_(generated_key, KEY_SIZE, _); @*/
 /*@ ensures  principal(sender, _) &*&
              [f]cryptogram(key, KEY_SIZE, key_ccs, key_cg) &*&
              cryptogram(generated_key, KEY_SIZE, _, ?g_key_cg) &*&
@@ -256,7 +256,7 @@ void receiver(int server, int sender, int receiver,
              [?f]cryptogram(key, KEY_SIZE, ?key_ccs, ?key_cg) &*&
                key_cg == cg_symmetric_key(receiver, _) &*&
                cg_info(key_cg) == IP(3, server) &*&
-             chars(generated_key, KEY_SIZE, _); @*/
+             chars_(generated_key, KEY_SIZE, _); @*/
 /*@ ensures  principal(receiver, _) &*&
              [f]cryptogram(key, KEY_SIZE, key_ccs, key_cg) &*&
              cryptogram(generated_key, KEY_SIZE, _, ?g_key_cg) &*&

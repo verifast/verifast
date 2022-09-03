@@ -317,7 +317,7 @@ void increment_nonce(struct item *item);
 
 void random_buffer(char* buffer, int size);
   /*@ requires [?f]world(?pub, ?key_clsfy) &*&
-               chars(buffer, size, _) &*&
+               chars_(buffer, size, _) &*&
                principal(?principal, ?count) &*&
                [_]pub(nonce_item(principal, count + 1, 0)); @*/
   /*@ ensures  [f]world(pub, key_clsfy) &*&

@@ -11,6 +11,15 @@ inductive unit = unit;
 
 inductive option<t> = none | some(t);
 
+fixpoint t the<t>(option<t> v) { switch (v) { case none: return default_value; case some(v0): return v0; } }
+
+fixpoint option<b> map_option<a, b>(fixpoint(a, b) f, option<a> v) {
+    switch (v) {
+        case none: return none;
+        case some(v0): return some(f(v0));
+    }
+}
+
 inductive pair<a, b> = pair(a, b);
 
 fixpoint a fst<a, b>(pair<a, b> p) {

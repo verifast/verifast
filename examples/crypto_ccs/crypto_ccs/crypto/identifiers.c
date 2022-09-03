@@ -1,6 +1,7 @@
 #include "identifiers.h"
 
 #include <stdlib.h>
+#include <string.h>
 #include "../crypto_string.h"
 
 #include "crypto.h"
@@ -25,7 +26,7 @@ lemma void equal_identifiers(int id1, int id2)
 
 void write_identifier(char *array, int id)
   /*@ requires [_]public_invar(?pub) &*&
-               chars(array, ID_SIZE, _); @*/
+               chars_(array, ID_SIZE, _); @*/
   /*@ ensures  crypto_chars(normal, array, ID_SIZE, ?ccs) &*&
                ccs == cs_to_ccs(identifier(id)) &*&
                [_]public_ccs(ccs); @*/
@@ -35,11 +36,8 @@ void write_identifier(char *array, int id)
   //@ chars_to_integer(temp);
   //@ assert chars(temp, 4, chars_of_int(id_val));
 
-  //@ chars_limits(array);
+  //@ chars__limits(array);
   //@ chars_to_crypto_chars(temp, 4);
-  //@ chars_to_crypto_chars(array, 4);
-  //@ chars_to_crypto_chars((void*) array + 4, 4);
-  //@ chars_to_crypto_chars((void*) array + 8, 4);
   crypto_memcpy(array +  0, temp, 4);
   crypto_memcpy(array +  4, temp, 4);
   crypto_memcpy(array +  8, temp, 4);
@@ -75,6 +73,7 @@ void check_identifier(char *array, int id)
 {
   //@ open check_identifier_ghost_args(sym, garbage, p, p_key, c_key, ccs_rest);
   char temp[ID_SIZE];
+  memset(temp, 0, ID_SIZE);
   write_identifier(temp, id);
   //@ MEMCMP_PUB(temp)
   //@ MEMCMP_PUB(array)

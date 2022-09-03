@@ -70,6 +70,13 @@ predicate attacker_invariant(predicate(cryptogram) pub,
 
 @*/
 
+void get_random_bytes(char *buffer, size_t len)
+//@ requires chars_(buffer, len, _);
+//@ ensures chars(buffer, len, _);
+{
+  memset(buffer, 0, len);
+}
+
 void attacker_send_data(havege_state *havege_state, void* socket)
   //@ requires attacker_invariant(?pub, ?pred, ?kc, havege_state, socket, ?attacker);
   //@ ensures  attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
@@ -77,15 +84,17 @@ void attacker_send_data(havege_state *havege_state, void* socket)
   int temp;
   int size;
   char buffer[MAX_MESSAGE_SIZE];
-
+  
   //@ open attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
   //@ close_havege_util(pub, pred, attacker);
   r_int_with_bounds(havege_state, &temp, 1, MAX_MESSAGE_SIZE);
   //@ open_havege_util(pub, pred, attacker);
   size = temp;
-  //@ chars_split(buffer, size);
+  //@ chars__split(buffer, size);
+  get_random_bytes(buffer, (unsigned int) size);
   net_send(socket, buffer, (unsigned int) size);
   //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
+  //@ chars_to_chars_(buffer);
 }
 
 void attacker_send_concatenation(havege_state *havege_state, void* socket)
@@ -105,14 +114,14 @@ void attacker_send_concatenation(havege_state *havege_state, void* socket)
   if (size1 <= 0 || size2 <= 0 || MAX_MESSAGE_SIZE - size1 <= size2)
   {
     //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
+    //@ chars_to_chars_(buffer1);
+    //@ chars_to_chars_(buffer2);
     return;
   }
 
   //@ chars_to_crypto_chars(buffer1, size1);
-  //@ chars_to_crypto_chars(buffer3, size1);
   crypto_memcpy(buffer3, buffer1, (unsigned int) size1);
   //@ chars_to_crypto_chars(buffer2, size2);
-  //@ chars_to_crypto_chars((char*) buffer3 + size1, size2);
   crypto_memcpy((char*) buffer3 + size1, buffer2, (unsigned int) size2);
   //@ crypto_chars_join(buffer3);
   //@ crypto_chars_to_chars(buffer3, size1 + size2);
@@ -349,12 +358,15 @@ int get_iv(havege_state *state, char* iv)
                havege_state_initialized(state) &*&
                random_permission(?p, ?c) &*& true == bad(p) &*&
                is_bad_nonce_is_public(?proof, pub, ?pred) &*&
-               pred() &*& chars(iv, 16, _);@*/
+               pred() &*& chars_(iv, 16, _);@*/
   /*@ ensures  havege_state_initialized(state) &*&
                random_permission(p, c + 1) &*&
                is_bad_nonce_is_public(proof, pub, pred) &*&
-               pred() &*& crypto_chars(normal, iv, 16, ?ccs) &*&
-               result != 0 || ccs == ccs_for_cg(cg_nonce(p, c + 1));@*/
+               pred() &*&
+               result == 0 ?
+                   crypto_chars(normal, iv, 16, ?ccs) &*& ccs == ccs_for_cg(cg_nonce(p, c + 1))
+               :
+                   chars_(iv, 16, _);@*/
 {
   int result = -1;
   //@ close random_request(p, 0, false);
@@ -364,10 +376,10 @@ int get_iv(havege_state *state, char* iv)
     //@ close cryptogram(iv, 16, ccs_iv, cg_iv);
     //@ proof(cg_iv);
     //@ public_cryptogram(iv, cg_iv);
+    //@ chars_to_crypto_chars(iv, 16);
     
     result = 0;
   }
-  //@ chars_to_crypto_chars(iv, 16);
   return result;
 }
 
@@ -426,12 +438,12 @@ void attacker_send_encrypted(havege_state *havege_state, void* socket)
         net_send(socket, buffer3, (unsigned int) size2);
       }
       //@ crypto_chars_to_chars(buffer2, size2);
+      //@ crypto_chars_to_chars(iv, 16);
     }
     aes_free(&aes_context);
     //@ open aes_context(&aes_context);
     //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
     //@ public_cryptogram(buffer1, cg_symmetric_key(p, c));
-    //@ crypto_chars_to_chars(iv, 16);
     return;
   }
 
@@ -510,9 +522,9 @@ void attacker_send_decrypted(havege_state *havege_state, void* socket)
       //@ crypto_chars_to_chars(buffer3, size2);
       net_send(socket, buffer3, (unsigned int) size2);
       //@ public_cryptogram(buffer2, cg_enc);
+      //@ crypto_chars_to_chars(iv, 16);
     }
     aes_free(&aes_context);
-    //@ crypto_chars_to_chars(iv, 16);
   }
   //@ open aes_context(&aes_context);
   //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
@@ -555,7 +567,7 @@ void attacker_send_auth_encrypted(havege_state *havege_state, void* socket)
     if (get_iv(havege_state, iv) == 0)
     {
       //@ chars_to_crypto_chars(buffer2, size2);
-      //@ chars_split(buffer3, 16);
+      //@ chars__split(buffer3, 16);
       if (gcm_crypt_and_tag(&gcm_context, GCM_ENCRYPT,
                             (unsigned int) size2, iv, 16, NULL, 0,
                             buffer2, (void*) buffer3 + 16, 16, buffer3) == 0)
@@ -585,9 +597,9 @@ void attacker_send_auth_encrypted(havege_state *havege_state, void* socket)
       //@ crypto_chars_to_chars(buffer2, size2);
       //@ crypto_chars_join(buffer3);
       //@ crypto_chars_to_chars(buffer3, size2 + 16);
+      //@ crypto_chars_to_chars(iv, 16);
     }
     gcm_free(&gcm_context);
-    //@ crypto_chars_to_chars(iv, 16);
   }
   //@ open gcm_context(&gcm_context);
   //@ close attacker_invariant(pub, pred, kc, havege_state, socket, attacker);
@@ -661,8 +673,8 @@ void attacker_send_auth_decrypted(havege_state *havege_state, void* socket)
       //@ crypto_chars_to_chars(buffer2, 16);
       //@ crypto_chars_to_chars((void*) buffer2 + 16, size2 - 16);
       //@ chars_join(buffer2);
+      //@ crypto_chars_to_chars(iv, 16);
     }
-    //@ crypto_chars_to_chars(iv, 16);
     gcm_free(&gcm_context);
   }
   //@ open gcm_context(&gcm_context);
@@ -726,6 +738,7 @@ void attacker_send_asym_encrypted(havege_state *havege_state, void* socket)
           }
         @*/
         net_send(socket, buffer3, osize);
+        //@ chars_join(buffer3);
       }
       //@ crypto_chars_to_chars(buffer2, size2);
     }
@@ -800,7 +813,7 @@ void attacker_send_asym_decrypted(havege_state *havege_state, void* socket)
       @*/
       //@ crypto_chars_to_chars(buffer3, osize_val);
       if (success == 0) net_send(socket, buffer3, osize);
-      //@ chars_join(buffer3);
+      //@ chars_chars__join(buffer3);
       //@ open cryptogram(buffer2, size2, ccs2, cg_enc);
       //@ public_crypto_chars(buffer2, size2);
     }

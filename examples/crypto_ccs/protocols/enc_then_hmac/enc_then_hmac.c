@@ -54,7 +54,6 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
     //@ open cryptogram(iv, 16, ?iv_ccs, ?iv_cg);
     //@ close enc_then_hmac_pub(iv_cg);
     //@ leak enc_then_hmac_pub(iv_cg);
-    //@ chars_to_crypto_chars(message, 16);
     crypto_memcpy(message, iv, 16);
     //@ close cryptogram(message, 16, iv_ccs, iv_cg);
     //@ public_cryptogram(message, iv_cg);
@@ -130,11 +129,11 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
                  cg_info(hmac_key_cg) == enc_id &*&
                receiver == shared_with(sender, enc_id) &*&
                receiver == shared_with(sender, hmac_id) &*&
-             chars(msg, MAX_SIZE, _); @*/
+             chars_(msg, MAX_SIZE, _); @*/
 /*@ ensures  principal(receiver, _) &*&
              [f1]cryptogram(enc_key, KEY_SIZE, enc_key_ccs, enc_key_cg) &*&
              [f2]cryptogram(hmac_key, KEY_SIZE, hmac_key_ccs, hmac_key_cg) &*&
-             chars(msg + result, MAX_SIZE - result, _) &*&
+             chars_(msg + result, MAX_SIZE - result, _) &*&
              crypto_chars(?kind, msg, result, ?msg_ccs) &*&
              col || bad(sender) || bad(receiver) ||
                (kind == secret && send(sender, receiver, msg_ccs)); @*/
@@ -164,9 +163,6 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     if (size <= 16 + 64) abort();
     enc_size = size - 16 - 64;
     if (enc_size < MINIMAL_STRING_SIZE) abort();
-    //@ chars_split(buffer, size);
-    //@ assert chars(buffer, size, ?all_cs);
-    //@ close hide_chars((void*) buffer + size, max_size - size, _);
 
     //Verify the hmac
     //@ chars_split(buffer, size - 64);
@@ -192,7 +188,6 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
           crypto_chars_to_chars(hmac, 64);
         }
     @*/
-    //@ assert all_cs == append(pay_cs, hmac_cs);
 
     // IV stuff
     //@ cs_to_ccs_crypto_chars(buffer, pay_cs);
@@ -200,7 +195,6 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ assert chars(buffer, 16, ?iv_cs);
     //@ chars_to_crypto_chars(buffer, 16);
     //@ assert crypto_chars(normal, buffer, 16, ?iv_ccs);
-    //@ chars_to_crypto_chars(iv, 16);
     crypto_memcpy(iv, buffer, 16);
     //@ cs_to_ccs_crypto_chars(iv, iv_cs);
     //@ interpret_nonce(iv, 16);
@@ -259,7 +253,6 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
         }
     @*/
     //@ if (garbage) decryption_garbage(msg, enc_size, s);
-    //@ open hide_chars((void*) buffer + size, max_size - size, _);
     //@ crypto_chars_to_chars(buffer, 16);
     //@ crypto_chars_to_chars(buffer + size - 64, 64);
     //@ chars_join(buffer);

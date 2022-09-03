@@ -34,11 +34,11 @@ struct student *read_students(int *count)
     struct student *result = malloc(*count * sizeof(struct student));
     if (result == 0) abort();
     for (int i = 0; i < *count; i++)
-        //@ requires *count |-> nb &*& i <= nb &*& chars((void *)(result + i), (nb - i) * sizeof(struct student), _);
+        //@ requires *count |-> nb &*& i <= nb &*& chars_((void *)(result + i), (nb - i) * sizeof(struct student), _);
         //@ ensures *count |-> nb &*& students(result + old_i, nb - old_i);
     {
         //@ mul_mono_l(1, nb - i, sizeof(struct student));
-        //@ chars_split((void *)(result + i), sizeof(struct student));
+        //@ chars__split((void *)(result + i), sizeof(struct student));
         //@ close_struct(result + i);
         printf("Please enter the name of student %d:\n", i);
         if (scanf(" %99s", &result[i].name) != 1) abort();
@@ -61,7 +61,7 @@ int main() //@ : main
     //@ div_rem_nonneg(SIZE_MAX, 2);
     struct point *points = malloc(2 * sizeof(struct point));
     if (points == 0) abort();
-    //@ chars_split((void *)points, sizeof(struct point));
+    //@ chars__split((void *)points, sizeof(struct point));
     //@ close_struct(points);
     //@ close_struct(points + 1);
     points[0].x = 10;
@@ -70,7 +70,7 @@ int main() //@ : main
     points[1].y = 40;
     //@ open_struct(points);
     //@ open_struct(points + 1);
-    //@ chars_join((void *)points);
+    //@ chars__join((void *)points);
     free((void *)points); 
     return 0;
 }

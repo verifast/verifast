@@ -273,6 +273,17 @@ predicate_family_instance userdef_usb_interface_data(usb_mouse_probe, usb_mouse_
   
 predicate_family_instance usb_probe_callback_link(usb_mouse_probe)(void* disconnect_cb) =
   usb_mouse_disconnect == disconnect_cb;
+
+lemma void forall_equals_all_eq_char_of_uchar(list<unsigned char> ucs)
+    requires forall(ucs, (equals)(unit, 0)) == true;
+    ensures all_eq(map(char_of_uchar, ucs), 0) == true;
+{
+    switch (ucs) {
+        case nil:
+        case cons(uc, ucs0):
+            forall_equals_all_eq_char_of_uchar(ucs0);
+    }
+}
 @*/ 
 
 static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_id *id) //@: vf_usb_operation_probe_t
@@ -355,8 +366,10 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 	if (! mouse || ! input_dev)
 		goto fail1;
 	
+	//@ assert uchars((void *)mouse, sizeof(struct usb_mouse), ?mouse_ucs);
 	//@ uchars_to_chars(mouse);
-	//@ close_struct(mouse);
+	//@ forall_equals_all_eq_char_of_uchar(mouse_ucs);
+	//@ close_struct_zero(mouse);
 	
 	//@ assert chars((void*) &mouse->name, 128, ?zeros);
 	//@ assume(mem(0, zeros)); // follows because kzalloc is used
@@ -373,7 +386,7 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 	//@ signed char* data_tmp = mouse->data;
 	if (! mouse->data) {
 		//@ open_struct(mouse);
-		//@ chars_to_uchars(mouse);
+		//@ chars__to_uchars_(mouse);
 		goto fail1;
 	}
 
@@ -491,7 +504,7 @@ fail3:
 fail2:	
 	usb_free_coherent(dev, 8, mouse->data, mouse->data_dma);
 	//@ open_struct(mouse);
-	//@ chars_to_uchars(mouse);
+	//@ chars__to_uchars_(mouse);
 fail1:	
 	input_free_device(input_dev);
 	kfree(mouse);

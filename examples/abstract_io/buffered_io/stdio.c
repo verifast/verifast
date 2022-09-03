@@ -70,7 +70,6 @@ lemma void destroy_stdio()
     ensures module(stdio, false);
 {
     open stdout_buffer(_);
-    chars_join(buffer);
     close_module();
 }
 
@@ -118,7 +117,6 @@ void flush_core()
     //@ open stdout_buffer_token(_, _);
     //@ open stdout_buffer(_);
     write_stdout(buffer, count);
-    //@ chars_join(buffer);
     count = 0;
     //@ close stdout_buffer(nil);
     //@ produce_lemma_function_pointer_chunk implies(Q, True, Q, True)() {};

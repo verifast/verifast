@@ -49,8 +49,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
     if (enc_msg == 0) abort();
 
     // Copy message
-    //@ chars_split(enc_msg, msg_len);
-    //@ chars_to_crypto_chars(enc_msg, msg_len);
+    //@ chars__split(enc_msg, msg_len);
     crypto_memcpy(enc_msg, msg, msg_len);
     //@ assert crypto_chars(secret, enc_msg, msg_len, msg_ccs);
 
@@ -78,7 +77,6 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
     //@ open cryptogram(iv, 16, ?iv_ccs, ?iv_cg);
     //@ close hmac_then_enc_pub(iv_cg);
     //@ leak hmac_then_enc_pub(iv_cg);
-    //@ chars_to_crypto_chars(message, 16);
     crypto_memcpy(message, iv, 16);
     //@ close cryptogram(message, 16, iv_ccs, iv_cg);
     //@ public_cryptogram(message, iv_cg);
@@ -151,11 +149,11 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
                  cg_info(enc_key_cg) == hmac_id &*&
                receiver == shared_with(sender, enc_id) &*&
                receiver == shared_with(sender, hmac_id) &*&
-             chars(msg, MAX_SIZE, _); @*/
+             chars_(msg, MAX_SIZE, _); @*/
 /*@ ensures  principal(receiver, _) &*&
              [f1]cryptogram(enc_key, KEY_SIZE, enc_key_ccs, enc_key_cg) &*&
              [f2]cryptogram(hmac_key, KEY_SIZE, hmac_key_ccs, hmac_key_cg) &*&
-             chars(msg + result, MAX_SIZE - result, _) &*&
+             chars_(msg + result, MAX_SIZE - result, _) &*&
              crypto_chars(?kind, msg, result, ?msg_ccs) &*&
              col || bad(sender) || bad(receiver) ||
                (kind == secret && send(sender, receiver, msg_ccs)); @*/
@@ -192,7 +190,6 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ chars_split(buffer, 16);
     //@ assert chars(buffer, 16, ?iv_cs);
     //@ chars_to_crypto_chars(buffer, 16);
-    //@ chars_to_crypto_chars(iv, 16);
     crypto_memcpy(iv, buffer, 16);
     //@ cs_to_ccs_crypto_chars(iv, iv_cs);
     //@ cs_to_ccs_crypto_chars(buffer, iv_cs);
@@ -277,7 +274,6 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     @*/
     //@ MEMCMP_SEC(hmac, hmac_cg)
     if (crypto_memcmp(hmac, (void*) buffer_dec + enc_size - 64, 64) != 0) abort();
-    //@ chars_to_crypto_chars(msg, enc_size - 64);
     crypto_memcpy(msg, buffer_dec, (unsigned int) enc_size - 64);
     /*@ if (garbage)
         {
@@ -300,6 +296,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     zeroize(hmac, 64);
     zeroize(buffer_dec, (int)enc_size - 64);
     zeroize(buffer_dec + enc_size - 64, 64);
+    //@ chars_join(buffer_dec);
     free(buffer_dec);
   }
   net_close(socket2);

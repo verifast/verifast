@@ -49,8 +49,8 @@ predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
     s_key_cg == cg_rsa_private_key(sender, ?s_id) &*&
   [1/2]cryptogram(r_key, 8 * KEY_SIZE, ?r_key_ccs, ?r_key_cg) &*&
     r_key_cg == cg_rsa_public_key(receiver, ?r_id) &*&
-  chars(s_nonce, NONCE_SIZE, _) &*&
-  chars(r_nonce, NONCE_SIZE, _) &*&
+  chars_(s_nonce, NONCE_SIZE, _) &*&
+  chars_(r_nonce, NONCE_SIZE, _) &*&
   info == IV(sender, IV(receiver, PV(s_key, CCL(s_key_ccs, IV(s_id,
              PV(r_key, CCL(r_key_ccs, IV(r_id, PV(s_nonce, PV(r_nonce, nil))))))))));
 
@@ -115,8 +115,8 @@ predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) =
     s_key_cg == cg_rsa_public_key(sender, ?s_id) &*&
   [1/2]cryptogram(r_key, 8 * KEY_SIZE, ?r_key_ccs, ?r_key_cg) &*&
     r_key_cg == cg_rsa_private_key(receiver, ?r_id) &*&
-  chars(s_nonce, NONCE_SIZE, _) &*&
-  chars(r_nonce, NONCE_SIZE, _) &*&
+  chars_(s_nonce, NONCE_SIZE, _) &*&
+  chars_(r_nonce, NONCE_SIZE, _) &*&
   info == cons(int_value(sender), 
             cons(int_value(receiver), 
               cons(pointer_value(s_key),

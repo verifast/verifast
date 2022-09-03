@@ -166,8 +166,8 @@ void sender(int sender, int receiver,
              [?f2]cryptogram(r_pub_key, 8 * KEY_SIZE,
                              ?r_pub_key_ccs, ?r_pub_key_cg) &*&
                r_pub_key_cg == cg_rsa_public_key(receiver, ?r_id) &*&
-             chars(s_nonce, NONCE_SIZE, _) &*&
-             chars(r_nonce, NONCE_SIZE, _); @*/
+             chars_(s_nonce, NONCE_SIZE, _) &*&
+             chars_(r_nonce, NONCE_SIZE, _); @*/
 /*@ ensures  principal(sender, _) &*&
              [f1]cryptogram(s_priv_key, 8 * KEY_SIZE,
                             s_priv_key_ccs, s_priv_key_cg) &*&
@@ -196,8 +196,8 @@ void receiver(int sender, int receiver,
              [?f2]cryptogram(r_priv_key, 8 * KEY_SIZE,
                              ?r_priv_key_ccs, ?r_priv_key_cg) &*&
                r_priv_key_cg == cg_rsa_private_key(receiver, ?r_id) &*&
-             chars(s_nonce, NONCE_SIZE, _) &*&
-             chars(r_nonce, NONCE_SIZE, _); @*/
+             chars_(s_nonce, NONCE_SIZE, _) &*&
+             chars_(r_nonce, NONCE_SIZE, _); @*/
 /*@ ensures  principal(receiver, _) &*&
              [f1]cryptogram(s_pub_key, 8 * KEY_SIZE,
                             s_pub_key_ccs, s_pub_key_cg) &*&

@@ -34,7 +34,6 @@ void sender(char *key, int key_len, char *message)
     if (M == 0) abort();
     
     //@ chars_to_crypto_chars(message, MESSAGE_SIZE);
-    //@ chars_to_crypto_chars(M, MESSAGE_SIZE);
     crypto_memcpy(M, message, MESSAGE_SIZE);
     //@ MEMCMP_PUB(M)
     sha512_hmac(key, (unsigned int) key_len, M, 
@@ -45,7 +44,6 @@ void sender(char *key, int key_len, char *message)
     //@ leak hmac_pub(hmac_cg);
     //@ public_cryptogram(hmac, hmac_cg);
     //@ chars_to_crypto_chars(hmac, 64);
-    //@ chars_to_crypto_chars(M + MESSAGE_SIZE, 64);
     crypto_memcpy(M + MESSAGE_SIZE, hmac, 64);
     //@ crypto_chars_to_chars(hmac, 64);
     
@@ -66,7 +64,7 @@ void receiver(char *key, int key_len, char *message)
                [?f1]cryptogram(key, key_len, ?key_ccs, ?key_cg) &*&
                  key_cg == cg_symmetric_key(?sender, ?id) &*&
                  receiver == shared_with(sender, id) &*&
-               chars(message, MESSAGE_SIZE, _); @*/
+               chars_(message, MESSAGE_SIZE, _); @*/
   /*@ ensures  principal(receiver, _) &*&
                [f1]cryptogram(key, key_len, key_ccs, key_cg) &*&
                chars(message, MESSAGE_SIZE, ?msg_cs) &*&
@@ -92,17 +90,13 @@ void receiver(char *key, int key_len, char *message)
     size = net_recv(&socket2, buffer, MAX_MESSAGE_SIZE);
     int expected_size = MESSAGE_SIZE + 64;
     if (size != expected_size) abort();
-    //@ chars_split(buffer, expected_size);
     //@ assert chars(buffer, MESSAGE_SIZE, ?msg_cs);
-    /*@ close hide_chars((void*) buffer + expected_size, 
-                         MAX_MESSAGE_SIZE - expected_size, _); @*/
     
     //Verify the hmac
     //@ chars_to_crypto_chars(buffer, MESSAGE_SIZE);
     //@ MEMCMP_PUB(buffer)
     sha512_hmac(key, (unsigned int) key_len, buffer, 
                 (unsigned int) MESSAGE_SIZE, hmac, 0);
-    //@ chars_to_crypto_chars(message, MESSAGE_SIZE);
     crypto_memcpy(message, (void*) buffer , MESSAGE_SIZE);
     //@ open cryptogram(hmac, 64, ?hmac_ccs, ?hmac_cg);
     //@ assert hmac_cg == cg_sha512_hmac(sender, id, _);
@@ -126,8 +120,6 @@ void receiver(char *key, int key_len, char *message)
         }
     @*/
     //@ cs_to_ccs_crypto_chars(message, msg_cs);
-    /*@ open hide_chars((void*) buffer + expected_size, 
-                        MAX_MESSAGE_SIZE - expected_size, _); @*/
   }
   net_close(socket2);
   net_close(socket1);

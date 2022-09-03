@@ -19,7 +19,7 @@ predicate random_state_predicate(predicate(void *) state_pred) = true;
   [?f]STATE_PRED(STATE) &*& \
   random_request(?principal, ?info, ?key_request) &*& \
   random_permission(principal, ?count) &*& \
-  chars(output, len, _) &*& len >= MIN_RANDOM_SIZE
+  chars_(output, len, _) &*& len >= MIN_RANDOM_SIZE
   
 #define PRG_POSTCONDITION(STATE_PRED, STATE) \
   [f]STATE_PRED(STATE) &*& \
@@ -32,7 +32,7 @@ predicate random_state_predicate(predicate(void *) state_pred) = true;
     : \
       cg == cg_nonce(principal, count + 1) \
   : \
-    chars(output, len, _)
+    chars_(output, len, _)
 
 @*/
 

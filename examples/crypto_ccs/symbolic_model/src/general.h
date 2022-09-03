@@ -43,12 +43,12 @@
 void *malloc_wrapper(int size);
   //@ requires 0 <= size;
   /*@ ensures  result != 0 &*&
-               malloc_block(result, size) &*& chars(result, size, ?cs) &*&
+               malloc_block(result, size) &*& chars_(result, size, ?cs) &*&
                true == ((char *)0 < result &&
                result + size <= (char *)UINTPTR_MAX); @*/
 
 void write_buffer(char **target, const char *source, int length);
-  /*@ requires pointer(target, ?t) &*& chars(t, length, ?cs) &*&
+  /*@ requires pointer(target, ?t) &*& chars_(t, length, ?cs) &*&
                [?f]crypto_chars(?kind, source, length, ?ccs0) &*&
                length > 0 &*& kind == normal ||
                  (kind == secret && length >= MINIMAL_STRING_SIZE)

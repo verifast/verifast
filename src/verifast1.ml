@@ -5092,34 +5092,36 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let array_slice_symb = lazy_predfamsymb "java.lang.array_slice"
   let array_slice_deep_symb = lazy_predfamsymb "java.lang.array_slice_deep"
   
+  let integer___symb = lazy_predfamsymb "integer__"
+  let integers___symb = lazy_predfamsymb "integers__"
   let integer__symb = lazy_predfamsymb "integer_"
   let integers__symb = lazy_predfamsymb "integers_"
 
   let generic_points_to_symb = lazy_predfamsymb "generic_points_to"
 
-  let pointee_tuple chunk_pred_name array_pred_name =
+  let pointee_tuple chunk_pred_name array_pred_name uninit_chunk_pred_name uninit_array_pred_name =
     let ambpn = "malloc_block_" ^ array_pred_name in
     let ambsymb = lazy_predfamsymb ambpn in
     (* no new_block_ in c, but we have to generate a dummy symb so try_pointee_pred_symb0 keeps working (c does not include the prelude of cxx) *)
     let anbpn = match dialect with Some Cxx -> "new_block_" ^ array_pred_name | _ -> "new_block_x unsupported" in
     let anbsymb = match dialect with Some Cxx -> lazy_predfamsymb anbpn | _ -> ambsymb in
-    chunk_pred_name, lazy_predfamsymb chunk_pred_name, array_pred_name, lazy_predfamsymb array_pred_name, ambpn, ambsymb, anbpn, anbsymb
+    chunk_pred_name, lazy_predfamsymb chunk_pred_name, array_pred_name, lazy_predfamsymb array_pred_name, ambpn, ambsymb, anbpn, anbsymb, uninit_chunk_pred_name, lazy_predfamsymb uninit_chunk_pred_name, uninit_array_pred_name, lazy_predfamsymb uninit_array_pred_name
   
-  let _, pointer_pred_symb, _, pointers_pred_symb, _, malloc_block_pointers_pred_symb, _, new_block_pointers_pred_symb as pointer_pointee_tuple = pointee_tuple "pointer" "pointers"
-  let _, llong_pred_symb, _, llongs_pred_symb, _, malloc_block_llongs_pred_symb, _, new_block_llongs_pred_symb as llong_pointee_tuple = pointee_tuple "llong_integer" "llongs"
-  let _, ullong_pred_symb, _, ullongs_pred_symb, _, malloc_block_ullongs_pred_symb, _, new_block_ullongs_pred_symb as ullong_pointee_tuple = pointee_tuple "u_llong_integer" "ullongs"
-  let _, int_pred_symb, _, ints_pred_symb, _, malloc_block_ints_pred_symb, _, new_block_ints_pred_symb as int_pointee_tuple = pointee_tuple "integer" "ints"
-  let _, uint_pred_symb, _, uints_pred_symb, _, malloc_block_uints_pred_symb, _, new_block_uints_pred_symb as uint_pointee_tuple = pointee_tuple "u_integer" "uints"
-  let _, short_pred_symb, _, shorts_pred_symb, _, malloc_block_shorts_pred_symb, _, new_block_shorts_pred_symb as short_pointee_tuple = pointee_tuple "short_integer" "shorts"
-  let _, ushort_pred_symb, _, ushorts_pred_symb, _, malloc_block_ushorts_pred_symb, _, new_block_ushorts_pred_symb as ushort_pointee_tuple = pointee_tuple "u_short_integer" "ushorts"
-  let _, char_pred_symb, _, chars_pred_symb, _, malloc_block_chars_pred_symb, _, new_block_chars_pred_symb as char_pointee_tuple = pointee_tuple "character" "chars"
-  let _, uchar_pred_symb, _, uchars_pred_symb, _, malloc_block_uchars_pred_symb, _, new_block_uchars_pred_symb as uchar_pointee_tuple = pointee_tuple "u_character" "uchars"
-  let _, bool_pred_symb, _, bools_pred_symb, _, malloc_block_bools_pred_symb, _, new_block_bools_pred_symb as bool_pointee_tuple = pointee_tuple "boolean" "bools"
-  let _, float__pred_symb, _, floats_pred_symb, _, malloc_block_floats_pred_symb, _, new_block_floats_pred_symb as float_pointee_tuple = pointee_tuple "float_" "floats"
-  let _, double__pred_symb, _, doubles_pred_symb, _, malloc_block_doubles_pred_symb, _, new_block_doubles_pred_symb as double_pointee_tuple = pointee_tuple "double_" "doubles"
-  let _, long_double_pred_symb, _, long_doubles_pred_symb, _, malloc_block_long_doubles_pred_symb, _, new_block_long_doubles_pred_symb as long_double_pointee_tuple = pointee_tuple "long_double" "long_doubles"
+  let _, pointer_pred_symb, _, pointers_pred_symb, _, malloc_block_pointers_pred_symb, _, new_block_pointers_pred_symb, _, pointer__pred_symb, _, pointers__pred_symb as pointer_pointee_tuple = pointee_tuple "pointer" "pointers" "pointer_" "pointers_"
+  let _, llong_pred_symb, _, llongs_pred_symb, _, malloc_block_llongs_pred_symb, _, new_block_llongs_pred_symb, _, llong__pred_symb, _, llongs__pred_symb as llong_pointee_tuple = pointee_tuple "llong_integer" "llongs" "llong_" "llongs_"
+  let _, ullong_pred_symb, _, ullongs_pred_symb, _, malloc_block_ullongs_pred_symb, _, new_block_ullongs_pred_symb, _, ullong__pred_symb, _, ullongs__pred_symb as ullong_pointee_tuple = pointee_tuple "u_llong_integer" "ullongs" "ullong_" "ullongs_"
+  let _, int_pred_symb, _, ints_pred_symb, _, malloc_block_ints_pred_symb, _, new_block_ints_pred_symb, _, int__pred_symb, _, ints__pred_symb as int_pointee_tuple = pointee_tuple "integer" "ints" "int_" "ints_"
+  let _, uint_pred_symb, _, uints_pred_symb, _, malloc_block_uints_pred_symb, _, new_block_uints_pred_symb, _, uint__pred_symb, _, uints__pred_symb as uint_pointee_tuple = pointee_tuple "u_integer" "uints" "uint_" "uints_"
+  let _, short_pred_symb, _, shorts_pred_symb, _, malloc_block_shorts_pred_symb, _, new_block_shorts_pred_symb, _, short__pred_symb, _, shorts__pred_symb as short_pointee_tuple = pointee_tuple "short_integer" "shorts" "short_" "shorts_"
+  let _, ushort_pred_symb, _, ushorts_pred_symb, _, malloc_block_ushorts_pred_symb, _, new_block_ushorts_pred_symb, _, ushort__pred_symb, _, ushorts__pred_symb  as ushort_pointee_tuple = pointee_tuple "u_short_integer" "ushorts" "ushort_" "ushorts_"
+  let _, char_pred_symb, _, chars_pred_symb, _, malloc_block_chars_pred_symb, _, new_block_chars_pred_symb, _, char__pred_symb, _, chars__pred_symb  as char_pointee_tuple = pointee_tuple "character" "chars" "char_" "chars_"
+  let _, uchar_pred_symb, _, uchars_pred_symb, _, malloc_block_uchars_pred_symb, _, new_block_uchars_pred_symb, _, uchar__pred_symb, _, uchars__pred_symb as uchar_pointee_tuple = pointee_tuple "u_character" "uchars" "uchar_" "uchars_"
+  let _, bool_pred_symb, _, bools_pred_symb, _, malloc_block_bools_pred_symb, _, new_block_bools_pred_symb, _, bool__pred_symb, _, bools__pred_symb  as bool_pointee_tuple = pointee_tuple "boolean" "bools" "bool_" "bools_"
+  let _, float__pred_symb, _, floats_pred_symb, _, malloc_block_floats_pred_symb, _, new_block_floats_pred_symb, _, float___pred_symb, _, floats__pred_symb  as float_pointee_tuple = pointee_tuple "float_" "floats" "float__" "floats_"
+  let _, double__pred_symb, _, doubles_pred_symb, _, malloc_block_doubles_pred_symb, _, new_block_doubles_pred_symb, _, double___pred_symb, _, doubles__pred_symb as double_pointee_tuple = pointee_tuple "double_" "doubles" "double__" "doubles_"
+  let _, long_double_pred_symb, _, long_doubles_pred_symb, _, malloc_block_long_doubles_pred_symb, _, new_block_long_doubles_pred_symb, _, long_double__pred_symb, _, long_doubles__pred_symb as long_double_pointee_tuple = pointee_tuple "long_double" "long_doubles" "long_double_" "long_doubles_"
   
-  let deref_pointee_tuple (cn, csym, an, asym, mban, mbasym, nban, nbasym) = (cn, csym(), an, asym(), mban, mbasym(), nban, nbasym())
+  let deref_pointee_tuple (cn, csym, an, asym, mban, mbasym, nban, nbasym, ucn, ucsym, uan, uasym) = (cn, csym(), an, asym(), mban, mbasym(), nban, nbasym(), ucn, ucsym(), uan, uasym())
   
   let int32_pointee_tuple =
     if int_rank = LitRank 2 then Some int_pointee_tuple else None
@@ -5149,9 +5151,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let supported_types_text = "int, unsigned int, char, unsigned char, or a pointer type"
   
-  let try_pointee_pred_symb pointeeType = option_map (fun (_, x, _, _, _, _, _, _) -> x) (try_pointee_pred_symb0 pointeeType)
+  let try_pointee_pred_symb pointeeType = option_map (fun (_, x, _, _, _, _, _, _, _, _, _, _) -> x) (try_pointee_pred_symb0 pointeeType)
   
   let list_type elemType = InductiveType ("list", [elemType])
+  let option_type elemType = InductiveType ("option", [elemType])
   
   let rec check_asn_core (pn,ilist) tparams tenv p =
     let check_asn = check_asn_core in
@@ -5191,13 +5194,15 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | _ -> static_error l "Malformed array assertion." None
         in
         begin match try_pointee_pred_symb0 elemtype with
-          Some (pointee_pred_name, pointee_pred_symb, array_pred_name, array_pred_symb, _, _, _, _) ->
+          Some (pointee_pred_name, pointee_pred_symb, array_pred_name, array_pred_symb, _, _, _, _, _, _, uninit_array_pred_name, _) ->
+          let array_pred_name, elemtype = if wrhs = DummyPat then uninit_array_pred_name, option_type elemtype else array_pred_name, elemtype in
           let p = new predref array_pred_name [PtrType elemtype; intType; list_type elemtype] (Some 2) in
           (WPredAsn (l, p, true, [], [], [LitPat wfirst; wlength; wrhs]), tenv, [])
         | None ->
         match int_rank_and_signedness elemtype with
           Some (k, signedness) ->
-          let p = new predref "integers_" [PtrType Void; intType; Bool; intType; list_type elemtype] (Some 4) in
+          let predname, pred_elemtype = if wrhs = DummyPat then "integers__", option_type elemtype else "integers_", elemtype in
+          let p = new predref predname [PtrType Void; intType; Bool; intType; list_type pred_elemtype] (Some 4) in
           (WPredAsn (l, p, true, [], [], [LitPat wfirst; LitPat (SizeofExpr (l, TypeExpr (ManifestTypeExpr (l, elemtype)))); LitPat (if signedness = Signed then True l else False l); wlength; wrhs]), tenv, [])
         | None ->
           static_error l (Printf.sprintf "Array points-to notation is not supported for element type '%s'" (string_of_type elemtype)) None
@@ -5804,6 +5809,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let cons_symb = lazy_purefuncsymb "cons"
 
   let mk_cons elem_tp head tail = mk_app !!cons_symb [apply_conversion (provertype_of_type elem_tp) ProverInductive head; tail]
+
+  let some_symb = lazy_purefuncsymb "some"
+
+  let mk_some elem_tp value = mk_app !!some_symb [apply_conversion (provertype_of_type elem_tp) ProverInductive value]
   
   let all_eq_symb = lazy_purefuncsymb "all_eq"
 

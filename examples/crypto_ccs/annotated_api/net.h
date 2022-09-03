@@ -65,10 +65,11 @@ int net_send(void *ctx, const char *buf, size_t len);
 int net_recv(void *ctx, char *buf, size_t len);
   /*@ requires integer(ctx, ?fd)  &*&
                net_status(fd, ?ip, ?port, connected) &*&
-               chars(buf, len, _) &*& len <= MAX_MESSAGE_SIZE; @*/
+               chars_(buf, len, _) &*& len <= MAX_MESSAGE_SIZE; @*/
   /*@ ensures  integer(ctx, fd)  &*&
                net_status(fd, ip, port, connected) &*&
-               chars(buf, len, _) &*& result <= len; @*/
+               result <= len &*&
+               chars(buf, max(0, {result}), _) &*& chars_(buf + max(0, {result}), len - max(0, {result}), _); @*/
 
 void net_close(int fd);
   //@ requires net_status(fd, _, _, _);

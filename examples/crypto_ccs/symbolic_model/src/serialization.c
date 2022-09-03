@@ -318,7 +318,6 @@ int serialize_to_public_message(char** dest, struct item* item)
   //@ assert [f1]crypto_chars(secret, cont, size, ?ccs);
 
   temp = malloc_wrapper(size);
-  //@ chars_to_crypto_chars(temp, size);
   crypto_memcpy(temp, item->content, (unsigned int) size);
   *dest = temp;
 

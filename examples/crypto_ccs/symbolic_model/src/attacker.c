@@ -9,7 +9,7 @@
 void random_buffer_(char* buffer, int size)
   /*@ requires [?f]world(?pub, ?key_clsfy) &*&
                proof_obligations(pub) &*&
-               chars(buffer, size, _) &*&
+               chars_(buffer, size, _) &*&
                principal(?principal, ?count) &*&
                true == bad(principal); @*/
   /*@ ensures  [f]world(pub, key_clsfy) &*&

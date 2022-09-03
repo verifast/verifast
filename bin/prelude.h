@@ -31,27 +31,54 @@ lemma void div_rem_nonneg(int D, int d);
 
 predicate generic_points_to<t>(t *p; t v);
 
-predicate integer_(void *p, int size, bool signed_; int v);
+predicate integer__(void *p, int size, bool signed_; option<int> v);
+predicate integer_(void *p, int size, bool signed_; int v) = integer__(p, size, signed_, some(v));
 
-predicate character(char *p; char c) = integer_(p, 1, true, c);
-predicate u_character(unsigned char *p; unsigned char c) = integer_(p, 1, false, c);
+predicate char_(char *p; option<char> v) = integer__(p, 1, true, v);
+predicate uchar_(unsigned char *p; option<unsigned char> v) = integer__(p, 1, false, v);
 
-predicate integer(int *p; int v) = integer_(p, sizeof(int), true, v);
-predicate u_integer(unsigned int *p; unsigned int v) = integer_(p, sizeof(int), false, v);
+predicate character(char *p; char c) = char_(p, some(c));
+predicate u_character(unsigned char *p; unsigned char c) = uchar_(p, some(c));
+
+predicate int_(int *p; option<int> v) = integer__(p, sizeof(int), true, v);
+predicate uint_(unsigned int *p; option<int> v) = integer__(p, sizeof(int), false, v);
+
+predicate integer(int *p; int v) = int_(p, some(v));
+predicate u_integer(unsigned int *p; unsigned int v) = uint_(p, some(v));
+
+predicate llong_(long long *p; option<long long> v) = integer__(p, sizeof(long long), true, v);
+predicate ullong_(unsigned long long *p; option<unsigned long long> v) = integer__(p, sizeof(long long), false, v);
 
 predicate llong_integer(long long *p; long long l) = integer_(p, sizeof(long long), true, l);
 predicate u_llong_integer(unsigned long long *p; unsigned long long l) = integer_(p, sizeof(long long), false, l);
 
-predicate short_integer(short *p; short s) = integer_(p, sizeof(short), true, s);
-predicate u_short_integer(unsigned short *p; unsigned short v) = integer_(p, sizeof(short), false, v);
+lemma_auto void llong_integer_to_llong_(long long *p);
+    requires [?f]llong_integer(p, ?v);
+    ensures [f]llong_(p, some(v));
 
-predicate pointer(void **pp; void *p);
+lemma_auto void u_llong_integer_to_ullong_(unsigned long long *p);
+    requires [?f]u_llong_integer(p, ?v);
+    ensures [f]ullong_(p, some(v));
 
-predicate boolean(bool* p; bool v);
+predicate short_(short *p; option<short> v) = integer__(p, sizeof(short), true, v);
+predicate ushort_(unsigned short *p; option<unsigned short> v) = integer__(p, sizeof(short), false, v);
 
-predicate float_(float *p; float v);
-predicate double_(double *p; double v);
-predicate long_double(long double *p; long double v);
+predicate short_integer(short *p; short s) = short_(p, some(s));
+predicate u_short_integer(unsigned short *p; unsigned short v) = ushort_(p, some(v));
+
+predicate pointer_(void **pp; option<void *> p);
+predicate pointer(void **pp; void *p) = pointer_(pp, some(p));
+
+predicate bool_(bool *p; option<bool> v);
+predicate boolean(bool* p; bool v) = bool_(p, some(v));
+
+predicate float__(float *p; option<float> v);
+predicate double__(double *p; option<double> v);
+predicate long_double_(long double *p; option<long double> v);
+
+predicate float_(float *p; float v) = float__(p, some(v));
+predicate double_(double *p; double v) = double__(p, some(v));
+predicate long_double(long double *p; long double v) = long_double_(p, some(v));
 
 lemma void integer__distinct(void *i, void *j);
     requires integer_(i, ?size1, ?signed1, ?v1) &*& integer_(j, ?size2, ?signed2, ?v2);
@@ -64,6 +91,10 @@ lemma void integer__unique(void *p);
 lemma void integer__limits(void *p);
     requires [?f]integer_(p, ?size, ?signed_, ?v);
     ensures [f]integer_(p, size, signed_, v) &*& p > (void *)0 &*& p + size <= (void *)UINTPTR_MAX &*& signed_ ? -(1<<(8*size-1)) <= v &*& v < (1<<(8*size-1)) : 0 <= v &*& v < (1<<(8*size));
+
+lemma void char__limits(char *pc);
+    requires [?f]char_(pc, ?c);
+    ensures [f]char_(pc, c) &*& pc > (char *)0 &*& pc < (char *)UINTPTR_MAX;
 
 lemma void character_limits(char *pc);
     requires [?f]character(pc, ?c);
@@ -133,12 +164,48 @@ lemma_auto(chars_of_pointer(pointer_of_chars(cs))) void chars_of_pointer_of_char
     requires length(cs) == sizeof(void *) && chars_within_limits(cs) == true;
     ensures chars_of_pointer(pointer_of_chars(cs)) == cs;
 
+predicate chars_(char *array, int count; list<option<char> > cs) =
+    count == 0 ?
+        cs == nil
+    :
+        char_(array, ?c) &*& chars_(array + 1, count - 1, ?cs0) &*& cs == cons(c, cs0);
 
 predicate chars(char *array, int count; list<char> cs) =
     count == 0 ?
         cs == nil
     :
         character(array, ?c) &*& chars(array + 1, count - 1, ?cs0) &*& cs == cons(c, cs0);
+
+lemma_auto void chars_to_chars_(char *array);
+    requires [?f]chars(array, ?count, ?cs);
+    ensures [f]chars_(array, count, map(some, cs));
+
+lemma_auto void chars__to_chars(char *array);
+    requires [?f]chars_(array, ?count, ?cs) &*& cs == map(some, map(the, cs));
+    ensures [f]chars(array, count, map(the, cs));
+
+lemma void chars__limits(char *array);
+    requires [?f]chars_(array, ?n, ?cs) &*& (char *)0 <= array &*& array <= (char *)UINTPTR_MAX;
+    ensures [f]chars_(array, n, cs) &*& (char *)0 <= array &*& array + n <= (char *)UINTPTR_MAX;
+
+lemma_auto void chars__split(char *array, int offset);
+   requires [?f]chars_(array, ?n, ?cs) &*& 0 <= offset &*& offset <= n;
+   ensures
+       [f]chars_(array, offset, take(offset, cs))
+       &*& [f]chars_(array + offset, n - offset, drop(offset, cs))
+       &*& append(take(offset, cs), drop(offset, cs)) == cs;
+
+lemma_auto void chars__join(char *array);
+    requires [?f]chars_(array, ?n, ?cs) &*& [f]chars_(array + n, ?n0, ?cs0);
+    ensures [f]chars_(array, n + n0, append(cs, cs0));
+
+lemma_auto void chars_chars__join(char *array);
+    requires [?f]chars(array, ?n, ?cs) &*& [f]chars_(array + n, ?n0, ?cs0);
+    ensures [f]chars_(array, n + n0, append(map(some, cs), cs0));
+
+lemma_auto void chars__inv();
+    requires [?f]chars_(?array, ?count, ?cs);
+    ensures [f]chars_(array, count, cs) &*& length(cs) == count;
 
 lemma_auto void chars_inv();
     requires [?f]chars(?array, ?count, ?cs);
@@ -196,6 +263,10 @@ lemma void chars_of_int_char_in_bounds(char c, int i);
     ensures  INT_MIN <= c && c <= INT_MAX;
 
 // chars to ...
+lemma_auto void chars__to_int_(void *p);
+    requires [?f]chars_(p, sizeof(int), _);
+    ensures [f]int_(p, _);
+
 lemma_auto void chars_to_integer(void *p);
     requires [?f]chars(p, sizeof(int), ?cs);
     ensures [f]integer(p, int_of_chars(cs));
@@ -225,9 +296,17 @@ lemma_auto void chars_to_integer_(void *p, int size, bool signed_);
     ensures [f]integer_(p, size, signed_, _);
 
 // ... to chars
+lemma_auto void int__to_chars_(int *p);
+    requires [?f]int_(p, _);
+    ensures [f]chars_((void *)p, sizeof(int), _);
+
 lemma_auto void integer_to_chars(void *p);
     requires [?f]integer(p, ?i);
     ensures [f]chars(p, sizeof(int), chars_of_int(i));
+
+lemma_auto void uint__to_chars_(unsigned int *p);
+    requires [?f]uint_(p, _);
+    ensures [f]chars_((void *)p, sizeof(unsigned int), _);
 
 lemma_auto void u_integer_to_chars(void *p);
     requires [?f]u_integer(p, _);
@@ -262,6 +341,27 @@ lemma_auto void character_to_u_character(void *p);
     requires [?f]character(p, _);
     ensures [f]u_character(p, _);
 
+predicate uchars_(unsigned char *p, int count; list<option<unsigned char> > cs) =
+    true == ((unsigned char *)0 <= p) &*& p <= (unsigned char *)UINTPTR_MAX &*&
+    count == 0 ?
+        cs == nil
+    :
+        uchar_(p, ?c) &*& uchars_(p + 1, count - 1, ?cs0) &*& cs == cons(c, cs0);
+
+lemma_auto void uchars__inv();
+    requires [?f]uchars_(?p, ?count, ?cs);
+    ensures [f]uchars_(p, count, cs) &*& count == length(cs) &*& true == ((char *)0 <= (void *)p) &*& p + count <= (void *)UINTPTR_MAX;
+
+lemma_auto void uchars__split(unsigned char *array, int offset);
+   requires [?f]uchars_(array, ?n, ?cs) &*& 0 <= offset &*& offset <= n;
+   ensures
+       [f]uchars_(array, offset, take(offset, cs))
+       &*& [f]uchars_(array + offset, n - offset, drop(offset, cs))
+       &*& append(take(offset, cs), drop(offset, cs)) == cs;
+
+lemma_auto void uchars_to_uchars_(unsigned char *array);
+    requires [?f]uchars(array, ?n, ?cs);
+    ensures [f]uchars_(array, n, map(some, cs));
 
 predicate uchars(unsigned char *p, int count; list<unsigned char> cs) =
     true == ((unsigned char *)0 <= p) &*& p <= (unsigned char *)UINTPTR_MAX &*&
@@ -285,15 +385,50 @@ lemma_auto void uchars_join(unsigned char *array);
     requires [?f]uchars(array, ?n, ?cs) &*& [f]uchars((void *)array + n, ?n0, ?cs0);
     ensures [f]uchars(array, n + n0, append(cs, cs0));
 
+predicate ints_(int *p, int count; list<option<int> > vs) =
+    count == 0 ?
+        vs == nil
+    :
+        int_(p, ?v) &*& ints_(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0);
+
+lemma_auto void ints__split(int *array, int offset);
+   requires [?f]ints_(array, ?n, ?vs) &*& 0 <= offset &*& offset <= n;
+   ensures
+       [f]ints_(array, offset, take(offset, vs))
+       &*& [f]ints_(array + offset, n - offset, drop(offset, vs))
+       &*& append(take(offset, vs), drop(offset, vs)) == vs;
+
+lemma_auto void ints__join(int *array);
+    requires [?f]ints_(array, ?n, ?vs) &*& [f]ints_(array + n, ?n0, ?vs0);
+    ensures [f]ints_(array, n + n0, append(vs, vs0));
+
 predicate ints(int *p, int count; list<int> vs) =
     count == 0 ?
         vs == nil
     :
         integer(p, ?v) &*& ints(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0);
 
+lemma_auto void ints_to_ints_(int *p);
+    requires ints(p, ?count, ?vs);
+    ensures ints_(p, count, map(some, vs));
+
+lemma_auto void ints__to_ints(int *p);
+    requires ints_(p, ?count, ?vs) &*& vs == map(some, map(the, vs));
+    ensures ints(p, count, map(the, vs));
+
 lemma_auto void ints_inv();
     requires [?f]ints(?p, ?count, ?vs);
     ensures [f]ints(p, count, vs) &*& count == length(vs);
+
+lemma_auto void ints__inv();
+    requires [?f]ints_(?p, ?count, ?vs);
+    ensures [f]ints_(p, count, vs) &*& count == length(vs);
+
+predicate uints_(unsigned int *p, int count; list<option<unsigned int> > vs) =
+    count == 0 ?
+        vs == nil
+    :
+        uint_(p, ?v) &*& uints_(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0);
 
 predicate uints(unsigned int *p, int count; list<unsigned int> vs) =
     count == 0 ?
@@ -305,6 +440,12 @@ lemma_auto void uints_inv();
     requires [?f]uints(?p, ?count, ?vs);
     ensures [f]uints(p, count, vs) &*& count == length(vs);
 
+predicate llongs_(long long *p, int count; list<option<long long> > ls) = 
+    count == 0 ?
+        ls == nil
+    :
+        llong_(p, ?l) &*& llongs_(p + 1, count - 1, ?ls0) &*& ls == cons(l, ls0);
+
 predicate llongs(long long *p, int count; list<long long> ls) = 
     count == 0 ?
         ls == nil
@@ -314,6 +455,12 @@ predicate llongs(long long *p, int count; list<long long> ls) =
 lemma_auto void llongs_inv();
     requires [?f]llongs(?p, ?count, ?vs);
     ensures [f]llongs(p, count, vs) &*& count == length(vs);
+
+predicate ullongs_(unsigned long long *p, int count; list<option<unsigned long long> > ls) = 
+    count == 0 ?
+        ls == nil
+    :
+        ullong_(p, ?l) &*& ullongs_(p + 1, count - 1, ?ls0) &*& ls == cons(l, ls0);
 
 predicate ullongs(unsigned long long *p, int count; list<unsigned long long> ls) = 
     count == 0 ?
@@ -325,7 +472,13 @@ lemma_auto void ullongs_inv();
     requires [?f]ullongs(?p, ?count, ?vs);
     ensures [f]ullongs(p, count, vs) &*& count == length(vs);
 
-predicate shorts(short *p, short count; list<short> vs) =
+predicate shorts_(short *p, int count; list<option<short> > vs) =
+    count == 0 ?
+        vs == nil
+    :
+        short_(p, ?v) &*& shorts_(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0);
+
+predicate shorts(short *p, int count; list<short> vs) =
     count == 0 ?
         vs == nil
     :
@@ -335,7 +488,13 @@ lemma_auto void shorts_inv();
     requires [?f]shorts(?p, ?count, ?vs);
     ensures [f]shorts(p, count, vs) &*& count == length(vs);
 
-predicate ushorts(unsigned short *p, short count; list<unsigned short> vs) =
+predicate ushorts_(unsigned short *p, int count; list<option<unsigned short> > vs) =
+    count == 0 ?
+        vs == nil
+    :
+        ushort_(p, ?v) &*& ushorts_(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0);
+
+predicate ushorts(unsigned short *p, int count; list<unsigned short> vs) =
     count == 0 ?
         vs == nil
     :
@@ -344,6 +503,12 @@ predicate ushorts(unsigned short *p, short count; list<unsigned short> vs) =
 lemma_auto void ushorts_inv();
     requires [?f]ushorts(?p, ?count, ?vs);
     ensures [f]ushorts(p, count, vs) &*& count == length(vs);
+
+predicate bools_(bool *p, int count; list<option<bool> > vs) =
+    count == 0 ?
+        vs == nil
+    :
+        bool_(p, ?v) &*& bools_(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0);
 
 predicate bools(bool *p, int count; list<bool> vs) =
     count == 0 ?
@@ -355,11 +520,37 @@ lemma_auto void bools_inv();
     requires [?f]bools(?p, ?count, ?vs);
     ensures [f]bools(p, count, vs) &*& count == length(vs);
 
+predicate pointers_(void **pp, int count; list<option<void *> > ps) =
+    count == 0 ?
+        ps == nil
+    :
+        pointer_(pp, ?p) &*& pointers_(pp + 1, count - 1, ?ps0) &*& ps == cons(p, ps0);
+
+lemma_auto void pointers__inv();
+    requires [?f]pointers_(?pp, ?count, ?ps);
+    ensures [f]pointers_(pp, count, ps) &*& count == length(ps);
+
+lemma_auto void pointers__split(void **pp, int offset);
+    requires [?f]pointers_(pp, ?count, ?ps) &*& 0 <= offset &*& offset <= count;
+    ensures [f]pointers_(pp, offset, take(offset, ps)) &*& [f]pointers_(pp + offset, count - offset, drop(offset, ps));
+
+lemma_auto void pointers__join(void **pp);
+    requires [?f]pointers_(pp, ?count1, ?ps1) &*& [f]pointers_(pp + count1, ?count2, ?ps2);
+    ensures [f]pointers_(pp, count1 + count2, append(ps1, ps2));
+
+lemma_auto void pointers_pointers__join(void **pp);
+    requires [?f]pointers(pp, ?count1, ?ps1) &*& [f]pointers_(pp + count1, ?count2, ?ps2);
+    ensures [f]pointers_(pp, count1 + count2, append(map(some, ps1), ps2));
+
 predicate pointers(void **pp, int count; list<void *> ps) =
     count == 0 ?
         ps == nil
     :
         pointer(pp, ?p) &*& pointers(pp + 1, count - 1, ?ps0) &*& ps == cons(p, ps0);
+
+lemma_auto void pointers_to_pointers_(void **array);
+    requires [?f]pointers(array, ?count, ?ps);
+    ensures [f]pointers_(array, count, map(some, ps));
 
 lemma_auto void pointers_inv();
     requires [?f]pointers(?pp, ?count, ?ps);
@@ -377,8 +568,8 @@ lemma_auto void pointers_join(void **pp);
     requires [?f]pointers(pp, ?count1, ?ps1) &*& [f]pointers(pp + count1, ?count2, ?ps2);
     ensures [f]pointers(pp, count1 + count2, append(ps1, ps2));
 
-fixpoint char char_of_uchar(unsigned char c);
-fixpoint unsigned char uchar_of_char(char c);
+fixpoint char char_of_uchar(unsigned char c) { return c <= 127 ? c : c - 256; }
+fixpoint unsigned char uchar_of_char(char c) { return c < 0 ? c + 256 : c; }
 
 lemma_auto void map_uchar_of_char_char_of_uchar(list<unsigned char> ucs);
     requires true;
@@ -392,9 +583,17 @@ lemma_auto void chars_to_uchars(void *p);
     requires [?f]chars(p, ?n, ?cs);
     ensures [f]uchars(p, n, map(uchar_of_char, cs));
 
+lemma_auto void chars__to_uchars_(void *p);
+    requires [?f]chars_(p, ?n, ?cs);
+    ensures [f]uchars_(p, n, map((map_option)(uchar_of_char), cs));
+
 lemma_auto void uchars_to_chars(void *p);
     requires [?f]uchars(p, ?n, ?ucs);
     ensures [f]chars(p, n, map(char_of_uchar, ucs));
+
+lemma_auto void uchars__to_chars_(void *p);
+    requires [?f]uchars_(p, ?n, ?ucs);
+    ensures [f]chars_(p, n, map((map_option)(char_of_uchar), ucs));
 
 lemma_auto void chars_to_ints(void *p, int n);
     requires [?f]chars(p, n * sizeof(int), _);
@@ -441,6 +640,14 @@ lemma_auto void integers__to_uchars(void *p);
     requires [?f]integers_(p, ?size, ?signed_, ?n, _);
     ensures [f]uchars(p, n * size, _);
 
+lemma_auto void chars__to_pointers_(void *p, int n);
+    requires [?f]chars_(p, n * sizeof(void *), _);
+    ensures [f]pointers_(p, n, _);
+
+lemma_auto void pointers__to_chars_(void *pp);
+    requires [?f]pointers_(pp, ?n, _);
+    ensures [f]chars_(pp, n * sizeof(void *), _);
+
 fixpoint list<void *> pointers_of_chars(list<char> cs);
 fixpoint list<char> chars_of_pointers(list<void *> ps);
 
@@ -451,6 +658,12 @@ lemma_auto void chars_to_pointers(void *p, int n);
 lemma_auto void pointers_to_chars(void *pp);
     requires [?f]pointers(pp, ?n, ?ps) &*& true;
     ensures [f]chars(pp, n * sizeof(void *), chars_of_pointers(ps)) &*& pointers_of_chars(chars_of_pointers(ps)) == ps;
+
+predicate integers__(void *p, int size, bool signed_, int count; list<option<int> > vs) =
+    count == 0 ?
+        vs == nil
+    :
+        integer__(p, size, signed_, ?v0) &*& integers__(p + size, size, signed_, count - 1, ?vs0) &*& vs == cons(v0, vs0);
 
 predicate integers_(void *p, int size, bool signed_, int count; list<int> vs) =
     count == 0 ?
@@ -475,17 +688,39 @@ lemma void integers__join(void *p);
         [f]integers_(p + size * count1, size, signed_, ?count2, ?vs2);
     ensures [f]integers_(p, size, signed_, count1 + count2, append(vs1, vs2));
 
+lemma_auto void integers__to_integers__(void *p);
+    requires [?f]integers_(p, ?size, ?signed_, ?count, ?vs);
+    ensures [f]integers__(p, size, signed_, count, map(some, vs));
+
+predicate floats_(float *p, int count; list<option<float> > values) =
+    count == 0 ?
+        values == nil
+    :
+        float__(p, ?value) &*& floats_(p + 1, count - 1, ?values0) &*& values == cons(value, values0);
+
 predicate floats(float *p, int count; list<float> values) =
     count == 0 ?
         values == nil
     :
         float_(p, ?value) &*& floats(p + 1, count - 1, ?values0) &*& values == cons(value, values0);
 
+predicate doubles_(double *p, int count; list<option<double> > values) =
+    count == 0 ?
+        values == nil
+    :
+        double__(p, ?value) &*& doubles_(p + 1, count - 1, ?values0) &*& values == cons(value, values0);
+
 predicate doubles(double *p, int count; list<double> values) =
     count == 0 ?
         values == nil
     :
         double_(p, ?value) &*& doubles(p + 1, count - 1, ?values0) &*& values == cons(value, values0);
+
+predicate long_doubles_(long double *p, int count; list<option<long double> > values) =
+    count == 0 ?
+        values == nil
+    :
+        long_double_(p, ?value) &*& long_doubles_(p + 1, count - 1, ?values0) &*& values == cons(value, values0);
 
 predicate long_doubles(long double *p, int count; list<long double> values) =
     count == 0 ?
@@ -540,6 +775,10 @@ lemma_auto void body_chars_to_string(char *s);
 lemma_auto void chars_to_string(char *s);
     requires [?f]chars(s, ?n, ?cs) &*& index_of('\0', cs) == n - 1;
     ensures [f]string(s, take(n - 1, cs));
+
+lemma_auto void string_to_chars_(char *s);
+    requires [?f]string(s, ?cs);
+    ensures [f]chars_(s, length(cs) + 1, _);
 
 lemma_auto void string_to_chars(char *s);
     requires [?f]string(s, ?cs);

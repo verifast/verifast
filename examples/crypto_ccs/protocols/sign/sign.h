@@ -89,7 +89,7 @@ void receiver(int recvr, char *key, int key_len, char *msg);
                [?f1]cryptogram(key, key_len, ?key_ccs, ?key_cg) &*&
                  key_cg == cg_rsa_public_key(?sender, ?id) &*&
                  key_len <= MAX_KEY_SIZE &*&
-               chars(msg, MSG_SIZE, _); @*/
+               chars_(msg, MSG_SIZE, _); @*/
   /*@ ensures  principal(recvr, _) &*&
                [f1]cryptogram(key, key_len, key_ccs, key_cg) &*&
                chars(msg, MSG_SIZE, ?msg_cs) &*&

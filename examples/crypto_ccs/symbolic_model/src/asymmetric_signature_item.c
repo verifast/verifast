@@ -34,7 +34,7 @@ int asym_sig_havege_random_stub(void *havege_state, char *output, size_t len)
   /*@ requires [?f]havege_state_initialized(havege_state) &*&
                random_request(?principal, ?info, ?key_request) &*&
                random_permission(principal, ?count) &*&
-               chars(output, len, _) &*& len >= MIN_RANDOM_SIZE;
+               chars_(output, len, _) &*& len >= MIN_RANDOM_SIZE;
   @*/
   /*@ ensures  [f]havege_state_initialized(havege_state) &*&
                random_permission(principal, count + 1) &*&
@@ -46,7 +46,7 @@ int asym_sig_havege_random_stub(void *havege_state, char *output, size_t len)
                  :
                    cg == cg_nonce(principal, count + 1)
                :
-                 chars(output, len, _);
+                 chars_(output, len, _);
   @*/
 {
   return havege_random(havege_state, output, len);
@@ -134,13 +134,11 @@ struct item *asymmetric_signature(struct item *key, struct item *payload)
     if (result->content == 0) {abort_crypto_lib("Malloc failed");}
     write_tag(result->content, TAG_ASYMMETRIC_SIG);
     //@ assert result->content |-> ?cont &*& result->size |-> ?size;
-    //@ chars_to_crypto_chars(result->content + TAG_LENGTH, olen);
     crypto_memcpy(result->content + TAG_LENGTH, output, olen);
     //@ item e = asymmetric_signature_item(principal, count, some(pay), ent);
     //@ close ic_cg(e)(sig_ccs, sig_cg);
     //@ close item(payload, pay, pub);
     zeroize(output, (int) olen);
-    //@ chars_join(output);
     free(output);
     //@ close well_formed_item_ccs(e)(pay_ccs);
     //@ leak well_formed_item_ccs(e)(pay_ccs);

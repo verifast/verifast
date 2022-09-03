@@ -114,11 +114,11 @@ int receiver(char *enc_key, char *hmac_key, char *msg);
                cg_info(enc_key_cg) == hmac_id &*&
                receiver == shared_with(sender, enc_id) &*&
                receiver == shared_with(sender, hmac_id) &*&
-             chars(msg, MAX_SIZE, _); @*/
+             chars_(msg, MAX_SIZE, _); @*/
 /*@ ensures  principal(receiver, _) &*&
              [f1]cryptogram(enc_key, KEY_SIZE, enc_key_ccs, enc_key_cg) &*&
              [f2]cryptogram(hmac_key, KEY_SIZE, hmac_key_ccs, hmac_key_cg) &*&
-             chars(msg + result, MAX_SIZE - result, _) &*&
+             chars_(msg + result, MAX_SIZE - result, _) &*&
              crypto_chars(?kind, msg, result, ?msg_ccs) &*&
              col || bad(sender) || bad(receiver) || 
                (kind == secret && send(sender, receiver, msg_ccs)); @*/

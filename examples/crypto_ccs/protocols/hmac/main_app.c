@@ -83,7 +83,7 @@ predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) =
   [1/2]cryptogram(key, KEY_SIZE, ?key_cs, ?key_cg) &*&
     key_cg == cg_symmetric_key(sender, ?id) &*&
     receiver == shared_with(sender, id) &*&
-  chars(msg, MESSAGE_SIZE, _) &*&
+  chars_(msg, MESSAGE_SIZE, _) &*&
   info == IV(sender, IV(receiver, PV(key, CCL(key_cs, IV(id, PV(msg, nil))))));
                          
 predicate_family_instance pthread_run_post(receiver_t)(void *data, any info) =

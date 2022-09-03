@@ -620,7 +620,6 @@ struct item* deserialize(char* buffer, int size)
   //@ assert item->content |-> ?cont;
   //@ chars_to_crypto_chars(buffer, size);
   //@ assert [f1]crypto_chars(normal, buffer, size, ?ccs);
-  //@ chars_to_crypto_chars(item->content, size);
   crypto_memcpy(item->content, buffer, (unsigned int) size);
   //@ get_forall_t<char>();
   //@ get_forall_t<list<char> >();

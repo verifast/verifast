@@ -83,7 +83,7 @@ predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) =
   principal(receiver, _) &*&
   [1/2]cryptogram(key, 8 * KEY_SIZE, ?key_ccs, ?key_cg) &*&
     key_cg == cg_rsa_public_key(sender, ?id) &*&
-  chars(msg, MSG_SIZE, _) &*&
+  chars_(msg, MSG_SIZE, _) &*&
   info == IV(sender, IV(receiver, PV(key, CCL(key_ccs, IV(id, PV(msg, nil))))));
                          
 predicate_family_instance pthread_run_post(receiver_t)(void *data, any info) =

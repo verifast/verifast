@@ -87,7 +87,7 @@ lemma void cs_to_ccs_full_tag_for_item(item i);
 @*/
 
 void write_tag(char* buffer, char tag);
-  //@ requires chars(buffer, TAG_LENGTH, _);
+  //@ requires chars_(buffer, TAG_LENGTH, _);
   /*@ ensures  chars(buffer, TAG_LENGTH, ?cs) &*&
                head(cs) == tag &*& cs == full_tag(tag); @*/
 

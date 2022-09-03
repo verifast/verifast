@@ -87,27 +87,27 @@ void pk_free(pk_context *ctx);
 int pk_write_pubkey_pem(pk_context *ctx, char *buf, size_t size);
   /*@ requires pk_context_with_keys(ctx, ?p, ?c, ?nbits, ?info) &*&
                //To fix size and to ensure that there is enough space.
-               chars(buf, size, _) &*& nbits == size; @*/
+               chars_(buf, size, _) &*& nbits == size; @*/
   /*@ ensures  pk_context_with_keys(ctx, p, c, nbits, info) &*&
                result == 0 ?
                  cryptogram(buf, size, ?key_ccs, ?key) &*&
                  key == cg_rsa_public_key(p, c) &*&
                  info == cg_info(key)
                :
-                 chars(buf, size, _);
+                 chars_(buf, size, _);
   @*/
 
 int pk_write_key_pem(pk_context *ctx, char *buf, size_t size);
   /*@ requires pk_context_with_keys(ctx, ?p, ?c, ?nbits, ?info) &*&
                //To fix size and to ensure that there is enough space.
-               chars(buf, size, _) &*&  nbits == size; @*/
+               chars_(buf, size, _) &*&  nbits == size; @*/
   /*@ ensures  pk_context_with_keys(ctx, p, c, nbits, info) &*&
                result == 0 ?
                  cryptogram(buf, size, ?key_ccs, ?key) &*&
                  key == cg_rsa_private_key(p, c) &*&
                  info == cg_info(key)
                :
-                 chars(buf, size, _);
+                 chars_(buf, size, _);
   @*/
 
 /*@
@@ -147,7 +147,7 @@ int pk_encrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                   // encrypted message can not be bigger than key
                   ilen * 8 <= nbits &*&
                 u_integer(olen, _) &*&
-                chars(output, osize, _) &*&
+                chars_(output, osize, _) &*&
                 random_state_predicate(?state_pred) &*&
                 [_]is_random_function(f_rng, state_pred) &*&
                 [?f2]state_pred(p_rng) &*&
@@ -179,7 +179,7 @@ int pk_decrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                   ilen * 8 <= nbits &*&
                 // output
                 u_integer(olen, _) &*&
-                chars(output, osize, _) &*&
+                chars_(output, osize, _) &*&
                 // entropy
                 random_permission(p1, ?c1) &*& 
                 random_state_predicate(?state_pred) &*&
@@ -191,7 +191,7 @@ int pk_decrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                 random_permission(p1, c1 + 1) &*&
                 [f2]state_pred(p_rng) &*&
                 crypto_chars(?kind, output, ?olen_val2, ?ccs_out) &*&
-                chars(output + olen_val2, osize - olen_val2, _) &*&
+                chars_(output + olen_val2, osize - olen_val2, _) &*&
                 decryption_post(false, ?garbage_out, 
                                 p1, s, p2, c2, ccs_out) &*&
                 garbage_out == (garbage_in || p2 != p3 || c2 != c3) &*&
@@ -214,7 +214,7 @@ int pk_sign(pk_context *ctx, int md_alg, const char *hash, size_t hash_len,
                   // hash to sign can not be bigger than key
                   hash_len * 8 <= nbits &*&
                 u_integer(sig_len, _) &*&
-                chars(sig, ?out_len, _) &*& 8 * out_len >= nbits &*&
+                chars_(sig, ?out_len, _) &*& 8 * out_len >= nbits &*&
                 random_state_predicate(?state_pred) &*&
                 [_]is_random_function(f_rng, state_pred) &*&
                 [?f2]state_pred(p_rng) &*&
@@ -226,13 +226,13 @@ int pk_sign(pk_context *ctx, int md_alg, const char *hash, size_t hash_len,
                 random_permission(p2, c2 + 1) &*&
                 result != 0 ?
                   // signing failed
-                  chars(sig, out_len, _)
+                  chars_(sig, out_len, _)
                 :
                   // signing was successful
                   cryptogram(sig, sig_len_val, _, ?cg) &*&
                   cg == cg_rsa_signature(p1, c1, ccs_input, _) &*&
                   sig_len_val > 0 &*& sig_len_val <= out_len &*&
-                  chars(sig + sig_len_val, out_len - sig_len_val, _); @*/
+                  chars_(sig + sig_len_val, out_len - sig_len_val, _); @*/
 
 int pk_verify(pk_context *ctx, int md_alg, const char *hash,
               size_t hash_len, const char *sig, size_t sig_len );

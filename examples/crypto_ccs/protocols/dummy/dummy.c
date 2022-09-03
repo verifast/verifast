@@ -29,7 +29,7 @@ void sender(char* msg)
 
 void receiver(char* msg)
   /*@ requires principal(?receiver, _) &*&
-               chars(msg, PACKAGE_SIZE, _); @*/
+               chars_(msg, PACKAGE_SIZE, _); @*/
   /*@ ensures  principal(receiver, _) &*&
                chars(msg, PACKAGE_SIZE, ?cs); @*/
 {
@@ -45,7 +45,8 @@ void receiver(char* msg)
   if(net_set_block(socket2) != 0)
     abort();
   
-  net_recv(&socket2, msg, PACKAGE_SIZE);
+  if (net_recv(&socket2, msg, PACKAGE_SIZE) != PACKAGE_SIZE)
+    abort();
   net_close(socket1);
   net_close(socket2);
   //@ close principal(receiver, _);

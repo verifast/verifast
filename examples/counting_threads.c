@@ -69,8 +69,8 @@ void process(int n)
         thread_join(t);
         //@ open thread_run_post(m)(_, _);
         //@ destroy_ticket(integer, &cell);
-        //@ close pointers(threads + i, 1, _);
-        //@ pointers_join(threads);
+        //@ close pointers_(threads + i, 1, _);
+        //@ pointers__join(threads);
     }
     //@ open foreach(_, _);
     

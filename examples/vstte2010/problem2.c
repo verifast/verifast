@@ -3,6 +3,18 @@
 //@ #include "arrays.gh"
 
 /*@
+lemma void nth_map<a, b>(int k, fixpoint(a, b) f, list<a> xs)
+    requires 0 <= k &*& k < length(xs);
+    ensures nth(k, map(f, xs)) == f(nth(k, xs));
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            if (k > 0)
+                nth_map(k - 1, f, xs0);
+    }
+}
+
 fixpoint bool between(unit u, int lower, int upper, int x) {
     switch (u) {
         case unit: return lower <= x && x <= upper;
@@ -27,19 +39,19 @@ lemma void with_index_append<t>(int i, list<t> xs, list<t> ys)
     }
 }
 
-fixpoint bool is_inverse(list<int> bs, pair<int, int> ia) {
+fixpoint bool is_inverse(list<option<int> > bs, pair<int, int> ia) {
     switch (ia) {
-        case pair(i, a): return nth(a, bs) == i;
+        case pair(i, a): return nth(a, bs) == some(i);
     }
 }
 
-lemma void forall_with_index_take_is_inverse(list<int> as, int i, list<int> bs, int ai, int k)
+lemma void forall_with_index_take_is_inverse(list<int> as, int i, list<option<int> > bs, int ai, int k)
     requires
         forall(with_index(k, take(i - k, as)), (is_inverse)(bs)) == true &*&
         0 <= i &*& i - k < length(as) &*& 0 <= ai &*& ai < length(bs) &*&
         forall(as, (between)(unit, 0, length(bs) - 1)) == true &*& 0 <= k &*& k <= i &*&
         !mem(ai, take(i - k, as));
-    ensures forall(with_index(k, take(i - k, as)), (is_inverse)(update(ai, i, bs))) == true;
+    ensures forall(with_index(k, take(i - k, as)), (is_inverse)(update(ai, some(i), bs))) == true;
 {
     switch (as) {
         case nil:
@@ -154,13 +166,14 @@ lemma_auto(length(with_index(k, xs))) void length_with_index<t>(int k, list<t> x
     }
 }
 
-lemma void is_inverse_symm(list<int> as, nat n, list<int> bs, int i)
+lemma void is_inverse_symm(list<int> as, nat n, list<option<int> > bs, int i)
     requires
         forall(as, (between)(unit, 0, length(as) - 1)) == true &*& distinct(as) == true &*& length(bs) == length(as) &*&
         forall(with_index(0, as), (is_inverse)(bs)) == true &*&
         int_of_nat(n) <= length(bs) &*& i == length(bs) - int_of_nat(n);
     ensures
-        forall(with_index(i, drop(i, bs)), (is_inverse)(as)) == true &*& distinct(drop(i, bs)) == true;
+        drop(i, bs) == map(some, map(the, drop(i, bs))) &*&
+        forall(with_index(i, map(the, drop(i, bs))), (is_inverse)(map(some, as))) == true &*& distinct(drop(i, bs)) == true;
 {
     switch (n) {
         case zero:
@@ -170,15 +183,36 @@ lemma void is_inverse_symm(list<int> as, nat n, list<int> bs, int i)
             forall_between_distinct_mem(nat_of_int(length(as)), as, i);
             mem_nth_index_of(i, as);
             int k = index_of(i, as);
+            assert nth(k, as) == i;
+            nth_map(k, some, as);
+            assert nth(k, map(some, as)) == some(i);
             mem_nth(k, with_index(0, as));
             forall_mem(pair(k, i), with_index(0, as), (is_inverse)(bs));
-            if (mem(k, drop(i + 1, bs))) {
-                int kk = index_of(k, drop(i + 1, bs));
-                mem_nth_index_of(k, drop(i + 1, bs));
+            if (mem(k, map(the, drop(i + 1, bs)))) {
+                int kk = index_of(k, map(the, drop(i + 1, bs)));
+                mem_nth_index_of(k, map(the, drop(i + 1, bs)));
                 int kkk = i + 1 + kk;
-                mem_nth(kk, with_index(i + 1, drop(i + 1, bs)));
-                forall_mem(pair(kkk, k), with_index(i + 1, drop(i + 1, bs)), (is_inverse)(as));
+                mem_nth(kk, with_index(i + 1, map(the, drop(i + 1, bs))));
+                forall_mem(pair(kkk, k), with_index(i + 1, map(the, drop(i + 1, bs))), (is_inverse)(map(some, as)));
+                assert false;
             }
+            if (mem(some(k), drop(i + 1, bs))) {
+                mem_map(some(k), drop(i + 1, bs), the);
+                assert false;
+            }
+    }
+}
+
+lemma void distinct_map<a, b>(fixpoint(a, b) f, list<a> xs)
+    requires distinct(map(f, xs)) == true;
+    ensures distinct(xs) == true;
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            distinct_map(f, xs0);
+            if (mem(x0, xs0))
+                mem_map(x0, xs0, f);
     }
 }
 
@@ -189,14 +223,14 @@ void invert(int *A, int N, int *B)
     /*@
     ensures
         ints(A, N, as) &*& ints(B, N, ?bs) &*&
-        forall(with_index(0, as), (is_inverse)(bs)) == true &*&
-        forall(with_index(0, bs), (is_inverse)(as)) == true &*&
+        forall(with_index(0, as), (is_inverse)(map(some, bs))) == true &*&
+        forall(with_index(0, bs), (is_inverse)(map(some, as))) == true &*&
         distinct(bs) == true;
     @*/
 {
     for (int i = 0; i < N; i++)
         /*@
-        invariant A[0..N] |-> as &*& B[0..N] |-> ?bs &*& 0 <= i &*& i <= N &*& forall(with_index(0, take(i, as)), (is_inverse)(bs)) == true;
+        invariant A[0..N] |-> as &*& ints_(B, N, ?bs) &*& 0 <= i &*& i <= N &*& forall(with_index(0, take(i, as)), (is_inverse)(bs)) == true;
         @*/
     {
         int ai = A[i];
@@ -204,10 +238,12 @@ void invert(int *A, int N, int *B)
         B[ai] = i;
         //@ take_plus_one(i, as);
         //@ with_index_append(0, take(i, as), cons(nth(i, as), nil));
-        //@ forall_append(with_index(0, take(i, as)), with_index(i, cons(nth(i, as), nil)), (is_inverse)(update(ai, i, bs)));
+        //@ forall_append(with_index(0, take(i, as)), with_index(i, cons(nth(i, as), nil)), (is_inverse)(update(ai, some(i), bs)));
         //@ distinct_mem_nth_take(as, i);
         //@ forall_with_index_take_is_inverse(as, i, bs, ai, 0);
     }
-    //@ assert ints(B, N, ?bs);
+    //@ assert ints_(B, N, ?bs);
     //@ is_inverse_symm(as, nat_of_int(N), bs, 0);
+    //@ ints__to_ints(B);
+    //@ distinct_map(some, map(the, bs));
 }

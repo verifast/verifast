@@ -6,12 +6,12 @@
 #define OPENSSL_H
 
 unsigned int n2s_(unsigned char *p);
-    //@ requires *p |-> _ &*& *(p + 1) |-> _;
-    //@ ensures *p |-> _ &*& *(p + 1) |-> _ &*& result <= 0xffff;
+    //@ requires *p |-> ?v1 &*& *(p + 1) |-> ?v2;
+    //@ ensures *p |-> v1 &*& *(p + 1) |-> v2 &*& result <= 0xffff;
 
 void s2n_(unsigned char *p, unsigned int value);
     //@ requires *p |-> _ &*& *(p + 1) |-> _ &*& value <= 0xffff;
-    //@ ensures  *p |-> _ &*& *(p + 1) |-> _;
+    //@ ensures  *p |-> ?v1 &*& *(p + 1) |-> ?v2;
 
 #define n2s(p, x) { x = n2s_(p); p += 2; }
 #define s2n(p, x) { s2n_(p, x); p += 2; }
@@ -50,12 +50,12 @@ void memcpy(unsigned char *dest, unsigned char *src, unsigned size);
 
 void RAND_pseudo_bytes(unsigned char *buffer, unsigned size);
     //@ requires buffer[..size] |-> _;
-    //@ ensures buffer[..size] |-> _;
+    //@ ensures buffer[..size] |-> ?bytes;
 
 int ssl3_write_bytes(SSL *s, int rt, unsigned char *buffer, unsigned size);
     //@ requires SSL(s) &*& buffer[..size] |-> ?cs;
     //@ ensures SSL(s) &*& buffer[..size] |-> cs;
 
-//@ predicate SSL(SSL *s;) = s->s3 |-> ?s3 &*& s3->rrec.length |-> ?length &*& s3->rrec.data[0..10000] |-> _ &*& length <= 10000;
+//@ predicate SSL(SSL *s;) = s->s3 |-> ?s3 &*& s3->rrec.length |-> ?length &*& s3->rrec.data[0..10000] |-> ?data &*& length <= 10000;
 
 #endif

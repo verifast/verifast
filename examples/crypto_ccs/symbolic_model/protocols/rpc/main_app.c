@@ -183,6 +183,7 @@ int main() //@ : main_full(main_app)
       pthread_create(&s_thread, NULL, &server_t, &s_args);
       //@ close pthread_run_pre(client_t)(&c_args, _);
       pthread_create(&c_thread, NULL, &client_t, &c_args);
+      //@ chars_to_integer(&random);
     }
 
     {

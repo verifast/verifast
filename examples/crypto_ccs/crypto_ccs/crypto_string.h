@@ -6,7 +6,7 @@
 //@ #include "crypto/memcmp.gh"
 
 void crypto_memcpy(void *array, void *array0, size_t count);
-    /*@ requires crypto_chars(_, array, count, _) &*&
+    /*@ requires chars_(array, count, _) &*&
                  [?f]crypto_chars(?kind, array0, count, ?ccs0); @*/
     /*@ ensures  crypto_chars(kind, array, count, ccs0) &*&
                  [f]crypto_chars(kind, array0, count, ccs0); @*/

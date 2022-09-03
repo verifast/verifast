@@ -19,9 +19,10 @@ int main(int argc, char** argv) //@ : main
   if(buffer == 0 || from == 0 || to == 0) { abort(); }
   nb_read = fread(buffer, 1, 100, from);
   while(0 < nb_read)
-    //@ invariant file(from) &*& file(to) &*& chars(buffer, 100, _) &*& nb_read <= 100;
+    //@ invariant file(from) &*& file(to) &*& chars(buffer, nb_read, _) &*& nb_read <= 100 &*& chars_(buffer + nb_read, 100 - nb_read, _);
   {
     int nb_written = fwrite(buffer, 1, nb_read, to);
+    //@ chars_chars__join(buffer);
     nb_read = fread(buffer, 1, 100, from);
   }
   fclose(from);

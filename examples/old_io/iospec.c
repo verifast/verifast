@@ -10,17 +10,6 @@ Represents an I/O specification using an approach inspired by coinduction.
 
 /*@
 
-fixpoint t the<t>(option<t> o) {
-    switch (o) {
-        case none: return default_value;
-        case some(v): return v;
-    }
-}
-
-@*/
-
-/*@
-
 inductive io_action = in(char) | out(char);
 
 inductive iospec = iospec(fixpoint(pair<io_action, list<io_action> >, bool));

@@ -24,7 +24,7 @@ lemma void equal_identifiers(int id1, int id2);
 
 void write_identifier(char *array, int id);
   /*@ requires [_]public_invar(?pub) &*&
-               chars(array, ID_SIZE, _); @*/
+               chars_(array, ID_SIZE, _); @*/
   /*@ ensures  crypto_chars(normal, array, ID_SIZE, ?ccs) &*&
                ccs == cs_to_ccs(identifier(id)) &*&
                [_]public_ccs(ccs); @*/

@@ -87,7 +87,7 @@ void client(char *key, int key_len, char *request, char *response);
                [?f2]chars(request, PACKAGE_SIZE, ?req_cs) &*&
                  bad(client) ||
                  request(client, shared_with(client, id), req_cs) == true &*&
-               chars(response, PACKAGE_SIZE, _); @*/
+               chars_(response, PACKAGE_SIZE, _); @*/
   /*@ ensures  principal(client, _) &*&
                [f1]cryptogram(key, key_len, key_ccs, key_cg) &*&
                [f2]chars(request, PACKAGE_SIZE, req_cs) &*&
@@ -102,8 +102,8 @@ void server(char *key, int key_len, char *request, char *response);
                [?f1]cryptogram(key, key_len, ?key_ccs, ?key_cg) &*&
                  key_cg == cg_symmetric_key(?client, ?id) &*&
                  server == shared_with(client, id) &*&
-               chars(request, PACKAGE_SIZE, _) &*&
-               chars(response, PACKAGE_SIZE, _); @*/
+               chars_(request, PACKAGE_SIZE, _) &*&
+               chars_(response, PACKAGE_SIZE, _); @*/
   /*@ ensures  principal(server, _) &*&
                [f1]cryptogram(key, key_len, key_ccs, key_cg) &*&
                chars(request, PACKAGE_SIZE, ?req_cs) &*&

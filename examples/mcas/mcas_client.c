@@ -182,7 +182,7 @@ void shift_interval(struct interval *interval) //@ : thread_run
         struct mcas_entry *entries = malloc(2 * sizeof(struct mcas_entry));
         if (entries == 0) abort();
         //@ leak malloc_block(entries, _); // We assume the presence of a garbage collector.
-        //@ chars_split((char *)(void *)entries, sizeof(struct mcas_entry));
+        //@ chars__split((char *)(void *)entries, sizeof(struct mcas_entry));
         //@ close_struct(entries + 0);
         (entries + 0)->a = &interval->a;
         (entries + 0)->o = a0;

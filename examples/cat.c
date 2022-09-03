@@ -19,11 +19,10 @@ int main(int argc, char** argv) //@ : main
   if(fp == 0 || buffer == 0) { abort(); }
   res = fgets(buffer, 100, fp);
   while(res != 0) 
-    //@ invariant file(fp) &*& chars(buffer, 100, ?cs) &*& res != 0 ? mem('\0', cs) == true : true;
+    //@ invariant file(fp) &*& res != 0 ? string(buffer, ?scs) &*& buffer[length(scs) + 1..100] |-> _ : buffer[..100] |-> _;
   {
-    //@ chars_separate_string(buffer);
     puts(buffer);
-    //@ chars_unseparate_string(buffer);
+    //@ string_to_chars(buffer);
     res = fgets(buffer, 100, fp);
   }
   free((void *)buffer);

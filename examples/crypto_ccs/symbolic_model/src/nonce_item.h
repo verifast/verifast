@@ -27,7 +27,7 @@ void create_havege_random(char *output, int len);
   /*@ requires [?f]world(?pub, ?key_clsfy) &*& 
                nonce_request(?principal, ?info) &*&
                principal(principal, ?count) &*&
-               chars(output, len, _);  @*/
+               chars_(output, len, _);  @*/
   /*@ ensures  [f]world(pub, key_clsfy) &*& 
                principal(principal, count + 1) &*&
                cryptogram(output, len, ?cs, ?cg) &*& 

@@ -37,7 +37,7 @@ lemma void cs_to_ccs_full_tag_for_item(item i)
 @*/
 
 void write_tag(char* buffer, char tag)
-  //@ requires chars(buffer, TAG_LENGTH, _);
+  //@ requires chars_(buffer, TAG_LENGTH, _);
   /*@ ensures  chars(buffer, TAG_LENGTH, ?cs) &*&
                head(cs) == tag &*& cs == full_tag(tag); @*/
 {
@@ -46,19 +46,19 @@ void write_tag(char* buffer, char tag)
     /*@ requires offset <= TAG_LENGTH &*&
                  true == ((char *)0 <= buffer + offset) &*&
                  buffer + offset <= (char *)UINTPTR_MAX &*&
-                 chars(buffer + offset, TAG_LENGTH - offset, ?cs0) &*&
+                 chars_(buffer + offset, TAG_LENGTH - offset, ?cs0) &*&
                  offset != TAG_LENGTH || cs0 == nil; @*/
     /*@ ensures  chars(buffer + old_offset, TAG_LENGTH - old_offset, ?cs1) &*&
                  old_offset == TAG_LENGTH || head(cs1) == tag &*&
                  cs1 == repeat(tag, nat_of_int(TAG_LENGTH - old_offset)); @*/
   {
     //@ length_equals_nat_length(cs0);
-    //@ chars_limits(buffer + offset);
-    //@ open chars(buffer + offset, TAG_LENGTH - offset, _);
+    //@ chars__limits(buffer + offset);
+    //@ open chars_(buffer + offset, TAG_LENGTH - offset, _);
     *(buffer + offset) = tag;
     offset = offset + 1;
-    //@ open chars(buffer + offset, TAG_LENGTH - offset, ?cs1);
-    //@ close chars(buffer + offset, TAG_LENGTH - offset, cs1);
+    //@ open chars_(buffer + offset, TAG_LENGTH - offset, _);
+    //@ close chars_(buffer + offset, TAG_LENGTH - offset, _);
     //@ recursive_call();
   }
 }

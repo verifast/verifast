@@ -11,7 +11,7 @@ void fill(char *buf, int length, char c)
 //@ ensures buf[..length] |-> n_times(c, length);
 {
     for (int i = 0; i < length; i++)
-    //@ requires i <= length &*& buf[i..length] |-> ?cs0 &*& switch (cs0) { case nil: return true; case cons(c0, cs00): return true; };
+    //@ requires i <= length &*& chars_(buf + i, length - i, ?cs0) &*& switch (cs0) { case nil: return true; case cons(c0, cs00): return true; };
     //@ ensures buf[old_i..length] |-> n_times(c, length - old_i);
     {
         buf[i] = c;

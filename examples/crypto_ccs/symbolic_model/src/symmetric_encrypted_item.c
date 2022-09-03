@@ -96,19 +96,18 @@ struct item *symmetric_encryption(struct item *key, struct item *payload)
     //@ assert result->content |-> ?r_cont &*& result->size |-> ?r_size;
     if (result->content == 0)
       abort_crypto_lib("Malloc failed");
-    //@ chars_split(r_cont, TAG_LENGTH);
+    //@ chars__split(r_cont, TAG_LENGTH);
     write_tag(result->content, TAG_SYMMETRIC_ENC);
     //@ assert chars(r_cont, TAG_LENGTH, ?tag_cs);
     //@ public_chars(r_cont, TAG_LENGTH);
     //@ assert tag_cs == full_tag(TAG_SYMMETRIC_ENC);
-    //@ assert chars(r_cont + TAG_LENGTH, GCM_IV_SIZE + p_size, _);
-    //@ chars_split(r_cont + TAG_LENGTH, GCM_IV_SIZE);
+    //@ assert chars_(r_cont + TAG_LENGTH, GCM_IV_SIZE + p_size, _);
+    //@ chars__split(r_cont + TAG_LENGTH, GCM_IV_SIZE);
     iv = result->content + TAG_LENGTH;
     //@ close nonce_request(principal1, 0);
     //@ close [f]world(pub, key_clsfy);
     create_havege_random(iv, GCM_IV_SIZE);
     //@ open cryptogram(iv, GCM_IV_SIZE, ?iv_ccs, ?iv_cg);
-    //@ chars_to_crypto_chars(iv_buffer, GCM_IV_SIZE);
     crypto_memcpy(iv_buffer, iv, GCM_IV_SIZE);
     //@ close cryptogram(iv, GCM_IV_SIZE, iv_ccs, iv_cg);
     //@ close polarssl_pub(pub)(iv_cg);
@@ -116,7 +115,7 @@ struct item *symmetric_encryption(struct item *key, struct item *payload)
     //@ public_cryptogram(iv, iv_cg);
     //@ public_chars(iv, GCM_IV_SIZE);
     encrypted = iv + GCM_IV_SIZE;
-    //@ chars_split(encrypted, GCM_MAC_SIZE);
+    //@ chars__split(encrypted, GCM_MAC_SIZE);
     //@ open principal(principal1, count1 + 1);
     if (gcm_crypt_and_tag(&gcm_context, GCM_ENCRYPT,
                           (unsigned int) payload->size, iv_buffer,
@@ -264,7 +263,6 @@ struct item *symmetric_decryption(struct item *key, struct item *item)
     iv = item->content + TAG_LENGTH;
     //@ crypto_chars_split(iv, GCM_IV_SIZE);
     //@ assert [1/2]crypto_chars(secret, iv, GCM_IV_SIZE, ?iv_ccs);
-    //@ chars_to_crypto_chars(iv_buffer, GCM_IV_SIZE);
     crypto_memcpy(iv_buffer, iv, GCM_IV_SIZE);
     //@ assert ccs == append(enc_tag, enc_cont);
     //@ assert enc_cont == append(iv_ccs, cg_ccs);

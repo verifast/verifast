@@ -163,7 +163,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | Some addr ->
             match List.assoc x tenv with
               StaticArrayType (elemTp, elemCount) as t ->
-              consume_c_object closeBraceLoc addr t h true $. fun h ->
+              consume_c_object_core_core closeBraceLoc real_unit_pat addr t h true true $. fun _ h _ ->
               free_locals_core h locals
             | RefType t -> (* free locals of which the address is taken *)
               let verify_dtor_call = verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env addr (Some x) in
@@ -511,8 +511,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let sn = match tp with PtrType (StructType sn) -> sn | _ -> static_error l "The argument of close_struct must be of type pointer-to-struct." None in
       eval_h h env w $. fun h env pointerTerm ->
       with_context (Executing (h, env, l, "Consuming character array")) $. fun () ->
-      let (_, _, _, _, chars_symb, _, _) = List.assoc ("chars") predfammap in
-      consume_chunk rules h ghostenv [] [] l (chars_symb, true) [] real_unit dummypat (Some 2) [TermPat pointerTerm; TermPat (struct_size l sn); SrcPat DummyPat] $. fun _ h coef [_; _; elems] _ _ _ _ ->
+      consume_chunk rules h ghostenv [] [] l ((if name = "close_struct" then chars__pred_symb () else chars_pred_symb ()), true) [] real_unit dummypat (Some 2) [TermPat pointerTerm; TermPat (struct_size l sn); SrcPat DummyPat] $. fun _ h coef [_; _; elems] _ _ _ _ ->
       if not (definitely_equal coef real_unit) then assert_false h env l "Closing a struct requires full permission to the character array." None;
       let init =
         match name with
@@ -530,13 +529,12 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       let sn = match tp with PtrType (StructType sn) -> sn | _ -> static_error l "The argument of open_struct must be of type pointer-to-struct." None in
       eval_h h env w $. fun h env pointerTerm ->
-      consume_c_object l pointerTerm (StructType sn) h true $. fun h ->
-      let (_, _, _, _, chars_symb, _, _) = List.assoc "chars" predfammap in
-      let cs = get_unique_var_symb "cs" (InductiveType ("list", [charType])) in
+      consume_c_object_core_core l real_unit_pat pointerTerm (StructType sn) h true true $. fun _ h _ ->
+      let cs = get_unique_var_symb "cs" (list_type (option_type charType)) in
       let Some (_, _, _, _, length_symb) = try_assoc' Ghost (pn,ilist) "length" purefuncmap in
       let size = struct_size l sn in
       assume (ctxt#mk_eq (mk_app length_symb [cs]) size) $. fun () ->
-      cont (Chunk ((chars_symb, true), [], real_unit, [pointerTerm; size; cs], None)::h) env
+      cont (Chunk ((chars__pred_symb (), true), [], real_unit, [pointerTerm; size; cs], None)::h) env
     | ExprStmt (CallExpr (l, "free", [], [], args,Static) as e) ->
       let args = List.map (function LitPat e -> e | _ -> static_error l "No patterns allowed here" None ) args in
       begin
@@ -545,12 +543,12 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           if pure then static_error l "Cannot call a non-pure function from a pure context." None;
           let arg = ev arg in
           begin match try_pointee_pred_symb0 t with
-            Some (_, _, _, arrayPredSymb, _, arrayMallocBlockPredSymb, _, _) ->
+            Some (_, _, _, _, _, arrayMallocBlockPredSymb, _, _, _, _, _, uninitArrayPredSymb) ->
             consume_chunk rules h [] [] [] l (arrayMallocBlockPredSymb, true) [] real_unit real_unit_pat (Some 1) [TermPat arg; dummypat] $. fun _ h _ [_; n] _ _ _ _ ->
-            consume_chunk rules h [] [] [] l (arrayPredSymb, true) [] real_unit real_unit_pat (Some 2) [TermPat arg; TermPat n; dummypat] $. fun _ h _ _ _ _ _ _ ->
+            consume_chunk rules h [] [] [] l (uninitArrayPredSymb, true) [] real_unit real_unit_pat (Some 2) [TermPat arg; TermPat n; dummypat] $. fun _ h _ _ _ _ _ _ ->
             cont h env
           | None ->
-          consume_c_object l arg t h false $. fun h ->
+          consume_c_object_core_core l real_unit_pat arg t h false true $. fun _ h _ ->
           begin match t with
             StructType sn ->
             let (_, (_, _, _, _, malloc_block_symb, _, _)) = List.assoc sn malloc_block_pred_map in
@@ -572,9 +570,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           if pure then static_error l "Cannot call a non-pure function from a pure context." None;
           let addr = ev arg in
           begin match try_pointee_pred_symb0 t with
-          | Some (_, _, _, array_pred_symb, _, _, _, array_new_block_pred_symb) ->
+          | Some (_, _, _, _, _, _, _, array_new_block_pred_symb, _, _, _, uninit_array_pred_symb) ->
               consume_chunk rules h [] [] [] l (array_new_block_pred_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat addr; TermPat int_unit_term] @@ fun _ h _ [_; n] _ _ _ _ ->
-              consume_chunk rules h [] [] [] l (array_pred_symb, true) [] real_unit real_unit_pat (Some 2) [TermPat addr; TermPat n; dummypat] @@ fun _ h _ _ _ _ _ _ ->
+              consume_chunk rules h [] [] [] l (uninit_array_pred_symb, true) [] real_unit real_unit_pat (Some 2) [TermPat addr; TermPat n; dummypat] @@ fun _ h _ _ _ _ _ _ ->
               cont h env
           | None -> 
             let verify_dtor_call = verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env addr None in

@@ -276,15 +276,15 @@ void merge_sort_core(int *pxs, int *pys, int n)
         int *right = pxs + nleft;
         int nright = n - n / 2;
         //@ ints_split(pxs, nleft);
-        //@ ints_split(pys, nright);
+        //@ ints__split(pys, nright);
         //@ assert left[0..nleft] |-> ?ls0 &*& right[0..nright] |-> ?rs0;
         //@ ints_limits(left);
         //@ ints_limits(right);
-        //@ ints_split(pys, nleft);
+        //@ ints__split(pys, nleft);
         merge_sort_core(left, pys, nleft);
-        //@ ints_join(pys);
+        //@ ints__join(pys);
         merge_sort_core(right, pys, nright);
-        //@ ints_join(pys);
+        //@ ints__join(pys);
         //@ sorted_is_sorted(ls0);
         //@ sorted_is_sorted(rs0);
         int i = 0;
@@ -305,7 +305,7 @@ void merge_sort_core(int *pxs, int *pys, int n)
             //@ ints_limits(right + j);
             //@ open ints(left + i, _, _);
             //@ open ints(right + j, _, _);
-            //@ open ints(pys + k, _, _);
+            //@ open ints_(pys + k, _, _);
             if (i == nleft) {
                 if (j == nright) {
                     break;
@@ -351,13 +351,13 @@ void merge_sort_core(int *pxs, int *pys, int n)
                 }
             }
         }
-        //@ ints_join(pxs);
+        //@ ints__join(pxs);
         for (int p = 0; ;)
             //@ requires pys[p..n] |-> ?ys &*& pxs[p..n] |-> _ &*& p <= n;
             //@ ensures pxs[old_p..n] |-> ys &*& pys[old_p..n] |-> _;
         {
             //@ open ints(pys + p, _, _);
-            //@ open ints(pxs + p, _, _);
+            //@ open ints_(pxs + p, _, _);
             if (p >= n) break;
             pxs[p] = pys[p];
             p++;
@@ -534,10 +534,13 @@ int main()
     //@ case_split_sizeof_int();
     xs = malloc(n * sizeof(int));
     if (xs == 0) abort();
-    for (int i = 0; i < n; i++)
-        //@ requires xs[i..n] |-> _;
-        //@ ensures xs[old_i..n] |-> _;
+    for (int i = 0; ; i++)
+        //@ requires xs[i..n] |-> _ &*& i <= n;
+        //@ ensures xs[old_i..n] |-> ?vs;
     {
+        //@ open ints_(_, _, _);
+        if (i >= n)
+          break;
         int x = read_int();
         xs[i] = x;
     }

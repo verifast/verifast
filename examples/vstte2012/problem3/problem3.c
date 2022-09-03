@@ -57,7 +57,7 @@ predicate ring_buffer(struct ring_buffer *buffer; int size, list<int> items) =
 		fields[0..bigtail_size(size, first, len)] |-> ?bigtail_elems
 	
 		// emptyness
-		&*& ints(fields + bigtail_size(size, first, len), size - len, _)
+		&*& ints_(fields + bigtail_size(size, first, len), size - len, _)
 		
 		// Bighead
 		&*& ints(fields + first, bighead_size(size, first, len), ?bighead_elems)
@@ -69,13 +69,13 @@ predicate ring_buffer(struct ring_buffer *buffer; int size, list<int> items) =
 		
 	:
 		// leading emptyness
-		ints(fields, first, _)
+		ints_(fields, first, _)
 		
 		// Elems
 		&*& ints(fields + first, len, items)
 		
 		// trailing emptyness
-		&*& ints(fields + first + len, size - len - first, _)
+		&*& ints_(fields + first + len, size - len - first, _)
 	;
 	
 @*/
@@ -127,7 +127,7 @@ void ring_buffer_push(struct ring_buffer *ring_buffer, int element)
 		//@ assert ints(fields, bigtail_size(size, first, len), ?bigtail_elems);
 		//@ assert ints(fields + first, bighead_size(size, first, len), ?bighead_elems);
 
-		//@ open ints(ring_buffer->fields + bigtail_size(size, first, len), size - len, _); // open <s>happyness</s>emptyness.
+		//@ open ints_(ring_buffer->fields + bigtail_size(size, first, len), size - len, _); // open <s>happyness</s>emptyness.
 		*(ring_buffer->fields+put_at) = element;
 
 		//@ close ints(ring_buffer->fields+put_at, 1, cons(element, nil)); // array of size one
@@ -143,7 +143,7 @@ void ring_buffer_push(struct ring_buffer *ring_buffer, int element)
 	}else{
 		//@ assert ! is_split_up_fp(size, first, len) == true;
 		put_at = ring_buffer->first + ring_buffer->len;
-		//@ open ints(fields + first + len, _, _); // open trailing emptyness
+		//@ open ints_(fields + first + len, _, _); // open trailing emptyness
 		*(ring_buffer->fields+put_at) = element;
 		//@ close ints(ring_buffer->fields+put_at, 1, cons(element, nil)); // array of size one
 		//@ ints_join(ring_buffer->fields+first);
@@ -173,10 +173,20 @@ void ring_buffer_clear(struct ring_buffer *ring_buffer)
 //@ ensures ring_buffer(ring_buffer, size, nil);
 {
 	//@ open ring_buffer(ring_buffer, size, elems);
-	//@ ints_join(ring_buffer->fields);
-	//@ ints_join(ring_buffer->fields);
+	/*@
+	if (ring_buffer->first > ring_buffer->size - ring_buffer->len) {
+	  ints_to_ints_(ring_buffer->fields);
+	  ints__join(ring_buffer->fields);
+	  ints_to_ints_(ring_buffer->fields + ring_buffer->first);
+	  ints__join(ring_buffer->fields);
+	} else {
+	  ints_to_ints_(ring_buffer->fields + ring_buffer->first);
+	  ints__join(ring_buffer->fields);
+	  ints__join(ring_buffer->fields);
+        }
+        @*/
 	ring_buffer->len = 0;
-	//@ ints_split(ring_buffer->fields,ring_buffer->first);
+	//@ ints__split(ring_buffer->fields,ring_buffer->first);
 	//@ close ring_buffer(ring_buffer, size, nil);
 }
 
@@ -221,19 +231,19 @@ int ring_buffer_pop(struct ring_buffer *ring_buffer)
 		assert newfirst == 0;
 		switch (elems_bighead) { case nil: case cons(h, t): switch (t) { case nil: case cons(th, tt): } }
 		
-		close ints(fields + take_at, 1, cons(elem, nil)); // array size one
-		ints_join(fields + len-1);
+		close ints_(fields + take_at, 1, cons(some(elem), _)); // array size one
+		ints__join(fields + len-1);
 	}else{
 		close ints(ring_buffer->fields + take_at + 1, 0, nil);
 
-		close ints(fields + take_at, 1, cons(elem, nil)); // array size one
+		close ints_(fields + take_at, 1, cons(some(elem), nil)); // array size one
 		if (is_split_up_fp(size, first, len)){
-			ints_join(ring_buffer->fields + bigtail_size(size, first, len));
+			ints__join(ring_buffer->fields + bigtail_size(size, first, len));
 		}else{
 			// Make trailing emptyness a bit larger
-			assert ints(fields + first + len, size - first - len, ?trailing_emptyness_data);
+			assert ints_(fields + first + len, size - first - len, ?trailing_emptyness_data);
 		
-			ints_join(ring_buffer->fields);
+			ints__join(ring_buffer->fields);
 		}
 	}
 	@*/
@@ -248,8 +258,18 @@ void ring_buffer_dispose(struct ring_buffer *ring_buffer)
 //@ ensures true;
 {
 	//@ open ring_buffer(ring_buffer, _, _);
-	//@ ints_join(ring_buffer->fields);
-	//@ ints_join(ring_buffer->fields);
+	/*@
+	if (ring_buffer->first > ring_buffer->size - ring_buffer->len) {
+	  ints_to_ints_(ring_buffer->fields);
+	  ints__join(ring_buffer->fields);
+	  ints_to_ints_(ring_buffer->fields + ring_buffer->first);
+	  ints__join(ring_buffer->fields);
+	} else {
+	  ints_to_ints_(ring_buffer->fields + ring_buffer->first);
+	  ints__join(ring_buffer->fields);
+	  ints__join(ring_buffer->fields);
+        }
+        @*/
 	free(ring_buffer->fields);
 	free(ring_buffer);
 }

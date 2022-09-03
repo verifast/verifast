@@ -90,7 +90,7 @@ predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) =
   [1/2]cryptogram(key, KEY_SIZE, ?key_ccs, ?key_cg) &*&
     key_cg == cg_symmetric_key(sender, ?id) &*&
     receiver == shared_with(sender, id) &*&
-  chars(msg, MAX_SIZE, _) &*&
+  chars_(msg, MAX_SIZE, _) &*&
   info == IV(sender, IV(receiver, PV(key, CCL(key_ccs, IV(id, PV(msg, nil))))));
 
 predicate_family_instance pthread_run_post(receiver_t)(void *data, any info) =
@@ -105,7 +105,7 @@ predicate_family_instance pthread_run_post(receiver_t)(void *data, any info) =
     key_cg == cg_symmetric_key(sender, ?id) &*&
     receiver == shared_with(sender, id) &*&
   crypto_chars(secret, msg, length, ?msg_ccs) &*&
-  chars(msg + length, MAX_SIZE - length, _) &*&
+  chars_(msg + length, MAX_SIZE - length, _) &*&
   col || send(sender, receiver, msg_ccs) &*&
   info == IV(sender, IV(receiver, PV(key, CCL(key_ccs, IV(id, PV(msg, nil))))));
 @*/
@@ -176,6 +176,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
       char s_message[MSG_LEN];
       char r_message[MAX_SIZE];
     
+      memset(s_message, 0, MSG_LEN);
       //@ assert chars(s_message, MSG_LEN, ?msg_cs);
       //@ public_chars(s_message, MSG_LEN);
       //@ chars_to_secret_crypto_chars(s_message, MSG_LEN);

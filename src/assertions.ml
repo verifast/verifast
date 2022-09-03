@@ -102,6 +102,13 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       ([], [], []) -> cont ghostenv env []
     | (pat::pats, tp0::tps0, tp::tps) -> evalpat true ghostenv env pat tp0 tp (fun ghostenv env t -> evalpats ghostenv env pats tps0 tps (fun ghostenv env ts -> cont ghostenv env (t::ts)))
 
+  let evalpat_ ghost ghostenv env pat tp0 tp cont =
+    if pat = DummyPat then
+      cont ghostenv env None
+    else
+      evalpat ghost ghostenv env pat tp0 tp $. fun ghostenv env t ->
+      cont ghostenv env (Some t)
+
   let real_mul l t1 t2 =
     if t1 == real_unit then t2 else if t2 == real_unit then t1 else
     let t = ctxt#mk_real_mul t1 t2 in
@@ -223,6 +230,28 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | None ->
       produce_chunk h (generic_points_to_symb (), true) [type_] coef (Some 1) [addr; value] None cont
 
+  let produce_uninit_points_to_chunk l h type_ coef addr cont =
+    begin fun cont ->
+      if coef != real_unit && coef != real_half then
+        assume (ctxt#mk_real_lt real_zero coef) cont
+      else
+        cont()
+    end $. fun () ->
+    match try_pointee_pred_symb0 type_ with
+      Some (_, _, _, _, _, _, _, _, _, uninit_predsym, _, _) ->
+      produce_chunk h (uninit_predsym, true) [] coef (Some 1) [addr; get_unique_var_symb_ "dummy" (option_type type_) true] None cont
+    | None ->
+    match int_rank_and_signedness type_ with
+      Some (k, signedness) ->
+        produce_chunk h (integer___symb (), true) [] coef (Some 3) [addr; rank_size_term k; mk_bool (signedness = Signed); get_unique_var_symb_ "dummy" (option_type type_) true] None cont
+    | None ->
+      produce_chunk h (generic_points_to_symb (), true) [type_] coef (Some 1) [addr; get_unique_var_symb_ "dummy" type_ true] None cont
+
+  let produce_points_to_chunk_ l h type_ coef addr value cont =
+    match value with
+      None -> produce_uninit_points_to_chunk l h type_ coef addr cont
+    | Some v -> produce_points_to_chunk l h type_ coef addr v cont
+
   let rec produce_asn_core_with_post tpenv h ghostenv env p coef size_first size_all (assuming: bool) cont_with_post: symexec_result =
     let cont h env ghostenv = cont_with_post h env ghostenv None in
     let with_context_helper cont =
@@ -258,8 +287,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       cont h ghostenv env
     | WPointsTo (l, WDeref(ld, e, td), tp, rhs) ->  
       let symbn = eval None env e in
-      evalpat false ghostenv env rhs tp tp $. fun ghostenv env t ->
-      produce_points_to_chunk l h tp coef symbn t $. fun h ->
+      evalpat_ false ghostenv env rhs tp tp $. fun ghostenv env t ->
+      produce_points_to_chunk_ l h tp coef symbn t $. fun h ->
       cont h ghostenv env
     | WPredAsn (l, g, is_global_predref, targs, pats0, pats) ->
       let (g_symb, pats0, pats, types, auto_info) =
@@ -710,7 +739,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let read_c_array h env l a i tp =
     match try_pointee_pred_symb0 tp with
       None -> read_integer__array h env l a i tp
-    | Some (_, predsym, _, array_predsym, _, _, _, _) ->
+    | Some (_, predsym, _, array_predsym, _, _, _, _, _, _, _, _) ->
     let slices =
       head_flatmap
         begin function
@@ -927,15 +956,17 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let srcpat pat = SrcPat pat
   let srcpats pats = List.map srcpat pats
 
-  let consume_points_to_chunk rules h ghostenv env env' l type_ coef coefpat addr rhs cont =
-    match try_pointee_pred_symb type_ with
-      Some symb ->
-      consume_chunk rules h ghostenv env env' l (symb, true) [] coef coefpat (Some 1) [TermPat addr; rhs]
+  let dummypat = SrcPat DummyPat
+  
+  let consume_points_to_chunk_ rules h ghostenv env env' l type_ coef coefpat addr rhs consumeUninitChunk cont =
+    match try_pointee_pred_symb0 type_ with
+      Some (_, predsym, _, _, _, _, _, _, _, uninit_predsym, _, _) ->
+      consume_chunk rules h ghostenv env env' l ((if consumeUninitChunk && rhs = dummypat then uninit_predsym else predsym), true) [] coef coefpat (Some 1) [TermPat addr; rhs]
         (fun chunk h coef [_; value] size ghostenv env env' -> cont chunk h coef value ghostenv env env')
     | None ->
     match int_rank_and_signedness type_ with
       Some (k, signedness) ->
-      consume_chunk rules h ghostenv env env' l (integer__symb (), true) [] coef coefpat (Some 3)
+      consume_chunk rules h ghostenv env env' l ((if consumeUninitChunk && rhs = dummypat then integer___symb () else integer__symb ()), true) [] coef coefpat (Some 3)
         [TermPat addr; TermPat (rank_size_term k); TermPat (mk_bool (signedness = Signed)); rhs]
         (fun chunk h coef [_; _; _; value] size ghostenv env env' -> cont chunk h coef value ghostenv env env')
     | None ->
@@ -943,6 +974,9 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         [TermPat addr; rhs]
         (fun chunk h coef [_; value] size ghostenv env env' -> cont chunk h coef value ghostenv env env')
   
+  let consume_points_to_chunk rules h ghostenv env env' l type_ coef coefpat addr rhs cont =
+    consume_points_to_chunk_ rules h ghostenv env env' l type_ coef coefpat addr rhs false cont
+
   let rec consume_asn_core_with_post rules tpenv h ghostenv env env' p checkDummyFracs coef cont_with_post =
     let cont chunks h ghostenv env env' size_first = cont_with_post chunks h ghostenv env env' size_first None in
     let with_context_helper cont =
@@ -979,12 +1013,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         cont [chunk] h ghostenv env env' size
       | WVar (lv, x, GlobalName) -> 
         let (_, type_, symbn, _) = List.assoc x globalmap in  
-        consume_points_to_chunk rules h ghostenv env env' l type_ coef coefpat symbn rhs
-          (fun chunk h coef value ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' None)
+        consume_points_to_chunk_ rules h ghostenv env env' l type_ coef coefpat symbn rhs true
+          (fun chunk h coef _ ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' None)
       | WDeref(ld, e, td) ->  
         let symbn = eval None env e in
-        consume_points_to_chunk rules h ghostenv env env' l td coef coefpat symbn rhs
-          (fun chunk h coef value ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' None)
+        consume_points_to_chunk_ rules h ghostenv env env' l td coef coefpat symbn rhs true
+          (fun chunk h coef _ ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' None)
     in
     let pred_asn l coefpat g is_global_predref targs pats0 pats =
       if g#name = "junk" && is_global_predref then

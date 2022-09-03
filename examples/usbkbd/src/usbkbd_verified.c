@@ -1369,6 +1369,19 @@ static void usb_kbd_close(struct input_dev *dev) //@ : input_close_t_no_pointer
 /*@
 predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; int direction, int xfer_type, int pipe) =
 	usb_endpoint_descriptor(epd, direction, xfer_type, pipe);
+
+
+lemma void forall_equals_all_eq_char_of_uchar(list<unsigned char> ucs) 
+    requires forall(ucs, (equals)(unit, 0)) == true; 
+    ensures all_eq(map(char_of_uchar, ucs), 0) == true; 
+{ 
+    switch (ucs) { 
+        case nil: 
+        case cons(uc, ucs0): 
+            forall_equals_all_eq_char_of_uchar(ucs0); 
+    } 
+}
+
 @*/
 
 
@@ -1503,8 +1516,10 @@ static int usb_kbd_probe(struct usb_interface *iface,
 		// Can't do this before the if(kbd==0){goto fail1;} because open_struct only happens in fail2 (not in fail1,
 		// because in fail1 kbd might be 0 and you can't open_struct a nullpointer).
 		
+		//@ assert uchars((void *)kbd, _, ?ucs);
 		//@ uchars_to_chars(kbd);
-		//@ close_struct(kbd);
+		//@ forall_equals_all_eq_char_of_uchar(ucs);
+		//@ close_struct_zero(kbd);
 		kbd->irq = 0;
 		kbd->new = 0;
 		kbd->led = 0;
@@ -1659,6 +1674,9 @@ static int usb_kbd_probe(struct usb_interface *iface,
 	tmp_le16 = cpu_to_le16(1);
 	kbd->cr->wLength = /*cpu_to_le16(1);*/ tmp_le16;
 	//@ open_struct(cr);
+	//@ assert chars_((void *)cr, sizeof(struct usb_ctrlrequest), ?cr_cs);
+	//@ assume(cr_cs == map(some, map(the, cr_cs)));
+	//@ chars__to_chars((void *)cr);
 	//@ chars_to_uchars(cr);
 	// XXX We don't have the USB endpoint descriptor of endpoint 0.
 	// and the way endpoints are specified seems to suck a little now...
@@ -1807,7 +1825,7 @@ fail2:
 	usb_kbd_free_mem(dev, kbd);
 	
 	//@ open_struct(kbd); 
-	//@ chars_to_uchars(kbd);
+	//@ chars__to_uchars_(kbd);
 
 fail1:
 	input_free_device(input_dev);
@@ -1922,7 +1940,7 @@ static void usb_kbd_disconnect(struct usb_interface *intf) //@ : vf_usb_operatio
 		
 		//@ spin_lock_dispose(&kbd->leds_lock);
 		//@ open_struct(kbd);
-		//@ chars_to_uchars(kbd);
+		//@ chars__to_uchars_(kbd);
 		//@ dispose_ghost_stuff(kbd);
 		
 		kfree(kbd);
@@ -2088,8 +2106,8 @@ static int /*__init*/ usb_kbd_init(void) //@ : module_setup_t(usbkbd_verified)
 		//@ open usb_device_id(usb_kbd_id_table_ptr, false);
 		//@ open_struct(usb_kbd_id_table);
 		//@ open_struct(usb_kbd_id_table+1);
-		//@ chars_join((void *)usb_kbd_id_table);
-		//@ chars_to_uchars(usb_kbd_id_table);
+		//@ chars__join((void *)usb_kbd_id_table);
+		//@ chars__to_uchars_(usb_kbd_id_table);
 		kfree(usb_kbd_id_table);// not original code
 		
 		//@ open probe_disconnect_userdata(usb_kbd_probe, usb_kbd_disconnect)();
@@ -2131,8 +2149,8 @@ static void /*__exit*/ usb_kbd_exit(void) //@ : module_cleanup_t(usbkbd_verified
 	//@ open usb_device_id_table(0, usb_kbd_id_table_ptr+sizeof(struct usb_device_id));
 	//@ open usb_device_id(usb_kbd_id_table_ptr+sizeof(struct usb_device_id), true);
 	//@ open_struct(usb_kbd_id_table+1);
-	//@ chars_join((void*)usb_kbd_id_table);
-	//@ chars_to_uchars(usb_kbd_id_table);
+	//@ chars__join((void*)usb_kbd_id_table);
+	//@ chars__to_uchars_(usb_kbd_id_table);
 	kfree(usb_kbd_id_table); // not original code
 	
 	//@ open probe_disconnect_userdata(usb_kbd_probe, usb_kbd_disconnect)();

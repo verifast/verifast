@@ -7,7 +7,7 @@ void memcpy(char *dest, char *src, int count)
   //@ensures dest[old_i..count] |-> cs0 &*& src[old_i..count] |-> cs0;
   {
     i = i;
-    //@ open chars(dest + i, _, _);
+    //@ open chars_(dest + i, _, _);
     //@ open chars(src + i, _, _);
     if (i == count) break;
     //dest[i] = src[i];
@@ -22,4 +22,6 @@ void test()
   char buffer2[7];
   memcpy(buffer2, buffer1, 7);
   assert(buffer2[5] == '!');
+  //@ chars_to_chars_(buffer2);
+  //@ chars_to_chars_(buffer1);
 }

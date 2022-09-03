@@ -76,7 +76,6 @@ void sender_msg1(int* socket, havege_state* havege_state, pk_context* r_context,
   //@ chars_to_secret_crypto_chars(message, ID_SIZE);
 
   //@ open cryptogram(s_nonce, NONCE_SIZE, s_nonce_ccs, s_nonce_cg);
-  //@ chars_to_crypto_chars((void*) message + ID_SIZE, NONCE_SIZE);
   crypto_memcpy((void*) message + ID_SIZE, s_nonce, NONCE_SIZE);
   //@ crypto_chars_join(message);
   //@ list<crypto_char> msg1 = append(sid_ccs, s_nonce_ccs);
@@ -131,6 +130,8 @@ void sender_msg1(int* socket, havege_state* havege_state, pk_context* r_context,
   zeroize(message, MSG1_SIZE);
   //@ close cryptogram(s_nonce, NONCE_SIZE, s_nonce_ccs, s_nonce_cg);
   //@ close principal(sender, _);
+  
+  //@ chars_join(encrypted);
 }
 
 void sender_msg2(int* socket, havege_state* havege_state, pk_context* s_context,
@@ -143,7 +144,7 @@ void sender_msg2(int* socket, havege_state* havege_state, pk_context* s_context,
                cryptogram(s_nonce, NONCE_SIZE, ?s_nonce_ccs, ?s_nonce_cg) &*&
                  s_nonce_cg == cg_nonce(sender, _) &*&
                  cg_info(s_nonce_cg) == int_pair(1, int_pair(recvr, r_id)) &*&
-               chars(r_nonce, NONCE_SIZE, _); @*/
+               chars_(r_nonce, NONCE_SIZE, _); @*/
   /*@ ensures  GENERAL_POST(sender) &*&
                pk_context_with_key(s_context, pk_private,
                                    sender, s_id, 8 * KEY_SIZE) &*&
@@ -158,7 +159,8 @@ void sender_msg2(int* socket, havege_state* havege_state, pk_context* s_context,
   char encrypted[KEY_SIZE];
 
   // Receive the message
-  net_recv(socket, encrypted, KEY_SIZE);
+  if (net_recv(socket, encrypted, KEY_SIZE) != KEY_SIZE)
+    abort();
   //@ assert chars(encrypted, KEY_SIZE, ?enc_cs);
   //@ interpret_asym_encrypted(encrypted, KEY_SIZE);
   //@ assert cryptogram(encrypted, KEY_SIZE, ?enc_ccs, ?enc_cg);
@@ -249,7 +251,6 @@ void sender_msg2(int* socket, havege_state* havege_state, pk_context* s_context,
   //@ open cryptogram(s_nonce, NONCE_SIZE, s_nonce_ccs, s_nonce_cg);
   //@ MEMCMP_SEC(s_nonce, s_nonce_cg)
   if (crypto_memcmp((void*) message + ID_SIZE, s_nonce, NONCE_SIZE) != 0) abort();
-  //@ chars_to_crypto_chars(r_nonce, NONCE_SIZE);
   crypto_memcpy(r_nonce, (void*) message + ID_SIZE + NONCE_SIZE, NONCE_SIZE);
   //@ assert id_ccs == cs_to_ccs(identifier(recvr));
   //@ assert s_ccs == s_nonce_ccs;
@@ -334,7 +335,6 @@ void sender_msg3(int* socket, havege_state* havege_state, pk_context* r_context,
         chars_to_secret_crypto_chars(r_nonce, NONCE_SIZE);
       }
   @*/
-  //@ chars_to_crypto_chars(message, NONCE_SIZE);
   crypto_memcpy(message, r_nonce, NONCE_SIZE);
   /*@ if (!condition)
         close cryptogram(r_nonce, NONCE_SIZE, r_nonce_ccs, r_nonce_cg);
@@ -364,6 +364,7 @@ void sender_msg3(int* socket, havege_state* havege_state, pk_context* r_context,
   net_send(socket, encrypted, size);
   zeroize(message, MSG3_SIZE);
   //@ close principal(sender, _);
+  //@ chars_join(encrypted);
 }
 
 void sender(int sender, int receiver,
@@ -378,8 +379,8 @@ void sender(int sender, int receiver,
              [?f2]cryptogram(r_pub_key, 8 * KEY_SIZE,
                              ?r_pub_key_ccs, ?r_pub_key_cg) &*&
                r_pub_key_cg == cg_rsa_public_key(receiver, ?r_id) &*&
-             chars(s_nonce, NONCE_SIZE, _) &*&
-             chars(r_nonce, NONCE_SIZE, _); @*/
+             chars_(s_nonce, NONCE_SIZE, _) &*&
+             chars_(r_nonce, NONCE_SIZE, _); @*/
 /*@ ensures  principal(sender, _) &*&
              [f1]cryptogram(s_priv_key, 8 * KEY_SIZE,
                             s_priv_key_ccs, s_priv_key_cg) &*&
@@ -467,7 +468,7 @@ void receiver_msg1(int* socket, havege_state* havege_state,
   /*@ requires GENERAL_PRE(receiver) &*&
                pk_context_with_key(r_context, pk_private,
                                    receiver, ?r_id, 8 * KEY_SIZE)  &*&
-               chars(s_nonce, NONCE_SIZE, _); @*/
+               chars_(s_nonce, NONCE_SIZE, _); @*/
   /*@ ensures  GENERAL_POST(receiver) &*&
                pk_context_with_key(r_context, pk_private,
                                    receiver, r_id, 8 * KEY_SIZE) &*&
@@ -479,7 +480,8 @@ void receiver_msg1(int* socket, havege_state* havege_state,
   char encrypted[KEY_SIZE];
 
   // Receive the message
-  net_recv(socket, encrypted, KEY_SIZE);
+  if (net_recv(socket, encrypted, KEY_SIZE) != KEY_SIZE)
+    abort();
   //@ assert chars(encrypted, KEY_SIZE, ?enc_cs);
   //@ interpret_asym_encrypted(encrypted, KEY_SIZE);
   //@ assert cryptogram(encrypted, KEY_SIZE, ?enc_ccs, ?enc_cg);
@@ -535,7 +537,6 @@ void receiver_msg1(int* socket, havege_state* havege_state,
                                         r_id, s_nonce_ccs); @*/
   check_identifier(message, sender);
   //@ assert id_ccs == cs_to_ccs(identifier(sender));
-  //@ chars_to_crypto_chars(s_nonce, NONCE_SIZE);
   crypto_memcpy(s_nonce, (void*) message + ID_SIZE, NONCE_SIZE);
 
   // Interpret message
@@ -579,6 +580,7 @@ void receiver_msg1(int* socket, havege_state* havege_state,
   zeroize((void*) message + ID_SIZE, NONCE_SIZE);
   //@ public_cryptogram(encrypted, enc_cg);
   //@ close principal(receiver, _);
+  //@ chars_join(message);
 }
 
 void receiver_msg2(int* socket, havege_state* havege_state,
@@ -632,8 +634,6 @@ void receiver_msg2(int* socket, havege_state* havege_state,
       }
   @*/
   //@ open cryptogram(r_nonce, NONCE_SIZE, r_nonce_ccs, r_nonce_cg);
-  //@ chars_to_crypto_chars((void*) message + ID_SIZE, NONCE_SIZE);
-  //@ chars_to_crypto_chars((void*) message + ID_SIZE + NONCE_SIZE, NONCE_SIZE);
   crypto_memcpy((void*) message + ID_SIZE, s_nonce, NONCE_SIZE);
   crypto_memcpy((void*) message + ID_SIZE + NONCE_SIZE, r_nonce, NONCE_SIZE);
   //@ crypto_chars_join(message);
@@ -704,6 +704,7 @@ void receiver_msg2(int* socket, havege_state* havege_state,
   @*/
   //@ close cryptogram(r_nonce, NONCE_SIZE, r_nonce_ccs, r_nonce_cg);
   //@ close principal(receiver, _);
+  //@ chars_join(encrypted);
 }
 
 void receiver_msg3(int* socket, havege_state* havege_state,
@@ -737,7 +738,8 @@ void receiver_msg3(int* socket, havege_state* havege_state,
   //@ open receiver_inter(p_orig, c_orig, p_inst, s_nonce_ccs, s_nonce_cg);
 
   // Receive the message
-  net_recv(socket, encrypted, KEY_SIZE);
+  if (net_recv(socket, encrypted, KEY_SIZE) != KEY_SIZE)
+    abort();
   //@ assert chars(encrypted, KEY_SIZE, ?enc_cs);
   //@ interpret_asym_encrypted(encrypted, KEY_SIZE);
   //@ assert cryptogram(encrypted, KEY_SIZE, ?enc_ccs, ?enc_cg);
@@ -846,8 +848,8 @@ void receiver(int sender, int receiver,
              [?f2]cryptogram(r_priv_key, 8 * KEY_SIZE,
                              ?r_priv_key_ccs, ?r_priv_key_cg) &*&
                r_priv_key_cg == cg_rsa_private_key(receiver, ?r_id) &*&
-             chars(s_nonce, NONCE_SIZE, _) &*&
-             chars(r_nonce, NONCE_SIZE, _); @*/
+             chars_(s_nonce, NONCE_SIZE, _) &*&
+             chars_(r_nonce, NONCE_SIZE, _); @*/
 /*@ ensures  principal(receiver, _) &*&
              [f1]cryptogram(s_pub_key, 8 * KEY_SIZE,
                             s_pub_key_ccs, s_pub_key_cg) &*&

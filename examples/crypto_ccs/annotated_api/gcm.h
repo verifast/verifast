@@ -16,7 +16,7 @@ typedef struct gcm_context gcm_context;
 /*@
 
 predicate gcm_context(gcm_context *context) =
-  chars((void*) context, GCM_CONTEXT_SIZE, _) &*&
+  chars_((void*) context, GCM_CONTEXT_SIZE, _) &*&
   struct_gcm_context_padding(context)
 ;
 predicate gcm_context_initialized(gcm_context *context,
@@ -60,8 +60,8 @@ int gcm_crypt_and_tag(gcm_context *ctx, int mode, size_t length,
                add == NULL &*& add_len == 0 &*&
                [?f]crypto_chars(?in_kind, input, length, ?in_ccs) &*&
                // only tags of 16 bytes for simplicity
-               chars(tag, tag_len, _) &*& tag_len == 16 &*&
-               chars(output, length, _); @*/
+               chars_(tag, tag_len, _) &*& tag_len == 16 &*&
+               chars_(output, length, _); @*/
   /*@ ensures  gcm_context_initialized(ctx, p1, c1) &*&
                // this increment enforces a fresh IV on each invocation
                random_permission(p2, c2 + 1) &*&
@@ -96,7 +96,7 @@ int gcm_auth_decrypt(gcm_context *ctx, size_t length,
                exists(?in_cg) &*&
                append(tag_ccs, in_ccs) == ccs_for_cg(in_cg) &*&
                in_cg == cg_aes_auth_encrypted(?p2, ?c2, ?out_ccs2, ?iv_ccs2) &*&
-               chars(output, length, _); @*/
+               chars_(output, length, _); @*/
   /*@ ensures  gcm_context_initialized(ctx, p1, c1) &*&
                [f1]crypto_chars(in_kind, tag, tag_len, tag_ccs) &*&
                [f2]crypto_chars(in_kind, input, length, in_ccs) &*&

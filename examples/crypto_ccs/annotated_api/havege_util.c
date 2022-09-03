@@ -7,7 +7,7 @@ void r_int(struct havege_state* state, int* i)
                [?f]havege_state_initialized(state) &*&
                random_permission(?principal, ?count) &*&
                havege_util(pub, ?proof_pred, principal) &*&
-               integer(i, _); @*/
+               int_(i, _); @*/
   /*@ ensures  [f]havege_state_initialized(state) &*&
                random_permission(principal, count + 1) &*&
                havege_util(pub, proof_pred, principal) &*&
@@ -17,6 +17,7 @@ void r_int(struct havege_state* state, int* i)
   //@ assert is_principal_with_public_nonces(?proof, pub, proof_pred, principal);
   char* temp = (void*) i;
   //@ close random_request(principal, 0, false);
+  //@ int__to_chars_(i);
   if (havege_random(state, temp, sizeof(int)) != 0) abort();
   //@ open cryptogram(temp, ?l, ?cs, ?random);
   /*@ if (!col)

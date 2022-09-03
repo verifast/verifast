@@ -279,7 +279,7 @@ void *consumer()
     }
 }
 
-//@ predicate integer0(void *p) = integer(p, _) &*& malloc_block_ints(p, 1);
+//@ predicate integer0(void *p) = int_(p, _) &*& malloc_block_ints(p, 1);
 
 int main() //@ : main_full(prodcons)
     //@ requires module(prodcons, true);

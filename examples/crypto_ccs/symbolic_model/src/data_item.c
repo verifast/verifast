@@ -40,7 +40,6 @@ struct item *create_data_item(char* data, int length)
   //@ assert item->content |-> ?cont &*& item->size |-> ?size;
   write_tag(item->content, TAG_DATA);
   //@ chars_to_crypto_chars(data, length);
-  //@ chars_to_crypto_chars(item->content + TAG_LENGTH, length);
   crypto_memcpy(item->content + TAG_LENGTH, data, (unsigned int) length);
   //@ cs_to_ccs_crypto_chars(data, cs_data);
   //@ cs_to_ccs_crypto_chars(cont + TAG_LENGTH, cs_data);
@@ -89,7 +88,6 @@ int item_get_data(struct item *item, char** data)
   //@ assert chars(cont + TAG_LENGTH, data_size, ?cs_data);
   //@ cs_to_ccs_inj(cs0, cs_data);
   //@ chars_to_crypto_chars(cont + TAG_LENGTH, data_size);
-  //@ chars_to_crypto_chars(temp, data_size);
   crypto_memcpy(temp, (void*) item->content + TAG_LENGTH, (unsigned int) data_size);
   //@ cs_to_ccs_crypto_chars(temp, cs_data);
   //@ cs_to_ccs_crypto_chars(cont + TAG_LENGTH, cs_data);
@@ -113,6 +111,7 @@ int item_get_data_as_int(struct item *item)
   if (size != (int) sizeof(int)) abort();
   //@ chars_to_integer(data);
   result = *((int*) ((void*) data));
+  //@ integer_to_chars(data);
   free(data);
   return result;
 }

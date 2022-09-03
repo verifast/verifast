@@ -1,12 +1,12 @@
 void memcpy(char *dest, char *src, int count)
-    //@ requires chars(dest, count, _) &*& [?f]chars(src, count, ?cs);
+    //@ requires chars_(dest, count, _) &*& [?f]chars(src, count, ?cs);
     //@ ensures chars(dest, count, cs) &*& [f]chars(src, count, cs);
 {
     for (int i = 0; ; i++)
-        //@ requires chars(dest + i, count - i, _) &*& [f]chars(src + i, count - i, ?cs0);
+        //@ requires chars_(dest + i, count - i, _) &*& [f]chars(src + i, count - i, ?cs0);
         //@ ensures chars(dest + old_i, count - old_i, cs0) &*& [f]chars(src + old_i, count - old_i, cs0);
     {
-        //@ open chars(dest + i, _, _);
+        //@ open chars_(dest + i, _, _);
         //@ open chars(src + i, _, _);
         if (i == count) {
             break;
@@ -23,7 +23,7 @@ void memcpy1(char *dest, char *src, int count) // Identical but uses array slice
         //@ requires dest[i..count] |-> _ &*& [f]src[i..count] |-> ?cs0;
         //@ ensures dest[old_i..count] |-> cs0 &*& [f]src[old_i..count] |-> cs0;
     {
-        //@ open chars(dest + i, _, _);
+        //@ open chars_(dest + i, _, _);
         //@ open chars(src + i, _, _);
         if (i == count) {
             break;

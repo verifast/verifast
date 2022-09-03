@@ -16,7 +16,7 @@ typedef struct aes_context aes_context;
 /*@
 
 predicate aes_context(aes_context *context) =
-  chars((void*) context, AES_CONTEXT_SIZE, _) &*&
+  chars_((void*) context, AES_CONTEXT_SIZE, _) &*&
   struct_aes_context_padding(context)
 ;
 
@@ -49,7 +49,7 @@ int aes_crypt_cfb128(aes_context *ctx, int mode, size_t length, size_t *iv_off,
                // only zero offset allowed, not spec'ed for CBF mode
                crypto_chars(?iv_kind, iv, 16, ?iv_ccs) &*&
                u_integer(iv_off, 0) &*&
-               chars(output, length, _) &*& mode == AES_ENCRYPT ?
+               chars_(output, length, _) &*& mode == AES_ENCRYPT ?
                (
                  random_permission(?p2, ?c2) &*&
                  iv_ccs == ccs_for_cg(cg_nonce(p2, c2)) &*&

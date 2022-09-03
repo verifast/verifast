@@ -132,7 +132,7 @@ int key_item_havege_random_stub(void *havege_state,
   /*@ requires [?f]havege_state_initialized(havege_state) &*&
                random_request(?principal, ?info, ?key_request) &*&
                random_permission(principal, ?count) &*&
-               chars(output, len, _) &*& len >= MIN_RANDOM_SIZE;
+               chars_(output, len, _) &*& len >= MIN_RANDOM_SIZE;
   @*/
   /*@ ensures  [f]havege_state_initialized(havege_state) &*&
                random_permission(principal, count + 1) &*&
@@ -144,7 +144,7 @@ int key_item_havege_random_stub(void *havege_state,
                  :
                    cg == cg_nonce(principal, count + 1)
                :
-                 chars(output, len, _);
+                 chars_(output, len, _);
   @*/
 {
   return havege_random(havege_state, output, len);

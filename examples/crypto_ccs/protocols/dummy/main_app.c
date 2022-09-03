@@ -48,7 +48,7 @@ void *sender_t(void *data) //@ : pthread_run_joinable
 /*@
 predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) = 
   principal(?receiver, _) &*&
-  chars(data, PACKAGE_SIZE, _) &*&
+  chars_(data, PACKAGE_SIZE, _) &*&
   info == cons(int_value(receiver), nil)
 ;
 

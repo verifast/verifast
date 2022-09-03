@@ -59,7 +59,7 @@ struct item *create_pair(struct item *first, struct item *second)
   //@ assert chars(cont, TAG_LENGTH, full_tag(TAG_PAIR));
   //@ public_chars(cont, TAG_LENGTH);
   temp = pair->content + TAG_LENGTH;
-  //@ chars_split(cont + TAG_LENGTH, sizeof(int));
+  //@ chars__split(cont + TAG_LENGTH, sizeof(int));
   //@ assert [f1]integer(&first->size, ?flen);
   //@ integer_to_chars(&first->size);
   //@ open chars((void*) &first->size, sizeof(int), chars_of_int(flen));
@@ -73,7 +73,7 @@ struct item *create_pair(struct item *first, struct item *second)
   //@ cs_to_ccs_crypto_chars(temp - sizeof(int), chars_of_int(flen));
   //@ chars_to_secret_crypto_chars(temp - sizeof(int), sizeof(int));
   //@ chars_to_integer(&first->size);
-  //@ chars_split(cont + TAG_LENGTH + sizeof(int), first->size);
+  //@ chars__split(cont + TAG_LENGTH + sizeof(int), first->size);
   write_buffer(&temp, first->content, first->size);
   write_buffer(&temp, second->content, second->size);
   //@ crypto_chars_join(cont + TAG_LENGTH + sizeof(int));
@@ -194,13 +194,11 @@ void pair_get_components(struct item* pair,
   first->content = malloc_wrapper(first->size);
   if (first->size <= MINIMAL_STRING_SIZE)
     abort_crypto_lib("Found corrupted pair item 3"); //~allow_dead_code
-  //@ chars_to_crypto_chars(first->content, first->size);
   crypto_memcpy(first->content, temp, (unsigned int) first->size);
   temp = temp + first->size;
   if (second->size <= MINIMAL_STRING_SIZE)
     abort_crypto_lib("Found corrupted pair item 4");
   second->content = malloc_wrapper(second->size);
-  //@ chars_to_crypto_chars(second->content, second->size);
   crypto_memcpy(second->content, temp, (unsigned int) second->size);
   //@ crypto_chars_join(cont + TAG_LENGTH + sizeof(int));
   //@ chars_to_secret_crypto_chars(cont + TAG_LENGTH, sizeof(int));

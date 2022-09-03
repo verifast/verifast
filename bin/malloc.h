@@ -23,13 +23,25 @@ void *malloc(size_t size);
         result == 0 ?
             emp
         :
-            chars(result, size, ?cs) &*& malloc_block(result, size) &*&
+            chars_(result, size, _) &*& malloc_block(result, size) &*&
             (char *)0 < result && result + size <= (char *)UINTPTR_MAX; // one-past-end does not overflow
     @*/
     //@ terminates;
 
+void *calloc(size_t nmemb, size_t size);
+    //@ requires true;
+    /*@
+    ensures
+        result == 0 ?
+            emp
+        :
+            chars(result, nmemb * size, ?cs) &*& malloc_block(result, nmemb * size) &*& all_eq(cs, 0) == true &*&
+            (char *)0 < result && result + nmemb * size <= (char *)UINTPTR_MAX; // one-past-end does not overflow
+    @*/
+    //@ terminates;
+
 void free(void *array);
-    //@ requires malloc_block(array, ?size) &*& chars(array, size, ?cs);
+    //@ requires malloc_block(array, ?size) &*& chars_(array, size, ?cs);
     //@ ensures emp;
     //@ terminates;
 

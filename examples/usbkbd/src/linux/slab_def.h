@@ -14,7 +14,7 @@ void kfree(void *ptr);
 			true
 		:
 			kmalloc_block(ptr, ?size)
-			&*& uchars(ptr,size,?cs)
+			&*& uchars_(ptr,size,?cs)
 		;
 	@*/
 	//@ ensures true;

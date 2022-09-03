@@ -212,7 +212,7 @@ void stack_push_iter(stack stack, void *value)
 
 bool stack_pop_iter(stack stack, void **pvalue)
     //@ requires [_]stack(call_perm_scope_of(currentThread), stack, ?p) &*& *pvalue |-> _ &*& call_perm_(currentThread, stack_pop_iter) &*& call_perm_level(currentThread, pair((pair_lt)(lt, lt), pair(1, 0)), {stack_pop_iter});
-    //@ ensures *pvalue |-> ?value &*& result ? p(value) : true;
+    //@ ensures pointer_(pvalue, ?value_opt) &*& result ? value_opt == some(?value) &*& p(value) : true;
     //@ terminates;
 {
     //@ int scope = call_perm_scope_of(currentThread);
@@ -355,7 +355,7 @@ void stack_push(stack stack, void *value)
 
 bool stack_pop(stack stack, void **pvalue)
     //@ requires [_]stack(call_perm_scope_of(currentThread), stack, ?p) &*& *pvalue |-> _;
-    //@ ensures *pvalue |-> ?value &*& result ? p(value) : true;
+    //@ ensures pointer_(pvalue, ?value_opt) &*& result ? value_opt == some(?value) &*& p(value) : true;
     //@ terminates;
 {
     //@ produce_call_below_perm_();

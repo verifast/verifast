@@ -128,7 +128,7 @@ int main() //@ : main
     
     int_pointer = malloc(5 * sizeof(int));
     if (int_pointer == 0) abort();
-    //@ open ints(int_pointer, _, _);
+    //@ open ints_(int_pointer, _, _);
     *(int_pointer + 1) = 5;
     *(int_pointer + 2) = 5;
     
@@ -137,7 +137,8 @@ int main() //@ : main
     //@ assert *(int_pointer + 1) |-> 10 &*& *(int_pointer + 2) |-> 0;
     modify_array_new_syntax(int_pointer);
     //@ assert int_pointer[1] |-> 15 &*& int_pointer[2] |-> -5;
-        
+
+    //@ close ints_(int_pointer + 2, 3, _);
     free(int_pointer);
     
     

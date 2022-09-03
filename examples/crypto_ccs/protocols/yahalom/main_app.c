@@ -90,7 +90,7 @@ predicate_family_instance pthread_run_pre(sender_t)(void *data, any info) =
   [1/2]cryptogram(s_key, KEY_SIZE, ?s_key_ccs, ?s_key_cg) &*&
     s_key_cg == cg_symmetric_key(sender, ?s_id) &*&
     cg_info(s_key_cg) == int_pair(3, server) &*&
-  chars(key, KEY_SIZE, _) &*&
+  chars_(key, KEY_SIZE, _) &*&
   info == IV(server, IV(sender, IV(receiver, PV(s_key, CCL(s_key_ccs, IV(s_id,
              PV(key, nil)))))));
 
@@ -135,7 +135,7 @@ predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) =
   [1/2]cryptogram(r_key, KEY_SIZE, ?r_key_ccs, ?r_key_cg) &*&
     r_key_cg == cg_symmetric_key(receiver, ?r_id) &*&
     cg_info(r_key_cg) == int_pair(3, server) &*&
-  chars(key, KEY_SIZE, _) &*&
+  chars_(key, KEY_SIZE, _) &*&
   info == IV(server, IV(sender, IV(receiver, PV(r_key, CCL(r_key_ccs, IV(r_id,
              PV(key, nil)))))));
 

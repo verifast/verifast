@@ -91,10 +91,10 @@ int receiver(char *key, char *msg);
              [?f1]cryptogram(key, KEY_SIZE, ?key_ccs, ?key_cg) &*&
                key_cg == cg_symmetric_key(?sender, ?id) &*&
                receiver == shared_with(sender, id) &*&
-             chars(msg, MAX_SIZE, _); @*/
+             chars_(msg, MAX_SIZE, _); @*/
 /*@ ensures  principal(receiver, _) &*&
              [f1]cryptogram(key, KEY_SIZE, key_ccs, key_cg) &*&
-             chars(msg + result, MAX_SIZE - result, _) &*&
+             chars_(msg + result, MAX_SIZE - result, _) &*&
              crypto_chars(secret, msg, result, ?msg_ccs) &*&
              col || bad(sender) || bad(receiver) ||
                send(sender, receiver, msg_ccs); @*/

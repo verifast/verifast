@@ -83,7 +83,7 @@ void receiver(char *key, int key_len, char *message);
                [?f1]cryptogram(key, key_len, ?key_ccs, ?key_cg) &*&
                  key_cg == cg_symmetric_key(?sender, ?id) &*&
                  receiver == shared_with(sender, id) &*&
-               chars(message, MESSAGE_SIZE, _); @*/
+               chars_(message, MESSAGE_SIZE, _); @*/
   /*@ ensures  principal(receiver, _) &*&
                [f1]cryptogram(key, key_len, key_ccs, key_cg) &*&
                chars(message, MESSAGE_SIZE, ?msg_cs) &*&
