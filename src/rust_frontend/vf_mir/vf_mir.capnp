@@ -6,6 +6,13 @@ struct Option(T) {
     }
 }
 
+struct Mutability {
+    union {
+        mut @0: Void;
+        not @1: Void;
+    }
+}
+
 struct Ty {
 
     struct Const {
@@ -70,13 +77,18 @@ struct Ty {
         substs @1: List(GenArg);
     }
 
+    struct RawPtrTy {
+        ty @0: Ty;
+        mutability @1: Mutability;
+    }
+
     struct TyKind {
         union {
             bool @0: Void;
             int @1: IntTy;
             uInt @2: UIntTy;
             adt @3: AdtTy;
-            rawPtr @4: Ty;
+            rawPtr @4: RawPtrTy;
             fnDef @5: FnDefTy;
             tuple @6: List(GenArg);
         }
@@ -100,13 +112,6 @@ struct Body {
         union {
             fn @0: Void;
             assocFn @1: Void;
-        }
-    }
-
-    struct Mutability {
-        union {
-            mut @0: Void;
-            not @1: Void;
         }
     }
 
@@ -199,7 +204,14 @@ struct Body {
                 }
 
                 struct FnCallData {
+                    struct DestinationData {
+                        place @0: Place;
+                        basicBlockId @1: BasicBlockId;
+                    }
                     func @0: Operand;
+                    args @1: List(Operand);
+                    destination @2: Option(DestinationData);
+                    cleanup @3: Option(BasicBlockId);
                 }
 
                 union {
@@ -218,6 +230,7 @@ struct Body {
         id @0: BasicBlockId;
         statements @1: List(Statement);
         terminator @2: Terminator;
+        isCleanup @3: Bool;
     }
 
     defKind @0: DefKind;
@@ -231,4 +244,5 @@ struct Body {
 struct VfMir {
     bodies @0: List(Body);
 }
-#TODO @Nima: For Clarity write a struct fields on top and then inner type definitions
+#Todo @Nima: For Clarity write a struct fields on top and then inner type definitions
+#Todo @Nima: Use a uniform naming. def_path for Rust style definition paths and Name for their corresponding translated names.

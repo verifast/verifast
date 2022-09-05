@@ -228,15 +228,18 @@ fn get_bodies<'tcx>(tcx: TyCtxt<'tcx>) -> Vec<(String, BodyWithBorrowckFacts<'tc
 
 mod vf_mir_builder {
     use crate::vf_mir_capnp::body as body_cpn;
+    use crate::vf_mir_capnp::mutability as mutability_cpn;
     use crate::vf_mir_capnp::ty as ty_cpn;
     use crate::vf_mir_capnp::vf_mir as vf_mir_cpn;
+    use basic_block_cpn::operand as operand_cpn;
+    use basic_block_cpn::place as place_cpn;
     use basic_block_cpn::terminator as terminator_cpn;
     use body_cpn::annotation as annot_cpn;
     use body_cpn::basic_block as basic_block_cpn;
     use body_cpn::basic_block_id as basic_block_id_cpn;
     use body_cpn::local_decl as local_decl_cpn;
     use body_cpn::local_decl_id as local_decl_id_cpn;
-    use body_cpn::mutability as mutability_cpn;
+    use place_cpn::place_element as place_element_cpn;
     use rustc_ast::util::comments::Comment;
     use rustc_hir as hir;
     use rustc_middle::bug;
@@ -249,6 +252,7 @@ mod vf_mir_builder {
     use ty_cpn::adt_ty as adt_ty_cpn;
     use ty_cpn::fn_def_ty as fn_def_ty_cpn;
     use ty_cpn::gen_arg as gen_arg_cpn;
+    use ty_cpn::raw_ptr_ty as raw_ptr_ty_cpn;
     use ty_cpn::ty_kind as ty_kind_cpn;
     use ty_cpn::u_int_ty as u_int_ty_cpn;
 
@@ -445,9 +449,13 @@ mod vf_mir_builder {
                     let u_int_ty_cpn = ty_kind_cpn.init_u_int();
                     Self::encode_ty_uint(u_int_ty, u_int_ty_cpn)
                 }
-                ty::Adt(adt_def, substs) => {
+                ty::TyKind::Adt(adt_def, substs) => {
                     let adt_ty_cpn = ty_kind_cpn.init_adt();
                     Self::encode_ty_adt(tcx, adt_def, substs, adt_ty_cpn);
+                }
+                ty::TyKind::RawPtr(ty_and_mut) => {
+                    let raw_ptr_ty_cpn = ty_kind_cpn.init_raw_ptr();
+                    Self::encode_ty_raw_ptr(tcx, ty_and_mut, raw_ptr_ty_cpn);
                 }
                 ty::TyKind::FnDef(def_id, substs) => {
                     let fn_def_ty_cpn = ty_kind_cpn.init_fn_def();
@@ -505,6 +513,17 @@ mod vf_mir_builder {
             // TODO @Nima: Definitions we use should be encoded later
         }
 
+        fn encode_ty_raw_ptr(
+            tcx: TyCtxt<'tcx>,
+            ty_and_mut: &ty::TypeAndMut<'tcx>,
+            mut raw_ptr_ty_cpn: raw_ptr_ty_cpn::Builder<'_>,
+        ) {
+            let ty_cpn = raw_ptr_ty_cpn.reborrow().init_ty();
+            Self::encode_ty(tcx, ty_and_mut.ty, ty_cpn);
+            let mut_cpn = raw_ptr_ty_cpn.init_mutability();
+            Self::encode_mutability(ty_and_mut.mutbl, mut_cpn);
+        }
+
         fn encode_ty_fn_def(
             tcx: TyCtxt<'tcx>,
             def_id: &hir::def_id::DefId,
@@ -554,8 +573,10 @@ mod vf_mir_builder {
             let basic_block_id_cpn = basic_block_cpn.reborrow().init_id();
             Self::encode_basic_block_id(basic_block_idx, basic_block_id_cpn);
             // TODO @Nima: statements
-            let terminator_cpn = basic_block_cpn.init_terminator();
+            let terminator_cpn = basic_block_cpn.reborrow().init_terminator();
             Self::encode_terminator(tcx, basic_block_data.terminator(), terminator_cpn);
+
+            basic_block_cpn.set_is_cleanup(basic_block_data.is_cleanup);
         }
 
         #[inline]
@@ -601,14 +622,15 @@ mod vf_mir_builder {
                     from_hir_call,
                     fn_span,
                 } => {
-                    // Todo @Nima: We should encode these data structures step by step
-                    if let mir::Operand::Constant(box mir::Constant { literal, .. }) = func {
-                        let fn_call_data_cpn = terminator_kind_cpn.init_call();
-                        let ty = literal.ty();
-                        Self::encode_fn_call_data(tcx, ty, fn_call_data_cpn);
-                    } else {
-                        bug!("Function call terminator with callee operand {:?}", func);
-                    }
+                    let fn_call_data_cpn = terminator_kind_cpn.init_call();
+                    Self::encode_fn_call_data(
+                        tcx,
+                        func,
+                        args,
+                        destination,
+                        cleanup,
+                        fn_call_data_cpn,
+                    );
                 }
                 _ => todo!("Unsupported Mir terminator kind"),
             }
@@ -616,13 +638,23 @@ mod vf_mir_builder {
 
         fn encode_fn_call_data(
             tcx: TyCtxt<'tcx>,
-            ty: ty::Ty<'tcx>,
+            func: &mir::Operand<'tcx>,
+            args: &Vec<mir::Operand<'tcx>>,
+            destination: &Option<(mir::Place<'tcx>, mir::BasicBlock)>,
+            cleanup: &Option<mir::BasicBlock>,
             mut fn_call_data_cpn: fn_call_data_cpn::Builder<'_>,
         ) {
+            // Todo @Nima: We should encode these data structures step by step
+            let ty = match func {
+                mir::Operand::Constant(box mir::Constant { literal, .. }) => literal.ty(),
+                _ => bug!("Function call terminator with callee operand {:?}", func),
+            };
+
             let ty_kind = ty.kind();
             match ty_kind {
                 ty::FnDef(..) | ty::FnPtr(_) => {
                     let ty_cpn = fn_call_data_cpn
+                        .reborrow()
                         .init_func() // Operand builder
                         .init_constant() // Constant builder
                         .init_literal() // ConstantKind builder
@@ -634,6 +666,66 @@ mod vf_mir_builder {
                     "Function call terminator with unexpected type kind {:?}",
                     ty_kind
                 ),
+            }
+
+            // Encoding args
+            let args_len = args.len().try_into().expect(&format!(
+                "The number of arguments for function call cannot be stored in a Capnp message"
+            ));
+            let mut args_cpn = fn_call_data_cpn.reborrow().init_args(args_len);
+            for (idx, arg) in args.iter().enumerate() {
+                let arg_cpn = args_cpn.reborrow().get(idx.try_into().unwrap());
+                Self::encode_operand(arg, arg_cpn);
+            }
+
+            // Encode destination
+            let mut destination_cpn = fn_call_data_cpn.reborrow().init_destination();
+            match destination {
+                Option::None => destination_cpn.set_nothing(()), // diverging call
+                Option::Some((dest_place, dest_bblock_id)) => {
+                    let mut destination_data_cpn = destination_cpn.init_something();
+                    let place_cpn = destination_data_cpn.reborrow().init_place();
+                    Self::encode_place(dest_place, place_cpn);
+                    let basic_block_id_cpn = destination_data_cpn.init_basic_block_id();
+                    Self::encode_basic_block_id(*dest_bblock_id, basic_block_id_cpn);
+                }
+            }
+        }
+
+        fn encode_operand(operand: &mir::Operand<'tcx>, operand_cpn: operand_cpn::Builder<'_>) {
+            debug!("Encoding Operand {:?}", operand);
+            match operand {
+                mir::Operand::Copy(place) => todo!(),
+                mir::Operand::Move(place) => {
+                    let place_cpn = operand_cpn.init_move();
+                    Self::encode_place(place, place_cpn);
+                }
+                mir::Operand::Constant(constant) => todo!(),
+            }
+        }
+
+        fn encode_place(place: &mir::Place<'tcx>, mut place_cpn: place_cpn::Builder<'_>) {
+            let local_decl_id_cpn = place_cpn.reborrow().init_local();
+            Self::encode_local_decl_id(place.local, local_decl_id_cpn);
+
+            let place_elms_len = place.projection.len().try_into().expect(&format!(
+                "The number of projection elements cannot be stored in a Capnp message"
+            ));
+            let mut place_elms_cpn = place_cpn.init_projection(place_elms_len);
+            for (idx, place_elm) in place.projection.iter().enumerate() {
+                let place_elm_cpn = place_elms_cpn.reborrow().get(idx.try_into().unwrap());
+                Self::encode_place_element(&place_elm, place_elm_cpn);
+            }
+        }
+
+        fn encode_place_element(
+            place_elm: &mir::PlaceElem<'tcx>,
+            place_elm_cpn: place_element_cpn::Builder<'_>,
+        ) {
+            match place_elm {
+                mir::ProjectionElem::Deref => todo!(),
+                mir::ProjectionElem::Field(field, ty) => todo!(),
+                _ => todo!(),
             }
         }
     }

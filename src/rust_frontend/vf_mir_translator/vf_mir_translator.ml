@@ -32,15 +32,27 @@ end
 
 module Mir = struct
   type mutability = Mut | Not
-  type ty_info = { vf_ty : Ast.type_expr }
+
+  type generic_arg = GenArgLifetime | GenArgType of ty_info | GenArgConst
+
+  and ty_info =
+    | TyInfoBasic of { vf_ty : Ast.type_expr }
+    | TyInfoGeneric of { vf_ty : Ast.type_expr; substs : generic_arg list }
+
+  let basic_type_of (ti : ty_info) =
+    match ti with
+    | TyInfoBasic ti1 -> ti1.vf_ty
+    | TyInfoGeneric _ -> failwith "Todo: Generic types are not supported yet"
+
   type local_decl = { mutability : mutability; id : string; ty : ty_info }
 
   type basic_block = {
     id : string;
     statements : Ast.stmt list;
-    terminator : Ast.stmt;
+    terminator : Ast.stmt list;
   }
 
+  type fn_call_dst_data = { dst : Ast.expr; dst_bblock_id : string }
   type u_int_ty = USize | U8 | U16 | U32 | U64 | U128
 
   let u_int_ty_bits_len (uit : u_int_ty) =
@@ -86,6 +98,20 @@ module TrTyInt = struct
       let bytes = bits / 8 in
       let rank = int_of_float @@ Float.log2 @@ float_of_int @@ bytes in
       Ok rank
+end
+
+module TrTyRawPtr = struct
+  type ty_raw_ptr_info = {
+    mutability : Mir.mutability;
+    pointee_ty_info : Mir.ty_info;
+  }
+end
+
+module TrName = struct
+  let translate_def_path (dp : string) =
+    let open Str in
+    let r = regexp {|::|} in
+    global_replace r "_" dp
 end
 
 module type VF_MIR_TRANSLATOR_ARGS = sig
@@ -140,8 +166,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | U128 -> calc_rank Mir.U128
       | Undefined _ -> Error (`TrUIntTy "Unknown Rust unsigned int type")
     in
-    let ty_info : Mir.ty_info =
-      { vf_ty = Ast.ManifestTypeExpr (dloc, Ast.Int (Ast.Unsigned, rank)) }
+    let ty_info =
+      Mir.TyInfoBasic
+        { vf_ty = Ast.ManifestTypeExpr (dloc, Ast.Int (Ast.Unsigned, rank)) }
     in
     Ok ty_info
 
@@ -156,39 +183,86 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         if List.length substs_cpn > 0 then
           failwith (def_path ^ " does not have any generic parameter")
         else
-          let ty_info : Mir.ty_info =
-            {
-              vf_ty =
-                Ast.ManifestTypeExpr (dloc, Ast.Int (Ast.Unsigned, u_size_rank));
-            }
+          let ty_info =
+            Mir.TyInfoBasic
+              {
+                vf_ty =
+                  Ast.ManifestTypeExpr
+                    (dloc, Ast.Int (Ast.Unsigned, u_size_rank));
+              }
           in
           Ok ty_info
     | _ -> failwith "Todo: Unsupported Adt"
 
-  let translate_fn_def_ty (fn_def_ty_cpn : FnDefTyRd.t) =
+  let rec translate_generic_arg (gen_arg_cpn : GenArgRd.t)
+      (gh_ty_decls : gh_ty_decls ref) =
+    let open GenArgRd in
+    let kind_cpn = kind_get gen_arg_cpn in
+    let open GenArgKindRd in
+    match get kind_cpn with
+    | Lifetime -> failwith "Todo: Generic arg. lifetime is not supported yet"
+    | Type ty_cpn ->
+        let* ty_info = translate_ty ty_cpn gh_ty_decls in
+        Ok (Mir.GenArgType ty_info)
+    | Const -> failwith "Todo: Generic arg. constant is not supported yet"
+    | Undefined _ -> Error (`TrGenArg "Unknown generic arg. kind")
+
+  and translate_fn_def_ty (fn_def_ty_cpn : FnDefTyRd.t)
+      (gh_ty_decls : gh_ty_decls ref) =
     let open FnDefTyRd in
+    let dloc = Ast.Lexed Ast.dummy_loc0 in
     let id_cpn = id_get fn_def_ty_cpn in
     let id = FnDefIdRd.name_get id_cpn in
+    let name = TrName.translate_def_path id in
+    let vf_ty = Ast.ManifestTypeExpr (dloc, Ast.FuncType name) in
     let substs_cpn = substs_get_list fn_def_ty_cpn in
-    if not @@ ListAux.is_empty @@ substs_cpn then
-      failwith "Todo: Generic functions are not supported yet";
-    Error (`Dummy "")
+    if ListAux.is_empty substs_cpn then Ok (Mir.TyInfoBasic { vf_ty })
+    else
+      let* substs =
+        ListAux.try_map
+          (fun subst_cpn -> translate_generic_arg subst_cpn gh_ty_decls)
+          substs_cpn
+      in
+      Ok (Mir.TyInfoGeneric { vf_ty; substs })
 
-  let translate_ty (ty_cpn : TyRd.t) (gh_ty_decls : gh_ty_decls ref) =
+  and translate_raw_ptr_ty (raw_ptr_ty_cpn : RawPtrTyRd.t)
+      (gh_ty_decls : gh_ty_decls ref) =
+    let open RawPtrTyRd in
+    let mut_cpn = mutability_get raw_ptr_ty_cpn in
+    let* mutability = translate_mutability mut_cpn in
+    let ty_cpn = ty_get raw_ptr_ty_cpn in
+    let* pointee_ty_info = translate_ty ty_cpn gh_ty_decls in
+    let ty_raw_ptr_info : TrTyRawPtr.ty_raw_ptr_info =
+      { mutability; pointee_ty_info }
+    in
+    Ok ty_raw_ptr_info
+
+  and translate_ty (ty_cpn : TyRd.t) (gh_ty_decls : gh_ty_decls ref) =
     let open TyRd in
     let dloc = Ast.Lexed Ast.dummy_loc0 in
     let kind_cpn = kind_get ty_cpn in
     match TyRd.TyKind.get kind_cpn with
     | Bool ->
-        let ty_info : Mir.ty_info =
-          { vf_ty = Ast.ManifestTypeExpr (dloc, Ast.Bool) }
+        let ty_info =
+          Mir.TyInfoBasic { vf_ty = Ast.ManifestTypeExpr (dloc, Ast.Bool) }
         in
         Ok ty_info
     | Int int_ty_cpn -> failwith "Todo: Int Ty is not implemented yet"
     | UInt u_int_ty_cpn -> translate_u_int_ty u_int_ty_cpn
     | Adt adt_ty_cpn -> translate_adt_ty adt_ty_cpn
-    | RawPtr ty1_cpn -> failwith "Todo: Raw Ptr Ty is not implemented yet"
-    | FnDef fn_def_ty_cpn -> translate_fn_def_ty fn_def_ty_cpn
+    | RawPtr raw_ptr_ty_cpn ->
+        let* { mutability; pointee_ty_info } =
+          translate_raw_ptr_ty raw_ptr_ty_cpn gh_ty_decls
+        in
+        let (Ast.ManifestTypeExpr (loc, pointee_ty)) =
+          Mir.basic_type_of pointee_ty_info
+        in
+        let ty_info =
+          Mir.TyInfoBasic
+            { vf_ty = Ast.ManifestTypeExpr (dloc, Ast.PtrType pointee_ty) }
+        in
+        Ok ty_info
+    | FnDef fn_def_ty_cpn -> translate_fn_def_ty fn_def_ty_cpn gh_ty_decls
     | Tuple substs_cpn ->
         if Capnp.Array.length substs_cpn != 0 then
           failwith "Todo: Tuple Ty is not implemented yet"
@@ -200,11 +274,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           (* (if not @@ GhostTyDecls.exists (fun n _ -> n = name) !gh_ty_decls then
              let decl = TrTyTuple.make_tuple_type_decl name [] Ast.DummyLoc in
              gh_ty_decls := GhostTyDecls.add name decl !gh_ty_decls); *)
-          let ty_info : Mir.ty_info =
-            { vf_ty = Ast.ManifestTypeExpr (dloc, Ast.StructType name) }
+          let ty_info =
+            Mir.TyInfoBasic
+              { vf_ty = Ast.ManifestTypeExpr (dloc, Ast.StructType name) }
           in
           Ok ty_info
     | Undefined _ -> Error (`TrTy "Unknown Rust type kind")
+
+  let translate_local_decl_id (local_decl_id_cpn : LocalDeclIdRd.t) =
+    LocalDeclIdRd.name_get local_decl_id_cpn
 
   let translate_local_decl (local_decl_cpn : LocalDeclRd.t)
       (gh_ty_decls : gh_ty_decls ref) =
@@ -212,7 +290,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let mutability_cpn = mutability_get local_decl_cpn in
     let* mutability = translate_mutability mutability_cpn in
     let id_cpn = id_get local_decl_cpn in
-    let id = LocalDeclIdRd.name_get id_cpn in
+    let id = translate_local_decl_id id_cpn in
     let ty_cpn = ty_get local_decl_cpn in
     let* ty_info = translate_ty ty_cpn gh_ty_decls in
     let local_decl : Mir.local_decl = { mutability; id; ty = ty_info } in
@@ -221,11 +299,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   let translate_to_vf_local_decl
       ({ mutability = mut; id; ty = ty_info } : Mir.local_decl) =
     let dloc = Ast.Lexed Ast.dummy_loc0 in
+    let ty = Mir.basic_type_of ty_info in
     Ast.DeclStmt
       ( dloc,
         [
           ( dloc,
-            ty_info.vf_ty,
+            ty,
             id,
             None,
             ( (* indicates whether address is taken *) ref false,
@@ -233,67 +312,160 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               ref None ) );
         ] )
 
+  let translate_place (place_cpn : PlaceRd.t) =
+    let open PlaceRd in
+    let dloc = Ast.Lexed Ast.dummy_loc0 in
+    let id_cpn = local_get place_cpn in
+    let id = translate_local_decl_id id_cpn in
+    let projection_cpn = projection_get_list place_cpn in
+    if ListAux.is_empty projection_cpn then Ast.Var (dloc, id)
+    else failwith "Todo: Place Projections"
+
+  let translate_operand (operand_cpn : OperandRd.t) =
+    let open OperandRd in
+    match get operand_cpn with
+    | Copy place_cpn -> failwith "Todo: Operand Copy"
+    | Move place_cpn -> Ok (translate_place place_cpn)
+    | Constant constant_cpn -> failwith "Todo: Operand Constant"
+    | Undefined _ -> Error (`TrOperand "Unknown Mir Operand kind")
+
+  let translate_fn_call_rexpr (callee_ty_info : Mir.ty_info)
+      (args_cpn : OperandRd.t list) =
+    let dloc = Ast.Lexed Ast.dummy_loc0 in
+    match callee_ty_info with
+    | Mir.TyInfoBasic
+        { vf_ty = Ast.ManifestTypeExpr (loc, Ast.FuncType fn_name) } ->
+        let fn_name =
+          match fn_name with "std_alloc_alloc" -> "malloc" | _ -> fn_name
+        in
+        let* args = ListAux.try_map translate_operand args_cpn in
+        let args = List.map (fun var -> Ast.LitPat var) args in
+        let rexpr =
+          Ast.CallExpr
+            ( dloc,
+              fn_name,
+              [] (* type arguments *),
+              [] (* indices, in case this is really a predicate assertion *),
+              args,
+              Ast.Static (* method_binding *) )
+        in
+        Ok rexpr
+    | Mir.TyInfoGeneric
+        { vf_ty = Ast.ManifestTypeExpr (loc, Ast.FuncType fn_name); substs }
+      -> (
+        match fn_name with
+        | "std_alloc_Layout_new" -> (
+            match substs with
+            | [ Mir.GenArgType ty_info ] ->
+                let ty_expr = Mir.basic_type_of ty_info in
+                Ok (Ast.SizeofExpr (loc, Ast.TypeExpr ty_expr))
+            | _ ->
+                Error
+                  (`TrFnCallRVal
+                    "Invalid generic argument(s) for std::alloc::Layout::new"))
+        | _ -> failwith "Todo: Generic functions are not supported yet")
+    | _ -> Error (`TrFnCallRVal "Invalid function definition type translation")
+
+  let translate_basic_block_id (bblock_id_cpn : BasicBlockIdRd.t) =
+    BasicBlockIdRd.name_get bblock_id_cpn
+
+  let translate_destination_data (dst_data_cpn : DestinationDataRd.t) =
+    let open DestinationDataRd in
+    let place_cpn = place_get dst_data_cpn in
+    let dst = translate_place place_cpn in
+    let dst_bblock_id_cpn = basic_block_id_get dst_data_cpn in
+    let dst_bblock_id = translate_basic_block_id dst_bblock_id_cpn in
+    let dst_data : Mir.fn_call_dst_data = { dst; dst_bblock_id } in
+    dst_data
+
   let translate_fn_call (fn_call_data_cpn : FnCallDataRd.t)
       (gh_ty_decls : gh_ty_decls ref) =
     let open FnCallDataRd in
+    let dloc = Ast.Lexed Ast.dummy_loc0 in
     let func_cpn = func_get fn_call_data_cpn in
     let* constant_cpn =
-      match OperandRd.get func_cpn with
-      | OperandRd.Copy _ | OperandRd.Move _ ->
+      let open OperandRd in
+      match get func_cpn with
+      | Copy _ | Move _ ->
           Error (`TrFnCall "Invalid Mir Operand kind for function call")
-      | OperandRd.Constant constant_cpn -> Ok constant_cpn
-      | OperandRd.Undefined _ -> Error (`TrFnCall "Unknown Mir Operand kind")
+      | Constant constant_cpn -> Ok constant_cpn
+      | Undefined _ -> Error (`TrFnCall "Unknown Mir Operand kind")
     in
     let literal_cpn = ConstantRd.literal_get constant_cpn in
     let* ty_const_cpn =
-      match ConstantKindRd.get literal_cpn with
+      let open ConstantKindRd in
+      match get literal_cpn with
       | Ty ty_const_cpn -> Ok ty_const_cpn
       | Val -> Error (`TrFnCall "Invalid ConstantKind for function call")
       | Undefined _ ->
           Error (`TrFnCall "Unknown ConstantKind for function call")
     in
     let ty_cpn = TyRd.Const.ty_get ty_const_cpn in
-    let callee_ty_info = translate_ty ty_cpn gh_ty_decls in
-    Ok ()
+    let* callee_ty_info = translate_ty ty_cpn gh_ty_decls in
+    let args_cpn = args_get_list fn_call_data_cpn in
+    let* fn_call_rexpr = translate_fn_call_rexpr callee_ty_info args_cpn in
+    let destination_cpn = destination_get fn_call_data_cpn in
+    match OptionRd.get destination_cpn with
+    | Nothing -> failwith "Todo: Diverging calls are not supported yet"
+    | Something ptr_cpn ->
+        let destination_data_cpn = VfMirStub.Reader.of_pointer ptr_cpn in
+        let { Mir.dst; Mir.dst_bblock_id } =
+          translate_destination_data destination_data_cpn
+        in
+        let full_call_stmt =
+          Ast.ExprStmt (Ast.AssignExpr (dloc, dst, fn_call_rexpr))
+        in
+        let next_bblock_stmt = Ast.GotoStmt (dloc, dst_bblock_id) in
+        Ok [ full_call_stmt; next_bblock_stmt ]
+    | Undefined _ -> Error (`TrFnCall "Unknown Option kind")
 
   let translate_terminator_kind (ret_place_id : string)
-      (tkind_cpn : TerminatorKindRd.t) =
+      (tkind_cpn : TerminatorKindRd.t) (gh_ty_decls : gh_ty_decls ref) =
     let open TerminatorKindRd in
     let dloc = Ast.Lexed Ast.dummy_loc0 in
     match get tkind_cpn with
-    | Goto bblock_id_cpn -> failwith "Todo"
+    | Goto bblock_id_cpn -> failwith "Todo Goto"
     | SwitchInt switch_int_data_cpn ->
         failwith "Todo: Mir SwitchInt terminator is not supported yet"
-    | Return -> Ok (Ast.ReturnStmt (dloc, Some (Ast.Var (dloc, ret_place_id))))
-    | Call fn_call_data_cpn -> failwith "Todo"
+    | Resume -> failwith "Todo: Terminator kind Resume"
+    | Return ->
+        Ok [ Ast.ReturnStmt (dloc, Some (Ast.Var (dloc, ret_place_id))) ]
+    | Call fn_call_data_cpn -> translate_fn_call fn_call_data_cpn gh_ty_decls
     | Undefined _ -> Error (`TrTerminatorKind "Unknown Mir terminator kind")
 
   let translate_terminator (ret_place_id : string)
-      (terminator_cpn : TerminatorRd.t) =
+      (terminator_cpn : TerminatorRd.t) (gh_ty_decls : gh_ty_decls ref) =
     let open TerminatorRd in
     let source_info_cpn = source_info_get terminator_cpn in
     (* Todo @Nima: Translate source_info *)
     let terminator_kind_cpn = kind_get terminator_cpn in
-    translate_terminator_kind ret_place_id terminator_kind_cpn
+    translate_terminator_kind ret_place_id terminator_kind_cpn gh_ty_decls
 
   let translate_basic_block (ret_place_id : string)
-      (bblock_cpn : BasicBlockRd.t) =
+      (bblock_cpn : BasicBlockRd.t) (gh_ty_decls : gh_ty_decls ref) =
     let open BasicBlockRd in
     let id_cpn = id_get bblock_cpn in
-    let id = BasicBlockIdRd.name_get id_cpn in
-    let statements_cpn = statements_get_list bblock_cpn in
-    if List.length statements_cpn != 0 then
-      failwith "Todo: Mir statements are not supported yet";
-    let statements = [] in
-    let terminator_cpn = terminator_get bblock_cpn in
-    let* terminator = translate_terminator ret_place_id terminator_cpn in
-    let bblock : Mir.basic_block = { id; statements; terminator } in
-    Ok bblock
+    let id = translate_basic_block_id id_cpn in
+    if is_cleanup_get bblock_cpn then
+      (* Todo @Nima: For now we are ignoring cleanup basic-blocks *)
+      let bblock : Mir.basic_block = { id; statements = []; terminator = [] } in
+      Ok bblock
+    else
+      let statements_cpn = statements_get_list bblock_cpn in
+      if List.length statements_cpn != 0 then
+        failwith "Todo: Mir statements are not supported yet";
+      let statements = [] in
+      let terminator_cpn = terminator_get bblock_cpn in
+      let* terminator =
+        translate_terminator ret_place_id terminator_cpn gh_ty_decls
+      in
+      let bblock : Mir.basic_block = { id; statements; terminator } in
+      Ok bblock
 
   let translate_to_vf_basic_block
       ({ id; statements; terminator } : Mir.basic_block) =
     let dloc = Ast.Lexed Ast.dummy_loc0 in
-    Ast.LabelStmt (dloc, id) :: (statements @ [ terminator ])
+    Ast.LabelStmt (dloc, id) :: (statements @ terminator)
 
   let translate_body (body_cpn : BodyRd.t) (gh_ty_decls : gh_ty_decls ref) =
     let open BodyRd in
@@ -303,6 +475,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | DefKind.Fn ->
         let dloc = Ast.Lexed Ast.dummy_loc0 in
         let def_path = def_path_get body_cpn in
+        let name = TrName.translate_def_path def_path in
         let contract_cpn = contract_get body_cpn in
         let nonghost_callers_only, fn_type_clause, pre_post, terminates =
           translate_contract contract_cpn
@@ -317,6 +490,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         (* There should be always a return place for each function *)
         let (ret_place_decl :: local_decls) = local_decls in
         let { Mir.id = ret_place_id; Mir.ty = ret_ty_info } = ret_place_decl in
+        let ret_ty = Mir.basic_type_of ret_ty_info in
         let param_decls, local_decls =
           ListAux.partitioni
             (fun idx _ -> idx < Stdint.Uint32.to_int arg_count)
@@ -325,7 +499,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let vf_param_decls =
           List.map
             (fun ({ mutability; id; ty = ty_info } : Mir.local_decl) ->
-              (ty_info.vf_ty, id))
+              let ty = Mir.basic_type_of ty_info in
+              (ty, id))
             param_decls
         in
         let vf_local_decls =
@@ -333,7 +508,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         in
         let bblocks_cpn = basic_blocks_get_list body_cpn in
         let* bblocks =
-          ListAux.try_map (translate_basic_block ret_place_id) bblocks_cpn
+          ListAux.try_map
+            (fun bblock_cpn ->
+              translate_basic_block ret_place_id bblock_cpn gh_ty_decls)
+            bblocks_cpn
         in
         let vf_bblocks = List.map translate_to_vf_basic_block bblocks in
         let vf_bblocks = List.concat vf_bblocks in
@@ -342,8 +520,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
              ( dloc,
                Ast.Regular,
                [],
-               Some ret_ty_info.Mir.vf_ty,
-               def_path,
+               Some ret_ty,
+               name,
                vf_param_decls,
                nonghost_callers_only,
                fn_type_clause,
