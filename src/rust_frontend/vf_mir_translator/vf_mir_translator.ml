@@ -127,6 +127,39 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   module VfMirRd = VfMirCapnpAlias.VfMirRd
   open VfMirCapnpAlias
 
+  module AuxHeaders = struct
+    module type AUX_HEADERS_ARGS = sig
+      include VF_MIR_TRANSLATOR_ARGS
+
+      val aux_headers_dir : string
+      val verbosity : int
+    end
+
+    module Make (Args : AUX_HEADERS_ARGS) = struct
+      type t = string list
+
+      let empty : t = []
+
+      let parse_aux_header (header_name : string) =
+        let header_path = Filename.concat Args.aux_headers_dir header_name in
+        (* Todo @Nima: should we catch the exceptions and return Error here? *)
+        let headers, decls =
+          Parser.parse_header_file header_path Args.report_range
+            Args.report_should_fail Args.verbosity (*include paths*) []
+            (*define macros*) [] (*enforce annotation*) true Args.data_model_opt
+        in
+        let header_names = List.map (fun (_, (_, _, h), _, _) -> h) headers in
+        let headers =
+          ( Ast.dummy_loc,
+            (Lexer.AngleBracketInclude, header_name, Args.aux_headers_dir),
+            header_names,
+            decls )
+          :: headers
+        in
+        Ok headers
+    end
+  end
+
   (* Ghost Type Declarations *)
   module GhostTyDecls = Map.Make (String)
 
@@ -534,16 +567,27 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   let translate_vf_mir (vf_mir_cpn : VfMirRd.t) =
     let job _ =
-      let bodies_cpn = VfMirRd.bodies_get_list vf_mir_cpn in
+      let module AuxHeaders = AuxHeaders.Make (struct
+        include Args
+
+        let aux_headers_dir = Filename.dirname Sys.executable_name
+        let verbosity = 0
+      end) in
+      let aux_headers = ref AuxHeaders.empty in
+      (* Todo @Nima: Translator functions should add auxiliary headers they need *)
+      aux_headers := [ "malloc.h" ];
       let gh_ty_decls = ref GhostTyDecls.empty in
+      let bodies_cpn = VfMirRd.bodies_get_list vf_mir_cpn in
       let* body_decls =
         ListAux.try_map
           (fun body_cpn -> translate_body body_cpn gh_ty_decls)
           bodies_cpn
       in
+      let* headers = ListAux.try_map AuxHeaders.parse_aux_header !aux_headers in
+      let headers = List.concat headers in
       let _, gh_ty_decls = GhostTyDecls.bindings !gh_ty_decls |> List.split in
       let decls = gh_ty_decls @ body_decls in
-      Ok ([ (*headers*) ], [ Ast.PackageDecl (Ast.dummy_loc, "", [], decls) ])
+      Ok (headers, [ Ast.PackageDecl (Ast.dummy_loc, "", [], decls) ])
     in
     match job () with
     | Ok res -> res
