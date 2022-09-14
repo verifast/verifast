@@ -231,25 +231,31 @@ mod vf_mir_builder {
     use crate::vf_mir_capnp::mutability as mutability_cpn;
     use crate::vf_mir_capnp::ty as ty_cpn;
     use crate::vf_mir_capnp::vf_mir as vf_mir_cpn;
+    use basic_block_cpn::constant as constant_cpn;
     use basic_block_cpn::operand as operand_cpn;
     use basic_block_cpn::place as place_cpn;
+    use basic_block_cpn::rvalue as rvalue_cpn;
+    use basic_block_cpn::statement as statement_cpn;
     use basic_block_cpn::terminator as terminator_cpn;
     use body_cpn::annotation as annot_cpn;
     use body_cpn::basic_block as basic_block_cpn;
     use body_cpn::basic_block_id as basic_block_id_cpn;
     use body_cpn::local_decl as local_decl_cpn;
     use body_cpn::local_decl_id as local_decl_id_cpn;
+    use constant_cpn::constant_kind as constant_kind_cpn;
     use place_cpn::place_element as place_element_cpn;
     use rustc_ast::util::comments::Comment;
     use rustc_hir as hir;
     use rustc_middle::bug;
     use rustc_middle::ty;
     use rustc_middle::{mir, ty::TyCtxt};
+    use statement_cpn::statement_kind as statement_kind_cpn;
     use std::collections::LinkedList;
     use terminator_cpn::terminator_kind as terminator_kind_cpn;
     use terminator_kind_cpn::fn_call_data as fn_call_data_cpn;
     use tracing::{debug, trace};
     use ty_cpn::adt_ty as adt_ty_cpn;
+    use ty_cpn::const_ as ty_const_cpn;
     use ty_cpn::fn_def_ty as fn_def_ty_cpn;
     use ty_cpn::gen_arg as gen_arg_cpn;
     use ty_cpn::raw_ptr_ty as raw_ptr_ty_cpn;
@@ -572,7 +578,20 @@ mod vf_mir_builder {
         ) {
             let basic_block_id_cpn = basic_block_cpn.reborrow().init_id();
             Self::encode_basic_block_id(basic_block_idx, basic_block_id_cpn);
-            // TODO @Nima: statements
+
+            let statements_len = basic_block_data
+                .statements
+                .len()
+                .try_into()
+                .expect(&format!(
+                    "The number of BasicBlock Statements cannot be stored in a Capnp message"
+                ));
+            let mut statements_cpn = basic_block_cpn.reborrow().init_statements(statements_len);
+            for (idx, statement) in basic_block_data.statements.iter().enumerate() {
+                let statement_cpn = statements_cpn.reborrow().get(idx.try_into().unwrap());
+                Self::encode_statement(tcx, statement, statement_cpn);
+            }
+
             let terminator_cpn = basic_block_cpn.reborrow().init_terminator();
             Self::encode_terminator(tcx, basic_block_data.terminator(), terminator_cpn);
 
@@ -585,6 +604,49 @@ mod vf_mir_builder {
             mut basic_block_id_cpn: basic_block_id_cpn::Builder<'_>,
         ) {
             basic_block_id_cpn.set_name(&format!("{:?}", basic_block_idx));
+        }
+
+        fn encode_statement(
+            tcx: TyCtxt<'tcx>,
+            statement: &mir::Statement<'tcx>,
+            statement_cpn: statement_cpn::Builder<'_>,
+        ) {
+            // TODO @Nima: sourceInfo
+            let kind_cpn = statement_cpn.init_kind();
+            Self::encode_statement_kind(tcx, &statement.kind, kind_cpn);
+        }
+
+        fn encode_statement_kind(
+            tcx: TyCtxt<'tcx>,
+            statement_kind: &mir::StatementKind<'tcx>,
+            mut statement_kind_cpn: statement_kind_cpn::Builder<'_>,
+        ) {
+            match statement_kind {
+                mir::StatementKind::Assign(box (lhs_place, rhs_rval)) => {
+                    let mut assign_data_cpn = statement_kind_cpn.init_assign();
+                    let lhs_place_cpn = assign_data_cpn.reborrow().init_lhs_place();
+                    Self::encode_place(lhs_place, lhs_place_cpn);
+                    let rhs_rvalue_cpn = assign_data_cpn.init_rhs_rvalue();
+                    Self::encode_rvalue(tcx, rhs_rval, rhs_rvalue_cpn);
+                }
+                mir::StatementKind::Nop => statement_kind_cpn.set_nop(()),
+                // TODO @Nima: For now we do not support many statements and treat them as Nop
+                _ => statement_kind_cpn.set_nop(()),
+            }
+        }
+
+        fn encode_rvalue(
+            tcx: TyCtxt<'tcx>,
+            rvalue: &mir::Rvalue<'tcx>,
+            rvalue_cpn: rvalue_cpn::Builder<'_>,
+        ) {
+            match rvalue {
+                mir::Rvalue::Use(operand) => {
+                    let operand_cpn = rvalue_cpn.init_use();
+                    Self::encode_operand(tcx, operand, operand_cpn);
+                }
+                _ => todo!(),
+            }
         }
 
         fn encode_terminator(
@@ -675,7 +737,7 @@ mod vf_mir_builder {
             let mut args_cpn = fn_call_data_cpn.reborrow().init_args(args_len);
             for (idx, arg) in args.iter().enumerate() {
                 let arg_cpn = args_cpn.reborrow().get(idx.try_into().unwrap());
-                Self::encode_operand(arg, arg_cpn);
+                Self::encode_operand(tcx, arg, arg_cpn);
             }
 
             // Encode destination
@@ -692,16 +754,71 @@ mod vf_mir_builder {
             }
         }
 
-        fn encode_operand(operand: &mir::Operand<'tcx>, operand_cpn: operand_cpn::Builder<'_>) {
+        fn encode_operand(
+            tcx: TyCtxt<'tcx>,
+            operand: &mir::Operand<'tcx>,
+            operand_cpn: operand_cpn::Builder<'_>,
+        ) {
             debug!("Encoding Operand {:?}", operand);
             match operand {
-                mir::Operand::Copy(place) => todo!(),
+                mir::Operand::Copy(place) => {
+                    let place_cpn = operand_cpn.init_copy();
+                    Self::encode_place(place, place_cpn);
+                }
                 mir::Operand::Move(place) => {
                     let place_cpn = operand_cpn.init_move();
                     Self::encode_place(place, place_cpn);
                 }
-                mir::Operand::Constant(constant) => todo!(),
+                mir::Operand::Constant(box constant) => {
+                    let constant_cpn = operand_cpn.init_constant();
+                    Self::encode_constant(tcx, constant, constant_cpn);
+                }
             }
+        }
+
+        fn encode_constant(
+            tcx: TyCtxt<'tcx>,
+            constant: &mir::Constant<'tcx>,
+            constant_cpn: constant_cpn::Builder<'_>,
+        ) {
+            let literal_cpn = constant_cpn.init_literal();
+            Self::encode_constant_kind(tcx, &constant.literal, literal_cpn);
+        }
+
+        fn encode_constant_kind(
+            tcx: TyCtxt<'tcx>,
+            constant_kind: &mir::ConstantKind<'tcx>,
+            constant_kind_cpn: constant_kind_cpn::Builder<'_>,
+        ) {
+            match constant_kind {
+                mir::ConstantKind::Ty(ty_const) => {
+                    let ty_const_cpn = constant_kind_cpn.init_ty();
+                    Self::encode_typed_constant(tcx, ty_const, ty_const_cpn);
+                }
+                mir::ConstantKind::Val(const_val, ty) => todo!(),
+            }
+        }
+
+        fn encode_typed_constant(
+            tcx: TyCtxt<'tcx>,
+            ty_const: &ty::Const<'tcx>,
+            ty_const_cpn: ty_const_cpn::Builder<'_>,
+        ) {
+            debug!("Encoding typed constant {:?}", ty_const);
+            let ty_cpn = ty_const_cpn.init_ty();
+            Self::encode_ty(tcx, ty_const.ty, ty_cpn);
+
+            // TODO @Nima: Send actual constant values as well later
+            // match ty_const.val {
+            //     ty::ConstKind::Value(const_value) => match const_value {
+            //         mir::interpret::ConstValue::Scalar(scalar) => match scalar {
+            //             mir::interpret::Scalar::Int(_) => todo!(),
+            //             mir::interpret::Scalar::Ptr(_, _) => todo!(),
+            //         },
+            //         _ => todo!(),
+            //     },
+            //     _ => todo!(),
+            // }
         }
 
         fn encode_place(place: &mir::Place<'tcx>, mut place_cpn: place_cpn::Builder<'_>) {

@@ -14,9 +14,24 @@ struct Mutability {
 }
 
 struct Ty {
+    struct ConstValue {
+        union {
+            scalar @0: Void;
+            slice @1: Void;
+        }
+    }
 
+    struct ConstKind {
+        union {
+            param @0: Void;
+            value @1: ConstValue;
+        }
+    }
+
+    # Typed constant value
     struct Const {
         ty @0: Ty;
+        val @1: ConstKind;
     }
 
     struct GenArg {
@@ -161,7 +176,7 @@ struct Body {
             }
         }
 
-        struct RValue {
+        struct Rvalue {
             struct AddressOfData {
                 mutability @0: Mutability;
                 place @1: Place;
@@ -177,8 +192,8 @@ struct Body {
         struct Statement {
             struct StatementKind {
                 struct AssignData {
-                    place @0: Place;
-                    rvalue @1: RValue;
+                    lhsPlace @0: Place;
+                    rhsRvalue @1: Rvalue;
                 }
 
                 union {

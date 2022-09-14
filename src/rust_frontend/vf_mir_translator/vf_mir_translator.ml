@@ -112,6 +112,8 @@ module TrName = struct
     let open Str in
     let r = regexp {|::|} in
     global_replace r "_" dp
+
+  let make_tmp_var_name base_name = "temp_var_" ^ base_name
 end
 
 module type VF_MIR_TRANSLATOR_ARGS = sig
@@ -354,35 +356,104 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     if ListAux.is_empty projection_cpn then Ast.Var (dloc, id)
     else failwith "Todo: Place Projections"
 
-  let translate_operand (operand_cpn : OperandRd.t) =
+  let translate_typed_constant (ty_const_cpn : TyConstRd.t)
+      (gh_ty_decls : gh_ty_decls ref) =
+    let open TyConstRd in
+    let dloc = Ast.Lexed Ast.dummy_loc0 in
+    let ty_cpn = ty_get ty_const_cpn in
+    let* ty_info = translate_ty ty_cpn gh_ty_decls in
+    (* Todo @Nima: Here we might need access to type declarations to create proper constants out of the bytes we get from
+       the Rust compiler. It would be more straightforward if we get higher-level info about constant value from Rustc.
+    *)
+    let ty_expr = Mir.basic_type_of ty_info in
+    let ty =
+      match ty_expr with
+      | Ast.ManifestTypeExpr (loc, ty) -> ty
+      | _ -> failwith "Todo: Unsupported type_expr"
+    in
+    match ty with
+    | Ast.StructType st_name ->
+        if st_name != TrTyTuple.make_tuple_type_name [] then
+          failwith
+            ("Todo: Constants of type struct " ^ st_name
+           ^ " are not supported yet")
+        else
+          let rvalue_binder_builder tmp_var_name =
+            Ast.DeclStmt
+              ( dloc,
+                [
+                  ( dloc,
+                    ty_expr,
+                    tmp_var_name,
+                    Some (Ast.InitializerList (dloc, [])),
+                    ( (*indicates whether address is taken*) ref false,
+                      (*pointer to enclosing block's list of variables whose address is taken*)
+                      ref None ) );
+                ] )
+          in
+          Ok (`TrTypedConstRvalueBinderBuilder rvalue_binder_builder)
+    | _ -> failwith "Todo: Constant of unsupported type"
+
+  let translate_constant_kind (constant_kind_cpn : ConstantKindRd.t)
+      (gh_ty_decls : gh_ty_decls ref) =
+    let open ConstantKindRd in
+    match get constant_kind_cpn with
+    | Ty ty_const_cpn -> translate_typed_constant ty_const_cpn gh_ty_decls
+    | Val -> failwith "Todo: ConstantKind::Val"
+    | Undefined _ -> Error (`TrConstantKind "Unknown ConstantKind")
+
+  let translate_constant (constant_cpn : ConstantRd.t)
+      (gh_ty_decls : gh_ty_decls ref) =
+    let open ConstantRd in
+    let literal_cpn = literal_get constant_cpn in
+    translate_constant_kind literal_cpn gh_ty_decls
+
+  let translate_operand (operand_cpn : OperandRd.t)
+      (gh_ty_decls : gh_ty_decls ref) =
     let open OperandRd in
+    (* Todo @Nima: Move and Copy are ignored for now. It is checked by the Rust compiler that
+       - only Places of type Copy get used for Operand::Copy
+       - Places used by Operand::Move will never get used again (obviously raw pointers are not tracked)
+    *)
     match get operand_cpn with
-    | Copy place_cpn -> failwith "Todo: Operand Copy"
-    | Move place_cpn -> Ok (translate_place place_cpn)
-    | Constant constant_cpn -> failwith "Todo: Operand Constant"
+    | Copy place_cpn -> Ok (`TrOperandCopy (translate_place place_cpn))
+    | Move place_cpn -> Ok (`TrOperandMove (translate_place place_cpn))
+    | Constant constant_cpn -> translate_constant constant_cpn gh_ty_decls
     | Undefined _ -> Error (`TrOperand "Unknown Mir Operand kind")
 
   let translate_fn_call_rexpr (callee_ty_info : Mir.ty_info)
-      (args_cpn : OperandRd.t list) =
+      (args_cpn : OperandRd.t list) (gh_ty_decls : gh_ty_decls ref) =
     let dloc = Ast.Lexed Ast.dummy_loc0 in
     match callee_ty_info with
     | Mir.TyInfoBasic
         { vf_ty = Ast.ManifestTypeExpr (loc, Ast.FuncType fn_name) } ->
-        let fn_name =
-          match fn_name with "std_alloc_alloc" -> "malloc" | _ -> fn_name
+        let tmp_rvalue_binders = ref [] in
+        let translate_arg arg_cpn =
+          let* arg = translate_operand arg_cpn gh_ty_decls in
+          match arg with
+          | `TrOperandCopy operand_expr | `TrOperandMove operand_expr ->
+              Ok operand_expr
+          | `TrTypedConstRvalueBinderBuilder rvalue_binder_builder ->
+              let tmp_var_cnt = List.length !tmp_rvalue_binders in
+              let tmp_var_name =
+                TrName.make_tmp_var_name (Int.to_string tmp_var_cnt)
+              in
+              let rvalue_binder = rvalue_binder_builder tmp_var_name in
+              tmp_rvalue_binders := !tmp_rvalue_binders @ [ rvalue_binder ];
+              Ok (Ast.Var (dloc, tmp_var_name))
         in
-        let* args = ListAux.try_map translate_operand args_cpn in
+        let* args = ListAux.try_map translate_arg args_cpn in
         let args = List.map (fun var -> Ast.LitPat var) args in
-        let rexpr =
+        let call_expr =
           Ast.CallExpr
             ( dloc,
               fn_name,
-              [] (* type arguments *),
-              [] (* indices, in case this is really a predicate assertion *),
+              [] (*type arguments*),
+              [] (*indices, in case this is really a predicate assertion*),
               args,
-              Ast.Static (* method_binding *) )
+              Ast.Static (*method_binding*) )
         in
-        Ok rexpr
+        Ok (!tmp_rvalue_binders, call_expr)
     | Mir.TyInfoGeneric
         { vf_ty = Ast.ManifestTypeExpr (loc, Ast.FuncType fn_name); substs }
       -> (
@@ -391,13 +462,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             match substs with
             | [ Mir.GenArgType ty_info ] ->
                 let ty_expr = Mir.basic_type_of ty_info in
-                Ok (Ast.SizeofExpr (loc, Ast.TypeExpr ty_expr))
+                Ok
+                  ( (*tmp_rvalue_binders*) [],
+                    Ast.SizeofExpr (loc, Ast.TypeExpr ty_expr) )
             | _ ->
                 Error
-                  (`TrFnCallRVal
+                  (`TrFnCallRExpr
                     "Invalid generic argument(s) for std::alloc::Layout::new"))
         | _ -> failwith "Todo: Generic functions are not supported yet")
-    | _ -> Error (`TrFnCallRVal "Invalid function definition type translation")
+    | _ -> Error (`TrFnCallRExpr "Invalid function definition type translation")
 
   let translate_basic_block_id (bblock_id_cpn : BasicBlockIdRd.t) =
     BasicBlockIdRd.name_get bblock_id_cpn
@@ -436,7 +509,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let ty_cpn = TyRd.Const.ty_get ty_const_cpn in
     let* callee_ty_info = translate_ty ty_cpn gh_ty_decls in
     let args_cpn = args_get_list fn_call_data_cpn in
-    let* fn_call_rexpr = translate_fn_call_rexpr callee_ty_info args_cpn in
+    let* fn_call_tmp_rval_ctx, fn_call_rexpr =
+      translate_fn_call_rexpr callee_ty_info args_cpn gh_ty_decls
+    in
     let destination_cpn = destination_get fn_call_data_cpn in
     match OptionRd.get destination_cpn with
     | Nothing -> failwith "Todo: Diverging calls are not supported yet"
@@ -447,6 +522,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         in
         let full_call_stmt =
           Ast.ExprStmt (Ast.AssignExpr (dloc, dst, fn_call_rexpr))
+        in
+        let full_call_stmt =
+          if ListAux.is_empty fn_call_tmp_rval_ctx then full_call_stmt
+          else
+            Ast.BlockStmt
+              ( dloc,
+                (*decl list*) [],
+                fn_call_tmp_rval_ctx @ [ full_call_stmt ],
+                dloc,
+                ref [] )
         in
         let next_bblock_stmt = Ast.GotoStmt (dloc, dst_bblock_id) in
         Ok [ full_call_stmt; next_bblock_stmt ]
@@ -474,6 +559,55 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let terminator_kind_cpn = kind_get terminator_cpn in
     translate_terminator_kind ret_place_id terminator_kind_cpn gh_ty_decls
 
+  let translate_rvalue (rvalue_cpn : RvalueRd.t) (gh_ty_decls : gh_ty_decls ref)
+      =
+    let open RvalueRd in
+    match get rvalue_cpn with
+    | Use operand_cpn -> translate_operand operand_cpn gh_ty_decls
+    | AddressOf address_of_data_cpn -> failwith "Todo: Rvalue::AddressOf"
+    | Undefined _ -> Error (`TrRvalue "Unknown Rvalue kind")
+
+  let translate_statement_kind (statement_kind_cpn : StatementKindRd.t)
+      (gh_ty_decls : gh_ty_decls ref) =
+    let open StatementKindRd in
+    let dloc = Ast.Lexed Ast.dummy_loc0 in
+    match get statement_kind_cpn with
+    | Assign assign_data_cpn -> (
+        let lhs_place_cpn = AssignData.lhs_place_get assign_data_cpn in
+        let lhs_place = translate_place lhs_place_cpn in
+        let rhs_rvalue_cpn = AssignData.rhs_rvalue_get assign_data_cpn in
+        let* rhs_rvalue = translate_rvalue rhs_rvalue_cpn gh_ty_decls in
+        match rhs_rvalue with
+        | `TrOperandCopy rhs_expr | `TrOperandMove rhs_expr ->
+            let assign_stmt =
+              Ast.ExprStmt (Ast.AssignExpr (dloc, lhs_place, rhs_expr))
+            in
+            Ok [ assign_stmt ]
+        | `TrTypedConstRvalueBinderBuilder rvalue_binder_builder ->
+            let tmp_var_name = TrName.make_tmp_var_name "" in
+            let rvalue_binder_stmt = rvalue_binder_builder tmp_var_name in
+            let assign_stmt =
+              Ast.ExprStmt
+                (Ast.AssignExpr (dloc, lhs_place, Ast.Var (dloc, tmp_var_name)))
+            in
+            let block_stmt =
+              Ast.BlockStmt
+                ( dloc,
+                  (*decl list*) [],
+                  [ rvalue_binder_stmt; assign_stmt ],
+                  dloc,
+                  ref [] )
+            in
+            Ok [ block_stmt ])
+    | Nop -> Ok []
+    | Undefined _ -> Error (`TrStatementKind "Unknown StatementKind")
+
+  let translate_statement (statement_cpn : StatementRd.t)
+      (gh_ty_decls : gh_ty_decls ref) =
+    (* Todo @Nima: sourceInfo *)
+    let kind_cpn = StatementRd.kind_get statement_cpn in
+    translate_statement_kind kind_cpn gh_ty_decls
+
   let translate_basic_block (ret_place_id : string)
       (bblock_cpn : BasicBlockRd.t) (gh_ty_decls : gh_ty_decls ref) =
     let open BasicBlockRd in
@@ -485,9 +619,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       Ok bblock
     else
       let statements_cpn = statements_get_list bblock_cpn in
-      if List.length statements_cpn != 0 then
-        failwith "Todo: Mir statements are not supported yet";
-      let statements = [] in
+      let* statements =
+        ListAux.try_map
+          (fun stmt_cpn -> translate_statement stmt_cpn gh_ty_decls)
+          statements_cpn
+      in
+      let statements = List.concat statements in
       let terminator_cpn = terminator_get bblock_cpn in
       let* terminator =
         translate_terminator ret_place_id terminator_cpn gh_ty_decls
@@ -575,7 +712,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       end) in
       let aux_headers = ref AuxHeaders.empty in
       (* Todo @Nima: Translator functions should add auxiliary headers they need *)
-      aux_headers := [ "malloc.h" ];
+      aux_headers := [ "rust/std/alloc.h" ];
       let gh_ty_decls = ref GhostTyDecls.empty in
       let bodies_cpn = VfMirRd.bodies_get_list vf_mir_cpn in
       let* body_decls =

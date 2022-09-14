@@ -19,6 +19,9 @@ module ConstantRd = BasicBlockRd.Constant
 module ConstantKindRd = ConstantRd.ConstantKind
 module PlaceRd = BasicBlockRd.Place
 module DestinationDataRd = FnCallDataRd.DestinationData
+module StatementRd = BasicBlockRd.Statement
+module StatementKindRd = StatementRd.StatementKind
+module RvalueRd = BasicBlockRd.Rvalue
 
 (* Types *)
 module TyRd = VfMirStub.Reader.Ty
@@ -30,3 +33,4 @@ module FnDefIdRd = TyRd.FnDefId
 module GenArgRd = TyRd.GenArg
 module GenArgKindRd = GenArgRd.GenArgKind
 module RawPtrTyRd = TyRd.RawPtrTy
+module TyConstRd = TyRd.Const
