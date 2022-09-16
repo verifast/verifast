@@ -229,6 +229,7 @@ fn get_bodies<'tcx>(tcx: TyCtxt<'tcx>) -> Vec<(String, BodyWithBorrowckFacts<'tc
 mod vf_mir_builder {
     use crate::vf_mir_capnp::body as body_cpn;
     use crate::vf_mir_capnp::mutability as mutability_cpn;
+    use crate::vf_mir_capnp::span_data as span_data_cpn;
     use crate::vf_mir_capnp::ty as ty_cpn;
     use crate::vf_mir_capnp::vf_mir as vf_mir_cpn;
     use basic_block_cpn::constant as constant_cpn;
@@ -243,12 +244,18 @@ mod vf_mir_builder {
     use body_cpn::local_decl as local_decl_cpn;
     use body_cpn::local_decl_id as local_decl_id_cpn;
     use constant_cpn::constant_kind as constant_kind_cpn;
+    use file_name_cpn::real_file_name as real_file_name_cpn;
+    use loc_cpn::char_pos as char_pos_cpn;
+    use loc_cpn::source_file as source_file_cpn;
     use place_cpn::place_element as place_element_cpn;
+    use real_file_name_cpn::path_buf as path_buf_cpn;
     use rustc_ast::util::comments::Comment;
     use rustc_hir as hir;
     use rustc_middle::bug;
     use rustc_middle::ty;
     use rustc_middle::{mir, ty::TyCtxt};
+    use source_file_cpn::file_name as file_name_cpn;
+    use span_data_cpn::loc as loc_cpn;
     use statement_cpn::statement_kind as statement_kind_cpn;
     use std::collections::LinkedList;
     use terminator_cpn::terminator_kind as terminator_kind_cpn;
@@ -378,12 +385,94 @@ mod vf_mir_builder {
                 "The number of basic blocks of {} cannot be stored in a Capnp message",
                 def_path
             ));
-            let mut basic_blocks_cpn = body_cpn.init_basic_blocks(basic_block_count);
+            let mut basic_blocks_cpn = body_cpn.reborrow().init_basic_blocks(basic_block_count);
             for (idx, (basic_block_idx, basic_block)) in basic_blocks.iter_enumerated().enumerate()
             {
                 let basic_block_cpn = basic_blocks_cpn.reborrow().get(idx.try_into().unwrap());
                 Self::encode_basic_block(tcx, basic_block_idx, basic_block, basic_block_cpn);
             }
+
+            let span_cpn = body_cpn.init_span();
+            Self::encode_span_data(tcx, &body.span.data(), span_cpn);
+        }
+
+        fn encode_span_data(
+            tcx: TyCtxt<'tcx>,
+            span_data: &rustc_span::SpanData,
+            mut span_data_cpn: span_data_cpn::Builder<'_>,
+        ) {
+            debug!("Encoding SpanData {:?}", span_data);
+            let sm = tcx.sess.source_map();
+            let lo_cpn = span_data_cpn.reborrow().init_lo();
+            let lo = sm.lookup_char_pos(span_data.lo);
+            Self::encode_loc(&lo, lo_cpn);
+            let hi_cpn = span_data_cpn.init_hi();
+            let hi = sm.lookup_char_pos(span_data.hi);
+            Self::encode_loc(&hi, hi_cpn);
+        }
+
+        fn encode_loc(loc: &rustc_span::Loc, mut loc_cpn: loc_cpn::Builder<'_>) {
+            debug!("Encoding Loc {:?}", loc);
+            let file_cpn = loc_cpn.reborrow().init_file();
+            Self::encode_source_file(loc.file.as_ref(), file_cpn);
+
+            let line = loc.line.try_into().expect(&format!(
+                "The line number of source location cannot be stored in a Capnp message"
+            ));
+            loc_cpn.set_line(line);
+
+            let col_cpn = loc_cpn.init_col();
+            Self::encode_char_pos(&loc.col, col_cpn);
+        }
+
+        fn encode_char_pos(cpos: &rustc_span::CharPos, mut cpos_cpn: char_pos_cpn::Builder<'_>) {
+            let pos = cpos.0.try_into().expect(&format!(
+                "The column of source location cannot be storred in a Capnp message"
+            ));
+            cpos_cpn.set_pos(pos);
+        }
+
+        fn encode_source_file(
+            src_file: &rustc_span::SourceFile,
+            src_file_cpn: source_file_cpn::Builder<'_>,
+        ) {
+            debug!("Encoding SourceFile {:?}", src_file);
+            let name_cpn = src_file_cpn.init_name();
+            Self::encode_file_name(&src_file.name, name_cpn);
+        }
+
+        fn encode_file_name(fname: &rustc_span::FileName, fname_cpn: file_name_cpn::Builder<'_>) {
+            debug!("Encoding FileName {:?}", fname);
+            match fname {
+                rustc_span::FileName::Real(real_fname) => {
+                    let real_fname_cpn = fname_cpn.init_real();
+                    Self::encode_real_file_name(real_fname, real_fname_cpn);
+                }
+                _ => todo!(),
+            }
+        }
+
+        fn encode_real_file_name(
+            real_fname: &rustc_span::RealFileName,
+            real_fname_cpn: real_file_name_cpn::Builder<'_>,
+        ) {
+            debug!("Encoding RealFileName {:?}", real_fname);
+            match real_fname {
+                rustc_span::RealFileName::LocalPath(path_buf) => {
+                    let path_buf_cpn = real_fname_cpn.init_local_path();
+                    Self::encode_path_buf(path_buf, path_buf_cpn);
+                }
+                rustc_span::RealFileName::Remapped { .. } => todo!(),
+            }
+        }
+
+        fn encode_path_buf(pbuf: &std::path::PathBuf, mut pbuf_cpn: path_buf_cpn::Builder<'_>) {
+            debug!("Encoding PathBuf {:?}", pbuf);
+            let path = pbuf.to_str().expect(&format!(
+                "Failed to get the unicode string of PathBuf {:?}",
+                pbuf
+            ));
+            pbuf_cpn.set_inner(path);
         }
 
         fn encode_contract(

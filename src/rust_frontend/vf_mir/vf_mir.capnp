@@ -6,6 +6,39 @@ struct Option(T) {
     }
 }
 
+struct SpanData {
+    struct Loc {
+        struct CharPos {
+            pos @0: UInt64;
+        }
+        struct SourceFile {
+            struct FileName {
+                struct RealFileName {
+                    struct PathBuf {
+                        inner @0: Text;
+                    }
+                    union {
+                        localPath @0: PathBuf;
+                        remapped @1: Void;
+                    }
+                }
+                union {
+                    real @0: RealFileName;
+                    quoteExpansion @1: UInt64;
+                }
+            }
+            name @0: FileName;
+        }
+        file @0: SourceFile;
+        # 1 based
+        line @1: UInt64;
+        # 0 based
+        col @2: CharPos;
+    }
+    lo @0: Loc;
+    hi @1: Loc;
+}
+
 struct Mutability {
     union {
         mut @0: Void;
@@ -251,9 +284,10 @@ struct Body {
     defKind @0: DefKind;
     defPath @1: Text;
     contract @2: Contract;
-    argCount @3: UInt32;
+    argCount @3: UInt32; #Todo @Nima: Change this to UInt64
     localDecls @4: List(LocalDecl);
     basicBlocks @5: List(BasicBlock);
+    span @6: SpanData;
 }
 
 struct VfMir {
