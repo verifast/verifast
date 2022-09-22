@@ -131,7 +131,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
       //@ open principal(sender, _);
       //@ MEMCMP_PUB(msg1)
       //@ MEMCMP_PUB(msg2)
-      if (memcmp(msg1, msg2, PACKAGE_SIZE) != 0)
+      if (crypto_memcmp(msg1, msg2, PACKAGE_SIZE) != 0)
         abort();
       //@ close principal(sender, _);
       printf(" |%i| ", i);

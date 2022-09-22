@@ -135,7 +135,7 @@ struct item *asymmetric_signature(struct item *key, struct item *payload)
     write_tag(result->content, TAG_ASYMMETRIC_SIG);
     //@ assert result->content |-> ?cont &*& result->size |-> ?size;
     //@ chars_to_crypto_chars(result->content + TAG_LENGTH, olen);
-    memcpy(result->content + TAG_LENGTH, output, olen);
+    crypto_memcpy(result->content + TAG_LENGTH, output, olen);
     //@ item e = asymmetric_signature_item(principal, count, some(pay), ent);
     //@ close ic_cg(e)(sig_ccs, sig_cg);
     //@ close item(payload, pay, pub);

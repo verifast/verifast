@@ -64,3 +64,8 @@
 .provides ./crypto/decryption.gh#decryption_init
 .provides ./crypto/decryption.gh#decryption_garbage
 .produces module decryption_mod
+#
+#
+# crypto_string.h
+.provides ./crypto_string.h#crypto_memcmp
+.provides ./crypto_string.h#crypto_memcpy

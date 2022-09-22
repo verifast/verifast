@@ -2,6 +2,7 @@
 #define ATTACKER_H
 
 #include <stdlib.h>
+#include "crypto.h"
 #include <pthread.h>
 #include "macro_defines.h"
 

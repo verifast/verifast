@@ -233,7 +233,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
       //@ open principal(sender, _);
       //@ MEMCMP_PUB(s_message)
       //@ MEMCMP_PUB(r_message)
-      if (memcmp(s_message, r_message, MSG_SIZE) != 0)
+      if (crypto_memcmp(s_message, r_message, MSG_SIZE) != 0)
         abort();
       //@ crypto_chars_to_chars(s_message, MSG_SIZE);
       //@ crypto_chars_to_chars(r_message, MSG_SIZE);

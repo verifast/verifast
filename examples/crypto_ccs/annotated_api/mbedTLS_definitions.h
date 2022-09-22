@@ -3,7 +3,10 @@
 
 #include <stddef.h>
 #include <stdlib.h>
+#include "crypto.h"
 #include <string.h>
+#include "crypto_string.h"
+//@ #include "crypto/memcmp.gh"
 
 #include "macro_defines.h"
 #include "net.h"

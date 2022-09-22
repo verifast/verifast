@@ -35,7 +35,7 @@ void sender(char *key, int key_len, char *message)
     
     //@ chars_to_crypto_chars(message, MESSAGE_SIZE);
     //@ chars_to_crypto_chars(M, MESSAGE_SIZE);
-    memcpy(M, message, MESSAGE_SIZE);
+    crypto_memcpy(M, message, MESSAGE_SIZE);
     //@ MEMCMP_PUB(M)
     sha512_hmac(key, (unsigned int) key_len, M, 
                 (unsigned int) MESSAGE_SIZE, hmac, 0);
@@ -46,7 +46,7 @@ void sender(char *key, int key_len, char *message)
     //@ public_cryptogram(hmac, hmac_cg);
     //@ chars_to_crypto_chars(hmac, 64);
     //@ chars_to_crypto_chars(M + MESSAGE_SIZE, 64);
-    memcpy(M + MESSAGE_SIZE, hmac, 64);
+    crypto_memcpy(M + MESSAGE_SIZE, hmac, 64);
     //@ crypto_chars_to_chars(hmac, 64);
     
     //@ crypto_chars_to_chars(M, MESSAGE_SIZE);
@@ -103,7 +103,7 @@ void receiver(char *key, int key_len, char *message)
     sha512_hmac(key, (unsigned int) key_len, buffer, 
                 (unsigned int) MESSAGE_SIZE, hmac, 0);
     //@ chars_to_crypto_chars(message, MESSAGE_SIZE);
-    memcpy(message, (void*) buffer , MESSAGE_SIZE);
+    crypto_memcpy(message, (void*) buffer , MESSAGE_SIZE);
     //@ open cryptogram(hmac, 64, ?hmac_ccs, ?hmac_cg);
     //@ assert hmac_cg == cg_sha512_hmac(sender, id, _);
     //@ assert chars((void*) buffer + MESSAGE_SIZE, 64, _);
@@ -111,7 +111,7 @@ void receiver(char *key, int key_len, char *message)
     //@ chars_to_crypto_chars((void*) buffer + MESSAGE_SIZE, 64);
     //@ MEMCMP_SEC(hmac, hmac_cg)
     //@ MEMCMP_PUB((void*) buffer + MESSAGE_SIZE)
-    if (memcmp((void*) buffer + MESSAGE_SIZE, hmac, 64) != 0) abort();
+    if (crypto_memcmp((void*) buffer + MESSAGE_SIZE, hmac, 64) != 0) abort();
     //@ crypto_chars_join(buffer);
     //@ crypto_chars_to_chars(buffer, expected_size);
     //@ public_crypto_chars(hmac, 64);

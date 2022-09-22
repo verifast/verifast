@@ -110,10 +110,10 @@ void attacker_send_concatenation(havege_state *havege_state, void* socket)
 
   //@ chars_to_crypto_chars(buffer1, size1);
   //@ chars_to_crypto_chars(buffer3, size1);
-  memcpy(buffer3, buffer1, (unsigned int) size1);
+  crypto_memcpy(buffer3, buffer1, (unsigned int) size1);
   //@ chars_to_crypto_chars(buffer2, size2);
   //@ chars_to_crypto_chars((char*) buffer3 + size1, size2);
-  memcpy((char*) buffer3 + size1, buffer2, (unsigned int) size2);
+  crypto_memcpy((char*) buffer3 + size1, buffer2, (unsigned int) size2);
   //@ crypto_chars_join(buffer3);
   //@ crypto_chars_to_chars(buffer3, size1 + size2);
   net_send(socket, buffer3, (unsigned int) (size1 + size2));

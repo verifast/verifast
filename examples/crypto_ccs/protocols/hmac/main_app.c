@@ -206,7 +206,7 @@ int main(int argc, char **argv) //@ : main_full(main_app)
       //@ open principal(sender, _);
       //@ MEMCMP_PUB(s_message)
       //@ MEMCMP_PUB(r_message)
-      if (memcmp(s_message, r_message, MESSAGE_SIZE) != 0)
+      if (crypto_memcmp(s_message, r_message, MESSAGE_SIZE) != 0)
         abort();
       //@ close principal(sender, _);
       printf(" |%i| ", i);

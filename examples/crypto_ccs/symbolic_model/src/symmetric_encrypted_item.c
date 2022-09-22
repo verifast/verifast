@@ -109,7 +109,7 @@ struct item *symmetric_encryption(struct item *key, struct item *payload)
     create_havege_random(iv, GCM_IV_SIZE);
     //@ open cryptogram(iv, GCM_IV_SIZE, ?iv_ccs, ?iv_cg);
     //@ chars_to_crypto_chars(iv_buffer, GCM_IV_SIZE);
-    memcpy(iv_buffer, iv, GCM_IV_SIZE);
+    crypto_memcpy(iv_buffer, iv, GCM_IV_SIZE);
     //@ close cryptogram(iv, GCM_IV_SIZE, iv_ccs, iv_cg);
     //@ close polarssl_pub(pub)(iv_cg);
     //@ leak polarssl_pub(pub)(iv_cg);
@@ -265,7 +265,7 @@ struct item *symmetric_decryption(struct item *key, struct item *item)
     //@ crypto_chars_split(iv, GCM_IV_SIZE);
     //@ assert [1/2]crypto_chars(secret, iv, GCM_IV_SIZE, ?iv_ccs);
     //@ chars_to_crypto_chars(iv_buffer, GCM_IV_SIZE);
-    memcpy(iv_buffer, iv, GCM_IV_SIZE);
+    crypto_memcpy(iv_buffer, iv, GCM_IV_SIZE);
     //@ assert ccs == append(enc_tag, enc_cont);
     //@ assert enc_cont == append(iv_ccs, cg_ccs);
     //@ public_crypto_chars(iv, GCM_IV_SIZE);

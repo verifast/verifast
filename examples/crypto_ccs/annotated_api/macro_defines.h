@@ -2,6 +2,7 @@
 #define POLARSSL_MACRO_DEFINES
 
 #include <stdlib.h>
+#include "crypto.h"
 #include <stddef.h>
 #include <limits.h>
 #include <stdbool.h>

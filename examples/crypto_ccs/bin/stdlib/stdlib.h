@@ -3,7 +3,6 @@
 
 #include <stdbool.h>
 #include <malloc.h>
-#include "crypto.h"
 
 void abort();
     //@ requires true;

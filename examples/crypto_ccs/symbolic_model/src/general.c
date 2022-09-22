@@ -49,7 +49,7 @@ void write_buffer(char **target, const char *source, int length)
   //@ character_limits(t);
   //@ close chars(t, length, cs);
   //@ chars_to_crypto_chars(*target, length);
-  memcpy(*target, source, (unsigned int) length);
+  crypto_memcpy(*target, source, (unsigned int) length);
   *target = *target + l;
 }
 

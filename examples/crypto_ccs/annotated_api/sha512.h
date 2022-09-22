@@ -2,6 +2,7 @@
 #define SHA512_H
 
 #include <string.h>
+//@ #include "crypto/memcmp.gh"
 
 #include "macro_defines.h"
 #include "net.h"

@@ -55,7 +55,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
     //@ close enc_then_hmac_pub(iv_cg);
     //@ leak enc_then_hmac_pub(iv_cg);
     //@ chars_to_crypto_chars(message, 16);
-    memcpy(message, iv, 16);
+    crypto_memcpy(message, iv, 16);
     //@ close cryptogram(message, 16, iv_ccs, iv_cg);
     //@ public_cryptogram(message, iv_cg);
     //@ assert chars(message, 16, ?iv_cs);
@@ -181,7 +181,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ chars_to_crypto_chars((void*) buffer + size - 64, 64);
     //@ MEMCMP_SEC(hmac, hmac_cg)
     //@ MEMCMP_PUB((void*) buffer + size - 64)
-    if (memcmp((void*) buffer + size - 64, hmac, 64) != 0) abort();
+    if (crypto_memcmp((void*) buffer + size - 64, hmac, 64) != 0) abort();
     /*@ if (!col) 
         {
           public_ccs_cg(hmac_cg);
@@ -201,7 +201,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ chars_to_crypto_chars(buffer, 16);
     //@ assert crypto_chars(normal, buffer, 16, ?iv_ccs);
     //@ chars_to_crypto_chars(iv, 16);
-    memcpy(iv, buffer, 16);
+    crypto_memcpy(iv, buffer, 16);
     //@ cs_to_ccs_crypto_chars(iv, iv_cs);
     //@ interpret_nonce(iv, 16);
     //@ open cryptogram(iv, 16, iv_ccs, ?iv_cg);

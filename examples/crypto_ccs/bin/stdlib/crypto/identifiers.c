@@ -1,7 +1,10 @@
 #include "identifiers.h"
 
 #include "../stdlib.h"
-#include "../string.h"
+#include "../crypto_string.h"
+
+#include "crypto.h"
+//@ #include "crypto/memcmp.gh"
 
 /*@
 
@@ -37,9 +40,9 @@ void write_identifier(char *array, int id)
   //@ chars_to_crypto_chars(array, 4);
   //@ chars_to_crypto_chars((void*) array + 4, 4);
   //@ chars_to_crypto_chars((void*) array + 8, 4);
-  memcpy(array +  0, temp, 4);
-  memcpy(array +  4, temp, 4);
-  memcpy(array +  8, temp, 4);
+  crypto_memcpy(array +  0, temp, 4);
+  crypto_memcpy(array +  4, temp, 4);
+  crypto_memcpy(array +  8, temp, 4);
   //@ crypto_chars_to_chars(temp, 4);
 
   //@ crypto_chars_join(array + 4);
@@ -75,7 +78,7 @@ void check_identifier(char *array, int id)
   write_identifier(temp, id);
   //@ MEMCMP_PUB(temp)
   //@ MEMCMP_PUB(array)
-  if (memcmp(temp, array, ID_SIZE) != 0) abort();
+  if (crypto_memcmp(temp, array, ID_SIZE) != 0) abort();
   //@ public_crypto_chars(temp, ID_SIZE);
   //@ assert [f]crypto_chars(normal, array, ID_SIZE, ccs);
   /*@ if (garbage)

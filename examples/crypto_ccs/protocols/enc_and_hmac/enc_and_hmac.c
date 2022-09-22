@@ -55,7 +55,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
     if (havege_random(&havege_state, iv, 16) != 0) abort();
     //@ open cryptogram(iv, 16, ?iv_ccs, ?iv_cg);
     //@ chars_to_crypto_chars(message, 16);
-    memcpy(message, iv, 16);
+    crypto_memcpy(message, iv, 16);
     //@ close cryptogram(message, 16, iv_ccs, iv_cg);
     //@ close enc_and_hmac_pub(iv_cg);
     //@ leak enc_and_hmac_pub(iv_cg);
@@ -168,7 +168,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ assert chars(buffer, 16, ?iv_cs);
     //@ chars_to_crypto_chars(buffer, 16);
     //@ chars_to_crypto_chars(iv, 16);
-    memcpy(iv, buffer, 16);
+    crypto_memcpy(iv, buffer, 16);
     //@ cs_to_ccs_crypto_chars(iv, iv_cs);
     //@ interpret_nonce(iv, 16);
     //@ open cryptogram(iv, 16, ?iv_ccs, ?iv_cg);
@@ -222,7 +222,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ chars_to_crypto_chars(buffer + size - 64, 64);
     //@ MEMCMP_SEC(hmac, hmac_cg2)
     //@ MEMCMP_PUB((void*) buffer + size - 64)
-    if (memcmp((void*) buffer + size - 64, hmac, 64) != 0) abort();   
+    if (crypto_memcmp((void*) buffer + size - 64, hmac, 64) != 0) abort();   
     //@ ccs_for_cg_inj(hmac_cg, hmac_cg2);
     //@ assert col || hmac_cg == hmac_cg2;
     //@ public_crypto_chars(hmac, 64);

@@ -48,7 +48,7 @@ void sender(char *key, char *msg, unsigned int msg_len)
     if (havege_random(&havege_state, iv, 16) != 0) abort();
     //@ open cryptogram(iv, 16, ?iv_ccs, ?iv_cg);
     //@ chars_to_crypto_chars(message, 16);
-    memcpy(message, iv, 16);
+    crypto_memcpy(message, iv, 16);
     //@ close auth_enc_pub(iv_cg);
     //@ leak auth_enc_pub(iv_cg);
     //@ close cryptogram(message, 16, iv_ccs, iv_cg);

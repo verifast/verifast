@@ -77,7 +77,7 @@ void sender_msg1(int* socket, havege_state* havege_state, pk_context* r_context,
 
   //@ open cryptogram(s_nonce, NONCE_SIZE, s_nonce_ccs, s_nonce_cg);
   //@ chars_to_crypto_chars((void*) message + ID_SIZE, NONCE_SIZE);
-  memcpy((void*) message + ID_SIZE, s_nonce, NONCE_SIZE);
+  crypto_memcpy((void*) message + ID_SIZE, s_nonce, NONCE_SIZE);
   //@ crypto_chars_join(message);
   //@ list<crypto_char> msg1 = append(sid_ccs, s_nonce_ccs);
   //@ assert crypto_chars(secret, message, MSG1_SIZE, msg1);
@@ -248,9 +248,9 @@ void sender_msg2(int* socket, havege_state* havege_state, pk_context* s_context,
   check_identifier(message, recvr);
   //@ open cryptogram(s_nonce, NONCE_SIZE, s_nonce_ccs, s_nonce_cg);
   //@ MEMCMP_SEC(s_nonce, s_nonce_cg)
-  if (memcmp((void*) message + ID_SIZE, s_nonce, NONCE_SIZE) != 0) abort();
+  if (crypto_memcmp((void*) message + ID_SIZE, s_nonce, NONCE_SIZE) != 0) abort();
   //@ chars_to_crypto_chars(r_nonce, NONCE_SIZE);
-  memcpy(r_nonce, (void*) message + ID_SIZE + NONCE_SIZE, NONCE_SIZE);
+  crypto_memcpy(r_nonce, (void*) message + ID_SIZE + NONCE_SIZE, NONCE_SIZE);
   //@ assert id_ccs == cs_to_ccs(identifier(recvr));
   //@ assert s_ccs == s_nonce_ccs;
   //@ cryptogram r_nonce_cg = ccs_for_cg_sur(r_ccs, tag_nonce);
@@ -335,7 +335,7 @@ void sender_msg3(int* socket, havege_state* havege_state, pk_context* r_context,
       }
   @*/
   //@ chars_to_crypto_chars(message, NONCE_SIZE);
-  memcpy(message, r_nonce, NONCE_SIZE);
+  crypto_memcpy(message, r_nonce, NONCE_SIZE);
   /*@ if (!condition)
         close cryptogram(r_nonce, NONCE_SIZE, r_nonce_ccs, r_nonce_cg);
       else
@@ -536,7 +536,7 @@ void receiver_msg1(int* socket, havege_state* havege_state,
   check_identifier(message, sender);
   //@ assert id_ccs == cs_to_ccs(identifier(sender));
   //@ chars_to_crypto_chars(s_nonce, NONCE_SIZE);
-  memcpy(s_nonce, (void*) message + ID_SIZE, NONCE_SIZE);
+  crypto_memcpy(s_nonce, (void*) message + ID_SIZE, NONCE_SIZE);
 
   // Interpret message
   //@ cryptogram s_nonce_cg;
@@ -634,8 +634,8 @@ void receiver_msg2(int* socket, havege_state* havege_state,
   //@ open cryptogram(r_nonce, NONCE_SIZE, r_nonce_ccs, r_nonce_cg);
   //@ chars_to_crypto_chars((void*) message + ID_SIZE, NONCE_SIZE);
   //@ chars_to_crypto_chars((void*) message + ID_SIZE + NONCE_SIZE, NONCE_SIZE);
-  memcpy((void*) message + ID_SIZE, s_nonce, NONCE_SIZE);
-  memcpy((void*) message + ID_SIZE + NONCE_SIZE, r_nonce, NONCE_SIZE);
+  crypto_memcpy((void*) message + ID_SIZE, s_nonce, NONCE_SIZE);
+  crypto_memcpy((void*) message + ID_SIZE + NONCE_SIZE, r_nonce, NONCE_SIZE);
   //@ crypto_chars_join(message);
   //@ crypto_chars_join(message);
   //@ list<crypto_char> msg2 = append(rid_ccs, append(s_nonce_ccs, r_nonce_ccs));
@@ -785,7 +785,7 @@ void receiver_msg3(int* socket, havege_state* havege_state,
       }
   @*/
   //@ MEMCMP_SEC(r_nonce, r_nonce_cg)
-  if (memcmp((void*) message, r_nonce, NONCE_SIZE) != 0) abort();
+  if (crypto_memcmp((void*) message, r_nonce, NONCE_SIZE) != 0) abort();
   //@ assert dec_ccs == r_nonce_ccs;
   /*@ if (garbage)
       {

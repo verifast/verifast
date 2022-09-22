@@ -551,7 +551,7 @@ void ic_check_equal(char* cont1, int size1, char* cont2, int size2)
     //@ chars_to_crypto_chars(b2, size);
     //@ MEMCMP_PUB(b1)
     //@ MEMCMP_PUB(b2)
-    if (memcmp(b1, b2, (unsigned int) size) != 0)
+    if (crypto_memcmp(b1, b2, (unsigned int) size) != 0)
       abort_crypto_lib("Data items were not equal");
     //@ cs_to_ccs_crypto_chars(b1, cs1');
     //@ cs_to_ccs_crypto_chars(b2, cs2');
@@ -631,7 +631,7 @@ void ic_check_equal(char* cont1, int size1, char* cont2, int size2)
       //@ chars_to_crypto_chars(b2, GCM_IV_SIZE);
       //@ MEMCMP_PUB(b1)
       //@ MEMCMP_PUB(b2)
-      if (memcmp(b1, b2, GCM_IV_SIZE) != 0)
+      if (crypto_memcmp(b1, b2, GCM_IV_SIZE) != 0)
         abort_crypto_lib("Items not equal: encrypted items with distinct iv's");
       //@ cs_to_ccs_crypto_chars(b1, iv_cs1);
       //@ cs_to_ccs_crypto_chars(b2, iv_cs2);
@@ -682,7 +682,7 @@ void ic_check_equal(char* cont1, int size1, char* cont2, int size2)
          MEMCMP_REGION(cons(memcmp_sec(cg2), nil), ccs_cg2)
        }
     @*/
-    if (memcmp(b_cg1, b_cg2, (unsigned int) size_cg) != 0)
+    if (crypto_memcmp(b_cg1, b_cg2, (unsigned int) size_cg) != 0)
       abort_crypto_lib("Items were not equal");
     /*@ if (tag1 == TAG_NONCE || tag1 == TAG_SYMMETRIC_ENC)
         {

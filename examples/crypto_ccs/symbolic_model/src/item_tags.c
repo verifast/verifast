@@ -123,7 +123,7 @@ void check_tag2(char* buffer, char tag)
   //@ cs_to_ccs_full_tag(tag);
   //@ MEMCMP_PUB(tb)
   //@ MEMCMP_PUB(buffer)
-  if (memcmp(buffer, tb, TAG_LENGTH) != 0)
+  if (crypto_memcmp(buffer, tb, TAG_LENGTH) != 0)
     abort_crypto_lib("Checking tag failed");
   //@ assert [f2]crypto_chars(?kind2, buffer, TAG_LENGTH, ccs);
   /*@ if (garbage)

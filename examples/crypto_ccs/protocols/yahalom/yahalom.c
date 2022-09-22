@@ -45,7 +45,7 @@ void encrypt(havege_state *state, char *key, char *msg,
   //@ close yahalom_pub(iv_cg);
   //@ leak yahalom_pub(iv_cg);
   //@ chars_to_crypto_chars(output, 16);
-  memcpy(output, iv, 16);
+  crypto_memcpy(output, iv, 16);
   //@ close cryptogram(output, 16, iv_ccs, iv_cg);
   //@ public_cryptogram(output, iv_cg);
 
@@ -103,7 +103,7 @@ void decrypt(char *key, char *msg, unsigned int msg_len, char* output)
   //@ public_ccs_cg(iv_cg);
   //@ chars_to_secret_crypto_chars(msg, 16);
   //@ chars_to_crypto_chars(iv, 16);
-  memcpy(iv, msg, 16);
+  crypto_memcpy(iv, msg, 16);
   //@ public_crypto_chars(msg, 16);
   //@ assert [f2]chars(msg, 16, ?iv_cs0);
   //@ cs_to_ccs_inj(iv_cs, iv_cs0);
@@ -218,8 +218,8 @@ void server(int server, int sender, int receiver,
     //@ crypto_chars_split((void*) decrypted + ID_SIZE, NONCE_SIZE);
     //@ chars_to_crypto_chars(NA, NONCE_SIZE);
     //@ chars_to_crypto_chars(NB, NONCE_SIZE);
-    memcpy(NA, (void*) decrypted + ID_SIZE, NONCE_SIZE);
-    memcpy(NB, (void*) decrypted + prefix_size, NONCE_SIZE);
+    crypto_memcpy(NA, (void*) decrypted + ID_SIZE, NONCE_SIZE);
+    crypto_memcpy(NB, (void*) decrypted + prefix_size, NONCE_SIZE);
     //@ assert crypto_chars(?kind, decrypted, ID_SIZE, ?id_ccs);
     //@ assert crypto_chars(kind, decrypted + ID_SIZE, NONCE_SIZE, ?NA_ccs);
     /*@ assert crypto_chars(kind, (void*) decrypted + ID_SIZE + NONCE_SIZE,
@@ -346,11 +346,11 @@ void server(int server, int sender, int receiver,
       //@ list<crypto_char> rid_ccs = cs_to_ccs(identifier(receiver));
       //@ assert crypto_chars(secret, m, ID_SIZE, rid_ccs);
       //@ chars_to_crypto_chars(m + ID_SIZE, KEY_SIZE);
-      memcpy(m + ID_SIZE, KAB, KEY_SIZE);
+      crypto_memcpy(m + ID_SIZE, KAB, KEY_SIZE);
       //@ crypto_chars_to_chars(NA, NONCE_SIZE);
       //@ chars_to_secret_crypto_chars(NA, NONCE_SIZE);
       //@ chars_to_crypto_chars(m + ID_SIZE + KEY_SIZE, NONCE_SIZE);
-      memcpy(m + ID_SIZE + KEY_SIZE, NA, NONCE_SIZE);
+      crypto_memcpy(m + ID_SIZE + KEY_SIZE, NA, NONCE_SIZE);
       //@ public_crypto_chars(NA, NONCE_SIZE);
       /*@ if (col || yahalom_public_key(receiver, r_id, true))
           {
@@ -359,7 +359,7 @@ void server(int server, int sender, int receiver,
           }
       @*/
       //@ chars_to_crypto_chars(m + ID_SIZE + KEY_SIZE + NONCE_SIZE, NONCE_SIZE);
-      memcpy(m + ID_SIZE + KEY_SIZE + NONCE_SIZE, NB, NONCE_SIZE);
+      crypto_memcpy(m + ID_SIZE + KEY_SIZE + NONCE_SIZE, NB, NONCE_SIZE);
       //@ crypto_chars_join(m + ID_SIZE + KEY_SIZE);
       //@ crypto_chars_join(m + ID_SIZE);
       //@ crypto_chars_join(m);
@@ -453,7 +453,7 @@ void server(int server, int sender, int receiver,
       //@ chars_to_secret_crypto_chars(m, ID_SIZE);
       //@ assert crypto_chars(secret, m, ID_SIZE, cs_to_ccs(identifier(sender)));
       //@ chars_to_crypto_chars(m + ID_SIZE, KEY_SIZE);
-      memcpy(m + ID_SIZE, KAB, KEY_SIZE);
+      crypto_memcpy(m + ID_SIZE, KAB, KEY_SIZE);
       //@ crypto_chars_join(m);
 
       encrypt(&havege_state, r_key, m, (unsigned int) (ID_SIZE + KEY_SIZE), enc2);
@@ -510,8 +510,8 @@ void server(int server, int sender, int receiver,
       char *message = malloc(size); if (message == 0) abort();
       //@ chars_to_crypto_chars(message, size1);
       //@ chars_to_crypto_chars(message + size1, size2);
-      memcpy(message, enc1, (unsigned int) size1);
-      memcpy(message + size1, enc2, (unsigned int) size2);
+      crypto_memcpy(message, enc1, (unsigned int) size1);
+      crypto_memcpy(message + size1, enc2, (unsigned int) size2);
       //@ crypto_chars_join(message);
       //@ crypto_chars_to_chars(message, size);
       //@ open principal(server, _);
@@ -612,7 +612,7 @@ void sender(int server, int sender, int receiver,
     write_identifier(message, sender);
     //@ crypto_chars_split(message, ID_SIZE);
     //@ chars_to_crypto_chars((void*) message + ID_SIZE, NONCE_SIZE);
-    memcpy((void*) message + ID_SIZE, NA, NONCE_SIZE);
+    crypto_memcpy((void*) message + ID_SIZE, NA, NONCE_SIZE);
     //@ crypto_chars_join(message);
     //@ crypto_chars_join(message);
     //@ crypto_chars_to_chars(message, ID_SIZE + NONCE_SIZE);
@@ -633,7 +633,7 @@ void sender(int server, int sender, int receiver,
     //@ chars_split(msg, 16 + size1);
     //@ chars_to_crypto_chars(msg + 16 + size1, size2);
     //@ chars_to_crypto_chars(MB, size2);
-    memcpy(MB, msg + 16 + size1, (unsigned int) size2);
+    crypto_memcpy(MB, msg + 16 + size1, (unsigned int) size2);
     //@ chars_split(msg, 16);
     //@ assert chars(msg, 16, ?iv_cs);
     //@ assert chars(msg + 16, size1, ?enc_cs);
@@ -678,9 +678,9 @@ void sender(int server, int sender, int receiver,
     //@ cg_NB = ccs_for_cg_sur(ccs_NB, tag_nonce);
     //@ cg_KAB = ccs_for_cg_sur(ccs_KAB, tag_symmetric_key);
     //@ chars_to_crypto_chars(generated_key, KEY_SIZE);
-    memcpy(generated_key, (void*) dec + ID_SIZE, KEY_SIZE);
+    crypto_memcpy(generated_key, (void*) dec + ID_SIZE, KEY_SIZE);
     //@ chars_to_crypto_chars(NB, NONCE_SIZE);
-    memcpy(NB, (void*) dec + ID_SIZE + KEY_SIZE + NONCE_SIZE, NONCE_SIZE);
+    crypto_memcpy(NB, (void*) dec + ID_SIZE + KEY_SIZE + NONCE_SIZE, NONCE_SIZE);
     /*@ if (col || garbage || condition)
         {
           if (col || garbage)
@@ -740,7 +740,7 @@ void sender(int server, int sender, int receiver,
     check_identifier(dec, receiver);
     //@ assert id_ccs == rid_ccs;
     //@ MEMCMP_PUB(NA)
-    if (memcmp(NA, dec + ID_SIZE + KEY_SIZE, NONCE_SIZE) != 0) abort();
+    if (crypto_memcmp(NA, dec + ID_SIZE + KEY_SIZE, NONCE_SIZE) != 0) abort();
     //@ assert ccs_NA == ccs_NA2;
     //@ assert crypto_chars(kind, NB, NONCE_SIZE, ccs_NB);
     /*@ if (!col && !garbage && !condition)
@@ -857,10 +857,10 @@ void sender(int server, int sender, int receiver,
       int size = size1 + size2;
       char *message = malloc(size); if (message == 0) abort();
       //@ chars_to_crypto_chars(message, size1);
-      memcpy(message, MB, (unsigned int) size1);
+      crypto_memcpy(message, MB, (unsigned int) size1);
       //@ crypto_chars_to_chars(MB, size1);
       //@ chars_to_crypto_chars(message + size1, size2);
-      memcpy(message + size1, enc2, (unsigned int) size2);
+      crypto_memcpy(message + size1, enc2, (unsigned int) size2);
       //@ crypto_chars_to_chars(enc2, size2);
       //@ crypto_chars_join(message);
       //@ crypto_chars_to_chars(message, size);
@@ -981,7 +981,7 @@ void receiver_(int socket_in, int sender, int receiver, int server,
       }
   @*/
   //@ chars_to_crypto_chars(generated_key, KEY_SIZE);
-  memcpy(generated_key, dec1 + ID_SIZE, KEY_SIZE);
+  crypto_memcpy(generated_key, dec1 + ID_SIZE, KEY_SIZE);
   //@ chars_to_crypto_chars(dec1, ID_SIZE);
   /*@ close check_identifier_ghost_args(true, garbage, receiver, receiver,
                                         r_id1, ccs_KAB); @*/
@@ -1042,7 +1042,7 @@ void receiver_(int socket_in, int sender, int receiver, int server,
   @*/
   //@ open cryptogram(NB, NONCE_SIZE, ccs_NB, cg_NB);
   //@ MEMCMP_SEC(NB, cg_NB)
-  if (memcmp(dec2, NB, NONCE_SIZE) != 0) abort();
+  if (crypto_memcmp(dec2, NB, NONCE_SIZE) != 0) abort();
   //@ close cryptogram(NB, NONCE_SIZE, ccs_NB, cg_NB);
   //@ assert crypto_chars(_, dec2, NONCE_SIZE, ccs_NB);
   /*@ if (garbage2)
@@ -1151,7 +1151,7 @@ void receiver(int server, int sender, int receiver,
     //@ public_chars(message + ID_SIZE, NONCE_SIZE);
     //@ chars_to_crypto_chars(message + ID_SIZE, NONCE_SIZE);
     //@ chars_to_crypto_chars(NA, NONCE_SIZE);
-    memcpy(NA, (void*) message + ID_SIZE, NONCE_SIZE);
+    crypto_memcpy(NA, (void*) message + ID_SIZE, NONCE_SIZE);
     //@ cs_to_ccs_crypto_chars(NA, cs_NA);
     //@ cs_to_ccs_crypto_chars(message + ID_SIZE, cs_NA);
     //@ chars_join(message);
@@ -1207,8 +1207,8 @@ void receiver(int server, int sender, int receiver,
 
     //@ chars_to_crypto_chars((void*) plaintext + ID_SIZE, NONCE_SIZE);
     //@ chars_to_crypto_chars((void*) plaintext + ID_SIZE + NONCE_SIZE, NONCE_SIZE);
-    memcpy((void*) plaintext + ID_SIZE, NA, NONCE_SIZE);
-    memcpy((void*) plaintext + ID_SIZE + NONCE_SIZE, NB, NONCE_SIZE);
+    crypto_memcpy((void*) plaintext + ID_SIZE, NA, NONCE_SIZE);
+    crypto_memcpy((void*) plaintext + ID_SIZE + NONCE_SIZE, NB, NONCE_SIZE);
     //@ crypto_chars_join(plaintext);
     //@ crypto_chars_join(plaintext);
     //@ assert crypto_chars(secret, plaintext, p_size, ?p_ccs);

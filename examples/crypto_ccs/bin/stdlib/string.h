@@ -3,17 +3,13 @@
 
 #include <stddef.h>
 
-//@ #include "crypto/memcmp.gh"
-
 char *strcpy(char *d, char *s);
     //@ requires [?f]string(s, ?cs) &*& chars(d, length(cs) + 1, _);
     //@ ensures [f]string(s, cs) &*& chars(d, length(cs) + 1, append(cs, {0})) &*& result == d;
 
 void memcpy(void *array, void *array0, size_t count);
-    /*@ requires crypto_chars(_, array, count, _) &*&
-                 [?f]crypto_chars(?kind, array0, count, ?ccs0); @*/
-    /*@ ensures  crypto_chars(kind, array, count, ccs0) &*&
-                 [f]crypto_chars(kind, array0, count, ccs0); @*/
+    //@ requires chars(array, count, ?cs) &*& [?f]chars(array0, count, ?cs0);
+    //@ ensures chars(array, count, cs0) &*& [f]chars(array0, count, cs0);
 
 void memmove(void *dest, void *src, size_t count);
     /*@
@@ -33,19 +29,13 @@ void memmove(void *dest, void *src, size_t count);
             chars(src, dest - src, _);
     @*/
 
-int strlen(char *string);
+size_t strlen(char *string);
     //@ requires [?f]string(string, ?cs);
     //@ ensures [f]string(string, cs) &*& result == length(cs);
 
 int memcmp(char *array, char *array0, size_t count);
-    /*@ requires [?f1]crypto_chars(?kind1, array, ?n1, ?ccs1) &*&
-                 [_]memcmp_region(?l1, take(count, ccs1)) &*& 
-                 [?f2]crypto_chars(?kind2, array0, ?n2, ?ccs2) &*& 
-                 [_]memcmp_region(?l2, take(count, ccs2)) &*& 
-                 memcmp_match(l1, l2) && count <= n1 && count <= n2; @*/
-    /*@ ensures  [f1]crypto_chars(kind1, array, n1, ccs1) &*&
-                 [f2]crypto_chars(kind2, array0, n2, ccs2) &*&
-                 true == ((result == 0) == (take(count, ccs1) == take(count, ccs2))); @*/
+    //@ requires [?f]chars(array, ?n, ?cs) &*& [?f0]chars(array0, ?n0, ?cs0) &*& count <= n &*& count <= n0;
+    //@ ensures [f]chars(array, n, cs) &*& [f0]chars(array0, n0, cs0) &*& (result == 0) == (take(count, cs) == take(count, cs0));
 
 int strcmp(char *s1, char *s2);
     //@ requires [?f1]string(s1, ?cs1) &*& [?f2]string(s2, ?cs2);

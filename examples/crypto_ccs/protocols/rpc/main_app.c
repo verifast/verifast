@@ -223,11 +223,11 @@ int main(int argc, char **argv) //@ : main_full(main_app)
       //@ chars_to_crypto_chars(s_response, PACKAGE_SIZE);
       //@ MEMCMP_PUB(c_request)
       //@ MEMCMP_PUB(s_request)
-      if (memcmp(c_request, s_request, PACKAGE_SIZE) != 0)
+      if (crypto_memcmp(c_request, s_request, PACKAGE_SIZE) != 0)
         abort();
       //@ MEMCMP_PUB(c_response)
       //@ MEMCMP_PUB(s_response)
-      if (memcmp(c_response, s_response, PACKAGE_SIZE) != 0)
+      if (crypto_memcmp(c_response, s_response, PACKAGE_SIZE) != 0)
         abort();
       //@ crypto_chars_to_chars(c_request, PACKAGE_SIZE);
       //@ crypto_chars_to_chars(s_request, PACKAGE_SIZE);

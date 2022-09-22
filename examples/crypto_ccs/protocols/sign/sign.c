@@ -49,13 +49,13 @@ void sender(int recvr, char *key, int key_len, char *msg)
     //@ integer_to_chars(&recvr);
     //@ chars_to_crypto_chars((void*) &recvr, 4);
     //@ chars_to_crypto_chars(M, 4);
-    memcpy(M, &recvr, 4);
+    crypto_memcpy(M, &recvr, 4);
     //@ cs_to_ccs_crypto_chars((void*) &recvr, chars_of_int(receiver));
     //@ chars_to_integer(&recvr);
     
     //@ chars_to_crypto_chars(msg, MSG_SIZE);
     //@ chars_to_crypto_chars(M + 4, MSG_SIZE);
-    memcpy(M + 4, msg, (unsigned int) MSG_SIZE);
+    crypto_memcpy(M + 4, msg, (unsigned int) MSG_SIZE);
     //@ crypto_chars_join(M);
     //@ list<char> pay = append(chars_of_int(receiver), msg_cs);
     //@ cs_to_ccs_crypto_chars(msg, msg_cs);
@@ -164,7 +164,7 @@ void receiver(int recvr, char *key, int key_len, char *msg)
     //@ assert chars(buffer + 4, MSG_SIZE, ?msg_cs);
     //@ chars_to_crypto_chars(buffer + 4, MSG_SIZE);
     //@ chars_to_crypto_chars(msg, MSG_SIZE);
-    memcpy(msg, buffer + 4, MSG_SIZE);
+    crypto_memcpy(msg, buffer + 4, MSG_SIZE);
     //@ cs_to_ccs_crypto_chars(msg, msg_cs);
     //@ cs_to_ccs_crypto_chars(buffer + 4, msg_cs);
     int sign_size = size - 4 - MSG_SIZE;

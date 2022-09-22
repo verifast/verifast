@@ -124,7 +124,7 @@ struct item *asymmetric_encryption(struct item *key, struct item *payload)
     //@ assert result->content |-> ?cont &*& result->size |-> ?size;
     if (olen < MINIMAL_STRING_SIZE) {abort_crypto_lib("Asymmetric encryption failed: to small");}
     //@ chars_to_crypto_chars(result->content + TAG_LENGTH, olen);
-    memcpy(result->content + TAG_LENGTH, output, olen);
+    crypto_memcpy(result->content + TAG_LENGTH, output, olen);
 
     //@ item enc = asymmetric_encrypted_item(principal, count, some(pay), ent);
     //@ close ic_cg(enc)(enc_ccs, enc_cg);
@@ -270,7 +270,7 @@ struct item *asymmetric_decryption(struct item *key, struct item *item, char tag
     @*/
     //@ crypto_chars_join(output);
     //@ chars_to_crypto_chars(result->content, olen);
-    memcpy(result->content, output, olen);
+    crypto_memcpy(result->content, output, olen);
     //@ assert result->content |-> ?cont;
     //@ assert crypto_chars(?kind, cont, olen_val, ccs_out);
     zeroize(output, (int) olen);

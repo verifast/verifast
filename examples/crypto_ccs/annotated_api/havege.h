@@ -2,6 +2,7 @@
 #define HAVEGE_H
 
 #include <stdlib.h>
+#include "crypto.h"
 #include "macro_defines.h"
 
 struct havege_state
