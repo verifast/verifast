@@ -226,6 +226,7 @@ let string_of_token t =
   | RealToken(bi) -> "RealToken:" ^ (Big_int.string_of_big_int bi)
   | RationalToken(n, suffix) -> "RationalToken:" ^ (Num.string_of_num n) ^ (match suffix with None -> "" | Some FloatFSuffix -> "f" | Some FloatLSuffix -> "l")
   | String(s) -> "String: " ^ s
+  | AngleBracketString(s) -> "AngleBracketString: " ^ s
   | CharToken(ch) -> "Char: " ^ (Char.escaped ch)
   | BeginInclude(kind, s, _) -> "BeginInclude(" ^ string_of_include_kind kind ^ "): " ^ s
   | SecondaryInclude(s, _) -> "SecondaryInclude: " ^ s
@@ -523,6 +524,7 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
       (' ' | '\009' | '\026' | '\012') ->
         text_junk (); next_token ()
     | ('\010'|'\013') as c ->
+        start_token();
         let old_line = !line in
         let old_column = !textpos - !linepos + 1 in
         if c = '\013' && !textpos + 1 < textlength && text.[!textpos + 1] = '\010' then incr textpos;
@@ -951,8 +953,13 @@ class tentative_lexer (lloc:unit -> loc0) (lstream:(loc0 * token) Stream.t) : t_
       counter_old <- counter;
       counter <- 0;
     method commit() =
-      if counter <> counter_old then raise (PreprocessorDivergence (this#loc(), 
-           "Different amount of tokens were consumed by normal and context-free preprocessors"));
+      if counter < counter_old then
+        let Some (l, _) = Array.get buffer (base + counter) in
+        raise (PreprocessorDivergence (l, Printf.sprintf "This token and the %d after it were consumed by the normal preprocessor but not by the context-free preprocessor" (counter_old - counter - 1)))
+      else if counter_old < counter then begin
+        let Some (l, _) = Array.get buffer (base + counter_old) in
+        raise (PreprocessorDivergence (l, Printf.sprintf "This token and the %d after it were consumed by the context-free preprocessor but not by the normal preprocessor" (counter - counter_old - 1)))
+      end;
       base <- base + counter;
       counter <- 0;
       counter_old <- 0;
@@ -1801,7 +1808,7 @@ let make_sound_preprocessor reportMacroCall make_lexer path verbose include_path
               (* The safest version: *)
               (* error (current_loc()) (Printf.sprintf "Cannot include file '%s' because multiple possible include paths are found." i) *)
           in
-          let path = find_include_file includepaths in push_tlexer l path;
+          let path = abs_path (find_include_file includepaths) in push_tlexer l path;
           let () =
             let pp1, last_macro_used1 = make_file_preprocessor reportMacroCall path p_macros p_ghost_macros (fun () -> !curr_tlexer#peek ()) (fun () -> !curr_tlexer#junk ()) p_in_ghost_range dataModel in
             pps := pp1::!pps;
