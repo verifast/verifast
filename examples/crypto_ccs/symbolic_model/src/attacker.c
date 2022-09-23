@@ -54,7 +54,7 @@ void send_data(struct network_status *net_stat)
   int data_size = random_int_();
   if (data_size > MIN_RANDOM_SIZE)
   {
-    char* data = malloc((int) data_size);
+    char* data = malloc((size_t)data_size);
     if (data == 0) abort_crypto_lib("malloc failed");
     random_buffer_(data, data_size);
     struct item *item = create_data_item(data, data_size);

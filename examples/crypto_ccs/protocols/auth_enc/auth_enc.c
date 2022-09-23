@@ -38,7 +38,7 @@ void sender(char *key, char *msg, unsigned int msg_len)
   {
     gcm_context gcm_context;
     int message_len = 16 + (int) msg_len + 16;
-    char* message = malloc(message_len);
+    char* message = malloc((size_t)message_len);
     if (message == 0) abort();
 
     // IV stuff
@@ -121,7 +121,7 @@ int receiver(char *key, char *msg)
   {
     int max_size = 16 + MAX_SIZE + 16;
     gcm_context gcm_context;
-    char *buffer = malloc (max_size); if (buffer == 0) abort();
+    char *buffer = malloc ((size_t)max_size); if (buffer == 0) abort();
     size = net_recv(&socket2, buffer, (unsigned int) max_size);
     if (size <= 16 + 16) abort();
     enc_size = size - 16 - 16;

@@ -1,7 +1,7 @@
 #ifndef AUXILIARY_DEFINITIONS_GH
 #define AUXILIARY_DEFINITIONS_GH
 
-#include <nat.gh>
+//#include <nat.gh>
 #include <list.gh>
 #include <listex.gh>
 
@@ -32,14 +32,14 @@ predicate hide_chars(char *buffer, int length, list<char> cs) =
 ;
 
 //Power fixpoint
-fixpoint int pow(int n, nat e)
-{
-  switch (e)
-  {
-    case succ(e0): return n * pow(n, e0);
-    case zero: return 1;
-  }
-}
+//fixpoint int pow(int n, nat e)
+//{
+//  switch (e)
+//  {
+//    case succ(e0): return n * pow(n, e0);
+//    case zero: return 1;
+//  }
+//}
 
 //Maximum/minimum of a list of ints
 fixpoint int maximum(list<int> ints)

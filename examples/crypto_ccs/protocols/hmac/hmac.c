@@ -29,7 +29,7 @@ void sender(char *key, int key_len, char *message)
     abort();
   
   {
-    int message_len = MESSAGE_SIZE + 64;
+    size_t message_len = MESSAGE_SIZE + 64U;
     char* M = malloc(message_len);
     if (M == 0) abort();
     

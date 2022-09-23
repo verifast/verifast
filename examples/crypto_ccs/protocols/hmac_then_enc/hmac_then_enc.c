@@ -44,7 +44,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
 
   {
     aes_context aes_context;
-    int enc_len = (int) msg_len + 64;
+    size_t enc_len = msg_len + 64;
     char* enc_msg = malloc(enc_len);
     if (enc_msg == 0) abort();
 
@@ -66,7 +66,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
     //@ list<crypto_char> enc_msg_ccs = append(msg_ccs, hmac_ccs);
     //@ assert crypto_chars(secret, enc_msg, msg_len + 64, enc_msg_ccs);
 
-    int message_len = 16 + enc_len;
+    size_t message_len = 16U + enc_len;
     char* message = malloc(message_len);
     if (message == 0) abort();
      
@@ -132,7 +132,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
     net_send(&socket, message, (unsigned int) message_len);
     //@ chars_to_secret_crypto_chars(enc_msg + msg_len, 64);
     //@ crypto_chars_join(enc_msg);
-    zeroize(enc_msg, enc_len);
+    zeroize(enc_msg, (int)enc_len);
     free(enc_msg);
     free(message);
   }
@@ -165,7 +165,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
   int socket2;
 
   int size;
-  int enc_size;
+  size_t enc_size;
   char hmac[64];
   unsigned int iv_off = 0;
   char iv[16];
@@ -179,11 +179,11 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     abort();
 
   {
-    int max_size = 20 + MAX_SIZE + 64;
+    size_t max_size = 20U + MAX_SIZE + 64;
     char *buffer = malloc (max_size); if (buffer == 0) abort();
     size = net_recv(&socket2, buffer, (unsigned int) max_size);
     if (size <= 16 + 64) abort();
-    enc_size = size - 16;
+    enc_size = (size_t)size - 16;
     if (enc_size < MINIMAL_STRING_SIZE || enc_size > MAX_SIZE) abort();
     if (enc_size - 64 < MINIMAL_STRING_SIZE) abort();
     char *buffer_dec = malloc (enc_size); if (buffer_dec == 0) abort();
@@ -298,12 +298,12 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     //@ chars_join(buffer);
     free(buffer);
     zeroize(hmac, 64);
-    zeroize(buffer_dec, enc_size - 64);
+    zeroize(buffer_dec, (int)enc_size - 64);
     zeroize(buffer_dec + enc_size - 64, 64);
     free(buffer_dec);
   }
   net_close(socket2);
   net_close(socket1);
-  return enc_size - 64;
+  return (int)enc_size - 64;
   //@ close principal(receiver, _);
 }

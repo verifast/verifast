@@ -42,7 +42,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
   if(net_set_block(socket) != 0)
     abort();
   {
-    int message_len = 16 + (int) msg_len + 64;
+    size_t message_len = 16U + msg_len + 64;
     char* message = malloc(message_len);
     if (message == 0) abort();
 
@@ -158,7 +158,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
     abort();
 
   {
-    int max_size = 16 + MAX_SIZE + 64;
+    size_t max_size = 16U + MAX_SIZE + 64;
     char *buffer = malloc (max_size); if (buffer == 0) abort();
     size = net_recv(&socket2, buffer, (unsigned int) max_size);
     if (size <= 16 + 64) abort();

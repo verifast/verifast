@@ -92,7 +92,7 @@ struct item *symmetric_encryption(struct item *key, struct item *payload)
         payload->size < MINIMAL_STRING_SIZE)
       abort_crypto_lib("Gcm encryption failed: incorrect sizes");
     result->size = TAG_LENGTH + GCM_IV_SIZE + GCM_MAC_SIZE + payload->size;
-    result->content = malloc(result->size);
+    result->content = malloc((size_t)result->size);
     //@ assert result->content |-> ?r_cont &*& result->size |-> ?r_size;
     if (result->content == 0)
       abort_crypto_lib("Malloc failed");
@@ -278,7 +278,7 @@ struct item *symmetric_decryption(struct item *key, struct item *item)
                                  size, ?enc_ccs); @*/
     //@ assert cg_ccs == append(mac_ccs, enc_ccs);
     result->size = size;
-    result->content = malloc(size);
+    result->content = malloc((size_t)size);
     if (result->content == 0) abort_crypto_lib("Malloc failed");
     //@ assert result->content |-> ?r_cont &*& result->size |-> size;
     //@ if (col) enc_cg = ccs_for_cg_sur(cg_ccs, tag_auth_encrypted);

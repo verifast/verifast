@@ -183,9 +183,9 @@ void server(int server, int sender, int receiver,
     // 2. B -> S. B, ENC(KB, {A, NA, NB})
     int prefix_size = ID_SIZE + NONCE_SIZE;
     int d_size = prefix_size + NONCE_SIZE;
-    char *decrypted = malloc(d_size); if (decrypted == 0) abort();
+    char *decrypted = malloc((size_t)d_size); if (decrypted == 0) abort();
     int m_size = ID_SIZE + 16 + d_size;
-    char *message = malloc(m_size); if (message == 0) abort();
+    char *message = malloc((size_t)m_size); if (message == 0) abort();
 
     // Receive the message
     net_recv(&socket_in, message, (unsigned int) m_size);
@@ -334,12 +334,12 @@ void server(int server, int sender, int receiver,
     // 3. S -> A. ENC(KA, {B, KAB, NA, NB}), ENC(KB, {A, KAB})
     int size1 = 16 + ID_SIZE + KEY_SIZE + NONCE_SIZE + NONCE_SIZE;
     int size2 = 16 + ID_SIZE + KEY_SIZE;
-    char *enc1 = malloc(size1); if (enc1 == 0) abort();
-    char *enc2 = malloc(size2); if (enc2 == 0) abort();
+    char *enc1 = malloc((size_t)size1); if (enc1 == 0) abort();
+    char *enc2 = malloc((size_t)size2); if (enc2 == 0) abort();
     {
       //ENC(KA, {B, KAB, NA, NB})
       int s = ID_SIZE + KEY_SIZE + NONCE_SIZE + NONCE_SIZE;
-      char* m = malloc(s); if (m == 0) abort();
+      char* m = malloc((size_t)s); if (m == 0) abort();
       write_identifier(m, receiver);
       //@ cs_to_ccs_crypto_chars(m, identifier(receiver));
       //@ chars_to_secret_crypto_chars(m, ID_SIZE);
@@ -447,7 +447,7 @@ void server(int server, int sender, int receiver,
     {
       //ENC(KB, {A, KAB})
       int s = ID_SIZE + KEY_SIZE;
-      char* m = malloc(s); if (m == 0) abort();
+      char* m = malloc((size_t)s); if (m == 0) abort();
       write_identifier(m, sender);
       //@ crypto_chars_to_chars(m, ID_SIZE);
       //@ chars_to_secret_crypto_chars(m, ID_SIZE);
@@ -507,7 +507,7 @@ void server(int server, int sender, int receiver,
 
     {
       int size = size1 + size2;
-      char *message = malloc(size); if (message == 0) abort();
+      char *message = malloc((size_t)size); if (message == 0) abort();
       //@ chars_to_crypto_chars(message, size1);
       //@ chars_to_crypto_chars(message + size1, size2);
       crypto_memcpy(message, enc1, (unsigned int) size1);
@@ -607,7 +607,7 @@ void sender(int server, int sender, int receiver,
 
   {
     // 1. A -> B. A, NA
-    char* message = malloc(ID_SIZE + NONCE_SIZE); if (message == 0) abort();
+    char* message = malloc((size_t)(ID_SIZE + NONCE_SIZE)); if (message == 0) abort();
 
     write_identifier(message, sender);
     //@ crypto_chars_split(message, ID_SIZE);
@@ -625,9 +625,9 @@ void sender(int server, int sender, int receiver,
     int size1 = ID_SIZE + KEY_SIZE + NONCE_SIZE + NONCE_SIZE;
     int size2 = 16 + ID_SIZE + KEY_SIZE;
     int size = 16 + size1 + size2;
-    char *msg = malloc(size); if (msg == 0) abort();
-    char *dec = malloc(size1); if (dec == 0) abort();
-    MB = malloc(size2); if (MB == 0) abort();
+    char *msg = malloc((size_t)size); if (msg == 0) abort();
+    char *dec = malloc((size_t)size1); if (dec == 0) abort();
+    MB = malloc((size_t)size2); if (MB == 0) abort();
 
     net_recv(&socket_in, msg, (unsigned int) size);
     //@ chars_split(msg, 16 + size1);
@@ -810,7 +810,7 @@ void sender(int server, int sender, int receiver,
     // 4. A -> B. ENC(KB, {A, KAB}), ENC(KAB, NB)
     int size1 = 16 + ID_SIZE + KEY_SIZE;
     int size2 = 16 + NONCE_SIZE;
-    char *enc2 = malloc(size2); if (enc2 == 0) abort();
+    char *enc2 = malloc((size_t)size2); if (enc2 == 0) abort();
     {
       //@ close principal(sender, _);
       encrypt(&havege_state, generated_key, NB, NONCE_SIZE, enc2);
@@ -855,7 +855,7 @@ void sender(int server, int sender, int receiver,
 
     {
       int size = size1 + size2;
-      char *message = malloc(size); if (message == 0) abort();
+      char *message = malloc((size_t)size); if (message == 0) abort();
       //@ chars_to_crypto_chars(message, size1);
       crypto_memcpy(message, MB, (unsigned int) size1);
       //@ crypto_chars_to_chars(MB, size1);
@@ -926,9 +926,9 @@ void receiver_(int socket_in, int sender, int receiver, int server,
   int size1 = ID_SIZE + KEY_SIZE;
   int size2 = NONCE_SIZE;
   int size = 16 + size1 + 16 + size2;
-  char *msg = malloc(size); if (msg == 0) abort();
-  char *dec1 = malloc(size1); if (dec1 == 0) abort();
-  char *dec2 = malloc(size2); if (dec2 == 0) abort();
+  char *msg = malloc((size_t)size); if (msg == 0) abort();
+  char *dec1 = malloc((size_t)size1); if (dec1 == 0) abort();
+  char *dec2 = malloc((size_t)size2); if (dec2 == 0) abort();
   net_recv(&socket_in, msg, (unsigned int) size);
   //@ chars_split(msg, 16);
   //@ chars_split(msg + 16, size1);
@@ -1136,7 +1136,7 @@ void receiver(int server, int sender, int receiver,
   {
     // 1. A -> B. A, NA
     int size = ID_SIZE + NONCE_SIZE;
-    char* message = malloc(size); if (message == 0) abort();
+    char* message = malloc((size_t)size); if (message == 0) abort();
     net_recv(&socket_in, message, (unsigned int) size);
     //@ chars_split(message, ID_SIZE);
     //@ public_chars(message, ID_SIZE);
@@ -1190,9 +1190,9 @@ void receiver(int server, int sender, int receiver,
     // 2. B -> S. B, ENC(KB, {A, NA, NB})
     int prefix_size = ID_SIZE + NONCE_SIZE;
     int p_size = prefix_size + NONCE_SIZE;
-    char *plaintext = malloc(p_size); if (plaintext == 0) abort();
+    char *plaintext = malloc((size_t)p_size); if (plaintext == 0) abort();
     int m_size = ID_SIZE + 16 + p_size;
-    char *message = malloc(m_size); if (message == 0) abort();
+    char *message = malloc((size_t)m_size); if (message == 0) abort();
 
     //@ list<crypto_char> sid_ccs = cs_to_ccs(identifier(sender));
     //@ list<crypto_char> rid_ccs = cs_to_ccs(identifier(receiver));

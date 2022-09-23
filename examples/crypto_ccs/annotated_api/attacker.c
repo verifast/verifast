@@ -202,11 +202,11 @@ void attacker_send_keys(havege_state *havege_state, void* socket)
   r_u_int_with_bounds(havege_state, &temp, 1024, 8192);
   //@ open_havege_util(pub, pred, attacker);
   key_size = temp;
-  char* key = malloc((int) key_size);
+  char* key = malloc(key_size);
   if ((key) == 0) abort();
-  char* pub_key = malloc((int) key_size);
+  char* pub_key = malloc(key_size);
   if ((pub_key) == 0) abort();
-  char* priv_key = malloc((int) key_size);
+  char* priv_key = malloc(key_size);
   if ((priv_key) == 0) abort();
 
   //@ close random_request(attacker, temp, true);

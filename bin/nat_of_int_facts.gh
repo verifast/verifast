@@ -1,0 +1,51 @@
+#ifndef NAT_OF_INT_FACTS_H
+#define NAT_OF_INT_FACTS_H
+
+#include <nat.gh>
+
+fixpoint bool is_decimal_digit(char c) { return '0' <= c && c <= '9'; }
+
+fixpoint nat nat_of_digit(char c) {
+    return
+        c == '0' ? N0 :
+        c == '1' ? N1 :
+        c == '2' ? N2 :
+        c == '3' ? N3 :
+        c == '4' ? N4 :
+        c == '5' ? N5 :
+        c == '6' ? N6 :
+        c == '7' ? N7 :
+        c == '8' ? N8 :
+        c == '9' ? N9 :
+        c == 'A' || c == 'a' ? NxA :
+        c == 'B' || c == 'b' ? NxB :
+        c == 'C' || c == 'c' ? NxC :
+        c == 'D' || c == 'd' ? NxD :
+        c == 'E' || c == 'e' ? NxE :
+        c == 'F' || c == 'f' ? NxF :
+        N0;
+}
+
+fixpoint nat nat_of_decimal_digits(list<char> cs) {
+    switch (cs) {
+        case nil: return N0;
+        case cons(c, cs0): return nat_plus(nat_times(nat_of_decimal_digits(cs0), N10), nat_of_digit(c));
+    }
+}
+
+fixpoint int int_of_digit(char c) {
+    return '0' <= c && c <= '9' ? c - '0' : 'A' <= c && c <= 'F' ? c - 'A' + 10 : c - 'a' + 10;
+}
+
+fixpoint int int_of_decimal_digits(list<char> cs) {
+    switch (cs) {
+        case nil: return 0;
+        case cons(c, cs0): return int_of_decimal_digits(cs0) * 10 + int_of_digit(c);
+    }
+}
+
+lemma void nat_of_int_of_decimal_digits(list<char> digits);
+    requires forall(digits, is_decimal_digit) == true;
+    ensures nat_of_int(int_of_decimal_digits(reverse(digits))) == nat_of_decimal_digits(reverse(digits));
+
+#endif

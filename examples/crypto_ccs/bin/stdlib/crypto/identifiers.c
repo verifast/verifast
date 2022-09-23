@@ -1,6 +1,6 @@
 #include "identifiers.h"
 
-#include "../stdlib.h"
+#include <stdlib.h>
 #include "../crypto_string.h"
 
 #include "crypto.h"

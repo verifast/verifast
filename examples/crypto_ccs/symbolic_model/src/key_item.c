@@ -170,10 +170,10 @@ void retreive_keys(pk_context *ctx, struct item **public, struct item **private)
 
   int size = TAG_LENGTH + RSA_SERIALIZED_KEY_SIZE;
   pub_i->size = size;
-  pub_i->content = malloc(pub_i->size);
+  pub_i->content = malloc((size_t)pub_i->size);
   if (pub_i->content == 0) {abort_crypto_lib("Malloc failed");}
   priv_i->size = size;
-  priv_i->content = malloc(priv_i->size);
+  priv_i->content = malloc((size_t)priv_i->size);
   if (priv_i->content == 0) {abort_crypto_lib("Malloc failed");}
 
   write_tag(pub_i->content, TAG_PUBLIC_KEY);

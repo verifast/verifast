@@ -26,7 +26,7 @@ void *malloc_wrapper(int size)
   if (size > MAX_PACKAGE_SIZE)
     abort_crypto_lib("Requested humongous malloc!!!!!!!!");
 
-  void* result = malloc(size);
+  void* result = malloc((size_t)size);
   if (result == 0)
     abort_crypto_lib("Malloc failed");
 

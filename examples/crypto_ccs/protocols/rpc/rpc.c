@@ -35,7 +35,7 @@ void client(char *key, int key_len, char *request, char *response)
     abort();
 
   {
-    int message_len = 1 + PACKAGE_SIZE + 64;
+    size_t message_len = 1U + PACKAGE_SIZE + 64U;
     char* message = malloc(message_len);
     if (message == 0) abort();
 
@@ -313,7 +313,7 @@ void server(char *key, int key_len, char *request, char *response)
   {
     char hmac[64];
 
-    int message_len = 1 + 2 * PACKAGE_SIZE + 64;
+    size_t message_len = 1U + 2U * PACKAGE_SIZE + 64;
     char* message = malloc(message_len);
     if (message == 0) abort();
     //@ chars_split(message, 1 + 2 * PACKAGE_SIZE);

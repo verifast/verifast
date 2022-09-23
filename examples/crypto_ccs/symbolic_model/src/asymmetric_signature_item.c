@@ -130,7 +130,7 @@ struct item *asymmetric_signature(struct item *key, struct item *payload)
     if (olen < MINIMAL_STRING_SIZE)
       abort_crypto_lib("Assymetric signing failed: output to small");
     result->size = TAG_LENGTH + (int) olen;
-    result->content = malloc(result->size);
+    result->content = malloc((size_t)result->size);
     if (result->content == 0) {abort_crypto_lib("Malloc failed");}
     write_tag(result->content, TAG_ASYMMETRIC_SIG);
     //@ assert result->content |-> ?cont &*& result->size |-> ?size;

@@ -163,9 +163,9 @@ int main(int argc, char **argv) //@ : main_full(main_app)
     char* pub_key;
     
     unsigned int key_size = (unsigned int) 8 * KEY_SIZE;
-    priv_key = malloc((int) key_size);
+    priv_key = malloc(key_size);
     if (priv_key == 0) abort();
-    pub_key = malloc((int) key_size);
+    pub_key = malloc(key_size);
     if (pub_key == 0) abort();
     
     //@ close pk_context(&context);

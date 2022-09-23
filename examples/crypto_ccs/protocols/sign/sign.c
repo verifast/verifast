@@ -41,7 +41,7 @@ void sender(int recvr, char *key, int key_len, char *msg)
   {
     unsigned int sign_len;
     int max_message_len = 4 + MSG_SIZE + key_len;
-    char* M = malloc(max_message_len);
+    char* M = malloc((size_t)max_message_len);
     if (M == 0) abort();
 
     // fill in plain text
@@ -143,7 +143,7 @@ void receiver(int recvr, char *key, int key_len, char *msg)
     int max_size = 4 + MSG_SIZE + MAX_KEY_SIZE;
     char hash[64];
     int* temp;
-    char *buffer = malloc (max_size); if (buffer == 0) abort();
+    char *buffer = malloc ((size_t)max_size); if (buffer == 0) abort();
     int size = net_recv(&socket2, buffer, (unsigned int) max_size);
     if (size <= 4 + MSG_SIZE) abort();
     if (64 * 8 > key_len) abort();

@@ -118,7 +118,7 @@ struct item *asymmetric_encryption(struct item *key, struct item *payload)
 
     // Create item
     result->size = TAG_LENGTH + (int) olen;
-    result->content = malloc(result->size);
+    result->content = malloc((size_t)result->size);
     if (result->content == 0) {abort_crypto_lib("Malloc failed");}
     write_tag(result->content, TAG_ASYMMETRIC_ENC);
     //@ assert result->content |-> ?cont &*& result->size |-> ?size;
@@ -233,7 +233,7 @@ struct item *asymmetric_decryption(struct item *key, struct item *item, char tag
     result->size = (int) olen;
     if ((int) olen <= MINIMAL_STRING_SIZE)
       abort_crypto_lib("Decryption: Incorrect size");
-    result->content = malloc(result->size);
+    result->content = malloc((size_t)result->size);
     if (result->content == 0) {abort_crypto_lib("Malloc failed");}
     //@ close [f]world(pub, key_clsfy);
     //@ assert u_integer(&olen, ?olen_val);
