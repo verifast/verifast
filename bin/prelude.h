@@ -84,6 +84,10 @@ lemma void integer__distinct(void *i, void *j);
     requires integer_(i, ?size1, ?signed1, ?v1) &*& integer_(j, ?size2, ?signed2, ?v2);
     ensures integer_(i, size1, signed1, v1) &*& integer_(j, size2, signed2, v2) &*& i != j;
 
+lemma void integer___unique(void *p);
+    requires [?f]integer__(p, ?size, ?signed_, ?v);
+    ensures [f]integer__(p, size, signed_, v) &*& f <= 1;
+
 lemma void integer__unique(void *p);
     requires [?f]integer_(p, ?size, ?signed_, ?v);
     ensures [f]integer_(p, size, signed_, v) &*& f <= 1;

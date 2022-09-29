@@ -9,6 +9,7 @@ cd bin
   cd ..
 cd ..
 cd examples
+  verifast -shared uniqueness.c
   verifast unions.c
   verifast unions2.c
   cd busywaiting
