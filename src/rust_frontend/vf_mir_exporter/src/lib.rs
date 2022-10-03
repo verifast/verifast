@@ -317,7 +317,7 @@ mod vf_mir_builder {
                 let annots = self
                     .annots
                     .drain_filter(|annot| {
-                        body_span.contains(crate::comments_utils::comment_span(&annot))
+                        body_span.contains(crate::span_utils::comment_span(&annot))
                     })
                     .collect::<LinkedList<_>>();
                 let mut body_cpn = bodies_cpn.reborrow().get(idx.try_into().unwrap());
@@ -392,8 +392,12 @@ mod vf_mir_builder {
                 Self::encode_basic_block(tcx, basic_block_idx, basic_block, basic_block_cpn);
             }
 
-            let span_cpn = body_cpn.init_span();
+            let span_cpn = body_cpn.reborrow().init_span();
             Self::encode_span_data(tcx, &body.span.data(), span_cpn);
+
+            let imp_span_cpn = body_cpn.init_imp_span();
+            let imp_span_data = crate::span_utils::body_imp_span(body);
+            Self::encode_span_data(tcx, &imp_span_data, imp_span_cpn);
         }
 
         fn encode_span_data(
@@ -480,10 +484,10 @@ mod vf_mir_builder {
             annots: &mut LinkedList<Comment>,
             body_cpn: body_cpn::Builder<'_>,
         ) {
-            let body_contract_span = crate::vf_annot_utils::body_contract_span(&body);
+            let body_contract_span = crate::span_utils::body_contract_span(&body);
             let contract_annots = annots
                 .drain_filter(|annot| {
-                    body_contract_span.contains(crate::comments_utils::comment_span(&annot))
+                    body_contract_span.contains(crate::span_utils::comment_span(&annot))
                 })
                 .collect::<LinkedList<_>>();
 
@@ -970,24 +974,25 @@ mod mir_utils {
     }
 }
 
-mod vf_annot_utils {
+mod span_utils {
     use rustc_ast::util::comments::Comment;
     use rustc_middle::mir;
-    use rustc_span::SpanData;
+    use rustc_span::{BytePos, SpanData, SyntaxContext};
     use tracing::debug;
 
-    pub fn is_vf_annot(cmt: &Comment) -> bool {
-        if let Some(first_line) = cmt.lines.first() {
-            if first_line.starts_with("//@") {
-                return true;
-            } else if first_line.starts_with("/*@") {
-                let last_line = cmt.lines.last().unwrap();
-                if last_line.ends_with("@*/") {
-                    return true;
-                }
-            }
-        }
-        false
+    pub fn body_imp_span<'tcx>(body: &mir::Body<'tcx>) -> SpanData {
+        let body_imp_span = body.span.with_lo(
+            body.local_decls[mir::RETURN_PLACE]
+                .source_info
+                .span
+                .data()
+                .lo,
+        );
+        debug!(
+            "The body implementation span for {:?} at {:?} is {:?}",
+            body.source.instance, body.span, body_imp_span
+        );
+        body_imp_span.data()
     }
 
     pub fn body_contract_span<'tcx>(body: &mir::Body<'tcx>) -> SpanData {
@@ -1006,11 +1011,6 @@ mod vf_annot_utils {
         );
         body_contract_span.data()
     }
-}
-
-mod comments_utils {
-    use rustc_ast::util::comments::Comment;
-    use rustc_span::{BytePos, SpanData, SyntaxContext};
 
     /** BUG @Nima: In the case of BlockComment this calculation is wrong. We cannot calculate the span rightly.
      * The new line characters have been removed from the lines of the comment and we do not know if they are '\n' or "\r\n".
@@ -1034,6 +1034,24 @@ mod comments_utils {
             ctxt: SyntaxContext::root(),
             parent: None,
         }
+    }
+}
+
+mod vf_annot_utils {
+    use rustc_ast::util::comments::Comment;
+
+    pub fn is_vf_annot(cmt: &Comment) -> bool {
+        if let Some(first_line) = cmt.lines.first() {
+            if first_line.starts_with("//@") {
+                return true;
+            } else if first_line.starts_with("/*@") {
+                let last_line = cmt.lines.last().unwrap();
+                if last_line.ends_with("@*/") {
+                    return true;
+                }
+            }
+        }
+        false
     }
 }
 // TODO @Nima: Some mut vars might not need to be mut.

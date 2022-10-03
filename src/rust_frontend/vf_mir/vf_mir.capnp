@@ -284,10 +284,11 @@ struct Body {
     defKind @0: DefKind;
     defPath @1: Text;
     contract @2: Contract;
-    argCount @3: UInt32; #Todo @Nima: Change this to UInt64
+    argCount @3: UInt32;
     localDecls @4: List(LocalDecl);
     basicBlocks @5: List(BasicBlock);
     span @6: SpanData;
+    impSpan @7: SpanData;
 }
 
 struct VfMir {

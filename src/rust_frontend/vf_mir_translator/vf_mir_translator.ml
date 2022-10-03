@@ -30,6 +30,36 @@ module TestDataHardCoded = struct
         Ast.Package )
 end
 
+module IntAux = struct
+  module Make (StdintMod : sig
+    type t
+
+    val zero : t
+    val max_int : t
+    val min_int : t
+    val ( - ) : t -> t -> t
+    val ( + ) : t -> t -> t
+    val to_int : t -> int
+    val of_int : int -> t
+  end) =
+  struct
+    open StdintMod
+
+    let try_add (a : t) (b : t) =
+      if a >= zero then
+        if b <= max_int - a then Ok (a + b) else Error (`IntAuxAdd "Overflow")
+      else if b >= min_int - a then Ok (a + b)
+      else Error (`IntAuxAdd "Underflow")
+
+    let try_to_int (a : t) =
+      let i = to_int a in
+      if a = of_int i then Ok i else Error `IntAuxToInt
+  end
+
+  module Uint64 = Make (Stdint.Uint64)
+  module Uint32 = Make (Stdint.Uint32)
+end
+
 module Mir = struct
   type mutability = Mut | Not
 
@@ -116,6 +146,26 @@ module TrName = struct
   let make_tmp_var_name base_name = "temp_var_" ^ base_name
 end
 
+module type DECLS = sig
+  type decl
+
+  val add_decl : decl -> unit
+  val decls : unit -> decl list
+end
+
+module Decls (Args : sig
+  type decl
+end) : DECLS with type decl = Args.decl = struct
+  type decl = Args.decl
+
+  let ds : decl list ref = ref []
+
+  let add_decl (decl : decl) =
+    if not @@ List.exists (( = ) decl) !ds then ds := !ds @ [ decl ]
+
+  let decls _ = !ds
+end
+
 module type VF_MIR_TRANSLATOR_ARGS = sig
   val data_model_opt : Ast.data_model option
   val report_should_fail : string -> Ast.loc0 -> unit
@@ -129,7 +179,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   module VfMirRd = VfMirCapnpAlias.VfMirRd
   open VfMirCapnpAlias
 
-  module AuxHeaders = struct
+  module TyDecls = Decls (struct
+    type decl = Ast.decl
+  end)
+
+  module Headers = Decls (struct
+    type decl = string
+  end)
+
+  module HeadersAux = struct
     module type AUX_HEADERS_ARGS = sig
       include VF_MIR_TRANSLATOR_ARGS
 
@@ -142,7 +200,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
       let empty : t = []
 
-      let parse_aux_header (header_name : string) =
+      let parse_header (header_name : string) =
         let header_path = Filename.concat Args.aux_headers_dir header_name in
         (* Todo @Nima: should we catch the exceptions and return Error here? *)
         let headers, decls =
@@ -166,6 +224,54 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   module GhostTyDecls = Map.Make (String)
 
   type gh_ty_decls = Ast.decl GhostTyDecls.t
+
+  let translate_path_buf (pbuf_cpn : PathBufRd.t) = PathBufRd.inner_get pbuf_cpn
+
+  let translate_real_file_name (real_fname_cpn : RealFileNameRd.t) =
+    let open RealFileNameRd in
+    match get real_fname_cpn with
+    | LocalPath path_buf_cpn -> Ok (translate_path_buf path_buf_cpn)
+    | Remapped -> failwith "Todo: RealFileName Remapped"
+    | Undefined _ -> Error (`TrRealFileName "Unknown RealFileName kind")
+
+  let translate_file_name (fname_cpn : FileNameRd.t) =
+    let open FileNameRd in
+    match get fname_cpn with
+    | Real real_fname_cpn -> translate_real_file_name real_fname_cpn
+    | QuoteExpansion _ -> failwith "Todo: FileName QuoteExpansion"
+    | Undefined _ -> Error (`TrFileName "Unknown FileName kind")
+
+  let translate_source_file (src_file_cpn : SourceFileRd.t) =
+    let open SourceFileRd in
+    let name_cpn = name_get src_file_cpn in
+    translate_file_name name_cpn
+
+  let translate_char_pos (cpos_cpn : CharPosRd.t) =
+    let open CharPosRd in
+    let cpos = pos_get cpos_cpn in
+    (* Make it 1-based *)
+    let cpos = IntAux.Uint64.try_add cpos Stdint.Uint64.one in
+    cpos
+
+  let translate_loc (loc_cpn : LocRd.t) =
+    let open LocRd in
+    let file_cpn = file_get loc_cpn in
+    let* file = translate_source_file file_cpn in
+    let line = line_get loc_cpn in
+    let col_cpn = col_get loc_cpn in
+    let* col = translate_char_pos col_cpn in
+    let* line = IntAux.Uint64.try_to_int line in
+    let* col = IntAux.Uint64.try_to_int col in
+    let src_pos = (file, line, col) in
+    Ok src_pos
+
+  let translate_span_data (span_cpn : SpanDataRd.t) =
+    let open SpanDataRd in
+    let lo_cpn = lo_get span_cpn in
+    let* lo = translate_loc lo_cpn in
+    let hi_cpn = hi_get span_cpn in
+    let* hi = translate_loc hi_cpn in
+    Ok (Ast.Lexed (lo, hi))
 
   let translate_contract (contract_cpn : ContractRd.t) =
     let annots_cpn = ContractRd.annotations_get_list contract_cpn in
@@ -319,8 +425,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   let translate_local_decl_id (local_decl_id_cpn : LocalDeclIdRd.t) =
     LocalDeclIdRd.name_get local_decl_id_cpn
 
-  let translate_local_decl (local_decl_cpn : LocalDeclRd.t)
-      (gh_ty_decls : gh_ty_decls ref) =
+  let translate_local_decl (local_decl_cpn : LocalDeclRd.t) =
+    let gh_ty_decls : gh_ty_decls ref = ref GhostTyDecls.empty in
     let open LocalDeclRd in
     let mutability_cpn = mutability_get local_decl_cpn in
     let* mutability = translate_mutability mutability_cpn in
@@ -609,7 +715,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     translate_statement_kind kind_cpn gh_ty_decls
 
   let translate_basic_block (ret_place_id : string)
-      (bblock_cpn : BasicBlockRd.t) (gh_ty_decls : gh_ty_decls ref) =
+      (bblock_cpn : BasicBlockRd.t) =
+    let gh_ty_decls : gh_ty_decls ref = ref GhostTyDecls.empty in
     let open BasicBlockRd in
     let id_cpn = id_get bblock_cpn in
     let id = translate_basic_block_id id_cpn in
@@ -637,13 +744,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let dloc = Ast.Lexed Ast.dummy_loc0 in
     Ast.LabelStmt (dloc, id) :: (statements @ terminator)
 
-  let translate_body (body_cpn : BodyRd.t) (gh_ty_decls : gh_ty_decls ref) =
+  let translate_body (body_cpn : BodyRd.t) =
     let open BodyRd in
     let def_kind_cpn = def_kind_get body_cpn in
     let def_kind = DefKind.get def_kind_cpn in
     match def_kind with
     | DefKind.Fn ->
-        let dloc = Ast.Lexed Ast.dummy_loc0 in
         let def_path = def_path_get body_cpn in
         let name = TrName.translate_def_path def_path in
         let contract_cpn = contract_get body_cpn in
@@ -651,20 +757,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           translate_contract contract_cpn
         in
         let arg_count = arg_count_get body_cpn in
+        let* arg_count = IntAux.Uint32.try_to_int arg_count in
         let local_decls_cpn = local_decls_get_list body_cpn in
         let* local_decls =
-          ListAux.try_map
-            (fun ld_cpn -> translate_local_decl ld_cpn gh_ty_decls)
-            local_decls_cpn
+          ListAux.try_map translate_local_decl local_decls_cpn
         in
-        (* There should be always a return place for each function *)
+        (* There should always be a return place for each function *)
         let (ret_place_decl :: local_decls) = local_decls in
         let { Mir.id = ret_place_id; Mir.ty = ret_ty_info } = ret_place_decl in
         let ret_ty = Mir.basic_type_of ret_ty_info in
         let param_decls, local_decls =
-          ListAux.partitioni
-            (fun idx _ -> idx < Stdint.Uint32.to_int arg_count)
-            local_decls
+          ListAux.partitioni (fun idx _ -> idx < arg_count) local_decls
         in
         let vf_param_decls =
           List.map
@@ -679,15 +782,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let bblocks_cpn = basic_blocks_get_list body_cpn in
         let* bblocks =
           ListAux.try_map
-            (fun bblock_cpn ->
-              translate_basic_block ret_place_id bblock_cpn gh_ty_decls)
+            (fun bblock_cpn -> translate_basic_block ret_place_id bblock_cpn)
             bblocks_cpn
         in
         let vf_bblocks = List.map translate_to_vf_basic_block bblocks in
         let vf_bblocks = List.concat vf_bblocks in
+        let span_cpn = span_get body_cpn in
+        let* loc = translate_span_data span_cpn in
+        let imp_span_cpn = imp_span_get body_cpn in
+        let* imp_loc = translate_span_data imp_span_cpn in
         Ok
           (Ast.Func
-             ( dloc,
+             ( loc,
                Ast.Regular,
                [],
                Some ret_ty,
@@ -697,36 +803,31 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                fn_type_clause,
                pre_post,
                terminates,
-               Some (vf_local_decls @ vf_bblocks, dloc),
+               Some (vf_local_decls @ vf_bblocks, imp_loc),
                Ast.Static,
                Ast.Package ))
+    | DefKind.AssocFn -> failwith "Todo: MIR Body kind AssocFn"
     | _ -> Error (`TrBody "Unknown MIR Body kind")
 
   let translate_vf_mir (vf_mir_cpn : VfMirRd.t) =
     let job _ =
-      let module AuxHeaders = AuxHeaders.Make (struct
+      let module HeadersAux = HeadersAux.Make (struct
         include Args
 
         let aux_headers_dir = Filename.dirname Sys.executable_name
         let verbosity = 0
       end) in
-      let aux_headers = ref AuxHeaders.empty in
-      (* Todo @Nima: Translator functions should add auxiliary headers they need *)
-      aux_headers := [ "rust/std/alloc.h" ];
-      let gh_ty_decls = ref GhostTyDecls.empty in
       let bodies_cpn = VfMirRd.bodies_get_list vf_mir_cpn in
-      let* body_decls =
-        ListAux.try_map
-          (fun body_cpn -> translate_body body_cpn gh_ty_decls)
-          bodies_cpn
-      in
-      let* headers = ListAux.try_map AuxHeaders.parse_aux_header !aux_headers in
+      let* body_decls = ListAux.try_map translate_body bodies_cpn in
+      let ty_decls = TyDecls.decls () in
+      let decls = ty_decls @ body_decls in
+      let header_names = Headers.decls () in
+      let* headers = ListAux.try_map HeadersAux.parse_header header_names in
       let headers = List.concat headers in
-      let _, gh_ty_decls = GhostTyDecls.bindings !gh_ty_decls |> List.split in
-      let decls = gh_ty_decls @ body_decls in
       Ok (headers, [ Ast.PackageDecl (Ast.dummy_loc, "", [], decls) ])
     in
     match job () with
     | Ok res -> res
     | Error err -> failwith "Todo: translate_vf_mir Error handling"
 end
+(* aux_headers := [ "rust/std/alloc.h" ]; *)

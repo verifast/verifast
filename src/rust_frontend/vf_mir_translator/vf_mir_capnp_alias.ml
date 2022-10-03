@@ -2,6 +2,15 @@ module VfMirStub = Vf_mir.Make (Capnp.BytesMessage)
 module OptionRd = VfMirStub.Reader.Option
 module VfMirRd = VfMirStub.Reader.VfMir
 
+(* Source Spans *)
+module SpanDataRd = VfMirStub.Reader.SpanData
+module LocRd = SpanDataRd.Loc
+module SourceFileRd = LocRd.SourceFile
+module FileNameRd = SourceFileRd.FileName
+module RealFileNameRd = FileNameRd.RealFileName
+module PathBufRd = RealFileNameRd.PathBuf
+module CharPosRd = LocRd.CharPos
+
 (* Bodies *)
 module BodyRd = VfMirStub.Reader.Body
 module ContractRd = BodyRd.Contract
