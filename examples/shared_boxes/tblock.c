@@ -333,6 +333,7 @@ int main()
 
     int * d = malloc(sizeof(int));
     if(d == 0) { abort(); }
+    *d = 0;
     s -> data = d;
 
     //@ close create_tlock_ghost_arg(datainv(d));

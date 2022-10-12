@@ -1568,12 +1568,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | _ ->
       begin fun cont ->
         match init with
-          Default -> cont h env (ctxt#mk_intlit 0)
-        | Expr e -> eval_h h env e cont
-        | Unspecified -> cont h env (get_unique_var_symb "value" tp)
-        | Term t -> cont h env t
+          Default -> cont h env (Some (ctxt#mk_intlit 0))
+        | Expr e -> eval_h h env e $. fun h env value -> cont h env (Some value)
+        | Unspecified -> cont h env None
+        | Term t -> cont h env (Some t)
       end $. fun h env value ->
-      produce_points_to_chunk l h tp coef addr value $. fun h ->
+      produce_points_to_chunk_ l h tp coef addr value $. fun h ->
       cont h env
   
   let rec consume_c_object_core_core l coefpat addr tp h consumePaddingChunk consumeUninitChunk cont =
