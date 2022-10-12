@@ -243,6 +243,7 @@ mod vf_mir_builder {
     use body_cpn::basic_block_id as basic_block_id_cpn;
     use body_cpn::local_decl as local_decl_cpn;
     use body_cpn::local_decl_id as local_decl_id_cpn;
+    use body_cpn::source_info as source_info_cpn;
     use constant_cpn::constant_kind as constant_kind_cpn;
     use file_name_cpn::real_file_name as real_file_name_cpn;
     use loc_cpn::char_pos as char_pos_cpn;
@@ -522,8 +523,11 @@ mod vf_mir_builder {
             let id_cpn = local_decl_cpn.reborrow().init_id();
             Self::encode_local_decl_id(local_decl_idx, id_cpn);
 
-            let ty_cpn = local_decl_cpn.init_ty();
+            let ty_cpn = local_decl_cpn.reborrow().init_ty();
             Self::encode_ty(tcx, local_decl.ty, ty_cpn);
+
+            let src_info_cpn = local_decl_cpn.init_source_info();
+            Self::encode_source_info(tcx, &local_decl.source_info, src_info_cpn);
         }
 
         #[inline]
@@ -702,11 +706,23 @@ mod vf_mir_builder {
         fn encode_statement(
             tcx: TyCtxt<'tcx>,
             statement: &mir::Statement<'tcx>,
-            statement_cpn: statement_cpn::Builder<'_>,
+            mut statement_cpn: statement_cpn::Builder<'_>,
         ) {
-            // TODO @Nima: sourceInfo
+            let src_info_cpn = statement_cpn.reborrow().init_source_info();
+            Self::encode_source_info(tcx, &statement.source_info, src_info_cpn);
             let kind_cpn = statement_cpn.init_kind();
             Self::encode_statement_kind(tcx, &statement.kind, kind_cpn);
+        }
+
+        fn encode_source_info(
+            tcx: TyCtxt<'tcx>,
+            src_info: &mir::SourceInfo,
+            mut src_info_cpn: source_info_cpn::Builder<'_>,
+        ) {
+            debug!("Encoding SourceInfo {:?}", src_info);
+            let span_cpn = src_info_cpn.reborrow().init_span();
+            Self::encode_span_data(tcx, &src_info.span.data(), span_cpn);
+            let scope_cpn = src_info_cpn.init_scope();
         }
 
         fn encode_statement_kind(
@@ -745,9 +761,10 @@ mod vf_mir_builder {
         fn encode_terminator(
             tcx: TyCtxt<'tcx>,
             terminator: &mir::Terminator<'tcx>,
-            terminator_cpn: terminator_cpn::Builder<'_>,
+            mut terminator_cpn: terminator_cpn::Builder<'_>,
         ) {
-            //@ TODO @Nima: sourceInfo
+            let src_info_cpn = terminator_cpn.reborrow().init_source_info();
+            Self::encode_source_info(tcx, &terminator.source_info, src_info_cpn);
             let terminator_kind_cpn = terminator_cpn.init_kind();
             Self::encode_terminator_kind(tcx, &terminator.kind, terminator_kind_cpn);
         }
@@ -784,6 +801,8 @@ mod vf_mir_builder {
                         args,
                         destination,
                         cleanup,
+                        *from_hir_call,
+                        fn_span,
                         fn_call_data_cpn,
                     );
                 }
@@ -797,26 +816,24 @@ mod vf_mir_builder {
             args: &Vec<mir::Operand<'tcx>>,
             destination: &Option<(mir::Place<'tcx>, mir::BasicBlock)>,
             cleanup: &Option<mir::BasicBlock>,
+            from_hir_call: bool,
+            fn_span: &rustc_span::Span,
             mut fn_call_data_cpn: fn_call_data_cpn::Builder<'_>,
         ) {
-            // Todo @Nima: We should encode these data structures step by step
+            let func_cpn = fn_call_data_cpn.reborrow().init_func();
+            Self::encode_operand(tcx, func, func_cpn);
+            // Todo @Nima: Are these checks necessary
             let ty = match func {
-                mir::Operand::Constant(box mir::Constant { literal, .. }) => literal.ty(),
+                mir::Operand::Constant(box mir::Constant {
+                    literal: mir::ConstantKind::Ty(ty::Const { ty, .. }),
+                    ..
+                }) => ty,
                 _ => bug!("Function call terminator with callee operand {:?}", func),
             };
 
             let ty_kind = ty.kind();
             match ty_kind {
-                ty::FnDef(..) | ty::FnPtr(_) => {
-                    let ty_cpn = fn_call_data_cpn
-                        .reborrow()
-                        .init_func() // Operand builder
-                        .init_constant() // Constant builder
-                        .init_literal() // ConstantKind builder
-                        .init_ty() // Ty.Const builder
-                        .init_ty(); // Ty builder
-                    Self::encode_ty(tcx, ty, ty_cpn);
-                }
+                ty::FnDef(..) | ty::FnPtr(_) => (),
                 _ => bug!(
                     "Function call terminator with unexpected type kind {:?}",
                     ty_kind
@@ -845,6 +862,10 @@ mod vf_mir_builder {
                     Self::encode_basic_block_id(*dest_bblock_id, basic_block_id_cpn);
                 }
             }
+
+            fn_call_data_cpn.set_from_hir_call(from_hir_call);
+            let fn_span_data_cpn = fn_call_data_cpn.init_fn_span();
+            Self::encode_span_data(tcx, &fn_span.data(), fn_span_data_cpn);
         }
 
         fn encode_operand(
@@ -872,8 +893,10 @@ mod vf_mir_builder {
         fn encode_constant(
             tcx: TyCtxt<'tcx>,
             constant: &mir::Constant<'tcx>,
-            constant_cpn: constant_cpn::Builder<'_>,
+            mut constant_cpn: constant_cpn::Builder<'_>,
         ) {
+            let span_data_cpn = constant_cpn.reborrow().init_span();
+            Self::encode_span_data(tcx, &constant.span.data(), span_data_cpn);
             let literal_cpn = constant_cpn.init_literal();
             Self::encode_constant_kind(tcx, &constant.literal, literal_cpn);
         }

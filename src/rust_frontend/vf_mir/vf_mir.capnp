@@ -146,7 +146,11 @@ struct Ty {
 }
 
 struct Body {
-    struct SourceInfo {}
+    struct SourceInfo {
+        struct SourceScope {}
+        span @0: SpanData;
+        scope @1: SourceScope;
+    }
 
     struct Annotation {
         raw @0: Text;
@@ -171,6 +175,7 @@ struct Body {
         mutability @0: Mutability;
         id @1: LocalDeclId;
         ty @2: Ty;
+        sourceInfo @3: SourceInfo;
     }
 
     struct BasicBlockId {
@@ -198,7 +203,8 @@ struct Body {
                 }
             }
 
-            literal @0: ConstantKind;
+            span @0: SpanData;
+            literal @1: ConstantKind;
         }
 
         struct Operand {
@@ -260,6 +266,9 @@ struct Body {
                     args @1: List(Operand);
                     destination @2: Option(DestinationData);
                     cleanup @3: Option(BasicBlockId);
+                    fromHirCall @4: Bool;
+                    # The span of the function, without the dot and receiver e.g. `foo(a, b)` in `x.foo(a, b)`
+                    fnSpan @5: SpanData;
                 }
 
                 union {

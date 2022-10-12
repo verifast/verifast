@@ -31,6 +31,7 @@ module DestinationDataRd = FnCallDataRd.DestinationData
 module StatementRd = BasicBlockRd.Statement
 module StatementKindRd = StatementRd.StatementKind
 module RvalueRd = BasicBlockRd.Rvalue
+module SourceInfoRd = BodyRd.SourceInfo
 
 (* Types *)
 module TyRd = VfMirStub.Reader.Ty
