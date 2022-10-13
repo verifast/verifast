@@ -1516,11 +1516,15 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           Some (_, Some (_, fds), padding_predsymb_opt, _) -> fds, padding_predsymb_opt
         | _ -> static_error l (Printf.sprintf "Cannot produce an object of type 'struct %s' since this struct type has not been defined" sn) None
       in
+      let field_values_of_struct_as_value v =
+        let (_, _, getters, _) = List.assoc sn struct_accessor_map in
+        getters |> List.map (fun (_, getter) -> ctxt#mk_app getter [v])
+      in
       begin fun cont ->
         match init with
-          Expr (InitializerList (_, es)) -> cont h env (Some (Some es))
-        | Expr e -> eval_h h env e $. fun h env v -> cont h env None (* TODO: Do not ignore the value *)
-        | Term t -> cont h env None (* TODO: Do not ignore the value *)
+          Expr (InitializerList (_, es)) -> cont h env (Some (Some (`Exprs es)))
+        | Expr e -> eval_h h env e $. fun h env v -> cont h env (Some (Some (`Terms (field_values_of_struct_as_value v))))
+        | Term t -> cont h env (Some (Some (`Terms (field_values_of_struct_as_value t))))
         | Default -> cont h env (Some None) (* Initialize to default value (= zero) *)
         | Unspecified -> cont h env None (* Do not initialize; i.e. arbitrary initial value *)
       end $. fun h env inits ->
@@ -1539,8 +1543,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let init, inits =
             if gh = Ghost then Unspecified, inits else
             match inits with
-              Some (Some (e::es)) -> Expr e, Some (Some es)
-            | Some (None | Some []) -> Default, Some None
+              Some (Some (`Exprs (e::es))) -> Expr e, Some (Some (`Exprs es))
+            | Some (Some (`Terms (t::ts))) -> Term t, Some (Some (`Terms ts))
+            | Some (None | Some (`Exprs [] | `Terms [])) -> Default, Some None
             | _ -> Unspecified, None
           in
           match t with
@@ -1559,6 +1564,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | ProverInductive -> get_unique_var_symb_ "value" t (gh = Ghost)
                 end
               | Expr e -> eval_h h env e cont
+              | Term t -> cont h env t
               | Unspecified -> cont h env (get_unique_var_symb_ "value" t (gh = Ghost))
             end $. fun h env value ->
             assume_field h sn f t gh addr value coef $. fun h ->
@@ -1580,7 +1586,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let consume_char_array_chunk () =
       let pats = [TermPat addr; TermPat (sizeof l tp); dummypat] in
       consume_chunk rules h [] [] [] l ((if consumeUninitChunk then chars__pred_symb() else chars_pred_symb()), true) [] real_unit coefpat (Some 2) pats $. fun chunk h _ [_; _; cs] _ _ _ _ ->
-      cont [chunk] h cs
+      cont [chunk] h (get_unique_var_symb "value" tp)
     in
     match tp with
       StaticArrayType (elemTp, elemCount) ->
@@ -1614,20 +1620,22 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | _ ->
           cont [] h
       end $. fun chunks h ->
-      let rec iter chunks h fields =
+      let rec iter chunks vs h fields =
         match fields with
-          [] -> cont chunks h (get_unique_var_symb "struct_value" tp)
+          [] ->
+          let (_, csym, _, _) = List.assoc sn struct_accessor_map in
+          cont chunks h (ctxt#mk_app csym (List.rev vs))
         | (f, (lf, gh, t, offset, finit))::fields ->
           match t with
             StaticArrayType (_, _) | StructType _ | UnionType _ ->
-            consume_c_object_core_core l coefpat (field_address l addr sn f) t h true consumeUninitChunk $. fun chunks' h _ ->
-            iter (chunks' @ chunks) h fields
+            consume_c_object_core_core l coefpat (field_address l addr sn f) t h true consumeUninitChunk $. fun chunks' h value ->
+            iter (chunks' @ chunks) (value::vs) h fields
           | _ ->
              let (_, (_, _, _, _, f_symb, _, _)) = List.assoc (sn, f) field_pred_map in
              consume_chunk rules h [] [] [] l (f_symb, true) [] real_unit coefpat (Some 1) [TermPat addr; dummypat] $.
-             (fun chunk h coef [_; t] size ghostenv env env' -> iter (chunk::chunks) h fields)
+             (fun chunk h coef [_; t] size ghostenv env env' -> iter (chunk::chunks) (t::vs) h fields)
       in
-      iter chunks h fields
+      iter chunks [] h fields
     | _ ->
       consume_points_to_chunk_ rules h [] [] [] l tp real_unit coefpat addr dummypat consumeUninitChunk $. fun chunk h _ value _ _ _ ->
       cont [chunk] h value
