@@ -498,6 +498,7 @@ and
     LitPat of expr (* literal pattern *)
   | VarPat of loc * string (* var pattern, aangeduid met ? in code *)
   | DummyPat (*dummy pattern, aangeduid met _ in code *)
+  | DummyVarPat (* '? _' *)
   | CtorPat of loc * string * pat list
   | WCtorPat of loc * string * type_ list * string * type_ list * type_ list * pat list * expr option (* The expression if it is also a literal pattern *)
 and

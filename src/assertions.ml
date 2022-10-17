@@ -91,7 +91,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       LitPat e -> cont ghostenv env (prover_convert_term (eval None env e) tp0 tp)
     | VarPat (_, x) when not (List.mem_assoc x env) -> let t = get_unique_var_symb_ x tp ghost in cont (x::ghostenv) (update env x (prover_convert_term t tp tp0)) t
     | VarPat(_, x) -> cont (x :: ghostenv) env (List.assoc x env)
-    | DummyPat -> let t = get_unique_var_symb_ "dummy" tp ghost in cont ghostenv env t
+    | DummyPat|DummyVarPat -> let t = get_unique_var_symb_ "dummy" tp ghost in cont ghostenv env t
     | WCtorPat (l, i, targs, g, ts0, ts, pats, _) ->
       let (_, inductive_tparams, ctormap, _, _, _, _, _) = List.assoc i inductivemap in
       let (_, (_, _, _, _, (symb, _))) = List.assoc g ctormap in
@@ -437,6 +437,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | CoefAsn (l, DummyPat, body) ->
       produce_asn_core_with_post tpenv h ghostenv env body (get_dummy_frac_term ()) size_first size_all assuming cont_with_post
+    | CoefAsn (l, DummyVarPat, body) ->
+      static_error l "Producing a dummy variable pattern fraction is not yet supported" None
     | CoefAsn (l, coef', body) ->
       evalpat true ghostenv env coef' RealType RealType $. fun ghostenv env coef' ->
       produce_asn_core_with_post tpenv h ghostenv env body (real_mul l coef coef') size_first size_all assuming cont_with_post
@@ -479,7 +481,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match_terms (prover_convert_term (eval None env e) tp0 tp) t
     | TermPat t0 -> match_terms (prover_convert_term t0 tp0 tp) t
     | SrcPat (VarPat (_, x)) -> cont (x::ghostenv) ((x, prover_convert_term t tp tp0)::env) env'
-    | SrcPat DummyPat -> cont ghostenv env env'
+    | SrcPat (DummyPat|DummyVarPat) -> cont ghostenv env env'
     | SrcPat (WCtorPat (l, i, targs, g, ts0, ts, pats, _)) ->
       let t = prover_convert_term t tp tp0 in
       let (_, inductive_tparams, ctormap, _, _, _, _, _) = List.assoc i inductivemap in
@@ -597,6 +599,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           cont (Chunk (g', targs0, dummy', ts0, size0)) ghostenv env dummy' [Chunk (g', targs0, get_dummy_frac_term (), ts0, size0)]
         else
           cont chunk ghostenv env coef0 []
+      | SrcPat DummyVarPat ->
+        static_error l "Consuming a dummy variable pattern fraction is not yet supported" None
     in
     if not (predname_eq g g' && List.for_all2 unify targs targs0) then cont None else
     let inputParamCount = match inputParamCount with None -> max_int | Some n -> n in
@@ -915,6 +919,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | LitPat (WVar (_, x, LocalVar)) -> if List.mem_assoc x env then ctxt#pprint (List.assoc x env) else "_"
             | LitPat e -> if !patvars = [] || lists_disjoint !patvars (vars_used e) then ctxt#pprint (eval None env e) else "<expr>"
             | DummyPat -> "_"
+            | DummyVarPat -> "?_"
             | VarPat (_, x) -> patvars := x::!patvars; "_"
             | WCtorPat (_, i, targs, g, ts0, ts, pats, _) -> Printf.sprintf "%s(%s)" g (String.concat ", " (List.map string_of_pat pats))
           in

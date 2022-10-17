@@ -1311,6 +1311,12 @@ and
 | [< '(l, Kwd "["); coef = parse_pattern; '(_, Kwd "]"); p = parse_pointsto_expr >] -> CoefAsn (l, coef, p)
 | [< '(l, Kwd "ensures"); p = parse_asn >] -> EnsuresAsn (l, p)
 and
+  parse_pointsto_rhs = parser
+  [< '(_, Kwd "_") >] -> DummyPat
+| [< '(_, Kwd "?"); p = parser [< '(lx, Ident x) >] -> VarPat (lx, x) | [< '(_, Kwd "_") >] -> DummyVarPat >] -> p
+| [< '(_, Kwd "^"); e = parse_expr >] -> LitPat (WidenedParameterArgument e)
+| [< e = parse_cond_expr >] -> pat_of_expr e
+and
   parse_pattern = parser
   [< '(_, Kwd "_") >] -> DummyPat
 | [< '(_, Kwd "?"); '(lx, Ident x) >] -> VarPat (lx, x)
@@ -1337,7 +1343,7 @@ and
 and
   parse_pointsto_expr = parser
   [< e = parse_cond_expr; e = parser
-    [< '(l, Kwd "|->"); rhs = parse_pattern >] -> 
+    [< '(l, Kwd "|->"); rhs = parse_pointsto_rhs >] -> 
     begin match e with
        ReadArray (_, _, SliceExpr (_, _, _)) -> PointsTo (l, e, rhs)
      | ReadArray (lr, e0, e1) when language = CLang -> PointsTo (l, Deref(lr, Operation(lr, Add, [e0; e1])), rhs) 

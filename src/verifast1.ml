@@ -4946,7 +4946,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | VarPat (l, x) ->
       if List.mem_assoc x tenv then static_error l ("Pattern variable '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.") None;
       (p, [(x, t)])
-    | DummyPat -> (p, [])
+    | DummyPat|DummyVarPat -> (p, [])
     | CtorPat (l, g, pats) ->
       begin match resolve Ghost (pn,ilist) l g purefuncmap with
         Some (_, (_, _, rt, _, _)) ->
@@ -5392,6 +5392,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           (ForallAsn(l, ManifestTypeExpr(l, t), i, w), tenv, [])
       | Some _ -> static_error l ("bound variable " ^ i ^ " hides existing local variable " ^ i) None
       end
+    | CoefAsn (l, DummyVarPat, _) ->
+      static_error l "Dummy variable pattern fractions are not yet supported" None
     | CoefAsn (l, coef, body) ->
       begin match body with
         CoefAsn _ ->
@@ -5514,7 +5516,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       LitPat (WVar (_, x, LocalVar)) -> [x]
     | LitPat _ -> []
     | VarPat (_, x) -> [x]
-    | DummyPat -> []
+    | DummyPat|DummyVarPat -> []
     | WCtorPat (l, i, targs, g, ts0, ts, pats, _) ->
       List.concat (List.map fixed_pat_fixed_vars pats)
   
@@ -5598,7 +5600,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match coefpat with
           LitPat e -> assert_expr_fixed fixed e
         | VarPat (_, x) -> static_error l "Precision check failure: variable patterns not supported as coefficients." None
-        | DummyPat -> ()
+        | DummyPat|DummyVarPat -> ()
       end;
       check_pred_precise fixed p
   

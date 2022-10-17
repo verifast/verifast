@@ -2482,7 +2482,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               | (t :: actuals, LitPat(WVar(_, x, LocalVar)) :: pats) when List.mem_assoc x ps && not (List.mem_assoc x param_env) -> 
                   match_pats ((x, t) :: param_env) ((x, t) :: env) actuals pats (nb_inputs - 1)
               | (t :: actuals, LitPat(e) :: pats) -> if nb_inputs <= 0 || (definitely_equal t (eval None env e)) then match_pats param_env env actuals pats (nb_inputs - 1) else find_chunk (hdone @ [chunk]) hrest
-              | (t :: actuals, DummyPat :: pats) -> match_pats param_env env actuals pats (nb_inputs - 1)
+              | (t :: actuals, (DummyPat|DummyVarPat) :: pats) -> match_pats param_env env actuals pats (nb_inputs - 1)
               | (t :: actuals, VarPat(_, x) :: pats) -> match_pats param_env ((x, t) :: env) actuals pats (nb_inputs - 1)
             in
             let check_frac cont = match frac with
@@ -2579,7 +2579,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | LitPat(e) ->
           let newmust = List.filter (fun x -> (List.mem_assoc x ps) && not (List.mem x vars)) (vars_used e) in
           (vars, must @ newmust)
-        | DummyPat -> (vars, must)
+        | DummyPat|DummyVarPat -> (vars, must)
         | VarPat(_, _) -> (vars, must)) (vars,must) p_args
     in 
     let rec bound_param_vars asn vars must = match asn with
