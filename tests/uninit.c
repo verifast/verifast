@@ -1,5 +1,20 @@
 #include <stdlib.h>
 
+struct foo {
+  int x;
+  int y;
+};
+
+void calloc_test()
+//@ requires true;
+//@ ensures true;
+{
+  struct foo *f = calloc(1, sizeof(struct foo));
+  if (f == 0) abort();
+  assert(f->x == 0 && f->y == 0);
+  free(f);
+}
+
 void uninit_raw()
 //@ requires true;
 //@ ensures true;

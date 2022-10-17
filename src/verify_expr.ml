@@ -2300,8 +2300,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let t = type_of_expr es in
       expect_type lc (Some pure) (PtrType t) tp;
       verify_expr readonly h env xo e cont
-    | WFunCall (l, ("malloc" as g), [], [Operation (lmul, Mul, ([e; SizeofExpr (ls, es)] | [SizeofExpr (ls, es); e]))]) |
-      WFunCall (l as lmul, ("calloc" as g), [], [e; SizeofExpr (ls, es)]) ->
+    | WFunCall (l, ("malloc" as g), [], ([Operation (lmul, Mul, ([e; SizeofExpr (ls, es)] | [SizeofExpr (ls, es); e]))] as args)) |
+      WFunCall (l as lmul, ("calloc" as g), [], ([e; SizeofExpr (ls, es)] as args)) when (match args with [IntLit (_, n, _, _, _); _] when eq_big_int n unit_big_int -> false | _ -> true) ->
       if pure then static_error l "Cannot call a non-pure function from a pure context." None;
       let elemTp = type_of_expr es in
       let w, tp = check_expr (pn,ilist) tparams tenv e in
@@ -2340,7 +2340,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let arrayChunk = Chunk ((arrayPredSymb, true), [], real_unit, [result; n; values], None) in
           cont (mallocBlockChunk::arrayChunk::h)
         end
-    | WFunCall (l, "malloc", [], [SizeofExpr (ls, es)]) ->
+    | WFunCall (l, ("malloc" as g), [], ([SizeofExpr (ls, es)] as args)) | WFunCall (l, ("calloc" as g), [], ([IntLit (_, _, _, _, _); SizeofExpr (ls, es)] as args)) ->
+      assert (match args with [IntLit (_, n, _, _, _); _] -> eq_big_int n unit_big_int | _ -> true); (* Has to be true or the previous case would have matched. *)
       if pure then static_error l "Cannot call a non-pure function from a pure context." None;
       let t = type_of_expr es in
       let resultType = PtrType t in
@@ -2353,7 +2354,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
         begin fun () ->
           assume_neq result (ctxt#mk_intlit 0) $. fun () ->
-          produce_c_object l real_unit result t eval_h Unspecified true false h env $. fun h env ->
+          produce_c_object l real_unit result t eval_h (if g = "calloc" then Default else Unspecified) true false h env $. fun h env ->
           match t with
             StructType sn ->
             let (_, (_, _, _, _, malloc_block_symb, _, _)) = List.assoc sn malloc_block_pred_map in
