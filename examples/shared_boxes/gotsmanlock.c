@@ -48,7 +48,7 @@ predicate locked(int* l, predicate() I) = [1/2]gbox(?id, l, I) &*& holds_lock(?h
 @*/
 
 void init(int* l)
-  //@ requires integer(l, _) &*& exists<predicate()>(?I);
+  //@ requires int_(l, _) &*& exists<predicate()>(?I);
   //@ ensures lock(l, I) &*& locked(l, I);
 {
   *l = 1;

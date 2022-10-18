@@ -32,7 +32,7 @@ predicate tree(struct tree *t, int depth) =
     t == 0 ?
         depth == 0
     :
-        t->left |-> ?left &*& t->right |-> ?right &*& t->value |-> _ &*& malloc_block_tree(t) &*&
+        t->left |-> ?left &*& t->right |-> ?right &*& t->value |-> ?value &*& malloc_block_tree(t) &*&
         tree(left, depth - 1) &*& tree(right, depth - 1);
 @*/
 
@@ -82,9 +82,9 @@ struct sum_data {
 /*@
 
 predicate_family_instance thread_run_pre(summator)(struct sum_data *data, any info) =
-    data->tree |-> ?tree &*& tree(tree, _) &*& data->sum |-> _;
+    data->tree |-> ?tree &*& tree(tree, _) &*& data->sum |-> ?sum;
 predicate_family_instance thread_run_post(summator)(struct sum_data *data, any info) =
-    data->tree |-> ?tree &*& tree(tree, _) &*& data->sum |-> _;
+    data->tree |-> ?tree &*& tree(tree, _) &*& data->sum |-> ?sum;
 
 @*/
 
@@ -106,6 +106,7 @@ struct sum_data *start_sum_thread(struct tree *tree)
     struct thread *t = 0;
     if (data == 0) abort();
     //@ leak malloc_block_sum_data(data);
+    data->sum = 0;
     data->tree = tree;
     //@ close thread_run_pre(summator)(data, unit);
     t = thread_start_joinable(summator, data);

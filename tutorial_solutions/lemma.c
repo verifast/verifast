@@ -13,7 +13,7 @@ predicate lseg(struct node *first, struct node *last, int count) =
         count == 0
     :
         0 < count &*& first != 0 &*&
-        first->value |-> _ &*& first->next |-> ?next &*& malloc_block_node(first) &*&
+        first->value |-> ?value &*& first->next |-> ?next &*& malloc_block_node(first) &*&
         lseg(next, last, count - 1);
 
 lemma void nodes_to_lseg_lemma(struct node *first)

@@ -88,6 +88,9 @@ void test3()
     
     //@ { &a; &t; }
 
+    r.q = a;
+    t.p = b;
+    t.q = a;
     a = b;
     r.p = r.q;
     r.q = t.p;

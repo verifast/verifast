@@ -372,7 +372,7 @@ lemma void junk_mem_remove(list<pair<struct node*, struct stack_client* > > junk
 }
 
 predicate is_node(pair<struct node*, struct stack_client*> p;) = 
-  fst(p) != 0 &*& fst(p)->next |-> _ &*& [1/3]fst(p)->data |-> _ &*& fst(p)->owner |-> snd(p) &*& malloc_block_node(fst(p));
+  fst(p) != 0 &*& fst(p)->next |-> ?next &*& [1/3]fst(p)->data |-> ?data &*& fst(p)->owner |-> snd(p) &*& malloc_block_node(fst(p));
   
 lemma void invalidated_hps_lemma(list<pair<struct stack_client*, client_state> > states, struct stack_client* client) 
   requires mem(client, keys(states)) == true &*& is_valid(assoc(client, states)) == true &*& is_active(assoc(client, states)) == true;
@@ -878,10 +878,10 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
 
 /*@
 predicate one_third_data(struct node* n;) =
-  [1/3]n->data |-> _;
+  [1/3]n->data |-> ?data;
 
 predicate two_thirds_data(struct node* n;) =
-  [2/3]n->data |-> _;
+  [2/3]n->data |-> ?data;
   
 predicate stack_client(struct stack* s, real f, predicate(list<void*>) I, struct stack_client* client) =
   [f]stack_box(?id, s, I) &*& client != 0 &*& client->rlist |-> ?rlist &*& [1/2]client->myhandle |-> ?ha &*& 
@@ -1377,6 +1377,8 @@ void phase2(struct stack* s, struct stack_client* client, struct list* plist)
       producing_handle_predicate phase2_handle(ha, client, append(newretired, tail(todos)), newretired, tail(todos), hazards);
       @*/
       //@ foreach_remove(curr, todos);
+      //@ open two_thirds_data(curr);
+      //@ open is_node(_);
       free(curr);
     }
    

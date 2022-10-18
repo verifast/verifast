@@ -163,7 +163,7 @@ lemma void lseg_merge3(struct node *node, int e, list<int> values10)
 }
 
 predicate set(struct set *set;) =
-    [1/2]set->head |-> ?head &*& [1/2]set->nodesList |-> _ &*& [1/2]head->value |-> _ &*& malloc_block_set(set) &*&
+    [1/2]set->head |-> ?head &*& [1/2]set->nodesList |-> _ &*& [1/2]head->value |-> ?headValue &*& malloc_block_set(set) &*&
     [1/2]set->lockCounter |-> ?lockCounter &*& ghost_counter_zero_contrib(lockCounter);
 
 predicate set_atomic(struct set *set, list<int> values) =

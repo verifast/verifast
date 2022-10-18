@@ -410,7 +410,7 @@ predicate urb_private(struct urb *urb, bool initialized, struct usb_device *dev,
 	// You can't write the status yourself (so we need a fraction here).
 	// We explicitly specify some fraction size to avoid opening the
 	// struct, stealing half of the fraction, and closing the struct again.
-	[1/2]urb->status |-> _
+	[1/2]urb->status |-> ?status
 	
 	// The URB initialization function enforces dev is a proper device (when that function is called)
 	// 

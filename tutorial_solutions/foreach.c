@@ -102,7 +102,7 @@ struct vector {
     int y;
 };
 
-//@ predicate vector(struct vector *v) = v->x |-> _ &*& v->y |-> _ &*& malloc_block_vector(v);
+//@ predicate vector(struct vector *v) = v->x |-> ?x &*& v->y |-> ?y &*& malloc_block_vector(v);
 
 struct vector *create_vector(int x, int y)
     //@ requires true;

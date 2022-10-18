@@ -15,15 +15,15 @@ struct tokenizer
 predicate Tokenizer(struct tokenizer* t;) =
   malloc_block_tokenizer(t) &*&
   t->next_char |-> ?nc &*& is_charreader(nc) == true &*&
-  t->lastread |-> _ &*&
-  t->lasttoken |-> _ &*&
+  t->lastread |-> ?lastread &*&
+  t->lasttoken |-> ?lasttoken &*&
   t->buffer |-> ?b &*& string_buffer(b, _);
 
 predicate Tokenizer_minus_buffer(struct tokenizer* t; struct string_buffer *buffer) =
   malloc_block_tokenizer(t) &*&
   t->next_char |-> ?nc &*& is_charreader(nc) == true &*&
-  t->lastread |-> _ &*&
-  t->lasttoken |-> _ &*&
+  t->lastread |-> ?lastread &*&
+  t->lasttoken |-> ?lasttoken &*&
   t->buffer |-> buffer;
 
 lemma void tokenizer_merge_buffer(struct tokenizer *tokenizer)
@@ -210,6 +210,7 @@ struct tokenizer* tokenizer_create(charreader* reader)
 	tokenizer = (struct tokenizer*) malloc( sizeof( struct tokenizer ) );
 	if ( tokenizer == 0 ) abort();
 	tokenizer->lastread = -2;
+	tokenizer->lasttoken = 0;
 	tokenizer->next_char = reader;
 	buffer = create_string_buffer();
 	tokenizer->buffer = buffer;

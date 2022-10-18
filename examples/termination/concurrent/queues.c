@@ -20,9 +20,9 @@ lemma void lseg_add(struct node *first)
     requires lseg(first, ?last, ?values) &*&
         last->next |-> ?next &*& last->value |-> ?value &*&
         malloc_block_node(last) &*&
-        next->next |-> ?nextNext;
+        next->next |-> _;
     ensures lseg(first, next, append(values, cons(value, nil)))
-        &*& next->next |-> nextNext;
+        &*& next->next |-> _;
 {
     open lseg(first, last, values);
     if (first == last) {

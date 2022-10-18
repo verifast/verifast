@@ -239,7 +239,7 @@ array_t create_array()
     array->fxid = start_tracking_int(&array->fx);
     array->yid = start_tracking_int(&array->y);
     array->fyid = start_tracking_int(&array->fy);
-    //@ leak array->inv |-> _ &*& array->Sid |-> _ &*& array->xid |-> _ &*& array->fxid |-> _ &*& array->yid |-> _ &*& array->fyid |-> _;
+    //@ leak array->inv |-> ?_ &*& array->Sid |-> ?_ &*& array->xid |-> ?_ &*& array->fxid |-> ?_ &*& array->yid |-> ?_ &*& array->fyid |-> ?_;
     //@ array->scan_x_state = 0;
     //@ array->scan_y_state = 0;
     //@ array->write_x_state = 0;

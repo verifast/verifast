@@ -374,15 +374,15 @@ int main() //@ : custom_main_spec
     //@ b->gdo = gdo;
     //@ b->gcu = gcu;
     
-    //@ leak [_]b->cbarber |-> _;
-    //@ leak [_]b->cchair |-> _;
-    //@ leak [_]b->cdoor |-> _;
-    //@ leak [_]b->ccustomer |-> _;            
-    //@ leak [_]b->m |-> _;  
-    //@ leak [_]b->gba |-> _;               
-    //@ leak [_]b->gch |-> _;               
-    //@ leak [_]b->gdo |-> _;               
-    //@ leak [_]b->gcu |-> _;               
+    //@ leak [_]b->cbarber |-> ?_;
+    //@ leak [_]b->cchair |-> ?_;
+    //@ leak [_]b->cdoor |-> ?_;
+    //@ leak [_]b->ccustomer |-> ?_;            
+    //@ leak [_]b->m |-> ?_;  
+    //@ leak [_]b->gba |-> ?_;               
+    //@ leak [_]b->gch |-> ?_;               
+    //@ leak [_]b->gdo |-> ?_;               
+    //@ leak [_]b->gcu |-> ?_;               
     //@ leak [_]malloc_block_barbershop(_);
     
     //@ close init_mutex_ghost_args(barbershop(b));

@@ -271,7 +271,7 @@ predicate cas_tracker(struct cas_tracker *tracker, int count) =
     [_]popl20_atomic_space(create_cas_tracker, cas_tracker_inv(tracker));
 
 predicate is_cas_tracker(struct cas_tracker *tracker;) =
-    [_]tracker->pid |-> _ &*&
+    [_]tracker->pid |-> ?_ &*&
     [_]tracker->vs |-> _ &*&
     [_]popl20_atomic_space(create_cas_tracker, cas_tracker_inv(tracker));
 

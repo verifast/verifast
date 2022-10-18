@@ -17,8 +17,8 @@ typedef struct pk_context pk_context;
 
 /*@
 predicate pk_context(pk_context *context) =
-  context->pk_info |-> ?info &*&
-  context->pk_ctx |-> ?ctx &*&
+  context->pk_info |-> _ &*&
+  context->pk_ctx |-> _ &*&
   struct_pk_context_padding(context)
 ;
 

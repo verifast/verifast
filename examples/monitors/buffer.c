@@ -171,9 +171,9 @@ int main() //@ : custom_main_spec
   b->v = v;
   //@ b->gid = gid;
     
-  //@ leak [_]b->v |-> _;
-  //@ leak [_]b->m |-> _;
-  //@ leak [_]b->gid |-> _;
+  //@ leak [_]b->v |-> ?_;
+  //@ leak [_]b->m |-> ?_;
+  //@ leak [_]b->gid |-> ?_;
   //@ leak [_]malloc_block_buffer(_);
 
   //@ g_chrgu(v);

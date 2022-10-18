@@ -53,7 +53,7 @@ void error(char *msg)
 }
 
 typedef void dispose_func/*@(predicate(void *) inv)@*/(struct object *object);
-    //@ requires heap0(nil) &*& object->refCount |-> _ &*& object->class |-> _ &*& inv(object);
+    //@ requires heap0(nil) &*& object->refCount |-> ?refCount &*& object->class |-> ?class &*& inv(object);
     //@ ensures heap0(nil);
 
 struct class {

@@ -103,7 +103,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (pat::pats, tp0::tps0, tp::tps) -> evalpat true ghostenv env pat tp0 tp (fun ghostenv env t -> evalpats ghostenv env pats tps0 tps (fun ghostenv env ts -> cont ghostenv env (t::ts)))
 
   let evalpat_ ghost ghostenv env pat tp0 tp cont =
-    if pat = DummyPat then
+    if pat = DummyPat && not ghost then
       cont ghostenv env None
     else
       evalpat ghost ghostenv env pat tp0 tp $. fun ghostenv env t ->
@@ -128,10 +128,10 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       ((g1, literal1), (g2, literal2)) -> if literal1 && literal2 then g1 == g2 else definitely_equal g1 g2
   
   let assume_field h0 fparent fname frange fghost tp tv tcoef cont =
-    let (_, (_, _, _, _, symb, _, _)) = List.assoc (fparent, fname) field_pred_map in
+    let ((_, (_, _, _, _, symb, _, _)), p__opt) = List.assoc (fparent, fname) field_pred_map in
     if fghost = Real then begin
-      match frange with
-        Int (_, _) | PtrType _ ->
+      match frange, tv with
+        (Int (_, _) | PtrType _), Some tv ->
         let (min_term, max_term) = limits_of_type frange in
         ctxt#assert_term (ctxt#mk_and (ctxt#mk_le min_term tv) (ctxt#mk_le tv max_term))
       | _ -> ()
@@ -144,16 +144,47 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         cont()
     end $. fun () ->
     let pred_symb = (symb, true) in
+    let is_related_pred_symb =
+      match p__opt with
+        None -> fun g -> predname_eq g pred_symb
+      | Some (_, (_, _, _, _, symb_, _, _)) ->
+        let pred__symb = (symb_, true) in
+        fun g -> predname_eq g pred_symb || predname_eq g pred__symb
+    in
     let rec iter h =
       match h with
-        [] -> cont (Chunk ((symb, true), [], tcoef, [tp; tv], None)::h0)
-      | Chunk (g, targs', tcoef', [tp'; tv'], _) as chunk::h when predname_eq g pred_symb ->
+        [] ->
+        let chunk =
+          match tv, p__opt with
+            Some tv, _ ->
+            Chunk ((symb, true), [], tcoef, [tp; tv], None)
+          | None, Some (_, (_, _, _, _, symb_, _, _)) ->
+            let tv = get_unique_var_symb_ "dummy" (option_type frange) (fghost = Ghost) in
+            Chunk ((symb_, true), [], tcoef, [tp; tv], None)
+          | None, None ->
+            let tv = get_unique_var_symb_ "dummy" frange (fghost = Ghost) in
+            Chunk ((symb, true), [], tcoef, [tp; tv], None)
+        in
+        cont (chunk::h0)
+      | Chunk (g, targs', tcoef', [tp'; tv'], _) as chunk::h when is_related_pred_symb g ->
         if tcoef == real_unit || tcoef' == real_unit then
           assume_neq tp tp' (fun _ -> iter h)
         else if definitely_equal tp tp' then
         begin
-          assume (ctxt#mk_eq tv tv') $. fun () ->
-          let cont = (fun coef -> cont (Chunk ((symb, true), [], coef, [tp'; tv'], None)::List.filter (fun ch -> ch != chunk) h0)) in
+          let cont coef = 
+            let cont new_chunk = cont (new_chunk::List.filter (fun ch -> ch != chunk) h0) in
+            match tv, predname_eq g pred_symb with
+              Some tv, true ->
+              assume (ctxt#mk_eq tv tv') $. fun () ->
+              cont (Chunk ((symb, true), [], coef, [tp'; tv'], None))
+            | None, true ->
+              cont (Chunk ((symb, true), [], coef, [tp'; tv'], None))
+            | Some tv, false ->
+              assume (ctxt#mk_eq (mk_some frange tv) tv') $. fun () ->
+              cont (Chunk ((symb, true), [], coef, [tp; tv], None))
+            | None, false ->
+              cont (Chunk (g, [], coef, [tp'; tv'], None))
+          in
           if tcoef == real_half && tcoef' == real_half then cont real_unit else
           if is_dummy_frac_term tcoef then
             cont tcoef'
@@ -265,13 +296,13 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match p with
     | WPointsTo (l, WRead (lr, e, fparent, fname, frange, fstatic, fvalue, fghost), tp, rhs) ->
       if fstatic then
-        let (_, (_, _, _, _, symb, _, _)) = List.assoc (fparent, fname) field_pred_map in
+        let (_, (_, _, _, _, symb, _, _)), p__opt = List.assoc (fparent, fname) field_pred_map in
         evalpat (fghost = Ghost) ghostenv env rhs tp tp $. fun ghostenv env t ->
         produce_chunk h (symb, true) [] coef (Some 0) [t] None $. fun h ->
         cont h ghostenv env
       else
         let te = ev e in
-        evalpat (fghost = Ghost) ghostenv env rhs tp tp $. fun ghostenv env t ->
+        evalpat_ (fghost = Ghost) ghostenv env rhs tp tp $. fun ghostenv env t ->
         assume_field h fparent fname frange fghost te t coef $. fun h ->
         cont h ghostenv env
     | WPointsTo (l, WReadArray (la, ea, _, ei), tp, rhs) ->
@@ -646,11 +677,11 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Some v -> v
 
   let read_field h env l t fparent fname =
-    let (_, (_, _, _, _, f_symb, _, _)) = List.assoc (fparent, fname) field_pred_map in
+    let (_, (_, _, _, _, f_symb, _, _)), _ = List.assoc (fparent, fname) field_pred_map in
     lookup_points_to_chunk h env l f_symb t
   
   let read_static_field h env l fparent fname =
-    let (_, (_, _, _, _, f_symb, _, _)) = List.assoc (fparent, fname) field_pred_map in
+    let (_, (_, _, _, _, f_symb, _, _)), _ = List.assoc (fparent, fname) field_pred_map in
     match extract (function Chunk (g, targs, coef, arg0::args, size) when predname_eq (f_symb, true) g -> Some arg0 | _ -> None) h with
       None -> assert_false h env l ("No matching heap chunk: " ^ ctxt#pprint f_symb) None
     | Some (v, _) -> v
@@ -1001,14 +1032,21 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let points_to l coefpat e tp rhs =
       match e with
         WRead (lr, e, fparent, fname, frange, fstatic, fvalue, fghost) ->
-        let (_, (_, _, _, _, symb, _, _)) = List.assoc (fparent, fname) field_pred_map in
+        let (_, (_, _, _, _, symb, _, _)), p__opt = List.assoc (fparent, fname) field_pred_map in
         let (inputParamCount, pats) =
           if fstatic then
             (Some 0, [rhs])
           else
             (Some 1, [SrcPat (LitPat e); rhs])
         in
-        consume_chunk rules h ghostenv env env' l (symb, true) [] coef coefpat inputParamCount pats
+        let symb_used =
+          match rhs, p__opt with
+            SrcPat DummyPat, Some ((_, (_, _, _, _, symb_, _, _))) ->
+            symb_
+          | _ ->
+            symb
+        in
+        consume_chunk rules h ghostenv env env' l (symb_used, true) [] coef coefpat inputParamCount pats
           (fun chunk h coef ts size ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' size)
       | WReadArray (la, ea, _, ei) ->
         let pats = [SrcPat (LitPat ea); SrcPat (LitPat ei); rhs] in
@@ -1269,8 +1307,13 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match wbody with
         WPointsTo(_, WRead(lr, e, fparent, fname, frange, fstatic, fvalue, fghost), tp, v) ->
         if expr_is_fixed inputParameters e || fstatic then
-          let (_, (_, _, _, _, qsymb, _, _)) = List.assoc (fparent, fname) field_pred_map in
-          construct_edge qsymb coef None [] [] (if fstatic then [] else [e]) conds
+          let (_, (_, _, _, _, qsymb, _, _)), p__opt = List.assoc (fparent, fname) field_pred_map in
+          let qsymb_used =
+            match v, p__opt with
+              DummyPat, Some ((_, (_, _, _, _, qsymb_, _, _))) -> qsymb_
+            | _ -> qsymb
+          in
+          construct_edge qsymb_used coef None [] [] (if fstatic then [] else [e]) conds
         else
           []
       | WPredAsn(_, q, true, qtargs, qfns, qpats) ->
@@ -1635,7 +1678,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       )
       transitive_contains_edges_;
     (* transitive auto-open rules for precise predicates and predicate families *)
-    List.iter 
+    let transitive_auto_open_rules =
+    List.map
       (fun (from_symb, indices, to_symb, path) ->
         let transitive_auto_open_rule l h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
           (*let _ = print_endline ("trying to auto-open : " ^ (ctxt#pprint from_symb)) in *)
@@ -1773,8 +1817,88 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             cont None
          in
          add_rule to_symb transitive_auto_open_rule;
+         (to_symb, transitive_auto_open_rule)
       )
-      transitive_contains_edges_;
+      transitive_contains_edges_
+    in
+    (* rules for obtaining underscore (i.e. possibly uninitialized) field chunks *)
+    field_pred_map |> List.iter begin function (_, (_, None)) -> () | ((sn, fn), ((_, (_, _, _, [_; ft], symb, _, _)), Some (_, (_, _, _, _, symb_, _, _)))) ->
+      let (_, Some (_, fmap), _, _) = List.assoc sn structmap in
+      let (_, gh, _, offset_opt, _) = List.assoc fn fmap in
+      begin match offset_opt with
+        None -> ()
+      | Some offset ->
+      match try_pointee_pred_symb ft with
+        Some pointee_pred_symb ->
+        let pointee_chunk_to_field_chunk__rule l h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
+          let [tp] = wanted_indices_and_input_ts in
+          let field_address = ctxt#mk_add tp offset in
+          match extract
+            begin function
+              (Chunk ((g, is_symb), [], coef, [tp'; tv], _)) when g == pointee_pred_symb && definitely_equal tp' field_address -> Some (coef, tv)
+            | _ -> None
+            end
+            h
+          with
+            None -> cont None
+          | Some ((coef, tv), h) ->
+            cont (Some (Chunk ((symb_, true), [], coef, [tp; mk_some ft tv], None)::h))
+        in
+        add_rule symb_ pointee_chunk_to_field_chunk__rule
+      | None ->
+      match int_rank_and_signedness ft with
+        Some (rank, signedness) ->
+        let integer__symb = integer__symb () in
+        let tsize = rank_size_term rank in
+        let tsigned = match signedness with Signed -> true_term | Unsigned -> false_term in
+        let pointee_chunk_to_field_chunk__rule l h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
+          let [tp] = wanted_indices_and_input_ts in
+          let field_address = ctxt#mk_add tp offset in
+          match extract
+            begin function
+              (Chunk ((g, is_symb), [], coef, [tp'; tsize'; tsigned'; tv], _)) when
+              g == integer__symb &&
+              definitely_equal tp' field_address &&
+              definitely_equal tsize' tsize &&
+              definitely_equal tsigned' tsigned
+              -> Some (coef, tv)
+            | _ -> None
+            end
+            h
+          with
+            None -> cont None
+          | Some ((coef, tv), h) ->
+            cont (Some (Chunk ((symb_, true), [], coef, [tp; mk_some ft tv], None)::h))
+        in
+        add_rule symb_ pointee_chunk_to_field_chunk__rule
+      | None -> ()
+      end;
+      let field_chunk_to_field_chunk__rule l h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
+        let [tp] = wanted_indices_and_input_ts in
+        match extract
+          begin function
+            Chunk ((g, is_symb), [], coef, [tp'; tv], _) when g == symb && definitely_equal tp' tp -> Some (coef, tv)
+          | _ -> None
+          end
+          h
+        with
+          None -> cont None
+        | Some ((coef, tv), h) ->
+          let tv_ = mk_some ft tv in
+          cont (Some (Chunk ((symb_, true), [], coef, [tp; tv_], None)::h))
+      in
+      add_rule symb_ field_chunk_to_field_chunk__rule;
+      transitive_auto_open_rules |> List.iter begin fun (to_symb, rule) ->
+        if to_symb == symb then
+          let combined_rule l h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
+            rule l h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts $. function
+              None -> cont None
+            | Some h ->
+              field_chunk_to_field_chunk__rule l h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont
+          in
+          add_rule symb_ combined_rule
+      end
+    end;
     (* rules for closing empty chunks *)
     List.iter
       begin fun (symb, fsymbs, conds, ((p, fns), (env, l, predinst_tparams, xs, _, inputParamCount, wbody))) ->

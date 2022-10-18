@@ -99,7 +99,7 @@ predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) =
   enc_then_hmac_args_enc_key(data, ?enc_key) &*&
   enc_then_hmac_args_hmac_key(data, ?hmac_key) &*&
   enc_then_hmac_args_msg(data, ?msg) &*&
-  enc_then_hmac_args_length(data, _) &*&
+  enc_then_hmac_args_length_(data, _) &*&
   !bad(sender) && !bad(receiver) &*&
   principal(receiver, _) &*&
   [1/2]cryptogram(enc_key, KEY_SIZE, ?enc_key_ccs, ?enc_key_cg) &*&

@@ -7,7 +7,7 @@ predicate locked(int* l, predicate() I);
 @*/
 
 void init(int* l);
-  //@ requires integer(l, _) &*& exists<predicate()>(?I);
+  //@ requires *l |-> _ &*& exists<predicate()>(?I);
   //@ ensures lock(l, I) &*& locked(l, I);
   
 void acquire(int* l);

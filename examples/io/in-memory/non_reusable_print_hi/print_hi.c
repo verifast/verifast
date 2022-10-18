@@ -191,6 +191,7 @@ int main()
   if (b == 0){
     abort();
   }
+  b->c = 0;
   //@ int id = create_gcf();
   //@ iot iot1 = iot_init;
   //@ iot ioth = iot_split_left(iot1);

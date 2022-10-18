@@ -619,7 +619,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               None -> cont h1 [] (default_value ft)
             | Some e -> eval_h h1 [] e cont
           end $. fun h1 [] v ->
-          let (_, (_, _, _, _, symb, _, _)) = List.assoc (cn, fn) field_pred_map in
+          let (_, (_, _, _, _, symb, _, _)), _ = List.assoc (cn, fn) field_pred_map in
           produce_chunk h1 (symb, true) [] real_unit (Some 0) [v] None $. fun h1 ->
           iter h1 fds
         | _::fds ->
@@ -1176,7 +1176,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           ((g_symb, true), inputParamCount, targs, pats, false)
         | WPointsTo (_, WRead (_, e, fparent, fname, frange, fstatic, fvalue, fghost), _, rhs) ->
-          let (p, (_, _, _, _, symb, _, _)) = List.assoc (fparent, fname) field_pred_map in
+          let (p, (_, _, _, _, symb, _, _)), _ = List.assoc (fparent, fname) field_pred_map in
           let pats, inputParamCount =
             if fstatic then
               [rhs], 0
@@ -2855,7 +2855,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             match init_expr_opt with 
             | None -> 
               with_context (Executing (h, [], field_loc, "Producing field chunk")) @@ fun () ->
-              init_field h field_name field_type (get_unique_var_symb_ "value" field_type false) struct_addr @@ fun h ->
+              init_field h field_name field_type None struct_addr @@ fun h ->
               iter h rest
             | Some (init, is_written) ->
               let init_kind, env, tenv =
@@ -2876,7 +2876,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   begin fun cont ->
                     verify_expr false (pn, ilist) [] false leminfo funcmap sizemap tenv ghostenv h env (Some field_name) init cont @@ fun _ _ _ _ _ -> assert false
                   end @@ fun h _ initial_value ->
-                  init_field h field_name field_type initial_value struct_addr @@ fun h ->
+                  init_field h field_name field_type (Some initial_value) struct_addr @@ fun h ->
                   iter h rest
               end
           end
@@ -2930,8 +2930,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             iter h rest
           | _ ->
             with_context (Executing (h, [], field_loc, "Consuming field chunk")) @@ fun () ->
-            let _, (_, _, _, _, field_symb, _, _) = List.assoc (struct_name, field_name) field_pred_map in
-            consume_chunk rules h [] [] [] field_loc (field_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat struct_addr; dummypat] @@ fun _ h _ _ _ _ env _ ->
+            let (_, (_, _, _, _, field_symb, _, _)), p__opt = List.assoc (struct_name, field_name) field_pred_map in
+            let field_symb_used =
+              match p__opt with
+                Some (_, (_, _, _, _, field_symb_, _, _)) -> field_symb_
+              | _ -> field_symb
+            in
+            consume_chunk rules h [] [] [] field_loc (field_symb_used, true) [] real_unit real_unit_pat (Some 1) [TermPat struct_addr; dummypat] @@ fun _ h _ _ _ _ env _ ->
             iter h rest
           end
       in
@@ -3107,12 +3112,12 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 if binding = Instance then begin
                   match init with 
                     None ->
-                    assume_field h cn f t Real this (default_value t) real_unit $. fun h ->
+                    assume_field h cn f t Real this (Some (default_value t)) real_unit $. fun h ->
                     iter h fds
                   | Some(e) -> 
                     with_context (Executing (h, [], expr_loc e, "Executing field initializer")) $. fun () ->
                     verify_expr false (pn,ilist) tparams false leminfo funcmap sizemap [(current_class, ClassOrInterfaceName cn); ("this", thisType); (current_thread_name, current_thread_type)] ghostenv h [("this", this); (current_thread_name, List.assoc current_thread_name env)] None e (fun h _ initial_value ->
-                      assume_field h cn f t Real this initial_value real_unit $. fun h ->
+                      assume_field h cn f t Real this (Some initial_value) real_unit $. fun h ->
                       iter h fds
                     ) (fun throwl h env2 exceptp excep -> assert_false h env2 throwl ("Field initializers throws exception.") None)
                 end else

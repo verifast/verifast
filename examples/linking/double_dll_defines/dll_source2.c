@@ -10,7 +10,7 @@ struct struct_dll
 
 /*@ predicate predicate_dll(struct struct_dll* s) =
       malloc_block_struct_dll(s) &*& 
-      struct_dll_body(s, ?value);
+      struct_dll_body_(s, ?value);
 @*/
 
 void func()

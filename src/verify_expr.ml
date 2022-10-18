@@ -1407,7 +1407,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | LabelStmt _ | GotoStmt _ | NoopStmt _ | Break _ | Throw _ | TryFinally _ | TryCatch _ -> []
     | _ -> []
   
-  let nonempty_pred_symbs = List.map (fun (_, (_, (_, _, _, _, symb, _, _))) -> symb) field_pred_map
+  let nonempty_pred_symbs =
+    field_pred_map |> flatmap begin function
+      (_, ((_, (_, _, _, _, symb, _, _)), None)) -> [symb]
+    | (_, ((_, (_, _, _, _, symb, _, _)), Some (_, (_, _, _, _, symb_, _, _)))) -> [symb; symb_]
+    end
   
   let eval_non_pure_cps ev is_ghost_expr ((h, env) as state) env e cont =
     let assert_term = if is_ghost_expr then None else Some (fun l t msg url -> assert_term t h env l msg url) in
@@ -1556,16 +1560,17 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             begin fun cont ->
               match init with
                 Default ->
-                cont h env
+                cont h env begin Some
                 begin match provertype_of_type t with
                   ProverBool -> ctxt#mk_false
                 | ProverInt -> ctxt#mk_intlit 0
                 | ProverReal -> real_zero
                 | ProverInductive -> get_unique_var_symb_ "value" t (gh = Ghost)
                 end
-              | Expr e -> eval_h h env e cont
-              | Term t -> cont h env t
-              | Unspecified -> cont h env (get_unique_var_symb_ "value" t (gh = Ghost))
+                end
+              | Expr e -> eval_h h env e (fun h env v -> cont h env (Some v))
+              | Term t -> cont h env (Some t)
+              | Unspecified -> cont h env (match gh with Ghost -> Some (get_unique_var_symb_ "value" t true) | Real -> None)
             end $. fun h env value ->
             assume_field h sn f t gh addr value coef $. fun h ->
             iter h env fields inits
@@ -1624,15 +1629,21 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match fields with
           [] ->
           let (_, csym, _, _) = List.assoc sn struct_accessor_map in
-          cont chunks h (ctxt#mk_app csym (List.rev vs))
+          cont chunks h (if consumeUninitChunk then real_unit (* dummy term; should never be used *) else ctxt#mk_app csym (List.rev vs))
         | (f, (lf, gh, t, offset, finit))::fields ->
           match t with
             StaticArrayType (_, _) | StructType _ | UnionType _ ->
             consume_c_object_core_core l coefpat (field_address l addr sn f) t h true consumeUninitChunk $. fun chunks' h value ->
             iter (chunks' @ chunks) (value::vs) h fields
           | _ ->
-             let (_, (_, _, _, _, f_symb, _, _)) = List.assoc (sn, f) field_pred_map in
-             consume_chunk rules h [] [] [] l (f_symb, true) [] real_unit coefpat (Some 1) [TermPat addr; dummypat] $.
+             let (_, (_, _, _, _, f_symb, _, _)), p__opt = List.assoc (sn, f) field_pred_map in
+             let f_symb_used =
+               match consumeUninitChunk, p__opt with
+                 true, Some (_, (_, _, _, _, f_symb_, _, _)) ->
+                 f_symb_
+               | _ -> f_symb
+             in
+             consume_chunk rules h [] [] [] l (f_symb_used, true) [] real_unit coefpat (Some 1) [TermPat addr; dummypat] $.
              (fun chunk h coef [_; t] size ghostenv env env' -> iter (chunk::chunks) (t::vs) h fields)
       in
       iter chunks [] h fields
@@ -2002,6 +2013,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * constant_value option option ref
       * ghostness
       * termnode (* field symbol *)
+      * termnode option (* possibly-uninitialized field symbol *)
     | ValueField of
         loc
       * lvalue
@@ -2106,14 +2118,19 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match lhs with
         WVar (l, x, scope) -> cont h env (LValues.Var (l, x, scope))
       | WRead (l, w, fparent, fname, tp, fstatic, fvalue, fghost) ->
-        let (_, (_, _, _, _, f_symb, _, _)) = List.assoc (fparent, fname) field_pred_map in
+        let (_, (_, _, _, _, f_symb, _, _)), p__opt = List.assoc (fparent, fname) field_pred_map in
         begin fun cont ->
           if fstatic then
             cont h env None
           else
             eval_h h env w (fun h env target -> cont h env (Some target))
         end $. fun h env target ->
-        cont h env (LValues.Field (l, target, fparent, fname, tp, fvalue, fghost, f_symb))
+        let f_symb__opt =
+          match p__opt with
+            Some (_, (_, _, _, _, f_symb_, _, _)) -> Some f_symb_
+          | None -> None
+        in
+        cont h env (LValues.Field (l, target, fparent, fname, tp, fvalue, fghost, f_symb, f_symb__opt))
       | WSelect (l, w, fparent, fname, tp) ->
         let (_, _, getters, setters) = List.assoc fparent struct_accessor_map in
         let getter = List.assoc fname getters in
@@ -2139,7 +2156,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match lvalue with
         LValues.Var (l, x, scope) ->
         eval_h h env (WVar (l, x, scope)) cont
-      | LValues.Field (l, target, fparent, fname, tp, fvalue, fghost, f_symb) ->
+      | LValues.Field (l, target, fparent, fname, tp, fvalue, fghost, f_symb, _) ->
         begin match target with
           Some target ->
           consume_chunk rules h [] [] [] l (f_symb, true) [] real_unit dummypat (Some 1) [TermPat target; dummypat] $. fun chunk h _ [_; value] _ _ _ _ ->
@@ -2167,7 +2184,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         check_assign l x;
         let (tpx, symb) = vartp l x in
         update_local_or_global h env tpx x symb value cont
-      | LValues.Field (l, target, fparent, fname, tp, fvalue, fghost, f_symb) ->
+      | LValues.Field (l, target, fparent, fname, tp, fvalue, fghost, f_symb, f_symb__opt) ->
         has_heap_effects();
         if pure && fghost = Real then static_error l "Cannot write in a pure context" None;
         let targets =
@@ -2176,7 +2193,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | None -> []
         in
         let pats = List.map (fun t -> TermPat t) targets @ [dummypat] in
-        consume_chunk rules h [] [] [] l (f_symb, true) [] real_unit real_unit_pat (Some 1) pats $. fun _ h _ _ _ _ _ _ ->
+        let f_symb_used =
+          match f_symb__opt with
+            Some f_symb_ -> f_symb_
+          | None -> f_symb
+        in
+        consume_chunk rules h [] [] [] l (f_symb_used, true) [] real_unit real_unit_pat (Some 1) pats $. fun _ h _ _ _ _ _ _ ->
         cont (Chunk ((f_symb, true), [], real_unit, targets @ [value], None)::h) env
       | LValues.ValueField (l, w, getter, setter) ->
         read_lvalue h env w $. fun h env x ->
@@ -2577,7 +2599,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         StaticArrayType (elemTp, elemCount) ->
         cont h env (field_address l t fparent fname)
       | _ ->
-      let (_, (_, _, _, _, f_symb, _, _)) = List.assoc (fparent, fname) field_pred_map in
+      let (_, (_, _, _, _, f_symb, _, _)), _ = List.assoc (fparent, fname) field_pred_map in
       begin match lookup_points_to_chunk_core h f_symb t with
         None -> (* Try the heavyweight approach; this might trigger a rule (i.e. an auto-open or auto-close) and rewrite the heap. *)
         get_points_to h t f_symb l $. fun h coef v ->
@@ -2586,7 +2608,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
       end
     | WRead (l, _, fparent, fname, frange, true (* is static? *), fvalue, fghost) when ! fvalue = None || ! fvalue = Some None->
-      let (_, (_, _, _, _, f_symb, _, _)) = List.assoc (fparent, fname) field_pred_map in
+      let (_, (_, _, _, _, f_symb, _, _)), _ = List.assoc (fparent, fname) field_pred_map in
       consume_chunk rules h [] [] [] l (f_symb, true) [] real_unit dummypat (Some 0) [dummypat] (fun chunk h coef [field_value] size ghostenv _ _ ->
         cont (chunk :: h) env field_value)
     | WReadArray (l, arr, elem_tp, i) when language = Java ->

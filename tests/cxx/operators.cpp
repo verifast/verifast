@@ -1,7 +1,7 @@
 #include "operators.h"
 
 void IntWrapper::setInt(int i)
-//@ requires this->i |-> _;
+//@ requires this->i |-> ?v;
 //@ ensures this->i |-> i;
 {
   this->i = i;

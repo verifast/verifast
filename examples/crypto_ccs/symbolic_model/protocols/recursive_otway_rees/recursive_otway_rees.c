@@ -440,7 +440,7 @@ struct processed_messages *server_process(struct keys *keys, struct item *msg)
   }
   else
   {
-    result = malloc(sizeof(struct processed_messages));
+    result = calloc(1, sizeof(struct processed_messages));
     if (result == 0) abort_crypto_lib("Malloc failed");
 
     //@ open [_]ror_pub(msg_i);

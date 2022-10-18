@@ -899,7 +899,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * struct_accessor_info map
       * malloc_block_pred_info map
       * new_block_pred_info map
-      * ((string * string) * field_pred_info) list
+      * ((string * string) * (field_pred_info * field_pred_info option)) list
       * pred_fam_info map
       * pred_inst_map
       * (loc * type_) map (* typedefmap *)
@@ -1005,7 +1005,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (struct_accessor_map0: struct_accessor_info map),
       (malloc_block_pred_map0: malloc_block_pred_info map),
       (new_block_pred_map0: new_block_pred_info map),
-      (field_pred_map0: ((string * string) * field_pred_info) list),
+      (field_pred_map0: ((string * string) * (field_pred_info * field_pred_info option)) list),
       (predfammap0: pred_fam_info map),
       (predinstmap0: pred_inst_map),
       (typedefmap0: (loc * type_) map),
@@ -2813,7 +2813,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let bases_constructed_map = bases_constructed_map1 @ bases_constructed_map0
 
-  let field_pred_map1 = (* dient om dingen te controleren bij read/write controle v velden*)
+  let field_pred_map1 =
     match file_type path with
       Java ->
       classmap1 |> flatmap begin fun (cn, (_,_,_,_, fds,_,_,_,_,_,_,_)) ->
@@ -2823,7 +2823,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               Static -> mk_predfam (cn ^ "_" ^ fn) fl [] 0 [ft] (Some 0) Inductiveness_Inductive
             | Instance -> mk_predfam (cn ^ "_" ^ fn) fl [] 0 [ObjType (cn, []); ft] (Some 1) Inductiveness_Inductive
           in
-          ((cn, fn), predfam)
+          ((cn, fn), (predfam, None))
         end
       end
     | _ ->
@@ -2834,7 +2834,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
          | Some (_, fds) ->
            List.map
              (fun (fn, (l, gh, t, offset, _)) ->
-              ((sn, fn), mk_predfam (sn ^ "_" ^ fn) l [] 0 [PtrType (StructType sn); t] (Some 1) Inductiveness_Inductive)
+              ((sn, fn),
+               (mk_predfam (sn ^ "_" ^ fn) l [] 0 [PtrType (StructType sn); t] (Some 1) Inductiveness_Inductive,
+                match gh with
+                  Ghost -> None
+                | Real -> Some (mk_predfam (sn ^ "_" ^ fn ^ "_") l [] 0 [PtrType (StructType sn); InductiveType ("option", [t])] (Some 1) Inductiveness_Inductive)
+               )
+              )
              )
              fds
       )
@@ -2844,7 +2850,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let structpreds1: pred_fam_info map = 
     let map_pred map = map |> List.map @@ fun (_, p) -> p in
-    let result = map_pred malloc_block_pred_map1 @ map_pred field_pred_map1 @ struct_padding_predfams1 in
+    let result = map_pred malloc_block_pred_map1 @ flatmap (function (_, (p, Some p_)) -> [p; p_] | (_, (p, None)) -> [p]) field_pred_map1 @ struct_padding_predfams1 in
     match dialect with
       Some Cxx -> map_pred new_block_pred_map1 @ map_pred bases_constructed_map @ result
     | _ -> result
@@ -5616,33 +5622,49 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               function
                 (f, (l, Real, t, offset, _)) ->
                 begin
-                let (g, (_, _, _, _, symb, _, inductiveness)) = List.assoc (sn, f) field_pred_map in (* TODO WILLEM: we moeten die inductiveness ergens gebruiken *)
-                let predinst___ p domain args =
-                  let p = new predref p domain (Some (1 + List.length args)) in
+                let ((g, (_, _, _, _, symb, _, _)), g__opt) = List.assoc (sn, f) field_pred_map in
+                let predinst___ p p_ domain0 t args =
+                  let p = new predref p (domain0 @ [t]) (Some (1 + List.length args)) in
+                  let p_ = new predref p_ (domain0 @ [InductiveType ("option", [t])]) (Some (1 + List.length args)) in
+                  let inst =
                   ((g, []),
                    ([], l, [], [sn, PtrType (StructType sn); "value", t], symb, Some 1,
                     let r = WRead (l, WVar (l, sn, LocalVar), sn, f, t, false, ref (Some None), Real) in
                     WPredAsn (l, p, true, [], [], ([LitPat (AddressOf (l, r))] @ List.map (fun e -> LitPat e) args @ [LitPat (WVar (l, "value", LocalVar))]))
                    )
                   )
+                  in
+                  match g__opt with
+                    None -> [inst]
+                  | Some (g_, (_, _, _, _, symb_, _, _)) ->
+                    [
+                      inst
+                    ;
+                      ((g_, []),
+                       ([], l, [], [sn, PtrType (StructType sn); "value", InductiveType ("option", [t])], symb_, Some 1,
+                        let r = WRead (l, WVar (l, sn, LocalVar), sn, f, t, false, ref (Some None), Real) in
+                        WPredAsn (l, p_, true, [], [], ([LitPat (AddressOf (l, r))] @ List.map (fun e -> LitPat e) args @ [LitPat (WVar (l, "value", LocalVar))]))
+                       )
+                      )
+                    ]
                 in
-                let predinst__ p domain = predinst___ p domain [] in
-                let predinst_ p t = [predinst__ p [PtrType t; t]] in
-                let predinst p = predinst_ p t in
+                let predinst__ p p_ domain t = predinst___ p p_ domain t [] in
+                let predinst_ p p_ t = predinst__ p p_ [PtrType t] t in
+                let predinst p p_ = predinst_ p p_ t in
                 match t with
-                  PtrType _ -> predinst_ "pointer" (PtrType Void)
-                | Int (Signed, IntRank) -> predinst "integer"
-                | Int (Unsigned, IntRank) -> predinst "u_integer"
-                | Int (Signed, LitRank 3) -> predinst "llong_integer"
-                | Int (Unsigned, LitRank 3) -> predinst "u_llong_integer"
-                | Int (Signed, LitRank 2) when int_rank = LitRank 2 -> predinst "integer"
-                | Int (Unsigned, LitRank 2) when int_rank = LitRank 2 -> predinst "u_integer"
-                | Int (Signed, LitRank 1) -> predinst "short_integer"
-                | Int (Unsigned, LitRank 1) -> predinst "u_short_integer"
-                | Int (Signed, LitRank 0) -> predinst "character"
-                | Int (Unsigned, LitRank 0) -> predinst "u_character"
-                | Int (s, _) -> [predinst___ "integer_" [PtrType Void; intType; Bool; intType] [SizeofExpr (l, TypeExpr (ManifestTypeExpr (l, t))); if s = Signed then True l else False l]]
-                | Bool -> predinst_ "boolean" Bool
+                  PtrType _ -> predinst_ "pointer" "pointer_" (PtrType Void)
+                | Int (Signed, IntRank) -> predinst "integer" "int_"
+                | Int (Unsigned, IntRank) -> predinst "u_integer" "uint_"
+                | Int (Signed, LitRank 3) -> predinst "llong_integer" "llong_"
+                | Int (Unsigned, LitRank 3) -> predinst "u_llong_integer" "ullong_"
+                | Int (Signed, LitRank 2) when int_rank = LitRank 2 -> predinst "integer" "int_"
+                | Int (Unsigned, LitRank 2) when int_rank = LitRank 2 -> predinst "u_integer" "uint_"
+                | Int (Signed, LitRank 1) -> predinst "short_integer" "short_"
+                | Int (Unsigned, LitRank 1) -> predinst "u_short_integer" "ushort_"
+                | Int (Signed, LitRank 0) -> predinst "character" "char_"
+                | Int (Unsigned, LitRank 0) -> predinst "u_character" "uchar_"
+                | Int (s, _) -> predinst___ "integer_" "integer__" [PtrType Void; intType; Bool] intType [SizeofExpr (l, TypeExpr (ManifestTypeExpr (l, t))); if s = Signed then True l else False l]
+                | Bool -> predinst_ "boolean" "bool_" Bool
                 | _ -> []
                 end
               | _ -> []

@@ -246,12 +246,12 @@ int main() //@ : custom_main_spec
     b->max = 1;
     //@ b->ge = ge;
     //@ b->gf = gf;    
-    //@ leak [_]b->ve |-> _;
-    //@ leak [_]b->vf |-> _;     
-    //@ leak [_]b->m |-> _;    
-    //@ leak [_]b->max |-> _; 
-    //@ leak [_]b->ge |-> _;
-    //@ leak [_]b->gf |-> _;               
+    //@ leak [_]b->ve |-> ?_ve;
+    //@ leak [_]b->vf |-> ?_vf;     
+    //@ leak [_]b->m |-> ?_m;
+    //@ leak [_]b->max |-> ?_max; 
+    //@ leak [_]b->ge |-> ?_ge;
+    //@ leak [_]b->gf |-> ?_gf;               
     //@ leak [_]malloc_block_buffer(_);
     
     //@ inc_ctr(gf);

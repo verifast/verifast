@@ -29,7 +29,7 @@ struct llist *create_llist()
 {
   struct llist *l = malloc(sizeof(struct llist));
   if (l == 0) abort();
-  struct node *n = malloc(sizeof(struct node));
+  struct node *n = calloc(1, sizeof(struct node));
   if (n == 0) abort();
   l->first = n;
   l->last = n;
@@ -69,7 +69,7 @@ void llist_add(struct llist *list, int x)
   //@ ensures llist(list, append(_v, cons(x, nil)));
 {
   struct node *l = 0;
-  struct node *n = malloc(sizeof(struct node));
+  struct node *n = calloc(1, sizeof(struct node));
   if (n == 0) {
     abort();
   }

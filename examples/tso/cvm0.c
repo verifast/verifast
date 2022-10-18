@@ -193,7 +193,7 @@ void print_interval(void *interval)
     {
         /*@
         predicate P() = [_]object_class(interval, &interval_class);
-        predicate Q() = [_]interval_->a |-> _ &*& [_]interval_->b |-> _;
+        predicate Q() = [_]interval_->a |-> ?a &*& [_]interval_->b |-> ?b;
         lemma void body(list<object> os1, list<object> os)
             requires P() &*& subset(objects, os1) == true &*& subset(os1, os) == true &*& heap(os);
             ensures Q() &*& heap(os) &*& subset(os, os) == true &*& subset(os1, os) == true;
@@ -270,7 +270,7 @@ struct interval *create_interval(int a, int b)
     interval->a = a;
     interval->b = b;
     return interval;
-    //@ leak object_class(&interval->object, _) &*& interval->a |-> _ &*& interval->b |-> _;
+    //@ leak object_class(&interval->object, _) &*& interval->a |-> ?a_ &*& interval->b |-> ?b_;
     //@ close interval_inv(interval, nil);
 }
 

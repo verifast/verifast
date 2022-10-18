@@ -103,7 +103,7 @@ struct usb_endpoint_descriptor {
 // XXX hmmm I dunno if I like the way this is done here...
 /*@ predicate usb_endpoint_descriptor_data(struct usb_endpoint_descriptor *epd; __u8 bEndpointAddress) = 
 	[1/2]epd->bEndpointAddress |-> bEndpointAddress
-	&*& [1/2]epd->bInterval |-> _;
+	&*& [1/2]epd->bInterval |-> ?bInterval;
 @*/
 
 /*@ 

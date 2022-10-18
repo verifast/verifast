@@ -84,7 +84,7 @@ predicate_family_instance pthread_run_pre(receiver_t)(void *data, any info) =
   auth_enc_args_receiver(data, ?receiver) &*&
   auth_enc_args_key(data, ?key) &*&
   auth_enc_args_msg(data, ?msg) &*& 
-  auth_enc_args_length(data, _) &*& 
+  auth_enc_args_length_(data, _) &*& 
   !bad(sender) && !bad(receiver) &*&
   principal(receiver, _) &*&
   [1/2]cryptogram(key, KEY_SIZE, ?key_ccs, ?key_cg) &*&

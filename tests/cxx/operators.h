@@ -15,7 +15,7 @@ class IntWrapper {
   {}
 
   void setInt(int i);
-  //@ requires this->i |-> _;
+  //@ requires this->i |-> ?v;
   //@ ensures this->i |-> i;
 
   int getInt() const;

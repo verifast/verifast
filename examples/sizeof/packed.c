@@ -25,7 +25,7 @@ void foo(void)
 	struct y* allocated = malloc(sizeof(struct y));
 	if (allocated != NULL) {
 		//@ leak malloc_block_y(allocated);
-		//@ leak x_a(&(allocated->value), _);
-		//@ leak x_b(&(allocated->value), _);
+		//@ leak x_a_(&(allocated->value), _);
+		//@ leak x_b_(&(allocated->value), _);
 	}
 }

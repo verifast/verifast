@@ -19,7 +19,7 @@ struct list_node {
     n == 0 ? 
       true
     :
-      n->value |-> _ &*& n->next |-> ?next &*& list_pred(next);
+      n->value |-> ?nValue &*& n->next |-> ?next &*& list_pred(next);
 @*/
 
 /*@
@@ -29,7 +29,7 @@ struct list_node {
     start == end ?
       true
     :
-      start->value |-> _ &*& start->next |-> ?next &*& start != 0 &*& start != next &*& lseg_pred(next, end);
+      start->value |-> ?startValue &*& start->next |-> ?next &*& start != 0 &*& start != next &*& lseg_pred(next, end);
 @*/
 
 /*@  
@@ -68,8 +68,8 @@ struct list_node {
 /*@  
   // Lemma for adding (appending) a node to a list segment predicate
   lemma void lseg_append_node(struct list_node* lseg_start, struct list_node* lseg_end)
-    requires lseg_pred(lseg_start, lseg_end) &*& lseg_end != 0 &*& lseg_end->value |-> _ &*& lseg_end->next |-> ?next1 &*& next1->value |-> _ &*& next1->next |-> ?next2;
-    ensures lseg_pred(lseg_start, next1) &*& next1->value |-> _ &*& next1->next |-> next2;
+    requires lseg_pred(lseg_start, lseg_end) &*& lseg_end != 0 &*& lseg_end->value |-> ?endValue &*& lseg_end->next |-> ?next1 &*& next1->value |-> ?next1Value &*& next1->next |-> ?next2;
+    ensures lseg_pred(lseg_start, next1) &*& next1->value |-> next1Value &*& next1->next |-> next2;
   {
     open lseg_pred(lseg_start, lseg_end);
     if (lseg_start == lseg_end) {
@@ -145,7 +145,7 @@ void insertion_sort_core(struct list_node** pfirst)
   
   struct list_node* last_sorted = *pfirst;
   while (last_sorted->next != 0)
-    /*@ invariant pointer(pfirst, ?first) &*& first != 0 &*& lseg_pred(first, last_sorted) &*& last_sorted->value |-> _ &*& last_sorted->next |-> ?last_sorted_next &*&
+    /*@ invariant pointer(pfirst, ?first) &*& first != 0 &*& lseg_pred(first, last_sorted) &*& last_sorted->value |-> ?last_sortedValue &*& last_sorted->next |-> ?last_sorted_next &*&
                    last_sorted != 0 &*& list_pred(last_sorted_next);
     @*/
   {
@@ -162,14 +162,14 @@ void insertion_sort_core(struct list_node** pfirst)
                   (pn == pfirst ? 
                     n == first &*&
                     lseg_pred(first, last_sorted) &*&
-                    last_sorted->value |-> _ &*& last_sorted->next |-> last_sorted_next &*&
+                    last_sorted->value |-> ?last_sortedValue1 &*& last_sorted->next |-> last_sorted_next &*&
                     list_pred(last_sorted_next)
                   :
                     (pn == &(last_sorted->next) ?
-                      lseg_pred(first, last_sorted) &*& last_sorted->value |-> _ &*& last_sorted->next |-> last_sorted_next &*& list_pred(last_sorted_next)
+                      lseg_pred(first, last_sorted) &*& last_sorted->value |-> ?last_sortedValue1 &*& last_sorted->next |-> last_sorted_next &*& list_pred(last_sorted_next)
                     :
-                      lseg_pred(first, ?prev_n) &*& prev_n != 0 &*& prev_n->value |-> _ &*& pn == &(prev_n->next) &*& pointer(pn, n) &*& lseg_pred(n, last_sorted) &*&
-                      n != first &*& last_sorted->value |-> _ &*& last_sorted->next |-> last_sorted_next &*& list_pred(last_sorted_next) &*& n != last_sorted_next
+                      lseg_pred(first, ?prev_n) &*& prev_n != 0 &*& prev_n->value |-> ?prev_nValue &*& pn == &(prev_n->next) &*& pointer(pn, n) &*& lseg_pred(n, last_sorted) &*&
+                      n != first &*& last_sorted->value |-> ?last_sortedValue1 &*& last_sorted->next |-> last_sorted_next &*& list_pred(last_sorted_next) &*& n != last_sorted_next
                     )
                   );
       @*/

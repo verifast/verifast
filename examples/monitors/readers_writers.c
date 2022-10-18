@@ -287,10 +287,10 @@ int main() //@ : custom_main_spec
     b->vw = vw;
     b->vr = vr;
     //@ b->gw = gw;
-    //@ leak [_]b->vw |-> _;
-    //@ leak [_]b->vr |-> _;
-    //@ leak [_]b->m |-> _;    
-    //@ leak [_]b->gw |-> _;    
+    //@ leak [_]b->vw |-> ?_;
+    //@ leak [_]b->vr |-> ?_;
+    //@ leak [_]b->m |-> ?_;    
+    //@ leak [_]b->gw |-> ?_;    
     //@ leak [_]malloc_block_read_write(_);
     //@ close init_mutex_ghost_args(read_write(b));
     //@ close read_write(b)(empb,empb);

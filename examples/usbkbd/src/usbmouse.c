@@ -385,6 +385,7 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 	mouse->data = usb_alloc_coherent(dev, 8, GFP_ATOMIC, &mouse->data_dma);
 	//@ signed char* data_tmp = mouse->data;
 	if (! mouse->data) {
+		//@ close usb_mouse_data_dma(mouse, _);
 		//@ open_struct(mouse);
 		//@ chars__to_uchars_(mouse);
 		goto fail1;

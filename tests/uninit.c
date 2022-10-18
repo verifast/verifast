@@ -49,3 +49,12 @@ void uninit_malloc_primitive()
   if (px == 0) abort();
   int x = *px; //~ should_fail
 }
+
+void uninit_struct()
+//@ requires true;
+//@ ensures true;
+{
+  struct foo *f = malloc(sizeof(struct foo));
+  if (f == 0) abort();
+  int x = f->x; //~ should_fail
+}

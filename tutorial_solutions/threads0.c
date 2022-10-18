@@ -31,7 +31,7 @@ predicate tree(struct tree *t, int depth) =
     t == 0 ?
         depth == 0
     :
-        t->left |-> ?left &*& t->right |-> ?right &*& t->value |-> _ &*& malloc_block_tree(t) &*&
+        t->left |-> ?left &*& t->right |-> ?right &*& t->value |-> ?value &*& malloc_block_tree(t) &*&
         tree(left, depth - 1) &*& tree(right, depth - 1);
 @*/
 

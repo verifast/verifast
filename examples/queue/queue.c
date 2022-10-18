@@ -65,6 +65,8 @@ struct queue *create_queue()
 {
     struct node *middle = malloc(sizeof(struct node));
     if (middle == 0) { abort(); }
+    middle->next = 0;
+    middle->value = 0;
     struct queue *queue = malloc(sizeof(struct queue));
     if (queue == 0) { abort(); }
     queue->first = middle;

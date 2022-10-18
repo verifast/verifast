@@ -1824,6 +1824,7 @@ fail2:
 	//@ assert dev_ == dev;
 	usb_kbd_free_mem(dev, kbd);
 	
+	//@ close usb_kbd_leds_lock(kbd, _);
 	//@ open_struct(kbd); 
 	//@ chars__to_uchars_(kbd);
 
@@ -1939,6 +1940,7 @@ static void usb_kbd_disconnect(struct usb_interface *intf) //@ : vf_usb_operatio
 		//@ assert interface_to_usbdev_ret == dev;
 		
 		//@ spin_lock_dispose(&kbd->leds_lock);
+		//@ close usb_kbd_leds_lock(kbd, _);
 		//@ open_struct(kbd);
 		//@ chars__to_uchars_(kbd);
 		//@ dispose_ghost_stuff(kbd);
@@ -2053,10 +2055,14 @@ static int /*__init*/ usb_kbd_init(void) //@ : module_setup_t(usbkbd_verified)
 	
 	// VeriFast does not support struct initialization of the form struct something = {.x = y},
 	// so we write the fields here (not exactly original code):
+	usb_kbd_id_table->idVendor = 0;
+	usb_kbd_id_table->idProduct = 0;
+	usb_kbd_id_table->bDeviceClass = 0;
 	usb_kbd_id_table->match_flags = USB_DEVICE_ID_MATCH_INT_INFO;
 	usb_kbd_id_table->bInterfaceClass = USB_INTERFACE_CLASS_HID;
 	usb_kbd_id_table->bInterfaceSubClass = USB_INTERFACE_SUBCLASS_BOOT;
 	usb_kbd_id_table->bInterfaceProtocol = USB_INTERFACE_PROTOCOL_KEYBOARD;
+	usb_kbd_id_table->driver_info = 0;
 	//@ close usb_device_id(usb_kbd_id_table, false);
 	
 	// usb_kbd_id_table[1] is all zero.

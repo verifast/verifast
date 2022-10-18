@@ -18,7 +18,7 @@ struct counter {
     struct mutex *mutex;
 };
 
-//@ predicate_ctor counter(struct counter *counter)() = counter->count |-> _;
+//@ predicate_ctor counter(struct counter *counter)() = counter->count |-> ?count;
 
 struct count_pulses_data {
     struct counter *counter;
@@ -28,7 +28,7 @@ struct count_pulses_data {
 /*@
 
 predicate_family_instance thread_run_data(count_pulses)(struct count_pulses_data *data) =
-    data->counter |-> ?counter &*& data->source |-> _ &*& malloc_block_count_pulses_data(data) &*&
+    data->counter |-> ?counter &*& data->source |-> ?source &*& malloc_block_count_pulses_data(data) &*&
     [1/2]counter->mutex |-> ?mutex &*& [1/3]mutex(mutex, counter(counter));
 
 @*/

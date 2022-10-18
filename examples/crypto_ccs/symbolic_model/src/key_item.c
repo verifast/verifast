@@ -153,7 +153,7 @@ int key_item_havege_random_stub(void *havege_state,
 void retreive_keys(pk_context *ctx, struct item **public, struct item **private)
   /*@ requires [?f]world(?pub, ?key_clsfy) &*&
                pk_context_with_keys(ctx, ?principal, ?count, RSA_BIT_KEY_SIZE, ?info) &*&
-               pointer(public, _) &*& pointer(private, _); @*/
+               pointer_(public, _) &*& pointer_(private, _); @*/
   /*@ ensures  [f]world(pub, key_clsfy) &*&
                pk_context_with_keys(ctx, principal, count, RSA_BIT_KEY_SIZE, info) &*&
                pointer(public, ?pub_key) &*& pointer(private, ?priv_key) &*&

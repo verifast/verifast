@@ -42,6 +42,7 @@ struct Test {
   //@ ensures TestPred(this, 1, _);
   {
     _i = 1;
+    _k = 0;
     //@ close TestPred(this, _, _);
   }
   
@@ -80,6 +81,7 @@ Test::Test(int i) : _i(i)
 //@ requires true;
 //@ ensures TestPred(this, i, _);
 {
+  _k = 0;
   //@ close TestPred(this, i, _);
 }
 

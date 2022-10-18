@@ -268,7 +268,7 @@ channel create_channel()
     //@ assert prophecy_var(prophecyVar, p, pred, ?msgs);
     c->prophecyVar = prophecyVar;
     //@ close valid_elems(p, nil, p);
-    //@ leak c->pred |-> _ &*& c->queue |-> _ &*& c->senderTree |-> _ &*& c->prophecyVar |-> _;
+    //@ leak c->pred |-> ?_ &*& c->queue |-> ?_ &*& c->senderTree |-> ?_ &*& c->prophecyVar |-> ?_;
     //@ close channel_inv(c)();
     //@ close create_mutex_ghost_arg(channel_inv(c));
     mutex mutex = create_mutex();
@@ -276,7 +276,7 @@ channel create_channel()
     //@ close create_mutex_cond_ghost_args(mutex);
     mutex_cond cond = create_mutex_cond();
     c->cond = cond;
-    //@ leak c->mutex |-> _ &*& mutex(mutex, _) &*& c->cond |-> _ &*& mutex_cond(cond, mutex);
+    //@ leak c->mutex |-> ?_ &*& mutex(mutex, _) &*& c->cond |-> ?_ &*& mutex_cond(cond, mutex);
     return c;
     //@ close exists(true);
     //@ close sender_node(senderTree, p);

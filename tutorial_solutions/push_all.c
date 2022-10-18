@@ -38,7 +38,7 @@ predicate lseg(struct node *first, struct node *last, int count) =
         count == 0
     :
         0 < count &*& first != 0 &*&
-        first->value |-> _ &*& first->next |-> ?next &*& malloc_block_node(first) &*&
+        first->value |-> ?value &*& first->next |-> ?next &*& malloc_block_node(first) &*&
         lseg(next, last, count - 1);
 
 lemma void nodes_to_lseg_lemma(struct node *first)
@@ -64,7 +64,7 @@ lemma void lseg_to_nodes_lemma(struct node *first)
 }
 
 lemma void lseg_add_lemma(struct node *first)
-    requires lseg(first, ?last, ?count) &*& last != 0 &*& last->value |-> _ &*& last->next |-> ?next &*& malloc_block_node(last) &*& lseg(next, 0, ?count0);
+    requires lseg(first, ?last, ?count) &*& last != 0 &*& last->value |-> ?lastValue &*& last->next |-> ?next &*& malloc_block_node(last) &*& lseg(next, 0, ?count0);
     ensures lseg(first, next, count + 1) &*& lseg(next, 0, count0);
 {
     open lseg(first, last, count);
@@ -139,7 +139,7 @@ void stack_push_all(struct stack *stack, struct stack *other)
             /*@
             invariant
                 lseg(head0, n, ?count1) &*&
-                n != 0 &*& n->value |-> _ &*& n->next |-> ?next &*& malloc_block_node(n) &*& lseg(next, 0, count0 - count1 - 1);
+                n != 0 &*& n->value |-> ?nValue &*& n->next |-> ?next &*& malloc_block_node(n) &*& lseg(next, 0, count0 - count1 - 1);
             @*/
         {
             n = n->next;

@@ -18,10 +18,11 @@ predicate_ctor I(eloop x)() =
     x->signalCount |-> ?signalCount &*& 0 <= signalCount &*&
     x->handler |-> ?h &*&
     x->dataPred |-> ?dataPred &*&
-    x->handlerData |-> ?data &*&
     h == 0 ?
+        x->handlerData |-> _ &*&
         true
     :
+        x->handlerData |-> ?data &*&
         [_]is_eloop_handler(h, x, dataPred) &*& [_]dataPred(data);
 
 predicate eloop(eloop x) =
@@ -71,7 +72,8 @@ void eloop_loop(eloop x)
         if (x->signalCount > 0) {
             x->signalCount--;
             handler = x->handler;
-            handlerData = x->handlerData;
+            if (handler)
+                handlerData = x->handlerData;
         }
         //@ close I(x)();
         release(&x->lock);

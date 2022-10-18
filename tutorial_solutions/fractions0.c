@@ -32,7 +32,7 @@ predicate tree(struct tree *t, int depth) =
     t == 0 ?
         depth == 0
     :
-        t->left |-> ?left &*& t->right |-> ?right &*& t->value |-> _ &*& malloc_block_tree(t) &*&
+        t->left |-> ?left &*& t->right |-> ?right &*& t->value |-> ?value &*& malloc_block_tree(t) &*&
         tree(left, depth - 1) &*& tree(right, depth - 1);
 @*/
 
@@ -87,9 +87,9 @@ struct fold_data {
 /*@
 
 predicate_family_instance thread_run_pre(folder)(struct fold_data *data, any info) =
-    data->tree |-> ?tree &*& tree(tree, _) &*& data->f |-> ?f &*& is_fold_function(f) == true &*& data->acc |-> _;
+    data->tree |-> ?tree &*& tree(tree, _) &*& data->f |-> ?f &*& is_fold_function(f) == true &*& data->acc |-> ?acc;
 predicate_family_instance thread_run_post(folder)(struct fold_data *data, any info) =
-    data->tree |-> ?tree &*& tree(tree, _) &*& data->f |-> ?f &*& is_fold_function(f) == true &*& data->acc |-> _;
+    data->tree |-> ?tree &*& tree(tree, _) &*& data->f |-> ?f &*& is_fold_function(f) == true &*& data->acc |-> ?acc;
 
 @*/
 

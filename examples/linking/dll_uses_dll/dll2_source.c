@@ -10,7 +10,7 @@ struct struct_dll2
 
 /*@ predicate predicate_dll2(struct struct_dll2* s) =
       malloc_block_struct_dll2(s) &*& 
-      struct_dll2_body(s, ?value);
+      struct_dll2_body_(s, _);
 @*/
 
 struct struct_dll2* get_struct_dll2()
