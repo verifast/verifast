@@ -16,7 +16,6 @@ let common_keywords = [
   "*"; "/"; "&"; "^"; "~"; "assert"; "currentCodeFraction"; "currentThread"; "varargs"; "short"; ">>"; "<<";
   "truncating"; "typedef"; "do"; "...";
   "float"; "double"; "real"; (* "real" really should be a ghost keyword, but it's used in vf__floating_point.h... *)
-  "->" (* Used for inductive value field access (e.g. "my_ind_value->my_param_name") in ghostcode, and struct field access in C and C-ghostcode. *)
 ]
 
 let ghost_keywords = [
@@ -45,7 +44,8 @@ let c_keywords = [
   "__int8"; "__int16"; "__int32"; "__int64"; "__int128";
   "inline"; "__inline"; "__inline__"; "__forceinline"; "_Noreturn";
   "__signed__"; "__always_inline"; "extern";
-  "__attribute__"
+  "__attribute__";
+  "->" (* Used for inductive value field access (e.g. "my_ind_value->my_param_name") in ghostcode, and struct field access in C and C-ghostcode. *)
 ]
 
 let java_keywords = [

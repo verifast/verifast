@@ -9,7 +9,7 @@ class NotAnnotatedClass2_1
 
 public class PartiallyAnnotated2 implements PartiallyAnnotatedInterface2
 {
-  //@ predicate PartiallyAnnotatedClassPred2(int value) = this->i |-> value;
+  //@ predicate PartiallyAnnotatedClassPred2(int value) = this.i |-> value;
   
   private int i;
   

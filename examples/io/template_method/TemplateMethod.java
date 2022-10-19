@@ -102,7 +102,7 @@ inductive adder_place = adder_place(int value);
  */
 public class Adder extends ComplexCalculation {
   short x = 0;
-  //@ predicate token(any t1) = this->x |-> ?x &*& t1 == adder_place(x);
+  //@ predicate token(any t1) = this.x |-> ?x &*& t1 == adder_place(x);
 
   public Adder()
     //@ requires true;
