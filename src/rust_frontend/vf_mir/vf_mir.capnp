@@ -154,6 +154,7 @@ struct Body {
 
     struct Annotation {
         raw @0: Text;
+        span @1: SpanData;
     }
 
     struct Contract {

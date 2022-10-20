@@ -79,6 +79,8 @@ module Mir = struct
     | TyInfoBasic { vf_ty } -> vf_ty
     | TyInfoGeneric { vf_ty; substs } -> vf_ty
 
+  type annot = { span : Ast.loc; raw : string }
+
   type local_decl = {
     mutability : mutability;
     id : string;
@@ -288,10 +290,28 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let src_info : Mir.source_info = { span; scope = () } in
     Ok src_info
 
+  let translate_annotation (annot_cpn : AnnotationRd.t) =
+    let open AnnotationRd in
+    let raw = raw_get annot_cpn in
+    let span_cpn = span_get annot_cpn in
+    let* span = translate_span_data span_cpn in
+    let annot : Mir.annot = { span; raw } in
+    Ok annot
+
   let translate_contract (contract_cpn : ContractRd.t) =
     let annots_cpn = ContractRd.annotations_get_list contract_cpn in
-    let annots = List.map AnnotationRd.raw_get annots_cpn in
-    VfMirAnnotParser.parse_func_contract annots
+    let* annots = ListAux.try_map translate_annotation annots_cpn in
+    let* annots =
+      ListAux.try_map
+        (fun { Mir.span; Mir.raw } ->
+          match span with
+          | Ast.Lexed (b, e) -> Ok (b, raw)
+          | DummyLoc | MacroExpansion _ | MacroParamExpansion _ ->
+              Error
+                (`TrContract "Invalid span translation for function contract"))
+        annots
+    in
+    Ok (VfMirAnnotParser.parse_func_contract annots)
   (* Todo: VeriFast parser throws exceptions. we should catch them and use our own error handling scheme *)
 
   let translate_mutability (mutability_cpn : MutabilityRd.t) =
@@ -715,7 +735,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let id = translate_basic_block_id id_cpn in
     if is_cleanup_get bblock_cpn then
       (* Todo @Nima: For now we are ignoring cleanup basic-blocks *)
-      let bblock : Mir.basic_block = { id; statements = []; terminator = [] } in
+      let bblock : Mir.basic_block =
+        {
+          id;
+          statements = [];
+          terminator = [ Ast.NoopStmt (Ast.Lexed Ast.dummy_loc0) ];
+        }
+      in
       Ok bblock
     else
       let statements_cpn = statements_get_list bblock_cpn in
@@ -744,7 +770,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let def_path = def_path_get body_cpn in
         let name = TrName.translate_def_path def_path in
         let contract_cpn = contract_get body_cpn in
-        let nonghost_callers_only, fn_type_clause, pre_post, terminates =
+        let* nonghost_callers_only, fn_type_clause, pre_post, terminates =
           translate_contract contract_cpn
         in
         let arg_count = arg_count_get body_cpn in
@@ -820,6 +846,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let* body_decls = ListAux.try_map translate_body bodies_cpn in
       let ty_decls = TyDecls.decls () in
       let decls = ty_decls @ body_decls in
+      (* Todo @Nima: we should add necessary inclusions from Rust side *)
+      let _ = Headers.add_decl "rust/std/alloc.h" in
       let header_names = Headers.decls () in
       let* headers = ListAux.try_map HeadersAux.parse_header header_names in
       let headers = List.concat headers in
@@ -829,6 +857,4 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Ok res -> res
     | Error err -> failwith "Todo: translate_vf_mir Error handling"
 end
-(* aux_headers := [ "rust/std/alloc.h" ]; *)
-(* for cleanup bblocks add noop terminator *)
-(* terminator kind goto *)
+(* Todo @Nima: terminator kind goto *)

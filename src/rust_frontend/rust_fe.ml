@@ -78,35 +78,87 @@ module Make (Args : RUST_FE_ARGS) = struct
         let emsg = SysUtil.gen_unix_error_msg ecode fname param in
         Error (`SysCallFailed emsg)
 
-  (*** If we use several messages later, it would work more efficient than storing everything and then deserializing it *)
   let get_vf_mir_rd (rs_file_path : string) =
     let* msg_in_chn, out_chn, err_in_chn = run_vf_mir_exporter rs_file_path in
     let module CpIO = Capnp_unix.IO in
-    let rd_ctx =
+    let msg_rd_ctx =
       CpIO.create_read_context_for_channel ~compression:`None msg_in_chn
     in
     let rec read_vf_mir_exp_msgs msgs =
       try
-        match CpIO.ReadContext.read_message rd_ctx with
+        match CpIO.ReadContext.read_message msg_rd_ctx with
         | None -> Ok msgs
         | Some msg_rw -> read_vf_mir_exp_msgs (msgs @ [ msg_rw ])
-      with CpIO.Unsupported_message_frame ->
-        Error (`CapnpMsgReadingFailed "Unsupported message frame")
+      with
+      | CpIO.Unsupported_message_frame ->
+          Error (`CapnpMsgReadingFailed "Unsupported message frame")
+      | _ -> Error (`CapnpMsgReadingFailed "Unsupported exception")
     in
-    let close_chns () =
+    let rd_ths_res = ref ((*msg reader*) None, (*err reader*) None) in
+    let rd_ths_mtx = Mutex.create () in
+    let rd_ths_cond = Condition.create () in
+    let msg_rd_job _ =
+      let res = read_vf_mir_exp_msgs [] in
+      Mutex.lock rd_ths_mtx;
+      (match res with
+      | Ok msgs -> rd_ths_res := (Some (Ok msgs), snd !rd_ths_res)
+      | Error err -> rd_ths_res := (Some (Error err), snd !rd_ths_res));
+      Condition.broadcast rd_ths_cond;
+      Mutex.unlock rd_ths_mtx
+    in
+    let err_rd_job _ =
+      let emsgs =
+        try Ok (Util.input_fully err_in_chn)
+        with _ -> Error (`ErrMsgReadingFailed "Unsupported exception")
+      in
+      Mutex.lock rd_ths_mtx;
+      (match emsgs with
+      | Ok emsgs -> rd_ths_res := (fst !rd_ths_res, Some (Ok emsgs))
+      | Error emsg -> rd_ths_res := (fst !rd_ths_res, Some (Error emsg)));
+      Condition.broadcast rd_ths_cond;
+      Mutex.unlock rd_ths_mtx
+    in
+    let run_jobs _ =
+      let msg_rd_th = Thread.create msg_rd_job () in
+      let err_rd_th = Thread.create err_rd_job () in
+      Mutex.lock rd_ths_mtx;
+      while
+        match !rd_ths_res with
+        | Some (Error _), _ | _, Some (Error _) -> false
+        | Some (Ok _), Some (Ok _) -> false
+        | _ -> true
+      do
+        Condition.wait rd_ths_cond rd_ths_mtx
+      done;
+      let res =
+        match !rd_ths_res with
+        | Some (Ok msgs), Some (Ok emsgs) -> Ok (msgs, emsgs)
+        | Some (Error err), _ | _, Some (Error err) -> Error err
+        | _ -> failwith "Should not happen"
+      in
+      Mutex.unlock rd_ths_mtx;
+      res
+    in
+    let close_chns emsgs =
       try
         (*** TODO @Nima: Can we force to close channels in case of exception *)
-        let emsg = Util.input_fully err_in_chn in
         match Unix.close_process_full (msg_in_chn, out_chn, err_in_chn) with
         | Unix.WEXITED 0 -> Ok ()
         | Unix.WEXITED _ | Unix.WSIGNALED _ | Unix.WSTOPPED _ ->
-            Error (`RustMirExpFailed emsg)
+            Error (`RustMirExpFailed emsgs)
       with Unix.Unix_error (ecode, fname, param) ->
         let emsg = SysUtil.gen_unix_error_msg ecode fname param in
         Error (`SysCallFailed emsg)
     in
-    let* msgs = read_vf_mir_exp_msgs [] in
-    let* _ = close_chns () in
+    let* msgs =
+      match run_jobs () with
+      | Ok (msgs, emsgs) ->
+          let* _ = close_chns emsgs in
+          Ok msgs
+      | Error err ->
+          let* _ = close_chns "No error message could be read from std_err" in
+          Error err
+    in
     match msgs with
     | [] -> Error (`RustMirDesFailed "No message from Rust MIR exporter")
     (*** For now we are just using the first message *)

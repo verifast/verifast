@@ -241,6 +241,7 @@ mod vf_mir_builder {
     use body_cpn::annotation as annot_cpn;
     use body_cpn::basic_block as basic_block_cpn;
     use body_cpn::basic_block_id as basic_block_id_cpn;
+    use body_cpn::contract as contract_cpn;
     use body_cpn::local_decl as local_decl_cpn;
     use body_cpn::local_decl_id as local_decl_id_cpn;
     use body_cpn::source_info as source_info_cpn;
@@ -355,7 +356,14 @@ mod vf_mir_builder {
             let def_path = tcx.def_path_str(def_id);
             body_cpn.set_def_path(&def_path);
 
-            Self::encode_contract(body, &mut annots, body_cpn.reborrow());
+            let contract_cpn = body_cpn.reborrow().init_contract();
+            let body_contract_span = crate::span_utils::body_contract_span(&body);
+            let contract_annots = annots
+                .drain_filter(|annot| {
+                    body_contract_span.contains(crate::span_utils::comment_span(&annot))
+                })
+                .collect::<LinkedList<_>>();
+            Self::encode_contract(tcx, contract_annots, contract_cpn);
 
             let arg_count = body.arg_count.try_into().expect(&format!(
                 "The number of args of {} cannot be stored in a Capnp message",
@@ -481,33 +489,30 @@ mod vf_mir_builder {
         }
 
         fn encode_contract(
-            body: &mir::Body<'tcx>,
-            annots: &mut LinkedList<Comment>,
-            body_cpn: body_cpn::Builder<'_>,
+            tcx: TyCtxt<'tcx>,
+            contract_annots: LinkedList<Comment>,
+            contract_cpn: contract_cpn::Builder<'_>,
         ) {
-            let body_contract_span = crate::span_utils::body_contract_span(&body);
-            let contract_annots = annots
-                .drain_filter(|annot| {
-                    body_contract_span.contains(crate::span_utils::comment_span(&annot))
-                })
-                .collect::<LinkedList<_>>();
-
-            let contract_cpn = body_cpn.init_contract();
-
             let len = contract_annots.len().try_into().expect(&format!(
-                "The number of contract annotations for {:?} cannot be stored in a Capnp message",
-                body.source.instance
+                "The number of contract annotations cannot be stored in a Capnp message"
             ));
             let mut annots_cpn = contract_cpn.init_annotations(len);
             for (idx, annot) in contract_annots.into_iter().enumerate() {
                 let annot_cpn = annots_cpn.reborrow().get(idx.try_into().unwrap());
-                Self::encode_annotation(annot, annot_cpn);
+                Self::encode_annotation(tcx, annot, annot_cpn);
             }
         }
 
-        fn encode_annotation(annot: Comment, mut annot_cpn: annot_cpn::Builder<'_>) {
+        fn encode_annotation(
+            tcx: TyCtxt<'tcx>,
+            annot: Comment,
+            mut annot_cpn: annot_cpn::Builder<'_>,
+        ) {
             let annot_string = annot.lines.join("\n");
             annot_cpn.set_raw(&annot_string);
+
+            let span_cpn = annot_cpn.init_span();
+            Self::encode_span_data(tcx, &crate::span_utils::comment_span(&annot), span_cpn);
         }
 
         fn encode_local_decl(
@@ -1078,3 +1083,4 @@ mod vf_annot_utils {
     }
 }
 // TODO @Nima: Some mut vars might not need to be mut.
+// TODO @Nima: The encoding functions need to be turned to method to prevent passing context around

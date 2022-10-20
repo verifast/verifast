@@ -1,8 +1,6 @@
 module type VF_MIR_ANNOT_PARSER_ARGS = sig
   val data_model_opt : Ast.data_model option
-
   val report_should_fail : string -> Ast.loc0 -> unit
-
   val report_range : Lexer.range_kind -> Ast.loc0 -> unit
 end
 
@@ -13,12 +11,10 @@ module Make (Args : VF_MIR_ANNOT_PARSER_ARGS) = struct
     (* If it is false the parser adds "requires false" and "ensures true" as the contract to functions without one.
        It does not matter here because we are just parsing annotations *)
     let enforce_annotations = true
-
     let data_model = Args.data_model_opt
   end)
 
   type src_pos = Ast.srcpos
-
   type src_span = Ast.loc0
 
   let token_stream_from_annot ((start_pos, text) : src_pos * string) =
@@ -54,9 +50,7 @@ module Make (Args : VF_MIR_ANNOT_PARSER_ARGS) = struct
     in
     Lexer.Stream.from next_tk
 
-  let parse_func_contract (annots : string list) =
-    let dpos = Ast.dummy_srcpos in
-    let annots = List.map (fun annot -> (dpos, annot)) annots in
+  let parse_func_contract (annots : (src_pos * string) list) =
     let tk_stream = token_stream_from_annots annots in
     let tk_stream = Parser.noop_preprocessor tk_stream in
     VfParser.parse_spec_clauses tk_stream

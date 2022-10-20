@@ -87,7 +87,7 @@ $(OCAML_AUX_OBJ): $(OCAML_AUX_SRC)
 # The whole frontend interface
 $(RUST_FE_OBJ): $(RUST_FE_SRC) $(OCAML_AUX_OBJ) $(VF_MIR_TRANSLATOR_OBJ)
 	@echo "  OCAMLOPT " $@
-	$(COMPILE) -c -w -11 -I $(RUST_FE_INC) -I $(VF_MIR_TRANSLATOR_DIR) -I $(VF_MIR_OCAML_STUBS_DIR) $(CAPNP_LINK_FLAGS) $<
+	$(COMPILE) -c -w -11 -thread -I $(RUST_FE_INC) -I $(VF_MIR_TRANSLATOR_DIR) -I $(VF_MIR_OCAML_STUBS_DIR) $(CAPNP_LINK_FLAGS) $<
 
 clean::
 	rm -f $(RUST_FE_DIR)/*.cm* $(RUST_FE_DIR)/*.o
