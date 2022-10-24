@@ -14,7 +14,7 @@ typedef struct havege_state havege_state;
 /*@
 
 predicate havege_state(havege_state *state) =
-  chars_((void*) state, HAVEGE_STATE_SIZE, _) &*&
+  chars_(state->content, HAVEGE_STATE_SIZE, _) &*&
   struct_havege_state_padding(state)
 ;
 

@@ -2740,7 +2740,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match penv, dialect, in_pure_context with
         | ("this", this_term) :: _, Some Cxx, false ->
           let ("this", PtrType (StructType sn)) :: _ = ps in
-          assume_neq this_term real_zero @@ fun () ->
+          assume_neq this_term (null_pointer_term ()) @@ fun () ->
           cont (Some (sn, this_term))
         | _ -> 
           cont None
@@ -2896,7 +2896,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       check_should_fail () @@ fun () ->
       execute_branch @@ fun () ->
       with_context (Executing ([], env, loc, sprintf "Verifying constructor '%s'" struct_name)) @@ fun () ->
-      assume_neq this_term int_zero_term @@ fun () ->
+      assume_neq this_term (null_pointer_term ()) @@ fun () ->
       produce_asn [] [] ghostenv env pre real_unit None None @@ fun h ghostenv env ->
       init_constructs this_term init_list leminfo sizemap h env ghostenv @@ fun delegated h init_list ->
       if List.exists (function ("this", _) -> true | _ -> false) init_list then assert_false h env loc "Invalid order of initialization: the base or delegating constructor should already have been handled." None;
@@ -2950,7 +2950,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | (base_name, (base_spec_loc, is_virtual, base_offset)) :: bases_rest ->
           iter bases_rest @@ fun h env tenv ->
           with_context (Executing (h, [], base_spec_loc, "Executing base destructor")) @@ fun () ->
-          let this_addr = ctxt#mk_add this_addr base_offset in
+          let this_addr = mk_field_ptr this_addr base_offset in
           let verify_dtor_call = verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env this_addr None in
           consume_cxx_object base_spec_loc real_unit_pat this_addr (StructType base_name) verify_dtor_call false h env @@ fun h env ->
           cont h env tenv
@@ -2969,7 +2969,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       check_should_fail () @@ fun () ->
       execute_branch @@ fun () ->
       with_context (Executing ([], env, loc, sprintf "Verifying destructor '%s'" @@ cxx_dtor_name struct_name)) @@ fun () ->
-      assume_neq this_term int_zero_term @@ fun () ->
+      assume_neq this_term (null_pointer_term ()) @@ fun () ->
       produce_asn [] [] ghostenv env pre real_unit None None @@ fun h ghostenv env ->
       begin fun cont ->
         match try_assoc struct_name bases_constructed_map with

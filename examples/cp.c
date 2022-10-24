@@ -21,7 +21,7 @@ int main(int argc, char** argv) //@ : main
   while(0 < nb_read)
     //@ invariant file(from) &*& file(to) &*& buffer[..nb_read] |-> ?_ &*& nb_read <= 100 &*& buffer[nb_read..100] |-> _;
   {
-    int nb_written = fwrite(buffer, 1, nb_read, to);
+    int nb_written = fwrite(buffer, 1, (uintptr_t)nb_read, to);
     //@ chars_chars__join(buffer);
     nb_read = fread(buffer, 1, 100, from);
   }

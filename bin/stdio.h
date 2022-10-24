@@ -47,11 +47,11 @@ FILE* fopen(char* filename, char* mode); // todo: check that mode is a valid mod
     @*/
     //@ ensures [f]string(filename, fcs) &*& [g]string(mode, mcs) &*& result == 0 ? true : file(result);
 
-int fread(void* buffer, int size, int n, FILE* fp);
+int fread(void* buffer, size_t size, size_t n, FILE* fp);
     //@ requires chars_(buffer, ?m, ?cs) &*& 0<=size &*& 0<=n &*& size * n <= m &*& [?f]file(fp);
     //@ ensures chars(buffer, size * result, ?cs2) &*& chars_(buffer + size * result, m - size * result, _) &*& [f]file(fp) &*& 0 <= result &*& result <= n;
   
-int fwrite(void* buffer, int size, int n, FILE* fp);
+int fwrite(void* buffer, size_t size, size_t n, FILE* fp);
     //@ requires [?fb]chars(buffer, ?m, ?cs) &*& 0<=size &*& 0<=n &*& size * n <= m &*& [?ff]file(fp);
     //@ ensures [fb]chars(buffer, m, cs) &*& [ff]file(fp) &*& 0 <= result &*& result <= n;
   

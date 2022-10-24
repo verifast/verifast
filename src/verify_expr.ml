@@ -1456,7 +1456,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       StaticArrayType (elemTp, elemCount) ->
       let elemSize = sizeof l elemTp in
       let arraySize = ctxt#mk_mul (ctxt#mk_intlit elemCount) elemSize in
-      ctxt#assert_term (ctxt#mk_and (ctxt#mk_le int_zero_term addr) (ctxt#mk_le (ctxt#mk_add addr arraySize) max_uintptr_term));
+      ctxt#assert_term (ctxt#mk_and (ctxt#mk_le int_zero_term (mk_ptr_address addr)) (ctxt#mk_le (ctxt#mk_add (mk_ptr_address addr) arraySize) max_uintptr_term));
       let produce_char_array_chunk h env addr elemCount =
         produce_char_array_chunk h env addr (ctxt#mk_mul (ctxt#mk_intlit elemCount) elemSize)
       in
@@ -1481,7 +1481,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         produce_array_chunk h env false addr (mk_char_list_of_c_string elemCount s) elemCount
       | (UnionType _ | StructType _ | StaticArrayType (_, _)), Expr (InitializerList (ll, es)) ->
         let rec iter h env i es =
-          let addr = ctxt#mk_add addr (ctxt#mk_mul (ctxt#mk_intlit i) elemSize) in
+          let addr = mk_ptr_add addr (ctxt#mk_mul (ctxt#mk_intlit i) elemSize) in
           match es with
             [] ->
             produce_char_array_chunk h env addr (elemCount - i)
@@ -1505,8 +1505,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let elems = get_unique_var_symb "elems" (list_type (if init = Unspecified then option_type elemTp else elemTp)) in
         begin fun cont ->
           match init, elemTp with
-            Default, (Int (_, _)|PtrType _) ->
+            Default, (Int (_, _)) ->
             assume (mk_all_eq elemTp elems (ctxt#mk_intlit 0)) cont
+          | Default, PtrType _ ->
+            assume (mk_all_eq elemTp elems (null_pointer_term ())) cont
           | _ ->
             cont ()
         end $. fun () ->
@@ -1565,7 +1567,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   ProverBool -> ctxt#mk_false
                 | ProverInt -> ctxt#mk_intlit 0
                 | ProverReal -> real_zero
-                | ProverInductive -> get_unique_var_symb_ "value" t (gh = Ghost)
+                | ProverInductive ->
+                  match t with
+                    PtrType _ -> null_pointer_term ()
+                  | _ -> get_unique_var_symb_ "value" t (gh = Ghost)
                 end
                 end
               | Expr e -> eval_h h env e (fun h env v -> cont h env (Some v))
@@ -1579,7 +1584,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | _ ->
       begin fun cont ->
         match init with
-          Default -> cont h env (Some (ctxt#mk_intlit 0))
+          Default -> cont h env (Some (match tp with PtrType _ -> null_pointer_term () | _ -> ctxt#mk_intlit 0))
         | Expr e -> eval_h h env e $. fun h env value -> cont h env (Some value)
         | Unspecified -> cont h env None
         | Term t -> cont h env (Some t)
@@ -1667,7 +1672,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if body_opt = None then register_prototype_used lc mangled_name None;
       let args = args |> List.map @@ fun e -> SrcPat (LitPat e) in
       check_ctor_call l args params pre post terminates h env @@ fun h env _ ->
-      assume_neq addr int_zero_term @@ fun () ->
+      assume_neq addr (null_pointer_term ()) @@ fun () ->
       if produce_padding_chunk then
         let _, _, Some padding_pred_symb, _ = List.assoc struct_name structmap in
         produce_chunk h (padding_pred_symb, true) [] coef None [addr] None @@ fun h ->
@@ -1698,9 +1703,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let assume_is_of_type l t tp cont =
     match tp with
-      Int (_, _) | PtrType _ ->
+      Int (_, _) ->
       let (min_term, max_term) = limits_of_type tp in
       assume (ctxt#mk_and (ctxt#mk_le min_term t) (ctxt#mk_le t max_term)) cont
+    | PtrType _ ->
+      let (min_term, max_term) = limits_of_type tp in
+      assume (ctxt#mk_and (ctxt#mk_le min_term (mk_ptr_address t)) (ctxt#mk_le (mk_ptr_address t) max_term)) cont
     | _ -> static_error l (Printf.sprintf "Producing the limits of a variable of type '%s' is not yet supported." (string_of_type tp)) None
   
   let assume_instanceof l t tp cont =
@@ -1733,12 +1741,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | Some (_, _, _, _, (func_lt, _)) ->
         (* forall f, g. func_lt(f, g) = (func_rank(f) < func_rank(g)) *)
         ctxt#begin_formal;
-        let f = ctxt#mk_bound 0 ctxt#type_int in
-        let g = ctxt#mk_bound 1 ctxt#type_int in
+        let f = ctxt#mk_bound 0 ctxt#type_inductive in
+        let g = ctxt#mk_bound 1 ctxt#type_inductive in
         let app = ctxt#mk_app func_lt [f; g] in
         let body = ctxt#mk_eq app (ctxt#mk_lt (ctxt#mk_app func_rank [f]) (ctxt#mk_app func_rank [g])) in
         ctxt#end_formal;
-        ctxt#assume_forall "func_lt" [app] [ctxt#type_int; ctxt#type_int] body
+        ctxt#assume_forall "func_lt" [app] [ctxt#type_inductive; ctxt#type_inductive] body
     end else begin
       match try_assoc "java.lang.Class_lt" purefuncmap with
         None -> ()
@@ -1846,7 +1854,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | Java, _, Some ObjType _
       | CLang, Some Cxx, Some _ ->
         let this_term = List.assoc "this" env' in
-        if not (ctxt#query (ctxt#mk_not (ctxt#mk_eq this_term int_zero_term))) then
+        if not (ctxt#query (ctxt#mk_not (ctxt#mk_eq this_term (null_pointer_term ())))) then
           assert_false h env l "Target of method call might be null." None
       | _ -> () 
     in
@@ -2045,6 +2053,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | AddressOf(_, e) -> is_safe_expr e
     | CastExpr (_, _, e) -> is_safe_expr e
     | Upcast (e, _, _) -> is_safe_expr e
+    | WPureFunCall (_, _, _, args) -> List.for_all is_safe_expr args
     | _ -> false
   
   let rec asserts_exclusive_ownership a =
@@ -2219,7 +2228,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         has_heap_effects();
         if pure then static_error l "Cannot write in a pure context." None;
         let consume_elem () =
-          let target = ctxt#mk_add arr (ctxt#mk_mul i (sizeof l elem_tp)) in
+          let target = mk_ptr_add arr (ctxt#mk_mul i (sizeof l elem_tp)) in
           consume_points_to_chunk_ rules h [] [] [] l elem_tp real_unit real_unit_pat target dummypat true $. fun _ h _ _ _ _ _ ->
           produce_points_to_chunk l h elem_tp real_unit target value $. fun h ->
           cont h env
@@ -2339,17 +2348,17 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let cont h = cont h env result in
       branch
         begin fun () ->
-          assume_eq result int_zero_term $. fun () ->
+          assume_eq result (null_pointer_term ()) $. fun () ->
           cont h
         end
         begin fun () ->
-          assume_neq result int_zero_term $. fun () ->
+          assume_neq result (null_pointer_term ()) $. fun () ->
           let n, elemTp, arrayPredSymb, mallocBlockSymb =
             match try_pointee_pred_symb0 elemTp with
               Some (_, _, _, asym, _, mbsym, _, _, _, _, _, uasym) -> n, (if g = "calloc" then elemTp else option_type elemTp), (if g = "calloc" then asym else uasym), mbsym
             | None -> arraySize, (if g = "calloc" then charType else option_type charType), (if g = "calloc" then chars_pred_symb () else chars__pred_symb ()), malloc_block_chars_pred_symb()
           in
-          assume (ctxt#mk_and (ctxt#mk_le int_zero_term result) (ctxt#mk_le (ctxt#mk_add result arraySize) max_uintptr_term)) $. fun () ->
+          assume (ctxt#mk_and (ctxt#mk_le int_zero_term (mk_ptr_address result)) (ctxt#mk_le (ctxt#mk_add (mk_ptr_address result) arraySize) max_uintptr_term)) $. fun () ->
           let values = get_unique_var_symb "values" (list_type elemTp) in
           assume (ctxt#mk_eq (mk_length values) n) $. fun () ->
           begin fun cont ->
@@ -2371,11 +2380,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let cont h = cont h env result in
       branch
         begin fun () ->
-          assume_eq result (ctxt#mk_intlit 0) $. fun () ->
+          assume_eq result (null_pointer_term ()) $. fun () ->
           cont h
         end
         begin fun () ->
-          assume_neq result (ctxt#mk_intlit 0) $. fun () ->
+          assume_neq result (null_pointer_term ()) $. fun () ->
           produce_c_object l real_unit result t eval_h (if g = "calloc" then Default else Unspecified) true false h env $. fun h env ->
           match t with
             StructType sn ->
@@ -2583,7 +2592,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let cs = get_unique_var_symb "stringLiteralChars" (InductiveType ("list", [charType])) in
         let value = get_unique_var_symb "stringLiteral" (PtrType charType) in
         let coef = get_dummy_frac_term () in
-        assume (ctxt#mk_not (ctxt#mk_eq value (ctxt#mk_intlit 0))) $. fun () ->
+        assume (ctxt#mk_not (ctxt#mk_eq value (null_pointer_term ()))) $. fun () ->
         assume (ctxt#mk_eq (mk_char_list_of_c_string (String.length s) s) cs) $. fun () ->
         cont (Chunk ((string_symb, true), [], coef, [value; cs], None)::h) env value
       end

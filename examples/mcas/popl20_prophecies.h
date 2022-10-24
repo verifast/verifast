@@ -25,7 +25,7 @@ typedef long long popl20_prophecy_id;
 
 /*@
 
-predicate popl20_prophecy(popl20_prophecy_id pid, list<pair<int, list<vararg> > > vs);
+predicate popl20_prophecy(popl20_prophecy_id pid, list<pair<vararg, list<vararg> > > vs);
 
 lemma void popl20_prophecy_inv(popl20_prophecy_id pid);
     requires popl20_prophecy(pid, ?vs);
@@ -88,7 +88,7 @@ void resolve_list_push(resolve_list_id rlid, popl20_prophecy_id pid, ...);
 
 /*@
 
-predicate prophecies(list<resolve_cmd> resolveCmds, list<list<pair<int, list<vararg> > > > vss) =
+predicate prophecies(list<resolve_cmd> resolveCmds, list<list<pair<vararg, list<vararg> > > > vss) =
     switch (resolveCmds) {
     case nil: return vss == nil;
     case cons(resolveCmd, resolveCmds0): return
@@ -98,7 +98,7 @@ predicate prophecies(list<resolve_cmd> resolveCmds, list<list<pair<int, list<var
         prophecies(resolveCmds0, vss0);
     };
 
-predicate prophecies_resolved(list<resolve_cmd> resolveCmds, list<list<pair<int, list<vararg> > > > vss, int result) =
+predicate prophecies_resolved(list<resolve_cmd> resolveCmds, list<list<pair<vararg, list<vararg> > > > vss, vararg result) =
     switch (resolveCmds) {
     case nil: return vss == nil;
     case cons(resolveCmd, resolveCmds0): return
@@ -115,7 +115,7 @@ predicate prophecies_resolved(list<resolve_cmd> resolveCmds, list<list<pair<int,
 
 typedef lemma void popl20_atomic_load_pointer_ghop(void **pp, list<resolve_cmd> resolveCmds, predicate() P, predicate(void *) Q)();
     requires [?f]*pp |-> ?p &*& prophecies(resolveCmds, ?vss) &*& P();
-    ensures [f]*pp |-> p &*& prophecies_resolved(resolveCmds, vss, (uintptr_t)p) &*& Q(p);
+    ensures [f]*pp |-> p &*& prophecies_resolved(resolveCmds, vss, vararg_pointer(p)) &*& Q(p);
 
 typedef lemma void popl20_atomic_load_pointer_ctxt(void **pp, list<resolve_cmd> resolveCmds, predicate() pre, predicate(void *) post)();
     requires popl20_atomic_spaces(nil) &*& pre() &*& is_popl20_atomic_load_pointer_ghop(?ghop, pp, resolveCmds, ?P, ?Q) &*& P();
@@ -145,8 +145,8 @@ fixpoint bool fst_head_eq<a, b>(a x, list<pair<a, b> > xys) {
 }
 
 typedef lemma void popl20_atomic_compare_and_swap_pointer_ghop(void **pp, void *old, void *new, list<resolve_cmd> resolveCmds, predicate() P, predicate(void *) Q)();
-    requires [?f]*pp |-> ?p &*& prophecies(resolveCmds, ?vss) &*& P() &*& p != old || !forall(vss, (fst_head_eq)((uintptr_t)p)) || f == 1;
-    ensures [f]*pp |-> (p == old ? new : p) &*& prophecies_resolved(resolveCmds, vss, (uintptr_t)p) &*& Q(p);
+    requires [?f]*pp |-> ?p &*& prophecies(resolveCmds, ?vss) &*& P() &*& p != old || !forall(vss, (fst_head_eq)(vararg_pointer(p))) || f == 1;
+    ensures [f]*pp |-> (p == old ? new : p) &*& prophecies_resolved(resolveCmds, vss, vararg_pointer(p)) &*& Q(p);
 
 typedef lemma void popl20_atomic_compare_and_swap_pointer_ctxt(void **pp, void *old, void *new, list<resolve_cmd> resolveCmds, predicate() pre, predicate(void *) post)();
     requires popl20_atomic_spaces(nil) &*& is_popl20_atomic_compare_and_swap_pointer_ghop(?ghop, pp, old, new, resolveCmds, ?P, ?Q) &*& P() &*& pre();

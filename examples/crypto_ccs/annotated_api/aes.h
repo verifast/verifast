@@ -16,7 +16,7 @@ typedef struct aes_context aes_context;
 /*@
 
 predicate aes_context(aes_context *context) =
-  chars_((void*) context, AES_CONTEXT_SIZE, _) &*&
+  chars_(context->content, AES_CONTEXT_SIZE, _) &*&
   struct_aes_context_padding(context)
 ;
 

@@ -13,6 +13,10 @@ lemma_auto void ptr_size_ptr_max();
     requires true;
     ensures __maxvalue(intptr_t) == (1 << (8 * sizeof(intptr_t) - 1)) - 1;
 
+lemma_auto void uintptr_size_uintptr_max();
+    requires true;
+    ensures __maxvalue(uintptr_t) == (1 << (8 * sizeof(uintptr_t))) - 1;
+
 inductive target = IP16 | I16 | ILP32 | LLP64 | LP64;
 
 fixpoint target __target();

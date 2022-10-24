@@ -2,6 +2,7 @@
 .requires CRT/bitops.gh#bitand_uintN_def
 .requires CRT/bitops.gh#bitnot_def
 .requires CRT/bitops.gh#bitor_def
+.requires CRT/bitops.gh#bitor_limits
 .requires CRT/bitops.gh#bitor_uintN_def
 .requires CRT/bitops.gh#bitxor_uintN_def
 .requires CRT/bitops.gh#shiftleft_def
@@ -72,6 +73,7 @@
 .requires CRT/prelude.h#chars_unseparate_string
 .requires CRT/prelude.h#div_rem
 .requires CRT/prelude.h#divrem_elim
+.requires CRT/prelude.h#field_ptr_provenance_injective
 .requires CRT/prelude.h#int__to_chars_
 .requires CRT/prelude.h#int_of_chars_of_int
 .requires CRT/prelude.h#int_of_chars_size
@@ -84,6 +86,7 @@
 .requires CRT/prelude.h#ints__inv
 .requires CRT/prelude.h#ints__join
 .requires CRT/prelude.h#ints__split
+.requires CRT/prelude.h#ints__to_chars_
 .requires CRT/prelude.h#ints__to_ints
 .requires CRT/prelude.h#ints_inv
 .requires CRT/prelude.h#ints_to_chars
@@ -129,7 +132,14 @@
 .requires CRT/prelude.h#ullongs_inv
 .requires CRT/prelude.h#ushorts_inv
 .requires CRT/prelude_core.gh#default_value_eq_zero
+.requires CRT/target.gh#int_size_int_max
+.requires CRT/target.gh#long_size_long_max
+.requires CRT/target.gh#ptr_size_ptr_max
+.requires CRT/target.gh#target_sizes
+.requires CRT/target.gh#uintptr_size_uintptr_max
 .provides ./bitops_ex.gh#bitand_bitor_1_2_lemma
 .provides ./bitops_ex.gh#bitand_bitor_lemma
+.provides ./bitops_ex.gh#bitand_minus2_lemma
+.provides ./bitops_ex.gh#bitand_minus_lemma
 .provides ./bitops_ex.gh#bitand_plus_4
 .produces module bitops_ex

@@ -10,5 +10,5 @@ verifast_both -shared -link_should_fail inter_module_loop1.c inter_module_loop2.
 verifast_both -allow_assume simple_recursion.c
 
 verifast_both -disable_overflow_check -c ackermann.c
-verifast_both -disable_overflow_check -c funcptr.c
-verifast_both call_perms.o termination.c cons.c
+verifast_both -disable_overflow_check -c -assume_no_subobject_provenance funcptr.c
+verifast_both call_perms.o termination.c -assume_no_subobject_provenance cons.c

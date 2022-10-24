@@ -209,7 +209,7 @@ int chars_index_of_string(char *chars, int length, char *string)
     //@ chars_limits(chars);
     end = chars + length;
     while (true)
-        //@ invariant [f1]chars(chars, length, charsChars) &*& [f2]string(string, stringChars) &*& chars <= p &*& p <= end;
+        //@ invariant [f1]chars(chars, length, charsChars) &*& [f2]string(string, stringChars) &*& 0 <= p - chars &*& p - chars <= length &*& p == chars + (p - chars);
     {
         if ((size_t)(end - p) < n) return -1;
         //@ chars_split(chars, p - chars);

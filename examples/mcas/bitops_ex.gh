@@ -4,12 +4,20 @@
 #include <bitops.gh>
 
 lemma void bitand_bitor_lemma(uintptr_t x, uintptr_t y);
-    requires true == ((x & y) == 0);
-    ensures y == ((x | y) & y) &*& x == ((x | y) & ~y);
+    requires true == ((x & y) == 0) &*& 0 <= x &*& x <= UINTPTR_MAX &*& 0 <= y &*& y <= UINTPTR_MAX;
+    ensures y == ((x | y) & y) &*& x == ((x | y) & ~y) &*& y == ((x + y) & y) &*& x + y <= UINTPTR_MAX;
+
+lemma void bitand_minus_lemma(uintptr_t x);
+    requires (x & 1) != 0 &*& 0 <= x;
+    ensures 0 <= x - 1;
+
+lemma void bitand_minus2_lemma(uintptr_t x);
+    requires (x & 2) != 0 &*& 0 <= x;
+    ensures 0 <= x - 2;
 
 lemma void bitand_bitor_1_2_lemma(void *x);
-    requires true == (((uintptr_t)x & 1) == 0);
-    ensures  true == ((((uintptr_t)x | 2) & 1) == 0);
+    requires true == (((uintptr_t)x & 1) == 0) &*& ((uintptr_t)x & 2) == 0 &*& 0 <= (uintptr_t)x &*& (uintptr_t)x <= UINTPTR_MAX;
+    ensures  true == ((((uintptr_t)x | 2) & 1) == 0) &*& true == ((((uintptr_t)x + 2) & 1) == 0) &*& (uintptr_t)x + 2 <= UINTPTR_MAX;
 
 lemma void bitand_plus_4(void *x);
     requires true == (((uintptr_t)x & 1) == 0) &*& true == (((uintptr_t)x & 2) == 0);

@@ -14,6 +14,7 @@
 .provides ./string.h#strcmp
 .provides ./string.h#strlen
 .provides ./string.h#strdup
+.provides ./prelude.h#field_ptr_provenance_injective
 .provides ./prelude.h#integer__distinct
 .provides ./prelude.h#integer__unique
 .provides ./prelude.h#integer__limits
@@ -121,6 +122,7 @@
 .provides ./prelude.h#uchars_to_chars
 .provides ./prelude.h#chars_to_ints
 .provides ./prelude.h#ints_to_chars
+.provides ./prelude.h#ints__to_chars_
 .provides ./prelude.h#chars_to_uints
 .provides ./prelude.h#uints_to_chars
 .provides ./prelude.h#chars_to_bools
@@ -249,6 +251,7 @@
 .provides ./target.gh#int_size_int_max
 .provides ./target.gh#long_size_long_max
 .provides ./target.gh#ptr_size_ptr_max
+.provides ./target.gh#uintptr_size_uintptr_max
 .provides ./target.gh#target_sizes
 .predicate @./stdarg.h#va_list
 .provides ./stdarg.h#__va_start
