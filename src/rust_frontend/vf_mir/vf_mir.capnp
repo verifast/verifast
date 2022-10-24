@@ -1,4 +1,9 @@
 @0x810f32815ffa3aa2;
+struct UInt128 {
+    h @0: UInt64;
+    l @1: UInt64;
+}
+
 struct Option(T) {
     union {
         nothing @0: Void;
@@ -250,7 +255,11 @@ struct Body {
             struct TerminatorKind {
                 struct SwitchIntData {
                     struct SwitchTargets {
-                        targets @0: List(BasicBlockId);
+                        struct Branch {
+                            val @0: UInt128;
+                            target @1: BasicBlockId;
+                        }
+                        branches @0: List(Branch);
                         otherwise @1: Option(BasicBlockId);
                     }
 

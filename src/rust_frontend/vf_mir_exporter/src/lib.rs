@@ -1,6 +1,7 @@
 #![feature(rustc_private)]
 #![feature(drain_filter)]
 #![feature(box_patterns)]
+#![feature(split_array)]
 
 /***
  * TODO @Nima:
@@ -227,6 +228,7 @@ fn get_bodies<'tcx>(tcx: TyCtxt<'tcx>) -> Vec<(String, BodyWithBorrowckFacts<'tc
 }
 
 mod vf_mir_builder {
+    mod capnp_utils;
     use crate::vf_mir_capnp::body as body_cpn;
     use crate::vf_mir_capnp::mutability as mutability_cpn;
     use crate::vf_mir_capnp::span_data as span_data_cpn;
@@ -260,8 +262,10 @@ mod vf_mir_builder {
     use span_data_cpn::loc as loc_cpn;
     use statement_cpn::statement_kind as statement_kind_cpn;
     use std::collections::LinkedList;
+    use switch_int_data_cpn::switch_targets as switch_targets_cpn;
     use terminator_cpn::terminator_kind as terminator_kind_cpn;
     use terminator_kind_cpn::fn_call_data as fn_call_data_cpn;
+    use terminator_kind_cpn::switch_int_data as switch_int_data_cpn;
     use tracing::{debug, trace};
     use ty_cpn::adt_ty as adt_ty_cpn;
     use ty_cpn::const_ as ty_const_cpn;
@@ -551,8 +555,9 @@ mod vf_mir_builder {
         }
 
         fn encode_ty(tcx: TyCtxt<'tcx>, ty: ty::Ty<'tcx>, mut ty_cpn: ty_cpn::Builder<'_>) {
-            let ty_kind_cpn = ty_cpn.init_kind();
+            let mut ty_kind_cpn = ty_cpn.init_kind();
             match ty.kind() {
+                ty::TyKind::Bool => ty_kind_cpn.set_bool(()),
                 ty::TyKind::Uint(u_int_ty) => {
                     let u_int_ty_cpn = ty_kind_cpn.init_u_int();
                     Self::encode_ty_uint(u_int_ty, u_int_ty_cpn)
@@ -788,7 +793,10 @@ mod vf_mir_builder {
                     discr,
                     switch_ty,
                     targets,
-                } => todo!("Mir terminator SwitchInt is not supported"),
+                } => {
+                    let switch_int_data_cpn = terminator_kind_cpn.init_switch_int();
+                    Self::encode_switch_int_data(tcx, discr, targets, switch_int_data_cpn);
+                }
                 mir::TerminatorKind::Resume => terminator_kind_cpn.set_resume(()),
                 mir::TerminatorKind::Return => terminator_kind_cpn.set_return(()),
                 mir::TerminatorKind::Call {
@@ -813,6 +821,48 @@ mod vf_mir_builder {
                 }
                 _ => todo!("Unsupported Mir terminator kind"),
             }
+        }
+
+        fn encode_switch_int_data(
+            tcx: TyCtxt<'tcx>,
+            discr: &mir::Operand<'tcx>,
+            targets: &mir::terminator::SwitchTargets,
+            mut switch_int_data_cpn: switch_int_data_cpn::Builder<'_>,
+        ) {
+            let discr_cpn = switch_int_data_cpn.reborrow().init_discr();
+            Self::encode_operand(tcx, discr, discr_cpn);
+            let targets_cpn = switch_int_data_cpn.init_targets();
+            Self::encode_switch_targets(targets, targets_cpn);
+        }
+
+        fn encode_switch_targets(
+            targets: &mir::terminator::SwitchTargets,
+            mut targets_cpn: switch_targets_cpn::Builder<'_>,
+        ) {
+            debug!("Encoding Switch targets {:?}", targets);
+            let len = targets
+                .all_targets()
+                .len()
+                .checked_sub(1 /*`otherwise` case*/)
+                .expect(&format!(
+                    "Compiler invariant failed. SwitchInt must always have at least one branch"
+                ));
+            let len = len.try_into().expect(&format!(
+                "{} Switch branches cannot be stored in a Capnp message",
+                len
+            ));
+            let mut branches_cpn = targets_cpn.reborrow().init_branches(len);
+            for (idx, (val, target)) in targets.iter().enumerate() {
+                let mut branch_cpn = branches_cpn.reborrow().get(idx.try_into().unwrap());
+                let val_cpn = branch_cpn.reborrow().init_val();
+                capnp_utils::encode_u_int128(val, val_cpn);
+                let target_cpn = branch_cpn.init_target();
+                Self::encode_basic_block_id(target, target_cpn);
+            }
+            let otherwise_cpn = targets_cpn.init_otherwise();
+            // TODO @Nima: For now there is always an `otherwise` case in SwitchInt targets. The compiler may change this invariant.
+            let target_cpn = otherwise_cpn.init_something();
+            Self::encode_basic_block_id(targets.otherwise(), target_cpn);
         }
 
         fn encode_fn_call_data(
