@@ -62,6 +62,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let {
     option_verbose=initial_verbosity;
     option_disable_overflow_check=disable_overflow_check;
+    option_assume_no_subobject_provenance=assume_no_subobject_provenance;
     option_allow_should_fail=allow_should_fail;
     option_emit_manifest=emit_manifest;
     option_check_manifest=check_manifest;
@@ -371,7 +372,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ObjType (n, _) -> ProverInt
     | ArrayType t -> ProverInt
     | StaticArrayType (t, s) -> ProverInductive
-    | PtrType t -> ProverInt
+    | PtrType t -> ProverInductive
     | FuncType _ -> ProverInt
     | PredType (tparams, ts, inputParamCount, _) -> ProverInductive
     | PureFuncType _ -> ProverInductive
@@ -397,7 +398,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let get_class_symbol = mk_symbol "getClass" [ctxt#type_int] ctxt#type_int Uninterp
   let class_serial_number = mk_symbol "class_serial_number" [ctxt#type_int] ctxt#type_int Uninterp
   let class_rank = mk_symbol "class_rank" [ctxt#type_int] ctxt#type_real Uninterp
-  let func_rank = mk_symbol "func_rank" [ctxt#type_int] ctxt#type_real Uninterp
+  let func_rank = mk_symbol "func_rank" [ctxt#type_inductive] ctxt#type_real Uninterp
   let bitwise_or_symbol = mk_symbol "bitor" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp
   let bitwise_xor_symbol = mk_symbol "bitxor" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp
   let bitwise_and_symbol = mk_symbol "bitand" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp
@@ -529,33 +530,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Int (Unsigned, LitRank k) -> le_big_int zero_big_int n && le_big_int n (max_unsigned_big_int k)
     | _ -> false
 
-  let assume_bounds term (tp: type_) = 
-    match tp with
-      Int (_, _)|PtrType _ ->
-      let min, max = limits_of_type tp in
-      ctxt#assert_term (ctxt#mk_and (ctxt#mk_le min term) (ctxt#mk_le term max))
-    | _ -> ()
-  
-  let get_unique_var_symb_non_ghost x t = 
-    let res = get_unique_var_symb x t in
-    assume_bounds res t;
-    res
-  
-  let get_unique_var_symb_ x t ghost = 
-    if ghost then
-      get_unique_var_symb x t
-    else
-      get_unique_var_symb_non_ghost x t
-  
   let get_dummy_frac_term () =
     let t = get_unique_var_symb "dummy" RealType in
     dummy_frac_terms := t::!dummy_frac_terms;
     t
   
   let is_dummy_frac_term t = List.memq t !dummy_frac_terms
-  
-  let get_unique_var_symbs_ xts ghost = List.map (fun (x, t) -> (x, get_unique_var_symb_ x t ghost)) xts
-  let get_unique_var_symbs_non_ghost xts = List.map (fun (x, t) -> (x, get_unique_var_symb_non_ghost x t)) xts
   
   let real_unit_pat = TermPat real_unit
   
@@ -1973,7 +1953,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match (gh, tparams, ftps) with
         (Real, [], []) ->
         let isfuncname = "is_" ^ ftn in
-        let domain = [ProverInt] in
+        let domain = [provertype_of_type (PtrType Void)] in
         let symb = mk_func_symbol isfuncname domain ProverBool Uninterp in
         [(isfuncname, (dummy_loc, [], Bool, [("", PtrType Void)], symb))]
       | _ -> []
@@ -2415,7 +2395,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let (_, pts) = List.split pts in
             let rec type_is_inhabited tp =
               match tp with
-                Bool | Int (_, _) | RealType | PtrType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> true
+                Bool | Int (_, _) | RealType | PtrType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType | AbstractType _ -> true
               | GhostTypeParam _ -> true  (* Should be checked at instantiation site. *)
               | PredType (tps, pts, _, _) -> true
               | PureFuncType (t1, t2) -> type_is_inhabited t2
@@ -2458,7 +2438,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             match tp with
               Bool -> Some []
             | GhostTypeParam x -> Some [x]
-            | Int (_, _) | RealType | PtrType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> None
+            | Int (_, _) | RealType | PtrType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType | AbstractType _ -> None
             | PureFuncType (_, _) -> None (* CAVEAT: This assumes we do *not* have extensionality *)
             | InductiveType (i0, targs) ->
               begin match try_assoc i0 infinite_map with
@@ -2531,29 +2511,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ContainsAnyConstraint allowContainsAnyPositive -> type_satisfies_contains_any_constraint allowContainsAnyPositive tp
 
   (* Region: type compatibility checker *)
-
-  let direct_base_addr (derived_name, derived_addr) base_name =
-    let _, Some (bases, _), _, _ = List.assoc derived_name structmap in
-    let _, _, base_offset = List.assoc base_name bases in
-    ctxt#mk_add derived_addr base_offset
-
-  let base_addr l (derived_name, derived_addr) base_name =
-    let rec iter derived_name offsets =
-      let _, Some (bases, _), _, _ = List.assoc derived_name structmap in 
-      let other_paths = bases |> List.fold_left begin fun acc (name, (_, _, offset)) -> 
-        match iter name (offset :: offsets) with
-        | Some p -> p :: acc
-        | None -> acc
-      end [] in
-      match try_assoc base_name bases, other_paths with 
-      | Some _,  _ :: _
-      | None, _ :: (_ :: _) -> static_error l (Printf.sprintf "Derived '%s' to base '%s' is ambiguous: multiple '%s' base candidates exist." derived_name base_name base_name) None
-      | Some (_, _, base_offset), [] -> Some (base_offset :: offsets)
-      | None, [p] -> Some p
-      | _ -> None
-    in 
-    let Some offsets = iter derived_name [] in 
-    List.rev offsets |> List.fold_left ctxt#mk_add derived_addr
 
   let rec is_derived_of_base derived_name base_name =
     let check_bases bases = bases |> List.exists @@ fun (name, _) -> is_derived_of_base name base_name in
@@ -4395,7 +4352,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   and check_expr_t_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e t0 isCast =
     match (e, unfold_inferred_type t0) with
       (Operation(l, Div, [IntLit(_, i1, _, _, _); IntLit(_, i2, _, _, _)]), RealType) -> RealLit(l, (num_of_big_int i1) // (num_of_big_int i2), None)
-    | (IntLit (l, n, _, _, _), PtrType _) when isCast || eq_big_int n zero_big_int -> wintlit l n
+    | (IntLit (l, n, _, _, _), PtrType _) when isCast || eq_big_int n zero_big_int -> WPureFunCall (l, "pointer_ctor", [], [WPureFunCall (l, "null_pointer_provenance", [], []); wintlit l n])
     | (IntLit (l, n, _, _, _), RealType) -> RealLit (l, num_of_big_int n, None)
     | (IntLit (l, n, _, _, _), (Int (Unsigned, rank) as tp)) when isCast || inAnnotation <> Some true ->
       let k, isTight = get_glb_litrank rank in
@@ -4433,7 +4390,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         begin match (t, t0) with
         | _ when t = t0 -> w
         | (ObjType _, ObjType _) when isCast -> w
-        | (Int (_, _)|PtrType _), (Int (_, _)|PtrType _) when isCast -> if definitely_is_upcast (int_rank_and_signedness t) (int_rank_and_signedness t0) then Upcast (w, t, t0) else w
+        | (PtrType _, PtrType _) when isCast -> Upcast (w, t, t0)
+        | (Int (_, _)), (Int (_, _)) when isCast -> if definitely_is_upcast (int_rank_and_signedness t) (int_rank_and_signedness t0) then Upcast (w, t, t0) else w
+        | (PtrType _), (Int (Unsigned, k)) when k = ptr_rank && isCast -> WReadInductiveField (expr_loc w, w, "pointer", "pointer_ctor", "address", [])
+        | (Int (_, _)), (PtrType _) when isCast && (inAnnotation = Some true || definitely_is_upcast (int_rank_and_signedness t) (int_rank_and_signedness t0)) -> WPureFunCall (expr_loc w, "pointer_ctor", [], [WPureFunCall (expr_loc w, "null_pointer_provenance", [], []); w])
         | (Int (signedness, _), (Float|Double|LongDouble)) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type (Int (signedness, LitRank max_rank))) [TypedExpr (w, t)]
         | ((Float|Double|LongDouble), (Float|Double|LongDouble)) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
         | ((Float|Double|LongDouble), (Int (signedness, _))) when isCast -> floating_point_fun_call_expr funcmap (expr_loc w) (Int (signedness, LitRank max_rank)) ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
@@ -4453,8 +4413,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
     match t with
       Bool -> w
-    | Int (_, _) | PtrType _ when language = CLang ->
+    | Int (_, _) when language = CLang ->
       WOperation (expr_loc e, Neq, [w; wintlit (expr_loc e) (big_int_of_int 0)], t)
+    | PtrType _ when language = CLang ->
+      WOperation (expr_loc e, Neq, [w; WPureFunCall (expr_loc e, "null_pointer", [], [])], t)
     | _ -> expect_type (expr_loc e) inAnnotation t Bool; w
   and check_deref_core functypemap funcmap classmap interfmap (pn,ilist) l tparams tenv e f =
     let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv None e in
@@ -4498,10 +4460,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | PtrType (UnionType un) ->
       begin match try_assoc un unionmap with
         Some (_, Some (fds, _)) ->
-        begin match try_assoc f fds with
+        begin match try_assoc_i f fds with
           None -> static_error l ("No such field in union '" ^ un ^ "'.") None
-        | Some (_, tp) ->
-          (WDeref (l, w, tp), tp, None)
+        | Some (i, (_, tp)) ->
+          (WDeref (l, WPureFunCall (l, "union_variant_ptr", [], [w; wintlit l (big_int_of_int i)]), tp), tp, None)
         end
       | _ -> static_error l ("Invalid dereference; union type '" ^ un ^ "' has not been defined.") None
       end
@@ -5093,6 +5055,75 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | rank -> ctxt#mk_sub (ctxt#mk_mul (ctxt#mk_intlit 8) (rank_size_term rank)) (ctxt#mk_intlit 1)
       in
       mk_app !!truncate_signed_symb [t; nbBits]
+  
+  let pointer_ctor_symb = lazy_purefuncsymb "pointer_ctor"
+  let ptr_add_symb = lazy_purefuncsymb "ptr_add"
+  let field_ptr_symb = lazy_purefuncsymb "field_ptr"
+  let union_variant_ptr_symb = lazy_purefuncsymb "union_variant_ptr"
+  let null_pointer_provenance_symb = lazy_purefuncsymb "null_pointer_provenance"
+  let null_pointer_symb = lazy_purefuncsymb "null_pointer"
+  let null_pointer_term =
+    match language with
+      Java -> fun () -> int_zero_term
+    | _ -> fun () -> snd (null_pointer_symb ())
+
+  let mk_ptr_add p off = mk_app (ptr_add_symb ()) [p; off]
+  let mk_field_ptr p off = mk_app (field_ptr_symb ()) [p; off]
+
+  if assume_no_subobject_provenance && List.mem_assoc "field_ptr" purefuncmap then begin
+    ctxt#begin_formal;
+    let pr = ctxt#mk_bound 0 ctxt#type_inductive in
+    let addr = ctxt#mk_bound 1 ctxt#type_int in
+    let fp = mk_field_ptr pr addr in
+    let eq = ctxt#mk_eq fp (mk_ptr_add pr addr) in
+    ctxt#end_formal;
+    ctxt#assume_forall "field_ptr_eq_ptr_add" [fp] [ctxt#type_inductive; ctxt#type_int] eq
+  end
+
+  let pointer_getters = lazy_value (fun () ->
+    let (_, _, _, ["provenance", ptr_provenance; "address", ptr_address], _, _, _, _) =
+      List.assoc "pointer" inductivemap
+    in
+    ptr_provenance, ptr_address
+  )
+  
+  let ptr_provenance () = fst (pointer_getters ())
+  let ptr_address () = snd (pointer_getters ())
+
+  let mk_pointer pr addr = mk_app (pointer_ctor_symb ()) [pr; addr]
+  let mk_ptr_provenance p = ctxt#mk_app (ptr_provenance ()) [p]
+  let mk_ptr_address p = ctxt#mk_app (ptr_address ()) [p]
+
+  let assume_bounds term (tp: type_) = 
+    match tp with
+      Int (_, _) ->
+      let min, max = limits_of_type tp in
+      ctxt#assert_term (ctxt#mk_and (ctxt#mk_le min term) (ctxt#mk_le term max))
+    | PtrType _ ->
+      let min, max = limits_of_type tp in
+      ctxt#assert_term (ctxt#mk_and (ctxt#mk_le min (mk_ptr_address term)) (ctxt#mk_le (mk_ptr_address term) max))
+    | _ -> ()
+  
+  let assert_mk_pointer p =
+    ctxt#assert_term (ctxt#mk_eq p (mk_pointer (mk_ptr_provenance p) (mk_ptr_address p)))
+
+  let get_unique_var_symb_ x t ghost = 
+    let result = get_unique_var_symb x t in
+    if not ghost then assume_bounds result t;
+    begin match language, t with
+      CLang, PtrType _ -> assert_mk_pointer result
+    | _ -> ()
+    end;
+    result
+
+  let () = 
+    globalmap1 |> List.iter (fun (x, (lg, tp, symb, ref_init)) -> assert_mk_pointer symb)
+
+  let get_unique_var_symb_non_ghost x t = 
+    get_unique_var_symb_ x t false
+  
+  let get_unique_var_symbs_ xts ghost = List.map (fun (x, t) -> (x, get_unique_var_symb_ x t ghost)) xts
+  let get_unique_var_symbs_non_ghost xts = List.map (fun (x, t) -> (x, get_unique_var_symb_non_ghost x t)) xts
   
   let array_element_symb = lazy_predfamsymb "java.lang.array_element"
   let array_slice_symb = lazy_predfamsymb "java.lang.array_slice"
@@ -5818,8 +5849,31 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
     end
 
-  let field_address l t fparent fname = ctxt#mk_add t (field_offset l fparent fname)
+  let field_address l t fparent fname = mk_field_ptr t (field_offset l fparent fname)
   
+  let direct_base_addr (derived_name, derived_addr) base_name =
+    let _, Some (bases, _), _, _ = List.assoc derived_name structmap in
+    let _, _, base_offset = List.assoc base_name bases in
+    mk_field_ptr derived_addr base_offset
+
+  let base_addr l (derived_name, derived_addr) base_name =
+    let rec iter derived_name offsets =
+      let _, Some (bases, _), _, _ = List.assoc derived_name structmap in 
+      let other_paths = bases |> List.fold_left begin fun acc (name, (_, _, offset)) -> 
+        match iter name (offset :: offsets) with
+        | Some p -> p :: acc
+        | None -> acc
+      end [] in
+      match try_assoc base_name bases, other_paths with 
+      | Some _,  _ :: _
+      | None, _ :: (_ :: _) -> static_error l (Printf.sprintf "Derived '%s' to base '%s' is ambiguous: multiple '%s' base candidates exist." derived_name base_name base_name) None
+      | Some (_, _, base_offset), [] -> Some (base_offset :: offsets)
+      | None, [p] -> Some p
+      | _ -> None
+    in 
+    let Some offsets = iter derived_name [] in 
+    List.rev offsets |> List.fold_left mk_field_ptr derived_addr
+
   let convert_provertype term proverType proverType0 =
     if proverType = proverType0 then term else apply_conversion proverType proverType0 term
   
@@ -6332,7 +6386,9 @@ let check_if_list_is_defined () =
         check_overflow (ctxt#mk_add v1 v2)
       | PtrType t ->
         let n = sizeof l t in
-        check_overflow (ctxt#mk_add v1 (ctxt#mk_mul n v2))
+        let result = mk_ptr_add v1 (ctxt#mk_mul n v2) in
+        ignore $. check_overflow (mk_ptr_address result);
+        result
       | RealType ->
         ctxt#mk_real_add v1 v2
       end
@@ -6342,11 +6398,13 @@ let check_if_list_is_defined () =
         check_overflow (ctxt#mk_sub v1 v2)
       | PtrType t ->
         let n = sizeof l t in
-        check_overflow (ctxt#mk_sub v1 (ctxt#mk_mul n v2))
+        let result = mk_ptr_add v1 (ctxt#mk_sub int_zero_term (ctxt#mk_mul n v2)) in
+        ignore $. check_overflow (mk_ptr_address result);
+        result
       | RealType ->
         ctxt#mk_real_sub v1 v2
       end
-    | PtrDiff -> check_overflow (ctxt#mk_sub v1 v2)
+    | PtrDiff -> check_overflow (ctxt#mk_sub (mk_ptr_address v1) (mk_ptr_address v2))
     | Mul ->
       begin match t with
         Int (_, _) ->
@@ -6355,6 +6413,11 @@ let check_if_list_is_defined () =
         ctxt#mk_real_mul v1 v2
       end
     | Le|Lt|Ge|Gt ->
+      let v1, v2 =
+        match t with
+          PtrType _ -> mk_ptr_address v1, mk_ptr_address v2
+        | _ -> v1, v2
+      in
       begin match t with
         Int (_, _) | PtrType _ ->
         begin match op with
@@ -6471,10 +6534,15 @@ let check_if_list_is_defined () =
     | CastExpr (l, ManifestTypeExpr (_, t), e) ->
       begin
         match (e, t) with
-          (e, (Int (_, _) | PtrType _ as tp)) ->
+          (e, (Int (_, _) as tp)) ->
           ev state e $. fun state t ->
           let min, max = limits_of_type tp in
           cont state (check_overflow l min t max)
+        | (e, (PtrType _ as tp)) ->
+          ev state e $. fun state t ->
+          let min, max = limits_of_type tp in
+          ignore $. check_overflow l min (mk_ptr_address t) max;
+          cont state t
         | (_, (ObjType _|ArrayType _)) when ass_term = None -> static_error l "Class casts are not allowed in annotations." None
         | _ -> ev state e cont (* No other cast allowed by the type checker changes the value *)
       end
@@ -6705,7 +6773,7 @@ let check_if_list_is_defined () =
           ev state w1 $. fun state arr ->
           ev state w2 $. fun state index ->
           let n = sizeof le tp in
-          cont state (ctxt#mk_add arr (ctxt#mk_mul n index))
+          cont state (mk_ptr_add arr (ctxt#mk_mul n index))
         | WVar (l, x, GlobalName) ->
           let Some (l, tp, symbol, init) = try_assoc x globalmap in cont state symbol
         (* The address of a function symbol is commonly used in the

@@ -105,7 +105,7 @@ predicate_ctor mcas_cell(int rcsList, int dsList)(void **a, void *vr, void *va) 
         f == 1 &*& va == vr
     :
         true == (((uintptr_t)vr & 2) == 2) &*&
-        mcas_cell_attached(dsList, (void *)((uintptr_t)vr & ~2), a, va, f);
+        mcas_cell_attached(dsList, (void *)vr - 2, a, va, f);
 
 predicate mcas_cell_attached(int dsList, struct cd *cd, void **a, void *va, real f) =
     [_]ghost_list_member_handle(dsList, cd) &*&
@@ -121,7 +121,7 @@ predicate_ctor entry_mem(int rcsList)(pair<void *, pair<void *, void *> > e) =
     true == (((uintptr_t)snd<void *, void *>(snd(e)) & 2) == 0);
 
 predicate_ctor entry_attached(int rcsList, void *cd)(pair<void *, pair<void *, void *> > e) =
-    [1/2]strong_ghost_assoc_list_member_handle(rcsList, fst(e), (void *)((uintptr_t)cd | 2));
+    [1/2]strong_ghost_assoc_list_member_handle(rcsList, fst(e), (void *)cd + 2);
 
 predicate disposed_info(struct cd *cd, bool done, mcas_op *op, bool success2) =
     [1/2]cd->disposed |-> ?disposed &*&
@@ -831,8 +831,8 @@ start:
                 is_mcas_read_op(rop) &*& mcas_read_post(rop)(result)
             :
                 is_mcas_read_op(rop) &*& mcas_read_pre(rop)(unsep, mcasInfo, a) &*&
-                [_]ghost_list_member_handle(dsList, (void *)((uintptr_t)result & ~2)) &*&
-                [_]cd((void *)((uintptr_t)result & ~2), _, _, _, _, _);
+                [_]ghost_list_member_handle(dsList, (void *)result - 2) &*&
+                [_]cd((void *)result - 2, _, _, _, _, _);
         lemma void *rdcssRop() : rdcss_read_operation_lemma
             requires
                 rdcss_read_operation_pre(rdcssRop)(?rdcssUnsep, ?info, ?a2) &*&
@@ -876,7 +876,8 @@ start:
         //@ open rdcss_read_operation_post(rdcssRop)(_);
         //@ leak rdcss_bs_membership_lemma(_)(_, _, _);
         if (((uintptr_t)r & 2) != 0) {
-            mcas_impl((struct cd *)((uintptr_t)r & ~(uintptr_t)2));
+            //@ bitand_minus2_lemma((uintptr_t)r);
+            mcas_impl((struct cd *)(r - 2));
             goto start;
         }
         return r;
@@ -1145,6 +1146,7 @@ start:
                 create_ghost_counter_snapshot(0);
                 close committed_copy(false, cd, counter, 0);
             }
+            if (cd->success2) {} else {}
             close cdext(rcsList, unsep, mcasInfo)(cd, &cd->status, statusProphecy);
             foreach3_foreach_assoc_unseparate_nochange(ds, sas, svs, cd);
             close mcas(id, sep, unsep, mcasInfo, cs);
@@ -1239,7 +1241,7 @@ start:
                     (rdcss_unseparate_lemma *rdcssUnsep, boxed_int info, void *a1, void *o1, void *a2, void *o2, void *n2) =
                     rdcssUnsep == mcas_rdcss_unsep &*& info == boxed_int(id) &*&
                     a1 == &cd->status &*& o1 == 0 &*& a2 == fst(nth(i, es)) &*& o2 == fst(snd(nth(i, es))) &*&
-                    n2 == (void *)((uintptr_t)cd | 2) &*&
+                    n2 == (void *)cd + 2 &*&
                     [_]ghost_cell6(id, rdcssId, rcsList, dsList, sep, unsep, mcasInfo) &*&
                     [_]ghost_list_member_handle(dsList, cd) &*&
                     [_]cd(cd, es, tracker, counter, statusCell, op) &*&
@@ -1247,15 +1249,15 @@ start:
                 predicate_family_instance rdcss_operation_post(rop)(void *result) =
                     [_]ghost_list_member_handle(dsList, cd) &*&
                     true == (((uintptr_t)result & 2) == 2) ?
-                        true == (((uintptr_t)result & ~2) != (uintptr_t)cd) ?
-                            [_]ghost_list_member_handle(dsList, (void *)((uintptr_t)result & ~2)) &*&
-                            [_]cd((void *)((uintptr_t)result & ~2), _, _, _, _, _)
+                        true == (result - 2 != cd) ?
+                            [_]ghost_list_member_handle(dsList, result - 2) &*&
+                            [_]cd(result - 2, _, _, _, _, _)
                         :
                             committed_copy(?committedCopy1, cd, counter, i + 1)
                     :
                         result != fst(snd(nth(i, es))) ?
                             [_]tracked_cas_prediction(tracker, 0, ?prediction) &*&
-                            true == ((uintptr_t)prediction == 2) ?
+                            true == (prediction == (void *)2) ?
                                 [_]cd->done |-> true &*& [_]cd->success2 |-> false
                             :
                                 true
@@ -1298,8 +1300,8 @@ start:
                     foreach_assoc2_separate(a2);
                     open mcas_cell(rcsList, dsList)(a2, ?realCellValue, ?abstractCellValue);
                     if (((uintptr_t)result & 2) == 2) {
-                        if (((uintptr_t)result & ~2) != (uintptr_t)cd) {
-                            void *cd1 = (void *)((uintptr_t)result & ~2);
+                        if (result - 2 != cd) {
+                            void *cd1 = result - 2;
                             open mcas_cell_attached(dsList, cd1, a2, abstractCellValue, ?ff);
                             close mcas_cell_attached(dsList, cd1, a2, abstractCellValue, ff);
                         } else {
@@ -1398,7 +1400,7 @@ start:
                 @*/
                 /*@
                 close rdcss_operation_pre(rop)
-                    (mcas_rdcss_unsep, boxed_int(id), &cd->status, 0, fst(nth(i, es)), fst(snd(nth(i, es))), (void *)((uintptr_t)cd | 2));
+                    (mcas_rdcss_unsep, boxed_int(id), &cd->status, 0, fst(nth(i, es)), fst(snd(nth(i, es))), (void *)cd + 2);
                 @*/
                 //@ close rdcss_separate_lemma(mcas_rdcss_sep)(boxed_int(id), rdcssId, inv, mcas_rdcss_unsep);
                 //@ close rdcss_as_membership_lemma(asMem)(mcas_rdcss_unsep, boxed_int(id), &cd->status);
@@ -1411,7 +1413,7 @@ start:
                 //@ entries_separate_ith(i);
                 //@ bitand_bitor_1_2_lemma(cd);
                 //@ if ((uintptr_t)(cd->es + i) < 0 || UINTPTR_MAX < (uintptr_t)(cd->es + i)) pointer_limits(&(cd->es + i)->a);
-                r = rdcss(&cd->status, 0, (cd->es + i)->a, (cd->es + i)->o, (void *)((uintptr_t)cd | 2));
+                r = rdcss(&cd->status, 0, (cd->es + i)->a, (cd->es + i)->o, (void *)cd + 2);
                 //@ leak is_rdcss_operation_lemma(_);
                 //@ leak is_rdcss_as_membership_lemma(_);
                 //@ leak is_rdcss_bs_membership_lemma(_);
@@ -1423,7 +1425,8 @@ start:
                 //@ open rdcss_operation_post(rop)(_);
             }
             if (((uintptr_t)r & 2) == 2) {
-                struct cd *cd1 = (void *)((uintptr_t)r & ~(uintptr_t)2);
+                //@ bitand_minus2_lemma((uintptr_t)r);
+                struct cd *cd1 = r - 2;
                 if (cd1 != cd) {
                     mcas_impl(cd1);
                     //@ entries_unseparate_ith(i, es);
@@ -1463,7 +1466,7 @@ start:
                 [_]ghost_cell6(id, rdcssId, rcsList, dsList, sep, unsep, mcasInfo) &*&
                 [_]ghost_list_member_handle(dsList, cd) &*&
                 [_]cd(cd, es, tracker, counter, statusCell, op) &*&
-                [_]cd->committed |-> true &*& [_]cd->success2 |-> ((casProphecy == 0 ? s : (uintptr_t)casProphecy) == 1);
+                [_]cd->committed |-> true &*& [_]cd->success2 |-> ((casProphecy == 0 ? (void *)s : casProphecy) == (void *)1);
             lemma void context(tracked_cas_operation *aop) : tracked_cas_ctxt
                 requires
                     tracked_cas_ctxt_pre(context)(?tracker_, ?inv_, ?pp, ?old, ?new, ?prophecy) &*& inv_() &*&
@@ -1549,7 +1552,7 @@ start:
                                             create_counted_ghost_cell_ticket(statusCell);
                                             assoc_fst_ith_snd_ith(es, k);
                                             close mcas_cell_attached(dsList, cd, fst(nth(k, es)), snd(snd(nth(k, es))), 1);
-                                            close mcas_cell(rcsList, dsList)(fst(nth(k, es)), (void *)((uintptr_t)cd | 2), snd(snd(nth(k, es))));
+                                            close mcas_cell(rcsList, dsList)(fst(nth(k, es)), (void *)cd + 2, snd(snd(nth(k, es))));
                                             es_apply_lemma(k, es, cs);
                                             drop_n_plus_one(k, es);
                                         }
@@ -1644,6 +1647,7 @@ start:
                     }
                 }
                 assert pointer(&cd->status, ?newStatus);
+                if (cd->success2) {} else {}
                 close cdext(rcsList, unsep, mcasInfo)(cd, &cd->status, newStatus);
                 foreach3_foreach_assoc_unseparate(ds, sas, svs, cd);
                 close mcas(id, sep, unsep, mcasInfo, cs);
@@ -1659,7 +1663,7 @@ start:
         }
         if (status == 0) status = (void *)s;
     }
-    success = (uintptr_t)status == 1;
+    success = status == (void *)1;
     /*@
     invariant
         [f]atomic_space(inv) &*&
@@ -1725,7 +1729,7 @@ start:
                 }
                 predicate_family_instance rdcss_cas_pre(casOp)(rdcss_unseparate_lemma *rdcssUnsep, boxed_int info, void **a2, void *o2, void *n2) =
                     rdcssUnsep == mcas_rdcss_unsep &*& info == boxed_int(id) &*&
-                    a2 == fst(nth(i, es)) &*& o2 == (void *)((uintptr_t)cd | 2) &*&
+                    a2 == fst(nth(i, es)) &*& o2 == (void *)cd + 2 &*&
                     n2 == (success ? snd(snd(nth(i, es))) : fst(snd(nth(i, es)))) &*&
                     true == (((uintptr_t)n2 & 2) == 0) &*&
                     [_]ghost_cell6(id, rdcssId, rcsList, dsList, sep, unsep, mcasInfo) &*&
@@ -1778,7 +1782,7 @@ start:
                 }
                 @*/
                 //@ entries_separate_ith(i);
-                //@ close rdcss_cas_pre(casOp)(mcas_rdcss_unsep, boxed_int(id), fst(nth(i, es)), (void *)((uintptr_t)cd | 2), success ? snd(snd(nth(i, es))) : fst(snd(nth(i, es))));
+                //@ close rdcss_cas_pre(casOp)(mcas_rdcss_unsep, boxed_int(id), fst(nth(i, es)), (void *)cd + 2, success ? snd(snd(nth(i, es))) : fst(snd(nth(i, es))));
                 //@ close rdcss_bs_membership_lemma(bsMem)(mcas_rdcss_unsep, boxed_int(id), fst(nth(i, es)));
                 //@ close rdcss_separate_lemma(mcas_rdcss_sep)(boxed_int(id), rdcssId, inv, mcas_rdcss_unsep);
                 //@ produce_lemma_function_pointer_chunk(casOp);
@@ -1786,8 +1790,8 @@ start:
                 //@ produce_lemma_function_pointer_chunk(mcas_rdcss_unsep);
                 //@ produce_lemma_function_pointer_chunk(bsMem);
                 //@ bitand_bitor_1_2_lemma(cd);
-                //@ if ((uintptr_t)(cd->es + i) < 0 || UINTPTR_MAX < (uintptr_t)(cd->es + i)) pointer_limits(cd->es + i);
-                rdcss_compare_and_store((cd->es + i)->a, (void *)((uintptr_t)cd | 2), success ? (cd->es + i)->n : (cd->es + i)->o);
+                //@ if ((uintptr_t)(cd->es + i) < 0 || UINTPTR_MAX < (uintptr_t)(cd->es + i)) pointer_limits(&(cd->es + i)->a);
+                rdcss_compare_and_store((cd->es + i)->a, (void *)cd + 2, success ? (cd->es + i)->n : (cd->es + i)->o);
                 //@ leak is_rdcss_cas_lemma(casOp);
                 //@ leak is_rdcss_separate_lemma(mcas_rdcss_sep);
                 //@ leak is_rdcss_unseparate_lemma(mcas_rdcss_unsep);

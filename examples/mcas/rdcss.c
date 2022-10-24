@@ -37,7 +37,7 @@ predicate_ctor rdcss_cell(int dsList)(void **a, void *v) =
         f == 1 &*& w == v
     :
         f == 1/2 &*&
-        rdcss_cell_attached(dsList, (struct rdcss_descriptor *)((uintptr_t)w & ~1), a, v);
+        rdcss_cell_attached(dsList, (struct rdcss_descriptor *)(w - 1), a, v);
 
 predicate rdcss_cell_attached(int dsList, struct rdcss_descriptor *d, void **a, void *v) =
     [_]ghost_list_member_handle(dsList, d) &*&
@@ -47,6 +47,7 @@ predicate rdcss_cell_attached(int dsList, struct rdcss_descriptor *d, void **a, 
     v == (success ? n2 : o2);
 
 predicate descr(struct rdcss_descriptor *d; void **a1, void *o1, void **a2, void *o2, void *n2, struct cas_tracker *tracker, rdcss_operation_lemma *op) =
+    ((uintptr_t)d & 1) == 0 &*& (uintptr_t)d + 1 <= UINTPTR_MAX &*&
     d->a1 |-> a1 &*& d->o1 |-> o1 &*& d->a2 |-> a2 &*& d->o2 |-> o2 &*& d->n2 |-> n2 &*& d->tracker |-> tracker &*& d->op |-> op &*& [_]is_cas_tracker(tracker);
 
 predicate done_copy(struct rdcss_descriptor *d, bool done) = true;
@@ -70,7 +71,7 @@ predicate_ctor rdcss_descriptor(int asList, int bsList, rdcss_unseparate_lemma *
             done
         :
             cas_tracker(tracker, 0) &*&
-            !disposed &*& [1/2]pointer(a2, (void *)((uintptr_t)d | 1))
+            !disposed &*& [1/2]pointer(a2, (void *)d + 1)
     ) &*&
     done ?
         [_]tracked_cas_prediction(tracker, 0, success ? n2 : o2) &*&
@@ -172,7 +173,7 @@ void rdcss_complete(struct rdcss_descriptor *d)
             [_]ghost_cell3(id, asList, bsList, dsList) &*&
             [_]ghost_list_member_handle(dsList, d) &*&
             is_rdcss_separate_lemma(sep) &*& is_rdcss_unseparate_lemma(unsep) &*& rdcss_separate_lemma(sep)(info, id, inv, unsep) &*&
-            a2Prophecy == (void *)((uintptr_t)d | 1) ?
+            a2Prophecy == (void *)d + 1 ?
                 prediction(?v) &*& [_]tracked_cas_prediction(tracker, 0, v) &*&
                 v == (a1Prophecy == o1 ? n2 : o2) ?
                     [_]d->done |-> true
@@ -201,7 +202,7 @@ void rdcss_complete(struct rdcss_descriptor *d)
             foreach_assoc_separate(zip(aas, avs), a1);
             aop();
             foreach_assoc_unseparate_nochange(zip(aas, avs), a1);
-            if (a2Prophecy == (void *)((uintptr_t)d | 1)) {
+            if (a2Prophecy == (void *)d + 1) {
                 void *predictedValue = create_tracked_cas_prediction(tracker, 0);
                 close prediction(predictedValue);
                 if (predictedValue == (a1Prophecy == o1 ? n2 : o2)) {
@@ -251,12 +252,12 @@ void rdcss_complete(struct rdcss_descriptor *d)
     {
         /*@
         predicate_family_instance tracked_cas_ctxt_pre(context2)(struct cas_tracker *tracker_, predicate() inv_, void **pp, void *old, void *new, void *prophecy) =
-            tracker_ == tracker &*& inv_ == inv &*& pp == a2 &*& old == (void *)((uintptr_t)d | 1) &*& new == v &*& prophecy == a2Prophecy &*&
+            tracker_ == tracker &*& inv_ == inv &*& pp == a2 &*& old == (void *)d + 1 &*& new == v &*& prophecy == a2Prophecy &*&
             [_]descr(d, a1, o1, a2, o2, n2, tracker, op) &*&
             [_]ghost_cell3(id, asList, bsList, dsList) &*&
             [_]ghost_list_member_handle(dsList, d) &*&
             is_rdcss_separate_lemma(sep) &*& is_rdcss_unseparate_lemma(unsep) &*& rdcss_separate_lemma(sep)(info, id, inv, unsep) &*&
-            a2Prophecy == (void *)((uintptr_t)d | 1) ?
+            a2Prophecy == (void *)d + 1 ?
                 prediction(?w) &*& [_]tracked_cas_prediction(tracker, 0, w) &*&
                 w == (a1Prophecy == o1 ? n2 : o2) ?
                     [_]d->done |-> true
@@ -290,7 +291,7 @@ void rdcss_complete(struct rdcss_descriptor *d)
             bitand_bitor_lemma((uintptr_t)d, 1);
             open rdcss_cell(dsList)(a2, ?abstractValue);
             assert [_]pointer(a2, ?w);
-            if (w == (void *)((uintptr_t)d | 1)) {
+            if (w == (void *)d + 1) {
                 open rdcss_cell_attached(dsList, d, a2, abstractValue);
                 if (a2Prophecy == w) {
                     open prediction(?w0);
@@ -324,9 +325,9 @@ void rdcss_complete(struct rdcss_descriptor *d)
             close tracked_cas_ctxt_post(context2)();
         }
         @*/
-        //@ close tracked_cas_ctxt_pre(context2)(tracker, inv, a2, (void *)((uintptr_t)d | 1), v, a2Prophecy);
+        //@ close tracked_cas_ctxt_pre(context2)(tracker, inv, a2, (void *)d + 1, v, a2Prophecy);
         //@ produce_lemma_function_pointer_chunk(context2);
-        tracked_cas(a2ProphecyId, d->tracker, d->a2, (void *)((uintptr_t)d | 1), v);
+        tracked_cas(a2ProphecyId, d->tracker, d->a2, (void *)d + 1, v);
         //@ leak is_tracked_cas_ctxt(context2);
         //@ open tracked_cas_ctxt_post(context2)();
     }
@@ -367,6 +368,7 @@ void *rdcss(void **a1, void *o1, void **a2, void *o2, void *n2)
     //@ d->success = false;
     //@ d->detached = false;
     //@ d->disposed = false;
+    //@ bitand_bitor_lemma((uintptr_t)d, 1);
     //@ close descr(d, a1, o1, a2, o2, n2, tracker, op);
     //@ leak descr(d, a1, o1, a2, o2, n2, tracker, op);
 loop:
@@ -388,7 +390,7 @@ loop:
     {
         /*@
         predicate_family_instance atomic_compare_and_store_pointer_context_pre(context)(predicate() inv_, void **p, void *old, void *new, void *prophecy_) =
-            inv_ == inv &*& p == a2 &*& old == o2 &*& new == (void *)((uintptr_t)d | 1) &*& prophecy_ == prophecy &*&
+            inv_ == inv &*& p == a2 &*& old == o2 &*& new == (void *)d + 1 &*& prophecy_ == prophecy &*&
             is_rdcss_separate_lemma(sep) &*& is_rdcss_unseparate_lemma(unsep) &*& rdcss_separate_lemma(sep)(info, id, inv, unsep) &*&
             is_rdcss_as_membership_lemma(asMem) &*& rdcss_as_membership_lemma(asMem)(unsep, info, a1) &*&
             is_rdcss_bs_membership_lemma(bsMem) &*& rdcss_bs_membership_lemma(bsMem)(unsep, info, a2) &*&
@@ -414,8 +416,8 @@ loop:
                     d->done |-> false &*& d->success |-> false &*& d->detached |-> false &*& d->disposed |-> false &*&
                     cas_tracker(tracker, 0) &*&
                     is_rdcss_operation_lemma(op) &*& rdcss_operation_pre(op)(unsep, info, a1, o1, a2, o2, n2) &*&
-                    [_]ghost_list_member_handle(dsList, (void *)((uintptr_t)prophecy & ~1)) &*&
-                    [_]descr((void *)((uintptr_t)prophecy & ~1), _, _, _, _, _, _, _);
+                    [_]ghost_list_member_handle(dsList, (void *)prophecy - 1) &*&
+                    [_]descr((void *)prophecy - 1, _, _, _, _, _, _, _);
         
         lemma void context(atomic_compare_and_store_pointer_operation *aop) : atomic_compare_and_store_pointer_context
             requires
@@ -476,19 +478,21 @@ loop:
             close atomic_compare_and_store_pointer_context_post(context)();
         }
         @*/
-        //@ close atomic_compare_and_store_pointer_context_pre(context)(inv, a2, o2, (void *)((uintptr_t)d | 1), prophecy);
+        //@ close atomic_compare_and_store_pointer_context_pre(context)(inv, a2, o2, (void *)d + 1, prophecy);
         //@ produce_lemma_function_pointer_chunk(context);
         //@ produce_limits(d);
-        r = atomic_compare_and_store_pointer(prophecyId, a2, o2, (void *)((uintptr_t)d | 1));
+        //@ bitand_bitor_lemma((uintptr_t)d, 1);
+        r = atomic_compare_and_store_pointer(prophecyId, a2, o2, (void *)d + 1);
         //@ leak is_atomic_compare_and_store_pointer_context(context);
         //@ open atomic_compare_and_store_pointer_context_post(context)();
     }
     if (((uintptr_t)r & 1) != 0) {
-        rdcss_complete((void *)((uintptr_t)r & ~(uintptr_t)1));
-        //@ leak [_]rdcss_descriptor_detached((void *)((uintptr_t)r & ~1), _);
-        //@ leak [_]descr((void *)((uintptr_t)r & ~1), _, _, _, _, _, _, _);
+        //@ bitand_minus_lemma((uintptr_t)r);
+        rdcss_complete(r - 1);
+        //@ leak [_]rdcss_descriptor_detached((void *)r - 1, _);
+        //@ leak [_]descr((void *)r - 1, _, _, _, _, _, _, _);
         //@ leak [_]ghost_cell3(id, ?asList, ?bsList, ?dsList);
-        //@ leak [_]ghost_list_member_handle(dsList, (void *)((uintptr_t)r & ~1));
+        //@ leak [_]ghost_list_member_handle(dsList, (void *)r - 1);
         goto loop;
     }
     if (r == o2) {
@@ -587,8 +591,8 @@ loop:
             :
                 rdcss_read_operation_pre(op)(unsep, info, a2) &*&
                 [_]ghost_cell3(id, ?asList, ?bsList, ?dsList) &*&
-                [_]ghost_list_member_handle(dsList, (void *)((uintptr_t)prophecy & ~1)) &*&
-                [_]descr((void *)((uintptr_t)prophecy & ~1), _, _, _, _, _, _, _);
+                [_]ghost_list_member_handle(dsList, (void *)prophecy - 1) &*&
+                [_]descr((void *)prophecy - 1, _, _, _, _, _, _, _);
         lemma void context(atomic_load_pointer_operation *aop) : atomic_load_pointer_context
             requires
                 atomic_load_pointer_context_pre(context)(?inv_, ?pp, ?prophecy_) &*& inv_() &*&
@@ -626,7 +630,8 @@ loop:
         //@ open atomic_load_pointer_context_post(context)();
     }
     if (((uintptr_t)r & 1) != 0) {
-        rdcss_complete((void *)((uintptr_t)r & ~(uintptr_t)1));
+        //@ bitand_minus_lemma((uintptr_t)r);
+        rdcss_complete(r - 1);
         //@ leak [_]rdcss_descriptor_detached(_, _);
         //@ leak [_]ghost_cell3(_, _, _, _);
         //@ leak [_]ghost_list_member_handle(_, _);

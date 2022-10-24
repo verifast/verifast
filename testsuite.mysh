@@ -110,7 +110,7 @@ cd examples
     cd ..
   cd ..
   cd tso
-    verifast_both -c cvm0.c
+    verifast_both -c -assume_no_subobject_provenance cvm0.c
     verifast_both -c lock.c
     verifast_both -c -disable_overflow_check prodcons.c
   cd ..
@@ -143,13 +143,13 @@ cd examples
   verifast_both -allow_assume -disable_overflow_check dyncode.c
   verifast_both enums.c
   verifast_both -c equalsmap.c
-  verifast_both -disable_overflow_check expr.c
+  verifast_both -disable_overflow_check -assume_no_subobject_provenance expr.c
   cd fm2012
     mysh < fm2012.mysh
   cd ..
   verifast_both -disable_overflow_check -c fractions-counting.c
-  verifast_both -disable_overflow_check -c gcl0.c
-  verifast_both -disable_overflow_check -c gcl.c
+  verifast_both -disable_overflow_check -c -assume_no_subobject_provenance gcl0.c
+  verifast_both -disable_overflow_check -c -assume_no_subobject_provenance gcl.c
   verifast_both ghost_field.c
   verifast_both -disable_overflow_check globals.c
   verifast_both -disable_overflow_check global_points_to_syntax.c
@@ -220,7 +220,7 @@ cd examples
   verifast_both -target 32bit -c -disable_overflow_check quicksort.c
   verifast_both -c tokenizer_test.c
   verifast_both -c truncating.c
-  verifast_both -disable_overflow_check stringBuffers.c tokenizer.c ghostlist.o rcl.c
+  verifast_both -disable_overflow_check stringBuffers.c tokenizer.c ghostlist.o -assume_no_subobject_provenance rcl.c
   verifast_both reallittest.c
   verifast_both -disable_overflow_check ref_points_to_syntax.c
   cd reduced_annotations
@@ -398,7 +398,7 @@ cd examples
   verifast_both -c void_ignore.c
   cd sizeof
     verifast_both -c -allow_should_fail struct.c
-    verifast_both -c packed.c
+    verifast_both -c -assume_no_subobject_provenance packed.c
   cd ..
 cd ..
 cd tutorial_solutions
@@ -444,6 +444,7 @@ cd tutorial_solutions
   verifast_both -target 32bit students.c
 cd ..
 cd tests
+  verifast -c -allow_should_fail provenance0.c
   verifast -c -allow_should_fail uninit.c
   verifast -c lit_ctor_pat.c
   verifast -c issue311.c

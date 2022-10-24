@@ -335,6 +335,7 @@ let _ =
   let json = ref false in
   let verbose = ref 0 in
   let disable_overflow_check = ref false in
+  let assume_no_subobject_provenance = ref false in
   let prover: string ref = ref default_prover in
   let compileOnly = ref false in
   let isLibrary = ref false in
@@ -388,6 +389,7 @@ let _ =
             ; "-json", Set json, "Report result as JSON"
             ; "-verbose", Set_int verbose, "-1 = file processing; 1 = statement executions; 2 = produce/consume steps; 4 = prover queries."
             ; "-disable_overflow_check", Set disable_overflow_check, " "
+            ; "-assume_no_subobject_provenance", Set assume_no_subobject_provenance, "Assume the compiler's alias analysis ignores subobject provenance. CompCert ignores subobject provenance, and so, it seems, do GCC and Clang (last time I checked)"
             ; "-prover", String (fun str -> prover := str), "Set SMT prover (" ^ list_provers() ^ ")."
             ; "-c", Set compileOnly, "Compile only, do not perform link checking."
             ; "-shared", Set isLibrary, "The file is a library (i.e. no main function required)."
@@ -437,6 +439,7 @@ let _ =
         let options = {
           option_verbose = !verbose;
           option_disable_overflow_check = !disable_overflow_check;
+          option_assume_no_subobject_provenance = !assume_no_subobject_provenance;
           option_allow_should_fail = !allowShouldFail;
           option_emit_manifest = !emitManifest;
           option_check_manifest = !checkManifest;

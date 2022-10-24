@@ -16,7 +16,7 @@ typedef struct gcm_context gcm_context;
 /*@
 
 predicate gcm_context(gcm_context *context) =
-  chars_((void*) context, GCM_CONTEXT_SIZE, _) &*&
+  chars_(context->content, GCM_CONTEXT_SIZE, _) &*&
   struct_gcm_context_padding(context)
 ;
 predicate gcm_context_initialized(gcm_context *context,

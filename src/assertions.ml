@@ -130,12 +130,10 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let assume_field h0 fparent fname frange fghost tp tv tcoef cont =
     let ((_, (_, _, _, _, symb, _, _)), p__opt) = List.assoc (fparent, fname) field_pred_map in
     if fghost = Real then begin
-      match frange, tv with
-        (Int (_, _) | PtrType _), Some tv ->
-        let (min_term, max_term) = limits_of_type frange in
-        ctxt#assert_term (ctxt#mk_and (ctxt#mk_le min_term tv) (ctxt#mk_le tv max_term))
-      | _ -> ()
-    end; 
+      match tv with
+        Some tv -> assume_bounds tv frange
+      | None -> ()
+    end;
     (* automatic generation of t1 != t2 if t1.f |-> _ &*& t2.f |-> _ *)
     begin fun cont ->
       if tcoef != real_unit && tcoef != real_half then
@@ -392,7 +390,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         let target = match e_opt with None -> List.assoc "this" env | Some e -> ev e in
         let index = ev index in
-        assume (ctxt#mk_not (ctxt#mk_eq target (ctxt#mk_intlit 0))) $. fun () ->
+        assume (ctxt#mk_not (ctxt#mk_eq target (null_pointer_term ()))) $. fun () ->
         begin fun cont -> if cfin = FinalClass then assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [target]) (List.assoc st classterms)) cont else cont () end $. fun () ->
         let types = List.map snd pmap in
         evalpats ghostenv env pats types types $. fun ghostenv env args ->
@@ -758,7 +756,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     match slices with
       None ->
-        begin match lookup_integer__chunk_core h (ctxt#mk_add a (ctxt#mk_mul i (sizeof l tp))) k signedness with
+        begin match lookup_integer__chunk_core h (mk_ptr_add a (ctxt#mk_mul i (sizeof l tp))) k signedness with
           None ->
           assert_false h env l
             (sprintf "No matching array chunk: integers_(%s, %s, %s, 0<=%s<n, _)"
@@ -790,7 +788,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     match slices with
       None ->
-        begin match lookup_points_to_chunk_core h predsym (ctxt#mk_add a (ctxt#mk_mul i (sizeof l tp))) with
+        begin match lookup_points_to_chunk_core h predsym (mk_ptr_add a (ctxt#mk_mul i (sizeof l tp))) with
           None ->
           assert_false h env l
             (sprintf "No matching array chunk: %s(%s, 0<=%s<n, _)"
@@ -1832,7 +1830,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         Some pointee_pred_symb ->
         let pointee_chunk_to_field_chunk__rule l h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
           let [tp] = wanted_indices_and_input_ts in
-          let field_address = ctxt#mk_add tp offset in
+          let field_address = mk_field_ptr tp offset in
           match extract
             begin function
               (Chunk ((g, is_symb), [], coef, [tp'; tv], _)) when g == pointee_pred_symb && definitely_equal tp' field_address -> Some (coef, tv)
@@ -1853,7 +1851,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let tsigned = match signedness with Signed -> true_term | Unsigned -> false_term in
         let pointee_chunk_to_field_chunk__rule l h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
           let [tp] = wanted_indices_and_input_ts in
-          let field_address = ctxt#mk_add tp offset in
+          let field_address = mk_field_ptr tp offset in
           match extract
             begin function
               (Chunk ((g, is_symb), [], coef, [tp'; tsize'; tsigned'; tv], _)) when

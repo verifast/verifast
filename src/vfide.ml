@@ -137,7 +137,7 @@ module TreeMetrics = struct
   let cw = dotWidth + 2 * padding
 end
 
-let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend enforceAnnotations allowUndeclaredStructTypes dataModel overflowCheck verifyAndQuit =
+let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend enforceAnnotations allowUndeclaredStructTypes dataModel overflowCheck assumeNoSubobjectProvenance verifyAndQuit =
   let dataModel = ref dataModel in
   let leftBranchPixbuf = Branchleft_png.pixbuf () in
   let rightBranchPixbuf = Branchright_png.pixbuf () in
@@ -164,6 +164,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   let scaledTraceFont = ref !traceFont in
   let actionGroup = GAction.action_group ~name:"Actions" () in
   let disableOverflowCheck = ref (not overflowCheck) in
+  let assumeNoSubobjectProvenance = ref assumeNoSubobjectProvenance in
   let useJavaFrontend = ref false in
   let toggle_java_frontend active =
     (useJavaFrontend := active;
@@ -268,6 +269,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       a "ShowExecutionTree" ~label:"Show _execution tree" ~accel:"<Ctrl>T";
       a "Verify" ~label:"_Verify";
       GAction.add_toggle_action "CheckOverflow" ~label:"Check arithmetic overflow" ~active:true ~callback:(fun toggleAction -> disableOverflowCheck := not toggleAction#get_active);
+      GAction.add_toggle_action "AssumeNoSubobjectProvenance" ~label:"Assume no subobject provenance" ~active:false ~callback:(fun toggleAction -> assumeNoSubobjectProvenance := toggleAction#get_active);
       GAction.add_toggle_action "UseJavaFrontend" ~label:"Use the Java frontend" ~active:(toggle_java_frontend javaFrontend; javaFrontend) ~callback:(fun toggleAction -> toggle_java_frontend toggleAction#get_active);
       GAction.add_toggle_action "SimplifyTerms" ~label:"Simplify Terms" ~active:true ~callback:(fun toggleAction -> simplifyTerms := toggleAction#get_active);
       a "Include paths" ~label:"_Include paths...";
@@ -328,6 +330,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
           <menuitem action='RunShapeAnalysis' />
           <separator />
           <menuitem action='CheckOverflow' />
+          <menuitem action='AssumeNoSubobjectProvenance' />
           <menuitem action='UseJavaFrontend' />
           <menuitem action='SimplifyTerms' />
           <menuitem action='Include paths' />
@@ -1458,6 +1461,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
               let options = {
                 option_verbose = 0;
                 option_disable_overflow_check = !disableOverflowCheck;
+                option_assume_no_subobject_provenance = !assumeNoSubobjectProvenance;
                 option_use_java_frontend = !useJavaFrontend;
                 option_enforce_annotations = enforceAnnotations;
                 option_allow_undeclared_struct_types = allowUndeclaredStructTypes;
@@ -1883,6 +1887,7 @@ let () =
   let enforceAnnotations = ref false in
   let allowUndeclaredStructTypes = ref false in
   let overflow_check = ref true in
+  let assume_no_subobject_provenance = ref false in
   let data_model = ref None in
   let verify_and_quit = ref false in
   let rec iter args =
@@ -1905,9 +1910,10 @@ let () =
     | "-allow_undeclared_struct_types"::args -> allowUndeclaredStructTypes := true; iter args
     | "-target"::target::args -> data_model := Some (data_model_of_string target); iter args
     | "-disable_overflow_check"::args -> overflow_check := false; iter args
+    | "-assume_no_subobject_provenance"::args -> assume_no_subobject_provenance := true; iter args
     | "-verify_and_quit"::args -> verify_and_quit := true; iter args
     | arg::args when not (startswith arg "-") -> path := Some arg; iter args
-    | [] -> show_ide !path !prover !codeFont !traceFont !runtime !layout !javaFrontend !enforceAnnotations !allowUndeclaredStructTypes !data_model !overflow_check !verify_and_quit
+    | [] -> show_ide !path !prover !codeFont !traceFont !runtime !layout !javaFrontend !enforceAnnotations !allowUndeclaredStructTypes !data_model !overflow_check !assume_no_subobject_provenance !verify_and_quit
     | _ ->
       let options = [
         "-prover prover    (" ^ list_provers () ^ ")";
@@ -1921,6 +1927,7 @@ let () =
         "-bindir";
         "-enforce_annotations";
         "-disable_overflow_check";
+        "-assume_no_subobject_provenance";
         "-target target    (supported targets: " ^ String.concat ", " (List.map fst data_models) ^ ")"
       ] in
       GToolbox.message_box "VeriFast IDE" begin

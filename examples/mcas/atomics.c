@@ -30,8 +30,17 @@ lemma void dispose_atomic_space(predicate() inv)
 
 predicate prophecy_pointer(prophecy_id id, void *prophecy) =
     popl20_prophecy(id, ?vs) &*& 
-    switch (vs) { case nil: return true; case cons(v0, vs0): return prophecy == (void *)(uintptr_t)fst(v0); };
-    
+    switch (vs) {
+        case nil: return true;
+        case cons(v0, vs0): return
+            switch (fst(v0)) {
+                case vararg_pointer(p): return prophecy == p;
+                case vararg_int(i): return true;
+                case vararg_uint(i): return true;
+                case vararg_double(d): return true;
+            };
+    };
+
 @*/
 
 prophecy_id create_prophecy_pointer()
@@ -45,7 +54,7 @@ prophecy_id create_prophecy_pointer()
     case nil:
         close prophecy_pointer(id, 0);
     case cons(v0, vs0):
-        close prophecy_pointer(id, (void *)(uintptr_t)fst(v0));
+        close prophecy_pointer(id, switch (fst(v0)) { case vararg_pointer(p): return p; default: return (void *)0; });
     }
     @*/
     return id;
@@ -252,9 +261,9 @@ lemma void atomic_noop()
 
 /*@
 
-fixpoint bool is_successful(pair<int, list<vararg> > v) {
+fixpoint bool is_successful(pair<vararg, list<vararg> > v) {
     switch (v) {
-    case pair(result, marker): return length(marker) == 2 && head(marker) == vararg_pointer((void *)(uintptr_t)result);
+    case pair(result, marker): return length(marker) == 2 && head(marker) == result;
     }
 }
 
@@ -289,7 +298,7 @@ lemma void cas_tracker_is_cas_tracker(struct cas_tracker *tracker)
 
 struct cas_tracker {
     popl20_prophecy_id pid;
-    //@ list<pair<int, list<vararg> > > vs;
+    //@ list<pair<vararg, list<vararg> > > vs;
     //@ int count;
 };
 
@@ -434,7 +443,7 @@ void *tracked_cas(prophecy_id prophecyId, struct cas_tracker *tracker, void **pp
                         open tracked_cas_prediction(tracker, count, new0);
                         tracker->count++;
                         close cas_tracker(tracker, count + 1);
-                        list<pair<int, list<vararg> > > tracker_vs = tracker->vs;
+                        list<pair<vararg, list<vararg> > > tracker_vs = tracker->vs;
                         assert filter(is_successful, tail(tracker_vs1)) == drop(1, drop(count, tracker_vs));
                         length_drop(count, tracker_vs);
                         drop_n_plus_one(count, tracker_vs);
