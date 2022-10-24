@@ -18,7 +18,7 @@
 /usr/local/opt/fontconfig/lib/libfontconfig.1.dylib
 /usr/local/opt/freetype/lib/libfreetype.6.dylib
 /usr/local/opt/libffi/lib/libffi.8.dylib
-/usr/local/opt/pcre/lib/libpcre.1.dylib
+/usr/local/opt/pcre2/lib/libpcre2-8.0.dylib
 /usr/local/opt/pixman/lib/libpixman-1.0.dylib
 /usr/local/opt/libpng/lib/libpng16.16.dylib
 /usr/local/opt/jpeg-turbo/lib/libjpeg.8.dylib
