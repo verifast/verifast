@@ -3,13 +3,13 @@
 namespace vf {
 
 class GhostCodeAnalyzer {
-  llvm::StringRef _text;
-  llvm::StringRef::iterator _pos;
-  bool _isAnnotationLike;
-  bool _isContractClauseLike = false;
-  bool _checkedForContractClause = false;
-  bool _isTruncating = false;
-  bool _checkedForTruncating = false;
+  llvm::StringRef m_text;
+  llvm::StringRef::iterator m_pos;
+  bool m_isAnnotationLike;
+  bool m_isContractClauseLike = false;
+  bool m_checkedForContractClause = false;
+  bool m_isTruncating = false;
+  bool m_checkedForTruncating = false;
 
   // Check for ghost symbols. `/*@*/` is allowed so we don't silently ignore it
   // and VeriFast can throw a parse error.
@@ -21,59 +21,63 @@ class GhostCodeAnalyzer {
   }
 
   void skipWhitespace() {
-    for (; _pos != _text.end() && isspace(*_pos); ++_pos);
+    for (; m_pos != m_text.end() && isspace(*m_pos); ++m_pos)
+      ;
   }
 
   bool startsWith(llvm::StringRef prefix) {
     auto pos = prefix.begin();
-    for (; _pos != _text.end() && pos != prefix.end() && *_pos == *pos; ++_pos, ++pos);
+    for (; m_pos != m_text.end() && pos != prefix.end() && *m_pos == *pos;
+         ++m_pos, ++pos)
+      ;
     return pos == prefix.end();
   }
 
 public:
   explicit GhostCodeAnalyzer(llvm::StringRef text)
-      : _text(text), _pos(text.begin()), _isAnnotationLike(isAnnotationLike(text)) {}
+      : m_text(text), m_pos(text.begin()),
+        m_isAnnotationLike(isAnnotationLike(text)) {}
 
-  bool isAnnotationLike() { return _isAnnotationLike; }
+  bool isAnnotationLike() { return m_isAnnotationLike; }
 
   bool isContractClauseLike() {
-    if (_checkedForContractClause)
-      return _isContractClauseLike;
+    if (m_checkedForContractClause)
+      return m_isContractClauseLike;
     std::string checks[] = {"requires", "ensures", "terminates", ":",
-                                   "non_ghost_callers_only"};
+                            "non_ghost_callers_only"};
     for (const auto &prefix : checks) {
-      _pos = _text.begin() + 3;
+      m_pos = m_text.begin() + 3;
       skipWhitespace();
       if (startsWith(prefix)) {
-        _isContractClauseLike = true;
+        m_isContractClauseLike = true;
         break;
       }
     }
-    _checkedForContractClause = true;
-    return _isContractClauseLike;
+    m_checkedForContractClause = true;
+    return m_isContractClauseLike;
   }
 
   bool isTruncating() {
-    if (_checkedForTruncating)
-      return _isTruncating;
-    
-    _checkedForTruncating = true;
-    _pos = _text.begin() + 3;
+    if (m_checkedForTruncating)
+      return m_isTruncating;
+
+    m_checkedForTruncating = true;
+    m_pos = m_text.begin() + 3;
 
     skipWhitespace();
-    if (! startsWith("truncating")) {
-      _isTruncating = false;
+    if (!startsWith("truncating")) {
+      m_isTruncating = false;
       return false;
     }
 
     skipWhitespace();
-    if (_pos == _text.end()) {
-      _isTruncating = true;
+    if (m_pos == m_text.end()) {
+      m_isTruncating = true;
       return true;
     }
 
     if (startsWith("@*/")) {
-      _isTruncating = true;
+      m_isTruncating = true;
       return true;
     }
 
@@ -90,7 +94,7 @@ llvm::Optional<Annotation> annotationOf(clang::SourceRange range,
     bool isContractClauseLike = gca.isContractClauseLike();
     bool isTruncating = isContractClauseLike ? false : gca.isTruncating();
     result.emplace(range, text, isContractClauseLike, isTruncating, isNewSeq);
-  }                                        
+  }
   return result;
 }
 } // namespace vf

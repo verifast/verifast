@@ -131,7 +131,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
 
   (**
     [decompose_node node] decomposes [node] to a tuple consisting of a VeriFast location of [node]
-    and a cap'n proto pointer pointing to [node].
+    and a cap'n proto pointer pointing to the description of [node].
   *)
   let decompose_node (node: R.Node.t): VF.loc * 'a Stubs.reader_t =
     let open R.Node in
@@ -340,6 +340,21 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
   and transl_record_decl (loc: VF.loc) (record: R.Decl.Record.t): VF.decl list =
     let open R.Decl.Record in
     let name = name_get record in
+    let transl_mems (decls: R.Node.t list): Cxx_fe_sig.struct_member_decl list =
+      let transl_mem decl =
+        let loc, desc = decompose_node decl in
+        match R.Decl.get desc with
+        | R.Decl.Ann ann ->
+          let VF.Lexed l = loc in
+          AP.parse_struct_members name (l, ann)
+        | R.Decl.Field f ->
+          let field = transl_field_decl loc f in
+          [Cxx_fe_sig.CxxFieldMem field]
+        | _ ->
+          transl_decl decl |> List.map (fun d -> Cxx_fe_sig.CxxDeclMem d)
+      in
+      decls |> flatmap transl_mem
+    in
     let body, decls = 
       if has_body record then
         let open Body in
@@ -348,8 +363,21 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
           VF.CxxBaseSpec (loc, name_get desc, virtual_get desc)
         in
         let body = body_get record in
-        let fields = fields_get body |> capnp_arr_map (transl_node transl_field_decl) in
-        let decls = decls_get body |> capnp_arr_map transl_decl |> List.flatten in
+        let mems = body |> decls_get_list |> transl_mems in
+        let decls, fields, inst_preds =
+          mems |> List.fold_left (fun (decls, fields, inst_preds) mem ->
+            match mem with
+            | Cxx_fe_sig.CxxFieldMem (VF.Field (l, Ghost, _, _, _, _, _, _)) ->
+              error l "Ghost fields are not supported."
+            | Cxx_fe_sig.CxxFieldMem field ->
+              decls, field :: fields, inst_preds
+            | Cxx_fe_sig.CxxInstPredMem (VF.InstancePredDecl (l, _, _, _)) ->
+              error l "Instance predicates are not supported."
+            | Cxx_fe_sig.CxxDeclMem (VF.Func (l, Lemma _, _, _, _, _, _, _, _, _, _, _, _)) ->
+              error l "Lemmas are notsupported inside struct or class declarations."
+            | Cxx_fe_sig.CxxDeclMem decl ->
+              decl :: decls, fields, inst_preds) ([], [], [])
+        in
         let bases = bases_get body |> capnp_arr_map (transl_node transl_base) in
         Some (bases, fields), decls
       else None, [] 
@@ -359,7 +387,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
       | R.RecordKind.Struc | R.RecordKind.Class -> 
         VF.Struct (loc, name, body, []) 
       | R.RecordKind.Unio -> 
-        VF.Union (loc, name, body |> option_map snd) 
+        VF.Union (loc, name, body |> option_map @@ fun (_, fields) -> fields) 
     in
     vf_record :: decls
 

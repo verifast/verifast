@@ -6,35 +6,35 @@
 
 namespace vf {
 class InclusionContext {
-  using get_first_decl_loc_fn = std::function<llvm::Optional<clang::SourceLocation>(unsigned)>;
+  using get_first_decl_loc_fn =
+      std::function<llvm::Optional<clang::SourceLocation>(unsigned)>;
 
-  std::unordered_map<unsigned, Inclusion> _includesMap;
-  llvm::SmallVector<Inclusion *, 8> _includesStack;
+  std::unordered_map<unsigned, Inclusion> m_includesMap;
+  llvm::SmallVector<Inclusion *, 8> m_includesStack;
 
   friend class ContextFreePPCallbacks;
   Inclusion *currentInclusion() {
     assert(hasInclusions() && "Empty stack of inclusions");
-    return _includesStack.back();
+    return m_includesStack.back();
   }
 
   void serializeInclDirectivesCore(
       capnp::List<stubs::Include, capnp::Kind::STRUCT>::Builder &builder,
       const clang::SourceManager &SM,
       const llvm::ArrayRef<InclDirective> inclDirectives,
-      get_first_decl_loc_fn &getFirstDeclLocOpt,
-      unsigned fd) const;
+      get_first_decl_loc_fn &getFirstDeclLocOpt, unsigned fd) const;
 
 public:
   explicit InclusionContext() {}
 
   KJ_DISALLOW_COPY(InclusionContext);
 
-  bool hasInclusions() { return !_includesStack.empty(); }
+  bool hasInclusions() { return !m_includesStack.empty(); }
 
   void startInclusion(const clang::FileEntry &fileEntry) {
-    auto it = _includesMap.emplace(fileEntry.getUID(), fileEntry);
+    auto it = m_includesMap.emplace(fileEntry.getUID(), fileEntry);
     auto &startedIncl = it.first->second;
-    _includesStack.push_back(&startedIncl);
+    m_includesStack.push_back(&startedIncl);
     // TODO: what if we start an inclusion that we already processed? -> does
     // not have header guards; then it.second will be false
   }
@@ -47,12 +47,13 @@ public:
 
   void endInclusion() {
     auto ended = currentInclusion();
-    _includesStack.pop_back();
+    m_includesStack.pop_back();
     currentInclusion()->addInclusion(ended);
   }
 
-  void serializeTUInclDirectives(stubs::TU::Builder &builder,
-                                 const clang::SourceManager &SM,
-                                get_first_decl_loc_fn &getFirstDeclLocOpt) const;
+  void
+  serializeTUInclDirectives(stubs::TU::Builder &builder,
+                            const clang::SourceManager &SM,
+                            get_first_decl_loc_fn &getFirstDeclLocOpt) const;
 };
 } // namespace vf

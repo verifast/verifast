@@ -9,12 +9,12 @@ namespace vf {
 bool TypeSerializer::VisitBuiltinType(const clang::BuiltinType *type) {
 #define CASE_TYPE(CLANG_TYPE, STUBS_TYPE)                                      \
   case clang::BuiltinType::Kind::CLANG_TYPE:                                   \
-    _builder.setBuiltin(stubs::Type::BuiltinKind::STUBS_TYPE);                 \
+    m_builder.setBuiltin(stubs::Type::BuiltinKind::STUBS_TYPE);                \
     return true;
 
 #define CASE_TYPE_FW(CLANG_TYPE, STUBS_TYPE, BITS)                             \
   case clang::BuiltinType::Kind::CLANG_TYPE: {                                 \
-    auto fw = _builder.initFixedWidth();                                        \
+    auto fw = m_builder.initFixedWidth();                                      \
     fw.setKind(stubs::Type::FixedWidth::FixedWidthKind::STUBS_TYPE);           \
     fw.setBits(BITS);                                                          \
     return true;                                                               \
@@ -45,13 +45,13 @@ bool TypeSerializer::VisitBuiltinType(const clang::BuiltinType *type) {
 }
 
 bool TypeSerializer::VisitPointerType(const clang::PointerType *type) {
-  auto pointer = _builder.initPointer().initDesc();
-  _serializer.serializeQualType(pointer, type->getPointeeType());
+  auto pointer = m_builder.initPointer().initDesc();
+  m_serializer.serializeQualType(pointer, type->getPointeeType());
   return true;
 }
 
 bool TypeSerializer::VisitRecordType(const clang::RecordType *type) {
-  auto rec = _builder.initRecord();
+  auto rec = m_builder.initRecord();
   rec.setName(type->getDecl()->getQualifiedNameAsString());
   if (type->isClassType()) {
     rec.setKind(stubs::RecordKind::CLASS);
@@ -66,60 +66,60 @@ bool TypeSerializer::VisitRecordType(const clang::RecordType *type) {
 }
 
 bool TypeSerializer::VisitEnumType(const clang::EnumType *type) {
-  _builder.setEnumType(type->getDecl()->getQualifiedNameAsString());
+  m_builder.setEnumType(type->getDecl()->getQualifiedNameAsString());
   return true;
 }
 
-bool TypeSerializer::VisitElaboratedType(
-    const clang::ElaboratedType *type) {
-  auto elaborated = _builder.initElaborated().initDesc();
-  _serializer.serializeQualType(elaborated, type->getNamedType());
+bool TypeSerializer::VisitElaboratedType(const clang::ElaboratedType *type) {
+  auto elaborated = m_builder.initElaborated().initDesc();
+  m_serializer.serializeQualType(elaborated, type->getNamedType());
   return true;
 }
 
 bool TypeSerializer::VisitTypedefType(const clang::TypedefType *type) {
-  _builder.setTypedef(type->getDecl()->getQualifiedNameAsString());
+  m_builder.setTypedef(type->getDecl()->getQualifiedNameAsString());
   return true;
 }
 
 bool TypeSerializer::VisitLValueReferenceType(
     const clang::LValueReferenceType *type) {
-  auto ref = _builder.initLValueRef().initDesc();
-  _serializer.serializeQualType(ref, type->getPointeeType());
+  auto ref = m_builder.initLValueRef().initDesc();
+  m_serializer.serializeQualType(ref, type->getPointeeType());
   return true;
 }
 
 bool TypeSerializer::VisitRValueReferenceType(
     const clang::RValueReferenceType *type) {
-  auto ref = _builder.initRValueRef().initDesc();
-  _serializer.serializeQualType(ref, type->getPointeeType());
+  auto ref = m_builder.initRValueRef().initDesc();
+  m_serializer.serializeQualType(ref, type->getPointeeType());
   return true;
 }
 
-bool TypeLocSerializer::VisitPointerTypeLoc(const clang::PointerTypeLoc typeLoc) {
-  auto pointer = _builder.initPointer();
-  _serializer.serializeTypeLoc(pointer, typeLoc.getPointeeLoc());
+bool TypeLocSerializer::VisitPointerTypeLoc(
+    const clang::PointerTypeLoc typeLoc) {
+  auto pointer = m_builder.initPointer();
+  m_serializer.serializeTypeLoc(pointer, typeLoc.getPointeeLoc());
   return true;
 }
 
 bool TypeLocSerializer::VisitElaboratedTypeLoc(
     const clang::ElaboratedTypeLoc typeLoc) {
-  auto elaborated = _builder.initElaborated();
-  _serializer.serializeTypeLoc(elaborated, typeLoc.getNamedTypeLoc());
+  auto elaborated = m_builder.initElaborated();
+  m_serializer.serializeTypeLoc(elaborated, typeLoc.getNamedTypeLoc());
   return true;
 }
 
 bool TypeLocSerializer::VisitLValueReferenceTypeLoc(
     const clang::LValueReferenceTypeLoc typeLoc) {
-  auto ref = _builder.initLValueRef();
-  _serializer.serializeTypeLoc(ref, typeLoc.getPointeeLoc());
+  auto ref = m_builder.initLValueRef();
+  m_serializer.serializeTypeLoc(ref, typeLoc.getPointeeLoc());
   return true;
 }
 
 bool TypeLocSerializer::VisitRValueReferenceTypeLoc(
     const clang::RValueReferenceTypeLoc typeLoc) {
-  auto ref = _builder.initRValueRef();
-  _serializer.serializeTypeLoc(ref, typeLoc.getPointeeLoc());
+  auto ref = m_builder.initRValueRef();
+  m_serializer.serializeTypeLoc(ref, typeLoc.getPointeeLoc());
   return true;
 }
 

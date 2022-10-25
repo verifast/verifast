@@ -23,16 +23,16 @@ class AnnotationStore {
    * Holds a sequence of VeriFast annotations.
    */
   struct AnnCont {
-    unsigned int _pos;
-    ann_v _anns;
+    unsigned int m_pos;
+    ann_v m_anns;
 
-    explicit AnnCont() : _pos(0) {}
+    explicit AnnCont() : m_pos(0) {}
 
     /**
      * Moves the given annotation in this store.
      * @param ann the annotation that will be moved.
      */
-    void add(Annotation &&ann) { _anns.emplace_back(std::move(ann)); }
+    void add(Annotation &&ann) { m_anns.emplace_back(std::move(ann)); }
 
     /**
      * Retrieve every annotation from this container while the given predicate
@@ -47,11 +47,11 @@ class AnnotationStore {
      * the annotation container should be retrieved.
      */
     template <class Pred, class Cont> void getWhile(Cont &con, Pred pred) {
-      while (_pos < _anns.size()) {
-        auto ann = _anns.at(_pos);
+      while (m_pos < m_anns.size()) {
+        auto ann = m_anns.at(m_pos);
         if (pred(ann)) {
           con.push_back(ann);
-          ++_pos;
+          ++m_pos;
           continue;
         }
         return;
@@ -66,8 +66,8 @@ class AnnotationStore {
      * are added to.
      */
     template <class Cont> void getAll(Cont &con) {
-      while (_pos < _anns.size()) {
-        con.push_back(_anns.at(_pos));
+      while (m_pos < m_anns.size()) {
+        con.push_back(m_anns.at(m_pos));
       }
     }
   };
@@ -77,7 +77,7 @@ class AnnotationStore {
   /**
    * Retrieves the annotation container that corresponds with the given
    * location. The unique identifier of the file entry that contains the given
-   * location is used retrieve the correct annotation store.
+   * location is used to retrieve the correct annotation store.
    * @param loc source location that is used to get the correct annotation
    * container.
    * @param SM source manager.
@@ -179,7 +179,8 @@ public:
   queryTruncatingAnnotation(const clang::SourceLocation currentLoc,
                             const clang::SourceManager &SM) {
     auto pred = [&currentLoc](const Annotation &ann) {
-      // compare to 'begin' of range in case the end overlaps with the given currentLoc
+      // compare to 'begin' of range in case the end overlaps with the given
+      // currentLoc
       return ann.getRange().getBegin() < currentLoc && ann.isTruncating();
     };
     llvm::SmallVector<Annotation, 1> query;

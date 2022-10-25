@@ -33,17 +33,19 @@ using DeclNodeOrphan = NodeOrphan<stubs::Decl>;
  * corresponding serializer.
  */
 class AstSerializer {
-  clang::ASTContext &_context;
-  clang::SourceManager &_SM;
-  const InclusionContext &_inclContext;
+  clang::ASTContext &m_context;
+  clang::SourceManager &m_SM;
+  const InclusionContext &c_inclContext;
 
-  FunctionMangler _funcMangler;
+  FunctionMangler m_funcMangler;
 
-  AnnotationSerializer _AS;
-  AnnotationStore &_store;
+  AnnotationSerializer m_AS;
+  AnnotationStore &m_store;
   std::unordered_map<unsigned, llvm::SmallVector<DeclNodeOrphan, 8>>
-      _fileDeclsMap;
-  std::unordered_map<unsigned, clang::SourceLocation> _firstDeclLocMap;
+      m_fileDeclsMap;
+  std::unordered_map<unsigned, clang::SourceLocation> m_firstDeclLocMap;
+
+  bool m_serializeImplicitDecls;
 
   void updateFirstDeclLoc(unsigned fileUID, clang::SourceLocation newLoc);
 
@@ -52,14 +54,16 @@ class AstSerializer {
 
 public:
   explicit AstSerializer(clang::ASTContext &context, AnnotationStore &store,
-                         const InclusionContext &inclContext)
-      : _context(context), _SM(context.getSourceManager()),
-        _inclContext(inclContext), _AS(context.getSourceManager()),
-        _funcMangler(context), _store(store) {}
+                         const InclusionContext &inclContext,
+                         bool serializeImplicitDecls)
+      : m_context(context), m_SM(context.getSourceManager()),
+        c_inclContext(inclContext), m_AS(context.getSourceManager()),
+        m_funcMangler(context), m_store(store),
+        m_serializeImplicitDecls(serializeImplicitDecls) {}
 
   KJ_DISALLOW_COPY(AstSerializer);
 
-  AnnotationStore &getAnnStore() { return _store; }
+  AnnotationStore &getAnnStore() { return m_store; }
 
   /**
    * Serializes a declaration.
@@ -68,7 +72,9 @@ public:
    */
   void serializeDecl(DeclSerializer::NodeBuilder &builder,
                      const clang::Decl *decl) {
-    DeclSerializer ser(_context, *this, builder);
+    if (!m_serializeImplicitDecls && decl->isImplicit())
+      return;
+    DeclSerializer ser(m_context, *this, builder, m_serializeImplicitDecls);
     ser.serialize(decl);
   }
 
@@ -79,7 +85,7 @@ public:
    */
   void serializeStmt(StmtSerializer::NodeBuilder &builder,
                      const clang::Stmt *stmt) {
-    StmtSerializer ser(_context, *this, builder);
+    StmtSerializer ser(m_context, *this, builder);
     ser.serialize(stmt);
   }
 
@@ -91,20 +97,20 @@ public:
   void serializeExpr(ExprSerializer::NodeBuilder &builder,
                      const clang::Expr *expr) {
     auto truncatingOptional =
-        _store.queryTruncatingAnnotation(expr->getBeginLoc(), _SM);
+        m_store.queryTruncatingAnnotation(expr->getBeginLoc(), m_SM);
     if (truncatingOptional) {
       auto loc = builder.initLoc();
       auto desc = builder.initDesc();
 
       serializeSrcRange(
-          loc, {truncatingOptional->getBegin(), expr->getEndLoc()}, _SM);
+          loc, {truncatingOptional->getBegin(), expr->getEndLoc()}, m_SM);
       auto truncating = desc.initTruncating();
 
-      ExprSerializer ser(_context, *this, truncating);
+      ExprSerializer ser(m_context, *this, truncating);
       ser.serialize(expr);
       return;
     }
-    ExprSerializer ser(_context, *this, builder);
+    ExprSerializer ser(m_context, *this, builder);
     ser.serialize(expr);
   }
 
@@ -116,7 +122,7 @@ public:
    */
   void serializeTypeLoc(TypeLocSerializer::NodeBuilder &builder,
                         const clang::TypeLoc typeLoc) {
-    TypeLocSerializer ser(_context, *this, builder);
+    TypeLocSerializer ser(m_context, *this, builder);
     ser.serialize(typeLoc);
   }
 
@@ -127,8 +133,8 @@ public:
    * that type.
    */
   void serializeQualType(TypeSerializer::DescBuilder &builder,
-                     const clang::QualType type) {
-    TypeSerializer ser(_context, *this, builder);
+                         const clang::QualType type) {
+    TypeSerializer ser(m_context, *this, builder);
     ser.serialize(type.getTypePtr());
   }
 
@@ -144,7 +150,10 @@ public:
   void serializeNodeDecomposed(stubs::Loc::Builder &locBuilder,
                                stubs::Decl::Builder &builder,
                                const clang::Decl *decl) {
-    DeclSerializer ser(_context, *this, locBuilder, builder);
+    if (!m_serializeImplicitDecls && decl->isImplicit())
+      return;
+    DeclSerializer ser(m_context, *this, locBuilder, builder,
+                       m_serializeImplicitDecls);
     ser.serialize(decl);
   }
 
@@ -160,7 +169,7 @@ public:
   void serializeNodeDecomposed(stubs::Loc::Builder &locBuilder,
                                stubs::Stmt::Builder &builder,
                                const clang::Stmt *stmt) {
-    StmtSerializer ser(_context, *this, locBuilder, builder);
+    StmtSerializer ser(m_context, *this, locBuilder, builder);
     ser.serialize(stmt);
   }
 
@@ -188,7 +197,7 @@ public:
    */
   void serializeAnnotationClause(AnnotationSerializer::ClauseBuilder &builder,
                                  const Annotation &ann) {
-    _AS.serializeClause(builder, ann);
+    m_AS.serializeClause(builder, ann);
   }
 
   /**
@@ -207,7 +216,7 @@ public:
   void serializeAnnotationDecomposed(stubs::Loc::Builder &locBuilder,
                                      typename StubsNode::Builder &descBuilder,
                                      const Annotation &ann) {
-    _AS.serializeNode<StubsNode>(locBuilder, descBuilder, ann);
+    m_AS.serializeNode<StubsNode>(locBuilder, descBuilder, ann);
   }
 
   /**
@@ -303,15 +312,15 @@ public:
   }
 
   llvm::StringRef getMangledCtorName(const clang::CXXConstructorDecl *decl) {
-    return _funcMangler.mangleCtor(decl);
+    return m_funcMangler.mangleCtor(decl);
   }
 
   llvm::StringRef getMangledDtorName(const clang::CXXDestructorDecl *decl) {
-    return _funcMangler.mangleDtor(decl);
+    return m_funcMangler.mangleDtor(decl);
   }
 
   llvm::StringRef getMangledFunc(const clang::FunctionDecl *decl) {
-    return _funcMangler.mangleFunc(decl);
+    return m_funcMangler.mangleFunc(decl);
   }
 };
 

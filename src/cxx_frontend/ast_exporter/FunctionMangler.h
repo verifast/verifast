@@ -6,32 +6,33 @@
 
 namespace vf {
 class FunctionMangler {
-  std::unique_ptr<clang::MangleContext> _mangler;
+  std::unique_ptr<clang::MangleContext> m_mangler;
 
-  std::unordered_map<int64_t, std::string> _mangledNames;
+  std::unordered_map<int64_t, std::string> m_mangledNames;
 
-  llvm::StringRef getMangledName(const clang::NamedDecl *nd, const clang::GlobalDecl &gd) {
+  llvm::StringRef getMangledName(const clang::NamedDecl *nd,
+                                 const clang::GlobalDecl &gd) {
     auto id = nd->getMostRecentDecl()->getID();
-    auto search = _mangledNames.find(id);
-    if (search != _mangledNames.end()) {
+    auto search = m_mangledNames.find(id);
+    if (search != m_mangledNames.end()) {
       return search->second;
     }
-    if (_mangler->shouldMangleDeclName(nd)) {
+    if (m_mangler->shouldMangleDeclName(nd)) {
       std::string name;
       {
         llvm::raw_string_ostream os(name);
-        _mangler->mangleName(gd, os);
+        m_mangler->mangleName(gd, os);
       }
-      _mangledNames.emplace(id, std::move(name));
+      m_mangledNames.emplace(id, std::move(name));
     } else {
-      _mangledNames.emplace(id, nd->getNameAsString());
+      m_mangledNames.emplace(id, nd->getNameAsString());
     }
-    return _mangledNames[id];
+    return m_mangledNames[id];
   }
 
 public:
   explicit FunctionMangler(clang::ASTContext &context)
-      : _mangler(clang::ItaniumMangleContext::create(
+      : m_mangler(clang::ItaniumMangleContext::create(
             context, context.getDiagnostics())){};
 
   llvm::StringRef mangleFunc(const clang::FunctionDecl *decl) {

@@ -22,7 +22,7 @@ void ContextFreePPCallbacks::PPDiags::reportCtxSensitiveMacroExp(
              "here: %1")
       << macroName
       << MD.getMacroInfo()->getDefinitionLoc().printToString(
-             _PP.getSourceManager());
+             m_PP.getSourceManager());
 }
 
 void ContextFreePPCallbacks::PPDiags::reportUndefIsolatedMacro(
@@ -33,12 +33,12 @@ void ContextFreePPCallbacks::PPDiags::reportUndefIsolatedMacro(
              "context. Last definition is here: %1")
       << macroName
       << MD.getMacroInfo()->getDefinitionLoc().printToString(
-             _PP.getSourceManager());
+             m_PP.getSourceManager());
 }
 
 std::string
 ContextFreePPCallbacks::getMacroName(const clang::Token &macroNameToken) const {
-  return _PP.getSpelling(macroNameToken);
+  return m_PP.getSpelling(macroNameToken);
 }
 
 bool ContextFreePPCallbacks::macroAllowed(const std::string &macroName) const {
@@ -58,16 +58,16 @@ void ContextFreePPCallbacks::FileChanged(
     if (includeLoc.isValid()) {
       auto fileEntry = SM().getFileEntryForID(fileID);
       assert(fileEntry);
-      _context.startInclusion(*fileEntry);
+      m_context.startInclusion(*fileEntry);
     }
     break;
   }
   case ExitFile: {
-    if (_context.hasInclusions()) {
+    if (m_context.hasInclusions()) {
       auto exitedFileEntry = SM().getFileEntryForID(prevFID);
       if (exitedFileEntry &&
-          exitedFileEntry->getUID() == _context.currentInclusion()->fileUID) {
-        _context.endInclusion();
+          exitedFileEntry->getUID() == m_context.currentInclusion()->fileUID) {
+        m_context.endInclusion();
       }
     }
     break;
@@ -91,7 +91,7 @@ void ContextFreePPCallbacks::MacroUndefined(
   auto name = getMacroName(macroNameTok);
   if (macroAllowed(name))
     return;
-  if (undef && !_context.currentInclusion()->ownsMacroDef(MD, SM())) {
+  if (undef && !m_context.currentInclusion()->ownsMacroDef(MD, SM())) {
     _diags.reportUndefIsolatedMacro(macroNameTok, name, MD);
   }
 }
@@ -103,7 +103,7 @@ void ContextFreePPCallbacks::MacroExpands(const clang::Token &macroNameTok,
   auto name = getMacroName(macroNameTok);
   if (macroAllowed(name))
     return;
-  bool macroDefined = _context.currentInclusion()->ownsMacroDef(MD, SM());
+  bool macroDefined = m_context.currentInclusion()->ownsMacroDef(MD, SM());
   if (!macroDefined) {
     _diags.reportCtxSensitiveMacroExp(macroNameTok, name, MD, range);
   }
@@ -113,8 +113,8 @@ void ContextFreePPCallbacks::FileSkipped(
     const clang::FileEntryRef &skippedFile, const clang::Token &filenameTok,
     clang::SrcMgr::CharacteristicKind fileType) {
   auto &fileEntry = skippedFile.getFileEntry();
-  _context.startInclusion(fileEntry);
-  _context.endInclusion();
+  m_context.startInclusion(fileEntry);
+  m_context.endInclusion();
 }
 
 void ContextFreePPCallbacks::InclusionDirective(
@@ -123,7 +123,7 @@ void ContextFreePPCallbacks::InclusionDirective(
     clang::CharSourceRange filenameRange, const clang::FileEntry *file,
     clang::StringRef searchPath, clang::StringRef relativePath,
     const clang::Module *imported, clang::SrcMgr::CharacteristicKind fileType) {
-  _context.addInclDirective(filenameRange.getAsRange(), fileName, *file,
+  m_context.addInclDirective(filenameRange.getAsRange(), fileName, *file,
                             isAngled);
 }
 
@@ -132,7 +132,7 @@ void ContextFreePPCallbacks::checkDivergence(const clang::Token &macroNameTok,
   auto name = getMacroName(macroNameTok);
   if (macroAllowed(name))
     return;
-  bool hasLocalDef = _context.currentInclusion()->ownsMacroDef(MD, SM());
+  bool hasLocalDef = m_context.currentInclusion()->ownsMacroDef(MD, SM());
   bool hasGlobalDef = MD.getMacroInfo();
   if (hasLocalDef ^ hasGlobalDef) {
     _diags.reportMacroDivergence(macroNameTok, name, MD);

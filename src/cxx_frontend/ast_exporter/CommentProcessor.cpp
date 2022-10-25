@@ -13,26 +13,26 @@ bool CommentProcessor::HandleComment(clang::Preprocessor &PP,
 
   // We have entered a different file
   // Set offset to start of file
-  if (fileID != prevFile) {
-    prevFile = fileID;
-    prevBufferOffset = 0;
+  if (fileID != m_prevFile) {
+    m_prevFile = fileID;
+    m_prevBufferOffset = 0;
   }
 
   unsigned currentOffset = locInfo.second;
-  auto fileBuffer = SM.getBufferData(prevFile);
-  onlyWhitespace = checkWhiteSpace(fileBuffer.data() + prevBufferOffset,
-                                   fileBuffer.data() + currentOffset);
+  auto fileBuffer = SM.getBufferData(m_prevFile);
+  m_onlyWhitespace = checkWhiteSpace(fileBuffer.data() + m_prevBufferOffset,
+                                     fileBuffer.data() + currentOffset);
 
-  auto annOpt =
-      annotationOf(comment, llvm::StringRef(begin, end - begin),
-                   /* annotation at the start of the file */ prevBufferOffset ==
-                           currentOffset ||
-                       !onlyWhitespace);
+  auto annOpt = annotationOf(
+      comment, llvm::StringRef(begin, end - begin),
+      /* annotation at the start of the file */ m_prevBufferOffset ==
+              currentOffset ||
+          !m_onlyWhitespace);
   if (annOpt) {
-    _store.add(std::move(*annOpt), SM);
+    m_store.add(std::move(*annOpt), SM);
   }
 
-  prevBufferOffset = currentOffset + end - begin;
+  m_prevBufferOffset = currentOffset + end - begin;
 
   return false;
 }

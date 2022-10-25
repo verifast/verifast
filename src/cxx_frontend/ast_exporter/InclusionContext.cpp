@@ -10,26 +10,26 @@ void InclusionContext::serializeInclDirectivesCore(
     auto &lastInclDir = inclDirectives.back();
     auto firstDeclLocOpt = getFirstDeclLocOpt(fd);
     if (firstDeclLocOpt &&
-        lastInclDir._range.getEnd() > firstDeclLocOpt.getValue()) {
+        lastInclDir.m_range.getEnd() > firstDeclLocOpt.getValue()) {
       auto diagID = SM.getDiagnostics().getCustomDiagID(
           clang::DiagnosticsEngine::Level::Error,
           "An include directive can only appear at the start of a file.");
-      SM.getDiagnostics().Report(lastInclDir._range.getBegin(), diagID);
+      SM.getDiagnostics().Report(lastInclDir.m_range.getBegin(), diagID);
     }
   }
 
   for (size_t i(0); i < inclDirectives.size(); ++i) {
     auto inclDirBuilder = builder[i];
     auto inclDirective = inclDirectives[i];
-    auto currentFd = inclDirective._fileUID;
+    auto currentFd = inclDirective.m_fileUID;
 
     inclDirBuilder.setFd(currentFd);
-    inclDirBuilder.setFileName(inclDirective._fileName.str());
-    inclDirBuilder.setIsAngled(inclDirective._isAngled);
+    inclDirBuilder.setFileName(inclDirective.m_fileName.str());
+    inclDirBuilder.setIsAngled(inclDirective.m_isAngled);
     auto locBuilder = inclDirBuilder.initLoc();
-    serializeSrcRange(locBuilder, inclDirective._range, SM);
+    serializeSrcRange(locBuilder, inclDirective.m_range, SM);
 
-    auto &nestedInclDirectives = _includesMap.at(currentFd).getInclDirectives();
+    auto &nestedInclDirectives = m_includesMap.at(currentFd).getInclDirectives();
     auto nestedInclDirectivesBuilder =
         inclDirBuilder.initIncludes(nestedInclDirectives.size());
     serializeInclDirectivesCore(nestedInclDirectivesBuilder, SM,
@@ -42,7 +42,7 @@ void InclusionContext::serializeTUInclDirectives(
     stubs::TU::Builder &builder, const clang::SourceManager &SM,
     get_first_decl_loc_fn &getFirstDeclLocOpt) const {
   auto mainUID = SM.getFileEntryForID(SM.getMainFileID())->getUID();
-  auto &inclDirectives = _includesMap.at(mainUID).getInclDirectives();
+  auto &inclDirectives = m_includesMap.at(mainUID).getInclDirectives();
   auto inclDirectivesBuilder = builder.initIncludes(inclDirectives.size());
   serializeInclDirectivesCore(inclDirectivesBuilder, SM, inclDirectives,
                               getFirstDeclLocOpt, mainUID);

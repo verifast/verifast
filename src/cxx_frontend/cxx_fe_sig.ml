@@ -9,6 +9,11 @@ module type Cxx_Ast_Translator = sig
   *)
 end
 
+type struct_member_decl =
+  | CxxFieldMem of VF.field
+  | CxxInstPredMem of VF.instance_pred_decl
+  | CxxDeclMem of VF.decl
+
 module type CXX_TRANSLATOR_ARGS = sig
   val data_model_opt: VF.data_model option
   val enforce_annotations: bool

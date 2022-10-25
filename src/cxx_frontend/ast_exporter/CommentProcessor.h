@@ -10,15 +10,15 @@ namespace vf {
  * be added to the annotation store.
  */
 class CommentProcessor : public clang::CommentHandler {
-  clang::FileID prevFile;
-  unsigned prevBufferOffset;
-  bool onlyWhitespace = true;
+  clang::FileID m_prevFile;
+  unsigned m_prevBufferOffset;
+  bool m_onlyWhitespace = true;
 
-  AnnotationStore &_store;
+  AnnotationStore &m_store;
 
   /**
-   * @return whether or not all characters from 'start' up until 'end' only represent
-   * white space.
+   * @return whether or not all characters from 'start' up until 'end' only
+   * represent white space.
    */
   static bool checkWhiteSpace(const char *start, const char *end) {
     for (; start < end; ++start) {
@@ -37,7 +37,7 @@ public:
    */
   bool HandleComment(clang::Preprocessor &PP, clang::SourceRange comment);
 
-  explicit CommentProcessor(AnnotationStore &store) : _store(store) {}
+  explicit CommentProcessor(AnnotationStore &store) : m_store(store) {}
   CommentProcessor(AnnotationStore &&store) = delete;
 };
 } // namespace vf

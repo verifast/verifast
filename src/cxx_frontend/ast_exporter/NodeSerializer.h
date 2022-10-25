@@ -23,17 +23,17 @@ public:
 protected:
   explicit DescSerializer(clang::ASTContext &context, AstSerializer &serializer,
                           DescBuilder builder)
-      : _context(context), _serializer(serializer), _builder(builder) {}
+      : m_context(context), m_serializer(serializer), m_builder(builder) {}
 
-  clang::ASTContext &_context;
-  AstSerializer &_serializer;
-  DescBuilder _builder;
+  clang::ASTContext &m_context;
+  AstSerializer &m_serializer;
+  DescBuilder m_builder;
 
   virtual bool serializeDesc(const AstNode *node) = 0;
 
-  const AstSerializer &getSerializer() const { return _serializer; }
+  const AstSerializer &getSerializer() const { return m_serializer; }
 
-  const clang::ASTContext &getContext() const { return _context; }
+  const clang::ASTContext &getContext() const { return m_context; }
 
   const clang::SourceManager &getSourceManager() const {
     return getContext().getSourceManager();
@@ -148,15 +148,19 @@ private:
 
 struct DeclSerializer : public NodeSerializer<stubs::Decl, clang::Decl>,
                         public clang::ConstDeclVisitor<DeclSerializer, bool> {
+  bool m_serializeImplicitDecls;
 
   explicit DeclSerializer(clang::ASTContext &context, AstSerializer &serializer,
                           stubs::Loc::Builder &locBuilder,
-                          stubs::Decl::Builder &descBuilder)
-      : NodeSerializer(context, serializer, locBuilder, descBuilder) {}
+                          stubs::Decl::Builder &descBuilder,
+                          bool serializeImplicitDecls)
+      : NodeSerializer(context, serializer, locBuilder, descBuilder),
+        m_serializeImplicitDecls(serializeImplicitDecls) {}
 
   explicit DeclSerializer(clang::ASTContext &context, AstSerializer &serializer,
-                          NodeBuilder &nodeBuilder)
-      : NodeSerializer(context, serializer, nodeBuilder) {}
+                          NodeBuilder &nodeBuilder, bool serializeImplicitDecls)
+      : NodeSerializer(context, serializer, nodeBuilder),
+        m_serializeImplicitDecls() {}
 
   bool serializeDesc(const clang::Decl *decl) override {
     assert(decl && "Declaration should not be null");
@@ -164,9 +168,9 @@ struct DeclSerializer : public NodeSerializer<stubs::Decl, clang::Decl>,
   }
 
   void serialize(const clang::Decl *decl) {
-    if (decl->isImplicit())
+    if (!m_serializeImplicitDecls && decl->isImplicit())
       llvm::report_fatal_error(
-          "Serialization of implicit declarations is not supported.");
+          "Serialization of implicit declarations is not enabled.");
     serializeNode(decl, "Declaration", decl->getDeclKindName());
   }
 
@@ -329,13 +333,13 @@ public:
                              stubs::Loc::Builder &locBuilder,
                              stubs::Type::Builder &descBuilder)
       : NodeSerializer(context, serializer, locBuilder, descBuilder),
-        _typeSerializer(context, serializer, _builder) {}
+        _typeSerializer(context, serializer, m_builder) {}
 
   explicit TypeLocSerializer(clang::ASTContext &context,
                              AstSerializer &serializer,
                              NodeBuilder &nodeBuilder)
       : NodeSerializer(context, serializer, nodeBuilder),
-        _typeSerializer(context, serializer, _builder) {}
+        _typeSerializer(context, serializer, m_builder) {}
 
   void serialize(const clang::TypeLoc typeLoc) {
     serializeNode(&typeLoc, "Type location",
@@ -344,7 +348,8 @@ public:
 
   bool serializeDesc(const clang::TypeLoc *typeLoc) override {
     assert(typeLoc && "Type should not be null");
-    if (! Visit(*typeLoc)) return _typeSerializer.serializeDesc(typeLoc->getTypePtr());
+    if (!Visit(*typeLoc))
+      return _typeSerializer.serializeDesc(typeLoc->getTypePtr());
     return true;
   }
 

@@ -83,4 +83,45 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) = struct
       [< stmt = AnnParser.parse_stmt; parse_end >] -> stmt in
     try_parse_ghost ann ann_parser
 
+  let parse_struct_members (struct_name: string) (ann: raw_annotation): Cxx_fe_sig.struct_member_decl list =
+    let parse_mem = parser
+      | [< 
+          '(l, Kwd "predicate"); 
+          '(_, Ident g); 
+          ps = AnnParser.parse_paramlist;
+          body = begin parser
+          | [< '(_, Kwd "="); p = AnnParser.parse_asn >] -> Some p
+          | [< >] -> None
+          end;
+          '(_, Kwd ";") 
+        >] -> 
+        let pred = VF.InstancePredDecl (l, g, ps, body) in
+        Cxx_fe_sig.CxxInstPredMem pred
+      | [< 
+          '(l, Kwd "lemma"); 
+          t = AnnParser.parse_return_type;
+          VF.Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, terminates, None, VF.Static, v) = AnnParser.parse_func_rest (VF.Lemma (false, None)) t VF.Public 
+        >] ->
+        let ps = (VF.PtrTypeExpr (l, VF.StructTypeExpr (l, Some struct_name, None, [])), "this") :: ps in
+        let lem = VF.Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, terminates, None, VF.Static, v) in
+        Cxx_fe_sig.CxxDeclMem lem
+      | [< 
+          binding = begin parser
+          | [< '(_, Kwd "static") >] -> VF.Static
+          | [<  >] -> VF.Instance
+          end;
+          t = AnnParser.parse_type; '(l, Ident x); '(_, Kwd ";")
+        >] ->
+        let field = VF.Field (l, VF.Ghost, t, x, binding, VF.Public, false, None) in
+        Cxx_fe_sig.CxxFieldMem field
+    in
+    let rec parse_mems = parser
+      | [< '(_, Kwd "@*/") >] -> []
+      | [< mem = parse_mem; mems = parse_mems >] -> mem :: mems
+    in
+    let ann_parser = parser
+      | [< '(_, Kwd "/*@"); mems = parse_mems; () = parse_end >] -> mems
+    in
+    try_parse_ghost ann ann_parser
+
 end

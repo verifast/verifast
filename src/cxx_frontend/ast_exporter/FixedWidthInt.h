@@ -14,7 +14,8 @@ struct FixedWidthInt {
   FixedWidthInt() = delete;
 };
 
-inline llvm::Optional<FixedWidthInt> getFixedWidthFromString(llvm::StringRef name) {
+inline llvm::Optional<FixedWidthInt>
+getFixedWidthFromString(llvm::StringRef name) {
   if (name.equals("int8_t"))
     return llvm::Optional<FixedWidthInt>(std::move<FixedWidthInt>({8, false}));
   if (name.equals("int16_t"))

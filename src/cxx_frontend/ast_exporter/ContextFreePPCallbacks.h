@@ -9,18 +9,18 @@ namespace vf {
 class ContextFreePPCallbacks : public clang::PPCallbacks {
 
   class PPDiags {
-    clang::Preprocessor &_PP;
+    clang::Preprocessor &m_PP;
 
     template <unsigned N>
     clang::DiagnosticBuilder createDiag(clang::SourceLocation loc,
                                         clang::DiagnosticsEngine::Level level,
                                         const char (&msg)[N]) const {
-      auto id = _PP.getDiagnostics().getCustomDiagID(level, msg);
-      return _PP.getDiagnostics().Report(loc, id);
+      auto id = m_PP.getDiagnostics().getCustomDiagID(level, msg);
+      return m_PP.getDiagnostics().Report(loc, id);
     }
 
   public:
-    explicit PPDiags(clang::Preprocessor &PP) : _PP(PP) {}
+    explicit PPDiags(clang::Preprocessor &PP) : m_PP(PP) {}
 
     void reportMacroDivergence(const clang::Token &macroNameTok,
                                const std::string &macroName,
@@ -36,12 +36,12 @@ class ContextFreePPCallbacks : public clang::PPCallbacks {
                                   const clang::MacroDefinition &MD);
   };
 
-  InclusionContext &_context;
-  clang::Preprocessor &_PP;
+  InclusionContext &m_context;
+  clang::Preprocessor &m_PP;
   const std::unordered_set<std::string> _whiteList;
   PPDiags _diags;
 
-  const clang::SourceManager &SM() const { return _PP.getSourceManager(); }
+  const clang::SourceManager &SM() const { return m_PP.getSourceManager(); }
 
   void checkDivergence(const clang::Token &macroNameToken,
                        const clang::MacroDefinition &MD);
@@ -54,10 +54,10 @@ public:
   explicit ContextFreePPCallbacks(InclusionContext &context,
                                   clang::Preprocessor &PP,
                                   const std::vector<std::string> &whiteList)
-      : _context(context), _PP(PP),
+      : m_context(context), m_PP(PP),
         _whiteList(whiteList.begin(), whiteList.end()), _diags(PP) {
     auto mainEntry = SM().getFileEntryForID(SM().getMainFileID());
-    _context.startInclusion(*mainEntry);
+    m_context.startInclusion(*mainEntry);
   }
 
   KJ_DISALLOW_COPY(ContextFreePPCallbacks);

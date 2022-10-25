@@ -6,21 +6,21 @@ namespace vf {
 
 void AstSerializer::updateFirstDeclLoc(unsigned fileUID,
                                        clang::SourceLocation newLoc) {
-  if (_firstDeclLocMap.find(fileUID) != _firstDeclLocMap.end())
+  if (m_firstDeclLocMap.find(fileUID) != m_firstDeclLocMap.end())
     return;
 
-  _firstDeclLocMap.emplace(fileUID, newLoc);
+  m_firstDeclLocMap.emplace(fileUID, newLoc);
 }
 
 void AstSerializer::serializeDeclToDeclMap(const clang::Decl *decl,
                                            capnp::Orphanage &orphanage) {
   auto range = decl->getSourceRange();
-  auto fileID = _SM.getFileID(range.getBegin());
-  auto fileUID = _SM.getFileEntryForID(fileID)->getUID();
-  auto &declNodeOrphans = _fileDeclsMap[fileUID];
+  auto fileID = m_SM.getFileID(range.getBegin());
+  auto fileUID = m_SM.getFileEntryForID(fileID)->getUID();
+  auto &declNodeOrphans = m_fileDeclsMap[fileUID];
 
   std::list<Annotation> anns;
-  _store.getUntilLoc(anns, range.getBegin(), _SM);
+  m_store.getUntilLoc(anns, range.getBegin(), m_SM);
   serializeAnnsToOrphans(anns, orphanage, declNodeOrphans);
   serializeToOrphan(decl, orphanage, declNodeOrphans);
 
@@ -45,21 +45,21 @@ void AstSerializer::serializeTU(stubs::TU::Builder &builder,
     }
   }
 
-  builder.setMainFd(_SM.getFileEntryForID(_SM.getMainFileID())->getUID());
+  builder.setMainFd(m_SM.getFileEntryForID(m_SM.getMainFileID())->getUID());
 
   clang::SmallVector<const clang::FileEntry *, 4> fileEntries;
-  _SM.getFileManager().GetUniqueIDMapping(fileEntries);
+  m_SM.getFileManager().GetUniqueIDMapping(fileEntries);
   auto files = builder.initFiles(fileEntries.size());
 
   for (size_t i(0); i < fileEntries.size(); ++i) {
     auto fileEntry = fileEntries[i];
     auto fileUID = fileEntry->getUID();
     auto file = files[i];
-    auto &declNodeOrphans = _fileDeclsMap[fileUID];
+    auto &declNodeOrphans = m_fileDeclsMap[fileUID];
 
     // Make sure to retrieve annotations after the last C++ declaration
     std::list<Annotation> anns;
-    _store.getAll(fileUID, anns);
+    m_store.getAll(fileUID, anns);
     serializeAnnsToOrphans(anns, orphanage, declNodeOrphans);
 
     file.setFd(fileUID);
@@ -70,7 +70,7 @@ void AstSerializer::serializeTU(stubs::TU::Builder &builder,
   }
 
   std::function<llvm::Optional<clang::SourceLocation>(unsigned)>
-      getFirstDeclOpt = [&map = _firstDeclLocMap](unsigned fd) {
+      getFirstDeclOpt = [&map = m_firstDeclLocMap](unsigned fd) {
         auto it = map.find(fd);
         llvm::Optional<clang::SourceLocation> result;
         if (it != map.end()) {
@@ -79,7 +79,7 @@ void AstSerializer::serializeTU(stubs::TU::Builder &builder,
         return result;
       };
 
-  _inclContext.serializeTUInclDirectives(builder, _SM, getFirstDeclOpt);
+  c_inclContext.serializeTUInclDirectives(builder, m_SM, getFirstDeclOpt);
 }
 
 } // namespace vf

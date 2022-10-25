@@ -188,9 +188,8 @@ struct Decl {
       virtual @1 :Bool;
     }
     struct Body {
-      fields @0 :List(Node(Field));
-      decls @1 :List(DeclNode);
-      bases @2 :List(Node(BaseSpec));
+      decls @0 :List(DeclNode);
+      bases @1 :List(Node(BaseSpec));
     }
     name @0 :Text;
     kind @1 :RecordKind;
