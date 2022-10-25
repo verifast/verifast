@@ -598,7 +598,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 Error
                   (`TrFnCallRExpr
                     "Invalid generic argument(s) for std::alloc::Layout::new"))
-        | _ -> failwith "Todo: Generic functions are not supported yet")
+        | _ ->
+            failwith
+              ("Todo: Generic functions are not supported yet. Function: "
+             ^ fn_name))
     | _ -> Error (`TrFnCallRExpr "Invalid function definition type translation")
 
   let translate_basic_block_id (bblock_id_cpn : BasicBlockIdRd.t) =
@@ -857,4 +860,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Ok res -> res
     | Error err -> failwith "Todo: translate_vf_mir Error handling"
 end
-(* Todo @Nima: terminator kind goto *)
+(* Todo @Nima: TerminatorKind goto *)
+(* Todo @Nima: There would be naming conflicts if the user writes a function in rust with a name like `std_alloc_alloc`.
+   A possible solution might be adding `crate` in front of local declarations *)

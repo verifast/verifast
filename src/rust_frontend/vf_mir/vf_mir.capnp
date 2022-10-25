@@ -127,7 +127,8 @@ struct Ty {
 
     struct FnDefTy {
         id @0: FnDefId;
-        substs @1: List(GenArg);
+        idMono @1: Option(FnDefId);
+        substs @2: List(GenArg);
     }
 
     struct RawPtrTy {

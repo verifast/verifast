@@ -645,17 +645,26 @@ mod vf_mir_builder {
         ) {
             let def_path = tcx.def_path_str(*def_id);
             debug!("Encoding FnDef for {}", def_path);
-            let mut fn_def_id_cpn = fn_def_ty_cpn.reborrow().init_id();
-            fn_def_id_cpn.set_name(&def_path);
+            let mut id_cpn = fn_def_ty_cpn.reborrow().init_id();
+            id_cpn.set_name(&def_path);
+            let mut id_mono_cpn = fn_def_ty_cpn.reborrow().init_id_mono();
+            if substs.is_empty() {
+                id_mono_cpn.set_nothing(());
+            } else {
+                let def_path_mono = tcx.def_path_str_with_substs(*def_id, substs);
+                debug!("Mono: {}", def_path_mono);
+                let mut id_mono_cpn = id_mono_cpn.init_something();
+                id_mono_cpn.set_name(&def_path_mono);
+            }
 
             let len = substs.len().try_into().expect(&format!(
                 "The number of generic args for {} cannot be stored in a Capnp message",
                 def_path
             ));
-            let mut fn_def_substs_cpn = fn_def_ty_cpn.init_substs(len);
-            for (idx, fn_def_subst) in substs.iter().enumerate() {
-                let fn_def_subst_cpn = fn_def_substs_cpn.reborrow().get(idx.try_into().unwrap());
-                Self::encode_gen_arg(tcx, &fn_def_subst, fn_def_subst_cpn);
+            let mut substs_cpn = fn_def_ty_cpn.init_substs(len);
+            for (idx, subst) in substs.iter().enumerate() {
+                let subst_cpn = substs_cpn.reborrow().get(idx.try_into().unwrap());
+                Self::encode_gen_arg(tcx, &subst, subst_cpn);
             }
         }
 
