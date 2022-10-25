@@ -1067,7 +1067,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let overrides =
           flatmap
             begin fun (sign, MethodInfo (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, terminates, ss, fb, v, is_override, abstract, mtparams)) ->
-              if is_override || pre != pre_dyn || post != post_dyn then [(cn, sign)] else []
+              if is_override || pre != pre_dyn || post != post_dyn then
+                 [(cn, sign)] 
+              else []
             end
             cmeths
         in

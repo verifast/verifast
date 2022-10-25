@@ -8,3 +8,5 @@ verifast_both -c NoOverrideSpecfileNoExport.jarsrc
 verifast_both -c -allow_should_fail NoOverrideObjectCreation.java
 verifast_both -c -allow_should_fail NoOverrideSuperCall.java
 verifast_both -c -allow_should_fail NoOverrideSpecfileExport.jarsrc
+verifast_both -c -allow_should_fail NoOverrideTargetParam.java
+verifast_both -c OverrideTargetParam.java
