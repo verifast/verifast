@@ -2,12 +2,13 @@ class A
 {
     int i;
   
-    //@ predicate valid() = this.i |-> ?m_i;
+    //@ predicate valid() = false;
       
     public int getI()
     //@ requires valid();
     //@ ensures valid();
     {
+    	//@ open valid();
         return i;
     }
 }
@@ -17,7 +18,7 @@ class B extends A //~
 {
     int j;
     
-    //@ predicate valid() = this.valid(A.class)() &*& this.j |-> ?m_j;
+    //@ predicate valid() = this.j |-> ?m_j;
 }
 
 class Program {
