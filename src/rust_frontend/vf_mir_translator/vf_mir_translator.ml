@@ -67,17 +67,19 @@ module Mir = struct
 
   and ty_info =
     | TyInfoBasic of { vf_ty : Ast.type_expr }
-    | TyInfoGeneric of { vf_ty : Ast.type_expr; substs : generic_arg list }
+    | TyInfoGeneric of {
+        vf_ty : Ast.type_expr;
+        substs : generic_arg list;
+        vf_ty_mono : Ast.type_expr;
+      }
 
   let basic_type_of (ti : ty_info) =
     match ti with
-    | TyInfoBasic ti1 -> ti1.vf_ty
-    | TyInfoGeneric _ -> failwith "Todo: Generic types are not supported yet"
+    | TyInfoBasic { vf_ty } -> vf_ty
+    | TyInfoGeneric { vf_ty; substs; vf_ty_mono } -> vf_ty_mono
 
   let raw_type_of (ti : ty_info) =
-    match ti with
-    | TyInfoBasic { vf_ty } -> vf_ty
-    | TyInfoGeneric { vf_ty; substs } -> vf_ty
+    match ti with TyInfoBasic { vf_ty } | TyInfoGeneric { vf_ty; _ } -> vf_ty
 
   type annot = { span : Ast.loc; raw : string }
 
@@ -193,7 +195,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   module VfMirRd = VfMirCapnpAlias.VfMirRd
   open VfMirCapnpAlias
 
-  module TyDecls = Decls (struct
+  module AstDecls = Decls (struct
     type decl = Ast.decl
   end)
 
@@ -402,14 +404,26 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let name = TrName.translate_def_path id in
     let vf_ty = Ast.ManifestTypeExpr (loc, Ast.FuncType name) in
     let substs_cpn = substs_get_list fn_def_ty_cpn in
-    if ListAux.is_empty substs_cpn then Ok (Mir.TyInfoBasic { vf_ty })
-    else
-      let* substs =
-        ListAux.try_map
-          (fun subst_cpn -> translate_generic_arg subst_cpn loc)
-          substs_cpn
-      in
-      Ok (Mir.TyInfoGeneric { vf_ty; substs })
+    let id_mono_cpn = id_mono_get fn_def_ty_cpn in
+    match OptionRd.get id_mono_cpn with
+    | Nothing ->
+        if not (ListAux.is_empty substs_cpn) then
+          Error (`TrFnDefTy "Simple function type with generic arg(s)")
+        else Ok (Mir.TyInfoBasic { vf_ty })
+    | Something ptr_cpn ->
+        if ListAux.is_empty substs_cpn then
+          Error (`TrFnDefTy "Generic function type without generic arg(s)")
+        else
+          let id_mono_cpn = VfMirStub.Reader.of_pointer ptr_cpn in
+          let id_mono = FnDefIdRd.name_get id_mono_cpn in
+          let name_mono = TrName.translate_def_path id_mono in
+          let vf_ty_mono = Ast.ManifestTypeExpr (loc, Ast.FuncType name_mono) in
+          let* substs =
+            ListAux.try_map
+              (fun subst_cpn -> translate_generic_arg subst_cpn loc)
+              substs_cpn
+          in
+          Ok (Mir.TyInfoGeneric { vf_ty; substs; vf_ty_mono })
 
   and translate_raw_ptr_ty (raw_ptr_ty_cpn : RawPtrTyRd.t) (loc : Ast.loc) =
     let open RawPtrTyRd in
@@ -546,30 +560,35 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Constant constant_cpn -> translate_constant constant_cpn
     | Undefined _ -> Error (`TrOperand "Unknown Mir Operand kind")
 
+  let translate_operands (oprs : (OperandRd.t * Ast.loc) list) =
+    let tmp_rvalue_binders = ref [] in
+    let translate_opr ((opr_cpn, loc) : OperandRd.t * Ast.loc) =
+      let* opr = translate_operand opr_cpn loc in
+      match opr with
+      | `TrOperandCopy operand_expr | `TrOperandMove operand_expr ->
+          Ok operand_expr
+      | `TrTypedConstantRvalueBinderBuilder rvalue_binder_builder ->
+          let tmp_var_cnt = List.length !tmp_rvalue_binders in
+          let tmp_var_name =
+            TrName.make_tmp_var_name (Int.to_string tmp_var_cnt)
+          in
+          let rvalue_binder = rvalue_binder_builder tmp_var_name in
+          tmp_rvalue_binders := !tmp_rvalue_binders @ [ rvalue_binder ];
+          Ok (Ast.Var (loc, tmp_var_name))
+      | `TrTypedConstantFn _ ->
+          failwith "Todo: Functions as operand in rvalues are not supported yet"
+    in
+    let* oprs = ListAux.try_map translate_opr oprs in
+    Ok (!tmp_rvalue_binders, oprs)
+
   let translate_fn_call_rexpr (callee_ty_info : Mir.ty_info)
       (args_cpn : OperandRd.t list) (call_loc : Ast.loc) (fn_loc : Ast.loc) =
     match callee_ty_info with
     | Mir.TyInfoBasic
         { vf_ty = Ast.ManifestTypeExpr ((*loc*) _, Ast.FuncType fn_name) } ->
-        let tmp_rvalue_binders = ref [] in
-        let translate_arg arg_cpn =
-          (* Todo @Nima: There should be a way to get separated source spans for args *)
-          let* arg = translate_operand arg_cpn fn_loc in
-          match arg with
-          | `TrOperandCopy operand_expr | `TrOperandMove operand_expr ->
-              Ok operand_expr
-          | `TrTypedConstantRvalueBinderBuilder rvalue_binder_builder ->
-              let tmp_var_cnt = List.length !tmp_rvalue_binders in
-              let tmp_var_name =
-                TrName.make_tmp_var_name (Int.to_string tmp_var_cnt)
-              in
-              let rvalue_binder = rvalue_binder_builder tmp_var_name in
-              tmp_rvalue_binders := !tmp_rvalue_binders @ [ rvalue_binder ];
-              Ok (Ast.Var (fn_loc, tmp_var_name))
-          | `TrTypedConstantFn _ ->
-              Error (`TrFnCallRExpr "Invalid function call argument")
-        in
-        let* args = ListAux.try_map translate_arg args_cpn in
+        (* Todo @Nima: There should be a way to get separated source spans for args *)
+        let args = List.map (fun arg_cpn -> (arg_cpn, fn_loc)) args_cpn in
+        let* tmp_rvalue_binders, args = translate_operands args in
         let args = List.map (fun expr -> Ast.LitPat expr) args in
         let call_expr =
           Ast.CallExpr
@@ -580,24 +599,48 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               args,
               Ast.Static (*method_binding*) )
         in
-        Ok (!tmp_rvalue_binders, call_expr)
+        Ok (tmp_rvalue_binders, call_expr)
     | Mir.TyInfoGeneric
         {
           vf_ty = Ast.ManifestTypeExpr ((*loc*) _, Ast.FuncType fn_name);
           substs;
+          vf_ty_mono =
+            Ast.ManifestTypeExpr ((*loc*) _, Ast.FuncType fn_name_mono);
         } -> (
         match fn_name with
+        (* Todo @Nima: For cases where we inline an expression instead of a function call,
+           there is a problem with extending the implementation for clean-up paths *)
         | "std_alloc_Layout_new" -> (
-            match substs with
-            | [ Mir.GenArgType ty_info ] ->
-                let ty_expr = Mir.basic_type_of ty_info in
+            if not (ListAux.is_empty args_cpn) then
+              Error
+                (`TrFnCallRExpr
+                  "Invalid number of arguments for std::alloc::Layout::new")
+            else
+              match substs with
+              | [ Mir.GenArgType ty_info ] ->
+                  let ty_expr = Mir.basic_type_of ty_info in
+                  Ok
+                    ( (*tmp_rvalue_binders*) [],
+                      Ast.SizeofExpr (call_loc, Ast.TypeExpr ty_expr) )
+              | _ ->
+                  Error
+                    (`TrFnCallRExpr
+                      "Invalid generic argument(s) for std::alloc::Layout::new")
+            )
+        | "std_ptr_mut_ptr_<impl *mut T>_is_null" -> (
+            match (substs, args_cpn) with
+            | [ Mir.GenArgType gen_arg_ty_info ], [ arg_cpn ] ->
+                let* tmp_rvalue_binders, [ arg ] =
+                  translate_operands [ (arg_cpn, fn_loc) ]
+                in
                 Ok
-                  ( (*tmp_rvalue_binders*) [],
-                    Ast.SizeofExpr (call_loc, Ast.TypeExpr ty_expr) )
+                  ( tmp_rvalue_binders,
+                    Ast.Operation (fn_loc, Ast.Eq, [ arg; Ast.Null fn_loc ]) )
             | _ ->
                 Error
                   (`TrFnCallRExpr
-                    "Invalid generic argument(s) for std::alloc::Layout::new"))
+                    "Invalid (generic) arg(s) for std::ptr::mut_ptr::<impl \
+                     *mut T>::is_null"))
         | _ ->
             failwith
               ("Todo: Generic functions are not supported yet. Function: "
@@ -847,8 +890,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       end) in
       let bodies_cpn = VfMirRd.bodies_get_list vf_mir_cpn in
       let* body_decls = ListAux.try_map translate_body bodies_cpn in
-      let ty_decls = TyDecls.decls () in
-      let decls = ty_decls @ body_decls in
+      let decls = AstDecls.decls () in
+      let decls = decls @ body_decls in
       (* Todo @Nima: we should add necessary inclusions from Rust side *)
       let _ = Headers.add_decl "rust/std/alloc.h" in
       let header_names = Headers.decls () in
@@ -862,4 +905,5 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 end
 (* Todo @Nima: TerminatorKind goto *)
 (* Todo @Nima: There would be naming conflicts if the user writes a function in rust with a name like `std_alloc_alloc`.
-   A possible solution might be adding `crate` in front of local declarations *)
+   A possible solution might be adding `crate` in front of local declarations. Another problem with names is that two paths
+   like `a::mut_ptr::b` and `a::mut_ptr::b` both convert to `a_mut_ptr_b` *)
