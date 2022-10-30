@@ -22,7 +22,7 @@ predicate ring_buffer(struct ring_buffer *buffer; int size, list<int> items) =
 	&*& first >= 0 && first < size
 	&*& length(items) == len
 	&*& len <= size  
-	&*& fields + size <= (void*)UINTPTR_MAX
+	&*& pointer_within_limits(fields + size) == true
 	
 	&*& malloc_block_ints(fields, size)
 	&*& malloc_block_ring_buffer(buffer)

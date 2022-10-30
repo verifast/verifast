@@ -3,8 +3,8 @@
 /*@
 
 lemma void ints_limits(int *pxs)
-    requires [?f]ints(pxs, ?N, ?xs) &*& pxs <= (int *)UINTPTR_MAX;
-    ensures [f]ints(pxs, N, xs) &*& pxs + N <= (int *)UINTPTR_MAX &*& forall(xs, int_within_limits) == true;
+    requires [?f]ints(pxs, ?N, ?xs) &*& (uintptr_t)pxs <= ptr_provenance_max_addr(((pointer)pxs).provenance);
+    ensures [f]ints(pxs, N, xs) &*& (uintptr_t)(pxs + N) <= ptr_provenance_max_addr(((pointer)pxs).provenance) &*& forall(xs, int_within_limits) == true;
 {
     open [f]ints(pxs, N, xs);
     if (N > 0) {

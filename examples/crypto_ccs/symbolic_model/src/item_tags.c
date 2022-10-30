@@ -45,7 +45,7 @@ void write_tag(char* buffer, char tag)
   while (offset < TAG_LENGTH)
     /*@ requires offset <= TAG_LENGTH &*&
                  true == ((char *)0 <= buffer + offset) &*&
-                 buffer + offset <= (char *)UINTPTR_MAX &*&
+                 pointer_within_limits(buffer + offset) == true &*&
                  chars_(buffer + offset, TAG_LENGTH - offset, ?cs0) &*&
                  offset != TAG_LENGTH || cs0 == nil; @*/
     /*@ ensures  chars(buffer + old_offset, TAG_LENGTH - old_offset, ?cs1) &*&
@@ -72,7 +72,7 @@ void check_tag(char* buffer, char tag)
   while (offset < TAG_LENGTH)
     /*@ requires offset <= TAG_LENGTH &*&
                  true == ((char *)0 <= buffer + offset) &*&
-                 buffer + offset <= (char *)UINTPTR_MAX &*&
+                 pointer_within_limits(buffer + offset) == true &*&
                  [f]chars(buffer + offset, TAG_LENGTH - offset, ?cs0) &*&
                  offset >= 0 &*& offset <= TAG_LENGTH &*&
                  offset != TAG_LENGTH || cs0 == nil; @*/

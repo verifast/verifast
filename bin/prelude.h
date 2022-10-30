@@ -29,7 +29,8 @@ lemma void div_rem_nonneg(int D, int d);
     requires 0 <= D &*& 0 < d;
     ensures D == D / d * d + D % d &*& 0 <= D / d &*& D / d <= D &*& 0 <= D % d &*& D % d < d;
 
-abstract_type pointer_provenance;
+inductive pointer_provenance =
+    pointer_provenance_ctor(int); // Do not rely on this definition; it is subject to change.
 inductive pointer = pointer_ctor(pointer_provenance provenance, uintptr_t address);
 
 fixpoint pointer ptr_add(pointer p, int offset) {
@@ -55,6 +56,50 @@ fixpoint pointer union_variant_ptr(pointer p, int variantId) {
 
 fixpoint pointer_provenance null_pointer_provenance();
 fixpoint pointer null_pointer() { return pointer_ctor(null_pointer_provenance, 0); }
+
+fixpoint uintptr_t ptr_provenance_min_addr(pointer_provenance pr);
+fixpoint uintptr_t ptr_provenance_max_addr(pointer_provenance pr);
+
+lemma_auto void ptr_provenance_min_addr_limits(pointer_provenance pr);
+    requires true;
+    ensures 0 <= ptr_provenance_min_addr(pr);
+
+lemma_auto void ptr_provenance_max_addr_limits(pointer_provenance pr);
+    requires true;
+    ensures ptr_provenance_max_addr(pr) <= UINTPTR_MAX;
+
+lemma_auto void null_pointer_provenance_min_addr();
+    requires true;
+    ensures ptr_provenance_min_addr(null_pointer_provenance) == 0;
+
+lemma_auto void null_pointer_provenance_max_addr();
+    requires true;
+    ensures ptr_provenance_max_addr(null_pointer_provenance) == UINTPTR_MAX;
+
+lemma_auto void field_ptr_provenance_min_addr(pointer p, int fieldOffset);
+    requires true;
+    ensures ptr_provenance_min_addr(p.provenance) <= ptr_provenance_min_addr(field_ptr_provenance(p, fieldOffset));
+
+lemma_auto void field_ptr_provenance_max_addr(pointer p, int fieldOffset);
+    requires true;
+    ensures ptr_provenance_max_addr(field_ptr_provenance(p, fieldOffset)) <= ptr_provenance_max_addr(p.provenance);
+
+lemma void ptr_provenance_min_addr_zero(pointer_provenance pr);
+    requires ptr_provenance_min_addr(pr) <= 0;
+    ensures pr == null_pointer_provenance;
+
+fixpoint bool ptr_within_limits(pointer p) {
+    return ptr_provenance_min_addr(p.provenance) <= p.address && p.address <= ptr_provenance_max_addr(p.provenance);
+}
+
+fixpoint bool pointer_within_limits(void *p) {
+    return ptr_within_limits((pointer)p);
+}
+
+
+fixpoint bool object_pointer_within_limits(void *p, int size) {
+    return pointer_within_limits(p) && pointer_within_limits(p + size) && 0 < (uintptr_t)p;
+}
 
 predicate generic_points_to<t>(t *p; t v);
 
@@ -121,19 +166,19 @@ lemma void integer__unique(void *p);
 
 lemma void integer__limits(void *p);
     requires [?f]integer_(p, ?size, ?signed_, ?v);
-    ensures [f]integer_(p, size, signed_, v) &*& p > (void *)0 &*& p + size <= (void *)UINTPTR_MAX &*& signed_ ? -(1<<(8*size-1)) <= v &*& v < (1<<(8*size-1)) : 0 <= v &*& v < (1<<(8*size));
+    ensures [f]integer_(p, size, signed_, v) &*& object_pointer_within_limits(p, size) == true &*& signed_ ? -(1<<(8*size-1)) <= v &*& v < (1<<(8*size-1)) : 0 <= v &*& v < (1<<(8*size));
 
 lemma void char__limits(char *pc);
     requires [?f]char_(pc, ?c);
-    ensures [f]char_(pc, c) &*& pc > (char *)0 &*& pc < (char *)UINTPTR_MAX;
+    ensures [f]char_(pc, c) &*& object_pointer_within_limits(pc, 1) == true;
 
 lemma void character_limits(char *pc);
     requires [?f]character(pc, ?c);
-    ensures [f]character(pc, c) &*& pc > (char *)0 &*& pc < (char *)UINTPTR_MAX &*& CHAR_MIN <= c &*& c <= CHAR_MAX;
+    ensures [f]character(pc, c) &*& object_pointer_within_limits(pc, 1) == true &*& CHAR_MIN <= c &*& c <= CHAR_MAX;
 
 lemma void u_character_limits(unsigned char *pc);
     requires [?f]u_character(pc, ?c);
-    ensures [f]u_character(pc, c) &*& pc > (unsigned char *)0 &*& pc < (unsigned char *)UINTPTR_MAX &*& 0 <= c &*& c <= UCHAR_MAX;
+    ensures [f]u_character(pc, c) &*& object_pointer_within_limits(pc, 1) == true &*& 0 <= c &*& c <= UCHAR_MAX;
 
 lemma void integer_distinct(int* i, int* j);
     requires integer(i, ?v1) &*& integer(j, ?v2);
@@ -145,19 +190,19 @@ lemma void integer_unique(int *p);
 
 lemma void integer_limits(int *p);
     requires [?f]integer(p, ?v);
-    ensures [f]integer(p, v) &*& p > (int *)0 &*& p + 1 <= (int *)UINTPTR_MAX &*& INT_MIN <= v &*& v <= INT_MAX;
+    ensures [f]integer(p, v) &*& object_pointer_within_limits(p, sizeof(int)) == true &*& INT_MIN <= v &*& v <= INT_MAX;
 
 lemma void u_integer_limits(unsigned int *p);
     requires [?f]u_integer(p, ?v);
-    ensures [f]u_integer(p, v) &*& p > (unsigned int *)0 &*& p + 1 <= (unsigned int *)UINTPTR_MAX &*& 0 <= v &*& v <= UINT_MAX;
+    ensures [f]u_integer(p, v) &*& object_pointer_within_limits(p, sizeof(unsigned int)) == true &*& 0 <= v &*& v <= UINT_MAX;
 
 lemma void short_integer_limits(short *p);
     requires [?f]short_integer(p, ?v);
-    ensures [f]short_integer(p, v) &*& p > (short *)0 &*& p + 1 <= (short *)UINTPTR_MAX &*& SHRT_MIN <= v &*& v <= SHRT_MAX;
+    ensures [f]short_integer(p, v) &*& object_pointer_within_limits(p, sizeof(short)) == true &*& SHRT_MIN <= v &*& v <= SHRT_MAX;
 
 lemma void u_short_integer_limits(unsigned short *p);
     requires [?f]u_short_integer(p, ?v);
-    ensures [f]u_short_integer(p, v) &*& p > (unsigned short *)0 &*& p + 1 <= (unsigned short *)UINTPTR_MAX &*& 0 <= v &*& v <= USHRT_MAX;
+    ensures [f]u_short_integer(p, v) &*& object_pointer_within_limits(p, sizeof(unsigned short)) == true &*& 0 <= v &*& v <= USHRT_MAX;
 
 lemma void pointer_distinct(void *pp1, void *pp2);
     requires pointer(pp1, ?p1) &*& pointer(pp2, ?p2);
@@ -173,7 +218,7 @@ lemma_auto void pointer_nonzero();
 
 lemma void pointer_limits(void *pp);
     requires [?f]pointer(pp, ?p);
-    ensures [f]pointer(pp, p) &*& pp > (void *)0 &*& pp + sizeof(void *) <= (void *)UINTPTR_MAX &*& p >= (void *)0 &*& p <= (void *)UINTPTR_MAX;
+    ensures [f]pointer(pp, p) &*& object_pointer_within_limits(pp, sizeof(void *)) == true &*& pointer_within_limits(p) == true;
 
 lemma void boolean_distinct(bool* i, bool* j);
     requires boolean(i, ?v1) &*& boolean(j, ?v2);
@@ -216,8 +261,8 @@ lemma_auto void chars__to_chars(char *array);
     ensures [f]chars(array, count, map(the, cs));
 
 lemma void chars__limits(char *array);
-    requires [?f]chars_(array, ?n, ?cs) &*& (char *)0 <= array &*& array <= (char *)UINTPTR_MAX;
-    ensures [f]chars_(array, n, cs) &*& (char *)0 <= array &*& array + n <= (char *)UINTPTR_MAX;
+    requires [?f]chars_(array, ?n, ?cs) &*& pointer_within_limits(array) == true;
+    ensures [f]chars_(array, n, cs) &*& pointer_within_limits(array + n) == true;
 
 lemma_auto void chars__split(char *array, int offset);
    requires [?f]chars_(array, ?n, ?cs) &*& 0 <= offset &*& offset <= n;
@@ -247,8 +292,8 @@ lemma void chars_zero();
     ensures cs == nil;
 
 lemma void chars_limits(char *array);
-    requires [?f]chars(array, ?n, ?cs) &*& (char *)0 <= array &*& array <= (char *)UINTPTR_MAX;
-    ensures [f]chars(array, n, cs) &*& (char *)0 <= array &*& array + n <= (char *)UINTPTR_MAX;
+    requires [?f]chars(array, ?n, ?cs) &*& pointer_within_limits(array) == true;
+    ensures [f]chars(array, n, cs) &*& pointer_within_limits(array + n) == true;
 
 lemma_auto void chars_split(char *array, int offset);
    requires [?f]chars(array, ?n, ?cs) &*& 0 <= offset &*& offset <= n;
@@ -373,7 +418,7 @@ lemma_auto void character_to_u_character(void *p);
     ensures [f]u_character(p, _);
 
 predicate uchars_(unsigned char *p, int count; list<option<unsigned char> > cs) =
-    true == ((unsigned char *)0 <= p) &*& p <= (unsigned char *)UINTPTR_MAX &*&
+    pointer_within_limits(p) == true &*&
     count == 0 ?
         cs == nil
     :
@@ -381,7 +426,7 @@ predicate uchars_(unsigned char *p, int count; list<option<unsigned char> > cs) 
 
 lemma_auto void uchars__inv();
     requires [?f]uchars_(?p, ?count, ?cs);
-    ensures [f]uchars_(p, count, cs) &*& count == length(cs) &*& true == ((char *)0 <= (void *)p) &*& p + count <= (void *)UINTPTR_MAX;
+    ensures [f]uchars_(p, count, cs) &*& count == length(cs) &*& pointer_within_limits(p) && pointer_within_limits(p + count);
 
 lemma_auto void uchars__split(unsigned char *array, int offset);
    requires [?f]uchars_(array, ?n, ?cs) &*& 0 <= offset &*& offset <= n;
@@ -395,7 +440,7 @@ lemma_auto void uchars_to_uchars_(unsigned char *array);
     ensures [f]uchars_(array, n, map(some, cs));
 
 predicate uchars(unsigned char *p, int count; list<unsigned char> cs) =
-    true == ((unsigned char *)0 <= p) &*& p <= (unsigned char *)UINTPTR_MAX &*&
+    pointer_within_limits(p) == true &*&
     count == 0 ?
         cs == nil
     :
@@ -403,7 +448,7 @@ predicate uchars(unsigned char *p, int count; list<unsigned char> cs) =
 
 lemma_auto void uchars_inv();
     requires [?f]uchars(?p, ?count, ?cs);
-    ensures [f]uchars(p, count, cs) &*& count == length(cs) &*& true == ((char *)0 <= (void *)p) &*& p + count <= (void *)UINTPTR_MAX;
+    ensures [f]uchars(p, count, cs) &*& count == length(cs) &*& pointer_within_limits(p) && pointer_within_limits(p + count);
 
 lemma_auto void uchars_split(unsigned char *array, int offset);
    requires [?f]uchars(array, ?n, ?cs) &*& 0 <= offset &*& offset <= n;
@@ -588,8 +633,8 @@ lemma_auto void pointers_inv();
     ensures [f]pointers(pp, count, ps) &*& count == length(ps);
 
 lemma void pointers_limits(void **array);
-    requires [?f]pointers(array, ?n, ?ps) &*& (void **)0 <= array &*& array <= (void **)UINTPTR_MAX;
-    ensures [f]pointers(array, n, ps) &*& array + n <= (void **)UINTPTR_MAX;
+    requires [?f]pointers(array, ?n, ?ps) &*& pointer_within_limits(array) == true;
+    ensures [f]pointers(array, n, ps) &*& pointer_within_limits(array + n) == true;
 
 lemma_auto void pointers_split(void **pp, int offset);
     requires [?f]pointers(pp, ?count, ?ps) &*& 0 <= offset &*& offset <= count;
@@ -701,6 +746,7 @@ predicate integers__(void *p, int size, bool signed_, int count; list<option<int
         integer__(p, size, signed_, ?v0) &*& integers__(p + size, size, signed_, count - 1, ?vs0) &*& vs == cons(v0, vs0);
 
 predicate integers_(void *p, int size, bool signed_, int count; list<int> vs) =
+    pointer_within_limits(p) == true &*&
     count == 0 ?
         vs == nil
     :
@@ -708,7 +754,7 @@ predicate integers_(void *p, int size, bool signed_, int count; list<int> vs) =
 
 lemma_auto void integers__inv();
     requires [?f]integers_(?p, ?size, ?signed_, ?count, ?vs);
-    ensures [f]integers_(p, size, signed_, count, vs) &*& length(vs) == count &*& 0 <= (uintptr_t)p &*& (uintptr_t)p <= UINTPTR_MAX;
+    ensures [f]integers_(p, size, signed_, count, vs) &*& length(vs) == count &*& pointer_within_limits(p + size * count) == true;
 
 lemma void integers__split(void *p, int offset);
     requires [?f]integers_(p, ?size, ?signed_, ?count, ?vs) &*& 0 <= offset &*& offset <= count;
@@ -829,7 +875,7 @@ lemma_auto void chars_unseparate_string(char *s);
 
 lemma void string_limits(char *s);
     requires [?f]string(s, ?cs);
-    ensures [f]string(s, cs) &*& true == ((char *)0 < s) &*& s + length(cs) < (char *)UINTPTR_MAX;
+    ensures [f]string(s, cs) &*& object_pointer_within_limits(s, length(cs) + 1) == true;
 
 inductive vararg = vararg_int(int) | vararg_uint(unsigned int) | vararg_pointer(void *) | vararg_double(double);
 

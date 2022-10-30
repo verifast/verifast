@@ -48,9 +48,9 @@ lemma_auto void crypto_chars_inv();
 
 lemma_auto void crypto_chars_limits(char *array);
   requires [?f]crypto_chars(?kind, array, ?n, ?ccs) &*&
-           true == ((char *)0 <= array) &*& array <= (char *)UINTPTR_MAX;
+           pointer_within_limits(array) == true;
   ensures  [f]crypto_chars(kind, array, n, ccs) &*&
-           true == ((char *)0 <= array) &*& array + n <= (char *)UINTPTR_MAX;
+           pointer_within_limits(array + n) == true;
 
 lemma_auto void crypto_chars_distinct(char *array1, char *array2);
   requires crypto_chars(?kind1, array1, ?count1, ?ccs1) &*&
