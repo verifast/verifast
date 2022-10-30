@@ -1455,8 +1455,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match tp with
       StaticArrayType (elemTp, elemCount) ->
       let elemSize = sizeof l elemTp in
-      let arraySize = ctxt#mk_mul (ctxt#mk_intlit elemCount) elemSize in
-      ctxt#assert_term (ctxt#mk_and (ctxt#mk_le int_zero_term (mk_ptr_address addr)) (ctxt#mk_le (ctxt#mk_add (mk_ptr_address addr) arraySize) max_uintptr_term));
+      if elemCount > 0 then begin
+        let arraySize = ctxt#mk_mul (ctxt#mk_intlit elemCount) elemSize in
+        ctxt#assert_term (mk_object_pointer_within_limits addr arraySize)
+      end;
       let produce_char_array_chunk h env addr elemCount =
         produce_char_array_chunk h env addr (ctxt#mk_mul (ctxt#mk_intlit elemCount) elemSize)
       in
@@ -1707,8 +1709,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (min_term, max_term) = limits_of_type tp in
       assume (ctxt#mk_and (ctxt#mk_le min_term t) (ctxt#mk_le t max_term)) cont
     | PtrType _ ->
-      let (min_term, max_term) = limits_of_type tp in
-      assume (ctxt#mk_and (ctxt#mk_le min_term (mk_ptr_address t)) (ctxt#mk_le (mk_ptr_address t) max_term)) cont
+      assume (mk_pointer_within_limits t) cont
     | _ -> static_error l (Printf.sprintf "Producing the limits of a variable of type '%s' is not yet supported." (string_of_type tp)) None
   
   let assume_instanceof l t tp cont =
@@ -2358,7 +2359,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               Some (_, _, _, asym, _, mbsym, _, _, _, _, _, uasym) -> n, (if g = "calloc" then elemTp else option_type elemTp), (if g = "calloc" then asym else uasym), mbsym
             | None -> arraySize, (if g = "calloc" then charType else option_type charType), (if g = "calloc" then chars_pred_symb () else chars__pred_symb ()), malloc_block_chars_pred_symb()
           in
-          assume (ctxt#mk_and (ctxt#mk_le int_zero_term (mk_ptr_address result)) (ctxt#mk_le (ctxt#mk_add (mk_ptr_address result) arraySize) max_uintptr_term)) $. fun () ->
+          assume (mk_object_pointer_within_limits result arraySize) $. fun () ->
           let values = get_unique_var_symb "values" (list_type elemTp) in
           assume (ctxt#mk_eq (mk_length values) n) $. fun () ->
           begin fun cont ->

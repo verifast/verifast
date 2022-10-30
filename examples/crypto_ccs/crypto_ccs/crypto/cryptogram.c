@@ -21,9 +21,9 @@ lemma_auto void cryptogram_inv()
 
 lemma void cryptogram_limits(char *array)
   requires [?f]cryptogram(array, ?count, ?cs, ?cg) &*&
-           true == ((char *)0 <= array) &*& array <= (char *)UINTPTR_MAX;
+           pointer_within_limits(array) == true;
   ensures  [f]cryptogram(array, count, cs, cg) &*&
-           true == ((char *)0 <= array) &*& array + count <= (char *)UINTPTR_MAX;
+           pointer_within_limits(array + count) == true;
 {
   open [f]cryptogram(array, count, cs, cg);
   crypto_chars_limits(array);

@@ -47,7 +47,7 @@ predicate rdcss_cell_attached(int dsList, struct rdcss_descriptor *d, void **a, 
     v == (success ? n2 : o2);
 
 predicate descr(struct rdcss_descriptor *d; void **a1, void *o1, void **a2, void *o2, void *n2, struct cas_tracker *tracker, rdcss_operation_lemma *op) =
-    ((uintptr_t)d & 1) == 0 &*& (uintptr_t)d + 1 <= UINTPTR_MAX &*&
+    ((uintptr_t)d & 1) == 0 &*& pointer_within_limits(d) == true &*& pointer_within_limits((char *)d + 1) == true &*&
     d->a1 |-> a1 &*& d->o1 |-> o1 &*& d->a2 |-> a2 &*& d->o2 |-> o2 &*& d->n2 |-> n2 &*& d->tracker |-> tracker &*& d->op |-> op &*& [_]is_cas_tracker(tracker);
 
 predicate done_copy(struct rdcss_descriptor *d, bool done) = true;
@@ -358,6 +358,7 @@ void *rdcss(void **a1, void *o1, void **a2, void *o2, void *n2)
     if (d == 0) abort();
     if (((uintptr_t)d & 1) != 0) abort();
     d->a1 = a1;
+    //@ pointer_limits(&d->a1);
     d->o1 = o1;
     d->a2 = a2;
     d->o2 = o2;
@@ -482,12 +483,14 @@ loop:
         //@ produce_lemma_function_pointer_chunk(context);
         //@ produce_limits(d);
         //@ bitand_bitor_lemma((uintptr_t)d, 1);
+        //@ open descr(d, _, _, _, _, _, _, _);
         r = atomic_compare_and_store_pointer(prophecyId, a2, o2, (void *)d + 1);
         //@ leak is_atomic_compare_and_store_pointer_context(context);
         //@ open atomic_compare_and_store_pointer_context_post(context)();
     }
     if (((uintptr_t)r & 1) != 0) {
         //@ bitand_minus_lemma((uintptr_t)r);
+        //@ open descr(r - 1, _, _, _, _, _, _, _);
         rdcss_complete(r - 1);
         //@ leak [_]rdcss_descriptor_detached((void *)r - 1, _);
         //@ leak [_]descr((void *)r - 1, _, _, _, _, _, _, _);
@@ -631,6 +634,7 @@ loop:
     }
     if (((uintptr_t)r & 1) != 0) {
         //@ bitand_minus_lemma((uintptr_t)r);
+        //@ open descr(r - 1, _, _, _, _, _, _, _);
         rdcss_complete(r - 1);
         //@ leak [_]rdcss_descriptor_detached(_, _);
         //@ leak [_]ghost_cell3(_, _, _, _);

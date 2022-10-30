@@ -26,6 +26,8 @@ predicate_family_instance mcas_unsep(interval_unsep)(interval_info info, int id,
     interval_values(?a, ?b) &*& a == b &*&
     true == (((uintptr_t)a & 2) == 0) &*&
     true == (((uintptr_t)a & 1) == 0) &*&
+    a == (void *)(uintptr_t)a &*&
+    b == (void *)(uintptr_t)b &*&
     switch (info) {
         case interval_info(interval): return
             &interval->a != &interval->b &*&
@@ -60,6 +62,8 @@ predicate interval_values(void *a, void *b) = true;
 
 predicate_ctor interval_ctor(int id, struct interval *interval)() =
     interval_values(?a, ?b) &*& a == b &*&
+    a == (void *)(uintptr_t)a &*&
+    b == (void *)(uintptr_t)b &*&
     &interval->a != &interval->b &*&
     true == (((uintptr_t)a & 2) == 0) &*&
     true == (((uintptr_t)a & 1) == 0) &*&
@@ -98,6 +102,7 @@ void shift_interval(struct interval *interval) //@ : thread_run
             predicate_family_instance mcas_read_pre(rop)(mcas_unsep *unsep, any mcasInfo, void *a) =
                 unsep == interval_unsep &*& mcasInfo == interval_info(interval) &*& a == &interval->a;
             predicate_family_instance mcas_read_post(rop)(void *result) =
+                result == (void *)(uintptr_t)result &*&
                 true == (((uintptr_t)result & 1) == 0) &*&
                 true == (((uintptr_t)result & 2) == 0);
             lemma void rop() : mcas_read_op
@@ -129,6 +134,7 @@ void shift_interval(struct interval *interval) //@ : thread_run
         /*@
         invariant
             [_]atomic_space(interval_ctor(id, interval)) &*&
+            a0 == (void *)(uintptr_t)a0 &*&
             true == (((uintptr_t)a0 & 1) == 0) &*&
             true == (((uintptr_t)a0 & 2) == 0);
         @*/
@@ -148,6 +154,7 @@ void shift_interval(struct interval *interval) //@ : thread_run
             predicate_family_instance mcas_read_pre(rop)(mcas_unsep *unsep, any mcasInfo, void *a) =
                 unsep == interval_unsep &*& mcasInfo == interval_info(interval) &*& a == &interval->b;
             predicate_family_instance mcas_read_post(rop)(void *result) =
+                result == (void *)(uintptr_t)result &*&
                 true == (((uintptr_t)result & 1) == 0) &*&
                 true == (((uintptr_t)result & 2) == 0);
             lemma void rop() : mcas_read_op

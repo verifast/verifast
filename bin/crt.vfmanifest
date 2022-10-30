@@ -15,6 +15,13 @@
 .provides ./string.h#strlen
 .provides ./string.h#strdup
 .provides ./prelude.h#field_ptr_provenance_injective
+.provides ./prelude.h#ptr_provenance_min_addr_limits
+.provides ./prelude.h#ptr_provenance_max_addr_limits
+.provides ./prelude.h#null_pointer_provenance_min_addr
+.provides ./prelude.h#null_pointer_provenance_max_addr
+.provides ./prelude.h#field_ptr_provenance_min_addr
+.provides ./prelude.h#field_ptr_provenance_max_addr
+.provides ./prelude.h#ptr_provenance_min_addr_zero
 .provides ./prelude.h#integer__distinct
 .provides ./prelude.h#integer__unique
 .provides ./prelude.h#integer__limits

@@ -96,6 +96,8 @@ lemma void entries_length_lemma()
 predicate cd(struct cd *cd; list<pair<void *, pair<void *, void *> > > es, struct cas_tracker *tracker, int counter, int statusCell, mcas_op *op) =
     true == (((uintptr_t)cd & 1) == 0) &*&
     true == (((uintptr_t)cd & 2) == 0) &*&
+    pointer_within_limits(cd) == true &*&
+    pointer_within_limits((char *)cd + 2) == true &*&
     cd->n |-> ?count &*& cd->es |-> ?entries &*& entries(count, entries, es) &*& cd->tracker |-> tracker &*& cd->counter |-> counter &*& cd->statusCell |-> statusCell &*&
     cd->op |-> op &*& [_]is_cas_tracker(tracker);
 
@@ -877,6 +879,7 @@ start:
         //@ leak rdcss_bs_membership_lemma(_)(_, _, _);
         if (((uintptr_t)r & 2) != 0) {
             //@ bitand_minus2_lemma((uintptr_t)r);
+            //@ open cd(r - 2, _, _, _, _, _);
             mcas_impl((struct cd *)(r - 2));
             goto start;
         }
@@ -908,6 +911,7 @@ bool mcas(int n, struct mcas_entry *aes)
     if (((uintptr_t)cd & 1) != 0) abort();
     if (((uintptr_t)cd & 2) != 0) abort();
     cd->status = 0;
+    //@ pointer_limits(&cd->status);
     cd->n = n;
     cd->es = aes;
     cd->tracker = tracker;
@@ -1412,7 +1416,7 @@ start:
                 //@ produce_lemma_function_pointer_chunk(rop);
                 //@ entries_separate_ith(i);
                 //@ bitand_bitor_1_2_lemma(cd);
-                //@ if ((uintptr_t)(cd->es + i) < 0 || UINTPTR_MAX < (uintptr_t)(cd->es + i)) pointer_limits(&(cd->es + i)->a);
+                //@ if (!pointer_within_limits(cd->es + i)) pointer_limits(&(cd->es + i)->a);
                 r = rdcss(&cd->status, 0, (cd->es + i)->a, (cd->es + i)->o, (void *)cd + 2);
                 //@ leak is_rdcss_operation_lemma(_);
                 //@ leak is_rdcss_as_membership_lemma(_);
@@ -1426,6 +1430,7 @@ start:
             }
             if (((uintptr_t)r & 2) == 2) {
                 //@ bitand_minus2_lemma((uintptr_t)r);
+                //@ open cd(r - 2, _, _, _, _, _);
                 struct cd *cd1 = r - 2;
                 if (cd1 != cd) {
                     mcas_impl(cd1);
@@ -1790,7 +1795,8 @@ start:
                 //@ produce_lemma_function_pointer_chunk(mcas_rdcss_unsep);
                 //@ produce_lemma_function_pointer_chunk(bsMem);
                 //@ bitand_bitor_1_2_lemma(cd);
-                //@ if ((uintptr_t)(cd->es + i) < 0 || UINTPTR_MAX < (uintptr_t)(cd->es + i)) pointer_limits(&(cd->es + i)->a);
+                //@ if (!pointer_within_limits(cd->es + i)) pointer_limits(&(cd->es + i)->a);
+                //@ open cd(cd, _, _, _, _, _);
                 rdcss_compare_and_store((cd->es + i)->a, (void *)cd + 2, success ? (cd->es + i)->n : (cd->es + i)->o);
                 //@ leak is_rdcss_cas_lemma(casOp);
                 //@ leak is_rdcss_separate_lemma(mcas_rdcss_sep);

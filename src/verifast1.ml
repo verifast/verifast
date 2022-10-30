@@ -4398,6 +4398,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | ((Float|Double|LongDouble), (Float|Double|LongDouble)) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
         | ((Float|Double|LongDouble), (Int (signedness, _))) when isCast -> floating_point_fun_call_expr funcmap (expr_loc w) (Int (signedness, LitRank max_rank)) ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
         | (ObjType ("java.lang.Object", []), ArrayType _) when isCast -> w
+        | (PtrType _, InductiveType ("pointer", [])) when isCast -> w
+        | (InductiveType ("pointer", []), PtrType _) when isCast -> w
         | _ ->
           expect_type (expr_loc e) inAnnotation t t0;
           if isCast || try expect_type dummy_loc inAnnotation t0 t; false with StaticError _ -> true then
@@ -5061,6 +5063,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let field_ptr_symb = lazy_purefuncsymb "field_ptr"
   let union_variant_ptr_symb = lazy_purefuncsymb "union_variant_ptr"
   let null_pointer_provenance_symb = lazy_purefuncsymb "null_pointer_provenance"
+  let pointer_within_limits_symb = lazy_purefuncsymb "pointer_within_limits"
+  let object_pointer_within_limits_symb = lazy_purefuncsymb "object_pointer_within_limits"
   let null_pointer_symb = lazy_purefuncsymb "null_pointer"
   let null_pointer_term =
     match language with
@@ -5069,6 +5073,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let mk_ptr_add p off = mk_app (ptr_add_symb ()) [p; off]
   let mk_field_ptr p off = mk_app (field_ptr_symb ()) [p; off]
+  let mk_pointer_within_limits p = mk_app (pointer_within_limits_symb ()) [p]
+  let mk_object_pointer_within_limits p size = mk_app (object_pointer_within_limits_symb ()) [p; size]
 
   if assume_no_subobject_provenance && List.mem_assoc "field_ptr" purefuncmap then begin
     ctxt#begin_formal;
@@ -5100,8 +5106,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let min, max = limits_of_type tp in
       ctxt#assert_term (ctxt#mk_and (ctxt#mk_le min term) (ctxt#mk_le term max))
     | PtrType _ ->
-      let min, max = limits_of_type tp in
-      ctxt#assert_term (ctxt#mk_and (ctxt#mk_le min (mk_ptr_address term)) (ctxt#mk_le (mk_ptr_address term) max))
+      ctxt#assert_term (mk_pointer_within_limits term)
     | _ -> ()
   
   let assert_mk_pointer p =
@@ -6387,7 +6392,11 @@ let check_if_list_is_defined () =
       | PtrType t ->
         let n = sizeof l t in
         let result = mk_ptr_add v1 (ctxt#mk_mul n v2) in
-        ignore $. check_overflow (mk_ptr_address result);
+        begin match ass_term with
+          Some assert_term when not disable_overflow_check ->
+          assert_term l (mk_pointer_within_limits result) "Pointer may be out of bounds" None
+        | _ -> ()
+        end;
         result
       | RealType ->
         ctxt#mk_real_add v1 v2
@@ -6399,7 +6408,11 @@ let check_if_list_is_defined () =
       | PtrType t ->
         let n = sizeof l t in
         let result = mk_ptr_add v1 (ctxt#mk_sub int_zero_term (ctxt#mk_mul n v2)) in
-        ignore $. check_overflow (mk_ptr_address result);
+        begin match ass_term with
+          Some assert_term when not disable_overflow_check ->
+          assert_term l (mk_pointer_within_limits result) "Pointer may be out of bounds" None
+        | _ -> ()
+        end;
         result
       | RealType ->
         ctxt#mk_real_sub v1 v2

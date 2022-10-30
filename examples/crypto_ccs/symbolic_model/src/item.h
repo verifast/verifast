@@ -19,7 +19,7 @@ predicate item(struct item *item, item i, predicate(item) pub) =
     size > MINIMAL_STRING_SIZE &*& size <= INT_MAX &*&
   item->content |-> ?content &*&
     crypto_chars(secret, content, size, ?ccs) &*&
-    content >= (char *)0 &*& content + size <= (char *)UINTPTR_MAX &*&
+    pointer_within_limits(content) && pointer_within_limits(content + size) &*&
     size == length(ccs) &*& malloc_block_chars(content, size) &*&
   malloc_block_item(item) &*&
 

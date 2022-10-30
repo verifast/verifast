@@ -39,6 +39,21 @@ fixpoint pointer union_variant_ptr(pointer p, int variantId) {
 fixpoint pointer_provenance null_pointer_provenance();
 fixpoint pointer null_pointer() { return pointer_ctor(null_pointer_provenance, 0); }
 
+fixpoint uintptr_t ptr_provenance_min_addr(pointer_provenance pr);
+fixpoint uintptr_t ptr_provenance_max_addr(pointer_provenance pr);
+
+fixpoint bool ptr_within_limits(pointer p) {
+    return ptr_provenance_min_addr(p.provenance) <= p.address && p.address <= ptr_provenance_max_addr(p.provenance);
+}
+
+fixpoint bool pointer_within_limits(void *p) {
+    return ptr_within_limits((pointer)p);
+}
+
+fixpoint bool object_pointer_within_limits(void *p, int size) {
+    return pointer_within_limits(p) && pointer_within_limits(p + size) && 0 < (uintptr_t)p;
+}
+
 predicate custom_chars(char *array, int size, list<char> cs);
 
 lemma_auto void custom_chars_inv();

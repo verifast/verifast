@@ -49,7 +49,7 @@ predicate ring_buffer(struct ring_buffer *buffer; int size, list<int> items) =
 	&*& malloc_block_ints(fields, size)
 	&*& malloc_block_ring_buffer(buffer)
 
-	&*& fields + size <= (void*)UINTPTR_MAX
+	&*& pointer_within_limits(fields + size) == true
 	
 	&*& is_split_up_fp(size, first, len) ?
 	

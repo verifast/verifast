@@ -12,7 +12,7 @@ lemma_auto void malloc_block_null();
 
 lemma void malloc_block_limits(void *array);
     requires [?f]malloc_block(array, ?size);
-    ensures [f]malloc_block(array, size) &*& (void *)0 <= array &*& 0 <= size &*& array + size <= (void *)UINTPTR_MAX;
+    ensures [f]malloc_block(array, size) &*& 0 <= size &*& pointer_within_limits(array) && pointer_within_limits(array + size);
 
 @*/
 
@@ -24,7 +24,7 @@ void *malloc(size_t size);
             emp
         :
             chars_(result, size, _) &*& malloc_block(result, size) &*&
-            (char *)0 < result && result + size <= (char *)UINTPTR_MAX; // one-past-end does not overflow
+            object_pointer_within_limits(result, size) == true; // one-past-end does not overflow
     @*/
     //@ terminates;
 

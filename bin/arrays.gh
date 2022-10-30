@@ -6,8 +6,8 @@
 fixpoint bool int_within_limits(int x) { return INT_MIN <= x && x <= INT_MAX; }
 
 lemma void ints_limits(int *pxs);
-    requires [?f]ints(pxs, ?N, ?xs) &*& pxs <= (int *)UINTPTR_MAX;
-    ensures [f]ints(pxs, N, xs) &*& pxs + N <= (int *)UINTPTR_MAX &*& forall(xs, int_within_limits) == true;
+    requires [?f]ints(pxs, ?N, ?xs) &*& (uintptr_t)pxs <= ptr_provenance_max_addr(((pointer)pxs).provenance);
+    ensures [f]ints(pxs, N, xs) &*& (uintptr_t)(pxs + N) <= ptr_provenance_max_addr(((pointer)pxs).provenance) &*& forall(xs, int_within_limits) == true;
 
 lemma void ints_split(int *array, int offset);
     requires [?f]ints(array, ?N, ?as) &*& 0 <= offset &*& offset <= N;

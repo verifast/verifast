@@ -230,7 +230,7 @@ struct class interval_class = {print_interval};
 char heap_[HEAP_SIZE];
 char *heap_free_space;
 
-//@ predicate free_space(;) = pointer(&heap_free_space, ?fs) &*& fs >= (char *)heap_ &*& chars(fs, (char *)heap_ + HEAP_SIZE - (char *)fs, _);
+//@ predicate free_space(;) = pointer(&heap_free_space, ?fs) &*& fs >= (char *)heap_ &*& fs == heap_ + ((char *)fs - heap_) &*& chars(fs, (char *)heap_ + HEAP_SIZE - (char *)fs, _);
 
 void *heap_alloc(size_t size)
     //@ requires free_space() &*& 0 <= size;
