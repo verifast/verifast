@@ -804,7 +804,13 @@ mod vf_mir_builder {
                     targets,
                 } => {
                     let switch_int_data_cpn = terminator_kind_cpn.init_switch_int();
-                    Self::encode_switch_int_data(tcx, discr, targets, switch_int_data_cpn);
+                    Self::encode_switch_int_data(
+                        tcx,
+                        discr,
+                        switch_ty,
+                        targets,
+                        switch_int_data_cpn,
+                    );
                 }
                 mir::TerminatorKind::Resume => terminator_kind_cpn.set_resume(()),
                 mir::TerminatorKind::Return => terminator_kind_cpn.set_return(()),
@@ -835,11 +841,14 @@ mod vf_mir_builder {
         fn encode_switch_int_data(
             tcx: TyCtxt<'tcx>,
             discr: &mir::Operand<'tcx>,
+            discr_ty: &ty::Ty<'tcx>,
             targets: &mir::terminator::SwitchTargets,
             mut switch_int_data_cpn: switch_int_data_cpn::Builder<'_>,
         ) {
             let discr_cpn = switch_int_data_cpn.reborrow().init_discr();
             Self::encode_operand(tcx, discr, discr_cpn);
+            let discr_ty_cpn = switch_int_data_cpn.reborrow().init_discr_ty();
+            Self::encode_ty(tcx, discr_ty, discr_ty_cpn);
             let targets_cpn = switch_int_data_cpn.init_targets();
             Self::encode_switch_targets(targets, targets_cpn);
         }

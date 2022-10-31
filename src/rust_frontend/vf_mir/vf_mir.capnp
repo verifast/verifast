@@ -265,7 +265,8 @@ struct Body {
                     }
 
                     discr @0: Operand;
-                    targets @1: SwitchTargets;
+                    discrTy @1: Ty;
+                    targets @2: SwitchTargets;
                 }
 
                 struct FnCallData {

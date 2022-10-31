@@ -195,6 +195,20 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   module VfMirRd = VfMirCapnpAlias.VfMirRd
   open VfMirCapnpAlias
 
+  module CapnpAux = struct
+    open Stdint
+
+    let uint128_get (ui_cpn : UInt128Rd.t) : Uint128.t =
+      let open UInt128Rd in
+      let open Uint128 in
+      let h = h_get ui_cpn in
+      let l = l_get ui_cpn in
+      let r = of_uint64 h in
+      let r = shift_left r 8 in
+      let r = add r (of_uint64 l) in
+      r
+  end
+
   module AstDecls = Decls (struct
     type decl = Ast.decl
   end)
@@ -700,13 +714,71 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         Ok [ full_call_stmt; next_bblock_stmt ]
     | Undefined _ -> Error (`TrFnCall "Unknown Option kind")
 
+  let translate_sw_targets_branch (br_cpn : SwitchTargetsBranchRd.t) =
+    let open SwitchTargetsBranchRd in
+    let v_cpn = val_get br_cpn in
+    let v = CapnpAux.uint128_get v_cpn in
+    let target_cpn = target_get br_cpn in
+    let target = translate_basic_block_id target_cpn in
+    (v, target)
+
+  let translate_sw_int (sw_int_data_cpn : SwitchIntDataRd.t) (loc : Ast.loc) =
+    let open SwitchIntDataRd in
+    let discr_cpn = discr_get sw_int_data_cpn in
+    let* tmp_rvalue_binders, [ discr ] =
+      translate_operands [ (discr_cpn, loc) ]
+    in
+    let discr_ty_cpn = discr_ty_get sw_int_data_cpn in
+    let* discr_ty = translate_ty discr_ty_cpn loc in
+    let targets_cpn = targets_get sw_int_data_cpn in
+    let open SwitchTargetsRd in
+    let branches_cpn = branches_get_list targets_cpn in
+    let branches = List.map translate_sw_targets_branch branches_cpn in
+    let otherwise_cpn = otherwise_get targets_cpn in
+    let otherwise_op =
+      match OptionRd.get otherwise_cpn with
+      | Nothing -> None
+      | Something ptr_cpn ->
+          let otherwise_cpn = VfMirStub.Reader.of_pointer ptr_cpn in
+          let otherwise = translate_basic_block_id otherwise_cpn in
+          Some otherwise
+    in
+    let* main_stmt =
+      match Mir.basic_type_of discr_ty with
+      | Ast.ManifestTypeExpr ((*loc*) _, Ast.Bool) -> (
+          match (branches, otherwise_op) with
+          | [ (v, false_tgt) ], Some true_tgt when Stdint.Uint128.(zero = v) ->
+              Ok
+                (Ast.IfStmt
+                   ( loc,
+                     discr,
+                     [ Ast.GotoStmt (loc, true_tgt) ],
+                     [ Ast.GotoStmt (loc, false_tgt) ] ))
+          | _ ->
+              Error
+                (`TrSwInt "Invalid SwitchTargets for a boolean discriminant"))
+      | _ -> failwith "Todo: SwitchInt TerminatorKind"
+    in
+    if ListAux.is_empty tmp_rvalue_binders then Ok main_stmt
+    else
+      Ok
+        (Ast.BlockStmt
+           ( loc,
+             (*decl list*) [],
+             tmp_rvalue_binders @ [ main_stmt ],
+             loc,
+             ref [] ))
+
   let translate_terminator_kind (ret_place_id : string)
       (tkind_cpn : TerminatorKindRd.t) (loc : Ast.loc) =
     let open TerminatorKindRd in
     match get tkind_cpn with
-    | Goto bblock_id_cpn -> failwith "Todo TerminatorKind::Goto"
-    | SwitchInt switch_int_data_cpn ->
-        failwith "Todo: TerminatorKind::SwitchInt"
+    | Goto bblock_id_cpn ->
+        let bb_id = translate_basic_block_id bblock_id_cpn in
+        Ok [ Ast.GotoStmt (loc, bb_id) ]
+    | SwitchInt sw_int_data_cpn ->
+        let* sw_stmt = translate_sw_int sw_int_data_cpn loc in
+        Ok [ sw_stmt ]
     | Resume -> failwith "Todo: Terminatorkind::Resume"
     | Return -> Ok [ Ast.ReturnStmt (loc, Some (Ast.Var (loc, ret_place_id))) ]
     | Call fn_call_data_cpn -> translate_fn_call fn_call_data_cpn loc
@@ -903,7 +975,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Ok res -> res
     | Error err -> failwith "Todo: translate_vf_mir Error handling"
 end
-(* Todo @Nima: TerminatorKind goto *)
 (* Todo @Nima: There would be naming conflicts if the user writes a function in rust with a name like `std_alloc_alloc`.
    A possible solution might be adding `crate` in front of local declarations. Another problem with names is that two paths
    like `a::mut_ptr::b` and `a::mut_ptr::b` both convert to `a_mut_ptr_b` *)

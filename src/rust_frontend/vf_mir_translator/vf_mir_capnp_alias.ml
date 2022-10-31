@@ -1,4 +1,5 @@
 module VfMirStub = Vf_mir.Make (Capnp.BytesMessage)
+module UInt128Rd = VfMirStub.Reader.UInt128
 module OptionRd = VfMirStub.Reader.Option
 module VfMirRd = VfMirStub.Reader.VfMir
 
@@ -32,6 +33,9 @@ module StatementRd = BasicBlockRd.Statement
 module StatementKindRd = StatementRd.StatementKind
 module RvalueRd = BasicBlockRd.Rvalue
 module SourceInfoRd = BodyRd.SourceInfo
+module SwitchIntDataRd = TerminatorKindRd.SwitchIntData
+module SwitchTargetsRd = SwitchIntDataRd.SwitchTargets
+module SwitchTargetsBranchRd = SwitchTargetsRd.Branch
 
 (* Types *)
 module TyRd = VfMirStub.Reader.Ty
