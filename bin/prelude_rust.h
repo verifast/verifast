@@ -587,6 +587,9 @@ predicate argv(char **argv, int argc; list<list<char> > arguments) =
         &*& arguments == cons(head_arguments, tail_arguments); // fix output parameter.
 @*/
 
+union std_empty_ {};
+struct std_tuple_0_ {};
+
 typedef int main(int argc, char **argv);
     //@ requires 0 <= argc &*& [_]argv(argv, argc, ?arguments);
     //@ ensures junk();
@@ -595,7 +598,7 @@ typedef int main(int argc, char **argv);
 () type implements it for example. Until we support traits we will just support main functions with
 unit as their return type.
 */
-struct std_tuple_0_ {};
+
 typedef struct std_tuple_0_ main_full/*@(int mainModule)@*/();
     //@ requires true;
     //@ ensures true;

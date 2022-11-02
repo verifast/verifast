@@ -16,3 +16,8 @@ struct std_tuple_0_ std_alloc_dealloc(unsigned char *p, size_t size);
     //@ requires malloc_block(p, size) &*& uchars(p, size, _);
     //@ ensures true;
     //@ terminates;
+
+union std_empty_ std_alloc_handle_alloc_error(size_t layout);
+    //@ requires true;
+    //@ ensures false;
+    //@ terminates;

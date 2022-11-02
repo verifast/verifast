@@ -465,6 +465,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Adt adt_ty_cpn -> translate_adt_ty adt_ty_cpn loc
     | RawPtr raw_ptr_ty_cpn -> translate_raw_ptr_ty raw_ptr_ty_cpn loc
     | FnDef fn_def_ty_cpn -> translate_fn_def_ty fn_def_ty_cpn loc
+    | Never ->
+        Ok
+          (Mir.TyInfoBasic
+             { vf_ty = Ast.ManifestTypeExpr (loc, Ast.UnionType "std_empty_") })
     | Tuple substs_cpn ->
         let substs_cpn = Capnp.Array.to_list substs_cpn in
         translate_tuple_ty substs_cpn loc
@@ -701,29 +705,32 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       translate_fn_call_rexpr callee_ty_info args_cpn loc fn_loc
     in
     let destination_cpn = destination_get fn_call_data_cpn in
-    match OptionRd.get destination_cpn with
-    | Nothing -> failwith "Todo: Diverging calls are not supported yet"
-    | Something ptr_cpn ->
-        let destination_data_cpn = VfMirStub.Reader.of_pointer ptr_cpn in
-        let { Mir.dst; Mir.dst_bblock_id } =
-          translate_destination_data destination_data_cpn loc
-        in
-        let full_call_stmt =
-          Ast.ExprStmt (Ast.AssignExpr (loc, dst, fn_call_rexpr))
-        in
-        let full_call_stmt =
-          if ListAux.is_empty fn_call_tmp_rval_ctx then full_call_stmt
-          else
-            Ast.BlockStmt
-              ( loc,
-                (*decl list*) [],
-                fn_call_tmp_rval_ctx @ [ full_call_stmt ],
-                loc,
-                ref [] )
-        in
-        let next_bblock_stmt = Ast.GotoStmt (loc, dst_bblock_id) in
-        Ok [ full_call_stmt; next_bblock_stmt ]
-    | Undefined _ -> Error (`TrFnCall "Unknown Option kind")
+    let* call_stmt, next_bblock_stmt_op =
+      match OptionRd.get destination_cpn with
+      | Nothing -> (*Diverging call*) Ok (Ast.ExprStmt fn_call_rexpr, None)
+      | Something ptr_cpn ->
+          let destination_data_cpn = VfMirStub.Reader.of_pointer ptr_cpn in
+          let { Mir.dst; Mir.dst_bblock_id } =
+            translate_destination_data destination_data_cpn loc
+          in
+          Ok
+            ( Ast.ExprStmt (Ast.AssignExpr (loc, dst, fn_call_rexpr)),
+              Some (Ast.GotoStmt (loc, dst_bblock_id)) )
+      | Undefined _ -> Error (`TrFnCall "Unknown Option kind")
+    in
+    let full_call_stmt =
+      if ListAux.is_empty fn_call_tmp_rval_ctx then call_stmt
+      else
+        Ast.BlockStmt
+          ( loc,
+            (*decl list*) [],
+            fn_call_tmp_rval_ctx @ [ call_stmt ],
+            loc,
+            ref [] )
+    in
+    match next_bblock_stmt_op with
+    | None -> Ok [ full_call_stmt ]
+    | Some next_bblock_stmt -> Ok [ full_call_stmt; next_bblock_stmt ]
 
   let translate_sw_targets_branch (br_cpn : SwitchTargetsBranchRd.t) =
     let open SwitchTargetsBranchRd in
