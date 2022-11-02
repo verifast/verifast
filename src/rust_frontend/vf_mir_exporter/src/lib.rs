@@ -575,6 +575,7 @@ mod vf_mir_builder {
                     Self::encode_ty_fn_def(tcx, def_id, substs, fn_def_ty_cpn);
                 }
                 ty::TyKind::FnPtr(_) => todo!("Function pointer type kind"),
+                ty::TyKind::Never => ty_kind_cpn.set_never(()),
                 ty::TyKind::Tuple(substs) => {
                     let len = substs.len().try_into().expect(&format!(
                         "The number of elements of the Tuple cannot be stored in a Capnp message"

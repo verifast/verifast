@@ -649,7 +649,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 in
                 Ok
                   ( tmp_rvalue_binders,
-                    Ast.Operation (fn_loc, Ast.Eq, [ arg; Ast.Null fn_loc ]) )
+                    Ast.Operation
+                      ( fn_loc,
+                        Ast.Eq,
+                        [
+                          arg;
+                          IntLit
+                            ( fn_loc,
+                              Big_int.zero_big_int,
+                              (*decimal*) true,
+                              (*U suffix*) false,
+                              (*int literal*) Ast.NoLSuffix );
+                        ] ) )
             | _ ->
                 Error
                   (`TrFnCallRExpr

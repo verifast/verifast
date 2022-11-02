@@ -144,7 +144,8 @@ struct Ty {
             adt @3: AdtTy;
             rawPtr @4: RawPtrTy;
             fnDef @5: FnDefTy;
-            tuple @6: List(GenArg);
+            never @6: Void;
+            tuple @7: List(GenArg);
         }
     }
 
