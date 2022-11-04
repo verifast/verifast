@@ -108,6 +108,10 @@ struct usb_endpoint_descriptor {
 
 /*@ 
   predicate usb_endpoint_descriptor(struct usb_endpoint_descriptor *epd; int direction, int xfer_type, int pipe);
+
+lemma_auto void usb_endpoint_descriptor_inv();
+    requires [?f]usb_endpoint_descriptor(?epd, ?dir, ?xfer_type, ?pipe);
+    ensures [f]usb_endpoint_descriptor(epd, dir, xfer_type, pipe) &*& object_pointer_within_limits(epd, sizeof(struct usb_endpoint_descriptor)) == true;
 @*/
 
 static inline int usb_endpoint_is_int_in(const struct usb_endpoint_descriptor *epd);

@@ -154,7 +154,7 @@ int main() //@ : main
     //@ leak thread(_, _, _, _);
     int id = 0;
     while (true)
-        //@ invariant [1/2]atomic_space(message_queue(queue, minIdCell, maxIdCell)) &*& [1/2]ghost_cell<int>(maxIdCell, id - 1);
+        //@ invariant [1/2]atomic_space(message_queue(queue, minIdCell, maxIdCell)) &*& [1/2]ghost_cell<int>(maxIdCell, id - 1) &*& [_]queue(queue);
     {
         struct message *message = create_message(id);
         {

@@ -31,6 +31,7 @@ predicate_family_instance mcas_unsep(interval_unsep)(interval_info info, int id,
     switch (info) {
         case interval_info(interval): return
             &interval->a != &interval->b &*&
+            pointer_within_limits(&interval->b) == true &*&
             cs == cons(pair(&interval->a, a), cons(pair(&interval->b, b), nil)) &*&
             inv == interval_ctor(id, interval);
     } &*&
@@ -65,12 +66,13 @@ predicate_ctor interval_ctor(int id, struct interval *interval)() =
     a == (void *)(uintptr_t)a &*&
     b == (void *)(uintptr_t)b &*&
     &interval->a != &interval->b &*&
+    pointer_within_limits(&interval->b) == true &*&
     true == (((uintptr_t)a & 2) == 0) &*&
     true == (((uintptr_t)a & 1) == 0) &*&
     mcas(id, interval_sep, interval_unsep, interval_info(interval), cons(pair(&interval->a, a), cons(pair(&interval->b, b), nil)));
 
 predicate_family_instance thread_run_data(shift_interval)(struct interval *interval) =
-    [_]interval->id |-> ?id &*& [_]atomic_space(interval_ctor(id, interval)) &*& &interval->a != &interval->b;
+    [_]interval->id |-> ?id &*& [_]atomic_space(interval_ctor(id, interval)) &*& &interval->a != &interval->b &*& pointer_within_limits(&interval->b) == true;
 
 @*/
 

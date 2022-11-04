@@ -22,6 +22,9 @@
 .provides ./prelude.h#field_ptr_provenance_min_addr
 .provides ./prelude.h#field_ptr_provenance_max_addr
 .provides ./prelude.h#ptr_provenance_min_addr_zero
+.provides ./prelude.h#field_pointer_within_limits_def
+.provides ./prelude.h#ptr_within_limits_field_ptr_0
+.provides ./prelude.h#first_field_pointer_within_limits_elim
 .provides ./prelude.h#integer__distinct
 .provides ./prelude.h#integer__unique
 .provides ./prelude.h#integer__limits

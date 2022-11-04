@@ -96,10 +96,25 @@ fixpoint bool pointer_within_limits(void *p) {
     return ptr_within_limits((pointer)p);
 }
 
-
 fixpoint bool object_pointer_within_limits(void *p, int size) {
-    return pointer_within_limits(p) && pointer_within_limits(p + size) && 0 < (uintptr_t)p;
+    return pointer_within_limits(p) && pointer_within_limits(p + size) && p != 0;
 }
+
+// When producing a field chunk, VeriFast produces a field_pointer_within_limits fact
+// instead of a pointer_within_limits fact to avoid producing too many linear inequalities.
+fixpoint bool field_pointer_within_limits(void *p, int fieldOffset);
+
+lemma_auto(pointer_within_limits((void *)field_ptr((pointer)p, fieldOffset))) void field_pointer_within_limits_def(void *p, int fieldOffset);
+    requires true;
+    ensures field_pointer_within_limits(p, fieldOffset) == pointer_within_limits((void *)field_ptr((pointer)p, fieldOffset));
+
+lemma_auto(field_pointer_within_limits((void *)field_ptr((pointer)p, fieldOffset), 0)) void first_field_pointer_within_limits_elim(void *p, int fieldOffset);
+    requires true;
+    ensures field_pointer_within_limits((void *)field_ptr((pointer)p, fieldOffset), 0) == field_pointer_within_limits(p, fieldOffset);
+
+lemma_auto(ptr_within_limits(field_ptr(p, 0))) void ptr_within_limits_field_ptr_0(pointer p);
+    requires true;
+    ensures ptr_within_limits(field_ptr(p, 0)) == ptr_within_limits(p);
 
 predicate generic_points_to<t>(t *p; t v);
 
@@ -167,6 +182,10 @@ lemma void integer__unique(void *p);
 lemma void integer__limits(void *p);
     requires [?f]integer_(p, ?size, ?signed_, ?v);
     ensures [f]integer_(p, size, signed_, v) &*& object_pointer_within_limits(p, size) == true &*& signed_ ? -(1<<(8*size-1)) <= v &*& v < (1<<(8*size-1)) : 0 <= v &*& v < (1<<(8*size));
+
+lemma void integer___limits(void *p);
+    requires [?f]integer__(p, ?size, ?signed_, ?v);
+    ensures [f]integer__(p, size, signed_, v) &*& object_pointer_within_limits(p, size) == true;
 
 lemma void char__limits(char *pc);
     requires [?f]char_(pc, ?c);

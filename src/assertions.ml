@@ -195,10 +195,22 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           iter h
       | _::h -> iter h
     in
-    if (file_type path) <> Java || ctxt#query (ctxt#mk_not (ctxt#mk_eq tp (ctxt#mk_intlit 0))) then 
-      iter h0
-    else
-      assume_neq tp (ctxt#mk_intlit 0) (fun _ -> iter h0) (* in Java, the target of a field chunk is non-null *)
+    begin fun cont ->
+      match language with
+        Java ->
+        if not (ctxt#query (ctxt#mk_not (ctxt#mk_eq tp (ctxt#mk_intlit 0)))) then
+          assume_neq tp (ctxt#mk_intlit 0) cont
+        else
+          cont ()
+      | _ ->
+        let (_, Some (_, fmap), _, _) = List.assoc fparent structmap in
+        let (_, gh, y, offset_opt, _) = List.assoc fname fmap in
+        match offset_opt with
+          Some term ->
+          assume (mk_field_pointer_within_limits tp term) cont
+        | None -> cont ()
+    end $. fun () ->
+    iter h0
 
   let produce_chunk h g_symb targs coef inputParamCount ts size cont =
     if inputParamCount = None || coef == real_unit then

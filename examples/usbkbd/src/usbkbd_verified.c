@@ -1455,6 +1455,9 @@ static int usb_kbd_probe(struct usb_interface *iface,
 		return -ENODEV;
 	}
 	
+	//@ assert [_]interface->endpoint |-> ?host_endpoint;
+	//@ open usb_host_endpoint(host_endpoint);
+
 	/* The control endpoint 0 always exists: "All USB devices are required to
 	 * implement a default control method that uses both the input and output
 	 * endpoints with endpoint number zero" -- USB 2.0 specs page 34.
@@ -1466,9 +1469,6 @@ static int usb_kbd_probe(struct usb_interface *iface,
 	ep = interface->endpoint;
 	endpoint = &ep->desc;
 	//original: endpoint = &interface->endpoint[0].desc;
-	
-	//@ assert [_]interface->endpoint |-> ?host_endpoint;
-	//@ open usb_host_endpoint(host_endpoint);
 	
 	if (!usb_endpoint_is_int_in(endpoint))
 	{ // extra "{"

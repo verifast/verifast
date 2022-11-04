@@ -19,6 +19,10 @@
 /*@
 predicate spinlock(spinlock_t *spinlock, predicate() p ;);
 // XXX mutex uses p as output-argument. Why didn't I do that?
+
+lemma_auto void spinlock_inv();
+    requires [?f]spinlock(?spinlock, ?p);
+    ensures [f]spinlock(spinlock, p) &*& object_pointer_within_limits(spinlock, sizeof(spinlock_t)) == true;
 @*/
 
 /*#

@@ -33,6 +33,7 @@ predicate_ctor counter_inv(struct counter *counter, predicate(int) inv)() =
     foreach(readers, reader(inv, left, right));
 
 predicate counter(struct counter *counter, predicate(int) inv) =
+    pointer_within_limits(&counter->right) == true &*&
     atomic_space(counter_inv(counter, inv)) &*&
     [1/2]counter->ghostListId |-> _ &*&
     malloc_block_counter(counter);

@@ -17,35 +17,6 @@ Known VeriFast unsoundnesses:
   However, this unsoundness does not apply to `gcc -O2 -fno-strict-aliasing`.
 - The C standard says that reading an uninitialized variable or using the value so obtained can cause a trap. VeriFast does not check that the program does not read or use uninitialized variables.
 - I am not 100% sure that a statement of the form `x = foo();` where x is a global and foo modifies x is allowed by the C standard. VeriFast allows this statement.
-- The pointer arithmetic implied by field or array dereference should be checked for arithmetic overflow. For example, the following program verifies, even though
-  the `assert(false);` is reachable:
-
-    ```c
-    struct bar { int x; int y; };
-
-    void foo()
-      //@ requires true;
-      //@ ensures true;
-    {
-      void *p0 = 0;
-      void *q0 = &((struct bar *)p0)->y;
-      //@ produce_limits(q0);
-      //@ assert p0 <= q0;
-      //@ assert q0 - p0 >= 0;
-      void *p = (void *)UINTPTR_MAX;
-      void *q = &((struct bar *)p)->y;
-      //@ produce_limits(q);
-      //@ assert q <= p;
-      //@ assert q - p <= 0;
-      //@ assert q - p == 0;
-      struct bar b;
-      //@ open bar_x(&b, _);
-      //@ open bar_y(&b, _);
-      //@ integer_distinct(&b.x, &b.x);
-      assert(false);
-    }
-    ```
-
 - Per the C standard, the following program has undefined behavior. (Compilers exploit this to infer that the assignment to `xs[4]` does not modify `ys[0]`.) However, VeriFast allows it to be verified.
 
     ```c

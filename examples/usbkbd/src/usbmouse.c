@@ -341,9 +341,9 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 		return -ENODEV;
 	}
 	
+	//@ open usb_host_endpoint(interface->endpoint);
 	ep = interface->endpoint;
 	endpoint = &(ep->desc);
-	//@ open usb_host_endpoint(interface->endpoint);
 	
 	//int usb_endpoint_is_int_in_res = ;
 	if (! usb_endpoint_is_int_in(endpoint)) {

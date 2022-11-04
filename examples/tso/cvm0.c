@@ -102,13 +102,51 @@ struct cell {
     struct object *contents;
 };
 
-//@ predicate cell_inv(void *cell, list<object> os) = cell_contents(cell, ?contents) &*& mem(contents, os) == true &*& struct_cell_padding(cell) &*& struct_object_padding(cell);
+//@ predicate cell_inv(void *cell, list<object> os) = ((struct cell *)cell)->contents |-> ?contents &*& mem(contents, os) == true &*& struct_cell_padding(cell) &*& struct_object_padding(cell);
+
+void get_cell_properties(void *cell)
+    //@ requires [_]classes() &*& [_]object_class(cell, &cell_class) &*& [?f]mytso(?id, ?objects) &*& mem(cell, objects) == true;
+    //@ ensures [f]mytso(id, objects) &*& pointer_within_limits(&((struct cell *)cell)->contents) == true;
+{
+    struct cell *cell_ = cell;
+    {
+        /*@
+        predicate P() = [_]classes() &*& [_]object_class(cell, &cell_class);
+        predicate Q() = pointer_within_limits(&cell_->contents) == true;
+        lemma void body(list<object> os0, list<object> os1)
+            requires P() &*& subset(objects, os0) == true &*& subset(os0, os1) == true &*& heap(os1);
+            ensures Q() &*& heap(os1) &*& subset(os1, os1) == true &*& subset(os0, os1) == true;
+        {
+            open P();
+            open heap(_);
+            subset_trans(objects, os0, os1);
+            mem_subset(cell, objects, os1);
+            foreach_remove(cell, os1);
+            open object(os1)(cell);
+            open classes();
+            open cell_inv(cell, ?os00);
+            close cell_inv(cell, os00);
+            close Q();
+            close object(os1)(cell);
+            foreach_unremove(cell, os1);
+            close heap(os1);
+        }
+        @*/
+        //@ produce_lemma_function_pointer_chunk(body) : tso_noop_body<list<object> >(heap, subset, objects, (idf)(nil), P, Q)(os0, os1) { call(); };
+        //@ close P();
+        //@ open mytso(_, _);
+        tso_noop(0);
+        //@ close [f]mytso(id, objects);
+        //@ open Q();
+    }
+}
 
 void *read_cell_contents0(void *cell)
     //@ requires [_]classes() &*& [_]object_class(cell, &cell_class) &*& [?f]mytso(?id, cons(cell, nil));
     //@ ensures [f]mytso(id, cons(result, nil));
 {
     struct cell *cell_ = cell;
+    get_cell_properties(cell);
     prophecy_id contents0Id = create_tso_prophecy();
     //@ assert tso_prophecy(contents0Id, ?contents0);
     struct object *contents;
@@ -332,9 +370,10 @@ void tso_add_object(void *o)
 }
 
 void write_cell_contents(struct cell *cell, void *contents)
-    //@ requires [?f]mytso(?id, ?objects) &*& mem<void *>(cell, objects) == true &*& mem(contents, objects) == true &*& [_]object_class(&cell->object, &cell_class);
+    //@ requires [_]classes() &*& [?f]mytso(?id, ?objects) &*& mem<void *>(cell, objects) == true &*& mem(contents, objects) == true &*& [_]object_class(&cell->object, &cell_class);
     //@ ensures [f]mytso(id, objects);
 {
+    get_cell_properties(cell);
     {
         /*@
         predicate P() = [_]object_class(&cell->object, &cell_class);

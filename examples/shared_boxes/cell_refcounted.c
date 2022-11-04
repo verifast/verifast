@@ -9,9 +9,9 @@ and its Use in Observational Disjointness".
 //@ #include "listex.gh"
 
 struct cell {
+  int lock;
   int value;
   int refcount;
-  int lock;
 };
 
 struct cell_client {

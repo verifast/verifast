@@ -73,9 +73,11 @@
 .requires CRT/prelude.h#chars_unseparate_string
 .requires CRT/prelude.h#div_rem
 .requires CRT/prelude.h#divrem_elim
+.requires CRT/prelude.h#field_pointer_within_limits_def
 .requires CRT/prelude.h#field_ptr_provenance_injective
 .requires CRT/prelude.h#field_ptr_provenance_max_addr
 .requires CRT/prelude.h#field_ptr_provenance_min_addr
+.requires CRT/prelude.h#first_field_pointer_within_limits_elim
 .requires CRT/prelude.h#int__to_chars_
 .requires CRT/prelude.h#int_of_chars_of_int
 .requires CRT/prelude.h#int_of_chars_size
@@ -114,6 +116,7 @@
 .requires CRT/prelude.h#pointers_to_pointers_
 .requires CRT/prelude.h#ptr_provenance_max_addr_limits
 .requires CRT/prelude.h#ptr_provenance_min_addr_limits
+.requires CRT/prelude.h#ptr_within_limits_field_ptr_0
 .requires CRT/prelude.h#short_integer_to_chars
 .requires CRT/prelude.h#shorts_inv
 .requires CRT/prelude.h#string_to_body_chars

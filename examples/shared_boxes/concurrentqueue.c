@@ -7,8 +7,8 @@ Michael-Scott queue (without memory reclamation)
 #include "concurrentqueue.h"
 
 struct node {
-  int value;
   struct node* next;
+  int value;
 };
 
 struct queue {

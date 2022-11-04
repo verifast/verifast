@@ -163,6 +163,11 @@ predicate_ctor atomic_space_inv(struct array *array)() =
     );
 
 predicate array_scanner(array_t array; predicate(int, int) inv) =
+    pointer_within_limits(&array->fx) == true &*&
+    pointer_within_limits(&array->fy) == true &*&
+    pointer_within_limits(&array->x) == true &*&
+    pointer_within_limits(&array->y) == true &*&
+    pointer_within_limits(&array->S) == true &*&
     [_]popl20_atomic_space(create_array, atomic_space_inv(array)) &*&
     [_]array->Sid |-> ?Sid &*& [_]is_tracked_int(Sid) &*&
     [_]array->xid |-> ?xid &*& [_]is_tracked_int(xid) &*&
@@ -183,6 +188,8 @@ predicate array_scanner(array_t array; predicate(int, int) inv) =
     [_]array->inv |-> inv;
 
 predicate array_x_writer(array_t array; predicate(int, int) inv) =
+    pointer_within_limits(&array->x) == true &*&
+    pointer_within_limits(&array->fx) == true &*&
     [_]popl20_atomic_space(create_array, atomic_space_inv(array)) &*&
     [_]array->Sid |-> ?Sid &*& [_]is_tracked_int(Sid) &*&
     [_]array->xid |-> ?xid &*& [_]is_tracked_int(xid) &*&
@@ -201,6 +208,8 @@ predicate array_x_writer(array_t array; predicate(int, int) inv) =
     [_]array->inv |-> inv;
 
 predicate array_y_writer(array_t array; predicate(int, int) inv) =
+    pointer_within_limits(&array->y) == true &*&
+    pointer_within_limits(&array->fy) == true &*&
     [_]popl20_atomic_space(create_array, atomic_space_inv(array)) &*&
     [_]array->Sid |-> ?Sid &*& [_]is_tracked_int(Sid) &*&
     [_]array->xid |-> ?xid &*& [_]is_tracked_int(xid) &*&

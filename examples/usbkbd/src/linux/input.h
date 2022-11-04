@@ -134,7 +134,7 @@ struct input_dev {
 		&*& input_dev->event |-> event_cb
 		&*& input_dev->name |-> name
 		&*& input_dev->phys |-> phys
-		&*& input_id_bustype(&input_dev->id, _)
+		&*& input_dev->id.bustype |-> _
 		&*& input_id_vendor(&input_dev->id, _)
 		&*& input_id_product(&input_dev->id, _)
 		&*& input_id_version(&input_dev->id, _)

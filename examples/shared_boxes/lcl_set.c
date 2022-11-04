@@ -7,9 +7,9 @@
 struct lock;
 
 struct node {
+  int lock;
   int value;
   struct node* next;
-  int lock;
 };
 
 struct set {

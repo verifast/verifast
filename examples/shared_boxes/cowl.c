@@ -5,9 +5,9 @@
 #include "cowl.h"
 
 struct node {
+  int lock;
   int value;
   int refcount;
-  int lock;
   struct node* next;
   //@ list<int> values;
 };

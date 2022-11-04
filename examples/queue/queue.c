@@ -49,7 +49,10 @@ lemma void lseg2_distinct(struct node *first, struct node *middle, struct node *
     close lseg2(first, middle, value0, values);
 }
 
+predicate queue(struct queue *queue;) = pointer_within_limits(&queue->last) == true;
+
 predicate queue_consumer(struct queue *queue) =
+    pointer_within_limits(&queue->last) == true &*&
     queue->first |-> ?first &*& queue->middle |-> ?middle &*& [1/2]queue->ghost_middle |-> middle &*& malloc_block_queue(queue)
     &*& lseg2(first, middle, _, ?frontValues) &*& [1/2]queue->front_values |-> frontValues;
 
@@ -61,7 +64,7 @@ predicate queue_state(struct queue *queue, list<void *> values) =
 
 struct queue *create_queue()
     //@ requires emp;
-    //@ ensures queue_consumer(result) &*& queue_state(result, nil);
+    //@ ensures queue_consumer(result) &*& queue_state(result, nil) &*& [_]queue(result);
 {
     struct node *middle = malloc(sizeof(struct node));
     if (middle == 0) { abort(); }
@@ -88,6 +91,7 @@ struct queue *create_queue()
 void queue_enqueue(struct queue *queue, void *value)
     /*@
     requires
+        [_]queue(queue) &*&
         [?f]atomic_space(?inv) &*&
         is_queue_enqueue_context(?ctxt, inv, queue, value, ?pre, ?post) &*& pre();
     @*/
@@ -97,6 +101,7 @@ void queue_enqueue(struct queue *queue, void *value)
         is_queue_enqueue_context(ctxt, inv, queue, value, pre, post) &*& post();
     @*/
 {
+    //@ open queue(queue);
     struct node *n = malloc(sizeof(struct node));
     if (n == 0) { abort(); }
     n->value = value;

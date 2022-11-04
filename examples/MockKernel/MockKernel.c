@@ -523,6 +523,7 @@ void handle_connection(struct socket *socket) //@ : thread_run
                             open lseg(m, 0, _, _);
                         }
                         @*/
+                        //@ produce_limits(m);
                         pm = &m->next;
                     }
                 }

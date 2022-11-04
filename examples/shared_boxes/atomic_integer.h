@@ -4,6 +4,12 @@
 //@ predicate atomic_integer(int* i, real level, predicate(int) I);
 
 /*@
+lemma_auto void atomic_integer_inv();
+    requires [?f]atomic_integer(?i, ?level, ?I);
+    ensures [f]atomic_integer(i, level, I) &*& pointer_within_limits(i) == true;
+@*/
+
+/*@
 lemma void create_atomic_integer(int* i, real upper_bound, predicate(int) I);
   requires integer(i, ?value) &*& I(value);
   ensures atomic_integer(i, ?new_level, I) &*& new_level < upper_bound;

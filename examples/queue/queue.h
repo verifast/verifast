@@ -8,13 +8,14 @@ struct queue;
 /*@
 
 predicate queue_state(struct queue *queue, list<void *> values);
+predicate queue(struct queue *queue;);
 predicate queue_consumer(struct queue *queue);
 
 @*/
 
 struct queue *create_queue();
     //@ requires emp;
-    //@ ensures queue_consumer(result) &*& queue_state(result, nil);
+    //@ ensures queue_consumer(result) &*& queue_state(result, nil) &*& [_]queue(result);
 
 /*@
 
@@ -32,6 +33,7 @@ typedef lemma void queue_enqueue_context(predicate() inv, struct queue *queue, v
 void queue_enqueue(struct queue *queue, void *value);
     /*@
     requires
+        [_]queue(queue) &*&
         [?f]atomic_space(?inv) &*&
         is_queue_enqueue_context(?ctxt, inv, queue, value, ?pre, ?post) &*& pre();
     @*/

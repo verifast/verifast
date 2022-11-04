@@ -16,15 +16,15 @@ predicate network_status_core(struct network_status *stat, bool initialized) =
   network_status_initialized(stat, ?i) &*&
     (i == 0 || i == 1) &*& 
     initialized == (i == 1) &*&
-  network_status_listen_socket(stat, ?l_socket) &*&
+  stat->listen_socket |-> ?l_socket &*&
     (l_socket == -1 ? true : initialized == true &*&
         net_status(l_socket, nil, ?l_port, bound_to_port)
     ) &*&
-  network_status_client_socket(stat, ?c_socket) &*&
+  stat->client_socket |-> ?c_socket &*&
     (c_socket == -1 ? true : initialized == true &*&
        net_status(c_socket, ?c_ip, ?c_port, connected)
     ) &*&
-  network_status_server_socket(stat, ?s_socket) &*&
+  stat->server_socket |-> ?s_socket &*&
     (s_socket == -1 ? true : initialized == true &*&
        net_status(s_socket, ?s_ip, ?s_port, connected)
     )

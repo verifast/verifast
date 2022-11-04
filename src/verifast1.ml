@@ -5065,6 +5065,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let null_pointer_provenance_symb = lazy_purefuncsymb "null_pointer_provenance"
   let pointer_within_limits_symb = lazy_purefuncsymb "pointer_within_limits"
   let object_pointer_within_limits_symb = lazy_purefuncsymb "object_pointer_within_limits"
+  let field_pointer_within_limits_symb = lazy_purefuncsymb "field_pointer_within_limits"
   let null_pointer_symb = lazy_purefuncsymb "null_pointer"
   let null_pointer_term =
     match language with
@@ -5075,6 +5076,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let mk_field_ptr p off = mk_app (field_ptr_symb ()) [p; off]
   let mk_pointer_within_limits p = mk_app (pointer_within_limits_symb ()) [p]
   let mk_object_pointer_within_limits p size = mk_app (object_pointer_within_limits_symb ()) [p; size]
+  let mk_field_pointer_within_limits p off = mk_app (field_pointer_within_limits_symb ()) [p; off]
 
   if assume_no_subobject_provenance && List.mem_assoc "field_ptr" purefuncmap then begin
     ctxt#begin_formal;
@@ -6360,6 +6362,14 @@ let check_if_list_is_defined () =
       assert_term l (ctxt#mk_lt v width) "Shifting by an amount greater than or equal to the width of the operand has undefined behavior." None
     | _ -> ()
   
+  let check_pointer_within_limits ass_term l v =
+    begin match ass_term with
+      Some assert_term when not disable_overflow_check ->
+      assert_term l (mk_pointer_within_limits v) "Pointer may be out of bounds" None
+    | _ -> ()
+    end;
+    v
+
   let eval_op l truncating op e1 v1 e2 v2 t ass_term =
     let check_overflow0 v =
       begin match ass_term with
@@ -6391,13 +6401,7 @@ let check_if_list_is_defined () =
         check_overflow (ctxt#mk_add v1 v2)
       | PtrType t ->
         let n = sizeof l t in
-        let result = mk_ptr_add v1 (ctxt#mk_mul n v2) in
-        begin match ass_term with
-          Some assert_term when not disable_overflow_check ->
-          assert_term l (mk_pointer_within_limits result) "Pointer may be out of bounds" None
-        | _ -> ()
-        end;
-        result
+        check_pointer_within_limits ass_term l (mk_ptr_add v1 (ctxt#mk_mul n v2))
       | RealType ->
         ctxt#mk_real_add v1 v2
       end
@@ -6407,13 +6411,7 @@ let check_if_list_is_defined () =
         check_overflow (ctxt#mk_sub v1 v2)
       | PtrType t ->
         let n = sizeof l t in
-        let result = mk_ptr_add v1 (ctxt#mk_sub int_zero_term (ctxt#mk_mul n v2)) in
-        begin match ass_term with
-          Some assert_term when not disable_overflow_check ->
-          assert_term l (mk_pointer_within_limits result) "Pointer may be out of bounds" None
-        | _ -> ()
-        end;
-        result
+        check_pointer_within_limits ass_term l (mk_ptr_add v1 (ctxt#mk_sub int_zero_term (ctxt#mk_mul n v2)))
       | RealType ->
         ctxt#mk_real_sub v1 v2
       end
@@ -6551,11 +6549,6 @@ let check_if_list_is_defined () =
           ev state e $. fun state t ->
           let min, max = limits_of_type tp in
           cont state (check_overflow l min t max)
-        | (e, (PtrType _ as tp)) ->
-          ev state e $. fun state t ->
-          let min, max = limits_of_type tp in
-          ignore $. check_overflow l min (mk_ptr_address t) max;
-          cont state t
         | (_, (ObjType _|ArrayType _)) when ass_term = None -> static_error l "Class casts are not allowed in annotations." None
         | _ -> ev state e cont (* No other cast allowed by the type checker changes the value *)
       end
@@ -6743,7 +6736,7 @@ let check_if_list_is_defined () =
         begin
           match frange with
             StaticArrayType (elemTp, elemCount) ->
-            cont state (field_address l v fparent fname)
+            cont state (check_pointer_within_limits ass_term l (field_address l v fparent fname))
           | _ ->
           match read_field with
             None -> static_error l "Cannot use field dereference in this context." None
@@ -6781,12 +6774,12 @@ let check_if_list_is_defined () =
           (* MS Visual C++ behavior: http://msdn.microsoft.com/en-us/library/hx1b6kkd.aspx (= depends on command-line switches and pragmas) *)
           (* GCC documentation is not clear about it. *)
           ev state e $. fun state v ->
-          cont state (field_address l v fparent fname)
+          cont state (check_pointer_within_limits ass_term l (field_address l v fparent fname))
         | WReadArray (le, w1, tp, w2) ->
           ev state w1 $. fun state arr ->
           ev state w2 $. fun state index ->
           let n = sizeof le tp in
-          cont state (mk_ptr_add arr (ctxt#mk_mul n index))
+          cont state (check_pointer_within_limits ass_term le (mk_ptr_add arr (ctxt#mk_mul n index)))
         | WVar (l, x, GlobalName) ->
           let Some (l, tp, symbol, init) = try_assoc x globalmap in cont state symbol
         (* The address of a function symbol is commonly used in the
