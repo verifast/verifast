@@ -234,19 +234,20 @@ mod vf_mir_builder {
     use crate::vf_mir_capnp::span_data as span_data_cpn;
     use crate::vf_mir_capnp::ty as ty_cpn;
     use crate::vf_mir_capnp::vf_mir as vf_mir_cpn;
-    use basic_block_cpn::constant as constant_cpn;
     use basic_block_cpn::operand as operand_cpn;
-    use basic_block_cpn::place as place_cpn;
     use basic_block_cpn::rvalue as rvalue_cpn;
     use basic_block_cpn::statement as statement_cpn;
     use basic_block_cpn::terminator as terminator_cpn;
     use body_cpn::annotation as annot_cpn;
     use body_cpn::basic_block as basic_block_cpn;
     use body_cpn::basic_block_id as basic_block_id_cpn;
+    use body_cpn::constant as constant_cpn;
     use body_cpn::contract as contract_cpn;
     use body_cpn::local_decl as local_decl_cpn;
     use body_cpn::local_decl_id as local_decl_id_cpn;
+    use body_cpn::place as place_cpn;
     use body_cpn::source_info as source_info_cpn;
+    use body_cpn::var_debug_info as var_debug_info_cpn;
     use constant_cpn::constant_kind as constant_kind_cpn;
     use file_name_cpn::real_file_name as real_file_name_cpn;
     use loc_cpn::char_pos as char_pos_cpn;
@@ -274,6 +275,8 @@ mod vf_mir_builder {
     use ty_cpn::raw_ptr_ty as raw_ptr_ty_cpn;
     use ty_cpn::ty_kind as ty_kind_cpn;
     use ty_cpn::u_int_ty as u_int_ty_cpn;
+    use var_debug_info_cpn::symbol as symbol_cpn;
+    use var_debug_info_cpn::var_debug_info_contents as var_debug_info_contents_cpn;
 
     pub struct VfMirCapnpBuilder<'tcx, 'a> {
         tcx: TyCtxt<'tcx>,
@@ -408,9 +411,53 @@ mod vf_mir_builder {
             let span_cpn = body_cpn.reborrow().init_span();
             Self::encode_span_data(tcx, &body.span.data(), span_cpn);
 
-            let imp_span_cpn = body_cpn.init_imp_span();
+            let imp_span_cpn = body_cpn.reborrow().init_imp_span();
             let imp_span_data = crate::span_utils::body_imp_span(body);
             Self::encode_span_data(tcx, &imp_span_data, imp_span_cpn);
+
+            let vdis_len = body.var_debug_info.len().try_into().expect(
+                "The number of variables debug info entries cannot be stored in a Capnp message",
+            );
+            let mut vdis_cpn = body_cpn.init_var_debug_info(vdis_len);
+            for (idx, vdi) in body.var_debug_info.iter().enumerate() {
+                let vdi_cpn = vdis_cpn.reborrow().get(idx.try_into().unwrap());
+                Self::encode_var_debug_info(tcx, vdi, vdi_cpn);
+            }
+        }
+
+        fn encode_var_debug_info(
+            tcx: TyCtxt<'tcx>,
+            vdi: &mir::VarDebugInfo<'tcx>,
+            mut vdi_cpn: var_debug_info_cpn::Builder<'_>,
+        ) {
+            let name_cpn = vdi_cpn.reborrow().init_name();
+            Self::encode_symbol(&vdi.name, name_cpn);
+            let src_info_cpn = vdi_cpn.reborrow().init_source_info();
+            Self::encode_source_info(tcx, &vdi.source_info, src_info_cpn);
+            let value_cpn = vdi_cpn.init_value();
+            Self::encode_var_debug_info_contents(tcx, &vdi.value, value_cpn);
+        }
+
+        fn encode_var_debug_info_contents(
+            tcx: TyCtxt<'tcx>,
+            vdi_contents: &mir::VarDebugInfoContents<'tcx>,
+            vdi_contents_cpn: var_debug_info_contents_cpn::Builder<'_>,
+        ) {
+            match vdi_contents {
+                mir::VarDebugInfoContents::Place(place) => {
+                    let place_cpn = vdi_contents_cpn.init_place();
+                    Self::encode_place(place, place_cpn)
+                }
+                mir::VarDebugInfoContents::Const(constant) => {
+                    let constant_cpn = vdi_contents_cpn.init_const();
+                    Self::encode_constant(tcx, constant, constant_cpn)
+                }
+            }
+        }
+
+        #[inline]
+        fn encode_symbol(sym: &rustc_span::symbol::Symbol, mut sym_cpn: symbol_cpn::Builder<'_>) {
+            sym_cpn.set_name(sym.as_str());
         }
 
         fn encode_span_data(

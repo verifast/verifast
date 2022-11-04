@@ -186,35 +186,35 @@ struct Body {
         sourceInfo @3: SourceInfo;
     }
 
+    struct Place {
+        struct PlaceElement {
+            union {
+                deref @0: Void;
+                field @1: Text;
+            }
+        }
+
+        local @0: LocalDeclId;
+        projection @1: List(PlaceElement);
+    }
+
+    struct Constant {
+        struct ConstantKind {
+            union {
+                ty @0: Ty.Const;
+                val @1: Void;
+            }
+        }
+
+        span @0: SpanData;
+        literal @1: ConstantKind;
+    }
+
     struct BasicBlockId {
         name @0: Text;
     }
 
     struct BasicBlock {
-        struct Place {
-            struct PlaceElement {
-                union {
-                    deref @0: Void;
-                    field @1: Text;
-                }
-            }
-
-            local @0: LocalDeclId;
-            projection @1: List(PlaceElement);
-        }
-
-        struct Constant {
-            struct ConstantKind {
-                union {
-                    ty @0: Ty.Const;
-                    val @1: Void;
-                }
-            }
-
-            span @0: SpanData;
-            literal @1: ConstantKind;
-        }
-
         struct Operand {
             union {
                 copy @0: Place;
@@ -303,6 +303,21 @@ struct Body {
         isCleanup @3: Bool;
     }
 
+    struct VarDebugInfo {
+        struct Symbol {
+            name @0: Text;
+        }
+        struct VarDebugInfoContents {
+            union {
+                place @0: Place;
+                const @1: Constant;
+            }
+        }
+        name @0: Symbol;
+        sourceInfo @1: SourceInfo;
+        value @2: VarDebugInfoContents;
+    }
+
     defKind @0: DefKind;
     defPath @1: Text;
     contract @2: Contract;
@@ -311,6 +326,7 @@ struct Body {
     basicBlocks @5: List(BasicBlock);
     span @6: SpanData;
     impSpan @7: SpanData;
+    varDebugInfo @8: List(VarDebugInfo);
 }
 
 struct VfMir {
