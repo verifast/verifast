@@ -15,17 +15,7 @@ Known VeriFast unsoundnesses:
   does not affect the value at the other location.
   VeriFast does not check that the program obeys strict aliasing rules. Therefore, VeriFast is currently unsound for `gcc -O2`.
   However, this unsoundness does not apply to `gcc -O2 -fno-strict-aliasing`.
-- The C standard says that reading an uninitialized variable or using the value so obtained can cause a trap. VeriFast does not check that the program does not read or use uninitialized variables.
 - I am not 100% sure that a statement of the form `x = foo();` where x is a global and foo modifies x is allowed by the C standard. VeriFast allows this statement.
-- Per the C standard, the following program has undefined behavior. (Compilers exploit this to infer that the assignment to `xs[4]` does not modify `ys[0]`.) However, VeriFast allows it to be verified.
-
-    ```c
-    void test() {
-        int xs[4];
-        int ys[4];
-        if (xs + 4 == ys) xs[4] = 1;
-    }
-    ```
 
 Java Programs
 =============
