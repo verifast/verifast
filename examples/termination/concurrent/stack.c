@@ -6,8 +6,8 @@
 #include <stdlib.h>
 
 struct node {
-    void *value;
     struct node *next;
+    void *value;
 };
 typedef struct node *node;
 
@@ -32,6 +32,36 @@ predicate nodes(node n, predicate(void *) p) =
     :
         [_]n->value |-> ?value &*& p(value) &*&
         [_]n->next |-> ?next &*& nodes(next, p);
+
+predicate node_ptr(node n) = n == 0 ? true : [_]n->next |-> ?_;
+
+lemma void nodes_head_ptr()
+    requires nodes(?n, ?p);
+    ensures nodes(n, p) &*& [_]node_ptr(n);
+{
+    open nodes(n, p);
+    close node_ptr(n);
+    close nodes(n, p);
+    leak node_ptr(n);
+}
+
+lemma void node_ptr_same_address(node n1, node n2)
+    requires [_]node_ptr(n1) &*& [_]node_ptr(n2) &*& (uintptr_t)n1 == (uintptr_t)n2;
+    ensures n1 == n2;
+{
+    open node_ptr(n1);
+    open node_ptr(n2);
+    if (n1 == 0) {
+        if (n2 != 0)
+            pointer_limits(&n2->next);
+    } else {
+        if (n2 == 0)
+            pointer_limits(&n1->next);
+        else
+            if (n1 != n2)
+                pointer_fractions_same_address(&n1->next, &n2->next);
+    }
+}
 
 fixpoint bool neq<t>(t x, t y) { return x != y; }
 
@@ -104,7 +134,7 @@ void stack_push_iter(stack stack, void *value)
         {
             /*@
             predicate P() = true;
-            predicate Q(void *head_) = [_]stack->readsId |-> ?readsId &*& ghost_list_member_handle(readsId, head_);
+            predicate Q(void *head_) = [_]stack->readsId |-> ?readsId &*& ghost_list_member_handle(readsId, head_) &*& [_]node_ptr(head_);
             lemma void ctxt()
                 requires stack_space_inv(scope, stack)() &*& P() &*& is_atomic_load_op(?op, &stack->head, ?pre, ?post) &*& pre();
                 ensures stack_space_inv(scope, stack)() &*& post(?head_) &*& Q(head_) &*& is_atomic_load_op(op, &stack->head, pre, post);
@@ -112,6 +142,7 @@ void stack_push_iter(stack stack, void *value)
                 open stack_space_inv(scope, stack)();
                 open P();
 
+                nodes_head_ptr();
                 node head_ = op();
                 int readsId = stack->readsId;
 
@@ -138,6 +169,7 @@ void stack_push_iter(stack stack, void *value)
                 [_]n->value |-> value &*& p(value) &*& n->next |-> head &*&
                 call_perm_level(pushThread, pair((pair_lt)(lt, lt), pair(1, 0)), {stack_pop_iter});
             predicate Q(void *head1_) =
+                [_]node_ptr(head1_) &*&
                 head1_ == head ?
                     true
                 :
@@ -152,6 +184,7 @@ void stack_push_iter(stack stack, void *value)
                 open P();
 
                 node head0 = stack->head;
+                nodes_head_ptr();
                 assert ghost_list(readsId, ?reads);
                 op();
 
@@ -205,8 +238,10 @@ void stack_push_iter(stack stack, void *value)
             head1 = atomic_compare_and_swap(&stack->head, head, n);
             //@ open Q(head1);
         }
-        if (head1 == head)
+        if (head1 == head) {
+            //@ node_ptr_same_address(head1, head);
             break;
+        }
     }
 }
 
@@ -229,7 +264,7 @@ loop:
             /*@
             predicate P() = true;
             predicate Q(node head_) =
-                [_]stack->readsId |-> ?readsId &*&
+                [_]stack->readsId |-> ?readsId &*& [_]node_ptr(head_) &*&
                 head_ == 0 ? true : ghost_list_member_handle(readsId, head_) &*& [_]head_->next |-> ?next;
             lemma void ctxt()
                 requires stack_space_inv(scope, stack)() &*& P() &*& is_atomic_load_op(?op, &stack->head, ?pre, ?post) &*& pre();
@@ -237,6 +272,8 @@ loop:
             {
                 open stack_space_inv(scope, stack)();
                 open P();
+                
+                nodes_head_ptr();
 
                 node head_ = op();
 
@@ -272,6 +309,7 @@ loop:
                 [_]head->next |-> next &*&
                 call_perm_level(popThread, pair((pair_lt)(lt, lt), pair(1, 0)), {stack_pop_iter});
             predicate Q(void *head1) =
+                [_]node_ptr(head1) &*&
                 head1 == head ?
                     [_]head->value |-> ?value &*& p(value)
                 :
@@ -283,6 +321,8 @@ loop:
             {
                 open stack_space_inv(scope, stack)();
                 open P();
+                
+                nodes_head_ptr();
 
                 node head0_ = stack->head;
                 assert ghost_list(readsId, ?reads);
@@ -335,6 +375,7 @@ loop:
             //@ open Q(head0);
         }
         if (head0 == head) {
+            //@ node_ptr_same_address(head0, head);
             *pvalue = head->value;
             return true;
         }

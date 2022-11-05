@@ -8,8 +8,10 @@ fixpoint bool sublist<t>(list<t> vs1, list<t> vs2) {
   }
 }
 
+fixpoint bool has_null_provenance(void *p) { return p == (void *)(uintptr_t)p; }
+
 box_class incr_box(list<void*> all, list<void*> vs) {
-  invariant distinct(all) && distinct(vs) && sublist(vs, all) == true;
+  invariant distinct(all) && distinct(vs) && sublist(vs, all) == true && forall(all, has_null_provenance) && forall(vs, has_null_provenance);
   
   action push(void* x);
     requires ! mem(x, all);
@@ -44,7 +46,7 @@ void consumer(struct stack* s, struct stack_client* client)
   {
   /*@
     predicate_family_instance stack_pop_pre(my_pop_lemma)() = true;
-    predicate_family_instance stack_pop_post(my_pop_lemma)(bool success, void* res) = not_contains(?ha, id, success, res);
+    predicate_family_instance stack_pop_post(my_pop_lemma)(bool success, void* res) = not_contains(?ha, id, success, res) &*& has_null_provenance(res) == true;
     lemma void my_pop_lemma()
       requires stack_pop_pre(my_pop_lemma)() &*& myi(id)(?vs);
       ensures stack_pop_post(my_pop_lemma)(vs != nil, ?out) &*& (vs == nil ? myi(id)(nil) : myi(id)(tail(vs)) &*& out == head(vs));
@@ -80,7 +82,7 @@ void consumer(struct stack* s, struct stack_client* client)
     {
     /*@
     predicate_family_instance stack_pop_pre(my_pop_lemma2)() = not_contains(?ha, id, true, y);
-    predicate_family_instance stack_pop_post(my_pop_lemma2)(bool success2, void* res) = ! success2 || res != y;
+    predicate_family_instance stack_pop_post(my_pop_lemma2)(bool success2, void* res) = ! success2 || res != y &*& has_null_provenance(res) == true;
     lemma void my_pop_lemma2()
       requires stack_pop_pre(my_pop_lemma2)() &*& myi(id)(?vs);
       ensures stack_pop_post(my_pop_lemma2)(vs != nil, ?out) &*& (vs == nil ? myi(id)(nil) : myi(id)(tail(vs)) &*& out == head(vs));

@@ -197,6 +197,8 @@ lemma void lset_subset_add_l<t>(list<t> s1, t el, list<t> s2)
 {
 }
 
+*/
+
 lemma void lset_subset_add_r<t>(list<t> s1, list<t> s2, t el)
     requires lset_subset(s1, s2) == true;
     ensures lset_subset(s1, lset_add(s2, el)) == true;
@@ -207,6 +209,8 @@ lemma void lset_subset_add_r<t>(list<t> s1, list<t> s2, t el)
             lset_subset_add_r(t, s2, el);
     }
 }
+
+/*
 
 lemma void lset_subset_remove_l<t>(list<t> s1, t el, list<t> s2)
     requires lset_subset(s1, s2) == true;
@@ -231,6 +235,8 @@ lemma void lset_subset_remove_r<t>(list<t> s1, list<t> s2, t el)
     }    
 }
 
+*/
+
 lemma void lset_subset_union_l<t>(list<t> s1, list<t> s2)
     requires true;
     ensures lset_subset(s1, lset_union(s1, s2)) == true;
@@ -242,6 +248,8 @@ lemma void lset_subset_union_l<t>(list<t> s1, list<t> s2)
             lset_subset_add_r(t, lset_union(t, s2), h);
     }
 }
+
+/*
 
 lemma void lset_subset_union_r<t>(list<t> s1, list<t> s2)
     requires true;
@@ -291,6 +299,8 @@ lemma void lset_subset_refl<t>(list<t> s)
     }
 }
 
+*/
+
 lemma void lset_subset_trans<t>(list<t> s1, list<t> s2, list<t> s3)
     requires lset_subset(s1, s2) == true &*& lset_subset(s2, s3) == true;
     ensures lset_subset(s1, s3) == true;
@@ -304,6 +314,7 @@ lemma void lset_subset_trans<t>(list<t> s1, list<t> s2, list<t> s3)
 
 }
 
+/*
 //subset is structurally compatible
 
 lemma void lset_add_remains_subset<t>(list<t> s1, list<t> s2, t el)
@@ -742,6 +753,8 @@ lemma void lset_equals_add_r_remove_l<t>(list<t> s1, list<t> s2, t el)
 
 // more advanced
 
+*/
+
 lemma void lset_union_subset_l<t>(list<t> s1, list<t> s2, list<t> s3)
     requires true;
     ensures lset_subset(lset_union(s1, s2), s3) == (lset_subset(s1, s3) && lset_subset(s2, s3));
@@ -753,7 +766,7 @@ lemma void lset_union_subset_l<t>(list<t> s1, list<t> s2, list<t> s3)
     }
 }
 
-
+/*
 lemma void lset_inters_distr_union<t>(list<t> s1, list<t> s2, list<t> s3)
     requires true;
     ensures lset_equals(lset_inters(s1, lset_union(s2, s3)), lset_union(lset_inters(s1, s2), lset_inters(s1, s3))) == true; 

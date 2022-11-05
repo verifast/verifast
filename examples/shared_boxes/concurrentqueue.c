@@ -5,6 +5,7 @@ Michael-Scott queue (without memory reclamation)
 #include "stdlib.h"
 #include "atomics.h"
 #include "concurrentqueue.h"
+//@ #include <listex.gh>
 
 struct node {
   struct node* next;
@@ -277,6 +278,37 @@ lemma void lseg_merge(struct node* a, struct node* b, struct node* c)
   }
 }
 
+fixpoint uintptr_t address_of(void *p) { return (uintptr_t)p; }
+
+lemma void lseg_next_distinct_addresses(struct node* from, struct node* to, struct node* n)
+  requires lseg(from, to, ?nodes, ?vs) &*& n->next |-> ?nxt;
+  ensures lseg(from, to, nodes, vs) &*& n->next |-> nxt &*& !mem(address_of(n), map(address_of, nodes));
+{
+  open lseg(from, to, nodes, vs);
+  if(from == to) {
+  } else {
+    lseg_next_distinct_addresses(from->next, to, n);
+  }
+}
+
+lemma void lseg_distinct_addresses(struct node *n1, struct node *n2)
+  requires lseg(?from, ?to, ?nodes, ?vs) &*& mem(n1, nodes) && mem(n2, nodes) &*& n1 != n2;
+  ensures lseg(from, to, nodes, vs) &*& (uintptr_t)n1 != (uintptr_t)n2;
+{
+  open lseg(from, to, nodes, vs);
+  assert lseg(?next, to, ?nodes0, ?vs0);
+  if (from == n1) {
+    lseg_next_distinct_addresses(from->next, to, from);
+    mem_map(n2, nodes0, address_of);
+  } else if (from == n2) {
+    lseg_next_distinct_addresses(from->next, to, from);
+    mem_map(n1, nodes0, address_of);
+  } else {
+    lseg_distinct_addresses(n1, n2);
+  }
+  close lseg(from, to, nodes, vs);
+}
+
 lemma void lseg_next_distinct(struct node* from, struct node* to, struct node* n)
   requires lseg(from, to, ?nodes, ?vs) &*& n->next |-> ?nxt;
   ensures lseg(from, to, nodes, vs) &*& n->next |-> nxt &*& ! mem(n, nodes);
@@ -287,7 +319,6 @@ lemma void lseg_next_distinct(struct node* from, struct node* to, struct node* n
     lseg_next_distinct(from->next, to, n);
   }
 }
-
 
 lemma void lseg_distinct(struct node* from, struct node* to)
   requires lseg(from, to, ?nodes, ?vs);
@@ -493,6 +524,7 @@ bool try_dequeue(struct queue* q, int* res)
           drop_nth_index_of(thevalues, index_of(h, thenodes) + 1);
         } else {
           ret = 0;
+          lseg_distinct_addresses(old, h);
         }
       } producing_handle_predicate if (old == h) is_good_node(ha, n, ret) else msqueue_box_handle(ha); @*/
       if(old == h) {

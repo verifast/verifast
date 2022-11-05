@@ -5,12 +5,12 @@
 
 bool do_alias(int *x, int *y)
 //@ requires true;
-//@ ensures result == (x == y);
+//@ ensures result == (x == y); //~should_fail
 {
     if ((uintptr_t)x <= (uintptr_t)y)
         return (uintptr_t)y - (uintptr_t)x == 0;
     else
-        return (uintptr_t)x - (uintptr_t)y == 0;
+        return (uintptr_t)x - (uintptr_t)y == 0; //~allow_dead_code
 }
 
 struct foo {

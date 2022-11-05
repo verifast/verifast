@@ -93,7 +93,7 @@ predicate_family_instance equals_post(my_equals)(void* v1, void* v2, fixpoint(un
 
 fixpoint bool my_eq_func(unit un, void* v1, void* v2) {
   switch(un) {
-    case unit: return v1 == v2;
+    case unit: return (uintptr_t)v1 == (uintptr_t)v2;
   }
 }
 @*/
@@ -103,7 +103,7 @@ bool my_equals(void* v1, void* v2) //@: equals
   //@ ensures equals_post(my_equals)(v1, v2, eq_func) &*& result == eq_func(unit, v1, v2);
 {
   //@ open equals_pre(my_equals)(v1, v2, eq_func);
-  if(v1 == v2) {
+  if((uintptr_t)v1 == (uintptr_t)v2) {
     return true;
     //@ close equals_post(my_equals)(v1, v2, eq_func);
   } else {

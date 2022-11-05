@@ -97,7 +97,7 @@ fixpoint bool pointer_within_limits(void *p) {
 }
 
 fixpoint bool object_pointer_within_limits(void *p, int size) {
-    return pointer_within_limits(p) && pointer_within_limits(p + size) && p != 0;
+    return pointer_within_limits(p) && pointer_within_limits(p + size) && (uintptr_t)p != 0;
 }
 
 // When producing a field chunk, VeriFast produces a field_pointer_within_limits fact
@@ -169,7 +169,7 @@ predicate long_double(long double *p; long double v) = long_double_(p, some(v));
 
 lemma void integer__distinct(void *i, void *j);
     requires integer_(i, ?size1, ?signed1, ?v1) &*& integer_(j, ?size2, ?signed2, ?v2);
-    ensures integer_(i, size1, signed1, v1) &*& integer_(j, size2, signed2, v2) &*& i != j;
+    ensures integer_(i, size1, signed1, v1) &*& integer_(j, size2, signed2, v2) &*& (uintptr_t)i != (uintptr_t)j;
 
 lemma void integer___unique(void *p);
     requires [?f]integer__(p, ?size, ?signed_, ?v);
@@ -201,7 +201,7 @@ lemma void u_character_limits(unsigned char *pc);
 
 lemma void integer_distinct(int* i, int* j);
     requires integer(i, ?v1) &*& integer(j, ?v2);
-    ensures integer(i, v1) &*& integer(j, v2) &*& i != j;
+    ensures integer(i, v1) &*& integer(j, v2) &*& (uintptr_t)i != (uintptr_t)j;
 
 lemma void integer_unique(int *p);
     requires [?f]integer(p, ?v);
@@ -225,7 +225,15 @@ lemma void u_short_integer_limits(unsigned short *p);
 
 lemma void pointer_distinct(void *pp1, void *pp2);
     requires pointer(pp1, ?p1) &*& pointer(pp2, ?p2);
-    ensures pointer(pp1, p1) &*& pointer(pp2, p2) &*& pp1 != pp2;
+    ensures pointer(pp1, p1) &*& pointer(pp2, p2) &*& (uintptr_t)pp1 != (uintptr_t)pp2;
+
+lemma void pointer_fractions_same_address(void *pp1, void *pp2);
+    requires [?f1]pointer(pp1, ?p1) &*& [?f2]pointer(pp2, ?p2) &*& (uintptr_t)pp1 == (uintptr_t)pp2;
+    ensures [f1]pointer(pp1, p1) &*& [f2]pointer(pp2, p2) &*& pp1 == pp2 &*& p2 == p1;
+
+lemma void pointer__fractions_same_address(void *pp1, void *pp2);
+    requires [?f1]pointer_(pp1, ?p1) &*& [?f2]pointer_(pp2, ?p2) &*& (uintptr_t)pp1 == (uintptr_t)pp2;
+    ensures [f1]pointer_(pp1, p1) &*& [f2]pointer_(pp2, p2) &*& pp1 == pp2 &*& p2 == p1;
 
 lemma void pointer_unique(void *pp);
     requires [?f]pointer(pp, ?p);
@@ -233,7 +241,7 @@ lemma void pointer_unique(void *pp);
 
 lemma_auto void pointer_nonzero();
     requires pointer(?pp, ?p);
-    ensures pointer(pp, p) &*& pp != 0;
+    ensures pointer(pp, p) &*& (uintptr_t)pp != 0;
 
 lemma void pointer_limits(void *pp);
     requires [?f]pointer(pp, ?p);
@@ -241,7 +249,7 @@ lemma void pointer_limits(void *pp);
 
 lemma void boolean_distinct(bool* i, bool* j);
     requires boolean(i, ?v1) &*& boolean(j, ?v2);
-    ensures boolean(i, v1) &*& boolean(j, v2) &*& i != j;
+    ensures boolean(i, v1) &*& boolean(j, v2) &*& (uintptr_t)i != (uintptr_t)j;
 
 lemma void boolean_unique(bool *p);
     requires [?f]boolean(p, ?v);

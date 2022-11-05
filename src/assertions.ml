@@ -166,7 +166,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         cont (chunk::h0)
       | Chunk (g, targs', tcoef', [tp'; tv'], _) as chunk::h when is_related_pred_symb g ->
         if tcoef == real_unit || tcoef' == real_unit then
-          assume_neq tp tp' (fun _ -> iter h)
+          assume_neq (mk_ptr_address tp) (mk_ptr_address tp') (fun _ -> iter h)
         else if definitely_equal tp tp' then
         begin
           let cont coef = 

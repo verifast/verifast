@@ -131,8 +131,8 @@ int subtree_get_count(struct node *node)
 }
 
 void fixup_ancestors(struct node * n, struct node * p, int count)
-  //@ requires context(n, p, _, ?c) &*& 0 <= count;
-  //@ ensures context(n, p, count, c);
+  //@ requires context(n, p, _, ?c) &*& 0 <= count &*& n->left |-> ?nLeft;
+  //@ ensures context(n, p, count, c) &*& n->left |-> nLeft;
 {
   //@ open context(n, p, _, c);
   if (p == 0) {
@@ -143,6 +143,7 @@ void fixup_ancestors(struct node * n, struct node * p, int count)
     int leftCount = 0;
     int rightCount = 0;
     if (n == left) {
+      //@ if (n != left) { open subtree(left, _, _); pointer_fractions_same_address(&n->left, &left->left); }
       leftCount = count;
       rightCount = subtree_get_count(right);
     } else {
@@ -188,7 +189,9 @@ struct node *tree_add_left(struct node *node)
       node->left = n;
       /*@ close context(n, node, 0,
                   left_context(c, node, r)); @*/
+      //@ open subtree(n, node, tree(n, empty, empty));
       fixup_ancestors(n, node, 1);
+      //@ close subtree(n, node, tree(n, empty, empty));
   }
   /*@ close tree(n, left_context(c, node, r),
               tree(n, empty, empty)); @*/
@@ -221,7 +224,9 @@ struct node *tree_add_right(struct node *node)
         //@ open subtree(nodeRight, node, empty);
         node->right = n;
         //@ close context(n, node, 0, right_context(contextNodes, node, leftNodes));
+        //@ open subtree(n, node, tree(n, empty, empty));
         fixup_ancestors(n, node, 1);
+        //@ close subtree(n, node, tree(n, empty, empty));
     }
     //@ close tree(n, right_context(contextNodes, node, leftNodes), tree(n, empty, empty));
     return n;

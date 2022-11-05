@@ -104,11 +104,11 @@ predicate heap0(list<struct object *> unpacked) =
     foreach(remove_all(unpacked, objects), object_inv);
 
 predicate ref0(struct object *object, struct class *class) =
-    ticket(object_ticket_base, object, ?f) &*& [f]object->class |-> class &*&
+    ticket(object_ticket_base, object, ?f) &*& [f]object->class |-> class &*& [_]class->dispose |-> ?_ &*&
     [_]globals_objectListId(&globals, ?id) &*& [f]ghost_list_member_handle(id, object) &*& object != 0;
 
 predicate ref(struct object *object) =
-    ticket(object_ticket_base, object, ?f) &*& [f]object->class |-> ?class &*&
+    ticket(object_ticket_base, object, ?f) &*& [f]object->class |-> ?class &*& [_]class->dispose |-> ?_ &*&
     [_]globals_objectListId(&globals, ?id) &*& [f]ghost_list_member_handle(id, object) &*& object != 0;
 
 lemma void ref_not_null(void *object)
@@ -169,6 +169,7 @@ void object_release(void *object)
         //@ ghost_list_remove(id, o);
         //@ close heap0(nil);
         dispose_func *dispose = o->class->dispose;
+        //@ merge_fractions o->class->dispose |-> _;
         dispose(o);
     } else {
         //@ close object_refcount(o);
@@ -303,6 +304,7 @@ void destruct_cons(struct object *object, struct object **head, struct object **
         error("cons expected");
     else {
         //@ open heap();
+        //@ pointer_fractions_same_address(&object->class->dispose, &cons_class.dispose);
         //@ close ref0(object, &cons_class);
         //@ unpack(object);
         //@ open ref0(object, &cons_class);
@@ -625,8 +627,10 @@ void apply(struct object *function)
         error("apply: not a function");
     {
         struct function *f = (void *)function;
+        //@ struct class *fClass = function->class;
         //@ close ref0(function, _);
         //@ open heap();
+        //@ pointer_fractions_same_address(&fClass->dispose, &function_class.dispose);
         //@ unpack(function);
         //@ open ref0(function, _);
         //@ open object_inv(function);
@@ -673,6 +677,7 @@ struct object *assoc(struct atom *key, struct object *map)
             error("assoc: cons cell expected");
         else {
             //@ open heap();
+            //@ pointer_fractions_same_address(&map->class->dispose, &cons_class.dispose);
             //@ close ref0(map, &cons_class);
             //@ unpack(map);
             //@ open ref0(map, _);
@@ -695,6 +700,7 @@ struct object *assoc(struct atom *key, struct object *map)
                 error("assoc: cons cell expected at head");
             else {
                 struct cons *entry = (void *)mapHead;
+                //@ pointer_fractions_same_address(&mapHead->class->dispose, &cons_class.dispose);
                 //@ close ref0(mapHead, &cons_class);
                 //@ unpack(mapHead);
                 //@ open ref0(mapHead, _);
@@ -722,6 +728,7 @@ struct object *assoc(struct atom *key, struct object *map)
                 if (entryHead->class != &atom_class)
                     error("assoc: atom expected at head of head");
                 else {
+                    //@ pointer_fractions_same_address(&entryHead->class->dispose, &atom_class.dispose);
                     //@ close ref0(entryHead, &atom_class);
                     //@ unpack(entryHead);
                     //@ open ref0(entryHead, _);
@@ -806,6 +813,7 @@ void eval(struct object *data) //@ : apply_func
     if (expr->class == &atom_class) {
         struct object *value;
         //@ open heap();
+        //@ pointer_fractions_same_address(&expr->class->dispose, &atom_class.dispose);
         object_add_ref(env);
         //@ close heap();
         //@ close ref0(expr, _);
@@ -833,6 +841,7 @@ void eval(struct object *data) //@ : apply_func
         isForm = f_expr->class == &atom_class;
         if (isForm) {
             //@ open heap();
+            //@ pointer_fractions_same_address(&f_expr->class->dispose, &atom_class.dispose);
             object_add_ref(forms);
             //@ close heap();
             //@ close ref0(f_expr, _);
@@ -884,6 +893,7 @@ void print_atom(struct object *data) //@ : apply_func
     //@ open ref(arg);
     if (arg->class != &atom_class) error("print_atom: argument is not an atom");
     //@ open heap();
+    //@ pointer_fractions_same_address(&arg->class->dispose, &atom_class.dispose);
     //@ close ref0(arg, _);
     //@ unpack(arg);
     //@ open ref0(arg, _);

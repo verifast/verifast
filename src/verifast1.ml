@@ -62,6 +62,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let {
     option_verbose=initial_verbosity;
     option_disable_overflow_check=disable_overflow_check;
+    option_assume_no_provenance=assume_no_provenance;
     option_assume_no_subobject_provenance=assume_no_subobject_provenance;
     option_allow_should_fail=allow_should_fail;
     option_emit_manifest=emit_manifest;
@@ -5100,7 +5101,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let mk_pointer pr addr = mk_app (pointer_ctor_symb ()) [pr; addr]
   let mk_ptr_provenance p = ctxt#mk_app (ptr_provenance ()) [p]
-  let mk_ptr_address p = ctxt#mk_app (ptr_address ()) [p]
+  let mk_ptr_address p = if language = Java then p else ctxt#mk_app (ptr_address ()) [p]
 
   let assume_bounds term (tp: type_) = 
     match tp with
@@ -5112,7 +5113,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | _ -> ()
   
   let assert_mk_pointer p =
-    ctxt#assert_term (ctxt#mk_eq p (mk_pointer (mk_ptr_provenance p) (mk_ptr_address p)))
+    ctxt#assert_term (ctxt#mk_eq p (mk_pointer (mk_ptr_provenance p) (mk_ptr_address p)));
+    if assume_no_provenance then ctxt#assert_term (ctxt#mk_eq (mk_ptr_provenance p) (snd (null_pointer_provenance_symb ())))
 
   let get_unique_var_symb_ x t ghost = 
     let result = get_unique_var_symb x t in
@@ -6390,10 +6392,15 @@ let check_if_list_is_defined () =
       And -> ctxt#mk_and v1 v2
     | Or -> ctxt#mk_or v1 v2
     | Eq ->
-      if t = Bool then
-        ctxt#mk_iff v1 v2
-      else
-        ctxt#mk_eq v1 v2
+      begin match t with
+        Bool -> ctxt#mk_iff v1 v2
+      | PtrType _ ->
+        if ass_term = None then
+          ctxt#mk_eq v1 v2
+        else
+          static_error l "A pointer comparison is not supported in this context." None
+      | _ -> ctxt#mk_eq v1 v2
+      end
     | Neq -> ctxt#mk_not (ctxt#mk_eq v1 v2)
     | Add ->
       begin match t with
@@ -6676,8 +6683,8 @@ let check_if_list_is_defined () =
       in
       if ass_term <> None then begin
         assume_eq_bounded_op t;
-        begin match e2 with
-          WIntLit (_, i) when le_big_int zero_big_int i ->
+        begin match e2, op with
+          WIntLit (_, i), BitAnd when le_big_int zero_big_int i ->
           ctxt#assert_term (ctxt#mk_and (ctxt#mk_le int_zero_term v) (ctxt#mk_le v v2));
           if eq_big_int i unit_big_int then
             ctxt#assert_term (ctxt#mk_eq (ctxt#mk_mod v1 (ctxt#mk_intlit 2)) v)

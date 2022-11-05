@@ -6,6 +6,7 @@
 //@ require_module nonce_item;
 
 //@ predicate nonces_initialized();
+//@ predicate nonces_state(void *state);
 
 void nonces_init();
   //@ requires module(nonce_item, true);
@@ -13,10 +14,10 @@ void nonces_init();
 
 void *nonces_expose_state();
   //@ requires [?f]nonces_initialized();
-  //@ ensures  [f]havege_state_initialized(result);
+  //@ ensures  [f]havege_state_initialized(result) &*& [_]nonces_state(result);
 
 void nonces_hide_state(void* state);
-  //@ requires [?f]havege_state_initialized(state);
+  //@ requires [?f]havege_state_initialized(state) &*& [_]nonces_state(state);
   //@ ensures  [f]nonces_initialized();
 
 void nonces_exit();

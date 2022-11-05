@@ -38,7 +38,7 @@ predicate lseg2(struct node *first, struct node *middle, void *value0, list<void
 
 lemma void lseg2_distinct(struct node *first, struct node *middle, struct node *n)
     requires lseg2(first, middle, ?value0, ?values) &*& n->next |-> ?nNext;
-    ensures lseg2(first, middle, value0, values) &*& n->next |-> nNext &*& n != middle;
+    ensures lseg2(first, middle, value0, values) &*& n->next |-> nNext &*& (uintptr_t)n != (uintptr_t)middle;
 {
     open lseg2(first, middle, value0, values);
     if (first != middle) {
@@ -46,6 +46,16 @@ lemma void lseg2_distinct(struct node *first, struct node *middle, struct node *
         lseg2_distinct(next, middle, n);
         split_fraction node_next(first, _);
     }
+    close lseg2(first, middle, value0, values);
+}
+
+lemma void lseg2_same_address(struct node *first, struct node *middle)
+    requires lseg2(first, middle, ?value0, ?values) &*& (uintptr_t)first == (uintptr_t)middle;
+    ensures lseg2(first, middle, value0, values) &*& first == middle;
+{
+    open lseg2(first, middle, value0, values);
+    if (first != middle)
+        lseg2_distinct(first->next, middle, first);
     close lseg2(first, middle, value0, values);
 }
 
@@ -208,6 +218,7 @@ bool queue_try_dequeue(struct queue *queue, void **pvalue)
     //@ open lseg2(first, middle, ?firstValue, ?frontValues);
     //@ close lseg2(first, middle, firstValue, frontValues);
     if (first == middle) {
+        //@ lseg2_same_address(first, middle);
         struct node *last;
         {
             /*@
@@ -277,6 +288,7 @@ bool queue_try_dequeue(struct queue *queue, void **pvalue)
             //@ open post_(last);
         }
         if (last == middle) {
+            //@ if (last != middle) pointer__fractions_same_address(&last->next, &middle->next);
             //@ close queue_consumer(queue);
             return false;
         }
@@ -379,6 +391,7 @@ void queue_dispose(struct queue *queue)
         free(first);
         first = next;
     }
+    //@ lseg2_same_address(first, middle);
     while (last != middle)
         //@ invariant lseg(last, middle, _);
     {

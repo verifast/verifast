@@ -117,7 +117,7 @@ int main()
   list_add(a, (void *)20);
   
   tmp = list_get(a, 1);
-  assert tmp == (void*) 20;
+  assert(tmp == (void*) 20);
   list_dispose(a);
 
   return 0;

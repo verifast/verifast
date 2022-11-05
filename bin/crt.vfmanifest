@@ -25,6 +25,8 @@
 .provides ./prelude.h#field_pointer_within_limits_def
 .provides ./prelude.h#ptr_within_limits_field_ptr_0
 .provides ./prelude.h#first_field_pointer_within_limits_elim
+.provides ./prelude.h#pointer_fractions_same_address
+.provides ./prelude.h#pointer__fractions_same_address
 .provides ./prelude.h#integer__distinct
 .provides ./prelude.h#integer__unique
 .provides ./prelude.h#integer__limits

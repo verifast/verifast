@@ -145,6 +145,7 @@ let bases_constructed_pred_name sn = sn ^ "_bases_constructed"
 type options = {
   option_verbose: int;
   option_disable_overflow_check: bool;
+  option_assume_no_provenance: bool;
   option_assume_no_subobject_provenance: bool;
   option_allow_should_fail: bool;
   option_emit_manifest: bool;

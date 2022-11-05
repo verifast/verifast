@@ -88,8 +88,8 @@ lemma void lset_diff_contains<t>(list<t> s1, list<t> s2, t el);
     ensures lset_contains(lset_diff(s1, s2), el) == (lset_contains(s1, el) && !lset_contains(s2, el));
 
 lemma void lset_subset_contains<t>(list<t> s1, list<t> s2, t el);
-    requires lset_subset(s1, s2) == true;
-    ensures lset_contains(s1, el) ? lset_contains(s2, el)==true : true;
+    requires lset_subset(s1, s2) && lset_contains(s1, el);
+    ensures lset_contains(s2, el)==true;
 
 lemma void lset_equals_contains<t>(list<t> s1, list<t> s2, t el);
     requires lset_equals(s1, s2) == true;
@@ -156,9 +156,13 @@ lemma void lset_subset_remove_r<t>(list<t> s1, list<t> s2, t el);
     requires true;
     ensures lset_subset(s1, lset_remove(s2, el)) == (!lset_contains(s1, el) && lset_subset(s1, s2));
 
+*/
+
 lemma void lset_subset_union_l<t>(list<t> s1, list<t> s2);
     requires true;
     ensures lset_subset(s1, lset_union(s1, s2)) == true;
+
+/*
 
 lemma void lset_subset_union_r<t>(list<t> s1, list<t> s2);
     requires true;
@@ -178,9 +182,13 @@ lemma void lset_subset_refl<t>(list<t> s);
     requires true;
     ensures lset_subset(s, s) == true;
 
+*/
+
 lemma void lset_subset_trans<t>(list<t> s1, list<t> s2, list<t> s3);
     requires lset_subset(s1, s2) == true &*& lset_subset(s2, s3) == true;
     ensures lset_subset(s1, s3) == true;
+
+/*
 
 //subset is structurally compatible
 
@@ -376,9 +384,13 @@ lemma void lset_inters_subset<t>(list<t> s1, list<t> s2);
 
 // todo: place these in the right category 
 
+*/
+
 lemma void lset_union_subset_l<t>(list<t> s1, list<t> s2, list<t> s3);
     requires true;
     ensures lset_subset(lset_union(s1, s2), s3) == (lset_subset(s1, s3) && lset_subset(s2, s3));
+
+/*
 
 lemma void lset_inters_subset_r<t>(list<t> s1, list<t> s2, list<t> s3);
     requires true;

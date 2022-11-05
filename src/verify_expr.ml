@@ -2353,7 +2353,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           cont h
         end
         begin fun () ->
-          assume_neq result (null_pointer_term ()) $. fun () ->
+          assume_neq (mk_ptr_address result) int_zero_term $. fun () ->
           let n, elemTp, arrayPredSymb, mallocBlockSymb =
             match try_pointee_pred_symb0 elemTp with
               Some (_, _, _, asym, _, mbsym, _, _, _, _, _, uasym) -> n, (if g = "calloc" then elemTp else option_type elemTp), (if g = "calloc" then asym else uasym), mbsym
@@ -2385,7 +2385,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           cont h
         end
         begin fun () ->
-          assume_neq result (null_pointer_term ()) $. fun () ->
+          assume_neq (mk_ptr_address result) int_zero_term $. fun () ->
           produce_c_object l real_unit result t eval_h (if g = "calloc" then Default else Unspecified) true false h env $. fun h env ->
           match t with
             StructType sn ->
@@ -2646,7 +2646,22 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let create_term t1 t2 = match op with Eq -> ctxt#mk_eq t1 t2 | Neq -> ctxt#mk_not (ctxt#mk_eq t1 t2) in
       let e1_safe = is_safe_expr e1 in
       let e2_safe = is_safe_expr e2 in
-      eval_h_core (true, heapReadonly || not e2_safe) h env e1 (fun h env v1 -> eval_h_core (true, heapReadonly || not e1_safe) h env e2 (fun h env v2 -> cont h env (create_term v1 v2)))
+      eval_h_core (true, heapReadonly || not e2_safe) h env e1 $. fun h env v1 ->
+      eval_h_core (true, heapReadonly || not e1_safe) h env e2 $. fun h env v2 ->
+      begin match t with
+        PtrType tp when not pure && not assume_no_provenance && not (ctxt#query (ctxt#mk_or (ctxt#mk_eq (mk_ptr_address v1) int_zero_term) (ctxt#mk_eq (mk_ptr_address v2) int_zero_term))) ->
+        branch
+          begin fun () ->
+            assume (ctxt#mk_eq (mk_ptr_address v1) (mk_ptr_address v2)) $. fun () ->
+            cont h env (if op = Eq then true_term else false_term)
+          end
+          begin fun () ->
+            assume (ctxt#mk_not (ctxt#mk_eq v1 v2)) $. fun () ->
+            cont h env (if op = Eq then false_term else true_term)
+          end
+      | _ ->
+        cont h env (create_term v1 v2)
+      end
     | WOperation (l, And, [e1; e2], t) ->
       eval_h_core readonly h env e1 $. fun h env v1 ->
       branch

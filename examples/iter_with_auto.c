@@ -100,6 +100,7 @@ void llist_append(struct llist *list1, struct llist *list2)
   struct node *l2 = list2->last;
   //@ open lseg(f2, l2, _v2);  // Causes case split.
   if (f2 == l2) {
+    //@ if (f2 != l2) pointer_fractions_same_address(&f2->next, &l2->next);
     free(l2);
     free(list2);
   } else {
@@ -127,6 +128,7 @@ void llist_dispose(struct llist *list)
     free(n);
     n = next;
   }
+  //@ if (n != l) pointer_fractions_same_address(&n->next, &l->next);
   free(l);
   free(list);
 }
@@ -196,6 +198,7 @@ int llist_length(struct llist *list)
     //@ assert [frac]lseg(next, l, ?ls3);
     //@ append_assoc(_ls1, cons(value, nil), ls3);
   }
+  //@ if (n != l) pointer_fractions_same_address(&n->next, &l->next);
   //@ open lseg(n, l, _ls2);
   return c;
 }

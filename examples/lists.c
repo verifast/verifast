@@ -44,6 +44,30 @@ lemma void lseg_add(void *n1)
     append_assoc(xs0, cons(n2, nil), xs1);
 }
 
+lemma void lseg_distinct(void *element, void *n)
+    requires lseg(?first, ?last, ?xs, ?p) &*& mem(element, xs) == true &*& pointer(n, ?nNext);
+    ensures lseg(first, last, xs, p) &*& pointer(n, nNext) &*& (uintptr_t)element != (uintptr_t)n;
+{
+    open lseg(first, last, xs, p);
+    if (first != last) {
+        if (first != element)
+            lseg_distinct(element, n);
+        else
+            pointer_distinct(first, n);
+    }
+    close lseg(first, last, xs, p);
+}    
+
+lemma void lseg_same_address(void *element)
+    requires lseg(?first, ?last, ?xs, ?p) &*& mem(element, xs) == true &*& (uintptr_t)first == (uintptr_t)element;
+    ensures lseg(first, last, xs, p) &*& first == element;
+{
+    open lseg(first, last, xs, p);
+    if (first != element)
+        lseg_distinct(element, first);
+    close lseg(first, last, xs, p);
+}
+
 @*/
 
 void lseg_remove(void *phead, void *element)
@@ -86,6 +110,7 @@ void lseg_remove(void *phead, void *element)
         @*/
         pnext = next;
     }
+    //@ lseg_same_address(element);
     //@ void *next = *pnext;
     //@ open lseg(next, 0, _, p);
     {

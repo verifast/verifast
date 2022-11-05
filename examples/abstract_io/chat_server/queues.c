@@ -79,6 +79,7 @@ bool queue_is_empty/*@ <t> @*/(queue queue)
 {
     //@ open queue(queue, pred, elems);
     //@ open nodes(?first, ?last, _, _);
+    //@ if ((uintptr_t)queue->first == (uintptr_t)queue->last && queue->first != queue->last) pointer__fractions_same_address(&queue->first->next, &queue->last->next);
     //@ close [f]nodes(first, last, pred, elems);
     return queue->first == queue->last;
     //@ close [f]queue(queue, pred, elems);

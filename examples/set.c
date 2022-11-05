@@ -52,20 +52,22 @@ void set_add(struct set* set, void* x)
 
 bool set_contains(struct set* set, void* x)
   //@ requires set(set, ?size, ?elems);
-  //@ ensures set(set, size, elems) &*& result == elems(x);
+  //@ ensures set(set, size, elems) &*& result ? exists<void *>(?elem) &*& elems(elem) == true &*& (uintptr_t)x == (uintptr_t)elem : !elems(x);
 {
   //@ open set(set, size, elems);
   struct node* curr = set->head;
   bool found = false;
   //@ open lseg(curr, 0, ?vss);
   //@ close lseg(curr, 0, vss);
+  //@ void *elem = 0;
   while(curr != 0 && ! found) 
     //@ requires lseg(curr, 0, ?vs) &*& curr == 0 ? vs == nil : true;
-    //@ ensures lseg(old_curr, 0, vs) &*& found == (old_found || (list_as_set(vs))(x) == true);
+    //@ ensures lseg(old_curr, 0, vs) &*& old_found ? found && elem == old_elem : found ? (uintptr_t)elem == (uintptr_t)x && (list_as_set(vs))(elem) : !(list_as_set(vs))(x);
   {
     //@ open lseg(curr, 0, vs);
     //@ assert lseg(_, 0, ?tail);
     if(curr->val == x) {
+      //@ elem = curr->val;
       found = true;
     }
     curr = curr->next;
@@ -75,6 +77,7 @@ bool set_contains(struct set* set, void* x)
     //@ close lseg(old_curr, 0, vs);
   }
   //@ close set(set, size, elems);
+  //@ if (found) close exists(elem);
   return found;
 }
 

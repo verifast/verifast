@@ -11,6 +11,8 @@ struct havege_state random_state;
 predicate nonces_initialized() =
   havege_state_initialized(&random_state)
 ;
+
+predicate nonces_state(void *state) = state == &random_state;
 @*/
 
 void nonces_init()
@@ -25,20 +27,19 @@ void nonces_init()
 
 void *nonces_expose_state()
   //@ requires [?f]nonces_initialized();
-  //@ ensures  [f]havege_state_initialized(result);
+  //@ ensures  [f]havege_state_initialized(result) &*& [_]nonces_state(result);
 {
   //@ open [f]nonces_initialized();
   return &random_state;
+  //@ close nonces_state(&random_state);
+  //@ leak nonces_state(_);
 }
 
 void nonces_hide_state(void* state)
-  //@ requires [?f]havege_state_initialized(state);
+  //@ requires [?f]havege_state_initialized(state) &*& [_]nonces_state(state);
   //@ ensures  [f]nonces_initialized();
 {
-  void *temp = &random_state;
-  if (state != temp)
-    abort_crypto_lib("Illegal state for nonces");
-
+  //@ open nonces_state(state);
   //@ close [f]nonces_initialized();
 }
 

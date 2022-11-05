@@ -744,6 +744,8 @@ void destruct_cons(struct object *object, struct object **head, struct object **
     else {
         struct cons *cons = (void *)object;
         //@ open class_info();
+        //@ pointer_fractions_same_address(&object->class->dispose, &cons_class.dispose);
+        //@ merge_fractions cons_class.inv |-> _;
         //@ open cons_inv(cons, ?cs);
         *head = cons->head;
         *tail = cons->tail;
@@ -856,6 +858,8 @@ struct object *parse(struct tokenizer *tokenizer)
                     //@ open object(objects2)(parent);
                     if (parent->class != &cons_class) abort();
                     //@ open class_info();
+                    //@ pointer_fractions_same_address(&parent->class->dispose, &cons_class.dispose);
+                    //@ merge_fractions cons_class.inv |-> _;
                     //@ open cons_inv(parentCons, _);
                     if (parentCons->head == &nil_value) {
                         parentCons->head = expr;
@@ -926,6 +930,8 @@ struct object *pop()
         error("pop: stack underflow");
     else {
         //@ open class_info();
+        //@ pointer_fractions_same_address(&old_operand_stack->class->dispose, &cons_class.dispose);
+        //@ merge_fractions cons_class.inv |-> _;
         struct cons *cons = (void *)operand_stack;
         //@ open cons_inv(cons, ?cs);
         struct object *result = cons->head;
@@ -972,6 +978,8 @@ struct object *pop_cont()
         return 0;
     } else {
         //@ open class_info();
+        //@ pointer_fractions_same_address(&old_cont_stack->class->dispose, &cons_class.dispose);
+        //@ merge_fractions cons_class.inv |-> _;
         struct cons *cons = (void *)cont_stack;
         //@ open cons_inv(cons, ?cs);
         struct object *result = cons->head;
@@ -1060,6 +1068,8 @@ void apply(struct object *function)
         error("apply: not a function");
     {
         //@ open class_info();
+        //@ pointer_fractions_same_address(&function->class->dispose, &function_class.dispose);
+        //@ merge_fractions function_class.inv |-> _;
         struct function *f = (void *)function;
         //@ open function_inv(_, ?cs);
         apply_func *applyFunc = f->apply;
@@ -1100,6 +1110,9 @@ bool atom_equals(struct object *object1, struct object *object2)
         struct atom *a1 = (void *)object1;
         struct atom *a2 = (void *)object2;
         //@ open class_info();
+        //@ pointer_fractions_same_address(&object1->class->dispose, &atom_class.dispose);
+        //@ pointer_fractions_same_address(&object2->class->dispose, &atom_class.dispose);
+        //@ merge_fractions atom_class.inv |-> _;
         //@ open atom_inv(a1, _);
         //@ open class_info();
         //@ open atom_inv(a2, _);
@@ -1270,6 +1283,8 @@ void print_atom(struct object *data) //@ : apply_func
     //@ open object(objects)(arg);
     if (arg->class != &atom_class) error("print_atom: argument is not an atom");
     //@ open class_info();
+    //@ pointer_fractions_same_address(&arg->class->dispose, &atom_class.dispose);
+    //@ merge_fractions atom_class.inv |-> _;
     //@ open atom_inv((void *)arg, _);
     print_string_buffer(((struct atom *)(void *)arg)->chars);
     //@ close atom_inv((void *)arg, nil);

@@ -931,7 +931,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | Assert (l, p) when not pure ->
       let we = check_expr_t (pn,ilist) tparams tenv p boolt in
-      let t = eval env we in
+      eval_h h env we $. fun h env t ->
       assert_term t h env l "Assertion might not hold." None;
       cont h env
     | Assert (l, p) ->
