@@ -10,7 +10,7 @@ cd bin
 cd ..
 cd examples
   verifast -shared uniqueness.c
-  verifast unions.c
+  verifast -fwrapv unions.c
   verifast unions2.c
   cd busywaiting
     verifast -c bounded_fifo.c
@@ -444,6 +444,8 @@ cd tutorial_solutions
   verifast_both -target 32bit students.c
 cd ..
 cd tests
+  verifast -c -allow_should_fail no_fwrapv.c
+  verifast -c -fwrapv fwrapv.c
   verifast -c -allow_should_fail subobject_provenance.c
   verifast -c -allow_should_fail provenance.c
   verifast -c -allow_should_fail pointer_limits.c

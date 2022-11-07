@@ -17,21 +17,21 @@ struct FixedWidthInt {
 inline llvm::Optional<FixedWidthInt>
 getFixedWidthFromString(llvm::StringRef name) {
   if (name.equals("int8_t"))
-    return llvm::Optional<FixedWidthInt>(std::move<FixedWidthInt>({8, false}));
-  if (name.equals("int16_t"))
-    return llvm::Optional<FixedWidthInt>(std::move<FixedWidthInt>({16, false}));
-  if (name.equals("int32_t"))
-    return llvm::Optional<FixedWidthInt>(std::move<FixedWidthInt>({32, false}));
-  if (name.equals("int64_t"))
-    return llvm::Optional<FixedWidthInt>(std::move<FixedWidthInt>({64, false}));
-  if (name.equals("uint8_t"))
     return llvm::Optional<FixedWidthInt>(std::move<FixedWidthInt>({8, true}));
-  if (name.equals("uint16_t"))
+  if (name.equals("int16_t"))
     return llvm::Optional<FixedWidthInt>(std::move<FixedWidthInt>({16, true}));
-  if (name.equals("uint32_t"))
+  if (name.equals("int32_t"))
     return llvm::Optional<FixedWidthInt>(std::move<FixedWidthInt>({32, true}));
-  if (name.equals("uint64_t"))
+  if (name.equals("int64_t"))
     return llvm::Optional<FixedWidthInt>(std::move<FixedWidthInt>({64, true}));
+  if (name.equals("uint8_t"))
+    return llvm::Optional<FixedWidthInt>(std::move<FixedWidthInt>({8, false}));
+  if (name.equals("uint16_t"))
+    return llvm::Optional<FixedWidthInt>(std::move<FixedWidthInt>({16, false}));
+  if (name.equals("uint32_t"))
+    return llvm::Optional<FixedWidthInt>(std::move<FixedWidthInt>({32, false}));
+  if (name.equals("uint64_t"))
+    return llvm::Optional<FixedWidthInt>(std::move<FixedWidthInt>({64, false}));
   return {};
 }
 

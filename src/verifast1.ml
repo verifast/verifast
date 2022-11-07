@@ -62,6 +62,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let {
     option_verbose=initial_verbosity;
     option_disable_overflow_check=disable_overflow_check;
+    option_fwrapv=fwrapv;
     option_assume_no_provenance=assume_no_provenance;
     option_assume_no_subobject_provenance=assume_no_subobject_provenance;
     option_allow_should_fail=allow_should_fail;
@@ -6383,10 +6384,10 @@ let check_if_list_is_defined () =
       v
     in
     let check_overflow v =
-      if truncating then
-        mk_truncate_term (woperation_type_result_type op t) v
-      else
-        check_overflow0 v
+      match truncating, t with
+        true, Int (Signed, _) when language <> Java && not fwrapv -> static_error l "Signed integer arithmetic overflow is undefined behavior unless the -fwrapv flag is specified" None
+      | true, _ -> mk_truncate_term (woperation_type_result_type op t) v
+      | false, _ -> check_overflow0 v
     in
     begin match op with
       And -> ctxt#mk_and v1 v2

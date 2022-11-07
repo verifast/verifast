@@ -137,7 +137,7 @@ module TreeMetrics = struct
   let cw = dotWidth + 2 * padding
 end
 
-let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend enforceAnnotations allowUndeclaredStructTypes dataModel overflowCheck assumeNoProvenance assumeNoSubobjectProvenance verifyAndQuit =
+let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend enforceAnnotations allowUndeclaredStructTypes dataModel overflowCheck fwrapv assumeNoProvenance assumeNoSubobjectProvenance verifyAndQuit =
   let dataModel = ref dataModel in
   let leftBranchPixbuf = Branchleft_png.pixbuf () in
   let rightBranchPixbuf = Branchright_png.pixbuf () in
@@ -164,6 +164,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   let scaledTraceFont = ref !traceFont in
   let actionGroup = GAction.action_group ~name:"Actions" () in
   let disableOverflowCheck = ref (not overflowCheck) in
+  let fwrapv = ref fwrapv in
   let assumeNoProvenance = ref assumeNoProvenance in
   let assumeNoSubobjectProvenance = ref assumeNoSubobjectProvenance in
   let useJavaFrontend = ref false in
@@ -270,6 +271,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       a "ShowExecutionTree" ~label:"Show _execution tree" ~accel:"<Ctrl>T";
       a "Verify" ~label:"_Verify";
       GAction.add_toggle_action "CheckOverflow" ~label:"Check arithmetic overflow" ~active:true ~callback:(fun toggleAction -> disableOverflowCheck := not toggleAction#get_active);
+      GAction.add_toggle_action "AllowTruncatingSignedArithmetic" ~label:"Allow truncating signed integer arithmetic (GCC's -fwrapv)" ~active:false ~callback:(fun toggleAction -> fwrapv := toggleAction#get_active);
       GAction.add_toggle_action "AssumeNoProvenance" ~label:"Assume no pointer provenance" ~active:false ~callback:(fun toggleAction -> assumeNoProvenance := toggleAction#get_active);
       GAction.add_toggle_action "AssumeNoSubobjectProvenance" ~label:"Assume no subobject provenance" ~active:false ~callback:(fun toggleAction -> assumeNoSubobjectProvenance := toggleAction#get_active);
       GAction.add_toggle_action "UseJavaFrontend" ~label:"Use the Java frontend" ~active:(toggle_java_frontend javaFrontend; javaFrontend) ~callback:(fun toggleAction -> toggle_java_frontend toggleAction#get_active);
@@ -332,15 +334,17 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
           <menuitem action='RunShapeAnalysis' />
           <separator />
           <menuitem action='CheckOverflow' />
+          <menuitem action='AllowTruncatingSignedArithmetic' />
           <menuitem action='AssumeNoProvenance' />
           <menuitem action='AssumeNoSubobjectProvenance' />
-          <menuitem action='UseJavaFrontend' />
-          <menuitem action='SimplifyTerms' />
-          <menuitem action='Include paths' />
           <separator />
           <menu action='TargetArchitecture'>
             <menuitem action='Stub' />
           </menu>
+          <separator />
+          <menuitem action='UseJavaFrontend' />
+          <menuitem action='SimplifyTerms' />
+          <menuitem action='Include paths' />
         </menu>
         <menu action='TopWindow'>
            <menuitem action='Stub' />
@@ -1464,6 +1468,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
               let options = {
                 option_verbose = 0;
                 option_disable_overflow_check = !disableOverflowCheck;
+                option_fwrapv = !fwrapv;
                 option_assume_no_provenance = !assumeNoProvenance;
                 option_assume_no_subobject_provenance = !assumeNoSubobjectProvenance;
                 option_use_java_frontend = !useJavaFrontend;
@@ -1891,6 +1896,7 @@ let () =
   let enforceAnnotations = ref false in
   let allowUndeclaredStructTypes = ref false in
   let overflow_check = ref true in
+  let fwrapv = ref false in
   let assume_no_provenance = ref false in
   let assume_no_subobject_provenance = ref false in
   let data_model = ref None in
@@ -1915,11 +1921,12 @@ let () =
     | "-allow_undeclared_struct_types"::args -> allowUndeclaredStructTypes := true; iter args
     | "-target"::target::args -> data_model := Some (data_model_of_string target); iter args
     | "-disable_overflow_check"::args -> overflow_check := false; iter args
+    | "-fwrapv"::args -> fwrapv := true; iter args
     | "-assume_no_provenance"::args -> assume_no_provenance := true; iter args
     | "-assume_no_subobject_provenance"::args -> assume_no_subobject_provenance := true; iter args
     | "-verify_and_quit"::args -> verify_and_quit := true; iter args
     | arg::args when not (startswith arg "-") -> path := Some arg; iter args
-    | [] -> show_ide !path !prover !codeFont !traceFont !runtime !layout !javaFrontend !enforceAnnotations !allowUndeclaredStructTypes !data_model !overflow_check !assume_no_provenance !assume_no_subobject_provenance !verify_and_quit
+    | [] -> show_ide !path !prover !codeFont !traceFont !runtime !layout !javaFrontend !enforceAnnotations !allowUndeclaredStructTypes !data_model !overflow_check !fwrapv !assume_no_provenance !assume_no_subobject_provenance !verify_and_quit
     | _ ->
       let options = [
         "-prover prover    (" ^ list_provers () ^ ")";
@@ -1933,6 +1940,8 @@ let () =
         "-bindir";
         "-enforce_annotations";
         "-disable_overflow_check";
+        "-fwrapv";
+        "-assume_no_provenance";
         "-assume_no_subobject_provenance";
         "-target target    (supported targets: " ^ String.concat ", " (List.map fst data_models) ^ ")"
       ] in
