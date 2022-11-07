@@ -16,6 +16,16 @@ Known VeriFast unsoundnesses:
   VeriFast does not check that the program obeys strict aliasing rules. Therefore, VeriFast is currently unsound for `gcc -O2`.
   However, this unsoundness does not apply to `gcc -O2 -fno-strict-aliasing`.
 - I am not 100% sure that a statement of the form `x = foo();` where x is a global and foo modifies x is allowed by the C standard. VeriFast allows this statement.
+- C compilers can and do sometimes remove side-effect-free loops, even if they might not terminate. This is allowed by the C standard (C11/C18 6.8.5p6). (The C++ standard has more general language, requiring that a thread always eventually terminate or perform I/O or synchronization; see [6.9.2.3p1, Forward progress](https://eel.is/c++draft/intro.progress#1). Presumably, C compilers interpret the C standard in the more general sense of the C++ standard.) VeriFast currently ignores this aspect of the standard. (Note that VeriFast is not sound with respect to this aspect of the standard, even when the functions being verified are marked as `terminates`: VeriFast can be made to verify safety and termination of the following program, even though it violates the standard's forward progress requirement:
+
+  ```c
+  fork { abort(); }
+  int x = input();
+  if (x == 1) {
+    while (x) {}
+    1/0;
+  }
+  ```
 
 Java Programs
 =============
