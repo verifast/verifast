@@ -3081,7 +3081,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 cont h
               else
                 let (argtypes, args) = match explicitsupercall with
-                  None -> ([], [])
+                  None -> 
+                  inheritance_check cn lm;
+                  ([], [])
                 | Some(SuperConstructorCall(l, es)) -> 
                   reportStmtExec l;
                   inheritance_check cn l;
