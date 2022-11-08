@@ -9,16 +9,16 @@ class A
     //@ ensures valid();
     {
     	//@ open valid();
-        return i;
+        return i/0; //~allow_dead_code
     }
 }
 
 
-class B extends A //~
+class B extends A //~should_fail
 {
     int j;
     
-    //@ predicate valid() = this.j |-> ?m_j;
+    //@ predicate valid() = this.i |-> ?m_i &*& this.j |-> ?m_j;
 }
 
 class Program {
