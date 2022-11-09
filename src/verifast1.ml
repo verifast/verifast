@@ -78,6 +78,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let {reportRange; reportUseSite; reportExecutionForest; reportStmt; reportStmtExec; reportDirective} = callbacks
 
+  let type_info_type = 
+    match dialect with 
+    | Some Cxx -> RefType (StructType "std::type_info")
+    | _ -> PtrType Void
+
   let reportMacroCall l0u l0d =
     reportUseSite DeclKind_Macro l0d l0u
 
@@ -386,7 +391,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Void -> ProverInductive
     | InferredType (_, t) -> begin match !t with EqConstraint t -> provertype_of_type t | _ -> t := EqConstraint (InductiveType ("unit", [])); ProverInductive end
     | AbstractType _ -> ProverInductive
-    | RefType t -> ProverInt
+    | RefType t -> ProverInductive
     (* Using expressions of the types below as values is wrong, but we must not crash here because this function is in some cases called by the type checker before it detects that there is a problem and produces a proper error message. *)
     | ClassOrInterfaceName n -> ProverInt
     | PackageName n -> ProverInt
@@ -649,6 +654,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * (base_spec_info map * struct_field_info map) option (* None if struct without body *)
       * termnode option (* predicate symbol for struct_padding predicate *)
       * termnode (* size *)
+      * termnode (* type_info *)
     type union_field_info =
         loc
       * type_
@@ -1213,8 +1219,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end;
         begin
           match try_assoc sn structmap0 with
-            Some (_, _, Some _, _) -> static_error l "Duplicate struct name." None
-          | Some (ldecl, _, None, _) -> if body_opt = None then static_error l "Duplicate struct declaration." None else delayed_struct_def sn ldecl l
+            Some (_, _, Some _, _, _) -> static_error l "Duplicate struct name." None
+          | Some (ldecl, _, None, _, _) -> if body_opt = None then static_error l "Duplicate struct declaration." None else delayed_struct_def sn ldecl l
           | None -> ()
         end;
         begin
@@ -1644,7 +1650,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | None ->
       (* So we can use class/struct/union names as types in ghost code *)
       match try_assoc id structmap0 with
-        Some (ld, _, _, _) when dialect = Some Cxx ->
+        Some (ld, _, _, _, _) when dialect = Some Cxx ->
         reportUseSite DeclKind_Struct ld l;
         StructType id
       | _ ->
@@ -1694,7 +1700,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       static_error l "A struct type with a body is not supported in this position." None
     | StructTypeExpr (l, Some sn, None, _) ->
       begin match try_assoc sn structmap0 with
-        Some (ld, _, _, _) ->
+        Some (ld, _, _, _, _) ->
         reportUseSite DeclKind_Struct ld l;
         StructType sn
       | None ->
@@ -1826,7 +1832,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let struct_size_partial smap l sn =
     match try_assoc sn smap with
-      Some (_, _, _, s) -> s
+      Some (_, _, _, s, _) -> s
     | _ -> static_error l (sprintf "Cannot take size of undeclared struct '%s'" sn) None
 
   let union_size_partial umap l un =
@@ -1896,6 +1902,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         ) attrs;
         ctxt#assert_term (ctxt#mk_le s max_uintptr_term);
         ctxt#assert_term (ctxt#mk_lt (ctxt#mk_intlit 0) s);
+        let type_info = get_unique_var_symb (sn ^ "_type_info") type_info_type in
         let rec iter1 fmap fds has_ghost_fields bases =
           match fds with
             [] ->
@@ -1916,8 +1923,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               end
             in
             offset_iter fmap (ctxt#mk_intlit 0) true;
-            let base_map = bases |> List.map @@ fun (CxxBaseSpec (l, base, is_virtual)) -> base, (l, is_virtual, get_unique_var_symb (sn ^ "_" ^ base ^ "_offset") intType) in
-            (sn, (l, Some (base_map, fmap), padding_predsym_opt, s))
+            let base_map = bases |> List.map @@ fun (CxxBaseSpec (l, base, is_virtual)) -> 
+              let base_offset = get_unique_var_symb (sn ^ "_" ^ base ^ "_offset") intType in
+              ctxt#assert_term (ctxt#mk_le int_zero_term base_offset);
+              base, (l, is_virtual, base_offset) 
+            in
+            (sn, (l, Some (base_map, fmap), padding_predsym_opt, s, type_info))
           | Field (lf, gh, t, f, Instance, Public, final, init)::fds ->
             if List.mem_assoc f fmap then static_error lf "Duplicate field name." None;
             let t = check_pure_type ("", []) [] gh t in
@@ -1928,7 +1939,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let new_item = begin
           match body_opt with
             Some (bases, fds) -> iter1 [] fds false bases
-          | None -> (sn, (l, None, None, s))
+          | None -> (sn, (l, None, None, s, type_info))
         end
         in
         iter (new_item::smap) (new_item::smapwith0) remaining
@@ -1942,7 +1953,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let union_size = union_size_partial unionmap
 
   let field_offset l fparent fname =
-    let (_, Some (_, fmap), _, _) = List.assoc fparent structmap in
+    let (_, Some (_, fmap), _, _, _) = List.assoc fparent structmap in
     let (_, gh, y, offset_opt, _) = List.assoc fname fmap in
     match offset_opt with
       Some term -> term
@@ -2518,7 +2529,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let check_bases bases = bases |> List.exists @@ fun (name, _) -> is_derived_of_base name base_name in
     derived_name = base_name ||
     match try_assoc derived_name structmap with 
-    | Some (_, Some (bases, _), _, _) -> check_bases bases 
+    | Some (_, Some (bases, _), _, _, _) -> check_bases bases 
     | None -> false
   
   let rec compatible_pointees t t0 =
@@ -2706,7 +2717,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let struct_padding_predfams1 =
     flatmap
       (function
-         (sn, (l, body_opt, Some padding_predsymb, size)) -> [("struct_" ^ sn ^ "_padding", (l, [], 0, [PtrType (StructType sn)], padding_predsymb, Some 1, Inductiveness_Inductive))]
+         (sn, (l, body_opt, Some padding_predsymb, size, _)) -> [("struct_" ^ sn ^ "_padding", (l, [], 0, [PtrType (StructType sn)], padding_predsymb, Some 1, Inductiveness_Inductive))]
        | _ -> [])
       structmap1
   
@@ -2727,7 +2738,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let isparamizedfunctypepreds1 = flatmap (fun (g, (l, gh, tparams, rt, ftxmap, xmap, pn, ilist, pre, post, terminates, predfammaps)) -> predfammaps) functypedeclmap1
 
   let struct_accessor_map1: struct_accessor_info map =
-    structmap1 |> flatmap (fun (sn, (l, body_opt, _, _)) ->
+    structmap1 |> flatmap (fun (sn, (l, body_opt, _, _, _)) ->
         (* For each struct "s", and each field fi, generate a tuple type and getter/setter functions
              mk_s : T1 * ... * Tn -> struct s
              get_s_fi : struct s -> Ti
@@ -2753,7 +2764,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let (malloc_block_pred_map1: malloc_block_pred_info map), (new_block_pred_map1: new_block_pred_info map) = 
     let mk_block_pred_map name =
       structmap1 |> flatmap begin function
-        (sn, (l, Some _, _, _)) -> [(sn, mk_predfam (name ^ "_" ^ sn) l [] 0 [PtrType (StructType sn)] (Some 1) Inductiveness_Inductive)]
+        (sn, (l, Some _, _, _, _)) -> [(sn, mk_predfam (name ^ "_" ^ sn) l [] 0 [PtrType (StructType sn)] (Some 1) Inductiveness_Inductive)]
       | _ -> []
       end 
     in
@@ -2763,7 +2774,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let new_block_pred_map: new_block_pred_info map = new_block_pred_map1 @ new_block_pred_map0
 
   let bases_constructed_map1: bases_constructed_pred_info map =
-    let fold acc (sn, (l, body_opt, _, _)) =
+    let fold acc (sn, (l, body_opt, _, _, _)) =
       match body_opt with
       | Some (_ :: _, _) -> (sn, mk_predfam (bases_constructed_pred_name sn) l [] 0 [PtrType (StructType sn)] (Some 1) Inductiveness_Inductive) :: acc
       | _ -> acc
@@ -2787,7 +2798,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | _ ->
     flatmap
-      (fun (sn, (_, body_opt, _, _)) ->
+      (fun (sn, (_, body_opt, _, _, _)) ->
          match body_opt with
            None -> []
          | Some (_, fds) ->
@@ -3846,6 +3857,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ClassLit (l, s) ->
       let s = check_classname (pn, ilist) (l, s) in
       (ClassLit (l, s), ObjType ("java.lang.Class", []), None)
+    | Typeid (l, TypeExpr te) ->
+      let t = check_pure_type (pn, ilist) tparams Real te in
+      let t = 
+        match t with 
+        | RefType t -> t
+        | _ -> t
+      in
+      TypeInfo (l, t), type_info_type, None
     | StringLit (l, s) ->
       if inAnnotation = Some true then
         (* TODO: Do the right thing for non-ASCII characters *)
@@ -3882,7 +3901,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         begin match t with
         | StructType sn ->
           begin match try_assoc sn structmap with
-          | Some (_, Some (_, fds), _, _) ->
+          | Some (_, Some (_, fds), _, _, _) ->
             begin match try_assoc f fds with
             | None -> static_error l ("No such field in struct '" ^ sn ^ "'.") None
             | Some (_, gh, t, offset, _) ->
@@ -4446,7 +4465,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | PtrType (StructType sn) ->
       begin
       match try_assoc sn structmap with
-        Some (_, Some (_, fds), _, _) ->
+        Some (_, Some (_, fds), _, _, _) ->
         begin
           match try_assoc f fds with
             None -> static_error l ("No such field in struct '" ^ sn ^ "'.") None
@@ -4735,7 +4754,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | StructType sn, InitializerList (ll, es) ->
       let fds =
         match try_assoc sn structmap with
-          Some (_, Some (_, fds), _, _) -> fds
+          Some (_, Some (_, fds), _, _, _) -> fds
         | _ -> static_error ll (sprintf "Missing definition of struct '%s'" sn) None
       in
       let rec iter fds es =
@@ -5657,7 +5676,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     flatmap
       begin
         function
-          (sn, (_, Some (_, fmap), _, _)) ->
+          (sn, (_, Some (_, fmap), _, _, _)) ->
           flatmap
             begin
               function
@@ -5862,13 +5881,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let field_address l t fparent fname = mk_field_ptr t (field_offset l fparent fname)
   
   let direct_base_addr (derived_name, derived_addr) base_name =
-    let _, Some (bases, _), _, _ = List.assoc derived_name structmap in
+    let _, Some (bases, _), _, _, _ = List.assoc derived_name structmap in
     let _, _, base_offset = List.assoc base_name bases in
     mk_field_ptr derived_addr base_offset
 
   let base_addr l (derived_name, derived_addr) base_name =
     let rec iter derived_name offsets =
-      let _, Some (bases, _), _, _ = List.assoc derived_name structmap in 
+      let _, Some (bases, _), _, _, _ = List.assoc derived_name structmap in 
       let other_paths = bases |> List.fold_left begin fun acc (name, (_, _, offset)) -> 
         match iter name (offset :: offsets) with
         | Some p -> p :: acc
@@ -6581,6 +6600,9 @@ let check_if_list_is_defined () =
       in
       cont state v
     | ClassLit (l,s) -> cont state (List.assoc s classterms)
+    | TypeInfo (l, StructType sn) ->
+      let _, _, _, _, info = List.assoc sn structmap in
+      cont state info
     | StringLit (l, s) ->
       if ass_term = None then static_error l "String literals are not allowed in ghost code." None;
       cont state

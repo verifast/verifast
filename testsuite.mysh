@@ -444,6 +444,7 @@ cd tutorial_solutions
   verifast_both -target 32bit students.c
 cd ..
 cd tests
+  verifast -c typeid.c
   verifast -c -allow_should_fail no_fwrapv.c
   verifast -c -fwrapv fwrapv.c
   verifast -c -allow_should_fail subobject_provenance.c

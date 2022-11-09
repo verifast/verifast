@@ -288,6 +288,8 @@ and
   | RealLit of loc * num * float_literal_suffix option
   | StringLit of loc * string (* string literal *)
   | ClassLit of loc * string (* class literal in java *)
+  | Typeid of loc * expr
+  | TypeInfo of loc * type_
   | Read of loc * expr * string (* lezen van een veld; hergebruiken voor java field access *)
   | Select of loc * expr * string (* reading a field in C; Java uses Read *)
   | ArrayLengthExpr of loc * expr
@@ -992,6 +994,8 @@ let rec expr_loc e =
   | WCxxConstruct (l, _, _, _) -> l
   | CxxLValueToRValue (l, _) -> l
   | CxxDerivedToBase (l, _, _) -> l
+  | Typeid (l, _) -> l
+  | TypeInfo (l, _) -> l
 let asn_loc a = expr_loc a
   
 let stmt_loc s =
@@ -1187,6 +1191,7 @@ let expr_fold_open iter state e =
   | CxxNew (_, _, _)
   | WCxxNew (_, _, _) -> state
   | CxxDelete (_, arg) -> iter state arg
+  | Typeid (_, e) -> iter state e
 
 (* Postfix fold *)
 let expr_fold f state e = let rec iter state e = f (expr_fold_open iter state e) e in iter state e
