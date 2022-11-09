@@ -27,7 +27,7 @@ let ghost_keywords = [
   "produce_lemma_function_pointer_chunk"; "duplicate_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
   "producing_box_predicate"; "producing_handle_predicate"; "producing_fresh_handle_predicate"; "box"; "handle"; "any"; "split_fraction"; "by"; "merge_fractions";
   "unloadable_module"; "decreases"; "forall_"; "import_module"; "require_module"; ".."; "extends"; "permbased";
-  "terminates"; "abstract_type"; "fixpoint_auto"
+  "terminates"; "abstract_type"; "fixpoint_auto"; "typeid"
 ]
 
 let c_keywords = [
@@ -1532,6 +1532,7 @@ and
      '(_, Kwd "}")
   >] -> SwitchExpr (l, e, cs, cdef_opt)
 | [< '(l, Kwd "sizeof"); e = parse_expr_suffix0 false >] -> SizeofExpr (l, e)
+| [< '(l, Kwd "typeid") when language <> Java; '(_, Kwd "("); te = parse_type; '(_, Kwd ")") >] -> Typeid (l, TypeExpr te)
 | [< '(l, Kwd "super"); '(_, Kwd "."); '(l2, Ident n); '(_, Kwd "("); es = rep_comma parse_expr; '(_, Kwd ")") >] -> SuperMethodCall (l, n, es)
 | [< '(l, Kwd "!"); e = parse_expr_suffix >] -> Operation(l, Not, [e])
 | [< '(l, Kwd "@"); '(_, Ident g) >] -> PredNameExpr (l, g)

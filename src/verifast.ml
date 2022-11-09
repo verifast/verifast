@@ -740,7 +740,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match t with
             StaticArrayType (elemTp, elemCount) ->
             produce_object t
-          | StructType sn when !address_taken || e = None || (language = CLang && dialect = Some Cxx) || (let (_, body_opt, _, _) = List.assoc sn structmap in match body_opt with Some (_, fds) -> List.exists (fun (_, (_, gh, _, _, _)) -> gh = Ast.Ghost) fds | _ -> true) ->
+          | StructType sn when !address_taken || e = None || (language = CLang && dialect = Some Cxx) || (let (_, body_opt, _, _, _) = List.assoc sn structmap in match body_opt with Some (_, fds) -> List.exists (fun (_, (_, gh, _, _, _)) -> gh = Ast.Ghost) fds | _ -> true) ->
             (* If the variable's address is taken or the struct type has no body or it has a ghost field, treat it like a resource. *)
             produce_object (RefType t)
           | UnionType _ -> produce_object (RefType t)
@@ -749,7 +749,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               match t, e with
                 _, None -> cont h env (get_unique_var_symb_non_ghost x t)
               | StructType sn, Some (InitializerList (linit, es)) ->
-                let (_, Some (_, fds), _, _) = List.assoc sn structmap in
+                let (_, Some (_, fds), _, _, _) = List.assoc sn structmap in
                 let bs =
                   match zip fds es with
                     Some bs -> bs
@@ -3346,7 +3346,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | CxxCtor (loc, mangled_name, _, _, _, Some _, _, StructType sn) :: ds ->
       let gs', lems' =
         record_fun_timing loc (sn ^ ".<ctor>") @@ fun () ->
-        let _, Some (_, fields), _, _ = List.assoc sn structmap in
+        let _, Some (_, fields), _, _, _ = List.assoc sn structmap in
         let loc, params, pre, pre_tenv, post, terminates, Some (Some (init_list, (body, close_brace_loc))) = List.assoc mangled_name cxx_ctor_map1 in
         verify_cxx_ctor pn ilist gs lems boxes predinstmap funcmap (sn, fields, mangled_name, loc, params, init_list, pre, pre_tenv, post, terminates, body, close_brace_loc)
       in
@@ -3354,7 +3354,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | CxxDtor (loc, _, _, Some _, _, StructType sn) :: ds ->
       let gs', lems' =
         record_fun_timing loc (sn ^ ".<dtor>") @@ fun () ->
-        let _, Some (bases, fields), _, _ = List.assoc sn structmap in
+        let _, Some (bases, fields), _, _, _ = List.assoc sn structmap in
         let loc, pre, pre_tenv, post, terminates, Some (Some (body, close_brace_loc)) = List.assoc sn cxx_dtor_map1 in 
         verify_cxx_dtor pn ilist gs lems boxes predinstmap funcmap (sn, bases, fields, cxx_dtor_name sn, loc, pre, pre_tenv, post, terminates, body, close_brace_loc)
       in

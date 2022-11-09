@@ -419,7 +419,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let check_init_list pn ilist tenv struct_name body_opt struct_name =
       body_opt |> option_map @@ fun (init_list, b) ->
         let init_list_checked =
-          let _, Some (bases, fields), _, _ = List.assoc struct_name structmap in 
+          let _, Some (bases, fields), _, _, _ = List.assoc struct_name structmap in 
           init_list |> List.map @@ function 
             | ("this", Some (init, is_written)) ->
               let w, tp = check_expr (pn,ilist) [] tenv None init in
@@ -1037,7 +1037,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let structmap1 = 
     let pn, ilist = "", [] in
     let check_expr_t tenv e tp = check_expr_t_core functypemap funcmap [] [] (pn, ilist) [] tenv None e tp in
-    structmap1 |> List.map @@ fun (sn, (sloc, sbody, spad_sym, ssize)) ->
+    structmap1 |> List.map @@ fun (sn, (sloc, sbody, spad_sym, ssize, sinfo)) ->
       let tenv = ["this", PtrType (StructType sn); current_thread_name, current_thread_type] in 
       let body = sbody |> option_map @@ fun (bases, fields) ->
         bases, fields |> List.map @@ function
@@ -1046,7 +1046,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             fname, (floc, fgh, ft, foffset, Some init)
           | fd -> fd 
       in
-      sn, (sloc, body, spad_sym, ssize)
+      sn, (sloc, body, spad_sym, ssize, sinfo)
 
   let structmap = structmap1 @ structmap0 
     
@@ -1243,6 +1243,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | CxxLValueToRValue (_, e) -> expr_mark_addr_taken e locals
     | CxxDerivedToBase (_, e, _) -> expr_mark_addr_taken e locals
     | Sep (_, e1, e2) -> expr_mark_addr_taken e1 locals; expr_mark_addr_taken e2 locals
+    | TypeExpr _ -> ()
+    | Typeid (_, e) -> expr_mark_addr_taken e locals
   and pat_expr_mark_addr_taken pat locals = 
     match pat with
     | LitPat(e) -> expr_mark_addr_taken e locals
@@ -1521,7 +1523,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | StructType sn ->
       let (fields, padding_predsymb_opt) =
         match try_assoc sn structmap with
-          Some (_, Some (_, fds), padding_predsymb_opt, _) -> fds, padding_predsymb_opt
+          Some (_, Some (_, fds), padding_predsymb_opt, _, _) -> fds, padding_predsymb_opt
         | _ -> static_error l (Printf.sprintf "Cannot produce an object of type 'struct %s' since this struct type has not been defined" sn) None
       in
       let field_values_of_struct_as_value v =
@@ -1621,7 +1623,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | StructType sn ->
       let fields, padding_predsymb_opt =
         match try_assoc sn structmap with
-          Some (_, Some (_, fds), padding_predsymb_opt, _) -> fds, padding_predsymb_opt
+          Some (_, Some (_, fds), padding_predsymb_opt, _, _) -> fds, padding_predsymb_opt
         | _ -> static_error l (Printf.sprintf "Cannot consume an object of type 'struct %s' since this struct type has not been defined" sn) None
       in
       begin fun cont ->
@@ -1676,7 +1678,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       check_ctor_call l args params pre post terminates h env @@ fun h env _ ->
       assume_neq addr (null_pointer_term ()) @@ fun () ->
       if produce_padding_chunk then
-        let _, _, Some padding_pred_symb, _ = List.assoc struct_name structmap in
+        let _, _, Some padding_pred_symb, _, _ = List.assoc struct_name structmap in
         produce_chunk h (padding_pred_symb, true) [] coef None [addr] None @@ fun h ->
         cont h env
       else
@@ -1694,7 +1696,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if body_opt = None then register_prototype_used ld (cxx_dtor_name struct_name) None;
       check_dtor_call l pre post terminates h env @@ fun h env _ ->
       if consume_padding_chunk then 
-        let _, _, Some padding_pred_symb, _ = List.assoc struct_name structmap in 
+        let _, _, Some padding_pred_symb, _, _ = List.assoc struct_name structmap in 
         consume_chunk rules h [] [] [] l (padding_pred_symb, true) [] real_unit coefpat (Some 1) [TermPat addr] @@ fun _ h _ _ _ _ env _ ->
         cont h env
       else 
