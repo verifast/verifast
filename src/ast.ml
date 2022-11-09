@@ -995,6 +995,7 @@ let rec expr_loc e =
   | CxxLValueToRValue (l, _) -> l
   | CxxDerivedToBase (l, _, _) -> l
   | Typeid (l, _) -> l
+  | TypeInfo (l, _) -> l
 let asn_loc a = expr_loc a
   
 let stmt_loc s =

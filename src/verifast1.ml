@@ -78,6 +78,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let {reportRange; reportUseSite; reportExecutionForest; reportStmt; reportStmtExec; reportDirective} = callbacks
 
+  let type_info_type = 
+    match dialect with 
+    | Some Cxx -> RefType (StructType "std::type_info")
+    | _ -> PtrType Void
+
   let reportMacroCall l0u l0d =
     reportUseSite DeclKind_Macro l0d l0u
 
@@ -1897,7 +1902,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         ) attrs;
         ctxt#assert_term (ctxt#mk_le s max_uintptr_term);
         ctxt#assert_term (ctxt#mk_lt (ctxt#mk_intlit 0) s);
-        let type_info = get_unique_var_symb (sn ^ "_type_info") type_info_ref_type in
+        let type_info = get_unique_var_symb (sn ^ "_type_info") type_info_type in
         let rec iter1 fmap fds has_ghost_fields bases =
           match fds with
             [] ->
@@ -3859,7 +3864,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | RefType t -> t
         | _ -> t
       in
-      TypeInfo (l, t), type_info_ref_type, None
+      TypeInfo (l, t), type_info_type, None
     | StringLit (l, s) ->
       if inAnnotation = Some true then
         (* TODO: Do the right thing for non-ASCII characters *)
