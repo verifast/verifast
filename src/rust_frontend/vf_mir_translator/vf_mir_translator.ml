@@ -112,6 +112,8 @@ module Mir = struct
     | U32 -> Ok 32
     | U64 -> Ok 64
     | U128 -> Ok 128
+
+  type var_debug_info_internal = VdiiPlace of string | VdiiConstant
 end
 
 module TrTyTuple = struct
@@ -897,6 +899,30 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let loc = Ast.stmt_loc @@ List.hd @@ statements in
       Ok (Ast.LabelStmt (loc, id) :: statements)
 
+  let translate_symbol (sym_cpn : SymbolRd.t) = SymbolRd.name_get sym_cpn
+
+  let translate_var_debug_info_contents (vdic_cpn : VarDebugInfoContentsRd.t)
+      (loc : Ast.loc) =
+    let open VarDebugInfoContentsRd in
+    match get vdic_cpn with
+    | Place place_cpn -> (
+        match translate_place place_cpn loc with
+        | Ast.Var ((*loc*) _, id) -> Ok (Mir.VdiiPlace id)
+        | _ -> failwith "Todo VarDebugInfoContents Place")
+    | Const constant_cpn -> Ok Mir.VdiiConstant
+    | Undefined _ ->
+        Error (`TrVarDebugInfoContents "Unknown variable debug info kind")
+
+  let translate_var_debug_info (vdi_cpn : VarDebugInfoRd.t) =
+    let open VarDebugInfoRd in
+    let name_cpn = name_get vdi_cpn in
+    let name = translate_symbol name_cpn in
+    let src_info_cpn = source_info_get vdi_cpn in
+    let* src_info = translate_source_info src_info_cpn in
+    let value_cpn = value_get vdi_cpn in
+    let value = translate_var_debug_info_contents value_cpn src_info.span in
+    Ok (value, name)
+
   let translate_body (body_cpn : BodyRd.t) =
     let open BodyRd in
     let def_kind_cpn = def_kind_get body_cpn in
@@ -952,21 +978,25 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let* loc = translate_span_data span_cpn in
         let imp_span_cpn = imp_span_get body_cpn in
         let* imp_loc = translate_span_data imp_span_cpn in
-        Ok
-          (Ast.Func
-             ( loc,
-               Ast.Regular,
-               [],
-               Some ret_ty,
-               name,
-               vf_param_decls,
-               nonghost_callers_only,
-               fn_type_clause,
-               pre_post,
-               terminates,
-               Some (vf_local_decls @ vf_bblocks, imp_loc),
-               Ast.Static,
-               Ast.Package ))
+        let body =
+          Ast.Func
+            ( loc,
+              Ast.Regular,
+              [],
+              Some ret_ty,
+              name,
+              vf_param_decls,
+              nonghost_callers_only,
+              fn_type_clause,
+              pre_post,
+              terminates,
+              Some (vf_local_decls @ vf_bblocks, imp_loc),
+              Ast.Static,
+              Ast.Package )
+        in
+        let vdis_cpn = var_debug_info_get_list body_cpn in
+        let* vdis = ListAux.try_map translate_var_debug_info vdis_cpn in
+        Ok (imp_loc (*as a unique id*), body, vdis)
     | DefKind.AssocFn -> failwith "Todo: MIR Body kind AssocFn"
     | _ -> Error (`TrBody "Unknown MIR Body kind")
 
@@ -979,7 +1009,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let verbosity = 0
       end) in
       let bodies_cpn = VfMirRd.bodies_get_list vf_mir_cpn in
-      let* body_decls = ListAux.try_map translate_body bodies_cpn in
+      let* id_body_vdis_list = ListAux.try_map translate_body bodies_cpn in
+      let body_decls, debug_infos =
+        List.split
+        @@ List.map
+             (fun (id, body, vdis) -> (body, (id, vdis)))
+             id_body_vdis_list
+      in
       let decls = AstDecls.decls () in
       let decls = decls @ body_decls in
       (* Todo @Nima: we should add necessary inclusions from Rust side *)

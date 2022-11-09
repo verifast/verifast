@@ -36,6 +36,9 @@ module SourceInfoRd = BodyRd.SourceInfo
 module SwitchIntDataRd = TerminatorKindRd.SwitchIntData
 module SwitchTargetsRd = SwitchIntDataRd.SwitchTargets
 module SwitchTargetsBranchRd = SwitchTargetsRd.Branch
+module VarDebugInfoRd = BodyRd.VarDebugInfo
+module SymbolRd = VarDebugInfoRd.Symbol
+module VarDebugInfoContentsRd = VarDebugInfoRd.VarDebugInfoContents
 
 (* Types *)
 module TyRd = VfMirStub.Reader.Ty

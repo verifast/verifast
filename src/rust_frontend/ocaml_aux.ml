@@ -25,4 +25,8 @@ module ListAux = struct
     Ok (List.rev mapped_l)
 
   let is_empty l = match l with [] -> true | _ :: _ -> false
+  let first l = match l with [] -> None | fst :: _ -> Some fst
+
+  let rec last l =
+    match l with [] -> None | lst :: [] -> Some lst | _ :: tl -> last tl
 end

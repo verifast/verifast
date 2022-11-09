@@ -430,6 +430,7 @@ mod vf_mir_builder {
             vdi: &mir::VarDebugInfo<'tcx>,
             mut vdi_cpn: var_debug_info_cpn::Builder<'_>,
         ) {
+            debug!("Encoding VarDebugInfo {:?}", vdi);
             let name_cpn = vdi_cpn.reborrow().init_name();
             Self::encode_symbol(&vdi.name, name_cpn);
             let src_info_cpn = vdi_cpn.reborrow().init_source_info();
