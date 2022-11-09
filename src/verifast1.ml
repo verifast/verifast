@@ -1897,7 +1897,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         ) attrs;
         ctxt#assert_term (ctxt#mk_le s max_uintptr_term);
         ctxt#assert_term (ctxt#mk_lt (ctxt#mk_intlit 0) s);
-        let rec iter1 fmap fds has_ghost_fields bases type_info =
+        let type_info = get_unique_var_symb (sn ^ "_type_info") type_info_ref_type in
+        let rec iter1 fmap fds has_ghost_fields bases =
           match fds with
             [] ->
             let padding_predsym_opt =
@@ -1928,13 +1929,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let t = check_pure_type ("", []) [] gh t in
             let offset = if gh = Ghost then None else Some (get_unique_var_symb (sn ^ "_" ^ f ^ "_offset") intType) in
             let entry = (f, (lf, gh, t, offset, init)) in
-            iter1 (entry::fmap) fds (has_ghost_fields || gh = Ghost) bases type_info
+            iter1 (entry::fmap) fds (has_ghost_fields || gh = Ghost) bases
         in
-        let new_item = 
-          let type_info = get_unique_var_symb (sn ^ "_type_info") type_info_ref_type in
+        let new_item = begin
           match body_opt with
-            Some (bases, fds) -> iter1 [] fds false bases type_info
+            Some (bases, fds) -> iter1 [] fds false bases
           | None -> (sn, (l, None, None, s, type_info))
+        end
         in
         iter (new_item::smap) (new_item::smapwith0) remaining
     in
