@@ -59,14 +59,20 @@ let rec string_of_type t =
   match t with
     Bool -> "bool"
   | Void -> "void"
+  | Int (Signed, CharRank) -> "char"
+  | Int (Unsigned, CharRank) -> "unsigned char"
+  | Int (Signed, ShortRank) -> "short"
+  | Int (Unsigned, ShortRank) -> "unsigned short"
   | Int (Signed, IntRank) -> "int"
   | Int (Unsigned, IntRank) -> "unsigned int"
   | Int (Signed, LongRank) -> "long"
   | Int (Unsigned, LongRank) -> "unsigned long"
+  | Int (Signed, LongLongRank) -> "long long"
+  | Int (Unsigned, LongLongRank) -> "unsigned long long"
   | Int (Signed, PtrRank) -> "intptr_t"
   | Int (Unsigned, PtrRank) -> "uintptr_t"
-  | Int (Signed, LitRank k) -> "int" ^ string_of_int ((1 lsl k) * 8)
-  | Int (Unsigned, LitRank k) -> "uint" ^ string_of_int ((1 lsl k) * 8)
+  | Int (Signed, FixedWidthRank k) -> "int" ^ string_of_int ((1 lsl k) * 8) ^ "_t"
+  | Int (Unsigned, FixedWidthRank k) -> "uint" ^ string_of_int ((1 lsl k) * 8) ^ "_t"
   | Float -> "float"
   | Double -> "double"
   | LongDouble -> "long double"

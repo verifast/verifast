@@ -1035,22 +1035,22 @@ and
 | [< '(l, Kwd "-"); '(l, Int (n, dec, usuffix, lsuffix, _)) >] -> IntLit (l, minus_big_int n, dec, usuffix, lsuffix)
 | [< '(l, Kwd "("); e0 = parse_operators; '(_, Kwd ")"); e = parse_operators_rest e0 >] -> e
 | [< '(l, Kwd "!"); e = parse_expr_suffix >] -> Operation(l, Not, [e])
-| [< '(l, Kwd "INT_MIN") >] -> (match dataModel with Some {int_rank} -> IntLit (l, min_signed_big_int int_rank, true, false, NoLSuffix) | _ -> construct_not_supported ())
-| [< '(l, Kwd "INT_MAX") >] -> (match dataModel with Some {int_rank} -> IntLit (l, max_signed_big_int int_rank, true, false, NoLSuffix) | _ -> construct_not_supported ())
-| [< '(l, Kwd "UINTPTR_MAX") >] -> (match dataModel with Some {ptr_rank} -> IntLit (l, max_unsigned_big_int ptr_rank, true, true, NoLSuffix) | _ -> construct_not_supported ())
+| [< '(l, Kwd "INT_MIN") >] -> (match dataModel with Some {int_width} -> IntLit (l, min_signed_big_int int_width, true, false, NoLSuffix) | _ -> construct_not_supported ())
+| [< '(l, Kwd "INT_MAX") >] -> (match dataModel with Some {int_width} -> IntLit (l, max_signed_big_int int_width, true, false, NoLSuffix) | _ -> construct_not_supported ())
+| [< '(l, Kwd "UINTPTR_MAX") >] -> (match dataModel with Some {ptr_width} -> IntLit (l, max_unsigned_big_int ptr_width, true, true, NoLSuffix) | _ -> construct_not_supported ())
 | [< '(l, Kwd "CHAR_MIN") >] -> IntLit (l, big_int_of_string "-128", true, false, NoLSuffix)
 | [< '(l, Kwd "CHAR_MAX") >] -> IntLit (l, big_int_of_string "127", true, false, NoLSuffix)
 | [< '(l, Kwd "UCHAR_MAX") >] -> IntLit (l, big_int_of_string "255", true, false, NoLSuffix)
 | [< '(l, Kwd "SHRT_MIN") >] -> IntLit (l, big_int_of_string "-32768", true, false, NoLSuffix)
 | [< '(l, Kwd "SHRT_MAX") >] -> IntLit (l, big_int_of_string "32767", true, false, NoLSuffix)
 | [< '(l, Kwd "USHRT_MAX") >] -> IntLit (l, big_int_of_string "65535", true, false, NoLSuffix)
-| [< '(l, Kwd "UINT_MAX") >] -> (match dataModel with Some {int_rank} -> IntLit (l, max_unsigned_big_int int_rank, true, true, NoLSuffix) | _ -> construct_not_supported ())
+| [< '(l, Kwd "UINT_MAX") >] -> (match dataModel with Some {int_width} -> IntLit (l, max_unsigned_big_int int_width, true, true, NoLSuffix) | _ -> construct_not_supported ())
 | [< '(l, Kwd "LLONG_MIN") >] -> IntLit (l, big_int_of_string "-9223372036854775808", true, false, NoLSuffix)
 | [< '(l, Kwd "LLONG_MAX") >] -> IntLit (l, big_int_of_string "9223372036854775807", true, false, NoLSuffix)
 | [< '(l, Kwd "ULLONG_MAX") >] -> IntLit (l, big_int_of_string "18446744073709551615", true, true, NoLSuffix)
-| [< '(l, Kwd "LONG_MIN") >] -> (match dataModel with Some {long_rank} -> IntLit (l, min_signed_big_int long_rank, true, false, NoLSuffix) | _ -> construct_not_supported ())
-| [< '(l, Kwd "LONG_MAX") >] -> (match dataModel with Some {long_rank} -> IntLit (l, max_signed_big_int long_rank, true, false, NoLSuffix) | _ -> construct_not_supported ())
-| [< '(l, Kwd "ULONG_MAX") >] -> (match dataModel with Some {long_rank} -> IntLit (l, max_unsigned_big_int long_rank, true, true, NoLSuffix) | _ -> construct_not_supported ())
+| [< '(l, Kwd "LONG_MIN") >] -> (match dataModel with Some {long_width} -> IntLit (l, min_signed_big_int long_width, true, false, NoLSuffix) | _ -> construct_not_supported ())
+| [< '(l, Kwd "LONG_MAX") >] -> (match dataModel with Some {long_width} -> IntLit (l, max_signed_big_int long_width, true, false, NoLSuffix) | _ -> construct_not_supported ())
+| [< '(l, Kwd "ULONG_MAX") >] -> (match dataModel with Some {long_width} -> IntLit (l, max_unsigned_big_int long_width, true, true, NoLSuffix) | _ -> construct_not_supported ())
 and
   parse_expr_mul_rest e0 = parser
   [< '(l, Kwd "*"); e1 = parse_expr_suffix; e = parse_expr_mul_rest (Operation (l, Mul, [e0; e1])) >] -> e
@@ -1099,7 +1099,7 @@ and
 in
 parse_operators
 
-let intmax_width = 8 * (1 lsl intmax_rank)
+let intmax_bitwidth = 8 * (1 lsl intmax_width)
 
 (* Evaluator for operators *)
 let rec eval_operators e =
@@ -1121,7 +1121,7 @@ let rec eval_operators e =
       let u1, n1 = eval_operators e0 in
       let _, n2 = eval_operators e1 in
       if sign_big_int n2 < 0 then error l "Right operand of bitwise shift operator is negative";
-      if le_big_int (big_int_of_int intmax_width) n2 then error l "Right operand of bitwise shift operator is greater than or equal to the width of the left operand";
+      if le_big_int (big_int_of_int intmax_bitwidth) n2 then error l "Right operand of bitwise shift operator is greater than or equal to the width of the left operand";
       let n =
         match op with
           ShiftLeft ->
@@ -1147,8 +1147,8 @@ let rec eval_operators e =
     | Operation (_, (BitAnd|BitXor|BitOr as op), [e0; e1]) ->
       let u, n1, n2 = eval_and_convert_operands e0 e1 in
       let n1', n2' =
-        extract_big_int n1 0 intmax_width,
-        extract_big_int n2 0 intmax_width
+        extract_big_int n1 0 intmax_bitwidth,
+        extract_big_int n2 0 intmax_bitwidth
       in
       let n =
         match op with
@@ -1157,7 +1157,7 @@ let rec eval_operators e =
         | BitXor -> xor_big_int n1' n2'
       in
       let n =
-        if u then n else if lt_big_int (max_signed_big_int intmax_rank) n then sub_big_int n (succ_big_int (max_unsigned_big_int intmax_rank)) else n
+        if u then n else if lt_big_int (max_signed_big_int intmax_width) n then sub_big_int n (succ_big_int (max_unsigned_big_int intmax_width)) else n
       in
       u, n
     | Operation (_, And, [e0; e1]) ->
@@ -1169,11 +1169,11 @@ let rec eval_operators e =
   in
   let n =
     if u then
-      extract_big_int n 0 intmax_width
+      extract_big_int n 0 intmax_bitwidth
     else
-      if lt_big_int n (min_signed_big_int intmax_rank) then
+      if lt_big_int n (min_signed_big_int intmax_width) then
         error (expr_loc e) "Arithmetic underflow: the value of this expression is less than INTMAX_MIN"
-      else if lt_big_int (max_signed_big_int intmax_rank) n then
+      else if lt_big_int (max_signed_big_int intmax_width) n then
         error (expr_loc e) "Arithmetic overflow: the value of this expression is greater than INTMAX_MAX"
       else
         n
@@ -1183,8 +1183,8 @@ and eval_and_convert_operands e1 e2 =
   let (u1, n1), (u2, n2) = eval_operators e1, eval_operators e2 in
   (* Apply usual arithmetic conversions *)
   let u = u1 || u2 in
-  let n1 = if u1 = u then n1 else extract_big_int n1 0 intmax_width in
-  let n2 = if u2 = u then n2 else extract_big_int n2 0 intmax_width in
+  let n1 = if u1 = u then n1 else extract_big_int n1 0 intmax_bitwidth in
+  let n2 = if u2 = u then n2 else extract_big_int n2 0 intmax_bitwidth in
   u, n1, n2
 
 let make_file_preprocessor0 reportMacroCall path get_macro set_macro peek junk in_ghost_range dataModel =

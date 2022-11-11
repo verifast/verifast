@@ -8,6 +8,8 @@ void test()
   size_t x = 0;
   size_t *p = &x;
   assert(*p == 0);
-  //@ integer__limits(p);
+  //@ open uintptr(p, _);
+  //@ open uintptr_(p, _);
+  //@ integer___limits(p);
   assert(p != 0);
 }

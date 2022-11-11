@@ -32,7 +32,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
   int socket;
   havege_state havege_state;
 
-  unsigned int iv_off = 0;
+  size_t iv_off = 0;
   char iv[16];
   char hmac[64];
   aes_context aes_context;
@@ -140,7 +140,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
   int enc_size;
   char hmac[64];
   unsigned int temp;
-  unsigned int iv_off = 0;
+  size_t iv_off = 0;
   char iv[16];
   aes_context aes_context;
 

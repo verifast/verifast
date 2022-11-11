@@ -48,7 +48,7 @@ int aes_crypt_cfb128(aes_context *ctx, int mode, size_t length, size_t *iv_off,
                // AES only supports an iv with a length of 16 bytes
                // only zero offset allowed, not spec'ed for CBF mode
                crypto_chars(?iv_kind, iv, 16, ?iv_ccs) &*&
-               u_integer(iv_off, 0) &*&
+               *iv_off |-> 0 &*&
                chars_(output, length, _) &*& mode == AES_ENCRYPT ?
                (
                  random_permission(?p2, ?c2) &*&
@@ -63,7 +63,7 @@ int aes_crypt_cfb128(aes_context *ctx, int mode, size_t length, size_t *iv_off,
                    [f]crypto_chars(kind, input, length, in_ccs) &*&
                    // content of updated iv is correlated with input
                    crypto_chars(join_kinds(iv_kind, kind), iv, 16, _) &*&
-                   u_integer(iv_off, _) &*&
+                   *iv_off |-> ?_ &*&
                    result != 0 ?
                      // encryption failed
                      chars(output, length, _)
@@ -82,7 +82,7 @@ int aes_crypt_cfb128(aes_context *ctx, int mode, size_t length, size_t *iv_off,
                  (
                    aes_context_initialized(ctx, p1, c1) &*&
                    [f]cryptogram(input, length, in_ccs, cg) &*&
-                   u_integer(iv_off, _) &*&
+                   *iv_off |-> ?_ &*&
                    crypto_chars(?kind, output, length, ?out_ccs) &*&
                    // content of updated iv is correlated with output
                    crypto_chars(join_kinds(iv_kind, kind), iv, 16, _) &*&

@@ -103,15 +103,15 @@ long double vf__long_double_of_real(real x);
     //@ requires x == 0 || 0x0.0000_0000_0000_1p-1022 <= real_abs(x) &*& real_abs(x) <= 0x1.ffff_ffff_ffff_fp1023;
     //@ ensures fp_of_long_double(result) == fp_real(?r) &*& x == 0 ? r == 0 : real_abs(x - r) < double_max_error(x);
 
-float vf__float_of_int128(__int128 x);
+float vf__float_of_int128_t(__int128 x);
     //@ requires true;
     //@ ensures -(1 << 24) <= x && x <= (1 << 24) ? fp_of_float(result) == fp_real(real_of_int(x)) : true;
 
-double vf__double_of_int128(__int128 x);
+double vf__double_of_int128_t(__int128 x);
     //@ requires true;
     //@ ensures -(1 << 53) <= x && x <= (1 << 53) ? fp_of_double(result) == fp_real(real_of_int(x)) : true;
 
-long double vf__long_double_of_int128(__int128 x);
+long double vf__long_double_of_int128_t(__int128 x);
     //@ requires true;
     //@ ensures -(1 << 53) <= x && x <= (1 << 53) ? fp_of_long_double(result) == fp_real(real_of_int(x)) : true;
 

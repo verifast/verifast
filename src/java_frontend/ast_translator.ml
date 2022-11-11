@@ -598,11 +598,11 @@ and translate_prim_type typ =
   match typ with
   | GEN.VoidType l -> VF.ManifestTypeExpr(translate_location l, VF.Void)
   | GEN.BoolType l -> VF.ManifestTypeExpr(translate_location l, VF.Bool)
-  | GEN.CharType l -> VF.ManifestTypeExpr(translate_location l, VF.Int (VF.Unsigned, LitRank 1))
-  | GEN.ByteType l -> VF.ManifestTypeExpr(translate_location l, VF.Int (VF.Signed, LitRank 0))
-  | GEN.ShortType l -> VF.ManifestTypeExpr(translate_location l, VF.Int (VF.Signed, LitRank 1))
-  | GEN.IntType l -> VF.ManifestTypeExpr(translate_location l, VF.Int (VF.Signed, LitRank 2))
-  | GEN.LongType l -> VF.ManifestTypeExpr(translate_location l, VF.Int (VF.Signed, LitRank 3))
+  | GEN.CharType l -> VF.ManifestTypeExpr(translate_location l, VF.java_char_type)
+  | GEN.ByteType l -> VF.ManifestTypeExpr(translate_location l, VF.java_byte_type)
+  | GEN.ShortType l -> VF.ManifestTypeExpr(translate_location l, VF.java_short_type)
+  | GEN.IntType l -> VF.ManifestTypeExpr(translate_location l, VF.java_int_type)
+  | GEN.LongType l -> VF.ManifestTypeExpr(translate_location l, VF.java_long_type)
   | GEN.FloatType l -> VF.ManifestTypeExpr(translate_location l, VF.Float)
   | GEN.DoubleType l -> VF.ManifestTypeExpr(translate_location l, VF.Double)
 

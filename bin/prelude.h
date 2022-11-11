@@ -133,6 +133,12 @@ predicate uint_(unsigned int *p; option<int> v) = integer__(p, sizeof(int), fals
 predicate integer(int *p; int v) = int_(p, some(v));
 predicate u_integer(unsigned int *p; unsigned int v) = uint_(p, some(v));
 
+predicate long_(long *p; option<long> v) = integer__(p, sizeof(long), true, v);
+predicate ulong_(unsigned long *p; option<unsigned long> v) = integer__(p, sizeof(long), false, v);
+
+predicate long_integer(long *p; long v) = long_(p, some(v));
+predicate ulong_integer(unsigned long *p; unsigned long v) = ulong_(p, some(v));
+
 predicate llong_(long long *p; option<long long> v) = integer__(p, sizeof(long long), true, v);
 predicate ullong_(unsigned long long *p; option<unsigned long long> v) = integer__(p, sizeof(long long), false, v);
 
@@ -152,6 +158,12 @@ predicate ushort_(unsigned short *p; option<unsigned short> v) = integer__(p, si
 
 predicate short_integer(short *p; short s) = short_(p, some(s));
 predicate u_short_integer(unsigned short *p; unsigned short v) = ushort_(p, some(v));
+
+predicate intptr_(intptr_t *p; option<intptr_t> v) = integer__(p, sizeof(intptr_t), true, v);
+predicate uintptr_(uintptr_t *p; option<uintptr_t> v) = integer__(p, sizeof(uintptr_t), false, v);
+
+predicate intptr(intptr_t *p; intptr_t v) = intptr_(p, some(v));
+predicate uintptr(uintptr_t *p; uintptr_t v) = uintptr_(p, some(v));
 
 predicate pointer_(void **pp; option<void *> p);
 predicate pointer(void **pp; void *p) = pointer_(pp, some(p));
@@ -543,6 +555,30 @@ lemma_auto void uints_inv();
     requires [?f]uints(?p, ?count, ?vs);
     ensures [f]uints(p, count, vs) &*& count == length(vs);
 
+predicate longs_(long *p, int count; list<option<long> > ls) =
+    count == 0 ?
+        ls == nil
+    :
+        long_(p, ?l) &*& longs_(p + 1, count - 1, ?ls0) &*& ls == cons(l, ls0);
+
+predicate longs(long *p, int count; list<long> ls) =
+    count == 0 ?
+        ls == nil
+    :
+        long_integer(p, ?l) &*& longs(p + 1, count - 1, ?ls0) &*& ls == cons(l, ls0);
+
+predicate ulongs_(unsigned long *p, int count; list<option<unsigned long> > ls) =
+    count == 0 ?
+        ls == nil
+    :
+        ulong_(p, ?l) &*& ulongs_(p + 1, count - 1, ?ls0) &*& ls == cons(l, ls0);
+
+predicate ulongs(unsigned long *p, int count; list<unsigned long> ls) =
+    count == 0 ?
+        ls == nil
+    :
+        ulong_integer(p, ?l) &*& ulongs(p + 1, count - 1, ?ls0) &*& ls == cons(l, ls0);
+
 predicate llongs_(long long *p, int count; list<option<long long> > ls) = 
     count == 0 ?
         ls == nil
@@ -622,6 +658,30 @@ predicate bools(bool *p, int count; list<bool> vs) =
 lemma_auto void bools_inv();
     requires [?f]bools(?p, ?count, ?vs);
     ensures [f]bools(p, count, vs) &*& count == length(vs);
+
+predicate intptrs_(intptr_t *p, int count; list<option<intptr_t> > vs) =
+    count == 0 ?
+        vs == nil
+    :
+        intptr_(p, ?v) &*& intptrs_(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0);
+
+predicate uintptrs_(uintptr_t *p, int count; list<option<uintptr_t> > vs) =
+    count == 0 ?
+        vs == nil
+    :
+        uintptr_(p, ?v) &*& uintptrs_(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0);
+
+predicate intptrs(intptr_t *p, int count; list<intptr_t> vs) =
+    count == 0 ?
+        vs == nil
+    :
+        intptr(p, ?v) &*& intptrs(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0);
+
+predicate uintptrs(uintptr_t *p, int count; list<uintptr_t> vs) =
+    count == 0 ?
+        vs == nil
+    :
+        uintptr(p, ?v) &*& uintptrs(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0);
 
 predicate pointers_(void **pp, int count; list<option<void *> > ps) =
     count == 0 ?
@@ -854,6 +914,10 @@ predicate malloc_block_uints(unsigned int *p; int count) = malloc_block(p, ?size
 predicate malloc_block_shorts(short *p; int count) = malloc_block(p, ?size) &*& [_]divrem(size, sizeof(short), count, 0);
 predicate malloc_block_ushorts(unsigned short *p; int count) = malloc_block(p, ?size) &*& [_]divrem(size, sizeof(unsigned short), count, 0);
 predicate malloc_block_pointers(void **p; int count) = malloc_block(p, ?size) &*& [_]divrem(size, sizeof(void *), count, 0);
+predicate malloc_block_intptrs(intptr_t *p; int count) = malloc_block(p, ?size) &*& [_]divrem(size, sizeof(intptr_t), count, 0);
+predicate malloc_block_uintptrs(uintptr_t *p; int count) = malloc_block(p, ?size) &*& [_]divrem(size, sizeof(uintptr_t), count, 0);
+predicate malloc_block_longs(long *p; int count) = malloc_block(p, ?size) &*& [_]divrem(size, sizeof(long), count, 0);
+predicate malloc_block_ulongs(unsigned long *p; int count) = malloc_block(p, ?size) &*& [_]divrem(size, sizeof(unsigned long), count, 0);
 predicate malloc_block_llongs(long long *p; int count) = malloc_block(p, ?size) &*& [_]divrem(size, sizeof(long long), count, 0);
 predicate malloc_block_ullongs(unsigned long long *p; int count) = malloc_block(p, ?size) &*& [_]divrem(size, sizeof(unsigned long long), count, 0);
 predicate malloc_block_bools(bool *p; int count) =  malloc_block(p, ?size) &*& [_]divrem(size, sizeof(bool), count, 0);

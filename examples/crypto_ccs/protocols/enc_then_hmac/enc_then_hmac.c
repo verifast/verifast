@@ -32,7 +32,7 @@ void sender(char *enc_key, char *hmac_key, char *msg, unsigned int msg_len)
   havege_state havege_state;
 
   char iv[16];
-  unsigned int iv_off = 0;
+  size_t iv_off = 0;
   char hmac[64];
   aes_context aes_context;
   
@@ -145,7 +145,7 @@ int receiver(char *enc_key, char *hmac_key, char *msg)
   int size;
   int enc_size;
   char iv[16];
-  unsigned int iv_off = 0;
+  size_t iv_off = 0;
   char hmac[64];
   aes_context aes_context;
 

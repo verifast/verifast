@@ -7,6 +7,6 @@ struct foo {
 
 void test(struct foo *f)
 	//@ requires foo_bar(f, _) &*& foo_ubar(f, _);
-	//@ ensures llong_integer(&f->bar, _) &*& u_llong_integer(&f->ubar, _);
+	//@ ensures *&f->bar |-> _ &*& *&f->ubar |-> _;
 {
 }

@@ -39,7 +39,7 @@ void sender(int recvr, char *key, int key_len, char *msg)
     abort();
 
   {
-    unsigned int sign_len;
+    size_t sign_len;
     int max_message_len = 4 + MSG_SIZE + key_len;
     char* M = malloc((size_t)max_message_len);
     if (M == 0) abort();
@@ -90,7 +90,7 @@ void sender(int recvr, char *key, int key_len, char *msg)
     //@ open pk_context(&context);
     havege_free(&havege_state);
     //@ open havege_state(&havege_state);
-    //@ assert u_integer(&sign_len, ?sign_len_val);
+    //@ assert sign_len |-> ?sign_len_val;
     //@ crypto_chars_to_chars(hash, 64);
     //@ open cryptogram(M + 4 + MSG_SIZE, sign_len_val, ?cs_sign, ?cg_sign);
     //@ close cryptogram(M + 4 + MSG_SIZE, sign_len_val, cs_sign, cg_sign);

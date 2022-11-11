@@ -63,7 +63,7 @@ void sender_msg1(int* socket, havege_state* havege_state, pk_context* r_context,
                cryptogram(s_nonce, NONCE_SIZE, s_nonce_ccs, s_nonce_cg); @*/
 {
   //@ open principal(sender, _);
-  unsigned int size;
+  size_t size;
   char message[MSG1_SIZE];
   char encrypted[KEY_SIZE];
 
@@ -88,7 +88,7 @@ void sender_msg1(int* socket, havege_state* havege_state, pk_context* r_context,
   if (pk_encrypt(r_context, message, MSG1_SIZE, encrypted, &size,
                   KEY_SIZE, random_stub_nsl, havege_state) != 0)
     abort();
-  //@ assert u_integer(&size, ?size_val);
+  //@ assert size |-> ?size_val;
   //@ assert cryptogram(encrypted, size_val, ?cs_enc, ?cg_enc);
 
   // Proof the message is public
@@ -154,7 +154,7 @@ void sender_msg2(int* socket, havege_state* havege_state, pk_context* s_context,
                SENDER_INTER; @*/
 {
   //@ open principal(sender, _);
-  unsigned int size;
+  size_t size;
   char message[MSG2_SIZE];
   char encrypted[KEY_SIZE];
 
@@ -178,7 +178,7 @@ void sender_msg2(int* socket, havege_state* havege_state, pk_context* s_context,
     abort();
   //@ public_cryptogram(encrypted, enc_cg);
   //@ assert enc_cg == cg_rsa_encrypted(?p, ?c, ?pay, ?ent);
-  //@ assert u_integer(&size, MSG2_SIZE);
+  //@ assert size |-> MSG2_SIZE;
   /*@ open decryption_post(false, ?garbage, sender,
                            st, sender, s_id, ?dec_ccs); @*/
   //@ assert crypto_chars(?kind, message, MSG2_SIZE, dec_ccs);
@@ -319,7 +319,7 @@ void sender_msg3(int* socket, havege_state* havege_state, pk_context* r_context,
                  cryptogram(r_nonce, NONCE_SIZE, r_nonce_ccs, r_nonce_cg); @*/
 {
   //@ open principal(sender, _);
-  unsigned int size;
+  size_t size;
   char message[MSG3_SIZE];
   char encrypted[KEY_SIZE];
 
@@ -349,7 +349,7 @@ void sender_msg3(int* socket, havege_state* havege_state, pk_context* r_context,
   if (pk_encrypt(r_context, message, MSG3_SIZE, encrypted, &size,
                  KEY_SIZE, random_stub_nsl, havege_state) != 0)
     abort();
-  //@ assert u_integer(&size, ?size_val);
+  //@ assert size |-> ?size_val;
   //@ assert cryptogram(encrypted, size_val, ?cs_enc, ?cg_enc);
 
   // Proof the message is public
@@ -475,7 +475,7 @@ void receiver_msg1(int* socket, havege_state* havege_state,
                RECEIVER_INTER; @*/
 {
   //@ open principal(receiver, _);
-  unsigned int size;
+  size_t size;
   char message[MSG1_SIZE];
   char encrypted[KEY_SIZE];
 
@@ -498,7 +498,7 @@ void receiver_msg1(int* socket, havege_state* havege_state,
     abort();
   if (size != MSG1_SIZE)
     abort();
-  //@ assert u_integer(&size, MSG1_SIZE);
+  //@ assert size |-> MSG1_SIZE;
   //@ assert crypto_chars(?kind, message, MSG1_SIZE, ?dec_ccs);
   /*@ open decryption_post(false, ?garbage, receiver,
                            st, receiver, r_id, dec_ccs); @*/
@@ -611,7 +611,7 @@ void receiver_msg2(int* socket, havege_state* havege_state,
                cryptogram(r_nonce, NONCE_SIZE, r_nonce_ccs, r_nonce_cg); @*/
 {
   //@ open principal(receiver, _);
-  unsigned int size;
+  size_t size;
   char message[MSG2_SIZE];
   char encrypted[KEY_SIZE];
   //@ open receiver_inter(p_orig, c_orig, p_inst, s_nonce_ccs, s_nonce_cg);
@@ -649,7 +649,7 @@ void receiver_msg2(int* socket, havege_state* havege_state,
   if (pk_encrypt(s_context, message, MSG2_SIZE, encrypted, &size,
                   KEY_SIZE, random_stub_nsl, havege_state) != 0)
     abort();
-  //@ assert u_integer(&size, ?size_val);
+  //@ assert size |-> ?size_val;
   //@ assert cryptogram(encrypted, size_val, ?cs_enc, ?cg_enc);
   //@ take_append(ID_SIZE, rid_ccs, append(s_nonce_ccs, r_nonce_ccs));
   //@ drop_append(ID_SIZE, rid_ccs, append(s_nonce_ccs, r_nonce_ccs));
@@ -732,7 +732,7 @@ void receiver_msg3(int* socket, havege_state* havege_state,
                  (receiver == p_orig && r_id == c_orig && sender == p_inst); @*/
 {
   //@ open principal(receiver, _);
-  unsigned int size;
+  size_t size;
   char message[MSG3_SIZE];
   char encrypted[KEY_SIZE];
   //@ open receiver_inter(p_orig, c_orig, p_inst, s_nonce_ccs, s_nonce_cg);
@@ -756,7 +756,7 @@ void receiver_msg3(int* socket, havege_state* havege_state,
     abort();
   if (size != MSG3_SIZE)
     abort();
-  //@ assert u_integer(&size, MSG3_SIZE);
+  //@ assert size |-> MSG3_SIZE;
   //@ assert crypto_chars(?kind, message, NONCE_SIZE, ?dec_ccs);
   /*@ open decryption_post(false, ?garbage, receiver,
                            st, receiver, r_id, dec_ccs); @*/

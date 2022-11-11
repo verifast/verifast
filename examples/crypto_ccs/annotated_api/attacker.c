@@ -689,7 +689,7 @@ void attacker_send_asym_encrypted(havege_state *havege_state, void* socket)
   int temp;
   int size1;
   int size2;
-  unsigned int osize;
+  size_t osize;
   char buffer1[MAX_MESSAGE_SIZE];
   char buffer2[MAX_MESSAGE_SIZE];
   char buffer3[MAX_MESSAGE_SIZE];
@@ -723,7 +723,7 @@ void attacker_send_asym_encrypted(havege_state *havege_state, void* socket)
                     buffer3, &osize, MAX_MESSAGE_SIZE,
                     attacker_key_item_havege_random_stub, havege_state) == 0)
       {
-        //@ assert u_integer(&osize, ?osize_val);
+        //@ assert osize |-> ?osize_val;
         /*@
           {
             assert cryptogram(buffer3, osize_val, ?ccs_enc, ?cg_enc);
@@ -757,7 +757,7 @@ void attacker_send_asym_decrypted(havege_state *havege_state, void* socket)
   int temp;
   int size1;
   int size2;
-  unsigned int osize;
+  size_t osize;
   char buffer1[MAX_MESSAGE_SIZE];
   char buffer2[MAX_MESSAGE_SIZE];
   char buffer3[MAX_MESSAGE_SIZE];
@@ -832,7 +832,7 @@ void attacker_send_asym_signature(havege_state *havege_state, void* socket)
   int temp;
   int size1;
   int size2;
-  unsigned int osize;
+  size_t osize;
   char buffer1[MAX_MESSAGE_SIZE];
   char buffer2[MAX_MESSAGE_SIZE];
   char buffer3[MAX_MESSAGE_SIZE];
@@ -868,7 +868,7 @@ void attacker_send_asym_signature(havege_state *havege_state, void* socket)
       {
         /*@
           {
-            assert u_integer(&osize, ?osize_val);
+            assert osize |-> ?osize_val;
             assert cryptogram(buffer3, osize_val, ?ccs_enc, ?cg_sig);
             assert cg_sig == cg_rsa_signature(p, c, ?cs2, _);
             assert is_public_asym_signature_is_public(?proof, pub, pred);

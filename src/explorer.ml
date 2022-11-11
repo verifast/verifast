@@ -229,25 +229,17 @@ let _ =
     let rec string_of_type_ (type_: type_): string =
 
       let rec string_of_integer_rank (rank: int): string =
-        if (rank = 0) then
-          "char"
-        else if (rank = 1) then
-          "short"
-        else if (rank = 2) then
-          "int"
-        else if (rank = 3) then
-          "long"
-        else if (rank = 4) then
-          "__int128"
-        else
-          assert false
+        "__int" ^ string_of_int ((1 lsl rank) * 8)
       in
 
       let string_of_rank r =
         match r with
-          LitRank k -> string_of_integer_rank k
+          FixedWidthRank k -> string_of_integer_rank k
+        | CharRank -> "char"
+        | ShortRank -> "short"
         | IntRank -> "int"
         | LongRank -> "long"
+        | LongLongRank -> "long long"
         | PtrRank -> "intptr_t"
       in
 

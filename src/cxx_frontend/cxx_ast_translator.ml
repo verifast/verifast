@@ -754,18 +754,18 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
       make_man @@ VF.Int (signed, rank) 
     in
     match bt with
-    | Char      -> make_int VF.Signed @@ VF.LitRank 0
-    | UChar     -> make_int VF.Unsigned @@ VF.LitRank 0
-    | Short     -> make_int VF.Signed @@ VF.LitRank 1
-    | UShort    -> make_int VF.Unsigned @@ VF.LitRank 1
+    | Char      -> make_int VF.Signed @@ VF.CharRank
+    | UChar     -> make_int VF.Unsigned @@ VF.CharRank
+    | Short     -> make_int VF.Signed @@ VF.ShortRank
+    | UShort    -> make_int VF.Unsigned @@ VF.ShortRank
     | Void      -> make_man VF.Void
     | Bool      -> make_man VF.Bool
-    | Int       -> make_int VF.Signed int_rank
-    | UInt      -> make_int VF.Unsigned int_rank
-    | Long      -> make_int VF.Signed long_rank
-    | ULong     -> make_int VF.Unsigned long_rank
-    | LongLong  -> make_int VF.Signed @@ VF.LitRank 3
-    | ULongLong -> make_int VF.Unsigned @@ VF.LitRank 3
+    | Int       -> make_int VF.Signed IntRank
+    | UInt      -> make_int VF.Unsigned IntRank
+    | Long      -> make_int VF.Signed LongRank
+    | ULong     -> make_int VF.Unsigned LongRank
+    | LongLong  -> make_int VF.Signed @@ LongLongRank
+    | ULongLong -> make_int VF.Unsigned @@ LongLongRank
     | _         -> error loc "Unsupported builtin type."
 
   and transl_pointer_type (loc: VF.loc) (ptr: R.Node.t): VF.type_expr = 
@@ -796,11 +796,11 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     let open R.Type.FixedWidth in
     let rank = 
       match bits_get fw with
-      | 8 ->  VF.LitRank 0
-      | 16 -> VF.LitRank 1
-      | 32 -> VF.LitRank 2
-      | 64 -> VF.LitRank 3
-      | 128 -> VF.LitRank 4
+      | 8 ->  VF.FixedWidthRank 0
+      | 16 -> VF.FixedWidthRank 1
+      | 32 -> VF.FixedWidthRank 2
+      | 64 -> VF.FixedWidthRank 3
+      | 128 -> VF.FixedWidthRank 4
       | n -> error loc @@ "Invalid fixed width specified in type: " ^ (string_of_int n)
     in
     let signed = 

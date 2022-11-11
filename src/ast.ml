@@ -102,16 +102,25 @@ let string_of_inductiveness inductiveness =
   
 type signedness = Signed | Unsigned
 
+type int_bitwidth =
+  LitWidth of int
+| IntWidth
+| LongWidth
+| PtrWidth
+
 type int_rank =
-  LitRank of int  (* The size of an integer of rank k is 2^k bytes. *)
+| CharRank
+| ShortRank
 | IntRank
 | LongRank
+| LongLongRank
 | PtrRank
+| FixedWidthRank of int  (* The size of an integer of rank k is 2^k bytes. *)
 
 type type_ = (* ?type_ *)
     Bool
   | Void
-  | Int of signedness * int_rank (*rank*)  (* The size of Int (_, k) is 2^k bytes. For example: uint8 is denoted as Int (Unsigned, 0). *)
+  | Int of signedness * int_rank
   | RealType  (* Mathematical real numbers. Used for fractional permission coefficients. Also used for reasoning about floating-point code. *)
   | Float
   | Double
@@ -155,10 +164,10 @@ let inferred_type_constraint_meet c1 c2 =
 
 type integer_limits = {max_unsigned_big_int: big_int; min_signed_big_int: big_int; max_signed_big_int: big_int}
 
-let max_rank = 4 (* (u)int128 *)
+let max_width = 4 (* (u)int128 *)
 
 let integer_limits_table =
-  Array.init (max_rank + 1) begin fun k ->
+  Array.init (max_width + 1) begin fun k ->
     let max_unsigned_big_int = pred_big_int (shift_left_big_int unit_big_int (8 * (1 lsl k))) in
     let max_signed_big_int = shift_right_big_int max_unsigned_big_int 1 in
     let min_signed_big_int = pred_big_int (minus_big_int max_signed_big_int) in
@@ -169,13 +178,13 @@ let max_unsigned_big_int k = integer_limits_table.(k).max_unsigned_big_int
 let min_signed_big_int k = integer_limits_table.(k).min_signed_big_int
 let max_signed_big_int k = integer_limits_table.(k).max_signed_big_int
 
-type data_model = {int_rank: int; long_rank: int; ptr_rank: int}
-let data_model_32bit = {int_rank=2; long_rank=2; ptr_rank=2}
-let data_model_java = {int_rank=2; long_rank=3; ptr_rank=3 (*arbitrary value; ptr_rank is not relevant to Java programs*)}
-let data_model_lp64 = {int_rank=2; long_rank=3; ptr_rank=3}
-let data_model_llp64 = {int_rank=2; long_rank=2; ptr_rank=3}
-let data_model_ip16 = {int_rank=1; long_rank=2; ptr_rank=1}
-let data_model_i16 = {int_rank=1; long_rank=2; ptr_rank=2}
+type data_model = {int_width: int; long_width: int; ptr_width: int}
+let data_model_32bit = {int_width=2; long_width=2; ptr_width=2}
+let data_model_java = {int_width=2; long_width=3; ptr_width=3 (*arbitrary value; ptr_width is not relevant to Java programs*)}
+let data_model_lp64 = {int_width=2; long_width=3; ptr_width=3}
+let data_model_llp64 = {int_width=2; long_width=2; ptr_width=3}
+let data_model_ip16 = {int_width=1; long_width=2; ptr_width=1}
+let data_model_i16 = {int_width=1; long_width=2; ptr_width=2}
 let data_models_ = [
   "IP16", data_model_ip16;
   "I16", data_model_i16;
@@ -201,7 +210,13 @@ let data_model_of_string s =
   match head_flatmap_option (fun (k, v) -> if String.uppercase_ascii k = s then Some v else None) data_models with
     None -> failwith ("Data model must be one of " ^ String.concat ", " (List.map fst data_models))
   | Some v -> v
-let intmax_rank = 3 (* Assume that sizeof(intmax_t) is always 8 *)
+let intmax_width = 3 (* Assume that sizeof(intmax_t) is always 8 *)
+
+let java_byte_type = Int (Signed, FixedWidthRank 0)
+let java_short_type = Int (Signed, ShortRank)
+let java_char_type = Int (Unsigned, FixedWidthRank 1)
+let java_int_type = Int (Signed, IntRank)
+let java_long_type = Int (Signed, LongRank)
 
 let is_arithmetic_type t =
   match t with

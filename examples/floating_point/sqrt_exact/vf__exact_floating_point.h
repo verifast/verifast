@@ -49,12 +49,12 @@ double vf__double_of_real(real x);
     //@ ensures real_of_double(result) == some(x);
     //@ terminates;
 
-double vf__double_of_int128(__int128 x);
+double vf__double_of_int128_t(__int128 x);
     //@ requires true;
     //@ ensures real_of_double(result) == some(real_of_int(x));
     //@ terminates;
 
-long double vf__long_double_of_int128(__int128 x);
+long double vf__long_double_of_int128_t(__int128 x);
     //@ requires true;
     //@ ensures real_of_long_double(result) == some(real_of_int(x));
     //@ terminates;

@@ -36,7 +36,7 @@ void encrypt(havege_state *state, char *key, char *msg,
   //@ open principal(principal1, _);
   char iv[16];
   aes_context aes_context;
-  unsigned int iv_off = 0;
+  size_t iv_off = 0;
   //@ chars__limits(output);
 
   //@ close random_request(principal1, IP(0, 0), false);
@@ -92,7 +92,7 @@ void decrypt(char *key, char *msg, unsigned int msg_len, char* output)
 {
   char iv[16];
   aes_context aes_context;
-  unsigned int iv_off = 0;
+  size_t iv_off = 0;
   //@ crypto_chars_limits(msg);
 
   //@ cryptogram iv_cg = ccs_for_cg_sur(iv_ccs, tag_nonce);

@@ -499,8 +499,8 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   let targetMenuGroup = ref None in
   let targetMenuItems =
     data_models_ |> List.map begin fun (name, model) ->
-      let {int_rank; long_rank; ptr_rank} = model in
-      let item = GMenu.radio_menu_item ~active:(!dataModel = Some model) ?group:!targetMenuGroup ~label:(Printf.sprintf "sizeof(int, long, void *) = %d, %d, %d - %s" (1 lsl int_rank) (1 lsl long_rank) (1 lsl ptr_rank) name) ~packing:targetMenu#add () in
+      let {int_width; long_width; ptr_width} = model in
+      let item = GMenu.radio_menu_item ~active:(!dataModel = Some model) ?group:!targetMenuGroup ~label:(Printf.sprintf "sizeof(int, long, void *) = %d, %d, %d - %s" (1 lsl int_width) (1 lsl long_width) (1 lsl ptr_width) name) ~packing:targetMenu#add () in
       targetMenuGroup := Some item#group;
       (Some model, item)
     end

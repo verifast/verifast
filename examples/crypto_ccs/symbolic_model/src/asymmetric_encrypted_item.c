@@ -74,7 +74,7 @@ struct item *asymmetric_encryption(struct item *key, struct item *payload)
 
   {
     pk_context context;
-    unsigned int olen;
+    size_t olen;
     char output[MAX_PACKAGE_SIZE];
 
     // Key
@@ -107,7 +107,7 @@ struct item *asymmetric_encryption(struct item *key, struct item *payload)
     //@ close principal(principal1, count1 + 1);
     //@ open cryptogram(output, ?enc_length, ?enc_ccs, ?enc_cg);
     //@ assert enc_cg == cg_rsa_encrypted(principal, count, pay_ccs, ?ent);
-    //@ assert u_integer(&olen, enc_length);
+    //@ assert olen |-> enc_length;
     //@ assert enc_length > 0 &*& enc_length < MAX_PACKAGE_SIZE;
     //@ assert enc_length > 0 &*& enc_length <= RSA_SERIALIZED_KEY_SIZE;
     nonces_hide_state(random_state);
@@ -173,7 +173,7 @@ struct item *asymmetric_decryption(struct item *key, struct item *item, char tag
 
   {
     pk_context context;
-    unsigned int olen;
+    size_t olen;
     char output[MAX_PACKAGE_SIZE];
 
     // Key
@@ -220,7 +220,7 @@ struct item *asymmetric_decryption(struct item *key, struct item *item, char tag
       abort_crypto_lib("Decryption failed");
     /*@ open decryption_post(false, ?garbage, principal1,
                              s, ?p_key, ?c_key, ?ccs_out); @*/
-    //@ assert u_integer(&olen, ?size_out);
+    //@ assert olen |-> ?size_out;
     //@ pk_release_context_with_key(&context);
     //@ open cryptogram(i_cont + TAG_LENGTH, i_size - TAG_LENGTH, enc_cont, enc_cg);
     pk_free(&context);
@@ -235,7 +235,7 @@ struct item *asymmetric_decryption(struct item *key, struct item *item, char tag
     result->content = malloc((size_t)result->size);
     if (result->content == 0) {abort_crypto_lib("Malloc failed");}
     //@ close [f]world(pub, key_clsfy);
-    //@ assert u_integer(&olen, ?olen_val);
+    //@ assert olen |-> ?olen_val;
     //@ assert crypto_chars(_, output, olen_val, ccs_out);
     //@ crypto_chars_split(output, TAG_LENGTH);
     //@ assert crypto_chars(_, output, TAG_LENGTH, ?ccs_tag);

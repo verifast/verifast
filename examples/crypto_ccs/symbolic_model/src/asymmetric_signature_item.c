@@ -78,7 +78,7 @@ struct item *asymmetric_signature(struct item *key, struct item *payload)
 
   {
     pk_context context;
-    unsigned int olen;
+    size_t olen;
     char* output;
 
     // Key
@@ -116,7 +116,7 @@ struct item *asymmetric_signature(struct item *key, struct item *payload)
     //@ open principal(principal1, count1 + 1);
     //@ open cryptogram(output, ?sig_length, ?sig_ccs, ?sig_cg);
     //@ assert sig_cg == cg_rsa_signature(principal, count, pay_ccs, ?ent);
-    //@ assert u_integer(&olen, sig_length);
+    //@ assert olen |-> sig_length;
     //@ assert sig_length > 0 &*& sig_length <= RSA_KEY_SIZE;
     nonces_hide_state(random_state);
     //@ pk_release_context_with_key(&context);

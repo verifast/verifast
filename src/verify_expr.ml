@@ -1481,7 +1481,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           produce_char_array_chunk h env addr elemCount
       in
       begin match elemTp, init with
-        Int (Signed, LitRank 0), Expr (StringLit (_, s)) ->
+        Int (Signed, CharRank), Expr (StringLit (_, s)) ->
         produce_array_chunk h env false addr (mk_char_list_of_c_string elemCount s) elemCount
       | (UnionType _ | StructType _ | StaticArrayType (_, _)), Expr (InitializerList (ll, es)) ->
         let rec iter h env i es =
@@ -1825,8 +1825,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   | _ -> tp
                 in
                 match tp_promoted with
-                  Int (Signed, k) when k = int_rank -> mk_vararg_int t
-                | Int (Unsigned, k) when k = int_rank -> mk_vararg_uint t
+                  Int (Signed, IntRank) -> mk_vararg_int t
+                | Int (Unsigned, IntRank) -> mk_vararg_uint t
                 | PtrType _ | StaticArrayType _ -> mk_vararg_pointer t
                 | Double -> mk_vararg_double t
                 | _ -> static_error (expr_loc e) ("Expressions of type '"^string_of_type tp^"' are not yet supported as arguments for a varargs function.") None

@@ -146,7 +146,7 @@ int pk_encrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                   ilen >= MINIMAL_STRING_SIZE &*&
                   // encrypted message can not be bigger than key
                   ilen * 8 <= nbits &*&
-                u_integer(olen, _) &*&
+                *olen |-> ?_ &*&
                 chars_(output, osize, _) &*&
                 random_state_predicate(?state_pred) &*&
                 [_]is_random_function(f_rng, state_pred) &*&
@@ -154,7 +154,7 @@ int pk_encrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                 random_permission(?p2, ?c2); @*/
   /*@ ensures   pk_context_with_key(ctx, pk_public, p1, c1, nbits) &*&
                 [f1]crypto_chars(kind, input, ilen, ccs_input) &*&
-                u_integer(olen, ?olen_val) &*&
+                *olen |-> ?olen_val &*&
                 [f2]state_pred(p_rng) &*&
                 random_permission(p2, c2 + 1) &*&
                 result != 0 ?
@@ -178,7 +178,7 @@ int pk_decrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                   // message to decrypt can not be bigger than key
                   ilen * 8 <= nbits &*&
                 // output
-                u_integer(olen, _) &*&
+                *olen |-> ?_ &*&
                 chars_(output, osize, _) &*&
                 // entropy
                 random_permission(p1, ?c1) &*& 
@@ -187,7 +187,7 @@ int pk_decrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                 [?f2]state_pred(p_rng); @*/
   /*@ ensures   pk_context_with_key(ctx, pk_private, p2, c2, nbits) &*&
                 [f1]cryptogram(input, ilen, in_ccs, cg_input) &*&
-                u_integer(olen, ?olen_val) &*&
+                *olen |-> ?olen_val &*&
                 random_permission(p1, c1 + 1) &*&
                 [f2]state_pred(p_rng) &*&
                 crypto_chars(?kind, output, ?olen_val2, ?ccs_out) &*&
@@ -213,7 +213,7 @@ int pk_sign(pk_context *ctx, int md_alg, const char *hash, size_t hash_len,
                   hash_len >= MINIMAL_STRING_SIZE &*&
                   // hash to sign can not be bigger than key
                   hash_len * 8 <= nbits &*&
-                u_integer(sig_len, _) &*&
+                *sig_len |-> ?_ &*&
                 chars_(sig, ?out_len, _) &*& 8 * out_len >= nbits &*&
                 random_state_predicate(?state_pred) &*&
                 [_]is_random_function(f_rng, state_pred) &*&
@@ -221,7 +221,7 @@ int pk_sign(pk_context *ctx, int md_alg, const char *hash, size_t hash_len,
                 random_permission(?p2, ?c2); @*/
   /*@ ensures   pk_context_with_key(ctx, pk_private, p1, c1, nbits) &*&
                 [f1]crypto_chars(kind, hash, hash_len, ccs_input) &*&
-                u_integer(sig_len, ?sig_len_val) &*&
+                *sig_len |-> ?sig_len_val &*&
                 [f2]state_pred(p_rng) &*&
                 random_permission(p2, c2 + 1) &*&
                 result != 0 ?

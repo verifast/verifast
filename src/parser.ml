@@ -151,7 +151,7 @@ module Scala = struct
       begin
         match (tn, targs) with
           ("Unit", []) -> ManifestTypeExpr (l, Void)
-        | ("Int", []) -> ManifestTypeExpr (l, Int (Signed, LitRank 2))
+        | ("Int", []) -> ManifestTypeExpr (l, Int (Signed, FixedWidthRank 2))
         | ("Array", [t]) -> ArrayTypeExpr (l, t)
         | (_, []) -> IdentTypeExpr (l, None, tn)
         | _ -> raise (ParseException (l, "Type arguments are not supported."))
@@ -223,17 +223,17 @@ end
 
 let decompose_data_model data_model_opt =
   match data_model_opt with
-    Some {int_rank; long_rank; ptr_rank} -> LitRank int_rank, LitRank long_rank, LitRank ptr_rank
-  | None -> IntRank, LongRank, PtrRank
+    Some {int_width; long_width; ptr_width} -> LitWidth int_width, LitWidth long_width, LitWidth ptr_width
+  | None -> IntWidth, LongWidth, PtrWidth
 
 module Parser(ParserArgs: PARSER_ARGS) = struct
 
 open ParserArgs
 
-let int_rank, long_rank, ptr_rank = decompose_data_model data_model
+let int_width, long_width, ptr_width = decompose_data_model data_model
 
-let intType = Int (Signed, int_rank)
-let longType = Int (Signed, long_rank)
+let intType = Int (Signed, IntRank)
+let longType = Int (Signed, LongRank)
 
 let get_unnamed_param_name =
   let counter = ref 0 in
@@ -849,24 +849,24 @@ and
 | [< >] -> ()
 and
   parse_integer_type_keyword = parser
-  [< '(l, Kwd "int") >] -> (l, int_rank)
-| [< '(l, Kwd "__int8") >] -> (l, LitRank 0)
-| [< '(l, Kwd "__int16") >] -> (l, LitRank 1)
-| [< '(l, Kwd "__int32") >] -> (l, LitRank 2)
-| [< '(l, Kwd "__int64") >] -> (l, LitRank 3)
-| [< '(l, Kwd "__int128") >] -> (l, LitRank 4)
+  [< '(l, Kwd "int") >] -> (l, IntRank)
+| [< '(l, Kwd "__int8") >] -> (l, FixedWidthRank 0)
+| [< '(l, Kwd "__int16") >] -> (l, FixedWidthRank 1)
+| [< '(l, Kwd "__int32") >] -> (l, FixedWidthRank 2)
+| [< '(l, Kwd "__int64") >] -> (l, FixedWidthRank 3)
+| [< '(l, Kwd "__int128") >] -> (l, FixedWidthRank 4)
 and
   parse_integer_size_specifier = parser
-| [< '(_, Kwd "short") >] -> LitRank 1
+| [< '(_, Kwd "short") >] -> ShortRank
 | [< '(_, Kwd "long");
      n = begin parser
-       [< '(_, Kwd "long") >] -> LitRank 3
-     | [< >] -> long_rank
+       [< '(_, Kwd "long") >] -> LongLongRank
+     | [< >] -> LongRank
      end >] -> n
-| [< >] -> int_rank
+| [< >] -> IntRank
 and
   parse_integer_type_rest = parser
-  [< '(_, Kwd "char") >] -> LitRank 0
+  [< '(_, Kwd "char") >] -> CharRank
 | [< (_, k) = parse_integer_type_keyword >] -> k
 | [< n = parse_integer_size_specifier; _ = opt (parser [< '(_, Kwd "int") >] -> ()) >] -> n
 and
@@ -888,26 +888,26 @@ and
 | [< (l, k) = parse_integer_type_keyword >] -> ManifestTypeExpr (l, Int (Signed, k))
 | [< '(l, Kwd "float") >] -> ManifestTypeExpr (l, Float)
 | [< '(l, Kwd "double") >] -> ManifestTypeExpr (l, Double)
-| [< '(l, Kwd "short") >] -> ManifestTypeExpr(l, Int (Signed, LitRank 1))
+| [< '(l, Kwd "short") >] -> ManifestTypeExpr(l, Int (Signed, ShortRank))
 | [< '(l, Kwd "long");
      t = begin parser
        [< '(_, Kwd "int") >] -> ManifestTypeExpr (l, longType);
      | [< '(_, Kwd "double") >] -> ManifestTypeExpr (l, LongDouble);
-     | [< '(_, Kwd "long"); _ = opt (parser [< '(_, Kwd "int") >] -> ()) >] -> ManifestTypeExpr (l, Int (Signed, LitRank 3))
+     | [< '(_, Kwd "long"); _ = opt (parser [< '(_, Kwd "int") >] -> ()) >] -> ManifestTypeExpr (l, Int (Signed, LongLongRank))
      | [< >] -> ManifestTypeExpr (l, longType)
      end
    >] -> t
 | [< '(l, Kwd "signed"); n = parse_integer_type_rest >] -> ManifestTypeExpr (l, Int (Signed, n))
 | [< '(l, Kwd "__signed__"); n = parse_integer_type_rest >] -> ManifestTypeExpr (l, Int (Signed, n))
 | [< '(l, Kwd "unsigned"); n = parse_integer_type_rest >] -> ManifestTypeExpr (l, Int (Unsigned, n))
-| [< '(l, Kwd "uintptr_t") >] -> ManifestTypeExpr (l, Int (Unsigned, ptr_rank))
-| [< '(l, Kwd "intptr_t") >] -> ManifestTypeExpr (l, Int (Signed, ptr_rank))
+| [< '(l, Kwd "uintptr_t") >] -> ManifestTypeExpr (l, Int (Unsigned, PtrRank))
+| [< '(l, Kwd "intptr_t") >] -> ManifestTypeExpr (l, Int (Signed, PtrRank))
 | [< '(l, Kwd "real") >] -> ManifestTypeExpr (l, RealType)
 | [< '(l, Kwd "bool") >] -> ManifestTypeExpr (l, Bool)
 | [< '(l, Kwd "boolean") >] -> ManifestTypeExpr (l, Bool)
 | [< '(l, Kwd "void") >] -> ManifestTypeExpr (l, Void)
-| [< '(l, Kwd "char") >] -> ManifestTypeExpr (l, match language with CLang -> Int (Signed, LitRank 0) | Java -> Int (Unsigned, LitRank 1))
-| [< '(l, Kwd "byte") >] -> ManifestTypeExpr (l, Int (Signed, LitRank 0))
+| [< '(l, Kwd "char") >] -> ManifestTypeExpr (l, match language with CLang -> Int (Signed, CharRank) | Java -> java_char_type)
+| [< '(l, Kwd "byte") >] -> ManifestTypeExpr (l, java_byte_type)
 | [< '(l, Kwd "predicate");
      '(_, Kwd "(");
      ts = rep_comma parse_paramtype;
@@ -1426,7 +1426,7 @@ and
 | [< '(l, Kwd "false") >] -> False l
 | [< '(l, CharToken c) >] ->
   if Char.code c > 127 then raise (ParseException (l, "Non-ASCII character literals are not yet supported"));
-  let tp = match language with CLang -> Int (Signed, LitRank 0) | Java -> Int (Unsigned, LitRank 1) in
+  let tp = match language with CLang -> Int (Signed, CharRank) | Java -> Int (Unsigned, ShortRank) in
   CastExpr (l, ManifestTypeExpr (l, tp), IntLit (l, big_int_of_int (Char.code c), true, false, NoLSuffix))
 | [< '(l, Kwd "null") >] -> Null l
 | [< '(l, Kwd "currentThread") >] -> Var (l, "currentThread")
@@ -1475,19 +1475,19 @@ and
 | [< '(l, Int (i, dec, usuffix, lsuffix, _)) >] -> IntLit (l, i, dec, usuffix, lsuffix)
 | [< '(l, RealToken i) >] -> RealLit (l, num_of_big_int i, None)
 | [< '(l, RationalToken (n, suffix)) >] -> RealLit (l, n, suffix)
-| [< '(l, Kwd "INT_MIN") >] -> (match int_rank with LitRank k -> IntLit (l, min_signed_big_int k, true, false, NoLSuffix) | IntRank -> Operation (l, MinValue (Int (Signed, IntRank)), []))
-| [< '(l, Kwd "INT_MAX") >] -> (match int_rank with LitRank k -> IntLit (l, max_signed_big_int k, true, false, NoLSuffix) | IntRank -> Operation (l, MaxValue (Int (Signed, IntRank)), []))
-| [< '(l, Kwd "UINTPTR_MAX") >] -> (match ptr_rank with LitRank k -> IntLit (l, max_unsigned_big_int k, true, true, NoLSuffix) | PtrRank -> Operation (l, MaxValue (Int (Unsigned, PtrRank)), []))
+| [< '(l, Kwd "INT_MIN") >] -> (match int_width with LitWidth k -> IntLit (l, min_signed_big_int k, true, false, NoLSuffix) | IntWidth -> Operation (l, MinValue (Int (Signed, IntRank)), []))
+| [< '(l, Kwd "INT_MAX") >] -> (match int_width with LitWidth k -> IntLit (l, max_signed_big_int k, true, false, NoLSuffix) | IntWidth -> Operation (l, MaxValue (Int (Signed, IntRank)), []))
+| [< '(l, Kwd "UINTPTR_MAX") >] -> (match ptr_width with LitWidth k -> IntLit (l, max_unsigned_big_int k, true, true, NoLSuffix) | PtrWidth -> Operation (l, MaxValue (Int (Unsigned, PtrRank)), []))
 | [< '(l, Kwd "CHAR_MIN") >] -> IntLit (l, big_int_of_string "-128", true, false, NoLSuffix)
 | [< '(l, Kwd "CHAR_MAX") >] -> IntLit (l, big_int_of_string "127", true, false, NoLSuffix)
 | [< '(l, Kwd "UCHAR_MAX") >] -> IntLit (l, big_int_of_string "255", true, false, NoLSuffix)
 | [< '(l, Kwd "SHRT_MIN") >] -> IntLit (l, big_int_of_string "-32768", true, false, NoLSuffix)
 | [< '(l, Kwd "SHRT_MAX") >] -> IntLit (l, big_int_of_string "32767", true, false, NoLSuffix)
 | [< '(l, Kwd "USHRT_MAX") >] -> IntLit (l, big_int_of_string "65535", true, false, NoLSuffix)
-| [< '(l, Kwd "LONG_MIN") >] -> (match long_rank with LitRank k -> IntLit (l, min_signed_big_int k, true, false, NoLSuffix) | LongRank -> Operation (l, MinValue (Int (Signed, LongRank)), []))
-| [< '(l, Kwd "LONG_MAX") >] -> (match long_rank with LitRank k -> IntLit (l, max_signed_big_int k, true, false, NoLSuffix) | LongRank -> Operation (l, MaxValue (Int (Signed, LongRank)), []))
-| [< '(l, Kwd "ULONG_MAX") >] -> (match long_rank with LitRank k -> IntLit (l, max_unsigned_big_int k, true, true, NoLSuffix) | LongRank -> Operation (l, MaxValue (Int (Unsigned, LongRank)), []))
-| [< '(l, Kwd "UINT_MAX") >] -> (match int_rank with LitRank k -> IntLit (l, max_unsigned_big_int k, true, true, NoLSuffix) | IntRank -> Operation (l, MaxValue (Int (Unsigned, IntRank)), []))
+| [< '(l, Kwd "LONG_MIN") >] -> (match long_width with LitWidth k -> IntLit (l, min_signed_big_int k, true, false, NoLSuffix) | LongWidth -> Operation (l, MinValue (Int (Signed, LongRank)), []))
+| [< '(l, Kwd "LONG_MAX") >] -> (match long_width with LitWidth k -> IntLit (l, max_signed_big_int k, true, false, NoLSuffix) | LongWidth -> Operation (l, MaxValue (Int (Signed, LongRank)), []))
+| [< '(l, Kwd "ULONG_MAX") >] -> (match long_width with LitWidth k -> IntLit (l, max_unsigned_big_int k, true, true, NoLSuffix) | LongWidth -> Operation (l, MaxValue (Int (Unsigned, LongRank)), []))
+| [< '(l, Kwd "UINT_MAX") >] -> (match int_width with LitWidth k -> IntLit (l, max_unsigned_big_int k, true, true, NoLSuffix) | IntWidth -> Operation (l, MaxValue (Int (Unsigned, IntRank)), []))
 | [< '(l, Kwd "LLONG_MIN") >] -> IntLit (l, big_int_of_string "-9223372036854775808", true, false, LLSuffix)
 | [< '(l, Kwd "LLONG_MAX") >] -> IntLit (l, big_int_of_string "9223372036854775807", true, false, LLSuffix)
 | [< '(l, Kwd "ULLONG_MAX") >] -> IntLit (l, big_int_of_string "18446744073709551615", true, true, LLSuffix)
