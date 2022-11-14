@@ -907,6 +907,7 @@ lemma_auto void divrem_elim();
     ensures [f]divrem(D, d, q, r) &*& 0 <= r &*& r < d &*& D == q * d + r;
 
 predicate malloc_block(void *p; int size);
+predicate malloc_block_integers_(void *p, int size, bool signed_; int count) = malloc_block(p, ?size_) &*& [_]divrem(size_, size, count, 0);
 predicate malloc_block_chars(char *p; int count) = malloc_block(p, count);
 predicate malloc_block_uchars(unsigned char *p; int count) = malloc_block(p, count);
 predicate malloc_block_ints(int *p; int count) = malloc_block(p, ?size) &*& [_]divrem(size, sizeof(int), count, 0);

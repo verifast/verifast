@@ -5210,6 +5210,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let integers___symb = lazy_predfamsymb "integers__"
   let integer__symb = lazy_predfamsymb "integer_"
   let integers__symb = lazy_predfamsymb "integers_"
+  let malloc_block_integers__symb = lazy_predfamsymb "malloc_block_integers_"
 
   let generic_points_to_symb = lazy_predfamsymb "generic_points_to"
 

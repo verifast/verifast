@@ -2345,7 +2345,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end;
       eval_h h env w $. fun h env n ->
       let arraySize = ctxt#mk_mul n (sizeof ls elemTp) in
-      check_overflow lmul int_zero_term arraySize max_uintptr_term (fun l t -> assert_term t h env l);
+      if g <> "calloc" then check_overflow lmul int_zero_term arraySize max_uintptr_term (fun l t -> assert_term t h env l);
       let resultType = PtrType elemTp in
       let result = get_unique_var_symb_non_ghost (match xo with None -> "array" | Some x -> x) resultType in
       let cont h = cont h env result in
@@ -2356,10 +2356,16 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
         begin fun () ->
           assume_neq (mk_ptr_address result) int_zero_term $. fun () ->
-          let n, elemTp, arrayPredSymb, mallocBlockSymb =
+          let n, elemTp, arrayPredSymb, mallocBlockSymb, extra_args =
             match try_pointee_pred_symb0 elemTp with
-              Some (_, _, _, asym, _, mbsym, _, _, _, _, _, uasym) -> n, (if g = "calloc" then elemTp else option_type elemTp), (if g = "calloc" then asym else uasym), mbsym
-            | None -> arraySize, (if g = "calloc" then charType else option_type charType), (if g = "calloc" then chars_pred_symb () else chars__pred_symb ()), malloc_block_chars_pred_symb()
+              Some (_, _, _, asym, _, mbsym, _, _, _, _, _, uasym) ->
+              n, (if g = "calloc" then elemTp else option_type elemTp), (if g = "calloc" then asym else uasym), mbsym, []
+            | None ->
+            match int_rank_and_signedness elemTp with
+              Some (r, s) ->
+                n, (if g = "calloc" then intType else option_type intType), (if g = "calloc" then integers__symb () else integers___symb ()), malloc_block_integers__symb (), [rank_size_term r; if s = Signed then true_term else false_term]
+            | _ ->
+              arraySize, (if g = "calloc" then charType else option_type charType), (if g = "calloc" then chars_pred_symb () else chars__pred_symb ()), malloc_block_chars_pred_symb(), []
           in
           assume (mk_object_pointer_within_limits result arraySize) $. fun () ->
           let values = get_unique_var_symb "values" (list_type elemTp) in
@@ -2370,8 +2376,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             else
               cont ()
           end $. fun () ->
-          let mallocBlockChunk = Chunk ((mallocBlockSymb, true), [], real_unit, [result; n], None) in
-          let arrayChunk = Chunk ((arrayPredSymb, true), [], real_unit, [result; n; values], None) in
+          let mallocBlockChunk = Chunk ((mallocBlockSymb, true), [], real_unit, result :: extra_args @ [n], None) in
+          let arrayChunk = Chunk ((arrayPredSymb, true), [], real_unit, result :: extra_args @ [n; values], None) in
           cont (mallocBlockChunk::arrayChunk::h)
         end
     | WFunCall (l, ("malloc" as g), [], ([SizeofExpr (ls, es)] as args)) | WFunCall (l, ("calloc" as g), [], ([IntLit (_, _, _, _, _); SizeofExpr (ls, es)] as args)) ->
