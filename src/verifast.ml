@@ -788,6 +788,11 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       iter h tenv ghostenv env xs
     | ExprStmt e ->
+      let e =
+        match e with
+          CastExpr (_, ManifestTypeExpr (_, Void), e) -> e
+        | _ -> e
+      in
       let (w, _) = check_expr (pn,ilist) tparams tenv e in
       verify_expr false h env None w (fun h env _ -> cont h env) econt
     | IfStmt (l, e, ss1, ss2) ->
