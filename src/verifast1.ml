@@ -681,7 +681,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * type_
     type union_info =
         loc
-      * ((string * union_field_info) list * termnode (* size *)) option (* None if union without body *)
+      * ((string * union_field_info) list * termnode (* size *)) option (* None if union without body *) * termnode (* typeid *)
     type enum_info =
         big_int
     type global_info =
@@ -1266,8 +1266,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         [] -> udm
       | Union (l, un, fds_opt)::ds ->
         begin match try_assoc un unionmap0 with
-          Some (_, Some _) -> static_error l "Duplicate union name." None
-        | Some (ldecl, None) -> if fds_opt = None then static_error l "Duplicate union declaration." None else delayed_union_def un ldecl l
+          Some (_, Some _, _) -> static_error l "Duplicate union name." None
+        | Some (ldecl, None, _) -> if fds_opt = None then static_error l "Duplicate union declaration." None else delayed_union_def un ldecl l
         | None -> ()
         end;
         begin match try_assoc un udm with
@@ -1681,7 +1681,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         StructType id
       | _ ->
       match try_assoc id unionmap0 with
-        Some (ld, _) when dialect = Some Cxx ->
+        Some (ld, _, _) when dialect = Some Cxx ->
         reportUseSite DeclKind_Union ld l;
         UnionType id
       | _ ->
@@ -1739,7 +1739,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       static_error l "A union type with a body is not supported in this position." None
     | UnionTypeExpr (l, Some un, None) ->
       begin match try_assoc un unionmap0 with
-        Some (ld, _) ->
+        Some (ld, _, _) ->
         reportUseSite DeclKind_Union ld l;
         UnionType un
       | None ->
@@ -1858,7 +1858,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let union_size_partial umap l un =
     match try_assoc un umap with
-      Some (_, Some (_, s)) -> s
+      Some (_, Some (_, s), _) -> s
     | _ -> static_error l (sprintf "Cannot take size of undefined union '%s'" un) None
   
   let rec sizeof_partial smap umap l t =
@@ -1882,8 +1882,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let unionmap1 =
     uniondeclmap |> List.map begin fun (un, (l, fds_opt)) ->
+      let typeid_symb = get_unique_var_symb ("union_" ^ un ^ "_typeid") (PtrType Void) in
       match fds_opt with
-        None -> (un, (l, None))
+        None -> (un, (l, None, typeid_symb))
       | Some fds ->
         let s = get_unique_var_symb ("union_" ^ un ^ "_size") intType in
         let fmap =
@@ -1898,7 +1899,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           iter [] fds
         in
-        (un, (l, Some (fmap, s)))
+        (un, (l, Some (fmap, s), typeid_symb))
     end
 
   let unionmap = unionmap1 @ unionmap0
@@ -4530,7 +4531,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | PtrType (UnionType un) ->
       begin match try_assoc un unionmap with
-        Some (_, Some (fds, _)) ->
+        Some (_, Some (fds, _), _) ->
         begin match try_assoc_i f fds with
           None -> static_error l ("No such field in union '" ^ un ^ "'.") None
         | Some (i, (_, tp)) ->
@@ -5127,6 +5128,47 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       mk_app !!truncate_signed_symb [t; nbBits]
   
+  let char_rank_symb = lazy_purefuncsymb "char_rank"
+  let short_rank_symb = lazy_purefuncsymb "short_rank"
+  let int_rank_symb = lazy_purefuncsymb "int_rank"
+  let long_rank_symb = lazy_purefuncsymb "long_rank"
+  let long_long_rank_symb = lazy_purefuncsymb "long_long_rank"
+  let intptr_rank_symb = lazy_purefuncsymb "intptr_rank"
+  let exact_width_rank_symb = lazy_purefuncsymb "exact_width_rank"
+  let integer_typeid_symb = lazy_purefuncsymb "integer_typeid"
+
+  let mk_typeid_term name = get_unique_var_symb (name ^ "_typeid") (PtrType Void)
+  
+  let pointer_typeid_term = mk_typeid_term "pointer"
+  let bool_typeid_term = mk_typeid_term "bool"
+  let float_typeid_term = mk_typeid_term "float"
+  let double_typeid_term = mk_typeid_term "double"
+  let long_double_typeid_term = mk_typeid_term "long_double"
+
+  let term_of_rank = function
+    CharRank -> snd (char_rank_symb ())
+  | ShortRank -> snd (short_rank_symb ())
+  | IntRank -> snd (int_rank_symb ())
+  | LongRank -> snd (long_rank_symb ())
+  | LongLongRank -> snd (long_long_rank_symb ())
+  | PtrRank -> snd (intptr_rank_symb ())
+  | FixedWidthRank k -> mk_app (exact_width_rank_symb ()) [ctxt#mk_intlit ((1 lsl k) * 8)]
+
+  let typeid_of l = function
+    Int (signedness, rank) -> mk_app (integer_typeid_symb ()) [term_of_rank rank; if signedness = Signed then true_term else false_term]
+  | PtrType _ -> pointer_typeid_term
+  | Bool -> bool_typeid_term
+  | Float -> float_typeid_term
+  | Double -> double_typeid_term
+  | LongDouble -> long_double_typeid_term
+  | StructType sn ->
+    let _, _, _, _, s = List.assoc sn structmap in
+    s
+  | UnionType un ->
+    let _, _, s = List.assoc un unionmap in
+    s
+  | _ -> static_error l "Taking the typeid of this type is not yet supported" None
+
   let pointer_ctor_symb = lazy_purefuncsymb "pointer_ctor"
   let ptr_add_symb = lazy_purefuncsymb "ptr_add"
   let field_ptr_symb = lazy_purefuncsymb "field_ptr"
@@ -5921,7 +5963,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     expr_iter (check_ghost_nonrec ghostenv) e
   
   let () =
-    unionmap1 |> List.iter begin fun (un, (l, body_opt)) ->
+    unionmap1 |> List.iter begin fun (un, (l, body_opt, _)) ->
       match body_opt with
         None -> ()
       | Some (fds, s) ->
@@ -6652,9 +6694,8 @@ let check_if_list_is_defined () =
       in
       cont state v
     | ClassLit (l,s) -> cont state (List.assoc s classterms)
-    | TypeInfo (l, StructType sn) ->
-      let _, _, _, _, info = List.assoc sn structmap in
-      cont state info
+    | TypeInfo (l, tp) ->
+      cont state (typeid_of l tp)
     | StringLit (l, s) ->
       if ass_term = None then static_error l "String literals are not allowed in ghost code." None;
       cont state
