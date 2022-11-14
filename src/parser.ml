@@ -212,8 +212,29 @@ type modifier = StaticModifier | FinalModifier | AbstractModifier | VisibilityMo
 
 (* Ugly hack *)
 let typedefs: (string, unit) Hashtbl.t = Hashtbl.create 64
-let register_typedef g = Hashtbl.add typedefs g ()
-let is_typedef g = Hashtbl.mem typedefs g
+let typedefs_enabled = ref true
+let set_typedefs_enabled b =
+  let old_typedefs_enabled = !typedefs_enabled in
+  typedefs_enabled := b;
+  old_typedefs_enabled
+let register_typedef g = if not (Hashtbl.mem typedefs g) then Hashtbl.add typedefs g ()
+let is_typedef g = Hashtbl.mem typedefs g && !typedefs_enabled
+let typedef_scopes = ref []
+let push_typedef_scope () =
+  typedef_scopes := ref []::!typedef_scopes
+let register_varname x =
+  if Hashtbl.mem typedefs x then begin
+    match !typedef_scopes with
+      scope::_ ->
+      scope := x::!scope;
+      Hashtbl.remove typedefs x
+    | _ ->
+      ()
+  end
+let pop_typedef_scope () =
+  let scope::scopes = !typedef_scopes in
+  List.iter register_typedef !scope;
+  typedef_scopes := scopes
 
 module type PARSER_ARGS = sig
   val language: language
@@ -424,6 +445,7 @@ and
       StaticArrayTypeExpr (l, elemTp, List.length es)
     | _ -> tx
   in
+  register_varname x;
   (l, tx, x, init, (ref false, ref None))
 and
   parse_method_rest l = parser
@@ -509,6 +531,7 @@ and
   | [< t = parse_type_suffix (UnionTypeExpr (l, Some u, None)); d = parse_func_rest Regular (Some t) Public >] -> d
   >] -> check_function_for_contract d
 | [< '(l, Kwd "typedef");
+     () = (fun _ -> push_typedef_scope ());
      rt = parse_return_type;
      g, ds = begin parser
        [< '(_, Ident g);
@@ -549,7 +572,7 @@ and
          let contract = check_for_contract spec l "Function type declaration should have contract." (fun (pre, post) -> (pre, post, false)) in
          g, [FuncTypeDecl (l, Real, rt, g, tparams, ftps, ps, contract); TypedefDecl (l, ManifestTypeExpr (lp, PtrType (FuncType g)), g)]
      end
-  >] -> register_typedef g; ds
+  >] -> pop_typedef_scope (); register_typedef g; ds
 | [< '(_, Kwd "enum"); '(l, Ident n); d = parser
     [< elems = parse_enum_body; '(_, Kwd ";"); >] -> EnumDecl(l, n, elems)
   | [< t = parse_type_suffix (EnumTypeExpr (l, Some n, None)); d = parse_func_rest Regular (Some t) Public >] -> d
@@ -609,10 +632,12 @@ and
 and
   parse_predicate_decl l (inductiveness: inductiveness) = parser 
     [< '(li, Ident g); tparams = parse_type_params li; 
+     () = (fun _ -> push_typedef_scope ());
      (ps, inputParamCount) = parse_pred_paramlist;
      body = opt parse_pred_body;
      '(_, Kwd ";");
     >] ->
+    pop_typedef_scope ();
     [PredFamilyDecl (l, g, tparams, 0, List.map (fun (t, p) -> t) ps, inputParamCount, inductiveness)] @
     (match body with None -> [] | Some body -> [PredFamilyInstanceDecl (l, g, tparams, [], ps, body)])
 and
@@ -622,15 +647,15 @@ and
   | [< '(l, Kwd "copredicate"); result = parse_predicate_decl l Inductiveness_CoInductive >] -> result
   | [< '(l, Kwd "predicate_family"); '(_, Ident g); is = parse_paramlist; (ps, inputParamCount) = parse_pred_paramlist; '(_, Kwd ";") >]
   -> [PredFamilyDecl (l, g, [], List.length is, List.map (fun (t, p) -> t) ps, inputParamCount, Inductiveness_Inductive)]
-  | [< '(l, Kwd "predicate_family_instance"); '(_, Ident g); is = parse_index_list; ps = parse_paramlist;
-     p = parse_pred_body; '(_, Kwd ";"); >] -> [PredFamilyInstanceDecl (l, g, [], is, ps, p)]
-  | [< '(l, Kwd "predicate_ctor"); '(_, Ident g); ps1 = parse_paramlist; (ps2, inputParamCount) = parse_pred_paramlist;
-     p = parse_pred_body; '(_, Kwd ";"); >] -> [PredCtorDecl (l, g, ps1, ps2, inputParamCount, p)]
+  | [< '(l, Kwd "predicate_family_instance"); '(_, Ident g); is = parse_index_list; () = (fun _ -> push_typedef_scope ()); ps = parse_paramlist;
+     p = parse_pred_body; '(_, Kwd ";"); >] -> pop_typedef_scope (); [PredFamilyInstanceDecl (l, g, [], is, ps, p)]
+  | [< '(l, Kwd "predicate_ctor"); '(_, Ident g); () = (fun _ -> push_typedef_scope ()); ps1 = parse_paramlist; (ps2, inputParamCount) = parse_pred_paramlist;
+     p = parse_pred_body; '(_, Kwd ";"); >] -> pop_typedef_scope (); [PredCtorDecl (l, g, ps1, ps2, inputParamCount, p)]
   | [< '(l, Kwd "lemma"); t = parse_return_type; d = parse_func_rest (Lemma(false, None)) t Public >] -> [d]
   | [< '(l, Kwd "lemma_auto"); trigger = opt (parser [< '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); >] -> e); t = parse_return_type; d = parse_func_rest (Lemma(true, trigger)) t Public >] -> [d]
-  | [< '(l, Kwd "box_class"); '(_, Ident bcn); ps = parse_paramlist;
+  | [< '(l, Kwd "box_class"); '(_, Ident bcn); () = (fun _ -> push_typedef_scope ()); ps = parse_paramlist;
        '(_, Kwd "{"); '(_, Kwd "invariant"); inv = parse_asn; '(_, Kwd ";");
-       ads = parse_action_decls; hpds = parse_handle_pred_decls; '(_, Kwd "}") >] -> [BoxClassDecl (l, bcn, ps, inv, ads, hpds)]
+       ads = parse_action_decls; hpds = parse_handle_pred_decls; '(_, Kwd "}") >] -> pop_typedef_scope (); [BoxClassDecl (l, bcn, ps, inv, ads, hpds)]
   | [< '(l, Kwd "typedef"); '(_, Kwd "lemma"); rt = parse_return_type; '(li, Ident g); tps = parse_type_params li;
        (ftps, ps) = parse_functype_paramlists; '(_, Kwd ";"); (pre, post, terminates) = parse_spec >] ->
     [FuncTypeDecl (l, Ghost, rt, g, tps, ftps, ps, (pre, post, terminates))]
@@ -639,6 +664,7 @@ and
   | [< '(l, Kwd "require_module"); '(_, Ident g); '(lx, Kwd ";") >] -> [RequireModuleDecl (l, g)]
   | [< '(l, Kwd "abstract_type"); '(_, Ident t); '(_, Kwd ";") >] -> [AbstractTypeDecl (l, t)]
   | [< '(l, Kwd ("fixpoint"|"fixpoint_auto" as kwd)); rt = parse_return_type; '(lg, Ident g); tparams = parse_type_params_general;
+       () = (fun _ -> push_typedef_scope ());
        ps = parse_paramlist;
        decreases = begin parser
          [< '(_, Kwd "decreases"); e = parse_expr; '(_, Kwd ";") >] -> Some e
@@ -649,6 +675,7 @@ and
        | [< '(_, Kwd ";") >] -> None
        end
     >] ->
+    pop_typedef_scope ();
     let rec refers_to_g state e =
       match e with
         CallExpr (_, g', _, _, _, _) when g' = g -> true
@@ -761,13 +788,17 @@ and
     tparams = parse_type_params_general;
     decl = parser
       [<
-        ps = parse_paramlist;
+        '(_, Kwd "(");
+        () = (fun _ -> push_typedef_scope ());
+        ps = rep_comma parse_param;
+        ps = (fun _ -> List.filter filter_void_params ps);
+        '(_, Kwd ")");
         f = parser
           [< '(_, Kwd ";"); (nonghost_callers_only, ft, co, terminates) = parse_spec_clauses >] ->
           Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, terminates, None, Static, v)
         | [< (nonghost_callers_only, ft, co, terminates) = parse_spec_clauses; '(_, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}") >] ->
           Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, terminates, Some (ss, closeBraceLoc), Static, v)
-      >] -> f
+      >] -> pop_typedef_scope (); f
     | [<
         () = (fun s -> if k = Regular && tparams = [] && t <> None then () else raise Stream.Failure);
         t = parse_array_braces (get t);
@@ -964,6 +995,7 @@ and
       begin match pn with
         None -> (t, get_unnamed_param_name ())
       | Some((l, pname)) -> 
+        register_varname pname;
         begin match is_array with
           None -> ( match fp_params with 
                       None -> (t, pname)
@@ -1131,10 +1163,10 @@ and
      init_stmts = begin parser
        [< e = parse_expr;
           ss = parser
-            [< '(l, Ident x); s = parse_decl_stmt_rest (type_expr_of_expr e) l x >] -> [s]
+            [< '(l, Ident x); s = parse_decl_stmt_rest (type_expr_of_expr e) l x >] -> register_varname x; [s]
           | [< es = comma_rep parse_expr; '(_, Kwd ";") >] -> List.map (fun e -> ExprStmt e) (e::es)
        >] -> ss
-     | [< te = parse_type; '(l, Ident x); s = parse_decl_stmt_rest te l x >] -> [s]
+     | [< te = parse_type; '(l, Ident x); s = parse_decl_stmt_rest te l x >] -> register_varname x; [s]
      | [< '(_, Kwd ";") >] -> []
      end;
      cond = opt parse_expr;
@@ -1188,7 +1220,7 @@ and
       AssignExpr (l, Operation (llhs, Mul, [Var (lt, t); e1]), rhs) -> 
       let rec iter te e1 =
         match e1 with
-          Var (lx, x) -> DeclStmt (l, [l, te, x, Some(rhs), (ref false, ref None)])
+          Var (lx, x) -> register_varname x; DeclStmt (l, [l, te, x, Some(rhs), (ref false, ref None)])
         | Deref (ld, e2) -> iter (PtrTypeExpr (ld, te)) e2
         | _ -> ExprStmt e
       in
@@ -1196,7 +1228,7 @@ and
     | Operation (l, Mul, [Var (lt, t); e1]) ->
       let rec iter te e1 =
         match e1 with
-          Var (lx, x) -> DeclStmt (lx, [lx, te, x, None, (ref false, ref None)])
+          Var (lx, x) -> register_varname x; DeclStmt (lx, [lx, te, x, None, (ref false, ref None)])
         | Deref (ld, e2) -> iter (PtrTypeExpr (ld, te)) e2
         | _ -> ExprStmt e
       in
@@ -1204,10 +1236,11 @@ and
     | _ -> ExprStmt e
     end
   | [< '(l, Kwd ":") >] -> (match e with Var (_, lbl) -> LabelStmt (l, lbl) | _ -> raise (ParseException (l, "Label must be identifier.")))
-  | [< '(lx, Ident x); s = parse_decl_stmt_rest (type_expr_of_expr e) lx x >] -> s
+  | [< '(lx, Ident x); s = parse_decl_stmt_rest (type_expr_of_expr e) lx x >] -> register_varname x; s
   >] -> s
 (* parse variable declarations: *)
 | [< te = parse_type; '(lx, Ident x); s2 = parse_decl_stmt_rest te lx x >] ->
+  register_varname x;
   ( try match te with
      ManifestTypeExpr (l, Void) ->
       raise (ParseException (l, "A variable cannot be of type void."))
@@ -1296,12 +1329,25 @@ and
 | [< >] -> []
 and
   parse_switch_stmt_clause = parser
-  [< '(l, Kwd "case"); e = parse_expr; '(_, Kwd ":"); ss = parse_stmts >] -> SwitchStmtClause (l, e, ss)
+  [<
+    '(l, Kwd "case");
+    typedefs_enabled = (fun _ -> set_typedefs_enabled false);
+    e = parse_expr;
+    _ = (fun _ -> set_typedefs_enabled typedefs_enabled);
+    '(_, Kwd ":");
+    _ = (fun _ -> register_pattern_varnames e);
+    ss = parse_stmts
+  >] -> SwitchStmtClause (l, e, ss)
 | [< '(l, Kwd "default"); '(_, Kwd ":"); ss = parse_stmts; >] -> SwitchStmtDefaultClause(l, ss)
+and
+  register_pattern_varnames = function
+    CallExpr (_, _, _, _, args, _) -> List.iter (function LitPat e -> register_pattern_varnames e | _ -> ()) args
+  | Var (_, x) -> register_varname x
+  | _ -> ()
 and
   parse_more_pats = parser
   [< '(_, Kwd ")") >] -> []
-| [< '(_, Kwd ","); '(lx, Ident x); xs = parse_more_pats >] -> x::xs
+| [< '(_, Kwd ","); '(lx, Ident x); xs = parse_more_pats >] -> register_varname x; x::xs
 and
   parse_asn stream = parse_expr stream
 and
@@ -1313,13 +1359,13 @@ and
 and
   parse_pointsto_rhs = parser
   [< '(_, Kwd "_") >] -> DummyPat
-| [< '(_, Kwd "?"); p = parser [< '(lx, Ident x) >] -> VarPat (lx, x) | [< '(_, Kwd "_") >] -> DummyVarPat >] -> p
+| [< '(_, Kwd "?"); p = parser [< '(lx, Ident x) >] -> register_varname x; VarPat (lx, x) | [< '(_, Kwd "_") >] -> DummyVarPat >] -> p
 | [< '(_, Kwd "^"); e = parse_expr >] -> LitPat (WidenedParameterArgument e)
 | [< e = parse_cond_expr >] -> pat_of_expr e
 and
   parse_pattern = parser
   [< '(_, Kwd "_") >] -> DummyPat
-| [< '(_, Kwd "?"); '(lx, Ident x) >] -> VarPat (lx, x)
+| [< '(_, Kwd "?"); '(lx, Ident x) >] -> register_varname x; VarPat (lx, x)
 | [< '(_, Kwd "^"); e = parse_expr >] -> LitPat (WidenedParameterArgument e)
 | [< e = parse_cond_expr >] -> pat_of_expr e
 and
@@ -1328,7 +1374,7 @@ and
 | [< >] -> []
 and
   parse_switch_asn_clause = parser
-  [< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(lx, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); '(_, Kwd "return"); p = parse_asn; '(_, Kwd ";") >] -> SwitchAsnClause (l, c, pats, p)
+  [< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(lx, Ident x); () = (fun _ -> register_varname x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); '(_, Kwd "return"); p = parse_asn; '(_, Kwd ";") >] -> SwitchAsnClause (l, c, pats, p)
 and
   parse_expr stream = parse_assign_expr stream
 and
@@ -1421,7 +1467,7 @@ and
 and
   parse_expr_primary s = parse_expr_primary0 true s
 and
-  parse_expr_primary0 allowCast = parser
+  parse_expr_primary0 allowCast = fun stream -> stream |> parser
   [< '(l, Kwd "true") >] -> True l
 | [< '(l, Kwd "false") >] -> False l
 | [< '(l, CharToken c) >] ->
@@ -1449,7 +1495,7 @@ and
   >] -> res
 | [<
     (* TODO: parse type arguments for java generic methods *)
-    '(lx, Ident x);
+  '(lx, Ident x) when not (is_typedef x) || (match Stream.npeek 2 stream with [_; (_, Kwd ("("|"<"))] -> true | _ -> false);
     ex = parser
       [<
         args0 = parse_patlist;
@@ -1566,7 +1612,7 @@ and
 | [< >] -> []
 and
   parse_switch_expr_clause = parser
-  [< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(lx, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); '(_, Kwd "return"); e = parse_expr; '(_, Kwd ";") >] -> SwitchExprClause (l, c, pats, e)
+    [< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(lx, Ident x); () = (fun _ -> register_varname x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); '(_, Kwd "return"); e = parse_expr; '(_, Kwd ";") >] -> SwitchExprClause (l, c, pats, e)
 and
   expr_to_class_name e =
     match e with
