@@ -3512,7 +3512,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   end (* CheckFile *)
   
-  let rec check_file filepath is_import_spec include_prelude dir headers ps =
+  let rec check_file filepath is_import_spec include_prelude dir headers ps dbg_info =
     let module CF = CheckFile(struct
       let filepath = filepath
       let is_import_spec = is_import_spec
@@ -3520,6 +3520,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let dir = dir
       let headers = headers
       let ps = ps
+      let dbg_info = dbg_info
       let check_file = check_file
     end) in
     CF.result
@@ -3531,7 +3532,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let (prototypes_implemented, functypes_implemented, structures_defined, unions_defined,
        nonabstract_predicates, modules_imported) =
     let result = check_should_fail ([], [], [], [], [], []) $. fun () ->
-    let (headers, ds)=
+    let (headers, ds, dbg_info) =
       match file_specs path with
         Java, _ ->
           let l = Lexed (file_loc path) in
@@ -3569,12 +3570,15 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let javas = javas @ provide_javas in
           let context = List.map (fun (Lexed ((b, _, _), _), (_, p, _), _, _) -> Util.concat (Filename.dirname b) ((Filename.chop_extension p) ^ ".jar")) headers in
           let ds = Java_frontend_bridge.parse_java_files javas context reportRange reportShouldFail options.option_verbose options.option_enforce_annotations options.option_use_java_frontend in
-          (headers, ds)
+          (headers, ds, (*dbg_info*) None)
       | CLang, None ->
+        let headers, ds =
         if Filename.check_suffix path ".h" then
           parse_header_file reportMacroCall path reportRange reportShouldFail options.option_verbose [] define_macros options.option_enforce_annotations data_model
         else
           parse_c_file reportMacroCall path reportRange reportShouldFail options.option_verbose include_paths define_macros options.option_enforce_annotations data_model
+        in
+        (headers, ds, (*dbg_info*) None)
       | CLang, Some Cxx -> begin
         let module Translator = Cxx_ast_translator.Make(
           struct
@@ -3592,7 +3596,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         ) 
         in
         try
-          Translator.parse_cxx_file ()
+          let headers, ds = Translator.parse_cxx_file () in (headers, ds, (*dbg_info*) None)
         with
         | Cxx_annotation_parser.CxxAnnParseException (l, msg)
         | Cxx_ast_translator.CxxAstTranslException (l, msg) -> static_error l msg None
@@ -3611,7 +3615,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     emitter_callback ds;
     check_should_fail ([], [], [], [], [], []) $. fun () ->
-    let (linker_info, _) = check_file path false true programDir headers ds in
+    let (linker_info, _) = check_file path false true programDir headers ds dbg_info in
     linker_info
     in
     begin

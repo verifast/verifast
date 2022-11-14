@@ -183,8 +183,41 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match ctxt#simplify t with None -> ctxt#pprint t | Some(t) -> ctxt#pprint t
     else
       ctxt#pprint t
-  
-  let pprint_context_stack cs =
+
+  let print_dbg_info pr (di: debug_info) =
+    match di with
+    | DbgInfoRustFe dbg_info_rust_fe_list -> begin
+      let mmsg_dbg_info_rust_fe ({id; info}: debug_info_rust_fe) = begin
+        let msg = "id:" ^ Ast.string_of_loc id ^ "|" in
+        List.fold_left (fun msg ({internal_name; surf_name}: var_debug_info) -> msg ^ "{internal_name:" ^ internal_name ^ ", surf_name:" ^ surf_name ^"}") msg info
+      end
+      in
+      let msg = "Debug info for \"" ^ path ^ "\"\n" in
+      let msg = List.fold_left (fun msg di_rust_fe -> msg ^ mmsg_dbg_info_rust_fe di_rust_fe ^ "\n") msg dbg_info_rust_fe_list in
+      pr ("%s": ('a, out_channel, unit) format) msg
+    end
+
+  let pprint_context_stack cs dbg_info =
+    let Executing (_, _, current_fid, _) = List.hd (List.rev cs) in
+    let var_name_map =
+      match dbg_info with
+      | Some(dbg_info) -> begin
+        print_dbg_info Printf.eprintf dbg_info;
+        match dbg_info with
+        | DbgInfoRustFe dbg_info_rust_fe_list when (language, dialect) = (CLang, Some(Rust)) -> begin
+          match List.find_opt (fun ({ id; _}: debug_info_rust_fe) -> id = current_fid) dbg_info_rust_fe_list with
+          | None -> None (* its a lemma *)
+          | Some f -> Some(f.info)
+        end
+        | _ -> failwith "Rust debug info for non Rust language"
+      end
+      | None -> None
+    in
+    let map_env_entry var_name_map (var_name, term) =
+      match List.find_opt (fun ({internal_name; surf_name}: var_debug_info) -> internal_name = var_name) var_name_map with
+      | None -> None
+      | Some entry -> Some (entry.surf_name, (pprint_context_term term))
+    in
     List.map
       (function
          Assuming t -> Assuming (pprint_context_term t)
@@ -197,7 +230,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
              end
              h
          in
-         let env' = List.map (fun (x, t) -> (x, pprint_context_term t)) env in
+         let env' =
+         match var_name_map with
+         | Some var_name_map -> List.filter_map (map_env_entry var_name_map) env
+         | None -> List.map (fun (x, t) -> (x, pprint_context_term t)) env
+        in
          Executing (h', env', l, msg)
        | PushSubcontext -> PushSubcontext
        | PopSubcontext -> PopSubcontext
@@ -207,75 +244,19 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let register_pred_ctor_application t symbol symbol_term ts inputParamCount =
     pred_ctor_applications := (t, (symbol, symbol_term, ts, inputParamCount)) :: !pred_ctor_applications
 
-  let assert_false h env l msg url =
-    push (Node (ErrorNode, ref [])) !currentForest;
-    raise (SymbolicExecutionError (pprint_context_stack !contextStack, l, msg, url))
-  
-  let push_node l msg =
-    let oldPath, oldBranch, oldTargetPath = !currentPath, !currentBranch, !targetPath in
-    targetPath :=
-      begin match oldTargetPath with
-        Some (b::bs) ->
-        if b = oldBranch then
-          if bs = [] then
-            assert_false [] [] l "Target branch reached" None
-          else
-            Some bs
-        else
-          Some []
-      | p -> p
-      end;
-    currentPath := oldBranch::oldPath;
-    currentBranch := 0;
-    push_undo_item (fun () -> currentPath := oldPath; currentBranch := oldBranch + 1; targetPath := oldTargetPath);
-    let newForest = ref [] in
-    let oldForest = !currentForest in
-    push (Node (ExecNode (msg, !currentPath), newForest)) oldForest;
-    push_undo_item (fun () -> currentForest := oldForest);
-    currentForest := newForest
-  
   let success () = SymExecSuccess
 
   let major_success () =  (* A major success is a successful completion of a symbolic execution path that shows up as a green node in the execution tree. *)
     push (Node (SuccessNode, ref [])) !currentForest;
     success ()
 
-  let push_context ?(verbosity_level=1) msg =
-    contextStack := msg::!contextStack;
-    begin match msg with
-      Executing (h, env, l, msg) ->
-      if !verbosity >= verbosity_level then printff "%10.6fs: %s: %s\n" (Perf.time ()) (string_of_loc l) msg;
-      push_node l msg
-    | _ -> ()
-    end
   let pop_context () = let (h::t) = !contextStack in contextStack := t
   
   let contextStackStack = ref []
   
   let push_contextStack () = push_undoStack(); contextStackStack := !contextStack::!contextStackStack
   let pop_contextStack () = pop_undoStack(); let h::t = !contextStackStack in contextStack := h; contextStackStack := t
-  
-  let with_context_force msg cont =
-    !stats#execStep;
-    push_contextStack ();
-    push_context msg;
-    let result = cont() in
-    pop_contextStack ();
-    result
-  
-  let with_context ?(verbosity_level=1) msg cont =
-    !stats#execStep;
-    push_contextStack ();
-    push_context ~verbosity_level msg;
-    do_finally
-      begin fun () ->
-        if !targetPath <> Some [] then
-          cont()
-        else
-          SymExecSuccess
-      end
-      pop_contextStack
-  
+
   (** Remember the current path condition, set of used IDs, and set of dummy fraction terms. *)  
   let push() =
     used_ids_stack := (!used_ids_undo_stack, !dummy_frac_terms, !pred_ctor_applications)::!used_ids_stack;
@@ -1088,15 +1069,73 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     val dir: string
     val headers: (loc * (include_kind * string * string) * string list * package list) list
     val ps: package list
-    
+
+    val dbg_info: debug_info option
     (** For recursive calls. *)
-    val check_file: string -> bool -> bool -> string -> (loc * (include_kind * string * string) * string list * package list) list -> package list -> check_file_output * maps
+    val check_file: string -> bool -> bool -> string -> (loc * (include_kind * string * string) * string list * package list) list -> package list -> debug_info option -> check_file_output * maps
   end
   
   module CheckFile1(CheckFileArgs: CHECK_FILE_ARGS) = struct
   
   include CheckFileArgs
-  
+
+  let assert_false h env l msg url =
+    Util.push (Node (ErrorNode, ref [])) !currentForest;
+    raise (SymbolicExecutionError (pprint_context_stack !contextStack dbg_info, l, msg, url))
+
+  let push_node l msg =
+    let oldPath, oldBranch, oldTargetPath = !currentPath, !currentBranch, !targetPath in
+    targetPath :=
+      begin match oldTargetPath with
+        Some (b::bs) ->
+          if b = oldBranch then
+            if bs = [] then
+              assert_false [] [] l "Target branch reached" None
+            else
+              Some bs
+          else
+            Some []
+        | p -> p
+      end;
+    currentPath := oldBranch::oldPath;
+    currentBranch := 0;
+    push_undo_item (fun () -> currentPath := oldPath; currentBranch := oldBranch + 1; targetPath := oldTargetPath);
+    let newForest = ref [] in
+    let oldForest = !currentForest in
+    Util.push (Node (ExecNode (msg, !currentPath), newForest)) oldForest;
+    push_undo_item (fun () -> currentForest := oldForest);
+    currentForest := newForest
+
+  let push_context ?(verbosity_level = 1) msg =
+    contextStack := msg::!contextStack;
+    begin match msg with
+      Executing (h, env, l, msg) ->
+        if !verbosity >= verbosity_level then printff "%10.6fs: %s: %s\n" (Perf.time ()) (string_of_loc l) msg;
+        push_node l msg
+      | _ -> ()
+    end
+
+  let with_context_force msg cont =
+    !stats#execStep;
+    push_contextStack ();
+    push_context msg;
+    let result = cont() in
+    pop_contextStack ();
+    result
+
+  let with_context ?(verbosity_level = 1) msg cont =
+    !stats#execStep;
+    push_contextStack ();
+    push_context ~verbosity_level msg;
+    do_finally
+      begin fun () ->
+        if !targetPath <> Some [] then
+          cont ()
+        else
+          SymExecSuccess
+      end
+      pop_contextStack
+
   let is_jarspec = Filename.check_suffix filepath ".jarspec"
 
   let _ = if options.option_verbose = -1 then Printf.printf "%10.6fs: >> type checking of %s \n" (Perf.time()) filepath
@@ -1249,7 +1288,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     (jarspecs, ds)
                 in
                 reportUseSite DeclKind_HeaderFile (Lexed ((path, 1, 1), (path, 1, 1))) l;
-                let (_, maps) = check_file header_path header_is_import_spec include_prelude (Filename.dirname path) headers' ds in
+                let (_, maps) = check_file header_path header_is_import_spec include_prelude (Filename.dirname path) headers' ds (*Todo @Nima: dbg_info*) None in
                 headermap := (path, (headers', maps))::!headermap;
                 (headers', maps)
               | Some (headers', maps) ->
@@ -1278,7 +1317,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let rtdir = Filename.dirname rtpath in
                 let ds = Java_frontend_bridge.parse_java_files (List.map (fun x -> concat rtdir x) javaspecs) [] reportRange
                                                                reportShouldFail initial_verbosity enforce_annotations use_java_frontend in
-                let (_, maps0) = check_file rtpath true false !bindir [] ds in
+                let (_, maps0) = check_file rtpath true false !bindir [] ds (*Todo @Nima: dbg_info*) None in
                 headermap := (rtpath, ([], maps0))::!headermap;
                 (maps0, [])
               | Some ([], maps0) ->

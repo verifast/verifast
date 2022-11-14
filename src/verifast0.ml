@@ -297,3 +297,7 @@ type options = {
 
 (* result of symbolic execution; used instead of unit to detect branches not guarded by push and pop calls *)
 type symexec_result = SymExecSuccess
+
+type var_debug_info = { internal_name : string; surf_name : string }
+type debug_info_rust_fe = { id : loc; info : var_debug_info list }
+type debug_info = DbgInfoRustFe of debug_info_rust_fe list

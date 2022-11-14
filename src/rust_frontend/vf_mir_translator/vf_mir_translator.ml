@@ -113,7 +113,14 @@ module Mir = struct
     | U64 -> Ok 64
     | U128 -> Ok 128
 
-  type var_debug_info_internal = VdiiPlace of string | VdiiConstant
+  type var_debug_info_internal = VdiiPlace of { id : string } | VdiiConstant
+
+  type var_debug_info = {
+    internal : var_debug_info_internal;
+    surf_name : string;
+  }
+
+  type debug_info = { id : Ast.loc; info : var_debug_info list }
 end
 
 module TrTyTuple = struct
@@ -907,7 +914,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     match get vdic_cpn with
     | Place place_cpn -> (
         match translate_place place_cpn loc with
-        | Ast.Var ((*loc*) _, id) -> Ok (Mir.VdiiPlace id)
+        | Ast.Var ((*loc*) _, id) -> Ok (Mir.VdiiPlace { id })
         | _ -> failwith "Todo VarDebugInfoContents Place")
     | Const constant_cpn -> Ok Mir.VdiiConstant
     | Undefined _ ->
@@ -920,8 +927,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let src_info_cpn = source_info_get vdi_cpn in
     let* src_info = translate_source_info src_info_cpn in
     let value_cpn = value_get vdi_cpn in
-    let value = translate_var_debug_info_contents value_cpn src_info.span in
-    Ok (value, name)
+    let* value = translate_var_debug_info_contents value_cpn src_info.span in
+    Ok ({ internal = value; surf_name = name } : Mir.var_debug_info)
 
   let translate_body (body_cpn : BodyRd.t) =
     let open BodyRd in
@@ -996,9 +1003,21 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         in
         let vdis_cpn = var_debug_info_get_list body_cpn in
         let* vdis = ListAux.try_map translate_var_debug_info vdis_cpn in
-        Ok (imp_loc (*as a unique id*), body, vdis)
+        Ok (body, ({ id = loc; info = vdis } : Mir.debug_info))
     | DefKind.AssocFn -> failwith "Todo: MIR Body kind AssocFn"
     | _ -> Error (`TrBody "Unknown MIR Body kind")
+
+  let translate_to_vf_debug_info ({ id; info = dbg_info } : Mir.debug_info) =
+    let module VF = Verifast0 in
+    let translate_to_vf_var_debug_info
+        ({ internal; surf_name } : Mir.var_debug_info) =
+      match internal with
+      | Mir.VdiiConstant -> None
+      | Mir.VdiiPlace { id } ->
+          Some ({ internal_name = id; surf_name } : VF.var_debug_info)
+    in
+    let dbg_info = List.filter_map translate_to_vf_var_debug_info dbg_info in
+    ({ id; info = dbg_info } : VF.debug_info_rust_fe)
 
   let translate_vf_mir (vf_mir_cpn : VfMirRd.t) =
     let job _ =
@@ -1009,13 +1028,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let verbosity = 0
       end) in
       let bodies_cpn = VfMirRd.bodies_get_list vf_mir_cpn in
-      let* id_body_vdis_list = ListAux.try_map translate_body bodies_cpn in
-      let body_decls, debug_infos =
-        List.split
-        @@ List.map
-             (fun (id, body, vdis) -> (body, (id, vdis)))
-             id_body_vdis_list
-      in
+      let* bodies_and_dbg_infos = ListAux.try_map translate_body bodies_cpn in
+      let body_decls, debug_infos = List.split bodies_and_dbg_infos in
+      let debug_infos = List.map translate_to_vf_debug_info debug_infos in
+      let debug_infos = Verifast0.DbgInfoRustFe debug_infos in
       let decls = AstDecls.decls () in
       let decls = decls @ body_decls in
       (* Todo @Nima: we should add necessary inclusions from Rust side *)
@@ -1023,7 +1039,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let header_names = Headers.decls () in
       let* headers = ListAux.try_map HeadersAux.parse_header header_names in
       let headers = List.concat headers in
-      Ok (headers, [ Ast.PackageDecl (Ast.dummy_loc, "", [], decls) ])
+      Ok
+        ( headers,
+          [ Ast.PackageDecl (Ast.dummy_loc, "", [], decls) ],
+          Some debug_infos )
     in
     match job () with
     | Ok res -> res
