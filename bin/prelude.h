@@ -29,17 +29,6 @@ lemma void div_rem_nonneg(int D, int d);
     requires 0 <= D &*& 0 < d;
     ensures D == D / d * d + D % d &*& 0 <= D / d &*& D / d <= D &*& 0 <= D % d &*& D % d < d;
 
-abstract_type integer_rank;
-fixpoint integer_rank char_rank();
-fixpoint integer_rank short_rank();
-fixpoint integer_rank int_rank();
-fixpoint integer_rank long_rank();
-fixpoint integer_rank longlong_rank();
-fixpoint integer_rank intptr_rank();
-fixpoint integer_rank exact_width_rank(int bitwidth);
-
-fixpoint void *integer_typeid(integer_rank rank, bool signed_);
-
 inductive pointer_provenance =
     pointer_provenance_ctor(int); // Do not rely on this definition; it is subject to change.
 inductive pointer = pointer_ctor(pointer_provenance provenance, uintptr_t address);

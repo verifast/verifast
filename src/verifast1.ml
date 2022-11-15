@@ -468,6 +468,36 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let get_unique_var_symb x t = 
     ctxt#mk_app (mk_symbol x [] (typenode_of_type t) Uninterp) []
 
+  let mk_typeid_term name = get_unique_var_symb (name ^ "_typeid") (PtrType Void)
+  
+  let char_typeid_term = mk_typeid_term "char"
+  let uchar_typeid_term = mk_typeid_term "unsigned_char"
+  let short_typeid_term = mk_typeid_term "short"
+  let ushort_typeid_term = mk_typeid_term "ushort"
+  let int_typeid_term = mk_typeid_term "int"
+  let uint_typeid_term = mk_typeid_term "unsigned_int"
+  let long_typeid_term = mk_typeid_term "long"
+  let ulong_typeid_term = mk_typeid_term "unsigned_long"
+  let llong_typeid_term = mk_typeid_term "long_long"
+  let ullong_typeid_term = mk_typeid_term "unsigned_long_long"
+  let intptr_typeid_term = mk_typeid_term "intptr_t"
+  let uintptr_typeid_term = mk_typeid_term "uintptr_t"
+  
+  let exact_width_integer_typeid_terms = Array.init (max_width + 1) begin fun k ->
+    mk_typeid_term ("uint" ^ string_of_int ((1 lsl k) * 8) ^ "_t"),
+    mk_typeid_term ("int" ^ string_of_int ((1 lsl k) * 8) ^ "_t")
+  end
+
+  let pointer_typeid_term = mk_typeid_term "pointer"
+  let bool_typeid_term = mk_typeid_term "bool"
+  let float_typeid_term = mk_typeid_term "float"
+  let double_typeid_term = mk_typeid_term "double"
+  let long_double_typeid_term = mk_typeid_term "long_double"
+
+  let sizeof_func_symb = mk_symbol "sizeof" [ctxt#type_inductive] ctxt#type_int Uninterp
+
+  let mk_sizeof typeid_term = ctxt#mk_app sizeof_func_symb [typeid_term]
+
   let int_size_term, long_size_term, ptr_size_term =
     match data_model with
       Some {int_width; long_width; ptr_width} ->
@@ -494,6 +524,55 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | PtrWidth -> ptr_size_term
 
   let rank_size_term k = width_size_term (width_of_rank k)
+
+  let () =
+    let assert_sizeof typeid_term size_term =
+      ctxt#assert_term (ctxt#mk_eq (mk_sizeof typeid_term) size_term)
+    in
+    assert_sizeof bool_typeid_term (rank_size_term CharRank);
+    assert_sizeof char_typeid_term (rank_size_term CharRank);
+    assert_sizeof uchar_typeid_term (rank_size_term CharRank);
+    assert_sizeof short_typeid_term (rank_size_term ShortRank);
+    assert_sizeof ushort_typeid_term (rank_size_term ShortRank);
+    assert_sizeof int_typeid_term (rank_size_term IntRank);
+    assert_sizeof uint_typeid_term (rank_size_term IntRank);
+    assert_sizeof long_typeid_term (rank_size_term LongRank);
+    assert_sizeof ulong_typeid_term (rank_size_term LongRank);
+    assert_sizeof llong_typeid_term (rank_size_term LongLongRank);
+    assert_sizeof ullong_typeid_term (rank_size_term LongLongRank);
+    assert_sizeof intptr_typeid_term (rank_size_term PtrRank);
+    assert_sizeof uintptr_typeid_term (rank_size_term PtrRank);
+    for k = 0 to max_width do
+      assert_sizeof (fst exact_width_integer_typeid_terms.(k)) (width_size_term_ k);
+      assert_sizeof (snd exact_width_integer_typeid_terms.(k)) (width_size_term_ k)
+    done;
+    assert_sizeof float_typeid_term (width_size_term_ 2);
+    assert_sizeof double_typeid_term (width_size_term_ 3);
+    assert_sizeof pointer_typeid_term (width_size_term ptr_width)
+
+  let struct_size_partial smap l sn =
+    match try_assoc sn smap with
+      Some (_, _, _, s, _) -> s
+    | _ -> static_error l (sprintf "Cannot take size of undeclared struct '%s'" sn) None
+
+  let union_size_partial umap l un =
+    match try_assoc un umap with
+      Some (_, Some (_, s), _) -> s
+    | _ -> static_error l (sprintf "Cannot take size of undefined union '%s'" un) None
+  
+  let rec sizeof_partial smap umap l t =
+    match t with
+      Void -> ctxt#mk_intlit 1
+    | Bool -> rank_size_term CharRank
+    | Int (_, k) -> rank_size_term k
+    (* Assume IEEE-754 *)
+    | Float -> width_size_term (LitWidth 2)
+    | Double -> width_size_term (LitWidth 3)
+    | PtrType _ -> width_size_term ptr_width
+    | StructType sn -> struct_size_partial smap l sn
+    | UnionType un -> union_size_partial umap l un
+    | StaticArrayType (elemTp, elemCount) -> ctxt#mk_mul (sizeof_partial smap umap l elemTp) (ctxt#mk_intlit elemCount)
+    | _ -> static_error l ("Taking the size of type " ^ string_of_type t ^ " is not yet supported.") None
 
   let integer_limits_table =
     Array.init (max_width + 1) begin fun k ->
@@ -1889,30 +1968,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let classterms = classterms1 @ classterms0
   let interfaceterms = interfaceterms1 @ interfaceterms0
 
-  let struct_size_partial smap l sn =
-    match try_assoc sn smap with
-      Some (_, _, _, s, _) -> s
-    | _ -> static_error l (sprintf "Cannot take size of undeclared struct '%s'" sn) None
-
-  let union_size_partial umap l un =
-    match try_assoc un umap with
-      Some (_, Some (_, s), _) -> s
-    | _ -> static_error l (sprintf "Cannot take size of undefined union '%s'" un) None
-  
-  let rec sizeof_partial smap umap l t =
-    match t with
-      Void -> ctxt#mk_intlit 1
-    | Bool -> rank_size_term CharRank
-    | Int (_, k) -> rank_size_term k
-    (* Assume IEEE-754 *)
-    | Float -> width_size_term (LitWidth 2)
-    | Double -> width_size_term (LitWidth 3)
-    | PtrType _ -> width_size_term ptr_width
-    | StructType sn -> struct_size_partial smap l sn
-    | UnionType un -> union_size_partial umap l un
-    | StaticArrayType (elemTp, elemCount) -> ctxt#mk_mul (sizeof_partial smap umap l elemTp) (ctxt#mk_intlit elemCount)
-    | _ -> static_error l ("Taking the size of type " ^ string_of_type t ^ " is not yet supported.") None
-
   let field_size_partial smap umap = function
     | Field (l, _, t, _, _, _, _, _) -> sizeof_partial smap umap l (check_pure_type ("", []) [] Real t)
 
@@ -1924,7 +1979,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match fds_opt with
         None -> (un, (l, None, typeid_symb))
       | Some fds ->
-        let s = get_unique_var_symb ("union_" ^ un ^ "_size") intType in
+        let s = mk_sizeof typeid_symb in
         let fmap =
           let rec iter fmap fds =
             match fds with
@@ -1949,7 +2004,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match remaining with
       | [] -> smap
       | (sn, (l, body_opt, attrs)) :: remaining ->
-        let s = get_unique_var_symb ("struct_" ^ sn ^ "_size") intType in
+        let type_info = get_unique_var_symb (sn ^ "_type_info") type_info_type in
+        let s = mk_sizeof type_info in
         let packed = ref false in
         List.iter (function
                    | Packed ->
@@ -1962,7 +2018,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         ) attrs;
         ctxt#assert_term (ctxt#mk_le s max_uintptr_term);
         ctxt#assert_term (ctxt#mk_lt (ctxt#mk_intlit 0) s);
-        let type_info = get_unique_var_symb (sn ^ "_type_info") type_info_type in
         let rec iter1 fmap fds has_ghost_fields bases is_polymorphic =
           match fds with
             [] ->
@@ -4387,7 +4442,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | SizeofExpr(l, e) ->
       let (w, t, v) = check_expr_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
       let t = unfold_inferred_type t in
-      (SizeofExpr (l, TypeExpr (ManifestTypeExpr (expr_loc e, t))), sizeType, None)
+      begin match t with
+        InductiveType ("pointer", []) ->
+        (SizeofExpr (l, w), sizeType, None)
+      | _ ->
+        (SizeofExpr (l, TypeExpr (ManifestTypeExpr (expr_loc e, t))), sizeType, None)
+      end
     | GenericExpr (l, e, cs, d) ->
       let (_, t, _) = check e in
       let matching_cases = cs |> flatmap begin fun (te, e) ->
@@ -5193,34 +5253,21 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       mk_app !!truncate_signed_symb [t; nbBits]
   
-  let char_rank_symb = lazy_purefuncsymb "char_rank"
-  let short_rank_symb = lazy_purefuncsymb "short_rank"
-  let int_rank_symb = lazy_purefuncsymb "int_rank"
-  let long_rank_symb = lazy_purefuncsymb "long_rank"
-  let long_long_rank_symb = lazy_purefuncsymb "long_long_rank"
-  let intptr_rank_symb = lazy_purefuncsymb "intptr_rank"
-  let exact_width_rank_symb = lazy_purefuncsymb "exact_width_rank"
-  let integer_typeid_symb = lazy_purefuncsymb "integer_typeid"
-
-  let mk_typeid_term name = get_unique_var_symb (name ^ "_typeid") (PtrType Void)
-  
-  let pointer_typeid_term = mk_typeid_term "pointer"
-  let bool_typeid_term = mk_typeid_term "bool"
-  let float_typeid_term = mk_typeid_term "float"
-  let double_typeid_term = mk_typeid_term "double"
-  let long_double_typeid_term = mk_typeid_term "long_double"
-
-  let term_of_rank = function
-    CharRank -> snd (char_rank_symb ())
-  | ShortRank -> snd (short_rank_symb ())
-  | IntRank -> snd (int_rank_symb ())
-  | LongRank -> snd (long_rank_symb ())
-  | LongLongRank -> snd (long_long_rank_symb ())
-  | PtrRank -> snd (intptr_rank_symb ())
-  | FixedWidthRank k -> mk_app (exact_width_rank_symb ()) [ctxt#mk_intlit ((1 lsl k) * 8)]
-
   let typeid_of l = function
-    Int (signedness, rank) -> mk_app (integer_typeid_symb ()) [term_of_rank rank; if signedness = Signed then true_term else false_term]
+    Int (Signed, CharRank) -> char_typeid_term
+  | Int (Signed, ShortRank) -> short_typeid_term
+  | Int (Signed, IntRank) -> int_typeid_term
+  | Int (Signed, LongRank) -> long_typeid_term
+  | Int (Signed, LongLongRank) -> llong_typeid_term
+  | Int (Signed, PtrRank) -> intptr_typeid_term
+  | Int (Signed, FixedWidthRank k) -> snd exact_width_integer_typeid_terms.(k)
+  | Int (Unsigned, CharRank) -> uchar_typeid_term
+  | Int (Unsigned, ShortRank) -> ushort_typeid_term
+  | Int (Unsigned, IntRank) -> uint_typeid_term
+  | Int (Unsigned, LongRank) -> ulong_typeid_term
+  | Int (Unsigned, LongLongRank) -> ullong_typeid_term
+  | Int (Unsigned, PtrRank) -> uintptr_typeid_term
+  | Int (Unsigned, FixedWidthRank k) -> fst exact_width_integer_typeid_terms.(k)
   | PtrType _ -> pointer_typeid_term
   | Bool -> bool_typeid_term
   | Float -> float_typeid_term
@@ -7101,6 +7148,9 @@ let check_if_list_is_defined () =
     | ProverTypeConversion (tfrom, tto, e) -> ev state e $. fun state v -> cont state (convert_provertype v tfrom tto)
     | SizeofExpr (l, TypeExpr (ManifestTypeExpr (_, t))) ->
       cont state (sizeof l t)
+    | SizeofExpr (l, w) ->
+      ev state w $. fun state v ->
+      cont state (mk_sizeof v)
     | InstanceOfExpr(l, e, ManifestTypeExpr (l2, tp)) ->
       ev state e $. fun state v -> cont state (ctxt#mk_app instanceof_symbol [v; prover_type_term l2 tp])
     | _ -> static_error (expr_loc e) "Construct not supported in this position." None
