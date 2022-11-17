@@ -152,6 +152,7 @@ type options = {
   option_verbose: int;
   option_disable_overflow_check: bool;
   option_fwrapv: bool; (* GCC's -fwrapv flag: signed integer arithmetic wraps around *)
+  option_assume_left_to_right_evaluation: bool;
   option_assume_no_provenance: bool;
   option_assume_no_subobject_provenance: bool;
   option_allow_should_fail: bool;

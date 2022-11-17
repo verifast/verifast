@@ -63,6 +63,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     option_verbose=initial_verbosity;
     option_disable_overflow_check=disable_overflow_check;
     option_fwrapv=fwrapv;
+    option_assume_left_to_right_evaluation=assume_left_to_right_evaluation;
     option_assume_no_provenance=assume_no_provenance;
     option_assume_no_subobject_provenance=assume_no_subobject_provenance;
     option_allow_should_fail=allow_should_fail;
@@ -75,6 +76,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     option_data_model=data_model;
     option_report_skipped_stmts=report_skipped_stmts;
   } = options
+
+  let assume_left_to_right_evaluation = assume_left_to_right_evaluation || language <> CLang
 
   let {reportRange; reportUseSite; reportExecutionForest; reportStmt; reportStmtExec; reportDirective} = callbacks
 

@@ -336,6 +336,7 @@ let _ =
   let verbose = ref 0 in
   let disable_overflow_check = ref false in
   let fwrapv = ref false in
+  let assume_left_to_right_evaluation = ref false in
   let assume_no_provenance = ref false in
   let assume_no_subobject_provenance = ref false in
   let prover: string ref = ref default_prover in
@@ -392,6 +393,7 @@ let _ =
             ; "-verbose", Set_int verbose, "-1 = file processing; 1 = statement executions; 2 = produce/consume steps; 4 = prover queries."
             ; "-disable_overflow_check", Set disable_overflow_check, " "
             ; "-fwrapv", Set fwrapv, "allow truncating signed integer arithmetic (corresponds to GCC's -fwrapv flag)"
+            ; "-assume_left_to_right_evaluation", Set assume_left_to_right_evaluation, "Disable checks related to C's unspecified evaluation order and sequencing rules"
             ; "-assume_no_provenance", Set assume_no_provenance, "Disregard pointer provenance. This is unsound, even when compiling with -O0!"
             ; "-assume_no_subobject_provenance", Set assume_no_subobject_provenance, "Assume the compiler's alias analysis ignores subobject provenance. CompCert ignores subobject provenance, and so, it seems, do GCC and Clang (last time I checked)"
             ; "-prover", String (fun str -> prover := str), "Set SMT prover (" ^ list_provers() ^ ")."
@@ -444,6 +446,7 @@ let _ =
           option_verbose = !verbose;
           option_disable_overflow_check = !disable_overflow_check;
           option_fwrapv = !fwrapv;
+          option_assume_left_to_right_evaluation = !assume_left_to_right_evaluation;
           option_assume_no_provenance = !assume_no_provenance;
           option_assume_no_subobject_provenance = !assume_no_subobject_provenance;
           option_allow_should_fail = !allowShouldFail;
