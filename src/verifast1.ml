@@ -198,25 +198,31 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     end
 
   let pprint_context_stack cs dbg_info =
-    let Executing (_, _, current_fid, _) = List.hd (List.rev cs) in
+    let is_internal_name n = String.starts_with ~prefix:"$" n in
     let var_name_map =
-      match dbg_info with
-      | Some(dbg_info) -> begin
-        print_dbg_info Printf.eprintf dbg_info;
+      match List.hd (List.rev cs), dbg_info with
+      | Executing (_, _, current_fid, _), Some(dbg_info) -> begin
+        (* print_dbg_info Printf.eprintf dbg_info; *)
         match dbg_info with
         | DbgInfoRustFe dbg_info_rust_fe_list when (language, dialect) = (CLang, Some(Rust)) -> begin
           match List.find_opt (fun ({ id; _}: debug_info_rust_fe) -> id = current_fid) dbg_info_rust_fe_list with
           | None -> None (* its a lemma *)
           | Some f -> Some(f.info)
         end
-        | _ -> failwith "Rust debug info for non Rust language"
+        | DbgInfoRustFe _ -> failwith "Rust debug info for non Rust language"
       end
-      | None -> None
+      | _ -> None
+      (* Todo @Nima @Bart: The first context is not always of the kind `Executing` that makes some tests fail if we write
+         `let Executing (_, _, current_fid, _) = List.hd (List.rev cs)`. To circumvent this we do not filter variable names
+         in case of other kinds of context as the first one. It should be fixed. *)
     in
     let map_env_entry var_name_map (var_name, term) =
-      match List.find_opt (fun ({internal_name; surf_name}: var_debug_info) -> internal_name = var_name) var_name_map with
-      | None -> None
-      | Some entry -> Some (entry.surf_name, (pprint_context_term term))
+      if not (is_internal_name var_name) then
+        Some (var_name, pprint_context_term term)
+      else
+        match List.find_opt (fun ({internal_name; surf_name}: var_debug_info) -> internal_name = var_name) var_name_map with
+        | None -> None
+        | Some entry -> Some (entry.surf_name, (pprint_context_term term))
     in
     List.map
       (function
