@@ -755,7 +755,7 @@ and
     Struct of 
       loc * 
       string * 
-      (base_spec list * field list) option *
+      (base_spec list * field list * bool (* is polymorphic *)) option *
       struct_attr list
   | Union of loc * string * field list option
   | Inductive of  (* inductief data type regel-naam-type parameters-lijst van constructors*)

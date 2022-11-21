@@ -1,6 +1,6 @@
 #pragma once
 #include "Annotation.h"
-#include "loc_serializer.h"
+#include "Util.h"
 #include "clang/AST/DeclVisitor.h"
 #include "clang/AST/StmtVisitor.h"
 #include "clang/AST/TypeLocVisitor.h"
@@ -143,7 +143,7 @@ struct StmtSerializer : public NodeSerializer<stubs::Stmt, clang::Stmt>,
 
 private:
   template <class While>
-  bool visitWhi(stubs::Stmt::While::Builder &builder, const While *stmt);
+  bool serializeWhileStmt(stubs::Stmt::While::Builder &builder, const While *stmt);
 };
 
 struct DeclSerializer : public NodeSerializer<stubs::Decl, clang::Decl>,
@@ -197,14 +197,12 @@ struct DeclSerializer : public NodeSerializer<stubs::Decl, clang::Decl>,
 
   bool VisitEnumDecl(const clang::EnumDecl *decl);
 
+  bool VisitNamespaceDecl(const clang::NamespaceDecl *decl);
+
 private:
   void serializeFuncDecl(stubs::Decl::Function::Builder &builder,
                          const clang::FunctionDecl *decl,
                          llvm::StringRef mangledName);
-
-  void serializeParams(
-      capnp::List<stubs::Decl::Param, capnp::Kind::STRUCT>::Builder &builder,
-      llvm::ArrayRef<clang::ParmVarDecl *> params);
 
   void serializeFieldDecl(stubs::Decl::Field::Builder &builder,
                           const clang::FieldDecl *decl);
@@ -251,6 +249,8 @@ struct ExprSerializer : public NodeSerializer<stubs::Expr, clang::Expr>,
 
   bool VisitImplicitCastExpr(const clang::ImplicitCastExpr *expr);
 
+  bool VisitExplicitCastExpr(const clang::ExplicitCastExpr *expr);
+
   bool VisitCallExpr(const clang::CallExpr *expr);
 
   bool VisitDeclRefExpr(const clang::DeclRefExpr *expr);
@@ -260,6 +260,8 @@ struct ExprSerializer : public NodeSerializer<stubs::Expr, clang::Expr>,
   bool VisitCXXThisExpr(const clang::CXXThisExpr *expr);
 
   bool VisitCXXMemberCallExpr(const clang::CXXMemberCallExpr *expr);
+
+  bool VisitCXXOperatorCallExpr(const clang::CXXOperatorCallExpr *expr);
 
   bool VisitCXXNewExpr(const clang::CXXNewExpr *expr);
 
@@ -282,8 +284,14 @@ private:
   bool serializeBinaryOperator(stubs::Expr::BinaryOp::Builder &builder,
                                const clang::BinaryOperator *bo);
 
-  bool visitCall(stubs::Expr::Call::Builder &builder,
-                 const clang::CallExpr *expr);
+  bool serializeCall(stubs::Expr::Call::Builder &builder,
+                     const clang::CallExpr *expr);
+
+  bool serializeCast(const clang::CastExpr *expr, bool expl);
+
+  bool serializeStructToStructCast(
+      stubs::Expr::Expr::StructToStruct::Builder &builder,
+      const clang::CastExpr *expr);
 };
 
 struct TypeSerializer : public DescSerializer<stubs::Type, clang::Type>,
@@ -360,6 +368,8 @@ public:
   bool VisitLValueReferenceTypeLoc(const clang::LValueReferenceTypeLoc type);
 
   bool VisitRValueReferenceTypeLoc(const clang::RValueReferenceTypeLoc type);
+
+  bool VisitFunctionProtoTypeLoc(const clang::FunctionProtoTypeLoc type);
 };
 
 class AnnotationSerializer {

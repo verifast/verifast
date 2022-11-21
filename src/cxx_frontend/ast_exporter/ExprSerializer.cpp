@@ -151,28 +151,49 @@ bool ExprSerializer::VisitIntegerLiteral(const clang::IntegerLiteral *lit) {
 
 bool ExprSerializer::VisitImplicitCastExpr(
     const clang::ImplicitCastExpr *expr) {
-  if (expr->getCastKind() == clang::CastKind::CK_LValueToRValue) {
+  return serializeCast(expr, false);
+}
+
+bool ExprSerializer::VisitExplicitCastExpr(
+    const clang::ExplicitCastExpr *expr) {
+  return serializeCast(expr, true);
+}
+
+bool ExprSerializer::serializeStructToStructCast(
+    stubs::Expr::Expr::StructToStruct::Builder &builder,
+    const clang::CastExpr *expr) {
+  auto e = builder.initExpr();
+  auto type = builder.initType();
+  m_serializer.serializeExpr(e, expr->getSubExpr());
+  m_serializer.serializeQualType(type, expr->getType());
+  return true;
+}
+
+bool ExprSerializer::serializeCast(const clang::CastExpr *expr, bool expl) {
+  switch (expr->getCastKind()) {
+  case clang::CastKind::CK_LValueToRValue: {
     auto ce = m_builder.initLValueToRValue();
     m_serializer.serializeExpr(ce, expr->getSubExpr());
     return true;
   }
-  switch (expr->getCastKind()) {
   case clang::CastKind::CK_UncheckedDerivedToBase:
   case clang::CastKind::CK_DerivedToBase: {
     auto ce = m_builder.initDerivedToBase();
-    auto e = ce.initExpr();
-    auto type = ce.initType();
-    m_serializer.serializeExpr(e, expr->getSubExpr());
-    m_serializer.serializeQualType(type, expr->getType());
-    return true;
+    return serializeStructToStructCast(ce, expr);
+  }
+  case clang::CastKind::CK_BaseToDerived: {
+    auto ce = m_builder.initBaseToDerived();
+    return serializeStructToStructCast(ce, expr);
   }
   default:
+    if (expl)
+      return false;
     return Visit(expr->getSubExpr());
   }
 }
 
-bool ExprSerializer::visitCall(stubs::Expr::Call::Builder &builder,
-                               const clang::CallExpr *expr) {
+bool ExprSerializer::serializeCall(stubs::Expr::Call::Builder &builder,
+                                   const clang::CallExpr *expr) {
   auto callee = builder.initCallee();
   m_serializer.serializeExpr(callee, expr->getCallee());
 
@@ -187,13 +208,12 @@ bool ExprSerializer::visitCall(stubs::Expr::Call::Builder &builder,
 
 bool ExprSerializer::VisitCallExpr(const clang::CallExpr *expr) {
   auto call = m_builder.initCall();
-  return visitCall(call, expr);
+  return serializeCall(call, expr);
 }
 
 bool ExprSerializer::VisitDeclRefExpr(const clang::DeclRefExpr *expr) {
   auto declRef = m_builder.initDeclRef();
   auto *decl = expr->getDecl();
-  declRef.setIsClassMember(decl->isCXXClassMember());
   declRef.setName(decl->getQualifiedNameAsString());
   if (auto *func = llvm::dyn_cast<clang::FunctionDecl>(decl)) {
     declRef.setMangledName(m_serializer.getMangledFunc(func).str());
@@ -222,8 +242,19 @@ bool ExprSerializer::VisitMemberExpr(const clang::MemberExpr *expr) {
 
 bool ExprSerializer::VisitCXXMemberCallExpr(
     const clang::CXXMemberCallExpr *expr) {
-  auto call = m_builder.initMemberCall();
-  return visitCall(call, expr);
+  auto memberCall = m_builder.initMemberCall();
+  memberCall.setArrow(
+      expr->getImplicitObjectArgument()->getType()->isPointerType());
+  auto implArg = memberCall.initImplicitArg();
+  m_serializer.serializeExpr(implArg, expr->getImplicitObjectArgument());
+  auto call = memberCall.initCall();
+  return serializeCall(call, expr);
+}
+
+bool ExprSerializer::VisitCXXOperatorCallExpr(
+    const clang::CXXOperatorCallExpr *expr) {
+  auto call = m_builder.initOperatorCall();
+  return serializeCall(call, expr);
 }
 
 bool ExprSerializer::VisitCXXThisExpr(const clang::CXXThisExpr *expr) {

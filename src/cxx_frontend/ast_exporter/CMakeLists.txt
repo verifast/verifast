@@ -17,6 +17,11 @@ add_executable(vf-cxx-ast-exporter
   Annotation.cpp
   CommentProcessor.cpp
   ContextFreePPCallbacks.cpp
+  LocUtil.cpp
+  FixedWidthInt.cpp
+  AnnotationStore.cpp
+  FunctionMangler.cpp
+  Inclusion.cpp
 )
 
 find_package(LLVM REQUIRED CONFIG)
@@ -43,6 +48,7 @@ set(CAPNP_LIBS capnp)
 set(KJ_LIBS kj)
 
 set(LIBS_PATHS "")
+
 foreach(LIB IN LISTS CAPNP_LIBS KJ_LIBS)
   set(_LIB_VAR "LIB_${LIB}")
   find_library(${_LIB_VAR} NAMES lib${LIB}.a ${LIB}.lib PATHS "${VFDEPS}/lib" REQUIRED NO_CACHE NO_DEFAULT_PATH)
@@ -67,6 +73,7 @@ target_link_libraries(vf-cxx-ast-exporter
 
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-fvisibility-inlines-hidden" SUPPORT_FVIS_INLINES_HIDDEN)
-if (${SUPPORT_FVIS_INLINES_HIDDEN})
+
+if(${SUPPORT_FVIS_INLINES_HIDDEN})
   target_compile_options(vf-cxx-ast-exporter PRIVATE -fvisibility-inlines-hidden)
 endif()

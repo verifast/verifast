@@ -20,13 +20,7 @@ class CommentProcessor : public clang::CommentHandler {
    * @return whether or not all characters from 'start' up until 'end' only
    * represent white space.
    */
-  static bool checkWhiteSpace(const char *start, const char *end) {
-    for (; start < end; ++start) {
-      if (!std::isspace(*start))
-        return false;
-    }
-    return true;
-  }
+  static bool checkWhiteSpace(const char *start, const char *end);
 
 public:
   /**

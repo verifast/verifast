@@ -4,28 +4,6 @@
 
 namespace vf {
 
-void DeclSerializer::serializeParams(
-    capnp::List<stubs::Decl::Param, capnp::Kind::STRUCT>::Builder &builder,
-    llvm::ArrayRef<clang::ParmVarDecl *> params) {
-  size_t i(0);
-  for (auto p : params) {
-    auto param = builder[i++];
-
-    auto declName = p->getDeclName();
-    param.setName(declName.getAsString());
-    auto type = param.initType();
-    auto typeInfo = p->getTypeSourceInfo();
-
-    assert(typeInfo && "Explicit parameter source info.");
-
-    m_serializer.serializeTypeLoc(type, typeInfo->getTypeLoc());
-    if (p->hasDefaultArg()) {
-      auto def = param.initDefault();
-      m_serializer.serializeExpr(def, p->getDefaultArg());
-    }
-  }
-}
-
 // TODO: check how to retrieve the name of a decl in a proper way
 void DeclSerializer::serializeFuncDecl(stubs::Decl::Function::Builder &builder,
                                        const clang::FunctionDecl *decl,
@@ -37,28 +15,17 @@ void DeclSerializer::serializeFuncDecl(stubs::Decl::Function::Builder &builder,
                                 decl->getFunctionTypeLoc().getReturnLoc());
 
   auto paramsBuilder = builder.initParams(decl->param_size());
-  serializeParams(paramsBuilder, decl->parameters());
-  std::list<Annotation> anns;
+  m_serializer.serializeParams(paramsBuilder, decl->parameters());
 
   auto isImplicit = decl->isImplicit();
   auto isDef = decl->isThisDeclarationADefinition();
 
   // Implicit functions cannot have annotations provided by the programmer.
   if (!isImplicit) {
-    if (isDef) {
-      m_serializer.getAnnStore().getContract(decl->getBeginLoc(), anns,
-                                             getSourceManager(),
-                                             decl->getBody()->getBeginLoc());
-    } else {
-      m_serializer.getAnnStore().getContract(decl->getBeginLoc(), anns,
-                                             getSourceManager());
-    }
+    llvm::SmallVector<Annotation> anns;
+    m_serializer.getAnnStore().getContract(decl, anns, getSourceManager());
     auto contractBuilder = builder.initContract(anns.size());
-    size_t i(0);
-    for (auto &ann : anns) {
-      auto annBuilder = contractBuilder[i++];
-      m_serializer.serializeAnnotationClause(annBuilder, ann);
-    }
+    m_serializer.serializeAnnotationClauses(contractBuilder, anns);
   }
 
   // Implicit functions have a definition, but only have a body when
@@ -172,13 +139,12 @@ bool DeclSerializer::VisitCXXRecordDecl(const clang::CXXRecordDecl *decl) {
                                 : stubs::RecordKind::STRUC;
   rec.setKind(kind);
 
-  bool hasDef(decl->hasDefinition());
-  if (hasDef) {
+  if (decl->hasDefinition()) {
     auto orphanage = capnp::Orphanage::getForMessageContaining(m_builder);
-    llvm::SmallVector<DeclNodeOrphan, 16> declNodeOrphans;
+    llvm::SmallVector<DeclNodeOrphan> declNodeOrphans;
     auto &store = m_serializer.getAnnStore();
     auto &SM = getSourceManager();
-    std::list<Annotation> anns;
+    llvm::SmallVector<Annotation> anns;
 
     for (auto d : decl->decls()) {
       if (d->isImplicit() && !m_serializeImplicitDecls)
@@ -194,13 +160,13 @@ bool DeclSerializer::VisitCXXRecordDecl(const clang::CXXRecordDecl *decl) {
     m_serializer.serializeAnnsToOrphans(anns, orphanage, declNodeOrphans);
 
     auto body = rec.initBody();
+    body.setPolymorphic(decl->isPolymorphic());
     auto basesBuilder = body.initBases(decl->getNumBases());
     serializeBases(basesBuilder, decl->bases());
 
     auto declsBuilder = body.initDecls(declNodeOrphans.size());
     AstSerializer::adoptOrphansToListBuilder(declNodeOrphans, declsBuilder);
   }
-
   return true;
 }
 
@@ -243,7 +209,6 @@ bool DeclSerializer::VisitCXXConstructorDecl(
   for (auto init : decl->inits()) {
     auto initBuilder = initBuilders[i++];
     initBuilder.setName(init->isMemberInitializer()
-
                             ? init->getMember()->getNameAsString()
                             : "this");
     initBuilder.setIsWritten(init->isWritten());
@@ -329,6 +294,35 @@ bool DeclSerializer::VisitEnumDecl(const clang::EnumDecl *decl) {
       m_serializer.serializeExpr(fieldExpr, init);
     }
   }
+
+  return true;
+}
+
+bool DeclSerializer::VisitNamespaceDecl(const clang::NamespaceDecl *decl) {
+  auto ns = m_builder.initNamespace();
+  ns.setName(decl->getNameAsString());
+
+  auto orphanage = capnp::Orphanage::getForMessageContaining(m_builder);
+  llvm::SmallVector<DeclNodeOrphan, 16> declNodeOrphans;
+  auto &store = m_serializer.getAnnStore();
+  auto &SM = getSourceManager();
+  llvm::SmallVector<Annotation> anns;
+
+  for (auto d : decl->decls()) {
+    if (d->isImplicit() && !m_serializeImplicitDecls)
+      continue;
+
+    store.getUntilLoc(anns, d->getBeginLoc(), SM);
+    m_serializer.serializeAnnsToOrphans(anns, orphanage, declNodeOrphans);
+    m_serializer.serializeToOrphan(d, orphanage, declNodeOrphans);
+    anns.clear();
+  }
+
+  store.getUntilLoc(anns, decl->getRBraceLoc(), SM);
+  m_serializer.serializeAnnsToOrphans(anns, orphanage, declNodeOrphans);
+
+  auto decls = ns.initDecls(declNodeOrphans.size());
+  AstSerializer::adoptOrphansToListBuilder(declNodeOrphans, decls);
 
   return true;
 }

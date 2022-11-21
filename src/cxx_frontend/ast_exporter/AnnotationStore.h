@@ -1,7 +1,9 @@
 #pragma once
 #include "Annotation.h"
+#include "clang/AST/Decl.h"
 #include "clang/Basic/FileManager.h"
 #include "clang/Basic/SourceManager.h"
+#include "llvm/ADT/STLForwardCompat.h"
 #include "llvm/ADT/SmallVector.h"
 #include <kj/common.h>
 #include <unordered_map>
@@ -17,14 +19,14 @@ namespace vf {
  * a current index to know which annotations have already been retrieved.
  */
 class AnnotationStore {
-  using ann_v = std::vector<Annotation>;
+  using AnnotationPred = llvm::function_ref<bool(const Annotation &)>;
 
   /**
    * Holds a sequence of VeriFast annotations.
    */
   struct AnnCont {
     unsigned int m_pos;
-    ann_v m_anns;
+    std::vector<Annotation> m_anns;
 
     explicit AnnCont() : m_pos(0) {}
 
@@ -39,37 +41,21 @@ class AnnotationStore {
      * holds for the annotation that is currently at the front of this
      * container. The annotations that are retrieved from the container are
      * added to a given container.
-     * @tparam Pred type of the predicate that is passed.
-     * @tparam Cont type of the given container.
-     * @param con container where all annotations that are retrieved from the
-     * annotation container, are added to.
+     * @param container container where all annotations that are retrieved from
+     * the annotation container, are added to.
      * @param pred predicate that is used to check if the current annotation in
      * the annotation container should be retrieved.
      */
-    template <class Pred, class Cont> void getWhile(Cont &con, Pred pred) {
-      while (m_pos < m_anns.size()) {
-        auto ann = m_anns.at(m_pos);
-        if (pred(ann)) {
-          con.push_back(ann);
-          ++m_pos;
-          continue;
-        }
-        return;
-      }
-    }
+    void getWhile(llvm::SmallVectorImpl<Annotation> &container,
+                  AnnotationPred pred);
 
     /**
      * Retrieves all annotations in this annotation container and adds them to
      * the given container.
-     * @tparam type of the given container.
-     * @param con container where all annotation in this annotation container,
-     * are added to.
+     * @param container container where all annotation in this annotation
+     * container, are added to.
      */
-    template <class Cont> void getAll(Cont &con) {
-      while (m_pos < m_anns.size()) {
-        con.push_back(m_anns.at(m_pos));
-      }
-    }
+    void getAll(llvm::SmallVectorImpl<Annotation> &container);
   };
 
   std::unordered_map<unsigned, AnnCont> _annContainers;
@@ -82,12 +68,14 @@ class AnnotationStore {
    * container.
    * @param SM source manager.
    */
-  AnnCont &getCont(clang::SourceLocation loc, const clang::SourceManager &SM) {
-    auto id = SM.getFileID(SM.getExpansionLoc(loc));
-    auto entry = SM.getFileEntryForID(id);
-    assert(entry);
+  AnnCont &getCont(const clang::FileEntry *entry) {
     return _annContainers[entry->getUID()];
   }
+
+  void guessContract(const clang::FileEntry *entry,
+                     llvm::SmallVectorImpl<Annotation> &container,
+                     const clang::SourceManager &SM,
+                     clang::SourceLocation maxEndLoc);
 
 public:
   explicit AnnotationStore() {}
@@ -99,98 +87,49 @@ public:
    * will be moved.
    * @param SM source manager.
    */
-  void add(Annotation &&ann, const clang::SourceManager &SM) {
-    getCont(ann.getRange().getBegin(), SM).add(std::move(ann));
-  }
+  void add(Annotation &&ann, const clang::SourceManager &SM);
 
   /**
    * Retrieve every annotation before the given location.
-   * @tparam Container type of the container where the retrieved annotations
-   * will be added to.
-   * @param con the container to add the annotations to.
+   * @param container the container to add the annotations to.
    * @param loc location that comes from a specific file. Only the annotations
    * in that file that appear before this location are retrieved.
    * @param SM source manager.
    */
-  template <class Container>
-  void getUntilLoc(Container &con, clang::SourceLocation loc,
-                   const clang::SourceManager &SM) {
-    auto expLoc = SM.getFileLoc(loc);
-    auto pred = [expLoc](const Annotation &ann) {
-      // compare to 'begin' of range in case the end overlaps with the given loc
-      return ann.getRange().getBegin() < expLoc;
-    };
-    getCont(expLoc, SM).getWhile(con, pred);
-  }
+  void getUntilLoc(llvm::SmallVectorImpl<Annotation> &container,
+                   const clang::SourceLocation loc,
+                   const clang::SourceManager &SM);
 
   /**
    * Retrieve all annotations in the file that corresponds to the
    * given location.
-   * @tparam Container type of the container where the retrieved annotations
-   * will be added to.
-   * @param currentLoc location that comes from a specific file. It may be you
-   * 'current' location in the file. The location is used to retrieve the
-   * annotations from the correct file.
-   * @param con the container to add the annotations to.
-   * @param SM source manager.
    */
-  template <class Container>
-  void getAll(const clang::SourceLocation currentLoc, Container &con,
-              const clang::SourceManager &SM) {
-    getCont(SM.getFileLoc(currentLoc), SM).getAll(con);
-  }
-
-  template <class Container> void getAll(unsigned fileUID, Container &con) {
-    _annContainers[fileUID].getAll(con);
-  }
+  void getAll(const clang::FileEntry *entry,
+              llvm::SmallVectorImpl<Annotation> &container);
 
   /**
    * Retrieves the next contract from the store. The contract that
    * is retrieved comes from the file that corresponds with the given location.
-   * @tparam Container type of the container where the retrieved annotations
-   * will be added to.
-   * @param currentLoc location that comes from a specific file. It may be you
-   * 'current' location in the file. The location is used to retrieve the
-   * annotations from the correct file.
-   * @param con the container to add the annotations to.
-   * @param SM source manager.
-   * @param loc optional location that represents the start of a body. E.g.,
+   * @param endLoc location that represents the start of a body. E.g.,
    * when you want to retrieve the contract of a function implementation, you
-   * can pass the the location of the start of the body. Otherwise an attempt
-   * will be done to get a best match for a function contract.
+   * can pass the the location of the start of the body. If the location is not
+   * valid, an attempt will be done to get a best match for a function contract.
    */
-  template <class Container>
-  void getContract(const clang::SourceLocation currentLoc, Container &con,
+  void getContract(const clang::FileEntry *entry,
+                   llvm::SmallVectorImpl<Annotation> &container,
                    const clang::SourceManager &SM,
-                   clang::SourceLocation loc = {}) {
-    if (loc.isValid()) {
-      return getUntilLoc(con, loc, SM);
-    }
-    bool first = true;
-    auto pred = [&first](const Annotation &ann) {
-      bool result = ann.isContractClauseLike() && first == ann.isNewSeq();
-      first = false;
-      return result;
-    };
-    getCont(SM.getFileLoc(currentLoc), SM).getWhile(con, pred);
-  }
+                   clang::SourceLocation bodyStartLoc);
+
+  void getContract(const clang::FunctionDecl *decl,
+                   llvm::SmallVectorImpl<Annotation> &container,
+                   const clang::SourceManager &SM);
 
   llvm::Optional<clang::SourceRange>
   queryTruncatingAnnotation(const clang::SourceLocation currentLoc,
-                            const clang::SourceManager &SM) {
-    auto pred = [&currentLoc](const Annotation &ann) {
-      // compare to 'begin' of range in case the end overlaps with the given
-      // currentLoc
-      return ann.getRange().getBegin() < currentLoc && ann.isTruncating();
-    };
-    llvm::SmallVector<Annotation, 1> query;
-    getCont(SM.getFileLoc(currentLoc), SM).getWhile(query, pred);
-    llvm::Optional<clang::SourceRange> result;
-    if (query.empty()) {
-      return result;
-    }
-    result.emplace(query.front().getRange());
-    return result;
-  }
+                            const clang::SourceManager &SM);
+
+  void getGhostIncludeSequence(const clang::FileEntry *entry,
+                               llvm::SmallVectorImpl<Annotation> &container,
+                               const clang::SourceManager &SM);
 };
 } // namespace vf

@@ -9,7 +9,7 @@ bool StmtSerializer::VisitCompoundStmt(const clang::CompoundStmt *stmt) {
   llvm::SmallVector<StmtNodeOrphan, 32> stmtNodeOrphans;
   auto &store = m_serializer.getAnnStore();
   auto &SM = getSourceManager();
-  std::list<Annotation> anns;
+  llvm::SmallVector<Annotation> anns;
 
   for (auto s : stmt->body()) {
     store.getUntilLoc(anns, s->getBeginLoc(), SM);
@@ -84,13 +84,13 @@ bool StmtSerializer::VisitNullStmt(const clang::NullStmt *stmt) {
 }
 
 template <class While>
-bool StmtSerializer::visitWhi(stubs::Stmt::While::Builder &builder,
+bool StmtSerializer::serializeWhileStmt(stubs::Stmt::While::Builder &builder,
                               const While *stmt) {
 
   auto cond = builder.initCond();
   m_serializer.serializeExpr(cond, stmt->getCond());
 
-  std::list<Annotation> anns;
+  llvm::SmallVector<Annotation> anns;
   m_serializer.getAnnStore().getUntilLoc(anns, stmt->getBody()->getBeginLoc(),
                                          getSourceManager());
   auto specBuilder = builder.initSpec(anns.size());
@@ -111,12 +111,12 @@ bool StmtSerializer::visitWhi(stubs::Stmt::While::Builder &builder,
 
 bool StmtSerializer::VisitWhileStmt(const clang::WhileStmt *stmt) {
   auto whi = m_builder.initWhile();
-  return visitWhi(whi, stmt);
+  return serializeWhileStmt(whi, stmt);
 }
 
 bool StmtSerializer::VisitDoStmt(const clang::DoStmt *stmt) {
   auto doWhi = m_builder.initDoWhile();
-  return visitWhi(doWhi, stmt);
+  return serializeWhileStmt(doWhi, stmt);
 }
 
 bool StmtSerializer::VisitBreakStmt(const clang::BreakStmt *stmt) {

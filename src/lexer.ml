@@ -1634,7 +1634,7 @@ type ghostness = Real | Ghost
 
 let is_ghost_header h = Filename.check_suffix h ".gh"
 
-let make_sound_preprocessor reportMacroCall make_lexer path verbose include_paths dataModel define_macros =
+let make_sound_preprocessor_core reportMacroCall make_lexer path verbose include_paths dataModel define_macros p_ghost_macros included_files =
   if verbose = -1 then Printf.printf "%10.6fs: >> start preprocessing file: %s\n" (Perf.time()) path;
   let mk_macros0 () =
     let macros0 = Hashtbl.create 10 in
@@ -1645,7 +1645,6 @@ let make_sound_preprocessor reportMacroCall make_lexer path verbose include_path
   in
   let tlexers = ref [] in
   let p_macros = mk_macros0 () in
-  let p_ghost_macros = Hashtbl.create 10 in
   let pps = ref [] in
   let p_last_macro_used = ref [] in
   let cfp_macros = ref [] in
@@ -1655,7 +1654,6 @@ let make_sound_preprocessor reportMacroCall make_lexer path verbose include_path
   let path_is_ghost_header = is_ghost_header path in
   let p_in_ghost_range = ref path_is_ghost_header in
   let cfp_in_ghost_range = ref path_is_ghost_header in
-  let included_files = ref [] in
   let paths = ref [] in  
   let mk_tlexer path =
     assert (!p_in_ghost_range = is_ghost_header path);
@@ -1865,6 +1863,12 @@ let make_sound_preprocessor reportMacroCall make_lexer path verbose include_path
     result
   in
   ((fun () -> !current_loc), Stream.from next)
+
+let make_sound_preprocessor reportMacroCall make_lexer path verbose include_paths dataModel define_macros =
+  let included_files = ref [] in
+  let ghost_macros = Hashtbl.create 10 in
+  make_sound_preprocessor_core reportMacroCall make_lexer path verbose include_paths dataModel define_macros ghost_macros included_files
+
 
 let make_preprocessor reportMacroCall make_lexer path verbose include_paths dataModel define_macros =
   make_sound_preprocessor reportMacroCall make_lexer path verbose include_paths dataModel define_macros

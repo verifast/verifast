@@ -521,7 +521,7 @@ and
     [< fs = parse_fields; attrs = begin parser
       [< '(_, Kwd "__attribute__"); res = parse_struct_attrs; >] -> res
     | [< >] -> [] end;
-    '(_, Kwd ";") >] -> Struct (l, s, Some ([], fs), attrs)
+    '(_, Kwd ";") >] -> Struct (l, s, Some ([], fs, false), attrs)
   | [< '(_, Kwd ";") >] -> Struct (l, s, None, [])
   | [< t = parse_type_suffix (StructTypeExpr (l, Some s, None, [])); d = parse_func_rest Regular (Some t) Public >] -> d
   >] -> check_function_for_contract d
@@ -552,13 +552,13 @@ and
                [EnumDecl (l, en, body); TypedefDecl (l, EnumTypeExpr (le, Some en, None), g)]
              | Some (StructTypeExpr (ls, s_opt, Some fs, attrs)) ->
                let s = match s_opt with None -> g | Some s -> s in
-               [Struct (l, s, Some ([], fs), attrs); TypedefDecl (l, StructTypeExpr (ls, Some s, None, attrs), g)]
+               [Struct (l, s, Some ([], fs, false), attrs); TypedefDecl (l, StructTypeExpr (ls, Some s, None, attrs), g)]
              | Some (UnionTypeExpr (ls, u_opt, Some fs)) ->
                let u = match u_opt with None -> g | Some u -> u in
                [Union (l, u, Some fs); TypedefDecl (l, UnionTypeExpr (ls, Some u, None), g)]
              | Some PtrTypeExpr (lp, (StructTypeExpr (ls, s_opt, Some fs, attrs))) ->
                let s = match s_opt with None -> g | Some s -> s in
-               [Struct (l, s, Some ([], fs), attrs); TypedefDecl (l, PtrTypeExpr (lp, StructTypeExpr (ls, Some s, None, attrs)), g)]
+               [Struct (l, s, Some ([], fs, false), attrs); TypedefDecl (l, PtrTypeExpr (lp, StructTypeExpr (ls, Some s, None, attrs)), g)]
              | Some te ->
                [TypedefDecl (l, te, g)]
          end
@@ -1841,9 +1841,8 @@ let parse_java_file_old (path: string) (reportRange: range_kind -> loc0 -> unit)
 
 type 'result parser_ = (loc * token) Stream.t -> 'result
 
-let rec parse_include_directives (verbose: int) (enforceAnnotations: bool) (dataModel: data_model option): 
+let rec parse_include_directives_core (verbose: int) (enforceAnnotations: bool) (dataModel: data_model option) (active_headers: string list ref): 
     ((loc * (include_kind * string * string) * string list * package list) list * string list) parser_ =
-  let active_headers = ref [] in
   let test_include_cycle l totalPath =
     if List.mem totalPath !active_headers then raise (ParseException (l, "Include cycles (even with header guards) are not supported"));
   in
@@ -1888,6 +1887,11 @@ let rec parse_include_directives (verbose: int) (enforceAnnotations: bool) (data
                                                         (List.append headers [(l, (kind, h, totalPath), header_names, ps)], totalPath)
   in
   parse_include_directives_core [] false
+
+let rec parse_include_directives (verbose: int) (enforceAnnotations: bool) (dataModel: data_model option): 
+  ((loc * (include_kind * string * string) * string list * package list) list * string list) parser_ =
+  let active_headers = ref [] in
+  parse_include_directives_core verbose enforceAnnotations dataModel active_headers
 
 let parse_c_file reportMacroCall (path: string) (reportRange: range_kind -> loc0 -> unit) (reportShouldFail: string -> loc0 -> unit) (verbose: int) 
             (include_paths: string list) (define_macros: string list) (enforceAnnotations: bool) (dataModel: data_model option): ((loc * (include_kind * string * string) * string list * package list) list * package list) = (* ?parse_c_file *)

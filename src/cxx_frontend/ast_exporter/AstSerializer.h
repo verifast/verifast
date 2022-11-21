@@ -35,7 +35,7 @@ using DeclNodeOrphan = NodeOrphan<stubs::Decl>;
 class AstSerializer {
   clang::ASTContext &m_context;
   clang::SourceManager &m_SM;
-  const InclusionContext &c_inclContext;
+  InclusionContext &m_inclContext;
 
   FunctionMangler m_funcMangler;
 
@@ -47,17 +47,26 @@ class AstSerializer {
 
   bool m_serializeImplicitDecls;
 
-  void updateFirstDeclLoc(unsigned fileUID, clang::SourceLocation newLoc);
-
+  /**
+   * Serialize a declaration to this instance's declaration map of orphans.
+   * First checks for annotation declarations an d serializes them to the map
+   * prior to serializing the declaration itself.
+   * @param decl Declaration to serialize.
+   * @param orphanage Orphanage to be able to create new orphans.
+   */
   void serializeDeclToDeclMap(const clang::Decl *decl,
                               capnp::Orphanage &orphanage);
 
+  void updateFirstDeclLoc(unsigned fd, const clang::SourceLocation loc);
+
+  llvm::Optional<clang::SourceLocation> getFirstDeclLocOpt(unsigned fd) const;
+
 public:
   explicit AstSerializer(clang::ASTContext &context, AnnotationStore &store,
-                         const InclusionContext &inclContext,
+                         InclusionContext &inclContext,
                          bool serializeImplicitDecls)
       : m_context(context), m_SM(context.getSourceManager()),
-        c_inclContext(inclContext), m_AS(context.getSourceManager()),
+        m_inclContext(inclContext), m_AS(context.getSourceManager()),
         m_funcMangler(context), m_store(store),
         m_serializeImplicitDecls(serializeImplicitDecls) {}
 
@@ -71,12 +80,7 @@ public:
    * @param decl declaration that has to be serialized.
    */
   void serializeDecl(DeclSerializer::NodeBuilder &builder,
-                     const clang::Decl *decl) {
-    if (!m_serializeImplicitDecls && decl->isImplicit())
-      return;
-    DeclSerializer ser(m_context, *this, builder, m_serializeImplicitDecls);
-    ser.serialize(decl);
-  }
+                     const clang::Decl *decl);
 
   /**
    * Serializes a statement.
@@ -84,10 +88,7 @@ public:
    * @param stmt statement that has to be serialized.
    */
   void serializeStmt(StmtSerializer::NodeBuilder &builder,
-                     const clang::Stmt *stmt) {
-    StmtSerializer ser(m_context, *this, builder);
-    ser.serialize(stmt);
-  }
+                     const clang::Stmt *stmt);
 
   /**
    * Serializes an expression.
@@ -95,24 +96,7 @@ public:
    * @param expr expression that has to be serialized.
    */
   void serializeExpr(ExprSerializer::NodeBuilder &builder,
-                     const clang::Expr *expr) {
-    auto truncatingOptional =
-        m_store.queryTruncatingAnnotation(expr->getBeginLoc(), m_SM);
-    if (truncatingOptional) {
-      auto loc = builder.initLoc();
-      auto desc = builder.initDesc();
-
-      serializeSrcRange(
-          loc, {truncatingOptional->getBegin(), expr->getEndLoc()}, m_SM);
-      auto truncating = desc.initTruncating();
-
-      ExprSerializer ser(m_context, *this, truncating);
-      ser.serialize(expr);
-      return;
-    }
-    ExprSerializer ser(m_context, *this, builder);
-    ser.serialize(expr);
-  }
+                     const clang::Expr *expr);
 
   /**
    * Serializes a type with a location.
@@ -121,10 +105,7 @@ public:
    * that type.
    */
   void serializeTypeLoc(TypeLocSerializer::NodeBuilder &builder,
-                        const clang::TypeLoc typeLoc) {
-    TypeLocSerializer ser(m_context, *this, builder);
-    ser.serialize(typeLoc);
-  }
+                        const clang::TypeLoc typeLoc);
 
   /**
    * Serializes a type.
@@ -133,10 +114,11 @@ public:
    * that type.
    */
   void serializeQualType(TypeSerializer::DescBuilder &builder,
-                         const clang::QualType type) {
-    TypeSerializer ser(m_context, *this, builder);
-    ser.serialize(type.getTypePtr());
-  }
+                         const clang::QualType type);
+
+  void serializeParams(
+      capnp::List<stubs::Param, capnp::Kind::STRUCT>::Builder &builder,
+      llvm::ArrayRef<clang::ParmVarDecl *> params);
 
   /**
    * Serializes a declaration. Useful when serializing to orphans instead of
@@ -149,13 +131,7 @@ public:
    */
   void serializeNodeDecomposed(stubs::Loc::Builder &locBuilder,
                                stubs::Decl::Builder &builder,
-                               const clang::Decl *decl) {
-    if (!m_serializeImplicitDecls && decl->isImplicit())
-      return;
-    DeclSerializer ser(m_context, *this, locBuilder, builder,
-                       m_serializeImplicitDecls);
-    ser.serialize(decl);
-  }
+                               const clang::Decl *decl);
 
   /**
    * Serializes a statement. Useful when serializing to orphans instead of
@@ -168,10 +144,7 @@ public:
    */
   void serializeNodeDecomposed(stubs::Loc::Builder &locBuilder,
                                stubs::Stmt::Builder &builder,
-                               const clang::Stmt *stmt) {
-    StmtSerializer ser(m_context, *this, locBuilder, builder);
-    ser.serialize(stmt);
-  }
+                               const clang::Stmt *stmt);
 
   /**
    * Serializes a translation unit. A serialized translation unit consists of a
@@ -199,6 +172,10 @@ public:
                                  const Annotation &ann) {
     m_AS.serializeClause(builder, ann);
   }
+
+  void serializeAnnotationClauses(
+      capnp::List<stubs::Clause, capnp::Kind::STRUCT>::Builder &builder,
+      clang::ArrayRef<Annotation> anns);
 
   /**
    * Serializes an annotation that derives from another node (like a declaration
@@ -275,19 +252,20 @@ public:
    * declaration or statement.
    * @tparam Container type of the container that holds the annotations to
    * serialize.
-   * @param cont container that holds the the annotations to serialize to
+   * @param annotations container that holds the the annotations to serialize to
    * orphans.
    * @param orphanage factory to create orphans that can be serialied to.
    * @param orphans collection of serialized orphans. New orphans
    * containing the serialized annotations will be added to the back of the
    * collection.
    */
-  template <class StubsNode, class Container>
+  template <class StubsNode>
   void serializeAnnsToOrphans(
-      Container &cont, capnp::Orphanage &orphanage,
+      const llvm::ArrayRef<Annotation> &annotations,
+      capnp::Orphanage &orphanage,
       llvm::SmallVectorImpl<NodeOrphan<StubsNode>> &orphans) {
-    for (auto it = cont.cbegin(); it != cont.cend(); ++it) {
-      serializeAnnToOrphan(*it, orphanage, orphans);
+    for (auto &ann : annotations) {
+      serializeAnnToOrphan(ann, orphanage, orphans);
     }
   }
 
@@ -310,6 +288,11 @@ public:
       builder.adoptDesc(std::move(no.nodeOrphan));
     }
   }
+
+  void validateIncludesBeforeFirstDecl(
+      unsigned fd,
+      clang::ArrayRef<std::reference_wrapper<const IncludeDirective>>
+          orderedDirectives) const;
 
   llvm::StringRef getMangledCtorName(const clang::CXXConstructorDecl *decl) {
     return m_funcMangler.mangleCtor(decl);

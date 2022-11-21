@@ -19,6 +19,11 @@ struct Node(Base) {
   desc @1 :Base;
 }
 
+struct Clause {
+  loc @0 :Loc;
+  text @1 :Text;
+}
+
 using StmtNode = Node(Stmt);
 using DeclNode = Node(Decl);
 using ExprNode = Node(Expr);
@@ -34,6 +39,12 @@ enum RecordKind {
 struct RecordRef {
   name @0 :Text;
   kind @1 :RecordKind;
+}
+
+struct Param {
+  type @0 :TypeNode;
+  name @1 :Text; # optional
+  default @2 :ExprNode; # optional
 }
 
 struct Type {
@@ -62,6 +73,13 @@ struct Type {
     bits @1 :UInt8;
   }
 
+  struct FunctionProto {
+    returnType @0 :TypeNode;
+    ghostParams @1 :List(Clause); # should only be one clause
+    params @2 :List(Param);
+    contract @3 :List(Clause); # optional
+  }
+
   union {
     unionNotInitialized @0 :Void;
     builtin @1 :BuiltinKind;
@@ -73,6 +91,7 @@ struct Type {
     fixedWidth @7 :FixedWidth;
     elaborated @8 :TypeNode;
     typedef @9 :Text;
+    functionProto @10 :FunctionProto;
   }
 }
 
@@ -132,17 +151,7 @@ struct Stmt {
   }
 }
 
-struct Clause {
-  loc @0 :Loc;
-  text @1 :Text;
-}
-
 struct Decl {
-  struct Param {
-    type @0 :TypeNode;
-    name @1 :Text;
-    default @2 :ExprNode; # optional
-  }
 
   struct Var {
     enum InitStyle {
@@ -190,6 +199,7 @@ struct Decl {
     struct Body {
       decls @0 :List(DeclNode);
       bases @1 :List(Node(BaseSpec));
+      polymorphic @2 :Bool;
     }
     name @0 :Text;
     kind @1 :RecordKind;
@@ -233,6 +243,11 @@ struct Decl {
     fields @1 :List(EnumField);
   }
 
+  struct Namespace {
+    name @0 :Text;
+    decls @1 :List(DeclNode);
+  }
+
   union {
     unionNotInitialized @0 :Void;
     ann @1 :Text;
@@ -247,6 +262,7 @@ struct Decl {
     dtor @10 :Dtor;
     typedef @11 :Typedef;
     enumDecl @12 :Enum;
+    namespace @13 :Namespace;
   }
 }
 
@@ -331,6 +347,12 @@ struct Expr {
     callee @1 :ExprNode;
   }
 
+  struct MemberCall {
+    implicitArg @0 :ExprNode;
+    arrow @1 :Bool;
+    call @2 :Call;
+  }
+
   struct Member {
     base @0 :ExprNode;
     name @1 :Text;
@@ -348,7 +370,6 @@ struct Expr {
   struct DeclRef {
     name @0 :Text;
     mangledName @1 :Text; # optional, present if it refers to a function/method
-    isClassMember @2 :Bool;
   }
 
   struct Construct {
@@ -358,7 +379,7 @@ struct Expr {
     type @3 :Type;
   }
 
-  struct DerivedToBase {
+  struct StructToStruct {
     expr @0 :ExprNode;
     type @1 :Type;
   }
@@ -374,23 +395,33 @@ struct Expr {
     declRef @7 :DeclRef;
     member @8 :Member;
     this @9 :Void;
-    memberCall @10 :Call;
+    memberCall @10 :MemberCall;
     new @11 :New;
     construct @12 :Construct;
     nullPtrLit @13 :Void;
     delete @14 :ExprNode;
     truncating @15 :ExprNode;
     lValueToRValue @16 :ExprNode;
-    derivedToBase @17 :DerivedToBase;
+    derivedToBase @17 :StructToStruct;
+    baseToDerived @18 :StructToStruct;
+    operatorCall @19 :Call;
   }
 }
 
 struct Include {
-  loc @0 :Loc;
-  fileName @1 :Text; # as written in the include directive
-  fd @2 :UInt16;
-  includes @3 :List(Include);
-  isAngled @4 :Bool;
+  struct RealInclude {
+    loc @0 :Loc;
+    fileName @1 :Text; # as written in the include directive
+    fd @2 :UInt16;
+    includes @3 :List(Include);
+    isAngled @4 :Bool;
+  }
+
+  union {
+    unionNotInitialized @0 :Void;
+    realInclude @1 :RealInclude;
+    ghostInclude @2 :Clause;
+  }
 }
 
 struct File {
@@ -400,7 +431,7 @@ struct File {
 }
 
 # A translation unit does not have a valid source location in Clang.
-# That's why we don't use it as a DeclNode.
+# That's why we don't encode it as a DeclNode.
 struct TU {
   mainFd @0 :UInt16;
   includes @1 :List(Include);

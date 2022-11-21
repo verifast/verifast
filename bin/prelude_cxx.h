@@ -2,6 +2,7 @@
 #define PRELUDE_CXX_H
 
 #include "prelude.h"
+#include "typeinfo.h"
 
 /*@
 

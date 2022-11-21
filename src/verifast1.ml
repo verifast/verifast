@@ -1186,7 +1186,33 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             begin match !prelude_maps with
               None ->
               let maps =
-                let prelude_name = match dialect with Some Cxx -> "prelude_cxx.h" | _ -> "prelude.h" in
+                let prelude_name, parse_header_file = 
+                  match dialect with 
+                  | Some Cxx -> 
+                    "prelude_cxx.h", fun report_macro_call path report_range report_should_fail verbose include_paths define_macros enforce_annotations data_model -> 
+                      let module Translator = Cxx_ast_translator.Make(
+                        struct 
+                          let enforce_annotations = enforce_annotations
+                          let data_model_opt = data_model
+                          let report_should_fail = report_should_fail
+                          let report_range = report_range
+                          let dialect_opt = Some Cxx
+                          let report_macro_call = report_macro_call
+                          let path = path
+                          let verbose = verbose
+                          let include_paths = include_paths
+                          let define_macros = define_macros
+                        end
+                      )
+                      in
+                      begin try
+                        Translator.parse_cxx_file ()
+                      with
+                      | Cxx_annotation_parser.CxxAnnParseException (l, msg)
+                      | Cxx_ast_translator.CxxAstTranslException (l, msg) -> static_error l msg None
+                      end
+                  | _ -> "prelude.h", parse_header_file 
+                in
                 let prelude_path = concat !bindir prelude_name in
                 let (prelude_headers, prelude_decls) = parse_header_file reportMacroCall prelude_path reportRange reportShouldFail initial_verbosity [] [] enforce_annotations data_model in
                 let prelude_header_names = List.map (fun (_, (_, _, h), _, _) -> h) prelude_headers in
@@ -1237,7 +1263,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         [] -> sdm
       | Struct (l, sn, body_opt, attrs)::ds ->
         begin match body_opt with
-        | Some (bases, _) ->
+        | Some (bases, _, _) ->
           if List.exists (fun (CxxBaseSpec (l, _, is_virtual)) -> is_virtual) bases then static_error l "Virtual inheritance is not supported." None;
         | _ -> ()
         end;
@@ -1920,7 +1946,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                    | Packed ->
                      packed := true;
                      begin match body_opt with
-                     | Some (_, fds) ->
+                     | Some (_, fds, _) ->
                        ctxt#assert_term (ctxt#mk_eq s (fds |> List.map (field_size_partial smapwith0 unionmap) |> List.fold_left ctxt#mk_add (ctxt#mk_intlit 0)))
                      | None -> static_error l "A struct declaration cannot be packed." None
                      end
@@ -1950,7 +1976,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             offset_iter fmap (ctxt#mk_intlit 0) true;
             let base_map = bases |> List.map @@ fun (CxxBaseSpec (l, base, is_virtual)) -> 
               let base_offset = get_unique_var_symb (sn ^ "_" ^ base ^ "_offset") intType in
-              ctxt#assert_term (ctxt#mk_le int_zero_term base_offset);
+                ctxt#assert_term (ctxt#mk_le int_zero_term base_offset);
               base, (l, is_virtual, base_offset) 
             in
             (sn, (l, Some (base_map, fmap), padding_predsym_opt, s, type_info))
@@ -1963,7 +1989,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         let new_item = begin
           match body_opt with
-            Some (bases, fds) -> iter1 [] fds false bases
+            Some (bases, fds, _) -> iter1 [] fds false bases
           | None -> (sn, (l, None, None, s, type_info))
         end
         in
@@ -4009,6 +4035,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         (w, PtrType elemTp, None)
       | _, WVar (_, x, FuncName) ->
         (w, t, None)
+      | RefType t, TypeInfo _ -> (* allow to take the address of a reference to a typeInfo object *)
+        w, PtrType t, None
       | _, _ ->
         (AddressOf (l, w), PtrType t, None)
       end

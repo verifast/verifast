@@ -3482,11 +3482,17 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let data_model_opt = data_model
             let report_should_fail = reportShouldFail
             let report_range = reportRange
+            let dialect_opt = Some Cxx
+            let report_macro_call = reportMacroCall
+            let path = path
+            let verbose = options.option_verbose
+            let include_paths = if Filename.check_suffix path ".h" then [] else options.option_include_paths
+            let define_macros = options.option_define_macros
           end
         ) 
         in
         try
-          Translator.parse_cxx_file path
+          Translator.parse_cxx_file ()
         with
         | Cxx_annotation_parser.CxxAnnParseException (l, msg)
         | Cxx_ast_translator.CxxAstTranslException (l, msg) -> static_error l msg None

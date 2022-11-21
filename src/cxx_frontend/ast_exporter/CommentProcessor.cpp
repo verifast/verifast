@@ -2,6 +2,15 @@
 #include "clang/Basic/FileManager.h"
 
 namespace vf {
+
+bool CommentProcessor::checkWhiteSpace(const char *start, const char *end) {
+  for (; start < end; ++start) {
+    if (!std::isspace(*start))
+      return false;
+  }
+  return true;
+}
+
 bool CommentProcessor::HandleComment(clang::Preprocessor &PP,
                                      clang::SourceRange comment) {
   auto &SM = PP.getSourceManager();

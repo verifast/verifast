@@ -39,7 +39,7 @@ using Builder = stubs::TU::Builder;
 class VerifastASTConsumer : public clang::ASTConsumer {
   Builder &m_builder;
   AnnotationStore &m_store;
-  const InclusionContext &m_context;
+  InclusionContext &m_context;
 
 public:
   void HandleTranslationUnit(clang::ASTContext &context) override {
@@ -48,7 +48,7 @@ public:
   }
 
   explicit VerifastASTConsumer(Builder &builder, AnnotationStore &store,
-                               const InclusionContext &context)
+                              InclusionContext &context)
       : m_builder(builder), m_store(store), m_context(context) {}
   VerifastASTConsumer(Builder &&builder, AnnotationStore &&store) = delete;
 };

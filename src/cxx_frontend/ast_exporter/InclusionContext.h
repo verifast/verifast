@@ -1,16 +1,13 @@
 #pragma once
 #include "Inclusion.h"
+#include "Util.h"
 #include "kj/common.h"
-#include "loc_serializer.h"
 #include <unordered_map>
 
 namespace vf {
 class InclusionContext {
-  using get_first_decl_loc_fn =
-      std::function<llvm::Optional<clang::SourceLocation>(unsigned)>;
-
   std::unordered_map<unsigned, Inclusion> m_includesMap;
-  llvm::SmallVector<Inclusion *, 8> m_includesStack;
+  llvm::SmallVector<Inclusion *> m_includesStack;
 
   friend class ContextFreePPCallbacks;
   Inclusion *currentInclusion() {
@@ -21,39 +18,38 @@ class InclusionContext {
   void serializeInclDirectivesCore(
       capnp::List<stubs::Include, capnp::Kind::STRUCT>::Builder &builder,
       const clang::SourceManager &SM,
-      const llvm::ArrayRef<InclDirective> inclDirectives,
-      get_first_decl_loc_fn &getFirstDeclLocOpt, unsigned fd) const;
+      const llvm::ArrayRef<IncludeDirective> inclDirectives, unsigned fd) const;
 
 public:
   explicit InclusionContext() {}
 
   KJ_DISALLOW_COPY(InclusionContext);
 
+  const Inclusion &getInclusionForFD(unsigned fd) const {
+    return m_includesMap.at(fd);
+  }
+
   bool hasInclusions() { return !m_includesStack.empty(); }
 
-  void startInclusion(const clang::FileEntry &fileEntry) {
-    auto it = m_includesMap.emplace(fileEntry.getUID(), fileEntry);
-    auto &startedIncl = it.first->second;
-    m_includesStack.push_back(&startedIncl);
-    // TODO: what if we start an inclusion that we already processed? -> does
-    // not have header guards; then it.second will be false
+  void startInclusion(const clang::FileEntry &fileEntry);
+
+  void addRealInclDirective(clang::SourceRange range, clang::StringRef fileName,
+                            const clang::FileEntry &fileEntry, bool isAngled) {
+    currentInclusion()->addRealInclDirective(range, fileName,
+                                             fileEntry.getUID(), isAngled);
   }
 
-  void addInclDirective(clang::SourceRange range, clang::StringRef fileName,
-                        const clang::FileEntry &fileEntry, bool isAngled) {
-    currentInclusion()->addInclDirective(range, fileName, fileEntry.getUID(),
-                                         isAngled);
+  void addGhostInclDirective(const clang::FileEntry *entry, Annotation &ann) {
+    auto uid = entry->getUID();
+    assert(m_includesMap.contains(uid) &&
+           "File has not been preprocessed and added to inclusion context");
+    m_includesMap.at(uid).addGhostInclDirective(ann);
   }
 
-  void endInclusion() {
-    auto ended = currentInclusion();
-    m_includesStack.pop_back();
-    currentInclusion()->addInclusion(ended);
-  }
+  void endInclusion();
 
-  void
-  serializeTUInclDirectives(stubs::TU::Builder &builder,
-                            const clang::SourceManager &SM,
-                            get_first_decl_loc_fn &getFirstDeclLocOpt) const;
+  void serializeTUInclDirectives(stubs::TU::Builder &builder,
+                                 const clang::SourceManager &SM,
+                                 AstSerializer &serializer) const;
 };
 } // namespace vf

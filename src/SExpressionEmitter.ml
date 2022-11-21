@@ -913,13 +913,14 @@ and sexpr_of_decl (decl : decl) : sexpression =
                    [ "attrs", sexpr_of_list ~head:(Some (Symbol "attrs")) sexpr_of_attr attrs ]
     | Struct (loc,
               name,
-              Some (bases, fields),
+              Some (bases, fields, polymorphic),
               attrs) ->
         build_list [ Symbol "define-struct"
                    ; Symbol name ]
                    [ "bases", sexpr_of_list ~head:(Some (Symbol "bases")) sexpr_of_base bases
                    ; "fields", sexpr_of_list ~head:(Some (Symbol "fields")) sexpr_of_field fields
-                   ; "attrs", sexpr_of_list ~head:(Some (Symbol "attrs")) sexpr_of_attr attrs ]
+                   ; "attrs", sexpr_of_list ~head:(Some (Symbol "attrs")) sexpr_of_attr attrs
+                   ; "polymorphic", sexpr_of_bool polymorphic ]
     | Func (loc,
             kind,
             tparams,

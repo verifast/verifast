@@ -66,7 +66,7 @@ void ContextFreePPCallbacks::FileChanged(
     if (m_context.hasInclusions()) {
       auto exitedFileEntry = SM().getFileEntryForID(prevFID);
       if (exitedFileEntry &&
-          exitedFileEntry->getUID() == m_context.currentInclusion()->fileUID) {
+          exitedFileEntry->getUID() == m_context.currentInclusion()->getUID()) {
         m_context.endInclusion();
       }
     }
@@ -123,8 +123,8 @@ void ContextFreePPCallbacks::InclusionDirective(
     clang::CharSourceRange filenameRange, const clang::FileEntry *file,
     clang::StringRef searchPath, clang::StringRef relativePath,
     const clang::Module *imported, clang::SrcMgr::CharacteristicKind fileType) {
-  m_context.addInclDirective(filenameRange.getAsRange(), fileName, *file,
-                            isAngled);
+  m_context.addRealInclDirective(filenameRange.getAsRange(), fileName, *file,
+                                 isAngled);
 }
 
 void ContextFreePPCallbacks::checkDivergence(const clang::Token &macroNameTok,

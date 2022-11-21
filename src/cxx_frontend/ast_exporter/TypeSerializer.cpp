@@ -1,4 +1,5 @@
 #include "AstSerializer.h"
+#include "Util.h"
 #include "clang/AST/Type.h"
 #include "clang/AST/TypeLoc.h"
 
@@ -92,6 +93,34 @@ bool TypeSerializer::VisitRValueReferenceType(
     const clang::RValueReferenceType *type) {
   auto ref = m_builder.initRValueRef().initDesc();
   m_serializer.serializeQualType(ref, type->getPointeeType());
+  return true;
+}
+
+bool TypeLocSerializer::VisitFunctionProtoTypeLoc(
+    const clang::FunctionProtoTypeLoc typeLoc) {
+  auto proto = m_builder.initFunctionProto();
+  auto ret = proto.initReturnType();
+
+  m_serializer.serializeTypeLoc(ret, typeLoc.getReturnLoc());
+
+  auto &store = m_serializer.getAnnStore();
+  auto &SM = getSourceManager();
+  llvm::SmallVector<Annotation> anns;
+
+  store.getUntilLoc(anns, typeLoc.getLParenLoc(), SM);
+  auto ghostParams = proto.initGhostParams(anns.size());
+  m_serializer.serializeAnnotationClauses(ghostParams, anns);
+
+  auto params = proto.initParams(typeLoc.getNumParams());
+  m_serializer.serializeParams(params, typeLoc.getParams());
+
+  anns.clear();
+
+  store.getContract(getFileEntry(typeLoc.getBeginLoc(), SM), anns, SM,
+                    clang::SourceLocation());
+  auto contract = proto.initContract(anns.size());
+  m_serializer.serializeAnnotationClauses(contract, anns);
+
   return true;
 }
 

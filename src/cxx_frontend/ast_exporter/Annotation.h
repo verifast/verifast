@@ -10,17 +10,25 @@ namespace vf {
  * Represents a VeriFast annotation in the source code.
  */
 class Annotation {
+public:
+  enum Kind {
+    Ann_Unknown,
+    Ann_ContractClause,
+    Ann_Truncating,
+    Ann_Include,
+    Ann_other,
+  };
+
+private:
   clang::SourceRange m_range;
   std::string m_text;
-  bool m_isContractClauseLike;
+  Kind m_kind;
   bool m_isNewSeq;
-  bool m_isTruncating;
 
 public:
-  Annotation(clang::SourceRange &range, llvm::StringRef text,
-             bool isContractClause, bool isTruncating, bool isNewSeq)
-      : m_range(range), m_text(text), m_isContractClauseLike(isContractClause),
-        m_isTruncating(isTruncating), m_isNewSeq(isNewSeq) {}
+  Annotation(clang::SourceRange range, llvm::StringRef text, Kind kind,
+             bool isNewSeq)
+      : m_range(range), m_text(text), m_kind(kind), m_isNewSeq(isNewSeq) {}
 
 public:
   clang::SourceRange getRange() const { return m_range; }
@@ -32,7 +40,7 @@ public:
    annotation starts with 'requires, 'ensures', 'terminates', ':', or
    'non_ghost_callers_only'. White space characters are not taken into account.
    */
-  bool isContractClauseLike() const { return m_isContractClauseLike; }
+  bool isContractClauseLike() const { return m_kind == Ann_ContractClause; }
 
   /**
    * @return wether or not this annotation starts a new sequence of annotations.
@@ -44,7 +52,12 @@ public:
   /**
    * @return wether or not this annotation is a truncating expression.
    */
-  bool isTruncating() const { return m_isTruncating; }
+  bool isTruncating() const { return m_kind == Ann_Truncating; }
+
+  /**
+   * @return wether or not this annotation in an include directive.
+   */
+  bool isInclude() const { return m_kind == Ann_Include; }
 };
 
 /**

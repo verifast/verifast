@@ -8,7 +8,8 @@ open Big_int
   [capnp_arr_map f arr] applies [f] to every element of cap'n proto array [arr] and return a new list containing those elements.
 *)
 let capnp_arr_map (f: 'a -> 'b) (arr: (Stubs_ast.ro, 'a, R.array_t) Capnp.Array.t): 'b list =
-  arr |> Capnp.Array.map_list ~f
+  (* map array to list first, the map function of capnp traverses the array in reverse order *)
+  arr |> Capnp.Array.to_list |> List.map f
 
 (**
   [capnp_arr_iter] applies [f] to every element of cap'n proto array [arr].
@@ -72,7 +73,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
 
     In case of success, the exporter first transmits a message {i SerResult.Ok} through {i in_channel} 
     to report that the compilation, context free macro expansion check, and AST serialization were successful.
-    The next message that is trasmitted through {i in_channel} represents the serialized C++ AST.
+    The next message that is transmitted through {i in_channel} represents the serialized C++ AST.
 
     Otherwise a message {i SerResult.Error} is transmitted through {i error_channel}
     if any error occurred during compilation, context free macro expansion checking, or AST serialization.
@@ -82,13 +83,21 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     let bin_dir = Filename.dirname Sys.executable_name in
     let frontend_macro = "__VF_CXX_CLANG_FRONTEND__" in
     let allow_expansions = frontend_macro :: allow_expansions in
+    (* 
+      -allow_macro_expansion=<expansions>   Don't check context-free expasions for <expansions>
+      -x<language>                          Treat input files as having type <language> 
+      -I<dir>                               Include dir
+      -D<macros>                            Define macros <macros>
+    *)
     let cmd = 
-      Printf.sprintf "%s/vf-cxx-ast-exporter %s -allow_macro_expansion=%s -- -I %s -D%s" 
+      Printf.sprintf "%s/vf-cxx-ast-exporter %s -allow_macro_expansion=%s -- -x%s -I%s -D%s %s" 
       bin_dir 
       file 
       (String.concat "," allow_expansions) 
+      (match Args.dialect_opt with Some Cxx -> "c++" | _ -> "c")
       bin_dir 
       frontend_macro
+      (Args.include_paths |> List.map (fun s -> "-I" ^ s) |> String.concat " ")
     in
     let inchan, outchan, errchan = Unix.open_process_full cmd [||] in
     inchan, outchan, errchan
@@ -172,10 +181,11 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     | EnumDecl d          -> [transl_enum_decl loc d]
     | Typedef d           -> [transl_typedef_decl loc d]
     | Ctor c              -> if R.Decl.Ctor.method_get c |> method_is_implicit then [] else [transl_ctor_decl loc c]
-                              (* TODO: we currently skip implicit constructors because they can contain lValueRefs/rValueRefs *)
+                              (* TODO: we currently skip implicit constructors *)
     | Dtor d              -> if R.Decl.Dtor.method_get d |> method_is_implicit then [] else [transl_dtor_decl loc d]
-                              (* TODO: skipping implicit dtors (see ctor) *)
-    | AccessSpec          -> []     
+                              (* TODO: skipping implicit dtors *)
+    | AccessSpec          -> []  (* TODO: don't ignore this? *)   
+    | Namespace ns        -> transl_namespace_decl loc ns
     | Undefined _         -> failwith "Undefined declaration."
     | _                   -> error loc "Unsupported declaration."
 
@@ -198,12 +208,13 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     | New n               -> transl_new_expr loc n
     | Construct c         -> transl_construct_expr loc c
     | Member m            -> transl_member_expr loc m
-    | MemberCall c        -> transl_call_expr loc c
+    | MemberCall c        -> transl_member_call_expr loc c
     | NullPtrLit          -> transl_null_ptr_lit_expr loc
     | Delete d            -> transl_delete_expr loc d
     | Truncating t        -> transl_trunc_expr loc t
     | LValueToRValue l    -> transl_lvalue_to_rvalue_expr loc l
     | DerivedToBase e     -> transl_derived_to_base_expr loc e
+    | OperatorCall o      -> transl_operator_call_expr loc o
     | Undefined _         -> failwith "Undefined expression"
     | _                   -> error loc "Unsupported expression."
 
@@ -267,7 +278,17 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
   (* declarations *)
   (****************)
 
-  and transl_func (f: R.Decl.Function.t) = 
+  and transl_param (param: R.Param.t): VF.type_expr * string =
+    let open R.Param in
+    if has_default param then failwith "Parameters with default expressions are not supported yet."
+    else type_get param |> transl_type_loc, name_get param 
+
+  and transl_return_type (type_node: R.Node.t): VF.type_expr option =
+    match transl_type_loc type_node with
+    | VF.ManifestTypeExpr (_, VF.Void) -> None
+    | rt -> Some rt 
+
+  and transl_func (loc: VF.loc) (f: R.Decl.Function.t) = 
     let open R.Decl.Function in
     let name = name_get f in
     let mangled_name = mangled_name_get f in 
@@ -275,24 +296,13 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
       if has_body f then Some (transl_stmt_as_list @@ body_get f)
       else None 
     in
-    let contract = contract_get f in
-    let contract_lst = contract |> capnp_arr_map map_ann_clause in
-    let ng_callers_only, ft, pre_post, terminates = AP.parse_spec_clauses contract_lst in
-    let return_type = 
-      match transl_type_loc @@ result_get f with
-      | VF.ManifestTypeExpr (_, VF.Void) -> None
-      | rt -> Some rt 
-    in
-    let transl_param param = 
-      let open R.Decl.Param in
-      if has_default param then failwith "Parameters with default expressions are not supported yet."
-      else transl_type_loc @@ type_get param, name_get param 
-    in
+    let ng_callers_only, ft, pre_post, terminates = contract_get f |> capnp_arr_map map_ann_clause |> AP.parse_func_contract loc in
+    let return_type = result_get f |> transl_return_type in
     let params = params_get f |> capnp_arr_map transl_param in
     name, mangled_name, params, body_opt, (ng_callers_only, ft, pre_post, terminates), return_type
 
   and transl_func_decl (loc: VF.loc) (f: R.Decl.Function.t): VF.decl =
-    let _, name, params, body_opt, (ng_callers_only, ft, pre_post, terminates), return_type = transl_func f in
+    let _, name, params, body_opt, (ng_callers_only, ft, pre_post, terminates), return_type = transl_func loc f in
     let make_return loc = VF.ReturnStmt (loc, Some (make_int_lit loc 0)) in
     let body_stmts = 
       match name, body_opt with
@@ -363,6 +373,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
           VF.CxxBaseSpec (loc, name_get desc, virtual_get desc)
         in
         let body = body_get record in
+        let polymorphic = polymorphic_get body in
         let mems = body |> decls_get_list |> transl_mems in
         let decls, fields, inst_preds =
           mems |> List.fold_left (fun (decls, fields, inst_preds) mem ->
@@ -379,7 +390,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
               decl :: decls, fields, inst_preds) ([], [], [])
         in
         let bases = bases_get body |> capnp_arr_map (transl_node transl_base) in
-        Some (bases, fields), decls
+        Some (bases, fields, polymorphic), decls
       else None, [] 
     in
     let vf_record = 
@@ -387,13 +398,13 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
       | R.RecordKind.Struc | R.RecordKind.Class -> 
         VF.Struct (loc, name, body, []) 
       | R.RecordKind.Unio -> 
-        VF.Union (loc, name, body |> option_map @@ fun (_, fields) -> fields) 
+        VF.Union (loc, name, body |> option_map @@ fun (_, fields, _) -> fields) 
     in
     vf_record :: decls
 
   and transl_meth (loc: VF.loc) (meth: R.Decl.Method.t) =
     let open R.Decl.Method in
-    let name, mangled_name, params, body_opt, anns, return_type = func_get meth |> transl_func in
+    let name, mangled_name, params, body_opt, anns, return_type = func_get meth |> transl_func loc in
     let binding = if static_get meth then VF.Static else VF.Instance in
     let params = 
       match binding with
@@ -473,8 +484,21 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
   and transl_typedef_decl (loc: VF.loc) (decl: R.Decl.Typedef.t): VF.decl =
     let open R.Decl.Typedef in
     let name = name_get decl in
-    let ty = type_get decl |> transl_type_loc in
-    VF.TypedefDecl (loc, ty, name)
+    let l, type_desc = type_get decl |> decompose_node in
+    match R.Type.get type_desc with
+    | R.Type.FunctionProto fp ->
+      let return_type, (ft_type_params, ft_params, params), contract = transl_function_proto_type l fp in
+      VF.FuncTypeDecl (loc, VF.Real, return_type, name, ft_type_params, ft_params, params, contract)
+    | _ -> 
+      let ty = transl_type l type_desc in
+      VF.TypedefDecl (loc, ty, name)
+
+  (* TODO: we currnetly ignore the name, because the serializer exposes qualified names.
+     However, namespaces might be useful to scope ghost code. *)
+  and transl_namespace_decl (loc: VF.loc) (decl: R.Decl.Namespace.t): VF.decl list =
+    let open R.Decl.Namespace in
+    (* let name = name_get decl in *)
+    decls_get decl |> capnp_arr_map transl_decl |> List.flatten
 
   (***************)
   (* expressions *)
@@ -573,32 +597,39 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
   and map_args (args: (Stubs_ast.ro, R.Node.t, R.array_t) Capnp.Array.t): VF.pat list =
     args |> capnp_arr_map (fun e -> VF.LitPat (transl_expr e))
 
+  and transl_call (loc: VF.loc) (call: R.Expr.Call.t): string * VF.pat list =
+  let open R.Expr.Call in
+  let callee = callee_get call in
+  let args = args_get call |> map_args in
+  let name =
+    let callee_loc, desc = decompose_node callee in
+    let e = R.Expr.get desc in
+    match e with
+    | R.Expr.DeclRef r -> (* c-like function call, operator calls (even tho they can be class methods) *)
+      R.Expr.DeclRef.mangled_name_get r
+    | R.Expr.Member m ->  (* C++ method call on explicit or implicit (this) object *)
+      R.Expr.Member.mangled_name_get m 
+    | _ -> error loc "Unsupported callee in function or method call." 
+  in
+  name, args
+
   and transl_call_expr (loc: VF.loc) (call: R.Expr.Call.t): VF.expr =
-    let open R.Expr.Call in
-    let callee = callee_get call in
-    let args = args_get call |> map_args in
-    let name, args =
-      let callee_loc, desc = decompose_node callee in
-      let e = R.Expr.get desc in
-      match e with
-      | R.Expr.DeclRef r -> (* c-like function call, operator calls (even tho they can be class methods) *)
-        let args = 
-          if R.Expr.DeclRef.is_class_member_get r then 
-            let VF.LitPat this_arg :: args = args in
-            VF.LitPat (VF.make_addr_of callee_loc this_arg) :: args
-          else args 
-        in
-        R.Expr.DeclRef.mangled_name_get r, args
-      | R.Expr.Member m ->  (* C++ method call on explicit or implicit (this) object *)
-        let base = 
-          let base_expr = transl_expr @@ R.Expr.Member.base_get m in
-          (* methods/operators/conversions expect a pointer to the object as first argument *)
-          if R.Expr.Member.base_is_pointer_get m then base_expr
-          else VF.make_addr_of callee_loc base_expr 
-        in
-        R.Expr.Member.mangled_name_get m, VF.LitPat base :: args 
-      | _ -> error loc "Unsupported callee in function or method call." 
+    let name, args = transl_call loc call in
+    VF.CallExpr (loc, name, [], [], args, VF.Static)
+
+  and transl_operator_call_expr (loc: VF.loc) (call: R.Expr.Call.t): VF.expr =
+    let name, VF.LitPat this_arg :: args = transl_call loc call in
+    let args = VF.LitPat (VF.make_addr_of (VF.expr_loc this_arg) this_arg) :: args in
+    VF.CallExpr (loc, name, [], [], args, VF.Static)
+
+  and transl_member_call_expr (loc: VF.loc) (member_call: R.Expr.MemberCall.t): VF.expr =
+    let open R.Expr.MemberCall in
+    let name, args = call_get member_call |> transl_call loc in
+    let impl_arg = 
+      let arg = implicit_arg_get member_call |> transl_expr in
+      if arrow_get member_call then arg else VF.make_addr_of (VF.expr_loc arg) arg
     in
+    let args = VF.LitPat impl_arg :: args in
     VF.CallExpr (loc, name, [], [], args, VF.Static)
 
   and transl_decl_ref_expr (loc: VF.loc) (ref: R.Expr.DeclRef.t): VF.expr =
@@ -647,8 +678,8 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     let e = transl_expr e in
     VF.CxxLValueToRValue (loc, e)
 
-  and transl_derived_to_base_expr (loc: VF.loc) (e: R.Expr.DerivedToBase.t): VF.expr =
-    let open R.Expr.DerivedToBase in 
+  and transl_derived_to_base_expr (loc: VF.loc) (e: R.Expr.StructToStruct.t): VF.expr =
+    let open R.Expr.StructToStruct in 
     let sub_expr = expr_get e |> transl_expr in
     let ty = type_get e |> transl_type loc in
     VF.CxxDerivedToBase (loc, sub_expr, ty)
@@ -810,6 +841,20 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     in
     ManifestTypeExpr (loc, VF.Int (signed, rank))
 
+  and transl_function_proto_type (loc: VF.loc) (proto_type: R.Type.FunctionProto.t): VF.type_expr option * (string list * (VF.type_expr * string) list * (VF.type_expr * string) list) * (VF.asn * VF.asn * bool) =
+    let open R.Type.FunctionProto in
+    let return_type = return_type_get proto_type |> transl_return_type in
+    let params = params_get proto_type |> capnp_arr_map transl_param in
+    let contract = contract_get proto_type |> capnp_arr_map map_ann_clause |> AP.parse_functype_contract loc in
+    let functype_type_params, functype_params = 
+      let ann = ghost_params_get proto_type |> capnp_arr_map map_ann_clause in
+      match ann with
+      | [] -> [], []
+      | [ann] -> AP.parse_functype_ghost_params ann
+      | _ -> error loc @@ "A single annotation expected of the form '/*@ ... @*/'."
+    in
+    return_type, (functype_type_params, functype_params, params), contract
+
   (********************)
   (* translation unit *)
   (********************)
@@ -820,54 +865,77 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     let reason = reason_get err in
     error loc reason
 
-  let transl_includes (includes: R.Include.t list): Cxx_fe_sig.header_type list =
-    let rec transl_includes_rec incls header_names =
+  let transl_includes (decls_map: (int * (Stubs_ast.ro, R.Node.t, R.array_t) Capnp.Array.t) list) (includes: R.Include.t list): Cxx_fe_sig.header_type list =
+    let active_headers = ref [] in
+    let test_include_cycle l path =
+      if List.mem path !active_headers then raise (Lexer.ParseException (l, "Include cycles (even with header guards) are not supported"));
+    in
+    let add_active_header path =
+      active_headers := path :: !active_headers
+    in
+    let remove_active_header path =
+      active_headers := List.filter (fun h -> h <> path) !active_headers;
+    in
+    let transl_decls fd = List.assoc fd decls_map |> capnp_arr_map transl_decl |> List.flatten in
+    let open R.Include in
+    let rec transl_includes_rec path incls header_names all_includes_done_paths =
       match incls with
       | [] -> [], header_names
       | h :: tl -> 
-        let headers, header_name = transl_include_rec h in
-        let other_headers, other_header_names = transl_includes_rec tl (header_name :: header_names) in
-        List.append headers other_headers, other_header_names
-    and transl_include_rec incl =
-      let open R.Include in
+        match get h with
+        | RealInclude incl ->
+          let headers, header_name = transl_real_include_rec incl all_includes_done_paths in
+          let other_headers, other_header_names = transl_includes_rec path tl (header_name :: header_names) (header_name :: all_includes_done_paths) in
+          List.append headers other_headers, other_header_names
+        | GhostInclude incl ->
+          let ann = map_ann_clause incl in
+          let included_files_ref = ref all_includes_done_paths in
+          let ghost_headers, ghost_header_names = AP.parse_include_directives path ann active_headers included_files_ref in
+          let other_headers, other_header_names = transl_includes_rec path tl (List.append ghost_header_names header_names) !included_files_ref in
+          List.append ghost_headers other_headers, other_header_names
+    and transl_real_include_rec incl all_includes_done_paths =
+      let open RealInclude in
+      let file_name = file_name_get incl in
+      let path = abs_path file_name in
       let fd = fd_get incl in
-      let path = get_fd_path fd in
-      match pop_fd_decls_opt fd with
-      | None -> [], path (* ignore secondary include *)
-      | Some decls ->
-        let loc = loc_get incl |> transl_loc in
-        let file_name = file_name_get incl in
+      let loc = loc_get incl |> transl_loc in
+      if List.mem path all_includes_done_paths then
+        let () = test_include_cycle loc path in
+        [], path
+      else
         let incl_kind = if is_angled_get incl then Lexer.AngleBracketInclude else Lexer.DoubleQuoteInclude in
         let includes = includes_get_list incl in
-        let headers, header_names = transl_includes_rec includes [] in
+        let () = add_active_header path in
+        let headers, header_names = transl_includes_rec path includes [] (path :: all_includes_done_paths) in
+        let () = remove_active_header path in
+        let decls = transl_decls fd in
         let ps = [VF.PackageDecl (VF.dummy_loc, "", [], decls)] in
-        List.append headers [loc, (incl_kind, file_name, path), header_names, ps], path 
+        List.append headers [loc, (incl_kind, file_name, path), header_names, ps], path
     in
-    let headers, _ = transl_includes_rec includes [] in
+    let headers, _ = transl_includes_rec Args.path includes [] [] in
     headers
 
-  let transl_files (files: (Stubs_ast.ro, R.File.t, R.array_t) Capnp.Array.t): unit =
+  let transl_files (files: (Stubs_ast.ro, R.File.t, R.array_t) Capnp.Array.t): (int * (Stubs_ast.ro, R.Node.t, R.array_t) Capnp.Array.t) list =
     Hashtbl.clear files_table;
-    Hashtbl.clear decls_table;
     let transl_file file =
       let open R.File in
       let fd = fd_get file in
       let name = path_get file in
       Hashtbl.replace files_table fd name;
-      let decls = decls_get file |> capnp_arr_map transl_decl |> List.flatten in
-      Hashtbl.replace decls_table fd decls 
+      let decls = decls_get file in
+      fd, decls
     in
-    files |> capnp_arr_iter transl_file
+    files |> capnp_arr_map transl_file
 
   let transl_tu (tu: R.TU.t): Cxx_fe_sig.header_type list * VF.decl list =
     let open R.TU in
-    files_get tu |> transl_files;
+    let decls_table = files_get tu |> transl_files in
+    let includes = includes_get_list tu |> transl_includes decls_table in
     let main_fd = main_fd_get tu in
-    let main_decls = pop_fd_decls main_fd in
-    let includes = includes_get_list tu |> transl_includes in
+    let main_decls = List.assoc main_fd decls_table |> capnp_arr_map transl_decl |> List.flatten in
     includes, main_decls
 
-  let parse_cxx_file (path: string): Cxx_fe_sig.header_type list * VF.package list =
+  let parse_cxx_file (): Cxx_fe_sig.header_type list * VF.package list =
     (* TODO: pass macros that are whitelisted *)
     let type_macros pref =
       [8; 16; 32; 64] |> List.map @@ fun n ->
@@ -876,7 +944,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     let enable_types = 
       type_macros "INT" @ type_macros "UINT"
     in
-    let inchan, outchan, errchan = invoke_exporter path enable_types in
+    let inchan, outchan, errchan = invoke_exporter Args.path enable_types in
     let close_channels () =
       let _ = Unix.close_process_full (inchan, outchan, errchan) in () 
     in
