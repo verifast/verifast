@@ -197,8 +197,42 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       pr ("%s": ('a, out_channel, unit) format) msg
     end
 
-  let pprint_context_stack cs dbg_info =
+  let filter_map_env_of_ctx var_name_map ctx =
     let is_internal_name n = String.starts_with ~prefix:"$" n in
+    let map_env_entry (var_name, term) =
+      if not (is_internal_name var_name) then
+        Some (var_name, term) (*ghost var*)
+      else
+        match List.find_opt (fun ({internal_name; surf_name}: var_debug_info) -> internal_name = var_name) var_name_map with
+        | None -> None
+        | Some entry -> Some (entry.surf_name, term)
+    in
+    match ctx with
+    | Executing (heap, env, loc, msg) -> Executing (heap, List.filter_map map_env_entry env, loc, msg)
+    | _ -> ctx
+
+  let filter_redundant_ctxs ctxs =
+    let filter_ctx out_ctxs ctx =
+      match out_ctxs with
+      | [] -> [ ctx ]
+      | last_ctx :: _ -> begin
+        match last_ctx with
+        | Assuming t -> if ctx = last_ctx then out_ctxs else ctx :: out_ctxs
+        | Executing (heap, env, loc, msg) -> begin
+          match ctx with
+          | Executing (heap1, env1, loc1, msg1) ->
+            let heap, env = List.sort compare heap, List.sort compare env in
+            let heap1, env1 = List.sort compare heap1, List.sort compare env1 in
+            if heap = heap1 && env = env1 then out_ctxs else ctx :: out_ctxs
+          | _ -> ctx :: out_ctxs
+        end
+        | PushSubcontext
+        | PopSubcontext
+        | Branching _ -> ctx :: out_ctxs
+      end
+    in List.fold_left filter_ctx [] (List.rev ctxs)
+
+  let pprint_context_stack cs dbg_info =
     let var_name_map =
       match List.hd (List.rev cs), dbg_info with
       | Executing (_, _, current_fid, _), Some(dbg_info) -> begin
@@ -216,35 +250,30 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
          `let Executing (_, _, current_fid, _) = List.hd (List.rev cs)`. To circumvent this we do not filter variable names
          in case of other kinds of context as the first one. It should be fixed. *)
     in
-    let map_env_entry var_name_map (var_name, term) =
-      if not (is_internal_name var_name) then
-        Some (var_name, pprint_context_term term)
-      else
-        match List.find_opt (fun ({internal_name; surf_name}: var_debug_info) -> internal_name = var_name) var_name_map with
-        | None -> None
-        | Some entry -> Some (entry.surf_name, (pprint_context_term term))
+    let cs =
+      match var_name_map with
+      | Some var_name_map -> List.map (filter_map_env_of_ctx var_name_map) cs
+      | None -> cs
     in
+    let cs = if (language, dialect) = (CLang, Some(Rust)) then filter_redundant_ctxs cs else cs in
     List.map
       (function
-         Assuming t -> Assuming (pprint_context_term t)
-       | Executing (h, env, l, msg) ->
-         let h' =
-           List.map
-             begin function
-             | (Chunk ((g, literal), targs, coef, ts, size)) ->
-               Chunk ((ctxt#pprint g, literal), targs, pprint_context_term coef, List.map (fun t -> pprint_context_term t) ts, size)
-             end
-             h
-         in
-         let env' =
-         match var_name_map with
-         | Some var_name_map -> List.filter_map (map_env_entry var_name_map) env
-         | None -> List.map (fun (x, t) -> (x, pprint_context_term t)) env
-        in
-         Executing (h', env', l, msg)
-       | PushSubcontext -> PushSubcontext
-       | PopSubcontext -> PopSubcontext
-       | Branching branch -> Branching branch)
+        | Assuming t -> Assuming (pprint_context_term t)
+        | Executing (h, env, l, msg) ->
+          let h' =
+            List.map
+              begin function
+              | (Chunk ((g, literal), targs, coef, ts, size)) ->
+                Chunk ((ctxt#pprint g, literal), targs, pprint_context_term coef, List.map (fun t -> pprint_context_term t) ts, size)
+              end
+            h
+          in
+          let env' = List.map (fun (x, t) -> (x, pprint_context_term t)) env
+          in
+          Executing (h', env', l, msg)
+        | PushSubcontext -> PushSubcontext
+        | PopSubcontext -> PopSubcontext
+        | Branching branch -> Branching branch)
       cs
 
   let register_pred_ctor_application t symbol symbol_term ts inputParamCount =
