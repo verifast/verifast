@@ -50,7 +50,7 @@ end
 module LineHashtbl = Hashtbl.Make(HashedLine)
 
 let _ =
-  let verify ?(emitter_callback = fun _ -> ()) (print_stats : bool) (options : options) (prover : string) (path : string) (emitHighlightedSourceFiles : bool) (dumpPerLineStmtExecCounts : bool) allowDeadCode json mergeOptionsFromSourceFile =
+  let verify ?(emitter_callback = fun _ -> ()) (print_stats : bool) (options : options) (prover : string) (path : string) (emitHighlightedSourceFiles : bool) (dumpPerLineStmtExecCounts : bool) allowDeadCode json mergeOptionsFromSourceFile breakpoint =
     let exit l =
       Java_frontend_bridge.unload();
       exit l
@@ -197,7 +197,7 @@ let _ =
         else
           prover, options
       in
-      let stats = verify_program ~emitter_callback:emitter_callback prover options path callbacks None None in
+      let stats = verify_program ~emitter_callback:emitter_callback prover options path callbacks breakpoint None in
       reportDeadCode ();
       dumpPerLineStmtExecCounts ();
       if print_stats then stats#printStats;
@@ -357,6 +357,7 @@ let _ =
   let exports: string list ref = ref [] in
   let outputSExpressions : string option ref = ref None in
   let runtime: string option ref = ref None in
+  let breakpoint: (string * int) option ref = ref None in
   let provides = ref [] in
   let keepProvideFiles = ref false in
   let include_paths: string list ref = ref [] in
@@ -401,6 +402,7 @@ let _ =
             ; "-shared", Set isLibrary, "The file is a library (i.e. no main function required)."
             ; "-allow_assume", Set allowAssume, "Allow assume(expr) annotations."
             ; "-runtime", String (fun path -> runtime := Some path), " "
+            ; "-breakpoint", String (fun path_loc -> let [path; loc_string] = String.split_on_char ':' path_loc in breakpoint := Some (path, int_of_string loc_string)), "-breakpoint myfile.c:123 causes symbolic execution to fail when it reaches line 123 of file myfile.c"
             ; "-allow_should_fail", Set allowShouldFail, "Allow '//~' annotations that specify the line should fail."
             ; "-emit_vfmanifest", Set emitManifest, " "
             ; "-check_vfmanifest", Set checkManifest, " "
@@ -476,7 +478,7 @@ let _ =
               SExpressionEmitter.emit target_file packages          
             | None             -> ()
         in
-        verify ~emitter_callback:emitter_callback !stats options !prover filename !emitHighlightedSourceFiles !dumpPerLineStmtExecCounts !allowDeadCode !json !readOptionsFromSourceFile;
+        verify ~emitter_callback:emitter_callback !stats options !prover filename !emitHighlightedSourceFiles !dumpPerLineStmtExecCounts !allowDeadCode !json !readOptionsFromSourceFile !breakpoint;
         allModules := ((Filename.chop_extension filename) ^ ".vfmanifest")::!allModules
       end
     else if Filename.check_suffix filename ".o" then
