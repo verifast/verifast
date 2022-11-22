@@ -597,6 +597,7 @@ cd ..
         verifast -c -disable_overflow_check single_inheritance.cpp
         verifast -c -disable_overflow_check diamond.cpp
         verifast -c multiple_inheritance.cpp
+        verifast -c method_call_in_dtor.cpp
     cd ..
     verifast -c main_implicit_return.cpp
     verifast -c new_class.cpp
