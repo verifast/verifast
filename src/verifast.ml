@@ -2976,15 +2976,15 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       with_context (Executing ([], env, loc, sprintf "Verifying destructor '%s'" @@ cxx_dtor_name struct_name)) @@ fun () ->
       assume_neq this_term (null_pointer_term ()) @@ fun () ->
       produce_asn [] [] ghostenv env pre real_unit None None @@ fun h ghostenv env ->
-      begin fun cont ->
-        match try_assoc struct_name bases_constructed_map with
-        | Some (_, (_, _, _, _, bases_constructed_symb, _, _)) ->
-          consume_chunk rules h [] env [] loc (bases_constructed_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat this_term] @@ fun _ h _ _ _ _ _ _ ->
-          cont h
-        | None ->
-          cont h
-      end @@ fun h ->
       let return_cont h tenv2 env2 retval =
+        begin fun cont ->
+          match try_assoc struct_name bases_constructed_map with
+          | Some (_, (_, _, _, _, bases_constructed_symb, _, _)) ->
+            consume_chunk rules h [] env [] loc (bases_constructed_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat this_term] @@ fun _ h _ _ _ _ _ _ ->
+            cont h
+          | None ->
+            cont h
+        end @@ fun h ->
         consume_fields this_term h env tenv ghostenv leminfo sizemap @@ fun h ->
         consume_bases bases h env tenv this_term ghostenv leminfo sizemap @@ fun h env tenv ->
         consume_asn rules [] h ghostenv env post true real_unit @@ fun _ h ghostenv env size_first ->
