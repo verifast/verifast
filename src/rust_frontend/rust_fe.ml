@@ -2,6 +2,7 @@ module type RUST_FE_ARGS = sig
   val data_model_opt : Ast.data_model option
   val report_should_fail : string -> Ast.loc0 -> unit
   val report_range : Lexer.range_kind -> Ast.loc0 -> unit
+  val report_macro_call : Ast.loc0 -> Ast.loc0 -> unit
 end
 
 module Make (Args : RUST_FE_ARGS) = struct

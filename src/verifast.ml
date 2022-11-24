@@ -3607,6 +3607,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let data_model_opt = data_model
             let report_should_fail = reportShouldFail
             let report_range = reportRange
+            let report_macro_call = reportMacroCall
           end
         )
         in

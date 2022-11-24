@@ -1,19 +1,20 @@
 #include "../../stddef.h"
+#include "../../stdint.h"
 
-unsigned char *std_alloc_alloc(size_t size);
+uint8_t *std_alloc_alloc(size_t size);
     //@ requires true;
     /*@
     ensures
         result == 0 ?
             emp
         :
-            malloc_block(result, size) &*& uchars(result, size, ?cs) &*&
-            (unsigned char *)0 < result && result + size <= (unsigned char *)UINTPTR_MAX; // one-past-end does not overflow
+            integers__(result, 1, false, size, _) &*& malloc_block(result, size) &*&
+            object_pointer_within_limits(result, size) == true; // one-past-end does not overflow
     @*/
     //@ terminates;
 
-struct std_tuple_0_ std_alloc_dealloc(unsigned char *p, size_t size);
-    //@ requires malloc_block(p, size) &*& uchars(p, size, _);
+struct std_tuple_0_ std_alloc_dealloc(uint8_t *p, size_t size);
+    //@ requires malloc_block(p, size) &*& integers__(p, 1, false, size, _);
     //@ ensures true;
     //@ terminates;
 

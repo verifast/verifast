@@ -136,23 +136,24 @@ module TrTyTuple = struct
       Ast.Struct
         ( loc,
           name,
-          Some ((* base_spec list *) [], (* field list *) []),
-          (* attr list *) [] )
+          Some
+            ((*base_spec list*) [], (*field list*) [], (*is polymorphic*) false),
+          (*attr list*) [] )
 end
 
 module TrTyInt = struct
-  let calc_int_rank (bits : int) =
+  let calc_int_width (bits : int) =
     let n = Float.log2 @@ float_of_int @@ bits in
     let n_is_int = FP_zero == Float.classify_float @@ fst @@ Float.modf @@ n in
     if not (bits > 0 && n_is_int && int_of_float n >= 3) then
       Error
-        (`CalcIntRank
+        (`CalcIntWidth
           "The number of bits of an integer should be non-negative and equal \
            to 2^n such that n>=3")
     else
       let bytes = bits / 8 in
-      let rank = int_of_float @@ Float.log2 @@ float_of_int @@ bytes in
-      Ok rank
+      let width = int_of_float @@ Float.log2 @@ float_of_int @@ bytes in
+      Ok width
 end
 
 module TrTyRawPtr = struct
@@ -197,6 +198,7 @@ module type VF_MIR_TRANSLATOR_ARGS = sig
   val data_model_opt : Ast.data_model option
   val report_should_fail : string -> Ast.loc0 -> unit
   val report_range : Lexer.range_kind -> Ast.loc0 -> unit
+  val report_macro_call : Ast.loc0 -> Ast.loc0 -> unit
 end
 
 module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
@@ -245,9 +247,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let header_path = Filename.concat Args.aux_headers_dir header_name in
         (* Todo @Nima: should we catch the exceptions and return Error here? *)
         let headers, decls =
-          Parser.parse_header_file header_path Args.report_range
-            Args.report_should_fail Args.verbosity (*include paths*) []
-            (*define macros*) [] (*enforce annotation*) true Args.data_model_opt
+          Parser.parse_header_file Args.report_macro_call header_path
+            Args.report_range Args.report_should_fail Args.verbosity
+            (*include paths*) [] (*define macros*) []
+            (*enforce annotation*) true Args.data_model_opt
         in
         let header_names = List.map (fun (_, (_, _, h), _, _) -> h) headers in
         let headers =
@@ -350,16 +353,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Undefined _ ->
         Error (`TrMutability "Unknown Mir mutability discriminator")
 
-  let int_size_rank =
-    match Args.data_model_opt with
-    | None -> Ast.PtrRank
-    | Some data_model -> Ast.LitRank data_model.ptr_rank
+  let int_size_rank = Ast.PtrRank
 
   let translate_u_int_ty (u_int_ty_cpn : UIntTyRd.t) (loc : Ast.loc) =
     let calc_rank ui =
       let* bits = Mir.u_int_ty_bits_len ui in
-      let* rank = TrTyInt.calc_int_rank bits in
-      Ok (Ast.LitRank rank)
+      let* width = TrTyInt.calc_int_width bits in
+      Ok (Ast.FixedWidthRank width)
     in
     let* rank =
       match UIntTyRd.get u_int_ty_cpn with
