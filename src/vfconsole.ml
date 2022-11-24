@@ -50,10 +50,47 @@ end
 module LineHashtbl = Hashtbl.Make(HashedLine)
 
 let _ =
-  let verify ?(emitter_callback = fun _ -> ()) (print_stats : bool) (options : options) (prover : string) (path : string) (emitHighlightedSourceFiles : bool) (dumpPerLineStmtExecCounts : bool) allowDeadCode json mergeOptionsFromSourceFile breakpoint =
+  let verify ?(emitter_callback = fun _ -> ()) (print_stats : bool) (options : options) (prover : string) (path : string) (emitHighlightedSourceFiles : bool) (dumpPerLineStmtExecCounts : bool) allowDeadCode json mergeOptionsFromSourceFile breakpoint targetPath =
     let exit l =
       Java_frontend_bridge.unload();
       exit l
+    in
+    let reportExecutionForest, get_execution_forest_json =
+      if not json then
+        (fun _ -> ()), (fun _ -> Null)
+      else
+        let forest = ref None in
+        let reportExecutionForest f = forest := Some f in
+        let get_execution_forest_json () =
+          let msgsTable = Hashtbl.create 10 in
+          let msgs = ref [] in
+          let get_msg_id msg =
+            match Hashtbl.find_opt msgsTable msg with
+              None ->
+              msgs := msg::!msgs;
+              let id = Hashtbl.length msgsTable in
+              Hashtbl.add msgsTable msg id;
+              id
+            | Some id -> id
+          in
+          let Some forest = !forest in
+          let buf = Buffer.create 10000 in
+          let add_node_type = function
+            ExecNode (msg, path) -> Printf.bprintf buf "#%d" (get_msg_id msg)
+          | BranchNode -> Buffer.add_char buf 'B'
+          | SuccessNode -> Buffer.add_char buf 'S'
+          | ErrorNode -> Buffer.add_char buf 'E'
+          in
+          let rec add_node (Node (nodeType, children)) =
+            add_node_type nodeType;
+            match !children with
+              [child] -> add_node child
+            | children -> Buffer.add_char buf '['; List.iter add_node (List.rev children); Buffer.add_char buf ']'
+          in
+          List.iter add_node (List.rev !forest);
+          O ["msgs", A (List.map (fun msg -> S msg) (List.rev !msgs)); "forest", S (Buffer.contents buf)]
+        in
+        reportExecutionForest, get_execution_forest_json
     in
     let reportUseSite, get_use_sites_json =
       if not json then
@@ -111,7 +148,7 @@ let _ =
     let exit_with_json_result resultJson =
       let majorVersion = 2 in
       let minorVersion = 0 in
-      print_json_endline (A [S "VeriFast-Json"; I majorVersion; I minorVersion; O ["result", resultJson; "useSites", get_use_sites_json ()]])
+      print_json_endline (A [S "VeriFast-Json"; I majorVersion; I minorVersion; O ["result", resultJson; "useSites", get_use_sites_json (); "executionForest", get_execution_forest_json ()]])
     in
     let exit_with_msg l msg =
       if json then begin
@@ -190,14 +227,14 @@ let _ =
         | _ ->
           false
       in
-      let callbacks = {Verifast1.noop_callbacks with reportRange=range_callback; reportStmt; reportStmtExec; reportDirective; reportUseSite} in
+      let callbacks = {Verifast1.reportRange=range_callback; reportStmt; reportStmtExec; reportDirective; reportUseSite; reportExecutionForest} in
       let prover, options = 
         if mergeOptionsFromSourceFile then
           merge_options_from_source_file prover options path
         else
           prover, options
       in
-      let stats = verify_program ~emitter_callback:emitter_callback prover options path callbacks breakpoint None in
+      let stats = verify_program ~emitter_callback:emitter_callback prover options path callbacks breakpoint targetPath in
       reportDeadCode ();
       dumpPerLineStmtExecCounts ();
       if print_stats then stats#printStats;
@@ -358,6 +395,7 @@ let _ =
   let outputSExpressions : string option ref = ref None in
   let runtime: string option ref = ref None in
   let breakpoint: (string * int) option ref = ref None in
+  let targetPath: int list option ref = ref None in
   let provides = ref [] in
   let keepProvideFiles = ref false in
   let include_paths: string list ref = ref [] in
@@ -403,6 +441,7 @@ let _ =
             ; "-allow_assume", Set allowAssume, "Allow assume(expr) annotations."
             ; "-runtime", String (fun path -> runtime := Some path), " "
             ; "-breakpoint", String (fun path_loc -> let [path; loc_string] = String.split_on_char ':' path_loc in breakpoint := Some (path, int_of_string loc_string)), "-breakpoint myfile.c:123 causes symbolic execution to fail when it reaches line 123 of file myfile.c"
+            ; "-break_at_node", String (fun path -> targetPath := Some (path |> String.split_on_char ',' |> List.map int_of_string)), "Break when symbolic execution reaches the specified node in the execution tree."
             ; "-allow_should_fail", Set allowShouldFail, "Allow '//~' annotations that specify the line should fail."
             ; "-emit_vfmanifest", Set emitManifest, " "
             ; "-check_vfmanifest", Set checkManifest, " "
@@ -478,7 +517,7 @@ let _ =
               SExpressionEmitter.emit target_file packages          
             | None             -> ()
         in
-        verify ~emitter_callback:emitter_callback !stats options !prover filename !emitHighlightedSourceFiles !dumpPerLineStmtExecCounts !allowDeadCode !json !readOptionsFromSourceFile !breakpoint;
+        verify ~emitter_callback:emitter_callback !stats options !prover filename !emitHighlightedSourceFiles !dumpPerLineStmtExecCounts !allowDeadCode !json !readOptionsFromSourceFile !breakpoint !targetPath;
         allModules := ((Filename.chop_extension filename) ^ ".vfmanifest")::!allModules
       end
     else if Filename.check_suffix filename ".o" then
