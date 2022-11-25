@@ -594,18 +594,18 @@ cd tests
   cd ..
   cd java
     cd generics
-    verifast -c BasicGenericClass.java
-    verifast -c GenericInheritance.java
-    verifast -c GenericType.java
-    verifast -c QualifiedGenericMethodCall.java
-    verifast -c DiamondOperator.java
-    verifast -c MethodInference.java
-    verifast -c CorrectFieldTypes.java
-    cd errors
-      verifast -c -allow_should_fail Test3.java
+      verifast -c BasicGenericClass.java
+      verifast -c GenericInheritance.java
+      verifast -c GenericType.java
+      verifast -c QualifiedGenericMethodCall.java
+      verifast -c DiamondOperator.java
+      verifast -c MethodInference.java
+      verifast -c CorrectFieldTypes.java
+      cd errors
+        verifast -c -allow_should_fail Test3.java
+      cd ..
     cd ..
   cd ..
-cd ..
   cd cxx
     cd c_copy
         verifast_both -disable_overflow_check globals.cpp
@@ -668,5 +668,10 @@ cd ..
     verifast -c -disable_overflow_check lvalue_refs.cpp
     verifast -c typeid.cpp
     verifast -c ghost_field.cpp
+  cd ..
+  cd rust
+    cd purely_unsafe
+      verifast -c -allow_dead_code alloc.rs
+    cd ..
   cd ..
 end_parallel

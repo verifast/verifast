@@ -57,6 +57,32 @@ module Make (Args : RUST_FE_ARGS) = struct
     let find_tchain_lib tchain_name = find_tchain_path tchain_name Lib
   end
 
+  let add_path_to_env_var env var_name path =
+    if String.length var_name = 0 then
+      Error (`EnvSettingFailed "Environment var names should not be empty")
+    else
+      let env = Array.to_list env in
+      let env, var_values =
+        List.partition_map
+          (fun entry ->
+            let key = var_name ^ "=" in
+            if String.starts_with ~prefix:key entry then
+              let entry_len, key_len =
+                (String.length entry, String.length key)
+              in
+              Right (String.sub entry key_len (entry_len - key_len))
+            else Left entry)
+          env
+      in
+      let entry = var_name ^ "=" ^ path in
+      let entry =
+        match ListAux.last var_values with
+        | None -> entry
+        | Some value -> entry ^ ":" ^ value
+      in
+      let env = env @ [ entry ] in
+      Ok (Array.of_list env)
+
   let run_vf_mir_exporter (rs_file_path : string) =
     try
       (*** TODO @Nima: Get these names from build system *)
@@ -68,9 +94,7 @@ module Make (Args : RUST_FE_ARGS) = struct
       let* tchain_lib = RustTChain.find_tchain_lib tchain_name in
       let args = [| bin_path; rs_file_path; "--sysroot=" ^ tchain_root |] in
       let current_env = Unix.environment () in
-      let env =
-        Array.append [| "LD_LIBRARY_PATH=" ^ tchain_lib |] current_env
-      in
+      let* env = add_path_to_env_var current_env "LD_LIBRARY_PATH" tchain_lib in
       let chns = Unix.open_process_args_full bin_path args env in
       Ok chns
     with
