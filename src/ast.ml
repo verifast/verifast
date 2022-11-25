@@ -818,8 +818,8 @@ and
       (asn * asn) option *  (* contract *)
       bool *  (* terminates *)
       (stmt list * loc (* Close brace *)) option *  (* body *)
-      method_binding *  (* static or instance *)
-      visibility
+      bool * (* virtual *)
+      (string list) (* overrides *)
   | CxxCtor of 
       loc *
       string * (* mangled name *)

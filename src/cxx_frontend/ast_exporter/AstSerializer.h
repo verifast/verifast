@@ -33,13 +33,13 @@ using DeclNodeOrphan = NodeOrphan<stubs::Decl>;
  * corresponding serializer.
  */
 class AstSerializer {
-  clang::ASTContext &m_context;
+  clang::ASTContext &m_ASTContext;
   clang::SourceManager &m_SM;
   InclusionContext &m_inclContext;
 
   FunctionMangler m_funcMangler;
 
-  AnnotationSerializer m_AS;
+  AnnotationSerializer m_textSerializer;
   AnnotationStore &m_store;
   std::unordered_map<unsigned, llvm::SmallVector<DeclNodeOrphan, 8>>
       m_fileDeclsMap;
@@ -65,8 +65,8 @@ public:
   explicit AstSerializer(clang::ASTContext &context, AnnotationStore &store,
                          InclusionContext &inclContext,
                          bool serializeImplicitDecls)
-      : m_context(context), m_SM(context.getSourceManager()),
-        m_inclContext(inclContext), m_AS(context.getSourceManager()),
+      : m_ASTContext(context), m_SM(context.getSourceManager()),
+        m_inclContext(inclContext), m_textSerializer(context.getSourceManager()),
         m_funcMangler(context), m_store(store),
         m_serializeImplicitDecls(serializeImplicitDecls) {}
 
@@ -170,12 +170,12 @@ public:
    */
   void serializeAnnotationClause(AnnotationSerializer::ClauseBuilder &builder,
                                  const Annotation &ann) {
-    m_AS.serializeClause(builder, ann);
+    m_textSerializer.serializeClause(builder, ann);
   }
 
   void serializeAnnotationClauses(
       capnp::List<stubs::Clause, capnp::Kind::STRUCT>::Builder &builder,
-      clang::ArrayRef<Annotation> anns);
+      const clang::ArrayRef<Annotation> anns);
 
   /**
    * Serializes an annotation that derives from another node (like a declaration
@@ -193,7 +193,7 @@ public:
   void serializeAnnotationDecomposed(stubs::Loc::Builder &locBuilder,
                                      typename StubsNode::Builder &descBuilder,
                                      const Annotation &ann) {
-    m_AS.serializeNode<StubsNode>(locBuilder, descBuilder, ann);
+    m_textSerializer.serializeNode<StubsNode>(locBuilder, descBuilder, ann);
   }
 
   /**
@@ -294,15 +294,15 @@ public:
       clang::ArrayRef<std::reference_wrapper<const IncludeDirective>>
           orderedDirectives) const;
 
-  llvm::StringRef getMangledCtorName(const clang::CXXConstructorDecl *decl) {
+  llvm::StringRef getMangledName(const clang::CXXConstructorDecl *decl) {
     return m_funcMangler.mangleCtor(decl);
   }
 
-  llvm::StringRef getMangledDtorName(const clang::CXXDestructorDecl *decl) {
+  llvm::StringRef getMangledName(const clang::CXXDestructorDecl *decl) {
     return m_funcMangler.mangleDtor(decl);
   }
 
-  llvm::StringRef getMangledFunc(const clang::FunctionDecl *decl) {
+  llvm::StringRef getMangledName(const clang::FunctionDecl *decl) {
     return m_funcMangler.mangleFunc(decl);
   }
 };

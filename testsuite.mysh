@@ -599,6 +599,14 @@ cd ..
         verifast -c multiple_inheritance.cpp
         verifast -c method_call_in_dtor.cpp
     cd ..
+    cd virtual_methods
+        verifast -c virtual_methods.cpp
+        verifast -c virtual_calls_in_xtor.cpp
+        verifast -c -allow_should_fail virtual_call_in_ctor_ub.cpp
+        verifast -c -allow_should_fail virtual_call_in_dtor_ub.cpp
+        verifast -c -allow_should_fail indirect_virtual_call_in_ctor_ub.cpp
+        verifast -c -allow_should_fail indirect_virtual_call_in_dtor_ub.cpp
+    cd ..
     verifast -c main_implicit_return.cpp
     verifast -c new_class.cpp
     verifast -c new_primitives.cpp

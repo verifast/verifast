@@ -4,17 +4,19 @@ module VF = Ast
 open Util
 open Big_int
 
+type 'a capnp_arr = (Stubs_ast.ro, 'a, R.array_t) Capnp.Array.t
+
 (**
   [capnp_arr_map f arr] applies [f] to every element of cap'n proto array [arr] and return a new list containing those elements.
 *)
-let capnp_arr_map (f: 'a -> 'b) (arr: (Stubs_ast.ro, 'a, R.array_t) Capnp.Array.t): 'b list =
+let capnp_arr_map (f: 'a -> 'b) (arr: 'a capnp_arr): 'b list =
   (* map array to list first, the map function of capnp traverses the array in reverse order *)
   arr |> Capnp.Array.to_list |> List.map f
 
 (**
   [capnp_arr_iter] applies [f] to every element of cap'n proto array [arr].
 *)
-let capnp_arr_iter (f: 'a -> 'b) (arr: (Stubs_ast.ro, 'a, R.array_t) Capnp.Array.t): unit =
+let capnp_arr_iter (f: 'a -> 'b) (arr: 'a capnp_arr): unit =
   arr |> Capnp.Array.iter ~f
 
 let union_no_init_err kind =
@@ -35,21 +37,6 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
   let files_table: (int, string) Hashtbl.t = Hashtbl.create 8
 
   let get_fd_path = Hashtbl.find files_table
-
-  (*
-    Maps unique identifiers - integers - to the declarations that are part of the file with that identifier.
-    Allows to process declarations of a file in isolation from other files.
-  *)
-  let decls_table: (int, VF.decl list) Hashtbl.t = Hashtbl.create 4
-
-  let pop_fd_decls_opt fd = 
-    let result = Hashtbl.find_opt decls_table fd in
-    Hashtbl.remove decls_table fd;
-    result
-
-  let pop_fd_decls fd =
-    let Some res = pop_fd_decls_opt fd in
-    res
 
   (*
     Parser which is used to translate VeriFast annotations.
@@ -313,7 +300,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
         end 
       | _ -> body_opt 
     in
-    VF.Func (loc, VF.Regular, [], return_type, name, params, ng_callers_only, ft, pre_post, terminates, body_stmts, VF.Static, VF.Public)
+    VF.Func (loc, VF.Regular, [], return_type, name, params, ng_callers_only, ft, pre_post, terminates, body_stmts, false, [])
 
   and transl_ann_decls (loc: VF.loc) (text: string): VF.decl list =
     let VF.Lexed l = loc in
@@ -405,22 +392,26 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
   and transl_meth (loc: VF.loc) (meth: R.Decl.Method.t) =
     let open R.Decl.Method in
     let name, mangled_name, params, body_opt, anns, return_type = func_get meth |> transl_func loc in
-    let binding = if static_get meth then VF.Static else VF.Instance in
+    let is_static = static_get meth in
     let params = 
-      match binding with
-      | VF.Static -> params
-      | VF.Instance -> 
+      if is_static then params
+      else 
         let this_type = this_get meth |> transl_type loc in
         (VF.PtrTypeExpr (VF.dummy_loc, this_type), "this") :: params 
     in
     let implicit = implicit_get meth in
-    name, mangled_name, params, body_opt, anns, return_type, implicit
+    let is_virtual = virtual_get meth in
+    let overrides = 
+      if has_overrides meth then overrides_get_list meth
+      else []
+    in
+    name, mangled_name, params, body_opt, anns, return_type, implicit, is_virtual, overrides
 
   (* translates a method to a function and prepends 'this' to the parameters in case it is not a static method *)
   and transl_meth_decl (loc: VF.loc) (meth: R.Decl.Method.t): VF.decl =
     let open R.Decl.Method in
-    let _, mangled_name, params, body_opt, (ng_callers_only, ft, pre_post, terminates), return_type, _ = transl_meth loc meth in
-    VF.Func (loc, VF.Regular, [], return_type, mangled_name, params, ng_callers_only, ft, pre_post, terminates, body_opt, VF.Static, VF.Public)
+    let _, mangled_name, params, body_opt, (ng_callers_only, ft, pre_post, terminates), return_type, _, is_virtual, overrides = transl_meth loc meth in
+    VF.Func (loc, VF.Regular, [], return_type, mangled_name, params, ng_callers_only, ft, pre_post, terminates, body_opt, is_virtual, overrides)
 
   and transl_record_ref (loc: VF.loc) (record_ref: R.RecordRef.t): VF.type_ =
     let open R.RecordRef in
@@ -433,7 +424,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
 
   and transl_ctor_decl (loc: VF.loc) (ctor: R.Decl.Ctor.t): VF.decl =
     let open R.Decl.Ctor in
-    let _, mangled_name, this_param :: params, body_opt, (_, _, pre_post_opt, terminates), _, implicit = method_get ctor |> transl_meth loc in
+    let _, mangled_name, this_param :: params, body_opt, (_, _, pre_post_opt, terminates), _, implicit, _, _ = method_get ctor |> transl_meth loc in
     (* the init list also contains member names that are default initialized and don't appear in the init list *)
     (* in that case, no init expr is present (we can always retrieve it from the field default initializer) *)
     let transl_init init =
@@ -447,7 +438,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
 
   and transl_dtor_decl (loc: VF.loc) (dtor: R.Decl.Dtor.t): VF.decl =
     let open R.Decl.Dtor in 
-    let _, _, [this_param], body_opt, (_, _, pre_post_opt, terminates), _, implicit = method_get dtor |> transl_meth loc in
+    let _, _, [this_param], body_opt, (_, _, pre_post_opt, terminates), _, implicit, _, _ = method_get dtor |> transl_meth loc in
     let parent = dtor |> parent_get |> transl_record_ref loc in
     VF.CxxDtor (loc, pre_post_opt, terminates, body_opt, implicit, parent)
 
@@ -594,7 +585,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
   and transl_str_lit_expr (loc: VF.loc) (str_lit: string): VF.expr =
     VF.StringLit (loc, str_lit)
 
-  and map_args (args: (Stubs_ast.ro, R.Node.t, R.array_t) Capnp.Array.t): VF.pat list =
+  and map_args (args: R.Node.t capnp_arr): VF.pat list =
     args |> capnp_arr_map (fun e -> VF.LitPat (transl_expr e))
 
   and transl_call (loc: VF.loc) (call: R.Expr.Call.t): string * VF.pat list =
@@ -689,7 +680,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
   (**************)
 
   (* TODO: redeclaration of function! *)
-  and transl_decl_stmt (loc: VF.loc) (decls: (Stubs_ast.ro, R.Node.t, R.array_t) Capnp.Array.t): VF.stmt =
+  and transl_decl_stmt (loc: VF.loc) (decls: R.Node.t capnp_arr): VF.stmt =
     let expect_var loc desc = match R.Decl.get desc with R.Decl.Var v -> Some (transl_var_decl_local loc v) | _ -> None in
     VF.DeclStmt (loc, decls |> capnp_arr_map (transl_expect expect_var))
 
@@ -865,7 +856,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     let reason = reason_get err in
     error loc reason
 
-  let transl_includes (decls_map: (int * (Stubs_ast.ro, R.Node.t, R.array_t) Capnp.Array.t) list) (includes: R.Include.t list): Cxx_fe_sig.header_type list =
+  let transl_includes (decls_map: (int * R.Node.t capnp_arr) list) (includes: R.Include.t list): Cxx_fe_sig.header_type list =
     let active_headers = ref [] in
     let test_include_cycle l path =
       if List.mem path !active_headers then raise (Lexer.ParseException (l, "Include cycles (even with header guards) are not supported"));
@@ -915,7 +906,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     let headers, _ = transl_includes_rec Args.path includes [] [] in
     headers
 
-  let transl_files (files: (Stubs_ast.ro, R.File.t, R.array_t) Capnp.Array.t): (int * (Stubs_ast.ro, R.Node.t, R.array_t) Capnp.Array.t) list =
+  let transl_files (files: R.File.t capnp_arr): (int * R.Node.t capnp_arr) list =
     Hashtbl.clear files_table;
     let transl_file file =
       let open R.File in
@@ -933,6 +924,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     let includes = includes_get_list tu |> transl_includes decls_table in
     let main_fd = main_fd_get tu in
     let main_decls = List.assoc main_fd decls_table |> capnp_arr_map transl_decl |> List.flatten in
+    let () = fail_directives_get tu |> capnp_arr_map map_ann_clause |> List.iter @@ fun (l, s) -> Args.report_should_fail s l in
     includes, main_decls
 
   let parse_cxx_file (): Cxx_fe_sig.header_type list * VF.package list =

@@ -632,7 +632,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | Some _ -> false
       end in
       iter (pn,ilist) (Class(l, abstract, fin, cn, meths', fds, cons', super, tparams, inames, [])::classes) lemmas rest
-    | Func(l,Lemma(_),tparams,rt,fn,arglist,nonghost_callers_only,ftype,contract,terminates,None,fb,vis) as elem ::rest->
+    | Func(l,Lemma(_),tparams,rt,fn,arglist,nonghost_callers_only,ftype,contract,terminates,None,_,_) as elem ::rest->
       iter (pn, ilist) classes (elem::lemmas) rest
     | _::rest -> 
       iter (pn, ilist) classes lemmas rest
@@ -679,7 +679,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * termnode (* offset *)
     type struct_info =
         loc
-      * (base_spec_info map * struct_field_info map) option (* None if struct without body *)
+      * (base_spec_info map * struct_field_info map * bool (* has virtual methods *)) option (* None if struct without body *)
       * termnode option (* predicate symbol for struct_padding predicate *)
       * termnode (* size *)
       * termnode (* type_info *)
@@ -749,6 +749,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     type bases_constructed_pred_info =
         string (* predicate name *)
       * pred_fam_info
+    type cxx_vtype_pred_info =
+        string (* predicate name *)
+      * pred_fam_info
     type field_pred_info =
         string (* predicate name *)
       * pred_fam_info
@@ -777,8 +780,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * bool  (* terminates *)
       * (string * pred_fam_info map * type_ list * (loc * string) list) option (* implemented function type, with function type type arguments and function type arguments *)
       * (stmt list * loc (* closing brace *) ) option option (* body; None if prototype; Some None if ? *)
-      * method_binding (* always Static; TODO: remove *)
-      * visibility (* always Public; TODO: remove *)
+      * bool (* virtual *)
     type func_type_info =
         loc
       * ghostness
@@ -930,6 +932,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * cxx_ctor_info map
       * cxx_dtor_info map
       * bases_constructed_pred_info map
+      * cxx_vtype_pred_info map
     
     type implemented_prototype_info =
         string
@@ -1035,7 +1038,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (abstract_types_map0: abstract_type_info map),
       (cxx_ctor_map0: cxx_ctor_info map),
       (cxx_dtor_map0: cxx_dtor_info map),
-      (bases_constructed_map0: bases_constructed_pred_info map)
+      (bases_constructed_map0: bases_constructed_pred_info map),
+      (cxx_vtype_map0: cxx_vtype_pred_info map)
       : maps
     ) =
 
@@ -1051,8 +1055,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let id x = x in
     let merge_maps l
-      (structmap, unionmap, enummap, globalmap, modulemap, importmodulemap, inductivemap, purefuncmap, predctormap, struct_accessor_map, malloc_block_pred_map, new_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, abstract_types_map, cxx_ctor_map, cxx_dtor_map, bases_constructed_map)
-      (structmap0, unionmap0, enummap0, globalmap0, modulemap0, importmodulemap0, inductivemap0, purefuncmap0, predctormap0, struct_accessor_map0, malloc_block_pred_map0, new_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, abstract_types_map0, cxx_ctor_map0, cxx_dtor_map0, bases_constructed_map0)
+      (structmap, unionmap, enummap, globalmap, modulemap, importmodulemap, inductivemap, purefuncmap, predctormap, struct_accessor_map, malloc_block_pred_map, new_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, abstract_types_map, cxx_ctor_map, cxx_dtor_map, bases_constructed_map, cxx_vtype_map)
+      (structmap0, unionmap0, enummap0, globalmap0, modulemap0, importmodulemap0, inductivemap0, purefuncmap0, predctormap0, struct_accessor_map0, malloc_block_pred_map0, new_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, abstract_types_map0, cxx_ctor_map0, cxx_dtor_map0, bases_constructed_map0, cxx_vtype_map0)
       =
       (
 (*     append_nodups structmap structmap0 id l "struct", *)
@@ -1085,7 +1089,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
        append_nodups abstract_types_map abstract_types_map0 id l "abstract type",
        append_nodups cxx_ctor_map cxx_ctor_map0 id l "constructor",
        append_nodups cxx_dtor_map cxx_dtor_map0 id l "destructor",
-       bases_constructed_map @ bases_constructed_map0)
+       bases_constructed_map @ bases_constructed_map0,
+       cxx_vtype_map @ cxx_vtype_map0)
     in
 
     (** [merge_header_maps maps0 headers] returns [maps0] plus all elements transitively declared in [headers]. *)
@@ -1164,7 +1169,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
     in
 
-    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
+    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
     
     let (maps0, headers_included) =
       if include_prelude then
@@ -1958,7 +1963,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         ctxt#assert_term (ctxt#mk_le s max_uintptr_term);
         ctxt#assert_term (ctxt#mk_lt (ctxt#mk_intlit 0) s);
         let type_info = get_unique_var_symb (sn ^ "_type_info") type_info_type in
-        let rec iter1 fmap fds has_ghost_fields bases =
+        let rec iter1 fmap fds has_ghost_fields bases is_polymorphic =
           match fds with
             [] ->
             let padding_predsym_opt =
@@ -1983,17 +1988,17 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 ctxt#assert_term (ctxt#mk_le int_zero_term base_offset);
               base, (l, is_virtual, base_offset) 
             in
-            (sn, (l, Some (base_map, fmap), padding_predsym_opt, s, type_info))
+            (sn, (l, Some (base_map, fmap, is_polymorphic), padding_predsym_opt, s, type_info))
           | Field (lf, gh, t, f, Instance, Public, final, init)::fds ->
             if List.mem_assoc f fmap then static_error lf "Duplicate field name." None;
             let t = check_pure_type ("", []) [] gh t in
             let offset = if gh = Ghost then None else Some (get_unique_var_symb (sn ^ "_" ^ f ^ "_offset") intType) in
             let entry = (f, (lf, gh, t, offset, init)) in
-            iter1 (entry::fmap) fds (has_ghost_fields || gh = Ghost) bases
+            iter1 (entry::fmap) fds (has_ghost_fields || gh = Ghost) bases is_polymorphic
         in
         let new_item = begin
           match body_opt with
-            Some (bases, fds, _) -> iter1 [] fds false bases
+            Some (bases, fds, is_polymorphic) -> iter1 [] fds false bases is_polymorphic
           | None -> (sn, (l, None, None, s, type_info))
         end
         in
@@ -2008,7 +2013,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let union_size = union_size_partial unionmap
 
   let field_offset l fparent fname =
-    let (_, Some (_, fmap), _, _, _) = List.assoc fparent structmap in
+    let (_, Some (_, fmap, _), _, _, _) = List.assoc fparent structmap in
     let (_, gh, y, offset_opt, _) = List.assoc fname fmap in
     match offset_opt with
       Some term -> term
@@ -2275,7 +2280,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | _ -> []
         in
         iter pni ((i, (l, tparams, List.rev ctormap, getters, setters, subtype))::imap) pfm fpm ds
-      | Func (l, Fixpoint, tparams, rto, g, ps, nonghost_callers_only, functype, contract, terminates, body_opt,Static,Public)::ds ->
+      | Func (l, Fixpoint, tparams, rto, g, ps, nonghost_callers_only, functype, contract, terminates, body_opt, _, _)::ds ->
         let g = full_name pn g in
         if List.mem_assoc g pfm || List.mem_assoc g purefuncmap0 then static_error l ("Duplicate pure function name: "^g) None;
         check_tparams l [] tparams;
@@ -2584,7 +2589,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let check_bases bases = bases |> List.exists @@ fun (name, _) -> is_derived_of_base name base_name in
     derived_name = base_name ||
     match try_assoc derived_name structmap with 
-    | Some (_, Some (bases, _), _, _, _) -> check_bases bases 
+    | Some (_, Some (bases, _, _), _, _, _) -> check_bases bases 
     | None -> false
   
   let rec compatible_pointees t t0 =
@@ -2802,7 +2807,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         *)
         begin match body_opt with
         | None -> []
-        | Some (_, fds) ->
+        | Some (_, fds, _) ->
           let cname = "mk_" ^ sn in
           let field_types = fds |> List.map (fun (f, (_, _, t, _, _)) -> (f, t)) in
           let fieldnames = List.map fst field_types in
@@ -2824,7 +2829,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | _ -> []
       end 
     in
-    mk_block_pred_map "malloc_block", mk_block_pred_map "new_block"
+    mk_block_pred_map "malloc_block", match dialect with Some Cxx -> mk_block_pred_map "new_block" | _ -> []
   
   let malloc_block_pred_map: malloc_block_pred_info map = malloc_block_pred_map1 @ malloc_block_pred_map0
   let new_block_pred_map: new_block_pred_info map = new_block_pred_map1 @ new_block_pred_map0
@@ -2832,7 +2837,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let bases_constructed_map1: bases_constructed_pred_info map =
     let fold acc (sn, (l, body_opt, _, _, _)) =
       match body_opt with
-      | Some (_ :: _, _) -> (sn, mk_predfam (bases_constructed_pred_name sn) l [] 0 [PtrType (StructType sn)] (Some 1) Inductiveness_Inductive) :: acc
+      | Some (_ :: _, _, _) -> (sn, mk_predfam (bases_constructed_pred_name sn) l [] 0 [PtrType (StructType sn)] (Some 1) Inductiveness_Inductive) :: acc
       | _ -> acc
     in
     structmap1 |> List.fold_left fold [] |> List.rev
@@ -2857,7 +2862,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (fun (sn, (_, body_opt, _, _, _)) ->
          match body_opt with
            None -> []
-         | Some (_, fds) ->
+         | Some (_, fds, _) ->
            List.map
              (fun (fn, (l, gh, t, offset, _)) ->
               ((sn, fn),
@@ -3036,7 +3041,24 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | [] -> (bm,pfm)
     in
     iter' ([],predfammap1) ps
+
+  let predfammap1, cxx_vtype_map1 =
+    match dialect with 
+    | Some Cxx ->
+      (*
+        For each polymorphic struct S create predicate family:
+          S_vtype(struct S *; std::type_info *t);  
+      *)
+      structmap1 |> List.fold_left (fun (pred_fams, vtypes) s ->
+        match s with
+        | sn, (l, Some (_, _, true), _, _, _) -> 
+          let pred = mk_predfam (vtype_pred_name sn) l [] 0 [PtrType (StructType sn); PtrType (StructType "std::type_info")] (Some 1) Inductiveness_Inductive in
+          (pred :: pred_fams), ((sn, pred) :: vtypes)
+        | _ -> pred_fams, vtypes
+      ) (predfammap1, [])
+    | _ -> predfammap1, []
   
+  let cxx_vtype_map = cxx_vtype_map1 @ cxx_vtype_map0
   let predfammap = predfammap1 @ predfammap0 (* TODO: Check for name clashes here. *)
   
   let interfmap1 =
@@ -3237,7 +3259,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         begin fun (PackageDecl (_, pn, _, ds)) ->
           flatmap
             begin function
-              (Func (l, (Regular|Lemma(_)), tparams, rt, g, ps, nonghost_callers_only, ft, c, terminates, b,Static,_)) -> [full_name pn g]
+              (Func (l, (Regular|Lemma(_)), tparams, rt, g, ps, nonghost_callers_only, ft, c, terminates, b, _, _)) -> [full_name pn g]
             | _ -> []
             end
             ds
@@ -3246,7 +3268,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
   
   let funcnameterms = List.map (fun fn -> (fn, get_unique_var_symb fn (PtrType Void))) funcnames
-  let funcnameterms0 = List.map (fun (g, FuncInfo (_, fterm, _, _, _, _, _, _, _, _, _, _, _, _,_,_)) -> (g, fterm)) funcmap0
+  let funcnameterms0 = List.map (fun (g, FuncInfo (_, fterm, _, _, _, _, _, _, _, _, _, _, _, _, _)) -> (g, fterm)) funcmap0
   let all_funcnameterms = funcnameterms @ funcnameterms0
   
   let check_classname (pn, ilist) (l, c) =
@@ -3979,7 +4001,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         begin match t with
         | StructType sn ->
           begin match try_assoc sn structmap with
-          | Some (_, Some (_, fds), _, _, _) ->
+          | Some (_, Some (_, fds, _), _, _, _) ->
             begin match try_assoc f fds with
             | None -> static_error l ("No such field in struct '" ^ sn ^ "'.") None
             | Some (_, gh, t, offset, _) ->
@@ -4098,7 +4120,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           (WFunCall (l, g, [], es), PtrType t, None)
         | _ ->
         match resolve2 (pn,ilist) l g funcmap with
-          Some (g, FuncInfo (funenv, fterm, lg, k, callee_tparams, tr, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, fbf, v)) ->
+          Some (g, FuncInfo (funenv, fterm, lg, k, callee_tparams, tr, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, virt)) ->
           let declKind =
             match k with
               Regular -> DeclKind_RegularFunction
@@ -4549,7 +4571,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | PtrType (StructType sn) ->
       begin
       match try_assoc sn structmap with
-        Some (_, Some (_, fds), _, _, _) ->
+        Some (_, Some (_, fds, _), _, _, _) ->
         begin
           match try_assoc f fds with
             None -> static_error l ("No such field in struct '" ^ sn ^ "'.") None
@@ -4838,7 +4860,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | StructType sn, InitializerList (ll, es) ->
       let fds =
         match try_assoc sn structmap with
-          Some (_, Some (_, fds), _, _, _) -> fds
+          Some (_, Some (_, fds, _), _, _, _) -> fds
         | _ -> static_error ll (sprintf "Missing definition of struct '%s'" sn) None
       in
       let rec iter fds es =
@@ -5123,6 +5145,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let get_pred_symb p = let (_, _, _, _, symb, _, _) = List.assoc p predfammap in symb
   let get_pure_func_symb g = let (_, _, _, _, symb) = List.assoc g purefuncmap in symb
+  let get_pred_symb_from_map p m = let _, (_, _, _, _, symb, _, _) = List.assoc p m in symb
+  let try_get_pred_symb_from_map p m = try_assoc p m |> option_map @@ fun (_, (_, _, _, _, symb, _, _)) -> symb
   
   let lazy_value f =
     let cell = ref None in
@@ -5803,7 +5827,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     flatmap
       begin
         function
-          (sn, (_, Some (_, fmap), _, _, _)) ->
+          (sn, (_, Some (_, fmap, _), _, _, _)) ->
           flatmap
             begin
               function
@@ -5917,18 +5941,59 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         (p, predfam_tparams, arity, ps, psymb, inputParamCount)
     in
     check_predinst0 predfam_tparams arity ps psymb inputParamCount (pn, ilist) tparams tenv env l p predinst_tparams fns xs body
+
+  let is_polymorphic_struct sn =
+    match List.assoc sn structmap with
+    | _, (Some (_, _, true)), _, _, _ -> true
+    | _ -> false
+
+  let mk_pred_inst l (pn, ilist) pred tparams is params body =
+    let fns = match file_type path with
+      Java-> check_classnamelist (pn,ilist) is
+    | _ -> check_funcnamelist is 
+    in
+    check_predinst (pn, ilist) [] [] [] l pred tparams fns params body
+  
+  let predinstmap1 =
+    match dialect with 
+    | Some Cxx ->
+      (* 
+        For each polymorphic struct S with bases [B0; ...; Bn] and n > 0 create:
+          predicate S_vtype(struct S *s, std::type_info *t) =
+            B0_vtype(s, t) &*& ... &*& Bn_vtype(s, t)
+      *)
+      let mk_pred_inst l sn body = 
+        let params = [(PtrTypeExpr (l, (StructTypeExpr (l, Some sn, None, []))), "s"); (PtrTypeExpr (l, (StructTypeExpr (l, Some "std::type_info", None, []))), "t")] in
+        mk_pred_inst l ("", []) (vtype_pred_name sn) [] [] params body 
+      in
+      let base_vtype l base = CallExpr (l, (vtype_pred_name base), [], [], [LitPat (Var (l, "s")); LitPat (Var (l, "t"))], Static) in
+      structmap1 |> List.fold_left (fun acc s ->
+        match s with
+        | sn, (l, Some (bases, _, true), _, _, _) ->
+          let bases = bases |> List.filter @@ fun (b, _) -> is_polymorphic_struct b in
+          begin match bases with
+          | [] -> acc
+          | [(base, _)] -> 
+            let body = base_vtype l base in
+            let pred_inst = mk_pred_inst l sn body in
+            pred_inst :: acc
+          | (base, _) :: bases ->
+            let fold acc (base, _) = Sep (l, base_vtype l base, acc) in
+            let body = bases |> List.fold_left fold (base_vtype l base) in
+            let pred_inst = mk_pred_inst l sn body in
+            pred_inst :: acc
+          end
+        | _ -> acc
+      ) predinstmap1
+    | _ -> predinstmap1
   
   let predinstmap1 = 
     let rec iter (pn,ilist) pm ds =
       match ds with
         PredFamilyInstanceDecl (l, p, tparams, is, xs, body)::ds ->
-        let fns = match file_type path with
-          Java-> check_classnamelist (pn,ilist) is
-        | _ -> check_funcnamelist is 
-        in
-        let (pfns, info) as entry = check_predinst (pn, ilist) [] [] [] l p tparams fns xs body in
-        let _ = if List.mem_assoc pfns pm || List.mem_assoc pfns predinstmap0 then static_error l "Duplicate predicate family instance." None in
-        iter (pn,ilist) (entry::pm) ds
+          let (pfns, info) as entry = mk_pred_inst l (pn, ilist) p tparams is xs body in 
+          let _ = if List.mem_assoc pfns pm || List.mem_assoc pfns predinstmap0 then static_error l "Duplicate predicate family instance." None in
+          iter (pn,ilist) (entry::pm) ds
       | _::ds -> iter (pn,ilist) pm ds
       | [] -> List.rev pm
     in
@@ -6010,13 +6075,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let field_address l t fparent fname = mk_field_ptr t (field_offset l fparent fname)
   
   let direct_base_addr (derived_name, derived_addr) base_name =
-    let _, Some (bases, _), _, _, _ = List.assoc derived_name structmap in
+    let _, Some (bases, _, _), _, _, _ = List.assoc derived_name structmap in
     let _, _, base_offset = List.assoc base_name bases in
     mk_field_ptr derived_addr base_offset
 
   let base_addr l (derived_name, derived_addr) base_name =
     let rec iter derived_name offsets =
-      let _, Some (bases, _), _, _, _ = List.assoc derived_name structmap in 
+      let _, Some (bases, _, _), _, _, _ = List.assoc derived_name structmap in 
       let other_paths = bases |> List.fold_left begin fun acc (name, (_, _, offset)) -> 
         match iter name (offset :: offsets) with
         | Some p -> p :: acc

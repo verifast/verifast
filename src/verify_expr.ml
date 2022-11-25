@@ -261,7 +261,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     ctxt#assert_term (ctxt#mk_eq (mk_app symb [List.assoc fn funcnameterms]) ctxt#mk_true)
    
   let funcnameterm_of funcmap fn =
-    let FuncInfo (env, fterm, l, k, tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, _, _) = List.assoc fn funcmap in fterm
+    let FuncInfo (env, fterm, l, k, tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, virt) = List.assoc fn funcmap in fterm
  
   let functypes_implemented = ref []
   
@@ -380,7 +380,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter pn ilist funcmap prototypes_implemented ds =
       match ds with
         [] -> (funcmap, List.rev prototypes_implemented)
-      | Func (l, k, tparams, rt, fn, xs, nonghost_callers_only, functype_opt, contract_opt, terminates, body,Static,_)::ds when k <> Fixpoint ->
+      | Func (l, k, tparams, rt, fn, xs, nonghost_callers_only, functype_opt, contract_opt, terminates, body, is_virtual, overrides)::ds when k <> Fixpoint ->
         let fn = full_name pn fn in
         let fterm = List.assoc fn funcnameterms in
         if body <> None then
@@ -390,20 +390,32 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let (rt, xmap, functype_opt, pre, pre_tenv, post) =
           check_func_header pn ilist [] [] [] l k tparams rt fn (Some fterm) xs nonghost_callers_only functype_opt contract_opt terminates body
         in
-        begin
-          let body' = match body with None -> None | Some body -> Some (Some body) in
+        let body' = match body with None -> None | Some body -> Some (Some body) in
+        begin fun cont ->
           match try_assoc2 fn funcmap funcmap0 with
-            None -> iter pn ilist ((fn, FuncInfo ([], fterm, l, k, tparams, rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body',Static,Public))::funcmap) prototypes_implemented ds
-          | Some (FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, nonghost_callers_only0, pre0, pre_tenv0, post0, terminates0, _, Some _,Static,Public)) ->
+            None -> cont (fn, FuncInfo ([], fterm, l, k, tparams, rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body', is_virtual)) prototypes_implemented
+          | Some (FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, nonghost_callers_only0, pre0, pre_tenv0, post0, terminates0, _, Some _, is_virtual0)) ->
             if body = None then
               static_error l "Function prototype must precede function implementation." None
             else
               static_error l "Duplicate function implementation." None
-          | Some (FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, nonghost_callers_only0, pre0, pre_tenv0, post0, terminates0, functype_opt0, None,Static,Public)) ->
+          | Some (FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, nonghost_callers_only0, pre0, pre_tenv0, post0, terminates0, functype_opt0, None, is_virtual)) ->
             if body = None then static_error l "Duplicate function prototype." None;
             check_func_header_compat l ("Function '" ^ fn ^ "'") "Function prototype implementation check" [] (k, tparams, rt, xmap, nonghost_callers_only, pre, post, [], terminates) (k0, tparams0, rt0, xmap0, nonghost_callers_only0, [], [], pre0, post0, [], terminates0);
-            iter pn ilist ((fn, FuncInfo ([], fterm, l, k, tparams, rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body',Static,Public))::funcmap) ((fn, l0)::prototypes_implemented) ds
-        end
+            cont (fn, FuncInfo ([], fterm, l, k, tparams, rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body', is_virtual)) ((fn, l0)::prototypes_implemented)
+        end @@ fun func_info protos_implemented ->
+        let check_override overridden_meth =
+          let FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, ng_callers_only0, pre0, pre_tenv0, post0, terminates0, _, _, is_virtual0) = assoc2 overridden_meth funcmap funcmap0 in
+          let ("this", PtrType (StructType base)) :: xmap0 = xmap0 in
+          let ("this", PtrType (StructType derived)) :: xmap = xmap in
+          let this_term = get_unique_var_symb "this" (PtrType (StructType derived)) in
+          let base_term = base_addr l (derived, this_term) base in
+          check_func_header_compat l ("Method '" ^ fn ^ "'") "Method implementation check" [("this", base_term)]
+            (Regular, [], rt0, xmap0, false, pre0, post0, [], terminates0)
+            (Regular, [], rt, xmap, false, [], [("this", this_term)], pre, post, [], terminates)
+        in
+        let () = overrides |> List.iter check_override in
+        iter pn ilist (func_info :: funcmap) protos_implemented ds
       | _::ds -> iter pn ilist funcmap prototypes_implemented ds
     in
     let rec iter' (funcmap,prototypes_implemented) ps=
@@ -419,7 +431,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let check_init_list pn ilist tenv struct_name body_opt struct_name =
       body_opt |> option_map @@ fun (init_list, b) ->
         let init_list_checked =
-          let _, Some (bases, fields), _, _, _ = List.assoc struct_name structmap in 
+          let _, Some (bases, fields, _), _, _, _ = List.assoc struct_name structmap in 
           init_list |> List.map @@ function 
             | ("this", Some (init, is_written)) ->
               let w, tp = check_expr (pn,ilist) [] tenv None init in
@@ -494,13 +506,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let None, [], None, pre, pre_tenv, post =
           check_func_header pn ilist [] ["this", this_type] [] loc Regular [] None struct_name None [] false None contract_opt terminates body_opt
         in
-        begin 
+        let this_term = get_unique_var_symb_non_ghost "this" this_type in
+        begin fun cont ->
           match try_assoc2 struct_name dtor_map cxx_dtor_map0 with 
           | None ->
-            iter pn ilist 
-              ((struct_name, (loc, pre, pre_tenv, post, terminates, body_opt |> option_map @@ fun b -> Some b)) :: dtor_map)
-              dtors_implemented
-              rest
+            cont (loc, pre, pre_tenv, post, terminates, body_opt |> option_map @@ fun b -> Some b) dtors_implemented
           | Some (_, _, _, _, _, Some _) ->
             (* We should never reach this because Clang would not allow it, but let's check it to be sure *)
             if body_opt = None then 
@@ -509,15 +519,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               static_error loc "Duplicate destructor implementation." None 
           | Some (loc0, pre0, pre_tenv0, post0, terminates0, None) ->
             if body_opt = None then static_error loc "Duplicate destructor prototype." None;
-            let this_term = get_unique_var_symb_non_ghost "this" this_type in
             check_func_header_compat loc ("Destructor '" ^ struct_name ^ "'") "Destructor prototype implementation check" ["this", this_term] 
               (Regular, [], None, [], false, pre, post, [], terminates) 
               (Regular, [], None, [], false, [], ["this", this_term], pre0, post0, [], terminates0);
-            iter pn ilist 
-              ((struct_name, (loc, pre, pre_tenv, post, terminates, body_opt |> option_map @@ fun b -> Some b)) :: dtor_map) 
-              ((dtor_name, loc0) :: dtors_implemented)
-              rest
-        end
+            cont (loc, pre, pre_tenv, post, terminates, body_opt |> option_map @@ fun b -> Some b) ((dtor_name, loc0) :: dtors_implemented)
+        end @@ fun dtor_info dtors_implemented ->
+        iter pn ilist ((struct_name, dtor_info) :: dtor_map) dtors_implemented rest
       | _ :: rest -> iter pn ilist dtor_map dtors_implemented rest 
     in 
     let rec iter_ps (dtor_map, dtors_implemented) ps =
@@ -1039,12 +1046,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let check_expr_t tenv e tp = check_expr_t_core functypemap funcmap [] [] (pn, ilist) [] tenv None e tp in
     structmap1 |> List.map @@ fun (sn, (sloc, sbody, spad_sym, ssize, sinfo)) ->
       let tenv = ["this", PtrType (StructType sn); current_thread_name, current_thread_type] in 
-      let body = sbody |> option_map @@ fun (bases, fields) ->
-        bases, fields |> List.map @@ function
+      let body = sbody |> option_map @@ fun (bases, fields, is_polymorphic) ->
+        bases, 
+        (fields |> List.map @@ function
           | fname, (floc, fgh, ft, foffset, Some finit) ->
             let init = check_expr_t tenv finit ft in
             fname, (floc, fgh, ft, foffset, Some init)
-          | fd -> fd 
+          | fd -> fd),
+        is_polymorphic
       in
       sn, (sloc, body, spad_sym, ssize, sinfo)
 
@@ -1116,7 +1125,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec check_spec_lemmas lemmas impl=
       match lemmas with
         [] when List.length impl=0-> ()
-      | Func(l,Lemma(auto, trigger),tparams,rt,fn,arglist,nonghost_callers_only,ftype,contract,terminates,None,fb,vis)::rest ->
+      | Func(l,Lemma(auto, trigger),tparams,rt,fn,arglist,nonghost_callers_only,ftype,contract,terminates,None,is_virtual,overrides)::rest ->
           if List.mem (fn,l) impl then
             let impl'= remove (fun (x,l0) -> x=fn && l=l0) impl in
             check_spec_lemmas rest impl'
@@ -1523,7 +1532,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | StructType sn ->
       let (fields, padding_predsymb_opt) =
         match try_assoc sn structmap with
-          Some (_, Some (_, fds), padding_predsymb_opt, _, _) -> fds, padding_predsymb_opt
+          Some (_, Some (_, fds, _), padding_predsymb_opt, _, _) -> fds, padding_predsymb_opt
         | _ -> static_error l (Printf.sprintf "Cannot produce an object of type 'struct %s' since this struct type has not been defined" sn) None
       in
       let field_values_of_struct_as_value v =
@@ -1623,7 +1632,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | StructType sn ->
       let fields, padding_predsymb_opt =
         match try_assoc sn structmap with
-          Some (_, Some (_, fds), padding_predsymb_opt, _, _) -> fds, padding_predsymb_opt
+          Some (_, Some (_, fds, _), padding_predsymb_opt, _, _) -> fds, padding_predsymb_opt
         | _ -> static_error l (Printf.sprintf "Cannot consume an object of type 'struct %s' since this struct type has not been defined" sn) None
       in
       begin fun cont ->
@@ -1671,12 +1680,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | UnionType _, _ when dialect = Some Cxx -> static_error l "Union construction is not supported yet." None 
     | StructType struct_name, Expr (WCxxConstruct (lc, mangled_name, _, args)) ->
       let ctor_info = try_assoc mangled_name cxx_ctor_map in
-      if ctor_info = None then static_error l "No matching constructor is defined explicitly." None;
+      if ctor_info = None then static_error l ("No matching constructor is defined explicitly for " ^ struct_name ^ ".") None;
       let Some (lc, params, pre, pre_tenv, post, terminates, body_opt) = ctor_info in 
       if body_opt = None then register_prototype_used lc mangled_name None;
       let args = args |> List.map @@ fun e -> SrcPat (LitPat e) in
       check_ctor_call l args params pre post terminates h env @@ fun h env _ ->
-      assume_neq addr (null_pointer_term ()) @@ fun () ->
+      assume_neq (mk_ptr_address addr) int_zero_term @@ fun () ->
       if produce_padding_chunk then
         let _, _, Some padding_pred_symb, _, _ = List.assoc struct_name structmap in
         produce_chunk h (padding_pred_symb, true) [] coef None [addr] None @@ fun h ->
@@ -1691,7 +1700,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | UnionType _, Some Cxx -> static_error l "Union destruction is not supported yet." None 
     | StructType struct_name, Some Cxx ->
       let dtor_info = try_assoc struct_name cxx_dtor_map in 
-      if dtor_info = None then static_error l "No matching destructor is defined explicitly." None;
+      if dtor_info = None then static_error l ("No matching destructor is defined explicitly for " ^ struct_name ^ ".") None;
       let Some (ld, pre, pre_tenv, post, terminates, body_opt) = dtor_info in 
       if body_opt = None then register_prototype_used ld (cxx_dtor_name struct_name) None;
       check_dtor_call l pre post terminates h env @@ fun h env _ ->
@@ -1794,7 +1803,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     consume_chunk rules h [] [] [] l (call_perm__symb, true) [] real_unit real_unit_pat (Some 2) [TermPat currentThread; TermPat t] $. fun _ h _ _ _ _ _ _ ->
     cont h
 
-  let verify_call funcmap eval_h l (pn, ilist) xo g targs pats (callee_tparams, tr, ps, funenv, pre, post, epost, terminates, v) pure is_upcall target_class leminfo sizemap h tparams tenv ghostenv env cont econt =
+  let verify_call funcmap eval_h l (pn, ilist) xo g targs pats (callee_tparams, tr, ps, funenv, pre, post, epost, terminates) pure is_upcall target_class leminfo sizemap h tparams tenv ghostenv env cont econt =
     let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some pure) e tp in
     let check_expr (pn,ilist) tparams tenv pure e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv pure e in
     let eval_h h env pat cont =
@@ -2112,12 +2121,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           produce_points_to_chunk l h tpx real_unit symb w $. fun h ->
           cont h env
     in
-    let check_correct h xo g targs args (lg, callee_tparams, tr, ps, funenv, pre, post, epost, terminates, v) is_upcall target_class cont =
+    let check_correct h xo g targs args (lg, callee_tparams, tr, ps, funenv, pre, post, epost, terminates) is_upcall target_class cont =
       (* check_expr is needed here because args are not typechecked yet. Why does check_expr_t not check the arguments of a WFunCall? *)
       let at_most_one_unsafe args = (List.length (List.filter (fun a -> let (w, t) = check_expr (pn,ilist) tparams tenv a in not (is_safe_expr w)) args)) <= 1 in
       let eval_h = if language == CLang && not heapReadonly &&  (List.length args = 1 || at_most_one_unsafe args) then (fun h env e cont -> eval_h_core (true, false) h env e cont) else eval_h in
       let pre = match pre with ExprAsn (la, False _) when la == lg -> ExprAsn (lg, False dummy_loc) | _ -> pre in
-      verify_call funcmap eval_h l (pn, ilist) xo g targs (List.map (fun e -> SrcPat (LitPat e)) args) (callee_tparams, tr, ps, funenv, pre, post, epost, terminates, v) pure is_upcall target_class leminfo sizemap h tparams tenv ghostenv env cont econt
+      verify_call funcmap eval_h l (pn, ilist) xo g targs (List.map (fun e -> SrcPat (LitPat e)) args) (callee_tparams, tr, ps, funenv, pre, post, epost, terminates) pure is_upcall target_class leminfo sizemap h tparams tenv ghostenv env cont econt
     in
     let new_array h env l elem_tp length elems =
       let at = get_unique_var_symb (match xo with None -> "array" | Some x -> x) (ArrayType elem_tp) in
@@ -2412,7 +2421,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (_, gh, fttparams, rt, ftxmap, xmap, pre, post, terminates, ft_predfammaps) = List.assoc ftn functypemap in
       if pure && gh = Real then static_error l "Cannot call regular function pointer in a pure context." None;
       let check_call targs h args0 cont =
-        verify_call funcmap eval_h l (pn, ilist) xo None targs (TermPat fterm::List.map (fun arg -> TermPat arg) args0 @ List.map (fun e -> SrcPat (LitPat e)) args) (fttparams, rt, (("this", PtrType Void)::ftxmap @ xmap), [], pre, post, None, terminates, Public) pure true None leminfo sizemap h tparams tenv ghostenv env cont (fun _ _ _ _ -> assert false)
+        verify_call funcmap eval_h l (pn, ilist) xo None targs (TermPat fterm::List.map (fun arg -> TermPat arg) args0 @ List.map (fun e -> SrcPat (LitPat e)) args) (fttparams, rt, (("this", PtrType Void)::ftxmap @ xmap), [], pre, post, None, terminates) pure true None leminfo sizemap h tparams tenv ghostenv env cont (fun _ _ _ _ -> assert false)
       in
       let consume_call_perm h cont =
         if should_terminate leminfo then begin
@@ -2463,12 +2472,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | None -> Unspecified
         | Some e -> Expr e 
       in 
-      let verify_call loc args params pre post terminates h env cont = verify_call funcmap eval_h loc (pn, ilist) xo None [] args ([], None, params, ["this", result], pre, post, None, terminates, Static) false false None leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in
+      let verify_call loc args params pre post terminates h env cont = verify_call funcmap eval_h loc (pn, ilist) xo None [] args ([], None, params, ["this", result], pre, post, None, terminates) false false None leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in
       produce_cxx_object l real_unit result ty eval_h verify_call init false false h env @@ fun h env ->
       begin
         match ty with 
         | StructType struct_name ->
-          let _, (_, _, _, _, new_block_symb, _, _) = List.assoc struct_name new_block_pred_map in
+          let new_block_symb = get_pred_symb_from_map struct_name new_block_pred_map in
           produce_chunk h (new_block_symb, true) [] real_unit None [result] None cont
         | _ ->
           begin 
@@ -2514,7 +2523,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let Some targEnv = zip ctpenv targtps in
             List.map (fun (name,tp) -> (name, replace_type l targEnv tp)) xmap 
         in
-        check_correct h None None [] args (lm, [], None, xmap, ["this", obj], pre, post, Some(epost), terminates, Static) is_upcall (Some cn) (fun h env _ -> cont h env obj)
+        check_correct h None None [] args (lm, [], None, xmap, ["this", obj], pre, post, Some(epost), terminates) is_upcall (Some cn) (fun h env _ -> cont h env obj)
       | _ -> static_error l "Multiple matching overloads" None
       end
     | WMethodCall (l, tn, m, pts, args, fb, tpenv) when m <> "getClass" ->
@@ -2543,7 +2552,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if not pure then static_error l "A lemma method call is not allowed in a non-pure context." None;
         if leminfo_is_lemma leminfo then static_error l "Lemma method calls in lemmas are currently not supported (for termination reasons)." None
       end;
-      check_correct h xo None mtargs args (lm, mtparams, rt, xmap, [], pre, post, Some epost, terminates, v) is_upcall target_class cont
+      check_correct h xo None mtargs args (lm, mtparams, rt, xmap, [], pre, post, Some epost, terminates) is_upcall target_class cont
     | WSuperMethodCall(l, supercn, m, args, (lm, gh, rt, xmap, pre, post, epost, terminates, rank, v)) ->
       if gh = Real && pure then static_error l "Method call is not allowed in a pure context" None;
       if gh = Ghost then begin
@@ -2555,9 +2564,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           Some rank, RealMethodInfo (Some rank0) -> rank < rank0
         | _ -> true
       in
-      check_correct h None None [] args (lm, [], rt, xmap, [], pre, post, Some epost, terminates, v) is_upcall (Some supercn) cont
+      check_correct h None None [] args (lm, [], rt, xmap, [], pre, post, Some epost, terminates) is_upcall (Some supercn) cont
     | WFunCall (l, g, targs, es) ->
-      let FuncInfo (funenv, fterm, lg, k, tparams, tr, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, fbf, v) = List.assoc g funcmap in
+      let FuncInfo (funenv, fterm, lg, k, tparams, tr, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, virt) = List.assoc g funcmap in
       if heapReadonly && not assume_left_to_right_evaluation && not (startswith g "vf__") && asserts_exclusive_ownership pre then has_heap_effects ();
       if body = None then register_prototype_used lg g (Some fterm);
       if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." None;
@@ -2567,7 +2576,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           RealFuncInfo (_, _, _) | LemInfo (_, _, _, true) | RealMethodInfo _ -> ()
         | _ -> static_error l "A lemma function marked nonghost_callers_only cannot be called from a non-nonghost_callers_only lemma function." None
       end;
-      check_correct h xo (Some g) targs es (lg, tparams, tr, ps, funenv, pre, post, None, terminates, v) true None cont
+      check_correct h xo (Some g) targs es (lg, tparams, tr, ps, funenv, pre, post, None, terminates) true None cont
     | NewArray(l, tp, e) ->
       let elem_tp = check_pure_type (pn,ilist) tparams Real tp in
       let w = check_expr_t (pn,ilist) tparams tenv e intType in

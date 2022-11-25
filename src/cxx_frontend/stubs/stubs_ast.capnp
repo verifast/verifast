@@ -211,6 +211,8 @@ struct Decl {
     func @1 :Function;
     this @2 :Type; # optional, not present if it is a static method
     implicit @3 :Bool;
+    virtual @4 :Bool;
+    overrides @5 :List(Text); # optional, qualified names
   }
 
   struct Ctor {
@@ -436,6 +438,7 @@ struct TU {
   mainFd @0 :UInt16;
   includes @1 :List(Include);
   files @2 :List(File);
+  failDirectives @3 :List(Clause);
 }
 
 struct Err {

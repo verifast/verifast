@@ -8,13 +8,13 @@ void AstSerializer::serializeDecl(DeclSerializer::NodeBuilder &builder,
                                   const clang::Decl *decl) {
   if (!m_serializeImplicitDecls && decl->isImplicit())
     return;
-  DeclSerializer ser(m_context, *this, builder, m_serializeImplicitDecls);
+  DeclSerializer ser(m_ASTContext, *this, builder, m_serializeImplicitDecls);
   ser.serialize(decl);
 }
 
 void AstSerializer::serializeStmt(StmtSerializer::NodeBuilder &builder,
                                   const clang::Stmt *stmt) {
-  StmtSerializer ser(m_context, *this, builder);
+  StmtSerializer ser(m_ASTContext, *this, builder);
   ser.serialize(stmt);
 }
 
@@ -30,23 +30,23 @@ void AstSerializer::serializeExpr(ExprSerializer::NodeBuilder &builder,
                       m_SM);
     auto truncating = desc.initTruncating();
 
-    ExprSerializer ser(m_context, *this, truncating);
+    ExprSerializer ser(m_ASTContext, *this, truncating);
     ser.serialize(expr);
     return;
   }
-  ExprSerializer ser(m_context, *this, builder);
+  ExprSerializer ser(m_ASTContext, *this, builder);
   ser.serialize(expr);
 }
 
 void AstSerializer::serializeTypeLoc(TypeLocSerializer::NodeBuilder &builder,
                                      const clang::TypeLoc typeLoc) {
-  TypeLocSerializer ser(m_context, *this, builder);
+  TypeLocSerializer ser(m_ASTContext, *this, builder);
   ser.serialize(typeLoc);
 }
 
 void AstSerializer::serializeQualType(TypeSerializer::DescBuilder &builder,
                                       const clang::QualType type) {
-  TypeSerializer ser(m_context, *this, builder);
+  TypeSerializer ser(m_ASTContext, *this, builder);
   ser.serialize(type.getTypePtr());
 }
 
@@ -77,7 +77,7 @@ void AstSerializer::serializeNodeDecomposed(stubs::Loc::Builder &locBuilder,
                                             const clang::Decl *decl) {
   if (!m_serializeImplicitDecls && decl->isImplicit())
     return;
-  DeclSerializer ser(m_context, *this, locBuilder, builder,
+  DeclSerializer ser(m_ASTContext, *this, locBuilder, builder,
                      m_serializeImplicitDecls);
   ser.serialize(decl);
 }
@@ -85,13 +85,13 @@ void AstSerializer::serializeNodeDecomposed(stubs::Loc::Builder &locBuilder,
 void AstSerializer::serializeNodeDecomposed(stubs::Loc::Builder &locBuilder,
                                             stubs::Stmt::Builder &builder,
                                             const clang::Stmt *stmt) {
-  StmtSerializer ser(m_context, *this, locBuilder, builder);
+  StmtSerializer ser(m_ASTContext, *this, locBuilder, builder);
   ser.serialize(stmt);
 }
 
 void AstSerializer::serializeAnnotationClauses(
     capnp::List<stubs::Clause, capnp::Kind::STRUCT>::Builder &builder,
-    clang::ArrayRef<Annotation> anns) {
+    const clang::ArrayRef<Annotation> anns) {
   size_t i(0);
   for (auto &ann : anns) {
     auto annBuilder = builder[i++];
@@ -139,8 +139,8 @@ void AstSerializer::validateIncludesBeforeFirstDecl(
 void AstSerializer::serializeDeclToDeclMap(const clang::Decl *decl,
                                            capnp::Orphanage &orphanage) {
   auto range = decl->getSourceRange();
-  auto fileID = m_SM.getFileID(range.getBegin());
-  auto fileUID = m_SM.getFileEntryForID(fileID)->getUID();
+  auto entry = getFileEntry(range.getBegin(), m_SM);
+  auto fileUID = entry->getUID();
   auto &declNodeOrphans = m_fileDeclsMap[fileUID];
 
   llvm::SmallVector<Annotation> anns;
@@ -202,6 +202,17 @@ void AstSerializer::serializeTU(stubs::TU::Builder &builder,
   }
 
   m_inclContext.serializeTUInclDirectives(builder, m_SM, *this);
+
+  auto failDirectives = m_store.getFailDirectives();
+  auto failDirectivesBuilder =
+      builder.initFailDirectives(failDirectives.size());
+  size_t i(0);
+  for (auto &directive : failDirectives) {
+    auto directiveBuilder = failDirectivesBuilder[i++];
+    auto locBuilder = directiveBuilder.initLoc();
+    serializeSrcRange(locBuilder, directive.getRange(), m_SM);
+    directiveBuilder.setText(directive.getText().str());
+  }
 }
 
 } // namespace vf

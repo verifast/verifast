@@ -111,7 +111,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (h -> env -> result)  continuation
   *)
   let verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env this_addr xo =
-    let verify_call eval_h loc pre post terminates h env cont = verify_call funcmap eval_h loc (pn, ilist) xo None [] [] ([], None, [], ["this", this_addr], pre, post, None, terminates, Static) false false None leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in
+    let verify_call eval_h loc pre post terminates h env cont = verify_call funcmap eval_h loc (pn, ilist) xo None [] [] ([], None, [], ["this", this_addr], pre, post, None, terminates) false false None leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in
     verify_xtor_call_core (pn, ilist) verify_call leminfo funcmap sizemap tenv ghostenv
 
   (*
@@ -127,7 +127,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (h -> env -> result)  continuation
   *)
   let verify_ctor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env this_addr xo =
-    let verify_call eval_h loc args params pre post terminates h env cont = verify_call funcmap eval_h loc (pn, ilist) xo None [] args ([], None, params, ["this", this_addr], pre, post, None, terminates, Static) false false None leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in
+    let verify_call eval_h loc args params pre post terminates h env cont = verify_call funcmap eval_h loc (pn, ilist) xo None [] args ([], None, params, ["this", this_addr], pre, post, None, terminates) false false None leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in
     verify_xtor_call_core (pn, ilist) verify_call leminfo funcmap sizemap tenv ghostenv
   
   let rec assume_handle_invs bcn hpmap hname hpInvEnv h cont = 
@@ -233,7 +233,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           match resolve Real (pn,ilist) l fn funcmap with
             None -> static_error l "No such function." None
-          | Some (fn, FuncInfo (funenv, fterm, lf, k, f_tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body',fb,v)) ->
+          | Some (fn, FuncInfo (funenv, fterm, lf, k, f_tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body', virt)) ->
             if stmt_ghostness = Ghost && not (is_lemma k) then static_error l "Not a lemma function." None;
             if stmt_ghostness = Real && k <> Regular then static_error l "Regular function expected." None;
             if f_tparams <> [] then static_error l "Taking the address of a function with type parameters is not yet supported." None;
@@ -338,7 +338,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     RealFuncInfo (_, _, _) | RealMethodInfo _ ->
                     let lems =
                       flatmap
-                        (function (fn, FuncInfo (funenv, fterm, l, Lemma(_), tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, _, _)) -> [fn] | _ -> [])
+                        (function (fn, FuncInfo (funenv, fterm, l, Lemma(_), tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, virt)) -> [fn] | _ -> [])
                         funcmap
                     in
                     (lems, None)
@@ -470,7 +470,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ExprStmt (CallExpr (l, "produce_func_lt", [], [], [LitPat (Var (lv, fn))], Static)) when language = CLang ->
       begin match resolve Ghost (pn,ilist) l fn funcmap with
         None -> static_error l "No such function." None
-      | Some (fn, FuncInfo (funenv, fterm, lf, k, f_tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body',fb,v)) ->
+      | Some (fn, FuncInfo (funenv, fterm, lf, k, f_tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body', virt)) ->
         if body' = None then register_prototype_used lf fn (Some fterm)
       end;
       cont h env
@@ -581,7 +581,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             consume_cxx_object l real_unit_pat addr t verify_dtor_call false h env @@ fun h env ->
               begin match t with 
               | StructType name ->
-                  let _, (_, _, _, _, new_block_symb, _, _) = List.assoc name new_block_pred_map in
+                  let new_block_symb = get_pred_symb_from_map name new_block_pred_map in
                   consume_chunk rules h [] [] [] l (new_block_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat addr] @@ fun _ h _ _ _ _ _ _ -> 
                   cont h env
               | _ -> 
@@ -742,7 +742,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match t with
             StaticArrayType (elemTp, elemCount) ->
             produce_object t
-          | StructType sn when !address_taken || e = None || (language = CLang && dialect = Some Cxx) || (let (_, body_opt, _, _, _) = List.assoc sn structmap in match body_opt with Some (_, fds) -> List.exists (fun (_, (_, gh, _, _, _)) -> gh = Ast.Ghost) fds | _ -> true) ->
+          | StructType sn when !address_taken || e = None || (language = CLang && dialect = Some Cxx) || (let (_, body_opt, _, _, _) = List.assoc sn structmap in match body_opt with Some (_, fds, _) -> List.exists (fun (_, (_, gh, _, _, _)) -> gh = Ast.Ghost) fds | _ -> true) ->
             (* If the variable's address is taken or the struct type has no body or it has a ghost field, treat it like a resource. *)
             produce_object (RefType t)
           | UnionType _ -> produce_object (RefType t)
@@ -751,7 +751,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               match t, e with
                 _, None -> cont h env (get_unique_var_symb_non_ghost x t)
               | StructType sn, Some (InitializerList (linit, es)) ->
-                let (_, Some (_, fds), _, _, _) = List.assoc sn structmap in
+                let (_, Some (_, fds, _), _, _, _) = List.assoc sn structmap in
                 let bs =
                   match zip fds es with
                     Some bs -> bs
@@ -2120,7 +2120,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 if List.mem_assoc (p, i) predinsts then static_error l "Duplicate predicate family instance." None;
                 (lems, ((p, i), (l, predinst_tparams, xs, body))::predinsts, localpreds, localpredinsts)
               end
-            | Func (l, Lemma(auto, trigger), tparams, rt, fn, xs, nonghost_callers_only, functype_opt, contract_opt, terminates, Some body, Static, Public) ->
+            | Func (l, Lemma(auto, trigger), tparams, rt, fn, xs, nonghost_callers_only, functype_opt, contract_opt, terminates, Some body, is_virtual, overrides) ->
               if List.mem_assoc fn funcmap || List.mem_assoc fn lems then static_error l "Duplicate function name." None;
               if List.mem_assoc fn tenv then static_error l "Local lemma name hides existing local variable name." None;
               let fterm = get_unique_var_symb fn (PtrType Void) in
@@ -2162,7 +2162,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let (rt, xmap, functype_opt, pre, pre_tenv, post) =
               check_func_header pn ilist tparams tenv env l (Lemma(auto, trigger)) tparams' rt fn (Some fterm) xs nonghost_callers_only functype_opt contract_opt terminates (Some body)
             in
-            (fn, FuncInfo (env, fterm, l, Lemma(auto, trigger), tparams', rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, Some (Some body), Static, Public))
+            (fn, FuncInfo (env, fterm, l, Lemma(auto, trigger), tparams', rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, Some (Some body), false))
           end
           lems
       in
@@ -2170,8 +2170,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let funcmap = funcmap' @ funcmap in
       let verify_lems lems0 =
         List.fold_left
-          begin fun lems0 (fn, FuncInfo (funenv, fterm, l, k, tparams', rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, Some (Some (ss, closeBraceLoc)), _, _)) ->
-            let gs', lems' = verify_func pn ilist [] lems0 boxes predinstmap funcmap tparams funenv l k tparams' rt fn xmap nonghost_callers_only pre pre_tenv post terminates ss closeBraceLoc in
+          begin fun lems0 (fn, FuncInfo (funenv, fterm, l, k, tparams', rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, Some (Some (ss, closeBraceLoc)), _)) ->
+            let gs', lems' = verify_func pn ilist [] lems0 boxes predinstmap funcmap tparams funenv l k tparams' rt fn xmap nonghost_callers_only pre pre_tenv post terminates ss closeBraceLoc None in
             lems'
           end
           lems0
@@ -2182,7 +2182,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           RealFuncInfo (_, _, _) | RealMethodInfo _ ->
           let lems0 =
             flatmap
-              (function (fn, FuncInfo (funenv, fterm, l, Lemma(_), tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, _, _)) -> [fn] | _ -> [])
+              (function (fn, FuncInfo (funenv, fterm, l, Lemma(_), tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, virt)) -> [fn] | _ -> [])
               funcmap
           in
           ignore $. verify_lems lems0;
@@ -2307,7 +2307,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | Some current_fraction ->
           (* produce [current_bases_constructed_fraction]X_bases_constructed(this) *)
           let this_term = List.assoc "this" env in
-          let _, (_, _, _, _, bases_constructed_symb, _, _) = List.assoc sn bases_constructed_map in
+          let bases_constructed_symb = get_pred_symb_from_map sn bases_constructed_map in
           with_context (Executing ([], env, l, "Producing constructed bases fraction")) @@ fun () ->
           produce_chunk h (bases_constructed_symb, true) [] current_fraction (Some 1) [this_term] None cont
         | None ->
@@ -2720,7 +2720,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     end @@ fun sizemap tenv ghostenv h env ->
     verify_return_stmt (pn, ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env false close_brace_loc None [] return_cont (fun _ _ _ -> assert false)
 
-  and verify_func pn ilist gs lems boxes predinstmap funcmap tparams env l k tparams' rt g ps nonghost_callers_only pre pre_tenv post terminates ss closeBraceLoc =
+  and verify_func pn ilist gs lems boxes predinstmap funcmap tparams env l k tparams' rt g ps nonghost_callers_only pre pre_tenv post terminates ss closeBraceLoc vtype_info_opt =
     if startswith g "vf__" then static_error l "The name of a user-defined function must not start with 'vf__'." None;
     let tparams = tparams' @ tparams in
     let _ = push() in
@@ -2777,20 +2777,30 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         begin fun cont ->
           match this_term_opt with
           | Some (sn, this_term) ->
-            begin match try_assoc sn bases_constructed_map with
-            | Some (_, (_, _, _, _, bases_constructed_symb, _, _)) ->
-              (* consume [?f * 1/2]X_bases_constructed(this) *)
-              with_context (Executing ([], env, l, "Consuming constructed bases fraction")) @@ fun () ->
-              consume_chunk rules h [] [] [] l (bases_constructed_symb, true) [] real_unit dummypat (Some 1) [TermPat this_term] @@ fun consumed_chunk h coef _ _ _ _ _ ->
-              let half = real_mul l real_half coef in
-              let half_chunk = Chunk ((bases_constructed_symb, true), [], half, [this_term], None) in
-              let tenv = ("current_bases_constructed_fraction", RealType) :: tenv in
-              let ghostenv = "current_bases_constructed_fraction" :: ghostenv in 
-              let env = ("current_bases_constructed_fraction", half) :: env in
-              cont (half_chunk :: h) tenv ghostenv env
-            | None ->
-              cont h tenv ghostenv env
-            end
+            begin fun cont ->
+              match try_get_pred_symb_from_map sn bases_constructed_map with
+              | Some bases_constructed_symb ->
+                (* consume [?f * 1/2]X_bases_constructed(this) *)
+                with_context (Executing ([], env, l, "Consuming constructed bases fraction")) @@ fun () ->
+                consume_chunk rules h [] [] [] l (bases_constructed_symb, true) [] real_unit dummypat (Some 1) [TermPat this_term] @@ fun consumed_chunk h coef _ _ _ _ _ ->
+                let half = real_mul l real_half coef in
+                let half_chunk = Chunk ((bases_constructed_symb, true), [], half, [this_term], None) in
+                let tenv = ("current_bases_constructed_fraction", RealType) :: tenv in
+                let ghostenv = "current_bases_constructed_fraction" :: ghostenv in 
+                let env = ("current_bases_constructed_fraction", half) :: env in
+                cont (half_chunk :: h) tenv ghostenv env
+              | None ->
+                cont h tenv ghostenv env
+            end @@ fun h tenv ghostenv env ->
+            begin fun cont ->
+              match vtype_info_opt with
+              | Some vtype_info ->
+                consume_chunk rules h [] [] [] l (vtype_info, true) [] real_unit dummypat (Some 1) [TermPat this_term; dummypat] @@ fun consumed_chunk _ _ _ _ _ _ _ ->
+                cont h
+              | None ->
+                cont h
+            end @@ fun h ->
+            cont h tenv ghostenv env
           | None ->
             cont h tenv ghostenv env
         end @@ fun h tenv ghostenv env ->
@@ -2815,7 +2825,15 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     ) in
     gs', lems'
 
-  let verify_cxx_ctor pn ilist gs lems boxes predinstmap funcmap (struct_name, fields, g, loc, params, init_list, pre, pre_tenv, post, terminates, ss, close_brace_loc) =
+  (*
+      - Call base constructors (or delegated constructor)
+        * Consume vtype of base after base constructor call if base is polymorphic
+      - Produce vtype of this object if it is polymorphic
+      - Produce bases_constructed for this object if it derives from at least one base
+      - Initialize fields
+      - Execute body
+  *)
+  let verify_cxx_ctor pn ilist gs lems boxes predinstmap funcmap (struct_name, fields, g, loc, params, init_list, pre, pre_tenv, post, terminates, ss, close_brace_loc, is_polymorphic, type_info) =
     let init_constructs this_term init_list leminfo sizemap h env ghostenv cont =
       let rec iter first init_list h =
         match init_list with 
@@ -2830,10 +2848,29 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let verify_ctor_call = verify_ctor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env this_term (Some "this") in
             produce_cxx_object l real_unit this_term this_type eval_h verify_ctor_call (Expr construct) false false h env @@ fun h _ ->
             if delegating then cont true h [] 
-            else iter false init_list_rest h
+            else begin fun cont -> 
+              if is_polymorphic_struct sn then 
+                (* the base that was constructed is polymorphic, consume the vtype to block other bases from calling virtual methods from this base during construction *)
+                with_context (Executing ([], env, l, "Consuming base vtype chunk.")) @@ fun () ->
+                let vtype_symb = get_pred_symb_from_map sn cxx_vtype_map in
+                let _, _, _, _, type_info = List.assoc sn structmap in
+                consume_chunk rules h [] env [] l (vtype_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat this_term; TermPat type_info] @@ fun _ h _ _ _ _ _ _ ->
+                cont h
+              else cont h
+            end @@ fun h -> iter false init_list_rest h
           | _ -> 
-            begin match try_assoc struct_name bases_constructed_map with
-            | Some (_, (_, _, _, _, bases_constructed_symb, _, _)) ->
+            (* init_list now only contains field initializers *)
+            begin fun cont ->
+              if is_polymorphic then
+                (* base cosntructors are finished, produce own vtype *)
+                with_context (Executing ([], env, loc, "Producing vtype chunk.")) @@ fun () ->
+                let vtype_symb = get_pred_symb_from_map struct_name cxx_vtype_map in
+                produce_chunk h (vtype_symb, true) [] real_unit (Some 1) [this_term; type_info] None cont
+              else cont h 
+            end @@ fun h ->
+            begin match try_get_pred_symb_from_map struct_name bases_constructed_map with
+            | Some bases_constructed_symb ->
+              with_context (Executing ([], env, loc, "Producing bases_constructed chunk.")) @@ fun () ->
               produce_chunk h (bases_constructed_symb, true) [] real_unit (Some 1) [this_term] None @@ fun h ->
               cont false h init_list
             | None ->
@@ -2915,7 +2952,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       check_should_fail () @@ fun () ->
       execute_branch @@ fun () ->
       with_context (Executing ([], env, loc, sprintf "Verifying constructor '%s'" struct_name)) @@ fun () ->
-      assume_neq this_term (null_pointer_term ()) @@ fun () ->
+      assume_neq (mk_ptr_address this_term) int_zero_term @@ fun () ->
       produce_asn [] [] ghostenv env pre real_unit None None @@ fun h ghostenv env ->
       init_constructs this_term init_list leminfo sizemap h env ghostenv @@ fun delegated h init_list ->
       if List.exists (function ("this", _) -> true | _ -> false) init_list then assert_false h env loc "Invalid order of initialization: the base or delegating constructor should already have been handled." None;
@@ -2933,7 +2970,15 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let _ = pop () in 
     gs', lems'
 
-  let verify_cxx_dtor pn ilist gs lems boxes predinstmap funcmap (struct_name, bases, fields, g, loc, pre, pre_tenv, post, terminates, ss, close_brace_loc) =
+  (*
+    - Execute body
+    - Consume bases_constructed for this object if it derives from at least one base
+    - Destruct fields
+    - Consume vtype of this object if it is polymorphic
+    - Call base destructors
+      * Produce vtype of base before base destructor call if base is polymorphic
+  *)
+  let verify_cxx_dtor pn ilist gs lems boxes predinstmap funcmap (struct_name, bases, fields, g, loc, pre, pre_tenv, post, terminates, ss, close_brace_loc, is_polymorphic, type_info) =
     let consume_fields struct_addr h env tenv ghostenv leminfo sizemap cont =
       let rec iter h fields =
         match fields with 
@@ -2967,9 +3012,20 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | [] ->
           cont h env tenv
         | (base_name, (base_spec_loc, is_virtual, base_offset)) :: bases_rest ->
+          (* reverse order compared to constructor order *)
           iter bases_rest @@ fun h env tenv ->
           with_context (Executing (h, env, base_spec_loc, "Executing base destructor")) @@ fun () ->
           let this_addr = mk_field_ptr this_addr base_offset in
+          begin fun cont ->
+            if is_polymorphic_struct base_name then
+              (* the base is polymorphic, produce its vtype *)
+              with_context (Executing ([], env, loc, "Producing base vtype chunk")) @@ fun () ->
+              let vtype_symb = get_pred_symb_from_map base_name cxx_vtype_map in
+              let _, _, _, _, type_info = List.assoc base_name structmap in
+              produce_chunk h (vtype_symb, true) [] real_unit (Some 1) [this_addr; type_info] None cont
+            else cont h
+          end @@ fun h ->
+          with_context (Executing (h, [], base_spec_loc, "Executing base destructor")) @@ fun () ->
           let verify_dtor_call = verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env this_addr None in
           consume_cxx_object base_spec_loc real_unit_pat this_addr (StructType base_name) verify_dtor_call false h env @@ fun h env ->
           cont h env tenv
@@ -2988,18 +3044,27 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       check_should_fail () @@ fun () ->
       execute_branch @@ fun () ->
       with_context (Executing ([], env, loc, sprintf "Verifying destructor '%s'" @@ cxx_dtor_name struct_name)) @@ fun () ->
-      assume_neq this_term (null_pointer_term ()) @@ fun () ->
+      assume_neq (mk_ptr_address this_term) int_zero_term @@ fun () ->
       produce_asn [] [] ghostenv env pre real_unit None None @@ fun h ghostenv env ->
       let return_cont h tenv2 env2 retval =
         begin fun cont ->
-          match try_assoc struct_name bases_constructed_map with
-          | Some (_, (_, _, _, _, bases_constructed_symb, _, _)) ->
+          match try_get_pred_symb_from_map struct_name bases_constructed_map with
+          | Some bases_constructed_symb ->
+            with_context (Executing ([], env, loc, "Consuming bases_constructed chunk.")) @@ fun () ->
             consume_chunk rules h [] env [] loc (bases_constructed_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat this_term] @@ fun _ h _ _ _ _ _ _ ->
             cont h
           | None ->
             cont h
         end @@ fun h ->
         consume_fields this_term h env tenv ghostenv leminfo sizemap @@ fun h ->
+        begin fun cont ->
+          if is_polymorphic then
+            with_context (Executing ([], env, loc, "Consuming vtype chunk.")) @@ fun () ->
+            let vtype_symb = get_pred_symb_from_map struct_name cxx_vtype_map in
+            consume_chunk rules h [] env [] loc (vtype_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat this_term; TermPat type_info] @@ fun _ h _ _ _ _ _ _ ->
+            cont h
+          else cont h
+        end @@ fun h ->
         consume_bases bases h env tenv this_term ghostenv leminfo sizemap @@ fun h env tenv ->
         consume_asn rules [] h ghostenv env post true real_unit @@ fun _ h ghostenv env size_first ->
         check_leaks h env close_brace_loc "Destructor leaks heap chunks."
@@ -3121,7 +3186,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   in
                   let eval_h h env e cont = verify_expr false (pn,ilist) tparams false leminfo funcmap sizemap tenv ghostenv h env None e cont econt in
                   let pats = (List.map (fun e -> SrcPat (LitPat e)) args) in
-                  verify_call funcmap eval_h lm (pn, ilist) None None [] pats ([], None, xmap0, ["this", this], pre0, post0, Some(epost0), terminates0, v0) false is_upcall (Some supercn) leminfo sizemap h [] tenv ghostenv env (fun h env _ ->
+                  verify_call funcmap eval_h lm (pn, ilist) None None [] pats ([], None, xmap0, ["this", this], pre0, post0, Some(epost0), terminates0) false is_upcall (Some supercn) leminfo sizemap h [] tenv ghostenv env (fun h env _ ->
                   cont h) econt
             end $. fun h ->
             let fds = get_fields (pn,ilist) cn lm in
@@ -3239,7 +3304,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let ((g_file_name, _, _), _) = root_caller_token l in
       if language = Java && not (Filename.check_suffix g_file_name ".javaspec") then
         static_error l "A lemma function outside a .javaspec file must have a body. To assume a lemma, use the body '{ assume(false); }'." None;
-      let FuncInfo ([], fterm, _, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, fb,v) = List.assoc g funcmap in
+      let FuncInfo ([], fterm, _, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, virt) = List.assoc g funcmap in
       if auto && (Filename.check_suffix g_file_name ".c" || is_import_spec || language = CLang && Filename.chop_extension (Filename.basename g_file_name) <> Filename.chop_extension (Filename.basename program_path)) then begin
         register_prototype_used l g (Some fterm);
         create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams'
@@ -3251,9 +3316,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           lems    (* Prototype for lemma implemented in current file; will not generate .requires directive; calls must be subjected to termination check. *)
       in
       verify_funcs (pn,ilist) boxes gs lems ds
-    | Func (l, Regular, _, rt, g, ps, _, _, _, _, None, _, _)::ds ->
+    | Func (l, Regular, _, rt, g, ps, _, _, _, _, None, is_virtual, _)::ds ->
       let g = full_name pn g in
-      let FuncInfo ([], fterm, _, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, fb,v) = List.assoc g funcmap in
+      let FuncInfo ([], fterm, _, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, is_virtual) = List.assoc g funcmap in
       let gs =
         if body = None then
           g::gs
@@ -3261,14 +3326,21 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           gs
       in
       verify_funcs (pn,ilist) boxes gs lems ds
-    | Func (l, k, _, _, g, _, _, functype_opt, _, _, Some _, _, _)::ds when k <> Fixpoint ->
+    | Func (l, k, _, _, g, _, _, functype_opt, _, _, Some _, is_virtual, _)::ds when k <> Fixpoint ->
       let g = full_name pn g in
       let gs', lems' =
       record_fun_timing l g begin fun () ->
-      let FuncInfo ([], fterm, l, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, _, Some (Some (ss, closeBraceLoc)),fb,v) = (List.assoc g funcmap)in
+      let FuncInfo ([], fterm, l, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, _, Some (Some (ss, closeBraceLoc)), is_virtual) = (List.assoc g funcmap)in
       let tparams = [] in
       let env = [] in
-      verify_func pn ilist gs lems boxes predinstmap funcmap tparams env l k tparams' rt g ps nonghost_callers_only pre pre_tenv post terminates ss closeBraceLoc
+      let vtype_symb_opt = 
+        match is_virtual, ps with
+        | true, ("this", PtrType (StructType sn)) :: _ -> 
+          let vtype_symb = get_pred_symb_from_map sn cxx_vtype_map in
+          Some vtype_symb
+        | _ -> None
+      in
+      verify_func pn ilist gs lems boxes predinstmap funcmap tparams env l k tparams' rt g ps nonghost_callers_only pre pre_tenv post terminates ss closeBraceLoc vtype_symb_opt
       end in
       verify_funcs (pn, ilist) boxes gs' lems' ds
     | BoxClassDecl (l, bcn, _, _, _, _)::ds -> let bcn=full_name pn bcn in
@@ -3365,39 +3437,39 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | CxxCtor (loc, mangled_name, _, _, _, Some _, _, StructType sn) :: ds ->
       let gs', lems' =
         record_fun_timing loc (sn ^ ".<ctor>") @@ fun () ->
-        let _, Some (_, fields), _, _, _ = List.assoc sn structmap in
+        let _, Some (_, fields, is_polymorphic), _, _, type_info = List.assoc sn structmap in
         let loc, params, pre, pre_tenv, post, terminates, Some (Some (init_list, (body, close_brace_loc))) = List.assoc mangled_name cxx_ctor_map1 in
-        verify_cxx_ctor pn ilist gs lems boxes predinstmap funcmap (sn, fields, mangled_name, loc, params, init_list, pre, pre_tenv, post, terminates, body, close_brace_loc)
+        verify_cxx_ctor pn ilist gs lems boxes predinstmap funcmap (sn, fields, mangled_name, loc, params, init_list, pre, pre_tenv, post, terminates, body, close_brace_loc, is_polymorphic, type_info)
       in
       verify_funcs (pn, ilist) boxes gs' lems' ds
     | CxxDtor (loc, _, _, Some _, _, StructType sn) :: ds ->
       let gs', lems' =
         record_fun_timing loc (sn ^ ".<dtor>") @@ fun () ->
-        let _, Some (bases, fields), _, _, _ = List.assoc sn structmap in
+        let _, Some (bases, fields, is_polymorphic), _, _, type_info = List.assoc sn structmap in
         let loc, pre, pre_tenv, post, terminates, Some (Some (body, close_brace_loc)) = List.assoc sn cxx_dtor_map1 in 
-        verify_cxx_dtor pn ilist gs lems boxes predinstmap funcmap (sn, bases, fields, cxx_dtor_name sn, loc, pre, pre_tenv, post, terminates, body, close_brace_loc)
+        verify_cxx_dtor pn ilist gs lems boxes predinstmap funcmap (sn, bases, fields, cxx_dtor_name sn, loc, pre, pre_tenv, post, terminates, body, close_brace_loc, is_polymorphic, type_info)
       in
       verify_funcs (pn, ilist) boxes gs' lems' ds
     | _::ds -> verify_funcs (pn,ilist)  boxes gs lems ds
   
   let lems1 =
     flatmap
-      (function (g, FuncInfo (funenv, fterm, l, Lemma(_), tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, fb, v)) -> [g] | _ -> [])
+      (function (g, FuncInfo (funenv, fterm, l, Lemma(_), tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, virt)) -> [g] | _ -> [])
       funcmap1
   
   let lems0 =
     flatmap
-      (function (g, FuncInfo (funenv, fterm, l, Lemma(_), tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, fb, v)) when not (List.mem g lems1) -> [g] | _ -> [])
+      (function (g, FuncInfo (funenv, fterm, l, Lemma(_), tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, virt)) when not (List.mem g lems1) -> [g] | _ -> [])
       funcmap0
   
   let gs1 =
     flatmap
-      (function (g, FuncInfo (funenv, fterm, l, Regular, tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, fb, v)) -> [g] | _ -> [])
+      (function (g, FuncInfo (funenv, fterm, l, Regular, tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, virt)) -> [g] | _ -> [])
       funcmap1
   
   let gs0 =
     flatmap
-      (function (g, FuncInfo (funenv, fterm, l, Regular, tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, fb, v)) when not (List.mem g gs1) -> [g] | _ -> [])
+      (function (g, FuncInfo (funenv, fterm, l, Regular, tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, virt)) when not (List.mem g gs1) -> [g] | _ -> [])
       funcmap0
   
   let rec verify_funcs' boxes gs lems ps=
@@ -3420,7 +3492,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         inductivemap1, purefuncmap1, predctormap1, struct_accessor_map1, malloc_block_pred_map1, new_block_pred_map1, 
         field_pred_map1, predfammap1, predinstmap1, typedefmap1, functypemap1, 
         funcmap1, boxmap, classmap1, interfmap1, classterms1, interfaceterms1, 
-        abstract_types_map1, cxx_ctor_map1, cxx_dtor_map1, bases_constructed_map1
+        abstract_types_map1, cxx_ctor_map1, cxx_dtor_map1, bases_constructed_map1, cxx_vtype_map1
       )
     )
   

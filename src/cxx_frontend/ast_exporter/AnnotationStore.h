@@ -58,7 +58,8 @@ class AnnotationStore {
     void getAll(llvm::SmallVectorImpl<Annotation> &container);
   };
 
-  std::unordered_map<unsigned, AnnCont> _annContainers;
+  std::unordered_map<unsigned, AnnCont> m_annContainers;
+  llvm::SmallVector<Text> m_failDirectives;
 
   /**
    * Retrieves the annotation container that corresponds with the given
@@ -69,13 +70,13 @@ class AnnotationStore {
    * @param SM source manager.
    */
   AnnCont &getCont(const clang::FileEntry *entry) {
-    return _annContainers[entry->getUID()];
+    return m_annContainers[entry->getUID()];
   }
 
-  void guessContract(const clang::FileEntry *entry,
-                     llvm::SmallVectorImpl<Annotation> &container,
-                     const clang::SourceManager &SM,
-                     clang::SourceLocation maxEndLoc);
+  void getContract(const clang::FileEntry *entry,
+                   llvm::SmallVectorImpl<Annotation> &container,
+                   const clang::SourceManager &SM,
+                   clang::SourceLocation bodyStartLoc);
 
 public:
   explicit AnnotationStore() {}
@@ -88,6 +89,14 @@ public:
    * @param SM source manager.
    */
   void add(Annotation &&ann, const clang::SourceManager &SM);
+
+  void addFailDirective(Text &&directive) {
+    m_failDirectives.emplace_back(std::move(directive));
+  }
+
+  const llvm::ArrayRef<Text> getFailDirectives() const {
+    return m_failDirectives;
+  }
 
   /**
    * Retrieve every annotation before the given location.
@@ -107,22 +116,14 @@ public:
   void getAll(const clang::FileEntry *entry,
               llvm::SmallVectorImpl<Annotation> &container);
 
-  /**
-   * Retrieves the next contract from the store. The contract that
-   * is retrieved comes from the file that corresponds with the given location.
-   * @param endLoc location that represents the start of a body. E.g.,
-   * when you want to retrieve the contract of a function implementation, you
-   * can pass the the location of the start of the body. If the location is not
-   * valid, an attempt will be done to get a best match for a function contract.
-   */
-  void getContract(const clang::FileEntry *entry,
-                   llvm::SmallVectorImpl<Annotation> &container,
-                   const clang::SourceManager &SM,
-                   clang::SourceLocation bodyStartLoc);
-
   void getContract(const clang::FunctionDecl *decl,
                    llvm::SmallVectorImpl<Annotation> &container,
                    const clang::SourceManager &SM);
+
+  void guessContract(const clang::FileEntry *entry,
+                     llvm::SmallVectorImpl<Annotation> &container,
+                     const clang::SourceManager &SM,
+                     clang::SourceLocation maxEndLoc);
 
   llvm::Optional<clang::SourceRange>
   queryTruncatingAnnotation(const clang::SourceLocation currentLoc,

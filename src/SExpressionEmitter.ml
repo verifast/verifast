@@ -921,6 +921,7 @@ and sexpr_of_decl (decl : decl) : sexpression =
                    ; "fields", sexpr_of_list ~head:(Some (Symbol "fields")) sexpr_of_field fields
                    ; "attrs", sexpr_of_list ~head:(Some (Symbol "attrs")) sexpr_of_attr attrs
                    ; "polymorphic", sexpr_of_bool polymorphic ]
+    | CxxDtor _ -> unsupported "cxx dtor"
     | Func (loc,
             kind,
             tparams,
@@ -932,10 +933,15 @@ and sexpr_of_decl (decl : decl) : sexpression =
             contract,
             terminates,
             body,
-            binding,
-            visibility) ->
+            is_virtual,
+            overrides) ->
       let sexpr_of_arg (t, id) =
         List [ Symbol id; sexpr_of_type_expr t ]
+      in
+      let overrides =
+        match overrides with
+        | [ ] -> [ ]
+        | _ -> [ "overrides", sexpr_of_list (fun s -> Symbol s) overrides ]
       in
       let body =
         match body with
@@ -951,7 +957,9 @@ and sexpr_of_decl (decl : decl) : sexpression =
       let kw = List.concat [ [ "kind", sexpr_of_func_kind kind
                              ; "type-parameters", List (List.map symbol tparams )
                              ; "return-type", sexpr_of_type_expr_option rtype
-                             ; "parameters", List (List.map sexpr_of_arg params) ]
+                             ; "parameters", List (List.map sexpr_of_arg params)
+                             ; "is_virtual", sexpr_of_bool is_virtual ]
+                           ; overrides
                            ; body
                            ; contract ]
       in

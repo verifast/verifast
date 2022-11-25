@@ -116,7 +116,7 @@ bool TypeLocSerializer::VisitFunctionProtoTypeLoc(
 
   anns.clear();
 
-  store.getContract(getFileEntry(typeLoc.getBeginLoc(), SM), anns, SM,
+  store.guessContract(getFileEntry(typeLoc.getBeginLoc(), SM), anns, SM,
                     clang::SourceLocation());
   auto contract = proto.initContract(anns.size());
   m_serializer.serializeAnnotationClauses(contract, anns);

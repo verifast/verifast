@@ -67,6 +67,7 @@ protected:
  */
 template <class StubsNode, class AstNode>
 class NodeSerializer : public DescSerializer<StubsNode, AstNode> {
+    stubs::Loc::Builder m_locBuilder;
 public:
   using NodeBuilder = typename stubs::Node<StubsNode>::Builder;
 
@@ -74,7 +75,7 @@ public:
                           stubs::Loc::Builder locBuilder,
                           typename StubsNode::Builder descBuilder)
       : DescSerializer<StubsNode, AstNode>(context, serializer, descBuilder),
-        _locBuilder(locBuilder) {}
+        m_locBuilder(locBuilder) {}
 
   explicit NodeSerializer(clang::ASTContext &context, AstSerializer &serializer,
                           NodeBuilder nodeBuilder)
@@ -86,12 +87,9 @@ protected:
                      const llvm::StringRef kind) {
     if (!this->serializeDesc(node))
       this->unsupported(node->getSourceRange(), nodeName, kind);
-    serializeSrcRange(_locBuilder, node->getSourceRange(),
+    serializeSrcRange(m_locBuilder, node->getSourceRange(),
                       this->getSourceManager());
   }
-
-private:
-  stubs::Loc::Builder _locBuilder;
 };
 
 struct StmtSerializer : public NodeSerializer<stubs::Stmt, clang::Stmt>,
@@ -160,7 +158,7 @@ struct DeclSerializer : public NodeSerializer<stubs::Decl, clang::Decl>,
   explicit DeclSerializer(clang::ASTContext &context, AstSerializer &serializer,
                           NodeBuilder &nodeBuilder, bool serializeImplicitDecls)
       : NodeSerializer(context, serializer, nodeBuilder),
-        m_serializeImplicitDecls() {}
+        m_serializeImplicitDecls(serializeImplicitDecls) {}
 
   bool serializeDesc(const clang::Decl *decl) override {
     assert(decl && "Declaration should not be null");
@@ -209,7 +207,8 @@ private:
 
   void serializeMethodDecl(stubs::Decl::Method::Builder &builder,
                            const clang::CXXMethodDecl *decl,
-                           llvm::StringRef mangledName);
+                           llvm::StringRef mangledName,
+                           bool isDtor);
 
   void serializeBases(capnp::List<stubs::Node<stubs::Decl::Record::BaseSpec>,
                                   capnp::Kind::STRUCT>::Builder &builder,

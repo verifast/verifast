@@ -216,7 +216,7 @@ bool ExprSerializer::VisitDeclRefExpr(const clang::DeclRefExpr *expr) {
   auto *decl = expr->getDecl();
   declRef.setName(decl->getQualifiedNameAsString());
   if (auto *func = llvm::dyn_cast<clang::FunctionDecl>(decl)) {
-    declRef.setMangledName(m_serializer.getMangledFunc(func).str());
+    declRef.setMangledName(m_serializer.getMangledName(func).str());
   }
   return true;
 }
@@ -234,7 +234,7 @@ bool ExprSerializer::VisitMemberExpr(const clang::MemberExpr *expr) {
   mem.setName(decl->getNameAsString());
   mem.setQualName(decl->getQualifiedNameAsString());
   if (auto *meth = llvm::dyn_cast<clang::CXXMethodDecl>(decl)) {
-    mem.setMangledName(m_serializer.getMangledFunc(meth).str());
+    mem.setMangledName(m_serializer.getMangledName(meth).str());
   }
   mem.setArrow(expr->isArrow());
   return true;
@@ -287,7 +287,7 @@ bool ExprSerializer::VisitCXXConstructExpr(
   auto construct = m_builder.initConstruct();
   auto ctor = expr->getConstructor();
   construct.setName(ctor->getNameAsString());
-  construct.setMangledName(m_serializer.getMangledCtorName(ctor).str());
+  construct.setMangledName(m_serializer.getMangledName(ctor).str());
   auto args = construct.initArgs(expr->getNumArgs());
 
   size_t i(0);

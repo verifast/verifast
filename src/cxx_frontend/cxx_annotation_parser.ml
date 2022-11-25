@@ -144,10 +144,10 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) = struct
     | [< 
         '(l, Kwd "lemma"); 
         t = AnnParser.parse_return_type;
-        VF.Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, terminates, None, VF.Static, v) = AnnParser.parse_func_rest (VF.Lemma (false, None)) t VF.Public 
+        VF.Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, terminates, None, false, []) = AnnParser.parse_func_rest (VF.Lemma (false, None)) t 
       >] ->
       let ps = (VF.PtrTypeExpr (l, VF.StructTypeExpr (l, Some struct_name, None, [])), "this") :: ps in
-      let lem = VF.Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, terminates, None, VF.Static, v) in
+      let lem = VF.Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, terminates, None, false, []) in
       Cxx_fe_sig.CxxDeclMem lem
     | [< 
         binding = begin parser
