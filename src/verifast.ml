@@ -2843,9 +2843,21 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let init_fields delegated h struct_addr this_type init_list env ghostenv leminfo sizemap current_thread cont =
       (* when a delegated ctor was called, no initializeation is needed for the fields *)
       if delegated then cont h else
+      begin fun cont ->
+        (* assume all fields with an offset to be within bounds *)
+        let rec iter fields =
+          match fields with
+          | [] -> cont ()
+          | (field_name, (_, _, _, Some offset, _)) :: rest ->
+            assume (mk_field_pointer_within_limits struct_addr offset) @@ fun () -> iter rest
+          | _ :: rest -> iter rest
+        in
+        iter fields
+      end @@ fun () ->
       let init_field h field_name field_type value struct_addr cont =
         assume_field h struct_name field_name field_type Real struct_addr value real_unit cont
       in
+      (* initialize each fields *)
       let rec iter h fields =
         match fields with 
         | [] -> cont h
@@ -2859,7 +2871,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           begin 
             match init_expr_opt with 
             | None -> 
-              with_context (Executing (h, [], field_loc, "Producing field chunk")) @@ fun () ->
+              with_context (Executing (h, env, field_loc, "Producing field chunk")) @@ fun () ->
               init_field h field_name field_type None struct_addr @@ fun h ->
               iter h rest
             | Some (init, is_written) ->
@@ -2867,7 +2879,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 if mem_init && is_written then "member", env, pre_tenv
                 else "default field", [("this", struct_addr); current_thread], [("this", this_type); (current_thread_name, current_thread_type)]
               in
-              with_context (Executing (h, [], expr_loc init, "Executing " ^ init_kind ^ " initializer")) @@ fun () ->
+              with_context (Executing (h, env, expr_loc init, "Executing " ^ init_kind ^ " initializer")) @@ fun () ->
               let field_addr_name = Some (field_name ^ "_addr") in 
               begin 
                 match init with 
@@ -2929,12 +2941,12 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let field_addr = field_address field_loc struct_addr struct_name field_name in
           begin match field_type with
           | UnionType struct_name | StructType struct_name ->
-            with_context (Executing (h, [], field_loc, "Executing field destructor")) @@ fun () ->
+            with_context (Executing (h, env, field_loc, "Executing field destructor")) @@ fun () ->
             let verify_dtor_call = verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env field_addr field_addr_name in
             consume_cxx_object field_loc real_unit_pat field_addr field_type verify_dtor_call true h env @@ fun h env ->
             iter h rest
           | _ ->
-            with_context (Executing (h, [], field_loc, "Consuming field chunk")) @@ fun () ->
+            with_context (Executing (h, env, field_loc, "Consuming field chunk")) @@ fun () ->
             let (_, (_, _, _, _, field_symb, _, _)), p__opt = List.assoc (struct_name, field_name) field_pred_map in
             let field_symb_used =
               match p__opt with
@@ -2954,7 +2966,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           cont h env tenv
         | (base_name, (base_spec_loc, is_virtual, base_offset)) :: bases_rest ->
           iter bases_rest @@ fun h env tenv ->
-          with_context (Executing (h, [], base_spec_loc, "Executing base destructor")) @@ fun () ->
+          with_context (Executing (h, env, base_spec_loc, "Executing base destructor")) @@ fun () ->
           let this_addr = mk_field_ptr this_addr base_offset in
           let verify_dtor_call = verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env this_addr None in
           consume_cxx_object base_spec_loc real_unit_pat this_addr (StructType base_name) verify_dtor_call false h env @@ fun h env ->

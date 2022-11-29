@@ -390,7 +390,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
               decl :: decls, fields, inst_preds) ([], [], [])
         in
         let bases = bases_get body |> capnp_arr_map (transl_node transl_base) in
-        Some (bases, fields, polymorphic), decls
+        Some (List.rev bases, List.rev fields, polymorphic), List.rev decls
       else None, [] 
     in
     let vf_record = 
