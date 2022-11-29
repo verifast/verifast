@@ -248,6 +248,11 @@ bool ExprSerializer::VisitCXXMemberCallExpr(
   auto implArg = memberCall.initImplicitArg();
   m_serializer.serializeExpr(implArg, expr->getImplicitObjectArgument());
   auto call = memberCall.initCall();
+
+  if (auto *callee = llvm::dyn_cast<clang::MemberExpr>(expr->getCallee())) {
+    memberCall.setTargetHasQualifier(callee->hasQualifier());
+  }
+
   return serializeCall(call, expr);
 }
 

@@ -1,108 +1,116 @@
-class AVirtual
+class A
 {
+  int m_i;
+
 public:
-  AVirtual()
+  A() : m_i(0)
   //@ requires true;
-  //@ ensures AVirtual_vtype(this, &typeid(struct AVirtual));
-  {
-    foo();
-  }
+  //@ ensures A_vtype(this, &typeid(A)) &*& this->m_i |-> 0;
+  {}
   
-  virtual ~AVirtual() 
-  //@ requires AVirtual_vtype(this, &typeid(struct AVirtual));
+  virtual ~A()
+  //@ requires A_vtype(this, &typeid(A)) &*& this->m_i |-> _;
   //@ ensures true;
   {}
   
-  virtual void foo() const
-  //@ requires AVirtual_vtype(this, ?t);
-  //@ ensures AVirtual_vtype(this, t);
-  {}
+  int getI() const
+  //@ requires this->m_i |-> ?i;
+  //@ ensures this->m_i |-> i &*& result == i;
+  {
+    return m_i;
+  }
+  
+  virtual int getVirtualI() const
+  //@ requires this->m_i |-> ?i;
+  //@ ensures this->m_i |-> i &*& result == i;
+  {
+    return getI();
+  }
+  
+  void callVirtualMeth() const
+  //@ requires A_vtype(this, ?t) &*& this->m_i |-> ?i;
+  //@ ensures A_vtype(this, t) &*& this->m_i |-> i;
+  {
+    getVirtualI();
+  }
+  
+  virtual void virtualCallVirtualMeth() const
+  //@ requires A_vtype(this, ?t) &*& this->m_i |-> ?i;
+  //@ ensures A_vtype(this, t) &*& this->m_i |-> i;
+  {
+    getVirtualI();
+  }
 };
 
-class B
+class B : public A
 {
 public:
   B()
   //@ requires true;
+  /*@ ensures 
+      B_bases_constructed(this) &*& 
+      B_vtype(this, &typeid(B)) &*& 
+      A_m_i(this, 0);
+  @*/
+  {}
+  
+  virtual ~B()
+  /*@ requires 
+      B_bases_constructed(this) &*& 
+      B_vtype(this, &typeid(B)) &*& 
+      A_m_i(this, _);
+  @*/
   //@ ensures true;
   {}
-
-  ~B()
-  //@ requires true;
-  //@ ensures true;
-  {}
-
-  void foo(AVirtual &a) const 
-  //@ requires &a != 0 &*& AVirtual_vtype(&a, ?t);
-  //@ ensures AVirtual_vtype(&a, t);
+  
+  void callVirtualFromBase() const
+  /*@ requires 
+      B_bases_constructed(this) &*& 
+      A_vtype(this, ?t) &*& 
+      A_m_i(this, ?i);
+  @*/
+  /*@ ensures 
+      B_bases_constructed(this) &*&
+      A_vtype(this, t) &*& 
+      A_m_i(this, i);
+  @*/
   {
-    a.foo();
+    callVirtualMeth();
+  }
+  
+  void callStaticlyBoundCall() const
+  /*@ requires
+      B_bases_constructed(this) &*&
+      A_m_i(this, ?i);
+  @*/
+  /*@ ensures
+      B_bases_constructed(this) &*&
+      A_m_i(this, i);
+  @*/
+  {
+    A::getVirtualI();
   }
 };
-
-class CVirtual
-{
-public:
-  CVirtual()
-  //@ requires true;
-  //@ ensures CVirtual_vtype(this, &typeid(struct CVirtual));
-  {}
-
-  virtual ~CVirtual()
-  //@ requires CVirtual_vtype(this, &typeid(struct CVirtual));
-  //@ ensures true;
-  {}
-
-  virtual void foo() const
-  //@ requires CVirtual_vtype(this, ?t);
-  //@ ensures CVirtual_vtype(this, t);
-  {}
-
-  void bar() const
-  //@ requires CVirtual_vtype(this, ?t);
-  //@ ensures CVirtual_vtype(this, t);
-  {
-    foo();
-  }
-};
-
-class DVirtual : public AVirtual, public B, public CVirtual
-{
-public:
-  DVirtual()
-  //@ requires true;
-  //@ ensures DVirtual_bases_constructed(this) &*& DVirtual_vtype(this, &typeid(struct DVirtual));
-  {}
-
-  ~DVirtual()
-  //@ requires DVirtual_bases_constructed(this) &*& DVirtual_vtype(this, &typeid(struct DVirtual));
-  //@ ensures true;
-  {}
-
-  void foo() const override
-  //@ requires DVirtual_bases_constructed(this) &*& DVirtual_vtype(this, ?t);
-  //@ ensures DVirtual_bases_constructed(this) &*& DVirtual_vtype(this, t);
-  {}
-
-};
-
-void foo(AVirtual &a)
-//@ requires &a != 0 &*& AVirtual_vtype(&a, ?t);
-//@ ensures AVirtual_vtype(&a, t);
-{
-  a.foo();
-}
 
 int main()
 //@ requires true;
 //@ ensures true;
 {
-  DVirtual d;
-  d.foo();
-  AVirtual &aref = d;
-  aref.foo();
-  foo(aref);
-  d.AVirtual::foo();
-  d.bar();
-  d.B::foo(aref);
+  A a;
+  a.getI();
+  a.getVirtualI();
+  a.callVirtualMeth();
+  a.virtualCallVirtualMeth();
+  B b;
+  b.getVirtualI();
+  b.A::getVirtualI();
+  b.callVirtualMeth();
+  b.virtualCallVirtualMeth();
+  b.callVirtualFromBase();
+  b.callStaticlyBoundCall();
+  A &aref = b;
+  aref.getI();
+  aref.getVirtualI();
+  aref.callVirtualMeth();
+  aref.virtualCallVirtualMeth();
 }

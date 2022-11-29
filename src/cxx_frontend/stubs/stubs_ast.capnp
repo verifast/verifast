@@ -353,6 +353,7 @@ struct Expr {
     implicitArg @0 :ExprNode;
     arrow @1 :Bool;
     call @2 :Call;
+    targetHasQualifier @3 :Bool;
   }
 
   struct Member {

@@ -207,8 +207,7 @@ private:
 
   void serializeMethodDecl(stubs::Decl::Method::Builder &builder,
                            const clang::CXXMethodDecl *decl,
-                           llvm::StringRef mangledName,
-                           bool isDtor);
+                           llvm::StringRef mangledName);
 
   void serializeBases(capnp::List<stubs::Node<stubs::Decl::Record::BaseSpec>,
                                   capnp::Kind::STRUCT>::Builder &builder,

@@ -438,7 +438,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
 
   and transl_dtor_decl (loc: VF.loc) (dtor: R.Decl.Dtor.t): VF.decl =
     let open R.Decl.Dtor in 
-    let _, _, [this_param], body_opt, (_, _, pre_post_opt, terminates), _, implicit, _, _ = method_get dtor |> transl_meth loc in
+    let _, _, [this_param], body_opt, (_, _, pre_post_opt, terminates), _, implicit, is_virtual, overrides = method_get dtor |> transl_meth loc in
     let parent = dtor |> parent_get |> transl_record_ref loc in
     VF.CxxDtor (loc, pre_post_opt, terminates, body_opt, implicit, parent)
 
@@ -621,7 +621,8 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
       if arrow_get member_call then arg else VF.make_addr_of (VF.expr_loc arg) arg
     in
     let args = VF.LitPat impl_arg :: args in
-    VF.CallExpr (loc, name, [], [], args, VF.Static)
+    let binding = if target_has_qualifier_get member_call then VF.Static else VF.Instance in
+    VF.CallExpr (loc, name, [], [], args, binding)
 
   and transl_decl_ref_expr (loc: VF.loc) (ref: R.Expr.DeclRef.t): VF.expr =
     VF.Var (loc, R.Expr.DeclRef.name_get ref)

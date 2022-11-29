@@ -384,7 +384,7 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
           "expr", sexpr_of_expr expr;
           "exprs", sexpr_of_list sexpr_of_expr exprs
         ]
-    | WFunCall  (_, name, typs, exprs) ->
+    | WFunCall  (_, name, typs, exprs, _) ->
       build_list
         [ Symbol "expr-w-func-call" ]
         [
@@ -921,7 +921,6 @@ and sexpr_of_decl (decl : decl) : sexpression =
                    ; "fields", sexpr_of_list ~head:(Some (Symbol "fields")) sexpr_of_field fields
                    ; "attrs", sexpr_of_list ~head:(Some (Symbol "attrs")) sexpr_of_attr attrs
                    ; "polymorphic", sexpr_of_bool polymorphic ]
-    | CxxDtor _ -> unsupported "cxx dtor"
     | Func (loc,
             kind,
             tparams,

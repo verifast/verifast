@@ -410,9 +410,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let ("this", PtrType (StructType derived)) :: xmap = xmap in
           let this_term = get_unique_var_symb "this" (PtrType (StructType derived)) in
           let base_term = base_addr l (derived, this_term) base in
-          check_func_header_compat l ("Method '" ^ fn ^ "'") "Method implementation check" [("this", base_term)]
-            (Regular, [], rt0, xmap0, false, pre0, post0, [], terminates0)
-            (Regular, [], rt, xmap, false, [], [("this", this_term)], pre, post, [], terminates)
+          check_func_header_compat l ("Method '" ^ fn ^ "'") "Method implementation check" [("this", this_term)]
+            (Regular, [], rt, xmap, false, pre, post, [], terminates)
+            (Regular, [], rt0, xmap0, false, [], [("this", base_term)], pre0, post0, [], terminates0)
         in
         let () = overrides |> List.iter check_override in
         iter pn ilist (func_info :: funcmap) protos_implemented ds
@@ -1217,7 +1217,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | WFunPtrCall(_, e, ftn, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) (e :: es)
     | WPureFunCall(_, _, _, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
     | WPureFunValueCall(_, e, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) (e :: es)
-    | WFunCall(_, _, _, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
+    | WFunCall(_, _, _, es, _) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
     | WMethodCall _ -> ()
     | NewArray _ -> ()
     | NewObject _ -> ()
@@ -1374,7 +1374,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | WFunPtrCall(_, e, ftn, es) -> List.flatten (List.map (fun e -> expr_address_taken e) (e :: es))
     | WPureFunCall(_, _, _, es) -> List.flatten (List.map (fun e -> expr_address_taken e) es)
     | WPureFunValueCall(_, e, es) -> List.flatten (List.map (fun e -> expr_address_taken e) (e :: es))
-    | WFunCall(_, _, _, es) -> List.flatten (List.map (fun e -> expr_address_taken e) es)
+    | WFunCall(_, _, _, es, _) -> List.flatten (List.map (fun e -> expr_address_taken e) es)
     | WMethodCall _ -> []
     | NewArray _ -> []
     | NewObject _ -> []
@@ -1803,7 +1803,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     consume_chunk rules h [] [] [] l (call_perm__symb, true) [] real_unit real_unit_pat (Some 2) [TermPat currentThread; TermPat t] $. fun _ h _ _ _ _ _ _ ->
     cont h
 
-  let verify_call funcmap eval_h l (pn, ilist) xo g targs pats (callee_tparams, tr, ps, funenv, pre, post, epost, terminates) pure is_upcall target_class leminfo sizemap h tparams tenv ghostenv env cont econt =
+  let verify_call funcmap eval_h l (pn, ilist) xo g targs pats (callee_tparams, tr, ps, funenv, pre, post, epost, terminates, is_virtual_call) pure is_upcall target_class leminfo sizemap h tparams tenv ghostenv env cont econt =
     let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some pure) e tp in
     let check_expr (pn,ilist) tparams tenv pure e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv pure e in
     let eval_h h env pat cont =
@@ -1861,15 +1861,26 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       iter h env [] pats ps
     end $. fun h env ts ->
     let Some env' = zip ys ts in
-    let _ = 
-      match language, dialect, try_assoc "this" ps with
-      | Java, _, Some ObjType _
-      | CLang, Some Cxx, Some _ ->
+    begin fun cont ->
+      let check_target_not_null cont =
         let this_term = List.assoc "this" env' in
         if not (ctxt#query (ctxt#mk_not (ctxt#mk_eq this_term (null_pointer_term ())))) then
-          assert_false h env l "Target of method call might be null." None
-      | _ -> () 
-    in
+          assert_false h env l "Target of method call might be null." None;
+        cont this_term
+      in
+      match language, dialect, try_assoc "this" ps with
+      | Java, _, Some ObjType _ ->
+        check_target_not_null @@ fun _ -> cont h
+      | CLang, Some Cxx, Some _ ->
+        check_target_not_null @@ fun this_term ->
+        if is_virtual_call then
+          let ("this", PtrType (StructType struct_name)) :: _ = ps in
+          let vtype_symb = get_pred_symb_from_map struct_name cxx_vtype_map in
+          consume_chunk rules h [] [] [] l (vtype_symb, true) [] real_unit dummypat (Some 1) [TermPat this_term; dummypat] @@ fun consumed_chunk _ _ _ _ _ _ _ ->
+          cont h
+        else cont h
+      | _ -> cont h
+    end @@ fun h ->
     let currentThread = List.assoc current_thread_name env in
     let cenv = [(current_thread_name, currentThread)] @ env' @ funenv in
     with_context (Executing (h, env, l, "Verifying call")) $. fun () ->
@@ -2121,12 +2132,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           produce_points_to_chunk l h tpx real_unit symb w $. fun h ->
           cont h env
     in
-    let check_correct h xo g targs args (lg, callee_tparams, tr, ps, funenv, pre, post, epost, terminates) is_upcall target_class cont =
+    let check_correct h xo g targs args (lg, callee_tparams, tr, ps, funenv, pre, post, epost, terminates, is_virtual_call) is_upcall target_class cont =
       (* check_expr is needed here because args are not typechecked yet. Why does check_expr_t not check the arguments of a WFunCall? *)
       let at_most_one_unsafe args = (List.length (List.filter (fun a -> let (w, t) = check_expr (pn,ilist) tparams tenv a in not (is_safe_expr w)) args)) <= 1 in
       let eval_h = if language == CLang && not heapReadonly &&  (List.length args = 1 || at_most_one_unsafe args) then (fun h env e cont -> eval_h_core (true, false) h env e cont) else eval_h in
       let pre = match pre with ExprAsn (la, False _) when la == lg -> ExprAsn (lg, False dummy_loc) | _ -> pre in
-      verify_call funcmap eval_h l (pn, ilist) xo g targs (List.map (fun e -> SrcPat (LitPat e)) args) (callee_tparams, tr, ps, funenv, pre, post, epost, terminates) pure is_upcall target_class leminfo sizemap h tparams tenv ghostenv env cont econt
+      verify_call funcmap eval_h l (pn, ilist) xo g targs (List.map (fun e -> SrcPat (LitPat e)) args) (callee_tparams, tr, ps, funenv, pre, post, epost, terminates, is_virtual_call) pure is_upcall target_class leminfo sizemap h tparams tenv ghostenv env cont econt
     in
     let new_array h env l elem_tp length elems =
       let at = get_unique_var_symb (match xo with None -> "array" | Some x -> x) (ArrayType elem_tp) in
@@ -2339,12 +2350,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       eval_h_core readonly h env w @@ fun h env v ->
       base_addr l (derived, v) base |> cont h env
     | Upcast (w, _, _) -> eval_h_core readonly h env w cont
-    | CastExpr (lc, ManifestTypeExpr (_, tp), (WFunCall (l, "malloc", [], [SizeofExpr (ls, es)]) as e)) ->
+    | CastExpr (lc, ManifestTypeExpr (_, tp), (WFunCall (l, "malloc", [], [SizeofExpr (ls, es)], Static) as e)) ->
       let t = type_of_expr es in
       expect_type lc (Some pure) (PtrType t) tp;
       verify_expr readonly h env xo e cont
-    | WFunCall (l, ("malloc" as g), [], ([Operation (lmul, Mul, ([e; SizeofExpr (ls, es)] | [SizeofExpr (ls, es); e]))] as args)) |
-      WFunCall (l as lmul, ("calloc" as g), [], ([e; SizeofExpr (ls, es)] as args)) when (match args with [IntLit (_, n, _, _, _); _] when eq_big_int n unit_big_int -> false | _ -> true) ->
+    | WFunCall (l, ("malloc" as g), [], ([Operation (lmul, Mul, ([e; SizeofExpr (ls, es)] | [SizeofExpr (ls, es); e]))] as args), Static) |
+      WFunCall (l as lmul, ("calloc" as g), [], ([e; SizeofExpr (ls, es)] as args), Static) when (match args with [IntLit (_, n, _, _, _); _] when eq_big_int n unit_big_int -> false | _ -> true) ->
       if pure then static_error l "Cannot call a non-pure function from a pure context." None;
       let elemTp = type_of_expr es in
       let w, tp = check_expr (pn,ilist) tparams tenv e in
@@ -2389,7 +2400,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let arrayChunk = Chunk ((arrayPredSymb, true), [], real_unit, result :: extra_args @ [n; values], None) in
           cont (mallocBlockChunk::arrayChunk::h)
         end
-    | WFunCall (l, ("malloc" as g), [], ([SizeofExpr (ls, es)] as args)) | WFunCall (l, ("calloc" as g), [], ([IntLit (_, _, _, _, _); SizeofExpr (ls, es)] as args)) ->
+    | WFunCall (l, ("malloc" as g), [], ([SizeofExpr (ls, es)] as args), Static) | WFunCall (l, ("calloc" as g), [], ([IntLit (_, _, _, _, _); SizeofExpr (ls, es)] as args), Static) ->
       assert (match args with [IntLit (_, n, _, _, _); _] -> eq_big_int n unit_big_int | _ -> true); (* Has to be true or the previous case would have matched. *)
       if pure then static_error l "Cannot call a non-pure function from a pure context." None;
       let t = type_of_expr es in
@@ -2421,7 +2432,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (_, gh, fttparams, rt, ftxmap, xmap, pre, post, terminates, ft_predfammaps) = List.assoc ftn functypemap in
       if pure && gh = Real then static_error l "Cannot call regular function pointer in a pure context." None;
       let check_call targs h args0 cont =
-        verify_call funcmap eval_h l (pn, ilist) xo None targs (TermPat fterm::List.map (fun arg -> TermPat arg) args0 @ List.map (fun e -> SrcPat (LitPat e)) args) (fttparams, rt, (("this", PtrType Void)::ftxmap @ xmap), [], pre, post, None, terminates) pure true None leminfo sizemap h tparams tenv ghostenv env cont (fun _ _ _ _ -> assert false)
+        verify_call funcmap eval_h l (pn, ilist) xo None targs (TermPat fterm::List.map (fun arg -> TermPat arg) args0 @ List.map (fun e -> SrcPat (LitPat e)) args) (fttparams, rt, (("this", PtrType Void)::ftxmap @ xmap), [], pre, post, None, terminates, false) pure true None leminfo sizemap h tparams tenv ghostenv env cont (fun _ _ _ _ -> assert false)
       in
       let consume_call_perm h cont =
         if should_terminate leminfo then begin
@@ -2472,7 +2483,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | None -> Unspecified
         | Some e -> Expr e 
       in 
-      let verify_call loc args params pre post terminates h env cont = verify_call funcmap eval_h loc (pn, ilist) xo None [] args ([], None, params, ["this", result], pre, post, None, terminates) false false None leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in
+      let verify_call loc args params pre post terminates h env cont = verify_call funcmap eval_h loc (pn, ilist) xo None [] args ([], None, params, ["this", result], pre, post, None, terminates, false) false false None leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in
       produce_cxx_object l real_unit result ty eval_h verify_call init false false h env @@ fun h env ->
       begin
         match ty with 
@@ -2523,7 +2534,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let Some targEnv = zip ctpenv targtps in
             List.map (fun (name,tp) -> (name, replace_type l targEnv tp)) xmap 
         in
-        check_correct h None None [] args (lm, [], None, xmap, ["this", obj], pre, post, Some(epost), terminates) is_upcall (Some cn) (fun h env _ -> cont h env obj)
+        check_correct h None None [] args (lm, [], None, xmap, ["this", obj], pre, post, Some(epost), terminates, false) is_upcall (Some cn) (fun h env _ -> cont h env obj)
       | _ -> static_error l "Multiple matching overloads" None
       end
     | WMethodCall (l, tn, m, pts, args, fb, tpenv) when m <> "getClass" ->
@@ -2552,7 +2563,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if not pure then static_error l "A lemma method call is not allowed in a non-pure context." None;
         if leminfo_is_lemma leminfo then static_error l "Lemma method calls in lemmas are currently not supported (for termination reasons)." None
       end;
-      check_correct h xo None mtargs args (lm, mtparams, rt, xmap, [], pre, post, Some epost, terminates) is_upcall target_class cont
+      check_correct h xo None mtargs args (lm, mtparams, rt, xmap, [], pre, post, Some epost, terminates, true) is_upcall target_class cont
     | WSuperMethodCall(l, supercn, m, args, (lm, gh, rt, xmap, pre, post, epost, terminates, rank, v)) ->
       if gh = Real && pure then static_error l "Method call is not allowed in a pure context" None;
       if gh = Ghost then begin
@@ -2564,9 +2575,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           Some rank, RealMethodInfo (Some rank0) -> rank < rank0
         | _ -> true
       in
-      check_correct h None None [] args (lm, [], rt, xmap, [], pre, post, Some epost, terminates) is_upcall (Some supercn) cont
-    | WFunCall (l, g, targs, es) ->
-      let FuncInfo (funenv, fterm, lg, k, tparams, tr, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, virt) = List.assoc g funcmap in
+      check_correct h None None [] args (lm, [], rt, xmap, [], pre, post, Some epost, terminates, false) is_upcall (Some supercn) cont
+    | WFunCall (l, g, targs, es, binding) ->
+      let FuncInfo (funenv, fterm, lg, k, tparams, tr, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, is_virt) = List.assoc g funcmap in
       if heapReadonly && not assume_left_to_right_evaluation && not (startswith g "vf__") && asserts_exclusive_ownership pre then has_heap_effects ();
       if body = None then register_prototype_used lg g (Some fterm);
       if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." None;
@@ -2576,7 +2587,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           RealFuncInfo (_, _, _) | LemInfo (_, _, _, true) | RealMethodInfo _ -> ()
         | _ -> static_error l "A lemma function marked nonghost_callers_only cannot be called from a non-nonghost_callers_only lemma function." None
       end;
-      check_correct h xo (Some g) targs es (lg, tparams, tr, ps, funenv, pre, post, None, terminates) true None cont
+      check_correct h xo (Some g) targs es (lg, tparams, tr, ps, funenv, pre, post, None, terminates, (binding = Instance && is_virt)) true None cont
     | NewArray(l, tp, e) ->
       let elem_tp = check_pure_type (pn,ilist) tparams Real tp in
       let w = check_expr_t (pn,ilist) tparams tenv e intType in
@@ -2710,10 +2721,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         (* 'E = ++E + 1' has undefined behavior. This is true for any lvalue E. *)
         (* We interpret the C standard as saying that 'E = f(++E)' does not have undefined behavior because argument expression evaluation is sequenced before function call. *)
         match (lhs, rhs) with
-          (WVar (_, _, _), WFunCall (_, _, _, _)) -> false (* Is this OK when the variable is a global? *)
+          (WVar (_, _, _), WFunCall (_, _, _, _, _)) -> false (* Is this OK when the variable is a global? *)
         | (WVar (_, _, LocalVar), _) -> false
-        | (WRead (l, WVar (_, _, LocalVar), fparent, fname, tp, false, fvalue, fghost), WFunCall (_, _, _, _)) -> false
-        | (WDeref (l, WVar (_, _, LocalVar), _), WFunCall (_, _, _, _)) -> false
+        | (WRead (l, WVar (_, _, LocalVar), fparent, fname, tp, false, fvalue, fghost), WFunCall (_, _, _, _, _)) -> false
+        | (WDeref (l, WVar (_, _, LocalVar), _), WFunCall (_, _, _, _, _)) -> false
         | _ -> true
       in
       verify_expr (true, rhsHeapReadOnly) h env varName rhs $. fun h env vrhs ->

@@ -171,15 +171,14 @@ bool DeclSerializer::VisitCXXRecordDecl(const clang::CXXRecordDecl *decl) {
 
 void DeclSerializer::serializeMethodDecl(stubs::Decl::Method::Builder &builder,
                                          const clang::CXXMethodDecl *decl,
-                                         llvm::StringRef mangledName,
-                                         bool isDtor) {
+                                         llvm::StringRef mangledName) {
   auto isStatic = decl->isStatic();
   builder.setStatic(isStatic);
   builder.setImplicit(decl->isImplicit());
 
   bool isVirtual(decl->isVirtual());
   builder.setVirtual(isVirtual);
-  if (isVirtual && !isDtor) {
+  if (isVirtual) {
     auto overriddenMeths =
         builder.initOverrides(decl->size_overridden_methods());
     size_t i(0);
@@ -199,7 +198,7 @@ void DeclSerializer::serializeMethodDecl(stubs::Decl::Method::Builder &builder,
 
 bool DeclSerializer::VisitCXXMethodDecl(const clang::CXXMethodDecl *decl) {
   auto meth = m_builder.initMethod();
-  serializeMethodDecl(meth, decl, m_serializer.getMangledName(decl), false);
+  serializeMethodDecl(meth, decl, m_serializer.getMangledName(decl));
   return true;
 }
 
@@ -232,7 +231,7 @@ bool DeclSerializer::VisitCXXConstructorDecl(
   }
 
   auto meth = ctor.initMethod();
-  serializeMethodDecl(meth, decl, m_serializer.getMangledName(decl), false);
+  serializeMethodDecl(meth, decl, m_serializer.getMangledName(decl));
 
   auto parent = ctor.initParent();
   serializeRecordRef(parent, decl->getParent());
@@ -245,7 +244,7 @@ bool DeclSerializer::VisitCXXDestructorDecl(
   auto dtor = m_builder.initDtor();
 
   auto meth = dtor.initMethod();
-  serializeMethodDecl(meth, decl, m_serializer.getMangledName(decl), true);
+  serializeMethodDecl(meth, decl, m_serializer.getMangledName(decl));
 
   auto parent = dtor.initParent();
   serializeRecordRef(parent, decl->getParent());

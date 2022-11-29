@@ -606,7 +606,7 @@ cd ..
         verifast -c -allow_should_fail virtual_call_in_dtor_ub.cpp
         verifast -c -allow_should_fail indirect_virtual_call_in_ctor_ub.cpp
         verifast -c -allow_should_fail indirect_virtual_call_in_dtor_ub.cpp
-        verifast -c -allow_should_fail -allow_dead_code -disable_overflow_check check_vtype_ptr_in_callee.cpp
+        verifast -c -allow_should_fail -allow_dead_code -disable_overflow_check check_vtype_ptr_before_call.cpp
     cd ..
     verifast -c main_implicit_return.cpp
     verifast -c new_class.cpp

@@ -3397,7 +3397,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let g = "vf__" ^ prefix ^ "_" ^ fun_name in
     if funcmap == [] then static_error l "Cannot perform this floating-point operation in an annotation" None;
     if not (List.mem_assoc g funcmap) then static_error l (Printf.sprintf "Must include header <math.h> when using floating-point operations. (Pseudo-function %s not found.)" g) None;
-    WFunCall (l, g, [], args)
+    WFunCall (l, g, [], args, Static)
   
   let operation_expr funcmap l t operator arg1 arg2 =
     match t with
@@ -4117,7 +4117,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match (g, es) with
           ("malloc", [SizeofExpr (ls, TypeExpr te)]) ->
           let t = check_pure_type (pn,ilist) tparams Ghost te in
-          (WFunCall (l, g, [], es), PtrType t, None)
+          (WFunCall (l, g, [], es, Static), PtrType t, None)
         | _ ->
         match resolve2 (pn,ilist) l g funcmap with
           Some (g, FuncInfo (funenv, fterm, lg, k, callee_tparams, tr, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, virt)) ->
@@ -4129,7 +4129,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           reportUseSite declKind lg l;
           let (targs, tpenv) = process_targes callee_tparams in
-          let wcall = WFunCall (l, g, targs, es) in
+          let wcall = WFunCall (l, g, targs, es, fb) in
           begin match tr with 
           | None -> wcall, Void, None 
           | Some (RefType t) -> WDeref (l, wcall, t), instantiate_type tpenv t, None
