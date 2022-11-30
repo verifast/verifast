@@ -78,7 +78,7 @@ public:
     callVirtualMeth();
   }
   
-  void callStaticlyBoundCall() const
+  void callStaticallyBoundCall() const
   /*@ requires
       B_bases_constructed(this) &*&
       A_m_i(this, ?i);
@@ -107,7 +107,7 @@ int main()
   b.callVirtualMeth();
   b.virtualCallVirtualMeth();
   b.callVirtualFromBase();
-  b.callStaticlyBoundCall();
+  b.callStaticallyBoundCall();
   A &aref = b;
   aref.getI();
   aref.getVirtualI();
