@@ -61,21 +61,25 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let {
     option_verbose=initial_verbosity;
-    option_disable_overflow_check=disable_overflow_check;
-    option_fwrapv=fwrapv;
-    option_assume_left_to_right_evaluation=assume_left_to_right_evaluation;
-    option_assume_no_provenance=assume_no_provenance;
-    option_assume_no_subobject_provenance=assume_no_subobject_provenance;
+    option_vfbindings=vfbindings;
     option_allow_should_fail=allow_should_fail;
     option_emit_manifest=emit_manifest;
     option_check_manifest=check_manifest;
-    option_include_paths=include_paths;
     option_use_java_frontend=use_java_frontend;
     option_enforce_annotations=enforce_annotations;
-    option_allow_undeclared_struct_types;
-    option_data_model=data_model;
     option_report_skipped_stmts=report_skipped_stmts;
   } = options
+
+  let disable_overflow_check = Vfbindings.get Vfparam_disable_overflow_check vfbindings
+  let fwrapv = Vfbindings.get Vfparam_fwrapv vfbindings
+  let assume_left_to_right_evaluation = Vfbindings.get Vfparam_assume_left_to_right_evaluation vfbindings
+  let assume_no_provenance = Vfbindings.get Vfparam_assume_no_provenance vfbindings
+  let assume_no_subobject_provenance = Vfbindings.get Vfparam_assume_no_subobject_provenance vfbindings
+  let include_paths = Vfbindings.get Vfparam_include_paths vfbindings
+  let option_allow_undeclared_struct_types = Vfbindings.get Vfparam_allow_undeclared_struct_types vfbindings
+  let data_model = Vfbindings.get Vfparam_data_model vfbindings
+  let define_macros = Vfbindings.get Vfparam_define_macros vfbindings
+  let include_paths = Vfbindings.get Vfparam_include_paths vfbindings
 
   let assume_left_to_right_evaluation = assume_left_to_right_evaluation || language <> CLang
 
@@ -167,7 +171,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let contextStack = ref []
   
   let pprint_context_term t = 
-    if options.option_simplify_terms then
+    if not (Vfbindings.get Vfparam_no_simplify_terms vfbindings) then
       match ctxt#simplify t with None -> ctxt#pprint t | Some(t) -> ctxt#pprint t
     else
       ctxt#pprint t
@@ -578,7 +582,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let current_module_term = get_unique_var_symb current_module_name intType
   
   let programDir = Filename.dirname path
-  let rtpath = match options.option_runtime with None -> concat (rtdir()) "rt.jarspec" | Some path -> path
+  let rtpath = match Vfbindings.get Vfparam_runtime vfbindings with None -> concat (rtdir()) "rt.jarspec" | Some path -> path
   (** Records the source lines containing //~, indicating that VeriFast is supposed to detect an error on that line. *)
   let shouldFailLocs: loc0 list ref = ref []
   

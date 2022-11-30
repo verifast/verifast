@@ -122,15 +122,14 @@ let get_first_line_tokens text =
 type file_options = {
   annot_char: char;
   tab_size: int;
-  disable_overflow_check: bool option;
   prover: string option;
-  target: string option
+  bindings: (string * string option) list
 }
 
 exception FileOptionsError of string
 
 let default_file_options =
-  {annot_char='@'; tab_size=8; disable_overflow_check=None; prover=None; target=None}
+  {annot_char='@'; tab_size=8; prover=None; bindings=[]}
 
 let get_file_options text =
   let tokens = get_first_line_tokens text in
@@ -146,14 +145,14 @@ let get_file_options text =
       iter inVFBlock {opts with tab_size=tabSize} toks
     | "verifast_options"::"{"::toks ->
       iter true opts toks
-    | "disable_overflow_check"::toks when inVFBlock ->
-      iter inVFBlock {opts with disable_overflow_check=Some true} toks
-    | "prover"::":"::prover::toks when inVFBlock ->
-      iter inVFBlock {opts with prover=Some prover} toks
-    | "target"::":"::target::toks when inVFBlock ->
-      iter inVFBlock {opts with target=Some target} toks
     | "}"::toks when inVFBlock ->
       iter false opts toks
+    | "prover"::":"::prover::toks when inVFBlock ->
+      iter inVFBlock {opts with prover=Some prover} toks
+    | param::":"::arg::toks when inVFBlock && param <> ":" && arg <> ":" && arg <> "}" ->
+      iter inVFBlock {opts with bindings=(param, Some arg)::opts.bindings} toks
+    | param::toks when inVFBlock && param <> ":" ->
+      iter inVFBlock {opts with bindings=(param, None)::opts.bindings} toks
     | tok::toks ->
       if inVFBlock then
         raise (FileOptionsError ("No such VeriFast option: '" ^ tok ^ "'; example: verifast_annotation_char:@ tab_size:4 verifast_options{disable_overflow_check prover:z3v4.5 target:32bit}"))

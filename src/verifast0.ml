@@ -148,30 +148,140 @@ let cxx_dtor_name struct_name = "~" ^ struct_name
 
 let bases_constructed_pred_name sn = sn ^ "_bases_constructed"
 
+type _ vfparam =
+  Vfparam_disable_overflow_check: bool vfparam
+| Vfparam_fwrapv: bool vfparam (* GCC's -fwrapv flag: signed integer arithmetic wraps around *)
+| Vfparam_assume_left_to_right_evaluation: bool vfparam
+| Vfparam_assume_no_provenance: bool vfparam
+| Vfparam_assume_no_subobject_provenance: bool vfparam
+| Vfparam_no_simplify_terms: bool vfparam
+| Vfparam_runtime: string option vfparam
+| Vfparam_include_paths: string list vfparam
+| Vfparam_define_macros: string list vfparam
+| Vfparam_allow_undeclared_struct_types: bool vfparam
+| Vfparam_data_model: data_model option vfparam
+
+let cast_vfarg: type t1 t2. t1 vfparam -> t1 -> t2 vfparam -> t2 option = fun p0 a0 p ->
+  (* if Obj.magic p0 = Obj.magic p then Some (Obj.magic a0) else None *)
+  match p0, p with
+    Vfparam_disable_overflow_check, Vfparam_disable_overflow_check -> Some a0
+  | Vfparam_fwrapv, Vfparam_fwrapv -> Some a0
+  | Vfparam_assume_left_to_right_evaluation, Vfparam_assume_left_to_right_evaluation -> Some a0
+  | Vfparam_assume_no_provenance, Vfparam_assume_no_provenance -> Some a0
+  | Vfparam_assume_no_subobject_provenance, Vfparam_assume_no_subobject_provenance -> Some a0
+  | Vfparam_no_simplify_terms, Vfparam_no_simplify_terms -> Some a0
+  | Vfparam_runtime, Vfparam_runtime -> Some a0
+  | Vfparam_include_paths, Vfparam_include_paths -> Some a0
+  | Vfparam_define_macros, Vfparam_define_macros -> Some a0
+  | Vfparam_allow_undeclared_struct_types, Vfparam_allow_undeclared_struct_types -> Some a0
+  | Vfparam_data_model, Vfparam_data_model -> Some a0
+  | _ -> None
+
+type _ vfparam_info =
+  BoolParam: bool vfparam_info
+| ParsedParam: 'a * (string -> 'a) * ('a -> 'a -> 'a) -> 'a vfparam_info
+
+let string_opt_param = ParsedParam (None, (fun x -> Some x), (fun old new_ -> new_))
+let string_list_param = ParsedParam ([], (fun x -> [x]), (fun old new_ -> new_ @ old))
+
+let vfparam_info_of: type a. a vfparam -> a vfparam_info = function
+  Vfparam_disable_overflow_check -> BoolParam
+| Vfparam_fwrapv -> BoolParam
+| Vfparam_assume_left_to_right_evaluation -> BoolParam
+| Vfparam_assume_no_provenance -> BoolParam
+| Vfparam_assume_no_subobject_provenance -> BoolParam
+| Vfparam_no_simplify_terms -> BoolParam
+| Vfparam_runtime -> string_opt_param
+| Vfparam_include_paths -> string_list_param
+| Vfparam_define_macros -> string_list_param
+| Vfparam_allow_undeclared_struct_types -> BoolParam
+| Vfparam_data_model -> ParsedParam (None, (fun x -> Some (data_model_of_string x)), (fun old new_ -> new_))
+
+let default_vfarg: type ta. ta vfparam -> ta = fun p ->
+  match vfparam_info_of p with
+    BoolParam -> false
+  | ParsedParam (a0, _, _) -> a0
+
+let merge_vfarg: type ta. ta vfparam -> ta -> ta -> ta = fun p a0 a ->
+  match vfparam_info_of p with
+    BoolParam -> a
+  | ParsedParam (_, _, merge) -> merge a0 a
+
+type boxed_vfparam = Vfparam: 'a vfparam -> boxed_vfparam
+
+let vfparams = [
+  "disable_overflow_check", (Vfparam Vfparam_disable_overflow_check, " ");
+  "fwrapv", (Vfparam Vfparam_fwrapv, "allow truncating signed integer arithmetic (corresponds to GCC's -fwrapv flag)");
+  "assume_left_to_right_evaluation", (Vfparam Vfparam_assume_left_to_right_evaluation, "Disable checks related to C's unspecified evaluation order and sequencing rules");
+  "assume_no_provenance", (Vfparam Vfparam_assume_no_provenance, "Disregard pointer provenance. This is unsound, even when compiling with -O0!");
+  "assume_no_subobject_provenance", (Vfparam Vfparam_assume_no_subobject_provenance, "Assume the compiler's alias analysis ignores subobject provenance. CompCert ignores subobject provenance, and so, it seems, do GCC and Clang (last time I checked)");
+  "no_simplify_terms", (Vfparam Vfparam_no_simplify_terms, " ");
+  "runtime", (Vfparam Vfparam_runtime, " ");
+  "I", (Vfparam Vfparam_include_paths, "Add a directory to the list of directories to be searched for header files.");
+  "D", (Vfparam Vfparam_define_macros, "Predefine name as a macro, with definition 1.");
+  "allow_undeclared_struct_types", (Vfparam Vfparam_allow_undeclared_struct_types, " ");
+  "target", (Vfparam Vfparam_data_model, "Target platform of the program being verified. Determines the size of pointer and integer types. Supported targets: " ^ String.concat ", " (List.map fst data_models))
+]
+
+type vfbinding = Vfbinding: 'a vfparam * 'a -> vfbinding
+
+module Vfbindings : sig
+  type t
+  val default: t
+  val set: 'ta vfparam -> 'ta -> t -> t
+  val reset: 'ta vfparam -> t -> t
+  val set_or_reset_bool: bool vfparam -> bool -> t -> t
+  val get: 'ta vfparam -> t -> 'ta
+  val as_list: t -> vfbinding list
+end = struct
+
+  type t = vfbinding list
+
+  let default = []
+
+  let rec set: type ta. ta vfparam -> ta -> t -> t = fun p a bs ->
+    match bs with
+      [] -> [Vfbinding (p, a)]
+    | Vfbinding (p0, a0) as b::bs ->
+      match cast_vfarg p0 a0 p with
+        Some a0 -> Vfbinding (p, merge_vfarg p a0 a)::bs
+      | None -> b::set p a bs
+
+  let rec reset: type ta. ta vfparam -> t -> t = fun p bs ->
+    match bs with
+      [] -> []
+    | Vfbinding (p0, a0) as b::bs ->
+      if cast_vfarg p0 a0 p <> None then bs else b::reset p bs
+
+  let set_or_reset_bool: bool vfparam -> bool -> t -> t = fun p b bs ->
+    if b then set p true bs else reset p bs
+
+  let rec get: type a. a vfparam -> vfbinding list -> a = fun p bs ->
+    match bs with
+      [] -> default_vfarg p
+    | Vfbinding (p0, a0)::bs ->
+      match cast_vfarg p0 a0 p with
+        Some a0 -> a0
+      | None -> get p bs
+
+  let as_list bs = bs
+
+end
+
 type options = {
   option_verbose: int;
-  option_disable_overflow_check: bool;
-  option_fwrapv: bool; (* GCC's -fwrapv flag: signed integer arithmetic wraps around *)
-  option_assume_left_to_right_evaluation: bool;
-  option_assume_no_provenance: bool;
-  option_assume_no_subobject_provenance: bool;
+  option_vfbindings: Vfbindings.t;
   option_allow_should_fail: bool;
   option_emit_manifest: bool;
   option_check_manifest: bool;
   option_vroots: (string * string) list;
   option_allow_assume: bool;
-  option_simplify_terms: bool;
-  option_runtime: string option;
   option_provides: string list;
   option_keep_provide_files: bool;
-  option_include_paths: string list;
-  option_define_macros: string list;
   option_safe_mode: bool; (* for invocation through web interface *)
   option_header_whitelist: string list;
   option_use_java_frontend : bool;
   option_enforce_annotations : bool;
-  option_allow_undeclared_struct_types: bool;
-  option_data_model: data_model option;
   option_report_skipped_stmts: bool; (* Report statements in functions or methods that have no contract. *)
 } (* ?options *)
 

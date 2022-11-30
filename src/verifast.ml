@@ -14,26 +14,28 @@ open Verify_expr
 
 exception FileNotFound of string
 
-let merge_file_options prover0 options {disable_overflow_check; prover; target} =
+let merge_file_options prover0 options {prover; bindings} =
   (match prover with None -> prover0 | Some prover -> prover),
   {
     options with
-      option_disable_overflow_check=
-        begin match disable_overflow_check with
-          None -> options.option_disable_overflow_check
-        | Some b -> b
-        end;
-      option_data_model=
-        match target with
-          None -> options.option_data_model
-        | Some target ->
-          let dataModel =
-            try
-              data_model_of_string target
-            with Failure msg ->
-              failwith ("Error while parsing file option 'target:" ^ target ^ "': " ^ msg)
-          in
-          Some dataModel
+      option_vfbindings=
+      List.fold_right begin fun (paramName, arg) bs ->
+        match try_assoc paramName vfparams with
+          None -> failwith ("No such option: '" ^ paramName ^ "'")
+        | Some (Vfparam vfparam, _) ->
+        match vfparam_info_of vfparam, arg with
+          BoolParam, None ->
+          Vfbindings.set vfparam true bs
+        | BoolParam, Some _ ->
+          failwith ("Option '" ^ paramName ^ "' does not take an argument")
+        | ParsedParam (_, _, _), None ->
+          failwith ("Option '" ^ paramName ^ "': argument expected")
+        | ParsedParam (_, parseFunc, _), Some arg ->
+          try
+            Vfbindings.set vfparam (parseFunc arg) bs
+          with Failure msg ->
+            failwith ("Error while parsing option '" ^ paramName ^ "': " ^ msg)
+      end bindings options.option_vfbindings
   }
 
 let merge_options_from_source_file prover options path =
@@ -3484,9 +3486,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           (headers, ds)
       | CLang, None ->
         if Filename.check_suffix path ".h" then
-          parse_header_file reportMacroCall path reportRange reportShouldFail options.option_verbose [] options.option_define_macros options.option_enforce_annotations data_model
+          parse_header_file reportMacroCall path reportRange reportShouldFail options.option_verbose [] define_macros options.option_enforce_annotations data_model
         else
-          parse_c_file reportMacroCall path reportRange reportShouldFail options.option_verbose options.option_include_paths options.option_define_macros options.option_enforce_annotations data_model
+          parse_c_file reportMacroCall path reportRange reportShouldFail options.option_verbose include_paths define_macros options.option_enforce_annotations data_model
       | CLang, Some Cxx ->
         let module Translator = Cxx_ast_translator.Make(
           struct
@@ -3498,8 +3500,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let report_macro_call = reportMacroCall
             let path = path
             let verbose = options.option_verbose
-            let include_paths = if Filename.check_suffix path ".h" then [] else options.option_include_paths
-            let define_macros = options.option_define_macros
+            let include_paths = if Filename.check_suffix path ".h" then [] else include_paths
+            let define_macros = define_macros
           end
         ) 
         in

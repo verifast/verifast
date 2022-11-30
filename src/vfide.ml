@@ -137,8 +137,9 @@ module TreeMetrics = struct
   let cw = dotWidth + 2 * padding
 end
 
-let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend enforceAnnotations allowUndeclaredStructTypes dataModel overflowCheck fwrapv assumeLeftToRightEvaluation assumeNoProvenance assumeNoSubobjectProvenance verifyAndQuit =
-  let dataModel = ref dataModel in
+let show_ide initialPath prover codeFont traceFont vfbindings layout javaFrontend enforceAnnotations verifyAndQuit =
+  let vfbindings = ref vfbindings in
+  let set_or_reset_bool_vfbinding p b = vfbindings := Vfbindings.set_or_reset_bool p b !vfbindings in
   let leftBranchPixbuf = Branchleft_png.pixbuf () in
   let rightBranchPixbuf = Branchright_png.pixbuf () in
   let ctxts_lifo = ref None in
@@ -163,11 +164,6 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   let traceFont = ref traceFont in
   let scaledTraceFont = ref !traceFont in
   let actionGroup = GAction.action_group ~name:"Actions" () in
-  let disableOverflowCheck = ref (not overflowCheck) in
-  let fwrapv = ref fwrapv in
-  let assumeLeftToRightEvaluation = ref assumeLeftToRightEvaluation in
-  let assumeNoProvenance = ref assumeNoProvenance in
-  let assumeNoSubobjectProvenance = ref assumeNoSubobjectProvenance in
   let useJavaFrontend = ref false in
   let toggle_java_frontend active =
     (useJavaFrontend := active;
@@ -176,7 +172,6 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     else
       Java_frontend_bridge.unload())
   in
-  let simplifyTerms = ref false in
   let current_tab = ref None in
   let showLineNumbers enable =
     match !current_tab with
@@ -271,13 +266,13 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       (fun group -> group#add_action showRightMarginAction);
       a "ShowExecutionTree" ~label:"Show _execution tree" ~accel:"<Ctrl>T";
       a "Verify" ~label:"_Verify";
-      GAction.add_toggle_action "CheckOverflow" ~label:"Check arithmetic overflow" ~active:true ~callback:(fun toggleAction -> disableOverflowCheck := not toggleAction#get_active);
-      GAction.add_toggle_action "AllowTruncatingSignedArithmetic" ~label:"Allow truncating signed integer arithmetic (GCC's -fwrapv)" ~active:false ~callback:(fun toggleAction -> fwrapv := toggleAction#get_active);
-      GAction.add_toggle_action "AssumeLeftToRightEvaluation" ~label:"Assume left-to-right evaluation" ~active:false ~callback:(fun toggleAction -> assumeLeftToRightEvaluation := toggleAction#get_active);
-      GAction.add_toggle_action "AssumeNoProvenance" ~label:"Assume no pointer provenance" ~active:false ~callback:(fun toggleAction -> assumeNoProvenance := toggleAction#get_active);
-      GAction.add_toggle_action "AssumeNoSubobjectProvenance" ~label:"Assume no subobject provenance" ~active:false ~callback:(fun toggleAction -> assumeNoSubobjectProvenance := toggleAction#get_active);
+      GAction.add_toggle_action "CheckOverflow" ~label:"Check arithmetic overflow" ~active:(not (Vfbindings.get Vfparam_disable_overflow_check !vfbindings)) ~callback:(fun toggleAction -> set_or_reset_bool_vfbinding Vfparam_disable_overflow_check (not toggleAction#get_active));
+      GAction.add_toggle_action "AllowTruncatingSignedArithmetic" ~label:"Allow truncating signed integer arithmetic (GCC's -fwrapv)" ~active:(Vfbindings.get Vfparam_fwrapv !vfbindings) ~callback:(fun toggleAction -> set_or_reset_bool_vfbinding Vfparam_fwrapv toggleAction#get_active);
+      GAction.add_toggle_action "AssumeLeftToRightEvaluation" ~label:"Assume left-to-right evaluation" ~active:(Vfbindings.get Vfparam_assume_left_to_right_evaluation !vfbindings) ~callback:(fun toggleAction -> set_or_reset_bool_vfbinding Vfparam_assume_left_to_right_evaluation toggleAction#get_active);
+      GAction.add_toggle_action "AssumeNoProvenance" ~label:"Assume no pointer provenance" ~active:(Vfbindings.get Vfparam_assume_no_provenance !vfbindings) ~callback:(fun toggleAction -> set_or_reset_bool_vfbinding Vfparam_assume_no_provenance toggleAction#get_active);
+      GAction.add_toggle_action "AssumeNoSubobjectProvenance" ~label:"Assume no subobject provenance" ~active:(Vfbindings.get Vfparam_assume_no_subobject_provenance !vfbindings) ~callback:(fun toggleAction -> set_or_reset_bool_vfbinding Vfparam_assume_no_subobject_provenance toggleAction#get_active);
       GAction.add_toggle_action "UseJavaFrontend" ~label:"Use the Java frontend" ~active:(toggle_java_frontend javaFrontend; javaFrontend) ~callback:(fun toggleAction -> toggle_java_frontend toggleAction#get_active);
-      GAction.add_toggle_action "SimplifyTerms" ~label:"Simplify Terms" ~active:true ~callback:(fun toggleAction -> simplifyTerms := toggleAction#get_active);
+      GAction.add_toggle_action "SimplifyTerms" ~label:"Simplify Terms" ~active:(not (Vfbindings.get Vfparam_no_simplify_terms !vfbindings)) ~callback:(fun toggleAction -> set_or_reset_bool_vfbinding Vfparam_no_simplify_terms (not toggleAction#get_active));
       a "Include paths" ~label:"_Include paths...";
       a "Find file (top window)" ~label:"Find file (_top window)..." ~stock:`FIND ~accel:"<Shift>F7";
       a "Find file (bottom window)" ~label:"Find _file (bottom window)..." ~stock:`FIND ~accel:"F7";
@@ -503,18 +498,18 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   let targetMenuItems =
     data_models_ |> List.map begin fun (name, model) ->
       let {int_width; long_width; ptr_width} = model in
-      let item = GMenu.radio_menu_item ~active:(!dataModel = Some model) ?group:!targetMenuGroup ~label:(Printf.sprintf "sizeof(int, long, void *) = %d, %d, %d - %s" (1 lsl int_width) (1 lsl long_width) (1 lsl ptr_width) name) ~packing:targetMenu#add () in
+      let item = GMenu.radio_menu_item ~active:(Vfbindings.get Vfparam_data_model !vfbindings = Some model) ?group:!targetMenuGroup ~label:(Printf.sprintf "sizeof(int, long, void *) = %d, %d, %d - %s" (1 lsl int_width) (1 lsl long_width) (1 lsl ptr_width) name) ~packing:targetMenu#add () in
       targetMenuGroup := Some item#group;
       (Some model, item)
     end
   in
   let targetMenuItems =
     ignore (GMenu.separator_item ~packing:targetMenu#add ());
-    let item = GMenu.radio_menu_item ~active:(!dataModel = None) ?group:!targetMenuGroup ~label:"All of the above" ~packing:targetMenu#add () in
+    let item = GMenu.radio_menu_item ~active:(Vfbindings.get Vfparam_data_model !vfbindings = None) ?group:!targetMenuGroup ~label:"All of the above" ~packing:targetMenu#add () in
     targetMenuItems @ [(None, item)]
   in
   targetMenuItem#set_submenu targetMenu;
-  targetMenuItems |> List.iter (fun (model, item) -> ignore (item#connect#activate ~callback:(fun () -> dataModel := model)));
+  targetMenuItems |> List.iter (fun (model, item) -> ignore (item#connect#activate ~callback:(fun () -> vfbindings := Vfbindings.set Vfparam_data_model model !vfbindings)));
   let updateWhenTabListChanges () =
     updateBufferMenu ();
     updateWindowTitle ()
@@ -1470,26 +1465,16 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
             begin try
               let options = {
                 option_verbose = 0;
-                option_disable_overflow_check = !disableOverflowCheck;
-                option_fwrapv = !fwrapv;
-                option_assume_left_to_right_evaluation = !assumeLeftToRightEvaluation;
-                option_assume_no_provenance = !assumeNoProvenance;
-                option_assume_no_subobject_provenance = !assumeNoSubobjectProvenance;
                 option_use_java_frontend = !useJavaFrontend;
                 option_enforce_annotations = enforceAnnotations;
-                option_allow_undeclared_struct_types = allowUndeclaredStructTypes;
-                option_data_model = !dataModel;
                 option_allow_should_fail = true;
                 option_emit_manifest = false;
                 option_check_manifest = false;
                 option_vroots = [crt_vroot default_bindir];
                 option_allow_assume = true;
-                option_simplify_terms = !simplifyTerms;
-                option_runtime = runtime;
                 option_provides = [];
                 option_keep_provide_files = true;
-                option_include_paths = !include_paths;
-                option_define_macros = !define_macros;
+                option_vfbindings = !vfbindings;
                 option_safe_mode = false;
                 option_header_whitelist = [];
                 option_report_skipped_stmts = false;
@@ -1610,7 +1595,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
             (* Save all tabs to disk firsts. Only continue on success. *)
             if not (List.exists sync_with_disk !buffers) then begin
               try begin
-                let new_contents = shape_analyse_frontend path !include_paths !define_macros (getCursor ()) in
+                let new_contents = shape_analyse_frontend path (Vfbindings.get Vfparam_include_paths !vfbindings) (Vfbindings.get Vfparam_define_macros !vfbindings) (getCursor ()) in
                 let buffer = tab#buffer in
                 buffer#set_text new_contents;
                 (* syntax highlighting gets updated automatically *)
@@ -1731,15 +1716,15 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   in
   let add_include_path_gui gui_input () =
     let text = gui_input#text in
-    if (String.length text > 0) then (
-    include_paths := text :: !include_paths )
+    if (String.length text > 0) then
+      vfbindings := Vfbindings.set Vfparam_include_paths [text] !vfbindings
   in
   let showIncludesDialog () =
     let dialog = GWindow.dialog ~title:"Include Paths" ~parent:root () in
     let vbox = dialog#vbox in
     let itemsTable = GPack.table ~rows:2 ~columns:2 ~border_width:4 ~row_spacings:4 ~col_spacings:4 ~packing:(vbox#pack ~from:`START ~expand:true) () in
     ignore $. GMisc.label ~text:"Current paths:" ~packing:(itemsTable#attach ~left:0 ~top:0 ~expand:`X) ();
-    ignore $. GMisc.label ~text:(String.concat ":" !include_paths) ~packing:(itemsTable#attach ~left:1 ~top:0 ~expand:`X) ();
+    ignore $. GMisc.label ~text:(String.concat ":" (Vfbindings.get Vfparam_include_paths !vfbindings)) ~packing:(itemsTable#attach ~left:1 ~top:0 ~expand:`X) ();
     ignore $. GMisc.label ~text:"Add path:" ~packing:(itemsTable#attach ~left:0 ~top:1 ~expand:`X) ();
     let new_include = GEdit.entry ~text:"" ~max_length:500 ~packing:(itemsTable#attach ~left:1 ~top:1 ~expand:`X) () in
     ignore $. new_include#connect#activate ~callback:(add_include_path_gui new_include);
@@ -1894,64 +1879,46 @@ let () =
   let prover = ref default_prover in
   let codeFont = ref code_font in
   let traceFont = ref trace_font in
-  let runtime = ref None in
   let layout = ref FourThree in
   let javaFrontend = ref false in
   let enforceAnnotations = ref false in
-  let allowUndeclaredStructTypes = ref false in
-  let overflow_check = ref true in
-  let fwrapv = ref false in
-  let assume_left_to_right_evaluation = ref false in
-  let assume_no_provenance = ref false in
-  let assume_no_subobject_provenance = ref false in
-  let data_model = ref None in
+  let vfbindings = ref Vfbindings.default in
   let verify_and_quit = ref false in
   let rec iter args =
     match args with
       "-prover"::arg::args -> prover := arg; iter args
     | "-codeFont"::arg::args -> codeFont := arg; iter args
     | "-traceFont"::arg::args -> traceFont := arg; iter args
-    | "-runtime"::arg::args -> runtime := Some arg; iter args
     | "-bindir"::arg::args -> Util.set_bindir arg; iter args
-    | "-I"::arg::args -> ( match (Some arg) with
-       None -> ( ) | Some arg -> include_paths := arg :: !include_paths);
-       iter args
-    | "-D"::arg::args -> ( match (Some arg) with
-       None -> ( ) | Some arg -> define_macros := arg :: !define_macros);
-       iter args
     | "-layout"::"fourthree"::args -> layout := FourThree; iter args
     | "-layout"::"widescreen"::args -> layout := Widescreen; iter args
     | "-javac"::args -> javaFrontend := true; iter args
     | "-enforce_annotations"::args -> enforceAnnotations := true; iter args
-    | "-allow_undeclared_struct_types"::args -> allowUndeclaredStructTypes := true; iter args
-    | "-target"::target::args -> data_model := Some (data_model_of_string target); iter args
-    | "-disable_overflow_check"::args -> overflow_check := false; iter args
-    | "-fwrapv"::args -> fwrapv := true; iter args
-    | "-assume_left_to_right_evaluation"::args -> assume_left_to_right_evaluation := true; iter args
-    | "-assume_no_provenance"::args -> assume_no_provenance := true; iter args
-    | "-assume_no_subobject_provenance"::args -> assume_no_subobject_provenance := true; iter args
     | "-verify_and_quit"::args -> verify_and_quit := true; iter args
+    | arg::args when startswith arg "-" && List.mem_assoc (String.sub arg 1 (String.length arg - 1)) vfparams ->
+      let (Vfparam vfparam, _) = List.assoc (String.sub arg 1 (String.length arg - 1)) vfparams in
+      begin match vfparam_info_of vfparam with
+        BoolParam -> vfbindings := Vfbindings.set vfparam true !vfbindings; iter args
+      | ParsedParam (_, parseFunc, _) ->
+        begin match args with
+          [] -> failwith ("Bad command line: option '" ^ arg ^ "' takes an argument")
+        | arg::args ->
+          vfbindings := Vfbindings.set vfparam (parseFunc arg) !vfbindings;
+          iter args
+        end
+      end
     | arg::args when not (startswith arg "-") -> path := Some arg; iter args
-    | [] -> show_ide !path !prover !codeFont !traceFont !runtime !layout !javaFrontend !enforceAnnotations !allowUndeclaredStructTypes !data_model !overflow_check !fwrapv !assume_left_to_right_evaluation !assume_no_provenance !assume_no_subobject_provenance !verify_and_quit
+    | [] -> show_ide !path !prover !codeFont !traceFont !vfbindings !layout !javaFrontend !enforceAnnotations !verify_and_quit
     | _ ->
       let options = [
         "-prover prover    (" ^ list_provers () ^ ")";
         "-codeFont fontSpec";
         "-traceFont fontSpec";
-        "-I IncludeDir";
-        "-D DefineName";
         "-layout fourthree|widescreen";
         "-javac";
-        "-runtime";
         "-bindir";
-        "-enforce_annotations";
-        "-disable_overflow_check";
-        "-fwrapv";
-        "-assume_left_to_right_evaluation";
-        "-assume_no_provenance";
-        "-assume_no_subobject_provenance";
-        "-target target    (supported targets: " ^ String.concat ", " (List.map fst data_models) ^ ")"
-      ] in
+        "-enforce_annotations"
+      ] @ List.map (fun (paramName, (_, description)) -> "-" ^ paramName ^ "   " ^ description) vfparams in
       GToolbox.message_box "VeriFast IDE" begin
         "Invalid command line.\n\n" ^ 
         "Usage: vfide [options] [filepath]\n\n" ^

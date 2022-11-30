@@ -371,16 +371,11 @@ let _ =
   let stats = ref false in
   let json = ref false in
   let verbose = ref 0 in
-  let disable_overflow_check = ref false in
-  let fwrapv = ref false in
-  let assume_left_to_right_evaluation = ref false in
-  let assume_no_provenance = ref false in
-  let assume_no_subobject_provenance = ref false in
+  let vfbindings = ref Vfbindings.default in
   let prover: string ref = ref default_prover in
   let compileOnly = ref false in
   let isLibrary = ref false in
   let allowAssume = ref false in
-  let simplifyTerms = ref false in
   let allowShouldFail = ref false in
   let emitManifest = ref false in
   let checkManifest = ref false in
@@ -393,21 +388,16 @@ let _ =
   let readOptionsFromSourceFile = ref false in
   let exports: string list ref = ref [] in
   let outputSExpressions : string option ref = ref None in
-  let runtime: string option ref = ref None in
   let breakpoint: (string * int) option ref = ref None in
   let targetPath: int list option ref = ref None in
   let provides = ref [] in
   let keepProvideFiles = ref false in
-  let include_paths: string list ref = ref [] in
-  let define_macros: string list ref = ref [] in
   let library_paths: string list ref = ref ["CRT"] in
   let safe_mode = ref false in
   let header_whitelist: string list ref = ref [] in
   let linkShouldFail = ref false in
   let useJavaFrontend = ref false in
   let enforceAnnotations = ref false in
-  let allowUndeclaredStructTypes = ref false in
-  let dataModel = ref None in
   let vroots = ref [Util.crt_vroot Util.default_bindir] in
   let add_vroot vroot =
     let (root, expansion) = Util.split_around_char vroot '=' in
@@ -421,25 +411,30 @@ let _ =
     vroots := List.append (List.filter (fun (x, y) -> x <> root) !vroots) [(root, expansion)]
   in
 
+  let cla = vfparams |> List.map begin fun (paramName, (Vfparam vfparam, description)) ->
+      let action =
+        match vfparam_info_of vfparam with
+          BoolParam -> Unit (fun () -> vfbindings := Vfbindings.set vfparam true !vfbindings)
+        | ParsedParam (_, parseFunc, _) -> String (fun arg -> vfbindings := Vfbindings.set vfparam (parseFunc arg) !vfbindings)
+      in
+      "-" ^ paramName, action, description
+    end
+  in
+
   (* Explanations that are an empty string ("") become hidden in the
    * "--help" output. When adding options, you can consider writing an
    * explanation or just " " to prevent this, or document why the
    * new option should be hidden.
    *)
-  let cla = [ "-stats", Set stats, " "
+  let cla = cla @
+            [ "-stats", Set stats, " "
             ; "-read_options_from_source_file", Set readOptionsFromSourceFile, "Retrieve disable_overflow_check, prover, target settings from first line of .c/.java file; syntax: //verifast_options{disable_overflow_check prover:z3v4.5 target:32bit}"
             ; "-json", Set json, "Report result as JSON"
             ; "-verbose", Set_int verbose, "-1 = file processing; 1 = statement executions; 2 = produce/consume steps; 4 = prover queries."
-            ; "-disable_overflow_check", Set disable_overflow_check, " "
-            ; "-fwrapv", Set fwrapv, "allow truncating signed integer arithmetic (corresponds to GCC's -fwrapv flag)"
-            ; "-assume_left_to_right_evaluation", Set assume_left_to_right_evaluation, "Disable checks related to C's unspecified evaluation order and sequencing rules"
-            ; "-assume_no_provenance", Set assume_no_provenance, "Disregard pointer provenance. This is unsound, even when compiling with -O0!"
-            ; "-assume_no_subobject_provenance", Set assume_no_subobject_provenance, "Assume the compiler's alias analysis ignores subobject provenance. CompCert ignores subobject provenance, and so, it seems, do GCC and Clang (last time I checked)"
             ; "-prover", String (fun str -> prover := str), "Set SMT prover (" ^ list_provers() ^ ")."
             ; "-c", Set compileOnly, "Compile only, do not perform link checking."
             ; "-shared", Set isLibrary, "The file is a library (i.e. no main function required)."
             ; "-allow_assume", Set allowAssume, "Allow assume(expr) annotations."
-            ; "-runtime", String (fun path -> runtime := Some path), " "
             ; "-breakpoint", String (fun path_loc -> let [path; loc_string] = String.split_on_char ':' path_loc in breakpoint := Some (path, int_of_string loc_string)), "-breakpoint myfile.c:123 causes symbolic execution to fail when it reaches line 123 of file myfile.c"
             ; "-break_at_node", String (fun path -> targetPath := Some (path |> String.split_on_char ',' |> List.map int_of_string)), "Break when symbolic execution reaches the specified node in the execution tree."
             ; "-allow_should_fail", Set allowShouldFail, "Allow '//~' annotations that specify the line should fail."
@@ -467,46 +462,36 @@ let _ =
               end,
               "Emits the AST as an s-expression to the specified file; raises exception on unsupported constructs."
             ; "-export", String (fun str -> exports := str :: !exports), " "
-            ; "-I", String (fun str -> include_paths := str :: !include_paths), "Add a directory to the list of directories to be searched for header files."
-            ; "-D", String (fun str -> define_macros := str :: !define_macros), "Predefine name as a macro, with definition 1."
             ; "-L", String (fun str -> library_paths := str :: !library_paths), "Add a directory to the list of directories to be searched for manifest files during linking."
             ; "-safe_mode", Set safe_mode, "Safe mode (for use in CGI scripts)."
             ; "-allow_header", String (fun str -> header_whitelist := str::!header_whitelist), "Add the specified header to the whitelist."
             ; "-link_should_fail", Set linkShouldFail, "Specify that the linking phase is expected to fail."
             ; "-javac", Unit (fun _ -> (useJavaFrontend := true; Java_frontend_bridge.load ())), " "
             ; "-enforce_annotations", Unit (fun _ -> (enforceAnnotations := true)), " "
-            ; "-allow_undeclared_struct_types", Unit (fun () -> (allowUndeclaredStructTypes := true)), " "
-            ; "-target", String (fun s -> dataModel := Some (data_model_of_string s)), "Target platform of the program being verified. Determines the size of pointer and integer types. Supported targets: " ^ String.concat ", " (List.map fst data_models)
             ]
   in
   let process_file filename =
     if List.exists (Filename.check_suffix filename) [ ".c"; ".cpp"; ".java"; ".scala"; ".jarsrc"; ".javaspec" ]
     then
       begin
+        let vfbindings = !vfbindings in
+        let includePaths = Vfbindings.get Vfparam_include_paths vfbindings in
+        let includePaths = List.map (Util.replace_vroot !vroots) includePaths in
+        let vfbindings = Vfbindings.set Vfparam_include_paths includePaths vfbindings in
         let options = {
           option_verbose = !verbose;
-          option_disable_overflow_check = !disable_overflow_check;
-          option_fwrapv = !fwrapv;
-          option_assume_left_to_right_evaluation = !assume_left_to_right_evaluation;
-          option_assume_no_provenance = !assume_no_provenance;
-          option_assume_no_subobject_provenance = !assume_no_subobject_provenance;
+          option_vfbindings = vfbindings;
           option_allow_should_fail = !allowShouldFail;
           option_emit_manifest = !emitManifest;
           option_check_manifest = !checkManifest;
           option_vroots = !vroots;
           option_allow_assume = !allowAssume;
-          option_simplify_terms = !simplifyTerms;
-          option_runtime = !runtime;
           option_provides = !provides;
           option_keep_provide_files = !keepProvideFiles;
-          option_include_paths = List.map (Util.replace_vroot !vroots) !include_paths;
-          option_define_macros = !define_macros;
           option_safe_mode = !safe_mode;
           option_header_whitelist = !header_whitelist;
           option_use_java_frontend = !useJavaFrontend;
           option_enforce_annotations = !enforceAnnotations;
-          option_allow_undeclared_struct_types = !allowUndeclaredStructTypes;
-          option_data_model = !dataModel;
           option_report_skipped_stmts = false;
         } in
         if not !json then print_endline filename;

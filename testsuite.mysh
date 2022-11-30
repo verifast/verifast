@@ -10,7 +10,7 @@ cd bin
 cd ..
 cd examples
   verifast -shared uniqueness.c
-  verifast -fwrapv unions.c
+  verifast -read_options_from_source_file unions.c
   verifast unions2.c
   cd busywaiting
     verifast -c bounded_fifo.c

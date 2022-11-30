@@ -1,3 +1,5 @@
+// verifast_options{fwrapv}
+
 #include <stdlib.h>
 #include <stdio.h>
 
