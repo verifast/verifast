@@ -85,10 +85,14 @@ public:
         m_kind(Annotation::Kind::Ann_Unknown) {}
 
   Annotation::Kind getKind() {
-    if (kindIsNotUnknown()) return m_kind;
-    if (isTruncating()) return m_kind;
-    if (isContractClauseLike()) return m_kind;
-    if (isInclude()) return m_kind;
+    if (kindIsNotUnknown())
+      return m_kind;
+    if (isTruncating())
+      return m_kind;
+    if (isContractClauseLike())
+      return m_kind;
+    if (isInclude())
+      return m_kind;
 
     m_kind = Annotation::Kind::Ann_other;
     return m_kind;

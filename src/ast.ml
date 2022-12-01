@@ -359,7 +359,7 @@ and
   | WFunPtrCall of loc * expr * string (* function type name *) * expr list
   | WPureFunCall of loc * string * type_ list * expr list
   | WPureFunValueCall of loc * expr * expr list
-  | WFunCall of loc * string * type_ list * expr list
+  | WFunCall of loc * string * type_ list * expr list * method_binding
   | WMethodCall of
       loc *
       string (* declaring class or interface *) *
@@ -818,8 +818,8 @@ and
       (asn * asn) option *  (* contract *)
       bool *  (* terminates *)
       (stmt list * loc (* Close brace *)) option *  (* body *)
-      method_binding *  (* static or instance *)
-      visibility
+      bool * (* virtual *)
+      (string list) (* overrides *)
   | CxxCtor of 
       loc *
       string * (* mangled name *)
@@ -960,7 +960,7 @@ let rec expr_loc e =
   | WPureFunCall (l, g, targs, args) -> l
   | WPureFunValueCall (l, e, es) -> l
   | WFunPtrCall (l, g, ftn, args) -> l
-  | WFunCall (l, g, targs, args) -> l
+  | WFunCall (l, g, targs, args, _) -> l
   | WMethodCall (l, tn, m, pts, args, fb, tparamEnv) -> l
   | NewObject (l, cn, args, targs) -> l
   | NewArray(l, _, _) -> l
@@ -1164,7 +1164,7 @@ let expr_fold_open iter state e =
   | ExprCallExpr (l, e, es) -> iters state (e::es)
   | WPureFunCall (l, g, targs, args) -> iters state args
   | WPureFunValueCall (l, e, args) -> iters state (e::args)
-  | WFunCall (l, g, targs, args) -> iters state args
+  | WFunCall (l, g, targs, args, _) -> iters state args
   | WFunPtrCall (l, e, ftn, args) -> let state = iter state e in iters state args
   | WMethodCall (l, cn, m, pts, args, mb, tparamEnv) -> iters state args
   | NewObject (l, cn, args, targs) -> iters state args

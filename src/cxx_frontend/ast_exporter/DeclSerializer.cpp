@@ -39,7 +39,7 @@ void DeclSerializer::serializeFuncDecl(stubs::Decl::Function::Builder &builder,
 
 bool DeclSerializer::VisitFunctionDecl(const clang::FunctionDecl *decl) {
   auto function = m_builder.initFunction();
-  serializeFuncDecl(function, decl, m_serializer.getMangledFunc(decl));
+  serializeFuncDecl(function, decl, m_serializer.getMangledName(decl));
   return true;
 }
 
@@ -138,8 +138,7 @@ bool DeclSerializer::VisitCXXRecordDecl(const clang::CXXRecordDecl *decl) {
               : decl->isClass() ? stubs::RecordKind::CLASS
                                 : stubs::RecordKind::STRUC;
   rec.setKind(kind);
-
-  if (decl->hasDefinition()) {
+  if (decl->isThisDeclarationADefinition()) {
     auto orphanage = capnp::Orphanage::getForMessageContaining(m_builder);
     llvm::SmallVector<DeclNodeOrphan> declNodeOrphans;
     auto &store = m_serializer.getAnnStore();
@@ -156,13 +155,13 @@ bool DeclSerializer::VisitCXXRecordDecl(const clang::CXXRecordDecl *decl) {
       anns.clear();
     }
 
-    store.getUntilLoc(anns, decl->getBraceRange().getEnd(), SM);
-    m_serializer.serializeAnnsToOrphans(anns, orphanage, declNodeOrphans);
-
     auto body = rec.initBody();
     body.setPolymorphic(decl->isPolymorphic());
     auto basesBuilder = body.initBases(decl->getNumBases());
     serializeBases(basesBuilder, decl->bases());
+
+    store.getUntilLoc(anns, decl->getBraceRange().getEnd(), SM);
+    m_serializer.serializeAnnsToOrphans(anns, orphanage, declNodeOrphans);
 
     auto declsBuilder = body.initDecls(declNodeOrphans.size());
     AstSerializer::adoptOrphansToListBuilder(declNodeOrphans, declsBuilder);
@@ -176,6 +175,18 @@ void DeclSerializer::serializeMethodDecl(stubs::Decl::Method::Builder &builder,
   auto isStatic = decl->isStatic();
   builder.setStatic(isStatic);
   builder.setImplicit(decl->isImplicit());
+
+  bool isVirtual(decl->isVirtual());
+  builder.setVirtual(isVirtual);
+  if (isVirtual) {
+    auto overriddenMeths =
+        builder.initOverrides(decl->size_overridden_methods());
+    size_t i(0);
+    for (auto *meth : decl->overridden_methods()) {
+      overriddenMeths.set(i++, m_serializer.getMangledName(meth).str());
+    }
+  }
+
   if (!isStatic) {
     auto thisType = builder.initThis();
     m_serializer.serializeQualType(thisType, decl->getThisObjectType());
@@ -187,7 +198,7 @@ void DeclSerializer::serializeMethodDecl(stubs::Decl::Method::Builder &builder,
 
 bool DeclSerializer::VisitCXXMethodDecl(const clang::CXXMethodDecl *decl) {
   auto meth = m_builder.initMethod();
-  serializeMethodDecl(meth, decl, m_serializer.getMangledFunc(decl));
+  serializeMethodDecl(meth, decl, m_serializer.getMangledName(decl));
   return true;
 }
 
@@ -220,7 +231,7 @@ bool DeclSerializer::VisitCXXConstructorDecl(
   }
 
   auto meth = ctor.initMethod();
-  serializeMethodDecl(meth, decl, m_serializer.getMangledCtorName(decl));
+  serializeMethodDecl(meth, decl, m_serializer.getMangledName(decl));
 
   auto parent = ctor.initParent();
   serializeRecordRef(parent, decl->getParent());
@@ -233,10 +244,11 @@ bool DeclSerializer::VisitCXXDestructorDecl(
   auto dtor = m_builder.initDtor();
 
   auto meth = dtor.initMethod();
-  serializeMethodDecl(meth, decl, m_serializer.getMangledDtorName(decl));
+  serializeMethodDecl(meth, decl, m_serializer.getMangledName(decl));
 
   auto parent = dtor.initParent();
   serializeRecordRef(parent, decl->getParent());
+
   return true;
 }
 

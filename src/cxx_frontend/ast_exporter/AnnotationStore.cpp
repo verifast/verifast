@@ -45,6 +45,14 @@ void AnnotationStore::getAll(const clang::FileEntry *entry,
   getCont(entry).getAll(container);
 }
 
+const clang::Decl *findNextExplicitDeclInContext(const clang::Decl *decl) {
+  const auto *nextDecl = decl->getNextDeclInContext();
+  while (nextDecl && nextDecl->isImplicit()) {
+    nextDecl = nextDecl->getNextDeclInContext();
+  }
+  return nextDecl;
+}
+
 void AnnotationStore::guessContract(
     const clang::FileEntry *entry, llvm::SmallVectorImpl<Annotation> &container,
     const clang::SourceManager &SM, clang::SourceLocation maxEndLoc) {
@@ -86,12 +94,11 @@ void AnnotationStore::getContract(const clang::FunctionDecl *decl,
     return;
   }
 
-  const auto *nextDecl = decl->getNextDeclInContext();
-  // Skip implicit declarations and make sure that the end location > our start
-  // loc
-  while (nextDecl &&
-         (nextDecl->isImplicit() || startLoc >= nextDecl->getBeginLoc())) {
-    nextDecl = nextDecl->getNextDeclInContext();
+  const auto *nextDecl = findNextExplicitDeclInContext(decl);
+
+  if (nextDecl) {
+    guessContract(entry, container, SM, nextDecl->getBeginLoc());
+    return;
   }
 
   guessContract(entry, container, SM,

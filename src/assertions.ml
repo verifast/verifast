@@ -203,7 +203,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         else
           cont ()
       | _ ->
-        let (_, Some (_, fmap), _, _, _) = List.assoc fparent structmap in
+        let (_, Some (_, fmap, _), _, _, _) = List.assoc fparent structmap in
         let (_, gh, y, offset_opt, _) = List.assoc fname fmap in
         match offset_opt with
           Some term ->
@@ -1833,7 +1833,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     (* rules for obtaining underscore (i.e. possibly uninitialized) field chunks *)
     field_pred_map |> List.iter begin function (_, (_, None)) -> () | ((sn, fn), ((_, (_, _, _, [_; ft], symb, _, _)), Some (_, (_, _, _, _, symb_, _, _)))) ->
-      let (_, Some (_, fmap), _, _, _) = List.assoc sn structmap in
+      let (_, Some (_, fmap, _), _, _, _) = List.assoc sn structmap in
       let (_, gh, _, offset_opt, _) = List.assoc fn fmap in
       begin match offset_opt with
         None -> ()

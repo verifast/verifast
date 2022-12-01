@@ -523,12 +523,12 @@ and
     | [< >] -> [] end;
     '(_, Kwd ";") >] -> Struct (l, s, Some ([], fs, false), attrs)
   | [< '(_, Kwd ";") >] -> Struct (l, s, None, [])
-  | [< t = parse_type_suffix (StructTypeExpr (l, Some s, None, [])); d = parse_func_rest Regular (Some t) Public >] -> d
+  | [< t = parse_type_suffix (StructTypeExpr (l, Some s, None, [])); d = parse_func_rest Regular (Some t) >] -> d
   >] -> check_function_for_contract d
 | [< '(l, Kwd "union"); '(_, Ident u); d = parser
     [< fs = parse_fields; '(_, Kwd ";") >] -> Union (l, u, Some fs)
   | [< '(_, Kwd ";") >] -> Union (l, u, None)
-  | [< t = parse_type_suffix (UnionTypeExpr (l, Some u, None)); d = parse_func_rest Regular (Some t) Public >] -> d
+  | [< t = parse_type_suffix (UnionTypeExpr (l, Some u, None)); d = parse_func_rest Regular (Some t) >] -> d
   >] -> check_function_for_contract d
 | [< '(l, Kwd "typedef");
      () = (fun _ -> push_typedef_scope ());
@@ -575,14 +575,14 @@ and
   >] -> pop_typedef_scope (); register_typedef g; ds
 | [< '(_, Kwd "enum"); '(l, Ident n); d = parser
     [< elems = parse_enum_body; '(_, Kwd ";"); >] -> EnumDecl(l, n, elems)
-  | [< t = parse_type_suffix (EnumTypeExpr (l, Some n, None)); d = parse_func_rest Regular (Some t) Public >] -> d
+  | [< t = parse_type_suffix (EnumTypeExpr (l, Some n, None)); d = parse_func_rest Regular (Some t) >] -> d
   >] -> check_function_for_contract d
-| [< '(_, Kwd "static"); _ = parse_ignore_inline; t = parse_return_type; d = parse_func_rest Regular t Private >] -> check_function_for_contract d
-| [< '(_, Kwd "extern"); t = parse_return_type; d = parse_func_rest Regular t Public >] -> check_function_for_contract d
-| [< '(_, Kwd "_Noreturn"); v = parse_static_visibility; _ = parse_ignore_inline; t = parse_return_type; d = parse_func_rest Regular t v >] ->
+| [< '(_, Kwd "static"); _ = parse_ignore_inline; t = parse_return_type; d = parse_func_rest Regular t >] -> check_function_for_contract d
+| [< '(_, Kwd "extern"); t = parse_return_type; d = parse_func_rest Regular t >] -> check_function_for_contract d
+| [< '(_, Kwd "_Noreturn"); _ = parse_static_visibility; _ = parse_ignore_inline; t = parse_return_type; d = parse_func_rest Regular t >] ->
   let ds = check_function_for_contract d in
   begin match ds with
-    [Func (l, k, tparams, t, g, ps, gc, ft, Some (pre, post), terminates, ss, static, v)] ->
+    [Func (l, k, tparams, t, g, ps, gc, ft, Some (pre, post), terminates, ss, _, _)] ->
     begin match pre, post with
       ExprAsn (_, False _), _ | False _, _ | _, False _ -> ()
     | _ -> raise (ParseException (l, "Function marked 'noreturn' must declare 'ensures false'."))
@@ -590,7 +590,7 @@ and
   | _ -> ()
   end;
   ds
-| [< t = parse_return_type; d = parse_func_rest Regular t Public >] -> check_function_for_contract d
+| [< t = parse_return_type; d = parse_func_rest Regular t >] -> check_function_for_contract d
 and check_for_contract: 'a. 'a option -> loc -> string -> (asn * asn -> 'a) -> 'a = fun contract l m f ->
   match contract with
     | Some spec -> spec 
@@ -602,9 +602,9 @@ and check_for_contract: 'a. 'a option -> loc -> string -> (asn * asn -> 'a) -> '
 
 and check_function_for_contract d =
   match d with
-  | Func(l, k, tparams, t, g, ps, gc, ft, contract, terminates, ss, static, v) ->
+  | Func(l, k, tparams, t, g, ps, gc, ft, contract, terminates, ss, virt, overrides) ->
     let contract = check_for_contract contract l "Function declaration should have a contract." (fun co -> co) in
-    [Func(l, k, tparams, t, g, ps, gc, ft, Some contract, terminates, ss, static, v)]
+    [Func(l, k, tparams, t, g, ps, gc, ft, Some contract, terminates, ss, virt, overrides)]
   | _ -> [d]
 and
   parse_pure_decls = parser
@@ -651,8 +651,8 @@ and
      p = parse_pred_body; '(_, Kwd ";"); >] -> pop_typedef_scope (); [PredFamilyInstanceDecl (l, g, [], is, ps, p)]
   | [< '(l, Kwd "predicate_ctor"); '(_, Ident g); () = (fun _ -> push_typedef_scope ()); ps1 = parse_paramlist; (ps2, inputParamCount) = parse_pred_paramlist;
      p = parse_pred_body; '(_, Kwd ";"); >] -> pop_typedef_scope (); [PredCtorDecl (l, g, ps1, ps2, inputParamCount, p)]
-  | [< '(l, Kwd "lemma"); t = parse_return_type; d = parse_func_rest (Lemma(false, None)) t Public >] -> [d]
-  | [< '(l, Kwd "lemma_auto"); trigger = opt (parser [< '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); >] -> e); t = parse_return_type; d = parse_func_rest (Lemma(true, trigger)) t Public >] -> [d]
+  | [< '(l, Kwd "lemma"); t = parse_return_type; d = parse_func_rest (Lemma(false, None)) t >] -> [d]
+  | [< '(l, Kwd "lemma_auto"); trigger = opt (parser [< '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); >] -> e); t = parse_return_type; d = parse_func_rest (Lemma(true, trigger)) t >] -> [d]
   | [< '(l, Kwd "box_class"); '(_, Ident bcn); () = (fun _ -> push_typedef_scope ()); ps = parse_paramlist;
        '(_, Kwd "{"); '(_, Kwd "invariant"); inv = parse_asn; '(_, Kwd ";");
        ads = parse_action_decls; hpds = parse_handle_pred_decls; '(_, Kwd "}") >] -> pop_typedef_scope (); [BoxClassDecl (l, bcn, ps, inv, ads, hpds)]
@@ -703,17 +703,17 @@ and
       let gmeasure = g ^ "__measure" in
       let call g args = CallExpr (l, g, [], [], List.map (fun e -> LitPat e) args, Static) in
       [
-        Func (l, Fixpoint, tparams, Some rt, gdef, (PureFuncTypeExpr (l, List.map fst ps @ [rt]), g) :: ps, false, None, None, false, body, Static, Public);
+        Func (l, Fixpoint, tparams, Some rt, gdef, (PureFuncTypeExpr (l, List.map fst ps @ [rt]), g) :: ps, false, None, None, false, body, false, []);
         Inductive (l, iargs, tparams, [Ctor (l, iargs, List.map (fun (t, x) -> (x, t)) ps)]);
         Func (l, Fixpoint, tparams, Some rt, g_uncurry, (PureFuncTypeExpr (l, [iargsType; rt]), g) :: ps, false, None, None, false,
-          Some ([ReturnStmt (l, Some (call g [call iargs (List.map (fun (t, x) -> Var (l, x)) ps)]))], l), Static, Public);
+          Some ([ReturnStmt (l, Some (call g [call iargs (List.map (fun (t, x) -> Var (l, x)) ps)]))], l), false, []);
         Func (l, Fixpoint, tparams, Some rt, gdef_curried, [PureFuncTypeExpr (l, [iargsType; rt]), g; iargsType, "__args"], false, None, None, false,
           Some ([SwitchStmt (l, Var (l, "__args"), [SwitchStmtClause (l, call iargs (List.map (fun (t, x) -> Var (l, x)) ps),
-            [ReturnStmt (l, Some (call gdef ([ExprCallExpr (l, Var (l, g_uncurry), [Var (l, g)])] @ List.map (fun (t, x) -> Var (l, x)) ps)))])])], l), Static, Public);
+            [ReturnStmt (l, Some (call gdef ([ExprCallExpr (l, Var (l, g_uncurry), [Var (l, g)])] @ List.map (fun (t, x) -> Var (l, x)) ps)))])])], l), false, []);
         Func (l, Fixpoint, tparams, Some (ManifestTypeExpr (l, intType)), gmeasure, [iargsType, "__args"], false, None, None, false,
           Some ([SwitchStmt (l, Var (l, "__args"), [SwitchStmtClause (l, call iargs (List.map (fun (t, x) -> Var (l, x)) ps),
-            [ReturnStmt (l, Some measure)])])], l), Static, Public);
-        Func (l, Fixpoint, tparams, Some rt, g, ps, false, None, None, false, Some ([ReturnStmt (l, Some (call "fix" [Var (l, gdef_curried); Var (l, gmeasure); call iargs (List.map (fun (t, x) -> Var (l, x)) ps)]))], l), Static, Public);
+            [ReturnStmt (l, Some measure)])])], l), false, []);
+        Func (l, Fixpoint, tparams, Some rt, g, ps, false, None, None, false, Some ([ReturnStmt (l, Some (call "fix" [Var (l, gdef_curried); Var (l, gmeasure); call iargs (List.map (fun (t, x) -> Var (l, x)) ps)]))], l), false, []);
         Func (l, Lemma (kwd = "fixpoint_auto", None), tparams, None, g ^ "_def", ps, false, None,
           Some (Operation (l, Le, [IntLit (l, zero_big_int, true, false, NoLSuffix); measure]), Operation (l, Eq, [call g (List.map (fun (t, x) -> Var (l, x)) ps); bodyExpr])),
           false,
@@ -727,11 +727,11 @@ and
                 call gdef ([Var (l, g ^ "__1")] @ List.map (fun (t, x) -> Var (l, x ^ "0")) ps);
                 call gdef ([Var (l, g ^ "__2")] @ List.map (fun (t, x) -> Var (l, x ^ "0")) ps)]))
             ], [])
-          ], l), Static, Public)
+          ], l), false, [])
       ]
     | _ ->
       if kwd = "fixpoint_auto" then raise (ParseException (l, "Keyword 'fixpoint_auto' does not make sense here because this type of fixpoint definition is always unfolded automatically"));
-      [Func (l, Fixpoint, tparams, rt, g, ps, false, None, None, false, body, Static, Public)]
+      [Func (l, Fixpoint, tparams, rt, g, ps, false, None, None, false, body, false, [])]
     end
 and
   parse_action_decls = parser
@@ -782,7 +782,7 @@ and
          | Some(params) -> params
          | None -> []
 and
-  parse_func_rest k t v = parser
+  parse_func_rest k t = parser
   [<
     '(l, Ident g);
     tparams = parse_type_params_general;
@@ -795,9 +795,9 @@ and
         '(_, Kwd ")");
         f = parser
           [< '(_, Kwd ";"); (nonghost_callers_only, ft, co, terminates) = parse_spec_clauses >] ->
-          Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, terminates, None, Static, v)
+          Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, terminates, None, false, [])
         | [< (nonghost_callers_only, ft, co, terminates) = parse_spec_clauses; '(_, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}") >] ->
-          Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, terminates, Some (ss, closeBraceLoc), Static, v)
+          Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, terminates, Some (ss, closeBraceLoc), false, [])
       >] -> pop_typedef_scope (); f
     | [<
         () = (fun s -> if k = Regular && tparams = [] && t <> None then () else raise Stream.Failure);

@@ -32,13 +32,19 @@ bool CommentProcessor::HandleComment(clang::Preprocessor &PP,
   m_onlyWhitespace = checkWhiteSpace(fileBuffer.data() + m_prevBufferOffset,
                                      fileBuffer.data() + currentOffset);
 
-  auto annOpt = annotationOf(
-      comment, llvm::StringRef(begin, end - begin),
-      /* annotation at the start of the file */ m_prevBufferOffset ==
-              currentOffset ||
-          !m_onlyWhitespace);
-  if (annOpt) {
-    m_store.add(std::move(*annOpt), SM);
+  if (*(begin + 2) == '~') {
+    m_store.addFailDirective(
+        Text(comment, llvm::StringRef(begin, end - begin)));
+  } else {
+
+    auto annOpt = annotationOf(
+        comment, llvm::StringRef(begin, end - begin),
+        /* annotation at the start of the file */ m_prevBufferOffset ==
+                currentOffset ||
+            !m_onlyWhitespace);
+    if (annOpt) {
+      m_store.add(std::move(*annOpt), SM);
+    }
   }
 
   m_prevBufferOffset = currentOffset + end - begin;

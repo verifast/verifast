@@ -6,10 +6,25 @@
 
 namespace vf {
 
+class Text {
+  clang::SourceRange m_range;
+  std::string m_text;
+
+public:
+  Text(clang::SourceRange range, llvm::StringRef text)
+      : m_range(range), m_text(text) {}
+
+  clang::SourceRange getRange() const { return m_range; }
+
+  llvm::StringRef getText() const { return m_text; }
+
+  virtual ~Text() {}
+};
+
 /**
  * Represents a VeriFast annotation in the source code.
  */
-class Annotation {
+class Annotation : public Text {
 public:
   enum Kind {
     Ann_Unknown,
@@ -20,21 +35,15 @@ public:
   };
 
 private:
-  clang::SourceRange m_range;
-  std::string m_text;
   Kind m_kind;
   bool m_isNewSeq;
 
 public:
   Annotation(clang::SourceRange range, llvm::StringRef text, Kind kind,
              bool isNewSeq)
-      : m_range(range), m_text(text), m_kind(kind), m_isNewSeq(isNewSeq) {}
+      : Text(range, text), m_kind(kind), m_isNewSeq(isNewSeq) {}
 
 public:
-  clang::SourceRange getRange() const { return m_range; }
-
-  llvm::StringRef getText() const { return m_text; }
-
   /**
    * @return whether or not this annotation can appear in a contract. I.e., the
    annotation starts with 'requires, 'ensures', 'terminates', ':', or

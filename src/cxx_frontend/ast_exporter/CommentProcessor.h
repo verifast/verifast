@@ -6,7 +6,7 @@ namespace vf {
 
 /**
  * Processes each comment encountered during parsing and keeps a reference to an
- * annotation store. If a comment represents a VeriFast annoation, it will also
+ * annotation store. If a comment represents a VeriFast annotation, it will also
  * be added to the annotation store.
  */
 class CommentProcessor : public clang::CommentHandler {

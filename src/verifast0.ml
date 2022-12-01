@@ -267,6 +267,7 @@ end = struct
   let as_list bs = bs
 
 end
+let vtype_pred_name sn = sn ^ "_vtype"
 
 type options = {
   option_verbose: int;
