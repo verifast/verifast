@@ -111,13 +111,46 @@ let get_first_line_tokens text =
         'A'..'Z'|'a'..'z'|'0'..'9'|'_' -> ident_token i (i + 1)
       | ' '|'\t' -> first_line_tokens (i + 1)
       | '\r'|'\n' -> []
+      | '{' -> brace_block (i + 1) (i + 1)
       | c -> Printf.sprintf "%c" c::first_line_tokens (i + 1)
   and ident_token start i =
     match if i = n then None else Some text.[i] with
       Some ('A'..'Z'|'a'..'z'|'0'..'9'|'_'|'.') -> ident_token start (i + 1)
     | _ -> String.sub text start (i - start)::first_line_tokens i
+  and brace_block start i =
+    match if i = n then None else Some text.[i] with
+      None|Some ('}'|'\r'|'\n') -> String.sub text start (i - start)::first_line_tokens i
+    | _ -> brace_block start (i + 1)
   in
   first_line_tokens 0
+
+let split_into_words text =
+  let n = String.length text in
+  let buf = Buffer.create 10 in
+  let rec words i =
+    if i = n then
+      []
+    else
+      match text.[i] with
+        ' ' -> words (i + 1)
+      | _ -> Buffer.clear buf; word i
+  and word i =
+    if i = n then
+      [Buffer.contents buf]
+    else
+      match text.[i] with
+        ' ' -> let word = Buffer.contents buf in word::words (i + 1)
+      | '"' -> quoted_word (i + 1)
+      | c -> Buffer.add_char buf c; word (i + 1)
+  and quoted_word i =
+    if i = n then
+      [Buffer.contents buf]
+    else
+      match text.[i] with
+        '"' -> word (i + 1)
+      | c -> Buffer.add_char buf c; quoted_word (i + 1)
+  in
+  words 0
 
 type file_options = {
   annot_char: char;
@@ -133,34 +166,38 @@ let default_file_options =
 
 let get_file_options text =
   let tokens = get_first_line_tokens text in
-  let rec iter inVFBlock opts toks =
+  let rec iter opts toks =
     match toks with
-      "verifast_annotation_char"::":"::c::toks when String.length c = 1 -> iter inVFBlock {opts with annot_char=c.[0]} toks
+      "verifast_annotation_char"::":"::c::toks when String.length c = 1 -> iter {opts with annot_char=c.[0]} toks
     | "tab_size"::":"::n::toks ->
       let tabSize =
         match int_of_string n with
           exception Failure _ -> opts.tab_size
         | n -> n
       in
-      iter inVFBlock {opts with tab_size=tabSize} toks
-    | "verifast_options"::"{"::toks ->
-      iter true opts toks
-    | "}"::toks when inVFBlock ->
-      iter false opts toks
-    | "prover"::":"::prover::toks when inVFBlock ->
-      iter inVFBlock {opts with prover=Some prover} toks
-    | param::":"::arg::toks when inVFBlock && param <> ":" && arg <> ":" && arg <> "}" ->
-      iter inVFBlock {opts with bindings=(param, Some arg)::opts.bindings} toks
-    | param::toks when inVFBlock && param <> ":" ->
-      iter inVFBlock {opts with bindings=(param, None)::opts.bindings} toks
+      iter {opts with tab_size=tabSize} toks
+    | "verifast_options"::body::toks ->
+      let body_words = split_into_words body in
+      let rec process_words opts words =
+        match words with
+          [] -> iter opts toks
+        | word::words ->
+          match String.index_opt word ':' with
+            None ->
+            process_words {opts with bindings=(word, None)::opts.bindings} words
+          | Some k ->
+            let paramName = String.sub word 0 k in
+            let arg = String.sub word (k + 1) (String.length word - k - 1) in
+            match paramName with
+              "prover" -> process_words {opts with prover=Some arg} words
+            | _ -> process_words {opts with bindings=(paramName, Some arg)::opts.bindings} words
+      in
+      process_words opts body_words 
     | tok::toks ->
-      if inVFBlock then
-        raise (FileOptionsError ("No such VeriFast option: '" ^ tok ^ "'; example: verifast_annotation_char:@ tab_size:4 verifast_options{disable_overflow_check prover:z3v4.5 target:32bit}"))
-      else
-        iter inVFBlock opts toks
+      iter opts toks
     | [] -> opts
   in
-  iter false default_file_options tokens
+  iter default_file_options tokens
 
 let readFileOptions path =
   let chan = open_in path in

@@ -27,7 +27,7 @@ cd symbolic_model
 
     begin_parallel
 
-    verify_crypto -I ../../crypto_ccs -allow_assume pthread.o ../../libann_polarssl.dll.vfmanifest ../symbolic.dll.vfmanifest dummy_protocol/dummy_protocol.c dummy_protocol/main_app.c
+    verifast -read_options_from_source_file -allow_assume pthread.o ../../libann_polarssl.dll.vfmanifest ../symbolic.dll.vfmanifest dummy_protocol/dummy_protocol.c dummy_protocol/main_app.c
     verify_crypto -I ../../crypto_ccs -allow_assume pthread.o ../../libann_polarssl.dll.vfmanifest ../symbolic.dll.vfmanifest secure_storage/secure_storage.c secure_storage/main_app.c
     verify_crypto -I ../../crypto_ccs -allow_assume pthread.o ../../libann_polarssl.dll.vfmanifest ../symbolic.dll.vfmanifest secure_storage_asym/secure_storage_asym.c secure_storage_asym/main_app.c
     verify_crypto -I ../../crypto_ccs -allow_assume pthread.o ../../libann_polarssl.dll.vfmanifest ../symbolic.dll.vfmanifest rpc/rpc.c rpc/main_app.c

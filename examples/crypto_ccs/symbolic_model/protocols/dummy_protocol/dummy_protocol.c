@@ -1,3 +1,5 @@
+//verifast_options{target:32bit I:../../../crypto_ccs}
+
 #include "dummy_protocol.h"
 #include "stdlib.h"
 

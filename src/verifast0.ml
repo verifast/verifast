@@ -179,10 +179,13 @@ let cast_vfarg: type t1 t2. t1 vfparam -> t1 -> t2 vfparam -> t2 option = fun p0
 
 type _ vfparam_info =
   BoolParam: bool vfparam_info
-| ParsedParam: 'a * (string -> 'a) * ('a -> 'a -> 'a) -> 'a vfparam_info
+| ParsedParam: 'a * (?basePath:string -> string -> 'a) * ('a -> 'a -> 'a) -> 'a vfparam_info
 
-let string_opt_param = ParsedParam (None, (fun x -> Some x), (fun old new_ -> new_))
-let string_list_param = ParsedParam ([], (fun x -> [x]), (fun old new_ -> new_ @ old))
+let string_opt_param = ParsedParam (None, (fun ?basePath x -> Some x), (fun old new_ -> new_))
+let string_list_param = ParsedParam ([], (fun ?basePath x -> [x]), (fun old new_ -> new_ @ old))
+
+let path_opt_param = ParsedParam (None, (fun ?basePath x -> Some (match basePath with None -> x | Some basePath -> compose basePath x)), (fun old new_ -> new_))
+let path_list_param = ParsedParam ([], (fun ?basePath x -> [match basePath with None -> x | Some basePath -> compose basePath x]), (fun old new_ -> new_ @ old))
 
 let vfparam_info_of: type a. a vfparam -> a vfparam_info = function
   Vfparam_disable_overflow_check -> BoolParam
@@ -191,11 +194,11 @@ let vfparam_info_of: type a. a vfparam -> a vfparam_info = function
 | Vfparam_assume_no_provenance -> BoolParam
 | Vfparam_assume_no_subobject_provenance -> BoolParam
 | Vfparam_no_simplify_terms -> BoolParam
-| Vfparam_runtime -> string_opt_param
-| Vfparam_include_paths -> string_list_param
+| Vfparam_runtime -> path_opt_param
+| Vfparam_include_paths -> path_list_param
 | Vfparam_define_macros -> string_list_param
 | Vfparam_allow_undeclared_struct_types -> BoolParam
-| Vfparam_data_model -> ParsedParam (None, (fun x -> Some (data_model_of_string x)), (fun old new_ -> new_))
+| Vfparam_data_model -> ParsedParam (None, (fun ?basePath x -> Some (data_model_of_string x)), (fun old new_ -> new_))
 
 let default_vfarg: type ta. ta vfparam -> ta = fun p ->
   match vfparam_info_of p with

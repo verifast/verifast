@@ -14,7 +14,7 @@ open Verify_expr
 
 exception FileNotFound of string
 
-let merge_file_options prover0 options {prover; bindings} =
+let merge_file_options prover0 options basePath {prover; bindings} =
   (match prover with None -> prover0 | Some prover -> prover),
   {
     options with
@@ -32,7 +32,7 @@ let merge_file_options prover0 options {prover; bindings} =
           failwith ("Option '" ^ paramName ^ "': argument expected")
         | ParsedParam (_, parseFunc, _), Some arg ->
           try
-            Vfbindings.set vfparam (parseFunc arg) bs
+            Vfbindings.set vfparam (parseFunc ~basePath arg) bs
           with Failure msg ->
             failwith ("Error while parsing option '" ^ paramName ^ "': " ^ msg)
       end bindings options.option_vfbindings
@@ -41,7 +41,7 @@ let merge_file_options prover0 options {prover; bindings} =
 let merge_options_from_source_file prover options path =
   try
     let fileOptions = readFileOptions path in
-    merge_file_options prover options fileOptions
+    merge_file_options prover options (Filename.dirname path) fileOptions
   with
     FileOptionsError msg -> raise (StaticError (Lexed ((path, 1, 1), (path, 1, 1)), msg, None))
   | Failure msg -> raise (StaticError (Lexed ((path, 1, 1), (path, 1, 1)), msg, None))
