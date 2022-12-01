@@ -5958,7 +5958,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match dialect with 
     | Some Cxx ->
       (* 
-        For each polymorphic struct S with bases [B0; ...; Bn] and n > 0 create:
+        For each polymorphic struct S with polymorphic bases [B0; ...; Bn] and n > 0 create:
           predicate S_vtype(struct S *s, std::type_info *t) =
             B0_vtype(s, t) &*& ... &*& Bn_vtype(s, t)
       *)
@@ -5991,9 +5991,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter (pn,ilist) pm ds =
       match ds with
         PredFamilyInstanceDecl (l, p, tparams, is, xs, body)::ds ->
-          let (pfns, info) as entry = mk_pred_inst l (pn, ilist) p tparams is xs body in 
-          let _ = if List.mem_assoc pfns pm || List.mem_assoc pfns predinstmap0 then static_error l "Duplicate predicate family instance." None in
-          iter (pn,ilist) (entry::pm) ds
+        let (pfns, info) as entry = mk_pred_inst l (pn, ilist) p tparams is xs body in 
+        let _ = if List.mem_assoc pfns pm || List.mem_assoc pfns predinstmap0 then static_error l "Duplicate predicate family instance." None in
+        iter (pn,ilist) (entry::pm) ds
       | _::ds -> iter (pn,ilist) pm ds
       | [] -> List.rev pm
     in
