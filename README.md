@@ -30,6 +30,14 @@ Simply extract the files from the archive to any location in your filesystem. Al
 
     sudo xattr -d com.apple.quarantine ~/Downloads/verifast-nightly-osx.tar.gz
 
+User interfaces
+---------------
+
+We offer the following user interfaces:
+- The VeriFast IDE (at `bin/vfide` in the distribution)
+- The [VeriFast VS Code Extension](https://marketplace.visualstudio.com/items?itemName=VeriFast.verifast)
+- The VeriFast command-line tool (at `bin/verifast` in the distribution)
+
 Compiling
 ---------
 
