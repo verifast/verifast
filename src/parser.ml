@@ -27,7 +27,7 @@ let ghost_keywords = [
   "produce_lemma_function_pointer_chunk"; "duplicate_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
   "producing_box_predicate"; "producing_handle_predicate"; "producing_fresh_handle_predicate"; "box"; "handle"; "any"; "split_fraction"; "by"; "merge_fractions";
   "unloadable_module"; "decreases"; "forall_"; "import_module"; "require_module"; ".."; "extends"; "permbased";
-  "terminates"; "abstract_type"; "fixpoint_auto"; "typeid"
+  "terminates"; "abstract_type"; "fixpoint_auto"; "typeid"; "activating"
 ]
 
 let c_keywords = [
@@ -1621,8 +1621,16 @@ and
     | _ -> raise (ParseException (expr_loc e, "Class name expected"))
 and
   parse_expr_suffix_rest e0 = parser
-  [< '(l, Kwd "->"); '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, f)) >] -> e
-| [< '(l, Kwd ".") when language = CLang; '(_, Ident f); e = parse_expr_suffix_rest (Select (l, e0, f)) >] -> e
+  [< '(l, Kwd "->");
+     e = begin parser
+       [< '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, f)) >] -> e
+     | [< '(_, Kwd "/*@"); '(_, Kwd "activating"); '(_, Kwd "@*/"); '(_, Ident f); e = parse_expr_suffix_rest (ActivatingRead (l, e0, f)) >] -> e
+     end >] -> e
+| [< '(l, Kwd ".") when language = CLang;
+     e = begin parser
+       [< '(_, Ident f); e = parse_expr_suffix_rest (Select (l, e0, f)) >] -> e
+     | [< '(_, Kwd "/*@"); '(_, Kwd "activating"); '(_, Kwd "@*/"); '(_, Ident f); e = parse_expr_suffix_rest (ActivatingRead (l, AddressOf (l, e0), f)) >] -> e
+     end >] -> e
 | [< '(l, Kwd ".");
      e = begin parser
        [< '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, f)) >] -> e

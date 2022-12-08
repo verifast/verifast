@@ -12,6 +12,7 @@ cd examples
   verifast -shared uniqueness.c
   verifast -read_options_from_source_file unions.c
   verifast unions2.c
+  verifast -assume_no_subobject_provenance unions2_no_subobj_prov.c
   cd busywaiting
     verifast -c bounded_fifo.c
     cd clhlock

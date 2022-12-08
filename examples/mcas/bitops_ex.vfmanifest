@@ -77,6 +77,7 @@
 .requires CRT/prelude.h#field_ptr_provenance_injective
 .requires CRT/prelude.h#field_ptr_provenance_max_addr
 .requires CRT/prelude.h#field_ptr_provenance_min_addr
+.requires CRT/prelude.h#first_field_of_union_variant_pointer_within_limits_elim
 .requires CRT/prelude.h#first_field_pointer_within_limits_elim
 .requires CRT/prelude.h#int__to_chars_
 .requires CRT/prelude.h#int_of_chars_of_int

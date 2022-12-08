@@ -3984,6 +3984,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (w, t, None)
     | Read (l, e, f) ->
       check_deref_core functypemap funcmap classmap interfmap (pn,ilist) l tparams tenv e f
+    | ActivatingRead (l, e, f) ->
+      let (w, t, _) = check e in
+      begin match t with
+        PtrType (UnionType un) ->
+        check_union_member_deref l w un f true
+      | _ -> static_error l "Pointer to union expected" None
+      end
     | Select (l, ((CxxDerivedToBase (le, _, StructTypeExpr _)) as e), f) ->
       (*
         Select a base object field.
@@ -4547,6 +4554,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | PtrType _ when language = CLang ->
       WOperation (expr_loc e, Neq, [w; WPureFunCall (expr_loc e, "null_pointer", [], [])], t)
     | _ -> expect_type (expr_loc e) inAnnotation t Bool; w
+  and check_union_member_deref l w un f isActivating =
+    match try_assoc un unionmap with
+      Some (_, Some (fds, _), _) ->
+      begin match try_assoc_i f fds with
+        None -> static_error l ("No such field in union '" ^ un ^ "'.") None
+      | Some (i, (_, tp)) -> (WDeref (l, AddressOf (l, WReadUnionMember (l, w, un, i, f, tp, isActivating)), tp), tp, None)
+      end
+    | _ -> static_error l ("Invalid dereference; union type '" ^ un ^ "' has not been defined.") None
   and check_deref_core functypemap funcmap classmap interfmap (pn,ilist) l tparams tenv e f =
     let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv None e in
     begin
@@ -4586,16 +4601,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
       | _ -> static_error l ("Invalid dereference; struct type '" ^ sn ^ "' has not been defined.") None
       end
-    | PtrType (UnionType un) ->
-      begin match try_assoc un unionmap with
-        Some (_, Some (fds, _), _) ->
-        begin match try_assoc_i f fds with
-          None -> static_error l ("No such field in union '" ^ un ^ "'.") None
-        | Some (i, (_, tp)) ->
-          (WDeref (l, WPureFunCall (l, "union_variant_ptr", [], [w; wintlit l (big_int_of_int i)]), tp), tp, None)
-        end
-      | _ -> static_error l ("Invalid dereference; union type '" ^ un ^ "' has not been defined.") None
-      end
+    | PtrType (UnionType un) -> check_union_member_deref l w un f false
     | ObjType (cn, targs) ->
       begin
       match lookup_class_field (cn, targs) f with
@@ -5244,11 +5250,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let mk_ptr_add p off = mk_app (ptr_add_symb ()) [p; off]
   let mk_field_ptr p off = mk_app (field_ptr_symb ()) [p; off]
+  let mk_union_variant_ptr p idx = mk_app (union_variant_ptr_symb ()) [p; ctxt#mk_intlit idx]
   let mk_pointer_within_limits p = mk_app (pointer_within_limits_symb ()) [p]
   let mk_object_pointer_within_limits p size = mk_app (object_pointer_within_limits_symb ()) [p; size]
   let mk_field_pointer_within_limits p off = mk_app (field_pointer_within_limits_symb ()) [p; off]
 
   if assume_no_subobject_provenance && List.mem_assoc "field_ptr" purefuncmap then begin
+    begin
     ctxt#begin_formal;
     let pr = ctxt#mk_bound 0 ctxt#type_inductive in
     let addr = ctxt#mk_bound 1 ctxt#type_int in
@@ -5256,6 +5264,17 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let eq = ctxt#mk_eq fp (mk_ptr_add pr addr) in
     ctxt#end_formal;
     ctxt#assume_forall "field_ptr_eq_ptr_add" [fp] [ctxt#type_inductive; ctxt#type_int] eq
+    end;
+
+    begin
+    ctxt#begin_formal;
+    let p = ctxt#mk_bound 0 ctxt#type_inductive in
+    let i = ctxt#mk_bound 1 ctxt#type_int in
+    let vp = mk_app (union_variant_ptr_symb ()) [p; i] in
+    let eq = ctxt#mk_eq vp p in
+    ctxt#end_formal;
+    ctxt#assume_forall "union_variant_ptr_eq_ptr" [vp] [ctxt#type_inductive; ctxt#type_int] eq
+    end
   end
 
   let pointer_getters = lazy_value (fun () ->
@@ -5442,7 +5461,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin match wlhs with
         WRead (_, _, _, _, _, _, _, _) | WReadArray (_, _, _, _) -> ()
       | WVar (_, _, GlobalName) -> ()
-      | WDeref (_, _, _) -> ()
+      | WDeref (_, _, _)  -> ()
       | _ -> static_error l "The left-hand side of a points-to assertion must be a field dereference, a global variable, a pointer variable dereference or an array element expression." None
       end;
       let (wv, tenv') = check_pat (pn,ilist) tparams tenv t v in
@@ -7020,6 +7039,9 @@ let check_if_list_is_defined () =
             cont state (List.assoc x all_funcnameterms)
         | WDeref (l, w, tp) ->
           ev state w cont
+        | WReadUnionMember (l, w, unionName, memberIndex, memberName, memberType, isActivating) ->
+          ev state w $. fun state v ->
+          cont state (mk_union_variant_ptr v memberIndex)
         | _ -> static_error l "Taking the address of this expression is not supported." None
       end
     | WSwitchExpr (l, e, i, targs, cs, cdef_opt, tenv, tp) ->

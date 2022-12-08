@@ -305,8 +305,9 @@ and
   | ClassLit of loc * string (* class literal in java *)
   | Typeid of loc * expr
   | TypeInfo of loc * type_
-  | Read of loc * expr * string (* lezen van een veld; hergebruiken voor java field access *)
+  | Read of loc * expr * string
   | Select of loc * expr * string (* reading a field in C; Java uses Read *)
+  | ActivatingRead of loc * expr * string (* activates the union member *)
   | ArrayLengthExpr of loc * expr
   (* Expression which returns the value of a field of an object *)
   | WRead of
@@ -318,6 +319,14 @@ and
       bool (* static *) *
       constant_value option option ref *
       ghostness
+  | WReadUnionMember of
+      loc *
+      expr *
+      string (* parent *) *
+      int * (* member index *)
+      string (* member name *) *
+      type_ (* range *) *
+      bool (* activates the member *)
   (* Expression which returns the value of a field of
    * a struct that is not an object - only for C *)
   | WSelect of
@@ -946,10 +955,12 @@ let rec expr_loc e =
   | WOperation (l, op, es, t) -> l
   | SliceExpr (l, p1, p2) -> l
   | Read (l, e, f)
+  | ActivatingRead (l, e, f)
   | Select (l, e, f) -> l
   | ArrayLengthExpr (l, e) -> l
   | WSelect (l, _, _, _, _) -> l
   | WRead (l, _, _, _, _, _, _, _) -> l
+  | WReadUnionMember (l, _, _, _, _, _, _) -> l
   | WReadInductiveField(l, _, _, _, _, _) -> l
   | ReadArray (l, _, _) -> l
   | WReadArray (l, _, _, _) -> l
@@ -1151,9 +1162,11 @@ let expr_fold_open iter state e =
   | StringLit (l, s) -> state
   | ClassLit (l, cn) -> state
   | Read (l, e0, f)
+  | ActivatingRead (l, e0, f)
   | Select (l, e0, f) -> iter state e0
   | ArrayLengthExpr (l, e0) -> iter state e0
   | WRead (l, e0, fparent, fname, frange, fstatic, fvalue, fghost) -> if fstatic then state else iter state e0
+  | WReadUnionMember (l, e0, parent, name, index, range, isActivating) -> iter state e0
   | WSelect (l, e0, fparent, fname, frange) -> iter state e0
   | WReadInductiveField (l, e0, ind_name, constr_name, field_name, targs) -> iter state e0
   | ReadArray (l, a, i) -> let state = iter state a in let state = iter state i in state

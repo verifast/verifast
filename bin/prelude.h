@@ -58,9 +58,8 @@ lemma_auto(field_ptr_provenance(p, fieldOffset)) void field_ptr_provenance_injec
 fixpoint pointer field_ptr(pointer p, int fieldOffset) {
     return pointer_ctor(field_ptr_provenance(p, fieldOffset), p.address + fieldOffset);
 }
-fixpoint pointer_provenance union_variant_ptr_provenance(pointer p, int variantId) {
-    return p.provenance; // TODO: enforce strict aliasing (a.k.a. "effective types")
-}
+
+fixpoint pointer_provenance union_variant_ptr_provenance(pointer p, int variantId);
 fixpoint pointer union_variant_ptr(pointer p, int variantId) {
     return pointer_ctor(union_variant_ptr_provenance(p, variantId), p.address);
 }
@@ -122,6 +121,10 @@ lemma_auto(pointer_within_limits((void *)field_ptr((pointer)p, fieldOffset))) vo
 lemma_auto(field_pointer_within_limits((void *)field_ptr((pointer)p, fieldOffset), 0)) void first_field_pointer_within_limits_elim(void *p, int fieldOffset);
     requires true;
     ensures field_pointer_within_limits((void *)field_ptr((pointer)p, fieldOffset), 0) == field_pointer_within_limits(p, fieldOffset);
+
+lemma_auto(field_pointer_within_limits((void *)union_variant_ptr(field_ptr((pointer)p, fieldOffset), variantId), 0)) void first_field_of_union_variant_pointer_within_limits_elim(void *p, int fieldOffset, int variantId);
+    requires true;
+    ensures field_pointer_within_limits((void *)union_variant_ptr(field_ptr((pointer)p, fieldOffset), variantId), 0) == field_pointer_within_limits(p, fieldOffset);
 
 lemma_auto(ptr_within_limits(field_ptr(p, 0))) void ptr_within_limits_field_ptr_0(pointer p);
     requires true;

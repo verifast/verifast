@@ -54,8 +54,8 @@ expr mk_literal_expr(int value)
   expr result = malloc(sizeof(struct expr));
   if (result == 0) abort();
   result->tag = EXPR_TAG_LITERAL;
-  //@ close_struct(&result->info.literal);
-  result->info.literal.value = value;
+  //@ char__limits((void *)&result->info);
+  result->info./*@activating@*/literal.value = value;
   return result;
 }
 
@@ -66,8 +66,7 @@ expr mk_binop_expr(char operator, expr leftOperand, expr rightOperand)
   expr result = malloc(sizeof(struct expr));
   if (result == 0) abort();
   result->tag = EXPR_TAG_BINOP;
-  //@ close_struct(&result->info.binop);
-  result->info.binop.operator = operator;
+  result->info./*@activating@*/binop.operator = operator;
   result->info.binop.leftOperand = leftOperand;
   result->info.binop.rightOperand = rightOperand;
   return result;
@@ -99,13 +98,13 @@ void dispose(expr e)
 {
   switch (e->tag) {
     case EXPR_TAG_LITERAL:
-      //@ open_struct(&e->info.literal);
+      //@ deactivate_union_member(e->info.literal);
       free(e);
       break;
     case EXPR_TAG_BINOP:
       dispose(e->info.binop.leftOperand);
       dispose(e->info.binop.rightOperand);
-      //@ open_struct(&e->info.binop);
+      //@ deactivate_union_member(e->info.binop);
       free(e);
       break;
   }

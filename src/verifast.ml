@@ -506,6 +506,20 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           produce_chunk h (p_symb, true) targs real_unit (Some (List.length ftxmap + 1)) ts size $. fun h ->
           cont h env
       end
+    | ExprStmt (CallExpr (l, "deactivate_union_member", [], [], args, Static)) when language = CLang && pure ->
+      let e = match args with [LitPat e] -> e | _ -> static_error l "One argument expected" None in
+      let (w, tp) = check_expr (pn,ilist) tparams tenv e in
+      let (ld, wtarget, unionName, memberIndex, memberName, memberType) =
+        match w with
+          WDeref (ld, AddressOf (_, WReadUnionMember (_, wtarget, unionName, memberIndex, memberName, memberType, _)), _) ->
+          (ld, wtarget, unionName, memberIndex, memberName, memberType)
+        | _ -> static_error l "The argument must be a union member expression" None
+      in
+      eval_h h env wtarget $. fun h env target ->
+      let vp = mk_union_variant_ptr target memberIndex in
+      consume_c_object_core_core l real_unit_pat vp memberType h true true $. fun _ h _ ->
+      let cs = get_unique_var_symb "cs" (list_type (option_type charType)) in
+      cont (Chunk ((chars__pred_symb (), true), [], real_unit, [target; sizeof l memberType; cs], None)::h) env
     | ExprStmt (CallExpr (l, ("close_struct" | "close_struct_zero" as name), targs, [], args, Static)) when language = CLang ->
       require_pure ();
       let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "close_struct expects no type arguments and one argument." None in

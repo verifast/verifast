@@ -29,11 +29,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match e with
       Operation (l, op, es) | WOperation (l, op, es, _) -> flatmap expr_assigned_variables es
     | TruncatingExpr (l, e) -> expr_assigned_variables e
-    | Read (l, e, f) -> expr_assigned_variables e
+    | Read (l, e, f) | ActivatingRead (l, e, f) -> expr_assigned_variables e
     | WRead (l, e, fparent, fname, frange, fstatic, fvalue, fghost) -> expr_assigned_variables e
     | ReadArray (l, ea, ei) -> expr_assigned_variables ea @ expr_assigned_variables ei
     | Deref (l, e) -> expr_assigned_variables e
-    | WDeref (l, e, _) -> expr_assigned_variables e
+    | WDeref (_, e, _) | WReadUnionMember (_, e, _, _, _, _, _) -> expr_assigned_variables e
     | CallExpr (l, g, _, _, pats, _) -> flatmap (function (LitPat e) -> expr_assigned_variables e | _ -> []) pats
     | ExprCallExpr (l, e, es) -> flatmap expr_assigned_variables (e::es)
     | WPureFunCall (l, g, targs, args) -> flatmap expr_assigned_variables args
@@ -1189,7 +1189,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Operation(_, _, es) | WOperation (_, _, es, _) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
     | TruncatingExpr (_, e) -> expr_mark_addr_taken e locals
     | AddressOf(_, (Var (_, x) | WVar (_, x, _))) -> mark_if_local locals x
-    | Read(_, e, _) -> expr_mark_addr_taken e locals
+    | Read(_, e, _) | ActivatingRead (_, e, _) -> expr_mark_addr_taken e locals
     | Select(_, e, f) -> expr_mark_addr_taken e locals
     | ArrayLengthExpr(_, e) -> expr_mark_addr_taken e locals
     | WRead(_, e, _, _, _, _, _, _) -> expr_mark_addr_taken e locals
@@ -1197,7 +1197,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ReadArray(_, e1, e2) -> (expr_mark_addr_taken e1 locals); (expr_mark_addr_taken e2 locals)
     | WReadArray(_, e1, _, e2) -> (expr_mark_addr_taken e1 locals); (expr_mark_addr_taken e2 locals)
     | Deref(_, e) -> expr_mark_addr_taken e locals
-    | WDeref(_, e, _) -> expr_mark_addr_taken e locals
+    | WDeref(_, e, _) | WReadUnionMember (_, e, _, _, _, _, _) -> expr_mark_addr_taken e locals
     | CallExpr(_, n, _, ps1, ps2, _) -> 
       begin match dialect with 
       | Some Cxx -> 
@@ -1361,14 +1361,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       True _ | False _ | Null _ | Var _ | WVar _ | IntLit _ | WIntLit _ | RealLit _ | StringLit(_, _) | ClassLit(_) -> []
     | Operation(_, _, es) | WOperation (_, _, es, _) -> List.flatten (List.map (fun e -> expr_address_taken e) es)
     | TruncatingExpr (_, e) -> expr_address_taken e
-    | Read(_, e, _) -> expr_address_taken e
+    | Read(_, e, _) | ActivatingRead (_, e, _) -> expr_address_taken e
     | ArrayLengthExpr(_, e) -> expr_address_taken e
     | WRead(_, e, _, _, _, _, _, _) -> expr_address_taken e
     | WSelect(_, e, _, _, _) -> expr_address_taken e
     | ReadArray(_, e1, e2) -> (expr_address_taken e1) @ (expr_address_taken e2)
     | WReadArray(_, e1, _, e2) -> (expr_address_taken e1) @ (expr_address_taken e2)
     | Deref(_, e) -> (expr_address_taken e)
-    | WDeref(_, e, _) -> (expr_address_taken e)
+    | WDeref(_, e, _) | WReadUnionMember (_, e, _, _, _, _, _) -> (expr_address_taken e)
     | CallExpr(_, _, _, ps1, ps2, _) -> List.flatten (List.map (fun pat -> pat_address_taken pat) (ps1 @ ps2))
     | ExprCallExpr(_, e, es) -> List.flatten (List.map (fun e -> expr_address_taken e) (e :: es))
     | WFunPtrCall(_, e, ftn, es) -> List.flatten (List.map (fun e -> expr_address_taken e) (e :: es))
@@ -2146,6 +2146,26 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       assume (ctxt#mk_eq (ctxt#mk_app arraylength_symbol [at]) length) $. fun () ->
       cont (Chunk ((array_slice_symb, true), [elem_tp], real_unit, [at; ctxt#mk_intlit 0; length; elems], None)::h) env at
     in
+    let rec eval_h_core_and_activate_union_members readonly h env w cont =
+      match w with
+        AddressOf (la, WReadUnionMember (lr, wr, unionName, memberIndex, memberName, memberType, isActivating)) ->
+        eval_h_core_and_activate_union_members readonly h env wr $. fun h env target ->
+        let vp = mk_union_variant_ptr target memberIndex in
+        if isActivating then
+          let pats = [TermPat target; TermPat (sizeof l memberType); dummypat] in
+          consume_chunk rules h [] [] [] l (chars__pred_symb(), true) [] real_unit real_unit_pat (Some 2) pats $. fun _ h _ [_; _; cs] _ _ _ _ ->
+          produce_c_object l real_unit vp memberType eval_h Unspecified false true h env $. fun h env ->
+          cont h env vp
+        else
+          cont h env vp
+      | AddressOf (la, WRead (lr, wr, fparent, fname, tp, false, fvalue, fghost)) ->
+        eval_h_core_and_activate_union_members readonly h env wr $. fun h env target ->
+        cont h env (field_address l target fparent fname)
+      | AddressOf (la, WDeref (ld, w, _)) ->
+        eval_h_core_and_activate_union_members readonly h env w cont
+      | _ ->
+        eval_h_core readonly h env w cont
+    in
     let rec lhs_to_lvalue h env lhs cont =
       match lhs with
         WVar (l, x, scope) -> cont h env (LValues.Var (l, x, scope))
@@ -2155,7 +2175,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           if fstatic then
             cont h env None
           else
-            eval_h h env w (fun h env target -> cont h env (Some target))
+            eval_h_core_and_activate_union_members readonly h env w (fun h env target -> cont h env (Some target))
         end $. fun h env target ->
         let f_symb__opt =
           match p__opt with
@@ -2180,7 +2200,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         eval_h h env i $. fun h env i ->
         cont h env (LValues.ArrayElement (l, arr, elem_tp, i))
       | WDeref (l, w, pointeeType) ->
-        eval_h_core readonly h env w $. fun h env target ->
+        eval_h_core_and_activate_union_members readonly h env w $. fun h env target ->
         cont h env (LValues.Deref (l, target, pointeeType))
       | _ -> static_error (expr_loc lhs) "Cannot assign to this expression." None
     in
