@@ -8,7 +8,7 @@ jobs:
 
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
@@ -18,7 +18,7 @@ jobs:
       - name: Build
         run: ./build.sh
 
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: binary_package
           path: upload
@@ -29,7 +29,7 @@ jobs:
 
       - name: Upload nightly release assets
         if: ${{ github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-        uses: actions/github-script@v5
+        uses: actions/github-script@v6
         with:
           script: |
             await require('./upload-release-asset.js')({
@@ -47,7 +47,7 @@ jobs:
 
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
@@ -60,12 +60,12 @@ jobs:
       - name: Build
         run: ./build.sh
 
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: binary_package
           path: upload
 
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         if: ${{ always() }}
         with:
           name: vfide_libraries
@@ -77,7 +77,7 @@ jobs:
 
       - name: Upload nightly release assets
         if: ${{ github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-        uses: actions/github-script@v5
+        uses: actions/github-script@v6
         with:
           script: |
             await require('./upload-release-asset.js')({
@@ -95,7 +95,7 @@ jobs:
 
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
@@ -108,7 +108,7 @@ jobs:
       - name: Build
         run: c:/cygwin64/bin/bash -lc 'cd $GITHUB_WORKSPACE/src && make nightly VERBOSE=yes GTK=/cygdrive/c/vfdeps'
 
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: binary_package
           path: src/verifast-nightly.zip
@@ -120,7 +120,7 @@ jobs:
 
       - name: Upload nightly release assets
         if: ${{ github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-        uses: actions/github-script@v5
+        uses: actions/github-script@v6
         with:
           script: |
             await require('./upload-release-asset.js')({
