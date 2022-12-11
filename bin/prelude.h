@@ -96,7 +96,7 @@ fixpoint bool pointer_within_limits(void *p) {
 }
 
 fixpoint bool object_pointer_within_limits(void *p, int size) {
-    return pointer_within_limits(p) && pointer_within_limits(p + size) && (uintptr_t)p != 0;
+    return pointer_within_limits(p) && pointer_within_limits(p + size) && (uintptr_t)p != 0 && size > 0;
 }
 
 // When producing a field chunk, VeriFast produces a field_pointer_within_limits fact
