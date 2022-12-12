@@ -2754,6 +2754,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let env = [(current_thread_name, get_unique_var_symb current_thread_name current_thread_type)] @ penv @ env in
     let _ =
+      check_focus l closeBraceLoc $. fun () ->
       check_should_fail () $. fun () ->
       execute_branch $. fun () ->
       with_context (Executing ([], env, l, sprintf "Verifying function '%s'" g)) $. fun () ->
@@ -2953,6 +2954,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let current_thread = (current_thread_name, get_unique_var_symb current_thread_name current_thread_type) in
     let env = [current_thread; "this", this_term] @ penv in
     let _ = 
+      check_focus loc close_brace_loc $. fun () ->
       check_should_fail () @@ fun () ->
       execute_branch @@ fun () ->
       with_context (Executing ([], env, loc, sprintf "Verifying constructor '%s'" struct_name)) @@ fun () ->
@@ -3045,6 +3047,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let env = ["this", this_term; current_thread_name, get_unique_var_symb current_thread_name current_thread_type] in
     let tenv = [("this", this_type); (current_thread_name, current_thread_type)] in
     let _ = 
+      check_focus loc close_brace_loc $. fun () ->
       check_should_fail () @@ fun () ->
       execute_branch @@ fun () ->
       with_context (Executing ([], env, loc, sprintf "Verifying destructor '%s'" @@ cxx_dtor_name struct_name)) @@ fun () ->
@@ -3139,6 +3142,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if report_skipped_stmts || match pre with ExprAsn (_, False _) -> false | _ -> true then reportStmts ss;
         record_fun_timing lm (cn ^ ".<ctor>") begin fun () ->
         if !verbosity >= 1 then Printf.printf "%10.6fs: %s: Verifying constructor %s\n" (Perf.time()) (string_of_loc lm) (string_of_sign (cn, sign));
+        check_focus lm closeBraceLoc $. fun () ->
         execute_branch begin fun () ->
         with_context (Executing ([], [], lm, Printf.sprintf "Class '%s': verifying constructor" cn)) $. fun () ->
         let env = get_unique_var_symbs_non_ghost ([(current_thread_name, current_thread_type)] @ xmap) in
@@ -3241,6 +3245,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         record_fun_timing l g begin fun () ->
         if !verbosity >= 1 then Printf.printf "%10.6fs: %s: Verifying method %s\n" (Perf.time()) (string_of_loc l) g;
         if abstract then static_error l "Abstract method cannot have implementation." None;
+        check_focus l closeBraceLoc $. fun () ->
         execute_branch $. fun () ->
         with_context (Executing ([], [], l, Printf.sprintf "Verifying method '%s'" g)) $. fun () ->
         let (in_pure_context, leminfo, ghostenv) =
@@ -3749,6 +3754,7 @@ let verify_program_core (* ?verify_program_core *)
     (program_path : string)
     (callbacks : callbacks)
     (breakpoint : (string * int) option)
+    (focus : (string * int) option)
     (targetPath : int list option) : unit =
 
   let module VP = VerifyProgram(struct
@@ -3761,6 +3767,7 @@ let verify_program_core (* ?verify_program_core *)
     let program_path = program_path
     let callbacks = callbacks
     let breakpoint = breakpoint
+    let focus = focus
     let targetPath = targetPath
   end) in
   ()
@@ -3825,12 +3832,13 @@ let verify_program (* ?verify_program *)
     (path : string)
     (callbacks : callbacks)
     (breakpoint : (string * int) option)
+    (focus : (string * int) option)
     (targetPath : int list option) : Stats.stats =
   lookup_prover prover
     (object
        method run: 'typenode 'symbol 'termnode. ('typenode, 'symbol, 'termnode) Proverapi.context -> Stats.stats =
          fun ctxt -> clear_stats ();
-                     verify_program_core ~emitter_callback:emitter_callback ctxt options path callbacks breakpoint targetPath;
+                     verify_program_core ~emitter_callback:emitter_callback ctxt options path callbacks breakpoint focus targetPath;
                      !stats
      end)
 

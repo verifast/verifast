@@ -277,6 +277,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
       a "Find file (top window)" ~label:"Find file (_top window)..." ~stock:`FIND ~accel:"<Shift>F7";
       a "Find file (bottom window)" ~label:"Find _file (bottom window)..." ~stock:`FIND ~accel:"F7";
       a "VerifyProgram" ~label:"Verify program" ~stock:`MEDIA_PLAY ~accel:"F5" ~tooltip:"Verify";
+      a "VerifyFunction" ~label:"Verify function" ~stock:`EXECUTE ~accel:"<Shift>F5" ~tooltip:"Verify function";
       a "RunToCursor" ~label:"_Run to cursor" ~stock:`JUMP_TO ~accel:"<Ctrl>F5" ~tooltip:"Run to cursor";
       a "RunShapeAnalysis" ~label:"Run shape analysis on function" ~stock:`MEDIA_FORWARD ~accel:"F9" ~tooltip:"Run shape analysis on the function where the cursor is in";
       a "TopWindow" ~label:"Window(_Top)";
@@ -326,6 +327,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
         </menu>
         <menu action='Verify'>
           <menuitem action='VerifyProgram' />
+          <menuitem action='VerifyFunction' />
           <menuitem action='RunToCursor' />
           <separator />
           <menuitem action='RunShapeAnalysis' />
@@ -362,6 +364,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
         <toolitem action='Redo' />
         <separator />
         <toolitem action='VerifyProgram' />
+        <toolitem action='VerifyFunction' />
         <toolitem action='RunToCursor' />
       </toolbar>
     </ui>
@@ -1441,7 +1444,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
         Some (path, insert_line + 1)
     end
   in
-  let verifyProgram runToCursor targetPath () =
+  let verifyProgram runToCursor focus targetPath () =
     msg := Some("Verifying...");
     updateMessageEntry(false);
     clearTrace();
@@ -1457,6 +1460,12 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
           begin
             let breakpoint =
               if runToCursor then
+                getCursor ()
+              else
+                None
+            in
+            let focus =
+              if focus then
                 getCursor ()
               else
                 None
@@ -1510,7 +1519,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
                 | _ -> false
               in
               let prover, options = merge_options_from_source_file prover options path in
-              let stats = verify_program prover options path {reportRange; reportUseSite; reportStmt; reportStmtExec; reportExecutionForest; reportDirective} breakpoint targetPath in
+              let stats = verify_program prover options path {reportRange; reportUseSite; reportStmt; reportStmtExec; reportExecutionForest; reportDirective} breakpoint focus targetPath in
               begin
                 let _, tab = get_tab_for_path path in
                 let column = tab#stmtExecCountsColumn in
@@ -1668,7 +1677,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
           let py = y + cw / 2 in
           if abs (by - py) <= dotRadius && abs (bx - px) <= dotRadius then
             begin match nodeType with
-              ExecNode (msg, p) -> verifyProgram false (Some p) ()
+              ExecNode (msg, p) -> verifyProgram false false (Some p) ()
             | _ -> ()
             end
         end else begin
@@ -1838,8 +1847,9 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
   
   ignore $. (actionGroup#get_action "ClearTrace")#connect#activate clearTrace;
   ignore $. (actionGroup#get_action "Preferences")#connect#activate showPreferencesDialog;
-  ignore $. (actionGroup#get_action "VerifyProgram")#connect#activate (verifyProgram false None);
-  ignore $. (actionGroup#get_action "RunToCursor")#connect#activate (verifyProgram true None);
+  ignore $. (actionGroup#get_action "VerifyProgram")#connect#activate (verifyProgram false false None);
+  ignore $. (actionGroup#get_action "VerifyFunction")#connect#activate (verifyProgram false true None);
+  ignore $. (actionGroup#get_action "RunToCursor")#connect#activate (verifyProgram true false None);
   ignore $. (actionGroup#get_action "RunShapeAnalysis")#connect#activate runShapeAnalyser;
   ignore $. (actionGroup#get_action "Include paths")#connect#activate showIncludesDialog;
   ignore $. (actionGroup#get_action "Find file (top window)")#connect#activate (showFindFileDialog subNotebook);
@@ -1862,7 +1872,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
   ignore $. Glib.Idle.add (fun () -> textPaned#set_position 0; false);
   if verifyAndQuit then begin
     ignore $. Glib.Idle.add begin fun () ->
-      verifyProgram false None ();
+      verifyProgram false false None ();
       ignore $. Glib.Idle.add (fun () -> exit 0);
       false
     end

@@ -50,7 +50,7 @@ end
 module LineHashtbl = Hashtbl.Make(HashedLine)
 
 let _ =
-  let verify ?(emitter_callback = fun _ -> ()) (print_stats : bool) (options : options) (prover : string) (path : string) (emitHighlightedSourceFiles : bool) (dumpPerLineStmtExecCounts : bool) allowDeadCode json mergeOptionsFromSourceFile breakpoint targetPath =
+  let verify ?(emitter_callback = fun _ -> ()) (print_stats : bool) (options : options) (prover : string) (path : string) (emitHighlightedSourceFiles : bool) (dumpPerLineStmtExecCounts : bool) allowDeadCode json mergeOptionsFromSourceFile breakpoint focus targetPath =
     let exit l =
       Java_frontend_bridge.unload();
       exit l
@@ -234,7 +234,7 @@ let _ =
         else
           prover, options
       in
-      let stats = verify_program ~emitter_callback:emitter_callback prover options path callbacks breakpoint targetPath in
+      let stats = verify_program ~emitter_callback:emitter_callback prover options path callbacks breakpoint focus targetPath in
       reportDeadCode ();
       dumpPerLineStmtExecCounts ();
       if print_stats then stats#printStats;
@@ -389,6 +389,7 @@ let _ =
   let exports: string list ref = ref [] in
   let outputSExpressions : string option ref = ref None in
   let breakpoint: (string * int) option ref = ref None in
+  let focus: (string * int) option ref  = ref None in
   let targetPath: int list option ref = ref None in
   let provides = ref [] in
   let keepProvideFiles = ref false in
@@ -436,6 +437,7 @@ let _ =
             ; "-shared", Set isLibrary, "The file is a library (i.e. no main function required)."
             ; "-allow_assume", Set allowAssume, "Allow assume(expr) annotations."
             ; "-breakpoint", String (fun path_loc -> let [path; loc_string] = String.split_on_char ':' path_loc in breakpoint := Some (path, int_of_string loc_string)), "-breakpoint myfile.c:123 causes symbolic execution to fail when it reaches line 123 of file myfile.c"
+            ; "-focus", String (fun path_loc -> let [path; loc_string] = String.split_on_char ':' path_loc in focus := Some (path, int_of_string loc_string)), "-focus myfile.c:123 causes VeriFast to verify only the function/method/constructor/destructor at the specified source line"
             ; "-break_at_node", String (fun path -> targetPath := Some (path |> String.split_on_char ',' |> List.map int_of_string)), "Break when symbolic execution reaches the specified node in the execution tree."
             ; "-allow_should_fail", Set allowShouldFail, "Allow '//~' annotations that specify the line should fail."
             ; "-emit_vfmanifest", Set emitManifest, " "
@@ -502,7 +504,7 @@ let _ =
               SExpressionEmitter.emit target_file packages          
             | None             -> ()
         in
-        verify ~emitter_callback:emitter_callback !stats options !prover filename !emitHighlightedSourceFiles !dumpPerLineStmtExecCounts !allowDeadCode !json !readOptionsFromSourceFile !breakpoint !targetPath;
+        verify ~emitter_callback:emitter_callback !stats options !prover filename !emitHighlightedSourceFiles !dumpPerLineStmtExecCounts !allowDeadCode !json !readOptionsFromSourceFile !breakpoint !focus !targetPath;
         allModules := ((Filename.chop_extension filename) ^ ".vfmanifest")::!allModules
       end
     else if Filename.check_suffix filename ".o" then

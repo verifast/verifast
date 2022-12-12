@@ -46,6 +46,7 @@ module type VERIFY_PROGRAM_ARGS = sig
   val program_path: string
   val callbacks: callbacks
   val breakpoint: (string * int) option
+  val focus: (string * int) option (* Only verify the function/method/ctor on the specified source line *)
   val targetPath: int list option
 end
 

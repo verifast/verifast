@@ -137,6 +137,15 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if line = line0 && path = path0 then
         assert_false h env l "Breakpoint reached." None
 
+  let check_focus l1 l2 cont =
+    match focus with
+      None -> cont ()
+    | Some (path, line) ->
+      let ((path1, line1, _), _) = root_caller_token l1 in
+      let ((_, line2, _), _) = root_caller_token l2 in
+      if line1 <= line && line <= line2 && path = path1 then
+        cont ()
+
   let is_empty_chunk name targs frac args =
     List.exists
     (fun (symb, fsymbs, conds, ((p, fns), (env, l, predinst_tparams, xs, _, inputParamCount, wbody))) ->
