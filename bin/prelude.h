@@ -29,6 +29,10 @@ lemma void div_rem_nonneg(int D, int d);
     requires 0 <= D &*& 0 < d;
     ensures D == D / d * d + D % d &*& 0 <= D / d &*& D / d <= D &*& 0 <= D % d &*& D % d < d;
 
+lemma void div_rem_nonneg_unique(int D, int d, int q, int r);
+    requires 0 <= D &*& 0 <= r &*& r < d &*& D == d * q + r;
+    ensures D / d == q &*& D % d == r;
+
 inductive pointer_provenance =
     pointer_provenance_ctor(int); // Do not rely on this definition; it is subject to change.
 inductive pointer = pointer_ctor(pointer_provenance provenance, uintptr_t address);

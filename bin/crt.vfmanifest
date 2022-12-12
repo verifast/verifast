@@ -148,6 +148,7 @@
 .provides ./prelude.h#mul_mono_l
 .provides ./prelude.h#div_rem
 .provides ./prelude.h#div_rem_nonneg
+.provides ./prelude.h#div_rem_nonneg_unique
 .provides ./prelude.h#divrem_intro
 .provides ./prelude.h#divrem_elim
 .provides ./prelude.h#pointers_to_chars
