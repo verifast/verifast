@@ -532,13 +532,24 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 ref None ) );
           ] )
 
+    let translate_place_element (loc : Ast.loc) (e : Ast.expr)
+        (place_elm : PlaceElementRd.t) =
+      let open PlaceElementRd in
+      match get place_elm with
+      | Deref -> Ok (Ast.Deref (loc, e))
+      | Field -> failwith "Todo: PlaceElement Field"
+      | Undefined _ ->
+          Error (`TrPlaceElement "Unknown place element projection")
+
     let translate_place (place_cpn : PlaceRd.t) (loc : Ast.loc) =
       let open PlaceRd in
       let id_cpn = local_get place_cpn in
       let id = translate_local_decl_id id_cpn in
       let projection_cpn = projection_get_list place_cpn in
-      if ListAux.is_empty projection_cpn then Ast.Var (loc, id)
-      else failwith "Todo: Place::Projection"
+      ListAux.try_fold_left
+        (translate_place_element loc)
+        (Ast.Var (loc, id))
+        projection_cpn
 
     let translate_typed_constant (ty_const_cpn : TyConstRd.t) (loc : Ast.loc) =
       let open TyConstRd in
@@ -600,8 +611,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
          - Places used by Operand::Move will never get used again (obviously raw pointers are not tracked)
       *)
       match get operand_cpn with
-      | Copy place_cpn -> Ok (`TrOperandCopy (translate_place place_cpn loc))
-      | Move place_cpn -> Ok (`TrOperandMove (translate_place place_cpn loc))
+      | Copy place_cpn ->
+          let* place = translate_place place_cpn loc in
+          Ok (`TrOperandCopy place)
+      | Move place_cpn ->
+          let* place = translate_place place_cpn loc in
+          Ok (`TrOperandMove place)
       | Constant constant_cpn -> translate_constant constant_cpn
       | Undefined _ -> Error (`TrOperand "Unknown Mir Operand kind")
 
@@ -712,11 +727,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         (loc : Ast.loc) =
       let open DestinationDataRd in
       let place_cpn = place_get dst_data_cpn in
-      let dst = translate_place place_cpn loc in
+      let* dst = translate_place place_cpn loc in
       let dst_bblock_id_cpn = basic_block_id_get dst_data_cpn in
       let dst_bblock_id = translate_basic_block_id dst_bblock_id_cpn in
       let dst_data : Mir.fn_call_dst_data = { dst; dst_bblock_id } in
-      dst_data
+      Ok dst_data
 
     let translate_fn_call (fn_call_data_cpn : FnCallDataRd.t) (loc : Ast.loc) =
       let open FnCallDataRd in
@@ -739,7 +754,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         | Nothing -> (*Diverging call*) Ok (Ast.ExprStmt fn_call_rexpr, None)
         | Something ptr_cpn ->
             let destination_data_cpn = VfMirStub.Reader.of_pointer ptr_cpn in
-            let { Mir.dst; Mir.dst_bblock_id } =
+            let* { Mir.dst; Mir.dst_bblock_id } =
               translate_destination_data destination_data_cpn loc
             in
             Ok
@@ -859,7 +874,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       match get statement_kind_cpn with
       | Assign assign_data_cpn -> (
           let lhs_place_cpn = AssignData.lhs_place_get assign_data_cpn in
-          let lhs_place = translate_place lhs_place_cpn loc in
+          let* lhs_place = translate_place lhs_place_cpn loc in
           let rhs_rvalue_cpn = AssignData.rhs_rvalue_get assign_data_cpn in
           let* rhs_rvalue = translate_rvalue rhs_rvalue_cpn loc in
           match rhs_rvalue with
@@ -935,7 +950,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let open VarDebugInfoContentsRd in
       match get vdic_cpn with
       | Place place_cpn -> (
-          match translate_place place_cpn loc with
+          let* place = translate_place place_cpn loc in
+          match place with
           | Ast.Var ((*loc*) _, id) -> Ok (Mir.VdiiPlace { id })
           | _ -> failwith "Todo VarDebugInfoContents Place")
       | Const constant_cpn -> Ok Mir.VdiiConstant

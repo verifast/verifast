@@ -241,11 +241,13 @@ mod vf_mir_builder {
     use body_cpn::annotation as annot_cpn;
     use body_cpn::basic_block as basic_block_cpn;
     use body_cpn::basic_block_id as basic_block_id_cpn;
+    use body_cpn::const_value as const_value_cpn;
     use body_cpn::constant as constant_cpn;
     use body_cpn::contract as contract_cpn;
     use body_cpn::local_decl as local_decl_cpn;
     use body_cpn::local_decl_id as local_decl_id_cpn;
     use body_cpn::place as place_cpn;
+    use body_cpn::scalar as scalar_cpn;
     use body_cpn::source_info as source_info_cpn;
     use body_cpn::var_debug_info as var_debug_info_cpn;
     use constant_cpn::constant_kind as constant_kind_cpn;
@@ -270,6 +272,7 @@ mod vf_mir_builder {
     use tracing::{debug, trace};
     use ty_cpn::adt_ty as adt_ty_cpn;
     use ty_cpn::const_ as ty_const_cpn;
+    use ty_cpn::const_kind as const_kind_cpn;
     use ty_cpn::fn_def_ty as fn_def_ty_cpn;
     use ty_cpn::gen_arg as gen_arg_cpn;
     use ty_cpn::raw_ptr_ty as raw_ptr_ty_cpn;
@@ -817,12 +820,30 @@ mod vf_mir_builder {
             rvalue: &mir::Rvalue<'tcx>,
             rvalue_cpn: rvalue_cpn::Builder<'_>,
         ) {
+            debug!("Encoding Rvalue {:?}", rvalue);
             match rvalue {
                 mir::Rvalue::Use(operand) => {
                     let operand_cpn = rvalue_cpn.init_use();
                     Self::encode_operand(tcx, operand, operand_cpn);
                 }
-                _ => todo!(),
+                // [x; 32]
+                mir::Rvalue::Repeat(operand, ty_const) => todo!(),
+                // &x or &mut x
+                mir::Rvalue::Ref(region, bor_kind, place) => todo!(),
+                mir::Rvalue::ThreadLocalRef(def_id) => todo!(),
+                mir::Rvalue::AddressOf(mutability, place) => todo!(),
+                mir::Rvalue::Len(place) => todo!(),
+                mir::Rvalue::Cast(cast_kind, operand, ty) => todo!(),
+                mir::Rvalue::BinaryOp(bin_op, box (operandl, operandr)) => todo!(),
+                mir::Rvalue::CheckedBinaryOp(bin_op, box (operandl, operandr)) => todo!(),
+                mir::Rvalue::NullaryOp(null_op, ty) => todo!(),
+                mir::Rvalue::UnaryOp(un_op, operand) => todo!(),
+                // Read the discriminant of an ADT.
+                mir::Rvalue::Discriminant(place) => todo!(),
+                // Creates an aggregate value, like a tuple or struct.
+                mir::Rvalue::Aggregate(box aggregate_kind, operands) => todo!(),
+                // Transmutes a `*mut u8` into shallow-initialized `Box<T>`.
+                mir::Rvalue::ShallowInitBox(operand, ty) => todo!(),
             }
         }
 
@@ -1040,23 +1061,127 @@ mod vf_mir_builder {
         fn encode_typed_constant(
             tcx: TyCtxt<'tcx>,
             ty_const: &ty::Const<'tcx>,
-            ty_const_cpn: ty_const_cpn::Builder<'_>,
+            mut ty_const_cpn: ty_const_cpn::Builder<'_>,
         ) {
             debug!("Encoding typed constant {:?}", ty_const);
-            let ty_cpn = ty_const_cpn.init_ty();
+            let ty_cpn = ty_const_cpn.reborrow().init_ty();
             Self::encode_ty(tcx, ty_const.ty, ty_cpn);
 
-            // TODO @Nima: Send actual constant values as well later
-            // match ty_const.val {
-            //     ty::ConstKind::Value(const_value) => match const_value {
-            //         mir::interpret::ConstValue::Scalar(scalar) => match scalar {
-            //             mir::interpret::Scalar::Int(_) => todo!(),
-            //             mir::interpret::Scalar::Ptr(_, _) => todo!(),
-            //         },
-            //         _ => todo!(),
-            //     },
-            //     _ => todo!(),
-            // }
+            let val_cpn = ty_const_cpn.init_val();
+            Self::encode_const_kind(tcx, ty_const.ty, &ty_const.val, val_cpn);
+        }
+
+        fn encode_const_kind(
+            tcx: TyCtxt<'tcx>,
+            ty: ty::Ty<'tcx>,
+            const_kind: &ty::ConstKind<'tcx>,
+            const_kind_cpn: const_kind_cpn::Builder<'_>,
+        ) {
+            use ty::ConstKind as CK;
+            match const_kind {
+                // A const generic parameter.
+                CK::Param(param_const) => todo!(),
+                // Infer the value of the const.
+                CK::Infer(infer_const) => todo!(),
+                // Bound const variable, used only when preparing a trait query.
+                CK::Bound(debruijn_idx, bound_var) => todo!(),
+                // A placeholder const - universally quantified higher-ranked const.
+                CK::Placeholder(placeholder_const) => todo!(),
+                // Used in the HIR by using `Unevaluated` everywhere and later normalizing to one of the other
+                // variants when the code is monomorphic enough for that.
+                CK::Unevaluated(unevaluated) => todo!(),
+                // Used to hold computed value.
+                CK::Value(const_value) => {
+                    let const_value_cpn = const_kind_cpn.init_value();
+                    Self::encode_const_value(tcx, ty, const_value, const_value_cpn);
+                }
+                // A placeholder for a const which could not be computed; this is
+                // propagated to avoid useless error messages.
+                CK::Error(delay_span_bug_emitted) => todo!(),
+            }
+        }
+
+        fn encode_const_value(
+            tcx: TyCtxt<'tcx>,
+            ty: ty::Ty<'tcx>,
+            const_value: &mir::interpret::ConstValue<'tcx>,
+            const_value_cpn: const_value_cpn::Builder<'_>,
+        ) {
+            use mir::interpret::ConstValue as CV;
+            match const_value {
+                // Used only for types with `layout::abi::Scalar` ABI and ZSTs.
+                CV::Scalar(scalar) => {
+                    // `Scalar`s are a limited number of primitives.
+                    // It is easier to encode the value itself instead of its internal representation in the compiler
+                    let scalar_cpn = const_value_cpn.init_scalar();
+                    Self::encode_scalar(tcx, ty, scalar, scalar_cpn);
+                }
+                // Used only for `&[u8]` and `&str`
+                CV::Slice { data, start, end } => todo!(),
+                // A value not represented/representable by `Scalar` or `Slice`
+                CV::ByRef { alloc, offset } => todo!(),
+            }
+        }
+
+        fn encode_scalar(
+            tcx: TyCtxt<'tcx>,
+            ty: ty::Ty<'tcx>,
+            scalar: &mir::interpret::Scalar,
+            mut scalar_cpn: scalar_cpn::Builder<'_>,
+        ) {
+            let gen_err_msg = "Failed to encode scalar";
+            let err_msg = &format!(
+                "{}. Cannot make a {:?} value out of the scalar {:?}",
+                gen_err_msg, ty, scalar
+            );
+            match ty.kind() {
+                ty::TyKind::Bool => {
+                    let bv = scalar.to_bool().expect(err_msg);
+                    scalar_cpn.set_bool(bv);
+                }
+                ty::TyKind::Char => {
+                    let cv = scalar.to_char().expect(err_msg);
+                    scalar_cpn.set_char(&cv.to_string());
+                }
+                ty::TyKind::Int(int_ty) => todo!(),
+                ty::TyKind::Uint(uint_ty) => {
+                    let mut uint_val_cpn = scalar_cpn.init_uint();
+                    match uint_ty {
+                        ty::UintTy::Usize => {
+                            let vusz = scalar.to_machine_usize(&tcx).expect(err_msg);
+                            capnp_utils::encode_u_int128(vusz.into(), uint_val_cpn.init_usize());
+                        }
+                        ty::UintTy::U8 => {
+                            let vu8 = scalar.to_u8().expect(err_msg);
+                            uint_val_cpn.set_u8(vu8);
+                        }
+                        ty::UintTy::U16 => {
+                            let vu16 = scalar.to_u16().expect(err_msg);
+                            uint_val_cpn.set_u16(vu16);
+                        }
+                        ty::UintTy::U32 => {
+                            let vu32 = scalar.to_u32().expect(err_msg);
+                            uint_val_cpn.set_u32(vu32);
+                        }
+                        ty::UintTy::U64 => {
+                            let vu64 = scalar.to_u64().expect(err_msg);
+                            uint_val_cpn.set_u64(vu64);
+                        }
+                        ty::UintTy::U128 => {
+                            let vu128 = scalar.to_u128().expect(err_msg);
+                            capnp_utils::encode_u_int128(vu128, uint_val_cpn.init_u128());
+                        }
+                    }
+                }
+                ty::TyKind::Float(float_ty) => todo!(),
+                ty::TyKind::FnDef(def_id, substs) => scalar_cpn.set_fn_def(()),
+                ty::TyKind::Tuple(substs) => {
+                    for ty in ty.tuple_fields() {
+                        todo!();
+                    }
+                }
+                _ => panic!("{}. Type {:?} is not a scalar type.", gen_err_msg, ty),
+            }
         }
 
         fn encode_place(place: &mir::Place<'tcx>, mut place_cpn: place_cpn::Builder<'_>) {
@@ -1075,10 +1200,10 @@ mod vf_mir_builder {
 
         fn encode_place_element(
             place_elm: &mir::PlaceElem<'tcx>,
-            place_elm_cpn: place_element_cpn::Builder<'_>,
+            mut place_elm_cpn: place_element_cpn::Builder<'_>,
         ) {
             match place_elm {
-                mir::ProjectionElem::Deref => todo!(),
+                mir::ProjectionElem::Deref => place_elm_cpn.set_deref(()),
                 mir::ProjectionElem::Field(field, ty) => todo!(),
                 _ => todo!(),
             }

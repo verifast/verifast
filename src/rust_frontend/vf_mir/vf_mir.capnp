@@ -4,6 +4,8 @@ struct UInt128 {
     l @1: UInt64;
 }
 
+using BigUInt = UInt128;
+
 struct Option(T) {
     union {
         nothing @0: Void;
@@ -52,17 +54,11 @@ struct Mutability {
 }
 
 struct Ty {
-    struct ConstValue {
-        union {
-            scalar @0: Void;
-            slice @1: Void;
-        }
-    }
 
     struct ConstKind {
         union {
             param @0: Void;
-            value @1: ConstValue;
+            value @1: Body.ConstValue;
         }
     }
 
@@ -190,12 +186,44 @@ struct Body {
         struct PlaceElement {
             union {
                 deref @0: Void;
-                field @1: Text;
+                field @1: Void;
             }
         }
 
         local @0: LocalDeclId;
         projection @1: List(PlaceElement);
+    }
+
+    struct Scalar {
+        struct Int {
+            # Todo
+        }
+        struct UInt { union {
+            usize @0: BigUInt;
+            u8 @1: UInt8;
+            u16 @2: UInt16;
+            u32 @3: UInt32;
+            u64 @4: UInt64;
+            u128 @5: UInt128;
+        }}
+        struct Float {
+            # Todo
+        }
+        union {
+            bool @0: Bool;
+            char @1: Text;
+            int @2: Int;
+            uint @3: UInt;
+            float @4: Float;
+            fnDef @5: Void;
+        }
+    }
+
+    struct ConstValue {
+        union {
+            scalar @0: Scalar;
+            slice @1: Void;
+        }
     }
 
     struct Constant {

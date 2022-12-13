@@ -24,6 +24,13 @@ module ListAux = struct
     let* mapped_l = helper l [] in
     Ok (List.rev mapped_l)
 
+  let rec try_fold_left f inp l =
+    match l with
+    | [] -> Ok inp
+    | h :: t ->
+        let* inp = f inp h in
+        try_fold_left f inp t
+
   let is_empty l = match l with [] -> true | _ :: _ -> false
   let first l = match l with [] -> None | fst :: _ -> Some fst
 

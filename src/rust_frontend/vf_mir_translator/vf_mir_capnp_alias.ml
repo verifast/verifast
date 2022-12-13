@@ -28,6 +28,7 @@ module OperandRd = BasicBlockRd.Operand
 module ConstantRd = BodyRd.Constant
 module ConstantKindRd = ConstantRd.ConstantKind
 module PlaceRd = BodyRd.Place
+module PlaceElementRd = PlaceRd.PlaceElement
 module DestinationDataRd = FnCallDataRd.DestinationData
 module StatementRd = BasicBlockRd.Statement
 module StatementKindRd = StatementRd.StatementKind
