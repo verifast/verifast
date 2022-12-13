@@ -4,7 +4,6 @@ struct AVirtual
 {
   int m_a;
   BVirtual *m_bv;
-
   AVirtual(AVirtual *a, BVirtual *b) : m_a(0), m_bv(b)
   //@ requires true;
   /*@ ensures 
@@ -16,7 +15,7 @@ struct AVirtual
     foo();
   }
 
-  virtual ~AVirtual();
+  ~AVirtual();
   /*@ requires 
       AVirtual_vtype(this, &typeid(struct AVirtual)) &*& 
       this->m_a |-> _ &*&
@@ -51,7 +50,7 @@ struct BVirtual
   @*/
   {}
 
-  virtual ~BVirtual()
+  ~BVirtual()
   /*@ requires 
       BVirtual_vtype(this, &typeid(struct BVirtual)) &*& 
       this->m_b |-> _;
@@ -66,8 +65,7 @@ struct BVirtual
 };
 
 struct CVirtual : AVirtual, BVirtual
-{
-  CVirtual() : AVirtual(this, this), BVirtual(this)
+{  CVirtual() : AVirtual(this, this), BVirtual(this)
   //@ requires true;
   /*@ ensures 
       CVirtual_bases_constructed(this) &*& 
@@ -93,6 +91,10 @@ struct CVirtual : AVirtual, BVirtual
     bar();
     foo();
   }
+  
+  virtual void pure() = 0;
+  //@ requires true;
+  //@ ensures true;
 };
 
 void bar(BVirtual *bv)
@@ -113,15 +115,4 @@ AVirtual::~AVirtual()
 {
   foo();
   bar(m_bv); //~
-}
-
-int main()
-//@ requires true;
-//@ ensures true;
-{
-  CVirtual c;
-  c.foo();
-  c.bar();
-  int a = c.getI();
-  //@ assert a == 0;
 }

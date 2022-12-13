@@ -3,15 +3,24 @@ class A
   int m_i;
 
 public:
+  /*@
+  predicate valid(int i) =
+    this->m_i |-> i;
+  @*/
+  
   A() : m_i(0)
   //@ requires true;
-  //@ ensures A_vtype(this, &typeid(A)) &*& this->m_i |-> 0;
-  {}
+  //@ ensures A_vtype(this, thisType) &*& valid(0);
+  {
+    //@ close valid(0);
+  }
   
   virtual ~A()
-  //@ requires A_vtype(this, &typeid(A)) &*& this->m_i |-> _;
+  //@ requires A_vtype(this, thisType) &*& valid(_);
   //@ ensures true;
-  {}
+  {
+    //@ open valid(_);
+  }
   
   int getI() const
   //@ requires this->m_i |-> ?i;
@@ -45,23 +54,31 @@ public:
 class B : public A
 {
 public:
+  /*@
+  predicate valid(int i) =
+    this->valid(&typeid(A))(i) &*&
+    B_bases_constructed(this);
+  @*/
+
   B()
   //@ requires true;
   /*@ ensures 
-      B_bases_constructed(this) &*& 
-      B_vtype(this, &typeid(B)) &*& 
-      A_m_i(this, 0);
+      valid(0) &*&
+      B_vtype(this, thisType);
   @*/
-  {}
+  {
+    //@ close valid(0);
+  }
   
   virtual ~B()
   /*@ requires 
-      B_bases_constructed(this) &*& 
-      B_vtype(this, &typeid(B)) &*& 
-      A_m_i(this, _);
+      valid(_) &*&
+      B_vtype(this, thisType);
   @*/
   //@ ensures true;
-  {}
+  {
+    //@ open valid(_);
+  }
   
   void callVirtualFromBase() const
   /*@ requires 
@@ -90,18 +107,24 @@ public:
   {
     A::getVirtualI();
   }
+  
+  virtual void pure() = 0;
+  //@ requires true;
+  //@ ensures true;
 };
 
-int main()
-//@ requires true;
-//@ ensures true;
+void test(B &b)
+//@ requires &b != 0 &*& B_vtype(&b, &typeid(B)) &*& b.valid(&typeid(B))(?i);
+//@ ensures B_vtype(&b, &typeid(B)) &*& b.valid(&typeid(B))(i);
 {
   A a;
+  //@ open a.valid(0);
   a.getI();
   a.getVirtualI();
   a.callVirtualMeth();
   a.virtualCallVirtualMeth();
-  B b;
+  //@ open b.valid(i);
+  //@ open b.valid(&typeid(struct A))(_);
   b.getVirtualI();
   b.A::getVirtualI();
   b.callVirtualMeth();
@@ -113,4 +136,7 @@ int main()
   aref.getVirtualI();
   aref.callVirtualMeth();
   aref.virtualCallVirtualMeth();
+  //@ close b.valid(&typeid(struct A))(_);
+  //@ close b.valid(_);
+  //@ close a.valid(_);
 }

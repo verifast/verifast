@@ -196,10 +196,13 @@ struct Decl {
       name @0 :Text;
       virtual @1 :Bool;
     }
+
     struct Body {
       decls @0 :List(DeclNode);
       bases @1 :List(Node(BaseSpec));
       polymorphic @2 :Bool;
+      nonOverriddenMethods @3 :List(Text); # qualified names
+      isAbstract @4 :Bool;
     }
     name @0 :Text;
     kind @1 :RecordKind;
@@ -207,12 +210,17 @@ struct Decl {
   }
 
   struct Method {
+    struct Override {
+      name @0 :Text; # qualified name
+      base @1 :RecordRef;
+    }
+
     static @0 :Bool;
     func @1 :Function;
     this @2 :Type; # optional, not present if it is a static method
     implicit @3 :Bool;
     virtual @4 :Bool;
-    overrides @5 :List(Text); # optional, qualified names
+    overrides @5 :List(Override); # optional, only present if the method is virtual and overrides methods
   }
 
   struct Ctor {

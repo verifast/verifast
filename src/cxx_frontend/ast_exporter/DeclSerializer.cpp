@@ -1,8 +1,17 @@
 #include "AstSerializer.h"
 #include "FixedWidthInt.h"
+#include "clang/AST/CXXInheritance.h"
 #include "clang/AST/Decl.h"
 
 namespace vf {
+
+void serializeRecordRef(stubs::RecordRef::Builder &builder,
+                        const clang::CXXRecordDecl *record) {
+  builder.setName(record->getQualifiedNameAsString());
+  builder.setKind(record->isStruct()  ? stubs::RecordKind::STRUC
+                  : record->isClass() ? stubs::RecordKind::CLASS
+                                      : stubs::RecordKind::UNIO);
+}
 
 // TODO: check how to retrieve the name of a decl in a proper way
 void DeclSerializer::serializeFuncDecl(stubs::Decl::Function::Builder &builder,
@@ -130,14 +139,14 @@ void DeclSerializer::serializeBases(
 
 using DeclNodeOrphan = NodeOrphan<stubs::Decl>;
 bool DeclSerializer::VisitCXXRecordDecl(const clang::CXXRecordDecl *decl) {
-  auto rec = m_builder.initRecord();
+  auto recordBuilder = m_builder.initRecord();
 
-  rec.setName(decl->getQualifiedNameAsString());
+  recordBuilder.setName(decl->getQualifiedNameAsString());
 
   auto kind = decl->isUnion()   ? stubs::RecordKind::UNIO
               : decl->isClass() ? stubs::RecordKind::CLASS
                                 : stubs::RecordKind::STRUC;
-  rec.setKind(kind);
+  recordBuilder.setKind(kind);
   if (decl->isThisDeclarationADefinition()) {
     auto orphanage = capnp::Orphanage::getForMessageContaining(m_builder);
     llvm::SmallVector<DeclNodeOrphan> declNodeOrphans;
@@ -155,15 +164,42 @@ bool DeclSerializer::VisitCXXRecordDecl(const clang::CXXRecordDecl *decl) {
       anns.clear();
     }
 
-    auto body = rec.initBody();
-    body.setPolymorphic(decl->isPolymorphic());
-    auto basesBuilder = body.initBases(decl->getNumBases());
+    auto bodyBuilder = recordBuilder.initBody();
+    bodyBuilder.setPolymorphic(decl->isPolymorphic());
+    auto basesBuilder = bodyBuilder.initBases(decl->getNumBases());
     serializeBases(basesBuilder, decl->bases());
+
+    clang::CXXFinalOverriderMap finalOverrides;
+    decl->getFinalOverriders(finalOverrides);
+    bodyBuilder.setIsAbstract(decl->isAbstract());
+
+    finalOverrides.remove_if(
+        [decl](std::pair<const clang::CXXMethodDecl *, clang::OverridingMethods>
+                   p) {
+          auto overridingMeths = p.second;
+          for (auto it = overridingMeths.begin(); it < overridingMeths.end();
+               ++it) {
+            auto overrides = it->second;
+            for (auto &override : overrides) {
+              if (override.Method->getParent() != decl)
+                return false;
+            }
+          }
+          return true;
+        });
+
+    auto nonOverriddenMethsBuilder =
+        bodyBuilder.initNonOverriddenMethods(finalOverrides.size());
+    size_t i(0);
+    for (auto finalOverride : finalOverrides) {
+      nonOverriddenMethsBuilder.set(
+          i++, finalOverride.first->getQualifiedNameAsString());
+    }
 
     store.getUntilLoc(anns, decl->getBraceRange().getEnd(), SM);
     m_serializer.serializeAnnsToOrphans(anns, orphanage, declNodeOrphans);
 
-    auto declsBuilder = body.initDecls(declNodeOrphans.size());
+    auto declsBuilder = bodyBuilder.initDecls(declNodeOrphans.size());
     AstSerializer::adoptOrphansToListBuilder(declNodeOrphans, declsBuilder);
   }
   return true;
@@ -178,12 +214,18 @@ void DeclSerializer::serializeMethodDecl(stubs::Decl::Method::Builder &builder,
 
   bool isVirtual(decl->isVirtual());
   builder.setVirtual(isVirtual);
+
   if (isVirtual) {
     auto overriddenMeths =
         builder.initOverrides(decl->size_overridden_methods());
     size_t i(0);
     for (auto *meth : decl->overridden_methods()) {
-      overriddenMeths.set(i++, m_serializer.getMangledName(meth).str());
+      auto *parentRecord = llvm::dyn_cast<clang::CXXRecordDecl>(
+          meth->getFirstDecl()->getParent());
+      auto over = overriddenMeths[i++];
+      over.setName(m_serializer.getMangledName(meth).str());
+      auto base = over.initBase();
+      serializeRecordRef(base, parentRecord);
     }
   }
 
@@ -200,14 +242,6 @@ bool DeclSerializer::VisitCXXMethodDecl(const clang::CXXMethodDecl *decl) {
   auto meth = m_builder.initMethod();
   serializeMethodDecl(meth, decl, m_serializer.getMangledName(decl));
   return true;
-}
-
-void serializeRecordRef(stubs::RecordRef::Builder &builder,
-                        const clang::CXXRecordDecl *record) {
-  builder.setName(record->getQualifiedNameAsString());
-  builder.setKind(record->isStruct()  ? stubs::RecordKind::STRUC
-                  : record->isClass() ? stubs::RecordKind::CLASS
-                                      : stubs::RecordKind::UNIO);
 }
 
 bool DeclSerializer::VisitCXXConstructorDecl(

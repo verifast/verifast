@@ -16,7 +16,7 @@ struct AVirtual
     foo();
   }
 
-  virtual ~AVirtual();
+  ~AVirtual();
   /*@ requires 
       AVirtual_vtype(this, &typeid(struct AVirtual)) &*& 
       this->m_a |-> _ &*&
@@ -51,7 +51,7 @@ struct BVirtual
   @*/
   {}
 
-  virtual ~BVirtual()
+  ~BVirtual()
   /*@ requires 
       BVirtual_vtype(this, &typeid(struct BVirtual)) &*& 
       this->m_b |-> _;
@@ -93,6 +93,10 @@ struct CVirtual : AVirtual, BVirtual
     bar();
     foo();
   }
+  
+  virtual void pure() = 0;
+  //@ requires true;
+  //@ ensures true;
 };
 
 AVirtual::~AVirtual()
@@ -106,15 +110,4 @@ AVirtual::~AVirtual()
 {
   foo();
   m_bv->bar(); //~
-}
-
-int main()
-//@ requires true;
-//@ ensures true;
-{
-  CVirtual c;
-  c.foo();
-  c.bar();
-  int a = c.getI();
-  //@ assert a == 0;
 }

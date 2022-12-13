@@ -521,7 +521,7 @@ and
     [< fs = parse_fields; attrs = begin parser
       [< '(_, Kwd "__attribute__"); res = parse_struct_attrs; >] -> res
     | [< >] -> [] end;
-    '(_, Kwd ";") >] -> Struct (l, s, Some ([], fs, false), attrs)
+    '(_, Kwd ";") >] -> Struct (l, s, Some ([], fs, [], false), attrs)
   | [< '(_, Kwd ";") >] -> Struct (l, s, None, [])
   | [< t = parse_type_suffix (StructTypeExpr (l, Some s, None, [])); d = parse_func_rest Regular (Some t) >] -> d
   >] -> check_function_for_contract d
@@ -552,13 +552,13 @@ and
                [EnumDecl (l, en, body); TypedefDecl (l, EnumTypeExpr (le, Some en, None), g)]
              | Some (StructTypeExpr (ls, s_opt, Some fs, attrs)) ->
                let s = match s_opt with None -> g | Some s -> s in
-               [Struct (l, s, Some ([], fs, false), attrs); TypedefDecl (l, StructTypeExpr (ls, Some s, None, attrs), g)]
+               [Struct (l, s, Some ([], fs, [], false), attrs); TypedefDecl (l, StructTypeExpr (ls, Some s, None, attrs), g)]
              | Some (UnionTypeExpr (ls, u_opt, Some fs)) ->
                let u = match u_opt with None -> g | Some u -> u in
                [Union (l, u, Some fs); TypedefDecl (l, UnionTypeExpr (ls, Some u, None), g)]
              | Some PtrTypeExpr (lp, (StructTypeExpr (ls, s_opt, Some fs, attrs))) ->
                let s = match s_opt with None -> g | Some s -> s in
-               [Struct (l, s, Some ([], fs, false), attrs); TypedefDecl (l, PtrTypeExpr (lp, StructTypeExpr (ls, Some s, None, attrs)), g)]
+               [Struct (l, s, Some ([], fs, [], false), attrs); TypedefDecl (l, PtrTypeExpr (lp, StructTypeExpr (ls, Some s, None, attrs)), g)]
              | Some te ->
                [TypedefDecl (l, te, g)]
          end
@@ -1466,6 +1466,39 @@ and
   >] -> e
 and
   parse_expr_primary s = parse_expr_primary0 true s
+and 
+  parse_instance_call_rest l g targs target = parser
+| [<
+    args0 = parse_patlist;
+    (args0, args) = begin parser
+    | [< args = parse_patlist >] -> args0, args
+    | [< >] -> [], args0
+    end
+  >] -> CallExpr (l, g, targs, args0, LitPat(target) :: args, Instance)
+and
+  parse_instance_call l target = 
+    let parse_call_or_read lf f targs target read = parser
+    | [< e = parse_instance_call l read >] -> e
+    | [< e = parse_instance_call_rest lf f [] target >] -> e
+    | [< >] -> read
+    in
+  parser
+| [< 
+    '(larrow, Kwd "->");
+    (lf, f, read) = begin parser
+    | [< '(lf, Ident f) >] -> lf, f, Read (larrow, target, f);
+    | [< '(_, Kwd "/*@"); '(_, Kwd "activating"); '(_, Kwd "@*/"); '(lf, Ident f) >] -> lf, f, ActivatingRead (larrow, target, f)
+    end;
+    e = parse_call_or_read lf f [] target read
+  >] -> e
+| [<
+    '(ldot, Kwd ".");
+    (lf, f, read) = begin parser
+    | [< '(lf, Ident f) >] -> lf, f, Select (ldot, target, f);
+    | [< '(_, Kwd "/*@"); '(_, Kwd "activating"); '(_, Kwd "@*/"); '(lf, Ident f) >] -> lf, f, ActivatingRead (ldot, AddressOf (ldot, target), f)
+    end;
+    e = parse_call_or_read lf f [] (AddressOf (ldot, target)) read
+  >] -> e
 and
   parse_expr_primary0 allowCast = fun stream -> stream |> parser
   [< '(l, Kwd "true") >] -> True l
@@ -1511,11 +1544,11 @@ and
         | [<
             '(lf, Ident f);
             e = parser
-              [<args0 = parse_patlist; (args0, args) = (parser [< args = parse_patlist >] -> (args0, args) | [< >] -> ([], args0)) >] ->
-              CallExpr (lf, f, targs, args0, LitPat(Var(lx,x))::args,Instance)
-            | [<>] -> Read (ldot, Var(lx,x), f)
+            | [< e = parse_instance_call_rest lf f targs (Var (lx, x)) >] -> e
+            | [< >] -> Read (ldot, Var (lx, x), f)
           >]->e 
       >]-> r
+    | [< e = parse_instance_call lx (Var (lx, x)) >] -> e
     | [< >] -> Var (lx, x)
   >] -> ex
 | [< '(l, Int (i, dec, usuffix, lsuffix, _)) >] -> IntLit (l, i, dec, usuffix, lsuffix)

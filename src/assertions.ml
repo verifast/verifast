@@ -384,26 +384,39 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | WInstPredAsn (l, e_opt, st, cfin, tn, g, index, pats) ->
         let (pmap, pred_symb) =
           try
-          match try_assoc tn classmap1 with
-            Some (lcn, abstract, fin, methods, fds_opt, ctors, super, tparams, interfs, preds, pn, ilist) ->
-            let (_, pmap, _, symb, _) = List.assoc g preds in (pmap, symb)
+          match dialect with
           | None ->
-            match try_assoc tn classmap0 with
-              Some {cpreds} ->
-              let (_, pmap, _, symb, _) = List.assoc g cpreds in (pmap, symb)
+            begin match try_assoc tn classmap1 with
+              Some (lcn, abstract, fin, methods, fds_opt, ctors, super, tparams, interfs, preds, pn, ilist) ->
+              let (_, pmap, _, symb, _) = List.assoc g preds in (pmap, symb)
             | None ->
-              match try_assoc tn interfmap1 with
-                Some (li, fields, methods, preds, interfs, pn, ilist, tparams) -> let (_, pmap, family, symb) = List.assoc g preds in (pmap, symb)
+              match try_assoc tn classmap0 with
+                Some {cpreds} ->
+                let (_, pmap, _, symb, _) = List.assoc g cpreds in (pmap, symb)
               | None ->
-                let InterfaceInfo (li, fields, methods, preds, interfs, tparams) = List.assoc tn interfmap0 in
-                let (_, pmap, family, symb) = List.assoc g preds in
-                (pmap, symb)
+                match try_assoc tn interfmap1 with
+                  Some (li, fields, methods, preds, interfs, pn, ilist, tparams) -> let (_, pmap, family, symb) = List.assoc g preds in (pmap, symb)
+                | None ->
+                  let InterfaceInfo (li, fields, methods, preds, interfs, tparams) = List.assoc tn interfmap0 in
+                  let (_, pmap, family, symb) = List.assoc g preds in
+                  (pmap, symb)
+            end
+          | Some Cxx ->
+            let preds = List.assoc tn cxx_inst_pred_map in
+            let _, pmap, _, symb, _ = List.assoc g preds in
+            pmap, symb
           with Not_found -> assert_false h env l ("Definition of predicate " ^ g ^ " is missing from implementing class") None
         in
         let target = match e_opt with None -> List.assoc "this" env | Some e -> ev e in
+        let target = 
+          match dialect with
+          | Some Cxx ->
+            base_addr l (st, target) tn
+          | _ -> target
+        in
         let index = ev index in
         assume (ctxt#mk_not (ctxt#mk_eq target (null_pointer_term ()))) $. fun () ->
-        begin fun cont -> if cfin = FinalClass then assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [target]) (List.assoc st classterms)) cont else cont () end $. fun () ->
+        begin fun cont -> if cfin = FinalClass && language = Java then assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [target]) (List.assoc st classterms)) cont else cont () end $. fun () ->
         let types = List.map snd pmap in
         evalpats ghostenv env pats types types $. fun ghostenv env args ->
         produce_chunk h (pred_symb, true) [] coef (Some 2) (target::index::args) size_first $. fun h ->
@@ -1101,26 +1114,41 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         cont [chunk] h ghostenv env env' size
       )
     in
-    let inst_call_pred l coefpat e_opt tn g index pats =
+    let inst_call_pred l coefpat e_opt static_type tn g index pats =
       let (pmap, pred_symb, ctparams) =
-        match try_assoc tn classmap1 with
-          Some (lcn, abstract, fin, methods, fds_opt, ctors, super, tparams, interfs, preds, pn, ilist) ->
-          let (_, pmap, _, symb, _) = List.assoc g preds in (pmap, symb, tparams)
+        match dialect with
         | None ->
-          match try_assoc tn classmap0 with
-            Some {cpreds; ctpenv} ->
-            let (_, pmap, _, symb, _) = List.assoc g cpreds in (pmap, symb, ctpenv)
+          begin match try_assoc tn classmap1 with
+            Some (lcn, abstract, fin, methods, fds_opt, ctors, super, tparams, interfs, preds, pn, ilist) ->
+            let (_, pmap, _, symb, _) = List.assoc g preds in (pmap, symb, tparams)
           | None ->
-            match try_assoc tn interfmap1 with
-              Some (li, fields, methods, preds, interfs, pn, ilist, tparams) -> let (_, pmap, family, symb) = List.assoc g preds in (pmap, symb, tparams)
+            match try_assoc tn classmap0 with
+              Some {cpreds; ctpenv} ->
+              let (_, pmap, _, symb, _) = List.assoc g cpreds in (pmap, symb, ctpenv)
             | None ->
-              let InterfaceInfo (li, fields, methods, preds, interfs, tparams) = List.assoc tn interfmap0 in
-              let (_, pmap, family, symb) = List.assoc g preds in
-              (pmap, symb, tparams)
+              match try_assoc tn interfmap1 with
+                Some (li, fields, methods, preds, interfs, pn, ilist, tparams) -> let (_, pmap, family, symb) = List.assoc g preds in (pmap, symb, tparams)
+              | None ->
+                let InterfaceInfo (li, fields, methods, preds, interfs, tparams) = List.assoc tn interfmap0 in
+                let (_, pmap, family, symb) = List.assoc g preds in
+                (pmap, symb, tparams)
+          end
+        | Some Cxx ->
+          let preds = List.assoc tn cxx_inst_pred_map in
+          let _, pmap, _, symb, _ = List.assoc g preds in
+          pmap, symb, []
       in
       let target = match e_opt with None -> List.assoc "this" env | Some e -> ev e in
+      let types = List.map snd pmap in
+      let target, types =
+        match dialect with
+        | Some Cxx ->
+          let target = base_addr l (static_type, target) tn in
+          target, PtrType (StructType tn) :: type_info_type :: types
+        | _ ->
+          target, ObjType (tn, (List.map (fun tparam -> RealTypeParam tparam) ctparams))::ObjType ("java.lang.Class", []) :: types
+      in
       let index = ev index in
-      let types = ObjType (tn, (List.map (fun tparam -> RealTypeParam tparam) ctparams))::ObjType ("java.lang.Class", [])::List.map snd pmap in
       let pats = TermPat target::TermPat index::srcpats pats in
       consume_chunk_core rules h ghostenv env env' l (pred_symb, true) [] coef coefpat (Some 2) pats types types $. fun chunk h coef ts size ghostenv env env' ->
       check_dummy_coefpat l coefpat coef;
@@ -1130,7 +1158,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | WPointsTo (l, e, tp, rhs) -> points_to l real_unit_pat e tp (SrcPat rhs)
     | WPredAsn (l, g, is_global_predref, targs, pats0, pats) -> pred_asn l real_unit_pat g is_global_predref targs (srcpats pats0) (srcpats pats)
     | WInstPredAsn (l, e_opt, st, cfin, tn, g, index, pats) ->
-      inst_call_pred l real_unit_pat e_opt tn g index pats
+      inst_call_pred l real_unit_pat e_opt st tn g index pats
     | ExprAsn (l, WOperation (lo, Eq, [WVar (lx, x, LocalVar); e], tp)) ->
       begin match try_assoc x env with
         Some t -> assert_term (if tp = Bool then ctxt#mk_iff t (ev e) else ctxt#mk_eq t (ev e)) h env l "Cannot prove condition." None; cont [] h ghostenv env env' None
@@ -1215,7 +1243,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       cont [] h ghostenv env env' None
     | CoefAsn (l, coefpat, WPointsTo (_, e, tp, rhs)) -> points_to l (SrcPat coefpat) e tp (SrcPat rhs)
     | CoefAsn (l, coefpat, WPredAsn (_, g, is_global_predref, targs, pat0, pats)) -> pred_asn l (SrcPat coefpat) g is_global_predref targs (srcpats pat0) (srcpats pats)
-    | CoefAsn (l, coefpat, WInstPredAsn (_, e_opt, st, cfin, tn, g, index, pats)) -> inst_call_pred l (SrcPat coefpat) e_opt tn g index pats
+    | CoefAsn (l, coefpat, WInstPredAsn (_, e_opt, st, cfin, tn, g, index, pats)) -> inst_call_pred l (SrcPat coefpat) e_opt st tn g index pats
     | EnsuresAsn (l, body) ->
       cont_with_post [] h ghostenv env env' None (Some body)
     )

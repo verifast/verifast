@@ -753,6 +753,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * asn (* post *)
       * bool (* terminates *)
       * (stmt list * loc) option option
+      * bool (* is_virtual *)
     type base_spec_info = 
         loc 
       * bool (* virtual *)
@@ -1013,6 +1014,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * cxx_dtor_info map
       * bases_constructed_pred_info map
       * cxx_vtype_pred_info map
+      * inst_pred_info map map
     
     type implemented_prototype_info =
         string
@@ -1119,7 +1121,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (cxx_ctor_map0: cxx_ctor_info map),
       (cxx_dtor_map0: cxx_dtor_info map),
       (bases_constructed_map0: bases_constructed_pred_info map),
-      (cxx_vtype_map0: cxx_vtype_pred_info map)
+      (cxx_vtype_map0: cxx_vtype_pred_info map),
+      (cxx_inst_pred_map0: inst_pred_info map map)
       : maps
     ) =
 
@@ -1135,8 +1138,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let id x = x in
     let merge_maps l
-      (structmap, unionmap, enummap, globalmap, modulemap, importmodulemap, inductivemap, purefuncmap, predctormap, struct_accessor_map, malloc_block_pred_map, new_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, abstract_types_map, cxx_ctor_map, cxx_dtor_map, bases_constructed_map, cxx_vtype_map)
-      (structmap0, unionmap0, enummap0, globalmap0, modulemap0, importmodulemap0, inductivemap0, purefuncmap0, predctormap0, struct_accessor_map0, malloc_block_pred_map0, new_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, abstract_types_map0, cxx_ctor_map0, cxx_dtor_map0, bases_constructed_map0, cxx_vtype_map0)
+      (structmap, unionmap, enummap, globalmap, modulemap, importmodulemap, inductivemap, purefuncmap, predctormap, struct_accessor_map, malloc_block_pred_map, new_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, abstract_types_map, cxx_ctor_map, cxx_dtor_map, bases_constructed_map, cxx_vtype_map, cxx_inst_pred_map)
+      (structmap0, unionmap0, enummap0, globalmap0, modulemap0, importmodulemap0, inductivemap0, purefuncmap0, predctormap0, struct_accessor_map0, malloc_block_pred_map0, new_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, abstract_types_map0, cxx_ctor_map0, cxx_dtor_map0, bases_constructed_map0, cxx_vtype_map0, cxx_inst_pred_map0)
       =
       (
 (*     append_nodups structmap structmap0 id l "struct", *)
@@ -1170,7 +1173,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
        append_nodups cxx_ctor_map cxx_ctor_map0 id l "constructor",
        append_nodups cxx_dtor_map cxx_dtor_map0 id l "destructor",
        bases_constructed_map @ bases_constructed_map0,
-       cxx_vtype_map @ cxx_vtype_map0)
+       cxx_vtype_map @ cxx_vtype_map0,
+       cxx_inst_pred_map @ cxx_inst_pred_map0)
     in
 
     (** [merge_header_maps maps0 headers] returns [maps0] plus all elements transitively declared in [headers]. *)
@@ -1249,7 +1253,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
     in
 
-    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
+    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
     
     let (maps0, headers_included) =
       if include_prelude then
@@ -1346,16 +1350,23 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let delayed_struct_def sn ldecl ldef =
     structures_defined := (sn, ldecl, ldef)::!structures_defined
 
-  let structdeclmap =
-    let rec iter sdm ds =
+  let structdeclmap, cxx_inst_pred_decl_map =
+    let rec iter sdm pred_map ds =
       match ds with
-        [] -> sdm
+        [] -> sdm, List.rev pred_map
       | Struct (l, sn, body_opt, attrs)::ds ->
-        begin match body_opt with
-        | Some (bases, _, _) ->
-          if List.exists (fun (CxxBaseSpec (l, _, is_virtual)) -> is_virtual) bases then static_error l "Virtual inheritance is not supported." None;
-        | _ -> ()
-        end;
+        let body_opt, pred_map =
+          match body_opt with
+          | Some (bases, fields, inst_preds, polymorphic) ->
+            if List.exists (fun (CxxBaseSpec (l, _, is_virtual)) -> is_virtual) bases then static_error l "Virtual inheritance is not supported." None;
+            let pred_map = 
+              match inst_preds with
+              | [] -> pred_map
+              | _ -> (sn, inst_preds) :: pred_map
+            in
+            Some (bases, fields, polymorphic), pred_map
+          | _ -> None, pred_map
+        in
         begin
           match try_assoc sn structmap0 with
             Some (_, _, Some _, _, _) -> static_error l "Duplicate struct name." None
@@ -1368,12 +1379,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | Some (ldecl, None, _) -> if body_opt = None then static_error l "Duplicate struct declaration." None else delayed_struct_def sn ldecl l
           | None -> ()
         end;
-        iter ((sn, (l, body_opt, attrs))::sdm) ds
-      | _::ds -> iter sdm ds
+        iter ((sn, (l, body_opt, attrs))::sdm) pred_map ds
+      | _::ds -> iter sdm pred_map ds
     in
     match ps with
-      [PackageDecl(_,"",[],ds)] -> iter [] ds
-    | _ when file_type path=Java -> []
+      [PackageDecl(_,"",[],ds)] -> iter [] [] ds
+    | _ when file_type path=Java -> [],[]
   
   let delayed_union_def un ldecl ldef =
     unions_defined := (un, ldecl, ldef)::!unions_defined
@@ -3245,6 +3256,61 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         iter [] preds
     in
     iter [] classmap1
+
+  let cxx_inst_pred_map1_unchecked =
+    let rec iter_preds sn ~bases_map ~pred_map ~inst_preds inst_preds_map_done =
+      match inst_preds with
+      | [] -> List.rev pred_map
+      | InstancePredDecl (pred_loc, pred_name, pred_params, pred_body) :: inst_preds ->
+        if List.mem_assoc pred_name pred_map then static_error pred_loc "Duplicate predicate name." None;
+        let param_map =
+          let rec iter param_map params =
+            match params with
+            | [] -> List.rev param_map
+            | (tp, p) :: ps ->
+              if List.mem_assoc p param_map then static_error pred_loc "Duplicate parameter name." None;
+              let tp = check_pure_type ("", []) [] Ghost tp in
+              iter ((p, tp) :: param_map) ps
+          in
+          iter [] pred_params
+        in
+        let pred_fam, pred_symb =
+          let preds_in_bases bases_map preds_in_struct =
+            bases_map |> flatmap @@ fun b -> (b |> fst |> preds_in_struct)
+          in
+          let rec preds_in_struct sn =
+            match try_assoc2 sn cxx_inst_pred_map0 inst_preds_map_done with
+            | Some preds ->
+              begin match try_assoc pred_name preds with
+              | Some (_, params_map, pred_fam, pred_symb, _) ->
+                [pred_fam, params_map, pred_symb]
+              | None ->
+                let _, Some (bases_map, _, _), _, _, _ = List.assoc sn structmap in
+                preds_in_bases bases_map preds_in_struct
+              end
+            | None ->
+              []
+          in
+          match preds_in_bases bases_map preds_in_struct with
+          | [] ->
+            sn, get_unique_var_symb (sn ^ "#" ^ pred_name) (PredType ([], [], None, Inductiveness_Inductive))
+          | [(pred_fam, param_map0, pred_symb)] ->
+            if not (for_all2 (fun (x, t) (x0, t0) -> expect_type_core pred_loc "Predicate parameter covariance check." (Some true) t t0; true) param_map param_map0) then
+              static_error pred_loc "Predicate override check: parameter count mismatch." None;
+            pred_fam, pred_symb
+          | _ -> static_error pred_loc "Ambiguous override: multiple overridden predicates." None
+        in
+        iter_preds sn ~bases_map ~pred_map:((pred_name, (pred_loc, param_map, pred_fam, pred_symb, pred_body)) :: pred_map) ~inst_preds inst_preds_map_done
+    in
+    let rec iter ~inst_preds inst_preds_map_done =
+      match inst_preds with
+      | [] -> inst_preds_map_done
+      | (sn, inst_preds) :: rest ->
+        let _, Some (bases_map, _, _), _, _, _ = List.assoc sn structmap in
+        let result = iter_preds sn ~bases_map ~pred_map:[] ~inst_preds inst_preds_map_done in
+        iter ~inst_preds:rest ((sn, result) :: inst_preds_map_done)
+    in
+    iter ~inst_preds:cxx_inst_pred_decl_map []
   
   let (predctormap1, purefuncmap1) =
     let rec iter (pn,ilist) pcm pfm ds =
@@ -3257,7 +3323,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end;
         begin
           match try_assoc' Ghost (pn,ilist) p predfammap with
-            Some _ -> static_error l "Predicate constructor name clashes with existing predicate or predicate familiy name." None
+            Some _ -> static_error l "Predicate constructor name clashes with existing predicate or predicate family name." None
           | None -> ()
         end;
         let ps1 =
@@ -5169,7 +5235,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         cfinal
       | None -> ExtensibleClass
   
-  let check_inst_pred_asn l cn g check_call error =
+  let check_inst_pred_asn l tn g check_call error =
     let rec find_in_interf itf =
       let search_interfmap get_interfs_and_preds interfmap fallback =
         match try_assoc itf interfmap with
@@ -5204,11 +5270,27 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         $. fun () ->
       []
     in
-    begin match find_in_class cn @ find_in_interf cn with
+    let rec find_in_struct sn =
+      match try_assoc2 sn cxx_inst_pred_map1_unchecked cxx_inst_pred_map0 with
+      | Some preds ->
+        begin match try_assoc g preds with
+        | Some (_, pmap, family, symb, _) ->
+          [family, pmap]
+        | None ->
+          let _, Some (bases, _, _), _, _, _ = List.assoc sn structmap in
+          bases |> List.map fst |> flatmap find_in_struct
+        end
+      | None -> []
+    in
+    let candidates =
+      match dialect with
+      | Some Cxx -> find_in_struct tn
+      | _ -> find_in_class tn @ find_in_interf tn
+    in
+    match candidates with
       [] -> error ()
     | [(family, pmap)] -> check_call family pmap
     | _ -> static_error l (Printf.sprintf "Ambiguous instance predicate assertion: multiple predicates named '%s' in scope" g) None
-    end
   
   let get_pred_symb p = let (_, _, _, _, symb, _, _) = List.assoc p predfammap in symb
   let get_pure_func_symb g = let (_, _, _, _, symb) = List.assoc g purefuncmap in symb
@@ -5439,283 +5521,338 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let list_type elemType = InductiveType ("list", [elemType])
   let option_type elemType = InductiveType ("option", [elemType])
+
+  let is_polymorphic_struct sn =
+    match List.assoc sn structmap with
+    | _, (Some (_, _, true)), _, _, _ -> true
+    | _ -> false
   
-  let rec check_asn_core (pn,ilist) tparams tenv p =
-    let check_asn = check_asn_core in
-    match p with
-    | PointsTo (l, ReadArray (lread, earray, SliceExpr (lslice, pstart, pend)), rhs) ->
-      let (warray, tarray) = check_expr (pn,ilist) tparams tenv (Some true) earray in
-      let (wstart, tenv) =
-        match pstart with
-          None -> (None, tenv)
-        | Some pstart ->
-          let (wstart, tenv) = check_pat (pn,ilist) tparams tenv intType pstart in
-          Some wstart, tenv
-      in
-      let (wend, tenv) =
-        match pend with
-          None -> (None, tenv)
-        | Some pend ->
-          let (wend, tenv) = check_pat (pn,ilist) tparams tenv intType pend in
-          Some wend, tenv
-      in
-      begin match language with
-      | CLang ->
-        let elemtype =
-          match tarray with
-            PtrType t -> t
-          | StaticArrayType (t, _) -> t
-          | _ -> static_error lread "Array in array dereference must be of pointer type." None
+  let check_asn_core (pn,ilist) tparams tenv p =
+    let pre_tenv = tenv in
+    let rec check_asn tenv p =
+      match p with
+      | PointsTo (l, ReadArray (lread, earray, SliceExpr (lslice, pstart, pend)), rhs) ->
+        let (warray, tarray) = check_expr (pn,ilist) tparams tenv (Some true) earray in
+        let (wstart, tenv) =
+          match pstart with
+            None -> (None, tenv)
+          | Some pstart ->
+            let (wstart, tenv) = check_pat (pn,ilist) tparams tenv intType pstart in
+            Some wstart, tenv
         in
-        let (wrhs, tenv) = check_pat (pn,ilist) tparams tenv (list_type elemtype) rhs in
-        let wfirst, wlength =
-          match wstart, wend with
-            None, Some wend -> warray, wend
-          | Some (LitPat (WIntLit (_, n))), Some wend when eq_big_int n zero_big_int -> warray, wend
-          | Some (LitPat wstart), Some (LitPat wend) ->
-            WOperation (lslice, Add, [warray; wstart], PtrType elemtype),
-            LitPat (WOperation (lslice, Sub, [wend; wstart], intType))
-          | _ -> static_error l "Malformed array assertion." None
+        let (wend, tenv) =
+          match pend with
+            None -> (None, tenv)
+          | Some pend ->
+            let (wend, tenv) = check_pat (pn,ilist) tparams tenv intType pend in
+            Some wend, tenv
         in
-        begin match try_pointee_pred_symb0 elemtype with
-          Some (pointee_pred_name, pointee_pred_symb, array_pred_name, array_pred_symb, _, _, _, _, _, _, uninit_array_pred_name, _) ->
-          let array_pred_name, elemtype = if wrhs = DummyPat then uninit_array_pred_name, option_type elemtype else array_pred_name, elemtype in
-          let p = new predref array_pred_name [PtrType elemtype; intType; list_type elemtype] (Some 2) in
-          (WPredAsn (l, p, true, [], [], [LitPat wfirst; wlength; wrhs]), tenv, [])
-        | None ->
-        match int_rank_and_signedness elemtype with
-          Some (k, signedness) ->
-          let predname, pred_elemtype = if wrhs = DummyPat then "integers__", option_type elemtype else "integers_", elemtype in
-          let p = new predref predname [PtrType Void; intType; Bool; intType; list_type pred_elemtype] (Some 4) in
-          (WPredAsn (l, p, true, [], [], [LitPat wfirst; LitPat (SizeofExpr (l, TypeExpr (ManifestTypeExpr (l, elemtype)))); LitPat (if signedness = Signed then True l else False l); wlength; wrhs]), tenv, [])
-        | None ->
-          static_error l (Printf.sprintf "Array points-to notation is not supported for element type '%s'" (string_of_type elemtype)) None
-        end
-      | Java ->
-        let elemtype =
-          match tarray with
-            ArrayType t -> t
-          | _ -> static_error lread "Array in array dereference must be of array type." None
-        in
-        let (wrhs, tenv) = check_pat (pn,ilist) tparams tenv (list_type elemtype) rhs in
-        let p = new predref "java.lang.array_slice" [ArrayType elemtype; intType; intType; list_type elemtype] (Some 3) in
-        let wstart = match wstart with None -> LitPat (wintlit lslice zero_big_int) | Some wstart -> wstart in
-        let wend = match wend with None -> LitPat (ArrayLengthExpr (lslice, warray)) | Some wend -> wend in
-        let args = [LitPat warray; wstart; wend; wrhs] in
-        (WPredAsn (l, p, true, [elemtype], [], args), tenv, [])
-      end
-    | PointsTo (l, lhs, v) ->
-      let (wlhs, t) = check_expr (pn,ilist) tparams tenv (Some true) lhs in
-      begin match wlhs with
-        WRead (_, _, _, _, _, _, _, _) | WReadArray (_, _, _, _) -> ()
-      | WVar (_, _, GlobalName) -> ()
-      | WDeref (_, _, _)  -> ()
-      | _ -> static_error l "The left-hand side of a points-to assertion must be a field dereference, a global variable, a pointer variable dereference or an array element expression." None
-      end;
-      let (wv, tenv') = check_pat (pn,ilist) tparams tenv t v in
-      (WPointsTo (l, wlhs, t, wv), tenv', [])
-    | PredAsn (l, p, targs, ps0, ps) ->
-      let targs = List.map (check_pure_type (pn, ilist) tparams Ghost) targs in
-      begin fun cont ->
-         match try_assoc p tenv |> option_map unfold_inferred_type with
-           Some (PredType (callee_tparams, ts, inputParamCount, inductiveness)) -> cont (p, false, callee_tparams, [], ts, inputParamCount)
-         | None | Some _ ->
-          begin match resolve Ghost (pn,ilist) l p predfammap with
-            Some (pname, (lp, callee_tparams, arity, xs, _, inputParamCount, inductiveness)) ->
-            reportUseSite DeclKind_Predicate lp l;
-            let ts0 = match file_type path with
-              Java-> list_make arity (ObjType ("java.lang.Class", []))
-            | _   -> list_make arity (PtrType Void)
-            in
-            cont (pname, true, callee_tparams, ts0, xs, inputParamCount)
+        begin match language with
+        | CLang ->
+          let elemtype =
+            match tarray with
+              PtrType t -> t
+            | StaticArrayType (t, _) -> t
+            | _ -> static_error lread "Array in array dereference must be of pointer type." None
+          in
+          let (wrhs, tenv) = check_pat (pn,ilist) tparams tenv (list_type elemtype) rhs in
+          let wfirst, wlength =
+            match wstart, wend with
+              None, Some wend -> warray, wend
+            | Some (LitPat (WIntLit (_, n))), Some wend when eq_big_int n zero_big_int -> warray, wend
+            | Some (LitPat wstart), Some (LitPat wend) ->
+              WOperation (lslice, Add, [warray; wstart], PtrType elemtype),
+              LitPat (WOperation (lslice, Sub, [wend; wstart], intType))
+            | _ -> static_error l "Malformed array assertion." None
+          in
+          begin match try_pointee_pred_symb0 elemtype with
+            Some (pointee_pred_name, pointee_pred_symb, array_pred_name, array_pred_symb, _, _, _, _, _, _, uninit_array_pred_name, _) ->
+            let array_pred_name, elemtype = if wrhs = DummyPat then uninit_array_pred_name, option_type elemtype else array_pred_name, elemtype in
+            let p = new predref array_pred_name [PtrType elemtype; intType; list_type elemtype] (Some 2) in
+            (WPredAsn (l, p, true, [], [], [LitPat wfirst; wlength; wrhs]), tenv, [])
           | None ->
-            begin match
-              match try_assoc p predctormap1 with
-                Some (lp, ps1, ps2, inputParamCount, body, funcsym, pn, ilist) ->
-                reportUseSite DeclKind_Predicate lp l;
-                Some (ps1, ps2, inputParamCount)
-              | None ->
-              match try_assoc p predctormap0 with
-                Some (PredCtorInfo (lp, ps1, ps2, inputParamCount, body, funcsym)) ->
-                reportUseSite DeclKind_Predicate lp l;
-                Some (ps1, ps2, inputParamCount)
-              | None -> None
-            with
-              Some (ps1, ps2, inputParamCount) ->
-              cont (p, true, [], List.map snd ps1, List.map snd ps2, inputParamCount)
-            | None ->
-              let error () = 
-                begin match try_assoc p tenv with
-                  None ->  static_error l ("No such predicate: " ^ p) None 
-                | Some _ -> static_error l ("Variable " ^ p ^ " is not of predicate type.") None 
-                end
+          match int_rank_and_signedness elemtype with
+            Some (k, signedness) ->
+            let predname, pred_elemtype = if wrhs = DummyPat then "integers__", option_type elemtype else "integers_", elemtype in
+            let p = new predref predname [PtrType Void; intType; Bool; intType; list_type pred_elemtype] (Some 4) in
+            (WPredAsn (l, p, true, [], [], [LitPat wfirst; LitPat (SizeofExpr (l, TypeExpr (ManifestTypeExpr (l, elemtype)))); LitPat (if signedness = Signed then True l else False l); wlength; wrhs]), tenv, [])
+          | None ->
+            static_error l (Printf.sprintf "Array points-to notation is not supported for element type '%s'" (string_of_type elemtype)) None
+          end
+        | Java ->
+          let elemtype =
+            match tarray with
+              ArrayType t -> t
+            | _ -> static_error lread "Array in array dereference must be of array type." None
+          in
+          let (wrhs, tenv) = check_pat (pn,ilist) tparams tenv (list_type elemtype) rhs in
+          let p = new predref "java.lang.array_slice" [ArrayType elemtype; intType; intType; list_type elemtype] (Some 3) in
+          let wstart = match wstart with None -> LitPat (wintlit lslice zero_big_int) | Some wstart -> wstart in
+          let wend = match wend with None -> LitPat (ArrayLengthExpr (lslice, warray)) | Some wend -> wend in
+          let args = [LitPat warray; wstart; wend; wrhs] in
+          (WPredAsn (l, p, true, [elemtype], [], args), tenv, [])
+        end
+      | PointsTo (l, lhs, v) ->
+        let (wlhs, t) = check_expr (pn,ilist) tparams tenv (Some true) lhs in
+        begin match wlhs with
+          WRead (_, _, _, _, _, _, _, _) | WReadArray (_, _, _, _) -> ()
+        | WVar (_, _, GlobalName) -> ()
+        | WDeref (_, _, _)  -> ()
+        | _ -> static_error l "The left-hand side of a points-to assertion must be a field dereference, a global variable, a pointer variable dereference or an array element expression." None
+        end;
+        let (wv, tenv') = check_pat (pn,ilist) tparams tenv t v in
+        (WPointsTo (l, wlhs, t, wv), tenv', [])
+      | PredAsn (l, p, targs, ps0, ps) ->
+        let targs = List.map (check_pure_type (pn, ilist) tparams Ghost) targs in
+        begin fun cont ->
+          match try_assoc p tenv |> option_map unfold_inferred_type with
+            Some (PredType (callee_tparams, ts, inputParamCount, inductiveness)) -> cont (p, false, callee_tparams, [], ts, inputParamCount)
+          | None | Some _ ->
+            begin match resolve Ghost (pn,ilist) l p predfammap with
+              Some (pname, (lp, callee_tparams, arity, xs, _, inputParamCount, inductiveness)) ->
+              reportUseSite DeclKind_Predicate lp l;
+              let ts0 = match file_type path with
+                Java-> list_make arity (ObjType ("java.lang.Class", []))
+              | _   -> list_make arity (PtrType Void)
               in
-              begin match try_assoc "this" tenv with
-                None -> error ()
-              | Some (ObjType (cn, _)) ->
-                let check_call family pmap =
+              cont (pname, true, callee_tparams, ts0, xs, inputParamCount)
+            | None ->
+              begin match
+                match try_assoc p predctormap1 with
+                  Some (lp, ps1, ps2, inputParamCount, body, funcsym, pn, ilist) ->
+                  reportUseSite DeclKind_Predicate lp l;
+                  Some (ps1, ps2, inputParamCount)
+                | None ->
+                match try_assoc p predctormap0 with
+                  Some (PredCtorInfo (lp, ps1, ps2, inputParamCount, body, funcsym)) ->
+                  reportUseSite DeclKind_Predicate lp l;
+                  Some (ps1, ps2, inputParamCount)
+                | None -> None
+              with
+                Some (ps1, ps2, inputParamCount) ->
+                cont (p, true, [], List.map snd ps1, List.map snd ps2, inputParamCount)
+              | None ->
+                let error () = 
+                  begin match try_assoc p tenv with
+                    None ->  static_error l ("No such predicate: " ^ p) None 
+                  | Some _ -> static_error l ("Variable " ^ p ^ " is not of predicate type.") None 
+                  end
+                in
+                let check_pats pmap =
                   if targs <> [] then static_error l "Incorrect number of type arguments." None;
                   if ps0 <> [] then static_error l "Incorrect number of indices." None;
-                  let (wps, tenv) = check_pats (pn,ilist) l [] tenv (List.map snd pmap) ps in
-                  let index =
-                    if List.mem_assoc cn classmap1 || List.mem_assoc cn classmap0 then
-                      ClassLit (l, cn)
-                    else
-                      get_class_of_this
-                  in
-                  (WInstPredAsn (l, None, cn, get_class_finality cn, family, p, index, wps), tenv, [])
+                  check_pats (pn, ilist) l [] tenv (List.map snd pmap) ps
                 in
-                check_inst_pred_asn l cn p check_call error
-              | Some(_) -> error ()
+                begin match try_assoc "this" tenv with
+                  None -> error ()
+                | Some (ObjType (cn, _)) ->
+                  let check_call family pmap =
+                    let wps, tenv = check_pats pmap in
+                    let index =
+                      if List.mem_assoc cn classmap1 || List.mem_assoc cn classmap0 then
+                        ClassLit (l, cn)
+                      else
+                        get_class_of_this
+                    in
+                    (WInstPredAsn (l, None, cn, get_class_finality cn, family, p, index, wps), tenv, [])
+                  in
+                  check_inst_pred_asn l cn p check_call error
+                | Some (PtrType (StructType sn)) ->
+                  let check_call family pmap =
+                    let wps, tenv = check_pats pmap in
+                    let index = WVar (l, "thisType", LocalVar) in
+                    WInstPredAsn (l, None, sn, ExtensibleClass, family, p, index, wps), tenv, []
+                  in
+                  check_inst_pred_asn l sn p check_call error
+                | Some(_) -> error ()
+                end
               end
             end
-          end
-      end $. fun (p, is_global_predref, callee_tparams, ts0, xs, inputParamCount) ->
-      begin
-        let (targs, tpenv, inferredTypes) =
-          if targs = [] then
-            let tpenv = List.map (fun x -> (x, (object end), ref Unconstrained)) callee_tparams in
-            (List.map (fun (x, o, r) -> InferredType (o, r)) tpenv,
-             List.map (fun (x, o, r) -> (x, InferredType (o, r))) tpenv,
-             List.map (fun (x, o, r) -> r) tpenv)
-          else
-            match zip callee_tparams targs with
-              None -> static_error l (Printf.sprintf "Predicate requires %d type arguments." (List.length callee_tparams)) None
-            | Some bs -> (targs, bs, [])
-        in
-        if List.length ps0 <> List.length ts0 then static_error l "Incorrect number of indexes." None;
-        let (wps0, tenv) = check_pats (pn,ilist) l tparams tenv ts0 ps0 in
-        let xs' = List.map (instantiate_type tpenv) xs in
-        let (wps, tenv) = check_pats (pn,ilist) l tparams tenv xs' ps in
-        let p = new predref p (ts0 @ xs') inputParamCount in
-        (WPredAsn (l, p, is_global_predref, targs, wps0, wps), tenv, inferredTypes)
-      end
-    | InstPredAsn (l, e, g, index, pats) ->
-      let (w, t) = check_expr (pn,ilist) tparams tenv (Some true) e in
-      begin match t with
-        ObjType (cn, targs) ->
-        let check_call family pmap =
-          let (wpats, tenv) = check_pats (pn,ilist) l [] tenv (List.map snd pmap) pats in
-          let index = check_expr_t (pn,ilist) [] tenv (Some true) index (ObjType ("java.lang.Class", [])) in
-          (WInstPredAsn (l, Some w, cn, get_class_finality cn, family, g, index, wpats), tenv, [])
-        in
-        let error () = static_error l (Printf.sprintf "Type '%s' does not declare such a predicate" cn) None in
-        check_inst_pred_asn l cn g check_call error
-      | _ -> static_error l "Target of instance predicate assertion must be of class type" None
-      end
-    | ExprAsn (l, e) ->
-      let w = check_expr_t (pn,ilist) tparams tenv (Some true) e boolt in (ExprAsn (l, w), tenv, [])
-    | MatchAsn (l, e1, pat) ->
-      let (w1, t) = check_expr (pn,ilist) tparams tenv (Some true) e1 in
-      let (wpat, tenv) = check_pat (pn,ilist) tparams tenv t pat in
-      (WMatchAsn (l, w1, wpat, t), tenv, [])
-    | Sep (l, p1, p2) ->
-      let (p1, tenv, infTps1) = check_asn (pn,ilist) tparams tenv p1 in
-      let (p2, tenv, infTps2) = check_asn (pn,ilist) tparams tenv p2 in
-      (Sep (l, p1, p2), tenv, infTps1 @ infTps2)
-    | IfExpr (l, e, p1, p2) ->
-      let w = check_expr_t (pn,ilist) tparams tenv (Some true) e boolt in
-      let (wp1, _, infTps1) = check_asn (pn,ilist) tparams tenv p1 in
-      let (wp2, _, infTps2) = check_asn (pn,ilist) tparams tenv p2 in
-      (IfAsn (l, w, wp1, wp2), tenv, infTps1 @ infTps2)
-    | SwitchExpr (l, e, cs, cdef) ->
-      if cdef <> None then static_error l "A default clause is not yet supported in a switch assertion." None;
-      let (w, t) = check_expr (pn,ilist) tparams tenv (Some true) e in
-      begin
-      match t with
-      | InductiveType (i, targs) ->
+        end $. fun (p, is_global_predref, callee_tparams, ts0, xs, inputParamCount) ->
         begin
-        match try_assoc i inductivemap with
-          None -> static_error l "Switch operand is not an inductive value." None
-        | Some (_, inductive_tparams, ctormap, _, _, _, _, _) ->
-          let (Some tpenv) = zip inductive_tparams targs in
-          let rec iter wcs (ctormap: (string * inductive_ctor_info) list) cs infTps =
-            match cs with
-              [] ->
-              let _ = 
-                match ctormap with
-                  [] -> ()
-                | (cn, _)::_ ->
-                  static_error l ("Missing case: '" ^ cn ^ "'.") None
-              in (WSwitchAsn (l, w, i, wcs), tenv, infTps)
-            | SwitchExprClause (lc, cn, xs, body)::cs ->
-              begin
-              match try_assoc cn ctormap with
-                None -> static_error lc "No such constructor." None
-              | Some (_, (_, _, _, param_names_types, _)) ->
-                let (_, ts) = List.split param_names_types in
-                let (xmap, xsInfo) =
-                  let rec iter xmap xsInfo ts xs =
-                    match (ts, xs) with
-                      ([], []) -> (xmap, List.rev xsInfo)
-                    | (t::ts, x::xs) ->
-                      if List.mem_assoc x tenv then static_error lc ("Pattern variable '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.") None;
-                      let _ = if List.mem_assoc x xmap then static_error lc "Duplicate pattern variable." None in
-                      let xInfo = match unfold_inferred_type t with GhostTypeParam x -> Some (provertype_of_type (List.assoc x tpenv)) | _ -> None in
-                      iter ((x, instantiate_type tpenv t)::xmap) (xInfo::xsInfo) ts xs
-                    | ([], _) -> static_error lc "Too many pattern variables." None
-                    | _ -> static_error lc "Too few pattern variables." None
-                  in
-                  iter [] [] ts xs
-                in
-                let tenv = xmap @ tenv in
-                let (wbody, _, clauseInfTps) = check_asn (pn,ilist)  tparams tenv body in
-                iter (WSwitchAsnClause (lc, cn, xs, xsInfo, wbody)::wcs) (List.remove_assoc cn ctormap) cs (clauseInfTps @ infTps)
-              end
+          let (targs, tpenv, inferredTypes) =
+            if targs = [] then
+              let tpenv = List.map (fun x -> (x, (object end), ref Unconstrained)) callee_tparams in
+              (List.map (fun (x, o, r) -> InferredType (o, r)) tpenv,
+              List.map (fun (x, o, r) -> (x, InferredType (o, r))) tpenv,
+              List.map (fun (x, o, r) -> r) tpenv)
+            else
+              match zip callee_tparams targs with
+                None -> static_error l (Printf.sprintf "Predicate requires %d type arguments." (List.length callee_tparams)) None
+              | Some bs -> (targs, bs, [])
           in
-          iter [] ctormap cs []
+          if List.length ps0 <> List.length ts0 then static_error l "Incorrect number of indexes." None;
+          let (wps0, tenv) = check_pats (pn,ilist) l tparams tenv ts0 ps0 in
+          let xs' = List.map (instantiate_type tpenv) xs in
+          let (wps, tenv) = check_pats (pn,ilist) l tparams tenv xs' ps in
+          let p = new predref p (ts0 @ xs') inputParamCount in
+          (WPredAsn (l, p, is_global_predref, targs, wps0, wps), tenv, inferredTypes)
         end
-      | _ -> static_error l "Switch operand is not an inductive value." None
-      end
-    | EmpAsn l -> (p, tenv, [])
-    | ForallAsn (l, te, i, e) -> 
-      begin match try_assoc i tenv with
-        None -> 
-          let t = check_pure_type (pn,ilist) tparams Ghost te in
-          let w = check_expr_t (pn,ilist) tparams ((i, t) :: tenv) (Some true) e boolt in
-          (ForallAsn(l, ManifestTypeExpr(l, t), i, w), tenv, [])
-      | Some _ -> static_error l ("bound variable " ^ i ^ " hides existing local variable " ^ i) None
-      end
-    | CoefAsn (l, DummyVarPat, _) ->
-      static_error l "Dummy variable pattern fractions are not yet supported" None
-    | CoefAsn (l, coef, body) ->
-      begin match body with
-        CoefAsn _ ->
-          static_error l ("Consecutive fractional permission coefficients found. Permissions of the form `[f1][f2]p' are not supported.") None
-      | _ ->
-        let (wcoef, tenv') = check_pat_core (pn,ilist) tparams tenv RealType coef in
-        let (wbody, tenv, infTps) = check_asn (pn,ilist) tparams tenv body in
-        (CoefAsn (l, wcoef, wbody), merge_tenvs l tenv' tenv, infTps)
-      end
-    | EnsuresAsn (l, body) ->
-      begin match try_assoc "#pre" tenv with
-        None -> static_error l "Ensures clause not allowed here." None
-      | Some rt ->
-        let tenv = List.remove_assoc "#pre" tenv in
-        let tenv = if rt = Void then tenv else ("result", rt)::tenv in
-        let (wbody, tenv, infTps) = check_asn (pn,ilist) tparams tenv body in
-        (EnsuresAsn (l, wbody), tenv, infTps)
-      end
-    | e ->
-      let a =
-        match e with
-        | CallExpr (l, g, targs, pats0, pats, Static) -> PredAsn (l, g, targs, pats0, pats)
-        | CallExpr (l, g, [], pats0, LitPat e::pats, Instance) ->
-          let index =
-            match pats0 with
-              [] -> CallExpr (l, "getClass", [], [], [LitPat e], Instance)
-            | [LitPat e] -> e
-            | _ -> raise (ParseException (l, "Instance predicate call: single index expression expected"))
+      | InstPredAsn (l, e, g, index, pats) ->
+        let error l tn () = static_error l (Printf.sprintf "Type '%s' does not declare such a predicate." tn) None in
+        let (w, t) = check_expr (pn,ilist) tparams tenv (Some true) e in
+        begin match t with
+        | ObjType (cn, targs) ->
+          let check_call family pmap =
+            let (wpats, tenv) = check_pats (pn,ilist) l [] tenv (List.map snd pmap) pats in
+            let index = check_expr_t (pn,ilist) [] tenv (Some true) index (ObjType ("java.lang.Class", [])) in
+            (WInstPredAsn (l, Some w, cn, get_class_finality cn, family, g, index, wpats), tenv, [])
           in
-          InstPredAsn (l, e, g, index, pats)
-        | Operation (l, Eq, [e1; e2]) ->
-          begin match pat_of_expr e2 with
-            LitPat e2 -> ExprAsn (l, e)
-          | e2 -> MatchAsn (l, e1, e2)
+          check_inst_pred_asn l cn g check_call (error l cn)
+        | PtrType (StructType sn) ->
+          let check_call family pmap =
+            match index with
+            | CallExpr (_, "typeid", [], [], [], Instance) when is_polymorphic_struct sn ->
+              let target_name w =
+                let rec aux = function
+                | WVar (_, name, _) -> "#" ^ name
+                | AddressOf (_, WDeref (_, w, _)) -> aux w
+                in
+                aux w
+              in
+              let vtype_var, index_var = 
+                let var_name = target_name w in
+                let index_var = Var (l, var_name) in
+                if (not (List.mem_assoc var_name pre_tenv)) then
+                  VarPat (l, var_name), index_var
+                else
+                  LitPat (Var (l, var_name)), index_var
+              in
+              let a, tenv, _ = check_asn tenv (Sep (
+                l, 
+                CallExpr (l, vtype_pred_name sn, [], [], [LitPat (TypedExpr (w, t)); vtype_var], Static),
+                InstPredAsn (l, TypedExpr (w, t), g, index_var, pats)))
+              in
+              a, tenv, []
+            | CallExpr (_, "typeid", [], [], [], Instance) ->
+              let wpats, tenv = check_pats (pn, ilist) l [] tenv (List.map snd pmap) pats in
+              let index = TypeInfo (l, StructType sn) in
+              WInstPredAsn (l, Some w, sn, ExtensibleClass, family, g, index, wpats), tenv, []
+            | _ -> 
+              let wpats, tenv = check_pats (pn, ilist) l [] tenv (List.map snd pmap) pats in
+              let index = check_expr_t (pn, ilist) [] tenv (Some true) index (PtrType (StructType "std::type_info")) in
+              WInstPredAsn (l, Some w, sn, ExtensibleClass, family, g, index, wpats), tenv, []
+          in
+          check_inst_pred_asn l sn g check_call (error l sn)
+        | _ when dialect = Some Cxx -> static_error l "Target of instance predicate assertion must be of type: pointer to struct." None
+        | _ -> static_error l "Target of instance predicate assertion must be of class type." None
+        end
+      | ExprAsn (l, e) ->
+        let w = check_expr_t (pn,ilist) tparams tenv (Some true) e boolt in (ExprAsn (l, w), tenv, [])
+      | MatchAsn (l, e1, pat) ->
+        let (w1, t) = check_expr (pn,ilist) tparams tenv (Some true) e1 in
+        let (wpat, tenv) = check_pat (pn,ilist) tparams tenv t pat in
+        (WMatchAsn (l, w1, wpat, t), tenv, [])
+      | Sep (l, p1, p2) ->
+        let (p1, tenv, infTps1) = check_asn tenv p1 in
+        let (p2, tenv, infTps2) = check_asn tenv p2 in
+        (Sep (l, p1, p2), tenv, infTps1 @ infTps2)
+      | IfExpr (l, e, p1, p2) ->
+        let w = check_expr_t (pn,ilist) tparams tenv (Some true) e boolt in
+        let (wp1, _, infTps1) = check_asn tenv p1 in
+        let (wp2, _, infTps2) = check_asn tenv p2 in
+        (IfAsn (l, w, wp1, wp2), tenv, infTps1 @ infTps2)
+      | SwitchExpr (l, e, cs, cdef) ->
+        if cdef <> None then static_error l "A default clause is not yet supported in a switch assertion." None;
+        let (w, t) = check_expr (pn,ilist) tparams tenv (Some true) e in
+        begin
+        match t with
+        | InductiveType (i, targs) ->
+          begin
+          match try_assoc i inductivemap with
+            None -> static_error l "Switch operand is not an inductive value." None
+          | Some (_, inductive_tparams, ctormap, _, _, _, _, _) ->
+            let (Some tpenv) = zip inductive_tparams targs in
+            let rec iter wcs (ctormap: (string * inductive_ctor_info) list) cs infTps =
+              match cs with
+                [] ->
+                let _ = 
+                  match ctormap with
+                    [] -> ()
+                  | (cn, _)::_ ->
+                    static_error l ("Missing case: '" ^ cn ^ "'.") None
+                in (WSwitchAsn (l, w, i, wcs), tenv, infTps)
+              | SwitchExprClause (lc, cn, xs, body)::cs ->
+                begin
+                match try_assoc cn ctormap with
+                  None -> static_error lc "No such constructor." None
+                | Some (_, (_, _, _, param_names_types, _)) ->
+                  let (_, ts) = List.split param_names_types in
+                  let (xmap, xsInfo) =
+                    let rec iter xmap xsInfo ts xs =
+                      match (ts, xs) with
+                        ([], []) -> (xmap, List.rev xsInfo)
+                      | (t::ts, x::xs) ->
+                        if List.mem_assoc x tenv then static_error lc ("Pattern variable '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.") None;
+                        let _ = if List.mem_assoc x xmap then static_error lc "Duplicate pattern variable." None in
+                        let xInfo = match unfold_inferred_type t with GhostTypeParam x -> Some (provertype_of_type (List.assoc x tpenv)) | _ -> None in
+                        iter ((x, instantiate_type tpenv t)::xmap) (xInfo::xsInfo) ts xs
+                      | ([], _) -> static_error lc "Too many pattern variables." None
+                      | _ -> static_error lc "Too few pattern variables." None
+                    in
+                    iter [] [] ts xs
+                  in
+                  let tenv = xmap @ tenv in
+                  let (wbody, _, clauseInfTps) = check_asn tenv body in
+                  iter (WSwitchAsnClause (lc, cn, xs, xsInfo, wbody)::wcs) (List.remove_assoc cn ctormap) cs (clauseInfTps @ infTps)
+                end
+            in
+            iter [] ctormap cs []
           end
-        | _ -> ExprAsn (expr_loc e, e)
-      in
-      check_asn (pn,ilist) tparams tenv a
+        | _ -> static_error l "Switch operand is not an inductive value." None
+        end
+      | EmpAsn l -> (p, tenv, [])
+      | ForallAsn (l, te, i, e) -> 
+        begin match try_assoc i tenv with
+          None -> 
+            let t = check_pure_type (pn,ilist) tparams Ghost te in
+            let w = check_expr_t (pn,ilist) tparams ((i, t) :: tenv) (Some true) e boolt in
+            (ForallAsn(l, ManifestTypeExpr(l, t), i, w), tenv, [])
+        | Some _ -> static_error l ("bound variable " ^ i ^ " hides existing local variable " ^ i) None
+        end
+      | CoefAsn (l, DummyVarPat, _) ->
+        static_error l "Dummy variable pattern fractions are not yet supported" None
+      | CoefAsn (l, coef, body) ->
+        begin match body with
+          CoefAsn _ ->
+            static_error l ("Consecutive fractional permission coefficients found. Permissions of the form `[f1][f2]p' are not supported.") None
+        | _ ->
+          let (wcoef, tenv') = check_pat_core (pn,ilist) tparams tenv RealType coef in
+          let (wbody, tenv, infTps) = check_asn tenv body in
+          (CoefAsn (l, wcoef, wbody), merge_tenvs l tenv' tenv, infTps)
+        end
+      | EnsuresAsn (l, body) ->
+        begin match try_assoc "#pre" tenv with
+          None -> static_error l "Ensures clause not allowed here." None
+        | Some rt ->
+          let tenv = List.remove_assoc "#pre" tenv in
+          let tenv = if rt = Void then tenv else ("result", rt)::tenv in
+          let (wbody, tenv, infTps) = check_asn tenv body in
+          (EnsuresAsn (l, wbody), tenv, infTps)
+        end
+      | e ->
+        let a =
+          match e with
+          | CallExpr (l, g, targs, pats0, pats, Static) -> PredAsn (l, g, targs, pats0, pats)
+          | CallExpr (l, g, [], pats0, LitPat e::pats, Instance) ->
+            let index =
+              match pats0 with
+              | [] when dialect = Some Cxx -> CallExpr (l, "typeid", [], [], [], Instance)
+              | [] -> CallExpr (l, "getClass", [], [], [LitPat e], Instance)
+              | [LitPat e] -> e
+              | _ -> raise (ParseException (l, "Instance predicate call: single index expression expected"))
+            in
+            InstPredAsn (l, e, g, index, pats)
+          | Operation (l, Eq, [e1; e2]) ->
+            begin match pat_of_expr e2 with
+              LitPat e2 -> ExprAsn (l, e)
+            | e2 -> MatchAsn (l, e1, e2)
+            end
+          | _ -> ExprAsn (expr_loc e, e)
+        in
+        check_asn tenv a
+    in
+    check_asn tenv p
   
   let rec fix_inferred_type r =
     match !r with
@@ -6009,11 +6146,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     check_predinst0 predfam_tparams arity ps psymb inputParamCount (pn, ilist) tparams tenv env l p predinst_tparams fns xs body
 
-  let is_polymorphic_struct sn =
-    match List.assoc sn structmap with
-    | _, (Some (_, _, true)), _, _, _ -> true
-    | _ -> false
-
   let mk_pred_inst l (pn, ilist) pred tparams is params body =
     let fns = match file_type path with
       Java-> check_classnamelist (pn,ilist) is
@@ -6118,6 +6250,26 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         (cn, (lc, abstract, fin, methods, fds_opt, ctors, super, tpenv, interfs, preds, pn, ilist))
       end
+
+  let cxx_inst_pred_map1 =
+    cxx_inst_pred_map1_unchecked |> List.map (fun (sn, inst_preds) ->
+      let winst_preds = inst_preds |> List.map (function
+        | g, (loc, pmap, family, symb, Some body) ->
+          let tenv = ("this", PtrType (StructType sn)) :: pmap in
+          let wbody, _ = check_asn ("", []) [] tenv body in
+          let fixed = check_pred_precise ["this"] wbody in
+          pmap |> List.iter (fun (x, t) ->
+            if not (List.mem x fixed) then static_error loc ("Preciseness check failure: predicate body does not fix parameter '" ^ x ^ "'.") None
+          );
+          g, (loc, pmap, family, symb, Some wbody)
+        | pred ->
+          pred
+        )
+      in
+      sn, winst_preds
+    )
+
+  let cxx_inst_pred_map = cxx_inst_pred_map1 @ cxx_inst_pred_map0
   
   (* Region: evaluation helpers; pushing and popping assumptions and execution trace elements *)
   
@@ -6147,22 +6299,25 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     mk_field_ptr derived_addr base_offset
 
   let base_addr l (derived_name, derived_addr) base_name =
-    let rec iter derived_name offsets =
-      let _, Some (bases, _, _), _, _, _ = List.assoc derived_name structmap in 
-      let other_paths = bases |> List.fold_left begin fun acc (name, (_, _, offset)) -> 
-        match iter name (offset :: offsets) with
-        | Some p -> p :: acc
-        | None -> acc
-      end [] in
-      match try_assoc base_name bases, other_paths with 
-      | Some _,  _ :: _
-      | None, _ :: (_ :: _) -> static_error l (Printf.sprintf "Derived '%s' to base '%s' is ambiguous: multiple '%s' base candidates exist." derived_name base_name base_name) None
-      | Some (_, _, base_offset), [] -> Some (base_offset :: offsets)
-      | None, [p] -> Some p
-      | _ -> None
-    in 
-    let Some offsets = iter derived_name [] in 
-    List.rev offsets |> List.fold_left mk_field_ptr derived_addr
+    if derived_name = base_name then 
+      derived_addr
+    else
+      let rec iter derived_name offsets =
+        let _, Some (bases, _, _), _, _, _ = List.assoc derived_name structmap in 
+        let other_paths = bases |> List.fold_left begin fun acc (name, (_, _, offset)) -> 
+          match iter name (offset :: offsets) with
+          | Some p -> p :: acc
+          | None -> acc
+        end [] in
+        match try_assoc base_name bases, other_paths with 
+        | Some _,  _ :: _
+        | None, _ :: (_ :: _) -> static_error l (Printf.sprintf "Derived '%s' to base '%s' is ambiguous: multiple '%s' base candidates exist." derived_name base_name base_name) None
+        | Some (_, _, base_offset), [] -> Some (base_offset :: offsets)
+        | None, [p] -> Some p
+        | _ -> None
+      in 
+      let Some offsets = iter derived_name [] in 
+      List.rev offsets |> List.fold_left mk_field_ptr derived_addr
 
   let convert_provertype term proverType proverType0 =
     if proverType = proverType0 then term else apply_conversion proverType proverType0 term
