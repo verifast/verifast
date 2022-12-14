@@ -445,6 +445,7 @@ cd tutorial_solutions
   verifast_both -target 32bit students.c
 cd ..
 cd tests
+  verifast -c -allow_should_fail alloc_zero.c
   verifast -c malloc_integers_.c
   verifast -c void_cast.c
   verifast -c typedef_pointers.c
