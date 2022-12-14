@@ -96,7 +96,7 @@ fixpoint bool pointer_within_limits(void *p) {
 }
 
 fixpoint bool object_pointer_within_limits(void *p, int size) {
-    return pointer_within_limits(p) && pointer_within_limits(p + size) && (uintptr_t)p != 0 && size > 0;
+    return pointer_within_limits(p) && pointer_within_limits(p + size) && (uintptr_t)p != 0 && size >= 0;
 }
 
 // When producing a field chunk, VeriFast produces a field_pointer_within_limits fact
@@ -196,11 +196,11 @@ lemma void integer__unique(void *p);
 
 lemma void integer__limits(void *p);
     requires [?f]integer_(p, ?size, ?signed_, ?v);
-    ensures [f]integer_(p, size, signed_, v) &*& object_pointer_within_limits(p, size) == true &*& signed_ ? -(1<<(8*size-1)) <= v &*& v < (1<<(8*size-1)) : 0 <= v &*& v < (1<<(8*size));
+    ensures [f]integer_(p, size, signed_, v) &*& object_pointer_within_limits(p, size) == true &*& size > 0 &*& signed_ ? -(1<<(8*size-1)) <= v &*& v < (1<<(8*size-1)) : 0 <= v &*& v < (1<<(8*size));
 
 lemma void integer___limits(void *p);
     requires [?f]integer__(p, ?size, ?signed_, ?v);
-    ensures [f]integer__(p, size, signed_, v) &*& object_pointer_within_limits(p, size) == true;
+    ensures [f]integer__(p, size, signed_, v) &*& object_pointer_within_limits(p, size) == true &*& size > 0;
 
 lemma void char__limits(char *pc);
     requires [?f]char_(pc, ?c);
