@@ -40,6 +40,8 @@ module SwitchTargetsBranchRd = SwitchTargetsRd.Branch
 module VarDebugInfoRd = BodyRd.VarDebugInfo
 module SymbolRd = VarDebugInfoRd.Symbol
 module VarDebugInfoContentsRd = VarDebugInfoRd.VarDebugInfoContents
+module ConstValueRd = BodyRd.ConstValue
+module ScalarRd = BodyRd.Scalar
 
 (* Types *)
 module TyRd = VfMirStub.Reader.Ty
@@ -52,3 +54,4 @@ module GenArgRd = TyRd.GenArg
 module GenArgKindRd = GenArgRd.GenArgKind
 module RawPtrTyRd = TyRd.RawPtrTy
 module TyConstRd = TyRd.Const
+module TyConstKindRd = TyRd.ConstKind

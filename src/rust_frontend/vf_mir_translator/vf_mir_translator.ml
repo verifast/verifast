@@ -39,6 +39,8 @@ module IntAux = struct
     val min_int : t
     val ( - ) : t -> t -> t
     val ( + ) : t -> t -> t
+    val div : t -> t -> t
+    val rem : t -> t -> t
     val to_int : t -> int
     val of_int : int -> t
   end) =
@@ -54,10 +56,27 @@ module IntAux = struct
     let try_to_int (a : t) =
       let i = to_int a in
       if a = of_int i then Ok i else Error `IntAuxToInt
+
+    let rec to_big_int (a : t) =
+      let a_maybe_truncated = to_int a in
+      let a_reconst = of_int a_maybe_truncated in
+      if a = a_reconst then
+        let a_int = a_maybe_truncated in
+        Big_int.(big_int_of_int a_int)
+      else
+        let m = div a a_reconst in
+        let r = rem a a_reconst in
+        let open Big_int in
+        let bi = big_int_of_int a_maybe_truncated in
+        let bi = mult_big_int (to_big_int m) bi in
+        add_int_big_int (to_int r) bi
   end
 
-  module Uint64 = Make (Stdint.Uint64)
+  module Uint8 = Make (Stdint.Uint8)
+  module Uint16 = Make (Stdint.Uint16)
   module Uint32 = Make (Stdint.Uint32)
+  module Uint64 = Make (Stdint.Uint64)
+  module Uint128 = Make (Stdint.Uint128)
 end
 
 module Mir = struct
@@ -551,14 +570,58 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         (Ast.Var (loc, id))
         projection_cpn
 
+    let translate_scalar_u_int (sui_cpn : ScalarRd.UInt.t) (ty : Ast.type_expr)
+        (loc : Ast.loc) =
+      let mk_const v =
+        let open Ast in
+        let lit =
+          IntLit (loc, v, (*decimal*) true, (*U suffix*) true, LLSuffix)
+        in
+        Ok (CastExpr (loc, ty, lit))
+      in
+      let open ScalarRd.UInt in
+      let open IntAux in
+      match get sui_cpn with
+      | Usize v_cpn | U128 v_cpn ->
+          let vui128 = Uint128.to_big_int (CapnpAux.uint128_get v_cpn) in
+          mk_const vui128
+      | U8 v | U16 v -> mk_const (Big_int.big_int_of_int v)
+      | U32 vu32 -> mk_const (Uint32.to_big_int vu32)
+      | U64 vu64 -> mk_const (Uint64.to_big_int vu64)
+      | Undefined _ -> Error (`TrScalarUint "Unknown Uint type")
+
+    let translate_scalar (s_cpn : ScalarRd.t) (ty : Ast.type_expr)
+        (loc : Ast.loc) =
+      let open ScalarRd in
+      match get s_cpn with
+      | Bool b -> failwith "Todo: Scalar::Bool"
+      | Char str -> failwith "Todo: Scalar::Char"
+      | Int int_cpn -> failwith "Todo: Scalar::Int"
+      | Uint u_int_cpn -> translate_scalar_u_int u_int_cpn ty loc
+      | Float float_cpn -> failwith "Todo: Scalar::Float"
+      | FnDef -> failwith "Todo: Scalar::FnDef"
+      | Undefined _ -> Error (`TrScalar "Unknown Scalar kind")
+
+    let translate_const_value (cv_cpn : ConstValueRd.t) (ty : Ast.type_expr)
+        (loc : Ast.loc) =
+      let open ConstValueRd in
+      match get cv_cpn with
+      | Scalar scalar_cpn -> translate_scalar scalar_cpn ty loc
+      | Slice -> failwith "Todo: ConstValue::Slice"
+      | Undefined _ -> Error (`TrConstValue "Unknown ConstValue")
+
+    let translate_ty_const_kind (ck_cpn : TyConstKindRd.t) (ty : Ast.type_expr)
+        (loc : Ast.loc) =
+      let open TyConstKindRd in
+      match get ck_cpn with
+      | Param -> failwith "Todo: ConstKind::Param"
+      | Value v_cpn -> translate_const_value v_cpn ty loc
+      | Undefined _ -> Error (`TrTyConstKind "Unknown ConstKind")
+
     let translate_typed_constant (ty_const_cpn : TyConstRd.t) (loc : Ast.loc) =
       let open TyConstRd in
       let ty_cpn = ty_get ty_const_cpn in
       let* ty_info = translate_ty ty_cpn loc in
-
-      (* Todo @Nima: Here we might need access to type declarations to create proper constants out of the bytes we get from
-         the Rust compiler. It would be more straightforward if we get higher-level info about constant value from Rustc.
-      *)
       let ty_expr = Mir.raw_type_of ty_info in
       let ty =
         match ty_expr with
@@ -587,6 +650,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             in
             Ok (`TrTypedConstantRvalueBinderBuilder rvalue_binder_builder)
       | Ast.FuncType _ -> Ok (`TrTypedConstantFn ty_info)
+      | Ast.Int (Ast.Unsigned, _) ->
+          let val_cpn = val_get ty_const_cpn in
+          let* const_expr = translate_ty_const_kind val_cpn ty_expr loc in
+          Ok (`TrTypedConstantScalar const_expr)
       | _ -> failwith "Todo: Constant of unsupported type"
 
     let translate_constant_kind (constant_kind_cpn : ConstantKindRd.t)
@@ -621,6 +688,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | Undefined _ -> Error (`TrOperand "Unknown Mir Operand kind")
 
     let translate_operands (oprs : (OperandRd.t * Ast.loc) list) =
+      (* We want to preserve Rust's left to right argument evaluation *)
       let tmp_rvalue_binders = ref [] in
       let translate_opr ((opr_cpn, loc) : OperandRd.t * Ast.loc) =
         let* opr = translate_operand opr_cpn loc in
@@ -638,6 +706,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         | `TrTypedConstantFn _ ->
             failwith
               "Todo: Functions as operand in rvalues are not supported yet"
+        | `TrTypedConstantScalar expr -> Ok expr
       in
       let* oprs = ListAux.try_map translate_opr oprs in
       Ok (!tmp_rvalue_binders, oprs)
@@ -878,7 +947,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let rhs_rvalue_cpn = AssignData.rhs_rvalue_get assign_data_cpn in
           let* rhs_rvalue = translate_rvalue rhs_rvalue_cpn loc in
           match rhs_rvalue with
-          | `TrOperandCopy rhs_expr | `TrOperandMove rhs_expr ->
+          | `TrOperandCopy rhs_expr
+          | `TrOperandMove rhs_expr
+          | `TrTypedConstantScalar rhs_expr ->
               let assign_stmt =
                 Ast.ExprStmt (Ast.AssignExpr (loc, lhs_place, rhs_expr))
               in
@@ -899,7 +970,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     loc,
                     ref [] )
               in
-              Ok [ block_stmt ])
+              Ok [ block_stmt ]
+          | _ -> Error (`TrStatementKind "Invalid rvalue for assign statement"))
       | Nop -> Ok []
       | Undefined _ -> Error (`TrStatementKind "Unknown StatementKind")
 
