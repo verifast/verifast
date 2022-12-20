@@ -257,10 +257,38 @@ struct Body {
                 place @1: Place;
             }
 
+            struct BinaryOpData {
+                struct BinOp {
+                    union {
+                        add @0: Void;
+                        sub @1: Void;
+                        mul @2: Void;
+                        div @3: Void;
+                        rem @4: Void;
+                        bitXor @5: Void;
+                        bitAnd @6: Void;
+                        bitOr @7: Void;
+                        shl @8: Void;
+                        shr @9: Void;
+                        eq @10: Void;
+                        lt @11: Void;
+                        le @12: Void;
+                        ne @13: Void;
+                        ge @14: Void;
+                        gt @15: Void;
+                        offset @16: Void;
+                    }
+                }
+                operator @0: BinOp;
+                operandl @1: Operand;
+                operandr @2: Operand;
+            }
+
             union {
                 # Either move or copy depending on operand type
                 use @0: Operand;
                 addressOf @1: AddressOfData;
+                binaryOp @2: BinaryOpData;
             }
         }
 

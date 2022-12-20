@@ -925,16 +925,55 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let terminator_kind_cpn = kind_get terminator_cpn in
       translate_terminator_kind ret_place_id terminator_kind_cpn loc
 
+    let translate_bin_op (bin_op_cpn : BinOpRd.t) =
+      let open BinOpRd in
+      match get bin_op_cpn with
+      | Add -> Ok Ast.Add
+      | Sub -> Ok Ast.Sub
+      | Mul -> Ok Ast.Mul
+      | Div -> Ok Ast.Div
+      | Rem -> Ok Ast.Mod
+      | BitXor -> Ok Ast.BitXor
+      | BitAnd -> Ok Ast.BitAnd
+      | BitOr -> Ok Ast.BitOr
+      | Shl -> failwith "Todo: BinOp::Shl"
+      | Shr -> failwith "Todo: BinOp::Shr"
+      | Eq -> Ok Ast.Eq
+      | Lt -> Ok Ast.Lt
+      | Le -> Ok Ast.Le
+      | Ne -> Ok Ast.Neq
+      | Ge -> Ok Ast.Ge
+      | Gt -> Ok Ast.Gt
+      | Offset -> failwith "Todo: BinOp::Offset"
+      | Undefined _ -> Error (`TrBinOp "Unknown binary operator")
+
+    let translate_binary_operation (bin_op_data_cpn : BinaryOpDataRd.t)
+        (loc : Ast.loc) =
+      let open BinaryOpDataRd in
+      let operator_cpn = operator_get bin_op_data_cpn in
+      let* operator = translate_bin_op operator_cpn in
+      let operandl_cpn = operandl_get bin_op_data_cpn in
+      let* operandl = translate_operand operandl_cpn loc in
+      let operandr_cpn = operandr_get bin_op_data_cpn in
+      let* operandr = translate_operand operandr_cpn loc in
+      Ok (operator, operandl, operandr)
+
     let translate_rvalue (rvalue_cpn : RvalueRd.t) (loc : Ast.loc) =
       let open RvalueRd in
       match get rvalue_cpn with
       | Use operand_cpn -> (
           let* operand = translate_operand operand_cpn loc in
           match operand with
+          | `TrOperandCopy expr
+          | `TrOperandMove expr
+          | `TrTypedConstantScalar expr ->
+              Ok (`TrRvalueExpr expr)
+          | `TrTypedConstantRvalueBinderBuilder rvalue_binder_builder ->
+              Ok (`TrRvalueRvalueBinderBuilder rvalue_binder_builder)
           | `TrTypedConstantFn _ ->
-              Error (`TrRvalue "Invalid Operand translation for Rvalue")
-          | _ -> Ok operand)
+              Error (`TrRvalue "Invalid operand translation for Rvalue::Use"))
       | AddressOf address_of_data_cpn -> failwith "Todo: Rvalue::AddressOf"
+      | BinaryOp bin_op_data_cpn -> failwith "Todo: Rvalue::BinaryOp"
       | Undefined _ -> Error (`TrRvalue "Unknown Rvalue kind")
 
     let translate_statement_kind (statement_kind_cpn : StatementKindRd.t)
@@ -947,14 +986,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let rhs_rvalue_cpn = AssignData.rhs_rvalue_get assign_data_cpn in
           let* rhs_rvalue = translate_rvalue rhs_rvalue_cpn loc in
           match rhs_rvalue with
-          | `TrOperandCopy rhs_expr
-          | `TrOperandMove rhs_expr
-          | `TrTypedConstantScalar rhs_expr ->
+          | `TrRvalueExpr rhs_expr ->
               let assign_stmt =
                 Ast.ExprStmt (Ast.AssignExpr (loc, lhs_place, rhs_expr))
               in
               Ok [ assign_stmt ]
-          | `TrTypedConstantRvalueBinderBuilder rvalue_binder_builder ->
+          | `TrRvalueRvalueBinderBuilder rvalue_binder_builder ->
               (* Todo @Nima: Is this correct to use `loc` for subparts of the block that represents the assignment statement *)
               let tmp_var_name = TrName.make_tmp_var_name "" in
               let rvalue_binder_stmt = rvalue_binder_builder tmp_var_name in
@@ -970,8 +1007,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     loc,
                     ref [] )
               in
-              Ok [ block_stmt ]
-          | _ -> Error (`TrStatementKind "Invalid rvalue for assign statement"))
+              Ok [ block_stmt ])
       | Nop -> Ok []
       | Undefined _ -> Error (`TrStatementKind "Unknown StatementKind")
 

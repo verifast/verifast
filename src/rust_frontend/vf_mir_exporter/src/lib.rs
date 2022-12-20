@@ -238,6 +238,7 @@ mod vf_mir_builder {
     use basic_block_cpn::rvalue as rvalue_cpn;
     use basic_block_cpn::statement as statement_cpn;
     use basic_block_cpn::terminator as terminator_cpn;
+    use binary_op_data_cpn::bin_op as bin_op_cpn;
     use body_cpn::annotation as annot_cpn;
     use body_cpn::basic_block as basic_block_cpn;
     use body_cpn::basic_block_id as basic_block_id_cpn;
@@ -261,6 +262,7 @@ mod vf_mir_builder {
     use rustc_middle::bug;
     use rustc_middle::ty;
     use rustc_middle::{mir, ty::TyCtxt};
+    use rvalue_cpn::binary_op_data as binary_op_data_cpn;
     use source_file_cpn::file_name as file_name_cpn;
     use span_data_cpn::loc as loc_cpn;
     use statement_cpn::statement_kind as statement_kind_cpn;
@@ -834,7 +836,15 @@ mod vf_mir_builder {
                 mir::Rvalue::AddressOf(mutability, place) => todo!(),
                 mir::Rvalue::Len(place) => todo!(),
                 mir::Rvalue::Cast(cast_kind, operand, ty) => todo!(),
-                mir::Rvalue::BinaryOp(bin_op, box (operandl, operandr)) => todo!(),
+                mir::Rvalue::BinaryOp(bin_op, box (operandl, operandr)) => {
+                    let mut bin_op_data_cpn = rvalue_cpn.init_binary_op();
+                    let bin_op_cpn = bin_op_data_cpn.reborrow().init_operator();
+                    Self::encode_bin_op(*bin_op, bin_op_cpn);
+                    let operandl_cpn = bin_op_data_cpn.reborrow().init_operandl();
+                    Self::encode_operand(tcx, operandl, operandl_cpn);
+                    let operandr_cpn = bin_op_data_cpn.init_operandr();
+                    Self::encode_operand(tcx, operandr, operandr_cpn);
+                }
                 mir::Rvalue::CheckedBinaryOp(bin_op, box (operandl, operandr)) => todo!(),
                 mir::Rvalue::NullaryOp(null_op, ty) => todo!(),
                 mir::Rvalue::UnaryOp(un_op, operand) => todo!(),
@@ -844,6 +854,28 @@ mod vf_mir_builder {
                 mir::Rvalue::Aggregate(box aggregate_kind, operands) => todo!(),
                 // Transmutes a `*mut u8` into shallow-initialized `Box<T>`.
                 mir::Rvalue::ShallowInitBox(operand, ty) => todo!(),
+            }
+        }
+
+        fn encode_bin_op(bin_op: mir::BinOp, mut bin_op_cpn: bin_op_cpn::Builder<'_>) {
+            match bin_op {
+                mir::BinOp::Add => bin_op_cpn.set_add(()),
+                mir::BinOp::Sub => bin_op_cpn.set_sub(()),
+                mir::BinOp::Mul => bin_op_cpn.set_mul(()),
+                mir::BinOp::Div => bin_op_cpn.set_div(()),
+                mir::BinOp::Rem => bin_op_cpn.set_rem(()),
+                mir::BinOp::BitXor => bin_op_cpn.set_bit_xor(()),
+                mir::BinOp::BitAnd => bin_op_cpn.set_bit_and(()),
+                mir::BinOp::BitOr => bin_op_cpn.set_bit_or(()),
+                mir::BinOp::Shl => bin_op_cpn.set_shl(()),
+                mir::BinOp::Shr => bin_op_cpn.set_shr(()),
+                mir::BinOp::Eq => bin_op_cpn.set_eq(()),
+                mir::BinOp::Lt => bin_op_cpn.set_lt(()),
+                mir::BinOp::Le => bin_op_cpn.set_le(()),
+                mir::BinOp::Ne => bin_op_cpn.set_ne(()),
+                mir::BinOp::Ge => bin_op_cpn.set_ge(()),
+                mir::BinOp::Gt => bin_op_cpn.set_gt(()),
+                mir::BinOp::Offset => bin_op_cpn.set_offset(()),
             }
         }
 

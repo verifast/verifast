@@ -42,6 +42,8 @@ module SymbolRd = VarDebugInfoRd.Symbol
 module VarDebugInfoContentsRd = VarDebugInfoRd.VarDebugInfoContents
 module ConstValueRd = BodyRd.ConstValue
 module ScalarRd = BodyRd.Scalar
+module BinaryOpDataRd = RvalueRd.BinaryOpData
+module BinOpRd = BinaryOpDataRd.BinOp
 
 (* Types *)
 module TyRd = VfMirStub.Reader.Ty
