@@ -975,20 +975,29 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
     let translate_rvalue (rvalue_cpn : RvalueRd.t) (loc : Ast.loc) =
       let open RvalueRd in
+      let tr_operand operand =
+        match operand with
+        | `TrOperandCopy expr
+        | `TrOperandMove expr
+        | `TrTypedConstantScalar expr ->
+            Ok (`TrRvalueExpr expr)
+        | `TrTypedConstantRvalueBinderBuilder rvalue_binder_builder ->
+            Ok (`TrRvalueRvalueBinderBuilder rvalue_binder_builder)
+        | `TrTypedConstantFn _ ->
+            Error (`TrRvalue "Invalid operand translation for Rvalue::Use")
+      in
       match get rvalue_cpn with
-      | Use operand_cpn -> (
+      | Use operand_cpn ->
           let* operand = translate_operand operand_cpn loc in
-          match operand with
-          | `TrOperandCopy expr
-          | `TrOperandMove expr
-          | `TrTypedConstantScalar expr ->
-              Ok (`TrRvalueExpr expr)
-          | `TrTypedConstantRvalueBinderBuilder rvalue_binder_builder ->
-              Ok (`TrRvalueRvalueBinderBuilder rvalue_binder_builder)
-          | `TrTypedConstantFn _ ->
-              Error (`TrRvalue "Invalid operand translation for Rvalue::Use"))
+          tr_operand operand
       | AddressOf address_of_data_cpn -> failwith "Todo: Rvalue::AddressOf"
-      | BinaryOp bin_op_data_cpn -> failwith "Todo: Rvalue::BinaryOp"
+      | BinaryOp bin_op_data_cpn ->
+          let* operator, operandl, operandr =
+            translate_binary_operation bin_op_data_cpn loc
+          in
+          let* operandl = tr_operand operandl in
+          let* operandr = tr_operand operandr in
+          Ok (`TrRvalueBinaryOp (operator, operandl, operandr))
       | Undefined _ -> Error (`TrRvalue "Unknown Rvalue kind")
 
     let translate_statement_kind (statement_kind_cpn : StatementKindRd.t)
@@ -1022,7 +1031,58 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     loc,
                     ref [] )
               in
-              Ok [ block_stmt ])
+              Ok [ block_stmt ]
+          | `TrRvalueBinaryOp (operator, operandl, operandr) -> (
+              let rvalue_binder_stmts, exprl, exprr =
+                match (operandl, operandr) with
+                | `TrRvalueExpr exprl, `TrRvalueExpr exprr -> ([], exprl, exprr)
+                | ( `TrRvalueExpr exprl,
+                    `TrRvalueRvalueBinderBuilder rvalue_binder_builderr ) ->
+                    let tmp_var_name = TrName.make_tmp_var_name "right" in
+                    let rvalue_binder_stmt =
+                      rvalue_binder_builderr tmp_var_name
+                    in
+                    ([ rvalue_binder_stmt ], exprl, Ast.Var (loc, tmp_var_name))
+                | ( `TrRvalueRvalueBinderBuilder rvalue_binder_builderl,
+                    `TrRvalueExpr exprr ) ->
+                    let tmp_var_name = TrName.make_tmp_var_name "left" in
+                    let rvalue_binder_stmt =
+                      rvalue_binder_builderl tmp_var_name
+                    in
+                    ([ rvalue_binder_stmt ], Ast.Var (loc, tmp_var_name), exprr)
+                | ( `TrRvalueRvalueBinderBuilder rvalue_binder_builderl,
+                    `TrRvalueRvalueBinderBuilder rvalue_binder_builderr ) ->
+                    let tmp_vl, tmp_vr =
+                      ( TrName.make_tmp_var_name "left",
+                        TrName.make_tmp_var_name "right" )
+                    in
+                    let rvbl, rvbr =
+                      ( rvalue_binder_builderl tmp_vl,
+                        rvalue_binder_builderr tmp_vr )
+                    in
+                    ( [ rvbl; rvbr ],
+                      Ast.Var (loc, tmp_vl),
+                      Ast.Var (loc, tmp_vr) )
+              in
+              let assign_stmt =
+                Ast.ExprStmt
+                  (Ast.AssignExpr
+                     ( loc,
+                       lhs_place,
+                       Ast.Operation (loc, operator, [ exprl; exprr ]) ))
+              in
+              match rvalue_binder_stmts with
+              | [] -> Ok [ assign_stmt ]
+              | _ ->
+                  let block_stmt =
+                    Ast.BlockStmt
+                      ( loc,
+                        (*decl list*) [],
+                        rvalue_binder_stmts @ [ assign_stmt ],
+                        loc,
+                        ref [] )
+                  in
+                  Ok [ block_stmt ]))
       | Nop -> Ok []
       | Undefined _ -> Error (`TrStatementKind "Unknown StatementKind")
 
