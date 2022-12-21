@@ -79,6 +79,21 @@ module IntAux = struct
   module Uint128 = Make (Stdint.Uint128)
 end
 
+module LocAux = struct
+  open Ast
+
+  let get_last_col_loc (loc : loc) =
+    match loc with
+    | Lexed loc ->
+        let _, ((path, ln, col) as epos) = loc in
+        Lexed ((path, ln, col - 1), epos)
+    | DummyLoc
+    | MacroExpansion ((*Call site*) _, (*Body token*) _)
+    | MacroParamExpansion
+        ((*Parameter occurrence being expanded*) _, (*Argument token*) _) ->
+        failwith "Todo"
+end
+
 module Mir = struct
   type mutability = Mut | Not
 
@@ -1185,8 +1200,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let vf_bblocks = List.concat vf_bblocks in
         let span_cpn = span_get body_cpn in
         let* loc = translate_span_data span_cpn in
-        let imp_span_cpn = imp_span_get body_cpn in
-        let* imp_loc = translate_span_data imp_span_cpn in
+        (* let imp_span_cpn = imp_span_get body_cpn in
+           let* imp_loc = translate_span_data imp_span_cpn in *)
+        let closing_cbrace_loc = LocAux.get_last_col_loc loc in
         let body =
           Ast.Func
             ( loc,
@@ -1199,7 +1215,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               fn_type_clause,
               pre_post,
               terminates,
-              Some (vf_local_decls @ vf_bblocks, imp_loc),
+              Some (vf_local_decls @ vf_bblocks, closing_cbrace_loc),
               Ast.Static,
               Ast.Package )
         in
