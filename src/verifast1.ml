@@ -214,21 +214,19 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let filter_redundant_ctxs ctxs =
     let filter_ctx out_ctxs ctx =
       match out_ctxs with
-      | [] -> [ ctx ]
-      | last_ctx :: _ -> begin
-        match last_ctx with
-        | Assuming t -> if ctx = last_ctx then out_ctxs else ctx :: out_ctxs
+      | [] | [ _ ] -> ctx :: out_ctxs
+      | last_ctx :: r_ctxs -> begin
+        match ctx with
+        | Assuming _ -> if ctx = last_ctx then out_ctxs else ctx :: out_ctxs
         | Executing (heap, env, loc, msg) -> begin
-          match ctx with
-          | Executing (heap1, env1, loc1, msg1) ->
+          match last_ctx with
+          | Executing (heapl, envl, locl, msgl) ->
             let heap, env = List.sort compare heap, List.sort compare env in
-            let heap1, env1 = List.sort compare heap1, List.sort compare env1 in
-            if heap = heap1 && env = env1 then out_ctxs else ctx :: out_ctxs
+            let heapl, envl = List.sort compare heapl, List.sort compare envl in
+            if heap = heapl && env = envl then ctx :: r_ctxs else ctx :: out_ctxs
           | _ -> ctx :: out_ctxs
         end
-        | PushSubcontext
-        | PopSubcontext
-        | Branching _ -> ctx :: out_ctxs
+        | PushSubcontext | PopSubcontext | Branching _ -> ctx :: out_ctxs
       end
     in List.fold_left filter_ctx [] (List.rev ctxs)
 
