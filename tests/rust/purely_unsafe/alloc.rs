@@ -8,6 +8,11 @@ fn main()
         if p.is_null() {
             std::alloc::handle_alloc_error(layout);
         }
+        *p = 42;
+        if *p != 42 {
+            std::alloc::dealloc(p, layout);
+            std::alloc::dealloc(p, layout);
+        }
         std::alloc::dealloc(p, layout);
     }
 }
