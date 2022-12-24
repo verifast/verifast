@@ -201,13 +201,6 @@ int calcArea(const Shape &s)
   return s.calcArea();
 }
 
-void destroy(Shape *s)
-//@ requires s->valid(_, _) &*& new_block_Shape(s);
-//@ ensures true;
-{
-  delete s;
-}
-
 /*@
 predicate hide_Square_vtype(Square *s) = Square_vtype(s, &typeid(Square));
 predicate hide_Shape_vtype(Rectangle *r) = Rectangle_vtype(r, &typeid(Rectangle));
