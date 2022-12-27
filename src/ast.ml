@@ -764,7 +764,7 @@ and
     Struct of 
       loc * 
       string * 
-      (base_spec list * field list * bool (* is polymorphic *)) option *
+      (base_spec list * field list * instance_pred_decl list * bool (* is polymorphic *)) option *
       struct_attr list
   | Union of loc * string * field list option
   | Inductive of  (* inductief data type regel-naam-type parameters-lijst van constructors*)
@@ -840,11 +840,14 @@ and
       type_ (* parent type *)
   | CxxDtor of 
       loc *
+      string * (* mangled_name *)
       (asn * asn) option * (* pre post *)
       bool * (* terminates *)
       (stmt list * loc (* close brace *)) option *
       bool * (* implicit *)
-      type_ (* parent type *)
+      type_ * (* parent type *)
+      bool * (* virtual *)
+      string list (* overrides *)
   (** Do not confuse with FuncTypeDecl *)
   | TypedefDecl of
       loc *
@@ -1220,6 +1223,7 @@ let expr_fold_open iter state e =
   | WCxxNew (_, _, _) -> state
   | CxxDelete (_, arg) -> iter state arg
   | Typeid (_, e) -> iter state e
+  | TypeInfo _ -> state
 
 (* Postfix fold *)
 let expr_fold f state e = let rec iter state e = f (expr_fold_open iter state e) e in iter state e

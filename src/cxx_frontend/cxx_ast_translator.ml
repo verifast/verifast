@@ -360,32 +360,35 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
           VF.CxxBaseSpec (loc, name_get desc, virtual_get desc)
         in
         let body = body_get record in
-        let polymorphic = polymorphic_get body in
-        let mems = body |> decls_get_list |> transl_mems in
-        let decls, fields, inst_preds =
-          mems |> List.fold_left (fun (decls, fields, inst_preds) mem ->
-            match mem with
-            | Cxx_fe_sig.CxxFieldMem (VF.Field (l, Ghost, _, _, _, _, _, _)) ->
-              error l "Ghost fields are not supported."
-            | Cxx_fe_sig.CxxFieldMem field ->
-              decls, field :: fields, inst_preds
-            | Cxx_fe_sig.CxxInstPredMem (VF.InstancePredDecl (l, _, _, _)) ->
-              error l "Instance predicates are not supported."
-            | Cxx_fe_sig.CxxDeclMem (VF.Func (l, Lemma _, _, _, _, _, _, _, _, _, _, _, _)) ->
-              error l "Lemmas are notsupported inside struct or class declarations."
-            | Cxx_fe_sig.CxxDeclMem decl ->
-              decl :: decls, fields, inst_preds) ([], [], [])
-        in
-        let bases = bases_get body |> capnp_arr_map (transl_node transl_base) in
-        Some (List.rev bases, List.rev fields, polymorphic), List.rev decls
-      else None, [] 
+        match is_abstract_get body, non_overridden_methods_get_list body with
+        | false, meth :: _ -> error loc ("This record must override virtual method '" ^ meth ^ "' or must be abstract.")
+        | _ ->
+          let polymorphic = polymorphic_get body in
+          let mems = body |> decls_get_list |> transl_mems in
+          let decls, fields, inst_preds =
+            mems |> List.fold_left (fun (decls, fields, inst_preds) mem ->
+              match mem with
+              | Cxx_fe_sig.CxxFieldMem (VF.Field (l, Ghost, _, _, _, _, _, _)) ->
+                error l "Ghost fields are not supported."
+              | Cxx_fe_sig.CxxFieldMem field ->
+                decls, field :: fields, inst_preds
+              | Cxx_fe_sig.CxxInstPredMem pred ->
+                decls, fields, pred :: inst_preds
+              | Cxx_fe_sig.CxxDeclMem (VF.Func (l, Lemma _, _, _, _, _, _, _, _, _, _, _, _)) ->
+                error l "Lemmas are not supported inside struct or class declarations."
+              | Cxx_fe_sig.CxxDeclMem decl ->
+                decl :: decls, fields, inst_preds) ([], [], [])
+          in
+          let bases = bases_get body |> capnp_arr_map (transl_node transl_base) in
+          Some (List.rev bases, List.rev fields, List.rev inst_preds, polymorphic), List.rev decls
+        else None, [] 
     in
     let vf_record = 
       match kind_get record with
       | R.RecordKind.Struc | R.RecordKind.Class -> 
         VF.Struct (loc, name, body, []) 
       | R.RecordKind.Unio -> 
-        VF.Union (loc, name, body |> option_map @@ fun (_, fields, _) -> fields) 
+        VF.Union (loc, name, body |> option_map @@ fun (_, fields, _, _) -> fields) 
     in
     vf_record :: decls
 
@@ -402,7 +405,13 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     let implicit = implicit_get meth in
     let is_virtual = virtual_get meth in
     let overrides = 
-      if has_overrides meth then overrides_get_list meth
+      if has_overrides meth then 
+        let open Override in
+        overrides_get meth |> capnp_arr_map (fun ov ->
+          let mangled_name = name_get ov in
+          let VF.StructType base = base_get ov |> transl_record_ref loc in
+          base, mangled_name
+        )
       else []
     in
     name, mangled_name, params, body_opt, anns, return_type, implicit, is_virtual, overrides
@@ -411,7 +420,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
   and transl_meth_decl (loc: VF.loc) (meth: R.Decl.Method.t): VF.decl =
     let open R.Decl.Method in
     let _, mangled_name, params, body_opt, (ng_callers_only, ft, pre_post, terminates), return_type, _, is_virtual, overrides = transl_meth loc meth in
-    VF.Func (loc, VF.Regular, [], return_type, mangled_name, params, ng_callers_only, ft, pre_post, terminates, body_opt, is_virtual, overrides)
+    VF.Func (loc, VF.Regular, [], return_type, mangled_name, params, ng_callers_only, ft, pre_post, terminates, body_opt, is_virtual, overrides |> List.map snd)
 
   and transl_record_ref (loc: VF.loc) (record_ref: R.RecordRef.t): VF.type_ =
     let open R.RecordRef in
@@ -438,9 +447,9 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
 
   and transl_dtor_decl (loc: VF.loc) (dtor: R.Decl.Dtor.t): VF.decl =
     let open R.Decl.Dtor in 
-    let _, _, [this_param], body_opt, (_, _, pre_post_opt, terminates), _, implicit, is_virtual, overrides = method_get dtor |> transl_meth loc in
+    let _, mangled_name, [this_param], body_opt, (_, _, pre_post_opt, terminates), _, implicit, is_virtual, overrides = method_get dtor |> transl_meth loc in
     let parent = dtor |> parent_get |> transl_record_ref loc in
-    VF.CxxDtor (loc, pre_post_opt, terminates, body_opt, implicit, parent)
+    VF.CxxDtor (loc, mangled_name, pre_post_opt, terminates, body_opt, implicit, parent, is_virtual, overrides |> List.map fst)
 
   and transl_field_decl (loc: VF.loc) (field: R.Decl.Field.t): VF.field =
     let open R.Decl.Field in

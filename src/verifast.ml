@@ -111,7 +111,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (h -> env -> result)  continuation
   *)
   let verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env this_addr xo =
-    let verify_call eval_h loc pre post terminates h env cont = verify_call funcmap eval_h loc (pn, ilist) xo None [] [] ([], None, [], ["this", this_addr], pre, post, None, terminates, false) false false None leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in
+    let verify_call eval_h loc pre post terminates h env is_virtual target_struct cont = verify_call funcmap eval_h loc (pn, ilist) xo None [] [] ([], None, [], ["this", this_addr], pre, post, None, terminates, is_virtual) false false (Some target_struct) leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in
     verify_xtor_call_core (pn, ilist) verify_call leminfo funcmap sizemap tenv ghostenv
 
   (*
@@ -127,7 +127,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (h -> env -> result)  continuation
   *)
   let verify_ctor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env this_addr xo =
-    let verify_call eval_h loc args params pre post terminates h env cont = verify_call funcmap eval_h loc (pn, ilist) xo None [] args ([], None, params, ["this", this_addr], pre, post, None, terminates, false) false false None leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in
+    let verify_call eval_h loc args params pre post terminates h env target_struct cont = verify_call funcmap eval_h loc (pn, ilist) xo None [] args ([], None, params, ["this", this_addr], pre, post, None, terminates, false) false false (Some target_struct) leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in
     verify_xtor_call_core (pn, ilist) verify_call leminfo funcmap sizemap tenv ghostenv
   
   let rec assume_handle_invs bcn hpmap hname hpInvEnv h cont = 
@@ -451,6 +451,65 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let require_pure () =
       if not pure then static_error l "This statement may appear only in a pure context." None
+    in
+    let pred_instance_target_type_err =
+      let sub_msg =
+        match dialect with
+        | Some Cxx -> "type: pointer to struct"
+        | _ -> "class type"
+      in
+      Printf.sprintf "Target of predicate instance call must be of %s." sub_msg
+    in
+    let get_pred_instance_info l g pats0 target target_tn =
+      let tn =
+        match pats0 with
+        | [] -> target_tn
+        | [LitPat (ClassLit (l, x))] ->
+          begin match resolve Real (pn, ilist) l x classmap with
+          | None -> static_error l "Index: No such class." None
+          | Some (cn, _) ->
+            if is_subtype_of target_tn cn then cn
+            else static_error l "Target object type must be subtype of index." None
+          end
+        | [LitPat (AddressOf (_, Typeid (_, TypeExpr (StructTypeExpr (_, Some x, None, [])))))] ->
+          begin match resolve Real (pn, ilist) l x structmap with
+          | None -> static_error l "Index: No such struct." None
+          | Some (sn, _) ->
+            if is_derived_of_base target_tn sn then sn
+            else static_error l "Target struct type must be subtype of the argument of 'typeid'." None
+          end
+        | _ ->
+          let index_str =
+            match dialect with
+            | Some Cxx -> "&typeid(struct S)"
+            | _ -> "C.class"
+          in
+          static_error l (Printf.sprintf "Index should be of the form %s." index_str) None
+      in
+      let preds_opt, get_index =
+        match dialect with
+        | Some Cxx -> try_assoc tn cxx_inst_pred_map, fun () -> let _, _, _, _, info = List.assoc tn structmap in info
+        | _ -> (try_assoc tn classmap |> option_map @@ fun {cpreds; _} -> cpreds), fun () -> List.assoc tn classterms
+      in
+      match preds_opt with
+      | Some preds ->
+        begin match try_assoc g preds with
+        | None -> static_error l "No such predicate instance." None
+        | Some (lp, pmap, family, symb, body_opt) ->
+          reportUseSite DeclKind_Predicate lp l;
+          match body_opt with
+          | None -> static_error l "Predicate does not have a body." None
+          | Some body -> 
+            let target, family_target = 
+              match dialect with
+              | Some Cxx -> 
+                let target = base_addr l (target_tn, target) tn in
+                target, base_addr l (tn, target) family
+              | _ -> target, target
+            in
+            lp, pmap, symb, body, get_index (), target, family_target
+        end
+      | None -> static_error l pred_instance_target_type_err None
     in
     match s with
       NonpureStmt (l, allowed, s) ->
@@ -976,49 +1035,22 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       )
     | Open (l, target, g, targs, pats0, pats, coefpat) ->
       let targs = List.map (check_pure_type (pn, ilist) tparams Ghost) targs in
-      let open_instance_predicate target target_cn =
-        let cn =
-          match pats0 with
-            [] -> target_cn
-          | [LitPat (ClassLit (l, x))] ->
-            begin match resolve Real (pn,ilist) l x classmap with
-              None -> static_error l "Index: No such class" None
-            | Some (cn, _) ->
-              if is_subtype_of target_cn cn then
-                cn
-              else
-                static_error l "Target object type must be subtype of index." None
-            end
-          | _ -> static_error l "Index should be of the form C.class." None
-        in
-        let (pmap, symb, body) =
-          match try_assoc cn classmap with
-            Some {cpreds} ->
-            begin match try_assoc g cpreds with
-              None -> static_error l "No such predicate instance" None
-            | Some (lp, pmap, family, symb, body_opt) ->
-              reportUseSite DeclKind_Predicate lp l;
-              match body_opt with
-                None -> static_error l "Predicate does not have a body" None
-              | Some body -> (pmap, symb, body)
-            end
-          | None -> static_error l "Target of predicate instance call must be of class type" None
-        in
-        let index = List.assoc cn classterms in
+      let open_instance_predicate target target_tn =
+        let _, pmap, symb, body, index, target, family_target = get_pred_instance_info l g pats0 target target_tn in
         let env0 = [("this", target)] in
-        ([], [], (symb, true), [TermPat target; TermPat index], 2, List.map (fun (x, t) -> (x, t, t)) pmap, env0, body, Some 2)
+        ([], [], (symb, true), [TermPat family_target; TermPat index], 2, List.map (fun (x, t) -> (x, t, t)) pmap, env0, body, Some 2)
       in
       let (targs, tpenv, g_symb, pats0, dropcount, ps, env0, p, inputParamCount) =
         match target with
           Some target ->
           let (target, targetType) = check_expr (pn,ilist) tparams tenv target in
-          let target_cn =
-            match targetType with
-              ObjType (cn, targs) -> cn
-            | _ -> static_error l "Target of predicate instance call must be of class type" None
+          let target_tn =
+            match targetType, dialect with
+            | ObjType (tn, _), None | PtrType (StructType tn), Some Cxx -> tn
+            | _ -> static_error l pred_instance_target_type_err None
           in
           let target = ev target in
-          open_instance_predicate target target_cn
+          open_instance_predicate target target_tn
         | None ->
         let open_pred_inst0 g =
           let fns = match file_type path with
@@ -1063,9 +1095,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             None ->
             begin match try_assoc "this" tenv with
               None -> static_error l "No such predicate instance." None
-            | Some (ObjType (target_cn, targs)) ->
+            | Some (ObjType (target_tn, _) | PtrType (StructType target_tn)) ->
               let this = List.assoc "this" env in
-              open_instance_predicate this target_cn
+              open_instance_predicate this target_tn
             end
           | Some (PredCtorInfo (lp, ps1, ps2, inputParamCount, body, funcsym)) ->
             reportUseSite DeclKind_Predicate lp l;
@@ -1307,48 +1339,21 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               tcont sizemap tenv ghostenv h env
     | Close (l, target, g, targs, pats0, pats, coef) ->
       let targs = List.map (check_pure_type (pn, ilist) tparams Ghost) targs in
-      let close_instance_predicate target target_cn =
-        let cn =
-          match pats0 with
-            [] -> target_cn
-          | [LitPat (ClassLit (l, x))] ->
-            begin match resolve Real (pn,ilist) l x classmap with
-              None -> static_error l "Index: No such class" None
-            | Some (cn, _) ->
-              if is_subtype_of target_cn cn then
-                cn
-              else
-                static_error l "Target object type must be subtype of index." None
-            end
-          | _ -> static_error l "Index should be of the form C.class." None
-        in
-        let (lpred, pmap, symb, body) =
-          match try_assoc cn classmap with
-            Some {cpreds} ->
-            begin match try_assoc g cpreds with
-              None -> static_error l "No such predicate instance" None
-            | Some (lp, pmap, family, symb, body_opt) ->
-              reportUseSite DeclKind_Predicate lp l;
-              match body_opt with
-                None -> static_error l "Predicate does not have a body" None
-              | Some body -> (lp, pmap, symb, body)
-            end
-          | None -> static_error l "Target of predicate instance call must be of class type" None
-        in
-        let index = List.assoc cn classterms in
-        (lpred, [], [], pmap, [("this", target)], (symb, true), body, [target; index], Some 1)
+      let close_instance_predicate target target_tn =
+        let lpred, pmap, symb, body, index, target, family_target = get_pred_instance_info l g pats0 target target_tn in
+        (lpred, [], [], pmap, [("this", target)], (symb, true), body, [family_target; index], Some 1)
       in
       let (lpred, targs, tpenv, ps, bs0, g_symb, p, ts0, inputParamCount) =
         match target with
           Some target ->
           let (target, targetType) = check_expr (pn,ilist) tparams tenv target in
-          let target_cn =
-            match targetType with
-              ObjType (cn, _) -> cn
-            | _ -> static_error l "Target of predicate instance call must be of class type" None
+          let target_tn =
+            match targetType, dialect with
+            | ObjType (tn, _), None | PtrType (StructType tn), Some Cxx -> tn
+            | _ -> static_error l pred_instance_target_type_err None
           in
           let target = ev target in
-          close_instance_predicate target target_cn
+          close_instance_predicate target target_tn
         | None ->
         let close_pred_inst0 g =
           let fns = match file_type path with
@@ -1388,9 +1393,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             match try_assoc' Ghost (pn,ilist) g predctormap with
               None ->
               begin match try_assoc "this" tenv with
-                Some (ObjType (cn, _)) ->
+                Some (ObjType (tn, _) | PtrType (StructType tn)) ->
                 let this = List.assoc "this" env in
-                close_instance_predicate this cn
+                close_instance_predicate this tn
               | _ -> static_error l "No such predicate instance." None
               end
             | Some (PredCtorInfo (lpred, ps1, ps2, inputParamCount, body, funcsym)) ->
@@ -2299,7 +2304,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | Some e ->
         let tp = match try_assoc "#result" tenv with None -> static_error l "Void function cannot return a value: " None | Some tp -> tp in
         let e, tp = match tp with
-        | RefType t -> AddressOf (expr_loc e, e), PtrType t
+        | RefType t -> make_addr_of (expr_loc e) e, PtrType t
         | _ -> e, tp 
         in
         let w = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some pure) e tp in
@@ -2762,11 +2767,12 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match penv, dialect, in_pure_context with
         | ("this", this_term) :: _, Some Cxx, false ->
           let ("this", PtrType (StructType sn)) :: _ = ps in
+          let _, _, _, _, type_info = List.assoc sn structmap in
           assume_neq (mk_ptr_address this_term) int_zero_term @@ fun () ->
-          cont (Some (sn, this_term))
+          cont (Some (sn, this_term)) (("thisType", type_info) :: env) ("thisType" :: ghostenv)
         | _ -> 
-          cont None
-      end @@ fun this_term_opt -> 
+          cont None env ghostenv
+      end @@ fun this_term_opt env ghostenv -> 
       produce_asn_with_post [] [] ghostenv env pre real_unit (Some (PredicateChunkSize 0)) None (fun h ghostenv env post' ->
         let post =
           match post' with
@@ -2901,7 +2907,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let init_field h field_name field_type value struct_addr cont =
         assume_field h struct_name field_name field_type Real struct_addr value real_unit cont
       in
-      (* initialize each fields *)
+      (* initialize each field *)
       let rec iter h fields =
         match fields with 
         | [] -> cont h
@@ -2948,11 +2954,11 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let penv, heapy_ps, varargsLastParam = compute_heapy_params loc Regular params pre_tenv ss in
     let sizemap, indinfo = compute_size_info penv ss in
     let prolog, ss = partition_ss Regular ss in
-    let leminfo, gs', lems', ghostenv = RealFuncInfo (gs, g, terminates), g :: gs, lems, [] in 
+    let leminfo, gs', lems', ghostenv = RealFuncInfo (gs, g, terminates), g :: gs, lems, ["thisType"] in 
     let this_type = List.assoc "this" pre_tenv in
     let this_term = get_unique_var_symb_non_ghost "this" this_type in
     let current_thread = (current_thread_name, get_unique_var_symb current_thread_name current_thread_type) in
-    let env = [current_thread; "this", this_term] @ penv in
+    let env = [current_thread; "this", this_term; "thisType", type_info] @ penv in
     let _ = 
       check_focus loc close_brace_loc $. fun () ->
       check_should_fail () @@ fun () ->
@@ -3041,10 +3047,10 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let _ = push () in 
     let sizemap, indinfo = [], None in
     let prolog, ss = partition_ss Regular ss in
-    let leminfo, gs', lems', ghostenv = RealFuncInfo (gs, g, terminates), g :: gs, lems, [] in
+    let leminfo, gs', lems', ghostenv = RealFuncInfo (gs, g, terminates), g :: gs, lems, ["thisType"] in
     let this_type = List.assoc "this" pre_tenv in
     let this_term = get_unique_var_symb_non_ghost "this" this_type in
-    let env = ["this", this_term; current_thread_name, get_unique_var_symb current_thread_name current_thread_type] in
+    let env = ["this", this_term; "thisType", type_info; current_thread_name, get_unique_var_symb current_thread_name current_thread_type] in
     let tenv = [("this", this_type); (current_thread_name, current_thread_type)] in
     let _ = 
       check_focus loc close_brace_loc $. fun () ->
@@ -3444,11 +3450,11 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         verify_cxx_ctor pn ilist gs lems boxes predinstmap funcmap (sn, fields, mangled_name, loc, params, init_list, pre, pre_tenv, post, terminates, body, close_brace_loc, is_polymorphic, type_info)
       in
       verify_funcs (pn, ilist) boxes gs' lems' ds
-    | CxxDtor (loc, _, _, Some _, _, StructType sn) :: ds ->
+    | CxxDtor (loc, mangled_name, _, _, Some _, _, StructType sn, _, _) :: ds ->
       let gs', lems' =
         record_fun_timing loc (sn ^ ".<dtor>") @@ fun () ->
         let _, Some (bases, fields, is_polymorphic), _, _, type_info = List.assoc sn structmap in
-        let loc, pre, pre_tenv, post, terminates, Some (Some (body, close_brace_loc)) = List.assoc sn cxx_dtor_map1 in 
+        let loc, pre, pre_tenv, post, terminates, Some (Some (body, close_brace_loc)), is_virtual = List.assoc sn cxx_dtor_map1 in 
         verify_cxx_dtor pn ilist gs lems boxes predinstmap funcmap (sn, bases, fields, cxx_dtor_name sn, loc, pre, pre_tenv, post, terminates, body, close_brace_loc, is_polymorphic, type_info)
       in
       verify_funcs (pn, ilist) boxes gs' lems' ds
@@ -3494,7 +3500,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         inductivemap1, purefuncmap1, predctormap1, struct_accessor_map1, malloc_block_pred_map1, new_block_pred_map1, 
         field_pred_map1, predfammap1, predinstmap1, typedefmap1, functypemap1, 
         funcmap1, boxmap, classmap1, interfmap1, classterms1, interfaceterms1, 
-        abstract_types_map1, cxx_ctor_map1, cxx_dtor_map1, bases_constructed_map1, cxx_vtype_map1
+        abstract_types_map1, cxx_ctor_map1, cxx_dtor_map1, bases_constructed_map1, cxx_vtype_map1, cxx_inst_pred_map1
       )
     )
   

@@ -400,6 +400,13 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           check_func_header pn ilist [] [] [] l k tparams rt fn (Some fterm) xs nonghost_callers_only functype_opt contract_opt terminates body
         in
         let body' = match body with None -> None | Some body -> Some (Some body) in
+        let fenv = 
+          match xmap, dialect with
+          | ("this", PtrType (StructType sn)) :: _, Some Cxx ->
+            let _, _, _, _, type_info = List.assoc sn structmap in
+            ["thisType", type_info]
+          | _ -> []
+        in
         begin fun cont ->
           match try_assoc2 fn funcmap funcmap0 with
             None -> cont (fn, FuncInfo ([], fterm, l, k, tparams, rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body', is_virtual)) prototypes_implemented
@@ -410,18 +417,20 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               static_error l "Duplicate function implementation." None
           | Some (FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, nonghost_callers_only0, pre0, pre_tenv0, post0, terminates0, functype_opt0, None, is_virtual)) ->
             if body = None then static_error l "Duplicate function prototype." None;
-            check_func_header_compat l ("Function '" ^ fn ^ "'") "Function prototype implementation check" [] (k, tparams, rt, xmap, nonghost_callers_only, pre, post, [], terminates) (k0, tparams0, rt0, xmap0, nonghost_callers_only0, [], [], pre0, post0, [], terminates0);
+            check_func_header_compat l ("Function '" ^ fn ^ "'") "Function prototype implementation check" fenv 
+              (k, tparams, rt, xmap, nonghost_callers_only, pre, post, [], terminates) 
+              (k0, tparams0, rt0, xmap0, nonghost_callers_only0, [], fenv, pre0, post0, [], terminates0);
             cont (fn, FuncInfo ([], fterm, l, k, tparams, rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body', is_virtual)) ((fn, l0)::prototypes_implemented)
         end @@ fun func_info protos_implemented ->
         let check_override overridden_meth =
           let FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, ng_callers_only0, pre0, pre_tenv0, post0, terminates0, _, _, is_virtual0) = assoc2 overridden_meth funcmap funcmap0 in
           let ("this", PtrType (StructType base)) :: xmap0 = xmap0 in
           let ("this", PtrType (StructType derived)) :: xmap = xmap in
-          let this_term = get_unique_var_symb "this" (PtrType (StructType derived)) in
+          let this_term = get_unique_var_symb_non_ghost "this" (PtrType (StructType derived)) in
           let base_term = base_addr l (derived, this_term) base in
-          check_func_header_compat l ("Method '" ^ fn ^ "'") "Method implementation check" [("this", this_term)]
+          check_func_header_compat l ("Method '" ^ fn ^ "'") "Method implementation check" (("this", this_term) :: fenv)
             (Regular, [], rt, xmap, false, pre, post, [], terminates)
-            (Regular, [], rt0, xmap0, false, [], [("this", base_term)], pre0, post0, [], terminates0)
+            (Regular, [], rt0, xmap0, false, [], (("this", base_term) :: fenv), pre0, post0, [], terminates0)
         in
         let () = overrides |> List.iter check_override in
         iter pn ilist (func_info :: funcmap) protos_implemented ds
@@ -464,8 +473,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | CxxCtor (loc, mangled_name, params, contract_opt, terminates, body_opt, implicit, StructType struct_name) :: rest ->
         if report_skipped_stmts || match contract_opt with Some ((False _ | ExprAsn (_, False _)), _) -> false | _ -> true then begin match body_opt with None -> () | Some (_, (ss, _)) -> reportStmts ss end;
         let this_type = PtrType (StructType struct_name) in
+        let thisType_type = PtrType (StructType "std::type_info") in
         let None, xmap, None, pre, pre_tenv, post =
-          check_func_header pn ilist [] ["this", this_type] [] loc Regular [] None struct_name None params false None contract_opt terminates body_opt
+          check_func_header pn ilist [] ["this", this_type; "thisType", thisType_type] [] loc Regular [] None struct_name None params false None contract_opt terminates body_opt
         in
         begin
           match try_assoc2 mangled_name ctor_map cxx_ctor_map0 with 
@@ -483,9 +493,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | Some (loc0, xmap0, pre0, pre_tenv0, post0, terminates0, None) ->
             if body_opt = None then static_error loc "Duplicate constructor prototype." None;
             let this_term = get_unique_var_symb_non_ghost "this" this_type in
-            check_func_header_compat loc ("Constructor '" ^ struct_name ^ "'") "Constructor prototype implementation check" ["this", this_term] 
+            let this_type = 
+              let _, _, _, _, type_info = List.assoc struct_name structmap in
+              type_info
+            in
+            let fenv = ["this", this_term; "thisType", this_type] in
+            check_func_header_compat loc ("Constructor '" ^ struct_name ^ "'") "Constructor prototype implementation check" fenv
               (Regular, [], None, xmap, false, pre, post, [], terminates) 
-              (Regular, [], None, xmap0, false, [], ["this", this_term], pre0, post0, [], terminates0);
+              (Regular, [], None, xmap0, false, [], fenv, pre0, post0, [], terminates0);
             iter pn ilist 
               ((mangled_name, (loc, xmap, pre, pre_tenv, post, terminates, check_init_list pn ilist pre_tenv struct_name body_opt struct_name)) :: ctor_map) 
               ((mangled_name, loc0) :: ctors_implemented)
@@ -507,32 +522,49 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter pn ilist dtor_map dtors_implemented ds =
       match ds with
       | [] -> dtor_map, List.rev dtors_implemented
-      | CxxDtor (loc, _, _, _, _, UnionType _) :: _ -> static_error loc "Union destructors are not supported yet." None 
-      | CxxDtor (loc, contract_opt, terminates, body_opt, implicit, StructType struct_name) :: rest ->
+      | CxxDtor (loc, _, _, _, _, _, UnionType _, _, _) :: _ -> static_error loc "Union destructors are not supported yet." None 
+      | CxxDtor (loc, mangled_name, contract_opt, terminates, body_opt, implicit, StructType struct_name, is_virtual, overrides) :: rest ->
         let dtor_name = cxx_dtor_name struct_name in
         if report_skipped_stmts || match contract_opt with Some ((False _ | ExprAsn (_, False _)), _) -> false | _ -> true then begin match body_opt with None -> () | Some (ss, _) -> reportStmts ss end;
         let this_type = PtrType (StructType struct_name) in
+        let thisType_type = PtrType (StructType "std::type_info") in
         let None, [], None, pre, pre_tenv, post =
-          check_func_header pn ilist [] ["this", this_type] [] loc Regular [] None struct_name None [] false None contract_opt terminates body_opt
+          check_func_header pn ilist [] ["this", this_type; "thisType", thisType_type] [] loc Regular [] None struct_name None [] false None contract_opt terminates body_opt
         in
         let this_term = get_unique_var_symb_non_ghost "this" this_type in
+        let fenv =
+          let thisType = 
+            let _, _, _, _, type_info = List.assoc struct_name structmap in
+            type_info
+          in
+          ["thisType", thisType] 
+        in
         begin fun cont ->
           match try_assoc2 struct_name dtor_map cxx_dtor_map0 with 
           | None ->
-            cont (loc, pre, pre_tenv, post, terminates, body_opt |> option_map @@ fun b -> Some b) dtors_implemented
-          | Some (_, _, _, _, _, Some _) ->
+            cont (loc, pre, pre_tenv, post, terminates, (body_opt |> option_map @@ fun b -> Some b), is_virtual) dtors_implemented
+          | Some (_, _, _, _, _, Some _, _) ->
             (* We should never reach this because Clang would not allow it, but let's check it to be sure *)
             if body_opt = None then 
               static_error loc "Destructor prototype must precede constructor implementation." None
             else 
               static_error loc "Duplicate destructor implementation." None 
-          | Some (loc0, pre0, pre_tenv0, post0, terminates0, None) ->
+          | Some (loc0, pre0, pre_tenv0, post0, terminates0, None, is_virtual) ->
             if body_opt = None then static_error loc "Duplicate destructor prototype." None;
-            check_func_header_compat loc ("Destructor '" ^ struct_name ^ "'") "Destructor prototype implementation check" ["this", this_term] 
+            let env = ("this", this_term) :: fenv in
+            check_func_header_compat loc ("Destructor '" ^ struct_name ^ "'") "Destructor prototype implementation check" env 
               (Regular, [], None, [], false, pre, post, [], terminates) 
-              (Regular, [], None, [], false, [], ["this", this_term], pre0, post0, [], terminates0);
-            cont (loc, pre, pre_tenv, post, terminates, body_opt |> option_map @@ fun b -> Some b) ((dtor_name, loc0) :: dtors_implemented)
+              (Regular, [], None, [], false, [], env, pre0, post0, [], terminates0);
+            cont (loc, pre, pre_tenv, post, terminates, (body_opt |> option_map @@ fun b -> Some b), is_virtual) ((dtor_name, loc0) :: dtors_implemented)
         end @@ fun dtor_info dtors_implemented ->
+        let check_override overridden_meth =
+          let loc0, pre0, pre_tenv0, post0, terminates0, _, is_virtual0 = assoc2 overridden_meth dtor_map cxx_dtor_map0 in
+          let base_term = base_addr loc (struct_name, this_term) overridden_meth in
+          check_func_header_compat loc ("Destructor '" ^ (cxx_dtor_name overridden_meth) ^ "'") "Destructor implementation check" (("this", this_term) :: fenv)
+            (Regular, [], None, [], false, pre, post, [], terminates)
+            (Regular, [], None, [], false, [], (("this", base_term) :: fenv), pre0, post0, [], terminates0)
+        in
+        let () = overrides |> List.iter check_override in
         iter pn ilist ((struct_name, dtor_info) :: dtor_map) dtors_implemented rest
       | _ :: rest -> iter pn ilist dtor_map dtors_implemented rest 
     in 
@@ -703,7 +735,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let rec dynamic_of asn =
     match asn with
-      WInstPredAsn (l, None, st, cfin, tn, g, index, pats) ->
+    | WInstPredAsn (l, None, st, cfin, tn, g, index, pats) ->
       WInstPredAsn (l, None, st, cfin, tn, g, get_class_of_this, pats)
     | Sep (l, a1, a2) ->
       let a1' = dynamic_of a1 in
@@ -1693,7 +1725,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let Some (lc, params, pre, pre_tenv, post, terminates, body_opt) = ctor_info in 
       if body_opt = None then register_prototype_used lc mangled_name None;
       let args = args |> List.map @@ fun e -> SrcPat (LitPat e) in
-      check_ctor_call l args params pre post terminates h env @@ fun h env _ ->
+      check_ctor_call l args params pre post terminates h env struct_name @@ fun h env _ ->
       assume_neq (mk_ptr_address addr) int_zero_term @@ fun () ->
       if produce_padding_chunk then
         let _, _, Some padding_pred_symb, _, _ = List.assoc struct_name structmap in
@@ -1710,9 +1742,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | StructType struct_name, Some Cxx ->
       let dtor_info = try_assoc struct_name cxx_dtor_map in 
       if dtor_info = None then static_error l ("No matching destructor is defined explicitly for " ^ struct_name ^ ".") None;
-      let Some (ld, pre, pre_tenv, post, terminates, body_opt) = dtor_info in 
+      let Some (ld, pre, pre_tenv, post, terminates, body_opt, is_virtual) = dtor_info in 
       if body_opt = None then register_prototype_used ld (cxx_dtor_name struct_name) None;
-      check_dtor_call l pre post terminates h env @@ fun h env _ ->
+      check_dtor_call l pre post terminates h env is_virtual struct_name @@ fun h env _ ->
       if consume_padding_chunk then 
         let _, _, Some padding_pred_symb, _, _ = List.assoc struct_name structmap in 
         consume_chunk rules h [] [] [] l (padding_pred_symb, true) [] real_unit coefpat (Some 1) [TermPat addr] @@ fun _ h _ _ _ _ env _ ->
@@ -1857,7 +1889,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           mk_varargs h env [] pats
         | SrcPat (LitPat e)::pats, (x, tp0)::ps ->
           let e, tp0 = match tp0 with 
-          | RefType t -> AddressOf (expr_loc e, e), PtrType t
+          | RefType t -> make_addr_of (expr_loc e) e, PtrType t
           | _ -> e, tp0 
           in
           let tp = instantiate_type tpenv tp0 in
@@ -1871,27 +1903,39 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     end $. fun h env ts ->
     let Some env' = zip ys ts in
     begin fun cont ->
-      let check_target_not_null cont =
+      match dialect, try_assoc "this" ps with
+      | _, Some ObjType _ | Some Cxx, Some (PtrType (StructType _)) ->
         let this_term = List.assoc "this" env' in
         if not (ctxt#query (ctxt#mk_not (ctxt#mk_eq this_term (null_pointer_term ())))) then
           assert_false h env l "Target of method call might be null." None;
-        cont this_term
-      in
-      match language, dialect, try_assoc "this" ps with
-      | Java, _, Some ObjType _ ->
-        check_target_not_null @@ fun _ -> cont h
-      | CLang, Some Cxx, Some _ ->
-        check_target_not_null @@ fun this_term ->
-        if is_virtual_call then
-          let ("this", PtrType (StructType struct_name)) :: _ = ps in
-          let vtype_symb = get_pred_symb_from_map struct_name cxx_vtype_map in
-          consume_chunk rules h [] [] [] l (vtype_symb, true) [] real_unit dummypat (Some 1) [TermPat this_term; dummypat] @@ fun consumed_chunk _ _ _ _ _ _ _ ->
-          cont h
-        else cont h
-      | _ -> cont h
-    end @@ fun h ->
+        cont ()
+      | _ -> cont ()
+    end @@ fun () ->
+    begin fun cont ->
+      if dialect <> Some Cxx then cont h env' ghostenv
+      else
+        let this_info_opt =
+          match try_assoc "this" ps, target_class with
+          | Some (PtrType (StructType struct_name)), _ ->
+            Some (struct_name, List.assoc "this" env')
+          | None, Some struct_name ->
+            Some (struct_name, List.assoc "this" funenv)
+          | _ -> None
+        in
+        match this_info_opt with
+        | Some (struct_name, this_term) ->
+          let ghostenv = "thisType" :: ghostenv in
+          if is_virtual_call then
+            let vtype_symb = get_pred_symb_from_map struct_name cxx_vtype_map in
+            consume_chunk rules h [] [] [] l (vtype_symb, true) [] real_unit dummypat (Some 1) [TermPat this_term; dummypat] @@ fun _ _ _ [_; vtype] _ _ _ _ ->
+            cont h (("thisType", vtype) :: env') ghostenv
+          else
+            let _, _, _, _, type_info = List.assoc struct_name structmap in
+            cont h (("thisType", type_info) :: env') ghostenv
+        | None -> cont h env' ghostenv
+    end @@ fun h env' ghostenv ->
     let currentThread = List.assoc current_thread_name env in
-    let cenv = [(current_thread_name, currentThread)] @ env' @ funenv in
+    let cenv = (current_thread_name, currentThread) :: env' @ funenv in
     with_context (Executing (h, env, l, "Verifying call")) $. fun () ->
     with_context PushSubcontext (fun () ->
       begin fun cont ->
@@ -2512,7 +2556,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | None -> Unspecified
         | Some e -> Expr e 
       in 
-      let verify_call loc args params pre post terminates h env cont = verify_call funcmap eval_h loc (pn, ilist) xo None [] args ([], None, params, ["this", result], pre, post, None, terminates, false) false false None leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in
+      let verify_call loc args params pre post terminates h env target_struct cont = verify_call funcmap eval_h loc (pn, ilist) xo None [] args ([], None, params, ["this", result], pre, post, None, terminates, false) false false (Some target_struct) leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in
       produce_cxx_object l real_unit result ty eval_h verify_call init false false h env @@ fun h env ->
       begin
         match ty with 
