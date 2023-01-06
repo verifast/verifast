@@ -458,6 +458,7 @@ cd tests
   verifast -c -allow_should_fail provenance0.c
   verifast -c -allow_should_fail uninit.c
   verifast -c lit_ctor_pat.c
+  verifast -c twoDimArray.c
   verifast -c issue311.c
   verifast -c -disable_overflow_check issue112.c
   verifast -c issue309.c

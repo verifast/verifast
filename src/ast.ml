@@ -264,6 +264,7 @@ type type_expr = (* ?type_expr *)
   | PtrTypeExpr of loc * type_expr
   | ArrayTypeExpr of loc * type_expr
   | StaticArrayTypeExpr of loc * type_expr (* type *) * int (* number of elements*)
+  | FuncTypeExpr of loc * type_expr (* return type *) * (type_expr * string) list (* parameters *)
   | ManifestTypeExpr of loc * type_  (* A type expression that is obviously a given type. *)
   | IdentTypeExpr of loc * string option (* package name *) * string
   | ConstructedTypeExpr of loc * string * type_expr list  (* A type of the form x<T1, T2, ...> *)

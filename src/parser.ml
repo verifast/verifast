@@ -433,6 +433,30 @@ and parse_declaration_rhs te = parser
   (match te with ArrayTypeExpr (_, elem_te) when language = Java -> NewArrayWithInitializer (linit, elem_te, es) | _ -> InitializerList (linit, es))
 | [< e = parse_expr >] -> e
 and
+  parse_declarator0 = parser
+  [< '(l, Kwd "(");
+     f = begin parser
+       [< p = parse_param; ps = comma_rep parse_param; '(_, Kwd ")") >] -> fun t ->
+       let ps = List.filter filter_void_params (p::ps) in
+       (FuncTypeExpr (l, t, ps), None)
+     | [< '(_, Kwd ")") >] -> fun t -> (FuncTypeExpr (l, t, []), None)
+     | [< f = parse_declarator0; '(_, Kwd ")") >] -> f
+     end;
+     f = parse_declarator_suffix f
+   >] -> f
+| [< '(l, Kwd "*"); f = parse_declarator0 >] -> fun t -> f (PtrTypeExpr (l, t))
+| [< x = opt (parser [< '(l, Ident x) >] -> (l, x)); f = parse_declarator_suffix (fun t -> (t, x)) >] -> f
+and
+  parse_declarator_suffix f = parser
+  [< '(l, Kwd "["); f = begin parser
+       [< '(_, Kwd "]") >] -> fun t -> f (ArrayTypeExpr (l, t))
+     | [< '(lsize, Int (size, _, _, _, _)); '(_, Kwd "]") >] ->
+       if sign_big_int size <= 0 then raise (ParseException (lsize, "Array must have size > 0."));
+       fun t -> f (StaticArrayTypeExpr (l, t, int_of_big_int size))
+     end; f = parse_declarator_suffix f >] -> f
+| [< '(l, Kwd "("); ps = rep_comma parse_param; '(_, Kwd ")"); f = parse_declarator_suffix (fun t -> f (FuncTypeExpr (l, t, List.filter filter_void_params ps))) >] -> f
+| [< >] -> f
+and
   parse_declarator t = parser
   [< t = parse_type_suffix t;
      '(l, Ident x);
@@ -966,7 +990,7 @@ and
   [< '(l, Kwd "*"); t = parse_type_suffix (PtrTypeExpr (l, t0)) >] -> t
 | [< '(l, Kwd "volatile"); t = parse_type_suffix t0 >] -> t
 | [< '(l, Kwd "const"); t = parse_type_suffix t0 >] -> t
-| [< '(l, Kwd "["); '(_, Kwd "]"); t = parse_type_suffix (ArrayTypeExpr (l,t0)) >] -> t
+| [< '(l, Kwd "[") when language = Java; '(_, Kwd "]"); t = parse_type_suffix (ArrayTypeExpr (l,t0)) >] -> t
 | [< >] -> t0
 and
 (* parse function parameters: *)
@@ -979,12 +1003,9 @@ and
     (ManifestTypeExpr (_, Void), "") -> false
   | _ -> true
 and
-  parse_param = parser [< t = parse_type; pn = parse_param_name;
-      is_array = opt(parser [< '(l0, Kwd "[");'(_, Kwd "]") >] -> l0);
-      (* A basic parser for the parameters of a function signature in a
-         function pointer declaration, currenly supporting one parameter: *)
-      fp_params = opt(parser [< '(l1, Kwd "("); fpp0 = parse_type;
-        '(_, Kwd ")") >] -> fpp0) >] ->
+  parse_param = parser
+    [< t = parse_type; f = parse_declarator0 >] ->
+    let (t, pn) = f t in
     begin match t with
       ManifestTypeExpr (_, Void) -> 
       begin match pn with
@@ -996,21 +1017,10 @@ and
         None -> (t, get_unnamed_param_name ())
       | Some((l, pname)) -> 
         register_varname pname;
-        begin match is_array with
-          None -> ( match fp_params with 
-                      None -> (t, pname)
-                    | Some(_) -> (t, pname) )
-        | Some(_) -> (ArrayTypeExpr(type_expr_loc t, t), pname)
-        end
+        (t, pname)
       end
     end
   | [< '(l, Kwd "...") >] -> (ConstructedTypeExpr (l, "list", [IdentTypeExpr (l, None, "vararg")]), "varargs")
-and
-  parse_param_name = parser
-    [< '(l, Ident pn) >] -> Some (l, pn)
-  | [< '(l, Kwd "("); '(l, Kwd "*"); '(l, Ident pn); '(l, Kwd ")") >] -> 
-     Some (l, pn) (* function pointer identifier *)
-  | [< >] -> None
 and
   parse_functypeclause_args = parser
   [< '(_, Kwd "("); args = rep_comma (parser [< '(l, Ident x) >] -> (l, x)); '(_, Kwd ")") >] -> args
@@ -1284,13 +1294,12 @@ and
 and parse_array_braces te = parser
   [< '(l, Kwd "[");
      te = begin parser
-       [< '(lsize, Int (size, _, _, _, _)) >] ->
+       [< '(lsize, Int (size, _, _, _, _)); '(_, Kwd "]"); te = parse_array_braces te >] ->
        if sign_big_int size <= 0 then raise (ParseException (lsize, "Array must have size > 0."));
        StaticArrayTypeExpr (l, te, int_of_big_int size)
-     | [< >] ->
+     | [< '(_, Kwd "]") >] ->
        ArrayTypeExpr (l, te)
-     end;
-     '(_, Kwd "]") >] -> te
+     end >] -> te
 | [< >] -> te
 and parse_create_handle_keyword = parser 
     [< '(l, Kwd "create_handle") >] -> (l, false)

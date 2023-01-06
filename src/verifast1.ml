@@ -1886,6 +1886,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       static_error l "An enum type with a body is not supported in this position." None
     | EnumTypeExpr (l, Some en, None) ->
       intType
+    | PtrTypeExpr (l, FuncTypeExpr (_, _, _)) -> PtrType Void
+    | FuncTypeExpr (_, _, _) -> PtrType Void
     | PtrTypeExpr (l, te) -> PtrType (check te)
     | PredTypeExpr (l, tes, inputParamCount) ->
       PredType ([], List.map check tes, inputParamCount, Inductiveness_Inductive)
@@ -2659,12 +2661,17 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Some (_, Some (bases, _, _), _, _, _) -> check_bases bases 
     | None -> false
   
+  let rec normalize_pointee_type t =
+    match t with
+      StaticArrayType (t, _) -> normalize_pointee_type t
+    | _ -> t
+
   let rec compatible_pointees t t0 =
-    match (t, t0) with
+    match (normalize_pointee_type t, normalize_pointee_type t0) with
       (_, Void) -> true
     | (Void, _) -> true
     | (PtrType t, PtrType t0) -> compatible_pointees t t0
-    | _ -> t = t0
+    | t, t0 -> t = t0
   
   let rec unify t1 t2 =
     t1 == t2 ||
@@ -4167,6 +4174,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match t with
           PtrType Void -> static_error l "Cannot dereference a void pointer" None
         | PtrType (FuncType _) -> (w, t, v)
+        | PtrType (StaticArrayType (elemTp, elemCount)) -> (w, PtrType elemTp, v)
         | PtrType t0 -> (WDeref (l, w, t0), t0, None)
         | _ -> static_error l "Operand must be pointer." None
       end
@@ -4421,6 +4429,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin match arr_t with
         ArrayType tp -> (WReadArray (l, w1, tp, w2), tp, None)
       | StaticArrayType (tp, _) -> (WReadArray (l, w1, tp, w2), tp, None)
+      | PtrType (StaticArrayType (tp, _)) -> (WOperation (l, Add, [w1; w2], arr_t), PtrType tp, None)
       | PtrType tp -> (WReadArray (l, w1, tp, w2), tp, None)
       | _ when language = Java -> static_error l "Target of array access is not an array." None
       | _ when language = CLang -> static_error l "Target of array access is not an array or pointer." None

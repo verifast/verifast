@@ -132,6 +132,8 @@ let rec sexpr_of_type_expr : type_expr -> sexpression = function
       List [ Symbol "type-expr-enum"; sexpr_of_option (fun s -> Symbol s) name ]
   | PtrTypeExpr (_, te) ->
       List [ Symbol "type-expr-pointer-to"; sexpr_of_type_expr te ]
+  | FuncTypeExpr (_, rte, ps) ->
+      List [ Symbol "type-expr-func"; sexpr_of_type_expr rte; List (List.map (fun (te, x) -> List [ sexpr_of_type_expr te; Symbol x ]) ps) ]
   | ManifestTypeExpr (_, t) ->
       List [ Symbol "type-expr-manifest"; sexpr_of_type_ t ]
   | ArrayTypeExpr (_, te) ->
