@@ -1311,6 +1311,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Ok res -> res
     | Error err -> failwith "Todo: translate_vf_mir Error handling"
 end
-(* Todo @Nima: There would be naming conflicts if the user writes a function in rust with a name like `std_alloc_alloc`.
+(* Todo @Nima: There would be naming conflicts if the user writes a function in Rust with a name like `std_alloc_alloc`.
    A possible solution might be adding `crate` in front of local declarations. Another problem with names is that two paths
    like `a::mut_ptr::b` and `a::mut_ptr::b` both convert to `a_mut_ptr_b` *)
+
+(* Todo @Nima: Unit type gets translated to an empty struct and Never (empty) type to an empty union.
+   The latter is not true because an empty union type has a value. For now, we are preventing the production and consumption
+   of padding chunks and chars predicates for empty structs and empty unions respectively when verifying Rust programs in
+   the `produce_c_object` and `consume_c_object` functions in `verify_expr.ml`.
+   For the Never type, we should add a specific type to VeriFast instead and extend the function `prover_type_of_type` to support it.
+   Moreover, check for the correct behaviour of production and consumption of chars predicate for empty Rust unions. *)

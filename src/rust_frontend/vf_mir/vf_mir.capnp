@@ -68,6 +68,10 @@ struct Ty {
         val @1: ConstKind;
     }
 
+    struct Region {
+        id @0: Text;
+    }
+
     struct GenArg {
         struct GenArgKind {
             union {
@@ -103,13 +107,36 @@ struct Ty {
 
     struct AdtDef {
         struct VariantDef {
-            name @0: Text;
-            discr @1: UInt64;
-            fields @2: List(Ty);
+            struct FieldDef {
+                struct Visibility {
+                    union {
+                        public @0: Void;
+                        restricted @1: Void;
+                        invisible @2: Void;
+                    }
+                }
+
+                name @0: Text;
+                ty @1: Ty;
+                vis @2: Visibility;
+            }
+
+            #name @0: Text;
+            #discr @1: UInt64;
+            fields @0: List(FieldDef);
         }
+
+        struct AdtKind {
+            union {
+                structKind @0: Void;
+                enumKind @1: Void;
+                unionKind @2: Void;
+            }
+        }
+
         id @0: AdtDefId;
         variants @1: List(VariantDef);
-        #TODO @Nima: We will need AdtFlags. For now it is just struct
+        kind @2: AdtKind;
     }
 
     struct AdtTy {
@@ -132,6 +159,12 @@ struct Ty {
         mutability @1: Mutability;
     }
 
+    struct RefTy {
+        region @0: Region;
+        ty @1: Ty;
+        mutability @2: Mutability;
+    }
+
     struct TyKind {
         union {
             bool @0: Void;
@@ -139,9 +172,10 @@ struct Ty {
             uInt @2: UIntTy;
             adt @3: AdtTy;
             rawPtr @4: RawPtrTy;
-            fnDef @5: FnDefTy;
-            never @6: Void;
-            tuple @7: List(GenArg);
+            ref @5: RefTy;
+            fnDef @6: FnDefTy;
+            never @7: Void;
+            tuple @8: List(GenArg);
         }
     }
 

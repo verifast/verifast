@@ -58,6 +58,8 @@ pub fn run_compiler() -> i32 {
         let mut rustc_args: Vec<_> = std::env::args().collect();
         // We must pass -Zpolonius so that the borrowck information is computed.
         rustc_args.push("-Zpolonius".to_owned());
+        // To have MIR annotated with lifetimes
+        rustc_args.push("-Zverbose".to_owned());
 
         // TODO @Nima: Find the correct sysroot by yourself. for now we get it as an argument.
         // See filesearch::get_or_default_sysroot()
@@ -278,6 +280,8 @@ mod vf_mir_builder {
     use ty_cpn::fn_def_ty as fn_def_ty_cpn;
     use ty_cpn::gen_arg as gen_arg_cpn;
     use ty_cpn::raw_ptr_ty as raw_ptr_ty_cpn;
+    use ty_cpn::ref_ty as ref_ty_cpn;
+    use ty_cpn::region as region_cpn;
     use ty_cpn::ty_kind as ty_kind_cpn;
     use ty_cpn::u_int_ty as u_int_ty_cpn;
     use var_debug_info_cpn::symbol as symbol_cpn;
@@ -623,6 +627,10 @@ mod vf_mir_builder {
                     let raw_ptr_ty_cpn = ty_kind_cpn.init_raw_ptr();
                     Self::encode_ty_raw_ptr(tcx, ty_and_mut, raw_ptr_ty_cpn);
                 }
+                ty::TyKind::Ref(region, ty, mutability) => {
+                    let ref_ty_cpn = ty_kind_cpn.init_ref();
+                    Self::encode_ty_ref(tcx, region, ty, *mutability, ref_ty_cpn);
+                }
                 ty::TyKind::FnDef(def_id, substs) => {
                     let fn_def_ty_cpn = ty_kind_cpn.init_fn_def();
                     Self::encode_ty_fn_def(tcx, def_id, substs, fn_def_ty_cpn);
@@ -691,6 +699,21 @@ mod vf_mir_builder {
             Self::encode_mutability(ty_and_mut.mutbl, mut_cpn);
         }
 
+        fn encode_ty_ref(
+            tcx: TyCtxt<'tcx>,
+            region: ty::Region<'tcx>,
+            ty: ty::Ty<'tcx>,
+            mutability: mir::Mutability,
+            mut ref_ty_cpn: ref_ty_cpn::Builder<'_>,
+        ) {
+            let region_cpn = ref_ty_cpn.reborrow().init_region();
+            Self::encode_region(region, region_cpn);
+            let ty_cpn = ref_ty_cpn.reborrow().init_ty();
+            Self::encode_ty(tcx, ty, ty_cpn);
+            let mutability_cpn = ref_ty_cpn.init_mutability();
+            Self::encode_mutability(mutability, mutability_cpn);
+        }
+
         fn encode_ty_fn_def(
             tcx: TyCtxt<'tcx>,
             def_id: &hir::def_id::DefId,
@@ -719,6 +742,24 @@ mod vf_mir_builder {
             for (idx, subst) in substs.iter().enumerate() {
                 let subst_cpn = substs_cpn.reborrow().get(idx.try_into().unwrap());
                 Self::encode_gen_arg(tcx, &subst, subst_cpn);
+            }
+        }
+
+        fn encode_region(region: ty::Region<'tcx>, mut region_cpn: region_cpn::Builder<'_>) {
+            debug!("Encoding region {:?}", region);
+            // MIR borrow-checker changes all regions to fresh `ReVar` and generates constraints for them and then tries to resolve the constraints
+            // We do not expect to receive any other kind of `Region` because we are getting borrow-checked MIR
+            match region {
+                ty::RegionKind::ReEarlyBound(_early_bound_region) => bug!(),
+                ty::RegionKind::ReLateBound(_debruijn_index, _bound_region) => bug!(),
+                ty::RegionKind::ReFree(_free_region) => bug!(),
+                ty::RegionKind::ReStatic => bug!(),
+                ty::RegionKind::ReVar(_region_vid) => {
+                    region_cpn.set_id(&format!("{:?}", region));
+                }
+                ty::RegionKind::RePlaceholder(_placeholder_region) => bug!(),
+                ty::RegionKind::ReEmpty(_universe_index) => bug!(),
+                ty::RegionKind::ReErased => bug!(),
             }
         }
 
