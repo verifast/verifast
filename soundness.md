@@ -26,6 +26,7 @@ Known VeriFast unsoundnesses:
     1/0;
   }
   ```
+- VeriFast currently treats `char` and `signed char` as the same type. But on some platforms, including ARM and RISC-V, type `char` is unsigned.
 
 Java Programs
 =============
