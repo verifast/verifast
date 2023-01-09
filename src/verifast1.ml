@@ -5541,21 +5541,42 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec check_asn tenv p =
       match p with
       | PointsTo (l, ReadArray (lread, earray, SliceExpr (lslice, pstart, pend)), rhs) ->
+        let (earray, slices) =
+          let rec get_slices = function
+            ReadArray (lread0, earray0, SliceExpr (lslice0, pstart0, pend0)) when language = CLang ->
+            let (earray, slices) = get_slices earray0 in
+            (earray, (lslice0, pstart0, pend0)::slices)
+          | earray ->
+            (earray, [])
+          in
+          get_slices earray
+        in
+        let slices = (lslice, pstart, pend)::slices in
         let (warray, tarray) = check_expr (pn,ilist) tparams tenv (Some true) earray in
-        let (wstart, tenv) =
-          match pstart with
-            None -> (None, tenv)
-          | Some pstart ->
-            let (wstart, tenv) = check_pat (pn,ilist) tparams tenv intType pstart in
-            Some wstart, tenv
+        let (wslices, tenv) =
+          let rec check_slices tenv = function
+            [] -> ([], tenv)
+          | (lslice, pstart, pend)::slices ->
+            let (wslices, tenv) = check_slices tenv slices in
+            let (wstart, tenv) =
+              match pstart with
+                None -> (None, tenv)
+              | Some pstart ->
+                let (wstart, tenv) = check_pat (pn,ilist) tparams tenv intType pstart in
+                Some wstart, tenv
+            in
+            let (wend, tenv) =
+              match pend with
+                None -> (None, tenv)
+              | Some pend ->
+                let (wend, tenv) = check_pat (pn,ilist) tparams tenv intType pend in
+                Some wend, tenv
+            in
+            ((lslice, wstart, wend)::wslices, tenv)
+          in
+          check_slices tenv slices
         in
-        let (wend, tenv) =
-          match pend with
-            None -> (None, tenv)
-          | Some pend ->
-            let (wend, tenv) = check_pat (pn,ilist) tparams tenv intType pend in
-            Some wend, tenv
-        in
+        let (lslice, wstart, wend)::wslices = List.rev wslices in
         begin match language with
         | CLang ->
           let elemtype =
@@ -5563,6 +5584,47 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               PtrType t -> t
             | StaticArrayType (t, _) -> t
             | _ -> static_error lread "Array in array dereference must be of pointer type." None
+          in
+          let elemtype, multiplier =
+            let rec check_slices elemtype wslices =
+              match wslices with
+                [] -> elemtype, 1
+              | (lslice, wstart, wend)::wslices ->
+                match elemtype with
+                  StaticArrayType (elemtype, elemCount) ->
+                  begin match wstart with
+                    None -> ()
+                  | Some (LitPat (WIntLit (_, n))) when eq_big_int n zero_big_int -> ()
+                  | _ -> static_error lslice "Start of slice, if specified, must be zero" None
+                  end;
+                  begin match wend with
+                    None -> ()
+                  | Some (LitPat (WIntLit (_, n))) when eq_big_int n (big_int_of_int elemCount) -> ()
+                  | _ -> static_error lslice (Printf.sprintf "End of slice, if specified, must equal array size (%d)" elemCount) None
+                  end;
+                  let elemtype, multiplier = check_slices elemtype wslices in
+                  elemtype, multiplier * elemCount
+                | _ ->
+                  static_error lslice (Printf.sprintf "Cannot use a slice here to subscript an expression of type %s; array type expected" (string_of_type elemtype)) None
+            in
+            check_slices elemtype wslices
+          in
+          let wstart, wend =
+            if multiplier = 1 then
+              wstart, wend
+            else
+              let wstart =
+                match wstart with
+                  None -> None
+                | Some (LitPat w) -> Some (LitPat (WOperation (expr_loc w, Mul, [w; WIntLit (expr_loc w, big_int_of_int multiplier)], intType)))
+                | _ -> static_error lslice "In this multi-dimensional array assertion, the start pattern of the slice must be an expression" None
+              in
+              let wend =
+                match wend with
+                | Some (LitPat w) -> Some (LitPat (WOperation (expr_loc w, Mul, [w; WIntLit (expr_loc w, big_int_of_int multiplier)], intType)))
+                | _ -> static_error lslice "In this multi-dimensional array assertion, the end of the slice must be specified as an expression" None
+              in
+              wstart, wend
           in
           let (wrhs, tenv) = check_pat (pn,ilist) tparams tenv (list_type elemtype) rhs in
           let wfirst, wlength =

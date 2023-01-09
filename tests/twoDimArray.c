@@ -2,14 +2,14 @@
 //@ #include <arrays.gh>
 
 void printMatrix(int m[2][3])
-//@ requires ((int *)m)[0..6] |-> ?elems;
-//@ ensures ((int *)m)[0..6] |-> elems;
+//@ requires m[0..2][0..3] |-> ?elems;
+//@ ensures m[0..2][0..3] |-> elems;
 {
     for(unsigned int r = 0; r < 2; r++)
-    //@ invariant ((int *)m)[0..6] |-> elems;
+    //@ invariant m[0..2][0..3] |-> elems;
     {
         for(unsigned int c = 0; c < 3; c++)
-        //@ invariant ((int *)m)[0..6] |-> elems;
+        //@ invariant m[0..2][0..3] |-> elems;
         {
             //@ ints_split(m, r * 3);
             //@ ints_split(m + r, 3);
