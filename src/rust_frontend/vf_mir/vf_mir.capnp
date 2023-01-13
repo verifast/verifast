@@ -1,17 +1,35 @@
 @0x810f32815ffa3aa2;
-struct UInt128 {
-    h @0: UInt64;
-    l @1: UInt64;
-}
+# Todo @Nima: Move Util to another capnp file
+struct Util {
+    struct UInt128 {
+        h @0: UInt64;
+        l @1: UInt64;
+    }
 
-using BigUInt = UInt128;
+    using BigUInt = UInt128;
 
-struct Option(T) {
-    union {
-        nothing @0: Void;
-        something @1: T;
+    struct Option(T) {
+        union {
+            nothing @0: Void;
+            something @1: T;
+        }
+    }
+
+    struct IndList(T) {
+        union {
+            nil @0: Void;
+            cons :group {
+                h @1: T;
+                t @2: IndList(T);
+            }
+        }
     }
 }
+
+using Util.UInt128;
+using Util.BigUInt;
+using Util.Option;
+using Util.IndList;
 
 struct SpanData {
     struct Loc {
@@ -420,7 +438,11 @@ struct Body {
 }
 
 struct VfMir {
-    bodies @0: List(Body);
+    # Todo @Nima: We are using an inductive list to encode ADT definitions because the total size of `List`s
+    # shoule be determined before initializing them which is not the case for ADT definitions. The standard way to
+    # do this is capnp `orphans` which are not supported for Rust plugin at the time.
+    adtDefs @0: IndList(Ty.AdtDef);
+    bodies @1: List(Body);
 }
 #Todo @Nima: For Clarity write a struct fields on top and then inner type definitions
 #Todo @Nima: Use a uniform naming. def_path for Rust style definition paths and Name for their corresponding translated names.

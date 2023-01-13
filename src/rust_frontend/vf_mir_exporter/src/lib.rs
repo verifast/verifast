@@ -58,7 +58,7 @@ pub fn run_compiler() -> i32 {
         let mut rustc_args: Vec<_> = std::env::args().collect();
         // We must pass -Zpolonius so that the borrowck information is computed.
         rustc_args.push("-Zpolonius".to_owned());
-        // To have MIR annotated with lifetimes
+        // To have MIR dump annotated with lifetimes
         rustc_args.push("-Zverbose".to_owned());
 
         // TODO @Nima: Find the correct sysroot by yourself. for now we get it as an argument.
@@ -236,6 +236,8 @@ mod vf_mir_builder {
     use crate::vf_mir_capnp::span_data as span_data_cpn;
     use crate::vf_mir_capnp::ty as ty_cpn;
     use crate::vf_mir_capnp::vf_mir as vf_mir_cpn;
+    use adt_def_cpn::adt_kind as adt_kind_cpn;
+    use adt_def_cpn::variant_def as variant_def_cpn;
     use basic_block_cpn::operand as operand_cpn;
     use basic_block_cpn::rvalue as rvalue_cpn;
     use basic_block_cpn::statement as statement_cpn;
@@ -254,6 +256,7 @@ mod vf_mir_builder {
     use body_cpn::source_info as source_info_cpn;
     use body_cpn::var_debug_info as var_debug_info_cpn;
     use constant_cpn::constant_kind as constant_kind_cpn;
+    use field_def_cpn::visibility as visibility_cpn;
     use file_name_cpn::real_file_name as real_file_name_cpn;
     use loc_cpn::char_pos as char_pos_cpn;
     use loc_cpn::source_file as source_file_cpn;
@@ -274,6 +277,7 @@ mod vf_mir_builder {
     use terminator_kind_cpn::fn_call_data as fn_call_data_cpn;
     use terminator_kind_cpn::switch_int_data as switch_int_data_cpn;
     use tracing::{debug, trace};
+    use ty_cpn::adt_def as adt_def_cpn;
     use ty_cpn::adt_ty as adt_ty_cpn;
     use ty_cpn::const_ as ty_const_cpn;
     use ty_cpn::const_kind as const_kind_cpn;
@@ -286,6 +290,26 @@ mod vf_mir_builder {
     use ty_cpn::u_int_ty as u_int_ty_cpn;
     use var_debug_info_cpn::symbol as symbol_cpn;
     use var_debug_info_cpn::var_debug_info_contents as var_debug_info_contents_cpn;
+    use variant_def_cpn::field_def as field_def_cpn;
+
+    struct RequiredDefs<'tcx> {
+        adts: Vec<&'tcx ty::AdtDef>,
+    }
+
+    impl<'tcx> RequiredDefs<'tcx> {
+        pub fn new() -> Self {
+            Self { adts: Vec::new() }
+        }
+        pub fn add_adt(&mut self, adt: &'tcx ty::AdtDef) {
+            /* Todo @Nima: It is necessary to encode the dependency between the required definitions.
+                Because the order of definitions will matter in most of the analyzers.
+            */
+            self.adts.push(adt);
+        }
+        pub fn get_adts(&self) -> &Vec<&'tcx ty::AdtDef> {
+            &self.adts
+        }
+    }
 
     pub struct VfMirCapnpBuilder<'tcx, 'a> {
         tcx: TyCtxt<'tcx>,
@@ -330,6 +354,8 @@ mod vf_mir_builder {
                 len
             ));
             let mut bodies_cpn = vf_mir_cpn.reborrow().init_bodies(len);
+
+            let mut req_defs = RequiredDefs::new();
             for (idx, body) in bodies.iter().enumerate() {
                 let body_span = body.span.data();
                 let annots = self
@@ -339,12 +365,111 @@ mod vf_mir_builder {
                     })
                     .collect::<LinkedList<_>>();
                 let mut body_cpn = bodies_cpn.reborrow().get(idx.try_into().unwrap());
-                Self::encode_body(self.tcx, body, annots, body_cpn);
+                Self::encode_body(self.tcx, &mut req_defs, body, annots, body_cpn);
+            }
+
+            // Encode Required Definitions
+            let mut adt_defs_cpn = vf_mir_cpn.init_adt_defs();
+            let mut checked_adt_defs_cnt = 0;
+            let mut encoded_adt_defs = Vec::new();
+            while checked_adt_defs_cnt < req_defs.get_adts().len() {
+                let adt_defs = req_defs.get_adts()[checked_adt_defs_cnt..].to_vec();
+                checked_adt_defs_cnt = req_defs.get_adts().len();
+                for adt_def in adt_defs {
+                    match encoded_adt_defs
+                        .iter()
+                        .find(|&&enc_adt_def| enc_adt_def == adt_def)
+                    {
+                        Option::None => {
+                            let mut adt_defs_cons_cpn = adt_defs_cpn.init_cons();
+                            let adt_def_cpn = adt_defs_cons_cpn.reborrow().init_h();
+                            Self::encode_adt_def(self.tcx, &mut req_defs, adt_def, adt_def_cpn);
+                            encoded_adt_defs.push(adt_def);
+                            adt_defs_cpn = adt_defs_cons_cpn.init_t();
+                        }
+                        Option::Some(_) => (), //skip
+                    }
+                }
+            }
+            adt_defs_cpn.set_nil(());
+        }
+
+        fn encode_adt_def(
+            tcx: TyCtxt<'tcx>,
+            req_defs: &mut RequiredDefs<'tcx>,
+            adt_def: &ty::AdtDef,
+            mut adt_def_cpn: adt_def_cpn::Builder<'_>,
+        ) {
+            debug!("Encoding ADT definition {:?}", adt_def);
+            let mut id_cpn = adt_def_cpn.reborrow().init_id();
+            id_cpn.set_name(&tcx.def_path_str(adt_def.did));
+            let len = adt_def.variants.len();
+            let len = len.try_into().expect(&format!(
+                "{} Variants cannot be stored in a Capnp message",
+                len
+            ));
+            let mut variants_cpn = adt_def_cpn.reborrow().init_variants(len);
+            for (idx, variant) in adt_def.variants.iter_enumerated() {
+                let variant_cpn = variants_cpn.reborrow().get(idx.try_into().unwrap());
+                Self::encode_variant_def(tcx, req_defs, variant, variant_cpn);
+            }
+            let kind_cpn = adt_def_cpn.init_kind();
+            Self::encode_adt_kind(adt_def.adt_kind(), kind_cpn);
+        }
+
+        fn encode_adt_kind(adt_kind: ty::AdtKind, mut adt_kind_cpn: adt_kind_cpn::Builder<'_>) {
+            match adt_kind {
+                ty::AdtKind::Struct => adt_kind_cpn.set_struct_kind(()),
+                ty::AdtKind::Union => adt_kind_cpn.set_enum_kind(()),
+                ty::AdtKind::Enum => adt_kind_cpn.set_union_kind(()),
+            }
+        }
+
+        fn encode_variant_def(
+            tcx: TyCtxt<'tcx>,
+            req_defs: &mut RequiredDefs<'tcx>,
+            vdef: &ty::VariantDef,
+            vdef_cpn: variant_def_cpn::Builder<'_>,
+        ) {
+            let len = vdef.fields.len();
+            let len = len.try_into().expect(&format!(
+                "{} Fields cannot be stored in a Capnp message",
+                len
+            ));
+            let mut fields_cpn = vdef_cpn.init_fields(len);
+            for (idx, field) in vdef.fields.iter().enumerate() {
+                let field_cpn = fields_cpn.reborrow().get(idx.try_into().unwrap());
+                Self::encode_field_def(tcx, req_defs, field, field_cpn);
+            }
+        }
+
+        fn encode_field_def(
+            tcx: TyCtxt<'tcx>,
+            req_defs: &mut RequiredDefs<'tcx>,
+            fdef: &ty::FieldDef,
+            mut fdef_cpn: field_def_cpn::Builder<'_>,
+        ) {
+            let name = fdef.name.as_str();
+            debug!("Encoding field definition {}", name);
+            fdef_cpn.set_name(name);
+            let ty_cpn = fdef_cpn.reborrow().init_ty();
+            let ty = tcx.type_of(fdef.did);
+            Self::encode_ty(tcx, req_defs, &ty, ty_cpn);
+            let vis_cpn = fdef_cpn.init_vis();
+            Self::encode_visibility(fdef.vis, vis_cpn);
+        }
+
+        fn encode_visibility(vis: ty::Visibility, mut vis_cpn: visibility_cpn::Builder<'_>) {
+            match vis {
+                ty::Visibility::Public => vis_cpn.set_public(()),
+                ty::Visibility::Restricted(_did) => vis_cpn.set_restricted(()),
+                ty::Visibility::Invisible => vis_cpn.set_invisible(()),
             }
         }
 
         fn encode_body(
             tcx: TyCtxt<'tcx>,
+            req_defs: &mut RequiredDefs<'tcx>,
             body: &mir::Body<'tcx>,
             mut annots: LinkedList<Comment>,
             mut body_cpn: body_cpn::Builder<'_>,
@@ -402,7 +527,7 @@ mod vf_mir_builder {
                 body.local_decls.iter_enumerated().enumerate()
             {
                 let mut local_decl_cpn = local_decls_cpn.reborrow().get(idx.try_into().unwrap());
-                Self::encode_local_decl(local_decl_idx, local_decl, tcx, local_decl_cpn);
+                Self::encode_local_decl(tcx, req_defs, local_decl_idx, local_decl, local_decl_cpn);
             }
 
             let basic_blocks = body.basic_blocks();
@@ -414,7 +539,13 @@ mod vf_mir_builder {
             for (idx, (basic_block_idx, basic_block)) in basic_blocks.iter_enumerated().enumerate()
             {
                 let basic_block_cpn = basic_blocks_cpn.reborrow().get(idx.try_into().unwrap());
-                Self::encode_basic_block(tcx, basic_block_idx, basic_block, basic_block_cpn);
+                Self::encode_basic_block(
+                    tcx,
+                    req_defs,
+                    basic_block_idx,
+                    basic_block,
+                    basic_block_cpn,
+                );
             }
 
             let span_cpn = body_cpn.reborrow().init_span();
@@ -430,12 +561,13 @@ mod vf_mir_builder {
             let mut vdis_cpn = body_cpn.init_var_debug_info(vdis_len);
             for (idx, vdi) in body.var_debug_info.iter().enumerate() {
                 let vdi_cpn = vdis_cpn.reborrow().get(idx.try_into().unwrap());
-                Self::encode_var_debug_info(tcx, vdi, vdi_cpn);
+                Self::encode_var_debug_info(tcx, req_defs, vdi, vdi_cpn);
             }
         }
 
         fn encode_var_debug_info(
             tcx: TyCtxt<'tcx>,
+            req_defs: &mut RequiredDefs<'tcx>,
             vdi: &mir::VarDebugInfo<'tcx>,
             mut vdi_cpn: var_debug_info_cpn::Builder<'_>,
         ) {
@@ -445,11 +577,12 @@ mod vf_mir_builder {
             let src_info_cpn = vdi_cpn.reborrow().init_source_info();
             Self::encode_source_info(tcx, &vdi.source_info, src_info_cpn);
             let value_cpn = vdi_cpn.init_value();
-            Self::encode_var_debug_info_contents(tcx, &vdi.value, value_cpn);
+            Self::encode_var_debug_info_contents(tcx, req_defs, &vdi.value, value_cpn);
         }
 
         fn encode_var_debug_info_contents(
             tcx: TyCtxt<'tcx>,
+            req_defs: &mut RequiredDefs<'tcx>,
             vdi_contents: &mir::VarDebugInfoContents<'tcx>,
             vdi_contents_cpn: var_debug_info_contents_cpn::Builder<'_>,
         ) {
@@ -460,7 +593,7 @@ mod vf_mir_builder {
                 }
                 mir::VarDebugInfoContents::Const(constant) => {
                     let constant_cpn = vdi_contents_cpn.init_const();
-                    Self::encode_constant(tcx, constant, constant_cpn)
+                    Self::encode_constant(tcx, req_defs, constant, constant_cpn)
                 }
             }
         }
@@ -577,9 +710,10 @@ mod vf_mir_builder {
         }
 
         fn encode_local_decl(
+            tcx: TyCtxt<'tcx>,
+            req_defs: &mut RequiredDefs<'tcx>,
             local_decl_idx: mir::Local,
             local_decl: &mir::LocalDecl<'tcx>,
-            tcx: TyCtxt<'tcx>,
             mut local_decl_cpn: local_decl_cpn::Builder<'_>,
         ) {
             debug!("Encoding local decl {:?}", local_decl);
@@ -590,7 +724,7 @@ mod vf_mir_builder {
             Self::encode_local_decl_id(local_decl_idx, id_cpn);
 
             let ty_cpn = local_decl_cpn.reborrow().init_ty();
-            Self::encode_ty(tcx, local_decl.ty, ty_cpn);
+            Self::encode_ty(tcx, req_defs, local_decl.ty, ty_cpn);
 
             let src_info_cpn = local_decl_cpn.init_source_info();
             Self::encode_source_info(tcx, &local_decl.source_info, src_info_cpn);
@@ -611,7 +745,12 @@ mod vf_mir_builder {
             id_cpn.set_name(&format!("{:?}", local_decl_idx));
         }
 
-        fn encode_ty(tcx: TyCtxt<'tcx>, ty: ty::Ty<'tcx>, mut ty_cpn: ty_cpn::Builder<'_>) {
+        fn encode_ty(
+            tcx: TyCtxt<'tcx>,
+            req_defs: &mut RequiredDefs<'tcx>,
+            ty: ty::Ty<'tcx>,
+            mut ty_cpn: ty_cpn::Builder<'_>,
+        ) {
             let mut ty_kind_cpn = ty_cpn.init_kind();
             match ty.kind() {
                 ty::TyKind::Bool => ty_kind_cpn.set_bool(()),
@@ -621,19 +760,19 @@ mod vf_mir_builder {
                 }
                 ty::TyKind::Adt(adt_def, substs) => {
                     let adt_ty_cpn = ty_kind_cpn.init_adt();
-                    Self::encode_ty_adt(tcx, adt_def, substs, adt_ty_cpn);
+                    Self::encode_ty_adt(tcx, req_defs, adt_def, substs, adt_ty_cpn);
                 }
                 ty::TyKind::RawPtr(ty_and_mut) => {
                     let raw_ptr_ty_cpn = ty_kind_cpn.init_raw_ptr();
-                    Self::encode_ty_raw_ptr(tcx, ty_and_mut, raw_ptr_ty_cpn);
+                    Self::encode_ty_raw_ptr(tcx, req_defs, ty_and_mut, raw_ptr_ty_cpn);
                 }
                 ty::TyKind::Ref(region, ty, mutability) => {
                     let ref_ty_cpn = ty_kind_cpn.init_ref();
-                    Self::encode_ty_ref(tcx, region, ty, *mutability, ref_ty_cpn);
+                    Self::encode_ty_ref(tcx, req_defs, region, ty, *mutability, ref_ty_cpn);
                 }
                 ty::TyKind::FnDef(def_id, substs) => {
                     let fn_def_ty_cpn = ty_kind_cpn.init_fn_def();
-                    Self::encode_ty_fn_def(tcx, def_id, substs, fn_def_ty_cpn);
+                    Self::encode_ty_fn_def(tcx, req_defs, def_id, substs, fn_def_ty_cpn);
                 }
                 ty::TyKind::FnPtr(_) => todo!("Function pointer type kind"),
                 ty::TyKind::Never => ty_kind_cpn.set_never(()),
@@ -666,15 +805,14 @@ mod vf_mir_builder {
 
         fn encode_ty_adt(
             tcx: TyCtxt<'tcx>,
+            req_defs: &mut RequiredDefs<'tcx>,
             adt_def: &'tcx ty::AdtDef,
             substs: ty::subst::SubstsRef<'tcx>,
             mut adt_ty_cpn: adt_ty_cpn::Builder<'_>,
         ) {
             debug!("Encoding algebraic data type {:?}", adt_def);
             let mut adt_def_id_cpn = adt_ty_cpn.reborrow().init_id();
-            /* TODO @Nima: There is a huge code base behind printing a definition path.
-            We should verify it always makes sense to use this string */
-            adt_def_id_cpn.set_name(&format!("{:?}", adt_def));
+            adt_def_id_cpn.set_name(&tcx.def_path_str(adt_def.did));
 
             let len = substs.len().try_into().expect(&format!(
                 "The number of generic args of {:?} cannot be stored in a Capnp message",
@@ -683,24 +821,27 @@ mod vf_mir_builder {
             let mut substs_cpn = adt_ty_cpn.init_substs(len);
             for (idx, subst) in substs.iter().enumerate() {
                 let subst_cpn = substs_cpn.reborrow().get(idx.try_into().unwrap());
-                Self::encode_gen_arg(tcx, &subst, subst_cpn);
+                Self::encode_gen_arg(tcx, req_defs, &subst, subst_cpn);
             }
-            // TODO @Nima: Definitions we use should be encoded later
+            // Definitions we use should be encoded later
+            req_defs.add_adt(adt_def);
         }
 
         fn encode_ty_raw_ptr(
             tcx: TyCtxt<'tcx>,
+            req_defs: &mut RequiredDefs<'tcx>,
             ty_and_mut: &ty::TypeAndMut<'tcx>,
             mut raw_ptr_ty_cpn: raw_ptr_ty_cpn::Builder<'_>,
         ) {
             let ty_cpn = raw_ptr_ty_cpn.reborrow().init_ty();
-            Self::encode_ty(tcx, ty_and_mut.ty, ty_cpn);
+            Self::encode_ty(tcx, req_defs, ty_and_mut.ty, ty_cpn);
             let mut_cpn = raw_ptr_ty_cpn.init_mutability();
             Self::encode_mutability(ty_and_mut.mutbl, mut_cpn);
         }
 
         fn encode_ty_ref(
             tcx: TyCtxt<'tcx>,
+            req_defs: &mut RequiredDefs<'tcx>,
             region: ty::Region<'tcx>,
             ty: ty::Ty<'tcx>,
             mutability: mir::Mutability,
@@ -709,13 +850,14 @@ mod vf_mir_builder {
             let region_cpn = ref_ty_cpn.reborrow().init_region();
             Self::encode_region(region, region_cpn);
             let ty_cpn = ref_ty_cpn.reborrow().init_ty();
-            Self::encode_ty(tcx, ty, ty_cpn);
+            Self::encode_ty(tcx, req_defs, ty, ty_cpn);
             let mutability_cpn = ref_ty_cpn.init_mutability();
             Self::encode_mutability(mutability, mutability_cpn);
         }
 
         fn encode_ty_fn_def(
             tcx: TyCtxt<'tcx>,
+            req_defs: &mut RequiredDefs<'tcx>,
             def_id: &hir::def_id::DefId,
             substs: ty::subst::SubstsRef<'tcx>,
             mut fn_def_ty_cpn: fn_def_ty_cpn::Builder<'_>,
@@ -741,7 +883,7 @@ mod vf_mir_builder {
             let mut substs_cpn = fn_def_ty_cpn.init_substs(len);
             for (idx, subst) in substs.iter().enumerate() {
                 let subst_cpn = substs_cpn.reborrow().get(idx.try_into().unwrap());
-                Self::encode_gen_arg(tcx, &subst, subst_cpn);
+                Self::encode_gen_arg(tcx, req_defs, &subst, subst_cpn);
             }
         }
 
@@ -765,6 +907,7 @@ mod vf_mir_builder {
 
         fn encode_gen_arg(
             tcx: TyCtxt<'tcx>,
+            req_defs: &mut RequiredDefs<'tcx>,
             gen_arg: &ty::subst::GenericArg<'tcx>,
             gen_arg_cpn: gen_arg_cpn::Builder<'_>,
         ) {
@@ -775,7 +918,7 @@ mod vf_mir_builder {
                 ty::subst::GenericArgKind::Lifetime(_) => todo!("Lifetime generic arg"),
                 ty::subst::GenericArgKind::Type(ty) => {
                     let ty_cpn = kind_cpn.init_type();
-                    Self::encode_ty(tcx, ty, ty_cpn);
+                    Self::encode_ty(tcx, req_defs, ty, ty_cpn);
                 }
                 ty::subst::GenericArgKind::Const(_) => todo!("Const generic arg"),
             }
@@ -783,6 +926,7 @@ mod vf_mir_builder {
 
         fn encode_basic_block(
             tcx: TyCtxt<'tcx>,
+            req_defs: &mut RequiredDefs<'tcx>,
             basic_block_idx: mir::BasicBlock,
             basic_block_data: &mir::BasicBlockData<'tcx>,
             mut basic_block_cpn: basic_block_cpn::Builder<'_>,
@@ -800,11 +944,11 @@ mod vf_mir_builder {
             let mut statements_cpn = basic_block_cpn.reborrow().init_statements(statements_len);
             for (idx, statement) in basic_block_data.statements.iter().enumerate() {
                 let statement_cpn = statements_cpn.reborrow().get(idx.try_into().unwrap());
-                Self::encode_statement(tcx, statement, statement_cpn);
+                Self::encode_statement(tcx, req_defs, statement, statement_cpn);
             }
 
             let terminator_cpn = basic_block_cpn.reborrow().init_terminator();
-            Self::encode_terminator(tcx, basic_block_data.terminator(), terminator_cpn);
+            Self::encode_terminator(tcx, req_defs, basic_block_data.terminator(), terminator_cpn);
 
             basic_block_cpn.set_is_cleanup(basic_block_data.is_cleanup);
         }
@@ -819,13 +963,14 @@ mod vf_mir_builder {
 
         fn encode_statement(
             tcx: TyCtxt<'tcx>,
+            req_defs: &mut RequiredDefs<'tcx>,
             statement: &mir::Statement<'tcx>,
             mut statement_cpn: statement_cpn::Builder<'_>,
         ) {
             let src_info_cpn = statement_cpn.reborrow().init_source_info();
             Self::encode_source_info(tcx, &statement.source_info, src_info_cpn);
             let kind_cpn = statement_cpn.init_kind();
-            Self::encode_statement_kind(tcx, &statement.kind, kind_cpn);
+            Self::encode_statement_kind(tcx, req_defs, &statement.kind, kind_cpn);
         }
 
         fn encode_source_info(
@@ -841,6 +986,7 @@ mod vf_mir_builder {
 
         fn encode_statement_kind(
             tcx: TyCtxt<'tcx>,
+            req_defs: &mut RequiredDefs<'tcx>,
             statement_kind: &mir::StatementKind<'tcx>,
             mut statement_kind_cpn: statement_kind_cpn::Builder<'_>,
         ) {
@@ -850,7 +996,7 @@ mod vf_mir_builder {
                     let lhs_place_cpn = assign_data_cpn.reborrow().init_lhs_place();
                     Self::encode_place(lhs_place, lhs_place_cpn);
                     let rhs_rvalue_cpn = assign_data_cpn.init_rhs_rvalue();
-                    Self::encode_rvalue(tcx, rhs_rval, rhs_rvalue_cpn);
+                    Self::encode_rvalue(tcx, req_defs, rhs_rval, rhs_rvalue_cpn);
                 }
                 mir::StatementKind::Nop => statement_kind_cpn.set_nop(()),
                 // TODO @Nima: For now we do not support many statements and treat them as Nop
@@ -860,6 +1006,7 @@ mod vf_mir_builder {
 
         fn encode_rvalue(
             tcx: TyCtxt<'tcx>,
+            req_defs: &mut RequiredDefs<'tcx>,
             rvalue: &mir::Rvalue<'tcx>,
             rvalue_cpn: rvalue_cpn::Builder<'_>,
         ) {
@@ -867,7 +1014,7 @@ mod vf_mir_builder {
             match rvalue {
                 mir::Rvalue::Use(operand) => {
                     let operand_cpn = rvalue_cpn.init_use();
-                    Self::encode_operand(tcx, operand, operand_cpn);
+                    Self::encode_operand(tcx, req_defs, operand, operand_cpn);
                 }
                 // [x; 32]
                 mir::Rvalue::Repeat(operand, ty_const) => todo!(),
@@ -882,9 +1029,9 @@ mod vf_mir_builder {
                     let bin_op_cpn = bin_op_data_cpn.reborrow().init_operator();
                     Self::encode_bin_op(*bin_op, bin_op_cpn);
                     let operandl_cpn = bin_op_data_cpn.reborrow().init_operandl();
-                    Self::encode_operand(tcx, operandl, operandl_cpn);
+                    Self::encode_operand(tcx, req_defs, operandl, operandl_cpn);
                     let operandr_cpn = bin_op_data_cpn.init_operandr();
-                    Self::encode_operand(tcx, operandr, operandr_cpn);
+                    Self::encode_operand(tcx, req_defs, operandr, operandr_cpn);
                 }
                 mir::Rvalue::CheckedBinaryOp(bin_op, box (operandl, operandr)) => todo!(),
                 mir::Rvalue::NullaryOp(null_op, ty) => todo!(),
@@ -922,17 +1069,19 @@ mod vf_mir_builder {
 
         fn encode_terminator(
             tcx: TyCtxt<'tcx>,
+            req_defs: &mut RequiredDefs<'tcx>,
             terminator: &mir::Terminator<'tcx>,
             mut terminator_cpn: terminator_cpn::Builder<'_>,
         ) {
             let src_info_cpn = terminator_cpn.reborrow().init_source_info();
             Self::encode_source_info(tcx, &terminator.source_info, src_info_cpn);
             let terminator_kind_cpn = terminator_cpn.init_kind();
-            Self::encode_terminator_kind(tcx, &terminator.kind, terminator_kind_cpn);
+            Self::encode_terminator_kind(tcx, req_defs, &terminator.kind, terminator_kind_cpn);
         }
 
         fn encode_terminator_kind(
             tcx: TyCtxt<'tcx>,
+            req_defs: &mut RequiredDefs<'tcx>,
             terminator_kind: &mir::TerminatorKind<'tcx>,
             mut terminator_kind_cpn: terminator_kind_cpn::Builder<'_>,
         ) {
@@ -949,6 +1098,7 @@ mod vf_mir_builder {
                     let switch_int_data_cpn = terminator_kind_cpn.init_switch_int();
                     Self::encode_switch_int_data(
                         tcx,
+                        req_defs,
                         discr,
                         switch_ty,
                         targets,
@@ -968,6 +1118,7 @@ mod vf_mir_builder {
                     let fn_call_data_cpn = terminator_kind_cpn.init_call();
                     Self::encode_fn_call_data(
                         tcx,
+                        req_defs,
                         func,
                         args,
                         destination,
@@ -983,15 +1134,16 @@ mod vf_mir_builder {
 
         fn encode_switch_int_data(
             tcx: TyCtxt<'tcx>,
+            req_defs: &mut RequiredDefs<'tcx>,
             discr: &mir::Operand<'tcx>,
             discr_ty: &ty::Ty<'tcx>,
             targets: &mir::terminator::SwitchTargets,
             mut switch_int_data_cpn: switch_int_data_cpn::Builder<'_>,
         ) {
             let discr_cpn = switch_int_data_cpn.reborrow().init_discr();
-            Self::encode_operand(tcx, discr, discr_cpn);
+            Self::encode_operand(tcx, req_defs, discr, discr_cpn);
             let discr_ty_cpn = switch_int_data_cpn.reborrow().init_discr_ty();
-            Self::encode_ty(tcx, discr_ty, discr_ty_cpn);
+            Self::encode_ty(tcx, req_defs, discr_ty, discr_ty_cpn);
             let targets_cpn = switch_int_data_cpn.init_targets();
             Self::encode_switch_targets(targets, targets_cpn);
         }
@@ -1028,6 +1180,7 @@ mod vf_mir_builder {
 
         fn encode_fn_call_data(
             tcx: TyCtxt<'tcx>,
+            req_defs: &mut RequiredDefs<'tcx>,
             func: &mir::Operand<'tcx>,
             args: &Vec<mir::Operand<'tcx>>,
             destination: &Option<(mir::Place<'tcx>, mir::BasicBlock)>,
@@ -1037,7 +1190,7 @@ mod vf_mir_builder {
             mut fn_call_data_cpn: fn_call_data_cpn::Builder<'_>,
         ) {
             let func_cpn = fn_call_data_cpn.reborrow().init_func();
-            Self::encode_operand(tcx, func, func_cpn);
+            Self::encode_operand(tcx, req_defs, func, func_cpn);
             // Todo @Nima: Are these checks necessary
             let ty = match func {
                 mir::Operand::Constant(box mir::Constant {
@@ -1063,7 +1216,7 @@ mod vf_mir_builder {
             let mut args_cpn = fn_call_data_cpn.reborrow().init_args(args_len);
             for (idx, arg) in args.iter().enumerate() {
                 let arg_cpn = args_cpn.reborrow().get(idx.try_into().unwrap());
-                Self::encode_operand(tcx, arg, arg_cpn);
+                Self::encode_operand(tcx, req_defs, arg, arg_cpn);
             }
 
             // Encode destination
@@ -1086,6 +1239,7 @@ mod vf_mir_builder {
 
         fn encode_operand(
             tcx: TyCtxt<'tcx>,
+            req_defs: &mut RequiredDefs<'tcx>,
             operand: &mir::Operand<'tcx>,
             operand_cpn: operand_cpn::Builder<'_>,
         ) {
@@ -1101,31 +1255,33 @@ mod vf_mir_builder {
                 }
                 mir::Operand::Constant(box constant) => {
                     let constant_cpn = operand_cpn.init_constant();
-                    Self::encode_constant(tcx, constant, constant_cpn);
+                    Self::encode_constant(tcx, req_defs, constant, constant_cpn);
                 }
             }
         }
 
         fn encode_constant(
             tcx: TyCtxt<'tcx>,
+            req_defs: &mut RequiredDefs<'tcx>,
             constant: &mir::Constant<'tcx>,
             mut constant_cpn: constant_cpn::Builder<'_>,
         ) {
             let span_data_cpn = constant_cpn.reborrow().init_span();
             Self::encode_span_data(tcx, &constant.span.data(), span_data_cpn);
             let literal_cpn = constant_cpn.init_literal();
-            Self::encode_constant_kind(tcx, &constant.literal, literal_cpn);
+            Self::encode_constant_kind(tcx, req_defs, &constant.literal, literal_cpn);
         }
 
         fn encode_constant_kind(
             tcx: TyCtxt<'tcx>,
+            req_defs: &mut RequiredDefs<'tcx>,
             constant_kind: &mir::ConstantKind<'tcx>,
             constant_kind_cpn: constant_kind_cpn::Builder<'_>,
         ) {
             match constant_kind {
                 mir::ConstantKind::Ty(ty_const) => {
                     let ty_const_cpn = constant_kind_cpn.init_ty();
-                    Self::encode_typed_constant(tcx, ty_const, ty_const_cpn);
+                    Self::encode_typed_constant(tcx, req_defs, ty_const, ty_const_cpn);
                 }
                 mir::ConstantKind::Val(const_val, ty) => todo!(),
             }
@@ -1133,12 +1289,13 @@ mod vf_mir_builder {
 
         fn encode_typed_constant(
             tcx: TyCtxt<'tcx>,
+            req_defs: &mut RequiredDefs<'tcx>,
             ty_const: &ty::Const<'tcx>,
             mut ty_const_cpn: ty_const_cpn::Builder<'_>,
         ) {
             debug!("Encoding typed constant {:?}", ty_const);
             let ty_cpn = ty_const_cpn.reborrow().init_ty();
-            Self::encode_ty(tcx, ty_const.ty, ty_cpn);
+            Self::encode_ty(tcx, req_defs, ty_const.ty, ty_cpn);
 
             let val_cpn = ty_const_cpn.init_val();
             Self::encode_const_kind(tcx, ty_const.ty, &ty_const.val, val_cpn);
