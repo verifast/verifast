@@ -1,7 +1,11 @@
 module VfMirStub = Vf_mir.Make (Capnp.BytesMessage)
-module UInt128Rd = VfMirStub.Reader.UInt128
-module OptionRd = VfMirStub.Reader.Option
+module UtilRd = VfMirStub.Reader.Util
 module VfMirRd = VfMirStub.Reader.VfMir
+
+(* Util *)
+module UInt128Rd = UtilRd.UInt128
+module OptionRd = UtilRd.Option
+module IndListRd = UtilRd.IndList
 
 (* Source Spans *)
 module SpanDataRd = VfMirStub.Reader.SpanData
@@ -57,3 +61,7 @@ module GenArgKindRd = GenArgRd.GenArgKind
 module RawPtrTyRd = TyRd.RawPtrTy
 module TyConstRd = TyRd.Const
 module TyConstKindRd = TyRd.ConstKind
+module AdtDefRd = TyRd.AdtDef
+module VariantDefRd = AdtDefRd.VariantDef
+module FieldDefRd = VariantDefRd.FieldDef
+module VisibilityRd = FieldDefRd.Visibility

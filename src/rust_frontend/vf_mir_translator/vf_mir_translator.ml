@@ -155,6 +155,7 @@ module Mir = struct
   }
 
   type debug_info = { id : Ast.loc; info : var_debug_info list }
+  type visibility = Public | Restricted | Invisible
 end
 
 module TrTyTuple = struct
@@ -254,6 +255,19 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let r = shift_left r 8 in
       let r = add r (of_uint64 l) in
       r
+
+    let rec ind_list_get_list (il_cpn : IndListRd.t) =
+      let open IndListRd in
+      match get il_cpn with
+      | Nil -> Ok []
+      | Cons cons_cpn ->
+          let open Cons in
+          let h_cpn = VfMirStub.Reader.of_pointer (h_get cons_cpn) in
+          let t_cpn = t_get cons_cpn in
+          let* t_cpn = ind_list_get_list t_cpn in
+          Ok (h_cpn :: t_cpn)
+      | Undefined _ ->
+          Error (`CapnpIndListGetList "Unknown inductive list constructor")
   end
 
   module AstDecls = Decls (struct
@@ -411,10 +425,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     Ok ty_info
 
+  let translate_adt_def_id (adt_def_id_cpn : AdtDefIdRd.t) =
+    AdtDefIdRd.name_get adt_def_id_cpn
+
   let translate_adt_ty (adt_ty_cpn : AdtTyRd.t) (loc : Ast.loc) =
     let open AdtTyRd in
     let id_cpn = id_get adt_ty_cpn in
-    let def_path = AdtDefIdRd.name_get id_cpn in
+    let def_path = translate_adt_def_id id_cpn in
     match def_path with
     | "std::alloc::Layout" ->
         let substs_cpn = substs_get_list adt_ty_cpn in
@@ -1283,6 +1300,81 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | DefKind.AssocFn -> failwith "Todo: MIR Body kind AssocFn"
     | _ -> Error (`TrBody "Unknown MIR Body kind")
 
+  let translate_visibility (vis_cpn : VisibilityRd.t) =
+    let open VisibilityRd in
+    match get vis_cpn with
+    | Public -> Ok Mir.Public
+    | Restricted -> Ok Mir.Restricted
+    | Invisible -> Ok Mir.Invisible
+    | Undefined _ -> Error (`TrVisibility "Unknown visibility kind")
+
+  let translate_field_def (fdef_cpn : FieldDefRd.t) =
+    let open FieldDefRd in
+    let name = name_get fdef_cpn in
+    let span_cpn = span_get fdef_cpn in
+    let* loc = translate_span_data span_cpn in
+    (* Todo @Nima: We are using the whole field definition span as the type span which should be corrected *)
+    let ty_cpn = ty_get fdef_cpn in
+    let* ty_info = translate_ty ty_cpn loc in
+    let vis_cpn = vis_get fdef_cpn in
+    let* vis = translate_visibility vis_cpn in
+    Ok (name, ty_info, vis, loc)
+
+  let translate_to_vf_field_def
+      ((name, ty_info, vis, loc) :
+        string * Mir.ty_info * Mir.visibility * Ast.loc) =
+    Ast.Field
+      ( loc,
+        Ast.Real (*ghostness*),
+        Mir.basic_type_of ty_info,
+        name,
+        Ast.Static (*method_binding*),
+        (* Currently, the plan is to have all fields Public as they are in C
+           and imposing constraints using separation logic *)
+        Ast.Public
+        (*visibility*),
+        true (*final*),
+        None (*expr option*) )
+
+  let translate_variant_def (vdef_cpn : VariantDefRd.t) =
+    let open VariantDefRd in
+    let fields_cpn = fields_get_list vdef_cpn in
+    let* fields = ListAux.try_map translate_field_def fields_cpn in
+    let fields = List.map translate_to_vf_field_def fields in
+    Ok fields
+
+  let translate_adt_def (adt_def_cpn : AdtDefRd.t) =
+    let open AdtDefRd in
+    let id_cpn = id_get adt_def_cpn in
+    let def_path = translate_adt_def_id id_cpn in
+    let name = TrName.translate_def_path def_path in
+    let variants_cpn = variants_get_list adt_def_cpn in
+    let* variants = ListAux.try_map translate_variant_def variants_cpn in
+    let span_cpn = span_get adt_def_cpn in
+    let* def_loc = translate_span_data span_cpn in
+    let kind_cpn = kind_get adt_def_cpn in
+    match AdtKind.get kind_cpn with
+    | StructKind ->
+        let* field_defs =
+          match variants with
+          | [ field_defs ] -> Ok field_defs
+          | _ -> Error (`TrAdtDef "Struct ADT kind should have one variant")
+        in
+        let struct_decl =
+          Ast.Struct
+            ( def_loc,
+              name,
+              Some
+                ( [] (*base_spec list*),
+                  field_defs (*field list*),
+                  false (*is polymorphic*) ),
+              [] (*struct_attr list*) )
+        in
+        Ok struct_decl
+    | EnumKind -> failwith "Todo: AdtDef::Enum"
+    | UnionKind -> failwith "Todo: AdtDef::Union"
+    | Undefined _ -> Error (`TrAdtDef "Unknown ADT kind")
+
   let translate_vf_mir (vf_mir_cpn : VfMirRd.t) =
     let job _ =
       let module HeadersAux = HeadersAux.Make (struct
@@ -1291,12 +1383,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let aux_headers_dir = Filename.dirname Sys.executable_name
         let verbosity = 0
       end) in
+      let adt_defs_cpn = VfMirRd.adt_defs_get vf_mir_cpn in
+      let* adt_defs_cpn = CapnpAux.ind_list_get_list adt_defs_cpn in
+      let* adt_defs = ListAux.try_map translate_adt_def adt_defs_cpn in
       let bodies_cpn = VfMirRd.bodies_get_list vf_mir_cpn in
       let* bodies_and_dbg_infos = ListAux.try_map translate_body bodies_cpn in
       let body_decls, debug_infos = List.split bodies_and_dbg_infos in
       let debug_infos = VF0.DbgInfoRustFe debug_infos in
       let decls = AstDecls.decls () in
-      let decls = decls @ body_decls in
+      let decls = decls @ adt_defs @ body_decls in
       (* Todo @Nima: we should add necessary inclusions from Rust side *)
       let _ = Headers.add_decl "rust/std/alloc.h" in
       let header_names = Headers.decls () in

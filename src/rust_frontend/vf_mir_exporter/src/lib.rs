@@ -56,6 +56,9 @@ use tracing::{debug, error, info, trace, Level};
 pub fn run_compiler() -> i32 {
     rustc_driver::catch_with_exit_code(move || {
         let mut rustc_args: Vec<_> = std::env::args().collect();
+        // To also compile crates without a main function
+        // Todo @Nima: Should it not be passed from VeriFast?
+        rustc_args.push("--crate-type=lib".to_owned());
         // We must pass -Zpolonius so that the borrowck information is computed.
         rustc_args.push("-Zpolonius".to_owned());
         // To have MIR dump annotated with lifetimes
@@ -413,8 +416,11 @@ mod vf_mir_builder {
                 let variant_cpn = variants_cpn.reborrow().get(idx.try_into().unwrap());
                 Self::encode_variant_def(tcx, req_defs, variant, variant_cpn);
             }
-            let kind_cpn = adt_def_cpn.init_kind();
+            let kind_cpn = adt_def_cpn.reborrow().init_kind();
             Self::encode_adt_kind(adt_def.adt_kind(), kind_cpn);
+            let span_cpn = adt_def_cpn.init_span();
+            let span = tcx.def_span(adt_def.did);
+            Self::encode_span_data(tcx, &span.data(), span_cpn);
         }
 
         fn encode_adt_kind(adt_kind: ty::AdtKind, mut adt_kind_cpn: adt_kind_cpn::Builder<'_>) {
@@ -455,8 +461,11 @@ mod vf_mir_builder {
             let ty_cpn = fdef_cpn.reborrow().init_ty();
             let ty = tcx.type_of(fdef.did);
             Self::encode_ty(tcx, req_defs, &ty, ty_cpn);
-            let vis_cpn = fdef_cpn.init_vis();
+            let vis_cpn = fdef_cpn.reborrow().init_vis();
             Self::encode_visibility(fdef.vis, vis_cpn);
+            let span_cpn = fdef_cpn.init_span();
+            let span = tcx.def_span(fdef.did);
+            Self::encode_span_data(tcx, &span.data(), span_cpn);
         }
 
         fn encode_visibility(vis: ty::Visibility, mut vis_cpn: visibility_cpn::Builder<'_>) {

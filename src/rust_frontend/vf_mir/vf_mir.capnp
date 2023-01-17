@@ -137,6 +137,7 @@ struct Ty {
                 name @0: Text;
                 ty @1: Ty;
                 vis @2: Visibility;
+                span @3: SpanData;
             }
 
             #name @0: Text;
@@ -155,6 +156,7 @@ struct Ty {
         id @0: AdtDefId;
         variants @1: List(VariantDef);
         kind @2: AdtKind;
+        span @3: SpanData;
     }
 
     struct AdtTy {
