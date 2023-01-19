@@ -7,14 +7,13 @@
  * TODO @Nima:
  * 1- Is it really necessary to register queries? read mir pretty printer.
  * The mir pretty printer uses optimized_mir/promoted_mir which are lower level generated mir
- * 2- Where are the data type definitions
- * 3- Possible alternative way to get mir: tcx.mir_keys() and then convert the LocalDefId to DefId and
+ * 2- Possible alternative way to get mir: tcx.mir_keys() and then convert the LocalDefId to DefId and
  * just call tcx.optimized_mir(def_id). These all should happen in the same place compiler may call
  * mir::pretty::write_mir_pretty(...)
  */
 
 /***
- * This example is written based on "rust/src/test/run-make-fulldeps/obtain-borrowck"
+ * This program is written based on "rust/src/test/run-make-fulldeps/obtain-borrowck"
  * This program implements a rustc driver that retrieves MIR bodies with
  * borrowck information. This cannot be done in a straightforward way because
  * `get_body_with_borrowck_facts`–the function for retrieving a MIR body with
@@ -239,7 +238,6 @@ mod vf_mir_builder {
     use crate::vf_mir_capnp::span_data as span_data_cpn;
     use crate::vf_mir_capnp::ty as ty_cpn;
     use crate::vf_mir_capnp::vf_mir as vf_mir_cpn;
-    use adt_def_cpn::adt_kind as adt_kind_cpn;
     use adt_def_cpn::variant_def as variant_def_cpn;
     use basic_block_cpn::operand as operand_cpn;
     use basic_block_cpn::rvalue as rvalue_cpn;
@@ -281,6 +279,7 @@ mod vf_mir_builder {
     use terminator_kind_cpn::switch_int_data as switch_int_data_cpn;
     use tracing::{debug, trace};
     use ty_cpn::adt_def as adt_def_cpn;
+    use ty_cpn::adt_kind as adt_kind_cpn;
     use ty_cpn::adt_ty as adt_ty_cpn;
     use ty_cpn::const_ as ty_const_cpn;
     use ty_cpn::const_kind as const_kind_cpn;
@@ -827,11 +826,13 @@ mod vf_mir_builder {
                 "The number of generic args of {:?} cannot be stored in a Capnp message",
                 adt_def
             ));
-            let mut substs_cpn = adt_ty_cpn.init_substs(len);
+            let mut substs_cpn = adt_ty_cpn.reborrow().init_substs(len);
             for (idx, subst) in substs.iter().enumerate() {
                 let subst_cpn = substs_cpn.reborrow().get(idx.try_into().unwrap());
                 Self::encode_gen_arg(tcx, req_defs, &subst, subst_cpn);
             }
+            let kind_cpn = adt_ty_cpn.init_kind();
+            Self::encode_adt_kind(adt_def.adt_kind(), kind_cpn);
             // Definitions we use should be encoded later
             req_defs.add_adt(adt_def);
         }

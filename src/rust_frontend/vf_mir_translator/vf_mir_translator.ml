@@ -432,22 +432,36 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let open AdtTyRd in
     let id_cpn = id_get adt_ty_cpn in
     let def_path = translate_adt_def_id id_cpn in
-    match def_path with
-    | "std::alloc::Layout" ->
-        let substs_cpn = substs_get_list adt_ty_cpn in
-        if not @@ ListAux.is_empty @@ substs_cpn then
-          Error (`TrAdtTy (def_path ^ " does not have any generic parameter"))
-        else
-          let ty_info =
-            Mir.TyInfoBasic
-              {
-                vf_ty =
-                  Ast.ManifestTypeExpr
-                    (loc, Ast.Int (Ast.Unsigned, int_size_rank));
-              }
-          in
-          Ok ty_info
-    | _ -> failwith "Todo: Unsupported Adt"
+    let name = TrName.translate_def_path def_path in
+    let kind_cpn = kind_get adt_ty_cpn in
+    let kind = AdtKindRd.get kind_cpn in
+    let substs_cpn = substs_get_list adt_ty_cpn in
+    match kind with
+    | StructKind -> (
+        match def_path with
+        | "std::alloc::Layout" ->
+            if not @@ ListAux.is_empty @@ substs_cpn then
+              Error
+                (`TrAdtTy (def_path ^ " does not have any generic parameter"))
+            else
+              let ty_info =
+                Mir.TyInfoBasic
+                  {
+                    vf_ty =
+                      Ast.ManifestTypeExpr
+                        (loc, Ast.Int (Ast.Unsigned, int_size_rank));
+                  }
+              in
+              Ok ty_info
+        | _ ->
+            let ty_info =
+              Mir.TyInfoBasic
+                { vf_ty = Ast.ManifestTypeExpr (loc, Ast.StructType name) }
+            in
+            Ok ty_info)
+    | EnumKind -> failwith "Todo: AdtTy::Enum"
+    | UnionKind -> failwith "Todo: AdtTy::Union"
+    | Undefined _ -> Error (`TrAdtTy "Unknown ADT kind")
 
   let translate_tuple_ty (substs_cpn : GenArgRd.t list) (loc : Ast.loc) =
     if not @@ ListAux.is_empty @@ substs_cpn then
@@ -518,6 +532,21 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     Ok ty_info
 
+  and translate_ref_ty (ref_ty_cpn : RefTyRd.t) (loc : Ast.loc) =
+    let open RefTyRd in
+    let region_cpn = region_get ref_ty_cpn in
+    let mut_cpn = mutability_get ref_ty_cpn in
+    let ty_cpn = ty_get ref_ty_cpn in
+    let* pointee_ty_info = translate_ty ty_cpn loc in
+    let (Ast.ManifestTypeExpr ((*loc*) _, pointee_ty)) =
+      Mir.basic_type_of pointee_ty_info
+    in
+    let ty_info =
+      Mir.TyInfoBasic
+        { vf_ty = Ast.ManifestTypeExpr (loc, Ast.PtrType pointee_ty) }
+    in
+    Ok ty_info
+
   and translate_ty (ty_cpn : TyRd.t) (loc : Ast.loc) =
     let open TyRd in
     let kind_cpn = kind_get ty_cpn in
@@ -528,6 +557,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | UInt u_int_ty_cpn -> translate_u_int_ty u_int_ty_cpn loc
     | Adt adt_ty_cpn -> translate_adt_ty adt_ty_cpn loc
     | RawPtr raw_ptr_ty_cpn -> translate_raw_ptr_ty raw_ptr_ty_cpn loc
+    | Ref ref_ty_cpn -> translate_ref_ty ref_ty_cpn loc
     | FnDef fn_def_ty_cpn -> translate_fn_def_ty fn_def_ty_cpn loc
     | Never ->
         Ok
@@ -1170,29 +1200,44 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   end
   (* TrBody *)
 
+  (** makes the mappings used for substituting the MIR level local declaration ids with names closer to variables surface name *)
   let make_var_id_name_maps (vdis : Mir.var_debug_info list) =
     let make_var_id_name_entries surf_names_set id surf_name =
-      let surf_names_set, internal_name =
-        match List.find_opt (fun (n, _) -> n = surf_name) surf_names_set with
-        | None ->
-            let surf_names_set = (surf_name, ref 0) :: surf_names_set in
-            (* We still substitute this id with an internal name to prevent name conflicts with ghost variable names *)
-            let internal_name = TrName.tag_internal surf_name in
-            (surf_names_set, internal_name)
-        | Some (_, counter) ->
-            (* This name is shadowed *)
-            let internal_name =
-              TrName.tag_internal surf_name ^ string_of_int !counter
+      match List.find_opt (fun (n, _) -> n = surf_name) surf_names_set with
+      | None ->
+          let surf_names_set = (surf_name, ref 0) :: surf_names_set in
+          let env_entry_opt : VF0.var_debug_info option = None in
+          let trs_entry : var_id_trs_entry =
+            { id; internal_name = surf_name }
+          in
+          (env_entry_opt, trs_entry, surf_names_set)
+      | Some (_, counter) ->
+          (* This name is shadowed or is in a nested scope *)
+          (* Todo @Nima: Ghost statements will refer to surface variable names.
+             Since VeriFast does not support shadowing, shadowed variables either need to have different internal names or
+             be in nested scopes. The current code is based on the former approach but it lacks substituting ghost statements variable names
+             with their corresponding internal names. The alternative solution to the whole problem of shadowed variable names and scoped variable names
+             is to use nested scopes which means adding nested scopes to the surface code scopes to handle shadowed names. *)
+          (* Note @Nima: To support shadowing for ghost variables will be confusing for the user. example:
+             ``
+             let x = 42;
+             //@ ghost x = 43;
+             let y = x + 2;
+             ``
+             The third `x` refers to the first x but the code might be confusing for the user *)
+          failwith "Todo: Shadowed variable names";
+          let internal_name =
+            TrName.tag_internal surf_name ^ string_of_int !counter
+          in
+          if !counter = Int.max_int then
+            failwith "Shadowed var name counter ovf"
+          else
+            let _ = counter := succ !counter in
+            let env_entry_opt : VF0.var_debug_info option =
+              Some { internal_name; surf_name }
             in
-            if !counter = Int.max_int then
-              failwith "Shadowed var name counter ovf"
-            else
-              let _ = counter := succ !counter in
-              (surf_names_set, internal_name)
-      in
-      let env_entry : VF0.var_debug_info = { internal_name; surf_name } in
-      let trs_entry : var_id_trs_entry = { id; internal_name } in
-      (env_entry, trs_entry, surf_names_set)
+            let trs_entry : var_id_trs_entry = { id; internal_name } in
+            (env_entry_opt, trs_entry, surf_names_set)
     in
     let f_aux (env_map, trs_map, surf_names_set)
         ({ internal; surf_name } : Mir.var_debug_info) =
@@ -1201,10 +1246,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           (* Todo @Nima: We do not want to un-substitute the constant. We might just want to show the constant name and value in the Store in the future *)
           (env_map, trs_map, surf_names_set)
       | Mir.VdiiPlace { id } ->
-          let env_entry, trs_entry, surf_names_set =
+          let env_entry_opt, trs_entry, surf_names_set =
             make_var_id_name_entries surf_names_set id surf_name
           in
-          (env_entry :: env_map, trs_entry :: trs_map, surf_names_set)
+          let env_map =
+            match env_entry_opt with
+            | None -> env_map
+            | Some env_entry -> env_entry :: env_map
+          in
+          (env_map, trs_entry :: trs_map, surf_names_set)
     in
     let env_map, trs_map, surf_names_set =
       List.fold_left f_aux ([], [], []) vdis
@@ -1328,7 +1378,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         Ast.Real (*ghostness*),
         Mir.basic_type_of ty_info,
         name,
-        Ast.Static (*method_binding*),
+        Ast.Instance (*method_binding*),
         (* Currently, the plan is to have all fields Public as they are in C
            and imposing constraints using separation logic *)
         Ast.Public
@@ -1353,7 +1403,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let span_cpn = span_get adt_def_cpn in
     let* def_loc = translate_span_data span_cpn in
     let kind_cpn = kind_get adt_def_cpn in
-    match AdtKind.get kind_cpn with
+    match AdtKindRd.get kind_cpn with
     | StructKind ->
         let* field_defs =
           match variants with

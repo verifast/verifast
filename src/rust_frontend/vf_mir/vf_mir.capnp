@@ -123,6 +123,14 @@ struct Ty {
         name @0: Text;
     }
 
+    struct AdtKind {
+        union {
+            structKind @0: Void;
+            enumKind @1: Void;
+            unionKind @2: Void;
+        }
+    }
+
     struct AdtDef {
         struct VariantDef {
             struct FieldDef {
@@ -145,14 +153,6 @@ struct Ty {
             fields @0: List(FieldDef);
         }
 
-        struct AdtKind {
-            union {
-                structKind @0: Void;
-                enumKind @1: Void;
-                unionKind @2: Void;
-            }
-        }
-
         id @0: AdtDefId;
         variants @1: List(VariantDef);
         kind @2: AdtKind;
@@ -161,7 +161,8 @@ struct Ty {
 
     struct AdtTy {
         id @0: AdtDefId;
-        substs @1: List(GenArg);
+        kind @1: AdtKind;
+        substs @2: List(GenArg);
     }
 
     struct FnDefId {
