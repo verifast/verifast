@@ -12,7 +12,7 @@ cd examples
   verifast -shared uniqueness.c
   verifast -read_options_from_source_file unions.c
   verifast unions2.c
-  verifast -assume_no_subobject_provenance unions2_no_subobj_prov.c
+  verifast -fno-strict-aliasing -assume_no_subobject_provenance unions2_no_subobj_prov.c
   cd busywaiting
     verifast -c bounded_fifo.c
     cd clhlock
@@ -91,7 +91,7 @@ cd examples
     verifast_both -c gotsmanlock.c
     verifast_both -c spinlock.c
     verifast -c -target 32bit concurrentqueue.c
-    verifast -c -prover z3v4.5 -target 32bit -assume_no_provenance concurrentstack.c
+    verifast -c -prover z3v4.5 -target 32bit -fno-strict-aliasing -assume_no_provenance concurrentstack.c
     verifast -c concurrentstackclient.c
     verifast -target 32bit -allow_assume threading.o atomics.o concurrentqueue.c concurrentqueue_client.c
     verifast_both -c atomic_integer.c
@@ -111,7 +111,7 @@ cd examples
     cd ..
   cd ..
   cd tso
-    verifast_both -c -assume_no_subobject_provenance cvm0.c
+    verifast_both -c -fno-strict-aliasing -assume_no_subobject_provenance cvm0.c
     verifast_both -c lock.c
     verifast_both -c -disable_overflow_check prodcons.c
   cd ..
@@ -144,13 +144,13 @@ cd examples
   verifast_both -allow_assume -disable_overflow_check dyncode.c
   verifast_both enums.c
   verifast_both -c equalsmap.c
-  verifast_both -disable_overflow_check -assume_no_subobject_provenance expr.c
+  verifast_both -disable_overflow_check -fno-strict-aliasing -assume_no_subobject_provenance expr.c
   cd fm2012
     mysh < fm2012.mysh
   cd ..
   verifast_both -disable_overflow_check -c fractions-counting.c
-  verifast_both -disable_overflow_check -c -assume_no_subobject_provenance gcl0.c
-  verifast_both -disable_overflow_check -c -assume_no_subobject_provenance gcl.c
+  verifast_both -disable_overflow_check -c -fno-strict-aliasing -assume_no_subobject_provenance gcl0.c
+  verifast_both -disable_overflow_check -c -fno-strict-aliasing -assume_no_subobject_provenance gcl.c
   verifast_both ghost_field.c
   verifast_both -disable_overflow_check globals.c
   verifast_both -disable_overflow_check global_points_to_syntax.c
@@ -221,7 +221,7 @@ cd examples
   verifast_both -target 32bit -c -disable_overflow_check quicksort.c
   verifast_both -c tokenizer_test.c
   verifast_both -c truncating.c
-  verifast_both -disable_overflow_check stringBuffers.c tokenizer.c ghostlist.o -assume_no_subobject_provenance rcl.c
+  verifast_both -disable_overflow_check stringBuffers.c tokenizer.c ghostlist.o -fno-strict-aliasing -assume_no_subobject_provenance rcl.c
   verifast_both reallittest.c
   verifast_both -disable_overflow_check ref_points_to_syntax.c
   cd reduced_annotations
@@ -399,7 +399,7 @@ cd examples
   verifast_both -c void_ignore.c
   cd sizeof
     verifast_both -c -allow_should_fail struct.c
-    verifast_both -c -assume_no_subobject_provenance packed.c
+    verifast_both -c -fno-strict-aliasing -assume_no_subobject_provenance packed.c
   cd ..
 cd ..
 cd tutorial_solutions
@@ -445,6 +445,7 @@ cd tutorial_solutions
   verifast_both -target 32bit students.c
 cd ..
 cd tests
+  verifast -c -allow_should_fail effective_types.c
   verifast -c mul_distrib.c
   verifast -c -allow_should_fail alloc_zero.c
   verifast -c malloc_integers_.c

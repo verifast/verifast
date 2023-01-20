@@ -1535,7 +1535,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         produce_array_chunk h env false addr (mk_char_list_of_c_string elemCount s) elemCount
       | (UnionType _ | StructType _ | StaticArrayType (_, _)), Expr (InitializerList (ll, es)) ->
         let rec iter h env i es =
-          let addr = mk_ptr_add addr (ctxt#mk_mul (ctxt#mk_intlit i) elemSize) in
+          let addr = mk_ptr_add_ l addr (ctxt#mk_intlit i) elemTp in
           match es with
             [] ->
             produce_char_array_chunk h env addr (elemCount - i)
@@ -2203,7 +2203,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match w with
         AddressOf (la, WReadUnionMember (lr, wr, unionName, memberIndex, memberName, memberType, isActivating)) ->
         eval_h_core_and_activate_union_members readonly h env wr $. fun h env target ->
-        let vp = mk_union_variant_ptr target memberIndex in
+        let vp = mk_union_variant_ptr target unionName memberIndex in
         if isActivating then
           let pats = [TermPat target; TermPat (sizeof l memberType); dummypat] in
           consume_chunk rules h [] [] [] l (chars__pred_symb(), true) [] real_unit real_unit_pat (Some 2) pats $. fun _ h _ [_; _; cs] _ _ _ _ ->
@@ -2324,7 +2324,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         has_heap_effects();
         if pure then static_error l "Cannot write in a pure context." None;
         let consume_elem () =
-          let target = mk_ptr_add arr (ctxt#mk_mul i (sizeof l elem_tp)) in
+          let target = mk_ptr_add_ l arr i elem_tp in
           consume_points_to_chunk_ rules h [] [] [] l elem_tp real_unit real_unit_pat target dummypat true $. fun _ h _ _ _ _ _ ->
           produce_points_to_chunk l h elem_tp real_unit target value $. fun h ->
           cont h env

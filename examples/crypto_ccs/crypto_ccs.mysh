@@ -14,7 +14,7 @@ cd protocols
   verify_crypto -I ../crypto_ccs -allow_assume pthread.o ../libann_polarssl.dll.vfmanifest hmac_then_enc/hmac_then_enc.c hmac_then_enc/main_app.c
   verify_crypto -I ../crypto_ccs -allow_assume pthread.o ../libann_polarssl.dll.vfmanifest enc_and_hmac/enc_and_hmac.c enc_and_hmac/main_app.c
   verify_crypto -I ../crypto_ccs -allow_assume pthread.o ../libann_polarssl.dll.vfmanifest auth_enc/auth_enc.c auth_enc/main_app.c
-  verify_crypto -I ../crypto_ccs -allow_assume pthread.o ../libann_polarssl.dll.vfmanifest sign/sign.c sign/main_app.c
+  verify_crypto -fno-strict-aliasing -I ../crypto_ccs -allow_assume pthread.o ../libann_polarssl.dll.vfmanifest sign/sign.c sign/main_app.c
   verify_crypto -I ../crypto_ccs -allow_assume pthread.o ../libann_polarssl.dll.vfmanifest yahalom/yahalom.c yahalom/main_app.c
   verify_crypto -I ../crypto_ccs -allow_assume pthread.o ../libann_polarssl.dll.vfmanifest nsl/nsl.c nsl/main_app.c
 cd ..
@@ -22,7 +22,7 @@ cd ..
 begin_sequential
 
 cd symbolic_model
-  verify_crypto -I ../crypto_ccs -I ../annotated_api/ -allow_assume -shared -emit_dll_vfmanifest -emit_dll_vfmanifest_as symbolic.dll.vfmanifest ../libann_polarssl.so src/general.c src/debug.c src/item.c src/item_tags.c src/well_formed.c src/item_constraints.c src/serialization.c src/deserialization.c src/invariants.c src/key_register.c src/data_item.c src/pair_item.c src/nonce_item.c src/hash_item.c src/key_item.c src/hmac_item.c src/symmetric_encrypted_item.c src/asymmetric_encrypted_item.c src/asymmetric_signature_item.c src/asymmetric_authenticated_encryption.c src/principal_ids.c src/network.c src/symbolic.c src/attacker.c
+  verify_crypto -fno-strict-aliasing -I ../crypto_ccs -I ../annotated_api/ -allow_assume -shared -emit_dll_vfmanifest -emit_dll_vfmanifest_as symbolic.dll.vfmanifest ../libann_polarssl.so src/general.c src/debug.c src/item.c src/item_tags.c src/well_formed.c src/item_constraints.c src/serialization.c src/deserialization.c src/invariants.c src/key_register.c src/data_item.c src/pair_item.c src/nonce_item.c src/hash_item.c src/key_item.c src/hmac_item.c src/symmetric_encrypted_item.c src/asymmetric_encrypted_item.c src/asymmetric_signature_item.c src/asymmetric_authenticated_encryption.c src/principal_ids.c src/network.c src/symbolic.c src/attacker.c
   cd protocols
 
     begin_parallel

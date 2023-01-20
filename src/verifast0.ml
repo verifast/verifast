@@ -151,6 +151,7 @@ let bases_constructed_pred_name sn = sn ^ "_bases_constructed"
 type _ vfparam =
   Vfparam_disable_overflow_check: bool vfparam
 | Vfparam_fwrapv: bool vfparam (* GCC's -fwrapv flag: signed integer arithmetic wraps around *)
+| Vfparam_fno_strict_aliasing: bool vfparam (* GCC's -fno-strict-aliasing flag; allows accessing an object of type T1 through a pointer of type T2 even if T1 != T2 *)
 | Vfparam_assume_left_to_right_evaluation: bool vfparam
 | Vfparam_assume_no_provenance: bool vfparam
 | Vfparam_assume_no_subobject_provenance: bool vfparam
@@ -166,6 +167,7 @@ let cast_vfarg: type t1 t2. t1 vfparam -> t1 -> t2 vfparam -> t2 option = fun p0
   match p0, p with
     Vfparam_disable_overflow_check, Vfparam_disable_overflow_check -> Some a0
   | Vfparam_fwrapv, Vfparam_fwrapv -> Some a0
+  | Vfparam_fno_strict_aliasing, Vfparam_fno_strict_aliasing -> Some a0
   | Vfparam_assume_left_to_right_evaluation, Vfparam_assume_left_to_right_evaluation -> Some a0
   | Vfparam_assume_no_provenance, Vfparam_assume_no_provenance -> Some a0
   | Vfparam_assume_no_subobject_provenance, Vfparam_assume_no_subobject_provenance -> Some a0
@@ -190,6 +192,7 @@ let path_list_param = ParsedParam ([], (fun ?basePath x -> [match basePath with 
 let vfparam_info_of: type a. a vfparam -> a vfparam_info = function
   Vfparam_disable_overflow_check -> BoolParam
 | Vfparam_fwrapv -> BoolParam
+| Vfparam_fno_strict_aliasing -> BoolParam
 | Vfparam_assume_left_to_right_evaluation -> BoolParam
 | Vfparam_assume_no_provenance -> BoolParam
 | Vfparam_assume_no_subobject_provenance -> BoolParam
@@ -215,6 +218,7 @@ type boxed_vfparam = Vfparam: 'a vfparam -> boxed_vfparam
 let vfparams = [
   "disable_overflow_check", (Vfparam Vfparam_disable_overflow_check, " ");
   "fwrapv", (Vfparam Vfparam_fwrapv, "allow truncating signed integer arithmetic (corresponds to GCC's -fwrapv flag)");
+  "fno-strict-aliasing", (Vfparam Vfparam_fno_strict_aliasing, "Allow accessing an object of type T1 through an lvalue of type T2 (corresponds to GCC's -fno-strict-aliasing flag)");
   "assume_left_to_right_evaluation", (Vfparam Vfparam_assume_left_to_right_evaluation, "Disable checks related to C's unspecified evaluation order and sequencing rules");
   "assume_no_provenance", (Vfparam Vfparam_assume_no_provenance, "Disregard pointer provenance. This is unsound, even when compiling with -O0!");
   "assume_no_subobject_provenance", (Vfparam Vfparam_assume_no_subobject_provenance, "Assume the compiler's alias analysis ignores subobject provenance. CompCert ignores subobject provenance, and so, it seems, do GCC and Clang (last time I checked)");

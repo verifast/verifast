@@ -73,6 +73,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let disable_overflow_check = Vfbindings.get Vfparam_disable_overflow_check vfbindings
   let fwrapv = Vfbindings.get Vfparam_fwrapv vfbindings
+  let fno_strict_aliasing = Vfbindings.get Vfparam_fno_strict_aliasing vfbindings
   let assume_left_to_right_evaluation = Vfbindings.get Vfparam_assume_left_to_right_evaluation vfbindings
   let assume_no_provenance = Vfbindings.get Vfparam_assume_no_provenance vfbindings
   let assume_no_subobject_provenance = Vfbindings.get Vfparam_assume_no_subobject_provenance vfbindings
@@ -82,14 +83,17 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let define_macros = Vfbindings.get Vfparam_define_macros vfbindings
   let include_paths = Vfbindings.get Vfparam_include_paths vfbindings
 
+  let () =
+    if assume_no_subobject_provenance && not fno_strict_aliasing then
+      static_error (Lexed ((path, 1, 1), (path, 1, 1))) "Command-line option -assume_no_subobject_provenance is allowed only in combination with -fno_strict_aliasing" None;
+    if assume_no_provenance && not fno_strict_aliasing then
+      static_error (Lexed ((path, 1, 1), (path, 1, 1))) "Command-line option -assume_no_provenance is allowed only in combination with -fno_strict_aliasing" None
+
   let assume_left_to_right_evaluation = assume_left_to_right_evaluation || language <> CLang
 
   let {reportRange; reportUseSite; reportExecutionForest; reportStmt; reportStmtExec; reportDirective} = callbacks
 
-  let type_info_type = 
-    match dialect with 
-    | Some Cxx -> RefType (StructType "std::type_info")
-    | _ -> PtrType Void
+  let type_info_type = RefType (StructType "std::type_info")
 
   let reportMacroCall l0u l0d =
     reportUseSite DeclKind_Macro l0d l0u
@@ -5360,7 +5364,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   | Int (Unsigned, LongLongRank) -> ullong_typeid_term
   | Int (Unsigned, PtrRank) -> uintptr_typeid_term
   | Int (Unsigned, FixedWidthRank k) -> fst exact_width_integer_typeid_terms.(k)
-  | PtrType _ -> pointer_typeid_term
+  | PtrType _ | StaticArrayType (_, _) -> pointer_typeid_term
   | Bool -> bool_typeid_term
   | Float -> float_typeid_term
   | Double -> double_typeid_term
@@ -5375,6 +5379,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let pointer_ctor_symb = lazy_purefuncsymb "pointer_ctor"
   let ptr_add_symb = lazy_purefuncsymb "ptr_add"
+  let ptr_add__symb = lazy_purefuncsymb "ptr_add_"
   let field_ptr_symb = lazy_purefuncsymb "field_ptr"
   let union_variant_ptr_symb = lazy_purefuncsymb "union_variant_ptr"
   let null_pointer_provenance_symb = lazy_purefuncsymb "null_pointer_provenance"
@@ -5386,33 +5391,72 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match language with
       Java -> fun () -> int_zero_term
     | _ -> fun () -> snd (null_pointer_symb ())
+  let has_type_symb = lazy_purefuncsymb "has_type"
 
   let mk_ptr_add p off = mk_app (ptr_add_symb ()) [p; off]
-  let mk_field_ptr p off = mk_app (field_ptr_symb ()) [p; off]
-  let mk_union_variant_ptr p idx = mk_app (union_variant_ptr_symb ()) [p; ctxt#mk_intlit idx]
+  let rec mk_ptr_add_ l p off elemType =
+    match elemType with
+      Void|Int (_, CharRank) ->
+      mk_app (ptr_add_symb ()) [p; off]
+    | StaticArrayType (elemTp, elemCount) ->
+      mk_ptr_add_ l p (ctxt#mk_mul off (ctxt#mk_intlit elemCount)) elemTp
+    | _ ->
+      mk_app (ptr_add__symb ()) [p; off; typeid_of l elemType]
+  let mk_field_ptr p structTypeid off = mk_app (field_ptr_symb ()) [p; structTypeid; off]
+  let mk_union_variant_ptr p unionTypeName idx =
+    let (_, _, unionTypeid) = List.assoc unionTypeName unionmap in
+    mk_app (union_variant_ptr_symb ()) [p; unionTypeid; ctxt#mk_intlit idx]
   let mk_pointer_within_limits p = mk_app (pointer_within_limits_symb ()) [p]
   let mk_object_pointer_within_limits p size = mk_app (object_pointer_within_limits_symb ()) [p; size]
   let mk_field_pointer_within_limits p off = mk_app (field_pointer_within_limits_symb ()) [p; off]
+  let mk_has_type p typeid = mk_app (has_type_symb ()) [p; typeid]
+
+  let () =
+    structmap1 |> List.iter begin function
+      (sn, (_, Some (_, fmap, _), _, _, structTypeid)) ->
+      fmap |> List.iter begin function (f, (l, Real, t, Some offset, _)) ->
+        ctxt#begin_formal;
+        let p = ctxt#mk_bound 0 ctxt#type_inductive in
+        let field_has_type = mk_has_type (mk_field_ptr p structTypeid offset) (typeid_of l t) in
+        let struct_has_type = mk_has_type p structTypeid in
+        let eq = ctxt#mk_eq field_has_type struct_has_type in
+        ctxt#end_formal;
+        ctxt#assume_forall ("has_type_field_ptr_" ^ sn ^ "_" ^ f) [field_has_type] [ctxt#type_inductive] eq
+      | _ -> ()
+      end
+    | _ -> ()
+    end
+
+  if fno_strict_aliasing && List.mem_assoc "has_type" purefuncmap then begin
+    ctxt#begin_formal;
+    let p = ctxt#mk_bound 0 ctxt#type_inductive in
+    let t = ctxt#mk_bound 1 ctxt#type_inductive in
+    let hasType = mk_has_type p t in
+    ctxt#end_formal;
+    ctxt#assume_forall "all_has_type" [hasType] [ctxt#type_inductive; ctxt#type_inductive] hasType
+  end
 
   if assume_no_subobject_provenance && List.mem_assoc "field_ptr" purefuncmap then begin
     begin
     ctxt#begin_formal;
     let pr = ctxt#mk_bound 0 ctxt#type_inductive in
-    let addr = ctxt#mk_bound 1 ctxt#type_int in
-    let fp = mk_field_ptr pr addr in
+    let structTypeid = ctxt#mk_bound 1 ctxt#type_inductive in
+    let addr = ctxt#mk_bound 2 ctxt#type_int in
+    let fp = mk_field_ptr pr structTypeid addr in
     let eq = ctxt#mk_eq fp (mk_ptr_add pr addr) in
     ctxt#end_formal;
-    ctxt#assume_forall "field_ptr_eq_ptr_add" [fp] [ctxt#type_inductive; ctxt#type_int] eq
+    ctxt#assume_forall "field_ptr_eq_ptr_add" [fp] [ctxt#type_inductive; ctxt#type_inductive; ctxt#type_int] eq
     end;
 
     begin
     ctxt#begin_formal;
     let p = ctxt#mk_bound 0 ctxt#type_inductive in
-    let i = ctxt#mk_bound 1 ctxt#type_int in
-    let vp = mk_app (union_variant_ptr_symb ()) [p; i] in
+    let tid = ctxt#mk_bound 1 ctxt#type_inductive in
+    let i = ctxt#mk_bound 2 ctxt#type_int in
+    let vp = mk_app (union_variant_ptr_symb ()) [p; tid; i] in
     let eq = ctxt#mk_eq vp p in
     ctxt#end_formal;
-    ctxt#assume_forall "union_variant_ptr_eq_ptr" [vp] [ctxt#type_inductive; ctxt#type_int] eq
+    ctxt#assume_forall "union_variant_ptr_eq_ptr" [vp] [ctxt#type_inductive; ctxt#type_inductive; ctxt#type_int] eq
     end
   end
 
@@ -6353,42 +6397,56 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     expr_iter (check_ghost_nonrec ghostenv) e
   
   let () =
-    unionmap1 |> List.iter begin fun (un, (l, body_opt, _)) ->
+    unionmap1 |> List.iter begin fun (un, (l, body_opt, unionTypeid)) ->
       match body_opt with
         None -> ()
       | Some (fds, s) ->
-        fds |> List.iter begin fun (f, (lf, tp)) ->
-          ctxt#assert_term (ctxt#mk_le (sizeof l tp) s)
+        fds |> List.iteri begin fun i (f, (lf, tp)) ->
+          ctxt#assert_term (ctxt#mk_le (sizeof l tp) s);
+          ctxt#begin_formal;
+          let p = ctxt#mk_bound 0 ctxt#type_inductive in
+          let member_has_type = mk_has_type (mk_app (union_variant_ptr_symb ()) [p; unionTypeid; ctxt#mk_intlit i]) (typeid_of lf tp) in
+          let union_has_type = mk_has_type p unionTypeid in
+          ctxt#end_formal;
+          ctxt#assume_forall ("has_type_union_variant_" ^ un ^ "_" ^ f) [member_has_type] [ctxt#type_inductive] (ctxt#mk_eq union_has_type member_has_type)
         end
     end
 
-  let field_address l t fparent fname = mk_field_ptr t (field_offset l fparent fname)
-  
+  let field_address l t fparent fname =
+    let (_, Some (_, fmap, _), _, _, structTypeid) = List.assoc fparent structmap in
+    let (_, gh, y, offset_opt, _) = List.assoc fname fmap in
+    let offset =
+       match offset_opt with
+        Some term -> term
+      | None -> static_error l "Cannot take the address of a ghost field" None
+    in
+    mk_field_ptr t structTypeid offset
+
   let direct_base_addr (derived_name, derived_addr) base_name =
-    let _, Some (bases, _, _), _, _, _ = List.assoc derived_name structmap in
+    let _, Some (bases, _, _), _, _, derivedTypeid = List.assoc derived_name structmap in
     let _, _, base_offset = List.assoc base_name bases in
-    mk_field_ptr derived_addr base_offset
+    mk_field_ptr derived_addr derivedTypeid base_offset
 
   let base_addr l (derived_name, derived_addr) base_name =
     if derived_name = base_name then 
       derived_addr
     else
       let rec iter derived_name offsets =
-        let _, Some (bases, _, _), _, _, _ = List.assoc derived_name structmap in 
+        let _, Some (bases, _, _), _, _, derivedTypeid = List.assoc derived_name structmap in 
         let other_paths = bases |> List.fold_left begin fun acc (name, (_, _, offset)) -> 
-          match iter name (offset :: offsets) with
+          match iter name ((derivedTypeid, offset) :: offsets) with
           | Some p -> p :: acc
           | None -> acc
         end [] in
         match try_assoc base_name bases, other_paths with 
         | Some _,  _ :: _
         | None, _ :: (_ :: _) -> static_error l (Printf.sprintf "Derived '%s' to base '%s' is ambiguous: multiple '%s' base candidates exist." derived_name base_name base_name) None
-        | Some (_, _, base_offset), [] -> Some (base_offset :: offsets)
+        | Some (_, _, base_offset), [] -> Some ((derivedTypeid, base_offset) :: offsets)
         | None, [p] -> Some p
         | _ -> None
       in 
       let Some offsets = iter derived_name [] in 
-      List.rev offsets |> List.fold_left mk_field_ptr derived_addr
+      List.rev offsets |> List.fold_left (fun addr (structTypeid, offset) -> mk_field_ptr addr structTypeid offset) derived_addr
 
   let convert_provertype term proverType proverType0 =
     if proverType = proverType0 then term else apply_conversion proverType proverType0 term
@@ -6914,8 +6972,7 @@ let check_if_list_is_defined () =
       | Int (_, _) ->
         check_overflow (ctxt#mk_add v1 v2)
       | PtrType t ->
-        let n = sizeof l t in
-        check_pointer_within_limits ass_term l (mk_ptr_add v1 (ctxt#mk_mul n v2))
+        check_pointer_within_limits ass_term l (mk_ptr_add_ l v1 v2 t)
       | RealType ->
         ctxt#mk_real_add v1 v2
       end
@@ -6924,8 +6981,7 @@ let check_if_list_is_defined () =
         Int (_, _) ->
         check_overflow (ctxt#mk_sub v1 v2)
       | PtrType t ->
-        let n = sizeof l t in
-        check_pointer_within_limits ass_term l (mk_ptr_add v1 (ctxt#mk_sub int_zero_term (ctxt#mk_mul n v2)))
+        check_pointer_within_limits ass_term l (mk_ptr_add_ l v1 (ctxt#mk_sub int_zero_term v2) t)
       | RealType ->
         ctxt#mk_real_sub v1 v2
       end
@@ -7302,8 +7358,7 @@ let check_if_list_is_defined () =
         | WReadArray (le, w1, tp, w2) ->
           ev state w1 $. fun state arr ->
           ev state w2 $. fun state index ->
-          let n = sizeof le tp in
-          cont state (check_pointer_within_limits ass_term le (mk_ptr_add arr (ctxt#mk_mul n index)))
+          cont state (check_pointer_within_limits ass_term le (mk_ptr_add_ le arr index tp))
         | WVar (l, x, GlobalName) ->
           let Some (l, tp, symbol, init) = try_assoc x globalmap in cont state symbol
         (* The address of a function symbol is commonly used in the
@@ -7315,7 +7370,7 @@ let check_if_list_is_defined () =
           ev state w cont
         | WReadUnionMember (l, w, unionName, memberIndex, memberName, memberType, isActivating) ->
           ev state w $. fun state v ->
-          cont state (mk_union_variant_ptr v memberIndex)
+          cont state (mk_union_variant_ptr v unionName memberIndex)
         | _ -> static_error l "Taking the address of this expression is not supported." None
       end
     | WSwitchExpr (l, e, i, targs, cs, cdef_opt, tenv, tp) ->

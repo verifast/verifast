@@ -1206,6 +1206,8 @@ void phase1(struct stack* s, struct stack_client* client, struct list* plist)
       append_keys(states1, states2);
       if(curr != 0) {
         nth_append_r(keys(states1),  keys(states2), 1);
+      } else {
+        take_length(values(states_));
       }
     }
     producing_handle_predicate if (curr != 0) phase1_handle(ha, client, retired, curr, i + 1, true, hp == 0 ? hps : cons(hp, hps)) else 
