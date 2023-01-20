@@ -139,6 +139,12 @@ class symbol (kind: symbol_kind) (name: string) =
       let listeners = apply_listeners in
       apply_listeners <- listener::listeners;
       ctxt#register_popaction (fun () -> apply_listeners <- listeners)
+    method as_poly = None
+  end
+and poly_symbol (name: string) (poly: num * (termnode * num) list) =
+  object (self)
+    inherit symbol Uninterp name
+    method as_poly = Some poly
   end
 and termnode (ctxt: context) s initial_children =
   object (self)
@@ -244,6 +250,48 @@ and termnode (ctxt: context) s initial_children =
               else if v2 = ctxt#false_node#value then
                 ignore (ctxt#assert_eq value ctxt#false_node#value)
             end
+          | ("*", [v1; v2]) ->
+            ctxt#add_redex (fun () -> ctxt#assert_eq value (ctxt#get_mul_node v2#initial_child v1#initial_child)#value);
+            let check_v1_child t =
+              if not ctxt#creating_termnode_of_poly && t#value#as_number = None then
+              match t#symbol#as_poly with
+                Some (n, ts) -> ctxt#add_redex begin fun () ->
+                  if t#value#as_number = None then begin
+                    if ctxt#verbosity > 20 then trace "asserting mul distributivity for %s (poly: %s)" self#pprint (ctxt#pprint_poly (n, ts));
+                    let rec evaluate_poly n0 output_ts input_ts =
+                      match input_ts with
+                        [] -> (n0, output_ts)
+                      | (t, n)::input_ts ->
+                        match t#value#as_number with
+                          Some nt ->
+                          evaluate_poly (n0 +/ nt */ n) output_ts input_ts
+                        | None ->
+                          evaluate_poly n0 ((t, n)::output_ts) input_ts
+                    in
+                    let (n, ts) = evaluate_poly n [] ts in
+                    let poly_times_term n ts tv2 =
+                      match tv2#value#as_number with
+                        Some v ->
+                        if sign_num v = 0 then ctxt#get_numnode zero_num else
+                        ctxt#termnode_of_poly (n */ v) (ts |> List.map (fun (t, n) -> (t, n */ v)))
+                      | None ->
+                        let nv2 =
+                          if sign_num n = 0 then [] else [tv2, n]
+                        in
+                        ctxt#termnode_of_poly zero_num (nv2 @ (ts |> List.map (fun (t, n) -> (ctxt#get_mul_node t tv2, n))))
+                    in
+                    let result =
+                    ctxt#assert_eq value (poly_times_term n ts v2#initial_child)#value
+                    in
+                    if ctxt#verbosity > 20 then trace "done asserting mul distributivity";
+                    result
+                  end else
+                    Valid3
+                end
+              | None -> ()
+            in
+            v1#children |> List.iter check_v1_child;
+            () (* v1#add_child_listener check_v1_child *)
           | _ -> ()
         end
     end
@@ -396,7 +444,7 @@ and termnode (ctxt: context) s initial_children =
       else
         Valid3
     method pprint =
-      "[" ^ string_of_int (Oo.id self) ^ "=" ^ string_of_int (Oo.id value) ^ "]" ^
+      (if (ctxt#verbosity land 1) = 1 then "[" ^ string_of_int (Oo.id self) ^ "=" ^ string_of_int (Oo.id value) ^ "]" else "") ^
       begin
       if initial_children = [] then symbol#name else
         symbol#name ^ "(" ^ String.concat ", " (List.map (fun v -> v#pprint) initial_children) ^ ")"
@@ -745,6 +793,7 @@ and context () =
     val mutable formal_depth = 0  (* If formal_depth = 0, App terms are eagerly turned into E-graph nodes. *)
     (* For diagnostics only. *)
     val mutable values = []
+    val mutable creating_termnode_of_poly = false
     
     (* Statistics *)
     val mutable max_truenode_childcount = 0
@@ -763,6 +812,8 @@ and context () =
     method verbosity = verbosity
     
     method set_verbosity v = verbosity <- v
+
+    method creating_termnode_of_poly = creating_termnode_of_poly
     
     method report_truenode_childcount n =
       if n > max_truenode_childcount then max_truenode_childcount <- n
@@ -1081,11 +1132,15 @@ and context () =
         [] -> self#get_numnode n
       | [(t, scale)] when sign_num n = 0 && scale =/ num_of_int 1 -> t
       | _ ->
+        creating_termnode_of_poly <- true;
         let s = "{" ^ self#pprint_poly (n, ts) ^ "}" in
-        let tnode = self#get_node (new symbol Uninterp s) [] in
+        let symb = new poly_symbol s (n, ts) in
+        let tnode = new termnode (self :> context) symb [] in
+        symb#set_node tnode;
         let u = tnode#value#mk_unknown in
         ignore (self#simplex_assert_eq n ((neg_unit_num, u)::List.map (fun (t, scale) -> (scale, t#value#mk_unknown)) ts));
         assert (self#pump_simplex_eqs <> Unsat3);
+        creating_termnode_of_poly <- false;
         tnode
     
     method termnode_of_term t =
@@ -1093,7 +1148,9 @@ and context () =
       match t with
         t when self#is_poly t ->
         let (n, ts) = self#to_poly t in
-        self#termnode_of_poly n ts
+        let result = self#termnode_of_poly n ts in
+        if verbosity > 20 then trace "termnode_of_term %s = %s" (self#pprint t) result#pprint;
+        result
       | TermNode t -> t
       | True -> self#true_node
       | False -> self#false_node
@@ -1412,6 +1469,27 @@ and context () =
     method pprint_poly (offset, terms) =
       String.concat " + " (string_of_num offset::List.map (fun (t, scale) -> Printf.sprintf "%s*%s" (string_of_num scale) (t#pprint)) terms)
 
+    method get_mul_node t1 t2 =
+      match t1#value#as_number with
+        Some n1 ->
+        if n1 =/ zero_num then
+          self#get_numnode zero_num
+        else
+          begin match t2#value#as_number with
+            Some n2 -> self#get_numnode (n1 */ n2)
+          | None ->
+            self#termnode_of_poly zero_num [(t2, n1)]
+          end
+      | None ->
+        match t2#value#as_number with
+          Some n2 ->
+          if n2 =/ zero_num then
+            self#get_numnode zero_num
+          else
+            self#termnode_of_poly zero_num [(t1, n2)]
+        | None ->
+          self#get_node mul_symbol [t1#value; t2#value]
+
     method to_poly t =
       let merge_term t scale ts =
         let rec iter ts =
@@ -1435,12 +1513,6 @@ and context () =
         if sign_num scale = 0 then (zero_num, []) else
         (mult_num scale n, List.map (fun (v, scale') -> (v, mult_num scale scale')) ts)
       in
-      let mult_values v v' =
-        let mul1 = self#get_node mul_symbol [v; v'] in
-        let mul2 = self#get_node mul_symbol [v'; v] in
-        self#add_redex (fun () -> self#assert_eq mul1#value mul2#value);
-        mul1
-      in
       let rec iter scale t =
         match t with
           NumLit n -> (mult_num scale n, [])
@@ -1460,22 +1532,9 @@ and context () =
           else if ts2 = [] then
             scale_poly (mult_num scale n2) n1 ts1
           else
-          let tn1 = self#termnode_of_poly n1 ts1 in
-          let tn2 = self#termnode_of_poly n2 ts2 in
-          let tn = mult_values tn1#value tn2#value in
-          let (n3, ts3) = (mult_num n1 n2, if sign_num n2 = 0 then [] else List.map (fun (v, scale) -> (v, mult_num n2 scale)) ts1) in
-          let rec iter ts3 ts2 =
-            match ts2 with
-              [] -> ts3
-            | (t, scale)::ts2 ->
-              let ts4 = if sign_num n1 = 0 then [] else [(t, mult_num scale n1)] in
-              let ts4 = ts4 @ List.map (fun (t', scale') -> (mult_values t#value t'#value, mult_num scale scale')) ts1 in
-              iter (ts4 @ ts3) ts2
-          in
-          let ts3 = iter ts3 ts2 in
-          let tn' = self#termnode_of_poly n3 ts3 in
-          self#add_redex (fun () -> self#assert_eq tn#value tn'#value);
-          (zero_num, [(tn, scale)])
+            let tn1 = self#termnode_of_poly n1 ts1 in
+            let tn2 = self#termnode_of_poly n2 ts2 in
+            (zero_num, [(self#get_mul_node tn1 tn2, scale)])
         | _ ->
           let t = self#termnode_of_term t in
           begin match t#value#as_number with
