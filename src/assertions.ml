@@ -781,7 +781,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     match slices with
       None ->
-        begin match lookup_integer__chunk_core h (mk_ptr_add a (ctxt#mk_mul i (sizeof l tp))) k signedness with
+        begin match lookup_integer__chunk_core h (mk_ptr_add_ l a i tp) k signedness with
           None ->
           assert_false h env l
             (sprintf "No matching array chunk: integers_(%s, %s, %s, 0<=%s<n, _)"
@@ -813,7 +813,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     match slices with
       None ->
-        begin match lookup_points_to_chunk_core h predsym (mk_ptr_add a (ctxt#mk_mul i (sizeof l tp))) with
+        begin match lookup_points_to_chunk_core h predsym (mk_ptr_add_ l a i tp) with
           None ->
           assert_false h env l
             (sprintf "No matching array chunk: %s(%s, 0<=%s<n, _)"
@@ -1861,7 +1861,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     (* rules for obtaining underscore (i.e. possibly uninitialized) field chunks *)
     field_pred_map |> List.iter begin function (_, (_, None)) -> () | ((sn, fn), ((_, (_, _, _, [_; ft], symb, _, _)), Some (_, (_, _, _, _, symb_, _, _)))) ->
-      let (_, Some (_, fmap, _), _, _, _) = List.assoc sn structmap in
+      let (_, Some (_, fmap, _), _, _, structTypeid) = List.assoc sn structmap in
       let (_, gh, _, offset_opt, _) = List.assoc fn fmap in
       begin match offset_opt with
         None -> ()
@@ -1870,7 +1870,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         Some pointee_pred_symb ->
         let pointee_chunk_to_field_chunk__rule l h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
           let [tp] = wanted_indices_and_input_ts in
-          let field_address = mk_field_ptr tp offset in
+          let field_address = mk_field_ptr tp structTypeid offset in
           match extract
             begin function
               (Chunk ((g, is_symb), [], coef, [tp'; tv], _)) when g == pointee_pred_symb && definitely_equal tp' field_address -> Some (coef, tv)
@@ -1891,7 +1891,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let tsigned = match signedness with Signed -> true_term | Unsigned -> false_term in
         let pointee_chunk_to_field_chunk__rule l h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
           let [tp] = wanted_indices_and_input_ts in
-          let field_address = mk_field_ptr tp offset in
+          let field_address = mk_field_ptr tp structTypeid offset in
           match extract
             begin function
               (Chunk ((g, is_symb), [], coef, [tp'; tsize'; tsigned'; tv], _)) when

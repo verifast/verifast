@@ -271,6 +271,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
       GAction.add_toggle_action "AssumeLeftToRightEvaluation" ~label:"Assume left-to-right evaluation" ~active:(Vfbindings.get Vfparam_assume_left_to_right_evaluation !vfbindings) ~callback:(fun toggleAction -> set_or_reset_bool_vfbinding Vfparam_assume_left_to_right_evaluation toggleAction#get_active);
       GAction.add_toggle_action "AssumeNoProvenance" ~label:"Assume no pointer provenance" ~active:(Vfbindings.get Vfparam_assume_no_provenance !vfbindings) ~callback:(fun toggleAction -> set_or_reset_bool_vfbinding Vfparam_assume_no_provenance toggleAction#get_active);
       GAction.add_toggle_action "AssumeNoSubobjectProvenance" ~label:"Assume no subobject provenance" ~active:(Vfbindings.get Vfparam_assume_no_subobject_provenance !vfbindings) ~callback:(fun toggleAction -> set_or_reset_bool_vfbinding Vfparam_assume_no_subobject_provenance toggleAction#get_active);
+      GAction.add_toggle_action "NoStrictAliasing" ~label:"Assume untyped memory (GCC's fno-strict-aliasing)" ~active:(Vfbindings.get Vfparam_fno_strict_aliasing !vfbindings) ~callback:(fun toggleAction -> set_or_reset_bool_vfbinding Vfparam_fno_strict_aliasing toggleAction#get_active);
       GAction.add_toggle_action "UseJavaFrontend" ~label:"Use the Java frontend" ~active:(toggle_java_frontend javaFrontend; javaFrontend) ~callback:(fun toggleAction -> toggle_java_frontend toggleAction#get_active);
       GAction.add_toggle_action "SimplifyTerms" ~label:"Simplify Terms" ~active:(not (Vfbindings.get Vfparam_no_simplify_terms !vfbindings)) ~callback:(fun toggleAction -> set_or_reset_bool_vfbinding Vfparam_no_simplify_terms (not toggleAction#get_active));
       a "Include paths" ~label:"_Include paths...";
@@ -337,6 +338,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
           <menuitem action='AssumeLeftToRightEvaluation' />
           <menuitem action='AssumeNoProvenance' />
           <menuitem action='AssumeNoSubobjectProvenance' />
+          <menuitem action='NoStrictAliasing' />
           <separator />
           <menu action='TargetArchitecture'>
             <menuitem action='Stub' />

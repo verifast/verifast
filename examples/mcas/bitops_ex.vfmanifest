@@ -79,6 +79,17 @@
 .requires CRT/prelude.h#field_ptr_provenance_min_addr
 .requires CRT/prelude.h#first_field_of_union_variant_pointer_within_limits_elim
 .requires CRT/prelude.h#first_field_pointer_within_limits_elim
+.requires CRT/prelude.h#has_type_int128_uint128
+.requires CRT/prelude.h#has_type_int16_uint16
+.requires CRT/prelude.h#has_type_int32_uint32
+.requires CRT/prelude.h#has_type_int64_uint64
+.requires CRT/prelude.h#has_type_int8_uint8
+.requires CRT/prelude.h#has_type_int_uint
+.requires CRT/prelude.h#has_type_intptr_uintptr
+.requires CRT/prelude.h#has_type_llong_ullong
+.requires CRT/prelude.h#has_type_long_ulong
+.requires CRT/prelude.h#has_type_ptr_add_
+.requires CRT/prelude.h#has_type_short_ushort
 .requires CRT/prelude.h#int__to_chars_
 .requires CRT/prelude.h#int_of_chars_of_int
 .requires CRT/prelude.h#int_of_chars_size

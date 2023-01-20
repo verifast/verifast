@@ -1194,7 +1194,9 @@ let expr_fold_open iter state e =
   | Upcast (e, fromType, toType) -> iter state e
   | TypedExpr (e, t) -> iter state e
   | WidenedParameterArgument e -> iter state e
-  | SizeofExpr (l, e) -> state
+  | SizeofExpr (l, TypeExpr _) -> state
+  | SizeofExpr (l, e) -> iter state e
+  | TypeInfo (l, t) -> state
   | GenericExpr (l, e, cs, d) ->
     let state = iter state e in
     let rec iter_cases state = function
@@ -1224,7 +1226,6 @@ let expr_fold_open iter state e =
   | WCxxNew (_, _, _) -> state
   | CxxDelete (_, arg) -> iter state arg
   | Typeid (_, e) -> iter state e
-  | TypeInfo _ -> state
 
 (* Postfix fold *)
 let expr_fold f state e = let rec iter state e = f (expr_fold_open iter state e) e in iter state e

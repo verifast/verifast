@@ -575,7 +575,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | _ -> static_error l "The argument must be a union member expression" None
       in
       eval_h h env wtarget $. fun h env target ->
-      let vp = mk_union_variant_ptr target memberIndex in
+      let vp = mk_union_variant_ptr target unionName memberIndex in
       consume_c_object_core_core l real_unit_pat vp memberType h true true $. fun _ h _ ->
       let cs = get_unique_var_symb "cs" (list_type (option_type charType)) in
       cont (Chunk ((chars__pred_symb (), true), [], real_unit, [target; sizeof l memberType; cs], None)::h) env
@@ -3027,7 +3027,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           (* reverse order compared to constructor order *)
           iter bases_rest @@ fun h env tenv ->
           with_context (Executing (h, env, base_spec_loc, "Executing base destructor")) @@ fun () ->
-          let this_addr = mk_field_ptr this_addr base_offset in
+          let this_addr = mk_field_ptr this_addr type_info base_offset in
           begin fun cont ->
             if is_polymorphic_struct base_name then
               (* the base is polymorphic, produce its vtype *)
@@ -3037,7 +3037,6 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               produce_chunk h (vtype_symb, true) [] real_unit (Some 1) [this_addr; type_info] None cont
             else cont h
           end @@ fun h ->
-          with_context (Executing (h, [], base_spec_loc, "Executing base destructor")) @@ fun () ->
           let verify_dtor_call = verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env this_addr None in
           consume_cxx_object base_spec_loc real_unit_pat this_addr (StructType base_name) verify_dtor_call false h env @@ fun h env ->
           cont h env tenv
