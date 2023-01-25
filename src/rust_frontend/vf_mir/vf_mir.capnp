@@ -7,6 +7,7 @@ struct Util {
     }
 
     using BigUInt = UInt128;
+    # Todo @Nima: We are using `BigUInt` for encoding `usize` values. It is better to have a distinct type for them.
 
     struct Option(T) {
         union {
@@ -69,6 +70,10 @@ struct Mutability {
         mut @0: Void;
         not @1: Void;
     }
+}
+
+struct Symbol {
+    name @0: Text;
 }
 
 struct Ty {
@@ -142,7 +147,7 @@ struct Ty {
                     }
                 }
 
-                name @0: Text;
+                name @0: Symbol;
                 ty @1: Ty;
                 vis @2: Visibility;
                 span @3: SpanData;
@@ -239,9 +244,14 @@ struct Body {
 
     struct Place {
         struct PlaceElement {
+            struct FieldData {
+                idx @0: BigUInt;
+                name @1: Symbol;
+                ty @2: Ty;
+            }
             union {
                 deref @0: Void;
-                field @1: Void;
+                field @1: FieldData;
             }
         }
 
@@ -339,11 +349,28 @@ struct Body {
                 operandr @2: Operand;
             }
 
+            struct RefData {
+                struct BorrowKind {
+                    union {
+                        shared @0: Void;
+                        shallow @1: Void;
+                        unique @2: Void;
+                        mut :group {
+                            allowTwoPhaseBorrow @3: Bool;
+                        }
+                    }
+                }
+                region @0: Ty.Region;
+                borKind @1: BorrowKind;
+                place @2: Place;
+            }
+
             union {
                 # Either move or copy depending on operand type
                 use @0: Operand;
-                addressOf @1: AddressOfData;
-                binaryOp @2: BinaryOpData;
+                ref @1: RefData;
+                addressOf @2: AddressOfData;
+                binaryOp @3: BinaryOpData;
             }
         }
 
@@ -415,9 +442,6 @@ struct Body {
     }
 
     struct VarDebugInfo {
-        struct Symbol {
-            name @0: Text;
-        }
         struct VarDebugInfoContents {
             union {
                 place @0: Place;

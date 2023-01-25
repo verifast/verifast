@@ -401,6 +401,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Undefined _ ->
         Error (`TrMutability "Unknown Mir mutability discriminator")
 
+  let translate_symbol (sym_cpn : SymbolRd.t) = SymbolRd.name_get sym_cpn
   let int_size_rank = Ast.PtrRank
 
   let translate_u_int_ty (u_int_ty_cpn : UIntTyRd.t) (loc : Ast.loc) =
@@ -618,7 +619,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let open PlaceElementRd in
       match get place_elm with
       | Deref -> Ok (Ast.Deref (loc, e))
-      | Field -> failwith "Todo: PlaceElement Field"
+      | Field _ -> failwith "Todo: PlaceElement Field"
       | Undefined _ ->
           Error (`TrPlaceElement "Unknown place element projection")
 
@@ -1173,8 +1174,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let loc = Ast.stmt_loc @@ List.hd @@ statements in
         Ok (Ast.LabelStmt (loc, id) :: statements)
 
-    let translate_symbol (sym_cpn : SymbolRd.t) = SymbolRd.name_get sym_cpn
-
     let translate_var_debug_info_contents (vdic_cpn : VarDebugInfoContentsRd.t)
         (loc : Ast.loc) =
       let open VarDebugInfoContentsRd in
@@ -1360,7 +1359,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   let translate_field_def (fdef_cpn : FieldDefRd.t) =
     let open FieldDefRd in
-    let name = name_get fdef_cpn in
+    let name_cpn = name_get fdef_cpn in
+    let name = translate_symbol name_cpn in
     let span_cpn = span_get fdef_cpn in
     let* loc = translate_span_data span_cpn in
     (* Todo @Nima: We are using the whole field definition span as the type span which should be corrected *)
