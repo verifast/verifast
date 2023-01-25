@@ -272,6 +272,7 @@ mod vf_mir_builder {
     use rustc_middle::ty;
     use rustc_middle::{mir, ty::TyCtxt};
     use rvalue_cpn::binary_op_data as binary_op_data_cpn;
+    use rvalue_cpn::cast_data::cast_kind as cast_kind_cpn;
     use rvalue_cpn::ref_data as ref_data_cpn;
     use source_file_cpn::file_name as file_name_cpn;
     use span_data_cpn::loc as loc_cpn;
@@ -1063,9 +1064,23 @@ mod vf_mir_builder {
                     Self::encode_place(enc_ctx, place, place_cpn);
                 }
                 mir::Rvalue::ThreadLocalRef(def_id) => todo!(),
-                mir::Rvalue::AddressOf(mutability, place) => todo!(),
+                mir::Rvalue::AddressOf(mutability, place) => {
+                    let mut ao_data_cpn = rvalue_cpn.init_address_of();
+                    let mutability_cpn = ao_data_cpn.reborrow().init_mutability();
+                    Self::encode_mutability(*mutability, mutability_cpn);
+                    let place_cpn = ao_data_cpn.init_place();
+                    Self::encode_place(enc_ctx, place, place_cpn);
+                }
                 mir::Rvalue::Len(place) => todo!(),
-                mir::Rvalue::Cast(cast_kind, operand, ty) => todo!(),
+                mir::Rvalue::Cast(cast_kind, operand, ty) => {
+                    let mut cast_data_cpn = rvalue_cpn.init_cast();
+                    let cast_kind_cpn = cast_data_cpn.reborrow().init_cast_kind();
+                    Self::encode_cast_kind(cast_kind, cast_kind_cpn);
+                    let operand_cpn = cast_data_cpn.reborrow().init_operand();
+                    Self::encode_operand(tcx, enc_ctx, operand, operand_cpn);
+                    let ty_cpn = cast_data_cpn.init_ty();
+                    Self::encode_ty(tcx, enc_ctx, ty, ty_cpn);
+                }
                 mir::Rvalue::BinaryOp(bin_op, box (operandl, operandr)) => {
                     let mut bin_op_data_cpn = rvalue_cpn.init_binary_op();
                     let bin_op_cpn = bin_op_data_cpn.reborrow().init_operator();
@@ -1084,6 +1099,13 @@ mod vf_mir_builder {
                 mir::Rvalue::Aggregate(box aggregate_kind, operands) => todo!(),
                 // Transmutes a `*mut u8` into shallow-initialized `Box<T>`.
                 mir::Rvalue::ShallowInitBox(operand, ty) => todo!(),
+            }
+        }
+
+        fn encode_cast_kind(ck: &mir::CastKind, mut ck_cpn: cast_kind_cpn::Builder<'_>) {
+            match ck {
+                mir::CastKind::Misc => ck_cpn.set_misc(()),
+                mir::CastKind::Pointer(_pointer_cast) => ck_cpn.set_pointer(()),
             }
         }
 

@@ -365,12 +365,25 @@ struct Body {
                 place @2: Place;
             }
 
+            struct CastData {
+                struct CastKind {
+                    union {
+                        misc @0: Void;
+                        pointer @1: Void;
+                    }
+                }
+                castKind @0: CastKind;
+                operand @1: Operand;
+                ty @2: Ty;
+            }
+
             union {
                 # Either move or copy depending on operand type
                 use @0: Operand;
                 ref @1: RefData;
                 addressOf @2: AddressOfData;
-                binaryOp @3: BinaryOpData;
+                cast @3: CastData;
+                binaryOp @4: BinaryOpData;
             }
         }
 
