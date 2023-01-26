@@ -619,7 +619,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let open PlaceElementRd in
       match get place_elm with
       | Deref -> Ok (Ast.Deref (loc, e))
-      | Field _ -> failwith "Todo: PlaceElement Field"
+      | Field field_data_cpn ->
+          let open FieldData in
+          let name_cpn = name_get field_data_cpn in
+          let name = translate_symbol name_cpn in
+          Ok (Ast.Select (loc, e, name))
       | Undefined _ ->
           Error (`TrPlaceElement "Unknown place element projection")
 
@@ -1032,13 +1036,46 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         | `TrTypedConstantRvalueBinderBuilder rvalue_binder_builder ->
             Ok (`TrRvalueRvalueBinderBuilder rvalue_binder_builder)
         | `TrTypedConstantFn _ ->
-            Error (`TrRvalue "Invalid operand translation for Rvalue::Use")
+            Error (`TrRvalue "Invalid operand translation for Rvalue")
       in
       match get rvalue_cpn with
       | Use operand_cpn ->
           let* operand = translate_operand operand_cpn loc in
           tr_operand operand
-      | AddressOf address_of_data_cpn -> failwith "Todo: Rvalue::AddressOf"
+      | Ref ref_data_cpn ->
+          let open RefData in
+          let region_cpn = region_get ref_data_cpn in
+          let bor_kind_cpn = bor_kind_get ref_data_cpn in
+          let place_cpn = place_get ref_data_cpn in
+          let* place_expr = translate_place place_cpn loc in
+          let expr = Ast.AddressOf (loc, place_expr) in
+          Ok (`TrRvalueExpr expr)
+          (*Todo @Nima: We might need to assert the chunk when we make a reference to it*)
+      | AddressOf address_of_data_cpn ->
+          let open AddressOfData in
+          let mut_cpn = mutability_get address_of_data_cpn in
+          let place_cpn = place_get address_of_data_cpn in
+          let* place_expr = translate_place place_cpn loc in
+          let expr = Ast.AddressOf (loc, place_expr) in
+          Ok (`TrRvalueExpr expr)
+      | Cast cast_data_cpn -> (
+          let open CastData in
+          let cast_kind_cpn = cast_kind_get cast_data_cpn in
+          let operand_cpn = operand_get cast_data_cpn in
+          let* operand = translate_operand operand_cpn loc in
+          let ty_cpn = ty_get cast_data_cpn in
+          let* ty_info = translate_ty ty_cpn loc in
+          let ty = Mir.basic_type_of ty_info in
+          match operand with
+          | `TrOperandCopy expr
+          | `TrOperandMove expr
+          | `TrTypedConstantScalar expr ->
+              Ok (`TrRvalueExpr (Ast.CastExpr (loc, ty, expr)))
+          | `TrTypedConstantRvalueBinderBuilder rvalue_binder_builder ->
+              failwith "Todo: Rvalue::Cast"
+              (*Todo @Nima: We need a better design (refactor) for passing different results of operand translation*)
+          | `TrTypedConstantFn _ ->
+              Error (`TrRvalue "Invalid operand translation for Rvalue::Cast"))
       | BinaryOp bin_op_data_cpn ->
           let* operator, operandl, operandr =
             translate_binary_operation bin_op_data_cpn loc
