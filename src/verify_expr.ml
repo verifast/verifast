@@ -2562,7 +2562,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match ty with 
         | StructType struct_name ->
           let new_block_symb = get_pred_symb_from_map struct_name new_block_pred_map in
-          produce_chunk h (new_block_symb, true) [] real_unit None [result] None cont
+          let args =
+            if is_polymorphic_struct struct_name then
+              let _, _, _, _, type_info = List.assoc struct_name structmap in
+              [result; type_info]
+            else
+              [result]
+          in
+          produce_chunk h (new_block_symb, true) [] real_unit None args None cont
         | _ ->
           begin 
             match try_pointee_pred_symb0 ty with

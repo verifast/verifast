@@ -2085,6 +2085,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let struct_size = struct_size_partial structmap
   let union_size = union_size_partial unionmap
 
+  let is_polymorphic_struct sn =
+    match List.assoc sn structmap with
+    | _, (Some (_, _, true)), _, _, _ -> true
+    | _ -> false
+
   let field_offset l fparent fname =
     let (_, Some (_, fmap, _), _, _, _) = List.assoc fparent structmap in
     let (_, gh, y, offset_opt, _) = List.assoc fname fmap in
@@ -2900,14 +2905,26 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let struct_accessor_map = struct_accessor_map1 @ struct_accessor_map0
 
-  let (malloc_block_pred_map1: malloc_block_pred_info map), (new_block_pred_map1: new_block_pred_info map) = 
-    let mk_block_pred_map name =
+  let malloc_block_pred_map1: malloc_block_pred_info map =
+    structmap1 |> flatmap begin function
+    | (sn, (l, Some _, _, _, _)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) l [] 0 [PtrType (StructType sn)] (Some 1) Inductiveness_Inductive)]
+    | _ -> []
+    end
+
+  let new_block_pred_map1: new_block_pred_info map =
+    match dialect with 
+    | Some Cxx ->
       structmap1 |> flatmap begin function
-        (sn, (l, Some _, _, _, _)) -> [(sn, mk_predfam (name ^ "_" ^ sn) l [] 0 [PtrType (StructType sn)] (Some 1) Inductiveness_Inductive)]
+      | (sn, (l, Some _, _, _, _)) ->
+        let arg = PtrType (StructType sn) in
+        let args =
+          if is_polymorphic_struct sn then [arg; PtrType (StructType "std::type_info")]
+          else [arg]
+        in
+        [sn, mk_predfam ("new_block_" ^ sn) l [] 0 args (Some 1) Inductiveness_Inductive]
       | _ -> []
-      end 
-    in
-    mk_block_pred_map "malloc_block", match dialect with Some Cxx -> mk_block_pred_map "new_block" | _ -> []
+    end 
+    | _ -> []
   
   let malloc_block_pred_map: malloc_block_pred_info map = malloc_block_pred_map1 @ malloc_block_pred_map0
   let new_block_pred_map: new_block_pred_info map = new_block_pred_map1 @ new_block_pred_map0
@@ -5574,11 +5591,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let list_type elemType = InductiveType ("list", [elemType])
   let option_type elemType = InductiveType ("option", [elemType])
-
-  let is_polymorphic_struct sn =
-    match List.assoc sn structmap with
-    | _, (Some (_, _, true)), _, _, _ -> true
-    | _ -> false
   
   let check_asn_core (pn,ilist) tparams tenv p =
     let pre_tenv = tenv in
