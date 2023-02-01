@@ -624,7 +624,8 @@ cd ..
     cd ..
     cd delete
         verifast -c polymorphic.cpp
-        verifast -c non_polymorphic_base.cpp
+        verifast -c -allow_should_fail -allow_dead_code non_polymorphic_base.cpp
+        verifast -c -allow_should_fail -allow_dead_code non_virtual_base_dtor.cpp
     cd ..
     verifast -c main_implicit_return.cpp
     verifast -c new_class.cpp

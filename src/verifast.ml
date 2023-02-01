@@ -546,22 +546,10 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end @@ fun h env base_addr ->
         let derived_symb = get_pred_symb_from_map derived new_block_pred_map in
         let base_symb = get_pred_symb_from_map base new_block_pred_map in
-        begin fun cont ->
-          if is_polymorphic_struct derived then 
-            consume_chunk rules h ghostenv env [] l (derived_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat derived_addr; dummypat] @@ fun _ h _ [_; type_info] _ _ _ _ ->
-            cont h (Some type_info)
-          else
-            consume_chunk rules h ghostenv env [] l (derived_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat derived_addr] @@ fun _ h _ _ _ _ _ _ ->
-            cont h None
-        end @@ fun h type_info_opt ->
-        begin fun cont ->
-          match type_info_opt, is_polymorphic_struct base with
-          | None, true -> failwith (Printf.sprintf "A derived struct ('%s') must be polymorphic when one of its bases ('%s') is polymorphic." derived base)
-          | _, false ->
-            produce_chunk h (base_symb, true) [] real_unit None [base_addr] None cont
-          | Some type_info, true ->
-            produce_chunk h (base_symb, true) [] real_unit None [base_addr; type_info] None cont
-        end @@ fun h ->
+        let _, _, _, _, _, _, is_virtual = List.assoc base cxx_dtor_map in
+        if not is_virtual then static_error l "The target object must have a virtual destructor." None;
+        consume_chunk rules h ghostenv env [] l (derived_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat derived_addr; dummypat] @@ fun _ h _ [_; type_info] _ _ _ _ ->
+        produce_chunk h (base_symb, true) [] real_unit None [base_addr; type_info] None @@ fun h ->
         cont h env
       | _ -> static_error l "The argument for this call must be an upcast of a struct pointer." None;
       end

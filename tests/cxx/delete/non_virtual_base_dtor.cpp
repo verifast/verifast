@@ -4,13 +4,18 @@ struct A
 
   A()
   //@ requires true;
-  //@ ensures valid();
+  //@ ensures valid() &*& A_vtype(this, thisType);
   {
     //@ close valid();
   }
 
-  ~A()
+  virtual void foo()
   //@ requires valid();
+  //@ ensures valid();
+  {}
+
+  ~A()
+  //@ requires valid() &*& A_vtype(this, thisType);
   //@ ensures true;
   {
     //@ open valid();
@@ -30,6 +35,15 @@ struct B : public A
     //@ close valid();
   }
 
+  virtual void foo()
+  //@ requires valid();
+  //@ ensures valid();
+  {
+    //@ open valid();
+    ;
+    //@ close valid();
+  }
+
   virtual ~B()
   //@ requires valid() &*& B_vtype(this, thisType);
   //@ ensures true;
@@ -39,7 +53,7 @@ struct B : public A
 };
 
 void dispose(A *a)
-//@ requires a->valid() &*& new_block_A(a);
+//@ requires new_block_A(a, &typeid(A)) &*& a->valid(&typeid(A))() &*& A_vtype(a, &typeid(A));
 //@ ensures true;
 {
   delete a;
