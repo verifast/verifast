@@ -533,6 +533,28 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if body' = None then register_prototype_used lf fn (Some fterm)
       end;
       cont h env
+    | ExprStmt (CallExpr (l, "upcast_new_block", [], [], [LitPat e], Static)) when dialect = Some Cxx ->
+      if not pure then static_error l "This function may be called only from a pure context." None;
+      let w, tp = check_expr (pn, ilist) tparams tenv e in
+      begin match w with
+      | CastExpr (_, _, Upcast (derived_w, PtrType (StructType derived), PtrType (StructType base))) ->
+        begin match List.assoc_opt base cxx_dtor_map with
+        | None | Some (_, _, _, _, _, _, false) -> static_error l "The target struct must have a virtual destructor." None
+        | _ ->
+          begin fun cont ->
+            verify_expr false h env None derived_w cont econt
+          end @@ fun h env derived_addr ->
+          begin fun cont ->
+            verify_expr false h env None w cont econt
+          end @@ fun h env base_addr ->
+          let derived_symb = get_pred_symb_from_map derived new_block_pred_map in
+          let base_symb = get_pred_symb_from_map base new_block_pred_map in
+          consume_chunk rules h ghostenv env [] l (derived_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat derived_addr; dummypat] @@ fun _ h _ [_; type_info] _ _ _ _ ->
+          produce_chunk h (base_symb, true) [] real_unit None [base_addr; type_info] None @@ fun h ->
+          cont h env
+        end
+      | _ -> static_error l "The argument for this call must be an upcast of a struct pointer." None;
+      end
     | ProduceLemmaFunctionPointerChunkStmt (l, e, ftclause_opt, body) ->
       verify_produce_function_pointer_chunk_stmt Ghost l e ftclause_opt body
     | ProduceFunctionPointerChunkStmt (l, ftn, fpe, targs, args, params, openBraceLoc, ss, closeBraceLoc) ->
@@ -638,32 +660,38 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let (w, _) = check_expr (pn,ilist) tparams tenv e in
           verify_expr false h env None w (fun h env _ -> cont h env) econt
       end
-      | ExprStmt (CxxDelete (l, arg)) ->
-        begin match check_expr (pn, ilist) tparams tenv arg with
-          _, PtrType Void -> static_error l "Deleting an object through a void pointer is undefined." None;
-        | arg, PtrType t ->
-          if pure then static_error l "Cannot call a non-pure function from a pure context." None;
-          let addr = ev arg in
-          begin match try_pointee_pred_symb0 t with
-          | Some (_, _, _, _, _, _, _, array_new_block_pred_symb, _, _, _, uninit_array_pred_symb) ->
-              consume_chunk rules h [] [] [] l (array_new_block_pred_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat addr; TermPat int_unit_term] @@ fun _ h _ [_; n] _ _ _ _ ->
-              consume_chunk rules h [] [] [] l (uninit_array_pred_symb, true) [] real_unit real_unit_pat (Some 2) [TermPat addr; TermPat n; dummypat] @@ fun _ h _ _ _ _ _ _ ->
-              cont h env
-          | None -> 
-            let verify_dtor_call = verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env addr None in
-            consume_cxx_object l real_unit_pat addr t verify_dtor_call false h env @@ fun h env ->
-              begin match t with 
-              | StructType name ->
-                  let new_block_symb = get_pred_symb_from_map name new_block_pred_map in
-                  consume_chunk rules h [] [] [] l (new_block_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat addr] @@ fun _ h _ _ _ _ _ _ -> 
-                  cont h env
-              | _ -> 
-                consume_chunk rules h [] [] [] l (get_pred_symb "new_block", true) [] real_unit real_unit_pat (Some 1) [TermPat addr; TermPat (sizeof l t)] @@ fun _ h _ _ _ _ _ _ -> 
-                cont h env
-              end
-          end
-        | _ -> static_error l "'delete' should receive a pointer." None   
+    | ExprStmt (CxxDelete (l, arg)) ->
+      begin match check_expr (pn, ilist) tparams tenv arg with
+        _, PtrType Void -> static_error l "Deleting an object through a void pointer is undefined." None;
+      | arg, PtrType t ->
+        if pure then static_error l "Cannot call a non-pure function from a pure context." None;
+        let addr = ev arg in
+        begin match try_pointee_pred_symb0 t with
+        | Some (_, _, _, _, _, _, _, array_new_block_pred_symb, _, _, _, uninit_array_pred_symb) ->
+            consume_chunk rules h [] [] [] l (array_new_block_pred_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat addr; TermPat int_unit_term] @@ fun _ h _ [_; n] _ _ _ _ ->
+            consume_chunk rules h [] [] [] l (uninit_array_pred_symb, true) [] real_unit real_unit_pat (Some 2) [TermPat addr; TermPat n; dummypat] @@ fun _ h _ _ _ _ _ _ ->
+            cont h env
+        | None -> 
+          let verify_dtor_call = verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env addr None in
+          begin fun cont ->
+          match t with 
+          | StructType name ->
+            let new_block_symb = get_pred_symb_from_map name new_block_pred_map in
+            if is_polymorphic_struct name then
+              consume_chunk rules h [] [] [] l (new_block_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat addr; dummypat] @@ fun _ h _ [_; type_info] _ _ _ _ -> 
+              consume_chunk rules h [] [] [] l (get_pred_symb_from_map name cxx_vtype_map, true) [] real_unit real_unit_pat (Some 1) [TermPat addr; TermPat type_info] @@ fun _ _ _ _ _ _ _ _ ->
+              cont h
+            else
+              consume_chunk rules h [] [] [] l (new_block_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat addr] @@ fun _ h _ _ _ _ _ _ -> 
+              cont h
+          | _ -> 
+            consume_chunk rules h [] [] [] l (get_pred_symb "new_block", true) [] real_unit real_unit_pat (Some 1) [TermPat addr; TermPat (sizeof l t)] @@ fun _ h _ _ _ _ _ _ -> 
+            cont h
+          end @@ fun h ->
+          consume_cxx_object l real_unit_pat addr t verify_dtor_call false h env cont
         end
+      | _ -> static_error l "'delete' should receive a pointer." None   
+      end
     | ExprStmt (CallExpr (l, "set_verifast_verbosity", [], [], [LitPat (IntLit (_, n, _, _, _))], Static)) when pure ->
       let oldv = !verbosity in
       set_verbosity (int_of_big_int n);
@@ -2320,22 +2348,6 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         cont h
     end $. fun h ->
     begin fun cont ->
-      match try_assoc "this" tenv with
-      | Some (PtrType (StructType sn)) when not pure && dialect = Some Cxx ->
-        begin match try_assoc "current_bases_constructed_fraction" env with
-        | Some current_fraction ->
-          (* produce [current_bases_constructed_fraction]X_bases_constructed(this) *)
-          let this_term = List.assoc "this" env in
-          let bases_constructed_symb = get_pred_symb_from_map sn bases_constructed_map in
-          with_context (Executing ([], env, l, "Producing constructed bases fraction")) @@ fun () ->
-          produce_chunk h (bases_constructed_symb, true) [] current_fraction (Some 1) [this_term] None cont
-        | None ->
-          cont h
-        end
-      | _ ->
-        cont h
-    end @@ fun h ->
-    begin fun cont ->
       verify_cont (pn,ilist) blocks_done lblenv tparams boxes true leminfo funcmap predinstmap sizemap tenv ghostenv h env epilog cont (fun _ _ -> assert false) econt
     end $. fun sizemap tenv ghostenv h env ->
     return_cont h tenv env retval
@@ -2800,15 +2812,10 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | Some (sn, this_term) ->
             begin match try_get_pred_symb_from_map sn bases_constructed_map with
             | Some bases_constructed_symb ->
-              (* consume [?f * 1/2]X_bases_constructed(this) *)
+              (* check X_bases_constructed(this) *)
               with_context (Executing ([], env, l, "Consuming constructed bases fraction")) @@ fun () ->
-              consume_chunk rules h [] [] [] l (bases_constructed_symb, true) [] real_unit dummypat (Some 1) [TermPat this_term] @@ fun consumed_chunk h coef _ _ _ _ _ ->
-              let half = real_mul l real_half coef in
-              let half_chunk = Chunk ((bases_constructed_symb, true), [], half, [this_term], None) in
-              let tenv = ("current_bases_constructed_fraction", RealType) :: tenv in
-              let ghostenv = "current_bases_constructed_fraction" :: ghostenv in 
-              let env = ("current_bases_constructed_fraction", half) :: env in
-              cont (half_chunk :: h) tenv ghostenv env
+              consume_chunk rules h [] [] [] l (bases_constructed_symb, true) [] real_unit dummypat (Some 1) [TermPat this_term] @@ fun consumed_chunk _ coef _ _ _ _ _ ->
+              cont h tenv ghostenv env
             | None ->
               cont h tenv ghostenv env
             end
