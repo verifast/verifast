@@ -16,12 +16,15 @@ module RealFileNameRd = FileNameRd.RealFileName
 module PathBufRd = RealFileNameRd.PathBuf
 module CharPosRd = LocRd.CharPos
 
+(* Global *)
+module MutabilityRd = VfMirStub.Reader.Mutability
+module SymbolRd = VfMirStub.Reader.Symbol
+module AnnotationRd = VfMirStub.Reader.Annotation
+
 (* Bodies *)
 module BodyRd = VfMirStub.Reader.Body
 module ContractRd = BodyRd.Contract
-module AnnotationRd = BodyRd.Annotation
 module LocalDeclRd = BodyRd.LocalDecl
-module MutabilityRd = VfMirStub.Reader.Mutability
 module LocalDeclIdRd = BodyRd.LocalDeclId
 module BasicBlockRd = BodyRd.BasicBlock
 module BasicBlockIdRd = BodyRd.BasicBlockId
@@ -42,7 +45,6 @@ module SwitchIntDataRd = TerminatorKindRd.SwitchIntData
 module SwitchTargetsRd = SwitchIntDataRd.SwitchTargets
 module SwitchTargetsBranchRd = SwitchTargetsRd.Branch
 module VarDebugInfoRd = BodyRd.VarDebugInfo
-module SymbolRd = VfMirStub.Reader.Symbol
 module VarDebugInfoContentsRd = VarDebugInfoRd.VarDebugInfoContents
 module ConstValueRd = BodyRd.ConstValue
 module ScalarRd = BodyRd.Scalar

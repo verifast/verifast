@@ -233,6 +233,7 @@ fn get_bodies<'tcx>(tcx: TyCtxt<'tcx>) -> Vec<(String, BodyWithBorrowckFacts<'tc
 
 mod vf_mir_builder {
     mod capnp_utils;
+    use crate::vf_mir_capnp::annotation as annot_cpn;
     use crate::vf_mir_capnp::body as body_cpn;
     use crate::vf_mir_capnp::mutability as mutability_cpn;
     use crate::vf_mir_capnp::span_data as span_data_cpn;
@@ -245,7 +246,6 @@ mod vf_mir_builder {
     use basic_block_cpn::statement as statement_cpn;
     use basic_block_cpn::terminator as terminator_cpn;
     use binary_op_data_cpn::bin_op as bin_op_cpn;
-    use body_cpn::annotation as annot_cpn;
     use body_cpn::basic_block as basic_block_cpn;
     use body_cpn::basic_block_id as basic_block_id_cpn;
     use body_cpn::const_value as const_value_cpn;
@@ -396,6 +396,32 @@ mod vf_mir_builder {
                 let body_cpn = bodies_cpn.reborrow().get(idx.try_into().unwrap());
                 Self::encode_body(&mut enc_ctx, body_cpn);
                 req_adt_defs.extend(enc_ctx.get_req_adts());
+            }
+
+            // Encode Ghost Declarations
+            let ghost_decls = self
+                .annots
+                .drain_filter(|annot| {
+                    let annot_span = crate::span_utils::comment_span(annot).span();
+                    if let Some(body) = bodies.iter().find(|body| body.span.overlaps(annot_span)) {
+                        panic!(
+                            "Overlapping Ghost Declaration at {:?} and Function at {:?}",
+                            annot_span, body.span
+                        )
+                    }
+                    true
+                })
+                .collect::<LinkedList<_>>();
+            assert!(self.annots.is_empty());
+            let len = ghost_decls.len();
+            let len = len.try_into().expect(&format!(
+                "{} ghost declarations cannot be stored in a Capnp message",
+                len
+            ));
+            let mut gh_decls_cpn = vf_mir_cpn.reborrow().init_ghost_decls(len);
+            for (idx, gh_decl) in ghost_decls.into_iter().enumerate() {
+                let gh_decl_cpn = gh_decls_cpn.reborrow().get(idx.try_into().unwrap());
+                Self::encode_annotation(self.tcx, gh_decl, gh_decl_cpn);
             }
 
             // Encode Required Definitions
