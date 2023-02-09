@@ -591,10 +591,32 @@ mod vf_mir_builder {
             let vdis_len = body.var_debug_info.len().try_into().expect(
                 "The number of variables debug info entries cannot be stored in a Capnp message",
             );
-            let mut vdis_cpn = body_cpn.init_var_debug_info(vdis_len);
+            let mut vdis_cpn = body_cpn.reborrow().init_var_debug_info(vdis_len);
             for (idx, vdi) in body.var_debug_info.iter().enumerate() {
                 let vdi_cpn = vdis_cpn.reborrow().get(idx.try_into().unwrap());
                 Self::encode_var_debug_info(tcx, enc_ctx, vdi, vdi_cpn);
+            }
+
+            let ghost_stmts = enc_ctx
+                .annots
+                .drain_filter(|annot| {
+                    imp_span_data.contains(crate::span_utils::comment_span(&annot))
+                })
+                .collect::<LinkedList<_>>();
+            assert!(
+                enc_ctx.annots.is_empty(),
+                "There are annotations for {} that are neither in contract nor in the body",
+                def_path
+            );
+            let len = ghost_stmts.len();
+            let len = len.try_into().expect(&format!(
+                "{} ghost statements cannot be stored in a Capnp message",
+                len
+            ));
+            let mut ghost_stmts_cpn = body_cpn.init_ghost_stmts(len);
+            for (idx, ghost_stmt) in ghost_stmts.into_iter().enumerate() {
+                let ghost_stmt_cpn = ghost_stmts_cpn.reborrow().get(idx.try_into().unwrap());
+                Self::encode_annotation(tcx, ghost_stmt, ghost_stmt_cpn);
             }
         }
 

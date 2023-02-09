@@ -80,18 +80,169 @@ module IntAux = struct
 end
 
 module LocAux = struct
+  open Ocaml_aux
   open Ast
 
+  let is_well_formed_src_pos (path, ln, col) =
+    if ln < 1 then
+      Error (`IsWellFormedSrcPos ("Invalid line number: " ^ Int.to_string ln))
+    else if col < 1 then
+      Error
+        (`IsWellFormedSrcPos ("Invalid column number: " ^ Int.to_string col))
+    else Ok ()
+
+  let is_well_formed_loc0
+      ((((spath, sln, scol) as spos), ((epath, eln, ecol) as epos)) : loc0) =
+    let* _ = is_well_formed_src_pos spos in
+    let* _ = is_well_formed_src_pos epos in
+    if spath <> epath then
+      Error
+        (`IsWellFormedLoc0
+          "The start and end positions are not in the same file")
+    else if not (sln < eln || (sln = eln && scol <= ecol)) then
+      Error (`IsWellFormedLoc0 "The start and end positions are not in order")
+    else Ok ()
+
   let get_last_col_loc (loc : loc) =
-    match loc with
-    | Lexed loc ->
-        let _, ((path, ln, col) as epos) = loc in
-        Lexed ((path, ln, col - 1), epos)
-    | DummyLoc
-    | MacroExpansion ((*Call site*) _, (*Body token*) _)
-    | MacroParamExpansion
-        ((*Parameter occurrence being expanded*) _, (*Argument token*) _) ->
-        failwith "Todo"
+    let loc0 = lexed_loc loc in
+    let* _ = is_well_formed_loc0 loc0 in
+    let _, ((path, ln, col) as epos) = loc0 in
+    if col > 1 (*1 based*) then Ok (Lexed ((path, ln, col - 1), epos))
+    else Error (`GetLastColLoc "There is no column before end position column")
+
+  let try_compare_src_pos ((path1, ln1, col1) as pos1)
+      ((path2, ln2, col2) as pos2) =
+    let* _ = is_well_formed_src_pos pos1 in
+    let* _ = is_well_formed_src_pos pos2 in
+    if path1 <> path2 then
+      Error
+        (`TryCompareSrcPos "Cannot compare source positions in different files")
+    else if ln1 > ln2 then Ok 1
+    else if ln1 < ln2 then Ok (-1)
+    else if col1 > col2 then Ok 1
+    else if col1 < col2 then Ok (-1)
+    else Ok 0
+
+  type inc_kind = LeftInRight | RightInLeft
+
+  type overlapping_kind =
+    | Partial of { intersection : loc0; union : loc0 }
+    | Inclusion of { kind : inc_kind }
+    | Eq
+
+  type rel =
+    | None
+    | Disjoint of { compare : int }
+    | Overlapping of { kind : overlapping_kind }
+
+  let rel l1 l2 =
+    let* _ = is_well_formed_loc0 l1 in
+    let* _ = is_well_formed_loc0 l2 in
+    let (((spath1, _, _) as spos1), epos1), (((spath2, _, _) as spos2), epos2) =
+      (l1, l2)
+    in
+    if spath1 <> spath2 then Ok None
+    else
+      let* cmp_s2_s1 = try_compare_src_pos spos2 spos1 in
+      let s2_gt_s1 = cmp_s2_s1 > 0 in
+      let* cmp_s2_e1 = try_compare_src_pos spos2 epos1 in
+      let s2_lt_e1 = cmp_s2_e1 < 0 in
+      let* cmp_e2_s1 = try_compare_src_pos epos2 spos1 in
+      let e2_gt_s1 = cmp_e2_s1 > 0 in
+      let* cmp_e2_e1 = try_compare_src_pos epos2 epos1 in
+      let e2_lt_e1 = cmp_e2_e1 < 0 in
+      let s2_eq_s1 = cmp_s2_s1 = 0 in
+      let e2_eq_e1 = cmp_e2_e1 = 0 in
+      match (s2_gt_s1, s2_lt_e1, e2_gt_s1, e2_lt_e1) with
+      | true (*s2>s1*), true (*s2<e1*), true (*e2>s1*), true (*e2<e1*) ->
+          Ok (Overlapping { kind = Inclusion { kind = RightInLeft } })
+      | true (*s2>s1*), true (*s2<e1*), true (*e2>s1*), false (*e2>=e1*) ->
+          Ok
+            (Overlapping
+               {
+                 kind =
+                   Partial
+                     { intersection = (spos2, epos1); union = (spos1, epos2) };
+               })
+      | true (*s2>s1*), true (*s2<e1*), false (*e2<=s1*), true (*e2<e1*) ->
+          failwith "bug!" (*e2<s2*)
+      | true (*s2>s1*), true (*s2<e1*), false (*e2<=s1*), false (*e2>=e1*) ->
+          failwith "bug!" (*e2<s2*)
+      | true (*s2>s1*), false (*s2>=e1*), true (*e2>s1*), true (*e2<e1*) ->
+          failwith "bug!" (*e2<s2*)
+      | true (*s2>s1*), false (*s2>=e1*), true (*e2>s1*), false (*e2>=e1*) ->
+          Ok (Disjoint { compare = -1 })
+      | true (*s2>s1*), false (*s2>=e1*), false (*e2<=s1*), true (*e2<e1*) ->
+          failwith "bug!" (*e2<s2*)
+      | true (*s2>s1*), false (*s2>=e1*), false (*e2<=s1*), false (*e2>=e1*) ->
+          failwith "bug!" (*e2<s2*)
+      | false (*s2<=s1*), true (*s2<e1*), true (*e2>s1*), true (*e2<e1*) ->
+          Ok
+            (Overlapping
+               {
+                 kind =
+                   Partial
+                     { intersection = (spos1, epos2); union = (spos2, epos1) };
+               })
+      | false (*s2<=s1*), true (*s2<e1*), true (*e2>s1*), false (*e2>=e1*) ->
+          if s2_eq_s1 && e2_eq_e1 then Ok (Overlapping { kind = Eq })
+          else Ok (Overlapping { kind = Inclusion { kind = LeftInRight } })
+      | false (*s2<=s1*), true (*s2<e1*), false (*e2<=s1*), true (*e2<e1*) ->
+          Ok (Disjoint { compare = 1 })
+      | false (*s2<=s1*), true (*s2<e1*), false (*e2<=s1*), false (*e2>=e1*) ->
+          Ok (Disjoint { compare = 1 }) (*s1=e1=e2*)
+      | false (*s2<=s1*), false (*s2>=e1*), true (*e2>s1*), true (*e2<e1*) ->
+          failwith "bug!" (*s1=e1=s2 => no e2*)
+      | false (*s2<=s1*), false (*s2>=e1*), true (*e2>s1*), false (*e2>=e1*) ->
+          Ok (Disjoint { compare = -1 }) (*s1=e1=s2*)
+      | false (*s2<=s1*), false (*s2>=e1*), false (*e2<=s1*), true (*e2<e1*) ->
+          failwith "bug!" (*s1=e1=s2 => e2<s2*)
+      | false (*s2<=s1*), false (*s2>=e1*), false (*e2<=s1*), false (*e2>=e1*)
+        ->
+          Ok (Overlapping { kind = Eq })
+  (*s1=e1=s2=e2*)
+
+  let try_compare_loc l1 l2 =
+    let* rel = rel l1 l2 in
+    match rel with
+    | Disjoint { compare } -> Ok compare
+    | None ->
+        Error (`TryCompareLoc "Cannot compare source spans in different files")
+    | Overlapping { kind = _ } ->
+        Error (`TryCompareLoc "Not strictly ordered locations")
+
+  let compare_err_desc ei =
+    match ei with
+    | `IsWellFormedLoc0 msg -> "Malformed source span: " ^ msg
+    | `IsWellFormedSrcPos msg -> "Malformed source position: " ^ msg
+    | `TryCompareLoc msg -> "Failed to compare source spans: " ^ msg
+    | `TryCompareSrcPos msg -> "Failed to compare source positions: " ^ msg
+
+  let disjoint_batches get_loc elms =
+    let f_aux disj_batches elm =
+      let loc_elm = Ast.lexed_loc (get_loc elm) in
+      match disj_batches with
+      | [] -> Ok [ ([ elm ], loc_elm) ]
+      | (batch_elms, loc_batch) :: t_disj_batches -> (
+          let* rel = rel loc_elm loc_batch in
+          match rel with
+          | None -> Error (`DisjointBatches "Elements with unrelated locations")
+          | Disjoint _ -> Ok (([ elm ], loc_elm) :: disj_batches)
+          | Overlapping { kind } ->
+              let loc_batch =
+                match kind with
+                | Partial d -> d.union
+                | Inclusion { kind } -> (
+                    match kind with
+                    | RightInLeft -> loc_elm
+                    | LeftInRight -> loc_batch)
+                | Eq -> loc_elm
+              in
+              Ok ((elm :: batch_elms, loc_batch) :: t_disj_batches))
+    in
+    let* dbs = ListAux.try_fold_left f_aux [] elms in
+    let dbs = List.map (fun (es, l) -> (List.rev es, l)) dbs in
+    Ok (List.rev dbs)
 end
 
 module Mir = struct
@@ -378,21 +529,22 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let annot : Mir.annot = { span; raw } in
     Ok annot
 
+  let translate_annot_to_vf_parser_inp ({ span; raw } : Mir.annot) =
+    let spos, epos = Ast.lexed_loc span in
+    (spos, raw)
+
   let translate_contract (contract_cpn : ContractRd.t) =
     let annots_cpn = ContractRd.annotations_get_list contract_cpn in
     let* annots = ListAux.try_map translate_annotation annots_cpn in
-    let* annots =
-      ListAux.try_map
-        (fun { Mir.span; Mir.raw } ->
-          match span with
-          | Ast.Lexed (b, e) -> Ok (b, raw)
-          | DummyLoc | MacroExpansion _ | MacroParamExpansion _ ->
-              Error
-                (`TrContract "Invalid span translation for function contract"))
-        annots
-    in
+    let annots = List.map translate_annot_to_vf_parser_inp annots in
     Ok (VfMirAnnotParser.parse_func_contract annots)
   (* Todo: VeriFast parser throws exceptions. we should catch them and use our own error handling scheme *)
+
+  let translate_ghost_stmt (gs_cpn : AnnotationRd.t) =
+    let open AnnotationRd in
+    let* gs = translate_annotation gs_cpn in
+    let gs = translate_annot_to_vf_parser_inp gs in
+    Ok (VfMirAnnotParser.parse_ghost_stmt gs)
 
   let translate_mutability (mutability_cpn : MutabilityRd.t) =
     match MutabilityRd.get mutability_cpn with
@@ -574,14 +726,34 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   module TrBody (Args : sig
     val var_id_trs_map_ref : var_id_trs_map ref
+    val ghost_stmts : Ast.stmt list
+    val body_imp_loc : Ast.loc
   end) =
   struct
+    module State = struct
+      let var_id_trs_map_ref = Args.var_id_trs_map_ref
+      let ghost_stmts = ref Args.ghost_stmts
+      let body_imp_loc = Args.body_imp_loc
+
+      let fetch_ghost_stmts_before (l : Ast.loc0) =
+        let* gs_before, gs_rem =
+          ListAux.try_partition
+            (fun g ->
+              let lg = Ast.lexed_loc (Ast.stmt_loc g) in
+              let* cmp = LocAux.try_compare_loc lg l in
+              Ok (cmp < 0))
+            !ghost_stmts
+        in
+        ghost_stmts := gs_rem;
+        Ok gs_before
+    end
+
     let translate_local_decl_id (local_decl_id_cpn : LocalDeclIdRd.t) =
       let id = TrName.tag_internal (LocalDeclIdRd.name_get local_decl_id_cpn) in
       match
         List.find_opt
           (fun ({ id = id1; _ } : var_id_trs_entry) -> id = id1)
-          !Args.var_id_trs_map_ref
+          !State.var_id_trs_map_ref
       with
       | None -> id
       | Some { id; internal_name } -> internal_name
@@ -1175,6 +1347,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let open StatementRd in
       let src_info_cpn = source_info_get statement_cpn in
       let* { Mir.span = loc; Mir.scope } = translate_source_info src_info_cpn in
+      (* Todo @Nima: The following `loc` substitution is due to deal with statements with their location equal to the whole body of the function.
+         They prevent us from embedding ghost statements into the MIR statements. The ghost embedding approach should be changed.
+         After that this `loc` changing and the `body_imp_loc` in the State are not necessary anymore. *)
+      let loc =
+        if loc = State.body_imp_loc then
+          let spos, _ = Ast.lexed_loc State.body_imp_loc in
+          Ast.Lexed (spos, spos)
+        else loc
+      in
       let kind_cpn = kind_get statement_cpn in
       translate_statement_kind kind_cpn loc
 
@@ -1203,13 +1384,19 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         Ok bblock
 
     let translate_to_vf_basic_block
-        ({ id; statements; terminator } : Mir.basic_block) =
-      if ListAux.is_empty terminator then
+        ({ id; statements = stmts; terminator = trm } : Mir.basic_block) =
+      if ListAux.is_empty trm then
         Error (`TrToVfBBlock "Basic block without any terminator")
       else
-        let statements = statements @ terminator in
-        let loc = Ast.stmt_loc @@ List.hd @@ statements in
-        Ok (Ast.LabelStmt (loc, id) :: statements)
+        let embed_ghost_stmts all_stmts stmt =
+          let loc_stmt = stmt |> Ast.stmt_loc |> Ast.lexed_loc in
+          let* ghost_stmts = State.fetch_ghost_stmts_before loc_stmt in
+          Ok (all_stmts @ ghost_stmts @ [ stmt ])
+        in
+        let stmts = stmts @ trm in
+        let* stmts = ListAux.try_fold_left embed_ghost_stmts [] stmts in
+        let loc = stmts |> List.hd |> Ast.stmt_loc in
+        Ok (Ast.LabelStmt (loc, id) :: stmts)
 
     let translate_var_debug_info_contents (vdic_cpn : VarDebugInfoContentsRd.t)
         (loc : Ast.loc) =
@@ -1304,8 +1491,24 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   let translate_body (body_cpn : BodyRd.t) =
     let open BodyRd in
     let var_id_trs_map_ref = ref [] in
+    let ghost_stmts_cpn = ghost_stmts_get_list body_cpn in
+    let* ghost_stmts = ListAux.try_map translate_ghost_stmt ghost_stmts_cpn in
+    let* ghost_stmts =
+      ListAux.try_sort LocAux.compare_err_desc
+        (fun s1 s2 ->
+          let l1, l2 =
+            (fun f -> (f s1, f s2)) @@ fun s ->
+            s |> Ast.stmt_loc |> Ast.lexed_loc
+          in
+          LocAux.try_compare_loc l1 l2)
+        ghost_stmts
+    in
+    let imp_span_cpn = imp_span_get body_cpn in
+    let* imp_loc = translate_span_data imp_span_cpn in
     let open TrBody (struct
       let var_id_trs_map_ref = var_id_trs_map_ref
+      let ghost_stmts = ghost_stmts
+      let body_imp_loc = imp_loc
     end) in
     let vdis_cpn = var_debug_info_get_list body_cpn in
     (* Since var id translation map is empty var debug info contains the plain Mir ids *)
@@ -1363,9 +1566,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let vf_bblocks = List.concat vf_bblocks in
         let span_cpn = span_get body_cpn in
         let* loc = translate_span_data span_cpn in
-        (* let imp_span_cpn = imp_span_get body_cpn in
-           let* imp_loc = translate_span_data imp_span_cpn in *)
-        let closing_cbrace_loc = LocAux.get_last_col_loc loc in
+        let* closing_cbrace_loc = LocAux.get_last_col_loc loc in
         let body =
           Ast.Func
             ( loc,
@@ -1491,7 +1692,51 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     match job () with
     | Ok res -> res
-    | Error err -> failwith "Todo: translate_vf_mir Error handling"
+    | Error err ->
+        (print_string "MIR Translator Failed";
+         match err with
+         | `CalcIntWidth str
+         | `CapnpIndListGetList str
+         | `DisjointBatches str
+         | `GetLastColLoc str
+         | `IntAuxAdd str
+         | `IsWellFormedLoc0 str
+         | `IsWellFormedSrcPos str
+         | `Sort str
+         | `TrAdtDef str
+         | `TrAdtTy str
+         | `TrBinOp str
+         | `TrBody str
+         | `TrConstValue str
+         | `TrConstantKind str
+         | `TrFileName str
+         | `TrFnCall str
+         | `TrFnCallRExpr str
+         | `TrFnDefTy str
+         | `TrGenArg str
+         | `TrMutability str
+         | `TrOperand str
+         | `TrPlaceElement str
+         | `TrRealFileName str
+         | `TrRvalue str
+         | `TrScalar str
+         | `TrScalarUint str
+         | `TrStatementKind str
+         | `TrSwInt str
+         | `TrTerminatorKind str
+         | `TrToVfBBlock str
+         | `TrTy str
+         | `TrTyConstKind str
+         | `TrUIntTy str
+         | `TrVarDebugInfoContents str
+         | `TrVisibility str
+         | `TryCompareLoc str
+         | `TryCompareSrcPos str
+         | `UIntTyBitsLen str ->
+             print_endline (": " ^ str)
+         | `IntAuxToInt -> ());
+        failwith "Todo: translate_vf_mir Error handling"
+  (* Todo @Nima: We should add error handling parts at the end of `translate_*` functions *)
 end
 (* Todo @Nima: There would be naming conflicts if the user writes a function in Rust with a name like `std_alloc_alloc`.
    A possible solution might be adding `crate` in front of local declarations. Another problem with names is that two paths

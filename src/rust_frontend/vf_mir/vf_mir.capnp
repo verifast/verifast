@@ -475,6 +475,7 @@ struct Body {
     span @6: SpanData;
     impSpan @7: SpanData;
     varDebugInfo @8: List(VarDebugInfo);
+    ghostStmts @9: List(Annotation);
 }
 
 struct VfMir {

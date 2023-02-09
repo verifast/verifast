@@ -32,10 +32,10 @@ module Make (Args : VF_MIR_ANNOT_PARSER_ARGS) = struct
 
   let token_stream_from_annots (annots : (src_pos * string) list) =
     let tk_strs_ref = annots |> List.map token_stream_from_annot |> ref in
-    let get_current_loc () =
-      let get_current_loc, _ = List.hd !tk_strs_ref in
-      get_current_loc ()
-    in
+    (* let get_current_loc () =
+         let get_current_loc, _ = List.hd !tk_strs_ref in
+         get_current_loc ()
+       in *)
     let rec next_tk n =
       match !tk_strs_ref with
       | [] -> None
@@ -54,4 +54,9 @@ module Make (Args : VF_MIR_ANNOT_PARSER_ARGS) = struct
     let tk_stream = token_stream_from_annots annots in
     let tk_stream = Parser.noop_preprocessor tk_stream in
     VfParser.parse_spec_clauses tk_stream
+
+  let parse_ghost_stmt (annot : src_pos * string) =
+    let _, ts = token_stream_from_annot annot in
+    ts |> Parser.noop_preprocessor |> VfParser.parse_stmt
+  (* Todo @Nima: This can parse all statements. Maybe we should rename this module to just a parser *)
 end

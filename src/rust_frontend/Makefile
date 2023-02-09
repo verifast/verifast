@@ -98,3 +98,4 @@ RUST_FE_OBJS = $(OCAML_AUX_OBJ) $(VF_MIR_OCAML_STUBS_OBJ) $(VF_MIR_ANNOT_PARSER_
 build-vf-rust-mir-exporter: $(VF_MIR_EXP_BIN)
 # Rust frontend
 build-rust-frontend: build-vf-rust-mir-exporter $(RUST_FE_OBJS)
+#Todo @Nima: The `-w p` in `OCAMLCFLAGS` suppresses exhaustive match check which we want to be enabled at least in the rust frontend
