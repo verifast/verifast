@@ -546,6 +546,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let gs = translate_annot_to_vf_parser_inp gs in
     Ok (VfMirAnnotParser.parse_ghost_stmt gs)
 
+  let translate_ghost_decl_batch (gh_decl_batch_cpn : AnnotationRd.t) =
+    let* gh_decl_b = translate_annotation gh_decl_batch_cpn in
+    let gh_decl_b = translate_annot_to_vf_parser_inp gh_decl_b in
+    Ok (VfMirAnnotParser.parse_ghost_decl_batch gh_decl_b)
+
   let translate_mutability (mutability_cpn : MutabilityRd.t) =
     match MutabilityRd.get mutability_cpn with
     | Mut -> Ok Mir.Mut
@@ -1674,12 +1679,19 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let adt_defs_cpn = VfMirRd.adt_defs_get vf_mir_cpn in
       let* adt_defs_cpn = CapnpAux.ind_list_get_list adt_defs_cpn in
       let* adt_defs = ListAux.try_map translate_adt_def adt_defs_cpn in
+      let ghost_decl_batches_cpn =
+        VfMirRd.ghost_decl_batches_get_list vf_mir_cpn
+      in
+      let* ghost_decl_batches =
+        ListAux.try_map translate_ghost_decl_batch ghost_decl_batches_cpn
+      in
+      let ghost_decls = List.flatten ghost_decl_batches in
       let bodies_cpn = VfMirRd.bodies_get_list vf_mir_cpn in
       let* bodies_and_dbg_infos = ListAux.try_map translate_body bodies_cpn in
       let body_decls, debug_infos = List.split bodies_and_dbg_infos in
       let debug_infos = VF0.DbgInfoRustFe debug_infos in
       let decls = AstDecls.decls () in
-      let decls = decls @ adt_defs @ body_decls in
+      let decls = decls @ adt_defs @ ghost_decls @ body_decls in
       (* Todo @Nima: we should add necessary inclusions from Rust side *)
       let _ = Headers.add_decl "rust/std/alloc.h" in
       let header_names = Headers.decls () in

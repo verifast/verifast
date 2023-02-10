@@ -399,29 +399,28 @@ mod vf_mir_builder {
             }
 
             // Encode Ghost Declarations
-            let ghost_decls = self
+            let ghost_decl_batches = self
                 .annots
                 .drain_filter(|annot| {
                     let annot_span = crate::span_utils::comment_span(annot).span();
                     if let Some(body) = bodies.iter().find(|body| body.span.overlaps(annot_span)) {
                         panic!(
-                            "Overlapping Ghost Declaration at {:?} and Function at {:?}",
+                            "Overlapping Ghost Declaration Block at {:?} and Function at {:?}",
                             annot_span, body.span
                         )
                     }
                     true
                 })
                 .collect::<LinkedList<_>>();
-            assert!(self.annots.is_empty());
-            let len = ghost_decls.len();
+            let len = ghost_decl_batches.len();
             let len = len.try_into().expect(&format!(
-                "{} ghost declarations cannot be stored in a Capnp message",
+                "{} ghost declaration blocks cannot be stored in a Capnp message",
                 len
             ));
-            let mut gh_decls_cpn = vf_mir_cpn.reborrow().init_ghost_decls(len);
-            for (idx, gh_decl) in ghost_decls.into_iter().enumerate() {
-                let gh_decl_cpn = gh_decls_cpn.reborrow().get(idx.try_into().unwrap());
-                Self::encode_annotation(self.tcx, gh_decl, gh_decl_cpn);
+            let mut gh_decl_bs_cpn = vf_mir_cpn.reborrow().init_ghost_decl_batches(len);
+            for (idx, gh_decl_b) in ghost_decl_batches.into_iter().enumerate() {
+                let gh_decl_b_cpn = gh_decl_bs_cpn.reborrow().get(idx.try_into().unwrap());
+                Self::encode_annotation(self.tcx, gh_decl_b, gh_decl_b_cpn);
             }
 
             // Encode Required Definitions

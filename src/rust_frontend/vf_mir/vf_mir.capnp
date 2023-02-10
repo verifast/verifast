@@ -484,7 +484,7 @@ struct VfMir {
     # do this is capnp `orphans` which are not supported for Rust plugin at the time.
     adtDefs @0: IndList(Ty.AdtDef);
     bodies @1: List(Body);
-    ghostDecls @2: List(Annotation);
+    ghostDeclBatches @2: List(Annotation);
 }
 #Todo @Nima: For Clarity write a struct fields on top and then inner type definitions
 #Todo @Nima: Use a uniform naming. def_path for Rust style definition paths and Name for their corresponding translated names.

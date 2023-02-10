@@ -59,4 +59,8 @@ module Make (Args : VF_MIR_ANNOT_PARSER_ARGS) = struct
     let _, ts = token_stream_from_annot annot in
     ts |> Parser.noop_preprocessor |> VfParser.parse_stmt
   (* Todo @Nima: This can parse all statements. Maybe we should rename this module to just a parser *)
+
+  let parse_ghost_decl_batch (annot : src_pos * string) =
+    let _, ts = token_stream_from_annot annot in
+    ts |> Parser.noop_preprocessor |> VfParser.parse_decls
 end
