@@ -454,7 +454,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let header_names = List.map (fun (_, (_, _, h), _, _) -> h) headers in
         let headers =
           ( Ast.dummy_loc,
-            (Lexer.AngleBracketInclude, header_name, Args.aux_headers_dir),
+            (Lexer.AngleBracketInclude, header_name, header_path),
             header_names,
             decls )
           :: headers
@@ -1692,8 +1692,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let debug_infos = VF0.DbgInfoRustFe debug_infos in
       let decls = AstDecls.decls () in
       let decls = decls @ adt_defs @ ghost_decls @ body_decls in
-      (* Todo @Nima: we should add necessary inclusions from Rust side *)
-      let _ = Headers.add_decl "rust/std/alloc.h" in
+      (* Todo @Nima: we should add necessary inclusions during translation *)
+      let _ =
+        List.iter Headers.add_decl
+          [ "rust/std/alloc.h"; "rust/rust_belt/lifetime_logic.gh" ]
+      in
       let header_names = Headers.decls () in
       let* headers = ListAux.try_map HeadersAux.parse_header header_names in
       let headers = List.concat headers in

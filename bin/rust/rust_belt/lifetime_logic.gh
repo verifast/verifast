@@ -1,0 +1,22 @@
+#ifndef LIFETIME_LOGIC_H
+#define LIFETIME_LOGIC_H
+
+abstract_type lifetime_t; // Type of lifetimes
+abstract_type thread_id_t; // Type of thread IDs
+
+predicate lifetime_token(lifetime_t k;); // Lifetime token
+predicate thread_token(thread_id_t t); // Non-atomic token with Top mask ([NaInv: t.Top] in RustBelt)
+
+predicate nonatomic_borrow(lifetime_t k, thread_id_t t, void *l, predicate() P); // Non-atomic borrow with mask Nshr.l
+
+// Rule LftL-na-acc with N = Nshr.l and requiring NaInv: t.Top instead of NaInv: t.N
+lemma void open_nonatomic_borrow(lifetime_t k, thread_id_t t, void *l, real q);
+    requires nonatomic_borrow(k, t, l, ?P) &*& [q]lifetime_token(k) &*& thread_token(t);
+    ensures P() &*& close_nonatomic_borrow_token(P, q, k, t);
+
+predicate close_nonatomic_borrow_token(predicate() P, real q, lifetime_t k, thread_id_t t);
+
+lemma void close_nonatomic_borrow();
+    requires close_nonatomic_borrow_token(?P, ?q, ?k, ?t) &*& P();
+    ensures [q]lifetime_token(k) &*& thread_token(t);
+#endif
