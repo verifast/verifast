@@ -25,12 +25,15 @@ struct Util {
             }
         }
     }
+
+    struct TextWrapper {text @0: Text;} #The pointer in Option just supports structs
 }
 
 using Util.UInt128;
 using Util.BigUInt;
 using Util.Option;
 using Util.IndList;
+using Util.TextWrapper;
 
 struct SpanData {
     struct Loc {
@@ -40,12 +43,13 @@ struct SpanData {
         struct SourceFile {
             struct FileName {
                 struct RealFileName {
-                    struct PathBuf {
-                        inner @0: Text;
+                    struct RemappedData {
+                        localPath @0: Option(TextWrapper);
+                        virtualName @1: Text;
                     }
                     union {
-                        localPath @0: PathBuf;
-                        remapped @1: Void;
+                        localPath @0: Text;
+                        remapped @1: RemappedData;
                     }
                 }
                 union {

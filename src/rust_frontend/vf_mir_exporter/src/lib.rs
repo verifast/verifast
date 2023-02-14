@@ -264,7 +264,6 @@ mod vf_mir_builder {
     use loc_cpn::source_file as source_file_cpn;
     use mir::HasLocalDecls;
     use place_cpn::place_element as place_element_cpn;
-    use real_file_name_cpn::path_buf as path_buf_cpn;
     use ref_data_cpn::borrow_kind as borrow_kind_cpn;
     use rustc_ast::util::comments::Comment;
     use rustc_hir as hir;
@@ -741,25 +740,35 @@ mod vf_mir_builder {
 
         fn encode_real_file_name(
             real_fname: &rustc_span::RealFileName,
-            real_fname_cpn: real_file_name_cpn::Builder<'_>,
+            mut real_fname_cpn: real_file_name_cpn::Builder<'_>,
         ) {
             debug!("Encoding RealFileName {:?}", real_fname);
+            fn get_path_str(path_buf: &std::path::PathBuf) -> &str {
+                path_buf.to_str().expect(&format!(
+                    "Failed to get the unicode string of PathBuf {:?}",
+                    path_buf
+                ))
+            };
             match real_fname {
                 rustc_span::RealFileName::LocalPath(path_buf) => {
-                    let path_buf_cpn = real_fname_cpn.init_local_path();
-                    Self::encode_path_buf(path_buf, path_buf_cpn);
+                    real_fname_cpn.set_local_path(get_path_str(path_buf));
                 }
-                rustc_span::RealFileName::Remapped { .. } => todo!(),
+                rustc_span::RealFileName::Remapped {
+                    local_path,
+                    virtual_name,
+                } => {
+                    let mut remapped_data_cpn = real_fname_cpn.init_remapped();
+                    let mut local_path_opt_cpn = remapped_data_cpn.reborrow().init_local_path();
+                    match local_path {
+                        None => local_path_opt_cpn.set_nothing(()),
+                        Some(local_path) => {
+                            let mut text_wrapper_cpn = local_path_opt_cpn.init_something();
+                            text_wrapper_cpn.set_text(get_path_str(local_path));
+                        }
+                    }
+                    remapped_data_cpn.set_virtual_name(get_path_str(virtual_name));
+                }
             }
-        }
-
-        fn encode_path_buf(pbuf: &std::path::PathBuf, mut pbuf_cpn: path_buf_cpn::Builder<'_>) {
-            debug!("Encoding PathBuf {:?}", pbuf);
-            let path = pbuf.to_str().expect(&format!(
-                "Failed to get the unicode string of PathBuf {:?}",
-                pbuf
-            ));
-            pbuf_cpn.set_inner(path);
         }
 
         fn encode_contract(

@@ -465,13 +465,25 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   module VF0 = Verifast0
 
-  let translate_path_buf (pbuf_cpn : PathBufRd.t) = PathBufRd.inner_get pbuf_cpn
-
   let translate_real_file_name (real_fname_cpn : RealFileNameRd.t) =
     let open RealFileNameRd in
     match get real_fname_cpn with
-    | LocalPath path_buf_cpn -> Ok (translate_path_buf path_buf_cpn)
-    | Remapped -> failwith "Todo: RealFileName Remapped"
+    | LocalPath path -> Ok path
+    | Remapped remapped_data_cpn -> (
+        let open RemappedData in
+        let local_path_opt_cpn = local_path_get remapped_data_cpn in
+        let virtual_name = virtual_name_get remapped_data_cpn in
+        match OptionRd.get local_path_opt_cpn with
+        | Nothing ->
+            Error
+              (`TrRealFileName
+                "RealFileName without local path: The file was imported from \
+                 another crate")
+        | Something ptr_cpn ->
+            let text_wrapper_cpn = VfMirStub.Reader.of_pointer ptr_cpn in
+            Ok (TextWrapperRd.text_get text_wrapper_cpn)
+        | Undefined _ ->
+            Error (`TrRealFileName "Unknown RealFileName::Remapped"))
     | Undefined _ -> Error (`TrRealFileName "Unknown RealFileName kind")
 
   let translate_file_name (fname_cpn : FileNameRd.t) =
@@ -1679,6 +1691,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let adt_defs_cpn = VfMirRd.adt_defs_get vf_mir_cpn in
       let* adt_defs_cpn = CapnpAux.ind_list_get_list adt_defs_cpn in
       let* adt_defs = ListAux.try_map translate_adt_def adt_defs_cpn in
+      let adt_defs = List.rev adt_defs in
+      (* Todo @Nima: The MIR exporter encodes `ADT`s and adds the `ADT` declarations used in them later in the same array.
+         For a Tree hierarchy of types just reversing the array works but obviously
+         for more complicated scenarios we need to add all of the declarations without definitions first
+         and then add all of the complete declarations
+      *)
       let ghost_decl_batches_cpn =
         VfMirRd.ghost_decl_batches_get_list vf_mir_cpn
       in

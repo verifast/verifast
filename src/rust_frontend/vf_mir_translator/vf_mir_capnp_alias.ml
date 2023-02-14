@@ -6,6 +6,7 @@ module VfMirRd = VfMirStub.Reader.VfMir
 module UInt128Rd = UtilRd.UInt128
 module OptionRd = UtilRd.Option
 module IndListRd = UtilRd.IndList
+module TextWrapperRd = UtilRd.TextWrapper
 
 (* Source Spans *)
 module SpanDataRd = VfMirStub.Reader.SpanData
@@ -13,7 +14,6 @@ module LocRd = SpanDataRd.Loc
 module SourceFileRd = LocRd.SourceFile
 module FileNameRd = SourceFileRd.FileName
 module RealFileNameRd = FileNameRd.RealFileName
-module PathBufRd = RealFileNameRd.PathBuf
 module CharPosRd = LocRd.CharPos
 
 (* Global *)
