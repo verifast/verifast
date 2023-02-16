@@ -2359,8 +2359,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         iter pni ((i, (l, tparams, List.rev ctormap, getters, setters, subtype))::imap) pfm fpm ds
       | Func (l, Fixpoint, tparams, rto, g, ps, nonghost_callers_only, functype, contract, terminates, body_opt, _, _)::ds ->
-        let g = full_name pn g in
-        if List.mem_assoc g pfm || List.mem_assoc g purefuncmap0 then static_error l ("Duplicate pure function name: "^g) None;
+        let g, name = full_name pn (Identifier.id g), full_name pn (Identifier.name g) in
+        if List.mem_assoc g pfm || List.mem_assoc g purefuncmap0 then static_error l ("Duplicate pure function name: " ^ name) None;
         check_tparams l [] tparams;
         let rt =
           match rto with
@@ -3409,7 +3409,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         begin fun (PackageDecl (_, pn, _, ds)) ->
           flatmap
             begin function
-              (Func (l, (Regular|Lemma(_)), tparams, rt, g, ps, nonghost_callers_only, ft, c, terminates, b, _, _)) -> [full_name pn g]
+              (Func (l, (Regular|Lemma(_)), tparams, rt, g, ps, nonghost_callers_only, ft, c, terminates, b, _, _)) -> [full_name pn (Identifier.id g)]
             | _ -> []
             end
             ds

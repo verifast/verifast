@@ -965,7 +965,7 @@ and sexpr_of_decl (decl : decl) : sexpression =
                            ; body
                            ; contract ]
       in
-        build_list [ Symbol "declare-function"; Symbol name ] kw
+        build_list [ Symbol "declare-function"; Symbol (Identifier.name name) ] kw
     | PredFamilyDecl (loc,
                       name,
                       tparams,

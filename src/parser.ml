@@ -727,18 +727,18 @@ and
       let gmeasure = g ^ "__measure" in
       let call g args = CallExpr (l, g, [], [], List.map (fun e -> LitPat e) args, Static) in
       [
-        Func (l, Fixpoint, tparams, Some rt, gdef, (PureFuncTypeExpr (l, List.map fst ps @ [rt]), g) :: ps, false, None, None, false, body, false, []);
+        Func (l, Fixpoint, tparams, Some rt, Identifier.of_string gdef, (PureFuncTypeExpr (l, List.map fst ps @ [rt]), g) :: ps, false, None, None, false, body, false, []);
         Inductive (l, iargs, tparams, [Ctor (l, iargs, List.map (fun (t, x) -> (x, t)) ps)]);
-        Func (l, Fixpoint, tparams, Some rt, g_uncurry, (PureFuncTypeExpr (l, [iargsType; rt]), g) :: ps, false, None, None, false,
+        Func (l, Fixpoint, tparams, Some rt, Identifier.of_string g_uncurry, (PureFuncTypeExpr (l, [iargsType; rt]), g) :: ps, false, None, None, false,
           Some ([ReturnStmt (l, Some (call g [call iargs (List.map (fun (t, x) -> Var (l, x)) ps)]))], l), false, []);
-        Func (l, Fixpoint, tparams, Some rt, gdef_curried, [PureFuncTypeExpr (l, [iargsType; rt]), g; iargsType, "__args"], false, None, None, false,
+        Func (l, Fixpoint, tparams, Some rt, Identifier.of_string gdef_curried, [PureFuncTypeExpr (l, [iargsType; rt]), g; iargsType, "__args"], false, None, None, false,
           Some ([SwitchStmt (l, Var (l, "__args"), [SwitchStmtClause (l, call iargs (List.map (fun (t, x) -> Var (l, x)) ps),
             [ReturnStmt (l, Some (call gdef ([ExprCallExpr (l, Var (l, g_uncurry), [Var (l, g)])] @ List.map (fun (t, x) -> Var (l, x)) ps)))])])], l), false, []);
-        Func (l, Fixpoint, tparams, Some (ManifestTypeExpr (l, intType)), gmeasure, [iargsType, "__args"], false, None, None, false,
+        Func (l, Fixpoint, tparams, Some (ManifestTypeExpr (l, intType)), Identifier.of_string gmeasure, [iargsType, "__args"], false, None, None, false,
           Some ([SwitchStmt (l, Var (l, "__args"), [SwitchStmtClause (l, call iargs (List.map (fun (t, x) -> Var (l, x)) ps),
             [ReturnStmt (l, Some measure)])])], l), false, []);
-        Func (l, Fixpoint, tparams, Some rt, g, ps, false, None, None, false, Some ([ReturnStmt (l, Some (call "fix" [Var (l, gdef_curried); Var (l, gmeasure); call iargs (List.map (fun (t, x) -> Var (l, x)) ps)]))], l), false, []);
-        Func (l, Lemma (kwd = "fixpoint_auto", None), tparams, None, g ^ "_def", ps, false, None,
+        Func (l, Fixpoint, tparams, Some rt, Identifier.of_string g, ps, false, None, None, false, Some ([ReturnStmt (l, Some (call "fix" [Var (l, gdef_curried); Var (l, gmeasure); call iargs (List.map (fun (t, x) -> Var (l, x)) ps)]))], l), false, []);
+        Func (l, Lemma (kwd = "fixpoint_auto", None), tparams, None, Identifier.of_string (g ^ "_def"), ps, false, None,
           Some (Operation (l, Le, [IntLit (l, zero_big_int, true, false, NoLSuffix); measure]), Operation (l, Eq, [call g (List.map (fun (t, x) -> Var (l, x)) ps); bodyExpr])),
           false,
           Some ([
@@ -755,7 +755,7 @@ and
       ]
     | _ ->
       if kwd = "fixpoint_auto" then raise (ParseException (l, "Keyword 'fixpoint_auto' does not make sense here because this type of fixpoint definition is always unfolded automatically"));
-      [Func (l, Fixpoint, tparams, rt, g, ps, false, None, None, false, body, false, [])]
+      [Func (l, Fixpoint, tparams, rt, Identifier.of_string g, ps, false, None, None, false, body, false, [])]
     end
 and
   parse_action_decls = parser
@@ -819,9 +819,9 @@ and
         '(_, Kwd ")");
         f = parser
           [< '(_, Kwd ";"); (nonghost_callers_only, ft, co, terminates) = parse_spec_clauses >] ->
-          Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, terminates, None, false, [])
+          Func (l, k, tparams, t, Identifier.of_string g, ps, nonghost_callers_only, ft, co, terminates, None, false, [])
         | [< (nonghost_callers_only, ft, co, terminates) = parse_spec_clauses; '(_, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}") >] ->
-          Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, terminates, Some (ss, closeBraceLoc), false, [])
+          Func (l, k, tparams, t, Identifier.of_string g, ps, nonghost_callers_only, ft, co, terminates, Some (ss, closeBraceLoc), false, [])
       >] -> pop_typedef_scope (); f
     | [<
         () = (fun s -> if k = Regular && tparams = [] && t <> None then () else raise Stream.Failure);

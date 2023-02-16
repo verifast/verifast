@@ -124,7 +124,7 @@ let _ =
             begin 
               match contract_opt with
                 | None -> parse_decl_list tail
-                | Some contract -> let (_, postcond) = contract in (loc, name, postcond) :: parse_decl_list tail
+                | Some contract -> let (_, postcond) = contract in (loc, Identifier.id name, postcond) :: parse_decl_list tail
             end
           | FuncTypeDecl(loc, _, _, name, _, _, _, (_, postcond, _)) -> (loc, name, postcond) :: parse_decl_list tail
           | _ -> parse_decl_list tail

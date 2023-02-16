@@ -286,13 +286,13 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     let ng_callers_only, ft, pre_post, terminates = contract_get f |> capnp_arr_map map_ann_clause |> AP.parse_func_contract loc in
     let return_type = result_get f |> transl_return_type in
     let params = params_get f |> capnp_arr_map transl_param in
-    name, mangled_name, params, body_opt, (ng_callers_only, ft, pre_post, terminates), return_type
+    Identifier.of_mangled ~name mangled_name, params, body_opt, (ng_callers_only, ft, pre_post, terminates), return_type
 
   and transl_func_decl (loc: VF.loc) (f: R.Decl.Function.t): VF.decl =
-    let _, name, params, body_opt, (ng_callers_only, ft, pre_post, terminates), return_type = transl_func loc f in
+    let id, params, body_opt, (ng_callers_only, ft, pre_post, terminates), return_type = transl_func loc f in
     let make_return loc = VF.ReturnStmt (loc, Some (make_int_lit loc 0)) in
     let body_stmts = 
-      match name, body_opt with
+      match Identifier.id id, body_opt with
       | "main", Some ([], l) -> Some ([make_return l], l)
       | "main", Some (body, l) -> begin match List.rev body with
         | VF.ReturnStmt _ :: _ -> body_opt
@@ -300,7 +300,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
         end 
       | _ -> body_opt 
     in
-    VF.Func (loc, VF.Regular, [], return_type, name, params, ng_callers_only, ft, pre_post, terminates, body_stmts, false, [])
+    VF.Func (loc, VF.Regular, [], return_type, id, params, ng_callers_only, ft, pre_post, terminates, body_stmts, false, [])
 
   and transl_ann_decls (loc: VF.loc) (text: string): VF.decl list =
     let VF.Lexed l = loc in
@@ -394,7 +394,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
 
   and transl_meth (loc: VF.loc) (meth: R.Decl.Method.t) =
     let open R.Decl.Method in
-    let name, mangled_name, params, body_opt, anns, return_type = func_get meth |> transl_func loc in
+    let id, params, body_opt, anns, return_type = func_get meth |> transl_func loc in
     let is_static = static_get meth in
     let params = 
       if is_static then params
@@ -414,13 +414,13 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
         )
       else []
     in
-    name, mangled_name, params, body_opt, anns, return_type, implicit, is_virtual, overrides
+    id, params, body_opt, anns, return_type, implicit, is_virtual, overrides
 
   (* translates a method to a function and prepends 'this' to the parameters in case it is not a static method *)
   and transl_meth_decl (loc: VF.loc) (meth: R.Decl.Method.t): VF.decl =
     let open R.Decl.Method in
-    let _, mangled_name, params, body_opt, (ng_callers_only, ft, pre_post, terminates), return_type, _, is_virtual, overrides = transl_meth loc meth in
-    VF.Func (loc, VF.Regular, [], return_type, mangled_name, params, ng_callers_only, ft, pre_post, terminates, body_opt, is_virtual, overrides |> List.map snd)
+    let id, params, body_opt, (ng_callers_only, ft, pre_post, terminates), return_type, _, is_virtual, overrides = transl_meth loc meth in
+    VF.Func (loc, VF.Regular, [], return_type, id, params, ng_callers_only, ft, pre_post, terminates, body_opt, is_virtual, overrides |> List.map snd)
 
   and transl_record_ref (loc: VF.loc) (record_ref: R.RecordRef.t): VF.type_ =
     let open R.RecordRef in
@@ -433,7 +433,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
 
   and transl_ctor_decl (loc: VF.loc) (ctor: R.Decl.Ctor.t): VF.decl =
     let open R.Decl.Ctor in
-    let _, mangled_name, this_param :: params, body_opt, (_, _, pre_post_opt, terminates), _, implicit, _, _ = method_get ctor |> transl_meth loc in
+    let id, this_param :: params, body_opt, (_, _, pre_post_opt, terminates), _, implicit, _, _ = method_get ctor |> transl_meth loc in
     (* the init list also contains member names that are default initialized and don't appear in the init list *)
     (* in that case, no init expr is present (we can always retrieve it from the field default initializer) *)
     let transl_init init =
@@ -443,13 +443,13 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
       let init_list = init_list_get ctor |> capnp_arr_map transl_init in
       init_list, body in
     let parent = ctor |> parent_get |> transl_record_ref loc in
-    VF.CxxCtor (loc, mangled_name, params, pre_post_opt, terminates, body_opt, implicit, parent)
+    VF.CxxCtor (loc, id, params, pre_post_opt, terminates, body_opt, implicit, parent)
 
   and transl_dtor_decl (loc: VF.loc) (dtor: R.Decl.Dtor.t): VF.decl =
     let open R.Decl.Dtor in 
-    let _, mangled_name, [this_param], body_opt, (_, _, pre_post_opt, terminates), _, implicit, is_virtual, overrides = method_get dtor |> transl_meth loc in
+    let id, [this_param], body_opt, (_, _, pre_post_opt, terminates), _, implicit, is_virtual, overrides = method_get dtor |> transl_meth loc in
     let parent = dtor |> parent_get |> transl_record_ref loc in
-    VF.CxxDtor (loc, mangled_name, pre_post_opt, terminates, body_opt, implicit, parent, is_virtual, overrides |> List.map fst)
+    VF.CxxDtor (loc, id, pre_post_opt, terminates, body_opt, implicit, parent, is_virtual, overrides |> List.map fst)
 
   and transl_field_decl (loc: VF.loc) (field: R.Decl.Field.t): VF.field =
     let open R.Decl.Field in

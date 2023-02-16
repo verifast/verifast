@@ -821,7 +821,7 @@ and
       func_kind *
       string list *  (* type parameters *)
       type_expr option *  (* return type *)
-      string *  (* name *)
+      Identifier.t *  (* name *)
       (type_expr * string) list *  (* parameters *)
       bool (* nonghost_callers_only *) *
       (string * type_expr list * (loc * string) list) option (* implemented function type, with function type type arguments and function type arguments *) *
@@ -832,7 +832,7 @@ and
       (string list) (* overrides *)
   | CxxCtor of 
       loc *
-      string * (* mangled name *)
+      Identifier.t * (* name *)
       (type_expr * string) list * (* params *)
       (asn * asn) option * (* pre post *)
       bool * (* terminates *)
@@ -841,7 +841,7 @@ and
       type_ (* parent type *)
   | CxxDtor of 
       loc *
-      string * (* mangled_name *)
+      Identifier.t * (* name *)
       (asn * asn) option * (* pre post *)
       bool * (* terminates *)
       (stmt list * loc (* close brace *)) option *
