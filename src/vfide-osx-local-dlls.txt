@@ -10,7 +10,7 @@
 /usr/local/opt/glib/lib/libgobject-2.0.0.dylib
 /usr/local/opt/glib/lib/libglib-2.0.0.dylib
 /usr/local/opt/gettext/lib/libintl.8.dylib
-/usr/local/lib/libgtkmacintegration-gtk2.4.dylib
+/usr/local/opt/gtksourceview/libexec/lib/libgtkmacintegration-gtk2.4.dylib
 /usr/local/opt/glib/lib/libgmodule-2.0.0.dylib
 /usr/local/opt/pango/lib/libpangoft2-1.0.0.dylib
 /usr/local/opt/glib/lib/libgthread-2.0.0.dylib
