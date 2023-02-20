@@ -834,7 +834,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let init =
               match e with
               | None -> Unspecified
-              | Some e -> Expr (check_c_initializer (pn,ilist) tparams tenv e t)
+              | Some e -> Expr (check_c_initializer check_expr_t (pn,ilist) tparams tenv e t)
             in
             let verify_ctor_call = verify_ctor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env addr (Some addr_name) in
             produce_cxx_object l real_unit addr t eval_h verify_ctor_call init true true h env @@ fun h env ->

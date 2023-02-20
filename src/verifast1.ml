@@ -5003,7 +5003,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (itf, (l, fds, meths, preds, interfs, pn, ilist, tparams))
     end
 
-  let check_c_initializer (pn,ilist) tparams tenv e tp =
+  let check_c_initializer check_expr_t (pn,ilist) tparams tenv e tp =
     let rec check e tp =
     match tp, e with
     | StaticArrayType (Int (Signed, CharRank), n), StringLit (ls, s) ->
@@ -5038,13 +5038,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       InitializerList (ll, iter fds es)
     | tp, e ->
-      check_expr_t (pn,ilist) tparams tenv None e tp
+      check_expr_t (pn,ilist) tparams tenv e tp
     in
     check e tp
   
   let () =
     globalmap1 |> List.iter begin fun (x, (lg, tp, symb, ref_init)) ->
-      ref_init := option_map (fun e -> check_c_initializer ("", []) [] [] e tp) !ref_init
+      ref_init := option_map (fun e -> check_c_initializer (fun (pn,ilist) tparams tenv e tp -> check_expr_t (pn,ilist) tparams tenv (Some false) e tp) ("", []) [] [] e tp) !ref_init
     end
   
   (* Region: Computing constant field values *)
