@@ -20,7 +20,6 @@ add_executable(vf-cxx-ast-exporter
   LocUtil.cpp
   FixedWidthInt.cpp
   AnnotationStore.cpp
-  FunctionMangler.cpp
   Inclusion.cpp
 )
 

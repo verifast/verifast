@@ -174,7 +174,6 @@ struct Decl {
     result @2 :TypeNode;
     params @3 :List(Param);
     contract @4 :List(Clause); # optional
-    mangledName @5 :Text;
   }
 
   struct Field {
@@ -368,9 +367,7 @@ struct Expr {
     base @0 :ExprNode;
     name @1 :Text;
     arrow @2 :Bool;
-    mangledName @3 :Text; #optional, present if it refers to a function/method
-    baseIsPointer @4 :Bool;
-    qualName @5 :Text;
+    baseIsPointer @3 :Bool;
   }
 
   struct New {
@@ -378,16 +375,10 @@ struct Expr {
     expr @1 :ExprNode; # optional
   }
 
-  struct DeclRef {
-    name @0 :Text;
-    mangledName @1 :Text; # optional, present if it refers to a function/method
-  }
-
   struct Construct {
     name @0 :Text;
-    mangledName @1 :Text;
-    args @2 :List(ExprNode);
-    type @3 :Type;
+    args @1 :List(ExprNode);
+    type @2 :Type;
   }
 
   struct StructToStruct {
@@ -403,7 +394,7 @@ struct Expr {
     intLit @4 :IntLit;
     stringLit @5 :Text;
     call @6 :Call;
-    declRef @7 :DeclRef;
+    declRef @7 :Text;
     member @8 :Member;
     this @9 :Void;
     memberCall @10 :MemberCall;

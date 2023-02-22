@@ -2970,7 +2970,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       check_focus loc close_brace_loc $. fun () ->
       check_should_fail () @@ fun () ->
       execute_branch @@ fun () ->
-      with_context (Executing ([], env, loc, sprintf "Verifying constructor '%s'" struct_name)) @@ fun () ->
+      with_context (Executing ([], env, loc, sprintf "Verifying constructor '%s'" g)) @@ fun () ->
       assume_neq (mk_ptr_address this_term) int_zero_term @@ fun () ->
       produce_asn [] [] ghostenv env pre real_unit None None @@ fun h ghostenv env ->
       init_constructs this_term init_list leminfo sizemap h env ghostenv @@ fun delegated h init_list ->
@@ -3062,7 +3062,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       check_focus loc close_brace_loc $. fun () ->
       check_should_fail () @@ fun () ->
       execute_branch @@ fun () ->
-      with_context (Executing ([], env, loc, sprintf "Verifying destructor '%s'" @@ cxx_dtor_name struct_name)) @@ fun () ->
+      with_context (Executing ([], env, loc, sprintf "Verifying destructor '%s'" g)) @@ fun () ->
       assume_neq (mk_ptr_address this_term) int_zero_term @@ fun () ->
       produce_asn [] [] ghostenv env pre real_unit None None @@ fun h ghostenv env ->
       let return_cont h tenv2 env2 retval =
@@ -3448,20 +3448,20 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
            List.iter (fun (an, _) -> if not (List.mem an pbcans) then static_error l ("No preserved_by clause for action '" ^ an ^ "'.") None) amap)
         hpmap;
       verify_funcs (pn,ilist) (bcn::boxes) gs lems ds
-    | CxxCtor (loc, mangled_name, _, _, _, Some _, _, StructType sn) :: ds ->
+    | CxxCtor (loc, name, _, _, _, Some _, _, StructType sn) :: ds ->
       let gs', lems' =
         record_fun_timing loc (sn ^ ".<ctor>") @@ fun () ->
         let _, Some (_, fields, is_polymorphic), _, _, type_info = List.assoc sn structmap in
-        let loc, params, pre, pre_tenv, post, terminates, Some (Some (init_list, (body, close_brace_loc))) = List.assoc mangled_name cxx_ctor_map1 in
-        verify_cxx_ctor pn ilist gs lems boxes predinstmap funcmap (sn, fields, mangled_name, loc, params, init_list, pre, pre_tenv, post, terminates, body, close_brace_loc, is_polymorphic, type_info)
+        let loc, params, pre, pre_tenv, post, terminates, Some (Some (init_list, (body, close_brace_loc))) = List.assoc name cxx_ctor_map1 in
+        verify_cxx_ctor pn ilist gs lems boxes predinstmap funcmap (sn, fields, name, loc, params, init_list, pre, pre_tenv, post, terminates, body, close_brace_loc, is_polymorphic, type_info)
       in
       verify_funcs (pn, ilist) boxes gs' lems' ds
-    | CxxDtor (loc, mangled_name, _, _, Some _, _, StructType sn, _, _) :: ds ->
+    | CxxDtor (loc, name, _, _, Some _, _, StructType sn, _, _) :: ds ->
       let gs', lems' =
         record_fun_timing loc (sn ^ ".<dtor>") @@ fun () ->
         let _, Some (bases, fields, is_polymorphic), _, _, type_info = List.assoc sn structmap in
         let loc, pre, pre_tenv, post, terminates, Some (Some (body, close_brace_loc)), is_virtual = List.assoc sn cxx_dtor_map1 in 
-        verify_cxx_dtor pn ilist gs lems boxes predinstmap funcmap (sn, bases, fields, cxx_dtor_name sn, loc, pre, pre_tenv, post, terminates, body, close_brace_loc, is_polymorphic, type_info)
+        verify_cxx_dtor pn ilist gs lems boxes predinstmap funcmap (sn, bases, fields, name, loc, pre, pre_tenv, post, terminates, body, close_brace_loc, is_polymorphic, type_info)
       in
       verify_funcs (pn, ilist) boxes gs' lems' ds
     | _::ds -> verify_funcs (pn,ilist)  boxes gs lems ds

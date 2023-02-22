@@ -212,12 +212,12 @@ bool ExprSerializer::VisitCallExpr(const clang::CallExpr *expr) {
 }
 
 bool ExprSerializer::VisitDeclRefExpr(const clang::DeclRefExpr *expr) {
-  auto declRef = m_builder.initDeclRef();
   auto *decl = expr->getDecl();
-  declRef.setName(decl->getQualifiedNameAsString());
   if (auto *func = llvm::dyn_cast<clang::FunctionDecl>(decl)) {
-    declRef.setMangledName(m_serializer.getMangledName(func).str());
+    m_builder.setDeclRef(m_serializer.getQualifiedFuncName(func));
+    return true;
   }
+  m_builder.setDeclRef(m_serializer.getQualifiedName(decl));
   return true;
 }
 
@@ -231,12 +231,12 @@ bool ExprSerializer::VisitMemberExpr(const clang::MemberExpr *expr) {
   mem.setBaseIsPointer(baseExpr->getType().getTypePtr()->isPointerType());
 
   auto *decl = expr->getMemberDecl();
-  mem.setName(decl->getNameAsString());
-  mem.setQualName(decl->getQualifiedNameAsString());
-  if (auto *meth = llvm::dyn_cast<clang::CXXMethodDecl>(decl)) {
-    mem.setMangledName(m_serializer.getMangledName(meth).str());
-  }
   mem.setArrow(expr->isArrow());
+  if (auto *meth = llvm::dyn_cast<clang::CXXMethodDecl>(decl)) {
+    mem.setName(m_serializer.getQualifiedFuncName(meth));
+    return true;
+  }
+  mem.setName(decl->getNameAsString());
   return true;
 }
 
@@ -291,8 +291,7 @@ bool ExprSerializer::VisitCXXConstructExpr(
     const clang::CXXConstructExpr *expr) {
   auto construct = m_builder.initConstruct();
   auto ctor = expr->getConstructor();
-  construct.setName(ctor->getNameAsString());
-  construct.setMangledName(m_serializer.getMangledName(ctor).str());
+  construct.setName(m_serializer.getQualifiedFuncName(ctor));
   auto args = construct.initArgs(expr->getNumArgs());
 
   size_t i(0);
