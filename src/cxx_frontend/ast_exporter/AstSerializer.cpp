@@ -215,4 +215,37 @@ void AstSerializer::serializeTU(stubs::TU::Builder &builder,
   }
 }
 
+void AstSerializer::printQualifiedName(const clang::NamedDecl *decl,
+                                       llvm::raw_string_ostream &os) const {
+  decl->printQualifiedName(os, m_ASTContext.getPrintingPolicy());
+}
+
+std::string
+AstSerializer::getQualifiedName(const clang::NamedDecl *decl) const {
+  std::string s;
+  llvm::raw_string_ostream os(s);
+  printQualifiedName(decl, os);
+  os.flush();
+  return s;
+}
+
+std::string
+AstSerializer::getQualifiedFuncName(const clang::FunctionDecl *decl) const {
+  std::string s;
+  llvm::raw_string_ostream os(s);
+  printQualifiedName(decl, os);
+  os << "(";
+  auto *param = decl->param_begin();
+  while (param != decl->param_end()) {
+    (*param)->getOriginalType().print(os, m_ASTContext.getPrintingPolicy());
+    ++param;
+    if (param != decl->param_end()) {
+      os << ", ";
+    }
+  }
+  os << ")";
+  os.flush();
+  return s;
+}
+
 } // namespace vf

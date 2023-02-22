@@ -1,12 +1,12 @@
 #pragma once
 #include "AnnotationStore.h"
-#include "FunctionMangler.h"
 #include "InclusionContext.h"
 #include "NodeSerializer.h"
 #include "capnp/orphan.h"
 #include "llvm/ADT/SmallVector.h"
 #include <kj/common.h>
 #include <unordered_map>
+#include <string.h>
 
 namespace vf {
 
@@ -37,8 +37,6 @@ class AstSerializer {
   clang::SourceManager &m_SM;
   InclusionContext &m_inclContext;
 
-  FunctionMangler m_funcMangler;
-
   AnnotationSerializer m_textSerializer;
   AnnotationStore &m_store;
   std::unordered_map<unsigned, llvm::SmallVector<DeclNodeOrphan, 8>>
@@ -61,13 +59,14 @@ class AstSerializer {
 
   llvm::Optional<clang::SourceLocation> getFirstDeclLocOpt(unsigned fd) const;
 
+  void printQualifiedName(const clang::NamedDecl *decl, llvm::raw_string_ostream &os) const;
+
 public:
   explicit AstSerializer(clang::ASTContext &context, AnnotationStore &store,
                          InclusionContext &inclContext,
                          bool serializeImplicitDecls)
       : m_ASTContext(context), m_SM(context.getSourceManager()),
-        m_inclContext(inclContext), m_textSerializer(context.getSourceManager()),
-        m_funcMangler(context), m_store(store),
+        m_inclContext(inclContext), m_textSerializer(context.getSourceManager()), m_store(store),
         m_serializeImplicitDecls(serializeImplicitDecls) {}
 
   KJ_DISALLOW_COPY(AstSerializer);
@@ -294,17 +293,9 @@ public:
       clang::ArrayRef<std::reference_wrapper<const IncludeDirective>>
           orderedDirectives) const;
 
-  llvm::StringRef getMangledName(const clang::CXXConstructorDecl *decl) {
-    return m_funcMangler.mangleCtor(decl);
-  }
+  std::string getQualifiedName(const clang::NamedDecl *decl) const;
 
-  llvm::StringRef getMangledName(const clang::CXXDestructorDecl *decl) {
-    return m_funcMangler.mangleDtor(decl);
-  }
-
-  llvm::StringRef getMangledName(const clang::FunctionDecl *decl) {
-    return m_funcMangler.mangleFunc(decl);
-  }
+  std::string getQualifiedFuncName(const clang::FunctionDecl *decl) const;
 };
 
 } // namespace vf

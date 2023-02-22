@@ -15,10 +15,8 @@ void serializeRecordRef(stubs::RecordRef::Builder &builder,
 
 // TODO: check how to retrieve the name of a decl in a proper way
 void DeclSerializer::serializeFuncDecl(stubs::Decl::Function::Builder &builder,
-                                       const clang::FunctionDecl *decl,
-                                       llvm::StringRef mangledName) {
-  builder.setName(decl->getQualifiedNameAsString());
-  builder.setMangledName(mangledName.str());
+                                       const clang::FunctionDecl *decl) {
+  builder.setName(m_serializer.getQualifiedFuncName(decl));
   auto result = builder.initResult();
   m_serializer.serializeTypeLoc(result,
                                 decl->getFunctionTypeLoc().getReturnLoc());
@@ -48,7 +46,7 @@ void DeclSerializer::serializeFuncDecl(stubs::Decl::Function::Builder &builder,
 
 bool DeclSerializer::VisitFunctionDecl(const clang::FunctionDecl *decl) {
   auto function = m_builder.initFunction();
-  serializeFuncDecl(function, decl, m_serializer.getMangledName(decl));
+  serializeFuncDecl(function, decl);
   return true;
 }
 
@@ -193,7 +191,7 @@ bool DeclSerializer::VisitCXXRecordDecl(const clang::CXXRecordDecl *decl) {
     size_t i(0);
     for (auto finalOverride : finalOverrides) {
       nonOverriddenMethsBuilder.set(
-          i++, finalOverride.first->getQualifiedNameAsString());
+          i++, m_serializer.getQualifiedFuncName(finalOverride.first));
     }
 
     store.getUntilLoc(anns, decl->getBraceRange().getEnd(), SM);
@@ -206,8 +204,7 @@ bool DeclSerializer::VisitCXXRecordDecl(const clang::CXXRecordDecl *decl) {
 }
 
 void DeclSerializer::serializeMethodDecl(stubs::Decl::Method::Builder &builder,
-                                         const clang::CXXMethodDecl *decl,
-                                         llvm::StringRef mangledName) {
+                                         const clang::CXXMethodDecl *decl) {
   auto isStatic = decl->isStatic();
   builder.setStatic(isStatic);
   builder.setImplicit(decl->isImplicit());
@@ -223,7 +220,7 @@ void DeclSerializer::serializeMethodDecl(stubs::Decl::Method::Builder &builder,
       auto *parentRecord = llvm::dyn_cast<clang::CXXRecordDecl>(
           meth->getFirstDecl()->getParent());
       auto over = overriddenMeths[i++];
-      over.setName(m_serializer.getMangledName(meth).str());
+      over.setName(m_serializer.getQualifiedFuncName(meth));
       auto base = over.initBase();
       serializeRecordRef(base, parentRecord);
     }
@@ -235,12 +232,12 @@ void DeclSerializer::serializeMethodDecl(stubs::Decl::Method::Builder &builder,
   }
 
   auto func = builder.initFunc();
-  serializeFuncDecl(func, decl, mangledName);
+  serializeFuncDecl(func, decl);
 }
 
 bool DeclSerializer::VisitCXXMethodDecl(const clang::CXXMethodDecl *decl) {
   auto meth = m_builder.initMethod();
-  serializeMethodDecl(meth, decl, m_serializer.getMangledName(decl));
+  serializeMethodDecl(meth, decl);
   return true;
 }
 
@@ -265,7 +262,7 @@ bool DeclSerializer::VisitCXXConstructorDecl(
   }
 
   auto meth = ctor.initMethod();
-  serializeMethodDecl(meth, decl, m_serializer.getMangledName(decl));
+  serializeMethodDecl(meth, decl);
 
   auto parent = ctor.initParent();
   serializeRecordRef(parent, decl->getParent());
@@ -278,7 +275,7 @@ bool DeclSerializer::VisitCXXDestructorDecl(
   auto dtor = m_builder.initDtor();
 
   auto meth = dtor.initMethod();
-  serializeMethodDecl(meth, decl, m_serializer.getMangledName(decl));
+  serializeMethodDecl(meth, decl);
 
   auto parent = dtor.initParent();
   serializeRecordRef(parent, decl->getParent());

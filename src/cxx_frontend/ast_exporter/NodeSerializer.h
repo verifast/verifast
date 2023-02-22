@@ -199,15 +199,13 @@ struct DeclSerializer : public NodeSerializer<stubs::Decl, clang::Decl>,
 
 private:
   void serializeFuncDecl(stubs::Decl::Function::Builder &builder,
-                         const clang::FunctionDecl *decl,
-                         llvm::StringRef mangledName);
+                         const clang::FunctionDecl *decl);
 
   void serializeFieldDecl(stubs::Decl::Field::Builder &builder,
                           const clang::FieldDecl *decl);
 
   void serializeMethodDecl(stubs::Decl::Method::Builder &builder,
-                           const clang::CXXMethodDecl *decl,
-                           llvm::StringRef mangledName);
+                           const clang::CXXMethodDecl *decl);
 
   void serializeBases(capnp::List<stubs::Node<stubs::Decl::Record::BaseSpec>,
                                   capnp::Kind::STRUCT>::Builder &builder,
