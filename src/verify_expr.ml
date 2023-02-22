@@ -423,7 +423,6 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             cont (fn, FuncInfo ([], fterm, l, k, tparams, rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body', is_virtual)) ((fn, l0)::prototypes_implemented)
         end @@ fun func_info protos_implemented ->
         let check_override overridden_meth =
-          let () = print_endline overridden_meth in
           let FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, ng_callers_only0, pre0, pre_tenv0, post0, terminates0, _, _, is_virtual0) = assoc2 overridden_meth funcmap funcmap0 in
           let ("this", PtrType (StructType base)) :: xmap0 = xmap0 in
           let ("this", PtrType (StructType derived)) :: xmap = xmap in
