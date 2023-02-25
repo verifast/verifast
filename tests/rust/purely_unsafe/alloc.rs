@@ -1,6 +1,4 @@
 fn main()
-//@ requires true;
-//@ ensures true;
 {
     unsafe {
         let layout = std::alloc::Layout::new::<u8>();

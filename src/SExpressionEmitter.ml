@@ -784,9 +784,10 @@ let rec sexpr_of_pred (asn : asn) : sexpression =
     | SwitchAsn (_, expr, _) ->
       build_list [ Symbol "pred-switch-asn" ]
                  [ "expr", sexpr_of_expr expr]
-    | CoefAsn (_, pat, _) ->
-      build_list [ Symbol "pred-coef-asn" ]
-                 [ "expr", sexpr_of_pat pat]
+    | CoefAsn (_, pat, asn) ->
+      List [ Symbol "pred-coef-asn";
+             sexpr_of_pat pat;
+             sexpr_of_pred asn ]
     | _ -> List [ Symbol "pred"; sexpr_of_expr asn ]
 
 let rec sexpr_of_stmt (stmt : stmt) : sexpression =

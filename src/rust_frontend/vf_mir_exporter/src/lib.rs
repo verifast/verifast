@@ -239,6 +239,7 @@ mod vf_mir_builder {
     use crate::vf_mir_capnp::span_data as span_data_cpn;
     use crate::vf_mir_capnp::symbol as symbol_cpn;
     use crate::vf_mir_capnp::ty as ty_cpn;
+    use crate::vf_mir_capnp::unsafety as unsafety_cpn;
     use crate::vf_mir_capnp::vf_mir as vf_mir_cpn;
     use adt_def_cpn::variant_def as variant_def_cpn;
     use basic_block_cpn::operand as operand_cpn;
@@ -542,6 +543,11 @@ mod vf_mir_builder {
             );
 
             let def_id = body.source.def_id();
+
+            Self::encode_unsafety(
+                tcx.fn_sig(def_id).unsafety(),
+                body_cpn.reborrow().init_unsafety(),
+            );
             let kind = tcx.def_kind(def_id);
             match kind {
                 hir::def::DefKind::Fn => {
@@ -561,7 +567,7 @@ mod vf_mir_builder {
                     body_contract_span.contains(crate::span_utils::comment_span(&annot))
                 })
                 .collect::<LinkedList<_>>();
-            Self::encode_contract(tcx, contract_annots, contract_cpn);
+            Self::encode_contract(tcx, contract_annots, &body_contract_span, contract_cpn);
 
             let arg_count = body.arg_count.try_into().expect(&format!(
                 "The number of args of {} cannot be stored in a Capnp message",
@@ -641,6 +647,13 @@ mod vf_mir_builder {
             for (idx, ghost_stmt) in ghost_stmts.into_iter().enumerate() {
                 let ghost_stmt_cpn = ghost_stmts_cpn.reborrow().get(idx.try_into().unwrap());
                 Self::encode_annotation(tcx, ghost_stmt, ghost_stmt_cpn);
+            }
+        }
+
+        fn encode_unsafety(us: hir::Unsafety, mut us_cpn: unsafety_cpn::Builder<'_>) {
+            match us {
+                hir::Unsafety::Normal => us_cpn.set_safe(()),
+                hir::Unsafety::Unsafe => us_cpn.set_unsafe(()),
             }
         }
 
@@ -774,8 +787,11 @@ mod vf_mir_builder {
         fn encode_contract(
             tcx: TyCtxt<'tcx>,
             contract_annots: LinkedList<Comment>,
-            contract_cpn: contract_cpn::Builder<'_>,
+            body_contract_span: &rustc_span::SpanData,
+            mut contract_cpn: contract_cpn::Builder<'_>,
         ) {
+            let span_cpn = contract_cpn.reborrow().init_span();
+            Self::encode_span_data(tcx, body_contract_span, span_cpn);
             let len = contract_annots.len().try_into().expect(&format!(
                 "The number of contract annotations cannot be stored in a Capnp message"
             ));
@@ -988,7 +1004,8 @@ mod vf_mir_builder {
                 ty::RegionKind::ReFree(_free_region) => bug!(),
                 ty::RegionKind::ReStatic => bug!(),
                 ty::RegionKind::ReVar(_region_vid) => {
-                    region_cpn.set_id(&format!("{:?}", region));
+                    // Todo @Nima: We should find a mapping of `RegionVid`s and lifetime variable names at `hir`
+                    region_cpn.set_id(/*&format!("{:?}", region)*/ "a");
                 }
                 ty::RegionKind::RePlaceholder(_placeholder_region) => bug!(),
                 ty::RegionKind::ReEmpty(_universe_index) => bug!(),

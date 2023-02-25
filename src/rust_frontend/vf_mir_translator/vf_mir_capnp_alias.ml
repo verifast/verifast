@@ -20,6 +20,7 @@ module CharPosRd = LocRd.CharPos
 module MutabilityRd = VfMirStub.Reader.Mutability
 module SymbolRd = VfMirStub.Reader.Symbol
 module AnnotationRd = VfMirStub.Reader.Annotation
+module UnsafetyRd = VfMirStub.Reader.Unsafety
 
 (* Bodies *)
 module BodyRd = VfMirStub.Reader.Body
@@ -69,3 +70,4 @@ module AdtDefRd = TyRd.AdtDef
 module VariantDefRd = AdtDefRd.VariantDef
 module FieldDefRd = VariantDefRd.FieldDef
 module VisibilityRd = FieldDefRd.Visibility
+module RegionRd = TyRd.Region

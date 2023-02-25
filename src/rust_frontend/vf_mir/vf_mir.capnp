@@ -69,6 +69,15 @@ struct SpanData {
     hi @1: Loc;
 }
 
+# It is also possible to use `Enum`s here but it would be easier to add
+# data to variants later in case it became necessary
+struct Unsafety {
+    union {
+        safe @0: Void;
+        unsafe @1: Void;
+    }
+}
+
 struct Mutability {
     union {
         mut @0: Void;
@@ -226,6 +235,7 @@ struct Body {
 
     struct Contract {
         annotations @0: List(Annotation);
+        span @1: SpanData;
     }
 
     struct DefKind {
@@ -480,6 +490,7 @@ struct Body {
     impSpan @7: SpanData;
     varDebugInfo @8: List(VarDebugInfo);
     ghostStmts @9: List(Annotation);
+    unsafety @10: Unsafety;
 }
 
 struct VfMir {

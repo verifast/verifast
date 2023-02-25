@@ -103,6 +103,12 @@ module LocAux = struct
       Error (`IsWellFormedLoc0 "The start and end positions are not in order")
     else Ok ()
 
+  let get_start_loc (loc : loc) =
+    let loc0 = lexed_loc loc in
+    let* _ = is_well_formed_loc0 loc0 in
+    let spos, _ = loc0 in
+    Ok (Lexed (spos, spos))
+
   let get_last_col_loc (loc : loc) =
     let loc0 = lexed_loc loc in
     let* _ = is_well_formed_loc0 loc0 in
@@ -245,26 +251,104 @@ module LocAux = struct
     Ok (List.rev dbs)
 end
 
+module AstAux = struct
+  let list_to_sep_conj asns init =
+    let f_aux (loc, asn) asn_opt =
+      match asn_opt with
+      | None -> Some asn
+      | Some asn1 -> Some (Ast.Sep (loc, asn, asn1))
+    in
+    List.fold_right f_aux asns init
+end
+
+module SizeAux : sig
+  (* These types have the invariant of holding a meaningful number of bits, bytes, etc. *)
+  type sz_bits
+  type sz_bytes
+
+  val sz_bits_of_int :
+    int -> (sz_bits, [> `SizeAuxSzBitsOfInt of string ]) result
+
+  val sz_bytes_of_int :
+    int -> (sz_bytes, [> `SizeAuxSzBytesOfInt of string ]) result
+
+  val sz_bytes_of_sz_bits : sz_bits -> sz_bytes
+  val int_of_sz_bytes : sz_bytes -> int
+end = struct
+  type sz_bits = int
+  type sz_bytes = int
+
+  let sz_bits_of_int bits =
+    if bits = 0 then Ok bits
+    else
+      let n = Float.log2 @@ float_of_int @@ bits in
+      let n_is_int_and_bits_gt_zero =
+        FP_zero == Float.classify_float @@ fst @@ Float.modf @@ n
+      in
+      if not (n_is_int_and_bits_gt_zero && int_of_float n >= 3) then
+        Error
+          (`SizeAuxSzBitsOfInt
+            "The number of bits should be 0 or 2^n such that n is an integer \
+             and n>=3")
+      else Ok bits
+
+  let sz_bytes_of_int bytes =
+    if bytes < 0 then
+      Error
+        (`SizeAuxSzBytesOfInt
+          "The number of bytes should be a non-negative integer")
+    else Ok bytes
+
+  let sz_bytes_of_sz_bits n = n / 8
+  let int_of_sz_bytes sb = sb
+end
+
+module RustBelt = struct
+  open Ast
+
+  type tid = expr
+  type v = expr
+  type lft = expr
+  type l = expr
+
+  type ty_interp = {
+    size : expr;
+    own : tid -> v list -> (asn, string) result;
+    shr : lft -> tid -> l -> (asn, string) result;
+  }
+
+  let emp_ty_interp loc =
+    {
+      size = True loc;
+      own = (fun _ _ -> Ok (True loc));
+      shr = (fun _ _ _ -> Ok (True loc));
+    }
+end
+
 module Mir = struct
   type mutability = Mut | Not
 
   type generic_arg = GenArgLifetime | GenArgType of ty_info | GenArgConst
 
   and ty_info =
-    | TyInfoBasic of { vf_ty : Ast.type_expr }
+    | TyInfoBasic of { vf_ty : Ast.type_expr; interp : RustBelt.ty_interp }
     | TyInfoGeneric of {
         vf_ty : Ast.type_expr;
         substs : generic_arg list;
         vf_ty_mono : Ast.type_expr;
+        interp : RustBelt.ty_interp;
       }
 
   let basic_type_of (ti : ty_info) =
     match ti with
     | TyInfoBasic { vf_ty } -> vf_ty
-    | TyInfoGeneric { vf_ty; substs; vf_ty_mono } -> vf_ty_mono
+    | TyInfoGeneric { vf_ty_mono } -> vf_ty_mono
+
+  let interp_of (ti : ty_info) =
+    match ti with TyInfoBasic { interp } | TyInfoGeneric { interp } -> interp
 
   let raw_type_of (ti : ty_info) =
-    match ti with TyInfoBasic { vf_ty } | TyInfoGeneric { vf_ty; _ } -> vf_ty
+    match ti with TyInfoBasic { vf_ty } | TyInfoGeneric { vf_ty } -> vf_ty
 
   type annot = { span : Ast.loc; raw : string }
 
@@ -328,18 +412,9 @@ module TrTyTuple = struct
 end
 
 module TrTyInt = struct
-  let calc_int_width (bits : int) =
-    let n = Float.log2 @@ float_of_int @@ bits in
-    let n_is_int = FP_zero == Float.classify_float @@ fst @@ Float.modf @@ n in
-    if not (bits > 0 && n_is_int && int_of_float n >= 3) then
-      Error
-        (`CalcIntWidth
-          "The number of bits of an integer should be non-negative and equal \
-           to 2^n such that n>=3")
-    else
-      let bytes = bits / 8 in
-      let width = int_of_float @@ Float.log2 @@ float_of_int @@ bytes in
-      Ok width
+  let calc_rank (bytes : SizeAux.sz_bytes) =
+    let open SizeAux in
+    int_of_float @@ Float.log2 @@ float_of_int @@ int_of_sz_bytes @@ bytes
 end
 
 module TrTyRawPtr = struct
@@ -546,11 +621,19 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     (spos, raw)
 
   let translate_contract (contract_cpn : ContractRd.t) =
-    let annots_cpn = ContractRd.annotations_get_list contract_cpn in
-    let* annots = ListAux.try_map translate_annotation annots_cpn in
-    let annots = List.map translate_annot_to_vf_parser_inp annots in
-    Ok (VfMirAnnotParser.parse_func_contract annots)
-  (* Todo: VeriFast parser throws exceptions. we should catch them and use our own error handling scheme *)
+    let open ContractRd in
+    let span_cpn = span_get contract_cpn in
+    let* loc = translate_span_data span_cpn in
+    let* contract_opt =
+      let annots_cpn = annotations_get_list contract_cpn in
+      if ListAux.is_empty annots_cpn then Ok None
+      else
+        let* annots = ListAux.try_map translate_annotation annots_cpn in
+        let annots = List.map translate_annot_to_vf_parser_inp annots in
+        try Ok (Some (VfMirAnnotParser.parse_func_contract annots))
+        with _ -> Error (`TrContract "Parser failed")
+    in
+    Ok (loc, contract_opt)
 
   let translate_ghost_stmt (gs_cpn : AnnotationRd.t) =
     let open AnnotationRd in
@@ -571,27 +654,78 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         Error (`TrMutability "Unknown Mir mutability discriminator")
 
   let translate_symbol (sym_cpn : SymbolRd.t) = SymbolRd.name_get sym_cpn
+  let translate_region (reg_cpn : RegionRd.t) = RegionRd.id_get reg_cpn
   let int_size_rank = Ast.PtrRank
 
   let translate_u_int_ty (u_int_ty_cpn : UIntTyRd.t) (loc : Ast.loc) =
-    let calc_rank ui =
+    let open Ast in
+    let sz_and_rank ui =
+      let open SizeAux in
       let* bits = Mir.u_int_ty_bits_len ui in
-      let* width = TrTyInt.calc_int_width bits in
-      Ok (Ast.FixedWidthRank width)
+      let* sz_bits = sz_bits_of_int bits in
+      let sz_bytes = sz_bytes_of_sz_bits sz_bits in
+      let sz_expr =
+        IntLit
+          ( loc,
+            Big_int.big_int_of_int @@ int_of_sz_bytes @@ sz_bytes,
+            (*decimal*) true,
+            (*U suffix*) true,
+            NoLSuffix )
+      in
+      let rank = FixedWidthRank (TrTyInt.calc_rank sz_bytes) in
+      Ok (sz_expr, rank)
     in
-    let* rank =
+    let* sz_expr, rank =
       match UIntTyRd.get u_int_ty_cpn with
-      | USize -> Ok int_size_rank
-      | U8 -> calc_rank Mir.U8
-      | U16 -> calc_rank Mir.U16
-      | U32 -> calc_rank Mir.U32
-      | U64 -> calc_rank Mir.U64
-      | U128 -> calc_rank Mir.U128
+      | USize ->
+          (* usize is pointer-sized *)
+          let ptr_sz_expr =
+            SizeofExpr (loc, TypeExpr (ManifestTypeExpr (loc, PtrType Void)))
+          in
+          Ok (ptr_sz_expr, int_size_rank)
+      | U8 -> sz_and_rank Mir.U8
+      | U16 -> sz_and_rank Mir.U16
+      | U32 -> sz_and_rank Mir.U32
+      | U64 -> sz_and_rank Mir.U64
+      | U128 -> sz_and_rank Mir.U128
       | Undefined _ -> Error (`TrUIntTy "Unknown Rust unsigned int type")
+    in
+    (* Todo @Nima: Is there any way to separate `own` definition from `int` definition like the way RustBelt does?
+       See RustBelt paper technical appendix
+    *)
+    (* In VeriFast we use one less indirection level than RustBelt: Verifast(int) == RustBelt(own int) *)
+    let own tid vs =
+      Ok (True loc)
+      (* match vs with
+         | [ l ] ->
+             Ok
+               (CallExpr
+                  ( loc,
+                    "integer_",
+                    (*type arguments*) [],
+                    (*indices*) [],
+                    (*arguments*)
+                    [
+                      LitPat l;
+                      LitPat sz_expr;
+                      (*signed*)
+                      LitPat (False loc);
+                      DummyPat;
+                    ],
+                    Static ))
+             (* predicate integer_(void *p, int size, bool signed_; int v) *)
+         | _ -> Error "[[uint]].own(t, vs) needs to vs == [l]" *)
+    in
+    let shr lft tid l =
+      Ok (True loc)
+      (* Todo @Nima: Add the frac borrow predicate to RustBelt and use it here *)
     in
     let ty_info =
       Mir.TyInfoBasic
-        { vf_ty = Ast.ManifestTypeExpr (loc, Ast.Int (Ast.Unsigned, rank)) }
+        {
+          vf_ty = ManifestTypeExpr (loc, Int (Unsigned, rank));
+          interp = RustBelt.{ size = sz_expr; own; shr };
+        }
     in
     Ok ty_info
 
@@ -600,6 +734,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   let translate_adt_ty (adt_ty_cpn : AdtTyRd.t) (loc : Ast.loc) =
     let open AdtTyRd in
+    let open Ast in
     let id_cpn = id_get adt_ty_cpn in
     let def_path = translate_adt_def_id id_cpn in
     let name = TrName.translate_def_path def_path in
@@ -617,17 +752,41 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               let ty_info =
                 Mir.TyInfoBasic
                   {
-                    vf_ty =
-                      Ast.ManifestTypeExpr
-                        (loc, Ast.Int (Ast.Unsigned, int_size_rank));
+                    vf_ty = ManifestTypeExpr (loc, Int (Unsigned, int_size_rank));
+                    interp = RustBelt.emp_ty_interp loc;
                   }
               in
               Ok ty_info
         | _ ->
-            let ty_info =
-              Mir.TyInfoBasic
-                { vf_ty = Ast.ManifestTypeExpr (loc, Ast.StructType name) }
+            let vf_ty = ManifestTypeExpr (loc, StructType name) in
+            let sz_expr = SizeofExpr (loc, TypeExpr vf_ty) in
+            let own tid vs =
+              match vs with
+              | [ l ] ->
+                  Ok
+                    (CallExpr
+                       ( loc,
+                         name ^ "_owned",
+                         (*type arguments*) [],
+                         (*indices*) [],
+                         (*arguments*)
+                         [ LitPat l; LitPat tid ],
+                         Static ))
+              | _ -> Error "[[struct _]].own(t, vs) needs to vs == [l]"
             in
+            let shr lft tid l =
+              Ok
+                (CallExpr
+                   ( loc,
+                     name ^ "_shared",
+                     (*type arguments*) [],
+                     (*indices*) [],
+                     (*arguments*)
+                     [ LitPat lft; LitPat tid; LitPat l ],
+                     Static ))
+            in
+            let interp = RustBelt.{ size = sz_expr; own; shr } in
+            let ty_info = Mir.TyInfoBasic { vf_ty; interp } in
             Ok ty_info)
     | EnumKind -> failwith "Todo: AdtTy::Enum"
     | UnionKind -> failwith "Todo: AdtTy::Union"
@@ -640,10 +799,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let name = TrTyTuple.make_tuple_type_name [] in
 
       (* TODO @Nima: std_tuple_0_ type is declared in prelude_rust_.h.
-         We should come up with a better arrangement for these ghost types. *)
+         We should come up with a better arrangement for these auxiliary types. *)
       let ty_info =
         Mir.TyInfoBasic
-          { vf_ty = Ast.ManifestTypeExpr (loc, Ast.StructType name) }
+          {
+            vf_ty = Ast.ManifestTypeExpr (loc, Ast.StructType name);
+            interp = RustBelt.emp_ty_interp loc;
+          }
       in
       Ok ty_info
 
@@ -671,7 +833,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Nothing ->
         if not (ListAux.is_empty substs_cpn) then
           Error (`TrFnDefTy "Simple function type with generic arg(s)")
-        else Ok (Mir.TyInfoBasic { vf_ty })
+        else Ok (Mir.TyInfoBasic { vf_ty; interp = RustBelt.emp_ty_interp loc })
     | Something ptr_cpn ->
         if ListAux.is_empty substs_cpn then
           Error (`TrFnDefTy "Generic function type without generic arg(s)")
@@ -685,7 +847,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               (fun subst_cpn -> translate_generic_arg subst_cpn loc)
               substs_cpn
           in
-          Ok (Mir.TyInfoGeneric { vf_ty; substs; vf_ty_mono })
+          Ok
+            (Mir.TyInfoGeneric
+               {
+                 vf_ty;
+                 substs;
+                 vf_ty_mono;
+                 interp = RustBelt.emp_ty_interp loc;
+               })
 
   and translate_raw_ptr_ty (raw_ptr_ty_cpn : RawPtrTyRd.t) (loc : Ast.loc) =
     let open RawPtrTyRd in
@@ -698,31 +867,60 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     let ty_info =
       Mir.TyInfoBasic
-        { vf_ty = Ast.ManifestTypeExpr (loc, Ast.PtrType pointee_ty) }
+        {
+          vf_ty = Ast.ManifestTypeExpr (loc, Ast.PtrType pointee_ty);
+          interp = RustBelt.emp_ty_interp loc;
+        }
     in
     Ok ty_info
 
   and translate_ref_ty (ref_ty_cpn : RefTyRd.t) (loc : Ast.loc) =
     let open RefTyRd in
     let region_cpn = region_get ref_ty_cpn in
+    let region = translate_region region_cpn in
+    let lft = Ast.Var (loc, region) in
     let mut_cpn = mutability_get ref_ty_cpn in
+    let* mut = translate_mutability mut_cpn in
     let ty_cpn = ty_get ref_ty_cpn in
     let* pointee_ty_info = translate_ty ty_cpn loc in
     let (Ast.ManifestTypeExpr ((*loc*) _, pointee_ty)) =
       Mir.basic_type_of pointee_ty_info
     in
-    let ty_info =
-      Mir.TyInfoBasic
-        { vf_ty = Ast.ManifestTypeExpr (loc, Ast.PtrType pointee_ty) }
+    let sz_expr =
+      Ast.(SizeofExpr (loc, TypeExpr (ManifestTypeExpr (loc, PtrType Void))))
     in
-    Ok ty_info
+    match mut with
+    | Mir.Mut -> failwith "Todo: mut ref"
+    | Mir.Not ->
+        let RustBelt.{ size = ptee_sz; own = ptee_own; shr = ptee_shr } =
+          Mir.interp_of pointee_ty_info
+        in
+        let own tid vs =
+          match vs with
+          | [ l ] -> ptee_shr lft tid l
+          | _ -> Error "[[&T]].own(tid, vs) needs to vs == [l]"
+        in
+        let shr lft tid l = Ok (Ast.True loc) in
+        let ty_info =
+          Mir.TyInfoBasic
+            {
+              vf_ty = Ast.ManifestTypeExpr (loc, Ast.PtrType pointee_ty);
+              interp = { size = sz_expr; own; shr };
+            }
+        in
+        Ok ty_info
 
   and translate_ty (ty_cpn : TyRd.t) (loc : Ast.loc) =
     let open TyRd in
     let kind_cpn = kind_get ty_cpn in
     match TyRd.TyKind.get kind_cpn with
     | Bool ->
-        Ok (Mir.TyInfoBasic { vf_ty = Ast.ManifestTypeExpr (loc, Ast.Bool) })
+        Ok
+          (Mir.TyInfoBasic
+             {
+               vf_ty = Ast.ManifestTypeExpr (loc, Ast.Bool);
+               interp = RustBelt.emp_ty_interp loc;
+             })
     | Int int_ty_cpn -> failwith "Todo: Int Ty is not implemented yet"
     | UInt u_int_ty_cpn -> translate_u_int_ty u_int_ty_cpn loc
     | Adt adt_ty_cpn -> translate_adt_ty adt_ty_cpn loc
@@ -732,7 +930,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Never ->
         Ok
           (Mir.TyInfoBasic
-             { vf_ty = Ast.ManifestTypeExpr (loc, Ast.UnionType "std_empty_") })
+             {
+               vf_ty = Ast.ManifestTypeExpr (loc, Ast.UnionType "std_empty_");
+               interp = RustBelt.emp_ty_interp loc;
+             })
     | Tuple substs_cpn ->
         let substs_cpn = Capnp.Array.to_list substs_cpn in
         translate_tuple_ty substs_cpn loc
@@ -1505,6 +1706,99 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         trs_map (* This will be used during the translation of variable names *)
     )
 
+  let gen_contract (contract_loc : Ast.loc) (lft_vars : string list)
+      (params : Mir.local_decl list) (ret : Mir.local_decl) =
+    let open Ast in
+    let bind_pat_b n = VarPat (contract_loc, n) in
+    let lit_pat_b n = LitPat (Var (contract_loc, n)) in
+    let nonatomic_token_b pat =
+      CallExpr
+        ( contract_loc,
+          "thread_token",
+          [] (*type arguments*),
+          [] (*indices*),
+          [ pat ] (*arguments*),
+          Static )
+    in
+    let thread_id_name = "_t" in
+    let pre_na_token = nonatomic_token_b (bind_pat_b thread_id_name) in
+    let post_na_token = nonatomic_token_b (lit_pat_b thread_id_name) in
+    let lft_token_b pat_b n =
+      let coef_n = "_q_" ^ n in
+      CoefAsn
+        ( contract_loc,
+          pat_b coef_n,
+          CallExpr
+            ( contract_loc,
+              "lifetime_token",
+              [] (*type arguments*),
+              [] (*indices*),
+              [ pat_b n ] (*arguments*),
+              Static ) )
+    in
+    let pre_lft_tks =
+      List.map (fun lft_var -> lft_token_b bind_pat_b lft_var) lft_vars
+    in
+    let post_lft_tks =
+      List.map (fun lft_var -> lft_token_b lit_pat_b lft_var) lft_vars
+    in
+    let gen_local_ty_asn (local : Mir.local_decl) =
+      let Mir.{ mutability; id; ty = ty_info; loc } = local in
+      let RustBelt.{ size; own; shr } = Mir.interp_of ty_info in
+      match own (Ast.Var (loc, thread_id_name)) [ Ast.Var (loc, id) ] with
+      | Ok asn -> Ok asn
+      | Error estr ->
+          Error (`GenContract ("Owner assertion function error: " ^ estr))
+    in
+    let* params_ty_asns = ListAux.try_map gen_local_ty_asn params in
+    let params_ty_asns =
+      List.filter
+        (fun asn -> match asn with True _ -> false | _ -> true)
+        params_ty_asns
+    in
+    let params_ty_asns =
+      AstAux.list_to_sep_conj
+        (List.map (fun asn -> (contract_loc, asn)) params_ty_asns)
+        None
+    in
+    let pre_asn =
+      AstAux.list_to_sep_conj
+        (List.map (fun asn -> (contract_loc, asn)) pre_lft_tks)
+        params_ty_asns
+    in
+    let pre_asn =
+      match pre_asn with
+      | None -> pre_na_token
+      | Some pre_asn -> Sep (contract_loc, pre_na_token, pre_asn)
+    in
+    let* ret_ty_asn =
+      gen_local_ty_asn
+        {
+          mutability = ret.mutability;
+          id = "result";
+          ty = ret.ty;
+          loc = ret.loc;
+        }
+    in
+    let post_asn =
+      AstAux.list_to_sep_conj
+        (List.map (fun asn -> (contract_loc, asn)) post_lft_tks)
+        (Some ret_ty_asn)
+    in
+    let post_asn =
+      match post_asn with
+      | None -> post_na_token
+      | Some post_asn -> Sep (contract_loc, post_na_token, post_asn)
+    in
+    Ok (pre_asn, post_asn)
+
+  let translate_unsafety (unsafety_cpn : UnsafetyRd.t) =
+    let open UnsafetyRd in
+    match get unsafety_cpn with
+    | Safe -> Ok false
+    | Unsafe -> Ok true
+    | Undefined _ -> Error (`TrUnsafety "Unknown unsafety kind")
+
   let translate_body (body_cpn : BodyRd.t) =
     let open BodyRd in
     let var_id_trs_map_ref = ref [] in
@@ -1538,10 +1832,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | DefKind.Fn ->
         let def_path = def_path_get body_cpn in
         let name = TrName.translate_def_path def_path in
-        let contract_cpn = contract_get body_cpn in
-        let* nonghost_callers_only, fn_type_clause, pre_post, terminates =
-          translate_contract contract_cpn
-        in
         let arg_count = arg_count_get body_cpn in
         let* arg_count = IntAux.Uint32.try_to_int arg_count in
         let local_decls_cpn = local_decls_get_list body_cpn in
@@ -1562,6 +1852,27 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let ret_ty = Mir.basic_type_of ret_ty_info in
         let param_decls, local_decls =
           ListAux.partitioni (fun idx _ -> idx < arg_count) local_decls
+        in
+        let contract_cpn = contract_get body_cpn in
+        let* contract_loc, contract_opt = translate_contract contract_cpn in
+        let* is_unsafe = translate_unsafety @@ unsafety_get @@ body_cpn in
+        let* ( (nonghost_callers_only : bool),
+               (fn_type_clause : _ option),
+               (pre_post : _ option),
+               (terminates : bool) ) =
+          match contract_opt with
+          | None when not is_unsafe ->
+              let* pre_post =
+                (* Todo @Nima: Hard-coded list of lifetimes *)
+                gen_contract contract_loc [ "a" ] param_decls ret_place_decl
+              in
+              Ok (false, None, Some pre_post, false)
+          | Some contract when is_unsafe -> Ok contract
+          | _ ->
+              Error
+                (`TrBody
+                  "User should provide contract for unsafe functions and \
+                   cannot provide a contract for the safe ones")
         in
         let vf_param_decls =
           List.map
@@ -1711,10 +2022,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let decls = AstDecls.decls () in
       let decls = decls @ adt_defs @ ghost_decls @ body_decls in
       (* Todo @Nima: we should add necessary inclusions during translation *)
-      let _ =
-        List.iter Headers.add_decl
-          [ "rust/std/alloc.h"; "rust/rust_belt/lifetime_logic.gh" ]
-      in
+      let _ = List.iter Headers.add_decl [ "rust/std/alloc.h" ] in
       let header_names = Headers.decls () in
       let* headers = ListAux.try_map HeadersAux.parse_header header_names in
       let headers = List.concat headers in
