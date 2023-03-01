@@ -4687,6 +4687,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | (ObjType ("java.lang.Object", []), ArrayType _) when isCast -> w
         | (PtrType _, InductiveType ("pointer", [])) when isCast -> w
         | (InductiveType ("pointer", []), PtrType _) when isCast -> w
+        | (Bool, Int (_, _)) -> IfExpr (expr_loc w, w, WIntLit (expr_loc w, unit_big_int), WIntLit (expr_loc w, zero_big_int))
         | _ ->
           expect_type (expr_loc e) inAnnotation t t0;
           if isCast || try expect_type dummy_loc inAnnotation t0 t; false with StaticError _ -> true then

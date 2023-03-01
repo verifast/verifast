@@ -445,6 +445,7 @@ cd tutorial_solutions
   verifast_both -target 32bit students.c
 cd ..
 cd tests
+  verifast -c issue357.c
   verifast -c call_in_struct_init.c
   verifast -c -allow_should_fail effective_types.c
   verifast -c mul_distrib.c
