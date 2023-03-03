@@ -96,6 +96,15 @@ bool TypeSerializer::VisitRValueReferenceType(
   return true;
 }
 
+bool TypeSerializer::VisitSubstTemplateTypeParmType(
+    const clang::SubstTemplateTypeParmType *type) {
+  auto substTemplateTypeParamBuilder =
+      m_builder.initSubstTemplateTypeParam().initDesc();
+  m_serializer.serializeQualType(substTemplateTypeParamBuilder,
+                                 type->getReplacementType());
+  return true;
+}
+
 bool TypeLocSerializer::VisitFunctionProtoTypeLoc(
     const clang::FunctionProtoTypeLoc typeLoc) {
   auto proto = m_builder.initFunctionProto();
@@ -117,7 +126,7 @@ bool TypeLocSerializer::VisitFunctionProtoTypeLoc(
   anns.clear();
 
   store.guessContract(getFileEntry(typeLoc.getBeginLoc(), SM), anns, SM,
-                    clang::SourceLocation());
+                      clang::SourceLocation());
   auto contract = proto.initContract(anns.size());
   m_serializer.serializeAnnotationClauses(contract, anns);
 
@@ -149,6 +158,17 @@ bool TypeLocSerializer::VisitRValueReferenceTypeLoc(
     const clang::RValueReferenceTypeLoc typeLoc) {
   auto ref = m_builder.initRValueRef();
   m_serializer.serializeTypeLoc(ref, typeLoc.getPointeeLoc());
+  return true;
+}
+
+bool TypeLocSerializer::VisitSubstTemplateTypeParmType(
+    const clang::SubstTemplateTypeParmTypeLoc typeLoc) {
+  auto substTemplateTypeParamBuilder = m_builder.initSubstTemplateTypeParam();
+  auto locBuilder = substTemplateTypeParamBuilder.initLoc();
+  auto descBuilder = substTemplateTypeParamBuilder.initDesc();
+  serializeSrcRange(locBuilder, typeLoc.getSourceRange(), getSourceManager());
+  m_serializer.serializeQualType(descBuilder,
+                                 typeLoc.getTypePtr()->getReplacementType());
   return true;
 }
 

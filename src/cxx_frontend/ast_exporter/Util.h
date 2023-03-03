@@ -22,10 +22,10 @@ struct LCF {
  * @param[out] lcf struct to place the line, column and file uniques identifier
  * in.
  * @return true if the given location \p loc was valid and could be decomposed.
- * @return false if the given location \p was incalid and it was not possible to
+ * @return false if the given location \p was invalid and it was not possible to
  * decompose it.
  */
-bool decomposeLocToLFC(const clang::SourceLocation &loc,
+bool decomposeLocToLCF(const clang::SourceLocation &loc,
                        const clang::SourceManager &SM, LCF &lcf);
 
 inline void serializeSrcPos(stubs::Loc::SrcPos::Builder &builder, LCF lcf) {

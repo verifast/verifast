@@ -1,4 +1,5 @@
 #include "AstSerializer.h"
+#include "Error.h"
 #include "FixedWidthInt.h"
 #include "clang/AST/CXXInheritance.h"
 #include "clang/AST/Decl.h"
@@ -13,9 +14,9 @@ void serializeRecordRef(stubs::RecordRef::Builder &builder,
                                       : stubs::RecordKind::UNIO);
 }
 
-// TODO: check how to retrieve the name of a decl in a proper way
 void DeclSerializer::serializeFuncDecl(stubs::Decl::Function::Builder &builder,
-                                       const clang::FunctionDecl *decl) {
+                                       const clang::FunctionDecl *decl,
+                                       bool serializeContract) {
   builder.setName(m_serializer.getQualifiedFuncName(decl));
   auto result = builder.initResult();
   m_serializer.serializeTypeLoc(result,
@@ -28,7 +29,7 @@ void DeclSerializer::serializeFuncDecl(stubs::Decl::Function::Builder &builder,
   auto isDef = decl->isThisDeclarationADefinition();
 
   // Implicit functions cannot have annotations provided by the programmer.
-  if (!isImplicit) {
+  if (serializeContract && !isImplicit) {
     llvm::SmallVector<Annotation> anns;
     m_serializer.getAnnStore().getContract(decl, anns, getSourceManager());
     auto contractBuilder = builder.initContract(anns.size());
@@ -366,6 +367,39 @@ bool DeclSerializer::VisitNamespaceDecl(const clang::NamespaceDecl *decl) {
 
   auto decls = ns.initDecls(declNodeOrphans.size());
   AstSerializer::adoptOrphansToListBuilder(declNodeOrphans, decls);
+
+  return true;
+}
+
+bool DeclSerializer::VisitFunctionTemplateDecl(
+    const clang::FunctionTemplateDecl *decl) {
+  auto functionTemplateBuilder = m_builder.initFunctionTemplate();
+  auto funcDecl = decl->getTemplatedDecl();
+  functionTemplateBuilder.setName(m_serializer.getQualifiedFuncName(funcDecl));
+
+  if (!decl->isImplicit()) {
+    llvm::SmallVector<Annotation> anns;
+    m_serializer.getAnnStore().getContract(funcDecl, anns, getSourceManager());
+    auto contractBuilder = functionTemplateBuilder.initContract(anns.size());
+    m_serializer.serializeAnnotationClauses(contractBuilder, anns);
+  }
+
+  auto nbSpecs = std::distance(decl->spec_begin(), decl->spec_end());
+
+  size_t i(0);
+  auto specsBuilder = functionTemplateBuilder.initSpecs(nbSpecs);
+  for (auto *spec : decl->specializations()) {
+    auto *info = spec->getTemplateSpecializationInfo();
+    if (info->isExplicitInstantiationOrSpecialization()) {
+      errors().newError(spec->getSourceRange(), getSourceManager())
+          << "Explicit instantiation and specialization is not supported.";
+    }
+    auto specBuilder = specsBuilder[i++];
+    auto locBuilder = specBuilder.initLoc();
+    auto descBuilder = specBuilder.initDesc();
+    serializeSrcRange(locBuilder, spec->getSourceRange(), getSourceManager());
+    serializeFuncDecl(descBuilder, spec, false);
+  }
 
   return true;
 }

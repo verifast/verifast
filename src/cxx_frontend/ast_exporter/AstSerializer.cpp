@@ -1,4 +1,5 @@
 #include "AstSerializer.h"
+#include "Error.h"
 #include "FixedWidthInt.h"
 #include "clang/AST/Decl.h"
 
@@ -130,10 +131,8 @@ void AstSerializer::validateIncludesBeforeFirstDecl(
   if (*firstDeclLocOpt > lastDirective.getRange().getEnd()) {
     return;
   }
-  auto diagID = m_SM.getDiagnostics().getCustomDiagID(
-      clang::DiagnosticsEngine::Level::Error,
-      "An include directive cannot appear after a declaration.");
-  m_SM.getDiagnostics().Report(lastDirective.getRange().getBegin(), diagID);
+  errors().newError(lastDirective.getRange(), m_SM)
+      << "An include directive cannot appear after a declaration.";
 }
 
 void AstSerializer::serializeDeclToDeclMap(const clang::Decl *decl,

@@ -92,6 +92,7 @@ struct Type {
     elaborated @8 :TypeNode;
     typedef @9 :Text;
     functionProto @10 :FunctionProto;
+    substTemplateTypeParam @11 :TypeNode;
   }
 }
 
@@ -257,6 +258,12 @@ struct Decl {
     decls @1 :List(DeclNode);
   }
 
+  struct FunctionTemplate {
+    name @0 :Text;
+    specs @1 :List(Node(Function));
+    contract @2 :List(Clause); # optional
+  }
+
   union {
     unionNotInitialized @0 :Void;
     ann @1 :Text;
@@ -272,6 +279,7 @@ struct Decl {
     typedef @11 :Typedef;
     enumDecl @12 :Enum;
     namespace @13 :Namespace;
+    functionTemplate @14 :FunctionTemplate;
   }
 }
 
@@ -446,9 +454,15 @@ struct Err {
   reason @1 :Text;
 }
 
+struct VfError {
+  tu @0 :TU; # needed for the file mappings, the program was valid for Clang, but not for VeriFast
+  errors @1 :List(Err);
+}
+
 struct SerResult {
   union {
-    ok @0 :Void;
-    err @1 :Void;
+    ok @0 :TU;
+    clangError @1 :Void;
+    vfError @2 :VfError;
   }
 }

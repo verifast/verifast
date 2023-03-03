@@ -21,6 +21,7 @@ add_executable(vf-cxx-ast-exporter
   FixedWidthInt.cpp
   AnnotationStore.cpp
   Inclusion.cpp
+  Error.cpp
 )
 
 find_package(LLVM REQUIRED CONFIG)

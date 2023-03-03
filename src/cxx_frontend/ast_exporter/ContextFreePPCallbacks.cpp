@@ -1,4 +1,5 @@
 #include "ContextFreePPCallbacks.h"
+#include "Error.h"
 #include "clang/Basic/FileManager.h"
 
 namespace vf {
@@ -6,34 +7,26 @@ namespace vf {
 void ContextFreePPCallbacks::PPDiags::reportMacroDivergence(
     const clang::Token &macroNameTok, const std::string &macroName,
     const clang::MacroDefinition &MD) {
-  auto loc = macroNameTok.getLocation();
   auto globalDef = MD.getMacroInfo();
-  createDiag(loc, clang::DiagnosticsEngine::Level::Error,
-             "Definition of '%0' has diverged. Its definition is%1 defined in "
-             "the current context, while%2 defined in the parent context.")
-      << macroName << (globalDef ? " not" : "") << (globalDef ? "" : " not");
+  errors().newError({macroNameTok.getLocation(), macroNameTok.getEndLoc()},
+                    m_PP.getSourceManager())
+      << "Definition of '" << macroName << "' has diverged. Its definition is"
+      << (globalDef ? " not " : " ") << "defined in the current context, while"
+      << (globalDef ? " " : " not ") << "defined in the parent context.";
 }
 
 void ContextFreePPCallbacks::PPDiags::reportCtxSensitiveMacroExp(
-    const clang::Token &macroNameTok, const std::string &macroName,
-    const clang::MacroDefinition &MD, const clang::SourceRange &range) {
-  createDiag(range.getBegin(), clang::DiagnosticsEngine::Level::Error,
-             "Macro expansion of '%0' is context sensitive. Last definition is "
-             "here: %1")
-      << macroName
-      << MD.getMacroInfo()->getDefinitionLoc().printToString(
-             m_PP.getSourceManager());
+    const clang::Token &macroNameTok, const std::string &macroName, const clang::SourceRange &range) {
+  errors().newError(range, m_PP.getSourceManager())
+      << "Macro expansion of '" << macroName << "' is context sensitive.";
 }
 
 void ContextFreePPCallbacks::PPDiags::reportUndefIsolatedMacro(
-    const clang::Token &macroNameTok, const std::string &macroName,
-    const clang::MacroDefinition &MD) {
-  createDiag(macroNameTok.getLocation(), clang::DiagnosticsEngine::Level::Error,
-             "'Undefining '%0', which has no definition in the current "
-             "context. Last definition is here: %1")
-      << macroName
-      << MD.getMacroInfo()->getDefinitionLoc().printToString(
-             m_PP.getSourceManager());
+    const clang::Token &macroNameTok, const std::string &macroName) {
+  errors().newError({macroNameTok.getLocation(), macroNameTok.getEndLoc()},
+                    m_PP.getSourceManager())
+      << "Undefining '" << macroName
+      << "', which has no definition in the current context.";
 }
 
 std::string
@@ -92,7 +85,7 @@ void ContextFreePPCallbacks::MacroUndefined(
   if (macroAllowed(name))
     return;
   if (undef && !m_context.currentInclusion()->ownsMacroDef(MD, SM())) {
-    _diags.reportUndefIsolatedMacro(macroNameTok, name, MD);
+    m_diags.reportUndefIsolatedMacro(macroNameTok, name);
   }
 }
 
@@ -105,7 +98,7 @@ void ContextFreePPCallbacks::MacroExpands(const clang::Token &macroNameTok,
     return;
   bool macroDefined = m_context.currentInclusion()->ownsMacroDef(MD, SM());
   if (!macroDefined) {
-    _diags.reportCtxSensitiveMacroExp(macroNameTok, name, MD, range);
+    m_diags.reportCtxSensitiveMacroExp(macroNameTok, name, range);
   }
 }
 
@@ -135,7 +128,7 @@ void ContextFreePPCallbacks::checkDivergence(const clang::Token &macroNameTok,
   bool hasLocalDef = m_context.currentInclusion()->ownsMacroDef(MD, SM());
   bool hasGlobalDef = MD.getMacroInfo();
   if (hasLocalDef ^ hasGlobalDef) {
-    _diags.reportMacroDivergence(macroNameTok, name, MD);
+    m_diags.reportMacroDivergence(macroNameTok, name, MD);
   }
 }
 
