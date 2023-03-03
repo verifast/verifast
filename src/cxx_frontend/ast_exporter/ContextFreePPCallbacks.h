@@ -11,14 +11,6 @@ class ContextFreePPCallbacks : public clang::PPCallbacks {
   class PPDiags {
     clang::Preprocessor &m_PP;
 
-    template <unsigned N>
-    clang::DiagnosticBuilder createDiag(clang::SourceLocation loc,
-                                        clang::DiagnosticsEngine::Level level,
-                                        const char (&msg)[N]) const {
-      auto id = m_PP.getDiagnostics().getCustomDiagID(level, msg);
-      return m_PP.getDiagnostics().Report(loc, id);
-    }
-
   public:
     explicit PPDiags(clang::Preprocessor &PP) : m_PP(PP) {}
 
@@ -28,18 +20,16 @@ class ContextFreePPCallbacks : public clang::PPCallbacks {
 
     void reportCtxSensitiveMacroExp(const clang::Token &macroNameTok,
                                     const std::string &macroName,
-                                    const clang::MacroDefinition &MD,
                                     const clang::SourceRange &range);
 
     void reportUndefIsolatedMacro(const clang::Token &macroNameTok,
-                                  const std::string &macroName,
-                                  const clang::MacroDefinition &MD);
+                                  const std::string &macroName);
   };
 
   InclusionContext &m_context;
   clang::Preprocessor &m_PP;
   const std::unordered_set<std::string> _whiteList;
-  PPDiags _diags;
+  PPDiags m_diags;
 
   const clang::SourceManager &SM() const { return m_PP.getSourceManager(); }
 
@@ -55,7 +45,7 @@ public:
                                   clang::Preprocessor &PP,
                                   const std::vector<std::string> &whiteList)
       : m_context(context), m_PP(PP),
-        _whiteList(whiteList.begin(), whiteList.end()), _diags(PP) {
+        _whiteList(whiteList.begin(), whiteList.end()), m_diags(PP) {
     auto mainEntry = SM().getFileEntryForID(SM().getMainFileID());
     m_context.startInclusion(*mainEntry);
   }

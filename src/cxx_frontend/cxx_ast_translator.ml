@@ -173,6 +173,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
                               (* TODO: skipping implicit dtors *)
     | AccessSpec          -> []  (* TODO: don't ignore this? *)   
     | Namespace ns        -> transl_namespace_decl loc ns
+    | FunctionTemplate ft -> transl_function_template_decl loc ft
     | Undefined _         -> failwith "Undefined declaration."
     | _                   -> error loc "Unsupported declaration."
 
@@ -242,17 +243,18 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
   and transl_type (loc: VF.loc) (ty: R.Type.t): VF.type_expr = 
     let open R.Type in
     match get ty with 
-      | UnionNotInitialized -> union_no_init_err "type"
-      | Builtin b           -> transl_builtin_type loc b 
-      | Pointer p           -> transl_pointer_type loc p
-      | Record r            -> transl_record_type loc r 
-      | EnumType e          -> transl_enum_type loc e 
-      | Elaborated e        -> transl_elaborated_type e
-      | Typedef t           -> transl_typedef_type loc t
-      | FixedWidth f        -> transl_fixed_width_type loc f
-      | LValueRef l         -> transl_lvalue_ref_type loc l
-      | Undefined _         -> failwith "Undefined type."
-      | _                   -> error loc "Unsupported type."
+      | UnionNotInitialized       -> union_no_init_err "type"
+      | Builtin b                 -> transl_builtin_type loc b 
+      | Pointer p                 -> transl_pointer_type loc p
+      | Record r                  -> transl_record_type loc r 
+      | EnumType e                -> transl_enum_type loc e 
+      | Elaborated e              -> transl_elaborated_type e
+      | Typedef t                 -> transl_typedef_type loc t
+      | FixedWidth f              -> transl_fixed_width_type loc f
+      | LValueRef l               -> transl_lvalue_ref_type loc l
+      | SubstTemplateTypeParam s  -> transl_subst_template_type_param loc s
+      | Undefined _               -> failwith "Undefined type."
+      | _                         -> error loc "Unsupported type."
       
   (**
     [transl_type_loc ty] translates [ty] and returns a VeriFast type expression, representing [ty].
@@ -498,6 +500,16 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     let open R.Decl.Namespace in
     (* let name = name_get decl in *)
     decls_get decl |> capnp_arr_map transl_decl |> List.flatten
+
+  and transl_function_template_decl (loc: VF.loc) (decl: R.Decl.FunctionTemplate.t) : VF.decl list =
+    let open R.Decl.FunctionTemplate in
+    (* let name = name_get decl in *)
+    let ng_callers_only, ft, pre_post, terminates = contract_get decl |> capnp_arr_map map_ann_clause |> AP.parse_func_contract loc in
+    let transl_spec loc desc =
+      let name, params, body_opt, _, return_type = transl_func loc desc in
+      VF.Func (loc, VF.Regular, [], return_type, name, params, ng_callers_only, ft, pre_post, terminates, body_opt, false, [])
+    in
+    specs_get decl |> capnp_arr_map (transl_node transl_spec)
 
   (***************)
   (* expressions *)
@@ -855,15 +867,12 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     in
     return_type, (functype_type_params, functype_params, params), contract
 
+  and transl_subst_template_type_param (loc: VF.loc) (st: R.Node.t): VF.type_expr =
+    transl_type_loc st
+
   (********************)
   (* translation unit *)
   (********************)
-
-  let transl_err (err: R.Err.t): 'a =
-    let open R.Err in
-    let loc = transl_loc @@ loc_get err in
-    let reason = reason_get err in
-    error loc reason
 
   let transl_includes (decls_map: (int * R.Node.t capnp_arr) list) (includes: R.Include.t list): Cxx_fe_sig.header_type list =
     let active_headers = ref [] in
@@ -915,17 +924,39 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     let headers, _ = transl_includes_rec Args.path includes [] [] in
     headers
 
+  (**
+    [update_file_mapping file] updates the mapping from [file]'s file descriptor to its name and return the mapping.
+  *)
+  let update_file_mapping (file: R.File.t): int * string =
+    let open R.File in
+    let fd = fd_get file in
+    let name = path_get file in
+    Hashtbl.replace files_table fd name;
+    fd, name
+
   let transl_files (files: R.File.t capnp_arr): (int * R.Node.t capnp_arr) list =
     Hashtbl.clear files_table;
     let transl_file file =
       let open R.File in
-      let fd = fd_get file in
-      let name = path_get file in
-      Hashtbl.replace files_table fd name;
+      let fd, _ = update_file_mapping file in
       let decls = decls_get file in
       fd, decls
     in
     files |> capnp_arr_map transl_file
+
+  let transl_vf_err (err: R.VfError.t): 'a =
+    let transl_err (err: R.Err.t): 'a =
+      let open R.Err in
+      let loc = transl_loc @@ loc_get err in
+      let reason = reason_get err in
+      error loc reason
+    in
+    let open R.VfError in
+    let tu = tu_get err in
+    (* we need the file mapping to translate the location of errors *)
+    let () = R.TU.files_get tu |> capnp_arr_iter (fun f -> update_file_mapping f |> ignore) in
+    let errors = errors_get err in
+    errors |> capnp_arr_iter transl_err
 
   let transl_tu (tu: R.TU.t): Cxx_fe_sig.header_type list * VF.decl list =
     let open R.TU in
@@ -955,21 +986,21 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
       | s -> failwith @@ "Cxx AST exporter error:\n" ^ s 
     in
     let in_channel = stubs_ast_in_channel inchan in
-    let try_deser on_receive =
-      let msg = read_capnp_message in_channel in
-      match msg with
-      | None -> on_error ()
-      | Some res -> on_receive res 
-    in
     do_finally
       begin fun () ->
-        try_deser @@ fun res -> 
-          match res |> R.SerResult.of_message |> R.SerResult.get with
+        match read_capnp_message in_channel with
+        | None -> on_error ()
+        | Some res ->
+          begin match res |> R.SerResult.of_message |> R.SerResult.get with
           | R.SerResult.Undefined _ -> on_error ()
-          | R.SerResult.Err -> try_deser @@ fun err -> err |> R.Err.of_message |> transl_err
-          | R.SerResult.Ok ->  try_deser @@ fun msg -> 
-            let headers, decls = msg |> R.TU.of_message |> transl_tu in
+          | R.SerResult.Ok tu -> 
+            let headers, decls = transl_tu tu in
             headers, [VF.PackageDecl (VF.dummy_loc, "", [], decls)]
+          | R.SerResult.ClangError -> on_error ()
+          | R.SerResult.VfError err ->
+            let () = transl_vf_err err in
+            on_error ()
+          end
       end
       begin fun () ->
         close_channels ()

@@ -67,7 +67,8 @@ protected:
  */
 template <class StubsNode, class AstNode>
 class NodeSerializer : public DescSerializer<StubsNode, AstNode> {
-    stubs::Loc::Builder m_locBuilder;
+  stubs::Loc::Builder m_locBuilder;
+
 public:
   using NodeBuilder = typename stubs::Node<StubsNode>::Builder;
 
@@ -141,7 +142,8 @@ struct StmtSerializer : public NodeSerializer<stubs::Stmt, clang::Stmt>,
 
 private:
   template <class While>
-  bool serializeWhileStmt(stubs::Stmt::While::Builder &builder, const While *stmt);
+  bool serializeWhileStmt(stubs::Stmt::While::Builder &builder,
+                          const While *stmt);
 };
 
 struct DeclSerializer : public NodeSerializer<stubs::Decl, clang::Decl>,
@@ -197,9 +199,12 @@ struct DeclSerializer : public NodeSerializer<stubs::Decl, clang::Decl>,
 
   bool VisitNamespaceDecl(const clang::NamespaceDecl *decl);
 
+  bool VisitFunctionTemplateDecl(const clang::FunctionTemplateDecl *decl);
+
 private:
   void serializeFuncDecl(stubs::Decl::Function::Builder &builder,
-                         const clang::FunctionDecl *decl);
+                         const clang::FunctionDecl *decl,
+                         bool serializeContract = true);
 
   void serializeFieldDecl(stubs::Decl::Field::Builder &builder,
                           const clang::FieldDecl *decl);
@@ -322,6 +327,9 @@ struct TypeSerializer : public DescSerializer<stubs::Type, clang::Type>,
   bool VisitLValueReferenceType(const clang::LValueReferenceType *type);
 
   bool VisitRValueReferenceType(const clang::RValueReferenceType *type);
+
+  bool
+  VisitSubstTemplateTypeParmType(const clang::SubstTemplateTypeParmType *type);
 };
 
 class TypeLocSerializer
@@ -366,19 +374,22 @@ public:
   bool VisitRValueReferenceTypeLoc(const clang::RValueReferenceTypeLoc type);
 
   bool VisitFunctionProtoTypeLoc(const clang::FunctionProtoTypeLoc type);
+
+  bool VisitSubstTemplateTypeParmType(
+      const clang::SubstTemplateTypeParmTypeLoc type);
 };
 
 class AnnotationSerializer {
-  clang::SourceManager &_SM;
+  clang::SourceManager &m_SM;
 
 public:
-  explicit AnnotationSerializer(clang::SourceManager &SM) : _SM(SM) {}
+  explicit AnnotationSerializer(clang::SourceManager &SM) : m_SM(SM) {}
 
   using ClauseBuilder = stubs::Clause::Builder;
 
   void serializeClause(ClauseBuilder &builder, const Annotation &ann) {
     auto locBuilder = builder.initLoc();
-    serializeSrcRange(locBuilder, ann.getRange(), _SM);
+    serializeSrcRange(locBuilder, ann.getRange(), m_SM);
     builder.setText(ann.getText().str());
   }
 
@@ -386,7 +397,7 @@ public:
   void serializeNode(stubs::Loc::Builder &locBuilder,
                      typename StubsNode::Builder &descBuilder,
                      const Annotation &ann) {
-    serializeSrcRange(locBuilder, ann.getRange(), _SM);
+    serializeSrcRange(locBuilder, ann.getRange(), m_SM);
     descBuilder.setAnn(ann.getText().str());
   }
 };
