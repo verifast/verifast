@@ -49,11 +49,11 @@ typedef lemma void compare_and_swap_int_op
 
 typedef lemma void compare_and_swap_int_ghost_op
     (predicate() inv, int *object, int oldValue, int newValue,
-     predicate() pre, predicate(int) post)();
+     predicate() pre, predicate(int) post, int callerThread)();
     requires
         inv() &*&
         is_compare_and_swap_int_op(?op, object, oldValue, newValue, ?P, ?Q) &*&
-        P() &*& pre();
+        P() &*& pre() &*& callerThread == currentThread;
     ensures
         inv() &*&
         is_compare_and_swap_int_op(op, object, oldValue, newValue, P, Q) &*&
@@ -65,7 +65,7 @@ int compare_and_swap_int(int *object, int oldValue, int newValue);
     /*@
     requires
         [?frac]atomic_space(?inv) &*&
-        is_compare_and_swap_int_ghost_op(?ghop, inv, object, oldValue, newValue, ?pre, ?post) &*&
+        is_compare_and_swap_int_ghost_op(?ghop, inv, object, oldValue, newValue, ?pre, ?post, currentThread) &*&
         pre();
     @*/
     /*@

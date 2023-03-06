@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include "atomics.h"
+#include "../busywaiting.h"
 
 typedef struct spinlock {
     int locked;
@@ -22,6 +23,7 @@ predicate spinlock(spinlock_t spinlock; predicate(int, int) inv) =
 spinlock_t create_spinlock()
 //@ requires exists<pair<predicate(int, int), int> >(pair(?inv, ?acquireCredits)) &*& inv(acquireCredits, 0);
 //@ ensures spinlock(result, inv);
+//@ terminates;
 {
   spinlock_t result = malloc(sizeof(struct spinlock));
   if (result == 0) abort();
@@ -35,36 +37,41 @@ spinlock_t create_spinlock()
 
 /*@
 
-typedef lemma void spinlock_acquire_ghost_op(predicate(int, int) inv, predicate() pre, predicate() post)();
-    requires inv(?acquireCredits, 0) &*& pre();
-    ensures inv(acquireCredits - 1, 1) &*& post() &*& 1 <= acquireCredits;
+typedef lemma void spinlock_acquire_ghost_op(predicate(int, int) inv, predicate() pre, predicate() post, int callerThread)();
+    requires inv(?acquireCredits, ?locked) &*& pre() &*& currentThread == callerThread;
+    ensures
+        locked == 0 ?
+            inv(acquireCredits - 1, 1) &*& post() &*& 1 <= acquireCredits
+        :
+            inv(acquireCredits, locked) &*& pre() &*& call_perm_(currentThread, spinlock_acquire);
 
 @*/
 
 void spinlock_acquire(spinlock_t spinlock)
-//@ requires [?f]spinlock(spinlock, ?inv) &*& is_spinlock_acquire_ghost_op(?ghop, inv, ?pre, ?post) &*& pre();
+//@ requires [?f]spinlock(spinlock, ?inv) &*& is_spinlock_acquire_ghost_op(?ghop, inv, ?pre, ?post, currentThread) &*& pre();
 //@ ensures [f]spinlock(spinlock, inv) &*& post();
+//@ terminates;
 {
   for (;;)
-  //@ invariant [f]spinlock(spinlock, inv) &*& is_spinlock_acquire_ghost_op(ghop, inv, pre, post) &*& pre();
+  //@ invariant [f]spinlock(spinlock, inv) &*& is_spinlock_acquire_ghost_op(ghop, inv, pre, post, currentThread) &*& pre();
   {
     int result;
     //@ open spinlock(spinlock, inv);
     {
       /*@
-      predicate pre_() = is_spinlock_acquire_ghost_op(ghop, inv, pre, post) &*& pre();
-      predicate post_(int result_) = result_ == 0 ? post() : is_spinlock_acquire_ghost_op(ghop, inv, pre, post) &*& pre();
+      predicate pre_() = is_spinlock_acquire_ghost_op(ghop, inv, pre, post, currentThread) &*& pre();
+      predicate post_(int result_) = result_ == 0 ? post() : is_spinlock_acquire_ghost_op(ghop, inv, pre, post, currentThread) &*& pre() &*& call_perm_(currentThread, spinlock_acquire);
       @*/
       /*@
-      produce_lemma_function_pointer_chunk compare_and_swap_int_ghost_op(spinlock_inv(spinlock, inv), &spinlock->locked, 0, 1, pre_, post_)() {
+      produce_lemma_function_pointer_chunk compare_and_swap_int_ghost_op(spinlock_inv(spinlock, inv), &spinlock->locked, 0, 1, pre_, post_, currentThread)() {
         assert is_compare_and_swap_int_op(?op, _, _, _, _, _);
         open spinlock_inv(spinlock, inv)();
         open pre_();
         assert spinlock->locked |-> ?locked;
         op();
+        ghop();
         if (locked == 0) {
-          ghop();
-          leak is_spinlock_acquire_ghost_op(_, _, _, _);
+          leak is_spinlock_acquire_ghost_op(_, _, _, _, currentThread);
           spinlock->acquireCredits--;
         } else {
         }
@@ -93,6 +100,7 @@ typedef lemma void spinlock_release_ghost_op(predicate(int, int) inv, predicate(
 void spinlock_release(spinlock_t spinlock)
 //@ requires [?f]spinlock(spinlock, ?inv) &*& is_spinlock_release_ghost_op(?ghop, inv, ?pre, ?post) &*& pre();
 //@ ensures [f]spinlock(spinlock, inv) &*& post();
+//@ terminates;
 {
   //@ open spinlock(spinlock, inv);
   {
