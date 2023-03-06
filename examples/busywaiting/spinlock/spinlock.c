@@ -1,11 +1,11 @@
 #include <stdlib.h>
 #include "atomics.h"
-#include "../busywaiting.h"
+#include "spinlock.h"
 
-typedef struct spinlock {
+struct spinlock {
     int locked;
     //@ predicate(int) inv_;
-} *spinlock_t;
+};
 
 /*@
 
@@ -32,18 +32,6 @@ spinlock_t create_spinlock()
   //@ create_atomic_space(spinlock_inv(result, inv));
   return result;
 }
-
-/*@
-
-typedef lemma void spinlock_acquire_ghost_op(predicate(int) inv, predicate() pre, predicate() post, int callerThread)();
-    requires inv(?locked) &*& pre() &*& currentThread == callerThread;
-    ensures
-        locked == 0 ?
-            inv(1) &*& post()
-        :
-            inv(locked) &*& pre() &*& call_perm_(currentThread, spinlock_acquire);
-
-@*/
 
 void spinlock_acquire(spinlock_t spinlock)
 //@ requires [?f]spinlock(spinlock, ?inv) &*& is_spinlock_acquire_ghost_op(?ghop, inv, ?pre, ?post, currentThread) &*& pre();
@@ -86,14 +74,6 @@ void spinlock_acquire(spinlock_t spinlock)
   }
 }
 
-/*@
-
-typedef lemma void spinlock_release_ghost_op(predicate(int) inv, predicate() pre, predicate() post)();
-    requires inv(_) &*& pre();
-    ensures inv(0) &*& post();
-
-@*/
-
 void spinlock_release(spinlock_t spinlock)
 //@ requires [?f]spinlock(spinlock, ?inv) &*& is_spinlock_release_ghost_op(?ghop, inv, ?pre, ?post) &*& pre();
 //@ ensures [f]spinlock(spinlock, inv) &*& post();
@@ -124,4 +104,3 @@ void spinlock_release(spinlock_t spinlock)
   }
   //@ close [f]spinlock(spinlock, inv);
 }
-
