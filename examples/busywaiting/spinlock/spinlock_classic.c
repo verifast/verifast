@@ -3,11 +3,24 @@
 
 typedef struct spinlock_classic {
   spinlock_t spinlock;
+  //@ list<int> level;
+  //@ predicate(int, bool) inv_;
+  //@ int acquireCredits;
+  //@ void *signal;
 } *spinlock_classic_t;
 
 /*@
 
-predicate spinlock_classic(spinlock_classic_t spinlock; list<int> level, predicate(int, bool) inv);
+predicate_ctor spinlock_classic_inv(spinlock_classic_t spinlock, list<int> level, predicate(int, bool) inv)(bool locked) =
+    spinlock->acquireCredits |-> ?acquireCredits &*&
+    spinlock->signal |-> ?signal &*&
+    inv(acquireCredits, locked) &*&
+    locked ? signal(signal, level, false) : true;
+
+predicate spinlock_classic(spinlock_classic_t spinlock; list<int> level, predicate(int, bool) inv) =
+    malloc_block_spinlock_classic(spinlock) &*&
+    spinlock->spinlock |-> ?spinlock_ &*& spinlock->level |-> level &*& spinlock->inv_ |-> ?inv &*&
+    spinlock(spinlock_, spinlock_classic_inv(spinlock, level, inv));
 
 @*/
 
@@ -45,7 +58,7 @@ requires
     predicate post_() = true;
     @*/
     /*@
-    
+    produce_lemma_function_pointer_chunk spinlock_acquire_ghost_op(spinlock_classic_inv(spinlock, 
     @*/
     spinlock_acquire(spinlock->spinlock);
   }
