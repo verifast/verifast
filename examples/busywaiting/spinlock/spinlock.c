@@ -4,15 +4,15 @@
 
 struct spinlock {
     int locked;
-    //@ predicate(int) inv_;
+    //@ predicate(bool) inv_;
 };
 
 /*@
 
-predicate_ctor spinlock_inv(spinlock_t spinlock, predicate(int) inv)() =
-    spinlock->locked |-> ?locked &*& inv(locked);
+predicate_ctor spinlock_inv(spinlock_t spinlock, predicate(bool) inv)() =
+    spinlock->locked |-> ?locked &*& inv(locked != 0);
 
-predicate spinlock(spinlock_t spinlock; predicate(int) inv) =
+predicate spinlock(spinlock_t spinlock; predicate(bool) inv) =
     spinlock->inv_ |-> inv &*&
     malloc_block_spinlock(spinlock) &*&
     atomic_space(spinlock_inv(spinlock, inv));
@@ -20,7 +20,7 @@ predicate spinlock(spinlock_t spinlock; predicate(int) inv) =
 @*/
 
 spinlock_t create_spinlock()
-//@ requires exists<predicate(int)>(?inv) &*& inv(0);
+//@ requires exists<predicate(bool)>(?inv) &*& inv(false);
 //@ ensures spinlock(result, inv);
 //@ terminates;
 {

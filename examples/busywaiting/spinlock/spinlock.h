@@ -8,24 +8,24 @@ typedef struct spinlock *spinlock_t;
 
 /*@
 
-predicate spinlock(spinlock_t spinlock; predicate(int) inv);
+predicate spinlock(spinlock_t spinlock; predicate(bool) inv);
 
 @*/
 
 spinlock_t create_spinlock();
-//@ requires exists<predicate(int)>(?inv) &*& inv(0);
+//@ requires exists<predicate(bool)>(?inv) &*& inv(false);
 //@ ensures spinlock(result, inv);
 //@ terminates;
 
 /*@
 
-typedef lemma void spinlock_acquire_ghost_op(predicate(int) inv, predicate() pre, predicate() post, int callerThread)();
+typedef lemma void spinlock_acquire_ghost_op(predicate(bool) inv, predicate() pre, predicate() post, int callerThread)();
     requires inv(?locked) &*& pre() &*& currentThread == callerThread;
     ensures
-        locked == 0 ?
-            inv(1) &*& post()
+        locked ?
+            inv(locked) &*& pre() &*& call_perm_(currentThread, spinlock_acquire)
         :
-            inv(locked) &*& pre() &*& call_perm_(currentThread, spinlock_acquire);
+            inv(true) &*& post();
 
 @*/
 
@@ -36,9 +36,9 @@ void spinlock_acquire(spinlock_t spinlock);
 
 /*@
 
-typedef lemma void spinlock_release_ghost_op(predicate(int) inv, predicate() pre, predicate() post)();
+typedef lemma void spinlock_release_ghost_op(predicate(bool) inv, predicate() pre, predicate() post)();
     requires inv(_) &*& pre();
-    ensures inv(0) &*& post();
+    ensures inv(false) &*& post();
 
 @*/
 
