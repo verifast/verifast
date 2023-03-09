@@ -46,7 +46,11 @@ void spinlock_acquire(spinlock_t spinlock)
     {
       /*@
       predicate pre_() = is_spinlock_acquire_ghost_op(ghop, inv, pre, post, currentThread) &*& pre();
-      predicate post_(int result_) = result_ == 0 ? post() : is_spinlock_acquire_ghost_op(ghop, inv, pre, post, currentThread) &*& pre() &*& call_perm_(currentThread, spinlock_acquire);
+      predicate post_(int result_) =
+        result_ == 0 ?
+          post()
+        :
+          is_spinlock_acquire_ghost_op(ghop, inv, pre, post, currentThread) &*& pre() &*& call_perm_(currentThread, spinlock_acquire);
       @*/
       /*@
       produce_lemma_function_pointer_chunk compare_and_swap_int_ghost_op(spinlock_inv(spinlock, inv), &spinlock->locked, 0, 1, pre_, post_, currentThread)() {

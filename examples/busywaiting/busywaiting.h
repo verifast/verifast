@@ -85,9 +85,19 @@ fixpoint bool is_prefix_of<t>(list<t> xs, list<t> ys) {
 
 predicate call_below_perm(list<pathcomp> path, void *f;);
 
+predicate call_below_perms(int n, list<pathcomp> path, void *f;) =
+    n <= 0 ?
+        true
+    :
+        call_below_perm(path, f) &*& call_below_perms(n - 1, path, f);
+
 lemma void pathize_call_below_perm_();
   requires obs(?p, ?obs) &*& call_below_perm_(currentThread, ?f);
   ensures obs(p, obs) &*& call_below_perm(p, f);
+
+lemma void pathize_call_below_perm__multi(int n);
+  requires obs(?p, ?obs) &*& call_below_perm_(currentThread, ?f);
+  ensures obs(p, obs) &*& call_below_perms(n, p, f);
 
 fixpoint bool lt(int x, int y) { return x < y; }
 
