@@ -235,6 +235,8 @@ mod vf_mir_builder {
     mod capnp_utils;
     use crate::vf_mir_capnp::annotation as annot_cpn;
     use crate::vf_mir_capnp::body as body_cpn;
+    use crate::vf_mir_capnp::hir as hir_cpn;
+    use crate::vf_mir_capnp::ident as ident_cpn;
     use crate::vf_mir_capnp::mutability as mutability_cpn;
     use crate::vf_mir_capnp::span_data as span_data_cpn;
     use crate::vf_mir_capnp::symbol as symbol_cpn;
@@ -261,6 +263,10 @@ mod vf_mir_builder {
     use constant_cpn::constant_kind as constant_kind_cpn;
     use field_def_cpn::visibility as visibility_cpn;
     use file_name_cpn::real_file_name as real_file_name_cpn;
+    use hir_cpn::generics as hir_generics_cpn;
+    use hir_generic_param_cpn::generic_param_kind as hir_generic_param_kind_cpn;
+    use hir_generic_param_cpn::param_name as hir_generic_param_name_cpn;
+    use hir_generics_cpn::generic_param as hir_generic_param_cpn;
     use loc_cpn::char_pos as char_pos_cpn;
     use loc_cpn::source_file as source_file_cpn;
     use mir::HasLocalDecls;
@@ -533,7 +539,6 @@ mod vf_mir_builder {
         fn encode_body(enc_ctx: &mut EncCtx<'tcx, 'a>, mut body_cpn: body_cpn::Builder<'_>) {
             let tcx = enc_ctx.tcx;
             let body = enc_ctx.body();
-            let annots = &mut enc_ctx.annots;
             trace!("Encoding MIR: {:?}", body.source.instance);
             debug!(
                 "Encoding MIR for {:?} with span {:?}\n{}",
@@ -544,10 +549,6 @@ mod vf_mir_builder {
 
             let def_id = body.source.def_id();
 
-            Self::encode_unsafety(
-                tcx.fn_sig(def_id).unsafety(),
-                body_cpn.reborrow().init_unsafety(),
-            );
             let kind = tcx.def_kind(def_id);
             match kind {
                 hir::def::DefKind::Fn => {
@@ -560,9 +561,22 @@ mod vf_mir_builder {
             let def_path = tcx.def_path_str(def_id);
             body_cpn.set_def_path(&def_path);
 
+            Self::encode_unsafety(
+                tcx.fn_sig(def_id).unsafety(),
+                body_cpn.reborrow().init_unsafety(),
+            );
+
+            let hir_gens_cpn = body_cpn.reborrow().init_hir_generics();
+            let hir_gens = tcx
+                .hir()
+                .get_generics(def_id.expect_local())
+                .expect(&format!("Failed to get HIR generics data"));
+            Self::encode_hir_generics(enc_ctx, hir_gens, hir_gens_cpn);
+
             let contract_cpn = body_cpn.reborrow().init_contract();
             let body_contract_span = crate::span_utils::body_contract_span(&body);
-            let contract_annots = annots
+            let contract_annots = enc_ctx
+                .annots
                 .drain_filter(|annot| {
                     body_contract_span.contains(crate::span_utils::comment_span(&annot))
                 })
@@ -657,6 +671,68 @@ mod vf_mir_builder {
             }
         }
 
+        fn encode_hir_generics(
+            enc_ctx: &mut EncCtx<'tcx, 'a>,
+            hir_gens: &hir::Generics,
+            mut hir_gens_cpn: hir_generics_cpn::Builder<'_>,
+        ) {
+            let len = hir_gens.params.len();
+            let len = len.try_into().expect(&format!(
+                "{} HIR generics cannot be stored in a Cpnp message",
+                len
+            ));
+            let mut params_cpn = hir_gens_cpn.reborrow().init_params(len);
+            for (idx, param) in hir_gens.params.iter().enumerate() {
+                let param_cpn = params_cpn.reborrow().get(idx.try_into().unwrap());
+                Self::encode_hir_generic_param(enc_ctx, param, param_cpn);
+            }
+            let span_cpn = hir_gens_cpn.init_span();
+            Self::encode_span_data(enc_ctx.tcx, &hir_gens.span.data(), span_cpn);
+        }
+
+        fn encode_hir_generic_param(
+            enc_ctx: &mut EncCtx<'tcx, 'a>,
+            p: &hir::GenericParam,
+            mut p_cpn: hir_generic_param_cpn::Builder<'_>,
+        ) {
+            let name_cpn = p_cpn.reborrow().init_name();
+            Self::encode_hir_generic_param_name(enc_ctx, &p.name, name_cpn);
+            let span_cpn = p_cpn.reborrow().init_span();
+            Self::encode_span_data(enc_ctx.tcx, &p.span.data(), span_cpn);
+            p_cpn.set_pure_wrt_drop(p.pure_wrt_drop);
+            let kind_cpn = p_cpn.init_kind();
+            Self::encode_hir_generic_param_kind(&p.kind, kind_cpn);
+        }
+
+        fn encode_hir_generic_param_kind(
+            gpk: &hir::GenericParamKind,
+            mut gpk_cpn: hir_generic_param_kind_cpn::Builder<'_>,
+        ) {
+            match gpk {
+                hir::GenericParamKind::Lifetime { .. } => gpk_cpn.set_lifetime(()),
+                hir::GenericParamKind::Type { .. } => gpk_cpn.set_type(()),
+                hir::GenericParamKind::Const { .. } => gpk_cpn.set_const(()),
+            }
+        }
+
+        fn encode_hir_generic_param_name(
+            enc_ctx: &mut EncCtx<'tcx, 'a>,
+            n: &hir::ParamName,
+            n_cpn: hir_generic_param_name_cpn::Builder<'_>,
+        ) {
+            match n {
+                hir::ParamName::Plain(ident) => {
+                    let ident_cpn = n_cpn.init_plain();
+                    Self::encode_ident(enc_ctx, ident, ident_cpn);
+                }
+                hir::ParamName::Fresh(id) => {
+                    let id_cpn = n_cpn.init_fresh();
+                    capnp_utils::encode_u_int128((*id).try_into().unwrap(), id_cpn);
+                }
+                hir::ParamName::Error => bug!(),
+            }
+        }
+
         fn encode_var_debug_info(
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
@@ -693,6 +769,17 @@ mod vf_mir_builder {
         #[inline]
         fn encode_symbol(sym: &rustc_span::symbol::Symbol, mut sym_cpn: symbol_cpn::Builder<'_>) {
             sym_cpn.set_name(sym.as_str());
+        }
+
+        fn encode_ident(
+            enc_ctx: &mut EncCtx<'tcx, 'a>,
+            ident: &rustc_span::symbol::Ident,
+            mut ident_cpn: ident_cpn::Builder<'_>,
+        ) {
+            let name_cpn = ident_cpn.reborrow().init_name();
+            Self::encode_symbol(&ident.name, name_cpn);
+            let span_cpn = ident_cpn.init_span();
+            Self::encode_span_data(enc_ctx.tcx, &ident.span.data(), span_cpn);
         }
 
         fn encode_span_data(
@@ -1678,6 +1765,7 @@ mod span_utils {
         body_imp_span.data()
     }
 
+    // Todo @Nima: This function returns a wrong span for functions with explicit return type in their signature
     pub fn body_contract_span<'tcx>(body: &mir::Body<'tcx>) -> SpanData {
         let body_span = body.span.data();
         // The following span is not exactly the contract span but serves our purpose

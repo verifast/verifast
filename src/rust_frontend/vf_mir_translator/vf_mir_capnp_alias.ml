@@ -21,6 +21,14 @@ module MutabilityRd = VfMirStub.Reader.Mutability
 module SymbolRd = VfMirStub.Reader.Symbol
 module AnnotationRd = VfMirStub.Reader.Annotation
 module UnsafetyRd = VfMirStub.Reader.Unsafety
+module IdentRd = VfMirStub.Reader.Ident
+
+(* Hir *)
+module HirRd = VfMirStub.Reader.Hir
+module HirGenericsRd = HirRd.Generics
+module HirGenericParamRd = HirGenericsRd.GenericParam
+module HirGenericParamNameRd = HirGenericParamRd.ParamName
+module HirGenericParamKindRd = HirGenericParamRd.GenericParamKind
 
 (* Bodies *)
 module BodyRd = VfMirStub.Reader.Body

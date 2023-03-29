@@ -325,6 +325,10 @@ module RustBelt = struct
     }
 end
 
+module Hir = struct
+  type generic_param = GenParamLifetime | GenParamType | GenParamConst
+end
+
 module Mir = struct
   type mutability = Mut | Not
 
@@ -433,6 +437,14 @@ module TrName = struct
     global_replace r "_" dp
 
   let make_tmp_var_name base_name = tag_internal "temp_var_" ^ base_name
+
+  let rec lft_name_without_apostrophe n =
+    let open String in
+    let len = length n in
+    if len > 0 then
+      if get n 0 = '\'' then lft_name_without_apostrophe (sub n 1 (len - 1))
+      else Ok n
+    else Error (`LftNameWithoutApostrophe "Empty string for name")
 end
 
 module type DECLS = sig
@@ -654,6 +666,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         Error (`TrMutability "Unknown Mir mutability discriminator")
 
   let translate_symbol (sym_cpn : SymbolRd.t) = SymbolRd.name_get sym_cpn
+
+  let translate_ident (i_cpn : IdentRd.t) =
+    let open IdentRd in
+    let name_cpn = name_get i_cpn in
+    let name = translate_symbol name_cpn in
+    let span_cpn = span_get i_cpn in
+    let* loc = translate_span_data span_cpn in
+    Ok (name, loc)
+
   let translate_region (reg_cpn : RegionRd.t) = RegionRd.id_get reg_cpn
   let int_size_rank = Ast.PtrRank
 
@@ -1799,6 +1820,40 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Unsafe -> Ok true
     | Undefined _ -> Error (`TrUnsafety "Unknown unsafety kind")
 
+  let translate_hir_generic_param_name (n_cpn : HirGenericParamNameRd.t) =
+    let open HirGenericParamNameRd in
+    match get n_cpn with
+    | Plain ident_cpn -> translate_ident ident_cpn
+    | Fresh id_cpn -> failwith "Todo: ParamName::Fresh"
+    | Undefined _ -> Error (`TrHirGenericParamName "Unknown ParamName kind")
+
+  let translate_hir_generic_param_kind (kind_cpn : HirGenericParamKindRd.t) =
+    let open HirGenericParamKindRd in
+    match get kind_cpn with
+    | Lifetime -> Ok Hir.GenParamLifetime
+    | Type -> Ok Hir.GenParamType
+    | Const -> Ok Hir.GenParamConst
+    | Undefined _ -> Error (`TrHirGenericParamKind "Unknown GenericParamKind")
+
+  let translate_hir_generic_param (p_cpn : HirGenericParamRd.t) =
+    let open HirGenericParamRd in
+    let name_cpn = name_get p_cpn in
+    let* name, name_loc = translate_hir_generic_param_name name_cpn in
+    let span_cpn = span_get p_cpn in
+    let* loc = translate_span_data span_cpn in
+    let pure_wrt_drop = pure_wrt_drop_get p_cpn in
+    let kind_cpn = kind_get p_cpn in
+    let* kind = translate_hir_generic_param_kind kind_cpn in
+    Ok (name, kind, loc)
+
+  let translate_hir_generics (gens_cpn : HirGenericsRd.t) =
+    let open HirGenericsRd in
+    let params_cpn = params_get_list gens_cpn in
+    let* params = ListAux.try_map translate_hir_generic_param params_cpn in
+    let span_cpn = span_get gens_cpn in
+    let* loc = translate_span_data span_cpn in
+    Ok (params, loc)
+
   let translate_body (body_cpn : BodyRd.t) =
     let open BodyRd in
     let var_id_trs_map_ref = ref [] in
@@ -1853,6 +1908,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let param_decls, local_decls =
           ListAux.partitioni (fun idx _ -> idx < arg_count) local_decls
         in
+        let hir_gens_cpn = hir_generics_get body_cpn in
+        let* gens, gens_loc = translate_hir_generics hir_gens_cpn in
+        let* lft_param_names =
+          ListAux.try_filter_map
+            (fun (name, kind, loc) ->
+              if kind = Hir.GenParamLifetime then
+                let* name = TrName.lft_name_without_apostrophe name in
+                Ok (Some name)
+              else Ok None)
+            gens
+        in
         let contract_cpn = contract_get body_cpn in
         let* contract_loc, contract_opt = translate_contract contract_cpn in
         let* is_unsafe = translate_unsafety @@ unsafety_get @@ body_cpn in
@@ -1863,8 +1929,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           match contract_opt with
           | None when not is_unsafe ->
               let* pre_post =
-                (* Todo @Nima: Hard-coded list of lifetimes *)
-                gen_contract contract_loc [ "a" ] param_decls ret_place_decl
+                gen_contract contract_loc lft_param_names param_decls
+                  ret_place_decl
               in
               Ok (false, None, Some pre_post, false)
           | Some contract when is_unsafe -> Ok contract

@@ -89,9 +89,42 @@ struct Symbol {
     name @0: Text;
 }
 
+struct Ident {
+    name @0: Symbol;
+    span @1: SpanData;
+}
+
 struct Annotation {
     raw @0: Text;
     span @1: SpanData;
+}
+
+struct Hir {
+    struct Generics {
+        struct GenericParam {
+            struct ParamName {
+                union {
+                    plain @0: Ident;
+                    fresh @1: BigUInt;
+                }
+            }
+            struct GenericParamKind {
+                union {
+                    lifetime @0: Void;
+                    type @1: Void;
+                    const @2: Void;
+                }
+            }
+            name @0: ParamName;
+            bounds @1: Void;
+            span @2: SpanData;
+            pureWrtDrop @3: Bool;
+            kind @4: GenericParamKind;
+        }
+        params @0: List(GenericParam);
+        whereClause @1: Void;
+        span @2: SpanData;
+    }
 }
 
 struct Ty {
@@ -491,6 +524,7 @@ struct Body {
     varDebugInfo @8: List(VarDebugInfo);
     ghostStmts @9: List(Annotation);
     unsafety @10: Unsafety;
+    hirGenerics @11: Hir.Generics;
 }
 
 struct VfMir {
