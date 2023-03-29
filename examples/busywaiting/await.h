@@ -50,7 +50,7 @@ requires
     call_perm_(currentThread, condition) &*&
     obs(?phase0, ?obs) &*& [?f]mutex(mutex, ?level, ?inv) &*& [_]is_condition(condition, level, obs, inv, ?P, ?Q, ?R, ?signals) &*&
     call_below_perms(phase0, ?caller, length(signals)) &*& func_lt(condition, caller) == true &*&
-    P(phase0, data) &*& is_await_viewshift(?awaitViewshift, R, inv, data, P) &*& forall(map(snd, obs), (all_sublevels_lt)(level)) == true;
+    P(phase0, data) &*& is_await_viewshift(?awaitViewshift, R, inv, data, P) &*& forall(map(snd, obs), (all_sublevels_lt)(mutex_nb_level_dims, level)) == true;
 @*/
 //@ ensures obs(?phase1, obs) &*& [f]mutex(mutex, level, inv) &*& Q(phase1) &*& is_await_viewshift(awaitViewshift, R, inv, data, P);
 

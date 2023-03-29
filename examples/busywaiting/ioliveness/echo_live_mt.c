@@ -43,19 +43,21 @@ mutex mut;
 
 /*@
 
+fixpoint int N() { return 1 + mutex_nb_level_dims; }
+
 predicate wait_perms(list<void *> ss, int level, void *f) =
   switch (ss) {
     case nil: return true;
     case cons(s, ss0): return
-      wait_perm({}, s, {level}, f) &*&
+      wait_perm({}, s, {N, level}, f) &*&
       wait_perms(ss0, level + 2, f);
   };
 
 predicate mutex_inv_aux(int k, list<void *> ses, list<void *> sds; int ne, int nd) =
   [1/2]g.nextToEnqueue |-> ne &*& ne <= k + 2 &*&
   [1/2]g.nextToDequeue |-> nd &*& 0 <= nd &*& nd <= ne &*& nd <= k + 1 &*&
-  signal(nth(ne, ses), {2*ne+1}, false) &*&
-  signal(nth(nd, sds), {2*nd+2}, false) &*&
+  signal(nth(ne, ses), {N, 2*ne+1}, false) &*&
+  signal(nth(nd, sds), {N, 2*nd+2}, false) &*&
   buffer |-> ?m &*& 
   m == 0 ?
     nd == ne
@@ -73,11 +75,11 @@ requires
     [1/2]g.nextToDequeue |-> 0 &*&
     send_all(?P0, 0, ?k) &*& P0() &*& 0 <= k &*&
     exists<pair<list<void *>, list<void *> > >(pair(?ses, ?sds)) &*&
-    [_]mut |-> ?mutex &*& [1/2]mutex(mutex, {0}, mutex_inv(k, ses, sds)) &*&
+    [_]mut |-> ?mutex &*& [1/2]mutex(mutex, {N, 0}, mutex_inv(k, ses, sds)) &*&
     length(ses) == k + 3 &*& length(sds) == k + 2 &*&
     wait_perms(ses, 1, sender) &*&
     foreachp(drop(1, sds), signal_uninit) &*&
-    obs({Forkee}, {pair(nth(0, sds), {2})});
+    obs({Forkee}, {pair(nth(0, sds), {N, 2})});
 @*/
 //@ ensures false;
 //@ terminates;
@@ -87,9 +89,9 @@ requires
   invariant
       [1/2]g.nextToDequeue |-> ?i &*& i <= k &*&
       send_all(?P, i, k) &*& 0 <= i &*& P() &*&
-      [_]mut |-> mutex &*& [1/2]mutex(mutex, {0}, mutex_inv(k, ses, sds)) &*&
+      [_]mut |-> mutex &*& [1/2]mutex(mutex, {N, 0}, mutex_inv(k, ses, sds)) &*&
       wait_perms(drop(i, ses), 1 + 2*i, sender) &*&
-      obs({Forkee}, {pair(nth(i, sds), {2 + 2 * i})}) &*&
+      obs({Forkee}, {pair(nth(i, sds), {N, 2 + 2 * i})}) &*&
       foreachp(drop(i + 1, sds), signal_uninit);
   @*/
   //@ decreases k - i;
@@ -99,9 +101,9 @@ requires
     invariant
         [1/2]g.nextToDequeue |-> i &*&
         send_all(P, i, k) &*& P() &*&
-        [_]mut |-> mutex &*& [1/2]mutex(mutex, {0}, mutex_inv(k, ses, sds)) &*&
+        [_]mut |-> mutex &*& [1/2]mutex(mutex, {N, 0}, mutex_inv(k, ses, sds)) &*&
         wait_perms(drop(i, ses), 1 + 2*i, sender) &*&
-        obs({Forkee}, {pair(nth(i, sds), {2 + 2 * i})}) &*&
+        obs({Forkee}, {pair(nth(i, sds), {N, 2 + 2 * i})}) &*&
         foreachp(drop(i + 1, sds), signal_uninit);
     @*/
     {
@@ -116,7 +118,7 @@ requires
         @*/
         /*@
         produce_lemma_function_pointer_chunk release_ghost_op(
-            currentThread, {Forkee}, {pair(nth(i, sds), {2 + 2 * i})}, mutex_inv(k, ses, sds), pre, post)() {
+            currentThread, {Forkee}, {pair(nth(i, sds), {N, 2 + 2 * i})}, mutex_inv(k, ses, sds), pre, post)() {
           open pre();
           open mutex_inv_aux(k, ses, sds, ne, nd);
           open wait_perms(drop(i, ses), 1 + 2 * i, sender);
@@ -133,11 +135,11 @@ requires
       } else {
         buffer = 0;
         //@ set_signal(nth(i, sds));
-        //@ leak signal(nth(i, sds), {2 + 2 * i}, true);
+        //@ leak signal(nth(i, sds), {N, 2 + 2 * i}, true);
         //@ g.nextToDequeue++;
         //@ open foreachp(drop(i + 1, sds), signal_uninit);
         //@ drop_n_plus_one(i + 1, sds);
-        //@ init_signal(nth(i + 1, sds), {4 + 2 * i});
+        //@ init_signal(nth(i + 1, sds), {N, 4 + 2 * i});
         //@ close mutex_inv(k, ses, sds)();
         release(mut);
         //@ open send_all(P, i, k);
@@ -145,7 +147,7 @@ requires
         //@ if (k == i) open False();
         //@ drop_n_plus_one(i, ses);
         //@ open wait_perms(drop(i, ses), 1 + 2 * i, sender);
-        //@ leak wait_perm({}, nth(i, ses), {1 + 2 * i}, sender);
+        //@ leak wait_perm({}, nth(i, ses), {N, 1 + 2 * i}, sender);
         break;
       }
     }
@@ -160,9 +162,9 @@ requires
     exists<int>(?k) &*& 0 <= k &*&
     exists<pair<list<void *>, list<void *> > >(pair(?ses, ?sds)) &*&
     length(ses) == k + 3 &*& length(sds) == k + 2 &*&
-    [_]mut |-> ?mutex &*& [1/2]mutex(mutex, {0}, mutex_inv(k, ses, sds)) &*&
+    [_]mut |-> ?mutex &*& [1/2]mutex(mutex, {N, 0}, mutex_inv(k, ses, sds)) &*&
     wait_perms(sds, 2, receiver) &*&
-    obs({Forker}, {pair(nth(0, ses), {1})}) &*&
+    obs({Forker}, {pair(nth(0, ses), {N, 1})}) &*&
     foreachp(drop(1, ses), signal_uninit);
 @*/
 //@ ensures false;
@@ -173,9 +175,9 @@ requires
   invariant
       [1/2]g.nextToEnqueue |-> ?i &*&
       receive_all(?P, i) &*& 0 <= i &*& P() &*&
-      [_]mut |-> mutex &*& [1/2]mutex(mutex, {0}, mutex_inv(k, ses, sds)) &*&
+      [_]mut |-> mutex &*& [1/2]mutex(mutex, {N, 0}, mutex_inv(k, ses, sds)) &*&
       (i == 0 ? wait_perms(sds, 2, receiver) : wait_perms(drop(i - 1, sds), 2 * i, receiver)) &*&
-      obs({Forker}, {pair(nth(i, ses), {1 + 2 * i})}) &*&
+      obs({Forker}, {pair(nth(i, ses), {N, 1 + 2 * i})}) &*&
       foreachp(drop(i + 1, ses), signal_uninit);
   @*/
   //@ decreases k + 3 - i;
@@ -186,9 +188,9 @@ requires
     /*@
     invariant
         [1/2]g.nextToEnqueue |-> i &*& message(m, i) &*&
-        [_]mut |-> mutex &*& [1/2]mutex(mutex, {0}, mutex_inv(k, ses, sds)) &*&
+        [_]mut |-> mutex &*& [1/2]mutex(mutex, {N, 0}, mutex_inv(k, ses, sds)) &*&
         (i == 0 ? wait_perms(sds, 2, receiver) : wait_perms(drop(i - 1, sds), 2 * i, receiver)) &*&
-        obs({Forker}, {pair(nth(i, ses), {1 + 2 * i})}) &*&
+        obs({Forker}, {pair(nth(i, ses), {N, 1 + 2 * i})}) &*&
         foreachp(drop(i + 1, ses), signal_uninit);
     @*/
     {
@@ -198,18 +200,18 @@ requires
       if (buffer == 0) {
         buffer = m;
         //@ set_signal(nth(i, ses));
-        //@ leak signal(nth(i, ses), {1 + 2 * i}, true);
+        //@ leak signal(nth(i, ses), {N, 1 + 2 * i}, true);
         //@ g.nextToEnqueue++;
         //@ open foreachp(drop(i + 1, ses), signal_uninit);
         //@ drop_n_plus_one(i + 1, ses);
-        //@ init_signal(nth(i + 1, ses), {3 + 2 * i});
+        //@ init_signal(nth(i + 1, ses), {N, 3 + 2 * i});
         //@ close mutex_inv(k, ses, sds)();
         release(mut);
         /*@
         if (i != 0) {
           open wait_perms(drop(i - 1, sds), 2 * i, receiver);
           drop_n_plus_one(i - 1, sds);
-          leak wait_perm({}, nth(i - 1, sds), {2 * i}, receiver);
+          leak wait_perm({}, nth(i - 1, sds), {N, 2 * i}, receiver);
         }
         @*/
         break;
@@ -222,7 +224,7 @@ requires
         @*/
         /*@
         produce_lemma_function_pointer_chunk release_ghost_op(
-            currentThread, {Forker}, {pair(nth(i, ses), {1 + 2 * i})}, mutex_inv(k, ses, sds), pre, post)() {
+            currentThread, {Forker}, {pair(nth(i, ses), {N, 1 + 2 * i})}, mutex_inv(k, ses, sds), pre, post)() {
           open pre();
           open mutex_inv_aux(k, ses, sds, ne, nd);
           open wait_perms(drop(i - 1, sds), 2 * i, receiver);
@@ -272,7 +274,7 @@ requires
     close foreachp(cons(s, ses), signal_uninit);
     produce_call_below_perm_();
     pathize_call_below_perm_();
-    create_wait_perm(s, {1 + 2 * i}, sender);
+    create_wait_perm(s, {N, 1 + 2 * i}, sender);
     close wait_perms(cons(s, ses), 1 + 2 * i, sender);
   }
   @*/
@@ -296,31 +298,31 @@ requires
     close foreachp(sds, signal_uninit);
     produce_call_below_perm_();
     pathize_call_below_perm_();
-    create_wait_perm(s, {2 + 2 * i}, receiver);
+    create_wait_perm(s, {N, 2 + 2 * i}, receiver);
     close wait_perms(sds, 2 + 2 * i, receiver);
   }
   @*/
   
   //@ open foreachp(ses, signal_uninit);
-  //@ init_signal(nth(0, ses), {1});
+  //@ init_signal(nth(0, ses), {N, 1});
   //@ open foreachp(sds, signal_uninit);
-  //@ init_signal(nth(0, sds), {2});
+  //@ init_signal(nth(0, sds), {N, 2});
   //@ close mutex_inv_aux(k, ses, sds, 0, 0);
   //@ close mutex_inv(k, ses, sds)();
   //@ close exists(mutex_inv(k, ses, sds));
-  //@ close exists({0});
+  //@ close exists({N, 0});
   mut = create_mutex();
   {
     /*@
     predicate sender_pre() =
       [1/2]g.nextToDequeue |-> 0 &*&
       send_all(Ps, 0, k) &*& Ps() &*&
-      [_]mut |-> ?mutex &*& [1/2]mutex(mutex, {0}, mutex_inv(k, ses, sds)) &*&
+      [_]mut |-> ?mutex &*& [1/2]mutex(mutex, {N, 0}, mutex_inv(k, ses, sds)) &*&
       wait_perms(ses, 1, sender) &*&
       foreachp(drop(1, sds), signal_uninit);
     @*/
     /*@
-    produce_function_pointer_chunk thread_run(sender)({}, {pair(nth(0, sds), {2})}, sender_pre)() {
+    produce_function_pointer_chunk thread_run(sender)({}, {pair(nth(0, sds), {N, 2})}, sender_pre)() {
       open sender_pre();
       close exists(pair(ses, sds));
       call();

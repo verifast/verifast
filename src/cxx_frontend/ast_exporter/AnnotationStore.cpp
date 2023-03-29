@@ -101,8 +101,7 @@ void AnnotationStore::getContract(const clang::FunctionDecl *decl,
     return;
   }
 
-  guessContract(entry, container, SM,
-                nextDecl ? nextDecl->getBeginLoc() : clang::SourceLocation());
+  guessContract(entry, container, SM, clang::SourceLocation());
 }
 
 llvm::Optional<clang::SourceRange> AnnotationStore::queryTruncatingAnnotation(

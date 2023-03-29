@@ -2,8 +2,11 @@
 
 namespace vf {
 
-bool decomposeLocToLFC(const clang::SourceLocation &loc,
+bool decomposeLocToLCF(const clang::SourceLocation &loc,
                        const clang::SourceManager &SM, LCF &lcf) {
+  if (loc.isInvalid()) {
+    return false;
+  }
   auto decLoc = SM.getDecomposedLoc(SM.getSpellingLoc(loc));
   auto fileEntry = SM.getFileEntryForID(decLoc.first);
 
@@ -25,11 +28,11 @@ void serializeSrcRange(stubs::Loc::Builder &builder,
   auto rBegin = range.getBegin();
   auto rEnd = range.getEnd();
   LCF lcf;
-  if (rBegin.isValid() && decomposeLocToLFC(rBegin, SM, lcf)) {
+  if (decomposeLocToLCF(rBegin, SM, lcf)) {
     auto start = builder.initStart();
     serializeSrcPos(start, lcf);
   }
-  if (rEnd.isValid() && decomposeLocToLFC(rEnd, SM, lcf)) {
+  if (decomposeLocToLCF(rEnd, SM, lcf)) {
     auto end = builder.initEnd();
     serializeSrcPos(end, lcf);
   }
