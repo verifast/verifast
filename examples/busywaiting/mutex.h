@@ -5,6 +5,16 @@
 
 #include "busywaiting.h"
 
+//@ fixpoint int mutex_nb_level_dims();
+
+/*@
+
+lemma_auto void mutex_nb_level_dims_nonneg();
+    requires true;
+    ensures 0 <= mutex_nb_level_dims;
+
+@*/
+
 struct mutex;
 typedef struct mutex *mutex;
 
@@ -12,12 +22,12 @@ typedef struct mutex *mutex;
 //@ predicate locked(mutex mutex, list<int> level, predicate() inv, real frac, pair<void *, list<int> > ob);
 
 mutex create_mutex();
-//@ requires exists<list<int> >(?level) &*& exists<predicate()>(?inv) &*& inv();
+//@ requires exists<list<int> >(?level) &*& exists<predicate()>(?inv) &*& inv() &*& level == cons(?level_max_length, ?level0) &*& length(level0) + mutex_nb_level_dims <= level_max_length;
 //@ ensures mutex(result, level, inv);
 //@ terminates;
 
 void acquire(mutex mutex);
-//@ requires obs(?p, ?obs) &*& [?f]mutex(mutex, ?level, ?inv) &*& forall(map(snd, obs), (all_sublevels_lt)(level)) == true;
+//@ requires obs(?p, ?obs) &*& [?f]mutex(mutex, ?level, ?inv) &*& forall(map(snd, obs), (all_sublevels_lt)(mutex_nb_level_dims, level)) == true;
 //@ ensures obs(p, cons(?ob, obs)) &*& locked(mutex, level, inv, f, ob) &*& inv() &*& level_lt(level, level_of(ob)) == true;
 //@ terminates;
 

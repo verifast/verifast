@@ -8,11 +8,13 @@ int consumerNext = 100;
 
 /*@
 
+fixpoint int N() { return 1 + mutex_nb_level_dims; }
+
 predicate wait_perms(list<void *> ss, int level, void *f) =
   switch (ss) {
     case nil: return true;
     case cons(s, ss0): return
-      wait_perm({}, s, {level}, f) &*&
+      wait_perm({}, s, {N, level}, f) &*&
       wait_perms(ss0, level + 1, f);
   };
 
@@ -26,30 +28,30 @@ predicate mutex_inv_aux(list<void *> sps, list<void *> scs; int cp, int cc) =
     cp == 0 ?
       true
     :
-      signal(nth(100 - cp, sps), {101 - cp}, false)
+      signal(nth(100 - cp, sps), {N, 101 - cp}, false)
   ) &*&
   (
     cc <= 10 ?
       true
     :
-      signal(nth(100 - cc, scs), {102 - cc}, false)
+      signal(nth(100 - cc, scs), {N, 102 - cc}, false)
   );
 
 @*/
 
 void producer()
-//@ requires exists(pair(?sps, ?scs)) &*& [_]m |-> ?mutex &*& [1/2]mutex(mutex, {0}, mutex_inv(sps, scs)) &*& [1/2]producerNext |-> 100 &*& obs({Forkee}, {pair(nth(0, sps), {1})}) &*& foreachp(drop(1, sps), signal_uninit) &*& length(sps) == 100 &*& length(scs) == 90 &*& wait_perms(scs, 2, producer);
+//@ requires exists(pair(?sps, ?scs)) &*& [_]m |-> ?mutex &*& [1/2]mutex(mutex, {N, 0}, mutex_inv(sps, scs)) &*& [1/2]producerNext |-> 100 &*& obs({Forkee}, {pair(nth(0, sps), {N, 1})}) &*& foreachp(drop(1, sps), signal_uninit) &*& length(sps) == 100 &*& length(scs) == 90 &*& wait_perms(scs, 2, producer);
 //@ ensures obs({Forkee}, {});
 //@ terminates;
 {
   //@ open exists(_);
   for (;;)
-  //@ invariant [1/2]producerNext |-> ?cp &*& 0 < cp &*& cp <= 100 &*& obs({Forkee}, {pair(nth(100 - cp, sps), {101 - cp})}) &*& [_]m |-> mutex &*& [1/2]mutex(mutex, {0}, mutex_inv(sps, scs)) &*& foreachp(drop(101 - cp, sps), signal_uninit) &*& wait_perms(scs, 2, producer);
+  //@ invariant [1/2]producerNext |-> ?cp &*& 0 < cp &*& cp <= 100 &*& obs({Forkee}, {pair(nth(100 - cp, sps), {N, 101 - cp})}) &*& [_]m |-> mutex &*& [1/2]mutex(mutex, {N, 0}, mutex_inv(sps, scs)) &*& foreachp(drop(101 - cp, sps), signal_uninit) &*& wait_perms(scs, 2, producer);
   //@ decreases cp; // For this loop, we don't consume call_perms
   {
     //@ void *sp = nth(100 - cp, sps);
     for (;;)
-    //@ invariant [1/2]producerNext |-> cp &*& obs({Forkee}, {pair(sp, {101 - cp})}) &*& [_]m |-> mutex &*& [1/2]mutex(mutex, {0}, mutex_inv(sps, scs)) &*& foreachp(drop(101 - cp, sps), signal_uninit) &*& wait_perms(scs, 2, producer);
+    //@ invariant [1/2]producerNext |-> cp &*& obs({Forkee}, {pair(sp, {N, 101 - cp})}) &*& [_]m |-> mutex &*& [1/2]mutex(mutex, {N, 0}, mutex_inv(sps, scs)) &*& foreachp(drop(101 - cp, sps), signal_uninit) &*& wait_perms(scs, 2, producer);
     {
       acquire(m);
       //@ open mutex_inv(sps, scs)();
@@ -57,18 +59,18 @@ void producer()
       if (consumerNext - producerNext < 10) {
         producerNext--;
         //@ set_signal(sp);
-        //@ leak signal(sp, {101 - cp}, true);
+        //@ leak signal(sp, {N, 101 - cp}, true);
         //@ open foreachp(drop(101 - cp, sps), signal_uninit);
         if (producerNext == 0) {
           //@ close mutex_inv_aux(sps, scs, cp - 1, cc);
           //@ close mutex_inv(sps, scs)();
           release(m);
-          //@ leak wait_perms(scs, 2, producer) &*& [1/2]producerNext |-> _ &*& [1/2]mutex(mutex, {0}, mutex_inv(sps, scs));
+          //@ leak wait_perms(scs, 2, producer) &*& [1/2]producerNext |-> _ &*& [1/2]mutex(mutex, {N, 0}, mutex_inv(sps, scs));
           return;
         } else {
           //@ drop_n_plus_one(101 - cp, sps);
           //@ void *new_sp = nth(101 - cp, sps);
-          //@ init_signal(new_sp, {101 - producerNext});
+          //@ init_signal(new_sp, {N, 101 - producerNext});
           //@ close mutex_inv_aux(sps, scs, cp - 1, cc);
           //@ close mutex_inv(sps, scs)();
           release(m);
@@ -80,14 +82,14 @@ void producer()
         predicate post() = call_perm_(currentThread, producer) &*& wait_perms(scs, 2, producer);
         @*/
         /*@
-        produce_lemma_function_pointer_chunk release_ghost_op(currentThread, {Forkee}, {pair(sp, {101 - cp})}, mutex_inv(sps, scs), pre, post)() {
+        produce_lemma_function_pointer_chunk release_ghost_op(currentThread, {Forkee}, {pair(sp, {N, 101 - cp})}, mutex_inv(sps, scs), pre, post)() {
           open pre();
           open mutex_inv_aux(sps, scs, cp, cc);
           void *sc = nth(100 - cc, scs);
           {
             lemma void iter(int i)
-              requires wait_perms(drop(100 - i, scs), 102 - i, producer) &*& obs({Forkee}, {pair(sp, {101 - cp})}) &*& signal(sc, {102 - cc}, false) &*& cc <= i &*& i <= 100;
-              ensures wait_perms(drop(100 - i, scs), 102 - i, producer) &*& obs({Forkee}, {pair(sp, {101 - cp})}) &*& signal(sc, {102 - cc}, false) &*& call_perm_(currentThread, producer);
+              requires wait_perms(drop(100 - i, scs), 102 - i, producer) &*& obs({Forkee}, {pair(sp, {N, 101 - cp})}) &*& signal(sc, {N, 102 - cc}, false) &*& cc <= i &*& i <= 100;
+              ensures wait_perms(drop(100 - i, scs), 102 - i, producer) &*& obs({Forkee}, {pair(sp, {N, 101 - cp})}) &*& signal(sc, {N, 102 - cc}, false) &*& call_perm_(currentThread, producer);
             {
               open wait_perms(drop(100 - i, scs), 102 - i, producer);
               drop_n_plus_one(100 - i, scs);
@@ -115,18 +117,18 @@ void producer()
 }
 
 void consumer()
-//@ requires [1/2]consumerNext |-> 100 &*& [_]m |-> ?mutex &*& exists(pair(?sps, ?scs)) &*& [1/2]mutex(mutex, {0}, mutex_inv(sps, scs)) &*& foreachp(drop(1, scs), signal_uninit) &*& length(sps) == 100 &*& length(scs) == 90 &*& wait_perms(sps, 1, consumer) &*& obs({Forker}, {pair(nth(0, scs), {2})});
+//@ requires [1/2]consumerNext |-> 100 &*& [_]m |-> ?mutex &*& exists(pair(?sps, ?scs)) &*& [1/2]mutex(mutex, {N, 0}, mutex_inv(sps, scs)) &*& foreachp(drop(1, scs), signal_uninit) &*& length(sps) == 100 &*& length(scs) == 90 &*& wait_perms(sps, 1, consumer) &*& obs({Forker}, {pair(nth(0, scs), {N, 2})});
 //@ ensures obs(_, {});
 //@ terminates;
 {
   for (;;)
-  //@ invariant [1/2]consumerNext |-> ?cc &*& 0 < cc &*& cc <= 100 &*& obs({Forker}, cc <= 10 ? {} : {pair(nth(100 - cc, scs), {102 - cc})}) &*& [_]m |-> mutex &*& [1/2]mutex(mutex, {0}, mutex_inv(sps, scs)) &*& wait_perms(sps, 1, consumer) &*& cc <= 10 ? true : foreachp(drop(101 - cc, scs), signal_uninit);
+  //@ invariant [1/2]consumerNext |-> ?cc &*& 0 < cc &*& cc <= 100 &*& obs({Forker}, cc <= 10 ? {} : {pair(nth(100 - cc, scs), {N, 102 - cc})}) &*& [_]m |-> mutex &*& [1/2]mutex(mutex, {N, 0}, mutex_inv(sps, scs)) &*& wait_perms(sps, 1, consumer) &*& cc <= 10 ? true : foreachp(drop(101 - cc, scs), signal_uninit);
   //@ decreases cc;
   {
     //@ void *sc = nth(100 - cc, scs);
     //@ assert obs(_, ?obs);
     for (;;)
-    //@ invariant [1/2]consumerNext |-> cc &*& obs({Forker}, obs) &*& [_]m |-> mutex &*& [1/2]mutex(mutex, {0}, mutex_inv(sps, scs)) &*& wait_perms(sps, 1, consumer) &*& cc <= 10 ? true : foreachp(drop(101 - cc, scs), signal_uninit);
+    //@ invariant [1/2]consumerNext |-> cc &*& obs({Forker}, obs) &*& [_]m |-> mutex &*& [1/2]mutex(mutex, {N, 0}, mutex_inv(sps, scs)) &*& wait_perms(sps, 1, consumer) &*& cc <= 10 ? true : foreachp(drop(101 - cc, scs), signal_uninit);
     {
       acquire(m);
       //@ open mutex_inv(sps, scs)();
@@ -135,7 +137,7 @@ void consumer()
         /*@
         if (cc > 10) {
           set_signal(sc);
-          leak signal(sc, {102 - cc}, true);
+          leak signal(sc, {N, 102 - cc}, true);
         }
         @*/
         consumerNext--;
@@ -143,7 +145,7 @@ void consumer()
           //@ close mutex_inv_aux(sps, scs, cp, _);
           //@ close mutex_inv(sps, scs)();
           release(m);
-          //@ leak wait_perms(sps, 1, consumer) &*& [1/2]consumerNext |-> 0 &*& [1/2]mutex(mutex, {0}, mutex_inv(sps, scs));
+          //@ leak wait_perms(sps, 1, consumer) &*& [1/2]consumerNext |-> 0 &*& [1/2]mutex(mutex, {N, 0}, mutex_inv(sps, scs));
           return;
         } else {
           /*@
@@ -153,7 +155,7 @@ void consumer()
               open foreachp(drop(101 - cc, scs), signal_uninit);
               drop_n_plus_one(101 - cc, scs);
               void *new_sc = nth(101 - cc, scs);
-              init_signal(new_sc, {102 - consumerNext});
+              init_signal(new_sc, {N, 102 - consumerNext});
             }
             close mutex_inv_aux(sps, scs, cp, cc - 1);
             close mutex_inv(sps, scs)();
@@ -174,8 +176,8 @@ void consumer()
           void *sp = nth(100 - cp, sps);
           {
             lemma void iter(int i)
-              requires wait_perms(drop(100 - i, sps), 101 - i, consumer) &*& obs({Forker}, obs) &*& signal(sp, {101 - cp}, false) &*& cp <= i &*& i <= 100;
-              ensures wait_perms(drop(100 - i, sps), 101 - i, consumer) &*& obs({Forker}, obs) &*& signal(sp, {101 - cp}, false) &*& call_perm_(currentThread, consumer);
+              requires wait_perms(drop(100 - i, sps), 101 - i, consumer) &*& obs({Forker}, obs) &*& signal(sp, {N, 101 - cp}, false) &*& cp <= i &*& i <= 100;
+              ensures wait_perms(drop(100 - i, sps), 101 - i, consumer) &*& obs({Forker}, obs) &*& signal(sp, {N, 101 - cp}, false) &*& call_perm_(currentThread, consumer);
             {
               open wait_perms(drop(100 - i, sps), 101 - i, consumer);
               drop_n_plus_one(100 - i, sps);
@@ -219,7 +221,7 @@ int main() //@ : custom_main_spec
     close foreachp(cons(s, sps), signal_uninit);
     produce_call_below_perm_();
     pathize_call_below_perm_();
-    create_wait_perm(s, {100 - i}, consumer);
+    create_wait_perm(s, {N, 100 - i}, consumer);
     close wait_perms(cons(s, sps), 100 - i, consumer);
   }
   @*/
@@ -237,7 +239,7 @@ int main() //@ : custom_main_spec
     close foreachp(cons(s, scs), signal_uninit);
     produce_call_below_perm_();
     pathize_call_below_perm_();
-    create_wait_perm(s, {91 - i}, producer);
+    create_wait_perm(s, {N, 91 - i}, producer);
     close wait_perms(cons(s, scs), 91 - i, producer);
     scs = cons(s, scs);
   }
@@ -246,23 +248,23 @@ int main() //@ : custom_main_spec
   
   //@ void *sp0 = nth(0, sps);
   //@ open foreachp(sps, signal_uninit);
-  //@ init_signal(sp0, {1});
+  //@ init_signal(sp0, {N, 1});
   //@ void *sc0 = nth(0, scs);
   //@ open foreachp(scs, signal_uninit);
-  //@ init_signal(sc0, {2});
+  //@ init_signal(sc0, {N, 2});
   //@ close mutex_inv_aux(sps, scs, 100, 100);
   //@ close mutex_inv(sps, scs)();
-  //@ close exists({0});
+  //@ close exists({N, 0});
   //@ close exists<predicate()>(mutex_inv(sps, scs));
   m = create_mutex();
   //@ leak m |-> _;
   {
     /*@
     predicate producer_pre() =
-      [1/2]producerNext |-> 100 &*& [_]m |-> ?mutex &*& [1/2]mutex(mutex, {0}, mutex_inv(sps, scs)) &*& foreachp(tail(sps), signal_uninit) &*& wait_perms(scs, 2, producer);
+      [1/2]producerNext |-> 100 &*& [_]m |-> ?mutex &*& [1/2]mutex(mutex, {N, 0}, mutex_inv(sps, scs)) &*& foreachp(tail(sps), signal_uninit) &*& wait_perms(scs, 2, producer);
     @*/
     /*@
-    produce_function_pointer_chunk thread_run(producer)({}, {pair(sp0, {1})}, producer_pre)() {
+    produce_function_pointer_chunk thread_run(producer)({}, {pair(sp0, {N, 1})}, producer_pre)() {
       open producer_pre();
       close exists(pair(sps, scs));
       call();

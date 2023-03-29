@@ -14,6 +14,7 @@ cd examples
   verifast unions2.c
   verifast -fno-strict-aliasing -assume_no_subobject_provenance unions2_no_subobj_prov.c
   cd busywaiting
+    verifast -c busywaiting_wf.c
     verifast -c bounded_fifo.c
     cd clhlock
       verifast -c clhlock.c

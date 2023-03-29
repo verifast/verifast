@@ -16,51 +16,83 @@ fixpoint bool is_ancestor_of(list<pathcomp> p1, list<pathcomp> p2) {
   }
 }
 
-fixpoint bool level_lt(list<int> l1, list<int> l2) {
+fixpoint bool level0_lt(int max_length, list<int> l1, list<int> l2) {
   switch (l1) {
-    case nil: return l2 != nil;
-    case cons(h1, t1): return
+    case nil: return max_length > 0 && l2 != nil;
+    case cons(h1, t1): return max_length > 0 &&
       switch (l2) {
         case nil: return false;
         case cons(h2, t2): return
-          0 < h2 && h1 < h2 || h1 == h2 && level_lt(t1, t2);
+          0 < h2 && h1 < h2 || h1 == h2 && level0_lt(max_length - 1, t1, t2);
     };
   }
 }
 
-lemma void level_lt_append(list<int> l, list<int> l1, list<int> l2)
+lemma void level0_lt_nonpos_max_length(int max_length, list<int> l1, list<int> l2)
+    requires max_length <= 0;
+    ensures !level0_lt(max_length, l1, l2);
+{
+    switch (l1) {
+        case nil:
+        case cons(h1, t1):
+            switch (l2) {
+                case nil:
+                case cons(h2, t2):
+                    level0_lt_nonpos_max_length(max_length - 1, t1, t2);
+            }
+    }
+}
+
+lemma void level0_lt_append(int max_length, list<int> l, list<int> l1, list<int> l2)
     requires true;
-    ensures level_lt(append(l, l1), append(l, l2)) == level_lt(l1, l2);
+    ensures level0_lt(max_length, append(l, l1), append(l, l2)) == level0_lt(max_length - length(l), l1, l2);
 {
     switch (l) {
         case nil:
         case cons(h, t):
-            level_lt_append(t, l1, l2);
+            if (max_length <= 0)
+                level0_lt_nonpos_max_length(max_length - length(l), l1, l2);
+            else
+                level0_lt_append(max_length - 1, t, l1, l2);
     }
 }
 
-fixpoint bool all_sublevels_lt(list<int> l1, list<int> l2) {
+fixpoint bool all_sublevel0s_lt(list<int> l1, list<int> l2) {
   switch (l1) {
     case nil: return false;
     case cons(h1, t1): return
       switch (l2) {
         case nil: return false;
         case cons(h2, t2): return
-          0 < h2 && h1 < h2 || h1 == h2 && all_sublevels_lt(t1, t2);
+          0 < h2 && h1 < h2 || h1 == h2 && all_sublevel0s_lt(t1, t2);
     };
   }
 }
 
-lemma void all_sublevels_lt_append(list<int> l, list<int> l1, list<int> l2)
-    requires all_sublevels_lt(l, l2) == true;
-    ensures level_lt(append(l, l1), l2) == true;
+lemma void all_sublevel0s_lt_append(int max_length, list<int> l, list<int> l1, list<int> l2)
+    requires all_sublevel0s_lt(l, l2) == true && length(l) < max_length;
+    ensures level0_lt(max_length, append(l, l1), l2) == true;
 {
     switch (l) {
         case nil:
         case cons(h, t):
             assert l2 == cons(?h2, ?t2);
             if (h == h2)
-                all_sublevels_lt_append(t, l1, t2);
+                all_sublevel0s_lt_append(max_length - 1, t, l1, t2);
+    }
+}
+
+fixpoint bool all_sublevels_lt(int nb_dims, list<int> l1, list<int> l2) {
+    switch (l1) {
+        case nil: return false;
+        case cons(max_length1, l01): return
+            switch (l2) {
+                case nil: return false;
+                case cons(max_length2, l02): return
+                    max_length1 == max_length2 &&
+                    length(l01) + nb_dims <= max_length1 &&
+                    all_sublevel0s_lt(l01, l02);
+            };
     }
 }
 
@@ -71,6 +103,17 @@ fixpoint bool is_prefix_of<t>(list<t> xs, list<t> ys) {
             switch (ys) {
                 case nil: return false;
                 case cons(hys, tys): return hxs == hys && is_prefix_of(txs, tys);
+            };
+    }
+}
+
+fixpoint bool level_lt(list<int> l1, list<int> l2) {
+    switch (l1) {
+        case nil: return false;
+        case cons(max_length1, l01): return
+            switch (l2) {
+                case nil: return false;
+                case cons(max_length2, l02): return max_length1 == max_length2 && level0_lt(max_length1, l01, l02);
             };
     }
 }

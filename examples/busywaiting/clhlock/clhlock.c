@@ -65,7 +65,7 @@ predicate_ctor lock_inv(struct lock *lock, predicate() inv)() =
     ghost_list(listId, cons(tail, ns));
 
 predicate lock(struct lock *lock, list<int> level, predicate() inv;) =
-    [1/2]lock->level |-> level &*&
+    [1/2]lock->level |-> level &*& level == cons(?level_max_length, ?level0) &*& length(level0) + 1 <= level_max_length &*&
     atomic_space(lock_inv(lock, inv)) &*&
     [1/2]lock->ghostListId |-> _ &*&
     malloc_block_lock(lock);
@@ -82,7 +82,7 @@ predicate locked(struct lock_thread *thread, struct lock *lock, list<int> level,
     thread->pred |-> ?pred &*&
     malloc_block_lock_thread(thread) &*&
     pred->lock |-> _ &*& pred->pred |-> _ &*& pred->frac |-> _ &*& pred->predSignal |-> _ &*& pred->signal |-> _ &*& pred->level |-> _ &*& malloc_block_node(pred) &*& pred != 0 &*&
-    [frac/2]lock->level |-> level &*&
+    [frac/2]lock->level |-> level &*& level == cons(?level_max_length, ?level0) &*& length(level0) + 1 <= level_max_length &*&
     [frac]atomic_space(lock_inv(lock, inv)) &*&
     [frac]malloc_block_lock(lock) &*&
     [frac/4]lock->ghostListId |-> ?listId &*&
@@ -91,7 +91,7 @@ predicate locked(struct lock_thread *thread, struct lock *lock, list<int> level,
 @*/
 
 struct lock *create_lock()
-    //@ requires exists<list<int> >(?lockLevel) &*& exists<predicate()>(?inv) &*& inv();
+    //@ requires exists<list<int> >(?lockLevel) &*& exists<predicate()>(?inv) &*& inv() &*& lockLevel == cons(?lockLevel_max_length, ?lockLevel0) &*& length(lockLevel0) + lock_nb_level_dims <= lockLevel_max_length;
     //@ ensures lock(result, lockLevel, inv);
     //@ terminates;
 {
@@ -160,8 +160,8 @@ void acquire_helper(struct lock_thread *thread, struct lock *lock, struct node *
         thread->node |-> ?node &*& node != 0 &*& [1/2]node->lock |-> 1 &*& [1/2]node->frac |-> ?frac &*& malloc_block_node(node) &*&
         thread->pred |-> _ &*&
         [1/2]node->signal |-> ?signal &*& [1/2]node->level |-> ?level &*& [1/2]node->predSignal |-> ?predSignal &*&
-        [frac/2]lock->level |-> ?lockLevel &*&
-        obs(?p, cons(pair(signal, append(lockLevel, {level})), ?obs)) &*& forall(map(snd, obs), (all_sublevels_lt)(lockLevel)) == true &*&
+        [frac/2]lock->level |-> ?lockLevel &*& lockLevel == cons(?max_level_length, ?lockLevel0) &*& length(lockLevel0) + 1 <= max_level_length &*&
+        obs(?p, cons(pair(signal, append(lockLevel, {level})), ?obs)) &*& forall(map(snd, obs), (all_sublevels_lt)(1, lockLevel)) == true &*&
         wait_perm(p, predSignal, append(lockLevel, {level - 1}), acquire_helper) &*&
         malloc_block_lock_thread(thread) &*&
         [frac]malloc_block_lock(lock) &*&
@@ -258,14 +258,17 @@ void acquire_helper(struct lock_thread *thread, struct lock *lock, struct node *
                                  close queue(lock, lockLevel, inv, ghostListId, sn, ln, n, {n});
                              } else {
                                  is_ancestor_of_refl(p);
-                                 level_lt_append(lockLevel, {level - 1}, {level});
+                                 level0_lt_append(max_level_length, lockLevel0, {level - 1}, {level});
                                  if (!forall(map(snd, obs), (level_lt)(append(lockLevel, {level - 1})))) {
                                      list<int> l = not_forall(map(snd, obs), (level_lt)(append(lockLevel, {level - 1})));
-                                     forall_elim(map(snd, obs), (all_sublevels_lt)(lockLevel), l);
+                                     forall_elim(map(snd, obs), (all_sublevels_lt)(1, lockLevel), l);
                                      assert !level_lt(append(lockLevel, {level - 1}), l);
-                                     all_sublevels_lt_append(lockLevel, {level - 1}, l);
+                                     assert l == cons(?l_max_length, ?l0);
+                                     all_sublevel0s_lt_append(max_level_length, lockLevel0, {level - 1}, l0);
                                      assert false;
                                  }
+                                 assert max_level_length >= length(lockLevel0) + 1;
+                                 assert level_lt(append(lockLevel, {level - 1}), append(lockLevel, {level})) == true;
                                  wait(predSignal);
                                  close queue(lock, lockLevel, inv, ghostListId, spred, ln - 1, pred, ns1t);
                                  close queue(lock, lockLevel, inv, ghostListId, sn, ln, n, ns1);
@@ -297,11 +300,11 @@ void acquire_helper(struct lock_thread *thread, struct lock *lock, struct node *
     //@ close locked(thread, lock, lockLevel, inv, frac, pair(signal, append(lockLevel, {level})));
     //@ is_ancestor_of_refl(p);
     //@ leak wait_perm(p, predSignal, append(lockLevel, {level - 1}), acquire_helper);
-    //@ level_lt_append(lockLevel, {}, {level});
+    //@ level0_lt_append(max_level_length, lockLevel0, {}, {level});
 }
 
 void acquire(struct lock_thread *thread, struct lock *lock)
-    //@ requires obs(?p, ?obs) &*& lock_thread(thread) &*& [?frac]lock(lock, ?lockLevel, ?inv) &*& forall(map(snd, obs), (all_sublevels_lt)(lockLevel)) == true;
+    //@ requires obs(?p, ?obs) &*& lock_thread(thread) &*& [?frac]lock(lock, ?lockLevel, ?inv) &*& forall(map(snd, obs), (all_sublevels_lt)(1, lockLevel)) == true;
     //@ ensures locked(thread, lock, lockLevel, inv, frac, ?ob) &*& inv() &*& obs(?p1, cons(ob, obs)) &*& is_ancestor_of(p, p1) == true &*& level_lt(lockLevel, level_of(ob)) == true;
     //@ terminates;
 {
