@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include "spinlock.h"
+//@ #include <quantifiers.gh>
 
 /*@
 
@@ -74,8 +75,8 @@ requires
 /*@
 
 typedef lemma void spinlock_classic_acquire_ghost_op(predicate(int, bool) inv, predicate() pre, predicate() post)();
-    requires inv(?acquireCredits, false) &*& pre();
-    ensures inv(acquireCredits - 1, true) &*& post() &*& 1 <= acquireCredits;
+    requires inv(?acquireCredits, false) &*& pre() &*& atomic_spaces(?spaces) &*& forall(spaces, (space_name_lt)(spinlock_classic_acquire)) == true;
+    ensures inv(acquireCredits - 1, true) &*& post() &*& 1 <= acquireCredits &*& atomic_spaces(spaces);
 
 predicate spinlock_classic_held(spinlock_classic_t spinlock, real f, predicate(int, bool) inv, pair<void *, list<int> > ob) =
     [f]malloc_block_spinlock_classic(spinlock) &*&
@@ -209,6 +210,13 @@ requires
         perform_action add(s) {}
         producing_box_predicate growing_list(append(signals, {s}));
         spinlock->signals = append(signals, {s});
+        produce_func_lt(spinlock_acquire);
+        assert atomic_spaces(?spaces);
+        if (!forall(spaces, (space_name_lt)(spinlock_classic_acquire))) {
+            pair<void *, predicate()> space = not_forall(spaces, (space_name_lt)(spinlock_classic_acquire));
+            forall_elim(spaces, (space_name_lt)(spinlock_acquire), space);
+            assert false;
+        }
         ghop();
         leak is_spinlock_classic_acquire_ghost_op(_, _, _, _);
         nth_append_r(signals, {s}, 0);

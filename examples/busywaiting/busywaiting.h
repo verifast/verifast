@@ -158,6 +158,25 @@ void fork(thread_run *run);
 //@ ensures obs(cons(Forker, p), remove_all(forkee_obs, obs));
 //@ terminates;
 
+typedef void thread_run_joinable/*@(list<pathcomp> path, list<pair<void *, list<int> > > obs, predicate() pre, predicate() post, list<int> level)@*/();
+//@ requires obs(cons(Forkee, path), cons(pair(?terminationSignal, level), obs)) &*& pre();
+//@ ensures obs(_, {pair(terminationSignal, level)}) &*& post();
+
+struct thread;
+typedef struct thread *thread;
+
+//@ predicate thread(thread thread, list<int> level, predicate() post);
+
+thread fork_joinable(thread_run_joinable *run);
+//@ requires obs(?p, ?obs) &*& [_]is_thread_run_joinable(run, p, ?forkee_obs, ?pre, ?post, ?level) &*& pre();
+//@ ensures obs(cons(Forker, p), remove_all(forkee_obs, obs)) &*& thread(result, level, post);
+//@ terminates;
+
+void join(thread thread);
+//@ requires obs(?p, ?obs) &*& thread(thread, ?level, ?post) &*& forall(map(snd, obs), (level_lt)(level)) == true;
+//@ ensures obs(p, obs) &*& post();
+//@ terminates;
+
 /*@
 
 predicate signal_uninit(void *id;);

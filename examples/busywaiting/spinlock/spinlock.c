@@ -15,7 +15,7 @@ predicate_ctor spinlock_inv(spinlock_t spinlock, predicate(bool) inv)() =
 predicate spinlock(spinlock_t spinlock; predicate(bool) inv) =
     spinlock->inv_ |-> inv &*&
     malloc_block_spinlock(spinlock) &*&
-    atomic_space(spinlock_inv(spinlock, inv));
+    atomic_space(create_spinlock, spinlock_inv(spinlock, inv));
 
 @*/
 
@@ -29,7 +29,7 @@ spinlock_t create_spinlock()
   result->locked = 0;
   //@ result->inv_ = inv;
   //@ close spinlock_inv(result, inv)();
-  //@ create_atomic_space(spinlock_inv(result, inv));
+  //@ create_atomic_space(create_spinlock, spinlock_inv(result, inv));
   return result;
 }
 
@@ -53,7 +53,7 @@ void spinlock_acquire(spinlock_t spinlock)
           is_spinlock_acquire_ghost_op(ghop, inv, pre, post, currentThread) &*& pre() &*& call_perm_(currentThread, spinlock_acquire);
       @*/
       /*@
-      produce_lemma_function_pointer_chunk compare_and_swap_int_ghost_op(spinlock_inv(spinlock, inv), &spinlock->locked, 0, 1, pre_, post_, currentThread)() {
+      produce_lemma_function_pointer_chunk compare_and_swap_int_ghost_op(create_spinlock, spinlock_inv(spinlock, inv), &spinlock->locked, 0, 1, pre_, post_, currentThread)() {
         assert is_compare_and_swap_int_op(?op, _, _, _, _, _);
         open spinlock_inv(spinlock, inv)();
         open pre_();
@@ -90,7 +90,7 @@ void spinlock_release(spinlock_t spinlock)
     predicate post_() = post();
     @*/
     /*@
-    produce_lemma_function_pointer_chunk atomic_store_int_ghost_op(spinlock_inv(spinlock, inv), &spinlock->locked, 0, pre_, post_, currentThread)() {
+    produce_lemma_function_pointer_chunk atomic_store_int_ghost_op(create_spinlock, spinlock_inv(spinlock, inv), &spinlock->locked, 0, pre_, post_, currentThread)() {
       assert is_atomic_store_int_op(?op, _, _, _, _);
       open spinlock_inv(spinlock, inv)();
       open pre_();
@@ -103,8 +103,19 @@ void spinlock_release(spinlock_t spinlock)
     @*/
     //@ close pre_();
     atomic_store_int(&spinlock->locked, 0);
-    //@ leak is_atomic_store_int_ghost_op(_, _, _, _, _, _, _);
+    //@ leak is_atomic_store_int_ghost_op(_, _, _, _, _, _, _, _);
     //@ open post_();
   }
   //@ close [f]spinlock(spinlock, inv);
+}
+
+void spinlock_dispose(spinlock_t spinlock)
+//@ requires spinlock(spinlock, ?inv);
+//@ ensures inv(_);
+//@ terminates;
+{
+    //@ open spinlock(spinlock, _);
+    //@ destroy_atomic_space();
+    //@ open spinlock_inv(spinlock, inv)();
+    free(spinlock);
 }
