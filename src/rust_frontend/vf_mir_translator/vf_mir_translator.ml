@@ -1,35 +1,3 @@
-module TestDataHardCoded = struct
-  let c_func_main =
-    let dloc = Ast.Lexed Ast.dummy_loc0 in
-    let contract = Some (Ast.True dloc, Ast.True dloc) in
-    Ast.Func
-      ( dloc,
-        Ast.Regular,
-        [],
-        Some (Ast.ManifestTypeExpr (dloc, Ast.Int (Ast.Signed, Ast.IntRank))),
-        "main",
-        [],
-        false,
-        None,
-        contract,
-        true,
-        Some
-          ( [
-              Ast.ReturnStmt
-                ( dloc,
-                  Some
-                    (Ast.IntLit
-                       ( dloc,
-                         Big_int.zero_big_int,
-                         true (* decimal *),
-                         false (* U suffix *),
-                         Ast.NoLSuffix (* int literal*) )) );
-            ],
-            dloc ),
-        Ast.Static,
-        Ast.Package )
-end
-
 module IntAux = struct
   module Make (StdintMod : sig
     type t
@@ -411,8 +379,11 @@ module TrTyTuple = struct
         ( loc,
           name,
           Some
-            ((*base_spec list*) [], (*field list*) [], (*is polymorphic*) false),
-          (*attr list*) [] )
+            ( (*base_spec list*) [],
+              (*field list*) [],
+              (*instance_pred_decl list*) [],
+              (*is polymorphic*) false ),
+          (*struct_attr list*) [] )
 end
 
 module TrTyInt = struct
@@ -1965,7 +1936,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           Ast.Func
             ( loc,
               Ast.Regular,
-              [],
+              (*type params*) [],
               Some ret_ty,
               name,
               vf_param_decls,
@@ -1973,9 +1944,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               fn_type_clause,
               pre_post,
               terminates,
-              Some (vf_local_decls @ vf_bblocks, closing_cbrace_loc),
-              Ast.Static,
-              Ast.Package )
+              (*body*) Some (vf_local_decls @ vf_bblocks, closing_cbrace_loc),
+              (*virtual*) false,
+              (*overrides*) [] )
         in
         Ok (body, ({ id = loc; info = env_map } : VF0.debug_info_rust_fe))
     | DefKind.AssocFn -> failwith "Todo: MIR Body kind AssocFn"
@@ -2047,10 +2018,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             ( def_loc,
               name,
               Some
-                ( [] (*base_spec list*),
-                  field_defs (*field list*),
-                  false (*is polymorphic*) ),
-              [] (*struct_attr list*) )
+                ( (*base_spec list*) [],
+                  (*field list*) field_defs,
+                  (*instance_pred_decl list*) [],
+                  (*is polymorphic*) false ),
+              (*struct_attr list*) [] )
         in
         Ok struct_decl
     | EnumKind -> failwith "Todo: AdtDef::Enum"
