@@ -30,16 +30,9 @@ lemma void div_rem_nonneg(int D, int d);
     requires 0 <= D &*& 0 < d;
     ensures D == D / d * d + D % d &*& 0 <= D / d &*& D / d <= D &*& 0 <= D % d &*& D % d < d;
 
-abstract_type integer_rank;
-fixpoint integer_rank char_rank();
-fixpoint integer_rank short_rank();
-fixpoint integer_rank int_rank();
-fixpoint integer_rank long_rank();
-fixpoint integer_rank longlong_rank();
-fixpoint integer_rank intptr_rank();
-fixpoint integer_rank exact_width_rank(int bitwidth);
-
-fixpoint void *integer_typeid(integer_rank rank, bool signed_);
+lemma void div_rem_nonneg_unique(int D, int d, int q, int r);
+    requires 0 <= D &*& 0 <= r &*& r < d &*& D == d * q + r;
+    ensures D / d == q &*& D % d == r;
 
 inductive pointer_provenance =
     pointer_provenance_ctor(int); // Do not rely on this definition; it is subject to change.
@@ -49,21 +42,20 @@ fixpoint pointer ptr_add(pointer p, int offset) {
     return pointer_ctor(p.provenance, p.address + offset);
 }
 
-fixpoint pointer_provenance field_ptr_provenance(pointer p, int fieldOffset);
+fixpoint pointer_provenance field_ptr_provenance(pointer p, void *structTypeid, int fieldOffset);
 fixpoint pointer field_ptr_provenance_parent(pointer_provenance pr, int fieldOffset);
 
-lemma_auto(field_ptr_provenance(p, fieldOffset)) void field_ptr_provenance_injective(pointer p, int fieldOffset);
+lemma_auto(field_ptr_provenance(p, structTypeid, fieldOffset)) void field_ptr_provenance_injective(pointer p, void *structTypeid, int fieldOffset);
     requires true;
-    ensures field_ptr_provenance_parent(field_ptr_provenance(p, fieldOffset), fieldOffset) == p;
+    ensures field_ptr_provenance_parent(field_ptr_provenance(p, structTypeid, fieldOffset), fieldOffset) == p;
 
-fixpoint pointer field_ptr(pointer p, int fieldOffset) {
-    return pointer_ctor(field_ptr_provenance(p, fieldOffset), p.address + fieldOffset);
+fixpoint pointer field_ptr(pointer p, void *structTypeid, int fieldOffset) {
+    return pointer_ctor(field_ptr_provenance(p, structTypeid, fieldOffset), p.address + fieldOffset);
 }
-fixpoint pointer_provenance union_variant_ptr_provenance(pointer p, int variantId) {
-    return p.provenance; // TODO: enforce strict aliasing (a.k.a. "effective types")
-}
-fixpoint pointer union_variant_ptr(pointer p, int variantId) {
-    return pointer_ctor(union_variant_ptr_provenance(p, variantId), p.address);
+
+fixpoint pointer_provenance union_variant_ptr_provenance(pointer p, void *unionTypeId, int variantId);
+fixpoint pointer union_variant_ptr(pointer p, void *unionTypeid, int variantId) {
+    return pointer_ctor(union_variant_ptr_provenance(p, unionTypeid, variantId), p.address);
 }
 
 fixpoint pointer_provenance null_pointer_provenance();
@@ -88,13 +80,13 @@ lemma_auto void null_pointer_provenance_max_addr();
     requires true;
     ensures ptr_provenance_max_addr(null_pointer_provenance) == UINTPTR_MAX;
 
-lemma_auto void field_ptr_provenance_min_addr(pointer p, int fieldOffset);
+lemma_auto void field_ptr_provenance_min_addr(pointer p, void *structTypeid, int fieldOffset);
     requires true;
-    ensures ptr_provenance_min_addr(p.provenance) <= ptr_provenance_min_addr(field_ptr_provenance(p, fieldOffset));
+    ensures ptr_provenance_min_addr(p.provenance) <= ptr_provenance_min_addr(field_ptr_provenance(p, structTypeid, fieldOffset));
 
-lemma_auto void field_ptr_provenance_max_addr(pointer p, int fieldOffset);
+lemma_auto void field_ptr_provenance_max_addr(pointer p, void *structTypeid, int fieldOffset);
     requires true;
-    ensures ptr_provenance_max_addr(field_ptr_provenance(p, fieldOffset)) <= ptr_provenance_max_addr(p.provenance);
+    ensures ptr_provenance_max_addr(field_ptr_provenance(p, structTypeid, fieldOffset)) <= ptr_provenance_max_addr(p.provenance);
 
 lemma void ptr_provenance_min_addr_zero(pointer_provenance pr);
     requires ptr_provenance_min_addr(pr) <= 0;
@@ -109,24 +101,78 @@ fixpoint bool pointer_within_limits(void *p) {
 }
 
 fixpoint bool object_pointer_within_limits(void *p, int size) {
-    return pointer_within_limits(p) && pointer_within_limits(p + size) && (uintptr_t)p != 0;
+    return pointer_within_limits(p) && pointer_within_limits(p + size) && (uintptr_t)p != 0 && size >= 0;
 }
 
 // When producing a field chunk, VeriFast produces a field_pointer_within_limits fact
 // instead of a pointer_within_limits fact to avoid producing too many linear inequalities.
 fixpoint bool field_pointer_within_limits(void *p, int fieldOffset);
 
-lemma_auto(pointer_within_limits((void *)field_ptr((pointer)p, fieldOffset))) void field_pointer_within_limits_def(void *p, int fieldOffset);
+lemma_auto(pointer_within_limits((void *)field_ptr((pointer)p, structTypeid, fieldOffset))) void field_pointer_within_limits_def(void *p, void *structTypeid, int fieldOffset);
     requires true;
-    ensures field_pointer_within_limits(p, fieldOffset) == pointer_within_limits((void *)field_ptr((pointer)p, fieldOffset));
+    ensures field_pointer_within_limits(p, fieldOffset) == pointer_within_limits((void *)field_ptr((pointer)p, structTypeid, fieldOffset));
 
-lemma_auto(field_pointer_within_limits((void *)field_ptr((pointer)p, fieldOffset), 0)) void first_field_pointer_within_limits_elim(void *p, int fieldOffset);
+lemma_auto(field_pointer_within_limits((void *)field_ptr((pointer)p, structTypeid, fieldOffset), 0)) void first_field_pointer_within_limits_elim(void *p, void *structTypeid, int fieldOffset);
     requires true;
-    ensures field_pointer_within_limits((void *)field_ptr((pointer)p, fieldOffset), 0) == field_pointer_within_limits(p, fieldOffset);
+    ensures field_pointer_within_limits((void *)field_ptr((pointer)p, structTypeid, fieldOffset), 0) == field_pointer_within_limits(p, fieldOffset);
 
-lemma_auto(ptr_within_limits(field_ptr(p, 0))) void ptr_within_limits_field_ptr_0(pointer p);
+lemma_auto(field_pointer_within_limits((void *)union_variant_ptr(field_ptr((pointer)p, structTypeid, fieldOffset), unionTypeid, variantId), 0)) void first_field_of_union_variant_pointer_within_limits_elim(void *p, void *structTypeid, int fieldOffset, void *unionTypeid, int variantId);
     requires true;
-    ensures ptr_within_limits(field_ptr(p, 0)) == ptr_within_limits(p);
+    ensures field_pointer_within_limits((void *)union_variant_ptr(field_ptr((pointer)p, structTypeid, fieldOffset), unionTypeid, variantId), 0) == field_pointer_within_limits(p, fieldOffset);
+
+lemma_auto(ptr_within_limits(field_ptr(p, structTypeid, 0))) void ptr_within_limits_field_ptr_0(pointer p, void *structTypeid);
+    requires true;
+    ensures ptr_within_limits(field_ptr(p, structTypeid, 0)) == ptr_within_limits(p);
+
+fixpoint bool has_type(void *p, void *typeid_);
+
+lemma_auto void has_type_short_ushort(void *p);
+    requires true;
+    ensures has_type(p, &typeid(short)) == has_type(p, &typeid(unsigned short));
+
+lemma_auto void has_type_int_uint(void *p);
+    requires true;
+    ensures has_type(p, &typeid(int)) == has_type(p, &typeid(unsigned int));
+
+lemma_auto void has_type_long_ulong(void *p);
+    requires true;
+    ensures has_type(p, &typeid(long)) == has_type(p, &typeid(unsigned long));
+
+lemma_auto void has_type_llong_ullong(void *p);
+    requires true;
+    ensures has_type(p, &typeid(long long)) == has_type(p, &typeid(unsigned long long));
+
+lemma_auto void has_type_intptr_uintptr(void *p);
+    requires true;
+    ensures has_type(p, &typeid(intptr_t)) == has_type(p, &typeid(uintptr_t));
+
+lemma_auto void has_type_int8_uint8(void *p);
+    requires true;
+    ensures has_type(p, &typeid(__int8)) == has_type(p, &typeid(unsigned __int8));
+
+lemma_auto void has_type_int16_uint16(void *p);
+    requires true;
+    ensures has_type(p, &typeid(__int16)) == has_type(p, &typeid(unsigned __int16));
+
+lemma_auto void has_type_int32_uint32(void *p);
+    requires true;
+    ensures has_type(p, &typeid(__int32)) == has_type(p, &typeid(unsigned __int32));
+
+lemma_auto void has_type_int64_uint64(void *p);
+    requires true;
+    ensures has_type(p, &typeid(__int64)) == has_type(p, &typeid(unsigned __int64));
+
+lemma_auto void has_type_int128_uint128(void *p);
+    requires true;
+    ensures has_type(p, &typeid(__int128)) == has_type(p, &typeid(unsigned __int128));
+
+fixpoint pointer ptr_add_(pointer p, int offset, void *elemTypeid) {
+    return ptr_add(p, offset * sizeof((pointer)elemTypeid));
+}
+
+lemma_auto(has_type((void *)ptr_add_(p, offset, elemTypeid), elemTypeid)) void has_type_ptr_add_(pointer p, int offset, void *elemTypeid);
+    requires true;
+    ensures has_type((void *)ptr_add_(p, offset, elemTypeid), elemTypeid) == has_type((void *)p, elemTypeid);
 
 predicate generic_points_to<t>(t *p; t v);
 
@@ -139,20 +185,20 @@ predicate uchar_(unsigned char *p; option<unsigned char> v) = integer__(p, 1, fa
 predicate character(char *p; char c) = char_(p, some(c));
 predicate u_character(unsigned char *p; unsigned char c) = uchar_(p, some(c));
 
-predicate int_(int *p; option<int> v) = integer__(p, sizeof(int), true, v);
-predicate uint_(unsigned int *p; option<int> v) = integer__(p, sizeof(int), false, v);
+predicate int_(int *p; option<int> v) = integer__(p, sizeof(int), true, v) &*& has_type(p, &typeid(int)) == true;
+predicate uint_(unsigned int *p; option<int> v) = integer__(p, sizeof(int), false, v) &*& has_type(p, &typeid(unsigned int)) == true;
 
 predicate integer(int *p; int v) = int_(p, some(v));
 predicate u_integer(unsigned int *p; unsigned int v) = uint_(p, some(v));
 
-predicate long_(long *p; option<long> v) = integer__(p, sizeof(long), true, v);
-predicate ulong_(unsigned long *p; option<unsigned long> v) = integer__(p, sizeof(long), false, v);
+predicate long_(long *p; option<long> v) = integer__(p, sizeof(long), true, v) &*& has_type(p, &typeid(long)) == true;
+predicate ulong_(unsigned long *p; option<unsigned long> v) = integer__(p, sizeof(long), false, v) &*& has_type(p, &typeid(unsigned long)) == true;
 
 predicate long_integer(long *p; long v) = long_(p, some(v));
 predicate ulong_integer(unsigned long *p; unsigned long v) = ulong_(p, some(v));
 
-predicate llong_(long long *p; option<long long> v) = integer__(p, sizeof(long long), true, v);
-predicate ullong_(unsigned long long *p; option<unsigned long long> v) = integer__(p, sizeof(long long), false, v);
+predicate llong_(long long *p; option<long long> v) = integer__(p, sizeof(long long), true, v) &*& has_type(p, &typeid(long long)) == true;
+predicate ullong_(unsigned long long *p; option<unsigned long long> v) = integer__(p, sizeof(long long), false, v) &*& has_type(p, &typeid(unsigned long long)) == true;
 
 predicate llong_integer(long long *p; long long l) = integer_(p, sizeof(long long), true, l);
 predicate u_llong_integer(unsigned long long *p; unsigned long long l) = integer_(p, sizeof(long long), false, l);
@@ -165,14 +211,14 @@ lemma_auto void u_llong_integer_to_ullong_(unsigned long long *p);
     requires [?f]u_llong_integer(p, ?v);
     ensures [f]ullong_(p, some(v));
 
-predicate short_(short *p; option<short> v) = integer__(p, sizeof(short), true, v);
-predicate ushort_(unsigned short *p; option<unsigned short> v) = integer__(p, sizeof(short), false, v);
+predicate short_(short *p; option<short> v) = integer__(p, sizeof(short), true, v) &*& has_type(p, &typeid(short)) == true;
+predicate ushort_(unsigned short *p; option<unsigned short> v) = integer__(p, sizeof(short), false, v) &*& has_type(p, &typeid(unsigned short)) == true;
 
 predicate short_integer(short *p; short s) = short_(p, some(s));
 predicate u_short_integer(unsigned short *p; unsigned short v) = ushort_(p, some(v));
 
-predicate intptr_(intptr_t *p; option<intptr_t> v) = integer__(p, sizeof(intptr_t), true, v);
-predicate uintptr_(uintptr_t *p; option<uintptr_t> v) = integer__(p, sizeof(uintptr_t), false, v);
+predicate intptr_(intptr_t *p; option<intptr_t> v) = integer__(p, sizeof(intptr_t), true, v) &*& has_type(p, &typeid(intptr_t)) == true;
+predicate uintptr_(uintptr_t *p; option<uintptr_t> v) = integer__(p, sizeof(uintptr_t), false, v) &*& has_type(p, &typeid(uintptr_t)) == true;
 
 predicate intptr(intptr_t *p; intptr_t v) = intptr_(p, some(v));
 predicate uintptr(uintptr_t *p; uintptr_t v) = uintptr_(p, some(v));
@@ -205,11 +251,11 @@ lemma void integer__unique(void *p);
 
 lemma void integer__limits(void *p);
     requires [?f]integer_(p, ?size, ?signed_, ?v);
-    ensures [f]integer_(p, size, signed_, v) &*& object_pointer_within_limits(p, size) == true &*& signed_ ? -(1<<(8*size-1)) <= v &*& v < (1<<(8*size-1)) : 0 <= v &*& v < (1<<(8*size));
+    ensures [f]integer_(p, size, signed_, v) &*& object_pointer_within_limits(p, size) == true &*& size > 0 &*& signed_ ? -(1<<(8*size-1)) <= v &*& v < (1<<(8*size-1)) : 0 <= v &*& v < (1<<(8*size));
 
 lemma void integer___limits(void *p);
     requires [?f]integer__(p, ?size, ?signed_, ?v);
-    ensures [f]integer__(p, size, signed_, v) &*& object_pointer_within_limits(p, size) == true;
+    ensures [f]integer__(p, size, signed_, v) &*& object_pointer_within_limits(p, size) == true &*& size > 0;
 
 lemma void char__limits(char *pc);
     requires [?f]char_(pc, ?c);
@@ -380,7 +426,7 @@ lemma_auto void chars_of_int_size(int i);
     requires INT_MIN <= i && i <= INT_MAX;
     ensures length(chars_of_int(i)) == sizeof(int);
 
-lemma_auto void int_of_chars_size(list<char> cs);
+lemma_auto(int_of_chars(cs)) void int_of_chars_size(list<char> cs);
     requires length(cs) == sizeof(int) && chars_within_limits(cs);
     ensures INT_MIN <= int_of_chars(cs) && int_of_chars(cs) <= INT_MAX;
 
@@ -391,69 +437,69 @@ lemma void chars_of_int_char_in_bounds(char c, int i);
 
 // chars to ...
 lemma_auto void chars__to_int_(void *p);
-    requires [?f]chars_(p, sizeof(int), _);
+    requires [?f]chars_(p, sizeof(int), _) &*& has_type(p, &typeid(int)) == true;
     ensures [f]int_(p, _);
 
 lemma_auto void chars_to_integer(void *p);
-    requires [?f]chars(p, sizeof(int), ?cs);
+    requires [?f]chars(p, sizeof(int), ?cs) &*& has_type(p, &typeid(int)) == true;
     ensures [f]integer(p, int_of_chars(cs));
 
 lemma_auto void chars_to_u_integer(void *p);
-    requires [?f]chars(p, sizeof(unsigned int), ?cs);
+    requires [?f]chars(p, sizeof(unsigned int), ?cs) &*& has_type(p, &typeid(unsigned int)) == true;
     ensures [f]u_integer(p, _);
 
 lemma_auto void chars_to_short_integer(void *p);
-    requires [?f]chars(p, sizeof(short), ?cs);
+    requires [?f]chars(p, sizeof(short), ?cs) &*& has_type(p, &typeid(short)) == true;
     ensures [f]short_integer(p, _);
 
 lemma_auto void chars_to_u_short_integer(void *p);
-    requires [?f]chars(p, sizeof(unsigned short), ?cs);
+    requires [?f]chars(p, sizeof(unsigned short), ?cs) &*& has_type(p, &typeid(unsigned short)) == true;
     ensures [f]u_short_integer(p, _);
 
 lemma_auto void chars_to_pointer(void *p);
-    requires [?f]chars(p, sizeof(void *), ?cs);
+    requires [?f]chars(p, sizeof(void *), ?cs) &*& has_type(p, &typeid(void *)) == true;
     ensures [f]pointer(p, pointer_of_chars(cs));
 
 lemma_auto void chars_to_boolean(void *p);
-    requires [?f]chars(p, sizeof(bool), ?cs);
+    requires [?f]chars(p, sizeof(bool), ?cs) &*& has_type(p, &typeid(bool)) == true;
     ensures [f]boolean(p, _);
 
 lemma_auto void chars_to_integer_(void *p, int size, bool signed_);
-    requires [?f]chars(p, size, ?cs);
+    requires [?f]chars(p, size, ?cs) &*& has_type(p, &typeid(int)) == true;
     ensures [f]integer_(p, size, signed_, _);
 
 // ... to chars
 lemma_auto void int__to_chars_(int *p);
     requires [?f]int_(p, _);
-    ensures [f]chars_((void *)p, sizeof(int), _);
+    ensures [f]chars_((void *)p, sizeof(int), _) &*& has_type(p, &typeid(int)) == true;
 
 lemma_auto void integer_to_chars(void *p);
     requires [?f]integer(p, ?i);
-    ensures [f]chars(p, sizeof(int), chars_of_int(i));
+    ensures [f]chars(p, sizeof(int), chars_of_int(i)) &*& has_type(p, &typeid(int)) == true;
 
 lemma_auto void uint__to_chars_(unsigned int *p);
     requires [?f]uint_(p, _);
-    ensures [f]chars_((void *)p, sizeof(unsigned int), _);
+    ensures [f]chars_((void *)p, sizeof(unsigned int), _) &*& has_type(p, &typeid(unsigned int)) == true;
 
 lemma_auto void u_integer_to_chars(void *p);
     requires [?f]u_integer(p, _);
-    ensures [f]chars(p, sizeof(unsigned int), ?cs);
+    ensures [f]chars(p, sizeof(unsigned int), ?cs) &*& has_type(p, &typeid(unsigned int)) == true;
 
 lemma_auto void short_integer_to_chars(void *p);
     requires [?f]short_integer(p, _);
-    ensures [f]chars(p, sizeof(short), ?cs);
+    ensures [f]chars(p, sizeof(short), ?cs) &*& has_type(p, &typeid(short)) == true;
 
 lemma_auto void u_short_integer_to_chars(void *p);
     requires [?f]u_short_integer(p, _);
-    ensures [f]chars(p, sizeof(unsigned short), ?cs);
+    ensures [f]chars(p, sizeof(unsigned short), ?cs) &*& has_type(p, &typeid(unsigned short)) == true;
 
 lemma_auto void pointer_to_chars(void *p);
     requires [?f]pointer(p, ?v);
-    ensures [f]chars(p, sizeof(void *), chars_of_pointer(v));
+    ensures [f]chars(p, sizeof(void *), chars_of_pointer(v)) &*& has_type(p, &typeid(void *)) == true;
 
 lemma_auto void boolean_to_chars(void *p);
     requires [?f]boolean(p, _);
-    ensures [f]chars(p, sizeof(bool), ?cs);
+    ensures [f]chars(p, sizeof(bool), ?cs) &*& has_type(p, &typeid(bool)) == true;
 
 lemma_auto void integer__to_chars(void *p, int size, bool signed_);
     requires [?f]integer_(p, size, signed_, ?v);
@@ -776,27 +822,27 @@ lemma_auto void chars_to_ints(void *p, int n);
 
 lemma_auto void ints_to_chars(void *p);
     requires [?f]ints(p, ?n, _);
-    ensures [f]chars(p, n * sizeof(int), _);
+    ensures [f]chars(p, n * sizeof(int), _) &*& has_type(p, &typeid(int)) == true;
 
 lemma_auto void ints__to_chars_(void *p);
     requires [?f]ints_(p, ?n, _);
-    ensures [f]chars_(p, n * sizeof(int), _);
+    ensures [f]chars_(p, n * sizeof(int), _) &*& has_type(p, &typeid(int)) == true;
 
 lemma_auto void chars_to_uints(void *p, int n);
-    requires [?f]chars(p, n * sizeof(unsigned int), _);
+    requires [?f]chars(p, n * sizeof(unsigned int), _) &*& has_type(p, &typeid(unsigned int)) == true;
     ensures [f]uints(p, n, _);
 
 lemma_auto void uints_to_chars(void *p);
     requires [?f]uints(p, ?n, _);
-    ensures [f]chars(p, n * sizeof(unsigned int), _);
+    ensures [f]chars(p, n * sizeof(unsigned int), _) &*& has_type(p, &typeid(unsigned int)) == true;
 
 lemma_auto void chars_to_bools(void *p, int n);
-    requires [?f]chars(p, n * sizeof(bool), _);
+    requires [?f]chars(p, n * sizeof(bool), _) &*& has_type(p, &typeid(bool)) == true;
     ensures [f]bools(p, n, _);
 
 lemma_auto void bools_to_chars(void *p);
     requires [?f]bools(p, ?n, _);
-    ensures [f]chars(p, n * sizeof(bool), _);
+    ensures [f]chars(p, n * sizeof(bool), _) &*& has_type(p, &typeid(bool)) == true;
 
 fixpoint list<int> integers_of_chars(int size, bool signed_, list<char> cs);
 fixpoint list<char> chars_of_integers(int size, bool signed_, list<int> cs);
@@ -820,23 +866,23 @@ lemma_auto void integers__to_uchars(void *p);
     ensures [f]uchars(p, n * size, _);
 
 lemma_auto void chars__to_pointers_(void *p, int n);
-    requires [?f]chars_(p, n * sizeof(void *), _);
+    requires [?f]chars_(p, n * sizeof(void *), _) &*& has_type(p, &typeid(void *)) == true;
     ensures [f]pointers_(p, n, _);
 
 lemma_auto void pointers__to_chars_(void *pp);
     requires [?f]pointers_(pp, ?n, _);
-    ensures [f]chars_(pp, n * sizeof(void *), _);
+    ensures [f]chars_(pp, n * sizeof(void *), _) &*& has_type(pp, &typeid(void *)) == true;
 
 fixpoint list<void *> pointers_of_chars(list<char> cs);
 fixpoint list<char> chars_of_pointers(list<void *> ps);
 
 lemma_auto void chars_to_pointers(void *p, int n);
-    requires [?f]chars(p, n * sizeof(void *), ?cs);
+    requires [?f]chars(p, n * sizeof(void *), ?cs) &*& has_type(p, &typeid(void *)) == true;
     ensures [f]pointers(p, n, pointers_of_chars(cs)) &*& chars_of_pointers(pointers_of_chars(cs)) == cs;
 
 lemma_auto void pointers_to_chars(void *pp);
     requires [?f]pointers(pp, ?n, ?ps) &*& true;
-    ensures [f]chars(pp, n * sizeof(void *), chars_of_pointers(ps)) &*& pointers_of_chars(chars_of_pointers(ps)) == ps;
+    ensures [f]chars(pp, n * sizeof(void *), chars_of_pointers(ps)) &*& has_type(pp, &typeid(void *)) == true &*& pointers_of_chars(chars_of_pointers(ps)) == ps;
 
 predicate integers__(void *p, int size, bool signed_, int count; list<option<int> > vs) =
     count == 0 ?
