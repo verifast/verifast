@@ -94,6 +94,12 @@ int main() //@ : main
     (*pll)++;
     long long ll = f.ll;
     assert(ll == 43);
+
+    f.ull = 42;
+    unsigned long long *pull = &f.ull;
+    (*pull)++;
+    unsigned long long ull = f.ull;
+    assert(ull == 43);
     
     f.i32 = 42;
     __int32 *pi32 = &f.i32;

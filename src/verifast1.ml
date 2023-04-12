@@ -6207,7 +6207,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | Int (Signed, LongRank) -> predinst "long_integer" "long_"
                 | Int (Unsigned, LongRank) -> predinst "ulong_integer" "ulong_"
                 | Int (Signed, LongLongRank) -> predinst "llong_integer" "llong_"
-                | Int (Unsigned, LongLongRank) -> predinst "ullong_integer" "ullong_"
+                | Int (Unsigned, LongLongRank) -> predinst "u_llong_integer" "ullong_"
                 | Int (s, _) -> predinst___ "integer_" "integer__" [PtrType Void; intType; Bool] intType [SizeofExpr (l, TypeExpr (ManifestTypeExpr (l, t))); if s = Signed then True l else False l]
                 | Bool -> predinst_ "boolean" "bool_" Bool
                 | _ -> []
