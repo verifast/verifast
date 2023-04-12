@@ -59,10 +59,7 @@ unsigned long long atomic_load_counter(unsigned long long *object);
     requires
         is_atomic_load_counter_ghost_op(?ghop, object, ?pre, ?post, currentThread) &*& pre();
     @*/
-    /*@
-    ensures
-        is_atomic_load_counter_ghost_op(ghop, object, pre, post, currentThread) &*& post(result);
-    @*/
+    //@ ensures post(result);
     //@ terminates;
 
 /*@
