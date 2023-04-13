@@ -91,8 +91,8 @@ lemma void signals_stop_plus_1(bool status)
 
 predicate_ctor ticketlock_inv(ticketlock lock, list<int> level, predicate(int, bool) inv, box signalsBox, box incrBox)() =
     growing_list(signalsBox, ?signals) &*&
-    lock->next |-> ?next &*& length(signals) == next &*&
-    [1/2]lock->owner |-> ?owner &*& 0 <= owner &*& owner <= next &*& incr_box(incrBox, owner) &*&
+    counter(&lock->next, ?next) &*& length(signals) == next &*&
+    [1/2]counter(&lock->owner, ?owner) &*& 0 <= owner &*& owner <= next &*& incr_box(incrBox, owner) &*&
     [1/2]lock->held_ |-> ?held &*&
     signals(signals, level, true, 0, owner) &*&
     signals(signals, level, false, held ? owner + 1 : owner, length(signals)) &*&
@@ -100,7 +100,7 @@ predicate_ctor ticketlock_inv(ticketlock lock, list<int> level, predicate(int, b
     held ?
         signal(nth(owner, signals), append(level, {owner}), true) &*& owner < next
     :
-        [1/2]lock->owner |-> owner &*& [1/2]lock->held_ |-> held;
+        [1/2]counter(&lock->owner, owner) &*& [1/2]lock->held_ |-> held;
 
 predicate ticketlock(ticketlock lock; list<int> level, predicate(int, bool) inv) =
     lock->level |-> level &*& lock->inv_ |-> inv &*& lock->signalsBox |-> ?signalsBox &*& lock->incrBox |-> ?incrBox &*& malloc_block_ticketlock(lock) &*&
@@ -113,7 +113,7 @@ predicate ticketlock_held(ticketlock lock, list<int> level, predicate(int, bool)
     level == cons(?level_max_length, ?level0) &*& length(level0) + ticketlock_nb_level_dims <= level_max_length &*&
     pointer_within_limits(&lock->owner) == true &*&
     [f]atomic_space(create_ticketlock, ticketlock_inv(lock, level, inv, signalsBox, incrBox)) &*&
-    [1/2]lock->held_ |-> true &*& [1/2]lock->owner |-> _;
+    [1/2]lock->held_ |-> true &*& [1/2]counter(&lock->owner, _);
 
 @*/
 
@@ -141,6 +141,8 @@ requires
     //@ result->held_ = false;
     //@ close signals({}, level, true, 0, 0);
     //@ close signals({}, level, false, 0, 0);
+    //@ create_counter(&result->next);
+    //@ create_counter(&result->owner);
     //@ close ticketlock_inv(result, level, inv, signalsBox, incrBox)();
     //@ create_atomic_space(create_ticketlock, ticketlock_inv(result, level, inv, signalsBox, incrBox));
     return result;
@@ -201,7 +203,7 @@ requires
                 result == ticket ?
                     post() &*&
                     [1/2]lock->held_ |-> true &*&
-                    [1/2]lock->owner |-> ticket
+                    [1/2]counter(&lock->owner, ticket)
                 :
                     call_perm_(currentThread, ticketlock_acquire_helper) &*&
                     has_at(hasAtHandle, signalsBox, ticket, signal) &*&
@@ -226,7 +228,7 @@ requires
                 producing_box_predicate growing_list(signals)
                 producing_handle_predicate has_at(hasAtHandle, ticket, signal);
                 assert is_atomic_load_counter_op(?op, &lock->owner, ?P, ?Q);
-                assert [1/2]lock->owner |-> ?owner_;
+                assert [1/2]counter(&lock->owner, ?owner_);
                 op();
                 if (owner_ == ticket) {
                     if (lock->held_) {
@@ -387,9 +389,8 @@ requires
             open ticketlock_inv(lock, level, inv, signalsBox, incrBox)();
             assert growing_list(signalsBox, ?signals);
             assert is_atomic_fetch_and_increment_counter_op(?op, &lock->next, ?P, ?Q);
-            assert [_]lock->owner |-> ?owner;
-            assert lock->next |-> ?next;
-            open ticketlock_next(lock, _);
+            assert [_]counter(&lock->owner, ?owner);
+            assert counter(&lock->next, ?next);
             op();
             leak is_atomic_fetch_and_increment_counter_op(_, _, _, _);
             void *signal = create_signal();
@@ -428,6 +429,48 @@ void ticketlock_release(ticketlock lock)
 //@ ensures [f]ticketlock(lock, level, inv) &*& post();
 //@ terminates;
 {
-    unsigned long long owner = load_counter(&lock->owner);
-    atomic_store_counter(&lock->owner, owner + 1);
+    //@ open ticketlock_held(lock, level, inv, f);
+    //@ box signalsBox = lock->signalsBox;
+    //@ box incrBox = lock->incrBox;
+    unsigned long long ownerPlusOne = get_counter_plus_one(&lock->owner);
+    {
+        /*@
+        predicate pre_() =
+	    [f]atomic_space(create_ticketlock, ticketlock_inv(lock, level, inv, signalsBox, incrBox)) &*&
+	    is_ticketlock_release_ghost_op(ghop, inv, pre, post, currentThread) &*& pre() &*&
+	    [1/2]lock->held_ |-> true &*& [1/2]counter(&lock->owner, ownerPlusOne - 1);
+        predicate post_() =
+            post() &*&
+            [f]atomic_space(create_ticketlock, ticketlock_inv(lock, level, inv, signalsBox, incrBox));
+        @*/
+        /*@
+        produce_lemma_function_pointer_chunk atomic_store_counter_ghost_op(&lock->owner, ownerPlusOne, pre_, post_, currentThread)() {
+            open pre_();
+            open_atomic_space(create_ticketlock, ticketlock_inv(lock, level, inv, signalsBox, incrBox));
+            open ticketlock_inv(lock, level, inv, signalsBox, incrBox)();
+            
+            assert counter(&lock->owner, ?owner);
+            
+            assert is_atomic_store_counter_op(?op, &lock->owner, ownerPlusOne, ?P, ?Q);
+            op();
+            
+            consuming_box_predicate incr_box(incrBox, owner)
+            perform_action incr() {}
+            producing_box_predicate incr_box(owner + 1);
+            
+            signals_stop_plus_1(true);
+            lock->held_ = false;
+            
+            ghop();
+            leak is_ticketlock_release_ghost_op(ghop, inv, pre, post, currentThread);
+            
+            close ticketlock_inv(lock, level, inv, signalsBox, incrBox)();
+            close_atomic_space(create_ticketlock, ticketlock_inv(lock, level, inv, signalsBox, incrBox));
+            close post_();
+        };
+        @*/
+        //@ close pre_();
+        atomic_store_counter(&lock->owner, ownerPlusOne);
+        //@ open post_();
+    }
 }

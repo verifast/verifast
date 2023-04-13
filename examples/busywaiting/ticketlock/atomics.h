@@ -38,15 +38,17 @@ lemma void create_counter(unsigned long long *pull);
 
 @*/
 
-unsigned long long load_counter(unsigned long long *pull);
+unsigned long long get_counter_plus_one(unsigned long long *pull);
 //@ requires [?f]counter(pull, ?value);
-//@ ensures [f]counter(pull, value) &*& result == value;
+//@ ensures [f]counter(pull, value) &*& result == value + 1;
+//@ terminates;
+// { return *pull + 1; }
 
 /*@
 
 typedef lemma void atomic_load_counter_op(unsigned long long *object, predicate() P, predicate(int) Q)();
-    requires [?f]*object |-> ?value &*& P();
-    ensures [f]*object |-> value &*& Q(value);
+    requires [?f]counter(object, ?value) &*& P();
+    ensures [f]counter(object, value) &*& Q(value);
 
 typedef lemma void atomic_load_counter_ghost_op(unsigned long long *object, predicate() pre, predicate(int) post, int callerThread)();
     requires is_atomic_load_counter_op(?op, object, ?P, ?Q) &*& P() &*& pre() &*& currentThread == callerThread &*& atomic_spaces({});
@@ -65,8 +67,8 @@ unsigned long long atomic_load_counter(unsigned long long *object);
 /*@
 
 typedef lemma void atomic_store_counter_op(unsigned long long *object, unsigned long long desired, predicate() P, predicate() Q)();
-    requires *object |-> ?oldValue &*& P();
-    ensures *object |-> desired &*& Q() &*& desired <= oldValue + 1;
+    requires counter(object, ?oldValue) &*& P() &*& desired <= oldValue + 1;
+    ensures counter(object, desired) &*& Q();
 
 typedef lemma void atomic_store_counter_ghost_op(unsigned long long *object, unsigned long long desired, predicate() pre, predicate() post, int callerThread)();
     requires is_atomic_store_counter_op(?op, object, desired, ?P, ?Q) &*& P() &*& pre() &*& currentThread == callerThread &*& atomic_spaces({});
@@ -86,8 +88,8 @@ void atomic_store_counter(unsigned long long *object, unsigned long long desired
 
 typedef lemma void atomic_fetch_and_increment_counter_op
     (unsigned long long *object, predicate() P, predicate(int) Q)();
-    requires *object |-> ?old &*& P();
-    ensures *object |-> old + 1 &*& Q(old);
+    requires counter(object, ?old) &*& P();
+    ensures counter(object, old + 1) &*& Q(old);
 
 typedef lemma void atomic_fetch_and_increment_counter_ghost_op(unsigned long long *object, predicate() pre, predicate(int) post, int callerThread)();
     requires
