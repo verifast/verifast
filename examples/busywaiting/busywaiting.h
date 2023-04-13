@@ -16,6 +16,27 @@ fixpoint bool is_ancestor_of(list<pathcomp> p1, list<pathcomp> p2) {
   }
 }
 
+lemma void is_ancestor_of_refl(list<pathcomp> p)
+    requires true;
+    ensures is_ancestor_of(p, p) == true;
+{
+    switch (p) { case nil: case cons(h, t): }
+}
+
+lemma void is_ancestor_of_trans(list<pathcomp> p1, list<pathcomp> p2, list<pathcomp> p3)
+    requires is_ancestor_of(p1, p2) && is_ancestor_of(p2, p3);
+    ensures is_ancestor_of(p1, p3) == true;
+{
+    switch (p3) {
+        case nil:
+        case cons(p3h, p3t):
+            if (p2 == p3) {
+            } else {
+                is_ancestor_of_trans(p1, p2, p3t);
+            }
+    }
+}
+
 fixpoint bool level0_lt(int max_length, list<int> l1, list<int> l2) {
   switch (l1) {
     case nil: return max_length > 0 && l2 != nil;
@@ -134,6 +155,19 @@ predicate call_below_perms(int n, list<pathcomp> path, void *f;) =
     :
         call_below_perm(path, f) &*& call_below_perms(n - 1, path, f);
 
+lemma void call_below_perms_weaken(int m)
+    requires call_below_perms(?n, ?p, ?f) &*& m <= n;
+    ensures call_below_perms(m, p, f);
+{
+    open call_below_perms(_, _, _);
+    if (n <= 0 || n == m)
+        close call_below_perms(m, p, f);
+    else {
+        leak call_below_perm(_, _);
+        call_below_perms_weaken(m);
+    }
+}
+
 lemma void pathize_call_below_perm_();
   requires obs(?p, ?obs) &*& call_below_perm_(currentThread, ?f);
   ensures obs(p, obs) &*& call_below_perm(p, f);
@@ -194,6 +228,10 @@ lemma void init_signal(void *signal, list<int> level);
 lemma void set_signal(void *signal);
   requires obs(?p, ?obs) &*& signal(signal, ?level, false);
   ensures obs(p, remove(pair(signal, level), obs)) &*& signal(signal, level, true);
+
+lemma void ob_signal_not_set(void *signal);
+  requires obs(?p, ?obs) &*& signal(signal, ?level, ?status) &*& mem(signal, map(fst, obs)) == true;
+  ensures obs(p, obs) &*& signal(signal, level, status) &*& !status;
 
 predicate wait_perm(list<pathcomp> path, void *signal, list<int> level, void *func;);
 
