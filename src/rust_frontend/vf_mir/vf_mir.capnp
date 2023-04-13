@@ -424,6 +424,27 @@ struct Body {
                 ty @2: Ty;
             }
 
+            struct AggregateData {
+                struct AggregateKind {
+                    struct AdtData {
+                        id @0: Ty.AdtDefId;
+                        variantIdx @1: BigUInt;
+                        substs @2: List(Ty.GenArg);
+                        userTypeAnnotationIndex @3: Void;
+                        unionActiveField @4: Void;
+                    }
+                    union {
+                        array @0: Ty; #Elements type
+                        tuple @1: Void;
+                        adt @2: AdtData;
+                        closure @3: Void;
+                        generator @4: Void;
+                    }
+                }
+                aggregateKind @0: AggregateKind;
+                operands @1: List(Operand);
+            }
+
             union {
                 # Either move or copy depending on operand type
                 use @0: Operand;
@@ -431,6 +452,7 @@ struct Body {
                 addressOf @2: AddressOfData;
                 cast @3: CastData;
                 binaryOp @4: BinaryOpData;
+                aggregate @5: AggregateData;
             }
         }
 

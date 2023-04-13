@@ -277,6 +277,7 @@ mod vf_mir_builder {
     use rustc_middle::bug;
     use rustc_middle::ty;
     use rustc_middle::{mir, ty::TyCtxt};
+    use rvalue_cpn::aggregate_data::aggregate_kind as aggregate_kind_cpn;
     use rvalue_cpn::binary_op_data as binary_op_data_cpn;
     use rvalue_cpn::cast_data::cast_kind as cast_kind_cpn;
     use rvalue_cpn::ref_data as ref_data_cpn;
@@ -290,6 +291,7 @@ mod vf_mir_builder {
     use terminator_kind_cpn::switch_int_data as switch_int_data_cpn;
     use tracing::{debug, trace};
     use ty_cpn::adt_def as adt_def_cpn;
+    use ty_cpn::adt_def_id as adt_def_id_cpn;
     use ty_cpn::adt_kind as adt_kind_cpn;
     use ty_cpn::adt_ty as adt_ty_cpn;
     use ty_cpn::const_ as ty_const_cpn;
@@ -375,7 +377,7 @@ mod vf_mir_builder {
 
         pub fn build(mut self) -> ::capnp::message::TypedBuilder<vf_mir_cpn::Owned> {
             let mut msg_cpn = ::capnp::message::TypedBuilder::<vf_mir_cpn::Owned>::new_default();
-            let mut vf_mir_cpn = msg_cpn.init_root();
+            let vf_mir_cpn = msg_cpn.init_root();
             self.encode_mir(vf_mir_cpn);
             msg_cpn
         }
@@ -457,6 +459,14 @@ mod vf_mir_builder {
             adt_defs_cpn.set_nil(());
         }
 
+        fn encode_adt_def_id(
+            enc_ctx: &mut EncCtx<'tcx, 'a>,
+            adt_did: hir::def_id::DefId,
+            mut adt_did_cpn: adt_def_id_cpn::Builder<'_>,
+        ) {
+            adt_did_cpn.set_name(&enc_ctx.tcx.def_path_str(adt_did));
+        }
+
         fn encode_adt_def(
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
@@ -464,8 +474,8 @@ mod vf_mir_builder {
             mut adt_def_cpn: adt_def_cpn::Builder<'_>,
         ) {
             debug!("Encoding ADT definition {:?}", adt_def);
-            let mut id_cpn = adt_def_cpn.reborrow().init_id();
-            id_cpn.set_name(&tcx.def_path_str(adt_def.did));
+            let id_cpn = adt_def_cpn.reborrow().init_id();
+            Self::encode_adt_def_id(enc_ctx, adt_def.did, id_cpn);
             let len = adt_def.variants.len();
             let len = len.try_into().expect(&format!(
                 "{} Variants cannot be stored in a Capnp message",
@@ -603,7 +613,7 @@ mod vf_mir_builder {
             for (idx, (local_decl_idx, local_decl)) in
                 body.local_decls().iter_enumerated().enumerate()
             {
-                let mut local_decl_cpn = local_decls_cpn.reborrow().get(idx.try_into().unwrap());
+                let local_decl_cpn = local_decls_cpn.reborrow().get(idx.try_into().unwrap());
                 Self::encode_local_decl(tcx, enc_ctx, local_decl_idx, local_decl, local_decl_cpn);
             }
 
@@ -909,7 +919,7 @@ mod vf_mir_builder {
             mut local_decl_cpn: local_decl_cpn::Builder<'_>,
         ) {
             debug!("Encoding local decl {:?}", local_decl);
-            let mut mutability_cpn = local_decl_cpn.reborrow().init_mutability();
+            let mutability_cpn = local_decl_cpn.reborrow().init_mutability();
             Self::encode_mutability(local_decl.mutability, mutability_cpn);
 
             let id_cpn = local_decl_cpn.reborrow().init_id();
@@ -941,7 +951,7 @@ mod vf_mir_builder {
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
             ty: ty::Ty<'tcx>,
-            mut ty_cpn: ty_cpn::Builder<'_>,
+            ty_cpn: ty_cpn::Builder<'_>,
         ) {
             let mut ty_kind_cpn = ty_cpn.init_kind();
             match ty.kind() {
@@ -1003,18 +1013,16 @@ mod vf_mir_builder {
             mut adt_ty_cpn: adt_ty_cpn::Builder<'_>,
         ) {
             debug!("Encoding algebraic data type {:?}", adt_def);
-            let mut adt_def_id_cpn = adt_ty_cpn.reborrow().init_id();
-            adt_def_id_cpn.set_name(&tcx.def_path_str(adt_def.did));
+            let adt_did_cpn = adt_ty_cpn.reborrow().init_id();
+            Self::encode_adt_def_id(enc_ctx, adt_def.did, adt_did_cpn);
 
             let len = substs.len().try_into().expect(&format!(
                 "The number of generic args of {:?} cannot be stored in a Capnp message",
                 adt_def
             ));
-            let mut substs_cpn = adt_ty_cpn.reborrow().init_substs(len);
-            for (idx, subst) in substs.iter().enumerate() {
-                let subst_cpn = substs_cpn.reborrow().get(idx.try_into().unwrap());
-                Self::encode_gen_arg(tcx, enc_ctx, &subst, subst_cpn);
-            }
+            let substs_cpn = adt_ty_cpn.reborrow().init_substs(len);
+            Self::encode_ty_args(enc_ctx, substs, substs_cpn);
+
             let kind_cpn = adt_ty_cpn.init_kind();
             Self::encode_adt_kind(adt_def.adt_kind(), kind_cpn);
             // Definitions we use should be encoded later
@@ -1074,11 +1082,8 @@ mod vf_mir_builder {
                 "The number of generic args for {} cannot be stored in a Capnp message",
                 def_path
             ));
-            let mut substs_cpn = fn_def_ty_cpn.init_substs(len);
-            for (idx, subst) in substs.iter().enumerate() {
-                let subst_cpn = substs_cpn.reborrow().get(idx.try_into().unwrap());
-                Self::encode_gen_arg(tcx, enc_ctx, &subst, subst_cpn);
-            }
+            let substs_cpn = fn_def_ty_cpn.init_substs(len);
+            Self::encode_ty_args(enc_ctx, substs, substs_cpn);
         }
 
         fn encode_region(region: ty::Region<'tcx>, mut region_cpn: region_cpn::Builder<'_>) {
@@ -1256,9 +1261,76 @@ mod vf_mir_builder {
                 // Read the discriminant of an ADT.
                 mir::Rvalue::Discriminant(place) => todo!(),
                 // Creates an aggregate value, like a tuple or struct.
-                mir::Rvalue::Aggregate(box aggregate_kind, operands) => todo!(),
+                mir::Rvalue::Aggregate(box aggregate_kind, operands) => {
+                    let mut aggregate_data_cpn = rvalue_cpn.init_aggregate();
+                    let aggregate_kind_cpn = aggregate_data_cpn.reborrow().init_aggregate_kind();
+                    Self::encode_aggregate_kind(enc_ctx, aggregate_kind, aggregate_kind_cpn);
+                    let len = operands.len();
+                    let len = len.try_into().expect(&format!(
+                        "{} operands cannot be stored in a Capnp message",
+                        len
+                    ));
+                    let mut operands_cpn = aggregate_data_cpn.init_operands(len);
+                    for (idx, operand) in operands.iter().enumerate() {
+                        let operand_cpn = operands_cpn.reborrow().get(idx.try_into().unwrap());
+                        Self::encode_operand(tcx, enc_ctx, operand, operand_cpn);
+                    }
+                }
                 // Transmutes a `*mut u8` into shallow-initialized `Box<T>`.
                 mir::Rvalue::ShallowInitBox(operand, ty) => todo!(),
+            }
+        }
+
+        fn encode_ty_args(
+            enc_ctx: &mut EncCtx<'tcx, 'a>,
+            targs: ty::subst::SubstsRef<'tcx>,
+            mut targs_cpn: capnp::struct_list::Builder<'_, gen_arg_cpn::Owned>,
+        ) {
+            for (idx, targ) in targs.iter().enumerate() {
+                let targ_cpn = targs_cpn.reborrow().get(idx.try_into().unwrap());
+                Self::encode_gen_arg(enc_ctx.tcx, enc_ctx, &targ, targ_cpn);
+            }
+        }
+
+        fn encode_aggregate_kind(
+            enc_ctx: &mut EncCtx<'tcx, 'a>,
+            agg_kind: &mir::AggregateKind<'tcx>,
+            agg_kind_cpn: aggregate_kind_cpn::Builder<'_>,
+        ) {
+            match agg_kind {
+                mir::AggregateKind::Array(_ty) => todo!(),
+                mir::AggregateKind::Tuple => todo!(),
+                mir::AggregateKind::Adt(
+                    def_id,
+                    variant_idx,
+                    substs,
+                    _user_type_annot_idx_opt,
+                    _union_active_field_opt,
+                ) => {
+                    if enc_ctx.tcx.adt_def(def_id.expect_local()).adt_kind() != ty::AdtKind::Struct
+                    {
+                        todo!()
+                    }
+                    let mut adt_data_cpn = agg_kind_cpn.init_adt();
+                    let id_cpn = adt_data_cpn.reborrow().init_id();
+                    Self::encode_adt_def_id(enc_ctx, *def_id, id_cpn);
+
+                    let v_idx_cpn = adt_data_cpn.reborrow().init_variant_idx();
+                    capnp_utils::encode_u_int128(
+                        variant_idx.index().try_into().unwrap(),
+                        v_idx_cpn,
+                    );
+
+                    let len = substs.len();
+                    let len = len.try_into().expect(&format!(
+                        "{} Generic args cannot be stored in a Capnp message",
+                        len
+                    ));
+                    let substs_cpn = adt_data_cpn.reborrow().init_substs(len);
+                    Self::encode_ty_args(enc_ctx, substs, substs_cpn);
+                }
+                mir::AggregateKind::Closure(_def_id, _substs) => todo!(),
+                mir::AggregateKind::Generator(_def_id, _substs, _movability) => todo!(),
             }
         }
 
