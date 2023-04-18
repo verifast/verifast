@@ -7,15 +7,64 @@ open Ast
 
 (* Region: the parser *)
 
-let common_keywords = [
-  "switch"; "case"; ":"; "return"; "for";
-  "void"; "if"; "else"; "while"; "!="; "<"; ">"; "<="; ">="; "&&"; "++"; "--"; "+="; "-="; "*="; "/="; "&="; "|="; "^="; "%="; "<<="; ">>="; ">>>=";
-  "||"; "!"; "."; "["; "]"; "{"; "break"; "default";
-  "}"; ";"; "int"; "true"; "false"; "("; ")"; ","; "="; "|"; "+"; "-"; "=="; "?"; "%"; 
+let common_keywords = []
+
+let c_keywords = [
+  (* C18 keywords *)
+  "auto"; "break"; "case"; "char"; "const"; "continue"; "default"; "do"; "double"; "else"; "enum";
+  "extern"; "float"; "for"; "goto"; "if"; "inline"; "int"; "long"; "register"; "restrict"; "return";
+  "short"; "signed"; "sizeof"; "static"; "struct"; "switch"; "typedef"; "union"; "unsigned"; "void"; "volatile";
+  "while"; "_Alignas"; "_Alignof"; "_Atomic"; "_Bool"; "_Complex"; "_Generic"; "_Imaginary"; "_Noreturn"; "_Static_assert"; "_Thread_local";
+
+  (* C18 punctuators *)
+  "["; "]"; "("; ")"; "{"; "}"; "."; "->";
+  "++"; "--"; "&"; "*"; "+"; "-"; "~"; "!";
+  "/"; "%"; "<<"; ">>"; "<"; ">"; "<="; ">="; "=="; "!="; "^"; "|"; "&&"; "||";
+  "?"; ":"; ";"; "...";
+  "="; "*="; "/="; "%="; "+="; "-="; "<<="; ">>="; "&="; "^="; "|=";
+  ","; "#"; "##";
+  "<:"; ":>"; "<%"; "%>"; "%:"; "%:%:";
+
+  (* C18 preprocessing directives *)
+  "ifdef"; "ifndef"; "elif"; "endif"; "include"; "define"; "undef"; (* "line"; "error"; *) "pragma";
+
+  (* GNU C extensions *)
+  "__always_inline"; "__attribute__"; "__forceinline"; "__inline"; "__inline__"; "__signed__";
+
+  (* The following are macros or typedefs in C but we treat them as keywords *)
+  "CHAR_MAX"; "CHAR_MIN"; "INT_MAX"; "INT_MIN"; "LLONG_MAX"; "LLONG_MIN"; "LONG_MAX"; "LONG_MIN"; "SHRT_MAX"; "SHRT_MIN";
+  "UCHAR_MAX"; "UINT_MAX"; "UINTPTR_MAX"; "ULLONG_MAX"; "ULONG_MAX"; "USHRT_MAX";
+  "assert"; "bool"; "false"; "intptr_t"; "true"; "uintptr_t"; "varargs";
+
+  (* VeriFast keywords *)
+  "__int8"; "__int16"; "__int32"; "__int64"; "__int128"; "__minvalue"; "__maxvalue";
 (* Note: it's important for soundness that currentCodeFractions, currentThread, and varargs be considered keywords both inside and outside of annotations. *)
-  "*"; "/"; "&"; "^"; "~"; "assert"; "currentCodeFraction"; "currentThread"; "varargs"; "short"; ">>"; "<<";
-  "truncating"; "typedef"; "do"; "...";
-  "float"; "double"; "real"; (* "real" really should be a ghost keyword, but it's used in vf__floating_point.h... *)
+  "currentCodeFractions"; "currentThread"; "real" (* "real" really should be a ghost keyword, but it's used in vf__floating_point.h... *)
+]
+
+let java_keywords = [
+  (* JLS6 keywords *)
+  "abstract"; "assert"; "boolean"; "break"; "byte"; "case"; "catch"; "char"; "class"; "const";
+  "continue"; "default"; "do"; "double"; "else"; "enum"; "extends"; "final"; "finally"; "float";
+  "for"; "if"; "goto"; "implements"; "import"; "instanceof"; "int"; "interface"; "long"; "native";
+  "new"; "package"; "private"; "protected"; "public"; "return"; "short"; "static"; "strictfp"; "super";
+  "switch"; "synchronized"; (*"this";*) "throw"; "throws"; "transient"; "try"; "void"; "volatile"; "while";
+
+  (* JLS6 separators *)
+  "("; ")"; "{"; "}"; "["; "]"; ";"; ","; ".";
+
+  (* JLS6 operators *)
+  "="; ">"; "<"; "!"; "~"; "?"; ":";
+  "=="; "<="; ">="; "!="; "&&"; "||"; "++"; "--";
+  "+"; "-"; "*"; "/"; "&"; "|"; "^"; "%"; "<<"; ">>"; ">>>";
+  "+="; "-="; "*="; "/="; "&="; "|="; "^="; "%="; "<<="; ">>="; ">>>=";
+
+  (* JLS6 literals *)
+  "false"; "null"; "true";
+
+  (* VeriFast keywords *)
+(* Note: it's important for soundness that currentThread be considered a keyword both inside and outside of annotations. *)
+  "currentThread"; "real" (* "real" really should be a ghost keyword, but it's used in vf__floating_point.h... *)
 ]
 
 let ghost_keywords = [
@@ -27,30 +76,7 @@ let ghost_keywords = [
   "produce_lemma_function_pointer_chunk"; "duplicate_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
   "producing_box_predicate"; "producing_handle_predicate"; "producing_fresh_handle_predicate"; "box"; "handle"; "any"; "split_fraction"; "by"; "merge_fractions";
   "unloadable_module"; "decreases"; "forall_"; "import_module"; "require_module"; ".."; "extends"; "permbased";
-  "terminates"; "abstract_type"; "fixpoint_auto"; "typeid"; "activating"
-]
-
-let c_keywords = [
-  "struct"; "bool"; "char"; "sizeof"; "#"; "##"; "include"; "ifndef"; "union";
-  "define"; "endif"; "&"; "goto"; "uintptr_t"; "intptr_t"; "INT_MIN"; "INT_MAX";
-  "UINTPTR_MAX"; "enum"; "static"; "signed"; "unsigned"; "long";
-  "const"; "volatile"; "register"; "ifdef"; "elif"; "undef"; "pragma";
-  "_Generic";
-  "SHRT_MIN"; "SHRT_MAX"; "USHRT_MAX"; "UINT_MAX";
-  "CHAR_MIN"; "CHAR_MAX"; "UCHAR_MAX";
-  "LLONG_MIN"; "LLONG_MAX"; "ULLONG_MAX";
-  "LONG_MIN"; "LONG_MAX"; "ULONG_MAX";
-  "__minvalue"; "__maxvalue";
-  "__int8"; "__int16"; "__int32"; "__int64"; "__int128";
-  "inline"; "__inline"; "__inline__"; "__forceinline"; "_Noreturn";
-  "__signed__"; "__always_inline"; "extern";
-  "__attribute__";
-  "->" (* Used for inductive value field access (e.g. "my_ind_value->my_param_name") in ghostcode, and struct field access in C and C-ghostcode. *)
-]
-
-let java_keywords = [
-  "public"; "char"; "private"; "protected"; "class"; "static"; "boolean"; "new"; "null"; "interface"; "implements"; "package"; "import";
-  "throw"; "try"; "catch"; "throws"; "byte"; "final"; "extends"; "instanceof"; "super"; "abstract"
+  "terminates"; "abstract_type"; "fixpoint_auto"; "typeid"; "activating"; "truncating"; "typedef"
 ]
 
 exception StaticError of loc * string * string option
