@@ -76,6 +76,27 @@ let cxx_keywords = [
   "currentCodeFractions"; "currentThread"; "real" (* "real" really should be a ghost keyword, but it's used in vf__floating_point.h... *)
 ]
 
+let rust_keywords = [
+  "as"; "break"; "const"; "continue"; "crate"; "else"; "enum"; "extern";
+  "false"; "fn"; "for"; "if"; "impl"; "in"; "let"; "loop"; "match"; "mod";
+  "move"; "mut"; "pub"; "ref"; "return"; "self"; "Self"; "static"; "struct";
+  "super"; "trait"; "true"; "type"; "unsafe"; "use"; "where"; "while";
+
+  "async"; "await"; "dyn";
+
+  "abstract"; "become"; "box"; "do"; "final"; "macro"; "override"; "priv";
+  "typeof"; "unsized"; "virtual"; "yield";
+
+  "try";
+
+  "+"; "-"; "*"; "/"; "%"; "^"; "&"; "|"; "&&"; "||"; "<<"; ">>"; "+="; "-=";
+  "*="; "/="; "%="; "^="; "&="; "|="; "<<="; ">>="; "="; "=="; "!="; ">"; "<";
+  ">="; "<="; "@"; "_"; "."; ".."; "..."; "..="; ","; ";"; ":"; "::"; "->";
+  "=>"; "#"; "$"; "?"; "~";
+
+  "{"; "}"; "["; "]"; "("; ")"
+]
+
 let java_keywords = [
   (* JLS6 keywords *)
   "abstract"; "assert"; "boolean"; "break"; "byte"; "case"; "catch"; "char"; "class"; "const";

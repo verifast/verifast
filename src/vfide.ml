@@ -613,6 +613,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
       if Filename.check_suffix path ".c" || Filename.check_suffix path ".h" then highlight (common_keywords @ c_keywords)
       else if Filename.check_suffix path ".java" || Filename.check_suffix path ".javaspec" then highlight (common_keywords @ java_keywords)
       else if Filename.check_suffix path ".cpp" then highlight (common_keywords @ cxx_keywords)
+      else if Filename.check_suffix path ".rs" then highlight (common_keywords @ rust_keywords)
       else ()
   in
   let create_editor (textNotebook: GPack.notebook) buffer lineMarksTable stmtExecCountsColumn =
@@ -1498,7 +1499,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
                 else
                   (fun forest -> postProcess := (fun () -> reportExecutionForest !forest))
               in
-              if options.option_use_java_frontend || Filename.check_suffix path ".cpp" then begin
+              if options.option_use_java_frontend || Filename.check_suffix path ".cpp" || Filename.check_suffix path ".rs" then begin
                 !buffers |> List.iter begin fun tab ->
                   perform_syntax_highlighting tab tab#buffer#start_iter tab#buffer#end_iter
                 end
