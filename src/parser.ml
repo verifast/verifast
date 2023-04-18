@@ -42,6 +42,40 @@ let c_keywords = [
   "currentCodeFractions"; "currentThread"; "real" (* "real" really should be a ghost keyword, but it's used in vf__floating_point.h... *)
 ]
 
+let cxx_keywords = [
+  (* C++17 keywords *)
+   "alignas"; "alignof"; "asm"; "auto"; "bool"; "break"; "case"; "catch"; "char"; "char16_t"; "char32_t"; "class"; "const"; "constexpr"; "const_cast";
+   "continue"; "decltype"; "default"; "delete"; "do"; "double"; "dynamic_cast"; "else"; "enum"; "explicit"; "export"; "extern"; "false"; "float"; "for";
+   "friend"; "goto"; "if"; "inline"; "int"; "long"; "mutable"; "namespace"; "new"; "noexcept"; "nullptr"; "operator"; "private"; "protected"; "public";
+   "register"; "reinterpret_cast"; "return"; "short"; "signed"; "sizeof"; "static"; "static_assert"; "static_cast"; "struct"; "switch"; "template"; (*"this";*) "thread_local"; "throw";
+   "true"; "try"; "typedef"; "typeid"; "typename"; "union"; "unsigned"; "using"; "virtual"; "void"; "volatile"; "wchar_t"; "while";
+
+   (* C++17 punctuators *)
+   "{"; "}"; "["; "]"; "#"; "##"; "("; ")";
+   "<:"; ":>"; "<%"; "%>"; "%:"; "%:%:"; ";"; ":"; "...";
+   "new"; "delete"; "?"; "::"; "."; ".*";
+   "+"; "-"; "*"; "/"; "%"; "^"; "&"; "|"; "~";
+   "!"; "="; "<"; ">"; "+="; "-="; "*="; "/="; "%=";
+   "^="; "&="; "|="; "<<"; ">>"; ">>="; "<<="; "=="; "!=";
+   "<="; ">="; "&&"; "||"; "++"; "--"; ","; "->*"; "->";
+
+  (* C++17 preprocessing directives *)
+  "include"; "define"; "undef"; (*"line"; "error";*) "pragma"; "ifdef"; "ifndef"; "elif"; "endif";
+
+  (* GNU C++ extensions *)
+  "__always_inline"; "__attribute__"; "__forceinline"; "__inline"; "__inline__"; "__signed__";
+
+  (* The following are macros or typedefs in C++ but we treat them as keywords *)
+  "CHAR_MAX"; "CHAR_MIN"; "INT_MAX"; "INT_MIN"; "LLONG_MAX"; "LLONG_MIN"; "LONG_MAX"; "LONG_MIN"; "SHRT_MAX"; "SHRT_MIN";
+  "UCHAR_MAX"; "UINT_MAX"; "UINTPTR_MAX"; "ULLONG_MAX"; "ULONG_MAX"; "USHRT_MAX";
+  "assert"; "intptr_t"; "uintptr_t"; "varargs";
+
+  (* VeriFast keywords *)
+  "__int8"; "__int16"; "__int32"; "__int64"; "__int128"; "__minvalue"; "__maxvalue";
+(* Note: it's important for soundness that currentCodeFractions, currentThread, and varargs be considered keywords both inside and outside of annotations. *)
+  "currentCodeFractions"; "currentThread"; "real" (* "real" really should be a ghost keyword, but it's used in vf__floating_point.h... *)
+]
+
 let java_keywords = [
   (* JLS6 keywords *)
   "abstract"; "assert"; "boolean"; "break"; "byte"; "case"; "catch"; "char"; "class"; "const";
