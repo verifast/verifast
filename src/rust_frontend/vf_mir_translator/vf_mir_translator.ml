@@ -220,13 +220,29 @@ module LocAux = struct
 end
 
 module AstAux = struct
+  open Ast
+
   let list_to_sep_conj asns init =
     let f_aux (loc, asn) asn_opt =
       match asn_opt with
       | None -> Some asn
-      | Some asn1 -> Some (Ast.Sep (loc, asn, asn1))
+      | Some asn1 -> Some (Sep (loc, asn, asn1))
     in
     List.fold_right f_aux asns init
+
+  let decl_name (d : decl) =
+    match d with
+    | Struct (loc, name, definition_opt, attrs) -> Some name
+    | _ -> failwith "Todo: get Ast.decl name"
+
+  let decl_fields (d : decl) =
+    match d with
+    | Struct (loc, name, definition_opt, attrs) -> (
+        match definition_opt with
+        | Some (base_specs, fields, instance_pred_decls, is_polymorphic) ->
+            Ok (Some fields)
+        | None -> Ok None)
+    | _ -> failwith "Todo: get Ast.decl fields"
 end
 
 module SizeAux : sig
@@ -363,6 +379,19 @@ module Mir = struct
 
   type debug_info = { id : Ast.loc; info : var_debug_info list }
   type visibility = Public | Restricted | Invisible
+  type adt_kind = Struct | Enum | Union
+
+  let decl_mir_adt_kind (d : Ast.decl) =
+    match d with
+    | Ast.Struct _ -> Ok Struct
+    | Ast.Union _ -> failwith "Todo: Unsupported ADT"
+    | _ -> Error (`DeclMirAdtKind "Not an ADT")
+
+  type aggregate_kind = {
+    adt_kind : adt_kind;
+    name : string;
+    fields : Ast.field list;
+  }
 end
 
 module TrTyTuple = struct
@@ -931,6 +960,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         translate_tuple_ty substs_cpn loc
     | Undefined _ -> Error (`TrTy "Unknown Rust type kind")
 
+  type body_tr_defs_ctx = { adt_defs : Ast.decl list }
   type var_id_trs_entry = { id : string; internal_name : string }
   type var_id_trs_map = var_id_trs_entry list
 
@@ -938,12 +968,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     val var_id_trs_map_ref : var_id_trs_map ref
     val ghost_stmts : Ast.stmt list
     val body_imp_loc : Ast.loc
+    val body_tr_defs_ctx : body_tr_defs_ctx
   end) =
   struct
     module State = struct
       let var_id_trs_map_ref = Args.var_id_trs_map_ref
       let ghost_stmts = ref Args.ghost_stmts
       let body_imp_loc = Args.body_imp_loc
+      let body_tr_defs_ctx = Args.body_tr_defs_ctx
 
       let fetch_ghost_stmts_before (l : Ast.loc0) =
         let* gs_before, gs_rem =
@@ -956,6 +988,23 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         in
         ghost_stmts := gs_rem;
         Ok gs_before
+
+      let get_adt_def name =
+        let adt_defs, _ =
+          List.partition
+            (fun adt_def ->
+              match AstAux.decl_name adt_def with
+              | Some n -> n = name
+              | None -> false)
+            body_tr_defs_ctx.adt_defs
+        in
+        match adt_defs with
+        | [] -> Ok None
+        | [ adt_def ] -> Ok (Some adt_def)
+        | _ ->
+            Error
+              (`GetAdtDef
+                ("More than one definition have been found for " ^ name))
     end
 
     let translate_local_decl_id (local_decl_id_cpn : LocalDeclIdRd.t) =
@@ -1407,6 +1456,46 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let* operandr = translate_operand operandr_cpn loc in
       Ok (operator, operandl, operandr)
 
+    let translate_aggregate_kind (agg_kind_cpn : AggregateKindRd.t) =
+      let open AggregateKindRd in
+      match get agg_kind_cpn with
+      | Array es_ty -> failwith "Todo: AggregateKind::Array"
+      | Tuple -> failwith "Todo: AggregateKind::Tuple"
+      | Adt adt_data_cpn ->
+          let open AdtData in
+          let id_cpn = id_get adt_data_cpn in
+          let def_path = translate_adt_def_id id_cpn in
+          let name = TrName.translate_def_path def_path in
+          let* adt_def = State.get_adt_def name in
+          let* adt_def =
+            match adt_def with
+            | None -> Error (`TrAggregateKind ("No decl found for " ^ name))
+            | Some adt_def -> Ok adt_def
+          in
+          let* adt_kind = Mir.decl_mir_adt_kind adt_def in
+          let* fields =
+            let* fields = AstAux.decl_fields adt_def in
+            match fields with
+            | Some fields -> Ok fields
+            | None -> Error (`TrAggregateKind "Adt without fields definition")
+          in
+          let variant_idx_cpn = variant_idx_get adt_data_cpn in
+          let substs_cpn = substs_get_list adt_data_cpn in
+          Ok Mir.{ adt_kind; name; fields }
+      | Closure -> failwith "Todo: AggregateKind::Closure"
+      | Generator -> failwith "Todo: AggregateKind::Generator"
+      | Undefined _ -> Error (`TrAggregateKind "Unknown AggregateKind")
+
+    let translate_aggregate (agg_data_cpn : RvalueAggregateDataRd.t)
+        (loc : Ast.loc) =
+      let open RvalueAggregateDataRd in
+      let agg_kind_cpn = aggregate_kind_get agg_data_cpn in
+      let agg_kind = translate_aggregate_kind agg_kind_cpn in
+      let operands_cpn = operands_get_list agg_data_cpn in
+      let operands_cpn = List.map (fun op -> (op, loc)) operands_cpn in
+      let* tmp_rvalue_binders, operands = translate_operands operands_cpn in
+      Ok ()
+
     let translate_rvalue (rvalue_cpn : RvalueRd.t) (loc : Ast.loc) =
       let open RvalueRd in
       let tr_operand operand =
@@ -1465,6 +1554,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let* operandl = tr_operand operandl in
           let* operandr = tr_operand operandr in
           Ok (`TrRvalueBinaryOp (operator, operandl, operandr))
+      | Aggregate agg_data_cpn -> failwith "Todo: Rvalue::Aggregate"
       | Undefined _ -> Error (`TrRvalue "Unknown Rvalue kind")
 
     let translate_statement_kind (statement_kind_cpn : StatementKindRd.t)
@@ -1825,7 +1915,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let* loc = translate_span_data span_cpn in
     Ok (params, loc)
 
-  let translate_body (body_cpn : BodyRd.t) =
+  let translate_body (body_tr_defs_ctx : body_tr_defs_ctx) (body_cpn : BodyRd.t)
+      =
     let open BodyRd in
     let var_id_trs_map_ref = ref [] in
     let ghost_stmts_cpn = ghost_stmts_get_list body_cpn in
@@ -1846,6 +1937,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let var_id_trs_map_ref = var_id_trs_map_ref
       let ghost_stmts = ghost_stmts
       let body_imp_loc = imp_loc
+      let body_tr_defs_ctx = body_tr_defs_ctx
     end) in
     let vdis_cpn = var_debug_info_get_list body_cpn in
     (* Since var id translation map is empty var debug info contains the plain Mir ids *)
@@ -2054,7 +2146,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       in
       let ghost_decls = List.flatten ghost_decl_batches in
       let bodies_cpn = VfMirRd.bodies_get_list vf_mir_cpn in
-      let* bodies_and_dbg_infos = ListAux.try_map translate_body bodies_cpn in
+      let body_tr_defs_ctx = { adt_defs } in
+      let* bodies_and_dbg_infos =
+        ListAux.try_map (translate_body body_tr_defs_ctx) bodies_cpn
+      in
       let body_decls, debug_infos = List.split bodies_and_dbg_infos in
       let debug_infos = VF0.DbgInfoRustFe debug_infos in
       let decls = AstDecls.decls () in

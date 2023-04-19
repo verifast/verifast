@@ -59,6 +59,8 @@ module ConstValueRd = BodyRd.ConstValue
 module ScalarRd = BodyRd.Scalar
 module BinaryOpDataRd = RvalueRd.BinaryOpData
 module BinOpRd = BinaryOpDataRd.BinOp
+module RvalueAggregateDataRd = RvalueRd.AggregateData
+module AggregateKindRd = RvalueAggregateDataRd.AggregateKind
 
 (* Types *)
 module TyRd = VfMirStub.Reader.Ty
