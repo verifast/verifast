@@ -244,6 +244,7 @@ type token = (* ?token *)
   | Eol
   | ErrorToken
   | Eof
+  | PrimePrefixedIdent of string (* Rust lifetime token, e.g. 'abc *)
 
 let string_of_include_kind = function
   DoubleQuoteInclude -> "DoubleQuoteInclude"
@@ -617,8 +618,21 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
           try char () with
             Stream.Failure -> error "Bad character literal."
         in
-        begin match text_peek () with
-          '\'' -> text_junk (); Some (CharToken c)
+        begin match text_peek (), c with
+          '\'', _ -> text_junk (); Some (CharToken c)
+        | _, ('A'..'Z'|'a'..'z'|'_') when Hashtbl.mem kwd_table "'a" ->
+          reset_buffer ();
+          store c;
+          let rec iter () =
+            match text_peek () with
+              'A'..'Z'|'a'..'z'|'0'..'9'|'_' as c ->
+              text_junk ();
+              store c;
+              iter ()
+            | _ ->
+              Some (PrimePrefixedIdent (get_string ()))
+          in
+          iter ()
         | _ -> error "Single quote expected."
         end
     | '"' ->

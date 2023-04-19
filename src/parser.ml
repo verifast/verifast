@@ -94,7 +94,9 @@ let rust_keywords = [
   ">="; "<="; "@"; "_"; "."; ".."; "..."; "..="; ","; ";"; ":"; "::"; "->";
   "=>"; "#"; "$"; "?"; "~";
 
-  "{"; "}"; "["; "]"; "("; ")"
+  "{"; "}"; "["; "]"; "("; ")";
+
+  "'a" (* this pseudo-keyword is a hack; its presence signals to the lexer that tokens of the form 'abc (i.e. Rust lifetime tokens) are allowed *)
 ]
 
 let java_keywords = [
