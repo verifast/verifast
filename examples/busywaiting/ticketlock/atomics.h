@@ -20,7 +20,7 @@ lemma void open_atomic_space(void *name, predicate() inv);
     ensures atomic_spaces(cons(pair(name, inv), spaces)) &*& [f]atomic_space(name, inv) &*& inv();
 
 lemma void close_atomic_space(void *name, predicate() inv);
-    requires atomic_spaces(?spaces) &*& inv();
+    requires atomic_spaces(?spaces) &*& inv() &*& mem(pair(name, inv), spaces) == true;
     ensures atomic_spaces(remove(pair(name, inv), spaces));
 
 // A fixpoint that may be useful in clients of this header.
@@ -35,6 +35,10 @@ predicate counter(unsigned long long *pull; unsigned long long value);
 lemma void create_counter(unsigned long long *pull);
     requires *pull |-> 0;
     ensures counter(pull, 0);
+
+lemma void destroy_counter(unsigned long long *pull);
+    requires counter(pull, ?value);
+    ensures *pull |-> value;
 
 @*/
 
