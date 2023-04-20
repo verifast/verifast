@@ -24,7 +24,7 @@ predicate_ctor atomic_space_inv(void *signal)() =
       !spaceRemoved
   :
       flag == 1 &*&
-      g.lock |-> ?lock &*& ticketlock_held(lock, {N, 0}, ticketlock_inv, 1) &*&
+      g.lock |-> ?lock &*& ticketlock_held(lock, {N, 0}, ticketlock_inv, 1, _) &*&
       [1/2]counter(&g.flag, flag) &*&
       [1/2]g.lockHeld |-> true &*&
       spaceRemoved ?
@@ -59,35 +59,35 @@ requires
 {
   {
     /*@
-    predicate wait_inv(int owner, void *f) = [1/2]g.lockHeld |-> false &*& owner == -1;
-    predicate post() = obs(?p, {pair(signal, {N, 1})}) &*& [1/2]g.lockHeld |-> true;
+    predicate wait_inv(int owner, void *f, list<pathcomp> p1) = [1/2]g.lockHeld |-> false &*& owner == -1;
+    predicate post(int ticket) = obs(?p, {pair(signal, {N, 1})}) &*& [1/2]g.lockHeld |-> true;
     @*/
     /*@
-    produce_lemma_function_pointer_chunk ticketlock_wait_ghost_op({Forkee}, {N, 0}, ticketlock_inv, wait_inv, currentThread)(f) {
+    produce_lemma_function_pointer_chunk ticketlock_wait_ghost_op({N, 0}, ticketlock_inv, wait_inv, currentThread)(f) {
       open ticketlock_inv(_, _);
-      open wait_inv(_, _);
+      open wait_inv(_, _, _);
       assert false;
     };
     @*/
     /*@
-    produce_lemma_function_pointer_chunk ticketlock_acquire_ghost_op({Forkee}, {pair(signal, {N, 1})}, {N, 0}, ticketlock_inv, wait_inv, post, currentThread)() {
+    produce_lemma_function_pointer_chunk ticketlock_acquire_ghost_op({pair(signal, {N, 1})}, {N, 0}, ticketlock_inv, wait_inv, post, currentThread)() {
       open ticketlock_inv(?owner, _);
-      open wait_inv(_, _);
+      open wait_inv(_, _, _);
       g.lockHeld = true;
       close ticketlock_inv(owner, true);
-      close post();
+      close post(owner);
     };
     @*/
-    //@ close wait_inv(-1, 0);
+    //@ close wait_inv(-1, 0, {Forkee});
     ticketlock_acquire(g.lock);
-    //@ open post();
+    //@ open post(_);
   }
   {
     /*@
     predicate pre() =
       obs(_, cons(pair(signal, {N, 1}), {})) &*& [1/2]atomic_space(main, atomic_space_inv(signal)) &*&
       g.lock |-> lock &*& [1/2]g.lockHeld |-> true &*& [1/2]counter(&g.flag, 0) &*&
-      ticketlock_held(lock, {N, 0}, ticketlock_inv, 1);
+      ticketlock_held(lock, {N, 0}, ticketlock_inv, 1, _);
     predicate post() = obs(_, {});
     @*/
     /*@
@@ -165,13 +165,15 @@ requires
   }
   //@ destroy_atomic_space();
   //@ open atomic_space_inv(signal)();
+  //@ ticketlock lock = g.lock;
+  //@ assert ticketlock_held(lock, _, _, _, ?ticket);
   {
     /*@
     predicate pre() = [1/2]g.lockHeld |-> true;
     predicate post() = [1/2]g.lockHeld |-> false;
     @*/
     /*@
-    produce_lemma_function_pointer_chunk ticketlock_release_ghost_op(ticketlock_inv, pre, post, currentThread)() {
+    produce_lemma_function_pointer_chunk ticketlock_release_ghost_op(ticketlock_inv, ticket, pre, post, currentThread)() {
       open pre();
       open ticketlock_inv(?owner, true);
       g.lockHeld = false;

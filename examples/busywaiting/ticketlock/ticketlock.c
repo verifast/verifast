@@ -109,13 +109,13 @@ predicate ticketlock(ticketlock lock; list<int> level, predicate(int, bool) inv)
     pointer_within_limits(&lock->owner) == true &*&
     atomic_space(create_ticketlock, ticketlock_inv(lock, level, inv, signalsBox, incrBox));
 
-predicate ticketlock_held(ticketlock lock; list<int> level, predicate(int, bool) inv, real f) =
+predicate ticketlock_held(ticketlock lock; list<int> level, predicate(int, bool) inv, real f, int ticket) =
     [1/2]lock->heldFrac |-> f &*&
     [f/2]lock->level |-> level &*& [f]lock->inv_ |-> inv &*& [f]lock->signalsBox |-> ?signalsBox &*& [f]lock->incrBox |-> ?incrBox &*& [f]malloc_block_ticketlock(lock) &*&
     level == cons(?level_max_length, ?level0) &*& length(level0) + ticketlock_nb_level_dims <= level_max_length &*&
     pointer_within_limits(&lock->owner) == true &*&
     [f]atomic_space(create_ticketlock, ticketlock_inv(lock, level, inv, signalsBox, incrBox)) &*&
-    [1/2]lock->held_ |-> true &*& [1/2]counter(&lock->owner, _);
+    [1/2]lock->held_ |-> true &*& [1/2]counter(&lock->owner, ticket);
 
 @*/
 
@@ -157,15 +157,15 @@ requires
     level == cons(?level_max_length, ?level0) &*& length(level0) + ticketlock_nb_level_dims <= level_max_length &*&
     [f]atomic_space(create_ticketlock, ticketlock_inv(lock, level, inv, signalsBox, incrBox)) &*&
     has_at(?hasAtHandle, signalsBox, ticket, ?signal) &*&
-    is_ticketlock_wait_ghost_op(?wop, ?p, level, inv, ?wait_inv, currentThread) &*&
-    obs(p, cons(pair(signal, append(level, {ticket})), ?obs)) &*&
-    is_ticketlock_acquire_ghost_op(?aop, p, obs, level, inv, wait_inv, ?post, currentThread) &*&
-    wait_inv(-1, _) &*& call_below_perms(ticket + 1, p, ticketlock_acquire) &*& is_lower_bound(_, incrBox, -1) &*&
+    is_ticketlock_wait_ghost_op(?wop, level, inv, ?wait_inv, currentThread) &*&
+    obs(?p, cons(pair(signal, append(level, {ticket})), ?obs)) &*&
+    is_ticketlock_acquire_ghost_op(?aop, obs, level, inv, wait_inv, ?post, currentThread) &*&
+    wait_inv(-1, _, p) &*& call_below_perms(ticket + 1, p, ticketlock_acquire) &*& is_lower_bound(_, incrBox, -1) &*&
     pointer_within_limits(&lock->owner) == true &*&
     forall(map(snd, obs), (all_sublevels_lt)(ticketlock_nb_level_dims, level)) == true &*&
     call_below_perm_(currentThread, ticketlock_acquire);
 @*/
-//@ ensures ticketlock_held(lock, level, inv, f) &*& post();
+//@ ensures ticketlock_held(lock, level, inv, f, ticket) &*& post(ticket);
 //@ terminates;
 {
     //@ close exists(false);
@@ -175,11 +175,11 @@ requires
         [f]lock->level |-> level &*&
         [f]atomic_space(create_ticketlock, ticketlock_inv(lock, level, inv, signalsBox, incrBox)) &*&
         has_at(hasAtHandle, signalsBox, ticket, signal) &*&
-        is_ticketlock_wait_ghost_op(wop, p, level, inv, wait_inv, currentThread) &*&
-        is_ticketlock_acquire_ghost_op(aop, p, obs, level, inv, wait_inv, post, currentThread) &*&
+        is_ticketlock_wait_ghost_op(wop, level, inv, wait_inv, currentThread) &*&
+        is_ticketlock_acquire_ghost_op(aop, obs, level, inv, wait_inv, post, currentThread) &*&
         obs(p, cons(pair(signal, append(level, {ticket})), obs)) &*&
         exists<bool>(?startedWaiting) &*&
-        wait_inv(?owner0, ?f0) &*& call_below_perms(ticket - owner0, p, ticketlock_acquire) &*& is_lower_bound(?lbHandle, incrBox, owner0) &*& (owner0 == -1 || f0 == ticketlock_acquire_helper) &*&
+        wait_inv(?owner0, ?f0, p) &*& call_below_perms(ticket - owner0, p, ticketlock_acquire) &*& is_lower_bound(?lbHandle, incrBox, owner0) &*& (owner0 == -1 || f0 == ticketlock_acquire_helper) &*&
         startedWaiting ?
             1 <= ticket &*& has_at(_, signalsBox, ticket - 1, ?predecessorSignal) &*& wait_perm(p, predecessorSignal, append(level, {ticket - 1}), ticketlock_acquire_helper)
         :
@@ -194,10 +194,10 @@ requires
                 [f]lock->level |-> level &*&
                 [f]atomic_space(create_ticketlock, ticketlock_inv(lock, level, inv, signalsBox, incrBox)) &*&
                 has_at(hasAtHandle, signalsBox, ticket, signal) &*&
-		is_ticketlock_wait_ghost_op(wop, p, level, inv, wait_inv, currentThread) &*&
-		is_ticketlock_acquire_ghost_op(aop, p, obs, level, inv, wait_inv, post, currentThread) &*&
+		is_ticketlock_wait_ghost_op(wop, level, inv, wait_inv, currentThread) &*&
+		is_ticketlock_acquire_ghost_op(aop, obs, level, inv, wait_inv, post, currentThread) &*&
 		obs(p, cons(pair(signal, append(level, {ticket})), obs)) &*&
-		wait_inv(owner0, f0) &*& call_below_perms(ticket - owner0, p, ticketlock_acquire) &*& is_lower_bound(lbHandle, incrBox, owner0) &*& (owner0 == -1 || f0 == ticketlock_acquire_helper) &*&            
+		wait_inv(owner0, f0, p) &*& call_below_perms(ticket - owner0, p, ticketlock_acquire) &*& is_lower_bound(lbHandle, incrBox, owner0) &*& (owner0 == -1 || f0 == ticketlock_acquire_helper) &*&            
 		startedWaiting ?
 		    1 <= ticket &*& has_at(_, signalsBox, ticket - 1, ?predecessorSignal) &*& wait_perm(p, predecessorSignal, append(level, {ticket - 1}), ticketlock_acquire_helper)
 		:
@@ -205,7 +205,7 @@ requires
             predicate post_(int result) =
                 [f]atomic_space(create_ticketlock, ticketlock_inv(lock, level, inv, signalsBox, incrBox)) &*&
                 result == ticket ?
-                    post() &*&
+                    post(ticket) &*&
                     [1/2]lock->heldFrac |-> f &*&
                     [f/2]lock->level |-> level &*&
                     [1/2]lock->held_ |-> true &*&
@@ -214,11 +214,11 @@ requires
                     [f]lock->level |-> level &*&
                     call_perm_(currentThread, ticketlock_acquire_helper) &*&
                     has_at(hasAtHandle, signalsBox, ticket, signal) &*&
-		    is_ticketlock_wait_ghost_op(wop, p, level, inv, wait_inv, currentThread) &*&
-		    is_ticketlock_acquire_ghost_op(aop, p, obs, level, inv, wait_inv, post, currentThread) &*&
+		    is_ticketlock_wait_ghost_op(wop, level, inv, wait_inv, currentThread) &*&
+		    is_ticketlock_acquire_ghost_op(aop, obs, level, inv, wait_inv, post, currentThread) &*&
 		    obs(p, cons(pair(signal, append(level, {ticket})), obs)) &*&
 		    exists<bool>(?startedWaiting1) &*&
-		    wait_inv(?owner1, ?f1) &*& call_below_perms(ticket - owner1, p, ticketlock_acquire) &*& is_lower_bound(?lbHandle1, incrBox, owner1) &*& (owner1 == -1 || f1 == ticketlock_acquire_helper) &*&            
+		    wait_inv(?owner1, ?f1, p) &*& call_below_perms(ticket - owner1, p, ticketlock_acquire) &*& is_lower_bound(?lbHandle1, incrBox, owner1) &*& (owner1 == -1 || f1 == ticketlock_acquire_helper) &*&            
 		    startedWaiting1 ?
 		        1 <= ticket &*& has_at(_, signalsBox, ticket - 1, ?predecessorSignal) &*& wait_perm(p, predecessorSignal, append(level, {ticket - 1}), ticketlock_acquire_helper)
 		    :
@@ -249,8 +249,8 @@ requires
                     leak has_at(hasAtHandle, signalsBox, ticket, signal);
                     is_ancestor_of_refl(p);
                     aop();
-                    leak is_ticketlock_acquire_ghost_op(aop, p, obs, level, inv, wait_inv, post, currentThread);
-                    leak is_ticketlock_wait_ghost_op(wop, p, level, inv, wait_inv, currentThread);
+                    leak is_ticketlock_acquire_ghost_op(aop, obs, level, inv, wait_inv, post, currentThread);
+                    leak is_ticketlock_wait_ghost_op(wop, level, inv, wait_inv, currentThread);
                     leak call_below_perms(ticket - owner0, p, ticketlock_acquire);
                     leak is_lower_bound(_, _, _);
                     if (startedWaiting) {
@@ -283,7 +283,7 @@ requires
                             list<int> badLevel = not_forall(map(snd, obs), (level_lt)(level));
                             forall_elim(map(snd, obs), (all_sublevels_lt)(ticketlock_nb_level_dims, level), badLevel);
                             assert badLevel == cons(level_max_length, ?badLevel0);
-                            all_sublevel0s_lt_append(level_max_length, level0, {}, badLevel0);
+                            all_sublevel0s_lt_level0_lt(level_max_length, level0, {}, badLevel0);
                             assert false;
                         }
                         level0_lt_append(level_max_length, level0, {}, {ticket});
@@ -334,7 +334,7 @@ requires
                                         list<int> badLevel = not_forall(map(snd, obs), (level_lt)(append(level, {ticket - 1})));
                                         forall_elim(map(snd, obs), (all_sublevels_lt)(ticketlock_nb_level_dims, level), badLevel);
                                         assert badLevel == cons(level_max_length, ?badLevel0);
-                                        all_sublevel0s_lt_append(level_max_length, level0, {ticket - 1}, badLevel0);
+                                        all_sublevel0s_lt_level0_lt(level_max_length, level0, {ticket - 1}, badLevel0);
                                         assert false;
                                     }
                                     wait(nth(ticket - 1, signals));
@@ -360,7 +360,7 @@ requires
         if (owner == ticket)
             break;
     }
-    //@ close ticketlock_held(lock, level, inv, f);
+    //@ close ticketlock_held(lock, level, inv, f, ticket);
 }
 
 void ticketlock_acquire(ticketlock lock)
@@ -369,11 +369,11 @@ requires
     [?f]ticketlock(lock, ?level, ?inv) &*&
     obs(?p, ?obs) &*& 
     forall(map(snd, obs), (all_sublevels_lt)(ticketlock_nb_level_dims, level)) == true &*&
-    is_ticketlock_wait_ghost_op(?wop, p, level, inv, ?wait_inv, currentThread) &*&
-    is_ticketlock_acquire_ghost_op(?aop, p, obs, level, inv, wait_inv, ?post, currentThread) &*&
-    wait_inv(-1, _);
+    is_ticketlock_wait_ghost_op(?wop, level, inv, ?wait_inv, currentThread) &*&
+    is_ticketlock_acquire_ghost_op(?aop, obs, level, inv, wait_inv, ?post, currentThread) &*&
+    wait_inv(-1, _, p);
 @*/
-//@ ensures ticketlock_held(lock, level, inv, f) &*& post();
+//@ ensures ticketlock_held(lock, level, inv, f, ?ticket) &*& post(ticket);
 //@ terminates;
 {
     //@ box signalsBox = lock->signalsBox;
@@ -433,11 +433,11 @@ requires
 }
 
 void ticketlock_release(ticketlock lock)
-//@ requires ticketlock_held(lock, ?level, ?inv, ?f) &*& is_ticketlock_release_ghost_op(?ghop, inv, ?pre, ?post, currentThread) &*& pre();
+//@ requires ticketlock_held(lock, ?level, ?inv, ?f, ?ticket) &*& is_ticketlock_release_ghost_op(?ghop, inv, ticket, ?pre, ?post, currentThread) &*& pre();
 //@ ensures [f]ticketlock(lock, level, inv) &*& post();
 //@ terminates;
 {
-    //@ open ticketlock_held(lock, level, inv, f);
+    //@ open ticketlock_held(lock, level, inv, f, ticket);
     //@ box signalsBox = lock->signalsBox;
     //@ box incrBox = lock->incrBox;
     unsigned long long ownerPlusOne = get_counter_plus_one(&lock->owner);
@@ -445,7 +445,7 @@ void ticketlock_release(ticketlock lock)
         /*@
         predicate pre_() =
 	    [f]atomic_space(create_ticketlock, ticketlock_inv(lock, level, inv, signalsBox, incrBox)) &*&
-	    is_ticketlock_release_ghost_op(ghop, inv, pre, post, currentThread) &*& pre() &*&
+	    is_ticketlock_release_ghost_op(ghop, inv, ticket, pre, post, currentThread) &*& pre() &*&
 	    [1/2]lock->held_ |-> true &*& [1/2]lock->heldFrac |-> f &*& [1/2]counter(&lock->owner, ownerPlusOne - 1);
         predicate post_() =
             post() &*&
@@ -471,7 +471,7 @@ void ticketlock_release(ticketlock lock)
             lock->held_ = false;
             
             ghop();
-            leak is_ticketlock_release_ghost_op(ghop, inv, pre, post, currentThread);
+            leak is_ticketlock_release_ghost_op(ghop, inv, ticket, pre, post, currentThread);
             
             close ticketlock_inv(lock, level, inv, signalsBox, incrBox)();
             close_atomic_space(create_ticketlock, ticketlock_inv(lock, level, inv, signalsBox, incrBox));
@@ -486,7 +486,7 @@ void ticketlock_release(ticketlock lock)
 
 void ticketlock_dispose(ticketlock lock)
 //@ requires ticketlock(lock, ?level, ?inv);
-//@ ensures inv(_, _);
+//@ ensures inv(_, false);
 //@ terminates;
 {
   //@ open ticketlock(_, _, _);

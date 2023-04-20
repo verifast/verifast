@@ -49,6 +49,28 @@ fixpoint bool level0_lt(int max_length, list<int> l1, list<int> l2) {
   }
 }
 
+lemma void level0_lt_trans(int max_length, list<int> l1, list<int> l2, list<int> l3)
+    requires level0_lt(max_length, l1, l2) && level0_lt(max_length, l2, l3);
+    ensures level0_lt(max_length, l1, l3) == true;
+{
+    switch (l1) {
+        case nil:
+            assert l2 == cons(_, _);
+            assert l3 == cons(_, _);
+        case cons(h1, t1):
+            assert l2 == cons(?h2, ?t2);
+            assert l3 == cons(?h3, ?t3);
+            if (0 < h2 && h1 < h2) {
+            } else {
+                assert h1 == h2 && level0_lt(max_length - 1, t1, t2);
+                if (0 < h3 && h2 < h3) {
+                } else {
+                    level0_lt_trans(max_length - 1, t1, t2, t3);
+                }
+            }
+    }
+}
+
 lemma void level0_lt_nonpos_max_length(int max_length, list<int> l1, list<int> l2)
     requires max_length <= 0;
     ensures !level0_lt(max_length, l1, l2);
@@ -90,7 +112,7 @@ fixpoint bool all_sublevel0s_lt(list<int> l1, list<int> l2) {
   }
 }
 
-lemma void all_sublevel0s_lt_append(int max_length, list<int> l, list<int> l1, list<int> l2)
+lemma void all_sublevel0s_lt_level0_lt(int max_length, list<int> l, list<int> l1, list<int> l2)
     requires all_sublevel0s_lt(l, l2) == true && length(l) < max_length;
     ensures level0_lt(max_length, append(l, l1), l2) == true;
 {
@@ -99,7 +121,32 @@ lemma void all_sublevel0s_lt_append(int max_length, list<int> l, list<int> l1, l
         case cons(h, t):
             assert l2 == cons(?h2, ?t2);
             if (h == h2)
-                all_sublevel0s_lt_append(max_length - 1, t, l1, t2);
+                all_sublevel0s_lt_level0_lt(max_length - 1, t, l1, t2);
+    }
+}
+
+lemma void all_sublevel0s_lt_append(list<int> l, list<int> l1, list<int> l2)
+    requires all_sublevel0s_lt(l1, l2) == true;
+    ensures all_sublevel0s_lt(append(l, l1), append(l, l2)) == true;
+{
+    switch (l) {
+        case nil:
+        case cons(h, t):
+            all_sublevel0s_lt_append(t, l1, l2);
+    }
+}
+
+lemma void all_sublevel0s_lt_append_l(list<int> l1, list<int> l, list<int> l2)
+    requires all_sublevel0s_lt(l1, l2) == true;
+    ensures all_sublevel0s_lt(append(l1, l), l2) == true;
+{
+    switch (l1) {
+        case nil:
+        case cons(h1, t1):
+            assert l2 == cons(?h2, ?t2);
+            if (h1 == h2) {
+                all_sublevel0s_lt_append_l(t1, l, t2);
+            }
     }
 }
 

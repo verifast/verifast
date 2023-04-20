@@ -15,7 +15,7 @@ lemma_auto void ticketlock_nb_level_dims_nonneg();
     ensures 0 <= ticketlock_nb_level_dims();
 
 predicate ticketlock(ticketlock lock; list<int> level, predicate(int, bool) inv);
-predicate ticketlock_held(ticketlock lock; list<int> level, predicate(int, bool) inv, real f);
+predicate ticketlock_held(ticketlock lock; list<int> level, predicate(int, bool) inv, real f, int ticket);
 
 @*/
 
@@ -30,19 +30,20 @@ requires
 
 /*@
 
-typedef lemma void ticketlock_wait_ghost_op(list<pathcomp> p, list<int> level, predicate(int, bool) inv, predicate(int, void *) wait_inv, int callerThread)(void *f);
+typedef lemma void ticketlock_wait_ghost_op(list<int> level, predicate(int, bool) inv, predicate(int, void *, list<pathcomp>) wait_inv, int callerThread)(void *f);
     requires
-        obs(?p1, ?obs) &*& is_ancestor_of(p, p1) == true &*& forall(map(snd, obs), (level_lt)(level)) == true &*&
-        inv(?owner, true) &*& 0 <= owner &*& wait_inv(?owner0, ?f0) &*& currentThread == callerThread &*& func_lt(f, ticketlock_acquire) == true &*&
+        obs(?p1, ?obs) &*& forall(map(snd, obs), (level_lt)(level)) == true &*&
+        inv(?owner, true) &*& 0 <= owner &*&
+        wait_inv(?owner0, ?f0, ?p0) &*& is_ancestor_of(p0, p1) == true &*& currentThread == callerThread &*& func_lt(f, ticketlock_acquire) == true &*&
         owner == owner0 ? f == f0 : owner0 < owner &*& call_below_perm(p1, ticketlock_acquire);
     ensures
-        obs(p1, obs) &*& inv(owner, true) &*& wait_inv(owner, f) &*& call_perm_(currentThread, f);
+        obs(p1, obs) &*& inv(owner, true) &*& wait_inv(owner, f, p1) &*& call_perm_(currentThread, f);
 
-typedef lemma void ticketlock_acquire_ghost_op(list<pathcomp> p, list<pair<void *, list<int> > > obs, list<int> level, predicate(int, bool) inv, predicate(int, void *) wait_inv, predicate() post, int callerThread)();
+typedef lemma void ticketlock_acquire_ghost_op(list<pair<void *, list<int> > > obs, list<int> level, predicate(int, bool) inv, predicate(int, void *, list<pathcomp>) wait_inv, predicate(int) post, int callerThread)();
     requires
-        obs(?p1, obs) &*& is_ancestor_of(p, p1) == true &*&
-        inv(?owner, false) &*& wait_inv(_, _) &*& currentThread == callerThread;
-    ensures inv(owner, true) &*& post();
+        obs(?p1, obs) &*&
+        inv(?owner, false) &*& wait_inv(_, _, ?p0) &*& is_ancestor_of(p0, p1) == true &*& currentThread == callerThread;
+    ensures inv(owner, true) &*& post(owner);
 
 @*/
 
@@ -52,29 +53,29 @@ requires
     [?f]ticketlock(lock, ?level, ?inv) &*&
     obs(?p, ?obs) &*& 
     forall(map(snd, obs), (all_sublevels_lt)(ticketlock_nb_level_dims, level)) == true &*&
-    is_ticketlock_wait_ghost_op(?wop, p, level, inv, ?wait_inv, currentThread) &*&
-    is_ticketlock_acquire_ghost_op(?aop, p, obs, level, inv, wait_inv, ?post, currentThread) &*&
-    wait_inv(-1, _);
+    is_ticketlock_wait_ghost_op(?wop, level, inv, ?wait_inv, currentThread) &*&
+    is_ticketlock_acquire_ghost_op(?aop, obs, level, inv, wait_inv, ?post, currentThread) &*&
+    wait_inv(-1, _, p);
 @*/
-//@ ensures ticketlock_held(lock, level, inv, f) &*& post();
+//@ ensures ticketlock_held(lock, level, inv, f, ?ticket) &*& post(ticket);
 //@ terminates;
 
 /*@
 
-typedef lemma void ticketlock_release_ghost_op(predicate(int, bool) inv, predicate() pre, predicate() post, int callerThread)();
-    requires inv(?owner, true) &*& pre() &*& currentThread == callerThread;
-    ensures inv(owner + 1, false) &*& post();
+typedef lemma void ticketlock_release_ghost_op(predicate(int, bool) inv, int ticket, predicate() pre, predicate() post, int callerThread)();
+    requires inv(ticket, true) &*& pre() &*& currentThread == callerThread;
+    ensures inv(ticket + 1, false) &*& post();
 
 @*/
 
 void ticketlock_release(ticketlock lock);
-//@ requires ticketlock_held(lock, ?level, ?inv, ?f) &*& is_ticketlock_release_ghost_op(?ghop, inv, ?pre, ?post, currentThread) &*& pre();
+//@ requires ticketlock_held(lock, ?level, ?inv, ?f, ?ticket) &*& is_ticketlock_release_ghost_op(?ghop, inv, ticket, ?pre, ?post, currentThread) &*& pre();
 //@ ensures [f]ticketlock(lock, level, inv) &*& post();
 //@ terminates;
 
 void ticketlock_dispose(ticketlock lock);
 //@ requires ticketlock(lock, ?level, ?inv);
-//@ ensures inv(_, _);
+//@ ensures inv(_, false);
 //@ terminates;
 
 #endif
