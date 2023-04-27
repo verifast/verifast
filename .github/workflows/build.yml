@@ -45,11 +45,13 @@ jobs:
       - name: Compute artifact hashes
         id: hash
         #if: ${{ github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-        run: cd upload && mv verifast-nightly.tar.gz upload/verifast-$VFVERSION-linux.tar.gz && echo "artifact_hashes=$(sha256sum * | base64 -w0)" >> "$GITHUB_OUTPUT"
+        run: |
+          cd upload && mv verifast-nightly.tar.gz upload/verifast-$VFVERSION-linux.tar.gz && echo "artifact_hashes=$(sha256sum * | base64 -w0)" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=verifast-$VFVERSION-linux.tar.gz" >> "$GITHUB_OUTPUT"
 
     outputs:
       artifact_hashes: ${{ steps.hash.outputs.artifact_hashes }}
-      artifact_name: verifast-${{ process.env.VFVERSION }}-linux.tar.gz
+      artifact_name: ${{ steps.hash.outputs.artifact_name }}
 
   # Sign in a separate job to limit ID token exposure
   sign_ubuntu:
