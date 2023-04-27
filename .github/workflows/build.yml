@@ -46,7 +46,7 @@ jobs:
         id: hash
         #if: ${{ github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         run: |
-          cd upload && mv verifast-nightly.tar.gz upload/verifast-$VFVERSION-linux.tar.gz && echo "artifact_hashes=$(sha256sum * | base64 -w0)" >> "$GITHUB_OUTPUT"
+          cd upload && mv verifast-nightly.tar.gz verifast-$VFVERSION-linux.tar.gz && echo "artifact_hashes=$(sha256sum * | base64 -w0)" >> "$GITHUB_OUTPUT"
           echo "artifact_name=verifast-$VFVERSION-linux.tar.gz" >> "$GITHUB_OUTPUT"
 
     outputs:
