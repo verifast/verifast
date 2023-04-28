@@ -73,6 +73,8 @@ jobs:
         #if: ${{ github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         run: |
           echo ${{ needs.build_ubuntu.outputs.artifact_hashes }} | base64 -d > ARTIFACT_SHA256SUMS
+          pwd
+          ls -lR
           unzip binary_package.zip
           sha256sum -c ARTIFACT_SHA256SUMS || exit 1
           mkdir -p upload
