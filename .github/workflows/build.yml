@@ -73,6 +73,7 @@ jobs:
         #if: ${{ github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         run: |
           echo ${{ needs.build_ubuntu.outputs.artifact_hashes }} | base64 -d > ARTIFACT_SHA256SUMS
+          unzip binary_package.zip
           sha256sum -c ARTIFACT_SHA256SUMS || exit 1
           mkdir -p upload
           cosign sign-blob -y ${{ needs.build_ubuntu.outputs.artifact_name }} --output-certificate upload/${{ needs.build_ubuntu.outputs.artifact_name }}-keyless.pem --output-signature upload/${{ needs.build_ubuntu.outputs.artifact_name }}-keyless.sig
@@ -133,10 +134,13 @@ jobs:
       - name: Compute artifact hashes
         id: hash
         #if: ${{ github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-        run: cd upload && mv verifast-nightly.tar.gz upload/verifast-$VFVERSION-linux.tar.gz && echo "artifact_hashes=$(shasum -a 256 * | base64)" >> "$GITHUB_OUTPUT"
+        run: |
+          cd upload && mv verifast-nightly.tar.gz verifast-$VFVERSION-linux.tar.gz && echo "artifact_hashes=$(shasum -a 256 * | base64)" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=verifast-$VFVERSION-macos.tar.gz" >> "$GITHUB_OUTPUT"
 
     outputs:
       artifact_hashes: ${{ steps.hash.outputs.artifact_hashes }}
+      artifact_name: ${{ steps.hash.outputs.artifact_name }}
 
   # Sign in a separate job to limit ID token exposure
   sign_macos:
