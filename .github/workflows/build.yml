@@ -82,6 +82,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: cosign-signature
+          path: upload
 
   build_macos:
     runs-on: macos-11
