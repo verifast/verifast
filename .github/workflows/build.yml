@@ -73,9 +73,7 @@ jobs:
         #if: ${{ github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         run: |
           echo ${{ needs.build_ubuntu.outputs.artifact_hashes }} | base64 -d > ARTIFACT_SHA256SUMS
-          pwd
-          ls -lR
-          unzip binary_package.zip
+          mv verifast-nightly.tar.gz ${{ needs.build_ubuntu.outputs.artifact_name }}
           sha256sum -c ARTIFACT_SHA256SUMS || exit 1
           mkdir -p upload
           cosign sign-blob -y ${{ needs.build_ubuntu.outputs.artifact_name }} --output-certificate upload/${{ needs.build_ubuntu.outputs.artifact_name }}-keyless.pem --output-signature upload/${{ needs.build_ubuntu.outputs.artifact_name }}-keyless.sig
