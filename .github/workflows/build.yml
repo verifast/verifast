@@ -98,8 +98,8 @@ jobs:
               github,
               context,
               core,
-              assetName: context.needs.build_ubuntu.outputs.artifact_name + '.signature',
-              assetPath: 'upload/' + context.needs.build_ubuntu.outputs.artifact_name + '.signature',
+              assetName: '${{ needs.build_ubuntu.outputs.artifact_name }}.signature',
+              assetPath: 'upload/${{ needs.build_ubuntu.outputs.artifact_name }}.signature',
               assetsToDeleteRegex: /-linux\.tar\.gz\.signature$/,
               tag: 'nightly'
             });
