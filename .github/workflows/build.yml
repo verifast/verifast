@@ -61,6 +61,10 @@ jobs:
       id-token: write
 
     steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
       - uses: actions/download-artifact@v3
         with:
           name: binary_package
