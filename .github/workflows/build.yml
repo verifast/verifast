@@ -17,10 +17,11 @@ jobs:
         run: ./setup-build.sh
 
       - name: Build
-        id: build
+        run: ./build.sh
+
+      - name: Rename artifact
+        id: rename_artifact
         run: |
-          set -e
-          ./build.sh
           cd upload
           ARTIFACT_NAME=verifast-$VFVERSION-linux.tar.gz
           mv verifast-nightly.tar.gz $ARTIFACT_NAME
@@ -32,7 +33,7 @@ jobs:
           path: upload
 
     outputs:
-      artifact_name: ${{ steps.build.outputs.artifact_name }}
+      artifact_name: ${{ steps.rename_artifact.outputs.artifact_name }}
 
   # Sign in a separate job to limit ID token exposure
   sign_ubuntu:
