@@ -58,6 +58,7 @@ jobs:
     needs: [build_ubuntu]
     runs-on: ubuntu-latest
     permissions:
+      contents: write
       id-token: write
 
     steps:
