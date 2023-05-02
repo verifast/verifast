@@ -72,17 +72,33 @@ jobs:
       - name: Sign artifact hashes
         #if: ${{ github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         run: |
+          set -e
           echo ${{ needs.build_ubuntu.outputs.artifact_hashes }} | base64 -d > ARTIFACT_SHA256SUMS
           mv verifast-nightly.tar.gz ${{ needs.build_ubuntu.outputs.artifact_name }}
           sha256sum -c ARTIFACT_SHA256SUMS || exit 1
           mkdir -p upload
-          cosign sign-blob -y ${{ needs.build_ubuntu.outputs.artifact_name }} --output-certificate upload/${{ needs.build_ubuntu.outputs.artifact_name }}-keyless.pem --output-signature upload/${{ needs.build_ubuntu.outputs.artifact_name }}-keyless.sig
+          cosign sign-blob -y ${{ needs.build_ubuntu.outputs.artifact_name }} --bundle upload/${{ needs.build_ubuntu.outputs.artifact_name }}.signature
 
-      - name: Upload signature
+      - name: Upload signature as artifact
         uses: actions/upload-artifact@v3
         with:
           name: cosign-signature
           path: upload
+
+      - name: Upload signature as nightly release asset
+        #if: ${{ github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+        uses: actions/github-script@v6
+        with:
+          script: |
+            await require('./upload-release-asset.js')({
+              github,
+              context,
+              core,
+              assetName: context.needs.build_ubuntu.outputs.artifact_name + '.signature',
+              assetPath: 'upload/' + context.needs.build_ubuntu.outputs.artifact_name + '.signature',
+              assetsToDeleteRegex: /-linux\.tar\.gz\.signature$/,
+              tag: 'nightly'
+            });
 
   build_macos:
     runs-on: macos-11
@@ -132,34 +148,6 @@ jobs:
               tag: 'nightly'
             });
 
-      - name: Compute artifact hashes
-        id: hash
-        #if: ${{ github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-        run: |
-          cd upload && mv verifast-nightly.tar.gz verifast-$VFVERSION-linux.tar.gz && echo "artifact_hashes=$(shasum -a 256 * | base64)" >> "$GITHUB_OUTPUT"
-          echo "artifact_name=verifast-$VFVERSION-macos.tar.gz" >> "$GITHUB_OUTPUT"
-
-    outputs:
-      artifact_hashes: ${{ steps.hash.outputs.artifact_hashes }}
-      artifact_name: ${{ steps.hash.outputs.artifact_name }}
-
-  # Sign in a separate job to limit ID token exposure
-  sign_macos:
-    needs: [build_macos]
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-
-    steps:
-      - name: Install cosign
-        #if: ${{ github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-        uses: sigstore/cosign-installer@v3.0.2
-
-      - name: Sign artifact hashes
-        #if: ${{ github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-        run: |
-          echo ${{ needs.build_ubuntu.outputs.artifact_hashes }} | base64 -d > ARTIFACT_SHA256SUMS
-          cosign sign-blob -y ARTIFACT_SHA256SUMS
 
   build_windows:
     runs-on: windows-2019
