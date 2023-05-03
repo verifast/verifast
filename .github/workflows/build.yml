@@ -8,7 +8,6 @@ jobs:
     permissions: {}
 
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
@@ -37,6 +36,7 @@ jobs:
 
   # Sign in a separate job to limit ID token exposure
   sign_ubuntu:
+    if: github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master'
     needs:
       - build_ubuntu
     runs-on: ubuntu-latest
@@ -49,11 +49,9 @@ jobs:
           name: binary-package-ubuntu
 
       - name: Install cosign
-        #if: ${{ github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         uses: sigstore/cosign-installer@v3.0.2
 
       - name: Sign artifact
-        #if: ${{ github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         run: |
           set -e
           mkdir -p upload
@@ -67,6 +65,7 @@ jobs:
 
   # Upload in a separate job to limit the code that has write access to repo contents
   upload_ubuntu:
+    if: github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master'
     needs:
       - build_ubuntu
       - sign_ubuntu
@@ -88,7 +87,6 @@ jobs:
           name: binary-package-ubuntu
       
       - name: Upload binary package as nightly release asset
-        #if: ${{ github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         uses: actions/github-script@v6
         env:
           ARTIFACT_NAME: ${{ needs.build_ubuntu.outputs.artifact_name }}
@@ -109,7 +107,6 @@ jobs:
           name: cosign-signature-ubuntu
       
       - name: Upload signature as nightly release asset
-        #if: ${{ github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         uses: actions/github-script@v6
         env:
           ARTIFACT_NAME: ${{ needs.build_ubuntu.outputs.artifact_name }}
@@ -130,7 +127,6 @@ jobs:
     permissions: {}
 
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
@@ -168,6 +164,7 @@ jobs:
 
   # Sign in a separate job to limit ID token exposure
   sign_macos:
+    if: github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master'
     needs:
       - build_macos
     runs-on: ubuntu-latest
@@ -180,11 +177,9 @@ jobs:
           name: binary-package-macos
 
       - name: Install cosign
-        #if: ${{ github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         uses: sigstore/cosign-installer@v3.0.2
 
       - name: Sign artifact
-        #if: ${{ github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         run: |
           set -e
           mkdir -p upload
@@ -198,6 +193,7 @@ jobs:
 
   # Upload in a separate job to limit the code that has write access to repo contents
   upload_macos:
+    if: github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master'
     needs:
       - build_macos
       - sign_macos
@@ -219,7 +215,6 @@ jobs:
           name: binary-package-macos
       
       - name: Upload binary package as nightly release asset
-        #if: ${{ github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         uses: actions/github-script@v6
         env:
           ARTIFACT_NAME: ${{ needs.build_macos.outputs.artifact_name }}
@@ -240,7 +235,6 @@ jobs:
           name: cosign-signature-macos
       
       - name: Upload signature as nightly release asset
-        #if: ${{ github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         uses: actions/github-script@v6
         env:
           ARTIFACT_NAME: ${{ needs.build_macos.outputs.artifact_name }}
@@ -261,7 +255,6 @@ jobs:
     permissions: {}
 
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
@@ -294,6 +287,7 @@ jobs:
 
   # Sign in a separate job to limit ID token exposure
   sign_windows:
+    if: github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master'
     needs:
       - build_windows
     runs-on: ubuntu-latest
@@ -306,11 +300,9 @@ jobs:
           name: binary-package-windows
 
       - name: Install cosign
-        #if: ${{ github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         uses: sigstore/cosign-installer@v3.0.2
 
       - name: Sign artifact
-        #if: ${{ github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         run: |
           set -e
           mkdir -p upload
@@ -324,6 +316,7 @@ jobs:
 
   # Upload in a separate job to limit the code that has write access to repo contents
   upload_windows:
+    if: github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master'
     needs:
       - build_windows
       - sign_windows
@@ -345,7 +338,6 @@ jobs:
           name: binary-package-windows
       
       - name: Upload binary package as nightly release asset
-        #if: ${{ github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         uses: actions/github-script@v6
         env:
           ARTIFACT_NAME: ${{ needs.build_windows.outputs.artifact_name }}
@@ -366,7 +358,6 @@ jobs:
           name: cosign-signature-windows
       
       - name: Upload signature as nightly release asset
-        #if: ${{ github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         uses: actions/github-script@v6
         env:
           ARTIFACT_NAME: ${{ needs.build_windows.outputs.artifact_name }}
