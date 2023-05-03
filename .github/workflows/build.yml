@@ -5,9 +5,9 @@ on: [push, pull_request]
 jobs:
   build_ubuntu:
     runs-on: ubuntu-20.04
+    permissions: {}
 
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
@@ -18,35 +18,115 @@ jobs:
       - name: Build
         run: ./build.sh
 
+      - name: Rename artifact
+        id: rename_artifact
+        run: |
+          cd upload
+          ARTIFACT_NAME=verifast-$VFVERSION-linux.tar.gz
+          mv verifast-nightly.tar.gz $ARTIFACT_NAME
+          echo "artifact_name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+
       - uses: actions/upload-artifact@v3
         with:
-          name: binary_package
+          name: binary-package-ubuntu
           path: upload
+
+    outputs:
+      artifact_name: ${{ steps.rename_artifact.outputs.artifact_name }}
+
+  # Sign in a separate job to limit ID token exposure
+  sign_ubuntu:
+    if: github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs:
+      - build_ubuntu
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+
+    steps:
+      - uses: actions/download-artifact@v3
+        with:
+          name: binary-package-ubuntu
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.0.2
+
+      - name: Sign artifact
+        run: |
+          set -e
+          mkdir -p upload
+          cosign sign-blob -y ${{ needs.build_ubuntu.outputs.artifact_name }} --bundle upload/${{ needs.build_ubuntu.outputs.artifact_name }}.signature
+
+      - name: Upload signature as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: cosign-signature-ubuntu
+          path: upload
+
+  # Upload in a separate job to limit the code that has write access to repo contents
+  upload_ubuntu:
+    if: github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs:
+      - build_ubuntu
+      - sign_ubuntu
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
       - name: Set and push nightly tag
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         run: git tag -f nightly && git push -f origin nightly:refs/tags/nightly
 
-      - name: Upload nightly release assets
-        if: ${{ github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+      - uses: actions/download-artifact@v3
+        with:
+          name: binary-package-ubuntu
+      
+      - name: Upload binary package as nightly release asset
         uses: actions/github-script@v6
+        env:
+          ARTIFACT_NAME: ${{ needs.build_ubuntu.outputs.artifact_name }}
         with:
           script: |
             await require('./upload-release-asset.js')({
               github,
               context,
               core,
-              assetName: 'verifast-' + process.env.VFVERSION + '-linux.tar.gz',
-              assetPath: 'upload/verifast-nightly.tar.gz',
+              assetName: process.env.ARTIFACT_NAME,
+              assetPath: process.env.ARTIFACT_NAME,
               assetsToDeleteRegex: /-linux\.tar\.gz$/,
+              tag: 'nightly'
+            });
+    
+      - uses: actions/download-artifact@v3
+        with:
+          name: cosign-signature-ubuntu
+      
+      - name: Upload signature as nightly release asset
+        uses: actions/github-script@v6
+        env:
+          ARTIFACT_NAME: ${{ needs.build_ubuntu.outputs.artifact_name }}
+        with:
+          script: |
+            await require('./upload-release-asset.js')({
+              github,
+              context,
+              core,
+              assetName: process.env.ARTIFACT_NAME + '.signature',
+              assetPath: process.env.ARTIFACT_NAME + '.signature',
+              assetsToDeleteRegex: /-linux\.tar\.gz\.signature$/,
               tag: 'nightly'
             });
 
   build_macos:
     runs-on: macos-11
+    permissions: {}
 
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
@@ -60,9 +140,17 @@ jobs:
       - name: Build
         run: ./build.sh
 
+      - name: Rename artifact
+        id: rename_artifact
+        run: |
+          cd upload
+          ARTIFACT_NAME=verifast-$VFVERSION-macos.tar.gz
+          mv verifast-nightly-osx.tar.gz $ARTIFACT_NAME
+          echo "artifact_name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+
       - uses: actions/upload-artifact@v3
         with:
-          name: binary_package
+          name: binary-package-macos
           path: upload
 
       - uses: actions/upload-artifact@v3
@@ -71,30 +159,102 @@ jobs:
           name: vfide_libraries
           path: src/vfide-libraries.log
 
+    outputs:
+      artifact_name: ${{ steps.rename_artifact.outputs.artifact_name }}
+
+  # Sign in a separate job to limit ID token exposure
+  sign_macos:
+    if: github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs:
+      - build_macos
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+
+    steps:
+      - uses: actions/download-artifact@v3
+        with:
+          name: binary-package-macos
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.0.2
+
+      - name: Sign artifact
+        run: |
+          set -e
+          mkdir -p upload
+          cosign sign-blob -y ${{ needs.build_macos.outputs.artifact_name }} --bundle upload/${{ needs.build_macos.outputs.artifact_name }}.signature
+
+      - name: Upload signature as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: cosign-signature-macos
+          path: upload
+
+  # Upload in a separate job to limit the code that has write access to repo contents
+  upload_macos:
+    if: github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs:
+      - build_macos
+      - sign_macos
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
       - name: Set and push nightly tag
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         run: git tag -f nightly && git push -f origin nightly:refs/tags/nightly
 
-      - name: Upload nightly release assets
-        if: ${{ github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+      - uses: actions/download-artifact@v3
+        with:
+          name: binary-package-macos
+      
+      - name: Upload binary package as nightly release asset
         uses: actions/github-script@v6
+        env:
+          ARTIFACT_NAME: ${{ needs.build_macos.outputs.artifact_name }}
         with:
           script: |
             await require('./upload-release-asset.js')({
               github,
               context,
               core,
-              assetName: 'verifast-' + process.env.VFVERSION + '-macos.tar.gz',
-              assetPath: 'upload/verifast-nightly-osx.tar.gz',
+              assetName: process.env.ARTIFACT_NAME,
+              assetPath: process.env.ARTIFACT_NAME,
               assetsToDeleteRegex: /-macos\.tar\.gz$/,
+              tag: 'nightly'
+            });
+    
+      - uses: actions/download-artifact@v3
+        with:
+          name: cosign-signature-macos
+      
+      - name: Upload signature as nightly release asset
+        uses: actions/github-script@v6
+        env:
+          ARTIFACT_NAME: ${{ needs.build_macos.outputs.artifact_name }}
+        with:
+          script: |
+            await require('./upload-release-asset.js')({
+              github,
+              context,
+              core,
+              assetName: process.env.ARTIFACT_NAME + '.signature',
+              assetPath: process.env.ARTIFACT_NAME + '.signature',
+              assetsToDeleteRegex: /-macos\.tar\.gz\.signature$/,
               tag: 'nightly'
             });
 
   build_windows:
     runs-on: windows-2019
+    permissions: {}
 
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
@@ -108,27 +268,107 @@ jobs:
       - name: Build
         run: c:/cygwin64/bin/bash -lc 'cd $GITHUB_WORKSPACE/src && make nightly VERBOSE=yes GTK=/cygdrive/c/vfdeps'
 
+      - name: Rename artifact
+        id: rename_artifact
+        shell: bash
+        run: |
+          cd src
+          ARTIFACT_NAME=verifast-$VFVERSION-windows.zip
+          mv verifast-nightly.zip $ARTIFACT_NAME
+          echo "artifact_name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+
       - uses: actions/upload-artifact@v3
         with:
-          name: binary_package
-          path: src/verifast-nightly.zip
+          name: binary-package-windows
+          path: src/${{ steps.rename_artifact.outputs.artifact_name }}
+
+    outputs:
+      artifact_name: ${{ steps.rename_artifact.outputs.artifact_name }}
+
+  # Sign in a separate job to limit ID token exposure
+  sign_windows:
+    if: github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs:
+      - build_windows
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+
+    steps:
+      - uses: actions/download-artifact@v3
+        with:
+          name: binary-package-windows
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.0.2
+
+      - name: Sign artifact
+        run: |
+          set -e
+          mkdir -p upload
+          cosign sign-blob -y ${{ needs.build_windows.outputs.artifact_name }} --bundle upload/${{ needs.build_windows.outputs.artifact_name }}.signature
+
+      - name: Upload signature as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: cosign-signature-windows
+          path: upload
+
+  # Upload in a separate job to limit the code that has write access to repo contents
+  upload_windows:
+    if: github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs:
+      - build_windows
+      - sign_windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
       - name: Set and push nightly tag
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-        shell: bash
         run: git tag -f nightly && git push -f origin nightly:refs/tags/nightly
 
-      - name: Upload nightly release assets
-        if: ${{ github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+      - uses: actions/download-artifact@v3
+        with:
+          name: binary-package-windows
+      
+      - name: Upload binary package as nightly release asset
         uses: actions/github-script@v6
+        env:
+          ARTIFACT_NAME: ${{ needs.build_windows.outputs.artifact_name }}
         with:
           script: |
             await require('./upload-release-asset.js')({
               github,
               context,
               core,
-              assetName: 'verifast-' + process.env.VFVERSION + '-windows.zip',
-              assetPath: 'src/verifast-nightly.zip',
+              assetName: process.env.ARTIFACT_NAME,
+              assetPath: process.env.ARTIFACT_NAME,
               assetsToDeleteRegex: /-windows\.zip$/,
+              tag: 'nightly'
+            });
+    
+      - uses: actions/download-artifact@v3
+        with:
+          name: cosign-signature-windows
+      
+      - name: Upload signature as nightly release asset
+        uses: actions/github-script@v6
+        env:
+          ARTIFACT_NAME: ${{ needs.build_windows.outputs.artifact_name }}
+        with:
+          script: |
+            await require('./upload-release-asset.js')({
+              github,
+              context,
+              core,
+              assetName: process.env.ARTIFACT_NAME + '.signature',
+              assetPath: process.env.ARTIFACT_NAME + '.signature',
+              assetsToDeleteRegex: /-windows\.zip\.signature$/,
               tag: 'nightly'
             });
