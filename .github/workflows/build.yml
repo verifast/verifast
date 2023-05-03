@@ -287,7 +287,7 @@ jobs:
       - uses: actions/upload-artifact@v3
         with:
           name: binary-package-windows
-          path: src/$${ steps.rename_artifact.outputs.artifact_name }}
+          path: src/${{ steps.rename_artifact.outputs.artifact_name }}
 
     outputs:
       artifact_name: ${{ steps.rename_artifact.outputs.artifact_name }}
