@@ -1,9 +1,26 @@
 #define _GNU_SOURCE
 #include <sched.h>
-#include <x86intrin.h>
+
+// see: https://stackoverflow.com/a/69856463
+#ifdef __x86_64__
+  #include <x86intrin.h>
+#endif
+
 #include <caml/mlvalues.h>
 #include <caml/alloc.h>
 #include <unistd.h>
+
+// see: https://stackoverflow.com/a/69856463
+#ifdef __ARM_64BIT_STATE
+  // see: https://cpufun.substack.com/p/fun-with-timers-and-cpuid
+  // see: https://developer.arm.com/-/media/Arm%20Developer%20Community/PDF/Learn%20the%20Architecture/Generic%20Timer.pdf?revision=c710e7a7-9f52-4901-8c9d-91b19f44f9c7
+  // see: https://stackoverflow.com/a/67968296
+  inline unsigned long long __rdtsc(void) {
+        unsigned long long tscTicks;
+        asm volatile("mrs \t%0, cntvct_el0" : "=r"(tscTicks));
+        return tscTicks;
+  }
+#endif
 
 value caml_stopwatch_getpid() {
     return copy_int32(getpid());
