@@ -231,30 +231,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in List.fold_left filter_ctx [] (List.rev ctxs)
 
   let pprint_context_stack cs dbg_info =
-    let var_name_map =
-      match List.hd (List.rev cs), dbg_info with
-      | Executing (_, _, current_fid, _), Some(dbg_info) -> begin
-        (* print_dbg_info Printf.eprintf dbg_info; *)
-        match dbg_info with
-        | DbgInfoRustFe dbg_info_rust_fe_list when (language, dialect) = (CLang, Some(Rust)) -> begin
-          match List.find_opt (fun ({ id; _}: debug_info_rust_fe) -> id = current_fid) dbg_info_rust_fe_list with
-          | None -> None (* its a lemma *)
-          | Some f -> Some(f.info)
-        end
-        | DbgInfoRustFe _ -> failwith "Rust debug info for non Rust language"
-      end
-      | _ -> None
-      (* Todo @Nima @Bart: The first context is not always of the kind `Executing` that makes some tests fail if we write
-         `let Executing (_, _, current_fid, _) = List.hd (List.rev cs)`. To circumvent this we do not filter variable names
-         in case of other kinds of context as the first one. It should be fixed. *)
-    in
-    let cs =
-      match var_name_map with
-      | Some var_name_map -> List.map (filter_map_env_of_ctx var_name_map) cs
-      | None -> cs
-    in
-    let cs = if (language, dialect) = (CLang, Some(Rust)) then filter_redundant_ctxs cs else cs in
-    List.map
+    let cs = List.map
       (function
         | Assuming t -> Assuming (pprint_context_term t)
         | Executing (h, env, l, msg) ->
@@ -271,8 +248,30 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           Executing (h', env', l, msg)
         | PushSubcontext -> PushSubcontext
         | PopSubcontext -> PopSubcontext
-        | Branching branch -> Branching branch)
-      cs
+        | Branching branch -> Branching branch) cs in
+    let var_name_map =
+      match List.hd (List.rev cs), dbg_info with
+      | Executing (_, _, current_fid, _), Some(dbg_info) -> begin
+        (* print_dbg_info Printf.eprintf dbg_info; *)
+        match dbg_info with
+        | DbgInfoRustFe dbg_info_rust_fe_list when (language, dialect) = (CLang, Some(Rust)) -> begin
+          match List.find_opt (fun ({ id; _}: debug_info_rust_fe) -> id = current_fid) dbg_info_rust_fe_list with
+          | None -> None (* its a lemma *)
+          | Some f -> Some(f.info)
+        end
+        | DbgInfoRustFe _ -> failwith "Rust debug info for non Rust language"
+      end
+      | _ -> None
+      (* Todo @Nima @Bart: The first context is not always of the kind `Executing` that makes some tests fail if we write
+          `let Executing (_, _, current_fid, _) = List.hd (List.rev cs)`. To circumvent this we do not filter variable names
+          in case of other kinds of context as the first one. It should be fixed. *)
+    in
+    let cs =
+      match var_name_map with
+      | Some var_name_map -> List.map (filter_map_env_of_ctx var_name_map) cs
+      | None -> cs
+    in
+    if (language, dialect) = (CLang, Some(Rust)) then filter_redundant_ctxs cs else cs
 
   let register_pred_ctor_application t symbol symbol_term ts inputParamCount =
     pred_ctor_applications := (t, (symbol, symbol_term, ts, inputParamCount)) :: !pred_ctor_applications
