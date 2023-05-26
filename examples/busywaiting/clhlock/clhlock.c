@@ -129,31 +129,6 @@ struct lock_thread *create_lock_thread()
     //@ close lock_thread(thread);
 }
 
-/*@
-
-lemma void is_ancestor_of_refl(list<pathcomp> p)
-    requires true;
-    ensures is_ancestor_of(p, p) == true;
-{
-    switch (p) { case nil: case cons(h, t): }
-}
-
-lemma void is_ancestor_of_trans(list<pathcomp> p1, list<pathcomp> p2, list<pathcomp> p3)
-    requires is_ancestor_of(p1, p2) && is_ancestor_of(p2, p3);
-    ensures is_ancestor_of(p1, p3) == true;
-{
-    switch (p3) {
-        case nil:
-        case cons(p3h, p3t):
-            if (p2 == p3) {
-            } else {
-                is_ancestor_of_trans(p1, p2, p3t);
-            }
-    }
-}
-
-@*/
-
 void acquire_helper(struct lock_thread *thread, struct lock *lock, struct node *pred)
     /*@
     requires
@@ -264,7 +239,7 @@ void acquire_helper(struct lock_thread *thread, struct lock *lock, struct node *
                                      forall_elim(map(snd, obs), (all_sublevels_lt)(1, lockLevel), l);
                                      assert !level_lt(append(lockLevel, {level - 1}), l);
                                      assert l == cons(?l_max_length, ?l0);
-                                     all_sublevel0s_lt_append(max_level_length, lockLevel0, {level - 1}, l0);
+                                     all_sublevel0s_lt_level0_lt(max_level_length, lockLevel0, {level - 1}, l0);
                                      assert false;
                                  }
                                  assert max_level_length >= length(lockLevel0) + 1;

@@ -34,22 +34,12 @@ typedef lemma void await_viewshift(predicate(list<pathcomp>, void *, void *, lis
 
 @*/
 
-/*@
-
-predicate call_below_perms(list<pathcomp> phase, void *f0, int count) =
-    count == 0 ?
-        true
-    :
-        call_below_perm(phase, f0) &*& call_below_perms(phase, f0, count - 1);
-
-@*/
-
 void await(mutex mutex, condition *condition, void *data);
 /*@
 requires
     call_perm_(currentThread, condition) &*&
     obs(?phase0, ?obs) &*& [?f]mutex(mutex, ?level, ?inv) &*& [_]is_condition(condition, level, obs, inv, ?P, ?Q, ?R, ?signals) &*&
-    call_below_perms(phase0, ?caller, length(signals)) &*& func_lt(condition, caller) == true &*&
+    call_below_perms(length(signals), phase0, ?caller) &*& func_lt(condition, caller) == true &*&
     P(phase0, data) &*& is_await_viewshift(?awaitViewshift, R, inv, data, P) &*& forall(map(snd, obs), (all_sublevels_lt)(mutex_nb_level_dims, level)) == true;
 @*/
 //@ ensures obs(?phase1, obs) &*& [f]mutex(mutex, level, inv) &*& Q(phase1) &*& is_await_viewshift(awaitViewshift, R, inv, data, P);
