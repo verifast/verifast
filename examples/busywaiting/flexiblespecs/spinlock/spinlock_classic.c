@@ -1,3 +1,5 @@
+// Justus Fasse and Bart Jacobs. Expressive modular verification of termination for busy-waiting programs. 2023.
+
 #include <stdlib.h>
 #include "spinlock.h"
 //@ #include <quantifiers.gh>

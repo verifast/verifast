@@ -1,3 +1,5 @@
+// Justus Fasse and Bart Jacobs. Expressive modular verification of termination for busy-waiting programs. 2023.
+
 #ifndef TICKETLOCK_CLASSIC_H
 #define TICKETLOCK_CLASSIC_H
 
