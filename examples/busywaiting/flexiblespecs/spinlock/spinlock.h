@@ -1,7 +1,7 @@
 #ifndef SPINLOCK_H
 #define SPINLOCK_H
 
-#include "../busywaiting.h"
+#include "busywaiting.h"
 #include "atomics.h"
 
 struct spinlock;

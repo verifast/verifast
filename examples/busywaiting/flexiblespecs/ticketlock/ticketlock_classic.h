@@ -3,7 +3,7 @@
 
 #include "ticketlock.h" // Only needed for ticketlock_nb_level_dims, which should be hidden.
 
-#include "../busywaiting.h"
+#include "busywaiting.h"
 
 struct ticketlock_classic;
 typedef struct ticketlock_classic *ticketlock_classic;

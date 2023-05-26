@@ -1,5 +1,5 @@
 #include <stdlib.h>
-#include "../busywaiting.h"
+#include "busywaiting.h"
 #include "atomics.h"
 #include "ticketlock.h"
 //@ #include <quantifiers.gh>

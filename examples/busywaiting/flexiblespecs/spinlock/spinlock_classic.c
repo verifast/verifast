@@ -89,44 +89,6 @@ predicate spinlock_classic_held(spinlock_classic_t spinlock, real f, predicate(i
 
 @*/
 
-/*@
-
-lemma void is_ancestor_of_refl(list<pathcomp> p)
-    requires true;
-    ensures is_ancestor_of(p, p) == true;
-{
-    switch (p) { case nil: case cons(h, t): }
-}
-
-lemma void is_ancestor_of_trans(list<pathcomp> p1, list<pathcomp> p2, list<pathcomp> p3)
-    requires is_ancestor_of(p1, p2) && is_ancestor_of(p2, p3);
-    ensures is_ancestor_of(p1, p3) == true;
-{
-    switch (p3) {
-        case nil:
-        case cons(p3h, p3t):
-            if (p2 == p3) {
-            } else {
-                is_ancestor_of_trans(p1, p2, p3t);
-            }
-    }
-}
-
-lemma void call_below_perms_weaken(int m)
-    requires call_below_perms(?n, ?p, ?f) &*& m <= n;
-    ensures call_below_perms(m, p, f);
-{
-    open call_below_perms(_, _, _);
-    if (n <= 0 || n == m)
-        close call_below_perms(m, p, f);
-    else {
-        leak call_below_perm(_, _);
-        call_below_perms_weaken(m);
-    }
-}   
-
-@*/
-
 void spinlock_classic_acquire(spinlock_classic_t spinlock)
 /*@
 requires

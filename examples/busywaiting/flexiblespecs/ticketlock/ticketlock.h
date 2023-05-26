@@ -1,7 +1,7 @@
 #ifndef TICKETLOCK_H
 #define TICKETLOCK_H
 
-#include "../busywaiting.h"
+#include "busywaiting.h"
 
 struct ticketlock;
 typedef struct ticketlock *ticketlock;

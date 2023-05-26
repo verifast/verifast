@@ -25,6 +25,14 @@ cd examples
       verifast -c echo_live_mt.c
     cd ..
     verifast -c await.c
+    cd flexiblespecs
+      cd spinlock
+        verifast -c -I ../.. spinlock.c spinlock_classic.c tricky_client.c
+      cd ..
+      cd ticketlock
+        verifast -c -I ../.. ticketlock.c ticketlock_classic.c simple_cross_thread_client.c
+      cd ..
+    cd ..
   cd ..
   cd jayanti
     verifast threading.o popl20_prophecies.o atomics.c jayanti.c client.c
