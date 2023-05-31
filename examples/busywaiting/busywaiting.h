@@ -235,7 +235,7 @@ typedef void thread_run/*@(list<pathcomp> path, list<pair<void *, list<int> > > 
 //@ terminates;
 
 void fork(thread_run *run);
-//@ requires obs(?p, ?obs) &*& [_]is_thread_run(run, p, ?forkee_obs, ?pre) &*& pre();
+//@ requires obs(?p, ?obs) &*& [_]is_thread_run(run, p, ?forkee_obs, ?pre) &*& length(remove_all(forkee_obs, obs)) == length(obs) - length(forkee_obs) &*& pre();
 //@ ensures obs(cons(Forker, p), remove_all(forkee_obs, obs));
 //@ terminates;
 
@@ -249,7 +249,7 @@ typedef struct thread *thread;
 //@ predicate thread(thread thread, list<int> level, predicate() post);
 
 thread fork_joinable(thread_run_joinable *run);
-//@ requires obs(?p, ?obs) &*& [_]is_thread_run_joinable(run, p, ?forkee_obs, ?pre, ?post, ?level) &*& pre();
+//@ requires obs(?p, ?obs) &*& [_]is_thread_run_joinable(run, p, ?forkee_obs, ?pre, ?post, ?level) &*& length(remove_all(forkee_obs, obs)) == length(obs) - length(forkee_obs) &*& pre();
 //@ ensures obs(cons(Forker, p), remove_all(forkee_obs, obs)) &*& thread(result, level, post);
 //@ terminates;
 
