@@ -36,7 +36,7 @@ void acquire(struct lock_thread *thread, struct lock *lock);
     //@ terminates;
 
 void release(struct lock_thread *thread);
-    //@ requires locked(thread, ?lock, ?level, ?inv, ?frac, ?ob) &*& inv() &*& obs(?p, ?obs);
+    //@ requires locked(thread, ?lock, ?level, ?inv, ?frac, ?ob) &*& inv() &*& obs(?p, ?obs) &*& mem(ob, obs) == true;
     //@ ensures obs(?p1, remove(ob, obs)) &*& lock_thread(thread) &*& [frac]lock(lock, level, inv) &*& is_ancestor_of(p, p1) == true;
     //@ terminates;
 
@@ -49,7 +49,7 @@ typedef lemma void release_ghost_op(int threadId, predicate() inv, list<pathcomp
 @*/
 
 void release_with_ghost_op(struct lock_thread *thread);
-    //@ requires locked(thread, ?lock, ?level, ?inv, ?frac, ?ob) &*& obs(?p, ?obs) &*& is_release_ghost_op(_, currentThread, inv, p, remove(ob, obs), ?pre, ?post) &*& pre();
+    //@ requires locked(thread, ?lock, ?level, ?inv, ?frac, ?ob) &*& obs(?p, ?obs) &*& mem(ob, obs) == true &*& is_release_ghost_op(_, currentThread, inv, p, remove(ob, obs), ?pre, ?post) &*& pre();
     //@ ensures post(?p1) &*& obs(?p2, remove(ob, obs)) &*& lock_thread(thread) &*& [frac]lock(lock, level, inv) &*& is_ancestor_of(p1, p2) == true;
     //@ terminates;
 

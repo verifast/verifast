@@ -37,7 +37,7 @@ void ticketlock_classic_acquire(ticketlock_classic lock);
 //@ ensures obs(?p1, cons(?ob, obs)) &*& is_ancestor_of(p, p1) == true &*& ticketlock_classic_held(lock, level, inv, f, ob) &*& inv() &*& level_lt(level, level_of(ob)) == true;
 
 void ticketlock_classic_release(ticketlock_classic lock);
-//@ requires obs(?p, ?obs) &*& ticketlock_classic_held(lock, ?level, ?inv, ?f, ?ob) &*& inv();
+//@ requires obs(?p, ?obs) &*& ticketlock_classic_held(lock, ?level, ?inv, ?f, ?ob) &*& mem(ob, obs) == true &*& inv();
 //@ ensures obs(p, remove(ob, obs)) &*& [f]ticketlock_classic(lock, level, inv);
 
 void ticketlock_classic_dispose(ticketlock_classic lock);

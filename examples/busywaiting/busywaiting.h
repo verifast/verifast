@@ -273,7 +273,7 @@ lemma void init_signal(void *signal, list<int> level);
   ensures obs(p, cons(pair(signal, level), obs)) &*& signal(signal, level, false);
 
 lemma void set_signal(void *signal);
-  requires obs(?p, ?obs) &*& signal(signal, ?level, false);
+  requires obs(?p, ?obs) &*& signal(signal, ?level, false) &*& mem(pair(signal, level), obs) == true;
   ensures obs(p, remove(pair(signal, level), obs)) &*& signal(signal, level, true);
 
 lemma void ob_signal_not_set(void *signal);

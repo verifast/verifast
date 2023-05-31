@@ -189,7 +189,7 @@ void ticketlock_classic_acquire(ticketlock_classic lock)
 }
 
 void ticketlock_classic_release(ticketlock_classic lock)
-//@ requires obs(?p, ?obs) &*& ticketlock_classic_held(lock, ?level, ?inv, ?f, ?ob) &*& inv();
+//@ requires obs(?p, ?obs) &*& ticketlock_classic_held(lock, ?level, ?inv, ?f, ?ob) &*& mem(ob, obs) == true &*& inv();
 //@ ensures obs(p, remove(ob, obs)) &*& [f]ticketlock_classic(lock, level, inv);
 {
   //@ open ticketlock_classic_held(lock, level, inv, f, ob);
