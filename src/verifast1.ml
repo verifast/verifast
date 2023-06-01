@@ -5445,7 +5445,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | _ -> ()
     end
 
-  if fno_strict_aliasing && List.mem_assoc "has_type" purefuncmap then begin
+  let () = if fno_strict_aliasing && List.mem_assoc "has_type" purefuncmap then begin
     ctxt#begin_formal;
     let p = ctxt#mk_bound 0 ctxt#type_inductive in
     let t = ctxt#mk_bound 1 ctxt#type_inductive in
@@ -5454,7 +5454,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     ctxt#assume_forall "all_has_type" [hasType] [ctxt#type_inductive; ctxt#type_inductive] hasType
   end
 
-  if assume_no_subobject_provenance && List.mem_assoc "field_ptr" purefuncmap then begin
+  let () = if assume_no_subobject_provenance && List.mem_assoc "field_ptr" purefuncmap then begin
     begin
     ctxt#begin_formal;
     let pr = ctxt#mk_bound 0 ctxt#type_inductive in

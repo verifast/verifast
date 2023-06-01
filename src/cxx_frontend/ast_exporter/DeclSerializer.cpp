@@ -77,6 +77,9 @@ bool DeclSerializer::VisitVarDecl(const clang::VarDecl *decl) {
       CASE_INIT(CInit, C_INIT)
       CASE_INIT(CallInit, CALL_INIT)
       CASE_INIT(ListInit, LIST_INIT)
+      case clang::VarDecl::InitializationStyle::ParenListInit:
+        errors().newError(decl->getSourceRange(), getSourceManager())
+          << "Parenthesized list-initialization is not supported.";
     }
 
 #undef CASE_INIT

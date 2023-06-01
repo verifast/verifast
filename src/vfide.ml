@@ -6,7 +6,6 @@ open Parser
 open Verifast0
 open Verifast
 open GMain
-open Pervasives
 open Shape_analysis_frontend
 open Vfconfig
 
@@ -117,7 +116,7 @@ let file_has_changed path mtime =
     if result then begin
       Printf.printf "File '%s' was last read by vfide at '%s' but was modified by another process at '%s'.\n"
         path (string_of_time mtime) (string_of_time mtime');
-      flush stdout
+      flush Stdlib.stdout
     end;
     result
   with Unix.Unix_error (_, _, _) -> true
@@ -197,17 +196,17 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
   in
   let showLineNumbersAction =
     let a = GAction.toggle_action ~name:"ShowLineNumbers" () in
-    a#set_label "Show _line numbers"; ignore $. a#connect#toggled (fun () -> showLineNumbers a#get_active);
+    a#set_label "Show _line numbers"; ignore $. a#connect#toggled ~callback:(fun () -> showLineNumbers a#get_active);
     a
   in
   let showWhitespaceAction =
     let a = GAction.toggle_action ~name:"ShowWhitespace" () in
-    a#set_label "Show _whitespace"; ignore $. a#connect#toggled (fun () -> showWhitespace a#get_active);
+    a#set_label "Show _whitespace"; ignore $. a#connect#toggled ~callback:(fun () -> showWhitespace a#get_active);
     a
   in
   let showRightMarginAction =
     let a = GAction.toggle_action ~name:"ShowRightMargin" () in
-    a#set_label "Show _right margin ruler"; ignore $. a#connect#toggled (fun () -> showRightMargin a#get_active);
+    a#set_label "Show _right margin ruler"; ignore $. a#connect#toggled ~callback:(fun () -> showRightMargin a#get_active);
     a
   in
   let launch_browser url =
@@ -230,13 +229,13 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
     dialog#action_area#set_border_width 0;
     let vbox = dialog#vbox in
     ignore $. GMisc.label ~xpad:2 ~ypad:2 ~line_wrap:true ~text:(Verifast.banner ()) ~packing:vbox#pack ();
-    ignore $. (GButton.button ~stock:`OK ~packing:dialog#action_area#add ())#connect#clicked (fun () ->
+    ignore $. (GButton.button ~stock:`OK ~packing:dialog#action_area#add ())#connect#clicked ~callback:(fun () ->
       dialog#response `DELETE_EVENT
     );
-    ignore $. (GButton.button ~label:"Launch Homepage" ~packing:dialog#action_area#add ())#connect#clicked (fun () ->
+    ignore $. (GButton.button ~label:"Launch Homepage" ~packing:dialog#action_area#add ())#connect#clicked ~callback:(fun () ->
       launch_browser "https://github.com/verifast/verifast/"
     );
-    ignore $. (GButton.button ~label:"Show Contributors" ~packing:dialog#action_area#add ())#connect#clicked (fun () ->
+    ignore $. (GButton.button ~label:"Show Contributors" ~packing:dialog#action_area#add ())#connect#clicked ~callback:(fun () ->
       launch_browser "https://github.com/verifast/verifast/graphs/contributors"
     );
     ignore $. dialog#run();
@@ -397,7 +396,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
   let show_help url =
     launch_browser (!bindir ^ "/../help/" ^ url ^ ".html")
   in
-  ignore (helpButton#connect#clicked (fun () -> (match(!url) with None -> () | Some(url) -> show_help url);));
+  ignore (helpButton#connect#clicked ~callback:(fun () -> (match(!url) with None -> () | Some(url) -> show_help url);));
   toolbar#insert messageToolItem;
   rootVbox#pack (toolbar#coerce);
   let treeSeparator = GPack.paned `HORIZONTAL ~packing:(rootVbox#pack ~expand:true) () in
@@ -438,7 +437,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
     treeComboListStore#clear ();
     !executionForest |> List.iter (fun (TreeNode (ExecNode (msg, _), _, _, _)) -> GEdit.text_combo_add treeComboText msg)
   in
-  ignore $. treeCombo#connect#changed begin fun () ->
+  ignore $. treeCombo#connect#changed ~callback:begin fun () ->
     let active = treeCombo#active in
     if 0 <= active then begin
       let TreeNode (_, w, h, ns) = List.nth !executionForest active in
@@ -491,7 +490,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
       let items = List.sort (fun (name1, _) (name2, _) -> compare name1 name2) items in
       items |> List.iter begin fun (name, tab) ->
          let item = GMenu.menu_item ~label:name ~packing:gtk_menu#add () in
-         ignore (item#connect#activate (fun () -> goto_tab tab notebook))
+         ignore (item#connect#activate ~callback:(fun () -> goto_tab tab notebook))
       end;
       gtk_menu
     in
@@ -629,20 +628,20 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
     lineMarksTable#show_in_source_view srcText;
     stmtExecCountsColumn#show_in_source_view srcText;
     srcText#misc#modify_font_by_name !scaledCodeFont;
-    ignore $. textFindEntry#event#connect#key_press (fun key ->
+    ignore $. textFindEntry#event#connect#key_press ~callback:(fun key ->
       if GdkEvent.Key.keyval key = GdkKeysyms._Escape then begin
         (new GObj.misc_ops srcText#as_widget)#grab_focus (); textFindBox#misc#hide (); true
       end else false
     );
-    ignore $. textFindEntry#connect#activate (fun () ->
+    ignore $. textFindEntry#connect#activate ~callback:(fun () ->
       let cursor = buffer#get_iter `INSERT in
       match cursor#forward_char#forward_search textFindEntry#text with
-        None -> GToolbox.message_box "VeriFast IDE" "Text not found"
+        None -> GToolbox.message_box ~title:"VeriFast IDE" "Text not found"
       | Some (iter1, iter2) ->
         buffer#select_range iter1 iter2;
         srcText#scroll_to_mark ~within_margin:0.2 `INSERT
     );
-    ignore $. srcText#event#connect#key_press (fun key ->
+    ignore $. srcText#event#connect#key_press ~callback:(fun key ->
       if GdkEvent.Key.keyval key = GdkKeysyms._f && List.mem `CONTROL (GdkEvent.Key.state key) then begin
         textFindBox#misc#show (); (new GObj.misc_ops textFindEntry#as_widget)#grab_focus (); true
       end else if GdkEvent.Key.keyval key = GdkKeysyms._d && List.mem `CONTROL (GdkEvent.Key.state key) then begin
@@ -675,7 +674,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
     let stmtExecCountsColumn = GLineMarks.source_gutter_text_column "99x" 1.0 in
     buffer#begin_not_undoable_action (); (* Disable the source view's undo manager since we handle undos ourselves. *)
     let apply_tag_enabled = ref false in (* To prevent tag copying when pasting from clipboard *)
-    ignore $. buffer#connect#apply_tag (fun tag ~start ~stop -> if not !apply_tag_enabled then GtkSignal.emit_stop_by_name buffer#as_buffer "apply-tag");
+    ignore $. buffer#connect#apply_tag ~callback:(fun tag ~start ~stop -> if not !apply_tag_enabled then GtkSignal.emit_stop_by_name buffer#as_buffer ~name:"apply-tag");
     let _ = buffer#create_tag ~name:"keyword" [`WEIGHT `BOLD; `FOREGROUND "Blue"] in
     let _ = buffer#create_tag ~name:"ghostRange" [`FOREGROUND "#CC6600"] in
     let _ = buffer#create_tag ~name:"ghostKeyword" [`WEIGHT `BOLD; `FOREGROUND "#DB9900"] in
@@ -707,14 +706,14 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
       method lineMarksTable = lineMarksTable
       method stmtExecCountsColumn = stmtExecCountsColumn
     end in
-    ignore $. buffer#connect#modified_changed (fun () ->
+    ignore $. buffer#connect#modified_changed ~callback:(fun () ->
       updateBufferTitle tab;
       (* should be "no color" (i.e. theme's default), but the API does
          not seem to provide it. *)
       messageEntry#coerce#misc#modify_base [`NORMAL, `NAME "gray"];
       messageEntry#coerce#misc#modify_text [`NORMAL, `NAME "black"]
     );
-    ignore $. buffer#connect#insert_text (fun iter text ->
+    ignore $. buffer#connect#insert_text ~callback:(fun iter text ->
       if not !ignore_text_changes then
       begin
         let offset = iter#offset in
@@ -730,14 +729,14 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
         redoAction#set_sensitive false
       end
     );
-    ignore $. buffer#connect#after#insert_text (fun iter text ->
+    ignore $. buffer#connect#after#insert_text ~callback:(fun iter text ->
       let start = iter#backward_chars (Glib.Utf8.length text) in
       perform_syntax_highlighting tab start iter
     );
-    ignore $. buffer#connect#after#delete_range (fun ~start:start ~stop:stop ->
+    ignore $. buffer#connect#after#delete_range ~callback:(fun ~start:start ~stop:stop ->
       perform_syntax_highlighting tab start stop
     );
-    ignore $. buffer#connect#delete_range (fun ~start:start ~stop:stop ->
+    ignore $. buffer#connect#delete_range ~callback:(fun ~start:start ~stop:stop ->
       if not !ignore_text_changes then
       begin
         let offset = start#offset in
@@ -754,7 +753,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
         redoAction#set_sensitive false
       end
     );
-    ignore $. buffer#connect#changed (fun () -> !bufferChangeListener tab);
+    ignore $. buffer#connect#changed ~callback:(fun () -> !bufferChangeListener tab);
     let focusIn _ = set_current_tab (Some tab); false in
     ignore $. mainView#view#event#connect#focus_in ~callback:focusIn;
     ignore $. subView#view#event#connect#focus_in ~callback:focusIn;
@@ -823,7 +822,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
       perform_syntax_highlighting tab buffer#start_iter buffer#end_iter;
       updateBufferTitle tab;
       Some newPath
-    with Sys_error msg -> GToolbox.message_box "VeriFast IDE" ("Could not load file: " ^ msg); None
+    with Sys_error msg -> GToolbox.message_box ~title:"VeriFast IDE" ("Could not load file: " ^ msg); None
   in
   let open_path path =
     let tab = add_buffer () in
@@ -955,16 +954,16 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
     setCodeFont !codeFont;
     setTraceFont !traceFont
   in
-  ignore $. (actionGroup#get_action "TextLarger")#connect#activate (fun () -> setFontScalePower (!fontScalePower + 1));
-  ignore $. (actionGroup#get_action "TextSmaller")#connect#activate (fun () -> setFontScalePower (!fontScalePower - 1));
-  ignore $. (actionGroup#get_action "TextSizeDefault")#connect#activate (fun () -> setFontScalePower 0);
+  ignore $. (actionGroup#get_action "TextLarger")#connect#activate ~callback:(fun () -> setFontScalePower (!fontScalePower + 1));
+  ignore $. (actionGroup#get_action "TextSmaller")#connect#activate ~callback:(fun () -> setFontScalePower (!fontScalePower - 1));
+  ignore $. (actionGroup#get_action "TextSizeDefault")#connect#activate ~callback:(fun () -> setFontScalePower 0);
   let showExecutionTree () =
     if treeSeparator#max_position - treeSeparator#position < 10 then
       treeSeparator#set_position (treeSeparator#max_position * 85 / 100)
     else
       treeSeparator#set_position treeSeparator#max_position
   in
-  ignore $. (actionGroup#get_action "ShowExecutionTree")#connect#activate showExecutionTree;
+  ignore $. (actionGroup#get_action "ShowExecutionTree")#connect#activate ~callback:showExecutionTree;
   let get_tab_for_path path0 =
     (* This function is called only at a time when no buffers are modified. *)
     let rec iter k tabs =
@@ -1266,7 +1265,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
   let get_current_tab() =
     match !current_tab with
       Some tab -> Some tab
-    | None -> GToolbox.message_box "VeriFast IDE" ("Please select a buffer."); None
+    | None -> GToolbox.message_box ~title:"VeriFast IDE" ("Please select a buffer."); None
   in
   let close tab =
     (* Returns true if canceled *)
@@ -1288,19 +1287,19 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
     | tab::_ ->
       close tab || close_all ()
   in
-  ignore $. (actionGroup#get_action "New")#connect#activate (fun _ ->
+  ignore $. (actionGroup#get_action "New")#connect#activate ~callback:(fun _ ->
     ignore (close_all () || (ignore $. new_buffer (); false))
   );
-  ignore $. (actionGroup#get_action "Open")#connect#activate (fun _ ->
+  ignore $. (actionGroup#get_action "Open")#connect#activate ~callback:(fun _ ->
     match GToolbox.select_file ~title:"Open" () with
       None -> ()
     | Some thePath ->
       if not (close_all ()) then
       ignore (open_path thePath)
   );
-  ignore $. (actionGroup#get_action "Save")#connect#activate (fun () -> match get_current_tab() with Some tab -> ignore $. save tab | None -> ());
-  ignore $. (actionGroup#get_action "SaveAs")#connect#activate (fun () -> match get_current_tab() with Some tab -> ignore $. saveAs tab | None -> ());
-  ignore $. (actionGroup#get_action "Close")#connect#activate (fun () -> match get_current_tab() with Some tab -> ignore $. close tab | None -> ());
+  ignore $. (actionGroup#get_action "Save")#connect#activate ~callback:(fun () -> match get_current_tab() with Some tab -> ignore $. save tab | None -> ());
+  ignore $. (actionGroup#get_action "SaveAs")#connect#activate ~callback:(fun () -> match get_current_tab() with Some tab -> ignore $. saveAs tab | None -> ());
+  ignore $. (actionGroup#get_action "Close")#connect#activate ~callback:(fun () -> match get_current_tab() with Some tab -> ignore $. close tab | None -> ());
   let go_to_loc l =
     let (start, stop) = l in
     let (path, line, col) = start in
@@ -1332,7 +1331,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
     let useSiteBuffer = useSiteTab#buffer in
     let useSiteTag = useSiteBuffer#create_tag [] in
     useSiteTab#useSiteTags := useSiteTag::!(useSiteTab#useSiteTags);
-    ignore $. useSiteTag#connect#event begin fun ~origin event iter ->
+    ignore $. useSiteTag#connect#event ~callback:begin fun ~origin event iter ->
       if GdkEvent.get_type event = `KEY_PRESS then begin
         let key = GdkEvent.Key.cast event in
         if GdkEvent.Key.keyval key = GdkKeysyms._d && List.mem `CONTROL (GdkEvent.Key.state key) then
@@ -1574,9 +1573,9 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
               end
             | e ->
               prerr_endline ("VeriFast internal error: \n" ^ Printexc.to_string e ^ "\n");
-              Printexc.print_backtrace stderr;
-              flush stderr;
-              GToolbox.message_box "VeriFast IDE" "Verification failed due to an internal error. See the console window for details."
+              Printexc.print_backtrace Stdlib.stderr;
+              flush Stdlib.stderr;
+              GToolbox.message_box ~title:"VeriFast IDE" "Verification failed due to an internal error. See the console window for details."
             end;
             !postProcess ()
           end
@@ -1591,18 +1590,18 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
     match (get_current_tab(), getCursor()) with
       (None, _) -> () (* get_current_tab already shows messagebox on error *)
       | (_, None) ->
-        GToolbox.message_box "VeriFast IDE" ("First place the cursor" ^
+        GToolbox.message_box ~title:"VeriFast IDE" ("First place the cursor" ^
           " inside the function you want to perform shape analysis on.")
       | (Some tab, cursor) ->
         match !(tab#path) with
-          None -> GToolbox.message_box "VeriFast IDE" ("Error: current tab" ^
+          None -> GToolbox.message_box ~title:"VeriFast IDE" ("Error: current tab" ^
             " has no path.")
         | Some (path, mtime) ->
           if file_type path <> CLang then
             (* It should be possible to support anything since we work on
              * the AST, so this is just because there is no (known) code yet to
              * call the correct parser. *)
-            GToolbox.message_box "VeriFast IDE" ("The shape analyser currently" ^
+            GToolbox.message_box ~title:"VeriFast IDE" ("The shape analyser currently" ^
             " only supports C programs")
           else begin
             (* Save all tabs to disk firsts. Only continue on success. *)
@@ -1627,7 +1626,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
   in
   begin
     let open TreeMetrics in
-    ignore $. treeDrawingArea#event#connect#expose begin fun event ->
+    ignore $. treeDrawingArea#event#connect#expose ~callback:begin fun event ->
       let d = new GDraw.drawable treeDrawingArea#misc#window in
       let delayedCommands = ref [] in
       let performDelayed f = delayedCommands := f::!delayedCommands in
@@ -1673,7 +1672,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
       true
     end;
     treeDrawingArea#event#add [`BUTTON_PRESS; `BUTTON_RELEASE];
-    ignore $. treeDrawingArea#event#connect#button_release begin fun event ->
+    ignore $. treeDrawingArea#event#connect#button_release ~callback:begin fun event ->
       let bx, by = int_of_float (GdkEvent.Button.x event), int_of_float (GdkEvent.Button.y event) in
       let rec hitTest x y (TreeNode (nodeType, w, h, ns)) =
         if by < y + cw then begin
@@ -1714,7 +1713,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
     let currentTabWidth = string_of_int (List.hd !buffers)#mainView#view#tab_width in
     let newTabSize = GEdit.entry ~text:currentTabWidth ~max_length:500 ~packing:(itemsTable#attach ~left:1 ~top:2 ~expand:`X) () in
     let okButton = GButton.button ~stock:`OK ~packing:dialog#action_area#add () in
-    ignore $. okButton#connect#clicked (fun () ->
+    ignore $. okButton#connect#clicked ~callback:(fun () ->
       match int_of_string_opt newTabSize#text with
         None -> ()
       | Some n -> setTabWidth n;
@@ -1723,7 +1722,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
       dialog#response `DELETE_EVENT
     );
     let cancelButton = GButton.button ~stock:`CANCEL ~packing:dialog#action_area#add () in
-    ignore $. cancelButton#connect#clicked (fun () -> dialog#response `DELETE_EVENT);
+    ignore $. cancelButton#connect#clicked ~callback:(fun () -> dialog#response `DELETE_EVENT);
     ignore $. dialog#run();
     dialog#destroy()
   in
@@ -1742,12 +1741,12 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
     let new_include = GEdit.entry ~text:"" ~max_length:500 ~packing:(itemsTable#attach ~left:1 ~top:1 ~expand:`X) () in
     ignore $. new_include#connect#activate ~callback:(add_include_path_gui new_include);
     let okButton = GButton.button ~stock:`OK ~packing:dialog#action_area#add () in
-    ignore $. okButton#connect#clicked (fun () ->
+    ignore $. okButton#connect#clicked ~callback:(fun () ->
       add_include_path_gui new_include ();
       dialog#response `DELETE_EVENT
     );
     let cancelButton = GButton.button ~stock:`CANCEL ~packing:dialog#action_area#add () in
-    ignore $. cancelButton#connect#clicked (fun () -> dialog#response `DELETE_EVENT);
+    ignore $. cancelButton#connect#clicked ~callback:(fun () -> dialog#response `DELETE_EVENT);
     ignore $. dialog#run();
     dialog#destroy()
   in
@@ -1849,18 +1848,18 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
       | `DELETE_EVENT | `CANCEL -> dialog#destroy()
   in
   
-  ignore $. (actionGroup#get_action "ClearTrace")#connect#activate clearTrace;
-  ignore $. (actionGroup#get_action "Preferences")#connect#activate showPreferencesDialog;
-  ignore $. (actionGroup#get_action "VerifyProgram")#connect#activate (verifyProgram false false None);
-  ignore $. (actionGroup#get_action "VerifyFunction")#connect#activate (verifyProgram false true None);
-  ignore $. (actionGroup#get_action "RunToCursor")#connect#activate (verifyProgram true false None);
-  ignore $. (actionGroup#get_action "RunShapeAnalysis")#connect#activate runShapeAnalyser;
-  ignore $. (actionGroup#get_action "Include paths")#connect#activate showIncludesDialog;
-  ignore $. (actionGroup#get_action "Find file (top window)")#connect#activate (showFindFileDialog subNotebook);
-  ignore $. (actionGroup#get_action "Find file (bottom window)")#connect#activate (showFindFileDialog textNotebook);
-  ignore $. undoAction#connect#activate undo;
-  ignore $. redoAction#connect#activate redo;
-  ignore $. root#event#connect#focus_in begin fun _ ->
+  ignore $. (actionGroup#get_action "ClearTrace")#connect#activate ~callback:clearTrace;
+  ignore $. (actionGroup#get_action "Preferences")#connect#activate ~callback:showPreferencesDialog;
+  ignore $. (actionGroup#get_action "VerifyProgram")#connect#activate ~callback:(verifyProgram false false None);
+  ignore $. (actionGroup#get_action "VerifyFunction")#connect#activate ~callback:(verifyProgram false true None);
+  ignore $. (actionGroup#get_action "RunToCursor")#connect#activate ~callback:(verifyProgram true false None);
+  ignore $. (actionGroup#get_action "RunShapeAnalysis")#connect#activate ~callback:runShapeAnalyser;
+  ignore $. (actionGroup#get_action "Include paths")#connect#activate ~callback:showIncludesDialog;
+  ignore $. (actionGroup#get_action "Find file (top window)")#connect#activate ~callback:(showFindFileDialog subNotebook);
+  ignore $. (actionGroup#get_action "Find file (bottom window)")#connect#activate ~callback:(showFindFileDialog textNotebook);
+  ignore $. undoAction#connect#activate ~callback:undo;
+  ignore $. redoAction#connect#activate ~callback:redo;
+  ignore $. root#event#connect#focus_in ~callback:begin fun _ ->
     !buffers |> List.iter begin fun tab ->
       match !(tab#path) with
         None -> ()
@@ -1933,7 +1932,7 @@ let () =
         "-bindir";
         "-enforce_annotations"
       ] @ List.map (fun (paramName, (_, description)) -> "-" ^ paramName ^ "   " ^ description) vfparams in
-      GToolbox.message_box "VeriFast IDE" begin
+      GToolbox.message_box ~title:"VeriFast IDE" begin
         "Invalid command line.\n\n" ^ 
         "Usage: vfide [options] [filepath]\n\n" ^
         "Options:\n" ^

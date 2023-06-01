@@ -19,18 +19,13 @@ dl_and_unzip() {
 }
 
 script_dir=$(pwd)
-MSVC_CACHE_FILEPATH=$script_dir/src/cxx_frontend/ast_exporter/MSVC_CACHE
 
 cd /cygdrive/c
-dl_and_unzip https://github.com/NielsMommen/vf-llvm-clang-build/releases/download/v1.0.0/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION-Windows.tar.gz B0D469554382EB68DB0E754DDED1AE49734FE837E6A768CAEA85184E5BEE0405 256 z
-dl_and_unzip https://github.com/verifast/vfdeps-win/releases/download/21.11/vfdeps-fdd90f3-win.txz 5e7adb1f3fabe8d5709d3e5ab7dbf2e3c276cbd28c2d8e1142aedb52 224 j
+dl_and_unzip https://github.com/NielsMommen/vf-llvm-clang-build/releases/download/v2.0.3/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION-Windows-MinGW-x86_64.tar.gz 0379947ECC2F475ECA7A876C858910DEAE507C2588BC8534935AE76C233AA49F 256 z
+dl_and_unzip https://github.com/verifast/vfdeps-win/releases/download/23.04/vfdeps-$VFDEPS_NAME-win.txz 63a593c235fbcb4d86c4cbe821aca1a943873daadfbbc1af37f0bb3f 224 j
 
-# $VCINSTALLDIR and $VCToolsRedistDir are set by invoking vcvarsall.bat in setup-windows.bat
-echo VCVARSALL_BAT_DIR="\"$VCINSTALLDIR\Auxiliary\Build\"" > $MSVC_CACHE_FILEPATH
-echo MSVC_REDIST_DIR="\"$VCToolsRedistDir\x86\Microsoft.VC142.CRT\"" >> $MSVC_CACHE_FILEPATH
-
-cd $script_dir/src/cxx_frontend/ast_exporter/build
-cmd /C "cmake -DLLVM_INSTALL_DIR=C:/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION -DVFDEPS=C:/vfdeps -A Win32 -Thost=x64 .."
+cd $script_dir/src/cxx_frontend/ast_exporter
+cmake -S . -B build -G ninja -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ -DCMAKE_BUILD_TYPE=Release -DLLVM_INSTALL_DIR=/cygdrive/c/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION -DVFDEPS=/cygdrive/c/vfdeps
 
 echo 'export PATH="/cygdrive/c/vfdeps/bin:$PATH"' >> ~/.bash_profile
       export PATH="/cygdrive/c/vfdeps/bin:$PATH"

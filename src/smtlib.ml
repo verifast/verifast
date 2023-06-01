@@ -183,7 +183,7 @@ module Symbol (S : SORT) : SYMBOL with type sort = S.t = struct
      Symbols may not start with a numeral. *)
   let escape_char = function
     | '@' -> "_@"
-    | ''' -> "_q"
+    | '\'' -> "_q"
     | '#' -> "_h"
     | '0'..'9' as c -> Printf.sprintf "_%c" c
     | c -> String.make 1 c

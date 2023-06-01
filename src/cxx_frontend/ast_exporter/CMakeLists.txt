@@ -39,7 +39,7 @@ target_include_directories(vf-cxx-ast-exporter
 )
 
 if(NOT LLVM_ENABLE_RTTI)
-  target_compile_options(vf-cxx-ast-exporter PRIVATE $<IF:$<CXX_COMPILER_ID:MSVC>,/GR-,-fno-rtti>)
+  target_compile_options(vf-cxx-ast-exporter PRIVATE -fno-rtti)
 endif()
 
 llvm_map_components_to_libnames(LLVM_LIBS support)
@@ -56,7 +56,7 @@ foreach(LIB IN LISTS CAPNP_LIBS KJ_LIBS)
   list(APPEND LIBS_PATHS ${${_LIB_VAR}})
 endforeach()
 
-set_property(TARGET vf-cxx-ast-exporter PROPERTY CXX_STANDARD 14)
+set_property(TARGET vf-cxx-ast-exporter PROPERTY CXX_STANDARD 17)
 
 target_include_directories(vf-cxx-ast-exporter
   PRIVATE

@@ -10,7 +10,7 @@ bool decomposeLocToLCF(const clang::SourceLocation &loc,
   auto decLoc = SM.getDecomposedLoc(SM.getSpellingLoc(loc));
   auto fileEntry = SM.getFileEntryForID(decLoc.first);
 
-  if (!fileEntry || !fileEntry->isValid())
+  if (!fileEntry)
     return false;
 
   auto uid = fileEntry->getUID();

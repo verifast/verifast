@@ -163,7 +163,7 @@ void AstSerializer::serializeTU(stubs::TU::Builder &builder,
   // Serialize ghost includes at start of file
   for (size_t i(0); i < fileEntries.size(); ++i) {
     auto fileEntry = fileEntries[i];
-    if (fileEntry && fileEntry->isValid()) {
+    if (fileEntry) {
       anns.clear();
       m_store.getGhostIncludeSequence(fileEntry, anns, m_SM);
       for (auto &ann : anns) {

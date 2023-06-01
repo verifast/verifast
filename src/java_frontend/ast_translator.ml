@@ -141,16 +141,16 @@ let parse_pure_decls_core loc used_parser anns lookup =
   | Lexer.Stream.Failure -> error (Lexed (loc())) "Parse error"
 
 let parse_ghost_import loc anns lookup =
-  let parse_ghost_import_eof = parser 
-    [< i = Parser.parse_import0; _ = Lexer.Stream.empty >] -> 
+  let parse_ghost_import_eof = function%parser 
+    [ [%l i = Parser.parse_import0]; [%l () = Lexer.Stream.empty] ] -> 
         match i with Import(l, Real, pn,el) -> Import(l, Ghost, pn,el)
   in
   parse_pure_decls_core loc parse_ghost_import_eof anns lookup
 
 let parse_pure_decls loc anns lookup =
-  let parser_pure_decls_eof = parser 
-    [< ds = Parser.parse_decls VF.Java (Some data_model_java) ~inGhostHeader:true true;
-      _ = Lexer.Stream.empty >] -> ds
+  let parser_pure_decls_eof = function%parser 
+    [ [%l ds = Parser.parse_decls VF.Java (Some data_model_java) ~inGhostHeader:true true];
+      [%l () = Lexer.Stream.empty] ] -> ds
   in
   parse_pure_decls_core loc parser_pure_decls_eof anns lookup
 
@@ -160,43 +160,43 @@ let parse_pure_decls_try anns lookup =
   with parse_error -> []
 
 let parse_postcondition loc anns lookup =
-  let parser_postcondition_eof = parser 
-    [< '(_, Lexer.Kwd "ensures"); post = JavaParser.parse_asn; '(_, Lexer.Kwd ";"); 
-       _ = Lexer.Stream.empty >] -> post
+  let parser_postcondition_eof = function%parser 
+    [ (_, Lexer.Kwd "ensures"); [%l post = JavaParser.parse_asn]; (_, Lexer.Kwd ";"); 
+       [%l () = Lexer.Stream.empty] ] -> post
   in
   parse_pure_decls_core loc parser_postcondition_eof anns lookup
 
 let parse_contract loc anns lookup =
-  let parse_contract_eof = parser 
-    [< s = JavaParser.parse_spec; _ = Lexer.Stream.empty >] -> s
+  let parse_contract_eof = function%parser 
+    [ [%l s = JavaParser.parse_spec]; [%l () = Lexer.Stream.empty] ] -> s
   in
   parse_pure_decls_core loc parse_contract_eof anns lookup
   
 let parse_ghost_members loc classname ann =
-  let rec parse_ghost_members_eof = parser
-  | [< _ = Lexer.Stream.empty >] -> []
-  | [< m = JavaParser.parse_ghost_java_member classname; mems = parse_ghost_members_eof >] -> m::mems
+  let rec parse_ghost_members_eof = function%parser
+  | [ [%l () = Lexer.Stream.empty] ] -> []
+  | [ [%l m = JavaParser.parse_ghost_java_member classname]; parse_ghost_members_eof as mems ] -> m::mems
   in
   parse_pure_decls_core loc parse_ghost_members_eof [ann] false
 
 let parse_pure_statement loc ann lookup =
-  let parse_pure_statement_eof = parser
-    [< s = JavaParser.parse_stmt0; _ = Lexer.Stream.empty >] -> PureStmt (loc, s)
+  let parse_pure_statement_eof = function%parser
+    [ [%l s = JavaParser.parse_stmt0]; [%l () = Lexer.Stream.empty] ] -> PureStmt (loc, s)
   in
   parse_pure_decls_core loc parse_pure_statement_eof [ann] lookup
 
 let parse_loop_invar loc anns lookup =
-  let parse_loop_invar_eof = parser 
-    [<
-      inv =
+  let parse_loop_invar_eof = function%parser 
+    [
+      [%l inv =
         Parser.opt
-          begin parser
-          | [< '(_, Lexer.Kwd "requires"); pre = JavaParser.parse_asn; '(_, Lexer.Kwd ";");
-              '(_, Lexer.Kwd "ensures"); post = JavaParser.parse_asn; '(_, Lexer.Kwd ";") >] -> VF.LoopSpec (pre, post)
-          | [< '(_, Lexer.Kwd "invariant"); p = JavaParser.parse_asn; '(_, Lexer.Kwd ";"); >] -> VF.LoopInv p
-          end;
-      dec = Parser.opt (parser [< '(_, Lexer.Kwd "decreases"); decr = JavaParser.parse_expr; '(_, Lexer.Kwd ";"); >] -> decr)
-    >] -> (inv, dec)
+          begin function%parser
+          | [ (_, Lexer.Kwd "requires"); [%l pre = JavaParser.parse_asn]; (_, Lexer.Kwd ";");
+              (_, Lexer.Kwd "ensures"); [%l post = JavaParser.parse_asn]; (_, Lexer.Kwd ";") ] -> VF.LoopSpec (pre, post)
+          | [ (_, Lexer.Kwd "invariant"); [%l p = JavaParser.parse_asn]; (_, Lexer.Kwd ";"); ] -> VF.LoopInv p
+          end];
+      [%l dec = Parser.opt (function%parser [ (_, Lexer.Kwd "decreases"); [%l decr = JavaParser.parse_expr]; (_, Lexer.Kwd ";"); ] -> decr)]
+    ] -> (inv, dec)
   in
   parse_pure_decls_core loc parse_loop_invar_eof anns lookup
 
@@ -953,40 +953,3 @@ and translate_literal l typ value =
       match t with
       | SimpleRef(Name(_, [Identifier(_, "java"); Identifier(_, "lang"); Identifier(_, "String")])) -> VF.StringLit(l', value)
       | _ -> VF.Null(l')
-      
-  
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  
