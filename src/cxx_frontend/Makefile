@@ -45,7 +45,7 @@ $(CXX_FE_STUBS_DIR)/stubs_ast.capnp.h $(CXX_FE_STUBS_DIR)/stubs_ast.capnp.c++ &:
 	cp -f $< $@
 
 ifeq ($(OS), Windows_NT)
-../bin/vf-cxx-ast-exporter$(DOTEXE): ..bin/libstdc++-6.dll
+../bin/vf-cxx-ast-exporter$(DOTEXE): ../bin/libstdc++-6.dll
 endif
 ../bin/vf-cxx-ast-exporter$(DOTEXE): $(CXX_FE_STUBS_DIR)/stubs_ast.capnp.h $(CXX_FE_STUBS_DIR)/stubs_ast.capnp.c++ $(CXX_FE_AST_EXPORTER_DIR)/*.h $(CXX_FE_AST_EXPORTER_DIR)/*.cpp
 	@echo "  MAKE " $@
