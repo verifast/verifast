@@ -30,7 +30,7 @@ dl_and_unzip_vfdeps() {
 dl_and_unzip_llvm-clang() {
   platform="$1"
   hash="$2"
-  dl_and_unzip "https://github.com/NielsMommen/vf-llvm-clang-build/releases/download/v1.0.0/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION-$platform.tar.gz" $hash 256 z
+  dl_and_unzip "https://github.com/NielsMommen/vf-llvm-clang-build/releases/download/v2.0.3/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION-$platform.tar.gz" $hash 256 z
 }
 
 script_dir=$(pwd)
@@ -41,14 +41,14 @@ if [ $(uname -s) = "Linux" ]; then
        git wget ca-certificates m4 \
        patch unzip libgtk2.0-dev \
        valac libgtksourceview2.0-dev \
-       cmake build-essential
+       cmake build-essential ninja-build
   
   cd /tmp
-  dl_and_unzip_llvm-clang Linux ab42b50fd7fbd59254d3a8aef5473a5c6ceb9ca3508f31c76d95ee5d31268291
-  dl_and_unzip_vfdeps https://github.com/verifast/vfdeps/releases/download/21.11/$VFDEPS_NAME-linux.txz a4298c2ba2d969197db0c47379630223a2d282fe40394d22a708709a
+  dl_and_unzip_llvm-clang Linux f39cc6feb96ebbc5cf7cb39f304b3bf7484a32842da4859441da6f983c43f22a
+  dl_and_unzip_vfdeps https://github.com/verifast/vfdeps/releases/download/23.04/$VFDEPS_NAME-linux.txz 9d108282a8a94526f8d043c3e2e4c3cac513788a42fa8d6964ee4937
 
-  cd $script_dir/src/cxx_frontend/ast_exporter/build
-  cmake -DLLVM_INSTALL_DIR=/tmp/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION -DVFDEPS=/tmp/$VFDEPS_NAME -DCMAKE_BUILD_TYPE=Release ..
+  cd $script_dir/src/cxx_frontend/ast_exporter
+  cmake -S . -B build -G Ninja -DLLVM_INSTALL_DIR=/tmp/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION -DVFDEPS=/tmp/$VFDEPS_NAME -DCMAKE_BUILD_TYPE=Release
 
 
 elif [ $(uname -s) = "Darwin" ]; then
@@ -70,17 +70,18 @@ elif [ $(uname -s) = "Darwin" ]; then
   brewinstall gtksourceview
   brewinstall vala
   brewinstall cmake
+  brewinstall ninja
   export PKG_CONFIG_PATH=/opt/X11/lib/pkgconfig
   sudo mkdir /usr/local/$VFDEPS_NAME
   sudo mkdir /usr/local/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION
   sudo chown -R $(whoami):admin /usr/local/*
 
   cd /usr/local
-  dl_and_unzip_llvm-clang MacOS 365648cc3fea920b49dc262b13a19d64896d873c1ceaa40d3da37c71c8201168
-  dl_and_unzip_vfdeps https://github.com/verifast/vfdeps/releases/download/21.11/$VFDEPS_NAME-macos.txz f47a09659ab3a699ba63daaa666e0ee9fc4fe28a3b186c0badc8834a
+  dl_and_unzip_llvm-clang MacOS 77474d414aa7ddc4e68bc00525a8dccec284c9936c45f6241157070dc5dfdfd6
+  dl_and_unzip_vfdeps https://github.com/verifast/vfdeps/releases/download/23.04/$VFDEPS_NAME-macos.txz a43ad92202761103a03400d78679a94838eaad44567c69b94eedd10d
 
-  cd $script_dir/src/cxx_frontend/ast_exporter/build
-  cmake -DLLVM_INSTALL_DIR=/usr/local/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION -DVFDEPS=/usr/local/$VFDEPS_NAME -DCMAKE_BUILD_TYPE=Release ..
+  cd $script_dir/src/cxx_frontend/ast_exporter
+  cmake -S . -B build -G Ninja -DLLVM_INSTALL_DIR=/usr/local/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION -DVFDEPS=/usr/local/$VFDEPS_NAME -DCMAKE_BUILD_TYPE=Release
   
 else
   echo "Your OS is not supported by this script."

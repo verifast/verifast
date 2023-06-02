@@ -34,14 +34,14 @@ public:
   void startInclusion(const clang::FileEntry &fileEntry);
 
   void addRealInclDirective(clang::SourceRange range, clang::StringRef fileName,
-                            const clang::FileEntry &fileEntry, bool isAngled) {
+                            const clang::FileEntryRef fileEntry, bool isAngled) {
     currentInclusion()->addRealInclDirective(range, fileName,
                                              fileEntry.getUID(), isAngled);
   }
 
   void addGhostInclDirective(const clang::FileEntry *entry, Annotation &ann) {
     auto uid = entry->getUID();
-    assert(m_includesMap.contains(uid) &&
+    assert(m_includesMap.find(uid) != m_includesMap.edn() &&
            "File has not been preprocessed and added to inclusion context");
     m_includesMap.at(uid).addGhostInclDirective(ann);
   }

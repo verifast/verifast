@@ -64,16 +64,16 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) = struct
     let token_stream = Stream.from (fun _ -> next_token ()) in
     try_parse_no_pp ann_parser (current_loc (), token_stream)
 
-  let parse_end = parser
-    | [< _ = Lexer.Stream.empty >] -> ()
-    | [< '(_, Lexer.Eof) >] -> ()
+  let parse_end = function%parser
+    | [ [%l () = Lexer.Stream.empty] ] -> ()
+    | [ (_, Lexer.Eof) ] -> ()
 
   let parse_spec_clauses_opt (anns: raw_annotation list): (bool * (string * VF.type_expr list * (VF.loc * string) list) option * (VF.asn * VF.asn) option * bool) option =
     match anns with
     | [] -> None
     | _ -> 
-      let ann_parser = parser
-      | [< s = AnnParser.parse_spec_clauses; () = parse_end >] -> s in
+      let ann_parser = function%parser
+      | [ [%l s = AnnParser.parse_spec_clauses]; [%l () = parse_end] ] -> s in
       Some (try_parse_ann_list_no_pp anns ann_parser)
 
   let parse_func_contract (loc: VF.loc) (anns: raw_annotation list): (bool * (string * VF.type_expr list * (VF.loc * string) list) option * (VF.asn * VF.asn) option * bool) =
@@ -103,68 +103,72 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) = struct
       try_parse_ann_list_no_pp anns ann_parser
 
   let parse_decls (ann: raw_annotation): VF.decl list =
-    let ann_parser = parser
-    | [< d = AnnParser.parse_decls; () = parse_end >] -> d in
+    let ann_parser = function%parser
+    | [ [%l d = AnnParser.parse_decls]; [%l () = parse_end] ] -> d in
     try_parse_ghost_no_pp ann ann_parser
 
   let parse_stmt (ann: raw_annotation): VF.stmt =
-    let ann_parser = parser
-    | [< stmt = AnnParser.parse_stmt; () = parse_end >] -> stmt in
+    let ann_parser = function%parser
+    | [ [%l stmt = AnnParser.parse_stmt]; [%l () = parse_end] ] -> stmt in
     try_parse_ghost_no_pp ann ann_parser
 
   let parse_functype_ghost_params (ann: raw_annotation): string list * (VF.type_expr * string) list =
-    let ann_parser = parser
-    | [< 
-        '(_, Kwd "/*@");
-        functiontype_type_params = Parser.opt AnnParser.parse_type_params_free;
-        functiontype_params = Parser.opt AnnParser.parse_paramlist;
-        '(_, Kwd "@*/");
-        () = parse_end
-      >] ->
+    let ann_parser = function%parser
+    | [ 
+        (_, Kwd "/*@");
+        [%l functiontype_type_params = Parser.opt AnnParser.parse_type_params_free];
+        [%l functiontype_params = Parser.opt AnnParser.parse_paramlist];
+        (_, Kwd "@*/");
+        [%l () = parse_end]
+      ] ->
         let none_to_empty_list = function None -> [] | Some x -> x in
         none_to_empty_list functiontype_type_params, none_to_empty_list functiontype_params
-    | [< () = parse_end >] -> [], []
+    | [ [%l () = parse_end] ] -> [], []
     in
     try_parse_ghost_no_pp ann ann_parser
 
   let parse_struct_members (struct_name: string) (ann: raw_annotation): Cxx_fe_sig.struct_member_decl list =
-    let parse_mem = parser
-    | [< 
-        '(l, Kwd "predicate"); 
-        '(_, Ident g); 
-        ps = AnnParser.parse_paramlist;
-        body = begin parser
-        | [< '(_, Kwd "="); p = AnnParser.parse_asn >] -> Some p
-        | [< >] -> None
-        end;
-        '(_, Kwd ";") 
-      >] -> 
+    let parse_mem = function%parser
+    | [ 
+        (l, Kwd "predicate"); 
+        (_, Ident g); 
+        [%l ps = AnnParser.parse_paramlist];
+        [%l
+        body = begin function%parser
+        | [ (_, Kwd "="); [%l p = AnnParser.parse_asn] ] -> Some p
+        | [ ] -> None
+        end
+        ];
+        (_, Kwd ";") 
+      ] -> 
       let pred = VF.InstancePredDecl (l, g, ps, body) in
       Cxx_fe_sig.CxxInstPredMem pred
-    | [< 
-        '(l, Kwd "lemma"); 
-        t = AnnParser.parse_return_type;
-        VF.Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, terminates, None, false, []) = AnnParser.parse_func_rest (VF.Lemma (false, None)) t 
-      >] ->
+    | [ 
+        (l, Kwd "lemma"); 
+        [%l t = AnnParser.parse_return_type];
+        [%l VF.Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, terminates, None, false, []) = AnnParser.parse_func_rest (VF.Lemma (false, None)) t] 
+      ] ->
       let ps = (VF.PtrTypeExpr (l, VF.StructTypeExpr (l, Some struct_name, None, [])), "this") :: ps in
       let lem = VF.Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, terminates, None, false, []) in
       Cxx_fe_sig.CxxDeclMem lem
-    | [< 
-        binding = begin parser
-        | [< '(_, Kwd "static") >] -> VF.Static
-        | [<  >] -> VF.Instance
-        end;
-        t = AnnParser.parse_type; '(l, Ident x); '(_, Kwd ";")
-      >] ->
+    | [ 
+        [%l
+        binding = begin function%parser
+        | [ (_, Kwd "static") ] -> VF.Static
+        | [  ] -> VF.Instance
+        end
+        ];
+        [%l t = AnnParser.parse_type]; (l, Ident x); (_, Kwd ";")
+      ] ->
       let field = VF.Field (l, VF.Ghost, t, x, binding, VF.Public, false, None) in
       Cxx_fe_sig.CxxFieldMem field
     in
-    let rec parse_mems = parser
-    | [< '(_, Kwd "@*/") >] -> []
-    | [< mem = parse_mem; mems = parse_mems >] -> mem :: mems
+    let rec parse_mems = function%parser
+    | [ (_, Kwd "@*/") ] -> []
+    | [ parse_mem as mem; parse_mems as mems ] -> mem :: mems
     in
-    let ann_parser = parser
-    | [< '(_, Kwd "/*@"); mems = parse_mems; () = parse_end >] -> mems
+    let ann_parser = function%parser
+    | [ (_, Kwd "/*@"); parse_mems as mems; [%l () = parse_end] ] -> mems
     in
     try_parse_ghost_no_pp ann ann_parser
 
@@ -191,12 +195,12 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) = struct
     in
     let result = 
       let loc, token_stream = make_sound_preprocessor_core Args.report_macro_call make_lexer path Args.verbose Args.include_paths Args.data_model_opt Args.define_macros ghost_macros included_files in
-      let parse_virtual_c_file = parser
-      [<
-        headers, header_names = Parser.parse_include_directives_core Args.verbose Args.enforce_annotations Args.data_model_opt active_headers;
-        ds = Parser.parse_decls VF.CLang Args.data_model_opt Args.enforce_annotations ~inGhostHeader:false;
-        () = parse_end
-      >] -> 
+      let parse_virtual_c_file = function%parser
+      [
+        [%l headers, header_names = Parser.parse_include_directives_core Args.verbose Args.enforce_annotations Args.data_model_opt active_headers];
+        [%l ds = Parser.parse_decls VF.CLang Args.data_model_opt Args.enforce_annotations ~inGhostHeader:false];
+        [%l () = parse_end]
+      ] -> 
         match ds with
         | [] -> headers, header_names
         | _ -> error (loc ()) "Expected only ghost #include directives."

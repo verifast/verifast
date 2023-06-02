@@ -316,34 +316,34 @@ let make_lexer keywords lines =
 (* ------------------------ *)
 
 (* general stuff *)
-let parse_int = parser [< '(Int i) >] -> 
+let parse_int = function%parser [ (Int i) ] -> 
       debug_print ("parse_int " ^ (string_of_big_int i)); int_of_big_int i
-let parse_float = parser [< '(Float f) >] -> 
+let parse_float = function%parser [ (Float f) ] -> 
       debug_print ("parse_float " ^ (string_of_float f));f
-let parse_string = parser [< '(String s) >] -> 
+let parse_string = function%parser [ (String s) ] -> 
       debug_print ("parse_string " ^ s); s
 let parse_list : (token Stream.t -> 'a) -> (token Stream.t) -> 'a list =
   fun p ->
-    let rec parse_rest = parser
-        | [< '(Kwd ";"); result = p; rest = parse_rest >] -> result::rest
-        | [< >] -> []
+    let rec parse_rest = function%parser
+        | [ (Kwd ";"); p as result; parse_rest as rest ] -> result::rest
+        | [ ] -> []
     in
-    let rec parse_list_core = parser
-        | [< result = p; rest = parse_rest >] -> debug_print "parse_list Cons"; result::rest
-        | [< >] -> debug_print "parse_list Nil"; []
+    let rec parse_list_core = function%parser
+        | [ p as result; parse_rest as rest ] -> debug_print "parse_list Cons"; result::rest
+        | [ ] -> debug_print "parse_list Nil"; []
     in
-    parser
-      | [< '(Kwd "["); result = parse_list_core; '(Kwd "]"); >] -> result
+    function%parser
+      | [ (Kwd "["); parse_list_core as result; (Kwd "]"); ] -> result
 let parse_pair : (token Stream.t -> 'a) -> (token Stream.t -> 'b) -> 
                              (token Stream.t) -> ('a * 'b) = 
-  fun p1 p2 -> parser
-  | [< '(Kwd "("); p1' = p1; '(Kwd ","); p2' = p2; '(Kwd ")") >] -> 
+  fun p1 p2 -> function%parser
+  | [ (Kwd "("); p1 as p1'; (Kwd ","); p2 as p2'; (Kwd ")") ] -> 
       debug_print "parse_pair"; (p1', p2')
 let parse_opt : (token Stream.t -> 'a) -> (token Stream.t) -> 'a option =
-  fun p -> parser 
-  | [< '(Kwd "Some"); '(Kwd "("); result = p; '(Kwd ")") >] -> 
+  fun p -> function%parser 
+  | [ (Kwd "Some"); (Kwd "("); p as result; (Kwd ")") ] -> 
       debug_print "parse_opt Some"; Some result
-  | [< '(Kwd "None") >] -> 
+  | [ (Kwd "None") ] -> 
       debug_print "parse_opt None"; None
 
 (* ------------------------ *)
@@ -373,580 +373,580 @@ let rec read_asts s =
 
 (* locations *)
 and 
-  parse_loc = parser
-  | [< '(Kwd "NoSource") >] -> 
+  parse_loc = function%parser
+  | [ (Kwd "NoSource") ] -> 
       debug_print ("parse_loc: " ^ "NoSource");
       NoSource
-  | [< '(Kwd "SourceLine"); '(Kwd "("); 
-          f = parse_string; '(Kwd ","); 
-          l = parse_int;    '(Kwd ","); 
-          c1 = parse_int;   '(Kwd ","); 
-          c2 = parse_int;   '(Kwd ")");
-    >] -> 
+  | [ (Kwd "SourceLine"); (Kwd "("); 
+          parse_string as f; (Kwd ","); 
+          parse_int as l;    (Kwd ","); 
+          parse_int as c1;   (Kwd ","); 
+          parse_int as c2;   (Kwd ")");
+    ] -> 
       debug_print ("parse_loc: " ^ "SourceLine");
       SourceLine(f, l, c1, c2)
-  | [< '(Kwd "SourceLines"); '(Kwd "("); 
-          f = parse_string;  '(Kwd ","); 
-          l1 = parse_int;    '(Kwd ","); 
-          c1 = parse_int;    '(Kwd ","); 
-          l2 = parse_int;    '(Kwd ","); 
-          c2 = parse_int;    '(Kwd ")"); 
-    >] -> 
+  | [ (Kwd "SourceLines"); (Kwd "("); 
+          parse_string as f;  (Kwd ","); 
+          parse_int as l1;    (Kwd ","); 
+          parse_int as c1;    (Kwd ","); 
+          parse_int as l2;    (Kwd ","); 
+          parse_int as c2;    (Kwd ")"); 
+    ] -> 
       debug_print ("parse_loc: " ^ "SourceLines");
       SourceLines(f, l1, c1, l2, c2)
 and
-  parse_gen_source = parser
-  | [< '(Kwd "Original") >]  -> debug_print ("parse_source: Original");  Original
-  | [< '(Kwd "Generated") >] -> debug_print ("parse_source: Generated"); Generated
+  parse_gen_source = function%parser
+  | [ (Kwd "Original") ]  -> debug_print ("parse_source: Original");  Original
+  | [ (Kwd "Generated") ] -> debug_print ("parse_source: Generated"); Generated
 
 
 (* verifier annotations *)
 and
-  parse_annotation = parser
-  | [< '(Kwd "Annotation");    '(Kwd "("); 
-          l = parse_loc;       '(Kwd ","); 
-          v = parse_string;    '(Kwd ")"); 
-    >] -> 
+  parse_annotation = function%parser
+  | [ (Kwd "Annotation");    (Kwd "("); 
+          parse_loc as l;       (Kwd ","); 
+          parse_string as v;    (Kwd ")"); 
+    ] -> 
       debug_print ("parse_annotation: " ^ v);
       Annotation(l, v)
 
 
 (* names *)
 and
-  parse_identifier = parser
-  | [< '(Kwd "Identifier");    '(Kwd "("); 
-          l = parse_loc;       '(Kwd ","); 
-          i = parse_string;    '(Kwd ")"); 
-    >] -> 
+  parse_identifier = function%parser
+  | [ (Kwd "Identifier");    (Kwd "("); 
+          parse_loc as l;       (Kwd ","); 
+          parse_string as i;    (Kwd ")"); 
+    ] -> 
       debug_print ("parse_identifier: " ^ i);
       Identifier(l, i)
 and
-  parse_name = parser  
-  | [< '(Kwd "Name");                        '(Kwd "("); 
-          l = parse_loc;                     '(Kwd ","); 
-          ids = parse_list parse_identifier; '(Kwd ")"); 
-    >] -> 
+  parse_name = function%parser  
+  | [ (Kwd "Name");                        (Kwd "("); 
+          parse_loc as l;                     (Kwd ","); 
+          [%l ids = parse_list parse_identifier]; (Kwd ")"); 
+    ] -> 
       debug_print ("parse_name");
       Name(l, ids)
 
 
 (* accessibility *)
 and
-  parse_accessibility = parser
-  | [< '(Kwd "PublicAccess") >]    -> debug_print ("parse_accessibility: PublicAccess");    PublicAccess
-  | [< '(Kwd "PrivateAccess") >]   -> debug_print ("parse_accessibility: PrivateAccess");   PrivateAccess
-  | [< '(Kwd "PackageAccess") >]   -> debug_print ("parse_accessibility: PackageAccess");   PackageAccess
-  | [< '(Kwd "ProtectedAccess") >] -> debug_print ("parse_accessibility: ProtectedAccess"); ProtectedAccess
+  parse_accessibility = function%parser
+  | [ (Kwd "PublicAccess") ]    -> debug_print ("parse_accessibility: PublicAccess");    PublicAccess
+  | [ (Kwd "PrivateAccess") ]   -> debug_print ("parse_accessibility: PrivateAccess");   PrivateAccess
+  | [ (Kwd "PackageAccess") ]   -> debug_print ("parse_accessibility: PackageAccess");   PackageAccess
+  | [ (Kwd "ProtectedAccess") ] -> debug_print ("parse_accessibility: ProtectedAccess"); ProtectedAccess
 and
-  parse_static_binding = parser
-  | [< '(Kwd "Static") >]    -> debug_print ("parse_static_binding: Static");    Static
-  | [< '(Kwd "NonStatic") >] -> debug_print ("parse_static_binding: NonStatic"); NonStatic
+  parse_static_binding = function%parser
+  | [ (Kwd "Static") ]    -> debug_print ("parse_static_binding: Static");    Static
+  | [ (Kwd "NonStatic") ] -> debug_print ("parse_static_binding: NonStatic"); NonStatic
 and
-  parse_abstractness = parser
-  | [< '(Kwd "Abstract") >]    -> debug_print ("parse_abstractness: Abstract");    Abstract
-  | [< '(Kwd "NonAbstract") >] -> debug_print ("parse_abstractness: NonAbstract"); NonAbstract
+  parse_abstractness = function%parser
+  | [ (Kwd "Abstract") ]    -> debug_print ("parse_abstractness: Abstract");    Abstract
+  | [ (Kwd "NonAbstract") ] -> debug_print ("parse_abstractness: NonAbstract"); NonAbstract
 and
-  parse_finality = parser
-  | [< '(Kwd "Final") >]    -> debug_print ("parse_finality: Final");    Final
-  | [< '(Kwd "NonFinal") >] -> debug_print ("parse_finality: NonFinal"); NonFinal
+  parse_finality = function%parser
+  | [ (Kwd "Final") ]    -> debug_print ("parse_finality: Final");    Final
+  | [ (Kwd "NonFinal") ] -> debug_print ("parse_finality: NonFinal"); NonFinal
 
 
 (* types *)
 and
-  parse_prim_type = parser
-  | [< '(Kwd "VoidType");  '(Kwd "("); 
-       l = parse_loc; '(Kwd ")") >] -> debug_print ("parse_prim_type: VoidType"); VoidType(l)
-  | [< '(Kwd "BoolType");  '(Kwd "("); 
-       l = parse_loc; '(Kwd ")") >] -> debug_print ("parse_prim_type: BoolType"); BoolType(l)
-  | [< '(Kwd "CharType");  '(Kwd "("); 
-       l = parse_loc; '(Kwd ")") >] -> debug_print ("parse_prim_type: CharType"); CharType(l)
-  | [< '(Kwd "ByteType");  '(Kwd "("); 
-       l = parse_loc; '(Kwd ")") >] -> debug_print ("parse_prim_type: ByteType"); ByteType(l)
-  | [< '(Kwd "ShortType"); '(Kwd "("); 
-       l = parse_loc; '(Kwd ")") >] -> debug_print ("parse_prim_type: ShortType"); ShortType(l)
-  | [< '(Kwd "IntType");   '(Kwd "("); 
-       l = parse_loc; '(Kwd ")") >] -> debug_print ("parse_prim_type: IntType"); IntType(l)
-  | [< '(Kwd "LongType");  '(Kwd "("); 
-       l = parse_loc; '(Kwd ")") >] -> debug_print ("parse_prim_type: LongType"); LongType(l)
-  | [< '(Kwd "FloatType"); '(Kwd "("); 
-       l = parse_loc; '(Kwd ")") >] -> debug_print ("parse_prim_type: FloatType"); FloatType(l)
-  | [< '(Kwd "DoubleType");'(Kwd "("); 
-       l = parse_loc; '(Kwd ")") >] -> debug_print ("parse_prim_type: DoubleType"); DoubleType(l)
+  parse_prim_type = function%parser
+  | [ (Kwd "VoidType");  (Kwd "("); 
+       parse_loc as l; (Kwd ")") ] -> debug_print ("parse_prim_type: VoidType"); VoidType(l)
+  | [ (Kwd "BoolType");  (Kwd "("); 
+       parse_loc as l; (Kwd ")") ] -> debug_print ("parse_prim_type: BoolType"); BoolType(l)
+  | [ (Kwd "CharType");  (Kwd "("); 
+       parse_loc as l; (Kwd ")") ] -> debug_print ("parse_prim_type: CharType"); CharType(l)
+  | [ (Kwd "ByteType");  (Kwd "("); 
+       parse_loc as l; (Kwd ")") ] -> debug_print ("parse_prim_type: ByteType"); ByteType(l)
+  | [ (Kwd "ShortType"); (Kwd "("); 
+       parse_loc as l; (Kwd ")") ] -> debug_print ("parse_prim_type: ShortType"); ShortType(l)
+  | [ (Kwd "IntType");   (Kwd "("); 
+       parse_loc as l; (Kwd ")") ] -> debug_print ("parse_prim_type: IntType"); IntType(l)
+  | [ (Kwd "LongType");  (Kwd "("); 
+       parse_loc as l; (Kwd ")") ] -> debug_print ("parse_prim_type: LongType"); LongType(l)
+  | [ (Kwd "FloatType"); (Kwd "("); 
+       parse_loc as l; (Kwd ")") ] -> debug_print ("parse_prim_type: FloatType"); FloatType(l)
+  | [ (Kwd "DoubleType");(Kwd "("); 
+       parse_loc as l; (Kwd ")") ] -> debug_print ("parse_prim_type: DoubleType"); DoubleType(l)
 and
-  parse_ref_type = parser
-  | [< '(Kwd "SimpleRef"); '(Kwd "("); 
-          n = parse_name;  '(Kwd ")"); 
-    >] -> 
+  parse_ref_type = function%parser
+  | [ (Kwd "SimpleRef"); (Kwd "("); 
+          parse_name as n;  (Kwd ")"); 
+    ] -> 
       debug_print ("parse_ref_type: SimpleRef");
       SimpleRef(n)
-  | [< '(Kwd "TypeApply");                  '(Kwd "(");
-          l = parse_loc;                    '(Kwd ",");
-          n = parse_name;                   '(Kwd ",");
-          typs = parse_list parse_ref_type; '(Kwd ")");
-    >] -> 
+  | [ (Kwd "TypeApply");                  (Kwd "(");
+          parse_loc as l;                    (Kwd ",");
+          parse_name as n;                   (Kwd ",");
+          [%l typs = parse_list parse_ref_type]; (Kwd ")");
+    ] -> 
       debug_print ("parse_ref_type: TypeApply");
       TypeApply(l, n, typs)
-  | [< '(Kwd "WildCard");                 '(Kwd "(");
-          l = parse_loc;                  '(Kwd ",");
-          typ = parse_opt parse_ref_type; '(Kwd ",");
-          bound = parse_type_bound;       '(Kwd ")");
+  | [ (Kwd "WildCard");                 (Kwd "(");
+          parse_loc as l;                  (Kwd ",");
+          [%l typ = parse_opt parse_ref_type]; (Kwd ",");
+          parse_type_bound as bound;       (Kwd ")");
           
-    >] -> 
+    ] -> 
       debug_print ("parse_ref_type: WildCard");
       WildCard(l, typ, bound)
 and
-  parse_type_bound = parser
-  | [< '(Kwd "Upper") >]   -> debug_print ("parse_type_bound: Upper");   Upper
-  | [< '(Kwd "Lower") >]   -> debug_print ("parse_type_bound: Lower");   Lower
-  | [< '(Kwd "Unbound") >] -> debug_print ("parse_type_bound: Unbound"); Unbound
+  parse_type_bound = function%parser
+  | [ (Kwd "Upper") ]   -> debug_print ("parse_type_bound: Upper");   Upper
+  | [ (Kwd "Lower") ]   -> debug_print ("parse_type_bound: Lower");   Lower
+  | [ (Kwd "Unbound") ] -> debug_print ("parse_type_bound: Unbound"); Unbound
 and
-  parse_type = parser
-  | [< '(Kwd "PrimType");      '(Kwd "(");
-          t = parse_prim_type; '(Kwd ")");
-    >] -> 
+  parse_type = function%parser
+  | [ (Kwd "PrimType");      (Kwd "(");
+          parse_prim_type as t; (Kwd ")"); 
+    ] -> 
       debug_print ("parse_type: PrimType");
       PrimType(t)
-  | [< '(Kwd "RefType");      '(Kwd "(");
-          t = parse_ref_type; '(Kwd ")");
-    >] -> 
+  | [ (Kwd "RefType");      (Kwd "(");
+          parse_ref_type as t; (Kwd ")");
+    ] -> 
       debug_print ("parse_type: RefType");
       RefType(t)
-  | [< '(Kwd "ArrayType");    '(Kwd "(");
-          t = parse_type;     '(Kwd ")");
-    >] -> 
+  | [ (Kwd "ArrayType");    (Kwd "(");
+          parse_type as t;     (Kwd ")");
+    ] -> 
       debug_print ("parse_type: ArrayType");
       ArrayType(t)
 and
-  parse_type_param = parser
-  | [< '(Kwd "TypeParam");                  '(Kwd "(");
-          l = parse_loc;                    '(Kwd ",");
-          id = parse_identifier;            '(Kwd ",");
-          typs = parse_list parse_ref_type; '(Kwd ")");
-    >] -> 
+  parse_type_param = function%parser
+  | [ (Kwd "TypeParam");                  (Kwd "(");
+          parse_loc as l;                    (Kwd ",");
+          parse_identifier as id;            (Kwd ",");
+          [%l typs = parse_list parse_ref_type]; (Kwd ")");
+    ] -> 
       debug_print ("parse_type_param: TypeParam");
       TypeParam(l, id, typs)
 
 
 (* package level *)
 and
-  parse_package = parser
-  | [< '(Kwd "Package");                          '(Kwd "(");
-          l = parse_loc;                          '(Kwd ",");
-          n = parse_name;                         '(Kwd ",");
-          imprts = parse_list parse_import;       '(Kwd ","); 
-          decls  = parse_list parse_package_decl; '(Kwd ")");
-    >] -> 
+  parse_package = function%parser
+  | [ (Kwd "Package");                          (Kwd "(");
+          parse_loc as l;                          (Kwd ",");
+          parse_name as n;                         (Kwd ",");
+          [%l imprts = parse_list parse_import];       (Kwd ","); 
+          [%l decls  = parse_list parse_package_decl]; (Kwd ")");
+    ] -> 
       debug_print ("parse_package: Package");
       Package(l, n, imprts, decls)
 and
-  parse_import = parser
-  | [< '(Kwd "Import");                    '(Kwd "(");
-          l = parse_loc;                   '(Kwd ",");
-          p = parse_name;                  '(Kwd ",");
-          id = parse_opt parse_identifier; '(Kwd ")");
-    >] -> 
+  parse_import = function%parser
+  | [ (Kwd "Import");                    (Kwd "(");
+          parse_loc as l;                   (Kwd ",");
+          parse_name as p;                  (Kwd ",");
+          [%l id = parse_opt parse_identifier]; (Kwd ")");
+    ] -> 
       debug_print ("parse_import: Import");
       Import(l, p, id)
 and
-  parse_package_decl = parser
-  | [< '(Kwd "P_Annotation");   '(Kwd "(");
-          a = parse_annotation; '(Kwd ")");
-    >] -> 
+  parse_package_decl = function%parser
+  | [ (Kwd "P_Annotation");   (Kwd "(");
+          parse_annotation as a; (Kwd ")");
+    ] -> 
       debug_print "parse_package_decl: P_Annotation"; 
       P_Annotation(a)
-  | [< '(Kwd "P_Class");                  '(Kwd "(");
-          c = parse_class_interface_enum; '(Kwd ")");
-    >] -> 
+  | [ (Kwd "P_Class");                  (Kwd "(");
+          parse_class_interface_enum as c; (Kwd ")");
+    ] -> 
       debug_print "parse_package_decl: P_Class"; 
       P_Class(c)
 
 
 (* class level *)
 and
-  parse_class_interface_enum = parser
-  | [< '(Kwd "Class");                           '(Kwd "(");
-          l = parse_loc;                         '(Kwd ",");
-          anns = parse_list parse_annotation;    '(Kwd ",");
-          id = parse_identifier;                 '(Kwd ",");
-          tparams = parse_list parse_type_param; '(Kwd ",");
-          access = parse_accessibility;          '(Kwd ",");
-          abs = parse_abstractness;              '(Kwd ",");
-          final = parse_finality;                '(Kwd ",");
-          static = parse_static_binding;         '(Kwd ",");
-          extnds = parse_opt parse_ref_type;     '(Kwd ",");
-          inters = parse_list parse_ref_type;    '(Kwd ",");
-          decls = parse_list parse_class_decl;   '(Kwd ")");
+  parse_class_interface_enum = function%parser
+  | [ (Kwd "Class");                           (Kwd "(");
+          parse_loc as l;                         (Kwd ",");
+          [%l anns = parse_list parse_annotation];    (Kwd ",");
+          parse_identifier as id;                 (Kwd ",");
+          [%l tparams = parse_list parse_type_param]; (Kwd ",");
+          parse_accessibility as access;          (Kwd ",");
+          parse_abstractness as abs;              (Kwd ",");
+          parse_finality as final;                (Kwd ",");
+          parse_static_binding as static;         (Kwd ",");
+          [%l extnds = parse_opt parse_ref_type];     (Kwd ",");
+          [%l inters = parse_list parse_ref_type];    (Kwd ",");
+          [%l decls = parse_list parse_class_decl];   (Kwd ")");
           
-    >] -> 
+    ] -> 
       debug_print "parse_class_interface_enum: Class"; 
       Class(l, anns, id, tparams, access, abs, final, 
             static, extnds, inters, decls)
-  | [< '(Kwd "Interface");                       '(Kwd "(");
-          l = parse_loc;                         '(Kwd ",");
-          anns = parse_list parse_annotation;    '(Kwd ",");
-          id = parse_identifier;                 '(Kwd ",");
-          tparams = parse_list parse_type_param; '(Kwd ",");
-          access = parse_accessibility;          '(Kwd ",");
-          inters = parse_list parse_ref_type;    '(Kwd ",");
-          decls = parse_list parse_class_decl;   '(Kwd ")");
+  | [ (Kwd "Interface");                       (Kwd "(");
+          parse_loc as l;                         (Kwd ",");
+          [%l anns = parse_list parse_annotation];    (Kwd ",");
+          parse_identifier as id;                 (Kwd ",");
+          [%l tparams = parse_list parse_type_param]; (Kwd ",");
+          parse_accessibility as access;          (Kwd ",");
+          [%l inters = parse_list parse_ref_type];    (Kwd ",");
+          [%l decls = parse_list parse_class_decl];   (Kwd ")");
           
-    >] -> 
+    ] -> 
       debug_print "parse_class_interface_enum: Interface"; 
       Interface(l, anns, id, tparams, access, inters, decls)
-  | [< '(Kwd "Enum");                            '(Kwd "(");
-          l = parse_loc;                         '(Kwd ",");
-          anns = parse_list parse_annotation;    '(Kwd ",");
-          id = parse_identifier;                 '(Kwd ",");
-          access = parse_accessibility;          '(Kwd ",");
-          ids = parse_list parse_identifier;     '(Kwd ")");
+  | [ (Kwd "Enum");                            (Kwd "(");
+          parse_loc as l;                         (Kwd ",");
+          [%l anns = parse_list parse_annotation];    (Kwd ",");
+          parse_identifier as id;                 (Kwd ",");
+          parse_accessibility as access;          (Kwd ",");
+          [%l ids = parse_list parse_identifier];     (Kwd ")");
           
-    >] -> 
+    ] -> 
       debug_print "parse_class_interface_enum: Enum"; 
       Enum(l, anns, id, access, ids)
 and
-  parse_class_decl = parser
-  | [< '(Kwd "C_Annotation");   '(Kwd "(");
-          a = parse_annotation; '(Kwd ")");
-    >] -> 
+  parse_class_decl = function%parser
+  | [ (Kwd "C_Annotation");   (Kwd "(");
+          parse_annotation as a; (Kwd ")");
+    ] -> 
       debug_print "parse_class_decl: C_Annotation"; 
       C_Annotation(a)
-  | [< '(Kwd "C_Class");                  '(Kwd "(");
-          c = parse_class_interface_enum; '(Kwd ")");
-    >] -> 
+  | [ (Kwd "C_Class");                  (Kwd "(");
+          parse_class_interface_enum as c; (Kwd ")");
+    ] -> 
       debug_print "parse_class_decl: C_Class"; 
       C_Class(c)
-  | [< '(Kwd "StaticBlock");                  '(Kwd "(");
-          l = parse_loc;                      '(Kwd ",");
-          stmts = parse_list parse_statement; '(Kwd ")");
-    >] -> 
+  | [ (Kwd "StaticBlock");                  (Kwd "(");
+          parse_loc as l;                      (Kwd ",");
+          [%l stmts = parse_list parse_statement]; (Kwd ")");
+    ] -> 
       debug_print "parse_class_decl: StaticBlock"; 
       StaticBlock(l, stmts)
-  | [< '(Kwd "Field");                    '(Kwd "(");
-          l = parse_loc;                  '(Kwd ",");
-          id = parse_identifier;          '(Kwd ",");
-          access = parse_accessibility;   '(Kwd ",");
-          final = parse_finality;         '(Kwd ",");
-          stat = parse_static_binding;    '(Kwd ",");
-          typ = parse_type;               '(Kwd ",");
-          e = parse_opt parse_expression; '(Kwd ",");
-          auto_gen = parse_gen_source;    '(Kwd ")");
+  | [ (Kwd "Field");                    (Kwd "(");
+          parse_loc as l;                  (Kwd ",");
+          parse_identifier as id;          (Kwd ",");
+          parse_accessibility as access;   (Kwd ",");
+          parse_finality as final;         (Kwd ",");
+          parse_static_binding as stat;    (Kwd ",");
+          parse_type as typ;               (Kwd ",");
+          [%l e = parse_opt parse_expression]; (Kwd ",");
+          parse_gen_source as auto_gen;    (Kwd ")");
           
-    >] -> 
+    ] -> 
       debug_print "parse_class_decl: Field"; 
       Field(l, id, access, final, stat, typ, e, auto_gen)
-  | [< '(Kwd "Constructor");                     '(Kwd "(");
-          l = parse_loc;                         '(Kwd ",");
-          anns = parse_list parse_annotation;    '(Kwd ",");
-          tparams = parse_list parse_type_param; '(Kwd ",");
-          access = parse_accessibility;          '(Kwd ",");
-          params = parse_list parse_var_decl;    '(Kwd ",");
-          thrown = parse_list (parse_pair 
+  | [ (Kwd "Constructor");                     (Kwd "(");
+          parse_loc as l;                         (Kwd ",");
+          [%l anns = parse_list parse_annotation];    (Kwd ",");
+          [%l tparams = parse_list parse_type_param]; (Kwd ",");
+          parse_accessibility as access;          (Kwd ",");
+          [%l params = parse_list parse_var_decl];    (Kwd ",");
+          [%l thrown = parse_list (parse_pair 
              parse_ref_type 
-             (parse_opt parse_annotation));      '(Kwd ",");
-          stmts = parse_opt (parse_list
-             parse_statement);                   '(Kwd ",");
-          auto_gen = parse_gen_source;           '(Kwd ")");
-    >] -> 
+             (parse_opt parse_annotation))];      (Kwd ",");
+          [%l stmts = parse_opt (parse_list
+             parse_statement)];                   (Kwd ",");
+          parse_gen_source as auto_gen;           (Kwd ")");
+    ] -> 
       debug_print ("parse_meth_decl: Constructor");
       Constructor(l, anns, tparams, access, 
                     params, thrown, stmts, auto_gen)
-  | [< '(Kwd "Method");                          '(Kwd "(");
-          l = parse_loc;                         '(Kwd ",");
-          anns = parse_list parse_annotation;    '(Kwd ",");
-          id = parse_identifier;                 '(Kwd ",");
-          tparams = parse_list parse_type_param; '(Kwd ",");
-          access = parse_accessibility;          '(Kwd ",");
-          abs = parse_abstractness;              '(Kwd ",");
-          final = parse_finality;                '(Kwd ",");
-          static = parse_static_binding;         '(Kwd ",");
-          rett = parse_type;                     '(Kwd ",");
-          params = parse_list parse_var_decl;    '(Kwd ",");
-          thrown = parse_list (parse_pair 
+  | [ (Kwd "Method");                          (Kwd "(");
+          parse_loc as l;                         (Kwd ",");
+          [%l anns = parse_list parse_annotation];    (Kwd ",");
+          parse_identifier as id;                 (Kwd ",");
+          [%l tparams = parse_list parse_type_param]; (Kwd ",");
+          parse_accessibility as access;          (Kwd ",");
+          parse_abstractness as abs;              (Kwd ",");
+          parse_finality as final;                (Kwd ",");
+          parse_static_binding as static;         (Kwd ",");
+          parse_type as rett;                     (Kwd ",");
+          [%l params = parse_list parse_var_decl];    (Kwd ",");
+          [%l thrown = parse_list (parse_pair 
              parse_ref_type 
-             (parse_opt parse_annotation));      '(Kwd ",");
-          stmts = parse_opt (parse_list 
-             parse_statement);                   '(Kwd ",");
-          auto_gen = parse_gen_source;           '(Kwd ")");
-    >] ->
+             (parse_opt parse_annotation))];      (Kwd ",");
+          [%l stmts = parse_opt (parse_list 
+             parse_statement)];                   (Kwd ",");
+          parse_gen_source as auto_gen;           (Kwd ")");
+    ] ->
       debug_print ("parse_meth_decl: Method"  ^ (string_of_identifier id));
       Method(l, anns, id, tparams, access, abs, final, 
              static, rett, params, thrown, stmts, auto_gen)
 and
-  parse_var_decl = parser
-  | [< '(Kwd "Variable");                    '(Kwd "(");
-          l = parse_loc;                     '(Kwd ",");
-          id = parse_identifier;             '(Kwd ",");
-          typ = parse_type;                  '(Kwd ",");
-          init = parse_opt parse_expression; '(Kwd ")");
-    >] ->
+  parse_var_decl = function%parser
+  | [ (Kwd "Variable");                    (Kwd "(");
+          parse_loc as l;                     (Kwd ",");
+          parse_identifier as id;             (Kwd ",");
+          parse_type as typ;                  (Kwd ",");
+          [%l init = parse_opt parse_expression]; (Kwd ")");
+    ] ->
       debug_print ("parse_var_decl: Variable"  ^ (string_of_identifier id));
       Variable(l, id, typ, init)
 
 
 (* statements *)
 and
-  parse_statement = parser
-  | [< '(Kwd "S_Annotation");   '(Kwd "(");
-          a = parse_annotation; '(Kwd ")");
-    >] -> 
+  parse_statement = function%parser
+  | [ (Kwd "S_Annotation");   (Kwd "(");
+          parse_annotation as a; (Kwd ")");
+    ] -> 
       debug_print "parse_statement: S_Annotation"; 
       S_Annotation(a)
-  | [< '(Kwd "S_Variable");   '(Kwd "(");
-          v = parse_var_decl; '(Kwd ")");
-    >] -> 
+  | [ (Kwd "S_Variable");   (Kwd "(");
+          parse_var_decl as v; (Kwd ")");
+    ] -> 
       debug_print "parse_statement: S_Variable"; 
       S_Variable(v)
-  | [< '(Kwd "S_Expression");   '(Kwd "(");
-          e = parse_expression; '(Kwd ")");
-    >] -> 
+  | [ (Kwd "S_Expression");   (Kwd "(");
+          parse_expression as e; (Kwd ")");
+    ] -> 
       debug_print "parse_statement: S_Expression"; 
       S_Expression(e)
-  | [< '(Kwd "Block");                        '(Kwd "(");
-          l = parse_loc;                      '(Kwd ",");
-          stmts = parse_list parse_statement; '(Kwd ")");
-    >] -> 
+  | [ (Kwd "Block");                        (Kwd "(");
+          parse_loc as l;                      (Kwd ",");
+          [%l stmts = parse_list parse_statement]; (Kwd ")");
+    ] -> 
       debug_print "parse_statement: Block"; 
       Block(l, stmts)
-  | [< '(Kwd "Try");                             '(Kwd "(");
-          l = parse_loc;                         '(Kwd ",");
-          stmts = parse_list parse_statement;    '(Kwd ",");
-          catchs = parse_list parse_catch_block; '(Kwd ")");
-    >] -> 
+  | [ (Kwd "Try");                             (Kwd "(");
+          parse_loc as l;                         (Kwd ",");
+          [%l stmts = parse_list parse_statement];    (Kwd ",");
+          [%l catchs = parse_list parse_catch_block]; (Kwd ")");
+    ] -> 
       debug_print "parse_statement: Try"; 
       Try(l, stmts, catchs) 
-  | [< '(Kwd "DoWhile");                      '(Kwd "(");
-          l = parse_loc;                      '(Kwd ",");
-          anns = parse_list parse_annotation; '(Kwd ",");
-          cond = parse_expression;            '(Kwd ",");
-          stmts = parse_list parse_statement; '(Kwd ")");
-    >] -> 
+  | [ (Kwd "DoWhile");                      (Kwd "(");
+          parse_loc as l;                      (Kwd ",");
+          [%l anns = parse_list parse_annotation]; (Kwd ",");
+          parse_expression as cond;            (Kwd ",");
+          [%l stmts = parse_list parse_statement]; (Kwd ")");
+    ] -> 
       debug_print "parse_statement: DoWhile"; 
       DoWhile(l, anns, cond, stmts)
-  | [< '(Kwd "While");                        '(Kwd "(");
-          l = parse_loc;                      '(Kwd ",");
-          anns = parse_list parse_annotation; '(Kwd ",");
-          cond = parse_expression;            '(Kwd ",");
-          stmts = parse_list parse_statement; '(Kwd ")");
-    >] -> 
+  | [ (Kwd "While");                        (Kwd "(");
+          parse_loc as l;                      (Kwd ",");
+          [%l anns = parse_list parse_annotation]; (Kwd ",");
+          parse_expression as cond;            (Kwd ",");
+          [%l stmts = parse_list parse_statement]; (Kwd ")");
+    ] -> 
       debug_print "parse_statement: While"; 
       While(l, anns, cond, stmts)
-  | [< '(Kwd "For");                          '(Kwd "(");
-          l = parse_loc;                      '(Kwd ",");
-          anns = parse_list parse_annotation; '(Kwd ",");
-          init = parse_list parse_statement;  '(Kwd ",");
-          cond = parse_expression;            '(Kwd ",");
-          up = parse_list parse_statement;    '(Kwd ",");
-          stmts = parse_list parse_statement; '(Kwd ")");
-    >] -> 
+  | [ (Kwd "For");                          (Kwd "(");
+          parse_loc as l;                      (Kwd ",");
+          [%l anns = parse_list parse_annotation]; (Kwd ",");
+          [%l init = parse_list parse_statement];  (Kwd ",");
+          parse_expression as cond;            (Kwd ",");
+          [%l up = parse_list parse_statement];    (Kwd ",");
+          [%l stmts = parse_list parse_statement]; (Kwd ")");
+    ] -> 
       debug_print "parse_statement: For"; 
       For(l, anns, init, cond, up, stmts)
-  | [< '(Kwd "Foreach");                      '(Kwd "(");
-          l = parse_loc;                      '(Kwd ",");
-          anns = parse_list parse_annotation; '(Kwd ",");
-          var   = parse_var_decl;             '(Kwd ",");
-          iter  = parse_expression;           '(Kwd ",");
-          stmts = parse_list parse_statement; '(Kwd ")");
-    >] -> 
+  | [ (Kwd "Foreach");                      (Kwd "(");
+          parse_loc as l;                      (Kwd ",");
+          [%l anns = parse_list parse_annotation]; (Kwd ",");
+          parse_var_decl as var;             (Kwd ",");
+          parse_expression as iter;           (Kwd ",");
+          [%l stmts = parse_list parse_statement]; (Kwd ")");
+    ] -> 
       debug_print "parse_statement: Foreach"; 
       Foreach(l, anns, var, iter, stmts)
-  | [< '(Kwd "Labeled");          '(Kwd "(");
-          l = parse_loc;          '(Kwd ",");
-          id = parse_identifier;  '(Kwd ",");
-          stmt = parse_statement; '(Kwd ")");
-    >] -> 
+  | [ (Kwd "Labeled");          (Kwd "(");
+          parse_loc as l;          (Kwd ",");
+          parse_identifier as id;  (Kwd ",");
+          parse_statement as stmt; (Kwd ")");
+    ] -> 
       debug_print "parse_statement: Labeled"; 
       Labeled(l, id, stmt)
-  | [< '(Kwd "Switch");                   '(Kwd "(");
-          l = parse_loc;                  '(Kwd ",");
-          sel = parse_expression;         '(Kwd ",");
-          cases = parse_list parse_case;  '(Kwd ",");
-          default = parse_opt parse_case; '(Kwd ")");
-    >] -> 
+  | [ (Kwd "Switch");                   (Kwd "(");
+          parse_loc as l;                  (Kwd ",");
+          parse_expression as sel;         (Kwd ",");
+          [%l cases = parse_list parse_case];  (Kwd ",");
+          [%l default = parse_opt parse_case]; (Kwd ")");
+    ] -> 
       debug_print "parse_statement: Switch"; 
       Switch(l, sel, cases, default)
-  | [< '(Kwd "If");                           '(Kwd "(");
-          l = parse_loc;                      '(Kwd ",");
-          cond = parse_expression;            '(Kwd ",");
-          if_ = parse_list parse_statement;   '(Kwd ",");
-          else_ = parse_list parse_statement; '(Kwd ")");
-    >] -> 
+  | [ (Kwd "If");                           (Kwd "(");
+          parse_loc as l;                      (Kwd ",");
+          parse_expression as cond;            (Kwd ",");
+          [%l if_ = parse_list parse_statement];   (Kwd ",");
+          [%l else_ = parse_list parse_statement]; (Kwd ")");
+    ] -> 
       debug_print "parse_statement: If"; 
       If(l, cond, if_, else_)
-  | [< '(Kwd "Break");        '(Kwd "(");
-          l = parse_loc;      '(Kwd ")");
-    >] -> 
+  | [ (Kwd "Break");        (Kwd "(");
+          parse_loc as l;      (Kwd ")");
+    ] -> 
       debug_print "parse_statement: Break"; 
       Break(l)
-  | [< '(Kwd "Continue");     '(Kwd "(");
-          l = parse_loc;      '(Kwd ")");
-    >] -> 
+  | [ (Kwd "Continue");     (Kwd "(");
+          parse_loc as l;      (Kwd ")");
+    ] -> 
       debug_print "parse_statement: Continue"; 
       Continue(l)
-  | [< '(Kwd "Return");                   '(Kwd "(");
-          l = parse_loc;                  '(Kwd ",");
-          e = parse_opt parse_expression; '(Kwd ")");
-    >] -> 
+  | [ (Kwd "Return");                   (Kwd "(");
+          parse_loc as l;                  (Kwd ",");
+          [%l e = parse_opt parse_expression]; (Kwd ")");
+    ] -> 
       debug_print "parse_statement: Return"; 
       Return(l, e)
-  | [< '(Kwd "Throw");          '(Kwd "(");
-          l = parse_loc;        '(Kwd ",");
-          e = parse_expression; '(Kwd ")");
-    >] -> 
+  | [ (Kwd "Throw");          (Kwd "(");
+          parse_loc as l;        (Kwd ",");
+          parse_expression as e; (Kwd ")");
+    ] -> 
       debug_print "parse_statement: Throw"; 
       Throw(l, e)
-  | [< '(Kwd "Assert");                    '(Kwd "(");
-          l = parse_loc;                   '(Kwd ",");
-          e1 = parse_expression;           '(Kwd ",");
-          e2 = parse_opt parse_expression; '(Kwd ")");
-    >] -> 
+  | [ (Kwd "Assert");                    (Kwd "(");
+          parse_loc as l;                   (Kwd ",");
+          parse_expression as e1;           (Kwd ",");
+          [%l e2 = parse_opt parse_expression]; (Kwd ")");
+    ] -> 
       debug_print "parse_statement: Assert"; 
       Assert(l, e1, e2)
-and parse_case = parser
-  | [< '(Kwd "Case");                           '(Kwd "(");
-          l = parse_loc;                        '(Kwd ",");
-          matched = parse_opt parse_expression; '(Kwd ",");
-          stmts = parse_list parse_statement;   '(Kwd ")");
-    >] -> 
+and parse_case = function%parser
+  | [ (Kwd "Case");                           (Kwd "(");
+          parse_loc as l;                        (Kwd ",");
+          [%l matched = parse_opt parse_expression]; (Kwd ",");
+          [%l stmts = parse_list parse_statement];   (Kwd ")");
+    ] -> 
       debug_print "parse_case: Case"; 
       Case(l, matched, stmts)
-and parse_catch_block = parser
-  | [< '(Kwd "Catch");                        '(Kwd "(");
-          l = parse_loc;                      '(Kwd ",");
-          excep = parse_var_decl;             '(Kwd ",");
-          stmts = parse_list parse_statement; '(Kwd ")");
-    >] -> 
+and parse_catch_block = function%parser
+  | [ (Kwd "Catch");                        (Kwd "(");
+          parse_loc as l;                      (Kwd ",");
+          parse_var_decl as excep;             (Kwd ",");
+          [%l stmts = parse_list parse_statement]; (Kwd ")");
+    ] -> 
       debug_print "parse_catch_block: Catch"; 
       Catch(l, excep, stmts)
 
 
 (* expressions *)
 and
-  parse_expression = parser
-  | [< '(Kwd "E_Identifier");    '(Kwd "(");
-          id = parse_identifier; '(Kwd ")");
-    >] -> 
+  parse_expression = function%parser
+  | [ (Kwd "E_Identifier");    (Kwd "(");
+          parse_identifier as id; (Kwd ")");
+    ] -> 
       debug_print "parse_expression: E_Identifier"; 
       E_Identifier(id)
-  | [< '(Kwd "Access");          '(Kwd "(");
-          l = parse_loc;         '(Kwd ",");
-          e = parse_expression;  '(Kwd ",");
-          id = parse_identifier; '(Kwd ")");
-    >] -> 
+  | [ (Kwd "Access");          (Kwd "(");
+          parse_loc as l;         (Kwd ",");
+          parse_expression as e;  (Kwd ",");
+          parse_identifier as id; (Kwd ")");
+    ] -> 
       debug_print "parse_expression: Access"; 
       Access(l, e, id)
-  | [< '(Kwd "Apply");                           '(Kwd "(");
-          l = parse_loc;                         '(Kwd ",");
-          tparams = parse_list parse_type_param; '(Kwd ",");
-          e = parse_expression;                  '(Kwd ",");
-          arg_types = parse_list parse_type;     '(Kwd ",");
-          args = parse_list parse_expression;    '(Kwd ")");
-    >] -> 
+  | [ (Kwd "Apply");                           (Kwd "(");
+          parse_loc as l;                         (Kwd ",");
+          [%l tparams = parse_list parse_type_param]; (Kwd ",");
+          parse_expression as e;                  (Kwd ",");
+          [%l arg_types = parse_list parse_type];     (Kwd ",");
+          [%l args = parse_list parse_expression];    (Kwd ")");
+    ] -> 
       debug_print "parse_expression: Apply"; 
       Apply(l, tparams, e, arg_types, args)
-  | [< '(Kwd "NewClass");                        '(Kwd "(");
-          l = parse_loc;                         '(Kwd ",");
-          tparams = parse_list parse_type_param; '(Kwd ",");
-          clss = parse_ref_type;                 '(Kwd ",");
-          args = parse_list parse_expression;    '(Kwd ")");
-    >] -> 
+  | [ (Kwd "NewClass");                        (Kwd "(");
+          parse_loc as l;                         (Kwd ",");
+          [%l tparams = parse_list parse_type_param]; (Kwd ",");
+          parse_ref_type as clss;                 (Kwd ",");
+          [%l args = parse_list parse_expression];    (Kwd ")");
+    ] -> 
       debug_print "parse_expression: NewClass"; 
       NewClass(l, tparams, clss, args)
-  | [< '(Kwd "NewArray");                     '(Kwd "(");
-          l = parse_loc;                      '(Kwd ",");
-          typ = parse_type;                   '(Kwd ",");
-          dims = parse_list parse_expression; '(Kwd ",");
-          elem = parse_list parse_expression; '(Kwd ")");
-    >] -> 
+  | [ (Kwd "NewArray");                     (Kwd "(");
+          parse_loc as l;                      (Kwd ",");
+          parse_type as typ;                   (Kwd ",");
+          [%l dims = parse_list parse_expression]; (Kwd ",");
+          [%l elem = parse_list parse_expression]; (Kwd ")");
+    ] -> 
       debug_print "parse_expression: NewArray"; 
       NewArray(l, typ, dims, elem)
-  | [< '(Kwd "Assign");                         '(Kwd "(");
-          l = parse_loc;                        '(Kwd ",");
-          op = parse_opt parse_bin_operator;    '(Kwd ",");
-          lhs = parse_expression;               '(Kwd ",");
-          rhs = parse_expression;               '(Kwd ")");
-    >] -> 
+  | [ (Kwd "Assign");                         (Kwd "(");
+          parse_loc as l;                        (Kwd ",");
+          [%l op = parse_opt parse_bin_operator];    (Kwd ",");
+          parse_expression as lhs;               (Kwd ",");
+          parse_expression as rhs;               (Kwd ")");
+    ] -> 
       debug_print "parse_expression: Assign"; 
       Assign(l, op, lhs, rhs)
-  | [< '(Kwd "Unary");             '(Kwd "(");
-          l = parse_loc;           '(Kwd ",");
-          op = parse_uni_operator; '(Kwd ",");
-          e = parse_expression;    '(Kwd ")");
-    >] -> 
+  | [ (Kwd "Unary");             (Kwd "(");
+          parse_loc as l;           (Kwd ",");
+          parse_uni_operator as op; (Kwd ",");
+          parse_expression as e;    (Kwd ")");
+    ] -> 
       debug_print "parse_expression: Unary"; 
       Unary(l, op, e)
-  | [< '(Kwd "Binary");            '(Kwd "(");
-          l = parse_loc;           '(Kwd ",");
-          op = parse_bin_operator; '(Kwd ",");
-          lhs = parse_expression;  '(Kwd ",");
-          rhs = parse_expression;  '(Kwd ")");
-    >] -> 
+  | [ (Kwd "Binary");            (Kwd "(");
+          parse_loc as l;           (Kwd ",");
+          parse_bin_operator as op; (Kwd ",");
+          parse_expression as lhs;  (Kwd ",");
+          parse_expression as rhs;  (Kwd ")");
+    ] -> 
       debug_print "parse_expression: Binary"; 
       Binary(l, op, lhs, rhs)
-  | [< '(Kwd "Ternary");             '(Kwd "(");
-          l = parse_loc;             '(Kwd ",");
-          cond = parse_expression;   '(Kwd ",");
-          true_ = parse_expression;  '(Kwd ",");
-          false_ = parse_expression; '(Kwd ")");
-    >] -> 
+  | [ (Kwd "Ternary");             (Kwd "(");
+          parse_loc as l;             (Kwd ",");
+          parse_expression as cond;   (Kwd ",");
+          parse_expression as true_;  (Kwd ",");
+          parse_expression as false_; (Kwd ")");
+    ] -> 
       debug_print "parse_expression: Ternary"; 
       Ternary(l, cond, true_, false_)
-  | [< '(Kwd "ArrayAccess");         '(Kwd "(");
-          l = parse_loc;             '(Kwd ",");
-          array_ = parse_expression; '(Kwd ",");
-          index = parse_expression;  '(Kwd ")");
-    >] -> 
+  | [ (Kwd "ArrayAccess");         (Kwd "(");
+          parse_loc as l;             (Kwd ",");
+          parse_expression as array_; (Kwd ",");
+          parse_expression as index;  (Kwd ")");
+    ] -> 
       debug_print "parse_expression: ArrayAccess"; 
       ArrayAccess(l, array_, index)
-  | [< '(Kwd "Literal");        '(Kwd "(");
-          l = parse_loc;        '(Kwd ",");
-          typ = parse_type;     '(Kwd ",");
-          value = parse_string; '(Kwd ")");
-    >] -> 
+  | [ (Kwd "Literal");        (Kwd "(");
+          parse_loc as l;        (Kwd ",");
+          parse_type as typ;     (Kwd ",");
+          parse_string as value; (Kwd ")");
+    ] -> 
       debug_print "parse_expression: Literal"; 
       Literal(l, typ, value)
-  | [< '(Kwd "TypeCast");       '(Kwd "(");
-          l = parse_loc;        '(Kwd ",");
-          typ = parse_type;     '(Kwd ",");
-          e = parse_expression; '(Kwd ")");
-    >] -> 
+  | [ (Kwd "TypeCast");       (Kwd "(");
+          parse_loc as l;        (Kwd ",");
+          parse_type as typ;     (Kwd ",");
+          parse_expression as e; (Kwd ")");
+    ] -> 
       debug_print "parse_expression: TypeCast"; 
       TypeCast(l, typ, e)
-  | [< '(Kwd "TypeTest");       '(Kwd "(");
-          l = parse_loc;        '(Kwd ",");
-          typ = parse_type;     '(Kwd ",");
-          e = parse_expression; '(Kwd ")");
-    >] -> 
+  | [ (Kwd "TypeTest");       (Kwd "(");
+          parse_loc as l;        (Kwd ",");
+          parse_type as typ;     (Kwd ",");
+          parse_expression as e; (Kwd ")");
+    ] -> 
       debug_print "parse_expression: TypeTest"; 
       TypeTest(l, typ, e)
 and
-  parse_bin_operator = parser
-  | [< '(Kwd "O_Plus") >]    -> debug_print ("parse_bin_operator: O_Plus");    O_Plus
-  | [< '(Kwd "O_Min") >]     -> debug_print ("parse_bin_operator: O_Min");     O_Min
-  | [< '(Kwd "O_Mul") >]     -> debug_print ("parse_bin_operator: O_Mul");     O_Mul
-  | [< '(Kwd "O_Div") >]     -> debug_print ("parse_bin_operator: O_Div");     O_Div
-  | [< '(Kwd "O_Mod") >]     -> debug_print ("parse_bin_operator: O_Mod");     O_Mod
-  | [< '(Kwd "O_Or") >]      -> debug_print ("parse_bin_operator: O_Or");      O_Or
-  | [< '(Kwd "O_And") >]     -> debug_print ("parse_bin_operator: O_And");     O_And
-  | [< '(Kwd "O_Eq") >]      -> debug_print ("parse_bin_operator: O_Eq");      O_Eq
-  | [< '(Kwd "O_NotEq") >]   -> debug_print ("parse_bin_operator: O_NotEq");   O_NotEq
-  | [< '(Kwd "O_Lt") >]      -> debug_print ("parse_bin_operator: O_Lt");      O_Lt
-  | [< '(Kwd "O_Gt") >]      -> debug_print ("parse_bin_operator: O_Gt");      O_Gt
-  | [< '(Kwd "O_LtEq") >]    -> debug_print ("parse_bin_operator: O_LtEq");    O_LtEq
-  | [< '(Kwd "O_GtEq") >]    -> debug_print ("parse_bin_operator: O_GtEq");    O_GtEq
-  | [< '(Kwd "O_BitOr") >]   -> debug_print ("parse_bin_operator: O_BitOr");   O_BitOr
-  | [< '(Kwd "O_BitXor") >]  -> debug_print ("parse_bin_operator: O_BitXor");  O_BitXor
-  | [< '(Kwd "O_BitAnd") >]  -> debug_print ("parse_bin_operator: O_BitAnd");  O_BitAnd
-  | [< '(Kwd "O_ShiftL") >]  -> debug_print ("parse_bin_operator: O_ShiftL");  O_ShiftL
-  | [< '(Kwd "O_ShiftR") >]  -> debug_print ("parse_bin_operator: O_ShiftR");  O_ShiftR
-  | [< '(Kwd "O_UShiftR") >] -> debug_print ("parse_bin_operator: O_UShiftR"); O_UShiftR
+  parse_bin_operator = function%parser
+  | [ (Kwd "O_Plus") ]    -> debug_print ("parse_bin_operator: O_Plus");    O_Plus
+  | [ (Kwd "O_Min") ]     -> debug_print ("parse_bin_operator: O_Min");     O_Min
+  | [ (Kwd "O_Mul") ]     -> debug_print ("parse_bin_operator: O_Mul");     O_Mul
+  | [ (Kwd "O_Div") ]     -> debug_print ("parse_bin_operator: O_Div");     O_Div
+  | [ (Kwd "O_Mod") ]     -> debug_print ("parse_bin_operator: O_Mod");     O_Mod
+  | [ (Kwd "O_Or") ]      -> debug_print ("parse_bin_operator: O_Or");      O_Or
+  | [ (Kwd "O_And") ]     -> debug_print ("parse_bin_operator: O_And");     O_And
+  | [ (Kwd "O_Eq") ]      -> debug_print ("parse_bin_operator: O_Eq");      O_Eq
+  | [ (Kwd "O_NotEq") ]   -> debug_print ("parse_bin_operator: O_NotEq");   O_NotEq
+  | [ (Kwd "O_Lt") ]      -> debug_print ("parse_bin_operator: O_Lt");      O_Lt
+  | [ (Kwd "O_Gt") ]      -> debug_print ("parse_bin_operator: O_Gt");      O_Gt
+  | [ (Kwd "O_LtEq") ]    -> debug_print ("parse_bin_operator: O_LtEq");    O_LtEq
+  | [ (Kwd "O_GtEq") ]    -> debug_print ("parse_bin_operator: O_GtEq");    O_GtEq
+  | [ (Kwd "O_BitOr") ]   -> debug_print ("parse_bin_operator: O_BitOr");   O_BitOr
+  | [ (Kwd "O_BitXor") ]  -> debug_print ("parse_bin_operator: O_BitXor");  O_BitXor
+  | [ (Kwd "O_BitAnd") ]  -> debug_print ("parse_bin_operator: O_BitAnd");  O_BitAnd
+  | [ (Kwd "O_ShiftL") ]  -> debug_print ("parse_bin_operator: O_ShiftL");  O_ShiftL
+  | [ (Kwd "O_ShiftR") ]  -> debug_print ("parse_bin_operator: O_ShiftR");  O_ShiftR
+  | [ (Kwd "O_UShiftR") ] -> debug_print ("parse_bin_operator: O_UShiftR"); O_UShiftR
 and
-  parse_uni_operator = parser
-  | [< '(Kwd "O_Pos") >]     -> debug_print ("parse_uni_operator: O_Pos");     O_Pos
-  | [< '(Kwd "O_Neg") >]     -> debug_print ("parse_uni_operator: O_Neg");     O_Neg
-  | [< '(Kwd "O_Not") >]     -> debug_print ("parse_uni_operator: O_Not");     O_Not
-  | [< '(Kwd "O_Compl") >]   -> debug_print ("parse_uni_operator: O_Compl");   O_Compl
-  | [< '(Kwd "O_PreInc") >]  -> debug_print ("parse_uni_operator: O_PreInc");  O_PreInc
-  | [< '(Kwd "O_PreDec") >]  -> debug_print ("parse_uni_operator: O_PreDec");  O_PreDec
-  | [< '(Kwd "O_PostInc") >] -> debug_print ("parse_uni_operator: O_PostInc"); O_PostInc
-  | [< '(Kwd "O_PostDec") >] -> debug_print ("parse_uni_operator: O_PostDec"); O_PostDec
+  parse_uni_operator = function%parser
+  | [ (Kwd "O_Pos") ]     -> debug_print ("parse_uni_operator: O_Pos");     O_Pos
+  | [ (Kwd "O_Neg") ]     -> debug_print ("parse_uni_operator: O_Neg");     O_Neg
+  | [ (Kwd "O_Not") ]     -> debug_print ("parse_uni_operator: O_Not");     O_Not
+  | [ (Kwd "O_Compl") ]   -> debug_print ("parse_uni_operator: O_Compl");   O_Compl
+  | [ (Kwd "O_PreInc") ]  -> debug_print ("parse_uni_operator: O_PreInc");  O_PreInc
+  | [ (Kwd "O_PreDec") ]  -> debug_print ("parse_uni_operator: O_PreDec");  O_PreDec
+  | [ (Kwd "O_PostInc") ] -> debug_print ("parse_uni_operator: O_PostInc"); O_PostInc
+  | [ (Kwd "O_PostDec") ] -> debug_print ("parse_uni_operator: O_PostDec"); O_PostDec
 end

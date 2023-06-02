@@ -85,7 +85,7 @@ public:
                           const clang::Token &IncludeTok,
                           clang::StringRef FileName, bool IsAngled,
                           clang::CharSourceRange FilenameRange,
-                          const clang::FileEntry *File,
+                          clang::OptionalFileEntryRef File,
                           clang::StringRef SearchPath,
                           clang::StringRef RelativePath,
                           const clang::Module *Imported,

@@ -12,7 +12,7 @@ linemarks.cmxa: liblinemarks.a
 	${OCAMLOPT} ${OCAMLCFLAGS} -a -o linemarks.cmxa $(LABLGTK_FLAGS) GtkLineMarks.mli GtkLineMarks.ml GLineMarks.ml -cclib -L$(shell pwd) -cclib -llinemarks -cclib "`pkg-config --libs gtksourceview-2.0`"
 
 ifeq ($(OS), Windows_NT)
-  AR=i686-w64-mingw32-ar
+  AR=x86_64-w64-mingw32-ar
 else
   AR=ar
 endif

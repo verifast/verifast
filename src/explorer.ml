@@ -48,9 +48,9 @@ let _ =
       in
       let (loc, token_stream) = make_preprocessor (fun _ _ -> ()) make_lexer path verbose include_paths dataModel define_macros in
       let p =
-        parser
-          [< (headers, _) = parse_include_directives verbose enforceAnnotations dataModel; 
-                              ds = parse_decls CLang dataModel enforceAnnotations ~inGhostHeader:false; '(_, Eof) >] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])
+        function%parser
+          [ [%l (headers, _d) = parse_include_directives verbose enforceAnnotations dataModel]; 
+                              [%l ds = parse_decls CLang dataModel enforceAnnotations ~inGhostHeader:false]; (_, Eof) ] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])
       in
       try
         p token_stream

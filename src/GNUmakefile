@@ -112,7 +112,7 @@ ifdef Z3V4DOT5
   Z3CCOPTS = -cclib "-L $(Z3_DLL_DIR)"
   Z3ARGS_EARLY = -I $(Z3_OCAML) z3ml.cmxa z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml verifastPluginReduxZ3$(Z3VERSION).ml  verifastPluginZ3$(Z3VERSION)Smtlib.ml $(Z3CCOPTS)
   ifeq ($(OS), Windows_NT)
-    Z3_DLL_DEPS_DIR:=/usr/i686-w64-mingw32/sys-root/mingw/bin
+    Z3_DLL_DEPS_DIR:=/usr/x86_64-w64-mingw32/sys-root/mingw/bin
     LDLPATH:=$(shell pwd)/../bin
     VERIFAST := $(LDLPATHVAR)=${LDLPATH}:$$$(LDLPATHVAR) ../bin/verifast
   else ifeq ($(OS), Darwin)
@@ -156,7 +156,7 @@ clean::
 	echo > ../lib/gdk-pixbuf-2.0/2.10.0/loaders.cache
 
 ../bin/libz3.dll:
-	cp $(Z3_DLL_DIR)/libz3.dll $(Z3_DLL_DEPS_DIR)/libwinpthread-1.dll $(Z3_DLL_DEPS_DIR)/libgomp-1.dll $(Z3_DLL_DEPS_DIR)/libgcc_s_sjlj-1.dll ../bin
+	cp $(Z3_DLL_DIR)/libz3.dll $(Z3_DLL_DEPS_DIR)/libwinpthread-1.dll $(Z3_DLL_DEPS_DIR)/libgomp-1.dll $(Z3_DLL_DEPS_DIR)/libgcc_s_seh-1.dll ../bin
 
 ../bin/libz3.so:
 	cp $(Z3_DLL_DIR)/libz3.so ../bin
@@ -183,11 +183,6 @@ OCAML        = ${OCAMLBIN}/ocaml
 OCAMLC       = $(firstword $(wildcard ${OCAMLBIN}/ocamlc.opt ${OCAMLBIN}/ocamlc))
 OCAMLOPT     = $(firstword $(wildcard ${OCAMLBIN}/ocamlopt.opt ${OCAMLBIN}/ocamlopt))
 OCAMLDEP     = $(firstword $(wildcard ${OCAMLBIN}/ocamldep.opt ${OCAMLBIN}/ocamldep))
-ifeq ($(OS), Windows_NT)
-  CAMLP4O    = camlp4o.opt
-else
-  CAMLP4O      = $(firstword $(wildcard ${OCAMLBIN}/camlp4o.opt ${OCAMLBIN}/camlp4o))
-endif
 
 # Do we build with "-I ./linux" or "-I ./win":
 ifeq ($(OS), Windows_NT)
@@ -280,8 +275,8 @@ clean::
 SET_LDD    = export CAML_LD_LIBRARY_PATH="$$CAML_LD_LIBRARY_PATH:$$GTKSOURCEVIEW_LIBS"
 SET_ENV    = export PATH="$(CWD)/../bin/:$(OCAMLBIN):$$PATH"; \
              export $(LDLPATHVAR)="$(LDLPATH):$$$(LDLPATHVAR)"
-COMPILE    = ocamlfind ocamlopt $(OCAMLCFLAGS)
-COMPILE_BC = ocamlfind ocamlc $(OCAMLCFLAGS)
+COMPILE    = ocamlfind ocamlopt $(OCAMLCFLAGS) -package ppx_parser,camlp-streams
+COMPILE_BC = ocamlfind ocamlc $(OCAMLCFLAGS) -package ppx_parser,camlp-streams
 
 STDLIB = ../bin/crt.dll.vfmanifest
 #sequence is important, it presents dependencies in command line of VeriFast
@@ -337,20 +332,20 @@ clean::
 
 %.cmi: %.mli
 	@echo "  OCAMLOPT " $@
-	$(COMPILE) $(INCLUDES) -c -package num $*.mli
+	$(COMPILE) $(INCLUDES) -c -package num,camlp-streams $*.mli
 clean::
 	rm -f *.cmi
 
 %.cmx: %.ml $(INCLUDE_OS_DIR)/Perf.cmxa
 	@echo "  OCAMLOPT " $@
-	$(COMPILE) -thread -c -w p -warn-error +F+S+U -c $(INCLUDES) -pp ${CAMLP4O} -package num $*.ml
+	$(COMPILE) -thread -c -w p -warn-error +F+S+U -c $(INCLUDES) -package num,camlp-streams $*.ml
 clean::
 	rm -f *.cmx
 	rm -f *.o
 
 %.cmo: %.ml
 	@echo "    OCAMLC " $@
-	$(COMPILE_BC) -thread $(INCLUDES) -I $(Z3_OCAML) -pp $(CAMLP4O) -o $@ -c $*.ml
+	$(COMPILE_BC) -thread $(INCLUDES) -I $(Z3_OCAML) -o $@ -c $*.ml
 clean::
 	rm -f *.cmo
 	cd java_frontend && rm -f *.cmo
@@ -436,11 +431,11 @@ ifndef WITHOUT_GTKSOURCEVIEW
 	make -C linemarks OCAMLOPT=${OCAMLOPT} OCAMLCFLAGS="${OCAMLCFLAGS}" LABLGTK_FLAGS="$(LABLGTK_FLAGS_)" linemarks.cmxa
 endif
 	$(SET_LDD); $(COMPILE) -thread -c -w p -warn-error +F+S+U -c $(INCLUDES) \
-	-pp ${CAMLP4O} -package num,threads $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) vfide.ml
+	-package num,threads $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) vfide.ml
 
 VERIFAST_PLUGINS=Redux Cvc4 ExternalZ3 ReduxSmtlib
 
-OCAMLOPT_LINKFLAGS = -package num,unix,str -linkpkg
+OCAMLOPT_LINKFLAGS = -package num,unix,str,camlp-streams -linkpkg
 ifeq ($(OS), Darwin)
   OCAMLOPT_LINKFLAGS += -cclib "-Xlinker -headerpad_max_install_names"
 else ifeq ($(OS), Linux)
@@ -452,7 +447,7 @@ endif
 ifndef WITHOUT_GTKSOURCEVIEW
 	cd linemarks; make linemarks.cmxa
 endif
-	$(SET_LDD); $(COMPILE) $(OCAMLOPT_LINKFLAGS) $(CAPNP_LINK_FLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/vfide$(DOTEXE)	\
+	$(SET_LDD); $(COMPILE) $(OCAMLOPT_LINKFLAGS) $(CAPNP_LINK_FLAGS) -warn-error F -o ../bin/vfide$(DOTEXE)	\
 	  $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) \
 	  $(INCLUDES) Perf.cmxa proverapi.cmx dynlink.cmxa \
 	  util.cmx ast.cmx stats.cmx lexer.cmx \
@@ -477,7 +472,7 @@ vfide: ../bin/vfide$(DOTEXE) $(STDLIB)
 
 ../bin/verifast$(DOTEXE): vfconsole.cmx $(VERIFAST_PLUGINS:%=verifastPlugin%.cmx) $(Z3DEPS)
 	@echo "  OCAMLOPT " $@
-	$(COMPILE) $(OCAMLOPT_LINKFLAGS) $(CAPNP_LINK_FLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/verifast$(DOTEXE) \
+	$(COMPILE) $(OCAMLOPT_LINKFLAGS) $(CAPNP_LINK_FLAGS) -warn-error F -o ../bin/verifast$(DOTEXE) \
 	$(INCLUDES) Perf.cmxa proverapi.cmx \
 	  util.cmx ast.cmx stats.cmx lexer.cmx parser.cmx \
 	  ${JAVA_FE_INCLS} $(CXX_FE_DEPS) verifast0.cmx verifast1.cmx assertions.cmx \
@@ -526,7 +521,7 @@ VERIFAST_BC_INCLUDES = -I $(INCLUDE_DIR_NUM) -I $(INCLUDE_DIR_THREADS) -I $(INCL
 # As I said: only tested on macOS.
 ../bin/verifast.bc: linux/Perf.cma $(VERIFAST_BC_OBJECTS)
 	@echo "    OCAMLC " $@
-	$(COMPILE_BC) $(OCAMLOPT_LINKFLAGS) -warn-error F -pp ${CAMLP4O} -o $@ \
+	$(COMPILE_BC) $(OCAMLOPT_LINKFLAGS) -warn-error F -o $@ \
 		$(VERIFAST_BC_INCLUDES) \
 		threads.cma z3ml.cma linux/Perf.cma \
 		$(VERIFAST_BC_OBJECTS)
@@ -537,7 +532,7 @@ clean::
 
 ../bin/explorer$(DOTEXE): explorer.cmx $(VERIFAST_PLUGINS:%=verifastPlugin%.cmx) $(Z3DEPS)
 	@echo "  OCAMLOPT " $@
-	$(COMPILE) $(OCAMLOPT_LINKFLAGS) $(CAPNP_LINK_FLAGS) -warn-error F -pp ${CAMLP4O} -o ../bin/explorer$(DOTEXE) \
+	$(COMPILE) $(OCAMLOPT_LINKFLAGS) $(CAPNP_LINK_FLAGS) -warn-error F -o ../bin/explorer$(DOTEXE) \
 	$(INCLUDES) Perf.cmxa proverapi.cmx \
 	  util.cmx ast.cmx stats.cmx lexer.cmx parser.cmx \
 	  ${JAVA_FE_INCLS} $(CXX_FE_DEPS) verifast0.cmx verifast1.cmx assertions.cmx \
@@ -662,7 +657,7 @@ depend: $(META_DEPS)
 	@echo "  OCAMLDEP "
 	echo "# These dependencies are automatically generated." > .depend
 	echo "# Do not edit by hand. To generate, run 'make depend'." >> .depend
-	$(OCAMLDEP) -slash -pp ${CAMLP4O} $(INCLUDES) $(META_DEPS) >> .depend
+	$(OCAMLDEP) -slash $(INCLUDES) $(META_DEPS) >> .depend
 .PHONY: depend
 
 .depend:
@@ -684,8 +679,8 @@ release_core:  build-cxx-ast-exporter test build
 	cp -R ../bin verifast-$(VFVERSION)
 ifeq ($(OS), Windows_NT)
 	cd $(GTK)/bin && cp -v \
-    FREETYPE6.DLL \
-    INTL.DLL \
+    LIBFREETYPE-6.DLL \
+    LIBINTL-8.DLL \
     LIBATK-1.0-0.DLL \
     LIBCAIRO-2.DLL \
     LIBEXPAT-1.DLL \

@@ -39,7 +39,7 @@ protected:
     return getContext().getSourceManager();
   }
 
-  LLVM_ATTRIBUTE_NORETURN void unsupported(const clang::SourceRange range,
+  [[noreturn]] void unsupported(const clang::SourceRange range,
                                            const llvm::StringRef nodeName,
                                            const llvm::StringRef className) {
     llvm::report_fatal_error(nodeName + " of type '" + className + "' at '" +
@@ -47,7 +47,7 @@ protected:
                              "' is not supported.");
   }
 
-  LLVM_ATTRIBUTE_NORETURN void unsupported(const llvm::StringRef nodeName,
+  [[noreturn]] void unsupported(const llvm::StringRef nodeName,
                                            const llvm::StringRef className) {
     llvm::report_fatal_error(nodeName + " of type '" + className +
                              "' is not supported.");

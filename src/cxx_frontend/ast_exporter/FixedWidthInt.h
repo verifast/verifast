@@ -1,4 +1,5 @@
 #pragma once
+#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Optional.h"
 
 namespace vf {

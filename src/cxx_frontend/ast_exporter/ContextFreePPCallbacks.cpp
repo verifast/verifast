@@ -113,7 +113,7 @@ void ContextFreePPCallbacks::FileSkipped(
 void ContextFreePPCallbacks::InclusionDirective(
     clang::SourceLocation hashLoc, const clang::Token &includeTok,
     clang::StringRef fileName, bool isAngled,
-    clang::CharSourceRange filenameRange, const clang::FileEntry *file,
+    clang::CharSourceRange filenameRange, clang::OptionalFileEntryRef file,
     clang::StringRef searchPath, clang::StringRef relativePath,
     const clang::Module *imported, clang::SrcMgr::CharacteristicKind fileType) {
   m_context.addRealInclDirective(filenameRange.getAsRange(), fileName, *file,

@@ -6,7 +6,7 @@
 #include <unistd.h>
 
 value caml_stopwatch_getpid() {
-    return copy_int32(getpid());
+    return caml_copy_int32(getpid());
 }
 
 value caml_lock_process_to_processor_1() {
@@ -21,7 +21,7 @@ value caml_lock_process_to_processor_1() {
 }
 
 value caml_stopwatch_processor_ticks() {
-    return copy_int64(__rdtsc());
+    return caml_copy_int64(__rdtsc());
 }
 
 struct stopwatch {
@@ -54,5 +54,5 @@ value caml_stopwatch_stop(value stopwatch) {
 
 value caml_stopwatch_ticks(value stopwatch) {
     struct stopwatch *s = (void *)stopwatch;
-    return copy_int64(s->counter);
+    return caml_copy_int64(s->counter);
 }

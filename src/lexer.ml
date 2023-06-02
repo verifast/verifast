@@ -1046,106 +1046,106 @@ let rec
 and
   parse_operators_rest stream = parse_disj_expr_rest stream
 and
-  parse_disj_expr = parser
-  [< e0 = parse_conj_expr; e = parse_disj_expr_rest e0 >] -> e
+  parse_disj_expr = function%parser
+  [ parse_conj_expr as e0; [%l e = parse_disj_expr_rest e0] ] -> e
 and
-  parse_conj_expr = parser
-  [< e0 = parse_bitor_expr; e = parse_conj_expr_rest e0 >] -> e
+  parse_conj_expr = function%parser
+  [ parse_bitor_expr as e0; [%l e = parse_conj_expr_rest e0] ] -> e
 and
-  parse_bitor_expr = parser
-  [< e0 = parse_bitxor_expr; e = parse_bitor_expr_rest e0 >] -> e
+  parse_bitor_expr = function%parser
+  [ parse_bitxor_expr as e0; [%l e = parse_bitor_expr_rest e0] ] -> e
 and
-  parse_bitxor_expr = parser
-  [< e0 = parse_bitand_expr; e = parse_bitxor_expr_rest e0 >] -> e
+  parse_bitxor_expr = function%parser
+  [ parse_bitand_expr as e0; [%l e = parse_bitxor_expr_rest e0] ] -> e
 and
-  parse_bitand_expr = parser
-  [< e0 = parse_expr_rel; e = parse_bitand_expr_rest e0 >] -> e
+  parse_bitand_expr = function%parser
+  [ parse_expr_rel as e0; [%l e = parse_bitand_expr_rest e0] ] -> e
 and
-  parse_expr_rel = parser
-  [< e0 = parse_truncating_expr; e = parse_expr_rel_rest e0 >] -> e
+  parse_expr_rel = function%parser
+  [ parse_truncating_expr as e0; [%l e = parse_expr_rel_rest e0] ] -> e
 and
-  parse_truncating_expr = parser
-  [< e = parse_shift >] -> e
+  parse_truncating_expr = function%parser
+  [ parse_shift as e ] -> e
 and
-  parse_shift = parser
-  [< e0 = parse_expr_arith; e = parse_shift_rest e0 >] -> e
+  parse_shift = function%parser
+  [ parse_expr_arith as e0; [%l e = parse_shift_rest e0] ] -> e
 and
-  parse_expr_arith = parser
-  [< e0 = parse_expr_mul; e = parse_expr_arith_rest e0 >] -> e
+  parse_expr_arith = function%parser
+  [ parse_expr_mul as e0; [%l e = parse_expr_arith_rest e0] ] -> e
 and
-  parse_expr_mul = parser
-  [< e0 = parse_expr_suffix; e = parse_expr_mul_rest e0 >] -> e
+  parse_expr_mul = function%parser
+  [ parse_expr_suffix as e0; [%l e = parse_expr_mul_rest e0] ] -> e
 and
-  parse_expr_suffix = parser
-  [< e = parse_expr_primary >] -> e
+  parse_expr_suffix = function%parser
+  [ parse_expr_primary as e ] -> e
 and
-  parse_expr_primary = parser
-  [< '(l, Ident _) >] -> IntLit (l, zero_big_int, false, false, NoLSuffix)
-| [< '(l, Int (n, dec, usuffix, lsuffix, _)) >] -> IntLit (l, n, dec, usuffix, lsuffix)
-| [< '(l, Kwd "-"); '(l, Int (n, dec, usuffix, lsuffix, _)) >] -> IntLit (l, minus_big_int n, dec, usuffix, lsuffix)
-| [< '(l, Kwd "("); e0 = parse_operators; '(_, Kwd ")"); e = parse_operators_rest e0 >] -> e
-| [< '(l, Kwd "!"); e = parse_expr_suffix >] -> Operation(l, Not, [e])
-| [< '(l, Kwd "INT_MIN") >] -> (match dataModel with Some {int_width} -> IntLit (l, min_signed_big_int int_width, true, false, NoLSuffix) | _ -> construct_not_supported ())
-| [< '(l, Kwd "INT_MAX") >] -> (match dataModel with Some {int_width} -> IntLit (l, max_signed_big_int int_width, true, false, NoLSuffix) | _ -> construct_not_supported ())
-| [< '(l, Kwd "UINTPTR_MAX") >] -> (match dataModel with Some {ptr_width} -> IntLit (l, max_unsigned_big_int ptr_width, true, true, NoLSuffix) | _ -> construct_not_supported ())
-| [< '(l, Kwd "CHAR_MIN") >] -> IntLit (l, big_int_of_string "-128", true, false, NoLSuffix)
-| [< '(l, Kwd "CHAR_MAX") >] -> IntLit (l, big_int_of_string "127", true, false, NoLSuffix)
-| [< '(l, Kwd "UCHAR_MAX") >] -> IntLit (l, big_int_of_string "255", true, false, NoLSuffix)
-| [< '(l, Kwd "SHRT_MIN") >] -> IntLit (l, big_int_of_string "-32768", true, false, NoLSuffix)
-| [< '(l, Kwd "SHRT_MAX") >] -> IntLit (l, big_int_of_string "32767", true, false, NoLSuffix)
-| [< '(l, Kwd "USHRT_MAX") >] -> IntLit (l, big_int_of_string "65535", true, false, NoLSuffix)
-| [< '(l, Kwd "UINT_MAX") >] -> (match dataModel with Some {int_width} -> IntLit (l, max_unsigned_big_int int_width, true, true, NoLSuffix) | _ -> construct_not_supported ())
-| [< '(l, Kwd "LLONG_MIN") >] -> IntLit (l, big_int_of_string "-9223372036854775808", true, false, NoLSuffix)
-| [< '(l, Kwd "LLONG_MAX") >] -> IntLit (l, big_int_of_string "9223372036854775807", true, false, NoLSuffix)
-| [< '(l, Kwd "ULLONG_MAX") >] -> IntLit (l, big_int_of_string "18446744073709551615", true, true, NoLSuffix)
-| [< '(l, Kwd "LONG_MIN") >] -> (match dataModel with Some {long_width} -> IntLit (l, min_signed_big_int long_width, true, false, NoLSuffix) | _ -> construct_not_supported ())
-| [< '(l, Kwd "LONG_MAX") >] -> (match dataModel with Some {long_width} -> IntLit (l, max_signed_big_int long_width, true, false, NoLSuffix) | _ -> construct_not_supported ())
-| [< '(l, Kwd "ULONG_MAX") >] -> (match dataModel with Some {long_width} -> IntLit (l, max_unsigned_big_int long_width, true, true, NoLSuffix) | _ -> construct_not_supported ())
+  parse_expr_primary = function%parser
+  [ (l, Ident _) ] -> IntLit (l, zero_big_int, false, false, NoLSuffix)
+| [ (l, Int (n, dec, usuffix, lsuffix, _)) ] -> IntLit (l, n, dec, usuffix, lsuffix)
+| [ (l, Kwd "-"); (l, Int (n, dec, usuffix, lsuffix, _)) ] -> IntLit (l, minus_big_int n, dec, usuffix, lsuffix)
+| [ (l, Kwd "("); parse_operators as e0; (_, Kwd ")"); [%l e = parse_operators_rest e0] ] -> e
+| [ (l, Kwd "!"); parse_expr_suffix as e ] -> Operation(l, Not, [e])
+| [ (l, Kwd "INT_MIN") ] -> (match dataModel with Some {int_width} -> IntLit (l, min_signed_big_int int_width, true, false, NoLSuffix) | _ -> construct_not_supported ())
+| [ (l, Kwd "INT_MAX") ] -> (match dataModel with Some {int_width} -> IntLit (l, max_signed_big_int int_width, true, false, NoLSuffix) | _ -> construct_not_supported ())
+| [ (l, Kwd "UINTPTR_MAX") ] -> (match dataModel with Some {ptr_width} -> IntLit (l, max_unsigned_big_int ptr_width, true, true, NoLSuffix) | _ -> construct_not_supported ())
+| [ (l, Kwd "CHAR_MIN") ] -> IntLit (l, big_int_of_string "-128", true, false, NoLSuffix)
+| [ (l, Kwd "CHAR_MAX") ] -> IntLit (l, big_int_of_string "127", true, false, NoLSuffix)
+| [ (l, Kwd "UCHAR_MAX") ] -> IntLit (l, big_int_of_string "255", true, false, NoLSuffix)
+| [ (l, Kwd "SHRT_MIN") ] -> IntLit (l, big_int_of_string "-32768", true, false, NoLSuffix)
+| [ (l, Kwd "SHRT_MAX") ] -> IntLit (l, big_int_of_string "32767", true, false, NoLSuffix)
+| [ (l, Kwd "USHRT_MAX") ] -> IntLit (l, big_int_of_string "65535", true, false, NoLSuffix)
+| [ (l, Kwd "UINT_MAX") ] -> (match dataModel with Some {int_width} -> IntLit (l, max_unsigned_big_int int_width, true, true, NoLSuffix) | _ -> construct_not_supported ())
+| [ (l, Kwd "LLONG_MIN") ] -> IntLit (l, big_int_of_string "-9223372036854775808", true, false, NoLSuffix)
+| [ (l, Kwd "LLONG_MAX") ] -> IntLit (l, big_int_of_string "9223372036854775807", true, false, NoLSuffix)
+| [ (l, Kwd "ULLONG_MAX") ] -> IntLit (l, big_int_of_string "18446744073709551615", true, true, NoLSuffix)
+| [ (l, Kwd "LONG_MIN") ] -> (match dataModel with Some {long_width} -> IntLit (l, min_signed_big_int long_width, true, false, NoLSuffix) | _ -> construct_not_supported ())
+| [ (l, Kwd "LONG_MAX") ] -> (match dataModel with Some {long_width} -> IntLit (l, max_signed_big_int long_width, true, false, NoLSuffix) | _ -> construct_not_supported ())
+| [ (l, Kwd "ULONG_MAX") ] -> (match dataModel with Some {long_width} -> IntLit (l, max_unsigned_big_int long_width, true, true, NoLSuffix) | _ -> construct_not_supported ())
 and
-  parse_expr_mul_rest e0 = parser
-  [< '(l, Kwd "*"); e1 = parse_expr_suffix; e = parse_expr_mul_rest (Operation (l, Mul, [e0; e1])) >] -> e
-| [< '(l, Kwd "/"); e1 = parse_expr_suffix; e = parse_expr_mul_rest (Operation (l, Div, [e0; e1])) >] -> e
-| [< '(l, Kwd "%"); e1 = parse_expr_suffix; e = parse_expr_mul_rest (Operation (l, Mod, [e0; e1])) >] -> e
-| [< >] -> e0
+  parse_expr_mul_rest e0 = function%parser
+  [ (l, Kwd "*"); parse_expr_suffix as e1; [%l e = parse_expr_mul_rest (Operation (l, Mul, [e0; e1]))] ] -> e
+| [ (l, Kwd "/"); parse_expr_suffix as e1; [%l e = parse_expr_mul_rest (Operation (l, Div, [e0; e1]))] ] -> e
+| [ (l, Kwd "%"); parse_expr_suffix as e1; [%l e = parse_expr_mul_rest (Operation (l, Mod, [e0; e1]))] ] -> e
+| [ ] -> e0
 and
-  parse_expr_arith_rest e0 = parser
-  [< '(l, Kwd "+"); e1 = parse_expr_mul; e = parse_expr_arith_rest (Operation (l, Add, [e0; e1])) >] -> e
-| [< '(l, Kwd "-"); e1 = parse_expr_mul; e = parse_expr_arith_rest (Operation (l, Sub, [e0; e1])) >] -> e
-| [< >] -> e0
+  parse_expr_arith_rest e0 = function%parser
+  [ (l, Kwd "+"); parse_expr_mul as e1; [%l e = parse_expr_arith_rest (Operation (l, Add, [e0; e1]))] ] -> e
+| [ (l, Kwd "-"); parse_expr_mul as e1; [%l e = parse_expr_arith_rest (Operation (l, Sub, [e0; e1]))] ] -> e
+| [ ] -> e0
 and
-  parse_shift_rest e0 = parser
-  [< '(l, Kwd "<<"); e1 = parse_expr_arith; e = parse_shift_rest (Operation (l, ShiftLeft, [e0; e1])) >] -> e
-| [< '(l, Kwd ">>"); e1 = parse_expr_arith; e = parse_shift_rest (Operation (l, ShiftRight, [e0; e1])) >] -> e
-| [< >] -> e0
+  parse_shift_rest e0 = function%parser
+  [ (l, Kwd "<<"); parse_expr_arith as e1; [%l e = parse_shift_rest (Operation (l, ShiftLeft, [e0; e1]))] ] -> e
+| [ (l, Kwd ">>"); parse_expr_arith as e1; [%l e = parse_shift_rest (Operation (l, ShiftRight, [e0; e1]))] ] -> e
+| [ ] -> e0
 and
-  parse_expr_rel_rest e0 = parser
-  [< '(l, Kwd "=="); e1 = parse_truncating_expr; e = parse_expr_rel_rest (Operation (l, Eq, [e0; e1])) >] -> e
-| [< '(l, Kwd "!="); e1 = parse_truncating_expr; e = parse_expr_rel_rest (Operation (l, Neq, [e0; e1])) >] -> e
-| [< '(l, Kwd "<"); e1 = parse_truncating_expr; e = parse_expr_rel_rest (Operation (l, Lt, [e0; e1])) >] -> e
-| [< '(l, Kwd "<="); e1 = parse_truncating_expr; e = parse_expr_rel_rest (Operation (l, Le, [e0; e1])) >] -> e
-| [< '(l, Kwd ">"); e1 = parse_truncating_expr; e = parse_expr_rel_rest (Operation (l, Gt, [e0; e1])) >] -> e
-| [< '(l, Kwd ">="); e1 = parse_truncating_expr; e = parse_expr_rel_rest (Operation (l, Ge, [e0; e1])) >] -> e
-| [< >] -> e0
+  parse_expr_rel_rest e0 = function%parser
+  [ (l, Kwd "=="); parse_truncating_expr as e1; [%l e = parse_expr_rel_rest (Operation (l, Eq, [e0; e1]))] ] -> e
+| [ (l, Kwd "!="); parse_truncating_expr as e1; [%l e = parse_expr_rel_rest (Operation (l, Neq, [e0; e1]))] ] -> e
+| [ (l, Kwd "<"); parse_truncating_expr as e1; [%l e = parse_expr_rel_rest (Operation (l, Lt, [e0; e1]))] ] -> e
+| [ (l, Kwd "<="); parse_truncating_expr as e1; [%l e = parse_expr_rel_rest (Operation (l, Le, [e0; e1]))] ] -> e
+| [ (l, Kwd ">"); parse_truncating_expr as e1; [%l e = parse_expr_rel_rest (Operation (l, Gt, [e0; e1]))] ] -> e
+| [ (l, Kwd ">="); parse_truncating_expr as e1; [%l e = parse_expr_rel_rest (Operation (l, Ge, [e0; e1]))] ] -> e
+| [ ] -> e0
 and
-  parse_bitand_expr_rest e0 = parser
-  [< '(l, Kwd "&"); e1 = parse_expr_rel; e = parse_bitand_expr_rest (Operation (l, BitAnd, [e0; e1])) >] -> e
-| [< >] -> e0
+  parse_bitand_expr_rest e0 = function%parser
+  [ (l, Kwd "&"); parse_expr_rel as e1; [%l e = parse_bitand_expr_rest (Operation (l, BitAnd, [e0; e1]))] ] -> e
+| [ ] -> e0
 and
-  parse_bitxor_expr_rest e0 = parser
-  [< '(l, Kwd "^"); e1 = parse_bitand_expr; e = parse_bitxor_expr_rest (Operation (l, BitXor, [e0; e1])) >] -> e
-| [< >] -> e0
+  parse_bitxor_expr_rest e0 = function%parser
+  [ (l, Kwd "^"); parse_bitand_expr as e1; [%l e = parse_bitxor_expr_rest (Operation (l, BitXor, [e0; e1]))] ] -> e
+| [ ] -> e0
 and
-  parse_bitor_expr_rest e0 = parser
-  [< '(l, Kwd "|"); e1 = parse_bitxor_expr; e = parse_bitor_expr_rest (Operation (l, BitOr, [e0; e1])) >] -> e
-| [< >] -> e0
+  parse_bitor_expr_rest e0 = function%parser
+  [ (l, Kwd "|"); parse_bitxor_expr as e1; [%l e = parse_bitor_expr_rest (Operation (l, BitOr, [e0; e1]))] ] -> e
+| [ ] -> e0
 and
-  parse_conj_expr_rest e0 = parser
-  [< '(l, Kwd "&&"); e1 = parse_bitor_expr; e = parse_conj_expr_rest (Operation (l, And, [e0; e1])) >] -> e
-| [< >] -> e0
+  parse_conj_expr_rest e0 = function%parser
+  [ (l, Kwd "&&"); parse_bitor_expr as e1; [%l e = parse_conj_expr_rest (Operation (l, And, [e0; e1]))] ] -> e
+| [ ] -> e0
 and
-  parse_disj_expr_rest e0 = parser
-  [< '(l, Kwd "||"); e1 = parse_conj_expr; e = parse_disj_expr_rest (Operation (l, Or, [e0; e1])) >] -> e
-| [< >] -> e0
+  parse_disj_expr_rest e0 = function%parser
+  [ (l, Kwd "||"); parse_conj_expr as e1; [%l e = parse_disj_expr_rest (Operation (l, Or, [e0; e1]))] ] -> e
+| [ ] -> e0
 in
 parse_operators
 
