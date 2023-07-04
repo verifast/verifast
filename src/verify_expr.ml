@@ -1736,15 +1736,20 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | _ ->
       produce_c_object l coef addr ty eval_h init allow_ghost_fields produce_padding_chunk h env cont
 
-  let consume_cxx_object l coefpat addr ty check_dtor_call consume_padding_chunk h env cont =
+  let consume_cxx_object_core l coefpat addr ty check_dtor_call consume_padding_chunk dynamic_dispatch h env cont =
     match ty, dialect with 
     | UnionType _, Some Cxx -> static_error l "Union destruction is not supported yet." None 
     | StructType struct_name, Some Cxx ->
       let dtor_info = try_assoc struct_name cxx_dtor_map in 
       if dtor_info = None then static_error l ("No matching destructor is defined explicitly for " ^ struct_name ^ ".") None;
-      let Some (ld, pre, pre_tenv, post, terminates, body_opt, is_virtual) = dtor_info in 
+      let Some (ld, pre, pre_tenv, post, terminates, body_opt, dtor_is_virtual) = dtor_info in 
       if body_opt = None then register_prototype_used ld (cxx_dtor_name struct_name) None;
-      check_dtor_call l pre post terminates h env is_virtual struct_name @@ fun h env _ ->
+      let dispatch_dynamically = 
+        match dtor_is_virtual with
+        | false -> false
+        | true -> dynamic_dispatch
+      in
+      check_dtor_call l pre post terminates h env dispatch_dynamically struct_name @@ fun h env _ ->
       if consume_padding_chunk then 
         let _, _, Some padding_pred_symb, _, _ = List.assoc struct_name structmap in 
         consume_chunk rules h [] [] [] l (padding_pred_symb, true) [] real_unit coefpat (Some 1) [TermPat addr] @@ fun _ h _ _ _ _ env _ ->
@@ -1754,6 +1759,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | _ ->
       consume_c_object_core_core l coefpat addr ty h consume_padding_chunk true @@ fun _ h _ -> 
       cont h env
+  
+  let consume_cxx_direct_base_object l coefpat addr ty check_dtor_call consume_padding_chunk h env cont =
+    consume_cxx_object_core l coefpat addr ty check_dtor_call consume_padding_chunk false h env cont
+
+  let consume_cxx_object l coefpat addr ty check_dtor_call consume_padding_chunk h env cont =
+    consume_cxx_object_core l coefpat addr ty check_dtor_call consume_padding_chunk true h env cont
 
   let assume_is_of_type l t tp cont =
     match tp with
@@ -1844,7 +1855,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     consume_chunk rules h [] [] [] l (call_perm__symb, true) [] real_unit real_unit_pat (Some 2) [TermPat currentThread; TermPat t] $. fun _ h _ _ _ _ _ _ ->
     cont h
 
-  let verify_call funcmap eval_h l (pn, ilist) xo g targs pats (callee_tparams, tr, ps, funenv, pre, post, epost, terminates, is_virtual_call) pure is_upcall target_class leminfo sizemap h tparams tenv ghostenv env cont econt =
+  let verify_call funcmap eval_h l (pn, ilist) xo g targs pats (callee_tparams, tr, ps, funenv, pre, post, epost, terminates, dynamic_dispatch) pure is_upcall target_class leminfo sizemap h tparams tenv ghostenv env cont econt =
     let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some pure) e tp in
     let check_expr (pn,ilist) tparams tenv pure e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv pure e in
     let eval_h h env pat cont =
@@ -1925,7 +1936,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match this_info_opt with
         | Some (struct_name, this_term) ->
           let ghostenv = "thisType" :: ghostenv in
-          if is_virtual_call then
+          if dynamic_dispatch then
             let vtype_symb = get_pred_symb_from_map struct_name cxx_vtype_map in
             consume_chunk rules h [] [] [] l (vtype_symb, true) [] real_unit dummypat (Some 1) [TermPat this_term; dummypat] @@ fun _ _ _ [_; vtype] _ _ _ _ ->
             cont h (("thisType", vtype) :: env') ghostenv
@@ -2185,12 +2196,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           produce_points_to_chunk l h tpx real_unit symb w $. fun h ->
           cont h env
     in
-    let check_correct h xo g targs args (lg, callee_tparams, tr, ps, funenv, pre, post, epost, terminates, is_virtual_call) is_upcall target_class cont =
+    let check_correct h xo g targs args (lg, callee_tparams, tr, ps, funenv, pre, post, epost, terminates, dynamic_dispatch) is_upcall target_class cont =
       (* check_expr is needed here because args are not typechecked yet. Why does check_expr_t not check the arguments of a WFunCall? *)
       let at_most_one_unsafe args = (List.length (List.filter (fun a -> let (w, t) = check_expr (pn,ilist) tparams tenv a in not (is_safe_expr w)) args)) <= 1 in
       let eval_h = if language == CLang && not heapReadonly &&  (List.length args = 1 || at_most_one_unsafe args) then (fun h env e cont -> eval_h_core (true, false) h env e cont) else eval_h in
       let pre = match pre with ExprAsn (la, False _) when la == lg -> ExprAsn (lg, False dummy_loc) | _ -> pre in
-      verify_call funcmap eval_h l (pn, ilist) xo g targs (List.map (fun e -> SrcPat (LitPat e)) args) (callee_tparams, tr, ps, funenv, pre, post, epost, terminates, is_virtual_call) pure is_upcall target_class leminfo sizemap h tparams tenv ghostenv env cont econt
+      verify_call funcmap eval_h l (pn, ilist) xo g targs (List.map (fun e -> SrcPat (LitPat e)) args) (callee_tparams, tr, ps, funenv, pre, post, epost, terminates, dynamic_dispatch) pure is_upcall target_class leminfo sizemap h tparams tenv ghostenv env cont econt
     in
     let new_array h env l elem_tp length elems =
       let at = get_unique_var_symb (match xo with None -> "array" | Some x -> x) (ArrayType elem_tp) in

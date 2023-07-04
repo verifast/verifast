@@ -3045,7 +3045,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             else cont h
           end @@ fun h ->
           let verify_dtor_call = verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env this_addr None in
-          consume_cxx_object base_spec_loc real_unit_pat this_addr (StructType base_name) verify_dtor_call false h env @@ fun h env ->
+          consume_cxx_direct_base_object base_spec_loc real_unit_pat this_addr (StructType base_name) verify_dtor_call false h env @@ fun h env ->
           cont h env tenv
       in
       iter bases cont 
