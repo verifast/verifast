@@ -758,6 +758,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * bool (* terminates *)
       * (stmt list * loc) option option
       * bool (* is_virtual *)
+      * string list (* overrides: direct base struct names *)
     type base_spec_info = 
         loc 
       * bool (* virtual *)
@@ -866,6 +867,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * (string * pred_fam_info map * type_ list * (loc * string) list) option (* implemented function type, with function type type arguments and function type arguments *)
       * (stmt list * loc (* closing brace *) ) option option (* body; None if prototype; Some None if ? *)
       * bool (* virtual *)
+      * string list (* overrides *)
     type func_type_info =
         loc
       * ghostness
@@ -3418,7 +3420,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
   
   let funcnameterms = List.map (fun fn -> (fn, get_unique_var_symb fn (PtrType Void))) funcnames
-  let funcnameterms0 = List.map (fun (g, FuncInfo (_, fterm, _, _, _, _, _, _, _, _, _, _, _, _, _)) -> (g, fterm)) funcmap0
+  let funcnameterms0 = List.map (fun (g, FuncInfo (_, fterm, _, _, _, _, _, _, _, _, _, _, _, _, _, _)) -> (g, fterm)) funcmap0
   let all_funcnameterms = funcnameterms @ funcnameterms0
   
   let check_classname (pn, ilist) (l, c) =
@@ -4278,7 +4280,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           (WFunCall (l, g, [], es, Static), PtrType t, None)
         | _ ->
         match resolve2 (pn,ilist) l g funcmap with
-          Some (g, FuncInfo (funenv, fterm, lg, k, callee_tparams, tr, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, virt)) ->
+          Some (g, FuncInfo (funenv, fterm, lg, k, callee_tparams, tr, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, virt, overrides)) ->
           let declKind =
             match k with
               Regular -> DeclKind_RegularFunction

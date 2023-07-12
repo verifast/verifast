@@ -270,7 +270,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     ctxt#assert_term (ctxt#mk_eq (mk_app symb [List.assoc fn funcnameterms]) ctxt#mk_true)
    
   let funcnameterm_of funcmap fn =
-    let FuncInfo (env, fterm, l, k, tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, virt) = List.assoc fn funcmap in fterm
+    let FuncInfo (env, fterm, l, k, tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, virt, overrides) = List.assoc fn funcmap in fterm
  
   let functypes_implemented = ref []
   
@@ -384,6 +384,30 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | _ -> false
 
   let reportStmts ss = List.iter (stmt_iter (fun s -> if not (is_transparent_stmt s) then reportStmt (stmt_loc s))) ss
+
+  let check_cxx_spec_overrides fenv (meth_name, meth_info) get_meth_info =
+    let FuncInfo ([], fterm, l, k, tparams, rt, xmap, ng_callers_only, pre, pre_tenv, post, terminates, _, _, is_virtual, overrides) = meth_info in
+    match overrides with
+    | [] -> ()
+    | _ ->
+      let ("this", PtrType (StructType derived)) :: xmap = xmap in
+      let this_term = get_unique_var_symb_non_ghost "this" (PtrType (StructType derived)) in
+      let env = ("this", this_term) :: fenv in
+      let rec check (prev_base_name, prev_base_term) overrides =
+        match overrides with
+        | [] -> ()
+        | override :: overrides ->
+          let FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, ng_callers_only0, pre0, pre_tenv0, post0, terminates0, _, _, is_virtual0, overrides0) = get_meth_info override in
+          let ("this", PtrType (StructType base)) :: xmap0 = xmap0 in
+          let base_term = direct_base_addr (prev_base_name, prev_base_term) base in
+          let () = check_func_header_compat l ("Method '" ^ meth_name ^ "'") ("Method implementation check of '" ^ override ^ "'") env
+            (Regular, [], rt, xmap, false, pre, post, [], terminates)
+            (Regular, [], rt0, xmap0, false, [], (("this", base_term) :: fenv), pre0, post0, [], terminates0)
+          in
+          let () = check (base, base_term) overrides0 in
+          check (prev_base_name, prev_base_term) overrides
+      in
+      check (derived, this_term) overrides
     
   let (funcmap1, prototypes_implemented) =
     let rec iter pn ilist funcmap prototypes_implemented ds =
@@ -409,30 +433,20 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         begin fun cont ->
           match try_assoc2 fn funcmap funcmap0 with
-            None -> cont (fn, FuncInfo ([], fterm, l, k, tparams, rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body', is_virtual)) prototypes_implemented
-          | Some (FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, nonghost_callers_only0, pre0, pre_tenv0, post0, terminates0, _, Some _, is_virtual0)) ->
+            None -> cont (fn, FuncInfo ([], fterm, l, k, tparams, rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body', is_virtual, overrides)) prototypes_implemented
+          | Some (FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, nonghost_callers_only0, pre0, pre_tenv0, post0, terminates0, _, Some _, is_virtual0, overrides0)) ->
             if body = None then
               static_error l "Function prototype must precede function implementation." None
             else
               static_error l "Duplicate function implementation." None
-          | Some (FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, nonghost_callers_only0, pre0, pre_tenv0, post0, terminates0, functype_opt0, None, is_virtual)) ->
+          | Some (FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, nonghost_callers_only0, pre0, pre_tenv0, post0, terminates0, functype_opt0, None, is_virtual, overrides0)) ->
             if body = None then static_error l "Duplicate function prototype." None;
             check_func_header_compat l ("Function '" ^ fn ^ "'") "Function prototype implementation check" fenv 
               (k, tparams, rt, xmap, nonghost_callers_only, pre, post, [], terminates) 
               (k0, tparams0, rt0, xmap0, nonghost_callers_only0, [], fenv, pre0, post0, [], terminates0);
-            cont (fn, FuncInfo ([], fterm, l, k, tparams, rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body', is_virtual)) ((fn, l0)::prototypes_implemented)
+            cont (fn, FuncInfo ([], fterm, l, k, tparams, rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body', is_virtual, overrides)) ((fn, l0)::prototypes_implemented)
         end @@ fun func_info protos_implemented ->
-        let check_override overridden_meth =
-          let FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, ng_callers_only0, pre0, pre_tenv0, post0, terminates0, _, _, is_virtual0) = assoc2 overridden_meth funcmap funcmap0 in
-          let ("this", PtrType (StructType base)) :: xmap0 = xmap0 in
-          let ("this", PtrType (StructType derived)) :: xmap = xmap in
-          let this_term = get_unique_var_symb_non_ghost "this" (PtrType (StructType derived)) in
-          let base_term = base_addr l (derived, this_term) base in
-          check_func_header_compat l ("Method '" ^ fn ^ "'") "Method implementation check" (("this", this_term) :: fenv)
-            (Regular, [], rt, xmap, false, pre, post, [], terminates)
-            (Regular, [], rt0, xmap0, false, [], (("this", base_term) :: fenv), pre0, post0, [], terminates0)
-        in
-        let () = overrides |> List.iter check_override in
+        let () = check_cxx_spec_overrides fenv func_info (fun name -> assoc2 name funcmap funcmap0) in
         iter pn ilist (func_info :: funcmap) protos_implemented ds
       | _::ds -> iter pn ilist funcmap prototypes_implemented ds
     in
@@ -518,6 +532,29 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let cxx_ctor_map = cxx_ctor_map1 @ cxx_ctor_map0
   let prototypes_implemented = prototypes_implemented @ ctors_implemented
 
+  let check_cxx_dtor_spec_overrides fenv derived_struct_name dtor_info get_dtor_info =
+    let loc, pre, pre_tenv, post, terminates, _, _, overrides = dtor_info in
+    match overrides with
+    | [] -> ()
+    | _ ->
+      let this_term = get_unique_var_symb_non_ghost "this" (PtrType (StructType derived_struct_name)) in
+      let env = ("this", this_term) :: fenv in
+      let derived_dtor_name = cxx_dtor_name derived_struct_name in
+      let rec check (prev_base_name, prev_base_term) overrides =
+        match overrides with
+        | [] -> ()
+        | override :: overrides ->
+          let loc0, pre0, pre_tenv0, post0, terminates0, _, is_virtual0, overrides0 = get_dtor_info override in
+          let base_term = direct_base_addr (prev_base_name, prev_base_term) override in
+          let () = check_func_header_compat loc ("Destructor '" ^ derived_dtor_name ^ "'") ("Destructor implementation check of '" ^ (cxx_dtor_name override) ^ "'") env
+            (Regular, [], None, [], false, pre, post, [], terminates)
+            (Regular, [], None, [], false, [], (("this", base_term) :: fenv), pre0, post0, [], terminates0)
+          in
+          let () = check (override, base_term) overrides0 in
+          check (prev_base_name, prev_base_term) overrides
+      in
+      check (derived_struct_name, this_term) overrides
+
   let cxx_dtor_map1, dtors_implemented =
     let rec iter pn ilist dtor_map dtors_implemented ds =
       match ds with
@@ -542,29 +579,22 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         begin fun cont ->
           match try_assoc2 struct_name dtor_map cxx_dtor_map0 with 
           | None ->
-            cont (loc, pre, pre_tenv, post, terminates, (body_opt |> option_map @@ fun b -> Some b), is_virtual) dtors_implemented
-          | Some (_, _, _, _, _, Some _, _) ->
+            cont (loc, pre, pre_tenv, post, terminates, (body_opt |> option_map @@ fun b -> Some b), is_virtual, overrides) dtors_implemented
+          | Some (_, _, _, _, _, Some _, _, _) ->
             (* We should never reach this because Clang would not allow it, but let's check it to be sure *)
             if body_opt = None then 
               static_error loc "Destructor prototype must precede constructor implementation." None
             else 
               static_error loc "Duplicate destructor implementation." None 
-          | Some (loc0, pre0, pre_tenv0, post0, terminates0, None, is_virtual) ->
+          | Some (loc0, pre0, pre_tenv0, post0, terminates0, None, is_virtual, overrides) ->
             if body_opt = None then static_error loc "Duplicate destructor prototype." None;
             let env = ("this", this_term) :: fenv in
             check_func_header_compat loc ("Destructor '" ^ struct_name ^ "'") "Destructor prototype implementation check" env 
               (Regular, [], None, [], false, pre, post, [], terminates) 
               (Regular, [], None, [], false, [], env, pre0, post0, [], terminates0);
-            cont (loc, pre, pre_tenv, post, terminates, (body_opt |> option_map @@ fun b -> Some b), is_virtual) ((dtor_name, loc0) :: dtors_implemented)
+            cont (loc, pre, pre_tenv, post, terminates, (body_opt |> option_map @@ fun b -> Some b), is_virtual, overrides) ((dtor_name, loc0) :: dtors_implemented)
         end @@ fun dtor_info dtors_implemented ->
-        let check_override overridden_meth =
-          let loc0, pre0, pre_tenv0, post0, terminates0, _, is_virtual0 = assoc2 overridden_meth dtor_map cxx_dtor_map0 in
-          let base_term = base_addr loc (struct_name, this_term) overridden_meth in
-          check_func_header_compat loc ("Destructor '" ^ (cxx_dtor_name overridden_meth) ^ "'") "Destructor implementation check" (("this", this_term) :: fenv)
-            (Regular, [], None, [], false, pre, post, [], terminates)
-            (Regular, [], None, [], false, [], (("this", base_term) :: fenv), pre0, post0, [], terminates0)
-        in
-        let () = overrides |> List.iter check_override in
+        let () = check_cxx_dtor_spec_overrides fenv struct_name dtor_info (fun name -> assoc2 name cxx_dtor_map0 dtor_map) in
         iter pn ilist ((struct_name, dtor_info) :: dtor_map) dtors_implemented rest
       | _ :: rest -> iter pn ilist dtor_map dtors_implemented rest 
     in 
@@ -1742,7 +1772,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | StructType struct_name, Some Cxx ->
       let dtor_info = try_assoc struct_name cxx_dtor_map in 
       if dtor_info = None then static_error l ("No matching destructor is defined explicitly for " ^ struct_name ^ ".") None;
-      let Some (ld, pre, pre_tenv, post, terminates, body_opt, dtor_is_virtual) = dtor_info in 
+      let Some (ld, pre, pre_tenv, post, terminates, body_opt, dtor_is_virtual, overrides) = dtor_info in 
       if body_opt = None then register_prototype_used ld (cxx_dtor_name struct_name) None;
       let dispatch_dynamically = 
         match dtor_is_virtual with
@@ -2668,7 +2698,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       check_correct h None None [] args (lm, [], rt, xmap, [], pre, post, Some epost, terminates, false) is_upcall (Some supercn) cont
     | WFunCall (l, g, targs, es, binding) ->
-      let FuncInfo (funenv, fterm, lg, k, tparams, tr, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, is_virt) = List.assoc g funcmap in
+      let FuncInfo (funenv, fterm, lg, k, tparams, tr, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, is_virt, overrides) = List.assoc g funcmap in
       if heapReadonly && not assume_left_to_right_evaluation && not (startswith g "vf__") && asserts_exclusive_ownership pre then has_heap_effects ();
       if body = None then register_prototype_used lg g (Some fterm);
       if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." None;
