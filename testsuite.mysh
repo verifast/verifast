@@ -624,6 +624,8 @@ cd ..
         verifast -c -allow_should_fail indirect_virtual_call_in_dtor_ub.cpp
         verifast -c -allow_should_fail -allow_dead_code -disable_overflow_check check_vtype_ptr_before_call.cpp
         verifast -c -disable_overflow_check override.cpp
+        verifast -c -disable_overflow_check spec_override_check.cpp
+        verifast -c -allow_should_fail invalid_spec_override_check.cpp
     cd ..
     cd instance_preds
         verifast -c lvalue_ref.cpp
