@@ -400,7 +400,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, ng_callers_only0, pre0, pre_tenv0, post0, terminates0, _, _, is_virtual0, overrides0) = get_meth_info override in
           let ("this", PtrType (StructType base)) :: xmap0 = xmap0 in
           let base_term = direct_base_addr (prev_base_name, prev_base_term) base in
-          let () = check_func_header_compat l ("Method '" ^ meth_name ^ "'") ("Method implementation check of '" ^ override ^ "'") env
+          let () = check_func_header_compat l ("Method '" ^ meth_name ^ "'") (Printf.sprintf "Checking that '%s' correctly overrides '%s'" meth_name override) env
             (Regular, [], rt, xmap, false, pre, post, [], terminates)
             (Regular, [], rt0, xmap0, false, [], (("this", base_term) :: fenv), pre0, post0, [], terminates0)
           in
@@ -546,7 +546,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | override :: overrides ->
           let loc0, pre0, pre_tenv0, post0, terminates0, _, is_virtual0, overrides0 = get_dtor_info override in
           let base_term = direct_base_addr (prev_base_name, prev_base_term) override in
-          let () = check_func_header_compat loc ("Destructor '" ^ derived_dtor_name ^ "'") ("Destructor implementation check of '" ^ (cxx_dtor_name override) ^ "'") env
+          let () = check_func_header_compat loc ("Destructor '" ^ derived_dtor_name ^ "'") (Printf.sprintf "Checking that '%s' correctly overrides '%s'" derived_dtor_name (cxx_dtor_name override)) env
             (Regular, [], None, [], false, pre, post, [], terminates)
             (Regular, [], None, [], false, [], (("this", base_term) :: fenv), pre0, post0, [], terminates0)
           in
