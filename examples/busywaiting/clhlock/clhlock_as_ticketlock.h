@@ -33,11 +33,11 @@ typedef lemma void clhlock_as_ticketlock_get_ticket_ghost_op(predicate(int, int,
     ensures inv(owner, nextTicket + 1, held) &*& wait_inv(nextTicket, f);
 
 typedef lemma void clhlock_as_ticketlock_wait_ghost_op(predicate(int, int, bool) inv, predicate(int, void *) wait_inv, int acquireThread)();
-    requires inv(?owner, ?nextTicket, ?held) &*& wait_inv(?ticket, ?f) &*& owner < ticket &*& currentThread == acquireThread;
+    requires inv(?owner, ?nextTicket, ?held) &*& wait_inv(?ticket, ?f) &*& owner < ticket &*& ticket < nextTicket &*& currentThread == acquireThread;
     ensures inv(owner, nextTicket, held) &*& wait_inv(ticket, f) &*& call_perm_(currentThread, f);
 
 typedef lemma void clhlock_as_ticketlock_acquire_ghost_op(predicate(int, int, bool) inv, predicate(int, void *) wait_inv, predicate(int) post, int acquireThread)();
-    requires inv(?owner, ?nextTicket, false) &*& wait_inv(owner, _) &*& currentThread == acquireThread;
+    requires inv(?owner, ?nextTicket, false) &*& wait_inv(owner, _) &*& owner < nextTicket &*& currentThread == acquireThread;
     ensures inv(owner, nextTicket, true) &*& post(owner);
 
 @*/
@@ -56,14 +56,14 @@ void clhlock_as_ticketlock_acquire(struct clhlock_as_ticketlock_thread *thread, 
 
 /*@
 
-typedef lemma void clhlock_as_ticketlock_release_ghost_op(predicate(int, int, bool) inv, int ticket, predicate() pre, predicate() post)();
-    requires inv(ticket, ?nextTicket, true) &*& pre();
+typedef lemma void clhlock_as_ticketlock_release_ghost_op(predicate(int, int, bool) inv, int ticket, predicate() pre, predicate() post, int releaseThread)();
+    requires inv(ticket, ?nextTicket, true) &*& pre() &*& currentThread == releaseThread;
     ensures inv(ticket + 1, nextTicket, false) &*& post();
 
 @*/
 
 void clhlock_as_ticketlock_release(struct clhlock_as_ticketlock_thread *thread);
-    //@ requires clhlock_as_ticketlock_locked(thread, ?lock, ?inv, ?frac, ?ticket) &*& is_clhlock_as_ticketlock_release_ghost_op(?rel, inv, ticket, ?pre, ?post) &*& pre();
+    //@ requires clhlock_as_ticketlock_locked(thread, ?lock, ?inv, ?frac, ?ticket) &*& is_clhlock_as_ticketlock_release_ghost_op(?rel, inv, ticket, ?pre, ?post, currentThread) &*& pre();
     //@ ensures clhlock_as_ticketlock_thread(thread) &*& [frac]clhlock_as_ticketlock(lock, inv) &*& post();
     //@ terminates;
 
@@ -74,7 +74,7 @@ void dispose_clhlock_as_ticketlock_thread(struct clhlock_as_ticketlock_thread *t
 
 void dispose_clhlock_as_ticketlock(struct clhlock_as_ticketlock *lock);
     //@ requires clhlock_as_ticketlock(lock, ?inv);
-    //@ ensures inv(_, _, false);
+    //@ ensures inv(?owner, owner, false);
     //@ terminates;
 
 #endif

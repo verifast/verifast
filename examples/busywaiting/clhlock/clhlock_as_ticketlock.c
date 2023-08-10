@@ -366,7 +366,7 @@ void clhlock_as_ticketlock_release(struct clhlock_as_ticketlock_thread *thread)
     /*@
     requires
         clhlock_as_ticketlock_locked(thread, ?lock, ?inv, ?frac, ?ticket) &*&
-        is_clhlock_as_ticketlock_release_ghost_op(?rel, inv, ticket, ?pre, ?post) &*& pre();
+        is_clhlock_as_ticketlock_release_ghost_op(?rel, inv, ticket, ?pre, ?post, currentThread) &*& pre();
     @*/
     //@ ensures clhlock_as_ticketlock_thread(thread) &*& [frac]clhlock_as_ticketlock(lock, inv) &*& post();
     //@ terminates;
@@ -381,7 +381,7 @@ void clhlock_as_ticketlock_release(struct clhlock_as_ticketlock_thread *thread)
         /*@
         predicate pre_() =
             [1/2]lock->owner |-> some(ticket) &*& [1/2]node->frac |-> frac &*&
-            is_clhlock_as_ticketlock_release_ghost_op(rel, inv, ticket, pre, post) &*& pre() &*&
+            is_clhlock_as_ticketlock_release_ghost_op(rel, inv, ticket, pre, post, releaseThread) &*& pre() &*&
             has_at(predHandleId, growingListId, ticket, ?predCellId) &*& [1/3]ghost_cell<struct node *>(predCellId, pred) &*&
             has_at(nodeHandleId, growingListId, ticket + 1, ?nodeCellId) &*& [1/6]ghost_cell(nodeCellId, node);
         predicate post_() =
@@ -439,7 +439,7 @@ void clhlock_as_ticketlock_release(struct clhlock_as_ticketlock_thread *thread)
             }
             lock->owner = none;
             rel();
-            leak is_clhlock_as_ticketlock_release_ghost_op(rel, inv, ticket, pre, post);
+            leak is_clhlock_as_ticketlock_release_ghost_op(rel, inv, ticket, pre, post, currentThread);
             close post_();
             close clhlock_as_ticketlock_inv(lock, inv, growingListId)();
             leak [2/3]ghost_cell<struct node *>(predCellId, _);
@@ -467,7 +467,7 @@ void dispose_clhlock_as_ticketlock_thread(struct clhlock_as_ticketlock_thread *t
 
 void dispose_clhlock_as_ticketlock(struct clhlock_as_ticketlock *lock)
     //@ requires clhlock_as_ticketlock(lock, ?inv);
-    //@ ensures inv(_, _, false);
+    //@ ensures inv(?owner, owner, false);
     //@ terminates;
 
 {
@@ -475,7 +475,7 @@ void dispose_clhlock_as_ticketlock(struct clhlock_as_ticketlock *lock)
     //@ destroy_atomic_space();
     //@ open clhlock_as_ticketlock_inv(lock, inv, lock->growingListId)();
     //@ struct node *tail = lock->tail;
-    //@ assert nodes(lock, ?nodeIds, ?owner);
+    //@ assert nodes(lock, ?nodeIds, _);
     //@ int tailCellId = nth(length(nodeIds) - 1, nodeIds);
     //@ assert [1/3]ghost_cell(tailCellId, tail);
     /*@
