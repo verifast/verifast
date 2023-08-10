@@ -17,7 +17,7 @@ cd examples
     verifast -c busywaiting_wf.c
     verifast -c bounded_fifo.c
     cd clhlock
-      verifast -c clhlock.c
+      verifast -c clhlock_as_ticketlock.c clhlock.c
     cd ..
     cd ioliveness
       verifast -c echo.c
