@@ -12,8 +12,6 @@ struct node {
     //@ struct node *pred;
     //@ real frac;
     //@ void *signal;
-    //@ void *predSignal;
-    //@ int level;
 };
 
 struct lock {
@@ -31,9 +29,8 @@ struct lock_thread {
 
 predicate queue(
     struct lock *l, list<int> lockLevel, predicate() inv, int ghostListId,
-    void *signal, int level,
+    void *signal,
     struct node *n, list<struct node *> ns) =
-    0 <= level &*&
     n == 0 ?
         ns == nil
     :
@@ -42,9 +39,7 @@ predicate queue(
             [1/2]n->lock |-> 0 &*&
             n->pred |-> _ &*&
             n->frac |-> _ &*&
-            n->level |-> _ &*&
             n->signal |-> _ &*&
-            n->predSignal |-> _ &*&
             inv() &*&
             ns == {n} &*&
             ghost_list_member_handle(ghostListId, n) &*&
@@ -52,37 +47,36 @@ predicate queue(
         :
             [1/2]n->pred |-> ?pred &*&
             [1/2]n->frac |-> ?frac &*& [frac/4]l->ghostListId |-> _ &*&
-            [1/2]n->signal |-> signal &*& [1/2]n->level |-> level &*&
-            [1/2]n->predSignal |-> ?predSignal &*&
-            signal(signal, append(lockLevel, {level}), false) &*&
-            queue(l, lockLevel, inv, ghostListId, predSignal, level - 1, pred, ?ns0) &*&
+            [1/2]n->signal |-> signal &*&
+            signal(signal, lockLevel, false) &*&
+            queue(l, lockLevel, inv, ghostListId, pred, ?ns0) &*&
             ns == cons(n, ns0);
 
 predicate_ctor lock_inv(struct lock *lock, predicate() inv)() =
     [1/2]lock->ghostListId |-> ?listId &*& [1/2]lock->level |-> ?lockLevel &*&
     lock->tail |-> ?tail &*&
-    queue(lock, lockLevel, inv, listId, _, _, tail, cons(tail, ?ns)) &*&
+    queue(lock, lockLevel, inv, listId, tail, cons(tail, ?ns)) &*&
     ghost_list(listId, cons(tail, ns));
 
 predicate lock(struct lock *lock, list<int> level, predicate() inv;) =
-    [1/2]lock->level |-> level &*& level == cons(?level_max_length, ?level0) &*& length(level0) + 1 <= level_max_length &*&
+    [1/2]lock->level |-> level &*&
     atomic_space(lock_inv(lock, inv)) &*&
     [1/2]lock->ghostListId |-> _ &*&
     malloc_block_lock(lock);
 
 predicate lock_thread(struct lock_thread *thread) =
     thread->node |-> ?node &*& node != 0 &*& node->lock |-> _ &*& node->pred |-> _ &*& node->frac |-> _ &*& malloc_block_node(node) &*&
-    node->predSignal |-> _ &*& node->signal |-> _ &*& node->level |-> _ &*&
+    node->signal |-> _ &*&
     thread->pred |-> _ &*&
     malloc_block_lock_thread(thread);
 
 predicate locked(struct lock_thread *thread, struct lock *lock, list<int> level, predicate() inv, real frac, pair<void *, list<int> > ob) =
     thread->node |-> ?node &*& [1/2]node->lock |-> 1 &*& [1/2]node->pred |-> 0 &*& [1/2]node->frac |-> frac &*& malloc_block_node(node) &*&
-    [1/2]node->predSignal |-> _ &*& [1/2]node->signal |-> ?signal &*& [1/2]node->level |-> ?obLevel &*& ob == pair(signal, append(level, {obLevel})) &*&
+    [1/2]node->signal |-> ?signal &*& ob == pair(signal, level) &*&
     thread->pred |-> ?pred &*&
     malloc_block_lock_thread(thread) &*&
-    pred->lock |-> _ &*& pred->pred |-> _ &*& pred->frac |-> _ &*& pred->predSignal |-> _ &*& pred->signal |-> _ &*& pred->level |-> _ &*& malloc_block_node(pred) &*& pred != 0 &*&
-    [frac/2]lock->level |-> level &*& level == cons(?level_max_length, ?level0) &*& length(level0) + 1 <= level_max_length &*&
+    pred->lock |-> _ &*& pred->pred |-> _ &*& pred->frac |-> _ &*& pred->signal |-> _ &*& malloc_block_node(pred) &*& pred != 0 &*&
+    [frac/2]lock->level |-> level &*&
     [frac]atomic_space(lock_inv(lock, inv)) &*&
     [frac]malloc_block_lock(lock) &*&
     [frac/4]lock->ghostListId |-> ?listId &*&
@@ -91,7 +85,7 @@ predicate locked(struct lock_thread *thread, struct lock *lock, list<int> level,
 @*/
 
 struct lock *create_lock()
-    //@ requires exists<list<int> >(?lockLevel) &*& exists<predicate()>(?inv) &*& inv() &*& lockLevel == cons(?lockLevel_max_length, ?lockLevel0) &*& length(lockLevel0) + lock_nb_level_dims <= lockLevel_max_length;
+    //@ requires exists<list<int> >(?lockLevel) &*& exists<predicate()>(?inv) &*& inv();
     //@ ensures lock(result, lockLevel, inv);
     //@ terminates;
 {
@@ -102,14 +96,13 @@ struct lock *create_lock()
     if (sentinel == 0) abort();
     sentinel->lock = 0;
     //@ sentinel->pred = 0;
-    //@ sentinel->level = 0;
     lock->tail = sentinel;
     return lock;
     //@ int ghostListId = create_ghost_list();
     //@ lock->ghostListId = ghostListId;
     //@ lock->level = lockLevel;
     //@ ghost_list_insert(ghostListId, nil, nil, sentinel);
-    //@ close queue(lock, lockLevel, inv, ghostListId, sentinel->signal, 0, sentinel, {sentinel});
+    //@ close queue(lock, lockLevel, inv, ghostListId, sentinel->signal, sentinel, {sentinel});
     //@ close lock_inv(lock, inv)();
     //@ create_atomic_space(lock_inv(lock, inv));
     //@ close lock(lock, lockLevel, inv);
@@ -134,9 +127,9 @@ void acquire_helper(struct lock_thread *thread, struct lock *lock, struct node *
     requires
         thread->node |-> ?node &*& node != 0 &*& [1/2]node->lock |-> 1 &*& [1/2]node->frac |-> ?frac &*& malloc_block_node(node) &*&
         thread->pred |-> _ &*&
-        [1/2]node->signal |-> ?signal &*& [1/2]node->level |-> ?level &*& [1/2]node->predSignal |-> ?predSignal &*&
-        [frac/2]lock->level |-> ?lockLevel &*& lockLevel == cons(?max_level_length, ?lockLevel0) &*& length(lockLevel0) + 1 <= max_level_length &*&
-        obs(?p, cons(pair(signal, append(lockLevel, {level})), ?obs)) &*& forall(map(snd, obs), (all_sublevels_lt)(1, lockLevel)) == true &*&
+        [1/2]node->signal |-> ?signal &*&
+        [frac/2]lock->level |-> ?lockLevel &*&
+        obs(?p, cons(pair(signal, lockLevel)), ?obs)) &*& forall(map(snd, obs), (level_lt)(lockLevel)) == true &*&
         wait_perm(p, predSignal, append(lockLevel, {level - 1}), acquire_helper) &*&
         malloc_block_lock_thread(thread) &*&
         [frac]malloc_block_lock(lock) &*&

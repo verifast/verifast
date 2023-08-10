@@ -74,8 +74,9 @@ typedef lemma void atomic_exchange_pointer_op
 
 typedef lemma void atomic_exchange_pointer_ghost_op
     (predicate() inv, void **object, void *desired,
-     predicate() pre, predicate(void *) post)();
+     predicate() pre, predicate(void *) post, int callThread)();
     requires
+        currentThread == callThread &*&
         inv() &*&
         is_atomic_exchange_pointer_op(?op, object, desired, ?P, ?Q) &*&
         P() &*& pre();
@@ -90,13 +91,13 @@ void *atomic_exchange_pointer(void **object, void *desired);
     /*@
     requires
         [?frac]atomic_space(?inv) &*&
-        is_atomic_exchange_pointer_ghost_op(?ghop, inv, object, desired, ?pre, ?post)
+        is_atomic_exchange_pointer_ghost_op(?ghop, inv, object, desired, ?pre, ?post, currentThread)
         &*& pre();
     @*/
     /*@
     ensures
         [frac]atomic_space(inv) &*&
-        is_atomic_exchange_pointer_ghost_op(ghop, inv, object, desired, pre, post)
+        is_atomic_exchange_pointer_ghost_op(ghop, inv, object, desired, pre, post, currentThread)
         &*& post(result);
     @*/
     //@ terminates;

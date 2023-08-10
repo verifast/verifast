@@ -8,12 +8,6 @@ struct lock_thread;
 
 /*@
 
-fixpoint int lock_nb_level_dims() { return 1; } // TODO: Hide this from the client. (VeriFast does not yet support hiding fixpoint bodies.)
-
-lemma_auto void lock_nb_level_dims_nonneg();
-    requires true;
-    ensures 0 <= lock_nb_level_dims();
-
 predicate lock(struct lock *lock, list<int> level, predicate() inv;);
 predicate lock_thread(struct lock_thread *thread);
 predicate locked(struct lock_thread *thread, struct lock *lock, list<int> level, predicate() inv, real frac, pair<void *, list<int> > ob);
@@ -21,7 +15,7 @@ predicate locked(struct lock_thread *thread, struct lock *lock, list<int> level,
 @*/
 
 struct lock *create_lock();
-    //@ requires exists<list<int> >(?level) &*& exists<predicate()>(?inv) &*& inv() &*& level == cons(?level_max_length, ?level0) &*& length(level0) + lock_nb_level_dims <= level_max_length;
+    //@ requires exists<list<int> >(?level) &*& exists<predicate()>(?inv) &*& inv();
     //@ ensures lock(result, level, inv);
     //@ terminates;
 
@@ -31,8 +25,8 @@ struct lock_thread *create_lock_thread();
     //@ terminates;
 
 void acquire(struct lock_thread *thread, struct lock *lock);
-    //@ requires obs(?p, ?obs) &*& lock_thread(thread) &*& [?frac]lock(lock, ?level, ?inv) &*& forall(map(snd, obs), (all_sublevels_lt)(lock_nb_level_dims, level)) == true;
-    //@ ensures locked(thread, lock, level, inv, frac, ?ob) &*& inv() &*& obs(?p1, cons(ob, obs)) &*& is_ancestor_of(p, p1) == true &*& level_lt(level, level_of(ob)) == true;
+    //@ requires obs(?p, ?obs) &*& lock_thread(thread) &*& [?frac]lock(lock, ?level, ?inv) &*& forall(map(snd, obs), (level_lt)(level)) == true;
+    //@ ensures locked(thread, lock, level, inv, frac, ?ob) &*& inv() &*& obs(?p1, cons(ob, obs)) &*& is_ancestor_of(p, p1) == true &*& level_of(ob) == level;
     //@ terminates;
 
 void release(struct lock_thread *thread);
