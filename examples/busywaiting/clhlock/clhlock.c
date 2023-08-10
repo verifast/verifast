@@ -1,118 +1,119 @@
 // Tobias Reinhard and Bart Jacobs. Ghost signals: verifying termination of busy-waiting. 2020.
-
-//@ #include "ghost_lists.gh"
+// Justus Fasse and Bart Jacobs. Expressive modular verification of termination for busy-waiting programs. 2023.
 
 #include <stdlib.h>
 #include "atomics.h"
 #include "clhlock.h"
-//@ #include <quantifiers.gh>
+#include "clhlock_as_ticketlock.h"
+//@ #include <ghost_cells.gh>
 
-struct node {
-    int lock;
-    //@ struct node *pred;
-    //@ real frac;
-    //@ void *signal;
-    //@ void *predSignal;
-    //@ int level;
-};
+/*@
+
+box_class growing_list(list<int> xs) {
+  invariant true;
+  action noop();
+    requires true;
+    ensures xs == old_xs;
+  action add(int elem);
+    requires true;
+    ensures xs == append(old_xs, {elem});
+  handle_predicate has_at(int k, int x) {
+    invariant 0 <= k && k < length(xs) && nth(k, xs) == x;
+    preserved_by noop() {}
+    preserved_by add(elem) {
+      nth_append(old_xs, {elem}, k);
+    }
+  }
+}
+
+box_class incr_box(int i) {
+  invariant true;
+  action noop();
+    requires true;
+    ensures i == old_i;
+  action incr();
+    requires true;
+    ensures i == old_i + 1;
+  handle_predicate is_lower_bound(int j) {
+    invariant j <= i;
+    preserved_by noop() {}
+    preserved_by incr() {}
+  }
+}
+
+@*/
 
 struct lock {
-    struct node *tail;
-    //@ int ghostListId;
-    //@ list<int> level;
+    struct clhlock_as_ticketlock *innerLock;
+    //@ box growingListId;
+    //@ box incrBoxId;
 };
 
 struct lock_thread {
-    struct node *node;
-    struct node *pred;
+    struct clhlock_as_ticketlock_thread *innerThread;
 };
 
 /*@
 
-predicate queue(
-    struct lock *l, list<int> lockLevel, predicate() inv, int ghostListId,
-    void *signal, int level,
-    struct node *n, list<struct node *> ns) =
-    0 <= level &*&
-    n == 0 ?
-        ns == nil
-    :
-        [1/2]n->lock |-> ?lock &*&
-        lock == 0 ?
-            [1/2]n->lock |-> 0 &*&
-            n->pred |-> _ &*&
-            n->frac |-> _ &*&
-            n->level |-> _ &*&
-            n->signal |-> _ &*&
-            n->predSignal |-> _ &*&
-            inv() &*&
-            ns == {n} &*&
-            ghost_list_member_handle(ghostListId, n) &*&
-            malloc_block_node(n)
-        :
-            [1/2]n->pred |-> ?pred &*&
-            [1/2]n->frac |-> ?frac &*& [frac/4]l->ghostListId |-> _ &*&
-            [1/2]n->signal |-> signal &*& [1/2]n->level |-> level &*&
-            [1/2]n->predSignal |-> ?predSignal &*&
-            signal(signal, append(lockLevel, {level}), false) &*&
-            queue(l, lockLevel, inv, ghostListId, predSignal, level - 1, pred, ?ns0) &*&
-            ns == cons(n, ns0);
+predicate_ctor cell_pred(list<int> level)(int cellId) = [1/2]ghost_cell(cellId, ?signalId) &*& signal(signalId, level, false); 
 
-predicate_ctor lock_inv(struct lock *lock, predicate() inv)() =
-    [1/2]lock->ghostListId |-> ?listId &*& [1/2]lock->level |-> ?lockLevel &*&
-    lock->tail |-> ?tail &*&
-    queue(lock, lockLevel, inv, listId, _, _, tail, cons(tail, ?ns)) &*&
-    ghost_list(listId, cons(tail, ns));
+predicate_ctor lock_inv(struct lock *lock, list<int> level, predicate() inv, box growingListId, box incrBoxId)(int owner, int nextTicket, bool held) =
+    incr_box(incrBoxId, owner) &*&
+    growing_list(growingListId, ?cellIds) &*& length(cellIds) == nextTicket &*&
+    0 <= owner &*& (held ? owner + 1 : owner) <= nextTicket &*&
+    (
+        owner < nextTicket ?
+            [_]ghost_cell(nth(owner, cellIds), ?ownerSignal) &*& signal(ownerSignal, level, false) &*&
+            foreach(drop(owner + 1, cellIds), cell_pred(level))
+        :
+            true
+    ) &*&
+    held ?
+        true
+    :
+        inv();
 
 predicate lock(struct lock *lock, list<int> level, predicate() inv;) =
-    [1/2]lock->level |-> level &*& level == cons(?level_max_length, ?level0) &*& length(level0) + 1 <= level_max_length &*&
-    atomic_space(lock_inv(lock, inv)) &*&
-    [1/2]lock->ghostListId |-> _ &*&
+    lock->growingListId |-> ?growingListId &*&
+    lock->incrBoxId |-> ?incrBoxId &*&
+    lock->innerLock |-> ?innerLock &*&
+    clhlock_as_ticketlock(innerLock, lock_inv(lock, level, inv, growingListId, incrBoxId)) &*&
     malloc_block_lock(lock);
 
 predicate lock_thread(struct lock_thread *thread) =
-    thread->node |-> ?node &*& node != 0 &*& node->lock |-> _ &*& node->pred |-> _ &*& node->frac |-> _ &*& malloc_block_node(node) &*&
-    node->predSignal |-> _ &*& node->signal |-> _ &*& node->level |-> _ &*&
-    thread->pred |-> _ &*&
+    thread->innerThread |-> ?innerThread &*& clhlock_as_ticketlock_thread(innerThread) &*&
     malloc_block_lock_thread(thread);
 
 predicate locked(struct lock_thread *thread, struct lock *lock, list<int> level, predicate() inv, real frac, pair<void *, list<int> > ob) =
-    thread->node |-> ?node &*& [1/2]node->lock |-> 1 &*& [1/2]node->pred |-> 0 &*& [1/2]node->frac |-> frac &*& malloc_block_node(node) &*&
-    [1/2]node->predSignal |-> _ &*& [1/2]node->signal |-> ?signal &*& [1/2]node->level |-> ?obLevel &*& ob == pair(signal, append(level, {obLevel})) &*&
-    thread->pred |-> ?pred &*&
+    thread->innerThread |-> ?innerThread &*&
     malloc_block_lock_thread(thread) &*&
-    pred->lock |-> _ &*& pred->pred |-> _ &*& pred->frac |-> _ &*& pred->predSignal |-> _ &*& pred->signal |-> _ &*& pred->level |-> _ &*& malloc_block_node(pred) &*& pred != 0 &*&
-    [frac/2]lock->level |-> level &*& level == cons(?level_max_length, ?level0) &*& length(level0) + 1 <= level_max_length &*&
-    [frac]atomic_space(lock_inv(lock, inv)) &*&
-    [frac]malloc_block_lock(lock) &*&
-    [frac/4]lock->ghostListId |-> ?listId &*&
-    ghost_list_member_handle(listId, node);
+    [frac]lock->growingListId |-> ?growingListId &*&
+    [frac]lock->incrBoxId |-> ?incrBoxId &*&
+    [frac]lock->innerLock |-> ?innerLock &*&
+    clhlock_as_ticketlock_locked(innerThread, innerLock, lock_inv(lock, level, inv, growingListId, incrBoxId), frac, ?ticket) &*&
+    exists(?cellHandleId) &*& has_at(cellHandleId, growingListId, ticket, ?cellId) &*& [_]ghost_cell<void *>(cellId, ?signalId) &*& ob == pair(signalId, level) &*&
+    [frac]malloc_block_lock(lock);
 
 @*/
 
 struct lock *create_lock()
-    //@ requires exists<list<int> >(?lockLevel) &*& exists<predicate()>(?inv) &*& inv() &*& lockLevel == cons(?lockLevel_max_length, ?lockLevel0) &*& length(lockLevel0) + lock_nb_level_dims <= lockLevel_max_length;
-    //@ ensures lock(result, lockLevel, inv);
+    //@ requires exists<list<int> >(?level) &*& exists<predicate()>(?inv) &*& inv();
+    //@ ensures lock(result, level, inv);
     //@ terminates;
 {
     //@ open exists(_);
+    //@ open exists(_);
     struct lock *lock = malloc(sizeof(struct lock));
     if (lock == 0) abort();
-    struct node *sentinel = malloc(sizeof(struct node));
-    if (sentinel == 0) abort();
-    sentinel->lock = 0;
-    //@ sentinel->pred = 0;
-    //@ sentinel->level = 0;
-    lock->tail = sentinel;
+    //@ create_box growingListId = growing_list({});
+    //@ create_box incrBoxId = incr_box(0);
+    //@ lock->growingListId = growingListId;
+    //@ lock->incrBoxId = incrBoxId;
+    //@ close exists(lock_inv(lock, level, inv, growingListId, incrBoxId));
+    //@ close lock_inv(lock, level, inv, growingListId, incrBoxId)(0, 0, false);
+    struct clhlock_as_ticketlock *innerLock = create_clhlock_as_ticketlock();
+    lock->innerLock = innerLock;
     return lock;
-    //@ int ghostListId = create_ghost_list();
-    //@ lock->ghostListId = ghostListId;
-    //@ lock->level = lockLevel;
-    //@ ghost_list_insert(ghostListId, nil, nil, sentinel);
-    //@ close queue(lock, lockLevel, inv, ghostListId, sentinel->signal, 0, sentinel, {sentinel});
-    //@ close lock_inv(lock, inv)();
-    //@ create_atomic_space(lock_inv(lock, inv));
-    //@ close lock(lock, lockLevel, inv);
 }
 
 struct lock_thread *create_lock_thread()
@@ -122,304 +123,259 @@ struct lock_thread *create_lock_thread()
 {
     struct lock_thread *thread = malloc(sizeof(struct lock_thread));
     if (thread == 0) abort();
-    struct node *node = malloc(sizeof(struct node));
-    if (node == 0) abort();
-    thread->node = node;
+    struct clhlock_as_ticketlock_thread *innerThread = create_clhlock_as_ticketlock_thread();
+    thread->innerThread = innerThread;
     return thread;
     //@ close lock_thread(thread);
 }
 
-void acquire_helper(struct lock_thread *thread, struct lock *lock, struct node *pred)
-    /*@
-    requires
-        thread->node |-> ?node &*& node != 0 &*& [1/2]node->lock |-> 1 &*& [1/2]node->frac |-> ?frac &*& malloc_block_node(node) &*&
-        thread->pred |-> _ &*&
-        [1/2]node->signal |-> ?signal &*& [1/2]node->level |-> ?level &*& [1/2]node->predSignal |-> ?predSignal &*&
-        [frac/2]lock->level |-> ?lockLevel &*& lockLevel == cons(?max_level_length, ?lockLevel0) &*& length(lockLevel0) + 1 <= max_level_length &*&
-        obs(?p, cons(pair(signal, append(lockLevel, {level})), ?obs)) &*& forall(map(snd, obs), (all_sublevels_lt)(1, lockLevel)) == true &*&
-        wait_perm(p, predSignal, append(lockLevel, {level - 1}), acquire_helper) &*&
-        malloc_block_lock_thread(thread) &*&
-        [frac]malloc_block_lock(lock) &*&
-        exists<predicate()>(?inv) &*&
-        [frac]atomic_space(lock_inv(lock, inv)) &*&
-        [frac/4]lock->ghostListId |-> ?ghostListId &*&
-        ghost_list_member_handle(ghostListId, node) &*&
-        [1/2]node->pred |-> pred &*& pred != 0;
-    @*/
-    //@ ensures locked(thread, lock, lockLevel, inv, frac, ?ob) &*& inv() &*& obs(?p1, cons(ob, obs)) &*& is_ancestor_of(p, p1) == true &*& level_lt(lockLevel, level_of(ob)) == true;
-    //@ terminates;
+/*@
+
+lemma void drop_append_le<t>(int n, list<t> xs, list<t> ys)
+    requires 0 <= n &*& n <= length(xs);
+    ensures drop(n, append(xs, ys)) == append(drop(n, xs), ys);
 {
-    //@ int acquireThread = currentThread;
-    for (;;)
-         /*@
-         invariant
-             obs(p, cons(pair(signal, append(lockLevel, {level})), obs)) &*&
-             wait_perm(p, predSignal, append(lockLevel, {level - 1}), acquire_helper) &*&
-             [frac]atomic_space(lock_inv(lock, inv)) &*&
-             [frac/4]lock->ghostListId |-> ghostListId &*& [frac/2]lock->level |-> lockLevel &*&
-             ghost_list_member_handle(ghostListId, node) &*&
-             [1/2]node->pred |-> pred &*& [1/2]node->predSignal |-> predSignal &*& [1/2]node->level |-> level;
-         @*/
-    {
-         int predLock;
-         {
-             /*@
-             predicate pre() =
-                 obs(p, cons(pair(signal, append(lockLevel, {level})), obs)) &*&
-                 wait_perm(p, predSignal, append(lockLevel, {level - 1}), acquire_helper) &*&
-                 [frac/4]lock->ghostListId |-> ghostListId &*& [frac/2]lock->level |-> lockLevel &*&
-                 ghost_list_member_handle(ghostListId, node) &*&
-                 [1/2]node->pred |-> pred &*& [1/2]node->predSignal |-> predSignal &*& [1/2]node->level |-> level;
-             predicate post(int value) =
-                 obs(p, cons(pair(signal, append(lockLevel, {level})), obs)) &*&
-                 wait_perm(p, predSignal, append(lockLevel, {level - 1}), acquire_helper) &*&
-                 [frac/4]lock->ghostListId |-> ghostListId &*& [frac/2]lock->level |-> lockLevel &*&
-                 ghost_list_member_handle(ghostListId, node) &*&
-                 value == 0 ?
-                     [1/2]node->pred |-> 0 &*& [1/2]node->predSignal |-> _ &*& [1/2]node->level |-> level &*&
-                     pred->lock |-> _ &*& pred->pred |-> _ &*& pred->frac |-> _ &*& pred->predSignal |-> _ &*& pred->signal |-> _ &*& pred->level |-> _ &*& malloc_block_node(pred) &*&
-                     inv()
-                 :
-                     [1/2]node->pred |-> pred &*& [1/2]node->predSignal |-> predSignal &*& [1/2]node->level |-> level &*& call_perm_(currentThread, acquire_helper);
-             lemma void ghop()
-                 requires lock_inv(lock, inv)() &*& is_atomic_load_int_op(?op, &pred->lock, ?P, ?Q) &*& P() &*& pre() &*& currentThread == acquireThread;
-                 ensures lock_inv(lock, inv)() &*& is_atomic_load_int_op(op, &pred->lock, P, Q) &*& Q(?value) &*& post(value);
-             {
-                 open lock_inv(lock, inv)();
-                 open pre();
-                 struct node *tail = lock->tail;
-                 ghost_list_member_handle_lemma();
-                 {
-                     lemma void iter(struct node *n, list<struct node *> ns0)
-                         requires
-                             queue(lock, lockLevel, inv, ghostListId, ?sn, ?ln, n, ?ns1) &*&
-                             obs(p, cons(pair(signal, append(lockLevel, {level})), obs)) &*&
-                             wait_perm(p, predSignal, append(lockLevel, {level - 1}), acquire_helper) &*&
-                             ghost_list(ghostListId, ?ns) &*& ns == cons(tail, _) &*&
-                             ns == append(ns0, ns1) &*&
-                             mem(node, ns1) == true &*&
-                             is_atomic_load_int_op(op, &pred->lock, P, Q) &*&
-                             P() &*&
-                             [1/2]node->pred |-> pred &*& [1/2]node->predSignal |-> predSignal &*& [1/2]node->level |-> level;
-                         ensures
-                             queue(lock, lockLevel, inv, ghostListId, sn, ln, n, ?ns1_) &*&
-                             obs(p, cons(pair(signal, append(lockLevel, {level})), obs)) &*&
-                             wait_perm(p, predSignal, append(lockLevel, {level - 1}), acquire_helper) &*&
-                             ghost_list(ghostListId, ?ns_) &*& ns_ == cons(tail, _) &*&
-                             ns_ == append(ns0, ns1_) &*&
-                             is_atomic_load_int_op(op, &pred->lock, P, Q) &*&
-                             Q(?predLock_) &*&
-                             predLock_ == 0 ?
-                                 [1/2]node->pred |-> 0 &*& [1/2]node->predSignal |-> _ &*& [1/2]node->level |-> level &*&
-                                 pred->lock |-> _ &*& pred->pred |-> _ &*& pred->frac |-> _ &*& pred->predSignal |-> _ &*& pred->level |-> _ &*& pred->signal |-> _ &*& malloc_block_node(pred) &*&
-                                 inv()
-                             :
-                                 [1/2]node->pred |-> pred &*& [1/2]node->predSignal |-> predSignal &*& [1/2]node->level |-> level &*& call_perm_(currentThread, acquire_helper);
-                     {
-                         open queue(lock, lockLevel, inv, ghostListId, sn, ln, n, ns1);
-                         if (n == node) {
-                             merge_fractions node_pred(n, _);
-                             merge_fractions node_predSignal(n, _);
-                             merge_fractions node_level(n, _);
-                             open queue(lock, lockLevel, inv, ghostListId, ?spred, ?lpred, pred, ?ns1t);
-                             open node_lock(pred, _);
-                             op();
-                             int predLock_ = pred->lock;
-                             if (predLock_ == 0) {
-                                 node->pred = 0;
-                                 append_assoc(ns0, {n}, {pred});
-                                 ghost_list_remove(ghostListId, append(ns0, {n}), nil, pred);
-                                 close queue(lock, lockLevel, inv, ghostListId, spred, ln - 1, 0, nil);
-                                 close queue(lock, lockLevel, inv, ghostListId, sn, ln, n, {n});
-                             } else {
-                                 is_ancestor_of_refl(p);
-                                 level0_lt_append(max_level_length, lockLevel0, {level - 1}, {level});
-                                 if (!forall(map(snd, obs), (level_lt)(append(lockLevel, {level - 1})))) {
-                                     list<int> l = not_forall(map(snd, obs), (level_lt)(append(lockLevel, {level - 1})));
-                                     forall_elim(map(snd, obs), (all_sublevels_lt)(1, lockLevel), l);
-                                     assert !level_lt(append(lockLevel, {level - 1}), l);
-                                     assert l == cons(?l_max_length, ?l0);
-                                     all_sublevel0s_lt_level0_lt(max_level_length, lockLevel0, {level - 1}, l0);
-                                     assert false;
-                                 }
-                                 assert max_level_length >= length(lockLevel0) + 1;
-                                 assert level_lt(append(lockLevel, {level - 1}), append(lockLevel, {level})) == true;
-                                 wait(predSignal);
-                                 close queue(lock, lockLevel, inv, ghostListId, spred, ln - 1, pred, ns1t);
-                                 close queue(lock, lockLevel, inv, ghostListId, sn, ln, n, ns1);
-                             }
-                         } else {
-                             append_assoc(ns0, {n}, tail(ns1));
-                             iter(n->pred, append(ns0, {n}));
-                             assert queue(lock, lockLevel, inv, ghostListId, _, _, _, ?ns1_);
-                             append_assoc(ns0, {n}, ns1_);
-                             close queue(lock, lockLevel, inv, ghostListId, sn, ln, n, cons(n, ns1_));
-                         }
-                     }
-                     iter(lock->tail, nil);
-                 }
-                 assert Q(?predLock_);
-                 close post(predLock_);
-                 close lock_inv(lock, inv)();
-             }
-             @*/
-             //@ close pre();
-             //@ produce_lemma_function_pointer_chunk(ghop) : atomic_load_int_ghost_op(lock_inv(lock, inv), &pred->lock, currentThread, pre, post)() { call(); };
-             predLock = atomic_load_int(&pred->lock);
-             //@ leak is_atomic_load_int_ghost_op(ghop, _, _, _, _, _);
-             //@ open post(predLock);
-         }
-         if (predLock == 0) break;
+    switch (xs) {
+        case nil:
+        case cons(x, xs0):
+            if (0 < n)
+                drop_append_le(n - 1, xs0, ys);
     }
-    thread->pred = pred;
-    //@ close locked(thread, lock, lockLevel, inv, frac, pair(signal, append(lockLevel, {level})));
-    //@ is_ancestor_of_refl(p);
-    //@ leak wait_perm(p, predSignal, append(lockLevel, {level - 1}), acquire_helper);
-    //@ level0_lt_append(max_level_length, lockLevel0, {}, {level});
 }
 
+@*/
+
 void acquire(struct lock_thread *thread, struct lock *lock)
-    //@ requires obs(?p, ?obs) &*& lock_thread(thread) &*& [?frac]lock(lock, ?lockLevel, ?inv) &*& forall(map(snd, obs), (all_sublevels_lt)(1, lockLevel)) == true;
-    //@ ensures locked(thread, lock, lockLevel, inv, frac, ?ob) &*& inv() &*& obs(?p1, cons(ob, obs)) &*& is_ancestor_of(p, p1) == true &*& level_lt(lockLevel, level_of(ob)) == true;
+    //@ requires obs(?p, ?obs) &*& lock_thread(thread) &*& [?frac]lock(lock, ?level, ?inv) &*& forall(map(snd, obs), (level_lt)(level)) == true;
+    //@ ensures locked(thread, lock, level, inv, frac, ?ob) &*& inv() &*& obs(?p1, cons(ob, obs)) &*& is_ancestor_of(p, p1) == true &*& level_of(ob) == level;
     //@ terminates;
 {
     //@ open lock_thread(thread);
-    //@ open lock(lock, lockLevel, inv);
-    //@ int ghostListId = lock->ghostListId;
-    struct node *node = thread->node;
-    node->lock = 1;
-    //@ node->frac = frac;
-    struct node *pred;
+    //@ open lock(lock, level, inv);
+    //@ box growingListId = lock->growingListId;
+    //@ box incrBoxId = lock->incrBoxId;
+    //@ int cellId = create_ghost_cell<void *>(0);
+    //@ produce_call_below_perm_();
+    //@ produce_func_lt(clhlock_as_ticketlock_acquire);
     {
         /*@
-        predicate pre() = obs(p, obs) &*& node->predSignal |-> _ &*& node->signal |-> _ &*& node->level |-> _ &*& [1/2]node->lock |-> 1 &*& node->pred |-> _ &*& [1/2]node->frac |-> frac &*& [frac/2]lock->level |-> lockLevel &*& [frac/2]lock->ghostListId |-> ghostListId;
-        predicate post(void *result) =
-            ghost_list_member_handle(ghostListId, node) &*& [1/2]node->pred |-> result &*& result != 0 &*& [frac/2]lock->level |-> lockLevel &*& [frac/4]lock->ghostListId |-> ghostListId &*&
-            [1/2]node->predSignal |-> ?predSignal &*& [1/2]node->signal |-> ?signal &*& [1/2]node->level |-> ?level &*& obs(p, cons(pair(signal, append(lockLevel, {level})), obs));
-        lemma void ghop()
-            requires lock_inv(lock, inv)() &*& is_atomic_exchange_pointer_op(?op, &lock->tail, node, ?P, ?Q) &*& P() &*& pre();
-            ensures lock_inv(lock, inv)() &*& is_atomic_exchange_pointer_op(op, &lock->tail, node, P, Q) &*& Q(?old) &*& post(old);
-        {
-            open lock_inv(lock, inv)();
+        predicate pre() =
+            call_below_perm_(currentThread, acquire) &*&
+            obs(p, obs) &*&
+            ghost_cell<void *>(cellId, 0);
+        predicate wait_inv(int ticket, void *f) =
+            exists<pair<handle, handle> >(pair(?lbHandleId, ?cellHandleId)) &*&
+            is_lower_bound(lbHandleId, incrBoxId, ?oldOwner) &*& func_lt(f, acquire) == true &*&
+            exists<option<handle> >(?startedWaiting) &*&
+            switch (startedWaiting) {
+                case none: return call_below_perms(ticket - oldOwner, p, acquire);
+                case some(ownerHandleId): return
+                    call_below_perms(ticket - oldOwner - 1, p, acquire) &*&
+                    has_at(ownerHandleId, growingListId, oldOwner, ?ownerCell) &*& [_]ghost_cell(ownerCell, ?ownerSignalId) &*&
+                    wait_perm(p, ownerSignalId, level, f);
+            } &*&
+            has_at(cellHandleId, growingListId, ticket, cellId) &*& [1/2]ghost_cell(cellId, ?signalId) &*& obs(p, cons(pair(signalId, level), obs));
+        predicate post(int ticket) =
+            exists(?cellHandleId) &*&
+            has_at(cellHandleId, growingListId, ticket, cellId) &*& [_]ghost_cell(cellId, ?signalId) &*& obs(p, cons(pair(signalId, level), obs)) &*&
+            inv();
+        @*/
+        /*@
+        produce_lemma_function_pointer_chunk clhlock_as_ticketlock_get_ticket_ghost_op(lock_inv(lock, level, inv, growingListId, incrBoxId), pre, wait_inv, currentThread)(f) {
+            open lock_inv(lock, level, inv, growingListId, incrBoxId)(?owner, ?nextTicket, ?held);
             open pre();
-            void *old = lock->tail;
-            op();
-            assert ghost_list(ghostListId, ?ns);
-            open queue(lock, lockLevel, inv, ghostListId, ?oldSignal, ?oldLevel, old, ns);
-            close queue(lock, lockLevel, inv, ghostListId, oldSignal, oldLevel, old, ns);
-            ghost_list_insert(ghostListId, nil, ns, node);
-            node->pred = old;
-            node->signal = create_signal();
-            init_signal(node->signal, append(lockLevel, {oldLevel + 1}));
-            node->level = oldLevel + 1;
-            node->predSignal = oldSignal;
-            close queue(lock, lockLevel, inv, ghostListId, node->signal, oldLevel + 1, node, cons(node, ns));
-            close post(old);
-            close lock_inv(lock, inv)();
-        }
+            pathize_call_below_perm__multi(nextTicket - owner);
+            consuming_box_predicate incr_box(incrBoxId, owner)
+            perform_action noop() {}
+            producing_fresh_handle_predicate is_lower_bound(owner);
+            assert is_lower_bound(?lbHandleId, incrBoxId, owner);
+            consuming_box_predicate growing_list(growingListId, ?cellIds)
+            perform_action add(cellId) {
+              nth_append_r(cellIds, {cellId}, 0);
+            }
+            producing_box_predicate growing_list(append(cellIds, {cellId}))
+            producing_fresh_handle_predicate has_at(nextTicket, cellId);
+            assert has_at(?cellHandleId, growingListId, nextTicket, cellId);
+            void *signalId = create_signal();
+            init_signal(signalId, level);
+            ghost_cell_mutate(cellId, signalId);
+            close exists(pair(lbHandleId, cellHandleId));
+            close exists(none);
+            close wait_inv(nextTicket, f);
+            if (owner < nextTicket) {
+                nth_append(cellIds, {cellId}, owner);
+                drop_append_le(owner + 1, cellIds, {cellId});
+                close foreach({}, cell_pred(level));
+                close cell_pred(level)(cellId);
+                close foreach({cellId}, cell_pred(level));
+                foreach_append(drop(owner + 1, cellIds), {cellId});
+            } else {
+                leak [_]ghost_cell(cellId, _);
+                close foreach({}, cell_pred(level));
+                drop_length(append(cellIds, {cellId}));
+            }
+            close lock_inv(lock, level, inv, growingListId, incrBoxId)(owner, nextTicket + 1, held);
+        };
+        @*/
+        /*@
+        produce_lemma_function_pointer_chunk clhlock_as_ticketlock_wait_ghost_op(lock_inv(lock, level, inv, growingListId, incrBoxId), wait_inv, currentThread)() {
+            open lock_inv(lock, level, inv, growingListId, incrBoxId)(?owner, ?nextTicket, ?held);
+            open wait_inv(?ticket, ?f);
+            open exists(pair(?lbHandleId, ?cellHandleId));
+            open exists<option<handle> >(?startedWaiting);
+            assert has_at(cellHandleId, growingListId, ticket, cellId) &*& [1/2]ghost_cell(cellId, ?oldSignalId);
+            consuming_box_predicate growing_list(growingListId, ?cellIds)
+            consuming_handle_predicate has_at(cellHandleId, ticket, cellId)
+            perform_action noop() {}
+            producing_handle_predicate has_at(cellHandleId, ticket, cellId);
+            nth_drop(ticket - owner - 1, owner + 1, cellIds);
+            mem_nth(ticket - owner - 1, drop(owner + 1, cellIds));
+            foreach_remove(cellId, drop(owner + 1, cellIds));
+            open cell_pred(level)(cellId);
+            set_signal(oldSignalId);
+            leak signal(oldSignalId, level, true);
+            assert [_]ghost_cell(nth(owner, cellIds), ?ownerSignal);
+            consuming_box_predicate incr_box(incrBoxId, owner)
+            consuming_handle_predicate is_lower_bound(lbHandleId, ?oldOwner)
+            perform_action noop() {}
+            producing_handle_predicate is_lower_bound(lbHandleId, owner);
+            if (oldOwner == owner) {
+                switch (startedWaiting) {
+                    case none:
+                        open call_below_perms(ticket - oldOwner, p, acquire);
+                        consuming_box_predicate growing_list(growingListId, cellIds)
+                        perform_action noop() {}
+                        producing_fresh_handle_predicate has_at(owner, nth(owner, cellIds));
+                        assert has_at(?ownerHandleId, growingListId, owner, nth(owner, cellIds));
+                        create_wait_perm(ownerSignal, level, f);
+                        close exists(some(ownerHandleId));
+                    case some(ownerHandleId):
+                        consuming_box_predicate growing_list(growingListId, cellIds)
+                        consuming_handle_predicate has_at(ownerHandleId, owner, _)
+                        perform_action noop() {}
+                        producing_handle_predicate has_at(ownerHandleId, owner, nth(owner, cellIds));
+                        merge_fractions ghost_cell(nth(owner, cellIds), _);
+                        close exists(some(ownerHandleId));
+                }
+            } else {
+                switch (startedWaiting) {
+                    case none:
+                    case some(oldOwnerHandleId):
+                        leak
+                            has_at(oldOwnerHandleId, growingListId, oldOwner, ?oldOwnerCell) &*& [_]ghost_cell(oldOwnerCell, ?oldOwnerSignalId) &*&
+                            wait_perm(p, oldOwnerSignalId, level, f);
+                }
+                call_below_perms_weaken(ticket - owner);
+                open call_below_perms(ticket - owner, p, acquire);
+                consuming_box_predicate growing_list(growingListId, cellIds)
+                perform_action noop() {}
+                producing_fresh_handle_predicate has_at(owner, nth(owner, cellIds));
+                assert has_at(?ownerHandleId, growingListId, owner, nth(owner, cellIds));
+                create_wait_perm(ownerSignal, level, f);
+                close exists(some(ownerHandleId));
+            }
+            is_ancestor_of_refl(p);
+            wait(ownerSignal);
+            void *newSignalId = create_signal();
+            init_signal(newSignalId, level);
+            ghost_cell_mutate(cellId, newSignalId);
+            close cell_pred(level)(cellId);
+            foreach_unremove(cellId, drop(owner + 1, cellIds));
+            close lock_inv(lock, level, inv, growingListId, incrBoxId)(owner, nextTicket, held);
+            close exists(pair(lbHandleId, cellHandleId));
+            close wait_inv(ticket, f);
+        };
+        @*/
+        /*@
+        produce_lemma_function_pointer_chunk clhlock_as_ticketlock_acquire_ghost_op(lock_inv(lock, level, inv, growingListId, incrBoxId), wait_inv, post, currentThread)() {
+            open lock_inv(lock, level, inv, growingListId, incrBoxId)(?owner, ?nextTicket, false);
+            open wait_inv(owner, ?f);
+            open exists(pair(?lbHandleId, ?cellHandleId));
+            open exists(?startedWaiting);
+            leak call_below_perms(_, _, _);
+            leak is_lower_bound(lbHandleId, incrBoxId, ?oldOwner);
+            switch (startedWaiting) {
+                case none:
+                case some(oldOwnerHandleId):
+                    leak has_at(oldOwnerHandleId, _, _, ?ownerCell) &*& [_]ghost_cell(ownerCell, ?ownerSignalId) &*& wait_perm(p, ownerSignalId, level, f);
+            }
+            leak [1/2]ghost_cell(cellId, ?signalId);
+            close lock_inv(lock, level, inv, growingListId, incrBoxId)(owner, nextTicket, true);
+            close exists(cellHandleId);
+            close post(owner);
+        };
         @*/
         //@ close pre();
-        //@ produce_lemma_function_pointer_chunk(ghop) : atomic_exchange_pointer_ghost_op(lock_inv(lock, inv), &lock->tail, node, pre, post)() { call(); };
-        pred = atomic_exchange_pointer(&lock->tail, node);
-        //@ leak is_atomic_exchange_pointer_ghost_op(ghop, _, _, _, _, _);
-        //@ open post(pred);
+        clhlock_as_ticketlock_acquire(thread->innerThread, lock->innerLock);
+        //@ open post(?ticket);
+        //@ open exists(?cellHandleId);
+        //@ assert has_at(cellHandleId, growingListId, ticket, cellId) &*& [_]ghost_cell(cellId, ?signalId);
+        //@ close exists(cellHandleId);
+        //@ close locked(thread, lock, level, inv, frac, pair(signalId, level));
+        //@ is_ancestor_of_refl(p);
     }
-    //@ produce_call_below_perm_();
-    //@ pathize_call_below_perm_();
-    //@ create_wait_perm(node->predSignal, append(lockLevel, {node->level - 1}), acquire_helper);
-    //@ close exists(inv);
-    acquire_helper(thread, lock, pred);
 }
 
 void release_with_ghost_op(struct lock_thread *thread)
-    //@ requires locked(thread, ?lock, ?lockLevel, ?inv, ?frac, ?ob) &*& obs(?p, ?obs) &*& mem(ob, obs) == true &*& is_release_ghost_op(?rgo, currentThread, inv, p, remove(ob, obs), ?pre, ?post) &*& pre();
-    //@ ensures post(?p1) &*& obs(?p2, remove(ob, obs)) &*& lock_thread(thread) &*& [frac]lock(lock, lockLevel, inv) &*& is_ancestor_of(p1, p2) == true;
+    /*@
+    requires
+        locked(thread, ?lock, ?level, ?inv, ?frac, ?ob) &*& obs(?p, ?obs) &*& mem(ob, obs) == true &*&
+        is_release_ghost_op(?rgo, currentThread, inv, p, remove(ob, obs), ?pre, ?post) &*& pre();
+    @*/
+    //@ ensures post(?p1) &*& obs(?p2, remove(ob, obs)) &*& lock_thread(thread) &*& [frac]lock(lock, level, inv) &*& is_ancestor_of(p1, p2) == true;
     //@ terminates;
 {
     //@ int releaseThread = currentThread;
-    //@ open locked(thread, lock, lockLevel, inv, frac, ob);
-    struct node *node = thread->node;
-    //@ int ghostListId = lock->ghostListId;
+    //@ open locked(thread, lock, level, inv, frac, ob);
+    //@ box growingListId = lock->growingListId;
+    //@ box incrBoxId = lock->incrBoxId;
+    //@ struct clhlock_as_ticketlock *innerLock = lock->innerLock;
+    //@ struct clhlock_as_ticketlock_thread *innerThread = thread->innerThread;
+    //@ assert clhlock_as_ticketlock_locked(innerThread, innerLock, _, frac, ?ticket);
+    //@ assert exists(?cellHandleId) &*& has_at(cellHandleId, growingListId, ticket, ?cellId) &*& [_]ghost_cell(cellId, ?signalId);
     {
         /*@
-        predicate ghop_pre() =
-            [frac/4]lock->ghostListId |-> ghostListId &*& [frac/2]lock->level |-> lockLevel &*&
-            ghost_list_member_handle(ghostListId, node) &*&
-            [1/2]node->lock |-> 1 &*&
-            [1/2]node->pred |-> 0 &*&
-            [1/2]node->frac |-> frac &*&
-            [1/2]node->signal |-> ?signal &*&
-            [1/2]node->level |-> ?level &*& ob == pair(signal, append(lockLevel, {level})) &*&
-            [1/2]node->predSignal |-> _ &*&
-            obs(p, obs) &*&
-            malloc_block_node(node) &*&
-            is_release_ghost_op(rgo, currentThread, inv, p, remove(ob, obs), pre, post) &*&
-            pre();
-        predicate ghop_post() =
-            obs(p, remove(ob, obs)) &*& post(p) &*&
-            [frac/2]lock->ghostListId |-> ghostListId &*& [frac/2]lock->level |-> lockLevel;
-        lemma void ghop()
-            requires lock_inv(lock, inv)() &*& is_atomic_store_int_op(?op, &node->lock, 0, ?P, ?Q) &*& P() &*& ghop_pre() &*& currentThread == releaseThread;
-            ensures lock_inv(lock, inv)() &*& is_atomic_store_int_op(op, &node->lock, 0, P, Q) &*& Q() &*& ghop_post();
-        {
-            open lock_inv(lock, inv)();
-            open ghop_pre();
-            ghost_list_member_handle_lemma();
-            {
-                lemma void iter()
-                    requires
-                        queue(lock, lockLevel, inv, ghostListId, ?nsig, ?nl, ?n, ?ns) &*& mem(node, ns) == true &*&
-                        ghost_list_member_handle(ghostListId, node) &*&
-                        [1/2]node->lock |-> 1 &*&
-                        [1/2]node->pred |-> 0 &*&
-                        [1/2]node->frac |-> frac &*&
-                        [1/2]node->predSignal |-> _ &*&
-                        [1/2]node->signal |-> ?signal &*&
-                        [1/2]node->level |-> ?level &*& ob == pair(signal, append(lockLevel, {level})) &*&
-                        obs(p, obs) &*&
-                        malloc_block_node(node) &*&
-                        is_release_ghost_op(rgo, currentThread, inv, p, remove(ob, obs), pre, post) &*& pre() &*&
-                        is_atomic_store_int_op(op, &node->lock, 0, P, Q) &*& P();
-                    ensures
-                        obs(p, remove(ob, obs)) &*& post(p) &*&
-                        queue(lock, lockLevel, inv, ghostListId, nsig, nl, n, ns) &*&
-                        is_atomic_store_int_op(op, &node->lock, 0, P, Q) &*& Q() &*&
-                        [frac/4]lock->ghostListId |-> _;
-                {
-                    open queue(lock, lockLevel, inv, ghostListId, nsig, nl, n, ns);
-                    if (n == node) {
-                        merge_fractions node_lock(n, _);
-                        merge_fractions node_pred(n, _);
-                        merge_fractions node_frac(n, _);
-                        merge_fractions node_level(n, _);
-                        merge_fractions node_predSignal(n, _);
-                        merge_fractions node_signal(n, _);
-                        open queue(lock, lockLevel, inv, ghostListId, _, _, 0, _);
-                        op();
-                        set_signal(node->signal);
-                        leak signal(_, _, true);
-                        is_ancestor_of_refl(p);
-                        rgo();
-                        leak is_release_ghost_op(rgo, currentThread, inv, p, remove(ob, obs), pre, post);
-                    } else {
-                        iter();
-                    }
-                    close queue(lock, lockLevel, inv, ghostListId, nsig, nl, n, ns);
-                }
-                iter();
-            }
-            close lock_inv(lock, inv)();
-            close ghop_post();
-        }
+        predicate pre_() =
+            has_at(cellHandleId, growingListId, ticket, cellId) &*& [_]ghost_cell(cellId, signalId) &*&
+            is_release_ghost_op(rgo, releaseThread, inv, p, remove(ob, obs), pre, post) &*& pre() &*&
+            obs(p, obs);
+        predicate post_() =
+            obs(p, remove(ob, obs)) &*& post(p);
         @*/
-        //@ close ghop_pre();
-        //@ produce_lemma_function_pointer_chunk(ghop) : atomic_store_int_ghost_op(lock_inv(lock, inv), &node->lock, 0, ghop_pre, ghop_post, currentThread)() { call(); };
-        atomic_store_int(&node->lock, 0);
-        //@ leak is_atomic_store_int_ghost_op(ghop, _, _, _, _, _, _);
-        //@ open ghop_post();
+        /*@
+        produce_lemma_function_pointer_chunk clhlock_as_ticketlock_release_ghost_op(lock_inv(lock, level, inv, growingListId, incrBoxId), ticket, pre_, post_, currentThread)() {
+            open lock_inv(lock, level, inv, growingListId, incrBoxId)(ticket, ?nextTicket, true);
+            open pre_();
+            consuming_box_predicate incr_box(incrBoxId, ticket)
+            perform_action incr() {}
+            producing_box_predicate incr_box(ticket + 1);
+            consuming_box_predicate growing_list(growingListId, ?cellIds)
+            consuming_handle_predicate has_at(cellHandleId, ticket, cellId)
+            perform_action noop() {};
+            merge_fractions ghost_cell(cellId, _);
+            set_signal(signalId);
+            leak signal(signalId, _, _);
+            if (ticket + 1 < nextTicket) {
+                drop_n_plus_one(ticket + 1, cellIds);
+                open foreach(drop(ticket + 1, cellIds), cell_pred(level));
+                nth_drop(0, ticket + 1, cellIds);
+                open cell_pred(level)(nth(ticket + 1, cellIds));
+                leak [1/2]ghost_cell(nth(ticket + 1, cellIds), ?nextOwnerSignalId);
+            } else {
+                open foreach(drop(ticket + 1, cellIds), cell_pred(level));
+            }
+            is_ancestor_of_refl(p);
+            rgo();
+            leak is_release_ghost_op(rgo, _, _, _, _, _, _);
+            close lock_inv(lock, level, inv, growingListId, incrBoxId)(ticket + 1, nextTicket, false);
+            close post_();
+        };
+        @*/
+        //@ close pre_();
+        clhlock_as_ticketlock_release(thread->innerThread);
+        //@ open post_();
     }
-    thread->node = thread->pred;
-    //@ close [frac]lock(lock, lockLevel, inv);
+    //@ close [frac]lock(lock, level, inv);
     //@ close lock_thread(thread);
     //@ is_ancestor_of_refl(p);
 }
@@ -451,20 +407,18 @@ void dispose_lock_thead(struct lock_thread *thread)
     //@ terminates;
 {
     //@ open lock_thread(thread);
-    free(thread->node);
+    dispose_clhlock_as_ticketlock_thread(thread->innerThread);
     free(thread);
 }
 
 void dispose_lock(struct lock *lock)
-    //@ requires lock(lock, ?lockLevel, ?inv);
+    //@ requires lock(lock, ?level, ?inv);
     //@ ensures inv();
     //@ terminates;
 {
-    //@ open lock(lock, lockLevel, inv);
-    //@ destroy_atomic_space();
-    //@ open lock_inv(lock, inv)();
-    //@ open queue(lock, _, inv, _, _, _, _, _);
-    free(lock->tail);
+    //@ open lock(lock, level, inv);
+    dispose_clhlock_as_ticketlock(lock->innerLock);
+    //@ open lock_inv(lock, level, inv, lock->growingListId, lock->incrBoxId)(?owner, ?nextTicket, false);
+    //@ leak incr_box(_, _) &*& growing_list(_, _);
     free(lock);
-    //@ leak ghost_list(_, _) &*& ghost_list_member_handle(_, _);
 }
