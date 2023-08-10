@@ -1,9 +1,8 @@
-//@ #include "ghost_lists.gh"
+// Justus Fasse and Bart Jacobs. Expressive modular verification of termination for busy-waiting programs. 2023.
 
 #include <stdlib.h>
 #include "atomics.h"
 #include "clhlock_as_ticketlock.h"
-//@ #include <quantifiers.gh>
 //@ #include <ghost_cells.gh>
 
 /*@
