@@ -476,20 +476,33 @@ void dispose_clhlock_as_ticketlock(struct clhlock_as_ticketlock *lock)
     //@ destroy_atomic_space();
     //@ open clhlock_as_ticketlock_inv(lock, inv, lock->growingListId)();
     //@ struct node *tail = lock->tail;
+    //@ assert nodes(lock, ?nodeIds, ?owner);
+    //@ int tailCellId = nth(length(nodeIds) - 1, nodeIds);
+    //@ assert [1/3]ghost_cell(tailCellId, tail);
     /*@
     {
         lemma void iter()
-            requires nodes(lock, ?nodeIds0, ?owner0) &*& lock->growingListId |-> _;
-            ensures tail->lock |-> _ &*& tail->heldToken |-> _ &*& tail->frac |-> _ &*& malloc_block_node(tail) &*& lock->growingListId |-> _;
+            requires
+                nodes(lock, ?nodeIds0, ?owner0) &*&
+                1 <= length(nodeIds0) &*&
+                tailCellId == nth(length(nodeIds0) - 1, nodeIds0) &*&
+                [1/3]ghost_cell(tailCellId, tail) &*&
+                owner0 <= length(nodeIds0) &*& lock->growingListId |-> _;
+            ensures length(nodeIds0) == owner0 &*& tail->lock |-> _ &*& tail->heldToken |-> _ &*& tail->frac |-> _ &*& malloc_block_node(tail) &*& lock->growingListId |-> _;
         {
             open nodes(_, _, _);
             leak [_]ghost_cell(_, _);
-            if (nodeIds0 != nil)
+            if (length(nodeIds0) > 1)
                 iter();
+            else {
+                open nodes(lock, tail(nodeIds0), owner0 - 1);
+                merge_fractions ghost_cell(tailCellId, _);
+            }
         }
         iter();
     }
     @*/
     free(lock->tail);
     free(lock);
+    //@ leak growing_list(_, _);
 }
