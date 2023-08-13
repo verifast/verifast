@@ -188,7 +188,13 @@ fixpoint bool level_lt(list<int> l1, list<int> l2) {
 
 @*/
 
-//@ predicate obs(list<pathcomp> path, list<pair<void *, list<int> > > obs);
+//@ predicate obs_(list<pathcomp> path, list<pair<void *, list<int> > > obs);
+
+/*@
+
+#define obs(path, obs) obs_(path, obs)
+
+@*/
 
 //@ fixpoint list<int> level_of(pair<void *, list<int> > ob) { return snd(ob); }
 

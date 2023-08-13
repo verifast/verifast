@@ -1589,13 +1589,13 @@ let make_file_preprocessor0 reportMacroCall path get_macro set_macro peek junk i
               let rec term parenDepth =
                 match peek () with
                   Some (l, Eof) -> syntax_error l
-                | Some ((_, Kwd ")") as t) -> junk (); t::if parenDepth = 1 then arg () else term (parenDepth - 1)
-                | Some ((_, Kwd "(") as t) -> junk (); t::term (parenDepth + 1)
+                | Some ((_, Kwd (")"|"}")) as t) -> junk (); t::if parenDepth = 1 then arg () else term (parenDepth - 1)
+                | Some ((_, Kwd ("("|"{")) as t) -> junk (); t::term (parenDepth + 1)
                 | Some t -> junk (); t::term parenDepth
               and arg () =
                 match peek () with
                   Some (_, Kwd (")"|",")) -> []
-                | Some (_, Kwd "(") -> term 0
+                | Some (_, Kwd ("("|"{")) -> term 0
                 | Some (l, Eof) -> syntax_error l
                 | Some t -> junk (); t::arg ()
               in
