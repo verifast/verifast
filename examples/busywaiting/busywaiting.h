@@ -188,11 +188,11 @@ fixpoint bool level_lt(list<int> l1, list<int> l2) {
 
 @*/
 
-//@ predicate obs_(list<pathcomp> path, list<pair<void *, list<int> > > obs);
+//@ predicate obs_(int thread, list<pathcomp> path, list<pair<void *, list<int> > > obs);
 
 /*@
 
-#define obs(path, obs) obs_(path, obs)
+#define obs(p, obs) obs_(currentThread, p, obs)
 
 @*/
 
@@ -222,12 +222,12 @@ lemma void call_below_perms_weaken(int m)
 }
 
 lemma void pathize_call_below_perm_();
-  requires obs(?p, ?obs) &*& call_below_perm_(currentThread, ?f);
-  ensures obs(p, obs) &*& call_below_perm(p, f);
+  requires obs_(?thread, ?p, ?obs) &*& call_below_perm_(thread, ?f);
+  ensures obs_(thread, p, obs) &*& call_below_perm(p, f);
 
 lemma void pathize_call_below_perm__multi(int n);
-  requires obs(?p, ?obs) &*& call_below_perm_(currentThread, ?f);
-  ensures obs(p, obs) &*& call_below_perms(n, p, f);
+  requires obs_(?thread, ?p, ?obs) &*& call_below_perm_(thread, ?f);
+  ensures obs_(thread, p, obs) &*& call_below_perms(n, p, f);
 
 fixpoint bool lt(int x, int y) { return x < y; }
 
@@ -275,16 +275,16 @@ lemma void *create_signal();
 predicate signal(void *id; list<int> level, bool status);
 
 lemma void init_signal(void *signal, list<int> level);
-  requires obs(?p, ?obs) &*& signal_uninit(signal);
-  ensures obs(p, cons(pair(signal, level), obs)) &*& signal(signal, level, false);
+  requires obs_(?thread, ?p, ?obs) &*& signal_uninit(signal);
+  ensures obs_(thread, p, cons(pair(signal, level), obs)) &*& signal(signal, level, false);
 
 lemma void set_signal(void *signal);
-  requires obs(?p, ?obs) &*& signal(signal, ?level, false) &*& mem(pair(signal, level), obs) == true;
-  ensures obs(p, remove(pair(signal, level), obs)) &*& signal(signal, level, true);
+  requires obs_(?thread, ?p, ?obs) &*& signal(signal, ?level, false) &*& mem(pair(signal, level), obs) == true;
+  ensures obs_(thread, p, remove(pair(signal, level), obs)) &*& signal(signal, level, true);
 
 lemma void ob_signal_not_set(void *signal);
-  requires obs(?p, ?obs) &*& signal(signal, ?level, ?status) &*& mem(signal, map(fst, obs)) == true;
-  ensures obs(p, obs) &*& signal(signal, level, status) &*& !status;
+  requires obs_(?thread, ?p, ?obs) &*& signal(signal, ?level, ?status) &*& mem(signal, map(fst, obs)) == true;
+  ensures obs_(thread, p, obs) &*& signal(signal, level, status) &*& !status;
 
 predicate wait_perm(list<pathcomp> path, void *signal, list<int> level, void *func;);
 
@@ -294,14 +294,14 @@ lemma void create_wait_perm(void *s, list<int> level, void *f);
 
 lemma void wait(void *s);
   requires
-    obs(?p, ?obs) &*& wait_perm(?pp, s, ?level, ?f) &*&
+    obs_(?thread, ?p, ?obs) &*& wait_perm(?pp, s, ?level, ?f) &*&
     signal(s, level, false) &*&
     is_ancestor_of(pp, p) == true &*&
     forall(map(snd, obs), (level_lt)(level)) == true;
   ensures
-    obs(p, obs) &*& wait_perm(pp, s, level, f) &*&
+    obs_(thread, p, obs) &*& wait_perm(pp, s, level, f) &*&
     signal(s, level, false) &*&
-    call_perm_(currentThread, f);
+    call_perm_(thread, f);
 
 @*/
 
