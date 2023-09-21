@@ -634,6 +634,13 @@ cd ..
         verifast -disable_overflow_check Account.cpp account_client.cpp
         verifast -disable_overflow_check Stack.cpp stack_client.cpp
         verifast -c -disable_overflow_check Shape.cpp
+        verifast -c -disable_overflow_check multiple_inheritance.cpp
+        cd auto_open_close
+          verifast -c -disable_overflow_check access_base_field_in_derived_struct.cpp
+          verifast -c -disable_overflow_check delegate_to_precise_pred.cpp
+          verifast -c -disable_overflow_check derived_uses_base_pred.cpp
+          verifast -c -disable_overflow_check target_is_not_this.cpp
+        cd ..
     cd ..
     cd delete
         verifast -c polymorphic.cpp
