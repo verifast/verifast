@@ -2898,6 +2898,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       iter true init_list h
     in
     let init_fields delegated h struct_addr this_type init_list env ghostenv leminfo sizemap current_thread cont =
+      let init_field h field_name field_type value struct_addr gh cont =
+        assume_field h struct_name field_name field_type gh struct_addr value real_unit cont
+      in
       (* when a delegated ctor was called, no initializeation is needed for the fields *)
       if delegated then cont h else
       begin fun cont ->
@@ -2905,20 +2908,17 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let rec iter fields =
           match fields with
           | [] -> cont ()
-          | (field_name, (_, _, _, Some offset, _)) :: rest ->
+          | (field_name, (_, Real, _, Some offset, _)) :: rest ->
             assume (mk_field_pointer_within_limits struct_addr offset) @@ fun () -> iter rest
           | _ :: rest -> iter rest
         in
         iter fields
       end @@ fun () ->
-      let init_field h field_name field_type value struct_addr cont =
-        assume_field h struct_name field_name field_type Real struct_addr value real_unit cont
-      in
       (* initialize each field *)
       let rec iter h fields =
         match fields with 
         | [] -> cont h
-        | (field_name, (field_loc, _, field_type, _, init_expr_opt)) :: rest -> 
+        | (field_name, (field_loc, gh, field_type, _, init_expr_opt)) :: rest -> 
           (* member init takes precedence over default field init *)
           let mem_init, init_expr_opt =
             match try_assoc field_name init_list with 
@@ -2929,7 +2929,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             match init_expr_opt with 
             | None -> 
               with_context (Executing (h, env, field_loc, "Producing field chunk")) @@ fun () ->
-              init_field h field_name field_type None struct_addr @@ fun h ->
+              init_field h field_name field_type None struct_addr gh @@ fun h ->
               iter h rest
             | Some (init, is_written) ->
               let init_kind, env, tenv =
@@ -2950,7 +2950,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   begin fun cont ->
                     verify_expr false (pn, ilist) [] false leminfo funcmap sizemap tenv ghostenv h env (Some field_name) init cont @@ fun _ _ _ _ _ -> assert false
                   end @@ fun h _ initial_value ->
-                  init_field h field_name field_type (Some initial_value) struct_addr @@ fun h ->
+                  init_field h field_name field_type (Some initial_value) struct_addr Real @@ fun h ->
                   iter h rest
               end
           end
@@ -3002,11 +3002,11 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let rec iter h fields =
         match fields with 
         | [] -> cont h
-        | (field_name, (field_loc, _, field_type, _, _)) :: rest ->
+        | (field_name, (field_loc, gh, field_type, _, _)) :: rest ->
           let field_addr_name = Some (field_name ^ "_addr") in 
-          let field_addr = field_address field_loc struct_addr struct_name field_name in
-          begin match field_type with
-          | UnionType struct_name | StructType struct_name ->
+          begin match gh, field_type with
+          | Real, (UnionType _ | StructType _) ->
+            let field_addr = field_address field_loc struct_addr struct_name field_name in
             with_context (Executing (h, env, field_loc, "Executing field destructor")) @@ fun () ->
             let verify_dtor_call = verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env field_addr field_addr_name in
             consume_cxx_object field_loc real_unit_pat field_addr field_type verify_dtor_call true h env @@ fun h env ->

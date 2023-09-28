@@ -1680,8 +1680,6 @@ let make_file_preprocessor reportMacroCall path macros ghost_macros peek junk in
   in
   make_file_preprocessor0 reportMacroCall path get_macro set_macro peek junk in_ghost_range dataModel
 
-type ghostness = Real | Ghost
-
 let is_ghost_header h = Filename.check_suffix h ".gh"
 
 let make_sound_preprocessor_core reportMacroCall make_lexer path verbose include_paths dataModel define_macros p_ghost_macros included_files =
