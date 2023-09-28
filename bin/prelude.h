@@ -52,6 +52,13 @@ fixpoint pointer field_ptr(pointer p, void *structTypeid, int fieldOffset) {
     return pointer_ctor(field_ptr_provenance(p, structTypeid, fieldOffset), p.address + fieldOffset);
 }
 
+fixpoint pointer field_ptr_parent(pointer p, int fieldOffset) {
+    return pointer_ctor(
+        field_ptr_provenance_parent(p.provenance, fieldOffset).provenance, 
+        p.address - fieldOffset
+    );
+}
+
 fixpoint pointer_provenance union_variant_ptr_provenance(pointer p, void *unionTypeId, int variantId);
 fixpoint pointer union_variant_ptr(pointer p, void *unionTypeid, int variantId) {
     return pointer_ctor(union_variant_ptr_provenance(p, unionTypeid, variantId), p.address);

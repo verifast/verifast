@@ -39,6 +39,13 @@ let rec simplify e =
       | e1 -> List [a0; a1; e1]
     with Failure _ -> List [a0; a1; simplify e1]
     end
+  | List [Atom "parent_field_ptr" as a0; ptr_e; Atom parent_offset as a1] ->
+    begin match simplify ptr_e with
+    | List [Atom "field_ptr"; child_target; _; Atom child_offset] when parent_offset = child_offset ->
+      child_target
+    | simpl ->
+      List [a0; simpl; a1] 
+    end
   | List es -> List (List.map simplify es)
   | a -> a
 

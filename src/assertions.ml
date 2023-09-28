@@ -293,6 +293,16 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       None -> produce_uninit_points_to_chunk l h type_ coef addr cont
     | Some v -> produce_points_to_chunk l h type_ coef addr v cont
 
+  let produce_instance_predicate_chunk l h symbol coef target index family arguments size_first cont =
+    let family_target = 
+      match language, dialect with
+      | CLang, Some Cxx ->
+        base_addr l target family
+      | _ -> snd target
+    in
+    produce_chunk h (symbol, true) [] coef (Some 2) (family_target :: index :: arguments) size_first @@ fun h ->
+    cont h family_target
+
   let rec produce_asn_core_with_post tpenv h ghostenv env p coef size_first size_all (assuming: bool) cont_with_post: symexec_result =
     let cont h env ghostenv = cont_with_post h env ghostenv None in
     let with_context_helper cont =
@@ -408,18 +418,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           with Not_found -> assert_false h env l ("Definition of predicate " ^ g ^ " is missing from implementing class") None
         in
         let target = match e_opt with None -> List.assoc "this" env | Some e -> ev e in
-        let target = 
-          match dialect with
-          | Some Cxx ->
-            base_addr l (st, target) tn
-          | _ -> target
-        in
         let index = ev index in
-        assume (ctxt#mk_not (ctxt#mk_eq target (null_pointer_term ()))) $. fun () ->
         begin fun cont -> if cfin = FinalClass && language = Java then assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [target]) (List.assoc st classterms)) cont else cont () end $. fun () ->
         let types = List.map snd pmap in
         evalpats ghostenv env pats types types $. fun ghostenv env args ->
-        produce_chunk h (pred_symb, true) [] coef (Some 2) (target::index::args) size_first $. fun h ->
+        produce_instance_predicate_chunk l h pred_symb coef (st, target) index tn args size_first @@ fun h target ->
+        assume (ctxt#mk_not (ctxt#mk_eq target (null_pointer_term ()))) @@ fun () ->
         cont h ghostenv env
     | ExprAsn (l, e) -> assume (ev e) (fun _ -> cont h ghostenv env)
     | WMatchAsn (l, e, pat, tp) ->
@@ -581,7 +585,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match (pats, tps0, tps, ts) with
       (pat::pats, tp0::tps0, tp::tps, t::ts) ->
       let isInputParam = index < inputParamCount in
-      match_pat h l ghostenv env env' isInputParam pat tp0 tp t cont_nomatch $. fun ghostenv env env' ->
+      match_pat h l ghostenv env env' isInputParam pat tp0 tp t cont_nomatch @@ fun ghostenv env env' ->
       match_pats h l ghostenv env env' inputParamCount (index + 1) pats tps0 tps ts cont_nomatch cont
     | ([], [], [], []) -> cont ghostenv env env'
   
@@ -1036,6 +1040,19 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let consume_points_to_chunk rules h ghostenv env env' l type_ coef coefpat addr rhs cont =
     consume_points_to_chunk_ rules h ghostenv env env' l type_ coef coefpat addr rhs false cont
 
+  let consume_instance_predicate_chunk rules h ghostenv env env' l symbol (target_type, target) (index_type, index) family coef coefpat pats types cont =
+    let family_target, family_target_type =
+      match dialect, target_type with
+      | Some Cxx, PtrType (StructType target_type_name) ->
+        base_addr l (target_type_name, target) family, PtrType (StructType family)
+      | _ -> 
+        target, target_type
+    in
+    let consume_types = family_target_type :: index_type :: types in
+    let consume_pats = TermPat family_target :: TermPat index :: srcpats pats in 
+    consume_chunk_core rules h ghostenv env env' l (symbol, true) [] coef coefpat (Some 2) consume_pats consume_types consume_types cont
+
+
   let rec consume_asn_core_with_post rules tpenv h ghostenv env env' p checkDummyFracs coef cont_with_post =
     let cont chunks h ghostenv env env' size_first = cont_with_post chunks h ghostenv env env' size_first None in
     let with_context_helper cont =
@@ -1140,17 +1157,15 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       let target = match e_opt with None -> List.assoc "this" env | Some e -> ev e in
       let types = List.map snd pmap in
-      let target, types =
+      let target_type, index_type =
         match dialect with
         | Some Cxx ->
-          let target = base_addr l (static_type, target) tn in
-          target, PtrType (StructType tn) :: type_info_type :: types
+          PtrType (StructType static_type), type_info_ref_type
         | _ ->
-          target, ObjType (tn, (List.map (fun tparam -> RealTypeParam tparam) ctparams))::ObjType ("java.lang.Class", []) :: types
+          ObjType (tn, (List.map (fun tparam -> RealTypeParam tparam) ctparams)), ObjType ("java.lang.Class", [])
       in
       let index = ev index in
-      let pats = TermPat target::TermPat index::srcpats pats in
-      consume_chunk_core rules h ghostenv env env' l (pred_symb, true) [] coef coefpat (Some 2) pats types types $. fun chunk h coef ts size ghostenv env env' ->
+      consume_instance_predicate_chunk rules h ghostenv env env' l pred_symb (target_type, target) (index_type, index) tn coef coefpat pats types @@ fun chunk h coef ts size ghostenv env env' ->
       check_dummy_coefpat l coefpat coef;
       cont [chunk] h ghostenv env env' size
     in
@@ -1384,25 +1399,37 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             end
           end
       | WInstPredAsn(l2, target_opt, static_type_name, static_type_finality, family_type_string, instance_pred_name, index, args) ->
-        let (pmap, qsymb) =
-          match try_assoc static_type_name classmap1 with
-            Some (lcn, abstract, fin, methods, fds_opt, ctors, super, tparams, interfs, preds, pn, ilist) ->
-            let (_, pmap, _, symb, _) = List.assoc instance_pred_name preds in (pmap, symb)
+        let qsymb =
+          match dialect with
           | None ->
-            match try_assoc static_type_name classmap0 with
-              Some {cpreds} ->
-              let (_, pmap, _, symb, _) = List.assoc instance_pred_name cpreds in (pmap, symb)
+            begin match try_assoc family_type_string classmap1 with
+            | Some (lcn, abstract, fin, methods, fds_opt, ctors, super, tparams, interfs, preds, pn, ilist) ->
+              let (_, _, _, symb, _) = List.assoc instance_pred_name preds in
+              symb
             | None ->
-              match try_assoc static_type_name interfmap1 with
-                Some (li, fields, methods, preds, interfs, pn, ilist, tparams) -> let (_, pmap, family, symb) = List.assoc instance_pred_name preds in (pmap, symb)
+              match try_assoc family_type_string classmap0 with
+              | Some {cpreds} ->
+                let (_, _, _, symb, _) = List.assoc instance_pred_name cpreds in
+                symb
               | None ->
-                let InterfaceInfo (li, fields, methods, preds, interfs, tparams) = List.assoc static_type_name interfmap0 in
-                let (_, pmap, family, symb) = List.assoc instance_pred_name preds in
-                (pmap, symb)
+                match try_assoc family_type_string interfmap1 with
+                | Some (li, fields, methods, preds, interfs, pn, ilist, tparams) -> 
+                  let (_, _, family, symb) = List.assoc instance_pred_name preds in 
+                  symb
+                | None ->
+                  let InterfaceInfo (li, fields, methods, preds, interfs, tparams) = List.assoc family_type_string interfmap0 in
+                  let (_, pmap, family, symb) = List.assoc instance_pred_name preds in
+                  symb
+            end
+          | Some Cxx ->
+            let preds = List.assoc family_type_string cxx_inst_pred_map in 
+            let _, _, _, symb, _ = List.assoc instance_pred_name preds in
+            symb
         in
         if match target_opt with Some e -> expr_is_fixed inputParameters e | None -> true then begin
           let target = match target_opt with Some e -> Some e | None -> Some (WVar(l2, "this", LocalVar)) in
-          construct_edge qsymb coef target [] [index] [] conds
+          let inner_info = target |> Option.map @@ fun target -> family_type_string, static_type_name, target in
+          construct_edge qsymb coef inner_info [] [index] [] conds
         end else
           []
       | CoefAsn(_, DummyPat, asn) ->
@@ -1439,8 +1466,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | Some nbInputParameters ->
           let inputParameters = List.map fst (take nbInputParameters xs) in
           let inputFormals = (take nbInputParameters xs) in
-          let construct_edge qsymb coef target qtargs qIndices qInputActuals conds =
-            [(psymb, pindices, qsymb, [(l, (psymb, true), 0, None, false, predinst_tparams, fns, xs, inputFormals, wbody0, coef, target, qtargs, qIndices, qInputActuals, conds)])]
+          let construct_edge qsymb coef inner_inst_pred_info_opt qtargs qIndices qInputActuals conds =
+            [(psymb, pindices, qsymb, [(l, (psymb, true), 0, None, None, predinst_tparams, fns, xs, inputFormals, wbody0, coef, inner_inst_pred_info_opt, qtargs, qIndices, qInputActuals, conds)])]
           in
           find_edges construct_edge inputParameters xs wbody0
       )
@@ -1459,30 +1486,39 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let inputParameters = List.map fst (take nbInputParameters xs) in
           let inputFormals = (take nbInputParameters xs) in
           let outer_nb_curried = (List.length ps1) in
-          let construct_edge qsymb coef target qtargs qIndices qInputActuals conds =
-            [(psymbol_term, [], qsymb, [(l, (psymbol_term, true), outer_nb_curried, Some(psymbol), false, predinst_tparams, fns, xs, inputFormals, wbody0, coef, target, qtargs, qIndices, qInputActuals, conds)])]
+          let construct_edge qsymb coef inner_inst_pred_info_opt qtargs qIndices qInputActuals conds =
+            [(psymbol_term, [], qsymb, [(l, (psymbol_term, true), outer_nb_curried, Some(psymbol), None, predinst_tparams, fns, xs, inputFormals, wbody0, coef, inner_inst_pred_info_opt, qtargs, qIndices, qInputActuals, conds)])]
           in
           find_edges construct_edge inputParameters xs wbody0
       )
-   
+
+  let instance_predicate_find_edges class_name index =
+    fun (g, (l, pmap, family, psymb, wbody_opt)) ->
+      match wbody_opt with None -> [] | Some wbody0 ->
+      let pindices = [index] in
+      let instpred_tparams = [] in
+      let fns = [class_name] in
+      let xs = pmap in
+      let inputParameters = ["this"] in
+      let inputFormals = [] in
+      let construct_edge qsymb coef inner_inst_pred_info_opt qtargs qIndices qInputActuals conds =
+        [(psymb, pindices, qsymb, [(l, (psymb, true), 0, None, Some family, instpred_tparams, fns, xs, inputFormals, wbody0, coef, inner_inst_pred_info_opt, qtargs, qIndices, qInputActuals, conds)])]
+      in
+      find_edges construct_edge inputParameters xs wbody0
+
   let instance_predicate_contains_edges = 
-    classmap1 |> flatmap 
-      (fun (cn, (l, abstract, fin, meths, fds, cmap, super, tparams, interfs, preds, pn, ilist)) ->
-        preds |> flatmap
-          (fun (g, (l, pmap, family, psymb, wbody_opt)) ->
-            match wbody_opt with None -> [] | Some wbody0 ->
-            let pindices = [(List.assoc cn classterms)] in
-            let instpred_tparams = [] in
-            let fns = [cn] in
-            let xs = pmap in
-            let inputParameters = ["this"] in
-            let inputFormals = [] in
-            let construct_edge qsymb coef target qtargs qIndices qInputActuals conds =
-              [(psymb, pindices, qsymb, [(l, (psymb, true), 0, None, true, instpred_tparams, fns, xs, inputFormals, wbody0, coef, target, qtargs, qIndices, qInputActuals, conds)])]
-            in
-            find_edges construct_edge inputParameters xs wbody0
-          )
-      )
+    match language, dialect with
+    | CLang, Some Cxx ->
+      cxx_inst_pred_map |> flatmap begin fun (sn, preds_map) ->
+        let _, _, _, _, type_info = List.assoc sn structmap in
+        preds_map |> flatmap (instance_predicate_find_edges sn type_info)
+      end
+    | Java, _ ->
+      classmap1 |> flatmap 
+        (fun (cn, (l, abstract, fin, meths, fds, cmap, super, tparams, interfs, preds, pn, ilist)) ->
+          preds |> flatmap (instance_predicate_find_edges cn @@ List.assoc cn classterms)
+        )
+    | _ -> []  
   
   let contains_edges = pred_fam_contains_edges @ instance_predicate_contains_edges @ predicate_ctor_contains_edges
     
@@ -1490,20 +1526,26 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     flatmap
     (fun (from_symb, from_indices, to_symb, path) ->
       flatmap 
-        (fun (from_symb0, from_indices0, to_symb0, (((outer_l0, outer_symb0, outer_nb_curried0, outer_fun_sym0, outer_is_inst_pred0, outer_formal_targs0, outer_actual_indices0, outer_formal_args0, outer_formal_input_args0, outer_wbody0, inner_frac_expr_opt0, inner_target_opt0, inner_formal_targs0, inner_formal_indices0, inner_input_exprs0, conds0) :: rest) as path0)) ->
+        (fun (from_symb0, from_indices0, to_symb0, (((outer_l0, outer_symb0, outer_nb_curried0, outer_fun_sym0, outer_inst_pred_info_opt0, outer_formal_targs0, outer_actual_indices0, outer_formal_args0, outer_formal_input_args0, outer_wbody0, inner_frac_expr_opt0, inner_inst_pred_info_opt0, inner_formal_targs0, inner_formal_indices0, inner_input_exprs0, conds0) :: rest) as path0)) ->
           if to_symb == from_symb0 then
             let rec add_extra_conditions path = 
               match path with
-                [(outer_l, outer_symb, outer_nb_curried, outer_fun_sym, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds)] ->
+              | [(outer_l, outer_symb, outer_nb_curried, outer_fun_sym, outer_inst_pred_info_opt, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_inst_pred_info_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds)] ->
                 let extra_conditions: expr list = List.map2 (fun cn e2 -> 
-                    if language = Java then 
-                      WOperation(dummy_loc, Eq, [ClassLit(dummy_loc, cn); e2], ObjType ("java.lang.Class", []))
-                    else 
+                  match language with 
+                  | Java -> 
+                    WOperation(dummy_loc, Eq, [ClassLit(dummy_loc, cn); e2], ObjType ("java.lang.Class", []))
+                  | CLang ->
+                    begin match dialect, outer_inst_pred_info_opt, inner_inst_pred_info_opt with
+                    | Some Cxx, Some _, _
+                    | Some Cxx, _, Some _ ->
+                      WOperation (outer_l0, Eq, [TypeInfo (outer_l0, StructType cn); e2], type_info_ref_type)
+                    | _ ->
                       WOperation(dummy_loc, Eq, [WVar(dummy_loc, cn, FuncName); e2], PtrType Void)
+                    end
                 ) outer_actual_indices0 inner_formal_indices in
                 (* these extra conditions ensure that the actual indices match the expected ones *)
-                [(outer_l, outer_symb, outer_nb_curried, outer_fun_sym, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, extra_conditions @ conds)]
-                 
+                [(outer_l, outer_symb, outer_nb_curried, outer_fun_sym, outer_inst_pred_info_opt, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_inst_pred_info_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, extra_conditions @ conds)]
               | head :: rest -> head :: (add_extra_conditions rest)
             in
             let new_path = add_extra_conditions path in
@@ -1554,71 +1596,105 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | Some rules ->
         rules := rule::!rules
     in
+    let index_target family_term ~family_name ~index_name =
+      match dialect with
+      | Some Cxx ->
+        let field_ptr_parent_symb = get_pure_func_symb "field_ptr_parent" |> fst in
+        let rec family_to_derived_offsets derived_type_name found_offsets =
+          if derived_type_name = family_name then
+            found_offsets
+          else
+            let _, Some (bases, _, _), _, _, _ = List.assoc derived_type_name structmap in
+            let base_name, (_, _, base_offset) = bases |> List.find @@ fun (base, _) -> 
+              match List.assoc_opt base cxx_inst_pred_map with
+              | None -> false
+              | Some base_preds -> 
+                base_preds |> List.exists @@ fun (_, (_, _, base_family, _, _)) -> base_family = family_name
+            in
+            family_to_derived_offsets base_name (base_offset :: found_offsets)
+        in      
+        let offsets = family_to_derived_offsets index_name [] in
+        offsets |> List.fold_left (fun addr offset -> ctxt#mk_app field_ptr_parent_symb [addr; offset]) family_term
+      | _ ->
+        family_term
+    in
+    let env_with_this_opt this_opt env = this_opt |> Option.fold ~none:env ~some:(fun (_, this_term) -> ("this", this_term) :: env) in
     (* transitive auto-close rules for precise predicates and predicate families *)
     List.iter
       (fun (from_symb, indices, to_symb, path) ->
         let transitive_auto_close_rule l h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
           (*let _ = print_endline ("trying to auto-close:" ^ (ctxt#pprint from_symb)) in*)
           let rec can_apply_rule wanted_coef current_this_opt current_targs current_indices current_input_args path =
+            let is_chunk_candidate (Chunk (found_symb, found_targs, found_coef, found_terms, _)) =
+              let expected_terms = (current_this_opt |> Option.map snd |> Option.to_list) @ current_indices @ current_input_args in
+              if predname_eq found_symb (to_symb, true) then
+                for_all2 definitely_equal (take (List.length (expected_terms)) found_terms) expected_terms
+              else
+                let (fsymb, literal) = found_symb in 
+                match try_assq fsymb !pred_ctor_applications with
+                | None -> false
+                | Some (symbol, symbol_term, ctor_args, _) ->
+                  let found_terms = ctor_args @ found_terms in
+                  if to_symb == symbol_term then
+                    for_all2 definitely_equal (take (List.length (expected_terms)) found_terms) expected_terms
+                  else
+                    false
+            in
+            let is_empty_pred_candidate (symb, fsymbs, conds, ((p, fns), (env, l, predinst_tparams, xs, _, inputParamCount, wbody))) =
+              to_symb == symb &&
+              (for_all2 definitely_equal fsymbs current_indices) &&
+              (
+                let Some inputParamCount = inputParamCount in
+                let Some tpenv = zip predinst_tparams current_targs in
+                let env = List.map2 
+                  (fun (x, tp0) actual -> 
+                    let tp = instantiate_type tpenv tp0 in 
+                    (x, prover_convert_term actual tp tp0)) 
+                  (take inputParamCount xs) 
+                  current_input_args 
+                in 
+                let env = env |> env_with_this_opt current_this_opt in
+                conds |> List.exists @@ for_all_rev @@ fun cond -> ctxt#query (eval None env cond)
+              )
+            in
             match path with
-              [] -> 
-                begin match try_find
-                  (fun (Chunk (found_symb, found_targs, found_coef, found_ts, _)) ->
-                    if predname_eq found_symb (to_symb, true) then begin
-                      let expected_ts = (match current_this_opt with None -> [] | Some t -> [t]) @ current_indices @ current_input_args in
-                      (for_all2 definitely_equal (take (List.length (expected_ts)) found_ts) expected_ts)
-                     end else begin
-                      let (fsymb, literal) = found_symb in 
-                      begin match try_assq fsymb !pred_ctor_applications with
-                        None -> false
-                      | Some (symbol, symbol_term, ctor_args, _) ->
-                        let expected_ts = (match current_this_opt with None -> [] | Some t -> [t]) @ current_indices @ current_input_args in
-                        let found_ts = ctor_args @ found_ts in
-                        if to_symb == symbol_term then begin
-                          (for_all2 definitely_equal (take (List.length (expected_ts)) found_ts) expected_ts)
-                        end else
-                          false
-                      end
-                    end
-                  )
-                  h
-                with
-                  None -> begin (* check whether the wanted predicate is an empty predicate? *)
-                    if List.exists 
-                         (fun (symb, fsymbs, conds, ((p, fns), (env, l, predinst_tparams, xs, _, inputParamCount, wbody))) ->
-                           to_symb == symb &&
-                           (for_all2 definitely_equal fsymbs current_indices) &&
-                           (
-                             let Some inputParamCount = inputParamCount in
-                             let Some tpenv = zip predinst_tparams current_targs in
-                             let env = List.map2 (fun (x, tp0) actual -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term actual tp tp0)) (take inputParamCount xs) current_input_args in 
-                             let env = match current_this_opt with None -> env | Some t -> ("this", t) :: env in
-                             List.exists (fun conds -> (for_all_rev (fun cond -> ctxt#query (eval None env cond)) conds)) conds
-                           )
-                         )
-                        empty_preds 
-                    then
-                      Some (fun h cont -> cont h real_unit)
-                    else
-                      None
-                  end
-                | Some (Chunk (found_symb, found_targs, found_coef, found_ts, _)) -> Some (fun h cont -> cont h found_coef)
-                end
-            | (outer_l, outer_symb, outer_nb_curried, outer_fun_sym, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds) :: path ->
+            | [] -> 
+              begin match try_find is_chunk_candidate h with
+              | None -> (* check whether the wanted predicate is an empty predicate? *)
+                if empty_preds |> List.exists is_empty_pred_candidate then
+                  Some (fun h cont -> cont h real_unit)
+                else
+                  None
+              | Some (Chunk (found_symb, found_targs, found_coef, found_ts, _)) ->
+                Some (fun h cont -> cont h found_coef)
+              end
+            | (outer_l, outer_symb, outer_nb_curried, outer_fun_sym, outer_inst_pred_info_opt, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_inst_pred_info_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds) :: path ->
               let Some tpenv = zip outer_formal_targs current_targs in
-              let env = List.map2 (fun (x, tp0) actual -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term actual tp tp0)) outer_formal_input_args current_input_args in
-              let env = match current_this_opt with
-                None -> env
-              | Some t ->  ("this", t) :: env
+              let env = List.map2 
+                (fun (x, tp0) actual -> 
+                  let tp = instantiate_type tpenv tp0 in 
+                  (x, prover_convert_term actual tp tp0)) 
+                outer_formal_input_args 
+                current_input_args 
               in
-              if (for_all_rev (fun cond -> ctxt#query (eval None env cond)) conds) then
-                let env = List.map2 (fun (x, tp0) actual -> (x, actual)) outer_formal_input_args current_input_args in
-                let env = match current_this_opt with
-                  None -> env
-                | Some t -> ("this", t) :: env
+              let current_this_opt =
+                match dialect, outer_actual_indices with 
+                | Some Cxx, [outer_index_name] ->
+                  (* 'this' term inside instance predicate body *)
+                  current_this_opt |> Option.map @@ fun this_type_name_and_term ->
+                    outer_index_name, base_addr outer_l this_type_name_and_term outer_index_name
+                | _ -> 
+                  current_this_opt
+              in
+              let env = env |> env_with_this_opt current_this_opt in
+              if conds |> for_all_rev @@ fun cond -> ctxt#query (eval None env cond) then
+                let env = List.map2 
+                  (fun (x, tp0) actual -> (x, actual)) 
+                  outer_formal_input_args 
+                  current_input_args 
                 in
-                let new_wanted_coef =
-                  match wanted_coef with None -> None | Some wanted_coef ->
+                let env = env |> env_with_this_opt current_this_opt in
+                let new_wanted_coef = Option.bind wanted_coef @@ fun wanted_coef ->
                   match inner_frac_expr_opt with
                     None -> Some wanted_coef
                   | Some DummyPat -> None
@@ -1627,83 +1703,89 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     Some (ctxt#mk_real_mul fterm wanted_coef)
                   | Some _ -> None
                 in
-                let new_this_opt = match inner_target_opt with
-                  None -> None
-                | Some thisExpr -> Some (eval None env thisExpr)
-                in 
-                let new_actual_targs = List.map (fun tp0 -> (instantiate_type tpenv tp0)) inner_formal_targs in
-                let new_actual_indices = List.map (fun index -> (eval None env index)) inner_formal_indices in
-                let new_actual_input_args = List.map (fun input_e -> (eval None env input_e)) inner_input_exprs in
+                let new_this_opt = inner_inst_pred_info_opt |> Option.map @@ fun (_, this_type, this_expr) -> this_type, eval None env this_expr in
+                let new_actual_targs = inner_formal_targs |> List.map @@ instantiate_type tpenv in
+                let new_actual_indices = inner_formal_indices |> List.map @@ eval None env in
+                let new_actual_input_args = inner_input_exprs |> List.map @@ eval None env in
                 match can_apply_rule new_wanted_coef new_this_opt new_actual_targs new_actual_indices new_actual_input_args path with
-                  None -> None
+                | None -> None
                 | Some exec_rule -> Some (fun h cont ->
                     exec_rule h (fun h coef ->
                       let rules = rules_cell in
                       let ghostenv = [] in
                       let checkDummyFracs = true in
-                      let env = List.map2 (fun (x, tp0) actual -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term actual tp tp0)) outer_formal_input_args current_input_args in
-                      let env = match current_this_opt with
-                        None -> env
-                      | Some t -> ("this", t) :: env
+                      let env = List.map2 
+                        (fun (x, tp0) actual -> 
+                          let tp = instantiate_type tpenv tp0 in 
+                          (x, prover_convert_term actual tp tp0)) 
+                        outer_formal_input_args 
+                        current_input_args 
                       in
-                      with_context PushSubcontext $. fun () ->
+                      let env = env |> env_with_this_opt current_this_opt in
+                      with_context PushSubcontext @@ fun () ->
                         let new_coef = 
                           match inner_frac_expr_opt with
-                            None -> coef
+                          | None -> coef
                           | Some DummyPat -> real_unit
                           | Some (LitPat (RealLit(_, n, _))) -> ctxt#mk_real_mul coef (ctxt#mk_reallit_of_num ((num_of_big_int unit_big_int) // n))
                           | Some (LitPat f) -> (* ideally: newcoef = coef / f, but real_div is not supported yet *)
-                              let fterm = (eval None env f) in
-                              if ctxt#query (ctxt#mk_real_le fterm coef) then
-                                real_unit
-                              else
-                                coef 
+                            let fterm = (eval None env f) in
+                            if ctxt#query (ctxt#mk_real_le fterm coef) then
+                              real_unit
+                            else
+                              coef 
                           | Some _ -> coef (* todo *)
                         in
-                        let new_coef = match wanted_coef with Some coef -> coef | None -> new_coef in
-                        with_context (Executing (h, env, outer_l, ("Auto-closing predicate with coefficient " ^ ctxt#pprint new_coef))) $. fun () ->
-                        consume_asn rules tpenv h ghostenv env outer_wbody checkDummyFracs new_coef $. fun _ h ghostenv env2 size_first ->
-                          let outputParams = drop (List.length outer_formal_input_args) outer_formal_args in
+                        let new_coef = wanted_coef |> Option.value ~default:new_coef in
+                        with_context (Executing (h, env, outer_l, ("Auto-closing predicate with coefficient " ^ ctxt#pprint new_coef))) @@ fun () ->
+                        consume_asn rules tpenv h ghostenv env outer_wbody checkDummyFracs new_coef @@ fun _ h ghostenv env2 size_first ->
+                          let outputParams = outer_formal_args |> drop @@ List.length outer_formal_input_args in
                           let outputArgs = List.map (fun (x, tp0) -> let tp = instantiate_type tpenv tp0 in (prover_convert_term (List.assoc x env2) tp0 tp)) outputParams in
-                          with_context (Executing (h, [], outer_l, "Producing auto-closed chunk")) $. fun () ->
-                            let input_param_count = match current_this_opt with Some _ -> 2 | None -> List.length current_indices + List.length current_input_args in
-                            let (input_param_count, symb, args) = begin match outer_fun_sym with
-                              None ->
-                              (input_param_count, outer_symb, ((match current_this_opt with None -> [] | Some t -> [t]) @ current_indices @ current_input_args @ outputArgs))
-                            | Some(funsym) ->
-                              assert (List.length current_indices = 0);
-                              let ctor_args, chunk_args = take_drop outer_nb_curried (current_input_args @ outputArgs) in
-                              (input_param_count - outer_nb_curried, (ctxt#mk_app funsym ctor_args, false), chunk_args)
-                            end in
-                            produce_chunk h symb current_targs new_coef (Some input_param_count) args None (fun h -> 
-                            with_context PopSubcontext $. fun () ->
-                            cont h new_coef) (* todo: properly set the size *)
+                          with_context (Executing (h, [], outer_l, "Producing auto-closed chunk")) @@ fun () ->
+                            let input_param_count = List.length current_indices + List.length current_input_args in
+                            begin fun cont ->
+                              match outer_fun_sym, outer_inst_pred_info_opt, current_this_opt with
+                              | Some (funsym), _, _ -> 
+                                assert (List.length current_indices = 0);
+                                let ctor_args, chunk_args = take_drop outer_nb_curried (current_input_args @ outputArgs) in
+                                let input_param_count, symb, args = input_param_count - outer_nb_curried, (ctxt#mk_app funsym ctor_args, false), chunk_args in 
+                                produce_chunk h symb current_targs new_coef (Some input_param_count) args None cont
+                              | None, Some family, Some this_type_name_and_term ->
+                                let index, other_indices = List.hd current_indices, List.tl current_indices in
+                                let args = other_indices @ current_input_args @ outputArgs in
+                                produce_instance_predicate_chunk outer_l h (fst outer_symb) new_coef this_type_name_and_term index family args None @@ fun h target ->
+                                cont h
+                              | _ ->
+                                let args = current_indices @ current_input_args @ outputArgs in
+                                produce_chunk h outer_symb current_targs new_coef (Some input_param_count) args None cont
+                            end @@ fun h ->
+                            with_context PopSubcontext @@ fun () ->
+                            cont h new_coef (* todo: properly set the size *)
                     )
                   )
-              else begin
-                
+              else
                 None (* conditions do not hold, so give up *)
-              end
           in
           let wanted_indices = match List.hd path with
-            (_, _, _, _, true, _, _, _, _, _, _, _, _, _, _, _) -> 
+          | (_, _, _, _, Some _, _, _, _, _, _, _, _, _, _, _, _) -> (* outer is instance predicate *)
              (take (List.length indices) (List.tl wanted_indices_and_input_ts))
-          | (_, _, _, _, false, _, _, _, _, _, _, _, _, _, _, _) -> 
+          | (_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) -> 
              (take (List.length indices) wanted_indices_and_input_ts)
           in
-          if terms_are_well_typed &&
-             (for_all2 definitely_equal indices wanted_indices) (* check that you are actually looking for from_symb at indices *) then
-            let (wanted_target_opt, wanted_indices, wanted_inputs) = 
+          if terms_are_well_typed && (for_all2 definitely_equal indices wanted_indices) then (* check that you are actually looking for from_symb at indices *)
+            let wanted_target_opt, wanted_indices, wanted_inputs = 
               match List.hd path with
-                  (_, _, _, _, true, _, _, _, _, _, _, _, _, _, _, _) -> 
-                  (Some (List.hd wanted_indices_and_input_ts), (take (List.length indices) (List.tl wanted_indices_and_input_ts)),
-                  (drop (List.length indices) (List.tl wanted_indices_and_input_ts)))
-                | (_, _, _, _, false, _, _, _, _, _, _, _, _, _, _, _) -> 
-                  (None, (take (List.length indices) wanted_indices_and_input_ts), (drop (List.length indices) wanted_indices_and_input_ts))
+              | (_, _, _, _, (Some family_name), _, [index_name], _, _, _, _, _, _, _, _, _) -> 
+                let family_this_term = List.hd wanted_indices_and_input_ts in
+                let parent_ptr = index_target family_this_term ~family_name ~index_name in
+                (Some (index_name, parent_ptr), (take (List.length indices) (List.tl wanted_indices_and_input_ts)),
+                (drop (List.length indices) (List.tl wanted_indices_and_input_ts)))
+              | (_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) -> 
+                (None, (take (List.length indices) wanted_indices_and_input_ts), (drop (List.length indices) wanted_indices_and_input_ts))
             in
             let wanted_coef =
               match wanted_coefpat with
-                TermPat coef -> if wanted_coef == real_unit then Some coef else Some (ctxt#mk_real_mul wanted_coef coef)
+              | TermPat coef -> if wanted_coef == real_unit then Some coef else Some (ctxt#mk_real_mul wanted_coef coef)
               | _ -> None
             in
             match can_apply_rule wanted_coef wanted_target_opt wanted_targs wanted_indices wanted_inputs path with
@@ -1721,40 +1803,60 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (fun (from_symb, indices, to_symb, path) ->
         let transitive_auto_open_rule l h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
           (*let _ = print_endline ("trying to auto-open : " ^ (ctxt#pprint from_symb)) in *)
+          (* Check if we can obtain the 'wanted' chunk by transitively opening each predicate in the rule's path *)
           let rec try_apply_rule_core actual_this_opt actual_targs actual_indices actual_input_args path = 
             match path with
             | [] ->
-              if for_all2 definitely_equal wanted_indices_and_input_ts ((match actual_this_opt with None -> [] | Some t -> [t]) @ actual_indices @ actual_input_args) then
-                Some (fun h_opt cont -> begin match h_opt with None -> cont None | Some(h) -> cont (Some h) end)
+              (* path is empty, check if the terms that we obtained match the wanted terms *)
+              if for_all2 definitely_equal wanted_indices_and_input_ts ((actual_this_opt |> Option.map snd |> Option.to_list) @ actual_indices @ actual_input_args) then
+                Some (fun h_opt cont -> cont h_opt)
               else
                 None
-            | (outer_l, outer_symb, outer_nb_curried, outer_fun_sym, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds) :: path ->
-              let actual_input_args = (take (List.length outer_formal_input_args) actual_input_args) in (* to fix first call *)
+            | (outer_l, outer_symb, outer_nb_curried, outer_fun_sym, outer_inst_pred_info_opt, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_inst_pred_info_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds) :: path ->
+              (* evaluate the relevant predicate in the body *)
+              let actual_input_args = actual_input_args |> take @@ List.length outer_formal_input_args in (* to fix first call *)
               let Some tpenv = zip outer_formal_targs actual_targs in
-              let env = List.map2 (fun (x, tp0) actual -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term actual tp tp0)) outer_formal_input_args actual_input_args in
-              let env = match actual_this_opt with
-                  None -> env
-                | Some t -> ("this", t) :: env
+              let env = List.map2 (fun (x, tp0) actual -> 
+                let tp = instantiate_type tpenv tp0 in (x, prover_convert_term actual tp tp0))
+                outer_formal_input_args 
+                actual_input_args 
               in
-              if (for_all_rev (fun cond -> ctxt#query (eval None env cond)) conds) then
+              let actual_this_opt =
+                match dialect, outer_actual_indices with
+                | Some Cxx, [outer_index_name] ->
+                  (* actual 'this' when opening the instance predicate *)
+                  actual_this_opt |> Option.map @@ fun this_type_name_and_term ->
+                    outer_index_name, base_addr outer_l this_type_name_and_term outer_index_name
+                | _ ->
+                  actual_this_opt
+              in
+              let env = env |> env_with_this_opt actual_this_opt in
+              if conds |> for_all_rev @@ fun cond -> ctxt#query (eval None env cond) then
                 let env = List.map2 (fun (x, tp0) actual -> (x, actual)) outer_formal_input_args actual_input_args in
-                let env = match actual_this_opt with
-                  None -> env
-                | Some t -> ("this", t) :: env
+                let env = env |> env_with_this_opt actual_this_opt in
+                let new_this_opt = inner_inst_pred_info_opt |> Option.map @@ fun (_, this_type, this_expr) ->
+                  this_type, eval None env this_expr
                 in
-                let new_this_opt = match inner_target_opt with
-                  None -> None
-                | Some thisExpr -> Some (eval None env thisExpr)
+                let new_actual_targs = inner_formal_targs |> List.map @@ instantiate_type tpenv in
+                let new_actual_indices = inner_formal_indices |> List.map @@ eval None env in
+                let new_actual_input_args = inner_input_exprs |> List.map @@ eval None env in
+                let new_this_opt = new_this_opt |> Option.map @@ fun this_type_name_and_term ->
+                  begin match dialect, path, inner_inst_pred_info_opt with
+                  | Some Cxx, [], Some (family, _, _) ->
+                    (* Path is empty. Hence, in the next recursive call the 'wanted' terms will be checked against the 'actual' terms.
+                       Therefore, we compute the family target term that is present in the predicate chunk as when we could close it. *)
+                    family, base_addr outer_l this_type_name_and_term family
+                  | _ ->
+                    this_type_name_and_term
+                  end
                 in
-                let new_actual_targs = List.map (fun tp0 -> (instantiate_type tpenv tp0)) inner_formal_targs in
-                let new_actual_indices = List.map (fun index -> (eval None env index)) inner_formal_indices in
-                let new_actual_input_args = List.map (fun input_e -> (eval None env input_e)) inner_input_exprs in
+                (* recursively continue *)
                 match try_apply_rule_core new_this_opt new_actual_targs new_actual_indices new_actual_input_args path with
-                  None -> None
+                | None -> None
                 | Some(exec_rule) ->
                   Some (fun h_opt cont ->
                     begin match h_opt with
-                      None -> cont None
+                    | None -> cont None
                     | Some h ->
                       (* consume from_symb *)
                       let result_opt =
@@ -1762,9 +1864,17 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                           match htodo with
                             [] -> None (* todo: can happen if predicate is only present under conditions that contain non-input variables *)
                           | (Chunk (found_symb, found_targs, found_coef, found_ts, _) as chunk)::htodo ->
-                            if (predname_eq outer_symb found_symb) && 
-                               (let actuals = ((match actual_this_opt with None -> [] | Some t -> [t]) @ actual_indices @ actual_input_args) in
-                               (for_all2 definitely_equal (take (List.length actuals) found_ts)) actuals) then
+                            let actual_this_opt = actual_this_opt |> Option.map @@ fun this_type_name_and_term ->
+                              begin match dialect, outer_inst_pred_info_opt with
+                              | Some Cxx, Some family ->
+                                (* Compute family target term *)
+                                family, base_addr outer_l this_type_name_and_term family
+                              | _ ->
+                                this_type_name_and_term
+                              end
+                            in
+                            let actuals = (actual_this_opt |> Option.map snd |> Option.to_list) @ actual_indices @ actual_input_args in
+                            if predname_eq outer_symb found_symb && for_all2 definitely_equal (take (List.length actuals) found_ts) actuals then
                                Some ((chunk, hdone @ htodo, found_targs, found_coef, found_ts))
                             else
                               let (osymb, _) = outer_symb in
@@ -1773,7 +1883,6 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                                 None -> iter (chunk::hdone) htodo
                               | Some (symbol, symbol_term, ctor_args, _) -> 
                                 if symbol_term == osymb then
-                                  let actuals = (match actual_this_opt with None -> [] | Some t -> [t]) @ actual_indices @ actual_input_args in
                                   if for_all2 definitely_equal (take (List.length actuals) (ctor_args @ found_ts)) actuals then
                                     Some ((chunk, hdone @ htodo, found_targs, found_coef, ctor_args @ found_ts))
                                   else 
@@ -1788,14 +1897,20 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                         None -> cont None
                       | Some ((Chunk (consumed_symb, consumed_targs, consumed_coef, consumed_ts, consumed_size), h, found_targs, found_coef, found_ts)) -> 
                         (* produce from_symb body *)
-                        let full_env = List.map2 (fun (x, tp0) t -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term t tp tp0)) outer_formal_args (drop ((List.length actual_indices) + (match actual_this_opt with None -> 0 | Some _ -> 1)) found_ts) in 
-                        let full_env = match actual_this_opt with None -> full_env | Some t -> ("this", t) :: full_env in
+                        let full_env = List.map2 
+                          (fun (x, tp0) t -> 
+                            let tp = instantiate_type tpenv tp0 in 
+                            (x, prover_convert_term t tp tp0)) 
+                            outer_formal_args 
+                            (drop ((List.length actual_indices) + (match actual_this_opt with None -> 0 | Some _ -> 1)) found_ts) 
+                        in 
+                        let full_env = full_env |> env_with_this_opt actual_this_opt in
                         let ghostenv = [] in
                         let produce_coef = if is_dummy_frac_term found_coef then get_dummy_frac_term () else found_coef in
-                        with_context PushSubcontext $. fun () ->
-                        with_context (Executing (h, full_env, outer_l, "Auto-opening predicate")) $. fun () ->
-                          produce_asn tpenv h ghostenv full_env outer_wbody produce_coef None None $. fun h ghostenv env ->
-                            with_context PopSubcontext $. fun () ->
+                        with_context PushSubcontext @@ fun () ->
+                        with_context (Executing (h, full_env, outer_l, "Auto-opening predicate")) @@ fun () ->
+                          produce_asn tpenv h ghostenv full_env outer_wbody produce_coef None None @@ fun h ghostenv env ->
+                            with_context PopSubcontext @@ fun () ->
                             (* perform remaining opens *)
                             if is_dummy_frac_term found_coef then
                               exec_rule (Some (Chunk(consumed_symb, consumed_targs, get_dummy_frac_term () , consumed_ts, consumed_size) :: h)) cont
@@ -1805,47 +1920,53 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     end
                   )
               else
+                (* conditions were not met *)
                 None
           in
           let try_apply_rule hdone htodo =
-            let rec try_apply_rule0 hdone htodo = 
+            (* Find a heap chunk with the correct name and indices to apply the rule *)
+            let rec try_apply_rule_aux hdone htodo = 
               match htodo with
-                [] -> None
+              | [] -> None
               | ((Chunk (actual_name, actual_targs, actual_coef, actual_ts, _)) as chnk) :: rest ->
+                  (* Check if chunk name and indices match the ones we need to apply the rule *)
                   if (predname_eq actual_name (from_symb, true)) && (
                        let indices0 = match List.hd path with
-                         (_, _, _, _, true, _, _, _, _, _, _, _, _, _, _, _) ->  (take (List.length indices) (List.tl actual_ts))
-                       | (_, _, _, _, false, _, _, _, _, _, _, _, _, _, _, _) -> (take (List.length indices) actual_ts)
+                         (_, _, _, _, Some _, _, _, _, _, _, _, _, _, _, _, _) ->  (take (List.length indices) (List.tl actual_ts)) (* outer is instance pred *)
+                       | (_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) -> (take (List.length indices) actual_ts)
                        in
                         (for_all2 definitely_equal indices0 indices)
                        ) 
                   then
+                    (* match found, find out if we can apply the rule *)
                     let (actual_target_opt, actual_indices, actual_inputs) = 
                       match List.hd path with
-                        (_, _, _, _, true, _, _, _, _, _, _, _, _, _, _, _) ->  (Some (List.hd actual_ts), indices, (drop (List.length indices) (List.tl actual_ts)))
-                      | (_, _, _, _, false, _, _, _, _, _, _, _, _, _, _, _) -> (None, indices, (drop (List.length indices) actual_ts))
+                      | (_, _, _, _, Some family_name, _, [index_name], _, _, _, _, _, _, _, _, _) ->  
+                          let family_this_term = List.hd actual_ts in
+                          let parent_ptr = index_target family_this_term ~family_name ~index_name in
+                          (Some (index_name, parent_ptr), indices, (drop (List.length indices) (List.tl actual_ts)))
+                      | (_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) -> (None, indices, (drop (List.length indices) actual_ts))
                     in
                     begin match try_apply_rule_core actual_target_opt actual_targs actual_indices actual_inputs path with
-                      None -> try_apply_rule0 (chnk :: hdone) rest
+                    | None -> try_apply_rule_aux (chnk :: hdone) rest
                     | Some exec_rule -> Some exec_rule
                     end
                   else  
+                    (* match not found, check if we can use a ctor application in order to apply the rule *)
                     let (fsymb, literal) = actual_name in 
                     begin match try_assq fsymb !pred_ctor_applications with
-                      None -> try_apply_rule0 (chnk :: hdone) rest
+                    | None -> try_apply_rule_aux (chnk :: hdone) rest
                     | Some (symbol, symbol_term, ctor_args, _) -> 
-                        if from_symb == symbol_term then
-                          begin match try_apply_rule_core None actual_targs [] (ctor_args @ actual_ts) path with
-                            None -> try_apply_rule0 (chnk :: hdone) rest
-                          | Some exec_rule -> Some exec_rule
-                          end
-                        else
-                          try_apply_rule0 (chnk :: hdone) rest
+                      if from_symb == symbol_term then
+                        begin match try_apply_rule_core None actual_targs [] (ctor_args @ actual_ts) path with
+                        | None -> try_apply_rule_aux (chnk :: hdone) rest
+                        | Some exec_rule -> Some exec_rule
+                        end
+                      else
+                        try_apply_rule_aux (chnk :: hdone) rest
                     end
-                    
-              (*| chnk :: rest -> try_apply_rule0 (chnk :: hdone) rest*)
             in
-            try_apply_rule0 hdone htodo
+            try_apply_rule_aux hdone htodo
           in
           if terms_are_well_typed then
             match try_apply_rule [] h with

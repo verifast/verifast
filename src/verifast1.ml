@@ -93,7 +93,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let {reportRange; reportUseSite; reportExecutionForest; reportStmt; reportStmtExec; reportDirective} = callbacks
 
-  let type_info_type = RefType (StructType "std::type_info")
+  let type_info_name = "std::type_info"
+  let type_info_struct_type = StructType type_info_name
+  let type_info_ref_type = RefType type_info_struct_type
+  let type_info_ptr_type = PtrType type_info_struct_type
 
   let reportMacroCall l0u l0d =
     reportUseSite DeclKind_Macro l0d l0u
@@ -2024,7 +2027,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match remaining with
       | [] -> smap
       | (sn, (l, body_opt, attrs)) :: remaining ->
-        let type_info = get_unique_var_symb (sn ^ "_type_info") type_info_type in
+        let type_info = get_unique_var_symb (sn ^ "_type_info") type_info_ref_type in
         let s = mk_sizeof type_info in
         let packed = ref false in
         List.iter (function
@@ -2920,7 +2923,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | (sn, (l, Some _, _, _, _)) ->
         let arg = PtrType (StructType sn) in
         let args =
-          if is_polymorphic_struct sn then [arg; PtrType (StructType "std::type_info")]
+          if is_polymorphic_struct sn then [arg; type_info_ptr_type]
           else [arg]
         in
         [sn, mk_predfam ("new_block_" ^ sn) l [] 0 args (Some 1) Inductiveness_Inductive]
@@ -3149,7 +3152,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       structmap1 |> List.fold_left (fun (pred_fams, vtypes) s ->
         match s with
         | sn, (l, Some (_, _, true), _, _, _) -> 
-          let pred = mk_predfam (vtype_pred_name sn) l [] 0 [PtrType (StructType sn); PtrType (StructType "std::type_info")] (Some 1) Inductiveness_Inductive in
+          let pred = mk_predfam (vtype_pred_name sn) l [] 0 [PtrType (StructType sn); type_info_ptr_type] (Some 1) Inductiveness_Inductive in
           (pred :: pred_fams), ((sn, pred) :: vtypes)
         | _ -> pred_fams, vtypes
       ) (predfammap1, [])
@@ -4116,7 +4119,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | RefType t -> t
         | _ -> t
       in
-      TypeInfo (l, t), type_info_type, None
+      TypeInfo (l, t), type_info_ref_type, None
     | StringLit (l, s) ->
       if inAnnotation = Some true then
         (* TODO: Do the right thing for non-ASCII characters *)
@@ -4261,7 +4264,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           (targs, tpenv)
       in
       let func_call () =
-        match match try_assoc g tenv with None -> None | Some tp -> Some (unfold_inferred_type tp) with
+        match try_assoc g tenv |> Option.map unfold_inferred_type with
           Some (PtrType (FuncType ftn)) ->
           let (_, gh, tparams, rt, ftxmap, xmap, pre, post, terminates, ft_predfammap) =
             match try_assoc ftn functypemap with
@@ -5860,7 +5863,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               WInstPredAsn (l, Some w, sn, ExtensibleClass, family, g, index, wpats), tenv, []
             | _ -> 
               let wpats, tenv = check_pats (pn, ilist) l [] tenv (List.map snd pmap) pats in
-              let index = check_expr_t (pn, ilist) [] tenv (Some true) index (PtrType (StructType "std::type_info")) in
+              let index = check_expr_t (pn, ilist) [] tenv (Some true) index type_info_ptr_type in
               WInstPredAsn (l, Some w, sn, ExtensibleClass, family, g, index, wpats), tenv, []
           in
           check_inst_pred_asn l sn g check_call (error l sn)
@@ -6292,7 +6295,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             B0_vtype(s, t) &*& ... &*& Bn_vtype(s, t)
       *)
       let mk_pred_inst l sn body = 
-        let params = [(PtrTypeExpr (l, (StructTypeExpr (l, Some sn, None, []))), "s"); (PtrTypeExpr (l, (StructTypeExpr (l, Some "std::type_info", None, []))), "t")] in
+        let params = [(PtrTypeExpr (l, (StructTypeExpr (l, Some sn, None, []))), "s"); (PtrTypeExpr (l, (StructTypeExpr (l, Some type_info_name, None, []))), "t")] in
         mk_pred_inst l ("", []) (vtype_pred_name sn) [] [] params body 
       in
       let base_vtype l base = CallExpr (l, (vtype_pred_name base), [], [], [LitPat (Var (l, "s")); LitPat (Var (l, "t"))], Static) in
