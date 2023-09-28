@@ -7101,7 +7101,7 @@ let check_if_list_is_defined () =
         match scope with
           LocalVar -> (try List.assoc x env with Not_found -> assert_false [] env l (Printf.sprintf "Unbound variable '%s'" x) None)
         | PureCtor -> let Some (lg, tparams, t, [], s) = try_assoc x purefuncmap in mk_app s []
-        | FuncName -> let () = Printf.sprintf "Assoc %s in all func name terms" x |> print_endline in List.assoc x all_funcnameterms
+        | FuncName -> List.assoc x all_funcnameterms
         | PredFamName -> let Some (_, _, _, _, symb, _, _) = try_assoc x predfammap in symb
         | EnumElemName n -> ctxt#mk_intlit_of_string (string_of_big_int n)
         | GlobalName ->

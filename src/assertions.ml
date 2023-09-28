@@ -585,7 +585,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match (pats, tps0, tps, ts) with
       (pat::pats, tp0::tps0, tp::tps, t::ts) ->
       let isInputParam = index < inputParamCount in
-      match_pat h l ghostenv env env' isInputParam pat tp0 tp t cont_nomatch  @@ fun ghostenv env env' ->
+      match_pat h l ghostenv env env' isInputParam pat tp0 tp t cont_nomatch @@ fun ghostenv env env' ->
       match_pats h l ghostenv env env' inputParamCount (index + 1) pats tps0 tps ts cont_nomatch cont
     | ([], [], [], []) -> cont ghostenv env env'
   
@@ -1599,7 +1599,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let index_target family_term ~family_name ~index_name =
       match dialect with
       | Some Cxx ->
-        let parent_field_ptr_symb = get_pure_func_symb "parent_field_ptr" |> fst in
+        let field_ptr_parent_symb = get_pure_func_symb "field_ptr_parent" |> fst in
         let rec family_to_derived_offsets derived_type_name found_offsets =
           if derived_type_name = family_name then
             found_offsets
@@ -1614,7 +1614,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             family_to_derived_offsets base_name (base_offset :: found_offsets)
         in      
         let offsets = family_to_derived_offsets index_name [] in
-        offsets |> List.fold_left (fun addr offset -> ctxt#mk_app parent_field_ptr_symb [addr; offset]) family_term
+        offsets |> List.fold_left (fun addr offset -> ctxt#mk_app field_ptr_parent_symb [addr; offset]) family_term
       | _ ->
         family_term
     in
@@ -1844,7 +1844,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   begin match dialect, path, inner_inst_pred_info_opt with
                   | Some Cxx, [], Some (family, _, _) ->
                     (* Path is empty. Hence, in the next recursive call the 'wanted' terms will be checked against the 'actual' terms.
-                       Tehrefore, we compute the family target term that is present in the predicate chunk as when we could close it. *)
+                       Therefore, we compute the family target term that is present in the predicate chunk as when we could close it. *)
                     family, base_addr outer_l this_type_name_and_term family
                   | _ ->
                     this_type_name_and_term
