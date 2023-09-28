@@ -760,6 +760,32 @@ and context () =
     s#set_fpclauses [boxed_bool_symbol, fun _ [b] -> b];
     s
   in
+  let rec simplify t =
+    match t with
+    | Iff (t1, t2) -> Iff (simplify t1, simplify t2)
+    | Eq (t1, t2) -> Eq (simplify t1, simplify t2)
+    | Le (t1, t2) -> Le (simplify t1, simplify t2)
+    | Lt (t1, t2) -> Lt (simplify t1, simplify t2)
+    | Not t -> Not (simplify t)
+    | And (t1, t2) -> And (simplify t1, simplify t2)
+    | Or (t1, t2) -> Or (simplify t1, simplify t2)
+    | Add (t1, t2) -> Add (simplify t1, simplify t2)
+    | Sub (t1, t2) -> Sub (simplify t1, simplify t2)
+    | Mul (t1, t2) -> Mul (simplify t1, simplify t2)
+    | App (parent_sym, [target; App (parent_offset_sym, [], _) as parent_offset], cached) when parent_sym#name = "field_ptr_parent" -> 
+      begin match simplify target with
+      | App (child_sym, [child_target; _; App (child_offset_sym, [], _)], _) when child_sym#name = "field_ptr" && parent_offset_sym#name = child_offset_sym#name ->
+        child_target
+      | simpl -> 
+        App (parent_sym, [simpl; parent_offset], cached)
+      end
+    | App (sym, terms, cached) -> 
+      App (sym, terms |> List.map simplify, cached)
+    | IfThenElse (t1, t2, t3) -> IfThenElse (simplify t1, simplify t2, simplify t3)
+    | RealLe (t1, t2) -> RealLe (simplify t1, simplify t2)
+    | Implies (t1, t2) -> Implies (simplify t1, simplify t2)
+    | t -> t
+  in
   object (self)
     val eq_symbol = new symbol Uninterp "=="
     val iff_symbol = new symbol Uninterp "<==>"
@@ -1780,5 +1806,5 @@ and context () =
           )
         | _ -> failwith "Redux supports only symbol applications at the top level of axiom triggers."
       )
-    method simplify (t: (symbol, termnode) term): ((symbol, termnode) term) option = None
+    method simplify (t: (symbol, termnode) term): ((symbol, termnode) term) option = Some (simplify t)
   end

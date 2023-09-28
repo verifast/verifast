@@ -1,5 +1,3 @@
-// verifast_options{prover:z3v4.5}
-
 class Target;
 
 class Source {
