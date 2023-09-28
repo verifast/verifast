@@ -657,5 +657,6 @@ cd ..
     verifast -c destructors.cpp
     verifast -c -disable_overflow_check lvalue_refs.cpp
     verifast -c typeid.cpp
+    verifast -c ghost_field.cpp
   cd ..
 end_parallel

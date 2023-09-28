@@ -369,8 +369,6 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
           let decls, fields, inst_preds =
             mems |> List.fold_left (fun (decls, fields, inst_preds) mem ->
               match mem with
-              | Cxx_fe_sig.CxxFieldMem (VF.Field (l, Ghost, _, _, _, _, _, _)) ->
-                error l "Ghost fields are not supported."
               | Cxx_fe_sig.CxxFieldMem field ->
                 decls, field :: fields, inst_preds
               | Cxx_fe_sig.CxxInstPredMem pred ->
@@ -925,7 +923,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     headers
 
   (**
-    [update_file_mapping file] updates the mapping from [file]'s file descriptor to its name and return the mapping.
+    [update_file_mapping file] updates the mapping from [file]'s file descriptor to its name and returns the mapping.
   *)
   let update_file_mapping (file: R.File.t): int * string =
     let open R.File in
