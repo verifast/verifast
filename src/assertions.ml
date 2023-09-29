@@ -1455,7 +1455,24 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   (** direct edges from a precise predicate or predicate family to other precise predicates 
      - each element of path is of the form:
-       (outer_l, outer_symb, outer_nb_curried, outer_fun_sym, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds)
+      (
+        outer_l, 
+        outer_symb, 
+        outer_nb_curried, 
+        outer_fun_sym_opt,        | Present for predicate constructor
+        outer_inst_pred_info_opt, | Family name if outer is instance predicate
+        outer_formal_targs, 
+        outer_actual_indices,     | List of strings. E.g., class/struct name for instance predicate
+        outer_formal_args, 
+        outer_formal_input_args, 
+        outer_wbody, 
+        inner_frac_expr_opt, 
+        inner_inst_pred_info_opt, | (inner_family_name, inner_target_expr_static_type_name, inner_target_expr) if inner is instance predicate
+        inner_formal_targs, 
+        inner_formal_indices, 
+        inner_input_exprs, 
+        conds                     | List of expressions that must hold in order to take the path
+      )
   *)
   let pred_fam_contains_edges =
     flatmap
