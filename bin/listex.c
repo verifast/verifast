@@ -275,6 +275,18 @@ lemma void drop_append<t>(int n, list<t> xs, list<t> ys)
     }
 }
 
+lemma void drop_append_le<t>(int n, list<t> xs, list<t> ys)
+    requires 0 <= n &*& n <= length(xs);
+    ensures drop(n, append(xs, ys)) == append(drop(n, xs), ys);
+{
+    switch (xs) {
+        case nil:
+        case cons(x, xs0):
+            if (0 < n)
+                drop_append_le(n - 1, xs0, ys);
+    }
+}
+
 lemma_auto void remove_all_nil<t>(list<t> xs)
     requires true;
     ensures remove_all(xs, nil) == nil;

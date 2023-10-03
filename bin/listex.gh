@@ -115,6 +115,10 @@ lemma void drop_append<t>(int n, list<t> xs, list<t> ys);
     requires length(xs) <= n;
     ensures drop(n, append(xs, ys)) == drop(n - length(xs), ys);
 
+lemma void drop_append_le<t>(int n, list<t> xs, list<t> ys);
+    requires 0 <= n &*& n <= length(xs);
+    ensures drop(n, append(xs, ys)) == append(drop(n, xs), ys);
+
 fixpoint list<t> remove_all<t>(list<t> xs, list<t> ys) {
     switch (xs) {
         case nil: return ys;
