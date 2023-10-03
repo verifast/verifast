@@ -95,6 +95,7 @@ void ticketlock_classic_acquire(ticketlock_classic lock)
   //@ open ticketlock_classic(lock, level, inv);
   //@ box signalsBox = lock->signalsBox;
   //@ assert level == cons(?level_max_length, ?level0);
+  //@ int acquireThread = currentThread;
   {
     /*@
     predicate wait_inv(int owner, void *func, list<pathcomp> p1) =
@@ -154,7 +155,7 @@ void ticketlock_classic_acquire(ticketlock_classic lock)
       open wait_inv(?owner0, ?func0, ?p0);
       close wait_inv(owner0, func0, p0);
       leak wait_inv(owner0, func0, p0);
-      assert obs(?p1, _);
+      assert obs_(acquireThread, ?p1, _);
       open ticketlock_classic_inv(level, inv, signalsBox)(?owner, false);
       void *signal = create_signal();
       init_signal(signal, append(level, {0}));
@@ -203,7 +204,7 @@ void ticketlock_classic_release(ticketlock_classic lock)
       obs(p, remove(ob, obs));
     @*/
     /*@
-    produce_lemma_function_pointer_chunk ticketlock_release_ghost_op(ticketlock_classic_inv(level, inv, signalsBox), ticket, pre, post, currentThread)() {
+    produce_lemma_function_pointer_chunk ticketlock_release_ghost_op(ticketlock_classic_inv(level, inv, signalsBox), ticket, pre, post)() {
       open pre();
       open ticketlock_classic_inv(level, inv, signalsBox)(ticket, true);
       consuming_box_predicate growing_list(signalsBox, ?signals)

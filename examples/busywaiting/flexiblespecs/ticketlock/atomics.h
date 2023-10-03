@@ -26,6 +26,8 @@ lemma void close_atomic_space(void *name, predicate() inv);
 // A fixpoint that may be useful in clients of this header.
 fixpoint bool space_name_lt(void *name1, pair<void *, predicate()> space) { return func_lt(fst(space), name1); }
 
+fixpoint bool func_gt(void *name1, void *name2) { return func_lt(name2, name1); }
+
 @*/
 
 /*@

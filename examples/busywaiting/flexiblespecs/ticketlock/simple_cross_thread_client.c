@@ -175,7 +175,7 @@ requires
     predicate post() = [1/2]g.lockHeld |-> false;
     @*/
     /*@
-    produce_lemma_function_pointer_chunk ticketlock_release_ghost_op(ticketlock_inv, ticket, pre, post, currentThread)() {
+    produce_lemma_function_pointer_chunk ticketlock_release_ghost_op(ticketlock_inv, ticket, pre, post)() {
       open pre();
       open ticketlock_inv(?owner, true);
       g.lockHeld = false;
