@@ -14,22 +14,22 @@ typedef struct ticketlock_classic *ticketlock_classic;
 
 fixpoint int ticketlock_classic_nb_level_dims() { return 1 + ticketlock_nb_level_dims; } // TODO: Hide this fixpoint body from clients.
 
-predicate ticketlock_classic(ticketlock_classic lock; list<int> level, predicate() inv);
+predicate ticketlock_classic(ticketlock_classic lock; level level, predicate() inv);
 
 @*/
 
 ticketlock_classic create_ticketlock_classic();
 /*@
 requires
-    exists<pair<list<int>, predicate()> >(pair(?level, ?inv)) &*&
-    level == cons(?level_max_length, ?level0) &*& length(level0) + ticketlock_classic_nb_level_dims <= level_max_length &*&
+    exists<pair<level, predicate()> >(pair(?level, ?inv)) &*&
+    ticketlock_classic_nb_level_dims <= level_subspace_nb_dims(level) &*&
     inv();
 @*/
 //@ ensures ticketlock_classic(result, level, inv);
 
 /*@
 
-predicate ticketlock_classic_held(ticketlock_classic lock, list<int> level, predicate() inv, real frac, pair<void *, list<int> > ob);
+predicate ticketlock_classic_held(ticketlock_classic lock, level level, predicate() inv, real frac, pair<void *, level> ob);
 
 @*/
 void ticketlock_classic_acquire(ticketlock_classic lock);

@@ -16,23 +16,23 @@ lemma_auto void ticketlock_nb_level_dims_nonneg();
     requires true;
     ensures 0 <= ticketlock_nb_level_dims();
 
-predicate ticketlock(ticketlock lock; list<int> level, predicate(int, bool) inv);
-predicate ticketlock_held(ticketlock lock, list<int> level, predicate(int, bool) inv, real f, int ticket);
+predicate ticketlock(ticketlock lock; level level, predicate(int, bool) inv);
+predicate ticketlock_held(ticketlock lock, level level, predicate(int, bool) inv, real f, int ticket);
 
 @*/
 
 ticketlock create_ticketlock();
 /*@
 requires
-    exists<pair<list<int>, predicate(int, bool)> >(pair(?level, ?inv)) &*& inv(0, false) &*&
-    level == cons(?level_max_length, ?level0) &*& length(level0) + ticketlock_nb_level_dims <= level_max_length;
+    exists<pair<level, predicate(int, bool)> >(pair(?level, ?inv)) &*& inv(0, false) &*&
+    ticketlock_nb_level_dims <= level_subspace_nb_dims(level);
 @*/
 //@ ensures ticketlock(result, level, inv);
 //@ terminates;
 
 /*@
 
-typedef lemma void ticketlock_wait_ghost_op(list<int> level, predicate(int, bool) inv, predicate(int, void *, list<pathcomp>) wait_inv, int callerThread)(void *f);
+typedef lemma void ticketlock_wait_ghost_op(level level, predicate(int, bool) inv, predicate(int, void *, list<pathcomp>) wait_inv, int callerThread)(void *f);
     requires
         obs(?p1, ?obs) &*& forall(map(snd, obs), (level_lt)(level)) == true &*&
         inv(?owner, true) &*& 0 <= owner &*&
@@ -41,7 +41,7 @@ typedef lemma void ticketlock_wait_ghost_op(list<int> level, predicate(int, bool
     ensures
         obs(p1, obs) &*& inv(owner, true) &*& wait_inv(owner, f, p1) &*& call_perm_(currentThread, f);
 
-typedef lemma void ticketlock_acquire_ghost_op(list<pair<void *, list<int> > > obs, list<int> level, predicate(int, bool) inv, predicate(int, void *, list<pathcomp>) wait_inv, predicate(int) post, int callerThread)();
+typedef lemma void ticketlock_acquire_ghost_op(list<pair<void *, level> > obs, level level, predicate(int, bool) inv, predicate(int, void *, list<pathcomp>) wait_inv, predicate(int) post, int callerThread)();
     requires
         obs_(callerThread, ?p1, obs) &*&
         inv(?owner, false) &*& wait_inv(_, _, ?p0) &*& is_ancestor_of(p0, p1) == true;

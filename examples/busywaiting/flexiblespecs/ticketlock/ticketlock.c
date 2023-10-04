@@ -8,7 +8,7 @@
 //@ #include <quantifiers.gh>
 
 typedef struct ticketlock {
-    //@ list<int> level;
+    //@ level level;
     //@ predicate(int, bool) inv_;
     ticketlock_strong lock;
 } *ticketlock;
@@ -20,15 +20,15 @@ lemma_auto void ticketlock_nb_level_dims_nonneg()
     ensures 0 <= ticketlock_nb_level_dims();
 {}
 
-predicate ticketlock(ticketlock lock; list<int> level, predicate(int, bool) inv) =
+predicate ticketlock(ticketlock lock; level level, predicate(int, bool) inv) =
     lock->level |-> level &*& lock->inv_ |-> inv &*& malloc_block_ticketlock(lock) &*&
-    level == cons(?level_max_length, ?level0) &*& length(level0) + ticketlock_nb_level_dims <= level_max_length &*&
+    ticketlock_nb_level_dims <= level_subspace_nb_dims(level) &*&
     lock->lock |-> ?innerLock &*&
     ticketlock_strong(innerLock, inv);
 
-predicate ticketlock_held(ticketlock lock, list<int> level, predicate(int, bool) inv, real f, int ticket) =
+predicate ticketlock_held(ticketlock lock, level level, predicate(int, bool) inv, real f, int ticket) =
     [f]lock->level |-> level &*& [f]lock->inv_ |-> inv &*& [f]malloc_block_ticketlock(lock) &*&
-    level == cons(?level_max_length, ?level0) &*& length(level0) + ticketlock_nb_level_dims <= level_max_length &*&
+    ticketlock_nb_level_dims <= level_subspace_nb_dims(level) &*&
     [f]lock->lock |-> ?innerLock &*&
     ticketlock_strong_locked(innerLock, inv, f, ticket);
 
@@ -38,8 +38,8 @@ predicate ticketlock_held(ticketlock lock, list<int> level, predicate(int, bool)
 ticketlock create_ticketlock()
 /*@
 requires
-    exists<pair<list<int>, predicate(int, bool)> >(pair(?level, ?inv)) &*& inv(0, false) &*&
-    level == cons(?level_max_length, ?level0) &*& length(level0) + ticketlock_nb_level_dims <= level_max_length;
+    exists<pair<level, predicate(int, bool)> >(pair(?level, ?inv)) &*& inv(0, false) &*&
+    ticketlock_nb_level_dims <= level_subspace_nb_dims(level);
 @*/
 //@ ensures ticketlock(result, level, inv);
 //@ terminates;
@@ -69,7 +69,7 @@ requires
 //@ terminates;
 {
     //@ open ticketlock(lock, level, inv);
-    //@ assert level == cons(?level_max_length, ?level0);
+    //@ assert level == level(?levelFunc, cons(?level_max_length, ?level0));
     //@ produce_func_lt(ticketlock_strong_acquire);
     {
         /*@
@@ -94,10 +94,10 @@ requires
                 open call_below_perms(_, _, _);
             }
             if (!forall(map(snd, obs), (level_lt)(level))) {
-                list<int> badLevel = not_forall(map(snd, obs), (level_lt)(level));
+                level badLevel = not_forall(map(snd, obs), (level_lt)(level));
                 forall_elim(map(snd, obs), (all_sublevels_lt)(ticketlock_nb_level_dims, level), badLevel);
-                assert badLevel == cons(?badLevel_max_length, ?badLevel0);
-                all_sublevel0s_lt_level0_lt(level_max_length, level0, {}, badLevel0);
+                assert badLevel == level(_, cons(?badLevel_max_length, ?badLevel0));
+                lex0_subspace_lt_lex0_lt(level_max_length, level0, {}, badLevel0);
                 assert false;
             }
             is_ancestor_of_refl(p);

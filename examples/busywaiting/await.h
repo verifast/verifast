@@ -5,13 +5,13 @@
 
 typedef bool condition
     /*@(
-    list<int> mutexLevel,
-    list<pair<void *, list<int> > > obs,
+    level mutexLevel,
+    list<pair<void *, level> > obs,
     predicate() inv,
     predicate(list<pathcomp> phase, void *) P,
     predicate(list<pathcomp> phase) Q,
-    predicate(list<pathcomp> phase, void *data, void* signal, list<int> level) R,
-    list<pair<void *, list<int> > > signals
+    predicate(list<pathcomp> phase, void *data, void* signal, level level) R,
+    list<pair<void *, level> > signals
     )@*/
     (void *data);
 //@ requires obs(?phase0, cons(?ob, obs)) &*& inv() &*& P(phase0, data) &*& level_lt(mutexLevel, level_of(ob)) == true;
@@ -28,7 +28,7 @@ ensures
 
 /*@
 
-typedef lemma void await_viewshift(predicate(list<pathcomp>, void *, void *, list<int>) R, predicate() inv, void *data, predicate(list<pathcomp> phase, void *data) P)();
+typedef lemma void await_viewshift(predicate(list<pathcomp>, void *, void *, level) R, predicate() inv, void *data, predicate(list<pathcomp> phase, void *data) P)();
     requires signal(?signal, ?level, false) &*& R(?phase, data, signal, level);
     ensures inv() &*& P(phase, data);
 

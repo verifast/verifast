@@ -4,7 +4,7 @@
 /*@
 
 fixpoint bool chain0_descends_at(nat max_length, fixpoint(int, list<int>) chain, int i) {
-    return i < 0 || level0_lt(int_of_nat(max_length), chain(i + 1), chain(i));
+    return i < 0 || lex0_lt(int_of_nat(max_length), chain(i + 1), chain(i));
 }
 
 fixpoint bool starts_with_from(fixpoint(int, list<int>) chain, int h, int i, int j) {
@@ -15,14 +15,14 @@ fixpoint list<int> tail_chain(fixpoint(int, list<int>) chain, int i, int j) {
     return tail(chain(i + j));
 }
 
-lemma void level0_lt_wf(nat max_length, fixpoint(int, list<int>) chain)
+lemma void lex0_lt_wf(nat max_length, fixpoint(int, list<int>) chain)
     requires forall_int((chain0_descends_at)(max_length, chain)) == true;
     ensures false;
 {
     switch (max_length) {
         case zero:
             forall_int_elim((chain0_descends_at)(max_length, chain), 0);
-            level0_lt_nonpos_max_length(0, chain(1), chain(0));
+            lex0_lt_nonpos_max_length(0, chain(1), chain(0));
             assert false;
         case succ(max_length0):
             switch (chain(0)) {
@@ -47,7 +47,7 @@ lemma void level0_lt_wf(nat max_length, fixpoint(int, list<int>) chain)
                                 assert chain(i + j + 1) == cons(?hij1, _);
                                 assert false;
                             }
-                            level0_lt_wf(max_length0, (tail_chain)(chain, i));
+                            lex0_lt_wf(max_length0, (tail_chain)(chain, i));
                             assert false;
                         }
                         int i1 = not_forall_int((starts_with_from)(chain, h, i));
@@ -84,7 +84,7 @@ lemma void level0_lt_wf(nat max_length, fixpoint(int, list<int>) chain)
                                 assert chain(i + j + 1) == cons(?hij1, _);
                                 assert false;
                             }
-                            level0_lt_wf(max_length0, (tail_chain)(chain, i));
+                            lex0_lt_wf(max_length0, (tail_chain)(chain, i));
                             assert false;
                         }
                         int i1 = not_forall_int((starts_with_from)(chain, h, i));
@@ -111,10 +111,10 @@ lemma void level0_lt_wf(nat max_length, fixpoint(int, list<int>) chain)
 }
 
 fixpoint bool chain_descends_at(fixpoint(int, list<int>) chain, int i) {
-    return i < 0 || level_lt(chain(i + 1), chain(i));
+    return i < 0 || lex_lt(chain(i + 1), chain(i));
 }
 
-lemma void level_lt_wf(fixpoint(int, list<int>) chain)
+lemma void lex_lt_wf(fixpoint(int, list<int>) chain)
     requires forall_int((chain_descends_at)(chain)) == true;
     ensures false;
 {
@@ -127,7 +127,7 @@ lemma void level_lt_wf(fixpoint(int, list<int>) chain)
             if (max_length <= 0) {
                 forall_int_elim((chain_descends_at)(chain), 0);
                 assert chain(1) == cons(max_length, ?c1t);
-                level0_lt_nonpos_max_length(max_length, c1t, c0t);
+                lex0_lt_nonpos_max_length(max_length, c1t, c0t);
                 assert false;
             }
             if (!forall_int((starts_with_from)(chain, max_length, 0))) {
@@ -153,7 +153,7 @@ lemma void level_lt_wf(fixpoint(int, list<int>) chain)
                 forall_int_elim((chain_descends_at)(chain), i);
                 assert false;
             }
-            level0_lt_wf(nat_of_int(max_length), (tail_chain)(chain, 0));
+            lex0_lt_wf(nat_of_int(max_length), (tail_chain)(chain, 0));
     }
 }
 

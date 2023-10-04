@@ -2,11 +2,11 @@
 
 /*@
 
-predicate_ctor wait_perm_(list<pathcomp> phase, void *f)(pair<void *, list<int> > signal) =
+predicate_ctor wait_perm_(list<pathcomp> phase, void *f)(pair<void *, level> signal) =
     signal == pair(?s, ?level) &*&
     wait_perm(phase, s, level, f) &*& wait_perm(phase, s, level, await_core);
 
-predicate wait_perm__(list<pathcomp> phase, void *signal, list<int> level, void *f) = wait_perm(phase, signal, level, f);
+predicate wait_perm__(list<pathcomp> phase, void *signal, level level, void *f) = wait_perm(phase, signal, level, f);
 
 @*/
 
@@ -103,7 +103,7 @@ requires
     @*/
     {
         /*@
-        lemma void iter(list<pair<void *, list<int> > > signals1)
+        lemma void iter(list<pair<void *, level> > signals1)
             requires call_below_perms(length(signals1), phase0, caller) &*& call_below_perms(length(signals1), phase0, await);
             ensures foreach(signals1, wait_perm_(phase0, condition));
         {

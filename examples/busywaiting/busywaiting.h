@@ -1,4 +1,5 @@
 // Tobias Reinhard and Bart Jacobs. Ghost signals: verifying termination of busy-waiting. 2020.
+// Justus Fasse and Bart Jacobs. Expressive modular verification of termination for busy-waiting programs. 2023.
 
 #ifndef BUSYWAITING_H
 #define BUSYWAITING_H
@@ -37,21 +38,21 @@ lemma void is_ancestor_of_trans(list<pathcomp> p1, list<pathcomp> p2, list<pathc
     }
 }
 
-fixpoint bool level0_lt(int max_length, list<int> l1, list<int> l2) {
+fixpoint bool lex0_lt(int max_length, list<int> l1, list<int> l2) {
   switch (l1) {
     case nil: return max_length > 0 && l2 != nil;
     case cons(h1, t1): return max_length > 0 &&
       switch (l2) {
         case nil: return false;
         case cons(h2, t2): return
-          0 < h2 && h1 < h2 || h1 == h2 && level0_lt(max_length - 1, t1, t2);
+          0 < h2 && h1 < h2 || h1 == h2 && lex0_lt(max_length - 1, t1, t2);
     };
   }
 }
 
-lemma void level0_lt_trans(int max_length, list<int> l1, list<int> l2, list<int> l3)
-    requires level0_lt(max_length, l1, l2) && level0_lt(max_length, l2, l3);
-    ensures level0_lt(max_length, l1, l3) == true;
+lemma void lex0_lt_trans(int max_length, list<int> l1, list<int> l2, list<int> l3)
+    requires lex0_lt(max_length, l1, l2) && lex0_lt(max_length, l2, l3);
+    ensures lex0_lt(max_length, l1, l3) == true;
 {
     switch (l1) {
         case nil:
@@ -62,18 +63,18 @@ lemma void level0_lt_trans(int max_length, list<int> l1, list<int> l2, list<int>
             assert l3 == cons(?h3, ?t3);
             if (0 < h2 && h1 < h2) {
             } else {
-                assert h1 == h2 && level0_lt(max_length - 1, t1, t2);
+                assert h1 == h2 && lex0_lt(max_length - 1, t1, t2);
                 if (0 < h3 && h2 < h3) {
                 } else {
-                    level0_lt_trans(max_length - 1, t1, t2, t3);
+                    lex0_lt_trans(max_length - 1, t1, t2, t3);
                 }
             }
     }
 }
 
-lemma void level0_lt_nonpos_max_length(int max_length, list<int> l1, list<int> l2)
+lemma void lex0_lt_nonpos_max_length(int max_length, list<int> l1, list<int> l2)
     requires max_length <= 0;
-    ensures !level0_lt(max_length, l1, l2);
+    ensures !lex0_lt(max_length, l1, l2);
 {
     switch (l1) {
         case nil:
@@ -81,76 +82,76 @@ lemma void level0_lt_nonpos_max_length(int max_length, list<int> l1, list<int> l
             switch (l2) {
                 case nil:
                 case cons(h2, t2):
-                    level0_lt_nonpos_max_length(max_length - 1, t1, t2);
+                    lex0_lt_nonpos_max_length(max_length - 1, t1, t2);
             }
     }
 }
 
-lemma void level0_lt_append(int max_length, list<int> l, list<int> l1, list<int> l2)
+lemma void lex0_lt_append(int max_length, list<int> l, list<int> l1, list<int> l2)
     requires true;
-    ensures level0_lt(max_length, append(l, l1), append(l, l2)) == level0_lt(max_length - length(l), l1, l2);
+    ensures lex0_lt(max_length, append(l, l1), append(l, l2)) == lex0_lt(max_length - length(l), l1, l2);
 {
     switch (l) {
         case nil:
         case cons(h, t):
             if (max_length <= 0)
-                level0_lt_nonpos_max_length(max_length - length(l), l1, l2);
+                lex0_lt_nonpos_max_length(max_length - length(l), l1, l2);
             else
-                level0_lt_append(max_length - 1, t, l1, l2);
+                lex0_lt_append(max_length - 1, t, l1, l2);
     }
 }
 
-fixpoint bool all_sublevel0s_lt(list<int> l1, list<int> l2) {
+fixpoint bool lex0_subspace_lt(list<int> l1, list<int> l2) {
   switch (l1) {
     case nil: return false;
     case cons(h1, t1): return
       switch (l2) {
         case nil: return false;
         case cons(h2, t2): return
-          0 < h2 && h1 < h2 || h1 == h2 && all_sublevel0s_lt(t1, t2);
+          0 < h2 && h1 < h2 || h1 == h2 && lex0_subspace_lt(t1, t2);
     };
   }
 }
 
-lemma void all_sublevel0s_lt_level0_lt(int max_length, list<int> l, list<int> l1, list<int> l2)
-    requires all_sublevel0s_lt(l, l2) == true && length(l) < max_length;
-    ensures level0_lt(max_length, append(l, l1), l2) == true;
+lemma void lex0_subspace_lt_lex0_lt(int max_length, list<int> l, list<int> l1, list<int> l2)
+    requires lex0_subspace_lt(l, l2) == true && length(l) < max_length;
+    ensures lex0_lt(max_length, append(l, l1), l2) == true;
 {
     switch (l) {
         case nil:
         case cons(h, t):
             assert l2 == cons(?h2, ?t2);
             if (h == h2)
-                all_sublevel0s_lt_level0_lt(max_length - 1, t, l1, t2);
+                lex0_subspace_lt_lex0_lt(max_length - 1, t, l1, t2);
     }
 }
 
-lemma void all_sublevel0s_lt_append(list<int> l, list<int> l1, list<int> l2)
-    requires all_sublevel0s_lt(l1, l2) == true;
-    ensures all_sublevel0s_lt(append(l, l1), append(l, l2)) == true;
+lemma void lex0_subspace_lt_append(list<int> l, list<int> l1, list<int> l2)
+    requires lex0_subspace_lt(l1, l2) == true;
+    ensures lex0_subspace_lt(append(l, l1), append(l, l2)) == true;
 {
     switch (l) {
         case nil:
         case cons(h, t):
-            all_sublevel0s_lt_append(t, l1, l2);
+            lex0_subspace_lt_append(t, l1, l2);
     }
 }
 
-lemma void all_sublevel0s_lt_append_l(list<int> l1, list<int> l, list<int> l2)
-    requires all_sublevel0s_lt(l1, l2) == true;
-    ensures all_sublevel0s_lt(append(l1, l), l2) == true;
+lemma void lex0_subspace_lt_append_l(list<int> l1, list<int> l, list<int> l2)
+    requires lex0_subspace_lt(l1, l2) == true;
+    ensures lex0_subspace_lt(append(l1, l), l2) == true;
 {
     switch (l1) {
         case nil:
         case cons(h1, t1):
             assert l2 == cons(?h2, ?t2);
             if (h1 == h2) {
-                all_sublevel0s_lt_append_l(t1, l, t2);
+                lex0_subspace_lt_append_l(t1, l, t2);
             }
     }
 }
 
-fixpoint bool all_sublevels_lt(int nb_dims, list<int> l1, list<int> l2) {
+fixpoint bool lex_subspace_lt(int nb_dims, list<int> l1, list<int> l2) {
     switch (l1) {
         case nil: return false;
         case cons(max_length1, l01): return
@@ -159,7 +160,7 @@ fixpoint bool all_sublevels_lt(int nb_dims, list<int> l1, list<int> l2) {
                 case cons(max_length2, l02): return
                     max_length1 == max_length2 &&
                     length(l01) + nb_dims <= max_length1 &&
-                    all_sublevel0s_lt(l01, l02);
+                    lex0_subspace_lt(l01, l02);
             };
     }
 }
@@ -175,20 +176,22 @@ fixpoint bool is_prefix_of<t>(list<t> xs, list<t> ys) {
     }
 }
 
-fixpoint bool level_lt(list<int> l1, list<int> l2) {
+fixpoint bool lex_lt(list<int> l1, list<int> l2) {
     switch (l1) {
         case nil: return false;
         case cons(max_length1, l01): return
             switch (l2) {
                 case nil: return false;
-                case cons(max_length2, l02): return max_length1 == max_length2 && level0_lt(max_length1, l01, l02);
+                case cons(max_length2, l02): return max_length1 == max_length2 && lex0_lt(max_length1, l01, l02);
             };
     }
 }
 
 @*/
 
-//@ predicate obs_(int thread, list<pathcomp> path, list<pair<void *, list<int> > > obs);
+//@ inductive level = level(void *func, list<int> localLevel);
+
+//@ predicate obs_(int thread, list<pathcomp> path, list<pair<void *, level> > obs);
 
 /*@
 
@@ -196,7 +199,7 @@ fixpoint bool level_lt(list<int> l1, list<int> l2) {
 
 @*/
 
-//@ fixpoint list<int> level_of(pair<void *, list<int> > ob) { return snd(ob); }
+//@ fixpoint level level_of(pair<void *, level> ob) { return snd(ob); }
 
 /*@
 
@@ -235,7 +238,7 @@ fixpoint bool le(int x, int y) { return x <= y; }
 
 @*/
 
-typedef void thread_run/*@(list<pathcomp> path, list<pair<void *, list<int> > > obs, predicate() pre)@*/();
+typedef void thread_run/*@(list<pathcomp> path, list<pair<void *, level> > obs, predicate() pre)@*/();
 //@ requires obs(cons(Forkee, path), obs) &*& pre();
 //@ ensures obs(_, nil);
 //@ terminates;
@@ -245,19 +248,45 @@ void fork(thread_run *run);
 //@ ensures obs(cons(Forker, p), remove_all(forkee_obs, obs));
 //@ terminates;
 
-typedef void thread_run_joinable/*@(list<pathcomp> path, list<pair<void *, list<int> > > obs, predicate() pre, predicate() post, list<int> level)@*/();
+typedef void thread_run_joinable/*@(list<pathcomp> path, list<pair<void *, level> > obs, predicate() pre, predicate() post, level level)@*/();
 //@ requires obs(cons(Forkee, path), cons(pair(?terminationSignal, level), obs)) &*& pre();
 //@ ensures obs(_, {pair(terminationSignal, level)}) &*& post();
 
 struct thread;
 typedef struct thread *thread;
 
-//@ predicate thread(thread thread, list<int> level, predicate() post);
+//@ predicate thread(thread thread, level level, predicate() post);
 
 thread fork_joinable(thread_run_joinable *run);
 //@ requires obs(?p, ?obs) &*& [_]is_thread_run_joinable(run, p, ?forkee_obs, ?pre, ?post, ?level) &*& length(remove_all(forkee_obs, obs)) == length(obs) - length(forkee_obs) &*& pre();
 //@ ensures obs(cons(Forker, p), remove_all(forkee_obs, obs)) &*& thread(result, level, post);
 //@ terminates;
+
+/*@
+
+fixpoint bool level_lt(level l1, level l2) {
+    return func_lt(l1->func, l2->func) || l1->func == l2->func && lex_lt(l1->localLevel, l2->localLevel);
+}
+
+fixpoint bool all_sublevels_lt(int nbDims, level l1, level l2) {
+    return func_lt(l1->func, l2->func) || l1->func == l2->func && lex_subspace_lt(nbDims, l1->localLevel, l2->localLevel);
+}
+
+fixpoint int level_subspace_nb_dims(level l) {
+    return head(l->localLevel) - length(tail(l->localLevel));
+}
+
+fixpoint level sublevel(level l, list<int> ks) {
+    switch (l) {
+        case level(f, localLevel): return level(f, append(localLevel, ks));
+    }
+}
+
+fixpoint bool func_lt_level(void *f, level l) {
+    return func_lt(f, l->func);
+}
+
+@*/
 
 void join(thread thread);
 //@ requires obs(?p, ?obs) &*& thread(thread, ?level, ?post) &*& forall(map(snd, obs), (level_lt)(level)) == true;
@@ -272,9 +301,9 @@ lemma void *create_signal();
   requires true;
   ensures signal_uninit(result);
 
-predicate signal(void *id; list<int> level, bool status);
+predicate signal(void *id; level level, bool status);
 
-lemma void init_signal(void *signal, list<int> level);
+lemma void init_signal(void *signal, level level);
   requires obs_(?thread, ?p, ?obs) &*& signal_uninit(signal);
   ensures obs_(thread, p, cons(pair(signal, level), obs)) &*& signal(signal, level, false);
 
@@ -286,9 +315,9 @@ lemma void ob_signal_not_set(void *signal);
   requires obs_(?thread, ?p, ?obs) &*& signal(signal, ?level, ?status) &*& mem(signal, map(fst, obs)) == true;
   ensures obs_(thread, p, obs) &*& signal(signal, level, status) &*& !status;
 
-predicate wait_perm(list<pathcomp> path, void *signal, list<int> level, void *func;);
+predicate wait_perm(list<pathcomp> path, void *signal, level level, void *func;);
 
-lemma void create_wait_perm(void *s, list<int> level, void *f);
+lemma void create_wait_perm(void *s, level level, void *f);
   requires call_below_perm(?p, ?f0) &*& func_lt(f, f0) == true;
   ensures wait_perm(p, s, level, f);
 

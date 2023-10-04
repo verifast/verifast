@@ -55,9 +55,9 @@ struct lock_thread {
 
 /*@
 
-predicate_ctor cell_pred(list<int> level)(int cellId) = [1/2]ghost_cell(cellId, ?signalId) &*& signal(signalId, level, false); 
+predicate_ctor cell_pred(level level)(int cellId) = [1/2]ghost_cell(cellId, ?signalId) &*& signal(signalId, level, false); 
 
-predicate_ctor lock_inv(struct lock *lock, list<int> level, predicate() inv, box growingListId, box incrBoxId)(int owner, int nextTicket, bool held) =
+predicate_ctor lock_inv(struct lock *lock, level level, predicate() inv, box growingListId, box incrBoxId)(int owner, int nextTicket, bool held) =
     incr_box(incrBoxId, owner) &*&
     growing_list(growingListId, ?cellIds) &*& length(cellIds) == nextTicket &*&
     0 <= owner &*& (held ? owner + 1 : owner) <= nextTicket &*&
@@ -73,7 +73,7 @@ predicate_ctor lock_inv(struct lock *lock, list<int> level, predicate() inv, box
     :
         inv();
 
-predicate lock(struct lock *lock, list<int> level, predicate() inv;) =
+predicate lock(struct lock *lock, level level, predicate() inv;) =
     lock->growingListId |-> ?growingListId &*&
     lock->incrBoxId |-> ?incrBoxId &*&
     lock->innerLock |-> ?innerLock &*&
@@ -84,7 +84,7 @@ predicate lock_thread(struct lock_thread *thread) =
     thread->innerThread |-> ?innerThread &*& clhlock_as_ticketlock_thread(innerThread) &*&
     malloc_block_lock_thread(thread);
 
-predicate locked(struct lock_thread *thread, struct lock *lock, list<int> level, predicate() inv, real frac, pair<void *, list<int> > ob) =
+predicate locked(struct lock_thread *thread, struct lock *lock, level level, predicate() inv, real frac, pair<void *, level> ob) =
     thread->innerThread |-> ?innerThread &*&
     malloc_block_lock_thread(thread) &*&
     [frac]lock->growingListId |-> ?growingListId &*&
@@ -97,7 +97,7 @@ predicate locked(struct lock_thread *thread, struct lock *lock, list<int> level,
 @*/
 
 struct lock *create_lock()
-    //@ requires exists<list<int> >(?level) &*& exists<predicate()>(?inv) &*& inv();
+    //@ requires exists<level>(?level) &*& exists<predicate()>(?inv) &*& inv();
     //@ ensures lock(result, level, inv);
     //@ terminates;
 {

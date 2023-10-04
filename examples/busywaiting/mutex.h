@@ -18,11 +18,11 @@ lemma_auto void mutex_nb_level_dims_nonneg();
 struct mutex;
 typedef struct mutex *mutex;
 
-//@ predicate mutex(mutex mutex; list<int> level, predicate() inv);
-//@ predicate locked(mutex mutex, list<int> level, predicate() inv, real frac, pair<void *, list<int> > ob);
+//@ predicate mutex(mutex mutex; level level, predicate() inv);
+//@ predicate locked(mutex mutex, level level, predicate() inv, real frac, pair<void *, level> ob);
 
 mutex create_mutex();
-//@ requires exists<list<int> >(?level) &*& exists<predicate()>(?inv) &*& inv() &*& level == cons(?level_max_length, ?level0) &*& length(level0) + mutex_nb_level_dims <= level_max_length;
+//@ requires exists<level>(?level) &*& exists<predicate()>(?inv) &*& inv() &*& mutex_nb_level_dims <= level_subspace_nb_dims(level);
 //@ ensures mutex(result, level, inv);
 //@ terminates;
 
@@ -38,7 +38,7 @@ void release(mutex mutex);
 
 /*@
 
-typedef lemma void release_ghost_op(int tid, list<pathcomp> p, list<pair<void *, list<int> > > obs, predicate() inv, predicate() pre, predicate() post)();
+typedef lemma void release_ghost_op(int tid, list<pathcomp> p, list<pair<void *, level> > obs, predicate() inv, predicate() pre, predicate() post)();
   requires obs(p, obs) &*& pre() &*& currentThread == tid;
   ensures obs(p, obs) &*& inv() &*& post();
 

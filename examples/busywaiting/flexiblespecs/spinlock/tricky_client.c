@@ -20,7 +20,9 @@ struct globals g;
 
 /*@
 
-predicate signal_if(void *signal, list<int> level, bool cond) =
+fixpoint level L(int level) { return level(main, {1, level}); }
+
+predicate signal_if(void *signal, level level, bool cond) =
     cond ? signal(signal, level, false) : true;
 
 predicate atomic_space_inv() =
@@ -32,9 +34,9 @@ predicate atomic_space_inv() =
     [1/3]g.main_signal |-> ?main_signal &*&
     g.done |-> ?done &*&
     [1/2]g.main_set_done |-> ?main_set_done &*& !main_set_done || done &*&
-    signal_if(thread1_signal, {1, 0}, h1) &*&
-    signal_if(thread2_signal, {1, 1}, h2 || !t2d) &*&
-    signal_if(main_signal, {1, 0}, !main_set_done);
+    signal_if(thread1_signal, L(0), h1) &*&
+    signal_if(thread2_signal, L(1), h2 || !t2d) &*&
+    signal_if(main_signal, L(0), !main_set_done);
 
 predicate spinlock_inv(bool held) =
     [1/4]g.thread1_holds_spinlock |-> ?h1 &*&
@@ -47,7 +49,7 @@ predicate spinlock_inv(bool held) =
 void thread1()
 /*@
 requires
-    obs({Forkee}, cons(pair(?terminationSignal, {1, 2}), nil)) &*& call_below_perm({}, main) &*&
+    obs({Forkee}, cons(pair(?terminationSignal, L(2)), nil)) &*& call_below_perm({}, main) &*&
     [1/3]g.spinlock |-> ?spinlock &*& [1/2]spinlock(spinlock, spinlock_inv) &*&
     pointer_within_limits(&g.done) == true &*&
     [1/3]g.thread1_signal |-> ?thread1_signal &*&
@@ -57,7 +59,7 @@ requires
     [1/3]atomic_space(main, atomic_space_inv);
 @*/
 /*@
-ensures obs(_, {pair(terminationSignal, {1, 2})}) &*&
+ensures obs(_, {pair(terminationSignal, L(2))}) &*&
     [1/3]g.spinlock |-> spinlock &*& [1/2]spinlock(spinlock, spinlock_inv) &*&
     [1/3]g.thread1_signal |-> thread1_signal &*&
     [1/3]g.thread2_signal |-> thread2_signal &*&
@@ -67,19 +69,19 @@ ensures obs(_, {pair(terminationSignal, {1, 2})}) &*&
 //@ terminates;
 {
     //@ produce_func_lt(spinlock_acquire);
-    //@ create_wait_perm(thread2_signal, {1, 1}, spinlock_acquire);
+    //@ create_wait_perm(thread2_signal, L(1), spinlock_acquire);
     {
         /*@
         predicate pre() =
-            obs({Forkee}, {pair(terminationSignal, {1, 2})}) &*&
+            obs({Forkee}, {pair(terminationSignal, L(2))}) &*&
             [1/3]atomic_space(main, atomic_space_inv) &*&
             [1/3]g.thread1_signal |-> thread1_signal &*&
             signal_uninit(thread1_signal) &*&
             [1/2]g.thread1_holds_spinlock |-> false &*&
             [1/3]g.thread2_signal |-> thread2_signal &*&
-            wait_perm({}, thread2_signal, {1, 1}, spinlock_acquire);
+            wait_perm({}, thread2_signal, L(1), spinlock_acquire);
         predicate post() =
-            obs({Forkee}, {pair(thread1_signal, {1, 0}), pair(terminationSignal, {1, 2})}) &*&
+            obs({Forkee}, {pair(thread1_signal, L(0)), pair(terminationSignal, L(2))}) &*&
             [1/3]atomic_space(main, atomic_space_inv) &*&
             [1/3]g.thread1_signal |-> thread1_signal &*&
             [1/2]g.thread1_holds_spinlock |-> true &*&
@@ -98,17 +100,17 @@ ensures obs(_, {pair(terminationSignal, {1, 2})}) &*&
             open_atomic_space(main, atomic_space_inv);
             open atomic_space_inv();
             if (held) {
-                open signal_if(g.thread2_signal, {1, 1}, true);
+                open signal_if(g.thread2_signal, L(1), true);
                 wait(g.thread2_signal);
-                close signal_if(g.thread2_signal, {1, 1}, true);
+                close signal_if(g.thread2_signal, L(1), true);
                 close pre();
             } else {
-                leak wait_perm({}, thread2_signal, {1, 1}, spinlock_acquire);
+                leak wait_perm({}, thread2_signal, L(1), spinlock_acquire);
                 g.thread1_holds_spinlock = true;
-                init_signal(g.thread1_signal, {1, 0});
+                init_signal(g.thread1_signal, L(0));
                 close post();
-                open signal_if(g.thread1_signal, {1, 0}, false);
-                close signal_if(g.thread1_signal, {1, 0}, true);
+                open signal_if(g.thread1_signal, L(0), false);
+                close signal_if(g.thread1_signal, L(0), true);
             }
             close atomic_space_inv();
             close_atomic_space(main, atomic_space_inv);
@@ -144,11 +146,11 @@ ensures obs(_, {pair(terminationSignal, {1, 2})}) &*&
         predicate pre() =
             [1/3]atomic_space(main, atomic_space_inv) &*&
             [1/2]g.thread1_holds_spinlock |-> true &*&
-            [1/3]g.thread1_signal |-> thread1_signal &*& obs({Forkee}, {pair(thread1_signal, {1, 0}), pair(terminationSignal, {1, 2})});
+            [1/3]g.thread1_signal |-> thread1_signal &*& obs({Forkee}, {pair(thread1_signal, L(0)), pair(terminationSignal, L(2))});
         predicate post() =
             [1/3]atomic_space(main, atomic_space_inv) &*&
             [1/2]g.thread1_holds_spinlock |-> false &*&
-            [1/3]g.thread1_signal |-> thread1_signal &*& obs({Forkee}, {pair(terminationSignal, {1, 2})});
+            [1/3]g.thread1_signal |-> thread1_signal &*& obs({Forkee}, {pair(terminationSignal, L(2))});
         @*/
         /*@
         produce_lemma_function_pointer_chunk spinlock_release_ghost_op(spinlock_inv, pre, post)() {
@@ -164,10 +166,10 @@ ensures obs(_, {pair(terminationSignal, {1, 2})}) &*&
             open atomic_space_inv();
             
             g.thread1_holds_spinlock = false;
-            open signal_if(g.thread1_signal, {1, 0}, true);
+            open signal_if(g.thread1_signal, L(0), true);
             set_signal(g.thread1_signal);
             leak signal(_, _, true);
-            close signal_if(g.thread1_signal, {1, 0}, false);
+            close signal_if(g.thread1_signal, L(0), false);
             
             close atomic_space_inv();
             close_atomic_space(main, atomic_space_inv);
@@ -185,7 +187,7 @@ void thread2()
 /*@
 requires
     [1/3]g.thread2_signal |-> ?thread2_signal &*&
-    obs({Forkee, Forker}, cons(pair(?terminationSignal, {1, 3}), {pair(thread2_signal, {1, 1})})) &*&
+    obs({Forkee, Forker}, cons(pair(?terminationSignal, L(3)), {pair(thread2_signal, L(1))})) &*&
     pointer_within_limits(&g.done) == true &*&
     [1/3]g.spinlock |-> ?spinlock &*& [1/3]spinlock(spinlock, spinlock_inv) &*&
     [1/3]g.thread1_signal |-> ?thread1_signal &*&
@@ -199,7 +201,7 @@ requires
 /*@
 ensures
     [1/3]g.thread2_signal |-> thread2_signal &*&
-    obs({Forkee, Forker}, {pair(terminationSignal, {1, 3})}) &*&
+    obs({Forkee, Forker}, {pair(terminationSignal, L(3))}) &*&
     [1/3]g.spinlock |-> spinlock &*& [1/3]spinlock(spinlock, spinlock_inv) &*&
     [1/3]g.thread1_signal |-> thread1_signal &*&
     [1/3]g.main_signal |-> main_signal &*&
@@ -210,18 +212,18 @@ ensures
 //@ terminates;
 {
     //@ produce_func_lt(spinlock_acquire);
-    //@ create_wait_perm(thread1_signal, {1, 0}, spinlock_acquire);
-    //@ create_wait_perm(main_signal, {1, 0}, thread2);
+    //@ create_wait_perm(thread1_signal, L(0), spinlock_acquire);
+    //@ create_wait_perm(main_signal, L(0), thread2);
     for (;;)
     /*@
     invariant
         [1/3]g.spinlock |-> spinlock &*& [1/3]spinlock(spinlock, spinlock_inv) &*&
         [1/3]g.thread1_signal |-> thread1_signal &*&
-        wait_perm({}, thread1_signal, {1, 0}, spinlock_acquire) &*&
-        wait_perm({}, main_signal, {1, 0}, thread2) &*&
+        wait_perm({}, thread1_signal, L(0), spinlock_acquire) &*&
+        wait_perm({}, main_signal, L(0), thread2) &*&
         [1/3]g.thread2_signal |-> thread2_signal &*&
         [1/3]g.main_signal |-> main_signal &*&
-        obs({Forkee, Forker}, {pair(terminationSignal, {1, 3}), pair(thread2_signal, {1, 1})}) &*&
+        obs({Forkee, Forker}, {pair(terminationSignal, L(3)), pair(thread2_signal, L(1))}) &*&
         [1/2]g.thread2_holds_spinlock |-> false &*&
         [1/2]g.thread2_knows_done |-> false &*&
         [1/3]atomic_space(main, atomic_space_inv);
@@ -230,18 +232,18 @@ ensures
         {
             /*@
             predicate pre() =
-                obs({Forkee, Forker}, {pair(terminationSignal, {1, 3}), pair(thread2_signal, {1, 1})}) &*&
+                obs({Forkee, Forker}, {pair(terminationSignal, L(3)), pair(thread2_signal, L(1))}) &*&
                 [1/3]g.thread1_signal |-> thread1_signal &*&
-                wait_perm({}, thread1_signal, {1, 0}, spinlock_acquire) &*&
+                wait_perm({}, thread1_signal, L(0), spinlock_acquire) &*&
                 [1/3]g.thread2_signal |-> thread2_signal &*&
                 [1/2]g.thread2_holds_spinlock |-> false &*&
                 [1/2]g.thread2_knows_done |-> false &*&
                 [1/3]atomic_space(main, atomic_space_inv);
             predicate post() =
                 [1/3]g.thread1_signal |-> thread1_signal &*&
-                wait_perm({}, thread1_signal, {1, 0}, spinlock_acquire) &*&
+                wait_perm({}, thread1_signal, L(0), spinlock_acquire) &*&
                 [1/3]g.thread2_signal |-> thread2_signal &*& 
-                obs({Forkee, Forker}, {pair(terminationSignal, {1, 3}), pair(thread2_signal, {1, 1})}) &*&
+                obs({Forkee, Forker}, {pair(terminationSignal, L(3)), pair(thread2_signal, L(1))}) &*&
                 [1/2]g.thread2_holds_spinlock |-> true &*&
                 [1/2]g.thread2_knows_done |-> false &*&
                 [1/3]atomic_space(main, atomic_space_inv);
@@ -260,9 +262,9 @@ ensures
                 open atomic_space_inv();
                 
                 if (held) {
-                    open signal_if(g.thread1_signal, {1, 0}, true);
+                    open signal_if(g.thread1_signal, L(0), true);
                     wait(g.thread1_signal);
-                    close signal_if(g.thread1_signal, {1, 0}, true);
+                    close signal_if(g.thread1_signal, L(0), true);
                     close pre();
                 } else {
                     g.thread2_holds_spinlock = true;
@@ -284,13 +286,13 @@ ensures
             /*@
             predicate pre() =
                 [1/3]g.main_signal |-> main_signal &*&
-                wait_perm({}, main_signal, {1, 0}, thread2) &*&
-                obs({Forkee, Forker}, {pair(terminationSignal, {1, 3}), pair(thread2_signal, {1, 1})}) &*&
+                wait_perm({}, main_signal, L(0), thread2) &*&
+                obs({Forkee, Forker}, {pair(terminationSignal, L(3)), pair(thread2_signal, L(1))}) &*&
                 [1/2]g.thread2_holds_spinlock |-> true &*& [1/2]g.thread2_knows_done |-> false;
             predicate post(int result) =
                 [1/3]g.main_signal |-> main_signal &*&
-                wait_perm({}, main_signal, {1, 0}, thread2) &*&
-                obs({Forkee, Forker}, {pair(terminationSignal, {1, 3}), pair(thread2_signal, {1, 1})}) &*&
+                wait_perm({}, main_signal, L(0), thread2) &*&
+                obs({Forkee, Forker}, {pair(terminationSignal, L(3)), pair(thread2_signal, L(1))}) &*&
                 [1/2]g.thread2_holds_spinlock |-> true &*& [1/2]g.thread2_knows_done |-> result != 0 &*&
                 result == 0 ? call_perm_(currentThread, thread2) : true;
             @*/
@@ -306,9 +308,9 @@ ensures
                 if (g.done) {
                     g.thread2_knows_done = true;
                 } else {
-                    open signal_if(g.main_signal, {1, 0}, true);
+                    open signal_if(g.main_signal, L(0), true);
                     wait(g.main_signal);
-                    close signal_if(g.main_signal, {1, 0}, true);
+                    close signal_if(g.main_signal, L(0), true);
                 }
                 
                 close post(done);
@@ -326,13 +328,13 @@ ensures
                 [1/3]g.thread2_signal |-> thread2_signal &*&
                 [1/2]g.thread2_holds_spinlock |-> true &*&
                 [1/2]g.thread2_knows_done |-> d != 0 &*&
-                obs({Forkee, Forker}, {pair(terminationSignal, {1, 3}), pair(thread2_signal, {1, 1})}) &*&
+                obs({Forkee, Forker}, {pair(terminationSignal, L(3)), pair(thread2_signal, L(1))}) &*&
                 [1/3]atomic_space(main, atomic_space_inv);
             predicate post() =
                 [1/3]g.thread2_signal |-> thread2_signal &*&
                 [1/2]g.thread2_holds_spinlock |-> false &*&
                 [1/2]g.thread2_knows_done |-> d != 0 &*&
-                obs({Forkee, Forker}, cons(pair(terminationSignal, {1, 3}), d != 0 ? nil : {pair(thread2_signal, {1, 1})})) &*&
+                obs({Forkee, Forker}, cons(pair(terminationSignal, L(3)), d != 0 ? nil : {pair(thread2_signal, L(1))})) &*&
                 [1/3]atomic_space(main, atomic_space_inv);
             @*/
             /*@
@@ -350,10 +352,10 @@ ensures
                 
                 g.thread2_holds_spinlock = false;
                 if (d != 0) {
-                    open signal_if(g.thread2_signal, {1, 1}, true);
+                    open signal_if(g.thread2_signal, L(1), true);
                     set_signal(g.thread2_signal);
-                    leak signal(thread2_signal, {1, 1}, true);
-                    close signal_if(g.thread2_signal, {1, 1}, false);
+                    leak signal(thread2_signal, L(1), true);
+                    close signal_if(g.thread2_signal, L(1), false);
                 }
                 
                 close atomic_space_inv();
@@ -369,8 +371,8 @@ ensures
         if (d)
             break;
     }
-    //@ leak wait_perm({}, thread1_signal, {1, 0}, spinlock_acquire);
-    //@ leak wait_perm({}, main_signal, {1, 0}, thread2);
+    //@ leak wait_perm({}, thread1_signal, L(0), spinlock_acquire);
+    //@ leak wait_perm({}, main_signal, L(0), thread2);
 }
 
 int main() //@ : custom_main_spec
@@ -382,16 +384,16 @@ int main() //@ : custom_main_spec
 
     //@ void *thread1_signal = g.thread1_signal = create_signal();
     //@ void *thread2_signal = g.thread2_signal = create_signal();
-    //@ init_signal(g.thread2_signal, {1, 1});
+    //@ init_signal(g.thread2_signal, L(1));
     //@ void *main_signal = g.main_signal = create_signal();
-    //@ init_signal(g.main_signal, {1, 0});
+    //@ init_signal(g.main_signal, L(0));
     //@ g.thread1_holds_spinlock = false;
     //@ g.thread2_holds_spinlock = false;
     //@ g.thread2_knows_done = false;
     //@ g.main_set_done = false;
-    //@ close signal_if(g.thread1_signal, {1, 0}, false);
-    //@ close signal_if(g.thread2_signal, {1, 1}, true);
-    //@ close signal_if(g.main_signal, {1, 0}, true);
+    //@ close signal_if(g.thread1_signal, L(0), false);
+    //@ close signal_if(g.thread2_signal, L(1), true);
+    //@ close signal_if(g.main_signal, L(0), true);
     //@ close atomic_space_inv();
     //@ create_atomic_space(main, atomic_space_inv);
     //@ close spinlock_inv(false);
@@ -444,7 +446,7 @@ int main() //@ : custom_main_spec
         @*/
         
         /*@
-        produce_function_pointer_chunk thread_run_joinable(thread1)({}, {}, thread1_pre, thread1_post, {1, 2})() {
+        produce_function_pointer_chunk thread_run_joinable(thread1)({}, {}, thread1_pre, thread1_post, L(2))() {
             open thread1_pre();
             call();
             close thread1_post();
@@ -454,7 +456,7 @@ int main() //@ : custom_main_spec
         thread t1 = fork_joinable(thread1);
         
         /*@
-        produce_function_pointer_chunk thread_run_joinable(thread2)({Forker}, {pair(thread2_signal, {1, 1})}, thread2_pre, thread2_post, {1, 3})() {
+        produce_function_pointer_chunk thread_run_joinable(thread2)({Forker}, {pair(thread2_signal, L(1))}, thread2_pre, thread2_post, L(3))() {
             open thread2_pre();
             call();
             close thread2_post();
@@ -465,7 +467,7 @@ int main() //@ : custom_main_spec
 
         {
             /*@
-            predicate pre() = [1/2]g.main_set_done |-> false &*& [1/3]g.main_signal |-> main_signal &*& obs({Forker, Forker}, {pair(main_signal, {1, 0})});
+            predicate pre() = [1/2]g.main_set_done |-> false &*& [1/3]g.main_signal |-> main_signal &*& obs({Forker, Forker}, {pair(main_signal, L(0))});
             predicate post() = [1/2]g.main_set_done |-> true &*& [1/3]g.main_signal |-> main_signal &*& obs({Forker, Forker}, {});
             @*/
             /*@
@@ -476,10 +478,10 @@ int main() //@ : custom_main_spec
                 assert is_atomic_store_int_op(?op, &g.done, 1, ?P, ?Q);
                 op();
                 
-                open signal_if(main_signal, {1, 0}, true);
+                open signal_if(main_signal, L(0), true);
                 set_signal(main_signal);
-                leak signal(main_signal, {1, 0}, true);
-                close signal_if(main_signal, {1, 0}, false);
+                leak signal(main_signal, L(0), true);
+                close signal_if(main_signal, L(0), false);
                 g.main_set_done = true;
                 
                 close atomic_space_inv();
@@ -504,9 +506,9 @@ int main() //@ : custom_main_spec
     //@ open spinlock_inv(_);
     
     //@ close_module();
-    //@ open signal_if(thread1_signal, {1, 0}, _);
-    //@ open signal_if(thread2_signal, {1, 1}, _);
-    //@ open signal_if(main_signal, {1, 0}, _);
+    //@ open signal_if(thread1_signal, L(0), _);
+    //@ open signal_if(thread2_signal, L(1), _);
+    //@ open signal_if(main_signal, L(0), _);
     
     return 0;
 }

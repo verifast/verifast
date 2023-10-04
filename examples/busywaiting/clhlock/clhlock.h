@@ -8,14 +8,14 @@ struct lock_thread;
 
 /*@
 
-predicate lock(struct lock *lock, list<int> level, predicate() inv;);
+predicate lock(struct lock *lock, level level, predicate() inv;);
 predicate lock_thread(struct lock_thread *thread);
-predicate locked(struct lock_thread *thread, struct lock *lock, list<int> level, predicate() inv, real frac, pair<void *, list<int> > ob);
+predicate locked(struct lock_thread *thread, struct lock *lock, level level, predicate() inv, real frac, pair<void *, level> ob);
 
 @*/
 
 struct lock *create_lock();
-    //@ requires exists<list<int> >(?level) &*& exists<predicate()>(?inv) &*& inv();
+    //@ requires exists<level>(?level) &*& exists<predicate()>(?inv) &*& inv();
     //@ ensures lock(result, level, inv);
     //@ terminates;
 
@@ -36,7 +36,7 @@ void release(struct lock_thread *thread);
 
 /*@
 
-typedef lemma void release_ghost_op(int threadId, predicate() inv, list<pathcomp> p, list<pair<void *, list<int> > > obs, predicate() pre, predicate(list<pathcomp>) post)();
+typedef lemma void release_ghost_op(int threadId, predicate() inv, list<pathcomp> p, list<pair<void *, level> > obs, predicate() pre, predicate(list<pathcomp>) post)();
     requires obs(?p1, obs) &*& pre() &*& currentThread == threadId &*& is_ancestor_of(p, p1) == true;
     ensures obs(p1, obs) &*& inv() &*& post(p1);
 

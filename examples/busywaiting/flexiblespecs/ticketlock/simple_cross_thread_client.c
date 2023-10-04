@@ -14,6 +14,7 @@ struct globals g;
 /*@
 
 fixpoint int N() { return 1 + ticketlock_nb_level_dims; }
+fixpoint level L(int level) { return level(main, {N, level}); }
 
 predicate ticketlock_inv(int owner, bool held) =
   [1/2]g.lockHeld |-> held;
@@ -21,12 +22,12 @@ predicate ticketlock_inv(int owner, bool held) =
 predicate_ctor atomic_space_inv(void *signal)() =
   [1/2]counter(&g.flag, ?flag) &*&
   [1/2]g.spaceRemoved |-> ?spaceRemoved &*&
-  signal(signal, {N, 1}, flag != 0) &*&
+  signal(signal, L(1), flag != 0) &*&
   flag == 0 ?
       !spaceRemoved
   :
       flag == 1 &*&
-      g.lock |-> ?lock &*& ticketlock_held(lock, {N, 0}, ticketlock_inv, 1, _) &*&
+      g.lock |-> ?lock &*& ticketlock_held(lock, L(0), ticketlock_inv, 1, _) &*&
       [1/2]counter(&g.flag, flag) &*&
       [1/2]g.lockHeld |-> true &*&
       spaceRemoved ?
@@ -43,18 +44,18 @@ predicate_ctor acquirer_pre(void *signal)() =
   [1/2]counter(&g.flag, 0) &*&
   g.lock |-> ?lock &*& [1/2]g.lockHeld |-> false &*&
   pointer_within_limits(&g.flag) == true &*&
-  ticketlock(lock, {N, 0}, ticketlock_inv);
+  ticketlock(lock, L(0), ticketlock_inv);
 
 @*/
 
 void acquirer()
 /*@
 requires
-  obs({Forkee}, cons(pair(?signal, {N, 1}), {})) &*& [1/2]atomic_space(main, atomic_space_inv(signal)) &*&
+  obs({Forkee}, cons(pair(?signal, L(1)), {})) &*& [1/2]atomic_space(main, atomic_space_inv(signal)) &*&
   [1/2]counter(&g.flag, 0) &*&
   g.lock |-> ?lock &*& [1/2]g.lockHeld |-> false &*&
   pointer_within_limits(&g.flag) == true &*&
-  ticketlock(lock, {N, 0}, ticketlock_inv);
+  ticketlock(lock, L(0), ticketlock_inv);
 @*/
 //@ ensures obs(_, {});
 //@ terminates;
@@ -62,17 +63,17 @@ requires
   {
     /*@
     predicate wait_inv(int owner, void *f, list<pathcomp> p1) = [1/2]g.lockHeld |-> false &*& owner == -1;
-    predicate post(int ticket) = obs(?p, {pair(signal, {N, 1})}) &*& [1/2]g.lockHeld |-> true;
+    predicate post(int ticket) = obs(?p, {pair(signal, L(1))}) &*& [1/2]g.lockHeld |-> true;
     @*/
     /*@
-    produce_lemma_function_pointer_chunk ticketlock_wait_ghost_op({N, 0}, ticketlock_inv, wait_inv, currentThread)(f) {
+    produce_lemma_function_pointer_chunk ticketlock_wait_ghost_op(L(0), ticketlock_inv, wait_inv, currentThread)(f) {
       open ticketlock_inv(_, _);
       open wait_inv(_, _, _);
       assert false;
     };
     @*/
     /*@
-    produce_lemma_function_pointer_chunk ticketlock_acquire_ghost_op({pair(signal, {N, 1})}, {N, 0}, ticketlock_inv, wait_inv, post, currentThread)() {
+    produce_lemma_function_pointer_chunk ticketlock_acquire_ghost_op({pair(signal, L(1))}, L(0), ticketlock_inv, wait_inv, post, currentThread)() {
       open ticketlock_inv(?owner, _);
       open wait_inv(_, _, _);
       g.lockHeld = true;
@@ -87,9 +88,9 @@ requires
   {
     /*@
     predicate pre() =
-      obs(_, cons(pair(signal, {N, 1}), {})) &*& [1/2]atomic_space(main, atomic_space_inv(signal)) &*&
+      obs(_, cons(pair(signal, L(1)), {})) &*& [1/2]atomic_space(main, atomic_space_inv(signal)) &*&
       g.lock |-> lock &*& [1/2]g.lockHeld |-> true &*& [1/2]counter(&g.flag, 0) &*&
-      ticketlock_held(lock, {N, 0}, ticketlock_inv, 1, _);
+      ticketlock_held(lock, L(0), ticketlock_inv, 1, _);
     predicate post() = obs(_, {});
     @*/
     /*@
@@ -122,20 +123,20 @@ requires
 {
   //@ open exists(_);
   //@ pathize_call_below_perm_();
-  //@ create_wait_perm(signal, {N, 1}, releaser);
+  //@ create_wait_perm(signal, L(1), releaser);
   for (;;)
   /*@
   invariant
-      obs({Forker}, {}) &*& [1/2]atomic_space(main, atomic_space_inv(signal)) &*& [1/2]g.spaceRemoved |-> false &*& wait_perm({Forker}, signal, {N, 1}, releaser);
+      obs({Forker}, {}) &*& [1/2]atomic_space(main, atomic_space_inv(signal)) &*& [1/2]g.spaceRemoved |-> false &*& wait_perm({Forker}, signal, L(1), releaser);
   @*/
   {
     unsigned long long value;
     {
       /*@
       predicate pre() =
-        obs({Forker}, {}) &*& [1/2]atomic_space(main, atomic_space_inv(signal)) &*& [1/2]g.spaceRemoved |-> false &*& wait_perm({Forker}, signal, {N, 1}, releaser);
+        obs({Forker}, {}) &*& [1/2]atomic_space(main, atomic_space_inv(signal)) &*& [1/2]g.spaceRemoved |-> false &*& wait_perm({Forker}, signal, L(1), releaser);
       predicate post(int result) =
-        obs({Forker}, {}) &*& wait_perm({Forker}, signal, {N, 1}, releaser) &*&
+        obs({Forker}, {}) &*& wait_perm({Forker}, signal, L(1), releaser) &*&
         result == 1 ?
           atomic_space(main, atomic_space_inv(signal)) &*& [1/2]g.spaceRemoved |-> true
         :
@@ -203,7 +204,7 @@ int main() //@ : custom_main_spec
 {
   //@ open_module();
   //@ void *signal = create_signal();
-  //@ init_signal(signal, {N, 1});
+  //@ init_signal(signal, L(1));
   //@ create_counter(&g.flag);
   //@ g.spaceRemoved = false;
   //@ close atomic_space_inv(signal)();
@@ -211,11 +212,11 @@ int main() //@ : custom_main_spec
   
   //@ g.lockHeld = false;
   //@ close ticketlock_inv(0, false);
-  //@ close exists(pair({N, 0}, ticketlock_inv));
+  //@ close exists(pair(L(0), ticketlock_inv));
   ticketlock lock = create_ticketlock();
   g.lock = lock;
   /*@
-  produce_function_pointer_chunk thread_run(acquirer)({}, {pair(signal, {N, 1})}, acquirer_pre(signal))() {
+  produce_function_pointer_chunk thread_run(acquirer)({}, {pair(signal, L(1))}, acquirer_pre(signal))() {
     open acquirer_pre(signal)();
     call();
   }

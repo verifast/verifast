@@ -27,7 +27,7 @@ box_class growing_list(list<void *> xs) {
 
 typedef struct spinlock_classic {
   spinlock_t spinlock;
-  //@ list<int> level;
+  //@ level level;
   //@ predicate(int, bool) inv_;
   //@ int acquireCredits;
   //@ list<void *> signals;
@@ -36,13 +36,13 @@ typedef struct spinlock_classic {
 
 /*@
 
-predicate_ctor spinlock_classic_inv(spinlock_classic_t spinlock, list<int> level, predicate(int, bool) inv, int acquireCredits, box signalsBox)(bool locked) =
+predicate_ctor spinlock_classic_inv(spinlock_classic_t spinlock, level level, predicate(int, bool) inv, int acquireCredits, box signalsBox)(bool locked) =
     growing_list(signalsBox, ?signals) &*& length(signals) <= acquireCredits &*&
     [1/2]spinlock->signals |-> signals &*&
     inv(acquireCredits - length(signals), locked) &*&
     locked ? 1 <= length(signals) &*& signal(nth(length(signals) - 1, signals), level, false) : [1/2]spinlock->signals |-> signals;
 
-predicate spinlock_classic(spinlock_classic_t spinlock; list<int> level, predicate(int, bool) inv) =
+predicate spinlock_classic(spinlock_classic_t spinlock; level level, predicate(int, bool) inv) =
     malloc_block_spinlock_classic(spinlock) &*&
     spinlock->spinlock |-> ?spinlock_ &*& spinlock->level |-> level &*& spinlock->inv_ |-> inv &*&
     spinlock->acquireCredits |-> ?acquireCredits &*&
@@ -54,7 +54,7 @@ predicate spinlock_classic(spinlock_classic_t spinlock; list<int> level, predica
 spinlock_classic_t create_spinlock_classic()
 /*@
 requires
-    exists<pair<list<int>, pair<predicate(int, bool), int> > >(pair(?level, pair(?inv, ?acquireCredits))) &*&
+    exists<pair<level, pair<predicate(int, bool), int> > >(pair(?level, pair(?inv, ?acquireCredits))) &*&
     0 <= acquireCredits &*& inv(acquireCredits, false);
 @*/
 //@ ensures spinlock_classic(result, level, inv);
@@ -80,7 +80,7 @@ typedef lemma void spinlock_classic_acquire_ghost_op(predicate(int, bool) inv, p
     requires inv(?acquireCredits, false) &*& pre() &*& atomic_spaces(?spaces) &*& forall(spaces, (space_name_lt)(spinlock_classic_acquire)) == true;
     ensures inv(acquireCredits - 1, true) &*& post() &*& 1 <= acquireCredits &*& atomic_spaces(spaces);
 
-predicate spinlock_classic_held(spinlock_classic_t spinlock, real f, predicate(int, bool) inv, pair<void *, list<int> > ob) =
+predicate spinlock_classic_held(spinlock_classic_t spinlock, real f, predicate(int, bool) inv, pair<void *, level> ob) =
     [f]malloc_block_spinlock_classic(spinlock) &*&
     [f]spinlock->spinlock |-> ?spinlock_ &*& [f]spinlock->level |-> ?level &*& [f]spinlock->inv_ |-> inv &*&
     [f]spinlock->acquireCredits |-> ?acquireCredits &*&
