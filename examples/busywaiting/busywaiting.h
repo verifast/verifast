@@ -5,6 +5,7 @@
 #define BUSYWAITING_H
 
 //@ #include <listex.gh>
+//@ #include "lexprod.gh"
 
 //@ inductive pathcomp = Forker | Forkee;
 
@@ -203,6 +204,10 @@ fixpoint bool lex_lt(list<int> l1, list<int> l2) {
 
 /*@
 
+lemma void call_perm__weaken(void *f1, void *f2);
+    requires call_perm_(?thread, f1) &*& func_lt(f2, f1) == true;
+    ensures call_perm_(thread, f2);
+
 predicate call_below_perm(list<pathcomp> path, void *f;);
 
 predicate call_below_perms(int n, list<pathcomp> path, void *f;) =
@@ -224,6 +229,12 @@ lemma void call_below_perms_weaken(int m)
     }
 }
 
+predicate call_below_perm_lex(list<pathcomp> path, void *f, list<int> localDegree;);
+
+lemma void call_below_perm_lex_weaken(list<int> newLocalDegree);
+    requires call_below_perm_lex(?p, ?f, ?d) &*& lexprod_lt(newLocalDegree, d) == true;
+    ensures call_below_perm(p, f) &*& call_below_perm_lex(p, f, newLocalDegree);
+
 lemma void pathize_call_below_perm_();
   requires obs_(?thread, ?p, ?obs) &*& call_below_perm_(thread, ?f);
   ensures obs_(thread, p, obs) &*& call_below_perm(p, f);
@@ -231,6 +242,10 @@ lemma void pathize_call_below_perm_();
 lemma void pathize_call_below_perm__multi(int n);
   requires obs_(?thread, ?p, ?obs) &*& call_below_perm_(thread, ?f);
   ensures obs_(thread, p, obs) &*& call_below_perms(n, p, f);
+
+lemma void pathize_call_below_perm__lex(list<int> d);
+  requires obs_(?thread, ?p, ?obs) &*& call_below_perm_(thread, ?f);
+  ensures obs_(thread, p, obs) &*& call_below_perm_lex(p, f, d) &*& call_below_perm(p, f);
 
 fixpoint bool lt(int x, int y) { return x < y; }
 

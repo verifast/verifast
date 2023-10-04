@@ -14,7 +14,7 @@ cd examples
   verifast unions2.c
   verifast -fno-strict-aliasing -assume_no_subobject_provenance unions2_no_subobj_prov.c
   cd busywaiting
-    verifast -c busywaiting_wf.c
+    verifast -c lexprod_wf.c busywaiting_wf.c
     verifast -c bounded_fifo.c
     cd clhlock
       verifast -c clhlock_as_ticketlock.c clhlock.c
@@ -31,6 +31,9 @@ cd examples
       cd ..
       cd ticketlock
         verifast -c -I ../.. ticketlock_strong.c ticketlock.c ticketlock_classic.c simple_cross_thread_client.c
+      cd ..
+      cd ticketlock-stronger
+        verifast -c -I ../.. ghost_lists.c ticketlock_strong.c ticketlock.c ticketlock_classic.c simple_classic_client.c simple_cross_thread_client.c cohortlock.c
       cd ..
     cd ..
   cd ..

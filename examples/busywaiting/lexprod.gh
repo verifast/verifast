@@ -1,0 +1,89 @@
+// Tobias Reinhard and Bart Jacobs. Ghost signals: verifying termination of busy-waiting. 2020.
+// Justus Fasse and Bart Jacobs. Expressive modular verification of termination for busy-waiting programs. 2023.
+
+#ifndef LEXPROD_H
+#define LEXPROD_H
+
+// Well-founded lexicographical order on equal-length lists of nonnegative integers
+
+fixpoint bool lexprod_lt(list<int> l1, list<int> l2) {
+  switch (l1) {
+    case nil: return false;
+    case cons(h1, t1): return
+      switch (l2) {
+        case nil: return false;
+        case cons(h2, t2): return
+          0 < h2 && h1 < h2 && length(t1) == length(t2) || h1 == h2 && lexprod_lt(t1, t2);
+    };
+  }
+}
+
+lemma_auto void lexprod_lt_neq(list<int> l1, list<int> l2)
+    requires lexprod_lt(l1, l2) == true;
+    ensures l1 != l2;
+{
+    switch (l1) {
+        case nil:
+        case cons(h1, t1):
+            assert l2 == cons(?h2, ?t2);
+            if (h1 == h2)
+                lexprod_lt_neq(t1, t2);
+    }
+}
+
+lemma void lexprod_lt_length_eq(list<int> l1, list<int> l2)
+    requires lexprod_lt(l1, l2) == true;
+    ensures length(l1) == length(l2);
+{
+    switch (l1) {
+        case nil:
+        case cons(h1, t1):
+            assert l2 == cons(?h2, ?t2);
+            if (h1 == h2)
+                lexprod_lt_length_eq(t1, t2);
+    }
+}
+
+lemma void lexprod_lt_trans(list<int> l1, list<int> l2, list<int> l3)
+    requires lexprod_lt(l1, l2) && lexprod_lt(l2, l3);
+    ensures lexprod_lt(l1, l3) == true;
+{
+    switch (l1) {
+        case nil:
+        case cons(h1, t1):
+            lexprod_lt_length_eq(l1, l2);
+            lexprod_lt_length_eq(l2, l3);
+            assert l2 == cons(?h2, ?t2);
+            assert l3 == cons(?h3, ?t3);
+            if (0 < h2 && h1 < h2) {
+            } else if (0 < h3 && h2 < h3) {
+            } else
+               lexprod_lt_trans(t1, t2, t3);
+    }
+}
+
+lemma void lexprod_lt_append_l(list<int> l1l, list<int> l1r, list<int> l2l, list<int> l2r)
+    requires lexprod_lt(l1l, l2l) && length(l1r) == length(l2r);
+    ensures lexprod_lt(append(l1l, l1r), append(l2l, l2r)) == true;
+{
+    switch (l1l) {
+        case nil:
+        case cons(h1l, t1l):
+            assert l2l == cons(?h2l, ?t2l);
+            if (h1l == h2l)
+                lexprod_lt_append_l(t1l, l1r, t2l, l2r);
+    }
+}
+
+lemma void lexprod_lt_append_r(list<int> l0, list<int> l1, list<int> l2)
+    requires lexprod_lt(l1, l2) == true;
+    ensures lexprod_lt(append(l0, l1), append(l0, l2)) == true;
+{
+    switch (l0) {
+        case nil:
+        case cons(h0, t0):
+            lexprod_lt_append_r(t0, l1, l2);
+    }
+}
+
+#endif
