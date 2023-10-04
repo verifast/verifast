@@ -30,7 +30,7 @@ cd examples
         verifast -c -I ../.. spinlock.c spinlock_classic.c tricky_client.c
       cd ..
       cd ticketlock
-        verifast -c -I ../.. ticketlock.c ticketlock_classic.c simple_cross_thread_client.c
+        verifast -c -I ../.. ticketlock_strong.c ticketlock.c ticketlock_classic.c simple_cross_thread_client.c
       cd ..
     cd ..
   cd ..
