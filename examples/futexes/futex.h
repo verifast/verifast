@@ -5,6 +5,8 @@
 
 /*@
 
+fixpoint int min(int x, int y) { return x <= y ? x : y; }
+
 fixpoint bool lex0_lt(int max_length, list<int> l1, list<int> l2) {
   switch (l1) {
     case nil: return max_length > 0 && l2 != nil;
@@ -179,24 +181,24 @@ lemma void destroy_futex(int *word);
 /*@
 
 typedef lemma void futex_wait_mismatch_ghost_op(predicate(int, int, int) inv, int val, predicate() pre, predicate() post)();
-    requires inv(?actualVal, ?nbWaiting, nbWaiting) &*& actualVal != val &*& pre();
-    ensures inv(actualVal, nbWaiting, nbWaiting) &*& post();
+    requires inv(?actualVal, ?nbWaiting, 0) &*& actualVal != val &*& pre();
+    ensures inv(actualVal, nbWaiting, 0) &*& post();
 
 typedef lemma void futex_wait_enqueue_ghost_op(predicate(int, int, int) inv, int val, predicate() pre, predicate() waitInv)();
-    requires inv(val, ?nbWaiting, nbWaiting) &*& pre();
-    ensures inv(val, nbWaiting + 1, nbWaiting + 1) &*& waitInv();
+    requires inv(val, ?nbWaiting, 0) &*& pre();
+    ensures inv(val, nbWaiting + 1, 0) &*& waitInv();
 
 typedef lemma void futex_wait_wait_op(list<pair<int, level> > obs, predicate() P, predicate() Q)(int id);
     requires ob(id, ?level, false) &*& forall(map(snd, obs), (level_lt)(level)) == true &*& P();
     ensures ob(id, level, false) &*& Q();
 
 typedef lemma void futex_wait_wait_ghost_op(predicate(int, int, int) inv, list<pair<int, level> > obs, predicate() waitInv)();
-    requires inv(?val, ?nbWaiting, nbWaiting) &*& is_futex_wait_wait_op(?op, obs, ?P, ?Q) &*& P() &*& waitInv();
-    ensures inv(val, nbWaiting, nbWaiting) &*& is_futex_wait_wait_op(op, obs, P, Q) &*& Q() &*& waitInv();
+    requires inv(?val, ?nbWaiting, 0) &*& is_futex_wait_wait_op(?op, obs, ?P, ?Q) &*& P() &*& waitInv();
+    ensures inv(val, nbWaiting, 0) &*& is_futex_wait_wait_op(op, obs, P, Q) &*& Q() &*& waitInv();
 
-typedef lemma void futex_wait_dequeue_ghost_op(predicate(int, int, int) inv, predicate() waitInv, predicate() post)();
-    requires inv(?val, ?nbWaiting, ?nbShouldBeWaiting) &*& nbShouldBeWaiting < nbWaiting &*& waitInv();
-    ensures inv(val, nbWaiting - 1, nbShouldBeWaiting) &*& post();
+typedef lemma void futex_wait_dequeue_ghost_op(predicate(int, int, int) inv, predicate() waitInv, predicate() post)(); // A dequeue, either spurious or because of a futex_wake
+    requires inv(?val, ?nbWaiting, ?nbToBeDequeued) &*& waitInv();
+    ensures inv(val, nbWaiting - 1, nbToBeDequeued - min(1, nbToBeDequeued)) &*& post();
 
 @*/
 
@@ -214,11 +216,9 @@ requires
 
 /*@
 
-fixpoint int min(int x, int y) { return x <= y ? x : y; }
-
 typedef lemma void futex_wake_ghost_op(predicate(int, int, int) inv, int count, predicate() pre, predicate() post)();
-    requires inv(?val, ?nbWaiting, nbWaiting) &*& pre();
-    ensures inv(val, nbWaiting, nbWaiting - min(nbWaiting, count)) &*& post();
+    requires inv(?val, ?nbWaiting, 0) &*& pre();
+    ensures inv(val, nbWaiting, min(nbWaiting, count)) &*& post();
 
 @*/
 
