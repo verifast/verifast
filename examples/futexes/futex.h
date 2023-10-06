@@ -151,16 +151,16 @@ fixpoint bool level_lt(level l1, level l2) {
     return func_lt(l1->func, l2->func) || l1->func == l2->func && lex_lt(l1->localLevel, l2->localLevel);
 }
 
-predicate obs(list<pair<int, level> > obs);
-predicate ob(int id; level level, bool discharged);
+predicate obs(list<level> obs);
+predicate ob(level level;);
 
 lemma int create_ob(level level);
     requires obs(?obs);
-    ensures obs(cons(pair(result, level), obs)) &*& ob(result, level, false);
+    ensures obs(cons(level, obs)) &*& ob(level);
 
-lemma void discharge_ob(int id);
-    requires obs(?obs) &*& ob(id, ?level, false) &*& mem(pair(id, level), obs) == true;
-    ensures obs(remove(pair(id, level), obs)) &*& ob(id, level, true);
+lemma void discharge_ob(level level);
+    requires obs(?obs) &*& ob(level);
+    ensures obs(remove(level, obs));
 
 @*/
 
@@ -188,11 +188,11 @@ typedef lemma void futex_wait_enqueue_ghost_op(predicate(int, int, int) inv, int
     requires inv(val, ?nbWaiting, 0) &*& pre();
     ensures inv(val, nbWaiting + 1, 0) &*& waitInv();
 
-typedef lemma void futex_wait_wait_op(list<pair<int, level> > obs, predicate() P, predicate() Q)(int id);
-    requires ob(id, ?level, false) &*& forall(map(snd, obs), (level_lt)(level)) == true &*& P();
-    ensures ob(id, level, false) &*& Q();
+typedef lemma void futex_wait_wait_op(list<level> obs, predicate() P, predicate() Q)(int id);
+    requires [?f]ob(?level) &*& forall(obs, (level_lt)(level)) == true &*& P();
+    ensures [f]ob(level) &*& Q();
 
-typedef lemma void futex_wait_wait_ghost_op(predicate(int, int, int) inv, list<pair<int, level> > obs, predicate() waitInv)();
+typedef lemma void futex_wait_wait_ghost_op(predicate(int, int, int) inv, list<level> obs, predicate() waitInv)();
     requires inv(?val, ?nbWaiting, 0) &*& is_futex_wait_wait_op(?op, obs, ?P, ?Q) &*& P() &*& waitInv();
     ensures inv(val, nbWaiting, 0) &*& is_futex_wait_wait_op(op, obs, P, Q) &*& Q() &*& waitInv();
 
