@@ -3,6 +3,8 @@
 #ifndef FUTEX_H
 #define FUTEX_H
 
+#include "atomics.h"
+
 /*@
 
 fixpoint int min(int x, int y) { return x <= y ? x : y; }
@@ -151,6 +153,10 @@ fixpoint bool level_lt(level l1, level l2) {
     return func_lt(l1->func, l2->func) || l1->func == l2->func && lex_lt(l1->localLevel, l2->localLevel);
 }
 
+fixpoint bool func_lt_level(void *func, level l) {
+    return func_lt(func, l->func);
+}
+
 predicate obs(list<level> obs);
 predicate ob(level level;);
 
@@ -166,64 +172,70 @@ lemma void discharge_ob(level level);
 
 /*@
 
-predicate futex(int *word; predicate(int, int, int) inv);
+inductive waiter_info = waiter_info(list<level> obs, predicate(list<level>) waitInv, predicate() post);
 
-lemma void init_futex(int *word, predicate(int, int, int) inv);
-    requires *word |-> ?value &*& inv(value, 0, 0);
-    ensures futex(word, inv);
+predicate futex(int *word, predicate(int nbWaiting) inv, predicate() dequeuePost;);
+
+lemma void create_futex(int *word, predicate(int nbWaiting) inv, predicate() dequeuePost);
+    requires inv(0);
+    ensures futex(word, inv, dequeuePost);
 
 lemma void destroy_futex(int *word);
-    requires futex(word, ?inv);
-    ensures *word |-> ?value &*& inv(value, 0, 0);
+    requires futex(word, ?inv, ?dequeuePost);
+    ensures inv(0);
 
 @*/
 
 /*@
 
-typedef lemma void futex_wait_mismatch_ghost_op(predicate(int, int, int) inv, int val, predicate() pre, predicate() post)();
-    requires inv(?actualVal, ?nbWaiting, 0) &*& actualVal != val &*& pre();
-    ensures inv(actualVal, nbWaiting, 0) &*& post();
+typedef lemma void futex_wait_enqueue_op(int *word, predicate() P, predicate(int) Q)();
+    requires [?f]*word |-> ?value &*& P();
+    ensures [f]*word |-> value &*& Q(value);
 
-typedef lemma void futex_wait_enqueue_ghost_op(predicate(int, int, int) inv, int val, predicate() pre, predicate() waitInv)();
-    requires inv(val, ?nbWaiting, 0) &*& pre();
-    ensures inv(val, nbWaiting + 1, 0) &*& waitInv();
+typedef lemma void futex_wait_enqueue_ghost_op(int *word, predicate(int) inv, int val, predicate() pre, predicate(list<level>) waitInv, predicate(bool) post)();
+    requires inv(?nbWaiting) &*& is_futex_wait_enqueue_op(?op, word, ?P, ?Q) &*& P() &*& pre() &*& atomic_spaces({});
+    ensures
+        atomic_spaces({}) &*& is_futex_wait_enqueue_op(op, word, P, Q) &*& Q(?value) &*&
+        value == val ?
+            obs(?obs) &*& inv(nbWaiting + 1) &*& waitInv(obs)
+        :
+            inv(nbWaiting) &*& post(false);
 
-typedef lemma void futex_wait_wait_op(list<level> obs, predicate() P, predicate() Q)(int id);
+typedef lemma void futex_wait_wait_op(list<level> obs, predicate() P, predicate() Q)();
     requires [?f]ob(?level) &*& forall(obs, (level_lt)(level)) == true &*& P();
     ensures [f]ob(level) &*& Q();
 
-typedef lemma void futex_wait_wait_ghost_op(predicate(int, int, int) inv, list<level> obs, predicate() waitInv)();
-    requires inv(?val, ?nbWaiting, 0) &*& is_futex_wait_wait_op(?op, obs, ?P, ?Q) &*& P() &*& waitInv();
-    ensures inv(val, nbWaiting, 0) &*& is_futex_wait_wait_op(op, obs, P, Q) &*& Q() &*& waitInv();
+typedef lemma void futex_wait_wait_ghost_op(predicate(int) inv, predicate(list<level>) waitInv)();
+    requires atomic_spaces({}) &*& inv(?nbWaiting) &*& 0 < nbWaiting &*& waitInv(?obs) &*& is_futex_wait_wait_op(?op, obs, ?P, ?Q) &*& P();
+    ensures atomic_spaces({}) &*& inv(nbWaiting) &*& waitInv(obs) &*& is_futex_wait_wait_op(op, obs, P, Q) &*& Q();
 
-typedef lemma void futex_wait_dequeue_ghost_op(predicate(int, int, int) inv, predicate() waitInv, predicate() post)(); // A dequeue, either spurious or because of a futex_wake
-    requires inv(?val, ?nbWaiting, ?nbToBeDequeued) &*& waitInv();
-    ensures inv(val, nbWaiting - 1, nbToBeDequeued - min(1, nbToBeDequeued)) &*& post();
+typedef lemma void futex_wait_dequeue_ghost_op(predicate(int) inv, predicate() dequeuePost, predicate(list<level>) waitInv, predicate(bool) post)();
+    requires atomic_spaces({}) &*& inv(?nbWaiting) &*& nbWaiting > 0 &*& waitInv(?obs) &*& obs(obs);
+    ensures atomic_spaces({}) &*& inv(nbWaiting - 1) &*& dequeuePost() &*& post(true);
 
 @*/
 
 void futex_wait(int *word, int val);
 /*@
 requires
-    obs(?obs) &*& [?f]futex(word, ?inv) &*&
-    is_futex_wait_mismatch_ghost_op(?mghop, inv, val, ?pre, ?post) &*&
-    is_futex_wait_enqueue_ghost_op(?eghop, inv, val, pre, ?waitInv) &*&
-    is_futex_wait_wait_ghost_op(?wghop, inv, obs, waitInv) &*&
-    is_futex_wait_dequeue_ghost_op(?dghop, inv, waitInv, post) &*&
+    [?f]futex(word, ?inv, ?dequeuePost) &*&
+    is_futex_wait_enqueue_ghost_op(?eghop, word, inv, val, ?pre, ?waitInv, ?post) &*&
+    is_futex_wait_wait_ghost_op(?wghop, inv, waitInv) &*&
+    is_futex_wait_dequeue_ghost_op(?dghop, inv, dequeuePost, waitInv, post) &*&
     pre();
 @*/
-//@ ensures obs(obs) &*& [f]futex(word, inv) &*& post();
+//@ ensures [f]futex(word, inv, dequeuePost) &*& post(?waited) &*& waited ? dequeuePost() : true;
 
 /*@
 
-typedef lemma void futex_wake_ghost_op(predicate(int, int, int) inv, int count, predicate() pre, predicate() post)();
-    requires inv(?val, ?nbWaiting, 0) &*& pre();
-    ensures inv(val, nbWaiting, min(nbWaiting, count)) &*& post();
+typedef lemma void futex_wake_one_ghost_op(predicate(int) inv, predicate() dequeuePost, predicate() pre, predicate() post)();
+    requires atomic_spaces({}) &*& inv(?nbWaiting) &*& (nbWaiting == 0 ? true : dequeuePost()) &*& pre();
+    ensures atomic_spaces({}) &*& inv(nbWaiting) &*& (nbWaiting == 0 ? true : dequeuePost()) &*& post();
 
 @*/
 
-void futex_wake(int *word, int count);
-//@ requires [?f]futex(word, ?inv) &*& 0 <= count &*& is_futex_wake_ghost_op(?ghop, inv, count, ?pre, ?post) &*& pre();
-//@ ensures [f]futex(word, inv) &*& post();
+void futex_wake_one(int *word);
+//@ requires [?f]futex(word, ?inv, ?dequeuePost) &*& is_futex_wake_one_ghost_op(?ghop, inv, dequeuePost, ?pre, ?post) &*& pre();
+//@ ensures [f]futex(word, inv, dequeuePost) &*& post();
 
 #endif
