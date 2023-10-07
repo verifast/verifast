@@ -339,23 +339,17 @@ requires
 }
 
 void mutex_release(mutex mutex)
-/*@
-requires
-    obs(?obs) &*& forall(obs, (func_lt_level)(mutex_release)) == true &*&
-    mutex_held(mutex, ?inv, ?f) &*& is_mutex_release_ghost_op(?rop, inv, ?pre, ?post) &*& pre();
-@*/
-//@ ensures obs(obs) &*& [f]mutex(mutex, inv) &*& post();
+//@ requires mutex_held(mutex, ?inv, ?f) &*& is_mutex_release_ghost_op(?rop, inv, ?pre, ?post) &*& pre();
+//@ ensures [f]mutex(mutex, inv) &*& post(?obs1) &*& obs(obs1);
 //@ terminates;
 {
     //@ open mutex_held(mutex, inv, f);
-    //@ create_ob(L);
     //@ int internalThreadsGhostListId = mutex->internalThreadsGhostListId;
     //@ int readersId = mutex->readersId;
     //@ produce_call_below_perm_();
     {
         /*@
         predicate pre_() =
-            ob(L) &*&
             call_below_perm_(currentThread, mutex_release) &*&
             [1/2]mutex->held_ |-> 1 &*&
             [1/2]mutex->heldFrac |-> f &*&
@@ -363,7 +357,8 @@ requires
             [f]atomic_space(create_mutex, mutex_inv(mutex, inv, internalThreadsGhostListId, readersId));
         predicate post_() =
             ghost_list_member_handle(internalThreadsGhostListId, unit) &*&
-            post() &*&
+            post(?obs1) &*&
+            obs(cons(L, obs1)) &*&
             [f/2]mutex->internalThreadsGhostListId |-> _ &*&
             [f]atomic_space(create_mutex, mutex_inv(mutex, inv, internalThreadsGhostListId, readersId));
         @*/
@@ -379,12 +374,14 @@ requires
             assert ghost_list(readersId, ?readers);
             call_below_perm__weaken(length(readers), mutex_acquire);
             
+            rop();
+            leak is_mutex_release_ghost_op(_, _, _, _);
+
+            create_ob(L);
+                        
             assert ghost_list(internalThreadsGhostListId, ?internalThreadsList);
             ghost_list_insert(internalThreadsGhostListId, {}, internalThreadsList, unit);
             close n_obs(length(internalThreadsList) + 1);
-            
-            rop();
-            leak is_mutex_release_ghost_op(_, _, _, _);
             
             close mutex_inv(mutex, inv, internalThreadsGhostListId, readersId)();
             close_atomic_space(create_mutex, mutex_inv(mutex, inv, internalThreadsGhostListId, readersId));
@@ -395,14 +392,15 @@ requires
         atomic_store_int(&mutex->held_, 0);
         //@ open post_();
     }
+    //@ assert post(?obs1);
     {
         /*@
         predicate pre_() =
             ghost_list_member_handle(internalThreadsGhostListId, unit) &*&
-            obs(cons(L, obs)) &*&
+            obs(cons(L, obs1)) &*&
             [f]atomic_space(create_mutex, mutex_inv(mutex, inv, internalThreadsGhostListId, readersId));
         predicate post_() =
-            obs(obs) &*&
+            obs(obs1) &*&
             [f]atomic_space(create_mutex, mutex_inv(mutex, inv, internalThreadsGhostListId, readersId));
         @*/
         /*@

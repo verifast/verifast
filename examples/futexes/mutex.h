@@ -48,19 +48,15 @@ requires
 
 /*@
 
-typedef lemma void mutex_release_ghost_op(predicate(bool) inv, predicate() pre, predicate() post)();
+typedef lemma void mutex_release_ghost_op(predicate(bool) inv, predicate() pre, predicate(list<level>) post)();
     requires inv(true) &*& pre();
-    ensures inv(false) &*& post();
+    ensures inv(false) &*& post(?obs1) &*& obs(obs1);
 
 @*/
 
 void mutex_release(mutex mutex);
-/*@
-requires
-    obs(?obs) &*& forall(obs, (func_lt_level)(mutex_release)) == true &*&
-    mutex_held(mutex, ?inv, ?f) &*& is_mutex_release_ghost_op(?rop, inv, ?pre, ?post) &*& pre();
-@*/
-//@ ensures obs(obs) &*& [f]mutex(mutex, inv) &*& post();
+//@ requires mutex_held(mutex, ?inv, ?f) &*& is_mutex_release_ghost_op(?rop, inv, ?pre, ?post) &*& pre();
+//@ ensures [f]mutex(mutex, inv) &*& post(?obs1) &*& obs(obs1);
 //@ terminates;
 
 void mutex_dispose(mutex mutex);
