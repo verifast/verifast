@@ -4,6 +4,7 @@
 #define FUTEX_H
 
 #include "atomics.h"
+//@ #include <listex.gh>
 
 /*@
 
@@ -256,6 +257,26 @@ typedef lemma void futex_wake_one_ghost_op(predicate(int) inv, predicate() deque
 void futex_wake_one(int *word);
 //@ requires [?f]futex(word, ?inv, ?dequeuePost, ?callPermFunc) &*& call_perm_(currentThread, callPermFunc) &*& is_futex_wake_one_ghost_op(?ghop, inv, dequeuePost, ?pre, ?post) &*& pre();
 //@ ensures [f]futex(word, inv, dequeuePost, callPermFunc) &*& post();
+//@ terminates;
+
+struct thread;
+typedef struct thread *thread;
+
+//@ predicate thread(thread thread; level level, predicate() post);
+
+typedef void thread_run_joinable/*@(level threadLevel, list<level> obs, predicate() pre, predicate() post)@*/();
+//@ requires obs(cons(threadLevel, obs)) &*& pre();
+//@ ensures obs({threadLevel}) &*& post();
+//@ terminates;
+
+thread fork_joinable(void *run);
+//@ requires obs(?obs) &*& [_]is_thread_run_joinable(run, ?threadLevel, ?runObs, ?pre, ?post) &*& pre();
+//@ ensures obs(remove_all(runObs, obs)) &*& thread(result, threadLevel, post);
+//@ terminates;
+
+void join(thread thread);
+//@ requires obs(?obs) &*& thread(thread, ?level, ?post) &*& forall(obs, (level_lt)(level)) == true;
+//@ ensures obs(obs) &*& post();
 //@ terminates;
 
 #endif

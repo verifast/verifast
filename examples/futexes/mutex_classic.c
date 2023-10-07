@@ -1,3 +1,5 @@
+// Justus Fasse and Bart Jacobs. Expressive modular deadlock-freedom verification. 2023.
+
 #include <stdlib.h>
 #include "mutex.h"
 #include "mutex_classic.h"
