@@ -3,6 +3,8 @@
 
 /*@
 
+predicate call_perm_top();
+
 predicate atomic_space(void *name, predicate() inv;);
 
 lemma void create_atomic_space(void *name, predicate() inv);
@@ -49,15 +51,16 @@ typedef lemma void atomic_weak_compare_and_set_int_op(int *object, int oldValue,
     requires [?f]*object |-> ?value &*& P() &*& value != oldValue || f == 1;
     ensures [f]*object |-> (value == oldValue ? newValue : value) &*& Q(value == oldValue);
 
-typedef lemma void atomic_weak_compare_and_set_int_ghost_op(int *object, int oldValue, int newValue, predicate() pre, predicate() post)();
+typedef lemma void atomic_weak_compare_and_set_int_ghost_op(int *object, int oldValue, int newValue, predicate() pre, predicate(bool) post)();
     requires atomic_spaces({}) &*& is_atomic_weak_compare_and_set_int_op(?op, object, oldValue, newValue, ?P, ?Q) &*& P() &*& pre();
-    ensures atomic_spaces({}) &*& is_atomic_weak_compare_and_set_int_op(op, object, oldValue, newValue, P, Q) &*& Q(?success) &*& success ? post() : pre();
+    ensures atomic_spaces({}) &*& is_atomic_weak_compare_and_set_int_op(op, object, oldValue, newValue, P, Q) &*& Q(?success) &*& post(success);
 
 @*/
 
 bool atomic_weak_compare_and_set_int(int *object, int oldValue, int newValue);
 //@ requires is_atomic_weak_compare_and_set_int_ghost_op(?ghop, object, oldValue, newValue, ?pre, ?post) &*& pre();
-//@ ensures result ? post() : pre();
+//@ ensures result ? post(true) : exists<bool>(?spurious) &*& spurious ? pre() &*& call_perm_top() : post(false);
+//@ terminates;
 
 /*@
 
@@ -74,6 +77,7 @@ typedef lemma void atomic_store_int_ghost_op(int *object, int value, predicate()
 void atomic_store_int(int *object, int value);
 //@ requires is_atomic_store_int_ghost_op(?ghop, object, value, ?pre, ?post) &*& pre();
 //@ ensures post();
+//@ terminates;
 
 /*@
 

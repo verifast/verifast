@@ -16,6 +16,7 @@ predicate mutex_held(mutex mutex, predicate(bool) inv, real frac);
 mutex create_mutex();
 //@ requires exists<predicate(bool)>(?inv) &*& inv(false);
 //@ ensures mutex(result, inv);
+//@ terminates;
 
 /*@
 
@@ -43,6 +44,7 @@ requires
     waitInv();
 @*/
 //@ ensures mutex_held(mutex, inv, f) &*& post();
+//@ terminates;
 
 /*@
 
@@ -59,9 +61,11 @@ requires
     mutex_held(mutex, ?inv, ?f) &*& is_mutex_release_ghost_op(?rop, inv, ?pre, ?post) &*& pre();
 @*/
 //@ ensures obs(obs) &*& [f]mutex(mutex, inv) &*& post();
+//@ terminates;
 
 void mutex_dispose(mutex mutex);
 //@ requires mutex(mutex, ?inv);
 //@ ensures inv(false);
+//@ terminates;
 
 #endif

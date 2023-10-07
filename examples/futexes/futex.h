@@ -7,6 +7,24 @@
 
 /*@
 
+lemma void call_perm_top_weaken(void *f);
+    requires call_perm_top();
+    ensures call_perm_(currentThread, f);
+
+lemma void call_perm__transfer(); // This lemma is sound in the absence of busy waiting.
+    requires call_perm_(_, ?f);
+    ensures call_perm_(currentThread, f);
+
+predicate call_perms_(int n, void *f) =
+    n == 0 ?
+        true
+    :
+        call_perm_(_, f) &*& call_perms_(n - 1, f);
+
+lemma void call_below_perm__weaken(int n, void *f);
+    requires call_below_perm_(_, ?f0) &*& 0 <= n &*& func_lt(f, f0) == true;
+    ensures call_perms_(n, f);
+
 fixpoint int min(int x, int y) { return x <= y ? x : y; }
 
 fixpoint bool lex0_lt(int max_length, list<int> l1, list<int> l2) {
@@ -174,14 +192,14 @@ lemma void discharge_ob(level level);
 
 inductive waiter_info = waiter_info(list<level> obs, predicate(list<level>) waitInv, predicate() post);
 
-predicate futex(int *word, predicate(int nbWaiting) inv, predicate() dequeuePost;);
+predicate futex(int *word, predicate(int nbWaiting) inv, predicate() dequeuePost, void *callPermFunc;);
 
-lemma void create_futex(int *word, predicate(int nbWaiting) inv, predicate() dequeuePost);
+lemma void create_futex(int *word, predicate(int nbWaiting) inv, predicate() dequeuePost, void *callPermFunc);
     requires inv(0);
-    ensures futex(word, inv, dequeuePost);
+    ensures futex(word, inv, dequeuePost, callPermFunc);
 
 lemma void destroy_futex(int *word);
-    requires futex(word, ?inv, ?dequeuePost);
+    requires futex(word, ?inv, ?dequeuePost, ?callPermFunc);
     ensures inv(0);
 
 @*/
@@ -209,8 +227,8 @@ typedef lemma void futex_wait_wait_ghost_op(predicate(int) inv, predicate(list<l
     requires atomic_spaces({}) &*& inv(?nbWaiting) &*& 0 < nbWaiting &*& waitInv(?obs) &*& is_futex_wait_wait_op(?op, obs, ?P, ?Q) &*& P();
     ensures atomic_spaces({}) &*& inv(nbWaiting) &*& waitInv(obs) &*& is_futex_wait_wait_op(op, obs, P, Q) &*& Q();
 
-typedef lemma void futex_wait_dequeue_ghost_op(predicate(int) inv, predicate() dequeuePost, predicate(list<level>) waitInv, predicate(bool) post)();
-    requires atomic_spaces({}) &*& inv(?nbWaiting) &*& nbWaiting > 0 &*& waitInv(?obs) &*& obs(obs);
+typedef lemma void futex_wait_dequeue_ghost_op(predicate(int) inv, predicate() dequeuePost, void *callPermFunc, predicate(list<level>) waitInv, predicate(bool) post)();
+    requires atomic_spaces({}) &*& inv(?nbWaiting) &*& nbWaiting > 0 &*& waitInv(?obs) &*& obs(obs) &*& call_perm_(currentThread, callPermFunc);
     ensures atomic_spaces({}) &*& inv(nbWaiting - 1) &*& dequeuePost() &*& post(true);
 
 @*/
@@ -218,13 +236,14 @@ typedef lemma void futex_wait_dequeue_ghost_op(predicate(int) inv, predicate() d
 void futex_wait(int *word, int val);
 /*@
 requires
-    [?f]futex(word, ?inv, ?dequeuePost) &*&
+    [?f]futex(word, ?inv, ?dequeuePost, ?callPermFunc) &*&
     is_futex_wait_enqueue_ghost_op(?eghop, word, inv, val, ?pre, ?waitInv, ?post) &*&
     is_futex_wait_wait_ghost_op(?wghop, inv, waitInv) &*&
-    is_futex_wait_dequeue_ghost_op(?dghop, inv, dequeuePost, waitInv, post) &*&
+    is_futex_wait_dequeue_ghost_op(?dghop, inv, dequeuePost, callPermFunc, waitInv, post) &*&
     pre();
 @*/
-//@ ensures [f]futex(word, inv, dequeuePost) &*& post(?waited) &*& waited ? dequeuePost() : true;
+//@ ensures [f]futex(word, inv, dequeuePost, callPermFunc) &*& post(?waited) &*& waited ? dequeuePost() : true;
+//@ terminates;
 
 /*@
 
@@ -235,7 +254,8 @@ typedef lemma void futex_wake_one_ghost_op(predicate(int) inv, predicate() deque
 @*/
 
 void futex_wake_one(int *word);
-//@ requires [?f]futex(word, ?inv, ?dequeuePost) &*& is_futex_wake_one_ghost_op(?ghop, inv, dequeuePost, ?pre, ?post) &*& pre();
-//@ ensures [f]futex(word, inv, dequeuePost) &*& post();
+//@ requires [?f]futex(word, ?inv, ?dequeuePost, ?callPermFunc) &*& call_perm_(currentThread, callPermFunc) &*& is_futex_wake_one_ghost_op(?ghop, inv, dequeuePost, ?pre, ?post) &*& pre();
+//@ ensures [f]futex(word, inv, dequeuePost, callPermFunc) &*& post();
+//@ terminates;
 
 #endif
