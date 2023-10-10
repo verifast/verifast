@@ -259,6 +259,24 @@ void futex_wake_one(int *word);
 //@ ensures [f]futex(word, inv, dequeuePost, callPermFunc) &*& post();
 //@ terminates;
 
+/*@
+
+typedef lemma void futex_wake_all_ghost_op(predicate(int) inv, predicate() pre, predicate() post)();
+    requires atomic_spaces({}) &*& inv(0) &*& pre();
+    ensures atomic_spaces({}) &*& inv(0) &*& post();
+
+@*/
+
+void futex_wake_all(int *word);
+/*@
+requires
+    [?f]futex(word, ?inv, ?dequeuePost, ?callPermFunc) &*&
+    call_below_perm_(currentThread, ?func) &*& func_lt(callPermFunc, func) == true &*&
+    is_futex_wake_all_ghost_op(?ghop, inv, ?pre, ?post) &*& pre();
+@*/
+//@ ensures [f]futex(word, inv, dequeuePost, callPermFunc) &*& post();
+//@ terminates;
+
 struct thread;
 typedef struct thread *thread;
 
