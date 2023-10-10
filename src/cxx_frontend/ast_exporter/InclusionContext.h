@@ -41,7 +41,7 @@ public:
 
   void addGhostInclDirective(const clang::FileEntry *entry, Annotation &ann) {
     auto uid = entry->getUID();
-    assert(m_includesMap.find(uid) != m_includesMap.edn() &&
+    assert(m_includesMap.find(uid) != m_includesMap.end() &&
            "File has not been preprocessed and added to inclusion context");
     m_includesMap.at(uid).addGhostInclDirective(ann);
   }

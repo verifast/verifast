@@ -81,7 +81,7 @@ let rec parse_java_files_with_frontend (paths: string list) (jars: string list) 
         in
         match l with
         | General_ast.NoSource -> raise (Parser.CompilationError message)
-        | _ -> raise (Parser.StaticError(Ast_translator.translate_location l, message, None))
+        | _ -> static_error (Ast_translator.translate_location l) message None
   in
   match paths with
     | [] -> []
