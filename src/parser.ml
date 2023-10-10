@@ -136,10 +136,6 @@ let ghost_keywords = [
   "terminates"; "abstract_type"; "fixpoint_auto"; "typeid"; "activating"; "truncating"; "typedef"
 ]
 
-exception StaticError of loc * string * string option
-
-let static_error l msg url = raise (StaticError (l, msg, url))
-
 exception CompilationError of string
 
 let file_specs path =

@@ -59,6 +59,10 @@ type loc =
  
 let dummy_loc = DummyLoc
 
+exception StaticError of loc * string * string option
+
+let static_error l msg url = raise (StaticError (l, msg, url))
+
 let rec root_caller_token l =
   match l with
     Lexed l -> l
@@ -1226,6 +1230,7 @@ let expr_fold_open iter state e =
   | WCxxNew (_, _, _) -> state
   | CxxDelete (_, arg) -> iter state arg
   | Typeid (_, e) -> iter state e
+  | _ -> static_error (expr_loc e) "This expression form is not allowed in this position." None
 
 (* Postfix fold *)
 let expr_fold f state e = let rec iter state e = f (expr_fold_open iter state e) e in iter state e
