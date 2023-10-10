@@ -584,6 +584,7 @@ cd tests
     verifast_both -c -allow_should_fail fraction-of-fraction.c
     verifast_both -c -allow_should_fail test-precise-predicate-pointsto-errorcase.c
     verifast_both -c -allow_should_fail test-ghost-break-from-real-loop.c
+    verifast -c -allow_should_fail expression_not_supported_in_fixpoint.c
     cd context_free_pp
       verifast -c -allow_should_fail lib.c prog.c
     cd ..
