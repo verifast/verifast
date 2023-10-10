@@ -13,6 +13,9 @@ cd examples
   verifast -read_options_from_source_file unions.c
   verifast unions2.c
   verifast -fno-strict-aliasing -assume_no_subobject_provenance unions2_no_subobj_prov.c
+  cd futexes
+    verifast -c ghost_lists.c mutex.c mutex_classic.c simple_classic_client.c simple_cross_thread_client.c
+  cd ..
   cd busywaiting
     verifast -c lexprod_wf.c busywaiting_wf.c
     verifast -c bounded_fifo.c

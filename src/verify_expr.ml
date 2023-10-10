@@ -1668,7 +1668,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | _ ->
       begin fun cont ->
         match init with
-          Default -> cont h env (Some (match tp with PtrType _ -> null_pointer_term () | _ -> ctxt#mk_intlit 0))
+          Default -> cont h env (Some (match tp with PtrType _ -> null_pointer_term () | Bool -> false_term | _ -> ctxt#mk_intlit 0))
         | Expr e -> eval_h h env e $. fun h env value -> cont h env (Some value)
         | Unspecified -> cont h env None
         | Term t -> cont h env (Some t)
