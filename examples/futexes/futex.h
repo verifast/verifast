@@ -191,8 +191,6 @@ lemma void discharge_ob(level level);
 
 /*@
 
-inductive waiter_info = waiter_info(list<level> obs, predicate(list<level>) waitInv, predicate() post);
-
 predicate futex(int *word, predicate(int nbWaiting) inv, predicate() dequeuePost, void *callPermFunc;);
 
 lemma void create_futex(int *word, predicate(int nbWaiting) inv, predicate() dequeuePost, void *callPermFunc);
