@@ -10,6 +10,8 @@ build = "build.rs"
 capnp = "0.14.5"
 tracing = {version = "0.1.33", features = ["max_level_trace", "release_max_level_warn"]}
 tracing-subscriber = "0.3.11"
+# Todo: This is temporary as the log 0.4.20 build fails
+log = "=0.4.18"
 
 [build-dependencies]
 capnpc = "0.14.7"
