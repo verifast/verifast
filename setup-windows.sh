@@ -13,9 +13,9 @@ dl_and_unzip() {
   hash="$2"
   sha="$3"
   filter="$4"
-  wget --progress=dot:mega -c "$url"
-  echo "$hash *$filename" | sha"$sha"sum -c || exit 1
-  tar x"$filter"f "$filename"
+  wget -P verifast-downloads --progress=dot:mega -c "$url"
+  echo "$hash *verifast-downloads/$filename" | sha"$sha"sum -c || exit 1
+  tar x"$filter"f "verifast-downloads/$filename"
 }
 
 script_dir=$(pwd)
