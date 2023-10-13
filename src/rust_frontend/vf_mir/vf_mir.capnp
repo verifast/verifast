@@ -160,7 +160,11 @@ struct Ty {
     struct IntTy {
         union {
             iSize @0: Void;
-            i32 @1: Void;
+            i8 @1: Void;
+            i16 @2: Void;
+            i32 @3: Void;
+            i64 @4: Void;
+            i128 @5: Void;
         }
     }
 

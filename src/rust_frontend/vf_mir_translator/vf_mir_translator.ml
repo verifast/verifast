@@ -233,6 +233,21 @@ module AstAux = struct
   let decl_name (d : decl) =
     match d with
     | Struct (loc, name, definition_opt, attrs) -> Some name
+    | Func
+        ( loc,
+          kind,
+          ty_params,
+          ret_ty_op,
+          name,
+          params,
+          nonghost_callers_only,
+          implemented_function_ty_op,
+          contract_op,
+          terminates,
+          body_op,
+          is_virtual,
+          overrides ) ->
+        Some name
     | _ -> failwith "Todo: get Ast.decl name"
 
   let decl_fields (d : decl) =
@@ -243,6 +258,55 @@ module AstAux = struct
             Ok (Some fields)
         | None -> Ok None)
     | _ -> failwith "Todo: get Ast.decl fields"
+
+  let decl_loc (d : decl) =
+    match d with
+    | Struct (loc, name, definition_opt, attrs) -> loc
+    | Func
+        ( loc,
+          kind,
+          ty_params,
+          ret_ty_op,
+          name,
+          params,
+          nonghost_callers_only,
+          implemented_function_ty_op,
+          contract_op,
+          terminates,
+          body_op,
+          is_virtual,
+          overrides ) ->
+        loc
+    | _ -> failwith "Todo: get Ast.decl loc"
+
+  let field_name (f : field) =
+    match f with
+    | Field
+        (loc, ghostness, ty, name, method_binding, visibility, is_final, expr_op)
+      ->
+        name
+
+  let field_ty (f : field) =
+    match f with
+    | Field
+        (loc, ghostness, ty, name, method_binding, visibility, is_final, expr_op)
+      ->
+        ty
+
+  let field_loc (f : field) =
+    match f with
+    | Field
+        (loc, ghostness, ty, name, method_binding, visibility, is_final, expr_op)
+      ->
+        loc
+
+  let is_adt_ty (t : type_) =
+    match t with StructType _ | UnionType _ -> true | _ -> false
+
+  let adt_ty_name (adt : type_) =
+    match adt with
+    | StructType name | UnionType name -> Ok name
+    | _ -> Error (`AdtTyName "Not an ADT")
 end
 
 module SizeAux : sig
@@ -387,11 +451,7 @@ module Mir = struct
     | Ast.Union _ -> failwith "Todo: Unsupported ADT"
     | _ -> Error (`DeclMirAdtKind "Not an ADT")
 
-  type aggregate_kind = {
-    adt_kind : adt_kind;
-    name : string;
-    fields : Ast.field list;
-  }
+  type aggregate_kind = AggKindAdt of { name : string; def : Ast.decl }
 end
 
 module TrTyTuple = struct
@@ -711,36 +771,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | U128 -> sz_and_rank Mir.U128
       | Undefined _ -> Error (`TrUIntTy "Unknown Rust unsigned int type")
     in
-    (* Todo @Nima: Is there any way to separate `own` definition from `int` definition like the way RustBelt does?
-       See RustBelt paper technical appendix
-    *)
-    (* In VeriFast we use one less indirection level than RustBelt: Verifast(int) == RustBelt(own int) *)
-    let own tid vs =
-      Ok (True loc)
-      (* match vs with
-         | [ l ] ->
-             Ok
-               (CallExpr
-                  ( loc,
-                    "integer_",
-                    (*type arguments*) [],
-                    (*indices*) [],
-                    (*arguments*)
-                    [
-                      LitPat l;
-                      LitPat sz_expr;
-                      (*signed*)
-                      LitPat (False loc);
-                      DummyPat;
-                    ],
-                    Static ))
-             (* predicate integer_(void *p, int size, bool signed_; int v) *)
-         | _ -> Error "[[uint]].own(t, vs) needs to vs == [l]" *)
-    in
-    let shr lft tid l =
-      Ok (True loc)
-      (* Todo @Nima: Add the frac borrow predicate to RustBelt and use it here *)
-    in
+    let own tid vs = Ok (True loc) in
+    let shr lft tid l = Ok (True loc) in
     let ty_info =
       Mir.TyInfoBasic
         {
@@ -782,24 +814,22 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             let vf_ty = ManifestTypeExpr (loc, StructType name) in
             let sz_expr = SizeofExpr (loc, TypeExpr vf_ty) in
             let own tid vs =
-              match vs with
-              | [ l ] ->
-                  Ok
-                    (CallExpr
-                       ( loc,
-                         name ^ "_owned",
-                         (*type arguments*) [],
-                         (*indices*) [],
-                         (*arguments*)
-                         [ LitPat l; LitPat tid ],
-                         Static ))
-              | _ -> Error "[[struct _]].own(t, vs) needs to vs == [l]"
+              let field_vs = List.map (fun v -> LitPat v) vs in
+              Ok
+                (CallExpr
+                   ( loc,
+                     name ^ "_own",
+                     (*type arguments*) [],
+                     (*indices*) [],
+                     (*arguments*)
+                     LitPat tid :: field_vs,
+                     Static ))
             in
             let shr lft tid l =
               Ok
                 (CallExpr
                    ( loc,
-                     name ^ "_shared",
+                     name ^ "_share",
                      (*type arguments*) [],
                      (*indices*) [],
                      (*arguments*)
@@ -932,6 +962,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         Ok ty_info
 
   and translate_ty (ty_cpn : TyRd.t) (loc : Ast.loc) =
+    let open Ast in
     let open TyRd in
     let kind_cpn = kind_get ty_cpn in
     match TyRd.TyKind.get kind_cpn with
@@ -939,7 +970,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         Ok
           (Mir.TyInfoBasic
              {
-               vf_ty = Ast.ManifestTypeExpr (loc, Ast.Bool);
+               vf_ty = ManifestTypeExpr (loc, Bool);
                interp = RustBelt.emp_ty_interp loc;
              })
     | Int int_ty_cpn -> failwith "Todo: Int Ty is not implemented yet"
@@ -949,12 +980,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Ref ref_ty_cpn -> translate_ref_ty ref_ty_cpn loc
     | FnDef fn_def_ty_cpn -> translate_fn_def_ty fn_def_ty_cpn loc
     | Never ->
-        Ok
-          (Mir.TyInfoBasic
-             {
-               vf_ty = Ast.ManifestTypeExpr (loc, Ast.UnionType "std_empty_");
-               interp = RustBelt.emp_ty_interp loc;
-             })
+        let vf_ty = ManifestTypeExpr (loc, UnionType "std_empty_") in
+        let size =
+          IntLit
+            ( loc,
+              Big_int.zero_big_int,
+              (*decimal*) true,
+              (*U suffix*) true,
+              NoLSuffix )
+        in
+        let own _ _ = Ok (False loc) in
+        let shr _ _ _ = Ok (False loc) in
+        Ok (Mir.TyInfoBasic { vf_ty; interp = RustBelt.{ size; own; shr } })
     | Tuple substs_cpn ->
         let substs_cpn = Capnp.Array.to_list substs_cpn in
         translate_tuple_ty substs_cpn loc
@@ -1459,42 +1496,59 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let translate_aggregate_kind (agg_kind_cpn : AggregateKindRd.t) =
       let open AggregateKindRd in
       match get agg_kind_cpn with
-      | Array es_ty -> failwith "Todo: AggregateKind::Array"
+      | Array es_ty_cpn -> failwith "Todo: AggregateKind::Array"
       | Tuple -> failwith "Todo: AggregateKind::Tuple"
       | Adt adt_data_cpn ->
           let open AdtData in
           let id_cpn = id_get adt_data_cpn in
           let def_path = translate_adt_def_id id_cpn in
           let name = TrName.translate_def_path def_path in
-          let* adt_def = State.get_adt_def name in
+          let* adt_def_opt = State.get_adt_def name in
           let* adt_def =
-            match adt_def with
-            | None -> Error (`TrAggregateKind ("No decl found for " ^ name))
-            | Some adt_def -> Ok adt_def
+            Option.to_result
+              ~none:(`TrAggregateKind ("No decl found for " ^ name))
+              adt_def_opt
           in
-          let* adt_kind = Mir.decl_mir_adt_kind adt_def in
-          let* fields =
-            let* fields = AstAux.decl_fields adt_def in
-            match fields with
-            | Some fields -> Ok fields
-            | None -> Error (`TrAggregateKind "Adt without fields definition")
-          in
+          (*check it is an adt*)
+          let* _ = Mir.decl_mir_adt_kind adt_def in
           let variant_idx_cpn = variant_idx_get adt_data_cpn in
           let substs_cpn = substs_get_list adt_data_cpn in
-          Ok Mir.{ adt_kind; name; fields }
+          Ok Mir.(AggKindAdt { name; def = adt_def })
       | Closure -> failwith "Todo: AggregateKind::Closure"
       | Generator -> failwith "Todo: AggregateKind::Generator"
       | Undefined _ -> Error (`TrAggregateKind "Unknown AggregateKind")
 
-    let translate_aggregate (agg_data_cpn : RvalueAggregateDataRd.t)
-        (loc : Ast.loc) =
-      let open RvalueAggregateDataRd in
+    let translate_aggregate (agg_data_cpn : AggregateDataRd.t) (loc : Ast.loc) =
+      let open AggregateDataRd in
       let agg_kind_cpn = aggregate_kind_get agg_data_cpn in
-      let agg_kind = translate_aggregate_kind agg_kind_cpn in
-      let operands_cpn = operands_get_list agg_data_cpn in
-      let operands_cpn = List.map (fun op -> (op, loc)) operands_cpn in
-      let* tmp_rvalue_binders, operands = translate_operands operands_cpn in
-      Ok ()
+      let* agg_kind = translate_aggregate_kind agg_kind_cpn in
+      match agg_kind with
+      | AggKindAdt { name; def = adt_def } -> (
+          let* adt_kind = Mir.decl_mir_adt_kind adt_def in
+          match adt_kind with
+          | Enum | Union -> failwith "Todo: Unsupported Adt kind for aggregate"
+          | Struct ->
+              let* fields_opt = AstAux.decl_fields adt_def in
+              let* fields =
+                Option.to_result
+                  ~none:(`TrAggregate "Struct without fields definition")
+                  fields_opt
+              in
+              let operands_cpn = operands_get_list agg_data_cpn in
+              if List.length operands_cpn <> List.length fields then
+                Error
+                  (`TrAggregate
+                    "The number of struct fields and initializing operands are \
+                     different")
+              else
+                let operands_cpn =
+                  List.map (fun op -> (op, loc)) operands_cpn
+                in
+                let* tmp_rvalue_binders, operand_exprs =
+                  translate_operands operands_cpn
+                in
+                let field_names = List.map AstAux.field_name fields in
+                Ok (tmp_rvalue_binders, List.combine field_names operand_exprs))
 
     let translate_rvalue (rvalue_cpn : RvalueRd.t) (loc : Ast.loc) =
       let open RvalueRd in
@@ -1554,7 +1608,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let* operandl = tr_operand operandl in
           let* operandr = tr_operand operandr in
           Ok (`TrRvalueBinaryOp (operator, operandl, operandr))
-      | Aggregate agg_data_cpn -> failwith "Todo: Rvalue::Aggregate"
+      | Aggregate agg_data_cpn ->
+          let* tmp_rvalue_binders, fields_init =
+            translate_aggregate agg_data_cpn loc
+          in
+          Ok (`TrRvalueAggregate (tmp_rvalue_binders, fields_init))
       | Undefined _ -> Error (`TrRvalue "Unknown Rvalue kind")
 
     let translate_statement_kind (statement_kind_cpn : StatementKindRd.t)
@@ -1639,7 +1697,26 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                         loc,
                         ref [] )
                   in
-                  Ok [ block_stmt ]))
+                  Ok [ block_stmt ])
+          | `TrRvalueAggregate (tmp_rvalue_binders, fields_init) ->
+              let field_init_stmts =
+                List.map
+                  (fun (field_name, init_expr) ->
+                    let open Ast in
+                    ExprStmt
+                      (AssignExpr
+                         (loc, Select (loc, lhs_place, field_name), init_expr)))
+                  fields_init
+              in
+              let block_stmt =
+                Ast.BlockStmt
+                  ( loc,
+                    (*decl list*) [],
+                    tmp_rvalue_binders @ field_init_stmts,
+                    loc,
+                    ref [] )
+              in
+              Ok [ block_stmt ])
       | Nop -> Ok []
       | Undefined _ -> Error (`TrStatementKind "Unknown StatementKind")
 
@@ -1720,6 +1797,127 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let value_cpn = value_get vdi_cpn in
       let* value = translate_var_debug_info_contents value_cpn src_info.span in
       Ok ({ internal = value; surf_name = name } : Mir.var_debug_info)
+
+    let gen_contract (contract_loc : Ast.loc) (lft_vars : string list)
+        (params : Mir.local_decl list) (ret : Mir.local_decl) =
+      let open Ast in
+      let bind_pat_b n = VarPat (contract_loc, n) in
+      let lit_pat_b n = LitPat (Var (contract_loc, n)) in
+      let nonatomic_token_b pat =
+        CallExpr
+          ( contract_loc,
+            "thread_token",
+            [] (*type arguments*),
+            [] (*indices*),
+            [ pat ] (*arguments*),
+            Static )
+      in
+      let thread_id_name = "_t" in
+      let pre_na_token = nonatomic_token_b (bind_pat_b thread_id_name) in
+      let post_na_token = nonatomic_token_b (lit_pat_b thread_id_name) in
+      let lft_token_b pat_b n =
+        let coef_n = "_q_" ^ n in
+        CoefAsn
+          ( contract_loc,
+            pat_b coef_n,
+            CallExpr
+              ( contract_loc,
+                "lifetime_token",
+                [] (*type arguments*),
+                [] (*indices*),
+                [ pat_b n ] (*arguments*),
+                Static ) )
+      in
+      let pre_lft_tks =
+        List.map (fun lft_var -> lft_token_b bind_pat_b lft_var) lft_vars
+      in
+      let post_lft_tks =
+        List.map (fun lft_var -> lft_token_b lit_pat_b lft_var) lft_vars
+      in
+      let gen_local_ty_asn (local : Mir.local_decl) =
+        let Mir.{ mutability; id; ty = ty_info; loc } = local in
+        let (Ast.ManifestTypeExpr (_ (*loc*), raw_ty)) =
+          Mir.raw_type_of ty_info
+        in
+        let* vs =
+          if not (AstAux.is_adt_ty raw_ty) then Ok [ Ast.Var (loc, id) ]
+          else
+            let* adt_name = AstAux.adt_ty_name raw_ty in
+            match adt_name with
+            (*Todo: We need to have these built-in types defined during translation and not through headers*)
+            | "std_tuple_0_" | "std_empty_" -> Ok [ Ast.Var (loc, id) ]
+            | _ -> (
+                let* adt_def_opt = State.get_adt_def adt_name in
+                let* adt_def =
+                  Option.to_result
+                    ~none:
+                      (`GenLocalTyAsn ("No declaration found for " ^ adt_name))
+                    adt_def_opt
+                in
+                let* adt_kind = Mir.decl_mir_adt_kind adt_def in
+                match adt_kind with
+                | Mir.Enum | Mir.Union ->
+                    failwith "Todo: Generate owner assertion for local ADT"
+                | Mir.Struct ->
+                    let* fields_opt = AstAux.decl_fields adt_def in
+                    let* fields =
+                      Option.to_result
+                        ~none:(`GenLocalTyAsn "ADT without fields definition")
+                        fields_opt
+                    in
+                    let vs =
+                      List.map
+                        (fun field ->
+                          Ast.Select
+                            (loc, Ast.Var (loc, id), AstAux.field_name field))
+                        fields
+                    in
+                    Ok vs)
+        in
+        let RustBelt.{ size; own; shr } = Mir.interp_of ty_info in
+        match own (Ast.Var (loc, thread_id_name)) vs with
+        | Ok asn -> Ok asn
+        | Error estr ->
+            Error (`GenLocalTyAsn ("Owner assertion function error: " ^ estr))
+      in
+      let* params_ty_asns = ListAux.try_map gen_local_ty_asn params in
+      let params_ty_asns =
+        List.filter
+          (fun asn -> match asn with True _ -> false | _ -> true)
+          params_ty_asns
+      in
+      let params_ty_asns =
+        AstAux.list_to_sep_conj
+          (List.map (fun asn -> (contract_loc, asn)) params_ty_asns)
+          None
+      in
+      let pre_asn =
+        AstAux.list_to_sep_conj
+          (List.map (fun asn -> (contract_loc, asn)) pre_lft_tks)
+          params_ty_asns
+      in
+      let pre_asn =
+        match pre_asn with
+        | None -> pre_na_token
+        | Some pre_asn -> Sep (contract_loc, pre_na_token, pre_asn)
+      in
+      let* ret_ty_asn =
+        gen_local_ty_asn
+          {
+            mutability = ret.mutability;
+            id = "result";
+            ty = ret.ty;
+            loc = ret.loc;
+          }
+      in
+      let (Some post_asn) =
+        AstAux.list_to_sep_conj
+          (List.map (fun asn -> (contract_loc, asn)) post_lft_tks)
+          (Some ret_ty_asn)
+        (*might be just True*)
+      in
+      let post_asn = Sep (contract_loc, post_na_token, post_asn) in
+      Ok (pre_asn, post_asn)
   end
   (* TrBody *)
 
@@ -1731,6 +1929,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let surf_names_set = (surf_name, ref 0) :: surf_names_set in
           let env_entry_opt : VF0.var_debug_info option = None in
           let trs_entry : var_id_trs_entry =
+            (*We will directly substitute the id with the surface name*)
             { id; internal_name = surf_name }
           in
           (env_entry_opt, trs_entry, surf_names_set)
@@ -1782,97 +1981,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let env_map, trs_map, surf_names_set =
       List.fold_left f_aux ([], [], []) vdis
     in
-    ( List.rev
-        env_map (* This will be used during the pprinting of execution states *),
-      List.rev
-        trs_map (* This will be used during the translation of variable names *)
+    ( env_map (* This will be used during the pprinting of execution states *),
+      trs_map (* This will be used during the translation of variable names *)
     )
-
-  let gen_contract (contract_loc : Ast.loc) (lft_vars : string list)
-      (params : Mir.local_decl list) (ret : Mir.local_decl) =
-    let open Ast in
-    let bind_pat_b n = VarPat (contract_loc, n) in
-    let lit_pat_b n = LitPat (Var (contract_loc, n)) in
-    let nonatomic_token_b pat =
-      CallExpr
-        ( contract_loc,
-          "thread_token",
-          [] (*type arguments*),
-          [] (*indices*),
-          [ pat ] (*arguments*),
-          Static )
-    in
-    let thread_id_name = "_t" in
-    let pre_na_token = nonatomic_token_b (bind_pat_b thread_id_name) in
-    let post_na_token = nonatomic_token_b (lit_pat_b thread_id_name) in
-    let lft_token_b pat_b n =
-      let coef_n = "_q_" ^ n in
-      CoefAsn
-        ( contract_loc,
-          pat_b coef_n,
-          CallExpr
-            ( contract_loc,
-              "lifetime_token",
-              [] (*type arguments*),
-              [] (*indices*),
-              [ pat_b n ] (*arguments*),
-              Static ) )
-    in
-    let pre_lft_tks =
-      List.map (fun lft_var -> lft_token_b bind_pat_b lft_var) lft_vars
-    in
-    let post_lft_tks =
-      List.map (fun lft_var -> lft_token_b lit_pat_b lft_var) lft_vars
-    in
-    let gen_local_ty_asn (local : Mir.local_decl) =
-      let Mir.{ mutability; id; ty = ty_info; loc } = local in
-      let RustBelt.{ size; own; shr } = Mir.interp_of ty_info in
-      match own (Ast.Var (loc, thread_id_name)) [ Ast.Var (loc, id) ] with
-      | Ok asn -> Ok asn
-      | Error estr ->
-          Error (`GenContract ("Owner assertion function error: " ^ estr))
-    in
-    let* params_ty_asns = ListAux.try_map gen_local_ty_asn params in
-    let params_ty_asns =
-      List.filter
-        (fun asn -> match asn with True _ -> false | _ -> true)
-        params_ty_asns
-    in
-    let params_ty_asns =
-      AstAux.list_to_sep_conj
-        (List.map (fun asn -> (contract_loc, asn)) params_ty_asns)
-        None
-    in
-    let pre_asn =
-      AstAux.list_to_sep_conj
-        (List.map (fun asn -> (contract_loc, asn)) pre_lft_tks)
-        params_ty_asns
-    in
-    let pre_asn =
-      match pre_asn with
-      | None -> pre_na_token
-      | Some pre_asn -> Sep (contract_loc, pre_na_token, pre_asn)
-    in
-    let* ret_ty_asn =
-      gen_local_ty_asn
-        {
-          mutability = ret.mutability;
-          id = "result";
-          ty = ret.ty;
-          loc = ret.loc;
-        }
-    in
-    let post_asn =
-      AstAux.list_to_sep_conj
-        (List.map (fun asn -> (contract_loc, asn)) post_lft_tks)
-        (Some ret_ty_asn)
-    in
-    let post_asn =
-      match post_asn with
-      | None -> post_na_token
-      | Some post_asn -> Sep (contract_loc, post_na_token, post_asn)
-    in
-    Ok (pre_asn, post_asn)
 
   let translate_unsafety (unsafety_cpn : UnsafetyRd.t) =
     let open UnsafetyRd in
@@ -1924,10 +2035,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let* ghost_stmts =
       ListAux.try_sort LocAux.compare_err_desc
         (fun s1 s2 ->
-          let l1, l2 =
-            (fun f -> (f s1, f s2)) @@ fun s ->
-            s |> Ast.stmt_loc |> Ast.lexed_loc
-          in
+          let f s = s |> Ast.stmt_loc |> Ast.lexed_loc in
+          let l1, l2 = (f s1, f s2) in
           LocAux.try_compare_loc l1 l2)
         ghost_stmts
     in
@@ -1950,6 +2059,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | DefKind.Fn ->
         let def_path = def_path_get body_cpn in
         let name = TrName.translate_def_path def_path in
+        let hir_gens_cpn = hir_generics_get body_cpn in
+        let* gens, gens_loc = translate_hir_generics hir_gens_cpn in
+        let* lft_param_names =
+          ListAux.try_filter_map
+            (fun (name, kind, loc) ->
+              if kind = Hir.GenParamLifetime then
+                let* name = TrName.lft_name_without_apostrophe name in
+                Ok (Some name)
+              else Ok None)
+            gens
+        in
         let arg_count = arg_count_get body_cpn in
         let* arg_count = IntAux.Uint32.try_to_int arg_count in
         let local_decls_cpn = local_decls_get_list body_cpn in
@@ -1971,38 +2091,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let param_decls, local_decls =
           ListAux.partitioni (fun idx _ -> idx < arg_count) local_decls
         in
-        let hir_gens_cpn = hir_generics_get body_cpn in
-        let* gens, gens_loc = translate_hir_generics hir_gens_cpn in
-        let* lft_param_names =
-          ListAux.try_filter_map
-            (fun (name, kind, loc) ->
-              if kind = Hir.GenParamLifetime then
-                let* name = TrName.lft_name_without_apostrophe name in
-                Ok (Some name)
-              else Ok None)
-            gens
-        in
-        let contract_cpn = contract_get body_cpn in
-        let* contract_loc, contract_opt = translate_contract contract_cpn in
-        let* is_unsafe = translate_unsafety @@ unsafety_get @@ body_cpn in
-        let* ( (nonghost_callers_only : bool),
-               (fn_type_clause : _ option),
-               (pre_post : _ option),
-               (terminates : bool) ) =
-          match contract_opt with
-          | None when not is_unsafe ->
-              let* pre_post =
-                gen_contract contract_loc lft_param_names param_decls
-                  ret_place_decl
-              in
-              Ok (false, None, Some pre_post, false)
-          | Some contract when is_unsafe -> Ok contract
-          | _ ->
-              Error
-                (`TrBody
-                  "User should provide contract for unsafe functions and \
-                   cannot provide a contract for the safe ones")
-        in
         let vf_param_decls =
           List.map
             (fun ({ mutability; id; ty = ty_info; loc } : Mir.local_decl) ->
@@ -2012,6 +2100,33 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         in
         let vf_local_decls =
           List.map translate_to_vf_local_decl (ret_place_decl :: local_decls)
+        in
+        let contract_cpn = contract_get body_cpn in
+        let* contract_loc, contract_opt = translate_contract contract_cpn in
+        let* is_unsafe = translate_unsafety @@ unsafety_get @@ body_cpn in
+        let* contract_template_opt, contract =
+          if is_unsafe then
+            let* contract =
+              Option.to_result
+                ~none:
+                  (`TrBodyFailed
+                    ( contract_loc,
+                      "User should provide contract for unsafe functions" ))
+                contract_opt
+            in
+            Ok (None, contract)
+          else
+            (*safe function*)
+            let* pre_post_template =
+              gen_contract contract_loc lft_param_names param_decls
+                ret_place_decl
+            in
+            let contract_template =
+              (false, None, Some pre_post_template, false)
+            in
+            match contract_opt with
+            | None -> Ok (None, contract_template)
+            | Some contract -> Ok (Some contract_template, contract)
         in
         let bblocks_cpn = basic_blocks_get_list body_cpn in
         let* bblocks =
@@ -2024,7 +2139,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let span_cpn = span_get body_cpn in
         let* loc = translate_span_data span_cpn in
         let* closing_cbrace_loc = LocAux.get_last_col_loc loc in
-        let body =
+        let mk_fn_decl contract body =
+          let ( (nonghost_callers_only : bool),
+                (fn_type_clause : _ option),
+                (pre_post : _ option),
+                (terminates : bool) ) =
+            contract
+          in
           Ast.Func
             ( loc,
               Ast.Regular,
@@ -2036,13 +2157,27 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               fn_type_clause,
               pre_post,
               terminates,
-              (*body*) Some (vf_local_decls @ vf_bblocks, closing_cbrace_loc),
+              body,
               (*virtual*) false,
               (*overrides*) [] )
         in
-        Ok (body, ({ id = loc; info = env_map } : VF0.debug_info_rust_fe))
+        let body =
+          mk_fn_decl contract
+            (Some (vf_local_decls @ vf_bblocks, closing_cbrace_loc))
+        in
+        let body_sig_opt =
+          match contract_template_opt with
+          | None -> None
+          | Some contract_template ->
+              let body_sig = mk_fn_decl contract_template None in
+              Some body_sig
+        in
+        Ok
+          ( body_sig_opt,
+            body,
+            ({ id = loc; info = env_map } : VF0.debug_info_rust_fe) )
     | DefKind.AssocFn -> failwith "Todo: MIR Body kind AssocFn"
-    | _ -> Error (`TrBody "Unknown MIR Body kind")
+    | _ -> Error (`TrBodyFatal "Unknown MIR Body kind")
 
   let translate_visibility (vis_cpn : VisibilityRd.t) =
     let open VisibilityRd in
@@ -2121,6 +2256,269 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | UnionKind -> failwith "Todo: AdtDef::Union"
     | Undefined _ -> Error (`TrAdtDef "Unknown ADT kind")
 
+  let gen_adt_full_borrow_content adt_def =
+    let open Ast in
+    let* adt_kind = Mir.decl_mir_adt_kind adt_def in
+    match adt_kind with
+    | Mir.Enum | Mir.Union ->
+        failwith "Todo: Gen ADT full borrow content for Enum or Union"
+    | Mir.Struct ->
+        let adt_def_loc = AstAux.decl_loc adt_def in
+        let* name =
+          Option.to_result
+            ~none:(`GenAdtFullBorContent "Failed to get ADT name")
+            (AstAux.decl_name adt_def)
+        in
+        let fbor_content_name = name ^ "_full_borrow_content" in
+        let fbor_content_params =
+          [
+            (ManifestTypeExpr (adt_def_loc, PtrType Void), "l");
+            ( IdentTypeExpr (adt_def_loc, None (*package name*), "thread_id_t"),
+              "t" );
+          ]
+        in
+        let* fields_opt = AstAux.decl_fields adt_def in
+        let* fields =
+          Option.to_result
+            ~none:(`GenAdtFullBorContent "Failed to get ADT fields") fields_opt
+        in
+        let field_chunk f =
+          let floc = AstAux.field_loc f in
+          let fname = AstAux.field_name f in
+          let (ManifestTypeExpr (_, fty)) = AstAux.field_ty f in
+          let _ =
+            match fty with
+            | Int _ -> ()
+            | _ ->
+                failwith
+                  ("Todo: Gen full borrow content Adt:" ^ name ^ " Field:"
+                 ^ fname)
+          in
+          ( floc,
+            CallExpr
+              ( floc,
+                name ^ "_" ^ fname,
+                (*type arguments*) [],
+                (*indices*) [],
+                (*arguments*)
+                [ LitPat (Var (floc, "l")); VarPat (floc, fname) ],
+                Static ) )
+        in
+        let field_chunks = List.map field_chunk fields in
+        let own_params =
+          LitPat (Var (adt_def_loc, "t"))
+          :: List.map
+               (fun f ->
+                 let n, l = AstAux.(field_name f, field_loc f) in
+                 LitPat (Var (l, n)))
+               fields
+        in
+        let own_pred =
+          CallExpr
+            ( adt_def_loc,
+              name ^ "_own",
+              (*type arguments*) [],
+              (*indices*) [],
+              (*arguments*)
+              own_params,
+              Static )
+        in
+        let (Some body_asn) =
+          AstAux.list_to_sep_conj field_chunks (Some own_pred)
+        in
+        let fbor_content_pred_ctor =
+          PredCtorDecl
+            ( adt_def_loc,
+              fbor_content_name,
+              fbor_content_params,
+              [],
+              None
+              (* (Some n) means the predicate is precise and the first n parameters are input parameters *),
+              body_asn )
+        in
+        Ok fbor_content_pred_ctor
+
+  let gen_adt_proof_obligs adt_def =
+    let open Ast in
+    let* adt_kind = Mir.decl_mir_adt_kind adt_def in
+    match adt_kind with
+    | Mir.Enum | Mir.Union ->
+        failwith "Todo: Gen proof obligs for Enum or Union"
+    | Mir.Struct ->
+        let adt_def_loc = AstAux.decl_loc adt_def in
+        let* name =
+          Option.to_result ~none:(`GenAdtProofObligs "Failed to get ADT name")
+            (AstAux.decl_name adt_def)
+        in
+        let lft_param n =
+          (IdentTypeExpr (adt_def_loc, None (*package name*), "lifetime_t"), n)
+        in
+        let thread_id_param n =
+          (IdentTypeExpr (adt_def_loc, None (*package name*), "thread_id_t"), n)
+        in
+        let void_ptr_param n =
+          (ManifestTypeExpr (adt_def_loc, PtrType Void), n)
+        in
+        let lpat_var n = LitPat (Var (adt_def_loc, n)) in
+        (*TY-SHR-MONO*)
+        let params =
+          [
+            lft_param "k";
+            lft_param "k1";
+            thread_id_param "t";
+            void_ptr_param "l";
+          ]
+        in
+        let lft_inc_asn =
+          Operation
+            ( adt_def_loc,
+              Eq,
+              [
+                CallExpr
+                  ( adt_def_loc,
+                    "lifetime_inclusion",
+                    (*type arguments*) [],
+                    (*indices*) [],
+                    (*arguments*)
+                    List.map lpat_var [ "k1"; "k" ],
+                    Static );
+                True adt_def_loc;
+              ] )
+        in
+        let shr_asn lft_n =
+          CoefAsn
+            ( adt_def_loc,
+              DummyPat,
+              CallExpr
+                ( adt_def_loc,
+                  name ^ "_share",
+                  (*type arguments*) [],
+                  (*indices*) [],
+                  (*arguments*)
+                  List.map lpat_var [ lft_n; "t"; "l" ],
+                  Static ) )
+        in
+        let pre = Sep (adt_def_loc, lft_inc_asn, shr_asn "k") in
+        let post = shr_asn "k1" in
+        let share_mono_po =
+          Func
+            ( adt_def_loc,
+              Lemma
+                ( false
+                  (*indicates whether an axiom should be generated for this lemma*),
+                  None (*trigger*) ),
+              [] (*type parameters*),
+              None (*return type*),
+              name ^ "_share_mono",
+              params,
+              false (*nonghost_callers_only*),
+              None
+              (*implemented function type, with function type type arguments and function type arguments*),
+              Some (pre, post) (*contract*),
+              false (*terminates*),
+              None (*body*),
+              false (*virtual*),
+              [] (*overrides*) )
+        in
+        (*TY-SHR*)
+        let params =
+          [ lft_param "k"; thread_id_param "t"; void_ptr_param "l" ]
+        in
+        let fbor_pred =
+          CallExpr
+            ( adt_def_loc,
+              "full_borrow",
+              (*type arguments*) [],
+              (*indices*) [],
+              (*arguments*)
+              [
+                lpat_var "k";
+                LitPat
+                  (CallExpr
+                     ( adt_def_loc,
+                       name ^ "_full_borrow_content",
+                       (*type arguments*) [],
+                       (*indices*) [],
+                       (*arguments*)
+                       List.map lpat_var [ "l"; "t" ],
+                       Static ));
+              ],
+              Static )
+        in
+        let lft_token coef_pat =
+          CoefAsn
+            ( adt_def_loc,
+              coef_pat,
+              CallExpr
+                ( adt_def_loc,
+                  "lifetime_token",
+                  (*type arguments*) [],
+                  (*indices*) [],
+                  (*arguments*)
+                  [ lpat_var "k" ],
+                  Static ) )
+        in
+        let pre =
+          Sep (adt_def_loc, fbor_pred, lft_token (VarPat (adt_def_loc, "q")))
+        in
+        let share_pred =
+          CoefAsn
+            ( adt_def_loc,
+              DummyPat,
+              CallExpr
+                ( adt_def_loc,
+                  name ^ "_share",
+                  (*type arguments*) [],
+                  (*indices*) [],
+                  (*arguments*) List.map lpat_var [ "k"; "t"; "l" ],
+                  Static ) )
+        in
+        let post = Sep (adt_def_loc, share_pred, lft_token (lpat_var "q")) in
+        let share_po =
+          Func
+            ( adt_def_loc,
+              Lemma
+                ( false
+                  (*indicates whether an axiom should be generated for this lemma*),
+                  None (*trigger*) ),
+              [] (*type parameters*),
+              None (*return type*),
+              name ^ "_share_full",
+              params,
+              false (*nonghost_callers_only*),
+              None
+              (*implemented function type, with function type type arguments and function type arguments*),
+              Some (pre, post) (*contract*),
+              false (*terminates*),
+              None (*body*),
+              false (*virtual*),
+              [] (*overrides*) )
+        in
+        Ok [ share_mono_po; share_po ]
+
+  (** Checks for the existence of a lemma for proof obligation in ghost code.
+      The consistency of the lemma with proof obligation will be checked by VeriFast later *)
+  let check_proof_obligation gh_decls po =
+    let loc = AstAux.decl_loc po in
+    let* po_name =
+      Option.to_result
+        ~none:(`ChekProofObligationFatal "Proof obligation without a name")
+        (AstAux.decl_name po)
+    in
+    let check decl =
+      match decl with
+      | Ast.Func (_, _, _, _, name, _, _, _, _, _, Some body, _, _)
+        when po_name = name ->
+          true
+      | _ -> false
+    in
+    if List.exists check gh_decls then
+      Ok () (*in case of duplicates VeriFast complains later*)
+    else
+      Error
+        (`ChekProofObligationFailed
+          (loc, "Lemma " ^ po_name ^ " Should be proven"))
+
   let translate_vf_mir (vf_mir_cpn : VfMirRd.t) =
     let job _ =
       let module HeadersAux = HeadersAux.Make (struct
@@ -2138,6 +2536,21 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
          for more complicated scenarios we need to add all of the declarations without definitions first
          and then add all of the complete declarations
       *)
+      (* Todo @Nima: External definitions and their corresponding ghost headers inclusion should be handled in a better way *)
+      let local_adt_defs =
+        List.filter
+          (fun adt ->
+            let (Some n) = AstAux.decl_name adt in
+            not (String.starts_with "std_" n))
+          adt_defs
+      in
+      let* adts_fbor_content_preds =
+        ListAux.try_map gen_adt_full_borrow_content local_adt_defs
+      in
+      let* adts_proof_obligs =
+        ListAux.try_map gen_adt_proof_obligs local_adt_defs
+      in
+      let adts_proof_obligs = List.flatten adts_proof_obligs in
       let ghost_decl_batches_cpn =
         VfMirRd.ghost_decl_batches_get_list vf_mir_cpn
       in
@@ -2145,17 +2558,30 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         ListAux.try_map translate_ghost_decl_batch ghost_decl_batches_cpn
       in
       let ghost_decls = List.flatten ghost_decl_batches in
+      let* _ =
+        ListAux.try_map
+          (fun po -> check_proof_obligation ghost_decls po)
+          adts_proof_obligs
+      in
       let bodies_cpn = VfMirRd.bodies_get_list vf_mir_cpn in
       let body_tr_defs_ctx = { adt_defs } in
-      let* bodies_and_dbg_infos =
+      let* bodies_tr_res =
         ListAux.try_map (translate_body body_tr_defs_ctx) bodies_cpn
       in
-      let body_decls, debug_infos = List.split bodies_and_dbg_infos in
+      let body_sig_opts, body_decls, debug_infos =
+        ListAux.split3 bodies_tr_res
+      in
+      let body_sigs = List.filter_map Fun.id body_sig_opts in
       let debug_infos = VF0.DbgInfoRustFe debug_infos in
       let decls = AstDecls.decls () in
-      let decls = decls @ adt_defs @ ghost_decls @ body_decls in
+      let decls =
+        decls @ adt_defs @ adts_fbor_content_preds @ adts_proof_obligs
+        @ ghost_decls @ body_sigs @ body_decls
+      in
       (* Todo @Nima: we should add necessary inclusions during translation *)
-      let _ = List.iter Headers.add_decl [ "rust/std/alloc.h" ] in
+      let _ =
+        List.iter Headers.add_decl [ "rust/std/alloc.h"; "rust/std/process.h" ]
+      in
       let header_names = Headers.decls () in
       let* headers = ListAux.try_map HeadersAux.parse_header header_names in
       let headers = List.concat headers in
@@ -2166,50 +2592,67 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     match job () with
     | Ok res -> res
-    | Error err ->
-        (print_string "MIR Translator Failed";
-         match err with
-         | `CalcIntWidth str
-         | `CapnpIndListGetList str
-         | `DisjointBatches str
-         | `GetLastColLoc str
-         | `IntAuxAdd str
-         | `IsWellFormedLoc0 str
-         | `IsWellFormedSrcPos str
-         | `Sort str
-         | `TrAdtDef str
-         | `TrAdtTy str
-         | `TrBinOp str
-         | `TrBody str
-         | `TrConstValue str
-         | `TrConstantKind str
-         | `TrFileName str
-         | `TrFnCall str
-         | `TrFnCallRExpr str
-         | `TrFnDefTy str
-         | `TrGenArg str
-         | `TrMutability str
-         | `TrOperand str
-         | `TrPlaceElement str
-         | `TrRealFileName str
-         | `TrRvalue str
-         | `TrScalar str
-         | `TrScalarUint str
-         | `TrStatementKind str
-         | `TrSwInt str
-         | `TrTerminatorKind str
-         | `TrToVfBBlock str
-         | `TrTy str
-         | `TrTyConstKind str
-         | `TrUIntTy str
-         | `TrVarDebugInfoContents str
-         | `TrVisibility str
-         | `TryCompareLoc str
-         | `TryCompareSrcPos str
-         | `UIntTyBitsLen str ->
-             print_endline (": " ^ str)
-         | `IntAuxToInt -> ());
-        failwith "Todo: translate_vf_mir Error handling"
+    | Error err -> (
+        match err with
+        | `AdtTyName str
+        | `CapnpIndListGetList str
+        | `ChekProofObligationFatal str
+        | `DeclMirAdtKind str
+        | `GenAdtFullBorContent str
+        | `GenAdtProofObligs str
+        | `GenLocalTyAsn str
+        | `GetAdtDef str
+        | `GetLastColLoc str
+        | `IntAuxAdd str
+        | `IsWellFormedLoc0 str
+        | `IsWellFormedSrcPos str
+        | `LftNameWithoutApostrophe str
+        | `SizeAuxSzBitsOfInt str
+        | `Sort str
+        | `TrAdtDef str
+        | `TrAdtTy str
+        | `TrAggregate str
+        | `TrAggregateKind str
+        | `TrBinOp str
+        | `TrBodyFatal str
+        | `TrConstValue str
+        | `TrConstantKind str
+        | `TrContract str
+        | `TrFileName str
+        | `TrFnCall str
+        | `TrFnCallRExpr str
+        | `TrFnDefTy str
+        | `TrGenArg str
+        | `TrHirGenericParamKind str
+        | `TrHirGenericParamName str
+        | `TrMutability str
+        | `TrOperand str
+        | `TrPlaceElement str
+        | `TrRealFileName str
+        | `TrRvalue str
+        | `TrScalar str
+        | `TrScalarUint str
+        | `TrStatementKind str
+        | `TrSwInt str
+        | `TrTerminatorKind str
+        | `TrToVfBBlock str
+        | `TrTy str
+        | `TrTyConstKind str
+        | `TrUIntTy str
+        | `TrUnsafety str
+        | `TrVarDebugInfoContents str
+        | `TrVisibility str
+        | `TryCompareLoc str
+        | `TryCompareSrcPos str
+        | `UIntTyBitsLen str ->
+            print_string ("MIR Translator Failed: " ^ str);
+            raise (Parser.CompilationError "Rust Translator Error")
+        | `IntAuxToInt ->
+            raise
+              (Parser.CompilationError "Rust Translator Error: to int failed")
+        | `ChekProofObligationFailed (loc, str) | `TrBodyFailed (loc, str) ->
+            raise (Parser.StaticError (loc, str, None)))
+
   (* Todo @Nima: We should add error handling parts at the end of `translate_*` functions *)
 end
 (* Todo @Nima: There would be naming conflicts if the user writes a function in Rust with a name like `std_alloc_alloc`.

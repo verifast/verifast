@@ -1,20 +1,52 @@
-#ifndef LIFETIME_LOGIC_H
-#define LIFETIME_LOGIC_H
+#ifndef LIFETIME_LOGIC_GH
+#define LIFETIME_LOGIC_GH
 
 abstract_type lifetime_t; // Type of lifetimes
 abstract_type thread_id_t; // Type of thread IDs
 
+fixpoint bool lifetime_inclusion(lifetime_t k, lifetime_t k1);
+
 predicate lifetime_token(lifetime_t k;); // Lifetime token
 predicate thread_token(thread_id_t t); // Non-atomic token with Top mask ([NaInv: t.Top] in RustBelt)
 
+// Full borrow
+predicate full_borrow(lifetime_t k, predicate() P);
+
+predicate close_full_borrow_token(predicate() P, real q, lifetime_t k);
+
+lemma void open_full_borrow(lifetime_t k, predicate() P);
+    requires full_borrow(k, P) &*& [?q]lifetime_token(k);
+    ensures P() &*& close_full_borrow_token(P, q, k);
+
+lemma void close_full_borrow();
+    requires close_full_borrow_token(?P, ?q, ?k) &*& P();
+    ensures full_borrow(k, P) &*& [q]lifetime_token(k);
+
+typedef lemma void implies(predicate() P, predicate() P1)();
+    requires P();
+    ensures P1();
+
+lemma void full_borrow_implies(lifetime_t k, predicate() P, predicate() P1);
+    requires full_borrow(k, P) &*& is_implies(?f, P, P1) &*& is_implies(?f1, P1, P);
+    ensures full_borrow(k, P1) &*& is_implies(f, P, P1) &*& is_implies(f1, P1, P);
+
+// Non-atomic persistent borrow
 predicate nonatomic_borrow(lifetime_t k, thread_id_t t, void *l, predicate() P); // Non-atomic borrow with mask Nshr.l
+
+lemma void full_borrow_into_nonatomic_borrow(lifetime_t k, thread_id_t t, void *l, predicate() P);
+    requires full_borrow(k, P);
+    ensures [_]nonatomic_borrow(k, t, l, P);
+
+lemma void nonatomic_borrow_mono(lifetime_t k, lifetime_t k1, thread_id_t t, void *l, predicate() P);
+    requires [_]nonatomic_borrow(k, t, l, P) &*& lifetime_inclusion(k1, k) == true;
+    ensures [_]nonatomic_borrow(k1, t, l, P);
+
+predicate close_nonatomic_borrow_token(predicate() P, real q, lifetime_t k, thread_id_t t);
 
 // Rule LftL-na-acc with N = Nshr.l and requiring NaInv: t.Top instead of NaInv: t.N
 lemma void open_nonatomic_borrow(lifetime_t k, thread_id_t t, void *l, real q);
-    requires nonatomic_borrow(k, t, l, ?P) &*& [q]lifetime_token(k) &*& thread_token(t);
+    requires [_]nonatomic_borrow(k, t, l, ?P) &*& [q]lifetime_token(k) &*& thread_token(t);
     ensures P() &*& close_nonatomic_borrow_token(P, q, k, t);
-
-predicate close_nonatomic_borrow_token(predicate() P, real q, lifetime_t k, thread_id_t t);
 
 lemma void close_nonatomic_borrow();
     requires close_nonatomic_borrow_token(?P, ?q, ?k, ?t) &*& P();

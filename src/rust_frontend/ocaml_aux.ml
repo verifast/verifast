@@ -3,6 +3,12 @@ let ( let* ) = Result.bind
 exception AuxExcp of string
 
 module ListAux = struct
+  let is_empty l = match l with [] -> true | _ :: _ -> false
+  let first l = match l with [] -> None | fst :: _ -> Some fst
+
+  let rec last l =
+    match l with [] -> None | lst :: [] -> Some lst | _ :: tl -> last tl
+
   let partitioni f l =
     let rec helper idx list sat_list unsat_list =
       match list with
@@ -14,6 +20,11 @@ module ListAux = struct
     in
     let sat, unsat = helper 0 l [] [] in
     (List.rev sat, List.rev unsat)
+
+  let split3 triples =
+    List.fold_right
+      (fun (x, y, z) (xs, ys, zs) -> (x :: xs, y :: ys, z :: zs))
+      triples ([], [], [])
 
   let try_map f l =
     let rec helper l mapped_l =
@@ -53,12 +64,6 @@ module ListAux = struct
     in
     let* sat, unsat = try_fold_left f_aux ([], []) l in
     Ok (List.rev sat, List.rev unsat)
-
-  let is_empty l = match l with [] -> true | _ :: _ -> false
-  let first l = match l with [] -> None | fst :: _ -> Some fst
-
-  let rec last l =
-    match l with [] -> None | lst :: [] -> Some lst | _ :: tl -> last tl
 
   let try_merge_sorted_lists try_compare l1 l2 =
     let rec f_aux merged l1 l2 =

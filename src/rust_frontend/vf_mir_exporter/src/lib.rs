@@ -36,6 +36,8 @@ extern crate rustc_middle;
 extern crate rustc_session;
 extern crate rustc_span;
 
+mod hir_utils;
+
 use rustc_borrowck::consumers::BodyWithBorrowckFacts;
 use rustc_driver::Compilation;
 use rustc_hir::def_id::LocalDefId;
@@ -298,6 +300,7 @@ mod vf_mir_builder {
     use ty_cpn::const_kind as const_kind_cpn;
     use ty_cpn::fn_def_ty as fn_def_ty_cpn;
     use ty_cpn::gen_arg as gen_arg_cpn;
+    use ty_cpn::int_ty as int_ty_cpn;
     use ty_cpn::raw_ptr_ty as raw_ptr_ty_cpn;
     use ty_cpn::ref_ty as ref_ty_cpn;
     use ty_cpn::region as region_cpn;
@@ -584,7 +587,7 @@ mod vf_mir_builder {
             Self::encode_hir_generics(enc_ctx, hir_gens, hir_gens_cpn);
 
             let contract_cpn = body_cpn.reborrow().init_contract();
-            let body_contract_span = crate::span_utils::body_contract_span(&body);
+            let body_contract_span = crate::span_utils::body_contract_span(tcx, body);
             let contract_annots = enc_ctx
                 .annots
                 .drain_filter(|annot| {
@@ -639,7 +642,7 @@ mod vf_mir_builder {
             Self::encode_span_data(tcx, &body.span.data(), span_cpn);
 
             let imp_span_cpn = body_cpn.reborrow().init_imp_span();
-            let imp_span_data = crate::span_utils::body_imp_span(body);
+            let imp_span_data = crate::span_utils::body_imp_span(tcx, body);
             Self::encode_span_data(tcx, &imp_span_data, imp_span_cpn);
 
             let vdis_len = body.var_debug_info.len().try_into().expect(
@@ -858,7 +861,7 @@ mod vf_mir_builder {
                     "Failed to get the unicode string of PathBuf {:?}",
                     path_buf
                 ))
-            };
+            }
             match real_fname {
                 rustc_span::RealFileName::LocalPath(path_buf) => {
                     real_fname_cpn.set_local_path(get_path_str(path_buf));
@@ -956,6 +959,10 @@ mod vf_mir_builder {
             let mut ty_kind_cpn = ty_cpn.init_kind();
             match ty.kind() {
                 ty::TyKind::Bool => ty_kind_cpn.set_bool(()),
+                ty::TyKind::Int(int_ty) => {
+                    let int_ty_cpn = ty_kind_cpn.init_int();
+                    Self::encode_ty_int(int_ty, int_ty_cpn);
+                }
                 ty::TyKind::Uint(u_int_ty) => {
                     let u_int_ty_cpn = ty_kind_cpn.init_u_int();
                     Self::encode_ty_uint(u_int_ty, u_int_ty_cpn)
@@ -991,6 +998,17 @@ mod vf_mir_builder {
                     }
                 }
                 _ => todo!("Unsupported type kind"),
+            }
+        }
+
+        fn encode_ty_int(int_ty: &ty::IntTy, mut int_ty_cpn: int_ty_cpn::Builder<'_>) {
+            match int_ty {
+                ty::IntTy::Isize => int_ty_cpn.set_i_size(()),
+                ty::IntTy::I8 => int_ty_cpn.set_i8(()),
+                ty::IntTy::I16 => int_ty_cpn.set_i16(()),
+                ty::IntTy::I32 => int_ty_cpn.set_i32(()),
+                ty::IntTy::I64 => int_ty_cpn.set_i64(()),
+                ty::IntTy::I128 => int_ty_cpn.set_i128(()),
             }
         }
 
@@ -1816,43 +1834,63 @@ mod mir_utils {
 }
 
 mod span_utils {
-    use mir::HasLocalDecls;
+
+    use crate::hir_utils;
     use rustc_ast::util::comments::Comment;
-    use rustc_middle::mir;
-    use rustc_span::{BytePos, SpanData, SyntaxContext};
+    use rustc_hir::def_id::DefId;
+    use rustc_middle::{mir, ty::TyCtxt};
+    use rustc_span::{BytePos, ExpnKind, Span, SpanData, SyntaxContext};
     use tracing::debug;
 
-    pub fn body_imp_span<'tcx>(body: &mir::Body<'tcx>) -> SpanData {
-        let body_imp_span = body.span.with_lo(
-            body.local_decls()[mir::RETURN_PLACE]
-                .source_info
-                .span
-                .data()
-                .lo,
-        );
+    // Copy from rustc_mir_transform/src/coverage/mod.rs
+    fn get_hir_body_span<'tcx>(
+        tcx: TyCtxt<'tcx>,
+        hir_body: &rustc_hir::Body<'tcx>,
+        def_id: DefId,
+    ) -> Span {
+        let mut body_span = hir_body.value.span;
+        if tcx.is_closure(def_id) {
+            // If the MIR function is a closure, and if the closure body span
+            // starts from a macro, but it's content is not in that macro, try
+            // to find a non-macro callsite, and instrument the spans there
+            // instead.
+            loop {
+                let expn_data = body_span.ctxt().outer_expn_data();
+                if expn_data.is_root() {
+                    break;
+                }
+                if let ExpnKind::Macro { .. } = expn_data.kind {
+                    body_span = expn_data.call_site;
+                } else {
+                    break;
+                }
+            }
+        }
+        body_span
+    }
+
+    pub fn body_imp_span<'tcx>(tcx: TyCtxt<'tcx>, mir_body: &mir::Body<'tcx>) -> SpanData {
+        let def_id = mir_body.source.def_id();
+        let hir_body = hir_utils::fn_body(tcx, def_id);
+        let body_imp_span = get_hir_body_span(tcx, hir_body, def_id);
         debug!(
             "The body implementation span for {:?} at {:?} is {:?}",
-            body.source.instance, body.span, body_imp_span
+            mir_body.source.instance, mir_body.span, body_imp_span
         );
         body_imp_span.data()
     }
 
-    // Todo @Nima: This function returns a wrong span for functions with explicit return type in their signature
-    pub fn body_contract_span<'tcx>(body: &mir::Body<'tcx>) -> SpanData {
-        let body_span = body.span.data();
-        // The following span is not exactly the contract span but serves our purpose
-        let body_contract_span = body_span.with_hi(
-            body.local_decls()[mir::RETURN_PLACE]
-                .source_info
-                .span
-                .data()
-                .lo,
-        );
+    pub fn body_contract_span<'tcx>(tcx: TyCtxt<'tcx>, mir_body: &mir::Body<'tcx>) -> SpanData {
+        let def_id = mir_body.source.def_id();
+        let fn_sig = hir_utils::fn_sig(tcx, def_id);
+        let hir_body = hir_utils::fn_body(tcx, def_id);
+        let body_span = get_hir_body_span(tcx, hir_body, def_id);
+        let cspan = fn_sig.span.shrink_to_hi().with_hi(body_span.lo());
         debug!(
-            "The contract span for {:?} at {:?} is: {:?}",
-            body.source.instance, body.span, body_contract_span
+            "Contract span for {:?} is {:?}",
+            mir_body.source.instance, cspan
         );
-        body_contract_span.data()
+        cspan.data()
     }
 
     /** BUG @Nima: In the case of BlockComment this calculation is wrong. We cannot calculate the span rightly.
@@ -1900,3 +1938,4 @@ mod vf_annot_utils {
 // Todo @Nima: Some mut vars might not need to be mut.
 // Todo @Nima: The encoding functions need to be turned to method to prevent passing context around
 // Todo @Nima: Change the encode functions that require the EncCtx as a parameter to methods of EncCtx
+// Todo @Nima: Extract lifetime beginning and ends to produce and consume their tokens in those compiler-inferred places
