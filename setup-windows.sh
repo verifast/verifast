@@ -16,8 +16,9 @@ dl_and_unzip() {
   # --no-clobber: do not download if already present
   wget --no-clobber -P verifast-downloads --progress=dot:mega -c "$url"
   echo "$hash *verifast-downloads/$filename" | sha"$sha"sum -c || exit 1
-  # --skip-old-files: do not extract files that already exist in the filesystem
-  tar x"$filter"f "verifast-downloads/$filename" --skip-old-files
+  if [ ! -e $(tar t"$filter"f "verifast-downloads/$filename" | head -n 1) ]; then
+    tar x"$filter"f "verifast-downloads/$filename"
+  fi
 }
 
 script_dir=$(pwd)
