@@ -13,9 +13,18 @@ dl_and_unzip() {
   hash="$2"
   sha="$3"
   filter="$4"
-  wget -P verifast-downloads --progress=dot:mega -c "$url"
-  echo "$hash *verifast-downloads/$filename" | sha"$sha"sum -c || exit 1
-  tar x"$filter"f "verifast-downloads/$filename"
+  if [ ! -e "verifast-downloads/$filename" ]; then
+    wget -P verifast-downloads --progress=dot:mega -c "$url"
+    echo "$hash *verifast-downloads/$filename" | sha"$sha"sum -c || exit 1
+  else
+    echo "Skipped downloading C:/verifast-downloads/$filename; file already exists"
+  fi
+  entry="$(tar t"$filter"f "verifast-downloads/$filename" | head -n 1)"
+  if [ ! -e $entry ]; then
+    tar x"$filter"f "verifast-downloads/$filename"
+  else
+    echo "Skipped extracting C:/verifast-downloads/$filename; file C:/$entry already exists"
+  fi
 }
 
 script_dir=$(pwd)
