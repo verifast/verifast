@@ -627,11 +627,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let local_path_opt_cpn = local_path_get remapped_data_cpn in
         let virtual_name = virtual_name_get remapped_data_cpn in
         match OptionRd.get local_path_opt_cpn with
-        | Nothing ->
-            Error
-              (`TrRealFileName
-                "RealFileName without local path: The file was imported from \
-                 another crate")
+        | Nothing -> Ok virtual_name
         | Something ptr_cpn ->
             let text_wrapper_cpn = VfMirStub.Reader.of_pointer ptr_cpn in
             Ok (TextWrapperRd.text_get text_wrapper_cpn)
