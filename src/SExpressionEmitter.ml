@@ -883,8 +883,10 @@ let rec sexpr_of_stmt (stmt : stmt) : sexpression =
     | CreateBoxStmt _                          -> unsupported "stmt-CreateBoxStmt"
     | CreateHandleStmt _                       -> unsupported "stmt-CreateHandleStmt"
     | DisposeBoxStmt _                         -> unsupported "stmt-DisposeBoxStmt"
-    | LabelStmt _                              -> unsupported "stmt-LabelStmt"
-    | GotoStmt _                               -> unsupported "stmt-GotoStmt"
+    | LabelStmt (loc, lbl) ->
+      List [ Symbol "stmt-label"; Symbol lbl ]
+    | GotoStmt (loc, lbl) ->
+      List [ Symbol "stmt-goto"; Symbol lbl ]
     | NoopStmt _                               -> unsupported "stmt-NoopStmt"
     | InvariantStmt _                          -> unsupported "stmt-InvariantStmt"
     | ProduceLemmaFunctionPointerChunkStmt _   -> unsupported "stmt-ProduceLemmaFunctionPointerChunkStmt"
