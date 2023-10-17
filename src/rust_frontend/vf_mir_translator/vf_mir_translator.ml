@@ -2645,7 +2645,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         | `TryCompareLoc str
         | `TryCompareSrcPos str
         | `UIntTyBitsLen str ->
-            print_string ("MIR Translator Failed: " ^ str);
+            print_endline ("MIR Translator Failed: " ^ str);
             raise (Parser.CompilationError "Rust Translator Error")
         | `IntAuxToInt ->
             raise
