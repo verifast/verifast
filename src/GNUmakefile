@@ -641,19 +641,19 @@ cleantest::
 # containing the dependency graph every time you e.g. write new .ml files.
 # Thus typing dependencies by hand is replaced by typing "make depend",
 # which is less error-prone.
+META_DEPS_RUST_FE = $(wildcard $(RUST_FE_DIR)/*.ml $(RUST_FE_DIR)/*.mli)
 META_DEPS = \
   $(wildcard *.ml *.mli \
   java_frontend/*.ml java_frontend/*.mli \
   cxx_frontend/*.ml cxx_frontend/*.mli \
-  shape_analysis/*.ml shape_analysis/*.mli)
-META_DEPS_RUST_FE = $(wildcard $(RUST_FE_DIR)/*.ml $(RUST_FE_DIR)/*.mli)
+  shape_analysis/*.ml shape_analysis/*.mli) \
+  $(META_DEPS_RUST_FE)
 
 depend: $(META_DEPS)
 	@echo "  OCAMLDEP "
 	echo "# These dependencies are automatically generated." > .depend
 	echo "# Do not edit by hand. To generate, run 'make depend'." >> .depend
 	$(OCAMLDEP) -slash $(INCLUDES) $(META_DEPS) >> .depend
-	$(OCAMLDEP) -slash $(META_DEPS_RUST_FE) >> .depend
 .PHONY: depend
 
 .depend:
