@@ -388,6 +388,7 @@ let _ =
   let readOptionsFromSourceFile = ref false in
   let exports: string list ref = ref [] in
   let outputSExpressions : string option ref = ref None in
+  let dumpAST: string option ref = ref None in
   let breakpoint: (string * int) option ref = ref None in
   let focus: (string * int) option ref  = ref None in
   let targetPath: int list option ref = ref None in
@@ -463,6 +464,7 @@ let _ =
                 SExpressionEmitter.unsupported_exception := true
               end,
               "Emits the AST as an s-expression to the specified file; raises exception on unsupported constructs."
+            ; "-dump_ast", String (fun str -> dumpAST := Some str), "Dumps the AST to the specified file."
             ; "-export", String (fun str -> exports := str :: !exports), " "
             ; "-L", String (fun str -> library_paths := str :: !library_paths), "Add a directory to the list of directories to be searched for manifest files during linking."
             ; "-safe_mode", Set safe_mode, "Safe mode (for use in CGI scripts)."
@@ -498,6 +500,11 @@ let _ =
         } in
         if not !json then print_endline filename;
         let emitter_callback (packages : package list) =
+          begin match !dumpAST with
+            | Some target_file ->
+              OCamlExpr.emit target_file (OCamlExprEmitter.of_list OCamlExprEmitter.of_package packages)
+            | None -> ()
+          end;
           match !outputSExpressions with
             | Some target_file ->
               Printf.printf "Emitting s-expressions to %s\n" target_file;
