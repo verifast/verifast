@@ -2651,7 +2651,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             raise
               (Parser.CompilationError "Rust Translator Error: to int failed")
         | `ChekProofObligationFailed (loc, str) | `TrBodyFailed (loc, str) ->
-            raise (Parser.StaticError (loc, str, None)))
+            raise (Ast.StaticError (loc, str, None)))
 
   (* Todo @Nima: We should add error handling parts at the end of `translate_*` functions *)
 end
