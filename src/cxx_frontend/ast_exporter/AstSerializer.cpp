@@ -63,9 +63,13 @@ void AstSerializer::serializeParams(
     auto type = param.initType();
     auto typeInfo = p->getTypeSourceInfo();
 
-    assert(typeInfo && "Explicit parameter source info.");
+    if (typeInfo) {
+      serializeTypeLoc(type, typeInfo->getTypeLoc());
+    } else {
+      auto typeDesc = type.initDesc();
+      serializeQualType(typeDesc, p->getType());
+    }
 
-    serializeTypeLoc(type, typeInfo->getTypeLoc());
     if (p->hasDefaultArg()) {
       auto def = param.initDefault();
       serializeExpr(def, p->getDefaultArg());

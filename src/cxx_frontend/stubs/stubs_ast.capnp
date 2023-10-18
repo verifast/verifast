@@ -218,9 +218,8 @@ struct Decl {
     static @0 :Bool;
     func @1 :Function;
     this @2 :Type; # optional, not present if it is a static method
-    implicit @3 :Bool;
-    virtual @4 :Bool;
-    overrides @5 :List(Override); # optional, only present if the method is virtual and overrides methods
+    virtual @3 :Bool;
+    overrides @4 :List(Override); # optional, only present if the method is virtual and overrides methods
   }
 
   struct Ctor {
@@ -264,22 +263,24 @@ struct Decl {
     contract @2 :List(Clause); # optional
   }
 
+  isImplicit @0 :Bool;
+
   union {
-    unionNotInitialized @0 :Void;
-    ann @1 :Text;
-    empty @2 :Void;
-    var @3 :Var;
-    function @4 :Function;
-    field @5 :Field;
-    record @6 :Record;
-    method @7 :Method;
-    accessSpec @8 :Void;
-    ctor @9 :Ctor;
-    dtor @10 :Dtor;
-    typedef @11 :Typedef;
-    enumDecl @12 :Enum;
-    namespace @13 :Namespace;
-    functionTemplate @14 :FunctionTemplate;
+    unionNotInitialized @1 :Void;
+    ann @2 :Text;
+    empty @3 :Void;
+    var @4 :Var;
+    function @5 :Function;
+    field @6 :Field;
+    record @7 :Record;
+    method @8 :Method;
+    accessSpec @9 :Void;
+    ctor @10 :Ctor;
+    dtor @11 :Dtor;
+    typedef @12 :Typedef;
+    enumDecl @13 :Enum;
+    namespace @14 :Namespace;
+    functionTemplate @15 :FunctionTemplate;
   }
 }
 

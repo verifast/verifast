@@ -164,6 +164,7 @@ struct DeclSerializer : public NodeSerializer<stubs::Decl, clang::Decl>,
 
   bool serializeDesc(const clang::Decl *decl) override {
     assert(decl && "Declaration should not be null");
+    m_builder.setIsImplicit(decl->isImplicit());
     return Visit(decl);
   }
 

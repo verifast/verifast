@@ -148,34 +148,32 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     let loc, ptr = decompose_node node in
     f loc ptr
 
-  let method_is_implicit (meth: R.Decl.Method.t): bool =
-    R.Decl.Method.implicit_get meth
-
   (**
     [transl_decl decl] translates [decl] and returns a VeriFast declaration list, representing [decl].
   *)
   let rec transl_decl (decl_node: R.Node.t): VF.decl list =
     let open R.Decl in
     let loc, desc = decompose_node decl_node in
-    match get desc with
-    | UnionNotInitialized -> union_no_init_err "declaration"
-    | Empty               -> []
-    | Function f          -> [transl_func_decl loc f]
-    | Ann a               -> transl_ann_decls loc a
-    | Record r            -> transl_record_decl loc r
-    | Method m            -> if method_is_implicit m then [] else [transl_meth_decl loc m]
-    | Var v               -> [transl_var_decl_global loc v]
-    | EnumDecl d          -> [transl_enum_decl loc d]
-    | Typedef d           -> [transl_typedef_decl loc d]
-    | Ctor c              -> if R.Decl.Ctor.method_get c |> method_is_implicit then [] else [transl_ctor_decl loc c]
-                              (* TODO: we currently skip implicit constructors *)
-    | Dtor d              -> if R.Decl.Dtor.method_get d |> method_is_implicit then [] else [transl_dtor_decl loc d]
-                              (* TODO: skipping implicit dtors *)
-    | AccessSpec          -> []  (* TODO: don't ignore this? *)   
-    | Namespace ns        -> transl_namespace_decl loc ns
-    | FunctionTemplate ft -> transl_function_template_decl loc ft
-    | Undefined _         -> failwith "Undefined declaration."
-    | _                   -> error loc "Unsupported declaration."
+    if is_implicit_get desc then
+      []
+    else
+      match get desc with
+      | UnionNotInitialized -> union_no_init_err "declaration"
+      | Empty               -> []
+      | Function f          -> [transl_func_decl loc f]
+      | Ann a               -> transl_ann_decls loc a
+      | Record r            -> transl_record_decl loc r
+      | Method m            -> [transl_meth_decl loc m]
+      | Var v               -> [transl_var_decl_global loc v]
+      | EnumDecl d          -> [transl_enum_decl loc d]
+      | Typedef d           -> [transl_typedef_decl loc d]
+      | Ctor c              -> [transl_ctor_decl loc c false]
+      | Dtor d              -> [transl_dtor_decl loc d false]
+      | AccessSpec          -> []  (* TODO: don't ignore this? *)   
+      | Namespace ns        -> transl_namespace_decl loc ns
+      | FunctionTemplate ft -> transl_function_template_decl loc ft
+      | Undefined _         -> failwith "Undefined declaration."
+      | _                   -> error loc "Unsupported declaration."
 
   (**
     [transl_expr expr] translates [expr] and returns a VeriFast expression, representing [expr].
@@ -401,7 +399,6 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
         let this_type = this_get meth |> transl_type loc in
         (VF.PtrTypeExpr (VF.dummy_loc, this_type), "this") :: params 
     in
-    let implicit = implicit_get meth in
     let is_virtual = virtual_get meth in
     let overrides = 
       if has_overrides meth then 
@@ -413,12 +410,12 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
         )
       else []
     in
-    name, params, body_opt, anns, return_type, implicit, is_virtual, overrides
+    name, params, body_opt, anns, return_type, is_virtual, overrides
 
   (* translates a method to a function and prepends 'this' to the parameters in case it is not a static method *)
   and transl_meth_decl (loc: VF.loc) (meth: R.Decl.Method.t): VF.decl =
     let open R.Decl.Method in
-    let name, params, body_opt, (ng_callers_only, ft, pre_post, terminates), return_type, _, is_virtual, overrides = transl_meth loc meth in
+    let name, params, body_opt, (ng_callers_only, ft, pre_post, terminates), return_type, is_virtual, overrides = transl_meth loc meth in
     VF.Func (loc, VF.Regular, [], return_type, name, params, ng_callers_only, ft, pre_post, terminates, body_opt, is_virtual, overrides |> List.map snd)
 
   and transl_record_ref (loc: VF.loc) (record_ref: R.RecordRef.t): VF.type_ =
@@ -430,9 +427,9 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     | R.RecordKind.Unio -> VF.UnionType name
     | _ -> error loc "Invalid record reference"
 
-  and transl_ctor_decl (loc: VF.loc) (ctor: R.Decl.Ctor.t): VF.decl =
+  and transl_ctor_decl (loc: VF.loc) (ctor: R.Decl.Ctor.t) (implicit: bool): VF.decl =
     let open R.Decl.Ctor in
-    let name, this_param :: params, body_opt, (_, _, pre_post_opt, terminates), _, implicit, _, _ = method_get ctor |> transl_meth loc in
+    let name, this_param :: params, body_opt, (_, _, pre_post_opt, terminates), _, _, _ = method_get ctor |> transl_meth loc in
     (* the init list also contains member names that are default initialized and don't appear in the init list *)
     (* in that case, no init expr is present (we can always retrieve it from the field default initializer) *)
     let transl_init init =
@@ -444,9 +441,9 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     let parent = ctor |> parent_get |> transl_record_ref loc in
     VF.CxxCtor (loc, name, params, pre_post_opt, terminates, body_opt, implicit, parent)
 
-  and transl_dtor_decl (loc: VF.loc) (dtor: R.Decl.Dtor.t): VF.decl =
+  and transl_dtor_decl (loc: VF.loc) (dtor: R.Decl.Dtor.t) (implicit: bool): VF.decl =
     let open R.Decl.Dtor in 
-    let name, [this_param], body_opt, (_, _, pre_post_opt, terminates), _, implicit, is_virtual, overrides = method_get dtor |> transl_meth loc in
+    let name, [this_param], body_opt, (_, _, pre_post_opt, terminates), _, is_virtual, overrides = method_get dtor |> transl_meth loc in
     let parent = dtor |> parent_get |> transl_record_ref loc in
     VF.CxxDtor (loc, name, pre_post_opt, terminates, body_opt, implicit, parent, is_virtual, overrides |> List.map fst)
 

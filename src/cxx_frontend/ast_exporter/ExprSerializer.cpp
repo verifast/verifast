@@ -188,7 +188,8 @@ bool ExprSerializer::serializeCast(const clang::CastExpr *expr, bool expl) {
   default:
     if (expl)
       return false;
-    return Visit(expr->getSubExpr());
+    serialize(expr->getSubExpr());
+    return true;
   }
 }
 
@@ -307,7 +308,8 @@ bool ExprSerializer::VisitCXXConstructExpr(
 }
 
 bool ExprSerializer::VisitConstantExpr(const clang::ConstantExpr *expr) {
-  return Visit(expr->getSubExpr());
+  serialize(expr->getSubExpr());
+  return true;
 }
 
 bool ExprSerializer::VisitCXXNullPtrLiteralExpr(
@@ -317,12 +319,14 @@ bool ExprSerializer::VisitCXXNullPtrLiteralExpr(
 }
 
 bool ExprSerializer::VisitParenExpr(const clang::ParenExpr *expr) {
-  return Visit(expr->getSubExpr());
+  serialize(expr->getSubExpr());
+  return true;
 }
 
 bool ExprSerializer::VisitCXXDefaultInitExpr(
     const clang::CXXDefaultInitExpr *expr) {
-  return Visit(expr->getExpr());
+  serialize(expr->getExpr());
+  return true;
 }
 
 } // namespace vf

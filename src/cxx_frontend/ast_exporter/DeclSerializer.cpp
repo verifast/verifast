@@ -19,8 +19,14 @@ void DeclSerializer::serializeFuncDecl(stubs::Decl::Function::Builder &builder,
                                        bool serializeContract) {
   builder.setName(m_serializer.getQualifiedFuncName(decl));
   auto result = builder.initResult();
-  m_serializer.serializeTypeLoc(result,
-                                decl->getFunctionTypeLoc().getReturnLoc());
+  auto returnTypeLoc = decl->getFunctionTypeLoc();
+
+  if (!returnTypeLoc.isNull()) {
+    m_serializer.serializeTypeLoc(result, returnTypeLoc.getReturnLoc());
+  } else {
+    auto typeDesc = result.initDesc();
+    m_serializer.serializeQualType(typeDesc, decl->getReturnType());
+  }
 
   auto paramsBuilder = builder.initParams(decl->param_size());
   m_serializer.serializeParams(paramsBuilder, decl->parameters());
@@ -211,7 +217,6 @@ void DeclSerializer::serializeMethodDecl(stubs::Decl::Method::Builder &builder,
                                          const clang::CXXMethodDecl *decl) {
   auto isStatic = decl->isStatic();
   builder.setStatic(isStatic);
-  builder.setImplicit(decl->isImplicit());
 
   bool isVirtual(decl->isVirtual());
   builder.setVirtual(isVirtual);
@@ -259,7 +264,7 @@ bool DeclSerializer::VisitCXXConstructorDecl(
                             : "this");
     initBuilder.setIsWritten(init->isWritten());
     auto *initExpr = init->getInit();
-    if (!llvm::isa<clang::CXXDefaultInitExpr>(initExpr)) {
+    if (!llvm::isa_and_nonnull<clang::CXXDefaultInitExpr>(initExpr)) {
       auto exprBuilder = initBuilder.initInit();
       m_serializer.serializeExpr(exprBuilder, init->getInit());
     }
