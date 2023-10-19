@@ -1,4 +1,4 @@
-open OCamlExpr
+open Ocaml_expr
 open Ast
 
 let of_list f xs = L (List.map f xs)
@@ -852,7 +852,7 @@ and of_decl = function
 | Func (l, k, tparams, rt, g, xs, nonghostCallersOnly, funcTypeClause, spec, terminates, body, isVirtual, overrides) ->
   C ("Func", [
     of_loc l;
-    of_find_kind k;
+    of_func_kind k;
     of_list s tparams;
     of_option of_type_expr rt;
     S g;

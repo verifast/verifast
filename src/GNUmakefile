@@ -450,7 +450,7 @@ endif
 	$(SET_LDD); $(COMPILE) $(OCAMLOPT_LINKFLAGS) $(CAPNP_LINK_FLAGS) -warn-error F -o ../bin/vfide$(DOTEXE)	\
 	  $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) \
 	  $(INCLUDES) Perf.cmxa proverapi.cmx dynlink.cmxa \
-	  util.cmx ast.cmx stats.cmx lexer.cmx \
+	  util.cmx ast.cmx ocaml_expr.cmx ocaml_expr_of_ast.cmx ocaml_expr_formatter.cmx stats.cmx lexer.cmx \
 	  parser.cmx ${JAVA_FE_INCLS} $(CXX_FE_DEPS) verifast0.cmx verifast1.cmx assertions.cmx \
 	  verify_expr.cmx verifast.cmx combineprovers.cmx \
           simplex.cmx redux.cmx verifastPluginRedux.cmx \
@@ -474,7 +474,7 @@ vfide: ../bin/vfide$(DOTEXE) $(STDLIB)
 	@echo "  OCAMLOPT " $@
 	$(COMPILE) $(OCAMLOPT_LINKFLAGS) $(CAPNP_LINK_FLAGS) -warn-error F -o ../bin/verifast$(DOTEXE) \
 	$(INCLUDES) Perf.cmxa proverapi.cmx \
-	  util.cmx ast.cmx stats.cmx lexer.cmx parser.cmx \
+	  util.cmx ast.cmx ocaml_expr.cmx ocaml_expr_of_ast.cmx ocaml_expr_formatter.cmx stats.cmx lexer.cmx parser.cmx \
 	  ${JAVA_FE_INCLS} $(CXX_FE_DEPS) verifast0.cmx verifast1.cmx assertions.cmx \
 	  verify_expr.cmx verifast.cmx simplex.cmx redux.cmx combineprovers.cmx \
           smtlib.cmx smtlibprover.cmx verifastPluginCvc4.cmx verifastPluginExternalZ3.cmx verifastPluginReduxSmtlib.cmx \

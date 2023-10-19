@@ -32,13 +32,13 @@ let rec pp_print_ocaml_expr f = function
   C (ctor, []) ->
   pp_print_string f ctor
 | C (ctor, args) ->
+  pp_open_box f 2;
   pp_print_string f ctor;
   pp_print_space f ();
   pp_print_string f "(";
-  pp_open_box f 2;
   pp_print_list ~pp_sep:(fun f () -> pp_print_string f ","; pp_print_space f ()) pp_print_ocaml_expr f args;
-  pp_close_box f ();
-  pp_print_string f ")"
+  pp_print_string f ")";
+  pp_close_box f ()
 | S s -> fprintf f "%S" s
 | I i -> fprintf f "%d" i
 | B b -> fprintf f "%B" b
@@ -46,8 +46,10 @@ let rec pp_print_ocaml_expr f = function
 | Num n -> fprintf f "num_of_string@ %S" (string_of_num n)
 | L es ->
   pp_print_string f "[";
-  pp_open_box f 2;
+  pp_open_hvbox f 2;
+  pp_print_cut f ();
   pp_print_list ~pp_sep:(fun f () -> pp_print_string f ";"; pp_print_space f ()) pp_print_ocaml_expr f es;
+  pp_print_cut f ();
   pp_close_box f ();
   pp_print_string f "]"
 | T es ->
