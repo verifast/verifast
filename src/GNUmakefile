@@ -647,6 +647,7 @@ META_DEPS = \
   java_frontend/*.ml java_frontend/*.mli \
   cxx_frontend/*.ml cxx_frontend/*.mli \
   shape_analysis/*.ml shape_analysis/*.mli) \
+  vfconfig.ml \
   $(META_DEPS_RUST_FE)
 
 depend: $(META_DEPS)
