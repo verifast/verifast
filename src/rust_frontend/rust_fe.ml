@@ -78,7 +78,7 @@ module Make (Args : RUST_FE_ARGS) = struct
       let entry =
         match ListAux.last var_values with
         | None -> entry
-        | Some value -> entry ^ ":" ^ value
+        | Some value -> entry ^ (if Sys.os_type = "Win32" then ";" else ":") ^ value
       in
       let env = env @ [ entry ] in
       Ok (Array.of_list env)
@@ -94,7 +94,7 @@ module Make (Args : RUST_FE_ARGS) = struct
       let* tchain_lib = RustTChain.find_tchain_lib tchain_name in
       let args = [| bin_path; rs_file_path; "--sysroot=" ^ tchain_root |] in
       let current_env = Unix.environment () in
-      let* env = add_path_to_env_var current_env (match Vfconfig.platform with MacOS -> "DYLD_LIBRARY_PATH" | _ -> "LD_LIBRARY_PATH") tchain_lib in
+      let* env = add_path_to_env_var current_env (match Vfconfig.platform with MacOS -> "DYLD_LIBRARY_PATH" | Windows -> "PATH" | _ -> "LD_LIBRARY_PATH") tchain_lib in
       let chns = Unix.open_process_args_full bin_path args env in
       Ok chns
     with
