@@ -137,6 +137,7 @@ let ghost_keywords = [
 ]
 
 exception CompilationError of string
+exception CompilationErrorWithDetails of string * string
 
 let file_specs path =
   begin

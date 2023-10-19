@@ -3611,7 +3611,10 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           end
         )
         in
-        RustFe.parse_rs_file path
+        try
+          RustFe.parse_rs_file path
+        with
+        | RustFe.RustFrontend msg -> raise (CompilationErrorWithDetails ("Rust frontend failed", msg))
       end
     in
     emitter_callback ds;

@@ -1558,6 +1558,11 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
               clearTrace();
               msg := Some(emsg);
               updateMessageEntry(false)
+            | CompilationErrorWithDetails (emsg, details) ->
+              clearTrace();
+              print_endline details;
+              msg := Some (emsg ^ " (see console for details)");
+              updateMessageEntry false
             | StaticError (l, emsg, eurl) ->
               handleStaticError l emsg eurl 
             | SymbolicExecutionError (ctxts, l, emsg, eurl) ->
