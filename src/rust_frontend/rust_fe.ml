@@ -169,8 +169,8 @@ module Make (Args : RUST_FE_ARGS) = struct
         (*** TODO @Nima: Can we force to close channels in case of exception *)
         match Unix.close_process_full (msg_in_chn, out_chn, err_in_chn) with
         | Unix.WEXITED 0 -> Ok ()
-        | Unix.WEXITED _ | Unix.WSIGNALED _ | Unix.WSTOPPED _ ->
-            Error (`RustMirExpFailed emsgs)
+        | result ->
+            Error (`RustMirExpFailed (result, emsgs))
       with Unix.Unix_error (ecode, fname, param) ->
         let emsg = SysUtil.gen_unix_error_msg ecode fname param in
         Error (`SysCallFailed emsg)
@@ -209,8 +209,20 @@ module Make (Args : RUST_FE_ARGS) = struct
               "Process for [" ^ bin ^ "] is been signaled or stopped"
           | `RustMirDesFailed emsg ->
               "Capnp message deserialization failed: " ^ emsg
-          | `RustMirExpFailed emsg ->
-              "Rust MIR exporter executable failed: " ^ emsg
+          | `RustMirExpFailed (result, emsg) ->
+              let failInfo =
+                match result with
+                  Unix.WEXITED exitCode ->
+                  let exitCodeInfo =
+                    match exitCode with
+                      -1073741515 when Sys.os_type = "Win32" -> " (Missing DLL; define VERIFAST_DEBUG_MISSING_DLL to see dialog box with details)"
+                    | _ -> ""
+                  in
+                  Printf.sprintf "exited with exit code %d%s" exitCode exitCodeInfo
+                | Unix.WSIGNALED signal -> Printf.sprintf "was killed with signal %d" signal
+                | Unix.WSTOPPED signal -> Printf.sprintf "was stopped with signal %d" signal
+              in
+              Printf.sprintf "Rust MIR exporter executable %s: %s" failInfo emsg
           | `SysCallFailed emsg -> "System call failed: " ^ emsg
         in
         raise (RustFrontend (gen_emsg ^ desc))
